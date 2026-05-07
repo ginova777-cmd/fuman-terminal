@@ -1,6 +1,7 @@
 const heatmap = document.querySelector("#heatmap");
 const refreshLine = document.querySelector(".refresh-line");
 const sourceLine = document.querySelector("#source-line");
+const dataStatus = document.querySelector("#data-status");
 const headerTimes = [...document.querySelectorAll(".header-time")];
 const metricCards = [...document.querySelectorAll(".metric-card")];
 const tickerStrip = document.querySelector(".ticker-strip");
@@ -105,6 +106,37 @@ function normalizeArray(value) {
   return [];
 }
 
+function formatDateTime(value = new Date()) {
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return "時間未知";
+
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  const time = date.toLocaleTimeString("zh-TW", {
+    hour12: false,
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  });
+
+  return `${month}/${day} ${time}`;
+}
+
+function setDataStatus(type, title, detail) {
+  const dotClass = {
+    live: "live",
+    delayed: "delayed",
+    fallback: "fallback",
+    pending: "pending",
+  }[type] || "pending";
+
+  dataStatus.innerHTML = `
+    <span class="status-dot ${dotClass}"></span>
+    <strong>${title}</strong>
+    <small>${detail}</small>
+  `;
+}
+
 function renderHeatmap(rows) {
   heatmap.innerHTML = rows
     .map(([name, change, volume, leader, count]) => `
@@ -123,9 +155,7 @@ function renderHeatmap(rows) {
 function renderIndexes(indexes) {
   const targets = [
     ["發行量加權", "加權指數"],
-    ["臺灣50", "台灣50"],
-    ["電子類", "電子類指數"],
-    ["金融保險", "金融保險"],
+    ["櫃買", "櫃買指數"],
   ];
 
   targets.forEach(([keyword, label], index) => {
@@ -282,6 +312,7 @@ function showView(viewName, activeLink) {
 async function loadMarketData() {
   renderHeatmap(fallbackSectors);
   renderStockTable(fallbackStocks);
+  setDataStatus("pending", "資料檢查中", "正在連線官方公開資料");
 
   try {
     const payload = await fetchJson(endpoints.backend, 12000);
@@ -290,9 +321,11 @@ async function loadMarketData() {
     renderIndexes(normalizeArray(payload.indexes));
     renderStocks(normalizeArray(payload.stocks));
     sourceLine.textContent = `資料來源：${payload.source} · 輔滿 API`;
+    setDataStatus("delayed", "延遲真實資料", `最後檢查 ${formatDateTime(payload.updatedAt)}`);
     return;
   } catch (error) {
     sourceLine.textContent = "輔滿 API 暫時無法連線，改用瀏覽器直連公開資料";
+    setDataStatus("pending", "改用備援連線", "正在嘗試瀏覽器直連 TWSE");
   }
 
   try {
@@ -304,10 +337,12 @@ async function loadMarketData() {
     renderIndexes(Array.isArray(indexes) ? indexes : []);
     renderStocks(Array.isArray(stocks) ? stocks : []);
     sourceLine.textContent = "資料來源：TWSE OpenAPI 公開盤後資料";
+    setDataStatus("delayed", "延遲真實資料", `最後檢查 ${formatDateTime()}`);
   } catch (error) {
     sourceLine.textContent = "資料來源：備援展示資料，公開資料暫時無法連線";
     latestStocks = fallbackStocks;
     terminalMessage.textContent = "公開資料暫時無法連線，已載入輔滿內建展示盤";
+    setDataStatus("fallback", "展示資料", "官方資料抓取失敗，請勿視為真實行情");
   }
 }
 
