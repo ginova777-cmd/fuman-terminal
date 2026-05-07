@@ -716,6 +716,20 @@ h1 {
   font-weight: 900;
 }
 
+.empty-state {
+  display: grid;
+  min-height: 92px;
+  place-items: center;
+  border: 1px dashed rgba(116, 134, 178, 0.22);
+  border-radius: 8px;
+  background: rgba(18, 24, 36, 0.42);
+  color: #8793ab;
+  font-size: 13px;
+  font-weight: 800;
+  padding: 18px;
+  text-align: center;
+}
+
 .section-title > span {
   color: #8895ac;
   font-size: 12px;

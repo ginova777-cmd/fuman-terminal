@@ -24,44 +24,6 @@ const endpoints = {
 
 let latestStocks = [];
 
-const fallbackSectors = [
-  ["矽智元件", "+8.26%", "7 檔 · 359.7 億", "正常 196.7 億", "0"],
-  ["銅概念", "+5.92%", "5 檔 · 335.7 億", "中位 265.9 億", "0"],
-  ["金流量", "+3.97%", "9 檔 · 99.9 億", "淨流入 45 億", "1"],
-  ["網通設備", "+3.22%", "8 檔 · 238.1 億", "中位 118.8 億", "2"],
-  ["CPU/ASIC/AP", "+3.21%", "7 檔 · 665.9 億", "聯發科 289.5 億", "3"],
-  ["IC封測", "+2.78%", "8 檔 · 305.6 億", "京元電子 102.5 億", "2"],
-  ["光通訊/CoWoS", "+2.69%", "10 檔 · 180.5 億", "聯亞 88.8 億", "2"],
-  ["工具機器", "+2.66%", "7 檔 · 58.3 億", "亞崴 40.7 億", "1"],
-  ["半導體", "+1.92%", "138 檔 · 983.7 億", "台積電 101.0 億", "46"],
-  ["電源供應", "+1.84%", "17 檔 · 45.8 億", "群電 37.6 億", "1"],
-  ["記憶體/儲存", "+1.81%", "19 檔 · 2592.0 億", "南亞科 566.4 億", "7"],
-  ["PCB/載板", "+1.80%", "25 檔 · 1428.1 億", "欣興 237.6 億", "5"],
-  ["電子零組件", "+1.63%", "168 檔 · 668.5 億", "嘉澤 64.7 億", "58"],
-  ["光電", "+1.61%", "41 檔 · 28.0 億", "宇瞻 8.9 億", "8"],
-  ["金融類股", "+1.32%", "22 檔 · 20.1 億", "中信金 14.0 億", "4"],
-  ["航運", "+1.28%", "32 檔 · 87.1 億", "長榮 22.4 億", "4"],
-  ["BBU/UPS", "+1.06%", "17 檔 · 610.9 億", "台達電 357.0 億", "4"],
-  ["光學", "+1.01%", "10 檔 · 394.0 億", "玉晶 55.2 億", "48"],
-  ["機器工具", "+0.88%", "7 檔 · 6.2 億", "亞崴 3.3 億", "2"],
-  ["IC設計服務", "+0.83%", "15 檔 · 221.9 億", "世芯 102.7 億", "7"],
-  ["面板零組", "+0.82%", "74 檔 · 106.2 億", "液晶 26.9 億", "23"],
-  ["IC生產鏈", "+0.80%", "5 檔 · 534.4 億", "台積 314.5 億", "2"],
-];
-
-const fallbackStocks = [
-  { code: "8016", name: "矽創", close: 337.5, change: 30.5, percent: 9.93, value: 1280000000, tradeVolume: 3100000 },
-  { code: "2408", name: "南亞科", close: 56.4, change: 4.1, percent: 7.84, value: 5664000000, tradeVolume: 99000000 },
-  { code: "2330", name: "台積電", close: 1065, change: 28, percent: 2.70, value: 10100000000, tradeVolume: 9400000 },
-  { code: "2308", name: "台達電", close: 357, change: 11, percent: 3.18, value: 35700000000, tradeVolume: 10000000 },
-  { code: "2357", name: "華碩", close: 607, change: 18, percent: 3.06, value: 3073000000, tradeVolume: 5100000 },
-  { code: "2454", name: "聯發科", close: 1280, change: 32, percent: 2.56, value: 28950000000, tradeVolume: 22600000 },
-  { code: "3034", name: "聯詠", close: 536, change: 12, percent: 2.29, value: 1188000000, tradeVolume: 2200000 },
-  { code: "2317", name: "鴻海", close: 203.5, change: 3.5, percent: 1.75, value: 8890000000, tradeVolume: 43600000 },
-  { code: "2382", name: "廣達", close: 289.5, change: 4.5, percent: 1.58, value: 6659000000, tradeVolume: 23000000 },
-  { code: "3231", name: "緯創", close: 118.8, change: 1.8, percent: 1.54, value: 2381000000, tradeVolume: 20000000 },
-];
-
 function cleanNumber(value) {
   if (value === undefined || value === null || value === "") return 0;
   return Number(String(value).replace(/[,+%]/g, "")) || 0;
@@ -138,6 +100,11 @@ function setDataStatus(type, title, detail) {
 }
 
 function renderHeatmap(rows) {
+  if (!rows.length) {
+    heatmap.innerHTML = `<div class="empty-state">尚無官方資料，未顯示展示行情。</div>`;
+    return;
+  }
+
   heatmap.innerHTML = rows
     .map(([name, change, volume, leader, count]) => `
       <article class="sector-card">
@@ -243,6 +210,12 @@ function renderStocks(stocks) {
 function renderStockTable(stocks) {
   const rows = stocks.slice(0, 10);
   watchCount.textContent = `TOP ${rows.length}`;
+
+  if (!rows.length) {
+    stockTable.innerHTML = `<div class="empty-state">尚無官方資料，未顯示展示排行。</div>`;
+    return;
+  }
+
   stockTable.innerHTML = `
     <div class="stock-row stock-head">
       <span>代號</span><span>名稱</span><span>收盤</span><span>漲幅</span><span>成交值</span>
@@ -310,8 +283,8 @@ function showView(viewName, activeLink) {
 }
 
 async function loadMarketData() {
-  renderHeatmap(fallbackSectors);
-  renderStockTable(fallbackStocks);
+  renderHeatmap([]);
+  renderStockTable([]);
   setDataStatus("pending", "資料檢查中", "正在連線官方公開資料");
 
   try {
@@ -340,9 +313,12 @@ async function loadMarketData() {
     setDataStatus("delayed", "延遲真實資料", `最後檢查 ${formatDateTime()}`);
   } catch (error) {
     sourceLine.textContent = "資料來源：備援展示資料，公開資料暫時無法連線";
-    latestStocks = fallbackStocks;
-    terminalMessage.textContent = "公開資料暫時無法連線，已載入輔滿內建展示盤";
-    setDataStatus("fallback", "展示資料", "官方資料抓取失敗，請勿視為真實行情");
+    latestStocks = [];
+    tickerStrip.innerHTML = `<span>官方資料暫時無法連線，未顯示展示行情。</span>`;
+    terminalMessage.textContent = "官方資料暫時無法連線，未載入任何假資料";
+    renderHeatmap([]);
+    renderStockTable([]);
+    setDataStatus("fallback", "無真實資料", "官方資料抓取失敗，畫面已停止顯示行情數字");
   }
 }
 
