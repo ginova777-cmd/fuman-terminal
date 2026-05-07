@@ -1,0 +1,324 @@
+const heatmap = document.querySelector("#heatmap");
+const refreshLine = document.querySelector(".refresh-line");
+const sourceLine = document.querySelector("#source-line");
+const headerTimes = [...document.querySelectorAll(".header-time")];
+const metricCards = [...document.querySelectorAll(".metric-card")];
+const tickerStrip = document.querySelector(".ticker-strip");
+const strengthPanel = document.querySelector(".strength-panel");
+const terminalMessage = document.querySelector("#terminal-message");
+const stockSearch = document.querySelector("#stock-search");
+const stockTable = document.querySelector("#stock-table");
+const watchCount = document.querySelector("#watch-count");
+const viewLinks = [...document.querySelectorAll("[data-view]")];
+const viewPanels = {
+  market: document.querySelector("#market-view"),
+  strategy: document.querySelector("#strategy-view"),
+};
+
+const endpoints = {
+  backend: "/api/market",
+  indexes: "https://openapi.twse.com.tw/v1/exchangeReport/MI_INDEX",
+  stocks: "https://openapi.twse.com.tw/v1/exchangeReport/STOCK_DAY_ALL",
+};
+
+let latestStocks = [];
+
+const fallbackSectors = [
+  ["矽智元件", "+8.26%", "7 檔 · 359.7 億", "正常 196.7 億", "0"],
+  ["銅概念", "+5.92%", "5 檔 · 335.7 億", "中位 265.9 億", "0"],
+  ["金流量", "+3.97%", "9 檔 · 99.9 億", "淨流入 45 億", "1"],
+  ["網通設備", "+3.22%", "8 檔 · 238.1 億", "中位 118.8 億", "2"],
+  ["CPU/ASIC/AP", "+3.21%", "7 檔 · 665.9 億", "聯發科 289.5 億", "3"],
+  ["IC封測", "+2.78%", "8 檔 · 305.6 億", "京元電子 102.5 億", "2"],
+  ["光通訊/CoWoS", "+2.69%", "10 檔 · 180.5 億", "聯亞 88.8 億", "2"],
+  ["工具機器", "+2.66%", "7 檔 · 58.3 億", "亞崴 40.7 億", "1"],
+  ["半導體", "+1.92%", "138 檔 · 983.7 億", "台積電 101.0 億", "46"],
+  ["電源供應", "+1.84%", "17 檔 · 45.8 億", "群電 37.6 億", "1"],
+  ["記憶體/儲存", "+1.81%", "19 檔 · 2592.0 億", "南亞科 566.4 億", "7"],
+  ["PCB/載板", "+1.80%", "25 檔 · 1428.1 億", "欣興 237.6 億", "5"],
+  ["電子零組件", "+1.63%", "168 檔 · 668.5 億", "嘉澤 64.7 億", "58"],
+  ["光電", "+1.61%", "41 檔 · 28.0 億", "宇瞻 8.9 億", "8"],
+  ["金融類股", "+1.32%", "22 檔 · 20.1 億", "中信金 14.0 億", "4"],
+  ["航運", "+1.28%", "32 檔 · 87.1 億", "長榮 22.4 億", "4"],
+  ["BBU/UPS", "+1.06%", "17 檔 · 610.9 億", "台達電 357.0 億", "4"],
+  ["光學", "+1.01%", "10 檔 · 394.0 億", "玉晶 55.2 億", "48"],
+  ["機器工具", "+0.88%", "7 檔 · 6.2 億", "亞崴 3.3 億", "2"],
+  ["IC設計服務", "+0.83%", "15 檔 · 221.9 億", "世芯 102.7 億", "7"],
+  ["面板零組", "+0.82%", "74 檔 · 106.2 億", "液晶 26.9 億", "23"],
+  ["IC生產鏈", "+0.80%", "5 檔 · 534.4 億", "台積 314.5 億", "2"],
+];
+
+const fallbackStocks = [
+  { code: "8016", name: "矽創", close: 337.5, change: 30.5, percent: 9.93, value: 1280000000, tradeVolume: 3100000 },
+  { code: "2408", name: "南亞科", close: 56.4, change: 4.1, percent: 7.84, value: 5664000000, tradeVolume: 99000000 },
+  { code: "2330", name: "台積電", close: 1065, change: 28, percent: 2.70, value: 10100000000, tradeVolume: 9400000 },
+  { code: "2308", name: "台達電", close: 357, change: 11, percent: 3.18, value: 35700000000, tradeVolume: 10000000 },
+  { code: "2357", name: "華碩", close: 607, change: 18, percent: 3.06, value: 3073000000, tradeVolume: 5100000 },
+  { code: "2454", name: "聯發科", close: 1280, change: 32, percent: 2.56, value: 28950000000, tradeVolume: 22600000 },
+  { code: "3034", name: "聯詠", close: 536, change: 12, percent: 2.29, value: 1188000000, tradeVolume: 2200000 },
+  { code: "2317", name: "鴻海", close: 203.5, change: 3.5, percent: 1.75, value: 8890000000, tradeVolume: 43600000 },
+  { code: "2382", name: "廣達", close: 289.5, change: 4.5, percent: 1.58, value: 6659000000, tradeVolume: 23000000 },
+  { code: "3231", name: "緯創", close: 118.8, change: 1.8, percent: 1.54, value: 2381000000, tradeVolume: 20000000 },
+];
+
+function cleanNumber(value) {
+  if (value === undefined || value === null || value === "") return 0;
+  return Number(String(value).replace(/[,+%]/g, "")) || 0;
+}
+
+function formatNumber(value, digits = 2) {
+  return cleanNumber(value).toLocaleString("zh-TW", {
+    minimumFractionDigits: digits,
+    maximumFractionDigits: digits,
+  });
+}
+
+function formatChange(sign, points, percent) {
+  const symbol = sign === "-" ? "-" : "+";
+  return `${symbol}${formatNumber(points)}　(${symbol}${formatNumber(percent)}%)`;
+}
+
+function valueOf(record, keys) {
+  for (const key of keys) {
+    if (record[key] !== undefined && record[key] !== "") return record[key];
+  }
+  return "";
+}
+
+async function fetchJson(url, timeout = 8000) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeout);
+  try {
+    const response = await fetch(url, { signal: controller.signal, cache: "no-store" });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    return await response.json();
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function normalizeArray(value) {
+  if (Array.isArray(value)) return value;
+  if (value && Array.isArray(value.data)) return value.data;
+  if (value && Array.isArray(value.rows)) return value.rows;
+  if (value && Array.isArray(value.result)) return value.result;
+  return [];
+}
+
+function renderHeatmap(rows) {
+  heatmap.innerHTML = rows
+    .map(([name, change, volume, leader, count]) => `
+      <article class="sector-card">
+        <h3>${name}<span>${change}</span></h3>
+        <p>${volume}</p>
+        <small>
+          <span>▲ ${Math.max(1, Math.ceil(Math.abs(cleanNumber(change)) * 1.4))}</span><b>▼ ${count}</b>
+          <span>${leader}</span><b>●</b>
+        </small>
+      </article>
+    `)
+    .join("");
+}
+
+function renderIndexes(indexes) {
+  const targets = [
+    ["發行量加權", "加權指數"],
+    ["臺灣50", "台灣50"],
+    ["電子類", "電子類指數"],
+    ["金融保險", "金融保險"],
+  ];
+
+  targets.forEach(([keyword, label], index) => {
+    const record = indexes.find((item) => String(valueOf(item, ["指數", "指數/報酬指數"])).includes(keyword));
+    if (!record || !metricCards[index]) return;
+
+    const sign = valueOf(record, ["漲跌", "漲跌(+/-)"]);
+    const points = valueOf(record, ["漲跌點數"]);
+    const percent = valueOf(record, ["漲跌百分比", "漲跌百分比(%)"]);
+    const close = valueOf(record, ["收盤指數"]);
+    const trendClass = sign === "-" ? "up" : "down";
+
+    metricCards[index].innerHTML = `
+      <span>↗ ${label}</span>
+      <strong>${formatNumber(close)}</strong>
+      <em class="${trendClass}">${formatChange(sign, points, percent)}</em>
+    `;
+  });
+}
+
+function stockChange(stock) {
+  const change = cleanNumber(valueOf(stock, ["漲跌價差", "Change", "漲跌"]));
+  const close = cleanNumber(valueOf(stock, ["收盤價", "ClosingPrice", "收盤"]));
+  const previous = close - change;
+  const percent = previous ? (change / previous) * 100 : 0;
+  return { change, close, percent };
+}
+
+function renderStocks(stocks) {
+  const parsed = stocks
+    .map((stock) => {
+      const code = valueOf(stock, ["證券代號", "Code"]);
+      const name = valueOf(stock, ["證券名稱", "Name"]);
+      const value = cleanNumber(valueOf(stock, ["成交金額", "TradeValue"]));
+      const tradeVolume = cleanNumber(valueOf(stock, ["成交股數", "TradeVolume"]));
+      return { code, name, value, tradeVolume, ...stockChange(stock) };
+    })
+    .filter((stock) => stock.code && stock.name && stock.close);
+
+  if (!parsed.length) return;
+  latestStocks = parsed;
+
+  const up = parsed.filter((stock) => stock.change > 0).length;
+  const down = parsed.filter((stock) => stock.change < 0).length;
+  const flat = parsed.length - up - down;
+  const totalValue = parsed.reduce((sum, stock) => sum + stock.value, 0) / 100000000;
+  const upPercent = (up / parsed.length) * 100;
+
+  strengthPanel.querySelector(".strength-head p").textContent = `${parsed.length.toLocaleString("zh-TW")} 檔 · 上漲 ${up.toLocaleString("zh-TW")} 檔`;
+  strengthPanel.querySelector(".strength-head > strong").innerHTML = `${upPercent.toFixed(1)}%<span>上漲比例</span>`;
+
+  const statValues = strengthPanel.querySelectorAll(".stats-row strong");
+  statValues[0].textContent = up.toLocaleString("zh-TW");
+  statValues[1].textContent = down.toLocaleString("zh-TW");
+  statValues[2].textContent = flat.toLocaleString("zh-TW");
+  statValues[3].textContent = `${totalValue.toLocaleString("zh-TW", { maximumFractionDigits: 1 })} 億`;
+
+  const topStocks = [...parsed]
+    .filter((stock) => stock.percent > 0)
+    .sort((a, b) => b.percent - a.percent)
+    .slice(0, 22);
+
+  tickerStrip.innerHTML = topStocks
+    .slice(0, 12)
+    .map((stock, index) => {
+      const className = index % 3 === 0 ? "down" : "";
+      return `<span class="${className}">${stock.code} ${stock.name} ${stock.percent.toFixed(2)}%</span>`;
+    })
+    .join("");
+
+  renderHeatmap(
+    topStocks.map((stock) => [
+      stock.name,
+      `+${stock.percent.toFixed(2)}%`,
+      `${stock.code} · ${(stock.value / 100000000).toFixed(1)} 億`,
+      `收盤 ${stock.close.toLocaleString("zh-TW")}`,
+      String(Math.max(0, Math.round(stock.tradeVolume / 10000000))),
+    ])
+  );
+
+  renderStockTable(topStocks);
+  terminalMessage.textContent = `掃描完成：${parsed.length.toLocaleString("zh-TW")} 檔，強勢股 ${topStocks.length} 檔`;
+}
+
+function renderStockTable(stocks) {
+  const rows = stocks.slice(0, 10);
+  watchCount.textContent = `TOP ${rows.length}`;
+  stockTable.innerHTML = `
+    <div class="stock-row stock-head">
+      <span>代號</span><span>名稱</span><span>收盤</span><span>漲幅</span><span>成交值</span>
+    </div>
+    ${rows
+      .map((stock) => `
+        <div class="stock-row">
+          <span>${stock.code}</span>
+          <strong>${stock.name}</strong>
+          <span>${stock.close.toLocaleString("zh-TW")}</span>
+          <em class="${stock.change >= 0 ? "down" : "up"}">${stock.percent >= 0 ? "+" : ""}${stock.percent.toFixed(2)}%</em>
+          <span>${(stock.value / 100000000).toFixed(1)} 億</span>
+        </div>
+      `)
+      .join("")}
+  `;
+}
+
+function searchStocks(query) {
+  const keyword = query.trim().toLowerCase();
+  if (!keyword) {
+    renderStockTable([...latestStocks].filter((stock) => stock.percent > 0).sort((a, b) => b.percent - a.percent));
+    return;
+  }
+
+  const results = latestStocks
+    .filter((stock) => stock.code.includes(keyword) || stock.name.toLowerCase().includes(keyword))
+    .sort((a, b) => b.value - a.value)
+    .slice(0, 10);
+
+  renderStockTable(results);
+  terminalMessage.textContent = results.length
+    ? `搜尋完成：找到 ${results.length} 筆符合「${query}」`
+    : `搜尋完成：沒有找到「${query}」`;
+}
+
+function tickClock() {
+  const now = new Date();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const day = String(now.getDate()).padStart(2, "0");
+  const time = now.toLocaleTimeString("zh-TW", {
+    hour12: false,
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  });
+  refreshLine.textContent = `${month}/${day}  重新整理　更新 ${time}`;
+  headerTimes.forEach((item) => {
+    item.textContent = `${month}/${day} ${time.slice(0, 5)}`;
+  });
+}
+
+function showView(viewName, activeLink) {
+  Object.entries(viewPanels).forEach(([name, panel]) => {
+    panel.hidden = name !== viewName;
+    panel.classList.toggle("active", name === viewName);
+  });
+
+  viewLinks.forEach((link) => link.classList.toggle("active", link === activeLink));
+
+  const focusTarget = activeLink.dataset.focus ? document.querySelector(`#${activeLink.dataset.focus}`) : null;
+  if (focusTarget) {
+    setTimeout(() => focusTarget.focus(), 0);
+  }
+}
+
+async function loadMarketData() {
+  renderHeatmap(fallbackSectors);
+  renderStockTable(fallbackStocks);
+
+  try {
+    const payload = await fetchJson(endpoints.backend, 12000);
+    if (!payload.ok) throw new Error(payload.error || "Backend API failed");
+
+    renderIndexes(normalizeArray(payload.indexes));
+    renderStocks(normalizeArray(payload.stocks));
+    sourceLine.textContent = `資料來源：${payload.source} · 輔滿 API`;
+    return;
+  } catch (error) {
+    sourceLine.textContent = "輔滿 API 暫時無法連線，改用瀏覽器直連公開資料";
+  }
+
+  try {
+    const [indexes, stocks] = await Promise.all([
+      fetchJson(endpoints.indexes),
+      fetchJson(endpoints.stocks),
+    ]);
+
+    renderIndexes(Array.isArray(indexes) ? indexes : []);
+    renderStocks(Array.isArray(stocks) ? stocks : []);
+    sourceLine.textContent = "資料來源：TWSE OpenAPI 公開盤後資料";
+  } catch (error) {
+    sourceLine.textContent = "資料來源：備援展示資料，公開資料暫時無法連線";
+    latestStocks = fallbackStocks;
+    terminalMessage.textContent = "公開資料暫時無法連線，已載入輔滿內建展示盤";
+  }
+}
+
+tickClock();
+loadMarketData();
+stockSearch.addEventListener("input", (event) => searchStocks(event.target.value));
+viewLinks.forEach((link) => {
+  link.addEventListener("click", (event) => {
+    event.preventDefault();
+    showView(link.dataset.view, link);
+  });
+});
+setInterval(tickClock, 1000);
+setInterval(loadMarketData, 5 * 60 * 1000);

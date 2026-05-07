@@ -1,0 +1,249 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>輔滿 股票終端</title>
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar">
+        <div class="brand">
+          <div class="brand-mark">✣</div>
+          <div>
+            <strong>輔滿</strong>
+            <span>股票終端</span>
+            <small>fuman terminal</small>
+          </div>
+        </div>
+
+        <nav class="nav-list" aria-label="Main navigation">
+          <a class="nav-item active" href="#" data-view="market"><span class="nav-icon globe">●</span>市場總覽</a>
+          <a class="nav-item" href="#" data-view="market" data-focus="stock-search"><span class="nav-icon search">⌕</span>個股查詢</a>
+          <p class="nav-label">策略中心</p>
+          <a class="strategy-nav" href="#" data-view="strategy"><span class="s1">⚡</span>策略1-開盤入</a>
+          <a class="strategy-nav" href="#" data-view="strategy"><span class="s2">◔</span>策略2-當沖雷達</a>
+          <a class="strategy-nav" href="#" data-view="strategy"><span class="s3">◐</span>策略3-隔日沖</a>
+          <a class="strategy-nav" href="#" data-view="strategy"><span class="s4">└</span>策略4-波段</a>
+          <a class="strategy-nav" href="#" data-view="strategy"><span class="s5">▰</span>策略5-綜合策略</a>
+        </nav>
+
+        <div class="sidebar-foot">
+          <div class="logout">↪ 登出</div>
+          <div class="link-state"><span></span>TWSE / TPEX</div>
+        </div>
+      </aside>
+
+      <main class="dashboard">
+        <section class="view-panel" id="strategy-view" hidden>
+          <header class="strategy-header">
+            <div>
+              <span class="console-badge">策略控管台</span>
+              <h1>策略中心</h1>
+              <p>左側切換日線、籌碼與高波動策略；右側即時重算符合條件的股票訊號。</p>
+            </div>
+            <div class="header-time strategy-time">05/07 17:20</div>
+          </header>
+
+          <section class="strategy-list" aria-label="Strategy checklist">
+          <div class="strategy-list-title">策略清單 (11)</div>
+          <article class="strategy-card selected">
+            <div class="strategy-icon hot">⚡</div>
+            <div>
+              <h2>動能分數 75+</h2>
+              <p>價格強勢，20日突破量比同步轉強，優先找資金加速股。</p>
+            </div>
+            <span>核心</span>
+          </article>
+          <article class="strategy-card">
+            <div class="strategy-icon violet">♣</div>
+            <div>
+              <h2>主力籌碼盤整</h2>
+              <p>法人、大戶成交比重高，觀察分點或區間底部的支撐力道。</p>
+            </div>
+          </article>
+          <article class="strategy-card">
+            <div class="strategy-icon green">↑</div>
+            <div>
+              <h2>突破20日新高</h2>
+              <p>收盤價高於近20日最高價，華星突破重要壓力位。</p>
+            </div>
+          </article>
+          <article class="strategy-card">
+            <div class="strategy-icon red">✥</div>
+            <div>
+              <h2>開盤即戰力狙擊</h2>
+              <p>針對開盤10分鐘跳空與量能過濾，捕捉即時強轉強標的。</p>
+            </div>
+            <span>v1.6</span>
+          </article>
+          <article class="strategy-card">
+            <div class="strategy-icon blue">↻</div>
+            <div>
+              <h2>昨日紅轉綠</h2>
+              <p>參考 Azix 邏輯，以昨收為準，開低走高突破昨日高點臨界。</p>
+            </div>
+          </article>
+          <article class="strategy-card">
+            <div class="strategy-icon yellow">⌁</div>
+            <div>
+              <h2>2分K當沖雷達</h2>
+              <p>針對台股 2 分 K 頻率進行形態捕捉，尋找 N 底或框型底。</p>
+            </div>
+          </article>
+          <article class="strategy-card">
+            <div class="strategy-icon cyan">▦</div>
+            <div>
+              <h2>投信連買認養股</h2>
+              <p>投信連續買超 3 日以上且站上均線，籌碼高度集中穩的。</p>
+            </div>
+          </article>
+          <article class="strategy-card">
+            <div class="strategy-icon indigo">⌁</div>
+            <div>
+              <h2>VCP 波段收斂</h2>
+              <p>波動度逐漸收斂，放量啟動前的關鍵轉折監控。</p>
+            </div>
+          </article>
+          <article class="strategy-card">
+            <div class="strategy-icon pink">☰</div>
+            <div>
+              <h2>均線多頭排列</h2>
+              <p>5/10/20/60 MA 呈現多頭向上發散，趨勢型強勢股。</p>
+            </div>
+          </article>
+          <article class="strategy-card">
+            <div class="strategy-icon mint">▣</div>
+            <div>
+              <h2>高同步率回測</h2>
+              <p>Smart Money 重新介入，同步率從低位陡升至 60 以上。</p>
+            </div>
+          </article>
+          <article class="strategy-card">
+            <div class="strategy-icon rose">⌬</div>
+            <div>
+              <h2>隔日沖吸籌監控</h2>
+              <p>監控量盤異常拉抬與資金流入，捕捉隔日開高機會。</p>
+            </div>
+          </article>
+          </section>
+        </section>
+
+        <section class="view-panel active" id="market-view">
+          <header class="page-header">
+            <div>
+              <p class="eyebrow">輔滿股票終端</p>
+              <h1>市場總覽</h1>
+              <span class="refresh-line">05/07  重新整理　更新 17:23:07</span>
+              <span class="source-line" id="source-line">資料連線中...</span>
+            </div>
+            <div class="header-time market-time">05/07 17:20</div>
+          </header>
+
+        <section class="metric-grid" aria-label="Market indexes">
+          <article class="metric-card">
+            <span>↗ 加權指數</span>
+            <strong>41,933.78</strong>
+            <em class="down">+794.53　(+1.95%)</em>
+          </article>
+          <article class="metric-card">
+            <span>↗ 櫃買指數</span>
+            <strong>416.41</strong>
+            <em class="down">+6.12　(+1.49%)</em>
+          </article>
+          <article class="metric-card">
+            <span>↯ 金融板</span>
+            <strong>42,340.00</strong>
+            <em class="down">+826.00　(+1.99%)</em>
+          </article>
+          <article class="metric-card">
+            <span>☾ 金融櫃買</span>
+            <strong>42,289.00</strong>
+            <em class="up">-51.00　(-0.12%)</em>
+            <small>盤後維護中</small>
+          </article>
+        </section>
+
+        <section class="ticker-strip" aria-label="Market ticker">
+          <span class="down">9.90% 133筆</span>
+          <span>8016 矽創</span>
+          <span class="down">9.30% 10.3量</span>
+          <span>2395 研華</span>
+          <span class="down">8.90% 31.4量</span>
+          <span>2406 國碩</span>
+          <span class="up">1.07% 基亞 869.9量</span>
+          <span>2408 南亞科</span>
+          <span class="up">2.05% 達安 566.4量</span>
+          <span>2357 華碩</span>
+          <span class="up">4.36% 京元 307.3量</span>
+          <span>2308 台達電</span>
+          <span class="down">1.22%</span>
+        </section>
+
+        <section class="strength-panel">
+          <div class="strength-head">
+            <div>
+              <h2>強勢</h2>
+              <p>1,946 檔 · 平均 +0.83%</p>
+            </div>
+            <strong>53.3%<span>上漲比例</span></strong>
+          </div>
+          <div class="stats-row">
+            <div><span>上漲</span><strong class="down">1,038</strong></div>
+            <div><span>下跌</span><strong class="up">733</strong></div>
+            <div><span>平盤</span><strong>175</strong></div>
+            <div><span>成交值</span><strong>14,950.5 億</strong></div>
+          </div>
+          <div class="balance-bar">
+            <span class="red-zone"></span>
+            <span class="mid-zone"></span>
+            <span class="green-zone"></span>
+          </div>
+        </section>
+
+        <section class="terminal-band" aria-label="Terminal status">
+          <div class="terminal-log">
+            <span>FMN://market.scan</span>
+            <strong id="terminal-message">等待公開資料回應...</strong>
+          </div>
+          <label class="search-box">
+            <span>搜尋</span>
+            <input id="stock-search" type="search" placeholder="輸入股票代號或名稱" autocomplete="off">
+          </label>
+        </section>
+
+        <section class="watch-section">
+          <div class="section-title">
+            <div>
+              <h2>強勢排行</h2>
+              <p>依漲幅與成交值篩選</p>
+            </div>
+            <span id="watch-count">TOP 10</span>
+          </div>
+          <div class="stock-table" id="stock-table"></div>
+        </section>
+
+        <section class="sector-section">
+          <div class="section-title">
+            <div>
+              <h2>熱力圖</h2>
+              <p>公開資料排序</p>
+            </div>
+            <span>全部 · 60 個</span>
+          </div>
+          <div class="tabs">
+            <button>全部</button>
+            <button>官方產業</button>
+            <button>電子細分</button>
+            <button>群組概念</button>
+            <button>集團股</button>
+          </div>
+          <div class="heatmap" id="heatmap"></div>
+        </section>
+        </section>
+      </main>
+    </div>
+    <script src="terminal.js"></script>
+  </body>
+</html>
