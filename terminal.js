@@ -1,7 +1,5 @@
 const heatmap = document.querySelector("#heatmap");
 const refreshLine = document.querySelector(".refresh-line");
-const sourceLine = document.querySelector("#source-line");
-const dataStatus = document.querySelector("#data-status");
 const headerTimes = [...document.querySelectorAll(".header-time")];
 const metricCards = [...document.querySelectorAll(".metric-card")];
 const tickerStrip = document.querySelector(".ticker-strip");
@@ -18,7 +16,7 @@ const viewPanels = {
 
 const endpoints = {
   backend: "/api/market",
-  indexes: "https://openapi.twse.com.tw/v1/exchangeReport/MI_INDEX",
+  heatmap: "/api/heatmap",
   stocks: "https://openapi.twse.com.tw/v1/exchangeReport/STOCK_DAY_ALL",
 };
 
@@ -71,52 +69,50 @@ function normalizeArray(value) {
 function formatDateTime(value = new Date()) {
   const date = value instanceof Date ? value : new Date(value);
   if (Number.isNaN(date.getTime())) return "時間未知";
-
   const month = String(date.getMonth() + 1).padStart(2, "0");
   const day = String(date.getDate()).padStart(2, "0");
   const time = date.toLocaleTimeString("zh-TW", {
-    hour12: false,
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
+    hour12: false, hour: "2-digit", minute: "2-digit", second: "2-digit",
   });
-
   return `${month}/${day} ${time}`;
 }
 
-function setDataStatus(type, title, detail) {
-  const dotClass = {
-    live: "live",
-    delayed: "delayed",
-    fallback: "fallback",
-    pending: "pending",
-  }[type] || "pending";
-
-  dataStatus.innerHTML = `
-    <span class="status-dot ${dotClass}"></span>
-    <strong>${title}</strong>
-    <small>${detail}</small>
-  `;
+function getSectorColor(pct) {
+  if (pct >= 3)  return "#c0392b";
+  if (pct >= 2)  return "#e74c3c";
+  if (pct >= 1)  return "#e05a4e";
+  if (pct >= 0.3) return "#c06b64";
+  if (pct > 0)   return "#8b4a46";
+  if (pct === 0) return "#555";
+  if (pct > -0.3) return "#3d6b4a";
+  if (pct > -1)  return "#27ae60";
+  if (pct > -2)  return "#1e8449";
+  return "#145a32";
 }
 
-function renderHeatmap(rows) {
-  if (!rows.length) {
-    heatmap.innerHTML = `<div class="empty-state">尚無官方資料，未顯示展示行情。</div>`;
+function renderHeatmapSectors(sectors) {
+  if (!sectors || !sectors.length) {
+    heatmap.innerHTML = `<div class="empty-state">等待產業資料...</div>`;
     return;
   }
 
-  heatmap.innerHTML = rows
-    .map(([name, change, volume, leader, count]) => `
-      <article class="sector-card">
-        <h3>${name}<span>${change}</span></h3>
-        <p>${volume}</p>
+  heatmap.innerHTML = sectors.map(s => {
+    const pct = s.pct || 0;
+    const sign = pct >= 0 ? "+" : "";
+    const bg = getSectorColor(pct);
+    const valueStr = s.totalValue ? `${s.count} 檔 · ${s.totalValue} 億` : `${s.count} 檔`;
+
+    return `
+      <article class="sector-card" style="background:${bg}">
+        <h3>${s.name}<span>${sign}${pct.toFixed(2)}%</span></h3>
+        <p>${valueStr}</p>
         <small>
-          <span>▲ ${Math.max(1, Math.ceil(Math.abs(cleanNumber(change)) * 1.4))}</span><b>▼ ${count}</b>
-          <span>${leader}</span><b>●</b>
+          <span>▲ ${s.up}</span><b>▼ ${s.down}</b>
+          <span>${s.leader || "--"}</span>
         </small>
       </article>
-    `)
-    .join("");
+    `;
+  }).join("");
 }
 
 function renderIndexes(indexes, futuresNear, futuresNext) {
@@ -142,7 +138,6 @@ function renderIndexes(indexes, futuresNear, futuresNext) {
     `;
   });
 
-  // 台指期近月
   if (metricCards[2]) {
     if (futuresNear) {
       const sign = String(futuresNear.change || "").startsWith("-") ? "-" : "+";
@@ -153,15 +148,10 @@ function renderIndexes(indexes, futuresNear, futuresNext) {
         <em class="${trendClass}">${futuresNear.change || "--"}</em>
       `;
     } else {
-      metricCards[2].innerHTML = `
-        <span>⇅ 台指近</span>
-        <strong>--</strong>
-        <em>非交易時段</em>
-      `;
+      metricCards[2].innerHTML = `<span>⇅ 台指近</span><strong>--</strong><em>非交易時段</em>`;
     }
   }
 
-  // 台指期次月
   if (metricCards[3]) {
     if (futuresNext) {
       const sign = String(futuresNext.change || "").startsWith("-") ? "-" : "+";
@@ -172,11 +162,7 @@ function renderIndexes(indexes, futuresNear, futuresNext) {
         <em class="${trendClass}">${futuresNext.change || "--"}</em>
       `;
     } else {
-      metricCards[3].innerHTML = `
-        <span>☾ 台指次月</span>
-        <strong>--</strong>
-        <em>非交易時段</em>
-      `;
+      metricCards[3].innerHTML = `<span>☾ 台指次月</span><strong>--</strong><em>非交易時段</em>`;
     }
   }
 }
@@ -190,15 +176,13 @@ function stockChange(stock) {
 }
 
 function renderStocks(stocks) {
-  const parsed = stocks
-    .map((stock) => {
-      const code = valueOf(stock, ["證券代號", "Code"]);
-      const name = valueOf(stock, ["證券名稱", "Name"]);
-      const value = cleanNumber(valueOf(stock, ["成交金額", "TradeValue"]));
-      const tradeVolume = cleanNumber(valueOf(stock, ["成交股數", "TradeVolume"]));
-      return { code, name, value, tradeVolume, ...stockChange(stock) };
-    })
-    .filter((stock) => stock.code && stock.name && stock.close);
+  const parsed = stocks.map((stock) => {
+    const code = valueOf(stock, ["證券代號", "Code"]);
+    const name = valueOf(stock, ["證券名稱", "Name"]);
+    const value = cleanNumber(valueOf(stock, ["成交金額", "TradeValue"]));
+    const tradeVolume = cleanNumber(valueOf(stock, ["成交股數", "TradeVolume"]));
+    return { code, name, value, tradeVolume, ...stockChange(stock) };
+  }).filter((stock) => stock.code && stock.name && stock.close);
 
   if (!parsed.length) return;
   latestStocks = parsed;
@@ -218,28 +202,12 @@ function renderStocks(stocks) {
   statValues[2].textContent = flat.toLocaleString("zh-TW");
   statValues[3].textContent = `${totalValue.toLocaleString("zh-TW", { maximumFractionDigits: 1 })} 億`;
 
-  const topStocks = [...parsed]
-    .filter((stock) => stock.percent > 0)
-    .sort((a, b) => b.percent - a.percent)
-    .slice(0, 22);
+  const topStocks = [...parsed].filter((s) => s.percent > 0).sort((a, b) => b.percent - a.percent).slice(0, 22);
 
-  tickerStrip.innerHTML = topStocks
-    .slice(0, 12)
-    .map((stock, index) => {
-      const className = index % 3 === 0 ? "down" : "";
-      return `<span class="${className}">${stock.code} ${stock.name} ${stock.percent.toFixed(2)}%</span>`;
-    })
-    .join("");
-
-  renderHeatmap(
-    topStocks.map((stock) => [
-      stock.name,
-      `+${stock.percent.toFixed(2)}%`,
-      `${stock.code} · ${(stock.value / 100000000).toFixed(1)} 億`,
-      `收盤 ${stock.close.toLocaleString("zh-TW")}`,
-      String(Math.max(0, Math.round(stock.tradeVolume / 10000000))),
-    ])
-  );
+  tickerStrip.innerHTML = topStocks.slice(0, 12).map((stock, index) => {
+    const className = index % 3 === 0 ? "down" : "";
+    return `<span class="${className}">${stock.code} ${stock.name} ${stock.percent.toFixed(2)}%</span>`;
+  }).join("");
 
   renderStockTable(topStocks);
   terminalMessage.textContent = `掃描完成：${parsed.length.toLocaleString("zh-TW")} 檔，強勢股 ${topStocks.length} 檔`;
@@ -248,62 +216,44 @@ function renderStocks(stocks) {
 function renderStockTable(stocks) {
   const rows = stocks.slice(0, 10);
   watchCount.textContent = `TOP ${rows.length}`;
-
   if (!rows.length) {
     stockTable.innerHTML = `<div class="empty-state">尚無官方資料，未顯示展示排行。</div>`;
     return;
   }
-
   stockTable.innerHTML = `
     <div class="stock-row stock-head">
       <span>代號</span><span>名稱</span><span>收盤</span><span>漲幅</span><span>成交值</span>
     </div>
-    ${rows
-      .map((stock) => `
-        <div class="stock-row">
-          <span>${stock.code}</span>
-          <strong>${stock.name}</strong>
-          <span>${stock.close.toLocaleString("zh-TW")}</span>
-          <em class="${stock.change >= 0 ? "down" : "up"}">${stock.percent >= 0 ? "+" : ""}${stock.percent.toFixed(2)}%</em>
-          <span>${(stock.value / 100000000).toFixed(1)} 億</span>
-        </div>
-      `)
-      .join("")}
+    ${rows.map((stock) => `
+      <div class="stock-row">
+        <span>${stock.code}</span>
+        <strong>${stock.name}</strong>
+        <span>${stock.close.toLocaleString("zh-TW")}</span>
+        <em class="${stock.change >= 0 ? "down" : "up"}">${stock.percent >= 0 ? "+" : ""}${stock.percent.toFixed(2)}%</em>
+        <span>${(stock.value / 100000000).toFixed(1)} 億</span>
+      </div>
+    `).join("")}
   `;
 }
 
 function searchStocks(query) {
   const keyword = query.trim().toLowerCase();
   if (!keyword) {
-    renderStockTable([...latestStocks].filter((stock) => stock.percent > 0).sort((a, b) => b.percent - a.percent));
+    renderStockTable([...latestStocks].filter((s) => s.percent > 0).sort((a, b) => b.percent - a.percent));
     return;
   }
-
-  const results = latestStocks
-    .filter((stock) => stock.code.includes(keyword) || stock.name.toLowerCase().includes(keyword))
-    .sort((a, b) => b.value - a.value)
-    .slice(0, 10);
-
+  const results = latestStocks.filter((s) => s.code.includes(keyword) || s.name.toLowerCase().includes(keyword)).sort((a, b) => b.value - a.value).slice(0, 10);
   renderStockTable(results);
-  terminalMessage.textContent = results.length
-    ? `搜尋完成：找到 ${results.length} 筆符合「${query}」`
-    : `搜尋完成：沒有找到「${query}」`;
+  terminalMessage.textContent = results.length ? `搜尋完成：找到 ${results.length} 筆符合「${query}」` : `搜尋完成：沒有找到「${query}」`;
 }
 
 function tickClock() {
   const now = new Date();
   const month = String(now.getMonth() + 1).padStart(2, "0");
   const day = String(now.getDate()).padStart(2, "0");
-  const time = now.toLocaleTimeString("zh-TW", {
-    hour12: false,
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-  });
+  const time = now.toLocaleTimeString("zh-TW", { hour12: false, hour: "2-digit", minute: "2-digit", second: "2-digit" });
   refreshLine.textContent = `${month}/${day}  重新整理　更新 ${time}`;
-  headerTimes.forEach((item) => {
-    item.textContent = `${month}/${day} ${time.slice(0, 5)}`;
-  });
+  headerTimes.forEach((item) => { item.textContent = `${month}/${day} ${time.slice(0, 5)}`; });
 }
 
 function showView(viewName, activeLink) {
@@ -311,61 +261,43 @@ function showView(viewName, activeLink) {
     panel.hidden = name !== viewName;
     panel.classList.toggle("active", name === viewName);
   });
-
   viewLinks.forEach((link) => link.classList.toggle("active", link === activeLink));
-
   const focusTarget = activeLink.dataset.focus ? document.querySelector(`#${activeLink.dataset.focus}`) : null;
-  if (focusTarget) {
-    setTimeout(() => focusTarget.focus(), 0);
-  }
+  if (focusTarget) setTimeout(() => focusTarget.focus(), 0);
 }
 
 async function loadMarketData() {
-  renderHeatmap([]);
-  renderStockTable([]);
-  setDataStatus("pending", "資料檢查中", "正在連線官方公開資料");
-
   try {
     const payload = await fetchJson(endpoints.backend, 12000);
-    if (!payload.ok) throw new Error(payload.error || "Backend API failed");
-
-    renderIndexes(
-      normalizeArray(payload.indexes),
-      payload.futuresNear || payload.futures || null,
-      payload.futuresNext || null
-    );
+    if (!payload.ok) throw new Error("Backend failed");
+    renderIndexes(normalizeArray(payload.indexes), payload.futuresNear || payload.futures || null, payload.futuresNext || null);
     renderStocks(normalizeArray(payload.stocks));
-    sourceLine.textContent = `資料來源：${payload.source} · 輔滿 API`;
-    setDataStatus("delayed", "延遲真實資料", `最後檢查 ${formatDateTime(payload.updatedAt)}`);
-    return;
-  } catch (error) {
-    sourceLine.textContent = "輔滿 API 暫時無法連線，改用瀏覽器直連公開資料";
-    setDataStatus("pending", "改用備援連線", "正在嘗試瀏覽器直連 TWSE");
+  } catch (e) {
+    try {
+      const stocks = await fetchJson(endpoints.stocks);
+      renderStocks(Array.isArray(stocks) ? stocks : []);
+    } catch (e2) {
+      tickerStrip.innerHTML = `<span>官方資料暫時無法連線</span>`;
+      terminalMessage.textContent = "官方資料暫時無法連線";
+    }
   }
+}
 
+async function loadHeatmap() {
+  heatmap.innerHTML = `<div class="empty-state">載入產業資料中...</div>`;
   try {
-    const [indexes, stocks] = await Promise.all([
-      fetchJson(endpoints.indexes),
-      fetchJson(endpoints.stocks),
-    ]);
-
-    renderIndexes(Array.isArray(indexes) ? indexes : [], null, null);
-    renderStocks(Array.isArray(stocks) ? stocks : []);
-    sourceLine.textContent = "資料來源：TWSE OpenAPI 公開盤後資料";
-    setDataStatus("delayed", "延遲真實資料", `最後檢查 ${formatDateTime()}`);
-  } catch (error) {
-    sourceLine.textContent = "資料來源：備援展示資料，公開資料暫時無法連線";
-    latestStocks = [];
-    tickerStrip.innerHTML = `<span>官方資料暫時無法連線，未顯示展示行情。</span>`;
-    terminalMessage.textContent = "官方資料暫時無法連線，未載入任何假資料";
-    renderHeatmap([]);
-    renderStockTable([]);
-    setDataStatus("fallback", "無真實資料", "官方資料抓取失敗，畫面已停止顯示行情數字");
+    const data = await fetchJson(endpoints.heatmap, 15000);
+    if (data.ok && data.sectors) {
+      renderHeatmapSectors(data.sectors);
+    }
+  } catch (e) {
+    heatmap.innerHTML = `<div class="empty-state">產業資料載入失敗</div>`;
   }
 }
 
 tickClock();
 loadMarketData();
+loadHeatmap();
 stockSearch.addEventListener("input", (event) => searchStocks(event.target.value));
 viewLinks.forEach((link) => {
   link.addEventListener("click", (event) => {
@@ -375,3 +307,4 @@ viewLinks.forEach((link) => {
 });
 setInterval(tickClock, 1000);
 setInterval(loadMarketData, 5 * 60 * 1000);
+setInterval(loadHeatmap, 10 * 60 * 1000);
