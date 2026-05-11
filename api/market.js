@@ -1,111 +1,118 @@
-const ENDPOINTS = {
-  indexes: "https://openapi.twse.com.tw/v1/exchangeReport/MI_INDEX",
-  stocks:  "https://openapi.twse.com.tw/v1/exchangeReport/STOCK_DAY_ALL",
-  mis_taiex: "https://mis.twse.com.tw/stock/api/getStockInfo.jsp?ex_ch=tse_t00.tw&json=1&delay=0",
-  mis_otc:   "https://mis.twse.com.tw/stock/api/getStockInfo.jsp?ex_ch=otc_o00.tw&json=1&delay=0",
-  futures: "https://openapi.taifex.com.tw/v1/DailyFuturesAndOptions",
+// api/market.js — 改用 Yahoo Finance，避免 TWSE/TAIFEX 封鎖海外 IP
+
+const YAHOO_SYMBOLS = {
+  taiex:      "^TWII",    // 加權指數
+  otc:        "^TWOII",   // 櫃買指數
+  futures:    "TXF=F",    // 台指期近月
 };
 
-const FETCH_HEADERS = {
-  accept: "application/json",
-  "user-agent": "FumanTerminal/1.0",
-  "cache-control": "no-cache",
-};
-
-async function fetchJson(url, timeout = 10000) {
+async function fetchYahoo(symbol, timeout = 8000) {
+  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1d&range=1d`;
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeout);
   try {
-    const response = await fetch(url, {
-      headers: FETCH_HEADERS,
+    const res = await fetch(url, {
+      headers: {
+        "User-Agent": "Mozilla/5.0 (compatible; FumanTerminal/1.0)",
+        "Accept": "application/json",
+      },
       signal: controller.signal,
     });
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
-    return await response.json();
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    const meta = data?.chart?.result?.[0]?.meta;
+    if (!meta) throw new Error("No meta data");
+    return meta;
   } finally {
     clearTimeout(timer);
   }
 }
 
-function isTradingHours() {
-  const now = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Taipei" }));
-  const day = now.getDay();
-  const hour = now.getHours();
-  const minute = now.getMinutes();
-  const totalMinutes = hour * 60 + minute;
-  if (day === 0 || day === 6) return false;
-  return totalMinutes >= 9 * 60 && totalMinutes <= 13 * 60 + 35;
+function calcChange(current, prev) {
+  if (!prev || !current) return { diff: "0", pct: "0", sign: "+" };
+  const diff = (current - prev).toFixed(2);
+  const pct  = ((current - prev) / prev * 100).toFixed(2);
+  return {
+    diff: Math.abs(diff).toString(),
+    pct:  Math.abs(pct).toString(),
+    sign: diff >= 0 ? "+" : "-",
+  };
 }
 
-async function fetchMisIndexes() {
+async function fetchIndexes() {
+  const results = [];
+
+  // 加權指數
   try {
-    const [taiex, otc] = await Promise.all([
-      fetchJson(ENDPOINTS.mis_taiex, 6000),
-      fetchJson(ENDPOINTS.mis_otc, 6000),
-    ]);
-    const results = [];
-    const taiexItem = taiex?.msgArray?.[0];
-    if (taiexItem) {
-      const close = taiexItem.z || taiexItem.y || "--";
-      const prev  = parseFloat(taiexItem.y) || 0;
-      const curr  = parseFloat(close) || 0;
-      const diff  = prev ? (curr - prev).toFixed(2) : "0";
-      const pct   = prev ? ((curr - prev) / prev * 100).toFixed(2) : "0";
-      results.push({
-        指數: "發行量加權股價指數",
-        收盤指數: close,
-        漲跌: diff >= 0 ? "+" : "-",
-        漲跌點數: Math.abs(diff).toString(),
-        漲跌百分比: Math.abs(pct).toString(),
-        _source: "MIS即時",
-      });
-    }
-    const otcItem = otc?.msgArray?.[0];
-    if (otcItem) {
-      const close = otcItem.z || otcItem.y || "--";
-      const prev  = parseFloat(otcItem.y) || 0;
-      const curr  = parseFloat(close) || 0;
-      const diff  = prev ? (curr - prev).toFixed(2) : "0";
-      const pct   = prev ? ((curr - prev) / prev * 100).toFixed(2) : "0";
-      results.push({
-        指數: "櫃買指數",
-        收盤指數: close,
-        漲跌: diff >= 0 ? "+" : "-",
-        漲跌點數: Math.abs(diff).toString(),
-        漲跌百分比: Math.abs(pct).toString(),
-        _source: "MIS即時",
-      });
-    }
-    return results;
+    const meta = await fetchYahoo(YAHOO_SYMBOLS.taiex);
+    const current = meta.regularMarketPrice;
+    const prev    = meta.chartPreviousClose || meta.previousClose;
+    const { diff, pct, sign } = calcChange(current, prev);
+    results.push({
+      指數: "發行量加權股價指數",
+      收盤指數: current?.toFixed(2) ?? "--",
+      漲跌: sign,
+      漲跌點數: diff,
+      漲跌百分比: pct,
+      _source: "Yahoo Finance",
+    });
   } catch (e) {
-    return [];
+    // 加權指數失敗，略過
   }
+
+  // 櫃買指數
+  try {
+    const meta = await fetchYahoo(YAHOO_SYMBOLS.otc);
+    const current = meta.regularMarketPrice;
+    const prev    = meta.chartPreviousClose || meta.previousClose;
+    const { diff, pct, sign } = calcChange(current, prev);
+    results.push({
+      指數: "櫃買指數",
+      收盤指數: current?.toFixed(2) ?? "--",
+      漲跌: sign,
+      漲跌點數: diff,
+      漲跌百分比: pct,
+      _source: "Yahoo Finance",
+    });
+  } catch (e) {
+    // 櫃買指數失敗，略過
+  }
+
+  return results;
 }
 
 async function fetchFutures() {
   try {
-    const data = await fetchJson(ENDPOINTS.futures, 6000);
-    if (!Array.isArray(data)) return null;
-    const tx = data.find(item =>
-      (item["商品代號"] || item["ProductCode"] || "").startsWith("TX")
-    );
-    if (!tx) return null;
+    const meta = await fetchYahoo(YAHOO_SYMBOLS.futures);
+    const current = meta.regularMarketPrice;
+    const prev    = meta.chartPreviousClose || meta.previousClose;
+    const { diff, sign } = calcChange(current, prev);
     return {
-      name:   tx["商品名稱"] || tx["ProductName"] || "台指期",
-      month:  tx["到期月份(週別)"] || tx["ContractMonth"] || "--",
-      price:  tx["成交價格"] || tx["SettlementPrice"] || "--",
-      change: tx["漲跌價格"] || "--",
-      volume: tx["成交量"] || "--",
+      name:       "臺股期貨",
+      month:      meta.contractSymbol || "近月",
+      price:      current?.toFixed(0) ?? "--",
+      change:     `${sign}${diff}`,
+      volume:     meta.regularMarketVolume?.toString() ?? "--",
+      _source:    "Yahoo Finance",
     };
   } catch (e) {
     return null;
   }
 }
 
+function isTradingHours() {
+  const now = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Taipei" }));
+  const day = now.getDay();
+  const totalMinutes = now.getHours() * 60 + now.getMinutes();
+  if (day === 0 || day === 6) return false;
+  return totalMinutes >= 9 * 60 && totalMinutes <= 13 * 60 + 35;
+}
+
 module.exports = async function handler(request, response) {
   response.setHeader("Access-Control-Allow-Origin", "*");
   response.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
   response.setHeader("Access-Control-Allow-Headers", "Content-Type");
+
   if (request.method === "OPTIONS") {
     response.status(204).end();
     return;
@@ -114,45 +121,30 @@ module.exports = async function handler(request, response) {
     response.status(405).json({ error: "Method not allowed" });
     return;
   }
+
   const trading = isTradingHours();
-  let indexes = [];
-  let stocks  = [];
-  let futures = null;
-  let source  = "";
-  let errors  = [];
-  if (trading) {
-    indexes = await fetchMisIndexes();
-    if (indexes.length > 0) source = "MIS即時盤中資料";
-  }
-  if (!indexes.length) {
-    try {
-      const raw = await fetchJson(ENDPOINTS.indexes, 10000);
-      indexes = Array.isArray(raw) ? raw : [];
-      source = "TWSE OpenAPI 盤後資料";
-    } catch (e) {
-      errors.push(`indexes: ${e.message}`);
-    }
-  }
-  try {
-    const raw = await fetchJson(ENDPOINTS.stocks, 12000);
-    stocks = Array.isArray(raw) ? raw : [];
-  } catch (e) {
-    errors.push(`stocks: ${e.message}`);
-  }
-  futures = await fetchFutures();
-  const ok = indexes.length > 0 || stocks.length > 0;
+
+  const [indexes, futures] = await Promise.all([
+    fetchIndexes(),
+    fetchFutures(),
+  ]);
+
+  const ok = indexes.length > 0;
+
   response.setHeader(
     "Cache-Control",
-    trading ? "s-maxage=30, stale-while-revalidate=60" : "s-maxage=120, stale-while-revalidate=300"
+    trading
+      ? "s-maxage=30, stale-while-revalidate=60"
+      : "s-maxage=120, stale-while-revalidate=300"
   );
+
   response.status(ok ? 200 : 502).json({
     ok,
-    source: source || "TWSE OpenAPI",
+    source: "Yahoo Finance",
     trading,
     updatedAt: new Date().toISOString(),
     indexes,
-    stocks,
+    stocks: [],   // Yahoo Finance 不提供個股清單，保留空陣列維持相容性
     futures,
-    ...(errors.length ? { errors } : {}),
   });
 };
