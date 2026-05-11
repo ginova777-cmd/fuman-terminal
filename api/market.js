@@ -1,4 +1,4 @@
-// api/market.js — TWSE（加權）+ MIS即時（櫃買）+ 期交所MIS（台指期）
+// api/market.js — TWSE（加權）+ MIS即時（櫃買）+ Yahoo Finance（台指期）
 
 async function fetchWithTimeout(url, options = {}, timeout = 8000) {
   const controller = new AbortController();
@@ -22,7 +22,7 @@ async function fetchWithTimeout(url, options = {}, timeout = 8000) {
 
 function calcChange(current, prev) {
   if (!prev || !current) return { diff: "0", pct: "0", sign: "+" };
-  const diff = (current - prev).toFixed(2);
+  const diff = (current - prev).toFixed(0);
   const pct  = ((current - prev) / prev * 100).toFixed(2);
   return {
     diff: Math.abs(diff).toString(),
@@ -34,7 +34,7 @@ function calcChange(current, prev) {
 async function fetchIndexes() {
   const results = [];
 
-  // 加權指數 — TWSE OpenAPI（穩定）
+  // 加權指數 — TWSE OpenAPI
   try {
     const raw = await fetchWithTimeout("https://openapi.twse.com.tw/v1/exchangeReport/MI_INDEX");
     const item = raw.find(r => r["指數"] === "發行量加權股價指數");
@@ -76,36 +76,39 @@ async function fetchIndexes() {
 }
 
 async function fetchFutures() {
-  try {
-    const data = await fetchWithTimeout(
-      "https://mis.taifex.com.tw/futures/api/getQuoteList?SymbolType=F&MarketType=0&commodity_id=TX",
-      { headers: { "Referer": "https://mis.taifex.com.tw/" } }
-    );
-    const list = data?.RtData?.QuoteList;
-    if (!Array.isArray(list) || list.length === 0) return { near: null, next: null };
+  // Yahoo Finance 台指期
+  const symbols = [
+    { symbol: "TWF=F", label: "台指期近月" },
+    { symbol: "TWG=F", label: "台指期次月" },
+  ];
 
-    const toFutures = (item) => {
-      if (!item) return null;
-      const price = parseFloat(item.CLastPrice) || 0;
-      const prev  = parseFloat(item.CRefPrice)  || 0;
-      const { diff, sign } = calcChange(price, prev);
-      return {
-        name:    item.DispCName  || "台指期",
-        month:   item.CSymbol    || "--",
-        price:   item.CLastPrice || "--",
-        change:  `${sign}${diff}`,
-        volume:  item.CTotalVolume || "--",
-        _source: "期交所MIS",
-      };
-    };
-
-    return {
-      near: toFutures(list[0]),
-      next: toFutures(list[1] || null),
-    };
-  } catch (e) {
-    return { near: null, next: null };
+  const results = [];
+  for (const { symbol, label } of symbols) {
+    try {
+      const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1d&range=1d`;
+      const data = await fetchWithTimeout(url);
+      const meta = data?.chart?.result?.[0]?.meta;
+      if (meta && meta.regularMarketPrice) {
+        const current = meta.regularMarketPrice;
+        const prev    = meta.chartPreviousClose || meta.previousClose;
+        const { diff, sign } = calcChange(current, prev);
+        results.push({
+          name:    label,
+          month:   symbol,
+          price:   current.toFixed(0),
+          change:  `${sign}${diff}`,
+          volume:  meta.regularMarketVolume?.toString() ?? "--",
+          _source: "Yahoo Finance",
+        });
+      } else {
+        results.push(null);
+      }
+    } catch (e) {
+      results.push(null);
+    }
   }
+
+  return { near: results[0], next: results[1] };
 }
 
 function isTradingHours() {
@@ -140,7 +143,7 @@ module.exports = async function handler(request, response) {
 
   response.status(ok ? 200 : 502).json({
     ok,
-    source: "TWSE + MIS + 期交所",
+    source: "TWSE + MIS + Yahoo Finance",
     trading,
     updatedAt: new Date().toISOString(),
     indexes,
