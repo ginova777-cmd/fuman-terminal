@@ -17,10 +17,92 @@ const viewPanels = {
 const endpoints = {
   backend: "/api/market",
   heatmap: "/api/heatmap",
+  institution: "/api/institution",
   stocks: "https://openapi.twse.com.tw/v1/exchangeReport/STOCK_DAY_ALL",
 };
 
 let latestStocks = [];
+let sectorStocksCache = {};
+let institutionData = {};
+
+const SECTOR_MAP = {
+  "2454":"CPU/ASIC/IP","3443":"CPU/ASIC/IP","3661":"CPU/ASIC/IP","3529":"CPU/ASIC/IP",
+  "3035":"CPU/ASIC/IP","6643":"CPU/ASIC/IP","6533":"CPU/ASIC/IP","5274":"CPU/ASIC/IP",
+  "3036":"CPU/ASIC/IP","6770":"CPU/ASIC/IP","4967":"CPU/ASIC/IP","6582":"CPU/ASIC/IP",
+  "3481":"面板業","2475":"面板業","3673":"面板業","5269":"面板業","8150":"面板業","3665":"面板業",
+  "2330":"IC生產製造","2303":"IC生產製造","5347":"IC生產製造","2337":"IC生產製造","2344":"IC生產製造","2408":"IC生產製造",
+  "3260":"記憶體/儲存","8299":"記憶體/儲存","4979":"記憶體/儲存","2406":"記憶體/儲存","3483":"記憶體/儲存",
+  "6409":"電源系統/BBU/UPS","1537":"電源系統/BBU/UPS","3504":"電源系統/BBU/UPS","6208":"電源系統/BBU/UPS",
+  "1560":"電源系統/BBU/UPS","3519":"電源系統/BBU/UPS","6550":"電源系統/BBU/UPS","3380":"電源系統/BBU/UPS",
+  "1590":"電源系統/BBU/UPS","6679":"電源系統/BBU/UPS","6197":"電源系統/BBU/UPS","3023":"電源系統/BBU/UPS",
+  "6670":"電源系統/BBU/UPS","3017":"電源系統/BBU/UPS",
+  "3444":"半導體設備/測試","5222":"半導體設備/測試","3588":"半導體設備/測試","6510":"半導體設備/測試",
+  "3530":"半導體設備/測試","5243":"半導體設備/測試","3413":"半導體設備/測試","2329":"半導體設備/測試",
+  "2317":"組裝代工","2354":"組裝代工","2353":"組裝代工","2356":"組裝代工","2324":"組裝代工","4938":"組裝代工","2382":"組裝代工",
+  "2327":"被動元件","2492":"被動元件","2049":"被動元件","2447":"被動元件","2351":"被動元件",
+  "6271":"被動元件","2483":"被動元件","3231":"被動元件","2390":"被動元件","2441":"被動元件",
+  "2395":"工業電腦","6414":"工業電腦","3596":"工業電腦","6438":"工業電腦","3026":"工業電腦","6485":"工業電腦",
+  "3708":"通訊/CPO","4904":"通訊/CPO","2412":"通訊/CPO","3704":"通訊/CPO","6547":"通訊/CPO","4977":"通訊/CPO","3706":"通訊/CPO",
+  "2379":"IC設計服務","3711":"IC設計服務","6415":"IC設計服務","4966":"IC設計服務","3034":"IC設計服務",
+  "6146":"IC設計服務","2385":"IC設計服務","3645":"IC設計服務","3163":"IC設計服務","5388":"IC設計服務",
+  "6274":"IC設計服務","3561":"IC設計服務","6191":"IC設計服務",
+  "3051":"網通設備組件","6277":"網通設備組件","4906":"網通設備組件","2399":"網通設備組件","3321":"網通設備組件",
+  "3037":"PCB/載板","6269":"PCB/載板","2383":"PCB/載板","3005":"PCB/載板","3044":"PCB/載板",
+  "2365":"PCB/載板","3406":"PCB/載板","8046":"PCB/載板","2457":"PCB/載板","3376":"PCB/載板","2461":"PCB/載板","6289":"PCB/載板",
+  "2308":"半導體","2449":"半導體","2344":"半導體","3711":"半導體","2337":"半導體",
+  "3034":"半導體","6415":"半導體","2385":"半導體","3529":"半導體","4966":"半導體",
+  "6146":"半導體","2329":"半導體","5347":"半導體","2363":"半導體",
+  "6669":"AI伺服器","3060":"AI伺服器","3008":"AI伺服器","3045":"AI伺服器",
+  "1802":"玻璃陶瓷","1805":"玻璃陶瓷","1806":"玻璃陶瓷","9902":"玻璃陶瓷","1810":"玻璃陶瓷",
+  "6235":"IC封測","3515":"IC封測","2340":"IC封測","2404":"IC封測",
+  "1717":"化學","1710":"化學","1711":"化學","1712":"化學","1713":"化學","1714":"化學",
+  "1715":"化學","1718":"化學","1721":"化學","1722":"化學","4743":"化學","1737":"化學","1731":"化學",
+  "2350":"液冷/散熱","6230":"液冷/散熱","3526":"液冷/散熱","3623":"液冷/散熱","2398":"液冷/散熱","1626":"液冷/散熱","3227":"液冷/散熱",
+  "3576":"綠能環保","3533":"綠能環保","6549":"綠能環保","3580":"綠能環保","6513":"綠能環保","3560":"綠能環保","3591":"綠能環保","6220":"綠能環保",
+  "9910":"運動休閒","9914":"運動休閒","5706":"運動休閒","9945":"運動休閒",
+  "6451":"數位雲端","3042":"數位雲端","6180":"數位雲端","5351":"數位雲端","3592":"數位雲端","6488":"數位雲端",
+  "3702":"電子通路","2347":"電子通路","2348":"電子通路","8454":"電子通路",
+  "1301":"塑膠","1303":"塑膠","1304":"塑膠","1305":"塑膠","1308":"塑膠","1309":"塑膠","1310":"塑膠","1312":"塑膠","1313":"塑膠","1314":"塑膠",
+  "1519":"電機機械","1504":"電機機械","1513":"電機機械","1530":"電機機械","1537":"電機機械","1538":"電機機械","1590":"電機機械","1536":"電機機械","1598":"電機機械",
+  "2357":"電腦及週邊","6669":"電腦及週邊","2353":"電腦及週邊","2362":"電腦及週邊","2399":"電腦及週邊","2376":"電腦及週邊","3060":"電腦及週邊",
+  "1603":"電器電纜","1604":"電器電纜","1605":"電器電纜","1608":"電器電纜","1609":"電器電纜","1610":"電器電纜","1611":"電器電纜","1612":"電器電纜",
+  "1101":"水泥","1102":"水泥","1103":"水泥","1104":"水泥","1108":"水泥","1109":"水泥",
+  "2358":"其他電子","2360":"其他電子","2368":"其他電子","2369":"其他電子","2374":"其他電子","2059":"其他電子","6209":"其他電子",
+  "9105":"存托憑證","9106":"存托憑證",
+  "2881":"金融保險","2882":"金融保險","2883":"金融保險","2884":"金融保險","2885":"金融保險","2886":"金融保險",
+  "2887":"金融保險","2888":"金融保險","2889":"金融保險","2890":"金融保險","2891":"金融保險","2892":"金融保險",
+  "2801":"金融保險","5880":"金融保險","2823":"金融保險","2833":"金融保險","2841":"金融保險","2845":"金融保險","5876":"金融保險",
+  "2501":"建材營造","2511":"建材營造","2515":"建材營造","2520":"建材營造","2524":"建材營造",
+  "2527":"建材營造","2530":"建材營造","2534":"建材營造","2542":"建材營造","5522":"建材營造","2536":"建材營造","2538":"建材營造",
+  "1402":"紡織","1409":"紡織","1410":"紡織","1414":"紡織","1417":"紡織","1418":"紡織","1434":"紡織","1436":"紡織",
+  "1438":"紡織","1440":"紡織","1441":"紡織","1442":"紡織","1443":"紡織","1444":"紡織","1445":"紡織",
+  "1446":"紡織","1447":"紡織","1448":"紡織","1449":"紡織","1452":"紡織","1453":"紡織","1454":"紡織",
+  "1455":"紡織","1456":"紡織","1457":"紡織","1458":"紡織","1459":"紡織","1460":"紡織","1461":"紡織",
+  "1463":"紡織","1464":"紡織","1465":"紡織","1466":"紡織","1467":"紡織","1468":"紡織","1469":"紡織",
+  "1470":"紡織","1471":"紡織","1472":"紡織","1473":"紡織","1474":"紡織","1475":"紡織","1476":"紡織","1477":"紡織","1478":"紡織",
+  "2103":"橡膠","2104":"橡膠","2105":"橡膠","2106":"橡膠","2107":"橡膠","2108":"橡膠","2109":"橡膠","2110":"橡膠",
+  "2903":"貿易百貨","2904":"貿易百貨","2906":"貿易百貨","2908":"貿易百貨","2910":"貿易百貨","2911":"貿易百貨","2912":"貿易百貨","9904":"貿易百貨",
+  "3481":"光電","2475":"光電","3008":"光電","2340":"光電","2409":"光電","3707":"光電","5269":"光電","3044":"光電","3673":"光電",
+  "6505":"油電燃氣","9907":"油電燃氣",
+  "1216":"食品","1210":"食品","1213":"食品","1215":"食品","1217":"食品","1218":"食品","1219":"食品","1220":"食品",
+  "1225":"食品","1227":"食品","1229":"食品","1231":"食品","1232":"食品","1233":"食品","1234":"食品",
+  "4746":"生技醫藥","6446":"生技醫藥","4743":"生技醫藥","1786":"生技醫藥","4166":"生技醫藥","4164":"生技醫藥",
+  "4111":"生技醫藥","4119":"生技醫藥","4144":"生技醫藥","4116":"生技醫藥","4147":"生技醫藥","4148":"生技醫藥",
+  "4153":"生技醫藥","4154":"生技醫藥","4157":"生技醫藥","4158":"生技醫藥","4160":"生技醫藥","4161":"生技醫藥",
+  "4162":"生技醫藥","4163":"生技醫藥","4165":"生技醫藥","4168":"生技醫藥","4169":"生技醫藥","4171":"生技醫藥",
+  "2201":"汽車","2204":"汽車","2206":"汽車","2207":"汽車","2209":"汽車","2211":"汽車","2212":"汽車","1319":"汽車","2203":"汽車","2208":"汽車",
+  "2727":"觀光餐旅","2731":"觀光餐旅","2733":"觀光餐旅","2736":"觀光餐旅","6704":"觀光餐旅",
+  "2719":"觀光餐旅","2722":"觀光餐旅","2704":"觀光餐旅","2706":"觀光餐旅","2707":"觀光餐旅","2712":"觀光餐旅","2718":"觀光餐旅",
+  "2326":"資訊服務","6214":"資訊服務","2405":"資訊服務","2434":"資訊服務","5203":"資訊服務","5478":"資訊服務",
+  "1262":"農業科技","1264":"農業科技","1267":"農業科技","1268":"農業科技","1275":"農業科技","4205":"農業科技","4207":"農業科技","4712":"農業科技",
+  "1476":"居家生活","1477":"居家生活","1536":"居家生活","8464":"居家生活","2923":"居家生活","9933":"居家生活",
+  "2603":"航運","2609":"航運","2610":"航運","2615":"航運","2618":"航運","2637":"航運","2641":"航運",
+  "5608":"航運","2614":"航運","2616":"航運","2617":"航運","2622":"航運","2624":"航運","2626":"航運",
+  "2002":"鋼鐵","2006":"鋼鐵","2007":"鋼鐵","2008":"鋼鐵","2009":"鋼鐵","2010":"鋼鐵","2012":"鋼鐵",
+  "2014":"鋼鐵","2015":"鋼鐵","2027":"鋼鐵","2029":"鋼鐵","2030":"鋼鐵","2031":"鋼鐵","2032":"鋼鐵",
+  "2033":"鋼鐵","2034":"鋼鐵","2035":"鋼鐵","2036":"鋼鐵","2038":"鋼鐵","2039":"鋼鐵",
+  "2002":"鋼鐵","6550":"創新板股","6730":"創新板股","6754":"創新板股","6811":"創新板股",
+};
 
 function cleanNumber(value) {
   if (value === undefined || value === null || value === "") return 0;
@@ -66,17 +148,6 @@ function normalizeArray(value) {
   return [];
 }
 
-function formatDateTime(value = new Date()) {
-  const date = value instanceof Date ? value : new Date(value);
-  if (Number.isNaN(date.getTime())) return "時間未知";
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  const time = date.toLocaleTimeString("zh-TW", {
-    hour12: false, hour: "2-digit", minute: "2-digit", second: "2-digit",
-  });
-  return `${month}/${day} ${time}`;
-}
-
 function getSectorColor(pct) {
   if (pct >= 3)  return "#c0392b";
   if (pct >= 2)  return "#e74c3c";
@@ -90,22 +161,152 @@ function getSectorColor(pct) {
   return "#145a32";
 }
 
+function formatInstitution(val) {
+  if (val === undefined || val === null) return "--";
+  const n = parseInt(val);
+  if (isNaN(n)) return "--";
+  const sign = n >= 0 ? "+" : "";
+  return `${sign}${n.toLocaleString("zh-TW")}`;
+}
+
+function getInstColor(val) {
+  const n = parseInt(val);
+  if (isNaN(n) || n === 0) return "#aaa";
+  return n > 0 ? "#e74c3c" : "#27ae60";
+}
+
+function openSectorModal(sector) {
+  const stocks = sectorStocksCache[sector.name] || [];
+  const existing = document.querySelector("#sector-modal");
+  if (existing) existing.remove();
+
+  const sortedStocks = [...stocks].sort((a, b) => b.pct - a.pct);
+  const today = new Date();
+  const dateStr = `${String(today.getMonth()+1).padStart(2,"0")}/${String(today.getDate()).padStart(2,"0")}`;
+
+  const modal = document.createElement("div");
+  modal.id = "sector-modal";
+  modal.style.cssText = `
+    position:fixed; inset:0; z-index:9999;
+    background:rgba(0,0,0,0.8);
+    display:flex; align-items:center; justify-content:center;
+    padding:20px;
+  `;
+
+  const sign = sector.pct >= 0 ? "+" : "";
+
+  modal.innerHTML = `
+    <div style="
+      background:#12151f; border:1px solid #2a2f45; border-radius:12px;
+      width:100%; max-width:1000px; max-height:88vh; overflow:hidden;
+      display:flex; flex-direction:column;
+    ">
+      <div style="padding:16px 24px 12px; border-bottom:1px solid #2a2f45;">
+        <div style="color:#aaa; font-size:11px; margin-bottom:4px;">產業即時動態</div>
+        <div style="display:flex; align-items:center; justify-content:space-between;">
+          <div>
+            <div style="font-size:20px; font-weight:700; color:#fff;">${sector.name}</div>
+            <div style="color:#888; font-size:12px; margin-top:2px;">${dateStr} · 全部 · ${sector.count} 檔 · 成交額排序</div>
+          </div>
+          <div style="display:flex; gap:12px; align-items:center;">
+            <div style="background:#1a1e2e; border-radius:8px; padding:10px 16px; text-align:center;">
+              <div style="color:#888; font-size:11px;">平均漲跌幅</div>
+              <div style="font-size:22px; font-weight:700; color:${sector.pct >= 0 ? "#e74c3c" : "#27ae60"}">${sign}${sector.pct.toFixed(2)}%</div>
+            </div>
+            <div style="background:#1a1e2e; border-radius:8px; padding:10px 16px; text-align:center;">
+              <div style="color:#888; font-size:11px;">成交金額</div>
+              <div style="font-size:18px; font-weight:600; color:#fff">${sector.totalValue} 億</div>
+            </div>
+            <div style="background:#1a1e2e; border-radius:8px; padding:10px 16px; text-align:center;">
+              <div style="color:#888; font-size:11px;">上漲 / 下跌</div>
+              <div style="font-size:18px; font-weight:600;">
+                <span style="color:#e74c3c">▲${sector.up}</span>
+                <span style="color:#555; margin:0 4px;">/</span>
+                <span style="color:#27ae60">▼${sector.down}</span>
+              </div>
+            </div>
+            <div style="background:#1a1e2e; border-radius:8px; padding:10px 16px; text-align:center;">
+              <div style="color:#888; font-size:11px;">成交張數排名</div>
+              <div style="font-size:14px; font-weight:600; color:#7ec8e3">${sector.leader?.split(" ")[0] || "--"} ${sector.leader?.split(" ").slice(1).join(" ") || ""}</div>
+            </div>
+            <button id="modal-close" style="
+              background:none; border:1px solid #333; color:#aaa;
+              width:30px; height:30px; border-radius:6px; cursor:pointer;
+              font-size:18px; line-height:1;
+            ">×</button>
+          </div>
+        </div>
+      </div>
+
+      <div style="overflow-y:auto; flex:1;">
+        <table style="width:100%; border-collapse:collapse; font-size:13px;">
+          <thead>
+            <tr style="background:#0c0f1a; color:#666; text-align:right; position:sticky; top:0; z-index:1;">
+              <th style="text-align:left; padding:10px 16px; font-weight:500; color:#888;">股票</th>
+              <th style="padding:10px 8px; font-weight:500;">市場</th>
+              <th style="padding:10px 12px; font-weight:500;">現價</th>
+              <th style="padding:10px 12px; font-weight:500;">漲跌</th>
+              <th style="padding:10px 12px; font-weight:500;">成交額</th>
+              <th style="padding:10px 12px; font-weight:500;">成交量</th>
+              <th style="padding:10px 12px; font-weight:500;">外資</th>
+              <th style="padding:10px 12px; font-weight:500;">投信</th>
+              <th style="padding:10px 12px; font-weight:500;">自營商</th>
+              <th style="padding:10px 16px; font-weight:500;">法人</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${sortedStocks.map((s, i) => {
+              const pctColor = s.pct > 0 ? "#e74c3c" : s.pct < 0 ? "#27ae60" : "#aaa";
+              const pctSign = s.pct >= 0 ? "+" : "";
+              const inst = institutionData[s.code] || {};
+              const foreign = inst.foreign ?? null;
+              const trust = inst.trust ?? null;
+              const dealer = inst.dealer ?? null;
+              const total = (foreign !== null && trust !== null && dealer !== null)
+                ? foreign + trust + dealer : null;
+              return `
+                <tr style="border-bottom:1px solid #161925; ${i % 2 === 0 ? "" : "background:#0c0f1a"}">
+                  <td style="padding:10px 16px;">
+                    <div style="color:#7ec8e3; font-weight:600; font-size:13px;">${s.code} ${s.name}</div>
+                    <div style="color:#555; font-size:11px; margin-top:2px;">${SECTOR_MAP[s.code] ? `半導體 · IC設計服務 · ${sector.name}` : sector.name}</div>
+                  </td>
+                  <td style="padding:10px 8px; text-align:center; color:#888; font-size:12px;">上市</td>
+                  <td style="padding:10px 12px; text-align:right; color:#fff; font-weight:600;">${s.close.toLocaleString("zh-TW")}</td>
+                  <td style="padding:10px 12px; text-align:right; color:${pctColor}; font-weight:700;">${pctSign}${s.pct.toFixed(2)}%</td>
+                  <td style="padding:10px 12px; text-align:right; color:#aaa;">${(s.value/100000000).toFixed(1)} 億</td>
+                  <td style="padding:10px 12px; text-align:right; color:#aaa;">${(s.volume/1000).toFixed(0)} 張</td>
+                  <td style="padding:10px 12px; text-align:right; color:${getInstColor(foreign)}; font-weight:500;">${formatInstitution(foreign)}</td>
+                  <td style="padding:10px 12px; text-align:right; color:${getInstColor(trust)}; font-weight:500;">${formatInstitution(trust)}</td>
+                  <td style="padding:10px 12px; text-align:right; color:${getInstColor(dealer)}; font-weight:500;">${formatInstitution(dealer)}</td>
+                  <td style="padding:10px 16px; text-align:right; color:${getInstColor(total)}; font-weight:600;">${formatInstitution(total)}</td>
+                </tr>
+              `;
+            }).join("")}
+          </tbody>
+        </table>
+        ${sortedStocks.length === 0 ? `<div style="text-align:center; padding:40px; color:#666;">載入個股資料中...</div>` : ""}
+      </div>
+    </div>
+  `;
+
+  document.body.appendChild(modal);
+  modal.querySelector("#modal-close").addEventListener("click", () => modal.remove());
+  modal.addEventListener("click", (e) => { if (e.target === modal) modal.remove(); });
+}
+
 function renderHeatmapSectors(sectors) {
   if (!sectors || !sectors.length) {
     heatmap.innerHTML = `<div class="empty-state">等待產業資料...</div>`;
     return;
   }
-
   heatmap.innerHTML = sectors.map(s => {
     const pct = s.pct || 0;
     const sign = pct >= 0 ? "+" : "";
     const bg = getSectorColor(pct);
-    const valueStr = s.totalValue ? `${s.count} 檔 · ${s.totalValue} 億` : `${s.count} 檔`;
-
     return `
-      <article class="sector-card" style="background:${bg}">
+      <article class="sector-card" style="background:${bg}; cursor:pointer;" data-sector="${encodeURIComponent(JSON.stringify(s))}">
         <h3>${s.name}<span>${sign}${pct.toFixed(2)}%</span></h3>
-        <p>${valueStr}</p>
+        <p>${s.count} 檔 · ${s.totalValue} 億</p>
         <small>
           <span>▲ ${s.up}</span><b>▼ ${s.down}</b>
           <span>${s.leader || "--"}</span>
@@ -113,54 +314,43 @@ function renderHeatmapSectors(sectors) {
       </article>
     `;
   }).join("");
+
+  heatmap.querySelectorAll(".sector-card").forEach(card => {
+    card.addEventListener("click", () => {
+      const sector = JSON.parse(decodeURIComponent(card.dataset.sector));
+      openSectorModal(sector);
+    });
+  });
 }
 
 function renderIndexes(indexes, futuresNear, futuresNext) {
-  const targets = [
-    ["發行量加權", "加權指數"],
-    ["櫃買", "櫃買指數"],
-  ];
-
+  const targets = [["發行量加權", "加權指數"], ["櫃買", "櫃買指數"]];
   targets.forEach(([keyword, label], index) => {
     const record = indexes.find((item) => String(valueOf(item, ["指數", "指數/報酬指數"])).includes(keyword));
     if (!record || !metricCards[index]) return;
-
     const sign = valueOf(record, ["漲跌", "漲跌(+/-)"]);
     const points = valueOf(record, ["漲跌點數"]);
     const percent = valueOf(record, ["漲跌百分比", "漲跌百分比(%)"]);
     const close = valueOf(record, ["收盤指數"]);
     const trendClass = sign === "-" ? "up" : "down";
-
     metricCards[index].innerHTML = `
       <span>↗ ${label}</span>
       <strong>${formatNumber(close)}</strong>
       <em class="${trendClass}">${formatChange(sign, points, percent)}</em>
     `;
   });
-
   if (metricCards[2]) {
     if (futuresNear) {
       const sign = String(futuresNear.change || "").startsWith("-") ? "-" : "+";
-      const trendClass = sign === "-" ? "up" : "down";
-      metricCards[2].innerHTML = `
-        <span>⇅ 台指近 ${futuresNear.month || ""}</span>
-        <strong>${formatNumber(futuresNear.price, 0)}</strong>
-        <em class="${trendClass}">${futuresNear.change || "--"}</em>
-      `;
+      metricCards[2].innerHTML = `<span>⇅ 台指近 ${futuresNear.month||""}</span><strong>${formatNumber(futuresNear.price,0)}</strong><em class="${sign==="-"?"up":"down"}">${futuresNear.change||"--"}</em>`;
     } else {
       metricCards[2].innerHTML = `<span>⇅ 台指近</span><strong>--</strong><em>非交易時段</em>`;
     }
   }
-
   if (metricCards[3]) {
     if (futuresNext) {
       const sign = String(futuresNext.change || "").startsWith("-") ? "-" : "+";
-      const trendClass = sign === "-" ? "up" : "down";
-      metricCards[3].innerHTML = `
-        <span>☾ 台指次月 ${futuresNext.month || ""}</span>
-        <strong>${formatNumber(futuresNext.price, 0)}</strong>
-        <em class="${trendClass}">${futuresNext.change || "--"}</em>
-      `;
+      metricCards[3].innerHTML = `<span>☾ 台指次月 ${futuresNext.month||""}</span><strong>${formatNumber(futuresNext.price,0)}</strong><em class="${sign==="-"?"up":"down"}">${futuresNext.change||"--"}</em>`;
     } else {
       metricCards[3].innerHTML = `<span>☾ 台指次月</span><strong>--</strong><em>非交易時段</em>`;
     }
@@ -175,6 +365,25 @@ function stockChange(stock) {
   return { change, close, percent };
 }
 
+function buildSectorStocksCache(stocks) {
+  sectorStocksCache = {};
+  for (const stock of stocks) {
+    const code = valueOf(stock, ["證券代號", "Code"]);
+    const name = valueOf(stock, ["證券名稱", "Name"]);
+    const change = parseFloat(valueOf(stock, ["漲跌價差", "Change"])) || 0;
+    const close = parseFloat(valueOf(stock, ["收盤價", "ClosingPrice"])) || 0;
+    const value = parseFloat(valueOf(stock, ["成交金額", "TradeValue"])) || 0;
+    const volume = parseFloat(valueOf(stock, ["成交股數", "TradeVolume"])) || 0;
+    if (!code || !close) continue;
+    const prev = close - change;
+    const pct = prev > 0 ? (change / prev) * 100 : 0;
+    const industry = SECTOR_MAP[code];
+    if (!industry) continue;
+    if (!sectorStocksCache[industry]) sectorStocksCache[industry] = [];
+    sectorStocksCache[industry].push({ code, name, close, change, pct, value, volume });
+  }
+}
+
 function renderStocks(stocks) {
   const parsed = stocks.map((stock) => {
     const code = valueOf(stock, ["證券代號", "Code"]);
@@ -182,15 +391,16 @@ function renderStocks(stocks) {
     const value = cleanNumber(valueOf(stock, ["成交金額", "TradeValue"]));
     const tradeVolume = cleanNumber(valueOf(stock, ["成交股數", "TradeVolume"]));
     return { code, name, value, tradeVolume, ...stockChange(stock) };
-  }).filter((stock) => stock.code && stock.name && stock.close);
+  }).filter((s) => s.code && s.name && s.close);
 
   if (!parsed.length) return;
   latestStocks = parsed;
+  buildSectorStocksCache(stocks);
 
-  const up = parsed.filter((stock) => stock.change > 0).length;
-  const down = parsed.filter((stock) => stock.change < 0).length;
+  const up = parsed.filter((s) => s.change > 0).length;
+  const down = parsed.filter((s) => s.change < 0).length;
   const flat = parsed.length - up - down;
-  const totalValue = parsed.reduce((sum, stock) => sum + stock.value, 0) / 100000000;
+  const totalValue = parsed.reduce((sum, s) => sum + s.value, 0) / 100000000;
   const upPercent = (up / parsed.length) * 100;
 
   strengthPanel.querySelector(".strength-head p").textContent = `${parsed.length.toLocaleString("zh-TW")} 檔 · 上漲 ${up.toLocaleString("zh-TW")} 檔`;
@@ -203,11 +413,9 @@ function renderStocks(stocks) {
   statValues[3].textContent = `${totalValue.toLocaleString("zh-TW", { maximumFractionDigits: 1 })} 億`;
 
   const topStocks = [...parsed].filter((s) => s.percent > 0).sort((a, b) => b.percent - a.percent).slice(0, 22);
-
-  tickerStrip.innerHTML = topStocks.slice(0, 12).map((stock, index) => {
-    const className = index % 3 === 0 ? "down" : "";
-    return `<span class="${className}">${stock.code} ${stock.name} ${stock.percent.toFixed(2)}%</span>`;
-  }).join("");
+  tickerStrip.innerHTML = topStocks.slice(0, 12).map((s, i) =>
+    `<span class="${i%3===0?"down":""}">${s.code} ${s.name} ${s.percent.toFixed(2)}%</span>`
+  ).join("");
 
   renderStockTable(topStocks);
   terminalMessage.textContent = `掃描完成：${parsed.length.toLocaleString("zh-TW")} 檔，強勢股 ${topStocks.length} 檔`;
@@ -216,21 +424,17 @@ function renderStocks(stocks) {
 function renderStockTable(stocks) {
   const rows = stocks.slice(0, 10);
   watchCount.textContent = `TOP ${rows.length}`;
-  if (!rows.length) {
-    stockTable.innerHTML = `<div class="empty-state">尚無官方資料，未顯示展示排行。</div>`;
-    return;
-  }
+  if (!rows.length) { stockTable.innerHTML = `<div class="empty-state">尚無資料</div>`; return; }
   stockTable.innerHTML = `
     <div class="stock-row stock-head">
       <span>代號</span><span>名稱</span><span>收盤</span><span>漲幅</span><span>成交值</span>
     </div>
-    ${rows.map((stock) => `
+    ${rows.map((s) => `
       <div class="stock-row">
-        <span>${stock.code}</span>
-        <strong>${stock.name}</strong>
-        <span>${stock.close.toLocaleString("zh-TW")}</span>
-        <em class="${stock.change >= 0 ? "down" : "up"}">${stock.percent >= 0 ? "+" : ""}${stock.percent.toFixed(2)}%</em>
-        <span>${(stock.value / 100000000).toFixed(1)} 億</span>
+        <span>${s.code}</span><strong>${s.name}</strong>
+        <span>${s.close.toLocaleString("zh-TW")}</span>
+        <em class="${s.change>=0?"down":"up"}">${s.percent>=0?"+":""}${s.percent.toFixed(2)}%</em>
+        <span>${(s.value/100000000).toFixed(1)} 億</span>
       </div>
     `).join("")}
   `;
@@ -238,39 +442,36 @@ function renderStockTable(stocks) {
 
 function searchStocks(query) {
   const keyword = query.trim().toLowerCase();
-  if (!keyword) {
-    renderStockTable([...latestStocks].filter((s) => s.percent > 0).sort((a, b) => b.percent - a.percent));
-    return;
-  }
-  const results = latestStocks.filter((s) => s.code.includes(keyword) || s.name.toLowerCase().includes(keyword)).sort((a, b) => b.value - a.value).slice(0, 10);
+  if (!keyword) { renderStockTable([...latestStocks].filter((s)=>s.percent>0).sort((a,b)=>b.percent-a.percent)); return; }
+  const results = latestStocks.filter((s)=>s.code.includes(keyword)||s.name.toLowerCase().includes(keyword)).sort((a,b)=>b.value-a.value).slice(0,10);
   renderStockTable(results);
-  terminalMessage.textContent = results.length ? `搜尋完成：找到 ${results.length} 筆符合「${query}」` : `搜尋完成：沒有找到「${query}」`;
+  terminalMessage.textContent = results.length ? `找到 ${results.length} 筆符合「${query}」` : `沒有找到「${query}」`;
 }
 
 function tickClock() {
   const now = new Date();
-  const month = String(now.getMonth() + 1).padStart(2, "0");
-  const day = String(now.getDate()).padStart(2, "0");
-  const time = now.toLocaleTimeString("zh-TW", { hour12: false, hour: "2-digit", minute: "2-digit", second: "2-digit" });
+  const month = String(now.getMonth()+1).padStart(2,"0");
+  const day = String(now.getDate()).padStart(2,"0");
+  const time = now.toLocaleTimeString("zh-TW",{hour12:false,hour:"2-digit",minute:"2-digit",second:"2-digit"});
   refreshLine.textContent = `${month}/${day}  重新整理　更新 ${time}`;
-  headerTimes.forEach((item) => { item.textContent = `${month}/${day} ${time.slice(0, 5)}`; });
+  headerTimes.forEach((item)=>{item.textContent=`${month}/${day} ${time.slice(0,5)}`;});
 }
 
 function showView(viewName, activeLink) {
-  Object.entries(viewPanels).forEach(([name, panel]) => {
+  Object.entries(viewPanels).forEach(([name, panel])=>{
     panel.hidden = name !== viewName;
     panel.classList.toggle("active", name === viewName);
   });
-  viewLinks.forEach((link) => link.classList.toggle("active", link === activeLink));
+  viewLinks.forEach((link)=>link.classList.toggle("active", link===activeLink));
   const focusTarget = activeLink.dataset.focus ? document.querySelector(`#${activeLink.dataset.focus}`) : null;
-  if (focusTarget) setTimeout(() => focusTarget.focus(), 0);
+  if (focusTarget) setTimeout(()=>focusTarget.focus(),0);
 }
 
 async function loadMarketData() {
   try {
     const payload = await fetchJson(endpoints.backend, 12000);
     if (!payload.ok) throw new Error("Backend failed");
-    renderIndexes(normalizeArray(payload.indexes), payload.futuresNear || payload.futures || null, payload.futuresNext || null);
+    renderIndexes(normalizeArray(payload.indexes), payload.futuresNear||payload.futures||null, payload.futuresNext||null);
     renderStocks(normalizeArray(payload.stocks));
   } catch (e) {
     try {
@@ -278,7 +479,6 @@ async function loadMarketData() {
       renderStocks(Array.isArray(stocks) ? stocks : []);
     } catch (e2) {
       tickerStrip.innerHTML = `<span>官方資料暫時無法連線</span>`;
-      terminalMessage.textContent = "官方資料暫時無法連線";
     }
   }
 }
@@ -287,24 +487,31 @@ async function loadHeatmap() {
   heatmap.innerHTML = `<div class="empty-state">載入產業資料中...</div>`;
   try {
     const data = await fetchJson(endpoints.heatmap, 15000);
-    if (data.ok && data.sectors) {
-      renderHeatmapSectors(data.sectors);
-    }
+    if (data.ok && data.sectors) renderHeatmapSectors(data.sectors);
   } catch (e) {
     heatmap.innerHTML = `<div class="empty-state">產業資料載入失敗</div>`;
   }
 }
 
+async function loadInstitution() {
+  try {
+    const data = await fetchJson(endpoints.institution, 12000);
+    if (data.ok && data.data) institutionData = data.data;
+  } catch (e) {}
+}
+
 tickClock();
 loadMarketData();
 loadHeatmap();
-stockSearch.addEventListener("input", (event) => searchStocks(event.target.value));
-viewLinks.forEach((link) => {
-  link.addEventListener("click", (event) => {
-    event.preventDefault();
+loadInstitution();
+stockSearch.addEventListener("input", (e)=>searchStocks(e.target.value));
+viewLinks.forEach((link)=>{
+  link.addEventListener("click",(e)=>{
+    e.preventDefault();
     showView(link.dataset.view, link);
   });
 });
 setInterval(tickClock, 1000);
-setInterval(loadMarketData, 5 * 60 * 1000);
-setInterval(loadHeatmap, 10 * 60 * 1000);
+setInterval(loadMarketData, 5*60*1000);
+setInterval(loadHeatmap, 10*60*1000);
+setInterval(loadInstitution, 10*60*1000);
