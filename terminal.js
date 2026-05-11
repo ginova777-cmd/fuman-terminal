@@ -515,3 +515,195 @@ setInterval(tickClock, 1000);
 setInterval(loadMarketData, 5*60*1000);
 setInterval(loadHeatmap, 10*60*1000);
 setInterval(loadInstitution, 10*60*1000);
+
+// ===== 自選股功能 =====
+const watchlistView = document.querySelector("#watchlist-view");
+const watchlistStocks = document.querySelector("#watchlist-stocks");
+const watchlistAnalysis = document.querySelector("#watchlist-analysis");
+const watchlistSearchInput = document.querySelector("#watchlist-search-input");
+const watchlistAddBtn = document.querySelector("#watchlist-add-btn");
+const watchlistRefresh = document.querySelector("#watchlist-refresh");
+
+function getWatchlist() {
+  try { return JSON.parse(localStorage.getItem("fuman_watchlist") || "[]"); } catch { return []; }
+}
+
+function saveWatchlist(list) {
+  localStorage.setItem("fuman_watchlist", JSON.stringify(list));
+}
+
+function showTVAnalysis(code, name) {
+  // TradingView Technical Analysis Widget
+  const symbol = `TWSE:${code}`;
+  watchlistAnalysis.innerHTML = `
+    <div style="width:100%; padding:16px 20px 0; border-bottom:1px solid #2a2f45;">
+      <div style="color:#aaa; font-size:12px;">技術分析</div>
+      <div style="font-size:18px; font-weight:700; color:#fff; margin-top:2px;">${code} ${name}</div>
+    </div>
+    <div style="flex:1; width:100%; display:flex; flex-direction:column; gap:0;">
+      <!-- TradingView Widget -->
+      <div class="tradingview-widget-container" style="flex:1; min-height:460px;">
+        <div class="tradingview-widget-container__widget"></div>
+        <script type="text/javascript" src="https://s3.tradingview.com/external-embedding/embed-widget-technical-analysis.js" async>
+        {
+          "interval": "1D",
+          "width": "100%",
+          "isTransparent": true,
+          "height": "100%",
+          "symbol": "${symbol}",
+          "showIntervalTabs": true,
+          "displayMode": "single",
+          "locale": "zh_TW",
+          "colorTheme": "dark"
+        }
+        <\/script>
+      </div>
+    </div>
+  `;
+}
+
+async function fetchStockPrice(code) {
+  try {
+    // 先從 latestStocks 找
+    const found = latestStocks.find(s => s.code === code);
+    if (found) return found;
+
+    // 否則從 TWSE MIS 即時抓
+    const url = `https://mis.twse.com.tw/stock/api/getStockInfo.jsp?ex_ch=tse_${code}.tw&json=1&delay=0`;
+    const data = await fetchJson(url, 5000);
+    const item = data?.msgArray?.[0];
+    if (!item) return null;
+
+    const close = parseFloat(item.z || item.y) || 0;
+    const prev = parseFloat(item.y) || 0;
+    const change = close - prev;
+    const percent = prev ? (change / prev) * 100 : 0;
+    return { code, name: item.n || code, close, change, percent };
+  } catch {
+    return null;
+  }
+}
+
+async function renderWatchlist() {
+  const list = getWatchlist();
+  if (!list.length) {
+    watchlistStocks.innerHTML = `<div style="text-align:center; padding:40px; color:#555;">尚未新增自選股，請輸入股票代號後點新增</div>`;
+    return;
+  }
+
+  watchlistStocks.innerHTML = list.map(item => `
+    <div class="watchlist-card" id="wcard-${item.code}" data-code="${item.code}" data-name="${item.name || item.code}"
+      style="background:#12151f; border:1px solid #2a2f45; border-radius:10px; padding:16px 20px; cursor:pointer; transition:border-color 0.2s;">
+      <div style="display:flex; justify-content:space-between; align-items:flex-start;">
+        <div>
+          <div style="display:flex; align-items:center; gap:8px;">
+            <span style="color:#7ec8e3; font-size:16px; font-weight:700;">${item.code}</span>
+            <span style="color:#fff; font-size:15px; font-weight:600;">${item.name || ""}</span>
+            <span style="background:#1e3a5f; color:#7ec8e3; font-size:11px; padding:2px 6px; border-radius:4px;">上市</span>
+          </div>
+          <div style="margin-top:6px;">
+            <span id="wprice-${item.code}" style="font-size:24px; font-weight:700; color:#fff;">--</span>
+            <span id="wchange-${item.code}" style="font-size:13px; margin-left:8px; color:#aaa;">載入中...</span>
+          </div>
+          <div style="margin-top:6px; font-size:12px; color:#666;" id="winst-${item.code}">
+            外資 -- 　投信 --
+          </div>
+        </div>
+        <button onclick="removeFromWatchlist('${item.code}')"
+          style="background:none; border:none; color:#555; font-size:18px; cursor:pointer; padding:4px; line-height:1;">×</button>
+      </div>
+    </div>
+  `).join("");
+
+  // 綁定點擊事件
+  document.querySelectorAll(".watchlist-card").forEach(card => {
+    card.addEventListener("click", (e) => {
+      if (e.target.tagName === "BUTTON") return;
+      document.querySelectorAll(".watchlist-card").forEach(c => c.style.borderColor = "#2a2f45");
+      card.style.borderColor = "#e74c3c";
+      showTVAnalysis(card.dataset.code, card.dataset.name);
+    });
+  });
+
+  // 非同步更新每支股票的價格
+  for (const item of list) {
+    fetchStockPrice(item.code).then(stock => {
+      if (!stock) return;
+      const priceEl = document.querySelector(`#wprice-${item.code}`);
+      const changeEl = document.querySelector(`#wchange-${item.code}`);
+      const instEl = document.querySelector(`#winst-${item.code}`);
+      if (priceEl) priceEl.textContent = stock.close.toLocaleString("zh-TW");
+      if (changeEl) {
+        const sign = stock.change >= 0 ? "+" : "";
+        const color = stock.change > 0 ? "#e74c3c" : stock.change < 0 ? "#27ae60" : "#aaa";
+        changeEl.style.color = color;
+        changeEl.textContent = `${sign}${stock.change.toFixed(2)} (${sign}${stock.percent.toFixed(2)}%)`;
+        // 更新名稱
+        if (stock.name && stock.name !== item.code) {
+          item.name = stock.name;
+          saveWatchlist(getWatchlist().map(w => w.code === item.code ? {...w, name: stock.name} : w));
+          const nameEls = document.querySelectorAll(`#wcard-${item.code} span`);
+          if (nameEls[1]) nameEls[1].textContent = stock.name;
+        }
+      }
+      if (instEl) {
+        const inst = institutionData[item.code];
+        if (inst) {
+          const fColor = inst.foreign > 0 ? "#e74c3c" : inst.foreign < 0 ? "#27ae60" : "#aaa";
+          const tColor = inst.trust > 0 ? "#e74c3c" : inst.trust < 0 ? "#27ae60" : "#aaa";
+          instEl.innerHTML = `外資 <span style="color:${fColor}">${inst.foreign > 0 ? "+" : ""}${(inst.foreign/1000).toFixed(0)}k</span>　投信 <span style="color:${tColor}">${inst.trust > 0 ? "+" : ""}${(inst.trust/1000).toFixed(0)}k</span>`;
+        }
+      }
+    });
+  }
+
+  // 更新時間
+  if (watchlistRefresh) {
+    const now = new Date();
+    watchlistRefresh.textContent = `${String(now.getMonth()+1).padStart(2,"0")}/${String(now.getDate()).padStart(2,"0")}  更新 ${now.toLocaleTimeString("zh-TW", {hour12:false})}`;
+  }
+}
+
+async function addToWatchlist() {
+  const code = watchlistSearchInput.value.trim().replace(/\D/g, "");
+  if (!code) return;
+
+  const list = getWatchlist();
+  if (list.find(w => w.code === code)) {
+    watchlistSearchInput.value = "";
+    alert("此股票已在自選股中");
+    return;
+  }
+
+  // 先加進去，名稱之後非同步更新
+  list.push({ code, name: code });
+  saveWatchlist(list);
+  watchlistSearchInput.value = "";
+  await renderWatchlist();
+
+  // 自動點擊第一筆
+  const firstCard = document.querySelector(".watchlist-card");
+  if (firstCard) firstCard.click();
+}
+
+function removeFromWatchlist(code) {
+  const list = getWatchlist().filter(w => w.code !== code);
+  saveWatchlist(list);
+  renderWatchlist();
+  watchlistAnalysis.innerHTML = `<div style="color:#555; font-size:14px;">點擊左側股票查看技術分析</div>`;
+}
+
+// 加入 viewPanels
+viewPanels.watchlist = document.querySelector("#watchlist-view");
+
+// 更新 showView 以支援 watchlist
+const _origShowView = showView;
+
+// Enter 鍵新增
+watchlistSearchInput?.addEventListener("keydown", (e) => {
+  if (e.key === "Enter") addToWatchlist();
+});
+watchlistAddBtn?.addEventListener("click", addToWatchlist);
+
+// 初始化自選股
+renderWatchlist();
