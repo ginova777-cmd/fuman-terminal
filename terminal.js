@@ -119,7 +119,7 @@ function renderHeatmap(rows) {
     .join("");
 }
 
-function renderIndexes(indexes) {
+function renderIndexes(indexes, futuresNear, futuresNext) {
   const targets = [
     ["發行量加權", "加權指數"],
     ["櫃買", "櫃買指數"],
@@ -141,6 +141,44 @@ function renderIndexes(indexes) {
       <em class="${trendClass}">${formatChange(sign, points, percent)}</em>
     `;
   });
+
+  // 台指期近月
+  if (metricCards[2]) {
+    if (futuresNear) {
+      const sign = String(futuresNear.change || "").startsWith("-") ? "-" : "+";
+      const trendClass = sign === "-" ? "up" : "down";
+      metricCards[2].innerHTML = `
+        <span>⇅ 台指近 ${futuresNear.month || ""}</span>
+        <strong>${formatNumber(futuresNear.price, 0)}</strong>
+        <em class="${trendClass}">${futuresNear.change || "--"}</em>
+      `;
+    } else {
+      metricCards[2].innerHTML = `
+        <span>⇅ 台指近</span>
+        <strong>--</strong>
+        <em>非交易時段</em>
+      `;
+    }
+  }
+
+  // 台指期次月
+  if (metricCards[3]) {
+    if (futuresNext) {
+      const sign = String(futuresNext.change || "").startsWith("-") ? "-" : "+";
+      const trendClass = sign === "-" ? "up" : "down";
+      metricCards[3].innerHTML = `
+        <span>☾ 台指次月 ${futuresNext.month || ""}</span>
+        <strong>${formatNumber(futuresNext.price, 0)}</strong>
+        <em class="${trendClass}">${futuresNext.change || "--"}</em>
+      `;
+    } else {
+      metricCards[3].innerHTML = `
+        <span>☾ 台指次月</span>
+        <strong>--</strong>
+        <em>非交易時段</em>
+      `;
+    }
+  }
 }
 
 function stockChange(stock) {
@@ -291,7 +329,11 @@ async function loadMarketData() {
     const payload = await fetchJson(endpoints.backend, 12000);
     if (!payload.ok) throw new Error(payload.error || "Backend API failed");
 
-    renderIndexes(normalizeArray(payload.indexes));
+    renderIndexes(
+      normalizeArray(payload.indexes),
+      payload.futuresNear || payload.futures || null,
+      payload.futuresNext || null
+    );
     renderStocks(normalizeArray(payload.stocks));
     sourceLine.textContent = `資料來源：${payload.source} · 輔滿 API`;
     setDataStatus("delayed", "延遲真實資料", `最後檢查 ${formatDateTime(payload.updatedAt)}`);
@@ -307,7 +349,7 @@ async function loadMarketData() {
       fetchJson(endpoints.stocks),
     ]);
 
-    renderIndexes(Array.isArray(indexes) ? indexes : []);
+    renderIndexes(Array.isArray(indexes) ? indexes : [], null, null);
     renderStocks(Array.isArray(stocks) ? stocks : []);
     sourceLine.textContent = "資料來源：TWSE OpenAPI 公開盤後資料";
     setDataStatus("delayed", "延遲真實資料", `最後檢查 ${formatDateTime()}`);
