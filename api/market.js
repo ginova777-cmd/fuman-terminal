@@ -1,4 +1,4 @@
-// api/market.js — TWSE（加權）+ MIS即時（櫃買）+ Yahoo Finance（台指期）
+// api/market.js — TWSE（加權）+ MIS即時（櫃買）+ 期交所（台指期）
 
 async function fetchWithTimeout(url, options = {}, timeout = 8000) {
   const controller = new AbortController();
@@ -9,7 +9,7 @@ async function fetchWithTimeout(url, options = {}, timeout = 8000) {
       signal: controller.signal,
       headers: {
         "User-Agent": "Mozilla/5.0 (compatible; FumanTerminal/1.0)",
-        "Accept": "application/json",
+        "Accept": "application/json, text/html, */*",
         ...(options.headers || {}),
       },
     });
@@ -76,39 +76,74 @@ async function fetchIndexes() {
 }
 
 async function fetchFutures() {
-  const symbols = [
-    { symbol: "TWF=F", label: "台指期近月" },
-    { symbol: "TWG=F", label: "台指期次月" },
-  ];
+  // 方法一：期交所 MIS 即時行情
+  try {
+    const url = "https://mis.taifex.com.tw/futures/api/getQuoteList";
+    const body = JSON.stringify({
+      MarketType: "0",
+      SymbolType: "F",
+      KindID: "1",
+      CID: "TXF",
+      ExpireMonth: "",
+      RowSize: "5",
+      PageNo: "1",
+      Language: "zh-tw",
+    });
+    const res = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Referer": "https://mis.taifex.com.tw/",
+        "Origin": "https://mis.taifex.com.tw",
+      },
+      signal: AbortSignal.timeout(8000),
+      body,
+    });
+    const data = await res.json();
+    const list = data?.RtnData?.QuoteList || [];
 
-  const results = [];
-  for (const { symbol, label } of symbols) {
-    try {
-      const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1d&range=1d`;
-      const data = await fetchWithTimeout(url);
-      const meta = data?.chart?.result?.[0]?.meta;
-      if (meta && meta.regularMarketPrice) {
-        const current = meta.regularMarketPrice;
-        const prev    = meta.chartPreviousClose || meta.previousClose;
-        const { diff, pct, sign } = calcChange(current, prev);
-        results.push({
-          name:    label,
-          month:   symbol,
-          price:   current.toFixed(0),
-          change:  `${sign}${diff}`,
-          pct:     `${sign}${pct}%`,
-          volume:  meta.regularMarketVolume?.toString() ?? "--",
-          _source: "Yahoo Finance",
-        });
-      } else {
-        results.push(null);
-      }
-    } catch (e) {
-      results.push(null);
+    if (list.length >= 2) {
+      const toItem = (item) => {
+        const price = parseFloat(item.CLastPrice?.replace(/,/g, "")) || 0;
+        const prev  = parseFloat(item.CRefPrice?.replace(/,/g, "")) || 0;
+        const { diff, pct, sign } = calcChange(price, prev);
+        return {
+          name:   item.CName || "",
+          month:  item.CID   || "",
+          price:  price.toFixed(0),
+          change: `${sign}${diff}`,
+          pct:    `${sign}${pct}%`,
+          volume: item.CTotalVolume || "--",
+          _source: "TAIFEX MIS",
+        };
+      };
+      return { near: toItem(list[0]), next: toItem(list[1]) };
     }
-  }
+  } catch (e) {}
 
-  return { near: results[0], next: results[1] };
+  // 方法二：TWSE MIS 台指期近月（TX00）
+  try {
+    const url = "https://mis.twse.com.tw/stock/api/getStockInfo.jsp?ex_ch=fsg_TX00.tw&json=1&delay=0";
+    const data = await fetchWithTimeout(url, { headers: { "Referer": "https://mis.twse.com.tw/" } });
+    const item = data?.msgArray?.[0];
+    if (item) {
+      const price = parseFloat(item.z || item.y) || 0;
+      const prev  = parseFloat(item.y) || 0;
+      const { diff, pct, sign } = calcChange(price, prev);
+      const near = {
+        name:   "台指期近月",
+        month:  "TX00",
+        price:  price.toFixed(0),
+        change: `${sign}${diff}`,
+        pct:    `${sign}${pct}%`,
+        volume: item.v || "--",
+        _source: "TWSE MIS",
+      };
+      return { near, next: null };
+    }
+  } catch (e) {}
+
+  return { near: null, next: null };
 }
 
 function getMarketStatus() {
@@ -116,13 +151,9 @@ function getMarketStatus() {
   const day   = now.getDay();
   const total = now.getHours() * 60 + now.getMinutes();
 
-  // 週六全天休市
   if (day === 6) return "closed";
-
-  // 週日：下午三點後夜盤開始
   if (day === 0) return total >= 15 * 60 ? "night" : "closed";
 
-  // 週一～週五
   if (total >= 8 * 60 + 45 && total <= 13 * 60 + 45) return "day";
   if (total >= 15 * 60 || total <= 5 * 60) return "night";
 
@@ -156,7 +187,7 @@ module.exports = async function handler(request, response) {
 
   response.status(ok ? 200 : 502).json({
     ok,
-    source: "TWSE + MIS + Yahoo Finance",
+    source: "TWSE + MIS + TAIFEX",
     trading,
     marketStatus,
     updatedAt: new Date().toISOString(),
