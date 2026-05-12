@@ -1,4 +1,5 @@
-// api/market.js — TWSE（加權）+ MIS即時（櫃買）+ 期交所（台指期）
+// api/market.js — TWSE（加權）+ MIS即時（櫃買）
+// 台指期改由前端直接抓 mis.taifex.com.tw
 
 async function fetchWithTimeout(url, options = {}, timeout = 8000) {
   const controller = new AbortController();
@@ -9,7 +10,7 @@ async function fetchWithTimeout(url, options = {}, timeout = 8000) {
       signal: controller.signal,
       headers: {
         "User-Agent": "Mozilla/5.0 (compatible; FumanTerminal/1.0)",
-        "Accept": "application/json, text/html, */*",
+        "Accept": "application/json",
         ...(options.headers || {}),
       },
     });
@@ -75,77 +76,6 @@ async function fetchIndexes() {
   return results;
 }
 
-async function fetchFutures() {
-  // 方法一：期交所 MIS 即時行情
-  try {
-    const url = "https://mis.taifex.com.tw/futures/api/getQuoteList";
-    const body = JSON.stringify({
-      MarketType: "0",
-      SymbolType: "F",
-      KindID: "1",
-      CID: "TXF",
-      ExpireMonth: "",
-      RowSize: "5",
-      PageNo: "1",
-      Language: "zh-tw",
-    });
-    const res = await fetch(url, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Referer": "https://mis.taifex.com.tw/",
-        "Origin": "https://mis.taifex.com.tw",
-      },
-      signal: AbortSignal.timeout(8000),
-      body,
-    });
-    const data = await res.json();
-    const list = data?.RtnData?.QuoteList || [];
-
-    if (list.length >= 2) {
-      const toItem = (item) => {
-        const price = parseFloat(item.CLastPrice?.replace(/,/g, "")) || 0;
-        const prev  = parseFloat(item.CRefPrice?.replace(/,/g, "")) || 0;
-        const { diff, pct, sign } = calcChange(price, prev);
-        return {
-          name:   item.CName || "",
-          month:  item.CID   || "",
-          price:  price.toFixed(0),
-          change: `${sign}${diff}`,
-          pct:    `${sign}${pct}%`,
-          volume: item.CTotalVolume || "--",
-          _source: "TAIFEX MIS",
-        };
-      };
-      return { near: toItem(list[0]), next: toItem(list[1]) };
-    }
-  } catch (e) {}
-
-  // 方法二：TWSE MIS 台指期近月（TX00）
-  try {
-    const url = "https://mis.twse.com.tw/stock/api/getStockInfo.jsp?ex_ch=fsg_TX00.tw&json=1&delay=0";
-    const data = await fetchWithTimeout(url, { headers: { "Referer": "https://mis.twse.com.tw/" } });
-    const item = data?.msgArray?.[0];
-    if (item) {
-      const price = parseFloat(item.z || item.y) || 0;
-      const prev  = parseFloat(item.y) || 0;
-      const { diff, pct, sign } = calcChange(price, prev);
-      const near = {
-        name:   "台指期近月",
-        month:  "TX00",
-        price:  price.toFixed(0),
-        change: `${sign}${diff}`,
-        pct:    `${sign}${pct}%`,
-        volume: item.v || "--",
-        _source: "TWSE MIS",
-      };
-      return { near, next: null };
-    }
-  } catch (e) {}
-
-  return { near: null, next: null };
-}
-
 function getMarketStatus() {
   const now = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Taipei" }));
   const day   = now.getDay();
@@ -171,11 +101,7 @@ module.exports = async function handler(request, response) {
   const marketStatus = getMarketStatus();
   const trading = marketStatus === "day";
 
-  const [indexes, futuresResult] = await Promise.all([
-    fetchIndexes(),
-    fetchFutures(),
-  ]);
-
+  const indexes = await fetchIndexes();
   const ok = indexes.length > 0;
 
   response.setHeader(
@@ -187,14 +113,14 @@ module.exports = async function handler(request, response) {
 
   response.status(ok ? 200 : 502).json({
     ok,
-    source: "TWSE + MIS + TAIFEX",
+    source: "TWSE + MIS",
     trading,
     marketStatus,
     updatedAt: new Date().toISOString(),
     indexes,
     stocks: [],
-    futures:     futuresResult.near,
-    futuresNear: futuresResult.near,
-    futuresNext: futuresResult.next,
+    futures:     null,
+    futuresNear: null,
+    futuresNext: null,
   });
 };
