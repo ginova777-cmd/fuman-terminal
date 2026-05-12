@@ -64,7 +64,7 @@ const SECTOR_MAP = {
   "3702":"電子通路","2347":"電子通路","2348":"電子通路","8454":"電子通路",
   "1301":"塑膠","1303":"塑膠","1304":"塑膠","1305":"塑膠","1308":"塑膠","1309":"塑膠","1310":"塑膠","1312":"塑膠","1313":"塑膠","1314":"塑膠",
   "1519":"電機機械","1504":"電機機械","1513":"電機機械","1530":"電機機械","1537":"電機機械","1538":"電機機械","1590":"電機機械","1536":"電機機械","1598":"電機機械",
-  "2357":"電腦及週邊","6669":"電腦及週邊","2353":"電腦及週邊","2362":"電腦及週邊","2399":"電腦及週邊","2376":"電腦及週邊","3060":"電腦及週邊",
+  "2357":"電腦週邊","6669":"電腦週邊","2353":"電腦週邊","2362":"電腦週邊","2399":"電腦週邊","2376":"電腦週邊","3060":"電腦週邊",
   "1603":"電器電纜","1604":"電器電纜","1605":"電器電纜","1608":"電器電纜","1609":"電器電纜","1610":"電器電纜","1611":"電器電纜","1612":"電器電纜",
   "1101":"水泥","1102":"水泥","1103":"水泥","1104":"水泥","1108":"水泥","1109":"水泥",
   "2358":"其他電子","2360":"其他電子","2368":"其他電子","2369":"其他電子","2374":"其他電子","2059":"其他電子","6209":"其他電子",
@@ -175,55 +175,6 @@ function getInstColor(val) {
   return n > 0 ? "#e74c3c" : "#27ae60";
 }
 
-// ★ 前端直接抓台指期（繞過 Vercel IP 封鎖）
-async function fetchFuturesDirect() {
-  try {
-    const res = await fetch("https://mis.taifex.com.tw/futures/api/getQuoteList", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Referer": "https://mis.taifex.com.tw/",
-        "Origin": "https://mis.taifex.com.tw",
-      },
-      body: JSON.stringify({
-        MarketType: "0",
-        SymbolType: "F",
-        KindID: "1",
-        CID: "TXF",
-        ExpireMonth: "",
-        RowSize: "5",
-        PageNo: "1",
-        Language: "zh-tw",
-      }),
-    });
-    const data = await res.json();
-    const list = data?.RtnData?.QuoteList || [];
-    if (list.length === 0) return { near: null, next: null };
-
-    const toItem = (item) => {
-      if (!item) return null;
-      const price = parseFloat(item.CLastPrice?.replace(/,/g, "")) || 0;
-      const prev  = parseFloat(item.CRefPrice?.replace(/,/g, "")) || 0;
-      if (price === 0) return null;
-      const diff = price - prev;
-      const pct  = prev ? (diff / prev * 100) : 0;
-      const sign = diff >= 0 ? "+" : "-";
-      return {
-        name:   item.CName || "台指期",
-        month:  item.CID   || "",
-        price:  price.toFixed(0),
-        change: `${sign}${Math.abs(diff).toFixed(0)}`,
-        pct:    `${sign}${Math.abs(pct).toFixed(2)}%`,
-        volume: item.CTotalVolume || "--",
-      };
-    };
-
-    return { near: toItem(list[0]), next: toItem(list[1] || null) };
-  } catch (e) {
-    return { near: null, next: null };
-  }
-}
-
 function openSectorModal(sector) {
   const stocks = sectorStocksCache[sector.name] || [];
   const existing = document.querySelector("#sector-modal");
@@ -317,7 +268,7 @@ function openSectorModal(sector) {
                 <tr style="border-bottom:1px solid #161925; ${i % 2 === 0 ? "" : "background:#0c0f1a"}">
                   <td style="padding:10px 16px;">
                     <div style="color:#7ec8e3; font-weight:600; font-size:13px;">${s.code} ${s.name}</div>
-                    <div style="color:#555; font-size:11px; margin-top:2px;">${SECTOR_MAP[s.code] ? `半導體 · IC設計服務 · ${sector.name}` : sector.name}</div>
+                    <div style="color:#555; font-size:11px; margin-top:2px;">${sector.name}</div>
                   </td>
                   <td style="padding:10px 8px; text-align:center; color:#888; font-size:12px;">上市</td>
                   <td style="padding:10px 12px; text-align:right; color:#fff; font-weight:600;">${s.close.toLocaleString("zh-TW")}</td>
@@ -343,17 +294,28 @@ function openSectorModal(sector) {
   modal.addEventListener("click", (e) => { if (e.target === modal) modal.remove(); });
 }
 
+// ★ 修改：從 API 回傳的 stocks 直接存進 cache
 function renderHeatmapSectors(sectors) {
   if (!sectors || !sectors.length) {
     heatmap.innerHTML = `<div class="empty-state">等待產業資料...</div>`;
     return;
   }
+
+  // 把個股資料存進 cache
+  sectors.forEach(s => {
+    if (s.stocks && s.stocks.length) {
+      sectorStocksCache[s.name] = s.stocks;
+    }
+  });
+
   heatmap.innerHTML = sectors.map(s => {
     const pct = s.pct || 0;
     const sign = pct >= 0 ? "+" : "";
     const bg = getSectorColor(pct);
+    // 不把 stocks 放進 data-sector，太大了
+    const sectorMeta = { name: s.name, pct: s.pct, totalValue: s.totalValue, count: s.count, up: s.up, down: s.down, flat: s.flat, leader: s.leader };
     return `
-      <article class="sector-card" style="background:${bg}; cursor:pointer;" data-sector="${encodeURIComponent(JSON.stringify(s))}">
+      <article class="sector-card" style="background:${bg}; cursor:pointer;" data-sector="${encodeURIComponent(JSON.stringify(sectorMeta))}">
         <h3>${s.name}<span>${sign}${pct.toFixed(2)}%</span></h3>
         <p>${s.count} 檔 · ${s.totalValue} 億</p>
         <small>
@@ -433,7 +395,6 @@ function stockChange(stock) {
 }
 
 function buildSectorStocksCache(stocks) {
-  sectorStocksCache = {};
   for (const stock of stocks) {
     const code = valueOf(stock, ["證券代號", "Code"]);
     const name = valueOf(stock, ["證券名稱", "Name"]);
@@ -447,7 +408,10 @@ function buildSectorStocksCache(stocks) {
     const industry = SECTOR_MAP[code];
     if (!industry) continue;
     if (!sectorStocksCache[industry]) sectorStocksCache[industry] = [];
-    sectorStocksCache[industry].push({ code, name, close, change, pct, value, volume });
+    // 避免重複
+    if (!sectorStocksCache[industry].find(s => s.code === code)) {
+      sectorStocksCache[industry].push({ code, name, close, change, pct, value, volume });
+    }
   }
 }
 
@@ -534,6 +498,55 @@ function showView(viewName, activeLink) {
   if (focusTarget) setTimeout(()=>focusTarget.focus(),0);
 }
 
+// ★ 前端直接抓台指期
+async function fetchFuturesDirect() {
+  try {
+    const res = await fetch("https://mis.taifex.com.tw/futures/api/getQuoteList", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Referer": "https://mis.taifex.com.tw/",
+        "Origin": "https://mis.taifex.com.tw",
+      },
+      body: JSON.stringify({
+        MarketType: "0",
+        SymbolType: "F",
+        KindID: "1",
+        CID: "TXF",
+        ExpireMonth: "",
+        RowSize: "5",
+        PageNo: "1",
+        Language: "zh-tw",
+      }),
+    });
+    const data = await res.json();
+    const list = data?.RtnData?.QuoteList || [];
+    if (list.length === 0) return { near: null, next: null };
+
+    const toItem = (item) => {
+      if (!item) return null;
+      const price = parseFloat(item.CLastPrice?.replace(/,/g, "")) || 0;
+      const prev  = parseFloat(item.CRefPrice?.replace(/,/g, "")) || 0;
+      if (price === 0) return null;
+      const diff = price - prev;
+      const pct  = prev ? (diff / prev * 100) : 0;
+      const sign = diff >= 0 ? "+" : "-";
+      return {
+        name:   item.CName || "台指期",
+        month:  item.CID   || "",
+        price:  price.toFixed(0),
+        change: `${sign}${Math.abs(diff).toFixed(0)}`,
+        pct:    `${sign}${Math.abs(pct).toFixed(2)}%`,
+        volume: item.CTotalVolume || "--",
+      };
+    };
+
+    return { near: toItem(list[0]), next: toItem(list[1] || null) };
+  } catch (e) {
+    return { near: null, next: null };
+  }
+}
+
 async function loadMarketData() {
   try {
     const [payload, futuresDirect] = await Promise.all([
@@ -543,7 +556,6 @@ async function loadMarketData() {
 
     if (!payload.ok) throw new Error("Backend failed");
 
-    // 台指期優先用前端直接抓的，後端抓到才用後端的
     const near = (futuresDirect.near && parseFloat(futuresDirect.near.price) > 0)
       ? futuresDirect.near
       : (payload.futuresNear || payload.futures || null);
