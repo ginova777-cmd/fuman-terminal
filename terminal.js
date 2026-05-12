@@ -101,7 +101,7 @@ const SECTOR_MAP = {
   "2002":"鋼鐵","2006":"鋼鐵","2007":"鋼鐵","2008":"鋼鐵","2009":"鋼鐵","2010":"鋼鐵","2012":"鋼鐵",
   "2014":"鋼鐵","2015":"鋼鐵","2027":"鋼鐵","2029":"鋼鐵","2030":"鋼鐵","2031":"鋼鐵","2032":"鋼鐵",
   "2033":"鋼鐵","2034":"鋼鐵","2035":"鋼鐵","2036":"鋼鐵","2038":"鋼鐵","2039":"鋼鐵",
-  "2002":"鋼鐵","6550":"創新板股","6730":"創新板股","6754":"創新板股","6811":"創新板股",
+  "6550":"創新板股","6730":"創新板股","6754":"創新板股","6811":"創新板股",
 };
 
 function cleanNumber(value) {
@@ -173,6 +173,55 @@ function getInstColor(val) {
   const n = parseInt(val);
   if (isNaN(n) || n === 0) return "#aaa";
   return n > 0 ? "#e74c3c" : "#27ae60";
+}
+
+// ★ 前端直接抓台指期（繞過 Vercel IP 封鎖）
+async function fetchFuturesDirect() {
+  try {
+    const res = await fetch("https://mis.taifex.com.tw/futures/api/getQuoteList", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Referer": "https://mis.taifex.com.tw/",
+        "Origin": "https://mis.taifex.com.tw",
+      },
+      body: JSON.stringify({
+        MarketType: "0",
+        SymbolType: "F",
+        KindID: "1",
+        CID: "TXF",
+        ExpireMonth: "",
+        RowSize: "5",
+        PageNo: "1",
+        Language: "zh-tw",
+      }),
+    });
+    const data = await res.json();
+    const list = data?.RtnData?.QuoteList || [];
+    if (list.length === 0) return { near: null, next: null };
+
+    const toItem = (item) => {
+      if (!item) return null;
+      const price = parseFloat(item.CLastPrice?.replace(/,/g, "")) || 0;
+      const prev  = parseFloat(item.CRefPrice?.replace(/,/g, "")) || 0;
+      if (price === 0) return null;
+      const diff = price - prev;
+      const pct  = prev ? (diff / prev * 100) : 0;
+      const sign = diff >= 0 ? "+" : "-";
+      return {
+        name:   item.CName || "台指期",
+        month:  item.CID   || "",
+        price:  price.toFixed(0),
+        change: `${sign}${Math.abs(diff).toFixed(0)}`,
+        pct:    `${sign}${Math.abs(pct).toFixed(2)}%`,
+        volume: item.CTotalVolume || "--",
+      };
+    };
+
+    return { near: toItem(list[0]), next: toItem(list[1] || null) };
+  } catch (e) {
+    return { near: null, next: null };
+  }
 }
 
 function openSectorModal(sector) {
@@ -323,7 +372,7 @@ function renderHeatmapSectors(sectors) {
   });
 }
 
-function renderIndexes(indexes, futuresNear, futuresNext) {
+function renderIndexes(indexes, futuresNear, futuresNext, marketStatus) {
   const targets = [["發行量加權", "加權指數"], ["櫃買", "櫃買指數"]];
   targets.forEach(([keyword, label], index) => {
     const record = indexes.find((item) => String(valueOf(item, ["指數", "指數/報酬指數"])).includes(keyword));
@@ -339,20 +388,38 @@ function renderIndexes(indexes, futuresNear, futuresNext) {
       <em class="${trendClass}">${formatChange(sign, points, percent)}</em>
     `;
   });
+
+  const statusLabel = {
+    day:    "日盤進行中",
+    night:  "夜盤進行中",
+    closed: "休市",
+  }[marketStatus] ?? "";
+
   if (metricCards[2]) {
-    if (futuresNear) {
+    if (futuresNear && futuresNear.price && parseFloat(futuresNear.price) > 0) {
       const sign = String(futuresNear.change || "").startsWith("-") ? "-" : "+";
-      metricCards[2].innerHTML = `<span>⇅ 台指近 ${futuresNear.month||""}</span><strong>${formatNumber(futuresNear.price,0)}</strong><em class="${sign==="-"?"up":"down"}">${futuresNear.change||"--"}</em>`;
+      metricCards[2].innerHTML = `
+        <span>⇅ 台指近</span>
+        <strong>${formatNumber(futuresNear.price, 0)}</strong>
+        <em class="${sign === "-" ? "up" : "down"}">${futuresNear.change || "--"}　(${futuresNear.pct || "--"})</em>
+        ${statusLabel ? `<small style="color:#666; font-size:11px; margin-top:2px;">${statusLabel}</small>` : ""}
+      `;
     } else {
-      metricCards[2].innerHTML = `<span>⇅ 台指近</span><strong>--</strong><em>非交易時段</em>`;
+      metricCards[2].innerHTML = `<span>⇅ 台指近</span><strong>--</strong><em>${statusLabel || "等待資料"}</em>`;
     }
   }
+
   if (metricCards[3]) {
-    if (futuresNext) {
+    if (futuresNext && futuresNext.price && parseFloat(futuresNext.price) > 0) {
       const sign = String(futuresNext.change || "").startsWith("-") ? "-" : "+";
-      metricCards[3].innerHTML = `<span>☾ 台指次月 ${futuresNext.month||""}</span><strong>${formatNumber(futuresNext.price,0)}</strong><em class="${sign==="-"?"up":"down"}">${futuresNext.change||"--"}</em>`;
+      metricCards[3].innerHTML = `
+        <span>☾ 台指次月</span>
+        <strong>${formatNumber(futuresNext.price, 0)}</strong>
+        <em class="${sign === "-" ? "up" : "down"}">${futuresNext.change || "--"}　(${futuresNext.pct || "--"})</em>
+        ${statusLabel ? `<small style="color:#666; font-size:11px; margin-top:2px;">${statusLabel}</small>` : ""}
+      `;
     } else {
-      metricCards[3].innerHTML = `<span>☾ 台指次月</span><strong>--</strong><em>非交易時段</em>`;
+      metricCards[3].innerHTML = `<span>☾ 台指次月</span><strong>--</strong><em>${statusLabel || "等待資料"}</em>`;
     }
   }
 }
@@ -469,9 +536,27 @@ function showView(viewName, activeLink) {
 
 async function loadMarketData() {
   try {
-    const payload = await fetchJson(endpoints.backend, 12000);
+    const [payload, futuresDirect] = await Promise.all([
+      fetchJson(endpoints.backend, 12000),
+      fetchFuturesDirect(),
+    ]);
+
     if (!payload.ok) throw new Error("Backend failed");
-    renderIndexes(normalizeArray(payload.indexes), payload.futuresNear||payload.futures||null, payload.futuresNext||null);
+
+    // 台指期優先用前端直接抓的，後端抓到才用後端的
+    const near = (futuresDirect.near && parseFloat(futuresDirect.near.price) > 0)
+      ? futuresDirect.near
+      : (payload.futuresNear || payload.futures || null);
+    const next = (futuresDirect.next && parseFloat(futuresDirect.next.price) > 0)
+      ? futuresDirect.next
+      : (payload.futuresNext || null);
+
+    renderIndexes(
+      normalizeArray(payload.indexes),
+      near,
+      next,
+      payload.marketStatus || null
+    );
     renderStocks(normalizeArray(payload.stocks));
   } catch (e) {
     try {
@@ -533,7 +618,6 @@ function saveWatchlist(list) {
 }
 
 function showTVAnalysis(code, name) {
-  // TradingView Technical Analysis Widget
   const symbol = `TWSE:${code}`;
   watchlistAnalysis.innerHTML = `
     <div style="width:100%; padding:16px 20px 0; border-bottom:1px solid #2a2f45;">
@@ -541,7 +625,6 @@ function showTVAnalysis(code, name) {
       <div style="font-size:18px; font-weight:700; color:#fff; margin-top:2px;">${code} ${name}</div>
     </div>
     <div style="flex:1; width:100%; display:flex; flex-direction:column; gap:0;">
-      <!-- TradingView Widget -->
       <div class="tradingview-widget-container" style="flex:1; min-height:460px;">
         <div class="tradingview-widget-container__widget"></div>
         <script type="text/javascript" src="https://s3.tradingview.com/external-embedding/embed-widget-technical-analysis.js" async>
@@ -564,11 +647,9 @@ function showTVAnalysis(code, name) {
 
 async function fetchStockPrice(code) {
   try {
-    // 先從 latestStocks 找
     const found = latestStocks.find(s => s.code === code);
     if (found) return found;
 
-    // 否則從 TWSE MIS 即時抓
     const url = `https://mis.twse.com.tw/stock/api/getStockInfo.jsp?ex_ch=tse_${code}.tw&json=1&delay=0`;
     const data = await fetchJson(url, 5000);
     const item = data?.msgArray?.[0];
@@ -615,7 +696,6 @@ async function renderWatchlist() {
     </div>
   `).join("");
 
-  // 綁定點擊事件
   document.querySelectorAll(".watchlist-card").forEach(card => {
     card.addEventListener("click", (e) => {
       if (e.target.tagName === "BUTTON") return;
@@ -625,7 +705,6 @@ async function renderWatchlist() {
     });
   });
 
-  // 非同步更新每支股票的價格
   for (const item of list) {
     fetchStockPrice(item.code).then(stock => {
       if (!stock) return;
@@ -638,7 +717,6 @@ async function renderWatchlist() {
         const color = stock.change > 0 ? "#e74c3c" : stock.change < 0 ? "#27ae60" : "#aaa";
         changeEl.style.color = color;
         changeEl.textContent = `${sign}${stock.change.toFixed(2)} (${sign}${stock.percent.toFixed(2)}%)`;
-        // 更新名稱
         if (stock.name && stock.name !== item.code) {
           item.name = stock.name;
           saveWatchlist(getWatchlist().map(w => w.code === item.code ? {...w, name: stock.name} : w));
@@ -657,7 +735,6 @@ async function renderWatchlist() {
     });
   }
 
-  // 更新時間
   if (watchlistRefresh) {
     const now = new Date();
     watchlistRefresh.textContent = `${String(now.getMonth()+1).padStart(2,"0")}/${String(now.getDate()).padStart(2,"0")}  更新 ${now.toLocaleTimeString("zh-TW", {hour12:false})}`;
@@ -675,13 +752,11 @@ async function addToWatchlist() {
     return;
   }
 
-  // 先加進去，名稱之後非同步更新
   list.push({ code, name: code });
   saveWatchlist(list);
   watchlistSearchInput.value = "";
   await renderWatchlist();
 
-  // 自動點擊第一筆
   const firstCard = document.querySelector(".watchlist-card");
   if (firstCard) firstCard.click();
 }
@@ -693,17 +768,11 @@ function removeFromWatchlist(code) {
   watchlistAnalysis.innerHTML = `<div style="color:#555; font-size:14px;">點擊左側股票查看技術分析</div>`;
 }
 
-// 加入 viewPanels
 viewPanels.watchlist = document.querySelector("#watchlist-view");
 
-// 更新 showView 以支援 watchlist
-const _origShowView = showView;
-
-// Enter 鍵新增
 watchlistSearchInput?.addEventListener("keydown", (e) => {
   if (e.key === "Enter") addToWatchlist();
 });
 watchlistAddBtn?.addEventListener("click", addToWatchlist);
 
-// 初始化自選股
 renderWatchlist();
