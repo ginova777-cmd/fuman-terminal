@@ -662,7 +662,7 @@ async function fetchStockPrice(code) {
     const found = latestStocks.find(s => s.code === code);
     if (found) return found;
 
-    const url = `https://mis.twse.com.tw/stock/api/getStockInfo.jsp?ex_ch=tse_${code}.tw&json=1&delay=0`;
+    const url = `/api/proxy?code=${code}`;
     const data = await fetchJson(url, 5000);
     const item = data?.msgArray?.[0];
     if (!item) return null;
