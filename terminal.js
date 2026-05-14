@@ -372,8 +372,14 @@ async function loadStrategyStocks() {
   if (strategyStocksLoading || latestStocks.length) return;
   strategyStocksLoading = true;
   try {
-    const stocks = await fetchJson(endpoints.stocks, 12000);
-    const parsed = normalizeArray(stocks).map((stock) => {
+    let stocks = [];
+    try {
+      stocks = normalizeArray(await fetchJson(endpoints.stocks, 12000));
+    } catch (error) {
+      stocks = [];
+    }
+
+    let parsed = stocks.map((stock) => {
       const code = valueOf(stock, ["證券代號", "Code"]);
       const name = valueOf(stock, ["證券名稱", "Name"]);
       const value = cleanNumber(valueOf(stock, ["成交金額", "TradeValue"]));
@@ -381,9 +387,32 @@ async function loadStrategyStocks() {
       return { code, name, value, tradeVolume, ...stockChange(stock) };
     }).filter((s) => s.code && s.name && s.close);
 
+    if (!parsed.length) {
+      const heatmapPayload = await fetchJson(endpoints.heatmap, 15000);
+      parsed = normalizeArray(heatmapPayload.sectors).flatMap((sector) => {
+        return normalizeArray(sector.stocks).map((stock) => {
+          const close = cleanNumber(stock.close);
+          const percent = cleanNumber(stock.pct);
+          const previous = percent === -100 ? close : close / (1 + percent / 100);
+          const change = close - previous;
+          return {
+            code: String(stock.code || ""),
+            name: String(stock.name || ""),
+            close,
+            change,
+            percent,
+            value: cleanNumber(stock.value),
+            tradeVolume: cleanNumber(stock.volume),
+          };
+        });
+      }).filter((s) => s.code && s.name && s.close);
+    }
+
     if (parsed.length) {
       latestStocks = parsed;
       renderStrategyScanner();
+    } else if (strategyTable) {
+      strategyTable.innerHTML = `<div class="empty-state">策略5目前沒有可篩選的股票資料。</div>`;
     }
   } catch (error) {
     if (strategyTable) {
