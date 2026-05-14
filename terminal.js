@@ -13,6 +13,15 @@ const viewPanels = {
   market: document.querySelector("#market-view"),
   strategy: document.querySelector("#strategy-view"),
 };
+const strategyCards = [...document.querySelectorAll(".strategy-card[data-strategy]")];
+const strategyTable = document.querySelector("#strategy-table");
+const strategySummary = document.querySelector("#strategy-summary");
+const strategySearch = document.querySelector("#strategy-search");
+const strategyClear = document.querySelector("#strategy-clear");
+const strategyModeButtons = [...document.querySelectorAll("[data-strategy-mode]")];
+const strategyMatchCount = document.querySelector("#strategy-match-count");
+const strategyAvgScore = document.querySelector("#strategy-avg-score");
+const strategyTopHit = document.querySelector("#strategy-top-hit");
 
 const endpoints = {
   backend: "/api/market",
@@ -24,6 +33,10 @@ const endpoints = {
 let latestStocks = [];
 let sectorStocksCache = {};
 let institutionData = {};
+let selectedStrategyIds = new Set(["momentum"]);
+let strategyMode = "any";
+let strategyKeyword = "";
+let strategyStocksLoading = false;
 
 const SECTOR_MAP = {
   "2454":"CPU/ASIC/IP","3443":"CPU/ASIC/IP","3661":"CPU/ASIC/IP","3529":"CPU/ASIC/IP",
@@ -146,6 +159,239 @@ function normalizeArray(value) {
   if (value && Array.isArray(value.rows)) return value.rows;
   if (value && Array.isArray(value.result)) return value.result;
   return [];
+}
+
+function clamp(value, min, max) {
+  return Math.max(min, Math.min(max, value));
+}
+
+function rankValue(value, sortedValues) {
+  if (!sortedValues.length) return 0;
+  let index = 0;
+  while (index < sortedValues.length && sortedValues[index] <= value) index++;
+  return Math.round((index / sortedValues.length) * 100);
+}
+
+function getInstitutionTotal(code) {
+  const inst = institutionData[code] || {};
+  const foreign = Number(inst.foreign) || 0;
+  const trust = Number(inst.trust) || 0;
+  const dealer = Number(inst.dealer) || 0;
+  return { foreign, trust, dealer, total: foreign + trust + dealer };
+}
+
+const STRATEGY_DEFS = [
+  { id: "momentum", label: "動能分數 75+", short: "動能", icon: "⚡" },
+  { id: "main_force_chip", label: "主力籌碼盤整", short: "主力", icon: "♣" },
+  { id: "twenty_day_breakout", label: "突破20日新高", short: "突破", icon: "↑" },
+  { id: "opening_power", label: "開盤即戰力狙擊", short: "開盤", icon: "✥" },
+  { id: "red_to_green", label: "昨日紅轉綠", short: "紅轉綠", icon: "↻" },
+  { id: "intraday_2m", label: "2分K當沖雷達", short: "當沖", icon: "⌁" },
+  { id: "investment_trust", label: "投信連買認養股", short: "投信", icon: "▦" },
+  { id: "vcp", label: "VCP 波段收斂", short: "VCP", icon: "⌁" },
+  { id: "ma_bull", label: "均線多頭排列", short: "均線", icon: "☰" },
+  { id: "sync_backtest", label: "高同步率回測", short: "同步", icon: "▣" },
+  { id: "overnight_chip", label: "隔日沖吸籌監控", short: "隔日", icon: "⌬" },
+];
+
+const STRATEGY_BY_ID = Object.fromEntries(STRATEGY_DEFS.map((item) => [item.id, item]));
+
+function buildStrategyUniverse(stocks) {
+  const values = stocks.map((s) => s.value || 0).sort((a, b) => a - b);
+  const volumes = stocks.map((s) => s.tradeVolume || 0).sort((a, b) => a - b);
+  const percents = stocks.map((s) => s.percent || 0).sort((a, b) => a - b);
+  return stocks.map((stock) => ({
+    ...stock,
+    valueRank: rankValue(stock.value || 0, values),
+    volumeRank: rankValue(stock.tradeVolume || 0, volumes),
+    percentRank: rankValue(stock.percent || 0, percents),
+    sector: SECTOR_MAP[stock.code] || "未分類",
+    inst: getInstitutionTotal(stock.code),
+  }));
+}
+
+function strategyHit(id, stock) {
+  const pct = stock.percent || 0;
+  const valueRank = stock.valueRank || 0;
+  const volumeRank = stock.volumeRank || 0;
+  const inst = stock.inst || getInstitutionTotal(stock.code);
+  const smartMoney = inst.total + inst.trust * 1.4;
+
+  const scoreBase = clamp(
+    Math.round(35 + pct * 7 + valueRank * 0.24 + volumeRank * 0.18 + Math.sign(smartMoney) * 8),
+    0,
+    100
+  );
+
+  const rules = {
+    momentum: {
+      hit: pct >= 2.2 && valueRank >= 55,
+      score: clamp(scoreBase + 10, 0, 100),
+      reason: `漲幅 ${pct.toFixed(2)}%，成交值排名 ${valueRank}%，動能轉強。`,
+    },
+    main_force_chip: {
+      hit: smartMoney > 0 && valueRank >= 45,
+      score: clamp(scoreBase + (inst.trust > 0 ? 10 : 0), 0, 100),
+      reason: `法人合計 ${formatInstitution(inst.total)}，投信 ${formatInstitution(inst.trust)}，資金偏買。`,
+    },
+    twenty_day_breakout: {
+      hit: pct >= 3.5 && volumeRank >= 50,
+      score: clamp(scoreBase + 12, 0, 100),
+      reason: `強漲 ${pct.toFixed(2)}%，成交量排名 ${volumeRank}%，視為突破候選。`,
+    },
+    opening_power: {
+      hit: pct >= 1.5 && volumeRank >= 70 && stock.change > 0,
+      score: clamp(scoreBase + 8, 0, 100),
+      reason: `盤中量能排名 ${volumeRank}%，漲幅維持在 ${pct.toFixed(2)}%。`,
+    },
+    red_to_green: {
+      hit: pct > 0.2 && pct <= 3.2 && valueRank >= 48,
+      score: clamp(scoreBase, 0, 100),
+      reason: `由弱轉強候選，漲幅 ${pct.toFixed(2)}%，成交值排名 ${valueRank}%。`,
+    },
+    intraday_2m: {
+      hit: pct >= 1 && valueRank >= 68 && volumeRank >= 68,
+      score: clamp(scoreBase + 6, 0, 100),
+      reason: `成交值與成交量同步進前段班，適合當沖雷達追蹤。`,
+    },
+    investment_trust: {
+      hit: inst.trust > 0 && pct > -1,
+      score: clamp(scoreBase + 15, 0, 100),
+      reason: `投信買超 ${formatInstitution(inst.trust)}，股價未轉弱。`,
+    },
+    vcp: {
+      hit: Math.abs(pct) <= 1.8 && valueRank >= 55 && volumeRank >= 45,
+      score: clamp(72 + valueRank * 0.15 - Math.abs(pct) * 5, 0, 100),
+      reason: `漲跌幅收斂在 ${pct.toFixed(2)}%，量能仍在市場前段。`,
+    },
+    ma_bull: {
+      hit: pct > 0 && valueRank >= 52 && stock.close > 10,
+      score: clamp(scoreBase + 4, 0, 100),
+      reason: `價格收紅且成交值排名 ${valueRank}%，趨勢股優先觀察。`,
+    },
+    sync_backtest: {
+      hit: pct > 0 && valueRank >= 65 && volumeRank >= 60 && smartMoney >= 0,
+      score: clamp(scoreBase + 12, 0, 100),
+      reason: `漲幅、量能、成交值與籌碼方向同步。`,
+    },
+    overnight_chip: {
+      hit: pct >= 1.2 && valueRank >= 60 && (smartMoney > 0 || inst.trust > 0),
+      score: clamp(scoreBase + 9, 0, 100),
+      reason: `尾盤吸籌候選，法人合計 ${formatInstitution(inst.total)}，量價偏強。`,
+    },
+  };
+
+  return rules[id] || { hit: false, score: 0, reason: "" };
+}
+
+function evaluateStrategyStock(stock) {
+  const matches = STRATEGY_DEFS.map((strategy) => {
+    const result = strategyHit(strategy.id, stock);
+    return { ...strategy, ...result };
+  }).filter((item) => item.hit);
+  const score = matches.length
+    ? Math.round(matches.reduce((sum, item) => sum + item.score, 0) / matches.length)
+    : 0;
+  return { ...stock, matches, score };
+}
+
+function renderStrategyScanner() {
+  if (!strategyTable) return;
+  const selected = [...selectedStrategyIds];
+  strategyCards.forEach((card) => card.classList.toggle("selected", selectedStrategyIds.has(card.dataset.strategy)));
+  strategyModeButtons.forEach((button) => button.classList.toggle("active", button.dataset.strategyMode === strategyMode));
+
+  if (!latestStocks.length) {
+    strategyTable.innerHTML = `<div class="empty-state">等待官方股票資料...</div>`;
+    if (strategySummary) strategySummary.textContent = "載入股票資料後即可開始篩選。";
+    loadStrategyStocks();
+    return;
+  }
+
+  if (!selected.length) {
+    strategyTable.innerHTML = `<div class="empty-state">請先點選左側至少一個策略。</div>`;
+    if (strategySummary) strategySummary.textContent = "尚未選擇策略。";
+    if (strategyMatchCount) strategyMatchCount.textContent = "0";
+    if (strategyAvgScore) strategyAvgScore.textContent = "--";
+    if (strategyTopHit) strategyTopHit.textContent = "--";
+    return;
+  }
+
+  const keyword = strategyKeyword.trim().toLowerCase();
+  const evaluated = buildStrategyUniverse(latestStocks).map(evaluateStrategyStock).filter((stock) => {
+    const matchedIds = stock.matches.map((item) => item.id);
+    const passMode = strategyMode === "all"
+      ? selected.every((id) => matchedIds.includes(id))
+      : selected.some((id) => matchedIds.includes(id));
+    const passKeyword = !keyword || stock.code.includes(keyword) || stock.name.toLowerCase().includes(keyword);
+    return passMode && passKeyword;
+  }).sort((a, b) => b.matches.length - a.matches.length || b.score - a.score || b.value - a.value);
+
+  const topRows = evaluated.slice(0, 50);
+  const avgScore = topRows.length
+    ? Math.round(topRows.reduce((sum, stock) => sum + stock.score, 0) / topRows.length)
+    : 0;
+  const topHit = topRows[0]?.matches.length || 0;
+  const selectedLabels = selected.map((id) => STRATEGY_BY_ID[id]?.short || id).join(" + ");
+
+  if (strategySummary) {
+    strategySummary.textContent = `${strategyMode === "all" ? "全部符合" : "任一符合"}：${selectedLabels}`;
+  }
+  if (strategyMatchCount) strategyMatchCount.textContent = evaluated.length.toLocaleString("zh-TW");
+  if (strategyAvgScore) strategyAvgScore.textContent = topRows.length ? avgScore : "--";
+  if (strategyTopHit) strategyTopHit.textContent = topRows.length ? `${topHit}/11` : "--";
+
+  if (!topRows.length) {
+    strategyTable.innerHTML = `<div class="empty-state">目前沒有符合條件的股票，請切換「任一符合」或減少策略。</div>`;
+    return;
+  }
+
+  strategyTable.innerHTML = `
+    <div class="strategy-row strategy-head">
+      <span>股票</span><span>分數</span><span>命中策略</span><span>漲幅</span><span>成交值</span><span>原因</span>
+    </div>
+    ${topRows.map((stock) => {
+      const sign = stock.percent >= 0 ? "+" : "";
+      const chips = stock.matches.slice(0, 5).map((item) => `<b>${item.icon} ${item.short}</b>`).join("");
+      const reason = stock.matches[0]?.reason || "符合策略條件";
+      return `
+        <div class="strategy-row">
+          <span><strong>${stock.code}</strong><small>${stock.name}</small></span>
+          <em>${stock.score}</em>
+          <span class="strategy-chips">${chips}${stock.matches.length > 5 ? `<b>+${stock.matches.length - 5}</b>` : ""}</span>
+          <span class="${stock.percent >= 0 ? "down" : "up"}">${sign}${stock.percent.toFixed(2)}%</span>
+          <span>${(stock.value / 100000000).toFixed(1)} 億</span>
+          <small>${reason}</small>
+        </div>
+      `;
+    }).join("")}
+  `;
+}
+
+async function loadStrategyStocks() {
+  if (strategyStocksLoading || latestStocks.length) return;
+  strategyStocksLoading = true;
+  try {
+    const stocks = await fetchJson(endpoints.stocks, 12000);
+    const parsed = normalizeArray(stocks).map((stock) => {
+      const code = valueOf(stock, ["證券代號", "Code"]);
+      const name = valueOf(stock, ["證券名稱", "Name"]);
+      const value = cleanNumber(valueOf(stock, ["成交金額", "TradeValue"]));
+      const tradeVolume = cleanNumber(valueOf(stock, ["成交股數", "TradeVolume"]));
+      return { code, name, value, tradeVolume, ...stockChange(stock) };
+    }).filter((s) => s.code && s.name && s.close);
+
+    if (parsed.length) {
+      latestStocks = parsed;
+      renderStrategyScanner();
+    }
+  } catch (error) {
+    if (strategyTable) {
+      strategyTable.innerHTML = `<div class="empty-state">策略5暫時無法取得股票資料，請稍後重新整理。</div>`;
+    }
+  } finally {
+    strategyStocksLoading = false;
+  }
 }
 
 function getSectorColor(pct) {
@@ -449,6 +695,7 @@ function renderStocks(stocks) {
   ).join("");
 
   renderStockTable(topStocks);
+  renderStrategyScanner();
   terminalMessage.textContent = `掃描完成：${parsed.length.toLocaleString("zh-TW")} 檔，強勢股 ${topStocks.length} 檔`;
 }
 
@@ -594,6 +841,7 @@ async function loadInstitution() {
   try {
     const data = await fetchJson(endpoints.institution, 12000);
     if (data.ok && data.data) institutionData = data.data;
+    renderStrategyScanner();
   } catch (e) {}
 }
 
@@ -787,4 +1035,36 @@ watchlistSearchInput?.addEventListener("keydown", (e) => {
 });
 watchlistAddBtn?.addEventListener("click", addToWatchlist);
 
+strategyCards.forEach((card) => {
+  card.addEventListener("click", () => {
+    const id = card.dataset.strategy;
+    if (selectedStrategyIds.has(id)) {
+      selectedStrategyIds.delete(id);
+    } else {
+      selectedStrategyIds.add(id);
+    }
+    renderStrategyScanner();
+  });
+});
+
+strategyModeButtons.forEach((button) => {
+  button.addEventListener("click", () => {
+    strategyMode = button.dataset.strategyMode;
+    renderStrategyScanner();
+  });
+});
+
+strategyClear?.addEventListener("click", () => {
+  selectedStrategyIds = new Set();
+  if (strategySearch) strategySearch.value = "";
+  strategyKeyword = "";
+  renderStrategyScanner();
+});
+
+strategySearch?.addEventListener("input", (event) => {
+  strategyKeyword = event.target.value;
+  renderStrategyScanner();
+});
+
 renderWatchlist();
+renderStrategyScanner();
