@@ -27,6 +27,7 @@ const endpoints = {
   backend: "/api/market",
   heatmap: "/api/heatmap",
   institution: "/api/institution",
+  strategyStocks: "/api/stocks",
   stocks: "https://openapi.twse.com.tw/v1/exchangeReport/STOCK_DAY_ALL",
 };
 
@@ -302,8 +303,8 @@ function renderStrategyScanner() {
   strategyModeButtons.forEach((button) => button.classList.toggle("active", button.dataset.strategyMode === strategyMode));
 
   if (!latestStocks.length) {
-    strategyTable.innerHTML = `<div class="empty-state">等待官方股票資料...</div>`;
-    if (strategySummary) strategySummary.textContent = "載入股票資料後即可開始篩選。";
+    strategyTable.innerHTML = `<div class="empty-state">載入全台股股票池...</div>`;
+    if (strategySummary) strategySummary.textContent = "正在載入上市櫃全市場股票資料。";
     loadStrategyStocks();
     return;
   }
@@ -374,9 +375,16 @@ async function loadStrategyStocks() {
   try {
     let stocks = [];
     try {
-      stocks = normalizeArray(await fetchJson(endpoints.stocks, 12000));
+      const payload = await fetchJson(endpoints.strategyStocks, 20000);
+      stocks = normalizeArray(payload.stocks);
     } catch (error) {
       stocks = [];
+    }
+
+    try {
+      if (!stocks.length) stocks = normalizeArray(await fetchJson(endpoints.stocks, 12000));
+    } catch (error) {
+      if (!stocks.length) stocks = [];
     }
 
     let parsed = stocks.map((stock) => {
