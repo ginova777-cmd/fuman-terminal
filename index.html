@@ -47,19 +47,53 @@
             </div>
             <div class="header-time strategy-time">05/07 17:20</div>
           </header>
-          <section class="strategy-list" aria-label="Strategy checklist">
-            <div class="strategy-list-title">策略清單 (11)</div>
-            <article class="strategy-card selected"><div class="strategy-icon hot">⚡</div><div><h2>動能分數 75+</h2><p>價格強勢，20日突破量比同步轉強，優先找資金加速股。</p></div><span>核心</span></article>
-            <article class="strategy-card"><div class="strategy-icon violet">♣</div><div><h2>主力籌碼盤整</h2><p>法人、大戶成交比重高，觀察分點或區間底部的支撐力道。</p></div></article>
-            <article class="strategy-card"><div class="strategy-icon green">↑</div><div><h2>突破20日新高</h2><p>收盤價高於近20日最高價，華星突破重要壓力位。</p></div></article>
-            <article class="strategy-card"><div class="strategy-icon red">✥</div><div><h2>開盤即戰力狙擊</h2><p>針對開盤10分鐘跳空與量能過濾，捕捉即時強轉強標的。</p></div><span>v1.6</span></article>
-            <article class="strategy-card"><div class="strategy-icon blue">↻</div><div><h2>昨日紅轉綠</h2><p>參考 Azix 邏輯，以昨收為準，開低走高突破昨日高點臨界。</p></div></article>
-            <article class="strategy-card"><div class="strategy-icon yellow">⌁</div><div><h2>2分K當沖雷達</h2><p>針對台股 2 分 K 頻率進行形態捕捉，尋找 N 底或框型底。</p></div></article>
-            <article class="strategy-card"><div class="strategy-icon cyan">▦</div><div><h2>投信連買認養股</h2><p>投信連續買超 3 日以上且站上均線，籌碼高度集中穩的。</p></div></article>
-            <article class="strategy-card"><div class="strategy-icon indigo">⌁</div><div><h2>VCP 波段收斂</h2><p>波動度逐漸收斂，放量啟動前的關鍵轉折監控。</p></div></article>
-            <article class="strategy-card"><div class="strategy-icon pink">☰</div><div><h2>均線多頭排列</h2><p>5/10/20/60 MA 呈現多頭向上發散，趨勢型強勢股。</p></div></article>
-            <article class="strategy-card"><div class="strategy-icon mint">▣</div><div><h2>高同步率回測</h2><p>Smart Money 重新介入，同步率從低位陡升至 60 以上。</p></div></article>
-            <article class="strategy-card"><div class="strategy-icon rose">⌬</div><div><h2>隔日沖吸籌監控</h2><p>監控量盤異常拉抬與資金流入，捕捉隔日開高機會。</p></div></article>
+          <section class="strategy-terminal" aria-label="Strategy scanner">
+            <section class="strategy-list" aria-label="Strategy checklist">
+              <div class="strategy-list-title">策略清單 (11)</div>
+              <article class="strategy-card selected" data-strategy="momentum"><div class="strategy-icon hot">⚡</div><div><h2>動能分數 75+</h2><p>價格強勢，20日突破量比同步轉強，優先找資金加速股。</p></div><span>核心</span></article>
+              <article class="strategy-card" data-strategy="main_force_chip"><div class="strategy-icon violet">♣</div><div><h2>主力籌碼盤整</h2><p>法人、大戶成交比重高，觀察分點或區間底部的支撐力道。</p></div></article>
+              <article class="strategy-card" data-strategy="twenty_day_breakout"><div class="strategy-icon green">↑</div><div><h2>突破20日新高</h2><p>收盤價高於近20日最高價，華星突破重要壓力位。</p></div></article>
+              <article class="strategy-card" data-strategy="opening_power"><div class="strategy-icon red">✥</div><div><h2>開盤即戰力狙擊</h2><p>針對開盤10分鐘跳空與量能過濾，捕捉即時強轉強標的。</p></div><span>v1.6</span></article>
+              <article class="strategy-card" data-strategy="red_to_green"><div class="strategy-icon blue">↻</div><div><h2>昨日紅轉綠</h2><p>參考 Azix 邏輯，以昨收為準，開低走高突破昨日高點臨界。</p></div></article>
+              <article class="strategy-card" data-strategy="intraday_2m"><div class="strategy-icon yellow">⌁</div><div><h2>2分K當沖雷達</h2><p>針對台股 2 分 K 頻率進行形態捕捉，尋找 N 底或框型底。</p></div></article>
+              <article class="strategy-card" data-strategy="investment_trust"><div class="strategy-icon cyan">▦</div><div><h2>投信連買認養股</h2><p>投信連續買超 3 日以上且站上均線，籌碼高度集中穩的。</p></div></article>
+              <article class="strategy-card" data-strategy="vcp"><div class="strategy-icon indigo">⌁</div><div><h2>VCP 波段收斂</h2><p>波動度逐漸收斂，放量啟動前的關鍵轉折監控。</p></div></article>
+              <article class="strategy-card" data-strategy="ma_bull"><div class="strategy-icon pink">☰</div><div><h2>均線多頭排列</h2><p>5/10/20/60 MA 呈現多頭向上發散，趨勢型強勢股。</p></div></article>
+              <article class="strategy-card" data-strategy="sync_backtest"><div class="strategy-icon mint">▣</div><div><h2>高同步率回測</h2><p>Smart Money 重新介入，同步率從低位陡升至 60 以上。</p></div></article>
+              <article class="strategy-card" data-strategy="overnight_chip"><div class="strategy-icon rose">⌬</div><div><h2>隔日沖吸籌監控</h2><p>監控量盤異常拉抬與資金流入，捕捉隔日開高機會。</p></div></article>
+            </section>
+
+            <section class="strategy-results">
+              <div class="strategy-toolbar">
+                <div>
+                  <span class="console-badge">FMN://strategy.scan</span>
+                  <h2>綜合策略選股</h2>
+                  <p id="strategy-summary">點選左側策略，立即篩出命中股票。</p>
+                </div>
+                <div class="strategy-actions">
+                  <div class="mode-toggle" aria-label="篩選模式">
+                    <button class="active" data-strategy-mode="any">任一符合</button>
+                    <button data-strategy-mode="all">全部符合</button>
+                  </div>
+                  <button class="ghost-btn" id="strategy-clear" type="button">清除</button>
+                </div>
+              </div>
+
+              <div class="strategy-metrics">
+                <article><span>符合股票</span><strong id="strategy-match-count">--</strong></article>
+                <article><span>平均分數</span><strong id="strategy-avg-score">--</strong></article>
+                <article><span>最高命中</span><strong id="strategy-top-hit">--</strong></article>
+              </div>
+
+              <label class="strategy-search">
+                <span>搜尋股票</span>
+                <input id="strategy-search" type="search" placeholder="輸入代號或名稱" autocomplete="off">
+              </label>
+
+              <div class="strategy-table" id="strategy-table">
+                <div class="empty-state">等待官方股票資料...</div>
+              </div>
+            </section>
           </section>
         </section>
 
