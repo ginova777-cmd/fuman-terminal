@@ -644,13 +644,13 @@ function renderIndexes(indexes, futuresNear, futuresNext, marketStatus) {
     if (futuresNear && futuresNear.price && parseFloat(futuresNear.price) > 0) {
       const sign = String(futuresNear.change || "").startsWith("-") ? "-" : "+";
       metricCards[2].innerHTML = `
-        <span>⇅ 台指近</span>
+        <span>⇅ 台指期</span>
         <strong>${formatNumber(futuresNear.price, 0)}</strong>
         <em class="${sign === "-" ? "up" : "down"}">${futuresNear.change || "--"}　(${futuresNear.pct || "--"})</em>
         ${statusLabel ? `<small style="color:#666; font-size:11px; margin-top:2px;">${statusLabel}</small>` : ""}
       `;
     } else {
-      metricCards[2].innerHTML = `<span>⇅ 台指近</span><strong>--</strong><em>${statusLabel || "等待資料"}</em>`;
+      metricCards[2].innerHTML = `<span>⇅ 台指期</span><strong>--</strong><em>${statusLabel || "等待資料"}</em>`;
     }
   }
 
@@ -658,13 +658,13 @@ function renderIndexes(indexes, futuresNear, futuresNext, marketStatus) {
     if (futuresNext && futuresNext.price && parseFloat(futuresNext.price) > 0) {
       const sign = String(futuresNext.change || "").startsWith("-") ? "-" : "+";
       metricCards[3].innerHTML = `
-        <span>☾ 台指次月</span>
+        <span>☾ 台指期近</span>
         <strong>${formatNumber(futuresNext.price, 0)}</strong>
         <em class="${sign === "-" ? "up" : "down"}">${futuresNext.change || "--"}　(${futuresNext.pct || "--"})</em>
         ${statusLabel ? `<small style="color:#666; font-size:11px; margin-top:2px;">${statusLabel}</small>` : ""}
       `;
     } else {
-      metricCards[3].innerHTML = `<span>☾ 台指次月</span><strong>--</strong><em>${statusLabel || "等待資料"}</em>`;
+      metricCards[3].innerHTML = `<span>☾ 台指期近</span><strong>--</strong><em>${statusLabel || "等待資料"}</em>`;
     }
   }
 }
@@ -833,19 +833,12 @@ async function fetchFuturesDirect() {
 
 async function loadMarketData() {
   try {
-    const [payload, futuresDirect] = await Promise.all([
-      fetchJson(endpoints.backend, 12000),
-      fetchFuturesDirect(),
-    ]);
+    const payload = await fetchJson(endpoints.backend, 12000);
 
     if (!payload.ok) throw new Error("Backend failed");
 
-    const near = (futuresDirect.near && parseFloat(futuresDirect.near.price) > 0)
-      ? futuresDirect.near
-      : (payload.futuresNear || payload.futures || null);
-    const next = (futuresDirect.next && parseFloat(futuresDirect.next.price) > 0)
-      ? futuresDirect.next
-      : (payload.futuresNext || null);
+    const near = payload.futuresNear || payload.futures || null;
+    const next = payload.futuresNext || null;
 
     renderIndexes(
       normalizeArray(payload.indexes),
@@ -894,7 +887,7 @@ viewLinks.forEach((link)=>{
   });
 });
 setInterval(tickClock, 1000);
-setInterval(loadMarketData, 5*60*1000);
+setInterval(loadMarketData, 15*1000);
 setInterval(loadHeatmap, 10*60*1000);
 setInterval(loadInstitution, 10*60*1000);
 
@@ -1081,6 +1074,9 @@ function gaugeMarkup(title, score, size = "small") {
   const label = signalLabel(score);
   const tone = signalClass(score);
   const gradient = gaugeGradient(score);
+  const sell = clamp(Math.round((100 - score) / 6), 0, 15);
+  const buy = clamp(Math.round(score / 6), 1, 15);
+  const neutral = clamp(17 - sell - buy, 0, 17);
   return `
     <article class="ta-gauge-card ${size}">
       <h3>${title}</h3>
@@ -1093,6 +1089,11 @@ function gaugeMarkup(title, score, size = "small") {
         <i></i>
       </div>
       <strong class="${tone}">${label}</strong>
+      <div class="ta-gauge-votes">
+        <div><span>賣出</span><b class="sell">${sell}</b></div>
+        <div><span>中立</span><b>${neutral}</b></div>
+        <div><span>買入</span><b class="buy">${buy}</b></div>
+      </div>
     </article>
   `;
 }
@@ -1187,11 +1188,6 @@ async function showTradingDashboard(code, name) {
 
       <section class="ta-main">
         ${gaugeMarkup("總覽", analysis.score, "large")}
-        <div class="ta-votes">
-          <div><span>賣出</span><strong class="sell">${analysis.sell}</strong></div>
-          <div><span>中立</span><strong>${analysis.neutral}</strong></div>
-          <div><span>買入</span><strong class="buy">${analysis.buy}</strong></div>
-        </div>
       </section>
 
       ${dashboardScoreMarkup(stock, analysis)}
