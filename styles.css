@@ -261,6 +261,12 @@ body::after {
   color: #9fc8ff;
 }
 
+.chip-menu-link.active {
+  border-color: rgba(255, 93, 67, 0.86);
+  background: #211d30;
+  box-shadow: inset 0 0 0 1px rgba(255, 93, 67, 0.15);
+}
+
 .chip-page-header {
   margin-bottom: 16px;
 }
