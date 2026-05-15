@@ -95,6 +95,53 @@ async function fetchIndexes() {
   return results;
 }
 
+async function fetchFutures() {
+  try {
+    const data = await fetchWithTimeout("https://mis.taifex.com.tw/futures/api/getQuoteList", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+        "Referer": "https://mis.taifex.com.tw/",
+        "Origin": "https://mis.taifex.com.tw",
+      },
+      body: JSON.stringify({
+        MarketType: "0",
+        SymbolType: "F",
+        KindID: "1",
+        CID: "TXF",
+        ExpireMonth: "",
+        RowSize: "5",
+        PageNo: "1",
+        Language: "zh-tw",
+      }),
+    }, 8000);
+    const list = (data?.RtData?.QuoteList || data?.RtnData?.QuoteList || [])
+      .filter((item) => String(item.SymbolID || "").includes("-F"));
+    const toItem = (item) => {
+      if (!item) return null;
+      const price = parseFloat(String(item.CLastPrice || "").replace(/,/g, "")) || 0;
+      const prev = parseFloat(String(item.CRefPrice || "").replace(/,/g, "")) || 0;
+      if (!price || !prev) return null;
+      const diff = price - prev;
+      const pct = prev ? (diff / prev) * 100 : 0;
+      const sign = diff >= 0 ? "+" : "-";
+      return {
+        name: item.DispCName || item.CName || "台指期",
+        month: item.SymbolID || item.CID || "",
+        price: price.toFixed(0),
+        change: `${sign}${Math.abs(diff).toFixed(0)}`,
+        pct: `${sign}${Math.abs(pct).toFixed(2)}%`,
+        volume: item.CTotalVolume || "--",
+      };
+    };
+
+    return { near: toItem(list[0]), next: toItem(list[1] || null) };
+  } catch (error) {
+    return { near: null, next: null };
+  }
+}
+
 function getMarketStatus() {
   const now = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Taipei" }));
   const day   = now.getDay();
@@ -115,7 +162,7 @@ module.exports = async function handler(request, response) {
 
   const marketStatus = getMarketStatus();
   const trading = marketStatus === "day";
-  const indexes = await fetchIndexes();
+  const [indexes, futures] = await Promise.all([fetchIndexes(), fetchFutures()]);
   const ok = indexes.length > 0;
 
   response.setHeader(
@@ -133,8 +180,8 @@ module.exports = async function handler(request, response) {
     updatedAt: new Date().toISOString(),
     indexes,
     stocks: [],
-    futures:     null,
-    futuresNear: null,
-    futuresNext: null,
+    futures: futures.near,
+    futuresNear: futures.near,
+    futuresNext: futures.next,
   });
 };
