@@ -79,9 +79,10 @@ body::after {
   width: 46px;
   height: 46px;
   border-radius: 14px;
-  object-fit: cover;
+  object-fit: contain;
   object-position: center;
-  background: #101827;
+  padding: 4px;
+  background: #f7f8f3;
   border: 1px solid rgba(154, 190, 215, 0.22);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 10px 24px rgba(0, 0, 0, 0.22);
 }
