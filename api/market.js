@@ -19,6 +19,26 @@ async function fetchWithTimeout(url, options = {}, timeout = 8000) {
   }
 }
 
+async function fetchTextWithTimeout(url, options = {}, timeout = 8000) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeout);
+  try {
+    const res = await fetch(url, {
+      ...options,
+      signal: controller.signal,
+      headers: {
+        "User-Agent": "Mozilla/5.0 (compatible; FumanTerminal/1.0)",
+        "Accept": "text/html, text/plain, */*",
+        ...(options.headers || {}),
+      },
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return await res.text();
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 function calcChange(current, prev) {
   if (!prev || !current) return { diff: "0", pct: "0", sign: "+" };
   const diff = (current - prev).toFixed(2);
@@ -126,6 +146,7 @@ async function fetchFutures() {
       const diff = price - prev;
       const pct = prev ? (diff / prev) * 100 : 0;
       const sign = diff >= 0 ? "+" : "-";
+      const basisLabel = price > prev ? "多方勢（高於結算）" : price < prev ? "空方勢（低於結算）" : "平盤整理";
       return {
         name: item.DispCName || item.CName || "台指期",
         month: item.SymbolID || item.CID || "",
@@ -133,12 +154,33 @@ async function fetchFutures() {
         change: `${sign}${Math.abs(diff).toFixed(0)}`,
         pct: `${sign}${Math.abs(pct).toFixed(2)}%`,
         volume: item.CTotalVolume || "--",
+        basisLabel,
+        basisSide: price > prev ? "long" : price < prev ? "short" : "flat",
       };
     };
 
     return { near: toItem(list[0]), next: toItem(list[1] || null) };
   } catch (error) {
     return { near: null, next: null };
+  }
+}
+
+async function fetchOtcYahooSignal() {
+  try {
+    const html = await fetchTextWithTimeout("https://tw.stock.yahoo.com/quote/006201.TW", {}, 8000);
+    const start = html.indexOf("漲→跌");
+    if (start < 0) return null;
+    const area = html.slice(start, start + 600);
+    const percentMatch = area.match(/(\d+(?:\.\d+)?)%/);
+    if (!percentMatch) return null;
+    const isDown = area.includes("border-color:#00ab5e") || area.includes("▼");
+    return {
+      label: `漲→跌(${isDown ? "▼" : "▲"} ${percentMatch[1]}%)`,
+      side: isDown ? "down" : "up",
+      source: "Yahoo 006201.TW",
+    };
+  } catch (error) {
+    return null;
   }
 }
 
@@ -162,7 +204,7 @@ module.exports = async function handler(request, response) {
 
   const marketStatus = getMarketStatus();
   const trading = marketStatus === "day";
-  const [indexes, futures] = await Promise.all([fetchIndexes(), fetchFutures()]);
+  const [indexes, futures, otcSignal] = await Promise.all([fetchIndexes(), fetchFutures(), fetchOtcYahooSignal()]);
   const ok = indexes.length > 0;
 
   response.setHeader(
@@ -183,5 +225,6 @@ module.exports = async function handler(request, response) {
     futures: futures.near,
     futuresNear: futures.near,
     futuresNext: futures.next,
+    otcSignal,
   });
 };
