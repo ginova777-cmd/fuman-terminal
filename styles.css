@@ -1480,14 +1480,14 @@ h1 {
   background: var(--gauge-bg);
   content: "";
   filter: saturate(1.12);
-  mask: radial-gradient(circle at 50% 100%, transparent 0 50%, #000 51% 57%, transparent 58%);
+  mask: radial-gradient(circle at 50% 100%, transparent 0 50%, #000 51% 62%, transparent 63%);
 }
 
 .ta-gauge i {
   position: absolute;
   left: 50%;
   bottom: 0;
-  width: 42%;
+  width: 46%;
   height: 3px;
   border-radius: 999px;
   background: #eef1f7;
@@ -1509,8 +1509,8 @@ h1 {
 
 .gauge-label {
   position: absolute;
-  color: rgba(255, 255, 255, 0.55);
-  font-size: 15px;
+  color: rgba(255, 255, 255, 0.74);
+  font-size: 14px;
   font-weight: 950;
   white-space: nowrap;
   letter-spacing: 0;
@@ -1521,17 +1521,17 @@ h1 {
   font-size: 11px;
 }
 
-.gauge-label.l1 { left: -16%; bottom: 23%; color: rgba(255, 79, 104, 0.58); }
-.gauge-label.l2 { left: 0; top: 36%; color: rgba(255, 79, 104, 0.78); }
-.gauge-label.l3 { left: 50%; top: -15%; color: rgba(255, 255, 255, 0.92); transform: translateX(-50%); }
-.gauge-label.l4 { right: 0; top: 36%; color: rgba(47, 140, 255, 0.95); text-shadow: 0 0 12px rgba(47, 140, 255, 0.42); }
-.gauge-label.l5 { right: -17%; bottom: 23%; color: rgba(255, 255, 255, 0.36); }
+.gauge-label.l1 { left: -12%; bottom: 32%; color: rgba(47, 140, 255, 0.86); }
+.gauge-label.l2 { left: 2%; top: 38%; color: rgba(47, 140, 255, 0.86); }
+.gauge-label.l3 { left: 50%; top: -14%; color: rgba(255, 255, 255, 0.92); transform: translateX(-50%); }
+.gauge-label.l4 { right: 2%; top: 38%; color: #ff4f68; text-shadow: 0 0 12px rgba(255, 79, 104, 0.42); }
+.gauge-label.l5 { right: -13%; bottom: 32%; color: rgba(255, 79, 104, 0.88); }
 
-.ta-gauge-card.small .gauge-label.l1 { left: -13%; bottom: 24%; }
-.ta-gauge-card.small .gauge-label.l2 { left: 1%; top: 38%; }
-.ta-gauge-card.small .gauge-label.l3 { top: -10%; }
-.ta-gauge-card.small .gauge-label.l4 { right: 1%; top: 38%; }
-.ta-gauge-card.small .gauge-label.l5 { right: -14%; bottom: 24%; }
+.ta-gauge-card.small .gauge-label.l1 { left: -6%; bottom: 30%; }
+.ta-gauge-card.small .gauge-label.l2 { left: 6%; top: 40%; }
+.ta-gauge-card.small .gauge-label.l3 { top: -8%; }
+.ta-gauge-card.small .gauge-label.l4 { right: 6%; top: 40%; }
+.ta-gauge-card.small .gauge-label.l5 { right: -7%; bottom: 30%; }
 
 .ta-votes,
 .ta-gauge-votes {

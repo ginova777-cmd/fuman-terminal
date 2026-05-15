@@ -1157,13 +1157,13 @@ function colorAtGaugeAngle(angle) {
 
 function gaugeGradient(score) {
   const fill = clamp(score, 0, 100) / 100 * 180;
-  const track = "rgba(118, 120, 109, 0.76)";
+  const track = "rgba(128, 132, 122, 0.72)";
   const baseStops = [
-    { angle: 0, color: "#ff405a" },
-    { angle: 44, color: "#d34691" },
-    { angle: 88, color: "#744bd7" },
-    { angle: 132, color: "#2f8cff" },
-    { angle: 180, color: "#2f8cff" },
+    { angle: 0, color: "#2f8cff" },
+    { angle: 42, color: "#4d6cf2" },
+    { angle: 86, color: "#8743b9" },
+    { angle: 126, color: "#d43d88" },
+    { angle: 158, color: "#ff4964" },
   ];
   const visibleStops = baseStops
     .filter((stop) => stop.angle <= fill)
@@ -1214,7 +1214,7 @@ function formatVolumeMetric(stock, analysis) {
 }
 
 function gaugeMarkup(title, score, size = "small") {
-  const rotation = Math.round(202 + (clamp(score, 0, 100) / 100) * 136);
+  const rotation = Math.round(180 + (clamp(score, 0, 100) / 100) * 180);
   const label = signalLabel(score);
   const tone = signalClass(score);
   const gradient = gaugeGradient(score);
