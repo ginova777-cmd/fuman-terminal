@@ -29,8 +29,8 @@
           <a class="strategy-nav" href="#" data-view="strategy"><span class="s5">▰</span>策略5-綜合策略</a>
           <section class="chip-menu" aria-label="盤後籌碼">
             <h2>盤後籌碼</h2>
-            <a href="#" class="chip-menu-link"><span>◆</span>1.買賣超</a>
-            <a href="#" class="chip-menu-link"><span>◒</span>2.權證走向</a>
+            <a href="#" class="chip-menu-link" data-view="chip-trade"><span>◆</span>1.買賣超</a>
+            <a href="#" class="chip-menu-link" data-view="warrant-flow"><span>◒</span>2.權證走向</a>
           </section>
         </nav>
 
@@ -196,6 +196,75 @@
               <div style="color:#555; font-size:14px;">點擊左側股票查看技術分析</div>
             </div>
           </div>
+        </section>
+
+        <!-- 買賣超 -->
+        <section class="view-panel" id="chip-trade-view" hidden>
+          <header class="page-header chip-page-header">
+            <div>
+              <h1>外資 + 投信連買</h1>
+              <span class="refresh-line" id="chip-trade-date">等待盤後資料</span>
+            </div>
+          </header>
+
+          <section class="chip-tool">
+            <div class="chip-tool-row">
+              <span>個股資訊:</span>
+              <div class="chip-tabs" aria-label="買賣超資料模式">
+                <button class="active" type="button" data-chip-mode="realtime">即時</button>
+                <button type="button" data-chip-mode="after">盤後</button>
+              </div>
+              <select id="chip-sort">
+                <option value="trustForeign">外資+投信買超</option>
+                <option value="trust">投信買超</option>
+                <option value="foreign">外資買超</option>
+                <option value="pct">漲幅</option>
+                <option value="value">成交值</option>
+              </select>
+            </div>
+            <div class="chip-tool-row">
+              <span>項目切換:</span>
+              <button class="chip-pill active" type="button">外資+投信連買</button>
+              <button class="chip-pill" type="button">投信連續買超</button>
+              <button class="chip-pill" type="button">外資買超</button>
+              <button class="chip-pill" type="button">法人同買</button>
+            </div>
+          </section>
+
+          <section class="chip-table-wrap">
+            <table class="chip-table">
+              <thead>
+                <tr>
+                  <th>股票代號</th>
+                  <th>股票名稱</th>
+                  <th>現價/收盤</th>
+                  <th>漲跌</th>
+                  <th>漲幅(%)</th>
+                  <th>成交量</th>
+                  <th>外資買賣超</th>
+                  <th>投信買賣超</th>
+                  <th>法人合計</th>
+                </tr>
+              </thead>
+              <tbody id="chip-trade-body">
+                <tr><td colspan="9">等待資料載入...</td></tr>
+              </tbody>
+            </table>
+          </section>
+        </section>
+
+        <!-- 權證走向 -->
+        <section class="view-panel" id="warrant-flow-view" hidden>
+          <header class="page-header chip-page-header">
+            <div>
+              <h1>權證走向</h1>
+              <span class="refresh-line">功能規劃中</span>
+            </div>
+          </header>
+          <section class="chip-empty">
+            <h2>權證走向</h2>
+            <p>下一步會接認購、認售、成交量與方向分數。</p>
+          </section>
         </section>
 
       </main>

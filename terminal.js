@@ -12,6 +12,8 @@ const viewLinks = [...document.querySelectorAll("[data-view]")];
 const viewPanels = {
   market: document.querySelector("#market-view"),
   strategy: document.querySelector("#strategy-view"),
+  "chip-trade": document.querySelector("#chip-trade-view"),
+  "warrant-flow": document.querySelector("#warrant-flow-view"),
 };
 const strategyCards = [...document.querySelectorAll(".strategy-card[data-strategy]")];
 const strategyTable = document.querySelector("#strategy-table");
@@ -34,6 +36,8 @@ const endpoints = {
 let latestStocks = [];
 let sectorStocksCache = {};
 let institutionData = {};
+let institutionDate = "";
+let chipMode = "realtime";
 let selectedStrategyIds = new Set(["momentum"]);
 let strategyMode = "any";
 let strategyKeyword = "";
@@ -660,6 +664,80 @@ function renderIndexes(indexes, futuresNear, futuresNext, marketStatus, otcSigna
   if (metricCards[3]) metricCards[3].remove();
 }
 
+function formatChipDate(dateStr) {
+  if (!dateStr || dateStr.length !== 8) return "等待盤後資料";
+  return `日期: ${dateStr.slice(0, 4)}/${dateStr.slice(4, 6)}/${dateStr.slice(6, 8)}`;
+}
+
+function renderChipTradeTable() {
+  const body = document.querySelector("#chip-trade-body");
+  const dateEl = document.querySelector("#chip-trade-date");
+  const sortEl = document.querySelector("#chip-sort");
+  if (!body) return;
+
+  if (dateEl) {
+    const now = new Date();
+    const time = now.toLocaleTimeString("zh-TW", { hour12: false });
+    dateEl.textContent = `${formatChipDate(institutionDate)}　更新 ${time}`;
+  }
+
+  const rows = latestStocks
+    .map((stock) => {
+      const code = String(stock.code || "");
+      const inst = institutionData[code];
+      if (!inst) return null;
+      const foreign = Number(inst.foreign) || 0;
+      const trust = Number(inst.trust) || 0;
+      const total = Number(inst.total) || foreign + trust + (Number(inst.dealer) || 0);
+      if (foreign <= 0 || trust <= 0) return null;
+      return {
+        code,
+        name: stock.name || code,
+        price: cleanNumber(stock.close),
+        change: cleanNumber(stock.change),
+        percent: cleanNumber(stock.percent),
+        volume: cleanNumber(stock.tradeVolume),
+        value: cleanNumber(stock.value),
+        foreign,
+        trust,
+        total,
+      };
+    })
+    .filter(Boolean);
+
+  const sortBy = sortEl?.value || "trustForeign";
+  rows.sort((a, b) => {
+    if (sortBy === "trust") return b.trust - a.trust;
+    if (sortBy === "foreign") return b.foreign - a.foreign;
+    if (sortBy === "pct") return b.percent - a.percent;
+    if (sortBy === "value") return b.value - a.value;
+    return (b.foreign + b.trust) - (a.foreign + a.trust);
+  });
+
+  const shown = rows.slice(0, 80);
+  if (!shown.length) {
+    body.innerHTML = `<tr><td colspan="9">目前沒有符合「外資 + 投信同買」的資料，盤後資料更新後會自動刷新。</td></tr>`;
+    return;
+  }
+
+  body.innerHTML = shown.map((row, index) => {
+    const up = row.change >= 0;
+    return `
+      <tr class="${index === 0 ? "highlight" : ""}">
+        <td><a href="#" data-chip-code="${row.code}">${row.code}</a></td>
+        <td>${row.name}</td>
+        <td>${formatNumber(row.price, row.price >= 100 ? 0 : 2)}</td>
+        <td class="${up ? "red" : "green"}">${up ? "+" : ""}${formatNumber(row.change, 2)}</td>
+        <td class="${row.percent >= 0 ? "red" : "green"}">${formatNumber(row.percent, 2)}</td>
+        <td>${Math.round(row.volume).toLocaleString("zh-TW")}</td>
+        <td class="${row.foreign >= 0 ? "red" : "green"}">${formatInstitution(row.foreign)}</td>
+        <td class="${row.trust >= 0 ? "red" : "green"}">${formatInstitution(row.trust)}</td>
+        <td class="${row.total >= 0 ? "red" : "green"}">${formatInstitution(row.total)}</td>
+      </tr>
+    `;
+  }).join("");
+}
+
 function stockChange(stock) {
   const change = cleanNumber(valueOf(stock, ["漲跌價差", "Change", "漲跌"]));
   const close = cleanNumber(valueOf(stock, ["收盤價", "ClosingPrice", "收盤"]));
@@ -724,6 +802,7 @@ function renderStocks(stocks) {
 
   renderStockTable(topStocks);
   renderStrategyScanner();
+  renderChipTradeTable();
   terminalMessage.textContent = `掃描完成：${parsed.length.toLocaleString("zh-TW")} 檔，強勢股 ${topStocks.length} 檔`;
 }
 
@@ -862,8 +941,12 @@ async function loadHeatmap() {
 async function loadInstitution() {
   try {
     const data = await fetchJson(endpoints.institution, 12000);
-    if (data.ok && data.data) institutionData = data.data;
+    if (data.ok && data.data) {
+      institutionData = data.data;
+      institutionDate = data.usedDate || "";
+    }
     renderStrategyScanner();
+    renderChipTradeTable();
   } catch (e) {}
 }
 
@@ -878,6 +961,14 @@ viewLinks.forEach((link)=>{
     showView(link.dataset.view, link);
   });
 });
+document.querySelectorAll("[data-chip-mode]").forEach((button) => {
+  button.addEventListener("click", () => {
+    chipMode = button.dataset.chipMode || "realtime";
+    document.querySelectorAll("[data-chip-mode]").forEach((item) => item.classList.toggle("active", item === button));
+    renderChipTradeTable();
+  });
+});
+document.querySelector("#chip-sort")?.addEventListener("change", renderChipTradeTable);
 setInterval(tickClock, 1000);
 setInterval(loadMarketData, 15*1000);
 setInterval(loadHeatmap, 10*60*1000);

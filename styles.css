@@ -261,6 +261,126 @@ body::after {
   color: #9fc8ff;
 }
 
+.chip-page-header {
+  margin-bottom: 16px;
+}
+
+.chip-tool {
+  max-width: 1180px;
+  margin-bottom: 12px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: rgba(20, 27, 42, 0.72);
+  overflow: hidden;
+}
+
+.chip-tool::before {
+  display: block;
+  padding: 10px 14px;
+  content: "外資 + 投信連買";
+  background: rgba(255, 122, 69, 0.22);
+  color: #fff;
+  font-size: 20px;
+  font-weight: 900;
+}
+
+.chip-tool-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border-top: 1px solid rgba(134, 151, 190, 0.12);
+  color: #c7d4ef;
+  font-size: 14px;
+}
+
+.chip-tabs {
+  display: inline-flex;
+  gap: 4px;
+}
+
+.chip-tabs button,
+.chip-pill,
+#chip-sort {
+  min-height: 28px;
+  border: 1px solid rgba(154, 169, 205, 0.35);
+  border-radius: 4px;
+  background: #d8dbe4;
+  color: #1f2635;
+  padding: 4px 14px;
+  font: inherit;
+}
+
+.chip-tabs button.active,
+.chip-pill.active {
+  background: #20283d;
+  color: #fff;
+  border-color: rgba(255, 122, 69, 0.65);
+}
+
+.chip-table-wrap {
+  max-width: 1180px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: rgba(10, 14, 24, 0.72);
+  overflow: auto;
+}
+
+.chip-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+  white-space: nowrap;
+}
+
+.chip-table th,
+.chip-table td {
+  padding: 8px 10px;
+  border: 1px solid rgba(134, 151, 190, 0.11);
+  text-align: right;
+}
+
+.chip-table th:nth-child(1),
+.chip-table th:nth-child(2),
+.chip-table td:nth-child(1),
+.chip-table td:nth-child(2) {
+  text-align: left;
+}
+
+.chip-table th {
+  background: rgba(231, 236, 245, 0.9);
+  color: #1f2635;
+  font-weight: 700;
+}
+
+.chip-table tbody tr {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.chip-table tbody tr:nth-child(even) {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.chip-table tbody tr.highlight {
+  background: rgba(255, 122, 69, 0.18);
+}
+
+.chip-table a {
+  color: #8fbfff;
+  text-decoration: underline;
+}
+
+.chip-table .red { color: var(--red); }
+.chip-table .green { color: var(--green); }
+
+.chip-empty {
+  max-width: 760px;
+  padding: 28px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(20, 27, 42, 0.72);
+}
+
 .nav-item.active {
   color: var(--orange);
 }
