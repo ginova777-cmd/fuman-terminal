@@ -18,6 +18,14 @@ async function fetchText(url, options = {}, timeout = 15000) {
   }
 }
 
+function withTimeout(promise, timeout, fallback) {
+  let timer;
+  const timeoutPromise = new Promise((resolve) => {
+    timer = setTimeout(() => resolve(fallback), timeout);
+  });
+  return Promise.race([promise, timeoutPromise]).finally(() => clearTimeout(timer));
+}
+
 function cleanNumber(value) {
   if (value === undefined || value === null || value === "" || value === "-" || value === "--") return 0;
   return Number(String(value).replace(/[,+%]/g, "").replace(/^X/i, "")) || 0;
@@ -215,29 +223,27 @@ async function fetchBatchQuotes(stocks) {
 
 async function fetchRealtimeQuotes(stocks) {
   const quoteMap = new Map();
-  const chunks = chunkArray(stocks, 45);
+  const chunks = chunkArray(stocks, 90);
+  const quotePromise = Promise.all(chunks.map(fetchBatchQuotes));
+  const results = await withTimeout(quotePromise, 6500, []);
 
-  for (let i = 0; i < chunks.length; i += 6) {
-    const batch = chunks.slice(i, i + 6);
-    const results = await Promise.all(batch.map(fetchBatchQuotes));
-    results.flat().forEach((item) => {
-      const code = String(item.c || "").trim();
-      if (!code) return;
-      const close = cleanNumber(item.z) || cleanNumber(item.y);
-      const prev = cleanNumber(item.y) || close;
-      if (!close || !prev) return;
-      const volumeLots = cleanNumber(item.v);
-      const change = close - prev;
-      quoteMap.set(code, {
-        close,
-        prev,
-        change,
-        pct: prev ? (change / prev) * 100 : 0,
-        volume: volumeLots || 0,
-        value: volumeLots ? volumeLots * 1000 * close : 0,
-      });
+  results.flat().forEach((item) => {
+    const code = String(item.c || "").trim();
+    if (!code) return;
+    const close = cleanNumber(item.z) || cleanNumber(item.y);
+    const prev = cleanNumber(item.y) || close;
+    if (!close || !prev) return;
+    const volumeLots = cleanNumber(item.v);
+    const change = close - prev;
+    quoteMap.set(code, {
+      close,
+      prev,
+      change,
+      pct: prev ? (change / prev) * 100 : 0,
+      volume: volumeLots || 0,
+      value: volumeLots ? volumeLots * 1000 * close : 0,
     });
-  }
+  });
 
   return quoteMap;
 }
