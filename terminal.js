@@ -619,7 +619,7 @@ function renderHeatmapSectors(sectors) {
   });
 }
 
-function renderIndexes(indexes, futuresNear, futuresNext, marketStatus) {
+function renderIndexes(indexes, futuresNear, futuresNext, marketStatus, otcSignal) {
   const targets = [["發行量加權", "加權指數"], ["櫃買", "櫃買指數"]];
   targets.forEach(([keyword, label], index) => {
     const record = indexes.find((item) => String(valueOf(item, ["指數", "指數/報酬指數"])).includes(keyword));
@@ -633,6 +633,7 @@ function renderIndexes(indexes, futuresNear, futuresNext, marketStatus) {
       <span>↗ ${label}</span>
       <strong>${formatNumber(close)}</strong>
       <em class="${trendClass}">${formatChange(sign, points, percent)}</em>
+      ${index === 1 && otcSignal ? `<small class="metric-signal ${otcSignal.side === "down" ? "green" : "red"}">${otcSignal.label}</small>` : ""}
     `;
   });
 
@@ -649,7 +650,7 @@ function renderIndexes(indexes, futuresNear, futuresNext, marketStatus) {
         <span>⇅ 台指期夜盤</span>
         <strong>${formatNumber(futuresNear.price, 0)}</strong>
         <em class="${sign === "-" ? "up" : "down"}">${futuresNear.change || "--"}　(${futuresNear.pct || "--"})</em>
-        ${statusLabel ? `<small style="color:#666; font-size:11px; margin-top:2px;">${statusLabel}</small>` : ""}
+        ${futuresNear.basisLabel ? `<small class="metric-signal ${futuresNear.basisSide === "short" ? "green" : futuresNear.basisSide === "long" ? "red" : ""}">${futuresNear.basisLabel}</small>` : statusLabel ? `<small style="color:#666; font-size:11px; margin-top:2px;">${statusLabel}</small>` : ""}
       `;
     } else {
       metricCards[2].innerHTML = `<span>⇅ 台指期夜盤</span><strong>--</strong><em>${statusLabel || "等待資料"}</em>`;
@@ -834,7 +835,8 @@ async function loadMarketData() {
       normalizeArray(payload.indexes),
       near,
       next,
-      payload.marketStatus || null
+      payload.marketStatus || null,
+      payload.otcSignal || null
     );
     renderStocks(normalizeArray(payload.stocks));
   } catch (e) {

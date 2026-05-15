@@ -700,6 +700,23 @@ h1 {
   color: #30e7f2;
 }
 
+.metric-card .metric-signal {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 10px;
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.metric-card .metric-signal.green {
+  color: var(--green);
+}
+
+.metric-card .metric-signal.red {
+  color: var(--red);
+}
+
 .down {
   color: var(--red) !important;
 }
