@@ -983,6 +983,63 @@ function buildTimeframeButtons(activeKey) {
   `).join("");
 }
 
+function hexToRgb(hex) {
+  const value = hex.replace("#", "");
+  return {
+    r: parseInt(value.slice(0, 2), 16),
+    g: parseInt(value.slice(2, 4), 16),
+    b: parseInt(value.slice(4, 6), 16),
+  };
+}
+
+function mixColor(from, to, ratio) {
+  const a = hexToRgb(from);
+  const b = hexToRgb(to);
+  const blend = (start, end) => Math.round(start + (end - start) * ratio);
+  return `rgb(${blend(a.r, b.r)}, ${blend(a.g, b.g)}, ${blend(a.b, b.b)})`;
+}
+
+function colorAtGaugeAngle(angle) {
+  const stops = [
+    { angle: 0, color: "#ff4964" },
+    { angle: 42, color: "#d43d88" },
+    { angle: 86, color: "#8743b9" },
+    { angle: 126, color: "#5c4ed5" },
+    { angle: 158, color: "#2f8cff" },
+    { angle: 180, color: "#2f8cff" },
+  ];
+  for (let i = 1; i < stops.length; i++) {
+    if (angle <= stops[i].angle) {
+      const prev = stops[i - 1];
+      const next = stops[i];
+      const ratio = (angle - prev.angle) / (next.angle - prev.angle);
+      return mixColor(prev.color, next.color, ratio);
+    }
+  }
+  return stops[stops.length - 1].color;
+}
+
+function gaugeGradient(score) {
+  const fill = clamp(score, 0, 100) / 100 * 180;
+  const baseStops = [
+    { angle: 0, color: "#ff4964" },
+    { angle: 42, color: "#d43d88" },
+    { angle: 86, color: "#8743b9" },
+    { angle: 126, color: "#5c4ed5" },
+    { angle: 158, color: "#2f8cff" },
+  ];
+  const visibleStops = baseStops
+    .filter((stop) => stop.angle <= fill)
+    .map((stop) => `${stop.color} ${stop.angle}deg`);
+  const fillColor = colorAtGaugeAngle(fill);
+
+  if (fill <= 1) {
+    return "conic-gradient(from 270deg at 50% 100%, #050711 0deg 180deg, transparent 180deg 360deg)";
+  }
+
+  return `conic-gradient(from 270deg at 50% 100%, ${visibleStops.join(", ")}, ${fillColor} ${fill.toFixed(1)}deg, #050711 ${fill.toFixed(1)}deg 180deg, transparent 180deg 360deg)`;
+}
+
 function buildTechnicalSummary(stock, timeframeKey = selectedTechnicalTimeframe) {
   const timeframe = getTechnicalTimeframe(timeframeKey);
   const pct = stock?.percent || 0;
@@ -1023,10 +1080,11 @@ function gaugeMarkup(title, score, size = "small") {
   const rotation = Math.round(180 + (clamp(score, 0, 100) / 100) * 180);
   const label = signalLabel(score);
   const tone = signalClass(score);
+  const gradient = gaugeGradient(score);
   return `
     <article class="ta-gauge-card ${size}">
       <h3>${title}</h3>
-      <div class="ta-gauge ${tone}" style="--needle:${rotation}deg;">
+      <div class="ta-gauge ${tone}" style="--needle:${rotation}deg; --gauge-bg:${gradient};">
         <span class="gauge-label l1">強力賣出</span>
         <span class="gauge-label l2">賣出</span>
         <span class="gauge-label l3">中立</span>
