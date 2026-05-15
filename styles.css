@@ -1222,14 +1222,14 @@ h1 {
 
 .ta-gauge-card > strong.buy,
 .ta-votes .buy {
-  color: #2f8cff;
-  text-shadow: 0 0 14px rgba(47, 140, 255, 0.32);
+  color: #ff4f68;
+  text-shadow: 0 0 14px rgba(255, 79, 104, 0.34);
 }
 
 .ta-gauge-card > strong.sell,
 .ta-votes .sell {
-  color: #ff4f68;
-  text-shadow: 0 0 14px rgba(255, 79, 104, 0.34);
+  color: #2f8cff;
+  text-shadow: 0 0 14px rgba(47, 140, 255, 0.32);
 }
 
 .ta-gauge-card > strong.neutral {
@@ -1301,11 +1301,11 @@ h1 {
   font-size: 11px;
 }
 
-.gauge-label.l1 { left: -12%; bottom: 32%; color: rgba(255, 79, 104, 0.82); }
-.gauge-label.l2 { left: 2%; top: 38%; color: rgba(255, 120, 150, 0.82); }
+.gauge-label.l1 { left: -12%; bottom: 32%; color: rgba(47, 140, 255, 0.86); }
+.gauge-label.l2 { left: 2%; top: 38%; color: rgba(47, 140, 255, 0.86); }
 .gauge-label.l3 { left: 50%; top: -14%; color: rgba(255, 255, 255, 0.92); transform: translateX(-50%); }
-.gauge-label.l4 { right: 2%; top: 38%; color: #2f8cff; text-shadow: 0 0 12px rgba(47, 140, 255, 0.42); }
-.gauge-label.l5 { right: -13%; bottom: 32%; color: rgba(135, 172, 255, 0.86); }
+.gauge-label.l4 { right: 2%; top: 38%; color: #ff4f68; text-shadow: 0 0 12px rgba(255, 79, 104, 0.42); }
+.gauge-label.l5 { right: -13%; bottom: 32%; color: rgba(255, 79, 104, 0.88); }
 
 .ta-gauge-card.small .gauge-label.l1 { left: -6%; bottom: 30%; }
 .ta-gauge-card.small .gauge-label.l2 { left: 6%; top: 40%; }
