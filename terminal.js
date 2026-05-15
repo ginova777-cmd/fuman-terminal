@@ -1146,11 +1146,6 @@ function dashboardScoreMarkup(stock, analysis) {
         <strong>${scores.swingScore}</strong>
         <em>趨勢強弱</em>
       </article>
-      <article class="${scores.chipScore === null ? "wait" : scoreTone(scores.chipScore)}">
-        <span>籌碼分</span>
-        <strong>${chipText}</strong>
-        <em>${scores.chipScore === null ? "盤後更新" : "法人方向"}</em>
-      </article>
       <article class="risk">
         <span>狀態提示</span>
         <div>${tagMarkup}</div>
@@ -1206,11 +1201,6 @@ async function showTradingDashboard(code, name) {
         ${gaugeMarkup("移動平均線", analysis.maScore)}
       </section>
 
-      <section class="ta-facts">
-        <article><span>外資</span><strong class="${analysis.foreign >= 0 ? "down" : "up"}">${analysis.foreign >= 0 ? "+" : ""}${(analysis.foreign / 1000).toFixed(0)}k</strong></article>
-        <article><span>投信</span><strong class="${trustClass}">${trustText}</strong></article>
-        <article><span>量能</span><strong>${volumeText}</strong></article>
-      </section>
     </div>
   `;
 
