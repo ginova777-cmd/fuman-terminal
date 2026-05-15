@@ -1224,13 +1224,16 @@ h1 {
   border-radius: 999px 999px 0 0;
   background:
     conic-gradient(from 270deg at 50% 100%,
-      #ff4964 0deg 35deg,
-      #bd3c8d 35deg 76deg,
-      #5f3c9d 76deg 118deg,
-      #2d67e9 118deg 154deg,
-      #454957 154deg 180deg,
+      #ff4964 0deg,
+      #f04774 25deg,
+      #c93d91 55deg,
+      #8c43b6 88deg,
+      #5c4ed5 116deg,
+      #2f7cff 145deg,
+      #4b5263 180deg,
       transparent 180deg 360deg);
   content: "";
+  filter: saturate(1.12);
   mask: radial-gradient(circle at 50% 100%, transparent 0 52%, #000 53% 62%, transparent 63%);
 }
 
