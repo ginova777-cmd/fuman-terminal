@@ -1001,12 +1001,12 @@ function mixColor(from, to, ratio) {
 
 function colorAtGaugeAngle(angle) {
   const stops = [
-    { angle: 0, color: "#ff4964" },
-    { angle: 42, color: "#d43d88" },
+    { angle: 0, color: "#2f8cff" },
+    { angle: 42, color: "#4d6cf2" },
     { angle: 86, color: "#8743b9" },
-    { angle: 126, color: "#5c4ed5" },
-    { angle: 158, color: "#2f8cff" },
-    { angle: 180, color: "#2f8cff" },
+    { angle: 126, color: "#d43d88" },
+    { angle: 158, color: "#ff4964" },
+    { angle: 180, color: "#ff4964" },
   ];
   for (let i = 1; i < stops.length; i++) {
     if (angle <= stops[i].angle) {
@@ -1022,11 +1022,11 @@ function colorAtGaugeAngle(angle) {
 function gaugeGradient(score) {
   const fill = clamp(score, 0, 100) / 100 * 180;
   const baseStops = [
-    { angle: 0, color: "#ff4964" },
-    { angle: 42, color: "#d43d88" },
+    { angle: 0, color: "#2f8cff" },
+    { angle: 42, color: "#4d6cf2" },
     { angle: 86, color: "#8743b9" },
-    { angle: 126, color: "#5c4ed5" },
-    { angle: 158, color: "#2f8cff" },
+    { angle: 126, color: "#d43d88" },
+    { angle: 158, color: "#ff4964" },
   ];
   const visibleStops = baseStops
     .filter((stop) => stop.angle <= fill)

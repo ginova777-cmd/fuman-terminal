@@ -1355,8 +1355,8 @@ h1 {
 }
 
 .ta-score-strip article.good {
-  border-color: rgba(47, 140, 255, 0.26);
-  background: linear-gradient(135deg, rgba(47, 140, 255, 0.16), rgba(23, 28, 44, 0.84));
+  border-color: rgba(255, 79, 104, 0.28);
+  background: linear-gradient(135deg, rgba(255, 79, 104, 0.14), rgba(23, 28, 44, 0.84));
 }
 
 .ta-score-strip article.mid,
@@ -1365,8 +1365,8 @@ h1 {
 }
 
 .ta-score-strip article.bad {
-  border-color: rgba(255, 79, 104, 0.28);
-  background: linear-gradient(135deg, rgba(255, 79, 104, 0.14), rgba(23, 28, 44, 0.84));
+  border-color: rgba(47, 140, 255, 0.26);
+  background: linear-gradient(135deg, rgba(47, 140, 255, 0.16), rgba(23, 28, 44, 0.84));
 }
 
 .ta-score-strip span {
@@ -1386,13 +1386,13 @@ h1 {
 }
 
 .ta-score-strip article.good strong {
-  color: #2f8cff;
-  text-shadow: 0 0 12px rgba(47, 140, 255, 0.28);
+  color: #ff4f68;
+  text-shadow: 0 0 12px rgba(255, 79, 104, 0.26);
 }
 
 .ta-score-strip article.bad strong {
-  color: #ff4f68;
-  text-shadow: 0 0 12px rgba(255, 79, 104, 0.26);
+  color: #2f8cff;
+  text-shadow: 0 0 12px rgba(47, 140, 255, 0.28);
 }
 
 .ta-score-strip article.wait strong {
