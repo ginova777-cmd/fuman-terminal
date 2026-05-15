@@ -1,4 +1,4 @@
-const heatmap = document.querySelector("#heatmap");
+﻿const heatmap = document.querySelector("#heatmap");
 const refreshLine = document.querySelector(".refresh-line");
 const headerTimes = [...document.querySelectorAll(".header-time")];
 const metricCards = [...document.querySelectorAll(".metric-card")];
@@ -960,7 +960,8 @@ function buildTechnicalSummary(stock) {
   const pct = stock?.percent || 0;
   const inst = getInstitutionTotal(stock?.code);
   const smartMoney = inst.total + inst.trust * 1.35;
-  const volumeRank = stock?.tradeVolume ? rankValue(stock.tradeVolume, latestStocks.map(s => s.tradeVolume || 0).sort((a, b) => a - b)) : 50;
+  const volumeValues = latestStocks.map(s => s.tradeVolume || 0).filter(Boolean).sort((a, b) => a - b);
+  const volumeRank = stock?.tradeVolume && volumeValues.length ? rankValue(stock.tradeVolume, volumeValues) : 50;
   const valueRank = stock?.value ? rankValue(stock.value, latestStocks.map(s => s.value || 0).sort((a, b) => a - b)) : 50;
   const momentumScore = clamp(Math.round(50 + pct * 8 + valueRank * 0.18 + Math.sign(smartMoney) * 8), 0, 100);
   const oscillatorScore = clamp(Math.round(50 + pct * 10 + volumeRank * 0.12), 0, 100);
@@ -978,11 +979,19 @@ function buildTechnicalSummary(stock) {
     buy,
     foreign: inst.foreign,
     trust: inst.trust,
+    hasInstitution: Boolean(institutionData[stock?.code]),
+    volumeRank: stock?.tradeVolume && volumeValues.length ? volumeRank : null,
   };
 }
 
+function formatVolumeMetric(stock, analysis) {
+  if (analysis.volumeRank !== null) return `${analysis.volumeRank}%`;
+  if (stock?.tradeVolume) return `${Math.round(stock.tradeVolume).toLocaleString("zh-TW")}張`;
+  return "載入中";
+}
+
 function gaugeMarkup(title, score, size = "small") {
-  const rotation = Math.round(-90 + (clamp(score, 0, 100) / 100) * 180);
+  const rotation = Math.round(180 + (clamp(score, 0, 100) / 100) * 180);
   const label = signalLabel(score);
   const tone = signalClass(score);
   return `
@@ -1007,6 +1016,9 @@ async function showTradingDashboard(code, name) {
   const analysis = buildTechnicalSummary(stock);
   const sign = stock.change >= 0 ? "+" : "";
   const changeClass = stock.change >= 0 ? "down" : "up";
+  const trustText = analysis.hasInstitution ? `${analysis.trust >= 0 ? "+" : ""}${(analysis.trust / 1000).toFixed(0)}k` : "盤後";
+  const trustClass = analysis.hasInstitution ? (analysis.trust >= 0 ? "down" : "up") : "";
+  const volumeText = formatVolumeMetric(stock, analysis);
 
   watchlistAnalysis.innerHTML = `
     <div class="ta-dashboard">
@@ -1037,8 +1049,8 @@ async function showTradingDashboard(code, name) {
 
       <section class="ta-facts">
         <article><span>外資</span><strong class="${analysis.foreign >= 0 ? "down" : "up"}">${analysis.foreign >= 0 ? "+" : ""}${(analysis.foreign / 1000).toFixed(0)}k</strong></article>
-        <article><span>投信</span><strong class="${analysis.trust >= 0 ? "down" : "up"}">${analysis.trust >= 0 ? "+" : ""}${(analysis.trust / 1000).toFixed(0)}k</strong></article>
-        <article><span>量能分位</span><strong>${stock.tradeVolume ? `${rankValue(stock.tradeVolume, latestStocks.map(s => s.tradeVolume || 0).sort((a, b) => a - b))}%` : "--"}</strong></article>
+        <article><span>投信</span><strong class="${trustClass}">${trustText}</strong></article>
+        <article><span>量能</span><strong>${volumeText}</strong></article>
       </section>
     </div>
   `;
@@ -1061,7 +1073,7 @@ async function fetchDailyStockFallback(code) {
     const change = cleanNumber(item.Change);
     const previous = close - change;
     const percent = previous ? (change / previous) * 100 : 0;
-    return { code, name: item.Name || code, close, change, percent };
+    return { code, name: item.Name || code, close, change, percent, tradeVolume: cleanNumber(item.TradeVolume) };
   } catch {
     return null;
   }
@@ -1081,7 +1093,7 @@ async function fetchStockPrice(code) {
     if (!close || !prev) return await fetchDailyStockFallback(code) || cached;
     const change = close - prev;
     const percent = prev ? (change / prev) * 100 : 0;
-    return { code, name: item.n || code, close, change, percent };
+    return { code, name: item.n || code, close, change, percent, tradeVolume: parseQuoteNumber(item.v, item.tv) };
   } catch {
     return await fetchDailyStockFallback(code) || cached;
   }
