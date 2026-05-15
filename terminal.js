@@ -683,7 +683,7 @@ function renderChipTradeTable() {
 
   const rows = latestStocks
     .map((stock) => {
-      const code = String(stock.code || "");
+      const code = String(stock.code || stock.Code || "");
       const inst = institutionData[code];
       if (!inst) return null;
       const foreign = Number(inst.foreign) || 0;
@@ -707,6 +707,29 @@ function renderChipTradeTable() {
       };
     })
     .filter(Boolean);
+
+  if (!rows.length && Object.keys(institutionData).length) {
+    Object.entries(institutionData).forEach(([code, inst]) => {
+      const foreign = Number(inst.foreign) || 0;
+      const trust = Number(inst.trust) || 0;
+      if (foreign <= 0 || trust <= 0) return;
+      rows.push({
+        code,
+        name: inst.name || code,
+        price: 0,
+        change: 0,
+        percent: 0,
+        volume: 0,
+        value: 0,
+        foreign,
+        trust,
+        total: Number(inst.total) || foreign + trust + (Number(inst.dealer) || 0),
+        foreignStreak: Number(inst.foreignStreak) || 0,
+        trustStreak: Number(inst.trustStreak) || 0,
+        jointStreak: Number(inst.jointStreak) || 0,
+      });
+    });
+  }
 
   const sortBy = sortEl?.value || "trustForeign";
   rows.sort((a, b) => {
