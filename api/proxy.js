@@ -10,22 +10,32 @@ module.exports = async function handler(request, response) {
   const { code, market } = request.query;
   if (!code) { response.status(400).json({ error: "Missing code" }); return; }
 
-  const ex = (market === "otc") ? "otc" : "tse";
-  const url = `https://mis.twse.com.tw/stock/api/getStockInfo.jsp?ex_ch=${ex}_${code}.tw&json=1&delay=0`;
-
   try {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 6000);
-    const res = await fetch(url, {
-      signal: controller.signal,
-      headers: {
-        "User-Agent": "Mozilla/5.0 (compatible; FumanTerminal/1.0)",
-        "Referer": "https://mis.twse.com.tw/",
-      },
+    const markets = market === "otc" ? ["otc"] : market === "tse" ? ["tse"] : ["tse", "otc"];
+    const urls = markets.map((ex) => `https://mis.twse.com.tw/stock/api/getStockInfo.jsp?ex_ch=${ex}_${code}.tw&json=1&delay=0`);
+    const results = await Promise.all(urls.map(async (url) => {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 6000);
+      try {
+        const res = await fetch(url, {
+          signal: controller.signal,
+          headers: {
+            "User-Agent": "Mozilla/5.0 (compatible; FumanTerminal/1.0)",
+            "Referer": "https://mis.twse.com.tw/",
+          },
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        return await res.json();
+      } finally {
+        clearTimeout(timer);
+      }
+    }));
+
+    const usable = results.find((data) => {
+      const item = data?.msgArray?.[0];
+      return item && item.c && (item.z !== "-" || item.y !== "-" || item.o !== "-");
     });
-    clearTimeout(timer);
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const data = await res.json();
+    const data = usable || results[0];
     response.setHeader("Cache-Control", "s-maxage=15, stale-while-revalidate=30");
     response.status(200).json(data);
   } catch (e) {
