@@ -956,16 +956,45 @@ function signalClass(score) {
   return "sell";
 }
 
-function buildTechnicalSummary(stock) {
+const technicalTimeframes = [
+  { key: "1", label: "1分", momentum: 1.55, volume: 0.08, money: 0.45 },
+  { key: "5", label: "5分", momentum: 1.42, volume: 0.10, money: 0.55 },
+  { key: "15", label: "15分", momentum: 1.28, volume: 0.12, money: 0.70 },
+  { key: "30", label: "30分", momentum: 1.14, volume: 0.14, money: 0.82 },
+  { key: "60", label: "1小時", momentum: 1.02, volume: 0.16, money: 0.95 },
+  { key: "120", label: "2小時", momentum: 0.94, volume: 0.17, money: 1.04 },
+  { key: "240", label: "4小時", momentum: 0.88, volume: 0.18, money: 1.12 },
+  { key: "1D", label: "1天", momentum: 0.78, volume: 0.20, money: 1.28 },
+  { key: "1W", label: "1週", momentum: 0.58, volume: 0.23, money: 1.45 },
+  { key: "1M", label: "1月", momentum: 0.42, volume: 0.26, money: 1.62 },
+];
+
+let selectedTechnicalTimeframe = localStorage.getItem("fuman-technical-timeframe") || "1D";
+
+function getTechnicalTimeframe(key = selectedTechnicalTimeframe) {
+  return technicalTimeframes.find((item) => item.key === key) || technicalTimeframes.find((item) => item.key === "1D");
+}
+
+function buildTimeframeButtons(activeKey) {
+  return technicalTimeframes.map((item) => `
+    <button class="ta-timeframe ${item.key === activeKey ? "active" : ""}" type="button" data-timeframe="${item.key}">
+      ${item.label}
+    </button>
+  `).join("");
+}
+
+function buildTechnicalSummary(stock, timeframeKey = selectedTechnicalTimeframe) {
+  const timeframe = getTechnicalTimeframe(timeframeKey);
   const pct = stock?.percent || 0;
   const inst = getInstitutionTotal(stock?.code);
   const smartMoney = inst.total + inst.trust * 1.35;
   const volumeValues = latestStocks.map(s => s.tradeVolume || 0).filter(Boolean).sort((a, b) => a - b);
   const volumeRank = stock?.tradeVolume && volumeValues.length ? rankValue(stock.tradeVolume, volumeValues) : 50;
   const valueRank = stock?.value ? rankValue(stock.value, latestStocks.map(s => s.value || 0).sort((a, b) => a - b)) : 50;
-  const momentumScore = clamp(Math.round(50 + pct * 8 + valueRank * 0.18 + Math.sign(smartMoney) * 8), 0, 100);
-  const oscillatorScore = clamp(Math.round(50 + pct * 10 + volumeRank * 0.12), 0, 100);
-  const maScore = clamp(Math.round(48 + pct * 9 + valueRank * 0.16 + Math.sign(stock?.change || 0) * 6), 0, 100);
+  const moneyBias = Math.sign(smartMoney) * 8 * timeframe.money;
+  const momentumScore = clamp(Math.round(50 + pct * 8 * timeframe.momentum + valueRank * timeframe.volume + moneyBias), 0, 100);
+  const oscillatorScore = clamp(Math.round(50 + pct * 10 * timeframe.momentum + volumeRank * timeframe.volume), 0, 100);
+  const maScore = clamp(Math.round(48 + pct * 9 * (0.74 + timeframe.money * 0.18) + valueRank * timeframe.volume + Math.sign(stock?.change || 0) * 6), 0, 100);
   const sell = clamp(Math.round((100 - momentumScore) / 6), 0, 15);
   const buy = clamp(Math.round(momentumScore / 6), 1, 15);
   const neutral = clamp(17 - sell - buy, 0, 17);
@@ -1013,7 +1042,8 @@ function gaugeMarkup(title, score, size = "small") {
 async function showTradingDashboard(code, name) {
   const fallback = latestStocks.find(s => s.code === code) || { code, name, close: 0, change: 0, percent: 0 };
   const stock = await fetchStockPrice(code) || fallback;
-  const analysis = buildTechnicalSummary(stock);
+  const activeTimeframe = getTechnicalTimeframe();
+  const analysis = buildTechnicalSummary(stock, activeTimeframe.key);
   const sign = stock.change >= 0 ? "+" : "";
   const changeClass = stock.change >= 0 ? "down" : "up";
   const trustText = analysis.hasInstitution ? `${analysis.trust >= 0 ? "+" : ""}${(analysis.trust / 1000).toFixed(0)}k` : "盤後";
@@ -1032,6 +1062,13 @@ async function showTradingDashboard(code, name) {
           <em class="${changeClass}">${sign}${(stock.change || 0).toFixed(2)} (${sign}${(stock.percent || 0).toFixed(2)}%)</em>
         </div>
       </header>
+
+      <section class="ta-period-panel">
+        <h3><span>${code}</span>的技術分析</h3>
+        <nav class="ta-timeframes" aria-label="技術分析週期">
+          ${buildTimeframeButtons(activeTimeframe.key)}
+        </nav>
+      </section>
 
       <section class="ta-main">
         ${gaugeMarkup("總覽", analysis.score, "large")}
@@ -1054,6 +1091,14 @@ async function showTradingDashboard(code, name) {
       </section>
     </div>
   `;
+
+  watchlistAnalysis.querySelectorAll(".ta-timeframe").forEach((button) => {
+    button.addEventListener("click", () => {
+      selectedTechnicalTimeframe = button.dataset.timeframe;
+      localStorage.setItem("fuman-technical-timeframe", selectedTechnicalTimeframe);
+      showTradingDashboard(code, stock.name || name);
+    });
+  });
 }
 
 function parseQuoteNumber(...values) {

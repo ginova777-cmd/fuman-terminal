@@ -1095,6 +1095,61 @@ h1 {
   font-weight: 900;
 }
 
+.ta-period-panel {
+  padding: 24px 22px 2px;
+  text-align: center;
+}
+
+.ta-period-panel h3 {
+  margin: 0 0 22px;
+  color: #eef2fb;
+  font-size: 20px;
+  font-weight: 900;
+  line-height: 1.2;
+}
+
+.ta-period-panel h3 span {
+  color: #2f8cff;
+}
+
+.ta-timeframes {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 14px;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  overflow-x: auto;
+  padding: 0 0 6px;
+}
+
+.ta-timeframe {
+  flex: 0 0 auto;
+  min-width: 44px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: #d8deeb;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 900;
+  line-height: 1;
+  padding: 9px 11px;
+  transition: background 0.16s ease, border-color 0.16s ease, color 0.16s ease;
+}
+
+.ta-timeframe:hover {
+  border-color: rgba(126, 200, 227, 0.28);
+  background: rgba(126, 200, 227, 0.08);
+  color: #ffffff;
+}
+
+.ta-timeframe.active {
+  border-color: rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.14);
+  color: #ffffff;
+}
+
 .ta-main {
   display: grid;
   justify-items: center;
