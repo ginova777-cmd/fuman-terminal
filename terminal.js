@@ -1044,23 +1044,46 @@ async function showTradingDashboard(code, name) {
   `;
 }
 
-async function fetchStockPrice(code) {
+function parseQuoteNumber(...values) {
+  for (const value of values) {
+    const number = Number(String(value ?? "").replace(/,/g, ""));
+    if (Number.isFinite(number) && number > 0) return number;
+  }
+  return 0;
+}
+
+async function fetchDailyStockFallback(code) {
   try {
-    const found = latestStocks.find(s => s.code === code);
-    if (found) return found;
+    const rows = await fetchJson(endpoints.stocks, 8000);
+    const item = normalizeArray(rows).find((row) => String(row.Code || "") === code);
+    if (!item) return null;
+    const close = cleanNumber(item.ClosingPrice);
+    const change = cleanNumber(item.Change);
+    const previous = close - change;
+    const percent = previous ? (change / previous) * 100 : 0;
+    return { code, name: item.Name || code, close, change, percent };
+  } catch {
+    return null;
+  }
+}
+
+async function fetchStockPrice(code) {
+  const cached = latestStocks.find(s => s.code === code) || null;
+  try {
 
     const url = `/api/proxy?code=${code}`;
     const data = await fetchJson(url, 5000);
     const item = data?.msgArray?.[0];
-    if (!item) return null;
+    if (!item) return await fetchDailyStockFallback(code) || cached;
 
-    const close = parseFloat(item.z || item.y) || 0;
-    const prev = parseFloat(item.y) || 0;
+    const close = parseQuoteNumber(item.z, item.y, item.o, item.h, item.l);
+    const prev = parseQuoteNumber(item.y, item.z, item.o, item.h, item.l);
+    if (!close || !prev) return await fetchDailyStockFallback(code) || cached;
     const change = close - prev;
     const percent = prev ? (change / prev) * 100 : 0;
     return { code, name: item.n || code, close, change, percent };
   } catch {
-    return null;
+    return await fetchDailyStockFallback(code) || cached;
   }
 }
 
@@ -1210,5 +1233,22 @@ strategySearch?.addEventListener("input", (event) => {
   renderStrategyScanner();
 });
 
+async function refreshSelectedWatchlistQuote() {
+  const card = document.querySelector(".watchlist-card.selected");
+  if (!card) return;
+  const stock = await fetchStockPrice(card.dataset.code);
+  if (!stock) return;
+  const priceEl = document.querySelector(`#wprice-${card.dataset.code}`);
+  const changeEl = document.querySelector(`#wchange-${card.dataset.code}`);
+  if (priceEl) priceEl.textContent = stock.close ? stock.close.toLocaleString("zh-TW") : "--";
+  if (changeEl) {
+    const sign = stock.change >= 0 ? "+" : "";
+    changeEl.style.color = stock.change > 0 ? "#e74c3c" : stock.change < 0 ? "#27ae60" : "#aaa";
+    changeEl.textContent = `${sign}${stock.change.toFixed(2)} (${sign}${stock.percent.toFixed(2)}%)`;
+  }
+  showTradingDashboard(card.dataset.code, stock.name || card.dataset.name);
+}
+
 renderWatchlist();
 renderStrategyScanner();
+setInterval(refreshSelectedWatchlistQuote, 5000);
