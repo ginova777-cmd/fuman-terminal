@@ -701,6 +701,9 @@ function renderChipTradeTable() {
         foreign,
         trust,
         total,
+        foreignStreak: Number(inst.foreignStreak) || 0,
+        trustStreak: Number(inst.trustStreak) || 0,
+        jointStreak: Number(inst.jointStreak) || 0,
       };
     })
     .filter(Boolean);
@@ -711,12 +714,12 @@ function renderChipTradeTable() {
     if (sortBy === "foreign") return b.foreign - a.foreign;
     if (sortBy === "pct") return b.percent - a.percent;
     if (sortBy === "value") return b.value - a.value;
-    return (b.foreign + b.trust) - (a.foreign + a.trust);
+    return (b.jointStreak - a.jointStreak) || ((b.foreign + b.trust) - (a.foreign + a.trust));
   });
 
   const shown = rows.slice(0, 80);
   if (!shown.length) {
-    body.innerHTML = `<tr><td colspan="9">目前沒有符合「外資 + 投信同買」的資料，盤後資料更新後會自動刷新。</td></tr>`;
+    body.innerHTML = `<tr><td colspan="12">目前沒有符合「外資 + 投信同買」的資料，盤後資料更新後會自動刷新。</td></tr>`;
     return;
   }
 
@@ -732,6 +735,9 @@ function renderChipTradeTable() {
         <td>${Math.round(row.volume).toLocaleString("zh-TW")}</td>
         <td class="${row.foreign >= 0 ? "red" : "green"}">${formatInstitution(row.foreign)}</td>
         <td class="${row.trust >= 0 ? "red" : "green"}">${formatInstitution(row.trust)}</td>
+        <td>${row.foreignStreak} 日</td>
+        <td>${row.trustStreak} 日</td>
+        <td>${row.jointStreak} 日</td>
         <td class="${row.total >= 0 ? "red" : "green"}">${formatInstitution(row.total)}</td>
       </tr>
     `;
