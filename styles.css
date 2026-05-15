@@ -1171,39 +1171,46 @@ h1 {
 
 .ta-gauge-card h3 {
   margin: 0 0 16px;
-  color: #d6dbe8;
-  font-size: 15px;
+  color: #f2f5fb;
+  font-size: 16px;
+  font-weight: 950;
+  text-shadow: 0 0 10px rgba(255, 255, 255, 0.12);
 }
 
 .ta-gauge-card.small h3 {
   margin-bottom: 10px;
-  font-size: 14px;
+  font-size: 15px;
 }
 
 .ta-gauge-card > strong {
   display: block;
-  margin-top: 10px;
+  margin-top: 12px;
   color: #a7b1c6;
-  font-size: 18px;
+  font-size: 20px;
+  font-weight: 950;
+  text-shadow: 0 0 12px currentColor;
 }
 
 .ta-gauge-card.small > strong {
-  margin-top: 6px;
-  font-size: 13px;
+  margin-top: 8px;
+  font-size: 14px;
 }
 
 .ta-gauge-card > strong.buy,
 .ta-votes .buy {
   color: #2f8cff;
+  text-shadow: 0 0 14px rgba(47, 140, 255, 0.32);
 }
 
 .ta-gauge-card > strong.sell,
 .ta-votes .sell {
   color: #ff4f68;
+  text-shadow: 0 0 14px rgba(255, 79, 104, 0.34);
 }
 
 .ta-gauge-card > strong.neutral {
   color: #aab2c2;
+  text-shadow: 0 0 12px rgba(170, 178, 194, 0.28);
 }
 
 .ta-gauge {
@@ -1263,14 +1270,15 @@ h1 {
 
 .gauge-label {
   position: absolute;
-  color: rgba(214, 219, 232, 0.38);
-  font-size: 11px;
-  font-weight: 900;
+  color: rgba(242, 245, 251, 0.58);
+  font-size: 12px;
+  font-weight: 950;
   white-space: nowrap;
+  text-shadow: 0 0 8px rgba(255, 255, 255, 0.16);
 }
 
 .ta-gauge-card.small .gauge-label {
-  font-size: 10px;
+  font-size: 11px;
 }
 
 .gauge-label.l1 { left: 2%; bottom: 22%; }
@@ -1290,16 +1298,18 @@ h1 {
 .ta-votes span,
 .ta-facts span {
   display: block;
-  color: #c6ccd8;
-  font-size: 13px;
-  font-weight: 900;
+  color: #f2f5fb;
+  font-size: 15px;
+  font-weight: 950;
+  text-shadow: 0 0 8px rgba(255, 255, 255, 0.14);
 }
 
 .ta-votes strong {
   display: block;
   margin-top: 8px;
   color: #9ea6b5;
-  font-size: 20px;
+  font-size: 22px;
+  font-weight: 950;
 }
 
 .ta-facts {
