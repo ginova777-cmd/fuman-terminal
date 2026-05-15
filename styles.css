@@ -930,6 +930,20 @@ h1 {
   font-size: 12px;
 }
 
+#market-view > .page-header .eyebrow,
+#market-view > .page-header .refresh-line,
+#market-view > .page-header .header-time,
+#market-view > .metric-grid,
+#market-view > .ticker-strip,
+#market-view > .strength-panel,
+#market-view > .terminal-band {
+  display: none !important;
+}
+
+#market-view > .page-header {
+  margin-bottom: 20px;
+}
+
 .tabs {
   display: flex;
   gap: 8px;
