@@ -70,14 +70,14 @@ body::after {
   align-items: center;
   gap: 12px;
   border-bottom: 1px solid rgba(134, 151, 190, 0.14);
-  min-height: 102px;
+  min-height: 108px;
   padding: 14px 15px 16px;
 }
 
 .brand-logo {
   flex: 0 0 auto;
-  width: 56px;
-  height: 56px;
+  width: 64px;
+  height: 64px;
   border-radius: 0;
   object-fit: contain;
   object-position: center;
