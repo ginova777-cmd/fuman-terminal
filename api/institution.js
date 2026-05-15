@@ -61,6 +61,7 @@ async function fetchTwseInstitution(date) {
     const code = String(row[0] || "").trim();
     if (!/^\d{4}$/.test(code)) continue;
     result[code] = {
+      name: String(row[1] || "").trim(),
       foreign: cleanNumber(row[4]),
       trust: cleanNumber(row[7]),
       dealer: cleanNumber(row[10] ?? row[8]),
@@ -87,6 +88,7 @@ async function fetchTpexInstitution(date) {
     const code = String(row[0] || "").trim();
     if (!/^\d{4}$/.test(code)) continue;
     result[code] = {
+      name: String(row[1] || "").trim(),
       foreign: cleanNumber(row[10] ?? row[4]),
       trust: cleanNumber(row[13]),
       dealer: cleanNumber(row[22] ?? row[16]),
@@ -135,6 +137,7 @@ function buildInstitutionSummary(dailyRows) {
 
     summary[code] = {
       foreign: latest.foreign,
+      name: latest.name || code,
       trust: latest.trust,
       dealer: latest.dealer,
       total: latest.total,
