@@ -933,7 +933,6 @@ h1 {
 #market-view > .page-header .eyebrow,
 #market-view > .page-header .refresh-line,
 #market-view > .page-header .header-time,
-#market-view > .metric-grid,
 #market-view > .ticker-strip,
 #market-view > .strength-panel,
 #market-view > .terminal-band {
@@ -1313,7 +1312,8 @@ h1 {
 .ta-gauge-card.small .gauge-label.l4 { right: 6%; top: 40%; }
 .ta-gauge-card.small .gauge-label.l5 { right: -7%; bottom: 30%; }
 
-.ta-votes {
+.ta-votes,
+.ta-gauge-votes {
   display: grid;
   width: min(360px, 100%);
   grid-template-columns: repeat(3, 1fr);
@@ -1322,6 +1322,7 @@ h1 {
 }
 
 .ta-votes span,
+.ta-gauge-votes span,
 .ta-facts span {
   display: block;
   color: #f2f5fb;
@@ -1330,12 +1331,27 @@ h1 {
   text-shadow: 0 0 8px rgba(255, 255, 255, 0.14);
 }
 
-.ta-votes strong {
+.ta-votes strong,
+.ta-gauge-votes b {
   display: block;
   margin-top: 10px;
   color: #9ea6b5;
   font-size: 24px;
   font-weight: 950;
+}
+
+.ta-gauge-card.small .ta-gauge-votes {
+  width: min(250px, 100%);
+  margin: 12px auto 0;
+}
+
+.ta-gauge-card.small .ta-gauge-votes span {
+  font-size: 13px;
+}
+
+.ta-gauge-card.small .ta-gauge-votes b {
+  margin-top: 5px;
+  font-size: 16px;
 }
 
 .ta-score-strip {
@@ -1562,4 +1578,11 @@ h1 {
   .ta-score-strip {
     grid-template-columns: 1fr;
   }
+}
+
+#market-view > .metric-grid {
+  display: grid !important;
+  grid-template-columns: repeat(4, minmax(180px, 1fr));
+  gap: 12px;
+  margin-bottom: 24px;
 }
