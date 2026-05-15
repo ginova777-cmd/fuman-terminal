@@ -38,6 +38,7 @@ let sectorStocksCache = {};
 let institutionData = {};
 let institutionDate = "";
 let chipMode = "realtime";
+let chipTradeLoading = false;
 let selectedStrategyIds = new Set(["momentum"]);
 let strategyMode = "any";
 let strategyKeyword = "";
@@ -391,13 +392,7 @@ async function loadStrategyStocks() {
       if (!stocks.length) stocks = [];
     }
 
-    let parsed = stocks.map((stock) => {
-      const code = valueOf(stock, ["證券代號", "Code"]);
-      const name = valueOf(stock, ["證券名稱", "Name"]);
-      const value = cleanNumber(valueOf(stock, ["成交金額", "TradeValue"]));
-      const tradeVolume = cleanNumber(valueOf(stock, ["成交股數", "TradeVolume"]));
-      return { code, name, value, tradeVolume, ...stockChange(stock) };
-    }).filter((s) => s.code && s.name && s.close);
+    let parsed = parseStocksForLatest(stocks);
 
     if (!parsed.length) {
       const heatmapPayload = await fetchJson(endpoints.heatmap, 15000);
@@ -767,6 +762,47 @@ function renderChipTradeTable() {
   }).join("");
 }
 
+function parseStocksForLatest(stocks) {
+  return stocks.map((stock) => {
+    const code = valueOf(stock, ["證券代號", "Code"]);
+    const name = valueOf(stock, ["證券名稱", "Name"]);
+    const value = cleanNumber(valueOf(stock, ["成交金額", "TradeValue"]));
+    const tradeVolume = cleanNumber(valueOf(stock, ["成交股數", "TradeVolume"]));
+    return { code, name, value, tradeVolume, ...stockChange(stock) };
+  }).filter((s) => s.code && s.name && s.close);
+}
+
+async function loadChipTradeData() {
+  if (chipTradeLoading) return;
+  chipTradeLoading = true;
+  const body = document.querySelector("#chip-trade-body");
+  if (body) body.innerHTML = `<tr><td colspan="12">正在載入即時股價與法人資料...</td></tr>`;
+
+  try {
+    const [stockResult, instResult] = await Promise.allSettled([
+      fetchJson(endpoints.strategyStocks, 20000),
+      fetchJson(endpoints.institution, 20000),
+    ]);
+
+    if (stockResult.status === "fulfilled") {
+      const stocks = normalizeArray(stockResult.value?.stocks || stockResult.value);
+      const parsed = parseStocksForLatest(stocks);
+      if (parsed.length) latestStocks = parsed;
+    }
+
+    if (instResult.status === "fulfilled" && instResult.value?.ok && instResult.value?.data) {
+      institutionData = instResult.value.data;
+      institutionDate = instResult.value.usedDate || "";
+    }
+
+    renderChipTradeTable();
+  } catch (error) {
+    if (body) body.innerHTML = `<tr><td colspan="12">資料載入失敗，請稍後再試。</td></tr>`;
+  } finally {
+    chipTradeLoading = false;
+  }
+}
+
 function stockChange(stock) {
   const change = cleanNumber(valueOf(stock, ["漲跌價差", "Change", "漲跌"]));
   const close = cleanNumber(valueOf(stock, ["收盤價", "ClosingPrice", "收盤"]));
@@ -797,13 +833,7 @@ function buildSectorStocksCache(stocks) {
 }
 
 function renderStocks(stocks) {
-  const parsed = stocks.map((stock) => {
-    const code = valueOf(stock, ["證券代號", "Code"]);
-    const name = valueOf(stock, ["證券名稱", "Name"]);
-    const value = cleanNumber(valueOf(stock, ["成交金額", "TradeValue"]));
-    const tradeVolume = cleanNumber(valueOf(stock, ["成交股數", "TradeVolume"]));
-    return { code, name, value, tradeVolume, ...stockChange(stock) };
-  }).filter((s) => s.code && s.name && s.close);
+  const parsed = parseStocksForLatest(stocks);
 
   if (!parsed.length) return;
   latestStocks = parsed;
@@ -877,6 +907,7 @@ function showView(viewName, activeLink) {
     panel.classList.toggle("active", name === viewName);
   });
   viewLinks.forEach((link)=>link.classList.toggle("active", link===activeLink));
+  if (viewName === "chip-trade") loadChipTradeData();
   const focusTarget = activeLink.dataset.focus ? document.querySelector(`#${activeLink.dataset.focus}`) : null;
   if (focusTarget) setTimeout(()=>focusTarget.focus(),0);
 }
