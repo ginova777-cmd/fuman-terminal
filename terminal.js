@@ -1097,6 +1097,68 @@ function gaugeMarkup(title, score, size = "small") {
   `;
 }
 
+function scoreTone(score) {
+  if (score >= 70) return "good";
+  if (score >= 45) return "mid";
+  return "bad";
+}
+
+function buildDashboardScores(stock, analysis) {
+  const pct = stock?.percent || 0;
+  const volumeScore = analysis.volumeRank ?? 50;
+  const chipScore = analysis.hasInstitution
+    ? clamp(Math.round(50 + Math.sign(analysis.foreign) * 16 + Math.sign(analysis.trust) * 22), 0, 100)
+    : null;
+  const shortScore = clamp(Math.round(analysis.oscillatorScore * 0.58 + analysis.score * 0.28 + volumeScore * 0.14), 0, 100);
+  const swingScore = clamp(Math.round(analysis.maScore * 0.52 + analysis.score * 0.28 + (chipScore ?? 50) * 0.20), 0, 100);
+  const tags = [];
+
+  if (pct >= 7) tags.push({ text: "漲幅過熱", tone: "bad" });
+  if (pct <= -7) tags.push({ text: "跌幅偏深", tone: "bad" });
+  if (analysis.volumeRank !== null && analysis.volumeRank >= 80) tags.push({ text: "量能放大", tone: "good" });
+  if (analysis.volumeRank !== null && analysis.volumeRank <= 25) tags.push({ text: "量能偏冷", tone: "mid" });
+  if (!analysis.hasInstitution) tags.push({ text: "法人盤後", tone: "mid" });
+  if (analysis.hasInstitution && analysis.foreign > 0 && analysis.trust > 0) tags.push({ text: "法人同步買", tone: "good" });
+  if (!tags.length) tags.push({ text: "正常觀察", tone: "mid" });
+
+  return {
+    shortScore,
+    swingScore,
+    chipScore,
+    tags: tags.slice(0, 3),
+  };
+}
+
+function dashboardScoreMarkup(stock, analysis) {
+  const scores = buildDashboardScores(stock, analysis);
+  const chipText = scores.chipScore === null ? "盤後" : scores.chipScore;
+  const tagMarkup = scores.tags.map((tag) => `<span class="${tag.tone}">${tag.text}</span>`).join("");
+
+  return `
+    <section class="ta-score-strip">
+      <article class="${scoreTone(scores.shortScore)}">
+        <span>短線分</span>
+        <strong>${scores.shortScore}</strong>
+        <em>看盤動能</em>
+      </article>
+      <article class="${scoreTone(scores.swingScore)}">
+        <span>波段分</span>
+        <strong>${scores.swingScore}</strong>
+        <em>趨勢強弱</em>
+      </article>
+      <article class="${scores.chipScore === null ? "wait" : scoreTone(scores.chipScore)}">
+        <span>籌碼分</span>
+        <strong>${chipText}</strong>
+        <em>${scores.chipScore === null ? "盤後更新" : "法人方向"}</em>
+      </article>
+      <article class="risk">
+        <span>狀態提示</span>
+        <div>${tagMarkup}</div>
+      </article>
+    </section>
+  `;
+}
+
 async function showTradingDashboard(code, name) {
   const fallback = latestStocks.find(s => s.code === code) || { code, name, close: 0, change: 0, percent: 0 };
   const stock = await fetchStockPrice(code) || fallback;
@@ -1136,6 +1198,8 @@ async function showTradingDashboard(code, name) {
           <div><span>買入</span><strong class="buy">${analysis.buy}</strong></div>
         </div>
       </section>
+
+      ${dashboardScoreMarkup(stock, analysis)}
 
       <section class="ta-grid">
         ${gaugeMarkup("震盪指標", analysis.oscillatorScore)}

@@ -1324,6 +1324,102 @@ h1 {
   font-weight: 950;
 }
 
+.ta-score-strip {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  padding: 0 18px 8px;
+}
+
+.ta-score-strip article {
+  min-height: 86px;
+  border: 1px solid rgba(134, 151, 190, 0.14);
+  border-radius: 8px;
+  background: rgba(23, 28, 44, 0.84);
+  padding: 12px 14px;
+}
+
+.ta-score-strip article.good {
+  border-color: rgba(47, 140, 255, 0.26);
+  background: linear-gradient(135deg, rgba(47, 140, 255, 0.16), rgba(23, 28, 44, 0.84));
+}
+
+.ta-score-strip article.mid,
+.ta-score-strip article.wait {
+  border-color: rgba(172, 181, 199, 0.16);
+}
+
+.ta-score-strip article.bad {
+  border-color: rgba(255, 79, 104, 0.28);
+  background: linear-gradient(135deg, rgba(255, 79, 104, 0.14), rgba(23, 28, 44, 0.84));
+}
+
+.ta-score-strip span {
+  display: block;
+  color: #dce3f3;
+  font-size: 13px;
+  font-weight: 950;
+}
+
+.ta-score-strip strong {
+  display: block;
+  margin-top: 8px;
+  color: #f7f9ff;
+  font-size: 26px;
+  font-weight: 950;
+  line-height: 1;
+}
+
+.ta-score-strip article.good strong {
+  color: #2f8cff;
+  text-shadow: 0 0 12px rgba(47, 140, 255, 0.28);
+}
+
+.ta-score-strip article.bad strong {
+  color: #ff4f68;
+  text-shadow: 0 0 12px rgba(255, 79, 104, 0.26);
+}
+
+.ta-score-strip article.wait strong {
+  color: #aeb7c8;
+  font-size: 22px;
+}
+
+.ta-score-strip em {
+  display: block;
+  margin-top: 8px;
+  color: #7f8aa3;
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 800;
+}
+
+.ta-score-strip article.risk div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.ta-score-strip article.risk div span {
+  width: max-content;
+  border-radius: 999px;
+  background: rgba(126, 200, 227, 0.10);
+  color: #aeb8cc;
+  font-size: 12px;
+  padding: 5px 8px;
+}
+
+.ta-score-strip article.risk div span.good {
+  background: rgba(47, 140, 255, 0.14);
+  color: #55a2ff;
+}
+
+.ta-score-strip article.risk div span.bad {
+  background: rgba(255, 79, 104, 0.14);
+  color: #ff6b7f;
+}
+
 .ta-facts {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -1447,7 +1543,8 @@ h1 {
   }
 
   .ta-grid,
-  .ta-facts {
+  .ta-facts,
+  .ta-score-strip {
     grid-template-columns: 1fr;
   }
 }
