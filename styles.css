@@ -68,22 +68,22 @@ body::after {
 .brand {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 13px;
   border-bottom: 1px solid rgba(134, 151, 190, 0.14);
-  min-height: 86px;
-  align-items: flex-start;
-  padding: 16px 15px 20px;
+  min-height: 96px;
+  padding: 15px 15px 18px;
 }
 
-.brand-mark {
-  display: none;
-  width: 28px;
-  height: 28px;
-  place-items: center;
-  border-radius: 8px;
-  background: rgba(255, 94, 103, 0.14);
-  color: var(--orange);
-  font-size: 19px;
+.brand-logo {
+  flex: 0 0 auto;
+  width: 46px;
+  height: 46px;
+  border-radius: 14px;
+  object-fit: cover;
+  object-position: center;
+  background: #101827;
+  border: 1px solid rgba(154, 190, 215, 0.22);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 10px 24px rgba(0, 0, 0, 0.22);
 }
 
 .brand strong,
@@ -93,22 +93,39 @@ body::after {
 }
 
 .brand strong {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
   color: #f5f7ff;
-  font-size: 23px;
-  line-height: 1.1;
+  font-size: 24px;
+  line-height: 1;
+  font-weight: 900;
+}
+
+.brand strong b {
+  color: #8fbfff;
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0;
 }
 
 .brand span {
-  margin-top: 7px;
-  color: #8d94a8;
-  font-size: 15px;
+  margin-top: 8px;
+  color: #8fa0bd;
+  font-size: 14px;
   font-weight: 500;
 }
 
 .brand small {
-  display: none;
-  color: #607089;
-  font-size: 10px;
+  display: block;
+  max-width: 238px;
+  margin-top: 5px;
+  color: #8fbfff;
+  font-size: 9px;
+  line-height: 1.25;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .nav-list {
