@@ -180,16 +180,16 @@
             </div>
           </header>
 
-          <div style="display:grid; grid-template-columns:1fr 1fr; gap:20px; padding: 0 0 24px 0;">
+          <div class="watchlist-layout">
             <!-- 左側：自選股清單 -->
-            <div>
-              <div id="watchlist-stocks" style="display:flex; flex-direction:column; gap:12px;">
+            <div class="watchlist-list-pane">
+              <div id="watchlist-stocks" class="watchlist-stock-list">
                 <div style="text-align:center; padding:40px; color:#555;">尚未新增自選股，請輸入股票代號後點新增</div>
               </div>
             </div>
 
             <!-- 右側：TradingView 技術分析 -->
-            <div id="watchlist-analysis" style="background:#12151f; border:1px solid #2a2f45; border-radius:12px; overflow:hidden; min-height:500px; display:flex; flex-direction:column; align-items:center; justify-content:center;">
+            <div id="watchlist-analysis" class="watchlist-analysis-pane">
               <div style="color:#555; font-size:14px;">點擊左側股票查看技術分析</div>
             </div>
           </div>

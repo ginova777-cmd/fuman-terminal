@@ -942,6 +942,108 @@ function showTVAnalysis(code, name) {
   `;
 }
 
+function signalLabel(score) {
+  if (score >= 76) return "強力買入";
+  if (score >= 58) return "買入";
+  if (score >= 43) return "中立";
+  if (score >= 26) return "賣出";
+  return "強力賣出";
+}
+
+function signalClass(score) {
+  if (score >= 58) return "buy";
+  if (score >= 43) return "neutral";
+  return "sell";
+}
+
+function buildTechnicalSummary(stock) {
+  const pct = stock?.percent || 0;
+  const inst = getInstitutionTotal(stock?.code);
+  const smartMoney = inst.total + inst.trust * 1.35;
+  const volumeRank = stock?.tradeVolume ? rankValue(stock.tradeVolume, latestStocks.map(s => s.tradeVolume || 0).sort((a, b) => a - b)) : 50;
+  const valueRank = stock?.value ? rankValue(stock.value, latestStocks.map(s => s.value || 0).sort((a, b) => a - b)) : 50;
+  const momentumScore = clamp(Math.round(50 + pct * 8 + valueRank * 0.18 + Math.sign(smartMoney) * 8), 0, 100);
+  const oscillatorScore = clamp(Math.round(50 + pct * 10 + volumeRank * 0.12), 0, 100);
+  const maScore = clamp(Math.round(48 + pct * 9 + valueRank * 0.16 + Math.sign(stock?.change || 0) * 6), 0, 100);
+  const sell = clamp(Math.round((100 - momentumScore) / 6), 0, 15);
+  const buy = clamp(Math.round(momentumScore / 6), 1, 15);
+  const neutral = clamp(17 - sell - buy, 0, 17);
+
+  return {
+    score: momentumScore,
+    oscillatorScore,
+    maScore,
+    sell,
+    neutral,
+    buy,
+    foreign: inst.foreign,
+    trust: inst.trust,
+  };
+}
+
+function gaugeMarkup(title, score, size = "small") {
+  const rotation = Math.round(-90 + (clamp(score, 0, 100) / 100) * 180);
+  const label = signalLabel(score);
+  const tone = signalClass(score);
+  return `
+    <article class="ta-gauge-card ${size}">
+      <h3>${title}</h3>
+      <div class="ta-gauge ${tone}" style="--needle:${rotation}deg;">
+        <span class="gauge-label l1">強力賣出</span>
+        <span class="gauge-label l2">賣出</span>
+        <span class="gauge-label l3">中立</span>
+        <span class="gauge-label l4">買入</span>
+        <span class="gauge-label l5">強力買入</span>
+        <i></i>
+      </div>
+      <strong class="${tone}">${label}</strong>
+    </article>
+  `;
+}
+
+async function showTradingDashboard(code, name) {
+  const fallback = latestStocks.find(s => s.code === code) || { code, name, close: 0, change: 0, percent: 0 };
+  const stock = await fetchStockPrice(code) || fallback;
+  const analysis = buildTechnicalSummary(stock);
+  const sign = stock.change >= 0 ? "+" : "";
+  const changeClass = stock.change >= 0 ? "down" : "up";
+
+  watchlistAnalysis.innerHTML = `
+    <div class="ta-dashboard">
+      <header class="ta-head">
+        <div>
+          <span>技術分析</span>
+          <h2>${code} ${stock.name || name || ""}</h2>
+        </div>
+        <div class="ta-price">
+          <strong>${stock.close ? stock.close.toLocaleString("zh-TW") : "--"}</strong>
+          <em class="${changeClass}">${sign}${(stock.change || 0).toFixed(2)} (${sign}${(stock.percent || 0).toFixed(2)}%)</em>
+        </div>
+      </header>
+
+      <section class="ta-main">
+        ${gaugeMarkup("總覽", analysis.score, "large")}
+        <div class="ta-votes">
+          <div><span>賣出</span><strong class="sell">${analysis.sell}</strong></div>
+          <div><span>中立</span><strong>${analysis.neutral}</strong></div>
+          <div><span>買入</span><strong class="buy">${analysis.buy}</strong></div>
+        </div>
+      </section>
+
+      <section class="ta-grid">
+        ${gaugeMarkup("震盪指標", analysis.oscillatorScore)}
+        ${gaugeMarkup("移動平均線", analysis.maScore)}
+      </section>
+
+      <section class="ta-facts">
+        <article><span>外資</span><strong class="${analysis.foreign >= 0 ? "down" : "up"}">${analysis.foreign >= 0 ? "+" : ""}${(analysis.foreign / 1000).toFixed(0)}k</strong></article>
+        <article><span>投信</span><strong class="${analysis.trust >= 0 ? "down" : "up"}">${analysis.trust >= 0 ? "+" : ""}${(analysis.trust / 1000).toFixed(0)}k</strong></article>
+        <article><span>量能分位</span><strong>${stock.tradeVolume ? `${rankValue(stock.tradeVolume, latestStocks.map(s => s.tradeVolume || 0).sort((a, b) => a - b))}%` : "--"}</strong></article>
+      </section>
+    </div>
+  `;
+}
+
 async function fetchStockPrice(code) {
   try {
     const found = latestStocks.find(s => s.code === code);
@@ -996,11 +1098,16 @@ async function renderWatchlist() {
   document.querySelectorAll(".watchlist-card").forEach(card => {
     card.addEventListener("click", (e) => {
       if (e.target.tagName === "BUTTON") return;
-      document.querySelectorAll(".watchlist-card").forEach(c => c.style.borderColor = "#2a2f45");
-      card.style.borderColor = "#e74c3c";
-      showTVAnalysis(card.dataset.code, card.dataset.name);
+      document.querySelectorAll(".watchlist-card").forEach(c => c.classList.remove("selected"));
+      card.classList.add("selected");
+      showTradingDashboard(card.dataset.code, card.dataset.name);
     });
   });
+
+  const selectedCard = document.querySelector(".watchlist-card.selected") || document.querySelector(".watchlist-card");
+  if (selectedCard && !watchlistAnalysis.querySelector(".ta-dashboard")) {
+    selectedCard.click();
+  }
 
   for (const item of list) {
     fetchStockPrice(item.code).then(stock => {
