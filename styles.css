@@ -935,7 +935,8 @@ h1 {
 #market-view > .page-header .header-time,
 #market-view > .ticker-strip,
 #market-view > .strength-panel,
-#market-view > .terminal-band {
+#market-view > .terminal-band,
+#market-view > .watch-section {
   display: none !important;
 }
 
@@ -1602,7 +1603,7 @@ h1 {
 
 #market-view > .metric-grid {
   display: grid !important;
-  grid-template-columns: repeat(4, minmax(180px, 1fr));
+  grid-template-columns: repeat(3, minmax(220px, 1fr));
   gap: 12px;
   margin-bottom: 24px;
 }

@@ -646,29 +646,17 @@ function renderIndexes(indexes, futuresNear, futuresNext, marketStatus) {
     if (futuresNear && futuresNear.price && parseFloat(futuresNear.price) > 0) {
       const sign = String(futuresNear.change || "").startsWith("-") ? "-" : "+";
       metricCards[2].innerHTML = `
-        <span>⇅ 台指期</span>
+        <span>⇅ 台指期夜盤</span>
         <strong>${formatNumber(futuresNear.price, 0)}</strong>
         <em class="${sign === "-" ? "up" : "down"}">${futuresNear.change || "--"}　(${futuresNear.pct || "--"})</em>
         ${statusLabel ? `<small style="color:#666; font-size:11px; margin-top:2px;">${statusLabel}</small>` : ""}
       `;
     } else {
-      metricCards[2].innerHTML = `<span>⇅ 台指期</span><strong>--</strong><em>${statusLabel || "等待資料"}</em>`;
+      metricCards[2].innerHTML = `<span>⇅ 台指期夜盤</span><strong>--</strong><em>${statusLabel || "等待資料"}</em>`;
     }
   }
 
-  if (metricCards[3]) {
-    if (futuresNext && futuresNext.price && parseFloat(futuresNext.price) > 0) {
-      const sign = String(futuresNext.change || "").startsWith("-") ? "-" : "+";
-      metricCards[3].innerHTML = `
-        <span>☾ 台指期近</span>
-        <strong>${formatNumber(futuresNext.price, 0)}</strong>
-        <em class="${sign === "-" ? "up" : "down"}">${futuresNext.change || "--"}　(${futuresNext.pct || "--"})</em>
-        ${statusLabel ? `<small style="color:#666; font-size:11px; margin-top:2px;">${statusLabel}</small>` : ""}
-      `;
-    } else {
-      metricCards[3].innerHTML = `<span>☾ 台指期近</span><strong>--</strong><em>${statusLabel || "等待資料"}</em>`;
-    }
-  }
+  if (metricCards[3]) metricCards[3].remove();
 }
 
 function stockChange(stock) {
