@@ -1232,6 +1232,31 @@ async function fetchDailyStockFallback(code) {
   }
 }
 
+async function fetchHeatmapStockFallback(code) {
+  try {
+    const payload = await fetchJson(endpoints.heatmap, 12000);
+    const sectors = normalizeArray(payload.sectors);
+    for (const sector of sectors) {
+      const item = normalizeArray(sector.stocks).find((row) => String(row.code || "") === code);
+      if (!item) continue;
+      const close = cleanNumber(item.close);
+      const percent = cleanNumber(item.pct);
+      const prev = cleanNumber(item.prev) || (percent === -100 ? close : close / (1 + percent / 100));
+      const change = cleanNumber(item.change) || (close - prev);
+      return {
+        code,
+        name: item.name || code,
+        close,
+        change,
+        percent,
+        value: cleanNumber(item.value),
+        tradeVolume: cleanNumber(item.volume),
+      };
+    }
+  } catch {}
+  return null;
+}
+
 async function fetchStockPrice(code) {
   const cached = latestStocks.find(s => s.code === code) || null;
   try {
@@ -1239,16 +1264,16 @@ async function fetchStockPrice(code) {
     const url = `/api/proxy?code=${code}`;
     const data = await fetchJson(url, 5000);
     const item = data?.msgArray?.[0];
-    if (!item) return await fetchDailyStockFallback(code) || cached;
+    if (!item) return await fetchHeatmapStockFallback(code) || await fetchDailyStockFallback(code) || cached;
 
     const close = parseQuoteNumber(item.z, item.y, item.o, item.h, item.l);
     const prev = parseQuoteNumber(item.y, item.z, item.o, item.h, item.l);
-    if (!close || !prev) return await fetchDailyStockFallback(code) || cached;
+    if (!close || !prev) return await fetchHeatmapStockFallback(code) || await fetchDailyStockFallback(code) || cached;
     const change = close - prev;
     const percent = prev ? (change / prev) * 100 : 0;
     return { code, name: item.n || code, close, change, percent, tradeVolume: parseQuoteNumber(item.v, item.tv) };
   } catch {
-    return await fetchDailyStockFallback(code) || cached;
+    return await fetchHeatmapStockFallback(code) || await fetchDailyStockFallback(code) || cached;
   }
 }
 
