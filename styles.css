@@ -970,13 +970,29 @@ h1 {
 
 .sector-card {
   min-height: 92px;
-  border: 1px solid rgba(255, 108, 111, 0.48);
+  border: 1px solid rgba(255, 108, 111, 0.42);
   border-radius: 8px;
-  background:
-    radial-gradient(circle at 24% 20%, rgba(255, 255, 255, 0.13), transparent 22%),
-    linear-gradient(135deg, rgba(117, 38, 43, 0.92), rgba(33, 22, 32, 0.92));
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.07);
+  background: var(--sector-bg);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.07),
+    inset 0 -24px 40px rgba(0, 0, 0, 0.10);
   padding: 10px 10px 8px;
+}
+
+.sector-card.hot {
+  border-color: rgba(255, 79, 104, 0.46);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.07),
+    inset 0 -24px 40px rgba(0, 0, 0, 0.10),
+    0 0 0 1px rgba(255, 79, 104, 0.06);
+}
+
+.sector-card.cold {
+  border-color: rgba(0, 210, 154, 0.42);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    inset 0 -24px 40px rgba(0, 0, 0, 0.10),
+    0 0 0 1px rgba(0, 210, 154, 0.05);
 }
 
 .sector-card h3 {
@@ -989,7 +1005,11 @@ h1 {
 }
 
 .sector-card h3 span {
-  color: #ff7076;
+  color: #ff6b7f;
+}
+
+.sector-card.cold h3 span {
+  color: #00d29a;
 }
 
 .sector-card p {

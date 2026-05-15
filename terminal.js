@@ -432,16 +432,17 @@ async function loadStrategyStocks() {
 }
 
 function getSectorColor(pct) {
-  if (pct >= 3)  return "#c0392b";
-  if (pct >= 2)  return "#e74c3c";
-  if (pct >= 1)  return "#e05a4e";
-  if (pct >= 0.3) return "#c06b64";
-  if (pct > 0)   return "#8b4a46";
-  if (pct === 0) return "#555";
-  if (pct > -0.3) return "#3d6b4a";
-  if (pct > -1)  return "#27ae60";
-  if (pct > -2)  return "#1e8449";
-  return "#145a32";
+  const strength = Math.min(Math.abs(pct) / 4, 1);
+  const alpha = 0.18 + strength * 0.42;
+  const edgeAlpha = 0.24 + strength * 0.34;
+  const rgb = pct >= 0 ? "255, 79, 104" : "0, 210, 154";
+  return `
+    linear-gradient(135deg,
+      rgba(${rgb}, ${alpha}) 0%,
+      rgba(${rgb}, ${Math.max(alpha - 0.12, 0.08)}) 46%,
+      rgba(16, 22, 35, 0.82) 100%),
+    radial-gradient(circle at 18% 12%, rgba(255, 255, 255, 0.12), transparent 34%)
+  `;
 }
 
 function formatInstitution(val) {
@@ -595,10 +596,11 @@ function renderHeatmapSectors(sectors) {
     const pct = s.pct || 0;
     const sign = pct >= 0 ? "+" : "";
     const bg = getSectorColor(pct);
+    const toneClass = pct >= 0 ? "hot" : "cold";
     // 不把 stocks 放進 data-sector，太大了
     const sectorMeta = { name: s.name, pct: s.pct, totalValue: s.totalValue, count: s.count, up: s.up, down: s.down, flat: s.flat, leader: s.leader };
     return `
-      <article class="sector-card" style="background:${bg}; cursor:pointer;" data-sector="${encodeURIComponent(JSON.stringify(sectorMeta))}">
+      <article class="sector-card ${toneClass}" style="--sector-bg:${bg}; cursor:pointer;" data-sector="${encodeURIComponent(JSON.stringify(sectorMeta))}">
         <h3>${s.name}<span>${sign}${pct.toFixed(2)}%</span></h3>
         <p>${s.count} 檔 · ${s.totalValue} 億</p>
         <small>
