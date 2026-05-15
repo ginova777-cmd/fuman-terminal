@@ -1157,12 +1157,13 @@ function colorAtGaugeAngle(angle) {
 
 function gaugeGradient(score) {
   const fill = clamp(score, 0, 100) / 100 * 180;
+  const track = "rgba(118, 120, 109, 0.76)";
   const baseStops = [
-    { angle: 0, color: "#2f8cff" },
-    { angle: 42, color: "#4d6cf2" },
-    { angle: 86, color: "#8743b9" },
-    { angle: 126, color: "#d43d88" },
-    { angle: 158, color: "#ff4964" },
+    { angle: 0, color: "#ff405a" },
+    { angle: 44, color: "#d34691" },
+    { angle: 88, color: "#744bd7" },
+    { angle: 132, color: "#2f8cff" },
+    { angle: 180, color: "#2f8cff" },
   ];
   const visibleStops = baseStops
     .filter((stop) => stop.angle <= fill)
@@ -1170,10 +1171,10 @@ function gaugeGradient(score) {
   const fillColor = colorAtGaugeAngle(fill);
 
   if (fill <= 1) {
-    return "conic-gradient(from 270deg at 50% 100%, #050711 0deg 180deg, transparent 180deg 360deg)";
+    return `conic-gradient(from 270deg at 50% 100%, ${track} 0deg 180deg, transparent 180deg 360deg)`;
   }
 
-  return `conic-gradient(from 270deg at 50% 100%, ${visibleStops.join(", ")}, ${fillColor} ${fill.toFixed(1)}deg, #050711 ${fill.toFixed(1)}deg 180deg, transparent 180deg 360deg)`;
+  return `conic-gradient(from 270deg at 50% 100%, ${visibleStops.join(", ")}, ${fillColor} ${fill.toFixed(1)}deg, ${track} ${fill.toFixed(1)}deg 180deg, transparent 180deg 360deg)`;
 }
 
 function buildTechnicalSummary(stock, timeframeKey = selectedTechnicalTimeframe) {
@@ -1213,7 +1214,7 @@ function formatVolumeMetric(stock, analysis) {
 }
 
 function gaugeMarkup(title, score, size = "small") {
-  const rotation = Math.round(180 + (clamp(score, 0, 100) / 100) * 180);
+  const rotation = Math.round(202 + (clamp(score, 0, 100) / 100) * 136);
   const label = signalLabel(score);
   const tone = signalClass(score);
   const gradient = gaugeGradient(score);
