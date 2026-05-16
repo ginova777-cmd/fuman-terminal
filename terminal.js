@@ -348,7 +348,7 @@ function buildStrategyUniverse(stocks) {
   const percents = stocks.map((s) => s.percent || 0).sort((a, b) => a - b);
   return stocks.map((stock) => {
     const liveStock = applyStrategyQuote(stock);
-    return {
+    const rankedStock = {
     ...liveStock,
     valueRank: rankValue(liveStock.value || 0, values),
     volumeRank: rankValue(liveStock.tradeVolume || 0, volumes),
@@ -357,6 +357,11 @@ function buildStrategyUniverse(stocks) {
     inst: getInstitutionTotal(stock.code),
     intradaySignals: getIntradaySignals(liveStock),
   };
+    return {
+      ...rankedStock,
+      swingStage: getSwingStage(rankedStock),
+      swingSignals: getSwingSignals(rankedStock),
+    };
   });
 }
 
@@ -456,6 +461,73 @@ const INTRADAY_SIGNAL_DEFS = [
   { id: "limit_near", title: "即將漲停", icon: "🔒", hint: "距離漲停區小於 1.5%" },
 ];
 
+const SWING_SIGNAL_DEFS = [
+  { id: "bull_attack", title: "多頭攻擊", icon: "🔥", hint: "價量轉強且趨勢偏多" },
+  { id: "n_base", title: "N字共振", icon: "N", hint: "攻擊後回檔再轉強" },
+  { id: "saucer", title: "圓弧底", icon: "◜", hint: "低位整理後突破" },
+  { id: "breakaway_gap", title: "突破缺口", icon: "◆", hint: "跳空突破整理高點" },
+  { id: "runaway_gap", title: "逃逸缺口", icon: "🚀", hint: "多頭延續型缺口" },
+  { id: "v_reversal", title: "V轉反彈", icon: "V", hint: "跌深後快速翻紅" },
+  { id: "three_inside", title: "三內翻紅", icon: "↻", hint: "弱轉強反轉型態" },
+  { id: "golden_cross", title: "多金釵", icon: "✦", hint: "短均線轉強候選" },
+];
+
+function getSwingStage(stock) {
+  const pctRank = stock.percentRank || 0;
+  const valueRank = stock.valueRank || 0;
+  const volumeRank = stock.volumeRank || 0;
+  const strength = clamp(Math.round(pctRank * 0.46 + valueRank * 0.30 + volumeRank * 0.24), 0, 100);
+  if (strength >= 86 || stock.percent >= 8.5) return { label: "過熱", ratio: "1.00+", tone: "hot" };
+  if (strength >= 62) return { label: "高基期", ratio: "0.618-1.000", tone: "high" };
+  if (strength >= 38) return { label: "中位階", ratio: "0.382-0.618", tone: "mid" };
+  return { label: "低基期", ratio: "0.000-0.382", tone: "low" };
+}
+
+function getSwingSignals(stock) {
+  const pct = stock.percent || 0;
+  const valueRank = stock.valueRank || 0;
+  const volumeRank = stock.volumeRank || 0;
+  const percentRank = stock.percentRank || 0;
+  const close = cleanNumber(stock.close);
+  const open = cleanNumber(stock.open);
+  const high = cleanNumber(stock.high);
+  const low = cleanNumber(stock.low);
+  const prevClose = cleanNumber(stock.prevClose) || (close - cleanNumber(stock.change));
+  const change = cleanNumber(stock.change);
+  const isRed = close >= open || change > 0;
+  const gapPct = open && prevClose ? ((open - prevClose) / prevClose) * 100 : 0;
+  const dayRange = high && low ? ((high - low) / Math.max(low, 0.01)) * 100 : 0;
+  const stage = getSwingStage(stock);
+  const signals = [];
+
+  if (pct >= 2.2 && valueRank >= 58 && volumeRank >= 55 && isRed) {
+    signals.push({ id: "bull_attack", short: "攻擊", icon: "🔥", reason: `價量轉強，漲幅 ${pct.toFixed(2)}%，成交值排名 ${valueRank}%。` });
+  }
+  if (pct >= 1.2 && pct <= 7.8 && valueRank >= 62 && volumeRank >= 58 && stage.tone !== "hot") {
+    signals.push({ id: "n_base", short: "N字", icon: "N", reason: `強勢股回攻候選，成交值/量能進入市場前段，位階 ${stage.label}。` });
+  }
+  if (pct >= 0.8 && pct <= 4.5 && valueRank >= 48 && volumeRank >= 42 && percentRank >= 55 && stage.tone !== "hot") {
+    signals.push({ id: "saucer", short: "圓弧", icon: "◜", reason: `低到中位階轉強，漲幅不過熱且量能開始放大。` });
+  }
+  if (gapPct >= 1.5 && pct >= 2 && close >= open && valueRank >= 55) {
+    signals.push({ id: "breakaway_gap", short: "突破缺口", icon: "◆", reason: `跳空 ${gapPct.toFixed(2)}%，開高走強，偏突破缺口候選。` });
+  }
+  if (gapPct >= 0.8 && pct >= 3.2 && close > open && stage.tone === "high" && valueRank >= 60) {
+    signals.push({ id: "runaway_gap", short: "逃逸缺口", icon: "🚀", reason: `高位階續強且跳空延伸，偏逃逸缺口候選。` });
+  }
+  if (pct >= 1 && percentRank >= 72 && stage.tone === "low" && volumeRank >= 45) {
+    signals.push({ id: "v_reversal", short: "V轉", icon: "V", reason: `低基期快速翻紅，漲幅排名轉強，留意 V 轉反彈。` });
+  }
+  if (pct > 0 && pct <= 3.8 && dayRange >= 2.2 && close >= open && valueRank >= 50) {
+    signals.push({ id: "three_inside", short: "翻紅", icon: "↻", reason: `盤中由弱轉強候選，收紅且區間波動足夠。` });
+  }
+  if (pct > 0 && pct <= 5.8 && valueRank >= 52 && volumeRank >= 50 && stage.tone !== "hot") {
+    signals.push({ id: "golden_cross", short: "金釵", icon: "✦", reason: `短線價量轉強，偏多金釵預備名單。` });
+  }
+
+  return signals;
+}
+
 const intradayRadarStyles = document.createElement("style");
 intradayRadarStyles.textContent = `
   .intraday-radar {
@@ -529,18 +601,194 @@ intradayRadarStyles.textContent = `
     font-size: 22px;
     font-weight: 800;
   }
-  .strategy-terminal.intraday-only {
+  .strategy-terminal.intraday-only,
+  .strategy-terminal.swing-only {
     grid-template-columns: minmax(0, 1fr);
   }
-  .strategy-terminal.intraday-only .strategy-list {
+  .strategy-terminal.intraday-only .strategy-list,
+  .strategy-terminal.swing-only .strategy-list {
     display: none;
   }
   #strategy-view.intraday-only .strategy-header h1,
+  #strategy-view.swing-only .strategy-header h1,
   .strategy-toolbar.intraday-mode h2 {
     color: #f5f8ff;
   }
   .strategy-toolbar.intraday-mode {
     border-bottom: 1px solid rgba(255, 112, 77, 0.18);
+  }
+  .swing-dashboard {
+    display: grid;
+    gap: 14px;
+  }
+  .swing-topbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: end;
+    gap: 16px;
+  }
+  .swing-topbar h2 {
+    margin: 0;
+    color: #f7fbff;
+    font-size: 26px;
+  }
+  .swing-topbar p {
+    margin: 6px 0 0;
+    color: #9ba8c1;
+    font-size: 13px;
+  }
+  .swing-live {
+    display: inline-flex;
+    margin-left: 8px;
+    padding: 3px 8px;
+    border-radius: 999px;
+    background: rgba(107, 151, 255, 0.16);
+    color: #8fb1ff;
+    font-size: 12px;
+    vertical-align: middle;
+  }
+  .swing-signal-grid {
+    display: grid;
+    grid-template-columns: repeat(8, minmax(0, 1fr));
+    gap: 10px;
+  }
+  .swing-card {
+    min-height: 118px;
+    border: 1px solid rgba(107, 151, 255, 0.28);
+    border-radius: 12px;
+    background: radial-gradient(circle at 24% 18%, rgba(107, 151, 255, 0.18), rgba(16, 24, 42, 0.78) 48%, rgba(9, 15, 26, 0.92));
+    padding: 14px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+  }
+  .swing-card strong {
+    display: block;
+    color: #dfe8ff;
+    font-size: 15px;
+  }
+  .swing-card small {
+    display: block;
+    color: #8f9bb4;
+    font-size: 11px;
+    line-height: 1.35;
+    margin-top: 4px;
+  }
+  .swing-card em {
+    color: #8fb1ff;
+    font-style: normal;
+    font-size: 26px;
+    font-weight: 800;
+  }
+  .swing-card.active {
+    border-color: rgba(255, 80, 80, 0.58);
+    background: radial-gradient(circle at 24% 18%, rgba(255, 80, 80, 0.22), rgba(16, 24, 42, 0.78) 48%, rgba(9, 15, 26, 0.92));
+  }
+  .swing-controls,
+  .swing-actions,
+  .swing-tabs {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+  .swing-controls {
+    color: #9ba8c1;
+    font-size: 13px;
+  }
+  .swing-controls select,
+  .swing-actions input {
+    border: 1px solid rgba(117, 133, 170, 0.28);
+    border-radius: 8px;
+    background: rgba(10, 15, 26, 0.72);
+    color: #eaf2ff;
+    padding: 9px 12px;
+    outline: none;
+  }
+  .swing-actions {
+    margin-left: auto;
+  }
+  .swing-actions button,
+  .swing-tabs button {
+    border: 1px solid rgba(117, 133, 170, 0.28);
+    border-radius: 8px;
+    background: rgba(10, 15, 26, 0.72);
+    color: #dce7ff;
+    padding: 9px 12px;
+  }
+  .swing-tabs button.active {
+    border-color: rgba(255, 80, 80, 0.58);
+    background: rgba(255, 80, 80, 0.22);
+    color: #fff;
+  }
+  .swing-panel {
+    border: 1px solid rgba(117, 133, 170, 0.18);
+    border-radius: 10px;
+    background: rgba(8, 14, 25, 0.62);
+    overflow: hidden;
+  }
+  .swing-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+  }
+  .swing-table th,
+  .swing-table td {
+    border-bottom: 1px solid rgba(117, 133, 170, 0.12);
+    padding: 11px 12px;
+    text-align: left;
+  }
+  .swing-table th {
+    color: #91a0ba;
+    background: rgba(30, 43, 65, 0.7);
+    font-weight: 600;
+  }
+  .swing-table td {
+    color: #dbe7ff;
+  }
+  .swing-table .code {
+    color: #75b7ff;
+    font-weight: 700;
+  }
+  .swing-table .pct,
+  .swing-table .price {
+    color: #ff4f5f;
+    font-weight: 700;
+  }
+  .swing-badges {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+  }
+  .swing-badges b {
+    border-radius: 6px;
+    background: rgba(255, 112, 77, 0.16);
+    color: #ffad8c;
+    padding: 4px 7px;
+    font-size: 11px;
+  }
+  .swing-stage {
+    display: inline-flex;
+    min-width: 62px;
+    justify-content: center;
+    border-radius: 999px;
+    padding: 5px 8px;
+    font-weight: 800;
+    color: #fff;
+  }
+  .swing-stage.low { background: #18724f; }
+  .swing-stage.mid { background: #245aa8; }
+  .swing-stage.high { background: #9a5b17; }
+  .swing-stage.hot { background: #a8263c; }
+  .swing-score {
+    display: inline-flex;
+    min-width: 34px;
+    justify-content: center;
+    border-radius: 999px;
+    background: #9e2c3d;
+    color: #fff;
+    padding: 5px 8px;
+    font-weight: 800;
   }
   .intraday-dashboard {
     display: grid;
@@ -766,32 +1014,39 @@ document.head.appendChild(intradayRadarStyles);
 
 function setStrategyChrome(mode) {
   const intraday = mode === "intraday";
-  if (strategyBadge) strategyBadge.textContent = intraday ? "FMN://intraday.2m.scan" : "FMN://strategy.scan";
-  if (strategyTitle) strategyTitle.textContent = intraday ? "2分K當沖雷達" : "綜合策略選股";
-  if (strategyHeaderTitle) strategyHeaderTitle.textContent = intraday ? "2分K當沖雷達" : "策略中心";
+  const swing = mode === "swing";
+  if (strategyBadge) strategyBadge.textContent = intraday ? "FMN://intraday.2m.scan" : swing ? "FMN://swing.daily.scan" : "FMN://strategy.scan";
+  if (strategyTitle) strategyTitle.textContent = intraday ? "2分K當沖雷達" : swing ? "策略4-波段雷達" : "綜合策略選股";
+  if (strategyHeaderTitle) strategyHeaderTitle.textContent = intraday ? "2分K當沖雷達" : swing ? "策略4-波段雷達" : "策略中心";
   if (strategyHeaderText) {
     strategyHeaderText.textContent = intraday
       ? "盤中即時輪巡全台股，專注偵測跳空、突破、MA35+MACD、鑽石、瞬間拉抬與即將漲停。"
+      : swing
+      ? "用波段指標邏輯整理全台股，盤中即時更新價量，分類突破缺口、逃逸缺口、V轉與多頭攻擊。"
       : "左側切換日線、籌碼與高波動策略；右側即時重算符合條件的股票訊號。";
   }
-  if (strategyActions) strategyActions.style.display = intraday ? "none" : "";
+  if (strategyActions) strategyActions.style.display = intraday || swing ? "none" : "";
   if (strategyToolbar) {
     strategyToolbar.classList.toggle("intraday-mode", intraday);
-    strategyToolbar.style.display = intraday ? "none" : "";
+    strategyToolbar.style.display = intraday || swing ? "none" : "";
   }
-  if (strategyMetrics) strategyMetrics.style.display = intraday ? "none" : "";
-  if (strategySearchLabel) strategySearchLabel.style.display = intraday ? "none" : "";
+  if (strategyMetrics) strategyMetrics.style.display = intraday || swing ? "none" : "";
+  if (strategySearchLabel) strategySearchLabel.style.display = intraday || swing ? "none" : "";
   if (strategyView) strategyView.classList.toggle("intraday-only", intraday);
+  if (strategyView) strategyView.classList.toggle("swing-only", swing);
   if (strategyTerminal) strategyTerminal.classList.toggle("intraday-only", intraday);
-  if (strategyList) strategyList.hidden = intraday;
+  if (strategyTerminal) strategyTerminal.classList.toggle("swing-only", swing);
+  if (strategyList) strategyList.hidden = intraday || swing;
   const labels = intraday
     ? ["觸發股票", "雷達分數", "最多訊號"]
+    : swing
+    ? ["符合股票", "波段分數", "最多訊號"]
     : ["符合股票", "平均分數", "最高命中"];
   strategyMetricLabels.forEach((label, index) => {
     if (labels[index]) label.textContent = labels[index];
   });
   if (strategySearch?.previousElementSibling) {
-    strategySearch.previousElementSibling.textContent = intraday ? "搜尋雷達股票" : "搜尋股票";
+    strategySearch.previousElementSibling.textContent = intraday || swing ? "搜尋雷達股票" : "搜尋股票";
   }
 }
 
@@ -903,10 +1158,112 @@ function renderIntradayRadar(evaluated) {
   `;
 }
 
+function renderSwingRadar(universe) {
+  setStrategyChrome("swing");
+  const rows = universe
+    .filter((stock) => (stock.swingSignals || []).length)
+    .map((stock) => {
+      const signalBoost = (stock.swingSignals || []).length * 6;
+      const stageBoost = stock.swingStage?.tone === "low" ? 8 : stock.swingStage?.tone === "mid" ? 6 : stock.swingStage?.tone === "high" ? 3 : -4;
+      const score = clamp(Math.round(42 + (stock.percentRank || 0) * 0.24 + (stock.valueRank || 0) * 0.18 + (stock.volumeRank || 0) * 0.14 + signalBoost + stageBoost), 0, 100);
+      return { ...stock, swingScore: score };
+    })
+    .sort((a, b) => b.swingSignals.length - a.swingSignals.length || b.swingScore - a.swingScore || b.percent - a.percent)
+    .slice(0, 100);
+  const signalCounts = Object.fromEntries(SWING_SIGNAL_DEFS.map((signal) => [signal.id, 0]));
+  rows.forEach((stock) => {
+    (stock.swingSignals || []).forEach((signal) => {
+      signalCounts[signal.id] = (signalCounts[signal.id] || 0) + 1;
+    });
+  });
+  const scanTime = strategyLastScanAt
+    ? new Date(strategyLastScanAt).toLocaleTimeString("zh-TW", { hour12: false })
+    : new Date().toLocaleTimeString("zh-TW", { hour12: false });
+
+  if (strategySummary) strategySummary.textContent = `全台股波段雷達｜盤中即時價量更新｜最後更新 ${scanTime}`;
+  if (strategyMatchCount) strategyMatchCount.textContent = rows.length.toLocaleString("zh-TW");
+  if (strategyAvgScore) strategyAvgScore.textContent = rows.length ? Math.round(rows.reduce((sum, stock) => sum + stock.swingScore, 0) / rows.length) : "--";
+  if (strategyTopHit) strategyTopHit.textContent = rows.length ? `${Math.max(...rows.map((stock) => stock.swingSignals.length))}/8` : "0/8";
+
+  const cards = SWING_SIGNAL_DEFS.map((signal) => {
+    const count = signalCounts[signal.id] || 0;
+    return `
+      <article class="swing-card ${count ? "active" : ""}">
+        <div>
+          <strong>${signal.icon} ${signal.title}</strong>
+          <small>${signal.hint}</small>
+        </div>
+        <em>${count}</em>
+      </article>
+    `;
+  }).join("");
+
+  const tabs = [
+    ["all", "全部", rows.length],
+    ...SWING_SIGNAL_DEFS.map((signal) => [signal.id, signal.title, signalCounts[signal.id] || 0]),
+  ].map(([id, label, count], index) => `<button class="${index === 0 ? "active" : ""}" type="button">${label}(${count})</button>`).join("");
+
+  const tableRows = rows.length ? rows.map((stock) => {
+    const sign = stock.percent >= 0 ? "+" : "";
+    const chips = stock.swingSignals.map((signal) => `<b>${signal.icon} ${signal.short}</b>`).join("");
+    const stage = stock.swingStage || getSwingStage(stock);
+    const reason = stock.swingSignals[0]?.reason || "波段訊號觸發";
+    return `
+      <tr>
+        <td><span class="code">${stock.code}</span></td>
+        <td>${stock.name}</td>
+        <td><span class="swing-badges">${chips}</span></td>
+        <td class="price">${formatNumber(stock.close, stock.close >= 100 ? 0 : 2)}</td>
+        <td class="pct">${sign}${stock.percent.toFixed(2)}%</td>
+        <td>${Math.round(stock.tradeVolume || 0).toLocaleString("zh-TW")}</td>
+        <td><span class="swing-stage ${stage.tone}">${stage.label}</span><small>${stage.ratio}</small></td>
+        <td><span class="swing-score">${stock.swingScore}</span></td>
+        <td>${reason}</td>
+      </tr>
+    `;
+  }).join("") : `
+    <tr><td colspan="9">策略4波段雷達框架已啟動。開盤後會用即時價量輪巡全台股；完整 MA/MACD/RSI/Fib 版會在接上日K歷史資料後更精準。</td></tr>
+  `;
+
+  strategyTable.innerHTML = `
+    <section class="swing-dashboard">
+      <div class="swing-topbar">
+        <div>
+          <h2>策略4-波段雷達 <span class="swing-live">● 即時偵測中</span></h2>
+          <p>全台股盤中即時價量更新，依你的 TradingView 指標拆成 8 種波段訊號。</p>
+        </div>
+        <div class="swing-controls">
+          <label>偵測頻率：<select><option>15秒</option></select></label>
+          <label>市場：<select><option>全市場</option></select></label>
+        </div>
+      </div>
+      <div class="swing-signal-grid">${cards}</div>
+      <section class="swing-panel">
+        <div class="swing-tabs">
+          ${tabs}
+          <div class="swing-actions">
+            <input type="search" placeholder="搜尋代號/名稱">
+            <button type="button">匯出</button>
+            <button type="button">設定</button>
+          </div>
+        </div>
+        <table class="swing-table">
+          <thead>
+            <tr>
+              <th>股票代號</th><th>股票名稱</th><th>訊號</th><th>現價</th><th>漲幅</th><th>成交量</th><th>位階</th><th>分數</th><th>原因</th>
+            </tr>
+          </thead>
+          <tbody>${tableRows}</tbody>
+        </table>
+      </section>
+    </section>
+  `;
+}
+
 function renderStrategyScanner() {
   if (!strategyTable) return;
   const selected = [...selectedStrategyIds];
-  if (!(selected.length === 1 && selected[0] === "intraday_2m")) setStrategyChrome("normal");
+  if (!(selected.length === 1 && (selected[0] === "intraday_2m" || selected[0] === "swing_radar"))) setStrategyChrome("normal");
   strategyCards.forEach((card) => card.classList.toggle("selected", selectedStrategyIds.has(card.dataset.strategy)));
   strategyModeButtons.forEach((button) => button.classList.toggle("active", button.dataset.strategyMode === strategyMode));
 
@@ -927,7 +1284,17 @@ function renderStrategyScanner() {
   }
 
   const keyword = strategyKeyword.trim().toLowerCase();
-  const evaluated = buildStrategyUniverse(latestStocks).map(evaluateStrategyStock).filter((stock) => {
+  const universe = buildStrategyUniverse(latestStocks);
+  if (selected.length === 1 && selected[0] === "swing_radar") {
+    const swingRows = universe.filter((stock) => {
+      const passKeyword = !keyword || stock.code.includes(keyword) || stock.name.toLowerCase().includes(keyword);
+      return passKeyword;
+    });
+    renderSwingRadar(swingRows);
+    return;
+  }
+
+  const evaluated = universe.map(evaluateStrategyStock).filter((stock) => {
     const matchedIds = stock.matches.map((item) => item.id);
     const passMode = strategyMode === "all"
       ? selected.every((id) => matchedIds.includes(id))
@@ -1682,8 +2049,8 @@ async function loadInstitution() {
 
 function applyStrategyPresetFromLink(link) {
   const text = link?.textContent || "";
-  if (!text.includes("策略2")) return;
-  selectedStrategyIds = new Set(["intraday_2m"]);
+  if (!text.includes("策略2") && !text.includes("策略4")) return;
+  selectedStrategyIds = new Set([text.includes("策略4") ? "swing_radar" : "intraday_2m"]);
   strategyMode = "any";
   strategyKeyword = "";
   if (strategySearch) strategySearch.value = "";
@@ -1694,8 +2061,8 @@ function applyStrategyPresetFromLink(link) {
 async function refreshStrategyRealtimeScan(force = false) {
   if (strategyRealtimeLoading || !latestStocks.length) return;
   const isStrategyVisible = document.querySelector("#strategy-view")?.classList.contains("active");
-  const isIntradayMode = selectedStrategyIds.has("intraday_2m");
-  if (!force && (!isStrategyVisible || !isIntradayMode)) return;
+  const isRealtimeStrategy = selectedStrategyIds.has("intraday_2m") || selectedStrategyIds.has("swing_radar");
+  if (!force && (!isStrategyVisible || !isRealtimeStrategy)) return;
 
   strategyRealtimeLoading = true;
   try {
