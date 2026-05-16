@@ -1553,6 +1553,10 @@ function renderIntradayRadar(evaluated) {
 
 function renderSwingRadar(universe) {
   setStrategyChrome("swing");
+  const historyCount = Object.keys(strategyHistoryData).length;
+  if (latestStocks.length && historyCount < latestStocks.length && !strategyHistoryLoading) {
+    setTimeout(() => refreshStrategyHistoryScan(true), 0);
+  }
   const allRows = universe
     .filter((stock) => (stock.swingSignals || []).length)
     .map((stock) => {
@@ -1575,7 +1579,6 @@ function renderSwingRadar(universe) {
   const scanTime = strategyLastScanAt
     ? new Date(strategyLastScanAt).toLocaleTimeString("zh-TW", { hour12: false })
     : new Date().toLocaleTimeString("zh-TW", { hour12: false });
-  const historyCount = Object.keys(strategyHistoryData).length;
   const historyText = strategyHistoryLastScanAt
     ? `日K ${historyCount}/${latestStocks.length}｜${new Date(strategyHistoryLastScanAt).toLocaleTimeString("zh-TW", { hour12: false })}`
     : `日K載入中 ${historyCount}/${latestStocks.length}`;
@@ -1631,7 +1634,7 @@ function renderSwingRadar(universe) {
       <div class="swing-topbar">
         <div>
           <h2>策略4-波段雷達 <span class="swing-live">● 即時偵測中</span></h2>
-          <p>全台股盤中即時價量更新，依你的 TradingView 指標拆成 8 種波段訊號。</p>
+          <p>全台股盤中即時價量更新，依你的 TradingView 指標拆成 8 種波段訊號。${historyText}</p>
         </div>
         <div class="swing-controls">
           <label>偵測頻率：<select><option>15秒</option></select></label>
