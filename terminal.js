@@ -1880,8 +1880,8 @@ function renderSwingRadar(universe) {
     ? new Date(strategyLastScanAt).toLocaleTimeString("zh-TW", { hour12: false })
     : new Date().toLocaleTimeString("zh-TW", { hour12: false });
   const historyText = strategy4ScanLastAt
-    ? `已掃描 ${scannedCount}/${totalCount}｜命中 ${scanCount}｜${new Date(strategy4ScanLastAt).toLocaleTimeString("zh-TW", { hour12: false })}`
-    : `後端日K掃描啟動中 0/${totalCount}`;
+    ? `快速連掃 ${scannedCount}/${totalCount}｜命中 ${scanCount}｜${new Date(strategy4ScanLastAt).toLocaleTimeString("zh-TW", { hour12: false })}`
+    : `快速連掃啟動中 0/${totalCount}`;
 
   if (strategySummary) strategySummary.textContent = `全台股波段雷達｜排除ETF｜後端策略4計算｜${historyText}`;
   if (strategyMatchCount) strategyMatchCount.textContent = rows.length.toLocaleString("zh-TW");
@@ -1937,7 +1937,7 @@ function renderSwingRadar(universe) {
           <p>排除ETF，只掃真正股票；後端抓日K並計算策略4，前端只顯示符合結果。${historyText}</p>
         </div>
         <div class="swing-controls">
-          <label>偵測頻率：<select><option>15秒</option></select></label>
+          <label>偵測頻率：<select><option>連續掃描</option></select></label>
           <label>市場：<select><option>全市場</option></select></label>
         </div>
       </div>
@@ -3255,23 +3255,28 @@ async function refreshStrategyHistoryScan(force = false) {
   const source = latestStocks.filter((stock) => !/^00/.test(stock.code));
   strategy4ScanTotal = source.length;
   if (!source.length) return;
-  const batchSize = 24;
+  const batchSize = 48;
   const start = strategy4ScanCursor % source.length;
   const rows = source.slice(start, start + batchSize);
   const wrapped = rows.length < batchSize ? source.slice(0, batchSize - rows.length) : [];
   const codes = [...rows, ...wrapped].map((stock) => stock.code).filter(Boolean);
   strategy4ScanCursor = (start + batchSize) % Math.max(source.length, 1);
+  const completedCycle = strategy4ScanCursor <= start;
   if (!codes.length) return;
 
   strategy4ScanLoading = true;
   try {
-    const payload = await fetchJson(`${endpoints.scanStrategy4}?codes=${encodeURIComponent(codes.join(","))}`, 30000);
+    const payload = await fetchJson(`${endpoints.scanStrategy4}?codes=${encodeURIComponent(codes.join(","))}`, 45000);
     updateStrategy4Scan(payload);
     strategy4ScanLastAt = Date.now();
     renderStrategyScanner();
   } catch (error) {
   } finally {
     strategy4ScanLoading = false;
+    const stillVisible = document.querySelector("#strategy-view")?.classList.contains("active") && selectedStrategyIds.has("swing_radar");
+    if (stillVisible) {
+      setTimeout(() => refreshStrategyHistoryScan(true), completedCycle ? 3000 : 350);
+    }
   }
 }
 
@@ -3306,7 +3311,7 @@ setInterval(tickClock, 1000);
 setInterval(loadMarketData, 15*1000);
 setInterval(refreshStrategyRealtimeScan, 15*1000);
 setInterval(refreshOpenBuyScan, 10*1000);
-setInterval(refreshStrategyHistoryScan, 10*1000);
+setInterval(refreshStrategyHistoryScan, 3000);
 setInterval(loadHeatmap, 10*60*1000);
 setInterval(loadInstitution, 10*60*1000);
 
