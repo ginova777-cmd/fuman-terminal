@@ -44,6 +44,7 @@ const endpoints = {
   institution: "/api/institution",
   history: "/api/history",
   realtime: "/api/realtime",
+  scanOpenBuy: "/api/scan-open-buy",
   scanStrategy4: "/api/scan-strategy4",
   strategyStocks: "/api/stocks",
   stocks: "https://openapi.twse.com.tw/v1/exchangeReport/STOCK_DAY_ALL",
@@ -72,6 +73,13 @@ let strategy4ScanLastAt = 0;
 let strategy4ScanCount = 0;
 let strategy4ScannedCodes = new Set();
 let strategy4ScanTotal = 0;
+let openBuyScanLoading = false;
+let openBuyScanCursor = 0;
+let openBuyScanMatches = {};
+let openBuyScanLastAt = 0;
+let openBuyScanCount = 0;
+let openBuyScannedCodes = new Set();
+let openBuyScanTotal = 0;
 let selectedStrategyIds = new Set(["momentum"]);
 let strategyMode = "any";
 let strategyKeyword = "";
@@ -342,6 +350,33 @@ function updateStrategy4Scan(payload) {
     };
   });
   strategy4ScanCount = Object.keys(strategy4ScanMatches).length;
+}
+
+function updateOpenBuyScan(payload) {
+  const scannedCodes = normalizeArray(payload?.scannedCodes);
+  const matches = normalizeArray(payload?.matches);
+  const matchedCodes = new Set(matches.map((item) => item.code));
+  scannedCodes.forEach((code) => {
+    if (code) openBuyScannedCodes.add(code);
+  });
+  scannedCodes.forEach((code) => {
+    if (!matchedCodes.has(code)) delete openBuyScanMatches[code];
+  });
+  matches.forEach((item) => {
+    if (!item?.code) return;
+    const base = latestStocks.find((stock) => stock.code === item.code) || {};
+    openBuyScanMatches[item.code] = {
+      ...base,
+      ...item,
+      name: base.name || item.name || item.code,
+      tradeVolume: cleanNumber(item.tradeVolume || item.volume || base.tradeVolume),
+      value: cleanNumber(item.value || base.value),
+      percent: Number.isFinite(Number(item.percent)) ? Number(item.percent) : (base.percent || 0),
+      score: cleanNumber(item.score),
+      updatedAt: Date.now(),
+    };
+  });
+  openBuyScanCount = Object.keys(openBuyScanMatches).length;
 }
 
 function updateStrategyQuote(quote) {
@@ -1913,6 +1948,97 @@ function renderSwingRadar(universe) {
   `;
 }
 
+function renderOpenBuyRadar(universe) {
+  setStrategyChrome("normal");
+  const scanCount = openBuyScanCount || Object.keys(openBuyScanMatches).length;
+  const scannedCount = openBuyScannedCodes.size;
+  const totalCount = openBuyScanTotal || latestStocks.filter((stock) => !/^00/.test(stock.code)).length || latestStocks.length;
+  if (latestStocks.length && !openBuyScanLoading) {
+    setTimeout(() => refreshOpenBuyScan(true), 0);
+  }
+
+  const keyword = strategyKeyword.trim().toLowerCase();
+  const allowCodes = new Set(universe.map((stock) => stock.code));
+  const rows = Object.values(openBuyScanMatches)
+    .filter((stock) => allowCodes.has(stock.code))
+    .filter((stock) => !keyword || stock.code.includes(keyword) || stock.name.toLowerCase().includes(keyword))
+    .sort((a, b) => b.score - a.score || b.percent - a.percent || b.value - a.value)
+    .slice(0, 80);
+
+  const scanText = openBuyScanLastAt
+    ? `已掃描 ${scannedCount}/${totalCount}｜候選 ${scanCount}｜${new Date(openBuyScanLastAt).toLocaleTimeString("zh-TW", { hour12: false })}`
+    : `等待後端掃描 0/${totalCount}`;
+
+  if (strategySummary) strategySummary.textContent = `策略1-開盤入快跑｜14:30後產生明日候選｜08:55後看最終名單｜${scanText}`;
+  if (strategyMatchCount) strategyMatchCount.textContent = rows.length.toLocaleString("zh-TW");
+  if (strategyAvgScore) strategyAvgScore.textContent = rows.length ? Math.round(rows.reduce((sum, stock) => sum + stock.score, 0) / rows.length) : "--";
+  if (strategyTopHit) strategyTopHit.textContent = rows.length ? "+1.2%" : "--";
+
+  const tableRows = rows.length ? rows.map((stock) => {
+    const sign = stock.percent >= 0 ? "+" : "";
+    return `
+      <tr>
+        <td><span class="code">${stock.code}</span></td>
+        <td>${stock.name}</td>
+        <td><b class="swing-stage mid">${stock.status || "明日開盤可買"}</b></td>
+        <td class="price">${formatNumber(stock.close, stock.close >= 100 ? 0 : 2)}</td>
+        <td class="pct">${sign}${stock.percent.toFixed(2)}%</td>
+        <td>${stock.entry || "09:00 開盤價"}</td>
+        <td class="price">${formatNumber(stock.takeProfit, stock.takeProfit >= 100 ? 1 : 2)}</td>
+        <td class="price">${formatNumber(stock.stopLoss, stock.stopLoss >= 100 ? 1 : 2)}</td>
+        <td><span class="swing-score">${stock.score}</span></td>
+        <td>${stock.reason || "昨日強勢，列入開盤入候選。"}</td>
+      </tr>
+    `;
+  }).join("") : `
+    <tr><td colspan="10">策略1後端掃描中。14:30後可看明日候選，08:55後用盤前狀態做最終確認；第一版先用日K條件產生開盤入名單。</td></tr>
+  `;
+
+  strategyTable.innerHTML = `
+    <section class="swing-dashboard">
+      <div class="swing-topbar">
+        <div>
+          <h2>策略1-開盤入快跑 <span class="swing-live">● 無腦開盤入</span></h2>
+          <p>14:30後先出明日候選；08:55後看最終名單。買入：09:00 開盤價｜停利 +1.2%｜停損 -1.0%｜09:10 強制出場。${scanText}</p>
+        </div>
+        <div class="swing-controls">
+          <label>掃描頻率：<select><option>10秒</option></select></label>
+          <label>市場：<select><option>排除ETF</option></select></label>
+        </div>
+      </div>
+      <div class="swing-signal-grid">
+        <button class="swing-card active selected" type="button">
+          <div><strong>14:30 候選</strong><small>收盤後用日K篩明日名單</small></div><em>${scanCount}</em>
+        </button>
+        <button class="swing-card active" type="button">
+          <div><strong>08:55 最終</strong><small>盤前最後確認後開盤買</small></div><em>待接</em>
+        </button>
+        <button class="swing-card active" type="button">
+          <div><strong>有賺就走</strong><small>+1.2% 停利，09:10 不戀戰</small></div><em>快跑</em>
+        </button>
+      </div>
+      <section class="swing-panel">
+        <div class="swing-tabs">
+          <button class="active" type="button">全部(${rows.length})</button>
+          <div class="swing-actions">
+            <input type="search" placeholder="搜尋代號/名稱">
+            <button type="button">匯出</button>
+            <button type="button">設定</button>
+          </div>
+        </div>
+        <table class="swing-table">
+          <thead>
+            <tr>
+              <th>股票代號</th><th>股票名稱</th><th>狀態</th><th>昨收</th><th>昨日漲幅</th><th>買入</th><th>停利</th><th>停損</th><th>分數</th><th>原因</th>
+            </tr>
+          </thead>
+          <tbody>${tableRows}</tbody>
+        </table>
+      </section>
+    </section>
+  `;
+}
+
 function renderStrategy5Dashboard(evaluated) {
   setStrategyChrome("strategy5");
   const byId = Object.fromEntries(STRATEGY5_PRESET_IDS.map((id) => [id, []]));
@@ -2051,6 +2177,14 @@ function renderStrategyScanner() {
 
   const keyword = strategyKeyword.trim().toLowerCase();
   const universe = buildStrategyUniverse(latestStocks);
+  if (selected.length === 1 && selected[0] === "open_buy") {
+    const openBuyRows = universe.filter((stock) => {
+      const passKeyword = !keyword || stock.code.includes(keyword) || stock.name.toLowerCase().includes(keyword);
+      return passKeyword;
+    });
+    renderOpenBuyRadar(openBuyRows);
+    return;
+  }
   if (selected.length === 1 && selected[0] === "swing_radar") {
     const swingRows = universe.filter((stock) => {
       const passKeyword = !keyword || stock.code.includes(keyword) || stock.name.toLowerCase().includes(keyword);
@@ -2854,9 +2988,11 @@ async function loadInstitution() {
 
 function applyStrategyPresetFromLink(link) {
   const text = link?.textContent || "";
-  if (!text.includes("策略2") && !text.includes("策略4") && !text.includes("策略5")) return;
+  if (!text.includes("策略1") && !text.includes("策略2") && !text.includes("策略4") && !text.includes("策略5")) return;
   strategyPresetMode = text.includes("策略5") ? "strategy5" : "";
-  selectedStrategyIds = text.includes("策略5")
+  selectedStrategyIds = text.includes("策略1")
+    ? new Set(["open_buy"])
+    : text.includes("策略5")
     ? new Set([
         "momentum",
         "main_force_chip",
@@ -2883,6 +3019,7 @@ function applyStrategyPresetFromLink(link) {
   if (strategySearch) strategySearch.value = "";
   loadStrategyStocks();
   refreshStrategyRealtimeScan(true);
+  if (text.includes("策略1")) refreshOpenBuyScan(true);
   if (text.includes("策略4") || text.includes("策略5")) refreshStrategyHistoryScan(true);
 }
 
@@ -2913,6 +3050,35 @@ async function refreshStrategyRealtimeScan(force = false) {
   } catch (error) {
   } finally {
     strategyRealtimeLoading = false;
+  }
+}
+
+async function refreshOpenBuyScan(force = false) {
+  if (openBuyScanLoading || !latestStocks.length) return;
+  const isStrategyVisible = document.querySelector("#strategy-view")?.classList.contains("active");
+  const isOpenBuyMode = selectedStrategyIds.has("open_buy");
+  if (!force && (!isStrategyVisible || !isOpenBuyMode)) return;
+
+  const source = latestStocks.filter((stock) => !/^00/.test(stock.code));
+  openBuyScanTotal = source.length;
+  if (!source.length) return;
+  const batchSize = 24;
+  const start = openBuyScanCursor % source.length;
+  const rows = source.slice(start, start + batchSize);
+  const wrapped = rows.length < batchSize ? source.slice(0, batchSize - rows.length) : [];
+  const codes = [...rows, ...wrapped].map((stock) => stock.code).filter(Boolean);
+  openBuyScanCursor = (start + batchSize) % Math.max(source.length, 1);
+  if (!codes.length) return;
+
+  openBuyScanLoading = true;
+  try {
+    const payload = await fetchJson(`${endpoints.scanOpenBuy}?codes=${encodeURIComponent(codes.join(","))}`, 30000);
+    updateOpenBuyScan(payload);
+    openBuyScanLastAt = Date.now();
+    renderStrategyScanner();
+  } catch (error) {
+  } finally {
+    openBuyScanLoading = false;
   }
 }
 
@@ -2975,6 +3141,7 @@ document.querySelectorAll("[data-chip-filter]").forEach((button) => {
 setInterval(tickClock, 1000);
 setInterval(loadMarketData, 15*1000);
 setInterval(refreshStrategyRealtimeScan, 15*1000);
+setInterval(refreshOpenBuyScan, 10*1000);
 setInterval(refreshStrategyHistoryScan, 10*1000);
 setInterval(loadHeatmap, 10*60*1000);
 setInterval(loadInstitution, 10*60*1000);
