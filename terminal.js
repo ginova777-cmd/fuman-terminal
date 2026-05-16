@@ -2305,22 +2305,33 @@ function renderWarrantFlow() {
       item.code.includes(keyword) ||
       item.name.toLowerCase().includes(keyword) ||
       item.underlyingName.toLowerCase().includes(keyword))
-    .sort((a, b) => b.score - a.score || b.callValue - a.callValue)
-    .slice(0, 80);
+    .filter((item) => item.stockPercent <= 4.5)
+    .map((item) => ({
+      ...item,
+      observeScore: Math.round(
+        item.score +
+        Math.min(cleanNumber(item.callValue) / 20000000, 18) +
+        Math.min(cleanNumber(item.callPutRatio) * 2, 14) +
+        (item.stockPercent >= -1 && item.stockPercent <= 2.5 ? 10 : item.stockPercent <= 4.5 ? 3 : -8)
+      ),
+    }))
+    .sort((a, b) => b.observeScore - a.observeScore || b.score - a.score || b.callValue - a.callValue)
+    .slice(0, 10);
   const totalCall = warrantFlowData.reduce((sum, item) => sum + cleanNumber(item.callValue), 0);
   const totalPut = warrantFlowData.reduce((sum, item) => sum + cleanNumber(item.putValue), 0);
   const updatedText = warrantFlowUpdatedAt
     ? new Date(warrantFlowUpdatedAt).toLocaleTimeString("zh-TW", { hour12: false })
     : "等待更新";
 
-  const body = rows.length ? rows.map((item) => {
+  const body = rows.length ? rows.map((item, index) => {
     const sign = item.stockPercent >= 0 ? "+" : "";
     const hot = item.score >= 82 ? "hot" : item.score >= 68 ? "mid" : "low";
     return `
       <tr>
+        <td><span class="swing-score">${index + 1}</span></td>
         <td><span class="code">${item.code || "--"}</span></td>
         <td>${item.name}</td>
-        <td><span class="swing-score">${item.score}</span></td>
+        <td><span class="swing-score">${item.observeScore}</span></td>
         <td class="price">${formatWarrantMoney(item.callValue)}</td>
         <td>${formatWarrantMoney(item.putValue)}</td>
         <td><b class="swing-stage ${hot}">${item.callPutRatio >= 99 ? "99+" : item.callPutRatio}</b></td>
@@ -2331,7 +2342,7 @@ function renderWarrantFlow() {
       </tr>
     `;
   }).join("") : `
-    <tr><td colspan="10">權證資金走向讀取中。會優先顯示「認購權證先熱、股票尚未噴出」的標的。</td></tr>
+    <tr><td colspan="11">權證資金走向讀取中。只顯示「認購權證先熱、股票尚未噴出」的前十名。</td></tr>
   `;
 
   panel.innerHTML = `
@@ -2346,7 +2357,7 @@ function renderWarrantFlow() {
       <div class="swing-topbar">
         <div>
           <h2>權證先熱雷達 <span class="swing-live">● 日資料版</span></h2>
-          <p>統計同一標的底下的認購與認售權證成交金額；認購集中、認售偏低、股票尚未大漲者優先觀察。</p>
+          <p>只顯示可優先觀察前十名：認購集中、認售偏低、股票尚未大漲者優先。</p>
         </div>
         <div class="swing-controls">
           <label>資料：<select><option>上市 + 上櫃</option></select></label>
@@ -2366,7 +2377,7 @@ function renderWarrantFlow() {
       </div>
       <section class="swing-panel">
         <div class="swing-tabs">
-          <button class="active" type="button">全部(${rows.length})</button>
+          <button class="active" type="button">優先觀察 Top 10</button>
           <div class="swing-actions">
             <input id="warrant-flow-search" type="search" placeholder="搜尋代號/名稱" value="${warrantFlowKeyword}">
             <button id="warrant-flow-refresh" type="button">重新整理</button>
@@ -2375,7 +2386,7 @@ function renderWarrantFlow() {
         <table class="swing-table">
           <thead>
             <tr>
-              <th>股票代號</th><th>標的名稱</th><th>熱度</th><th>認購金額</th><th>認售金額</th><th>購/售比</th><th>購/售檔數</th><th>股票漲幅</th><th>代表權證</th><th>原因</th>
+              <th>排名</th><th>股票代號</th><th>標的名稱</th><th>觀察分數</th><th>認購金額</th><th>認售金額</th><th>購/售比</th><th>購/售檔數</th><th>股票漲幅</th><th>代表權證</th><th>原因</th>
             </tr>
           </thead>
           <tbody>${body}</tbody>
