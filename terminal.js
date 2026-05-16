@@ -65,6 +65,13 @@ let strategyStocksLoading = false;
 let swingSortKey = "score";
 let swingSortDir = "desc";
 let swingSignalFilter = "all";
+let marketSnapshot = {
+  twse: null,
+  otc: null,
+  futures: null,
+  totalValue: 0,
+  updatedAt: null,
+};
 
 const SECTOR_MAP = {
   "2454":"CPU/ASIC/IP","3443":"CPU/ASIC/IP","3661":"CPU/ASIC/IP","3529":"CPU/ASIC/IP",
@@ -160,6 +167,27 @@ function formatNumber(value, digits = 2) {
 function formatChange(sign, points, percent) {
   const symbol = sign === "-" ? "-" : "+";
   return `${symbol}${formatNumber(points)}　(${symbol}${formatNumber(percent)}%)`;
+}
+
+function formatCompactValue(value) {
+  const number = cleanNumber(value);
+  if (!number) return "--";
+  return `${formatNumber(number / 100000000, 2)} 億`;
+}
+
+function formatMarketMini(item) {
+  if (!item) return `<strong>--</strong><span>--</span>`;
+  const sign = item.sign === "-" ? "-" : "+";
+  const trend = item.sign === "-" ? "green" : "red";
+  return `<strong>${formatNumber(item.close)}</strong><span class="${trend}">${sign} ${formatNumber(item.points)} (${sign}${formatNumber(item.percent)}%)</span>`;
+}
+
+function formatFuturesMini(item) {
+  if (!item || !cleanNumber(item.price)) return `<strong>--</strong><span>--</span>`;
+  const changeText = String(item.change || "--");
+  const sign = changeText.trim().startsWith("-") ? "-" : "+";
+  const trend = sign === "-" ? "green" : "red";
+  return `<strong>${formatNumber(item.price, 0)}</strong><span class="${trend}">${changeText} (${item.pct || "--"})</span>`;
 }
 
 function valueOf(record, keys) {
@@ -647,7 +675,47 @@ intradayRadarStyles.textContent = `
     color: #f5f8ff;
   }
   #strategy-view.swing-only .strategy-header {
-    display: none;
+    display: block;
+    margin-bottom: 18px;
+  }
+  .swing-market-strip {
+    display: flex;
+    align-items: center;
+    gap: 24px;
+    min-height: 34px;
+    margin-bottom: 8px;
+    padding-bottom: 9px;
+    border-bottom: 1px solid rgba(117, 133, 170, 0.16);
+    color: #dce7ff;
+    font-size: 14px;
+  }
+  .swing-market-strip b {
+    color: #e9f2ff;
+    font-weight: 700;
+  }
+  .swing-market-strip strong {
+    margin-left: 7px;
+    color: #ff4f5f;
+    font-weight: 800;
+  }
+  .swing-market-strip span {
+    margin-left: 6px;
+    font-weight: 700;
+  }
+  .swing-market-strip .red {
+    color: #ff4f5f;
+  }
+  .swing-market-strip .green {
+    color: #29e6a2;
+  }
+  .swing-market-strip time {
+    margin-left: auto;
+    color: #cfd9ee;
+    font-size: 13px;
+  }
+  .swing-market-strip .wifi {
+    color: #28e38a;
+    font-weight: 800;
   }
   .strategy-toolbar.intraday-mode {
     border-bottom: 1px solid rgba(255, 112, 77, 0.18);
@@ -661,12 +729,6 @@ intradayRadarStyles.textContent = `
     justify-content: space-between;
     align-items: end;
     gap: 16px;
-  }
-  .swing-topbar > div:first-child {
-    display: none;
-  }
-  .swing-topbar {
-    justify-content: flex-end;
   }
   .swing-topbar h2 {
     margin: 0;
@@ -1106,6 +1168,33 @@ function setStrategyChrome(mode) {
   if (strategySearch?.previousElementSibling) {
     strategySearch.previousElementSibling.textContent = intraday || swing ? "搜尋雷達股票" : "搜尋股票";
   }
+  renderSwingMarketHeader();
+}
+
+function renderSwingMarketHeader() {
+  const header = document.querySelector("#strategy-view .strategy-header");
+  if (!header) return;
+  let strip = header.querySelector(".swing-market-strip");
+  const isSwing = strategyView?.classList.contains("swing-only");
+  if (!isSwing) {
+    if (strip) strip.remove();
+    return;
+  }
+  if (!strip) {
+    strip = document.createElement("div");
+    strip.className = "swing-market-strip";
+    header.prepend(strip);
+  }
+  const now = marketSnapshot.updatedAt ? new Date(marketSnapshot.updatedAt) : new Date();
+  const date = now.toLocaleDateString("zh-TW", { year: "numeric", month: "2-digit", day: "2-digit", weekday: "short" });
+  const time = now.toLocaleTimeString("zh-TW", { hour12: false });
+  strip.innerHTML = `
+    <b>加權指數</b>${formatMarketMini(marketSnapshot.twse)}
+    <b>櫃買指數</b>${formatMarketMini(marketSnapshot.otc)}
+    <b>台指期夜盤</b>${formatFuturesMini(marketSnapshot.futures)}
+    <time>${date}　${time}</time>
+    <span class="wifi">即時連線中</span>
+  `;
 }
 
 function renderIntradayRadar(evaluated) {
@@ -1346,6 +1435,7 @@ function renderStrategyScanner() {
   }
 
   const keyword = strategyKeyword.trim().toLowerCase();
+  marketSnapshot.totalValue = latestStocks.reduce((sum, stock) => sum + (cleanNumber(stock.value) || 0), 0);
   const universe = buildStrategyUniverse(latestStocks);
   if (selected.length === 1 && selected[0] === "swing_radar") {
     const swingRows = universe.filter((stock) => {
@@ -1670,6 +1760,14 @@ function renderIndexes(indexes, futuresNear, futuresNext, marketStatus, otcSigna
     const percent = valueOf(record, ["漲跌百分比", "漲跌百分比(%)"]);
     const close = valueOf(record, ["收盤指數"]);
     const trendClass = sign === "-" ? "up" : "down";
+    const snapshotKey = index === 0 ? "twse" : "otc";
+    marketSnapshot[snapshotKey] = {
+      sign,
+      points: cleanNumber(points),
+      percent: cleanNumber(percent),
+      close: cleanNumber(close),
+    };
+    marketSnapshot.updatedAt = Date.now();
     metricCards[index].innerHTML = `
       <span>↗ ${label}</span>
       <strong>${formatNumber(close)}</strong>
@@ -1687,6 +1785,8 @@ function renderIndexes(indexes, futuresNear, futuresNext, marketStatus, otcSigna
   if (metricCards[2]) {
     if (futuresNear && futuresNear.price && parseFloat(futuresNear.price) > 0) {
       const sign = String(futuresNear.change || "").startsWith("-") ? "-" : "+";
+      marketSnapshot.futures = futuresNear;
+      marketSnapshot.updatedAt = Date.now();
       metricCards[2].innerHTML = `
         <span>⇅ 台指期夜盤</span>
         <strong>${formatNumber(futuresNear.price, 0)}</strong>
@@ -1694,11 +1794,13 @@ function renderIndexes(indexes, futuresNear, futuresNext, marketStatus, otcSigna
         ${futuresNear.basisLabel ? `<small class="metric-signal ${futuresNear.basisSide === "short" ? "green" : futuresNear.basisSide === "long" ? "red" : ""}">${futuresNear.basisLabel}</small>` : statusLabel ? `<small style="color:#666; font-size:11px; margin-top:2px;">${statusLabel}</small>` : ""}
       `;
     } else {
+      marketSnapshot.futures = null;
       metricCards[2].innerHTML = `<span>⇅ 台指期夜盤</span><strong>--</strong><em>${statusLabel || "等待資料"}</em>`;
     }
   }
 
   if (metricCards[3]) metricCards[3].remove();
+  renderSwingMarketHeader();
 }
 
 function formatChipDate(dateStr) {
@@ -2113,6 +2215,7 @@ function applyStrategyPresetFromLink(link) {
   const text = link?.textContent || "";
   if (!text.includes("策略2") && !text.includes("策略4")) return;
   selectedStrategyIds = new Set([text.includes("策略4") ? "swing_radar" : "intraday_2m"]);
+  if (text.includes("策略4")) swingSignalFilter = "all";
   strategyMode = "any";
   strategyKeyword = "";
   if (strategySearch) strategySearch.value = "";
