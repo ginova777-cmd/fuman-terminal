@@ -44,6 +44,7 @@ const endpoints = {
   institution: "/api/institution",
   history: "/api/history",
   realtime: "/api/realtime",
+  scanStrategy4: "/api/scan-strategy4",
   strategyStocks: "/api/stocks",
   stocks: "https://openapi.twse.com.tw/v1/exchangeReport/STOCK_DAY_ALL",
 };
@@ -64,6 +65,11 @@ let strategyHistoryLoading = false;
 let strategyHistoryCursor = 0;
 let strategyHistoryData = {};
 let strategyHistoryLastScanAt = 0;
+let strategy4ScanLoading = false;
+let strategy4ScanCursor = 0;
+let strategy4ScanMatches = {};
+let strategy4ScanLastAt = 0;
+let strategy4ScanCount = 0;
 let selectedStrategyIds = new Set(["momentum"]);
 let strategyMode = "any";
 let strategyKeyword = "";
@@ -304,6 +310,33 @@ function updateStrategyHistory(item) {
       .sort((a, b) => a.date.localeCompare(b.date)),
     updatedAt: Date.now(),
   };
+}
+
+function updateStrategy4Scan(payload) {
+  const scannedCodes = normalizeArray(payload?.scannedCodes);
+  const matches = normalizeArray(payload?.matches);
+  const matchedCodes = new Set(matches.map((item) => item.code));
+  scannedCodes.forEach((code) => {
+    if (!matchedCodes.has(code)) delete strategy4ScanMatches[code];
+  });
+  matches.forEach((item) => {
+    if (!item?.code) return;
+    const base = latestStocks.find((stock) => stock.code === item.code) || {};
+    const signals = normalizeArray(item.swingSignals || item.signals);
+    strategy4ScanMatches[item.code] = {
+      ...base,
+      ...item,
+      name: base.name || item.name || item.code,
+      tradeVolume: cleanNumber(item.tradeVolume || item.volume || base.tradeVolume),
+      value: cleanNumber(item.value || base.value),
+      percent: Number.isFinite(Number(item.percent)) ? Number(item.percent) : (base.percent || 0),
+      swingSignals: signals,
+      swingStage: item.swingStage || item.stage || base.swingStage,
+      swingScore: cleanNumber(item.swingScore || item.score),
+      updatedAt: Date.now(),
+    };
+  });
+  strategy4ScanCount = Object.keys(strategy4ScanMatches).length;
 }
 
 function updateStrategyQuote(quote) {
@@ -1766,18 +1799,14 @@ function renderIntradayRadar(evaluated) {
 
 function renderSwingRadar(universe) {
   setStrategyChrome("swing");
-  const historyCount = Object.keys(strategyHistoryData).length;
-  if (latestStocks.length && historyCount < latestStocks.length && !strategyHistoryLoading) {
+  const scanCount = strategy4ScanCount || Object.keys(strategy4ScanMatches).length;
+  if (latestStocks.length && !strategy4ScanLoading) {
     setTimeout(() => refreshStrategyHistoryScan(true), 0);
   }
-  const allRows = universe
-    .filter((stock) => (stock.swingSignals || []).length)
-    .map((stock) => {
-      const signalBoost = (stock.swingSignals || []).length * 6;
-      const stageBoost = stock.swingStage?.tone === "low" ? 8 : stock.swingStage?.tone === "mid" ? 6 : stock.swingStage?.tone === "high" ? 3 : -4;
-      const score = clamp(Math.round(42 + (stock.percentRank || 0) * 0.24 + (stock.valueRank || 0) * 0.18 + (stock.volumeRank || 0) * 0.14 + signalBoost + stageBoost), 0, 100);
-      return { ...stock, swingScore: score };
-    });
+  const allowCodes = new Set(universe.map((stock) => stock.code));
+  const allRows = Object.values(strategy4ScanMatches)
+    .filter((stock) => allowCodes.has(stock.code) && (stock.swingSignals || []).length)
+    .map((stock) => ({ ...stock, swingScore: stock.swingScore || stock.score || 0 }));
   const filteredRows = swingSignalFilter === "all"
     ? allRows
     : allRows.filter((stock) => (stock.swingSignals || []).some((signal) => signal.id === swingSignalFilter));
@@ -1792,11 +1821,11 @@ function renderSwingRadar(universe) {
   const scanTime = strategyLastScanAt
     ? new Date(strategyLastScanAt).toLocaleTimeString("zh-TW", { hour12: false })
     : new Date().toLocaleTimeString("zh-TW", { hour12: false });
-  const historyText = strategyHistoryLastScanAt
-    ? `日K ${historyCount}/${latestStocks.length}｜${new Date(strategyHistoryLastScanAt).toLocaleTimeString("zh-TW", { hour12: false })}`
-    : `日K載入中 ${historyCount}/${latestStocks.length}`;
+  const historyText = strategy4ScanLastAt
+    ? `後端日K掃描 ${scanCount} 檔命中｜${new Date(strategy4ScanLastAt).toLocaleTimeString("zh-TW", { hour12: false })}`
+    : `後端日K掃描啟動中`;
 
-  if (strategySummary) strategySummary.textContent = `全台股波段雷達｜日K準確優先｜即時價量 ${scanTime}｜${historyText}`;
+  if (strategySummary) strategySummary.textContent = `全台股波段雷達｜後端策略4計算｜即時價量 ${scanTime}｜${historyText}`;
   if (strategyMatchCount) strategyMatchCount.textContent = rows.length.toLocaleString("zh-TW");
   if (strategyAvgScore) strategyAvgScore.textContent = rows.length ? Math.round(rows.reduce((sum, stock) => sum + stock.swingScore, 0) / rows.length) : "--";
   if (strategyTopHit) strategyTopHit.textContent = rows.length ? `${Math.max(...rows.map((stock) => stock.swingSignals.length))}/8` : "0/8";
@@ -1839,7 +1868,7 @@ function renderSwingRadar(universe) {
       </tr>
     `;
   }).join("") : `
-    <tr><td colspan="9">正在分批載入全台股日K。為了準確，沒有日K資料的股票暫時不硬報訊號；資料進來後會自動顯示符合波段條件的股票。</td></tr>
+    <tr><td colspan="9">後端策略4掃描 API 已啟動。正在分批抓日K並計算符合股票；命中後會自動顯示在這裡。</td></tr>
   `;
 
   strategyTable.innerHTML = `
@@ -1847,7 +1876,7 @@ function renderSwingRadar(universe) {
       <div class="swing-topbar">
         <div>
           <h2>策略4-波段雷達 <span class="swing-live">● 即時偵測中</span></h2>
-          <p>全台股盤中即時價量更新，依你的 TradingView 指標拆成 8 種波段訊號。${historyText}</p>
+          <p>後端抓日K並計算策略4，前端只顯示符合結果。${historyText}</p>
         </div>
         <div class="swing-controls">
           <label>偵測頻率：<select><option>15秒</option></select></label>
@@ -2881,30 +2910,29 @@ async function refreshStrategyRealtimeScan(force = false) {
 }
 
 async function refreshStrategyHistoryScan(force = false) {
-  if (strategyHistoryLoading || !latestStocks.length) return;
+  if (strategy4ScanLoading || !latestStocks.length) return;
   const isStrategyVisible = document.querySelector("#strategy-view")?.classList.contains("active");
-  const isSwingMode = selectedStrategyIds.has("swing_radar") || selectedStrategyIds.has("one_day_rebound");
+  const isSwingMode = selectedStrategyIds.has("swing_radar");
   if (!force && (!isStrategyVisible || !isSwingMode)) return;
 
-  const missing = latestStocks.filter((stock) => !strategyHistoryData[stock.code]);
-  const source = missing.length ? missing : latestStocks;
-  const batchSize = missing.length ? 8 : 4;
-  const start = strategyHistoryCursor % source.length;
+  const source = latestStocks;
+  const batchSize = 20;
+  const start = strategy4ScanCursor % source.length;
   const rows = source.slice(start, start + batchSize);
   const wrapped = rows.length < batchSize ? source.slice(0, batchSize - rows.length) : [];
   const codes = [...rows, ...wrapped].map((stock) => stock.code).filter(Boolean);
-  strategyHistoryCursor = (start + batchSize) % Math.max(source.length, 1);
+  strategy4ScanCursor = (start + batchSize) % Math.max(source.length, 1);
   if (!codes.length) return;
 
-  strategyHistoryLoading = true;
+  strategy4ScanLoading = true;
   try {
-    const payload = await fetchJson(`${endpoints.history}?codes=${encodeURIComponent(codes.join(","))}`, 30000);
-    normalizeArray(payload.histories).forEach(updateStrategyHistory);
-    strategyHistoryLastScanAt = Date.now();
+    const payload = await fetchJson(`${endpoints.scanStrategy4}?codes=${encodeURIComponent(codes.join(","))}`, 30000);
+    updateStrategy4Scan(payload);
+    strategy4ScanLastAt = Date.now();
     renderStrategyScanner();
   } catch (error) {
   } finally {
-    strategyHistoryLoading = false;
+    strategy4ScanLoading = false;
   }
 }
 
