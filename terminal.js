@@ -41,6 +41,7 @@ const endpoints = {
   backend: "/api/market",
   heatmap: "/api/heatmap",
   institution: "/api/institution",
+  history: "/api/history",
   realtime: "/api/realtime",
   strategyStocks: "/api/stocks",
   stocks: "https://openapi.twse.com.tw/v1/exchangeReport/STOCK_DAY_ALL",
@@ -58,6 +59,10 @@ let strategyRealtimeLoading = false;
 let strategyRealtimeCursor = 0;
 let strategyRealtimeQuotes = {};
 let strategyLastScanAt = 0;
+let strategyHistoryLoading = false;
+let strategyHistoryCursor = 0;
+let strategyHistoryData = {};
+let strategyHistoryLastScanAt = 0;
 let selectedStrategyIds = new Set(["momentum"]);
 let strategyMode = "any";
 let strategyKeyword = "";
@@ -65,13 +70,6 @@ let strategyStocksLoading = false;
 let swingSortKey = "score";
 let swingSortDir = "desc";
 let swingSignalFilter = "all";
-let marketSnapshot = {
-  twse: null,
-  otc: null,
-  futures: null,
-  totalValue: 0,
-  updatedAt: null,
-};
 
 const SECTOR_MAP = {
   "2454":"CPU/ASIC/IP","3443":"CPU/ASIC/IP","3661":"CPU/ASIC/IP","3529":"CPU/ASIC/IP",
@@ -169,27 +167,6 @@ function formatChange(sign, points, percent) {
   return `${symbol}${formatNumber(points)}　(${symbol}${formatNumber(percent)}%)`;
 }
 
-function formatCompactValue(value) {
-  const number = cleanNumber(value);
-  if (!number) return "--";
-  return `${formatNumber(number / 100000000, 2)} 億`;
-}
-
-function formatMarketMini(item) {
-  if (!item) return `<strong>--</strong><span>--</span>`;
-  const sign = item.sign === "-" ? "-" : "+";
-  const trend = item.sign === "-" ? "green" : "red";
-  return `<strong>${formatNumber(item.close)}</strong><span class="${trend}">${sign} ${formatNumber(item.points)} (${sign}${formatNumber(item.percent)}%)</span>`;
-}
-
-function formatFuturesMini(item) {
-  if (!item || !cleanNumber(item.price)) return `<strong>--</strong><span>--</span>`;
-  const changeText = String(item.change || "--");
-  const sign = changeText.trim().startsWith("-") ? "-" : "+";
-  const trend = sign === "-" ? "green" : "red";
-  return `<strong>${formatNumber(item.price, 0)}</strong><span class="${trend}">${changeText} (${item.pct || "--"})</span>`;
-}
-
 function valueOf(record, keys) {
   for (const key of keys) {
     if (record[key] !== undefined && record[key] !== "") return record[key];
@@ -233,12 +210,94 @@ function avg(values) {
   return nums.length ? nums.reduce((sum, value) => sum + value, 0) / nums.length : 0;
 }
 
+function sum(values) {
+  return values.reduce((total, value) => total + (Number.isFinite(value) ? value : 0), 0);
+}
+
+function sma(values, length, offset = 0) {
+  const end = values.length - offset;
+  const start = end - length;
+  if (start < 0 || end <= 0) return 0;
+  return avg(values.slice(start, end));
+}
+
+function emaSeries(values, length) {
+  const k = 2 / (length + 1);
+  const out = [];
+  values.forEach((value, index) => {
+    out[index] = index === 0 ? value : value * k + out[index - 1] * (1 - k);
+  });
+  return out;
+}
+
+function rsi(values, length = 14) {
+  if (values.length <= length) return 50;
+  let gains = 0;
+  let losses = 0;
+  for (let i = values.length - length; i < values.length; i++) {
+    const diff = values[i] - values[i - 1];
+    if (diff >= 0) gains += diff;
+    else losses += Math.abs(diff);
+  }
+  if (!losses) return 100;
+  const rs = gains / losses;
+  return 100 - (100 / (1 + rs));
+}
+
+function macdSnapshot(values) {
+  if (values.length < 35) return { macd: 0, signal: 0, histogram: 0, rising: false };
+  const ema12 = emaSeries(values, 12);
+  const ema26 = emaSeries(values, 26);
+  const macdLine = values.map((_, index) => (ema12[index] || 0) - (ema26[index] || 0));
+  const signalLine = emaSeries(macdLine, 9);
+  const macd = macdLine.at(-1) || 0;
+  const signal = signalLine.at(-1) || 0;
+  const prevHist = (macdLine.at(-2) || 0) - (signalLine.at(-2) || 0);
+  const histogram = macd - signal;
+  return { macd, signal, histogram, rising: histogram > prevHist };
+}
+
+function atr(rows, length = 14) {
+  if (rows.length <= length) return 0;
+  const trs = [];
+  for (let i = 1; i < rows.length; i++) {
+    const row = rows[i];
+    const prev = rows[i - 1];
+    trs.push(Math.max(
+      row.high - row.low,
+      Math.abs(row.high - prev.close),
+      Math.abs(row.low - prev.close)
+    ));
+  }
+  return avg(trs.slice(-length));
+}
+
 function getInstitutionTotal(code) {
   const inst = institutionData[code] || {};
   const foreign = Number(inst.foreign) || 0;
   const trust = Number(inst.trust) || 0;
   const dealer = Number(inst.dealer) || 0;
   return { foreign, trust, dealer, total: foreign + trust + dealer };
+}
+
+function updateStrategyHistory(item) {
+  if (!item?.code || !Array.isArray(item.rows)) return;
+  strategyHistoryData[item.code] = {
+    ...item,
+    rows: item.rows
+      .map((row) => ({
+        date: row.date,
+        open: cleanNumber(row.open),
+        high: cleanNumber(row.high),
+        low: cleanNumber(row.low),
+        close: cleanNumber(row.close),
+        volume: cleanNumber(row.volume),
+        value: cleanNumber(row.value),
+      }))
+      .filter((row) => row.date && row.close)
+      .sort((a, b) => a.date.localeCompare(b.date)),
+    updatedAt: Date.now(),
+  };
 }
 
 function updateStrategyQuote(quote) {
@@ -380,18 +439,20 @@ function buildStrategyUniverse(stocks) {
   return stocks.map((stock) => {
     const liveStock = applyStrategyQuote(stock);
     const rankedStock = {
-    ...liveStock,
-    valueRank: rankValue(liveStock.value || 0, values),
-    volumeRank: rankValue(liveStock.tradeVolume || 0, volumes),
-    percentRank: rankValue(liveStock.percent || 0, percents),
-    sector: SECTOR_MAP[stock.code] || "未分類",
-    inst: getInstitutionTotal(stock.code),
-    intradaySignals: getIntradaySignals(liveStock),
-  };
+      ...liveStock,
+      valueRank: rankValue(liveStock.value || 0, values),
+      volumeRank: rankValue(liveStock.tradeVolume || 0, volumes),
+      percentRank: rankValue(liveStock.percent || 0, percents),
+      sector: SECTOR_MAP[stock.code] || "未分類",
+      inst: getInstitutionTotal(stock.code),
+      intradaySignals: getIntradaySignals(liveStock),
+    };
+    const swingDaily = analyzeSwingDaily(rankedStock);
+    const swingStock = { ...rankedStock, swingDaily };
     return {
-      ...rankedStock,
-      swingStage: getSwingStage(rankedStock),
-      swingSignals: getSwingSignals(rankedStock),
+      ...swingStock,
+      swingStage: getSwingStage(swingStock),
+      swingSignals: getSwingSignals(swingStock),
     };
   });
 }
@@ -503,7 +564,107 @@ const SWING_SIGNAL_DEFS = [
   { id: "golden_cross", title: "多金釵", icon: "✦", hint: "短均線轉強候選" },
 ];
 
+function buildSwingDailyRows(stock) {
+  const history = strategyHistoryData[stock.code];
+  if (!history?.rows?.length) return [];
+  const rows = history.rows.map((row) => ({ ...row }));
+  const today = new Date().toISOString().slice(0, 10);
+  const close = cleanNumber(stock.close);
+  const open = cleanNumber(stock.open) || close;
+  const high = cleanNumber(stock.high) || Math.max(open, close);
+  const low = cleanNumber(stock.low) || Math.min(open, close);
+  const volume = cleanNumber(stock.tradeVolume);
+  const value = cleanNumber(stock.value);
+  if (close) {
+    const last = rows.at(-1);
+    const liveRow = {
+      date: today,
+      open,
+      high,
+      low,
+      close,
+      volume: volume || last?.volume || 0,
+      value: value || last?.value || 0,
+      live: true,
+    };
+    if (last?.date === today) rows[rows.length - 1] = { ...last, ...liveRow };
+    else rows.push(liveRow);
+  }
+  return rows.slice(-180);
+}
+
+function analyzeSwingDaily(stock) {
+  const rows = buildSwingDailyRows(stock);
+  if (rows.length < 60) return null;
+  const closes = rows.map((row) => row.close);
+  const highs = rows.map((row) => row.high);
+  const lows = rows.map((row) => row.low);
+  const volumes = rows.map((row) => row.volume);
+  const last = rows.at(-1);
+  const prev = rows.at(-2);
+  const ma5 = sma(closes, 5);
+  const ma10 = sma(closes, 10);
+  const ma20 = sma(closes, 20);
+  const ma20Prev3 = sma(closes, 20, 3);
+  const ma60 = sma(closes, 60);
+  const ema21 = emaSeries(closes, 21).at(-1) || 0;
+  const ema21Prev = emaSeries(closes.slice(0, -1), 21).at(-1) || ema21;
+  const volMa20 = sma(volumes, 20);
+  const macd = macdSnapshot(closes);
+  const rsi14 = rsi(closes, 14);
+  const atr14 = atr(rows, 14);
+  const lookback = rows.slice(-40);
+  const swHigh = Math.max(...lookback.map((row) => row.high));
+  const swLow = Math.min(...lookback.map((row) => row.low));
+  const swDiff = Math.max(swHigh - swLow, 0);
+  const position = swDiff ? (last.close - swLow) / swDiff : 0.5;
+  const stage = position >= 1 ? { label: "過熱", ratio: "1.00+", tone: "hot", value: position }
+    : position >= 0.618 ? { label: "高基期", ratio: position.toFixed(2), tone: "high", value: position }
+    : position >= 0.382 ? { label: "中位階", ratio: position.toFixed(2), tone: "mid", value: position }
+    : { label: "低基期", ratio: position.toFixed(2), tone: "low", value: position };
+  const highest20Prev = Math.max(...rows.slice(-21, -1).map((row) => row.high));
+  const highest10Prev = Math.max(...rows.slice(-11, -1).map((row) => row.high));
+  const neckline = Math.max(...lookback.slice(0, Math.max(8, Math.floor(lookback.length * 0.6))).map((row) => row.high));
+  const pct = prev?.close ? ((last.close - prev.close) / prev.close) * 100 : stock.percent || 0;
+  const gapUp = prev && last.open > prev.high && last.close > last.open;
+  const realBody = (last.high - last.low) > 0 ? Math.abs(last.close - last.open) / (last.high - last.low) > 0.3 : false;
+  const bullTrend = last.close > ma20 && last.close > ema21 && ema21 > ema21Prev && macd.macd > macd.signal && ma20 > ma20Prev3;
+  const volumeRatio = volMa20 ? last.volume / volMa20 : 0;
+  const deepFall = ma20 ? ((last.close - ma20) / ma20) * 100 < -1.5 : false;
+  return {
+    rows,
+    last,
+    prev,
+    closes,
+    ma5,
+    ma10,
+    ma20,
+    ma60,
+    ema21,
+    ema21Prev,
+    volMa20,
+    volumeRatio,
+    macd,
+    rsi14,
+    atr14,
+    swHigh,
+    swLow,
+    position,
+    stage,
+    highest20Prev,
+    highest10Prev,
+    neckline,
+    pct,
+    gapUp,
+    realBody,
+    bullTrend,
+    deepFall,
+  };
+}
+
 function getSwingStage(stock) {
+  const daily = stock.swingDaily || analyzeSwingDaily(stock);
+  if (daily?.stage) return daily.stage;
   const pctRank = stock.percentRank || 0;
   const valueRank = stock.valueRank || 0;
   const volumeRank = stock.volumeRank || 0;
@@ -515,45 +676,72 @@ function getSwingStage(stock) {
 }
 
 function getSwingSignals(stock) {
-  const pct = stock.percent || 0;
-  const valueRank = stock.valueRank || 0;
-  const volumeRank = stock.volumeRank || 0;
-  const percentRank = stock.percentRank || 0;
-  const close = cleanNumber(stock.close);
-  const open = cleanNumber(stock.open);
-  const high = cleanNumber(stock.high);
-  const low = cleanNumber(stock.low);
-  const prevClose = cleanNumber(stock.prevClose) || (close - cleanNumber(stock.change));
-  const change = cleanNumber(stock.change);
-  const isRed = close >= open || change > 0;
-  const gapPct = open && prevClose ? ((open - prevClose) / prevClose) * 100 : 0;
-  const dayRange = high && low ? ((high - low) / Math.max(low, 0.01)) * 100 : 0;
-  const stage = getSwingStage(stock);
+  const daily = stock.swingDaily || analyzeSwingDaily(stock);
+  if (!daily) return [];
+  const pct = daily.pct;
+  const last = daily.last;
+  const prev = daily.prev;
+  const stage = daily.stage;
   const signals = [];
+  const isRed = last.close > last.open;
+  const volStrong = daily.volumeRatio >= 1.2;
+  const trendConfirmed = daily.ema21 > daily.ma20;
+  const bullAttack = daily.bullTrend && isRed && volStrong && daily.realBody &&
+    (daily.gapUp || (prev && last.volume > prev.volume * 1.2) || last.high > daily.highest10Prev);
+  const goldenCross = daily.ma5 > daily.ma10 && daily.ma10 > daily.ma20 && isRed;
+  const breakawayGap = daily.gapUp && last.close > daily.highest20Prev;
+  const runawayGap = daily.gapUp && last.close > daily.ma20 && !breakawayGap;
+  const saucerBreakout = last.close > daily.neckline && prev?.close <= daily.neckline && daily.volumeRatio >= 1.1 && isRed && daily.realBody;
+  const nBase = last.close > daily.highest10Prev && last.close > daily.ma20 && trendConfirmed && volStrong && isRed && stage.tone !== "hot";
+  const roc3 = daily.closes.length > 3 ? ((last.close - daily.closes.at(-4)) / daily.closes.at(-4)) * 100 : 0;
+  const vFast = roc3 < -10 && daily.volumeRatio >= 1.5 && isRed && prev && last.close > prev.high && daily.rsi14 < 50;
+  const vReversal = daily.deepFall && isRed && (
+    (roc3 < -5 ? 35 : 0) +
+    (prev && last.close > prev.high ? 25 : 0) +
+    (runawayGap ? 20 : 0) +
+    (daily.rsi14 < 40 ? 10 : 0)
+  ) >= 60;
+  const threeInside = daily.rows.length >= 3 && (() => {
+    const a = daily.rows.at(-3);
+    const b = daily.rows.at(-2);
+    const c = daily.rows.at(-1);
+    const aRange = a.high - a.low;
+    return a.close < a.open &&
+      aRange > 0 &&
+      Math.abs(a.close - a.open) / aRange > 0.5 &&
+      b.close > b.open &&
+      b.close < a.open &&
+      b.open > a.close &&
+      c.close > c.open &&
+      c.close > a.open &&
+      c.volume > daily.volMa20 * 1.2 &&
+      c.close > daily.ma20 &&
+      trendConfirmed;
+  })();
 
-  if (pct >= 2.2 && valueRank >= 58 && volumeRank >= 55 && isRed) {
-    signals.push({ id: "bull_attack", short: "攻擊", icon: "🔥", reason: `價量轉強，漲幅 ${pct.toFixed(2)}%，成交值排名 ${valueRank}%。` });
+  if (bullAttack) {
+    signals.push({ id: "bull_attack", short: "攻擊", icon: "🔥", reason: `站上MA20/EMA21，MACD多頭，量比 ${daily.volumeRatio.toFixed(2)}，日K多頭攻擊。` });
   }
-  if (pct >= 1.2 && pct <= 7.8 && valueRank >= 62 && volumeRank >= 58 && stage.tone !== "hot") {
-    signals.push({ id: "n_base", short: "N字", icon: "", reason: `強勢股回攻候選，成交值/量能進入市場前段，位階 ${stage.label}。` });
+  if (nBase) {
+    signals.push({ id: "n_base", short: "N字", icon: "", reason: `突破近10日壓力，站上MA20且趨勢確認，位階 ${stage.label}。` });
   }
-  if (pct >= 0.8 && pct <= 4.5 && valueRank >= 48 && volumeRank >= 42 && percentRank >= 55 && stage.tone !== "hot") {
-    signals.push({ id: "saucer", short: "圓弧", icon: "◜", reason: `低到中位階轉強，漲幅不過熱且量能開始放大。` });
+  if (saucerBreakout) {
+    signals.push({ id: "saucer", short: "圓弧", icon: "◜", reason: `突破40日整理頸線，量能放大，偏圓弧底突破。` });
   }
-  if (gapPct >= 1.5 && pct >= 2 && close >= open && valueRank >= 55) {
-    signals.push({ id: "breakaway_gap", short: "突破缺口", icon: "◆", reason: `跳空 ${gapPct.toFixed(2)}%，開高走強，偏突破缺口候選。` });
+  if (breakawayGap) {
+    signals.push({ id: "breakaway_gap", short: "突破缺口", icon: "◆", reason: `跳空突破近20日整理高點，偏突破缺口。` });
   }
-  if (gapPct >= 0.8 && pct >= 3.2 && close > open && stage.tone === "high" && valueRank >= 60) {
-    signals.push({ id: "runaway_gap", short: "逃逸缺口", icon: "🚀", reason: `高位階續強且跳空延伸，偏逃逸缺口候選。` });
+  if (runawayGap) {
+    signals.push({ id: "runaway_gap", short: "逃逸缺口", icon: "🚀", reason: `跳空且站上MA20，多頭段延續，偏逃逸缺口。` });
   }
-  if (pct >= 1 && percentRank >= 72 && stage.tone === "low" && volumeRank >= 45) {
-    signals.push({ id: "v_reversal", short: "V轉", icon: "V", reason: `低基期快速翻紅，漲幅排名轉強，留意 V 轉反彈。` });
+  if (vFast || vReversal) {
+    signals.push({ id: "v_reversal", short: "V轉", icon: "V", reason: vFast ? `3日急跌後放量翻紅，RSI ${daily.rsi14.toFixed(1)}，偏V型快殺反彈。` : `跌深後收紅並突破前高，V轉積分達標。` });
   }
-  if (pct > 0 && pct <= 3.8 && dayRange >= 2.2 && close >= open && valueRank >= 50) {
-    signals.push({ id: "three_inside", short: "翻紅", icon: "↻", reason: `盤中由弱轉強候選，收紅且區間波動足夠。` });
+  if (threeInside) {
+    signals.push({ id: "three_inside", short: "翻紅", icon: "↻", reason: `三內翻紅結構成立，站上MA20且趨勢確認。` });
   }
-  if (pct > 0 && pct <= 5.8 && valueRank >= 52 && volumeRank >= 50 && stage.tone !== "hot") {
-    signals.push({ id: "golden_cross", short: "金釵", icon: "✦", reason: `短線價量轉強，偏多金釵預備名單。` });
+  if (goldenCross) {
+    signals.push({ id: "golden_cross", short: "金釵", icon: "✦", reason: `MA5 > MA10 > MA20 且收紅，多金釵候選。` });
   }
 
   return signals;
@@ -675,47 +863,7 @@ intradayRadarStyles.textContent = `
     color: #f5f8ff;
   }
   #strategy-view.swing-only .strategy-header {
-    display: block;
-    margin-bottom: 18px;
-  }
-  .swing-market-strip {
-    display: flex;
-    align-items: center;
-    gap: 24px;
-    min-height: 34px;
-    margin-bottom: 8px;
-    padding-bottom: 9px;
-    border-bottom: 1px solid rgba(117, 133, 170, 0.16);
-    color: #dce7ff;
-    font-size: 14px;
-  }
-  .swing-market-strip b {
-    color: #e9f2ff;
-    font-weight: 700;
-  }
-  .swing-market-strip strong {
-    margin-left: 7px;
-    color: #ff4f5f;
-    font-weight: 800;
-  }
-  .swing-market-strip span {
-    margin-left: 6px;
-    font-weight: 700;
-  }
-  .swing-market-strip .red {
-    color: #ff4f5f;
-  }
-  .swing-market-strip .green {
-    color: #29e6a2;
-  }
-  .swing-market-strip time {
-    margin-left: auto;
-    color: #cfd9ee;
-    font-size: 13px;
-  }
-  .swing-market-strip .wifi {
-    color: #28e38a;
-    font-weight: 800;
+    display: none;
   }
   .strategy-toolbar.intraday-mode {
     border-bottom: 1px solid rgba(255, 112, 77, 0.18);
@@ -1135,6 +1283,9 @@ document.head.appendChild(intradayRadarStyles);
 function setStrategyChrome(mode) {
   const intraday = mode === "intraday";
   const swing = mode === "swing";
+  if (swing) {
+    document.querySelector("#strategy-view .strategy-header")?.remove();
+  }
   if (strategyBadge) strategyBadge.textContent = intraday ? "FMN://intraday.2m.scan" : swing ? "FMN://swing.daily.scan" : "FMN://strategy.scan";
   if (strategyTitle) strategyTitle.textContent = intraday ? "2分K當沖雷達" : swing ? "策略4-波段雷達" : "綜合策略選股";
   if (strategyHeaderTitle) strategyHeaderTitle.textContent = intraday ? "2分K當沖雷達" : swing ? "策略4-波段雷達" : "策略中心";
@@ -1168,33 +1319,6 @@ function setStrategyChrome(mode) {
   if (strategySearch?.previousElementSibling) {
     strategySearch.previousElementSibling.textContent = intraday || swing ? "搜尋雷達股票" : "搜尋股票";
   }
-  renderSwingMarketHeader();
-}
-
-function renderSwingMarketHeader() {
-  const header = document.querySelector("#strategy-view .strategy-header");
-  if (!header) return;
-  let strip = header.querySelector(".swing-market-strip");
-  const isSwing = strategyView?.classList.contains("swing-only");
-  if (!isSwing) {
-    if (strip) strip.remove();
-    return;
-  }
-  if (!strip) {
-    strip = document.createElement("div");
-    strip.className = "swing-market-strip";
-    header.prepend(strip);
-  }
-  const now = marketSnapshot.updatedAt ? new Date(marketSnapshot.updatedAt) : new Date();
-  const date = now.toLocaleDateString("zh-TW", { year: "numeric", month: "2-digit", day: "2-digit", weekday: "short" });
-  const time = now.toLocaleTimeString("zh-TW", { hour12: false });
-  strip.innerHTML = `
-    <b>加權指數</b>${formatMarketMini(marketSnapshot.twse)}
-    <b>櫃買指數</b>${formatMarketMini(marketSnapshot.otc)}
-    <b>台指期夜盤</b>${formatFuturesMini(marketSnapshot.futures)}
-    <time>${date}　${time}</time>
-    <span class="wifi">即時連線中</span>
-  `;
 }
 
 function renderIntradayRadar(evaluated) {
@@ -1329,8 +1453,12 @@ function renderSwingRadar(universe) {
   const scanTime = strategyLastScanAt
     ? new Date(strategyLastScanAt).toLocaleTimeString("zh-TW", { hour12: false })
     : new Date().toLocaleTimeString("zh-TW", { hour12: false });
+  const historyCount = Object.keys(strategyHistoryData).length;
+  const historyText = strategyHistoryLastScanAt
+    ? `日K ${historyCount}/${latestStocks.length}｜${new Date(strategyHistoryLastScanAt).toLocaleTimeString("zh-TW", { hour12: false })}`
+    : `日K載入中 ${historyCount}/${latestStocks.length}`;
 
-  if (strategySummary) strategySummary.textContent = `全台股波段雷達｜盤中即時價量更新｜最後更新 ${scanTime}`;
+  if (strategySummary) strategySummary.textContent = `全台股波段雷達｜日K準確優先｜即時價量 ${scanTime}｜${historyText}`;
   if (strategyMatchCount) strategyMatchCount.textContent = rows.length.toLocaleString("zh-TW");
   if (strategyAvgScore) strategyAvgScore.textContent = rows.length ? Math.round(rows.reduce((sum, stock) => sum + stock.swingScore, 0) / rows.length) : "--";
   if (strategyTopHit) strategyTopHit.textContent = rows.length ? `${Math.max(...rows.map((stock) => stock.swingSignals.length))}/8` : "0/8";
@@ -1373,7 +1501,7 @@ function renderSwingRadar(universe) {
       </tr>
     `;
   }).join("") : `
-    <tr><td colspan="9">策略4波段雷達框架已啟動。開盤後會用即時價量輪巡全台股；完整 MA/MACD/RSI/Fib 版會在接上日K歷史資料後更精準。</td></tr>
+    <tr><td colspan="9">正在分批載入全台股日K。為了準確，沒有日K資料的股票暫時不硬報訊號；資料進來後會自動顯示符合波段條件的股票。</td></tr>
   `;
 
   strategyTable.innerHTML = `
@@ -1435,7 +1563,6 @@ function renderStrategyScanner() {
   }
 
   const keyword = strategyKeyword.trim().toLowerCase();
-  marketSnapshot.totalValue = latestStocks.reduce((sum, stock) => sum + (cleanNumber(stock.value) || 0), 0);
   const universe = buildStrategyUniverse(latestStocks);
   if (selected.length === 1 && selected[0] === "swing_radar") {
     const swingRows = universe.filter((stock) => {
@@ -1760,14 +1887,6 @@ function renderIndexes(indexes, futuresNear, futuresNext, marketStatus, otcSigna
     const percent = valueOf(record, ["漲跌百分比", "漲跌百分比(%)"]);
     const close = valueOf(record, ["收盤指數"]);
     const trendClass = sign === "-" ? "up" : "down";
-    const snapshotKey = index === 0 ? "twse" : "otc";
-    marketSnapshot[snapshotKey] = {
-      sign,
-      points: cleanNumber(points),
-      percent: cleanNumber(percent),
-      close: cleanNumber(close),
-    };
-    marketSnapshot.updatedAt = Date.now();
     metricCards[index].innerHTML = `
       <span>↗ ${label}</span>
       <strong>${formatNumber(close)}</strong>
@@ -1785,8 +1904,6 @@ function renderIndexes(indexes, futuresNear, futuresNext, marketStatus, otcSigna
   if (metricCards[2]) {
     if (futuresNear && futuresNear.price && parseFloat(futuresNear.price) > 0) {
       const sign = String(futuresNear.change || "").startsWith("-") ? "-" : "+";
-      marketSnapshot.futures = futuresNear;
-      marketSnapshot.updatedAt = Date.now();
       metricCards[2].innerHTML = `
         <span>⇅ 台指期夜盤</span>
         <strong>${formatNumber(futuresNear.price, 0)}</strong>
@@ -1794,13 +1911,11 @@ function renderIndexes(indexes, futuresNear, futuresNext, marketStatus, otcSigna
         ${futuresNear.basisLabel ? `<small class="metric-signal ${futuresNear.basisSide === "short" ? "green" : futuresNear.basisSide === "long" ? "red" : ""}">${futuresNear.basisLabel}</small>` : statusLabel ? `<small style="color:#666; font-size:11px; margin-top:2px;">${statusLabel}</small>` : ""}
       `;
     } else {
-      marketSnapshot.futures = null;
       metricCards[2].innerHTML = `<span>⇅ 台指期夜盤</span><strong>--</strong><em>${statusLabel || "等待資料"}</em>`;
     }
   }
 
   if (metricCards[3]) metricCards[3].remove();
-  renderSwingMarketHeader();
 }
 
 function formatChipDate(dateStr) {
@@ -2221,6 +2336,7 @@ function applyStrategyPresetFromLink(link) {
   if (strategySearch) strategySearch.value = "";
   loadStrategyStocks();
   refreshStrategyRealtimeScan(true);
+  if (text.includes("策略4")) refreshStrategyHistoryScan(true);
 }
 
 async function refreshStrategyRealtimeScan(force = false) {
@@ -2246,6 +2362,34 @@ async function refreshStrategyRealtimeScan(force = false) {
   } catch (error) {
   } finally {
     strategyRealtimeLoading = false;
+  }
+}
+
+async function refreshStrategyHistoryScan(force = false) {
+  if (strategyHistoryLoading || !latestStocks.length) return;
+  const isStrategyVisible = document.querySelector("#strategy-view")?.classList.contains("active");
+  const isSwingMode = selectedStrategyIds.has("swing_radar");
+  if (!force && (!isStrategyVisible || !isSwingMode)) return;
+
+  const missing = latestStocks.filter((stock) => !strategyHistoryData[stock.code]);
+  const source = missing.length ? missing : latestStocks;
+  const batchSize = missing.length ? 8 : 4;
+  const start = strategyHistoryCursor % source.length;
+  const rows = source.slice(start, start + batchSize);
+  const wrapped = rows.length < batchSize ? source.slice(0, batchSize - rows.length) : [];
+  const codes = [...rows, ...wrapped].map((stock) => stock.code).filter(Boolean);
+  strategyHistoryCursor = (start + batchSize) % Math.max(source.length, 1);
+  if (!codes.length) return;
+
+  strategyHistoryLoading = true;
+  try {
+    const payload = await fetchJson(`${endpoints.history}?codes=${encodeURIComponent(codes.join(","))}`, 30000);
+    normalizeArray(payload.histories).forEach(updateStrategyHistory);
+    strategyHistoryLastScanAt = Date.now();
+    renderStrategyScanner();
+  } catch (error) {
+  } finally {
+    strategyHistoryLoading = false;
   }
 }
 
@@ -2279,6 +2423,7 @@ document.querySelectorAll("[data-chip-filter]").forEach((button) => {
 setInterval(tickClock, 1000);
 setInterval(loadMarketData, 15*1000);
 setInterval(refreshStrategyRealtimeScan, 15*1000);
+setInterval(refreshStrategyHistoryScan, 30*1000);
 setInterval(loadHeatmap, 10*60*1000);
 setInterval(loadInstitution, 10*60*1000);
 
