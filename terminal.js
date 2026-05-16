@@ -401,6 +401,172 @@ function evaluateStrategyStock(stock) {
   return { ...stock, matches, score };
 }
 
+const INTRADAY_SIGNAL_DEFS = [
+  { id: "gap", title: "跳空", icon: "🚀", hint: "開盤高於昨收且量能放大" },
+  { id: "breakout", title: "突破", icon: "🔥", hint: "站上盤中強勢區與 VWAP" },
+  { id: "ma35_macd", title: "MA35 + MACD", icon: "🟢", hint: "站上 MA35 且動能向上" },
+  { id: "diamond", title: "鑽石", icon: "💎", hint: "回測 0.618 後收紅轉強" },
+  { id: "surge", title: "瞬間拉抬", icon: "⚡", hint: "短時間價格快速推升" },
+  { id: "limit_near", title: "即將漲停", icon: "🔒", hint: "距離漲停區小於 1.5%" },
+];
+
+const intradayRadarStyles = document.createElement("style");
+intradayRadarStyles.textContent = `
+  .intraday-radar {
+    border: 1px solid rgba(126, 200, 227, 0.16);
+    border-radius: 8px;
+    background: rgba(13, 19, 32, 0.72);
+    padding: 14px;
+    margin: 0 0 14px;
+  }
+  .intraday-radar-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 12px;
+  }
+  .intraday-radar-head span {
+    color: #ff704d;
+    font-size: 11px;
+    font-weight: 700;
+  }
+  .intraday-radar-head h3 {
+    margin: 4px 0;
+    color: #f5f8ff;
+    font-size: 20px;
+  }
+  .intraday-radar-head p,
+  .intraday-radar-head strong {
+    margin: 0;
+    color: #8d9ab4;
+    font-size: 12px;
+  }
+  .intraday-signal-grid {
+    display: grid;
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+    gap: 8px;
+  }
+  .intraday-signal-card {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    align-items: center;
+    gap: 8px;
+    min-height: 70px;
+    border: 1px solid rgba(116, 134, 178, 0.14);
+    border-radius: 8px;
+    background: rgba(24, 31, 47, 0.58);
+    padding: 10px;
+  }
+  .intraday-signal-card.active {
+    border-color: rgba(255, 112, 77, 0.58);
+    background: rgba(255, 112, 77, 0.13);
+  }
+  .intraday-signal-card > span {
+    font-size: 18px;
+  }
+  .intraday-signal-card strong {
+    display: block;
+    color: #f5f8ff;
+    font-size: 13px;
+  }
+  .intraday-signal-card small {
+    display: block;
+    color: #8490aa;
+    font-size: 10px;
+    line-height: 1.35;
+    margin-top: 3px;
+  }
+  .intraday-signal-card em {
+    color: #7ec8e3;
+    font-style: normal;
+    font-size: 22px;
+    font-weight: 800;
+  }
+  @media (max-width: 1280px) {
+    .intraday-signal-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  }
+  @media (max-width: 760px) {
+    .intraday-signal-grid { grid-template-columns: 1fr; }
+  }
+`;
+document.head.appendChild(intradayRadarStyles);
+
+function renderIntradayRadar(evaluated) {
+  const rows = evaluated
+    .filter((stock) => (stock.intradaySignals || []).length)
+    .sort((a, b) => (b.intradaySignals.length - a.intradaySignals.length) || b.score - a.score || b.percent - a.percent)
+    .slice(0, 80);
+  const signalCounts = Object.fromEntries(INTRADAY_SIGNAL_DEFS.map((signal) => [signal.id, 0]));
+  rows.forEach((stock) => {
+    (stock.intradaySignals || []).forEach((signal) => {
+      signalCounts[signal.id] = (signalCounts[signal.id] || 0) + 1;
+    });
+  });
+  const scanTime = strategyLastScanAt
+    ? new Date(strategyLastScanAt).toLocaleTimeString("zh-TW", { hour12: false })
+    : "等待開盤";
+
+  if (strategySummary) strategySummary.textContent = `全台股盤中輪巡｜每 15 秒掃描一批｜最後更新 ${scanTime}`;
+  if (strategyMatchCount) strategyMatchCount.textContent = rows.length.toLocaleString("zh-TW");
+  if (strategyAvgScore) strategyAvgScore.textContent = rows.length ? Math.round(rows.reduce((sum, stock) => sum + stock.score, 0) / rows.length) : "--";
+  if (strategyTopHit) strategyTopHit.textContent = rows.length ? `${Math.max(...rows.map((stock) => stock.intradaySignals.length))}/6` : "0/6";
+
+  const cards = INTRADAY_SIGNAL_DEFS.map((signal) => {
+    const count = signalCounts[signal.id] || 0;
+    return `
+      <article class="intraday-signal-card ${count ? "active" : ""}">
+        <span>${signal.icon}</span>
+        <div>
+          <strong>${signal.title}</strong>
+          <small>${signal.hint}</small>
+        </div>
+        <em>${count}</em>
+      </article>
+    `;
+  }).join("");
+
+  const table = rows.length ? `
+    <div class="strategy-row strategy-head">
+      <span>股票</span><span>分數</span><span>盤中訊號</span><span>漲幅</span><span>成交值</span><span>原因</span>
+    </div>
+    ${rows.map((stock) => {
+      const sign = stock.percent >= 0 ? "+" : "";
+      const chips = stock.intradaySignals.map((signal) => `<b>${signal.icon} ${signal.short}</b>`).join("");
+      const reason = stock.intradaySignals[0]?.reason || "盤中訊號觸發";
+      return `
+        <div class="strategy-row">
+          <span><strong>${stock.code}</strong><small>${stock.name}</small></span>
+          <em>${stock.score}</em>
+          <span class="strategy-chips">${chips}</span>
+          <span class="${stock.percent >= 0 ? "down" : "up"}">${sign}${stock.percent.toFixed(2)}%</span>
+          <span>${(stock.value / 100000000).toFixed(1)} 億</span>
+          <small>${reason}</small>
+        </div>
+      `;
+    }).join("")}
+  ` : `
+    <div class="empty-state">
+      2分K當沖雷達框架已啟動。現在沒有觸發訊號；開盤後會輪巡全台股並顯示符合「跳空 / 突破 / MA35+MACD / 鑽石 / 瞬間拉抬 / 即將漲停」的股票。
+    </div>
+  `;
+
+  strategyTable.innerHTML = `
+    <section class="intraday-radar">
+      <div class="intraday-radar-head">
+        <div>
+          <span>FMN://intraday.2m.scan</span>
+          <h3>2分K當沖雷達</h3>
+          <p>全台股盤中即時偵測，命中訊號才進入下方清單。</p>
+        </div>
+        <strong>${scanTime}</strong>
+      </div>
+      <div class="intraday-signal-grid">${cards}</div>
+    </section>
+    ${table}
+  `;
+}
+
 function renderStrategyScanner() {
   if (!strategyTable) return;
   const selected = [...selectedStrategyIds];
@@ -432,6 +598,11 @@ function renderStrategyScanner() {
     const passKeyword = !keyword || stock.code.includes(keyword) || stock.name.toLowerCase().includes(keyword);
     return passMode && passKeyword;
   }).sort((a, b) => b.matches.length - a.matches.length || b.score - a.score || b.value - a.value);
+
+  if (selected.length === 1 && selected[0] === "intraday_2m") {
+    renderIntradayRadar(evaluated);
+    return;
+  }
 
   const topRows = evaluated.slice(0, 50);
   const avgScore = topRows.length
