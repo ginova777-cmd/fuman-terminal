@@ -3243,23 +3243,28 @@ async function refreshOpenBuyScan(force = false) {
   const source = latestStocks.filter((stock) => !/^00/.test(stock.code));
   openBuyScanTotal = source.length;
   if (!source.length) return;
-  const batchSize = 24;
+  const batchSize = 48;
   const start = openBuyScanCursor % source.length;
   const rows = source.slice(start, start + batchSize);
   const wrapped = rows.length < batchSize ? source.slice(0, batchSize - rows.length) : [];
   const codes = [...rows, ...wrapped].map((stock) => stock.code).filter(Boolean);
   openBuyScanCursor = (start + batchSize) % Math.max(source.length, 1);
+  const completedCycle = openBuyScanCursor <= start;
   if (!codes.length) return;
 
   openBuyScanLoading = true;
   try {
-    const payload = await fetchJson(`${endpoints.scanOpenBuy}?codes=${encodeURIComponent(codes.join(","))}`, 30000);
+    const payload = await fetchJson(`${endpoints.scanOpenBuy}?codes=${encodeURIComponent(codes.join(","))}`, 45000);
     updateOpenBuyScan(payload);
     openBuyScanLastAt = Date.now();
     renderStrategyScanner();
   } catch (error) {
   } finally {
     openBuyScanLoading = false;
+    const stillVisible = document.querySelector("#strategy-view")?.classList.contains("active") && selectedStrategyIds.has("open_buy");
+    if (stillVisible) {
+      setTimeout(() => refreshOpenBuyScan(true), completedCycle ? 3000 : 350);
+    }
   }
 }
 
@@ -3343,7 +3348,7 @@ document.querySelectorAll("[data-chip-filter]").forEach((button) => {
 setInterval(tickClock, 1000);
 setInterval(loadMarketData, 15*1000);
 setInterval(refreshStrategyRealtimeScan, 15*1000);
-setInterval(refreshOpenBuyScan, 10*1000);
+setInterval(refreshOpenBuyScan, 3000);
 setInterval(refreshStrategyHistoryScan, 3000);
 setInterval(loadHeatmap, 10*60*1000);
 setInterval(loadInstitution, 10*60*1000);
