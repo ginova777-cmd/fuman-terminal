@@ -46,6 +46,7 @@ const endpoints = {
   realtime: "/api/realtime",
   scanOpenBuy: "/api/scan-open-buy",
   scanStrategy4: "/api/scan-strategy4",
+  scanWarrantFlow: "/api/scan-warrant-flow",
   strategyStocks: "/api/stocks",
   stocks: "https://openapi.twse.com.tw/v1/exchangeReport/STOCK_DAY_ALL",
 };
@@ -80,6 +81,10 @@ let openBuyScanLastAt = 0;
 let openBuyScanCount = 0;
 let openBuyScannedCodes = new Set();
 let openBuyScanTotal = 0;
+let warrantFlowLoading = false;
+let warrantFlowData = [];
+let warrantFlowUpdatedAt = 0;
+let warrantFlowKeyword = "";
 let selectedStrategyIds = new Set(["momentum"]);
 let strategyMode = "any";
 let strategyKeyword = "";
@@ -2269,6 +2274,149 @@ function renderStrategyScanner() {
   `;
 }
 
+function hydrateWarrantFlowItem(item) {
+  const name = String(item.underlyingName || "").trim();
+  const exact = latestStocks.find((stock) => stock.name === name);
+  const partial = exact || latestStocks.find((stock) => name && (stock.name.includes(name) || name.includes(stock.name)));
+  return {
+    ...item,
+    code: partial?.code || "",
+    name: partial?.name || name || "--",
+    stockPercent: partial?.percent || 0,
+    stockClose: partial?.close || 0,
+    stockValue: partial?.value || 0,
+  };
+}
+
+function formatWarrantMoney(value) {
+  const number = cleanNumber(value);
+  if (number >= 100000000) return `${(number / 100000000).toFixed(2)} 億`;
+  if (number >= 10000) return `${Math.round(number / 10000).toLocaleString("zh-TW")} 萬`;
+  return Math.round(number).toLocaleString("zh-TW");
+}
+
+function renderWarrantFlow() {
+  const panel = viewPanels["warrant-flow"];
+  if (!panel) return;
+  const keyword = warrantFlowKeyword.trim().toLowerCase();
+  const rows = warrantFlowData
+    .map(hydrateWarrantFlowItem)
+    .filter((item) => !keyword ||
+      item.code.includes(keyword) ||
+      item.name.toLowerCase().includes(keyword) ||
+      item.underlyingName.toLowerCase().includes(keyword))
+    .sort((a, b) => b.score - a.score || b.callValue - a.callValue)
+    .slice(0, 80);
+  const totalCall = warrantFlowData.reduce((sum, item) => sum + cleanNumber(item.callValue), 0);
+  const totalPut = warrantFlowData.reduce((sum, item) => sum + cleanNumber(item.putValue), 0);
+  const updatedText = warrantFlowUpdatedAt
+    ? new Date(warrantFlowUpdatedAt).toLocaleTimeString("zh-TW", { hour12: false })
+    : "等待更新";
+
+  const body = rows.length ? rows.map((item) => {
+    const sign = item.stockPercent >= 0 ? "+" : "";
+    const hot = item.score >= 82 ? "hot" : item.score >= 68 ? "mid" : "low";
+    return `
+      <tr>
+        <td><span class="code">${item.code || "--"}</span></td>
+        <td>${item.name}</td>
+        <td><span class="swing-score">${item.score}</span></td>
+        <td class="price">${formatWarrantMoney(item.callValue)}</td>
+        <td>${formatWarrantMoney(item.putValue)}</td>
+        <td><b class="swing-stage ${hot}">${item.callPutRatio >= 99 ? "99+" : item.callPutRatio}</b></td>
+        <td>${item.callCount} / ${item.putCount}</td>
+        <td class="pct">${sign}${item.stockPercent.toFixed(2)}%</td>
+        <td>${item.topWarrants.map((warrant) => `<b>${warrant.code}</b>`).join(" ")}</td>
+        <td>${item.reason}</td>
+      </tr>
+    `;
+  }).join("") : `
+    <tr><td colspan="10">權證資金走向讀取中。會優先顯示「認購權證先熱、股票尚未噴出」的標的。</td></tr>
+  `;
+
+  panel.innerHTML = `
+    <header class="page-header chip-page-header">
+      <div>
+        <span class="console-badge">FMN://warrant.flow</span>
+        <h1>策略6-權證資金走向</h1>
+        <p class="refresh-line">用認購/認售權證成交金額推估標的股票短線熱度｜更新 ${updatedText}</p>
+      </div>
+    </header>
+    <section class="swing-dashboard">
+      <div class="swing-topbar">
+        <div>
+          <h2>權證先熱雷達 <span class="swing-live">● 日資料版</span></h2>
+          <p>統計同一標的底下的認購與認售權證成交金額；認購集中、認售偏低、股票尚未大漲者優先觀察。</p>
+        </div>
+        <div class="swing-controls">
+          <label>資料：<select><option>上市 + 上櫃</option></select></label>
+          <label>模式：<select><option>認購偏多</option></select></label>
+        </div>
+      </div>
+      <div class="swing-signal-grid">
+        <button class="swing-card active selected" type="button">
+          <div><strong>命中標的</strong><small>權證資金偏多</small></div><em>${warrantFlowData.length}</em>
+        </button>
+        <button class="swing-card active" type="button">
+          <div><strong>認購金額</strong><small>候選合計</small></div><em>${formatWarrantMoney(totalCall)}</em>
+        </button>
+        <button class="swing-card ${totalPut ? "active" : ""}" type="button">
+          <div><strong>認售金額</strong><small>候選合計</small></div><em>${formatWarrantMoney(totalPut)}</em>
+        </button>
+      </div>
+      <section class="swing-panel">
+        <div class="swing-tabs">
+          <button class="active" type="button">全部(${rows.length})</button>
+          <div class="swing-actions">
+            <input id="warrant-flow-search" type="search" placeholder="搜尋代號/名稱" value="${warrantFlowKeyword}">
+            <button id="warrant-flow-refresh" type="button">重新整理</button>
+          </div>
+        </div>
+        <table class="swing-table">
+          <thead>
+            <tr>
+              <th>股票代號</th><th>標的名稱</th><th>熱度</th><th>認購金額</th><th>認售金額</th><th>購/售比</th><th>購/售檔數</th><th>股票漲幅</th><th>代表權證</th><th>原因</th>
+            </tr>
+          </thead>
+          <tbody>${body}</tbody>
+        </table>
+      </section>
+    </section>
+  `;
+
+  panel.querySelector("#warrant-flow-search")?.addEventListener("input", (event) => {
+    warrantFlowKeyword = event.target.value || "";
+    renderWarrantFlow();
+  });
+  panel.querySelector("#warrant-flow-refresh")?.addEventListener("click", () => loadWarrantFlow(true));
+}
+
+async function loadWarrantFlow(force = false) {
+  if (warrantFlowLoading) return;
+  if (!force && warrantFlowData.length) {
+    renderWarrantFlow();
+    return;
+  }
+  warrantFlowLoading = true;
+  const panel = viewPanels["warrant-flow"];
+  if (panel) {
+    panel.innerHTML = `<div class="empty-state">正在讀取權證資金走向...</div>`;
+  }
+  try {
+    if (!latestStocks.length) loadStrategyStocks();
+    const payload = await fetchJson(endpoints.scanWarrantFlow, 30000);
+    warrantFlowData = normalizeArray(payload.matches);
+    warrantFlowUpdatedAt = Date.now();
+    renderWarrantFlow();
+  } catch (error) {
+    if (panel) {
+      panel.innerHTML = `<div class="empty-state">權證資料暫時讀取失敗，請稍後再試。</div>`;
+    }
+  } finally {
+    warrantFlowLoading = false;
+  }
+}
+
 async function loadStrategyStocks() {
   if (strategyStocksLoading || latestStocks.length) return;
   strategyStocksLoading = true;
@@ -2889,6 +3037,7 @@ function showView(viewName, activeLink) {
   });
   viewLinks.forEach((link)=>link.classList.toggle("active", link===activeLink));
   if (viewName === "chip-trade") loadChipTradeData();
+  if (viewName === "warrant-flow") loadWarrantFlow();
   const focusTarget = activeLink.dataset.focus ? document.querySelector(`#${activeLink.dataset.focus}`) : null;
   if (focusTarget) setTimeout(()=>focusTarget.focus(),0);
 }
