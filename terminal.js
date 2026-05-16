@@ -1332,6 +1332,9 @@ function setStrategyChrome(mode) {
   if (swing) {
     document.querySelector("#strategy-view .strategy-header")?.remove();
   }
+  if (intraday) {
+    document.querySelector("#strategy-view .strategy-header")?.remove();
+  }
   if (strategyBadge) strategyBadge.textContent = intraday ? "FMN://intraday.2m.scan" : swing ? "FMN://swing.daily.scan" : "FMN://strategy.scan";
   if (strategyTitle) strategyTitle.textContent = intraday ? "2分K當沖雷達" : swing ? "策略4-波段雷達" : "綜合策略選股";
   if (strategyHeaderTitle) strategyHeaderTitle.textContent = intraday ? "2分K當沖雷達" : swing ? "策略4-波段雷達" : "策略中心";
