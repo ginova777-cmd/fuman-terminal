@@ -646,6 +646,9 @@ intradayRadarStyles.textContent = `
   .strategy-toolbar.intraday-mode h2 {
     color: #f5f8ff;
   }
+  #strategy-view.swing-only .strategy-header {
+    display: none;
+  }
   .strategy-toolbar.intraday-mode {
     border-bottom: 1px solid rgba(255, 112, 77, 0.18);
   }
@@ -658,6 +661,12 @@ intradayRadarStyles.textContent = `
     justify-content: space-between;
     align-items: end;
     gap: 16px;
+  }
+  .swing-topbar > div:first-child {
+    display: none;
+  }
+  .swing-topbar {
+    justify-content: flex-end;
   }
   .swing-topbar h2 {
     margin: 0;
