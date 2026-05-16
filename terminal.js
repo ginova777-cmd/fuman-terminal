@@ -1407,6 +1407,53 @@ intradayRadarStyles.textContent = `
     grid-template-columns: 330px minmax(0, 1fr);
     gap: 16px;
   }
+  .strategy5-shell {
+    display: grid;
+    gap: 18px;
+  }
+  .strategy5-hero {
+    min-height: 124px;
+    border: 1px solid rgba(117, 133, 170, 0.22);
+    border-radius: 18px;
+    background: linear-gradient(105deg, rgba(93, 50, 58, 0.72), rgba(20, 28, 45, 0.92) 55%, rgba(16, 57, 56, 0.58));
+    padding: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 18px;
+  }
+  .strategy5-hero b {
+    display: inline-flex;
+    width: fit-content;
+    border-radius: 999px;
+    background: rgba(255, 123, 45, 0.18);
+    color: #ff9a47;
+    padding: 6px 10px;
+    font-size: 12px;
+    margin-bottom: 12px;
+  }
+  .strategy5-hero h2 {
+    color: #fff;
+    font-size: 36px;
+    margin: 0;
+  }
+  .strategy5-date {
+    min-width: 170px;
+    border: 1px solid rgba(117, 133, 170, 0.22);
+    border-radius: 12px;
+    background: rgba(8, 18, 33, 0.68);
+    padding: 16px;
+  }
+  .strategy5-date span {
+    color: #8d9ab4;
+    font-size: 12px;
+  }
+  .strategy5-date strong {
+    display: block;
+    color: #fff;
+    font-size: 26px;
+    margin: 8px 0 4px;
+  }
   .strategy5-list,
   .strategy5-results {
     border: 1px solid rgba(117, 133, 170, 0.18);
@@ -1486,11 +1533,11 @@ intradayRadarStyles.textContent = `
   }
   .strategy5-stock-card {
     display: grid;
-    grid-template-columns: 44px 1.1fr 0.8fr 1fr 1.25fr;
+    grid-template-columns: 44px 1.25fr 0.9fr 1fr 1.2fr;
     gap: 14px;
     align-items: center;
-    margin: 10px 14px;
-    padding: 14px;
+    margin: 10px 12px;
+    padding: 16px;
     border: 1px solid rgba(117, 133, 170, 0.14);
     border-radius: 10px;
     background: rgba(10, 17, 30, 0.72);
@@ -1531,6 +1578,12 @@ intradayRadarStyles.textContent = `
     line-height: 1.5;
     font-size: 12px;
   }
+  .strategy-toolbar.strategy5-mode,
+  .strategy-metrics.strategy5-mode,
+  .strategy-search.strategy5-mode,
+  .strategy-actions.strategy5-mode {
+    display: none !important;
+  }
   @media (max-width: 1180px) {
     .strategy5-dashboard { grid-template-columns: 1fr; }
     .strategy5-stock-card { grid-template-columns: 36px 1fr; }
@@ -1547,6 +1600,7 @@ document.head.appendChild(intradayRadarStyles);
 function setStrategyChrome(mode) {
   const intraday = mode === "intraday";
   const swing = mode === "swing";
+  const strategy5 = mode === "strategy5";
   if (swing) {
     document.querySelector("#strategy-view .strategy-header")?.remove();
   }
@@ -1563,13 +1617,20 @@ function setStrategyChrome(mode) {
       ? "用波段指標邏輯整理全台股，盤中即時更新價量，分類突破缺口、逃逸缺口、V轉與多頭攻擊。"
       : "左側切換日線、籌碼與高波動策略；右側即時重算符合條件的股票訊號。";
   }
-  if (strategyActions) strategyActions.style.display = intraday || swing ? "none" : "";
+  if (strategyActions) strategyActions.style.display = intraday || swing || strategy5 ? "none" : "";
   if (strategyToolbar) {
     strategyToolbar.classList.toggle("intraday-mode", intraday);
-    strategyToolbar.style.display = intraday || swing ? "none" : "";
+    strategyToolbar.classList.toggle("strategy5-mode", strategy5);
+    strategyToolbar.style.display = intraday || swing || strategy5 ? "none" : "";
   }
-  if (strategyMetrics) strategyMetrics.style.display = intraday || swing ? "none" : "";
-  if (strategySearchLabel) strategySearchLabel.style.display = intraday || swing ? "none" : "";
+  if (strategyMetrics) {
+    strategyMetrics.classList.toggle("strategy5-mode", strategy5);
+    strategyMetrics.style.display = intraday || swing || strategy5 ? "none" : "";
+  }
+  if (strategySearchLabel) {
+    strategySearchLabel.classList.toggle("strategy5-mode", strategy5);
+    strategySearchLabel.style.display = intraday || swing || strategy5 ? "none" : "";
+  }
   if (strategyView) strategyView.classList.toggle("intraday-only", intraday);
   if (strategyView) strategyView.classList.toggle("swing-only", swing);
   if (strategyTerminal) strategyTerminal.classList.toggle("intraday-only", intraday);
@@ -1814,7 +1875,7 @@ function renderSwingRadar(universe) {
 }
 
 function renderStrategy5Dashboard(evaluated) {
-  setStrategyChrome("normal");
+  setStrategyChrome("strategy5");
   const byId = Object.fromEntries(STRATEGY5_PRESET_IDS.map((id) => [id, []]));
   evaluated.forEach((stock) => {
     stock.matches.filter((match) => STRATEGY5_PRESET_IDS.includes(match.id)).forEach((match) => {
@@ -1829,7 +1890,7 @@ function renderStrategy5Dashboard(evaluated) {
 
   const list = (byId[strategy5ActiveId] || [])
     .sort((a, b) => b.score - a.score || b.percent - a.percent || b.value - a.value)
-    .slice(0, 80);
+    .slice(0, 12);
   const active = STRATEGY_BY_ID[strategy5ActiveId] || STRATEGY_BY_ID.momentum;
   const totalMatches = new Set(evaluated
     .filter((stock) => stock.matches.some((match) => STRATEGY5_PRESET_IDS.includes(match.id)))
@@ -1895,18 +1956,32 @@ function renderStrategy5Dashboard(evaluated) {
     `;
   }).join("") : `<div class="empty-state">目前沒有符合「${active.label}」的股票。</div>`;
 
+  const now = new Date();
   strategyTable.innerHTML = `
-    <section class="strategy5-dashboard">
-      <aside class="strategy5-list">${filters}</aside>
-      <section class="strategy5-results">
-        <div class="strategy5-results-head">
-          <div>
-            <h3>${active.label}</h3>
-            <p>${descriptions[strategy5ActiveId] || "符合策略5條件的股票。"}</p>
-          </div>
-          <span class="strategy5-count">${list.length} 檔</span>
+    <section class="strategy5-shell">
+      <div class="strategy5-hero">
+        <div>
+          <b>策略控制台</b>
+          <h2>策略中心</h2>
         </div>
-        ${rows}
+        <div class="strategy5-date">
+          <span>資料日</span>
+          <strong>${String(now.getMonth() + 1).padStart(2, "0")}/${String(now.getDate()).padStart(2, "0")}</strong>
+          <span>${latestStocks.length.toLocaleString("zh-TW")} 檔股票</span>
+        </div>
+      </div>
+      <section class="strategy5-dashboard">
+        <aside class="strategy5-list">${filters}</aside>
+        <section class="strategy5-results">
+          <div class="strategy5-results-head">
+            <div>
+              <h3>${active.label}</h3>
+              <p>${descriptions[strategy5ActiveId] || "符合策略5條件的股票。"}</p>
+            </div>
+            <span class="strategy5-count">${list.length} 檔</span>
+          </div>
+          ${rows}
+        </section>
       </section>
     </section>
   `;
