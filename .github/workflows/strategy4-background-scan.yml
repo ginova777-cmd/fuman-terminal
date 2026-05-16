@@ -24,7 +24,12 @@ jobs:
           node-version: "20"
 
       - name: Update strategy4 cache
-        run: node scripts/scan-strategy4-cache.js
+        run: |
+          if [ ! -f scripts/scan-strategy4-cache.js ] && [ -f scan-strategy4-cache.js ]; then
+            mkdir -p scripts
+            cp scan-strategy4-cache.js scripts/scan-strategy4-cache.js
+          fi
+          node scripts/scan-strategy4-cache.js
         env:
           STRATEGY4_BATCH_SIZE: "48"
           STRATEGY4_BATCHES_PER_RUN: "5"
