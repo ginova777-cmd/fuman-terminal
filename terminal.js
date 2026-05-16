@@ -47,6 +47,7 @@ const endpoints = {
   scanOpenBuy: "/api/scan-open-buy",
   scanStrategy4: "/api/scan-strategy4",
   scanWarrantFlow: "/api/scan-warrant-flow",
+  strategy4Cache: "/data/strategy4-latest.json",
   strategyStocks: "/api/stocks",
   stocks: "https://openapi.twse.com.tw/v1/exchangeReport/STOCK_DAY_ALL",
 };
@@ -74,6 +75,7 @@ let strategy4ScanLastAt = 0;
 let strategy4ScanCount = 0;
 let strategy4ScannedCodes = new Set();
 let strategy4ScanTotal = 0;
+let strategy4CacheLoading = false;
 let openBuyScanLoading = false;
 let openBuyScanCursor = 0;
 let openBuyScanMatches = {};
@@ -355,6 +357,17 @@ function updateStrategy4Scan(payload) {
     };
   });
   strategy4ScanCount = Object.keys(strategy4ScanMatches).length;
+}
+
+function mergeStrategy4Cache(payload) {
+  const scannedCodes = normalizeArray(payload?.scannedCodes);
+  scannedCodes.forEach((code) => {
+    if (code) strategy4ScannedCodes.add(code);
+  });
+  if (payload?.total) strategy4ScanTotal = cleanNumber(payload.total);
+  updateStrategy4Scan({ matches: normalizeArray(payload?.matches), scannedCodes: [] });
+  const updatedAt = Date.parse(payload?.updatedAt || "");
+  strategy4ScanLastAt = Number.isFinite(updatedAt) ? updatedAt : Date.now();
 }
 
 function updateOpenBuyScan(payload) {
@@ -1858,6 +1871,9 @@ function renderSwingRadar(universe) {
   const scanCount = strategy4ScanCount || Object.keys(strategy4ScanMatches).length;
   const scannedCount = strategy4ScannedCodes.size;
   const totalCount = strategy4ScanTotal || latestStocks.filter((stock) => !/^00/.test(stock.code)).length || latestStocks.length;
+  if (!strategy4ScanLastAt && !strategy4CacheLoading) {
+    loadStrategy4Cache();
+  }
   if (latestStocks.length && !strategy4ScanLoading) {
     setTimeout(() => refreshStrategyHistoryScan(true), 0);
   }
@@ -3184,6 +3200,7 @@ function applyStrategyPresetFromLink(link) {
   loadStrategyStocks();
   refreshStrategyRealtimeScan(true);
   if (text.includes("策略1")) refreshOpenBuyScan(true);
+  if (text.includes("策略4")) loadStrategy4Cache(true);
   if (text.includes("策略4") || text.includes("策略5")) refreshStrategyHistoryScan(true);
 }
 
@@ -3243,6 +3260,22 @@ async function refreshOpenBuyScan(force = false) {
   } catch (error) {
   } finally {
     openBuyScanLoading = false;
+  }
+}
+
+async function loadStrategy4Cache(force = false) {
+  if (strategy4CacheLoading) return;
+  if (!force && strategy4ScanLastAt) return;
+  strategy4CacheLoading = true;
+  try {
+    const payload = await fetchJson(`${endpoints.strategy4Cache}?t=${Date.now()}`, 10000);
+    if (payload?.ok && Array.isArray(payload.matches)) {
+      mergeStrategy4Cache(payload);
+      renderStrategyScanner();
+    }
+  } catch (error) {
+  } finally {
+    strategy4CacheLoading = false;
   }
 }
 
