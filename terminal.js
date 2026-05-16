@@ -24,6 +24,18 @@ const strategyModeButtons = [...document.querySelectorAll("[data-strategy-mode]"
 const strategyMatchCount = document.querySelector("#strategy-match-count");
 const strategyAvgScore = document.querySelector("#strategy-avg-score");
 const strategyTopHit = document.querySelector("#strategy-top-hit");
+const strategyToolbar = document.querySelector(".strategy-toolbar");
+const strategyBadge = document.querySelector(".strategy-toolbar .console-badge");
+const strategyTitle = document.querySelector(".strategy-toolbar h2");
+const strategyActions = document.querySelector(".strategy-actions");
+const strategyMetrics = document.querySelector(".strategy-metrics");
+const strategySearchLabel = document.querySelector(".strategy-search");
+const strategyMetricLabels = [...document.querySelectorAll(".strategy-metrics article span")];
+const strategyView = document.querySelector("#strategy-view");
+const strategyHeaderTitle = document.querySelector("#strategy-view .strategy-header h1");
+const strategyHeaderText = document.querySelector("#strategy-view .strategy-header p");
+const strategyTerminal = document.querySelector(".strategy-terminal");
+const strategyList = document.querySelector(".strategy-list");
 
 const endpoints = {
   backend: "/api/market",
@@ -483,6 +495,232 @@ intradayRadarStyles.textContent = `
     font-size: 22px;
     font-weight: 800;
   }
+  .strategy-terminal.intraday-only {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .strategy-terminal.intraday-only .strategy-list {
+    display: none;
+  }
+  #strategy-view.intraday-only .strategy-header h1,
+  .strategy-toolbar.intraday-mode h2 {
+    color: #f5f8ff;
+  }
+  .strategy-toolbar.intraday-mode {
+    border-bottom: 1px solid rgba(255, 112, 77, 0.18);
+  }
+  .intraday-dashboard {
+    display: grid;
+    gap: 14px;
+  }
+  .intraday-topbar {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 16px;
+    align-items: end;
+  }
+  .intraday-topbar h2 {
+    margin: 0;
+    color: #f7fbff;
+    font-size: 26px;
+  }
+  .intraday-topbar p {
+    margin: 5px 0 0;
+    color: #9ba8c1;
+    font-size: 13px;
+  }
+  .intraday-live {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin-left: 8px;
+    padding: 3px 8px;
+    border-radius: 999px;
+    background: rgba(15, 213, 226, 0.16);
+    color: #23d7e6;
+    font-size: 12px;
+    vertical-align: middle;
+  }
+  .intraday-controls {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    color: #9ba8c1;
+    font-size: 13px;
+  }
+  .intraday-controls select,
+  .intraday-actions input {
+    border: 1px solid rgba(117, 133, 170, 0.28);
+    border-radius: 8px;
+    background: rgba(10, 15, 26, 0.72);
+    color: #eaf2ff;
+    padding: 9px 12px;
+    outline: none;
+  }
+  .intraday-signal-grid {
+    display: grid;
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+    gap: 12px;
+  }
+  .intraday-signal-card {
+    min-height: 132px;
+    border: 1px solid rgba(255, 74, 74, 0.42);
+    border-radius: 12px;
+    background: radial-gradient(circle at 24% 24%, rgba(255, 91, 91, 0.22), rgba(24, 31, 47, 0.76) 48%, rgba(11, 18, 31, 0.9));
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+  }
+  .intraday-signal-card.ma,
+  .intraday-signal-card.ma.active {
+    border-color: rgba(39, 210, 130, 0.68);
+    background: radial-gradient(circle at 24% 24%, rgba(39, 210, 130, 0.23), rgba(14, 45, 41, 0.75) 50%, rgba(10, 22, 31, 0.9));
+  }
+  .intraday-signal-card.diamond,
+  .intraday-signal-card.diamond.active {
+    border-color: rgba(169, 100, 255, 0.62);
+    background: radial-gradient(circle at 24% 24%, rgba(169, 100, 255, 0.24), rgba(36, 26, 59, 0.74) 50%, rgba(10, 18, 31, 0.9));
+  }
+  .intraday-signal-card.warn,
+  .intraday-signal-card.warn.active {
+    border-color: rgba(245, 166, 35, 0.72);
+    background: radial-gradient(circle at 24% 24%, rgba(245, 166, 35, 0.24), rgba(55, 38, 15, 0.72) 50%, rgba(10, 18, 31, 0.9));
+  }
+  .intraday-signal-card.active {
+    box-shadow: 0 0 0 1px rgba(255, 112, 77, 0.18), 0 14px 42px rgba(255, 74, 74, 0.1);
+  }
+  .intraday-card-top {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .intraday-icon {
+    display: grid;
+    place-items: center;
+    width: 42px;
+    height: 42px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.08);
+    font-size: 24px;
+  }
+  .intraday-card-top strong {
+    color: #ff6262;
+    font-size: 17px;
+  }
+  .intraday-signal-card.ma strong { color: #35e29c; }
+  .intraday-signal-card.diamond strong { color: #c28cff; }
+  .intraday-signal-card.warn strong { color: #ffc057; }
+  .intraday-count {
+    display: block;
+    margin-top: 8px;
+    color: #f8fbff;
+    font-size: 30px;
+    font-weight: 800;
+  }
+  .intraday-signal-card small {
+    color: #b5c0d5;
+    font-size: 12px;
+  }
+  .intraday-strength {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-radius: 7px;
+    background: rgba(255, 91, 91, 0.14);
+    color: #ff7a6d;
+    padding: 7px 10px;
+    font-size: 13px;
+    font-weight: 700;
+  }
+  .intraday-panel {
+    border: 1px solid rgba(117, 133, 170, 0.18);
+    border-radius: 10px;
+    background: rgba(8, 14, 25, 0.62);
+    overflow: hidden;
+  }
+  .intraday-tabs {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0;
+    border-bottom: 1px solid rgba(117, 133, 170, 0.16);
+    padding: 12px;
+  }
+  .intraday-tabs button {
+    border: 0;
+    border-right: 1px solid rgba(117, 133, 170, 0.16);
+    background: transparent;
+    color: #bfd0ee;
+    padding: 9px 14px;
+    cursor: default;
+  }
+  .intraday-tabs button.active {
+    border-radius: 7px;
+    background: #b32836;
+    color: #fff;
+  }
+  .intraday-actions {
+    display: flex;
+    gap: 8px;
+    margin-left: auto;
+  }
+  .intraday-actions button {
+    border: 1px solid rgba(117, 133, 170, 0.28);
+    border-radius: 8px;
+    background: rgba(10, 15, 26, 0.72);
+    color: #d8e5ff;
+    padding: 8px 12px;
+  }
+  .intraday-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+  }
+  .intraday-table th,
+  .intraday-table td {
+    border-bottom: 1px solid rgba(117, 133, 170, 0.12);
+    padding: 11px 12px;
+    text-align: left;
+  }
+  .intraday-table th {
+    color: #91a0ba;
+    background: rgba(30, 43, 65, 0.7);
+    font-weight: 600;
+  }
+  .intraday-table td {
+    color: #dbe7ff;
+  }
+  .intraday-table .code {
+    color: #75b7ff;
+    font-weight: 700;
+  }
+  .intraday-table .price,
+  .intraday-table .pct {
+    color: #ff4f5f;
+    font-weight: 700;
+  }
+  .intraday-score {
+    display: inline-flex;
+    min-width: 34px;
+    justify-content: center;
+    border-radius: 999px;
+    background: #9e2c3d;
+    color: #fff;
+    padding: 5px 8px;
+    font-weight: 800;
+  }
+  .intraday-badges {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+  }
+  .intraday-badges b {
+    border-radius: 6px;
+    background: rgba(255, 112, 77, 0.16);
+    color: #ffad8c;
+    padding: 4px 7px;
+    font-size: 11px;
+  }
   @media (max-width: 1280px) {
     .intraday-signal-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   }
@@ -492,7 +730,39 @@ intradayRadarStyles.textContent = `
 `;
 document.head.appendChild(intradayRadarStyles);
 
+function setStrategyChrome(mode) {
+  const intraday = mode === "intraday";
+  if (strategyBadge) strategyBadge.textContent = intraday ? "FMN://intraday.2m.scan" : "FMN://strategy.scan";
+  if (strategyTitle) strategyTitle.textContent = intraday ? "2分K當沖雷達" : "綜合策略選股";
+  if (strategyHeaderTitle) strategyHeaderTitle.textContent = intraday ? "2分K當沖雷達" : "策略中心";
+  if (strategyHeaderText) {
+    strategyHeaderText.textContent = intraday
+      ? "盤中即時輪巡全台股，專注偵測跳空、突破、MA35+MACD、鑽石、瞬間拉抬與即將漲停。"
+      : "左側切換日線、籌碼與高波動策略；右側即時重算符合條件的股票訊號。";
+  }
+  if (strategyActions) strategyActions.style.display = intraday ? "none" : "";
+  if (strategyToolbar) {
+    strategyToolbar.classList.toggle("intraday-mode", intraday);
+    strategyToolbar.style.display = intraday ? "none" : "";
+  }
+  if (strategyMetrics) strategyMetrics.style.display = intraday ? "none" : "";
+  if (strategySearchLabel) strategySearchLabel.style.display = intraday ? "none" : "";
+  if (strategyView) strategyView.classList.toggle("intraday-only", intraday);
+  if (strategyTerminal) strategyTerminal.classList.toggle("intraday-only", intraday);
+  if (strategyList) strategyList.hidden = intraday;
+  const labels = intraday
+    ? ["觸發股票", "雷達分數", "最多訊號"]
+    : ["符合股票", "平均分數", "最高命中"];
+  strategyMetricLabels.forEach((label, index) => {
+    if (labels[index]) label.textContent = labels[index];
+  });
+  if (strategySearch?.previousElementSibling) {
+    strategySearch.previousElementSibling.textContent = intraday ? "搜尋雷達股票" : "搜尋股票";
+  }
+}
+
 function renderIntradayRadar(evaluated) {
+  setStrategyChrome("intraday");
   const rows = evaluated
     .filter((stock) => (stock.intradaySignals || []).length)
     .sort((a, b) => (b.intradaySignals.length - a.intradaySignals.length) || b.score - a.score || b.percent - a.percent)
@@ -512,64 +782,97 @@ function renderIntradayRadar(evaluated) {
   if (strategyAvgScore) strategyAvgScore.textContent = rows.length ? Math.round(rows.reduce((sum, stock) => sum + stock.score, 0) / rows.length) : "--";
   if (strategyTopHit) strategyTopHit.textContent = rows.length ? `${Math.max(...rows.map((stock) => stock.intradaySignals.length))}/6` : "0/6";
 
+  const cardClass = {
+    ma35_macd: "ma",
+    diamond: "diamond",
+    surge: "warn",
+    limit_near: "warn",
+  };
   const cards = INTRADAY_SIGNAL_DEFS.map((signal) => {
     const count = signalCounts[signal.id] || 0;
     return `
-      <article class="intraday-signal-card ${count ? "active" : ""}">
-        <span>${signal.icon}</span>
+      <article class="intraday-signal-card ${cardClass[signal.id] || ""} ${count ? "active" : ""}">
         <div>
-          <strong>${signal.title}</strong>
+          <div class="intraday-card-top">
+            <span class="intraday-icon">${signal.icon}</span>
+            <div>
+              <strong>${signal.title}</strong>
+              <span class="intraday-count">${count}</span>
+            </div>
+          </div>
           <small>${signal.hint}</small>
         </div>
-        <em>${count}</em>
+        <div class="intraday-strength">${count ? "強勢" : "待觸發"} <span>${count ? "↑" : "○"}</span></div>
       </article>
     `;
   }).join("");
 
-  const table = rows.length ? `
-    <div class="strategy-row strategy-head">
-      <span>股票</span><span>分數</span><span>盤中訊號</span><span>漲幅</span><span>成交值</span><span>原因</span>
-    </div>
+  const tabs = [
+    ["all", "全部", rows.length],
+    ...INTRADAY_SIGNAL_DEFS.map((signal) => [signal.id, signal.title, signalCounts[signal.id] || 0]),
+  ].map(([id, label, count], index) => `<button class="${index === 0 ? "active" : ""}" type="button">${label}(${count})</button>`).join("");
+
+  const tableRows = rows.length ? `
     ${rows.map((stock) => {
       const sign = stock.percent >= 0 ? "+" : "";
       const chips = stock.intradaySignals.map((signal) => `<b>${signal.icon} ${signal.short}</b>`).join("");
       const reason = stock.intradaySignals[0]?.reason || "盤中訊號觸發";
       return `
-        <div class="strategy-row">
-          <span><strong>${stock.code}</strong><small>${stock.name}</small></span>
-          <em>${stock.score}</em>
-          <span class="strategy-chips">${chips}</span>
-          <span class="${stock.percent >= 0 ? "down" : "up"}">${sign}${stock.percent.toFixed(2)}%</span>
-          <span>${(stock.value / 100000000).toFixed(1)} 億</span>
-          <small>${reason}</small>
-        </div>
+        <tr>
+          <td><span class="code">${stock.code}</span></td>
+          <td>${stock.name}</td>
+          <td><span class="intraday-badges">${chips}</span></td>
+          <td class="price">${formatNumber(stock.close, stock.close >= 100 ? 0 : 2)}</td>
+          <td class="pct">${sign}${stock.percent.toFixed(2)}%</td>
+          <td>${Math.round(stock.tradeVolume || 0).toLocaleString("zh-TW")}</td>
+          <td><span class="intraday-score">${stock.score}</span></td>
+          <td>${reason}</td>
+        </tr>
       `;
     }).join("")}
   ` : `
-    <div class="empty-state">
-      2分K當沖雷達框架已啟動。現在沒有觸發訊號；開盤後會輪巡全台股並顯示符合「跳空 / 突破 / MA35+MACD / 鑽石 / 瞬間拉抬 / 即將漲停」的股票。
-    </div>
+    <tr><td colspan="8">2分K當沖雷達框架已啟動。現在沒有觸發訊號；開盤後會輪巡全台股並顯示符合「跳空 / 突破 / MA35+MACD / 鑽石 / 瞬間拉抬 / 即將漲停」的股票。</td></tr>
   `;
 
   strategyTable.innerHTML = `
-    <section class="intraday-radar">
-      <div class="intraday-radar-head">
+    <section class="intraday-dashboard">
+      <div class="intraday-topbar">
         <div>
-          <span>FMN://intraday.2m.scan</span>
-          <h3>2分K當沖雷達</h3>
-          <p>全台股盤中即時偵測，命中訊號才進入下方清單。</p>
+          <h2>2分K當沖雷達 <span class="intraday-live">● 即時偵測中</span></h2>
+          <p>盤中即時偵測強勢訊號，15秒輪巡全台股。</p>
         </div>
-        <strong>${scanTime}</strong>
+        <div class="intraday-controls">
+          <label>偵測頻率：<select><option>15秒</option></select></label>
+          <label>市場：<select><option>全市場</option></select></label>
+        </div>
       </div>
       <div class="intraday-signal-grid">${cards}</div>
+      <section class="intraday-panel">
+        <div class="intraday-tabs">
+          ${tabs}
+          <div class="intraday-actions">
+            <input type="search" placeholder="搜尋代號/名稱">
+            <button type="button">匯出</button>
+            <button type="button">設定</button>
+          </div>
+        </div>
+        <table class="intraday-table">
+          <thead>
+            <tr>
+              <th>股票代號</th><th>股票名稱</th><th>訊號</th><th>現價</th><th>漲幅</th><th>成交量</th><th>分數</th><th>原因</th>
+            </tr>
+          </thead>
+          <tbody>${tableRows}</tbody>
+        </table>
+      </section>
     </section>
-    ${table}
   `;
 }
 
 function renderStrategyScanner() {
   if (!strategyTable) return;
   const selected = [...selectedStrategyIds];
+  if (!(selected.length === 1 && selected[0] === "intraday_2m")) setStrategyChrome("normal");
   strategyCards.forEach((card) => card.classList.toggle("selected", selectedStrategyIds.has(card.dataset.strategy)));
   strategyModeButtons.forEach((button) => button.classList.toggle("active", button.dataset.strategyMode === strategyMode));
 
