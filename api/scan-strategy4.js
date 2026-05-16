@@ -337,6 +337,7 @@ module.exports = async function handler(request, response) {
     .split(",")
     .map(normalizeCode)
     .filter((code) => /^\d{4}$/.test(code))
+    .filter((code) => !/^00/.test(code))
     .slice(0, 24);
 
   if (!codes.length) {
