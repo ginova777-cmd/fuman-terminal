@@ -2,6 +2,7 @@
 const refreshLine = document.querySelector(".refresh-line");
 const headerTimes = [...document.querySelectorAll(".header-time")];
 const metricCards = [...document.querySelectorAll(".metric-card")];
+metricCards[3]?.remove();
 const tickerStrip = document.querySelector(".ticker-strip");
 const strengthPanel = document.querySelector(".strength-panel");
 const terminalMessage = document.querySelector("#terminal-message");
@@ -1930,6 +1931,34 @@ function renderHeatmapSectors(sectors) {
   });
 }
 
+function renderHeatmapFromCache() {
+  const sectors = Object.entries(sectorStocksCache).map(([name, stocks]) => {
+    const rows = normalizeArray(stocks);
+    if (!rows.length) return null;
+    const totalValue = rows.reduce((sum, stock) => sum + cleanNumber(stock.value), 0);
+    const weightedPct = totalValue
+      ? rows.reduce((sum, stock) => sum + cleanNumber(stock.pct) * cleanNumber(stock.value), 0) / totalValue
+      : avg(rows.map((stock) => cleanNumber(stock.pct)));
+    const up = rows.filter((stock) => cleanNumber(stock.change) > 0 || cleanNumber(stock.pct) > 0).length;
+    const down = rows.filter((stock) => cleanNumber(stock.change) < 0 || cleanNumber(stock.pct) < 0).length;
+    const leader = [...rows].sort((a, b) => cleanNumber(b.value) - cleanNumber(a.value))[0];
+    return {
+      name,
+      pct: weightedPct || 0,
+      totalValue: (totalValue / 100000000).toFixed(1),
+      count: rows.length,
+      up,
+      down,
+      flat: rows.length - up - down,
+      leader: leader ? `${leader.code} ${leader.name}` : "--",
+      stocks: rows,
+    };
+  }).filter(Boolean).sort((a, b) => Math.abs(b.pct) - Math.abs(a.pct)).slice(0, 36);
+
+  if (sectors.length) renderHeatmapSectors(sectors);
+  return sectors.length > 0;
+}
+
 function renderIndexes(indexes, futuresNear, futuresNext, marketStatus, otcSignal) {
   const targets = [["發行量加權", "加權指數"], ["櫃買", "櫃買指數"]];
   targets.forEach(([keyword, label], index) => {
@@ -2207,6 +2236,7 @@ function renderStocks(stocks) {
   if (!parsed.length) return;
   latestStocks = parsed;
   buildSectorStocksCache(stocks);
+  renderHeatmapFromCache();
 
   const up = parsed.filter((s) => s.change > 0).length;
   const down = parsed.filter((s) => s.change < 0).length;
@@ -2358,12 +2388,18 @@ async function loadMarketData() {
 }
 
 async function loadHeatmap() {
-  heatmap.innerHTML = `<div class="empty-state">載入產業資料中...</div>`;
+  if (!Object.keys(sectorStocksCache).length && !heatmap.children.length) {
+    heatmap.innerHTML = `<div class="empty-state">載入產業資料中...</div>`;
+  } else {
+    renderHeatmapFromCache();
+  }
   try {
     const data = await fetchJson(endpoints.heatmap, 15000);
     if (data.ok && data.sectors) renderHeatmapSectors(data.sectors);
   } catch (e) {
-    heatmap.innerHTML = `<div class="empty-state">產業資料載入失敗</div>`;
+    if (!renderHeatmapFromCache()) {
+      heatmap.innerHTML = `<div class="empty-state">產業資料載入失敗</div>`;
+    }
   }
 }
 
