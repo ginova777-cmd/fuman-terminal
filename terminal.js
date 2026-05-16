@@ -64,6 +64,7 @@ let strategyKeyword = "";
 let strategyStocksLoading = false;
 let swingSortKey = "score";
 let swingSortDir = "desc";
+let swingSignalFilter = "all";
 
 const SECTOR_MAP = {
   "2454":"CPU/ASIC/IP","3443":"CPU/ASIC/IP","3661":"CPU/ASIC/IP","3529":"CPU/ASIC/IP",
@@ -692,6 +693,8 @@ intradayRadarStyles.textContent = `
     display: flex;
     flex-direction: column;
     justify-content: space-between;
+    cursor: pointer;
+    text-align: left;
   }
   .swing-card strong {
     display: block;
@@ -714,6 +717,10 @@ intradayRadarStyles.textContent = `
   .swing-card.active {
     border-color: rgba(255, 80, 80, 0.58);
     background: radial-gradient(circle at 24% 18%, rgba(255, 80, 80, 0.22), rgba(16, 24, 42, 0.78) 48%, rgba(9, 15, 26, 0.92));
+  }
+  .swing-card.selected {
+    border-color: rgba(255, 80, 80, 0.92);
+    box-shadow: inset 0 0 0 1px rgba(255, 80, 80, 0.32), 0 0 20px rgba(255, 80, 80, 0.12);
   }
   .swing-controls,
   .swing-actions,
@@ -1202,17 +1209,21 @@ function renderIntradayRadar(evaluated) {
 
 function renderSwingRadar(universe) {
   setStrategyChrome("swing");
-  const rows = sortSwingRows(universe
+  const allRows = universe
     .filter((stock) => (stock.swingSignals || []).length)
     .map((stock) => {
       const signalBoost = (stock.swingSignals || []).length * 6;
       const stageBoost = stock.swingStage?.tone === "low" ? 8 : stock.swingStage?.tone === "mid" ? 6 : stock.swingStage?.tone === "high" ? 3 : -4;
       const score = clamp(Math.round(42 + (stock.percentRank || 0) * 0.24 + (stock.valueRank || 0) * 0.18 + (stock.volumeRank || 0) * 0.14 + signalBoost + stageBoost), 0, 100);
       return { ...stock, swingScore: score };
-    }))
+    });
+  const filteredRows = swingSignalFilter === "all"
+    ? allRows
+    : allRows.filter((stock) => (stock.swingSignals || []).some((signal) => signal.id === swingSignalFilter));
+  const rows = sortSwingRows(filteredRows)
     .slice(0, 100);
   const signalCounts = Object.fromEntries(SWING_SIGNAL_DEFS.map((signal) => [signal.id, 0]));
-  rows.forEach((stock) => {
+  allRows.forEach((stock) => {
     (stock.swingSignals || []).forEach((signal) => {
       signalCounts[signal.id] = (signalCounts[signal.id] || 0) + 1;
     });
@@ -1228,21 +1239,22 @@ function renderSwingRadar(universe) {
 
   const cards = SWING_SIGNAL_DEFS.map((signal) => {
     const count = signalCounts[signal.id] || 0;
+    const selected = swingSignalFilter === signal.id;
     return `
-      <article class="swing-card ${count ? "active" : ""}">
+      <button class="swing-card ${count ? "active" : ""} ${selected ? "selected" : ""}" type="button" data-swing-filter="${signal.id}">
         <div>
           <strong>${signal.icon} ${signal.title}</strong>
           <small>${signal.hint}</small>
         </div>
         <em>${count}</em>
-      </article>
+      </button>
     `;
   }).join("");
 
   const tabs = [
-    ["all", "全部", rows.length],
+    ["all", "全部", allRows.length],
     ...SWING_SIGNAL_DEFS.map((signal) => [signal.id, signal.title, signalCounts[signal.id] || 0]),
-  ].map(([id, label, count], index) => `<button class="${index === 0 ? "active" : ""}" type="button">${label}(${count})</button>`).join("");
+  ].map(([id, label, count]) => `<button class="${swingSignalFilter === id ? "active" : ""}" type="button" data-swing-filter="${id}">${label}(${count})</button>`).join("");
 
   const tableRows = rows.length ? rows.map((stock) => {
     const sign = stock.percent >= 0 ? "+" : "";
@@ -2691,6 +2703,13 @@ document.addEventListener("click", (event) => {
     swingSortKey = key;
     swingSortDir = key === "code" ? "asc" : "desc";
   }
+  renderStrategyScanner();
+});
+
+document.addEventListener("click", (event) => {
+  const filterButton = event.target.closest("[data-swing-filter]");
+  if (!filterButton) return;
+  swingSignalFilter = filterButton.dataset.swingFilter || "all";
   renderStrategyScanner();
 });
 
