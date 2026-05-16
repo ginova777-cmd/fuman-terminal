@@ -38,6 +38,48 @@ const strategyHeaderText = document.querySelector("#strategy-view .strategy-head
 const strategyTerminal = document.querySelector(".strategy-terminal");
 const strategyList = document.querySelector(".strategy-list");
 
+function installBasicDevtoolsGuard() {
+  const blockedKeys = new Set(["F12"]);
+  const showNotice = () => {
+    if (document.querySelector(".security-notice")) return;
+    const notice = document.createElement("div");
+    notice.className = "security-notice";
+    notice.textContent = "此終端禁止檢視開發者工具。";
+    notice.style.cssText = `
+      position: fixed;
+      right: 18px;
+      bottom: 18px;
+      z-index: 99999;
+      padding: 12px 16px;
+      border: 1px solid rgba(255, 77, 92, 0.45);
+      border-radius: 10px;
+      background: rgba(12, 16, 28, 0.94);
+      color: #ff9aa8;
+      font-weight: 800;
+      box-shadow: 0 12px 36px rgba(0,0,0,0.35);
+    `;
+    document.body.appendChild(notice);
+    setTimeout(() => notice.remove(), 1800);
+  };
+  document.addEventListener("contextmenu", (event) => {
+    event.preventDefault();
+    showNotice();
+  });
+  document.addEventListener("keydown", (event) => {
+    const key = String(event.key || "").toUpperCase();
+    const blocked =
+      blockedKeys.has(event.key) ||
+      (event.ctrlKey && event.shiftKey && ["I", "J", "C"].includes(key)) ||
+      (event.ctrlKey && ["U", "S"].includes(key));
+    if (!blocked) return;
+    event.preventDefault();
+    event.stopPropagation();
+    showNotice();
+  }, true);
+}
+
+installBasicDevtoolsGuard();
+
 const endpoints = {
   backend: "/api/market",
   heatmap: "/api/heatmap",
