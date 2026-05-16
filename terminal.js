@@ -62,6 +62,8 @@ let selectedStrategyIds = new Set(["momentum"]);
 let strategyMode = "any";
 let strategyKeyword = "";
 let strategyStocksLoading = false;
+let swingSortKey = "score";
+let swingSortDir = "desc";
 
 const SECTOR_MAP = {
   "2454":"CPU/ASIC/IP","3443":"CPU/ASIC/IP","3661":"CPU/ASIC/IP","3529":"CPU/ASIC/IP",
@@ -463,7 +465,7 @@ const INTRADAY_SIGNAL_DEFS = [
 
 const SWING_SIGNAL_DEFS = [
   { id: "bull_attack", title: "多頭攻擊", icon: "🔥", hint: "價量轉強且趨勢偏多" },
-  { id: "n_base", title: "N字共振", icon: "N", hint: "攻擊後回檔再轉強" },
+  { id: "n_base", title: "N字共振", icon: "", hint: "攻擊後回檔再轉強" },
   { id: "saucer", title: "圓弧底", icon: "◜", hint: "低位整理後突破" },
   { id: "breakaway_gap", title: "突破缺口", icon: "◆", hint: "跳空突破整理高點" },
   { id: "runaway_gap", title: "逃逸缺口", icon: "🚀", hint: "多頭延續型缺口" },
@@ -504,7 +506,7 @@ function getSwingSignals(stock) {
     signals.push({ id: "bull_attack", short: "攻擊", icon: "🔥", reason: `價量轉強，漲幅 ${pct.toFixed(2)}%，成交值排名 ${valueRank}%。` });
   }
   if (pct >= 1.2 && pct <= 7.8 && valueRank >= 62 && volumeRank >= 58 && stage.tone !== "hot") {
-    signals.push({ id: "n_base", short: "N字", icon: "N", reason: `強勢股回攻候選，成交值/量能進入市場前段，位階 ${stage.label}。` });
+    signals.push({ id: "n_base", short: "N字", icon: "", reason: `強勢股回攻候選，成交值/量能進入市場前段，位階 ${stage.label}。` });
   }
   if (pct >= 0.8 && pct <= 4.5 && valueRank >= 48 && volumeRank >= 42 && percentRank >= 55 && stage.tone !== "hot") {
     signals.push({ id: "saucer", short: "圓弧", icon: "◜", reason: `低到中位階轉強，漲幅不過熱且量能開始放大。` });
@@ -526,6 +528,35 @@ function getSwingSignals(stock) {
   }
 
   return signals;
+}
+
+function getSwingSortValue(stock, key) {
+  const stageOrder = { low: 1, mid: 2, high: 3, hot: 4 };
+  const stage = stock.swingStage || getSwingStage(stock);
+  const values = {
+    code: Number(stock.code) || 0,
+    price: cleanNumber(stock.close),
+    percent: stock.percent || 0,
+    volume: stock.tradeVolume || 0,
+    stage: stageOrder[stage.tone] || 0,
+    score: stock.swingScore || 0,
+  };
+  return values[key] ?? 0;
+}
+
+function sortSwingRows(rows) {
+  return [...rows].sort((a, b) => {
+    const av = getSwingSortValue(a, swingSortKey);
+    const bv = getSwingSortValue(b, swingSortKey);
+    const diff = av === bv ? ((b.swingSignals?.length || 0) - (a.swingSignals?.length || 0)) : av - bv;
+    return swingSortDir === "asc" ? diff : -diff;
+  });
+}
+
+function swingSortHeader(key, label) {
+  const active = swingSortKey === key;
+  const mark = active ? (swingSortDir === "asc" ? " ▲" : " ▼") : "";
+  return `<button type="button" data-swing-sort="${key}">${label}${mark}</button>`;
 }
 
 const intradayRadarStyles = document.createElement("style");
@@ -742,6 +773,17 @@ intradayRadarStyles.textContent = `
     color: #91a0ba;
     background: rgba(30, 43, 65, 0.7);
     font-weight: 600;
+  }
+  .swing-table th button {
+    border: 0;
+    background: transparent;
+    color: inherit;
+    padding: 0;
+    font: inherit;
+    cursor: pointer;
+  }
+  .swing-table th button:hover {
+    color: #fff;
   }
   .swing-table td {
     color: #dbe7ff;
@@ -1160,15 +1202,14 @@ function renderIntradayRadar(evaluated) {
 
 function renderSwingRadar(universe) {
   setStrategyChrome("swing");
-  const rows = universe
+  const rows = sortSwingRows(universe
     .filter((stock) => (stock.swingSignals || []).length)
     .map((stock) => {
       const signalBoost = (stock.swingSignals || []).length * 6;
       const stageBoost = stock.swingStage?.tone === "low" ? 8 : stock.swingStage?.tone === "mid" ? 6 : stock.swingStage?.tone === "high" ? 3 : -4;
       const score = clamp(Math.round(42 + (stock.percentRank || 0) * 0.24 + (stock.valueRank || 0) * 0.18 + (stock.volumeRank || 0) * 0.14 + signalBoost + stageBoost), 0, 100);
       return { ...stock, swingScore: score };
-    })
-    .sort((a, b) => b.swingSignals.length - a.swingSignals.length || b.swingScore - a.swingScore || b.percent - a.percent)
+    }))
     .slice(0, 100);
   const signalCounts = Object.fromEntries(SWING_SIGNAL_DEFS.map((signal) => [signal.id, 0]));
   rows.forEach((stock) => {
@@ -1250,7 +1291,7 @@ function renderSwingRadar(universe) {
         <table class="swing-table">
           <thead>
             <tr>
-              <th>股票代號</th><th>股票名稱</th><th>訊號</th><th>現價</th><th>漲幅</th><th>成交量</th><th>位階</th><th>分數</th><th>原因</th>
+              <th>${swingSortHeader("code", "股票代號")}</th><th>股票名稱</th><th>訊號</th><th>${swingSortHeader("price", "現價")}</th><th>${swingSortHeader("percent", "漲幅")}</th><th>${swingSortHeader("volume", "成交量")}</th><th>${swingSortHeader("stage", "位階")}</th><th>${swingSortHeader("score", "分數")}</th><th>原因</th>
             </tr>
           </thead>
           <tbody>${tableRows}</tbody>
@@ -2638,6 +2679,19 @@ strategyModeButtons.forEach((button) => {
     strategyMode = button.dataset.strategyMode;
     renderStrategyScanner();
   });
+});
+
+document.addEventListener("click", (event) => {
+  const sortButton = event.target.closest("[data-swing-sort]");
+  if (!sortButton) return;
+  const key = sortButton.dataset.swingSort;
+  if (swingSortKey === key) {
+    swingSortDir = swingSortDir === "desc" ? "asc" : "desc";
+  } else {
+    swingSortKey = key;
+    swingSortDir = key === "code" ? "asc" : "desc";
+  }
+  renderStrategyScanner();
 });
 
 strategyClear?.addEventListener("click", () => {
