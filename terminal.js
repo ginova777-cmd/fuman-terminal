@@ -213,9 +213,22 @@ function getInstitutionTotal(code) {
 function updateStrategyQuote(quote) {
   if (!quote?.code || !quote.close) return;
   const previous = strategyRealtimeQuotes[quote.code];
-  const history = [...(previous?.history || []), { price: quote.close, volume: quote.tradeVolume || 0, ts: Date.now() }]
+  const now = Date.now();
+  const prevPoint = previous?.history?.at(-1);
+  const volume = quote.tradeVolume || 0;
+  const prevVolume = prevPoint?.volume || 0;
+  const dtSeconds = prevPoint?.ts ? Math.max((now - prevPoint.ts) / 1000, 1) : 0;
+  const deltaVolume = volume > prevVolume ? volume - prevVolume : 0;
+  const volumeRate = dtSeconds ? deltaVolume / dtSeconds : 0;
+  const history = [...(previous?.history || []), {
+    price: quote.close,
+    volume,
+    deltaVolume,
+    volumeRate,
+    ts: now,
+  }]
     .slice(-12);
-  strategyRealtimeQuotes[quote.code] = { ...previous, ...quote, history, updatedAt: Date.now() };
+  strategyRealtimeQuotes[quote.code] = { ...previous, ...quote, history, updatedAt: now };
 }
 
 function applyStrategyQuote(stock) {
@@ -257,6 +270,14 @@ function getIntradaySignals(stock) {
   const lastPrice = prices.at(-1) || close;
   const priorPrice = prices.at(-2) || 0;
   const burstPct = priorPrice ? ((lastPrice - priorPrice) / priorPrice) * 100 : 0;
+  const latestPoint = history.at(-1) || {};
+  const priorRates = history.slice(0, -1).map((item) => item.volumeRate || 0).filter((rate) => rate > 0);
+  const recentBaseRate = avg(priorRates.slice(-5));
+  const elapsedSeconds = quote?.updatedAt ? Math.max((quote.updatedAt - new Date().setHours(9, 0, 0, 0)) / 1000, 1) : 0;
+  const dayAvgRate = elapsedSeconds > 0 ? (quote?.tradeVolume || 0) / elapsedSeconds : 0;
+  const currentRate = latestPoint.volumeRate || 0;
+  const rateVsDay = dayAvgRate ? currentRate / dayAvgRate : 0;
+  const rateVsRecent = recentBaseRate ? currentRate / recentBaseRate : 0;
   const shortAvg = avg(prices.slice(-3));
   const longAvg = avg(prices.slice(-8));
   const macdUp = prices.length >= 3 && shortAvg > longAvg && lastPrice >= (prices.at(-2) || lastPrice);
@@ -281,8 +302,21 @@ function getIntradaySignals(stock) {
     signals.push({ id: "diamond", short: "鑽石", icon: "💎", reason: `回測 0.618 區後收紅，並維持在 MA35 動能區上方。` });
   }
 
-  if (burstPct >= 0.8 && volumeRank >= 70) {
-    signals.push({ id: "surge", short: "拉抬", icon: "⚡", reason: `相較上次偵測瞬間拉抬 ${burstPct.toFixed(2)}%，量能排名 ${volumeRank}%。` });
+  if (
+    burstPct >= 1.2 &&
+    (latestPoint.deltaVolume || 0) >= 20 &&
+    rateVsDay >= 3 &&
+    rateVsRecent >= 2 &&
+    high && close >= high * 0.993 &&
+    open && close > open &&
+    pct >= 1 && pct <= 8
+  ) {
+    signals.push({
+      id: "surge",
+      short: "拉抬",
+      icon: "⚡",
+      reason: `瞬間拉抬 ${burstPct.toFixed(2)}%，新增量 ${Math.round(latestPoint.deltaVolume)} 張，量速為今日均速 ${rateVsDay.toFixed(1)} 倍。`,
+    });
   }
 
   if ((limitUp && close >= limitUp * 0.985) || pct >= 9) {
