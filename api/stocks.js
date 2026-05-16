@@ -33,8 +33,7 @@ function isCommonStockCode(code) {
 
 function stockChange(close, change) {
   const previous = close - change;
-  const percent = previous ? (change / previous) * 100 : 0;
-  return percent;
+  return previous ? (change / previous) * 100 : 0;
 }
 
 function normalizeTwseRow(row) {
@@ -77,6 +76,45 @@ function normalizeTpexRow(row) {
     Market: "TPEX",
     Percent: stockChange(close, change).toFixed(2),
   };
+}
+
+function recordsFromFields(fields, rows) {
+  return rows.map((row) => {
+    if (!Array.isArray(row)) return row;
+    const record = {};
+    fields.forEach((field, index) => {
+      record[field] = row[index];
+    });
+    return record;
+  });
+}
+
+function parseTpexPayload(payload) {
+  const table = Array.isArray(payload.tables)
+    ? payload.tables.find((item) => Array.isArray(item.data) && item.data.length) || payload.tables[0]
+    : null;
+  const fields = table?.fields || payload.fields || payload.iTotalRecords?.fields || [];
+  const rows = table?.data || payload.aaData || payload.data || [];
+  if (!Array.isArray(rows) || !rows.length) return [];
+  return recordsFromFields(fields, rows).map(normalizeTpexRow).filter(Boolean);
+}
+
+function formatRocDate(date) {
+  const year = date.getFullYear() - 1911;
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}/${month}/${day}`;
+}
+
+function recentRocDates(days = 10) {
+  const base = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Taipei" }));
+  const dates = [];
+  for (let offset = 0; offset < days; offset++) {
+    const date = new Date(base);
+    date.setDate(base.getDate() - offset);
+    dates.push(formatRocDate(date));
+  }
+  return dates;
 }
 
 function parseCsv(text) {
@@ -131,23 +169,23 @@ async function fetchTwseStocks() {
 }
 
 async function fetchTpexStocks() {
-  const jsonUrl = "https://www.tpex.org.tw/web/stock/aftertrading/daily_close_quotes/stk_quote_result.php?l=zh-tw&o=json";
+  const resultBase = "https://www.tpex.org.tw/web/stock/aftertrading/daily_close_quotes/stk_quote_result.php?l=zh-tw&o=json&s=0,asc,0";
+  const dataUrl = "https://www.tpex.org.tw/web/stock/aftertrading/daily_close_quotes/stk_quote_result.php?l=zh-tw&o=data";
   const csvUrl = "https://www.tpex.org.tw/web/stock/aftertrading/daily_close_quotes/stk_quote_result.php?l=zh-tw&o=csv";
 
+  for (const date of recentRocDates()) {
+    try {
+      const url = `${resultBase}&d=${encodeURIComponent(date)}`;
+      const payload = JSON.parse(await fetchText(url, { headers: { Referer: "https://www.tpex.org.tw/" } }));
+      const parsed = parseTpexPayload(payload);
+      if (parsed.length) return parsed;
+    } catch (error) {}
+  }
+
   try {
-    const payload = JSON.parse(await fetchText(jsonUrl, { headers: { Referer: "https://www.tpex.org.tw/" } }));
-    const fields = payload.fields || payload.iTotalRecords?.fields || [];
-    const rows = payload.aaData || payload.data || payload.tables?.[0]?.data || [];
-    if (Array.isArray(rows) && rows.length) {
-      return rows.map((row) => {
-        if (!Array.isArray(row)) return normalizeTpexRow(row);
-        const record = {};
-        fields.forEach((field, index) => {
-          record[field] = row[index];
-        });
-        return normalizeTpexRow(record);
-      }).filter(Boolean);
-    }
+    const payload = JSON.parse(await fetchText(dataUrl, { headers: { Referer: "https://www.tpex.org.tw/" } }));
+    const parsed = parseTpexPayload(payload);
+    if (parsed.length) return parsed;
   } catch (error) {}
 
   const csv = await fetchText(csvUrl, { headers: { Referer: "https://www.tpex.org.tw/" } });
