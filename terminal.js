@@ -432,6 +432,11 @@ const STRATEGY_DEFS = [
   { id: "ma_bull", label: "均線多頭排列", short: "均線", icon: "☰" },
   { id: "sync_backtest", label: "高同步率回測", short: "同步", icon: "▣" },
   { id: "overnight_chip", label: "隔日沖吸籌監控", short: "隔日", icon: "⌬" },
+  { id: "short_fund_flow", label: "短線資金動能", short: "資金", icon: "◇" },
+  { id: "chip_health_strong", label: "籌碼健檢強勢", short: "籌碼", icon: "▣" },
+  { id: "one_day_rebound", label: "大跌一日反彈", short: "反彈", icon: "↥" },
+  { id: "short_squeeze", label: "融券嘎空雷達", short: "嘎空", icon: "⌁" },
+  { id: "ultra_short", label: "超短線操作", short: "短打", icon: "⚡" },
 ];
 
 const STRATEGY_BY_ID = Object.fromEntries(STRATEGY_DEFS.map((item) => [item.id, item]));
@@ -531,6 +536,39 @@ function strategyHit(id, stock) {
       hit: pct >= 1.2 && valueRank >= 60 && (smartMoney > 0 || inst.trust > 0),
       score: clamp(scoreBase + 9, 0, 100),
       reason: `尾盤吸籌候選，法人合計 ${formatInstitution(inst.total)}，量價偏強。`,
+    },
+    short_fund_flow: {
+      hit: pct >= 1.5 && pct <= 8.8 && valueRank >= 68 && volumeRank >= 62 && stock.change > 0,
+      score: clamp(scoreBase + 14 + Math.min(pct * 2, 12), 0, 100),
+      reason: `短線資金集中，漲幅 ${pct.toFixed(2)}%，成交值排名 ${valueRank}%，成交量排名 ${volumeRank}%。`,
+    },
+    chip_health_strong: {
+      hit: pct > 0 && valueRank >= 50 && (inst.total > 0 || inst.trust > 0 || inst.foreign > 0),
+      score: clamp(scoreBase + 12 + (inst.trust > 0 ? 8 : 0) + (inst.foreign > 0 ? 5 : 0), 0, 100),
+      reason: `籌碼偏強，外資 ${formatInstitution(inst.foreign)}、投信 ${formatInstitution(inst.trust)}、法人合計 ${formatInstitution(inst.total)}。`,
+    },
+    one_day_rebound: {
+      hit: Boolean(stock.swingDaily?.rows?.length >= 3 &&
+        stock.swingDaily.rows.at(-2).close < stock.swingDaily.rows.at(-3).close * 0.97 &&
+        stock.swingDaily.last.close > stock.swingDaily.last.open &&
+        stock.swingDaily.pct >= 1 &&
+        stock.swingDaily.volumeRatio >= 0.8),
+      score: clamp(scoreBase + 10 + (stock.swingDaily?.volumeRatio || 0) * 5, 0, 100),
+      reason: stock.swingDaily
+        ? `前一日大跌後收紅反彈，今日漲幅 ${stock.swingDaily.pct.toFixed(2)}%，量比 ${stock.swingDaily.volumeRatio.toFixed(2)}。`
+        : "等待日K資料確認大跌反彈結構。",
+    },
+    short_squeeze: {
+      hit: pct >= 3 && pct <= 9.8 && volumeRank >= 70 && valueRank >= 60 && stock.percentRank >= 75,
+      score: clamp(scoreBase + 16 + (pct >= 6 ? 8 : 0), 0, 100),
+      reason: `強漲放量，漲幅排名 ${stock.percentRank}%，量能排名 ${volumeRank}%，列入融券嘎空觀察。`,
+    },
+    ultra_short: {
+      hit: ((stock.intradaySignals?.length || 0) > 0 && pct > 0) || (pct >= 2 && pct <= 8.5 && valueRank >= 72 && volumeRank >= 68),
+      score: clamp(scoreBase + 10 + (stock.intradaySignals?.length || 0) * 6, 0, 100),
+      reason: stock.intradaySignals?.length
+        ? `超短線訊號：${stock.intradaySignals.map((signal) => signal.short).join("、")}。`
+        : `盤中量價同步偏強，適合超短線觀察，漲幅 ${pct.toFixed(2)}%。`,
     },
   };
 
@@ -2417,8 +2455,26 @@ async function loadInstitution() {
 
 function applyStrategyPresetFromLink(link) {
   const text = link?.textContent || "";
-  if (!text.includes("策略2") && !text.includes("策略4")) return;
-  selectedStrategyIds = new Set([text.includes("策略4") ? "swing_radar" : "intraday_2m"]);
+  if (!text.includes("策略2") && !text.includes("策略4") && !text.includes("策略5")) return;
+  selectedStrategyIds = text.includes("策略5")
+    ? new Set([
+        "momentum",
+        "main_force_chip",
+        "twenty_day_breakout",
+        "opening_power",
+        "red_to_green",
+        "investment_trust",
+        "vcp",
+        "ma_bull",
+        "sync_backtest",
+        "overnight_chip",
+        "short_fund_flow",
+        "chip_health_strong",
+        "one_day_rebound",
+        "short_squeeze",
+        "ultra_short",
+      ])
+    : new Set([text.includes("策略4") ? "swing_radar" : "intraday_2m"]);
   if (text.includes("策略4")) swingSignalFilter = "all";
   if (text.includes("策略2")) intradaySignalFilter = "all";
   strategyMode = "any";
@@ -2426,13 +2482,17 @@ function applyStrategyPresetFromLink(link) {
   if (strategySearch) strategySearch.value = "";
   loadStrategyStocks();
   refreshStrategyRealtimeScan(true);
-  if (text.includes("策略4")) refreshStrategyHistoryScan(true);
+  if (text.includes("策略4") || text.includes("策略5")) refreshStrategyHistoryScan(true);
 }
 
 async function refreshStrategyRealtimeScan(force = false) {
   if (strategyRealtimeLoading || !latestStocks.length) return;
   const isStrategyVisible = document.querySelector("#strategy-view")?.classList.contains("active");
-  const isRealtimeStrategy = selectedStrategyIds.has("intraday_2m") || selectedStrategyIds.has("swing_radar");
+  const isRealtimeStrategy = selectedStrategyIds.has("intraday_2m") ||
+    selectedStrategyIds.has("swing_radar") ||
+    selectedStrategyIds.has("ultra_short") ||
+    selectedStrategyIds.has("short_fund_flow") ||
+    selectedStrategyIds.has("short_squeeze");
   if (!force && (!isStrategyVisible || !isRealtimeStrategy)) return;
 
   strategyRealtimeLoading = true;
@@ -2458,7 +2518,7 @@ async function refreshStrategyRealtimeScan(force = false) {
 async function refreshStrategyHistoryScan(force = false) {
   if (strategyHistoryLoading || !latestStocks.length) return;
   const isStrategyVisible = document.querySelector("#strategy-view")?.classList.contains("active");
-  const isSwingMode = selectedStrategyIds.has("swing_radar");
+  const isSwingMode = selectedStrategyIds.has("swing_radar") || selectedStrategyIds.has("one_day_rebound");
   if (!force && (!isStrategyVisible || !isSwingMode)) return;
 
   const missing = latestStocks.filter((stock) => !strategyHistoryData[stock.code]);
