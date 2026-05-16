@@ -555,7 +555,7 @@ function sortSwingRows(rows) {
 
 function swingSortHeader(key, label) {
   const active = swingSortKey === key;
-  const mark = active ? (swingSortDir === "asc" ? " ▲" : " ▼") : "";
+  const mark = active ? (swingSortDir === "asc" ? " ▲" : " ▼") : " ↕";
   return `<button type="button" data-swing-sort="${key}">${label}${mark}</button>`;
 }
 
