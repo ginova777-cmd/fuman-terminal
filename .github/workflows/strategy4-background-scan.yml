@@ -1,0 +1,38 @@
+name: Strategy4 Background Scan
+
+on:
+  schedule:
+    - cron: "*/5 0-6 * * 1-5"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: strategy4-background-scan
+  cancel-in-progress: true
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Update strategy4 cache
+        run: node scripts/scan-strategy4-cache.js
+        env:
+          STRATEGY4_BATCH_SIZE: "48"
+          STRATEGY4_BATCHES_PER_RUN: "5"
+
+      - name: Commit cache
+        run: |
+          git config user.name "fuman-terminal-bot"
+          git config user.email "actions@github.com"
+          git add data/strategy4-latest.json
+          git diff --cached --quiet || git commit -m "Update strategy4 cache"
+          git push
