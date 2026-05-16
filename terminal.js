@@ -74,6 +74,8 @@ let swingSignalFilter = "all";
 let intradaySortKey = "score";
 let intradaySortDir = "desc";
 let intradaySignalFilter = "all";
+let strategyPresetMode = "";
+let strategy5ActiveId = "momentum";
 
 const SECTOR_MAP = {
   "2454":"CPU/ASIC/IP","3443":"CPU/ASIC/IP","3661":"CPU/ASIC/IP","3529":"CPU/ASIC/IP",
@@ -440,6 +442,20 @@ const STRATEGY_DEFS = [
 ];
 
 const STRATEGY_BY_ID = Object.fromEntries(STRATEGY_DEFS.map((item) => [item.id, item]));
+const STRATEGY5_IDS = ["short_fund_flow", "chip_health_strong", "one_day_rebound", "short_squeeze", "ultra_short"];
+const STRATEGY5_PRESET_IDS = [
+  "momentum",
+  "main_force_chip",
+  "twenty_day_breakout",
+  "opening_power",
+  "red_to_green",
+  "investment_trust",
+  "vcp",
+  "ma_bull",
+  "sync_backtest",
+  "overnight_chip",
+  ...STRATEGY5_IDS,
+];
 
 function ensureStrategyCards() {
   if (!strategyList) return;
@@ -1386,6 +1402,139 @@ intradayRadarStyles.textContent = `
     padding: 4px 7px;
     font-size: 11px;
   }
+  .strategy5-dashboard {
+    display: grid;
+    grid-template-columns: 330px minmax(0, 1fr);
+    gap: 16px;
+  }
+  .strategy5-list,
+  .strategy5-results {
+    border: 1px solid rgba(117, 133, 170, 0.18);
+    border-radius: 12px;
+    background: rgba(13, 20, 34, 0.72);
+    overflow: hidden;
+  }
+  .strategy5-filter-card {
+    width: 100%;
+    border: 0;
+    border-bottom: 1px solid rgba(117, 133, 170, 0.13);
+    background: transparent;
+    color: #eaf2ff;
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    gap: 12px;
+    align-items: center;
+    padding: 14px;
+    text-align: left;
+    cursor: pointer;
+  }
+  .strategy5-filter-card.active {
+    background: rgba(255, 80, 80, 0.13);
+    box-shadow: inset 3px 0 0 #ff4f5f;
+  }
+  .strategy5-filter-card > span {
+    display: grid;
+    place-items: center;
+    width: 38px;
+    height: 38px;
+    border-radius: 10px;
+    background: rgba(255, 80, 80, 0.16);
+    color: #ff9a6d;
+    font-weight: 800;
+  }
+  .strategy5-filter-card strong {
+    display: block;
+    color: #f7fbff;
+    font-size: 15px;
+  }
+  .strategy5-filter-card small {
+    display: block;
+    color: #8d9ab4;
+    font-size: 12px;
+    line-height: 1.4;
+    margin-top: 4px;
+  }
+  .strategy5-filter-card em {
+    color: #b8c6df;
+    font-style: normal;
+    font-weight: 800;
+  }
+  .strategy5-results-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 17px 18px;
+    border-bottom: 1px solid rgba(117, 133, 170, 0.13);
+  }
+  .strategy5-results-head h3 {
+    margin: 0;
+    color: #f7fbff;
+    font-size: 21px;
+  }
+  .strategy5-results-head p {
+    margin: 6px 0 0;
+    color: #8d9ab4;
+    font-size: 12px;
+  }
+  .strategy5-count {
+    border: 1px solid rgba(117, 133, 170, 0.22);
+    border-radius: 999px;
+    color: #dce7ff;
+    font-weight: 800;
+    padding: 6px 11px;
+  }
+  .strategy5-stock-card {
+    display: grid;
+    grid-template-columns: 44px 1.1fr 0.8fr 1fr 1.25fr;
+    gap: 14px;
+    align-items: center;
+    margin: 10px 14px;
+    padding: 14px;
+    border: 1px solid rgba(117, 133, 170, 0.14);
+    border-radius: 10px;
+    background: rgba(10, 17, 30, 0.72);
+  }
+  .strategy5-stock-card .rank {
+    color: #7f8ca8;
+    font-weight: 800;
+  }
+  .strategy5-stock-card strong {
+    color: #f7fbff;
+    font-size: 16px;
+  }
+  .strategy5-stock-card small {
+    display: block;
+    color: #7f8ca8;
+    margin-top: 4px;
+  }
+  .strategy5-price {
+    color: #ff4f68;
+    font-size: 22px;
+    font-weight: 900;
+  }
+  .strategy5-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .strategy5-chips b {
+    border-radius: 999px;
+    border: 1px solid rgba(255, 77, 92, 0.28);
+    background: rgba(255, 77, 92, 0.15);
+    color: #ff9a9d;
+    padding: 5px 8px;
+    font-size: 11px;
+  }
+  .strategy5-reason {
+    color: #aebad2;
+    line-height: 1.5;
+    font-size: 12px;
+  }
+  @media (max-width: 1180px) {
+    .strategy5-dashboard { grid-template-columns: 1fr; }
+    .strategy5-stock-card { grid-template-columns: 36px 1fr; }
+  }
   @media (max-width: 1280px) {
     .intraday-signal-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   }
@@ -1664,6 +1813,105 @@ function renderSwingRadar(universe) {
   `;
 }
 
+function renderStrategy5Dashboard(evaluated) {
+  setStrategyChrome("normal");
+  const byId = Object.fromEntries(STRATEGY5_PRESET_IDS.map((id) => [id, []]));
+  evaluated.forEach((stock) => {
+    stock.matches.filter((match) => STRATEGY5_PRESET_IDS.includes(match.id)).forEach((match) => {
+      byId[match.id].push({ ...stock, activeMatch: match });
+    });
+  });
+  if (!STRATEGY5_PRESET_IDS.includes(strategy5ActiveId)) strategy5ActiveId = "momentum";
+  if (!(byId[strategy5ActiveId] || []).length) {
+    const firstHit = STRATEGY5_PRESET_IDS.find((id) => (byId[id] || []).length);
+    if (firstHit) strategy5ActiveId = firstHit;
+  }
+
+  const list = (byId[strategy5ActiveId] || [])
+    .sort((a, b) => b.score - a.score || b.percent - a.percent || b.value - a.value)
+    .slice(0, 80);
+  const active = STRATEGY_BY_ID[strategy5ActiveId] || STRATEGY_BY_ID.momentum;
+  const totalMatches = new Set(evaluated
+    .filter((stock) => stock.matches.some((match) => STRATEGY5_PRESET_IDS.includes(match.id)))
+    .map((stock) => stock.code)).size;
+
+  if (strategySummary) strategySummary.textContent = `策略5：${active.label}｜符合 ${list.length} 檔`;
+  if (strategyMatchCount) strategyMatchCount.textContent = totalMatches.toLocaleString("zh-TW");
+  if (strategyAvgScore) strategyAvgScore.textContent = list.length ? Math.round(avg(list.map((stock) => stock.score))) : "--";
+  if (strategyTopHit) strategyTopHit.textContent = list.length ? `${Math.max(...list.map((stock) => stock.matches.filter((match) => STRATEGY5_PRESET_IDS.includes(match.id)).length))}/${STRATEGY5_PRESET_IDS.length}` : "--";
+
+  const descriptions = {
+    momentum: "價格趨勢與成交值同步轉強。",
+    main_force_chip: "法人、大戶或主力籌碼偏買。",
+    twenty_day_breakout: "收盤價接近近期強勢突破。",
+    opening_power: "盤中開盤後快速轉強。",
+    red_to_green: "弱轉強候選，觀察翻紅延續。",
+    investment_trust: "投信連買或偏買候選。",
+    vcp: "波動收斂後等待突破。",
+    ma_bull: "均線與趨勢方向偏多。",
+    sync_backtest: "量價與籌碼同步性高。",
+    overnight_chip: "隔日沖與尾盤籌碼觀察。",
+    short_fund_flow: "短線資金快速集中。",
+    chip_health_strong: "籌碼健檢偏強。",
+    one_day_rebound: "大跌後一日反彈，需日K確認。",
+    short_squeeze: "強漲放量，嘎空觀察。",
+    ultra_short: "盤中超短線操作候選。",
+  };
+
+  const filters = STRATEGY5_PRESET_IDS.map((id) => {
+    const item = STRATEGY_BY_ID[id];
+    const count = byId[id]?.length || 0;
+    return `
+      <button class="strategy5-filter-card ${strategy5ActiveId === id ? "active" : ""}" type="button" data-strategy5-filter="${id}">
+        <span>${item.icon}</span>
+        <div>
+          <strong>${item.label}</strong>
+          <small>${descriptions[id] || "符合策略條件的股票。"}</small>
+        </div>
+        <em>${count} 檔</em>
+      </button>
+    `;
+  }).join("");
+
+  const rows = list.length ? list.map((stock, index) => {
+    const sign = stock.percent >= 0 ? "+" : "";
+    const strategyMatches = stock.matches.filter((match) => STRATEGY5_PRESET_IDS.includes(match.id));
+    const main = stock.activeMatch || strategyMatches[0] || stock.matches[0];
+    const chips = strategyMatches.slice(0, 5).map((match) => `<b>${match.icon} ${match.short}</b>`).join("");
+    return `
+      <article class="strategy5-stock-card">
+        <div class="rank">#${index + 1}</div>
+        <div>
+          <strong>${stock.name} <small>${stock.code}</small></strong>
+          <small>${stock.sector || "未分類"} · ${stock.isRealtime ? "即時" : "盤中"} · ${new Date().toLocaleDateString("zh-TW")}</small>
+        </div>
+        <div>
+          <div class="strategy5-price">${formatNumber(stock.close, stock.close >= 100 ? 0 : 2)}</div>
+          <small class="${stock.percent >= 0 ? "red" : "green"}">${sign}${stock.percent.toFixed(2)}%</small>
+        </div>
+        <div class="strategy5-chips">${chips}</div>
+        <div class="strategy5-reason">${main?.reason || "符合策略5條件。"}</div>
+      </article>
+    `;
+  }).join("") : `<div class="empty-state">目前沒有符合「${active.label}」的股票。</div>`;
+
+  strategyTable.innerHTML = `
+    <section class="strategy5-dashboard">
+      <aside class="strategy5-list">${filters}</aside>
+      <section class="strategy5-results">
+        <div class="strategy5-results-head">
+          <div>
+            <h3>${active.label}</h3>
+            <p>${descriptions[strategy5ActiveId] || "符合策略5條件的股票。"}</p>
+          </div>
+          <span class="strategy5-count">${list.length} 檔</span>
+        </div>
+        ${rows}
+      </section>
+    </section>
+  `;
+}
+
 function renderStrategyScanner() {
   if (!strategyTable) return;
   const selected = [...selectedStrategyIds];
@@ -1709,6 +1957,10 @@ function renderStrategyScanner() {
 
   if (selected.length === 1 && selected[0] === "intraday_2m") {
     renderIntradayRadar(evaluated);
+    return;
+  }
+  if (strategyPresetMode === "strategy5") {
+    renderStrategy5Dashboard(evaluated);
     return;
   }
 
@@ -2489,6 +2741,7 @@ async function loadInstitution() {
 function applyStrategyPresetFromLink(link) {
   const text = link?.textContent || "";
   if (!text.includes("策略2") && !text.includes("策略4") && !text.includes("策略5")) return;
+  strategyPresetMode = text.includes("策略5") ? "strategy5" : "";
   selectedStrategyIds = text.includes("策略5")
     ? new Set([
         "momentum",
@@ -2508,6 +2761,7 @@ function applyStrategyPresetFromLink(link) {
         "ultra_short",
       ])
     : new Set([text.includes("策略4") ? "swing_radar" : "intraday_2m"]);
+  if (text.includes("策略5")) strategy5ActiveId = "momentum";
   if (text.includes("策略4")) swingSignalFilter = "all";
   if (text.includes("策略2")) intradaySignalFilter = "all";
   strategyMode = "any";
@@ -3118,6 +3372,7 @@ ensureStrategyCards();
 strategyList?.addEventListener("click", (event) => {
   const card = event.target.closest(".strategy-card[data-strategy]");
   if (!card || !strategyList.contains(card)) return;
+  strategyPresetMode = "";
   const id = card.dataset.strategy;
   if (selectedStrategyIds.has(id)) {
     selectedStrategyIds.delete(id);
@@ -3174,8 +3429,16 @@ document.addEventListener("click", (event) => {
   renderStrategyScanner();
 });
 
+document.addEventListener("click", (event) => {
+  const filterButton = event.target.closest("[data-strategy5-filter]");
+  if (!filterButton) return;
+  strategy5ActiveId = filterButton.dataset.strategy5Filter || "momentum";
+  renderStrategyScanner();
+});
+
 strategyClear?.addEventListener("click", () => {
   selectedStrategyIds = new Set();
+  strategyPresetMode = "";
   if (strategySearch) strategySearch.value = "";
   strategyKeyword = "";
   renderStrategyScanner();
