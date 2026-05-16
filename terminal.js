@@ -2346,13 +2346,6 @@ function renderWarrantFlow() {
   `;
 
   panel.innerHTML = `
-    <header class="page-header chip-page-header">
-      <div>
-        <span class="console-badge">FMN://warrant.flow</span>
-        <h1>策略6-權證資金走向</h1>
-        <p class="refresh-line">用認購/認售權證成交金額推估標的股票短線熱度｜更新 ${updatedText}</p>
-      </div>
-    </header>
     <section class="swing-dashboard">
       <div class="swing-topbar">
         <div>
