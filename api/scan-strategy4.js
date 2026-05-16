@@ -338,7 +338,7 @@ module.exports = async function handler(request, response) {
     .map(normalizeCode)
     .filter((code) => /^\d{4}$/.test(code))
     .filter((code) => !/^00/.test(code))
-    .slice(0, 24);
+    .slice(0, 48);
 
   if (!codes.length) {
     response.status(400).json({ ok: false, error: "Missing codes", matches: [] });
