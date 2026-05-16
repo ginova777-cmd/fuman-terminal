@@ -1724,7 +1724,7 @@ function renderStrategyScanner() {
   }
   if (strategyMatchCount) strategyMatchCount.textContent = evaluated.length.toLocaleString("zh-TW");
   if (strategyAvgScore) strategyAvgScore.textContent = topRows.length ? avgScore : "--";
-  if (strategyTopHit) strategyTopHit.textContent = topRows.length ? `${topHit}/11` : "--";
+  if (strategyTopHit) strategyTopHit.textContent = topRows.length ? `${topHit}/${selected.length}` : "--";
 
   if (!topRows.length) {
     strategyTable.innerHTML = `<div class="empty-state">目前沒有符合條件的股票，請切換「任一符合」或減少策略。</div>`;
@@ -3112,16 +3112,16 @@ watchlistSearchInput?.addEventListener("keydown", (e) => {
 watchlistAddBtn?.addEventListener("click", addToWatchlist);
 
 ensureStrategyCards();
-strategyCards.forEach((card) => {
-  card.addEventListener("click", () => {
-    const id = card.dataset.strategy;
-    if (selectedStrategyIds.has(id)) {
-      selectedStrategyIds.delete(id);
-    } else {
-      selectedStrategyIds.add(id);
-    }
-    renderStrategyScanner();
-  });
+strategyList?.addEventListener("click", (event) => {
+  const card = event.target.closest(".strategy-card[data-strategy]");
+  if (!card || !strategyList.contains(card)) return;
+  const id = card.dataset.strategy;
+  if (selectedStrategyIds.has(id)) {
+    selectedStrategyIds.delete(id);
+  } else {
+    selectedStrategyIds.add(id);
+  }
+  renderStrategyScanner();
 });
 
 strategyModeButtons.forEach((button) => {
