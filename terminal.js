@@ -373,16 +373,19 @@ function updateStrategyHistory(item) {
   };
 }
 
-function updateStrategy4Scan(payload) {
+function updateStrategy4Scan(payload, options = {}) {
+  const retainUnmatched = options.retainUnmatched !== false;
   const scannedCodes = normalizeArray(payload?.scannedCodes);
   const matches = normalizeArray(payload?.matches);
   const matchedCodes = new Set(matches.map((item) => item.code));
   scannedCodes.forEach((code) => {
     if (code) strategy4ScannedCodes.add(code);
   });
-  scannedCodes.forEach((code) => {
-    if (!matchedCodes.has(code)) delete strategy4ScanMatches[code];
-  });
+  if (!retainUnmatched) {
+    scannedCodes.forEach((code) => {
+      if (!matchedCodes.has(code)) delete strategy4ScanMatches[code];
+    });
+  }
   matches.forEach((item) => {
     if (!item?.code) return;
     const base = latestStocks.find((stock) => stock.code === item.code) || {};
