@@ -141,28 +141,37 @@ function scanOpenBuy(code, market, rows) {
   const volMa20 = sma(volumes, 20);
   const pct = prev?.close ? ((last.close - prev.close) / prev.close) * 100 : 0;
   const volumeRatio = volMa20 ? last.volume / volMa20 : 0;
-  const bodyRatio = (last.high - last.low) > 0 ? Math.abs(last.close - last.open) / (last.high - last.low) : 0;
-  const upperShadowRatio = (last.high - Math.max(last.close, last.open)) / Math.max(last.high - last.low, 1);
+  const range = Math.max(last.high - last.low, 1);
+  const bodyRatio = Math.abs(last.close - last.open) / range;
+  const upperShadowRatio = (last.high - Math.max(last.close, last.open)) / range;
   const high20 = Math.max(...rows.slice(-21, -1).map((row) => row.high));
   const closeNearHigh = last.high ? last.close >= last.high * 0.97 : false;
-  const notOverheated = pct <= 6.5 && upperShadowRatio <= 0.42;
-  const liquid = last.value >= 30000000 || last.volume >= 1000;
-  const trend = last.close > ma5 && ma5 >= ma10 && ma10 >= ma20;
-  const strongYesterday = last.close > last.open && pct >= 1.2 && pct <= 6.5 && volumeRatio >= 1.15 && bodyRatio >= 0.28;
-  const breakout = last.close > high20 || (last.close >= high20 * 0.985 && closeNearHigh);
+  const liquid = last.value >= 15000000 || last.volume >= 500;
+  const notOverheated = pct <= 7.5 && upperShadowRatio <= 0.58;
+  const notTooWeak = pct >= -2.5 && last.close >= last.low * 1.015;
+  const trend = last.close > ma20 || (last.close > ma5 && ma5 >= ma10 * 0.995);
+  const breakout = last.close > high20 || (last.close >= high20 * 0.965 && closeNearHigh);
+  const strongClose = last.close > last.open && bodyRatio >= 0.18 && pct >= 0.3;
+  const volumeTurn = volumeRatio >= 0.85 && pct > -0.8 && last.close >= ma5;
+  const reboundTurn = pct >= -1.2 && last.close > ma20 && closeNearHigh && volumeRatio >= 0.65;
 
-  if (!liquid || !trend || !strongYesterday || !notOverheated || !breakout) return null;
+  if (!(liquid && notOverheated && notTooWeak && trend && (strongClose || volumeTurn || reboundTurn || breakout))) {
+    return null;
+  }
 
   const score = Math.min(100, Math.round(
-    48 +
-    Math.min(pct * 4, 20) +
-    Math.min(volumeRatio * 10, 18) +
-    (breakout ? 10 : 0) +
-    (closeNearHigh ? 6 : 0)
+    42 +
+    Math.min(Math.max(pct, 0) * 3.6, 18) +
+    Math.min(volumeRatio * 9, 18) +
+    (breakout ? 12 : 0) +
+    (strongClose ? 10 : 0) +
+    (closeNearHigh ? 6 : 0) +
+    (last.close > ma20 ? 6 : 0)
   ));
   const takeProfit = Number((last.close * 1.012).toFixed(last.close >= 100 ? 1 : 2));
   const stopLoss = Number((last.close * 0.99).toFixed(last.close >= 100 ? 1 : 2));
   const noChase = Number((last.close * 1.045).toFixed(last.close >= 100 ? 1 : 2));
+  const tag = breakout ? "突破候選" : strongClose ? "強勢收紅" : volumeTurn ? "量價轉強" : "回測轉強";
 
   return {
     code,
@@ -175,13 +184,13 @@ function scanOpenBuy(code, market, rows) {
     value: last.value,
     volumeRatio: Number(volumeRatio.toFixed(2)),
     score,
-    status: "明日開盤可買",
+    status: "明日開盤候選",
     entry: "09:00 開盤價",
     takeProfit,
     stopLoss,
     noChase,
     exitTime: "09:10",
-    reason: `昨日強勢收紅 ${pct.toFixed(2)}%，量比 ${volumeRatio.toFixed(2)}，站上 MA5/10/20 且接近突破區。`,
+    reason: `${tag}：昨日漲幅 ${pct.toFixed(2)}%，量比 ${volumeRatio.toFixed(2)}，收盤位置偏強，列入開盤入候選。`,
   };
 }
 
@@ -200,7 +209,7 @@ module.exports = async function handler(request, response) {
     .map(normalizeCode)
     .filter((code) => /^\d{4}$/.test(code))
     .filter((code) => !/^00/.test(code))
-    .slice(0, 24);
+    .slice(0, 48);
 
   if (!codes.length) {
     response.status(400).json({ ok: false, error: "Missing codes", matches: [] });
