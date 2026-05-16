@@ -964,11 +964,13 @@ intradayRadarStyles.textContent = `
     font-weight: 800;
   }
   .strategy-terminal.intraday-only,
-  .strategy-terminal.swing-only {
+  .strategy-terminal.swing-only,
+  .strategy-terminal.strategy5-only {
     grid-template-columns: minmax(0, 1fr);
   }
   .strategy-terminal.intraday-only .strategy-list,
-  .strategy-terminal.swing-only .strategy-list {
+  .strategy-terminal.swing-only .strategy-list,
+  .strategy-terminal.strategy5-only .strategy-list {
     display: none;
   }
   #strategy-view.intraday-only .strategy-header h1,
@@ -1635,7 +1637,8 @@ function setStrategyChrome(mode) {
   if (strategyView) strategyView.classList.toggle("swing-only", swing);
   if (strategyTerminal) strategyTerminal.classList.toggle("intraday-only", intraday);
   if (strategyTerminal) strategyTerminal.classList.toggle("swing-only", swing);
-  if (strategyList) strategyList.hidden = intraday || swing;
+  if (strategyTerminal) strategyTerminal.classList.toggle("strategy5-only", strategy5);
+  if (strategyList) strategyList.hidden = intraday || swing || strategy5;
   const labels = intraday
     ? ["觸發股票", "雷達分數", "最多訊號"]
     : swing
