@@ -76,6 +76,7 @@ let strategy4ScanCount = 0;
 let strategy4ScannedCodes = new Set();
 let strategy4ScanTotal = 0;
 let strategy4CacheLoading = false;
+const STRATEGY4_LOCAL_CACHE_KEY = "fuman_strategy4_scan_cache_v1";
 let openBuyScanLoading = false;
 let openBuyScanCursor = 0;
 let openBuyScanMatches = {};
@@ -87,6 +88,7 @@ let warrantFlowLoading = false;
 let warrantFlowData = [];
 let warrantFlowUpdatedAt = 0;
 let warrantFlowKeyword = "";
+const CACHE_FRESH_MS = 30 * 60 * 1000;
 let selectedStrategyIds = new Set(["momentum"]);
 let strategyMode = "any";
 let strategyKeyword = "";
@@ -357,6 +359,7 @@ function updateStrategy4Scan(payload) {
     };
   });
   strategy4ScanCount = Object.keys(strategy4ScanMatches).length;
+  saveStrategy4LocalCache();
 }
 
 function mergeStrategy4Cache(payload) {
@@ -368,6 +371,59 @@ function mergeStrategy4Cache(payload) {
   updateStrategy4Scan({ matches: normalizeArray(payload?.matches), scannedCodes: [] });
   const updatedAt = Date.parse(payload?.updatedAt || "");
   strategy4ScanLastAt = Number.isFinite(updatedAt) ? updatedAt : Date.now();
+  saveStrategy4LocalCache();
+}
+
+function saveStrategy4LocalCache() {
+  try {
+    const payload = {
+      updatedAt: strategy4ScanLastAt || Date.now(),
+      total: strategy4ScanTotal,
+      scannedCodes: [...strategy4ScannedCodes],
+      matches: Object.values(strategy4ScanMatches),
+    };
+    localStorage.setItem(STRATEGY4_LOCAL_CACHE_KEY, JSON.stringify(payload));
+  } catch (error) {}
+}
+
+function loadStrategy4LocalCache() {
+  try {
+    const payload = JSON.parse(localStorage.getItem(STRATEGY4_LOCAL_CACHE_KEY) || "{}");
+    if (!Array.isArray(payload.matches) || !payload.matches.length) return false;
+    if (payload.total) strategy4ScanTotal = cleanNumber(payload.total);
+    normalizeArray(payload.scannedCodes).forEach((code) => {
+      if (code) strategy4ScannedCodes.add(code);
+    });
+    normalizeArray(payload.matches).forEach((item) => {
+      if (!item?.code) return;
+      strategy4ScanMatches[item.code] = { ...item };
+    });
+    strategy4ScanCount = Object.keys(strategy4ScanMatches).length;
+    strategy4ScanLastAt = cleanNumber(payload.updatedAt) || Date.now();
+    return true;
+  } catch (error) {
+    return false;
+  }
+}
+
+function hasFreshStrategy4Scan() {
+  const total = strategy4ScanTotal || latestStocks.filter((stock) => !/^00/.test(stock.code)).length || 0;
+  if (!total || !strategy4ScanLastAt) return false;
+  const progress = strategy4ScannedCodes.size / total;
+  const ageMs = Date.now() - strategy4ScanLastAt;
+  return progress >= 0.95 && ageMs < CACHE_FRESH_MS;
+}
+
+function hasFreshOpenBuyScan() {
+  const total = openBuyScanTotal || latestStocks.filter((stock) => !/^00/.test(stock.code)).length || 0;
+  if (!total || !openBuyScanLastAt) return false;
+  const progress = openBuyScannedCodes.size / total;
+  const ageMs = Date.now() - openBuyScanLastAt;
+  return progress >= 0.95 && ageMs < CACHE_FRESH_MS;
+}
+
+function hasFreshWarrantFlow() {
+  return warrantFlowData.length > 0 && warrantFlowUpdatedAt && (Date.now() - warrantFlowUpdatedAt) < CACHE_FRESH_MS;
 }
 
 function updateOpenBuyScan(payload) {
@@ -1868,13 +1924,16 @@ function renderIntradayRadar(evaluated) {
 
 function renderSwingRadar(universe) {
   setStrategyChrome("swing");
+  if (!strategy4ScanLastAt) {
+    loadStrategy4LocalCache();
+  }
   const scanCount = strategy4ScanCount || Object.keys(strategy4ScanMatches).length;
   const scannedCount = strategy4ScannedCodes.size;
   const totalCount = strategy4ScanTotal || latestStocks.filter((stock) => !/^00/.test(stock.code)).length || latestStocks.length;
   if (!strategy4ScanLastAt && !strategy4CacheLoading) {
     loadStrategy4Cache();
   }
-  if (latestStocks.length && !strategy4ScanLoading) {
+  if (latestStocks.length && !strategy4ScanLoading && !hasFreshStrategy4Scan()) {
     setTimeout(() => refreshStrategyHistoryScan(true), 0);
   }
   const allowCodes = new Set(universe.map((stock) => stock.code));
@@ -1896,8 +1955,8 @@ function renderSwingRadar(universe) {
     ? new Date(strategyLastScanAt).toLocaleTimeString("zh-TW", { hour12: false })
     : new Date().toLocaleTimeString("zh-TW", { hour12: false });
   const historyText = strategy4ScanLastAt
-    ? `快速連掃 ${scannedCount}/${totalCount}｜命中 ${scanCount}｜${new Date(strategy4ScanLastAt).toLocaleTimeString("zh-TW", { hour12: false })}`
-    : `快速連掃啟動中 0/${totalCount}`;
+    ? `波段快取 ${scannedCount}/${totalCount}｜命中 ${scanCount}｜${new Date(strategy4ScanLastAt).toLocaleTimeString("zh-TW", { hour12: false })}`
+    : `波段快取讀取中 0/${totalCount}`;
 
   if (strategySummary) strategySummary.textContent = `全台股波段雷達｜排除ETF｜後端策略4計算｜${historyText}`;
   if (strategyMatchCount) strategyMatchCount.textContent = rows.length.toLocaleString("zh-TW");
@@ -1953,7 +2012,7 @@ function renderSwingRadar(universe) {
           <p>排除ETF，只掃真正股票；後端抓日K並計算策略4，前端只顯示符合結果。${historyText}</p>
         </div>
         <div class="swing-controls">
-          <label>偵測頻率：<select><option>連續掃描</option></select></label>
+          <label>更新模式：<select><option>掃完即停</option></select></label>
           <label>市場：<select><option>全市場</option></select></label>
         </div>
       </div>
@@ -1985,7 +2044,7 @@ function renderOpenBuyRadar(universe) {
   const scanCount = openBuyScanCount || Object.keys(openBuyScanMatches).length;
   const scannedCount = openBuyScannedCodes.size;
   const totalCount = openBuyScanTotal || latestStocks.filter((stock) => !/^00/.test(stock.code)).length || latestStocks.length;
-  if (latestStocks.length && !openBuyScanLoading) {
+  if (latestStocks.length && !openBuyScanLoading && !hasFreshOpenBuyScan()) {
     setTimeout(() => refreshOpenBuyScan(true), 0);
   }
 
@@ -2413,7 +2472,7 @@ function renderWarrantFlow() {
 
 async function loadWarrantFlow(force = false) {
   if (warrantFlowLoading) return;
-  if (!force && warrantFlowData.length) {
+  if (!force && hasFreshWarrantFlow()) {
     renderWarrantFlow();
     return;
   }
@@ -3200,8 +3259,10 @@ function applyStrategyPresetFromLink(link) {
   loadStrategyStocks();
   refreshStrategyRealtimeScan(true);
   if (text.includes("策略1")) refreshOpenBuyScan(true);
-  if (text.includes("策略4")) loadStrategy4Cache(true);
-  if (text.includes("策略4") || text.includes("策略5")) refreshStrategyHistoryScan(true);
+  if (text.includes("策略4")) {
+    loadStrategy4Cache(true);
+    refreshStrategyHistoryScan(true);
+  }
 }
 
 async function refreshStrategyRealtimeScan(force = false) {
@@ -3243,6 +3304,7 @@ async function refreshOpenBuyScan(force = false) {
   const source = latestStocks.filter((stock) => !/^00/.test(stock.code));
   openBuyScanTotal = source.length;
   if (!source.length) return;
+  if (hasFreshOpenBuyScan()) return;
   const batchSize = 48;
   const start = openBuyScanCursor % source.length;
   const rows = source.slice(start, start + batchSize);
@@ -3262,7 +3324,7 @@ async function refreshOpenBuyScan(force = false) {
   } finally {
     openBuyScanLoading = false;
     const stillVisible = document.querySelector("#strategy-view")?.classList.contains("active") && selectedStrategyIds.has("open_buy");
-    if (stillVisible) {
+    if (stillVisible && !completedCycle) {
       setTimeout(() => refreshOpenBuyScan(true), completedCycle ? 3000 : 350);
     }
   }
@@ -3293,6 +3355,7 @@ async function refreshStrategyHistoryScan(force = false) {
   const source = latestStocks.filter((stock) => !/^00/.test(stock.code));
   strategy4ScanTotal = source.length;
   if (!source.length) return;
+  if (hasFreshStrategy4Scan()) return;
   const batchSize = 48;
   const start = strategy4ScanCursor % source.length;
   const rows = source.slice(start, start + batchSize);
@@ -3312,7 +3375,7 @@ async function refreshStrategyHistoryScan(force = false) {
   } finally {
     strategy4ScanLoading = false;
     const stillVisible = document.querySelector("#strategy-view")?.classList.contains("active") && selectedStrategyIds.has("swing_radar");
-    if (stillVisible) {
+    if (stillVisible && !completedCycle) {
       setTimeout(() => refreshStrategyHistoryScan(true), completedCycle ? 3000 : 350);
     }
   }
@@ -3348,8 +3411,8 @@ document.querySelectorAll("[data-chip-filter]").forEach((button) => {
 setInterval(tickClock, 1000);
 setInterval(loadMarketData, 15*1000);
 setInterval(refreshStrategyRealtimeScan, 15*1000);
-setInterval(refreshOpenBuyScan, 3000);
-setInterval(refreshStrategyHistoryScan, 3000);
+setInterval(refreshOpenBuyScan, 60*1000);
+setInterval(refreshStrategyHistoryScan, 60*1000);
 setInterval(loadHeatmap, 10*60*1000);
 setInterval(loadInstitution, 10*60*1000);
 
