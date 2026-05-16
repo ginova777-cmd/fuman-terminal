@@ -16,7 +16,7 @@ const viewPanels = {
   "chip-trade": document.querySelector("#chip-trade-view"),
   "warrant-flow": document.querySelector("#warrant-flow-view"),
 };
-const strategyCards = [...document.querySelectorAll(".strategy-card[data-strategy]")];
+let strategyCards = [...document.querySelectorAll(".strategy-card[data-strategy]")];
 const strategyTable = document.querySelector("#strategy-table");
 const strategySummary = document.querySelector("#strategy-summary");
 const strategySearch = document.querySelector("#strategy-search");
@@ -440,6 +440,36 @@ const STRATEGY_DEFS = [
 ];
 
 const STRATEGY_BY_ID = Object.fromEntries(STRATEGY_DEFS.map((item) => [item.id, item]));
+
+function ensureStrategyCards() {
+  if (!strategyList) return;
+  const descriptions = {
+    short_fund_flow: "短線資金快速集中，觀察量價同步放大的強勢股。",
+    chip_health_strong: "外資、投信與法人方向偏買，優先看籌碼乾淨的標的。",
+    one_day_rebound: "前一日大跌後出現收紅反彈，需要日K確認。",
+    short_squeeze: "強漲放量、漲幅排名靠前，列入嘎空觀察。",
+    ultra_short: "結合盤中訊號與量價強度，偏超短線操作名單。",
+  };
+  STRATEGY_DEFS.forEach((strategy) => {
+    if (strategyList.querySelector(`[data-strategy="${strategy.id}"]`)) return;
+    const card = document.createElement("article");
+    card.className = "strategy-card";
+    card.dataset.strategy = strategy.id;
+    card.innerHTML = `
+      <span>${strategy.icon}</span>
+      <div>
+        <strong>${strategy.label}</strong>
+        <p>${descriptions[strategy.id] || "策略條件已加入綜合策略掃描。"}</p>
+      </div>
+    `;
+    strategyList.appendChild(card);
+  });
+  const title = strategyList.querySelector("p");
+  if (title && title.textContent.includes("策略清單")) {
+    title.textContent = `策略清單 (${strategyList.querySelectorAll(".strategy-card[data-strategy]").length})`;
+  }
+  strategyCards = [...document.querySelectorAll(".strategy-card[data-strategy]")];
+}
 
 function buildStrategyUniverse(stocks) {
   const values = stocks.map((s) => s.value || 0).sort((a, b) => a - b);
@@ -3081,6 +3111,7 @@ watchlistSearchInput?.addEventListener("keydown", (e) => {
 });
 watchlistAddBtn?.addEventListener("click", addToWatchlist);
 
+ensureStrategyCards();
 strategyCards.forEach((card) => {
   card.addEventListener("click", () => {
     const id = card.dataset.strategy;
