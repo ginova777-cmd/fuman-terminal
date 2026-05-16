@@ -29,6 +29,7 @@ const endpoints = {
   backend: "/api/market",
   heatmap: "/api/heatmap",
   institution: "/api/institution",
+  realtime: "/api/realtime",
   strategyStocks: "/api/stocks",
   stocks: "https://openapi.twse.com.tw/v1/exchangeReport/STOCK_DAY_ALL",
 };
@@ -41,6 +42,10 @@ let chipMode = "realtime";
 let chipTradeLoading = false;
 let chipFilter = "joint";
 let chipQuoteHydrating = false;
+let strategyRealtimeLoading = false;
+let strategyRealtimeCursor = 0;
+let strategyRealtimeQuotes = {};
+let strategyLastScanAt = 0;
 let selectedStrategyIds = new Set(["momentum"]);
 let strategyMode = "any";
 let strategyKeyword = "";
@@ -180,12 +185,99 @@ function rankValue(value, sortedValues) {
   return Math.round((index / sortedValues.length) * 100);
 }
 
+function avg(values) {
+  const nums = values.filter((value) => Number.isFinite(value) && value > 0);
+  return nums.length ? nums.reduce((sum, value) => sum + value, 0) / nums.length : 0;
+}
+
 function getInstitutionTotal(code) {
   const inst = institutionData[code] || {};
   const foreign = Number(inst.foreign) || 0;
   const trust = Number(inst.trust) || 0;
   const dealer = Number(inst.dealer) || 0;
   return { foreign, trust, dealer, total: foreign + trust + dealer };
+}
+
+function updateStrategyQuote(quote) {
+  if (!quote?.code || !quote.close) return;
+  const previous = strategyRealtimeQuotes[quote.code];
+  const history = [...(previous?.history || []), { price: quote.close, volume: quote.tradeVolume || 0, ts: Date.now() }]
+    .slice(-12);
+  strategyRealtimeQuotes[quote.code] = { ...previous, ...quote, history, updatedAt: Date.now() };
+}
+
+function applyStrategyQuote(stock) {
+  const quote = strategyRealtimeQuotes[stock.code];
+  if (!quote?.close) return stock;
+  const value = quote.tradeVolume && quote.close ? quote.tradeVolume * quote.close : stock.value;
+  return {
+    ...stock,
+    name: quote.name || stock.name,
+    close: quote.close,
+    change: quote.change,
+    percent: quote.percent,
+    tradeVolume: quote.tradeVolume || stock.tradeVolume,
+    value: value || stock.value,
+    open: quote.open,
+    high: quote.high,
+    low: quote.low,
+    prevClose: quote.prevClose,
+    limitUp: quote.limitUp,
+    isRealtime: true,
+  };
+}
+
+function getIntradaySignals(stock) {
+  const quote = strategyRealtimeQuotes[stock.code];
+  const history = quote?.history || [];
+  const prices = history.map((item) => item.price);
+  const close = cleanNumber(stock.close);
+  const open = cleanNumber(stock.open);
+  const high = cleanNumber(stock.high);
+  const low = cleanNumber(stock.low);
+  const prevClose = cleanNumber(stock.prevClose) || (close - cleanNumber(stock.change));
+  const limitUp = cleanNumber(stock.limitUp);
+  const pct = stock.percent || 0;
+  const valueRank = stock.valueRank || 0;
+  const volumeRank = stock.volumeRank || 0;
+  const vwap = stock.vwap || ((stock.value && stock.tradeVolume) ? stock.value / stock.tradeVolume : 0);
+  const gapPct = open && prevClose ? ((open - prevClose) / prevClose) * 100 : 0;
+  const lastPrice = prices.at(-1) || close;
+  const priorPrice = prices.at(-2) || 0;
+  const burstPct = priorPrice ? ((lastPrice - priorPrice) / priorPrice) * 100 : 0;
+  const shortAvg = avg(prices.slice(-3));
+  const longAvg = avg(prices.slice(-8));
+  const macdUp = prices.length >= 3 && shortAvg > longAvg && lastPrice >= (prices.at(-2) || lastPrice);
+  const ma35Proxy = longAvg || avg([prevClose, open, high, low, close]);
+  const ibRange = high && low ? high - low : 0;
+  const f618 = ibRange > 0 ? high - ibRange * 0.618 : 0;
+  const signals = [];
+
+  if (open && prevClose && gapPct >= 2 && open > prevClose && close >= open && volumeRank >= 60) {
+    signals.push({ id: "gap", short: "跳空", icon: "🚀", reason: `跳空 ${gapPct.toFixed(2)}%，開盤高於昨收且量能排名 ${volumeRank}%。` });
+  }
+
+  if (pct >= 1 && valueRank >= 65 && volumeRank >= 65 && close >= open && (!vwap || close >= vwap) && (!high || close >= high * 0.992)) {
+    signals.push({ id: "breakout", short: "突破", icon: "🔥", reason: `突破盤中強勢區，漲幅 ${pct.toFixed(2)}%，成交值/量能同步放大。` });
+  }
+
+  if (close > ma35Proxy && macdUp && pct > 0 && valueRank >= 55) {
+    signals.push({ id: "ma35_macd", short: "MA35", icon: "🟢", reason: `站上 MA35 近似線，短線均值高於長線均值，MACD 動能向上。` });
+  }
+
+  if (f618 && low <= f618 && high >= f618 && close >= open && close > ma35Proxy && macdUp) {
+    signals.push({ id: "diamond", short: "鑽石", icon: "💎", reason: `回測 0.618 區後收紅，並維持在 MA35 動能區上方。` });
+  }
+
+  if (burstPct >= 0.8 && volumeRank >= 70) {
+    signals.push({ id: "surge", short: "拉抬", icon: "⚡", reason: `相較上次偵測瞬間拉抬 ${burstPct.toFixed(2)}%，量能排名 ${volumeRank}%。` });
+  }
+
+  if ((limitUp && close >= limitUp * 0.985) || pct >= 9) {
+    signals.push({ id: "limit_near", short: "漲停", icon: "🔒", reason: limitUp ? `距離漲停價 ${limitUp.toFixed(2)} 已小於 1.5%。` : `漲幅 ${pct.toFixed(2)}%，接近漲停區。` });
+  }
+
+  return signals;
 }
 
 const STRATEGY_DEFS = [
@@ -208,14 +300,18 @@ function buildStrategyUniverse(stocks) {
   const values = stocks.map((s) => s.value || 0).sort((a, b) => a - b);
   const volumes = stocks.map((s) => s.tradeVolume || 0).sort((a, b) => a - b);
   const percents = stocks.map((s) => s.percent || 0).sort((a, b) => a - b);
-  return stocks.map((stock) => ({
-    ...stock,
-    valueRank: rankValue(stock.value || 0, values),
-    volumeRank: rankValue(stock.tradeVolume || 0, volumes),
-    percentRank: rankValue(stock.percent || 0, percents),
+  return stocks.map((stock) => {
+    const liveStock = applyStrategyQuote(stock);
+    return {
+    ...liveStock,
+    valueRank: rankValue(liveStock.value || 0, values),
+    volumeRank: rankValue(liveStock.tradeVolume || 0, volumes),
+    percentRank: rankValue(liveStock.percent || 0, percents),
     sector: SECTOR_MAP[stock.code] || "未分類",
     inst: getInstitutionTotal(stock.code),
-  }));
+    intradaySignals: getIntradaySignals(liveStock),
+  };
+  });
 }
 
 function strategyHit(id, stock) {
@@ -258,9 +354,11 @@ function strategyHit(id, stock) {
       reason: `由弱轉強候選，漲幅 ${pct.toFixed(2)}%，成交值排名 ${valueRank}%。`,
     },
     intraday_2m: {
-      hit: pct >= 1 && valueRank >= 68 && volumeRank >= 68,
-      score: clamp(scoreBase + 6, 0, 100),
-      reason: `成交值與成交量同步進前段班，適合當沖雷達追蹤。`,
+      hit: (stock.intradaySignals?.length || 0) > 0 || (pct >= 1 && valueRank >= 68 && volumeRank >= 68),
+      score: clamp(scoreBase + 6 + (stock.intradaySignals?.length || 0) * 5, 0, 100),
+      reason: stock.intradaySignals?.length
+        ? stock.intradaySignals.map((signal) => signal.reason).join(" ")
+        : `成交值與成交量同步進前段班，適合當沖雷達追蹤。`,
     },
     investment_trust: {
       hit: inst.trust > 0 && pct > -1,
@@ -343,7 +441,10 @@ function renderStrategyScanner() {
   const selectedLabels = selected.map((id) => STRATEGY_BY_ID[id]?.short || id).join(" + ");
 
   if (strategySummary) {
-    strategySummary.textContent = `${strategyMode === "all" ? "全部符合" : "任一符合"}：${selectedLabels}`;
+    const scanText = selected.includes("intraday_2m") && strategyLastScanAt
+      ? `｜全台股輪巡 ${new Date(strategyLastScanAt).toLocaleTimeString("zh-TW", { hour12: false })}`
+      : "";
+    strategySummary.textContent = `${strategyMode === "all" ? "全部符合" : "任一符合"}：${selectedLabels}${scanText}`;
   }
   if (strategyMatchCount) strategyMatchCount.textContent = evaluated.length.toLocaleString("zh-TW");
   if (strategyAvgScore) strategyAvgScore.textContent = topRows.length ? avgScore : "--";
@@ -360,8 +461,10 @@ function renderStrategyScanner() {
     </div>
     ${topRows.map((stock) => {
       const sign = stock.percent >= 0 ? "+" : "";
-      const chips = stock.matches.slice(0, 5).map((item) => `<b>${item.icon} ${item.short}</b>`).join("");
-      const reason = stock.matches[0]?.reason || "符合策略條件";
+      const signalChips = (stock.intradaySignals || []).map((item) => `<b>${item.icon} ${item.short}</b>`).join("");
+      const strategyChips = stock.matches.slice(0, 5).map((item) => `<b>${item.icon} ${item.short}</b>`).join("");
+      const chips = signalChips || strategyChips;
+      const reason = (stock.intradaySignals || [])[0]?.reason || stock.matches[0]?.reason || "符合策略條件";
       return `
         <div class="strategy-row">
           <span><strong>${stock.code}</strong><small>${stock.name}</small></span>
@@ -1069,6 +1172,43 @@ async function loadInstitution() {
   } catch (e) {}
 }
 
+function applyStrategyPresetFromLink(link) {
+  const text = link?.textContent || "";
+  if (!text.includes("策略2")) return;
+  selectedStrategyIds = new Set(["intraday_2m"]);
+  strategyMode = "any";
+  strategyKeyword = "";
+  if (strategySearch) strategySearch.value = "";
+  loadStrategyStocks();
+  refreshStrategyRealtimeScan(true);
+}
+
+async function refreshStrategyRealtimeScan(force = false) {
+  if (strategyRealtimeLoading || !latestStocks.length) return;
+  const isStrategyVisible = document.querySelector("#strategy-view")?.classList.contains("active");
+  const isIntradayMode = selectedStrategyIds.has("intraday_2m");
+  if (!force && (!isStrategyVisible || !isIntradayMode)) return;
+
+  strategyRealtimeLoading = true;
+  try {
+    const batchSize = 80;
+    const start = strategyRealtimeCursor % latestStocks.length;
+    const rows = latestStocks.slice(start, start + batchSize);
+    const wrapped = rows.length < batchSize ? latestStocks.slice(0, batchSize - rows.length) : [];
+    const codes = [...rows, ...wrapped].map((stock) => stock.code).filter(Boolean);
+    strategyRealtimeCursor = (start + batchSize) % latestStocks.length;
+    if (!codes.length) return;
+
+    const payload = await fetchJson(`${endpoints.realtime}?codes=${encodeURIComponent(codes.join(","))}`, 12000);
+    normalizeArray(payload.quotes).forEach(updateStrategyQuote);
+    strategyLastScanAt = Date.now();
+    renderStrategyScanner();
+  } catch (error) {
+  } finally {
+    strategyRealtimeLoading = false;
+  }
+}
+
 tickClock();
 loadMarketData();
 loadHeatmap();
@@ -1078,6 +1218,7 @@ viewLinks.forEach((link)=>{
   link.addEventListener("click",(e)=>{
     e.preventDefault();
     showView(link.dataset.view, link);
+    applyStrategyPresetFromLink(link);
   });
 });
 document.querySelectorAll("[data-chip-mode]").forEach((button) => {
@@ -1097,6 +1238,7 @@ document.querySelectorAll("[data-chip-filter]").forEach((button) => {
 });
 setInterval(tickClock, 1000);
 setInterval(loadMarketData, 15*1000);
+setInterval(refreshStrategyRealtimeScan, 15*1000);
 setInterval(loadHeatmap, 10*60*1000);
 setInterval(loadInstitution, 10*60*1000);
 
