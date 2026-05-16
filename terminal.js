@@ -70,6 +70,9 @@ let strategyStocksLoading = false;
 let swingSortKey = "score";
 let swingSortDir = "desc";
 let swingSignalFilter = "all";
+let intradaySortKey = "score";
+let intradaySortDir = "desc";
+let intradaySignalFilter = "all";
 
 const SECTOR_MAP = {
   "2454":"CPU/ASIC/IP","3443":"CPU/ASIC/IP","3661":"CPU/ASIC/IP","3529":"CPU/ASIC/IP",
@@ -776,6 +779,32 @@ function swingSortHeader(key, label) {
   return `<button type="button" data-swing-sort="${key}">${label}${mark}</button>`;
 }
 
+function getIntradaySortValue(stock, key) {
+  const values = {
+    code: Number(stock.code) || 0,
+    price: cleanNumber(stock.close),
+    percent: stock.percent || 0,
+    volume: stock.tradeVolume || 0,
+    score: stock.score || 0,
+  };
+  return values[key] ?? 0;
+}
+
+function sortIntradayRows(rows) {
+  return [...rows].sort((a, b) => {
+    const av = getIntradaySortValue(a, intradaySortKey);
+    const bv = getIntradaySortValue(b, intradaySortKey);
+    const diff = av === bv ? ((b.intradaySignals?.length || 0) - (a.intradaySignals?.length || 0)) : av - bv;
+    return intradaySortDir === "asc" ? diff : -diff;
+  });
+}
+
+function intradaySortHeader(key, label) {
+  const active = intradaySortKey === key;
+  const mark = active ? (intradaySortDir === "asc" ? " ▲" : " ▼") : " ↕";
+  return `<button type="button" data-intraday-sort="${key}">${label}${mark}</button>`;
+}
+
 const intradayRadarStyles = document.createElement("style");
 intradayRadarStyles.textContent = `
   .intraday-radar {
@@ -1120,6 +1149,8 @@ intradayRadarStyles.textContent = `
     display: flex;
     flex-direction: column;
     justify-content: space-between;
+    cursor: pointer;
+    text-align: left;
   }
   .intraday-signal-card.ma,
   .intraday-signal-card.ma.active {
@@ -1138,6 +1169,10 @@ intradayRadarStyles.textContent = `
   }
   .intraday-signal-card.active {
     box-shadow: 0 0 0 1px rgba(255, 112, 77, 0.18), 0 14px 42px rgba(255, 74, 74, 0.1);
+  }
+  .intraday-signal-card.selected {
+    border-color: rgba(255, 80, 80, 0.92);
+    box-shadow: inset 0 0 0 1px rgba(255, 80, 80, 0.32), 0 0 20px rgba(255, 80, 80, 0.12);
   }
   .intraday-card-top {
     display: flex;
@@ -1202,7 +1237,7 @@ intradayRadarStyles.textContent = `
     background: transparent;
     color: #bfd0ee;
     padding: 9px 14px;
-    cursor: default;
+    cursor: pointer;
   }
   .intraday-tabs button.active {
     border-radius: 7px;
@@ -1236,6 +1271,17 @@ intradayRadarStyles.textContent = `
     color: #91a0ba;
     background: rgba(30, 43, 65, 0.7);
     font-weight: 600;
+  }
+  .intraday-table th button {
+    border: 0;
+    background: transparent;
+    color: inherit;
+    padding: 0;
+    font: inherit;
+    cursor: pointer;
+  }
+  .intraday-table th button:hover {
+    color: #fff;
   }
   .intraday-table td {
     color: #dbe7ff;
@@ -1323,12 +1369,15 @@ function setStrategyChrome(mode) {
 
 function renderIntradayRadar(evaluated) {
   setStrategyChrome("intraday");
-  const rows = evaluated
+  const allRows = evaluated
     .filter((stock) => (stock.intradaySignals || []).length)
-    .sort((a, b) => (b.intradaySignals.length - a.intradaySignals.length) || b.score - a.score || b.percent - a.percent)
-    .slice(0, 80);
+    .map((stock) => ({ ...stock }));
+  const filteredRows = intradaySignalFilter === "all"
+    ? allRows
+    : allRows.filter((stock) => (stock.intradaySignals || []).some((signal) => signal.id === intradaySignalFilter));
+  const rows = sortIntradayRows(filteredRows).slice(0, 80);
   const signalCounts = Object.fromEntries(INTRADAY_SIGNAL_DEFS.map((signal) => [signal.id, 0]));
-  rows.forEach((stock) => {
+  allRows.forEach((stock) => {
     (stock.intradaySignals || []).forEach((signal) => {
       signalCounts[signal.id] = (signalCounts[signal.id] || 0) + 1;
     });
@@ -1350,8 +1399,9 @@ function renderIntradayRadar(evaluated) {
   };
   const cards = INTRADAY_SIGNAL_DEFS.map((signal) => {
     const count = signalCounts[signal.id] || 0;
+    const selected = intradaySignalFilter === signal.id;
     return `
-      <article class="intraday-signal-card ${cardClass[signal.id] || ""} ${count ? "active" : ""}">
+      <button class="intraday-signal-card ${cardClass[signal.id] || ""} ${count ? "active" : ""} ${selected ? "selected" : ""}" type="button" data-intraday-filter="${signal.id}">
         <div>
           <div class="intraday-card-top">
             <span class="intraday-icon">${signal.icon}</span>
@@ -1363,14 +1413,14 @@ function renderIntradayRadar(evaluated) {
           <small>${signal.hint}</small>
         </div>
         <div class="intraday-strength">${count ? "強勢" : "待觸發"} <span>${count ? "↑" : "○"}</span></div>
-      </article>
+      </button>
     `;
   }).join("");
 
   const tabs = [
-    ["all", "全部", rows.length],
+    ["all", "全部", allRows.length],
     ...INTRADAY_SIGNAL_DEFS.map((signal) => [signal.id, signal.title, signalCounts[signal.id] || 0]),
-  ].map(([id, label, count], index) => `<button class="${index === 0 ? "active" : ""}" type="button">${label}(${count})</button>`).join("");
+  ].map(([id, label, count]) => `<button class="${intradaySignalFilter === id ? "active" : ""}" type="button" data-intraday-filter="${id}">${label}(${count})</button>`).join("");
 
   const tableRows = rows.length ? `
     ${rows.map((stock) => {
@@ -1419,7 +1469,7 @@ function renderIntradayRadar(evaluated) {
         <table class="intraday-table">
           <thead>
             <tr>
-              <th>股票代號</th><th>股票名稱</th><th>訊號</th><th>現價</th><th>漲幅</th><th>成交量</th><th>分數</th><th>原因</th>
+              <th>${intradaySortHeader("code", "股票代號")}</th><th>股票名稱</th><th>訊號</th><th>${intradaySortHeader("price", "現價")}</th><th>${intradaySortHeader("percent", "漲幅")}</th><th>${intradaySortHeader("volume", "成交量")}</th><th>${intradaySortHeader("score", "分數")}</th><th>原因</th>
             </tr>
           </thead>
           <tbody>${tableRows}</tbody>
@@ -2331,6 +2381,7 @@ function applyStrategyPresetFromLink(link) {
   if (!text.includes("策略2") && !text.includes("策略4")) return;
   selectedStrategyIds = new Set([text.includes("策略4") ? "swing_radar" : "intraday_2m"]);
   if (text.includes("策略4")) swingSignalFilter = "all";
+  if (text.includes("策略2")) intradaySignalFilter = "all";
   strategyMode = "any";
   strategyKeyword = "";
   if (strategySearch) strategySearch.value = "";
@@ -2967,6 +3018,26 @@ document.addEventListener("click", (event) => {
   const filterButton = event.target.closest("[data-swing-filter]");
   if (!filterButton) return;
   swingSignalFilter = filterButton.dataset.swingFilter || "all";
+  renderStrategyScanner();
+});
+
+document.addEventListener("click", (event) => {
+  const sortButton = event.target.closest("[data-intraday-sort]");
+  if (!sortButton) return;
+  const key = sortButton.dataset.intradaySort;
+  if (intradaySortKey === key) {
+    intradaySortDir = intradaySortDir === "desc" ? "asc" : "desc";
+  } else {
+    intradaySortKey = key;
+    intradaySortDir = key === "code" ? "asc" : "desc";
+  }
+  renderStrategyScanner();
+});
+
+document.addEventListener("click", (event) => {
+  const filterButton = event.target.closest("[data-intraday-filter]");
+  if (!filterButton) return;
+  intradaySignalFilter = filterButton.dataset.intradayFilter || "all";
   renderStrategyScanner();
 });
 
