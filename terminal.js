@@ -1038,11 +1038,13 @@ intradayRadarStyles.textContent = `
   }
   .strategy-terminal.intraday-only,
   .strategy-terminal.swing-only,
+  .strategy-terminal.open-buy-only,
   .strategy-terminal.strategy5-only {
     grid-template-columns: minmax(0, 1fr);
   }
   .strategy-terminal.intraday-only .strategy-list,
   .strategy-terminal.swing-only .strategy-list,
+  .strategy-terminal.open-buy-only .strategy-list,
   .strategy-terminal.strategy5-only .strategy-list {
     display: none;
   }
@@ -1676,52 +1678,58 @@ function setStrategyChrome(mode) {
   const intraday = mode === "intraday";
   const swing = mode === "swing";
   const strategy5 = mode === "strategy5";
+  const openBuy = mode === "openBuy";
   if (swing) {
     document.querySelector("#strategy-view .strategy-header")?.remove();
   }
   if (intraday) {
     document.querySelector("#strategy-view .strategy-header")?.remove();
   }
-  if (strategyBadge) strategyBadge.textContent = intraday ? "FMN://intraday.2m.scan" : swing ? "FMN://swing.daily.scan" : "FMN://strategy.scan";
-  if (strategyTitle) strategyTitle.textContent = intraday ? "2分K當沖雷達" : swing ? "策略4-波段雷達" : "綜合策略選股";
-  if (strategyHeaderTitle) strategyHeaderTitle.textContent = intraday ? "2分K當沖雷達" : swing ? "策略4-波段雷達" : "策略中心";
+  if (strategyBadge) strategyBadge.textContent = intraday ? "FMN://intraday.2m.scan" : swing ? "FMN://swing.daily.scan" : openBuy ? "FMN://open.buy.scan" : "FMN://strategy.scan";
+  if (strategyTitle) strategyTitle.textContent = intraday ? "2分K當沖雷達" : swing ? "策略4-波段雷達" : openBuy ? "策略1-開盤入快跑" : "綜合策略選股";
+  if (strategyHeaderTitle) strategyHeaderTitle.textContent = intraday ? "2分K當沖雷達" : swing ? "策略4-波段雷達" : openBuy ? "策略1-開盤入快跑" : "策略中心";
   if (strategyHeaderText) {
     strategyHeaderText.textContent = intraday
       ? "盤中即時輪巡全台股，專注偵測跳空、突破、MA35+MACD、鑽石、瞬間拉抬與即將漲停。"
       : swing
       ? "用波段指標邏輯整理全台股，盤中即時更新價量，分類突破缺口、逃逸缺口、V轉與多頭攻擊。"
+      : openBuy
+      ? "14:30 後產生明日候選，08:55 後看最終名單，09:00 開盤入，有賺就走。"
       : "左側切換日線、籌碼與高波動策略；右側即時重算符合條件的股票訊號。";
   }
-  if (strategyActions) strategyActions.style.display = intraday || swing || strategy5 ? "none" : "";
+  if (strategyActions) strategyActions.style.display = intraday || swing || strategy5 || openBuy ? "none" : "";
   if (strategyToolbar) {
     strategyToolbar.classList.toggle("intraday-mode", intraday);
     strategyToolbar.classList.toggle("strategy5-mode", strategy5);
-    strategyToolbar.style.display = intraday || swing || strategy5 ? "none" : "";
+    strategyToolbar.style.display = intraday || swing || strategy5 || openBuy ? "none" : "";
   }
   if (strategyMetrics) {
     strategyMetrics.classList.toggle("strategy5-mode", strategy5);
-    strategyMetrics.style.display = intraday || swing || strategy5 ? "none" : "";
+    strategyMetrics.style.display = intraday || swing || strategy5 || openBuy ? "none" : "";
   }
   if (strategySearchLabel) {
     strategySearchLabel.classList.toggle("strategy5-mode", strategy5);
-    strategySearchLabel.style.display = intraday || swing || strategy5 ? "none" : "";
+    strategySearchLabel.style.display = intraday || swing || strategy5 || openBuy ? "none" : "";
   }
   if (strategyView) strategyView.classList.toggle("intraday-only", intraday);
   if (strategyView) strategyView.classList.toggle("swing-only", swing);
   if (strategyTerminal) strategyTerminal.classList.toggle("intraday-only", intraday);
   if (strategyTerminal) strategyTerminal.classList.toggle("swing-only", swing);
+  if (strategyTerminal) strategyTerminal.classList.toggle("open-buy-only", openBuy);
   if (strategyTerminal) strategyTerminal.classList.toggle("strategy5-only", strategy5);
-  if (strategyList) strategyList.hidden = intraday || swing || strategy5;
+  if (strategyList) strategyList.hidden = intraday || swing || strategy5 || openBuy;
   const labels = intraday
     ? ["觸發股票", "雷達分數", "最多訊號"]
     : swing
     ? ["符合股票", "波段分數", "最多訊號"]
+    : openBuy
+    ? ["候選股票", "平均分數", "停利"]
     : ["符合股票", "平均分數", "最高命中"];
   strategyMetricLabels.forEach((label, index) => {
     if (labels[index]) label.textContent = labels[index];
   });
   if (strategySearch?.previousElementSibling) {
-    strategySearch.previousElementSibling.textContent = intraday || swing ? "搜尋雷達股票" : "搜尋股票";
+    strategySearch.previousElementSibling.textContent = intraday || swing || openBuy ? "搜尋雷達股票" : "搜尋股票";
   }
 }
 
@@ -1949,7 +1957,7 @@ function renderSwingRadar(universe) {
 }
 
 function renderOpenBuyRadar(universe) {
-  setStrategyChrome("normal");
+  setStrategyChrome("openBuy");
   const scanCount = openBuyScanCount || Object.keys(openBuyScanMatches).length;
   const scannedCount = openBuyScannedCodes.size;
   const totalCount = openBuyScanTotal || latestStocks.filter((stock) => !/^00/.test(stock.code)).length || latestStocks.length;
@@ -2155,7 +2163,7 @@ function renderStrategy5Dashboard(evaluated) {
 function renderStrategyScanner() {
   if (!strategyTable) return;
   const selected = [...selectedStrategyIds];
-  if (!(selected.length === 1 && (selected[0] === "intraday_2m" || selected[0] === "swing_radar"))) setStrategyChrome("normal");
+  if (!(selected.length === 1 && (selected[0] === "intraday_2m" || selected[0] === "swing_radar" || selected[0] === "open_buy"))) setStrategyChrome("normal");
   strategyCards.forEach((card) => card.classList.toggle("selected", selectedStrategyIds.has(card.dataset.strategy)));
   strategyModeButtons.forEach((button) => button.classList.toggle("active", button.dataset.strategyMode === strategyMode));
 
