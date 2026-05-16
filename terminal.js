@@ -70,6 +70,8 @@ let strategy4ScanCursor = 0;
 let strategy4ScanMatches = {};
 let strategy4ScanLastAt = 0;
 let strategy4ScanCount = 0;
+let strategy4ScannedCodes = new Set();
+let strategy4ScanTotal = 0;
 let selectedStrategyIds = new Set(["momentum"]);
 let strategyMode = "any";
 let strategyKeyword = "";
@@ -316,6 +318,9 @@ function updateStrategy4Scan(payload) {
   const scannedCodes = normalizeArray(payload?.scannedCodes);
   const matches = normalizeArray(payload?.matches);
   const matchedCodes = new Set(matches.map((item) => item.code));
+  scannedCodes.forEach((code) => {
+    if (code) strategy4ScannedCodes.add(code);
+  });
   scannedCodes.forEach((code) => {
     if (!matchedCodes.has(code)) delete strategy4ScanMatches[code];
   });
@@ -1800,6 +1805,8 @@ function renderIntradayRadar(evaluated) {
 function renderSwingRadar(universe) {
   setStrategyChrome("swing");
   const scanCount = strategy4ScanCount || Object.keys(strategy4ScanMatches).length;
+  const scannedCount = strategy4ScannedCodes.size;
+  const totalCount = strategy4ScanTotal || latestStocks.filter((stock) => !/^00/.test(stock.code)).length || latestStocks.length;
   if (latestStocks.length && !strategy4ScanLoading) {
     setTimeout(() => refreshStrategyHistoryScan(true), 0);
   }
@@ -1822,10 +1829,10 @@ function renderSwingRadar(universe) {
     ? new Date(strategyLastScanAt).toLocaleTimeString("zh-TW", { hour12: false })
     : new Date().toLocaleTimeString("zh-TW", { hour12: false });
   const historyText = strategy4ScanLastAt
-    ? `後端日K掃描 ${scanCount} 檔命中｜${new Date(strategy4ScanLastAt).toLocaleTimeString("zh-TW", { hour12: false })}`
-    : `後端日K掃描啟動中`;
+    ? `已掃描 ${scannedCount}/${totalCount}｜命中 ${scanCount}｜${new Date(strategy4ScanLastAt).toLocaleTimeString("zh-TW", { hour12: false })}`
+    : `後端日K掃描啟動中 0/${totalCount}`;
 
-  if (strategySummary) strategySummary.textContent = `全台股波段雷達｜後端策略4計算｜即時價量 ${scanTime}｜${historyText}`;
+  if (strategySummary) strategySummary.textContent = `全台股波段雷達｜排除ETF｜後端策略4計算｜${historyText}`;
   if (strategyMatchCount) strategyMatchCount.textContent = rows.length.toLocaleString("zh-TW");
   if (strategyAvgScore) strategyAvgScore.textContent = rows.length ? Math.round(rows.reduce((sum, stock) => sum + stock.swingScore, 0) / rows.length) : "--";
   if (strategyTopHit) strategyTopHit.textContent = rows.length ? `${Math.max(...rows.map((stock) => stock.swingSignals.length))}/8` : "0/8";
@@ -1876,7 +1883,7 @@ function renderSwingRadar(universe) {
       <div class="swing-topbar">
         <div>
           <h2>策略4-波段雷達 <span class="swing-live">● 即時偵測中</span></h2>
-          <p>後端抓日K並計算策略4，前端只顯示符合結果。${historyText}</p>
+          <p>排除ETF，只掃真正股票；後端抓日K並計算策略4，前端只顯示符合結果。${historyText}</p>
         </div>
         <div class="swing-controls">
           <label>偵測頻率：<select><option>15秒</option></select></label>
@@ -2915,8 +2922,10 @@ async function refreshStrategyHistoryScan(force = false) {
   const isSwingMode = selectedStrategyIds.has("swing_radar");
   if (!force && (!isStrategyVisible || !isSwingMode)) return;
 
-  const source = latestStocks;
-  const batchSize = 20;
+  const source = latestStocks.filter((stock) => !/^00/.test(stock.code));
+  strategy4ScanTotal = source.length;
+  if (!source.length) return;
+  const batchSize = 24;
   const start = strategy4ScanCursor % source.length;
   const rows = source.slice(start, start + batchSize);
   const wrapped = rows.length < batchSize ? source.slice(0, batchSize - rows.length) : [];
@@ -2966,7 +2975,7 @@ document.querySelectorAll("[data-chip-filter]").forEach((button) => {
 setInterval(tickClock, 1000);
 setInterval(loadMarketData, 15*1000);
 setInterval(refreshStrategyRealtimeScan, 15*1000);
-setInterval(refreshStrategyHistoryScan, 30*1000);
+setInterval(refreshStrategyHistoryScan, 10*1000);
 setInterval(loadHeatmap, 10*60*1000);
 setInterval(loadInstitution, 10*60*1000);
 
