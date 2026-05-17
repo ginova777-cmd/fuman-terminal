@@ -7,6 +7,7 @@ const OUT_FILE = path.join(ROOT, "data", "open-buy-latest.json");
 const BACKUP_FILE = path.join(ROOT, "data", "open-buy-backup.json");
 const BATCH_SIZE = Number(process.env.OPEN_BUY_BATCH_SIZE || 48);
 const BATCHES_PER_RUN = Number(process.env.OPEN_BUY_BATCHES_PER_RUN || 5);
+const FULL_SCAN = process.env.FULL_SCAN === "1";
 const STOCK_URL = process.env.STOCK_UNIVERSE_URL || "https://fuman-terminal.vercel.app/api/stocks";
 
 function readJson(file, fallback) {
@@ -88,8 +89,14 @@ async function main() {
   const scanned = new Set(previous.scannedCodes || []);
   let cursor = Number(previous.cursor || 0) % codes.length;
   let scannedThisRun = 0;
+  const batchesToRun = FULL_SCAN ? Math.ceil(codes.length / BATCH_SIZE) : BATCHES_PER_RUN;
+  if (FULL_SCAN) {
+    previousMatches.clear();
+    scanned.clear();
+    cursor = 0;
+  }
 
-  for (let batch = 0; batch < BATCHES_PER_RUN; batch++) {
+  for (let batch = 0; batch < batchesToRun; batch++) {
     const start = cursor;
     const slice = codes.slice(start, start + BATCH_SIZE);
     const wrapped = slice.length < BATCH_SIZE ? codes.slice(0, BATCH_SIZE - slice.length) : [];
@@ -112,6 +119,7 @@ async function main() {
     ok: true,
     source: "github-actions",
     updatedAt: new Date().toISOString(),
+    fullScan: FULL_SCAN,
     cursor,
     total: codes.length,
     scannedThisRun,
@@ -124,7 +132,7 @@ async function main() {
   fs.writeFileSync(OUT_FILE, `${JSON.stringify(output, null, 2)}\n`);
   if (matches.length) fs.writeFileSync(BACKUP_FILE, `${JSON.stringify({ ...output, source: "github-actions-backup" }, null, 2)}\n`);
   else if ((backup.matches || []).length) fs.writeFileSync(OUT_FILE, `${JSON.stringify({ ...backup, source: "github-actions-backup-readonly" }, null, 2)}\n`);
-  console.log(`open-buy cache updated: scanned ${scannedThisRun}, progress ${output.scannedCodes.length}/${codes.length}, matches ${matches.length}`);
+  console.log(`open-buy cache updated: full ${FULL_SCAN}, scanned ${scannedThisRun}, progress ${output.scannedCodes.length}/${codes.length}, matches ${matches.length}`);
 }
 
 main().catch((error) => {

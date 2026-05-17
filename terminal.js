@@ -106,14 +106,14 @@ function labelUpdateModes() {
   viewLinks.forEach((link) => {
     const text = link.textContent || "";
     if (text.includes("市場總覽")) appendUpdateBadge(link, "15秒更新", "live");
-    if (text.includes("權證走向")) appendUpdateBadge(link, "每10分鐘", "slow");
+    if (text.includes("權證走向")) appendUpdateBadge(link, "08/15完整掃", "slow");
   });
   document.querySelectorAll(".strategy-card[data-strategy]").forEach((card) => {
     const text = card.textContent || "";
     if (text.includes("策略2")) appendUpdateBadge(card, "立即更新", "live");
-    if (text.includes("策略1") || text.includes("策略4") || text.includes("策略5")) {
-      appendUpdateBadge(card, "每10分鐘", "slow");
-    }
+    if (text.includes("策略1")) appendUpdateBadge(card, "08/15完整掃", "slow");
+    if (text.includes("策略4")) appendUpdateBadge(card, "08/10/15完整掃", "slow");
+    if (text.includes("策略5")) appendUpdateBadge(card, "讀快取", "slow");
   });
 }
 
@@ -2409,11 +2409,11 @@ function renderSwingRadar(universe) {
     <section class="swing-dashboard">
       <div class="swing-topbar">
         <div>
-          <h2>策略4-波段雷達 <span class="swing-live">● 每10分鐘自動更新</span></h2>
-          <p>排除ETF，只掃真正股票；背景整輪完成後才更新正式名單。${historyText}</p>
+          <h2>策略4-波段雷達 <span class="swing-live">● 08:00 / 10:00 / 15:00 完整掃</span></h2>
+          <p>排除ETF，只掃真正股票；網站讀取上一版完整快取，08:00、10:00 與 15:00 背景更新正式名單。${historyText}</p>
         </div>
         <div class="swing-controls">
-          <label>更新模式：<select><option>每10分鐘自動更新</option></select></label>
+          <label>更新模式：<select><option>08:00 / 10:00 / 15:00 完整掃</option></select></label>
           <label>市場：<select><option>全市場</option></select></label>
         </div>
       </div>
@@ -2496,11 +2496,11 @@ function renderOpenBuyRadar(universe) {
     <section class="swing-dashboard">
       <div class="swing-topbar">
         <div>
-          <h2>策略1-開盤入快跑 <span class="swing-live">● 每10分鐘自動更新</span></h2>
+          <h2>策略1-開盤入快跑 <span class="swing-live">● 08:00 / 15:00 完整掃</span></h2>
           <p>14:30後先出明日候選；08:55後看最終名單。買入：09:00 開盤價｜停利 +1.2%｜停損 -1.0%｜09:10 強制出場。${scanText}</p>
         </div>
         <div class="swing-controls">
-          <label>更新模式：<select><option>每10分鐘自動更新</option></select></label>
+          <label>更新模式：<select><option>08:00 / 15:00 完整掃</option></select></label>
           <label>市場：<select><option>排除ETF</option></select></label>
         </div>
       </div>
@@ -2625,7 +2625,7 @@ function renderStrategy5Dashboard(evaluated) {
       <div class="strategy5-hero">
         <div>
           <b>策略控制台</b>
-          <h2>策略中心 <span class="swing-live">● 每10分鐘自動更新</span></h2>
+          <h2>策略中心 <span class="swing-live">● 讀取既有快取</span></h2>
         </div>
         <div class="strategy5-date">
           <span>資料日</span>
@@ -2831,11 +2831,11 @@ function renderWarrantFlow() {
     <section class="swing-dashboard">
       <div class="swing-topbar">
         <div>
-          <h2>權證先熱雷達 <span class="swing-live">● 每10分鐘自動更新</span></h2>
+          <h2>權證先熱雷達 <span class="swing-live">● 08:00 / 15:00 完整掃</span></h2>
           <p>只顯示可優先觀察前十名：認購集中、認售偏低、股票尚未大漲者優先。</p>
         </div>
         <div class="swing-controls">
-          <label>更新模式：<select><option>每10分鐘自動更新</option></select></label>
+          <label>更新模式：<select><option>08:00 / 15:00 完整掃</option></select></label>
           <label>模式：<select><option>認購偏多</option></select></label>
         </div>
       </div>
@@ -3853,9 +3853,6 @@ document.querySelectorAll("[data-chip-filter]").forEach((button) => {
 setInterval(tickClock, 1000);
 setInterval(loadMarketData, 15*1000);
 setInterval(refreshStrategyRealtimeScan, 15*1000);
-setInterval(refreshOpenBuyScan, 10*60*1000);
-setInterval(refreshStrategyHistoryScan, 10*60*1000);
-setInterval(loadWarrantFlow, 10*60*1000);
 setInterval(loadHeatmap, 10*60*1000);
 setInterval(loadInstitution, 10*60*1000);
 
