@@ -127,7 +127,12 @@ const endpoints = {
   scanStrategy4: "/api/scan-strategy4",
   scanWarrantFlow: "/api/scan-warrant-flow",
   exportAuth: "/api/export-auth",
+  openBuyCache: "/data/open-buy-latest.json",
+  openBuyBackup: "/data/open-buy-backup.json",
   strategy4Cache: "/data/strategy4-latest.json",
+  strategy4Backup: "/data/strategy4-backup.json",
+  warrantFlowCache: "/data/warrant-flow-latest.json",
+  warrantFlowBackup: "/data/warrant-flow-backup.json",
   strategyStocks: "/api/stocks",
   stocks: "https://openapi.twse.com.tw/v1/exchangeReport/STOCK_DAY_ALL",
 };
@@ -173,6 +178,7 @@ let openBuyScanLastAt = 0;
 let openBuyScanCount = 0;
 let openBuyScannedCodes = new Set();
 let openBuyScanTotal = 0;
+let openBuyCacheLoading = false;
 let warrantFlowLoading = false;
 let warrantFlowData = [];
 let warrantFlowUpdatedAt = 0;
@@ -816,6 +822,41 @@ function loadOpenBuyLocalCache() {
     return true;
   } catch (error) {
     return false;
+  }
+}
+
+function mergeOpenBuyCache(payload) {
+  normalizeArray(payload?.scannedCodes).forEach((code) => {
+    if (code) openBuyScannedCodes.add(code);
+  });
+  if (payload?.total) openBuyScanTotal = cleanNumber(payload.total);
+  normalizeArray(payload?.matches).forEach((item) => {
+    if (!item?.code) return;
+    const base = latestStocks.find((stock) => stock.code === item.code) || {};
+    openBuyScanMatches[item.code] = { ...base, ...item, name: base.name || item.name || item.code };
+  });
+  openBuyScanCount = Object.keys(openBuyScanMatches).length;
+  const updatedAt = Date.parse(payload?.updatedAt || "");
+  openBuyScanLastAt = Number.isFinite(updatedAt) ? updatedAt : Date.now();
+  saveOpenBuyLocalCache();
+}
+
+async function loadOpenBuyCache(force = false) {
+  if (openBuyCacheLoading) return;
+  if (!force && openBuyScanLastAt) return;
+  openBuyCacheLoading = true;
+  try {
+    let payload = await fetchJson(`${endpoints.openBuyCache}?t=${Date.now()}`, 10000);
+    if (!normalizeArray(payload?.matches).length) {
+      payload = await fetchJson(`${endpoints.openBuyBackup}?t=${Date.now()}`, 10000);
+    }
+    if (payload?.ok && Array.isArray(payload.matches)) {
+      mergeOpenBuyCache(payload);
+      renderStrategyScanner();
+    }
+  } catch (error) {
+  } finally {
+    openBuyCacheLoading = false;
   }
 }
 
@@ -2404,10 +2445,13 @@ function renderOpenBuyRadar(universe) {
   if (!openBuyScanLastAt) {
     loadOpenBuyLocalCache();
   }
+  if (!openBuyScanLastAt && !openBuyCacheLoading) {
+    loadOpenBuyCache();
+  }
   const scanCount = openBuyScanCount || Object.keys(openBuyScanMatches).length;
   const scannedCount = openBuyScannedCodes.size;
   const totalCount = openBuyScanTotal || latestStocks.filter((stock) => !/^00/.test(stock.code)).length || latestStocks.length;
-  if (latestStocks.length && !openBuyScanLoading && !hasFreshOpenBuyScan()) {
+  if (latestStocks.length && !openBuyScanLoading && !openBuyCacheLoading && !hasFreshOpenBuyScan()) {
     setTimeout(() => refreshOpenBuyScan(true), 0);
   }
 
@@ -2849,7 +2893,10 @@ async function loadWarrantFlow(force = false) {
   }
   try {
     if (!latestStocks.length) loadStrategyStocks();
-    const payload = await fetchJson(endpoints.scanWarrantFlow, 30000);
+    let payload = await fetchJson(`${endpoints.warrantFlowCache}?t=${Date.now()}`, 10000);
+    if (!normalizeArray(payload?.matches).length || force) {
+      payload = await fetchJson(force ? endpoints.scanWarrantFlow : `${endpoints.warrantFlowBackup}?t=${Date.now()}`, 30000);
+    }
     warrantFlowData = normalizeArray(payload.matches);
     warrantFlowUpdatedAt = Date.now();
     saveWarrantFlowLocalCache();
@@ -3625,7 +3672,10 @@ function applyStrategyPresetFromLink(link) {
   if (strategySearch) strategySearch.value = "";
   loadStrategyStocks();
   if (text.includes("策略2")) refreshStrategyRealtimeScan(true);
-  if (text.includes("策略1")) refreshOpenBuyScan(true);
+  if (text.includes("策略1")) {
+    loadOpenBuyCache(true);
+    refreshOpenBuyScan(true);
+  }
   if (text.includes("策略4")) {
     loadStrategy4Cache(true);
     refreshStrategyHistoryScan(true);
@@ -3711,7 +3761,10 @@ async function loadStrategy4Cache(force = false) {
   if (!force && strategy4ScanLastAt) return;
   strategy4CacheLoading = true;
   try {
-    const payload = await fetchJson(`${endpoints.strategy4Cache}?t=${Date.now()}`, 10000);
+    let payload = await fetchJson(`${endpoints.strategy4Cache}?t=${Date.now()}`, 10000);
+    if (!normalizeArray(payload?.matches).length) {
+      payload = await fetchJson(`${endpoints.strategy4Backup}?t=${Date.now()}`, 10000);
+    }
     if (payload?.ok && Array.isArray(payload.matches)) {
       mergeStrategy4Cache(payload);
       renderStrategyScanner();
