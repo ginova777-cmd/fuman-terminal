@@ -80,6 +80,43 @@ function installBasicDevtoolsGuard() {
 
 installBasicDevtoolsGuard();
 
+function appendUpdateBadge(target, text, tone = "slow") {
+  if (!target || target.querySelector(".update-mode-badge")) return;
+  const badge = document.createElement("small");
+  badge.className = "update-mode-badge";
+  badge.textContent = text;
+  badge.style.cssText = `
+    display: inline-flex;
+    align-items: center;
+    margin-left: 8px;
+    padding: 2px 6px;
+    border-radius: 999px;
+    border: 1px solid ${tone === "live" ? "rgba(255,77,92,.55)" : "rgba(127,166,255,.45)"};
+    background: ${tone === "live" ? "rgba(255,77,92,.14)" : "rgba(63,102,204,.16)"};
+    color: ${tone === "live" ? "#ff9aa8" : "#9db9ff"};
+    font-size: 11px;
+    font-weight: 800;
+    white-space: nowrap;
+  `;
+  const strong = target.querySelector("strong") || target;
+  strong.appendChild(badge);
+}
+
+function labelUpdateModes() {
+  viewLinks.forEach((link) => {
+    const text = link.textContent || "";
+    if (text.includes("市場總覽")) appendUpdateBadge(link, "15秒更新", "live");
+    if (text.includes("權證走向")) appendUpdateBadge(link, "每10分鐘", "slow");
+  });
+  document.querySelectorAll(".strategy-card[data-strategy]").forEach((card) => {
+    const text = card.textContent || "";
+    if (text.includes("策略2")) appendUpdateBadge(card, "立即更新", "live");
+    if (text.includes("策略1") || text.includes("策略4") || text.includes("策略5")) {
+      appendUpdateBadge(card, "每10分鐘", "slow");
+    }
+  });
+}
+
 const endpoints = {
   backend: "/api/market",
   heatmap: "/api/heatmap",
@@ -114,17 +151,24 @@ let strategyHistoryLastScanAt = 0;
 let strategy4ScanLoading = false;
 let strategy4ScanCursor = 0;
 let strategy4ScanMatches = {};
+let strategy4PendingMatches = null;
+let strategy4PendingScannedCodes = null;
 let strategy4ScanLastAt = 0;
 let strategy4ScanCount = 0;
 let strategy4ScannedCodes = new Set();
 let strategy4ScanTotal = 0;
 let strategy4CacheLoading = false;
 const STRATEGY4_LOCAL_CACHE_KEY = "fuman_strategy4_scan_cache_v1";
+const STRATEGY4_BACKUP_CACHE_KEY = "fuman_strategy4_nonempty_backup_v1";
+const OPEN_BUY_LOCAL_CACHE_KEY = "fuman_open_buy_scan_cache_v1";
+const OPEN_BUY_BACKUP_CACHE_KEY = "fuman_open_buy_nonempty_backup_v1";
 const EXPORT_UNLOCK_KEY = "fuman_export_unlock_until_v1";
 const EXPORT_UNLOCK_MS = 30 * 24 * 60 * 60 * 1000;
 let openBuyScanLoading = false;
 let openBuyScanCursor = 0;
 let openBuyScanMatches = {};
+let openBuyPendingMatches = null;
+let openBuyPendingScannedCodes = null;
 let openBuyScanLastAt = 0;
 let openBuyScanCount = 0;
 let openBuyScannedCodes = new Set();
@@ -133,7 +177,8 @@ let warrantFlowLoading = false;
 let warrantFlowData = [];
 let warrantFlowUpdatedAt = 0;
 let warrantFlowKeyword = "";
-const CACHE_FRESH_MS = 30 * 60 * 1000;
+const WARRANT_FLOW_LOCAL_CACHE_KEY = "fuman_warrant_flow_cache_v1";
+const CACHE_FRESH_MS = 10 * 60 * 1000;
 let selectedStrategyIds = new Set(["momentum"]);
 let strategyMode = "any";
 let strategyKeyword = "";
@@ -410,6 +455,42 @@ function updateStrategy4Scan(payload, options = {}) {
   saveStrategy4LocalCache();
 }
 
+function collectStrategy4Pending(payload) {
+  if (!strategy4PendingMatches) strategy4PendingMatches = {};
+  if (!strategy4PendingScannedCodes) strategy4PendingScannedCodes = new Set();
+  normalizeArray(payload?.scannedCodes).forEach((code) => {
+    if (code) strategy4PendingScannedCodes.add(code);
+  });
+  normalizeArray(payload?.matches).forEach((item) => {
+    if (!item?.code) return;
+    const base = latestStocks.find((stock) => stock.code === item.code) || {};
+    const signals = normalizeArray(item.swingSignals || item.signals);
+    strategy4PendingMatches[item.code] = {
+      ...base,
+      ...item,
+      name: base.name || item.name || item.code,
+      tradeVolume: cleanNumber(item.tradeVolume || item.volume || base.tradeVolume),
+      value: cleanNumber(item.value || base.value),
+      percent: Number.isFinite(Number(item.percent)) ? Number(item.percent) : (base.percent || 0),
+      swingSignals: signals,
+      swingStage: item.swingStage || item.stage || base.swingStage,
+      swingScore: cleanNumber(item.swingScore || item.score),
+      updatedAt: Date.now(),
+    };
+  });
+}
+
+function commitStrategy4Pending() {
+  if (!strategy4PendingMatches || !strategy4PendingScannedCodes) return;
+  strategy4ScanMatches = { ...strategy4PendingMatches };
+  strategy4ScannedCodes = new Set(strategy4PendingScannedCodes);
+  strategy4ScanCount = Object.keys(strategy4ScanMatches).length;
+  strategy4ScanLastAt = Date.now();
+  strategy4PendingMatches = null;
+  strategy4PendingScannedCodes = null;
+  saveStrategy4LocalCache();
+}
+
 function mergeStrategy4Cache(payload) {
   const scannedCodes = normalizeArray(payload?.scannedCodes);
   scannedCodes.forEach((code) => {
@@ -424,19 +505,26 @@ function mergeStrategy4Cache(payload) {
 
 function saveStrategy4LocalCache() {
   try {
+    const matches = Object.values(strategy4ScanMatches);
     const payload = {
       updatedAt: strategy4ScanLastAt || Date.now(),
       total: strategy4ScanTotal,
       scannedCodes: [...strategy4ScannedCodes],
-      matches: Object.values(strategy4ScanMatches),
+      matches,
     };
     localStorage.setItem(STRATEGY4_LOCAL_CACHE_KEY, JSON.stringify(payload));
+    if (matches.length) {
+      localStorage.setItem(STRATEGY4_BACKUP_CACHE_KEY, JSON.stringify(payload));
+    }
   } catch (error) {}
 }
 
 function loadStrategy4LocalCache() {
   try {
-    const payload = JSON.parse(localStorage.getItem(STRATEGY4_LOCAL_CACHE_KEY) || "{}");
+    let payload = JSON.parse(localStorage.getItem(STRATEGY4_LOCAL_CACHE_KEY) || "{}");
+    if (!Array.isArray(payload.matches) || !payload.matches.length) {
+      payload = JSON.parse(localStorage.getItem(STRATEGY4_BACKUP_CACHE_KEY) || "{}");
+    }
     if (!Array.isArray(payload.matches) || !payload.matches.length) return false;
     if (payload.total) strategy4ScanTotal = cleanNumber(payload.total);
     normalizeArray(payload.scannedCodes).forEach((code) => {
@@ -472,6 +560,28 @@ function hasFreshOpenBuyScan() {
 
 function hasFreshWarrantFlow() {
   return warrantFlowData.length > 0 && warrantFlowUpdatedAt && (Date.now() - warrantFlowUpdatedAt) < CACHE_FRESH_MS;
+}
+
+function saveWarrantFlowLocalCache() {
+  try {
+    if (!warrantFlowData.length) return;
+    localStorage.setItem(WARRANT_FLOW_LOCAL_CACHE_KEY, JSON.stringify({
+      updatedAt: warrantFlowUpdatedAt || Date.now(),
+      matches: warrantFlowData,
+    }));
+  } catch (error) {}
+}
+
+function loadWarrantFlowLocalCache() {
+  try {
+    const payload = JSON.parse(localStorage.getItem(WARRANT_FLOW_LOCAL_CACHE_KEY) || "{}");
+    if (!Array.isArray(payload.matches) || !payload.matches.length) return false;
+    warrantFlowData = payload.matches;
+    warrantFlowUpdatedAt = cleanNumber(payload.updatedAt) || Date.now();
+    return true;
+  } catch (error) {
+    return false;
+  }
 }
 
 function showExportNotice(message) {
@@ -606,16 +716,19 @@ function openExportSettings() {
   window.alert("請到 Vercel 專案 Settings → Environment Variables，新增或修改 FUMAN_EXPORT_PASSWORD。這樣只有知道你密碼的人可以匯出。");
 }
 
-function updateOpenBuyScan(payload) {
+function updateOpenBuyScan(payload, options = {}) {
+  const retainUnmatched = options.retainUnmatched !== false;
   const scannedCodes = normalizeArray(payload?.scannedCodes);
   const matches = normalizeArray(payload?.matches);
   const matchedCodes = new Set(matches.map((item) => item.code));
   scannedCodes.forEach((code) => {
     if (code) openBuyScannedCodes.add(code);
   });
-  scannedCodes.forEach((code) => {
-    if (!matchedCodes.has(code)) delete openBuyScanMatches[code];
-  });
+  if (!retainUnmatched) {
+    scannedCodes.forEach((code) => {
+      if (!matchedCodes.has(code)) delete openBuyScanMatches[code];
+    });
+  }
   matches.forEach((item) => {
     if (!item?.code) return;
     const base = latestStocks.find((stock) => stock.code === item.code) || {};
@@ -631,6 +744,79 @@ function updateOpenBuyScan(payload) {
     };
   });
   openBuyScanCount = Object.keys(openBuyScanMatches).length;
+  saveOpenBuyLocalCache();
+}
+
+function collectOpenBuyPending(payload) {
+  if (!openBuyPendingMatches) openBuyPendingMatches = {};
+  if (!openBuyPendingScannedCodes) openBuyPendingScannedCodes = new Set();
+  normalizeArray(payload?.scannedCodes).forEach((code) => {
+    if (code) openBuyPendingScannedCodes.add(code);
+  });
+  normalizeArray(payload?.matches).forEach((item) => {
+    if (!item?.code) return;
+    const base = latestStocks.find((stock) => stock.code === item.code) || {};
+    openBuyPendingMatches[item.code] = {
+      ...base,
+      ...item,
+      name: base.name || item.name || item.code,
+      tradeVolume: cleanNumber(item.tradeVolume || item.volume || base.tradeVolume),
+      value: cleanNumber(item.value || base.value),
+      percent: Number.isFinite(Number(item.percent)) ? Number(item.percent) : (base.percent || 0),
+      score: cleanNumber(item.score),
+      updatedAt: Date.now(),
+    };
+  });
+}
+
+function commitOpenBuyPending() {
+  if (!openBuyPendingMatches || !openBuyPendingScannedCodes) return;
+  openBuyScanMatches = { ...openBuyPendingMatches };
+  openBuyScannedCodes = new Set(openBuyPendingScannedCodes);
+  openBuyScanCount = Object.keys(openBuyScanMatches).length;
+  openBuyScanLastAt = Date.now();
+  openBuyPendingMatches = null;
+  openBuyPendingScannedCodes = null;
+  saveOpenBuyLocalCache();
+}
+
+function saveOpenBuyLocalCache() {
+  try {
+    const matches = Object.values(openBuyScanMatches);
+    const payload = {
+      updatedAt: openBuyScanLastAt || Date.now(),
+      total: openBuyScanTotal,
+      scannedCodes: [...openBuyScannedCodes],
+      matches,
+    };
+    localStorage.setItem(OPEN_BUY_LOCAL_CACHE_KEY, JSON.stringify(payload));
+    if (matches.length) {
+      localStorage.setItem(OPEN_BUY_BACKUP_CACHE_KEY, JSON.stringify(payload));
+    }
+  } catch (error) {}
+}
+
+function loadOpenBuyLocalCache() {
+  try {
+    let payload = JSON.parse(localStorage.getItem(OPEN_BUY_LOCAL_CACHE_KEY) || "{}");
+    if (!Array.isArray(payload.matches) || !payload.matches.length) {
+      payload = JSON.parse(localStorage.getItem(OPEN_BUY_BACKUP_CACHE_KEY) || "{}");
+    }
+    if (!Array.isArray(payload.matches) || !payload.matches.length) return false;
+    if (payload.total) openBuyScanTotal = cleanNumber(payload.total);
+    normalizeArray(payload.scannedCodes).forEach((code) => {
+      if (code) openBuyScannedCodes.add(code);
+    });
+    normalizeArray(payload.matches).forEach((item) => {
+      if (!item?.code) return;
+      openBuyScanMatches[item.code] = { ...item };
+    });
+    openBuyScanCount = Object.keys(openBuyScanMatches).length;
+    openBuyScanLastAt = cleanNumber(payload.updatedAt) || Date.now();
+    return true;
+  } catch (error) {
+    return false;
+  }
 }
 
 function updateStrategyQuote(quote) {
@@ -812,6 +998,7 @@ function ensureStrategyCards() {
     title.textContent = `策略清單 (${strategyList.querySelectorAll(".strategy-card[data-strategy]").length})`;
   }
   strategyCards = [...document.querySelectorAll(".strategy-card[data-strategy]")];
+  labelUpdateModes();
 }
 
 function buildStrategyUniverse(stocks) {
@@ -2071,7 +2258,7 @@ function renderIntradayRadar(evaluated) {
     <section class="intraday-dashboard">
       <div class="intraday-topbar">
         <div>
-          <h2>2分K當沖雷達 <span class="intraday-live">● 即時偵測中</span></h2>
+          <h2>2分K當沖雷達 <span class="intraday-live">● 立即更新</span></h2>
           <p>盤中即時偵測強勢訊號，15秒輪巡全台股。</p>
         </div>
         <div class="intraday-controls">
@@ -2188,11 +2375,11 @@ function renderSwingRadar(universe) {
     <section class="swing-dashboard">
       <div class="swing-topbar">
         <div>
-          <h2>策略4-波段雷達 <span class="swing-live">● 即時偵測中</span></h2>
-          <p>排除ETF，只掃真正股票；後端抓日K並計算策略4，前端只顯示符合結果。${historyText}</p>
+          <h2>策略4-波段雷達 <span class="swing-live">● 每10分鐘自動更新</span></h2>
+          <p>排除ETF，只掃真正股票；背景整輪完成後才更新正式名單。${historyText}</p>
         </div>
         <div class="swing-controls">
-          <label>更新模式：<select><option>掃完即停</option></select></label>
+          <label>更新模式：<select><option>每10分鐘自動更新</option></select></label>
           <label>市場：<select><option>全市場</option></select></label>
         </div>
       </div>
@@ -2221,6 +2408,9 @@ function renderSwingRadar(universe) {
 
 function renderOpenBuyRadar(universe) {
   setStrategyChrome("openBuy");
+  if (!openBuyScanLastAt) {
+    loadOpenBuyLocalCache();
+  }
   const scanCount = openBuyScanCount || Object.keys(openBuyScanMatches).length;
   const scannedCount = openBuyScannedCodes.size;
   const totalCount = openBuyScanTotal || latestStocks.filter((stock) => !/^00/.test(stock.code)).length || latestStocks.length;
@@ -2269,11 +2459,11 @@ function renderOpenBuyRadar(universe) {
     <section class="swing-dashboard">
       <div class="swing-topbar">
         <div>
-          <h2>策略1-開盤入快跑 <span class="swing-live">● 無腦開盤入</span></h2>
+          <h2>策略1-開盤入快跑 <span class="swing-live">● 每10分鐘自動更新</span></h2>
           <p>14:30後先出明日候選；08:55後看最終名單。買入：09:00 開盤價｜停利 +1.2%｜停損 -1.0%｜09:10 強制出場。${scanText}</p>
         </div>
         <div class="swing-controls">
-          <label>掃描頻率：<select><option>10秒</option></select></label>
+          <label>更新模式：<select><option>每10分鐘自動更新</option></select></label>
           <label>市場：<select><option>排除ETF</option></select></label>
         </div>
       </div>
@@ -2398,7 +2588,7 @@ function renderStrategy5Dashboard(evaluated) {
       <div class="strategy5-hero">
         <div>
           <b>策略控制台</b>
-          <h2>策略中心</h2>
+          <h2>策略中心 <span class="swing-live">● 每10分鐘自動更新</span></h2>
         </div>
         <div class="strategy5-date">
           <span>資料日</span>
@@ -2604,11 +2794,11 @@ function renderWarrantFlow() {
     <section class="swing-dashboard">
       <div class="swing-topbar">
         <div>
-          <h2>權證先熱雷達 <span class="swing-live">● 日資料版</span></h2>
+          <h2>權證先熱雷達 <span class="swing-live">● 每10分鐘自動更新</span></h2>
           <p>只顯示可優先觀察前十名：認購集中、認售偏低、股票尚未大漲者優先。</p>
         </div>
         <div class="swing-controls">
-          <label>資料：<select><option>上市 + 上櫃</option></select></label>
+          <label>更新模式：<select><option>每10分鐘自動更新</option></select></label>
           <label>模式：<select><option>認購偏多</option></select></label>
         </div>
       </div>
@@ -2652,13 +2842,16 @@ function renderWarrantFlow() {
 
 async function loadWarrantFlow(force = false) {
   if (warrantFlowLoading) return;
+  if (!warrantFlowData.length) {
+    loadWarrantFlowLocalCache();
+  }
   if (!force && hasFreshWarrantFlow()) {
     renderWarrantFlow();
     return;
   }
   warrantFlowLoading = true;
   const panel = viewPanels["warrant-flow"];
-  if (panel) {
+  if (panel && !warrantFlowData.length) {
     panel.innerHTML = `<div class="empty-state">正在讀取權證資金走向...</div>`;
   }
   try {
@@ -2666,9 +2859,10 @@ async function loadWarrantFlow(force = false) {
     const payload = await fetchJson(endpoints.scanWarrantFlow, 30000);
     warrantFlowData = normalizeArray(payload.matches);
     warrantFlowUpdatedAt = Date.now();
+    saveWarrantFlowLocalCache();
     renderWarrantFlow();
   } catch (error) {
-    if (panel) {
+    if (panel && !warrantFlowData.length) {
       panel.innerHTML = `<div class="empty-state">權證資料暫時讀取失敗，請稍後再試。</div>`;
     }
   } finally {
@@ -3437,7 +3631,7 @@ function applyStrategyPresetFromLink(link) {
   strategyKeyword = "";
   if (strategySearch) strategySearch.value = "";
   loadStrategyStocks();
-  refreshStrategyRealtimeScan(true);
+  if (text.includes("策略2")) refreshStrategyRealtimeScan(true);
   if (text.includes("策略1")) refreshOpenBuyScan(true);
   if (text.includes("策略4")) {
     loadStrategy4Cache(true);
@@ -3448,11 +3642,7 @@ function applyStrategyPresetFromLink(link) {
 async function refreshStrategyRealtimeScan(force = false) {
   if (strategyRealtimeLoading || !latestStocks.length) return;
   const isStrategyVisible = document.querySelector("#strategy-view")?.classList.contains("active");
-  const isRealtimeStrategy = selectedStrategyIds.has("intraday_2m") ||
-    selectedStrategyIds.has("swing_radar") ||
-    selectedStrategyIds.has("ultra_short") ||
-    selectedStrategyIds.has("short_fund_flow") ||
-    selectedStrategyIds.has("short_squeeze");
+  const isRealtimeStrategy = selectedStrategyIds.has("intraday_2m");
   if (!force && (!isStrategyVisible || !isRealtimeStrategy)) return;
 
   strategyRealtimeLoading = true;
@@ -3485,6 +3675,11 @@ async function refreshOpenBuyScan(force = false) {
   openBuyScanTotal = source.length;
   if (!source.length) return;
   if (hasFreshOpenBuyScan()) return;
+  if (!openBuyPendingMatches) {
+    openBuyPendingMatches = {};
+    openBuyPendingScannedCodes = new Set();
+    openBuyScanCursor = 0;
+  }
   const batchSize = 48;
   const start = openBuyScanCursor % source.length;
   const rows = source.slice(start, start + batchSize);
@@ -3497,8 +3692,16 @@ async function refreshOpenBuyScan(force = false) {
   openBuyScanLoading = true;
   try {
     const payload = await fetchJson(`${endpoints.scanOpenBuy}?codes=${encodeURIComponent(codes.join(","))}`, 45000);
-    updateOpenBuyScan(payload);
-    openBuyScanLastAt = Date.now();
+    collectOpenBuyPending(payload);
+    normalizeArray(payload?.scannedCodes).forEach((code) => {
+      if (code) openBuyScannedCodes.add(code);
+    });
+    if (!Object.keys(openBuyScanMatches).length) {
+      updateOpenBuyScan(payload);
+    }
+    if (completedCycle) {
+      commitOpenBuyPending();
+    }
     renderStrategyScanner();
   } catch (error) {
   } finally {
@@ -3536,6 +3739,11 @@ async function refreshStrategyHistoryScan(force = false) {
   strategy4ScanTotal = source.length;
   if (!source.length) return;
   if (hasFreshStrategy4Scan()) return;
+  if (!strategy4PendingMatches) {
+    strategy4PendingMatches = {};
+    strategy4PendingScannedCodes = new Set();
+    strategy4ScanCursor = 0;
+  }
   const batchSize = 48;
   const start = strategy4ScanCursor % source.length;
   const rows = source.slice(start, start + batchSize);
@@ -3548,8 +3756,16 @@ async function refreshStrategyHistoryScan(force = false) {
   strategy4ScanLoading = true;
   try {
     const payload = await fetchJson(`${endpoints.scanStrategy4}?codes=${encodeURIComponent(codes.join(","))}`, 45000);
-    updateStrategy4Scan(payload);
-    strategy4ScanLastAt = Date.now();
+    collectStrategy4Pending(payload);
+    normalizeArray(payload?.scannedCodes).forEach((code) => {
+      if (code) strategy4ScannedCodes.add(code);
+    });
+    if (!Object.keys(strategy4ScanMatches).length) {
+      updateStrategy4Scan(payload);
+    }
+    if (completedCycle) {
+      commitStrategy4Pending();
+    }
     renderStrategyScanner();
   } catch (error) {
   } finally {
@@ -3591,8 +3807,9 @@ document.querySelectorAll("[data-chip-filter]").forEach((button) => {
 setInterval(tickClock, 1000);
 setInterval(loadMarketData, 15*1000);
 setInterval(refreshStrategyRealtimeScan, 15*1000);
-setInterval(refreshOpenBuyScan, 60*1000);
-setInterval(refreshStrategyHistoryScan, 60*1000);
+setInterval(refreshOpenBuyScan, 10*60*1000);
+setInterval(refreshStrategyHistoryScan, 10*60*1000);
+setInterval(loadWarrantFlow, 10*60*1000);
 setInterval(loadHeatmap, 10*60*1000);
 setInterval(loadInstitution, 10*60*1000);
 
@@ -4101,6 +4318,7 @@ watchlistSearchInput?.addEventListener("keydown", (e) => {
 watchlistAddBtn?.addEventListener("click", addToWatchlist);
 
 ensureStrategyCards();
+labelUpdateModes();
 strategyList?.addEventListener("click", (event) => {
   const card = event.target.closest(".strategy-card[data-strategy]");
   if (!card || !strategyList.contains(card)) return;
