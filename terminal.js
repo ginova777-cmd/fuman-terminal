@@ -1650,9 +1650,9 @@ intradayRadarStyles.textContent = `
     margin-left: auto;
   }
   .warrant-search-hint {
-    flex-basis: 100%;
-    width: fit-content;
-    margin-left: auto;
+    display: inline-flex;
+    width: max-content;
+    max-width: 220px;
     padding: 7px 10px;
     border: 1px solid rgba(255, 80, 80, 0.58);
     border-radius: 8px;
@@ -1660,8 +1660,19 @@ intradayRadarStyles.textContent = `
     color: #fff;
     font-size: 12px;
     font-weight: 900;
-    text-align: right;
+    text-align: center;
     box-shadow: inset 0 0 0 1px rgba(255, 80, 80, 0.12);
+  }
+  .warrant-search-box {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+  .warrant-search-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
   }
   .swing-actions button,
   .swing-tabs button {
@@ -2893,10 +2904,12 @@ function renderWarrantFlow() {
       <section class="swing-panel">
         <div class="swing-tabs">
           <button class="active" type="button">${listLabel}</button>
-          <div class="swing-actions">
-            <small class="warrant-search-hint">可搜尋股票代號/名稱，查看未進 Top 10 的權證熱度。</small>
-            <input id="warrant-flow-search" type="search" placeholder="搜尋股票代號/名稱" value="${escapeAttr(warrantFlowKeyword)}" data-warrant-flow-search>
-            <button id="warrant-flow-refresh" type="button">重新整理</button>
+          <div class="swing-actions warrant-search-box">
+            <small class="warrant-search-hint">可搜尋全台股票權證熱度</small>
+            <div class="warrant-search-row">
+              <input id="warrant-flow-search" type="search" placeholder="搜尋股票代號/名稱" value="${escapeAttr(warrantFlowKeyword)}" data-warrant-flow-search>
+              <button id="warrant-flow-refresh" type="button">重新整理</button>
+            </div>
           </div>
         </div>
         <table class="swing-table">
