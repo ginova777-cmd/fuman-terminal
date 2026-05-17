@@ -2905,7 +2905,7 @@ function renderWarrantFlow() {
         <div class="swing-tabs">
           <button class="active" type="button">${listLabel}</button>
           <div class="swing-actions warrant-search-box">
-            <small class="warrant-search-hint">可搜尋全台股票權證熱度</small>
+            <small class="warrant-search-hint">🔥 可搜尋全台股票權證熱度</small>
             <div class="warrant-search-row">
               <input id="warrant-flow-search" type="search" placeholder="搜尋股票代號/名稱" value="${escapeAttr(warrantFlowKeyword)}" data-warrant-flow-search>
               <button id="warrant-flow-refresh" type="button">重新整理</button>
