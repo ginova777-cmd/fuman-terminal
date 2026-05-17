@@ -90,6 +90,22 @@ function isViewActive(name) {
   return Boolean(viewPanels[name]?.classList.contains("active"));
 }
 
+function titleWithIcon(icon, text) {
+  return `<span class="page-title-icon">${icon}</span>${text}`;
+}
+
+function setTitleWithIcon(target, icon, text) {
+  if (!target) return;
+  target.innerHTML = titleWithIcon(icon, text);
+}
+
+function applyStaticTitleIcons() {
+  setTitleWithIcon(document.querySelector("#market-view .page-header h1"), "●", "市場總覽");
+  setTitleWithIcon(document.querySelector("#watchlist-view .page-header h1"), "☆", "自選股");
+  setTitleWithIcon(document.querySelector("#chip-trade-view .page-header h1"), "◆", "外資 + 投信連買");
+  setTitleWithIcon(document.querySelector("#warrant-flow-view .page-header h1"), "◒", "權證走向");
+}
+
 function escapeAttr(value) {
   return String(value ?? "")
     .replace(/&/g, "&amp;")
@@ -2192,6 +2208,14 @@ intradayRadarStyles.textContent = `
     line-height: 1.5;
     font-size: 12px;
   }
+  .page-title-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    margin-right: 8px;
+    color: #7fa6ff;
+    font-weight: 900;
+  }
   .strategy-toolbar.strategy5-mode,
   .strategy-metrics.strategy5-mode,
   .strategy-search.strategy5-mode,
@@ -2226,8 +2250,11 @@ function setStrategyChrome(mode) {
     document.querySelector("#strategy-view .strategy-header")?.remove();
   }
   if (strategyBadge) strategyBadge.textContent = intraday ? "FMN://intraday.2m.scan" : swing ? "FMN://swing.daily.scan" : openBuy ? "FMN://open.buy.scan" : "FMN://strategy.scan";
-  if (strategyTitle) strategyTitle.textContent = intraday ? "2分K當沖雷達" : swing ? "策略4-波段雷達" : openBuy ? "策略1-開盤入快跑" : "綜合策略選股";
-  if (strategyHeaderTitle) strategyHeaderTitle.textContent = intraday ? "2分K當沖雷達" : swing ? "策略4-波段雷達" : openBuy ? "策略1-開盤入快跑" : "策略中心";
+  const icon = intraday ? "◔" : swing ? "└" : openBuy ? "⚡" : strategy5 ? "▰" : "⚡";
+  const title = intraday ? "2分K當沖雷達" : swing ? "策略4-波段雷達" : openBuy ? "策略1-開盤入快跑" : strategy5 ? "策略5-綜合策略" : "綜合策略選股";
+  const headerTitle = intraday ? "2分K當沖雷達" : swing ? "策略4-波段雷達" : openBuy ? "策略1-開盤入快跑" : strategy5 ? "策略5-綜合策略" : "策略中心";
+  setTitleWithIcon(strategyTitle, icon, title);
+  setTitleWithIcon(strategyHeaderTitle, icon, headerTitle);
   if (strategyHeaderText) {
     strategyHeaderText.textContent = intraday
       ? "盤中即時輪巡全台股，專注偵測跳空、突破、MA35+MACD、鑽石與瞬間拉抬。"
@@ -2355,7 +2382,7 @@ function renderIntradayRadar(evaluated) {
     <section class="intraday-dashboard">
       <div class="intraday-topbar">
         <div>
-          <h2>2分K當沖雷達 <span class="intraday-live">● 立即更新</span></h2>
+          <h2>${titleWithIcon("◔", "2分K當沖雷達")} <span class="intraday-live">● 立即更新</span></h2>
           <p>盤中即時偵測強勢訊號，15秒輪巡全台股。</p>
         </div>
         <div class="intraday-controls">
@@ -2474,7 +2501,7 @@ function renderSwingRadar(universe) {
     <section class="swing-dashboard">
       <div class="swing-topbar">
         <div>
-          <h2>策略4-波段雷達 <span class="swing-live">● 08:00 / 10:00 / 15:00 完整掃</span></h2>
+          <h2>${titleWithIcon("└", "策略4-波段雷達")} <span class="swing-live">● 08:00 / 10:00 / 15:00 完整掃</span></h2>
           <p>排除ETF，只掃真正股票；網站讀取上一版完整快取，08:00、10:00 與 15:00 背景更新正式名單。${historyText}</p>
         </div>
         <div class="swing-controls">
@@ -2561,7 +2588,7 @@ function renderOpenBuyRadar(universe) {
     <section class="swing-dashboard">
       <div class="swing-topbar">
         <div>
-          <h2>策略1-開盤入快跑 <span class="swing-live">● 08:00 / 15:00 完整掃</span></h2>
+          <h2>${titleWithIcon("⚡", "策略1-開盤入快跑")} <span class="swing-live">● 08:00 / 15:00 完整掃</span></h2>
           <p>14:30後先出明日候選；08:55後看最終名單。買入：09:00 開盤價｜停利 +1.2%｜停損 -1.0%｜09:10 強制出場。${scanText}</p>
         </div>
         <div class="swing-controls">
@@ -2690,7 +2717,7 @@ function renderStrategy5Dashboard(evaluated) {
       <div class="strategy5-hero">
         <div>
           <b>策略控制台</b>
-          <h2>策略中心 <span class="swing-live">● 讀取既有快取</span></h2>
+          <h2>${titleWithIcon("▰", "策略5-綜合策略")} <span class="swing-live">● 讀取既有快取</span></h2>
         </div>
         <div class="strategy5-date">
           <span>資料日</span>
@@ -2901,7 +2928,7 @@ function renderWarrantFlow() {
     <section class="swing-dashboard">
       <div class="swing-topbar">
         <div>
-          <h2>權證先熱雷達 <span class="swing-live">● 08:00 / 15:00 完整掃</span></h2>
+          <h2>${titleWithIcon("◒", "權證先熱雷達")} <span class="swing-live">● 08:00 / 15:00 完整掃</span></h2>
           <p>${helperText}</p>
         </div>
         <div class="swing-controls">
@@ -3613,6 +3640,7 @@ function showView(viewName, activeLink) {
     panel.hidden = name !== viewName;
     panel.classList.toggle("active", name === viewName);
   });
+  applyStaticTitleIcons();
   viewLinks.forEach((link)=>link.classList.toggle("active", link===activeLink));
   if (viewName === "strategy") deferUiWork(renderStrategyScanner);
   if (viewName === "chip-trade") deferUiWork(loadChipTradeData);
@@ -3911,6 +3939,7 @@ async function refreshStrategyHistoryScan(force = false) {
 
 tickClock();
 labelChipTradeMode();
+applyStaticTitleIcons();
 loadMarketData();
 loadHeatmap();
 loadInstitution();
