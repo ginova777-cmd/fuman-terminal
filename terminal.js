@@ -870,7 +870,6 @@ function getIntradaySignals(stock) {
   const high = cleanNumber(stock.high);
   const low = cleanNumber(stock.low);
   const prevClose = cleanNumber(stock.prevClose) || (close - cleanNumber(stock.change));
-  const limitUp = cleanNumber(stock.limitUp);
   const pct = stock.percent || 0;
   const valueRank = stock.valueRank || 0;
   const volumeRank = stock.volumeRank || 0;
@@ -926,10 +925,6 @@ function getIntradaySignals(stock) {
       icon: "⚡",
       reason: `瞬間拉抬 ${burstPct.toFixed(2)}%，新增量 ${Math.round(latestPoint.deltaVolume)} 張，量速為今日均速 ${rateVsDay.toFixed(1)} 倍。`,
     });
-  }
-
-  if ((limitUp && close >= limitUp * 0.985) || pct >= 9) {
-    signals.push({ id: "limit_near", short: "漲停", icon: "🔒", reason: limitUp ? `距離漲停價 ${limitUp.toFixed(2)} 已小於 1.5%。` : `漲幅 ${pct.toFixed(2)}%，接近漲停區。` });
   }
 
   return signals;
@@ -1152,7 +1147,6 @@ const INTRADAY_SIGNAL_DEFS = [
   { id: "ma35_macd", title: "MA35 + MACD", icon: "🟢", hint: "站上 MA35 且動能向上" },
   { id: "diamond", title: "鑽石", icon: "💎", hint: "回測 0.618 後收紅轉強" },
   { id: "surge", title: "瞬間拉抬", icon: "⚡", hint: "短時間價格快速推升" },
-  { id: "limit_near", title: "即將漲停", icon: "🔒", hint: "距離漲停區小於 1.5%" },
 ];
 
 const SWING_SIGNAL_DEFS = [
@@ -2134,7 +2128,7 @@ function setStrategyChrome(mode) {
   if (strategyHeaderTitle) strategyHeaderTitle.textContent = intraday ? "2分K當沖雷達" : swing ? "策略4-波段雷達" : openBuy ? "策略1-開盤入快跑" : "策略中心";
   if (strategyHeaderText) {
     strategyHeaderText.textContent = intraday
-      ? "盤中即時輪巡全台股，專注偵測跳空、突破、MA35+MACD、鑽石、瞬間拉抬與即將漲停。"
+      ? "盤中即時輪巡全台股，專注偵測跳空、突破、MA35+MACD、鑽石與瞬間拉抬。"
       : swing
       ? "用波段指標邏輯整理全台股，盤中即時更新價量，分類突破缺口、逃逸缺口、V轉與多頭攻擊。"
       : openBuy
@@ -2205,7 +2199,6 @@ function renderIntradayRadar(evaluated) {
     ma35_macd: "ma",
     diamond: "diamond",
     surge: "warn",
-    limit_near: "warn",
   };
   const cards = INTRADAY_SIGNAL_DEFS.map((signal) => {
     const count = signalCounts[signal.id] || 0;
@@ -2251,7 +2244,7 @@ function renderIntradayRadar(evaluated) {
       `;
     }).join("")}
   ` : `
-    <tr><td colspan="8">2分K當沖雷達框架已啟動。現在沒有觸發訊號；開盤後會輪巡全台股並顯示符合「跳空 / 突破 / MA35+MACD / 鑽石 / 瞬間拉抬 / 即將漲停」的股票。</td></tr>
+    <tr><td colspan="8">2分K當沖雷達框架已啟動。現在沒有觸發訊號；開盤後會輪巡全台股並顯示符合「跳空 / 突破 / MA35+MACD / 鑽石 / 瞬間拉抬」的股票。</td></tr>
   `;
 
   strategyTable.innerHTML = `
