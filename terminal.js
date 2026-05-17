@@ -134,6 +134,25 @@ function labelUpdateModes() {
   });
 }
 
+function labelChipTradeMode() {
+  const realtimeButton = document.querySelector('[data-chip-mode="realtime"]');
+  realtimeButton?.remove();
+  const afterButton = document.querySelector('[data-chip-mode="after"]');
+  afterButton?.classList.add("active");
+  const chipTool = document.querySelector(".chip-tool");
+  if (!chipTool || chipTool.querySelector(".chip-source-note")) return;
+  const note = document.createElement("div");
+  note.className = "chip-source-note";
+  note.textContent = "外資、投信買賣超為盤後公布資料，本頁只顯示最新盤後籌碼。";
+  note.style.cssText = `
+    margin-top: 10px;
+    color: #9db9ff;
+    font-size: 12px;
+    font-weight: 800;
+  `;
+  chipTool.appendChild(note);
+}
+
 const endpoints = {
   backend: "/api/market",
   heatmap: "/api/heatmap",
@@ -158,7 +177,7 @@ let latestStocks = [];
 let sectorStocksCache = {};
 let institutionData = {};
 let institutionDate = "";
-let chipMode = "realtime";
+let chipMode = "after";
 let chipTradeLoading = false;
 let chipFilter = "joint";
 let chipQuoteHydrating = false;
@@ -3284,7 +3303,14 @@ function renderIndexes(indexes, futuresNear, futuresNext, marketStatus, otcSigna
 
 function formatChipDate(dateStr) {
   if (!dateStr || dateStr.length !== 8) return "等待盤後資料";
-  return `日期: ${dateStr.slice(0, 4)}/${dateStr.slice(4, 6)}/${dateStr.slice(6, 8)}`;
+  return `法人資料: ${dateStr.slice(0, 4)}/${dateStr.slice(4, 6)}/${dateStr.slice(6, 8)}`;
+}
+
+function isTwseTradingTime(date = new Date()) {
+  const day = date.getDay();
+  if (day === 0 || day === 6) return false;
+  const minutes = date.getHours() * 60 + date.getMinutes();
+  return minutes >= 9 * 60 && minutes <= 13 * 60 + 30;
 }
 
 function renderChipTradeTable() {
@@ -3296,7 +3322,8 @@ function renderChipTradeTable() {
   if (dateEl) {
     const now = new Date();
     const time = now.toLocaleTimeString("zh-TW", { hour12: false });
-    dateEl.textContent = `${formatChipDate(institutionDate)}　更新 ${time}`;
+    const modeText = "盤後收盤";
+    dateEl.textContent = `${formatChipDate(institutionDate)}｜${modeText}　更新 ${time}`;
   }
 
   const rows = latestStocks
@@ -3398,12 +3425,11 @@ function renderChipTradeTable() {
     `;
   }).join("");
 
-  if (chipMode === "realtime") hydrateChipRealtimeQuotes(shown);
 }
 
 async function hydrateChipRealtimeQuotes(rows) {
   if (chipQuoteHydrating) return;
-  const targets = rows.filter((row) => !row.price).slice(0, 40);
+  const targets = rows.slice(0, 40);
   if (!targets.length) return;
   chipQuoteHydrating = true;
   try {
@@ -3456,7 +3482,7 @@ async function loadChipTradeData() {
   if (chipTradeLoading) return;
   chipTradeLoading = true;
   const body = document.querySelector("#chip-trade-body");
-  if (body) body.innerHTML = `<tr><td colspan="12">正在載入即時股價與法人資料...</td></tr>`;
+  if (body) body.innerHTML = `<tr><td colspan="12">正在載入盤後法人資料...</td></tr>`;
 
   try {
     const [stockResult, instResult] = await Promise.allSettled([
@@ -3884,6 +3910,7 @@ async function refreshStrategyHistoryScan(force = false) {
 }
 
 tickClock();
+labelChipTradeMode();
 loadMarketData();
 loadHeatmap();
 loadInstitution();
