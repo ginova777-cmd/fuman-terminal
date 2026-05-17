@@ -89,6 +89,7 @@ const endpoints = {
   scanOpenBuy: "/api/scan-open-buy",
   scanStrategy4: "/api/scan-strategy4",
   scanWarrantFlow: "/api/scan-warrant-flow",
+  exportAuth: "/api/export-auth",
   strategy4Cache: "/data/strategy4-latest.json",
   strategyStocks: "/api/stocks",
   stocks: "https://openapi.twse.com.tw/v1/exchangeReport/STOCK_DAY_ALL",
@@ -119,6 +120,8 @@ let strategy4ScannedCodes = new Set();
 let strategy4ScanTotal = 0;
 let strategy4CacheLoading = false;
 const STRATEGY4_LOCAL_CACHE_KEY = "fuman_strategy4_scan_cache_v1";
+const EXPORT_UNLOCK_KEY = "fuman_export_unlock_until_v1";
+const EXPORT_UNLOCK_MS = 30 * 24 * 60 * 60 * 1000;
 let openBuyScanLoading = false;
 let openBuyScanCursor = 0;
 let openBuyScanMatches = {};
@@ -469,6 +472,138 @@ function hasFreshOpenBuyScan() {
 
 function hasFreshWarrantFlow() {
   return warrantFlowData.length > 0 && warrantFlowUpdatedAt && (Date.now() - warrantFlowUpdatedAt) < CACHE_FRESH_MS;
+}
+
+function showExportNotice(message) {
+  if (terminalMessage) terminalMessage.textContent = message;
+  const notice = document.createElement("div");
+  notice.textContent = message;
+  notice.style.cssText = `
+    position: fixed;
+    right: 18px;
+    bottom: 18px;
+    z-index: 99999;
+    padding: 12px 16px;
+    border: 1px solid rgba(127, 166, 255, 0.45);
+    border-radius: 10px;
+    background: rgba(12, 16, 28, 0.96);
+    color: #dbe7ff;
+    font-weight: 800;
+    box-shadow: 0 12px 36px rgba(0,0,0,0.35);
+  `;
+  document.body.appendChild(notice);
+  setTimeout(() => notice.remove(), 2200);
+}
+
+function isExportUnlocked() {
+  const until = Number(localStorage.getItem(EXPORT_UNLOCK_KEY) || 0);
+  return until > Date.now();
+}
+
+async function verifyExportPassword(password) {
+  const response = await fetch(endpoints.exportAuth, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ password }),
+  });
+  const payload = await response.json().catch(() => ({}));
+  return { ok: response.ok && payload.ok, status: response.status, payload };
+}
+
+async function unlockExport() {
+  if (isExportUnlocked()) return true;
+  const input = window.prompt("請輸入你設定的匯出密碼：");
+  if (!input?.trim()) return false;
+  try {
+    const result = await verifyExportPassword(input.trim());
+    if (!result.ok) {
+      if (result.payload?.code === "PASSWORD_NOT_SET") {
+        showExportNotice("尚未在 Vercel 設定匯出密碼。");
+      } else {
+        showExportNotice("密碼錯誤，已阻擋匯出。");
+      }
+      return false;
+    }
+  } catch (error) {
+    showExportNotice("匯出驗證失敗，請稍後再試。");
+    return false;
+  }
+  localStorage.setItem(EXPORT_UNLOCK_KEY, String(Date.now() + EXPORT_UNLOCK_MS));
+  showExportNotice("匯出已解鎖，30天內不用再輸入。");
+  return true;
+}
+
+function getActiveExportRows(limit = Infinity) {
+  const table = strategyTable?.querySelector("table");
+  if (!table) return { headers: [], rows: [] };
+  const headers = [...table.querySelectorAll("thead th")].map((cell) => cell.textContent.trim());
+  const rows = [...table.querySelectorAll("tbody tr")]
+    .filter((row) => !row.querySelector("td[colspan]"))
+    .slice(0, limit)
+    .map((row) => [...row.cells].map((cell) => cell.textContent.replace(/\s+/g, " ").trim()));
+  return { headers, rows };
+}
+
+function csvCell(value) {
+  const text = String(value ?? "");
+  const guarded = /^[=+\-@]/.test(text) ? `\t${text}` : text;
+  return `"${guarded.replace(/"/g, '""')}"`;
+}
+
+function downloadCsv(headers, rows) {
+  const lines = [headers, ...rows].map((row) => row.map(csvCell).join(","));
+  const blob = new Blob([`\uFEFF${lines.join("\r\n")}`], { type: "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  const title = (strategyTitle?.textContent || "fuman").replace(/[^\w\u4e00-\u9fa5-]+/g, "-");
+  link.href = url;
+  link.download = `${title}-${new Date().toISOString().slice(0, 10)}.csv`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
+async function copyTopRows(headers, rows) {
+  const text = [headers.join("\t"), ...rows.map((row) => row.join("\t"))].join("\n");
+  if (navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(text);
+  } else {
+    const area = document.createElement("textarea");
+    area.value = text;
+    document.body.appendChild(area);
+    area.select();
+    document.execCommand("copy");
+    area.remove();
+  }
+}
+
+async function handleProtectedExport() {
+  if (!(await unlockExport())) return;
+  const { headers, rows } = getActiveExportRows();
+  if (!rows.length) {
+    showExportNotice("目前沒有可匯出的股票名單。");
+    return;
+  }
+  const choice = window.prompt("請選擇匯出方式：輸入 1 下載CSV，輸入 2 複製前10。", "1");
+  if (choice === "2") {
+    await copyTopRows(headers, rows.slice(0, 10));
+    showExportNotice("已複製前10名，可貼到 LINE 或 Google Sheets。");
+    return;
+  }
+  downloadCsv(headers, rows);
+  showExportNotice(`已匯出 ${rows.length} 筆 CSV。`);
+}
+
+function openExportSettings() {
+  const action = window.prompt("匯出設定：輸入 1 查看密碼設定方式，輸入 2 鎖回匯出。", "1");
+  if (action === "2") {
+    localStorage.removeItem(EXPORT_UNLOCK_KEY);
+    showExportNotice("匯出已重新上鎖。");
+    return;
+  }
+  if (action !== "1") return;
+  window.alert("請到 Vercel 專案 Settings → Environment Variables，新增或修改 FUMAN_EXPORT_PASSWORD。這樣只有知道你密碼的人可以匯出。");
 }
 
 function updateOpenBuyScan(payload) {
@@ -1950,8 +2085,8 @@ function renderIntradayRadar(evaluated) {
           ${tabs}
           <div class="intraday-actions">
             <input type="search" placeholder="搜尋代號/名稱">
-            <button type="button">匯出</button>
-            <button type="button">設定</button>
+            <button type="button" data-export-action>匯出</button>
+            <button type="button" data-export-settings>設定</button>
           </div>
         </div>
         <table class="intraday-table">
@@ -2067,8 +2202,8 @@ function renderSwingRadar(universe) {
           ${tabs}
           <div class="swing-actions">
             <input type="search" placeholder="搜尋代號/名稱">
-            <button type="button">匯出</button>
-            <button type="button">設定</button>
+            <button type="button" data-export-action>匯出</button>
+            <button type="button" data-export-settings>設定</button>
           </div>
         </div>
         <table class="swing-table">
@@ -2158,8 +2293,8 @@ function renderOpenBuyRadar(universe) {
           <button class="active" type="button">全部(${rows.length})</button>
           <div class="swing-actions">
             <input type="search" placeholder="搜尋代號/名稱">
-            <button type="button">匯出</button>
-            <button type="button">設定</button>
+            <button type="button" data-export-action>匯出</button>
+            <button type="button" data-export-settings>設定</button>
           </div>
         </div>
         <table class="swing-table">
@@ -4031,6 +4166,18 @@ document.addEventListener("click", (event) => {
   if (!filterButton) return;
   strategy5ActiveId = filterButton.dataset.strategy5Filter || "momentum";
   renderStrategyScanner();
+});
+
+document.addEventListener("click", (event) => {
+  const exportButton = event.target.closest("[data-export-action]");
+  if (!exportButton) return;
+  handleProtectedExport();
+});
+
+document.addEventListener("click", (event) => {
+  const settingsButton = event.target.closest("[data-export-settings]");
+  if (!settingsButton) return;
+  openExportSettings();
 });
 
 strategyClear?.addEventListener("click", () => {
