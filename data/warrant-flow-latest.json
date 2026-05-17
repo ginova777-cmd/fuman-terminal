@@ -2,10 +2,7 @@
   "ok": true,
   "source": "seed",
   "updatedAt": "",
-  "cursor": 0,
-  "total": 0,
-  "scannedThisRun": 0,
-  "scannedCodes": [],
+  "scanned": 0,
   "count": 0,
   "matches": []
 }
