@@ -80,6 +80,14 @@ function installBasicDevtoolsGuard() {
 
 installBasicDevtoolsGuard();
 
+function escapeAttr(value) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/"/g, "&quot;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
 function appendUpdateBadge(target, text, tone = "slow") {
   if (!target || target.querySelector(".update-mode-badge")) return;
   const badge = document.createElement("small");
@@ -719,7 +727,7 @@ function openExportSettings() {
     return;
   }
   if (action !== "1") return;
-  window.alert("請到 Vercel 專案 Settings → Environment Variables，新增或修改 FUMAN_EXPORT_PASSWORD。這樣只有知道你密碼的人可以匯出。");
+    window.alert("請直接與作者聯繫");
 }
 
 function updateOpenBuyScan(payload, options = {}) {
@@ -1196,7 +1204,7 @@ const SWING_SIGNAL_DEFS = [
   { id: "saucer", title: "圓弧底", icon: "◜", hint: "低位整理後突破" },
   { id: "breakaway_gap", title: "突破缺口", icon: "◆", hint: "跳空突破整理高點" },
   { id: "runaway_gap", title: "逃逸缺口", icon: "🚀", hint: "多頭延續型缺口" },
-  { id: "v_reversal", title: "V轉反彈", icon: "V", hint: "跌深後快速翻紅" },
+  { id: "v_reversal", title: "V轉反彈", icon: "", hint: "跌深後快速翻紅" },
   { id: "three_inside", title: "三內翻紅", icon: "↻", hint: "弱轉強反轉型態" },
   { id: "golden_cross", title: "多金釵", icon: "✦", hint: "短均線轉強候選" },
 ];
@@ -2338,8 +2346,10 @@ function renderSwingRadar(universe) {
     setTimeout(() => refreshStrategyHistoryScan(true), 0);
   }
   const allowCodes = new Set(universe.map((stock) => stock.code));
+  const keyword = strategyKeyword.trim().toLowerCase();
   const allRows = Object.values(strategy4ScanMatches)
     .filter((stock) => allowCodes.has(stock.code) && (stock.swingSignals || []).length)
+    .filter((stock) => !keyword || stock.code.includes(keyword) || stock.name.toLowerCase().includes(keyword))
     .map((stock) => ({ ...stock, swingScore: stock.swingScore || stock.score || 0 }));
   const filteredRows = swingSignalFilter === "all"
     ? allRows
@@ -2422,7 +2432,7 @@ function renderSwingRadar(universe) {
         <div class="swing-tabs">
           ${tabs}
           <div class="swing-actions">
-            <input type="search" placeholder="搜尋代號/名稱">
+            <input type="search" placeholder="搜尋代號/名稱" value="${escapeAttr(strategyKeyword)}" data-strategy-inline-search>
             <button type="button" data-export-action>匯出</button>
             <button type="button" data-export-settings>設定</button>
           </div>
@@ -4399,6 +4409,13 @@ document.addEventListener("click", (event) => {
   const filterButton = event.target.closest("[data-swing-filter]");
   if (!filterButton) return;
   swingSignalFilter = filterButton.dataset.swingFilter || "all";
+  renderStrategyScanner();
+});
+
+document.addEventListener("input", (event) => {
+  const input = event.target.closest("[data-strategy-inline-search]");
+  if (!input) return;
+  strategyKeyword = input.value || "";
   renderStrategyScanner();
 });
 
