@@ -1,6 +1,6 @@
 const fs = require("fs");
 const path = require("path");
-const scanWarrantFlow = require("../api/scan-warrant-flow");
+const scanWarrantFlow = require("./api/scan-warrant-flow");
 
 const ROOT = path.resolve(__dirname, "..");
 const OUT_FILE = path.join(ROOT, "data", "warrant-flow-latest.json");

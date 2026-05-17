@@ -2793,13 +2793,8 @@ function renderWarrantFlow() {
   const panel = viewPanels["warrant-flow"];
   if (!panel) return;
   const keyword = warrantFlowKeyword.trim().toLowerCase();
-  const rows = warrantFlowData
+  const allRows = warrantFlowData
     .map(hydrateWarrantFlowItem)
-    .filter((item) => !keyword ||
-      item.code.includes(keyword) ||
-      item.name.toLowerCase().includes(keyword) ||
-      item.underlyingName.toLowerCase().includes(keyword))
-    .filter((item) => item.stockPercent <= 4.5)
     .map((item) => ({
       ...item,
       observeScore: Math.round(
@@ -2810,19 +2805,29 @@ function renderWarrantFlow() {
       ),
     }))
     .sort((a, b) => b.observeScore - a.observeScore || b.score - a.score || b.callValue - a.callValue)
-    .slice(0, 10);
+    .map((item, index) => ({ ...item, rank: index + 1 }));
+  const rows = keyword
+    ? allRows.filter((item) =>
+      item.code.includes(keyword) ||
+      item.name.toLowerCase().includes(keyword) ||
+      item.underlyingName.toLowerCase().includes(keyword))
+    : allRows.filter((item) => item.stockPercent <= 4.5).slice(0, 10);
   const totalCall = warrantFlowData.reduce((sum, item) => sum + cleanNumber(item.callValue), 0);
   const totalPut = warrantFlowData.reduce((sum, item) => sum + cleanNumber(item.putValue), 0);
   const updatedText = warrantFlowUpdatedAt
     ? new Date(warrantFlowUpdatedAt).toLocaleTimeString("zh-TW", { hour12: false })
     : "等待更新";
+  const listLabel = keyword ? `搜尋結果 ${rows.length} 筆｜完整候選 ${allRows.length} 筆` : "優先觀察 Top 10";
+  const helperText = keyword
+    ? "搜尋會查完整候選名單，就算沒有進 Top 10 也會顯示目前權證資金狀況。"
+    : "只顯示可優先觀察前十名：認購集中、認售偏低、股票尚未大漲者優先。";
 
-  const body = rows.length ? rows.map((item, index) => {
+  const body = rows.length ? rows.map((item) => {
     const sign = item.stockPercent >= 0 ? "+" : "";
     const hot = item.score >= 82 ? "hot" : item.score >= 68 ? "mid" : "low";
     return `
       <tr>
-        <td><span class="swing-score">${index + 1}</span></td>
+        <td><span class="swing-score">${item.rank || "--"}</span></td>
         <td><span class="code">${item.code || "--"}</span></td>
         <td>${item.name}</td>
         <td><span class="swing-score">${item.observeScore}</span></td>
@@ -2836,7 +2841,7 @@ function renderWarrantFlow() {
       </tr>
     `;
   }).join("") : `
-    <tr><td colspan="11">權證資金走向讀取中。只顯示「認購權證先熱、股票尚未噴出」的前十名。</td></tr>
+    <tr><td colspan="11">${keyword ? "完整候選名單內找不到這檔股票；代表目前權證資金熱度尚未進候選名單。" : "權證資金走向讀取中。只顯示「認購權證先熱、股票尚未噴出」的前十名。"}</td></tr>
   `;
 
   panel.innerHTML = `
@@ -2844,7 +2849,7 @@ function renderWarrantFlow() {
       <div class="swing-topbar">
         <div>
           <h2>權證先熱雷達 <span class="swing-live">● 08:00 / 15:00 完整掃</span></h2>
-          <p>只顯示可優先觀察前十名：認購集中、認售偏低、股票尚未大漲者優先。</p>
+          <p>${helperText}</p>
         </div>
         <div class="swing-controls">
           <label>更新模式：<select><option>08:00 / 15:00 完整掃</option></select></label>
@@ -2864,9 +2869,9 @@ function renderWarrantFlow() {
       </div>
       <section class="swing-panel">
         <div class="swing-tabs">
-          <button class="active" type="button">優先觀察 Top 10</button>
+          <button class="active" type="button">${listLabel}</button>
           <div class="swing-actions">
-            <input id="warrant-flow-search" type="search" placeholder="搜尋代號/名稱" value="${escapeAttr(warrantFlowKeyword)}" data-warrant-flow-search>
+            <input id="warrant-flow-search" type="search" placeholder="搜尋股票代號/名稱" value="${escapeAttr(warrantFlowKeyword)}" data-warrant-flow-search>
             <button id="warrant-flow-refresh" type="button">重新整理</button>
           </div>
         </div>
@@ -2906,11 +2911,16 @@ async function loadWarrantFlow(force = false) {
   try {
     if (!latestStocks.length) loadStrategyStocks();
     let payload = await fetchJson(`${endpoints.warrantFlowCache}?t=${Date.now()}`, 10000);
-    if (!normalizeArray(payload?.matches).length || force) {
-      payload = await fetchJson(force ? endpoints.scanWarrantFlow : `${endpoints.warrantFlowBackup}?t=${Date.now()}`, 30000);
+    const cachedMatches = normalizeArray(payload?.matches);
+    if (force || !cachedMatches.length) {
+      payload = await fetchJson(`${endpoints.scanWarrantFlow}?t=${Date.now()}`, 45000);
+    }
+    if (!normalizeArray(payload?.matches).length) {
+      payload = await fetchJson(`${endpoints.warrantFlowBackup}?t=${Date.now()}`, 10000);
     }
     warrantFlowData = normalizeArray(payload.matches);
-    warrantFlowUpdatedAt = Date.now();
+    const updatedAt = Date.parse(payload?.updatedAt || "");
+    warrantFlowUpdatedAt = Number.isFinite(updatedAt) ? updatedAt : Date.now();
     saveWarrantFlowLocalCache();
     renderWarrantFlow();
   } catch (error) {
