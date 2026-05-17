@@ -1,8 +1,17 @@
 {
   "ok": true,
-  "source": "seed",
-  "updatedAt": "",
+  "updatedAt": "2026-05-17T05:49:57.933Z",
   "scanned": 0,
   "count": 0,
-  "matches": []
+  "matches": [],
+  "errors": [
+    "上市: no warrant rows",
+    "上櫃: fetch failed",
+    "上櫃: no warrant rows"
+  ],
+  "sources": [
+    "mopsfin.twse.com.tw/opendata/t187ap42_L.csv",
+    "dts.twse.com.tw/opendata/t187ap42_O.csv"
+  ],
+  "source": "github-actions"
 }
