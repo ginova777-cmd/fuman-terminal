@@ -2,8 +2,17 @@ name: Strategy Background Cache
 
 on:
   schedule:
-    - cron: "*/10 0-6 * * 1-5"
+    - cron: "0 0,2,7 * * 1-5"
   workflow_dispatch:
+    inputs:
+      full_scan:
+        description: "Use true for manual full market scan"
+        required: true
+        default: "true"
+        type: choice
+        options:
+          - "true"
+          - "false"
 
 permissions:
   contents: write
@@ -15,7 +24,7 @@ concurrency:
 jobs:
   scan:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 35
     steps:
       - uses: actions/checkout@v4
 
@@ -37,14 +46,24 @@ jobs:
             mkdir -p scripts
             cp scan-warrant-flow-cache.js scripts/scan-warrant-flow-cache.js
           fi
+          UTC_HOUR="$(date -u +%H)"
+          RUN_OPEN_AND_WARRANT="0"
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] || [ "$UTC_HOUR" = "00" ] || [ "$UTC_HOUR" = "07" ]; then
+            RUN_OPEN_AND_WARRANT="1"
+          fi
           node scripts/scan-strategy4-cache.js
-          node scripts/scan-open-buy-cache.js
-          node scripts/scan-warrant-flow-cache.js
+          if [ "$RUN_OPEN_AND_WARRANT" = "1" ]; then
+            node scripts/scan-open-buy-cache.js
+            node scripts/scan-warrant-flow-cache.js
+          else
+            echo "Skip open-buy and warrant-flow at Taiwan 10:00; strategy4 only."
+          fi
         env:
           STRATEGY4_BATCH_SIZE: "48"
           STRATEGY4_BATCHES_PER_RUN: "5"
           OPEN_BUY_BATCH_SIZE: "48"
           OPEN_BUY_BATCHES_PER_RUN: "5"
+          FULL_SCAN: ${{ (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.full_scan == 'true')) && '1' || '0' }}
 
       - name: Commit cache
         run: |
