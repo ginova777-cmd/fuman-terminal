@@ -80,6 +80,16 @@ function installBasicDevtoolsGuard() {
 
 installBasicDevtoolsGuard();
 
+function deferUiWork(callback, delay = 0) {
+  const run = () => setTimeout(callback, delay);
+  if (typeof requestAnimationFrame === "function") requestAnimationFrame(run);
+  else run();
+}
+
+function isViewActive(name) {
+  return Boolean(viewPanels[name]?.classList.contains("active"));
+}
+
 function escapeAttr(value) {
   return String(value ?? "")
     .replace(/&/g, "&amp;")
@@ -3504,8 +3514,8 @@ function renderStocks(stocks) {
   ).join("");
 
   renderStockTable(topStocks);
-  renderStrategyScanner();
-  renderChipTradeTable();
+  if (isViewActive("strategy")) deferUiWork(renderStrategyScanner);
+  if (isViewActive("chip-trade")) deferUiWork(renderChipTradeTable);
   terminalMessage.textContent = `掃描完成：${parsed.length.toLocaleString("zh-TW")} 檔，強勢股 ${topStocks.length} 檔`;
 }
 
@@ -3551,8 +3561,9 @@ function showView(viewName, activeLink) {
     panel.classList.toggle("active", name === viewName);
   });
   viewLinks.forEach((link)=>link.classList.toggle("active", link===activeLink));
-  if (viewName === "chip-trade") loadChipTradeData();
-  if (viewName === "warrant-flow") loadWarrantFlow();
+  if (viewName === "strategy") deferUiWork(renderStrategyScanner);
+  if (viewName === "chip-trade") deferUiWork(loadChipTradeData);
+  if (viewName === "warrant-flow") deferUiWork(loadWarrantFlow);
   const focusTarget = activeLink.dataset.focus ? document.querySelector(`#${activeLink.dataset.focus}`) : null;
   if (focusTarget) setTimeout(()=>focusTarget.focus(),0);
 }
@@ -3656,8 +3667,8 @@ async function loadInstitution() {
       institutionData = data.data;
       institutionDate = data.usedDate || "";
     }
-    renderStrategyScanner();
-    renderChipTradeTable();
+    if (isViewActive("strategy")) deferUiWork(renderStrategyScanner);
+    if (isViewActive("chip-trade")) deferUiWork(renderChipTradeTable);
   } catch (e) {}
 }
 
@@ -3692,15 +3703,15 @@ function applyStrategyPresetFromLink(link) {
   strategyMode = "any";
   strategyKeyword = "";
   if (strategySearch) strategySearch.value = "";
-  loadStrategyStocks();
-  if (text.includes("策略2")) refreshStrategyRealtimeScan(true);
+  deferUiWork(loadStrategyStocks);
+  if (text.includes("策略2")) deferUiWork(() => refreshStrategyRealtimeScan(true), 80);
   if (text.includes("策略1")) {
-    loadOpenBuyCache(true);
-    refreshOpenBuyScan(true);
+    deferUiWork(() => loadOpenBuyCache(true), 60);
+    deferUiWork(() => refreshOpenBuyScan(true), 120);
   }
   if (text.includes("策略4")) {
-    loadStrategy4Cache(true);
-    refreshStrategyHistoryScan(true);
+    deferUiWork(() => loadStrategy4Cache(true), 60);
+    deferUiWork(() => refreshStrategyHistoryScan(true), 120);
   }
 }
 
@@ -3854,7 +3865,7 @@ viewLinks.forEach((link)=>{
   link.addEventListener("click",(e)=>{
     e.preventDefault();
     showView(link.dataset.view, link);
-    applyStrategyPresetFromLink(link);
+    deferUiWork(() => applyStrategyPresetFromLink(link), 40);
   });
 });
 document.querySelectorAll("[data-chip-mode]").forEach((button) => {
