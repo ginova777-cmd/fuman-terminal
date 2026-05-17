@@ -7,6 +7,16 @@ const ISSUERS = [
   "合庫", "日盛", "大展", "宏遠", "福邦", "致和", "台中銀", "土銀", "臺銀", "台銀"
 ].sort((a, b) => b.length - a.length);
 
+const ETF_UNDERLYING_PATTERNS = [
+  /ETF/i, /ETN/i, /指數/, /期貨/, /期元大/, /期街口/,
+  /^元大台灣50$/, /^元大高股息$/, /^元大電子$/, /^元大金融$/,
+  /^富邦台50$/, /^富邦科技$/, /^國泰永續高股息$/, /^群益台灣精選高息$/,
+  /台灣50/, /臺灣50/, /高股息/, /高息/, /公司治理/, /正2/, /反1/,
+  /臺股指/, /台股指/, /道瓊/, /標普/, /NASDAQ/i, /那斯達克/, /費城半導體/,
+  /日經/, /恒生/, /滬深/, /上証/, /上證/, /深証/, /深證/, /印度/, /越南/,
+  /美債/, /公債/, /投資級債/, /非投等債/, /債\d*/, /原油/, /黃金/,
+];
+
 async function fetchText(url, timeout = 15000) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeout);
@@ -24,6 +34,11 @@ async function fetchText(url, timeout = 15000) {
   } finally {
     clearTimeout(timer);
   }
+}
+
+async function fetchJson(url, timeout = 20000) {
+  const text = await fetchText(url, timeout);
+  return JSON.parse(text);
 }
 
 function parseCsv(text) {
@@ -75,6 +90,10 @@ function cleanNumber(value) {
   return Number(String(value ?? "").replace(/[,+]/g, "").trim()) || 0;
 }
 
+function stripHtml(value) {
+  return String(value ?? "").replace(/<[^>]*>/g, "").trim();
+}
+
 function getValue(row, keys) {
   for (const key of keys) {
     const found = Object.keys(row).find((item) => item === key || item.includes(key));
@@ -99,6 +118,14 @@ function inferUnderlyingName(name) {
   return match?.[1] || "";
 }
 
+function isEtfUnderlying(name, warrantName = "") {
+  const target = String(name || "").replace(/\s/g, "");
+  const warrant = String(warrantName || "").replace(/\s/g, "");
+  if (!target) return false;
+  if (ETF_UNDERLYING_PATTERNS.some((pattern) => pattern.test(target))) return true;
+  return ETF_UNDERLYING_PATTERNS.some((pattern) => pattern.test(warrant));
+}
+
 function normalizeWarrant(row, market) {
   const code = String(getValue(row, ["權證代號", "Warrantcode", "WarrantCode"])).trim();
   const name = String(getValue(row, ["權證名稱", "WarrantName", "Warrantname"])).trim();
@@ -109,7 +136,108 @@ function normalizeWarrant(row, market) {
   const type = inferType(name);
   const underlyingName = inferUnderlyingName(name);
   if (!underlyingName || type === "unknown") return null;
+  if (isEtfUnderlying(underlyingName, name)) return null;
   return { code, name, market, type, value, volume, tradeDate, underlyingName };
+}
+
+function formatTwseDate(date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}${month}${day}`;
+}
+
+function formatTpexDate(date) {
+  const year = String(date.getFullYear() - 1911).padStart(3, "0");
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}/${month}/${day}`;
+}
+
+function recentTradingDates(limit = 10) {
+  const dates = [];
+  const date = new Date();
+  for (let i = 0; dates.length < limit && i < 18; i++) {
+    const day = date.getDay();
+    if (day !== 0 && day !== 6) dates.push(new Date(date));
+    date.setDate(date.getDate() - 1);
+  }
+  return dates;
+}
+
+function tableRecords(table) {
+  const fields = table?.fields || [];
+  const data = table?.data || table?.aaData || [];
+  return data.map((items) => {
+    const row = {};
+    fields.forEach((field, index) => { row[String(field).replace(/\s/g, "")] = items[index] || ""; });
+    return row;
+  });
+}
+
+async function fetchTwseWarrants() {
+  const rows = [];
+  const errors = [];
+  const types = [
+    { type: "0999", warrantType: "call" },
+    { type: "0999P", warrantType: "put" },
+  ];
+  for (const date of recentTradingDates()) {
+    const tradeDate = formatTwseDate(date);
+    const before = rows.length;
+    for (const item of types) {
+      const url = `https://www.twse.com.tw/rwd/zh/afterTrading/MI_INDEX?date=${tradeDate}&type=${item.type}&response=json`;
+      try {
+        const payload = await fetchJson(url, 25000);
+        const table = (payload.tables || []).find((entry) => String(entry.title || "").includes("收盤行情"));
+        for (const record of tableRecords(table)) {
+          const code = String(getValue(record, ["證券代號"])).trim();
+          const name = String(getValue(record, ["證券名稱"])).trim();
+          const value = cleanNumber(getValue(record, ["成交金額"]));
+          const volume = cleanNumber(getValue(record, ["成交股數"]));
+          const underlyingName = String(getValue(record, ["標的名稱"])).trim() || inferUnderlyingName(name);
+          if (!code || !name || !value || !underlyingName) continue;
+          if (isEtfUnderlying(underlyingName, name)) continue;
+          rows.push({ code, name, market: "上市", type: item.warrantType, value, volume, tradeDate, underlyingName });
+        }
+      } catch (error) {
+        errors.push(`上市備援 ${tradeDate}/${item.type}: ${error.message}`);
+      }
+    }
+    if (rows.length > before) return { rows, errors };
+  }
+  return { rows, errors };
+}
+
+async function fetchTpexWarrants() {
+  const rows = [];
+  const errors = [];
+  for (const date of recentTradingDates()) {
+    const tradeDate = formatTpexDate(date);
+    const url = `https://www.tpex.org.tw/web/stock/aftertrading/daily_close_quotes/stk_quote_result.php?l=zh-tw&o=json&d=${encodeURIComponent(tradeDate)}&s=0,asc,0`;
+    try {
+      const payload = await fetchJson(url, 25000);
+      const table = (payload.tables || [payload]).find((entry) => (entry.data || entry.aaData || []).length);
+      const fields = table?.fields || [];
+      const records = tableRecords(table);
+      for (const record of records) {
+        const code = String(getValue(record, ["代號", "證券代號"])).trim();
+        const name = String(getValue(record, ["名稱", "證券名稱"])).trim();
+        const value = cleanNumber(getValue(record, ["成交金額(元)", "成交金額"]));
+        const volume = cleanNumber(getValue(record, ["成交股數", "成交數量", "成交張數"]));
+        const type = inferType(name);
+        const underlyingName = inferUnderlyingName(name);
+        if (!/^[0-9A-Z]{5,}$/.test(code) || !name || !value || type === "unknown" || !underlyingName) continue;
+        if (isEtfUnderlying(underlyingName, name)) continue;
+        rows.push({ code, name, market: "上櫃", type, value, volume, tradeDate: payload.date || tradeDate, underlyingName });
+      }
+      if (rows.length) return { rows, errors };
+      if (!fields.length) errors.push(`上櫃備援 ${tradeDate}: no table fields`);
+    } catch (error) {
+      errors.push(`上櫃備援 ${tradeDate}: ${error.message}`);
+    }
+  }
+  return { rows, errors };
 }
 
 async function fetchWarrants() {
@@ -143,12 +271,19 @@ async function fetchWarrants() {
     }
     if (!loaded) errors.push(...sourceErrors, `${source.market}: no warrant rows`);
   }
+  if (!rows.length) {
+    const [twse, tpex] = await Promise.all([fetchTwseWarrants(), fetchTpexWarrants()]);
+    rows.push(...twse.rows, ...tpex.rows);
+    errors.push(...twse.errors, ...tpex.errors);
+    if (rows.length) errors.push("MOPS 權證成交檔為空，已改用 TWSE/TPEX 收盤行情備援。");
+  }
   return { rows, errors };
 }
 
 function aggregate(rows) {
   const byName = new Map();
   for (const row of rows) {
+    if (isEtfUnderlying(row.underlyingName, row.name)) continue;
     const key = row.underlyingName;
     const item = byName.get(key) || {
       underlyingName: key,
