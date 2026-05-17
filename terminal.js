@@ -2222,8 +2222,10 @@ function setStrategyChrome(mode) {
 
 function renderIntradayRadar(evaluated) {
   setStrategyChrome("intraday");
+  const keyword = strategyKeyword.trim().toLowerCase();
   const allRows = evaluated
     .filter((stock) => (stock.intradaySignals || []).length)
+    .filter((stock) => !keyword || stock.code.includes(keyword) || stock.name.toLowerCase().includes(keyword))
     .map((stock) => ({ ...stock }));
   const filteredRows = intradaySignalFilter === "all"
     ? allRows
@@ -2313,7 +2315,7 @@ function renderIntradayRadar(evaluated) {
         <div class="intraday-tabs">
           ${tabs}
           <div class="intraday-actions">
-            <input type="search" placeholder="搜尋代號/名稱">
+            <input type="search" placeholder="搜尋代號/名稱" value="${escapeAttr(strategyKeyword)}" data-strategy-inline-search>
             <button type="button" data-export-action>匯出</button>
             <button type="button" data-export-settings>設定</button>
           </div>
@@ -2529,7 +2531,7 @@ function renderOpenBuyRadar(universe) {
         <div class="swing-tabs">
           <button class="active" type="button">全部(${rows.length})</button>
           <div class="swing-actions">
-            <input type="search" placeholder="搜尋代號/名稱">
+            <input type="search" placeholder="搜尋代號/名稱" value="${escapeAttr(strategyKeyword)}" data-strategy-inline-search>
             <button type="button" data-export-action>匯出</button>
             <button type="button" data-export-settings>設定</button>
           </div>
@@ -2864,7 +2866,7 @@ function renderWarrantFlow() {
         <div class="swing-tabs">
           <button class="active" type="button">優先觀察 Top 10</button>
           <div class="swing-actions">
-            <input id="warrant-flow-search" type="search" placeholder="搜尋代號/名稱" value="${warrantFlowKeyword}">
+            <input id="warrant-flow-search" type="search" placeholder="搜尋代號/名稱" value="${escapeAttr(warrantFlowKeyword)}" data-warrant-flow-search>
             <button id="warrant-flow-refresh" type="button">重新整理</button>
           </div>
         </div>
@@ -4417,6 +4419,13 @@ document.addEventListener("input", (event) => {
   if (!input) return;
   strategyKeyword = input.value || "";
   renderStrategyScanner();
+});
+
+document.addEventListener("input", (event) => {
+  const input = event.target.closest("[data-warrant-flow-search]");
+  if (!input) return;
+  warrantFlowKeyword = input.value || "";
+  renderWarrantFlow();
 });
 
 document.addEventListener("click", (event) => {
