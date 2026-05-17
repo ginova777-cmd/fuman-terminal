@@ -1,20 +1,16 @@
 const fs = require("fs");
 const path = require("path");
-const scanStrategy4 = require("../api/scan-strategy4");
+const scanOpenBuy = require("../api/scan-open-buy");
 
 const ROOT = path.resolve(__dirname, "..");
-const OUT_FILE = path.join(ROOT, "data", "strategy4-latest.json");
-const BACKUP_FILE = path.join(ROOT, "data", "strategy4-backup.json");
-const BATCH_SIZE = Number(process.env.STRATEGY4_BATCH_SIZE || 48);
-const BATCHES_PER_RUN = Number(process.env.STRATEGY4_BATCHES_PER_RUN || 5);
+const OUT_FILE = path.join(ROOT, "data", "open-buy-latest.json");
+const BACKUP_FILE = path.join(ROOT, "data", "open-buy-backup.json");
+const BATCH_SIZE = Number(process.env.OPEN_BUY_BATCH_SIZE || 48);
+const BATCHES_PER_RUN = Number(process.env.OPEN_BUY_BATCHES_PER_RUN || 5);
 const STOCK_URL = process.env.STOCK_UNIVERSE_URL || "https://fuman-terminal.vercel.app/api/stocks";
 
 function readJson(file, fallback) {
-  try {
-    return JSON.parse(fs.readFileSync(file, "utf8"));
-  } catch {
-    return fallback;
-  }
+  try { return JSON.parse(fs.readFileSync(file, "utf8")); } catch { return fallback; }
 }
 
 function normalizeCode(value) {
@@ -25,7 +21,7 @@ function cleanNumber(value) {
   return Number(String(value ?? "").replace(/[,+%]/g, "").trim()) || 0;
 }
 
-async function fetchJson(url, timeout = 20000) {
+async function fetchJson(url, timeout = 30000) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeout);
   try {
@@ -44,8 +40,8 @@ async function fetchJson(url, timeout = 20000) {
 }
 
 function normalizeStock(row) {
-  const code = normalizeCode(row.Code || row.code || row["證券代號"]);
-  const name = String(row.Name || row.name || row["證券名稱"] || "").trim();
+  const code = normalizeCode(row.Code || row.code);
+  const name = String(row.Name || row.name || "").trim();
   if (!/^\d{4}$/.test(code) || /^00/.test(code) || !name) return null;
   return {
     code,
@@ -58,16 +54,8 @@ function normalizeStock(row) {
 }
 
 async function fetchUniverse() {
-  try {
-    const payload = await fetchJson(STOCK_URL, 30000);
-    const rows = Array.isArray(payload) ? payload : (payload.stocks || []);
-    const parsed = rows.map(normalizeStock).filter(Boolean);
-    if (parsed.length) return parsed;
-  } catch (error) {
-    console.log(`stock endpoint fallback: ${error.message}`);
-  }
-
-  const rows = await fetchJson("https://openapi.twse.com.tw/v1/exchangeReport/STOCK_DAY_ALL", 30000);
+  const payload = await fetchJson(STOCK_URL);
+  const rows = Array.isArray(payload) ? payload : (payload.stocks || []);
   return rows.map(normalizeStock).filter(Boolean);
 }
 
@@ -76,8 +64,7 @@ function runHandler(codes) {
     const req = { method: "GET", query: { codes: codes.join(",") } };
     const res = {
       statusCode: 200,
-      headers: {},
-      setHeader(key, value) { this.headers[key] = value; },
+      setHeader() {},
       status(code) { this.statusCode = code; return this; },
       json(payload) {
         if (this.statusCode >= 400) reject(new Error(payload?.error || `HTTP ${this.statusCode}`));
@@ -85,7 +72,7 @@ function runHandler(codes) {
       },
       end() { resolve({ ok: false, matches: [] }); },
     };
-    Promise.resolve(scanStrategy4(req, res)).catch(reject);
+    Promise.resolve(scanOpenBuy(req, res)).catch(reject);
   });
 }
 
@@ -94,13 +81,7 @@ async function main() {
   const codes = universe.map((stock) => stock.code);
   if (!codes.length) throw new Error("No stock universe");
 
-  const previousRaw = readJson(OUT_FILE, {
-    ok: true,
-    cursor: 0,
-    total: codes.length,
-    scannedCodes: [],
-    matches: [],
-  });
+  const previousRaw = readJson(OUT_FILE, { ok: true, cursor: 0, total: codes.length, scannedCodes: [], matches: [] });
   const backup = readJson(BACKUP_FILE, { ok: true, matches: [] });
   const previous = (previousRaw.matches || []).length ? previousRaw : { ...previousRaw, matches: backup.matches || [] };
   const previousMatches = new Map((previous.matches || []).map((item) => [item.code, item]));
@@ -117,20 +98,15 @@ async function main() {
     batchCodes.forEach((code) => scanned.add(code));
 
     const payload = await runHandler(batchCodes);
-    const matched = new Set((payload.matches || []).map((item) => item.code));
     (payload.matches || []).forEach((item) => {
       const base = universe.find((stock) => stock.code === item.code) || {};
-      previousMatches.set(item.code, {
-        ...base,
-        ...item,
-        name: base.name || item.name || item.code,
-      });
+      previousMatches.set(item.code, { ...base, ...item, name: base.name || item.name || item.code });
     });
     scannedThisRun += batchCodes.length;
   }
 
   const matches = [...previousMatches.values()]
-    .sort((a, b) => (b.swingScore || b.score || 0) - (a.swingScore || a.score || 0) || (b.percent || 0) - (a.percent || 0))
+    .sort((a, b) => (b.score || 0) - (a.score || 0) || (b.percent || 0) - (a.percent || 0))
     .slice(0, 200);
   const output = {
     ok: true,
@@ -146,12 +122,9 @@ async function main() {
 
   fs.mkdirSync(path.dirname(OUT_FILE), { recursive: true });
   fs.writeFileSync(OUT_FILE, `${JSON.stringify(output, null, 2)}\n`);
-  if (matches.length) {
-    fs.writeFileSync(BACKUP_FILE, `${JSON.stringify({ ...output, source: "github-actions-backup" }, null, 2)}\n`);
-  } else if ((backup.matches || []).length) {
-    fs.writeFileSync(OUT_FILE, `${JSON.stringify({ ...backup, source: "github-actions-backup-readonly", updatedAt: backup.updatedAt || new Date().toISOString() }, null, 2)}\n`);
-  }
-  console.log(`strategy4 cache updated: scanned ${scannedThisRun}, total progress ${output.scannedCodes.length}/${codes.length}, matches ${matches.length}`);
+  if (matches.length) fs.writeFileSync(BACKUP_FILE, `${JSON.stringify({ ...output, source: "github-actions-backup" }, null, 2)}\n`);
+  else if ((backup.matches || []).length) fs.writeFileSync(OUT_FILE, `${JSON.stringify({ ...backup, source: "github-actions-backup-readonly" }, null, 2)}\n`);
+  console.log(`open-buy cache updated: scanned ${scannedThisRun}, progress ${output.scannedCodes.length}/${codes.length}, matches ${matches.length}`);
 }
 
 main().catch((error) => {
