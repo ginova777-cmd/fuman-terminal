@@ -124,7 +124,6 @@ function labelUpdateModes() {
   viewLinks.forEach((link) => {
     const text = link.textContent || "";
     if (text.includes("市場總覽")) appendUpdateBadge(link, "15秒更新", "live");
-    if (text.includes("權證走向")) appendUpdateBadge(link, "08/15完整掃", "slow");
   });
   document.querySelectorAll(".strategy-card[data-strategy]").forEach((card) => {
     const text = card.textContent || "";
@@ -1650,6 +1649,20 @@ intradayRadarStyles.textContent = `
   .swing-actions {
     margin-left: auto;
   }
+  .warrant-search-hint {
+    flex-basis: 100%;
+    width: fit-content;
+    margin-left: auto;
+    padding: 7px 10px;
+    border: 1px solid rgba(255, 80, 80, 0.58);
+    border-radius: 8px;
+    background: rgba(255, 80, 80, 0.22);
+    color: #fff;
+    font-size: 12px;
+    font-weight: 900;
+    text-align: right;
+    box-shadow: inset 0 0 0 1px rgba(255, 80, 80, 0.12);
+  }
   .swing-actions button,
   .swing-tabs button {
     border: 1px solid rgba(117, 133, 170, 0.28);
@@ -2881,6 +2894,7 @@ function renderWarrantFlow() {
         <div class="swing-tabs">
           <button class="active" type="button">${listLabel}</button>
           <div class="swing-actions">
+            <small class="warrant-search-hint">可搜尋股票代號/名稱，查看未進 Top 10 的權證熱度。</small>
             <input id="warrant-flow-search" type="search" placeholder="搜尋股票代號/名稱" value="${escapeAttr(warrantFlowKeyword)}" data-warrant-flow-search>
             <button id="warrant-flow-refresh" type="button">重新整理</button>
           </div>
