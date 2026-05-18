@@ -4025,13 +4025,13 @@ function renderIndexes(indexes, futuresNear, futuresNext, marketStatus, otcSigna
     if (futuresNear && futuresNear.price && parseFloat(futuresNear.price) > 0) {
       const sign = String(futuresNear.change || "").startsWith("-") ? "-" : "+";
       metricCards[2].innerHTML = `
-        <span>⇅ 台指期夜盤</span>
+        <span>⇅ 台指近全</span>
         <strong>${formatNumber(futuresNear.price, 0)}</strong>
         <em class="${sign === "-" ? "up" : "down"}">${futuresNear.change || "--"}　(${futuresNear.pct || "--"})</em>
         ${futuresNear.basisLabel ? `<small class="metric-signal ${futuresNear.basisSide === "short" ? "green" : futuresNear.basisSide === "long" ? "red" : ""}">${futuresNear.basisLabel}</small>` : statusLabel ? `<small style="color:#666; font-size:11px; margin-top:2px;">${statusLabel}</small>` : ""}
       `;
     } else {
-      metricCards[2].innerHTML = `<span>⇅ 台指期夜盤</span><strong>--</strong><em>${statusLabel || "等待資料"}</em>`;
+      metricCards[2].innerHTML = `<span>⇅ 台指近全</span><strong>--</strong><em>${statusLabel || "等待資料"}</em>`;
     }
   }
 
@@ -4361,27 +4361,43 @@ function showView(viewName, activeLink) {
 
 // ★ 前端直接抓台指期
 async function fetchFuturesDirect() {
-  try {
-    const res = await fetch("https://mis.taifex.com.tw/futures/api/getQuoteList", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
+  const fetchMarket = async (marketType) => {
+    const body = {
+      MarketType: marketType,
+      SymbolType: "F",
+      KindID: "1",
+      CID: "",
+      ExpireMonth: "",
+      RowSize: "10",
+      PageNo: "1",
+      Language: "zh-tw",
+    };
+    try {
+      const res = await fetch("https://mis.taifex.com.tw/futures/api/getQuoteList", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
         "Referer": "https://mis.taifex.com.tw/",
         "Origin": "https://mis.taifex.com.tw",
       },
-      body: JSON.stringify({
-        MarketType: "0",
-        SymbolType: "F",
-        KindID: "1",
-        CID: "TXF",
-        ExpireMonth: "",
-        RowSize: "5",
-        PageNo: "1",
-        Language: "zh-tw",
-      }),
-    });
-    const data = await res.json();
-    const list = data?.RtnData?.QuoteList || [];
+        body: JSON.stringify(body),
+      });
+      const data = await res.json();
+      const list = data?.RtData?.QuoteList || data?.RtnData?.QuoteList || [];
+      return list.filter((item) => {
+        const symbol = String(item.SymbolID || "");
+        const name = String(item.DispCName || item.CName || "");
+        return /^TXF/i.test(symbol) && !symbol.includes("-P") && !name.includes("現貨");
+      });
+    } catch {
+      return [];
+    }
+  };
+
+  try {
+    const nightList = await fetchMarket("1");
+    const dayList = nightList.length ? [] : await fetchMarket("0");
+    const list = nightList.length ? nightList : dayList;
     if (list.length === 0) return { near: null, next: null };
 
     const toItem = (item) => {
@@ -4392,13 +4408,21 @@ async function fetchFuturesDirect() {
       const diff = price - prev;
       const pct  = prev ? (diff / prev * 100) : 0;
       const sign = diff >= 0 ? "+" : "-";
+      const basisSide = diff > 0 ? "long" : diff < 0 ? "short" : "";
+      const basisLabel = basisSide === "long"
+        ? "多方勢（高於結算）"
+        : basisSide === "short"
+          ? "空方勢（低於結算）"
+          : "平盤（貼近結算）";
       return {
-        name:   item.CName || "台指期",
-        month:  item.CID   || "",
+        name:   item.DispCName || item.CName || "台指近全",
+        month:  item.SymbolID || item.CID || "",
         price:  price.toFixed(0),
         change: `${sign}${Math.abs(diff).toFixed(0)}`,
         pct:    `${sign}${Math.abs(pct).toFixed(2)}%`,
         volume: item.CTotalVolume || "--",
+        basisSide,
+        basisLabel,
       };
     };
 
