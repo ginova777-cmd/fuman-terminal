@@ -107,7 +107,19 @@ function commitStrategySearch(input) {
   strategyKeyword = String(input?.value || "").trim();
   strategySearchDraft = null;
   if (strategySearch) strategySearch.value = strategyKeyword;
-  renderStrategyScanner();
+  if (isViewActive("strategy")) renderStrategyScanner();
+  if (isViewActive("chip-trade")) renderChipTradeTable();
+}
+
+function inlineStockActionsHtml() {
+  return `
+    <div class="swing-actions">
+      <input type="search" placeholder="搜尋代號/名稱" value="${escapeAttr(strategySearchInputValue())}" autocomplete="off" spellcheck="false" data-strategy-inline-search>
+      <button type="button" data-strategy-inline-submit>搜尋</button>
+      <button type="button" data-export-action>匯出</button>
+      <button type="button" data-export-settings>設定</button>
+    </div>
+  `;
 }
 
 function chipScanBadgeHtml() {
@@ -758,7 +770,28 @@ async function unlockExport() {
 }
 
 function getActiveExportRows(limit = Infinity) {
-  const table = strategyTable?.querySelector("table");
+  const table = isViewActive("chip-trade")
+    ? document.querySelector("#chip-trade-view table")
+    : strategyTable?.querySelector("table");
+  if (!table && isViewActive("strategy")) {
+    const cards = [...(strategyTable?.querySelectorAll(".strategy5-stock-card") || [])].slice(0, limit);
+    if (!cards.length) return { headers: [], rows: [] };
+    return {
+      headers: ["排名", "股票", "價格", "漲幅", "成交量", "價量特徵", "籌碼特徵"],
+      rows: cards.map((card) => {
+        const blocks = [...card.children];
+        return [
+          blocks[0]?.textContent.trim() || "",
+          blocks[1]?.textContent.replace(/\s+/g, " ").trim() || "",
+          blocks[2]?.querySelector(".strategy5-price")?.textContent.trim() || "",
+          blocks[2]?.querySelector("small")?.textContent.trim() || "",
+          blocks[2]?.querySelectorAll("small")?.[1]?.textContent.trim() || "",
+          blocks[3]?.textContent.replace(/\s+/g, " ").trim() || "",
+          blocks[4]?.textContent.replace(/\s+/g, " ").trim() || "",
+        ];
+      }),
+    };
+  }
   if (!table) return { headers: [], rows: [] };
   const headers = [...table.querySelectorAll("thead th")].map((cell) => cell.textContent.trim());
   const rows = [...table.querySelectorAll("tbody tr")]
@@ -2511,6 +2544,18 @@ intradayRadarStyles.textContent = `
     font-weight: 800;
     padding: 6px 11px;
   }
+  .strategy5-head-actions {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-left: auto;
+  }
+  .strategy5-head-actions .swing-actions,
+  .strategy5-results-head > .swing-actions {
+    margin-left: 0;
+  }
   .strategy5-stock-card {
     display: grid;
     grid-template-columns: 44px 1.25fr 0.9fr 1fr 1.2fr;
@@ -3307,7 +3352,10 @@ function renderStrategy5Dashboard(evaluated) {
               <h3>${active.icon} ${active.label} <span style="display:inline-flex;margin-left:8px;padding:3px 7px;border-radius:999px;background:rgba(255,79,104,.15);color:#ff5b6e;font-size:11px;">${rhythmLabels[strategy5ActiveId] || "策略節奏"}</span></h3>
               <p>${descriptions[strategy5ActiveId] || "符合策略5條件的股票。"}｜${strategy5ScheduleLabel()}</p>
             </div>
-            <span class="strategy5-count">${list.length} 檔　${now.toLocaleTimeString("zh-TW", { hour12: false }).slice(0, 5)} · 0.1 秒</span>
+            <div class="strategy5-head-actions">
+              <span class="strategy5-count">${list.length} 檔　${now.toLocaleTimeString("zh-TW", { hour12: false }).slice(0, 5)} · 0.1 秒</span>
+              ${inlineStockActionsHtml()}
+            </div>
           </div>
           ${rows}
         </section>
@@ -3427,6 +3475,7 @@ function renderOvernightDashboard(evaluated) {
               <h3>盤中隔日沖</h3>
               <p>接近收盤前完整掃一次，以量比、成交額與法人 5D 條件排序。</p>
             </div>
+            ${inlineStockActionsHtml()}
           </div>
           <div class="overnight-table-wrap">
             <table class="overnight-table">
@@ -4189,6 +4238,7 @@ function renderChipTradeTable() {
   const dateEl = document.querySelector("#chip-trade-date");
   const sortEl = document.querySelector("#chip-sort");
   if (!body) return;
+  const keyword = strategyKeyword.trim().toLowerCase();
 
   if (dateEl) {
     dateEl.textContent = "";
@@ -4211,9 +4261,11 @@ function renderChipTradeTable() {
       if (chipFilter === "trust" && !(trustStreak >= 2)) return null;
       if (chipFilter === "foreign" && !(foreignStreak >= 2)) return null;
       if (chipFilter === "legal" && !((Number(inst.total) || foreign + trust + (Number(inst.dealer) || 0)) > 0)) return null;
+      const name = stock.name || code;
+      if (keyword && !code.includes(keyword) && !String(name).toLowerCase().includes(keyword)) return null;
       return {
         code,
-        name: stock.name || code,
+        name,
         price: cleanNumber(stock.close),
         change: cleanNumber(stock.change),
         percent: cleanNumber(stock.percent),
@@ -4243,9 +4295,11 @@ function renderChipTradeTable() {
       if (chipFilter === "trust" && !(trustStreak >= 2)) return;
       if (chipFilter === "foreign" && !(foreignStreak >= 2)) return;
       if (chipFilter === "legal" && !(total > 0)) return;
+      const name = inst.name || code;
+      if (keyword && !code.includes(keyword) && !String(name).toLowerCase().includes(keyword)) return;
       rows.push({
         code,
-        name: inst.name || code,
+        name,
         price: 0,
         change: 0,
         percent: 0,
