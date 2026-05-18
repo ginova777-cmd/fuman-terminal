@@ -1141,18 +1141,18 @@ function ensureStrategyCards() {
 }
 
 function buildStrategyUniverse(stocks) {
-  const values = stocks.map((s) => s.value || 0).sort((a, b) => a - b);
-  const volumes = stocks.map((s) => s.tradeVolume || 0).sort((a, b) => a - b);
-  const percents = stocks.map((s) => s.percent || 0).sort((a, b) => a - b);
-  return stocks.map((stock) => {
-    const liveStock = applyStrategyQuote(stock);
+  const liveStocks = stocks.map(applyStrategyQuote);
+  const values = liveStocks.map((s) => s.value || 0).sort((a, b) => a - b);
+  const volumes = liveStocks.map((s) => s.tradeVolume || 0).sort((a, b) => a - b);
+  const percents = liveStocks.map((s) => s.percent || 0).sort((a, b) => a - b);
+  return liveStocks.map((liveStock) => {
     const rankedStock = {
       ...liveStock,
       valueRank: rankValue(liveStock.value || 0, values),
       volumeRank: rankValue(liveStock.tradeVolume || 0, volumes),
       percentRank: rankValue(liveStock.percent || 0, percents),
-      sector: SECTOR_MAP[stock.code] || "未分類",
-      inst: getInstitutionTotal(stock.code),
+      sector: SECTOR_MAP[liveStock.code] || "未分類",
+      inst: getInstitutionTotal(liveStock.code),
     };
     const swingDaily = analyzeSwingDaily(rankedStock);
     const swingStock = { ...rankedStock, swingDaily };
@@ -1206,7 +1206,7 @@ function strategyHit(id, stock) {
       reason: `由弱轉強候選，漲幅 ${pct.toFixed(2)}%，成交值排名 ${valueRank}%。`,
     },
     intraday_2m: {
-      hit: (stock.intradaySignals?.length || 0) > 0 || (pct >= 1 && valueRank >= 68 && volumeRank >= 68),
+      hit: (stock.intradaySignals?.length || 0) > 0 || (pct >= 0.8 && valueRank >= 55 && volumeRank >= 55),
       score: clamp(scoreBase + 6 + (stock.intradaySignals?.length || 0) * 5, 0, 100),
       reason: stock.intradaySignals?.length
         ? stock.intradaySignals.map((signal) => signal.reason).join(" ")
@@ -3407,6 +3407,9 @@ async function loadStrategyStocks() {
     if (parsed.length) {
       latestStocks = parsed;
       renderStrategyScanner();
+      if (selectedStrategyIds.has("intraday_2m")) {
+        deferUiWork(() => refreshStrategyRealtimeScan(true), 80);
+      }
     } else if (strategyTable) {
       strategyTable.innerHTML = `<div class="empty-state">策略5目前沒有可篩選的股票資料。</div>`;
     }
@@ -4148,7 +4151,11 @@ function applyStrategyPresetFromLink(link) {
 }
 
 async function refreshStrategyRealtimeScan(force = false) {
-  if (strategyRealtimeLoading || !latestStocks.length) return;
+  if (strategyRealtimeLoading) return;
+  if (!latestStocks.length) {
+    await loadStrategyStocks();
+    if (!latestStocks.length) return;
+  }
   const isStrategyVisible = document.querySelector("#strategy-view")?.classList.contains("active");
   const isRealtimeStrategy = selectedStrategyIds.has("intraday_2m");
   if (!force && (!isStrategyVisible || !isRealtimeStrategy)) return;
