@@ -1139,15 +1139,13 @@ const STRATEGY_DEFS = [
 ];
 
 const STRATEGY_BY_ID = Object.fromEntries(STRATEGY_DEFS.map((item) => [item.id, item]));
-const STRATEGY5_IDS = ["short_fund_flow", "chip_health_strong", "one_day_rebound", "short_squeeze", "ultra_short"];
+const STRATEGY5_IDS = ["short_fund_flow", "one_day_rebound", "short_squeeze", "ultra_short"];
 const STRATEGY5_PRESET_IDS = [
   "momentum",
   "main_force_chip",
   "twenty_day_breakout",
-  "opening_power",
   "vcp",
   "sync_backtest",
-  "overnight_chip",
   ...STRATEGY5_IDS,
 ];
 
@@ -4614,12 +4612,9 @@ function applyStrategyPresetFromLink(link) {
         "momentum",
         "main_force_chip",
         "twenty_day_breakout",
-        "opening_power",
         "vcp",
         "sync_backtest",
-        "overnight_chip",
         "short_fund_flow",
-        "chip_health_strong",
         "one_day_rebound",
         "short_squeeze",
         "ultra_short",
