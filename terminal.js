@@ -140,6 +140,7 @@ function labelUpdateModes() {
   viewLinks.forEach((link) => {
     const text = link.textContent || "";
     if (text.includes("市場總覽")) appendUpdateBadge(link, "15秒更新", "live");
+    if (text.includes("外資") || text.includes("投信")) appendUpdateBadge(link, "06/21完整掃", "slow");
   });
   document.querySelectorAll(".strategy-card[data-strategy]").forEach((card) => {
     const text = card.textContent || "";
@@ -159,7 +160,7 @@ function labelChipTradeMode() {
   if (!chipTool || chipTool.querySelector(".chip-source-note")) return;
   const note = document.createElement("div");
   note.className = "chip-source-note";
-  note.textContent = "外資、投信買賣超為盤後公布資料，本頁只顯示最新盤後籌碼。";
+  note.textContent = "外資、投信買賣超為盤後資料；本頁設定 06:00 / 21:00 完整掃，不佔用盤中資源。";
   note.style.cssText = `
     margin-top: 10px;
     color: #9db9ff;
@@ -172,7 +173,7 @@ function labelChipTradeMode() {
 const endpoints = {
   backend: "/api/market",
   heatmap: "/api/heatmap",
-  institution: "/api/institution",
+  institution: "/data/institution-latest.json",
   history: "/api/history",
   realtime: "/api/realtime",
   scanOpenBuy: "/api/scan-open-buy",
@@ -3582,7 +3583,7 @@ function renderWarrantFlow() {
           <p>${helperText}</p>
         </div>
         <div class="swing-controls">
-          <label>更新模式：<select><option>08:00 / 15:00 完整掃</option></select></label>
+          <label>更新模式：<select><option>06:00 / 21:00 完整掃</option></select></label>
           <label>模式：<select><option>權證先熱股票未噴</option></select></label>
         </div>
       </div>
@@ -4640,7 +4641,7 @@ setInterval(tickClock, 1000);
 setInterval(loadMarketData, 15*1000);
 setInterval(refreshStrategyRealtimeScan, 5*1000);
 setInterval(loadHeatmap, 10*60*1000);
-setInterval(loadInstitution, 10*60*1000);
+setInterval(loadInstitution, 24*60*60*1000);
 
 // ===== 自選股功能 =====
 const watchlistView = document.querySelector("#watchlist-view");
