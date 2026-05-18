@@ -170,6 +170,16 @@ function openBuyScheduleLabel() {
   return `●07:00/14:30完整掃　●預計下次掃描時間:${formatDateTimeShort(nextOpenBuyScanTime())}`;
 }
 
+function openBuyStatusStyle(status = "") {
+  if (String(status).includes("洗盤")) {
+    return "background:rgba(255,138,61,.18);border-color:rgba(255,138,61,.55);color:#ffb06d;";
+  }
+  if (String(status).includes("強勢")) {
+    return "background:rgba(63,132,255,.22);border-color:rgba(99,165,255,.55);color:#7fb0ff;";
+  }
+  return "";
+}
+
 function labelUpdateModes() {
   viewLinks.forEach((link) => {
     const text = link.textContent || "";
@@ -3042,7 +3052,7 @@ function renderOpenBuyRadar() {
       <tr>
         <td><span class="code">${stock.code}</span></td>
         <td>${stock.name}</td>
-        <td><b class="swing-stage mid">${stock.status || "明日開盤可買"}</b></td>
+        <td><b class="swing-stage mid" style="${openBuyStatusStyle(stock.status)}">${stock.status || "明日開盤可買"}</b></td>
         <td class="price">${formatNumber(stock.close, stock.close >= 100 ? 0 : 2)}</td>
         <td class="pct">${sign}${stock.percent.toFixed(2)}%</td>
         <td>${stock.entry || "09:00 開盤價"}</td>
