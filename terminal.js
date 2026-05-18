@@ -2481,6 +2481,83 @@ strategy3DashboardStyles.textContent = `
   .strategy5-dashboard.strategy5-dashboard-single .strategy5-results {
     min-width: 0;
   }
+  .overnight-table-wrap {
+    overflow-x: auto;
+  }
+  .overnight-table {
+    width: 100%;
+    min-width: 1180px;
+    border-collapse: collapse;
+    font-size: 13px;
+  }
+  .overnight-table th {
+    color: #8fa7d6;
+    font-size: 12px;
+    text-align: left;
+    padding: 10px 12px;
+    background: rgba(255,255,255,0.035);
+    font-weight: 700;
+  }
+  .overnight-table td {
+    padding: 18px 12px;
+    border-bottom: 1px solid rgba(126, 200, 227, 0.09);
+    color: #dce8ff;
+    vertical-align: middle;
+  }
+  .overnight-table td b {
+    display: block;
+    color: #fff;
+    font-size: 14px;
+  }
+  .overnight-table td small,
+  .overnight-table td p {
+    display: block;
+    color: #8fa7d6;
+    margin: 4px 0 0;
+    line-height: 1.5;
+  }
+  .overnight-rank {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 28px;
+    border-radius: 8px;
+    background: rgba(255, 91, 47, 0.18);
+    color: #ff8c5a;
+    font-weight: 900;
+  }
+  .overnight-pill {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 34px;
+    padding: 4px 10px;
+    border-radius: 999px;
+    border: 1px solid rgba(255, 77, 92, 0.35);
+    color: #ff8fa0;
+    background: rgba(255, 77, 92, 0.1);
+    font-weight: 800;
+  }
+  .overnight-table .price {
+    color: #ffffff;
+    font-weight: 900;
+  }
+  .overnight-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .overnight-tags span {
+    border: 1px solid rgba(126, 200, 227, 0.25);
+    background: rgba(39, 69, 120, 0.18);
+    color: #dce8ff;
+    border-radius: 999px;
+    padding: 3px 8px;
+    font-size: 11px;
+    font-weight: 800;
+    white-space: nowrap;
+  }
 `;
 document.head.appendChild(strategy3DashboardStyles);
 
@@ -3064,6 +3141,7 @@ function renderOvernightDashboard(evaluated) {
   setStrategyChrome("strategy5");
   const rows = evaluated
     .filter((stock) => stock.matches.some((match) => match.id === "overnight_chip"))
+    .map((stock) => applyStrategyQuote(stock))
     .map((stock) => ({ ...stock, activeMatch: stock.matches.find((match) => match.id === "overnight_chip") }))
     .sort((a, b) => b.score - a.score || b.value - a.value || b.percent - a.percent)
     .slice(0, 30);
@@ -3075,47 +3153,67 @@ function renderOvernightDashboard(evaluated) {
 
   const cards = rows.length ? rows.map((stock, index) => {
     const sign = stock.percent >= 0 ? "+" : "";
-    const stage = stock.swingStage || getSwingStage(stock);
+    const inst = stock.inst || getInstitutionTotal(stock.code);
+    const projectedRatio = Math.max(1, (stock.volumeRank || 0) / 24).toFixed(1);
+    const valueText = stock.value ? `${(stock.value / 100000000).toFixed(2)} 億` : "--";
+    const tags = [
+      stock.volumeRank >= 70 ? "量能啟動" : "量能觀察",
+      stock.percent >= 5 ? "急漲" : "溫和",
+      stock.valueRank >= 70 ? "高成交額" : "成交待放",
+      inst.total > 0 ? "法人5D偏多" : "法人待確認",
+      stock.isRealtime ? "即時價" : "盤後價",
+    ];
     return `
-      <article class="strategy5-stock-card">
-        <div class="rank">#${index + 1}</div>
-        <div>
-          <strong>${stock.name} <small>${stock.code}</small></strong>
-          <small>${stock.sector || "未分類"} · ${stage.label || "盤中"} · ${stock.isRealtime ? "即時" : "盤中"}</small>
-        </div>
-        <div>
-          <div class="strategy5-price">${formatNumber(stock.close, stock.close >= 100 ? 0 : 2)}</div>
-          <small class="${stock.percent >= 0 ? "red" : "green"}">${sign}${stock.percent.toFixed(2)}%</small>
-        </div>
-        <div class="strategy5-chips"><b>⌬ 隔日</b><b>${Math.round(stock.tradeVolume || 0).toLocaleString("zh-TW")}張</b></div>
-        <div class="strategy5-reason">${stock.activeMatch?.reason || "隔日沖籌碼與量價候選。"}</div>
-      </article>
+      <tr>
+        <td><span class="overnight-rank">#${index + 1}</span></td>
+        <td><b>${stock.name}</b><small>${stock.code}</small></td>
+        <td><span class="overnight-pill long">多</span></td>
+        <td class="price">${formatNumber(stock.close, stock.close >= 100 ? 0 : 2)}</td>
+        <td class="${stock.percent >= 0 ? "red" : "green"}">${sign}${stock.percent.toFixed(2)}%</td>
+        <td>${Math.round(stock.tradeVolume || 0).toLocaleString("zh-TW")}</td>
+        <td>${projectedRatio}x</td>
+        <td>${valueText}</td>
+        <td>${formatInstitution(inst.total)}</td>
+        <td><b>${stock.score}</b></td>
+        <td>
+          <strong>通過</strong>
+          <p>量價與成交值偏強，${stock.activeMatch?.reason || "隔日沖候選。"} ${stock.isRealtime ? "價格已用即時資料覆蓋。" : "等待即時價覆蓋。"}</p>
+          <div class="overnight-tags">${tags.map((tag) => `<span>${tag}</span>`).join("")}</div>
+        </td>
+        <td>
+          <div class="overnight-tags">${tags.map((tag) => `<span>${tag}</span>`).join("")}</div>
+          <small>推估量比 ${projectedRatio}x · 漲幅 ${sign}${stock.percent.toFixed(2)}% · 成交額 ${valueText}</small>
+        </td>
+      </tr>
     `;
-  }).join("") : `<div class="empty-state">目前沒有符合隔日沖條件的股票。</div>`;
+  }).join("") : `<tr><td colspan="12">目前沒有符合隔日沖條件的股票。</td></tr>`;
 
   strategyTable.innerHTML = `
     <section class="strategy5-shell">
       <div class="strategy5-hero">
         <div>
           <b>直達新版頁</b>
-          <h2>${titleWithIcon("◐", "策略3-隔日沖")} <span class="swing-live">● 即時篩選</span></h2>
-        </div>
-        <div class="strategy5-date">
-          <span>符合</span>
-          <strong>${rows.length}</strong>
-          <span>隔日沖候選</span>
+          <h2>${titleWithIcon("◐", "策略3-隔日沖")} <span class="swing-live">● 即時價覆蓋</span></h2>
         </div>
       </div>
       <section class="strategy5-dashboard strategy5-dashboard-single">
         <section class="strategy5-results">
           <div class="strategy5-results-head">
             <div>
-              <h3>隔日沖候選排行</h3>
-              <p>以量價、成交值與籌碼條件排序，避免混入其他策略。</p>
+              <h3>盤中隔日沖</h3>
+              <p>以即時價、量比、成交額與法人 5D 條件排序。</p>
             </div>
-            <span class="strategy5-count">${rows.length} 檔</span>
           </div>
-          ${cards}
+          <div class="overnight-table-wrap">
+            <table class="overnight-table">
+              <thead>
+                <tr>
+                  <th>排名</th><th>股票</th><th>多空</th><th>價格</th><th>漲幅</th><th>量</th><th>推估量比</th><th>成交額</th><th>法人5D</th><th>分數</th><th>AI分析</th><th>觸發原因</th>
+                </tr>
+              </thead>
+              <tbody>${cards}</tbody>
+            </table>
+          </div>
         </section>
       </section>
     </section>
@@ -4210,6 +4308,7 @@ function applyStrategyPresetFromLink(link) {
   if (strategySearch) strategySearch.value = "";
   deferUiWork(loadStrategyStocks);
   if (text.includes("策略2")) deferUiWork(() => refreshStrategyRealtimeScan(true), 80);
+  if (text.includes("策略3")) deferUiWork(() => refreshStrategyRealtimeScan(true), 80);
   if (text.includes("策略1")) {
     deferUiWork(() => loadOpenBuyCache(true), 60);
     deferUiWork(() => refreshOpenBuyScan(true), 120);
@@ -4227,7 +4326,7 @@ async function refreshStrategyRealtimeScan(force = false) {
     if (!latestStocks.length) return;
   }
   const isStrategyVisible = document.querySelector("#strategy-view")?.classList.contains("active");
-  const isRealtimeStrategy = selectedStrategyIds.has("intraday_2m");
+  const isRealtimeStrategy = selectedStrategyIds.has("intraday_2m") || selectedStrategyIds.has("overnight_chip");
   if (!force && (!isStrategyVisible || !isRealtimeStrategy)) return;
 
   strategyRealtimeLoading = true;
