@@ -3502,14 +3502,20 @@ function renderWarrantFlow() {
     .map(hydrateWarrantFlowItem)
     .map((item) => ({
       ...item,
-      observeScore: Math.round(
+      observeScore: clamp(Math.round(
         item.score +
         Math.min(cleanNumber(item.callValue) / 20000000, 18) +
         Math.min(cleanNumber(item.callPutRatio) * 2, 14) +
         (item.stockPercent < 0 ? -22 : item.stockPercent <= 2.5 ? 14 : item.stockPercent <= 4.5 ? 0 : -16)
-      ),
+      ), 0, 100),
     }))
-    .sort((a, b) => b.observeScore - a.observeScore || b.score - a.score || b.callValue - a.callValue)
+    .sort((a, b) =>
+      b.observeScore - a.observeScore ||
+      b.callValue - a.callValue ||
+      b.callCount - a.callCount ||
+      b.callPutRatio - a.callPutRatio ||
+      b.atMoneyCallCount - a.atMoneyCallCount
+    )
     .map((item, index) => ({ ...item, rank: index + 1 }));
   const rows = keyword
     ? allRows.filter((item) =>
@@ -3540,7 +3546,6 @@ function renderWarrantFlow() {
         <td><span class="swing-score">${item.rank || "--"}</span></td>
         <td><span class="code">${item.code || "--"}</span></td>
         <td>${item.name}</td>
-        <td><span class="swing-score">${item.observeScore}</span><small>${item.level || "C"}級</small></td>
         <td class="price">${formatWarrantMoney(item.callValue)}</td>
         <td>${formatWarrantMoney(item.putValue)}</td>
         <td><b class="swing-stage ${hot}">${item.callPutRatio >= 99 ? "99+" : item.callPutRatio}</b></td>
@@ -3551,7 +3556,7 @@ function renderWarrantFlow() {
       </tr>
     `;
   }).join("") : `
-    <tr><td colspan="11">${keyword ? (warrantFlowSearchLoading ? "正在查詢全台股權證資料..." : "查不到這檔股票的有效權證成交資料，或目前資料來源尚未提供。") : "權證資金走向讀取中。只顯示「認購權證先熱、股票尚未噴出」的前十名。"}</td></tr>
+    <tr><td colspan="10">${keyword ? (warrantFlowSearchLoading ? "正在查詢全台股權證資料..." : "查不到這檔股票的有效權證成交資料，或目前資料來源尚未提供。") : "權證資金走向讀取中。只顯示「認購權證先熱、股票尚未噴出」的前十名。"}</td></tr>
   `;
 
   panel.innerHTML = `
@@ -3591,7 +3596,7 @@ function renderWarrantFlow() {
         <table class="swing-table">
           <thead>
             <tr>
-              <th>排名</th><th>股票代號</th><th>標的名稱</th><th>觀察分數</th><th>認購金額</th><th>認售金額</th><th>購/售比</th><th>購/售檔數</th><th>股票漲幅</th><th>價平/價內權證</th><th>判斷</th>
+              <th>排名</th><th>股票代號</th><th>標的名稱</th><th>認購金額</th><th>認售金額</th><th>購/售比</th><th>購/售檔數</th><th>股票漲幅</th><th>價平/價內權證</th><th>判斷</th>
             </tr>
           </thead>
           <tbody>${body}</tbody>
