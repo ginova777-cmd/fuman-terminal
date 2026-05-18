@@ -979,8 +979,19 @@ function getIntradaySignals(stock) {
   const pct = stock.percent || 0;
   const valueRank = stock.valueRank || 0;
   const volumeRank = stock.volumeRank || 0;
+  const value = cleanNumber(stock.value);
+  const volume = cleanNumber(stock.tradeVolume);
+  const limitUp = cleanNumber(stock.limitUp);
+  const daily = stock.swingDaily || analyzeSwingDaily(stock);
+  const dailyVolumeRatio = daily?.volumeRatio || 0;
+  const yesterdayHigh = cleanNumber(daily?.prev?.high);
+  const highest20Prev = cleanNumber(daily?.highest20Prev);
   const vwap = stock.vwap || ((stock.value && stock.tradeVolume) ? stock.value / stock.tradeVolume : 0);
   const gapPct = open && prevClose ? ((open - prevClose) / prevClose) * 100 : 0;
+  const isNearLimit = limitUp && close >= limitUp * 0.985;
+  const isLimitLocked = limitUp && close >= limitUp * 0.998;
+  const breaksYesterdayHigh = yesterdayHigh && close >= yesterdayHigh * 1.002;
+  const breaks20High = highest20Prev && close >= highest20Prev * 1.002;
   const lastPrice = prices.at(-1) || close;
   const priorPrice = prices.at(-2) || 0;
   const burstPct = priorPrice ? ((lastPrice - priorPrice) / priorPrice) * 100 : 0;
@@ -999,6 +1010,33 @@ function getIntradaySignals(stock) {
   const ibRange = high && low ? high - low : 0;
   const f618 = ibRange > 0 ? high - ibRange * 0.618 : 0;
   const signals = [];
+
+  if (isNearLimit && (volumeRank >= 70 || valueRank >= 70 || volume >= 8000)) {
+    signals.push({
+      id: "limit_lock",
+      short: isLimitLocked ? "漲停" : "近漲停",
+      icon: "🔒",
+      reason: `${isLimitLocked ? "漲停鎖定" : "接近漲停"}，現價 ${formatNumber(close, close >= 100 ? 0 : 2)}，漲停 ${formatNumber(limitUp, limitUp >= 100 ? 0 : 2)}，量能排名 ${volumeRank}%。`,
+    });
+  }
+
+  if (volumeRank >= 88 || valueRank >= 88 || dailyVolumeRatio >= 1.8 || (volume >= 10000 && value >= 500000000)) {
+    signals.push({
+      id: "volume_burst",
+      short: "爆量",
+      icon: "📊",
+      reason: `盤中爆量，成交量 ${Math.round(volume).toLocaleString("zh-TW")} 張，量能排名 ${volumeRank}%，成交值排名 ${valueRank}%，日K量比 ${dailyVolumeRatio ? dailyVolumeRatio.toFixed(2) : "--"}。`,
+    });
+  }
+
+  if ((breaks20High || breaksYesterdayHigh) && (volumeRank >= 70 || dailyVolumeRatio >= 1.2 || isNearLimit)) {
+    signals.push({
+      id: "daily_breakout",
+      short: breaks20High ? "20日突" : "昨高突",
+      icon: "▲",
+      reason: `${breaks20High ? "突破近20日壓力" : "突破昨日高點"}，搭配盤中量能放大，列入日K底稿觸發。`,
+    });
+  }
 
   if (open && prevClose && gapPct >= 2 && open > prevClose && close >= open && volumeRank >= 60) {
     signals.push({ id: "gap", short: "跳空", icon: "🚀", reason: `跳空 ${gapPct.toFixed(2)}%，開盤高於昨收且量能排名 ${volumeRank}%。` });
@@ -1115,12 +1153,13 @@ function buildStrategyUniverse(stocks) {
       percentRank: rankValue(liveStock.percent || 0, percents),
       sector: SECTOR_MAP[stock.code] || "未分類",
       inst: getInstitutionTotal(stock.code),
-      intradaySignals: getIntradaySignals(liveStock),
     };
     const swingDaily = analyzeSwingDaily(rankedStock);
     const swingStock = { ...rankedStock, swingDaily };
+    const intradaySignals = getIntradaySignals(swingStock);
     return {
       ...swingStock,
+      intradaySignals,
       swingStage: getSwingStage(swingStock),
       swingSignals: getSwingSignals(swingStock),
     };
@@ -1248,6 +1287,9 @@ function evaluateStrategyStock(stock) {
 }
 
 const INTRADAY_SIGNAL_DEFS = [
+  { id: "limit_lock", title: "漲停鎖定", icon: "🔒", hint: "接近漲停或亮燈鎖住" },
+  { id: "volume_burst", title: "爆量", icon: "📊", hint: "成交量/成交值進市場前段" },
+  { id: "daily_breakout", title: "日K突破", icon: "▲", hint: "突破昨日或20日壓力" },
   { id: "gap", title: "跳空", icon: "🚀", hint: "開盤高於昨收且量能放大" },
   { id: "breakout", title: "突破", icon: "🔥", hint: "站上盤中強勢區與 VWAP" },
   { id: "ma35_macd", title: "MA35 + MACD", icon: "🟢", hint: "站上 MA35 且動能向上" },
@@ -1506,19 +1548,25 @@ function getIntradayState(stock) {
   const close = Number(stock.close) || 0;
   const high = Number(stock.high) || 0;
   const signals = stock.intradaySignals || [];
+  const daily = stock.swingDaily || null;
   const hasFallback = (stock.matches || []).some((match) => match.id === "intraday_2m");
   const hasSignal = signals.length > 0 || hasFallback;
-  const hasStrongSignal = signals.some((signal) => ["gap", "breakout", "ma35_macd", "surge"].includes(signal.id));
+  const hasStrongSignal = signals.some((signal) => ["limit_lock", "volume_burst", "daily_breakout", "gap", "breakout", "ma35_macd", "surge"].includes(signal.id));
+  const hasLimitSignal = signals.some((signal) => signal.id === "limit_lock");
+  const hasVolumeSignal = signals.some((signal) => signal.id === "volume_burst");
+  const hasDailyTrigger = signals.some((signal) => signal.id === "daily_breakout" || signal.id === "gap" || signal.id === "breakout");
   const liquid = value >= 150000000 || volume >= 2000;
   const tradableLiquidity = value >= 80000000 || volume >= 1000;
   const aboveOpen = !open || close >= open;
   const nearHigh = !high || close >= high * 0.985;
-  const notOverheated = pct <= 8.8;
+  const tooHotToChase = pct >= 8.8 || hasLimitSignal;
+  const dailyOk = !daily || daily.stage?.tone !== "hot" || hasDailyTrigger;
+  const winRateSetup = liquid && dailyOk && hasVolumeSignal && hasDailyTrigger && aboveOpen && nearHigh && pct >= 1 && pct <= 8.8;
 
-  if (liquid && pct >= 1 && hasStrongSignal && aboveOpen && nearHigh && notOverheated) {
+  if (winRateSetup) {
     return { id: "go", label: "可進場", cls: "go" };
   }
-  if (tradableLiquidity && pct >= 0.5 && hasSignal && notOverheated) {
+  if (tradableLiquidity && hasSignal && (pct >= 0.5 || hasLimitSignal) && !tooHotToChase && hasStrongSignal) {
     return { id: "wait", label: "待確認", cls: "wait" };
   }
   return { id: "watch", label: "觀察", cls: "watch" };
@@ -2505,6 +2553,9 @@ function renderIntradayRadar(evaluated) {
   if (strategyTopHit) strategyTopHit.textContent = rows.length ? `${Math.max(...rows.map((stock) => stock.intradaySignals.length))}/6` : "0/6";
 
   const cardClass = {
+    limit_lock: "warn",
+    volume_burst: "ma",
+    daily_breakout: "ma",
     ma35_macd: "ma",
     diamond: "diamond",
     surge: "warn",
