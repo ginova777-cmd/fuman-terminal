@@ -236,6 +236,8 @@ let warrantFlowData = [];
 let warrantFlowQuotes = {};
 let warrantFlowUpdatedAt = 0;
 let warrantFlowKeyword = "";
+let warrantFlowSearchTimer = 0;
+let warrantFlowSearchLoading = false;
 const WARRANT_FLOW_LOCAL_CACHE_KEY = "fuman_warrant_flow_cache_v1";
 const CACHE_FRESH_MS = 10 * 60 * 1000;
 let selectedStrategyIds = new Set();
@@ -3411,6 +3413,48 @@ async function refreshWarrantFlowQuotes() {
   });
 }
 
+function mergeWarrantFlowMatches(matches) {
+  const byKey = new Map();
+  warrantFlowData.forEach((item) => {
+    const key = String(item.underlyingCode || item.underlyingName || "").trim();
+    if (key) byKey.set(key, item);
+  });
+  normalizeArray(matches).forEach((item) => {
+    const key = String(item.underlyingCode || item.underlyingName || "").trim();
+    if (key) byKey.set(key, item);
+  });
+  warrantFlowData = [...byKey.values()];
+}
+
+async function searchWarrantFlowRemote(keyword) {
+  const query = String(keyword || "").trim();
+  if (query.length < 2 || warrantFlowSearchLoading) return;
+  warrantFlowSearchLoading = true;
+  try {
+    const payload = await fetchJson(`${endpoints.scanWarrantFlow}?q=${encodeURIComponent(query)}&t=${Date.now()}`, 45000);
+    mergeWarrantFlowMatches(payload?.matches);
+    const updatedAt = Date.parse(payload?.updatedAt || "");
+    if (Number.isFinite(updatedAt)) warrantFlowUpdatedAt = Math.max(warrantFlowUpdatedAt || 0, updatedAt);
+    await refreshWarrantFlowQuotes();
+  } catch (error) {
+    // 搜尋失敗時保留原本 Top 10，不讓畫面中斷。
+  } finally {
+    warrantFlowSearchLoading = false;
+    renderWarrantFlow();
+  }
+}
+
+function scheduleWarrantFlowSearch() {
+  const keyword = warrantFlowKeyword.trim();
+  clearTimeout(warrantFlowSearchTimer);
+  if (keyword.length < 2) {
+    renderWarrantFlow();
+    return;
+  }
+  renderWarrantFlow();
+  warrantFlowSearchTimer = setTimeout(() => searchWarrantFlowRemote(keyword), 350);
+}
+
 function formatWarrantMoney(value) {
   const number = cleanNumber(value);
   if (number >= 100000000) return `${(number / 100000000).toFixed(2)} 億`;
@@ -3446,9 +3490,9 @@ function renderWarrantFlow() {
   const updatedText = warrantFlowUpdatedAt
     ? new Date(warrantFlowUpdatedAt).toLocaleTimeString("zh-TW", { hour12: false })
     : "等待更新";
-  const listLabel = keyword ? `搜尋結果 ${rows.length} 筆｜完整候選 ${allRows.length} 筆` : "優先觀察 Top 10";
+  const listLabel = keyword ? `搜尋結果 ${rows.length} 筆｜全台股查詢` : "優先觀察 Top 10";
   const helperText = keyword
-    ? "搜尋會查完整候選名單，就算沒有進 Top 10 也會顯示目前權證資金狀況。"
+    ? "搜尋會直接查全台股權證，不受 Top 10 排名限制；若該股票有權證成交資料就會顯示。"
     : "策略6：收盤後找明日候選，盤中輔助確認；依認購金額、購售比、多檔同步、價平/價內、剩餘天數與股票未過熱程度排序。";
 
   const body = rows.length ? rows.map((item) => {
@@ -3475,7 +3519,7 @@ function renderWarrantFlow() {
       </tr>
     `;
   }).join("") : `
-    <tr><td colspan="11">${keyword ? "完整候選名單內找不到這檔股票；代表目前權證資金熱度尚未進候選名單。" : "權證資金走向讀取中。只顯示「認購權證先熱、股票尚未噴出」的前十名。"}</td></tr>
+    <tr><td colspan="11">${keyword ? (warrantFlowSearchLoading ? "正在查詢全台股權證資料..." : "查不到這檔股票的有效權證成交資料，或目前資料來源尚未提供。") : "權證資金走向讀取中。只顯示「認購權證先熱、股票尚未噴出」的前十名。"}</td></tr>
   `;
 
   panel.innerHTML = `
@@ -3526,7 +3570,7 @@ function renderWarrantFlow() {
 
   panel.querySelector("#warrant-flow-search")?.addEventListener("input", (event) => {
     warrantFlowKeyword = event.target.value || "";
-    renderWarrantFlow();
+    scheduleWarrantFlowSearch();
   });
   panel.querySelector("#warrant-flow-refresh")?.addEventListener("click", () => loadWarrantFlow(true));
 }
@@ -5103,7 +5147,7 @@ document.addEventListener("input", (event) => {
   const input = event.target.closest("[data-warrant-flow-search]");
   if (!input) return;
   warrantFlowKeyword = input.value || "";
-  renderWarrantFlow();
+  scheduleWarrantFlowSearch();
 });
 
 document.addEventListener("click", (event) => {
