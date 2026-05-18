@@ -3016,10 +3016,6 @@ function renderOpenBuyRadar() {
   const scanCount = openBuyScanCount || Object.keys(openBuyScanMatches).length;
   const scannedCount = openBuyScannedCodes.size;
   const totalCount = openBuyScanTotal || latestStocks.filter((stock) => !/^00/.test(stock.code)).length || latestStocks.length;
-  if (latestStocks.length && !openBuyScanLoading && !openBuyCacheLoading && !hasFreshOpenBuyScan()) {
-    setTimeout(() => refreshOpenBuyScan(true), 0);
-  }
-
   const keyword = strategyKeyword.trim().toLowerCase();
   const rows = Object.values(openBuyScanMatches)
     .filter((stock) => !keyword || stock.code.includes(keyword) || stock.name.toLowerCase().includes(keyword))
@@ -3059,11 +3055,11 @@ function renderOpenBuyRadar() {
     <section class="swing-dashboard">
       <div class="swing-topbar">
         <div>
-          <h2>${titleWithIcon("⚡", "策略1-開盤入快跑")} <span class="swing-live">● 08:00 / 15:00 完整掃</span></h2>
+          <h2>${titleWithIcon("⚡", "策略1-開盤入快跑")} <span class="swing-live">● 07:00 / 14:30 完整掃</span></h2>
           <p>14:30後先出明日候選；08:55後看最終名單。買入：09:00 開盤價｜停利 +1.2%｜停損 -1.0%｜09:10 強制出場。${scanText}</p>
         </div>
         <div class="swing-controls">
-          <label>更新模式：<select><option>08:00 / 15:00 完整掃</option></select></label>
+          <label>更新模式：<select><option>07:00 / 14:30 完整掃</option></select></label>
           <label>市場：<select><option>排除ETF</option></select></label>
         </div>
       </div>
@@ -4526,7 +4522,6 @@ function applyStrategyPresetFromLink(link) {
   if (text.includes("策略2")) deferUiWork(() => refreshStrategyRealtimeScan(true), 80);
   if (text.includes("策略1")) {
     deferUiWork(() => loadOpenBuyCache(true), 60);
-    deferUiWork(() => refreshOpenBuyScan(true), 120);
   }
   if (text.includes("策略4")) {
     deferUiWork(() => loadStrategy4Cache(true), 60);
