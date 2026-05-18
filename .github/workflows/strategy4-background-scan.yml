@@ -41,10 +41,6 @@ jobs:
             mkdir -p scripts
             cp scan-strategy4-cache.js scripts/scan-strategy4-cache.js
           fi
-          if [ ! -f scripts/scan-open-buy-cache.js ] && [ -f scan-open-buy-cache.js ]; then
-            mkdir -p scripts
-            cp scan-open-buy-cache.js scripts/scan-open-buy-cache.js
-          fi
           if [ ! -f scripts/scan-warrant-flow-cache.js ] && [ -f scan-warrant-flow-cache.js ]; then
             mkdir -p scripts
             cp scan-warrant-flow-cache.js scripts/scan-warrant-flow-cache.js
@@ -54,20 +50,17 @@ jobs:
             cp scan-institution-cache.js scripts/scan-institution-cache.js
           fi
           node scripts/scan-strategy4-cache.js
-          node scripts/scan-open-buy-cache.js
           node scripts/scan-institution-cache.js
           node scripts/scan-warrant-flow-cache.js
         env:
           STRATEGY4_BATCH_SIZE: "48"
           STRATEGY4_BATCHES_PER_RUN: "5"
-          OPEN_BUY_BATCH_SIZE: "48"
-          OPEN_BUY_BATCHES_PER_RUN: "5"
           FULL_SCAN: ${{ (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.full_scan == 'true')) && '1' || '0' }}
 
       - name: Commit cache
         run: |
           git config user.name "fuman-terminal-bot"
           git config user.email "actions@github.com"
-          git add data/strategy4-latest.json data/strategy4-backup.json data/open-buy-latest.json data/open-buy-backup.json data/institution-latest.json data/institution-backup.json data/warrant-flow-latest.json data/warrant-flow-backup.json
+          git add data/strategy4-latest.json data/strategy4-backup.json data/institution-latest.json data/institution-backup.json data/warrant-flow-latest.json data/warrant-flow-backup.json
           git diff --cached --quiet || git commit -m "Update strategy caches"
           git push

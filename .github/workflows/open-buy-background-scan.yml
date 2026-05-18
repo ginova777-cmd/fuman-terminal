@@ -1,0 +1,58 @@
+name: Open Buy Background Scan
+
+on:
+  schedule:
+    # Taiwan time 07:00 on trading days.
+    - cron: "0 23 * * 0-4"
+    # Taiwan time 14:30 on trading days.
+    - cron: "30 6 * * 1-5"
+  workflow_dispatch:
+    inputs:
+      full_scan:
+        description: "Use true for manual full market scan"
+        required: true
+        default: "true"
+        type: choice
+        options:
+          - "true"
+          - "false"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: open-buy-background-scan
+  cancel-in-progress: false
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Prepare scanner
+        run: |
+          if [ ! -f scripts/scan-open-buy-cache.js ] && [ -f scan-open-buy-cache.js ]; then
+            mkdir -p scripts
+            cp scan-open-buy-cache.js scripts/scan-open-buy-cache.js
+          fi
+
+      - name: Run open buy scan
+        run: node scripts/scan-open-buy-cache.js
+        env:
+          OPEN_BUY_BATCH_SIZE: "48"
+          OPEN_BUY_BATCHES_PER_RUN: "5"
+          FULL_SCAN: ${{ (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.full_scan == 'true')) && '1' || '0' }}
+
+      - name: Commit open buy cache
+        run: |
+          git config user.name "fuman-terminal-bot"
+          git config user.email "actions@github.com"
+          git add data/open-buy-latest.json data/open-buy-backup.json
+          git diff --cached --quiet || git commit -m "Update open buy cache"
+          git push
