@@ -3006,7 +3006,7 @@ function renderSwingRadar(universe) {
   `;
 }
 
-function renderOpenBuyRadar(universe) {
+function renderOpenBuyRadar() {
   setStrategyChrome("openBuy");
   if (!openBuyScanLastAt) {
     loadOpenBuyLocalCache();
@@ -3022,9 +3022,7 @@ function renderOpenBuyRadar(universe) {
   }
 
   const keyword = strategyKeyword.trim().toLowerCase();
-  const allowCodes = new Set(universe.map((stock) => stock.code));
   const rows = Object.values(openBuyScanMatches)
-    .filter((stock) => allowCodes.has(stock.code))
     .filter((stock) => !isStaleStrategyPrice(stock, latestStocks.find((item) => item.code === stock.code)))
     .filter((stock) => !keyword || stock.code.includes(keyword) || stock.name.toLowerCase().includes(keyword))
     .sort((a, b) => b.score - a.score || b.percent - a.percent || b.value - a.value)
@@ -3348,11 +3346,7 @@ function renderStrategyScanner() {
   const keyword = strategyKeyword.trim().toLowerCase();
   const universe = buildStrategyUniverse(latestStocks);
   if (selected.length === 1 && selected[0] === "open_buy") {
-    const openBuyRows = universe.filter((stock) => {
-      const passKeyword = !keyword || stock.code.includes(keyword) || stock.name.toLowerCase().includes(keyword);
-      return passKeyword;
-    });
-    renderOpenBuyRadar(openBuyRows);
+    renderOpenBuyRadar();
     return;
   }
   if (selected.length === 1 && selected[0] === "swing_radar") {
