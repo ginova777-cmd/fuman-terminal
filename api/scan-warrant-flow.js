@@ -90,6 +90,27 @@ function cleanNumber(value) {
   return Number(String(value ?? "").replace(/[,+]/g, "").trim()) || 0;
 }
 
+function parseTwDate(value) {
+  const text = String(value ?? "").trim();
+  const roc = text.match(/(\d{2,3})年(\d{1,2})月(\d{1,2})日/);
+  if (roc) return new Date(Number(roc[1]) + 1911, Number(roc[2]) - 1, Number(roc[3]));
+  const ymd = text.replace(/\D/g, "");
+  if (ymd.length === 8) return new Date(Number(ymd.slice(0, 4)), Number(ymd.slice(4, 6)) - 1, Number(ymd.slice(6, 8)));
+  return null;
+}
+
+function daysBetween(date, now = new Date()) {
+  if (!(date instanceof Date) || Number.isNaN(date.getTime())) return null;
+  const start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const end = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  return Math.ceil((end - start) / 86400000);
+}
+
+function formatIsoDate(date) {
+  if (!(date instanceof Date) || Number.isNaN(date.getTime())) return "";
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
+
 function stripHtml(value) {
   return String(value ?? "").replace(/<[^>]*>/g, "").trim();
 }
@@ -152,6 +173,115 @@ function formatTpexDate(date) {
   const month = String(date.getMonth() + 1).padStart(2, "0");
   const day = String(date.getDate()).padStart(2, "0");
   return `${year}/${month}/${day}`;
+}
+
+function normalizeBasicInfo(row) {
+  const code = String(getValue(row, ["權證代號", "代號"])).trim();
+  const name = String(getValue(row, ["權證簡稱", "名稱"])).trim();
+  const typeText = String(getValue(row, ["權證類型", "種類"])).trim();
+  const underlyingCode = String(getValue(row, ["標的代號"])).trim();
+  const underlyingName = String(getValue(row, ["標的名稱"])).trim();
+  const expiry = parseTwDate(getValue(row, ["履約截止日", "到期日"]));
+  const lastTrade = parseTwDate(getValue(row, ["最後交易日"]));
+  const strike = cleanNumber(getValue(row, ["履約價格(元)/點數", "最新履約價"]));
+  const exerciseRatio = cleanNumber(getValue(row, ["行使比例", "最新行使比例"]));
+  if (!code || !underlyingCode || !underlyingName || !strike) return null;
+  return {
+    code,
+    name,
+    type: /認售/.test(typeText) ? "put" : /認購/.test(typeText) ? "call" : inferType(name),
+    underlyingCode,
+    underlyingName,
+    expiryDate: formatIsoDate(expiry),
+    lastTradeDate: formatIsoDate(lastTrade),
+    daysToExpiry: daysBetween(expiry),
+    strike,
+    exerciseRatio,
+  };
+}
+
+async function fetchTwseWarrantBasics() {
+  const errors = [];
+  for (const date of recentTradingDates(5)) {
+    const tradeDate = formatTwseDate(date);
+    const url = `https://www.twse.com.tw/rwd/zh/stock/warrantStock?date=${tradeDate}&response=json`;
+    try {
+      const payload = await fetchJson(url, 25000);
+      if (payload?.stat !== "OK" || !Array.isArray(payload.data)) continue;
+      const rows = payload.data.map((items) => {
+        const row = {};
+        (payload.fields || []).forEach((field, index) => { row[String(field).replace(/\s/g, "")] = items[index] || ""; });
+        return normalizeBasicInfo(row);
+      }).filter(Boolean);
+      if (rows.length) return { rows, errors };
+    } catch (error) {
+      errors.push(`上市權證基本資料 ${tradeDate}: ${error.message}`);
+    }
+  }
+  return { rows: [], errors };
+}
+
+async function fetchTpexWarrantBasics() {
+  const errors = [];
+  const url = "https://www.tpex.org.tw/www/zh-tw/warrant/wntmand?response=json";
+  try {
+    const payload = await fetchJson(url, 25000);
+    const table = (payload.tables || [])[0];
+    const rows = (table?.data || []).map((items) => {
+      const row = {};
+      (table.fields || []).forEach((field, index) => { row[String(field).replace(/\s/g, "")] = items[index] || ""; });
+      return normalizeBasicInfo(row);
+    }).filter(Boolean);
+    return { rows, errors };
+  } catch (error) {
+    errors.push(`上櫃權證基本資料: ${error.message}`);
+    return { rows: [], errors };
+  }
+}
+
+async function fetchWarrantBasics() {
+  const [twse, tpex] = await Promise.all([fetchTwseWarrantBasics(), fetchTpexWarrantBasics()]);
+  const byCode = new Map();
+  [...twse.rows, ...tpex.rows].forEach((item) => byCode.set(item.code, item));
+  return { byCode, errors: [...twse.errors, ...tpex.errors] };
+}
+
+function quoteLevels(value) {
+  return String(value ?? "").split("_").map(cleanNumber).filter((number) => number > 0);
+}
+
+function firstPositive(...values) {
+  for (const value of values) {
+    const number = quoteLevels(value)[0] || cleanNumber(value);
+    if (number > 0) return number;
+  }
+  return 0;
+}
+
+async function fetchUnderlyingQuotes(codes) {
+  const uniqueCodes = [...new Set(codes)].filter((code) => /^\d{4}$/.test(code));
+  const byCode = new Map();
+  for (let index = 0; index < uniqueCodes.length; index += 40) {
+    const chunk = uniqueCodes.slice(index, index + 40);
+    const channels = chunk.flatMap((code) => [`tse_${code}.tw`, `otc_${code}.tw`]);
+    const url = `https://mis.twse.com.tw/stock/api/getStockInfo.jsp?ex_ch=${encodeURIComponent(channels.join("|"))}&json=1&delay=0&_=${Date.now()}`;
+    try {
+      const payload = await fetchJson(url, 20000);
+      for (const item of payload?.msgArray || []) {
+        const code = String(item?.c || "").trim();
+        const close = firstPositive(item.z, item.pz, item.b, item.a, item.h, item.l, item.o, item.y);
+        const prevClose = cleanNumber(item.y);
+        if (!/^\d{4}$/.test(code) || !close || !prevClose) continue;
+        byCode.set(code, {
+          code,
+          close,
+          percent: ((close - prevClose) / prevClose) * 100,
+          tradeVolume: firstPositive(item.v, item.tv),
+        });
+      }
+    } catch {}
+  }
+  return byCode;
 }
 
 function recentTradingDates(limit = 10) {
@@ -277,32 +407,69 @@ async function fetchWarrants() {
     errors.push(...twse.errors, ...tpex.errors);
     if (rows.length) errors.push("MOPS 權證成交檔為空，已改用 TWSE/TPEX 收盤行情備援。");
   }
-  return { rows, errors };
+  const basics = await fetchWarrantBasics();
+  const enriched = rows.map((row) => {
+    const basic = basics.byCode.get(row.code) || {};
+    return {
+      ...row,
+      ...basic,
+      type: basic.type || row.type,
+      underlyingName: basic.underlyingName || row.underlyingName,
+      underlyingCode: basic.underlyingCode || row.underlyingCode || "",
+    };
+  });
+  const quotes = await fetchUnderlyingQuotes(enriched.map((row) => row.underlyingCode).filter(Boolean));
+  enriched.forEach((row) => {
+    const quote = quotes.get(row.underlyingCode);
+    if (!quote) return;
+    row.underlyingClose = quote.close;
+    row.underlyingPercent = quote.percent;
+    row.underlyingVolume = quote.tradeVolume;
+    if (row.strike) {
+      row.moneynessPct = row.type === "put"
+        ? ((row.strike - quote.close) / row.strike) * 100
+        : ((quote.close - row.strike) / row.strike) * 100;
+      row.isAtMoney = row.moneynessPct >= -5 && row.moneynessPct <= 20;
+    }
+  });
+  return { rows: enriched, errors: [...errors, ...basics.errors] };
 }
 
 function aggregate(rows) {
   const byName = new Map();
   for (const row of rows) {
     if (isEtfUnderlying(row.underlyingName, row.name)) continue;
+    const days = Number(row.daysToExpiry);
+    if (!Number.isFinite(days) || days < 10) continue;
     const key = row.underlyingName;
     const item = byName.get(key) || {
       underlyingName: key,
+      underlyingCode: row.underlyingCode || "",
+      underlyingClose: row.underlyingClose || 0,
+      underlyingPercent: Number.isFinite(Number(row.underlyingPercent)) ? Number(row.underlyingPercent) : null,
       callValue: 0,
       putValue: 0,
       callVolume: 0,
       putVolume: 0,
       callCount: 0,
       putCount: 0,
+      atMoneyCallCount: 0,
+      minDaysToExpiry: days,
       marketSet: new Set(),
       tradeDate: row.tradeDate,
       topWarrants: [],
     };
     item.marketSet.add(row.market);
     item.tradeDate = row.tradeDate || item.tradeDate;
+    item.underlyingCode = item.underlyingCode || row.underlyingCode || "";
+    item.underlyingClose = item.underlyingClose || row.underlyingClose || 0;
+    item.underlyingPercent = item.underlyingPercent ?? row.underlyingPercent ?? null;
+    item.minDaysToExpiry = Math.min(item.minDaysToExpiry, days);
     if (row.type === "call") {
       item.callValue += row.value;
       item.callVolume += row.volume;
       item.callCount += 1;
+      if (row.isAtMoney) item.atMoneyCallCount += 1;
     } else if (row.type === "put") {
       item.putValue += row.value;
       item.putVolume += row.volume;
@@ -322,22 +489,41 @@ function aggregate(rows) {
         type: warrant.type,
         value: warrant.value,
         volume: warrant.volume,
+        strike: warrant.strike || 0,
+        daysToExpiry: warrant.daysToExpiry ?? null,
+        moneynessPct: Number.isFinite(Number(warrant.moneynessPct)) ? Number(Number(warrant.moneynessPct).toFixed(2)) : null,
       }));
     const totalValue = item.callValue + item.putValue;
     const ratio = item.putValue ? item.callValue / item.putValue : item.callValue ? 99 : 0;
     const breadth = item.callCount + item.putCount;
     const callBias = totalValue ? item.callValue / totalValue : 0;
-    const score = Math.min(100, Math.round(
-      30 +
-      Math.min(item.callValue / 10000000, 28) +
-      Math.min(item.callCount * 3.2, 22) +
-      Math.min(ratio * 4, 14) +
-      (callBias >= 0.78 ? 8 : callBias >= 0.65 ? 4 : 0)
-    ));
+    const conditionScore =
+      Math.min(item.callValue / 10000000, 24) +
+      Math.min(item.callCount * 3.2, 20) +
+      Math.min(item.atMoneyCallCount * 5, 20) +
+      Math.min(ratio * 4, 16) +
+      (item.minDaysToExpiry >= 10 ? 10 : -30) +
+      (callBias >= 0.78 ? 10 : callBias >= 0.65 ? 5 : 0);
+    const score = Math.min(100, Math.max(0, Math.round(20 + conditionScore)));
+    const level = (
+      item.callValue >= 20000000 &&
+      item.callCount >= 5 &&
+      item.atMoneyCallCount >= 2 &&
+      item.minDaysToExpiry >= 10 &&
+      ratio >= 2.5
+    ) ? "A" : (
+      item.callValue >= 8000000 &&
+      item.callCount >= 3 &&
+      item.minDaysToExpiry >= 10 &&
+      ratio >= 1.8
+    ) ? "B" : "C";
     return {
       underlyingName: item.underlyingName,
+      underlyingCode: item.underlyingCode,
       market: [...item.marketSet].join("/"),
       tradeDate: item.tradeDate,
+      underlyingClose: item.underlyingClose,
+      underlyingPercent: item.underlyingPercent,
       callValue: item.callValue,
       putValue: item.putValue,
       totalValue,
@@ -345,18 +531,22 @@ function aggregate(rows) {
       putVolume: item.putVolume,
       callCount: item.callCount,
       putCount: item.putCount,
+      atMoneyCallCount: item.atMoneyCallCount,
+      minDaysToExpiry: item.minDaysToExpiry,
       breadth,
       callPutRatio: Number(ratio.toFixed(2)),
       score,
+      level,
       topWarrants: item.topWarrants,
-      reason: `認購 ${item.callCount} 檔、認購金額 ${(item.callValue / 100000000).toFixed(2)} 億，認購/認售比 ${ratio >= 99 ? "99+" : ratio.toFixed(2)}。`,
+      reason: `${level}級：認購 ${item.callCount} 檔、價平/價內 ${item.atMoneyCallCount} 檔、認購金額 ${(item.callValue / 100000000).toFixed(2)} 億，認購/認售比 ${ratio >= 99 ? "99+" : ratio.toFixed(2)}，最近到期 ${item.minDaysToExpiry} 天。`,
     };
   }).filter((item) => (
-    item.callValue >= 8000000 &&
+    item.callValue >= 3000000 &&
     item.callCount >= 2 &&
+    item.minDaysToExpiry >= 10 &&
     item.callValue > item.putValue &&
-    item.callPutRatio >= 1.5
-  )).sort((a, b) => b.score - a.score || b.callValue - a.callValue);
+    item.callPutRatio >= 1.2
+  )).sort((a, b) => b.score - a.score || b.atMoneyCallCount - a.atMoneyCallCount || b.callValue - a.callValue);
 }
 
 module.exports = async function handler(request, response) {
