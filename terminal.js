@@ -4178,9 +4178,12 @@ function renderChipTradeTable() {
       const foreign = Number(inst.foreign) || 0;
       const trust = Number(inst.trust) || 0;
       const total = Number(inst.total) || foreign + trust + (Number(inst.dealer) || 0);
-      if (chipFilter === "joint" && !(foreign > 0 && trust > 0)) return null;
-      if (chipFilter === "trust" && !(trust > 0)) return null;
-      if (chipFilter === "foreign" && !(foreign > 0)) return null;
+      const foreignStreak = Number(inst.foreignStreak) || 0;
+      const trustStreak = Number(inst.trustStreak) || 0;
+      const jointStreak = Number(inst.jointStreak) || 0;
+      if (chipFilter === "joint" && !(jointStreak >= 2)) return null;
+      if (chipFilter === "trust" && !(trustStreak >= 2)) return null;
+      if (chipFilter === "foreign" && !(foreignStreak >= 2)) return null;
       if (chipFilter === "legal" && !((Number(inst.total) || foreign + trust + (Number(inst.dealer) || 0)) > 0)) return null;
       return {
         code,
@@ -4193,9 +4196,9 @@ function renderChipTradeTable() {
         foreign,
         trust,
         total,
-        foreignStreak: Number(inst.foreignStreak) || 0,
-        trustStreak: Number(inst.trustStreak) || 0,
-        jointStreak: Number(inst.jointStreak) || 0,
+        foreignStreak,
+        trustStreak,
+        jointStreak,
       };
     })
     .filter(Boolean);
@@ -4205,9 +4208,12 @@ function renderChipTradeTable() {
       const foreign = Number(inst.foreign) || 0;
       const trust = Number(inst.trust) || 0;
       const total = Number(inst.total) || foreign + trust + (Number(inst.dealer) || 0);
-      if (chipFilter === "joint" && !(foreign > 0 && trust > 0)) return;
-      if (chipFilter === "trust" && !(trust > 0)) return;
-      if (chipFilter === "foreign" && !(foreign > 0)) return;
+      const foreignStreak = Number(inst.foreignStreak) || 0;
+      const trustStreak = Number(inst.trustStreak) || 0;
+      const jointStreak = Number(inst.jointStreak) || 0;
+      if (chipFilter === "joint" && !(jointStreak >= 2)) return;
+      if (chipFilter === "trust" && !(trustStreak >= 2)) return;
+      if (chipFilter === "foreign" && !(foreignStreak >= 2)) return;
       if (chipFilter === "legal" && !(total > 0)) return;
       rows.push({
         code,
@@ -4220,9 +4226,9 @@ function renderChipTradeTable() {
         foreign,
         trust,
         total,
-        foreignStreak: Number(inst.foreignStreak) || 0,
-        trustStreak: Number(inst.trustStreak) || 0,
-        jointStreak: Number(inst.jointStreak) || 0,
+        foreignStreak,
+        trustStreak,
+        jointStreak,
       });
     });
   }
@@ -4239,9 +4245,9 @@ function renderChipTradeTable() {
   const shown = rows.slice(0, 80);
   if (!shown.length) {
     const emptyText = {
-      joint: "目前沒有符合「外資 + 投信同買」的資料，盤後資料更新後會自動刷新。",
-      trust: "目前沒有符合「投信買超」的資料，盤後資料更新後會自動刷新。",
-      foreign: "目前沒有符合「外資買超」的資料，盤後資料更新後會自動刷新。",
+      joint: "目前沒有符合「外資 + 投信連買 2 日以上」的資料，盤後資料更新後會自動刷新。",
+      trust: "目前沒有符合「投信連買 2 日以上」的資料，盤後資料更新後會自動刷新。",
+      foreign: "目前沒有符合「外資連買 2 日以上」的資料，盤後資料更新後會自動刷新。",
       legal: "目前沒有符合「法人同買」的資料，盤後資料更新後會自動刷新。",
     }[chipFilter] || "目前沒有符合條件的資料。";
     body.innerHTML = `<tr><td colspan="12">${emptyText}</td></tr>`;
