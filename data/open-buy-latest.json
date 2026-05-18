@@ -1,7 +1,7 @@
 {
   "ok": true,
   "source": "github-actions",
-  "updatedAt": "2026-05-18T09:25:05.071Z",
+  "updatedAt": "2026-05-18T11:46:39.068Z",
   "fullScan": true,
   "cursor": 21,
   "total": 1947,
@@ -1955,7 +1955,7 @@
     "9960",
     "9962"
   ],
-  "count": 2,
+  "count": 1,
   "matches": [
     {
       "code": "4510",
@@ -1976,26 +1976,6 @@
       "noChase": 52.09,
       "exitTime": "09:10",
       "reason": "強勢收紅：昨日漲幅 2.68%，量比 1.86，漲幅/量比/價格已過濾，列入高勝率開盤候選。"
-    },
-    {
-      "code": "3362",
-      "name": "先進光",
-      "close": 115,
-      "percent": 2.2222222222222223,
-      "value": 245660233,
-      "tradeVolume": 2137.481,
-      "market": "TPEX",
-      "date": "2026-05-18",
-      "volume": 2137.481,
-      "volumeRatio": 1.48,
-      "score": 85,
-      "status": "強勢延續",
-      "entry": "09:00 開盤價",
-      "takeProfit": 116.4,
-      "stopLoss": 113.8,
-      "noChase": 120.2,
-      "exitTime": "09:10",
-      "reason": "強勢收紅：昨日漲幅 2.22%，量比 1.48，漲幅/量比/價格已過濾，列入高勝率開盤候選。"
     }
   ]
 }
