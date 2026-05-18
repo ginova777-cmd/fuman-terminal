@@ -136,6 +136,40 @@ function appendUpdateBadge(target, text, tone = "slow") {
   strong.appendChild(badge);
 }
 
+function formatDateTimeShort(date) {
+  return `${date.getFullYear()}/${String(date.getMonth() + 1).padStart(2, "0")}/${String(date.getDate()).padStart(2, "0")} ${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
+}
+
+function nextOpenBuyScanTime(now = new Date()) {
+  const slots = [
+    { hour: 7, minute: 0 },
+    { hour: 14, minute: 30 },
+  ];
+  const isTradingDay = (date) => {
+    const day = date.getDay();
+    return day >= 1 && day <= 5;
+  };
+  const candidateFor = (base, slot) => {
+    const date = new Date(base);
+    date.setHours(slot.hour, slot.minute, 0, 0);
+    return date;
+  };
+  for (let offset = 0; offset < 8; offset += 1) {
+    const base = new Date(now);
+    base.setDate(now.getDate() + offset);
+    if (!isTradingDay(base)) continue;
+    for (const slot of slots) {
+      const candidate = candidateFor(base, slot);
+      if (candidate > now) return candidate;
+    }
+  }
+  return candidateFor(now, slots[0]);
+}
+
+function openBuyScheduleLabel() {
+  return `●07:00/14:30完整掃　●預計下次掃描時間:${formatDateTimeShort(nextOpenBuyScanTime())}`;
+}
+
 function labelUpdateModes() {
   viewLinks.forEach((link) => {
     const text = link.textContent || "";
@@ -161,7 +195,7 @@ function labelUpdateModes() {
   document.querySelectorAll(".strategy-card[data-strategy]").forEach((card) => {
     const text = card.textContent || "";
     if (text.includes("策略2")) appendUpdateBadge(card, "立即更新", "live");
-    if (text.includes("策略1")) appendUpdateBadge(card, "08/15完整掃", "slow");
+    if (text.includes("策略1")) appendUpdateBadge(card, openBuyScheduleLabel(), "slow");
     if (text.includes("策略4")) appendUpdateBadge(card, "08/10/15完整掃", "slow");
     if (text.includes("策略5")) appendUpdateBadge(card, "讀快取", "slow");
   });
@@ -3055,7 +3089,7 @@ function renderOpenBuyRadar() {
     <section class="swing-dashboard">
       <div class="swing-topbar">
         <div>
-          <h2>${titleWithIcon("⚡", "策略1-開盤入快跑")} <span class="swing-live">● 07:00 / 14:30 完整掃</span></h2>
+          <h2>${titleWithIcon("⚡", "策略1-開盤入快跑")} <span class="swing-live">${openBuyScheduleLabel()}</span></h2>
           <p>14:30後先出明日候選；08:55後看最終名單。買入：09:00 開盤價｜停利 +1.2%｜停損 -1.0%｜09:10 強制出場。${scanText}</p>
         </div>
         <div class="swing-controls">
