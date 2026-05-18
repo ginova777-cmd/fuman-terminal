@@ -100,7 +100,7 @@ function setTitleWithIcon(target, icon, text) {
 }
 
 function chipScanBadgeHtml() {
-  return `<span class="swing-live" style="color:#22c55e;border-color:rgba(34,197,94,.5);background:rgba(34,197,94,.12);margin-left:10px;">●06:00/21:00完整掃　●預計下次掃描時間:${nextChipScanTime()}</span>`;
+  return `<span class="swing-live" style="color:#12d6df;border-color:rgba(18,214,223,.45);background:rgba(18,214,223,.12);margin-left:10px;">●06:00/21:00完整掃　●預計下次掃描時間:${nextChipScanTime()}</span>`;
 }
 
 function applyStaticTitleIcons() {
@@ -3669,7 +3669,7 @@ function renderWarrantFlow() {
     <section class="swing-dashboard">
       <div class="swing-topbar">
         <div>
-          <h2>${titleWithIcon("◒", "權證資金走向")} <span class="swing-live" style="color:#22c55e;border-color:rgba(34,197,94,.5);background:rgba(34,197,94,.12);">${scanBadge}</span></h2>
+          <h2>${titleWithIcon("◒", "權證資金走向")} <span class="swing-live" style="color:#12d6df;border-color:rgba(18,214,223,.45);background:rgba(18,214,223,.12);">${scanBadge}</span></h2>
           <p>${helperText}</p>
         </div>
         <div class="swing-controls">
