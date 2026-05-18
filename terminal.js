@@ -3141,7 +3141,6 @@ function renderOvernightDashboard(evaluated) {
   setStrategyChrome("strategy5");
   const rows = evaluated
     .filter((stock) => stock.matches.some((match) => match.id === "overnight_chip"))
-    .map((stock) => applyStrategyQuote(stock))
     .map((stock) => ({ ...stock, activeMatch: stock.matches.find((match) => match.id === "overnight_chip") }))
     .sort((a, b) => b.score - a.score || b.value - a.value || b.percent - a.percent)
     .slice(0, 30);
@@ -3161,7 +3160,7 @@ function renderOvernightDashboard(evaluated) {
       stock.percent >= 5 ? "急漲" : "溫和",
       stock.valueRank >= 70 ? "高成交額" : "成交待放",
       inst.total > 0 ? "法人5D偏多" : "法人待確認",
-      stock.isRealtime ? "即時價" : "盤後價",
+      "13:00掃描",
     ];
     return `
       <tr>
@@ -3177,7 +3176,7 @@ function renderOvernightDashboard(evaluated) {
         <td><b>${stock.score}</b></td>
         <td>
           <strong>通過</strong>
-          <p>量價與成交值偏強，${stock.activeMatch?.reason || "隔日沖候選。"} ${stock.isRealtime ? "價格已用即時資料覆蓋。" : "等待即時價覆蓋。"}</p>
+          <p>量價與成交值偏強，${stock.activeMatch?.reason || "隔日沖候選。"} 本策略以 13:00 完整掃結果作為隔日沖候選。</p>
           <div class="overnight-tags">${tags.map((tag) => `<span>${tag}</span>`).join("")}</div>
         </td>
         <td>
@@ -3193,7 +3192,7 @@ function renderOvernightDashboard(evaluated) {
       <div class="strategy5-hero">
         <div>
           <b>直達新版頁</b>
-          <h2>${titleWithIcon("◐", "策略3-隔日沖")} <span class="swing-live">● 即時價覆蓋</span></h2>
+          <h2>${titleWithIcon("◐", "策略3-隔日沖")} <span class="swing-live">● 13:00 完整掃</span></h2>
         </div>
       </div>
       <section class="strategy5-dashboard strategy5-dashboard-single">
@@ -3201,7 +3200,7 @@ function renderOvernightDashboard(evaluated) {
           <div class="strategy5-results-head">
             <div>
               <h3>盤中隔日沖</h3>
-              <p>以即時價、量比、成交額與法人 5D 條件排序。</p>
+              <p>接近收盤前完整掃一次，以量比、成交額與法人 5D 條件排序。</p>
             </div>
           </div>
           <div class="overnight-table-wrap">
@@ -4308,7 +4307,6 @@ function applyStrategyPresetFromLink(link) {
   if (strategySearch) strategySearch.value = "";
   deferUiWork(loadStrategyStocks);
   if (text.includes("策略2")) deferUiWork(() => refreshStrategyRealtimeScan(true), 80);
-  if (text.includes("策略3")) deferUiWork(() => refreshStrategyRealtimeScan(true), 80);
   if (text.includes("策略1")) {
     deferUiWork(() => loadOpenBuyCache(true), 60);
     deferUiWork(() => refreshOpenBuyScan(true), 120);
@@ -4326,7 +4324,7 @@ async function refreshStrategyRealtimeScan(force = false) {
     if (!latestStocks.length) return;
   }
   const isStrategyVisible = document.querySelector("#strategy-view")?.classList.contains("active");
-  const isRealtimeStrategy = selectedStrategyIds.has("intraday_2m") || selectedStrategyIds.has("overnight_chip");
+  const isRealtimeStrategy = selectedStrategyIds.has("intraday_2m");
   if (!force && (!isStrategyVisible || !isRealtimeStrategy)) return;
 
   strategyRealtimeLoading = true;
