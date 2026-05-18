@@ -293,11 +293,16 @@ body::after {
 .chip-tool-row {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 10px;
   padding: 8px 12px;
   border-top: 1px solid rgba(134, 151, 190, 0.12);
   color: #c7d4ef;
   font-size: 14px;
+}
+
+.chip-tool-spacer {
+  flex: 1 1 auto;
 }
 
 .chip-tabs {

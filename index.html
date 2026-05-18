@@ -28,9 +28,9 @@
           <a class="strategy-nav" href="#" data-view="strategy"><span class="s4">└</span>策略4-波段</a>
           <a class="strategy-nav" href="#" data-view="strategy"><span class="s5">▰</span>策略5-綜合策略</a>
           <section class="chip-menu" aria-label="盤後籌碼">
-            <h2>盤後籌碼 <span style="color:#12d6df; font-size:11px; font-weight:700;">●每日06:00/21:00完整掃</span></h2>
-            <a href="#" class="chip-menu-link" data-view="chip-trade"><span>◆</span>1.外資+投信連買</a>
-            <a href="#" class="chip-menu-link" data-view="warrant-flow"><span>◒</span>2.權證資金走向</a>
+            <h2>盤後籌碼</h2>
+            <a href="#" class="chip-menu-link" data-view="chip-trade"><span>◆</span>1.買賣超</a>
+            <a href="#" class="chip-menu-link" data-view="warrant-flow"><span>◒</span>2.權證走向</a>
           </section>
         </nav>
 
@@ -116,7 +116,7 @@
           <section class="metric-grid" aria-label="Market indexes">
             <article class="metric-card"><span>↗ 加權指數</span><strong>--</strong><em>等待官方資料</em></article>
             <article class="metric-card"><span>↗ 櫃買指數</span><strong>--</strong><em>等待官方資料</em></article>
-            <article class="metric-card"><span>⇅ 台指近全</span><strong>--</strong><em>等待期交所資料</em></article>
+            <article class="metric-card"><span>⇅ 台指近</span><strong>--</strong><em>等待期交所資料</em></article>
             <article class="metric-card"><span>☾ 台指次月</span><strong>--</strong><em>等待期交所資料</em></article>
           </section>
 
@@ -227,12 +227,9 @@
               <button class="chip-pill" type="button" data-chip-filter="trust">投信連續買超</button>
               <button class="chip-pill" type="button" data-chip-filter="foreign">外資買超</button>
               <button class="chip-pill" type="button" data-chip-filter="legal">法人同買</button>
-              <div class="swing-actions">
-                <input type="search" placeholder="搜尋代號/名稱" autocomplete="off" spellcheck="false" data-strategy-inline-search>
-                <button type="button" data-strategy-inline-submit>搜尋</button>
-                <button type="button" data-export-action>匯出</button>
-                <button type="button" data-export-settings>設定</button>
-              </div>
+              <span class="chip-tool-spacer"></span>
+              <button class="chip-pill" type="button" data-export-action>匯出</button>
+              <button class="chip-pill" type="button" data-export-settings>設定</button>
             </div>
           </section>
 
@@ -261,7 +258,7 @@
           </section>
         </section>
 
-        <!-- 權證資金走向 -->
+        <!-- 權證走向 -->
         <section class="view-panel" id="warrant-flow-view" hidden>
           <header class="page-header chip-page-header">
             <div>
@@ -270,13 +267,13 @@
             </div>
           </header>
           <section class="chip-empty">
-            <h2>權證資金走向</h2>
+            <h2>權證走向</h2>
             <p>下一步會接認購、認售、成交量與方向分數。</p>
           </section>
         </section>
 
       </main>
     </div>
-    <script src="terminal.js?v=warrant-underlying-close-20260518"></script>
+    <script src="terminal.js?v=market-cards-20260515"></script>
   </body>
 </html>
