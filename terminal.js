@@ -2886,7 +2886,7 @@ function renderIntradayRadar(evaluated) {
   `;
 }
 
-function renderSwingRadar(universe) {
+function renderSwingRadar() {
   setStrategyChrome("swing");
   if (!strategy4ScanLastAt) {
     loadStrategy4LocalCache();
@@ -2900,10 +2900,9 @@ function renderSwingRadar(universe) {
   if (latestStocks.length && !strategy4ScanLoading && !hasFreshStrategy4Scan()) {
     setTimeout(() => refreshStrategyHistoryScan(true), 0);
   }
-  const allowCodes = new Set(universe.map((stock) => stock.code));
   const keyword = strategyKeyword.trim().toLowerCase();
   const allRows = Object.values(strategy4ScanMatches)
-    .filter((stock) => allowCodes.has(stock.code) && (stock.swingSignals || []).length)
+    .filter((stock) => (stock.swingSignals || []).length)
     .filter((stock) => !isStaleStrategyPrice(stock, latestStocks.find((item) => item.code === stock.code)))
     .filter((stock) => !keyword || stock.code.includes(keyword) || stock.name.toLowerCase().includes(keyword))
     .map((stock) => ({ ...stock, swingScore: stock.swingScore || stock.score || 0 }));
@@ -3350,11 +3349,7 @@ function renderStrategyScanner() {
     return;
   }
   if (selected.length === 1 && selected[0] === "swing_radar") {
-    const swingRows = universe.filter((stock) => {
-      const passKeyword = !keyword || stock.code.includes(keyword) || stock.name.toLowerCase().includes(keyword);
-      return passKeyword;
-    });
-    renderSwingRadar(swingRows);
+    renderSwingRadar();
     return;
   }
 
