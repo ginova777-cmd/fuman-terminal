@@ -1,211 +1,193 @@
-async function fetchWithTimeout(url, options = {}, timeout = 12000) {
+const CACHE_MS = 5 * 60 * 1000;
+let cache = null;
+
+function cleanNumber(value) {
+  return Number(String(value ?? "").replace(/[,+]/g, "").trim()) || 0;
+}
+
+function taipeiToday() {
+  const text = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Taipei",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
+  const [year, month, day] = text.split("-").map(Number);
+  return new Date(year, month - 1, day);
+}
+
+function recentTradingDates(limit = 8) {
+  const dates = [];
+  const date = taipeiToday();
+  for (let i = 0; dates.length < limit && i < 18; i++) {
+    const day = date.getDay();
+    if (day !== 0 && day !== 6) dates.push(new Date(date));
+    date.setDate(date.getDate() - 1);
+  }
+  return dates;
+}
+
+function formatYmd(date) {
+  return `${date.getFullYear()}${String(date.getMonth() + 1).padStart(2, "0")}${String(date.getDate()).padStart(2, "0")}`;
+}
+
+function formatTpexDate(date) {
+  return `${date.getFullYear()}/${String(date.getMonth() + 1).padStart(2, "0")}/${String(date.getDate()).padStart(2, "0")}`;
+}
+
+async function fetchJson(url, timeout = 20000) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeout);
   try {
-    const res = await fetch(url, {
-      ...options,
+    const response = await fetch(url, {
       signal: controller.signal,
       headers: {
         "User-Agent": "Mozilla/5.0 (compatible; FumanTerminal/1.0)",
-        "Accept": "application/json, text/plain, */*",
-        "Referer": "https://www.twse.com.tw/",
-        ...(options.headers || {}),
+        Accept: "application/json,text/plain,*/*",
+        Referer: "https://www.twse.com.tw/",
       },
     });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    return await res.json();
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const text = await response.text();
+    return JSON.parse(text.replace(/^\uFEFF/, ""));
   } finally {
     clearTimeout(timer);
   }
 }
 
-function cleanNumber(value) {
-  if (value === undefined || value === null || value === "" || value === "--") return 0;
-  return parseInt(String(value).replace(/[,+%]/g, ""), 10) || 0;
+function rowRecord(fields, row) {
+  if (!Array.isArray(fields) || !Array.isArray(row)) return {};
+  const record = {};
+  fields.forEach((field, index) => {
+    record[String(field || "").replace(/\s/g, "")] = row[index];
+  });
+  return record;
 }
 
-function formatTwseDate(date) {
-  const y = date.getFullYear();
-  const m = String(date.getMonth() + 1).padStart(2, "0");
-  const d = String(date.getDate()).padStart(2, "0");
-  return `${y}${m}${d}`;
-}
-
-function formatTpexDate(date) {
-  const y = date.getFullYear() - 1911;
-  const m = String(date.getMonth() + 1).padStart(2, "0");
-  const d = String(date.getDate()).padStart(2, "0");
-  return `${y}/${m}/${d}`;
-}
-
-function getRecentTradingDates(days = 7) {
-  const now = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Taipei" }));
-  const dates = [];
-  for (let i = 0; dates.length < days && i < 18; i++) {
-    const date = new Date(now);
-    date.setDate(now.getDate() - i);
-    const day = date.getDay();
-    if (day !== 0 && day !== 6) dates.push(date);
+function getValue(record, patterns) {
+  const keys = Object.keys(record || {});
+  for (const pattern of patterns) {
+    const key = keys.find((item) => item.includes(pattern));
+    if (key && record[key] !== undefined && record[key] !== "") return record[key];
   }
-  return dates;
+  return "";
+}
+
+function parseTwseRow(fields, row) {
+  const record = rowRecord(fields, row);
+  const code = String(getValue(record, ["證券代號"]) || row?.[0] || "").trim();
+  const name = String(getValue(record, ["證券名稱"]) || row?.[1] || "").trim();
+  if (!/^\d{4}$/.test(code)) return null;
+  const foreignCore = cleanNumber(getValue(record, ["外陸資買賣超股數(不含外資自營商)", "外資及陸資買賣超股數(不含外資自營商)"]) || row?.[4]);
+  const foreignDealer = cleanNumber(getValue(record, ["外資自營商買賣超股數"]) || row?.[7]);
+  const trust = cleanNumber(getValue(record, ["投信買賣超股數"]) || row?.[10]);
+  const dealer = cleanNumber(getValue(record, ["自營商買賣超股數"]) || row?.[13]);
+  const total = cleanNumber(getValue(record, ["三大法人買賣超股數"]) || row?.[row.length - 1]) || foreignCore + foreignDealer + trust + dealer;
+  return { code, name, foreign: foreignCore + foreignDealer, trust, dealer, total, market: "上市" };
+}
+
+function parseTpexRow(row, fields = []) {
+  const record = Array.isArray(row) ? rowRecord(fields, row) : row;
+  const code = String(getValue(record, ["代號", "證券代號"]) || row?.[0] || "").trim();
+  const name = String(getValue(record, ["名稱", "證券名稱"]) || row?.[1] || "").trim();
+  if (!/^\d{4}$/.test(code)) return null;
+  const foreign = cleanNumber(getValue(record, ["外資及陸資淨買股數", "外資及陸資買賣超股數", "外陸資買賣超"]) || row?.[4]);
+  const trust = cleanNumber(getValue(record, ["投信淨買股數", "投信買賣超股數", "投信買賣超"]) || row?.[7]);
+  const dealer = cleanNumber(getValue(record, ["自營商淨買股數", "自營商買賣超股數", "自營商買賣超"]) || row?.[8]);
+  const total = cleanNumber(getValue(record, ["三大法人買賣超股數", "三大法人買賣超股數合計"]) || row?.[row.length - 1]) || foreign + trust + dealer;
+  return { code, name, foreign, trust, dealer, total, market: "上櫃" };
 }
 
 async function fetchTwseInstitution(date) {
-  const dateStr = formatTwseDate(date);
-  const url = `https://www.twse.com.tw/fund/T86?response=json&selectType=ALLBUT0999&date=${dateStr}`;
-  const data = await fetchWithTimeout(url, {}, 10000);
-  if (!data || !Array.isArray(data.data) || !data.data.length) throw new Error(`TWSE no data ${dateStr}`);
-
-  const result = {};
-  for (const row of data.data) {
-    const code = String(row[0] || "").trim();
-    if (!/^\d{4}$/.test(code)) continue;
-    result[code] = {
-      name: String(row[1] || "").trim(),
-      foreign: cleanNumber(row[4]),
-      trust: cleanNumber(row[7]),
-      dealer: cleanNumber(row[10] ?? row[8]),
-      total: cleanNumber(row[12]),
-      market: "TWSE",
-    };
+  const ymd = formatYmd(date);
+  const urls = [
+    `https://www.twse.com.tw/rwd/zh/fund/T86?date=${ymd}&selectType=ALLBUT0999&response=json`,
+    `https://www.twse.com.tw/fund/T86?response=json&date=${ymd}&selectType=ALLBUT0999`,
+  ];
+  for (const url of urls) {
+    const payload = await fetchJson(url);
+    const rows = (payload.data || [])
+      .map((row) => parseTwseRow(payload.fields || [], row))
+      .filter(Boolean);
+    if (rows.length) return { date: ymd, rows };
   }
-  if (!Object.keys(result).length) throw new Error(`TWSE parsed empty ${dateStr}`);
-  return { date: dateStr, rows: result };
+  return { date: ymd, rows: [] };
 }
 
 async function fetchTpexInstitution(date) {
-  const rocDate = formatTpexDate(date);
-  const twseDate = formatTwseDate(date);
-  const url = `https://www.tpex.org.tw/web/stock/3insti/daily_trade/3itrade_hedge_result.php?l=zh-tw&o=json&se=EW&t=D&d=${rocDate}`;
-  const data = await fetchWithTimeout(url, { headers: { Referer: "https://www.tpex.org.tw/" } }, 10000);
-  const table = Array.isArray(data?.tables) ? data.tables[0] : null;
-  const rows = table?.data || data?.data || data?.aaData || [];
-  if (!Array.isArray(rows) || !rows.length) throw new Error(`TPEX no data ${rocDate}`);
+  const ymd = formatYmd(date);
+  const tpexDate = formatTpexDate(date);
+  const url = `https://www.tpex.org.tw/web/stock/3insti/daily_trade/3itrade_hedge_result.php?l=zh-tw&se=AL&t=D&d=${encodeURIComponent(tpexDate)}`;
+  const payload = await fetchJson(url);
+  const table = (payload.tables || [payload]).find((item) => Array.isArray(item?.data) || Array.isArray(item?.aaData)) || payload;
+  const fields = table.fields || payload.fields || [];
+  const rawRows = table.data || table.aaData || payload.data || payload.aaData || [];
+  const rows = rawRows.map((row) => parseTpexRow(row, fields)).filter(Boolean);
+  return { date: ymd, rows };
+}
 
-  const result = {};
-  for (const row of rows) {
-    if (!Array.isArray(row)) continue;
-    const code = String(row[0] || "").trim();
-    if (!/^\d{4}$/.test(code)) continue;
-    result[code] = {
-      name: String(row[1] || "").trim(),
-      foreign: cleanNumber(row[10] ?? row[4]),
-      trust: cleanNumber(row[13]),
-      dealer: cleanNumber(row[22] ?? row[16]),
-      total: cleanNumber(row[23]),
-      market: "TPEX",
-    };
+async function latestRows(fetcher) {
+  const errors = [];
+  for (const date of recentTradingDates()) {
+    try {
+      const result = await fetcher(date);
+      if (result.rows.length) return { ...result, errors };
+    } catch (error) {
+      errors.push(error.message);
+    }
   }
-  if (!Object.keys(result).length) throw new Error(`TPEX parsed empty ${rocDate}`);
-  return { date: twseDate, rows: result };
+  return { date: "", rows: [], errors };
 }
 
-function mergeMarketRows(twseResult, tpexResult) {
-  const rows = {};
-  if (twseResult?.rows) Object.assign(rows, twseResult.rows);
-  if (tpexResult?.rows) Object.assign(rows, tpexResult.rows);
-  return rows;
-}
-
-function countStreak(history, field) {
-  let count = 0;
-  for (const day of history) {
-    if ((day?.[field] || 0) > 0) count++;
-    else break;
+function mergeRows(...groups) {
+  const data = {};
+  for (const group of groups) {
+    for (const row of group.rows || []) {
+      data[row.code] = {
+        ...(data[row.code] || {}),
+        ...row,
+        foreignStreak: row.foreign > 0 ? 1 : 0,
+        trustStreak: row.trust > 0 ? 1 : 0,
+        dealerStreak: row.dealer > 0 ? 1 : 0,
+        jointStreak: row.foreign > 0 && row.trust > 0 ? 1 : 0,
+      };
+    }
   }
-  return count;
-}
-
-function buildInstitutionSummary(dailyRows) {
-  const byCode = {};
-
-  dailyRows.forEach((day) => {
-    Object.entries(day.rows).forEach(([code, row]) => {
-      if (!byCode[code]) byCode[code] = [];
-      byCode[code].push({ date: day.date, ...row });
-    });
-  });
-
-  const summary = {};
-  Object.entries(byCode).forEach(([code, history]) => {
-    history.sort((a, b) => b.date.localeCompare(a.date));
-    const latest = history[0];
-    const jointStreak = history.reduce((count, day, index) => {
-      if (index === count && day.foreign > 0 && day.trust > 0) return count + 1;
-      return count;
-    }, 0);
-
-    summary[code] = {
-      foreign: latest.foreign,
-      name: latest.name || code,
-      trust: latest.trust,
-      dealer: latest.dealer,
-      total: latest.total,
-      market: latest.market,
-      date: latest.date,
-      foreignStreak: countStreak(history, "foreign"),
-      trustStreak: countStreak(history, "trust"),
-      jointStreak,
-      history: history.slice(0, 5).map((item) => ({
-        date: item.date,
-        foreign: item.foreign,
-        trust: item.trust,
-        total: item.total,
-      })),
-    };
-  });
-
-  return summary;
+  return data;
 }
 
 module.exports = async function handler(request, response) {
   response.setHeader("Access-Control-Allow-Origin", "*");
-  response.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
-  response.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  response.setHeader("Cache-Control", "s-maxage=180, stale-while-revalidate=300");
   if (request.method === "OPTIONS") { response.status(204).end(); return; }
+  if (request.method !== "GET") {
+    response.status(405).json({ ok: false, error: "Method not allowed", data: {} });
+    return;
+  }
+  if (cache && Date.now() - cache.ts < CACHE_MS) {
+    response.status(200).json(cache.payload);
+    return;
+  }
 
   try {
-    const dates = getRecentTradingDates(5);
-    const settled = await Promise.allSettled(dates.map(async (date) => {
-      const [twse, tpex] = await Promise.allSettled([
-        fetchTwseInstitution(date),
-        fetchTpexInstitution(date),
-      ]);
-      const rows = mergeMarketRows(
-        twse.status === "fulfilled" ? twse.value : null,
-        tpex.status === "fulfilled" ? tpex.value : null,
-      );
-      if (!Object.keys(rows).length) throw new Error(`No institution data ${formatTwseDate(date)}`);
-      return {
-        date: formatTwseDate(date),
-        rows,
-        errors: {
-          twse: twse.status === "rejected" ? twse.reason.message : null,
-          tpex: tpex.status === "rejected" ? tpex.reason.message : null,
-        },
-      };
-    }));
-
-    const dailyRows = settled
-      .filter((item) => item.status === "fulfilled")
-      .map((item) => item.value)
-      .sort((a, b) => b.date.localeCompare(a.date));
-
-    if (!dailyRows.length) throw new Error("No institution data");
-
-    const data = buildInstitutionSummary(dailyRows);
-    response.setHeader("Cache-Control", "s-maxage=180, stale-while-revalidate=600");
-    response.status(200).json({
+    const [twse, tpex] = await Promise.all([
+      latestRows(fetchTwseInstitution),
+      latestRows(fetchTpexInstitution),
+    ]);
+    const data = mergeRows(twse, tpex);
+    const dates = [twse.date, tpex.date].filter(Boolean).sort();
+    const payload = {
       ok: true,
-      source: "TWSE T86 + TPEx 3itrade_hedge_result",
-      usedDate: dailyRows[0].date,
-      dates: dailyRows.map((item) => item.date),
-      updatedAt: new Date().toISOString(),
+      usedDate: dates.at(-1) || "",
+      sourceDates: { twse: twse.date, tpex: tpex.date },
       count: Object.keys(data).length,
       data,
-      errors: dailyRows.map((item) => ({ date: item.date, ...item.errors })),
-    });
+      errors: [...(twse.errors || []), ...(tpex.errors || [])].slice(0, 8),
+      sources: ["TWSE T86", "TPEx 3itrade_hedge_result"],
+    };
+    cache = { ts: Date.now(), payload };
+    response.status(200).json(payload);
   } catch (error) {
-    response.status(200).json({ ok: false, error: error.message, data: {} });
+    response.status(502).json({ ok: false, error: error.message, data: {} });
   }
 };
