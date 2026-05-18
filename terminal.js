@@ -3555,15 +3555,7 @@ function renderWarrantFlow() {
       item.name.toLowerCase().includes(keyword) ||
       item.underlyingName.toLowerCase().includes(keyword))
     : allRows.slice(0, 10);
-  const totalCall = warrantFlowData.reduce((sum, item) => sum + cleanNumber(item.callValue), 0);
-  const totalPut = warrantFlowData.reduce((sum, item) => sum + cleanNumber(item.putValue), 0);
-  const updatedText = warrantFlowUpdatedAt
-    ? new Date(warrantFlowUpdatedAt).toLocaleTimeString("zh-TW", { hour12: false })
-    : "等待更新";
   const listLabel = keyword ? `搜尋結果 ${rows.length} 筆｜全台股查詢` : "優先觀察 Top 10";
-  const helperText = keyword
-    ? "搜尋會直接查全台股權證，不受 Top 10 排名限制；若該股票有權證成交資料就會顯示。"
-    : "策略6：收盤後找明日候選，盤中輔助確認；依認購金額、購售比、多檔同步、價平/價內、剩餘天數與股票未過熱程度排序。";
 
   const body = rows.length ? rows.map((item) => {
     const hot = item.score >= 82 ? "hot" : item.score >= 68 ? "mid" : "low";
@@ -3582,7 +3574,7 @@ function renderWarrantFlow() {
         <td><b class="swing-stage ${hot}">${item.callPutRatio >= 99 ? "99+" : item.callPutRatio}</b></td>
         <td>${item.callCount} / ${item.putCount}</td>
         <td>${warrantHint}</td>
-        <td>${item.reason} 判斷：${item.stockPercent >= 0 && item.stockPercent <= 2.5 ? "權證先熱，股票未噴。" : "不在優先區。"}</td>
+        <td><b class="swing-stage mid">權證資金偏多</b></td>
       </tr>
     `;
   }).join("") : `
@@ -3591,27 +3583,6 @@ function renderWarrantFlow() {
 
   panel.innerHTML = `
     <section class="swing-dashboard">
-      <div class="swing-topbar">
-        <div>
-          <h2>${titleWithIcon("◒", "策略6：權證資金走向")} <span class="swing-live">● 收盤候選 / 盤中確認</span></h2>
-          <p>${helperText}</p>
-        </div>
-        <div class="swing-controls">
-          <label>更新模式：<select><option>06:00 / 21:00 完整掃</option></select></label>
-          <label>模式：<select><option>權證先熱股票未噴</option></select></label>
-        </div>
-      </div>
-      <div class="swing-signal-grid">
-        <button class="swing-card active selected" type="button">
-          <div><strong>命中標的</strong><small>權證資金偏多</small></div><em>${warrantFlowData.length}</em>
-        </button>
-        <button class="swing-card active" type="button">
-          <div><strong>認購金額</strong><small>候選合計</small></div><em>${formatWarrantMoney(totalCall)}</em>
-        </button>
-        <button class="swing-card ${totalPut ? "active" : ""}" type="button">
-          <div><strong>認售金額</strong><small>候選合計</small></div><em>${formatWarrantMoney(totalPut)}</em>
-        </button>
-      </div>
       <section class="swing-panel">
         <div class="swing-tabs">
           <button class="active" type="button">${listLabel}</button>
