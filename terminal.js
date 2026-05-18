@@ -174,24 +174,7 @@ function labelUpdateModes() {
   viewLinks.forEach((link) => {
     const text = link.textContent || "";
     if (text.includes("市場總覽")) appendUpdateBadge(link, "15秒更新", "live");
-    if (text.includes("外資") || text.includes("投信")) appendUpdateBadge(link, "06/21完整掃", "slow");
   });
-  const chipHeading = document.querySelector(".chip-menu h2");
-  if (chipHeading && !chipHeading.querySelector(".chip-scan-badge")) {
-    const badge = document.createElement("small");
-    badge.className = "chip-scan-badge";
-    badge.textContent = "●06:00 / 21:00完整掃";
-    badge.style.cssText = `
-      display: inline-flex;
-      margin-left: 8px;
-      color: #ff8a3d;
-      font-size: 11px;
-      font-weight: 900;
-      letter-spacing: 0;
-      white-space: nowrap;
-    `;
-    chipHeading.appendChild(badge);
-  }
   document.querySelectorAll(".strategy-card[data-strategy]").forEach((card) => {
     const text = card.textContent || "";
     if (text.includes("策略2")) appendUpdateBadge(card, "立即更新", "live");
@@ -206,18 +189,6 @@ function labelChipTradeMode() {
   realtimeButton?.remove();
   const afterButton = document.querySelector('[data-chip-mode="after"]');
   afterButton?.classList.add("active");
-  const chipTool = document.querySelector(".chip-tool");
-  if (!chipTool || chipTool.querySelector(".chip-source-note")) return;
-  const note = document.createElement("div");
-  note.className = "chip-source-note";
-  note.textContent = "外資、投信買賣超為盤後資料；本頁設定 06:00 / 21:00 完整掃，不佔用盤中資源。";
-  note.style.cssText = `
-    margin-top: 10px;
-    color: #9db9ff;
-    font-size: 12px;
-    font-weight: 800;
-  `;
-  chipTool.appendChild(note);
 }
 
 const endpoints = {
@@ -4069,8 +4040,7 @@ function renderIndexes(indexes, futuresNear, futuresNext, marketStatus, otcSigna
 }
 
 function formatChipDate(dateStr) {
-  if (!dateStr || dateStr.length !== 8) return "等待盤後資料";
-  return `法人資料: ${dateStr.slice(0, 4)}/${dateStr.slice(4, 6)}/${dateStr.slice(6, 8)}`;
+  return "";
 }
 
 function isTwseTradingTime(date = new Date()) {
