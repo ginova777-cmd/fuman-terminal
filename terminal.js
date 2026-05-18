@@ -248,6 +248,8 @@ let swingSignalFilter = "all";
 let intradaySortKey = "score";
 let intradaySortDir = "desc";
 let intradaySignalFilter = "all";
+let overnightSortKey = "score";
+let overnightSortDir = "desc";
 let strategyPresetMode = "";
 let strategy5ActiveId = "momentum";
 
@@ -2498,6 +2500,19 @@ strategy3DashboardStyles.textContent = `
     background: rgba(255,255,255,0.035);
     font-weight: 700;
   }
+  .overnight-table th button {
+    appearance: none;
+    border: 0;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    font-weight: 800;
+    cursor: pointer;
+    padding: 0;
+  }
+  .overnight-table th button:hover {
+    color: #ffffff;
+  }
   .overnight-table td {
     padding: 18px 12px;
     border-bottom: 1px solid rgba(126, 200, 227, 0.09);
@@ -2573,6 +2588,9 @@ function setStrategyChrome(mode) {
     document.querySelector("#strategy-view .strategy-header")?.remove();
   }
   if (openBuy) {
+    document.querySelector("#strategy-view .strategy-header")?.remove();
+  }
+  if (strategy5) {
     document.querySelector("#strategy-view .strategy-header")?.remove();
   }
   if (strategyBadge) strategyBadge.textContent = intraday ? "FMN://intraday.2m.scan" : swing ? "FMN://swing.daily.scan" : openBuy ? "FMN://open.buy.scan" : "FMN://strategy.scan";
@@ -3139,10 +3157,34 @@ function renderStrategy5Dashboard(evaluated) {
 
 function renderOvernightDashboard(evaluated) {
   setStrategyChrome("strategy5");
+  const sortValue = (stock, key) => {
+    const inst = stock.inst || getInstitutionTotal(stock.code);
+    const projectedRatio = Math.max(1, (stock.volumeRank || 0) / 24);
+    const values = {
+      rank: stock.score || 0,
+      code: Number(stock.code) || 0,
+      price: stock.close || 0,
+      percent: stock.percent || 0,
+      volume: stock.tradeVolume || 0,
+      ratio: projectedRatio,
+      value: stock.value || 0,
+      inst: inst.total || 0,
+      score: stock.score || 0,
+    };
+    return values[key] ?? 0;
+  };
+  const sortHeader = (key, label) => {
+    const active = overnightSortKey === key;
+    const mark = active ? (overnightSortDir === "asc" ? " ▲" : " ▼") : " ↕";
+    return `<button type="button" data-overnight-sort="${key}">${label}${mark}</button>`;
+  };
   const rows = evaluated
     .filter((stock) => stock.matches.some((match) => match.id === "overnight_chip"))
     .map((stock) => ({ ...stock, activeMatch: stock.matches.find((match) => match.id === "overnight_chip") }))
-    .sort((a, b) => b.score - a.score || b.value - a.value || b.percent - a.percent)
+    .sort((a, b) => {
+      const diff = sortValue(a, overnightSortKey) - sortValue(b, overnightSortKey);
+      return overnightSortDir === "asc" ? diff : -diff;
+    })
     .slice(0, 30);
 
   if (strategySummary) strategySummary.textContent = `策略3-隔日沖｜直達新版頁｜符合 ${rows.length} 檔`;
@@ -3166,7 +3208,6 @@ function renderOvernightDashboard(evaluated) {
       <tr>
         <td><span class="overnight-rank">#${index + 1}</span></td>
         <td><b>${stock.name}</b><small>${stock.code}</small></td>
-        <td><span class="overnight-pill long">多</span></td>
         <td class="price">${formatNumber(stock.close, stock.close >= 100 ? 0 : 2)}</td>
         <td class="${stock.percent >= 0 ? "red" : "green"}">${sign}${stock.percent.toFixed(2)}%</td>
         <td>${Math.round(stock.tradeVolume || 0).toLocaleString("zh-TW")}</td>
@@ -3185,7 +3226,7 @@ function renderOvernightDashboard(evaluated) {
         </td>
       </tr>
     `;
-  }).join("") : `<tr><td colspan="12">目前沒有符合隔日沖條件的股票。</td></tr>`;
+  }).join("") : `<tr><td colspan="11">目前沒有符合隔日沖條件的股票。</td></tr>`;
 
   strategyTable.innerHTML = `
     <section class="strategy5-shell">
@@ -3207,7 +3248,7 @@ function renderOvernightDashboard(evaluated) {
             <table class="overnight-table">
               <thead>
                 <tr>
-                  <th>排名</th><th>股票</th><th>多空</th><th>價格</th><th>漲幅</th><th>量</th><th>推估量比</th><th>成交額</th><th>法人5D</th><th>分數</th><th>AI分析</th><th>觸發原因</th>
+                  <th>${sortHeader("rank", "排名")}</th><th>${sortHeader("code", "股票")}</th><th>${sortHeader("price", "價格")}</th><th>${sortHeader("percent", "漲幅")}</th><th>${sortHeader("volume", "量")}</th><th>${sortHeader("ratio", "推估量比")}</th><th>${sortHeader("value", "成交額")}</th><th>${sortHeader("inst", "法人5D")}</th><th>${sortHeader("score", "分數")}</th><th>AI分析</th><th>觸發原因</th>
                 </tr>
               </thead>
               <tbody>${cards}</tbody>
@@ -5082,6 +5123,19 @@ document.addEventListener("click", (event) => {
   const filterButton = event.target.closest("[data-intraday-filter]");
   if (!filterButton) return;
   intradaySignalFilter = filterButton.dataset.intradayFilter || "all";
+  renderStrategyScanner();
+});
+
+document.addEventListener("click", (event) => {
+  const sortButton = event.target.closest("[data-overnight-sort]");
+  if (!sortButton) return;
+  const key = sortButton.dataset.overnightSort;
+  if (overnightSortKey === key) {
+    overnightSortDir = overnightSortDir === "desc" ? "asc" : "desc";
+  } else {
+    overnightSortKey = key;
+    overnightSortDir = key === "code" ? "asc" : "desc";
+  }
   renderStrategyScanner();
 });
 
