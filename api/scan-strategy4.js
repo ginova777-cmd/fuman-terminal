@@ -1,5 +1,6 @@
 const cache = new Map();
 const CACHE_MS = 30 * 60 * 1000;
+let tpexDailyCache = null;
 
 async function fetchText(url, options = {}, timeout = 12000) {
   const controller = new AbortController();
@@ -36,6 +37,12 @@ function rocToIso(value) {
   if (parts.length !== 3) return "";
   const year = Number(parts[0]) + 1911;
   return `${year}-${parts[1].padStart(2, "0")}-${parts[2].padStart(2, "0")}`;
+}
+
+function yyyymmddToIso(value) {
+  const text = String(value || "");
+  if (!/^\d{8}$/.test(text)) return "";
+  return `${text.slice(0, 4)}-${text.slice(4, 6)}-${text.slice(6, 8)}`;
 }
 
 function monthStarts(count = 8) {
@@ -78,6 +85,55 @@ function normalizeTpexRows(payload) {
     close: cleanNumber(row[6]),
     change: cleanNumber(row[7]),
   })).filter((row) => row.date && row.close);
+}
+
+function normalizeTpexDailyRow(row, date) {
+  if (!Array.isArray(row)) return null;
+  const close = cleanNumber(row[2]);
+  if (!close) return null;
+  return {
+    date,
+    volume: cleanNumber(row[8]),
+    value: cleanNumber(row[9]),
+    open: cleanNumber(row[4]),
+    high: cleanNumber(row[5]),
+    low: cleanNumber(row[6]),
+    close,
+    change: cleanNumber(row[3]),
+  };
+}
+
+async function fetchTpexDailyQuotes() {
+  if (tpexDailyCache && Date.now() - tpexDailyCache.ts < CACHE_MS) return tpexDailyCache.value;
+  const url = "https://www.tpex.org.tw/web/stock/aftertrading/daily_close_quotes/stk_quote_result.php?l=zh-tw&o=json&s=0,asc,0";
+  const payload = JSON.parse(await fetchText(url, { headers: { Referer: "https://www.tpex.org.tw/" } }, 20000));
+  const date = yyyymmddToIso(payload?.date);
+  const table = Array.isArray(payload?.tables) ? payload.tables[0] : null;
+  const rows = Array.isArray(table?.data) && date ? table.data : [];
+  const quotes = new Map();
+  rows.forEach((row) => {
+    const code = normalizeCode(row[0]);
+    const quote = normalizeTpexDailyRow(row, date);
+    if (/^\d{4}$/.test(code) && quote) quotes.set(code, quote);
+  });
+  tpexDailyCache = { ts: Date.now(), value: quotes };
+  return quotes;
+}
+
+async function mergeTpexDailyQuote(code, history) {
+  if (history.market !== "TPEX") return history;
+  try {
+    const quote = (await fetchTpexDailyQuotes()).get(code);
+    if (!quote) return history;
+    const byDate = new Map(history.rows.map((row) => [row.date, row]));
+    byDate.set(quote.date, { ...(byDate.get(quote.date) || {}), ...quote });
+    return {
+      ...history,
+      rows: [...byDate.values()].sort((a, b) => a.date.localeCompare(b.date)).slice(-180),
+    };
+  } catch {
+    return history;
+  }
 }
 
 async function fetchTwseMonth(code, date) {
@@ -346,7 +402,7 @@ module.exports = async function handler(request, response) {
   }
 
   const results = await Promise.allSettled(codes.map(async (code) => {
-    const history = await fetchHistory(code);
+    const history = await mergeTpexDailyQuote(code, await fetchHistory(code));
     if (!history.rows.length) return null;
     return scanStrategy4(code, history.market, history.rows);
   }));
