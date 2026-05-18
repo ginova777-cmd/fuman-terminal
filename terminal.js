@@ -99,6 +99,17 @@ function setTitleWithIcon(target, icon, text) {
   target.innerHTML = titleWithIcon(icon, text);
 }
 
+function strategySearchInputValue() {
+  return strategySearchDraft !== null ? strategySearchDraft : strategyKeyword;
+}
+
+function commitStrategySearch(input) {
+  strategyKeyword = String(input?.value || "").trim();
+  strategySearchDraft = null;
+  if (strategySearch) strategySearch.value = strategyKeyword;
+  renderStrategyScanner();
+}
+
 function chipScanBadgeHtml() {
   return `<span class="swing-live" style="color:#12d6df;border-color:rgba(18,214,223,.45);background:rgba(18,214,223,.12);margin-left:10px;">●06:00/21:00完整掃　●預計下次掃描時間:${nextChipScanTime()}</span>`;
 }
@@ -282,6 +293,7 @@ const CACHE_FRESH_MS = 10 * 60 * 1000;
 let selectedStrategyIds = new Set();
 let strategyMode = "any";
 let strategyKeyword = "";
+let strategySearchDraft = null;
 let strategyStocksLoading = false;
 let swingSortKey = "score";
 let swingSortDir = "desc";
@@ -2891,7 +2903,8 @@ function renderIntradayRadar(evaluated) {
         <div class="intraday-tabs">
           ${tabs}
           <div class="intraday-actions">
-            <input type="search" placeholder="搜尋代號/名稱" value="${escapeAttr(strategyKeyword)}" data-strategy-inline-search>
+            <input type="search" placeholder="搜尋代號/名稱" value="${escapeAttr(strategySearchInputValue())}" autocomplete="off" spellcheck="false" data-strategy-inline-search>
+            <button type="button" data-strategy-inline-submit>搜尋</button>
             <button type="button" data-export-action>匯出</button>
             <button type="button" data-export-settings>設定</button>
           </div>
@@ -3009,7 +3022,8 @@ function renderSwingRadar() {
         <div class="swing-tabs">
           ${tabs}
           <div class="swing-actions">
-            <input type="search" placeholder="搜尋代號/名稱" value="${escapeAttr(strategyKeyword)}" data-strategy-inline-search>
+            <input type="search" placeholder="搜尋代號/名稱" value="${escapeAttr(strategySearchInputValue())}" autocomplete="off" spellcheck="false" data-strategy-inline-search>
+            <button type="button" data-strategy-inline-submit>搜尋</button>
             <button type="button" data-export-action>匯出</button>
             <button type="button" data-export-settings>設定</button>
           </div>
@@ -3100,7 +3114,8 @@ function renderOpenBuyRadar() {
         <div class="swing-tabs">
           <button class="active" type="button">全部(${rows.length})</button>
           <div class="swing-actions">
-            <input type="search" placeholder="搜尋代號/名稱" value="${escapeAttr(strategyKeyword)}" data-strategy-inline-search>
+            <input type="search" placeholder="搜尋代號/名稱" value="${escapeAttr(strategySearchInputValue())}" autocomplete="off" spellcheck="false" data-strategy-inline-search>
+            <button type="button" data-strategy-inline-submit>搜尋</button>
             <button type="button" data-export-action>匯出</button>
             <button type="button" data-export-settings>設定</button>
           </div>
@@ -4568,6 +4583,7 @@ function applyStrategyPresetFromLink(link) {
   if (text.includes("策略2")) intradaySignalFilter = "all";
   strategyMode = "any";
   strategyKeyword = "";
+  strategySearchDraft = null;
   if (strategySearch) strategySearch.value = "";
   deferUiWork(loadStrategyStocks);
   if (text.includes("策略2")) deferUiWork(() => refreshStrategyRealtimeScan(true), 80);
@@ -5352,8 +5368,21 @@ document.addEventListener("click", (event) => {
 document.addEventListener("input", (event) => {
   const input = event.target.closest("[data-strategy-inline-search]");
   if (!input) return;
-  strategyKeyword = input.value || "";
-  renderStrategyScanner();
+  strategySearchDraft = input.value || "";
+});
+
+document.addEventListener("keydown", (event) => {
+  const input = event.target.closest("[data-strategy-inline-search]");
+  if (!input || event.key !== "Enter") return;
+  event.preventDefault();
+  commitStrategySearch(input);
+});
+
+document.addEventListener("click", (event) => {
+  const button = event.target.closest("[data-strategy-inline-submit]");
+  if (!button) return;
+  const input = button.parentElement?.querySelector("[data-strategy-inline-search]");
+  commitStrategySearch(input);
 });
 
 document.addEventListener("click", (event) => {
@@ -5413,12 +5442,18 @@ strategyClear?.addEventListener("click", () => {
   strategyPresetMode = "";
   if (strategySearch) strategySearch.value = "";
   strategyKeyword = "";
+  strategySearchDraft = null;
   renderStrategyScanner();
 });
 
 strategySearch?.addEventListener("input", (event) => {
-  strategyKeyword = event.target.value;
-  renderStrategyScanner();
+  strategySearchDraft = event.target.value || "";
+});
+
+strategySearch?.addEventListener("keydown", (event) => {
+  if (event.key !== "Enter") return;
+  event.preventDefault();
+  commitStrategySearch(event.target);
 });
 
 async function refreshSelectedWatchlistQuote() {
