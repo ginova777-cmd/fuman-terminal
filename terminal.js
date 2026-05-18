@@ -1858,6 +1858,21 @@ intradayRadarStyles.textContent = `
     align-items: center;
     gap: 10px;
   }
+  .warrant-code-detail {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    margin: 2px 6px 2px 0;
+    white-space: nowrap;
+  }
+  .warrant-code-detail b {
+    color: #eaf2ff;
+  }
+  .warrant-code-detail small {
+    color: #9db9ff;
+    font-size: 11px;
+    opacity: .9;
+  }
   .swing-actions button,
   .swing-tabs button {
     border: 1px solid rgba(117, 133, 170, 0.28);
@@ -3539,7 +3554,7 @@ function renderWarrantFlow() {
     const warrantHint = item.topWarrants.map((warrant) => {
       const money = Number.isFinite(Number(warrant.moneynessPct)) ? `${warrant.moneynessPct >= 0 ? "+" : ""}${Number(warrant.moneynessPct).toFixed(1)}%` : "--";
       const days = warrant.daysToExpiry ?? item.minDaysToExpiry ?? "--";
-      return `<b title="價內/價平 ${money}，剩餘 ${days} 天">${warrant.code}</b>`;
+      return `<span class="warrant-code-detail"><b>${warrant.code}</b><small>${money}｜${days}天</small></span>`;
     }).join(" ");
     return `
       <tr>
@@ -3550,7 +3565,7 @@ function renderWarrantFlow() {
         <td>${formatWarrantMoney(item.putValue)}</td>
         <td><b class="swing-stage ${hot}">${item.callPutRatio >= 99 ? "99+" : item.callPutRatio}</b></td>
         <td>${item.callCount} / ${item.putCount}</td>
-        <td class="pct">${sign}${item.stockPercent.toFixed(2)}%${item.stockRealtime ? " 即時" : ""}</td>
+        <td class="pct">${sign}${item.stockPercent.toFixed(2)}%</td>
         <td>${warrantHint}</td>
         <td>${item.reason} 判斷：${item.stockPercent >= 0 && item.stockPercent <= 2.5 ? "權證先熱，股票未噴。" : "不在優先區。"}</td>
       </tr>
@@ -3596,7 +3611,7 @@ function renderWarrantFlow() {
         <table class="swing-table">
           <thead>
             <tr>
-              <th>排名</th><th>股票代號</th><th>標的名稱</th><th>認購金額</th><th>認售金額</th><th>購/售比</th><th>購/售檔數</th><th>股票漲幅</th><th>價平/價內權證</th><th>判斷</th>
+              <th>排名</th><th>股票代號</th><th>標的名稱</th><th>認購金額</th><th>認售金額</th><th>購/售比</th><th>購/售檔數</th><th>股票漲幅${rows.some((item) => item.stockRealtime) ? " 即時" : ""}</th><th>價平/價內權證</th><th>判斷</th>
             </tr>
           </thead>
           <tbody>${body}</tbody>
