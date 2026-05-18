@@ -139,6 +139,61 @@ async function latestRows(fetcher) {
   return { date: "", rows: [], errors };
 }
 
+async function recentRows(fetcher, limit = 8) {
+  const errors = [];
+  const groups = [];
+  for (const date of recentTradingDates(limit)) {
+    try {
+      const result = await fetcher(date);
+      if (result.rows.length) groups.push(result);
+    } catch (error) {
+      errors.push(error.message);
+    }
+  }
+  return { groups, errors };
+}
+
+function buildMarketData(history) {
+  const groups = history.groups || [];
+  const latest = groups.find((group) => group.rows?.length);
+  const data = {};
+  if (!latest) return data;
+  const rowsByDate = groups.map((group) => ({
+    date: group.date,
+    byCode: new Map((group.rows || []).map((row) => [row.code, row])),
+  }));
+
+  for (const row of latest.rows || []) {
+    let foreignStreak = 0;
+    let trustStreak = 0;
+    let dealerStreak = 0;
+    let jointStreak = 0;
+    let foreignOpen = true;
+    let trustOpen = true;
+    let dealerOpen = true;
+    let jointOpen = true;
+
+    for (const day of rowsByDate) {
+      const dayRow = day.byCode.get(row.code);
+      if (!dayRow) break;
+      if (foreignOpen && dayRow.foreign > 0) foreignStreak += 1; else foreignOpen = false;
+      if (trustOpen && dayRow.trust > 0) trustStreak += 1; else trustOpen = false;
+      if (dealerOpen && dayRow.dealer > 0) dealerStreak += 1; else dealerOpen = false;
+      if (jointOpen && dayRow.foreign > 0 && dayRow.trust > 0) jointStreak += 1; else jointOpen = false;
+      if (!foreignOpen && !trustOpen && !dealerOpen && !jointOpen) break;
+    }
+
+    data[row.code] = {
+      ...row,
+      foreignStreak,
+      trustStreak,
+      dealerStreak,
+      jointStreak,
+    };
+  }
+  return data;
+}
+
 function mergeRows(...groups) {
   const data = {};
   for (const group of groups) {
@@ -170,19 +225,23 @@ module.exports = async function handler(request, response) {
   }
 
   try {
-    const [twse, tpex] = await Promise.all([
-      latestRows(fetchTwseInstitution),
-      latestRows(fetchTpexInstitution),
+    const [twseHistory, tpexHistory] = await Promise.all([
+      recentRows(fetchTwseInstitution, 8),
+      recentRows(fetchTpexInstitution, 8),
     ]);
-    const data = mergeRows(twse, tpex);
-    const dates = [twse.date, tpex.date].filter(Boolean).sort();
+    const twseData = buildMarketData(twseHistory);
+    const tpexData = buildMarketData(tpexHistory);
+    const data = { ...twseData, ...tpexData };
+    const twseDate = twseHistory.groups?.[0]?.date || "";
+    const tpexDate = tpexHistory.groups?.[0]?.date || "";
+    const dates = [twseDate, tpexDate].filter(Boolean).sort();
     const payload = {
       ok: true,
       usedDate: dates.at(-1) || "",
-      sourceDates: { twse: twse.date, tpex: tpex.date },
+      sourceDates: { twse: twseDate, tpex: tpexDate },
       count: Object.keys(data).length,
       data,
-      errors: [...(twse.errors || []), ...(tpex.errors || [])].slice(0, 8),
+      errors: [...(twseHistory.errors || []), ...(tpexHistory.errors || [])].slice(0, 8),
       sources: ["TWSE T86", "TPEx 3itrade_hedge_result"],
     };
     cache = { ts: Date.now(), payload };
