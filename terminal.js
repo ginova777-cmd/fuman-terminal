@@ -516,7 +516,10 @@ function getInstitutionTotal(code) {
   const foreign = Number(inst.foreign) || 0;
   const trust = Number(inst.trust) || 0;
   const dealer = Number(inst.dealer) || 0;
-  return { foreign, trust, dealer, total: foreign + trust + dealer };
+  const foreignStreak = Number(inst.foreignStreak) || 0;
+  const trustStreak = Number(inst.trustStreak) || 0;
+  const jointStreak = Number(inst.jointStreak) || 0;
+  return { foreign, trust, dealer, total: foreign + trust + dealer, foreignStreak, trustStreak, jointStreak };
 }
 
 function updateStrategyHistory(item) {
@@ -1127,6 +1130,7 @@ const STRATEGY_DEFS = [
   { id: "red_to_green", label: "昨日紅轉綠", short: "紅轉綠", icon: "↻" },
   { id: "intraday_2m", label: "2分K當沖雷達", short: "當沖", icon: "⌁" },
   { id: "investment_trust", label: "投信連買認養股", short: "投信", icon: "▦" },
+  { id: "institutional_breakout", label: "外資投信連買準突破", short: "法人準突", icon: "◆" },
   { id: "vcp", label: "VCP 波段收斂", short: "VCP", icon: "⌁" },
   { id: "ma_bull", label: "均線多頭排列", short: "均線", icon: "☰" },
   { id: "sync_backtest", label: "高同步率回測", short: "同步", icon: "▣" },
@@ -1143,6 +1147,7 @@ const STRATEGY5_IDS = ["short_fund_flow", "one_day_rebound", "short_squeeze", "u
 const STRATEGY5_PRESET_IDS = [
   "momentum",
   "main_force_chip",
+  "institutional_breakout",
   "twenty_day_breakout",
   "vcp",
   "sync_backtest",
@@ -1153,6 +1158,7 @@ function ensureStrategyCards() {
   if (!strategyList) return;
   const descriptions = {
     short_fund_flow: "短線資金快速集中，觀察量價同步放大的強勢股。",
+    institutional_breakout: "外資與投信同向連買，搭配日K MA35、動能與量能確認。",
     chip_health_strong: "外資、投信與法人方向偏買，優先看籌碼乾淨的標的。",
     one_day_rebound: "前一日大跌後出現收紅反彈，需要日K確認。",
     short_squeeze: "強漲放量、漲幅排名靠前，列入嘎空觀察。",
@@ -1220,10 +1226,23 @@ function strategyHit(id, stock) {
   );
   const momentumScore = clamp(scoreBase + 10, 0, 100);
   const daily = stock.swingDaily || null;
+  const dailyRows = Array.isArray(daily?.rows) ? daily.rows : [];
+  const dailyCloses = dailyRows.map((row) => cleanNumber(row.close)).filter(Boolean);
+  const lastDailyClose = cleanNumber(daily?.last?.close) || cleanNumber(stock.close);
+  const ma35 = dailyCloses.length >= 35 ? sma(dailyCloses, 35) : 0;
+  const ma60 = dailyCloses.length >= 60 ? sma(dailyCloses, 60) : 0;
+  const hourlyMa200Proxy = dailyCloses.length >= 45 ? sma(dailyCloses, 45) : ma35;
+  const dailyMa35Stand = ma35 ? lastDailyClose >= ma35 : pct > 0;
+  const weeklyMa60ProxyStand = ma60 ? lastDailyClose >= ma60 : dailyMa35Stand;
+  const hourlyMa200ProxyStand = hourlyMa200Proxy ? lastDailyClose >= hourlyMa200Proxy : dailyMa35Stand;
   const nearTwentyDayBreakout = daily
     ? cleanNumber(daily.last?.close) >= cleanNumber(daily.highest20Prev) * 0.995
     : stock.percentRank >= 88;
+  const nearBreakoutSetup = daily
+    ? cleanNumber(daily.last?.close) >= cleanNumber(daily.highest20Prev) * 0.985
+    : stock.percentRank >= 80;
   const volumeConfirmed = volumeRank >= 75 || cleanNumber(daily?.volumeRatio) >= 1.45;
+  const institutionalStreak = inst.jointStreak >= 2 || (inst.foreignStreak >= 2 && inst.trustStreak >= 2);
 
   const rules = {
     momentum: {
@@ -1262,6 +1281,11 @@ function strategyHit(id, stock) {
       hit: inst.trust > 0 && pct > -1,
       score: clamp(scoreBase + 15, 0, 100),
       reason: `投信買超 ${formatInstitution(inst.trust)}，股價未轉弱。`,
+    },
+    institutional_breakout: {
+      hit: institutionalStreak && inst.foreign > 0 && inst.trust > 0 && dailyMa35Stand && weeklyMa60ProxyStand && hourlyMa200ProxyStand && nearBreakoutSetup && momentumScore >= 75 && pct >= 0.8 && pct <= 9.8 && valueRank >= 65 && (volumeRank >= 70 || cleanNumber(daily?.volumeRatio) >= 1.3),
+      score: clamp(momentumScore + Math.min(inst.jointStreak, 5) * 3 + (volumeRank >= 80 ? 5 : 0), 0, 100),
+      reason: `外資連買 ${inst.foreignStreak} 日、投信連買 ${inst.trustStreak} 日，同買 ${inst.jointStreak} 日；日K站上MA35，60分K MA200/週K MA60以目前日K趨勢代理確認，動能 ${momentumScore}，成交值/量能排名 ${valueRank}%/${volumeRank}%。`,
     },
     vcp: {
       hit: Math.abs(pct) <= 1.8 && valueRank >= 55 && volumeRank >= 45,
@@ -1337,6 +1361,7 @@ function passesStrategy5Preset(stock, match) {
   const inst = stock.inst || getInstitutionTotal(stock.code);
   if (match.id === "momentum") return match.score >= 75 && stock.valueRank >= 70 && (stock.volumeRank >= 75 || cleanNumber(stock.swingDaily?.volumeRatio) >= 1.45);
   if (match.id === "investment_trust") return inst.trust > 0 && (Number(stock.trustStreak) || Number(inst.trustStreak) || 0) >= 2;
+  if (match.id === "institutional_breakout") return match.score >= 78 && inst.foreign > 0 && inst.trust > 0 && (inst.jointStreak >= 2 || (inst.foreignStreak >= 2 && inst.trustStreak >= 2));
   return true;
 }
 
@@ -3179,6 +3204,7 @@ function renderStrategy5Dashboard(evaluated) {
   const descriptions = {
     momentum: "價格趨勢、20日突破與量比同步轉強，優先找資金加速中的強勢股。",
     main_force_chip: "近日法人買超、外資或投信連買、籌碼分數提高，找主力資金持續進場標的。",
+    institutional_breakout: "投信連買搭配短均線站上、動能分數與量能確認，鎖定法人推升、準突破的觀察名單。",
     twenty_day_breakout: "收盤突破近20日高點且今日收紅，找出剛穿越壓力的強勢股。",
     opening_power: "針對開盤後快速轉強，捕捉即時強勢盤勢。",
     red_to_green: "參考 Azix 邏輯，以昨日收為準，開低走高突破昨日高點臨界。",
@@ -3196,6 +3222,7 @@ function renderStrategy5Dashboard(evaluated) {
   const rhythmLabels = {
     momentum: "核心節奏",
     main_force_chip: "籌碼K線",
+    institutional_breakout: "法人準突破",
     investment_trust: "法人訊號",
     chip_health_strong: "籌碼健檢",
     twenty_day_breakout: "技術突破",
@@ -4611,6 +4638,7 @@ function applyStrategyPresetFromLink(link) {
     ? new Set([
         "momentum",
         "main_force_chip",
+        "institutional_breakout",
         "twenty_day_breakout",
         "vcp",
         "sync_backtest",
