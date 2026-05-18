@@ -3216,19 +3216,37 @@ function renderStrategy5Dashboard(evaluated) {
 
 function renderOvernightDashboard(evaluated) {
   setStrategyChrome("strategy5");
-  const sortValue = (stock, key) => {
+  const buildOvernightCandidate = (stock) => {
     const inst = stock.inst || getInstitutionTotal(stock.code);
-    const projectedRatio = Math.max(1, (stock.volumeRank || 0) / 24);
+    const pct = Number(stock.percent) || 0;
+    const valueRank = Number(stock.valueRank) || 0;
+    const volumeRank = Number(stock.volumeRank) || 0;
+    const instBoost = inst.total > 0 ? 12 : inst.trust > 0 ? 10 : inst.foreign > 0 ? 6 : 0;
+    const heatPenalty = pct > 8.8 ? 24 : pct > 6.5 ? 12 : pct < 0 ? 30 : 0;
+    const overnightScore = clamp(Math.round(valueRank * 0.34 + volumeRank * 0.26 + Math.min(Math.max(pct, 0) * 5, 24) + instBoost - heatPenalty), 0, 100);
+    const pass = pct >= 1 && pct <= 8.8 && valueRank >= 50 && volumeRank >= 45;
+    return {
+      ...stock,
+      inst,
+      projectedRatio: Math.max(1, (volumeRank || 0) / 24),
+      overnightScore,
+      overnightState: pass ? "通過" : "觀察",
+      activeMatch: stock.matches.find((match) => match.id === "overnight_chip") || {
+        reason: pass ? "量價接近隔日沖候選條件，尾盤可列入觀察。" : "未完整命中強條件，但量價排名仍值得觀察。",
+      },
+    };
+  };
+  const sortValue = (stock, key) => {
     const values = {
-      rank: stock.score || 0,
+      rank: stock.overnightScore || stock.score || 0,
       code: Number(stock.code) || 0,
       price: stock.close || 0,
       percent: stock.percent || 0,
       volume: stock.tradeVolume || 0,
-      ratio: projectedRatio,
+      ratio: stock.projectedRatio || 0,
       value: stock.value || 0,
-      inst: inst.total || 0,
-      score: stock.score || 0,
+      inst: stock.inst?.total || 0,
+      score: stock.overnightScore || stock.score || 0,
     };
     return values[key] ?? 0;
   };
@@ -3238,8 +3256,14 @@ function renderOvernightDashboard(evaluated) {
     return `<button type="button" data-overnight-sort="${key}">${label}${mark}</button>`;
   };
   const rows = evaluated
-    .filter((stock) => stock.matches.some((match) => match.id === "overnight_chip"))
-    .map((stock) => ({ ...stock, activeMatch: stock.matches.find((match) => match.id === "overnight_chip") }))
+    .filter((stock) =>
+      stock.close >= 10 &&
+      stock.percent > 0 &&
+      stock.percent <= 9.8 &&
+      stock.valueRank >= 42 &&
+      stock.volumeRank >= 38
+    )
+    .map(buildOvernightCandidate)
     .sort((a, b) => {
       const diff = sortValue(a, overnightSortKey) - sortValue(b, overnightSortKey);
       return overnightSortDir === "asc" ? diff : -diff;
@@ -3248,13 +3272,13 @@ function renderOvernightDashboard(evaluated) {
 
   if (strategySummary) strategySummary.textContent = `策略3-隔日沖｜直達新版頁｜符合 ${rows.length} 檔`;
   if (strategyMatchCount) strategyMatchCount.textContent = rows.length.toLocaleString("zh-TW");
-  if (strategyAvgScore) strategyAvgScore.textContent = rows.length ? Math.round(avg(rows.map((stock) => stock.score))) : "--";
+  if (strategyAvgScore) strategyAvgScore.textContent = rows.length ? Math.round(avg(rows.map((stock) => stock.overnightScore || stock.score))) : "--";
   if (strategyTopHit) strategyTopHit.textContent = rows.length ? `${Math.max(...rows.map((stock) => stock.matches.length))}` : "--";
 
   const cards = rows.length ? rows.map((stock, index) => {
     const sign = stock.percent >= 0 ? "+" : "";
     const inst = stock.inst || getInstitutionTotal(stock.code);
-    const projectedRatio = Math.max(1, (stock.volumeRank || 0) / 24).toFixed(1);
+    const projectedRatio = (stock.projectedRatio || Math.max(1, (stock.volumeRank || 0) / 24)).toFixed(1);
     const valueText = stock.value ? `${(stock.value / 100000000).toFixed(2)} 億` : "--";
     const tags = [
       stock.volumeRank >= 70 ? "量能啟動" : "量能觀察",
@@ -3273,9 +3297,9 @@ function renderOvernightDashboard(evaluated) {
         <td>${projectedRatio}x</td>
         <td>${valueText}</td>
         <td>${formatInstitution(inst.total)}</td>
-        <td><b>${stock.score}</b></td>
+        <td><b>${stock.overnightScore}</b></td>
         <td>
-          <strong>通過</strong>
+          <strong>${stock.overnightState}</strong>
           <p>量價與成交值偏強，${stock.activeMatch?.reason || "隔日沖候選。"} 本策略以 13:00 完整掃結果作為隔日沖候選。</p>
           <div class="overnight-tags">${tags.map((tag) => `<span>${tag}</span>`).join("")}</div>
         </td>
@@ -3361,7 +3385,16 @@ function renderStrategyScanner() {
     return;
   }
 
-  const evaluated = universe.map(evaluateStrategyStock).filter((stock) => {
+  const allEvaluated = universe.map(evaluateStrategyStock);
+  if (strategyPresetMode === "strategy3") {
+    const overnightRows = allEvaluated.filter((stock) =>
+      !keyword || stock.code.includes(keyword) || stock.name.toLowerCase().includes(keyword)
+    );
+    renderOvernightDashboard(overnightRows);
+    return;
+  }
+
+  const evaluated = allEvaluated.filter((stock) => {
     const matchedIds = stock.matches.map((item) => item.id);
     const passMode = strategyMode === "all"
       ? selected.every((id) => matchedIds.includes(id))
@@ -3370,10 +3403,6 @@ function renderStrategyScanner() {
     return passMode && passKeyword;
   }).sort((a, b) => b.matches.length - a.matches.length || b.score - a.score || b.value - a.value);
 
-  if (strategyPresetMode === "strategy3") {
-    renderOvernightDashboard(evaluated);
-    return;
-  }
   if (strategyPresetMode === "strategy5") {
     renderStrategy5Dashboard(evaluated);
     return;
