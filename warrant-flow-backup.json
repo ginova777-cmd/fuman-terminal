@@ -1,0 +1,6379 @@
+{
+  "ok": true,
+  "updatedAt": "2026-05-17T13:34:45.952Z",
+  "scanned": 18120,
+  "count": 120,
+  "matches": [
+    {
+      "underlyingName": "台積電",
+      "market": "上市",
+      "tradeDate": "20260515",
+      "callValue": 247353540,
+      "putValue": 7550530,
+      "totalValue": 254904070,
+      "callVolume": 170860000,
+      "putVolume": 12254000,
+      "callCount": 510,
+      "putCount": 79,
+      "breadth": 589,
+      "callPutRatio": 32.76,
+      "score": 99,
+      "topWarrants": [
+        {
+          "code": "051666",
+          "name": "台積電元大5A購03",
+          "type": "call",
+          "value": 26907130,
+          "volume": 13814000
+        },
+        {
+          "code": "055260",
+          "name": "台積電元大5C購02",
+          "type": "call",
+          "value": 13006560,
+          "volume": 10056000
+        },
+        {
+          "code": "049108",
+          "name": "台積電元大59購03",
+          "type": "call",
+          "value": 7514870,
+          "volume": 1875000
+        },
+        {
+          "code": "060423",
+          "name": "台積電中信63購05",
+          "type": "call",
+          "value": 7128070,
+          "volume": 6243000
+        },
+        {
+          "code": "041451",
+          "name": "台積電永豐5A購09",
+          "type": "call",
+          "value": 6694650,
+          "volume": 1614000
+        }
+      ],
+      "reason": "認購 510 檔、認購金額 2.47 億，認購/認售比 32.76。"
+    },
+    {
+      "underlyingName": "國巨*",
+      "market": "上市",
+      "tradeDate": "20260515",
+      "callValue": 240088720,
+      "putValue": 1579730,
+      "totalValue": 241668450,
+      "callVolume": 56569000,
+      "putVolume": 3488000,
+      "callCount": 194,
+      "putCount": 12,
+      "breadth": 206,
+      "callPutRatio": 151.98,
+      "score": 98,
+      "topWarrants": [
+        {
+          "code": "067053",
+          "name": "國巨永豐5B購03",
+          "type": "call",
+          "value": 11066750,
+          "volume": 5000000
+        },
+        {
+          "code": "054117",
+          "name": "國巨元富57購06",
+          "type": "call",
+          "value": 9964900,
+          "volume": 838000
+        },
+        {
+          "code": "054626",
+          "name": "國巨元富57購09",
+          "type": "call",
+          "value": 9544800,
+          "volume": 1697000
+        },
+        {
+          "code": "041678",
+          "name": "國巨凱基56購02",
+          "type": "call",
+          "value": 9106700,
+          "volume": 451000
+        },
+        {
+          "code": "065665",
+          "name": "國巨凱基5B購02",
+          "type": "call",
+          "value": 7934790,
+          "volume": 2012000
+        }
+      ],
+      "reason": "認購 194 檔、認購金額 2.40 億，認購/認售比 99+。"
+    },
+    {
+      "underlyingName": "南亞科",
+      "market": "上市",
+      "tradeDate": "20260515",
+      "callValue": 153192120,
+      "putValue": 2782600,
+      "totalValue": 155974720,
+      "callVolume": 58957000,
+      "putVolume": 4006000,
+      "callCount": 104,
+      "putCount": 9,
+      "breadth": 113,
+      "callPutRatio": 55.05,
+      "score": 89,
+      "topWarrants": [
+        {
+          "code": "065057",
+          "name": "南亞科中信5A購01",
+          "type": "call",
+          "value": 9900660,
+          "volume": 5002000
+        },
+        {
+          "code": "065142",
+          "name": "南亞科國泰5B購01",
+          "type": "call",
+          "value": 8520900,
+          "volume": 1694000
+        },
+        {
+          "code": "066540",
+          "name": "南亞科群益5B購08",
+          "type": "call",
+          "value": 8208070,
+          "volume": 3568000
+        },
+        {
+          "code": "064618",
+          "name": "南亞科元大5A購02",
+          "type": "call",
+          "value": 7908940,
+          "volume": 3133000
+        },
+        {
+          "code": "064497",
+          "name": "南亞科國票5B購01",
+          "type": "call",
+          "value": 6722040,
+          "volume": 1953000
+        }
+      ],
+      "reason": "認購 104 檔、認購金額 1.53 億，認購/認售比 55.05。"
+    },
+    {
+      "underlyingName": "群聯",
+      "market": "上櫃",
+      "tradeDate": "20260515",
+      "callValue": 139955780,
+      "putValue": 244560,
+      "totalValue": 140200340,
+      "callVolume": 56016000,
+      "putVolume": 342000,
+      "callCount": 91,
+      "putCount": 5,
+      "breadth": 96,
+      "callPutRatio": 572.28,
+      "score": 88,
+      "topWarrants": [
+        {
+          "code": "708015",
+          "name": "群聯台新5A購01",
+          "type": "call",
+          "value": 18378150,
+          "volume": 1800000
+        },
+        {
+          "code": "707735",
+          "name": "群聯元大5A購02",
+          "type": "call",
+          "value": 13980700,
+          "volume": 4979000
+        },
+        {
+          "code": "708017",
+          "name": "群聯台新5A購03",
+          "type": "call",
+          "value": 7048750,
+          "volume": 868000
+        },
+        {
+          "code": "708117",
+          "name": "群聯台新5B購02",
+          "type": "call",
+          "value": 7004030,
+          "volume": 2135000
+        },
+        {
+          "code": "708209",
+          "name": "群聯凱基64購01",
+          "type": "call",
+          "value": 6049230,
+          "volume": 3305000
+        }
+      ],
+      "reason": "認購 91 檔、認購金額 1.40 億，認購/認售比 99+。"
+    },
+    {
+      "underlyingName": "鴻海",
+      "market": "上市",
+      "tradeDate": "20260515",
+      "callValue": 130471360,
+      "putValue": 1901540,
+      "totalValue": 132372900,
+      "callVolume": 96007000,
+      "putVolume": 4296000,
+      "callCount": 365,
+      "putCount": 27,
+      "breadth": 392,
+      "callPutRatio": 68.61,
+      "score": 87,
+      "topWarrants": [
+        {
+          "code": "064194",
+          "name": "鴻海台新64購01",
+          "type": "call",
+          "value": 6335100,
+          "volume": 1248000
+        },
+        {
+          "code": "078006",
+          "name": "鴻海凱基57購02",
+          "type": "call",
+          "value": 4814700,
+          "volume": 308000
+        },
+        {
+          "code": "064282",
+          "name": "鴻海凱基5B購04",
+          "type": "call",
+          "value": 4180560,
+          "volume": 1536000
+        },
+        {
+          "code": "041227",
+          "name": "鴻海永豐5A購01",
+          "type": "call",
+          "value": 3880700,
+          "volume": 597000
+        },
+        {
+          "code": "058899",
+          "name": "鴻海元大61購09",
+          "type": "call",
+          "value": 3189590,
+          "volume": 1831000
+        }
+      ],
+      "reason": "認購 365 檔、認購金額 1.30 億，認購/認售比 68.61。"
+    },
+    {
+      "underlyingName": "世芯-KY",
+      "market": "上市",
+      "tradeDate": "20260515",
+      "callValue": 129604870,
+      "putValue": 1652360,
+      "totalValue": 131257230,
+      "callVolume": 44526000,
+      "putVolume": 2369000,
+      "callCount": 252,
+      "putCount": 15,
+      "breadth": 267,
+      "callPutRatio": 78.44,
+      "score": 87,
+      "topWarrants": [
+        {
+          "code": "050675",
+          "name": "世芯台新57購02",
+          "type": "call",
+          "value": 26378800,
+          "volume": 1899000
+        },
+        {
+          "code": "051124",
+          "name": "世芯元富57購06",
+          "type": "call",
+          "value": 8270000,
+          "volume": 1000000
+        },
+        {
+          "code": "041026",
+          "name": "世芯凱基55購05",
+          "type": "call",
+          "value": 4078250,
+          "volume": 665000
+        },
+        {
+          "code": "064910",
+          "name": "世芯群益5A購06",
+          "type": "call",
+          "value": 3722250,
+          "volume": 1280000
+        },
+        {
+          "code": "054813",
+          "name": "世芯群益57購09",
+          "type": "call",
+          "value": 3524250,
+          "volume": 459000
+        }
+      ],
+      "reason": "認購 252 檔、認購金額 1.30 億，認購/認售比 78.44。"
+    },
+    {
+      "underlyingName": "聯電",
+      "market": "上市",
+      "tradeDate": "20260515",
+      "callValue": 113279470,
+      "putValue": 1261980,
+      "totalValue": 114541450,
+      "callVolume": 35523000,
+      "putVolume": 4321000,
+      "callCount": 168,
+      "putCount": 10,
+      "breadth": 178,
+      "callPutRatio": 89.76,
+      "score": 85,
+      "topWarrants": [
+        {
+          "code": "054704",
+          "name": "聯電統一61購08",
+          "type": "call",
+          "value": 8305100,
+          "volume": 5711000
+        },
+        {
+          "code": "038880",
+          "name": "聯電元大56購01",
+          "type": "call",
+          "value": 7019000,
+          "volume": 142000
+        },
+        {
+          "code": "052227",
+          "name": "聯電元富57購03",
+          "type": "call",
+          "value": 4138800,
+          "volume": 124000
+        },
+        {
+          "code": "053991",
+          "name": "聯電元大5A購02",
+          "type": "call",
+          "value": 4010440,
+          "volume": 887000
+        },
+        {
+          "code": "054933",
+          "name": "聯電永豐58購03",
+          "type": "call",
+          "value": 3243580,
+          "volume": 1136000
+        }
+      ],
+      "reason": "認購 168 檔、認購金額 1.13 億，認購/認售比 89.76。"
+    },
+    {
+      "underlyingName": "力成",
+      "market": "上市",
+      "tradeDate": "20260515",
+      "callValue": 108584640,
+      "putValue": 41560,
+      "totalValue": 108626200,
+      "callVolume": 87718000,
+      "putVolume": 167000,
+      "callCount": 159,
+      "putCount": 4,
+      "breadth": 163,
+      "callPutRatio": 2612.72,
+      "score": 85,
+      "topWarrants": [
+        {
+          "code": "060328",
+          "name": "力成元富59購02",
+          "type": "call",
+          "value": 11493270,
+          "volume": 2993000
+        },
+        {
+          "code": "061618",
+          "name": "力成元富59購04",
+          "type": "call",
+          "value": 7929210,
+          "volume": 1604000
+        },
+        {
+          "code": "050244",
+          "name": "力成凱基59購01",
+          "type": "call",
+          "value": 7576350,
+          "volume": 1184000
+        },
+        {
+          "code": "060808",
+          "name": "力成元富59購03",
+          "type": "call",
+          "value": 7185990,
+          "volume": 1503000
+        },
+        {
+          "code": "050702",
+          "name": "力成凱基59購03",
+          "type": "call",
+          "value": 5342830,
+          "volume": 994000
+        }
+      ],
+      "reason": "認購 159 檔、認購金額 1.09 億，認購/認售比 99+。"
+    },
+    {
+      "underlyingName": "群創",
+      "market": "上市",
+      "tradeDate": "20260515",
+      "callValue": 99329470,
+      "putValue": 2543850,
+      "totalValue": 101873320,
+      "callVolume": 35340000,
+      "putVolume": 5329000,
+      "callCount": 92,
+      "putCount": 13,
+      "breadth": 105,
+      "callPutRatio": 39.05,
+      "score": 84,
+      "topWarrants": [
+        {
+          "code": "050890",
+          "name": "群創中信57購02",
+          "type": "call",
+          "value": 5108800,
+          "volume": 414000
+        },
+        {
+          "code": "065944",
+          "name": "群創元大64購03",
+          "type": "call",
+          "value": 5053460,
+          "volume": 1410000
+        },
+        {
+          "code": "040292",
+          "name": "群創元大56購06",
+          "type": "call",
+          "value": 4292900,
+          "volume": 340000
+        },
+        {
+          "code": "064658",
+          "name": "群創群益5A購04",
+          "type": "call",
+          "value": 3862060,
+          "volume": 1184000
+        },
+        {
+          "code": "064502",
+          "name": "群創國票5A購01",
+          "type": "call",
+          "value": 3776490,
+          "volume": 1332000
+        }
+      ],
+      "reason": "認購 92 檔、認購金額 0.99 億，認購/認售比 39.05。"
+    },
+    {
+      "underlyingName": "華邦電",
+      "market": "上市",
+      "tradeDate": "20260515",
+      "callValue": 90853790,
+      "putValue": 1001510,
+      "totalValue": 91855300,
+      "callVolume": 42624000,
+      "putVolume": 1881000,
+      "callCount": 76,
+      "putCount": 10,
+      "breadth": 86,
+      "callPutRatio": 90.72,
+      "score": 83,
+      "topWarrants": [
+        {
+          "code": "064493",
+          "name": "華邦電國票5B購01",
+          "type": "call",
+          "value": 11079450,
+          "volume": 4137000
+        },
+        {
+          "code": "065327",
+          "name": "華邦電國泰61購01",
+          "type": "call",
+          "value": 8910720,
+          "volume": 3745000
+        },
+        {
+          "code": "065061",
+          "name": "華邦電永豐65購01",
+          "type": "call",
+          "value": 4350050,
+          "volume": 2199000
+        },
+        {
+          "code": "066646",
+          "name": "華邦電元大5B購04",
+          "type": "call",
+          "value": 4178020,
+          "volume": 3575000
+        },
+        {
+          "code": "066918",
+          "name": "華邦電兆豐65購03",
+          "type": "call",
+          "value": 4160120,
+          "volume": 2486000
+        }
+      ],
+      "reason": "認購 76 檔、認購金額 0.91 億，認購/認售比 90.72。"
+    },
+    {
+      "underlyingName": "奇鋐",
+      "market": "上市",
+      "tradeDate": "20260515",
+      "callValue": 83037070,
+      "putValue": 6918150,
+      "totalValue": 89955220,
+      "callVolume": 44665000,
+      "putVolume": 7068000,
+      "callCount": 184,
+      "putCount": 17,
+      "breadth": 201,
+      "callPutRatio": 12,
+      "score": 82,
+      "topWarrants": [
+        {
+          "code": "056400",
+          "name": "奇鋐元富5A購04",
+          "type": "call",
+          "value": 6812750,
+          "volume": 983000
+        },
+        {
+          "code": "063579",
+          "name": "奇鋐統一64購01",
+          "type": "call",
+          "value": 3260170,
+          "volume": 2529000
+        },
+        {
+          "code": "08984U",
+          "name": "奇鋐凱基5A售10",
+          "type": "put",
+          "value": 2817080,
+          "volume": 2346000
+        },
+        {
+          "code": "061102",
+          "name": "奇鋐國泰5A購03",
+          "type": "call",
+          "value": 2735970,
+          "volume": 1217000
+        },
+        {
+          "code": "061851",
+          "name": "奇鋐群益59購19",
+          "type": "call",
+          "value": 2706710,
+          "volume": 1078000
+        }
+      ],
+      "reason": "認購 184 檔、認購金額 0.83 億，認購/認售比 12.00。"
+    },
+    {
+      "underlyingName": "緯穎",
+      "market": "上市",
+      "tradeDate": "20260515",
+      "callValue": 82867870,
+      "putValue": 940310,
+      "totalValue": 83808180,
+      "callVolume": 37063000,
+      "putVolume": 1837000,
+      "callCount": 243,
+      "putCount": 15,
+      "breadth": 258,
+      "callPutRatio": 88.13,
+      "score": 82,
+      "topWarrants": [
+        {
+          "code": "055952",
+          "name": "緯穎元富62購01",
+          "type": "call",
+          "value": 5797250,
+          "volume": 1646000
+        },
+        {
+          "code": "059109",
+          "name": "緯穎元富5C購01",
+          "type": "call",
+          "value": 4955460,
+          "volume": 1546000
+        },
+        {
+          "code": "060120",
+          "name": "緯穎元富5C購02",
+          "type": "call",
+          "value": 4371350,
+          "volume": 1469000
+        },
+        {
+          "code": "058459",
+          "name": "緯穎元大61購02",
+          "type": "call",
+          "value": 3467250,
+          "volume": 606000
+        },
+        {
+          "code": "089497",
+          "name": "緯穎元富61購01",
+          "type": "call",
+          "value": 3375500,
+          "volume": 347000
+        }
+      ],
+      "reason": "認購 243 檔、認購金額 0.83 億，認購/認售比 88.13。"
+    },
+    {
+      "underlyingName": "旺矽",
+      "market": "上櫃",
+      "tradeDate": "20260515",
+      "callValue": 75887320,
+      "putValue": 1785270,
+      "totalValue": 77672590,
+      "callVolume": 28064000,
+      "putVolume": 4861000,
+      "callCount": 81,
+      "putCount": 7,
+      "breadth": 88,
+      "callPutRatio": 42.51,
+      "score": 82,
+      "topWarrants": [
+        {
+          "code": "707820",
+          "name": "旺矽元大5A購04",
+          "type": "call",
+          "value": 6411830,
+          "volume": 4083000
+        },
+        {
+          "code": "707313",
+          "name": "旺矽永豐5A購03",
+          "type": "call",
+          "value": 4360580,
+          "volume": 1288000
+        },
+        {
+          "code": "707300",
+          "name": "旺矽元大5A購02",
+          "type": "call",
+          "value": 4259440,
+          "volume": 927000
+        },
+        {
+          "code": "707285",
+          "name": "旺矽凱基5A購04",
+          "type": "call",
+          "value": 3998660,
+          "volume": 1257000
+        },
+        {
+          "code": "707301",
+          "name": "旺矽元大61購01",
+          "type": "call",
+          "value": 3827780,
+          "volume": 1154000
+        }
+      ],
+      "reason": "認購 81 檔、認購金額 0.76 億，認購/認售比 42.51。"
+    },
+    {
+      "underlyingName": "昇陽半導體",
+      "market": "上市",
+      "tradeDate": "20260515",
+      "callValue": 70719780,
+      "putValue": 73620,
+      "totalValue": 70793400,
+      "callVolume": 36319000,
+      "putVolume": 57000,
+      "callCount": 142,
+      "putCount": 2,
+      "breadth": 144,
+      "callPutRatio": 960.61,
+      "score": 81,
+      "topWarrants": [
+        {
+          "code": "051647",
+          "name": "昇陽半國票58購02",
+          "type": "call",
+          "value": 4763590,
+          "volume": 1370000
+        },
+        {
+          "code": "052989",
+          "name": "昇陽半統一61購03",
+          "type": "call",
+          "value": 2715030,
+          "volume": 2188000
+        },
+        {
+          "code": "035382",
+          "name": "昇陽半統一5C購01",
+          "type": "call",
+          "value": 2395100,
+          "volume": 2304000
+        },
+        {
+          "code": "052419",
+          "name": "昇陽半元大57購06",
+          "type": "call",
+          "value": 2376280,
+          "volume": 876000
+        },
+        {
+          "code": "035104",
+          "name": "昇陽半元富56購02",
+          "type": "call",
+          "value": 2207950,
+          "volume": 528000
+        }
+      ],
+      "reason": "認購 142 檔、認購金額 0.71 億，認購/認售比 99+。"
+    },
+    {
+      "underlyingName": "精材",
+      "market": "上櫃",
+      "tradeDate": "20260515",
+      "callValue": 68639440,
+      "putValue": 467570,
+      "totalValue": 69107010,
+      "callVolume": 30182000,
+      "putVolume": 1128000,
+      "callCount": 102,
+      "putCount": 4,
+      "breadth": 106,
+      "callPutRatio": 146.8,
+      "score": 81,
+      "topWarrants": [
+        {
+          "code": "708068",
+          "name": "精材群益5A購05",
+          "type": "call",
+          "value": 5661300,
+          "volume": 2381000
+        },
+        {
+          "code": "708090",
+          "name": "精材永豐5B購02",
+          "type": "call",
+          "value": 4485190,
+          "volume": 2673000
+        },
+        {
+          "code": "707623",
+          "name": "精材永豐61購01",
+          "type": "call",
+          "value": 4445550,
+          "volume": 971000
+        },
+        {
+          "code": "708361",
+          "name": "精材群益5B購01",
+          "type": "call",
+          "value": 4209910,
+          "volume": 1331000
+        },
+        {
+          "code": "705890",
+          "name": "精材群益59購02",
+          "type": "call",
+          "value": 3227990,
+          "volume": 726000
+        }
+      ],
+      "reason": "認購 102 檔、認購金額 0.69 億，認購/認售比 99+。"
+    },
+    {
+      "underlyingName": "晶豪科",
+      "market": "上市",
+      "tradeDate": "20260515",
+      "callValue": 63485700,
+      "putValue": 443110,
+      "totalValue": 63928810,
+      "callVolume": 12035000,
+      "putVolume": 880000,
+      "callCount": 58,
+      "putCount": 4,
+      "breadth": 62,
+      "callPutRatio": 143.27,
+      "score": 80,
+      "topWarrants": [
+        {
+          "code": "037947",
+          "name": "晶豪科永豐55購02",
+          "type": "call",
+          "value": 29507200,
+          "volume": 1171000
+        },
+        {
+          "code": "050492",
+          "name": "晶豪科中信56購03",
+          "type": "call",
+          "value": 3222820,
+          "volume": 687000
+        },
+        {
+          "code": "066290",
+          "name": "晶豪科群益5B購01",
+          "type": "call",
+          "value": 2362030,
+          "volume": 499000
+        },
+        {
+          "code": "066804",
+          "name": "晶豪科台新5B購04",
+          "type": "call",
+          "value": 2295970,
+          "volume": 611000
+        },
+        {
+          "code": "050513",
+          "name": "晶豪科永豐57購02",
+          "type": "call",
+          "value": 2124000,
+          "volume": 177000
+        }
+      ],
+      "reason": "認購 58 檔、認購金額 0.63 億，認購/認售比 99+。"
+    },
+    {
+      "underlyingName": "力積電",
+      "market": "上市",
+      "tradeDate": "20260515",
+      "callValue": 63037010,
+      "putValue": 4612160,
+      "totalValue": 67649170,
+      "callVolume": 34848000,
+      "putVolume": 4917000,
+      "callCount": 95,
+      "putCount": 10,
+      "breadth": 105,
+      "callPutRatio": 13.67,
+      "score": 80,
+      "topWarrants": [
+        {
+          "code": "03135T",
+          "name": "力積電台新5B售03",
+          "type": "put",
+          "value": 3934600,
+          "volume": 2764000
+        },
+        {
+          "code": "065600",
+          "name": "力積電台新5B購01",
+          "type": "call",
+          "value": 3632220,
+          "volume": 1520000
+        },
+        {
+          "code": "050573",
+          "name": "力積電凱基5A購02",
+          "type": "call",
+          "value": 3563000,
+          "volume": 430000
+        },
+        {
+          "code": "065535",
+          "name": "力積電兆豐61購01",
+          "type": "call",
+          "value": 3201900,
+          "volume": 2280000
+        },
+        {
+          "code": "066573",
+          "name": "力積電台新5B購07",
+          "type": "call",
+          "value": 3147510,
+          "volume": 998000
+        }
+      ],
+      "reason": "認購 95 檔、認購金額 0.63 億，認購/認售比 13.67。"
+    },
+    {
+      "underlyingName": "金像電",
+      "market": "上市",
+      "tradeDate": "20260515",
+      "callValue": 62549770,
+      "putValue": 1548530,
+      "totalValue": 64098300,
+      "callVolume": 37781000,
+      "putVolume": 3751000,
+      "callCount": 110,
+      "putCount": 9,
+      "breadth": 119,
+      "callPutRatio": 40.39,
+      "score": 80,
+      "topWarrants": [
+        {
+          "code": "047932",
+          "name": "金像電永豐57購02",
+          "type": "call",
+          "value": 10154500,
+          "volume": 106000
+        },
+        {
+          "code": "063859",
+          "name": "金像電群益5B購01",
+          "type": "call",
+          "value": 4859480,
+          "volume": 2134000
+        },
+        {
+          "code": "064213",
+          "name": "金像電群益5A購04",
+          "type": "call",
+          "value": 4403220,
+          "volume": 2715000
+        },
+        {
+          "code": "064444",
+          "name": "金像電群益5A購06",
+          "type": "call",
+          "value": 2263860,
+          "volume": 1463000
+        },
+        {
+          "code": "063793",
+          "name": "金像電統一63購02",
+          "type": "call",
+          "value": 1946400,
+          "volume": 1713000
+        }
+      ],
+      "reason": "認購 110 檔、認購金額 0.63 億，認購/認售比 40.39。"
+    },
+    {
+      "underlyingName": "華通",
+      "market": "上市",
+      "tradeDate": "20260515",
+      "callValue": 62500420,
+      "putValue": 3285960,
+      "totalValue": 65786380,
+      "callVolume": 42742000,
+      "putVolume": 2538000,
+      "callCount": 181,
+      "putCount": 18,
+      "breadth": 199,
+      "callPutRatio": 19.02,
+      "score": 80,
+      "topWarrants": [
+        {
+          "code": "030571",
+          "name": "華通統一58購02",
+          "type": "call",
+          "value": 13323300,
+          "volume": 1497000
+        },
+        {
+          "code": "065927",
+          "name": "華通元大61購08",
+          "type": "call",
+          "value": 2908410,
+          "volume": 4344000
+        },
+        {
+          "code": "057387",
+          "name": "華通群益5A購02",
+          "type": "call",
+          "value": 2858740,
+          "volume": 1513000
+        },
+        {
+          "code": "062125",
+          "name": "華通群益59購04",
+          "type": "call",
+          "value": 1864730,
+          "volume": 1648000
+        },
+        {
+          "code": "031555",
+          "name": "華通群益56購01",
+          "type": "call",
+          "value": 1635000,
+          "volume": 75000
+        }
+      ],
+      "reason": "認購 181 檔、認購金額 0.63 億，認購/認售比 19.02。"
+    },
+    {
+      "underlyingName": "大立光",
+      "market": "上市",
+      "tradeDate": "20260515",
+      "callValue": 62497430,
+      "putValue": 1110550,
+      "totalValue": 63607980,
+      "callVolume": 29493000,
+      "putVolume": 1638000,
+      "callCount": 171,
+      "putCount": 5,
+      "breadth": 176,
+      "callPutRatio": 56.28,
+      "score": 80,
+      "topWarrants": [
+        {
+          "code": "057404",
+          "name": "大立光群益59購01",
+          "type": "call",
+          "value": 3044050,
+          "volume": 578000
+        },
+        {
+          "code": "057226",
+          "name": "大立光永豐5A購01",
+          "type": "call",
+          "value": 2438050,
+          "volume": 241000
+        },
+        {
+          "code": "065598",
+          "name": "大立光台新65購01",
+          "type": "call",
+          "value": 2189720,
+          "volume": 460000
+        },
+        {
+          "code": "051252",
+          "name": "大立光統一6C購01",
+          "type": "call",
+          "value": 2167770,
+          "volume": 1884000
+        },
+        {
+          "code": "066045",
+          "name": "大立光兆豐65購01",
+          "type": "call",
+          "value": 1872020,
+          "volume": 875000
+        }
+      ],
+      "reason": "認購 171 檔、認購金額 0.62 億，認購/認售比 56.28。"
+    },
+    {
+      "underlyingName": "臻鼎-KY",
+      "market": "上市",
+      "tradeDate": "20260515",
+      "callValue": 61977380,
+      "putValue": 455850,
+      "totalValue": 62433230,
+      "callVolume": 28026000,
+      "putVolume": 2616000,
+      "callCount": 95,
+      "putCount": 3,
+      "breadth": 98,
+      "callPutRatio": 135.96,
+      "score": 80,
+      "topWarrants": [
+        {
+          "code": "033210",
+          "name": "臻鼎富邦55購02",
+          "type": "call",
+          "value": 5839100,
+          "volume": 868000
+        },
+        {
+          "code": "065213",
+          "name": "臻鼎元大5A購16",
+          "type": "call",
+          "value": 4329680,
+          "volume": 3599000
+        },
+        {
+          "code": "064895",
+          "name": "臻鼎群益5A購05",
+          "type": "call",
+          "value": 3284160,
+          "volume": 1079000
+        },
+        {
+          "code": "064937",
+          "name": "臻鼎凱基5A購07",
+          "type": "call",
+          "value": 3171580,
+          "volume": 964000
+        },
+        {
+          "code": "063493",
+          "name": "臻鼎中信64購03",
+          "type": "call",
+          "value": 2662980,
+          "volume": 1832000
+        }
+      ],
+      "reason": "認購 95 檔、認購金額 0.62 億，認購/認售比 99+。"
+    },
+    {
+      "underlyingName": "聖暉*",
+      "market": "上櫃",
+      "tradeDate": "20260515",
+      "callValue": 61524660,
+      "putValue": 42150,
+      "totalValue": 61566810,
+      "callVolume": 37266000,
+      "putVolume": 43000,
+      "callCount": 92,
+      "putCount": 1,
+      "breadth": 93,
+      "callPutRatio": 1459.66,
+      "score": 80,
+      "topWarrants": [
+        {
+          "code": "706872",
+          "name": "聖暉*群益5C購01",
+          "type": "call",
+          "value": 4987490,
+          "volume": 2125000
+        },
+        {
+          "code": "707650",
+          "name": "聖暉*兆豐5C購01",
+          "type": "call",
+          "value": 2785040,
+          "volume": 1639000
+        },
+        {
+          "code": "707472",
+          "name": "聖暉*統一63購01",
+          "type": "call",
+          "value": 2781710,
+          "volume": 2008000
+        },
+        {
+          "code": "707945",
+          "name": "聖暉*群益5B購01",
+          "type": "call",
+          "value": 2730310,
+          "volume": 1302000
+        },
+        {
+          "code": "703813",
+          "name": "聖暉*元大5A購04",
+          "type": "call",
+          "value": 2097310,
+          "volume": 1348000
+        }
+      ],
+      "reason": "認購 92 檔、認購金額 0.62 億，認購/認售比 99+。"
+    },
+    {
+      "underlyingName": "聯發科",
+      "market": "上市",
+      "tradeDate": "20260515",
+      "callValue": 59159210,
+      "putValue": 1803110,
+      "totalValue": 60962320,
+      "callVolume": 22563000,
+      "putVolume": 3902000,
+      "callCount": 152,
+      "putCount": 28,
+      "breadth": 180,
+      "callPutRatio": 32.81,
+      "score": 80,
+      "topWarrants": [
+        {
+          "code": "066100",
+          "name": "聯發科凱基5B購06",
+          "type": "call",
+          "value": 6136670,
+          "volume": 1749000
+        },
+        {
+          "code": "066178",
+          "name": "聯發科元大5B購13",
+          "type": "call",
+          "value": 3310330,
+          "volume": 2269000
+        },
+        {
+          "code": "066104",
+          "name": "聯發科凱基65購01",
+          "type": "call",
+          "value": 2821990,
+          "volume": 1424000
+        },
+        {
+          "code": "065511",
+          "name": "聯發科元大5B購04",
+          "type": "call",
+          "value": 2623340,
+          "volume": 613000
+        },
+        {
+          "code": "066044",
+          "name": "聯發科兆豐65購02",
+          "type": "call",
+          "value": 2182770,
+          "volume": 767000
+        }
+      ],
+      "reason": "認購 152 檔、認購金額 0.59 億，認購/認售比 32.81。"
+    },
+    {
+      "underlyingName": "漢唐",
+      "market": "上市",
+      "tradeDate": "20260515",
+      "callValue": 58824170,
+      "putValue": 182630,
+      "totalValue": 59006800,
+      "callVolume": 77587000,
+      "putVolume": 313000,
+      "callCount": 166,
+      "putCount": 5,
+      "breadth": 171,
+      "callPutRatio": 322.09,
+      "score": 80,
+      "topWarrants": [
+        {
+          "code": "047700",
+          "name": "漢唐元大5C購01",
+          "type": "call",
+          "value": 3407560,
+          "volume": 2097000
+        },
+        {
+          "code": "052383",
+          "name": "漢唐元大61購02",
+          "type": "call",
+          "value": 3155070,
+          "volume": 5653000
+        },
+        {
+          "code": "055402",
+          "name": "漢唐富邦5A購03",
+          "type": "call",
+          "value": 3066180,
+          "volume": 4117000
+        },
+        {
+          "code": "052022",
+          "name": "漢唐元大61購01",
+          "type": "call",
+          "value": 2422280,
+          "volume": 3229000
+        },
+        {
+          "code": "051591",
+          "name": "漢唐元大5A購02",
+          "type": "call",
+          "value": 1914150,
+          "volume": 5459000
+        }
+      ],
+      "reason": "認購 166 檔、認購金額 0.59 億，認購/認售比 99+。"
+    },
+    {
+      "underlyingName": "台虹",
+      "market": "上市",
+      "tradeDate": "20260515",
+      "callValue": 57430430,
+      "putValue": 23830,
+      "totalValue": 57454260,
+      "callVolume": 43658000,
+      "putVolume": 29000,
+      "callCount": 93,
+      "putCount": 2,
+      "breadth": 95,
+      "callPutRatio": 2410.01,
+      "score": 80,
+      "topWarrants": [
+        {
+          "code": "063888",
+          "name": "台虹群益5B購03",
+          "type": "call",
+          "value": 5509680,
+          "volume": 3321000
+        },
+        {
+          "code": "059649",
+          "name": "台虹統一63購02",
+          "type": "call",
+          "value": 4421410,
+          "volume": 3870000
+        },
+        {
+          "code": "060166",
+          "name": "台虹元大59購13",
+          "type": "call",
+          "value": 3064140,
+          "volume": 3337000
+        },
+        {
+          "code": "064490",
+          "name": "台虹元大63購01",
+          "type": "call",
+          "value": 2935500,
+          "volume": 3992000
+        },
+        {
+          "code": "063532",
+          "name": "台虹富邦61購01",
+          "type": "call",
+          "value": 2795800,
+          "volume": 3372000
+        }
+      ],
+      "reason": "認購 93 檔、認購金額 0.57 億，認購/認售比 99+。"
+    },
+    {
+      "underlyingName": "玉晶光",
+      "market": "上市",
+      "tradeDate": "20260515",
+      "callValue": 53924920,
+      "putValue": 43620,
+      "totalValue": 53968540,
+      "callVolume": 34609000,
+      "putVolume": 92000,
+      "callCount": 51,
+      "putCount": 4,
+      "breadth": 55,
+      "callPutRatio": 1236.24,
+      "score": 79,
+      "topWarrants": [
+        {
+          "code": "064695",
+          "name": "玉晶光台新5A購02",
+          "type": "call",
+          "value": 5549160,
+          "volume": 1904000
+        },
+        {
+          "code": "057175",
+          "name": "玉晶光統一62購01",
+          "type": "call",
+          "value": 5136930,
+          "volume": 4728000
+        },
+        {
+          "code": "064365",
+          "name": "玉晶光國票5B購01",
+          "type": "call",
+          "value": 3846450,
+          "volume": 1472000
+        },
+        {
+          "code": "064773",
+          "name": "玉晶光富邦5C購01",
+          "type": "call",
+          "value": 3674090,
+          "volume": 2542000
+        },
+        {
+          "code": "048345",
+          "name": "玉晶光元大56購04",
+          "type": "call",
+          "value": 2763490,
+          "volume": 731000
+        }
+      ],
+      "reason": "認購 51 檔、認購金額 0.54 億，認購/認售比 99+。"
+    },
+    {
+      "underlyingName": "新應材",
+      "market": "上櫃",
+      "tradeDate": "20260515",
+      "callValue": 53576640,
+      "putValue": 413060,
+      "totalValue": 53989700,
+      "callVolume": 36135000,
+      "putVolume": 404000,
+      "callCount": 96,
+      "putCount": 4,
+      "breadth": 100,
+      "callPutRatio": 129.71,
+      "score": 79,
+      "topWarrants": [
+        {
+          "code": "707558",
+          "name": "新應材台新5A購01",
+          "type": "call",
+          "value": 5770860,
+          "volume": 1566000
+        },
+        {
+          "code": "705920",
+          "name": "新應材元富59購02",
+          "type": "call",
+          "value": 4900320,
+          "volume": 1641000
+        },
+        {
+          "code": "705248",
+          "name": "新應材元富58購03",
+          "type": "call",
+          "value": 4828860,
+          "volume": 1042000
+        },
+        {
+          "code": "705969",
+          "name": "新應材元大61購03",
+          "type": "call",
+          "value": 3245240,
+          "volume": 3966000
+        },
+        {
+          "code": "702776",
+          "name": "新應材永豐5C購01",
+          "type": "call",
+          "value": 2717330,
+          "volume": 1187000
+        }
+      ],
+      "reason": "認購 96 檔、認購金額 0.54 億，認購/認售比 99+。"
+    },
+    {
+      "underlyingName": "上銀",
+      "market": "上市",
+      "tradeDate": "20260515",
+      "callValue": 45681780,
+      "putValue": 46790,
+      "totalValue": 45728570,
+      "callVolume": 17025000,
+      "putVolume": 536000,
+      "callCount": 81,
+      "putCount": 3,
+      "breadth": 84,
+      "callPutRatio": 976.32,
+      "score": 79,
+      "topWarrants": [
+        {
+          "code": "081835",
+          "name": "上銀兆豐55購01",
+          "type": "call",
+          "value": 2820300,
+          "volume": 814000
+        },
+        {
+          "code": "055656",
+          "name": "上銀統一5C購01",
+          "type": "call",
+          "value": 2600600,
+          "volume": 1400000
+        },
+        {
+          "code": "055133",
+          "name": "上銀元大58購02",
+          "type": "call",
+          "value": 2152320,
+          "volume": 853000
+        },
+        {
+          "code": "065002",
+          "name": "上銀富邦5A購01",
+          "type": "call",
+          "value": 2121310,
+          "volume": 1258000
+        },
+        {
+          "code": "055134",
+          "name": "上銀元大61購03",
+          "type": "call",
+          "value": 2101580,
+          "volume": 1114000
+        }
+      ],
+      "reason": "認購 81 檔、認購金額 0.46 億，認購/認售比 99+。"
+    },
+    {
+      "underlyingName": "世界",
+      "market": "上櫃",
+      "tradeDate": "20260515",
+      "callValue": 45515020,
+      "putValue": 629900,
+      "totalValue": 46144920,
+      "callVolume": 25391000,
+      "putVolume": 771000,
+      "callCount": 97,
+      "putCount": 8,
+      "breadth": 105,
+      "callPutRatio": 72.26,
+      "score": 79,
+      "topWarrants": [
+        {
+          "code": "708110",
+          "name": "世界台新5B購01",
+          "type": "call",
+          "value": 3325580,
+          "volume": 1188000
+        },
+        {
+          "code": "705492",
+          "name": "世界永豐5B購02",
+          "type": "call",
+          "value": 2058100,
+          "volume": 203000
+        },
+        {
+          "code": "707889",
+          "name": "世界群益5A購02",
+          "type": "call",
+          "value": 1981300,
+          "volume": 528000
+        },
+        {
+          "code": "707908",
+          "name": "世界元大5A購03",
+          "type": "call",
+          "value": 1870300,
+          "volume": 949000
+        },
+        {
+          "code": "708246",
+          "name": "世界群益5B購06",
+          "type": "call",
+          "value": 1732180,
+          "volume": 418000
+        }
+      ],
+      "reason": "認購 97 檔、認購金額 0.46 億，認購/認售比 72.26。"
+    },
+    {
+      "underlyingName": "啟碁",
+      "market": "上市",
+      "tradeDate": "20260515",
+      "callValue": 44360660,
+      "putValue": 623640,
+      "totalValue": 44984300,
+      "callVolume": 20830000,
+      "putVolume": 589000,
+      "callCount": 105,
+      "putCount": 9,
+      "breadth": 114,
+      "callPutRatio": 71.13,
+      "score": 78,
+      "topWarrants": [
+        {
+          "code": "054609",
+          "name": "啟碁群益61購01",
+          "type": "call",
+          "value": 5349900,
+          "volume": 1000000
+        },
+        {
+          "code": "083066",
+          "name": "啟碁元富56購01",
+          "type": "call",
+          "value": 4552800,
+          "volume": 425000
+        },
+        {
+          "code": "054821",
+          "name": "啟碁群益61購03",
+          "type": "call",
+          "value": 4193460,
+          "volume": 1072000
+        },
+        {
+          "code": "063389",
+          "name": "啟碁國泰61購01",
+          "type": "call",
+          "value": 2689110,
+          "volume": 904000
+        },
+        {
+          "code": "041920",
+          "name": "啟碁凱基56購01",
+          "type": "call",
+          "value": 2401600,
+          "volume": 225000
+        }
+      ],
+      "reason": "認購 105 檔、認購金額 0.44 億，認購/認售比 71.13。"
+    },
+    {
+      "underlyingName": "貿聯-KY",
+      "market": "上市",
+      "tradeDate": "20260515",
+      "callValue": 43892160,
+      "putValue": 5046630,
+      "totalValue": 48938790,
+      "callVolume": 42417000,
+      "putVolume": 8185000,
+      "callCount": 157,
+      "putCount": 6,
+      "breadth": 163,
+      "callPutRatio": 8.7,
+      "score": 78,
+      "topWarrants": [
+        {
+          "code": "08764U",
+          "name": "貿聯凱基59售06",
+          "type": "put",
+          "value": 2298100,
+          "volume": 5127000
+        },
+        {
+          "code": "03191T",
+          "name": "貿聯元大5B售08",
+          "type": "put",
+          "value": 2051940,
+          "volume": 1406000
+        },
+        {
+          "code": "044354",
+          "name": "貿聯元大58購05",
+          "type": "call",
+          "value": 1915470,
+          "volume": 1327000
+        },
+        {
+          "code": "062672",
+          "name": "貿聯統一63購02",
+          "type": "call",
+          "value": 1819860,
+          "volume": 1884000
+        },
+        {
+          "code": "062742",
+          "name": "貿聯凱基61購01",
+          "type": "call",
+          "value": 1793950,
+          "volume": 858000
+        }
+      ],
+      "reason": "認購 157 檔、認購金額 0.44 億，認購/認售比 8.70。"
+    },
+    {
+      "underlyingName": "定穎投控",
+      "market": "上市",
+      "tradeDate": "20260515",
+      "callValue": 39105870,
+      "putValue": 264720,
+      "totalValue": 39370590,
+      "callVolume": 38528000,
+      "putVolume": 476000,
+      "callCount": 164,
+      "putCount": 5,
+      "breadth": 169,
+      "callPutRatio": 147.73,
+      "score": 78,
+      "topWarrants": [
+        {
+          "code": "062138",
+          "name": "定穎控群益5B購04",
+          "type": "call",
+          "value": 1814570,
+          "volume": 2061000
+        },
+        {
+          "code": "053656",
+          "name": "定穎控統一65購02",
+          "type": "call",
+          "value": 1619610,
+          "volume": 1712000
+        },
+        {
+          "code": "057233",
+          "name": "定穎控永豐5A購03",
+          "type": "call",
+          "value": 1529100,
+          "volume": 69000
+        },
+        {
+          "code": "056140",
+          "name": "定穎控元大61購03",
+          "type": "call",
+          "value": 1231330,
+          "volume": 1745000
+        },
+        {
+          "code": "058930",
+          "name": "定穎控元大61購06",
+          "type": "call",
+          "value": 1207810,
+          "volume": 1295000
+        }
+      ],
+      "reason": "認購 164 檔、認購金額 0.39 億，認購/認售比 99+。"
+    },
+    {
+      "underlyingName": "矽格",
+      "market": "上市",
+      "tradeDate": "20260515",
+      "callValue": 37948920,
+      "putValue": 158580,
+      "totalValue": 38107500,
+      "callVolume": 19026000,
+      "putVolume": 316000,
+      "callCount": 67,
+      "putCount": 1,
+      "breadth": 68,
+      "callPutRatio": 239.3,
+      "score": 78,
+      "topWarrants": [
+        {
+          "code": "059908",
+          "name": "矽格元大59購02",
+          "type": "call",
+          "value": 4808870,
+          "volume": 1720000
+        },
+        {
+          "code": "061993",
+          "name": "矽格元富63購01",
+          "type": "call",
+          "value": 3485410,
+          "volume": 662000
+        },
+        {
+          "code": "054587",
+          "name": "矽格永豐5A購01",
+          "type": "call",
+          "value": 2216350,
+          "volume": 766000
+        },
+        {
+          "code": "043224",
+          "name": "矽格國票61購01",
+          "type": "call",
+          "value": 1896920,
+          "volume": 534000
+        },
+        {
+          "code": "065010",
+          "name": "矽格富邦5B購02",
+          "type": "call",
+          "value": 1852670,
+          "volume": 2028000
+        }
+      ],
+      "reason": "認購 67 檔、認購金額 0.38 億，認購/認售比 99+。"
+    },
+    {
+      "underlyingName": "祥碩",
+      "market": "上市",
+      "tradeDate": "20260515",
+      "callValue": 37598300,
+      "putValue": 0,
+      "totalValue": 37598300,
+      "callVolume": 35303000,
+      "putVolume": 0,
+      "callCount": 106,
+      "putCount": 0,
+      "breadth": 106,
+      "callPutRatio": 99,
+      "score": 78,
+      "topWarrants": [
+        {
+          "code": "064997",
+          "name": "祥碩群益5B購01",
+          "type": "call",
+          "value": 2162190,
+          "volume": 1291000
+        },
+        {
+          "code": "052446",
+          "name": "祥碩凱基5A購03",
+          "type": "call",
+          "value": 1915360,
+          "volume": 1125000
+        },
+        {
+          "code": "057739",
+          "name": "祥碩兆豐63購01",
+          "type": "call",
+          "value": 1662000,
+          "volume": 893000
+        },
+        {
+          "code": "058711",
+          "name": "祥碩群益59購03",
+          "type": "call",
+          "value": 1574610,
+          "volume": 330000
+        },
+        {
+          "code": "046614",
+          "name": "祥碩凱基5A購01",
+          "type": "call",
+          "value": 1429780,
+          "volume": 886000
+        }
+      ],
+      "reason": "認購 106 檔、認購金額 0.38 億，認購/認售比 99+。"
+    },
+    {
+      "underlyingName": "強茂",
+      "market": "上市",
+      "tradeDate": "20260515",
+      "callValue": 37368700,
+      "putValue": 35700,
+      "totalValue": 37404400,
+      "callVolume": 26582000,
+      "putVolume": 240000,
+      "callCount": 105,
+      "putCount": 1,
+      "breadth": 106,
+      "callPutRatio": 1046.74,
+      "score": 78,
+      "topWarrants": [
+        {
+          "code": "054334",
+          "name": "強茂永豐57購03",
+          "type": "call",
+          "value": 2432140,
+          "volume": 3021000
+        },
+        {
+          "code": "063089",
+          "name": "強茂國票5A購01",
+          "type": "call",
+          "value": 2357390,
+          "volume": 1679000
+        },
+        {
+          "code": "053492",
+          "name": "強茂凱基58購04",
+          "type": "call",
+          "value": 2168560,
+          "volume": 464000
+        },
+        {
+          "code": "058481",
+          "name": "強茂國票59購02",
+          "type": "call",
+          "value": 1554970,
+          "volume": 621000
+        },
+        {
+          "code": "057514",
+          "name": "強茂統一63購01",
+          "type": "call",
+          "value": 1547040,
+          "volume": 1343000
+        }
+      ],
+      "reason": "認購 105 檔、認購金額 0.37 億，認購/認售比 99+。"
+    },
+    {
+      "underlyingName": "昇貿",
+      "market": "上市",
+      "tradeDate": "20260515",
+      "callValue": 37112160,
+      "putValue": 7800,
+      "totalValue": 37119960,
+      "callVolume": 38752000,
+      "putVolume": 65000,
+      "callCount": 67,
+      "putCount": 1,
+      "breadth": 68,
+      "callPutRatio": 4757.97,
+      "score": 78,
+      "topWarrants": [
+        {
+          "code": "057035",
+          "name": "昇貿富邦5A購03",
+          "type": "call",
+          "value": 4440560,
+          "volume": 4467000
+        },
+        {
+          "code": "055943",
+          "name": "昇貿元富5A購01",
+          "type": "call",
+          "value": 4290270,
+          "volume": 1496000
+        },
+        {
+          "code": "065942",
+          "name": "昇貿元大5B購02",
+          "type": "call",
+          "value": 3342080,
+          "volume": 2859000
+        },
+        {
+          "code": "050518",
+          "name": "昇貿永豐58購01",
+          "type": "call",
+          "value": 1551350,
+          "volume": 423000
+        },
+        {
+          "code": "058987",
+          "name": "昇貿群益59購02",
+          "type": "call",
+          "value": 1537760,
+          "volume": 904000
+        }
+      ],
+      "reason": "認購 67 檔、認購金額 0.37 億，認購/認售比 99+。"
+    },
+    {
+      "underlyingName": "京元電子",
+      "market": "上市",
+      "tradeDate": "20260515",
+      "callValue": 36447410,
+      "putValue": 1321160,
+      "totalValue": 37768570,
+      "callVolume": 27995000,
+      "putVolume": 760000,
+      "callCount": 145,
+      "putCount": 6,
+      "breadth": 151,
+      "callPutRatio": 27.59,
+      "score": 78,
+      "topWarrants": [
+        {
+          "code": "044185",
+          "name": "京元電中信5B購02",
+          "type": "call",
+          "value": 3518660,
+          "volume": 1793000
+        },
+        {
+          "code": "065078",
+          "name": "京元電兆豐64購02",
+          "type": "call",
+          "value": 2909820,
+          "volume": 2016000
+        },
+        {
+          "code": "051962",
+          "name": "京元電永豐59購01",
+          "type": "call",
+          "value": 1570620,
+          "volume": 762000
+        },
+        {
+          "code": "064082",
+          "name": "京元電富邦5C購03",
+          "type": "call",
+          "value": 1444830,
+          "volume": 1822000
+        },
+        {
+          "code": "046709",
+          "name": "京元電國票58購01",
+          "type": "call",
+          "value": 1401350,
+          "volume": 380000
+        }
+      ],
+      "reason": "認購 145 檔、認購金額 0.36 億，認購/認售比 27.59。"
+    },
+    {
+      "underlyingName": "亞翔",
+      "market": "上市",
+      "tradeDate": "20260515",
+      "callValue": 36135340,
+      "putValue": 60300,
+      "totalValue": 36195640,
+      "callVolume": 24738000,
+      "putVolume": 329000,
+      "callCount": 135,
+      "putCount": 3,
+      "breadth": 138,
+      "callPutRatio": 599.26,
+      "score": 78,
+      "topWarrants": [
+        {
+          "code": "051688",
+          "name": "亞翔元大5A購02",
+          "type": "call",
+          "value": 2259120,
+          "volume": 2221000
+        },
+        {
+          "code": "057206",
+          "name": "亞翔富邦5A購02",
+          "type": "call",
+          "value": 1333940,
+          "volume": 669000
+        },
+        {
+          "code": "061579",
+          "name": "亞翔兆豐5B購01",
+          "type": "call",
+          "value": 1156520,
+          "volume": 918000
+        },
+        {
+          "code": "052548",
+          "name": "亞翔元大57購05",
+          "type": "call",
+          "value": 1057940,
+          "volume": 682000
+        },
+        {
+          "code": "063778",
+          "name": "亞翔元大5A購07",
+          "type": "call",
+          "value": 1028610,
+          "volume": 481000
+        }
+      ],
+      "reason": "認購 135 檔、認購金額 0.36 億，認購/認售比 99+。"
+    },
+    {
+      "underlyingName": "牧德",
+      "market": "上市",
+      "tradeDate": "20260515",
+      "callValue": 35519660,
+      "putValue": 230730,
+      "totalValue": 35750390,
+      "callVolume": 27430000,
+      "putVolume": 454000,
+      "callCount": 88,
+      "putCount": 4,
+      "breadth": 92,
+      "callPutRatio": 153.94,
+      "score": 78,
+      "topWarrants": [
+        {
+          "code": "061055",
+          "name": "牧德元大59購12",
+          "type": "call",
+          "value": 2397190,
+          "volume": 1614000
+        },
+        {
+          "code": "064631",
+          "name": "牧德元大61購02",
+          "type": "call",
+          "value": 2077850,
+          "volume": 4105000
+        },
+        {
+          "code": "061962",
+          "name": "牧德富邦62購01",
+          "type": "call",
+          "value": 2070040,
+          "volume": 2523000
+        },
+        {
+          "code": "036022",
+          "name": "牧德元大59購01",
+          "type": "call",
+          "value": 2017350,
+          "volume": 1679000
+        },
+        {
+          "code": "062414",
+          "name": "牧德凱基5C購01",
+          "type": "call",
+          "value": 1548860,
+          "volume": 769000
+        }
+      ],
+      "reason": "認購 88 檔、認購金額 0.36 億，認購/認售比 99+。"
+    },
+    {
+      "underlyingName": "南亞",
+      "market": "上市",
+      "tradeDate": "20260515",
+      "callValue": 35314210,
+      "putValue": 60310,
+      "totalValue": 35374520,
+      "callVolume": 29439000,
+      "putVolume": 100000,
+      "callCount": 157,
+      "putCount": 5,
+      "breadth": 162,
+      "callPutRatio": 585.54,
+      "score": 78,
+      "topWarrants": [
+        {
+          "code": "054267",
+          "name": "南亞元富5A購01",
+          "type": "call",
+          "value": 2685250,
+          "volume": 1636000
+        },
+        {
+          "code": "053432",
+          "name": "南亞富邦59購03",
+          "type": "call",
+          "value": 1765820,
+          "volume": 1570000
+        },
+        {
+          "code": "061577",
+          "name": "南亞兆豐63購02",
+          "type": "call",
+          "value": 1671940,
+          "volume": 1030000
+        },
+        {
+          "code": "057086",
+          "name": "南亞元富58購01",
+          "type": "call",
+          "value": 1310400,
+          "volume": 405000
+        },
+        {
+          "code": "046805",
+          "name": "南亞兆豐5C購01",
+          "type": "call",
+          "value": 1145050,
+          "volume": 422000
+        }
+      ],
+      "reason": "認購 157 檔、認購金額 0.35 億，認購/認售比 99+。"
+    },
+    {
+      "underlyingName": "景碩",
+      "market": "上市",
+      "tradeDate": "20260515",
+      "callValue": 34760170,
+      "putValue": 2109110,
+      "totalValue": 36869280,
+      "callVolume": 12897000,
+      "putVolume": 7013000,
+      "callCount": 47,
+      "putCount": 6,
+      "breadth": 53,
+      "callPutRatio": 16.48,
+      "score": 77,
+      "topWarrants": [
+        {
+          "code": "060308",
+          "name": "景碩國票61購02",
+          "type": "call",
+          "value": 7315910,
+          "volume": 1944000
+        },
+        {
+          "code": "060355",
+          "name": "景碩元大5C購03",
+          "type": "call",
+          "value": 4203000,
+          "volume": 2685000
+        },
+        {
+          "code": "060354",
+          "name": "景碩元大59購12",
+          "type": "call",
+          "value": 3856890,
+          "volume": 2154000
+        },
+        {
+          "code": "060189",
+          "name": "景碩永豐5C購02",
+          "type": "call",
+          "value": 2202320,
+          "volume": 405000
+        },
+        {
+          "code": "059225",
+          "name": "景碩統一73購02",
+          "type": "call",
+          "value": 1848960,
+          "volume": 1325000
+        }
+      ],
+      "reason": "認購 47 檔、認購金額 0.35 億，認購/認售比 16.48。"
+    },
+    {
+      "underlyingName": "精測",
+      "market": "上櫃",
+      "tradeDate": "20260515",
+      "callValue": 34638030,
+      "putValue": 225670,
+      "totalValue": 34863700,
+      "callVolume": 34481000,
+      "putVolume": 215000,
+      "callCount": 63,
+      "putCount": 6,
+      "breadth": 69,
+      "callPutRatio": 153.49,
+      "score": 77,
+      "topWarrants": [
+        {
+          "code": "706593",
+          "name": "精測元大59購03",
+          "type": "call",
+          "value": 2696600,
+          "volume": 2076000
+        },
+        {
+          "code": "705090",
+          "name": "精測富邦5A購01",
+          "type": "call",
+          "value": 2641500,
+          "volume": 5210000
+        },
+        {
+          "code": "704397",
+          "name": "精測元大57購03",
+          "type": "call",
+          "value": 2365000,
+          "volume": 1553000
+        },
+        {
+          "code": "706197",
+          "name": "精測元大59購02",
+          "type": "call",
+          "value": 2341790,
+          "volume": 2012000
+        },
+        {
+          "code": "706198",
+          "name": "精測元大5C購02",
+          "type": "call",
+          "value": 1837970,
+          "volume": 3399000
+        }
+      ],
+      "reason": "認購 63 檔、認購金額 0.35 億，認購/認售比 99+。"
+    },
+    {
+      "underlyingName": "超豐",
+      "market": "上市",
+      "tradeDate": "20260515",
+      "callValue": 34330170,
+      "putValue": 0,
+      "totalValue": 34330170,
+      "callVolume": 39627000,
+      "putVolume": 0,
+      "callCount": 54,
+      "putCount": 0,
+      "breadth": 54,
+      "callPutRatio": 99,
+      "score": 77,
+      "topWarrants": [
+        {
+          "code": "055823",
+          "name": "超豐統一62購02",
+          "type": "call",
+          "value": 2544070,
+          "volume": 3592000
+        },
+        {
+          "code": "059758",
+          "name": "超豐群益59購02",
+          "type": "call",
+          "value": 2248180,
+          "volume": 1530000
+        },
+        {
+          "code": "066140",
+          "name": "超豐永豐61購01",
+          "type": "call",
+          "value": 2163250,
+          "volume": 1497000
+        },
+        {
+          "code": "051353",
+          "name": "超豐國泰58購02",
+          "type": "call",
+          "value": 1842380,
+          "volume": 1566000
+        },
+        {
+          "code": "055668",
+          "name": "超豐統一62購01",
+          "type": "call",
+          "value": 1707910,
+          "volume": 2440000
+        }
+      ],
+      "reason": "認購 54 檔、認購金額 0.34 億，認購/認售比 99+。"
+    },
+    {
+      "underlyingName": "愛普*",
+      "market": "上市",
+      "tradeDate": "20260515",
+      "callValue": 32646330,
+      "putValue": 96560,
+      "totalValue": 32742890,
+      "callVolume": 5439000,
+      "putVolume": 1251000,
+      "callCount": 49,
+      "putCount": 2,
+      "breadth": 51,
+      "callPutRatio": 338.09,
+      "score": 77,
+      "topWarrants": [
+        {
+          "code": "039597",
+          "name": "愛普永豐56購01",
+          "type": "call",
+          "value": 6669000,
+          "volume": 39000
+        },
+        {
+          "code": "037497",
+          "name": "愛普統一64購01",
+          "type": "call",
+          "value": 4053310,
+          "volume": 1649000
+        },
+        {
+          "code": "057826",
+          "name": "愛普凱基59購04",
+          "type": "call",
+          "value": 3167600,
+          "volume": 106000
+        },
+        {
+          "code": "031317",
+          "name": "愛普統一58購02",
+          "type": "call",
+          "value": 3140240,
+          "volume": 608000
+        },
+        {
+          "code": "044803",
+          "name": "愛普統一6B購01",
+          "type": "call",
+          "value": 2526520,
+          "volume": 946000
+        }
+      ],
+      "reason": "認購 49 檔、認購金額 0.33 億，認購/認售比 99+。"
+    },
+    {
+      "underlyingName": "台達電",
+      "market": "上市",
+      "tradeDate": "20260515",
+      "callValue": 32321380,
+      "putValue": 368790,
+      "totalValue": 32690170,
+      "callVolume": 14314000,
+      "putVolume": 995000,
+      "callCount": 101,
+      "putCount": 9,
+      "breadth": 110,
+      "callPutRatio": 87.64,
+      "score": 77,
+      "topWarrants": [
+        {
+          "code": "063404",
+          "name": "台達電元大5A購12",
+          "type": "call",
+          "value": 2497450,
+          "volume": 1778000
+        },
+        {
+          "code": "039800",
+          "name": "台達電永豐56購02",
+          "type": "call",
+          "value": 2480000,
+          "volume": 300000
+        },
+        {
+          "code": "063406",
+          "name": "台達電元大64購04",
+          "type": "call",
+          "value": 1997580,
+          "volume": 1824000
+        },
+        {
+          "code": "062038",
+          "name": "台達電永豐63購01",
+          "type": "call",
+          "value": 1950760,
+          "volume": 763000
+        },
+        {
+          "code": "061843",
+          "name": "台達電群益59購07",
+          "type": "call",
+          "value": 1793700,
+          "volume": 51000
+        }
+      ],
+      "reason": "認購 101 檔、認購金額 0.32 億，認購/認售比 87.64。"
+    },
+    {
+      "underlyingName": "友達",
+      "market": "上市",
+      "tradeDate": "20260515",
+      "callValue": 30665140,
+      "putValue": 212280,
+      "totalValue": 30877420,
+      "callVolume": 24243000,
+      "putVolume": 501000,
+      "callCount": 133,
+      "putCount": 6,
+      "breadth": 139,
+      "callPutRatio": 144.46,
+      "score": 77,
+      "topWarrants": [
+        {
+          "code": "063795",
+          "name": "友達統一63購01",
+          "type": "call",
+          "value": 1063910,
+          "volume": 1423000
+        },
+        {
+          "code": "051956",
+          "name": "友達永豐58購01",
+          "type": "call",
+          "value": 981680,
+          "volume": 486000
+        },
+        {
+          "code": "050833",
+          "name": "友達元大58購01",
+          "type": "call",
+          "value": 945150,
+          "volume": 196000
+        },
+        {
+          "code": "064468",
+          "name": "友達元大61購10",
+          "type": "call",
+          "value": 924560,
+          "volume": 1383000
+        },
+        {
+          "code": "038410",
+          "name": "友達永豐56購01",
+          "type": "call",
+          "value": 900450,
+          "volume": 507000
+        }
+      ],
+      "reason": "認購 133 檔、認購金額 0.31 億，認購/認售比 99+。"
+    },
+    {
+      "underlyingName": "雙鴻",
+      "market": "上櫃",
+      "tradeDate": "20260515",
+      "callValue": 30450170,
+      "putValue": 2249390,
+      "totalValue": 32699560,
+      "callVolume": 47751000,
+      "putVolume": 1503000,
+      "callCount": 160,
+      "putCount": 12,
+      "breadth": 172,
+      "callPutRatio": 13.54,
+      "score": 77,
+      "topWarrants": [
+        {
+          "code": "705599",
+          "name": "雙鴻元大61購07",
+          "type": "call",
+          "value": 1957080,
+          "volume": 4003000
+        },
+        {
+          "code": "700207",
+          "name": "雙鴻統一6A購01",
+          "type": "call",
+          "value": 1456670,
+          "volume": 2272000
+        },
+        {
+          "code": "705366",
+          "name": "雙鴻元大5C購02",
+          "type": "call",
+          "value": 1369520,
+          "volume": 1892000
+        },
+        {
+          "code": "703477",
+          "name": "雙鴻統一61購04",
+          "type": "call",
+          "value": 1025240,
+          "volume": 2829000
+        },
+        {
+          "code": "72737U",
+          "name": "雙鴻群益5A售04",
+          "type": "put",
+          "value": 1023250,
+          "volume": 367000
+        }
+      ],
+      "reason": "認購 160 檔、認購金額 0.30 億，認購/認售比 13.54。"
+    },
+    {
+      "underlyingName": "順達",
+      "market": "上櫃",
+      "tradeDate": "20260515",
+      "callValue": 30022180,
+      "putValue": 49150,
+      "totalValue": 30071330,
+      "callVolume": 21093000,
+      "putVolume": 215000,
+      "callCount": 106,
+      "putCount": 1,
+      "breadth": 107,
+      "callPutRatio": 610.83,
+      "score": 77,
+      "topWarrants": [
+        {
+          "code": "705826",
+          "name": "順達永豐61購01",
+          "type": "call",
+          "value": 5136240,
+          "volume": 1147000
+        },
+        {
+          "code": "703047",
+          "name": "順達永豐58購02",
+          "type": "call",
+          "value": 3028890,
+          "volume": 1415000
+        },
+        {
+          "code": "702363",
+          "name": "順達元大5A購01",
+          "type": "call",
+          "value": 1543770,
+          "volume": 504000
+        },
+        {
+          "code": "708350",
+          "name": "順達台新5B購02",
+          "type": "call",
+          "value": 1247010,
+          "volume": 634000
+        },
+        {
+          "code": "703980",
+          "name": "順達統一61購01",
+          "type": "call",
+          "value": 1208600,
+          "volume": 1563000
+        }
+      ],
+      "reason": "認購 106 檔、認購金額 0.30 億，認購/認售比 99+。"
+    },
+    {
+      "underlyingName": "佳能",
+      "market": "上市",
+      "tradeDate": "20260515",
+      "callValue": 29617060,
+      "putValue": 0,
+      "totalValue": 29617060,
+      "callVolume": 31534000,
+      "putVolume": 0,
+      "callCount": 73,
+      "putCount": 0,
+      "breadth": 73,
+      "callPutRatio": 99,
+      "score": 77,
+      "topWarrants": [
+        {
+          "code": "060009",
+          "name": "佳能富邦5B購01",
+          "type": "call",
+          "value": 2430350,
+          "volume": 2342000
+        },
+        {
+          "code": "058750",
+          "name": "佳能元富5C購01",
+          "type": "call",
+          "value": 2250340,
+          "volume": 1489000
+        },
+        {
+          "code": "059270",
+          "name": "佳能國票5A購01",
+          "type": "call",
+          "value": 2248530,
+          "volume": 688000
+        },
+        {
+          "code": "056937",
+          "name": "佳能元大58購12",
+          "type": "call",
+          "value": 2003050,
+          "volume": 1099000
+        },
+        {
+          "code": "058044",
+          "name": "佳能群益59購01",
+          "type": "call",
+          "value": 1986250,
+          "volume": 1563000
+        }
+      ],
+      "reason": "認購 73 檔、認購金額 0.30 億，認購/認售比 99+。"
+    },
+    {
+      "underlyingName": "智邦",
+      "market": "上市",
+      "tradeDate": "20260515",
+      "callValue": 29575830,
+      "putValue": 3245970,
+      "totalValue": 32821800,
+      "callVolume": 12268000,
+      "putVolume": 2071000,
+      "callCount": 108,
+      "putCount": 13,
+      "breadth": 121,
+      "callPutRatio": 9.11,
+      "score": 77,
+      "topWarrants": [
+        {
+          "code": "064906",
+          "name": "智邦群益5A購09",
+          "type": "call",
+          "value": 4866670,
+          "volume": 2264000
+        },
+        {
+          "code": "046624",
+          "name": "智邦兆豐58購01",
+          "type": "call",
+          "value": 2337800,
+          "volume": 300000
+        },
+        {
+          "code": "03215T",
+          "name": "智邦台新5B售04",
+          "type": "put",
+          "value": 1731550,
+          "volume": 745000
+        },
+        {
+          "code": "064712",
+          "name": "智邦元大61購06",
+          "type": "call",
+          "value": 1632080,
+          "volume": 898000
+        },
+        {
+          "code": "03132T",
+          "name": "智邦台新5B售02",
+          "type": "put",
+          "value": 1243520,
+          "volume": 646000
+        }
+      ],
+      "reason": "認購 108 檔、認購金額 0.30 億，認購/認售比 9.11。"
+    },
+    {
+      "underlyingName": "凱美",
+      "market": "上市",
+      "tradeDate": "20260515",
+      "callValue": 28184440,
+      "putValue": 2300,
+      "totalValue": 28186740,
+      "callVolume": 19905000,
+      "putVolume": 22000,
+      "callCount": 22,
+      "putCount": 1,
+      "breadth": 23,
+      "callPutRatio": 12254.1,
+      "score": 77,
+      "topWarrants": [
+        {
+          "code": "062474",
+          "name": "凱美元大5A購01",
+          "type": "call",
+          "value": 9593760,
+          "volume": 4058000
+        },
+        {
+          "code": "060290",
+          "name": "凱美國票59購02",
+          "type": "call",
+          "value": 3898710,
+          "volume": 1583000
+        },
+        {
+          "code": "057118",
+          "name": "凱美元大58購02",
+          "type": "call",
+          "value": 2745940,
+          "volume": 1022000
+        },
+        {
+          "code": "064355",
+          "name": "凱美國票5A購01",
+          "type": "call",
+          "value": 2384800,
+          "volume": 1262000
+        },
+        {
+          "code": "050627",
+          "name": "凱美元大56購02",
+          "type": "call",
+          "value": 1610720,
+          "volume": 4084000
+        }
+      ],
+      "reason": "認購 22 檔、認購金額 0.28 億，認購/認售比 99+。"
+    },
+    {
+      "underlyingName": "均豪",
+      "market": "上櫃",
+      "tradeDate": "20260515",
+      "callValue": 28080810,
+      "putValue": 0,
+      "totalValue": 28080810,
+      "callVolume": 26765000,
+      "putVolume": 0,
+      "callCount": 59,
+      "putCount": 0,
+      "breadth": 59,
+      "callPutRatio": 99,
+      "score": 77,
+      "topWarrants": [
+        {
+          "code": "708313",
+          "name": "均豪群益5B購01",
+          "type": "call",
+          "value": 2925840,
+          "volume": 2170000
+        },
+        {
+          "code": "707897",
+          "name": "均豪富邦62購01",
+          "type": "call",
+          "value": 1625500,
+          "volume": 2344000
+        },
+        {
+          "code": "707409",
+          "name": "均豪統一63購02",
+          "type": "call",
+          "value": 1518890,
+          "volume": 1629000
+        },
+        {
+          "code": "708137",
+          "name": "均豪元大5B購01",
+          "type": "call",
+          "value": 1386980,
+          "volume": 1078000
+        },
+        {
+          "code": "706133",
+          "name": "均豪統一66購01",
+          "type": "call",
+          "value": 1272930,
+          "volume": 1159000
+        }
+      ],
+      "reason": "認購 59 檔、認購金額 0.28 億，認購/認售比 99+。"
+    },
+    {
+      "underlyingName": "創見",
+      "market": "上市",
+      "tradeDate": "20260515",
+      "callValue": 27744630,
+      "putValue": 203610,
+      "totalValue": 27948240,
+      "callVolume": 13770000,
+      "putVolume": 560000,
+      "callCount": 73,
+      "putCount": 5,
+      "breadth": 78,
+      "callPutRatio": 136.26,
+      "score": 77,
+      "topWarrants": [
+        {
+          "code": "059590",
+          "name": "創見國票5A購04",
+          "type": "call",
+          "value": 5886410,
+          "volume": 1624000
+        },
+        {
+          "code": "060404",
+          "name": "創見群益59購05",
+          "type": "call",
+          "value": 3505670,
+          "volume": 1397000
+        },
+        {
+          "code": "058229",
+          "name": "創見群益59購02",
+          "type": "call",
+          "value": 2011160,
+          "volume": 740000
+        },
+        {
+          "code": "060640",
+          "name": "創見元大59購07",
+          "type": "call",
+          "value": 1289710,
+          "volume": 891000
+        },
+        {
+          "code": "061039",
+          "name": "創見元大59購08",
+          "type": "call",
+          "value": 950650,
+          "volume": 618000
+        }
+      ],
+      "reason": "認購 73 檔、認購金額 0.28 億，認購/認售比 99+。"
+    },
+    {
+      "underlyingName": "旺宏",
+      "market": "上市",
+      "tradeDate": "20260515",
+      "callValue": 27460830,
+      "putValue": 18700,
+      "totalValue": 27479530,
+      "callVolume": 1384000,
+      "putVolume": 343000,
+      "callCount": 18,
+      "putCount": 9,
+      "breadth": 27,
+      "callPutRatio": 1468.49,
+      "score": 77,
+      "topWarrants": [
+        {
+          "code": "041636",
+          "name": "旺宏兆豐5A購01",
+          "type": "call",
+          "value": 13755000,
+          "volume": 399000
+        },
+        {
+          "code": "044407",
+          "name": "旺宏兆豐5B購01",
+          "type": "call",
+          "value": 9603400,
+          "volume": 470000
+        },
+        {
+          "code": "044171",
+          "name": "旺宏統一6B購02",
+          "type": "call",
+          "value": 1025590,
+          "volume": 218000
+        },
+        {
+          "code": "051857",
+          "name": "旺宏群益57購04",
+          "type": "call",
+          "value": 575800,
+          "volume": 34000
+        },
+        {
+          "code": "038824",
+          "name": "旺宏統一6A購01",
+          "type": "call",
+          "value": 399600,
+          "volume": 44000
+        }
+      ],
+      "reason": "認購 18 檔、認購金額 0.27 億，認購/認售比 99+。"
+    },
+    {
+      "underlyingName": "華城",
+      "market": "上市",
+      "tradeDate": "20260515",
+      "callValue": 27283490,
+      "putValue": 1395800,
+      "totalValue": 28679290,
+      "callVolume": 40891000,
+      "putVolume": 1369000,
+      "callCount": 102,
+      "putCount": 9,
+      "breadth": 111,
+      "callPutRatio": 19.55,
+      "score": 77,
+      "topWarrants": [
+        {
+          "code": "043355",
+          "name": "華城元大5B購01",
+          "type": "call",
+          "value": 4207830,
+          "volume": 6200000
+        },
+        {
+          "code": "063495",
+          "name": "華城永豐5C購01",
+          "type": "call",
+          "value": 3319570,
+          "volume": 3214000
+        },
+        {
+          "code": "064811",
+          "name": "華城凱基5A購06",
+          "type": "call",
+          "value": 2101380,
+          "volume": 1983000
+        },
+        {
+          "code": "057623",
+          "name": "華城元大59購01",
+          "type": "call",
+          "value": 1420060,
+          "volume": 2079000
+        },
+        {
+          "code": "059246",
+          "name": "華城凱基59購01",
+          "type": "call",
+          "value": 1351540,
+          "volume": 1270000
+        }
+      ],
+      "reason": "認購 102 檔、認購金額 0.27 億，認購/認售比 19.55。"
+    },
+    {
+      "underlyingName": "高技",
+      "market": "上櫃",
+      "tradeDate": "20260515",
+      "callValue": 26715320,
+      "putValue": 14400,
+      "totalValue": 26729720,
+      "callVolume": 15993000,
+      "putVolume": 110000,
+      "callCount": 38,
+      "putCount": 1,
+      "breadth": 39,
+      "callPutRatio": 1855.23,
+      "score": 77,
+      "topWarrants": [
+        {
+          "code": "702833",
+          "name": "高技元富5C購02",
+          "type": "call",
+          "value": 5995800,
+          "volume": 1124000
+        },
+        {
+          "code": "702441",
+          "name": "高技元富5C購01",
+          "type": "call",
+          "value": 2361830,
+          "volume": 1033000
+        },
+        {
+          "code": "702449",
+          "name": "高技富邦58購01",
+          "type": "call",
+          "value": 1652760,
+          "volume": 1673000
+        },
+        {
+          "code": "702445",
+          "name": "高技永豐59購01",
+          "type": "call",
+          "value": 1472950,
+          "volume": 415000
+        },
+        {
+          "code": "702725",
+          "name": "高技元大57購01",
+          "type": "call",
+          "value": 1388380,
+          "volume": 1139000
+        }
+      ],
+      "reason": "認購 38 檔、認購金額 0.27 億，認購/認售比 99+。"
+    },
+    {
+      "underlyingName": "日月光投控",
+      "market": "上市",
+      "tradeDate": "20260515",
+      "callValue": 26468020,
+      "putValue": 759430,
+      "totalValue": 27227450,
+      "callVolume": 9443000,
+      "putVolume": 835000,
+      "callCount": 87,
+      "putCount": 8,
+      "breadth": 95,
+      "callPutRatio": 34.85,
+      "score": 77,
+      "topWarrants": [
+        {
+          "code": "057721",
+          "name": "日月光元富59購01",
+          "type": "call",
+          "value": 2677300,
+          "volume": 443000
+        },
+        {
+          "code": "061615",
+          "name": "日月光元富59購04",
+          "type": "call",
+          "value": 2007900,
+          "volume": 110000
+        },
+        {
+          "code": "056825",
+          "name": "日月光國票5B購01",
+          "type": "call",
+          "value": 1175950,
+          "volume": 232000
+        },
+        {
+          "code": "063875",
+          "name": "日月光群益62購01",
+          "type": "call",
+          "value": 1049030,
+          "volume": 297000
+        },
+        {
+          "code": "064223",
+          "name": "日月光群益5C購01",
+          "type": "call",
+          "value": 1012320,
+          "volume": 295000
+        }
+      ],
+      "reason": "認購 87 檔、認購金額 0.26 億，認購/認售比 34.85。"
+    },
+    {
+      "underlyingName": "光寶科",
+      "market": "上市",
+      "tradeDate": "20260515",
+      "callValue": 26424040,
+      "putValue": 487410,
+      "totalValue": 26911450,
+      "callVolume": 16409000,
+      "putVolume": 293000,
+      "callCount": 129,
+      "putCount": 2,
+      "breadth": 131,
+      "callPutRatio": 54.21,
+      "score": 77,
+      "topWarrants": [
+        {
+          "code": "066887",
+          "name": "光寶科元大5B購02",
+          "type": "call",
+          "value": 2415790,
+          "volume": 1686000
+        },
+        {
+          "code": "067089",
+          "name": "光寶科元大5B購03",
+          "type": "call",
+          "value": 1343840,
+          "volume": 1298000
+        },
+        {
+          "code": "066736",
+          "name": "光寶科群益5B購03",
+          "type": "call",
+          "value": 1135470,
+          "volume": 606000
+        },
+        {
+          "code": "056584",
+          "name": "光寶科台新58購01",
+          "type": "call",
+          "value": 1128400,
+          "volume": 89000
+        },
+        {
+          "code": "066888",
+          "name": "光寶科元大61購07",
+          "type": "call",
+          "value": 1098060,
+          "volume": 805000
+        }
+      ],
+      "reason": "認購 129 檔、認購金額 0.26 億，認購/認售比 54.21。"
+    },
+    {
+      "underlyingName": "技嘉",
+      "market": "上市",
+      "tradeDate": "20260515",
+      "callValue": 26250490,
+      "putValue": 0,
+      "totalValue": 26250490,
+      "callVolume": 15574000,
+      "putVolume": 0,
+      "callCount": 64,
+      "putCount": 0,
+      "breadth": 64,
+      "callPutRatio": 99,
+      "score": 77,
+      "topWarrants": [
+        {
+          "code": "057644",
+          "name": "技嘉元大59購03",
+          "type": "call",
+          "value": 3766560,
+          "volume": 1148000
+        },
+        {
+          "code": "058165",
+          "name": "技嘉元大59購04",
+          "type": "call",
+          "value": 1475670,
+          "volume": 448000
+        },
+        {
+          "code": "064007",
+          "name": "技嘉統一64購01",
+          "type": "call",
+          "value": 1338030,
+          "volume": 1260000
+        },
+        {
+          "code": "061033",
+          "name": "技嘉元大63購02",
+          "type": "call",
+          "value": 1326390,
+          "volume": 404000
+        },
+        {
+          "code": "064079",
+          "name": "技嘉富邦5A購01",
+          "type": "call",
+          "value": 1315170,
+          "volume": 745000
+        }
+      ],
+      "reason": "認購 64 檔、認購金額 0.26 億，認購/認售比 99+。"
+    },
+    {
+      "underlyingName": "智原",
+      "market": "上市",
+      "tradeDate": "20260515",
+      "callValue": 26040770,
+      "putValue": 0,
+      "totalValue": 26040770,
+      "callVolume": 18435000,
+      "putVolume": 0,
+      "callCount": 65,
+      "putCount": 0,
+      "breadth": 65,
+      "callPutRatio": 99,
+      "score": 77,
+      "topWarrants": [
+        {
+          "code": "065984",
+          "name": "智原台新5B購01",
+          "type": "call",
+          "value": 3829110,
+          "volume": 967000
+        },
+        {
+          "code": "065524",
+          "name": "智原元大64購01",
+          "type": "call",
+          "value": 3685360,
+          "volume": 2777000
+        },
+        {
+          "code": "065435",
+          "name": "智原元大5A購02",
+          "type": "call",
+          "value": 1699220,
+          "volume": 1216000
+        },
+        {
+          "code": "065069",
+          "name": "智原永豐5C購01",
+          "type": "call",
+          "value": 1521390,
+          "volume": 967000
+        },
+        {
+          "code": "065337",
+          "name": "智原國泰5B購02",
+          "type": "call",
+          "value": 1348820,
+          "volume": 641000
+        }
+      ],
+      "reason": "認購 65 檔、認購金額 0.26 億，認購/認售比 99+。"
+    },
+    {
+      "underlyingName": "新盛力",
+      "market": "上櫃",
+      "tradeDate": "20260515",
+      "callValue": 26038890,
+      "putValue": 0,
+      "totalValue": 26038890,
+      "callVolume": 15626000,
+      "putVolume": 0,
+      "callCount": 39,
+      "putCount": 0,
+      "breadth": 39,
+      "callPutRatio": 99,
+      "score": 77,
+      "topWarrants": [
+        {
+          "code": "708044",
+          "name": "新盛力富邦61購02",
+          "type": "call",
+          "value": 3024220,
+          "volume": 3168000
+        },
+        {
+          "code": "707235",
+          "name": "新盛力凱基5A購01",
+          "type": "call",
+          "value": 2709790,
+          "volume": 926000
+        },
+        {
+          "code": "707247",
+          "name": "新盛力元大5A購01",
+          "type": "call",
+          "value": 2213290,
+          "volume": 994000
+        },
+        {
+          "code": "708042",
+          "name": "新盛力元大5A購04",
+          "type": "call",
+          "value": 2200200,
+          "volume": 1594000
+        },
+        {
+          "code": "707904",
+          "name": "新盛力群益5A購01",
+          "type": "call",
+          "value": 1960950,
+          "volume": 969000
+        }
+      ],
+      "reason": "認購 39 檔、認購金額 0.26 億，認購/認售比 99+。"
+    },
+    {
+      "underlyingName": "中砂",
+      "market": "上市",
+      "tradeDate": "20260515",
+      "callValue": 25229660,
+      "putValue": 386980,
+      "totalValue": 25616640,
+      "callVolume": 13553000,
+      "putVolume": 818000,
+      "callCount": 67,
+      "putCount": 4,
+      "breadth": 71,
+      "callPutRatio": 65.2,
+      "score": 77,
+      "topWarrants": [
+        {
+          "code": "064783",
+          "name": "中砂富邦61購02",
+          "type": "call",
+          "value": 1754950,
+          "volume": 1522000
+        },
+        {
+          "code": "064668",
+          "name": "中砂兆豐5C購02",
+          "type": "call",
+          "value": 1616000,
+          "volume": 981000
+        },
+        {
+          "code": "063149",
+          "name": "中砂兆豐5C購01",
+          "type": "call",
+          "value": 1232800,
+          "volume": 585000
+        },
+        {
+          "code": "057504",
+          "name": "中砂統一63購01",
+          "type": "call",
+          "value": 1152410,
+          "volume": 1046000
+        },
+        {
+          "code": "063609",
+          "name": "中砂元大5C購02",
+          "type": "call",
+          "value": 1151850,
+          "volume": 650000
+        }
+      ],
+      "reason": "認購 67 檔、認購金額 0.25 億，認購/認售比 65.20。"
+    },
+    {
+      "underlyingName": "國精化",
+      "market": "上市",
+      "tradeDate": "20260515",
+      "callValue": 24633430,
+      "putValue": 88100,
+      "totalValue": 24721530,
+      "callVolume": 10664000,
+      "putVolume": 120000,
+      "callCount": 46,
+      "putCount": 2,
+      "breadth": 48,
+      "callPutRatio": 279.61,
+      "score": 76,
+      "topWarrants": [
+        {
+          "code": "058006",
+          "name": "國精化元大59購01",
+          "type": "call",
+          "value": 3973980,
+          "volume": 2863000
+        },
+        {
+          "code": "064403",
+          "name": "國精化台新5A購01",
+          "type": "call",
+          "value": 2815350,
+          "volume": 511000
+        },
+        {
+          "code": "057823",
+          "name": "國精化凱基59購01",
+          "type": "call",
+          "value": 1836060,
+          "volume": 739000
+        },
+        {
+          "code": "057908",
+          "name": "國精化國票59購01",
+          "type": "call",
+          "value": 1831020,
+          "volume": 998000
+        },
+        {
+          "code": "057362",
+          "name": "國精化元大58購01",
+          "type": "call",
+          "value": 1774330,
+          "volume": 542000
+        }
+      ],
+      "reason": "認購 46 檔、認購金額 0.25 億，認購/認售比 99+。"
+    },
+    {
+      "underlyingName": "勤誠",
+      "market": "上市",
+      "tradeDate": "20260515",
+      "callValue": 24449610,
+      "putValue": 90910,
+      "totalValue": 24540520,
+      "callVolume": 15017000,
+      "putVolume": 727000,
+      "callCount": 94,
+      "putCount": 3,
+      "breadth": 97,
+      "callPutRatio": 268.94,
+      "score": 76,
+      "topWarrants": [
+        {
+          "code": "066506",
+          "name": "勤誠元大64購02",
+          "type": "call",
+          "value": 1250860,
+          "volume": 1188000
+        },
+        {
+          "code": "050191",
+          "name": "勤誠元大5C購01",
+          "type": "call",
+          "value": 925850,
+          "volume": 548000
+        },
+        {
+          "code": "060672",
+          "name": "勤誠元大59購11",
+          "type": "call",
+          "value": 911550,
+          "volume": 349000
+        },
+        {
+          "code": "057923",
+          "name": "勤誠國票5A購01",
+          "type": "call",
+          "value": 880200,
+          "volume": 180000
+        },
+        {
+          "code": "065450",
+          "name": "勤誠元大63購02",
+          "type": "call",
+          "value": 855670,
+          "volume": 556000
+        }
+      ],
+      "reason": "認購 94 檔、認購金額 0.24 億，認購/認售比 99+。"
+    },
+    {
+      "underlyingName": "宜鼎",
+      "market": "上櫃",
+      "tradeDate": "20260515",
+      "callValue": 23754410,
+      "putValue": 537200,
+      "totalValue": 24291610,
+      "callVolume": 7415000,
+      "putVolume": 1045000,
+      "callCount": 52,
+      "putCount": 1,
+      "breadth": 53,
+      "callPutRatio": 44.22,
+      "score": 76,
+      "topWarrants": [
+        {
+          "code": "704359",
+          "name": "宜鼎永豐59購02",
+          "type": "call",
+          "value": 3949450,
+          "volume": 471000
+        },
+        {
+          "code": "706108",
+          "name": "宜鼎元大59購09",
+          "type": "call",
+          "value": 3632780,
+          "volume": 1359000
+        },
+        {
+          "code": "706136",
+          "name": "宜鼎統一66購02",
+          "type": "call",
+          "value": 2131130,
+          "volume": 1243000
+        },
+        {
+          "code": "705719",
+          "name": "宜鼎元大61購02",
+          "type": "call",
+          "value": 1638230,
+          "volume": 518000
+        },
+        {
+          "code": "701698",
+          "name": "宜鼎統一6B購01",
+          "type": "call",
+          "value": 1325070,
+          "volume": 363000
+        }
+      ],
+      "reason": "認購 52 檔、認購金額 0.24 億，認購/認售比 44.22。"
+    },
+    {
+      "underlyingName": "至上",
+      "market": "上市",
+      "tradeDate": "20260515",
+      "callValue": 23602130,
+      "putValue": 25640,
+      "totalValue": 23627770,
+      "callVolume": 15880000,
+      "putVolume": 18000,
+      "callCount": 103,
+      "putCount": 3,
+      "breadth": 106,
+      "callPutRatio": 920.52,
+      "score": 76,
+      "topWarrants": [
+        {
+          "code": "057018",
+          "name": "至上永豐5B購01",
+          "type": "call",
+          "value": 6110000,
+          "volume": 324000
+        },
+        {
+          "code": "049461",
+          "name": "至上永豐56購02",
+          "type": "call",
+          "value": 2528100,
+          "volume": 1003000
+        },
+        {
+          "code": "052050",
+          "name": "至上元大61購02",
+          "type": "call",
+          "value": 2331980,
+          "volume": 2991000
+        },
+        {
+          "code": "056758",
+          "name": "至上群益58購01",
+          "type": "call",
+          "value": 1064580,
+          "volume": 606000
+        },
+        {
+          "code": "061741",
+          "name": "至上國票5A購04",
+          "type": "call",
+          "value": 936000,
+          "volume": 800000
+        }
+      ],
+      "reason": "認購 103 檔、認購金額 0.24 億，認購/認售比 99+。"
+    },
+    {
+      "underlyingName": "鴻勁",
+      "market": "上市",
+      "tradeDate": "20260515",
+      "callValue": 23591790,
+      "putValue": 0,
+      "totalValue": 23591790,
+      "callVolume": 5942000,
+      "putVolume": 0,
+      "callCount": 24,
+      "putCount": 0,
+      "breadth": 24,
+      "callPutRatio": 99,
+      "score": 76,
+      "topWarrants": [
+        {
+          "code": "063144",
+          "name": "鴻勁凱基5A購01",
+          "type": "call",
+          "value": 3945200,
+          "volume": 420000
+        },
+        {
+          "code": "063444",
+          "name": "鴻勁元大5C購02",
+          "type": "call",
+          "value": 2607190,
+          "volume": 635000
+        },
+        {
+          "code": "063380",
+          "name": "鴻勁永豐62購01",
+          "type": "call",
+          "value": 2543250,
+          "volume": 949000
+        },
+        {
+          "code": "063478",
+          "name": "鴻勁統一63購01",
+          "type": "call",
+          "value": 1982640,
+          "volume": 725000
+        },
+        {
+          "code": "063104",
+          "name": "鴻勁國票5A購01",
+          "type": "call",
+          "value": 1917900,
+          "volume": 310000
+        }
+      ],
+      "reason": "認購 24 檔、認購金額 0.24 億，認購/認售比 99+。"
+    },
+    {
+      "underlyingName": "大成鋼",
+      "market": "上市",
+      "tradeDate": "20260515",
+      "callValue": 23205480,
+      "putValue": 0,
+      "totalValue": 23205480,
+      "callVolume": 19791000,
+      "putVolume": 0,
+      "callCount": 51,
+      "putCount": 0,
+      "breadth": 51,
+      "callPutRatio": 99,
+      "score": 76,
+      "topWarrants": [
+        {
+          "code": "052850",
+          "name": "大成鋼元大57購01",
+          "type": "call",
+          "value": 2215880,
+          "volume": 1277000
+        },
+        {
+          "code": "057025",
+          "name": "大成鋼富邦5A購02",
+          "type": "call",
+          "value": 1913400,
+          "volume": 1570000
+        },
+        {
+          "code": "061803",
+          "name": "大成鋼凱基59購02",
+          "type": "call",
+          "value": 1645590,
+          "volume": 919000
+        },
+        {
+          "code": "055250",
+          "name": "大成鋼元大58購03",
+          "type": "call",
+          "value": 1518930,
+          "volume": 956000
+        },
+        {
+          "code": "062466",
+          "name": "大成鋼元大5A購01",
+          "type": "call",
+          "value": 1418330,
+          "volume": 577000
+        }
+      ],
+      "reason": "認購 51 檔、認購金額 0.23 億，認購/認售比 99+。"
+    },
+    {
+      "underlyingName": "敬鵬",
+      "market": "上市",
+      "tradeDate": "20260515",
+      "callValue": 22676020,
+      "putValue": 0,
+      "totalValue": 22676020,
+      "callVolume": 17284000,
+      "putVolume": 0,
+      "callCount": 52,
+      "putCount": 0,
+      "breadth": 52,
+      "callPutRatio": 99,
+      "score": 76,
+      "topWarrants": [
+        {
+          "code": "060472",
+          "name": "敬鵬富邦5B購01",
+          "type": "call",
+          "value": 2472710,
+          "volume": 2314000
+        },
+        {
+          "code": "056013",
+          "name": "敬鵬國票59購02",
+          "type": "call",
+          "value": 2359940,
+          "volume": 1591000
+        },
+        {
+          "code": "056237",
+          "name": "敬鵬國泰59購01",
+          "type": "call",
+          "value": 1773730,
+          "volume": 500000
+        },
+        {
+          "code": "061031",
+          "name": "敬鵬元大59購02",
+          "type": "call",
+          "value": 1433750,
+          "volume": 1185000
+        },
+        {
+          "code": "056124",
+          "name": "敬鵬元大58購01",
+          "type": "call",
+          "value": 1019340,
+          "volume": 882000
+        }
+      ],
+      "reason": "認購 52 檔、認購金額 0.23 億，認購/認售比 99+。"
+    },
+    {
+      "underlyingName": "中美晶",
+      "market": "上櫃",
+      "tradeDate": "20260515",
+      "callValue": 22625640,
+      "putValue": 0,
+      "totalValue": 22625640,
+      "callVolume": 14776000,
+      "putVolume": 0,
+      "callCount": 75,
+      "putCount": 0,
+      "breadth": 75,
+      "callPutRatio": 99,
+      "score": 76,
+      "topWarrants": [
+        {
+          "code": "704971",
+          "name": "中美晶元富58購01",
+          "type": "call",
+          "value": 5109550,
+          "volume": 787000
+        },
+        {
+          "code": "706462",
+          "name": "中美晶元富59購03",
+          "type": "call",
+          "value": 1696450,
+          "volume": 829000
+        },
+        {
+          "code": "708134",
+          "name": "中美晶元大5B購03",
+          "type": "call",
+          "value": 1164220,
+          "volume": 1115000
+        },
+        {
+          "code": "707384",
+          "name": "中美晶群益5A購01",
+          "type": "call",
+          "value": 949180,
+          "volume": 245000
+        },
+        {
+          "code": "706506",
+          "name": "中美晶元大59購01",
+          "type": "call",
+          "value": 870290,
+          "volume": 701000
+        }
+      ],
+      "reason": "認購 75 檔、認購金額 0.23 億，認購/認售比 99+。"
+    },
+    {
+      "underlyingName": "富喬",
+      "market": "上櫃",
+      "tradeDate": "20260515",
+      "callValue": 22041440,
+      "putValue": 1665510,
+      "totalValue": 23706950,
+      "callVolume": 26161000,
+      "putVolume": 2012000,
+      "callCount": 64,
+      "putCount": 5,
+      "breadth": 69,
+      "callPutRatio": 13.23,
+      "score": 76,
+      "topWarrants": [
+        {
+          "code": "707972",
+          "name": "富喬元大5C購02",
+          "type": "call",
+          "value": 1480530,
+          "volume": 2993000
+        },
+        {
+          "code": "703420",
+          "name": "富喬元大61購02",
+          "type": "call",
+          "value": 1205460,
+          "volume": 1307000
+        },
+        {
+          "code": "705348",
+          "name": "富喬永豐65購01",
+          "type": "call",
+          "value": 1151940,
+          "volume": 1107000
+        },
+        {
+          "code": "705327",
+          "name": "富喬元大58購01",
+          "type": "call",
+          "value": 1149890,
+          "volume": 1265000
+        },
+        {
+          "code": "704258",
+          "name": "富喬永豐64購01",
+          "type": "call",
+          "value": 1143770,
+          "volume": 659000
+        }
+      ],
+      "reason": "認購 64 檔、認購金額 0.22 億，認購/認售比 13.23。"
+    },
+    {
+      "underlyingName": "采鈺",
+      "market": "上市",
+      "tradeDate": "20260515",
+      "callValue": 21984240,
+      "putValue": 0,
+      "totalValue": 21984240,
+      "callVolume": 7540000,
+      "putVolume": 0,
+      "callCount": 44,
+      "putCount": 0,
+      "breadth": 44,
+      "callPutRatio": 99,
+      "score": 76,
+      "topWarrants": [
+        {
+          "code": "064188",
+          "name": "采鈺國票5B購01",
+          "type": "call",
+          "value": 3109810,
+          "volume": 873000
+        },
+        {
+          "code": "058642",
+          "name": "采鈺統一73購01",
+          "type": "call",
+          "value": 2094680,
+          "volume": 1642000
+        },
+        {
+          "code": "058202",
+          "name": "采鈺元大59購04",
+          "type": "call",
+          "value": 1826090,
+          "volume": 386000
+        },
+        {
+          "code": "060890",
+          "name": "采鈺元大59購07",
+          "type": "call",
+          "value": 1780000,
+          "volume": 470000
+        },
+        {
+          "code": "058329",
+          "name": "采鈺富邦63購01",
+          "type": "call",
+          "value": 1498530,
+          "volume": 836000
+        }
+      ],
+      "reason": "認購 44 檔、認購金額 0.22 億，認購/認售比 99+。"
+    },
+    {
+      "underlyingName": "威剛",
+      "market": "上櫃",
+      "tradeDate": "20260515",
+      "callValue": 21950020,
+      "putValue": 4040150,
+      "totalValue": 25990170,
+      "callVolume": 12911000,
+      "putVolume": 3591000,
+      "callCount": 41,
+      "putCount": 2,
+      "breadth": 43,
+      "callPutRatio": 5.43,
+      "score": 76,
+      "topWarrants": [
+        {
+          "code": "700727",
+          "name": "威剛群益55購05",
+          "type": "call",
+          "value": 4122000,
+          "volume": 290000
+        },
+        {
+          "code": "72874U",
+          "name": "威剛群益5C售02",
+          "type": "put",
+          "value": 4022720,
+          "volume": 3574000
+        },
+        {
+          "code": "708377",
+          "name": "威剛元大5B購07",
+          "type": "call",
+          "value": 2474990,
+          "volume": 2244000
+        },
+        {
+          "code": "701833",
+          "name": "威剛元富55購06",
+          "type": "call",
+          "value": 1686750,
+          "volume": 195000
+        },
+        {
+          "code": "708268",
+          "name": "威剛元大64購01",
+          "type": "call",
+          "value": 1600900,
+          "volume": 1728000
+        }
+      ],
+      "reason": "認購 41 檔、認購金額 0.22 億，認購/認售比 5.43。"
+    },
+    {
+      "underlyingName": "長興",
+      "market": "上市",
+      "tradeDate": "20260515",
+      "callValue": 21866150,
+      "putValue": 48000,
+      "totalValue": 21914150,
+      "callVolume": 15579000,
+      "putVolume": 80000,
+      "callCount": 76,
+      "putCount": 1,
+      "breadth": 77,
+      "callPutRatio": 455.54,
+      "score": 76,
+      "topWarrants": [
+        {
+          "code": "054961",
+          "name": "長興群益57購03",
+          "type": "call",
+          "value": 1712820,
+          "volume": 773000
+        },
+        {
+          "code": "063519",
+          "name": "長興兆豐5C購01",
+          "type": "call",
+          "value": 1479640,
+          "volume": 1372000
+        },
+        {
+          "code": "061237",
+          "name": "長興凱基63購01",
+          "type": "call",
+          "value": 1253440,
+          "volume": 530000
+        },
+        {
+          "code": "058420",
+          "name": "長興元大59購01",
+          "type": "call",
+          "value": 1085580,
+          "volume": 714000
+        },
+        {
+          "code": "058159",
+          "name": "長興元大61購01",
+          "type": "call",
+          "value": 999210,
+          "volume": 982000
+        }
+      ],
+      "reason": "認購 76 檔、認購金額 0.22 億，認購/認售比 99+。"
+    },
+    {
+      "underlyingName": "AES-KY",
+      "market": "上市",
+      "tradeDate": "20260515",
+      "callValue": 21129620,
+      "putValue": 10500,
+      "totalValue": 21140120,
+      "callVolume": 29477000,
+      "putVolume": 20000,
+      "callCount": 118,
+      "putCount": 2,
+      "breadth": 120,
+      "callPutRatio": 2012.34,
+      "score": 76,
+      "topWarrants": [
+        {
+          "code": "057319",
+          "name": "AES元富59購04",
+          "type": "call",
+          "value": 2039140,
+          "volume": 1649000
+        },
+        {
+          "code": "053458",
+          "name": "AES富邦59購03",
+          "type": "call",
+          "value": 1150770,
+          "volume": 1572000
+        },
+        {
+          "code": "062515",
+          "name": "AES元大5A購02",
+          "type": "call",
+          "value": 812470,
+          "volume": 641000
+        },
+        {
+          "code": "058328",
+          "name": "AES富邦5B購01",
+          "type": "call",
+          "value": 761540,
+          "volume": 1243000
+        },
+        {
+          "code": "065631",
+          "name": "AES群益5B購01",
+          "type": "call",
+          "value": 618350,
+          "volume": 778000
+        }
+      ],
+      "reason": "認購 118 檔、認購金額 0.21 億，認購/認售比 99+。"
+    },
+    {
+      "underlyingName": "主動統一台股增長",
+      "market": "上市",
+      "tradeDate": "20260515",
+      "callValue": 20770320,
+      "putValue": 4144770,
+      "totalValue": 24915090,
+      "callVolume": 16593000,
+      "putVolume": 2761000,
+      "callCount": 24,
+      "putCount": 3,
+      "breadth": 27,
+      "callPutRatio": 5.01,
+      "score": 76,
+      "topWarrants": [
+        {
+          "code": "065423",
+          "name": "台股增元大5A購01",
+          "type": "call",
+          "value": 9208610,
+          "volume": 7840000
+        },
+        {
+          "code": "03232T",
+          "name": "台股增群益5B售04",
+          "type": "put",
+          "value": 2022200,
+          "volume": 1012000
+        },
+        {
+          "code": "065918",
+          "name": "台股增元大5C購01",
+          "type": "call",
+          "value": 1622280,
+          "volume": 1050000
+        },
+        {
+          "code": "065605",
+          "name": "台股增富邦61購01",
+          "type": "call",
+          "value": 1592980,
+          "volume": 1884000
+        },
+        {
+          "code": "065660",
+          "name": "台股增凱基5C購01",
+          "type": "call",
+          "value": 1557560,
+          "volume": 875000
+        }
+      ],
+      "reason": "認購 24 檔、認購金額 0.21 億，認購/認售比 5.01。"
+    },
+    {
+      "underlyingName": "良維",
+      "market": "上櫃",
+      "tradeDate": "20260515",
+      "callValue": 20030830,
+      "putValue": 53520,
+      "totalValue": 20084350,
+      "callVolume": 16061000,
+      "putVolume": 317000,
+      "callCount": 73,
+      "putCount": 2,
+      "breadth": 75,
+      "callPutRatio": 374.27,
+      "score": 76,
+      "topWarrants": [
+        {
+          "code": "706710",
+          "name": "良維統一62購02",
+          "type": "call",
+          "value": 2120000,
+          "volume": 2111000
+        },
+        {
+          "code": "706564",
+          "name": "良維富邦5C購01",
+          "type": "call",
+          "value": 1840400,
+          "volume": 1916000
+        },
+        {
+          "code": "706502",
+          "name": "良維國泰5A購01",
+          "type": "call",
+          "value": 1355990,
+          "volume": 641000
+        },
+        {
+          "code": "708040",
+          "name": "良維元大5A購04",
+          "type": "call",
+          "value": 1120090,
+          "volume": 1378000
+        },
+        {
+          "code": "708041",
+          "name": "良維元大63購01",
+          "type": "call",
+          "value": 939180,
+          "volume": 1250000
+        }
+      ],
+      "reason": "認購 73 檔、認購金額 0.20 億，認購/認售比 99+。"
+    },
+    {
+      "underlyingName": "亞光",
+      "market": "上市",
+      "tradeDate": "20260515",
+      "callValue": 19912200,
+      "putValue": 0,
+      "totalValue": 19912200,
+      "callVolume": 28516000,
+      "putVolume": 0,
+      "callCount": 68,
+      "putCount": 0,
+      "breadth": 68,
+      "callPutRatio": 99,
+      "score": 76,
+      "topWarrants": [
+        {
+          "code": "056945",
+          "name": "亞光元大61購01",
+          "type": "call",
+          "value": 4511390,
+          "volume": 5780000
+        },
+        {
+          "code": "038683",
+          "name": "亞光元大5A購01",
+          "type": "call",
+          "value": 1874680,
+          "volume": 2165000
+        },
+        {
+          "code": "059352",
+          "name": "亞光群益5A購01",
+          "type": "call",
+          "value": 1132400,
+          "volume": 737000
+        },
+        {
+          "code": "056507",
+          "name": "亞光台新58購01",
+          "type": "call",
+          "value": 828420,
+          "volume": 732000
+        },
+        {
+          "code": "058876",
+          "name": "亞光兆豐5B購01",
+          "type": "call",
+          "value": 774460,
+          "volume": 843000
+        }
+      ],
+      "reason": "認購 68 檔、認購金額 0.20 億，認購/認售比 99+。"
+    },
+    {
+      "underlyingName": "矽力*-KY",
+      "market": "上市",
+      "tradeDate": "20260515",
+      "callValue": 19650050,
+      "putValue": 181730,
+      "totalValue": 19831780,
+      "callVolume": 8409000,
+      "putVolume": 291000,
+      "callCount": 50,
+      "putCount": 1,
+      "breadth": 51,
+      "callPutRatio": 108.13,
+      "score": 76,
+      "topWarrants": [
+        {
+          "code": "064831",
+          "name": "矽力凱基5A購03",
+          "type": "call",
+          "value": 3532060,
+          "volume": 1102000
+        },
+        {
+          "code": "055033",
+          "name": "矽力元大57購08",
+          "type": "call",
+          "value": 2164500,
+          "volume": 500000
+        },
+        {
+          "code": "054087",
+          "name": "矽力凱基5B購01",
+          "type": "call",
+          "value": 1975000,
+          "volume": 300000
+        },
+        {
+          "code": "055233",
+          "name": "矽力國票59購01",
+          "type": "call",
+          "value": 1354770,
+          "volume": 325000
+        },
+        {
+          "code": "065041",
+          "name": "矽力元大5B購04",
+          "type": "call",
+          "value": 1081390,
+          "volume": 1033000
+        }
+      ],
+      "reason": "認購 50 檔、認購金額 0.20 億，認購/認售比 99+。"
+    },
+    {
+      "underlyingName": "穩懋",
+      "market": "上櫃",
+      "tradeDate": "20260515",
+      "callValue": 19565510,
+      "putValue": 3340340,
+      "totalValue": 22905850,
+      "callVolume": 7260000,
+      "putVolume": 5891000,
+      "callCount": 47,
+      "putCount": 5,
+      "breadth": 52,
+      "callPutRatio": 5.86,
+      "score": 76,
+      "topWarrants": [
+        {
+          "code": "705565",
+          "name": "穩懋永豐5C購02",
+          "type": "call",
+          "value": 4327780,
+          "volume": 2079000
+        },
+        {
+          "code": "705516",
+          "name": "穩懋元富59購03",
+          "type": "call",
+          "value": 4245930,
+          "volume": 1628000
+        },
+        {
+          "code": "72779U",
+          "name": "穩懋元大59售08",
+          "type": "put",
+          "value": 1954760,
+          "volume": 2128000
+        },
+        {
+          "code": "705489",
+          "name": "穩懋統一73購02",
+          "type": "call",
+          "value": 1574580,
+          "volume": 868000
+        },
+        {
+          "code": "705015",
+          "name": "穩懋永豐59購04",
+          "type": "call",
+          "value": 1328650,
+          "volume": 165000
+        }
+      ],
+      "reason": "認購 47 檔、認購金額 0.20 億，認購/認售比 5.86。"
+    },
+    {
+      "underlyingName": "群聯國票",
+      "market": "上櫃",
+      "tradeDate": "20260515",
+      "callValue": 19384860,
+      "putValue": 86620,
+      "totalValue": 19471480,
+      "callVolume": 5476000,
+      "putVolume": 324000,
+      "callCount": 8,
+      "putCount": 1,
+      "breadth": 9,
+      "callPutRatio": 223.79,
+      "score": 76,
+      "topWarrants": [
+        {
+          "code": "708076",
+          "name": "群聯國票5B購05",
+          "type": "call",
+          "value": 5388280,
+          "volume": 1152000
+        },
+        {
+          "code": "707721",
+          "name": "群聯國票5B購01",
+          "type": "call",
+          "value": 5194500,
+          "volume": 1095000
+        },
+        {
+          "code": "708008",
+          "name": "群聯國票5B購03",
+          "type": "call",
+          "value": 4063620,
+          "volume": 1200000
+        },
+        {
+          "code": "708107",
+          "name": "群聯國票61購01",
+          "type": "call",
+          "value": 3272840,
+          "volume": 1325000
+        },
+        {
+          "code": "708179",
+          "name": "群聯國票66購01",
+          "type": "call",
+          "value": 554700,
+          "volume": 276000
+        }
+      ],
+      "reason": "認購 8 檔、認購金額 0.19 億，認購/認售比 99+。"
+    },
+    {
+      "underlyingName": "微星",
+      "market": "上市",
+      "tradeDate": "20260515",
+      "callValue": 19099900,
+      "putValue": 85840,
+      "totalValue": 19185740,
+      "callVolume": 16585000,
+      "putVolume": 158000,
+      "callCount": 35,
+      "putCount": 1,
+      "breadth": 36,
+      "callPutRatio": 222.51,
+      "score": 76,
+      "topWarrants": [
+        {
+          "code": "067025",
+          "name": "微星元大5B購01",
+          "type": "call",
+          "value": 2075970,
+          "volume": 2373000
+        },
+        {
+          "code": "055892",
+          "name": "微星元大58購01",
+          "type": "call",
+          "value": 1911480,
+          "volume": 780000
+        },
+        {
+          "code": "065188",
+          "name": "微星富邦5C購01",
+          "type": "call",
+          "value": 1848900,
+          "volume": 1748000
+        },
+        {
+          "code": "065220",
+          "name": "微星國票5B購01",
+          "type": "call",
+          "value": 1177010,
+          "volume": 671000
+        },
+        {
+          "code": "056938",
+          "name": "微星元大58購02",
+          "type": "call",
+          "value": 1127970,
+          "volume": 360000
+        }
+      ],
+      "reason": "認購 35 檔、認購金額 0.19 億，認購/認售比 99+。"
+    },
+    {
+      "underlyingName": "大銀微系統",
+      "market": "上市",
+      "tradeDate": "20260515",
+      "callValue": 18274640,
+      "putValue": 0,
+      "totalValue": 18274640,
+      "callVolume": 8466000,
+      "putVolume": 0,
+      "callCount": 43,
+      "putCount": 0,
+      "breadth": 43,
+      "callPutRatio": 99,
+      "score": 76,
+      "topWarrants": [
+        {
+          "code": "063955",
+          "name": "大銀凱基5A購03",
+          "type": "call",
+          "value": 2405170,
+          "volume": 832000
+        },
+        {
+          "code": "064267",
+          "name": "大銀元大5B購01",
+          "type": "call",
+          "value": 1875190,
+          "volume": 1022000
+        },
+        {
+          "code": "064027",
+          "name": "大銀統一63購02",
+          "type": "call",
+          "value": 1775350,
+          "volume": 1313000
+        },
+        {
+          "code": "064184",
+          "name": "大銀國票5B購01",
+          "type": "call",
+          "value": 1413790,
+          "volume": 466000
+        },
+        {
+          "code": "064265",
+          "name": "大銀元大5A購05",
+          "type": "call",
+          "value": 1363560,
+          "volume": 615000
+        }
+      ],
+      "reason": "認購 43 檔、認購金額 0.18 億，認購/認售比 99+。"
+    },
+    {
+      "underlyingName": "臺慶科",
+      "market": "上櫃",
+      "tradeDate": "20260515",
+      "callValue": 18220630,
+      "putValue": 0,
+      "totalValue": 18220630,
+      "callVolume": 8178000,
+      "putVolume": 0,
+      "callCount": 29,
+      "putCount": 0,
+      "breadth": 29,
+      "callPutRatio": 99,
+      "score": 76,
+      "topWarrants": [
+        {
+          "code": "703581",
+          "name": "臺慶科凱基5C購01",
+          "type": "call",
+          "value": 3111600,
+          "volume": 623000
+        },
+        {
+          "code": "708356",
+          "name": "臺慶科台新5B購01",
+          "type": "call",
+          "value": 2545100,
+          "volume": 705000
+        },
+        {
+          "code": "704655",
+          "name": "臺慶科國泰58購01",
+          "type": "call",
+          "value": 2090140,
+          "volume": 486000
+        },
+        {
+          "code": "700845",
+          "name": "臺慶科統一5C購01",
+          "type": "call",
+          "value": 1979080,
+          "volume": 2319000
+        },
+        {
+          "code": "708541",
+          "name": "臺慶科凱基5B購01",
+          "type": "call",
+          "value": 1796530,
+          "volume": 880000
+        }
+      ],
+      "reason": "認購 29 檔、認購金額 0.18 億，認購/認售比 99+。"
+    },
+    {
+      "underlyingName": "緯創",
+      "market": "上市",
+      "tradeDate": "20260515",
+      "callValue": 17939810,
+      "putValue": 178530,
+      "totalValue": 18118340,
+      "callVolume": 25463000,
+      "putVolume": 261000,
+      "callCount": 113,
+      "putCount": 8,
+      "breadth": 121,
+      "callPutRatio": 100.49,
+      "score": 76,
+      "topWarrants": [
+        {
+          "code": "047322",
+          "name": "緯創元大5C購01",
+          "type": "call",
+          "value": 1453920,
+          "volume": 1491000
+        },
+        {
+          "code": "065941",
+          "name": "緯創元大61購08",
+          "type": "call",
+          "value": 1401620,
+          "volume": 1583000
+        },
+        {
+          "code": "060927",
+          "name": "緯創富邦5C購04",
+          "type": "call",
+          "value": 1019990,
+          "volume": 1431000
+        },
+        {
+          "code": "047491",
+          "name": "緯創元大5A購01",
+          "type": "call",
+          "value": 795390,
+          "volume": 3520000
+        },
+        {
+          "code": "058678",
+          "name": "緯創元大61購05",
+          "type": "call",
+          "value": 759230,
+          "volume": 359000
+        }
+      ],
+      "reason": "認購 113 檔、認購金額 0.18 億，認購/認售比 99+。"
+    },
+    {
+      "underlyingName": "帆宣",
+      "market": "上市",
+      "tradeDate": "20260515",
+      "callValue": 17681740,
+      "putValue": 21760,
+      "totalValue": 17703500,
+      "callVolume": 10927000,
+      "putVolume": 22000,
+      "callCount": 56,
+      "putCount": 1,
+      "breadth": 57,
+      "callPutRatio": 812.58,
+      "score": 76,
+      "topWarrants": [
+        {
+          "code": "066372",
+          "name": "帆宣台新5B購04",
+          "type": "call",
+          "value": 2129250,
+          "volume": 993000
+        },
+        {
+          "code": "053533",
+          "name": "帆宣統一61購02",
+          "type": "call",
+          "value": 1709470,
+          "volume": 1492000
+        },
+        {
+          "code": "063468",
+          "name": "帆宣統一74購01",
+          "type": "call",
+          "value": 1137180,
+          "volume": 1130000
+        },
+        {
+          "code": "049973",
+          "name": "帆宣元大56購11",
+          "type": "call",
+          "value": 904070,
+          "volume": 416000
+        },
+        {
+          "code": "063880",
+          "name": "帆宣群益63購01",
+          "type": "call",
+          "value": 838660,
+          "volume": 554000
+        }
+      ],
+      "reason": "認購 56 檔、認購金額 0.18 億，認購/認售比 99+。"
+    },
+    {
+      "underlyingName": "嘉澤",
+      "market": "上市",
+      "tradeDate": "20260515",
+      "callValue": 17616500,
+      "putValue": 57430,
+      "totalValue": 17673930,
+      "callVolume": 14459000,
+      "putVolume": 195000,
+      "callCount": 77,
+      "putCount": 1,
+      "breadth": 78,
+      "callPutRatio": 306.75,
+      "score": 76,
+      "topWarrants": [
+        {
+          "code": "060833",
+          "name": "嘉澤群益59購07",
+          "type": "call",
+          "value": 2689750,
+          "volume": 1218000
+        },
+        {
+          "code": "055946",
+          "name": "嘉澤元富5A購02",
+          "type": "call",
+          "value": 1742800,
+          "volume": 310000
+        },
+        {
+          "code": "064089",
+          "name": "嘉澤富邦61購01",
+          "type": "call",
+          "value": 1228610,
+          "volume": 2157000
+        },
+        {
+          "code": "031303",
+          "name": "嘉澤統一58購01",
+          "type": "call",
+          "value": 942240,
+          "volume": 624000
+        },
+        {
+          "code": "061200",
+          "name": "嘉澤元大59購10",
+          "type": "call",
+          "value": 924220,
+          "volume": 1031000
+        }
+      ],
+      "reason": "認購 77 檔、認購金額 0.18 億，認購/認售比 99+。"
+    },
+    {
+      "underlyingName": "群翊",
+      "market": "上櫃",
+      "tradeDate": "20260515",
+      "callValue": 17596120,
+      "putValue": 0,
+      "totalValue": 17596120,
+      "callVolume": 8949000,
+      "putVolume": 0,
+      "callCount": 40,
+      "putCount": 0,
+      "breadth": 40,
+      "callPutRatio": 99,
+      "score": 76,
+      "topWarrants": [
+        {
+          "code": "707065",
+          "name": "群翊國泰5B購01",
+          "type": "call",
+          "value": 6745050,
+          "volume": 1692000
+        },
+        {
+          "code": "707405",
+          "name": "群翊國泰5B購02",
+          "type": "call",
+          "value": 2440180,
+          "volume": 665000
+        },
+        {
+          "code": "707485",
+          "name": "群翊凱基61購01",
+          "type": "call",
+          "value": 1801230,
+          "volume": 1129000
+        },
+        {
+          "code": "707400",
+          "name": "群翊元大5A購02",
+          "type": "call",
+          "value": 1064350,
+          "volume": 380000
+        },
+        {
+          "code": "707508",
+          "name": "群翊元大5A購06",
+          "type": "call",
+          "value": 756160,
+          "volume": 1200000
+        }
+      ],
+      "reason": "認購 40 檔、認購金額 0.18 億，認購/認售比 99+。"
+    },
+    {
+      "underlyingName": "新代",
+      "market": "上市",
+      "tradeDate": "20260515",
+      "callValue": 17510590,
+      "putValue": 0,
+      "totalValue": 17510590,
+      "callVolume": 3585000,
+      "putVolume": 0,
+      "callCount": 15,
+      "putCount": 0,
+      "breadth": 15,
+      "callPutRatio": 99,
+      "score": 76,
+      "topWarrants": [
+        {
+          "code": "063208",
+          "name": "新代群益5A購01",
+          "type": "call",
+          "value": 5915000,
+          "volume": 1100000
+        },
+        {
+          "code": "062901",
+          "name": "新代國票5A購01",
+          "type": "call",
+          "value": 4516000,
+          "volume": 538000
+        },
+        {
+          "code": "063930",
+          "name": "新代國票5A購02",
+          "type": "call",
+          "value": 3390450,
+          "volume": 639000
+        },
+        {
+          "code": "064549",
+          "name": "新代永豐5C購02",
+          "type": "call",
+          "value": 638030,
+          "volume": 263000
+        },
+        {
+          "code": "064230",
+          "name": "新代群益5A購02",
+          "type": "call",
+          "value": 596950,
+          "volume": 135000
+        }
+      ],
+      "reason": "認購 15 檔、認購金額 0.18 億，認購/認售比 99+。"
+    },
+    {
+      "underlyingName": "宏達電",
+      "market": "上市",
+      "tradeDate": "20260515",
+      "callValue": 17191690,
+      "putValue": 97790,
+      "totalValue": 17289480,
+      "callVolume": 24992000,
+      "putVolume": 101000,
+      "callCount": 49,
+      "putCount": 5,
+      "breadth": 54,
+      "callPutRatio": 175.8,
+      "score": 76,
+      "topWarrants": [
+        {
+          "code": "052387",
+          "name": "宏達電元大61購06",
+          "type": "call",
+          "value": 3352170,
+          "volume": 6119000
+        },
+        {
+          "code": "061193",
+          "name": "宏達電元大59購06",
+          "type": "call",
+          "value": 1460700,
+          "volume": 557000
+        },
+        {
+          "code": "060698",
+          "name": "宏達電永豐5A購01",
+          "type": "call",
+          "value": 1113990,
+          "volume": 495000
+        },
+        {
+          "code": "032043",
+          "name": "宏達電元富58購01",
+          "type": "call",
+          "value": 1012970,
+          "volume": 526000
+        },
+        {
+          "code": "037091",
+          "name": "宏達電元富5C購01",
+          "type": "call",
+          "value": 960960,
+          "volume": 1490000
+        }
+      ],
+      "reason": "認購 49 檔、認購金額 0.17 億，認購/認售比 99+。"
+    },
+    {
+      "underlyingName": "達邁",
+      "market": "上市",
+      "tradeDate": "20260515",
+      "callValue": 17090940,
+      "putValue": 0,
+      "totalValue": 17090940,
+      "callVolume": 9230000,
+      "putVolume": 0,
+      "callCount": 20,
+      "putCount": 0,
+      "breadth": 20,
+      "callPutRatio": 99,
+      "score": 76,
+      "topWarrants": [
+        {
+          "code": "059679",
+          "name": "達邁永豐63購01",
+          "type": "call",
+          "value": 2838300,
+          "volume": 2110000
+        },
+        {
+          "code": "065644",
+          "name": "達邁國泰5C購01",
+          "type": "call",
+          "value": 2186360,
+          "volume": 1846000
+        },
+        {
+          "code": "059598",
+          "name": "達邁國票5A購03",
+          "type": "call",
+          "value": 1986330,
+          "volume": 458000
+        },
+        {
+          "code": "059724",
+          "name": "達邁元大59購01",
+          "type": "call",
+          "value": 1718670,
+          "volume": 767000
+        },
+        {
+          "code": "059899",
+          "name": "達邁元大59購03",
+          "type": "call",
+          "value": 1670880,
+          "volume": 761000
+        }
+      ],
+      "reason": "認購 20 檔、認購金額 0.17 億，認購/認售比 99+。"
+    },
+    {
+      "underlyingName": "楠梓電",
+      "market": "上市",
+      "tradeDate": "20260515",
+      "callValue": 16927550,
+      "putValue": 1800,
+      "totalValue": 16929350,
+      "callVolume": 13149000,
+      "putVolume": 20000,
+      "callCount": 60,
+      "putCount": 1,
+      "breadth": 61,
+      "callPutRatio": 9404.19,
+      "score": 76,
+      "topWarrants": [
+        {
+          "code": "063540",
+          "name": "楠梓電凱基61購01",
+          "type": "call",
+          "value": 2013370,
+          "volume": 1145000
+        },
+        {
+          "code": "043152",
+          "name": "楠梓電凱基58購01",
+          "type": "call",
+          "value": 1879680,
+          "volume": 812000
+        },
+        {
+          "code": "057928",
+          "name": "楠梓電國泰5A購01",
+          "type": "call",
+          "value": 1464780,
+          "volume": 842000
+        },
+        {
+          "code": "058730",
+          "name": "楠梓電國票5A購01",
+          "type": "call",
+          "value": 1257600,
+          "volume": 300000
+        },
+        {
+          "code": "039224",
+          "name": "楠梓電凱基5A購01",
+          "type": "call",
+          "value": 1139890,
+          "volume": 548000
+        }
+      ],
+      "reason": "認購 60 檔、認購金額 0.17 億，認購/認售比 99+。"
+    },
+    {
+      "underlyingName": "矽統",
+      "market": "上市",
+      "tradeDate": "20260515",
+      "callValue": 16902190,
+      "putValue": 72120,
+      "totalValue": 16974310,
+      "callVolume": 13567000,
+      "putVolume": 88000,
+      "callCount": 39,
+      "putCount": 1,
+      "breadth": 40,
+      "callPutRatio": 234.36,
+      "score": 76,
+      "topWarrants": [
+        {
+          "code": "055400",
+          "name": "矽統富邦5A購01",
+          "type": "call",
+          "value": 1524610,
+          "volume": 1974000
+        },
+        {
+          "code": "057080",
+          "name": "矽統國泰59購01",
+          "type": "call",
+          "value": 1405660,
+          "volume": 661000
+        },
+        {
+          "code": "054033",
+          "name": "矽統永豐5A購01",
+          "type": "call",
+          "value": 1349360,
+          "volume": 725000
+        },
+        {
+          "code": "066554",
+          "name": "矽統台新5B購01",
+          "type": "call",
+          "value": 1206560,
+          "volume": 504000
+        },
+        {
+          "code": "057466",
+          "name": "矽統國泰5A購01",
+          "type": "call",
+          "value": 1156020,
+          "volume": 495000
+        }
+      ],
+      "reason": "認購 39 檔、認購金額 0.17 億，認購/認售比 99+。"
+    },
+    {
+      "underlyingName": "台星科",
+      "market": "上櫃",
+      "tradeDate": "20260515",
+      "callValue": 16618150,
+      "putValue": 0,
+      "totalValue": 16618150,
+      "callVolume": 12036000,
+      "putVolume": 0,
+      "callCount": 44,
+      "putCount": 0,
+      "breadth": 44,
+      "callPutRatio": 99,
+      "score": 76,
+      "topWarrants": [
+        {
+          "code": "704842",
+          "name": "台星科富邦5B購01",
+          "type": "call",
+          "value": 1990090,
+          "volume": 1773000
+        },
+        {
+          "code": "708371",
+          "name": "台星科元大65購01",
+          "type": "call",
+          "value": 1334710,
+          "volume": 924000
+        },
+        {
+          "code": "705506",
+          "name": "台星科元富59購01",
+          "type": "call",
+          "value": 1280300,
+          "volume": 213000
+        },
+        {
+          "code": "707896",
+          "name": "台星科富邦61購01",
+          "type": "call",
+          "value": 1135170,
+          "volume": 1396000
+        },
+        {
+          "code": "707439",
+          "name": "台星科群益61購01",
+          "type": "call",
+          "value": 1091450,
+          "volume": 593000
+        }
+      ],
+      "reason": "認購 44 檔、認購金額 0.17 億，認購/認售比 99+。"
+    },
+    {
+      "underlyingName": "欣興",
+      "market": "上市",
+      "tradeDate": "20260515",
+      "callValue": 16491680,
+      "putValue": 857810,
+      "totalValue": 17349490,
+      "callVolume": 3819000,
+      "putVolume": 4748000,
+      "callCount": 53,
+      "putCount": 12,
+      "breadth": 65,
+      "callPutRatio": 19.23,
+      "score": 76,
+      "topWarrants": [
+        {
+          "code": "057524",
+          "name": "欣興統一63購02",
+          "type": "call",
+          "value": 1545730,
+          "volume": 638000
+        },
+        {
+          "code": "057525",
+          "name": "欣興統一66購02",
+          "type": "call",
+          "value": 1301670,
+          "volume": 621000
+        },
+        {
+          "code": "057566",
+          "name": "欣興永豐5C購03",
+          "type": "call",
+          "value": 1166100,
+          "volume": 119000
+        },
+        {
+          "code": "057565",
+          "name": "欣興永豐5A購05",
+          "type": "call",
+          "value": 1002000,
+          "volume": 146000
+        },
+        {
+          "code": "055768",
+          "name": "欣興兆豐62購02",
+          "type": "call",
+          "value": 963750,
+          "volume": 130000
+        }
+      ],
+      "reason": "認購 53 檔、認購金額 0.16 億，認購/認售比 19.23。"
+    },
+    {
+      "underlyingName": "宜特",
+      "market": "上櫃",
+      "tradeDate": "20260515",
+      "callValue": 16444650,
+      "putValue": 4600,
+      "totalValue": 16449250,
+      "callVolume": 13004000,
+      "putVolume": 10000,
+      "callCount": 52,
+      "putCount": 1,
+      "breadth": 53,
+      "callPutRatio": 3574.92,
+      "score": 76,
+      "topWarrants": [
+        {
+          "code": "707361",
+          "name": "宜特凱基61購01",
+          "type": "call",
+          "value": 4059240,
+          "volume": 1987000
+        },
+        {
+          "code": "706711",
+          "name": "宜特統一62購02",
+          "type": "call",
+          "value": 2753560,
+          "volume": 2774000
+        },
+        {
+          "code": "707604",
+          "name": "宜特元大5A購02",
+          "type": "call",
+          "value": 1640580,
+          "volume": 1469000
+        },
+        {
+          "code": "706477",
+          "name": "宜特凱基59購03",
+          "type": "call",
+          "value": 1190870,
+          "volume": 689000
+        },
+        {
+          "code": "707605",
+          "name": "宜特元大5C購02",
+          "type": "call",
+          "value": 705610,
+          "volume": 808000
+        }
+      ],
+      "reason": "認購 52 檔、認購金額 0.16 億，認購/認售比 99+。"
+    },
+    {
+      "underlyingName": "富世達",
+      "market": "上市",
+      "tradeDate": "20260515",
+      "callValue": 16276770,
+      "putValue": 15000,
+      "totalValue": 16291770,
+      "callVolume": 19542000,
+      "putVolume": 54000,
+      "callCount": 74,
+      "putCount": 1,
+      "breadth": 75,
+      "callPutRatio": 1085.12,
+      "score": 76,
+      "topWarrants": [
+        {
+          "code": "047434",
+          "name": "富世達富邦58購01",
+          "type": "call",
+          "value": 1091810,
+          "volume": 1223000
+        },
+        {
+          "code": "045866",
+          "name": "富世達凱基57購04",
+          "type": "call",
+          "value": 1083000,
+          "volume": 400000
+        },
+        {
+          "code": "064974",
+          "name": "富世達元大5B購02",
+          "type": "call",
+          "value": 858760,
+          "volume": 1286000
+        },
+        {
+          "code": "064870",
+          "name": "富世達元大61購01",
+          "type": "call",
+          "value": 827860,
+          "volume": 974000
+        },
+        {
+          "code": "064975",
+          "name": "富世達元大5C購01",
+          "type": "call",
+          "value": 721410,
+          "volume": 927000
+        }
+      ],
+      "reason": "認購 74 檔、認購金額 0.16 億，認購/認售比 99+。"
+    },
+    {
+      "underlyingName": "立隆電",
+      "market": "上市",
+      "tradeDate": "20260515",
+      "callValue": 15738860,
+      "putValue": 0,
+      "totalValue": 15738860,
+      "callVolume": 9095000,
+      "putVolume": 0,
+      "callCount": 44,
+      "putCount": 0,
+      "breadth": 44,
+      "callPutRatio": 99,
+      "score": 76,
+      "topWarrants": [
+        {
+          "code": "064447",
+          "name": "立隆電群益5B購02",
+          "type": "call",
+          "value": 4086710,
+          "volume": 2547000
+        },
+        {
+          "code": "063900",
+          "name": "立隆電永豐5B購03",
+          "type": "call",
+          "value": 1538910,
+          "volume": 926000
+        },
+        {
+          "code": "063796",
+          "name": "立隆電統一64購01",
+          "type": "call",
+          "value": 1394160,
+          "volume": 998000
+        },
+        {
+          "code": "063624",
+          "name": "立隆電元大5A購02",
+          "type": "call",
+          "value": 926540,
+          "volume": 369000
+        },
+        {
+          "code": "064471",
+          "name": "立隆電元大5A購03",
+          "type": "call",
+          "value": 850200,
+          "volume": 440000
+        }
+      ],
+      "reason": "認購 44 檔、認購金額 0.16 億，認購/認售比 99+。"
+    },
+    {
+      "underlyingName": "日電貿",
+      "market": "上市",
+      "tradeDate": "20260515",
+      "callValue": 14925520,
+      "putValue": 0,
+      "totalValue": 14925520,
+      "callVolume": 9164000,
+      "putVolume": 0,
+      "callCount": 54,
+      "putCount": 0,
+      "breadth": 54,
+      "callPutRatio": 99,
+      "score": 75,
+      "topWarrants": [
+        {
+          "code": "064087",
+          "name": "日電貿富邦5A購01",
+          "type": "call",
+          "value": 1685570,
+          "volume": 745000
+        },
+        {
+          "code": "051376",
+          "name": "日電貿兆豐61購01",
+          "type": "call",
+          "value": 1110830,
+          "volume": 337000
+        },
+        {
+          "code": "051498",
+          "name": "日電貿元大5B購01",
+          "type": "call",
+          "value": 934640,
+          "volume": 694000
+        },
+        {
+          "code": "048658",
+          "name": "日電貿國票57購02",
+          "type": "call",
+          "value": 877300,
+          "volume": 794000
+        },
+        {
+          "code": "041911",
+          "name": "日電貿凱基55購01",
+          "type": "call",
+          "value": 862100,
+          "volume": 146000
+        }
+      ],
+      "reason": "認購 54 檔、認購金額 0.15 億，認購/認售比 99+。"
+    },
+    {
+      "underlyingName": "事欣科",
+      "market": "上市",
+      "tradeDate": "20260515",
+      "callValue": 14831530,
+      "putValue": 0,
+      "totalValue": 14831530,
+      "callVolume": 13105000,
+      "putVolume": 0,
+      "callCount": 34,
+      "putCount": 0,
+      "breadth": 34,
+      "callPutRatio": 99,
+      "score": 75,
+      "topWarrants": [
+        {
+          "code": "062504",
+          "name": "事欣科元大5A購02",
+          "type": "call",
+          "value": 2393580,
+          "volume": 1922000
+        },
+        {
+          "code": "062317",
+          "name": "事欣科元大5A購01",
+          "type": "call",
+          "value": 1526720,
+          "volume": 707000
+        },
+        {
+          "code": "051984",
+          "name": "事欣科永豐5A購01",
+          "type": "call",
+          "value": 1307430,
+          "volume": 720000
+        },
+        {
+          "code": "048401",
+          "name": "事欣科元富56購02",
+          "type": "call",
+          "value": 1273770,
+          "volume": 556000
+        },
+        {
+          "code": "053793",
+          "name": "事欣科元大61購01",
+          "type": "call",
+          "value": 1214760,
+          "volume": 1735000
+        }
+      ],
+      "reason": "認購 34 檔、認購金額 0.15 億，認購/認售比 99+。"
+    },
+    {
+      "underlyingName": "研華",
+      "market": "上市",
+      "tradeDate": "20260515",
+      "callValue": 14825660,
+      "putValue": 0,
+      "totalValue": 14825660,
+      "callVolume": 7250000,
+      "putVolume": 0,
+      "callCount": 27,
+      "putCount": 0,
+      "breadth": 27,
+      "callPutRatio": 99,
+      "score": 75,
+      "topWarrants": [
+        {
+          "code": "062833",
+          "name": "研華元大5A購01",
+          "type": "call",
+          "value": 2936820,
+          "volume": 970000
+        },
+        {
+          "code": "062918",
+          "name": "研華統一68購01",
+          "type": "call",
+          "value": 2247570,
+          "volume": 1801000
+        },
+        {
+          "code": "064356",
+          "name": "研華國票5A購02",
+          "type": "call",
+          "value": 1470170,
+          "volume": 339000
+        },
+        {
+          "code": "066897",
+          "name": "研華元大5B購01",
+          "type": "call",
+          "value": 1339240,
+          "volume": 1193000
+        },
+        {
+          "code": "066394",
+          "name": "研華元大64購01",
+          "type": "call",
+          "value": 999580,
+          "volume": 431000
+        }
+      ],
+      "reason": "認購 27 檔、認購金額 0.15 億，認購/認售比 99+。"
+    },
+    {
+      "underlyingName": "創意",
+      "market": "上市",
+      "tradeDate": "20260515",
+      "callValue": 14718540,
+      "putValue": 22190,
+      "totalValue": 14740730,
+      "callVolume": 2066000,
+      "putVolume": 124000,
+      "callCount": 36,
+      "putCount": 2,
+      "breadth": 38,
+      "callPutRatio": 663.3,
+      "score": 75,
+      "topWarrants": [
+        {
+          "code": "050595",
+          "name": "創意群益56購07",
+          "type": "call",
+          "value": 3422500,
+          "volume": 131000
+        },
+        {
+          "code": "051356",
+          "name": "創意國泰58購01",
+          "type": "call",
+          "value": 2143100,
+          "volume": 183000
+        },
+        {
+          "code": "051601",
+          "name": "創意元大5A購04",
+          "type": "call",
+          "value": 1847600,
+          "volume": 207000
+        },
+        {
+          "code": "040630",
+          "name": "創意統一6A購01",
+          "type": "call",
+          "value": 1758970,
+          "volume": 569000
+        },
+        {
+          "code": "051259",
+          "name": "創意統一6C購01",
+          "type": "call",
+          "value": 817240,
+          "volume": 321000
+        }
+      ],
+      "reason": "認購 36 檔、認購金額 0.15 億，認購/認售比 99+。"
+    },
+    {
+      "underlyingName": "台玻",
+      "market": "上市",
+      "tradeDate": "20260515",
+      "callValue": 14398510,
+      "putValue": 583220,
+      "totalValue": 14981730,
+      "callVolume": 10177000,
+      "putVolume": 1067000,
+      "callCount": 54,
+      "putCount": 7,
+      "breadth": 61,
+      "callPutRatio": 24.69,
+      "score": 75,
+      "topWarrants": [
+        {
+          "code": "064839",
+          "name": "台玻元大5C購05",
+          "type": "call",
+          "value": 1083420,
+          "volume": 730000
+        },
+        {
+          "code": "054138",
+          "name": "台玻國票58購03",
+          "type": "call",
+          "value": 963710,
+          "volume": 415000
+        },
+        {
+          "code": "065081",
+          "name": "台玻群益5A購04",
+          "type": "call",
+          "value": 944570,
+          "volume": 537000
+        },
+        {
+          "code": "064706",
+          "name": "台玻元大5A購06",
+          "type": "call",
+          "value": 847760,
+          "volume": 609000
+        },
+        {
+          "code": "053867",
+          "name": "台玻國票58購01",
+          "type": "call",
+          "value": 784380,
+          "volume": 332000
+        }
+      ],
+      "reason": "認購 54 檔、認購金額 0.14 億，認購/認售比 24.69。"
+    },
+    {
+      "underlyingName": "順德",
+      "market": "上市",
+      "tradeDate": "20260515",
+      "callValue": 14167250,
+      "putValue": 0,
+      "totalValue": 14167250,
+      "callVolume": 9464000,
+      "putVolume": 0,
+      "callCount": 30,
+      "putCount": 0,
+      "breadth": 30,
+      "callPutRatio": 99,
+      "score": 75,
+      "topWarrants": [
+        {
+          "code": "064988",
+          "name": "順德群益5A購05",
+          "type": "call",
+          "value": 5421750,
+          "volume": 3159000
+        },
+        {
+          "code": "065005",
+          "name": "順德富邦5B購01",
+          "type": "call",
+          "value": 1885220,
+          "volume": 2236000
+        },
+        {
+          "code": "066168",
+          "name": "順德元大5B購01",
+          "type": "call",
+          "value": 1675350,
+          "volume": 1670000
+        },
+        {
+          "code": "064713",
+          "name": "順德元大5A購02",
+          "type": "call",
+          "value": 828120,
+          "volume": 348000
+        },
+        {
+          "code": "063857",
+          "name": "順德群益5A購03",
+          "type": "call",
+          "value": 772340,
+          "volume": 259000
+        }
+      ],
+      "reason": "認購 30 檔、認購金額 0.14 億，認購/認售比 99+。"
+    },
+    {
+      "underlyingName": "新唐",
+      "market": "上市",
+      "tradeDate": "20260515",
+      "callValue": 14105180,
+      "putValue": 0,
+      "totalValue": 14105180,
+      "callVolume": 9509000,
+      "putVolume": 0,
+      "callCount": 34,
+      "putCount": 0,
+      "breadth": 34,
+      "callPutRatio": 99,
+      "score": 75,
+      "topWarrants": [
+        {
+          "code": "061393",
+          "name": "新唐中信59購02",
+          "type": "call",
+          "value": 1883640,
+          "volume": 1215000
+        },
+        {
+          "code": "064862",
+          "name": "新唐元大61購02",
+          "type": "call",
+          "value": 1728560,
+          "volume": 1809000
+        },
+        {
+          "code": "064859",
+          "name": "新唐元大5A購04",
+          "type": "call",
+          "value": 1405530,
+          "volume": 935000
+        },
+        {
+          "code": "064826",
+          "name": "新唐凱基5C購04",
+          "type": "call",
+          "value": 1351220,
+          "volume": 1000000
+        },
+        {
+          "code": "064433",
+          "name": "新唐統一64購02",
+          "type": "call",
+          "value": 1163360,
+          "volume": 798000
+        }
+      ],
+      "reason": "認購 34 檔、認購金額 0.14 億，認購/認售比 99+。"
+    },
+    {
+      "underlyingName": "華新",
+      "market": "上市",
+      "tradeDate": "20260515",
+      "callValue": 14002810,
+      "putValue": 14630,
+      "totalValue": 14017440,
+      "callVolume": 17938000,
+      "putVolume": 39000,
+      "callCount": 81,
+      "putCount": 4,
+      "breadth": 85,
+      "callPutRatio": 957.13,
+      "score": 75,
+      "topWarrants": [
+        {
+          "code": "048005",
+          "name": "華新元大58購06",
+          "type": "call",
+          "value": 3030630,
+          "volume": 3445000
+        },
+        {
+          "code": "050724",
+          "name": "華新富邦58購01",
+          "type": "call",
+          "value": 1330190,
+          "volume": 3458000
+        },
+        {
+          "code": "045489",
+          "name": "華新國票57購01",
+          "type": "call",
+          "value": 960160,
+          "volume": 548000
+        },
+        {
+          "code": "040607",
+          "name": "華新統一58購06",
+          "type": "call",
+          "value": 861780,
+          "volume": 1144000
+        },
+        {
+          "code": "049282",
+          "name": "華新富邦56購01",
+          "type": "call",
+          "value": 425840,
+          "volume": 645000
+        }
+      ],
+      "reason": "認購 81 檔、認購金額 0.14 億，認購/認售比 99+。"
+    },
+    {
+      "underlyingName": "鈞興-KY",
+      "market": "上市",
+      "tradeDate": "20260515",
+      "callValue": 13882710,
+      "putValue": 0,
+      "totalValue": 13882710,
+      "callVolume": 7479000,
+      "putVolume": 0,
+      "callCount": 11,
+      "putCount": 0,
+      "breadth": 11,
+      "callPutRatio": 99,
+      "score": 75,
+      "topWarrants": [
+        {
+          "code": "061883",
+          "name": "鈞興元富59購01",
+          "type": "call",
+          "value": 3892390,
+          "volume": 1184000
+        },
+        {
+          "code": "055275",
+          "name": "鈞興元大58購01",
+          "type": "call",
+          "value": 2563970,
+          "volume": 2090000
+        },
+        {
+          "code": "058071",
+          "name": "鈞興群益5B購01",
+          "type": "call",
+          "value": 2243340,
+          "volume": 1454000
+        },
+        {
+          "code": "065993",
+          "name": "鈞興台新5B購01",
+          "type": "call",
+          "value": 1641400,
+          "volume": 839000
+        },
+        {
+          "code": "066370",
+          "name": "鈞興台新5B購03",
+          "type": "call",
+          "value": 1357740,
+          "volume": 855000
+        }
+      ],
+      "reason": "認購 11 檔、認購金額 0.14 億，認購/認售比 99+。"
+    },
+    {
+      "underlyingName": "康舒",
+      "market": "上市",
+      "tradeDate": "20260515",
+      "callValue": 12919160,
+      "putValue": 15580,
+      "totalValue": 12934740,
+      "callVolume": 16838000,
+      "putVolume": 13000,
+      "callCount": 89,
+      "putCount": 1,
+      "breadth": 90,
+      "callPutRatio": 829.21,
+      "score": 75,
+      "topWarrants": [
+        {
+          "code": "058739",
+          "name": "康舒國票5A購01",
+          "type": "call",
+          "value": 1165880,
+          "volume": 545000
+        },
+        {
+          "code": "064607",
+          "name": "康舒兆豐64購01",
+          "type": "call",
+          "value": 807180,
+          "volume": 397000
+        },
+        {
+          "code": "052047",
+          "name": "康舒元大5A購04",
+          "type": "call",
+          "value": 663460,
+          "volume": 301000
+        },
+        {
+          "code": "055068",
+          "name": "康舒凱基5B購01",
+          "type": "call",
+          "value": 642130,
+          "volume": 478000
+        },
+        {
+          "code": "044157",
+          "name": "康舒元大5A購03",
+          "type": "call",
+          "value": 524720,
+          "volume": 581000
+        }
+      ],
+      "reason": "認購 89 檔、認購金額 0.13 億，認購/認售比 99+。"
+    },
+    {
+      "underlyingName": "台光電",
+      "market": "上市",
+      "tradeDate": "20260515",
+      "callValue": 12892000,
+      "putValue": 277310,
+      "totalValue": 13169310,
+      "callVolume": 2072000,
+      "putVolume": 1991000,
+      "callCount": 40,
+      "putCount": 8,
+      "breadth": 48,
+      "callPutRatio": 46.49,
+      "score": 75,
+      "topWarrants": [
+        {
+          "code": "057597",
+          "name": "台光電群益59購02",
+          "type": "call",
+          "value": 3270000,
+          "volume": 200000
+        },
+        {
+          "code": "057814",
+          "name": "台光電凱基59購04",
+          "type": "call",
+          "value": 2257900,
+          "volume": 229000
+        },
+        {
+          "code": "057854",
+          "name": "台光電元大59購01",
+          "type": "call",
+          "value": 1020070,
+          "volume": 239000
+        },
+        {
+          "code": "057167",
+          "name": "台光電統一63購01",
+          "type": "call",
+          "value": 801480,
+          "volume": 338000
+        },
+        {
+          "code": "034541",
+          "name": "台光電富邦56購02",
+          "type": "call",
+          "value": 696000,
+          "volume": 40000
+        }
+      ],
+      "reason": "認購 40 檔、認購金額 0.13 億，認購/認售比 46.49。"
+    },
+    {
+      "underlyingName": "眾達-KY",
+      "market": "上市",
+      "tradeDate": "20260515",
+      "callValue": 12575800,
+      "putValue": 185160,
+      "totalValue": 12760960,
+      "callVolume": 8426000,
+      "putVolume": 443000,
+      "callCount": 62,
+      "putCount": 3,
+      "breadth": 65,
+      "callPutRatio": 67.92,
+      "score": 75,
+      "topWarrants": [
+        {
+          "code": "064224",
+          "name": "眾達群益5C購01",
+          "type": "call",
+          "value": 1880920,
+          "volume": 737000
+        },
+        {
+          "code": "059809",
+          "name": "眾達凱基59購03",
+          "type": "call",
+          "value": 1682380,
+          "volume": 502000
+        },
+        {
+          "code": "066200",
+          "name": "眾達元大64購01",
+          "type": "call",
+          "value": 1282530,
+          "volume": 1635000
+        },
+        {
+          "code": "060566",
+          "name": "眾達元富59購02",
+          "type": "call",
+          "value": 1092950,
+          "volume": 604000
+        },
+        {
+          "code": "067062",
+          "name": "眾達永豐61購03",
+          "type": "call",
+          "value": 596330,
+          "volume": 884000
+        }
+      ],
+      "reason": "認購 62 檔、認購金額 0.13 億，認購/認售比 67.92。"
+    },
+    {
+      "underlyingName": "聯詠",
+      "market": "上市",
+      "tradeDate": "20260515",
+      "callValue": 12501530,
+      "putValue": 32920,
+      "totalValue": 12534450,
+      "callVolume": 6958000,
+      "putVolume": 40000,
+      "callCount": 52,
+      "putCount": 3,
+      "breadth": 55,
+      "callPutRatio": 379.75,
+      "score": 75,
+      "topWarrants": [
+        {
+          "code": "061589",
+          "name": "聯詠富邦5B購01",
+          "type": "call",
+          "value": 2076110,
+          "volume": 1022000
+        },
+        {
+          "code": "060531",
+          "name": "聯詠國票5A購01",
+          "type": "call",
+          "value": 1617950,
+          "volume": 297000
+        },
+        {
+          "code": "062264",
+          "name": "聯詠群益5A購02",
+          "type": "call",
+          "value": 978870,
+          "volume": 494000
+        },
+        {
+          "code": "060764",
+          "name": "聯詠凱基59購05",
+          "type": "call",
+          "value": 935150,
+          "volume": 147000
+        },
+        {
+          "code": "057069",
+          "name": "聯詠凱基5A購02",
+          "type": "call",
+          "value": 857540,
+          "volume": 165000
+        }
+      ],
+      "reason": "認購 52 檔、認購金額 0.13 億，認購/認售比 99+。"
+    },
+    {
+      "underlyingName": "華景電",
+      "market": "上櫃",
+      "tradeDate": "20260515",
+      "callValue": 12289110,
+      "putValue": 0,
+      "totalValue": 12289110,
+      "callVolume": 8122000,
+      "putVolume": 0,
+      "callCount": 31,
+      "putCount": 0,
+      "breadth": 31,
+      "callPutRatio": 99,
+      "score": 75,
+      "topWarrants": [
+        {
+          "code": "707173",
+          "name": "華景電凱基5A購01",
+          "type": "call",
+          "value": 6090100,
+          "volume": 2919000
+        },
+        {
+          "code": "707228",
+          "name": "華景電永豐61購01",
+          "type": "call",
+          "value": 2582660,
+          "volume": 1383000
+        },
+        {
+          "code": "707779",
+          "name": "華景電永豐5C購02",
+          "type": "call",
+          "value": 724300,
+          "volume": 908000
+        },
+        {
+          "code": "707227",
+          "name": "華景電永豐5C購01",
+          "type": "call",
+          "value": 463840,
+          "volume": 240000
+        },
+        {
+          "code": "707900",
+          "name": "華景電富邦61購01",
+          "type": "call",
+          "value": 275330,
+          "volume": 534000
+        }
+      ],
+      "reason": "認購 31 檔、認購金額 0.12 億，認購/認售比 99+。"
+    },
+    {
+      "underlyingName": "富鼎",
+      "market": "上市",
+      "tradeDate": "20260515",
+      "callValue": 12255890,
+      "putValue": 0,
+      "totalValue": 12255890,
+      "callVolume": 10731000,
+      "putVolume": 0,
+      "callCount": 35,
+      "putCount": 0,
+      "breadth": 35,
+      "callPutRatio": 99,
+      "score": 75,
+      "topWarrants": [
+        {
+          "code": "060088",
+          "name": "富鼎群益5A購01",
+          "type": "call",
+          "value": 1903070,
+          "volume": 1264000
+        },
+        {
+          "code": "064874",
+          "name": "富鼎元大5C購02",
+          "type": "call",
+          "value": 1894830,
+          "volume": 2243000
+        },
+        {
+          "code": "041742",
+          "name": "富鼎國票58購01",
+          "type": "call",
+          "value": 1272340,
+          "volume": 1403000
+        },
+        {
+          "code": "039038",
+          "name": "富鼎統一6A購01",
+          "type": "call",
+          "value": 961570,
+          "volume": 1295000
+        },
+        {
+          "code": "060056",
+          "name": "富鼎凱基59購01",
+          "type": "call",
+          "value": 629620,
+          "volume": 458000
+        }
+      ],
+      "reason": "認購 35 檔、認購金額 0.12 億，認購/認售比 99+。"
+    },
+    {
+      "underlyingName": "長榮",
+      "market": "上市",
+      "tradeDate": "20260515",
+      "callValue": 12135860,
+      "putValue": 193820,
+      "totalValue": 12329680,
+      "callVolume": 18501000,
+      "putVolume": 213000,
+      "callCount": 82,
+      "putCount": 1,
+      "breadth": 83,
+      "callPutRatio": 62.61,
+      "score": 75,
+      "topWarrants": [
+        {
+          "code": "058442",
+          "name": "長榮元大61購01",
+          "type": "call",
+          "value": 1557880,
+          "volume": 2701000
+        },
+        {
+          "code": "050900",
+          "name": "長榮永豐5A購01",
+          "type": "call",
+          "value": 675920,
+          "volume": 498000
+        },
+        {
+          "code": "061527",
+          "name": "長榮元大59購15",
+          "type": "call",
+          "value": 657430,
+          "volume": 665000
+        },
+        {
+          "code": "058913",
+          "name": "長榮元大5B購03",
+          "type": "call",
+          "value": 643910,
+          "volume": 479000
+        },
+        {
+          "code": "062073",
+          "name": "長榮元大59購16",
+          "type": "call",
+          "value": 624620,
+          "volume": 530000
+        }
+      ],
+      "reason": "認購 82 檔、認購金額 0.12 億，認購/認售比 62.61。"
+    },
+    {
+      "underlyingName": "光頡",
+      "market": "上櫃",
+      "tradeDate": "20260515",
+      "callValue": 11965150,
+      "putValue": 0,
+      "totalValue": 11965150,
+      "callVolume": 8509000,
+      "putVolume": 0,
+      "callCount": 22,
+      "putCount": 0,
+      "breadth": 22,
+      "callPutRatio": 99,
+      "score": 75,
+      "topWarrants": [
+        {
+          "code": "702914",
+          "name": "光頡元大56購03",
+          "type": "call",
+          "value": 2603080,
+          "volume": 2631000
+        },
+        {
+          "code": "703186",
+          "name": "光頡凱基58購01",
+          "type": "call",
+          "value": 1578550,
+          "volume": 357000
+        },
+        {
+          "code": "703006",
+          "name": "光頡群益58購01",
+          "type": "call",
+          "value": 1223030,
+          "volume": 389000
+        },
+        {
+          "code": "704898",
+          "name": "光頡統一5C購02",
+          "type": "call",
+          "value": 807880,
+          "volume": 636000
+        },
+        {
+          "code": "702718",
+          "name": "光頡元大56購02",
+          "type": "call",
+          "value": 685530,
+          "volume": 358000
+        }
+      ],
+      "reason": "認購 22 檔、認購金額 0.12 億，認購/認售比 99+。"
+    },
+    {
+      "underlyingName": "辛耘",
+      "market": "上市",
+      "tradeDate": "20260515",
+      "callValue": 11872810,
+      "putValue": 268650,
+      "totalValue": 12141460,
+      "callVolume": 5112000,
+      "putVolume": 287000,
+      "callCount": 51,
+      "putCount": 2,
+      "breadth": 53,
+      "callPutRatio": 44.19,
+      "score": 75,
+      "topWarrants": [
+        {
+          "code": "063686",
+          "name": "辛耘國票5B購01",
+          "type": "call",
+          "value": 1747440,
+          "volume": 731000
+        },
+        {
+          "code": "063685",
+          "name": "辛耘國票5A購03",
+          "type": "call",
+          "value": 1098600,
+          "volume": 570000
+        },
+        {
+          "code": "063762",
+          "name": "辛耘元大5A購08",
+          "type": "call",
+          "value": 815650,
+          "volume": 274000
+        },
+        {
+          "code": "063502",
+          "name": "辛耘永豐5A購03",
+          "type": "call",
+          "value": 780220,
+          "volume": 280000
+        },
+        {
+          "code": "063756",
+          "name": "辛耘元大5A購04",
+          "type": "call",
+          "value": 761220,
+          "volume": 213000
+        }
+      ],
+      "reason": "認購 51 檔、認購金額 0.12 億，認購/認售比 44.19。"
+    },
+    {
+      "underlyingName": "盟立",
+      "market": "上市",
+      "tradeDate": "20260515",
+      "callValue": 11857860,
+      "putValue": 68000,
+      "totalValue": 11925860,
+      "callVolume": 6784000,
+      "putVolume": 66000,
+      "callCount": 53,
+      "putCount": 1,
+      "breadth": 54,
+      "callPutRatio": 174.38,
+      "score": 75,
+      "topWarrants": [
+        {
+          "code": "065049",
+          "name": "盟立國票5A購02",
+          "type": "call",
+          "value": 1251920,
+          "volume": 554000
+        },
+        {
+          "code": "065726",
+          "name": "盟立元大5B購03",
+          "type": "call",
+          "value": 1184090,
+          "volume": 991000
+        },
+        {
+          "code": "064890",
+          "name": "盟立群益5A購02",
+          "type": "call",
+          "value": 952500,
+          "volume": 333000
+        },
+        {
+          "code": "065597",
+          "name": "盟立台新5B購01",
+          "type": "call",
+          "value": 914950,
+          "volume": 330000
+        },
+        {
+          "code": "065729",
+          "name": "盟立元大65購04",
+          "type": "call",
+          "value": 844730,
+          "volume": 781000
+        }
+      ],
+      "reason": "認購 53 檔、認購金額 0.12 億，認購/認售比 99+。"
+    },
+    {
+      "underlyingName": "博智",
+      "market": "上櫃",
+      "tradeDate": "20260515",
+      "callValue": 11808310,
+      "putValue": 0,
+      "totalValue": 11808310,
+      "callVolume": 4162000,
+      "putVolume": 0,
+      "callCount": 22,
+      "putCount": 0,
+      "breadth": 22,
+      "callPutRatio": 99,
+      "score": 75,
+      "topWarrants": [
+        {
+          "code": "704739",
+          "name": "博智凱基59購05",
+          "type": "call",
+          "value": 3059000,
+          "volume": 370000
+        },
+        {
+          "code": "706544",
+          "name": "博智凱基59購07",
+          "type": "call",
+          "value": 1713850,
+          "volume": 756000
+        },
+        {
+          "code": "706588",
+          "name": "博智元大63購02",
+          "type": "call",
+          "value": 1174780,
+          "volume": 772000
+        },
+        {
+          "code": "706586",
+          "name": "博智元大59購04",
+          "type": "call",
+          "value": 974000,
+          "volume": 400000
+        },
+        {
+          "code": "706513",
+          "name": "博智元大63購01",
+          "type": "call",
+          "value": 873620,
+          "volume": 386000
+        }
+      ],
+      "reason": "認購 22 檔、認購金額 0.12 億，認購/認售比 99+。"
+    },
+    {
+      "underlyingName": "英業達",
+      "market": "上市",
+      "tradeDate": "20260515",
+      "callValue": 11669820,
+      "putValue": 132650,
+      "totalValue": 11802470,
+      "callVolume": 8063000,
+      "putVolume": 95000,
+      "callCount": 44,
+      "putCount": 3,
+      "breadth": 47,
+      "callPutRatio": 87.97,
+      "score": 75,
+      "topWarrants": [
+        {
+          "code": "065360",
+          "name": "英業達國票5B購01",
+          "type": "call",
+          "value": 1103190,
+          "volume": 548000
+        },
+        {
+          "code": "060691",
+          "name": "英業達永豐5A購01",
+          "type": "call",
+          "value": 968760,
+          "volume": 256000
+        },
+        {
+          "code": "065345",
+          "name": "英業達兆豐64購01",
+          "type": "call",
+          "value": 915600,
+          "volume": 455000
+        },
+        {
+          "code": "040072",
+          "name": "英業達元大5A購01",
+          "type": "call",
+          "value": 904390,
+          "volume": 600000
+        },
+        {
+          "code": "065635",
+          "name": "英業達國泰5C購01",
+          "type": "call",
+          "value": 882350,
+          "volume": 268000
+        }
+      ],
+      "reason": "認購 44 檔、認購金額 0.12 億，認購/認售比 87.97。"
+    },
+    {
+      "underlyingName": "jpp-KY",
+      "market": "上市",
+      "tradeDate": "20260515",
+      "callValue": 11607950,
+      "putValue": 3200,
+      "totalValue": 11611150,
+      "callVolume": 7773000,
+      "putVolume": 40000,
+      "callCount": 47,
+      "putCount": 1,
+      "breadth": 48,
+      "callPutRatio": 3627.48,
+      "score": 75,
+      "topWarrants": [
+        {
+          "code": "048725",
+          "name": "jpp國票57購01",
+          "type": "call",
+          "value": 1147890,
+          "volume": 920000
+        },
+        {
+          "code": "063732",
+          "name": "jpp凱基5A購03",
+          "type": "call",
+          "value": 1017310,
+          "volume": 381000
+        },
+        {
+          "code": "058737",
+          "name": "jpp國票5A購01",
+          "type": "call",
+          "value": 914000,
+          "volume": 200000
+        },
+        {
+          "code": "061278",
+          "name": "jpp國票5A購02",
+          "type": "call",
+          "value": 819380,
+          "volume": 217000
+        },
+        {
+          "code": "066371",
+          "name": "jpp台新5B購01",
+          "type": "call",
+          "value": 745210,
+          "volume": 323000
+        }
+      ],
+      "reason": "認購 47 檔、認購金額 0.12 億，認購/認售比 99+。"
+    }
+  ],
+  "errors": [
+    "上市: no warrant rows",
+    "上櫃: fetch failed",
+    "上櫃: no warrant rows",
+    "MOPS 權證成交檔為空，已改用 TWSE/TPEX 收盤行情備援。"
+  ],
+  "sources": [
+    "mopsfin.twse.com.tw/opendata/t187ap42_L.csv",
+    "dts.twse.com.tw/opendata/t187ap42_O.csv"
+  ],
+  "source": "github-actions-backup"
+}
