@@ -3800,8 +3800,8 @@ async function loadWarrantFlow(force = false) {
   }
 }
 
-async function loadStrategyStocks() {
-  if (strategyStocksLoading || latestStocks.length) return;
+async function loadStrategyStocks(force = false) {
+  if (strategyStocksLoading || (!force && latestStocks.length)) return;
   strategyStocksLoading = true;
   try {
     let stocks = [];
@@ -4598,8 +4598,15 @@ function applyStrategyPresetFromLink(link) {
   strategyKeyword = "";
   strategySearchDraft = null;
   if (strategySearch) strategySearch.value = "";
-  deferUiWork(loadStrategyStocks);
-  if (text.includes("策略2") || text.includes("策略5")) deferUiWork(() => refreshStrategyRealtimeScan(true), 80);
+  if (text.includes("策略5")) {
+    deferUiWork(async () => {
+      await loadStrategyStocks(true);
+      await refreshStrategyRealtimeScan(true);
+    }, 60);
+  } else {
+    deferUiWork(loadStrategyStocks);
+    if (text.includes("策略2")) deferUiWork(() => refreshStrategyRealtimeScan(true), 80);
+  }
   if (text.includes("策略1")) {
     deferUiWork(() => loadOpenBuyCache(true), 60);
   }
