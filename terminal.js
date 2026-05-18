@@ -103,7 +103,7 @@ function applyStaticTitleIcons() {
   setTitleWithIcon(document.querySelector("#market-view .page-header h1"), "●", "市場總覽");
   setTitleWithIcon(document.querySelector("#watchlist-view .page-header h1"), "☆", "自選股");
   setTitleWithIcon(document.querySelector("#chip-trade-view .page-header h1"), "◆", "外資 + 投信連買");
-  setTitleWithIcon(document.querySelector("#warrant-flow-view .page-header h1"), "◒", "權證走向");
+  setTitleWithIcon(document.querySelector("#warrant-flow-view .page-header h1"), "◒", "權證資金走向");
 }
 
 function escapeAttr(value) {
@@ -1841,10 +1841,11 @@ intradayRadarStyles.textContent = `
     box-shadow: inset 0 0 0 1px rgba(255, 80, 80, 0.12);
   }
   .warrant-search-box {
-    display: flex;
-    flex-direction: column;
-    align-items: flex-start;
+    display: inline-flex;
+    flex-direction: row;
+    align-items: center;
     gap: 8px;
+    margin-left: 8px;
   }
   .warrant-search-row {
     display: flex;
@@ -2584,11 +2585,24 @@ strategy3DashboardStyles.textContent = `
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 32px;
+    min-width: 34px;
     height: 28px;
-    border-radius: 8px;
-    background: rgba(255, 91, 47, 0.18);
-    color: #ff8c5a;
+    padding: 0 9px;
+    border-radius: 999px;
+    background: #8e3524;
+    color: #fff;
+    font-weight: 900;
+  }
+  .overnight-score {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 34px;
+    height: 28px;
+    padding: 0 9px;
+    border-radius: 999px;
+    background: #8e3524;
+    color: #fff;
     font-weight: 900;
   }
   .overnight-pill {
@@ -3282,7 +3296,7 @@ function renderOvernightDashboard(evaluated) {
         <td>${projectedRatio}x</td>
         <td>${valueText}</td>
         <td>${formatInstitution(inst.total)}</td>
-        <td><b>${stock.overnightScore}</b></td>
+        <td><span class="overnight-score">${stock.overnightScore}</span></td>
         <td>
           <strong>${stock.overnightState}</strong>
           <p>量價與成交值偏強，${stock.activeMatch?.reason || "隔日沖候選。"} 本策略以 13:00 完整掃結果作為隔日沖候選。</p>
@@ -3539,6 +3553,24 @@ function formatWarrantMoney(value) {
   return Math.round(number).toLocaleString("zh-TW");
 }
 
+function nextChipScanTime() {
+  const now = new Date();
+  const candidates = [6, 21].map((hour) => {
+    const time = new Date(now);
+    time.setHours(hour, 0, 0, 0);
+    if (time <= now) time.setDate(time.getDate() + 1);
+    return time;
+  }).sort((a, b) => a - b);
+  return candidates[0].toLocaleString("zh-TW", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
+}
+
 function renderWarrantFlow() {
   const panel = viewPanels["warrant-flow"];
   if (!panel) return;
@@ -3572,6 +3604,7 @@ function renderWarrantFlow() {
   const helperText = keyword
     ? "搜尋會直接查全台股權證，不受 Top 10 排名限制；若該股票有權證成交資料就會顯示。"
     : "策略6：收盤後找明日候選，盤中輔助確認；依認購金額、購售比、多檔同步、價平/價內、剩餘天數與股票未過熱程度排序。";
+  const scanBadge = `●06:00/21:00完整掃　●預計下次掃描時間:${nextChipScanTime()}`;
 
   const body = rows.length ? rows.map((item) => {
     const hot = item.score >= 82 ? "hot" : item.score >= 68 ? "mid" : "low";
@@ -3595,7 +3628,7 @@ function renderWarrantFlow() {
     <section class="swing-dashboard">
       <div class="swing-topbar">
         <div>
-          <h2>${titleWithIcon("◒", "策略6：權證資金走向")} <span class="swing-live">● 收盤候選 / 盤中確認</span></h2>
+          <h2>${titleWithIcon("◒", "策略6：權證資金走向")} <span class="swing-live">${scanBadge}</span></h2>
           <p>${helperText}</p>
         </div>
         <div class="swing-controls">
@@ -3611,7 +3644,7 @@ function renderWarrantFlow() {
       <section class="swing-panel">
         <div class="swing-tabs">
           <button class="active" type="button">${listLabel}</button>
-          <div class="swing-actions warrant-search-box">
+          <div class="warrant-search-box">
             <small class="warrant-search-hint">🔥 可搜尋全台股票權證熱度</small>
             <div class="warrant-search-row">
               <input id="warrant-flow-search" type="search" placeholder="搜尋股票代號/名稱" value="${escapeAttr(warrantFlowKeyword)}">
