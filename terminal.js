@@ -1008,6 +1008,15 @@ function getIntradaySignals(stock) {
   const currentRate = latestPoint.volumeRate || 0;
   const rateVsDay = dayAvgRate ? currentRate / dayAvgRate : 0;
   const rateVsRecent = recentBaseRate ? currentRate / recentBaseRate : 0;
+  const minuteVolumeSurge =
+    (latestPoint.deltaVolume || 0) >= 50 ||
+    rateVsDay >= 2.2 ||
+    rateVsRecent >= 1.8;
+  const volumeHot =
+    volumeRank >= 78 ||
+    valueRank >= 78 ||
+    dailyVolumeRatio >= 1.3 ||
+    (volume >= 5000 && value >= 150000000);
   const shortAvg = avg(prices.slice(-3));
   const longAvg = avg(prices.slice(-8));
   const macdUp = prices.length >= 3 && shortAvg > longAvg && lastPrice >= (prices.at(-2) || lastPrice);
@@ -1025,12 +1034,12 @@ function getIntradaySignals(stock) {
     });
   }
 
-  if (volumeRank >= 88 || valueRank >= 88 || dailyVolumeRatio >= 1.8 || (volume >= 10000 && value >= 500000000)) {
+  if ((volumeHot && minuteVolumeSurge) || volumeRank >= 88 || valueRank >= 88 || dailyVolumeRatio >= 1.8 || (volume >= 10000 && value >= 500000000)) {
     signals.push({
       id: "volume_burst",
-      short: "爆量",
+      short: minuteVolumeSurge ? "量速" : "爆量",
       icon: "📊",
-      reason: `盤中爆量，成交量 ${Math.round(volume).toLocaleString("zh-TW")} 張，量能排名 ${volumeRank}%，成交值排名 ${valueRank}%，日K量比 ${dailyVolumeRatio ? dailyVolumeRatio.toFixed(2) : "--"}。`,
+      reason: `量能 + 分時成交量暴增，成交量 ${Math.round(volume).toLocaleString("zh-TW")} 張，新增量 ${Math.round(latestPoint.deltaVolume || 0)} 張，量速為今日均速 ${rateVsDay ? rateVsDay.toFixed(1) : "--"} 倍，成交值/量能排名 ${valueRank}%/${volumeRank}%。`,
     });
   }
 
@@ -1555,22 +1564,41 @@ function getIntradayFallbackSignal(stock) {
   const open = Number(stock.open) || 0;
   const high = Number(stock.high) || 0;
   const limitUp = Number(stock.limitUp) || 0;
-  const hasLiquidity = value >= 50000000 || volume >= 1000 || valueRank >= 55 || volumeRank >= 55;
-  const hasPriceAction = pct >= 0.5 || (open && close >= open * 1.005) || (high && close >= high * 0.985);
-  if (!hasLiquidity || !hasPriceAction) return null;
+  const nearLimit = limitUp && close >= limitUp * 0.985;
+  const limitLocked = limitUp && close >= limitUp * 0.998;
+  const volumeHot = value >= 50000000 || volume >= 1000 || valueRank >= 55 || volumeRank >= 55;
+  const priceHot = pct >= 0.5 || (open && close >= open * 1.005) || (high && close >= high * 0.985);
+  const strongMove = pct >= 2 || (open && close >= open * 1.015);
+  if (!nearLimit && !volumeHot && !priceHot && !strongMove) return null;
   if (limitUp && close >= limitUp * 0.998) {
     return {
-      id: "live_candidate",
-      short: "漲停量",
-      icon: "⚡",
+      id: "limit_lock",
+      short: "漲停",
+      icon: "🔒",
       reason: `即時量價候選：接近漲停，成交量 ${Math.round(volume).toLocaleString("zh-TW")} 張，先列入觀察，不代表可追。`,
+    };
+  }
+  if (nearLimit) {
+    return {
+      id: "limit_lock",
+      short: "近漲停",
+      icon: "🔒",
+      reason: `即時單一條件觸發：接近漲停，現價 ${formatNumber(close, close >= 100 ? 0 : 2)}，先列入當沖雷達觀察。`,
+    };
+  }
+  if (volumeHot && !priceHot) {
+    return {
+      id: "volume_burst",
+      short: "爆量",
+      icon: "📊",
+      reason: `即時單一條件觸發：成交量 ${Math.round(volume).toLocaleString("zh-TW")} 張，成交值/量能排名 ${valueRank}%/${volumeRank}%。`,
     };
   }
   return {
     id: "live_candidate",
     short: "量價",
     icon: "⚡",
-    reason: `即時量價候選：漲幅 ${pct.toFixed(2)}%，成交量 ${Math.round(volume).toLocaleString("zh-TW")} 張，成交值/量能排名 ${valueRank}%/${volumeRank}%。`,
+    reason: `即時單一條件觸發：漲幅 ${pct.toFixed(2)}%，成交量 ${Math.round(volume).toLocaleString("zh-TW")} 張，先顯示再分級確認。`,
   };
 }
 
@@ -3304,6 +3332,14 @@ function renderStrategyScanner() {
     return;
   }
 
+  if (selected.length === 1 && selected[0] === "intraday_2m") {
+    const intradayRows = universe
+      .filter((stock) => !keyword || stock.code.includes(keyword) || stock.name.toLowerCase().includes(keyword))
+      .map(evaluateStrategyStock);
+    renderIntradayRadar(intradayRows);
+    return;
+  }
+
   const evaluated = universe.map(evaluateStrategyStock).filter((stock) => {
     const matchedIds = stock.matches.map((item) => item.id);
     const passMode = strategyMode === "all"
@@ -3313,10 +3349,6 @@ function renderStrategyScanner() {
     return passMode && passKeyword;
   }).sort((a, b) => b.matches.length - a.matches.length || b.score - a.score || b.value - a.value);
 
-  if (selected.length === 1 && selected[0] === "intraday_2m") {
-    renderIntradayRadar(evaluated);
-    return;
-  }
   if (strategyPresetMode === "strategy3") {
     renderOvernightDashboard(evaluated);
     return;
