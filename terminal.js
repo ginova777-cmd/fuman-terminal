@@ -224,7 +224,7 @@ function labelChipTradeMode() {
 const endpoints = {
   backend: "/api/market",
   heatmap: "/api/heatmap",
-  institution: "/data/institution-latest.json",
+  institution: "/api/institution",
   history: "/api/history",
   realtime: "/api/realtime",
   scanOpenBuy: "/api/scan-open-buy",
