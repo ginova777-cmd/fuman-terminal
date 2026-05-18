@@ -1,4 +1,4 @@
-// api/market.js — 即時加權指數 + 櫃買指數
+// api/market.js — 即時加權指數 + 櫃買指數 + 台指近全
 async function fetchWithTimeout(url, options = {}, timeout = 8000) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeout);
@@ -42,10 +42,10 @@ async function fetchTextWithTimeout(url, options = {}, timeout = 8000) {
 function calcChange(current, prev) {
   if (!prev || !current) return { diff: "0", pct: "0", sign: "+" };
   const diff = (current - prev).toFixed(2);
-  const pct  = ((current - prev) / prev * 100).toFixed(2);
+  const pct = ((current - prev) / prev * 100).toFixed(2);
   return {
     diff: Math.abs(diff).toString(),
-    pct:  Math.abs(pct).toString(),
+    pct: Math.abs(pct).toString(),
     sign: parseFloat(diff) >= 0 ? "+" : "-",
   };
 }
@@ -53,7 +53,6 @@ function calcChange(current, prev) {
 async function fetchIndexes() {
   const results = [];
 
-  // 加權指數（即時）
   try {
     const data = await fetchWithTimeout(
       "https://mis.twse.com.tw/stock/api/getStockInfo.jsp?ex_ch=tse_t00.tw&json=1&delay=0",
@@ -62,7 +61,7 @@ async function fetchIndexes() {
     const item = data?.msgArray?.[0];
     if (item) {
       const current = parseFloat(item.z !== "-" ? item.z : item.y) || 0;
-      const prev    = parseFloat(item.y) || 0;
+      const prev = parseFloat(item.y) || 0;
       const { diff, pct, sign } = calcChange(current, prev);
       results.push({
         指數: "發行量加權股價指數",
@@ -73,10 +72,10 @@ async function fetchIndexes() {
         _source: "MIS即時",
       });
     }
-  } catch (e) {
+  } catch (error) {
     try {
       const raw = await fetchWithTimeout("https://openapi.twse.com.tw/v1/exchangeReport/MI_INDEX");
-      const item = raw.find(r => r["指數"] === "發行量加權股價指數");
+      const item = raw.find((row) => row["指數"] === "發行量加權股價指數");
       if (item) {
         results.push({
           指數: "發行量加權股價指數",
@@ -87,10 +86,9 @@ async function fetchIndexes() {
           _source: "TWSE OpenAPI",
         });
       }
-    } catch (e2) {}
+    } catch (error2) {}
   }
 
-  // 櫃買指數（即時）
   try {
     const data = await fetchWithTimeout(
       "https://mis.twse.com.tw/stock/api/getStockInfo.jsp?ex_ch=otc_o00.tw&json=1&delay=0",
@@ -99,7 +97,7 @@ async function fetchIndexes() {
     const item = data?.msgArray?.[0];
     if (item) {
       const current = parseFloat(item.z !== "-" ? item.z : item.y) || 0;
-      const prev    = parseFloat(item.y) || 0;
+      const prev = parseFloat(item.y) || 0;
       const { diff, pct, sign } = calcChange(current, prev);
       results.push({
         指數: "櫃買指數",
@@ -110,34 +108,45 @@ async function fetchIndexes() {
         _source: "MIS即時",
       });
     }
-  } catch (e) {}
+  } catch (error) {}
 
   return results;
 }
 
+async function fetchTaifexMarket(marketType) {
+  const data = await fetchWithTimeout("https://mis.taifex.com.tw/futures/api/getQuoteList", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Accept": "application/json",
+      "Referer": "https://mis.taifex.com.tw/futures/",
+      "Origin": "https://mis.taifex.com.tw",
+    },
+    body: JSON.stringify({
+      MarketType: marketType,
+      SymbolType: "F",
+      KindID: "1",
+      CID: "",
+      ExpireMonth: "",
+      RowSize: "10",
+      PageNo: "1",
+      Language: "zh-tw",
+    }),
+  }, 8000);
+
+  return (data?.RtData?.QuoteList || data?.RtnData?.QuoteList || []).filter((item) => {
+    const symbol = String(item.SymbolID || "");
+    const name = String(item.DispCName || item.CName || "");
+    return /^TXF/i.test(symbol) && !symbol.includes("-P") && !name.includes("現貨");
+  });
+}
+
 async function fetchFutures() {
   try {
-    const data = await fetchWithTimeout("https://mis.taifex.com.tw/futures/api/getQuoteList", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Accept": "application/json",
-        "Referer": "https://mis.taifex.com.tw/",
-        "Origin": "https://mis.taifex.com.tw",
-      },
-      body: JSON.stringify({
-        MarketType: "0",
-        SymbolType: "F",
-        KindID: "1",
-        CID: "TXF",
-        ExpireMonth: "",
-        RowSize: "5",
-        PageNo: "1",
-        Language: "zh-tw",
-      }),
-    }, 8000);
-    const list = (data?.RtData?.QuoteList || data?.RtnData?.QuoteList || [])
-      .filter((item) => String(item.SymbolID || "").includes("-F"));
+    const nightList = await fetchTaifexMarket("1");
+    const dayList = nightList.length ? [] : await fetchTaifexMarket("0");
+    const list = nightList.length ? nightList : dayList;
+
     const toItem = (item) => {
       if (!item) return null;
       const price = parseFloat(String(item.CLastPrice || "").replace(/,/g, "")) || 0;
@@ -146,16 +155,21 @@ async function fetchFutures() {
       const diff = price - prev;
       const pct = prev ? (diff / prev) * 100 : 0;
       const sign = diff >= 0 ? "+" : "-";
-      const basisLabel = price > prev ? "多方勢（高於結算）" : price < prev ? "空方勢（低於結算）" : "平盤整理";
+      const basisSide = diff > 0 ? "long" : diff < 0 ? "short" : "flat";
+      const basisLabel = basisSide === "long"
+        ? "多方勢（高於結算）"
+        : basisSide === "short"
+          ? "空方勢（低於結算）"
+          : "平盤（貼近結算）";
       return {
-        name: item.DispCName || item.CName || "台指期",
+        name: item.DispCName || item.CName || "台指近全",
         month: item.SymbolID || item.CID || "",
         price: price.toFixed(0),
         change: `${sign}${Math.abs(diff).toFixed(0)}`,
         pct: `${sign}${Math.abs(pct).toFixed(2)}%`,
         volume: item.CTotalVolume || "--",
         basisLabel,
-        basisSide: price > prev ? "long" : price < prev ? "short" : "flat",
+        basisSide,
       };
     };
 
@@ -186,7 +200,7 @@ async function fetchOtcYahooSignal() {
 
 function getMarketStatus() {
   const now = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Taipei" }));
-  const day   = now.getDay();
+  const day = now.getDay();
   const total = now.getHours() * 60 + now.getMinutes();
   if (day === 6) return "closed";
   if (day === 0) return total >= 15 * 60 ? "night" : "closed";
