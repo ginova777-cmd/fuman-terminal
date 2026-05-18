@@ -4358,6 +4358,7 @@ function renderChipTradeTable() {
     `;
   }).join("");
 
+  hydrateChipRealtimeQuotes(shown);
 }
 
 async function hydrateChipRealtimeQuotes(rows) {
@@ -4366,36 +4367,34 @@ async function hydrateChipRealtimeQuotes(rows) {
   if (!targets.length) return;
   chipQuoteHydrating = true;
   try {
-    await Promise.all(targets.map(async (row) => {
-      try {
-        const data = await fetchJson(`/api/proxy?code=${row.code}`, 7000);
-        const item = data?.msgArray?.[0];
-        if (!item) return;
-        const price = parseQuoteNumber(item.z, item.a, item.b, item.y);
-        const prev = parseQuoteNumber(item.y);
-        if (!price || !prev) return;
-        const change = price - prev;
-        const percent = prev ? (change / prev) * 100 : 0;
-        const volume = parseQuoteNumber(item.v, item.tv);
-        const tr = document.querySelector(`[data-chip-row="${row.code}"]`);
-        if (!tr) return;
-        const up = change >= 0;
-        const priceEl = tr.querySelector("[data-chip-price]");
-        const changeEl = tr.querySelector("[data-chip-change]");
-        const percentEl = tr.querySelector("[data-chip-percent]");
-        const volumeEl = tr.querySelector("[data-chip-volume]");
-        if (priceEl) priceEl.textContent = formatNumber(price, price >= 100 ? 0 : 2);
-        if (changeEl) {
-          changeEl.textContent = `${up ? "+" : ""}${formatNumber(change, 2)}`;
-          changeEl.className = up ? "red" : "green";
-        }
-        if (percentEl) {
-          percentEl.textContent = formatNumber(percent, 2);
-          percentEl.className = percent >= 0 ? "red" : "green";
-        }
-        if (volumeEl) volumeEl.textContent = volume ? Math.round(volume).toLocaleString("zh-TW") : "--";
-      } catch {}
-    }));
+    const codes = targets.map((row) => row.code).filter(Boolean).join(",");
+    const payload = await fetchJson(`${endpoints.realtime}?codes=${encodeURIComponent(codes)}&t=${Date.now()}`, 12000);
+    normalizeArray(payload?.quotes).forEach((quote) => {
+      const code = String(quote.code || "");
+      if (!code || !quote.close) return;
+      updateStrategyQuote(quote);
+      const tr = document.querySelector(`[data-chip-row="${code}"]`);
+      if (!tr) return;
+      const price = cleanNumber(quote.close);
+      const change = cleanNumber(quote.change);
+      const percent = cleanNumber(quote.percent);
+      const volume = cleanNumber(quote.tradeVolume);
+      const up = change >= 0;
+      const priceEl = tr.querySelector("[data-chip-price]");
+      const changeEl = tr.querySelector("[data-chip-change]");
+      const percentEl = tr.querySelector("[data-chip-percent]");
+      const volumeEl = tr.querySelector("[data-chip-volume]");
+      if (priceEl) priceEl.textContent = formatNumber(price, price >= 100 ? 0 : 2);
+      if (changeEl) {
+        changeEl.textContent = `${up ? "+" : ""}${formatNumber(change, 2)}`;
+        changeEl.className = up ? "red" : "green";
+      }
+      if (percentEl) {
+        percentEl.textContent = formatNumber(percent, 2);
+        percentEl.className = percent >= 0 ? "red" : "green";
+      }
+      if (volumeEl) volumeEl.textContent = volume ? Math.round(volume).toLocaleString("zh-TW") : "--";
+    });
   } finally {
     chipQuoteHydrating = false;
   }
