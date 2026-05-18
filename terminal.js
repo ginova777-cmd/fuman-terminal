@@ -4438,8 +4438,9 @@ async function loadMarketData() {
 
     if (!payload.ok) throw new Error("Backend failed");
 
-    const near = payload.futuresNear || payload.futures || null;
-    const next = payload.futuresNext || null;
+    const directFutures = await fetchFuturesDirect();
+    const near = directFutures.near || payload.futuresNear || payload.futures || null;
+    const next = directFutures.next || payload.futuresNext || null;
 
     renderIndexes(
       normalizeArray(payload.indexes),
