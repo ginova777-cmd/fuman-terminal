@@ -148,10 +148,10 @@ function labelUpdateModes() {
     badge.className = "chip-scan-badge";
     badge.textContent = "●06:00 / 21:00完整掃";
     badge.style.cssText = `
-      display: block;
-      margin-top: 6px;
+      display: inline-flex;
+      margin-left: 8px;
       color: #ff8a3d;
-      font-size: 12px;
+      font-size: 11px;
       font-weight: 900;
       letter-spacing: 0;
       white-space: nowrap;
