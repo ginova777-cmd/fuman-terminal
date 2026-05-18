@@ -99,10 +99,15 @@ function setTitleWithIcon(target, icon, text) {
   target.innerHTML = titleWithIcon(icon, text);
 }
 
+function chipScanBadgeHtml() {
+  return `<span class="swing-live" style="color:#22c55e;border-color:rgba(34,197,94,.5);background:rgba(34,197,94,.12);margin-left:10px;">●06:00/21:00完整掃　●預計下次掃描時間:${nextChipScanTime()}</span>`;
+}
+
 function applyStaticTitleIcons() {
   setTitleWithIcon(document.querySelector("#market-view .page-header h1"), "●", "市場總覽");
   setTitleWithIcon(document.querySelector("#watchlist-view .page-header h1"), "☆", "自選股");
-  setTitleWithIcon(document.querySelector("#chip-trade-view .page-header h1"), "◆", "外資 + 投信連買");
+  const chipTitle = document.querySelector("#chip-trade-view .page-header h1");
+  if (chipTitle) chipTitle.innerHTML = `${titleWithIcon("◆", "外資 + 投信連買")} ${chipScanBadgeHtml()}`;
   setTitleWithIcon(document.querySelector("#warrant-flow-view .page-header h1"), "◒", "權證資金走向");
 }
 
@@ -268,9 +273,11 @@ let warrantFlowData = [];
 let warrantFlowQuotes = {};
 let warrantFlowUpdatedAt = 0;
 let warrantFlowKeyword = "";
+let warrantFlowPage = 1;
 let warrantFlowSearchTimer = 0;
 let warrantFlowSearchLoading = false;
 const WARRANT_FLOW_LOCAL_CACHE_KEY = "fuman_warrant_flow_cache_v1";
+const WARRANT_FLOW_PAGE_SIZE = 10;
 const CACHE_FRESH_MS = 10 * 60 * 1000;
 let selectedStrategyIds = new Set();
 let strategyMode = "any";
@@ -3537,6 +3544,7 @@ async function searchWarrantFlowRemote(keyword) {
 
 function scheduleWarrantFlowSearch() {
   const keyword = warrantFlowKeyword.trim();
+  warrantFlowPage = 1;
   clearTimeout(warrantFlowSearchTimer);
   if (keyword.length < 2) {
     renderWarrantFlow();
@@ -3549,6 +3557,7 @@ function scheduleWarrantFlowSearch() {
 async function submitWarrantFlowSearch() {
   const input = document.querySelector("#warrant-flow-search");
   warrantFlowKeyword = String(input?.value || "").trim();
+  warrantFlowPage = 1;
   if (warrantFlowKeyword.length >= 2) {
     renderWarrantFlow();
     await searchWarrantFlowRemote(warrantFlowKeyword);
@@ -3606,17 +3615,32 @@ function renderWarrantFlow() {
     )
     .map((item, index) => ({ ...item, rank: index + 1 }));
   const priorityRows = allRows.filter((item) => item.stockPercent >= 0 && item.stockPercent <= 2.5);
-  const rows = keyword
+  const sourceRows = keyword
     ? allRows.filter((item) =>
       item.code.includes(keyword) ||
       item.name.toLowerCase().includes(keyword) ||
       item.underlyingName.toLowerCase().includes(keyword))
-    : priorityRows.slice(0, 10).map((item, index) => ({ ...item, rank: index + 1 }));
-  const listLabel = keyword ? `搜尋結果 ${rows.length} 筆｜全台股查詢` : "優先觀察 Top 10";
+    : priorityRows;
+  const totalPages = Math.max(1, Math.ceil(sourceRows.length / WARRANT_FLOW_PAGE_SIZE));
+  warrantFlowPage = Math.min(Math.max(warrantFlowPage || 1, 1), totalPages);
+  const pageStart = (warrantFlowPage - 1) * WARRANT_FLOW_PAGE_SIZE;
+  const rows = sourceRows
+    .slice(pageStart, pageStart + WARRANT_FLOW_PAGE_SIZE)
+    .map((item, index) => ({ ...item, rank: pageStart + index + 1 }));
+  const listLabel = keyword
+    ? `搜尋結果 ${sourceRows.length} 筆｜第 ${warrantFlowPage}/${totalPages} 頁`
+    : `全部 ${sourceRows.length} 筆｜第 ${warrantFlowPage}/${totalPages} 頁`;
   const helperText = keyword
-    ? "搜尋會直接查全台股權證，不受 Top 10 排名限制；若該股票有權證成交資料就會顯示。"
-    : "策略6：收盤後找明日候選，盤中輔助確認；依認購金額、購售比、多檔同步、價平/價內、剩餘天數與股票未過熱程度排序。";
+    ? "搜尋會直接查全台股權證；若該股票有權證成交資料就會顯示。"
+    : "收盤後找明日候選，盤中輔助確認；依認購金額、購售比、多檔同步、價平/價內、剩餘天數與股票未過熱程度排序。";
   const scanBadge = `●06:00/21:00完整掃　●預計下次掃描時間:${nextChipScanTime()}`;
+  const pager = sourceRows.length > WARRANT_FLOW_PAGE_SIZE ? `
+    <div class="warrant-pager" style="display:flex;align-items:center;justify-content:flex-end;gap:10px;margin-top:12px;">
+      <button type="button" data-warrant-page="${warrantFlowPage - 1}" ${warrantFlowPage <= 1 ? "disabled" : ""}>上一頁</button>
+      <span style="color:#9ebdff;font-size:13px;">第 ${warrantFlowPage} / ${totalPages} 頁，共 ${sourceRows.length} 筆</span>
+      <button type="button" data-warrant-page="${warrantFlowPage + 1}" ${warrantFlowPage >= totalPages ? "disabled" : ""}>下一頁</button>
+    </div>
+  ` : "";
 
   const body = rows.length ? rows.map((item) => {
     const hot = item.score >= 82 ? "hot" : item.score >= 68 ? "mid" : "low";
@@ -3638,14 +3662,14 @@ function renderWarrantFlow() {
       </tr>
     `;
   }).join("") : `
-    <tr><td colspan="8">${keyword ? (warrantFlowSearchLoading ? "正在查詢全台股權證資料..." : "查不到這檔股票的有效權證成交資料，或目前資料來源尚未提供。") : "權證資金走向讀取中。只顯示「認購權證先熱、股票尚未噴出」的前十名。"}</td></tr>
+    <tr><td colspan="8">${keyword ? (warrantFlowSearchLoading ? "正在查詢全台股權證資料..." : "查不到這檔股票的有效權證成交資料，或目前資料來源尚未提供。") : "目前沒有符合「認購權證先熱、股票尚未噴出」的資料。"}</td></tr>
   `;
 
   panel.innerHTML = `
     <section class="swing-dashboard">
       <div class="swing-topbar">
         <div>
-          <h2>${titleWithIcon("◒", "策略6：權證資金走向")} <span class="swing-live">${scanBadge}</span></h2>
+          <h2>${titleWithIcon("◒", "權證資金走向")} <span class="swing-live" style="color:#22c55e;border-color:rgba(34,197,94,.5);background:rgba(34,197,94,.12);">${scanBadge}</span></h2>
           <p>${helperText}</p>
         </div>
         <div class="swing-controls">
@@ -3678,6 +3702,7 @@ function renderWarrantFlow() {
           </thead>
           <tbody>${body}</tbody>
         </table>
+        ${pager}
       </section>
     </section>
   `;
@@ -3688,7 +3713,21 @@ function renderWarrantFlow() {
     event.preventDefault();
     submitWarrantFlowSearch();
   });
-  panel.querySelector("#warrant-flow-refresh")?.addEventListener("click", () => window.location.reload());
+  panel.querySelector("#warrant-flow-refresh")?.addEventListener("click", async () => {
+    warrantFlowKeyword = "";
+    warrantFlowPage = 1;
+    const input = panel.querySelector("#warrant-flow-search");
+    if (input) input.value = "";
+    await loadWarrantFlow(true);
+  });
+  panel.querySelectorAll("[data-warrant-page]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const page = Number(button.dataset.warrantPage);
+      if (!Number.isFinite(page)) return;
+      warrantFlowPage = page;
+      renderWarrantFlow();
+    });
+  });
 }
 
 async function loadWarrantFlow(force = false) {
@@ -4067,10 +4106,8 @@ function renderChipTradeTable() {
   if (!body) return;
 
   if (dateEl) {
-    const now = new Date();
-    const time = now.toLocaleTimeString("zh-TW", { hour12: false });
-    const modeText = "盤後收盤";
-    dateEl.textContent = `${formatChipDate(institutionDate)}｜${modeText}　更新 ${time}`;
+    dateEl.textContent = "";
+    dateEl.hidden = true;
   }
 
   const rows = latestStocks
