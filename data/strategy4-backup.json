@@ -1,11 +1,10 @@
 {
   "ok": true,
   "source": "github-actions-backup",
-  "updatedAt": "2026-05-17T08:19:11.906Z",
-  "fullScan": true,
-  "cursor": 15,
+  "updatedAt": "2026-05-18T02:00:34.916Z",
+  "cursor": 255,
   "total": 1953,
-  "scannedThisRun": 1968,
+  "scannedThisRun": 240,
   "scannedCodes": [
     "1101",
     "1102",
