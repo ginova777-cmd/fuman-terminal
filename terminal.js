@@ -3519,6 +3519,17 @@ function scheduleWarrantFlowSearch() {
   warrantFlowSearchTimer = setTimeout(() => searchWarrantFlowRemote(keyword), 350);
 }
 
+async function submitWarrantFlowSearch() {
+  const input = document.querySelector("#warrant-flow-search");
+  warrantFlowKeyword = String(input?.value || "").trim();
+  if (warrantFlowKeyword.length >= 2) {
+    renderWarrantFlow();
+    await searchWarrantFlowRemote(warrantFlowKeyword);
+  } else {
+    renderWarrantFlow();
+  }
+}
+
 function formatWarrantMoney(value) {
   const number = cleanNumber(value);
   if (number >= 100000000) return `${(number / 100000000).toFixed(2)} 億`;
@@ -3555,9 +3566,15 @@ function renderWarrantFlow() {
       item.name.toLowerCase().includes(keyword) ||
       item.underlyingName.toLowerCase().includes(keyword))
     : allRows.slice(0, 10);
+  const totalCall = warrantFlowData.reduce((sum, item) => sum + cleanNumber(item.callValue), 0);
+  const totalPut = warrantFlowData.reduce((sum, item) => sum + cleanNumber(item.putValue), 0);
   const listLabel = keyword ? `搜尋結果 ${rows.length} 筆｜全台股查詢` : "優先觀察 Top 10";
+  const helperText = keyword
+    ? "搜尋會直接查全台股權證，不受 Top 10 排名限制；若該股票有權證成交資料就會顯示。"
+    : "策略6：收盤後找明日候選，盤中輔助確認；依認購金額、購售比、多檔同步、價平/價內、剩餘天數與股票未過熱程度排序。";
 
   const body = rows.length ? rows.map((item) => {
+    const sign = item.stockPercent >= 0 ? "+" : "";
     const hot = item.score >= 82 ? "hot" : item.score >= 68 ? "mid" : "low";
     const warrantHint = item.topWarrants.map((warrant) => {
       const money = Number.isFinite(Number(warrant.moneynessPct)) ? `${warrant.moneynessPct >= 0 ? "+" : ""}${Number(warrant.moneynessPct).toFixed(1)}%` : "--";
@@ -3573,27 +3590,54 @@ function renderWarrantFlow() {
         <td>${formatWarrantMoney(item.putValue)}</td>
         <td><b class="swing-stage ${hot}">${item.callPutRatio >= 99 ? "99+" : item.callPutRatio}</b></td>
         <td>${item.callCount} / ${item.putCount}</td>
+        <td class="pct">${sign}${item.stockPercent.toFixed(2)}%</td>
         <td>${warrantHint}</td>
-        <td><b class="swing-stage mid">權證資金偏多</b></td>
+        <td>${item.reason} 判斷：${item.stockPercent >= 0 && item.stockPercent <= 2.5 ? "權證先熱，股票未噴。" : "不在優先區。"}</td>
       </tr>
     `;
   }).join("") : `
-    <tr><td colspan="9">${keyword ? (warrantFlowSearchLoading ? "正在查詢全台股權證資料..." : "查不到這檔股票的有效權證成交資料，或目前資料來源尚未提供。") : "權證資金走向讀取中。只顯示「認購權證先熱、股票尚未噴出」的前十名。"}</td></tr>
+    <tr><td colspan="10">${keyword ? (warrantFlowSearchLoading ? "正在查詢全台股權證資料..." : "查不到這檔股票的有效權證成交資料，或目前資料來源尚未提供。") : "權證資金走向讀取中。只顯示「認購權證先熱、股票尚未噴出」的前十名。"}</td></tr>
   `;
 
   panel.innerHTML = `
     <section class="swing-dashboard">
+      <div class="swing-topbar">
+        <div>
+          <h2>${titleWithIcon("◒", "策略6：權證資金走向")} <span class="swing-live">● 收盤候選 / 盤中確認</span></h2>
+          <p>${helperText}</p>
+        </div>
+        <div class="swing-controls">
+          <label>更新模式：<select><option>06:00 / 21:00 完整掃</option></select></label>
+          <label>模式：<select><option>權證先熱股票未噴</option></select></label>
+        </div>
+      </div>
+      <div class="swing-signal-grid">
+        <button class="swing-card active selected" type="button">
+          <div><strong>命中標的</strong><small>權證資金偏多</small></div><em>${warrantFlowData.length}</em>
+        </button>
+        <button class="swing-card active" type="button">
+          <div><strong>認購金額</strong><small>候選合計</small></div><em>${formatWarrantMoney(totalCall)}</em>
+        </button>
+        <button class="swing-card ${totalPut ? "active" : ""}" type="button">
+          <div><strong>認售金額</strong><small>候選合計</small></div><em>${formatWarrantMoney(totalPut)}</em>
+        </button>
+      </div>
       <section class="swing-panel">
         <div class="swing-tabs">
           <button class="active" type="button">${listLabel}</button>
           <div class="swing-actions warrant-search-box">
+            <small class="warrant-search-hint">🔥 可搜尋全台股票權證熱度</small>
+            <div class="warrant-search-row">
+              <input id="warrant-flow-search" type="search" placeholder="搜尋股票代號/名稱" value="${escapeAttr(warrantFlowKeyword)}">
+              <button id="warrant-flow-submit" type="button">搜尋</button>
+            </div>
             <button id="warrant-flow-refresh" type="button">重新整理</button>
           </div>
         </div>
         <table class="swing-table">
           <thead>
             <tr>
-              <th>排名</th><th>股票代號</th><th>標的名稱</th><th>認購金額</th><th>認售金額</th><th>購/售比</th><th>購/售檔數</th><th>價平/價內權證</th><th>判斷</th>
+              <th>排名</th><th>股票代號</th><th>標的名稱</th><th>認購金額</th><th>認售金額</th><th>購/售比</th><th>購/售檔數</th><th>股票漲幅${rows.some((item) => item.stockRealtime) ? " 即時" : ""}</th><th>價平/價內權證</th><th>判斷</th>
             </tr>
           </thead>
           <tbody>${body}</tbody>
@@ -3602,6 +3646,12 @@ function renderWarrantFlow() {
     </section>
   `;
 
+  panel.querySelector("#warrant-flow-submit")?.addEventListener("click", submitWarrantFlowSearch);
+  panel.querySelector("#warrant-flow-search")?.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter") return;
+    event.preventDefault();
+    submitWarrantFlowSearch();
+  });
   panel.querySelector("#warrant-flow-refresh")?.addEventListener("click", () => loadWarrantFlow(true));
 }
 
