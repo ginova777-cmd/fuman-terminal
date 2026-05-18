@@ -4992,6 +4992,12 @@ async function fetchHeatmapStockFallback(code) {
 async function fetchStockPrice(code) {
   const cached = latestStocks.find(s => s.code === code) || null;
   try {
+    const realtimePayload = await fetchJson(`${endpoints.realtime}?codes=${encodeURIComponent(code)}&t=${Date.now()}`, 8000);
+    const realtimeQuote = normalizeArray(realtimePayload?.quotes).find((quote) => String(quote.code || "") === code);
+    if (realtimeQuote?.close) {
+      updateStrategyQuote(realtimeQuote);
+      return applyStrategyQuote({ ...(cached || {}), code, name: cached?.name || realtimeQuote.name || code });
+    }
 
     const url = `/api/proxy?code=${code}`;
     const data = await fetchJson(url, 5000);
@@ -5006,6 +5012,65 @@ async function fetchStockPrice(code) {
     return { code, name: item.n || code, close, change, percent, tradeVolume: parseQuoteNumber(item.v, item.tv) };
   } catch {
     return await fetchHeatmapStockFallback(code) || await fetchDailyStockFallback(code) || cached;
+  }
+}
+
+function updateWatchlistCard(stock, fallbackName = "") {
+  if (!stock?.code) return;
+  const priceEl = document.querySelector(`#wprice-${stock.code}`);
+  const changeEl = document.querySelector(`#wchange-${stock.code}`);
+  const instEl = document.querySelector(`#winst-${stock.code}`);
+  if (priceEl) priceEl.textContent = stock.close ? stock.close.toLocaleString("zh-TW") : "--";
+  if (changeEl) {
+    const sign = stock.change >= 0 ? "+" : "";
+    const color = stock.change > 0 ? "#e74c3c" : stock.change < 0 ? "#27ae60" : "#aaa";
+    changeEl.style.color = color;
+    changeEl.textContent = `${sign}${(stock.change || 0).toFixed(2)} (${sign}${(stock.percent || 0).toFixed(2)}%)`;
+  }
+  if (stock.name && stock.name !== fallbackName && stock.name !== stock.code) {
+    saveWatchlist(getWatchlist().map(w => w.code === stock.code ? {...w, name: stock.name} : w));
+    const nameEls = document.querySelectorAll(`#wcard-${stock.code} span`);
+    if (nameEls[1]) nameEls[1].textContent = stock.name;
+    const card = document.querySelector(`#wcard-${stock.code}`);
+    if (card) card.dataset.name = stock.name;
+  }
+  if (instEl) {
+    const inst = institutionData[stock.code];
+    if (inst) {
+      const fColor = inst.foreign > 0 ? "#e74c3c" : inst.foreign < 0 ? "#27ae60" : "#aaa";
+      const tColor = inst.trust > 0 ? "#e74c3c" : inst.trust < 0 ? "#27ae60" : "#aaa";
+      instEl.innerHTML = `外資 <span style="color:${fColor}">${inst.foreign > 0 ? "+" : ""}${(inst.foreign/1000).toFixed(0)}k</span>　投信 <span style="color:${tColor}">${inst.trust > 0 ? "+" : ""}${(inst.trust/1000).toFixed(0)}k</span>`;
+    } else {
+      instEl.innerHTML = `外資 <span>盤後</span>　投信 <span>盤後</span>`;
+    }
+  }
+}
+
+async function refreshWatchlistQuotes(updateDashboard = true) {
+  const list = getWatchlist();
+  if (!list.length) return;
+  try {
+    const codes = list.map((item) => item.code).filter(Boolean).slice(0, 80);
+    const payload = await fetchJson(`${endpoints.realtime}?codes=${encodeURIComponent(codes.join(","))}&t=${Date.now()}`, 10000);
+    normalizeArray(payload?.quotes).forEach((quote) => {
+      updateStrategyQuote(quote);
+      const fallback = latestStocks.find((stock) => stock.code === quote.code) || list.find((item) => item.code === quote.code) || {};
+      const stock = applyStrategyQuote({ ...fallback, code: quote.code, name: fallback.name || quote.name || quote.code });
+      updateWatchlistCard(stock, fallback.name || "");
+    });
+  } catch {
+    await Promise.allSettled(list.map(async (item) => {
+      const stock = await fetchStockPrice(item.code);
+      if (stock) updateWatchlistCard(stock, item.name || "");
+    }));
+  }
+  if (watchlistRefresh) {
+    const now = new Date();
+    watchlistRefresh.textContent = `${String(now.getMonth()+1).padStart(2,"0")}/${String(now.getDate()).padStart(2,"0")}  更新 ${now.toLocaleTimeString("zh-TW", {hour12:false})}`;
+  }
+  const selectedCard = document.querySelector(".watchlist-card.selected");
+  if (updateDashboard && selectedCard && isViewActive("watchlist")) {
+    showTradingDashboard(selectedCard.dataset.code, selectedCard.dataset.name);
   }
 }
 
@@ -5054,37 +5119,7 @@ async function renderWatchlist() {
     selectedCard.click();
   }
 
-  for (const item of list) {
-    fetchStockPrice(item.code).then(stock => {
-      if (!stock) return;
-      const priceEl = document.querySelector(`#wprice-${item.code}`);
-      const changeEl = document.querySelector(`#wchange-${item.code}`);
-      const instEl = document.querySelector(`#winst-${item.code}`);
-      if (priceEl) priceEl.textContent = stock.close.toLocaleString("zh-TW");
-      if (changeEl) {
-        const sign = stock.change >= 0 ? "+" : "";
-        const color = stock.change > 0 ? "#e74c3c" : stock.change < 0 ? "#27ae60" : "#aaa";
-        changeEl.style.color = color;
-        changeEl.textContent = `${sign}${stock.change.toFixed(2)} (${sign}${stock.percent.toFixed(2)}%)`;
-        if (stock.name && stock.name !== item.code) {
-          item.name = stock.name;
-          saveWatchlist(getWatchlist().map(w => w.code === item.code ? {...w, name: stock.name} : w));
-          const nameEls = document.querySelectorAll(`#wcard-${item.code} span`);
-          if (nameEls[1]) nameEls[1].textContent = stock.name;
-        }
-      }
-      if (instEl) {
-        const inst = institutionData[item.code];
-        if (inst) {
-          const fColor = inst.foreign > 0 ? "#e74c3c" : inst.foreign < 0 ? "#27ae60" : "#aaa";
-          const tColor = inst.trust > 0 ? "#e74c3c" : inst.trust < 0 ? "#27ae60" : "#aaa";
-          instEl.innerHTML = `外資 <span style="color:${fColor}">${inst.foreign > 0 ? "+" : ""}${(inst.foreign/1000).toFixed(0)}k</span>　投信 <span style="color:${tColor}">${inst.trust > 0 ? "+" : ""}${(inst.trust/1000).toFixed(0)}k</span>`;
-        } else {
-          instEl.innerHTML = `外資 <span>盤後</span>　投信 <span>盤後</span>`;
-        }
-      }
-    });
-  }
+  refreshWatchlistQuotes(false);
 
   if (watchlistRefresh) {
     const now = new Date();
@@ -5248,19 +5283,7 @@ strategySearch?.addEventListener("input", (event) => {
 });
 
 async function refreshSelectedWatchlistQuote() {
-  const card = document.querySelector(".watchlist-card.selected");
-  if (!card) return;
-  const stock = await fetchStockPrice(card.dataset.code);
-  if (!stock) return;
-  const priceEl = document.querySelector(`#wprice-${card.dataset.code}`);
-  const changeEl = document.querySelector(`#wchange-${card.dataset.code}`);
-  if (priceEl) priceEl.textContent = stock.close ? stock.close.toLocaleString("zh-TW") : "--";
-  if (changeEl) {
-    const sign = stock.change >= 0 ? "+" : "";
-    changeEl.style.color = stock.change > 0 ? "#e74c3c" : stock.change < 0 ? "#27ae60" : "#aaa";
-    changeEl.textContent = `${sign}${stock.change.toFixed(2)} (${sign}${stock.percent.toFixed(2)}%)`;
-  }
-  showTradingDashboard(card.dataset.code, stock.name || card.dataset.name);
+  await refreshWatchlistQuotes(true);
 }
 
 renderWatchlist();
