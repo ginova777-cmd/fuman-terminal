@@ -237,7 +237,7 @@ let warrantFlowUpdatedAt = 0;
 let warrantFlowKeyword = "";
 const WARRANT_FLOW_LOCAL_CACHE_KEY = "fuman_warrant_flow_cache_v1";
 const CACHE_FRESH_MS = 10 * 60 * 1000;
-let selectedStrategyIds = new Set(["momentum"]);
+let selectedStrategyIds = new Set();
 let strategyMode = "any";
 let strategyKeyword = "";
 let strategyStocksLoading = false;
@@ -3014,6 +3014,78 @@ function renderStrategy5Dashboard(evaluated) {
   `;
 }
 
+function renderOvernightDashboard(evaluated) {
+  setStrategyChrome("strategy5");
+  const rows = evaluated
+    .filter((stock) => stock.matches.some((match) => match.id === "overnight_chip"))
+    .map((stock) => ({ ...stock, activeMatch: stock.matches.find((match) => match.id === "overnight_chip") }))
+    .sort((a, b) => b.score - a.score || b.value - a.value || b.percent - a.percent)
+    .slice(0, 30);
+
+  if (strategySummary) strategySummary.textContent = `策略3-隔日沖｜直達新版頁｜符合 ${rows.length} 檔`;
+  if (strategyMatchCount) strategyMatchCount.textContent = rows.length.toLocaleString("zh-TW");
+  if (strategyAvgScore) strategyAvgScore.textContent = rows.length ? Math.round(avg(rows.map((stock) => stock.score))) : "--";
+  if (strategyTopHit) strategyTopHit.textContent = rows.length ? `${Math.max(...rows.map((stock) => stock.matches.length))}` : "--";
+
+  const cards = rows.length ? rows.map((stock, index) => {
+    const sign = stock.percent >= 0 ? "+" : "";
+    const stage = stock.swingStage || getSwingStage(stock);
+    return `
+      <article class="strategy5-stock-card">
+        <div class="rank">#${index + 1}</div>
+        <div>
+          <strong>${stock.name} <small>${stock.code}</small></strong>
+          <small>${stock.sector || "未分類"} · ${stage.label || "盤中"} · ${stock.isRealtime ? "即時" : "盤中"}</small>
+        </div>
+        <div>
+          <div class="strategy5-price">${formatNumber(stock.close, stock.close >= 100 ? 0 : 2)}</div>
+          <small class="${stock.percent >= 0 ? "red" : "green"}">${sign}${stock.percent.toFixed(2)}%</small>
+        </div>
+        <div class="strategy5-chips"><b>⌬ 隔日</b><b>${Math.round(stock.tradeVolume || 0).toLocaleString("zh-TW")}張</b></div>
+        <div class="strategy5-reason">${stock.activeMatch?.reason || "隔日沖籌碼與量價候選。"}</div>
+      </article>
+    `;
+  }).join("") : `<div class="empty-state">目前沒有符合隔日沖條件的股票。</div>`;
+
+  strategyTable.innerHTML = `
+    <section class="strategy5-shell">
+      <div class="strategy5-hero">
+        <div>
+          <b>直達新版頁</b>
+          <h2>${titleWithIcon("◐", "策略3-隔日沖")} <span class="swing-live">● 即時篩選</span></h2>
+        </div>
+        <div class="strategy5-date">
+          <span>符合</span>
+          <strong>${rows.length}</strong>
+          <span>隔日沖候選</span>
+        </div>
+      </div>
+      <section class="strategy5-dashboard">
+        <aside class="strategy5-list">
+          <button class="strategy5-filter-card active" type="button">
+            <span>⌬</span>
+            <div>
+              <strong>隔日沖吸籌監控</strong>
+              <small>只看隔日沖條件，不經過舊綜合策略頁。</small>
+            </div>
+            <em>${rows.length} 檔</em>
+          </button>
+        </aside>
+        <section class="strategy5-results">
+          <div class="strategy5-results-head">
+            <div>
+              <h3>隔日沖候選排行</h3>
+              <p>以量價、成交值與籌碼條件排序，避免混入其他策略。</p>
+            </div>
+            <span class="strategy5-count">${rows.length} 檔</span>
+          </div>
+          ${cards}
+        </section>
+      </section>
+    </section>
+  `;
+}
+
 function renderStrategyScanner() {
   if (!strategyTable) return;
   const selected = [...selectedStrategyIds];
@@ -3067,6 +3139,10 @@ function renderStrategyScanner() {
 
   if (selected.length === 1 && selected[0] === "intraday_2m") {
     renderIntradayRadar(evaluated);
+    return;
+  }
+  if (strategyPresetMode === "strategy3") {
+    renderOvernightDashboard(evaluated);
     return;
   }
   if (strategyPresetMode === "strategy5") {
@@ -4027,10 +4103,12 @@ async function loadInstitution() {
 
 function applyStrategyPresetFromLink(link) {
   const text = link?.textContent || "";
-  if (!text.includes("策略1") && !text.includes("策略2") && !text.includes("策略4") && !text.includes("策略5")) return;
-  strategyPresetMode = text.includes("策略5") ? "strategy5" : "";
+  if (!text.includes("策略1") && !text.includes("策略2") && !text.includes("策略3") && !text.includes("策略4") && !text.includes("策略5")) return;
+  strategyPresetMode = text.includes("策略5") ? "strategy5" : text.includes("策略3") ? "strategy3" : "";
   selectedStrategyIds = text.includes("策略1")
     ? new Set(["open_buy"])
+    : text.includes("策略3")
+    ? new Set(["overnight_chip"])
     : text.includes("策略5")
     ? new Set([
         "momentum",
@@ -4051,6 +4129,7 @@ function applyStrategyPresetFromLink(link) {
       ])
     : new Set([text.includes("策略4") ? "swing_radar" : "intraday_2m"]);
   if (text.includes("策略5")) strategy5ActiveId = "momentum";
+  if (text.includes("策略3")) strategy5ActiveId = "overnight_chip";
   if (text.includes("策略4")) swingSignalFilter = "all";
   if (text.includes("策略2")) intradaySignalFilter = "all";
   strategyMode = "any";
@@ -4881,5 +4960,4 @@ async function refreshSelectedWatchlistQuote() {
 }
 
 renderWatchlist();
-renderStrategyScanner();
 setInterval(refreshSelectedWatchlistQuote, 5000);
