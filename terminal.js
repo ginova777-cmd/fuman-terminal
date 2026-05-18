@@ -2547,6 +2547,17 @@ strategy3DashboardStyles.textContent = `
     font-weight: 800;
     cursor: pointer;
     padding: 0;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    white-space: nowrap;
+    line-height: 1;
+  }
+  .overnight-table th button .sort-mark {
+    display: inline-flex;
+    align-items: center;
+    flex: 0 0 auto;
+    color: #9db9ff;
   }
   .overnight-table th button:hover {
     color: #ffffff;
@@ -3226,8 +3237,8 @@ function renderOvernightDashboard(evaluated) {
   };
   const sortHeader = (key, label) => {
     const active = overnightSortKey === key;
-    const mark = active ? (overnightSortDir === "asc" ? " ▲" : " ▼") : " ↕";
-    return `<button type="button" data-overnight-sort="${key}">${label}${mark}</button>`;
+    const mark = active ? (overnightSortDir === "asc" ? "▲" : "▼") : "↕";
+    return `<button type="button" data-overnight-sort="${key}"><span>${label}</span><span class="sort-mark">${mark}</span></button>`;
   };
   const rows = evaluated
     .filter((stock) =>
@@ -3244,7 +3255,7 @@ function renderOvernightDashboard(evaluated) {
     })
     .slice(0, 30);
 
-  if (strategySummary) strategySummary.textContent = `策略3-隔日沖｜直達新版頁｜符合 ${rows.length} 檔`;
+  if (strategySummary) strategySummary.textContent = `策略3-隔日沖｜符合 ${rows.length} 檔`;
   if (strategyMatchCount) strategyMatchCount.textContent = rows.length.toLocaleString("zh-TW");
   if (strategyAvgScore) strategyAvgScore.textContent = rows.length ? Math.round(avg(rows.map((stock) => stock.overnightScore || stock.score))) : "--";
   if (strategyTopHit) strategyTopHit.textContent = rows.length ? `${Math.max(...rows.map((stock) => stock.matches.length))}` : "--";
@@ -3289,7 +3300,6 @@ function renderOvernightDashboard(evaluated) {
     <section class="strategy5-shell">
       <div class="strategy5-hero">
         <div>
-          <b>直達新版頁</b>
           <h2>${titleWithIcon("◐", "策略3-隔日沖")} <span class="swing-live">● 13:00 完整掃</span></h2>
         </div>
       </div>
