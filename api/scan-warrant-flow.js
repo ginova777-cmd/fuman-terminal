@@ -435,7 +435,18 @@ async function fetchWarrants() {
   return { rows: enriched, errors: [...errors, ...basics.errors] };
 }
 
-function aggregate(rows) {
+function normalizeSearchKeyword(value) {
+  return String(value ?? "").trim().toLowerCase();
+}
+
+function matchesUnderlyingKeyword(item, keyword) {
+  if (!keyword) return true;
+  const code = String(item.underlyingCode || "").toLowerCase();
+  const name = String(item.underlyingName || "").toLowerCase();
+  return code.includes(keyword) || name.includes(keyword);
+}
+
+function aggregate(rows, keyword = "") {
   const byName = new Map();
   for (const row of rows) {
     if (isEtfUnderlying(row.underlyingName, row.name)) continue;
@@ -479,7 +490,7 @@ function aggregate(rows) {
     byName.set(key, item);
   }
 
-  return [...byName.values()].map((item) => {
+  const scoredItems = [...byName.values()].map((item) => {
     item.topWarrants = item.topWarrants
       .sort((a, b) => b.value - a.value)
       .slice(0, 5)
@@ -540,13 +551,21 @@ function aggregate(rows) {
       topWarrants: item.topWarrants,
       reason: `${level}級：認購 ${item.callCount} 檔、價平/價內 ${item.atMoneyCallCount} 檔、認購金額 ${(item.callValue / 100000000).toFixed(2)} 億，認購/認售比 ${ratio >= 99 ? "99+" : ratio.toFixed(2)}，最近到期 ${item.minDaysToExpiry} 天。`,
     };
-  }).filter((item) => (
+  });
+
+  const baseFilter = keyword
+    ? (item) => matchesUnderlyingKeyword(item, keyword)
+    : (item) => (
     item.callValue >= 3000000 &&
     item.callCount >= 2 &&
     item.minDaysToExpiry >= 10 &&
     item.callValue > item.putValue &&
     item.callPutRatio >= 1.2
-  )).sort((a, b) => b.score - a.score || b.atMoneyCallCount - a.atMoneyCallCount || b.callValue - a.callValue);
+  );
+
+  return scoredItems
+    .filter(baseFilter)
+    .sort((a, b) => b.score - a.score || b.atMoneyCallCount - a.atMoneyCallCount || b.callValue - a.callValue);
 }
 
 module.exports = async function handler(request, response) {
@@ -559,17 +578,20 @@ module.exports = async function handler(request, response) {
     return;
   }
 
-  if (cache && Date.now() - cache.ts < CACHE_MS) {
+  const keyword = normalizeSearchKeyword(request.query?.q || request.query?.code || "");
+
+  if (!keyword && cache && Date.now() - cache.ts < CACHE_MS) {
     response.status(200).json(cache.payload);
     return;
   }
 
   try {
     const { rows, errors } = await fetchWarrants();
-    const matches = aggregate(rows).slice(0, 120);
+    const matches = aggregate(rows, keyword).slice(0, keyword ? 30 : 120);
     const payload = {
       ok: true,
       updatedAt: new Date().toISOString(),
+      query: keyword,
       scanned: rows.length,
       count: matches.length,
       matches,
@@ -579,8 +601,8 @@ module.exports = async function handler(request, response) {
         "dts.twse.com.tw/opendata/t187ap42_O.csv",
       ],
     };
-    cache = { ts: Date.now(), payload };
-    response.setHeader("Cache-Control", "s-maxage=300, stale-while-revalidate=900");
+    if (!keyword) cache = { ts: Date.now(), payload };
+    response.setHeader("Cache-Control", keyword ? "s-maxage=60, stale-while-revalidate=120" : "s-maxage=300, stale-while-revalidate=900");
     response.status(200).json(payload);
   } catch (error) {
     response.status(502).json({ ok: false, error: error.message, matches: [] });
