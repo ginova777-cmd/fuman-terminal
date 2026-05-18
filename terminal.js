@@ -947,18 +947,21 @@ function applyStrategyQuote(stock) {
   const quote = strategyRealtimeQuotes[stock.code];
   if (!quote?.close) return stock;
   const value = quote.tradeVolume && quote.close ? quote.tradeVolume * quote.close : stock.value;
+  const prevClose = cleanNumber(quote.prevClose);
+  const change = prevClose ? quote.close - prevClose : cleanNumber(quote.change);
+  const percent = prevClose ? (change / prevClose) * 100 : cleanNumber(quote.percent);
   return {
     ...stock,
     name: quote.name || stock.name,
     close: quote.close,
-    change: quote.change,
-    percent: quote.percent,
+    change,
+    percent,
     tradeVolume: quote.tradeVolume || stock.tradeVolume,
     value: value || stock.value,
     open: quote.open,
     high: quote.high,
     low: quote.low,
-    prevClose: quote.prevClose,
+    prevClose: prevClose || quote.prevClose,
     limitUp: quote.limitUp,
     isRealtime: true,
   };
@@ -2461,6 +2464,7 @@ function renderIntradayRadar(evaluated) {
   setStrategyChrome("intraday");
   const keyword = strategyKeyword.trim().toLowerCase();
   const allRows = evaluated
+    .filter((stock) => stock.isRealtime)
     .filter((stock) => (stock.intradaySignals || []).length || (stock.matches || []).some((match) => match.id === "intraday_2m"))
     .filter((stock) => !keyword || stock.code.includes(keyword) || stock.name.toLowerCase().includes(keyword))
     .map((stock) => {
@@ -4022,7 +4026,8 @@ async function refreshStrategyRealtimeScan(force = false) {
   strategyRealtimeLoading = true;
   try {
     const batchSize = 100;
-    const batches = force ? 6 : 3;
+    if (force) strategyRealtimeCursor = 0;
+    const batches = force ? Math.ceil(latestStocks.length / batchSize) : 3;
     const requests = [];
     for (let batch = 0; batch < batches; batch++) {
       const start = strategyRealtimeCursor % latestStocks.length;
@@ -4031,7 +4036,7 @@ async function refreshStrategyRealtimeScan(force = false) {
       const codes = [...rows, ...wrapped].map((stock) => stock.code).filter(Boolean);
       strategyRealtimeCursor = (start + batchSize) % latestStocks.length;
       if (codes.length) {
-        requests.push(fetchJson(`${endpoints.realtime}?codes=${encodeURIComponent(codes.join(","))}`, 12000));
+        requests.push(fetchJson(`${endpoints.realtime}?codes=${encodeURIComponent(codes.join(","))}&t=${Date.now()}`, 12000));
       }
     }
     const payloads = await Promise.allSettled(requests);
