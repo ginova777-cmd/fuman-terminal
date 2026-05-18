@@ -142,6 +142,22 @@ function labelUpdateModes() {
     if (text.includes("市場總覽")) appendUpdateBadge(link, "15秒更新", "live");
     if (text.includes("外資") || text.includes("投信")) appendUpdateBadge(link, "06/21完整掃", "slow");
   });
+  const chipHeading = document.querySelector(".chip-menu h2");
+  if (chipHeading && !chipHeading.querySelector(".chip-scan-badge")) {
+    const badge = document.createElement("small");
+    badge.className = "chip-scan-badge";
+    badge.textContent = "●06:00 / 21:00完整掃";
+    badge.style.cssText = `
+      display: block;
+      margin-top: 6px;
+      color: #ff8a3d;
+      font-size: 12px;
+      font-weight: 900;
+      letter-spacing: 0;
+      white-space: nowrap;
+    `;
+    chipHeading.appendChild(badge);
+  }
   document.querySelectorAll(".strategy-card[data-strategy]").forEach((card) => {
     const text = card.textContent || "";
     if (text.includes("策略2")) appendUpdateBadge(card, "立即更新", "live");
