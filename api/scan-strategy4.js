@@ -93,7 +93,7 @@ function normalizeTpexDailyRow(row, date) {
   if (!close) return null;
   return {
     date,
-    volume: cleanNumber(row[8]),
+    volume: cleanNumber(row[8]) / 1000,
     value: cleanNumber(row[9]),
     open: cleanNumber(row[4]),
     high: cleanNumber(row[5]),
