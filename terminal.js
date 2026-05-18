@@ -4171,8 +4171,8 @@ stockSearch.addEventListener("input", (e)=>searchStocks(e.target.value));
 viewLinks.forEach((link)=>{
   link.addEventListener("click",(e)=>{
     e.preventDefault();
+    applyStrategyPresetFromLink(link);
     showView(link.dataset.view, link);
-    deferUiWork(() => applyStrategyPresetFromLink(link), 40);
   });
 });
 document.querySelectorAll("[data-chip-mode]").forEach((button) => {
