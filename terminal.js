@@ -186,6 +186,10 @@ function openBuyScheduleLabel() {
   return `●07:00/14:30完整掃　●預計下次掃描時間:${formatDateTimeShort(nextOpenBuyScanTime())}`;
 }
 
+function strategy5ScheduleLabel() {
+  return "●07:00/14:30完整掃";
+}
+
 function openBuyStatusStyle(status = "") {
   if (String(status).includes("洗盤")) {
     return "background:rgba(255,138,61,.18);border-color:rgba(255,138,61,.55);color:#ffb06d;";
@@ -206,7 +210,7 @@ function labelUpdateModes() {
     if (text.includes("策略2")) appendUpdateBadge(card, "立即更新", "live");
     if (text.includes("策略1")) appendUpdateBadge(card, openBuyScheduleLabel(), "slow");
     if (text.includes("策略4")) appendUpdateBadge(card, "08/10/15完整掃", "slow");
-    if (text.includes("策略5")) appendUpdateBadge(card, "讀快取", "slow");
+    if (text.includes("策略5")) appendUpdateBadge(card, strategy5ScheduleLabel(), "slow");
   });
 }
 
@@ -1325,6 +1329,14 @@ function evaluateStrategyStock(stock) {
     ? Math.round(matches.reduce((sum, item) => sum + item.score, 0) / matches.length)
     : 0;
   return { ...stock, matches, score };
+}
+
+function passesStrategy5Preset(stock, match) {
+  if (!match?.id) return false;
+  const inst = stock.inst || getInstitutionTotal(stock.code);
+  if (match.id === "momentum") return match.score >= 75;
+  if (match.id === "investment_trust") return inst.trust > 0 && (Number(stock.trustStreak) || Number(inst.trustStreak) || 0) >= 2;
+  return true;
 }
 
 const INTRADAY_SIGNAL_DEFS = [
@@ -3137,7 +3149,7 @@ function renderStrategy5Dashboard(evaluated) {
   setStrategyChrome("strategy5");
   const byId = Object.fromEntries(STRATEGY5_PRESET_IDS.map((id) => [id, []]));
   evaluated.forEach((stock) => {
-    stock.matches.filter((match) => STRATEGY5_PRESET_IDS.includes(match.id)).forEach((match) => {
+    stock.matches.filter((match) => STRATEGY5_PRESET_IDS.includes(match.id) && passesStrategy5Preset(stock, match)).forEach((match) => {
       byId[match.id].push({ ...stock, activeMatch: match });
     });
   });
@@ -3187,6 +3199,7 @@ function renderStrategy5Dashboard(evaluated) {
         <div>
           <strong>${item.label}</strong>
           <small>${descriptions[id] || "符合策略條件的股票。"}</small>
+          <small style="color:#12d6df;font-weight:800;">${strategy5ScheduleLabel()}</small>
         </div>
         <em>${count} 檔</em>
       </button>
@@ -3221,7 +3234,7 @@ function renderStrategy5Dashboard(evaluated) {
       <div class="strategy5-hero">
         <div>
           <b>策略控制台</b>
-          <h2>${titleWithIcon("▰", "策略5-綜合策略")} <span class="swing-live">● 讀取既有快取</span></h2>
+          <h2>${titleWithIcon("▰", "策略5-綜合策略")} <span class="swing-live">${strategy5ScheduleLabel()}</span></h2>
         </div>
         <div class="strategy5-date">
           <span>資料日</span>
@@ -3235,7 +3248,7 @@ function renderStrategy5Dashboard(evaluated) {
           <div class="strategy5-results-head">
             <div>
               <h3>${active.label}</h3>
-              <p>${descriptions[strategy5ActiveId] || "符合策略5條件的股票。"}</p>
+              <p>${descriptions[strategy5ActiveId] || "符合策略5條件的股票。"}｜${strategy5ScheduleLabel()}</p>
             </div>
             <span class="strategy5-count">${list.length} 檔</span>
           </div>
@@ -4586,7 +4599,7 @@ function applyStrategyPresetFromLink(link) {
   strategySearchDraft = null;
   if (strategySearch) strategySearch.value = "";
   deferUiWork(loadStrategyStocks);
-  if (text.includes("策略2")) deferUiWork(() => refreshStrategyRealtimeScan(true), 80);
+  if (text.includes("策略2") || text.includes("策略5")) deferUiWork(() => refreshStrategyRealtimeScan(true), 80);
   if (text.includes("策略1")) {
     deferUiWork(() => loadOpenBuyCache(true), 60);
   }
@@ -4604,7 +4617,8 @@ async function refreshStrategyRealtimeScan(force = false) {
   }
   const isStrategyVisible = document.querySelector("#strategy-view")?.classList.contains("active");
   const isRealtimeStrategy = selectedStrategyIds.has("intraday_2m");
-  if (!force && (!isStrategyVisible || !isRealtimeStrategy)) return;
+  const isStrategy5Mode = strategyPresetMode === "strategy5";
+  if (!force && (!isStrategyVisible || (!isRealtimeStrategy && !isStrategy5Mode))) return;
 
   strategyRealtimeLoading = true;
   try {
