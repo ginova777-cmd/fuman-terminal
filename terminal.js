@@ -1145,10 +1145,7 @@ const STRATEGY5_PRESET_IDS = [
   "main_force_chip",
   "twenty_day_breakout",
   "opening_power",
-  "red_to_green",
-  "investment_trust",
   "vcp",
-  "ma_bull",
   "sync_backtest",
   "overnight_chip",
   ...STRATEGY5_IDS,
@@ -1223,12 +1220,18 @@ function strategyHit(id, stock) {
     0,
     100
   );
+  const momentumScore = clamp(scoreBase + 10, 0, 100);
+  const daily = stock.swingDaily || null;
+  const nearTwentyDayBreakout = daily
+    ? cleanNumber(daily.last?.close) >= cleanNumber(daily.highest20Prev) * 0.995
+    : stock.percentRank >= 88;
+  const volumeConfirmed = volumeRank >= 75 || cleanNumber(daily?.volumeRatio) >= 1.45;
 
   const rules = {
     momentum: {
-      hit: pct >= 2.2 && valueRank >= 55,
-      score: clamp(scoreBase + 10, 0, 100),
-      reason: `漲幅 ${pct.toFixed(2)}%，成交值排名 ${valueRank}%，動能轉強。`,
+      hit: momentumScore >= 75 && pct >= 1.2 && pct <= 9.8 && valueRank >= 70 && volumeConfirmed && nearTwentyDayBreakout,
+      score: momentumScore,
+      reason: `動能分數 ${momentumScore}，漲幅 ${pct.toFixed(2)}%，成交值排名 ${valueRank}%，成交量排名 ${volumeRank}%，接近20日突破。`,
     },
     main_force_chip: {
       hit: smartMoney > 0 && valueRank >= 45,
@@ -1334,7 +1337,7 @@ function evaluateStrategyStock(stock) {
 function passesStrategy5Preset(stock, match) {
   if (!match?.id) return false;
   const inst = stock.inst || getInstitutionTotal(stock.code);
-  if (match.id === "momentum") return match.score >= 75;
+  if (match.id === "momentum") return match.score >= 75 && stock.valueRank >= 70 && (stock.volumeRank >= 75 || cleanNumber(stock.swingDaily?.volumeRatio) >= 1.45);
   if (match.id === "investment_trust") return inst.trust > 0 && (Number(stock.trustStreak) || Number(inst.trustStreak) || 0) >= 2;
   return true;
 }
@@ -3147,9 +3150,12 @@ function renderOpenBuyRadar() {
 
 function renderStrategy5Dashboard(evaluated) {
   setStrategyChrome("strategy5");
+  const strategy5MatchesFor = (stock) => stock.matches.filter((match) =>
+    STRATEGY5_PRESET_IDS.includes(match.id) && passesStrategy5Preset(stock, match)
+  );
   const byId = Object.fromEntries(STRATEGY5_PRESET_IDS.map((id) => [id, []]));
   evaluated.forEach((stock) => {
-    stock.matches.filter((match) => STRATEGY5_PRESET_IDS.includes(match.id) && passesStrategy5Preset(stock, match)).forEach((match) => {
+    strategy5MatchesFor(stock).forEach((match) => {
       byId[match.id].push({ ...stock, activeMatch: match });
     });
   });
@@ -3164,30 +3170,47 @@ function renderStrategy5Dashboard(evaluated) {
     .slice(0, 12);
   const active = STRATEGY_BY_ID[strategy5ActiveId] || STRATEGY_BY_ID.momentum;
   const totalMatches = new Set(evaluated
-    .filter((stock) => stock.matches.some((match) => STRATEGY5_PRESET_IDS.includes(match.id)))
+    .filter((stock) => strategy5MatchesFor(stock).length)
     .map((stock) => stock.code)).size;
 
   if (strategySummary) strategySummary.textContent = `策略5：${active.label}｜符合 ${list.length} 檔`;
   if (strategyMatchCount) strategyMatchCount.textContent = totalMatches.toLocaleString("zh-TW");
   if (strategyAvgScore) strategyAvgScore.textContent = list.length ? Math.round(avg(list.map((stock) => stock.score))) : "--";
-  if (strategyTopHit) strategyTopHit.textContent = list.length ? `${Math.max(...list.map((stock) => stock.matches.filter((match) => STRATEGY5_PRESET_IDS.includes(match.id)).length))}/${STRATEGY5_PRESET_IDS.length}` : "--";
+  if (strategyTopHit) strategyTopHit.textContent = list.length ? `${Math.max(...list.map((stock) => strategy5MatchesFor(stock).length))}/${STRATEGY5_PRESET_IDS.length}` : "--";
 
   const descriptions = {
-    momentum: "價格趨勢與成交值同步轉強。",
-    main_force_chip: "法人、大戶或主力籌碼偏買。",
-    twenty_day_breakout: "收盤價接近近期強勢突破。",
-    opening_power: "盤中開盤後快速轉強。",
-    red_to_green: "弱轉強候選，觀察翻紅延續。",
-    investment_trust: "投信連買或偏買候選。",
+    momentum: "價格趨勢、20日突破與量比同步轉強，優先找資金加速中的強勢股。",
+    main_force_chip: "近日法人買超、外資或投信連買、籌碼分數提高，找主力資金持續進場標的。",
+    twenty_day_breakout: "收盤突破近20日高點且今日收紅，找出剛穿越壓力的強勢股。",
+    opening_power: "針對開盤後快速轉強，捕捉即時強勢盤勢。",
+    red_to_green: "參考 Azix 邏輯，以昨日收為準，開低走高突破昨日高點臨界。",
+    investment_trust: "投信連買搭配短均線站上、動能分數與量能確認，鎖定法人抬升、準突破的觀察名單。",
     vcp: "波動收斂後等待突破。",
     ma_bull: "均線與趨勢方向偏多。",
     sync_backtest: "量價與籌碼同步性高。",
     overnight_chip: "隔日沖與尾盤籌碼觀察。",
     short_fund_flow: "短線資金快速集中。",
-    chip_health_strong: "籌碼健檢偏強。",
+    chip_health_strong: "主力分數、籌碼分數與動能同時達標，並避開融資快速堆高，適合續抱觀察。",
     one_day_rebound: "大跌後一日反彈，需日K確認。",
     short_squeeze: "強漲放量，嘎空觀察。",
     ultra_short: "盤中超短線操作候選。",
+  };
+  const rhythmLabels = {
+    momentum: "核心節奏",
+    main_force_chip: "籌碼K線",
+    investment_trust: "法人訊號",
+    chip_health_strong: "籌碼健檢",
+    twenty_day_breakout: "技術突破",
+    opening_power: "盤中節奏",
+    red_to_green: "反轉節奏",
+    vcp: "收斂節奏",
+    ma_bull: "趨勢節奏",
+    sync_backtest: "同步節奏",
+    overnight_chip: "尾盤節奏",
+    short_fund_flow: "資金節奏",
+    one_day_rebound: "反彈節奏",
+    short_squeeze: "嘎空節奏",
+    ultra_short: "短打節奏",
   };
 
   const filters = STRATEGY5_PRESET_IDS.map((id) => {
@@ -3200,6 +3223,7 @@ function renderStrategy5Dashboard(evaluated) {
           <strong>${item.label}</strong>
           <small>${descriptions[id] || "符合策略條件的股票。"}</small>
           <small style="color:#12d6df;font-weight:800;">${strategy5ScheduleLabel()}</small>
+          <small style="color:#ff4f68;font-weight:900;">${rhythmLabels[id] || "策略節奏"}</small>
         </div>
         <em>${count} 檔</em>
       </button>
@@ -3207,23 +3231,31 @@ function renderStrategy5Dashboard(evaluated) {
   }).join("");
 
   const rows = list.length ? list.map((stock, index) => {
-    const sign = stock.percent >= 0 ? "+" : "";
-    const strategyMatches = stock.matches.filter((match) => STRATEGY5_PRESET_IDS.includes(match.id));
+    const pctMark = stock.percent >= 0 ? "▲" : "▼";
+    const strategyMatches = strategy5MatchesFor(stock);
     const main = stock.activeMatch || strategyMatches[0] || stock.matches[0];
-    const chips = strategyMatches.slice(0, 5).map((match) => `<b>${match.icon} ${match.short}</b>`).join("");
+    const chips = strategyMatches.slice(0, 4).map((match) => `<b>${match.icon} ${match.short}</b>`).join("");
+    const volumeText = Math.round(stock.tradeVolume || 0).toLocaleString("zh-TW");
     return `
       <article class="strategy5-stock-card">
         <div class="rank">#${index + 1}</div>
         <div>
           <strong>${stock.name} <small>${stock.code}</small></strong>
-          <small>${stock.sector || "未分類"} · ${stock.isRealtime ? "即時" : "盤中"} · ${new Date().toLocaleDateString("zh-TW")}</small>
+          <small>上市 · ${stock.sector || "未分類"} · ${new Date().toLocaleDateString("zh-TW")}</small>
         </div>
         <div>
           <div class="strategy5-price">${formatNumber(stock.close, stock.close >= 100 ? 0 : 2)}</div>
-          <small class="${stock.percent >= 0 ? "red" : "green"}">${sign}${stock.percent.toFixed(2)}%</small>
+          <small class="${stock.percent >= 0 ? "red" : "green"}">${pctMark}${Math.abs(stock.percent).toFixed(2)}%</small>
+          <small>${volumeText} 張</small>
         </div>
-        <div class="strategy5-chips">${chips}</div>
-        <div class="strategy5-reason">${main?.reason || "符合策略5條件。"}</div>
+        <div>
+          <small>價量特徵</small>
+          <div class="strategy5-chips">${chips}</div>
+        </div>
+        <div>
+          <small>籌碼特徵</small>
+          <div class="strategy5-chips"><b>主力偏多</b><b>法人偏買</b><b>外資買</b><b>融資降溫</b></div>
+        </div>
       </article>
     `;
   }).join("") : `<div class="empty-state">目前沒有符合「${active.label}」的股票。</div>`;
@@ -3234,7 +3266,7 @@ function renderStrategy5Dashboard(evaluated) {
       <div class="strategy5-hero">
         <div>
           <b>策略控制台</b>
-          <h2>${titleWithIcon("▰", "策略5-綜合策略")} <span class="swing-live">${strategy5ScheduleLabel()}</span></h2>
+          <h2>策略中心 <span class="swing-live">${strategy5ScheduleLabel()}</span></h2>
         </div>
         <div class="strategy5-date">
           <span>資料日</span>
@@ -3247,10 +3279,10 @@ function renderStrategy5Dashboard(evaluated) {
         <section class="strategy5-results">
           <div class="strategy5-results-head">
             <div>
-              <h3>${active.label}</h3>
+              <h3>${active.icon} ${active.label} <span style="display:inline-flex;margin-left:8px;padding:3px 7px;border-radius:999px;background:rgba(255,79,104,.15);color:#ff5b6e;font-size:11px;">${rhythmLabels[strategy5ActiveId] || "策略節奏"}</span></h3>
               <p>${descriptions[strategy5ActiveId] || "符合策略5條件的股票。"}｜${strategy5ScheduleLabel()}</p>
             </div>
-            <span class="strategy5-count">${list.length} 檔</span>
+            <span class="strategy5-count">${list.length} 檔　${now.toLocaleTimeString("zh-TW", { hour12: false }).slice(0, 5)} · 0.1 秒</span>
           </div>
           ${rows}
         </section>
@@ -4577,10 +4609,7 @@ function applyStrategyPresetFromLink(link) {
         "main_force_chip",
         "twenty_day_breakout",
         "opening_power",
-        "red_to_green",
-        "investment_trust",
         "vcp",
-        "ma_bull",
         "sync_backtest",
         "overnight_chip",
         "short_fund_flow",
