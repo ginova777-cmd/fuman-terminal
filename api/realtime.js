@@ -24,9 +24,16 @@ function cleanNumber(value) {
   return Number.isFinite(number) ? number : 0;
 }
 
+function priceLevels(value) {
+  return String(value ?? "")
+    .split("_")
+    .map(cleanNumber)
+    .filter((number) => number > 0);
+}
+
 function firstPositive(...values) {
   for (const value of values) {
-    const number = cleanNumber(value);
+    const number = priceLevels(value)[0] || cleanNumber(value);
     if (number > 0) return number;
   }
   return 0;
@@ -35,8 +42,8 @@ function firstPositive(...values) {
 function parseQuote(item) {
   const code = String(item?.c || "").trim();
   if (!/^\d{4}$/.test(code)) return null;
-  const close = firstPositive(item.z, item.a, item.b, item.y, item.o, item.h, item.l);
-  const prevClose = firstPositive(item.y, item.z, item.o, item.h, item.l);
+  const close = firstPositive(item.z, item.pz, item.b, item.a, item.h, item.l, item.o, item.y);
+  const prevClose = cleanNumber(item.y);
   if (!close || !prevClose) return null;
   const change = close - prevClose;
   return {
@@ -90,7 +97,7 @@ module.exports = async function handler(request, response) {
       const previous = byCode.get(quote.code);
       if (!previous || quote.close || quote.tradeVolume) byCode.set(quote.code, quote);
     }
-    response.setHeader("Cache-Control", "s-maxage=5, stale-while-revalidate=10");
+    response.setHeader("Cache-Control", "no-store, max-age=0");
     response.status(200).json({
       ok: true,
       updatedAt: new Date().toISOString(),
