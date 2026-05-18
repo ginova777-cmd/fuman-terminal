@@ -3788,6 +3788,7 @@ function renderWarrantFlow() {
         <td><span class="swing-score">${item.rank || "--"}</span></td>
         <td><span class="code">${item.code || "--"}</span></td>
         <td>${item.name}</td>
+        <td class="price">${item.stockClose ? formatNumber(item.stockClose, item.stockClose >= 100 ? 0 : 2) : "--"}</td>
         <td class="price">${formatWarrantMoney(item.callValue)}</td>
         <td>${formatWarrantMoney(item.putValue)}</td>
         <td><b class="swing-stage ${hot}">${item.callPutRatio >= 99 ? "99+" : item.callPutRatio}</b></td>
@@ -3796,7 +3797,7 @@ function renderWarrantFlow() {
       </tr>
     `;
   }).join("") : `
-    <tr><td colspan="8">${keyword ? (warrantFlowSearchLoading ? "正在查詢全台股權證資料..." : "查不到這檔股票的有效權證成交資料，或目前資料來源尚未提供。") : "目前沒有符合「認購權證先熱、股票尚未噴出」的資料。"}</td></tr>
+    <tr><td colspan="9">${keyword ? (warrantFlowSearchLoading ? "正在查詢全台股權證資料..." : "查不到這檔股票的有效權證成交資料，或目前資料來源尚未提供。") : "目前沒有符合「認購權證先熱、股票尚未噴出」的資料。"}</td></tr>
   `;
 
   panel.innerHTML = `
@@ -3831,7 +3832,7 @@ function renderWarrantFlow() {
         <table class="swing-table">
           <thead>
             <tr>
-              <th>排名</th><th>股票代號</th><th>標的名稱</th><th>認購金額</th><th>認售金額</th><th>購/售比</th><th>購/售檔數</th><th>判斷</th>
+              <th>排名</th><th>股票代號</th><th>標的名稱</th><th>價格</th><th>認購金額</th><th>認售金額</th><th>購/售比</th><th>購/售檔數</th><th>判斷</th>
             </tr>
           </thead>
           <tbody>${body}</tbody>
