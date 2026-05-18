@@ -356,13 +356,6 @@ function cleanNumber(value) {
   return Number(String(value).replace(/[,+%]/g, "")) || 0;
 }
 
-function isStaleStrategyPrice(item, base) {
-  const cachedClose = cleanNumber(item?.close);
-  const latestClose = cleanNumber(base?.close);
-  if (!cachedClose || !latestClose) return false;
-  return Math.abs(cachedClose - latestClose) > 0.001;
-}
-
 function formatNumber(value, digits = 2) {
   return cleanNumber(value).toLocaleString("zh-TW", {
     minimumFractionDigits: digits,
@@ -508,23 +501,15 @@ function updateStrategyHistory(item) {
   };
 }
 
-function updateStrategy4Scan(payload, options = {}) {
-  const retainUnmatched = options.retainUnmatched !== false;
+function updateStrategy4Scan(payload) {
   const scannedCodes = normalizeArray(payload?.scannedCodes);
   const matches = normalizeArray(payload?.matches);
-  const matchedCodes = new Set(matches.map((item) => item.code));
   scannedCodes.forEach((code) => {
     if (code) strategy4ScannedCodes.add(code);
   });
-  if (!retainUnmatched) {
-    scannedCodes.forEach((code) => {
-      if (!matchedCodes.has(code)) delete strategy4ScanMatches[code];
-    });
-  }
   matches.forEach((item) => {
     if (!item?.code) return;
     const base = latestStocks.find((stock) => stock.code === item.code) || {};
-    if (isStaleStrategyPrice(item, base)) return;
     const signals = normalizeArray(item.swingSignals || item.signals);
     strategy4ScanMatches[item.code] = {
       ...base,
@@ -804,23 +789,15 @@ function openExportSettings() {
     window.alert("請直接與作者聯繫");
 }
 
-function updateOpenBuyScan(payload, options = {}) {
-  const retainUnmatched = options.retainUnmatched !== false;
+function updateOpenBuyScan(payload) {
   const scannedCodes = normalizeArray(payload?.scannedCodes);
   const matches = normalizeArray(payload?.matches);
-  const matchedCodes = new Set(matches.map((item) => item.code));
   scannedCodes.forEach((code) => {
     if (code) openBuyScannedCodes.add(code);
   });
-  if (!retainUnmatched) {
-    scannedCodes.forEach((code) => {
-      if (!matchedCodes.has(code)) delete openBuyScanMatches[code];
-    });
-  }
   matches.forEach((item) => {
     if (!item?.code) return;
     const base = latestStocks.find((stock) => stock.code === item.code) || {};
-    if (isStaleStrategyPrice(item, base)) return;
     openBuyScanMatches[item.code] = {
       ...base,
       ...item,
@@ -916,7 +893,6 @@ function mergeOpenBuyCache(payload) {
   normalizeArray(payload?.matches).forEach((item) => {
     if (!item?.code) return;
     const base = latestStocks.find((stock) => stock.code === item.code) || {};
-    if (isStaleStrategyPrice(item, base)) return;
     openBuyScanMatches[item.code] = { ...base, ...item, name: base.name || item.name || item.code };
   });
   openBuyScanCount = Object.keys(openBuyScanMatches).length;
@@ -2903,7 +2879,6 @@ function renderSwingRadar() {
   const keyword = strategyKeyword.trim().toLowerCase();
   const allRows = Object.values(strategy4ScanMatches)
     .filter((stock) => (stock.swingSignals || []).length)
-    .filter((stock) => !isStaleStrategyPrice(stock, latestStocks.find((item) => item.code === stock.code)))
     .filter((stock) => !keyword || stock.code.includes(keyword) || stock.name.toLowerCase().includes(keyword))
     .map((stock) => ({ ...stock, swingScore: stock.swingScore || stock.score || 0 }));
   const filteredRows = swingSignalFilter === "all"
@@ -3022,7 +2997,6 @@ function renderOpenBuyRadar() {
 
   const keyword = strategyKeyword.trim().toLowerCase();
   const rows = Object.values(openBuyScanMatches)
-    .filter((stock) => !isStaleStrategyPrice(stock, latestStocks.find((item) => item.code === stock.code)))
     .filter((stock) => !keyword || stock.code.includes(keyword) || stock.name.toLowerCase().includes(keyword))
     .sort((a, b) => b.score - a.score || b.percent - a.percent || b.value - a.value)
     .slice(0, 80);
