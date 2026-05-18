@@ -1495,6 +1495,32 @@ function sortIntradayRows(rows) {
   });
 }
 
+function getIntradayState(stock) {
+  const pct = Number(stock.percent) || 0;
+  const volume = Number(stock.tradeVolume) || Number(stock.volume) || 0;
+  const value = Number(stock.value) || (Number(stock.close) || 0) * volume * 1000;
+  const open = Number(stock.open) || 0;
+  const close = Number(stock.close) || 0;
+  const high = Number(stock.high) || 0;
+  const signals = stock.intradaySignals || [];
+  const hasFallback = (stock.matches || []).some((match) => match.id === "intraday_2m");
+  const hasSignal = signals.length > 0 || hasFallback;
+  const hasStrongSignal = signals.some((signal) => ["gap", "breakout", "ma35_macd", "surge"].includes(signal.id));
+  const liquid = value >= 150000000 || volume >= 2000;
+  const tradableLiquidity = value >= 80000000 || volume >= 1000;
+  const aboveOpen = !open || close >= open;
+  const nearHigh = !high || close >= high * 0.985;
+  const notOverheated = pct <= 8.8;
+
+  if (liquid && pct >= 1 && hasStrongSignal && aboveOpen && nearHigh && notOverheated) {
+    return { id: "go", label: "可進場", cls: "go" };
+  }
+  if (tradableLiquidity && pct >= 0.5 && hasSignal && notOverheated) {
+    return { id: "wait", label: "待確認", cls: "wait" };
+  }
+  return { id: "watch", label: "觀察", cls: "watch" };
+}
+
 function intradaySortHeader(key, label) {
   const active = intradaySortKey === key;
   const mark = active ? (intradaySortDir === "asc" ? " ▲" : " ▼") : " ↕";
@@ -2042,6 +2068,126 @@ intradayRadarStyles.textContent = `
     padding: 4px 7px;
     font-size: 11px;
   }
+  .intraday-zones {
+    display: grid;
+    grid-template-columns: 1.12fr 1fr 1fr;
+    gap: 12px;
+  }
+  .intraday-zone {
+    min-height: 156px;
+    border: 1px solid rgba(117, 133, 170, 0.18);
+    border-radius: 10px;
+    background: rgba(8, 14, 25, 0.62);
+    overflow: hidden;
+  }
+  .intraday-zone header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 14px;
+    border-bottom: 1px solid rgba(117, 133, 170, 0.13);
+  }
+  .intraday-zone h3 {
+    margin: 0;
+    color: #f7fbff;
+    font-size: 16px;
+  }
+  .intraday-zone small {
+    color: #8e9bb5;
+    font-size: 11px;
+  }
+  .intraday-zone strong {
+    color: #f7fbff;
+    font-size: 22px;
+  }
+  .intraday-zone.go {
+    border-color: rgba(48, 214, 142, 0.38);
+    background: linear-gradient(135deg, rgba(21, 83, 64, 0.46), rgba(8, 14, 25, 0.72));
+  }
+  .intraday-zone.wait {
+    border-color: rgba(245, 166, 35, 0.36);
+    background: linear-gradient(135deg, rgba(82, 55, 18, 0.42), rgba(8, 14, 25, 0.72));
+  }
+  .intraday-zone.watch {
+    border-color: rgba(117, 151, 255, 0.3);
+    background: linear-gradient(135deg, rgba(34, 48, 86, 0.42), rgba(8, 14, 25, 0.72));
+  }
+  .intraday-picks {
+    display: grid;
+    gap: 8px;
+    padding: 10px;
+  }
+  .intraday-pick {
+    display: grid;
+    grid-template-columns: 30px minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 9px;
+    min-height: 50px;
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.045);
+    padding: 8px 10px;
+  }
+  .intraday-rank {
+    display: grid;
+    place-items: center;
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.1);
+    color: #f7fbff;
+    font-size: 12px;
+    font-weight: 800;
+  }
+  .intraday-pick-main {
+    min-width: 0;
+  }
+  .intraday-pick-main b {
+    display: block;
+    color: #f7fbff;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .intraday-pick-main span,
+  .intraday-pick-price span {
+    color: #92a0ba;
+    font-size: 11px;
+  }
+  .intraday-pick-price {
+    text-align: right;
+  }
+  .intraday-pick-price b {
+    display: block;
+    color: #ff5261;
+    font-size: 14px;
+  }
+  .intraday-empty {
+    color: #8e9bb5;
+    padding: 18px 12px;
+    font-size: 12px;
+  }
+  .intraday-state {
+    display: inline-flex;
+    min-width: 58px;
+    justify-content: center;
+    border-radius: 999px;
+    padding: 5px 8px;
+    font-size: 12px;
+    font-weight: 800;
+  }
+  .intraday-state.go {
+    background: rgba(48, 214, 142, 0.16);
+    color: #45e49f;
+  }
+  .intraday-state.wait {
+    background: rgba(245, 166, 35, 0.16);
+    color: #ffc057;
+  }
+  .intraday-state.watch {
+    background: rgba(117, 151, 255, 0.16);
+    color: #9bb5ff;
+  }
   .strategy5-dashboard {
     display: grid;
     grid-template-columns: 330px minmax(0, 1fr);
@@ -2235,6 +2381,7 @@ intradayRadarStyles.textContent = `
   @media (max-width: 1180px) {
     .strategy5-dashboard { grid-template-columns: 1fr; }
     .strategy5-stock-card { grid-template-columns: 36px 1fr; }
+    .intraday-zones { grid-template-columns: 1fr; }
   }
   @media (max-width: 1280px) {
     .intraday-signal-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
@@ -2320,23 +2467,35 @@ function renderIntradayRadar(evaluated) {
       const signals = (stock.intradaySignals || []).length
         ? stock.intradaySignals
         : [{ id: "volume_price", short: "量價", icon: "⚡", reason: (stock.matches || []).find((match) => match.id === "intraday_2m")?.reason || "盤中量價同步偏強，列入當沖雷達觀察。" }];
-      return { ...stock, intradaySignals: signals };
+      const row = { ...stock, intradaySignals: signals };
+      return { ...row, intradayState: getIntradayState(row) };
     });
+  const stateFilters = new Set(["go", "wait", "watch"]);
   const filteredRows = intradaySignalFilter === "all"
     ? allRows
-    : allRows.filter((stock) => (stock.intradaySignals || []).some((signal) => signal.id === intradaySignalFilter));
+    : stateFilters.has(intradaySignalFilter)
+      ? allRows.filter((stock) => stock.intradayState.id === intradaySignalFilter)
+      : allRows.filter((stock) => (stock.intradaySignals || []).some((signal) => signal.id === intradaySignalFilter));
   const rows = sortIntradayRows(filteredRows).slice(0, 80);
   const signalCounts = Object.fromEntries(INTRADAY_SIGNAL_DEFS.map((signal) => [signal.id, 0]));
+  const stateCounts = { go: 0, wait: 0, watch: 0 };
   allRows.forEach((stock) => {
+    stateCounts[stock.intradayState.id] += 1;
     (stock.intradaySignals || []).forEach((signal) => {
       signalCounts[signal.id] = (signalCounts[signal.id] || 0) + 1;
     });
   });
+  const sortedAllRows = sortIntradayRows(allRows);
+  const zoneRows = {
+    go: sortedAllRows.filter((stock) => stock.intradayState.id === "go").slice(0, 3),
+    wait: sortedAllRows.filter((stock) => stock.intradayState.id === "wait").slice(0, 3),
+    watch: sortedAllRows.filter((stock) => stock.intradayState.id === "watch").slice(0, 3),
+  };
   const scanTime = strategyLastScanAt
     ? new Date(strategyLastScanAt).toLocaleTimeString("zh-TW", { hour12: false })
     : "等待開盤";
 
-  if (strategySummary) strategySummary.textContent = `全台股盤中輪巡｜每 15 秒掃描一批｜最後更新 ${scanTime}`;
+  if (strategySummary) strategySummary.textContent = `全台股盤中輪巡｜5秒刷新｜約30秒掃完整市場｜最後更新 ${scanTime}`;
   if (strategyMatchCount) strategyMatchCount.textContent = rows.length.toLocaleString("zh-TW");
   if (strategyAvgScore) strategyAvgScore.textContent = rows.length ? Math.round(rows.reduce((sum, stock) => sum + stock.score, 0) / rows.length) : "--";
   if (strategyTopHit) strategyTopHit.textContent = rows.length ? `${Math.max(...rows.map((stock) => stock.intradaySignals.length))}/6` : "0/6";
@@ -2368,18 +2527,58 @@ function renderIntradayRadar(evaluated) {
 
   const tabs = [
     ["all", "全部", allRows.length],
+    ["go", "可進場", stateCounts.go],
+    ["wait", "待確認", stateCounts.wait],
+    ["watch", "觀察", stateCounts.watch],
     ...INTRADAY_SIGNAL_DEFS.map((signal) => [signal.id, signal.title, signalCounts[signal.id] || 0]),
   ].map(([id, label, count]) => `<button class="${intradaySignalFilter === id ? "active" : ""}" type="button" data-intraday-filter="${id}">${label}(${count})</button>`).join("");
+
+  const renderZonePicks = (list) => list.length ? list.map((stock, index) => {
+    const sign = stock.percent >= 0 ? "+" : "";
+    const mainSignal = stock.intradaySignals[0]?.short || "量價";
+    return `
+      <div class="intraday-pick">
+        <span class="intraday-rank">${index + 1}</span>
+        <div class="intraday-pick-main">
+          <b>${stock.code} ${stock.name}</b>
+          <span>${mainSignal}｜分數 ${stock.score}</span>
+        </div>
+        <div class="intraday-pick-price">
+          <b>${sign}${stock.percent.toFixed(2)}%</b>
+          <span>${formatNumber(stock.close, stock.close >= 100 ? 0 : 2)}</span>
+        </div>
+      </div>
+    `;
+  }).join("") : `<div class="intraday-empty">目前沒有符合條件。</div>`;
+
+  const zones = `
+    <section class="intraday-zones">
+      <article class="intraday-zone go">
+        <header><div><h3>A區 可進場</h3><small>量夠、價強、靠近高點</small></div><strong>${stateCounts.go}</strong></header>
+        <div class="intraday-picks">${renderZonePicks(zoneRows.go)}</div>
+      </article>
+      <article class="intraday-zone wait">
+        <header><div><h3>B區 待確認</h3><small>等站穩開盤價或再放量</small></div><strong>${stateCounts.wait}</strong></header>
+        <div class="intraday-picks">${renderZonePicks(zoneRows.wait)}</div>
+      </article>
+      <article class="intraday-zone watch">
+        <header><div><h3>C區 觀察</h3><small>量能或型態還沒到位</small></div><strong>${stateCounts.watch}</strong></header>
+        <div class="intraday-picks">${renderZonePicks(zoneRows.watch)}</div>
+      </article>
+    </section>
+  `;
 
   const tableRows = rows.length ? `
     ${rows.map((stock) => {
       const sign = stock.percent >= 0 ? "+" : "";
       const chips = stock.intradaySignals.map((signal) => `<b>${signal.icon} ${signal.short}</b>`).join("");
       const reason = stock.intradaySignals[0]?.reason || "盤中訊號觸發";
+      const state = stock.intradayState || getIntradayState(stock);
       return `
         <tr>
           <td><span class="code">${stock.code}</span></td>
           <td>${stock.name}</td>
+          <td><span class="intraday-state ${state.cls}">${state.label}</span></td>
           <td><span class="intraday-badges">${chips}</span></td>
           <td class="price">${formatNumber(stock.close, stock.close >= 100 ? 0 : 2)}</td>
           <td class="pct">${sign}${stock.percent.toFixed(2)}%</td>
@@ -2390,7 +2589,7 @@ function renderIntradayRadar(evaluated) {
       `;
     }).join("")}
   ` : `
-    <tr><td colspan="8">2分K當沖雷達框架已啟動。現在沒有觸發訊號；開盤後會輪巡全台股並顯示符合「跳空 / 突破 / MA35+MACD / 鑽石 / 瞬間拉抬」的股票。</td></tr>
+    <tr><td colspan="9">2分K當沖雷達框架已啟動。現在沒有觸發訊號；開盤後會輪巡全台股並顯示符合「跳空 / 突破 / MA35+MACD / 鑽石 / 瞬間拉抬」的股票。</td></tr>
   `;
 
   strategyTable.innerHTML = `
@@ -2398,14 +2597,15 @@ function renderIntradayRadar(evaluated) {
       <div class="intraday-topbar">
         <div>
           <h2>${titleWithIcon("◔", "2分K當沖雷達")} <span class="intraday-live">● 立即更新</span></h2>
-          <p>盤中即時偵測強勢訊號，15秒輪巡全台股。</p>
+          <p>盤中即時偵測強勢訊號，5秒刷新、約30秒掃完整市場。</p>
         </div>
         <div class="intraday-controls">
-          <label>偵測頻率：<select><option>15秒</option></select></label>
+          <label>偵測頻率：<select><option>5秒</option></select></label>
           <label>市場：<select><option>全市場</option></select></label>
         </div>
       </div>
       <div class="intraday-signal-grid">${cards}</div>
+      ${zones}
       <section class="intraday-panel">
         <div class="intraday-tabs">
           ${tabs}
@@ -2418,7 +2618,7 @@ function renderIntradayRadar(evaluated) {
         <table class="intraday-table">
           <thead>
             <tr>
-              <th>${intradaySortHeader("code", "股票代號")}</th><th>股票名稱</th><th>訊號</th><th>${intradaySortHeader("price", "現價")}</th><th>${intradaySortHeader("percent", "漲幅")}</th><th>${intradaySortHeader("volume", "成交量")}</th><th>${intradaySortHeader("score", "分數")}</th><th>原因</th>
+              <th>${intradaySortHeader("code", "股票代號")}</th><th>股票名稱</th><th>狀態</th><th>訊號</th><th>${intradaySortHeader("price", "現價")}</th><th>${intradaySortHeader("percent", "漲幅")}</th><th>${intradaySortHeader("volume", "成交量")}</th><th>${intradaySortHeader("score", "分數")}</th><th>原因</th>
             </tr>
           </thead>
           <tbody>${tableRows}</tbody>
