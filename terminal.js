@@ -3821,16 +3821,23 @@ async function refreshStrategyRealtimeScan(force = false) {
 
   strategyRealtimeLoading = true;
   try {
-  const batchSize = 100;
-    const start = strategyRealtimeCursor % latestStocks.length;
-    const rows = latestStocks.slice(start, start + batchSize);
-    const wrapped = rows.length < batchSize ? latestStocks.slice(0, batchSize - rows.length) : [];
-    const codes = [...rows, ...wrapped].map((stock) => stock.code).filter(Boolean);
-    strategyRealtimeCursor = (start + batchSize) % latestStocks.length;
-    if (!codes.length) return;
-
-    const payload = await fetchJson(`${endpoints.realtime}?codes=${encodeURIComponent(codes.join(","))}`, 12000);
-    normalizeArray(payload.quotes).forEach(updateStrategyQuote);
+    const batchSize = 100;
+    const batches = force ? 6 : 3;
+    const requests = [];
+    for (let batch = 0; batch < batches; batch++) {
+      const start = strategyRealtimeCursor % latestStocks.length;
+      const rows = latestStocks.slice(start, start + batchSize);
+      const wrapped = rows.length < batchSize ? latestStocks.slice(0, batchSize - rows.length) : [];
+      const codes = [...rows, ...wrapped].map((stock) => stock.code).filter(Boolean);
+      strategyRealtimeCursor = (start + batchSize) % latestStocks.length;
+      if (codes.length) {
+        requests.push(fetchJson(`${endpoints.realtime}?codes=${encodeURIComponent(codes.join(","))}`, 12000));
+      }
+    }
+    const payloads = await Promise.allSettled(requests);
+    payloads.forEach((result) => {
+      if (result.status === "fulfilled") normalizeArray(result.value?.quotes).forEach(updateStrategyQuote);
+    });
     strategyLastScanAt = Date.now();
     renderStrategyScanner();
   } catch (error) {
@@ -3985,7 +3992,7 @@ document.querySelectorAll("[data-chip-filter]").forEach((button) => {
 });
 setInterval(tickClock, 1000);
 setInterval(loadMarketData, 15*1000);
-setInterval(refreshStrategyRealtimeScan, 15*1000);
+setInterval(refreshStrategyRealtimeScan, 5*1000);
 setInterval(loadHeatmap, 10*60*1000);
 setInterval(loadInstitution, 10*60*1000);
 
