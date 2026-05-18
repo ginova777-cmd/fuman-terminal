@@ -233,6 +233,7 @@ let openBuyScanTotal = 0;
 let openBuyCacheLoading = false;
 let warrantFlowLoading = false;
 let warrantFlowData = [];
+let warrantFlowQuotes = {};
 let warrantFlowUpdatedAt = 0;
 let warrantFlowKeyword = "";
 const WARRANT_FLOW_LOCAL_CACHE_KEY = "fuman_warrant_flow_cache_v1";
@@ -3196,18 +3197,45 @@ function renderStrategyScanner() {
   `;
 }
 
+function findWarrantUnderlyingStock(item) {
+  const name = String(item.underlyingName || "").trim();
+  const code = String(item.underlyingCode || "").trim();
+  const byCode = code ? latestStocks.find((stock) => stock.code === code) : null;
+  if (byCode) return byCode;
+  const exact = latestStocks.find((stock) => stock.name === name);
+  return exact || latestStocks.find((stock) => name && (stock.name.includes(name) || name.includes(stock.name))) || null;
+}
+
 function hydrateWarrantFlowItem(item) {
   const name = String(item.underlyingName || "").trim();
-  const exact = latestStocks.find((stock) => stock.name === name);
-  const partial = exact || latestStocks.find((stock) => name && (stock.name.includes(name) || name.includes(stock.name)));
+  const partial = findWarrantUnderlyingStock(item);
+  const code = item.underlyingCode || partial?.code || "";
+  const quote = code ? warrantFlowQuotes[code] : null;
+  const close = cleanNumber(quote?.close) || partial?.close || cleanNumber(item.underlyingClose) || 0;
+  const percent = Number.isFinite(Number(quote?.percent)) ? Number(quote.percent) : (Number.isFinite(Number(item.underlyingPercent)) ? Number(item.underlyingPercent) : (partial?.percent || 0));
+  const tradeVolume = cleanNumber(quote?.tradeVolume) || partial?.tradeVolume || 0;
   return {
     ...item,
-    code: partial?.code || "",
+    code,
     name: partial?.name || name || "--",
-    stockPercent: partial?.percent || 0,
-    stockClose: partial?.close || 0,
-    stockValue: partial?.value || 0,
+    stockPercent: percent,
+    stockClose: close,
+    stockValue: close && tradeVolume ? close * tradeVolume : partial?.value || 0,
+    stockRealtime: Boolean(quote?.close),
   };
+}
+
+async function refreshWarrantFlowQuotes() {
+  if (!warrantFlowData.length) return;
+  if (!latestStocks.length) await loadStrategyStocks();
+  const codes = [...new Set(warrantFlowData
+    .map((item) => item.underlyingCode || findWarrantUnderlyingStock(item)?.code)
+    .filter(Boolean))];
+  if (!codes.length) return;
+  const payload = await fetchJson(`${endpoints.realtime}?codes=${encodeURIComponent(codes.slice(0, 100).join(","))}&t=${Date.now()}`, 12000);
+  normalizeArray(payload?.quotes).forEach((quote) => {
+    if (quote?.code && quote.close) warrantFlowQuotes[quote.code] = quote;
+  });
 }
 
 function formatWarrantMoney(value) {
@@ -3229,7 +3257,7 @@ function renderWarrantFlow() {
         item.score +
         Math.min(cleanNumber(item.callValue) / 20000000, 18) +
         Math.min(cleanNumber(item.callPutRatio) * 2, 14) +
-        (item.stockPercent >= -1 && item.stockPercent <= 2.5 ? 10 : item.stockPercent <= 4.5 ? 3 : -8)
+        (item.stockPercent < 0 ? -22 : item.stockPercent <= 2.5 ? 14 : item.stockPercent <= 4.5 ? 0 : -16)
       ),
     }))
     .sort((a, b) => b.observeScore - a.observeScore || b.score - a.score || b.callValue - a.callValue)
@@ -3239,7 +3267,7 @@ function renderWarrantFlow() {
       item.code.includes(keyword) ||
       item.name.toLowerCase().includes(keyword) ||
       item.underlyingName.toLowerCase().includes(keyword))
-    : allRows.filter((item) => item.stockPercent <= 4.5).slice(0, 10);
+    : allRows.slice(0, 10);
   const totalCall = warrantFlowData.reduce((sum, item) => sum + cleanNumber(item.callValue), 0);
   const totalPut = warrantFlowData.reduce((sum, item) => sum + cleanNumber(item.putValue), 0);
   const updatedText = warrantFlowUpdatedAt
@@ -3248,24 +3276,29 @@ function renderWarrantFlow() {
   const listLabel = keyword ? `搜尋結果 ${rows.length} 筆｜完整候選 ${allRows.length} 筆` : "優先觀察 Top 10";
   const helperText = keyword
     ? "搜尋會查完整候選名單，就算沒有進 Top 10 也會顯示目前權證資金狀況。"
-    : "只顯示可優先觀察前十名：認購集中、認售偏低、股票尚未大漲者優先。";
+    : "策略6：收盤後找明日候選，盤中輔助確認；依認購金額、購售比、多檔同步、價平/價內、剩餘天數與股票未過熱程度排序。";
 
   const body = rows.length ? rows.map((item) => {
     const sign = item.stockPercent >= 0 ? "+" : "";
     const hot = item.score >= 82 ? "hot" : item.score >= 68 ? "mid" : "low";
+    const warrantHint = item.topWarrants.map((warrant) => {
+      const money = Number.isFinite(Number(warrant.moneynessPct)) ? `${warrant.moneynessPct >= 0 ? "+" : ""}${Number(warrant.moneynessPct).toFixed(1)}%` : "--";
+      const days = warrant.daysToExpiry ?? item.minDaysToExpiry ?? "--";
+      return `<b title="價內/價平 ${money}，剩餘 ${days} 天">${warrant.code}</b>`;
+    }).join(" ");
     return `
       <tr>
         <td><span class="swing-score">${item.rank || "--"}</span></td>
         <td><span class="code">${item.code || "--"}</span></td>
         <td>${item.name}</td>
-        <td><span class="swing-score">${item.observeScore}</span></td>
+        <td><span class="swing-score">${item.observeScore}</span><small>${item.level || "C"}級</small></td>
         <td class="price">${formatWarrantMoney(item.callValue)}</td>
         <td>${formatWarrantMoney(item.putValue)}</td>
         <td><b class="swing-stage ${hot}">${item.callPutRatio >= 99 ? "99+" : item.callPutRatio}</b></td>
         <td>${item.callCount} / ${item.putCount}</td>
-        <td class="pct">${sign}${item.stockPercent.toFixed(2)}%</td>
-        <td>${item.topWarrants.map((warrant) => `<b>${warrant.code}</b>`).join(" ")}</td>
-        <td>${item.reason}</td>
+        <td class="pct">${sign}${item.stockPercent.toFixed(2)}%${item.stockRealtime ? " 即時" : ""}</td>
+        <td>${warrantHint}</td>
+        <td>${item.reason} 判斷：${item.stockPercent >= 0 && item.stockPercent <= 2.5 ? "權證先熱，股票未噴。" : "不在優先區。"}</td>
       </tr>
     `;
   }).join("") : `
@@ -3276,12 +3309,12 @@ function renderWarrantFlow() {
     <section class="swing-dashboard">
       <div class="swing-topbar">
         <div>
-          <h2>${titleWithIcon("◒", "權證先熱雷達")} <span class="swing-live">● 08:00 / 15:00 完整掃</span></h2>
+          <h2>${titleWithIcon("◒", "策略6：權證資金走向")} <span class="swing-live">● 收盤候選 / 盤中確認</span></h2>
           <p>${helperText}</p>
         </div>
         <div class="swing-controls">
           <label>更新模式：<select><option>08:00 / 15:00 完整掃</option></select></label>
-          <label>模式：<select><option>認購偏多</option></select></label>
+          <label>模式：<select><option>權證先熱股票未噴</option></select></label>
         </div>
       </div>
       <div class="swing-signal-grid">
@@ -3309,7 +3342,7 @@ function renderWarrantFlow() {
         <table class="swing-table">
           <thead>
             <tr>
-              <th>排名</th><th>股票代號</th><th>標的名稱</th><th>觀察分數</th><th>認購金額</th><th>認售金額</th><th>購/售比</th><th>購/售檔數</th><th>股票漲幅</th><th>代表權證</th><th>原因</th>
+              <th>排名</th><th>股票代號</th><th>標的名稱</th><th>觀察分數</th><th>認購金額</th><th>認售金額</th><th>購/售比</th><th>購/售檔數</th><th>股票漲幅</th><th>價平/價內權證</th><th>判斷</th>
             </tr>
           </thead>
           <tbody>${body}</tbody>
@@ -3331,6 +3364,7 @@ async function loadWarrantFlow(force = false) {
     loadWarrantFlowLocalCache();
   }
   if (!force && hasFreshWarrantFlow()) {
+    await refreshWarrantFlowQuotes();
     renderWarrantFlow();
     return;
   }
@@ -3340,7 +3374,7 @@ async function loadWarrantFlow(force = false) {
     panel.innerHTML = `<div class="empty-state">正在讀取權證資金走向...</div>`;
   }
   try {
-    if (!latestStocks.length) loadStrategyStocks();
+    if (!latestStocks.length) await loadStrategyStocks();
     let payload = await fetchJson(`${endpoints.warrantFlowCache}?t=${Date.now()}`, 10000);
     const cachedMatches = normalizeArray(payload?.matches);
     if (force || !cachedMatches.length) {
@@ -3353,6 +3387,7 @@ async function loadWarrantFlow(force = false) {
     const updatedAt = Date.parse(payload?.updatedAt || "");
     warrantFlowUpdatedAt = Number.isFinite(updatedAt) ? updatedAt : Date.now();
     saveWarrantFlowLocalCache();
+    await refreshWarrantFlowQuotes();
     renderWarrantFlow();
   } catch (error) {
     if (panel && !warrantFlowData.length) {
