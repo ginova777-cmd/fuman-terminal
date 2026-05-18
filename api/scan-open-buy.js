@@ -203,20 +203,41 @@ function scanOpenBuy(code, market, rows) {
   const upperShadowRatio = (last.high - Math.max(last.close, last.open)) / range;
   const high20 = Math.max(...rows.slice(-21, -1).map((row) => row.high));
   const closeNearHigh = last.high ? last.close >= last.high * 0.97 : false;
-  const liquid = last.value >= 15000000 || last.volume >= 500;
-  const notOverheated = pct <= 7.5 && upperShadowRatio <= 0.58;
-  const notTooWeak = pct >= -2.5 && last.close >= last.low * 1.015;
+  const liquid = last.value >= 150000000 && last.volume >= 2000;
+  const qualityPrice = last.close >= 20;
+  const qualityValue = last.value >= 150000000;
+  const controlledMomentum = pct >= 1.5 && pct <= 4.5;
+  const saneVolume = volumeRatio >= 1.2 && volumeRatio <= 4.5;
+  const notOverheated = pct <= 4.5 && upperShadowRatio <= 0.35;
+  const notTooWeak = last.close >= last.low * 1.03;
   const trend = last.close > ma20 || (last.close > ma5 && ma5 >= ma10 * 0.995);
   const breakout = last.close > high20 || (last.close >= high20 * 0.965 && closeNearHigh);
   const strongClose = last.close > last.open && bodyRatio >= 0.18 && pct >= 0.3;
-  const volumeTurn = volumeRatio >= 0.85 && pct > -0.8 && last.close >= ma5;
-  const reboundTurn = pct >= -1.2 && last.close > ma20 && closeNearHigh && volumeRatio >= 0.65;
+  const volumeTurn = volumeRatio >= 1.2 && pct >= 1.5 && last.close >= ma5;
+  const reboundTurn = pct >= 1.5 && last.close > ma20 && closeNearHigh && volumeRatio >= 1.2;
+  const prevPct = rows.length > 2 && rows.at(-3)?.close ? ((prev.close - rows.at(-3).close) / rows.at(-3).close) * 100 : 0;
+  const high5 = Math.max(...rows.slice(-6, -1).map((row) => row.high));
+  const continuationSetup = liquid && qualityPrice && qualityValue && controlledMomentum && saneVolume &&
+    notOverheated && notTooWeak && trend && (strongClose || volumeTurn || reboundTurn || breakout);
+  const washoutSetup = liquid &&
+    qualityPrice &&
+    last.value >= 1000000000 &&
+    last.volume >= 5000 &&
+    pct >= -5.8 &&
+    pct <= -1.5 &&
+    prevPct >= 1.5 &&
+    volumeRatio >= 0.45 &&
+    volumeRatio <= 1.5 &&
+    last.close >= ma20 * 0.94 &&
+    last.low <= ma20 * 1.02 &&
+    high5 >= ma20 * 1.08 &&
+    bodyRatio >= 0.45;
 
-  if (!(liquid && notOverheated && notTooWeak && trend && (strongClose || volumeTurn || reboundTurn || breakout))) {
+  if (!(continuationSetup || washoutSetup)) {
     return null;
   }
 
-  const score = Math.min(100, Math.round(
+  const continuationScore = Math.min(100, Math.round(
     42 +
     Math.min(Math.max(pct, 0) * 3.6, 18) +
     Math.min(volumeRatio * 9, 18) +
@@ -225,10 +246,19 @@ function scanOpenBuy(code, market, rows) {
     (closeNearHigh ? 6 : 0) +
     (last.close > ma20 ? 6 : 0)
   ));
+  const washoutScore = Math.min(94, Math.round(
+    55 +
+    Math.min(Math.abs(pct) * 3.2, 17) +
+    Math.min(Math.max(prevPct, 0) * 2.2, 11) +
+    Math.min(last.value / 1000000000 * 3, 10) +
+    (last.close >= ma20 * 0.97 ? 5 : 0) +
+    (last.low <= ma20 * 1.02 ? 4 : 0)
+  ));
+  const score = washoutSetup ? washoutScore : continuationScore;
   const takeProfit = Number((last.close * 1.012).toFixed(last.close >= 100 ? 1 : 2));
   const stopLoss = Number((last.close * 0.99).toFixed(last.close >= 100 ? 1 : 2));
   const noChase = Number((last.close * 1.045).toFixed(last.close >= 100 ? 1 : 2));
-  const tag = breakout ? "突破候選" : strongClose ? "強勢收紅" : volumeTurn ? "量價轉強" : "回測轉強";
+  const tag = washoutSetup ? "洗盤反彈" : breakout ? "突破候選" : strongClose ? "強勢收紅" : volumeTurn ? "量價轉強" : "回測轉強";
 
   return {
     code,
@@ -241,13 +271,15 @@ function scanOpenBuy(code, market, rows) {
     value: last.value,
     volumeRatio: Number(volumeRatio.toFixed(2)),
     score,
-    status: "明日開盤候選",
-    entry: "09:00 開盤價",
+    status: washoutSetup ? "洗盤反彈" : "強勢延續",
+    entry: washoutSetup ? "09:01 站回開盤價" : "09:00 開盤價",
     takeProfit,
     stopLoss,
     noChase,
     exitTime: "09:10",
-    reason: `${tag}：昨日漲幅 ${pct.toFixed(2)}%，量比 ${volumeRatio.toFixed(2)}，收盤位置偏強，列入開盤入候選。`,
+    reason: washoutSetup
+      ? `${tag}：昨日拉回 ${pct.toFixed(2)}%，前日強勢 ${prevPct.toFixed(2)}%，成交值 ${(last.value / 100000000).toFixed(1)} 億；同頁排名，但需 09:01 站回開盤價。`
+      : `${tag}：昨日漲幅 ${pct.toFixed(2)}%，量比 ${volumeRatio.toFixed(2)}，漲幅/量比/價格已過濾，列入高勝率開盤候選。`,
   };
 }
 
