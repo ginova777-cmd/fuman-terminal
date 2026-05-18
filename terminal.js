@@ -1541,6 +1541,35 @@ function sortIntradayRows(rows) {
   });
 }
 
+function getIntradayFallbackSignal(stock) {
+  const pct = Number(stock.percent) || 0;
+  const volume = Number(stock.tradeVolume) || 0;
+  const value = Number(stock.value) || (Number(stock.close) || 0) * volume * 1000;
+  const valueRank = Number(stock.valueRank) || 0;
+  const volumeRank = Number(stock.volumeRank) || 0;
+  const close = Number(stock.close) || 0;
+  const open = Number(stock.open) || 0;
+  const high = Number(stock.high) || 0;
+  const limitUp = Number(stock.limitUp) || 0;
+  const hasLiquidity = value >= 50000000 || volume >= 1000 || valueRank >= 55 || volumeRank >= 55;
+  const hasPriceAction = pct >= 0.5 || (open && close >= open * 1.005) || (high && close >= high * 0.985);
+  if (!hasLiquidity || !hasPriceAction) return null;
+  if (limitUp && close >= limitUp * 0.998) {
+    return {
+      id: "live_candidate",
+      short: "漲停量",
+      icon: "⚡",
+      reason: `即時量價候選：接近漲停，成交量 ${Math.round(volume).toLocaleString("zh-TW")} 張，先列入觀察，不代表可追。`,
+    };
+  }
+  return {
+    id: "live_candidate",
+    short: "量價",
+    icon: "⚡",
+    reason: `即時量價候選：漲幅 ${pct.toFixed(2)}%，成交量 ${Math.round(volume).toLocaleString("zh-TW")} 張，成交值/量能排名 ${valueRank}%/${volumeRank}%。`,
+  };
+}
+
 function getIntradayState(stock) {
   const pct = Number(stock.percent) || 0;
   const volume = Number(stock.tradeVolume) || Number(stock.volume) || 0;
@@ -1552,7 +1581,7 @@ function getIntradayState(stock) {
   const daily = stock.swingDaily || null;
   const hasFallback = (stock.matches || []).some((match) => match.id === "intraday_2m");
   const hasSignal = signals.length > 0 || hasFallback;
-  const hasStrongSignal = signals.some((signal) => ["limit_lock", "volume_burst", "daily_breakout", "gap", "breakout", "ma35_macd", "surge"].includes(signal.id));
+  const hasStrongSignal = signals.some((signal) => ["limit_lock", "volume_burst", "daily_breakout", "gap", "breakout", "ma35_macd", "surge", "live_candidate"].includes(signal.id));
   const hasLimitSignal = signals.some((signal) => signal.id === "limit_lock");
   const hasVolumeSignal = signals.some((signal) => signal.id === "volume_burst");
   const hasDailyTrigger = signals.some((signal) => signal.id === "daily_breakout" || signal.id === "gap" || signal.id === "breakout");
@@ -2525,6 +2554,11 @@ function renderIntradayRadar(evaluated) {
   const keyword = strategyKeyword.trim().toLowerCase();
   const allRows = evaluated
     .filter((stock) => stock.isRealtime)
+    .map((stock) => {
+      const signals = normalizeArray(stock.intradaySignals);
+      const fallback = !signals.length ? getIntradayFallbackSignal(stock) : null;
+      return fallback ? { ...stock, intradaySignals: [fallback] } : stock;
+    })
     .filter((stock) => (stock.intradaySignals || []).length || (stock.matches || []).some((match) => match.id === "intraday_2m"))
     .filter((stock) => !keyword || stock.code.includes(keyword) || stock.name.toLowerCase().includes(keyword))
     .map((stock) => {
