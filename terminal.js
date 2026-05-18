@@ -2444,6 +2444,17 @@ intradayRadarStyles.textContent = `
 `;
 document.head.appendChild(intradayRadarStyles);
 
+const strategy3DashboardStyles = document.createElement("style");
+strategy3DashboardStyles.textContent = `
+  .strategy5-dashboard.strategy5-dashboard-single {
+    grid-template-columns: 1fr;
+  }
+  .strategy5-dashboard.strategy5-dashboard-single .strategy5-results {
+    min-width: 0;
+  }
+`;
+document.head.appendChild(strategy3DashboardStyles);
+
 function setStrategyChrome(mode) {
   const intraday = mode === "intraday";
   const swing = mode === "swing";
@@ -3061,17 +3072,7 @@ function renderOvernightDashboard(evaluated) {
           <span>隔日沖候選</span>
         </div>
       </div>
-      <section class="strategy5-dashboard">
-        <aside class="strategy5-list">
-          <button class="strategy5-filter-card active" type="button">
-            <span>⌬</span>
-            <div>
-              <strong>隔日沖吸籌監控</strong>
-              <small>只看隔日沖條件，不經過舊綜合策略頁。</small>
-            </div>
-            <em>${rows.length} 檔</em>
-          </button>
-        </aside>
+      <section class="strategy5-dashboard strategy5-dashboard-single">
         <section class="strategy5-results">
           <div class="strategy5-results-head">
             <div>
