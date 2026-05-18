@@ -2314,9 +2314,14 @@ function renderIntradayRadar(evaluated) {
   setStrategyChrome("intraday");
   const keyword = strategyKeyword.trim().toLowerCase();
   const allRows = evaluated
-    .filter((stock) => (stock.intradaySignals || []).length)
+    .filter((stock) => (stock.intradaySignals || []).length || (stock.matches || []).some((match) => match.id === "intraday_2m"))
     .filter((stock) => !keyword || stock.code.includes(keyword) || stock.name.toLowerCase().includes(keyword))
-    .map((stock) => ({ ...stock }));
+    .map((stock) => {
+      const signals = (stock.intradaySignals || []).length
+        ? stock.intradaySignals
+        : [{ id: "volume_price", short: "量價", icon: "⚡", reason: (stock.matches || []).find((match) => match.id === "intraday_2m")?.reason || "盤中量價同步偏強，列入當沖雷達觀察。" }];
+      return { ...stock, intradaySignals: signals };
+    });
   const filteredRows = intradaySignalFilter === "all"
     ? allRows
     : allRows.filter((stock) => (stock.intradaySignals || []).some((signal) => signal.id === intradaySignalFilter));
@@ -3816,7 +3821,7 @@ async function refreshStrategyRealtimeScan(force = false) {
 
   strategyRealtimeLoading = true;
   try {
-    const batchSize = 80;
+  const batchSize = 100;
     const start = strategyRealtimeCursor % latestStocks.length;
     const rows = latestStocks.slice(start, start + batchSize);
     const wrapped = rows.length < batchSize ? latestStocks.slice(0, batchSize - rows.length) : [];
