@@ -1437,6 +1437,13 @@ function renderEntryPlan(plan) {
   return `<b>${plan.label}</b><small>${range}｜停損 ${formatTradePrice(plan.stopLoss)}｜不追 ${formatTradePrice(plan.chaseLimit)}</small>`;
 }
 
+function formatEntryRange(plan) {
+  if (!plan) return "--";
+  return plan.entryLow === plan.entryHigh
+    ? formatTradePrice(plan.entryLow)
+    : `${formatTradePrice(plan.entryLow)}-${formatTradePrice(plan.entryHigh)}`;
+}
+
 function strategyHit(id, stock) {
   const pct = stock.percent || 0;
   const valueRank = stock.valueRank || 0;
@@ -2934,12 +2941,12 @@ function renderIntradayRadar(evaluated) {
           <td>${stock.name}</td>
           <td><span class="intraday-state ${state.cls}">${state.label}</span></td>
           <td><span class="intraday-badges">${chips}</span></td>
-          <td class="price">${formatNumber(stock.close, stock.close >= 100 ? 0 : 2)}</td>
+          <td class="price">${formatEntryRange(stock.intradayEntry)}</td>
           <td class="pct">${sign}${stock.percent.toFixed(2)}%</td>
           <td>${Math.round(stock.tradeVolume || 0).toLocaleString("zh-TW")}</td>
           <td><span class="intraday-score">${stock.score}</span></td>
           <td class="intraday-entry">${renderEntryPlan(stock.intradayEntry)}</td>
-          <td>${reason}</td>
+          <td>現價 ${formatTradePrice(stock.close)}｜${reason}</td>
         </tr>
       `;
     }).join("")}
@@ -2973,7 +2980,7 @@ function renderIntradayRadar(evaluated) {
         <table class="intraday-table">
           <thead>
             <tr>
-              <th>${intradaySortHeader("code", "股票代號")}</th><th>股票名稱</th><th>狀態</th><th>訊號</th><th>${intradaySortHeader("price", "現價")}</th><th>${intradaySortHeader("percent", "漲幅")}</th><th>${intradaySortHeader("volume", "成交量")}</th><th>${intradaySortHeader("score", "分數")}</th><th>建議進場</th><th>原因</th>
+              <th>${intradaySortHeader("code", "股票代號")}</th><th>股票名稱</th><th>狀態</th><th>訊號</th><th>${intradaySortHeader("price", "進場價格")}</th><th>${intradaySortHeader("percent", "漲幅")}</th><th>${intradaySortHeader("volume", "成交量")}</th><th>${intradaySortHeader("score", "分數")}</th><th>風控</th><th>原因</th>
             </tr>
           </thead>
           <tbody>${tableRows}</tbody>
