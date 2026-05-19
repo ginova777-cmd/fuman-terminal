@@ -1577,7 +1577,7 @@ function strategyHit(id, stock) {
   const smartMoney = inst.total + inst.trust * 1.4;
   const close = cleanNumber(stock.close);
   const highest20Prev = cleanNumber(stock.swingDaily?.highest20Prev);
-  const nearBreakout = highest20Prev ? close >= highest20Prev * 0.965 && close <= highest20Prev * 1.035 : valueRank >= 65;
+  const nearBreakout = highest20Prev ? close >= highest20Prev * 0.965 && close <= highest20Prev * 1.035 : true;
   const trustBuying = cleanNumber(inst.trust) > 0;
   const foreignBuying = cleanNumber(inst.foreign) > 0;
   const jointBuying = cleanNumber(inst.total) > 0 && trustBuying && foreignBuying;
@@ -1590,9 +1590,9 @@ function strategyHit(id, stock) {
 
   const rules = {
     foreign_trust_breakout: {
-      hit: jointBuying && nearBreakout && pct > -1.5 && pct <= 7.5 && valueRank >= 45 && close >= 10,
-      score: clamp(scoreBase + 18 + (trustBuying ? 8 : 0) + (foreignBuying ? 6 : 0) + (nearBreakout ? 8 : 0), 0, 100),
-      reason: `外資 ${formatInstitution(inst.foreign)}、投信 ${formatInstitution(inst.trust)} 同買，法人合計 ${formatInstitution(inst.total)}；股價接近突破區，漲幅 ${pct.toFixed(2)}%。`,
+      hit: jointBuying && nearBreakout && pct > -1.5 && pct <= 7.5 && close >= 10,
+      score: clamp(scoreBase + 18 + (trustBuying ? 8 : 0) + (foreignBuying ? 6 : 0), 0, 100),
+      reason: `外資 ${formatInstitution(inst.foreign)}、投信 ${formatInstitution(inst.trust)} 同買，法人合計 ${formatInstitution(inst.total)}；漲幅 ${pct.toFixed(2)}%。`,
     },
     momentum: {
       hit: pct >= 2.2 && valueRank >= 55,
@@ -3605,7 +3605,7 @@ function renderStrategy5Dashboard(evaluated) {
   if (strategyTopHit) strategyTopHit.textContent = list.length ? `${Math.max(...list.map((stock) => stock.matches.filter((match) => STRATEGY5_PRESET_IDS.includes(match.id)).length))}/${STRATEGY5_PRESET_IDS.length}` : "--";
 
   const descriptions = {
-    foreign_trust_breakout: "外資與投信同步買超，股價貼近突破區，優先觀察準突破名單。",
+    foreign_trust_breakout: "外資與投信同步買超，漲幅未過熱，優先觀察準突破名單。",
     momentum: "價格趨勢與成交值同步轉強。",
     main_force_chip: "法人、大戶或主力籌碼偏買。",
     twenty_day_breakout: "收盤價接近近期強勢突破。",
