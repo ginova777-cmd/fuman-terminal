@@ -1835,7 +1835,24 @@ function getIntradayState(stock) {
   const daily = stock.swingDaily || null;
   const hasFallback = (stock.matches || []).some((match) => match.id === "intraday_2m");
   const hasSignal = signals.length > 0 || hasFallback;
-  const hasStrongSignal = signals.some((signal) => ["limit_lock", "volume_burst", "daily_breakout", "gap", "breakout", "ma35_macd", "surge"].includes(signal.id));
+  const hasStrongSignal = signals.some((signal) => [
+    "limit_lock",
+    "volume_burst",
+    "daily_breakout",
+    "gap",
+    "breakout",
+    "fire",
+    "ma35_macd",
+    "ma35_buy",
+    "diamond",
+    "surge",
+    "gua_butterfly_buy",
+    "gua_flag_long",
+    "gua_abcd_long",
+    "gua_orb_long",
+    "gua_angel_long",
+    "gua_vwap_long",
+  ].includes(signal.id));
   const hasLimitSignal = signals.some((signal) => signal.id === "limit_lock");
   const hasVolumeSignal = signals.some((signal) => signal.id === "volume_burst");
   const hasDailyTrigger = signals.some((signal) => signal.id === "daily_breakout" || signal.id === "gap" || signal.id === "breakout");
@@ -2177,6 +2194,45 @@ intradayRadarStyles.textContent = `
     display: grid;
     gap: 14px;
   }
+  .intraday-main-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 300px;
+    gap: 14px;
+    align-items: start;
+  }
+  .intraday-main-panel {
+    display: grid;
+    gap: 14px;
+    min-width: 0;
+  }
+  .intraday-side-panel {
+    position: sticky;
+    top: 12px;
+    display: grid;
+    gap: 10px;
+    max-height: calc(100vh - 24px);
+    overflow: auto;
+    padding: 10px;
+    border: 1px solid rgba(117, 133, 170, 0.18);
+    border-radius: 10px;
+    background: rgba(8, 14, 25, 0.54);
+  }
+  .intraday-side-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 2px 2px 8px;
+    border-bottom: 1px solid rgba(117, 133, 170, 0.14);
+  }
+  .intraday-side-head strong {
+    color: #f7fbff;
+    font-size: 14px;
+  }
+  .intraday-side-head span {
+    color: #9ba8c1;
+    font-size: 12px;
+  }
   .intraday-topbar {
     display: grid;
     grid-template-columns: 1fr auto;
@@ -2226,6 +2282,10 @@ intradayRadarStyles.textContent = `
     grid-template-columns: repeat(6, minmax(0, 1fr));
     gap: 12px;
   }
+  .intraday-side-panel .intraday-signal-grid {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
   .intraday-signal-card {
     min-height: 132px;
     border: 1px solid rgba(255, 74, 74, 0.42);
@@ -2237,6 +2297,35 @@ intradayRadarStyles.textContent = `
     justify-content: space-between;
     cursor: pointer;
     text-align: left;
+  }
+  .intraday-side-panel .intraday-signal-card {
+    min-height: 86px;
+    padding: 12px;
+    border-radius: 10px;
+  }
+  .intraday-side-panel .intraday-icon {
+    width: 34px;
+    height: 34px;
+    font-size: 19px;
+  }
+  .intraday-side-panel .intraday-card-top strong {
+    font-size: 15px;
+  }
+  .intraday-side-panel .intraday-count {
+    display: inline-block;
+    margin: 0 0 0 8px;
+    font-size: 22px;
+    vertical-align: middle;
+  }
+  .intraday-side-panel .intraday-signal-card small {
+    display: block;
+    margin-top: 7px;
+    line-height: 1.35;
+  }
+  .intraday-side-panel .intraday-strength {
+    margin-top: 8px;
+    padding: 5px 8px;
+    font-size: 12px;
   }
   .intraday-signal-card.ma,
   .intraday-signal-card.ma.active {
@@ -2729,13 +2818,21 @@ intradayRadarStyles.textContent = `
   @media (max-width: 1180px) {
     .strategy5-dashboard { grid-template-columns: 1fr; }
     .strategy5-stock-card { grid-template-columns: 36px 1fr; }
+    .intraday-main-layout { grid-template-columns: 1fr; }
+    .intraday-side-panel {
+      position: static;
+      max-height: none;
+    }
+    .intraday-side-panel .intraday-signal-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .intraday-zones { grid-template-columns: 1fr; }
   }
   @media (max-width: 1280px) {
     .intraday-signal-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .intraday-side-panel .intraday-signal-grid { grid-template-columns: 1fr; }
   }
   @media (max-width: 760px) {
     .intraday-signal-grid { grid-template-columns: 1fr; }
+    .intraday-side-panel .intraday-signal-grid { grid-template-columns: 1fr; }
   }
 `;
 document.head.appendChild(intradayRadarStyles);
@@ -2966,25 +3063,35 @@ function renderIntradayRadar(evaluated) {
           <label>市場：<select><option>全市場</option></select></label>
         </div>
       </div>
-      <div class="intraday-signal-grid">${cards}</div>
-      ${zones}
-      <section class="intraday-panel">
-        <div class="intraday-tabs">
-          ${tabs}
-          <div class="intraday-actions">
-            <input type="search" placeholder="搜尋代號/名稱" value="${escapeAttr(strategyKeyword)}" data-strategy-inline-search>
-            <button type="button" data-export-action>匯出</button>
-            <button type="button" data-export-settings>設定</button>
-          </div>
+      <section class="intraday-main-layout">
+        <div class="intraday-main-panel">
+          ${zones}
+          <section class="intraday-panel">
+            <div class="intraday-tabs">
+              ${tabs}
+              <div class="intraday-actions">
+                <input type="search" placeholder="搜尋代號/名稱" value="${escapeAttr(strategyKeyword)}" data-strategy-inline-search>
+                <button type="button" data-export-action>匯出</button>
+                <button type="button" data-export-settings>設定</button>
+              </div>
+            </div>
+            <table class="intraday-table">
+              <thead>
+                <tr>
+                  <th>${intradaySortHeader("code", "股票代號")}</th><th>股票名稱</th><th>狀態</th><th>訊號</th><th>${intradaySortHeader("price", "進場價")}</th><th>${intradaySortHeader("percent", "漲幅")}</th><th>${intradaySortHeader("volume", "成交量")}</th><th>${intradaySortHeader("score", "分數")}</th><th>風控</th><th>原因</th>
+                </tr>
+              </thead>
+              <tbody>${tableRows}</tbody>
+            </table>
+          </section>
         </div>
-        <table class="intraday-table">
-          <thead>
-            <tr>
-              <th>${intradaySortHeader("code", "股票代號")}</th><th>股票名稱</th><th>狀態</th><th>訊號</th><th>${intradaySortHeader("price", "進場價格")}</th><th>${intradaySortHeader("percent", "漲幅")}</th><th>${intradaySortHeader("volume", "成交量")}</th><th>${intradaySortHeader("score", "分數")}</th><th>風控</th><th>原因</th>
-            </tr>
-          </thead>
-          <tbody>${tableRows}</tbody>
-        </table>
+        <aside class="intraday-side-panel">
+          <div class="intraday-side-head">
+            <strong>訊號分類</strong>
+            <span>由上到下</span>
+          </div>
+          <div class="intraday-signal-grid">${cards}</div>
+        </aside>
       </section>
     </section>
   `;
