@@ -3554,13 +3554,13 @@ function renderOvernightDashboard(evaluated) {
         <div class="rank">#${index + 1}</div>
         <div>
           <strong>${stock.name} <small>${stock.code}</small></strong>
-          <small>${stock.sector || "未分類"} · ${stage.label || "盤中"} · 13:00快取</small>
+          <small>${stock.sector || "未分類"} · ${stage.label || "盤中"} · 13:00固定掃</small>
         </div>
         <div>
           <div class="strategy5-price">${formatNumber(stock.close, stock.close >= 100 ? 0 : 2)}</div>
           <small class="${stock.percent >= 0 ? "red" : "green"}">${sign}${stock.percent.toFixed(2)}%</small>
         </div>
-        <div class="strategy5-chips"><b>⌬ 隔日</b><b>${Math.round(stock.tradeVolume || 0).toLocaleString("zh-TW")}張</b></div>
+        <div class="strategy5-chips"><b>⌬ 隔日</b><b>${Math.round(stock.volumeLots || (stock.tradeVolume || 0) / 1000).toLocaleString("zh-TW")}張</b><b>周轉 ${formatNumber(stock.turnoverRate || 0, 2)}%</b><b>量比 ${formatNumber(stock.volumeRatio || 0, 2)}</b></div>
         <div class="strategy5-reason">${stock.activeMatch?.reason || "隔日沖籌碼與量價候選。"}</div>
       </article>
     `;
@@ -3584,8 +3584,8 @@ function renderOvernightDashboard(evaluated) {
           <button class="strategy5-filter-card active" type="button">
             <span>⌬</span>
             <div>
-              <strong>隔日沖吸籌監控</strong>
-              <small>每天 13:00 背景掃描一次，前端只讀固定結果。</small>
+              <strong>固定條件監控</strong>
+              <small>每天 13:00 完整掃一次：漲幅 3%-5%、成交量 1000張、周轉率 >5%、量比 >1。</small>
             </div>
             <em>${rows.length} 檔</em>
           </button>
@@ -3594,7 +3594,7 @@ function renderOvernightDashboard(evaluated) {
           <div class="strategy5-results-head">
             <div>
               <h3>隔日沖候選排行</h3>
-              <p>以 13:00 背景完整掃描結果排序，開網頁不再臨時重算。</p>
+              <p>以 13:00 固定條件完整掃描結果排序，開網頁不再臨時重算。</p>
             </div>
             <span class="strategy5-count">${rows.length} 檔</span>
           </div>
