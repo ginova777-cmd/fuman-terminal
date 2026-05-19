@@ -1152,6 +1152,13 @@ const STRATEGY5_PRESET_IDS = [
   "overnight_chip",
   ...STRATEGY5_IDS,
 ];
+const INTRADAY_EXCLUDED_CODES = new Set([
+  "1101", "1102", "1216", "1301", "1303", "1326", "1402", "1590", "2002", "2105",
+  "2207", "2303", "2308", "2317", "2327", "2330", "2357", "2382", "2395", "2408",
+  "2412", "2454", "2603", "2609", "2615", "2801", "2880", "2881", "2882", "2883",
+  "2884", "2885", "2886", "2887", "2888", "2890", "2891", "2892", "2912", "3008",
+  "3034", "3045", "3711", "4904", "5871", "5876", "5880", "6505", "6669", "8069",
+]);
 
 function ensureStrategyCards() {
   if (!strategyList) return;
@@ -1210,6 +1217,23 @@ function buildStrategyUniverse(stocks) {
   });
 }
 
+function isIntradayTradable(stock) {
+  const code = String(stock?.code || "");
+  const close = cleanNumber(stock?.close);
+  const value = cleanNumber(stock?.value);
+  const volume = cleanNumber(stock?.tradeVolume);
+  const name = String(stock?.name || "");
+  if (!/^\d{4}$/.test(code) || /^00/.test(code)) return false;
+  if (/ETF|ETN|指數|台灣50|高股息|正2|反1|期貨|債/i.test(name)) return false;
+  if (/^(28|58)/.test(code)) return false;
+  if (INTRADAY_EXCLUDED_CODES.has(code)) return false;
+  if (close >= 900) return false;
+  if (value >= 25000000000) return false;
+  if (close >= 250 && value >= 8000000000) return false;
+  if (close >= 120 && value >= 12000000000 && volume < 20000) return false;
+  return true;
+}
+
 function strategyHit(id, stock) {
   const pct = stock.percent || 0;
   const valueRank = stock.valueRank || 0;
@@ -1250,7 +1274,7 @@ function strategyHit(id, stock) {
       reason: `由弱轉強候選，漲幅 ${pct.toFixed(2)}%，成交值排名 ${valueRank}%。`,
     },
     intraday_2m: {
-      hit: pct >= 2 && ((stock.intradaySignals?.length || 0) > 0 || (valueRank >= 68 && volumeRank >= 68)),
+      hit: isIntradayTradable(stock) && pct >= 2 && ((stock.intradaySignals?.length || 0) > 0 || (valueRank >= 68 && volumeRank >= 68)),
       score: clamp(scoreBase + 12 + Math.min(pct * 4, 28) + (stock.intradaySignals?.length || 0) * 8, 0, 100),
       reason: stock.intradaySignals?.length
         ? stock.intradaySignals.map((signal) => signal.reason).join(" ")
@@ -2557,6 +2581,7 @@ function renderIntradayRadar(evaluated) {
   const keyword = strategyKeyword.trim().toLowerCase();
   const allRows = evaluated
     .filter((stock) => stock.isRealtime)
+    .filter(isIntradayTradable)
     .filter((stock) => cleanNumber(stock.percent) >= 2)
     .filter((stock) => (stock.intradaySignals || []).length || (stock.matches || []).some((match) => match.id === "intraday_2m"))
     .filter((stock) => !keyword || stock.code.includes(keyword) || stock.name.toLowerCase().includes(keyword))
@@ -2592,7 +2617,7 @@ function renderIntradayRadar(evaluated) {
     ? new Date(strategyLastScanAt).toLocaleTimeString("zh-TW", { hour12: false })
     : "等待開盤";
 
-  if (strategySummary) strategySummary.textContent = `全台股盤中輪巡｜5秒刷新｜約30秒掃完整市場｜最後更新 ${scanTime}`;
+  if (strategySummary) strategySummary.textContent = `全台股即時全掃｜5秒刷新｜每次掃完整市場｜最後更新 ${scanTime}`;
   if (strategyMatchCount) strategyMatchCount.textContent = rows.length.toLocaleString("zh-TW");
   if (strategyAvgScore) strategyAvgScore.textContent = rows.length ? Math.round(rows.reduce((sum, stock) => sum + stock.score, 0) / rows.length) : "--";
   if (strategyTopHit) strategyTopHit.textContent = rows.length ? `${Math.max(...rows.map((stock) => stock.intradaySignals.length))}/6` : "0/6";
@@ -2697,7 +2722,7 @@ function renderIntradayRadar(evaluated) {
       <div class="intraday-topbar">
         <div>
           <h2>${titleWithIcon("◔", "2分K當沖雷達")} <span class="intraday-live">● 立即更新</span></h2>
-          <p>盤中即時偵測強勢訊號，5秒刷新、約30秒掃完整市場。</p>
+          <p>盤中即時偵測強勢訊號，5秒刷新、每次掃完整市場。</p>
         </div>
         <div class="intraday-controls">
           <label>偵測頻率：<select><option>5秒</option></select></label>
@@ -4211,16 +4236,14 @@ async function refreshStrategyRealtimeScan(force = false) {
 
   strategyRealtimeLoading = true;
   try {
-    const batchSize = 80;
-    if (force) strategyRealtimeCursor = 0;
-    const batches = force ? Math.ceil(latestStocks.length / batchSize) : 6;
+    const scanSource = latestStocks.filter((stock) => isIntradayTradable(applyStrategyQuote(stock)));
+    const batchSize = 100;
+    strategyRealtimeCursor = 0;
+    const batches = Math.ceil(scanSource.length / batchSize);
     const requests = [];
     for (let batch = 0; batch < batches; batch++) {
-      const start = strategyRealtimeCursor % latestStocks.length;
-      const rows = latestStocks.slice(start, start + batchSize);
-      const wrapped = rows.length < batchSize ? latestStocks.slice(0, batchSize - rows.length) : [];
-      const codes = [...rows, ...wrapped].map((stock) => stock.code).filter(Boolean);
-      strategyRealtimeCursor = (start + batchSize) % latestStocks.length;
+      const start = batch * batchSize;
+      const codes = scanSource.slice(start, start + batchSize).map((stock) => stock.code).filter(Boolean);
       if (codes.length) {
         requests.push(fetchJson(`${endpoints.realtime}?codes=${encodeURIComponent(codes.join(","))}&t=${Date.now()}`, 12000));
       }
