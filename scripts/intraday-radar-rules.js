@@ -26,9 +26,6 @@ function isIntradayTradable(stock) {
   if (/^(28|58)/.test(code)) return false;
   if (EXCLUDED_CODES.has(code)) return false;
   if (close >= 900) return false;
-  if (value >= 25000000000) return false;
-  if (close >= 250 && value >= 8000000000) return false;
-  if (close >= 120 && value >= 12000000000 && volume < 20000) return false;
   return true;
 }
 
