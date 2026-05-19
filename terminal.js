@@ -264,6 +264,8 @@ const INTRADAY_BACKGROUND_BATCH = 300;
 const INTRADAY_FAST_SCAN_MS = 3000;
 const INTRADAY_BACKGROUND_SCAN_MS = 20000;
 const INTRADAY_CANDIDATE_TTL_MS = 15 * 60 * 1000;
+const INTRADAY_MIN_VOLUME = 2000;
+const INTRADAY_MIN_VALUE = 80000000;
 
 const SECTOR_MAP = {
   "2454":"CPU/ASIC/IP","3443":"CPU/ASIC/IP","3661":"CPU/ASIC/IP","3529":"CPU/ASIC/IP",
@@ -1090,7 +1092,7 @@ function getIntradaySignals(stock) {
   const ibRange = high && low ? high - low : 0;
   const f618 = ibRange > 0 ? high - ibRange * 0.618 : 0;
   const signals = [];
-  if (pct < 2 || !close) return signals;
+  if (pct < 2 || !close || !hasIntradayLiquidity(stock)) return signals;
   const volumeMilestone = volume >= 10000 ? 10000 : volume >= 5000 ? 5000 : volume >= 2000 ? 2000 : 0;
   const minuteVolumeRising = deltaVolumeRising || recentDeltaVolume >= 100;
   const minuteBurst = recentDeltaVolume >= 300 || (dayAvgRate && currentRate >= dayAvgRate * 3 && recentDeltaVolume >= 120) || (recentBaseRate && currentRate >= recentBaseRate * 2.5 && recentDeltaVolume >= 120);
@@ -1297,6 +1299,7 @@ const STRATEGY5_PRESET_IDS = [
 ];
 const INTRADAY_EXCLUDED_CODES = new Set([
   "2330", "2412", "3045",
+  "2208", "2634", "2645", "4541", "4572", "5009", "6753", "8033", "8222",
 ]);
 
 function ensureStrategyCards() {
@@ -1366,10 +1369,17 @@ function isIntradayTradable(stock) {
   const name = String(stock?.name || "");
   if (!/^\d{4}$/.test(code) || /^00/.test(code)) return false;
   if (/ETF|ETN|指數|台灣50|高股息|正2|反1|期貨|債/i.test(name)) return false;
+  if (/軍工|航太|漢翔|雷虎|駐龍|寶一|晟田|長榮航太|龍德造船|台船|榮剛/i.test(name)) return false;
   if (/^(28|58)/.test(code)) return false;
   if (INTRADAY_EXCLUDED_CODES.has(code)) return false;
   if (close >= 900) return false;
   return true;
+}
+
+function hasIntradayLiquidity(stock) {
+  const volume = cleanNumber(stock?.tradeVolume);
+  const value = cleanNumber(stock?.value) || cleanNumber(stock?.close) * volume;
+  return volume >= INTRADAY_MIN_VOLUME && value >= INTRADAY_MIN_VALUE;
 }
 
 function roundTradePrice(price) {
@@ -4631,7 +4641,7 @@ function markIntradayCandidates(stocks) {
     const value = cleanNumber(live.value);
     const volume = cleanNumber(live.tradeVolume);
     const latestDelta = cleanNumber(strategyRealtimeQuotes[code]?.history?.at(-1)?.deltaVolume);
-    if (pct >= 1.5 || value >= 80000000 || volume >= 1000 || latestDelta >= 50) {
+    if (hasIntradayLiquidity(live) && (pct >= 1.5 || value >= INTRADAY_MIN_VALUE || volume >= INTRADAY_MIN_VOLUME || latestDelta >= 50)) {
       intradayCandidateSeenAt[code] = now;
     }
   });

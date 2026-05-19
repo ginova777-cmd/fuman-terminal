@@ -1,6 +1,9 @@
 const EXCLUDED_CODES = new Set([
   "2330", "2412", "3045",
+  "2208", "2634", "2645", "4541", "4572", "5009", "6753", "8033", "8222",
 ]);
+const INTRADAY_MIN_VOLUME = 2000;
+const INTRADAY_MIN_VALUE = 80000000;
 
 function cleanNumber(value) {
   return Number(String(value ?? "").replace(/[,+%]/g, "").trim()) || 0;
@@ -19,10 +22,18 @@ function isIntradayTradable(stock) {
   const name = String(stock?.name || "");
   if (!/^\d{4}$/.test(code) || /^00/.test(code)) return false;
   if (/ETF|ETN|指數|台灣50|高股息|正2|反1|期貨|債/i.test(name)) return false;
+  if (/軍工|航太|漢翔|雷虎|駐龍|寶一|晟田|長榮航太|龍德造船|台船|榮剛/i.test(name)) return false;
   if (/^(28|58)/.test(code)) return false;
   if (EXCLUDED_CODES.has(code)) return false;
   if (close >= 900) return false;
   return true;
+}
+
+function hasIntradayLiquidity(stock) {
+  const close = cleanNumber(stock?.close);
+  const volume = cleanNumber(stock?.tradeVolume);
+  const value = cleanNumber(stock?.value) || close * volume;
+  return volume >= INTRADAY_MIN_VOLUME && value >= INTRADAY_MIN_VALUE;
 }
 
 function roundTradePrice(price) {
@@ -112,7 +123,7 @@ function detectSignals(stock, previous = null, ranks = null) {
   const f618 = ibRange ? high - ibRange * 0.618 : 0;
   const signals = [];
 
-  if (!isIntradayTradable(stock) || pct < 2 || volume < 2000) return signals;
+  if (!isIntradayTradable(stock) || !hasIntradayLiquidity(stock) || pct < 2) return signals;
 
   const volumeMilestone = volume >= 10000 ? 10000 : volume >= 5000 ? 5000 : 2000;
   if (deltaVolume >= 50) {
@@ -172,6 +183,7 @@ module.exports = {
   classifySignalState,
   detectSignals,
   formatTradePrice,
+  hasIntradayLiquidity,
   isIntradayTradable,
   roundTradePrice,
   buildRanks,
