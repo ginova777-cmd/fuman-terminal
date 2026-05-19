@@ -145,6 +145,7 @@ async function main() {
         name: stock.name,
         strategy: signal.label,
         entryPrice: signal.entryPrice,
+        supportPrice: signal.supportPrice,
         entryLow: signal.entryLow,
         entryHigh: signal.entryHigh,
         stopLoss: signal.stopLoss,

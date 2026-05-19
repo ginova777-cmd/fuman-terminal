@@ -109,15 +109,19 @@ function detectSignals(stock, previous = null, ranks = null) {
     signals.push({ id: "diamond", label: "鑽石", reason: "回測 0.618 後收紅轉強" });
   }
 
-  const entryLow = roundTradePrice(Math.max(vwap || 0, open || 0, close * 0.997));
-  const entryHigh = roundTradePrice(Math.max(entryLow, close * 1.002));
-  const entryPrice = entryHigh || roundTradePrice(close);
+  const supportPrice = roundTradePrice(Math.max(vwap || 0, open || 0, close * 0.997));
+  const tradedLow = low || close;
+  const executableClose = Math.max(close, tradedLow);
+  const entryLow = roundTradePrice(Math.max(supportPrice || 0, executableClose * 0.997, tradedLow));
+  const entryHigh = roundTradePrice(Math.max(entryLow, executableClose));
+  const entryPrice = roundTradePrice(executableClose) || entryHigh || roundTradePrice(close);
   const stopLoss = roundTradePrice(Math.min(entryLow || close, vwap || close, ma35Proxy || close) * 0.985);
   const chaseLimit = roundTradePrice(Math.min(high || close * 1.012, close * 1.01));
 
   return signals.map((signal) => ({
     ...signal,
     entryPrice,
+    supportPrice,
     entryLow,
     entryHigh,
     stopLoss,

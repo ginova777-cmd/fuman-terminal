@@ -129,6 +129,7 @@ async function main() {
     const quote = quotes.get(record.code) || {};
     const exitPrice = cleanNumber(quote.high) || cleanNumber(record.observedHigh) || cleanNumber(record.observedPrice);
     const entryPrice = cleanNumber(record.entryPrice);
+    const supportPrice = cleanNumber(record.supportPrice);
     const profit = entryPrice ? (exitPrice - entryPrice) * LOT_SIZE : 0;
     const profitPct = entryPrice ? ((exitPrice - entryPrice) / entryPrice) * 100 : 0;
     totalProfit += profit;
@@ -136,6 +137,7 @@ async function main() {
       dateSlash(record.timestamp),
       `標的：${record.code} ${record.name}`,
       `策略：${record.strategy}`,
+      supportPrice ? `支撐位：${formatTradePrice(supportPrice)}，不破後觀察` : "",
       `建議進場價：${formatTradePrice(entryPrice)}`,
       `出場價：${formatTradePrice(exitPrice)}`,
       `預計獲利金額：${money(profit)}`,

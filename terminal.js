@@ -1393,6 +1393,8 @@ function getIntradayEntryPlan(stock) {
   const open = cleanNumber(stock.open);
   const high = cleanNumber(stock.high) || close;
   const low = cleanNumber(stock.low);
+  const tradedLow = low || close;
+  const executableClose = Math.max(close, tradedLow);
   const prevHigh = cleanNumber(stock.swingDaily?.prev?.high);
   const vwap = stock.vwap || ((stock.value && stock.tradeVolume) ? stock.value / stock.tradeVolume : 0);
   const prices = strategyRealtimeQuotes[stock.code]?.history?.map((item) => item.price).filter(Boolean) || [];
@@ -1404,27 +1406,29 @@ function getIntradayEntryPlan(stock) {
     .map(cleanNumber)
     .filter((price) => price > 0 && price <= close * 1.003);
   const pullbackBase = supports.length ? Math.max(...supports) : close * 0.995;
+  const supportPrice = roundTradePrice(pullbackBase);
+  const entryPrice = roundTradePrice(executableClose);
   const nearHigh = high && close >= high * 0.992;
   const overExtended = high && close >= high * 0.998 && cleanNumber(stock.percent) >= 7;
   const hasBreakout = signalIds.has("fire") || signalIds.has("gap") || signalIds.has("daily_breakout") || signalIds.has("breakout") || signalIds.has("gua_flag_long") || signalIds.has("gua_orb_long") || signalIds.has("gua_vwap_long");
   const hasSupportBuy = signalIds.has("ma35_buy") || signalIds.has("diamond") || signalIds.has("ma35_macd") || signalIds.has("volume_diamond") || signalIds.has("volume_ma35") || signalIds.has("gua_abcd_long") || signalIds.has("gua_angel_long") || signalIds.has("gua_butterfly_buy");
 
   let label = "等回測";
-  let entryLow = pullbackBase;
-  let entryHigh = Math.min(close, pullbackBase * 1.006);
+  let entryLow = Math.max(pullbackBase, tradedLow);
+  let entryHigh = Math.max(Math.min(executableClose, pullbackBase * 1.006), entryLow);
   if (hasBreakout && !overExtended) {
     label = nearHigh ? "突破可試" : "可進場";
-    entryLow = Math.max(pullbackBase, close * 0.997);
-    entryHigh = close * 1.002;
+    entryLow = Math.max(pullbackBase, executableClose * 0.997, tradedLow);
+    entryHigh = Math.max(executableClose, entryLow);
   } else if (hasSupportBuy) {
     label = "支撐買點";
-    entryLow = pullbackBase;
-    entryHigh = Math.min(close, pullbackBase * 1.005);
+    entryLow = Math.max(pullbackBase, tradedLow);
+    entryHigh = Math.max(Math.min(executableClose, pullbackBase * 1.005), entryLow);
   }
   if (overExtended || signalIds.has("limit_lock")) {
     label = "不追等回測";
-    entryLow = pullbackBase;
-    entryHigh = Math.min(close * 0.995, pullbackBase * 1.004);
+    entryLow = Math.max(pullbackBase, tradedLow);
+    entryHigh = Math.max(Math.min(executableClose * 0.995, pullbackBase * 1.004), entryLow);
   }
 
   const stopBase = Math.min(entryLow, vwap || entryLow, ma35 || entryLow);
@@ -1432,6 +1436,8 @@ function getIntradayEntryPlan(stock) {
   const chaseLimit = Math.min(high || close * 1.012, close * 1.01);
   return {
     label,
+    entryPrice,
+    supportPrice,
     entryLow: roundTradePrice(entryLow),
     entryHigh: roundTradePrice(Math.max(entryHigh, entryLow)),
     stopLoss: roundTradePrice(stopLoss),
@@ -1445,11 +1451,13 @@ function renderEntryPlan(plan) {
   const range = plan.entryLow === plan.entryHigh
     ? formatTradePrice(plan.entryLow)
     : `${formatTradePrice(plan.entryLow)}-${formatTradePrice(plan.entryHigh)}`;
-  return `<b>${plan.label}</b><small>${range}｜停損 ${formatTradePrice(plan.stopLoss)}｜不追 ${formatTradePrice(plan.chaseLimit)}</small>`;
+  const support = plan.supportPrice ? `｜支撐 ${formatTradePrice(plan.supportPrice)}` : "";
+  return `<b>${plan.label}</b><small>進場 ${formatTradePrice(plan.entryPrice || plan.entryLow)}${support}｜停損 ${formatTradePrice(plan.stopLoss)}｜不追 ${formatTradePrice(plan.chaseLimit)}</small>`;
 }
 
 function formatEntryRange(plan) {
   if (!plan) return "--";
+  if (plan.entryPrice) return formatTradePrice(plan.entryPrice);
   return plan.entryLow === plan.entryHigh
     ? formatTradePrice(plan.entryLow)
     : `${formatTradePrice(plan.entryLow)}-${formatTradePrice(plan.entryHigh)}`;
@@ -3010,7 +3018,7 @@ function renderIntradayRadar(evaluated) {
   const renderZonePicks = (list) => list.length ? list.map((stock, index) => {
     const sign = stock.percent >= 0 ? "+" : "";
     const mainSignal = stock.intradaySignals[0]?.short || "量價";
-    const entry = stock.intradayEntry ? `${formatTradePrice(stock.intradayEntry.entryLow)}-${formatTradePrice(stock.intradayEntry.entryHigh)}` : "--";
+    const entry = formatEntryRange(stock.intradayEntry);
     return `
       <div class="intraday-pick">
         <span class="intraday-rank">${index + 1}</span>
