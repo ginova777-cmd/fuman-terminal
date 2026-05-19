@@ -211,7 +211,7 @@ function labelUpdateModes() {
     if (text.includes("策略1")) appendUpdateBadge(card, "07/14:30完整掃", "slow");
     if (text.includes("策略3")) appendUpdateBadge(card, "13:00完整掃", "slow");
     if (text.includes("策略4")) appendUpdateBadge(card, "07/14:30完整掃", "slow");
-    if (text.includes("策略5")) appendUpdateBadge(card, "讀快取", "slow");
+    if (text.includes("策略5")) appendUpdateBadge(card, "MIS即時", "live");
   });
 }
 
@@ -290,6 +290,9 @@ let strategy4CacheLoading = false;
 let strategy3Data = [];
 let strategy3UpdatedAt = 0;
 let strategy3CacheLoading = false;
+let strategyStocksPromise = null;
+let strategy5RealtimeRetryTimer = null;
+let strategy5RealtimeReady = false;
 const STRATEGY4_LOCAL_CACHE_KEY = "fuman_strategy4_scan_cache_v1";
 const STRATEGY4_BACKUP_CACHE_KEY = "fuman_strategy4_nonempty_backup_v1";
 const OPEN_BUY_LOCAL_CACHE_KEY = "fuman_open_buy_scan_cache_v1";
@@ -3643,6 +3646,29 @@ function renderStrategy5Dashboard(evaluated) {
   `;
 }
 
+function renderStrategy5RealtimeLoading() {
+  setStrategyChrome("strategy5");
+  if (strategySummary) strategySummary.textContent = "策略5：MIS 即時股價更新中，暫不顯示舊資料。";
+  if (strategyMatchCount) strategyMatchCount.textContent = "更新中";
+  if (strategyAvgScore) strategyAvgScore.textContent = "--";
+  if (strategyTopHit) strategyTopHit.textContent = "--";
+  strategyTable.innerHTML = `
+    <section class="strategy5-shell strategy5-clean">
+      <section class="strategy5-dashboard">
+        <section class="strategy5-results">
+          <div class="strategy5-results-head">
+            <div>
+              <h3>外資投信連買準突破</h3>
+              <p>MIS 即時股價更新中，完成前先剔除舊股票池資料。</p>
+            </div>
+          </div>
+          <div class="empty-state">正在重新抓取全台股即時股價，請稍等。</div>
+        </section>
+      </section>
+    </section>
+  `;
+}
+
 function renderOvernightDashboard(evaluated) {
   setStrategyChrome("strategy3");
   setTitleWithSchedule(strategyTitle, "◐", "策略3-隔日沖", "strategy3");
@@ -3769,6 +3795,10 @@ function renderStrategyScanner() {
     return;
   }
   if (strategyPresetMode === "strategy5") {
+    if (!strategy5RealtimeReady) {
+      renderStrategy5RealtimeLoading();
+      return;
+    }
     renderStrategy5Dashboard(evaluated);
     return;
   }
@@ -4015,9 +4045,10 @@ async function loadWarrantFlow(force = false) {
 }
 
 async function loadStrategyStocks() {
-  if (strategyStocksLoading || latestStocks.length) return;
+  if (latestStocks.length) return latestStocks;
+  if (strategyStocksPromise) return strategyStocksPromise;
   strategyStocksLoading = true;
-  try {
+  strategyStocksPromise = (async () => {
     let stocks = [];
     try {
       const payload = await fetchJson(endpoints.strategyStocks, 20000);
@@ -4058,16 +4089,56 @@ async function loadStrategyStocks() {
     if (parsed.length) {
       latestStocks = parsed;
       renderStrategyScanner();
+      if (strategyPresetMode === "strategy5") deferUiWork(refreshStrategy5RealtimeNow, 40);
     } else if (strategyTable) {
       strategyTable.innerHTML = `<div class="empty-state">策略5目前沒有可篩選的股票資料。</div>`;
     }
+    return latestStocks;
+  })();
+
+  try {
+    return await strategyStocksPromise;
   } catch (error) {
     if (strategyTable) {
       strategyTable.innerHTML = `<div class="empty-state">策略5暫時無法取得股票資料，請稍後重新整理。</div>`;
     }
+    return [];
   } finally {
     strategyStocksLoading = false;
+    strategyStocksPromise = null;
   }
+}
+
+async function ensureStrategyStocksLoaded() {
+  if (latestStocks.length) return latestStocks;
+  return await loadStrategyStocks();
+}
+
+async function refreshStrategy5RealtimeNow() {
+  if (strategy5RealtimeRetryTimer) {
+    clearTimeout(strategy5RealtimeRetryTimer);
+    strategy5RealtimeRetryTimer = null;
+  }
+  strategy5RealtimeReady = false;
+  renderStrategy5RealtimeLoading();
+  await ensureStrategyStocksLoaded();
+  if (!latestStocks.length) return;
+  if (strategyRealtimeLoading) {
+    scheduleStrategy5RealtimeRetry();
+    return;
+  }
+  const scanStartedAt = Date.now();
+  await refreshStrategyRealtimeScan("strategy5-full");
+  strategy5RealtimeReady = strategyLastScanAt >= scanStartedAt;
+  renderStrategyScanner();
+}
+
+function scheduleStrategy5RealtimeRetry(delay = 800) {
+  if (strategy5RealtimeRetryTimer) return;
+  strategy5RealtimeRetryTimer = setTimeout(() => {
+    strategy5RealtimeRetryTimer = null;
+    refreshStrategy5RealtimeNow();
+  }, delay);
 }
 
 function getSectorColor(pct) {
@@ -4774,10 +4845,13 @@ function applyStrategyPresetFromLink(link) {
   if (text.includes("策略3")) strategy5ActiveId = "overnight_chip";
   if (text.includes("策略4")) swingSignalFilter = "all";
   if (text.includes("策略2")) intradaySignalFilter = "all";
+  if (text.includes("策略5")) strategy5RealtimeReady = false;
   strategyMode = "any";
   strategyKeyword = "";
   if (strategySearch) strategySearch.value = "";
-  if (text.includes("策略3")) {
+  if (text.includes("策略5")) {
+    deferUiWork(refreshStrategy5RealtimeNow, 60);
+  } else if (text.includes("策略3")) {
     deferUiWork(async () => {
       await loadStrategyStocks();
       await loadStrategy3Cache(true);
@@ -4787,7 +4861,6 @@ function applyStrategyPresetFromLink(link) {
     deferUiWork(loadStrategyStocks);
   }
   if (text.includes("策略2")) deferUiWork(() => refreshStrategyRealtimeScan(true), 80);
-  if (text.includes("策略5")) deferUiWork(() => refreshStrategyRealtimeScan("strategy5-full"), 100);
   if (text.includes("策略1")) {
     deferUiWork(() => loadOpenBuyCache(true), 60);
   }
@@ -4879,11 +4952,15 @@ async function fetchStrategyRealtimeBatches(stocks, batchSize = 80) {
 }
 
 async function refreshStrategyRealtimeScan(mode = "hot") {
-  if (strategyRealtimeLoading || !latestStocks.length) return;
+  const scanMode = mode === true ? "force" : String(mode || "hot");
+  if (strategyRealtimeLoading) {
+    if (scanMode === "strategy5-full") scheduleStrategy5RealtimeRetry();
+    return;
+  }
+  if (!latestStocks.length) return;
   const isStrategyVisible = document.querySelector("#strategy-view")?.classList.contains("active");
   const isRealtimeStrategy = selectedStrategyIds.has("intraday_2m");
   const isStrategy5Realtime = strategyPresetMode === "strategy5";
-  const scanMode = mode === true ? "force" : String(mode || "hot");
   if (scanMode !== "force" && scanMode !== "strategy5-full" && (!isStrategyVisible || (!isRealtimeStrategy && !isStrategy5Realtime))) return;
 
   strategyRealtimeLoading = true;
