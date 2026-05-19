@@ -3841,7 +3841,10 @@ async function loadWarrantFlow(force = false) {
   }
   try {
     if (!latestStocks.length) loadStrategyStocks();
-    let payload = await fetchJson(`${endpoints.warrantFlowCache}?t=${Date.now()}`, 10000);
+    let payload = force ? await fetchJson(`${endpoints.scanWarrantFlow}?t=${Date.now()}`, 25000) : null;
+    if (!payload?.ok) {
+      payload = await fetchJson(`${endpoints.warrantFlowCache}?t=${Date.now()}`, 10000);
+    }
     const cachedMatches = normalizeArray(payload?.matches);
     if (!normalizeArray(payload?.matches).length) {
       payload = await fetchJson(`${endpoints.warrantFlowBackup}?t=${Date.now()}`, 10000);
@@ -4595,6 +4598,9 @@ async function loadInstitution() {
     let data = await fetchJson(`${endpoints.institutionCache}?t=${Date.now()}`, 10000);
     if (!data?.ok || !data?.data || !Object.keys(data.data).length) {
       data = await fetchJson(`${endpoints.institutionBackup}?t=${Date.now()}`, 10000);
+    }
+    if (!data?.ok || !data?.data || !Object.keys(data.data).length) {
+      data = await fetchJson(`${endpoints.institution}?t=${Date.now()}`, 20000);
     }
     if (data.ok && data.data) {
       institutionData = data.data;
