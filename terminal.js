@@ -1226,6 +1226,24 @@ function getIntradaySignals(stock) {
     signals.push({ id: "diamond", short: "鑽石", icon: "💎", reason: `回測 0.618 區後收紅，並維持在 MA35 動能區上方。` });
   }
 
+  if (minuteVolumeRising && f618 && low <= f618 && high >= f618 && close >= open && close > ma35Proxy) {
+    signals.push({
+      id: "volume_diamond",
+      short: "量+鑽石",
+      icon: "💎",
+      reason: `分時放大 + 鑽石：回測 0.618 後收紅，且分時量能同步放大。`,
+    });
+  }
+
+  if (minuteVolumeRising && close > ma35Proxy && close >= open && (macdUp || valueRank >= 55 || volumeRank >= 55)) {
+    signals.push({
+      id: "volume_ma35",
+      short: "量+MA35",
+      icon: "🟢",
+      reason: `分時放大 + MA35：站上 MA35 近似線，且分時量能同步放大。`,
+    });
+  }
+
   if (
     burstPct >= 1.2 &&
     (latestPoint.deltaVolume || 0) >= 20 &&
@@ -1389,7 +1407,7 @@ function getIntradayEntryPlan(stock) {
   const nearHigh = high && close >= high * 0.992;
   const overExtended = high && close >= high * 0.998 && cleanNumber(stock.percent) >= 7;
   const hasBreakout = signalIds.has("fire") || signalIds.has("gap") || signalIds.has("daily_breakout") || signalIds.has("breakout") || signalIds.has("gua_flag_long") || signalIds.has("gua_orb_long") || signalIds.has("gua_vwap_long");
-  const hasSupportBuy = signalIds.has("ma35_buy") || signalIds.has("diamond") || signalIds.has("ma35_macd") || signalIds.has("gua_abcd_long") || signalIds.has("gua_angel_long") || signalIds.has("gua_butterfly_buy");
+  const hasSupportBuy = signalIds.has("ma35_buy") || signalIds.has("diamond") || signalIds.has("ma35_macd") || signalIds.has("volume_diamond") || signalIds.has("volume_ma35") || signalIds.has("gua_abcd_long") || signalIds.has("gua_angel_long") || signalIds.has("gua_butterfly_buy");
 
   let label = "等回測";
   let entryLow = pullbackBase;
@@ -1565,6 +1583,8 @@ const INTRADAY_SIGNAL_DEFS = [
   { id: "breakout", title: "突破", icon: "🔥", hint: "站上盤中強勢區與 VWAP" },
   { id: "ma35_macd", title: "MA35 + MACD", icon: "🟢", hint: "站上 MA35 且動能向上" },
   { id: "diamond", title: "鑽石", icon: "💎", hint: "回測 0.618 後收紅轉強" },
+  { id: "volume_diamond", title: "量+鑽石", icon: "💎", hint: "分時放大搭配 0.618 回測" },
+  { id: "volume_ma35", title: "量+MA35", icon: "🟢", hint: "分時放大搭配 MA35 支撐" },
   { id: "surge", title: "瞬間拉抬", icon: "⚡", hint: "短時間價格快速推升" },
   { id: "gua_butterfly_buy", title: "蝴蝶買", icon: "🦋", hint: "乖離反彈後突破前高" },
   { id: "gua_flag_long", title: "旗形多", icon: "🚩", hint: "EMA多頭排列後突破旗形" },
@@ -1838,6 +1858,8 @@ function getIntradayState(stock) {
     "ma35_macd",
     "ma35_buy",
     "diamond",
+    "volume_diamond",
+    "volume_ma35",
     "surge",
     "gua_butterfly_buy",
     "gua_flag_long",
@@ -2947,6 +2969,8 @@ function renderIntradayRadar(evaluated) {
     daily_breakout: "ma",
     ma35_macd: "ma",
     diamond: "diamond",
+    volume_diamond: "diamond",
+    volume_ma35: "ma",
     surge: "warn",
     gua_butterfly_buy: "diamond",
     gua_flag_long: "warn",
