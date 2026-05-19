@@ -2804,6 +2804,13 @@ intradayRadarStyles.textContent = `
     grid-template-columns: 330px minmax(0, 1fr);
     gap: 16px;
   }
+  .strategy5-clean .strategy5-dashboard {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .strategy5-clean .strategy5-results {
+    width: 100%;
+    max-width: none;
+  }
   .strategy5-shell {
     display: grid;
     gap: 18px;
@@ -3596,21 +3603,6 @@ function renderStrategy5Dashboard(evaluated) {
     ultra_short: "盤中超短線操作候選。",
   };
 
-  const filters = STRATEGY5_PRESET_IDS.map((id) => {
-    const item = STRATEGY_BY_ID[id];
-    const count = byId[id]?.length || 0;
-    return `
-      <button class="strategy5-filter-card ${strategy5ActiveId === id ? "active" : ""}" type="button" data-strategy5-filter="${id}">
-        <span>${item.icon}</span>
-        <div>
-          <strong>${item.label}</strong>
-          <small>${descriptions[id] || "符合策略條件的股票。"}</small>
-        </div>
-        <em>${count} 檔</em>
-      </button>
-    `;
-  }).join("");
-
   const rows = list.length ? list.map((stock, index) => {
     const sign = stock.percent >= 0 ? "+" : "";
     const strategyMatches = stock.matches.filter((match) => STRATEGY5_PRESET_IDS.includes(match.id));
@@ -3635,27 +3627,14 @@ function renderStrategy5Dashboard(evaluated) {
 
   const now = new Date();
   strategyTable.innerHTML = `
-    <section class="strategy5-shell">
-      <div class="strategy5-hero">
-        <div>
-          <b>策略控制台</b>
-          <h2>${titleWithSchedule("▰", "策略5-綜合策略", "strategy5")}</h2>
-        </div>
-        <div class="strategy5-date">
-          <span>資料日</span>
-          <strong>${String(now.getMonth() + 1).padStart(2, "0")}/${String(now.getDate()).padStart(2, "0")}</strong>
-          <span>${latestStocks.length.toLocaleString("zh-TW")} 檔股票</span>
-        </div>
-      </div>
+    <section class="strategy5-shell strategy5-clean">
       <section class="strategy5-dashboard">
-        <aside class="strategy5-list">${filters}</aside>
         <section class="strategy5-results">
           <div class="strategy5-results-head">
             <div>
               <h3>${active.label}</h3>
               <p>${descriptions[strategy5ActiveId] || "符合策略5條件的股票。"}</p>
             </div>
-            <span class="strategy5-count">${list.length} 檔</span>
           </div>
           ${rows}
         </section>
