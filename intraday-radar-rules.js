@@ -66,7 +66,7 @@ function classifySignalState(stock, signals, context = {}) {
   const high = cleanNumber(stock.high) || close;
   const ids = new Set(signals.map((signal) => signal.id));
   const hasVolume = ids.has("volume_burst");
-  const hasTrigger = ids.has("limit_lock") || ids.has("gap") || ids.has("breakout");
+  const hasTrigger = ids.has("gap") || ids.has("breakout");
   const hasSupport = ids.has("ma35_buy") || ids.has("diamond");
   const liquid = value >= 150000000 || volume >= 2000;
   const tradable = value >= 80000000 || volume >= 1000;
@@ -121,10 +121,6 @@ function detectSignals(stock, previous = null, ranks = null) {
       label: deltaVolume >= 300 ? "急拉爆量" : deltaVolume >= 100 ? "分時爆量" : "分時放大",
       reason: `本輪新增 ${Math.round(deltaVolume)} 張，總量 ${Math.round(volume)} 張`,
     });
-  }
-
-  if (limitUp && close >= limitUp * 0.985 && (volumeRank >= 55 || valueRank >= 55 || volume >= 1200)) {
-    signals.push({ id: "limit_lock", label: close >= limitUp * 0.998 ? "漲停鎖定" : "接近漲停", reason: "接近漲停或亮燈鎖住" });
   }
 
   if (open && prevClose && gapPct >= 2 && close >= open && (volume >= volumeMilestone || volumeRank >= 55)) {

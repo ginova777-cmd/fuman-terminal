@@ -132,10 +132,10 @@ function inferState(record) {
   }
   const strategies = record.strategies || [record.strategy].filter(Boolean);
   const text = strategies.join("、");
-  if (/急拉爆量|分時爆量|漲停鎖定/.test(text) && /轉強突破|真跳空|MA35買點|鑽石/.test(text)) {
+  if (/急拉爆量|分時爆量/.test(text) && /轉強突破|真跳空|MA35買點|鑽石/.test(text)) {
     return { id: "go", label: STATE_LABELS.go, reason: "量勢與進場訊號同步。" };
   }
-  if (/急拉爆量|分時爆量|分時放大|轉強突破|MA35買點|鑽石|接近漲停/.test(text)) {
+  if (/急拉爆量|分時爆量|分時放大|轉強突破|MA35買點|鑽石/.test(text)) {
     return { id: "wait", label: STATE_LABELS.wait, reason: "已有訊號，等待站穩或再放量。" };
   }
   return { id: "watch", label: STATE_LABELS.watch, reason: "列入觀察。" };

@@ -1057,7 +1057,6 @@ function getIntradaySignals(stock) {
   const vwap = stock.vwap || ((stock.value && stock.tradeVolume) ? stock.value / stock.tradeVolume : 0);
   const gapPct = open && prevClose ? ((open - prevClose) / prevClose) * 100 : 0;
   const isNearLimit = limitUp && close >= limitUp * 0.985;
-  const isLimitLocked = limitUp && close >= limitUp * 0.998;
   const breaksYesterdayHigh = yesterdayHigh && close >= yesterdayHigh * 1.002;
   const breaks20High = highest20Prev && close >= highest20Prev * 1.002;
   const lastPrice = prices.at(-1) || close;
@@ -1104,15 +1103,6 @@ function getIntradaySignals(stock) {
   const guaOrbLong = guaAllowed && guaPriorHigh && close > guaPriorHigh && close > open;
   const guaAngelLong = guaAllowed && vwap && low <= vwap && close > vwap && rsi > 45 && close > open && ema9 > ema20;
   const guaVwapLong = guaAllowed && vwap && priorPrice <= vwap && close > vwap && rsi > 50 && close > open;
-
-  if (isNearLimit && (volumeRank >= 55 || valueRank >= 55 || volume >= 1200)) {
-    signals.push({
-      id: "limit_lock",
-      short: isLimitLocked ? "漲停" : "近漲停",
-      icon: "🔒",
-      reason: `${isLimitLocked ? "漲停鎖定" : "接近漲停"}，現價 ${formatNumber(close, close >= 100 ? 0 : 2)}，漲停 ${formatNumber(limitUp, limitUp >= 100 ? 0 : 2)}，量能排名 ${volumeRank}%。`,
-    });
-  }
 
   if (volumeMilestone && minuteVolumeRising) {
     const burstLabel = minuteBurst
@@ -1432,7 +1422,7 @@ function getIntradayEntryPlan(stock) {
     entryLow = Math.max(pullbackBase, tradedLow);
     entryHigh = Math.max(Math.min(executableClose, pullbackBase * 1.005), entryLow);
   }
-  if (overExtended || signalIds.has("limit_lock")) {
+  if (overExtended) {
     label = "不追等回測";
     entryLow = Math.max(pullbackBase, tradedLow);
     entryHigh = Math.max(Math.min(executableClose * 0.995, pullbackBase * 1.004), entryLow);
@@ -1464,10 +1454,6 @@ function formatEntryRange(plan) {
   return plan.entryLow === plan.entryHigh
     ? formatTradePrice(plan.entryLow)
     : `${formatTradePrice(plan.entryLow)}-${formatTradePrice(plan.entryHigh)}`;
-}
-
-function isLimitLockedRow(stock) {
-  return (stock?.intradaySignals || []).some((signal) => signal.id === "limit_lock" && String(signal.short || "").includes("漲停"));
 }
 
 function strategyHit(id, stock) {
@@ -1591,7 +1577,6 @@ function evaluateStrategyStock(stock) {
 }
 
 const INTRADAY_SIGNAL_DEFS = [
-  { id: "limit_lock", title: "漲停鎖定", icon: "🔒", hint: "接近漲停或亮燈鎖住" },
   { id: "volume_burst", title: "爆量", icon: "📊", hint: "成交量/成交值進市場前段" },
   { id: "daily_breakout", title: "日K突破", icon: "▲", hint: "突破昨日或20日壓力" },
   { id: "gap", title: "跳空", icon: "🚀", hint: "開盤高於昨收且量能放大" },
@@ -1864,7 +1849,6 @@ function getIntradayState(stock) {
   const hasFallback = (stock.matches || []).some((match) => match.id === "intraday_2m");
   const hasSignal = signals.length > 0 || hasFallback;
   const hasStrongSignal = signals.some((signal) => [
-    "limit_lock",
     "volume_burst",
     "daily_breakout",
     "gap",
@@ -1883,21 +1867,20 @@ function getIntradayState(stock) {
     "gua_angel_long",
     "gua_vwap_long",
   ].includes(signal.id));
-  const hasLimitSignal = signals.some((signal) => signal.id === "limit_lock");
   const hasVolumeSignal = signals.some((signal) => signal.id === "volume_burst");
   const hasDailyTrigger = signals.some((signal) => signal.id === "daily_breakout" || signal.id === "gap" || signal.id === "breakout");
   const liquid = value >= 150000000 || volume >= 2000;
   const tradableLiquidity = value >= 80000000 || volume >= 1000;
   const aboveOpen = !open || close >= open;
   const nearHigh = !high || close >= high * 0.985;
-  const tooHotToChase = pct >= 8.8 || hasLimitSignal;
+  const tooHotToChase = pct >= 8.8;
   const dailyOk = !daily || daily.stage?.tone !== "hot" || hasDailyTrigger;
   const winRateSetup = liquid && dailyOk && hasVolumeSignal && hasDailyTrigger && aboveOpen && nearHigh && pct >= 1 && pct <= 8.8;
 
   if (winRateSetup) {
     return { id: "go", label: "可進場", cls: "go" };
   }
-  if (tradableLiquidity && hasSignal && (pct >= 0.5 || hasLimitSignal) && !tooHotToChase && hasStrongSignal) {
+  if (tradableLiquidity && hasSignal && pct >= 0.5 && !tooHotToChase && hasStrongSignal) {
     return { id: "wait", label: "待確認", cls: "wait" };
   }
   return { id: "watch", label: "觀察", cls: "watch" };
@@ -2948,20 +2931,18 @@ function renderIntradayRadar(evaluated) {
       const row = { ...stock, intradaySignals: signals };
       return { ...row, intradayState: getIntradayState(row) };
     });
-  const tradableRows = allRows.filter((stock) => !isLimitLockedRow(stock));
+  const tradableRows = allRows;
   const stateFilters = new Set(["go", "wait", "watch"]);
   const filteredRows = intradaySignalFilter === "all"
     ? tradableRows
     : stateFilters.has(intradaySignalFilter)
       ? tradableRows.filter((stock) => stock.intradayState.id === intradaySignalFilter)
-      : intradaySignalFilter === "limit_lock"
-      ? allRows.filter((stock) => (stock.intradaySignals || []).some((signal) => signal.id === intradaySignalFilter && !String(signal.short || "").includes("漲停")))
       : allRows.filter((stock) => (stock.intradaySignals || []).some((signal) => signal.id === intradaySignalFilter));
   const rows = sortIntradayRows(filteredRows).slice(0, 80);
   const signalCounts = Object.fromEntries(INTRADAY_SIGNAL_DEFS.map((signal) => [signal.id, 0]));
   const stateCounts = { go: 0, wait: 0, watch: 0 };
   allRows.forEach((stock) => {
-    if (!isLimitLockedRow(stock)) stateCounts[stock.intradayState.id] += 1;
+    stateCounts[stock.intradayState.id] += 1;
     (stock.intradaySignals || []).forEach((signal) => {
       signalCounts[signal.id] = (signalCounts[signal.id] || 0) + 1;
     });
@@ -2982,7 +2963,6 @@ function renderIntradayRadar(evaluated) {
   if (strategyTopHit) strategyTopHit.textContent = rows.length ? `${Math.max(...rows.map((stock) => stock.intradaySignals.length))}/6` : "0/6";
 
   const cardClass = {
-    limit_lock: "warn",
     volume_burst: "ma",
     daily_breakout: "ma",
     ma35_macd: "ma",
