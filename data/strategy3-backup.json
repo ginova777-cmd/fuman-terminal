@@ -1,7 +1,7 @@
 {
   "ok": true,
   "source": "github-actions-backup",
-  "updatedAt": "2026-05-19T12:49:16.720Z",
+  "updatedAt": "2026-05-19T13:04:38.047Z",
   "usedDate": "20260519",
   "total": 1945,
   "count": 5,
@@ -14,6 +14,11 @@
       "percent": 4.901960784313726,
       "value": 2287895400,
       "tradeVolume": 23758000,
+      "open": 89,
+      "high": 98.4,
+      "low": 88.1,
+      "prevClose": 91.8,
+      "volume": 23758,
       "market": "TWSE",
       "quoteDate": "20260519",
       "quoteTime": "13:30:00",
@@ -21,15 +26,15 @@
       "volumeRank": 97,
       "volumeLots": 23758,
       "turnoverRate": 16.42,
-      "volumeRatio": 2.89,
-      "projectedRatio": 2.89,
+      "volumeRatio": 2.95,
+      "projectedRatio": 2.95,
       "overnightScore": 100,
       "overnightState": "通過",
       "score": 100,
       "matches": [
         {
           "id": "overnight_chip",
-          "reason": "符合固定條件：漲幅 4.90%、成交量 23,758 張、周轉率 16.42%、量比 2.89。"
+          "reason": "符合固定條件：漲幅 4.90%、成交量 23,758 張、周轉率 16.42%、量比 2.95。"
         }
       ]
     },
@@ -41,6 +46,11 @@
       "percent": 4.651162790697675,
       "value": 13213530000,
       "tradeVolume": 97878000,
+      "open": 130,
+      "high": 140.5,
+      "low": 126.5,
+      "prevClose": 129,
+      "volume": 97878,
       "market": "TWSE",
       "quoteDate": "20260519",
       "quoteTime": "13:30:00",
@@ -48,15 +58,15 @@
       "volumeRank": 100,
       "volumeLots": 97878,
       "turnoverRate": 25.61,
-      "volumeRatio": 1.67,
-      "projectedRatio": 1.67,
+      "volumeRatio": 1.9,
+      "projectedRatio": 1.9,
       "overnightScore": 98,
       "overnightState": "通過",
       "score": 98,
       "matches": [
         {
           "id": "overnight_chip",
-          "reason": "符合固定條件：漲幅 4.65%、成交量 97,878 張、周轉率 25.61%、量比 1.67。"
+          "reason": "符合固定條件：漲幅 4.65%、成交量 97,878 張、周轉率 25.61%、量比 1.90。"
         }
       ]
     },
@@ -68,6 +78,11 @@
       "percent": 4.554079696394684,
       "value": 537390300,
       "tradeVolume": 9753000,
+      "open": 52.7,
+      "high": 57.9,
+      "low": 51.2,
+      "prevClose": 52.7,
+      "volume": 9753,
       "market": "TWSE",
       "quoteDate": "20260519",
       "quoteTime": "13:30:00",
@@ -75,15 +90,15 @@
       "volumeRank": 93,
       "volumeLots": 9753,
       "turnoverRate": 11.02,
-      "volumeRatio": 1.8,
-      "projectedRatio": 1.8,
-      "overnightScore": 96,
+      "volumeRatio": 1.48,
+      "projectedRatio": 1.48,
+      "overnightScore": 94,
       "overnightState": "通過",
-      "score": 96,
+      "score": 94,
       "matches": [
         {
           "id": "overnight_chip",
-          "reason": "符合固定條件：漲幅 4.55%、成交量 9,753 張、周轉率 11.02%、量比 1.80。"
+          "reason": "符合固定條件：漲幅 4.55%、成交量 9,753 張、周轉率 11.02%、量比 1.48。"
         }
       ]
     },
@@ -95,6 +110,11 @@
       "percent": 4.40251572327044,
       "value": 1383859000,
       "tradeVolume": 33346000,
+      "open": 39.75,
+      "high": 42.65,
+      "low": 39.5,
+      "prevClose": 39.75,
+      "volume": 33346,
       "market": "TWSE",
       "quoteDate": "20260519",
       "quoteTime": "13:30:00",
@@ -102,15 +122,15 @@
       "volumeRank": 98,
       "volumeLots": 33346,
       "turnoverRate": 5.47,
-      "volumeRatio": 1.33,
-      "projectedRatio": 1.33,
+      "volumeRatio": 1.28,
+      "projectedRatio": 1.28,
       "overnightScore": 89,
       "overnightState": "通過",
       "score": 89,
       "matches": [
         {
           "id": "overnight_chip",
-          "reason": "符合固定條件：漲幅 4.40%、成交量 33,346 張、周轉率 5.47%、量比 1.33。"
+          "reason": "符合固定條件：漲幅 4.40%、成交量 33,346 張、周轉率 5.47%、量比 1.28。"
         }
       ]
     },
@@ -122,6 +142,11 @@
       "percent": 3.8512616201859307,
       "value": 465368200,
       "tradeVolume": 5951000,
+      "open": 75.3,
+      "high": 81.6,
+      "low": 75.3,
+      "prevClose": 75.3,
+      "volume": 5951,
       "market": "TWSE",
       "quoteDate": "20260519",
       "quoteTime": "13:30:00",
@@ -129,15 +154,15 @@
       "volumeRank": 88,
       "volumeLots": 5951,
       "turnoverRate": 5.22,
-      "volumeRatio": 1.51,
-      "projectedRatio": 1.51,
-      "overnightScore": 81,
+      "volumeRatio": 1.54,
+      "projectedRatio": 1.54,
+      "overnightScore": 82,
       "overnightState": "通過",
-      "score": 81,
+      "score": 82,
       "matches": [
         {
           "id": "overnight_chip",
-          "reason": "符合固定條件：漲幅 3.85%、成交量 5,951 張、周轉率 5.22%、量比 1.51。"
+          "reason": "符合固定條件：漲幅 3.85%、成交量 5,951 張、周轉率 5.22%、量比 1.54。"
         }
       ]
     }
