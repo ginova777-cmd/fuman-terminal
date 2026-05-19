@@ -1008,6 +1008,25 @@ function applyStrategyQuote(stock) {
   };
 }
 
+function emaLast(values, length) {
+  const rows = normalizeArray(values).map(cleanNumber).filter((value) => value > 0);
+  if (!rows.length) return 0;
+  const k = 2 / (length + 1);
+  return rows.reduce((ema, value, index) => index === 0 ? value : value * k + ema * (1 - k), rows[0]);
+}
+
+function rsiLast(values, length = 14) {
+  const rows = normalizeArray(values).map(cleanNumber).filter((value) => value > 0);
+  if (rows.length <= 1) return 50;
+  const changes = rows.slice(1).map((value, index) => value - rows[index]);
+  const recent = changes.slice(-length);
+  const gain = avg(recent.map((change) => Math.max(change, 0)));
+  const loss = avg(recent.map((change) => Math.max(-change, 0)));
+  if (!loss) return gain ? 100 : 50;
+  const rs = gain / loss;
+  return 100 - (100 / (1 + rs));
+}
+
 function getIntradaySignals(stock) {
   const quote = strategyRealtimeQuotes[stock.code];
   const history = quote?.history || [];
@@ -1056,6 +1075,12 @@ function getIntradaySignals(stock) {
   const longAvg = avg(prices.slice(-8));
   const macdUp = prices.length >= 3 && shortAvg > longAvg && lastPrice >= (prices.at(-2) || lastPrice);
   const ma35Proxy = longAvg || avg([prevClose, open, high, low, close]);
+  const guaPrices = [...prices, close].filter(Boolean).slice(-24);
+  const ema9 = emaLast(guaPrices, 9) || shortAvg || close;
+  const ema20 = emaLast(guaPrices, 20) || longAvg || ema9;
+  const rsi = rsiLast(guaPrices, 14);
+  const bandWidth = close ? Math.abs(ema9 - ema20) / close * 100 : 0;
+  const priceBias = ema20 ? (close - ema20) / ema20 * 100 : 0;
   const ibRange = high && low ? high - low : 0;
   const f618 = ibRange > 0 ? high - ibRange * 0.618 : 0;
   const signals = [];
@@ -1063,6 +1088,15 @@ function getIntradaySignals(stock) {
   const volumeMilestone = volume >= 10000 ? 10000 : volume >= 5000 ? 5000 : volume >= 2000 ? 2000 : 0;
   const minuteVolumeRising = deltaVolumeRising || recentDeltaVolume >= 100;
   const minuteBurst = recentDeltaVolume >= 300 || (dayAvgRate && currentRate >= dayAvgRate * 3 && recentDeltaVolume >= 120) || (recentBaseRate && currentRate >= recentBaseRate * 2.5 && recentDeltaVolume >= 120);
+  const guaPriorHigh = Math.max(...guaPrices.slice(-16, -1), 0);
+  const guaVolumeOk = Boolean(volumeMilestone || minuteVolumeRising || volumeRank >= 55);
+  const guaAllowed = bandWidth >= 0.09 && guaVolumeOk;
+  const guaButterflyBuy = guaAllowed && priceBias < -2 && close >= open && guaPriorHigh && close > guaPriorHigh;
+  const guaFlagLong = guaAllowed && guaPriorHigh && close > guaPriorHigh && ema9 > ema20 && close > open;
+  const guaAbcdLong = guaAllowed && ema9 > ema20 && low <= ema9 * 1.001 && close > ema9 && close > open;
+  const guaOrbLong = guaAllowed && guaPriorHigh && close > guaPriorHigh && close > open;
+  const guaAngelLong = guaAllowed && vwap && low <= vwap && close > vwap && rsi > 45 && close > open && ema9 > ema20;
+  const guaVwapLong = guaAllowed && vwap && priorPrice <= vwap && close > vwap && rsi > 50 && close > open;
 
   if (isNearLimit && (volumeRank >= 55 || valueRank >= 55 || volume >= 1200)) {
     signals.push({
@@ -1087,6 +1121,60 @@ function getIntradaySignals(stock) {
       short: `${burstLabel}${Math.round(volumeMilestone / 1000)}千`,
       icon: "📊",
       reason: `${burstLabel}，${deltaText}，總量 ${Math.round(volume).toLocaleString("zh-TW")} 張，量速約今日均速 ${rateVsDay ? rateVsDay.toFixed(1) : "--"} 倍。`,
+    });
+  }
+
+  if (guaButterflyBuy) {
+    signals.push({
+      id: "gua_butterfly_buy",
+      short: "蝴蝶買",
+      icon: "🦋",
+      reason: `瓜蝶-蝴蝶買：乖離 ${priceBias.toFixed(2)}%，紅K突破前高，偏反彈開火。`,
+    });
+  }
+
+  if (guaFlagLong) {
+    signals.push({
+      id: "gua_flag_long",
+      short: "旗形多",
+      icon: "🚩",
+      reason: `瓜蝶-旗形多：EMA9 在 EMA20 上方，價格突破近段高點 ${formatTradePrice(guaPriorHigh)}。`,
+    });
+  }
+
+  if (guaAbcdLong) {
+    signals.push({
+      id: "gua_abcd_long",
+      short: "ABCD多",
+      icon: "📈",
+      reason: `瓜蝶-ABCD多：回測 EMA9 ${formatTradePrice(ema9)} 後收上，支撐轉強。`,
+    });
+  }
+
+  if (guaOrbLong) {
+    signals.push({
+      id: "gua_orb_long",
+      short: "ORB多",
+      icon: "🚀",
+      reason: `瓜蝶-ORB多：突破近段高點 ${formatTradePrice(guaPriorHigh)}，多頭趨勢啟動。`,
+    });
+  }
+
+  if (guaAngelLong) {
+    signals.push({
+      id: "gua_angel_long",
+      short: "Angel多",
+      icon: "👼",
+      reason: `瓜蝶-Angel多：回測 VWAP ${formatTradePrice(vwap)} 後站回，RSI ${rsi.toFixed(0)}。`,
+    });
+  }
+
+  if (guaVwapLong) {
+    signals.push({
+      id: "gua_vwap_long",
+      short: "VWAP多",
+      icon: "🌀",
+      reason: `瓜蝶-VWAP多：由下往上突破 VWAP ${formatTradePrice(vwap)}，RSI ${rsi.toFixed(0)}。`,
     });
   }
 
@@ -1307,8 +1395,8 @@ function getIntradayEntryPlan(stock) {
   const pullbackBase = supports.length ? Math.max(...supports) : close * 0.995;
   const nearHigh = high && close >= high * 0.992;
   const overExtended = high && close >= high * 0.998 && cleanNumber(stock.percent) >= 7;
-  const hasBreakout = signalIds.has("fire") || signalIds.has("gap") || signalIds.has("daily_breakout") || signalIds.has("breakout");
-  const hasSupportBuy = signalIds.has("ma35_buy") || signalIds.has("diamond") || signalIds.has("ma35_macd");
+  const hasBreakout = signalIds.has("fire") || signalIds.has("gap") || signalIds.has("daily_breakout") || signalIds.has("breakout") || signalIds.has("gua_flag_long") || signalIds.has("gua_orb_long") || signalIds.has("gua_vwap_long");
+  const hasSupportBuy = signalIds.has("ma35_buy") || signalIds.has("diamond") || signalIds.has("ma35_macd") || signalIds.has("gua_abcd_long") || signalIds.has("gua_angel_long") || signalIds.has("gua_butterfly_buy");
 
   let label = "等回測";
   let entryLow = pullbackBase;
@@ -1478,6 +1566,12 @@ const INTRADAY_SIGNAL_DEFS = [
   { id: "ma35_macd", title: "MA35 + MACD", icon: "🟢", hint: "站上 MA35 且動能向上" },
   { id: "diamond", title: "鑽石", icon: "💎", hint: "回測 0.618 後收紅轉強" },
   { id: "surge", title: "瞬間拉抬", icon: "⚡", hint: "短時間價格快速推升" },
+  { id: "gua_butterfly_buy", title: "蝴蝶買", icon: "🦋", hint: "乖離反彈後突破前高" },
+  { id: "gua_flag_long", title: "旗形多", icon: "🚩", hint: "EMA多頭排列後突破旗形" },
+  { id: "gua_abcd_long", title: "ABCD多", icon: "📈", hint: "回測 EMA9 支撐後轉強" },
+  { id: "gua_orb_long", title: "ORB多", icon: "🚀", hint: "突破近段高點啟動" },
+  { id: "gua_angel_long", title: "Angel多", icon: "👼", hint: "VWAP回測支撐成功" },
+  { id: "gua_vwap_long", title: "VWAP多", icon: "🌀", hint: "由下往上突破 VWAP" },
 ];
 
 const SWING_SIGNAL_DEFS = [
@@ -2757,6 +2851,12 @@ function renderIntradayRadar(evaluated) {
     ma35_macd: "ma",
     diamond: "diamond",
     surge: "warn",
+    gua_butterfly_buy: "diamond",
+    gua_flag_long: "warn",
+    gua_abcd_long: "ma",
+    gua_orb_long: "warn",
+    gua_angel_long: "ma",
+    gua_vwap_long: "diamond",
   };
   const cards = INTRADAY_SIGNAL_DEFS.map((signal) => {
     const count = signalCounts[signal.id] || 0;
