@@ -206,6 +206,7 @@ let strategyRealtimeLoading = false;
 let strategyRealtimeCursor = 0;
 let strategyRealtimeQuotes = {};
 let strategyLastScanAt = 0;
+let strategyRealtimeBackgroundCursor = 0;
 let strategyHistoryLoading = false;
 let strategyHistoryCursor = 0;
 let strategyHistoryData = {};
@@ -257,6 +258,8 @@ let intradaySortDir = "desc";
 let intradaySignalFilter = "all";
 let strategyPresetMode = "";
 let strategy5ActiveId = "momentum";
+const INTRADAY_HOT_SCAN_LIMIT = 450;
+const INTRADAY_BACKGROUND_BATCH = 300;
 
 const SECTOR_MAP = {
   "2454":"CPU/ASIC/IP","3443":"CPU/ASIC/IP","3661":"CPU/ASIC/IP","3529":"CPU/ASIC/IP",
@@ -2966,7 +2969,7 @@ function renderIntradayRadar(evaluated) {
     ? new Date(strategyLastScanAt).toLocaleTimeString("zh-TW", { hour12: false })
     : "等待開盤";
 
-  if (strategySummary) strategySummary.textContent = `全台股即時全掃｜5秒刷新｜每次掃完整市場｜最後更新 ${scanTime}`;
+  if (strategySummary) strategySummary.textContent = `熱門優先即時掃｜5秒刷新｜背景補完整市場｜最後更新 ${scanTime}`;
   if (strategyMatchCount) strategyMatchCount.textContent = rows.length.toLocaleString("zh-TW");
   if (strategyAvgScore) strategyAvgScore.textContent = rows.length ? Math.round(rows.reduce((sum, stock) => sum + stock.score, 0) / rows.length) : "--";
   if (strategyTopHit) strategyTopHit.textContent = rows.length ? `${Math.max(...rows.map((stock) => stock.intradaySignals.length))}/6` : "0/6";
@@ -4597,6 +4600,59 @@ function applyStrategyPresetFromLink(link) {
   }
 }
 
+function getIntradayHotScore(stock) {
+  const live = applyStrategyQuote(stock);
+  const pct = cleanNumber(live.percent);
+  const value = cleanNumber(live.value);
+  const volume = cleanNumber(live.tradeVolume);
+  const close = cleanNumber(live.close);
+  const history = strategyRealtimeQuotes[live.code]?.history || [];
+  const latestDelta = cleanNumber(history.at(-1)?.deltaVolume);
+  const signalBonus = (live.intradaySignals?.length || 0) * 900;
+  const pctScore = Math.max(pct, -2) * 150;
+  const valueScore = Math.log10(Math.max(value, 1)) * 42;
+  const volumeScore = Math.log10(Math.max(volume, 1)) * 38;
+  const deltaScore = Math.log10(Math.max(latestDelta, 1)) * 70;
+  const pricePenalty = close >= 900 ? 9999 : 0;
+  return signalBonus + pctScore + valueScore + volumeScore + deltaScore - pricePenalty;
+}
+
+function uniqueStocksByCode(stocks) {
+  const seen = new Set();
+  return stocks.filter((stock) => {
+    const code = String(stock?.code || "");
+    if (!code || seen.has(code)) return false;
+    seen.add(code);
+    return true;
+  });
+}
+
+function sliceBackgroundScan(stocks, count) {
+  if (!stocks.length || count <= 0) return [];
+  const result = [];
+  let guard = 0;
+  while (result.length < Math.min(count, stocks.length) && guard < stocks.length + count) {
+    result.push(stocks[strategyRealtimeBackgroundCursor % stocks.length]);
+    strategyRealtimeBackgroundCursor = (strategyRealtimeBackgroundCursor + 1) % stocks.length;
+    guard += 1;
+  }
+  return result;
+}
+
+async function fetchStrategyRealtimeBatches(stocks, batchSize = 80) {
+  const requests = [];
+  for (let start = 0; start < stocks.length; start += batchSize) {
+    const codes = stocks.slice(start, start + batchSize).map((stock) => stock.code).filter(Boolean);
+    if (codes.length) {
+      requests.push(fetchJson(`${endpoints.realtime}?codes=${encodeURIComponent(codes.join(","))}&t=${Date.now()}`, 12000));
+    }
+  }
+  const payloads = await Promise.allSettled(requests);
+  payloads.forEach((result) => {
+    if (result.status === "fulfilled") normalizeArray(result.value?.quotes).forEach(updateStrategyQuote);
+  });
+}
+
 async function refreshStrategyRealtimeScan(force = false) {
   if (strategyRealtimeLoading || !latestStocks.length) return;
   const isStrategyVisible = document.querySelector("#strategy-view")?.classList.contains("active");
@@ -4606,23 +4662,24 @@ async function refreshStrategyRealtimeScan(force = false) {
   strategyRealtimeLoading = true;
   try {
     const scanSource = latestStocks.filter((stock) => isIntradayTradable(applyStrategyQuote(stock)));
-    const batchSize = 100;
-    strategyRealtimeCursor = 0;
-    const batches = Math.ceil(scanSource.length / batchSize);
-    const requests = [];
-    for (let batch = 0; batch < batches; batch++) {
-      const start = batch * batchSize;
-      const codes = scanSource.slice(start, start + batchSize).map((stock) => stock.code).filter(Boolean);
-      if (codes.length) {
-        requests.push(fetchJson(`${endpoints.realtime}?codes=${encodeURIComponent(codes.join(","))}&t=${Date.now()}`, 12000));
-      }
-    }
-    const payloads = await Promise.allSettled(requests);
-    payloads.forEach((result) => {
-      if (result.status === "fulfilled") normalizeArray(result.value?.quotes).forEach(updateStrategyQuote);
-    });
+    const hotStocks = [...scanSource]
+      .sort((a, b) => getIntradayHotScore(b) - getIntradayHotScore(a))
+      .slice(0, INTRADAY_HOT_SCAN_LIMIT);
+    const hotCodes = new Set(hotStocks.map((stock) => stock.code));
+    const backgroundPool = scanSource.filter((stock) => !hotCodes.has(stock.code));
+    const backgroundStocks = sliceBackgroundScan(backgroundPool, force ? INTRADAY_BACKGROUND_BATCH * 2 : INTRADAY_BACKGROUND_BATCH);
+    const hotBatchSize = 75;
+    const backgroundBatchSize = 90;
+
+    strategyRealtimeCursor = (strategyRealtimeCursor + hotStocks.length + backgroundStocks.length) % Math.max(scanSource.length, 1);
+    await fetchStrategyRealtimeBatches(hotStocks, hotBatchSize);
     strategyLastScanAt = Date.now();
     renderStrategyScanner();
+    if (backgroundStocks.length) {
+      await fetchStrategyRealtimeBatches(backgroundStocks, backgroundBatchSize);
+      strategyLastScanAt = Date.now();
+      renderStrategyScanner();
+    }
   } catch (error) {
   } finally {
     strategyRealtimeLoading = false;
