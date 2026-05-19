@@ -207,6 +207,7 @@ let strategyRealtimeCursor = 0;
 let strategyRealtimeQuotes = {};
 let strategyLastScanAt = 0;
 let strategyRealtimeBackgroundCursor = 0;
+const intradayGoFirstSeenAt = new Map();
 let intradayCandidateSeenAt = {};
 let strategyHistoryLoading = false;
 let strategyHistoryCursor = 0;
@@ -2580,7 +2581,7 @@ intradayRadarStyles.textContent = `
   }
   .intraday-pick {
     display: grid;
-    grid-template-columns: 30px minmax(0, 1fr) auto;
+    grid-template-columns: 30px minmax(62px, auto) minmax(0, 1fr) auto;
     align-items: center;
     gap: 9px;
     min-height: 50px;
@@ -2601,6 +2602,12 @@ intradayRadarStyles.textContent = `
   }
   .intraday-pick-main {
     min-width: 0;
+  }
+  .intraday-pick-time {
+    color: #45e49f;
+    font-size: 12px;
+    font-weight: 800;
+    white-space: nowrap;
   }
   .intraday-pick-main b {
     display: block;
@@ -2928,6 +2935,7 @@ function setStrategyChrome(mode) {
 function renderIntradayRadar(evaluated) {
   setStrategyChrome("intraday");
   const keyword = strategyKeyword.trim().toLowerCase();
+  const now = Date.now();
   const allRows = evaluated
     .filter((stock) => stock.isRealtime)
     .filter(isIntradayTradable)
@@ -2939,7 +2947,11 @@ function renderIntradayRadar(evaluated) {
         ? stock.intradaySignals
         : [{ id: "volume_price", short: "量價", icon: "⚡", reason: (stock.matches || []).find((match) => match.id === "intraday_2m")?.reason || "盤中量價同步偏強，列入當沖雷達觀察。" }];
       const row = { ...stock, intradaySignals: signals };
-      return { ...row, intradayState: getIntradayState(row) };
+      const intradayState = getIntradayState(row);
+      if (intradayState.id === "go" && !intradayGoFirstSeenAt.has(row.code)) {
+        intradayGoFirstSeenAt.set(row.code, now);
+      }
+      return { ...row, intradayState, intradayGoFirstSeenAt: intradayGoFirstSeenAt.get(row.code) || null };
     });
   const tradableRows = allRows;
   const stateFilters = new Set(["go", "wait", "watch"]);
@@ -3015,13 +3027,18 @@ function renderIntradayRadar(evaluated) {
     ...INTRADAY_SIGNAL_DEFS.map((signal) => [signal.id, signal.title, signalCounts[signal.id] || 0]),
   ].map(([id, label, count]) => `<button class="${intradaySignalFilter === id ? "active" : ""}" type="button" data-intraday-filter="${id}">${label}(${count})</button>`).join("");
 
-  const renderZonePicks = (list) => list.length ? list.map((stock, index) => {
+  const renderZonePicks = (list, zoneId) => list.length ? list.map((stock, index) => {
     const sign = stock.percent >= 0 ? "+" : "";
     const mainSignal = stock.intradaySignals[0]?.short || "量價";
     const entry = formatEntryRange(stock.intradayEntry);
+    const firstSeenTime = stock.intradayGoFirstSeenAt
+      ? new Date(stock.intradayGoFirstSeenAt).toLocaleTimeString("zh-TW", { hour12: false, hour: "2-digit", minute: "2-digit", second: "2-digit" })
+      : scanTime;
+    const timeText = zoneId === "go" ? `<span class="intraday-pick-time">${firstSeenTime}</span>` : `<span class="intraday-pick-time"></span>`;
     return `
       <div class="intraday-pick">
         <span class="intraday-rank">${index + 1}</span>
+        ${timeText}
         <div class="intraday-pick-main">
           <b>${stock.code} ${stock.name}</b>
           <span>${mainSignal}｜進場 ${entry}</span>
@@ -3038,15 +3055,15 @@ function renderIntradayRadar(evaluated) {
     <section class="intraday-zones">
       <article class="intraday-zone go">
         <header><div><h3>A區 可進場</h3><small>量夠、價強、靠近高點</small></div><strong>${stateCounts.go}</strong></header>
-        <div class="intraday-picks">${renderZonePicks(zoneRows.go)}</div>
+        <div class="intraday-picks">${renderZonePicks(zoneRows.go, "go")}</div>
       </article>
       <article class="intraday-zone wait">
         <header><div><h3>B區 待確認</h3><small>等站穩開盤價或再放量</small></div><strong>${stateCounts.wait}</strong></header>
-        <div class="intraday-picks">${renderZonePicks(zoneRows.wait)}</div>
+        <div class="intraday-picks">${renderZonePicks(zoneRows.wait, "wait")}</div>
       </article>
       <article class="intraday-zone watch">
         <header><div><h3>C區 觀察</h3><small>量能或型態還沒到位</small></div><strong>${stateCounts.watch}</strong></header>
-        <div class="intraday-picks">${renderZonePicks(zoneRows.watch)}</div>
+        <div class="intraday-picks">${renderZonePicks(zoneRows.watch, "watch")}</div>
       </article>
     </section>
   `;
