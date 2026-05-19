@@ -91,9 +91,16 @@ function parseTpexRow(row, fields = []) {
   const code = String(getValue(record, ["代號", "證券代號"]) || row?.[0] || "").trim();
   const name = String(getValue(record, ["名稱", "證券名稱"]) || row?.[1] || "").trim();
   if (!/^\d{4}$/.test(code)) return null;
-  const foreign = cleanNumber(getValue(record, ["外資及陸資淨買股數", "外資及陸資買賣超股數", "外陸資買賣超"]) || row?.[4]);
-  const trust = cleanNumber(getValue(record, ["投信淨買股數", "投信買賣超股數", "投信買賣超"]) || row?.[7]);
-  const dealer = cleanNumber(getValue(record, ["自營商淨買股數", "自營商買賣超股數", "自營商買賣超"]) || row?.[8]);
+  const isTpexTable = Array.isArray(row) && row.length >= 24 && fields.filter((field) => String(field).includes("買賣超股數")).length >= 6;
+  const foreign = isTpexTable
+    ? cleanNumber(row[4])
+    : cleanNumber(getValue(record, ["外資及陸資淨買股數", "外資及陸資買賣超股數", "外陸資買賣超"]) || row?.[4]);
+  const trust = isTpexTable
+    ? cleanNumber(row[13])
+    : cleanNumber(getValue(record, ["投信淨買股數", "投信買賣超股數", "投信買賣超"]) || row?.[7]);
+  const dealer = isTpexTable
+    ? cleanNumber(row[22])
+    : cleanNumber(getValue(record, ["自營商淨買股數", "自營商買賣超股數", "自營商買賣超"]) || row?.[8]);
   const total = cleanNumber(getValue(record, ["三大法人買賣超股數", "三大法人買賣超股數合計"]) || row?.[row.length - 1]) || foreign + trust + dealer;
   return { code, name, foreign, trust, dealer, total, market: "上櫃" };
 }

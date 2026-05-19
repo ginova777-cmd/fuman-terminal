@@ -94,7 +94,13 @@ function parseTwDate(value) {
   const text = String(value ?? "").trim();
   const roc = text.match(/(\d{2,3})年(\d{1,2})月(\d{1,2})日/);
   if (roc) return new Date(Number(roc[1]) + 1911, Number(roc[2]) - 1, Number(roc[3]));
+  const slash = text.match(/^(\d{2,4})[\/.-](\d{1,2})[\/.-](\d{1,2})$/);
+  if (slash) {
+    const year = Number(slash[1]);
+    return new Date(year < 1911 ? year + 1911 : year, Number(slash[2]) - 1, Number(slash[3]));
+  }
   const ymd = text.replace(/\D/g, "");
+  if (ymd.length === 7) return new Date(Number(ymd.slice(0, 3)) + 1911, Number(ymd.slice(3, 5)) - 1, Number(ymd.slice(5, 7)));
   if (ymd.length === 8) return new Date(Number(ymd.slice(0, 4)), Number(ymd.slice(4, 6)) - 1, Number(ymd.slice(6, 8)));
   return null;
 }
