@@ -2,10 +2,9 @@ name: Strategy Background Cache
 
 on:
   schedule:
-    # Taiwan time 21:00 on trading days.
-    - cron: "0 13 * * 1-5"
-    # Taiwan time 06:00 next morning, so the latest files are ready before market open.
-    - cron: "0 22 * * 0-4"
+    # Taiwan time 07:00 and 14:30 on trading days.
+    - cron: "0 23 * * 0-4"
+    - cron: "30 6 * * 1-5"
   workflow_dispatch:
     inputs:
       full_scan:
@@ -41,26 +40,36 @@ jobs:
             mkdir -p scripts
             cp scan-strategy4-cache.js scripts/scan-strategy4-cache.js
           fi
+          if [ ! -f scripts/scan-open-buy-cache.js ] && [ -f scan-open-buy-cache.js ]; then
+            mkdir -p scripts
+            cp scan-open-buy-cache.js scripts/scan-open-buy-cache.js
+          fi
           if [ ! -f scripts/scan-warrant-flow-cache.js ] && [ -f scan-warrant-flow-cache.js ]; then
             mkdir -p scripts
             cp scan-warrant-flow-cache.js scripts/scan-warrant-flow-cache.js
           fi
-          if [ ! -f scripts/scan-institution-cache.js ] && [ -f scan-institution-cache.js ]; then
-            mkdir -p scripts
-            cp scan-institution-cache.js scripts/scan-institution-cache.js
+          RUN_OPEN_AND_WARRANT="0"
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] || [ "${{ github.event_name }}" = "schedule" ]; then
+            RUN_OPEN_AND_WARRANT="1"
           fi
           node scripts/scan-strategy4-cache.js
-          node scripts/scan-institution-cache.js
-          node scripts/scan-warrant-flow-cache.js
+          if [ "$RUN_OPEN_AND_WARRANT" = "1" ]; then
+            node scripts/scan-open-buy-cache.js
+            node scripts/scan-warrant-flow-cache.js
+          else
+            echo "Skip open-buy and warrant-flow for this manual batch run."
+          fi
         env:
           STRATEGY4_BATCH_SIZE: "48"
           STRATEGY4_BATCHES_PER_RUN: "5"
+          OPEN_BUY_BATCH_SIZE: "48"
+          OPEN_BUY_BATCHES_PER_RUN: "5"
           FULL_SCAN: ${{ (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.full_scan == 'true')) && '1' || '0' }}
 
       - name: Commit cache
         run: |
           git config user.name "fuman-terminal-bot"
           git config user.email "actions@github.com"
-          git add data/strategy4-latest.json data/strategy4-backup.json data/institution-latest.json data/institution-backup.json data/warrant-flow-latest.json data/warrant-flow-backup.json
+          git add data/strategy4-latest.json data/strategy4-backup.json data/open-buy-latest.json data/open-buy-backup.json data/warrant-flow-latest.json data/warrant-flow-backup.json
           git diff --cached --quiet || git commit -m "Update strategy caches"
           git push
