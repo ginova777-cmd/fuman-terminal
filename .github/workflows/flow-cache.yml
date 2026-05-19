@@ -1,0 +1,39 @@
+name: Flow And Institution Cache
+
+on:
+  schedule:
+    # Taiwan time 06:00 and 21:00 on trading days.
+    - cron: "0 22 * * 0-4"
+    - cron: "0 13 * * 1-5"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: flow-institution-cache
+  cancel-in-progress: false
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Update buy-sell and warrant-flow cache
+        run: |
+          node scripts/scan-institution-cache.js
+          node scripts/scan-warrant-flow-cache.js
+
+      - name: Commit cache
+        run: |
+          git config user.name "fuman-terminal-bot"
+          git config user.email "actions@github.com"
+          git add data/institution-latest.json data/institution-backup.json data/warrant-flow-latest.json data/warrant-flow-backup.json
+          git diff --cached --quiet || git commit -m "Update flow and institution cache"
+          git push

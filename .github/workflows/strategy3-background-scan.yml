@@ -2,9 +2,8 @@ name: Strategy3 Overnight Cache
 
 on:
   schedule:
-    # Taiwan time 07:00 and 14:30 on trading days.
-    - cron: "0 23 * * 0-4"
-    - cron: "30 6 * * 1-5"
+    # Taiwan time 13:00 on trading days.
+    - cron: "0 5 * * 1-5"
   workflow_dispatch:
 
 permissions:
@@ -27,13 +26,12 @@ jobs:
 
       - name: Update strategy3 cache
         run: |
-          node scripts/scan-institution-cache.js
           node scripts/scan-strategy3-cache.js
 
       - name: Commit strategy3 cache
         run: |
           git config user.name "fuman-terminal-bot"
           git config user.email "actions@github.com"
-          git add data/strategy3-latest.json data/strategy3-backup.json data/institution-latest.json data/institution-backup.json
+          git add data/strategy3-latest.json data/strategy3-backup.json
           git diff --cached --quiet || git commit -m "Update strategy3 cache"
           git push

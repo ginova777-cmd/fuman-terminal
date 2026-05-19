@@ -44,20 +44,15 @@ jobs:
             mkdir -p scripts
             cp scan-open-buy-cache.js scripts/scan-open-buy-cache.js
           fi
-          if [ ! -f scripts/scan-warrant-flow-cache.js ] && [ -f scan-warrant-flow-cache.js ]; then
-            mkdir -p scripts
-            cp scan-warrant-flow-cache.js scripts/scan-warrant-flow-cache.js
-          fi
-          RUN_OPEN_AND_WARRANT="0"
+          RUN_OPEN_BUY="0"
           if [ "${{ github.event_name }}" = "workflow_dispatch" ] || [ "${{ github.event_name }}" = "schedule" ]; then
-            RUN_OPEN_AND_WARRANT="1"
+            RUN_OPEN_BUY="1"
           fi
           node scripts/scan-strategy4-cache.js
-          if [ "$RUN_OPEN_AND_WARRANT" = "1" ]; then
+          if [ "$RUN_OPEN_BUY" = "1" ]; then
             node scripts/scan-open-buy-cache.js
-            node scripts/scan-warrant-flow-cache.js
           else
-            echo "Skip open-buy and warrant-flow for this manual batch run."
+            echo "Skip open-buy for this manual batch run."
           fi
         env:
           STRATEGY4_BATCH_SIZE: "48"
@@ -70,6 +65,6 @@ jobs:
         run: |
           git config user.name "fuman-terminal-bot"
           git config user.email "actions@github.com"
-          git add data/strategy4-latest.json data/strategy4-backup.json data/open-buy-latest.json data/open-buy-backup.json data/warrant-flow-latest.json data/warrant-flow-backup.json
+          git add data/strategy4-latest.json data/strategy4-backup.json data/open-buy-latest.json data/open-buy-backup.json
           git diff --cached --quiet || git commit -m "Update strategy caches"
           git push
