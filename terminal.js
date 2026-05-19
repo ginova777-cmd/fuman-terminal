@@ -2898,6 +2898,23 @@ intradayRadarStyles.textContent = `
   .strategy3-clean {
     grid-template-columns: 1fr;
   }
+  .strategy3-clean .strategy5-results {
+    width: 100%;
+  }
+  .strategy3-stock-card {
+    grid-template-columns: 44px minmax(150px, 0.8fr) minmax(96px, 0.45fr) minmax(260px, 1fr) minmax(340px, 1.25fr);
+    align-items: center;
+  }
+  .strategy3-stock-title strong {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+  }
+  .strategy3-stock-title small {
+    display: inline;
+    margin-top: 0;
+    color: #9db9ff;
+  }
   .page-title-icon {
     display: inline-flex;
     align-items: center;
@@ -2915,6 +2932,12 @@ intradayRadarStyles.textContent = `
   @media (max-width: 1180px) {
     .strategy5-dashboard { grid-template-columns: 1fr; }
     .strategy5-stock-card { grid-template-columns: 36px 1fr; }
+    .strategy3-stock-card {
+      grid-template-columns: 36px minmax(120px, 0.9fr) minmax(82px, 0.5fr) minmax(180px, 1fr);
+    }
+    .strategy3-stock-card .strategy5-reason {
+      grid-column: 2 / -1;
+    }
     .intraday-main-layout { grid-template-columns: 1fr; }
     .intraday-side-panel {
       position: static;
@@ -3558,9 +3581,9 @@ function renderOvernightDashboard(evaluated) {
   const cards = rows.length ? rows.map((stock, index) => {
     const sign = stock.percent >= 0 ? "+" : "";
     return `
-      <article class="strategy5-stock-card">
+      <article class="strategy5-stock-card strategy3-stock-card">
         <div class="rank">#${index + 1}</div>
-        <div>
+        <div class="strategy3-stock-title">
           <strong>${stock.name} <small>${stock.code}</small></strong>
         </div>
         <div>
