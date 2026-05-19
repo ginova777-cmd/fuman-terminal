@@ -4,8 +4,6 @@ const path = require("path");
 const ROOT = path.resolve(__dirname, "..");
 const OUT_FILE = path.join(ROOT, "data", "strategy3-latest.json");
 const BACKUP_FILE = path.join(ROOT, "data", "strategy3-backup.json");
-const INSTITUTION_FILE = path.join(ROOT, "data", "institution-latest.json");
-const INSTITUTION_BACKUP_FILE = path.join(ROOT, "data", "institution-backup.json");
 const STOCK_URL = process.env.STOCK_UNIVERSE_URL || "https://fuman-terminal.vercel.app/api/stocks";
 const CAPITAL_URLS = [
   "https://mopsfin.twse.com.tw/opendata/t187ap03_L.csv",
@@ -119,10 +117,62 @@ function normalizeStock(row) {
   };
 }
 
+function firstPositive(...values) {
+  for (const value of values) {
+    const number = cleanNumber(String(value ?? "").split("_")[0]);
+    if (number > 0) return number;
+  }
+  return 0;
+}
+
+function parseRealtimeQuote(item) {
+  const code = normalizeCode(item?.c);
+  if (!/^\d{4}$/.test(code)) return null;
+  const close = firstPositive(item.z, item.pz, item.b, item.a, item.h, item.l, item.o, item.y);
+  const prevClose = cleanNumber(item.y);
+  const volumeLots = firstPositive(item.v, item.tv);
+  if (!close || !prevClose || !volumeLots) return null;
+  const change = close - prevClose;
+  const tradeVolume = volumeLots * 1000;
+  return {
+    code,
+    name: item.n || code,
+    close,
+    change,
+    percent: prevClose ? (change / prevClose) * 100 : 0,
+    value: Math.round(close * tradeVolume),
+    tradeVolume,
+    market: item.ex === "otc" ? "OTC" : "TWSE",
+    quoteDate: item.d || item["^"] || "",
+    quoteTime: item.t || item.ot || "",
+  };
+}
+
+async function fetchRealtimeQuotes(codes) {
+  const quotes = new Map();
+  for (let i = 0; i < codes.length; i += 80) {
+    const chunk = codes.slice(i, i + 80);
+    const channels = chunk.flatMap((code) => [`tse_${code}.tw`, `otc_${code}.tw`]);
+    try {
+      const payload = await fetchJson(`https://mis.twse.com.tw/stock/api/getStockInfo.jsp?ex_ch=${encodeURIComponent(channels.join("|"))}&json=1&delay=0&_=${Date.now()}`, 25000);
+      (payload.msgArray || []).forEach((item) => {
+        const quote = parseRealtimeQuote(item);
+        if (quote) quotes.set(quote.code, quote);
+      });
+    } catch {}
+  }
+  return quotes;
+}
+
 async function fetchUniverse() {
   const payload = await fetchJson(STOCK_URL);
   const rows = Array.isArray(payload) ? payload : (payload.stocks || []);
-  return rows.map(normalizeStock).filter(Boolean);
+  const base = rows.map(normalizeStock).filter(Boolean);
+  const realtimeQuotes = await fetchRealtimeQuotes(base.map((stock) => stock.code));
+  return base.map((stock) => {
+    const quote = realtimeQuotes.get(stock.code);
+    return quote ? { ...stock, ...quote, name: quote.name || stock.name } : stock;
+  });
 }
 
 async function fetchIssuedShares() {
@@ -207,11 +257,10 @@ function rankMap(stocks, key) {
   return ranks;
 }
 
-function buildMatches(stocks, institutionData, issuedSharesMap, volumeAverageMap) {
+function buildMatches(stocks, issuedSharesMap, volumeAverageMap) {
   const valueRanks = rankMap(stocks, "value");
   const volumeRanks = rankMap(stocks, "tradeVolume");
   return stocks.map((stock) => {
-    const inst = institutionData[stock.code] || {};
     const valueRank = valueRanks.get(stock.code) || 0;
     const volumeRank = volumeRanks.get(stock.code) || 0;
     const pct = Number(stock.percent) || 0;
@@ -220,17 +269,12 @@ function buildMatches(stocks, institutionData, issuedSharesMap, volumeAverageMap
     const turnoverRate = issuedShares ? (stock.tradeVolume / issuedShares) * 100 : 0;
     const avgVolume = volumeAverageMap.get(stock.code) || 0;
     const volumeRatio = avgVolume ? stock.tradeVolume / avgVolume : 0;
-    const total = cleanNumber(inst.total);
-    const trust = cleanNumber(inst.trust);
-    const foreign = cleanNumber(inst.foreign);
-    const instBoost = total > 0 ? 12 : trust > 0 ? 10 : foreign > 0 ? 6 : 0;
     const heatPenalty = pct > 8.8 ? 24 : pct > 6.5 ? 12 : pct < 0 ? 30 : 0;
     const overnightScore = clamp(Math.round(
       Math.min((pct - 3) * 18, 36) +
       Math.min(volumeLots / 80, 18) +
       Math.min(turnoverRate * 6, 30) +
-      Math.min(volumeRatio * 12, 20) +
-      instBoost -
+      Math.min(volumeRatio * 12, 20) -
       heatPenalty
     ), 0, 100);
     const pass = pct > 3 && pct <= 5 && volumeLots >= 1000 && turnoverRate > 5 && volumeRatio > 1;
@@ -239,13 +283,6 @@ function buildMatches(stocks, institutionData, issuedSharesMap, volumeAverageMap
       : "未符合固定隔日沖條件。";
     return {
       ...stock,
-      inst: {
-        ...inst,
-        foreign,
-        trust,
-        total,
-        dealer: cleanNumber(inst.dealer),
-      },
       valueRank,
       volumeRank,
       volumeLots: Math.round(volumeLots),
@@ -272,19 +309,19 @@ function buildMatches(stocks, institutionData, issuedSharesMap, volumeAverageMap
 
 async function main() {
   const backup = readJson(BACKUP_FILE, { ok: true, matches: [] });
-  const institutionPayload = readJson(INSTITUTION_FILE, readJson(INSTITUTION_BACKUP_FILE, { data: {} }));
   const [stocks, issuedSharesMap, volumeAverageMap] = await Promise.all([
     fetchUniverse(),
     fetchIssuedShares(),
     fetchHistoricalVolumes(),
   ]);
   if (!stocks.length) throw new Error("No stock universe");
-  const matches = buildMatches(stocks, institutionPayload.data || {}, issuedSharesMap, volumeAverageMap);
+  const matches = buildMatches(stocks, issuedSharesMap, volumeAverageMap);
+  const quoteDate = stocks.find((stock) => stock.quoteDate)?.quoteDate || "";
   const output = {
     ok: true,
-    source: "github-actions",
+    source: "github-actions-mis-realtime",
     updatedAt: new Date().toISOString(),
-    usedDate: institutionPayload.usedDate || "",
+    usedDate: quoteDate,
     total: stocks.length,
     count: matches.length,
     matches,
