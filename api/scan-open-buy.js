@@ -1,6 +1,7 @@
 const cache = new Map();
 const CACHE_MS = 30 * 60 * 1000;
 let tpexDailyCache = null;
+const { fetchMisQuotes, mergeMisQuoteIntoHistory } = require("../lib/mis-quotes");
 
 async function fetchText(url, options = {}, timeout = 12000) {
   const controller = new AbortController();
@@ -305,8 +306,9 @@ module.exports = async function handler(request, response) {
     return;
   }
 
+  const quoteMap = await fetchMisQuotes(codes);
   const results = await Promise.allSettled(codes.map(async (code) => {
-    const history = await mergeTpexDailyQuote(code, await fetchHistory(code));
+    const history = mergeMisQuoteIntoHistory(await mergeTpexDailyQuote(code, await fetchHistory(code)), quoteMap.get(code));
     if (!history.rows.length) return null;
     return scanOpenBuy(code, history.market, history.rows);
   }));
