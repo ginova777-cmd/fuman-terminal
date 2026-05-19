@@ -95,16 +95,64 @@ function titleWithIcon(icon, text) {
   return `<span class="page-title-icon">${icon}</span>${text}`;
 }
 
+const SCHEDULE_META = {
+  market: { label: "盤中即時", next: "持續輪巡" },
+  watchlist: { label: "盤中即時", next: "持續輪巡" },
+  intraday: { label: "盤中即時", next: "持續輪巡" },
+  openBuy: { label: "07:00 / 14:30", times: ["07:00", "14:30"] },
+  strategy3: { label: "13:00", times: ["13:00"] },
+  swing: { label: "07:00 / 14:30", times: ["07:00", "14:30"] },
+  strategy5: { label: "依各策略", next: "依策略排程" },
+  chip: { label: "06:00 / 21:00", times: ["06:00", "21:00"] },
+  warrant: { label: "06:00 / 21:00", times: ["06:00", "21:00"] },
+};
+
+function nextScheduleTime(times = []) {
+  if (!times.length) return "";
+  const now = new Date();
+  for (const time of times) {
+    const [hour, minute] = time.split(":").map(Number);
+    const next = new Date(now);
+    next.setHours(hour, minute, 0, 0);
+    if (next > now) return next;
+  }
+  const [hour, minute] = times[0].split(":").map(Number);
+  const next = new Date(now);
+  next.setDate(next.getDate() + 1);
+  next.setHours(hour, minute, 0, 0);
+  return next;
+}
+
+function formatScheduleDate(date) {
+  if (!date || typeof date === "string") return date || "";
+  return `${String(date.getMonth() + 1).padStart(2, "0")}/${String(date.getDate()).padStart(2, "0")} ${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
+}
+
+function scheduleBadgeHtml(key) {
+  const meta = SCHEDULE_META[key] || SCHEDULE_META.market;
+  const next = meta.next || formatScheduleDate(nextScheduleTime(meta.times));
+  return `<span class="schedule-status-pill"><span>● 每日 ${meta.label} 更新</span><span>● 預計下次更新：${next}</span></span>`;
+}
+
+function titleWithSchedule(icon, text, scheduleKey) {
+  return `${titleWithIcon(icon, text)} ${scheduleBadgeHtml(scheduleKey)}`;
+}
+
 function setTitleWithIcon(target, icon, text) {
   if (!target) return;
   target.innerHTML = titleWithIcon(icon, text);
 }
 
+function setTitleWithSchedule(target, icon, text, scheduleKey) {
+  if (!target) return;
+  target.innerHTML = titleWithSchedule(icon, text, scheduleKey);
+}
+
 function applyStaticTitleIcons() {
-  setTitleWithIcon(document.querySelector("#market-view .page-header h1"), "●", "市場總覽");
-  setTitleWithIcon(document.querySelector("#watchlist-view .page-header h1"), "☆", "自選股");
-  setTitleWithIcon(document.querySelector("#chip-trade-view .page-header h1"), "◆", "外資 + 投信連買");
-  setTitleWithIcon(document.querySelector("#warrant-flow-view .page-header h1"), "◒", "權證走向");
+  setTitleWithSchedule(document.querySelector("#market-view .page-header h1"), "●", "市場總覽", "market");
+  setTitleWithSchedule(document.querySelector("#watchlist-view .page-header h1"), "☆", "自選股", "watchlist");
+  setTitleWithSchedule(document.querySelector("#chip-trade-view .page-header h1"), "◆", "外資 + 投信連買", "chip");
+  setTitleWithSchedule(document.querySelector("#warrant-flow-view .page-header h1"), "◒", "權證走向", "warrant");
 }
 
 function escapeAttr(value) {
@@ -2350,6 +2398,35 @@ intradayRadarStyles.textContent = `
     font-size: 12px;
     vertical-align: middle;
   }
+  .schedule-status-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    margin-left: 8px;
+    padding: 3px 8px;
+    border-radius: 999px;
+    background: rgba(15, 213, 226, 0.16);
+    color: #23d7e6;
+    font-size: 12px;
+    font-weight: 800;
+    line-height: 1.2;
+    vertical-align: middle;
+    white-space: nowrap;
+  }
+  .schedule-status-pill span {
+    display: inline-flex;
+    align-items: center;
+  }
+  .page-header h1,
+  .strategy-toolbar h2,
+  .intraday-topbar h2,
+  .swing-topbar h2,
+  .strategy5-hero h2 {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0;
+  }
   .intraday-controls {
     display: flex;
     align-items: center;
@@ -2989,8 +3066,9 @@ function setStrategyChrome(mode) {
   const icon = intraday ? "◔" : swing ? "└" : openBuy ? "⚡" : strategy5 ? "▰" : "⚡";
   const title = intraday ? "2分K當沖雷達" : swing ? "策略4-波段雷達" : openBuy ? "策略1-開盤入快跑" : strategy5 ? "策略5-綜合策略" : "綜合策略選股";
   const headerTitle = intraday ? "2分K當沖雷達" : swing ? "策略4-波段雷達" : openBuy ? "策略1-開盤入快跑" : strategy5 ? "策略5-綜合策略" : "策略中心";
-  setTitleWithIcon(strategyTitle, icon, title);
-  setTitleWithIcon(strategyHeaderTitle, icon, headerTitle);
+  const scheduleKey = intraday ? "intraday" : swing ? "swing" : openBuy ? "openBuy" : strategy5 ? "strategy5" : "market";
+  setTitleWithSchedule(strategyTitle, icon, title, scheduleKey);
+  setTitleWithSchedule(strategyHeaderTitle, icon, headerTitle, scheduleKey);
   if (strategyHeaderBadge) strategyHeaderBadge.style.display = strategy3 ? "none" : "";
   if (strategyHeaderText) {
     strategyHeaderText.textContent = intraday
@@ -3205,7 +3283,7 @@ function renderIntradayRadar(evaluated) {
     <section class="intraday-dashboard">
       <div class="intraday-topbar">
         <div>
-          <h2>${titleWithIcon("◔", "2分K當沖雷達")} <span class="intraday-live">● 立即更新</span></h2>
+          <h2>${titleWithSchedule("◔", "2分K當沖雷達", "intraday")}</h2>
           <p>盤中即時偵測強勢訊號，5秒刷新、每次掃完整市場。</p>
         </div>
         <div class="intraday-controls">
@@ -3336,7 +3414,7 @@ function renderSwingRadar(universe) {
     <section class="swing-dashboard">
       <div class="swing-topbar">
         <div>
-          <h2>${titleWithIcon("└", "策略4-波段雷達")} <span class="swing-live">● 07:00 / 14:30 完整掃</span></h2>
+          <h2>${titleWithSchedule("└", "策略4-波段雷達", "swing")}</h2>
           <p>排除ETF，只掃真正股票；網站讀取上一版完整快取，07:00 與 14:30 背景更新正式名單。${historyText}</p>
         </div>
         <div class="swing-controls">
@@ -3421,7 +3499,7 @@ function renderOpenBuyRadar(universe) {
     <section class="swing-dashboard">
       <div class="swing-topbar">
         <div>
-          <h2>${titleWithIcon("⚡", "策略1-開盤入快跑")} <span class="swing-live">● 07:00 / 14:30 完整掃</span></h2>
+          <h2>${titleWithSchedule("⚡", "策略1-開盤入快跑", "openBuy")}</h2>
           <p>14:30後先出明日候選；08:55後看最終名單。買入：09:00 開盤價｜停利 +1.2%｜停損 -1.0%｜09:10 強制出場。${scanText}</p>
         </div>
         <div class="swing-controls">
@@ -3550,7 +3628,7 @@ function renderStrategy5Dashboard(evaluated) {
       <div class="strategy5-hero">
         <div>
           <b>策略控制台</b>
-          <h2>${titleWithIcon("▰", "策略5-綜合策略")} <span class="swing-live">● 讀取既有快取</span></h2>
+          <h2>${titleWithSchedule("▰", "策略5-綜合策略", "strategy5")}</h2>
         </div>
         <div class="strategy5-date">
           <span>資料日</span>
@@ -3577,8 +3655,8 @@ function renderStrategy5Dashboard(evaluated) {
 
 function renderOvernightDashboard(evaluated) {
   setStrategyChrome("strategy3");
-  setTitleWithIcon(strategyTitle, "◐", "策略3-隔日沖");
-  setTitleWithIcon(strategyHeaderTitle, "◐", "策略3-隔日沖");
+  setTitleWithSchedule(strategyTitle, "◐", "策略3-隔日沖", "strategy3");
+  setTitleWithSchedule(strategyHeaderTitle, "◐", "策略3-隔日沖", "strategy3");
   if (strategyToolbar) strategyToolbar.style.display = "none";
   if (strategyMetrics) strategyMetrics.style.display = "none";
   if (strategySearchLabel) strategySearchLabel.style.display = "none";
@@ -3879,7 +3957,7 @@ function renderWarrantFlow() {
     <section class="swing-dashboard">
       <div class="swing-topbar">
         <div>
-          <h2>${titleWithIcon("◒", "策略6：權證資金走向")} <span class="swing-live">● 收盤候選 / 盤中確認</span></h2>
+          <h2>${titleWithSchedule("◒", "策略6：權證資金走向", "warrant")}</h2>
           <p>${helperText}</p>
         </div>
         <div class="swing-controls">
