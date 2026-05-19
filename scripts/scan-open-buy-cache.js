@@ -1,6 +1,7 @@
 const fs = require("fs");
 const path = require("path");
 const scanOpenBuy = require("../api/scan-open-buy");
+const { fetchMisQuotes } = require("../lib/mis-quotes");
 
 const ROOT = path.resolve(__dirname, "..");
 const OUT_FILE = path.join(ROOT, "data", "open-buy-latest.json");
@@ -57,7 +58,12 @@ function normalizeStock(row) {
 async function fetchUniverse() {
   const payload = await fetchJson(STOCK_URL);
   const rows = Array.isArray(payload) ? payload : (payload.stocks || []);
-  return rows.map(normalizeStock).filter(Boolean);
+  const base = rows.map(normalizeStock).filter(Boolean);
+  const quotes = await fetchMisQuotes(base.map((stock) => stock.code));
+  return base.map((stock) => {
+    const quote = quotes.get(stock.code);
+    return quote ? { ...stock, ...quote, name: quote.name || stock.name } : stock;
+  });
 }
 
 function runHandler(codes) {

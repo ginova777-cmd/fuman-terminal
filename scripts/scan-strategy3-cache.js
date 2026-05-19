@@ -1,5 +1,6 @@
 const fs = require("fs");
 const path = require("path");
+const { fetchMisQuotes } = require("../lib/mis-quotes");
 
 const ROOT = path.resolve(__dirname, "..");
 const OUT_FILE = path.join(ROOT, "data", "strategy3-latest.json");
@@ -117,58 +118,11 @@ function normalizeStock(row) {
   };
 }
 
-function firstPositive(...values) {
-  for (const value of values) {
-    const number = cleanNumber(String(value ?? "").split("_")[0]);
-    if (number > 0) return number;
-  }
-  return 0;
-}
-
-function parseRealtimeQuote(item) {
-  const code = normalizeCode(item?.c);
-  if (!/^\d{4}$/.test(code)) return null;
-  const close = firstPositive(item.z, item.pz, item.b, item.a, item.h, item.l, item.o, item.y);
-  const prevClose = cleanNumber(item.y);
-  const volumeLots = firstPositive(item.v, item.tv);
-  if (!close || !prevClose || !volumeLots) return null;
-  const change = close - prevClose;
-  const tradeVolume = volumeLots * 1000;
-  return {
-    code,
-    name: item.n || code,
-    close,
-    change,
-    percent: prevClose ? (change / prevClose) * 100 : 0,
-    value: Math.round(close * tradeVolume),
-    tradeVolume,
-    market: item.ex === "otc" ? "OTC" : "TWSE",
-    quoteDate: item.d || item["^"] || "",
-    quoteTime: item.t || item.ot || "",
-  };
-}
-
-async function fetchRealtimeQuotes(codes) {
-  const quotes = new Map();
-  for (let i = 0; i < codes.length; i += 80) {
-    const chunk = codes.slice(i, i + 80);
-    const channels = chunk.flatMap((code) => [`tse_${code}.tw`, `otc_${code}.tw`]);
-    try {
-      const payload = await fetchJson(`https://mis.twse.com.tw/stock/api/getStockInfo.jsp?ex_ch=${encodeURIComponent(channels.join("|"))}&json=1&delay=0&_=${Date.now()}`, 25000);
-      (payload.msgArray || []).forEach((item) => {
-        const quote = parseRealtimeQuote(item);
-        if (quote) quotes.set(quote.code, quote);
-      });
-    } catch {}
-  }
-  return quotes;
-}
-
 async function fetchUniverse() {
   const payload = await fetchJson(STOCK_URL);
   const rows = Array.isArray(payload) ? payload : (payload.stocks || []);
   const base = rows.map(normalizeStock).filter(Boolean);
-  const realtimeQuotes = await fetchRealtimeQuotes(base.map((stock) => stock.code));
+  const realtimeQuotes = await fetchMisQuotes(base.map((stock) => stock.code));
   return base.map((stock) => {
     const quote = realtimeQuotes.get(stock.code);
     return quote ? { ...stock, ...quote, name: quote.name || stock.name } : stock;

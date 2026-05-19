@@ -1,6 +1,7 @@
 const fs = require("fs");
 const path = require("path");
 const scanStrategy4 = require("../api/scan-strategy4");
+const { fetchMisQuotes } = require("../lib/mis-quotes");
 
 const ROOT = path.resolve(__dirname, "..");
 const OUT_FILE = path.join(ROOT, "data", "strategy4-latest.json");
@@ -59,17 +60,24 @@ function normalizeStock(row) {
 }
 
 async function fetchUniverse() {
+  let parsed = [];
   try {
     const payload = await fetchJson(STOCK_URL, 30000);
     const rows = Array.isArray(payload) ? payload : (payload.stocks || []);
-    const parsed = rows.map(normalizeStock).filter(Boolean);
-    if (parsed.length) return parsed;
+    parsed = rows.map(normalizeStock).filter(Boolean);
   } catch (error) {
     console.log(`stock endpoint fallback: ${error.message}`);
   }
 
-  const rows = await fetchJson("https://openapi.twse.com.tw/v1/exchangeReport/STOCK_DAY_ALL", 30000);
-  return rows.map(normalizeStock).filter(Boolean);
+  if (!parsed.length) {
+    const rows = await fetchJson("https://openapi.twse.com.tw/v1/exchangeReport/STOCK_DAY_ALL", 30000);
+    parsed = rows.map(normalizeStock).filter(Boolean);
+  }
+  const quotes = await fetchMisQuotes(parsed.map((stock) => stock.code));
+  return parsed.map((stock) => {
+    const quote = quotes.get(stock.code);
+    return quote ? { ...stock, ...quote, name: quote.name || stock.name } : stock;
+  });
 }
 
 function runHandler(codes) {
