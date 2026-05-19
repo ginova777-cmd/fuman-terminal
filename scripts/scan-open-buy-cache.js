@@ -77,6 +77,24 @@ function runHandler(codes) {
   });
 }
 
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function runHandlerWithRetry(codes, label) {
+  let lastError = null;
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      return await runHandler(codes);
+    } catch (error) {
+      lastError = error;
+      console.log(`${label} attempt ${attempt} failed: ${error.message}`);
+      if (attempt < 3) await sleep(2500 * attempt);
+    }
+  }
+  throw lastError;
+}
+
 async function main() {
   const universe = await fetchUniverse();
   const codes = universe.map((stock) => stock.code);
@@ -85,12 +103,13 @@ async function main() {
   const previousRaw = readJson(OUT_FILE, { ok: true, cursor: 0, total: codes.length, scannedCodes: [], matches: [] });
   const backup = readJson(BACKUP_FILE, { ok: true, matches: [] });
   const previous = (previousRaw.matches || []).length ? previousRaw : { ...previousRaw, matches: backup.matches || [] };
-  const previousMatches = new Map((FULL_SCAN ? [] : (previous.matches || [])).map((item) => [item.code, item]));
+  const previousMatches = new Map((previous.matches || []).map((item) => [item.code, item]));
   const scanned = new Set(FULL_SCAN ? [] : (previous.scannedCodes || []));
   let cursor = FULL_SCAN ? 0 : Number(previous.cursor || 0) % codes.length;
   let scannedThisRun = 0;
   const batchesToRun = FULL_SCAN ? Math.ceil(codes.length / BATCH_SIZE) : BATCHES_PER_RUN;
 
+  console.log(`open-buy cache start: ${FULL_SCAN ? "full scan" : "batch scan"}, ${codes.length} codes, ${batchesToRun} batches`);
   for (let batch = 0; batch < batchesToRun; batch++) {
     const start = cursor;
     const slice = codes.slice(start, start + BATCH_SIZE);
@@ -98,15 +117,24 @@ async function main() {
     const batchCodes = [...slice, ...wrapped];
     if (!batchCodes.length) break;
     cursor = (start + BATCH_SIZE) % codes.length;
-    batchCodes.forEach((code) => scanned.add(code));
 
-    const payload = await runHandler(batchCodes);
-    batchCodes.forEach((code) => previousMatches.delete(code));
-    (payload.matches || []).forEach((item) => {
-      const base = universe.find((stock) => stock.code === item.code) || {};
-      previousMatches.set(item.code, { ...base, ...item, name: base.name || item.name || item.code });
-    });
-    scannedThisRun += batchCodes.length;
+    const label = `open-buy batch ${batch + 1}/${batchesToRun} (${batchCodes[0]}-${batchCodes[batchCodes.length - 1]})`;
+    console.log(`${label} start`);
+    try {
+      const payload = await runHandlerWithRetry(batchCodes, label);
+      batchCodes.forEach((code) => {
+        scanned.add(code);
+        previousMatches.delete(code);
+      });
+      (payload.matches || []).forEach((item) => {
+        const base = universe.find((stock) => stock.code === item.code) || {};
+        previousMatches.set(item.code, { ...base, ...item, name: base.name || item.name || item.code });
+      });
+      scannedThisRun += batchCodes.length;
+      console.log(`${label} done: matches ${(payload.matches || []).length}`);
+    } catch (error) {
+      console.log(`${label} skipped after retries: ${error.message}`);
+    }
   }
 
   const matches = [...previousMatches.values()]
