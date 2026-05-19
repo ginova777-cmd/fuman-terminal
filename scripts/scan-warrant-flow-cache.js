@@ -27,10 +27,35 @@ function runHandler() {
   });
 }
 
+function cleanNumber(value) {
+  return Number(String(value ?? "").replace(/[,+%]/g, "").trim()) || 0;
+}
+
+function normalizeMatch(item) {
+  const code = String(item.underlyingCode || item.code || "").trim();
+  const name = String(item.underlyingName || item.name || "").trim();
+  const close = cleanNumber(item.underlyingClose ?? item.close ?? item.stockClose);
+  const percentRaw = item.underlyingPercent ?? item.percent ?? item.stockPercent;
+  const percent = Number.isFinite(Number(percentRaw)) ? Number(percentRaw) : 0;
+  return {
+    ...item,
+    code,
+    name,
+    close,
+    percent,
+    displayClose: close,
+    displayPercent: percent,
+    underlyingCode: code,
+    underlyingName: name,
+    underlyingClose: close,
+    underlyingPercent: percent,
+  };
+}
+
 async function main() {
   const backup = readJson(BACKUP_FILE, { ok: true, matches: [] });
   const payload = await runHandler();
-  const matches = Array.isArray(payload.matches) ? payload.matches : [];
+  const matches = Array.isArray(payload.matches) ? payload.matches.map(normalizeMatch) : [];
   const output = {
     ...payload,
     ok: true,
