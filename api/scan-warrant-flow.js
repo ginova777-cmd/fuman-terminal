@@ -94,7 +94,13 @@ function parseTwDate(value) {
   const text = String(value ?? "").trim();
   const roc = text.match(/(\d{2,3})年(\d{1,2})月(\d{1,2})日/);
   if (roc) return new Date(Number(roc[1]) + 1911, Number(roc[2]) - 1, Number(roc[3]));
+  const slash = text.match(/^(\d{2,4})[\/.-](\d{1,2})[\/.-](\d{1,2})$/);
+  if (slash) {
+    const year = Number(slash[1]);
+    return new Date(year < 1911 ? year + 1911 : year, Number(slash[2]) - 1, Number(slash[3]));
+  }
   const ymd = text.replace(/\D/g, "");
+  if (ymd.length === 7) return new Date(Number(ymd.slice(0, 3)) + 1911, Number(ymd.slice(3, 5)) - 1, Number(ymd.slice(5, 7)));
   if (ymd.length === 8) return new Date(Number(ymd.slice(0, 4)), Number(ymd.slice(4, 6)) - 1, Number(ymd.slice(6, 8)));
   return null;
 }
@@ -446,6 +452,21 @@ function matchesUnderlyingKeyword(item, keyword) {
   return code.includes(keyword) || name.includes(keyword);
 }
 
+function clampScore(value) {
+  return Math.min(100, Math.max(0, Math.round(Number(value) || 0)));
+}
+
+function scoreUnderlyingMove(percent) {
+  if (!Number.isFinite(Number(percent))) return 10;
+  const pct = Number(percent);
+  if (pct >= 0 && pct <= 2.5) return 18;
+  if (pct > 2.5 && pct <= 4) return 12;
+  if (pct > 4 && pct <= 6) return 6;
+  if (pct > 6) return -14;
+  if (pct >= -2) return 8;
+  return -10;
+}
+
 function aggregate(rows, keyword = "") {
   const byName = new Map();
   for (const row of rows) {
@@ -508,14 +529,23 @@ function aggregate(rows, keyword = "") {
     const ratio = item.putValue ? item.callValue / item.putValue : item.callValue ? 99 : 0;
     const breadth = item.callCount + item.putCount;
     const callBias = totalValue ? item.callValue / totalValue : 0;
-    const conditionScore =
-      Math.min(item.callValue / 10000000, 24) +
-      Math.min(item.callCount * 3.2, 20) +
-      Math.min(item.atMoneyCallCount * 5, 20) +
-      Math.min(ratio * 4, 16) +
-      (item.minDaysToExpiry >= 10 ? 10 : -30) +
-      (callBias >= 0.78 ? 10 : callBias >= 0.65 ? 5 : 0);
-    const score = Math.min(100, Math.max(0, Math.round(20 + conditionScore)));
+    const callValueScore = Math.min(item.callValue / 5000000, 24);
+    const breadthScore = Math.min(item.callCount * 2.4, 18);
+    const ratioScore = Math.min(ratio * 3.2, 16);
+    const moneynessScore = Math.min(item.atMoneyCallCount * 4, 16);
+    const underlyingMoveScore = scoreUnderlyingMove(item.underlyingPercent);
+    const expiryScore = item.minDaysToExpiry >= 10 ? 8 : -30;
+    const biasScore = callBias >= 0.78 ? 8 : callBias >= 0.65 ? 4 : 0;
+    const score = clampScore(
+      10 +
+      callValueScore +
+      breadthScore +
+      ratioScore +
+      moneynessScore +
+      underlyingMoveScore +
+      expiryScore +
+      biasScore
+    );
     const level = (
       item.callValue >= 20000000 &&
       item.callCount >= 5 &&
@@ -565,7 +595,14 @@ function aggregate(rows, keyword = "") {
 
   return scoredItems
     .filter(baseFilter)
-    .sort((a, b) => b.score - a.score || b.atMoneyCallCount - a.atMoneyCallCount || b.callValue - a.callValue);
+    .sort((a, b) =>
+      b.score - a.score ||
+      b.callValue - a.callValue ||
+      b.callCount - a.callCount ||
+      b.callPutRatio - a.callPutRatio ||
+      b.atMoneyCallCount - a.atMoneyCallCount ||
+      Math.abs(cleanNumber(a.underlyingPercent) - 1.2) - Math.abs(cleanNumber(b.underlyingPercent) - 1.2)
+    );
 }
 
 module.exports = async function handler(request, response) {
