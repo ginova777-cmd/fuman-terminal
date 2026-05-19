@@ -112,10 +112,68 @@ function money(value) {
   return `${sign}${Math.abs(Math.round(value)).toLocaleString("zh-TW")} 元`;
 }
 
+function isTaipeiMarketRecord(record) {
+  const match = String(record?.timestamp || "").match(/\s(\d{2}):(\d{2})(?::(\d{2}))?$/);
+  if (!match) return true;
+  const minutes = Number(match[1]) * 60 + Number(match[2]);
+  return minutes >= 9 * 60 && minutes <= 13 * 60 + 45;
+}
+
+const STATE_ORDER = { go: 1, wait: 2, watch: 3 };
+const STATE_LABELS = {
+  go: "A區 可進場",
+  wait: "B區 待確認",
+  watch: "C區 觀察",
+};
+
+function inferState(record) {
+  if (record.stateId && STATE_LABELS[record.stateId]) {
+    return { id: record.stateId, label: record.stateLabel || STATE_LABELS[record.stateId], reason: record.stateReason || "" };
+  }
+  const strategies = record.strategies || [record.strategy].filter(Boolean);
+  const text = strategies.join("、");
+  if (/急拉爆量|分時爆量|漲停鎖定/.test(text) && /轉強突破|真跳空|MA35買點|鑽石/.test(text)) {
+    return { id: "go", label: STATE_LABELS.go, reason: "量勢與進場訊號同步。" };
+  }
+  if (/急拉爆量|分時爆量|分時放大|轉強突破|MA35買點|鑽石|接近漲停/.test(text)) {
+    return { id: "wait", label: STATE_LABELS.wait, reason: "已有訊號，等待站穩或再放量。" };
+  }
+  return { id: "watch", label: STATE_LABELS.watch, reason: "列入觀察。" };
+}
+
+function mergeRecords(records) {
+  const map = new Map();
+  records.filter(isTaipeiMarketRecord).forEach((record) => {
+    const key = `${record.timestamp}|${record.code}`;
+    const state = inferState(record);
+    const current = map.get(key);
+    if (!current) {
+      map.set(key, { ...record, stateId: state.id, stateLabel: state.label, stateReason: state.reason, strategies: [record.strategy].filter(Boolean) });
+      return;
+    }
+    if (record.strategy && !current.strategies.includes(record.strategy)) {
+      current.strategies.push(record.strategy);
+    }
+    const entry = cleanNumber(record.entryPrice);
+    const currentEntry = cleanNumber(current.entryPrice);
+    if (entry && (!currentEntry || entry < currentEntry)) current.entryPrice = entry;
+    current.observedHigh = Math.max(cleanNumber(current.observedHigh), cleanNumber(record.observedHigh));
+    current.observedPrice = cleanNumber(current.observedPrice) || cleanNumber(record.observedPrice);
+    current.supportPrice = cleanNumber(current.supportPrice) || cleanNumber(record.supportPrice);
+    if (STATE_ORDER[state.id] < STATE_ORDER[current.stateId || "watch"]) {
+      current.stateId = state.id;
+      current.stateLabel = state.label;
+      current.stateReason = state.reason;
+    }
+    current.score = Math.max(cleanNumber(current.score), cleanNumber(record.score));
+  });
+  return [...map.values()].sort((a, b) => String(a.timestamp).localeCompare(String(b.timestamp)) || String(a.code).localeCompare(String(b.code)));
+}
+
 async function main() {
   const cache = readJson(SIGNAL_FILE, { date: "", records: [] });
   const today = cache.date || taipeiDateKey();
-  const records = cache.records || [];
+  const records = mergeRecords(cache.records || []);
   const codes = [...new Set(records.map((record) => record.code))];
   const quotes = await fetchRealtimeMap(codes);
   let totalProfit = 0;
@@ -125,18 +183,30 @@ async function main() {
     lines.push("今天沒有偵測到符合條件的標的。", "");
   }
 
-  records.forEach((record) => {
+  const grouped = {
+    go: records.filter((record) => inferState(record).id === "go"),
+    wait: records.filter((record) => inferState(record).id === "wait"),
+    watch: records.filter((record) => inferState(record).id === "watch"),
+  };
+
+  Object.entries(grouped).forEach(([stateId, list]) => {
+    if (!list.length) return;
+    lines.push(`${STATE_LABELS[stateId]}｜${list.length} 筆`, "");
+    list.forEach((record) => {
     const quote = quotes.get(record.code) || {};
     const exitPrice = cleanNumber(quote.high) || cleanNumber(record.observedHigh) || cleanNumber(record.observedPrice);
     const entryPrice = cleanNumber(record.entryPrice);
     const supportPrice = cleanNumber(record.supportPrice);
     const profit = entryPrice ? (exitPrice - entryPrice) * LOT_SIZE : 0;
     const profitPct = entryPrice ? ((exitPrice - entryPrice) / entryPrice) * 100 : 0;
+    const state = inferState(record);
     totalProfit += profit;
     lines.push(
       dateSlash(record.timestamp),
+      `分區：${state.label}${record.score ? `｜分數：${Math.round(cleanNumber(record.score))}` : ""}`,
       `標的：${record.code} ${record.name}`,
-      `策略：${record.strategy}`,
+      `策略：${(record.strategies?.length ? record.strategies : [record.strategy]).filter(Boolean).join("、")}`,
+      state.reason ? `判斷：${state.reason}` : "",
       supportPrice ? `支撐位：${formatTradePrice(supportPrice)}，不破後觀察` : "",
       `建議進場價：${formatTradePrice(entryPrice)}`,
       `出場價：${formatTradePrice(exitPrice)}`,
@@ -144,6 +214,7 @@ async function main() {
       `預計獲利率：${profitPct >= 0 ? "+" : ""}${profitPct.toFixed(2)}%`,
       ""
     );
+    });
   });
 
   lines.push(`我今天為您賺了：${money(totalProfit)}`);
