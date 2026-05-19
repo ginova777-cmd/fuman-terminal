@@ -3830,10 +3830,6 @@ async function loadWarrantFlow(force = false) {
   if (!warrantFlowData.length) {
     loadWarrantFlowLocalCache();
   }
-  if (!force && hasFreshWarrantFlow() && warrantFlowData.length >= 100) {
-    renderWarrantFlow();
-    return;
-  }
   warrantFlowLoading = true;
   const panel = viewPanels["warrant-flow"];
   if (panel && !warrantFlowData.length) {
