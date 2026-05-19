@@ -1090,6 +1090,15 @@ function getIntradaySignals(stock) {
     });
   }
 
+  if (open && prevClose && open > yesterdayHigh && gapPct >= 2 && close >= open && (volumeMilestone || volumeRank >= 55)) {
+    signals.push({
+      id: "gap",
+      short: "真跳空",
+      icon: "🚀",
+      reason: `真跳空，開盤高於昨日高點，跳空 ${gapPct.toFixed(2)}%，現價仍站在開盤價上方。`,
+    });
+  }
+
   if ((breaks20High || breaksYesterdayHigh || pct >= 6) && (volumeRank >= 55 || dailyVolumeRatio >= 1.2 || isNearLimit || volume >= 1200)) {
     signals.push({
       id: "daily_breakout",
@@ -1099,16 +1108,30 @@ function getIntradaySignals(stock) {
     });
   }
 
-  if (open && prevClose && gapPct >= 2 && open > prevClose && close >= open && volumeRank >= 60) {
-    signals.push({ id: "gap", short: "跳空", icon: "🚀", reason: `跳空 ${gapPct.toFixed(2)}%，開盤高於昨收且量能排名 ${volumeRank}%。` });
-  }
-
   if (pct >= 1 && valueRank >= 55 && volumeRank >= 55 && (!open || close >= open) && (!vwap || close >= vwap || pct >= 5) && (!high || close >= high * 0.992 || pct >= 5)) {
     signals.push({ id: "breakout", short: "突破", icon: "🔥", reason: `突破盤中強勢區，漲幅 ${pct.toFixed(2)}%，成交值/量能同步放大。` });
   }
 
+  if (close > yesterdayHigh && (!vwap || close > vwap) && open && close > open && (volumeRank >= 50 || minuteVolumeRising || volumeMilestone)) {
+    signals.push({
+      id: "fire",
+      short: "轉強",
+      icon: "🔥",
+      reason: `轉強突破，站上昨日高點、VWAP 與開盤價，符合長白龍轉強概念。`,
+    });
+  }
+
   if (close > ma35Proxy && macdUp && pct > 0 && valueRank >= 55) {
     signals.push({ id: "ma35_macd", short: "MA35", icon: "🟢", reason: `站上 MA35 近似線，短線均值高於長線均值，MACD 動能向上。` });
+  }
+
+  if (open > ma35Proxy && close > ma35Proxy && low > ma35Proxy && close > open && priorPrice && priorPrice <= ma35Proxy) {
+    signals.push({
+      id: "ma35_buy",
+      short: "MA35買",
+      icon: "🟢",
+      reason: `整根站上 MA35 近似線，前一輪仍在 MA35 下方，符合 MA35 支撐買點概念。`,
+    });
   }
 
   if (f618 && low <= f618 && high >= f618 && close >= open && close > ma35Proxy && macdUp) {
@@ -1225,9 +1248,11 @@ function buildStrategyUniverse(stocks) {
     const swingDaily = analyzeSwingDaily(rankedStock);
     const swingStock = { ...rankedStock, swingDaily };
     const intradaySignals = getIntradaySignals(swingStock);
+    const intradayEntry = getIntradayEntryPlan({ ...swingStock, intradaySignals });
     return {
       ...swingStock,
       intradaySignals,
+      intradayEntry,
       swingStage: getSwingStage(swingStock),
       swingSignals: getSwingSignals(swingStock),
     };
@@ -1249,6 +1274,79 @@ function isIntradayTradable(stock) {
   if (close >= 250 && value >= 8000000000) return false;
   if (close >= 120 && value >= 12000000000 && volume < 20000) return false;
   return true;
+}
+
+function roundTradePrice(price) {
+  const value = cleanNumber(price);
+  if (!value) return 0;
+  const tick = value >= 1000 ? 5 : value >= 500 ? 1 : value >= 100 ? 0.5 : value >= 50 ? 0.1 : value >= 10 ? 0.05 : 0.01;
+  return Math.round(value / tick) * tick;
+}
+
+function formatTradePrice(price) {
+  const value = roundTradePrice(price);
+  return value ? formatNumber(value, value >= 100 ? 1 : 2) : "--";
+}
+
+function getIntradayEntryPlan(stock) {
+  if (!stock?.intradaySignals?.length || cleanNumber(stock.percent) < 2) return null;
+  const close = cleanNumber(stock.close);
+  const open = cleanNumber(stock.open);
+  const high = cleanNumber(stock.high) || close;
+  const low = cleanNumber(stock.low);
+  const prevHigh = cleanNumber(stock.swingDaily?.prev?.high);
+  const vwap = stock.vwap || ((stock.value && stock.tradeVolume) ? stock.value / stock.tradeVolume : 0);
+  const prices = strategyRealtimeQuotes[stock.code]?.history?.map((item) => item.price).filter(Boolean) || [];
+  const ma35 = avg(prices.slice(-8)) || avg([open, high, low, close].filter(Boolean));
+  const ibRange = high && low ? high - low : 0;
+  const f618 = ibRange > 0 ? high - ibRange * 0.618 : 0;
+  const signalIds = new Set(stock.intradaySignals.map((signal) => signal.id));
+  const supports = [vwap, open, ma35, prevHigh, f618]
+    .map(cleanNumber)
+    .filter((price) => price > 0 && price <= close * 1.003);
+  const pullbackBase = supports.length ? Math.max(...supports) : close * 0.995;
+  const nearHigh = high && close >= high * 0.992;
+  const overExtended = high && close >= high * 0.998 && cleanNumber(stock.percent) >= 7;
+  const hasBreakout = signalIds.has("fire") || signalIds.has("gap") || signalIds.has("daily_breakout") || signalIds.has("breakout");
+  const hasSupportBuy = signalIds.has("ma35_buy") || signalIds.has("diamond") || signalIds.has("ma35_macd");
+
+  let label = "等回測";
+  let entryLow = pullbackBase;
+  let entryHigh = Math.min(close, pullbackBase * 1.006);
+  if (hasBreakout && !overExtended) {
+    label = nearHigh ? "突破可試" : "可進場";
+    entryLow = Math.max(pullbackBase, close * 0.997);
+    entryHigh = close * 1.002;
+  } else if (hasSupportBuy) {
+    label = "支撐買點";
+    entryLow = pullbackBase;
+    entryHigh = Math.min(close, pullbackBase * 1.005);
+  }
+  if (overExtended || signalIds.has("limit_lock")) {
+    label = "不追等回測";
+    entryLow = pullbackBase;
+    entryHigh = Math.min(close * 0.995, pullbackBase * 1.004);
+  }
+
+  const stopBase = Math.min(entryLow, vwap || entryLow, ma35 || entryLow);
+  const stopLoss = stopBase * 0.985;
+  const chaseLimit = Math.min(high || close * 1.012, close * 1.01);
+  return {
+    label,
+    entryLow: roundTradePrice(entryLow),
+    entryHigh: roundTradePrice(Math.max(entryHigh, entryLow)),
+    stopLoss: roundTradePrice(stopLoss),
+    chaseLimit: roundTradePrice(chaseLimit),
+    reason: hasBreakout ? "突破站穩" : hasSupportBuy ? "支撐回測" : "等待回測",
+  };
+}
+
+function renderEntryPlan(plan) {
+  if (!plan) return "--";
+  const range = plan.entryLow === plan.entryHigh
+    ? formatTradePrice(plan.entryLow)
+    : `${formatTradePrice(plan.entryLow)}-${formatTradePrice(plan.entryHigh)}`;
+  return `<b>${plan.label}</b><small>${range}｜停損 ${formatTradePrice(plan.stopLoss)}｜不追 ${formatTradePrice(plan.chaseLimit)}</small>`;
 }
 
 function strategyHit(id, stock) {
@@ -2182,6 +2280,19 @@ intradayRadarStyles.textContent = `
     color: #ff4f5f;
     font-weight: 700;
   }
+  .intraday-entry b {
+    display: block;
+    color: #ffd166;
+    font-size: 12px;
+  }
+  .intraday-entry small {
+    display: block;
+    color: #b8c6df;
+    font-size: 11px;
+    line-height: 1.45;
+    margin-top: 2px;
+    white-space: nowrap;
+  }
   .intraday-score {
     display: inline-flex;
     min-width: 34px;
@@ -2678,12 +2789,13 @@ function renderIntradayRadar(evaluated) {
   const renderZonePicks = (list) => list.length ? list.map((stock, index) => {
     const sign = stock.percent >= 0 ? "+" : "";
     const mainSignal = stock.intradaySignals[0]?.short || "量價";
+    const entry = stock.intradayEntry ? `${formatTradePrice(stock.intradayEntry.entryLow)}-${formatTradePrice(stock.intradayEntry.entryHigh)}` : "--";
     return `
       <div class="intraday-pick">
         <span class="intraday-rank">${index + 1}</span>
         <div class="intraday-pick-main">
           <b>${stock.code} ${stock.name}</b>
-          <span>${mainSignal}｜分數 ${stock.score}</span>
+          <span>${mainSignal}｜進場 ${entry}｜分數 ${stock.score}</span>
         </div>
         <div class="intraday-pick-price">
           <b>${sign}${stock.percent.toFixed(2)}%</b>
@@ -2726,12 +2838,13 @@ function renderIntradayRadar(evaluated) {
           <td class="pct">${sign}${stock.percent.toFixed(2)}%</td>
           <td>${Math.round(stock.tradeVolume || 0).toLocaleString("zh-TW")}</td>
           <td><span class="intraday-score">${stock.score}</span></td>
+          <td class="intraday-entry">${renderEntryPlan(stock.intradayEntry)}</td>
           <td>${reason}</td>
         </tr>
       `;
     }).join("")}
   ` : `
-    <tr><td colspan="9">2分K當沖雷達框架已啟動。現在沒有觸發訊號；開盤後會輪巡全台股並顯示符合「跳空 / 突破 / MA35+MACD / 鑽石 / 瞬間拉抬」的股票。</td></tr>
+    <tr><td colspan="10">2分K當沖雷達框架已啟動。現在沒有觸發訊號；開盤後會輪巡可當沖股票並顯示符合「跳空 / 突破 / MA35+MACD / 鑽石 / 瞬間拉抬」的股票。</td></tr>
   `;
 
   strategyTable.innerHTML = `
@@ -2760,7 +2873,7 @@ function renderIntradayRadar(evaluated) {
         <table class="intraday-table">
           <thead>
             <tr>
-              <th>${intradaySortHeader("code", "股票代號")}</th><th>股票名稱</th><th>狀態</th><th>訊號</th><th>${intradaySortHeader("price", "現價")}</th><th>${intradaySortHeader("percent", "漲幅")}</th><th>${intradaySortHeader("volume", "成交量")}</th><th>${intradaySortHeader("score", "分數")}</th><th>原因</th>
+              <th>${intradaySortHeader("code", "股票代號")}</th><th>股票名稱</th><th>狀態</th><th>訊號</th><th>${intradaySortHeader("price", "現價")}</th><th>${intradaySortHeader("percent", "漲幅")}</th><th>${intradaySortHeader("volume", "成交量")}</th><th>${intradaySortHeader("score", "分數")}</th><th>建議進場</th><th>原因</th>
             </tr>
           </thead>
           <tbody>${tableRows}</tbody>
