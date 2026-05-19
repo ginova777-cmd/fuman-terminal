@@ -35,6 +35,7 @@ const strategyMetricLabels = [...document.querySelectorAll(".strategy-metrics ar
 const strategyView = document.querySelector("#strategy-view");
 const strategyHeaderTitle = document.querySelector("#strategy-view .strategy-header h1");
 const strategyHeaderText = document.querySelector("#strategy-view .strategy-header p");
+const strategyHeaderBadge = document.querySelector("#strategy-view .strategy-header .console-badge");
 const strategyTerminal = document.querySelector(".strategy-terminal");
 const strategyList = document.querySelector(".strategy-list");
 
@@ -2898,11 +2899,23 @@ intradayRadarStyles.textContent = `
   .strategy3-clean {
     grid-template-columns: 1fr;
   }
+  .strategy-terminal.strategy3-only {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .strategy-terminal.strategy3-only .strategy-results,
+  .strategy-terminal.strategy3-only #strategy-table,
+  .strategy-terminal.strategy3-only .strategy5-shell,
+  .strategy-terminal.strategy3-only .strategy5-dashboard,
+  .strategy-terminal.strategy3-only .strategy5-results {
+    width: 100%;
+    max-width: none;
+    min-width: 0;
+  }
   .strategy3-clean .strategy5-results {
     width: 100%;
   }
   .strategy3-stock-card {
-    grid-template-columns: 44px minmax(150px, 0.8fr) minmax(96px, 0.45fr) minmax(260px, 1fr) minmax(340px, 1.25fr);
+    grid-template-columns: 44px minmax(170px, 0.75fr) minmax(100px, 0.45fr) minmax(300px, 1fr) minmax(420px, 1.35fr);
     align-items: center;
   }
   .strategy3-stock-title strong {
@@ -2962,6 +2975,7 @@ function setStrategyChrome(mode) {
   const swing = mode === "swing";
   const strategy5 = mode === "strategy5";
   const openBuy = mode === "openBuy";
+  const strategy3 = mode === "strategy3";
   if (swing) {
     document.querySelector("#strategy-view .strategy-header")?.remove();
   }
@@ -2977,6 +2991,7 @@ function setStrategyChrome(mode) {
   const headerTitle = intraday ? "2分K當沖雷達" : swing ? "策略4-波段雷達" : openBuy ? "策略1-開盤入快跑" : strategy5 ? "策略5-綜合策略" : "策略中心";
   setTitleWithIcon(strategyTitle, icon, title);
   setTitleWithIcon(strategyHeaderTitle, icon, headerTitle);
+  if (strategyHeaderBadge) strategyHeaderBadge.style.display = strategy3 ? "none" : "";
   if (strategyHeaderText) {
     strategyHeaderText.textContent = intraday
       ? "盤中即時輪巡全台股，專注偵測跳空、突破、MA35+MACD、鑽石與瞬間拉抬。"
@@ -2984,7 +2999,10 @@ function setStrategyChrome(mode) {
       ? "用波段指標邏輯整理全台股，盤中即時更新價量，分類突破缺口、逃逸缺口、V轉與多頭攻擊。"
       : openBuy
       ? "14:30 後產生明日候選，08:55 後看最終名單，09:00 開盤入，有賺就走。"
+      : strategy3
+      ? ""
       : "左側切換日線、籌碼與高波動策略；右側即時重算符合條件的股票訊號。";
+    strategyHeaderText.style.display = strategy3 ? "none" : "";
   }
   if (strategyActions) strategyActions.style.display = intraday || swing || strategy5 || openBuy ? "none" : "";
   if (strategyToolbar) {
@@ -3006,6 +3024,7 @@ function setStrategyChrome(mode) {
   if (strategyTerminal) strategyTerminal.classList.toggle("swing-only", swing);
   if (strategyTerminal) strategyTerminal.classList.toggle("open-buy-only", openBuy);
   if (strategyTerminal) strategyTerminal.classList.toggle("strategy5-only", strategy5);
+  if (strategyTerminal) strategyTerminal.classList.toggle("strategy3-only", strategy3);
   if (strategyList) strategyList.hidden = intraday || swing || strategy5 || openBuy;
   const labels = intraday
     ? ["觸發股票", "A區數量", "最多訊號"]
@@ -3557,7 +3576,7 @@ function renderStrategy5Dashboard(evaluated) {
 }
 
 function renderOvernightDashboard(evaluated) {
-  setStrategyChrome("normal");
+  setStrategyChrome("strategy3");
   setTitleWithIcon(strategyTitle, "◐", "策略3-隔日沖");
   setTitleWithIcon(strategyHeaderTitle, "◐", "策略3-隔日沖");
   if (strategyToolbar) strategyToolbar.style.display = "none";
