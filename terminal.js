@@ -1013,7 +1013,6 @@ function mergeOpenBuyCache(payload) {
   normalizeArray(payload?.matches).forEach((item) => {
     if (!item?.code) return;
     const base = latestStocks.find((stock) => stock.code === item.code) || {};
-    if (isStaleStrategyPrice(item, base)) return;
     openBuyScanMatches[item.code] = { ...base, ...item, name: base.name || item.name || item.code };
   });
   openBuyScanCount = Object.keys(openBuyScanMatches).length;
@@ -3467,9 +3466,6 @@ function renderSwingRadar(universe) {
 
 function renderOpenBuyRadar(universe) {
   setStrategyChrome("openBuy");
-  if (!openBuyScanLastAt) {
-    loadOpenBuyLocalCache();
-  }
   if (!openBuyCacheLoading && shouldLoadOpenBuyRemote()) {
     loadOpenBuyCache();
   }
@@ -3481,7 +3477,6 @@ function renderOpenBuyRadar(universe) {
   const allowCodes = new Set(universe.map((stock) => stock.code));
   const rows = Object.values(openBuyScanMatches)
     .filter((stock) => allowCodes.has(stock.code))
-    .filter((stock) => !isStaleStrategyPrice(stock, latestStocks.find((item) => item.code === stock.code)))
     .filter((stock) => !keyword || stock.code.includes(keyword) || stock.name.toLowerCase().includes(keyword))
     .sort((a, b) => b.score - a.score || b.percent - a.percent || b.value - a.value)
     .slice(0, 80);
