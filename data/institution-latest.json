@@ -132,7 +132,7 @@
       "dealer": 0,
       "total": 115133,
       "market": "上市",
-      "foreignStreak": 4,
+      "foreignStreak": 3,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -379,7 +379,7 @@
       "dealer": -22000,
       "total": -20000,
       "market": "上櫃",
-      "foreignStreak": 5,
+      "foreignStreak": 7,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -418,7 +418,7 @@
       "dealer": 0,
       "total": 30315,
       "market": "上櫃",
-      "foreignStreak": 2,
+      "foreignStreak": 1,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -457,7 +457,7 @@
       "dealer": 0,
       "total": 561450,
       "market": "上市",
-      "foreignStreak": 3,
+      "foreignStreak": 4,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -743,7 +743,7 @@
       "dealer": 0,
       "total": 6000,
       "market": "上市",
-      "foreignStreak": 7,
+      "foreignStreak": 3,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -779,12 +779,12 @@
       "name": "南染",
       "foreign": -5000,
       "trust": 0,
-      "dealer": 0,
+      "dealer": 25,
       "total": -5025,
       "market": "上市",
       "foreignStreak": 0,
       "trustStreak": 0,
-      "dealerStreak": 0,
+      "dealerStreak": 1,
       "jointStreak": 0
     },
     "1413": {
@@ -909,12 +909,12 @@
       "name": "華友聯",
       "foreign": 94000,
       "trust": -1000,
-      "dealer": 0,
+      "dealer": 1152,
       "total": 92848,
       "market": "上市",
       "foreignStreak": 1,
       "trustStreak": 0,
-      "dealerStreak": 0,
+      "dealerStreak": 1,
       "jointStreak": 0
     },
     "1437": {
@@ -1042,7 +1042,7 @@
       "dealer": 0,
       "total": 19000,
       "market": "上市",
-      "foreignStreak": 4,
+      "foreignStreak": 3,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -1562,7 +1562,7 @@
       "dealer": 0,
       "total": 16000,
       "market": "上市",
-      "foreignStreak": 3,
+      "foreignStreak": 4,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -1770,7 +1770,7 @@
       "dealer": 0,
       "total": 101000,
       "market": "上市",
-      "foreignStreak": 7,
+      "foreignStreak": 3,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -1822,7 +1822,7 @@
       "dealer": 0,
       "total": 6000,
       "market": "上櫃",
-      "foreignStreak": 2,
+      "foreignStreak": 4,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -1848,7 +1848,7 @@
       "dealer": 0,
       "total": 2313311,
       "market": "上市",
-      "foreignStreak": 4,
+      "foreignStreak": 3,
       "trustStreak": 1,
       "dealerStreak": 0,
       "jointStreak": 1
@@ -1874,7 +1874,7 @@
       "dealer": -1,
       "total": 12999,
       "market": "上櫃",
-      "foreignStreak": 1,
+      "foreignStreak": 2,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -1926,7 +1926,7 @@
       "dealer": 5,
       "total": 108005,
       "market": "上櫃",
-      "foreignStreak": 1,
+      "foreignStreak": 3,
       "trustStreak": 0,
       "dealerStreak": 1,
       "jointStreak": 0
@@ -1952,7 +1952,7 @@
       "dealer": 7488,
       "total": 60488,
       "market": "上櫃",
-      "foreignStreak": 1,
+      "foreignStreak": 2,
       "trustStreak": 0,
       "dealerStreak": 2,
       "jointStreak": 0
@@ -2031,7 +2031,7 @@
       "total": -2572017,
       "market": "上市",
       "foreignStreak": 0,
-      "trustStreak": 5,
+      "trustStreak": 3,
       "dealerStreak": 0,
       "jointStreak": 0
     },
@@ -2365,12 +2365,12 @@
       "name": "中碳",
       "foreign": -14000,
       "trust": 0,
-      "dealer": 0,
+      "dealer": 4000,
       "total": -19051,
       "market": "上市",
       "foreignStreak": 0,
       "trustStreak": 0,
-      "dealerStreak": 0,
+      "dealerStreak": 1,
       "jointStreak": 0
     },
     "1725": {
@@ -2628,7 +2628,7 @@
       "dealer": -5934,
       "total": 44124,
       "market": "上櫃",
-      "foreignStreak": 4,
+      "foreignStreak": 1,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -2642,7 +2642,7 @@
       "total": -1043770,
       "market": "上櫃",
       "foreignStreak": 0,
-      "trustStreak": 5,
+      "trustStreak": 7,
       "dealerStreak": 0,
       "jointStreak": 0
     },
@@ -2651,12 +2651,12 @@
       "name": "科妍",
       "foreign": -155000,
       "trust": 0,
-      "dealer": 0,
+      "dealer": 6267,
       "total": -141205,
       "market": "上市",
       "foreignStreak": 0,
       "trustStreak": 0,
-      "dealerStreak": 0,
+      "dealerStreak": 1,
       "jointStreak": 0
     },
     "1788": {
@@ -2781,12 +2781,12 @@
       "name": "中釉",
       "foreign": 487000,
       "trust": 0,
-      "dealer": 0,
+      "dealer": 1000,
       "total": 495000,
       "market": "上市",
       "foreignStreak": 7,
       "trustStreak": 0,
-      "dealerStreak": 0,
+      "dealerStreak": 1,
       "jointStreak": 0
     },
     "1810": {
@@ -3135,7 +3135,7 @@
       "dealer": 0,
       "total": 5353304,
       "market": "上市",
-      "foreignStreak": 3,
+      "foreignStreak": 7,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -3174,7 +3174,7 @@
       "dealer": 0,
       "total": 8928,
       "market": "上市",
-      "foreignStreak": 3,
+      "foreignStreak": 7,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -3330,9 +3330,9 @@
       "dealer": 28,
       "total": 7028,
       "market": "上櫃",
-      "foreignStreak": 1,
+      "foreignStreak": 3,
       "trustStreak": 0,
-      "dealerStreak": 1,
+      "dealerStreak": 3,
       "jointStreak": 0
     },
     "2066": {
@@ -3382,7 +3382,7 @@
       "dealer": 0,
       "total": 34000,
       "market": "上櫃",
-      "foreignStreak": 1,
+      "foreignStreak": 3,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -3587,12 +3587,12 @@
       "name": "和泰車",
       "foreign": -193868,
       "trust": 0,
-      "dealer": 0,
+      "dealer": 15807,
       "total": -194739,
       "market": "上市",
       "foreignStreak": 0,
       "trustStreak": 0,
-      "dealerStreak": 0,
+      "dealerStreak": 1,
       "jointStreak": 0
     },
     "2208": {
@@ -3668,7 +3668,7 @@
       "dealer": -2660,
       "total": 4940,
       "market": "上櫃",
-      "foreignStreak": 2,
+      "foreignStreak": 1,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -3851,7 +3851,7 @@
       "total": -24732790,
       "market": "上市",
       "foreignStreak": 0,
-      "trustStreak": 7,
+      "trustStreak": 3,
       "dealerStreak": 0,
       "jointStreak": 0
     },
@@ -3903,7 +3903,7 @@
       "total": 16212930,
       "market": "上市",
       "foreignStreak": 1,
-      "trustStreak": 3,
+      "trustStreak": 7,
       "dealerStreak": 0,
       "jointStreak": 1
     },
@@ -4020,7 +4020,7 @@
       "total": -2572029,
       "market": "上市",
       "foreignStreak": 0,
-      "trustStreak": 5,
+      "trustStreak": 3,
       "dealerStreak": 0,
       "jointStreak": 0
     },
@@ -4068,12 +4068,12 @@
       "name": "光罩",
       "foreign": 177415,
       "trust": 0,
-      "dealer": 0,
+      "dealer": 15867,
       "total": 198200,
       "market": "上市",
       "foreignStreak": 1,
       "trustStreak": 0,
-      "dealerStreak": 0,
+      "dealerStreak": 1,
       "jointStreak": 0
     },
     "2340": {
@@ -4107,12 +4107,12 @@
       "name": "華邦電",
       "foreign": -19138371,
       "trust": 7462000,
-      "dealer": 0,
+      "dealer": 1092405,
       "total": -11962552,
       "market": "上市",
       "foreignStreak": 0,
-      "trustStreak": 7,
-      "dealerStreak": 0,
+      "trustStreak": 3,
+      "dealerStreak": 1,
       "jointStreak": 0
     },
     "2345": {
@@ -4445,12 +4445,12 @@
       "name": "微星",
       "foreign": -4101405,
       "trust": 3000,
-      "dealer": 0,
+      "dealer": 16172,
       "total": -4027465,
       "market": "上市",
       "foreignStreak": 0,
       "trustStreak": 1,
-      "dealerStreak": 0,
+      "dealerStreak": 1,
       "jointStreak": 0
     },
     "2379": {
@@ -4461,7 +4461,7 @@
       "dealer": 0,
       "total": 1596668,
       "market": "上市",
-      "foreignStreak": 7,
+      "foreignStreak": 3,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -4552,7 +4552,7 @@
       "dealer": 0,
       "total": 387015,
       "market": "上市",
-      "foreignStreak": 3,
+      "foreignStreak": 5,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -4630,7 +4630,7 @@
       "dealer": 0,
       "total": 558635,
       "market": "上市",
-      "foreignStreak": 3,
+      "foreignStreak": 7,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -4643,7 +4643,7 @@
       "dealer": 0,
       "total": 189262,
       "market": "上市",
-      "foreignStreak": 3,
+      "foreignStreak": 6,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -4666,12 +4666,12 @@
       "name": "輔信",
       "foreign": -52000,
       "trust": 0,
-      "dealer": 0,
+      "dealer": 9000,
       "total": -58000,
       "market": "上市",
       "foreignStreak": 0,
       "trustStreak": 0,
-      "dealerStreak": 0,
+      "dealerStreak": 1,
       "jointStreak": 0
     },
     "2406": {
@@ -4890,7 +4890,7 @@
       "dealer": 0,
       "total": 207386,
       "market": "上市",
-      "foreignStreak": 7,
+      "foreignStreak": 3,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -5111,7 +5111,7 @@
       "dealer": 0,
       "total": 83000,
       "market": "上市",
-      "foreignStreak": 4,
+      "foreignStreak": 3,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -5268,7 +5268,7 @@
       "total": -65404,
       "market": "上市",
       "foreignStreak": 0,
-      "trustStreak": 4,
+      "trustStreak": 3,
       "dealerStreak": 0,
       "jointStreak": 0
     },
@@ -5385,7 +5385,7 @@
       "total": 2628205,
       "market": "上市",
       "foreignStreak": 1,
-      "trustStreak": 5,
+      "trustStreak": 3,
       "dealerStreak": 0,
       "jointStreak": 1
     },
@@ -5410,7 +5410,7 @@
       "dealer": 0,
       "total": 138000,
       "market": "上市",
-      "foreignStreak": 3,
+      "foreignStreak": 5,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -6541,7 +6541,7 @@
       "dealer": 0,
       "total": 70000,
       "market": "上市",
-      "foreignStreak": 3,
+      "foreignStreak": 4,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -6567,7 +6567,7 @@
       "dealer": -2000,
       "total": 36000,
       "market": "上櫃",
-      "foreignStreak": 2,
+      "foreignStreak": 1,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -6593,7 +6593,7 @@
       "dealer": 0,
       "total": 1000,
       "market": "上櫃",
-      "foreignStreak": 2,
+      "foreignStreak": 1,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -6632,7 +6632,7 @@
       "dealer": 0,
       "total": 2000,
       "market": "上櫃",
-      "foreignStreak": 2,
+      "foreignStreak": 1,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -6840,7 +6840,7 @@
       "dealer": 0,
       "total": 2193000,
       "market": "上市",
-      "foreignStreak": 7,
+      "foreignStreak": 3,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -6902,12 +6902,12 @@
       "name": "玉山金",
       "foreign": -5957723,
       "trust": -687000,
-      "dealer": 0,
+      "dealer": 54000,
       "total": -6633083,
       "market": "上市",
       "foreignStreak": 0,
       "trustStreak": 0,
-      "dealerStreak": 0,
+      "dealerStreak": 1,
       "jointStreak": 0
     },
     "2885": {
@@ -7413,7 +7413,7 @@
       "total": -566101,
       "market": "上市",
       "foreignStreak": 0,
-      "trustStreak": 7,
+      "trustStreak": 3,
       "dealerStreak": 0,
       "jointStreak": 0
     },
@@ -7529,7 +7529,7 @@
       "dealer": 0,
       "total": 1084223,
       "market": "上市",
-      "foreignStreak": 3,
+      "foreignStreak": 5,
       "trustStreak": 3,
       "dealerStreak": 0,
       "jointStreak": 3
@@ -7607,7 +7607,7 @@
       "dealer": 0,
       "total": 1901218,
       "market": "上市",
-      "foreignStreak": 7,
+      "foreignStreak": 3,
       "trustStreak": 2,
       "dealerStreak": 0,
       "jointStreak": 2
@@ -7685,7 +7685,7 @@
       "dealer": 0,
       "total": 25250,
       "market": "上市",
-      "foreignStreak": 3,
+      "foreignStreak": 7,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -7698,7 +7698,7 @@
       "dealer": 0,
       "total": 3536946,
       "market": "上市",
-      "foreignStreak": 6,
+      "foreignStreak": 3,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -7737,7 +7737,7 @@
       "dealer": 0,
       "total": 5883507,
       "market": "上市",
-      "foreignStreak": 7,
+      "foreignStreak": 3,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -7958,9 +7958,9 @@
       "dealer": 2000,
       "total": 70000,
       "market": "上櫃",
-      "foreignStreak": 1,
+      "foreignStreak": 3,
       "trustStreak": 0,
-      "dealerStreak": 1,
+      "dealerStreak": 3,
       "jointStreak": 0
     },
     "3073": {
@@ -8038,7 +8038,7 @@
       "market": "上櫃",
       "foreignStreak": 0,
       "trustStreak": 0,
-      "dealerStreak": 1,
+      "dealerStreak": 2,
       "jointStreak": 0
     },
     "3088": {
@@ -8088,7 +8088,7 @@
       "dealer": 0,
       "total": 16000,
       "market": "上櫃",
-      "foreignStreak": 3,
+      "foreignStreak": 1,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -8127,7 +8127,7 @@
       "dealer": -56988,
       "total": -322859,
       "market": "上櫃",
-      "foreignStreak": 1,
+      "foreignStreak": 2,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -8179,7 +8179,7 @@
       "dealer": 184,
       "total": 13184,
       "market": "上櫃",
-      "foreignStreak": 2,
+      "foreignStreak": 1,
       "trustStreak": 0,
       "dealerStreak": 1,
       "jointStreak": 0
@@ -8246,7 +8246,7 @@
       "market": "上櫃",
       "foreignStreak": 0,
       "trustStreak": 0,
-      "dealerStreak": 1,
+      "dealerStreak": 2,
       "jointStreak": 0
     },
     "3147": {
@@ -8257,7 +8257,7 @@
       "dealer": 9533,
       "total": 157535,
       "market": "上櫃",
-      "foreignStreak": 2,
+      "foreignStreak": 4,
       "trustStreak": 0,
       "dealerStreak": 1,
       "jointStreak": 0
@@ -8267,12 +8267,12 @@
       "name": "正達",
       "foreign": -3376000,
       "trust": 0,
-      "dealer": 0,
+      "dealer": 10239,
       "total": -3367239,
       "market": "上市",
       "foreignStreak": 0,
       "trustStreak": 0,
-      "dealerStreak": 0,
+      "dealerStreak": 1,
       "jointStreak": 0
     },
     "3150": {
@@ -8296,9 +8296,9 @@
       "dealer": 6934,
       "total": 191873,
       "market": "上櫃",
-      "foreignStreak": 1,
+      "foreignStreak": 3,
       "trustStreak": 0,
-      "dealerStreak": 1,
+      "dealerStreak": 2,
       "jointStreak": 0
     },
     "3162": {
@@ -8324,7 +8324,7 @@
       "market": "上櫃",
       "foreignStreak": 1,
       "trustStreak": 0,
-      "dealerStreak": 1,
+      "dealerStreak": 3,
       "jointStreak": 0
     },
     "3164": {
@@ -8400,7 +8400,7 @@
       "dealer": 1868,
       "total": 391868,
       "market": "上櫃",
-      "foreignStreak": 1,
+      "foreignStreak": 3,
       "trustStreak": 0,
       "dealerStreak": 1,
       "jointStreak": 0
@@ -8428,7 +8428,7 @@
       "market": "上櫃",
       "foreignStreak": 0,
       "trustStreak": 0,
-      "dealerStreak": 2,
+      "dealerStreak": 1,
       "jointStreak": 0
     },
     "3189": {
@@ -8465,7 +8465,7 @@
       "dealer": 0,
       "total": 34000,
       "market": "上櫃",
-      "foreignStreak": 2,
+      "foreignStreak": 1,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -8517,9 +8517,9 @@
       "dealer": 36202,
       "total": 36202,
       "market": "上櫃",
-      "foreignStreak": 2,
+      "foreignStreak": 1,
       "trustStreak": 0,
-      "dealerStreak": 1,
+      "dealerStreak": 2,
       "jointStreak": 0
     },
     "3213": {
@@ -8532,7 +8532,7 @@
       "market": "上櫃",
       "foreignStreak": 1,
       "trustStreak": 0,
-      "dealerStreak": 4,
+      "dealerStreak": 2,
       "jointStreak": 0
     },
     "3217": {
@@ -8543,7 +8543,7 @@
       "dealer": 8821,
       "total": 57321,
       "market": "上櫃",
-      "foreignStreak": 1,
+      "foreignStreak": 3,
       "trustStreak": 0,
       "dealerStreak": 1,
       "jointStreak": 0
@@ -8571,7 +8571,7 @@
       "market": "上櫃",
       "foreignStreak": 0,
       "trustStreak": 0,
-      "dealerStreak": 4,
+      "dealerStreak": 2,
       "jointStreak": 0
     },
     "3221": {
@@ -8582,9 +8582,9 @@
       "dealer": 26115,
       "total": 1181118,
       "market": "上櫃",
-      "foreignStreak": 1,
+      "foreignStreak": 2,
       "trustStreak": 0,
-      "dealerStreak": 3,
+      "dealerStreak": 1,
       "jointStreak": 0
     },
     "3224": {
@@ -8595,7 +8595,7 @@
       "dealer": 0,
       "total": 84000,
       "market": "上櫃",
-      "foreignStreak": 1,
+      "foreignStreak": 2,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -8699,7 +8699,7 @@
       "dealer": 0,
       "total": 278635,
       "market": "上櫃",
-      "foreignStreak": 1,
+      "foreignStreak": 2,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -8712,9 +8712,9 @@
       "dealer": 139721,
       "total": 287723,
       "market": "上櫃",
-      "foreignStreak": 1,
+      "foreignStreak": 2,
       "trustStreak": 0,
-      "dealerStreak": 5,
+      "dealerStreak": 1,
       "jointStreak": 0
     },
     "3252": {
@@ -8766,7 +8766,7 @@
       "market": "上櫃",
       "foreignStreak": 0,
       "trustStreak": 0,
-      "dealerStreak": 2,
+      "dealerStreak": 1,
       "jointStreak": 0
     },
     "3264": {
@@ -8777,7 +8777,7 @@
       "dealer": 142309,
       "total": 529909,
       "market": "上櫃",
-      "foreignStreak": 4,
+      "foreignStreak": 2,
       "trustStreak": 0,
       "dealerStreak": 2,
       "jointStreak": 0
@@ -8790,7 +8790,7 @@
       "dealer": -6234,
       "total": 9849,
       "market": "上櫃",
-      "foreignStreak": 3,
+      "foreignStreak": 1,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -8844,7 +8844,7 @@
       "market": "上櫃",
       "foreignStreak": 0,
       "trustStreak": 0,
-      "dealerStreak": 5,
+      "dealerStreak": 7,
       "jointStreak": 0
     },
     "3284": {
@@ -8855,7 +8855,7 @@
       "dealer": -106,
       "total": 83894,
       "market": "上櫃",
-      "foreignStreak": 3,
+      "foreignStreak": 1,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -8896,7 +8896,7 @@
       "market": "上櫃",
       "foreignStreak": 2,
       "trustStreak": 0,
-      "dealerStreak": 2,
+      "dealerStreak": 1,
       "jointStreak": 0
     },
     "3290": {
@@ -9065,7 +9065,7 @@
       "market": "上櫃",
       "foreignStreak": 1,
       "trustStreak": 0,
-      "dealerStreak": 1,
+      "dealerStreak": 2,
       "jointStreak": 0
     },
     "3317": {
@@ -9115,7 +9115,7 @@
       "dealer": -9341,
       "total": 150651,
       "market": "上櫃",
-      "foreignStreak": 1,
+      "foreignStreak": 3,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -9141,7 +9141,7 @@
       "dealer": -1,
       "total": 45375,
       "market": "上櫃",
-      "foreignStreak": 4,
+      "foreignStreak": 2,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -9206,7 +9206,7 @@
       "dealer": 0,
       "total": 48000,
       "market": "上櫃",
-      "foreignStreak": 3,
+      "foreignStreak": 2,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -9219,7 +9219,7 @@
       "dealer": 0,
       "total": 39000,
       "market": "上櫃",
-      "foreignStreak": 3,
+      "foreignStreak": 2,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -9247,7 +9247,7 @@
       "market": "上櫃",
       "foreignStreak": 0,
       "trustStreak": 0,
-      "dealerStreak": 2,
+      "dealerStreak": 1,
       "jointStreak": 0
     },
     "3360": {
@@ -9273,7 +9273,7 @@
       "market": "上櫃",
       "foreignStreak": 0,
       "trustStreak": 0,
-      "dealerStreak": 1,
+      "dealerStreak": 3,
       "jointStreak": 0
     },
     "3363": {
@@ -9297,7 +9297,7 @@
       "dealer": 0,
       "total": 141985,
       "market": "上櫃",
-      "foreignStreak": 2,
+      "foreignStreak": 4,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -9312,7 +9312,7 @@
       "market": "上櫃",
       "foreignStreak": 1,
       "trustStreak": 0,
-      "dealerStreak": 1,
+      "dealerStreak": 2,
       "jointStreak": 0
     },
     "3374": {
@@ -9388,7 +9388,7 @@
       "dealer": 0,
       "total": 10226,
       "market": "上櫃",
-      "foreignStreak": 2,
+      "foreignStreak": 1,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -9440,7 +9440,7 @@
       "dealer": 0,
       "total": 30191,
       "market": "上市",
-      "foreignStreak": 5,
+      "foreignStreak": 3,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -9494,7 +9494,7 @@
       "market": "上櫃",
       "foreignStreak": 0,
       "trustStreak": 0,
-      "dealerStreak": 1,
+      "dealerStreak": 3,
       "jointStreak": 0
     },
     "3437": {
@@ -9544,7 +9544,7 @@
       "dealer": 0,
       "total": 354017,
       "market": "上市",
-      "foreignStreak": 4,
+      "foreignStreak": 3,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -9583,7 +9583,7 @@
       "dealer": 0,
       "total": -949180,
       "market": "上市",
-      "foreignStreak": 5,
+      "foreignStreak": 3,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -9596,7 +9596,7 @@
       "dealer": 3780,
       "total": 71716,
       "market": "上櫃",
-      "foreignStreak": 5,
+      "foreignStreak": 7,
       "trustStreak": 0,
       "dealerStreak": 1,
       "jointStreak": 0
@@ -9609,7 +9609,7 @@
       "dealer": 0,
       "total": 25000,
       "market": "上櫃",
-      "foreignStreak": 1,
+      "foreignStreak": 2,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -9635,7 +9635,7 @@
       "dealer": 0,
       "total": 20000,
       "market": "上櫃",
-      "foreignStreak": 1,
+      "foreignStreak": 3,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -9676,7 +9676,7 @@
       "market": "上櫃",
       "foreignStreak": 0,
       "trustStreak": 0,
-      "dealerStreak": 1,
+      "dealerStreak": 2,
       "jointStreak": 0
     },
     "3484": {
@@ -9687,9 +9687,9 @@
       "dealer": 388,
       "total": 28388,
       "market": "上櫃",
-      "foreignStreak": 2,
+      "foreignStreak": 1,
       "trustStreak": 0,
-      "dealerStreak": 4,
+      "dealerStreak": 1,
       "jointStreak": 0
     },
     "3485": {
@@ -9700,7 +9700,7 @@
       "dealer": -6000,
       "total": 4000,
       "market": "上櫃",
-      "foreignStreak": 1,
+      "foreignStreak": 3,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -9778,7 +9778,7 @@
       "dealer": -42096,
       "total": 357832,
       "market": "上櫃",
-      "foreignStreak": 3,
+      "foreignStreak": 5,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -9830,7 +9830,7 @@
       "dealer": -109,
       "total": 5891,
       "market": "上櫃",
-      "foreignStreak": 1,
+      "foreignStreak": 3,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -9843,7 +9843,7 @@
       "dealer": 0,
       "total": 32000,
       "market": "上櫃",
-      "foreignStreak": 1,
+      "foreignStreak": 2,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -9960,10 +9960,10 @@
       "dealer": -32983,
       "total": 166625,
       "market": "上櫃",
-      "foreignStreak": 3,
-      "trustStreak": 1,
+      "foreignStreak": 5,
+      "trustStreak": 2,
       "dealerStreak": 0,
-      "jointStreak": 1
+      "jointStreak": 2
     },
     "3527": {
       "code": "3527",
@@ -10064,7 +10064,7 @@
       "dealer": -23,
       "total": 70977,
       "market": "上櫃",
-      "foreignStreak": 5,
+      "foreignStreak": 1,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -10142,7 +10142,7 @@
       "dealer": 7428,
       "total": 38428,
       "market": "上櫃",
-      "foreignStreak": 1,
+      "foreignStreak": 3,
       "trustStreak": 0,
       "dealerStreak": 1,
       "jointStreak": 0
@@ -10183,7 +10183,7 @@
       "market": "上櫃",
       "foreignStreak": 1,
       "trustStreak": 0,
-      "dealerStreak": 3,
+      "dealerStreak": 1,
       "jointStreak": 0
     },
     "3555": {
@@ -10235,7 +10235,7 @@
       "market": "上櫃",
       "foreignStreak": 0,
       "trustStreak": 0,
-      "dealerStreak": 3,
+      "dealerStreak": 2,
       "jointStreak": 0
     },
     "3563": {
@@ -10272,7 +10272,7 @@
       "dealer": 0,
       "total": 13000,
       "market": "上櫃",
-      "foreignStreak": 5,
+      "foreignStreak": 1,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -10285,7 +10285,7 @@
       "dealer": 0,
       "total": 4000,
       "market": "上櫃",
-      "foreignStreak": 2,
+      "foreignStreak": 1,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -10311,9 +10311,9 @@
       "dealer": 13837,
       "total": 27837,
       "market": "上櫃",
-      "foreignStreak": 2,
+      "foreignStreak": 4,
       "trustStreak": 0,
-      "dealerStreak": 2,
+      "dealerStreak": 1,
       "jointStreak": 0
     },
     "3580": {
@@ -10326,7 +10326,7 @@
       "market": "上櫃",
       "foreignStreak": 0,
       "trustStreak": 0,
-      "dealerStreak": 2,
+      "dealerStreak": 1,
       "jointStreak": 0
     },
     "3581": {
@@ -10363,7 +10363,7 @@
       "dealer": -15051,
       "total": 424349,
       "market": "上櫃",
-      "foreignStreak": 1,
+      "foreignStreak": 2,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -10386,12 +10386,12 @@
       "name": "艾笛森",
       "foreign": 341098,
       "trust": 0,
-      "dealer": 0,
+      "dealer": 279,
       "total": 341819,
       "market": "上市",
       "foreignStreak": 2,
       "trustStreak": 0,
-      "dealerStreak": 0,
+      "dealerStreak": 1,
       "jointStreak": 0
     },
     "3592": {
@@ -10480,7 +10480,7 @@
       "dealer": 0,
       "total": 15000,
       "market": "上櫃",
-      "foreignStreak": 5,
+      "foreignStreak": 1,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -10506,7 +10506,7 @@
       "dealer": 61966,
       "total": 533966,
       "market": "上櫃",
-      "foreignStreak": 3,
+      "foreignStreak": 2,
       "trustStreak": 0,
       "dealerStreak": 2,
       "jointStreak": 0
@@ -10559,8 +10559,8 @@
       "total": -495520,
       "market": "上櫃",
       "foreignStreak": 0,
-      "trustStreak": 2,
-      "dealerStreak": 5,
+      "trustStreak": 4,
+      "dealerStreak": 1,
       "jointStreak": 0
     },
     "3625": {
@@ -10571,7 +10571,7 @@
       "dealer": -254,
       "total": 87746,
       "market": "上櫃",
-      "foreignStreak": 2,
+      "foreignStreak": 1,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -10677,7 +10677,7 @@
       "market": "上櫃",
       "foreignStreak": 2,
       "trustStreak": 0,
-      "dealerStreak": 1,
+      "dealerStreak": 2,
       "jointStreak": 0
     },
     "3665": {
@@ -10688,7 +10688,7 @@
       "dealer": 0,
       "total": 342499,
       "market": "上市",
-      "foreignStreak": 3,
+      "foreignStreak": 7,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -10753,9 +10753,9 @@
       "dealer": 31607,
       "total": 446607,
       "market": "上櫃",
-      "foreignStreak": 2,
+      "foreignStreak": 1,
       "trustStreak": 0,
-      "dealerStreak": 2,
+      "dealerStreak": 1,
       "jointStreak": 0
     },
     "3679": {
@@ -10792,7 +10792,7 @@
       "dealer": -351,
       "total": 13649,
       "market": "上櫃",
-      "foreignStreak": 1,
+      "foreignStreak": 3,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -10805,7 +10805,7 @@
       "dealer": 0,
       "total": 23000,
       "market": "上櫃",
-      "foreignStreak": 1,
+      "foreignStreak": 2,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -10833,7 +10833,7 @@
       "market": "上櫃",
       "foreignStreak": 1,
       "trustStreak": 0,
-      "dealerStreak": 3,
+      "dealerStreak": 5,
       "jointStreak": 0
     },
     "3689": {
@@ -10857,7 +10857,7 @@
       "dealer": -58470,
       "total": 593937,
       "market": "上櫃",
-      "foreignStreak": 1,
+      "foreignStreak": 2,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -10919,12 +10919,12 @@
       "name": "欣陸",
       "foreign": -363000,
       "trust": 0,
-      "dealer": 0,
+      "dealer": 4701,
       "total": -365701,
       "market": "上市",
       "foreignStreak": 0,
       "trustStreak": 0,
-      "dealerStreak": 0,
+      "dealerStreak": 1,
       "jointStreak": 0
     },
     "3704": {
@@ -11002,7 +11002,7 @@
       "market": "上櫃",
       "foreignStreak": 1,
       "trustStreak": 0,
-      "dealerStreak": 3,
+      "dealerStreak": 5,
       "jointStreak": 0
     },
     "3710": {
@@ -11169,7 +11169,7 @@
       "dealer": 0,
       "total": 35000,
       "market": "上櫃",
-      "foreignStreak": 4,
+      "foreignStreak": 6,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -11195,9 +11195,9 @@
       "dealer": 16,
       "total": 77016,
       "market": "上櫃",
-      "foreignStreak": 3,
+      "foreignStreak": 1,
       "trustStreak": 0,
-      "dealerStreak": 2,
+      "dealerStreak": 1,
       "jointStreak": 0
     },
     "4111": {
@@ -11208,7 +11208,7 @@
       "dealer": 0,
       "total": 15000,
       "market": "上櫃",
-      "foreignStreak": 3,
+      "foreignStreak": 2,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -11221,7 +11221,7 @@
       "dealer": 0,
       "total": 23000,
       "market": "上櫃",
-      "foreignStreak": 3,
+      "foreignStreak": 1,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -11299,7 +11299,7 @@
       "dealer": 0,
       "total": 2000,
       "market": "上櫃",
-      "foreignStreak": 5,
+      "foreignStreak": 7,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -11312,7 +11312,7 @@
       "dealer": 2241,
       "total": 121241,
       "market": "上櫃",
-      "foreignStreak": 1,
+      "foreignStreak": 2,
       "trustStreak": 0,
       "dealerStreak": 1,
       "jointStreak": 0
@@ -11325,7 +11325,7 @@
       "dealer": -1570,
       "total": 402430,
       "market": "上櫃",
-      "foreignStreak": 3,
+      "foreignStreak": 1,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -11340,7 +11340,7 @@
       "market": "上櫃",
       "foreignStreak": 0,
       "trustStreak": 0,
-      "dealerStreak": 1,
+      "dealerStreak": 3,
       "jointStreak": 0
     },
     "4130": {
@@ -11351,7 +11351,7 @@
       "dealer": -25,
       "total": 8975,
       "market": "上櫃",
-      "foreignStreak": 4,
+      "foreignStreak": 1,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -11468,7 +11468,7 @@
       "dealer": 0,
       "total": 7000,
       "market": "上櫃",
-      "foreignStreak": 2,
+      "foreignStreak": 4,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -11481,7 +11481,7 @@
       "dealer": 0,
       "total": 5000,
       "market": "上櫃",
-      "foreignStreak": 2,
+      "foreignStreak": 1,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -11507,9 +11507,9 @@
       "dealer": 128,
       "total": 194128,
       "market": "上櫃",
-      "foreignStreak": 4,
+      "foreignStreak": 1,
       "trustStreak": 0,
-      "dealerStreak": 3,
+      "dealerStreak": 2,
       "jointStreak": 0
     },
     "4160": {
@@ -11520,7 +11520,7 @@
       "dealer": 0,
       "total": 14000,
       "market": "上櫃",
-      "foreignStreak": 4,
+      "foreignStreak": 2,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -11546,7 +11546,7 @@
       "dealer": -3871,
       "total": 85129,
       "market": "上櫃",
-      "foreignStreak": 3,
+      "foreignStreak": 1,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -11650,7 +11650,7 @@
       "dealer": 0,
       "total": 7000,
       "market": "上櫃",
-      "foreignStreak": 2,
+      "foreignStreak": 1,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -11663,7 +11663,7 @@
       "dealer": 0,
       "total": 32000,
       "market": "上櫃",
-      "foreignStreak": 2,
+      "foreignStreak": 1,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -11702,7 +11702,7 @@
       "dealer": 0,
       "total": 64013,
       "market": "上市",
-      "foreignStreak": 4,
+      "foreignStreak": 3,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -11741,7 +11741,7 @@
       "dealer": 0,
       "total": 6000,
       "market": "上櫃",
-      "foreignStreak": 5,
+      "foreignStreak": 7,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -11754,7 +11754,7 @@
       "dealer": -7529,
       "total": 105521,
       "market": "上櫃",
-      "foreignStreak": 1,
+      "foreignStreak": 2,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -11884,7 +11884,7 @@
       "dealer": 775,
       "total": 1775,
       "market": "上櫃",
-      "foreignStreak": 2,
+      "foreignStreak": 1,
       "trustStreak": 0,
       "dealerStreak": 1,
       "jointStreak": 0
@@ -12014,7 +12014,7 @@
       "dealer": 0,
       "total": 3000,
       "market": "上櫃",
-      "foreignStreak": 1,
+      "foreignStreak": 2,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -12040,7 +12040,7 @@
       "dealer": 0,
       "total": 974,
       "market": "上櫃",
-      "foreignStreak": 3,
+      "foreignStreak": 5,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -12055,7 +12055,7 @@
       "market": "上櫃",
       "foreignStreak": 0,
       "trustStreak": 0,
-      "dealerStreak": 1,
+      "dealerStreak": 2,
       "jointStreak": 0
     },
     "4513": {
@@ -12066,7 +12066,7 @@
       "dealer": -1,
       "total": 209235,
       "market": "上櫃",
-      "foreignStreak": 1,
+      "foreignStreak": 2,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -12131,7 +12131,7 @@
       "dealer": 0,
       "total": 2000,
       "market": "上櫃",
-      "foreignStreak": 1,
+      "foreignStreak": 2,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -12159,7 +12159,7 @@
       "market": "上櫃",
       "foreignStreak": 0,
       "trustStreak": 0,
-      "dealerStreak": 1,
+      "dealerStreak": 2,
       "jointStreak": 0
     },
     "4534": {
@@ -12170,7 +12170,7 @@
       "dealer": -668,
       "total": 90335,
       "market": "上櫃",
-      "foreignStreak": 2,
+      "foreignStreak": 1,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -12287,7 +12287,7 @@
       "dealer": 0,
       "total": 2000,
       "market": "上櫃",
-      "foreignStreak": 1,
+      "foreignStreak": 2,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -12326,7 +12326,7 @@
       "dealer": 0,
       "total": 11000,
       "market": "上櫃",
-      "foreignStreak": 3,
+      "foreignStreak": 1,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -12404,7 +12404,7 @@
       "dealer": 0,
       "total": 16000,
       "market": "上櫃",
-      "foreignStreak": 3,
+      "foreignStreak": 2,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -12430,7 +12430,7 @@
       "dealer": -92,
       "total": 34908,
       "market": "上櫃",
-      "foreignStreak": 1,
+      "foreignStreak": 3,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -12495,7 +12495,7 @@
       "dealer": 0,
       "total": 616076,
       "market": "上市",
-      "foreignStreak": 7,
+      "foreignStreak": 3,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -12534,7 +12534,7 @@
       "dealer": -18655,
       "total": 97443,
       "market": "上櫃",
-      "foreignStreak": 1,
+      "foreignStreak": 3,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -12729,7 +12729,7 @@
       "dealer": -17850,
       "total": 89539,
       "market": "上櫃",
-      "foreignStreak": 1,
+      "foreignStreak": 3,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -12739,12 +12739,12 @@
       "name": "國精化",
       "foreign": -706465,
       "trust": 0,
-      "dealer": 0,
+      "dealer": 27057,
       "total": -749054,
       "market": "上市",
       "foreignStreak": 0,
       "trustStreak": 0,
-      "dealerStreak": 0,
+      "dealerStreak": 1,
       "jointStreak": 0
     },
     "4726": {
@@ -12768,9 +12768,9 @@
       "dealer": 11786,
       "total": 163886,
       "market": "上櫃",
-      "foreignStreak": 1,
+      "foreignStreak": 3,
       "trustStreak": 0,
-      "dealerStreak": 2,
+      "dealerStreak": 1,
       "jointStreak": 0
     },
     "4735": {
@@ -12833,7 +12833,7 @@
       "dealer": 9000,
       "total": 44000,
       "market": "上櫃",
-      "foreignStreak": 1,
+      "foreignStreak": 3,
       "trustStreak": 0,
       "dealerStreak": 1,
       "jointStreak": 0
@@ -12848,7 +12848,7 @@
       "market": "上櫃",
       "foreignStreak": 0,
       "trustStreak": 0,
-      "dealerStreak": 5,
+      "dealerStreak": 2,
       "jointStreak": 0
     },
     "4744": {
@@ -12952,7 +12952,7 @@
       "market": "上櫃",
       "foreignStreak": 0,
       "trustStreak": 0,
-      "dealerStreak": 2,
+      "dealerStreak": 1,
       "jointStreak": 0
     },
     "4763": {
@@ -12976,7 +12976,7 @@
       "dealer": 0,
       "total": 103890,
       "market": "上市",
-      "foreignStreak": 7,
+      "foreignStreak": 3,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -13002,7 +13002,7 @@
       "dealer": -50903,
       "total": 258778,
       "market": "上櫃",
-      "foreignStreak": 1,
+      "foreignStreak": 2,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -13064,12 +13064,12 @@
       "name": "日成-KY",
       "foreign": -5000,
       "trust": 0,
-      "dealer": 0,
+      "dealer": 4047,
       "total": 2953,
       "market": "上市",
       "foreignStreak": 0,
       "trustStreak": 0,
-      "dealerStreak": 0,
+      "dealerStreak": 1,
       "jointStreak": 0
     },
     "4903": {
@@ -13080,7 +13080,7 @@
       "dealer": -177,
       "total": 230799,
       "market": "上櫃",
-      "foreignStreak": 4,
+      "foreignStreak": 1,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -13158,7 +13158,7 @@
       "dealer": 42389,
       "total": 202389,
       "market": "上櫃",
-      "foreignStreak": 1,
+      "foreignStreak": 3,
       "trustStreak": 0,
       "dealerStreak": 1,
       "jointStreak": 0
@@ -13210,7 +13210,7 @@
       "dealer": 0,
       "total": 1831472,
       "market": "上市",
-      "foreignStreak": 3,
+      "foreignStreak": 6,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -13236,7 +13236,7 @@
       "dealer": -1,
       "total": 31080,
       "market": "上櫃",
-      "foreignStreak": 1,
+      "foreignStreak": 3,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -13251,7 +13251,7 @@
       "market": "上櫃",
       "foreignStreak": 0,
       "trustStreak": 0,
-      "dealerStreak": 1,
+      "dealerStreak": 2,
       "jointStreak": 0
     },
     "4927": {
@@ -13290,7 +13290,7 @@
       "market": "上櫃",
       "foreignStreak": 0,
       "trustStreak": 0,
-      "dealerStreak": 1,
+      "dealerStreak": 2,
       "jointStreak": 0
     },
     "4933": {
@@ -13301,7 +13301,7 @@
       "dealer": -52018,
       "total": -5018,
       "market": "上櫃",
-      "foreignStreak": 5,
+      "foreignStreak": 1,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -13353,9 +13353,9 @@
       "dealer": 79174,
       "total": 316950,
       "market": "上櫃",
-      "foreignStreak": 3,
+      "foreignStreak": 1,
       "trustStreak": 0,
-      "dealerStreak": 1,
+      "dealerStreak": 2,
       "jointStreak": 0
     },
     "4942": {
@@ -13363,12 +13363,12 @@
       "name": "嘉彰",
       "foreign": -25000,
       "trust": 0,
-      "dealer": 0,
+      "dealer": 1154,
       "total": -25154,
       "market": "上市",
       "foreignStreak": 0,
       "trustStreak": 0,
-      "dealerStreak": 0,
+      "dealerStreak": 1,
       "jointStreak": 0
     },
     "4946": {
@@ -13379,7 +13379,7 @@
       "dealer": 0,
       "total": 7000,
       "market": "上櫃",
-      "foreignStreak": 2,
+      "foreignStreak": 1,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -13405,7 +13405,7 @@
       "dealer": -10702,
       "total": 6298,
       "market": "上櫃",
-      "foreignStreak": 1,
+      "foreignStreak": 3,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -13454,12 +13454,12 @@
       "name": "臻鼎-KY",
       "foreign": 1375340,
       "trust": -2688000,
-      "dealer": 0,
+      "dealer": 59000,
       "total": -967994,
       "market": "上市",
       "foreignStreak": 1,
       "trustStreak": 0,
-      "dealerStreak": 0,
+      "dealerStreak": 1,
       "jointStreak": 0
     },
     "4960": {
@@ -13470,7 +13470,7 @@
       "dealer": 0,
       "total": 2800000,
       "market": "上市",
-      "foreignStreak": 4,
+      "foreignStreak": 3,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -13496,7 +13496,7 @@
       "dealer": -63893,
       "total": 97088,
       "market": "上櫃",
-      "foreignStreak": 3,
+      "foreignStreak": 5,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -13561,9 +13561,9 @@
       "dealer": 14524,
       "total": 219530,
       "market": "上櫃",
-      "foreignStreak": 5,
+      "foreignStreak": 2,
       "trustStreak": 0,
-      "dealerStreak": 5,
+      "dealerStreak": 2,
       "jointStreak": 0
     },
     "4974": {
@@ -13613,7 +13613,7 @@
       "dealer": -21000,
       "total": 44645,
       "market": "上櫃",
-      "foreignStreak": 2,
+      "foreignStreak": 4,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -13652,9 +13652,9 @@
       "dealer": 1913,
       "total": 350917,
       "market": "上櫃",
-      "foreignStreak": 5,
+      "foreignStreak": 7,
       "trustStreak": 0,
-      "dealerStreak": 1,
+      "dealerStreak": 3,
       "jointStreak": 0
     },
     "4994": {
@@ -13730,7 +13730,7 @@
       "dealer": 0,
       "total": 58000,
       "market": "上櫃",
-      "foreignStreak": 2,
+      "foreignStreak": 1,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -13743,7 +13743,7 @@
       "dealer": 0,
       "total": 90000,
       "market": "上櫃",
-      "foreignStreak": 1,
+      "foreignStreak": 2,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -13756,7 +13756,7 @@
       "dealer": 0,
       "total": 2000,
       "market": "上櫃",
-      "foreignStreak": 2,
+      "foreignStreak": 4,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -13769,7 +13769,7 @@
       "dealer": 0,
       "total": 1000,
       "market": "上櫃",
-      "foreignStreak": 2,
+      "foreignStreak": 1,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -13797,7 +13797,7 @@
       "market": "上櫃",
       "foreignStreak": 1,
       "trustStreak": 0,
-      "dealerStreak": 1,
+      "dealerStreak": 2,
       "jointStreak": 0
     },
     "5203": {
@@ -13847,7 +13847,7 @@
       "dealer": 0,
       "total": 6000,
       "market": "上櫃",
-      "foreignStreak": 2,
+      "foreignStreak": 1,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -13860,7 +13860,7 @@
       "dealer": 0,
       "total": 2000,
       "market": "上櫃",
-      "foreignStreak": 1,
+      "foreignStreak": 2,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -13886,7 +13886,7 @@
       "dealer": 0,
       "total": 219000,
       "market": "上櫃",
-      "foreignStreak": 2,
+      "foreignStreak": 4,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -13977,7 +13977,7 @@
       "dealer": -5000,
       "total": 34000,
       "market": "上櫃",
-      "foreignStreak": 1,
+      "foreignStreak": 2,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -14016,7 +14016,7 @@
       "dealer": 5274,
       "total": 31287,
       "market": "上櫃",
-      "foreignStreak": 2,
+      "foreignStreak": 4,
       "trustStreak": 0,
       "dealerStreak": 1,
       "jointStreak": 0
@@ -14094,7 +14094,7 @@
       "dealer": 257,
       "total": 162292,
       "market": "上櫃",
-      "foreignStreak": 3,
+      "foreignStreak": 5,
       "trustStreak": 0,
       "dealerStreak": 1,
       "jointStreak": 0
@@ -14108,7 +14108,7 @@
       "total": -367373,
       "market": "上市",
       "foreignStreak": 0,
-      "trustStreak": 7,
+      "trustStreak": 3,
       "dealerStreak": 0,
       "jointStreak": 0
     },
@@ -14133,9 +14133,9 @@
       "dealer": 7915,
       "total": 9804,
       "market": "上櫃",
-      "foreignStreak": 2,
+      "foreignStreak": 1,
       "trustStreak": 0,
-      "dealerStreak": 1,
+      "dealerStreak": 2,
       "jointStreak": 0
     },
     "5276": {
@@ -14161,7 +14161,7 @@
       "market": "上櫃",
       "foreignStreak": 0,
       "trustStreak": 0,
-      "dealerStreak": 5,
+      "dealerStreak": 7,
       "jointStreak": 0
     },
     "5283": {
@@ -14195,12 +14195,12 @@
       "name": "界霖",
       "foreign": -236000,
       "trust": 0,
-      "dealer": 0,
+      "dealer": 3000,
       "total": -231000,
       "market": "上市",
       "foreignStreak": 0,
       "trustStreak": 0,
-      "dealerStreak": 0,
+      "dealerStreak": 1,
       "jointStreak": 0
     },
     "5287": {
@@ -14250,9 +14250,9 @@
       "dealer": 26177,
       "total": 79177,
       "market": "上櫃",
-      "foreignStreak": 3,
+      "foreignStreak": 5,
       "trustStreak": 0,
-      "dealerStreak": 1,
+      "dealerStreak": 3,
       "jointStreak": 0
     },
     "5292": {
@@ -14328,9 +14328,9 @@
       "dealer": 69615,
       "total": 945523,
       "market": "上櫃",
-      "foreignStreak": 1,
+      "foreignStreak": 3,
       "trustStreak": 0,
-      "dealerStreak": 1,
+      "dealerStreak": 3,
       "jointStreak": 0
     },
     "5312": {
@@ -14380,7 +14380,7 @@
       "dealer": 9412,
       "total": 182412,
       "market": "上櫃",
-      "foreignStreak": 4,
+      "foreignStreak": 6,
       "trustStreak": 0,
       "dealerStreak": 1,
       "jointStreak": 0
@@ -14419,7 +14419,7 @@
       "dealer": -33032,
       "total": 273930,
       "market": "上櫃",
-      "foreignStreak": 2,
+      "foreignStreak": 1,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -14445,10 +14445,10 @@
       "dealer": -301313,
       "total": 151508476,
       "market": "上櫃",
-      "foreignStreak": 2,
-      "trustStreak": 1,
+      "foreignStreak": 4,
+      "trustStreak": 3,
       "dealerStreak": 0,
-      "jointStreak": 1
+      "jointStreak": 3
     },
     "5351": {
       "code": "5351",
@@ -14458,7 +14458,7 @@
       "dealer": -63002,
       "total": 1555653,
       "market": "上櫃",
-      "foreignStreak": 4,
+      "foreignStreak": 1,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -14523,9 +14523,9 @@
       "dealer": 218736,
       "total": 1031736,
       "market": "上櫃",
-      "foreignStreak": 1,
+      "foreignStreak": 3,
       "trustStreak": 0,
-      "dealerStreak": 1,
+      "dealerStreak": 2,
       "jointStreak": 0
     },
     "5381": {
@@ -14549,7 +14549,7 @@
       "dealer": -12386,
       "total": -1386,
       "market": "上櫃",
-      "foreignStreak": 2,
+      "foreignStreak": 1,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -14601,7 +14601,7 @@
       "dealer": 0,
       "total": 86000,
       "market": "上櫃",
-      "foreignStreak": 1,
+      "foreignStreak": 2,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -14614,7 +14614,7 @@
       "dealer": 0,
       "total": 218058,
       "market": "上櫃",
-      "foreignStreak": 2,
+      "foreignStreak": 1,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -14627,9 +14627,9 @@
       "dealer": 368881,
       "total": 3352597,
       "market": "上櫃",
-      "foreignStreak": 1,
+      "foreignStreak": 2,
       "trustStreak": 0,
-      "dealerStreak": 1,
+      "dealerStreak": 2,
       "jointStreak": 0
     },
     "5426": {
@@ -14640,7 +14640,7 @@
       "dealer": 109,
       "total": 96109,
       "market": "上櫃",
-      "foreignStreak": 2,
+      "foreignStreak": 1,
       "trustStreak": 0,
       "dealerStreak": 1,
       "jointStreak": 0
@@ -14783,7 +14783,7 @@
       "dealer": 0,
       "total": 132000,
       "market": "上櫃",
-      "foreignStreak": 2,
+      "foreignStreak": 4,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -14809,7 +14809,7 @@
       "dealer": 0,
       "total": 1000,
       "market": "上櫃",
-      "foreignStreak": 3,
+      "foreignStreak": 1,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -14876,7 +14876,7 @@
       "market": "上櫃",
       "foreignStreak": 1,
       "trustStreak": 0,
-      "dealerStreak": 2,
+      "dealerStreak": 1,
       "jointStreak": 0
     },
     "5481": {
@@ -14965,7 +14965,7 @@
       "dealer": 0,
       "total": 19020,
       "market": "上櫃",
-      "foreignStreak": 5,
+      "foreignStreak": 7,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -15017,9 +15017,9 @@
       "dealer": 1000,
       "total": 5000,
       "market": "上櫃",
-      "foreignStreak": 3,
+      "foreignStreak": 1,
       "trustStreak": 0,
-      "dealerStreak": 1,
+      "dealerStreak": 2,
       "jointStreak": 0
     },
     "5512": {
@@ -15040,12 +15040,12 @@
       "name": "建國",
       "foreign": 18000,
       "trust": -7000,
-      "dealer": 0,
+      "dealer": 2122,
       "total": 60287,
       "market": "上市",
       "foreignStreak": 1,
       "trustStreak": 0,
-      "dealerStreak": 0,
+      "dealerStreak": 1,
       "jointStreak": 0
     },
     "5519": {
@@ -15095,7 +15095,7 @@
       "dealer": 0,
       "total": 5000,
       "market": "上櫃",
-      "foreignStreak": 3,
+      "foreignStreak": 1,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -15121,7 +15121,7 @@
       "dealer": -1,
       "total": 6999,
       "market": "上櫃",
-      "foreignStreak": 1,
+      "foreignStreak": 2,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -15186,7 +15186,7 @@
       "dealer": -68321,
       "total": -29997,
       "market": "上櫃",
-      "foreignStreak": 2,
+      "foreignStreak": 4,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -15251,7 +15251,7 @@
       "dealer": 0,
       "total": 10,
       "market": "上櫃",
-      "foreignStreak": 3,
+      "foreignStreak": 2,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -15381,7 +15381,7 @@
       "dealer": 0,
       "total": 804464,
       "market": "上市",
-      "foreignStreak": 6,
+      "foreignStreak": 3,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -15498,7 +15498,7 @@
       "dealer": 0,
       "total": 3000,
       "market": "上櫃",
-      "foreignStreak": 2,
+      "foreignStreak": 1,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -15615,7 +15615,7 @@
       "dealer": -269,
       "total": 94731,
       "market": "上櫃",
-      "foreignStreak": 2,
+      "foreignStreak": 1,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -15654,7 +15654,7 @@
       "dealer": 0,
       "total": 60000,
       "market": "上櫃",
-      "foreignStreak": 3,
+      "foreignStreak": 2,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -15771,7 +15771,7 @@
       "dealer": 286,
       "total": 8286,
       "market": "上櫃",
-      "foreignStreak": 1,
+      "foreignStreak": 2,
       "trustStreak": 0,
       "dealerStreak": 1,
       "jointStreak": 0
@@ -15810,9 +15810,9 @@
       "dealer": 18001,
       "total": 335038,
       "market": "上櫃",
-      "foreignStreak": 4,
+      "foreignStreak": 6,
       "trustStreak": 0,
-      "dealerStreak": 1,
+      "dealerStreak": 2,
       "jointStreak": 0
     },
     "6127": {
@@ -15823,9 +15823,9 @@
       "dealer": 169303,
       "total": 4996299,
       "market": "上櫃",
-      "foreignStreak": 3,
+      "foreignStreak": 2,
       "trustStreak": 0,
-      "dealerStreak": 1,
+      "dealerStreak": 3,
       "jointStreak": 0
     },
     "6128": {
@@ -15928,7 +15928,7 @@
       "total": 154196,
       "market": "上市",
       "foreignStreak": 1,
-      "trustStreak": 4,
+      "trustStreak": 3,
       "dealerStreak": 0,
       "jointStreak": 1
     },
@@ -15963,12 +15963,12 @@
       "name": "友勁",
       "foreign": -9000,
       "trust": 0,
-      "dealer": 0,
+      "dealer": 1000,
       "total": -10000,
       "market": "上市",
       "foreignStreak": 0,
       "trustStreak": 0,
-      "dealerStreak": 0,
+      "dealerStreak": 1,
       "jointStreak": 0
     },
     "6143": {
@@ -16005,7 +16005,7 @@
       "dealer": -1876247,
       "total": 6555043,
       "market": "上櫃",
-      "foreignStreak": 3,
+      "foreignStreak": 2,
       "trustStreak": 1,
       "dealerStreak": 0,
       "jointStreak": 1
@@ -16031,9 +16031,9 @@
       "dealer": 1267,
       "total": 35267,
       "market": "上櫃",
-      "foreignStreak": 2,
+      "foreignStreak": 1,
       "trustStreak": 0,
-      "dealerStreak": 4,
+      "dealerStreak": 1,
       "jointStreak": 0
     },
     "6151": {
@@ -16137,7 +16137,7 @@
       "market": "上櫃",
       "foreignStreak": 0,
       "trustStreak": 0,
-      "dealerStreak": 4,
+      "dealerStreak": 1,
       "jointStreak": 0
     },
     "6161": {
@@ -16161,7 +16161,7 @@
       "dealer": -21659,
       "total": 157361,
       "market": "上櫃",
-      "foreignStreak": 2,
+      "foreignStreak": 1,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -16265,9 +16265,9 @@
       "dealer": 189419,
       "total": 468788,
       "market": "上櫃",
-      "foreignStreak": 5,
+      "foreignStreak": 1,
       "trustStreak": 0,
-      "dealerStreak": 5,
+      "dealerStreak": 7,
       "jointStreak": 0
     },
     "6174": {
@@ -16280,7 +16280,7 @@
       "market": "上櫃",
       "foreignStreak": 2,
       "trustStreak": 0,
-      "dealerStreak": 1,
+      "dealerStreak": 2,
       "jointStreak": 0
     },
     "6175": {
@@ -16293,7 +16293,7 @@
       "market": "上櫃",
       "foreignStreak": 0,
       "trustStreak": 0,
-      "dealerStreak": 3,
+      "dealerStreak": 1,
       "jointStreak": 0
     },
     "6176": {
@@ -16356,7 +16356,7 @@
       "dealer": -95502,
       "total": 1167518,
       "market": "上櫃",
-      "foreignStreak": 3,
+      "foreignStreak": 5,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -16410,7 +16410,7 @@
       "market": "上櫃",
       "foreignStreak": 0,
       "trustStreak": 0,
-      "dealerStreak": 5,
+      "dealerStreak": 7,
       "jointStreak": 0
     },
     "6187": {
@@ -16421,10 +16421,10 @@
       "dealer": -16731,
       "total": 243159,
       "market": "上櫃",
-      "foreignStreak": 5,
-      "trustStreak": 3,
+      "foreignStreak": 2,
+      "trustStreak": 1,
       "dealerStreak": 0,
-      "jointStreak": 3
+      "jointStreak": 1
     },
     "6188": {
       "code": "6188",
@@ -16447,7 +16447,7 @@
       "dealer": 0,
       "total": 174622,
       "market": "上市",
-      "foreignStreak": 3,
+      "foreignStreak": 5,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -16460,7 +16460,7 @@
       "dealer": 223872,
       "total": 867877,
       "market": "上櫃",
-      "foreignStreak": 1,
+      "foreignStreak": 2,
       "trustStreak": 0,
       "dealerStreak": 1,
       "jointStreak": 0
@@ -16486,7 +16486,7 @@
       "dealer": 0,
       "total": 11073,
       "market": "上市",
-      "foreignStreak": 3,
+      "foreignStreak": 7,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -16512,7 +16512,7 @@
       "dealer": 0,
       "total": 1000,
       "market": "上櫃",
-      "foreignStreak": 2,
+      "foreignStreak": 1,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -16564,9 +16564,9 @@
       "dealer": 851,
       "total": 104851,
       "market": "上櫃",
-      "foreignStreak": 2,
+      "foreignStreak": 1,
       "trustStreak": 0,
-      "dealerStreak": 4,
+      "dealerStreak": 1,
       "jointStreak": 0
     },
     "6201": {
@@ -16590,7 +16590,7 @@
       "dealer": 0,
       "total": 52385,
       "market": "上市",
-      "foreignStreak": 3,
+      "foreignStreak": 4,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -16657,7 +16657,7 @@
       "market": "上櫃",
       "foreignStreak": 0,
       "trustStreak": 0,
-      "dealerStreak": 1,
+      "dealerStreak": 3,
       "jointStreak": 0
     },
     "6208": {
@@ -16668,7 +16668,7 @@
       "dealer": 0,
       "total": 55980,
       "market": "上櫃",
-      "foreignStreak": 1,
+      "foreignStreak": 3,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -16811,9 +16811,9 @@
       "dealer": 380,
       "total": 12380,
       "market": "上櫃",
-      "foreignStreak": 2,
+      "foreignStreak": 4,
       "trustStreak": 0,
-      "dealerStreak": 5,
+      "dealerStreak": 7,
       "jointStreak": 0
     },
     "6221": {
@@ -16824,7 +16824,7 @@
       "dealer": 0,
       "total": 63000,
       "market": "上櫃",
-      "foreignStreak": 3,
+      "foreignStreak": 1,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -16838,7 +16838,7 @@
       "total": 50200,
       "market": "上櫃",
       "foreignStreak": 0,
-      "trustStreak": 3,
+      "trustStreak": 2,
       "dealerStreak": 0,
       "jointStreak": 0
     },
@@ -16889,9 +16889,9 @@
       "dealer": 192631,
       "total": 1096631,
       "market": "上櫃",
-      "foreignStreak": 5,
+      "foreignStreak": 7,
       "trustStreak": 0,
-      "dealerStreak": 3,
+      "dealerStreak": 5,
       "jointStreak": 0
     },
     "6228": {
@@ -16902,7 +16902,7 @@
       "dealer": 0,
       "total": 1000,
       "market": "上櫃",
-      "foreignStreak": 2,
+      "foreignStreak": 1,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -16915,7 +16915,7 @@
       "dealer": 0,
       "total": 53000,
       "market": "上櫃",
-      "foreignStreak": 1,
+      "foreignStreak": 2,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -16941,7 +16941,7 @@
       "dealer": -12606,
       "total": 38394,
       "market": "上櫃",
-      "foreignStreak": 1,
+      "foreignStreak": 2,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -16954,7 +16954,7 @@
       "dealer": 0,
       "total": 49000,
       "market": "上櫃",
-      "foreignStreak": 1,
+      "foreignStreak": 3,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -16995,7 +16995,7 @@
       "market": "上櫃",
       "foreignStreak": 0,
       "trustStreak": 0,
-      "dealerStreak": 3,
+      "dealerStreak": 5,
       "jointStreak": 0
     },
     "6239": {
@@ -17003,12 +17003,12 @@
       "name": "力成",
       "foreign": -2734302,
       "trust": 94000,
-      "dealer": 0,
+      "dealer": 148224,
       "total": -1834154,
       "market": "上市",
       "foreignStreak": 0,
       "trustStreak": 1,
-      "dealerStreak": 0,
+      "dealerStreak": 1,
       "jointStreak": 0
     },
     "6240": {
@@ -17045,7 +17045,7 @@
       "dealer": 0,
       "total": 2000,
       "market": "上櫃",
-      "foreignStreak": 3,
+      "foreignStreak": 1,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -17071,7 +17071,7 @@
       "dealer": -6923,
       "total": 124077,
       "market": "上櫃",
-      "foreignStreak": 1,
+      "foreignStreak": 3,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -17110,7 +17110,7 @@
       "dealer": 0,
       "total": 1000,
       "market": "上櫃",
-      "foreignStreak": 1,
+      "foreignStreak": 3,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -17136,9 +17136,9 @@
       "dealer": 1000,
       "total": 27975,
       "market": "上櫃",
-      "foreignStreak": 2,
+      "foreignStreak": 1,
       "trustStreak": 0,
-      "dealerStreak": 3,
+      "dealerStreak": 1,
       "jointStreak": 0
     },
     "6261": {
@@ -17149,7 +17149,7 @@
       "dealer": 11476,
       "total": 99491,
       "market": "上櫃",
-      "foreignStreak": 1,
+      "foreignStreak": 2,
       "trustStreak": 0,
       "dealerStreak": 1,
       "jointStreak": 0
@@ -17162,7 +17162,7 @@
       "dealer": 0,
       "total": 8000,
       "market": "上櫃",
-      "foreignStreak": 1,
+      "foreignStreak": 2,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -17190,7 +17190,7 @@
       "market": "上櫃",
       "foreignStreak": 1,
       "trustStreak": 0,
-      "dealerStreak": 2,
+      "dealerStreak": 1,
       "jointStreak": 0
     },
     "6266": {
@@ -17227,7 +17227,7 @@
       "dealer": 0,
       "total": 89000,
       "market": "上櫃",
-      "foreignStreak": 3,
+      "foreignStreak": 1,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -17268,7 +17268,7 @@
       "market": "上櫃",
       "foreignStreak": 0,
       "trustStreak": 0,
-      "dealerStreak": 4,
+      "dealerStreak": 6,
       "jointStreak": 0
     },
     "6275": {
@@ -17292,7 +17292,7 @@
       "dealer": -2,
       "total": 1998,
       "market": "上櫃",
-      "foreignStreak": 3,
+      "foreignStreak": 1,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -17367,12 +17367,12 @@
       "name": "淳安",
       "foreign": 3000,
       "trust": 0,
-      "dealer": 0,
+      "dealer": 5000,
       "total": -1000,
       "market": "上市",
       "foreignStreak": 1,
       "trustStreak": 0,
-      "dealerStreak": 0,
+      "dealerStreak": 1,
       "jointStreak": 0
     },
     "6284": {
@@ -17383,9 +17383,9 @@
       "dealer": 229,
       "total": 336120,
       "market": "上櫃",
-      "foreignStreak": 5,
+      "foreignStreak": 7,
       "trustStreak": 0,
-      "dealerStreak": 5,
+      "dealerStreak": 7,
       "jointStreak": 0
     },
     "6285": {
@@ -17435,7 +17435,7 @@
       "dealer": 0,
       "total": 63001,
       "market": "上櫃",
-      "foreignStreak": 1,
+      "foreignStreak": 3,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -17448,9 +17448,9 @@
       "dealer": 18,
       "total": 1018,
       "market": "上櫃",
-      "foreignStreak": 1,
+      "foreignStreak": 3,
       "trustStreak": 0,
-      "dealerStreak": 1,
+      "dealerStreak": 2,
       "jointStreak": 0
     },
     "6405": {
@@ -17487,7 +17487,7 @@
       "dealer": -2996,
       "total": 104252,
       "market": "上櫃",
-      "foreignStreak": 1,
+      "foreignStreak": 3,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -17527,7 +17527,7 @@
       "total": 30843,
       "market": "上市",
       "foreignStreak": 0,
-      "trustStreak": 7,
+      "trustStreak": 3,
       "dealerStreak": 0,
       "jointStreak": 0
     },
@@ -17578,7 +17578,7 @@
       "dealer": -10975,
       "total": 17025,
       "market": "上櫃",
-      "foreignStreak": 4,
+      "foreignStreak": 6,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -17696,7 +17696,7 @@
       "total": -120453,
       "market": "上市",
       "foreignStreak": 0,
-      "trustStreak": 1,
+      "trustStreak": 3,
       "dealerStreak": 0,
       "jointStreak": 0
     },
@@ -17734,7 +17734,7 @@
       "dealer": 0,
       "total": 645706,
       "market": "上市",
-      "foreignStreak": 3,
+      "foreignStreak": 5,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -17773,7 +17773,7 @@
       "dealer": -600,
       "total": 36400,
       "market": "上櫃",
-      "foreignStreak": 4,
+      "foreignStreak": 1,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -17786,9 +17786,9 @@
       "dealer": 45693,
       "total": 589693,
       "market": "上櫃",
-      "foreignStreak": 5,
+      "foreignStreak": 7,
       "trustStreak": 0,
-      "dealerStreak": 1,
+      "dealerStreak": 2,
       "jointStreak": 0
     },
     "6464": {
@@ -17825,7 +17825,7 @@
       "dealer": -2400,
       "total": 393600,
       "market": "上櫃",
-      "foreignStreak": 3,
+      "foreignStreak": 1,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -17838,9 +17838,9 @@
       "dealer": 44,
       "total": 15044,
       "market": "上櫃",
-      "foreignStreak": 3,
+      "foreignStreak": 1,
       "trustStreak": 0,
-      "dealerStreak": 2,
+      "dealerStreak": 1,
       "jointStreak": 0
     },
     "6472": {
@@ -17930,8 +17930,8 @@
       "total": -594234,
       "market": "上櫃",
       "foreignStreak": 0,
-      "trustStreak": 2,
-      "dealerStreak": 3,
+      "trustStreak": 4,
+      "dealerStreak": 1,
       "jointStreak": 0
     },
     "6491": {
@@ -17957,7 +17957,7 @@
       "market": "上櫃",
       "foreignStreak": 0,
       "trustStreak": 0,
-      "dealerStreak": 1,
+      "dealerStreak": 2,
       "jointStreak": 0
     },
     "6494": {
@@ -17983,7 +17983,7 @@
       "market": "上櫃",
       "foreignStreak": 0,
       "trustStreak": 0,
-      "dealerStreak": 2,
+      "dealerStreak": 4,
       "jointStreak": 0
     },
     "6499": {
@@ -17994,7 +17994,7 @@
       "dealer": -231,
       "total": 209769,
       "market": "上櫃",
-      "foreignStreak": 2,
+      "foreignStreak": 1,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -18033,7 +18033,7 @@
       "dealer": 0,
       "total": 33000,
       "market": "上櫃",
-      "foreignStreak": 5,
+      "foreignStreak": 1,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -18059,9 +18059,9 @@
       "dealer": 90517,
       "total": 1518517,
       "market": "上櫃",
-      "foreignStreak": 3,
+      "foreignStreak": 1,
       "trustStreak": 0,
-      "dealerStreak": 3,
+      "dealerStreak": 1,
       "jointStreak": 0
     },
     "6510": {
@@ -18072,7 +18072,7 @@
       "dealer": -24342,
       "total": 59153,
       "market": "上櫃",
-      "foreignStreak": 2,
+      "foreignStreak": 1,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -18098,7 +18098,7 @@
       "dealer": 0,
       "total": 5000,
       "market": "上櫃",
-      "foreignStreak": 1,
+      "foreignStreak": 3,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -18111,7 +18111,7 @@
       "dealer": 383,
       "total": 35345,
       "market": "上櫃",
-      "foreignStreak": 1,
+      "foreignStreak": 2,
       "trustStreak": 0,
       "dealerStreak": 2,
       "jointStreak": 0
@@ -18137,7 +18137,7 @@
       "dealer": 0,
       "total": 338144,
       "market": "上市",
-      "foreignStreak": 4,
+      "foreignStreak": 3,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -18163,7 +18163,7 @@
       "dealer": 0,
       "total": 3000,
       "market": "上櫃",
-      "foreignStreak": 2,
+      "foreignStreak": 4,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -18254,9 +18254,9 @@
       "dealer": 3354,
       "total": 67108,
       "market": "上櫃",
-      "foreignStreak": 1,
+      "foreignStreak": 3,
       "trustStreak": 0,
-      "dealerStreak": 5,
+      "dealerStreak": 7,
       "jointStreak": 0
     },
     "6541": {
@@ -18295,7 +18295,7 @@
       "market": "上櫃",
       "foreignStreak": 1,
       "trustStreak": 0,
-      "dealerStreak": 3,
+      "dealerStreak": 1,
       "jointStreak": 0
     },
     "6547": {
@@ -18386,7 +18386,7 @@
       "market": "上櫃",
       "foreignStreak": 2,
       "trustStreak": 0,
-      "dealerStreak": 2,
+      "dealerStreak": 1,
       "jointStreak": 0
     },
     "6568": {
@@ -18397,7 +18397,7 @@
       "dealer": 13871,
       "total": 59789,
       "market": "上櫃",
-      "foreignStreak": 3,
+      "foreignStreak": 2,
       "trustStreak": 0,
       "dealerStreak": 1,
       "jointStreak": 0
@@ -18423,7 +18423,7 @@
       "dealer": 0,
       "total": 13000,
       "market": "上櫃",
-      "foreignStreak": 3,
+      "foreignStreak": 5,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -18462,7 +18462,7 @@
       "dealer": 2208,
       "total": 129297,
       "market": "上櫃",
-      "foreignStreak": 2,
+      "foreignStreak": 1,
       "trustStreak": 0,
       "dealerStreak": 1,
       "jointStreak": 0
@@ -18592,7 +18592,7 @@
       "dealer": 0,
       "total": 1000,
       "market": "上櫃",
-      "foreignStreak": 1,
+      "foreignStreak": 2,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -18709,9 +18709,9 @@
       "dealer": 11472,
       "total": 148472,
       "market": "上櫃",
-      "foreignStreak": 4,
+      "foreignStreak": 6,
       "trustStreak": 0,
-      "dealerStreak": 1,
+      "dealerStreak": 2,
       "jointStreak": 0
     },
     "6612": {
@@ -18737,7 +18737,7 @@
       "market": "上櫃",
       "foreignStreak": 0,
       "trustStreak": 0,
-      "dealerStreak": 2,
+      "dealerStreak": 4,
       "jointStreak": 0
     },
     "6614": {
@@ -18761,7 +18761,7 @@
       "dealer": 0,
       "total": 2000,
       "market": "上櫃",
-      "foreignStreak": 2,
+      "foreignStreak": 4,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -18802,7 +18802,7 @@
       "market": "上櫃",
       "foreignStreak": 1,
       "trustStreak": 0,
-      "dealerStreak": 1,
+      "dealerStreak": 3,
       "jointStreak": 0
     },
     "6624": {
@@ -18813,7 +18813,7 @@
       "dealer": 0,
       "total": 1000,
       "market": "上櫃",
-      "foreignStreak": 2,
+      "foreignStreak": 1,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -18866,7 +18866,7 @@
       "total": 105752,
       "market": "上櫃",
       "foreignStreak": 1,
-      "trustStreak": 5,
+      "trustStreak": 2,
       "dealerStreak": 0,
       "jointStreak": 1
     },
@@ -18930,7 +18930,7 @@
       "dealer": 0,
       "total": 1000,
       "market": "上櫃",
-      "foreignStreak": 5,
+      "foreignStreak": 1,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -19010,7 +19010,7 @@
       "market": "上櫃",
       "foreignStreak": 1,
       "trustStreak": 0,
-      "dealerStreak": 3,
+      "dealerStreak": 1,
       "jointStreak": 0
     },
     "6666": {
@@ -19138,9 +19138,9 @@
       "dealer": 18353,
       "total": 56556,
       "market": "上櫃",
-      "foreignStreak": 5,
+      "foreignStreak": 1,
       "trustStreak": 0,
-      "dealerStreak": 1,
+      "dealerStreak": 3,
       "jointStreak": 0
     },
     "6684": {
@@ -19177,7 +19177,7 @@
       "dealer": 0,
       "total": 50,
       "market": "上櫃",
-      "foreignStreak": 1,
+      "foreignStreak": 3,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -19187,12 +19187,12 @@
       "name": "洋基工程",
       "foreign": -93083,
       "trust": 0,
-      "dealer": 0,
+      "dealer": 207,
       "total": -92028,
       "market": "上市",
       "foreignStreak": 0,
       "trustStreak": 0,
-      "dealerStreak": 0,
+      "dealerStreak": 1,
       "jointStreak": 0
     },
     "6692": {
@@ -19242,7 +19242,7 @@
       "dealer": 0,
       "total": 6000,
       "market": "上櫃",
-      "foreignStreak": 1,
+      "foreignStreak": 2,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -19252,12 +19252,12 @@
       "name": "旭暉應材",
       "foreign": 32000,
       "trust": 0,
-      "dealer": 0,
+      "dealer": 15608,
       "total": 16392,
       "market": "上市",
       "foreignStreak": 2,
       "trustStreak": 0,
-      "dealerStreak": 0,
+      "dealerStreak": 1,
       "jointStreak": 0
     },
     "6703": {
@@ -19268,7 +19268,7 @@
       "dealer": 0,
       "total": 14853,
       "market": "上櫃",
-      "foreignStreak": 5,
+      "foreignStreak": 2,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -19309,7 +19309,7 @@
       "market": "上櫃",
       "foreignStreak": 0,
       "trustStreak": 0,
-      "dealerStreak": 2,
+      "dealerStreak": 1,
       "jointStreak": 0
     },
     "6715": {
@@ -19361,7 +19361,7 @@
       "market": "上櫃",
       "foreignStreak": 1,
       "trustStreak": 0,
-      "dealerStreak": 2,
+      "dealerStreak": 4,
       "jointStreak": 0
     },
     "6722": {
@@ -19385,7 +19385,7 @@
       "dealer": -897,
       "total": 1150,
       "market": "上櫃",
-      "foreignStreak": 1,
+      "foreignStreak": 3,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -19437,7 +19437,7 @@
       "dealer": -163,
       "total": 18837,
       "market": "上櫃",
-      "foreignStreak": 1,
+      "foreignStreak": 3,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -19450,7 +19450,7 @@
       "dealer": -52000,
       "total": 11237,
       "market": "上櫃",
-      "foreignStreak": 1,
+      "foreignStreak": 3,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -19463,7 +19463,7 @@
       "dealer": -72,
       "total": 26964,
       "market": "上櫃",
-      "foreignStreak": 2,
+      "foreignStreak": 1,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -19606,7 +19606,7 @@
       "dealer": 0,
       "total": 11000,
       "market": "上櫃",
-      "foreignStreak": 1,
+      "foreignStreak": 3,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -19711,7 +19711,7 @@
       "total": -140169,
       "market": "上市",
       "foreignStreak": 0,
-      "trustStreak": 4,
+      "trustStreak": 3,
       "dealerStreak": 0,
       "jointStreak": 0
     },
@@ -19723,7 +19723,7 @@
       "dealer": 0,
       "total": 18878,
       "market": "上櫃",
-      "foreignStreak": 3,
+      "foreignStreak": 1,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -19736,7 +19736,7 @@
       "dealer": -3047,
       "total": 38008,
       "market": "上櫃",
-      "foreignStreak": 1,
+      "foreignStreak": 3,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -19750,7 +19750,7 @@
       "total": -884936,
       "market": "上市",
       "foreignStreak": 0,
-      "trustStreak": 4,
+      "trustStreak": 3,
       "dealerStreak": 0,
       "jointStreak": 0
     },
@@ -19905,7 +19905,7 @@
       "dealer": -392,
       "total": 27608,
       "market": "上櫃",
-      "foreignStreak": 1,
+      "foreignStreak": 3,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -19918,7 +19918,7 @@
       "dealer": -27000,
       "total": 59000,
       "market": "上櫃",
-      "foreignStreak": 2,
+      "foreignStreak": 1,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -19967,12 +19967,12 @@
       "name": "邁科",
       "foreign": 264606,
       "trust": -45000,
-      "dealer": 0,
+      "dealer": 8444,
       "total": 201807,
       "market": "上市",
-      "foreignStreak": 6,
+      "foreignStreak": 3,
       "trustStreak": 0,
-      "dealerStreak": 0,
+      "dealerStreak": 1,
       "jointStreak": 0
     },
     "6834": {
@@ -20035,7 +20035,7 @@
       "dealer": -4010,
       "total": -1010,
       "market": "上櫃",
-      "foreignStreak": 1,
+      "foreignStreak": 3,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -20204,7 +20204,7 @@
       "dealer": 0,
       "total": 3000,
       "market": "上櫃",
-      "foreignStreak": 1,
+      "foreignStreak": 2,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -20230,7 +20230,7 @@
       "dealer": -2,
       "total": 21020,
       "market": "上櫃",
-      "foreignStreak": 1,
+      "foreignStreak": 2,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -20256,7 +20256,7 @@
       "dealer": 0,
       "total": 54000,
       "market": "上市",
-      "foreignStreak": 4,
+      "foreignStreak": 3,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -20297,7 +20297,7 @@
       "market": "上櫃",
       "foreignStreak": 0,
       "trustStreak": 0,
-      "dealerStreak": 1,
+      "dealerStreak": 2,
       "jointStreak": 0
     },
     "6895": {
@@ -20438,7 +20438,7 @@
       "dealer": 0,
       "total": 6000,
       "market": "上櫃",
-      "foreignStreak": 1,
+      "foreignStreak": 2,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -20531,7 +20531,7 @@
       "market": "上櫃",
       "foreignStreak": 0,
       "trustStreak": 0,
-      "dealerStreak": 4,
+      "dealerStreak": 6,
       "jointStreak": 0
     },
     "6923": {
@@ -20568,7 +20568,7 @@
       "dealer": 0,
       "total": 13000,
       "market": "上櫃",
-      "foreignStreak": 3,
+      "foreignStreak": 1,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -20726,7 +20726,7 @@
       "market": "上櫃",
       "foreignStreak": 0,
       "trustStreak": 0,
-      "dealerStreak": 4,
+      "dealerStreak": 2,
       "jointStreak": 0
     },
     "6955": {
@@ -20932,7 +20932,7 @@
       "dealer": 0,
       "total": 6000,
       "market": "上櫃",
-      "foreignStreak": 5,
+      "foreignStreak": 1,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -20986,7 +20986,7 @@
       "market": "上櫃",
       "foreignStreak": 0,
       "trustStreak": 0,
-      "dealerStreak": 1,
+      "dealerStreak": 2,
       "jointStreak": 0
     },
     "7703": {
@@ -20997,7 +20997,7 @@
       "dealer": 4,
       "total": 8012,
       "market": "上櫃",
-      "foreignStreak": 3,
+      "foreignStreak": 1,
       "trustStreak": 0,
       "dealerStreak": 1,
       "jointStreak": 0
@@ -21049,9 +21049,9 @@
       "dealer": 2377,
       "total": 55386,
       "market": "上櫃",
-      "foreignStreak": 3,
+      "foreignStreak": 1,
       "trustStreak": 0,
-      "dealerStreak": 2,
+      "dealerStreak": 1,
       "jointStreak": 0
     },
     "7711": {
@@ -21192,7 +21192,7 @@
       "dealer": 0,
       "total": 11000,
       "market": "上櫃",
-      "foreignStreak": 2,
+      "foreignStreak": 1,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -21232,7 +21232,7 @@
       "total": 44950,
       "market": "上櫃",
       "foreignStreak": 1,
-      "trustStreak": 2,
+      "trustStreak": 1,
       "dealerStreak": 0,
       "jointStreak": 1
     },
@@ -21297,7 +21297,7 @@
       "total": 87529,
       "market": "上市",
       "foreignStreak": 1,
-      "trustStreak": 4,
+      "trustStreak": 3,
       "dealerStreak": 0,
       "jointStreak": 1
     },
@@ -21322,9 +21322,9 @@
       "dealer": 26103,
       "total": 31898,
       "market": "上櫃",
-      "foreignStreak": 3,
+      "foreignStreak": 1,
       "trustStreak": 0,
-      "dealerStreak": 2,
+      "dealerStreak": 4,
       "jointStreak": 0
     },
     "7753": {
@@ -21335,7 +21335,7 @@
       "dealer": 0,
       "total": 1000,
       "market": "上櫃",
-      "foreignStreak": 2,
+      "foreignStreak": 1,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -21426,7 +21426,7 @@
       "dealer": -35000,
       "total": 128000,
       "market": "上櫃",
-      "foreignStreak": 5,
+      "foreignStreak": 1,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -21439,9 +21439,9 @@
       "dealer": 23389,
       "total": 184389,
       "market": "上櫃",
-      "foreignStreak": 2,
+      "foreignStreak": 1,
       "trustStreak": 0,
-      "dealerStreak": 4,
+      "dealerStreak": 6,
       "jointStreak": 0
     },
     "7780": {
@@ -21517,7 +21517,7 @@
       "dealer": -8695,
       "total": 6305,
       "market": "上櫃",
-      "foreignStreak": 3,
+      "foreignStreak": 2,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -21569,7 +21569,7 @@
       "dealer": -315,
       "total": 22685,
       "market": "上櫃",
-      "foreignStreak": 4,
+      "foreignStreak": 1,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -21582,7 +21582,7 @@
       "dealer": 61256,
       "total": 137256,
       "market": "上櫃",
-      "foreignStreak": 1,
+      "foreignStreak": 2,
       "trustStreak": 0,
       "dealerStreak": 1,
       "jointStreak": 0
@@ -21618,12 +21618,12 @@
       "name": "神數",
       "foreign": 24000,
       "trust": 0,
-      "dealer": 0,
+      "dealer": 2000,
       "total": 22000,
       "market": "上市",
       "foreignStreak": 3,
       "trustStreak": 0,
-      "dealerStreak": 0,
+      "dealerStreak": 1,
       "jointStreak": 0
     },
     "7822": {
@@ -21634,7 +21634,7 @@
       "dealer": 0,
       "total": 27282,
       "market": "上市",
-      "foreignStreak": 4,
+      "foreignStreak": 3,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -21738,7 +21738,7 @@
       "dealer": 4486,
       "total": 146205,
       "market": "上櫃",
-      "foreignStreak": 5,
+      "foreignStreak": 2,
       "trustStreak": 0,
       "dealerStreak": 1,
       "jointStreak": 0
@@ -21803,9 +21803,9 @@
       "dealer": 116,
       "total": 11116,
       "market": "上櫃",
-      "foreignStreak": 1,
+      "foreignStreak": 3,
       "trustStreak": 0,
-      "dealerStreak": 2,
+      "dealerStreak": 4,
       "jointStreak": 0
     },
     "8039": {
@@ -21829,9 +21829,9 @@
       "dealer": 21181,
       "total": 469321,
       "market": "上櫃",
-      "foreignStreak": 3,
+      "foreignStreak": 5,
       "trustStreak": 0,
-      "dealerStreak": 2,
+      "dealerStreak": 1,
       "jointStreak": 0
     },
     "8042": {
@@ -21842,7 +21842,7 @@
       "dealer": 23000,
       "total": 409000,
       "market": "上櫃",
-      "foreignStreak": 5,
+      "foreignStreak": 1,
       "trustStreak": 0,
       "dealerStreak": 1,
       "jointStreak": 0
@@ -21920,7 +21920,7 @@
       "dealer": 2224,
       "total": 81224,
       "market": "上櫃",
-      "foreignStreak": 1,
+      "foreignStreak": 2,
       "trustStreak": 0,
       "dealerStreak": 1,
       "jointStreak": 0
@@ -21935,7 +21935,7 @@
       "market": "上櫃",
       "foreignStreak": 0,
       "trustStreak": 0,
-      "dealerStreak": 1,
+      "dealerStreak": 2,
       "jointStreak": 0
     },
     "8050": {
@@ -21972,7 +21972,7 @@
       "dealer": 0,
       "total": 15000,
       "market": "上櫃",
-      "foreignStreak": 1,
+      "foreignStreak": 2,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -21987,7 +21987,7 @@
       "market": "上櫃",
       "foreignStreak": 0,
       "trustStreak": 0,
-      "dealerStreak": 4,
+      "dealerStreak": 2,
       "jointStreak": 0
     },
     "8066": {
@@ -22024,9 +22024,9 @@
       "dealer": 143484,
       "total": 1380066,
       "market": "上櫃",
-      "foreignStreak": 3,
+      "foreignStreak": 5,
       "trustStreak": 0,
-      "dealerStreak": 5,
+      "dealerStreak": 1,
       "jointStreak": 0
     },
     "8070": {
@@ -22050,7 +22050,7 @@
       "dealer": 0,
       "total": 210027,
       "market": "上櫃",
-      "foreignStreak": 1,
+      "foreignStreak": 2,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -22076,9 +22076,9 @@
       "dealer": 22462,
       "total": 190490,
       "market": "上櫃",
-      "foreignStreak": 1,
+      "foreignStreak": 2,
       "trustStreak": 0,
-      "dealerStreak": 3,
+      "dealerStreak": 1,
       "jointStreak": 0
     },
     "8076": {
@@ -22154,7 +22154,7 @@
       "dealer": -2,
       "total": 65998,
       "market": "上櫃",
-      "foreignStreak": 1,
+      "foreignStreak": 2,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -22169,7 +22169,7 @@
       "market": "上櫃",
       "foreignStreak": 0,
       "trustStreak": 0,
-      "dealerStreak": 2,
+      "dealerStreak": 1,
       "jointStreak": 0
     },
     "8087": {
@@ -22206,7 +22206,7 @@
       "dealer": -1,
       "total": 96999,
       "market": "上櫃",
-      "foreignStreak": 1,
+      "foreignStreak": 2,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -22219,7 +22219,7 @@
       "dealer": -33701,
       "total": 588315,
       "market": "上櫃",
-      "foreignStreak": 2,
+      "foreignStreak": 1,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -22232,7 +22232,7 @@
       "dealer": 587,
       "total": 160587,
       "market": "上櫃",
-      "foreignStreak": 3,
+      "foreignStreak": 1,
       "trustStreak": 0,
       "dealerStreak": 1,
       "jointStreak": 0
@@ -22247,7 +22247,7 @@
       "market": "上櫃",
       "foreignStreak": 1,
       "trustStreak": 0,
-      "dealerStreak": 2,
+      "dealerStreak": 1,
       "jointStreak": 0
     },
     "8097": {
@@ -22258,7 +22258,7 @@
       "dealer": -1475,
       "total": 45525,
       "market": "上櫃",
-      "foreignStreak": 5,
+      "foreignStreak": 7,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -22349,7 +22349,7 @@
       "dealer": -3000,
       "total": 21000,
       "market": "上櫃",
-      "foreignStreak": 4,
+      "foreignStreak": 1,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -22440,7 +22440,7 @@
       "dealer": 6832,
       "total": 107412,
       "market": "上櫃",
-      "foreignStreak": 5,
+      "foreignStreak": 7,
       "trustStreak": 0,
       "dealerStreak": 1,
       "jointStreak": 0
@@ -22479,7 +22479,7 @@
       "dealer": 0,
       "total": 72093,
       "market": "上市",
-      "foreignStreak": 5,
+      "foreignStreak": 3,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -22531,7 +22531,7 @@
       "dealer": -16047,
       "total": 59953,
       "market": "上櫃",
-      "foreignStreak": 1,
+      "foreignStreak": 2,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -22571,7 +22571,7 @@
       "total": 112825,
       "market": "上市",
       "foreignStreak": 0,
-      "trustStreak": 7,
+      "trustStreak": 3,
       "dealerStreak": 0,
       "jointStreak": 0
     },
@@ -22622,7 +22622,7 @@
       "dealer": -48998,
       "total": 10002,
       "market": "上櫃",
-      "foreignStreak": 3,
+      "foreignStreak": 1,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -22648,7 +22648,7 @@
       "dealer": 276,
       "total": 195276,
       "market": "上櫃",
-      "foreignStreak": 1,
+      "foreignStreak": 2,
       "trustStreak": 0,
       "dealerStreak": 1,
       "jointStreak": 0
@@ -22674,7 +22674,7 @@
       "dealer": -141111,
       "total": -65111,
       "market": "上櫃",
-      "foreignStreak": 5,
+      "foreignStreak": 7,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -22739,7 +22739,7 @@
       "dealer": 0,
       "total": 104000,
       "market": "上櫃",
-      "foreignStreak": 1,
+      "foreignStreak": 2,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -22791,7 +22791,7 @@
       "dealer": 9,
       "total": 4009,
       "market": "上櫃",
-      "foreignStreak": 2,
+      "foreignStreak": 1,
       "trustStreak": 0,
       "dealerStreak": 2,
       "jointStreak": 0
@@ -22804,7 +22804,7 @@
       "dealer": -72002,
       "total": 1246699,
       "market": "上櫃",
-      "foreignStreak": 1,
+      "foreignStreak": 2,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -22827,12 +22827,12 @@
       "name": "羅昇",
       "foreign": -242000,
       "trust": 0,
-      "dealer": 0,
+      "dealer": 47000,
       "total": -243151,
       "market": "上市",
       "foreignStreak": 0,
       "trustStreak": 0,
-      "dealerStreak": 0,
+      "dealerStreak": 1,
       "jointStreak": 0
     },
     "8383": {
@@ -22858,7 +22858,7 @@
       "market": "上櫃",
       "foreignStreak": 0,
       "trustStreak": 0,
-      "dealerStreak": 5,
+      "dealerStreak": 2,
       "jointStreak": 0
     },
     "8401": {
@@ -22882,7 +22882,7 @@
       "dealer": 0,
       "total": 82000,
       "market": "上櫃",
-      "foreignStreak": 3,
+      "foreignStreak": 1,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -22947,7 +22947,7 @@
       "dealer": -321001,
       "total": -88001,
       "market": "上櫃",
-      "foreignStreak": 1,
+      "foreignStreak": 3,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -23051,7 +23051,7 @@
       "dealer": 0,
       "total": 2000,
       "market": "上櫃",
-      "foreignStreak": 1,
+      "foreignStreak": 2,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -23155,7 +23155,7 @@
       "dealer": -452,
       "total": 17748,
       "market": "上櫃",
-      "foreignStreak": 2,
+      "foreignStreak": 4,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -23259,7 +23259,7 @@
       "dealer": 0,
       "total": 3000,
       "market": "上櫃",
-      "foreignStreak": 1,
+      "foreignStreak": 3,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -23389,7 +23389,7 @@
       "dealer": 0,
       "total": 1000,
       "market": "上櫃",
-      "foreignStreak": 1,
+      "foreignStreak": 3,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -23402,7 +23402,7 @@
       "dealer": 414,
       "total": 9414,
       "market": "上櫃",
-      "foreignStreak": 3,
+      "foreignStreak": 1,
       "trustStreak": 0,
       "dealerStreak": 1,
       "jointStreak": 0
@@ -23415,7 +23415,7 @@
       "dealer": 0,
       "total": 23000,
       "market": "上櫃",
-      "foreignStreak": 1,
+      "foreignStreak": 3,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -23480,7 +23480,7 @@
       "dealer": 0,
       "total": 103039,
       "market": "上櫃",
-      "foreignStreak": 2,
+      "foreignStreak": 1,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -23545,9 +23545,9 @@
       "dealer": 182255,
       "total": 473518,
       "market": "上櫃",
-      "foreignStreak": 2,
+      "foreignStreak": 1,
       "trustStreak": 0,
-      "dealerStreak": 5,
+      "dealerStreak": 1,
       "jointStreak": 0
     },
     "8933": {
@@ -23560,7 +23560,7 @@
       "market": "上櫃",
       "foreignStreak": 0,
       "trustStreak": 0,
-      "dealerStreak": 2,
+      "dealerStreak": 1,
       "jointStreak": 0
     },
     "8935": {
@@ -23571,7 +23571,7 @@
       "dealer": -178,
       "total": 28726,
       "market": "上櫃",
-      "foreignStreak": 3,
+      "foreignStreak": 5,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -23597,7 +23597,7 @@
       "dealer": 0,
       "total": 9000,
       "market": "上櫃",
-      "foreignStreak": 1,
+      "foreignStreak": 2,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -23620,12 +23620,12 @@
       "name": "新天地",
       "foreign": 1000,
       "trust": 0,
-      "dealer": 0,
-      "total": 1000,
+      "dealer": 1000,
+      "total": 2000,
       "market": "上市",
       "foreignStreak": 1,
       "trustStreak": 0,
-      "dealerStreak": 0,
+      "dealerStreak": 1,
       "jointStreak": 0
     },
     "8942": {
@@ -23740,7 +23740,7 @@
       "dealer": 0,
       "total": 82000,
       "market": "上市",
-      "foreignStreak": 4,
+      "foreignStreak": 3,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -23818,7 +23818,7 @@
       "dealer": 0,
       "total": 246766,
       "market": "上市",
-      "foreignStreak": 4,
+      "foreignStreak": 3,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -23844,7 +23844,7 @@
       "dealer": 0,
       "total": 13000,
       "market": "上市",
-      "foreignStreak": 5,
+      "foreignStreak": 3,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -23971,12 +23971,12 @@
       "name": "中鼎",
       "foreign": -1455900,
       "trust": 0,
-      "dealer": 0,
+      "dealer": 66318,
       "total": -1472218,
       "market": "上市",
       "foreignStreak": 0,
       "trustStreak": 0,
-      "dealerStreak": 0,
+      "dealerStreak": 1,
       "jointStreak": 0
     },
     "9934": {
@@ -24247,7 +24247,7 @@
       "dealer": 0,
       "total": 72446,
       "market": "上市",
-      "foreignStreak": 4,
+      "foreignStreak": 3,
       "trustStreak": 0,
       "dealerStreak": 0,
       "jointStreak": 0
@@ -24331,15 +24331,11 @@
       "jointStreak": 0
     }
   },
-  "errors": [
-    "HTTP 520",
-    "HTTP 520",
-    "HTTP 520"
-  ],
+  "errors": [],
   "sources": [
     "TWSE T86",
     "TPEx 3itrade_hedge_result"
   ],
   "source": "github-actions",
-  "updatedAt": "2026-05-19T00:48:38.301Z"
+  "updatedAt": "2026-05-19T01:41:39.587Z"
 }
