@@ -1455,11 +1455,7 @@ function getIntradayEntryPlan(stock) {
 
 function renderEntryPlan(plan) {
   if (!plan) return "--";
-  const range = plan.entryLow === plan.entryHigh
-    ? formatTradePrice(plan.entryLow)
-    : `${formatTradePrice(plan.entryLow)}-${formatTradePrice(plan.entryHigh)}`;
-  const support = plan.supportPrice ? `｜支撐 ${formatTradePrice(plan.supportPrice)}` : "";
-  return `<b>${plan.label}</b><small>進場 ${formatTradePrice(plan.entryPrice || plan.entryLow)}${support}｜停損 ${formatTradePrice(plan.stopLoss)}｜不追 ${formatTradePrice(plan.chaseLimit)}</small>`;
+  return plan.supportPrice ? `<b>支撐價位</b><small>${formatTradePrice(plan.supportPrice)}</small>` : "--";
 }
 
 function formatEntryRange(plan) {
@@ -1468,6 +1464,10 @@ function formatEntryRange(plan) {
   return plan.entryLow === plan.entryHigh
     ? formatTradePrice(plan.entryLow)
     : `${formatTradePrice(plan.entryLow)}-${formatTradePrice(plan.entryHigh)}`;
+}
+
+function isLimitLockedRow(stock) {
+  return (stock?.intradaySignals || []).some((signal) => signal.id === "limit_lock" && String(signal.short || "").includes("漲停"));
 }
 
 function strategyHit(id, stock) {
@@ -2948,22 +2948,25 @@ function renderIntradayRadar(evaluated) {
       const row = { ...stock, intradaySignals: signals };
       return { ...row, intradayState: getIntradayState(row) };
     });
+  const tradableRows = allRows.filter((stock) => !isLimitLockedRow(stock));
   const stateFilters = new Set(["go", "wait", "watch"]);
   const filteredRows = intradaySignalFilter === "all"
-    ? allRows
+    ? tradableRows
     : stateFilters.has(intradaySignalFilter)
-      ? allRows.filter((stock) => stock.intradayState.id === intradaySignalFilter)
+      ? tradableRows.filter((stock) => stock.intradayState.id === intradaySignalFilter)
+      : intradaySignalFilter === "limit_lock"
+      ? allRows.filter((stock) => (stock.intradaySignals || []).some((signal) => signal.id === intradaySignalFilter && !String(signal.short || "").includes("漲停")))
       : allRows.filter((stock) => (stock.intradaySignals || []).some((signal) => signal.id === intradaySignalFilter));
   const rows = sortIntradayRows(filteredRows).slice(0, 80);
   const signalCounts = Object.fromEntries(INTRADAY_SIGNAL_DEFS.map((signal) => [signal.id, 0]));
   const stateCounts = { go: 0, wait: 0, watch: 0 };
   allRows.forEach((stock) => {
-    stateCounts[stock.intradayState.id] += 1;
+    if (!isLimitLockedRow(stock)) stateCounts[stock.intradayState.id] += 1;
     (stock.intradaySignals || []).forEach((signal) => {
       signalCounts[signal.id] = (signalCounts[signal.id] || 0) + 1;
     });
   });
-  const sortedAllRows = sortIntradayRows(allRows);
+  const sortedAllRows = sortIntradayRows(tradableRows);
   const zoneRows = {
     go: sortedAllRows.filter((stock) => stock.intradayState.id === "go").slice(0, 3),
     wait: sortedAllRows.filter((stock) => stock.intradayState.id === "wait").slice(0, 3),
@@ -3015,7 +3018,7 @@ function renderIntradayRadar(evaluated) {
   }).join("");
 
   const tabs = [
-    ["all", "全部", allRows.length],
+    ["all", "全部", tradableRows.length],
     ["go", "可進場", stateCounts.go],
     ["wait", "待確認", stateCounts.wait],
     ["watch", "觀察", stateCounts.watch],
