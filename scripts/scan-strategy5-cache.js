@@ -99,16 +99,15 @@ function buildMatches(stocks, institutionData) {
     const trust = cleanNumber(inst.trust);
     const total = cleanNumber(inst.total || (foreign + trust + cleanNumber(inst.dealer)));
     const smartMoney = total + trust * 1.4;
-    const nearBreakout = valueRank >= 65;
+    const nearBreakout = true;
     const jointBuying = total > 0 && foreign > 0 && trust > 0;
     const scoreBase = clamp(
       Math.round(35 + pct * 7 + valueRank * 0.24 + volumeRank * 0.18 + Math.sign(smartMoney) * 8),
       0,
       100
     );
-    const score = clamp(scoreBase + 18 + 8 + 6 + (nearBreakout ? 8 : 0), 0, 100);
-    const pass = jointBuying && nearBreakout && pct > -1.5 && pct <= 7.5 && valueRank >= 45 && close >= 10;
-    const reason = `外資 ${formatInstitution(foreign)}、投信 ${formatInstitution(trust)} 同買，法人合計 ${formatInstitution(total)}；股價接近突破區，漲幅 ${pct.toFixed(2)}%。`;
+    const score = clamp(scoreBase + 18 + 8 + 6, 0, 100);
+    const reason = `外資 ${formatInstitution(foreign)}、投信 ${formatInstitution(trust)} 同買，法人合計 ${formatInstitution(total)}；漲幅 ${pct.toFixed(2)}%。`;
     return {
       ...stock,
       valueRank,
@@ -119,7 +118,7 @@ function buildMatches(stocks, institutionData) {
       activeMatch: { id: "foreign_trust_breakout", short: "準突破", icon: "◆", score, reason },
     };
   })
-    .filter((stock) => stock.matches.length && stock.activeMatch && stock.score && stock.inst.total > 0 && stock.inst.foreign > 0 && stock.inst.trust > 0 && stock.valueRank >= 65 && stock.percent > -1.5 && stock.percent <= 7.5 && stock.close >= 10)
+    .filter((stock) => stock.matches.length && stock.activeMatch && stock.score && stock.inst.total > 0 && stock.inst.foreign > 0 && stock.inst.trust > 0 && stock.percent > -1.5 && stock.percent <= 7.5 && stock.close >= 10)
     .sort((a, b) => b.score - a.score || b.percent - a.percent || b.value - a.value)
     .slice(0, 80);
 }
