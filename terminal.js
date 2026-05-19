@@ -136,10 +136,25 @@ function appendUpdateBadge(target, text, tone = "slow") {
   strong.appendChild(badge);
 }
 
+function getTaiexMajorSettlementBadge(date = new Date()) {
+  const local = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  for (let day = 15; day <= 21; day++) {
+    const settlement = new Date(local.getFullYear(), local.getMonth(), day);
+    if (settlement.getDay() !== 3) continue;
+    const weekStart = new Date(settlement);
+    weekStart.setDate(settlement.getDate() - 2);
+    if (local >= weekStart && local <= settlement) {
+      return `${settlement.getMonth() + 1}/${settlement.getDate()}🚨 台指大結算`;
+    }
+  }
+  return "";
+}
+
 function labelUpdateModes() {
   viewLinks.forEach((link) => {
     const text = link.textContent || "";
-    if (text.includes("市場總覽")) appendUpdateBadge(link, "15秒更新", "live");
+    const settlementBadge = getTaiexMajorSettlementBadge();
+    if (text.includes("市場總覽") && settlementBadge) appendUpdateBadge(link, settlementBadge, "live");
   });
   document.querySelectorAll(".strategy-card[data-strategy]").forEach((card) => {
     const text = card.textContent || "";
