@@ -175,7 +175,7 @@ function labelChipTradeMode() {
   if (!chipTool || chipTool.querySelector(".chip-source-note")) return;
   const note = document.createElement("div");
   note.className = "chip-source-note";
-  note.textContent = "外資、投信買賣超為盤後公布資料，本頁只顯示最新盤後籌碼。";
+  note.textContent = "外資、投信買賣超為盤後公布資料，每日 06:00 / 21:00 完整掃，本頁只顯示最新盤後籌碼。";
   note.style.cssText = `
     margin-top: 10px;
     color: #9db9ff;
@@ -3769,11 +3769,11 @@ function renderWarrantFlow() {
     <section class="swing-dashboard">
       <div class="swing-topbar">
         <div>
-          <h2>${titleWithIcon("◒", "權證先熱雷達")} <span class="swing-live">● 07:00 / 14:30 完整掃</span></h2>
+          <h2>${titleWithIcon("◒", "權證先熱雷達")} <span class="swing-live">● 每日 06:00 / 21:00 完整掃</span></h2>
           <p>${helperText}</p>
         </div>
         <div class="swing-controls">
-          <label>更新模式：<select><option>07:00 / 14:30 完整掃</option></select></label>
+          <label>更新模式：<select><option>每日 06:00 / 21:00 完整掃</option></select></label>
           <label>模式：<select><option>認購偏多</option></select></label>
         </div>
       </div>
@@ -3819,10 +3819,7 @@ async function loadWarrantFlow(force = false) {
   }
   try {
     if (!latestStocks.length) loadStrategyStocks();
-    let payload = await fetchJson(`${endpoints.scanWarrantFlow}?t=${Date.now()}`, 35000);
-    if (!payload?.ok) {
-      payload = await fetchJson(`${endpoints.warrantFlowCache}?t=${Date.now()}`, 10000);
-    }
+    let payload = await fetchJson(`${endpoints.warrantFlowCache}?t=${Date.now()}`, 10000);
     const cachedMatches = normalizeArray(payload?.matches);
     if (!normalizeArray(payload?.matches).length) {
       payload = await fetchJson(`${endpoints.warrantFlowBackup}?t=${Date.now()}`, 10000);
@@ -4577,9 +4574,6 @@ async function loadInstitution() {
     if (!data?.ok || !data?.data || !Object.keys(data.data).length) {
       data = await fetchJson(`${endpoints.institutionBackup}?t=${Date.now()}`, 10000);
     }
-    if (!data?.ok || !data?.data || !Object.keys(data.data).length) {
-      data = await fetchJson(`${endpoints.institution}?t=${Date.now()}`, 20000);
-    }
     if (data.ok && data.data) {
       institutionData = data.data;
       institutionDate = data.usedDate || "";
@@ -4828,7 +4822,6 @@ setInterval(loadMarketData, 15*1000);
 setInterval(() => refreshStrategyRealtimeScan("hot"), INTRADAY_FAST_SCAN_MS);
 setInterval(() => refreshStrategyRealtimeScan("background"), INTRADAY_BACKGROUND_SCAN_MS);
 setInterval(loadHeatmap, 10*60*1000);
-setInterval(loadInstitution, 10*60*1000);
 
 // ===== 自選股功能 =====
 const watchlistView = document.querySelector("#watchlist-view");
