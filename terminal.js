@@ -242,6 +242,7 @@ let openBuyScanCount = 0;
 let openBuyScannedCodes = new Set();
 let openBuyScanTotal = 0;
 let openBuyCacheLoading = false;
+let openBuyCacheCheckedAt = 0;
 let warrantFlowLoading = false;
 let warrantFlowData = [];
 let warrantFlowUpdatedAt = 0;
@@ -648,6 +649,23 @@ function hasFreshOpenBuyScan() {
   return progress >= 0.95 && ageMs < CACHE_FRESH_MS;
 }
 
+function getOpenBuyActiveScanTime() {
+  const now = new Date();
+  const today0700 = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 7, 0, 0, 0).getTime();
+  const today1430 = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 14, 30, 0, 0).getTime();
+  if (now.getTime() >= today1430) return today1430;
+  if (now.getTime() >= today0700) return today0700;
+  return new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1, 14, 30, 0, 0).getTime();
+}
+
+function shouldLoadOpenBuyRemote(force = false) {
+  if (force) return true;
+  const activeScanTime = getOpenBuyActiveScanTime();
+  if (!openBuyScanLastAt) return true;
+  if (openBuyScanLastAt >= activeScanTime) return false;
+  return openBuyCacheCheckedAt < activeScanTime;
+}
+
 function hasFreshWarrantFlow() {
   return warrantFlowData.length > 0 && warrantFlowUpdatedAt && (Date.now() - warrantFlowUpdatedAt) < CACHE_FRESH_MS;
 }
@@ -937,14 +955,17 @@ function mergeOpenBuyCache(payload) {
 
 async function loadOpenBuyCache(force = false) {
   if (openBuyCacheLoading) return;
-  if (!force && openBuyScanLastAt) return;
+  if (!shouldLoadOpenBuyRemote(force)) return;
   openBuyCacheLoading = true;
+  openBuyCacheCheckedAt = Date.now();
   try {
     let payload = await fetchJson(`${endpoints.openBuyCache}?t=${Date.now()}`, 10000);
     if (!normalizeArray(payload?.matches).length) {
       payload = await fetchJson(`${endpoints.openBuyBackup}?t=${Date.now()}`, 10000);
     }
-    if (payload?.ok && Array.isArray(payload.matches)) {
+    const incomingMatches = normalizeArray(payload?.matches);
+    const hasCurrentMatches = Object.keys(openBuyScanMatches).length > 0;
+    if (payload?.ok && Array.isArray(payload.matches) && (incomingMatches.length || !hasCurrentMatches)) {
       mergeOpenBuyCache(payload);
       renderStrategyScanner();
     }
@@ -3263,7 +3284,7 @@ function renderOpenBuyRadar(universe) {
   if (!openBuyScanLastAt) {
     loadOpenBuyLocalCache();
   }
-  if (!openBuyScanLastAt && !openBuyCacheLoading) {
+  if (!openBuyCacheLoading && shouldLoadOpenBuyRemote()) {
     loadOpenBuyCache();
   }
   const scanCount = openBuyScanCount || Object.keys(openBuyScanMatches).length;
