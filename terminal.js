@@ -99,39 +99,11 @@ function setTitleWithIcon(target, icon, text) {
   target.innerHTML = titleWithIcon(icon, text);
 }
 
-function strategySearchInputValue() {
-  return strategySearchDraft !== null ? strategySearchDraft : strategyKeyword;
-}
-
-function commitStrategySearch(input) {
-  strategyKeyword = String(input?.value || "").trim();
-  strategySearchDraft = null;
-  if (strategySearch) strategySearch.value = strategyKeyword;
-  if (isViewActive("strategy")) renderStrategyScanner();
-  if (isViewActive("chip-trade")) renderChipTradeTable();
-}
-
-function inlineStockActionsHtml() {
-  return `
-    <div class="swing-actions">
-      <input type="search" placeholder="搜尋代號/名稱" value="${escapeAttr(strategySearchInputValue())}" autocomplete="off" spellcheck="false" data-strategy-inline-search>
-      <button type="button" data-strategy-inline-submit>搜尋</button>
-      <button type="button" data-export-action>匯出</button>
-      <button type="button" data-export-settings>設定</button>
-    </div>
-  `;
-}
-
-function chipScanBadgeHtml() {
-  return `<span class="swing-live" style="color:#12d6df;border-color:rgba(18,214,223,.45);background:rgba(18,214,223,.12);margin-left:10px;">●06:00/21:00完整掃　●預計下次掃描時間:${nextChipScanTime()}</span>`;
-}
-
 function applyStaticTitleIcons() {
   setTitleWithIcon(document.querySelector("#market-view .page-header h1"), "●", "市場總覽");
   setTitleWithIcon(document.querySelector("#watchlist-view .page-header h1"), "☆", "自選股");
-  const chipTitle = document.querySelector("#chip-trade-view .page-header h1");
-  if (chipTitle) chipTitle.innerHTML = `${titleWithIcon("◆", "外資 + 投信連買")} ${chipScanBadgeHtml()}`;
-  setTitleWithIcon(document.querySelector("#warrant-flow-view .page-header h1"), "◒", "權證資金走向");
+  setTitleWithIcon(document.querySelector("#chip-trade-view .page-header h1"), "◆", "外資 + 投信連買");
+  setTitleWithIcon(document.querySelector("#warrant-flow-view .page-header h1"), "◒", "權證走向");
 }
 
 function escapeAttr(value) {
@@ -164,54 +136,6 @@ function appendUpdateBadge(target, text, tone = "slow") {
   strong.appendChild(badge);
 }
 
-function formatDateTimeShort(date) {
-  return `${date.getFullYear()}/${String(date.getMonth() + 1).padStart(2, "0")}/${String(date.getDate()).padStart(2, "0")} ${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
-}
-
-function nextOpenBuyScanTime(now = new Date()) {
-  const slots = [
-    { hour: 7, minute: 0 },
-    { hour: 14, minute: 30 },
-  ];
-  const isTradingDay = (date) => {
-    const day = date.getDay();
-    return day >= 1 && day <= 5;
-  };
-  const candidateFor = (base, slot) => {
-    const date = new Date(base);
-    date.setHours(slot.hour, slot.minute, 0, 0);
-    return date;
-  };
-  for (let offset = 0; offset < 8; offset += 1) {
-    const base = new Date(now);
-    base.setDate(now.getDate() + offset);
-    if (!isTradingDay(base)) continue;
-    for (const slot of slots) {
-      const candidate = candidateFor(base, slot);
-      if (candidate > now) return candidate;
-    }
-  }
-  return candidateFor(now, slots[0]);
-}
-
-function openBuyScheduleLabel() {
-  return `●07:00/14:30完整掃　●預計下次掃描時間:${formatDateTimeShort(nextOpenBuyScanTime())}`;
-}
-
-function strategy5ScheduleLabel() {
-  return "●07:00/14:30完整掃";
-}
-
-function openBuyStatusStyle(status = "") {
-  if (String(status).includes("洗盤")) {
-    return "background:rgba(255,138,61,.18);border-color:rgba(255,138,61,.55);color:#ffb06d;";
-  }
-  if (String(status).includes("強勢")) {
-    return "background:rgba(63,132,255,.22);border-color:rgba(99,165,255,.55);color:#7fb0ff;";
-  }
-  return "";
-}
-
 function labelUpdateModes() {
   viewLinks.forEach((link) => {
     const text = link.textContent || "";
@@ -220,9 +144,10 @@ function labelUpdateModes() {
   document.querySelectorAll(".strategy-card[data-strategy]").forEach((card) => {
     const text = card.textContent || "";
     if (text.includes("策略2")) appendUpdateBadge(card, "立即更新", "live");
-    if (text.includes("策略1")) appendUpdateBadge(card, openBuyScheduleLabel(), "slow");
-    if (text.includes("策略4")) appendUpdateBadge(card, "08/10/15完整掃", "slow");
-    if (text.includes("策略5")) appendUpdateBadge(card, strategy5ScheduleLabel(), "slow");
+    if (text.includes("策略1")) appendUpdateBadge(card, "07/14:30完整掃", "slow");
+    if (text.includes("策略3")) appendUpdateBadge(card, "07/14:30完整掃", "slow");
+    if (text.includes("策略4")) appendUpdateBadge(card, "07/14:30完整掃", "slow");
+    if (text.includes("策略5")) appendUpdateBadge(card, "讀快取", "slow");
   });
 }
 
@@ -231,6 +156,18 @@ function labelChipTradeMode() {
   realtimeButton?.remove();
   const afterButton = document.querySelector('[data-chip-mode="after"]');
   afterButton?.classList.add("active");
+  const chipTool = document.querySelector(".chip-tool");
+  if (!chipTool || chipTool.querySelector(".chip-source-note")) return;
+  const note = document.createElement("div");
+  note.className = "chip-source-note";
+  note.textContent = "外資、投信買賣超為盤後公布資料，本頁只顯示最新盤後籌碼。";
+  note.style.cssText = `
+    margin-top: 10px;
+    color: #9db9ff;
+    font-size: 12px;
+    font-weight: 800;
+  `;
+  chipTool.appendChild(note);
 }
 
 const endpoints = {
@@ -247,6 +184,10 @@ const endpoints = {
   openBuyBackup: "/data/open-buy-backup.json",
   strategy4Cache: "/data/strategy4-latest.json",
   strategy4Backup: "/data/strategy4-backup.json",
+  strategy3Cache: "/data/strategy3-latest.json",
+  strategy3Backup: "/data/strategy3-backup.json",
+  institutionCache: "/data/institution-latest.json",
+  institutionBackup: "/data/institution-backup.json",
   warrantFlowCache: "/data/warrant-flow-latest.json",
   warrantFlowBackup: "/data/warrant-flow-backup.json",
   strategyStocks: "/api/stocks",
@@ -279,6 +220,9 @@ let strategy4ScanCount = 0;
 let strategy4ScannedCodes = new Set();
 let strategy4ScanTotal = 0;
 let strategy4CacheLoading = false;
+let strategy3Data = [];
+let strategy3UpdatedAt = 0;
+let strategy3CacheLoading = false;
 const STRATEGY4_LOCAL_CACHE_KEY = "fuman_strategy4_scan_cache_v1";
 const STRATEGY4_BACKUP_CACHE_KEY = "fuman_strategy4_nonempty_backup_v1";
 const OPEN_BUY_LOCAL_CACHE_KEY = "fuman_open_buy_scan_cache_v1";
@@ -297,19 +241,13 @@ let openBuyScanTotal = 0;
 let openBuyCacheLoading = false;
 let warrantFlowLoading = false;
 let warrantFlowData = [];
-let warrantFlowQuotes = {};
 let warrantFlowUpdatedAt = 0;
 let warrantFlowKeyword = "";
-let warrantFlowPage = 1;
-let warrantFlowSearchTimer = 0;
-let warrantFlowSearchLoading = false;
 const WARRANT_FLOW_LOCAL_CACHE_KEY = "fuman_warrant_flow_cache_v1";
-const WARRANT_FLOW_PAGE_SIZE = 10;
 const CACHE_FRESH_MS = 10 * 60 * 1000;
 let selectedStrategyIds = new Set();
 let strategyMode = "any";
 let strategyKeyword = "";
-let strategySearchDraft = null;
 let strategyStocksLoading = false;
 let swingSortKey = "score";
 let swingSortDir = "desc";
@@ -317,8 +255,6 @@ let swingSignalFilter = "all";
 let intradaySortKey = "score";
 let intradaySortDir = "desc";
 let intradaySignalFilter = "all";
-let overnightSortKey = "score";
-let overnightSortDir = "desc";
 let strategyPresetMode = "";
 let strategy5ActiveId = "momentum";
 
@@ -404,6 +340,13 @@ const SECTOR_MAP = {
 function cleanNumber(value) {
   if (value === undefined || value === null || value === "") return 0;
   return Number(String(value).replace(/[,+%]/g, "")) || 0;
+}
+
+function isStaleStrategyPrice(item, base) {
+  const cachedClose = cleanNumber(item?.close);
+  const latestClose = cleanNumber(base?.close);
+  if (!cachedClose || !latestClose) return false;
+  return Math.abs(cachedClose - latestClose) > 0.001;
 }
 
 function formatNumber(value, digits = 2) {
@@ -528,10 +471,7 @@ function getInstitutionTotal(code) {
   const foreign = Number(inst.foreign) || 0;
   const trust = Number(inst.trust) || 0;
   const dealer = Number(inst.dealer) || 0;
-  const foreignStreak = Number(inst.foreignStreak) || 0;
-  const trustStreak = Number(inst.trustStreak) || 0;
-  const jointStreak = Number(inst.jointStreak) || 0;
-  return { foreign, trust, dealer, total: foreign + trust + dealer, foreignStreak, trustStreak, jointStreak };
+  return { foreign, trust, dealer, total: foreign + trust + dealer };
 }
 
 function updateStrategyHistory(item) {
@@ -554,15 +494,23 @@ function updateStrategyHistory(item) {
   };
 }
 
-function updateStrategy4Scan(payload) {
+function updateStrategy4Scan(payload, options = {}) {
+  const retainUnmatched = options.retainUnmatched !== false;
   const scannedCodes = normalizeArray(payload?.scannedCodes);
   const matches = normalizeArray(payload?.matches);
+  const matchedCodes = new Set(matches.map((item) => item.code));
   scannedCodes.forEach((code) => {
     if (code) strategy4ScannedCodes.add(code);
   });
+  if (!retainUnmatched) {
+    scannedCodes.forEach((code) => {
+      if (!matchedCodes.has(code)) delete strategy4ScanMatches[code];
+    });
+  }
   matches.forEach((item) => {
     if (!item?.code) return;
     const base = latestStocks.find((stock) => stock.code === item.code) || {};
+    if (isStaleStrategyPrice(item, base)) return;
     const signals = normalizeArray(item.swingSignals || item.signals);
     strategy4ScanMatches[item.code] = {
       ...base,
@@ -618,6 +566,8 @@ function commitStrategy4Pending() {
 }
 
 function mergeStrategy4Cache(payload) {
+  strategy4ScanMatches = {};
+  strategy4ScannedCodes = new Set();
   const scannedCodes = normalizeArray(payload?.scannedCodes);
   scannedCodes.forEach((code) => {
     if (code) strategy4ScannedCodes.add(code);
@@ -633,6 +583,7 @@ function saveStrategy4LocalCache() {
   try {
     const matches = Object.values(strategy4ScanMatches);
     const payload = {
+      source: "github-actions",
       updatedAt: strategy4ScanLastAt || Date.now(),
       total: strategy4ScanTotal,
       scannedCodes: [...strategy4ScannedCodes],
@@ -651,8 +602,11 @@ function loadStrategy4LocalCache() {
     if (!Array.isArray(payload.matches) || !payload.matches.length) {
       payload = JSON.parse(localStorage.getItem(STRATEGY4_BACKUP_CACHE_KEY) || "{}");
     }
+    if (!String(payload.source || "").includes("github-actions")) return false;
     if (!Array.isArray(payload.matches) || !payload.matches.length) return false;
     if (payload.total) strategy4ScanTotal = cleanNumber(payload.total);
+    strategy4ScanMatches = {};
+    strategy4ScannedCodes = new Set();
     normalizeArray(payload.scannedCodes).forEach((code) => {
       if (code) strategy4ScannedCodes.add(code);
     });
@@ -692,6 +646,7 @@ function saveWarrantFlowLocalCache() {
   try {
     if (!warrantFlowData.length) return;
     localStorage.setItem(WARRANT_FLOW_LOCAL_CACHE_KEY, JSON.stringify({
+      source: "github-actions",
       updatedAt: warrantFlowUpdatedAt || Date.now(),
       matches: warrantFlowData,
     }));
@@ -701,6 +656,7 @@ function saveWarrantFlowLocalCache() {
 function loadWarrantFlowLocalCache() {
   try {
     const payload = JSON.parse(localStorage.getItem(WARRANT_FLOW_LOCAL_CACHE_KEY) || "{}");
+    if (!String(payload.source || "").includes("github-actions")) return false;
     if (!Array.isArray(payload.matches) || !payload.matches.length) return false;
     warrantFlowData = payload.matches;
     warrantFlowUpdatedAt = cleanNumber(payload.updatedAt) || Date.now();
@@ -770,28 +726,7 @@ async function unlockExport() {
 }
 
 function getActiveExportRows(limit = Infinity) {
-  const table = isViewActive("chip-trade")
-    ? document.querySelector("#chip-trade-view table")
-    : strategyTable?.querySelector("table");
-  if (!table && isViewActive("strategy")) {
-    const cards = [...(strategyTable?.querySelectorAll(".strategy5-stock-card") || [])].slice(0, limit);
-    if (!cards.length) return { headers: [], rows: [] };
-    return {
-      headers: ["排名", "股票", "價格", "漲幅", "成交量", "價量特徵", "籌碼特徵"],
-      rows: cards.map((card) => {
-        const blocks = [...card.children];
-        return [
-          blocks[0]?.textContent.trim() || "",
-          blocks[1]?.textContent.replace(/\s+/g, " ").trim() || "",
-          blocks[2]?.querySelector(".strategy5-price")?.textContent.trim() || "",
-          blocks[2]?.querySelector("small")?.textContent.trim() || "",
-          blocks[2]?.querySelectorAll("small")?.[1]?.textContent.trim() || "",
-          blocks[3]?.textContent.replace(/\s+/g, " ").trim() || "",
-          blocks[4]?.textContent.replace(/\s+/g, " ").trim() || "",
-        ];
-      }),
-    };
-  }
+  const table = strategyTable?.querySelector("table");
   if (!table) return { headers: [], rows: [] };
   const headers = [...table.querySelectorAll("thead th")].map((cell) => cell.textContent.trim());
   const rows = [...table.querySelectorAll("tbody tr")]
@@ -863,15 +798,23 @@ function openExportSettings() {
     window.alert("請直接與作者聯繫");
 }
 
-function updateOpenBuyScan(payload) {
+function updateOpenBuyScan(payload, options = {}) {
+  const retainUnmatched = options.retainUnmatched !== false;
   const scannedCodes = normalizeArray(payload?.scannedCodes);
   const matches = normalizeArray(payload?.matches);
+  const matchedCodes = new Set(matches.map((item) => item.code));
   scannedCodes.forEach((code) => {
     if (code) openBuyScannedCodes.add(code);
   });
+  if (!retainUnmatched) {
+    scannedCodes.forEach((code) => {
+      if (!matchedCodes.has(code)) delete openBuyScanMatches[code];
+    });
+  }
   matches.forEach((item) => {
     if (!item?.code) return;
     const base = latestStocks.find((stock) => stock.code === item.code) || {};
+    if (isStaleStrategyPrice(item, base)) return;
     openBuyScanMatches[item.code] = {
       ...base,
       ...item,
@@ -924,6 +867,7 @@ function saveOpenBuyLocalCache() {
   try {
     const matches = Object.values(openBuyScanMatches);
     const payload = {
+      source: "github-actions",
       updatedAt: openBuyScanLastAt || Date.now(),
       total: openBuyScanTotal,
       scannedCodes: [...openBuyScannedCodes],
@@ -942,8 +886,11 @@ function loadOpenBuyLocalCache() {
     if (!Array.isArray(payload.matches) || !payload.matches.length) {
       payload = JSON.parse(localStorage.getItem(OPEN_BUY_BACKUP_CACHE_KEY) || "{}");
     }
+    if (!String(payload.source || "").includes("github-actions")) return false;
     if (!Array.isArray(payload.matches) || !payload.matches.length) return false;
     if (payload.total) openBuyScanTotal = cleanNumber(payload.total);
+    openBuyScanMatches = {};
+    openBuyScannedCodes = new Set();
     normalizeArray(payload.scannedCodes).forEach((code) => {
       if (code) openBuyScannedCodes.add(code);
     });
@@ -960,6 +907,8 @@ function loadOpenBuyLocalCache() {
 }
 
 function mergeOpenBuyCache(payload) {
+  openBuyScanMatches = {};
+  openBuyScannedCodes = new Set();
   normalizeArray(payload?.scannedCodes).forEach((code) => {
     if (code) openBuyScannedCodes.add(code);
   });
@@ -967,6 +916,7 @@ function mergeOpenBuyCache(payload) {
   normalizeArray(payload?.matches).forEach((item) => {
     if (!item?.code) return;
     const base = latestStocks.find((stock) => stock.code === item.code) || {};
+    if (isStaleStrategyPrice(item, base)) return;
     openBuyScanMatches[item.code] = { ...base, ...item, name: base.name || item.name || item.code };
   });
   openBuyScanCount = Object.keys(openBuyScanMatches).length;
@@ -991,6 +941,25 @@ async function loadOpenBuyCache(force = false) {
   } catch (error) {
   } finally {
     openBuyCacheLoading = false;
+  }
+}
+
+async function loadStrategy3Cache(force = false) {
+  if (strategy3CacheLoading) return;
+  if (!force && strategy3Data.length) return;
+  strategy3CacheLoading = true;
+  try {
+    let payload = await fetchJson(`${endpoints.strategy3Cache}?t=${Date.now()}`, 10000);
+    if (!normalizeArray(payload?.matches).length) {
+      payload = await fetchJson(`${endpoints.strategy3Backup}?t=${Date.now()}`, 10000);
+    }
+    strategy3Data = normalizeArray(payload?.matches);
+    const updatedAt = Date.parse(payload?.updatedAt || "");
+    strategy3UpdatedAt = Number.isFinite(updatedAt) ? updatedAt : Date.now();
+    renderStrategyScanner();
+  } catch (error) {
+  } finally {
+    strategy3CacheLoading = false;
   }
 }
 
@@ -1053,7 +1022,8 @@ function getIntradaySignals(stock) {
   const volumeRank = stock.volumeRank || 0;
   const value = cleanNumber(stock.value);
   const volume = cleanNumber(stock.tradeVolume);
-  const limitUp = cleanNumber(stock.limitUp);
+  const inferredLimitUp = prevClose ? prevClose * 1.1 : 0;
+  const limitUp = cleanNumber(stock.limitUp) || inferredLimitUp;
   const daily = stock.swingDaily || analyzeSwingDaily(stock);
   const dailyVolumeRatio = daily?.volumeRatio || 0;
   const yesterdayHigh = cleanNumber(daily?.prev?.high);
@@ -1075,15 +1045,6 @@ function getIntradaySignals(stock) {
   const currentRate = latestPoint.volumeRate || 0;
   const rateVsDay = dayAvgRate ? currentRate / dayAvgRate : 0;
   const rateVsRecent = recentBaseRate ? currentRate / recentBaseRate : 0;
-  const minuteVolumeSurge =
-    (latestPoint.deltaVolume || 0) >= 50 ||
-    rateVsDay >= 2.2 ||
-    rateVsRecent >= 1.8;
-  const volumeHot =
-    volumeRank >= 78 ||
-    valueRank >= 78 ||
-    dailyVolumeRatio >= 1.3 ||
-    (volume >= 5000 && value >= 150000000);
   const shortAvg = avg(prices.slice(-3));
   const longAvg = avg(prices.slice(-8));
   const macdUp = prices.length >= 3 && shortAvg > longAvg && lastPrice >= (prices.at(-2) || lastPrice);
@@ -1091,8 +1052,10 @@ function getIntradaySignals(stock) {
   const ibRange = high && low ? high - low : 0;
   const f618 = ibRange > 0 ? high - ibRange * 0.618 : 0;
   const signals = [];
+  if (pct < 2 || !close) return signals;
+  const volumeMilestone = volume >= 10000 ? 10000 : volume >= 5000 ? 5000 : volume >= 2000 ? 2000 : 0;
 
-  if (isNearLimit && (volumeRank >= 70 || valueRank >= 70 || volume >= 8000)) {
+  if (isNearLimit && (volumeRank >= 55 || valueRank >= 55 || volume >= 1200)) {
     signals.push({
       id: "limit_lock",
       short: isLimitLocked ? "漲停" : "近漲停",
@@ -1101,16 +1064,16 @@ function getIntradaySignals(stock) {
     });
   }
 
-  if ((volumeHot && minuteVolumeSurge) || volumeRank >= 88 || valueRank >= 88 || dailyVolumeRatio >= 1.8 || (volume >= 10000 && value >= 500000000)) {
+  if (volumeMilestone || volumeRank >= 82 || valueRank >= 82 || dailyVolumeRatio >= 1.6 || (volume >= 3000 && value >= 120000000) || (pct >= 5 && volume >= 1000)) {
     signals.push({
       id: "volume_burst",
-      short: minuteVolumeSurge ? "量速" : "爆量",
+      short: volumeMilestone ? `量${Math.round(volumeMilestone / 1000)}千` : "爆量",
       icon: "📊",
-      reason: `量能 + 分時成交量暴增，成交量 ${Math.round(volume).toLocaleString("zh-TW")} 張，新增量 ${Math.round(latestPoint.deltaVolume || 0)} 張，量速為今日均速 ${rateVsDay ? rateVsDay.toFixed(1) : "--"} 倍，成交值/量能排名 ${valueRank}%/${volumeRank}%。`,
+      reason: `盤中爆量，成交量 ${Math.round(volume).toLocaleString("zh-TW")} 張${volumeMilestone ? `，已突破 ${volumeMilestone.toLocaleString("zh-TW")} 張門檻` : ""}，量能排名 ${volumeRank}%，成交值排名 ${valueRank}%。`,
     });
   }
 
-  if ((breaks20High || breaksYesterdayHigh) && (volumeRank >= 70 || dailyVolumeRatio >= 1.2 || isNearLimit)) {
+  if ((breaks20High || breaksYesterdayHigh || pct >= 6) && (volumeRank >= 55 || dailyVolumeRatio >= 1.2 || isNearLimit || volume >= 1200)) {
     signals.push({
       id: "daily_breakout",
       short: breaks20High ? "20日突" : "昨高突",
@@ -1123,7 +1086,7 @@ function getIntradaySignals(stock) {
     signals.push({ id: "gap", short: "跳空", icon: "🚀", reason: `跳空 ${gapPct.toFixed(2)}%，開盤高於昨收且量能排名 ${volumeRank}%。` });
   }
 
-  if (pct >= 1 && valueRank >= 65 && volumeRank >= 65 && close >= open && (!vwap || close >= vwap) && (!high || close >= high * 0.992)) {
+  if (pct >= 1 && valueRank >= 55 && volumeRank >= 55 && (!open || close >= open) && (!vwap || close >= vwap || pct >= 5) && (!high || close >= high * 0.992 || pct >= 5)) {
     signals.push({ id: "breakout", short: "突破", icon: "🔥", reason: `突破盤中強勢區，漲幅 ${pct.toFixed(2)}%，成交值/量能同步放大。` });
   }
 
@@ -1163,7 +1126,6 @@ const STRATEGY_DEFS = [
   { id: "red_to_green", label: "昨日紅轉綠", short: "紅轉綠", icon: "↻" },
   { id: "intraday_2m", label: "2分K當沖雷達", short: "當沖", icon: "⌁" },
   { id: "investment_trust", label: "投信連買認養股", short: "投信", icon: "▦" },
-  { id: "institutional_breakout", label: "外資投信連買準突破", short: "法人準突", icon: "◆" },
   { id: "vcp", label: "VCP 波段收斂", short: "VCP", icon: "⌁" },
   { id: "ma_bull", label: "均線多頭排列", short: "均線", icon: "☰" },
   { id: "sync_backtest", label: "高同步率回測", short: "同步", icon: "▣" },
@@ -1176,14 +1138,18 @@ const STRATEGY_DEFS = [
 ];
 
 const STRATEGY_BY_ID = Object.fromEntries(STRATEGY_DEFS.map((item) => [item.id, item]));
-const STRATEGY5_IDS = ["short_fund_flow", "one_day_rebound", "short_squeeze", "ultra_short"];
+const STRATEGY5_IDS = ["short_fund_flow", "chip_health_strong", "one_day_rebound", "short_squeeze", "ultra_short"];
 const STRATEGY5_PRESET_IDS = [
   "momentum",
   "main_force_chip",
-  "institutional_breakout",
   "twenty_day_breakout",
+  "opening_power",
+  "red_to_green",
+  "investment_trust",
   "vcp",
+  "ma_bull",
   "sync_backtest",
+  "overnight_chip",
   ...STRATEGY5_IDS,
 ];
 
@@ -1191,7 +1157,6 @@ function ensureStrategyCards() {
   if (!strategyList) return;
   const descriptions = {
     short_fund_flow: "短線資金快速集中，觀察量價同步放大的強勢股。",
-    institutional_breakout: "外資與投信同向連買，搭配日K MA35、動能與量能確認。",
     chip_health_strong: "外資、投信與法人方向偏買，優先看籌碼乾淨的標的。",
     one_day_rebound: "前一日大跌後出現收紅反彈，需要日K確認。",
     short_squeeze: "強漲放量、漲幅排名靠前，列入嘎空觀察。",
@@ -1220,7 +1185,7 @@ function ensureStrategyCards() {
 }
 
 function buildStrategyUniverse(stocks) {
-  const liveStocks = stocks.map(applyStrategyQuote);
+  const liveStocks = stocks.map((stock) => applyStrategyQuote(stock));
   const values = liveStocks.map((s) => s.value || 0).sort((a, b) => a - b);
   const volumes = liveStocks.map((s) => s.tradeVolume || 0).sort((a, b) => a - b);
   const percents = liveStocks.map((s) => s.percent || 0).sort((a, b) => a - b);
@@ -1257,31 +1222,12 @@ function strategyHit(id, stock) {
     0,
     100
   );
-  const momentumScore = clamp(scoreBase + 10, 0, 100);
-  const daily = stock.swingDaily || null;
-  const dailyRows = Array.isArray(daily?.rows) ? daily.rows : [];
-  const dailyCloses = dailyRows.map((row) => cleanNumber(row.close)).filter(Boolean);
-  const lastDailyClose = cleanNumber(daily?.last?.close) || cleanNumber(stock.close);
-  const ma35 = dailyCloses.length >= 35 ? sma(dailyCloses, 35) : 0;
-  const ma60 = dailyCloses.length >= 60 ? sma(dailyCloses, 60) : 0;
-  const hourlyMa200Proxy = dailyCloses.length >= 45 ? sma(dailyCloses, 45) : ma35;
-  const dailyMa35Stand = ma35 ? lastDailyClose >= ma35 : pct > 0;
-  const weeklyMa60ProxyStand = ma60 ? lastDailyClose >= ma60 : dailyMa35Stand;
-  const hourlyMa200ProxyStand = hourlyMa200Proxy ? lastDailyClose >= hourlyMa200Proxy : dailyMa35Stand;
-  const nearTwentyDayBreakout = daily
-    ? cleanNumber(daily.last?.close) >= cleanNumber(daily.highest20Prev) * 0.995
-    : stock.percentRank >= 88;
-  const nearBreakoutSetup = daily
-    ? cleanNumber(daily.last?.close) >= cleanNumber(daily.highest20Prev) * 0.985
-    : stock.percentRank >= 80;
-  const volumeConfirmed = volumeRank >= 75 || cleanNumber(daily?.volumeRatio) >= 1.45;
-  const institutionalStreak = inst.jointStreak >= 2 || (inst.foreignStreak >= 2 && inst.trustStreak >= 2);
 
   const rules = {
     momentum: {
-      hit: momentumScore >= 75 && pct >= 1.2 && pct <= 9.8 && valueRank >= 70 && volumeConfirmed && nearTwentyDayBreakout,
-      score: momentumScore,
-      reason: `動能分數 ${momentumScore}，漲幅 ${pct.toFixed(2)}%，成交值排名 ${valueRank}%，成交量排名 ${volumeRank}%，接近20日突破。`,
+      hit: pct >= 2.2 && valueRank >= 55,
+      score: clamp(scoreBase + 10, 0, 100),
+      reason: `漲幅 ${pct.toFixed(2)}%，成交值排名 ${valueRank}%，動能轉強。`,
     },
     main_force_chip: {
       hit: smartMoney > 0 && valueRank >= 45,
@@ -1304,8 +1250,8 @@ function strategyHit(id, stock) {
       reason: `由弱轉強候選，漲幅 ${pct.toFixed(2)}%，成交值排名 ${valueRank}%。`,
     },
     intraday_2m: {
-      hit: (stock.intradaySignals?.length || 0) > 0 || (pct >= 0.8 && valueRank >= 55 && volumeRank >= 55),
-      score: clamp(scoreBase + 6 + (stock.intradaySignals?.length || 0) * 5, 0, 100),
+      hit: pct >= 2 && ((stock.intradaySignals?.length || 0) > 0 || (valueRank >= 68 && volumeRank >= 68)),
+      score: clamp(scoreBase + 12 + Math.min(pct * 4, 28) + (stock.intradaySignals?.length || 0) * 8, 0, 100),
       reason: stock.intradaySignals?.length
         ? stock.intradaySignals.map((signal) => signal.reason).join(" ")
         : `成交值與成交量同步進前段班，適合當沖雷達追蹤。`,
@@ -1314,11 +1260,6 @@ function strategyHit(id, stock) {
       hit: inst.trust > 0 && pct > -1,
       score: clamp(scoreBase + 15, 0, 100),
       reason: `投信買超 ${formatInstitution(inst.trust)}，股價未轉弱。`,
-    },
-    institutional_breakout: {
-      hit: institutionalStreak && inst.foreign > 0 && inst.trust > 0 && dailyMa35Stand && weeklyMa60ProxyStand && hourlyMa200ProxyStand && nearBreakoutSetup && momentumScore >= 75 && pct >= 0.8 && pct <= 9.8 && valueRank >= 65 && (volumeRank >= 70 || cleanNumber(daily?.volumeRatio) >= 1.3),
-      score: clamp(momentumScore + Math.min(inst.jointStreak, 5) * 3 + (volumeRank >= 80 ? 5 : 0), 0, 100),
-      reason: `外資連買 ${inst.foreignStreak} 日、投信連買 ${inst.trustStreak} 日，同買 ${inst.jointStreak} 日；日K站上MA35，60分K MA200/週K MA60以目前日K趨勢代理確認，動能 ${momentumScore}，成交值/量能排名 ${valueRank}%/${volumeRank}%。`,
     },
     vcp: {
       hit: Math.abs(pct) <= 1.8 && valueRank >= 55 && volumeRank >= 45,
@@ -1387,15 +1328,6 @@ function evaluateStrategyStock(stock) {
     ? Math.round(matches.reduce((sum, item) => sum + item.score, 0) / matches.length)
     : 0;
   return { ...stock, matches, score };
-}
-
-function passesStrategy5Preset(stock, match) {
-  if (!match?.id) return false;
-  const inst = stock.inst || getInstitutionTotal(stock.code);
-  if (match.id === "momentum") return match.score >= 75 && stock.valueRank >= 70 && (stock.volumeRank >= 75 || cleanNumber(stock.swingDaily?.volumeRatio) >= 1.45);
-  if (match.id === "investment_trust") return inst.trust > 0 && (Number(stock.trustStreak) || Number(inst.trustStreak) || 0) >= 2;
-  if (match.id === "institutional_breakout") return match.score >= 78 && inst.foreign > 0 && inst.trust > 0 && (inst.jointStreak >= 2 || (inst.foreignStreak >= 2 && inst.trustStreak >= 2));
-  return true;
 }
 
 const INTRADAY_SIGNAL_DEFS = [
@@ -1652,54 +1584,6 @@ function sortIntradayRows(rows) {
   });
 }
 
-function getIntradayFallbackSignal(stock) {
-  const pct = Number(stock.percent) || 0;
-  const volume = Number(stock.tradeVolume) || 0;
-  const value = Number(stock.value) || (Number(stock.close) || 0) * volume * 1000;
-  const valueRank = Number(stock.valueRank) || 0;
-  const volumeRank = Number(stock.volumeRank) || 0;
-  const close = Number(stock.close) || 0;
-  const open = Number(stock.open) || 0;
-  const high = Number(stock.high) || 0;
-  const limitUp = Number(stock.limitUp) || 0;
-  const nearLimit = limitUp && close >= limitUp * 0.985;
-  const limitLocked = limitUp && close >= limitUp * 0.998;
-  const volumeHot = value >= 50000000 || volume >= 1000 || valueRank >= 55 || volumeRank >= 55;
-  const priceHot = pct >= 0.5 || (open && close >= open * 1.005) || (high && close >= high * 0.985);
-  const strongMove = pct >= 2 || (open && close >= open * 1.015);
-  if (!nearLimit && !volumeHot && !priceHot && !strongMove) return null;
-  if (limitUp && close >= limitUp * 0.998) {
-    return {
-      id: "limit_lock",
-      short: "漲停",
-      icon: "🔒",
-      reason: `即時量價候選：接近漲停，成交量 ${Math.round(volume).toLocaleString("zh-TW")} 張，先列入觀察，不代表可追。`,
-    };
-  }
-  if (nearLimit) {
-    return {
-      id: "limit_lock",
-      short: "近漲停",
-      icon: "🔒",
-      reason: `即時單一條件觸發：接近漲停，現價 ${formatNumber(close, close >= 100 ? 0 : 2)}，先列入當沖雷達觀察。`,
-    };
-  }
-  if (volumeHot && !priceHot) {
-    return {
-      id: "volume_burst",
-      short: "爆量",
-      icon: "📊",
-      reason: `即時單一條件觸發：成交量 ${Math.round(volume).toLocaleString("zh-TW")} 張，成交值/量能排名 ${valueRank}%/${volumeRank}%。`,
-    };
-  }
-  return {
-    id: "live_candidate",
-    short: "量價",
-    icon: "⚡",
-    reason: `即時單一條件觸發：漲幅 ${pct.toFixed(2)}%，成交量 ${Math.round(volume).toLocaleString("zh-TW")} 張，先顯示再分級確認。`,
-  };
-}
-
 function getIntradayState(stock) {
   const pct = Number(stock.percent) || 0;
   const volume = Number(stock.tradeVolume) || Number(stock.volume) || 0;
@@ -1711,7 +1595,7 @@ function getIntradayState(stock) {
   const daily = stock.swingDaily || null;
   const hasFallback = (stock.matches || []).some((match) => match.id === "intraday_2m");
   const hasSignal = signals.length > 0 || hasFallback;
-  const hasStrongSignal = signals.some((signal) => ["limit_lock", "volume_burst", "daily_breakout", "gap", "breakout", "ma35_macd", "surge", "live_candidate"].includes(signal.id));
+  const hasStrongSignal = signals.some((signal) => ["limit_lock", "volume_burst", "daily_breakout", "gap", "breakout", "ma35_macd", "surge"].includes(signal.id));
   const hasLimitSignal = signals.some((signal) => signal.id === "limit_lock");
   const hasVolumeSignal = signals.some((signal) => signal.id === "volume_burst");
   const hasDailyTrigger = signals.some((signal) => signal.id === "daily_breakout" || signal.id === "gap" || signal.id === "breakout");
@@ -1946,31 +1830,15 @@ intradayRadarStyles.textContent = `
     box-shadow: inset 0 0 0 1px rgba(255, 80, 80, 0.12);
   }
   .warrant-search-box {
-    display: inline-flex;
-    flex-direction: row;
-    align-items: center;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
     gap: 8px;
-    margin-left: 8px;
   }
   .warrant-search-row {
     display: flex;
     align-items: center;
     gap: 10px;
-  }
-  .warrant-code-detail {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    margin: 2px 6px 2px 0;
-    white-space: nowrap;
-  }
-  .warrant-code-detail b {
-    color: #eaf2ff;
-  }
-  .warrant-code-detail small {
-    color: #9db9ff;
-    font-size: 11px;
-    opacity: .9;
   }
   .swing-actions button,
   .swing-tabs button {
@@ -2544,18 +2412,6 @@ intradayRadarStyles.textContent = `
     font-weight: 800;
     padding: 6px 11px;
   }
-  .strategy5-head-actions {
-    display: flex;
-    align-items: center;
-    justify-content: flex-end;
-    gap: 10px;
-    flex-wrap: wrap;
-    margin-left: auto;
-  }
-  .strategy5-head-actions .swing-actions,
-  .strategy5-results-head > .swing-actions {
-    margin-left: 0;
-  }
   .strategy5-stock-card {
     display: grid;
     grid-template-columns: 44px 1.25fr 0.9fr 1fr 1.2fr;
@@ -2631,131 +2487,6 @@ intradayRadarStyles.textContent = `
 `;
 document.head.appendChild(intradayRadarStyles);
 
-const strategy3DashboardStyles = document.createElement("style");
-strategy3DashboardStyles.textContent = `
-  .strategy5-dashboard.strategy5-dashboard-single {
-    grid-template-columns: 1fr;
-  }
-  .strategy5-dashboard.strategy5-dashboard-single .strategy5-results {
-    min-width: 0;
-  }
-  .overnight-table-wrap {
-    overflow-x: auto;
-  }
-  .overnight-table {
-    width: 100%;
-    min-width: 1180px;
-    border-collapse: collapse;
-    font-size: 13px;
-  }
-  .overnight-table th {
-    color: #8fa7d6;
-    font-size: 12px;
-    text-align: left;
-    padding: 10px 12px;
-    background: rgba(255,255,255,0.035);
-    font-weight: 700;
-  }
-  .overnight-table th button {
-    appearance: none;
-    border: 0;
-    background: transparent;
-    color: inherit;
-    font: inherit;
-    font-weight: 800;
-    cursor: pointer;
-    padding: 0;
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    white-space: nowrap;
-    line-height: 1;
-  }
-  .overnight-table th button .sort-mark {
-    display: inline-flex;
-    align-items: center;
-    flex: 0 0 auto;
-    color: #9db9ff;
-  }
-  .overnight-table th button:hover {
-    color: #ffffff;
-  }
-  .overnight-table td {
-    padding: 18px 12px;
-    border-bottom: 1px solid rgba(126, 200, 227, 0.09);
-    color: #dce8ff;
-    vertical-align: middle;
-  }
-  .overnight-table td b {
-    display: block;
-    color: #fff;
-    font-size: 14px;
-  }
-  .overnight-table td small,
-  .overnight-table td p {
-    display: block;
-    color: #8fa7d6;
-    margin: 4px 0 0;
-    line-height: 1.5;
-  }
-  .overnight-rank {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    min-width: 34px;
-    height: 28px;
-    padding: 0 9px;
-    border-radius: 999px;
-    background: #8e3524;
-    color: #fff;
-    font-weight: 900;
-  }
-  .overnight-score {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    min-width: 34px;
-    height: 28px;
-    padding: 0 9px;
-    border-radius: 999px;
-    background: #8e3524;
-    color: #fff;
-    font-weight: 900;
-  }
-  .overnight-pill {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    min-width: 34px;
-    padding: 4px 10px;
-    border-radius: 999px;
-    border: 1px solid rgba(255, 77, 92, 0.35);
-    color: #ff8fa0;
-    background: rgba(255, 77, 92, 0.1);
-    font-weight: 800;
-  }
-  .overnight-table .price {
-    color: #ffffff;
-    font-weight: 900;
-  }
-  .overnight-tags {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px;
-  }
-  .overnight-tags span {
-    border: 1px solid rgba(126, 200, 227, 0.25);
-    background: rgba(39, 69, 120, 0.18);
-    color: #dce8ff;
-    border-radius: 999px;
-    padding: 3px 8px;
-    font-size: 11px;
-    font-weight: 800;
-    white-space: nowrap;
-  }
-`;
-document.head.appendChild(strategy3DashboardStyles);
-
 function setStrategyChrome(mode) {
   const intraday = mode === "intraday";
   const swing = mode === "swing";
@@ -2768,9 +2499,6 @@ function setStrategyChrome(mode) {
     document.querySelector("#strategy-view .strategy-header")?.remove();
   }
   if (openBuy) {
-    document.querySelector("#strategy-view .strategy-header")?.remove();
-  }
-  if (strategy5) {
     document.querySelector("#strategy-view .strategy-header")?.remove();
   }
   if (strategyBadge) strategyBadge.textContent = intraday ? "FMN://intraday.2m.scan" : swing ? "FMN://swing.daily.scan" : openBuy ? "FMN://open.buy.scan" : "FMN://strategy.scan";
@@ -2829,11 +2557,7 @@ function renderIntradayRadar(evaluated) {
   const keyword = strategyKeyword.trim().toLowerCase();
   const allRows = evaluated
     .filter((stock) => stock.isRealtime)
-    .map((stock) => {
-      const signals = normalizeArray(stock.intradaySignals);
-      const fallback = !signals.length ? getIntradayFallbackSignal(stock) : null;
-      return fallback ? { ...stock, intradaySignals: [fallback] } : stock;
-    })
+    .filter((stock) => cleanNumber(stock.percent) >= 2)
     .filter((stock) => (stock.intradaySignals || []).length || (stock.matches || []).some((match) => match.id === "intraday_2m"))
     .filter((stock) => !keyword || stock.code.includes(keyword) || stock.name.toLowerCase().includes(keyword))
     .map((stock) => {
@@ -2986,8 +2710,7 @@ function renderIntradayRadar(evaluated) {
         <div class="intraday-tabs">
           ${tabs}
           <div class="intraday-actions">
-            <input type="search" placeholder="搜尋代號/名稱" value="${escapeAttr(strategySearchInputValue())}" autocomplete="off" spellcheck="false" data-strategy-inline-search>
-            <button type="button" data-strategy-inline-submit>搜尋</button>
+            <input type="search" placeholder="搜尋代號/名稱" value="${escapeAttr(strategyKeyword)}" data-strategy-inline-search>
             <button type="button" data-export-action>匯出</button>
             <button type="button" data-export-settings>設定</button>
           </div>
@@ -3005,7 +2728,7 @@ function renderIntradayRadar(evaluated) {
   `;
 }
 
-function renderSwingRadar() {
+function renderSwingRadar(universe) {
   setStrategyChrome("swing");
   if (!strategy4ScanLastAt) {
     loadStrategy4LocalCache();
@@ -3019,9 +2742,11 @@ function renderSwingRadar() {
   if (latestStocks.length && !strategy4ScanLoading && !hasFreshStrategy4Scan()) {
     setTimeout(() => refreshStrategyHistoryScan(true), 0);
   }
+  const allowCodes = new Set(universe.map((stock) => stock.code));
   const keyword = strategyKeyword.trim().toLowerCase();
   const allRows = Object.values(strategy4ScanMatches)
-    .filter((stock) => (stock.swingSignals || []).length)
+    .filter((stock) => allowCodes.has(stock.code) && (stock.swingSignals || []).length)
+    .filter((stock) => !isStaleStrategyPrice(stock, latestStocks.find((item) => item.code === stock.code)))
     .filter((stock) => !keyword || stock.code.includes(keyword) || stock.name.toLowerCase().includes(keyword))
     .map((stock) => ({ ...stock, swingScore: stock.swingScore || stock.score || 0 }));
   const filteredRows = swingSignalFilter === "all"
@@ -3092,11 +2817,11 @@ function renderSwingRadar() {
     <section class="swing-dashboard">
       <div class="swing-topbar">
         <div>
-          <h2>${titleWithIcon("└", "策略4-波段雷達")} <span class="swing-live">● 08:00 / 10:00 / 15:00 完整掃</span></h2>
-          <p>排除ETF，只掃真正股票；網站讀取上一版完整快取，08:00、10:00 與 15:00 背景更新正式名單。${historyText}</p>
+          <h2>${titleWithIcon("└", "策略4-波段雷達")} <span class="swing-live">● 07:00 / 14:30 完整掃</span></h2>
+          <p>排除ETF，只掃真正股票；網站讀取上一版完整快取，07:00 與 14:30 背景更新正式名單。${historyText}</p>
         </div>
         <div class="swing-controls">
-          <label>更新模式：<select><option>08:00 / 10:00 / 15:00 完整掃</option></select></label>
+          <label>更新模式：<select><option>07:00 / 14:30 完整掃</option></select></label>
           <label>市場：<select><option>全市場</option></select></label>
         </div>
       </div>
@@ -3105,8 +2830,7 @@ function renderSwingRadar() {
         <div class="swing-tabs">
           ${tabs}
           <div class="swing-actions">
-            <input type="search" placeholder="搜尋代號/名稱" value="${escapeAttr(strategySearchInputValue())}" autocomplete="off" spellcheck="false" data-strategy-inline-search>
-            <button type="button" data-strategy-inline-submit>搜尋</button>
+            <input type="search" placeholder="搜尋代號/名稱" value="${escapeAttr(strategyKeyword)}" data-strategy-inline-search>
             <button type="button" data-export-action>匯出</button>
             <button type="button" data-export-settings>設定</button>
           </div>
@@ -3124,7 +2848,7 @@ function renderSwingRadar() {
   `;
 }
 
-function renderOpenBuyRadar() {
+function renderOpenBuyRadar(universe) {
   setStrategyChrome("openBuy");
   if (!openBuyScanLastAt) {
     loadOpenBuyLocalCache();
@@ -3135,8 +2859,12 @@ function renderOpenBuyRadar() {
   const scanCount = openBuyScanCount || Object.keys(openBuyScanMatches).length;
   const scannedCount = openBuyScannedCodes.size;
   const totalCount = openBuyScanTotal || latestStocks.filter((stock) => !/^00/.test(stock.code)).length || latestStocks.length;
+
   const keyword = strategyKeyword.trim().toLowerCase();
+  const allowCodes = new Set(universe.map((stock) => stock.code));
   const rows = Object.values(openBuyScanMatches)
+    .filter((stock) => allowCodes.has(stock.code))
+    .filter((stock) => !isStaleStrategyPrice(stock, latestStocks.find((item) => item.code === stock.code)))
     .filter((stock) => !keyword || stock.code.includes(keyword) || stock.name.toLowerCase().includes(keyword))
     .sort((a, b) => b.score - a.score || b.percent - a.percent || b.value - a.value)
     .slice(0, 80);
@@ -3156,7 +2884,7 @@ function renderOpenBuyRadar() {
       <tr>
         <td><span class="code">${stock.code}</span></td>
         <td>${stock.name}</td>
-        <td><b class="swing-stage mid" style="${openBuyStatusStyle(stock.status)}">${stock.status || "明日開盤可買"}</b></td>
+        <td><b class="swing-stage mid">${stock.status || "明日開盤可買"}</b></td>
         <td class="price">${formatNumber(stock.close, stock.close >= 100 ? 0 : 2)}</td>
         <td class="pct">${sign}${stock.percent.toFixed(2)}%</td>
         <td>${stock.entry || "09:00 開盤價"}</td>
@@ -3174,7 +2902,7 @@ function renderOpenBuyRadar() {
     <section class="swing-dashboard">
       <div class="swing-topbar">
         <div>
-          <h2>${titleWithIcon("⚡", "策略1-開盤入快跑")} <span class="swing-live">${openBuyScheduleLabel()}</span></h2>
+          <h2>${titleWithIcon("⚡", "策略1-開盤入快跑")} <span class="swing-live">● 07:00 / 14:30 完整掃</span></h2>
           <p>14:30後先出明日候選；08:55後看最終名單。買入：09:00 開盤價｜停利 +1.2%｜停損 -1.0%｜09:10 強制出場。${scanText}</p>
         </div>
         <div class="swing-controls">
@@ -3197,8 +2925,7 @@ function renderOpenBuyRadar() {
         <div class="swing-tabs">
           <button class="active" type="button">全部(${rows.length})</button>
           <div class="swing-actions">
-            <input type="search" placeholder="搜尋代號/名稱" value="${escapeAttr(strategySearchInputValue())}" autocomplete="off" spellcheck="false" data-strategy-inline-search>
-            <button type="button" data-strategy-inline-submit>搜尋</button>
+            <input type="search" placeholder="搜尋代號/名稱" value="${escapeAttr(strategyKeyword)}" data-strategy-inline-search>
             <button type="button" data-export-action>匯出</button>
             <button type="button" data-export-settings>設定</button>
           </div>
@@ -3218,12 +2945,9 @@ function renderOpenBuyRadar() {
 
 function renderStrategy5Dashboard(evaluated) {
   setStrategyChrome("strategy5");
-  const strategy5MatchesFor = (stock) => stock.matches.filter((match) =>
-    STRATEGY5_PRESET_IDS.includes(match.id) && passesStrategy5Preset(stock, match)
-  );
   const byId = Object.fromEntries(STRATEGY5_PRESET_IDS.map((id) => [id, []]));
   evaluated.forEach((stock) => {
-    strategy5MatchesFor(stock).forEach((match) => {
+    stock.matches.filter((match) => STRATEGY5_PRESET_IDS.includes(match.id)).forEach((match) => {
       byId[match.id].push({ ...stock, activeMatch: match });
     });
   });
@@ -3238,49 +2962,30 @@ function renderStrategy5Dashboard(evaluated) {
     .slice(0, 12);
   const active = STRATEGY_BY_ID[strategy5ActiveId] || STRATEGY_BY_ID.momentum;
   const totalMatches = new Set(evaluated
-    .filter((stock) => strategy5MatchesFor(stock).length)
+    .filter((stock) => stock.matches.some((match) => STRATEGY5_PRESET_IDS.includes(match.id)))
     .map((stock) => stock.code)).size;
 
   if (strategySummary) strategySummary.textContent = `策略5：${active.label}｜符合 ${list.length} 檔`;
   if (strategyMatchCount) strategyMatchCount.textContent = totalMatches.toLocaleString("zh-TW");
   if (strategyAvgScore) strategyAvgScore.textContent = list.length ? Math.round(avg(list.map((stock) => stock.score))) : "--";
-  if (strategyTopHit) strategyTopHit.textContent = list.length ? `${Math.max(...list.map((stock) => strategy5MatchesFor(stock).length))}/${STRATEGY5_PRESET_IDS.length}` : "--";
+  if (strategyTopHit) strategyTopHit.textContent = list.length ? `${Math.max(...list.map((stock) => stock.matches.filter((match) => STRATEGY5_PRESET_IDS.includes(match.id)).length))}/${STRATEGY5_PRESET_IDS.length}` : "--";
 
   const descriptions = {
-    momentum: "價格趨勢、20日突破與量比同步轉強，優先找資金加速中的強勢股。",
-    main_force_chip: "近日法人買超、外資或投信連買、籌碼分數提高，找主力資金持續進場標的。",
-    institutional_breakout: "投信連買搭配短均線站上、動能分數與量能確認，鎖定法人推升、準突破的觀察名單。",
-    twenty_day_breakout: "收盤突破近20日高點且今日收紅，找出剛穿越壓力的強勢股。",
-    opening_power: "針對開盤後快速轉強，捕捉即時強勢盤勢。",
-    red_to_green: "參考 Azix 邏輯，以昨日收為準，開低走高突破昨日高點臨界。",
-    investment_trust: "投信連買搭配短均線站上、動能分數與量能確認，鎖定法人抬升、準突破的觀察名單。",
+    momentum: "價格趨勢與成交值同步轉強。",
+    main_force_chip: "法人、大戶或主力籌碼偏買。",
+    twenty_day_breakout: "收盤價接近近期強勢突破。",
+    opening_power: "盤中開盤後快速轉強。",
+    red_to_green: "弱轉強候選，觀察翻紅延續。",
+    investment_trust: "投信連買或偏買候選。",
     vcp: "波動收斂後等待突破。",
     ma_bull: "均線與趨勢方向偏多。",
     sync_backtest: "量價與籌碼同步性高。",
     overnight_chip: "隔日沖與尾盤籌碼觀察。",
     short_fund_flow: "短線資金快速集中。",
-    chip_health_strong: "主力分數、籌碼分數與動能同時達標，並避開融資快速堆高，適合續抱觀察。",
+    chip_health_strong: "籌碼健檢偏強。",
     one_day_rebound: "大跌後一日反彈，需日K確認。",
     short_squeeze: "強漲放量，嘎空觀察。",
     ultra_short: "盤中超短線操作候選。",
-  };
-  const rhythmLabels = {
-    momentum: "核心節奏",
-    main_force_chip: "籌碼K線",
-    institutional_breakout: "法人準突破",
-    investment_trust: "法人訊號",
-    chip_health_strong: "籌碼健檢",
-    twenty_day_breakout: "技術突破",
-    opening_power: "盤中節奏",
-    red_to_green: "反轉節奏",
-    vcp: "收斂節奏",
-    ma_bull: "趨勢節奏",
-    sync_backtest: "同步節奏",
-    overnight_chip: "尾盤節奏",
-    short_fund_flow: "資金節奏",
-    one_day_rebound: "反彈節奏",
-    short_squeeze: "嘎空節奏",
-    ultra_short: "短打節奏",
   };
 
   const filters = STRATEGY5_PRESET_IDS.map((id) => {
@@ -3292,8 +2997,6 @@ function renderStrategy5Dashboard(evaluated) {
         <div>
           <strong>${item.label}</strong>
           <small>${descriptions[id] || "符合策略條件的股票。"}</small>
-          <small style="color:#12d6df;font-weight:800;">${strategy5ScheduleLabel()}</small>
-          <small style="color:#ff4f68;font-weight:900;">${rhythmLabels[id] || "策略節奏"}</small>
         </div>
         <em>${count} 檔</em>
       </button>
@@ -3301,31 +3004,23 @@ function renderStrategy5Dashboard(evaluated) {
   }).join("");
 
   const rows = list.length ? list.map((stock, index) => {
-    const pctMark = stock.percent >= 0 ? "▲" : "▼";
-    const strategyMatches = strategy5MatchesFor(stock);
+    const sign = stock.percent >= 0 ? "+" : "";
+    const strategyMatches = stock.matches.filter((match) => STRATEGY5_PRESET_IDS.includes(match.id));
     const main = stock.activeMatch || strategyMatches[0] || stock.matches[0];
-    const chips = strategyMatches.slice(0, 4).map((match) => `<b>${match.icon} ${match.short}</b>`).join("");
-    const volumeText = Math.round(stock.tradeVolume || 0).toLocaleString("zh-TW");
+    const chips = strategyMatches.slice(0, 5).map((match) => `<b>${match.icon} ${match.short}</b>`).join("");
     return `
       <article class="strategy5-stock-card">
         <div class="rank">#${index + 1}</div>
         <div>
           <strong>${stock.name} <small>${stock.code}</small></strong>
-          <small>上市 · ${stock.sector || "未分類"} · ${new Date().toLocaleDateString("zh-TW")}</small>
+          <small>${stock.sector || "未分類"} · ${stock.isRealtime ? "即時" : "盤中"} · ${new Date().toLocaleDateString("zh-TW")}</small>
         </div>
         <div>
           <div class="strategy5-price">${formatNumber(stock.close, stock.close >= 100 ? 0 : 2)}</div>
-          <small class="${stock.percent >= 0 ? "red" : "green"}">${pctMark}${Math.abs(stock.percent).toFixed(2)}%</small>
-          <small>${volumeText} 張</small>
+          <small class="${stock.percent >= 0 ? "red" : "green"}">${sign}${stock.percent.toFixed(2)}%</small>
         </div>
-        <div>
-          <small>價量特徵</small>
-          <div class="strategy5-chips">${chips}</div>
-        </div>
-        <div>
-          <small>籌碼特徵</small>
-          <div class="strategy5-chips"><b>主力偏多</b><b>法人偏買</b><b>外資買</b><b>融資降溫</b></div>
-        </div>
+        <div class="strategy5-chips">${chips}</div>
+        <div class="strategy5-reason">${main?.reason || "符合策略5條件。"}</div>
       </article>
     `;
   }).join("") : `<div class="empty-state">目前沒有符合「${active.label}」的股票。</div>`;
@@ -3336,7 +3031,7 @@ function renderStrategy5Dashboard(evaluated) {
       <div class="strategy5-hero">
         <div>
           <b>策略控制台</b>
-          <h2>策略中心 <span class="swing-live">${strategy5ScheduleLabel()}</span></h2>
+          <h2>${titleWithIcon("▰", "策略5-綜合策略")} <span class="swing-live">● 讀取既有快取</span></h2>
         </div>
         <div class="strategy5-date">
           <span>資料日</span>
@@ -3349,13 +3044,10 @@ function renderStrategy5Dashboard(evaluated) {
         <section class="strategy5-results">
           <div class="strategy5-results-head">
             <div>
-              <h3>${active.icon} ${active.label} <span style="display:inline-flex;margin-left:8px;padding:3px 7px;border-radius:999px;background:rgba(255,79,104,.15);color:#ff5b6e;font-size:11px;">${rhythmLabels[strategy5ActiveId] || "策略節奏"}</span></h3>
-              <p>${descriptions[strategy5ActiveId] || "符合策略5條件的股票。"}｜${strategy5ScheduleLabel()}</p>
+              <h3>${active.label}</h3>
+              <p>${descriptions[strategy5ActiveId] || "符合策略5條件的股票。"}</p>
             </div>
-            <div class="strategy5-head-actions">
-              <span class="strategy5-count">${list.length} 檔　${now.toLocaleTimeString("zh-TW", { hour12: false }).slice(0, 5)} · 0.1 秒</span>
-              ${inlineStockActionsHtml()}
-            </div>
+            <span class="strategy5-count">${list.length} 檔</span>
           </div>
           ${rows}
         </section>
@@ -3366,127 +3058,70 @@ function renderStrategy5Dashboard(evaluated) {
 
 function renderOvernightDashboard(evaluated) {
   setStrategyChrome("strategy5");
-  const buildOvernightCandidate = (stock) => {
-    const inst = stock.inst || getInstitutionTotal(stock.code);
-    const pct = Number(stock.percent) || 0;
-    const valueRank = Number(stock.valueRank) || 0;
-    const volumeRank = Number(stock.volumeRank) || 0;
-    const instBoost = inst.total > 0 ? 12 : inst.trust > 0 ? 10 : inst.foreign > 0 ? 6 : 0;
-    const heatPenalty = pct > 8.8 ? 24 : pct > 6.5 ? 12 : pct < 0 ? 30 : 0;
-    const overnightScore = clamp(Math.round(valueRank * 0.34 + volumeRank * 0.26 + Math.min(Math.max(pct, 0) * 5, 24) + instBoost - heatPenalty), 0, 100);
-    const pass = pct >= 1 && pct <= 8.8 && valueRank >= 50 && volumeRank >= 45;
-    return {
-      ...stock,
-      inst,
-      projectedRatio: Math.max(1, (volumeRank || 0) / 24),
-      overnightScore,
-      overnightState: pass ? "通過" : "觀察",
-      activeMatch: stock.matches.find((match) => match.id === "overnight_chip") || {
-        reason: pass ? "量價接近隔日沖候選條件，尾盤可列入觀察。" : "未完整命中強條件，但量價排名仍值得觀察。",
-      },
-    };
-  };
-  const sortValue = (stock, key) => {
-    const values = {
-      rank: stock.overnightScore || stock.score || 0,
-      code: Number(stock.code) || 0,
-      price: stock.close || 0,
-      percent: stock.percent || 0,
-      volume: stock.tradeVolume || 0,
-      ratio: stock.projectedRatio || 0,
-      value: stock.value || 0,
-      inst: stock.inst?.total || 0,
-      score: stock.overnightScore || stock.score || 0,
-    };
-    return values[key] ?? 0;
-  };
-  const sortHeader = (key, label) => {
-    const active = overnightSortKey === key;
-    const mark = active ? (overnightSortDir === "asc" ? "▲" : "▼") : "↕";
-    return `<button type="button" data-overnight-sort="${key}"><span>${label}</span><span class="sort-mark">${mark}</span></button>`;
-  };
   const rows = evaluated
-    .filter((stock) =>
-      stock.close >= 10 &&
-      stock.percent > 0 &&
-      stock.percent <= 9.8 &&
-      stock.valueRank >= 42 &&
-      stock.volumeRank >= 38
-    )
-    .map(buildOvernightCandidate)
-    .sort((a, b) => {
-      const diff = sortValue(a, overnightSortKey) - sortValue(b, overnightSortKey);
-      return overnightSortDir === "asc" ? diff : -diff;
-    })
+    .filter((stock) => stock.matches.some((match) => match.id === "overnight_chip"))
+    .map((stock) => ({ ...stock, activeMatch: stock.matches.find((match) => match.id === "overnight_chip") }))
+    .sort((a, b) => b.score - a.score || b.value - a.value || b.percent - a.percent)
     .slice(0, 30);
 
-  if (strategySummary) strategySummary.textContent = `策略3-隔日沖｜符合 ${rows.length} 檔`;
+  if (strategySummary) strategySummary.textContent = `策略3-隔日沖｜07:00 / 14:30 完整掃｜符合 ${rows.length} 檔`;
   if (strategyMatchCount) strategyMatchCount.textContent = rows.length.toLocaleString("zh-TW");
-  if (strategyAvgScore) strategyAvgScore.textContent = rows.length ? Math.round(avg(rows.map((stock) => stock.overnightScore || stock.score))) : "--";
+  if (strategyAvgScore) strategyAvgScore.textContent = rows.length ? Math.round(avg(rows.map((stock) => stock.score))) : "--";
   if (strategyTopHit) strategyTopHit.textContent = rows.length ? `${Math.max(...rows.map((stock) => stock.matches.length))}` : "--";
 
   const cards = rows.length ? rows.map((stock, index) => {
     const sign = stock.percent >= 0 ? "+" : "";
-    const inst = stock.inst || getInstitutionTotal(stock.code);
-    const projectedRatio = (stock.projectedRatio || Math.max(1, (stock.volumeRank || 0) / 24)).toFixed(1);
-    const valueText = stock.value ? `${(stock.value / 100000000).toFixed(2)} 億` : "--";
-    const tags = [
-      stock.volumeRank >= 70 ? "量能啟動" : "量能觀察",
-      stock.percent >= 5 ? "急漲" : "溫和",
-      stock.valueRank >= 70 ? "高成交額" : "成交待放",
-      inst.total > 0 ? "法人5D偏多" : "法人待確認",
-      "13:00掃描",
-    ];
+    const stage = stock.swingStage || getSwingStage(stock);
     return `
-      <tr>
-        <td><span class="overnight-rank">#${index + 1}</span></td>
-        <td><b>${stock.name}</b><small>${stock.code}</small></td>
-        <td class="price">${formatNumber(stock.close, stock.close >= 100 ? 0 : 2)}</td>
-        <td class="${stock.percent >= 0 ? "red" : "green"}">${sign}${stock.percent.toFixed(2)}%</td>
-        <td>${Math.round(stock.tradeVolume || 0).toLocaleString("zh-TW")}</td>
-        <td>${projectedRatio}x</td>
-        <td>${valueText}</td>
-        <td>${formatInstitution(inst.total)}</td>
-        <td><span class="overnight-score">${stock.overnightScore}</span></td>
-        <td>
-          <strong>${stock.overnightState}</strong>
-          <p>量價與成交值偏強，${stock.activeMatch?.reason || "隔日沖候選。"} 本策略以 13:00 完整掃結果作為隔日沖候選。</p>
-          <div class="overnight-tags">${tags.map((tag) => `<span>${tag}</span>`).join("")}</div>
-        </td>
-        <td>
-          <div class="overnight-tags">${tags.map((tag) => `<span>${tag}</span>`).join("")}</div>
-          <small>推估量比 ${projectedRatio}x · 漲幅 ${sign}${stock.percent.toFixed(2)}% · 成交額 ${valueText}</small>
-        </td>
-      </tr>
+      <article class="strategy5-stock-card">
+        <div class="rank">#${index + 1}</div>
+        <div>
+          <strong>${stock.name} <small>${stock.code}</small></strong>
+          <small>${stock.sector || "未分類"} · ${stage.label || "盤中"} · ${stock.isRealtime ? "即時" : "盤中"}</small>
+        </div>
+        <div>
+          <div class="strategy5-price">${formatNumber(stock.close, stock.close >= 100 ? 0 : 2)}</div>
+          <small class="${stock.percent >= 0 ? "red" : "green"}">${sign}${stock.percent.toFixed(2)}%</small>
+        </div>
+        <div class="strategy5-chips"><b>⌬ 隔日</b><b>${Math.round(stock.tradeVolume || 0).toLocaleString("zh-TW")}張</b></div>
+        <div class="strategy5-reason">${stock.activeMatch?.reason || "隔日沖籌碼與量價候選。"}</div>
+      </article>
     `;
-  }).join("") : `<tr><td colspan="11">目前沒有符合隔日沖條件的股票。</td></tr>`;
+  }).join("") : `<div class="empty-state">目前沒有符合隔日沖條件的股票。</div>`;
 
   strategyTable.innerHTML = `
     <section class="strategy5-shell">
       <div class="strategy5-hero">
         <div>
-          <h2>${titleWithIcon("◐", "策略3-隔日沖")} <span class="swing-live">● 13:00 完整掃</span></h2>
+          <b>固定快取名單</b>
+          <h2>${titleWithIcon("◐", "策略3-隔日沖")} <span class="swing-live">● 07:00 / 14:30 完整掃</span></h2>
+        </div>
+        <div class="strategy5-date">
+          <span>符合</span>
+          <strong>${rows.length}</strong>
+          <span>隔日沖候選</span>
         </div>
       </div>
-      <section class="strategy5-dashboard strategy5-dashboard-single">
+      <section class="strategy5-dashboard">
+        <aside class="strategy5-list">
+          <button class="strategy5-filter-card active" type="button">
+            <span>⌬</span>
+            <div>
+              <strong>隔日沖吸籌監控</strong>
+              <small>只看 GitHub Actions 產出的固定隔日沖名單。</small>
+            </div>
+            <em>${rows.length} 檔</em>
+          </button>
+        </aside>
         <section class="strategy5-results">
           <div class="strategy5-results-head">
             <div>
-              <h3>盤中隔日沖</h3>
-              <p>接近收盤前完整掃一次，以量比、成交額與法人 5D 條件排序。</p>
+              <h3>隔日沖候選排行</h3>
+              <p>以背景完整掃描結果排序，開網頁不再臨時重算。</p>
             </div>
-            ${inlineStockActionsHtml()}
+            <span class="strategy5-count">${rows.length} 檔</span>
           </div>
-          <div class="overnight-table-wrap">
-            <table class="overnight-table">
-              <thead>
-                <tr>
-                  <th>${sortHeader("rank", "排名")}</th><th>${sortHeader("code", "股票")}</th><th>${sortHeader("price", "價格")}</th><th>${sortHeader("percent", "漲幅")}</th><th>${sortHeader("volume", "量")}</th><th>${sortHeader("ratio", "推估量比")}</th><th>${sortHeader("value", "成交額")}</th><th>${sortHeader("inst", "法人5D")}</th><th>${sortHeader("score", "分數")}</th><th>AI分析</th><th>觸發原因</th>
-                </tr>
-              </thead>
-              <tbody>${cards}</tbody>
-            </table>
-          </div>
+          ${cards}
         </section>
       </section>
     </section>
@@ -3518,33 +3153,33 @@ function renderStrategyScanner() {
 
   const keyword = strategyKeyword.trim().toLowerCase();
   const universe = buildStrategyUniverse(latestStocks);
+  if (strategyPresetMode === "strategy3") {
+    if (!strategy3Data.length && !strategy3CacheLoading) loadStrategy3Cache();
+    const rows = strategy3Data.filter((stock) => {
+      const name = String(stock.name || "").toLowerCase();
+      return !keyword || String(stock.code || "").includes(keyword) || name.includes(keyword);
+    });
+    renderOvernightDashboard(rows);
+    return;
+  }
   if (selected.length === 1 && selected[0] === "open_buy") {
-    renderOpenBuyRadar();
+    const openBuyRows = universe.filter((stock) => {
+      const passKeyword = !keyword || stock.code.includes(keyword) || stock.name.toLowerCase().includes(keyword);
+      return passKeyword;
+    });
+    renderOpenBuyRadar(openBuyRows);
     return;
   }
   if (selected.length === 1 && selected[0] === "swing_radar") {
-    renderSwingRadar();
+    const swingRows = universe.filter((stock) => {
+      const passKeyword = !keyword || stock.code.includes(keyword) || stock.name.toLowerCase().includes(keyword);
+      return passKeyword;
+    });
+    renderSwingRadar(swingRows);
     return;
   }
 
-  if (selected.length === 1 && selected[0] === "intraday_2m") {
-    const intradayRows = universe
-      .filter((stock) => !keyword || stock.code.includes(keyword) || stock.name.toLowerCase().includes(keyword))
-      .map(evaluateStrategyStock);
-    renderIntradayRadar(intradayRows);
-    return;
-  }
-
-  const allEvaluated = universe.map(evaluateStrategyStock);
-  if (strategyPresetMode === "strategy3") {
-    const overnightRows = allEvaluated.filter((stock) =>
-      !keyword || stock.code.includes(keyword) || stock.name.toLowerCase().includes(keyword)
-    );
-    renderOvernightDashboard(overnightRows);
-    return;
-  }
-
-  const evaluated = allEvaluated.filter((stock) => {
+  const evaluated = universe.map(evaluateStrategyStock).filter((stock) => {
     const matchedIds = stock.matches.map((item) => item.id);
     const passMode = strategyMode === "all"
       ? selected.every((id) => matchedIds.includes(id))
@@ -3553,6 +3188,14 @@ function renderStrategyScanner() {
     return passMode && passKeyword;
   }).sort((a, b) => b.matches.length - a.matches.length || b.score - a.score || b.value - a.value);
 
+  if (selected.length === 1 && selected[0] === "intraday_2m") {
+    renderIntradayRadar(evaluated);
+    return;
+  }
+  if (strategyPresetMode === "strategy3") {
+    renderOvernightDashboard(evaluated);
+    return;
+  }
   if (strategyPresetMode === "strategy5") {
     renderStrategy5Dashboard(evaluated);
     return;
@@ -3604,100 +3247,18 @@ function renderStrategyScanner() {
   `;
 }
 
-function findWarrantUnderlyingStock(item) {
-  const name = String(item.underlyingName || "").trim();
-  const code = String(item.underlyingCode || "").trim();
-  const byCode = code ? latestStocks.find((stock) => stock.code === code) : null;
-  if (byCode) return byCode;
-  const exact = latestStocks.find((stock) => stock.name === name);
-  return exact || latestStocks.find((stock) => name && (stock.name.includes(name) || name.includes(stock.name))) || null;
-}
-
 function hydrateWarrantFlowItem(item) {
   const name = String(item.underlyingName || "").trim();
-  const partial = findWarrantUnderlyingStock(item);
-  const code = item.underlyingCode || partial?.code || "";
-  const quote = code ? warrantFlowQuotes[code] : null;
-  const close = cleanNumber(quote?.close) || partial?.close || cleanNumber(item.underlyingClose) || 0;
-  const percent = Number.isFinite(Number(quote?.percent)) ? Number(quote.percent) : (Number.isFinite(Number(item.underlyingPercent)) ? Number(item.underlyingPercent) : (partial?.percent || 0));
-  const tradeVolume = cleanNumber(quote?.tradeVolume) || partial?.tradeVolume || 0;
+  const exact = latestStocks.find((stock) => stock.name === name);
+  const partial = exact || latestStocks.find((stock) => name && (stock.name.includes(name) || name.includes(stock.name)));
   return {
     ...item,
-    code,
+    code: partial?.code || "",
     name: partial?.name || name || "--",
-    stockPercent: percent,
-    stockClose: close,
-    stockValue: close && tradeVolume ? close * tradeVolume : partial?.value || 0,
-    stockRealtime: Boolean(quote?.close),
+    stockPercent: partial?.percent || 0,
+    stockClose: partial?.close || 0,
+    stockValue: partial?.value || 0,
   };
-}
-
-async function refreshWarrantFlowQuotes() {
-  if (!warrantFlowData.length) return;
-  if (!latestStocks.length) await loadStrategyStocks();
-  const codes = [...new Set(warrantFlowData
-    .map((item) => item.underlyingCode || findWarrantUnderlyingStock(item)?.code)
-    .filter(Boolean))];
-  if (!codes.length) return;
-  const payload = await fetchJson(`${endpoints.realtime}?codes=${encodeURIComponent(codes.slice(0, 100).join(","))}&t=${Date.now()}`, 12000);
-  normalizeArray(payload?.quotes).forEach((quote) => {
-    if (quote?.code && quote.close) warrantFlowQuotes[quote.code] = quote;
-  });
-}
-
-function mergeWarrantFlowMatches(matches) {
-  const byKey = new Map();
-  warrantFlowData.forEach((item) => {
-    const key = String(item.underlyingCode || item.underlyingName || "").trim();
-    if (key) byKey.set(key, item);
-  });
-  normalizeArray(matches).forEach((item) => {
-    const key = String(item.underlyingCode || item.underlyingName || "").trim();
-    if (key) byKey.set(key, item);
-  });
-  warrantFlowData = [...byKey.values()];
-}
-
-async function searchWarrantFlowRemote(keyword) {
-  const query = String(keyword || "").trim();
-  if (query.length < 2 || warrantFlowSearchLoading) return;
-  warrantFlowSearchLoading = true;
-  try {
-    const payload = await fetchJson(`${endpoints.scanWarrantFlow}?q=${encodeURIComponent(query)}&t=${Date.now()}`, 45000);
-    mergeWarrantFlowMatches(payload?.matches);
-    const updatedAt = Date.parse(payload?.updatedAt || "");
-    if (Number.isFinite(updatedAt)) warrantFlowUpdatedAt = Math.max(warrantFlowUpdatedAt || 0, updatedAt);
-    await refreshWarrantFlowQuotes();
-  } catch (error) {
-    // 搜尋失敗時保留原本 Top 10，不讓畫面中斷。
-  } finally {
-    warrantFlowSearchLoading = false;
-    renderWarrantFlow();
-  }
-}
-
-function scheduleWarrantFlowSearch() {
-  const keyword = warrantFlowKeyword.trim();
-  warrantFlowPage = 1;
-  clearTimeout(warrantFlowSearchTimer);
-  if (keyword.length < 2) {
-    renderWarrantFlow();
-    return;
-  }
-  renderWarrantFlow();
-  warrantFlowSearchTimer = setTimeout(() => searchWarrantFlowRemote(keyword), 350);
-}
-
-async function submitWarrantFlowSearch() {
-  const input = document.querySelector("#warrant-flow-search");
-  warrantFlowKeyword = String(input?.value || "").trim();
-  warrantFlowPage = 1;
-  if (warrantFlowKeyword.length >= 2) {
-    renderWarrantFlow();
-    await searchWarrantFlowRemote(warrantFlowKeyword);
-  } else {
-    renderWarrantFlow();
-  }
 }
 
 function formatWarrantMoney(value) {
@@ -3705,24 +3266,6 @@ function formatWarrantMoney(value) {
   if (number >= 100000000) return `${(number / 100000000).toFixed(2)} 億`;
   if (number >= 10000) return `${Math.round(number / 10000).toLocaleString("zh-TW")} 萬`;
   return Math.round(number).toLocaleString("zh-TW");
-}
-
-function nextChipScanTime() {
-  const now = new Date();
-  const candidates = [6, 21].map((hour) => {
-    const time = new Date(now);
-    time.setHours(hour, 0, 0, 0);
-    if (time <= now) time.setDate(time.getDate() + 1);
-    return time;
-  }).sort((a, b) => a - b);
-  return candidates[0].toLocaleString("zh-TW", {
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  });
 }
 
 function renderWarrantFlow() {
@@ -3733,136 +3276,104 @@ function renderWarrantFlow() {
     .map(hydrateWarrantFlowItem)
     .map((item) => ({
       ...item,
-      observeScore: clamp(Math.round(
+      observeScore: Math.round(
         item.score +
         Math.min(cleanNumber(item.callValue) / 20000000, 18) +
         Math.min(cleanNumber(item.callPutRatio) * 2, 14) +
-        (item.stockPercent < 0 ? -22 : item.stockPercent <= 2.5 ? 14 : item.stockPercent <= 4.5 ? 0 : -16)
-      ), 0, 100),
+        (item.stockPercent >= -1 && item.stockPercent <= 2.5 ? 10 : item.stockPercent <= 4.5 ? 3 : -8)
+      ),
     }))
-    .sort((a, b) =>
-      b.observeScore - a.observeScore ||
-      b.callValue - a.callValue ||
-      b.callCount - a.callCount ||
-      b.callPutRatio - a.callPutRatio ||
-      b.atMoneyCallCount - a.atMoneyCallCount
-    )
+    .sort((a, b) => b.observeScore - a.observeScore || b.score - a.score || b.callValue - a.callValue)
     .map((item, index) => ({ ...item, rank: index + 1 }));
-  const priorityRows = allRows.filter((item) => item.stockPercent >= 0 && item.stockPercent <= 2.5);
-  const sourceRows = keyword
+  const rows = keyword
     ? allRows.filter((item) =>
       item.code.includes(keyword) ||
       item.name.toLowerCase().includes(keyword) ||
       item.underlyingName.toLowerCase().includes(keyword))
-    : priorityRows;
-  const totalPages = Math.max(1, Math.ceil(sourceRows.length / WARRANT_FLOW_PAGE_SIZE));
-  warrantFlowPage = Math.min(Math.max(warrantFlowPage || 1, 1), totalPages);
-  const pageStart = (warrantFlowPage - 1) * WARRANT_FLOW_PAGE_SIZE;
-  const rows = sourceRows
-    .slice(pageStart, pageStart + WARRANT_FLOW_PAGE_SIZE)
-    .map((item, index) => ({ ...item, rank: pageStart + index + 1 }));
-  const listLabel = keyword
-    ? `搜尋結果 ${sourceRows.length} 筆｜第 ${warrantFlowPage}/${totalPages} 頁`
-    : `全部 ${sourceRows.length} 筆｜第 ${warrantFlowPage}/${totalPages} 頁`;
+    : allRows.filter((item) => item.stockPercent <= 4.5).slice(0, 10);
+  const totalCall = warrantFlowData.reduce((sum, item) => sum + cleanNumber(item.callValue), 0);
+  const totalPut = warrantFlowData.reduce((sum, item) => sum + cleanNumber(item.putValue), 0);
+  const updatedText = warrantFlowUpdatedAt
+    ? new Date(warrantFlowUpdatedAt).toLocaleTimeString("zh-TW", { hour12: false })
+    : "等待更新";
+  const listLabel = keyword ? `搜尋結果 ${rows.length} 筆｜完整候選 ${allRows.length} 筆` : "優先觀察 Top 10";
   const helperText = keyword
-    ? "搜尋會直接查全台股權證；若該股票有權證成交資料就會顯示。"
-    : "收盤後找明日候選，盤中輔助確認；依認購金額、購售比、多檔同步、價平/價內、剩餘天數與股票未過熱程度排序。";
-  const scanBadge = `●06:00/21:00完整掃　●預計下次掃描時間:${nextChipScanTime()}`;
-  const pager = sourceRows.length > WARRANT_FLOW_PAGE_SIZE ? `
-    <div class="warrant-pager" style="display:flex;align-items:center;justify-content:flex-end;gap:10px;margin-top:12px;">
-      <button type="button" data-warrant-page="${warrantFlowPage - 1}" ${warrantFlowPage <= 1 ? "disabled" : ""}>上一頁</button>
-      <span style="color:#9ebdff;font-size:13px;">第 ${warrantFlowPage} / ${totalPages} 頁，共 ${sourceRows.length} 筆</span>
-      <button type="button" data-warrant-page="${warrantFlowPage + 1}" ${warrantFlowPage >= totalPages ? "disabled" : ""}>下一頁</button>
-    </div>
-  ` : "";
+    ? "搜尋會查完整候選名單，就算沒有進 Top 10 也會顯示目前權證資金狀況。"
+    : "只顯示可優先觀察前十名：認購集中、認售偏低、股票尚未大漲者優先。";
 
   const body = rows.length ? rows.map((item) => {
+    const sign = item.stockPercent >= 0 ? "+" : "";
     const hot = item.score >= 82 ? "hot" : item.score >= 68 ? "mid" : "low";
-    const judgment = item.stockPercent >= 0 && item.stockPercent <= 2.5
-      ? "權證先熱，股票未噴，優先觀察。"
-      : item.stockPercent > 2.5
-        ? "股票已漲較多，暫不列優先買進。"
-        : "股票偏弱，暫不列優先買進。";
     return `
       <tr>
         <td><span class="swing-score">${item.rank || "--"}</span></td>
         <td><span class="code">${item.code || "--"}</span></td>
         <td>${item.name}</td>
-        <td class="price">${item.stockClose ? formatNumber(item.stockClose, item.stockClose >= 100 ? 0 : 2) : "--"}</td>
+        <td><span class="swing-score">${item.observeScore}</span></td>
         <td class="price">${formatWarrantMoney(item.callValue)}</td>
         <td>${formatWarrantMoney(item.putValue)}</td>
         <td><b class="swing-stage ${hot}">${item.callPutRatio >= 99 ? "99+" : item.callPutRatio}</b></td>
         <td>${item.callCount} / ${item.putCount}</td>
-        <td>${item.reason} 判斷：${judgment}</td>
+        <td class="pct">${sign}${item.stockPercent.toFixed(2)}%</td>
+        <td>${item.topWarrants.map((warrant) => `<b>${warrant.code}</b>`).join(" ")}</td>
+        <td>${item.reason}</td>
       </tr>
     `;
   }).join("") : `
-    <tr><td colspan="9">${keyword ? (warrantFlowSearchLoading ? "正在查詢全台股權證資料..." : "查不到這檔股票的有效權證成交資料，或目前資料來源尚未提供。") : "目前沒有符合「認購權證先熱、股票尚未噴出」的資料。"}</td></tr>
+    <tr><td colspan="11">${keyword ? "完整候選名單內找不到這檔股票；代表目前權證資金熱度尚未進候選名單。" : "權證資金走向讀取中。只顯示「認購權證先熱、股票尚未噴出」的前十名。"}</td></tr>
   `;
 
   panel.innerHTML = `
     <section class="swing-dashboard">
       <div class="swing-topbar">
         <div>
-          <h2>${titleWithIcon("◒", "權證資金走向")} <span class="swing-live" style="color:#12d6df;border-color:rgba(18,214,223,.45);background:rgba(18,214,223,.12);">${scanBadge}</span></h2>
+          <h2>${titleWithIcon("◒", "權證先熱雷達")} <span class="swing-live">● 07:00 / 14:30 完整掃</span></h2>
           <p>${helperText}</p>
         </div>
         <div class="swing-controls">
-          <label>更新模式：<select><option>06:00 / 21:00 完整掃</option></select></label>
-          <label>模式：<select><option>權證先熱股票未噴</option></select></label>
+          <label>更新模式：<select><option>07:00 / 14:30 完整掃</option></select></label>
+          <label>模式：<select><option>認購偏多</option></select></label>
         </div>
       </div>
       <div class="swing-signal-grid">
         <button class="swing-card active selected" type="button">
-          <div><strong>命中標的</strong><small>權證先熱股票未噴</small></div><em>${priorityRows.length}</em>
+          <div><strong>命中標的</strong><small>權證資金偏多</small></div><em>${warrantFlowData.length}</em>
+        </button>
+        <button class="swing-card active" type="button">
+          <div><strong>認購金額</strong><small>候選合計</small></div><em>${formatWarrantMoney(totalCall)}</em>
+        </button>
+        <button class="swing-card ${totalPut ? "active" : ""}" type="button">
+          <div><strong>認售金額</strong><small>候選合計</small></div><em>${formatWarrantMoney(totalPut)}</em>
         </button>
       </div>
       <section class="swing-panel">
         <div class="swing-tabs">
           <button class="active" type="button">${listLabel}</button>
-          <div class="warrant-search-box">
+          <div class="swing-actions warrant-search-box">
             <small class="warrant-search-hint">🔥 可搜尋全台股票權證熱度</small>
             <div class="warrant-search-row">
-              <input id="warrant-flow-search" type="search" placeholder="搜尋股票代號/名稱" value="${escapeAttr(warrantFlowKeyword)}">
-              <button id="warrant-flow-submit" type="button">搜尋</button>
+              <input id="warrant-flow-search" type="search" placeholder="搜尋股票代號/名稱" value="${escapeAttr(warrantFlowKeyword)}" data-warrant-flow-search>
+              <button id="warrant-flow-refresh" type="button">重新整理</button>
             </div>
-            <button id="warrant-flow-refresh" type="button">重新整理</button>
           </div>
         </div>
         <table class="swing-table">
           <thead>
             <tr>
-              <th>排名</th><th>股票代號</th><th>標的名稱</th><th>價格</th><th>認購金額</th><th>認售金額</th><th>購/售比</th><th>購/售檔數</th><th>判斷</th>
+              <th>排名</th><th>股票代號</th><th>標的名稱</th><th>觀察分數</th><th>認購金額</th><th>認售金額</th><th>購/售比</th><th>購/售檔數</th><th>股票漲幅</th><th>代表權證</th><th>原因</th>
             </tr>
           </thead>
           <tbody>${body}</tbody>
         </table>
-        ${pager}
       </section>
     </section>
   `;
 
-  panel.querySelector("#warrant-flow-submit")?.addEventListener("click", submitWarrantFlowSearch);
-  panel.querySelector("#warrant-flow-search")?.addEventListener("keydown", (event) => {
-    if (event.key !== "Enter") return;
-    event.preventDefault();
-    submitWarrantFlowSearch();
+  panel.querySelector("#warrant-flow-search")?.addEventListener("input", (event) => {
+    warrantFlowKeyword = event.target.value || "";
+    renderWarrantFlow();
   });
-  panel.querySelector("#warrant-flow-refresh")?.addEventListener("click", async () => {
-    warrantFlowKeyword = "";
-    warrantFlowPage = 1;
-    const input = panel.querySelector("#warrant-flow-search");
-    if (input) input.value = "";
-    await loadWarrantFlow(true);
-  });
-  panel.querySelectorAll("[data-warrant-page]").forEach((button) => {
-    button.addEventListener("click", () => {
-      const page = Number(button.dataset.warrantPage);
-      if (!Number.isFinite(page)) return;
-      warrantFlowPage = page;
-      renderWarrantFlow();
-    });
-  });
+  panel.querySelector("#warrant-flow-refresh")?.addEventListener("click", () => loadWarrantFlow(true));
 }
 
 async function loadWarrantFlow(force = false) {
@@ -3871,23 +3382,18 @@ async function loadWarrantFlow(force = false) {
     loadWarrantFlowLocalCache();
   }
   if (!force && hasFreshWarrantFlow()) {
-    await refreshWarrantFlowQuotes();
     renderWarrantFlow();
     return;
   }
   warrantFlowLoading = true;
-  renderWarrantFlow();
   const panel = viewPanels["warrant-flow"];
   if (panel && !warrantFlowData.length) {
     panel.innerHTML = `<div class="empty-state">正在讀取權證資金走向...</div>`;
   }
   try {
-    if (!latestStocks.length) await loadStrategyStocks();
+    if (!latestStocks.length) loadStrategyStocks();
     let payload = await fetchJson(`${endpoints.warrantFlowCache}?t=${Date.now()}`, 10000);
     const cachedMatches = normalizeArray(payload?.matches);
-    if (force || !cachedMatches.length) {
-      payload = await fetchJson(`${endpoints.scanWarrantFlow}?t=${Date.now()}`, 45000);
-    }
     if (!normalizeArray(payload?.matches).length) {
       payload = await fetchJson(`${endpoints.warrantFlowBackup}?t=${Date.now()}`, 10000);
     }
@@ -3895,7 +3401,6 @@ async function loadWarrantFlow(force = false) {
     const updatedAt = Date.parse(payload?.updatedAt || "");
     warrantFlowUpdatedAt = Number.isFinite(updatedAt) ? updatedAt : Date.now();
     saveWarrantFlowLocalCache();
-    await refreshWarrantFlowQuotes();
     renderWarrantFlow();
   } catch (error) {
     if (panel && !warrantFlowData.length) {
@@ -3903,12 +3408,11 @@ async function loadWarrantFlow(force = false) {
     }
   } finally {
     warrantFlowLoading = false;
-    renderWarrantFlow();
   }
 }
 
-async function loadStrategyStocks(force = false) {
-  if (strategyStocksLoading || (!force && latestStocks.length)) return;
+async function loadStrategyStocks() {
+  if (strategyStocksLoading || latestStocks.length) return;
   strategyStocksLoading = true;
   try {
     let stocks = [];
@@ -3951,9 +3455,6 @@ async function loadStrategyStocks(force = false) {
     if (parsed.length) {
       latestStocks = parsed;
       renderStrategyScanner();
-      if (selectedStrategyIds.has("intraday_2m")) {
-        deferUiWork(() => refreshStrategyRealtimeScan(true), 80);
-      }
     } else if (strategyTable) {
       strategyTable.innerHTML = `<div class="empty-state">策略5目前沒有可篩選的股票資料。</div>`;
     }
@@ -4210,13 +3711,13 @@ function renderIndexes(indexes, futuresNear, futuresNext, marketStatus, otcSigna
     if (futuresNear && futuresNear.price && parseFloat(futuresNear.price) > 0) {
       const sign = String(futuresNear.change || "").startsWith("-") ? "-" : "+";
       metricCards[2].innerHTML = `
-        <span>⇅ 台指近全</span>
+        <span>⇅ 台指期夜盤</span>
         <strong>${formatNumber(futuresNear.price, 0)}</strong>
         <em class="${sign === "-" ? "up" : "down"}">${futuresNear.change || "--"}　(${futuresNear.pct || "--"})</em>
         ${futuresNear.basisLabel ? `<small class="metric-signal ${futuresNear.basisSide === "short" ? "green" : futuresNear.basisSide === "long" ? "red" : ""}">${futuresNear.basisLabel}</small>` : statusLabel ? `<small style="color:#666; font-size:11px; margin-top:2px;">${statusLabel}</small>` : ""}
       `;
     } else {
-      metricCards[2].innerHTML = `<span>⇅ 台指近全</span><strong>--</strong><em>${statusLabel || "等待資料"}</em>`;
+      metricCards[2].innerHTML = `<span>⇅ 台指期夜盤</span><strong>--</strong><em>${statusLabel || "等待資料"}</em>`;
     }
   }
 
@@ -4224,7 +3725,8 @@ function renderIndexes(indexes, futuresNear, futuresNext, marketStatus, otcSigna
 }
 
 function formatChipDate(dateStr) {
-  return "";
+  if (!dateStr || dateStr.length !== 8) return "等待盤後資料";
+  return `法人資料: ${dateStr.slice(0, 4)}/${dateStr.slice(4, 6)}/${dateStr.slice(6, 8)}`;
 }
 
 function isTwseTradingTime(date = new Date()) {
@@ -4239,11 +3741,12 @@ function renderChipTradeTable() {
   const dateEl = document.querySelector("#chip-trade-date");
   const sortEl = document.querySelector("#chip-sort");
   if (!body) return;
-  const keyword = strategyKeyword.trim().toLowerCase();
 
   if (dateEl) {
-    dateEl.textContent = "";
-    dateEl.hidden = true;
+    const now = new Date();
+    const time = now.toLocaleTimeString("zh-TW", { hour12: false });
+    const modeText = "盤後收盤";
+    dateEl.textContent = `${formatChipDate(institutionDate)}｜${modeText}　更新 ${time}`;
   }
 
   const rows = latestStocks
@@ -4254,19 +3757,13 @@ function renderChipTradeTable() {
       const foreign = Number(inst.foreign) || 0;
       const trust = Number(inst.trust) || 0;
       const total = Number(inst.total) || foreign + trust + (Number(inst.dealer) || 0);
-      const foreignStreak = Number(inst.foreignStreak) || 0;
-      const trustStreak = Number(inst.trustStreak) || 0;
-      const jointStreak = Number(inst.jointStreak) || 0;
-      const jointSignal = jointStreak >= 2 || (foreignStreak >= 2 && trust > 0) || (trustStreak >= 2 && foreign > 0);
-      if (chipFilter === "joint" && !jointSignal) return null;
-      if (chipFilter === "trust" && !(trustStreak >= 2)) return null;
-      if (chipFilter === "foreign" && !(foreignStreak >= 2)) return null;
+      if (chipFilter === "joint" && !(foreign > 0 && trust > 0)) return null;
+      if (chipFilter === "trust" && !(trust > 0)) return null;
+      if (chipFilter === "foreign" && !(foreign > 0)) return null;
       if (chipFilter === "legal" && !((Number(inst.total) || foreign + trust + (Number(inst.dealer) || 0)) > 0)) return null;
-      const name = stock.name || code;
-      if (keyword && !code.includes(keyword) && !String(name).toLowerCase().includes(keyword)) return null;
       return {
         code,
-        name,
+        name: stock.name || code,
         price: cleanNumber(stock.close),
         change: cleanNumber(stock.change),
         percent: cleanNumber(stock.percent),
@@ -4275,10 +3772,9 @@ function renderChipTradeTable() {
         foreign,
         trust,
         total,
-        foreignStreak,
-        trustStreak,
-        jointStreak,
-        jointSignal,
+        foreignStreak: Number(inst.foreignStreak) || 0,
+        trustStreak: Number(inst.trustStreak) || 0,
+        jointStreak: Number(inst.jointStreak) || 0,
       };
     })
     .filter(Boolean);
@@ -4288,19 +3784,13 @@ function renderChipTradeTable() {
       const foreign = Number(inst.foreign) || 0;
       const trust = Number(inst.trust) || 0;
       const total = Number(inst.total) || foreign + trust + (Number(inst.dealer) || 0);
-      const foreignStreak = Number(inst.foreignStreak) || 0;
-      const trustStreak = Number(inst.trustStreak) || 0;
-      const jointStreak = Number(inst.jointStreak) || 0;
-      const jointSignal = jointStreak >= 2 || (foreignStreak >= 2 && trust > 0) || (trustStreak >= 2 && foreign > 0);
-      if (chipFilter === "joint" && !jointSignal) return;
-      if (chipFilter === "trust" && !(trustStreak >= 2)) return;
-      if (chipFilter === "foreign" && !(foreignStreak >= 2)) return;
+      if (chipFilter === "joint" && !(foreign > 0 && trust > 0)) return;
+      if (chipFilter === "trust" && !(trust > 0)) return;
+      if (chipFilter === "foreign" && !(foreign > 0)) return;
       if (chipFilter === "legal" && !(total > 0)) return;
-      const name = inst.name || code;
-      if (keyword && !code.includes(keyword) && !String(name).toLowerCase().includes(keyword)) return;
       rows.push({
         code,
-        name,
+        name: inst.name || code,
         price: 0,
         change: 0,
         percent: 0,
@@ -4309,10 +3799,9 @@ function renderChipTradeTable() {
         foreign,
         trust,
         total,
-        foreignStreak,
-        trustStreak,
-        jointStreak,
-        jointSignal,
+        foreignStreak: Number(inst.foreignStreak) || 0,
+        trustStreak: Number(inst.trustStreak) || 0,
+        jointStreak: Number(inst.jointStreak) || 0,
       });
     });
   }
@@ -4323,15 +3812,15 @@ function renderChipTradeTable() {
     if (sortBy === "foreign") return b.foreign - a.foreign;
     if (sortBy === "pct") return b.percent - a.percent;
     if (sortBy === "value") return b.value - a.value;
-    return (b.jointStreak - a.jointStreak) || ((b.foreignStreak + b.trustStreak) - (a.foreignStreak + a.trustStreak)) || ((b.foreign + b.trust) - (a.foreign + a.trust));
+    return (b.jointStreak - a.jointStreak) || ((b.foreign + b.trust) - (a.foreign + a.trust));
   });
 
   const shown = rows.slice(0, 80);
   if (!shown.length) {
     const emptyText = {
-      joint: "目前沒有符合「外資連買搭配投信買超 / 投信連買搭配外資買超」的資料，盤後資料更新後會自動刷新。",
-      trust: "目前沒有符合「投信連買 2 日以上」的資料，盤後資料更新後會自動刷新。",
-      foreign: "目前沒有符合「外資連買 2 日以上」的資料，盤後資料更新後會自動刷新。",
+      joint: "目前沒有符合「外資 + 投信同買」的資料，盤後資料更新後會自動刷新。",
+      trust: "目前沒有符合「投信買超」的資料，盤後資料更新後會自動刷新。",
+      foreign: "目前沒有符合「外資買超」的資料，盤後資料更新後會自動刷新。",
       legal: "目前沒有符合「法人同買」的資料，盤後資料更新後會自動刷新。",
     }[chipFilter] || "目前沒有符合條件的資料。";
     body.innerHTML = `<tr><td colspan="12">${emptyText}</td></tr>`;
@@ -4359,7 +3848,6 @@ function renderChipTradeTable() {
     `;
   }).join("");
 
-  hydrateChipRealtimeQuotes(shown);
 }
 
 async function hydrateChipRealtimeQuotes(rows) {
@@ -4368,34 +3856,36 @@ async function hydrateChipRealtimeQuotes(rows) {
   if (!targets.length) return;
   chipQuoteHydrating = true;
   try {
-    const codes = targets.map((row) => row.code).filter(Boolean).join(",");
-    const payload = await fetchJson(`${endpoints.realtime}?codes=${encodeURIComponent(codes)}&t=${Date.now()}`, 12000);
-    normalizeArray(payload?.quotes).forEach((quote) => {
-      const code = String(quote.code || "");
-      if (!code || !quote.close) return;
-      updateStrategyQuote(quote);
-      const tr = document.querySelector(`[data-chip-row="${code}"]`);
-      if (!tr) return;
-      const price = cleanNumber(quote.close);
-      const change = cleanNumber(quote.change);
-      const percent = cleanNumber(quote.percent);
-      const volume = cleanNumber(quote.tradeVolume);
-      const up = change >= 0;
-      const priceEl = tr.querySelector("[data-chip-price]");
-      const changeEl = tr.querySelector("[data-chip-change]");
-      const percentEl = tr.querySelector("[data-chip-percent]");
-      const volumeEl = tr.querySelector("[data-chip-volume]");
-      if (priceEl) priceEl.textContent = formatNumber(price, price >= 100 ? 0 : 2);
-      if (changeEl) {
-        changeEl.textContent = `${up ? "+" : ""}${formatNumber(change, 2)}`;
-        changeEl.className = up ? "red" : "green";
-      }
-      if (percentEl) {
-        percentEl.textContent = formatNumber(percent, 2);
-        percentEl.className = percent >= 0 ? "red" : "green";
-      }
-      if (volumeEl) volumeEl.textContent = volume ? Math.round(volume).toLocaleString("zh-TW") : "--";
-    });
+    await Promise.all(targets.map(async (row) => {
+      try {
+        const data = await fetchJson(`/api/proxy?code=${row.code}`, 7000);
+        const item = data?.msgArray?.[0];
+        if (!item) return;
+        const price = parseQuoteNumber(item.z, item.a, item.b, item.y);
+        const prev = parseQuoteNumber(item.y);
+        if (!price || !prev) return;
+        const change = price - prev;
+        const percent = prev ? (change / prev) * 100 : 0;
+        const volume = parseQuoteNumber(item.v, item.tv);
+        const tr = document.querySelector(`[data-chip-row="${row.code}"]`);
+        if (!tr) return;
+        const up = change >= 0;
+        const priceEl = tr.querySelector("[data-chip-price]");
+        const changeEl = tr.querySelector("[data-chip-change]");
+        const percentEl = tr.querySelector("[data-chip-percent]");
+        const volumeEl = tr.querySelector("[data-chip-volume]");
+        if (priceEl) priceEl.textContent = formatNumber(price, price >= 100 ? 0 : 2);
+        if (changeEl) {
+          changeEl.textContent = `${up ? "+" : ""}${formatNumber(change, 2)}`;
+          changeEl.className = up ? "red" : "green";
+        }
+        if (percentEl) {
+          percentEl.textContent = formatNumber(percent, 2);
+          percentEl.className = percent >= 0 ? "red" : "green";
+        }
+        if (volumeEl) volumeEl.textContent = volume ? Math.round(volume).toLocaleString("zh-TW") : "--";
+      } catch {}
+    }));
   } finally {
     chipQuoteHydrating = false;
   }
@@ -4420,7 +3910,7 @@ async function loadChipTradeData() {
   try {
     const [stockResult, instResult] = await Promise.allSettled([
       fetchJson(endpoints.strategyStocks, 20000),
-      fetchJson(endpoints.institution, 20000),
+      fetchJson(`${endpoints.institutionCache}?t=${Date.now()}`, 10000),
     ]);
 
     if (stockResult.status === "fulfilled") {
@@ -4429,9 +3919,13 @@ async function loadChipTradeData() {
       if (parsed.length) latestStocks = parsed;
     }
 
-    if (instResult.status === "fulfilled" && instResult.value?.ok && instResult.value?.data) {
-      institutionData = instResult.value.data;
-      institutionDate = instResult.value.usedDate || "";
+    let instPayload = instResult.status === "fulfilled" ? instResult.value : null;
+    if (!instPayload?.ok || !instPayload?.data || !Object.keys(instPayload.data).length) {
+      instPayload = await fetchJson(`${endpoints.institutionBackup}?t=${Date.now()}`, 10000);
+    }
+    if (instPayload?.ok && instPayload?.data) {
+      institutionData = instPayload.data;
+      institutionDate = instPayload.usedDate || "";
     }
 
     renderChipTradeTable();
@@ -4557,43 +4051,27 @@ function showView(viewName, activeLink) {
 
 // ★ 前端直接抓台指期
 async function fetchFuturesDirect() {
-  const fetchMarket = async (marketType) => {
-    const body = {
-      MarketType: marketType,
-      SymbolType: "F",
-      KindID: "1",
-      CID: "",
-      ExpireMonth: "",
-      RowSize: "10",
-      PageNo: "1",
-      Language: "zh-tw",
-    };
-    try {
-      const res = await fetch("https://mis.taifex.com.tw/futures/api/getQuoteList", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
+  try {
+    const res = await fetch("https://mis.taifex.com.tw/futures/api/getQuoteList", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
         "Referer": "https://mis.taifex.com.tw/",
         "Origin": "https://mis.taifex.com.tw",
       },
-        body: JSON.stringify(body),
-      });
-      const data = await res.json();
-      const list = data?.RtData?.QuoteList || data?.RtnData?.QuoteList || [];
-      return list.filter((item) => {
-        const symbol = String(item.SymbolID || "");
-        const name = String(item.DispCName || item.CName || "");
-        return /^TXF/i.test(symbol) && !symbol.includes("-P") && !name.includes("現貨");
-      });
-    } catch {
-      return [];
-    }
-  };
-
-  try {
-    const nightList = await fetchMarket("1");
-    const dayList = nightList.length ? [] : await fetchMarket("0");
-    const list = nightList.length ? nightList : dayList;
+      body: JSON.stringify({
+        MarketType: "0",
+        SymbolType: "F",
+        KindID: "1",
+        CID: "TXF",
+        ExpireMonth: "",
+        RowSize: "5",
+        PageNo: "1",
+        Language: "zh-tw",
+      }),
+    });
+    const data = await res.json();
+    const list = data?.RtnData?.QuoteList || [];
     if (list.length === 0) return { near: null, next: null };
 
     const toItem = (item) => {
@@ -4604,21 +4082,13 @@ async function fetchFuturesDirect() {
       const diff = price - prev;
       const pct  = prev ? (diff / prev * 100) : 0;
       const sign = diff >= 0 ? "+" : "-";
-      const basisSide = diff > 0 ? "long" : diff < 0 ? "short" : "";
-      const basisLabel = basisSide === "long"
-        ? "多方勢（高於結算）"
-        : basisSide === "short"
-          ? "空方勢（低於結算）"
-          : "平盤（貼近結算）";
       return {
-        name:   item.DispCName || item.CName || "台指近全",
-        month:  item.SymbolID || item.CID || "",
+        name:   item.CName || "台指期",
+        month:  item.CID   || "",
         price:  price.toFixed(0),
         change: `${sign}${Math.abs(diff).toFixed(0)}`,
         pct:    `${sign}${Math.abs(pct).toFixed(2)}%`,
         volume: item.CTotalVolume || "--",
-        basisSide,
-        basisLabel,
       };
     };
 
@@ -4634,9 +4104,8 @@ async function loadMarketData() {
 
     if (!payload.ok) throw new Error("Backend failed");
 
-    const directFutures = await fetchFuturesDirect();
-    const near = directFutures.near || payload.futuresNear || payload.futures || null;
-    const next = directFutures.next || payload.futuresNext || null;
+    const near = payload.futuresNear || payload.futures || null;
+    const next = payload.futuresNext || null;
 
     renderIndexes(
       normalizeArray(payload.indexes),
@@ -4674,7 +4143,10 @@ async function loadHeatmap() {
 
 async function loadInstitution() {
   try {
-    const data = await fetchJson(endpoints.institution, 12000);
+    let data = await fetchJson(`${endpoints.institutionCache}?t=${Date.now()}`, 10000);
+    if (!data?.ok || !data?.data || !Object.keys(data.data).length) {
+      data = await fetchJson(`${endpoints.institutionBackup}?t=${Date.now()}`, 10000);
+    }
     if (data.ok && data.data) {
       institutionData = data.data;
       institutionDate = data.usedDate || "";
@@ -4696,11 +4168,16 @@ function applyStrategyPresetFromLink(link) {
     ? new Set([
         "momentum",
         "main_force_chip",
-        "institutional_breakout",
         "twenty_day_breakout",
+        "opening_power",
+        "red_to_green",
+        "investment_trust",
         "vcp",
+        "ma_bull",
         "sync_backtest",
+        "overnight_chip",
         "short_fund_flow",
+        "chip_health_strong",
         "one_day_rebound",
         "short_squeeze",
         "ultra_short",
@@ -4712,42 +4189,31 @@ function applyStrategyPresetFromLink(link) {
   if (text.includes("策略2")) intradaySignalFilter = "all";
   strategyMode = "any";
   strategyKeyword = "";
-  strategySearchDraft = null;
   if (strategySearch) strategySearch.value = "";
-  if (text.includes("策略5")) {
-    deferUiWork(async () => {
-      await loadStrategyStocks(true);
-      await refreshStrategyRealtimeScan(true);
-    }, 60);
-  } else {
-    deferUiWork(loadStrategyStocks);
-    if (text.includes("策略2")) deferUiWork(() => refreshStrategyRealtimeScan(true), 80);
-  }
+  deferUiWork(loadStrategyStocks);
+  if (text.includes("策略2")) deferUiWork(() => refreshStrategyRealtimeScan(true), 80);
   if (text.includes("策略1")) {
     deferUiWork(() => loadOpenBuyCache(true), 60);
   }
+  if (text.includes("策略3")) {
+    deferUiWork(() => loadStrategy3Cache(true), 60);
+  }
   if (text.includes("策略4")) {
     deferUiWork(() => loadStrategy4Cache(true), 60);
-    deferUiWork(() => refreshStrategyHistoryScan(true), 120);
   }
 }
 
 async function refreshStrategyRealtimeScan(force = false) {
-  if (strategyRealtimeLoading) return;
-  if (!latestStocks.length) {
-    await loadStrategyStocks();
-    if (!latestStocks.length) return;
-  }
+  if (strategyRealtimeLoading || !latestStocks.length) return;
   const isStrategyVisible = document.querySelector("#strategy-view")?.classList.contains("active");
   const isRealtimeStrategy = selectedStrategyIds.has("intraday_2m");
-  const isStrategy5Mode = strategyPresetMode === "strategy5";
-  if (!force && (!isStrategyVisible || (!isRealtimeStrategy && !isStrategy5Mode))) return;
+  if (!force && (!isStrategyVisible || !isRealtimeStrategy)) return;
 
   strategyRealtimeLoading = true;
   try {
-    const batchSize = 100;
+    const batchSize = 80;
     if (force) strategyRealtimeCursor = 0;
-    const batches = force ? Math.ceil(latestStocks.length / batchSize) : 3;
+    const batches = force ? Math.ceil(latestStocks.length / batchSize) : 6;
     const requests = [];
     for (let batch = 0; batch < batches; batch++) {
       const start = strategyRealtimeCursor % latestStocks.length;
@@ -4772,51 +4238,7 @@ async function refreshStrategyRealtimeScan(force = false) {
 }
 
 async function refreshOpenBuyScan(force = false) {
-  if (openBuyScanLoading || !latestStocks.length) return;
-  const isStrategyVisible = document.querySelector("#strategy-view")?.classList.contains("active");
-  const isOpenBuyMode = selectedStrategyIds.has("open_buy");
-  if (!force && (!isStrategyVisible || !isOpenBuyMode)) return;
-
-  const source = latestStocks.filter((stock) => !/^00/.test(stock.code));
-  openBuyScanTotal = source.length;
-  if (!source.length) return;
-  if (hasFreshOpenBuyScan()) return;
-  if (!openBuyPendingMatches) {
-    openBuyPendingMatches = {};
-    openBuyPendingScannedCodes = new Set();
-    openBuyScanCursor = 0;
-  }
-  const batchSize = 48;
-  const start = openBuyScanCursor % source.length;
-  const rows = source.slice(start, start + batchSize);
-  const wrapped = rows.length < batchSize ? source.slice(0, batchSize - rows.length) : [];
-  const codes = [...rows, ...wrapped].map((stock) => stock.code).filter(Boolean);
-  openBuyScanCursor = (start + batchSize) % Math.max(source.length, 1);
-  const completedCycle = openBuyScanCursor <= start;
-  if (!codes.length) return;
-
-  openBuyScanLoading = true;
-  try {
-    const payload = await fetchJson(`${endpoints.scanOpenBuy}?codes=${encodeURIComponent(codes.join(","))}`, 45000);
-    collectOpenBuyPending(payload);
-    normalizeArray(payload?.scannedCodes).forEach((code) => {
-      if (code) openBuyScannedCodes.add(code);
-    });
-    if (!Object.keys(openBuyScanMatches).length) {
-      updateOpenBuyScan(payload);
-    }
-    if (completedCycle) {
-      commitOpenBuyPending();
-    }
-    renderStrategyScanner();
-  } catch (error) {
-  } finally {
-    openBuyScanLoading = false;
-    const stillVisible = document.querySelector("#strategy-view")?.classList.contains("active") && selectedStrategyIds.has("open_buy");
-    if (stillVisible && !completedCycle) {
-      setTimeout(() => refreshOpenBuyScan(true), completedCycle ? 3000 : 350);
-    }
-  }
+  await loadOpenBuyCache(force);
 }
 
 async function loadStrategy4Cache(force = false) {
@@ -4839,51 +4261,7 @@ async function loadStrategy4Cache(force = false) {
 }
 
 async function refreshStrategyHistoryScan(force = false) {
-  if (strategy4ScanLoading || !latestStocks.length) return;
-  const isStrategyVisible = document.querySelector("#strategy-view")?.classList.contains("active");
-  const isSwingMode = selectedStrategyIds.has("swing_radar");
-  if (!force && (!isStrategyVisible || !isSwingMode)) return;
-
-  const source = latestStocks.filter((stock) => !/^00/.test(stock.code));
-  strategy4ScanTotal = source.length;
-  if (!source.length) return;
-  if (hasFreshStrategy4Scan()) return;
-  if (!strategy4PendingMatches) {
-    strategy4PendingMatches = {};
-    strategy4PendingScannedCodes = new Set();
-    strategy4ScanCursor = 0;
-  }
-  const batchSize = 48;
-  const start = strategy4ScanCursor % source.length;
-  const rows = source.slice(start, start + batchSize);
-  const wrapped = rows.length < batchSize ? source.slice(0, batchSize - rows.length) : [];
-  const codes = [...rows, ...wrapped].map((stock) => stock.code).filter(Boolean);
-  strategy4ScanCursor = (start + batchSize) % Math.max(source.length, 1);
-  const completedCycle = strategy4ScanCursor <= start;
-  if (!codes.length) return;
-
-  strategy4ScanLoading = true;
-  try {
-    const payload = await fetchJson(`${endpoints.scanStrategy4}?codes=${encodeURIComponent(codes.join(","))}`, 45000);
-    collectStrategy4Pending(payload);
-    normalizeArray(payload?.scannedCodes).forEach((code) => {
-      if (code) strategy4ScannedCodes.add(code);
-    });
-    if (!Object.keys(strategy4ScanMatches).length) {
-      updateStrategy4Scan(payload);
-    }
-    if (completedCycle) {
-      commitStrategy4Pending();
-    }
-    renderStrategyScanner();
-  } catch (error) {
-  } finally {
-    strategy4ScanLoading = false;
-    const stillVisible = document.querySelector("#strategy-view")?.classList.contains("active") && selectedStrategyIds.has("swing_radar");
-    if (stillVisible && !completedCycle) {
-      setTimeout(() => refreshStrategyHistoryScan(true), completedCycle ? 3000 : 350);
-    }
-  }
+  await loadStrategy4Cache(force);
 }
 
 tickClock();
@@ -4919,7 +4297,7 @@ setInterval(tickClock, 1000);
 setInterval(loadMarketData, 15*1000);
 setInterval(refreshStrategyRealtimeScan, 5*1000);
 setInterval(loadHeatmap, 10*60*1000);
-setInterval(loadInstitution, 24*60*60*1000);
+setInterval(loadInstitution, 10*60*1000);
 
 // ===== 自選股功能 =====
 const watchlistView = document.querySelector("#watchlist-view");
@@ -5291,12 +4669,6 @@ async function fetchHeatmapStockFallback(code) {
 async function fetchStockPrice(code) {
   const cached = latestStocks.find(s => s.code === code) || null;
   try {
-    const realtimePayload = await fetchJson(`${endpoints.realtime}?codes=${encodeURIComponent(code)}&t=${Date.now()}`, 8000);
-    const realtimeQuote = normalizeArray(realtimePayload?.quotes).find((quote) => String(quote.code || "") === code);
-    if (realtimeQuote?.close) {
-      updateStrategyQuote(realtimeQuote);
-      return applyStrategyQuote({ ...(cached || {}), code, name: cached?.name || realtimeQuote.name || code });
-    }
 
     const url = `/api/proxy?code=${code}`;
     const data = await fetchJson(url, 5000);
@@ -5311,65 +4683,6 @@ async function fetchStockPrice(code) {
     return { code, name: item.n || code, close, change, percent, tradeVolume: parseQuoteNumber(item.v, item.tv) };
   } catch {
     return await fetchHeatmapStockFallback(code) || await fetchDailyStockFallback(code) || cached;
-  }
-}
-
-function updateWatchlistCard(stock, fallbackName = "") {
-  if (!stock?.code) return;
-  const priceEl = document.querySelector(`#wprice-${stock.code}`);
-  const changeEl = document.querySelector(`#wchange-${stock.code}`);
-  const instEl = document.querySelector(`#winst-${stock.code}`);
-  if (priceEl) priceEl.textContent = stock.close ? stock.close.toLocaleString("zh-TW") : "--";
-  if (changeEl) {
-    const sign = stock.change >= 0 ? "+" : "";
-    const color = stock.change > 0 ? "#e74c3c" : stock.change < 0 ? "#27ae60" : "#aaa";
-    changeEl.style.color = color;
-    changeEl.textContent = `${sign}${(stock.change || 0).toFixed(2)} (${sign}${(stock.percent || 0).toFixed(2)}%)`;
-  }
-  if (stock.name && stock.name !== fallbackName && stock.name !== stock.code) {
-    saveWatchlist(getWatchlist().map(w => w.code === stock.code ? {...w, name: stock.name} : w));
-    const nameEls = document.querySelectorAll(`#wcard-${stock.code} span`);
-    if (nameEls[1]) nameEls[1].textContent = stock.name;
-    const card = document.querySelector(`#wcard-${stock.code}`);
-    if (card) card.dataset.name = stock.name;
-  }
-  if (instEl) {
-    const inst = institutionData[stock.code];
-    if (inst) {
-      const fColor = inst.foreign > 0 ? "#e74c3c" : inst.foreign < 0 ? "#27ae60" : "#aaa";
-      const tColor = inst.trust > 0 ? "#e74c3c" : inst.trust < 0 ? "#27ae60" : "#aaa";
-      instEl.innerHTML = `外資 <span style="color:${fColor}">${inst.foreign > 0 ? "+" : ""}${(inst.foreign/1000).toFixed(0)}k</span>　投信 <span style="color:${tColor}">${inst.trust > 0 ? "+" : ""}${(inst.trust/1000).toFixed(0)}k</span>`;
-    } else {
-      instEl.innerHTML = `外資 <span>盤後</span>　投信 <span>盤後</span>`;
-    }
-  }
-}
-
-async function refreshWatchlistQuotes(updateDashboard = true) {
-  const list = getWatchlist();
-  if (!list.length) return;
-  try {
-    const codes = list.map((item) => item.code).filter(Boolean).slice(0, 80);
-    const payload = await fetchJson(`${endpoints.realtime}?codes=${encodeURIComponent(codes.join(","))}&t=${Date.now()}`, 10000);
-    normalizeArray(payload?.quotes).forEach((quote) => {
-      updateStrategyQuote(quote);
-      const fallback = latestStocks.find((stock) => stock.code === quote.code) || list.find((item) => item.code === quote.code) || {};
-      const stock = applyStrategyQuote({ ...fallback, code: quote.code, name: fallback.name || quote.name || quote.code });
-      updateWatchlistCard(stock, fallback.name || "");
-    });
-  } catch {
-    await Promise.allSettled(list.map(async (item) => {
-      const stock = await fetchStockPrice(item.code);
-      if (stock) updateWatchlistCard(stock, item.name || "");
-    }));
-  }
-  if (watchlistRefresh) {
-    const now = new Date();
-    watchlistRefresh.textContent = `${String(now.getMonth()+1).padStart(2,"0")}/${String(now.getDate()).padStart(2,"0")}  更新 ${now.toLocaleTimeString("zh-TW", {hour12:false})}`;
-  }
-  const selectedCard = document.querySelector(".watchlist-card.selected");
-  if (updateDashboard && selectedCard && isViewActive("watchlist")) {
-    showTradingDashboard(selectedCard.dataset.code, selectedCard.dataset.name);
   }
 }
 
@@ -5418,7 +4731,37 @@ async function renderWatchlist() {
     selectedCard.click();
   }
 
-  refreshWatchlistQuotes(false);
+  for (const item of list) {
+    fetchStockPrice(item.code).then(stock => {
+      if (!stock) return;
+      const priceEl = document.querySelector(`#wprice-${item.code}`);
+      const changeEl = document.querySelector(`#wchange-${item.code}`);
+      const instEl = document.querySelector(`#winst-${item.code}`);
+      if (priceEl) priceEl.textContent = stock.close.toLocaleString("zh-TW");
+      if (changeEl) {
+        const sign = stock.change >= 0 ? "+" : "";
+        const color = stock.change > 0 ? "#e74c3c" : stock.change < 0 ? "#27ae60" : "#aaa";
+        changeEl.style.color = color;
+        changeEl.textContent = `${sign}${stock.change.toFixed(2)} (${sign}${stock.percent.toFixed(2)}%)`;
+        if (stock.name && stock.name !== item.code) {
+          item.name = stock.name;
+          saveWatchlist(getWatchlist().map(w => w.code === item.code ? {...w, name: stock.name} : w));
+          const nameEls = document.querySelectorAll(`#wcard-${item.code} span`);
+          if (nameEls[1]) nameEls[1].textContent = stock.name;
+        }
+      }
+      if (instEl) {
+        const inst = institutionData[item.code];
+        if (inst) {
+          const fColor = inst.foreign > 0 ? "#e74c3c" : inst.foreign < 0 ? "#27ae60" : "#aaa";
+          const tColor = inst.trust > 0 ? "#e74c3c" : inst.trust < 0 ? "#27ae60" : "#aaa";
+          instEl.innerHTML = `外資 <span style="color:${fColor}">${inst.foreign > 0 ? "+" : ""}${(inst.foreign/1000).toFixed(0)}k</span>　投信 <span style="color:${tColor}">${inst.trust > 0 ? "+" : ""}${(inst.trust/1000).toFixed(0)}k</span>`;
+        } else {
+          instEl.innerHTML = `外資 <span>盤後</span>　投信 <span>盤後</span>`;
+        }
+      }
+    });
+  }
 
   if (watchlistRefresh) {
     const now = new Date();
@@ -5505,21 +4848,15 @@ document.addEventListener("click", (event) => {
 document.addEventListener("input", (event) => {
   const input = event.target.closest("[data-strategy-inline-search]");
   if (!input) return;
-  strategySearchDraft = input.value || "";
+  strategyKeyword = input.value || "";
+  renderStrategyScanner();
 });
 
-document.addEventListener("keydown", (event) => {
-  const input = event.target.closest("[data-strategy-inline-search]");
-  if (!input || event.key !== "Enter") return;
-  event.preventDefault();
-  commitStrategySearch(input);
-});
-
-document.addEventListener("click", (event) => {
-  const button = event.target.closest("[data-strategy-inline-submit]");
-  if (!button) return;
-  const input = button.parentElement?.querySelector("[data-strategy-inline-search]");
-  commitStrategySearch(input);
+document.addEventListener("input", (event) => {
+  const input = event.target.closest("[data-warrant-flow-search]");
+  if (!input) return;
+  warrantFlowKeyword = input.value || "";
+  renderWarrantFlow();
 });
 
 document.addEventListener("click", (event) => {
@@ -5539,19 +4876,6 @@ document.addEventListener("click", (event) => {
   const filterButton = event.target.closest("[data-intraday-filter]");
   if (!filterButton) return;
   intradaySignalFilter = filterButton.dataset.intradayFilter || "all";
-  renderStrategyScanner();
-});
-
-document.addEventListener("click", (event) => {
-  const sortButton = event.target.closest("[data-overnight-sort]");
-  if (!sortButton) return;
-  const key = sortButton.dataset.overnightSort;
-  if (overnightSortKey === key) {
-    overnightSortDir = overnightSortDir === "desc" ? "asc" : "desc";
-  } else {
-    overnightSortKey = key;
-    overnightSortDir = key === "code" ? "asc" : "desc";
-  }
   renderStrategyScanner();
 });
 
@@ -5579,22 +4903,28 @@ strategyClear?.addEventListener("click", () => {
   strategyPresetMode = "";
   if (strategySearch) strategySearch.value = "";
   strategyKeyword = "";
-  strategySearchDraft = null;
   renderStrategyScanner();
 });
 
 strategySearch?.addEventListener("input", (event) => {
-  strategySearchDraft = event.target.value || "";
-});
-
-strategySearch?.addEventListener("keydown", (event) => {
-  if (event.key !== "Enter") return;
-  event.preventDefault();
-  commitStrategySearch(event.target);
+  strategyKeyword = event.target.value;
+  renderStrategyScanner();
 });
 
 async function refreshSelectedWatchlistQuote() {
-  await refreshWatchlistQuotes(true);
+  const card = document.querySelector(".watchlist-card.selected");
+  if (!card) return;
+  const stock = await fetchStockPrice(card.dataset.code);
+  if (!stock) return;
+  const priceEl = document.querySelector(`#wprice-${card.dataset.code}`);
+  const changeEl = document.querySelector(`#wchange-${card.dataset.code}`);
+  if (priceEl) priceEl.textContent = stock.close ? stock.close.toLocaleString("zh-TW") : "--";
+  if (changeEl) {
+    const sign = stock.change >= 0 ? "+" : "";
+    changeEl.style.color = stock.change > 0 ? "#e74c3c" : stock.change < 0 ? "#27ae60" : "#aaa";
+    changeEl.textContent = `${sign}${stock.change.toFixed(2)} (${sign}${stock.percent.toFixed(2)}%)`;
+  }
+  showTradingDashboard(card.dataset.code, stock.name || card.dataset.name);
 }
 
 renderWatchlist();
