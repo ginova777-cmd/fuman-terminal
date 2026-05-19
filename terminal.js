@@ -2127,6 +2127,12 @@ intradayRadarStyles.textContent = `
     color: #f7fbff;
     font-size: 26px;
   }
+  [data-warrant-refresh] {
+    cursor: pointer;
+  }
+  [data-warrant-refresh]:hover {
+    filter: brightness(1.12);
+  }
   .swing-topbar p {
     margin: 6px 0 0;
     color: #9ba8c1;
@@ -4001,7 +4007,7 @@ function renderWarrantFlow() {
     <section class="swing-dashboard">
       <div class="swing-topbar">
         <div>
-          <h2>${titleWithSchedule("◒", "策略6：權證資金走向", "warrant")}</h2>
+          <h2 data-warrant-refresh title="重新整理權證資金走向">${titleWithSchedule("◒", "策略6：權證資金走向", "warrant")}</h2>
           <p>${helperText}</p>
         </div>
         <div class="swing-controls">
@@ -4011,12 +4017,12 @@ function renderWarrantFlow() {
       </div>
       <section class="swing-panel">
         <div class="swing-tabs">
-          <button class="active" type="button">${listLabel}</button>
+          <button class="active" type="button" data-warrant-refresh>${listLabel}</button>
           <div class="swing-actions warrant-search-box">
             <small class="warrant-search-hint">🔥 可搜尋全台股票權證熱度</small>
             <div class="warrant-search-row">
               <input id="warrant-flow-search" type="search" placeholder="搜尋股票代號/名稱" value="${escapeAttr(warrantFlowKeyword)}" data-warrant-flow-search>
-              <button id="warrant-flow-refresh" type="button">重新整理</button>
+              <button id="warrant-flow-refresh" type="button" data-warrant-refresh>重新整理</button>
             </div>
           </div>
         </div>
@@ -4032,8 +4038,6 @@ function renderWarrantFlow() {
       </section>
     </section>
   `;
-
-  panel.querySelector("#warrant-flow-refresh")?.addEventListener("click", () => loadWarrantFlow(true));
 }
 
 async function loadWarrantFlow(force = false) {
@@ -5627,6 +5631,12 @@ document.addEventListener("input", (event) => {
   warrantFlowPage = 1;
   clearTimeout(warrantFlowSearchTimer);
   warrantFlowSearchTimer = setTimeout(renderWarrantFlow, 250);
+});
+
+document.addEventListener("click", (event) => {
+  const refreshTarget = event.target.closest("[data-warrant-refresh]");
+  if (!refreshTarget) return;
+  loadWarrantFlow(true);
 });
 
 document.addEventListener("click", (event) => {
