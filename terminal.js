@@ -3534,7 +3534,13 @@ function renderStrategy5Dashboard(evaluated) {
 }
 
 function renderOvernightDashboard(evaluated) {
-  setStrategyChrome("strategy5");
+  setStrategyChrome("normal");
+  setTitleWithIcon(strategyTitle, "◐", "策略3-隔日沖");
+  setTitleWithIcon(strategyHeaderTitle, "◐", "策略3-隔日沖");
+  if (strategyToolbar) strategyToolbar.style.display = "none";
+  if (strategyMetrics) strategyMetrics.style.display = "none";
+  if (strategySearchLabel) strategySearchLabel.style.display = "none";
+  if (strategyList) strategyList.hidden = true;
   const rows = evaluated
     .filter((stock) => stock.matches.some((match) => match.id === "overnight_chip"))
     .map((stock) => ({ ...stock, activeMatch: stock.matches.find((match) => match.id === "overnight_chip") }))
@@ -3551,13 +3557,11 @@ function renderOvernightDashboard(evaluated) {
 
   const cards = rows.length ? rows.map((stock, index) => {
     const sign = stock.percent >= 0 ? "+" : "";
-    const stage = stock.swingStage || getSwingStage(stock);
     return `
       <article class="strategy5-stock-card">
         <div class="rank">#${index + 1}</div>
         <div>
           <strong>${stock.name} <small>${stock.code}</small></strong>
-          <small>${stock.sector || "未分類"} · ${stage.label || "盤中"} · 13:00固定掃</small>
         </div>
         <div>
           <div class="strategy5-price">${formatNumber(stock.close, stock.close >= 100 ? 0 : 2)}</div>
@@ -3571,11 +3575,6 @@ function renderOvernightDashboard(evaluated) {
 
   strategyTable.innerHTML = `
     <section class="strategy5-shell">
-      <div class="strategy5-hero">
-        <div>
-          <h2>${titleWithIcon("◐", "策略3-隔日沖")} <span class="swing-live">● ${scanText}</span></h2>
-        </div>
-      </div>
       <section class="strategy5-dashboard strategy3-clean">
         <section class="strategy5-results">
           <div class="strategy5-results-head">
