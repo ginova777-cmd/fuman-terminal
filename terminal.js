@@ -3633,7 +3633,7 @@ function renderStrategy5Dashboard(evaluated) {
           <div class="strategy5-results-head">
             <div>
               <h3>${active.label}</h3>
-              <p>${descriptions[strategy5ActiveId] || "符合策略5條件的股票。"}</p>
+              <p>${descriptions[strategy5ActiveId] || "符合策略5條件的股票。"}｜MIS 即時偵測中</p>
             </div>
           </div>
           ${rows}
@@ -4787,6 +4787,7 @@ function applyStrategyPresetFromLink(link) {
     deferUiWork(loadStrategyStocks);
   }
   if (text.includes("策略2")) deferUiWork(() => refreshStrategyRealtimeScan(true), 80);
+  if (text.includes("策略5")) deferUiWork(() => refreshStrategyRealtimeScan("strategy5-full"), 100);
   if (text.includes("策略1")) {
     deferUiWork(() => loadOpenBuyCache(true), 60);
   }
@@ -4881,23 +4882,34 @@ async function refreshStrategyRealtimeScan(mode = "hot") {
   if (strategyRealtimeLoading || !latestStocks.length) return;
   const isStrategyVisible = document.querySelector("#strategy-view")?.classList.contains("active");
   const isRealtimeStrategy = selectedStrategyIds.has("intraday_2m");
+  const isStrategy5Realtime = strategyPresetMode === "strategy5";
   const scanMode = mode === true ? "force" : String(mode || "hot");
-  if (scanMode !== "force" && (!isStrategyVisible || !isRealtimeStrategy)) return;
+  if (scanMode !== "force" && scanMode !== "strategy5-full" && (!isStrategyVisible || (!isRealtimeStrategy && !isStrategy5Realtime))) return;
 
   strategyRealtimeLoading = true;
   try {
-    const scanSource = latestStocks.filter((stock) => isIntradayTradable(applyStrategyQuote(stock)));
+    const scanSource = isStrategy5Realtime
+      ? latestStocks.filter((stock) => {
+          const code = String(stock?.code || "");
+          const name = String(stock?.name || "");
+          return /^\d{4}$/.test(code) && !/^00/.test(code) && !/ETF|ETN|指數|台灣50|高股息|正2|反1|期貨|債/i.test(name);
+        })
+      : latestStocks.filter((stock) => isIntradayTradable(applyStrategyQuote(stock)));
     const rankedHotStocks = [...scanSource]
       .sort((a, b) => getIntradayHotScore(b) - getIntradayHotScore(a))
       .slice(0, INTRADAY_HOT_SCAN_LIMIT);
     const candidateStocks = getIntradayCandidateStocks(scanSource);
-    const hotStocks = uniqueStocksByCode([...candidateStocks, ...rankedHotStocks]).slice(0, scanMode === "force" ? INTRADAY_HOT_SCAN_LIMIT + 150 : INTRADAY_HOT_SCAN_LIMIT);
+    const hotStocks = isStrategy5Realtime
+      ? []
+      : uniqueStocksByCode([...candidateStocks, ...rankedHotStocks]).slice(0, scanMode === "force" ? INTRADAY_HOT_SCAN_LIMIT + 150 : INTRADAY_HOT_SCAN_LIMIT);
     const hotCodes = new Set(hotStocks.map((stock) => stock.code));
     const backgroundPool = scanSource.filter((stock) => !hotCodes.has(stock.code));
-    const shouldScanHot = scanMode === "hot" || scanMode === "force";
-    const shouldScanBackground = scanMode === "background" || scanMode === "force";
-    const backgroundStocks = shouldScanBackground
-      ? sliceBackgroundScan(backgroundPool, scanMode === "force" ? INTRADAY_BACKGROUND_BATCH * 2 : INTRADAY_BACKGROUND_BATCH)
+    const shouldScanHot = !isStrategy5Realtime && (scanMode === "hot" || scanMode === "force");
+    const shouldScanBackground = isStrategy5Realtime || scanMode === "background" || scanMode === "force";
+    const backgroundStocks = scanMode === "strategy5-full"
+      ? backgroundPool
+      : shouldScanBackground
+      ? sliceBackgroundScan(backgroundPool, isStrategy5Realtime ? INTRADAY_BACKGROUND_BATCH * 2 : scanMode === "force" ? INTRADAY_BACKGROUND_BATCH * 2 : INTRADAY_BACKGROUND_BATCH)
       : [];
     const hotBatchSize = 75;
     const backgroundBatchSize = 90;
