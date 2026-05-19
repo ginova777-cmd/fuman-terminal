@@ -1,0 +1,37 @@
+name: Strategy5 Fixed Scan
+
+on:
+  schedule:
+    # Taiwan time 21:00 on trading days.
+    - cron: "0 13 * * 1-5"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: strategy5-background-cache
+  cancel-in-progress: false
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Update strategy5 cache
+        run: |
+          node scripts/scan-strategy5-cache.js
+
+      - name: Commit strategy5 cache
+        run: |
+          git config user.name "fuman-terminal-bot"
+          git config user.email "actions@github.com"
+          git add data/strategy5-latest.json data/strategy5-backup.json
+          git diff --cached --quiet || git commit -m "Update strategy5 cache"
+          git push
