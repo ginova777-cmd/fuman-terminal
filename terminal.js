@@ -145,7 +145,7 @@ function labelUpdateModes() {
     const text = card.textContent || "";
     if (text.includes("策略2")) appendUpdateBadge(card, "立即更新", "live");
     if (text.includes("策略1")) appendUpdateBadge(card, "07/14:30完整掃", "slow");
-    if (text.includes("策略3")) appendUpdateBadge(card, "07/14:30完整掃", "slow");
+    if (text.includes("策略3")) appendUpdateBadge(card, "13:00完整掃", "slow");
     if (text.includes("策略4")) appendUpdateBadge(card, "07/14:30完整掃", "slow");
     if (text.includes("策略5")) appendUpdateBadge(card, "讀快取", "slow");
   });
@@ -3494,8 +3494,11 @@ function renderOvernightDashboard(evaluated) {
     .map((stock) => ({ ...stock, activeMatch: stock.matches.find((match) => match.id === "overnight_chip") }))
     .sort((a, b) => b.score - a.score || b.value - a.value || b.percent - a.percent)
     .slice(0, 30);
+  const scanText = strategy3UpdatedAt
+    ? `13:00 掃描｜${new Date(strategy3UpdatedAt).toLocaleDateString("zh-TW")}`
+    : "13:00 掃描快取讀取中";
 
-  if (strategySummary) strategySummary.textContent = `策略3-隔日沖｜07:00 / 14:30 完整掃｜符合 ${rows.length} 檔`;
+  if (strategySummary) strategySummary.textContent = `策略3-隔日沖｜${scanText}｜符合 ${rows.length} 檔`;
   if (strategyMatchCount) strategyMatchCount.textContent = rows.length.toLocaleString("zh-TW");
   if (strategyAvgScore) strategyAvgScore.textContent = rows.length ? Math.round(avg(rows.map((stock) => stock.score))) : "--";
   if (strategyTopHit) strategyTopHit.textContent = rows.length ? `${Math.max(...rows.map((stock) => stock.matches.length))}` : "--";
@@ -3508,7 +3511,7 @@ function renderOvernightDashboard(evaluated) {
         <div class="rank">#${index + 1}</div>
         <div>
           <strong>${stock.name} <small>${stock.code}</small></strong>
-          <small>${stock.sector || "未分類"} · ${stage.label || "盤中"} · ${stock.isRealtime ? "即時" : "盤中"}</small>
+          <small>${stock.sector || "未分類"} · ${stage.label || "盤中"} · 13:00快取</small>
         </div>
         <div>
           <div class="strategy5-price">${formatNumber(stock.close, stock.close >= 100 ? 0 : 2)}</div>
@@ -3525,7 +3528,7 @@ function renderOvernightDashboard(evaluated) {
       <div class="strategy5-hero">
         <div>
           <b>固定快取名單</b>
-          <h2>${titleWithIcon("◐", "策略3-隔日沖")} <span class="swing-live">● 07:00 / 14:30 完整掃</span></h2>
+          <h2>${titleWithIcon("◐", "策略3-隔日沖")} <span class="swing-live">● ${scanText}</span></h2>
         </div>
         <div class="strategy5-date">
           <span>符合</span>
@@ -3539,7 +3542,7 @@ function renderOvernightDashboard(evaluated) {
             <span>⌬</span>
             <div>
               <strong>隔日沖吸籌監控</strong>
-              <small>只看 GitHub Actions 產出的固定隔日沖名單。</small>
+              <small>每天 13:00 背景掃描一次，前端只讀固定結果。</small>
             </div>
             <em>${rows.length} 檔</em>
           </button>
@@ -3548,7 +3551,7 @@ function renderOvernightDashboard(evaluated) {
           <div class="strategy5-results-head">
             <div>
               <h3>隔日沖候選排行</h3>
-              <p>以背景完整掃描結果排序，開網頁不再臨時重算。</p>
+              <p>以 13:00 背景完整掃描結果排序，開網頁不再臨時重算。</p>
             </div>
             <span class="strategy5-count">${rows.length} 檔</span>
           </div>
@@ -4621,13 +4624,18 @@ function applyStrategyPresetFromLink(link) {
   strategyMode = "any";
   strategyKeyword = "";
   if (strategySearch) strategySearch.value = "";
-  deferUiWork(loadStrategyStocks);
+  if (text.includes("策略3")) {
+    deferUiWork(async () => {
+      await loadStrategyStocks();
+      await loadStrategy3Cache(true);
+      renderStrategyScanner();
+    }, 60);
+  } else {
+    deferUiWork(loadStrategyStocks);
+  }
   if (text.includes("策略2")) deferUiWork(() => refreshStrategyRealtimeScan(true), 80);
   if (text.includes("策略1")) {
     deferUiWork(() => loadOpenBuyCache(true), 60);
-  }
-  if (text.includes("策略3")) {
-    deferUiWork(() => loadStrategy3Cache(true), 60);
   }
   if (text.includes("策略4")) {
     deferUiWork(() => loadStrategy4Cache(true), 60);
