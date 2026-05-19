@@ -1,9 +1,2730 @@
 {
   "ok": true,
   "source": "github-actions",
-  "updatedAt": "2026-05-19T00:00:00.000Z",
-  "usedDate": "",
-  "total": 0,
-  "count": 0,
-  "matches": []
+  "updatedAt": "2026-05-19T00:48:43.021Z",
+  "usedDate": "20260518",
+  "total": 1949,
+  "count": 80,
+  "matches": [
+    {
+      "code": "3673",
+      "name": "TPK-KY",
+      "close": 68.6,
+      "change": 3.9,
+      "percent": 6.03,
+      "value": 2298732639,
+      "tradeVolume": 34041705,
+      "inst": {
+        "code": "3673",
+        "name": "TPK-KY",
+        "foreign": -667527,
+        "trust": 0,
+        "dealer": 0,
+        "total": 304883,
+        "market": "上市",
+        "foreignStreak": 0,
+        "trustStreak": 0,
+        "dealerStreak": 0,
+        "jointStreak": 0
+      },
+      "valueRank": 95,
+      "volumeRank": 98,
+      "projectedRatio": 4.083333333333333,
+      "overnightScore": 94,
+      "overnightState": "通過",
+      "score": 94,
+      "matches": [
+        {
+          "id": "overnight_chip",
+          "reason": "量價接近隔日沖候選條件，尾盤可列入觀察。"
+        }
+      ]
+    },
+    {
+      "code": "6531",
+      "name": "愛普*",
+      "close": 1135,
+      "change": 55,
+      "percent": 5.09,
+      "value": 8695617920,
+      "tradeVolume": 7996123,
+      "inst": {
+        "code": "6531",
+        "name": "愛普*",
+        "foreign": -207878,
+        "trust": 396000,
+        "dealer": 0,
+        "total": 154728,
+        "market": "上市",
+        "foreignStreak": 0,
+        "trustStreak": 4,
+        "dealerStreak": 0,
+        "jointStreak": 0
+      },
+      "valueRank": 98,
+      "volumeRank": 91,
+      "projectedRatio": 3.7916666666666665,
+      "overnightScore": 93,
+      "overnightState": "通過",
+      "score": 93,
+      "matches": [
+        {
+          "id": "overnight_chip",
+          "reason": "量價接近隔日沖候選條件，尾盤可列入觀察。"
+        }
+      ]
+    },
+    {
+      "code": "3090",
+      "name": "日電貿",
+      "close": 148,
+      "change": 6,
+      "percent": 4.23,
+      "value": 5246130943,
+      "tradeVolume": 36767872,
+      "inst": {
+        "code": "3090",
+        "name": "日電貿",
+        "foreign": -1484614,
+        "trust": 1498000,
+        "dealer": 0,
+        "total": 70706,
+        "market": "上市",
+        "foreignStreak": 0,
+        "trustStreak": 3,
+        "dealerStreak": 0,
+        "jointStreak": 0
+      },
+      "valueRank": 98,
+      "volumeRank": 98,
+      "projectedRatio": 4.083333333333333,
+      "overnightScore": 92,
+      "overnightState": "通過",
+      "score": 92,
+      "matches": [
+        {
+          "id": "overnight_chip",
+          "reason": "量價接近隔日沖候選條件，尾盤可列入觀察。"
+        }
+      ]
+    },
+    {
+      "code": "5289",
+      "name": "宜鼎",
+      "close": 1865,
+      "change": 105,
+      "percent": 5.97,
+      "value": 10791424870,
+      "tradeVolume": 5904258,
+      "inst": {
+        "code": "5289",
+        "name": "宜鼎",
+        "foreign": -667740,
+        "trust": 27000,
+        "dealer": -32943,
+        "total": -673683,
+        "market": "上櫃",
+        "foreignStreak": 0,
+        "trustStreak": 1,
+        "dealerStreak": 0,
+        "jointStreak": 0
+      },
+      "valueRank": 99,
+      "volumeRank": 89,
+      "projectedRatio": 3.7083333333333335,
+      "overnightScore": 91,
+      "overnightState": "通過",
+      "score": 91,
+      "matches": [
+        {
+          "id": "overnight_chip",
+          "reason": "量價接近隔日沖候選條件，尾盤可列入觀察。"
+        }
+      ]
+    },
+    {
+      "code": "2367",
+      "name": "燿華",
+      "close": 64.3,
+      "change": 2.5,
+      "percent": 4.05,
+      "value": 4479715228,
+      "tradeVolume": 69998796,
+      "inst": {
+        "code": "2367",
+        "name": "燿華",
+        "foreign": 3244390,
+        "trust": 0,
+        "dealer": 0,
+        "total": 3691696,
+        "market": "上市",
+        "foreignStreak": 1,
+        "trustStreak": 0,
+        "dealerStreak": 0,
+        "jointStreak": 0
+      },
+      "valueRank": 97,
+      "volumeRank": 99,
+      "projectedRatio": 4.125,
+      "overnightScore": 91,
+      "overnightState": "通過",
+      "score": 91,
+      "matches": [
+        {
+          "id": "overnight_chip",
+          "reason": "量價接近隔日沖候選條件，尾盤可列入觀察。"
+        }
+      ]
+    },
+    {
+      "code": "6127",
+      "name": "九豪",
+      "close": 49.2,
+      "change": 2.75,
+      "percent": 5.92,
+      "value": 792165019,
+      "tradeVolume": 16187103,
+      "inst": {
+        "code": "6127",
+        "name": "九豪",
+        "foreign": 4826996,
+        "trust": 0,
+        "dealer": 169303,
+        "total": 4996299,
+        "market": "上櫃",
+        "foreignStreak": 3,
+        "trustStreak": 0,
+        "dealerStreak": 1,
+        "jointStreak": 0
+      },
+      "valueRank": 89,
+      "volumeRank": 95,
+      "projectedRatio": 3.9583333333333335,
+      "overnightScore": 91,
+      "overnightState": "通過",
+      "score": 91,
+      "matches": [
+        {
+          "id": "overnight_chip",
+          "reason": "量價接近隔日沖候選條件，尾盤可列入觀察。"
+        }
+      ]
+    },
+    {
+      "code": "3189",
+      "name": "景碩",
+      "close": 505,
+      "change": 19,
+      "percent": 3.91,
+      "value": 9750537678,
+      "tradeVolume": 20228783,
+      "inst": {
+        "code": "3189",
+        "name": "景碩",
+        "foreign": 17922,
+        "trust": 613000,
+        "dealer": 0,
+        "total": 1039882,
+        "market": "上市",
+        "foreignStreak": 1,
+        "trustStreak": 2,
+        "dealerStreak": 0,
+        "jointStreak": 1
+      },
+      "valueRank": 99,
+      "volumeRank": 96,
+      "projectedRatio": 4,
+      "overnightScore": 90,
+      "overnightState": "通過",
+      "score": 90,
+      "matches": [
+        {
+          "id": "overnight_chip",
+          "reason": "量價接近隔日沖候選條件，尾盤可列入觀察。"
+        }
+      ]
+    },
+    {
+      "code": "3236",
+      "name": "千如",
+      "close": 41.05,
+      "change": 2.15,
+      "percent": 5.53,
+      "value": 569487882,
+      "tradeVolume": 14200688,
+      "inst": {
+        "code": "3236",
+        "name": "千如",
+        "foreign": 148002,
+        "trust": 0,
+        "dealer": 139721,
+        "total": 287723,
+        "market": "上櫃",
+        "foreignStreak": 1,
+        "trustStreak": 0,
+        "dealerStreak": 5,
+        "jointStreak": 0
+      },
+      "valueRank": 87,
+      "volumeRank": 94,
+      "projectedRatio": 3.9166666666666665,
+      "overnightScore": 90,
+      "overnightState": "通過",
+      "score": 90,
+      "matches": [
+        {
+          "id": "overnight_chip",
+          "reason": "量價接近隔日沖候選條件，尾盤可列入觀察。"
+        }
+      ]
+    },
+    {
+      "code": "2379",
+      "name": "瑞昱",
+      "close": 560,
+      "change": 24,
+      "percent": 4.48,
+      "value": 2422641537,
+      "tradeVolume": 4398430,
+      "inst": {
+        "code": "2379",
+        "name": "瑞昱",
+        "foreign": 1658211,
+        "trust": -66000,
+        "dealer": 0,
+        "total": 1596668,
+        "market": "上市",
+        "foreignStreak": 7,
+        "trustStreak": 0,
+        "dealerStreak": 0,
+        "jointStreak": 0
+      },
+      "valueRank": 95,
+      "volumeRank": 86,
+      "projectedRatio": 3.5833333333333335,
+      "overnightScore": 89,
+      "overnightState": "通過",
+      "score": 89,
+      "matches": [
+        {
+          "id": "overnight_chip",
+          "reason": "量價接近隔日沖候選條件，尾盤可列入觀察。"
+        }
+      ]
+    },
+    {
+      "code": "6271",
+      "name": "同欣電",
+      "close": 185,
+      "change": 8,
+      "percent": 4.52,
+      "value": 1044460581,
+      "tradeVolume": 5745628,
+      "inst": {
+        "code": "6271",
+        "name": "同欣電",
+        "foreign": 2047950,
+        "trust": 0,
+        "dealer": 0,
+        "total": 2248531,
+        "market": "上市",
+        "foreignStreak": 1,
+        "trustStreak": 0,
+        "dealerStreak": 0,
+        "jointStreak": 0
+      },
+      "valueRank": 90,
+      "volumeRank": 88,
+      "projectedRatio": 3.6666666666666665,
+      "overnightScore": 88,
+      "overnightState": "通過",
+      "score": 88,
+      "matches": [
+        {
+          "id": "overnight_chip",
+          "reason": "量價接近隔日沖候選條件，尾盤可列入觀察。"
+        }
+      ]
+    },
+    {
+      "code": "5871",
+      "name": "中租-KY",
+      "close": 110,
+      "change": 4,
+      "percent": 3.77,
+      "value": 1697387479,
+      "tradeVolume": 15438955,
+      "inst": {
+        "code": "5871",
+        "name": "中租-KY",
+        "foreign": 3610153,
+        "trust": -209437,
+        "dealer": 0,
+        "total": 3421341,
+        "market": "上市",
+        "foreignStreak": 1,
+        "trustStreak": 0,
+        "dealerStreak": 0,
+        "jointStreak": 0
+      },
+      "valueRank": 93,
+      "volumeRank": 95,
+      "projectedRatio": 3.9583333333333335,
+      "overnightScore": 87,
+      "overnightState": "通過",
+      "score": 87,
+      "matches": [
+        {
+          "id": "overnight_chip",
+          "reason": "量價接近隔日沖候選條件，尾盤可列入觀察。"
+        }
+      ]
+    },
+    {
+      "code": "8069",
+      "name": "元太",
+      "close": 219,
+      "change": 9,
+      "percent": 4.29,
+      "value": 1139680859,
+      "tradeVolume": 5323092,
+      "inst": {
+        "code": "8069",
+        "name": "元太",
+        "foreign": 1476582,
+        "trust": -240000,
+        "dealer": 143484,
+        "total": 1380066,
+        "market": "上櫃",
+        "foreignStreak": 3,
+        "trustStreak": 0,
+        "dealerStreak": 5,
+        "jointStreak": 0
+      },
+      "valueRank": 91,
+      "volumeRank": 88,
+      "projectedRatio": 3.6666666666666665,
+      "overnightScore": 87,
+      "overnightState": "通過",
+      "score": 87,
+      "matches": [
+        {
+          "id": "overnight_chip",
+          "reason": "量價接近隔日沖候選條件，尾盤可列入觀察。"
+        }
+      ]
+    },
+    {
+      "code": "6139",
+      "name": "亞翔",
+      "close": 721,
+      "change": 28,
+      "percent": 4.04,
+      "value": 2580450752,
+      "tradeVolume": 3684232,
+      "inst": {
+        "code": "6139",
+        "name": "亞翔",
+        "foreign": 30847,
+        "trust": 84000,
+        "dealer": 0,
+        "total": 154196,
+        "market": "上市",
+        "foreignStreak": 1,
+        "trustStreak": 4,
+        "dealerStreak": 0,
+        "jointStreak": 1
+      },
+      "valueRank": 95,
+      "volumeRank": 84,
+      "projectedRatio": 3.5,
+      "overnightScore": 86,
+      "overnightState": "通過",
+      "score": 86,
+      "matches": [
+        {
+          "id": "overnight_chip",
+          "reason": "量價接近隔日沖候選條件，尾盤可列入觀察。"
+        }
+      ]
+    },
+    {
+      "code": "2492",
+      "name": "華新科",
+      "close": 217.5,
+      "change": 11.5,
+      "percent": 5.58,
+      "value": 1925725664,
+      "tradeVolume": 9025333,
+      "inst": {
+        "code": "2492",
+        "name": "華新科",
+        "foreign": 471459,
+        "trust": -780000,
+        "dealer": 0,
+        "total": -343698,
+        "market": "上市",
+        "foreignStreak": 4,
+        "trustStreak": 0,
+        "dealerStreak": 0,
+        "jointStreak": 0
+      },
+      "valueRank": 94,
+      "volumeRank": 92,
+      "projectedRatio": 3.8333333333333335,
+      "overnightScore": 86,
+      "overnightState": "通過",
+      "score": 86,
+      "matches": [
+        {
+          "id": "overnight_chip",
+          "reason": "量價接近隔日沖候選條件，尾盤可列入觀察。"
+        }
+      ]
+    },
+    {
+      "code": "2615",
+      "name": "萬海",
+      "close": 76.9,
+      "change": 2.7,
+      "percent": 3.64,
+      "value": 1276720620,
+      "tradeVolume": 16577354,
+      "inst": {
+        "code": "2615",
+        "name": "萬海",
+        "foreign": 7066824,
+        "trust": 0,
+        "dealer": 0,
+        "total": 7154752,
+        "market": "上市",
+        "foreignStreak": 1,
+        "trustStreak": 0,
+        "dealerStreak": 0,
+        "jointStreak": 0
+      },
+      "valueRank": 91,
+      "volumeRank": 95,
+      "projectedRatio": 3.9583333333333335,
+      "overnightScore": 86,
+      "overnightState": "通過",
+      "score": 86,
+      "matches": [
+        {
+          "id": "overnight_chip",
+          "reason": "量價接近隔日沖候選條件，尾盤可列入觀察。"
+        }
+      ]
+    },
+    {
+      "code": "6155",
+      "name": "鈞寶",
+      "close": 52,
+      "change": 2.7,
+      "percent": 5.48,
+      "value": 249041939,
+      "tradeVolume": 4804333,
+      "inst": {
+        "code": "6155",
+        "name": "鈞寶",
+        "foreign": 763604,
+        "trust": 0,
+        "dealer": 0,
+        "total": 762482,
+        "market": "上市",
+        "foreignStreak": 2,
+        "trustStreak": 0,
+        "dealerStreak": 0,
+        "jointStreak": 0
+      },
+      "valueRank": 80,
+      "volumeRank": 87,
+      "projectedRatio": 3.625,
+      "overnightScore": 86,
+      "overnightState": "通過",
+      "score": 86,
+      "matches": [
+        {
+          "id": "overnight_chip",
+          "reason": "量價接近隔日沖候選條件，尾盤可列入觀察。"
+        }
+      ]
+    },
+    {
+      "code": "2851",
+      "name": "中再保",
+      "close": 34.55,
+      "change": 1.9,
+      "percent": 5.82,
+      "value": 238955922,
+      "tradeVolume": 6938240,
+      "inst": {
+        "code": "2851",
+        "name": "中再保",
+        "foreign": 2945399,
+        "trust": 0,
+        "dealer": 0,
+        "total": 2944300,
+        "market": "上市",
+        "foreignStreak": 2,
+        "trustStreak": 0,
+        "dealerStreak": 0,
+        "jointStreak": 0
+      },
+      "valueRank": 79,
+      "volumeRank": 90,
+      "projectedRatio": 3.75,
+      "overnightScore": 86,
+      "overnightState": "通過",
+      "score": 86,
+      "matches": [
+        {
+          "id": "overnight_chip",
+          "reason": "量價接近隔日沖候選條件，尾盤可列入觀察。"
+        }
+      ]
+    },
+    {
+      "code": "6223",
+      "name": "旺矽",
+      "close": 6135,
+      "change": 240,
+      "percent": 4.07,
+      "value": 9430737385,
+      "tradeVolume": 1556443,
+      "inst": {
+        "code": "6223",
+        "name": "旺矽",
+        "foreign": -121999,
+        "trust": 185000,
+        "dealer": -12801,
+        "total": 50200,
+        "market": "上櫃",
+        "foreignStreak": 0,
+        "trustStreak": 3,
+        "dealerStreak": 0,
+        "jointStreak": 0
+      },
+      "valueRank": 99,
+      "volumeRank": 73,
+      "projectedRatio": 3.0416666666666665,
+      "overnightScore": 85,
+      "overnightState": "通過",
+      "score": 85,
+      "matches": [
+        {
+          "id": "overnight_chip",
+          "reason": "量價接近隔日沖候選條件，尾盤可列入觀察。"
+        }
+      ]
+    },
+    {
+      "code": "6442",
+      "name": "光聖",
+      "close": 1815,
+      "change": 75,
+      "percent": 4.31,
+      "value": 4053947670,
+      "tradeVolume": 2267870,
+      "inst": {
+        "code": "6442",
+        "name": "光聖",
+        "foreign": -212159,
+        "trust": 90000,
+        "dealer": 0,
+        "total": -120453,
+        "market": "上市",
+        "foreignStreak": 0,
+        "trustStreak": 1,
+        "dealerStreak": 0,
+        "jointStreak": 0
+      },
+      "valueRank": 97,
+      "volumeRank": 78,
+      "projectedRatio": 3.25,
+      "overnightScore": 85,
+      "overnightState": "通過",
+      "score": 85,
+      "matches": [
+        {
+          "id": "overnight_chip",
+          "reason": "量價接近隔日沖候選條件，尾盤可列入觀察。"
+        }
+      ]
+    },
+    {
+      "code": "8081",
+      "name": "致新",
+      "close": 270,
+      "change": 14.5,
+      "percent": 5.68,
+      "value": 507884569,
+      "tradeVolume": 1918318,
+      "inst": {
+        "code": "8081",
+        "name": "致新",
+        "foreign": 509000,
+        "trust": -1000,
+        "dealer": 0,
+        "total": 572431,
+        "market": "上市",
+        "foreignStreak": 1,
+        "trustStreak": 0,
+        "dealerStreak": 0,
+        "jointStreak": 0
+      },
+      "valueRank": 86,
+      "volumeRank": 76,
+      "projectedRatio": 3.1666666666666665,
+      "overnightScore": 85,
+      "overnightState": "通過",
+      "score": 85,
+      "matches": [
+        {
+          "id": "overnight_chip",
+          "reason": "量價接近隔日沖候選條件，尾盤可列入觀察。"
+        }
+      ]
+    },
+    {
+      "code": "5371",
+      "name": "中光電",
+      "close": 71.8,
+      "change": 3.2,
+      "percent": 4.66,
+      "value": 287886163,
+      "tradeVolume": 4093519,
+      "inst": {
+        "code": "5371",
+        "name": "中光電",
+        "foreign": 813000,
+        "trust": 0,
+        "dealer": 218736,
+        "total": 1031736,
+        "market": "上櫃",
+        "foreignStreak": 1,
+        "trustStreak": 0,
+        "dealerStreak": 1,
+        "jointStreak": 0
+      },
+      "valueRank": 81,
+      "volumeRank": 85,
+      "projectedRatio": 3.5416666666666665,
+      "overnightScore": 85,
+      "overnightState": "通過",
+      "score": 85,
+      "matches": [
+        {
+          "id": "overnight_chip",
+          "reason": "量價接近隔日沖候選條件，尾盤可列入觀察。"
+        }
+      ]
+    },
+    {
+      "code": "1528",
+      "name": "恩德",
+      "close": 26.35,
+      "change": 1.25,
+      "percent": 4.98,
+      "value": 153222057,
+      "tradeVolume": 5997132,
+      "inst": {
+        "code": "1528",
+        "name": "恩德",
+        "foreign": 637055,
+        "trust": 0,
+        "dealer": 0,
+        "total": 636843,
+        "market": "上市",
+        "foreignStreak": 2,
+        "trustStreak": 0,
+        "dealerStreak": 0,
+        "jointStreak": 0
+      },
+      "valueRank": 75,
+      "volumeRank": 89,
+      "projectedRatio": 3.7083333333333335,
+      "overnightScore": 85,
+      "overnightState": "通過",
+      "score": 85,
+      "matches": [
+        {
+          "id": "overnight_chip",
+          "reason": "量價接近隔日沖候選條件，尾盤可列入觀察。"
+        }
+      ]
+    },
+    {
+      "code": "3024",
+      "name": "憶聲",
+      "close": 17.8,
+      "change": 0.95,
+      "percent": 5.64,
+      "value": 129845440,
+      "tradeVolume": 7458185,
+      "inst": {
+        "code": "3024",
+        "name": "憶聲",
+        "foreign": 2398000,
+        "trust": 0,
+        "dealer": 0,
+        "total": 2713608,
+        "market": "上市",
+        "foreignStreak": 1,
+        "trustStreak": 0,
+        "dealerStreak": 0,
+        "jointStreak": 0
+      },
+      "valueRank": 74,
+      "volumeRank": 90,
+      "projectedRatio": 3.75,
+      "overnightScore": 85,
+      "overnightState": "通過",
+      "score": 85,
+      "matches": [
+        {
+          "id": "overnight_chip",
+          "reason": "量價接近隔日沖候選條件，尾盤可列入觀察。"
+        }
+      ]
+    },
+    {
+      "code": "6449",
+      "name": "鈺邦",
+      "close": 271,
+      "change": 8,
+      "percent": 3.04,
+      "value": 2766186703,
+      "tradeVolume": 10367057,
+      "inst": {
+        "code": "6449",
+        "name": "鈺邦",
+        "foreign": 588749,
+        "trust": 0,
+        "dealer": 0,
+        "total": 645706,
+        "market": "上市",
+        "foreignStreak": 3,
+        "trustStreak": 0,
+        "dealerStreak": 0,
+        "jointStreak": 0
+      },
+      "valueRank": 95,
+      "volumeRank": 93,
+      "projectedRatio": 3.875,
+      "overnightScore": 84,
+      "overnightState": "通過",
+      "score": 84,
+      "matches": [
+        {
+          "id": "overnight_chip",
+          "reason": "量價接近隔日沖候選條件，尾盤可列入觀察。"
+        }
+      ]
+    },
+    {
+      "code": "3023",
+      "name": "信邦",
+      "close": 294,
+      "change": 13,
+      "percent": 4.63,
+      "value": 531943047,
+      "tradeVolume": 1851343,
+      "inst": {
+        "code": "3023",
+        "name": "信邦",
+        "foreign": 213800,
+        "trust": 152000,
+        "dealer": 0,
+        "total": 369153,
+        "market": "上市",
+        "foreignStreak": 1,
+        "trustStreak": 1,
+        "dealerStreak": 0,
+        "jointStreak": 1
+      },
+      "valueRank": 86,
+      "volumeRank": 75,
+      "projectedRatio": 3.125,
+      "overnightScore": 84,
+      "overnightState": "通過",
+      "score": 84,
+      "matches": [
+        {
+          "id": "overnight_chip",
+          "reason": "量價接近隔日沖候選條件，尾盤可列入觀察。"
+        }
+      ]
+    },
+    {
+      "code": "2485",
+      "name": "兆赫",
+      "close": 73,
+      "change": 4.7,
+      "percent": 6.88,
+      "value": 4809284099,
+      "tradeVolume": 67032895,
+      "inst": {
+        "code": "2485",
+        "name": "兆赫",
+        "foreign": 8088116,
+        "trust": 0,
+        "dealer": 0,
+        "total": 8552324,
+        "market": "上市",
+        "foreignStreak": 1,
+        "trustStreak": 0,
+        "dealerStreak": 0,
+        "jointStreak": 0
+      },
+      "valueRank": 97,
+      "volumeRank": 99,
+      "projectedRatio": 4.125,
+      "overnightScore": 83,
+      "overnightState": "通過",
+      "score": 83,
+      "matches": [
+        {
+          "id": "overnight_chip",
+          "reason": "量價接近隔日沖候選條件，尾盤可列入觀察。"
+        }
+      ]
+    },
+    {
+      "code": "8112",
+      "name": "至上",
+      "close": 84.1,
+      "change": 2.5,
+      "percent": 3.06,
+      "value": 1466580823,
+      "tradeVolume": 17750416,
+      "inst": {
+        "code": "8112",
+        "name": "至上",
+        "foreign": 2607280,
+        "trust": -19992,
+        "dealer": 0,
+        "total": 3125138,
+        "market": "上市",
+        "foreignStreak": 1,
+        "trustStreak": 0,
+        "dealerStreak": 0,
+        "jointStreak": 0
+      },
+      "valueRank": 92,
+      "volumeRank": 95,
+      "projectedRatio": 3.9583333333333335,
+      "overnightScore": 83,
+      "overnightState": "通過",
+      "score": 83,
+      "matches": [
+        {
+          "id": "overnight_chip",
+          "reason": "量價接近隔日沖候選條件，尾盤可列入觀察。"
+        }
+      ]
+    },
+    {
+      "code": "3481",
+      "name": "群創",
+      "close": 38.7,
+      "change": 2.6,
+      "percent": 7.2,
+      "value": 35090047992,
+      "tradeVolume": 948858076,
+      "inst": {
+        "code": "3481",
+        "name": "群創",
+        "foreign": -26508116,
+        "trust": 43100,
+        "dealer": 0,
+        "total": -20234462,
+        "market": "上市",
+        "foreignStreak": 0,
+        "trustStreak": 1,
+        "dealerStreak": 0,
+        "jointStreak": 0
+      },
+      "valueRank": 100,
+      "volumeRank": 100,
+      "projectedRatio": 4.166666666666667,
+      "overnightScore": 82,
+      "overnightState": "通過",
+      "score": 82,
+      "matches": [
+        {
+          "id": "overnight_chip",
+          "reason": "量價接近隔日沖候選條件，尾盤可列入觀察。"
+        }
+      ]
+    },
+    {
+      "code": "3028",
+      "name": "增你強",
+      "close": 81.2,
+      "change": 2.5,
+      "percent": 3.18,
+      "value": 796039057,
+      "tradeVolume": 9837841,
+      "inst": {
+        "code": "3028",
+        "name": "增你強",
+        "foreign": 1022252,
+        "trust": 12600,
+        "dealer": 0,
+        "total": 1084223,
+        "market": "上市",
+        "foreignStreak": 3,
+        "trustStreak": 3,
+        "dealerStreak": 0,
+        "jointStreak": 3
+      },
+      "valueRank": 89,
+      "volumeRank": 93,
+      "projectedRatio": 3.875,
+      "overnightScore": 82,
+      "overnightState": "通過",
+      "score": 82,
+      "matches": [
+        {
+          "id": "overnight_chip",
+          "reason": "量價接近隔日沖候選條件，尾盤可列入觀察。"
+        }
+      ]
+    },
+    {
+      "code": "1597",
+      "name": "直得",
+      "close": 189.5,
+      "change": 10,
+      "percent": 5.57,
+      "value": 273515350,
+      "tradeVolume": 1476067,
+      "inst": {
+        "code": "1597",
+        "name": "直得",
+        "foreign": 145000,
+        "trust": 0,
+        "dealer": 0,
+        "total": 137000,
+        "market": "上市",
+        "foreignStreak": 2,
+        "trustStreak": 0,
+        "dealerStreak": 0,
+        "jointStreak": 0
+      },
+      "valueRank": 80,
+      "volumeRank": 71,
+      "projectedRatio": 2.9583333333333335,
+      "overnightScore": 82,
+      "overnightState": "通過",
+      "score": 82,
+      "matches": [
+        {
+          "id": "overnight_chip",
+          "reason": "量價接近隔日沖候選條件，尾盤可列入觀察。"
+        }
+      ]
+    },
+    {
+      "code": "8071",
+      "name": "能率網通",
+      "close": 20,
+      "change": 1,
+      "percent": 5.26,
+      "value": 84287927,
+      "tradeVolume": 4327068,
+      "inst": {
+        "code": "8071",
+        "name": "能率網通",
+        "foreign": 210027,
+        "trust": 0,
+        "dealer": 0,
+        "total": 210027,
+        "market": "上櫃",
+        "foreignStreak": 1,
+        "trustStreak": 0,
+        "dealerStreak": 0,
+        "jointStreak": 0
+      },
+      "valueRank": 69,
+      "volumeRank": 86,
+      "projectedRatio": 3.5833333333333335,
+      "overnightScore": 82,
+      "overnightState": "通過",
+      "score": 82,
+      "matches": [
+        {
+          "id": "overnight_chip",
+          "reason": "量價接近隔日沖候選條件，尾盤可列入觀察。"
+        }
+      ]
+    },
+    {
+      "code": "2472",
+      "name": "立隆電",
+      "close": 235,
+      "change": 18,
+      "percent": 8.29,
+      "value": 2792505260,
+      "tradeVolume": 12246194,
+      "inst": {
+        "code": "2472",
+        "name": "立隆電",
+        "foreign": 280020,
+        "trust": 44000,
+        "dealer": 0,
+        "total": 566105,
+        "market": "上市",
+        "foreignStreak": 1,
+        "trustStreak": 4,
+        "dealerStreak": 0,
+        "jointStreak": 1
+      },
+      "valueRank": 96,
+      "volumeRank": 93,
+      "projectedRatio": 3.875,
+      "overnightScore": 81,
+      "overnightState": "通過",
+      "score": 81,
+      "matches": [
+        {
+          "id": "overnight_chip",
+          "reason": "量價接近隔日沖候選條件，尾盤可列入觀察。"
+        }
+      ]
+    },
+    {
+      "code": "5425",
+      "name": "台半",
+      "close": 77.9,
+      "change": 5.9,
+      "percent": 8.19,
+      "value": 1567161242,
+      "tradeVolume": 20702681,
+      "inst": {
+        "code": "5425",
+        "name": "台半",
+        "foreign": 2983716,
+        "trust": 0,
+        "dealer": 368881,
+        "total": 3352597,
+        "market": "上櫃",
+        "foreignStreak": 1,
+        "trustStreak": 0,
+        "dealerStreak": 1,
+        "jointStreak": 0
+      },
+      "valueRank": 93,
+      "volumeRank": 96,
+      "projectedRatio": 4,
+      "overnightScore": 81,
+      "overnightState": "通過",
+      "score": 81,
+      "matches": [
+        {
+          "id": "overnight_chip",
+          "reason": "量價接近隔日沖候選條件，尾盤可列入觀察。"
+        }
+      ]
+    },
+    {
+      "code": "2476",
+      "name": "鉅祥",
+      "close": 118.5,
+      "change": 3.5,
+      "percent": 3.04,
+      "value": 774427499,
+      "tradeVolume": 6509556,
+      "inst": {
+        "code": "2476",
+        "name": "鉅祥",
+        "foreign": 470000,
+        "trust": 0,
+        "dealer": 0,
+        "total": 673512,
+        "market": "上市",
+        "foreignStreak": 2,
+        "trustStreak": 0,
+        "dealerStreak": 0,
+        "jointStreak": 0
+      },
+      "valueRank": 88,
+      "volumeRank": 90,
+      "projectedRatio": 3.75,
+      "overnightScore": 81,
+      "overnightState": "通過",
+      "score": 81,
+      "matches": [
+        {
+          "id": "overnight_chip",
+          "reason": "量價接近隔日沖候選條件，尾盤可列入觀察。"
+        }
+      ]
+    },
+    {
+      "code": "8289",
+      "name": "泰藝",
+      "close": 56.1,
+      "change": 2.1,
+      "percent": 3.89,
+      "value": 251261273,
+      "tradeVolume": 4491037,
+      "inst": {
+        "code": "8289",
+        "name": "泰藝",
+        "foreign": 104000,
+        "trust": 0,
+        "dealer": 0,
+        "total": 104000,
+        "market": "上櫃",
+        "foreignStreak": 1,
+        "trustStreak": 0,
+        "dealerStreak": 0,
+        "jointStreak": 0
+      },
+      "valueRank": 80,
+      "volumeRank": 86,
+      "projectedRatio": 3.5833333333333335,
+      "overnightScore": 81,
+      "overnightState": "通過",
+      "score": 81,
+      "matches": [
+        {
+          "id": "overnight_chip",
+          "reason": "量價接近隔日沖候選條件，尾盤可列入觀察。"
+        }
+      ]
+    },
+    {
+      "code": "6525",
+      "name": "捷敏-KY",
+      "close": 110.5,
+      "change": 5.5,
+      "percent": 5.24,
+      "value": 163579652,
+      "tradeVolume": 1515196,
+      "inst": {
+        "code": "6525",
+        "name": "捷敏-KY",
+        "foreign": 337000,
+        "trust": -1856,
+        "dealer": 0,
+        "total": 338144,
+        "market": "上市",
+        "foreignStreak": 4,
+        "trustStreak": 0,
+        "dealerStreak": 0,
+        "jointStreak": 0
+      },
+      "valueRank": 76,
+      "volumeRank": 72,
+      "projectedRatio": 3,
+      "overnightScore": 81,
+      "overnightState": "通過",
+      "score": 81,
+      "matches": [
+        {
+          "id": "overnight_chip",
+          "reason": "量價接近隔日沖候選條件，尾盤可列入觀察。"
+        }
+      ]
+    },
+    {
+      "code": "2495",
+      "name": "普安",
+      "close": 36.7,
+      "change": 1.55,
+      "percent": 4.41,
+      "value": 129302129,
+      "tradeVolume": 3582139,
+      "inst": {
+        "code": "2495",
+        "name": "普安",
+        "foreign": 664000,
+        "trust": 0,
+        "dealer": 0,
+        "total": 719769,
+        "market": "上市",
+        "foreignStreak": 1,
+        "trustStreak": 0,
+        "dealerStreak": 0,
+        "jointStreak": 0
+      },
+      "valueRank": 73,
+      "volumeRank": 84,
+      "projectedRatio": 3.5,
+      "overnightScore": 81,
+      "overnightState": "通過",
+      "score": 81,
+      "matches": [
+        {
+          "id": "overnight_chip",
+          "reason": "量價接近隔日沖候選條件，尾盤可列入觀察。"
+        }
+      ]
+    },
+    {
+      "code": "6515",
+      "name": "穎崴",
+      "close": 10240,
+      "change": 460,
+      "percent": 4.7,
+      "value": 2937549085,
+      "tradeVolume": 296009,
+      "inst": {
+        "code": "6515",
+        "name": "穎崴",
+        "foreign": -37030,
+        "trust": 70000,
+        "dealer": 0,
+        "total": 31853,
+        "market": "上市",
+        "foreignStreak": 0,
+        "trustStreak": 3,
+        "dealerStreak": 0,
+        "jointStreak": 0
+      },
+      "valueRank": 96,
+      "volumeRank": 45,
+      "projectedRatio": 1.875,
+      "overnightScore": 80,
+      "overnightState": "通過",
+      "score": 80,
+      "matches": [
+        {
+          "id": "overnight_chip",
+          "reason": "量價接近隔日沖候選條件，尾盤可列入觀察。"
+        }
+      ]
+    },
+    {
+      "code": "1582",
+      "name": "信錦",
+      "close": 106.5,
+      "change": 7.1,
+      "percent": 7.14,
+      "value": 1718214858,
+      "tradeVolume": 16357370,
+      "inst": {
+        "code": "1582",
+        "name": "信錦",
+        "foreign": 1836805,
+        "trust": 240000,
+        "dealer": 0,
+        "total": 2313311,
+        "market": "上市",
+        "foreignStreak": 4,
+        "trustStreak": 1,
+        "dealerStreak": 0,
+        "jointStreak": 1
+      },
+      "valueRank": 93,
+      "volumeRank": 95,
+      "projectedRatio": 3.9583333333333335,
+      "overnightScore": 80,
+      "overnightState": "通過",
+      "score": 80,
+      "matches": [
+        {
+          "id": "overnight_chip",
+          "reason": "量價接近隔日沖候選條件，尾盤可列入觀察。"
+        }
+      ]
+    },
+    {
+      "code": "6282",
+      "name": "康舒",
+      "close": 50.8,
+      "change": 1.2,
+      "percent": 2.42,
+      "value": 975576291,
+      "tradeVolume": 19528839,
+      "inst": {
+        "code": "6282",
+        "name": "康舒",
+        "foreign": 1373850,
+        "trust": 0,
+        "dealer": 0,
+        "total": 2146932,
+        "market": "上市",
+        "foreignStreak": 1,
+        "trustStreak": 0,
+        "dealerStreak": 0,
+        "jointStreak": 0
+      },
+      "valueRank": 90,
+      "volumeRank": 96,
+      "projectedRatio": 4,
+      "overnightScore": 80,
+      "overnightState": "通過",
+      "score": 80,
+      "matches": [
+        {
+          "id": "overnight_chip",
+          "reason": "量價接近隔日沖候選條件，尾盤可列入觀察。"
+        }
+      ]
+    },
+    {
+      "code": "6509",
+      "name": "聚和",
+      "close": 47.55,
+      "change": 1.7,
+      "percent": 3.71,
+      "value": 244376141,
+      "tradeVolume": 5150946,
+      "inst": {
+        "code": "6509",
+        "name": "聚和",
+        "foreign": 1428000,
+        "trust": 0,
+        "dealer": 90517,
+        "total": 1518517,
+        "market": "上櫃",
+        "foreignStreak": 3,
+        "trustStreak": 0,
+        "dealerStreak": 3,
+        "jointStreak": 0
+      },
+      "valueRank": 79,
+      "volumeRank": 88,
+      "projectedRatio": 3.6666666666666665,
+      "overnightScore": 80,
+      "overnightState": "通過",
+      "score": 80,
+      "matches": [
+        {
+          "id": "overnight_chip",
+          "reason": "量價接近隔日沖候選條件，尾盤可列入觀察。"
+        }
+      ]
+    },
+    {
+      "code": "2454",
+      "name": "聯發科",
+      "close": 3400,
+      "change": 140,
+      "percent": 4.29,
+      "value": 23527192745,
+      "tradeVolume": 7040537,
+      "inst": {
+        "code": "2454",
+        "name": "聯發科",
+        "foreign": -482320,
+        "trust": -124123,
+        "dealer": 0,
+        "total": -570169,
+        "market": "上市",
+        "foreignStreak": 0,
+        "trustStreak": 0,
+        "dealerStreak": 0,
+        "jointStreak": 0
+      },
+      "valueRank": 100,
+      "volumeRank": 90,
+      "projectedRatio": 3.75,
+      "overnightScore": 79,
+      "overnightState": "通過",
+      "score": 79,
+      "matches": [
+        {
+          "id": "overnight_chip",
+          "reason": "量價接近隔日沖候選條件，尾盤可列入觀察。"
+        }
+      ]
+    },
+    {
+      "code": "3042",
+      "name": "晶技",
+      "close": 147,
+      "change": 3,
+      "percent": 2.08,
+      "value": 2413033867,
+      "tradeVolume": 16677357,
+      "inst": {
+        "code": "3042",
+        "name": "晶技",
+        "foreign": 3672200,
+        "trust": -14000,
+        "dealer": 0,
+        "total": 3536946,
+        "market": "上市",
+        "foreignStreak": 6,
+        "trustStreak": 0,
+        "dealerStreak": 0,
+        "jointStreak": 0
+      },
+      "valueRank": 95,
+      "volumeRank": 95,
+      "projectedRatio": 3.9583333333333335,
+      "overnightScore": 79,
+      "overnightState": "通過",
+      "score": 79,
+      "matches": [
+        {
+          "id": "overnight_chip",
+          "reason": "量價接近隔日沖候選條件，尾盤可列入觀察。"
+        }
+      ]
+    },
+    {
+      "code": "6683",
+      "name": "雍智科技",
+      "close": 1800,
+      "change": 65,
+      "percent": 3.75,
+      "value": 1410566120,
+      "tradeVolume": 859630,
+      "inst": {
+        "code": "6683",
+        "name": "雍智科技",
+        "foreign": 44203,
+        "trust": -6000,
+        "dealer": 18353,
+        "total": 56556,
+        "market": "上櫃",
+        "foreignStreak": 5,
+        "trustStreak": 0,
+        "dealerStreak": 1,
+        "jointStreak": 0
+      },
+      "valueRank": 92,
+      "volumeRank": 64,
+      "projectedRatio": 2.6666666666666665,
+      "overnightScore": 79,
+      "overnightState": "通過",
+      "score": 79,
+      "matches": [
+        {
+          "id": "overnight_chip",
+          "reason": "量價接近隔日沖候選條件，尾盤可列入觀察。"
+        }
+      ]
+    },
+    {
+      "code": "4979",
+      "name": "華星光",
+      "close": 551,
+      "change": 20,
+      "percent": 3.77,
+      "value": 766199738,
+      "tradeVolume": 1463366,
+      "inst": {
+        "code": "4979",
+        "name": "華星光",
+        "foreign": 275645,
+        "trust": -210000,
+        "dealer": -21000,
+        "total": 44645,
+        "market": "上櫃",
+        "foreignStreak": 2,
+        "trustStreak": 0,
+        "dealerStreak": 0,
+        "jointStreak": 0
+      },
+      "valueRank": 88,
+      "volumeRank": 71,
+      "projectedRatio": 2.9583333333333335,
+      "overnightScore": 79,
+      "overnightState": "通過",
+      "score": 79,
+      "matches": [
+        {
+          "id": "overnight_chip",
+          "reason": "量價接近隔日沖候選條件，尾盤可列入觀察。"
+        }
+      ]
+    },
+    {
+      "code": "4973",
+      "name": "廣穎",
+      "close": 120.5,
+      "change": 3.5,
+      "percent": 2.99,
+      "value": 565751696,
+      "tradeVolume": 4847674,
+      "inst": {
+        "code": "4973",
+        "name": "廣穎",
+        "foreign": 205006,
+        "trust": 0,
+        "dealer": 14524,
+        "total": 219530,
+        "market": "上櫃",
+        "foreignStreak": 5,
+        "trustStreak": 0,
+        "dealerStreak": 5,
+        "jointStreak": 0
+      },
+      "valueRank": 86,
+      "volumeRank": 87,
+      "projectedRatio": 3.625,
+      "overnightScore": 79,
+      "overnightState": "通過",
+      "score": 79,
+      "matches": [
+        {
+          "id": "overnight_chip",
+          "reason": "量價接近隔日沖候選條件，尾盤可列入觀察。"
+        }
+      ]
+    },
+    {
+      "code": "7749",
+      "name": "意騰-KY",
+      "close": 511,
+      "change": 23,
+      "percent": 4.71,
+      "value": 333012077,
+      "tradeVolume": 675365,
+      "inst": {
+        "code": "7749",
+        "name": "意騰-KY",
+        "foreign": 43032,
+        "trust": 22000,
+        "dealer": 0,
+        "total": 87529,
+        "market": "上市",
+        "foreignStreak": 1,
+        "trustStreak": 4,
+        "dealerStreak": 0,
+        "jointStreak": 1
+      },
+      "valueRank": 82,
+      "volumeRank": 60,
+      "projectedRatio": 2.5,
+      "overnightScore": 79,
+      "overnightState": "通過",
+      "score": 79,
+      "matches": [
+        {
+          "id": "overnight_chip",
+          "reason": "量價接近隔日沖候選條件，尾盤可列入觀察。"
+        }
+      ]
+    },
+    {
+      "code": "2338",
+      "name": "光罩",
+      "close": 49.65,
+      "change": 1.75,
+      "percent": 3.65,
+      "value": 208357376,
+      "tradeVolume": 4362870,
+      "inst": {
+        "code": "2338",
+        "name": "光罩",
+        "foreign": 177415,
+        "trust": 0,
+        "dealer": 0,
+        "total": 198200,
+        "market": "上市",
+        "foreignStreak": 1,
+        "trustStreak": 0,
+        "dealerStreak": 0,
+        "jointStreak": 0
+      },
+      "valueRank": 78,
+      "volumeRank": 86,
+      "projectedRatio": 3.5833333333333335,
+      "overnightScore": 79,
+      "overnightState": "通過",
+      "score": 79,
+      "matches": [
+        {
+          "id": "overnight_chip",
+          "reason": "量價接近隔日沖候選條件，尾盤可列入觀察。"
+        }
+      ]
+    },
+    {
+      "code": "6499",
+      "name": "益安",
+      "close": 88.6,
+      "change": 5,
+      "percent": 5.98,
+      "value": 112477707,
+      "tradeVolume": 1276543,
+      "inst": {
+        "code": "6499",
+        "name": "益安",
+        "foreign": 210000,
+        "trust": 0,
+        "dealer": -231,
+        "total": 209769,
+        "market": "上櫃",
+        "foreignStreak": 2,
+        "trustStreak": 0,
+        "dealerStreak": 0,
+        "jointStreak": 0
+      },
+      "valueRank": 72,
+      "volumeRank": 70,
+      "projectedRatio": 2.9166666666666665,
+      "overnightScore": 79,
+      "overnightState": "通過",
+      "score": 79,
+      "matches": [
+        {
+          "id": "overnight_chip",
+          "reason": "量價接近隔日沖候選條件，尾盤可列入觀察。"
+        }
+      ]
+    },
+    {
+      "code": "2376",
+      "name": "技嘉",
+      "close": 330.5,
+      "change": 4,
+      "percent": 1.23,
+      "value": 13298561964,
+      "tradeVolume": 39137868,
+      "inst": {
+        "code": "2376",
+        "name": "技嘉",
+        "foreign": 694418,
+        "trust": 3054000,
+        "dealer": 0,
+        "total": 3527420,
+        "market": "上市",
+        "foreignStreak": 1,
+        "trustStreak": 1,
+        "dealerStreak": 0,
+        "jointStreak": 1
+      },
+      "valueRank": 99,
+      "volumeRank": 99,
+      "projectedRatio": 4.125,
+      "overnightScore": 78,
+      "overnightState": "通過",
+      "score": 78,
+      "matches": [
+        {
+          "id": "overnight_chip",
+          "reason": "量價接近隔日沖候選條件，尾盤可列入觀察。"
+        }
+      ]
+    },
+    {
+      "code": "3450",
+      "name": "聯鈞",
+      "close": 410,
+      "change": 14.5,
+      "percent": 3.67,
+      "value": 1715679667,
+      "tradeVolume": 4301777,
+      "inst": {
+        "code": "3450",
+        "name": "聯鈞",
+        "foreign": 261684,
+        "trust": -1134000,
+        "dealer": 0,
+        "total": -949180,
+        "market": "上市",
+        "foreignStreak": 5,
+        "trustStreak": 0,
+        "dealerStreak": 0,
+        "jointStreak": 0
+      },
+      "valueRank": 93,
+      "volumeRank": 85,
+      "projectedRatio": 3.5416666666666665,
+      "overnightScore": 78,
+      "overnightState": "通過",
+      "score": 78,
+      "matches": [
+        {
+          "id": "overnight_chip",
+          "reason": "量價接近隔日沖候選條件，尾盤可列入觀察。"
+        }
+      ]
+    },
+    {
+      "code": "3376",
+      "name": "新日興",
+      "close": 205.5,
+      "change": 13,
+      "percent": 6.75,
+      "value": 1227570651,
+      "tradeVolume": 6122823,
+      "inst": {
+        "code": "3376",
+        "name": "新日興",
+        "foreign": 1893900,
+        "trust": 0,
+        "dealer": 0,
+        "total": 2573857,
+        "market": "上市",
+        "foreignStreak": 1,
+        "trustStreak": 0,
+        "dealerStreak": 0,
+        "jointStreak": 0
+      },
+      "valueRank": 91,
+      "volumeRank": 89,
+      "projectedRatio": 3.7083333333333335,
+      "overnightScore": 78,
+      "overnightState": "通過",
+      "score": 78,
+      "matches": [
+        {
+          "id": "overnight_chip",
+          "reason": "量價接近隔日沖候選條件，尾盤可列入觀察。"
+        }
+      ]
+    },
+    {
+      "code": "3062",
+      "name": "建漢",
+      "close": 28.25,
+      "change": 0.8,
+      "percent": 2.91,
+      "value": 246230638,
+      "tradeVolume": 8743284,
+      "inst": {
+        "code": "3062",
+        "name": "建漢",
+        "foreign": 1693000,
+        "trust": 0,
+        "dealer": 0,
+        "total": 1708730,
+        "market": "上市",
+        "foreignStreak": 2,
+        "trustStreak": 0,
+        "dealerStreak": 0,
+        "jointStreak": 0
+      },
+      "valueRank": 80,
+      "volumeRank": 92,
+      "projectedRatio": 3.8333333333333335,
+      "overnightScore": 78,
+      "overnightState": "通過",
+      "score": 78,
+      "matches": [
+        {
+          "id": "overnight_chip",
+          "reason": "量價接近隔日沖候選條件，尾盤可列入觀察。"
+        }
+      ]
+    },
+    {
+      "code": "3576",
+      "name": "聯合再生",
+      "close": 17.5,
+      "change": 0.5,
+      "percent": 2.94,
+      "value": 233833762,
+      "tradeVolume": 13387947,
+      "inst": {
+        "code": "3576",
+        "name": "聯合再生",
+        "foreign": 3353729,
+        "trust": 0,
+        "dealer": 0,
+        "total": 3339234,
+        "market": "上市",
+        "foreignStreak": 2,
+        "trustStreak": 0,
+        "dealerStreak": 0,
+        "jointStreak": 0
+      },
+      "valueRank": 79,
+      "volumeRank": 94,
+      "projectedRatio": 3.9166666666666665,
+      "overnightScore": 78,
+      "overnightState": "通過",
+      "score": 78,
+      "matches": [
+        {
+          "id": "overnight_chip",
+          "reason": "量價接近隔日沖候選條件，尾盤可列入觀察。"
+        }
+      ]
+    },
+    {
+      "code": "1736",
+      "name": "喬山",
+      "close": 124.5,
+      "change": 6,
+      "percent": 5.06,
+      "value": 123023958,
+      "tradeVolume": 1005161,
+      "inst": {
+        "code": "1736",
+        "name": "喬山",
+        "foreign": 122015,
+        "trust": 0,
+        "dealer": 0,
+        "total": 118015,
+        "market": "上市",
+        "foreignStreak": 2,
+        "trustStreak": 0,
+        "dealerStreak": 0,
+        "jointStreak": 0
+      },
+      "valueRank": 73,
+      "volumeRank": 66,
+      "projectedRatio": 2.75,
+      "overnightScore": 78,
+      "overnightState": "通過",
+      "score": 78,
+      "matches": [
+        {
+          "id": "overnight_chip",
+          "reason": "量價接近隔日沖候選條件，尾盤可列入觀察。"
+        }
+      ]
+    },
+    {
+      "code": "2419",
+      "name": "仲琦",
+      "close": 30,
+      "change": 1.35,
+      "percent": 4.71,
+      "value": 62638276,
+      "tradeVolume": 2117692,
+      "inst": {
+        "code": "2419",
+        "name": "仲琦",
+        "foreign": -22000,
+        "trust": 0,
+        "dealer": 0,
+        "total": 2385,
+        "market": "上市",
+        "foreignStreak": 0,
+        "trustStreak": 0,
+        "dealerStreak": 0,
+        "jointStreak": 0
+      },
+      "valueRank": 66,
+      "volumeRank": 77,
+      "projectedRatio": 3.2083333333333335,
+      "overnightScore": 78,
+      "overnightState": "通過",
+      "score": 78,
+      "matches": [
+        {
+          "id": "overnight_chip",
+          "reason": "量價接近隔日沖候選條件，尾盤可列入觀察。"
+        }
+      ]
+    },
+    {
+      "code": "6147",
+      "name": "頎邦",
+      "close": 207,
+      "change": 2,
+      "percent": 0.98,
+      "value": 21237399990,
+      "tradeVolume": 102631199,
+      "inst": {
+        "code": "6147",
+        "name": "頎邦",
+        "foreign": 3180045,
+        "trust": 5251245,
+        "dealer": -1876247,
+        "total": 6555043,
+        "market": "上櫃",
+        "foreignStreak": 3,
+        "trustStreak": 1,
+        "dealerStreak": 0,
+        "jointStreak": 1
+      },
+      "valueRank": 99,
+      "volumeRank": 100,
+      "projectedRatio": 4.166666666666667,
+      "overnightScore": 77,
+      "overnightState": "觀察",
+      "score": 77,
+      "matches": [
+        {
+          "id": "overnight_chip",
+          "reason": "未完整命中強條件，但量價排名仍值得觀察。"
+        }
+      ]
+    },
+    {
+      "code": "3034",
+      "name": "聯詠",
+      "close": 475.5,
+      "change": 9,
+      "percent": 1.93,
+      "value": 2454384260,
+      "tradeVolume": 5240289,
+      "inst": {
+        "code": "3034",
+        "name": "聯詠",
+        "foreign": 1924649,
+        "trust": 2935,
+        "dealer": 0,
+        "total": 1901218,
+        "market": "上市",
+        "foreignStreak": 7,
+        "trustStreak": 2,
+        "dealerStreak": 0,
+        "jointStreak": 2
+      },
+      "valueRank": 95,
+      "volumeRank": 88,
+      "projectedRatio": 3.6666666666666665,
+      "overnightScore": 77,
+      "overnightState": "通過",
+      "score": 77,
+      "matches": [
+        {
+          "id": "overnight_chip",
+          "reason": "量價接近隔日沖候選條件，尾盤可列入觀察。"
+        }
+      ]
+    },
+    {
+      "code": "3211",
+      "name": "順達",
+      "close": 367.5,
+      "change": 8,
+      "percent": 2.23,
+      "value": 1638713414,
+      "tradeVolume": 4574561,
+      "inst": {
+        "code": "3211",
+        "name": "順達",
+        "foreign": 1000,
+        "trust": -1000,
+        "dealer": 36202,
+        "total": 36202,
+        "market": "上櫃",
+        "foreignStreak": 2,
+        "trustStreak": 0,
+        "dealerStreak": 1,
+        "jointStreak": 0
+      },
+      "valueRank": 93,
+      "volumeRank": 86,
+      "projectedRatio": 3.5833333333333335,
+      "overnightScore": 77,
+      "overnightState": "通過",
+      "score": 77,
+      "matches": [
+        {
+          "id": "overnight_chip",
+          "reason": "量價接近隔日沖候選條件，尾盤可列入觀察。"
+        }
+      ]
+    },
+    {
+      "code": "2542",
+      "name": "興富發",
+      "close": 44.6,
+      "change": 0.85,
+      "percent": 1.94,
+      "value": 861740481,
+      "tradeVolume": 19426031,
+      "inst": {
+        "code": "2542",
+        "name": "興富發",
+        "foreign": 5337355,
+        "trust": 29500,
+        "dealer": 0,
+        "total": 5609792,
+        "market": "上市",
+        "foreignStreak": 4,
+        "trustStreak": 5,
+        "dealerStreak": 0,
+        "jointStreak": 4
+      },
+      "valueRank": 89,
+      "volumeRank": 96,
+      "projectedRatio": 4,
+      "overnightScore": 77,
+      "overnightState": "通過",
+      "score": 77,
+      "matches": [
+        {
+          "id": "overnight_chip",
+          "reason": "量價接近隔日沖候選條件，尾盤可列入觀察。"
+        }
+      ]
+    },
+    {
+      "code": "2312",
+      "name": "金寶",
+      "close": 28.45,
+      "change": 0.6,
+      "percent": 2.15,
+      "value": 628332715,
+      "tradeVolume": 22712707,
+      "inst": {
+        "code": "2312",
+        "name": "金寶",
+        "foreign": 3559089,
+        "trust": 0,
+        "dealer": 0,
+        "total": 3713763,
+        "market": "上市",
+        "foreignStreak": 2,
+        "trustStreak": 0,
+        "dealerStreak": 0,
+        "jointStreak": 0
+      },
+      "valueRank": 87,
+      "volumeRank": 96,
+      "projectedRatio": 4,
+      "overnightScore": 77,
+      "overnightState": "通過",
+      "score": 77,
+      "matches": [
+        {
+          "id": "overnight_chip",
+          "reason": "量價接近隔日沖候選條件，尾盤可列入觀察。"
+        }
+      ]
+    },
+    {
+      "code": "3537",
+      "name": "堡達",
+      "close": 55,
+      "change": 2,
+      "percent": 3.77,
+      "value": 149583747,
+      "tradeVolume": 2764604,
+      "inst": {
+        "code": "3537",
+        "name": "堡達",
+        "foreign": 71000,
+        "trust": 0,
+        "dealer": -23,
+        "total": 70977,
+        "market": "上櫃",
+        "foreignStreak": 5,
+        "trustStreak": 0,
+        "dealerStreak": 0,
+        "jointStreak": 0
+      },
+      "valueRank": 75,
+      "volumeRank": 80,
+      "projectedRatio": 3.3333333333333335,
+      "overnightScore": 77,
+      "overnightState": "通過",
+      "score": 77,
+      "matches": [
+        {
+          "id": "overnight_chip",
+          "reason": "量價接近隔日沖候選條件，尾盤可列入觀察。"
+        }
+      ]
+    },
+    {
+      "code": "6668",
+      "name": "中揚光",
+      "close": 39.25,
+      "change": 1.95,
+      "percent": 5.23,
+      "value": 61665512,
+      "tradeVolume": 1557607,
+      "inst": {
+        "code": "6668",
+        "name": "中揚光",
+        "foreign": 193000,
+        "trust": 0,
+        "dealer": 0,
+        "total": 193046,
+        "market": "上市",
+        "foreignStreak": 1,
+        "trustStreak": 0,
+        "dealerStreak": 0,
+        "jointStreak": 0
+      },
+      "valueRank": 66,
+      "volumeRank": 73,
+      "projectedRatio": 3.0416666666666665,
+      "overnightScore": 77,
+      "overnightState": "通過",
+      "score": 77,
+      "matches": [
+        {
+          "id": "overnight_chip",
+          "reason": "量價接近隔日沖候選條件，尾盤可列入觀察。"
+        }
+      ]
+    },
+    {
+      "code": "3563",
+      "name": "牧德",
+      "close": 893,
+      "change": 18,
+      "percent": 2.06,
+      "value": 3970255413,
+      "tradeVolume": 4485375,
+      "inst": {
+        "code": "3563",
+        "name": "牧德",
+        "foreign": -361167,
+        "trust": 200000,
+        "dealer": 0,
+        "total": -155520,
+        "market": "上市",
+        "foreignStreak": 0,
+        "trustStreak": 1,
+        "dealerStreak": 0,
+        "jointStreak": 0
+      },
+      "valueRank": 97,
+      "volumeRank": 86,
+      "projectedRatio": 3.5833333333333335,
+      "overnightScore": 76,
+      "overnightState": "通過",
+      "score": 76,
+      "matches": [
+        {
+          "id": "overnight_chip",
+          "reason": "量價接近隔日沖候選條件，尾盤可列入觀察。"
+        }
+      ]
+    },
+    {
+      "code": "2409",
+      "name": "友達",
+      "close": 19.25,
+      "change": 0.2,
+      "percent": 1.05,
+      "value": 3909620018,
+      "tradeVolume": 207880657,
+      "inst": {
+        "code": "2409",
+        "name": "友達",
+        "foreign": 6297953,
+        "trust": 7000,
+        "dealer": 0,
+        "total": 7043839,
+        "market": "上市",
+        "foreignStreak": 2,
+        "trustStreak": 1,
+        "dealerStreak": 0,
+        "jointStreak": 1
+      },
+      "valueRank": 97,
+      "volumeRank": 100,
+      "projectedRatio": 4.166666666666667,
+      "overnightScore": 76,
+      "overnightState": "通過",
+      "score": 76,
+      "matches": [
+        {
+          "id": "overnight_chip",
+          "reason": "量價接近隔日沖候選條件，尾盤可列入觀察。"
+        }
+      ]
+    },
+    {
+      "code": "3035",
+      "name": "智原",
+      "close": 193,
+      "change": 3,
+      "percent": 1.58,
+      "value": 2026711031,
+      "tradeVolume": 10899387,
+      "inst": {
+        "code": "3035",
+        "name": "智原",
+        "foreign": 449302,
+        "trust": 0,
+        "dealer": 0,
+        "total": 836799,
+        "market": "上市",
+        "foreignStreak": 1,
+        "trustStreak": 0,
+        "dealerStreak": 0,
+        "jointStreak": 0
+      },
+      "valueRank": 94,
+      "volumeRank": 93,
+      "projectedRatio": 3.875,
+      "overnightScore": 76,
+      "overnightState": "通過",
+      "score": 76,
+      "matches": [
+        {
+          "id": "overnight_chip",
+          "reason": "量價接近隔日沖候選條件，尾盤可列入觀察。"
+        }
+      ]
+    },
+    {
+      "code": "2455",
+      "name": "全新",
+      "close": 387,
+      "change": 28.5,
+      "percent": 7.95,
+      "value": 1083791385,
+      "tradeVolume": 2920960,
+      "inst": {
+        "code": "2455",
+        "name": "全新",
+        "foreign": 1135701,
+        "trust": 0,
+        "dealer": 0,
+        "total": 1043230,
+        "market": "上市",
+        "foreignStreak": 7,
+        "trustStreak": 0,
+        "dealerStreak": 0,
+        "jointStreak": 0
+      },
+      "valueRank": 91,
+      "volumeRank": 81,
+      "projectedRatio": 3.375,
+      "overnightScore": 76,
+      "overnightState": "通過",
+      "score": 76,
+      "matches": [
+        {
+          "id": "overnight_chip",
+          "reason": "量價接近隔日沖候選條件，尾盤可列入觀察。"
+        }
+      ]
+    },
+    {
+      "code": "6426",
+      "name": "統新",
+      "close": 268.5,
+      "change": 12.5,
+      "percent": 4.88,
+      "value": 889338656,
+      "tradeVolume": 3373283,
+      "inst": {
+        "code": "6426",
+        "name": "統新",
+        "foreign": -8000,
+        "trust": 0,
+        "dealer": 0,
+        "total": -15262,
+        "market": "上市",
+        "foreignStreak": 0,
+        "trustStreak": 0,
+        "dealerStreak": 0,
+        "jointStreak": 0
+      },
+      "valueRank": 89,
+      "volumeRank": 83,
+      "projectedRatio": 3.4583333333333335,
+      "overnightScore": 76,
+      "overnightState": "通過",
+      "score": 76,
+      "matches": [
+        {
+          "id": "overnight_chip",
+          "reason": "量價接近隔日沖候選條件，尾盤可列入觀察。"
+        }
+      ]
+    },
+    {
+      "code": "6190",
+      "name": "萬泰科",
+      "close": 78.9,
+      "change": 1.6,
+      "percent": 2.07,
+      "value": 756346297,
+      "tradeVolume": 9560800,
+      "inst": {
+        "code": "6190",
+        "name": "萬泰科",
+        "foreign": 644005,
+        "trust": 0,
+        "dealer": 223872,
+        "total": 867877,
+        "market": "上櫃",
+        "foreignStreak": 1,
+        "trustStreak": 0,
+        "dealerStreak": 1,
+        "jointStreak": 0
+      },
+      "valueRank": 88,
+      "volumeRank": 92,
+      "projectedRatio": 3.8333333333333335,
+      "overnightScore": 76,
+      "overnightState": "通過",
+      "score": 76,
+      "matches": [
+        {
+          "id": "overnight_chip",
+          "reason": "量價接近隔日沖候選條件，尾盤可列入觀察。"
+        }
+      ]
+    },
+    {
+      "code": "1309",
+      "name": "台達化",
+      "close": 16.5,
+      "change": 0.85,
+      "percent": 5.43,
+      "value": 275145120,
+      "tradeVolume": 16296765,
+      "inst": {
+        "code": "1309",
+        "name": "台達化",
+        "foreign": -1483000,
+        "trust": 0,
+        "dealer": 0,
+        "total": -1487504,
+        "market": "上市",
+        "foreignStreak": 0,
+        "trustStreak": 0,
+        "dealerStreak": 0,
+        "jointStreak": 0
+      },
+      "valueRank": 81,
+      "volumeRank": 95,
+      "projectedRatio": 3.9583333333333335,
+      "overnightScore": 76,
+      "overnightState": "通過",
+      "score": 76,
+      "matches": [
+        {
+          "id": "overnight_chip",
+          "reason": "量價接近隔日沖候選條件，尾盤可列入觀察。"
+        }
+      ]
+    },
+    {
+      "code": "2426",
+      "name": "鼎元",
+      "close": 63.8,
+      "change": 1.9,
+      "percent": 3.07,
+      "value": 234773590,
+      "tradeVolume": 3926733,
+      "inst": {
+        "code": "2426",
+        "name": "鼎元",
+        "foreign": 186000,
+        "trust": 0,
+        "dealer": 0,
+        "total": 512000,
+        "market": "上市",
+        "foreignStreak": 1,
+        "trustStreak": 0,
+        "dealerStreak": 0,
+        "jointStreak": 0
+      },
+      "valueRank": 79,
+      "volumeRank": 84,
+      "projectedRatio": 3.5,
+      "overnightScore": 76,
+      "overnightState": "通過",
+      "score": 76,
+      "matches": [
+        {
+          "id": "overnight_chip",
+          "reason": "量價接近隔日沖候選條件，尾盤可列入觀察。"
+        }
+      ]
+    },
+    {
+      "code": "2406",
+      "name": "國碩",
+      "close": 31.75,
+      "change": 0.9,
+      "percent": 2.92,
+      "value": 190630849,
+      "tradeVolume": 6104152,
+      "inst": {
+        "code": "2406",
+        "name": "國碩",
+        "foreign": 522030,
+        "trust": 0,
+        "dealer": 0,
+        "total": 460286,
+        "market": "上市",
+        "foreignStreak": 1,
+        "trustStreak": 0,
+        "dealerStreak": 0,
+        "jointStreak": 0
+      },
+      "valueRank": 78,
+      "volumeRank": 89,
+      "projectedRatio": 3.7083333333333335,
+      "overnightScore": 76,
+      "overnightState": "通過",
+      "score": 76,
+      "matches": [
+        {
+          "id": "overnight_chip",
+          "reason": "量價接近隔日沖候選條件，尾盤可列入觀察。"
+        }
+      ]
+    },
+    {
+      "code": "6862",
+      "name": "三集瑞-KY",
+      "close": 168.5,
+      "change": 7.5,
+      "percent": 4.66,
+      "value": 129631811,
+      "tradeVolume": 772092,
+      "inst": {
+        "code": "6862",
+        "name": "三集瑞-KY",
+        "foreign": 144853,
+        "trust": 0,
+        "dealer": 0,
+        "total": 150103,
+        "market": "上市",
+        "foreignStreak": 2,
+        "trustStreak": 0,
+        "dealerStreak": 0,
+        "jointStreak": 0
+      },
+      "valueRank": 73,
+      "volumeRank": 62,
+      "projectedRatio": 2.5833333333333335,
+      "overnightScore": 76,
+      "overnightState": "通過",
+      "score": 76,
+      "matches": [
+        {
+          "id": "overnight_chip",
+          "reason": "量價接近隔日沖候選條件，尾盤可列入觀察。"
+        }
+      ]
+    },
+    {
+      "code": "4163",
+      "name": "鐿鈦",
+      "close": 124,
+      "change": 6,
+      "percent": 5.08,
+      "value": 90369789,
+      "tradeVolume": 741947,
+      "inst": {
+        "code": "4163",
+        "name": "鐿鈦",
+        "foreign": 9000,
+        "trust": 0,
+        "dealer": 0,
+        "total": 9000,
+        "market": "上櫃",
+        "foreignStreak": 1,
+        "trustStreak": 0,
+        "dealerStreak": 0,
+        "jointStreak": 0
+      },
+      "valueRank": 70,
+      "volumeRank": 61,
+      "projectedRatio": 2.5416666666666665,
+      "overnightScore": 76,
+      "overnightState": "通過",
+      "score": 76,
+      "matches": [
+        {
+          "id": "overnight_chip",
+          "reason": "量價接近隔日沖候選條件，尾盤可列入觀察。"
+        }
+      ]
+    },
+    {
+      "code": "2420",
+      "name": "新巨",
+      "close": 59.5,
+      "change": 2.8,
+      "percent": 4.94,
+      "value": 65921670,
+      "tradeVolume": 1123579,
+      "inst": {
+        "code": "2420",
+        "name": "新巨",
+        "foreign": 39350,
+        "trust": 0,
+        "dealer": 0,
+        "total": 41350,
+        "market": "上市",
+        "foreignStreak": 3,
+        "trustStreak": 0,
+        "dealerStreak": 0,
+        "jointStreak": 0
+      },
+      "valueRank": 66,
+      "volumeRank": 68,
+      "projectedRatio": 2.8333333333333335,
+      "overnightScore": 76,
+      "overnightState": "通過",
+      "score": 76,
+      "matches": [
+        {
+          "id": "overnight_chip",
+          "reason": "量價接近隔日沖候選條件，尾盤可列入觀察。"
+        }
+      ]
+    },
+    {
+      "code": "2303",
+      "name": "聯電",
+      "close": 111,
+      "change": 1,
+      "percent": 0.91,
+      "value": 29112210336,
+      "tradeVolume": 264201488,
+      "inst": {
+        "code": "2303",
+        "name": "聯電",
+        "foreign": -45921195,
+        "trust": 20707132,
+        "dealer": 0,
+        "total": -24732790,
+        "market": "上市",
+        "foreignStreak": 0,
+        "trustStreak": 7,
+        "dealerStreak": 0,
+        "jointStreak": 0
+      },
+      "valueRank": 100,
+      "volumeRank": 100,
+      "projectedRatio": 4.166666666666667,
+      "overnightScore": 75,
+      "overnightState": "觀察",
+      "score": 75,
+      "matches": [
+        {
+          "id": "overnight_chip",
+          "reason": "未完整命中強條件，但量價排名仍值得觀察。"
+        }
+      ]
+    },
+    {
+      "code": "3081",
+      "name": "聯亞",
+      "close": 2710,
+      "change": 55,
+      "percent": 2.07,
+      "value": 5175590080,
+      "tradeVolume": 1998033,
+      "inst": {
+        "code": "3081",
+        "name": "聯亞",
+        "foreign": 190630,
+        "trust": 23001,
+        "dealer": -58346,
+        "total": 155285,
+        "market": "上櫃",
+        "foreignStreak": 1,
+        "trustStreak": 1,
+        "dealerStreak": 0,
+        "jointStreak": 1
+      },
+      "valueRank": 98,
+      "volumeRank": 76,
+      "projectedRatio": 3.1666666666666665,
+      "overnightScore": 75,
+      "overnightState": "通過",
+      "score": 75,
+      "matches": [
+        {
+          "id": "overnight_chip",
+          "reason": "量價接近隔日沖候選條件，尾盤可列入觀察。"
+        }
+      ]
+    },
+    {
+      "code": "3264",
+      "name": "欣銓",
+      "close": 230,
+      "change": 4,
+      "percent": 1.77,
+      "value": 1315999749,
+      "tradeVolume": 5832156,
+      "inst": {
+        "code": "3264",
+        "name": "欣銓",
+        "foreign": 598700,
+        "trust": -211100,
+        "dealer": 142309,
+        "total": 529909,
+        "market": "上櫃",
+        "foreignStreak": 4,
+        "trustStreak": 0,
+        "dealerStreak": 2,
+        "jointStreak": 0
+      },
+      "valueRank": 92,
+      "volumeRank": 89,
+      "projectedRatio": 3.7083333333333335,
+      "overnightScore": 75,
+      "overnightState": "通過",
+      "score": 75,
+      "matches": [
+        {
+          "id": "overnight_chip",
+          "reason": "量價接近隔日沖候選條件，尾盤可列入觀察。"
+        }
+      ]
+    },
+    {
+      "code": "3019",
+      "name": "亞光",
+      "close": 147,
+      "change": 2.5,
+      "percent": 1.73,
+      "value": 1004205573,
+      "tradeVolume": 6860430,
+      "inst": {
+        "code": "3019",
+        "name": "亞光",
+        "foreign": 524223,
+        "trust": 0,
+        "dealer": 0,
+        "total": 562029,
+        "market": "上市",
+        "foreignStreak": 1,
+        "trustStreak": 0,
+        "dealerStreak": 0,
+        "jointStreak": 0
+      },
+      "valueRank": 90,
+      "volumeRank": 90,
+      "projectedRatio": 3.75,
+      "overnightScore": 75,
+      "overnightState": "通過",
+      "score": 75,
+      "matches": [
+        {
+          "id": "overnight_chip",
+          "reason": "量價接近隔日沖候選條件，尾盤可列入觀察。"
+        }
+      ]
+    },
+    {
+      "code": "6944",
+      "name": "兆聯實業",
+      "close": 924,
+      "change": 27,
+      "percent": 3.01,
+      "value": 991707343,
+      "tradeVolume": 1083872,
+      "inst": {
+        "code": "6944",
+        "name": "兆聯實業",
+        "foreign": 194441,
+        "trust": 0,
+        "dealer": 0,
+        "total": 230835,
+        "market": "上市",
+        "foreignStreak": 1,
+        "trustStreak": 0,
+        "dealerStreak": 0,
+        "jointStreak": 0
+      },
+      "valueRank": 90,
+      "volumeRank": 67,
+      "projectedRatio": 2.7916666666666665,
+      "overnightScore": 75,
+      "overnightState": "通過",
+      "score": 75,
+      "matches": [
+        {
+          "id": "overnight_chip",
+          "reason": "量價接近隔日沖候選條件，尾盤可列入觀察。"
+        }
+      ]
+    }
+  ]
 }
