@@ -3752,23 +3752,53 @@ function formatWarrantMoney(value) {
   return Math.round(number).toLocaleString("zh-TW");
 }
 
+function getWarrantPriority(item) {
+  const level = String(item.level || "").toUpperCase();
+  const callValue = cleanNumber(item.callValue);
+  const putValue = cleanNumber(item.putValue);
+  const ratio = cleanNumber(item.callPutRatio);
+  const callCount = cleanNumber(item.callCount);
+  const putCount = cleanNumber(item.putCount);
+  const atMoneyCount = cleanNumber(item.atMoneyCallCount);
+  const days = cleanNumber(item.minDaysToExpiry);
+  const pct = Number(item.stockPercent);
+  const score = cleanNumber(item.score);
+  const isPriority = (
+    level === "A" &&
+    callValue >= 20000000 &&
+    callCount >= 5 &&
+    atMoneyCount >= 2 &&
+    days >= 10 &&
+    ratio >= 2.5 &&
+    callValue > putValue &&
+    Number.isFinite(pct) &&
+    pct > -2 &&
+    pct <= 4
+  );
+  const reasons = [];
+  if (!isPriority) reasons.push("不在優先區");
+  else if (pct <= 1.5 && ratio >= 6 && atMoneyCount >= 3) reasons.push("權證先熱，股票未噴");
+  else if (pct <= 2.5) reasons.push("權證先熱，股票未過熱");
+  else reasons.push("權證熱，股票漲幅仍可控");
+  return {
+    isPriority,
+    score: Math.round(score + Math.min(callValue / 20000000, 18) + Math.min(ratio * 2, 14) + (pct <= 1.5 ? 12 : pct <= 2.5 ? 8 : 3)),
+    label: reasons[0],
+  };
+}
+
 function renderWarrantFlow() {
   const panel = viewPanels["warrant-flow"];
   if (!panel) return;
   const keyword = warrantFlowKeyword.trim().toLowerCase();
   const allRows = warrantFlowData
     .map(hydrateWarrantFlowItem)
-    .filter((item) => String(item.level || "").toUpperCase() === "A")
     .map((item) => ({
       ...item,
-      observeScore: Math.round(
-        item.score +
-        Math.min(cleanNumber(item.callValue) / 20000000, 18) +
-        Math.min(cleanNumber(item.callPutRatio) * 2, 14) +
-        (item.stockPercent >= -1 && item.stockPercent <= 2.5 ? 10 : item.stockPercent <= 4.5 ? 3 : -8)
-      ),
+      priority: getWarrantPriority(item),
     }))
-    .sort((a, b) => b.observeScore - a.observeScore || b.score - a.score || b.callValue - a.callValue)
+    .filter((item) => item.priority.isPriority)
+    .sort((a, b) => b.priority.score - a.priority.score || b.score - a.score || b.callValue - a.callValue)
     .map((item, index) => ({ ...item, rank: index + 1 }));
   const filteredRows = keyword
     ? allRows.filter((item) =>
@@ -3783,10 +3813,10 @@ function renderWarrantFlow() {
   const rows = filteredRows.slice(pageStart, pageStart + pageSize);
   const listLabel = keyword
     ? `搜尋結果 ${filteredRows.length} 筆｜第 ${warrantFlowPage}/${pageCount} 頁`
-    : `全部 A 級權證 ${allRows.length} 筆｜第 ${warrantFlowPage}/${pageCount} 頁`;
+    : `優先區權證 ${allRows.length} 筆｜第 ${warrantFlowPage}/${pageCount} 頁`;
   const helperText = keyword
-    ? "搜尋會查全部 A 級權證候選名單，股票代號或名稱都可以搜尋。"
-    : "只顯示 A 級權證：認購集中、認售偏低、權證資金熱度最高的候選。";
+    ? "搜尋只查優先區權證候選；不在優先區的 A 級權證已剔除。"
+    : "只顯示優先區：A級、認購熱、認售低、價平/價內足夠，且股票未過熱。";
   const pagination = filteredRows.length > pageSize ? `
     <div class="warrant-pagination">
       <button type="button" data-warrant-page="prev" ${warrantFlowPage <= 1 ? "disabled" : ""}>上一頁</button>
@@ -3811,23 +3841,23 @@ function renderWarrantFlow() {
         <td>${formatWarrantMoney(item.putValue)}</td>
         <td><b class="swing-stage ${hot}">${item.callPutRatio >= 99 ? "99+" : item.callPutRatio}</b></td>
         <td>${item.callCount} / ${item.putCount}</td>
-        <td>${item.reason}</td>
+        <td>${item.reason}　判斷：${item.priority.label}。</td>
       </tr>
     `;
   }).join("") : `
-    <tr><td colspan="9">${keyword ? "A 級權證名單內找不到這檔股票；代表目前權證資金熱度尚未達 A 級。" : "權證資金走向讀取中。只顯示 A 級權證候選。"}</td></tr>
+    <tr><td colspan="9">${keyword ? "優先區名單內找不到這檔股票；代表目前 A 級權證尚未進優先觀察區。" : "權證資金走向讀取中。只顯示優先區權證候選。"}</td></tr>
   `;
 
   panel.innerHTML = `
     <section class="swing-dashboard">
       <div class="swing-topbar">
         <div>
-          <h2>${titleWithIcon("◒", "權證先熱雷達")} <span class="swing-live">● 每日 06:00 / 21:00 完整掃</span></h2>
+          <h2>${titleWithIcon("◒", "策略6：權證資金走向")} <span class="swing-live">● 收盤候選 / 盤中確認</span></h2>
           <p>${helperText}</p>
         </div>
         <div class="swing-controls">
           <label>更新模式：<select><option>每日 06:00 / 21:00 完整掃</option></select></label>
-          <label>模式：<select><option>認購偏多</option></select></label>
+          <label>模式：<select><option>權證先熱股票未噴</option></select></label>
         </div>
       </div>
       <section class="swing-panel">
