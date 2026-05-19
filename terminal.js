@@ -2911,7 +2911,7 @@ function setStrategyChrome(mode) {
   if (strategyTerminal) strategyTerminal.classList.toggle("strategy5-only", strategy5);
   if (strategyList) strategyList.hidden = intraday || swing || strategy5 || openBuy;
   const labels = intraday
-    ? ["觸發股票", "雷達分數", "最多訊號"]
+    ? ["觸發股票", "A區數量", "最多訊號"]
     : swing
     ? ["符合股票", "波段分數", "最多訊號"]
     : openBuy
@@ -2969,7 +2969,7 @@ function renderIntradayRadar(evaluated) {
 
   if (strategySummary) strategySummary.textContent = `秒級熱門池｜3秒快掃｜20秒背景補完整市場｜最後更新 ${scanTime}`;
   if (strategyMatchCount) strategyMatchCount.textContent = rows.length.toLocaleString("zh-TW");
-  if (strategyAvgScore) strategyAvgScore.textContent = rows.length ? Math.round(rows.reduce((sum, stock) => sum + stock.score, 0) / rows.length) : "--";
+  if (strategyAvgScore) strategyAvgScore.textContent = stateCounts.go.toLocaleString("zh-TW");
   if (strategyTopHit) strategyTopHit.textContent = rows.length ? `${Math.max(...rows.map((stock) => stock.intradaySignals.length))}/6` : "0/6";
 
   const cardClass = {
@@ -3024,7 +3024,7 @@ function renderIntradayRadar(evaluated) {
         <span class="intraday-rank">${index + 1}</span>
         <div class="intraday-pick-main">
           <b>${stock.code} ${stock.name}</b>
-          <span>${mainSignal}｜進場 ${entry}｜分數 ${stock.score}</span>
+          <span>${mainSignal}｜進場 ${entry}</span>
         </div>
         <div class="intraday-pick-price">
           <b>${sign}${stock.percent.toFixed(2)}%</b>
@@ -3066,14 +3066,13 @@ function renderIntradayRadar(evaluated) {
           <td class="price">${formatEntryRange(stock.intradayEntry)}</td>
           <td class="pct">${sign}${stock.percent.toFixed(2)}%</td>
           <td>${Math.round(stock.tradeVolume || 0).toLocaleString("zh-TW")}</td>
-          <td><span class="intraday-score">${stock.score}</span></td>
           <td class="intraday-entry">${renderEntryPlan(stock.intradayEntry)}</td>
           <td>現價 ${formatTradePrice(stock.close)}｜${reason}</td>
         </tr>
       `;
     }).join("")}
   ` : `
-    <tr><td colspan="10">2分K當沖雷達框架已啟動。現在沒有觸發訊號；開盤後會輪巡可當沖股票並顯示符合「跳空 / 突破 / MA35+MACD / 鑽石 / 瞬間拉抬」的股票。</td></tr>
+    <tr><td colspan="9">2分K當沖雷達框架已啟動。現在沒有觸發訊號；開盤後會輪巡可當沖股票並顯示符合「跳空 / 突破 / MA35+MACD / 鑽石 / 瞬間拉抬」的股票。</td></tr>
   `;
 
   strategyTable.innerHTML = `
@@ -3103,7 +3102,7 @@ function renderIntradayRadar(evaluated) {
             <table class="intraday-table">
               <thead>
                 <tr>
-                  <th>${intradaySortHeader("code", "股票代號")}</th><th>股票名稱</th><th>狀態</th><th>訊號</th><th>${intradaySortHeader("price", "進場價")}</th><th>${intradaySortHeader("percent", "漲幅")}</th><th>${intradaySortHeader("volume", "成交量")}</th><th>${intradaySortHeader("score", "分數")}</th><th>風控</th><th>原因</th>
+                  <th>${intradaySortHeader("code", "股票代號")}</th><th>股票名稱</th><th>狀態</th><th>訊號</th><th>${intradaySortHeader("price", "進場價")}</th><th>${intradaySortHeader("percent", "漲幅")}</th><th>${intradaySortHeader("volume", "成交量")}</th><th>風控</th><th>原因</th>
                 </tr>
               </thead>
               <tbody>${tableRows}</tbody>
