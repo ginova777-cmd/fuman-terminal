@@ -326,7 +326,7 @@ let intradaySortKey = "score";
 let intradaySortDir = "desc";
 let intradaySignalFilter = "all";
 let strategyPresetMode = "";
-let strategy5ActiveId = "momentum";
+let strategy5ActiveId = "foreign_trust_breakout";
 const INTRADAY_HOT_SCAN_LIMIT = 450;
 const INTRADAY_BACKGROUND_BATCH = 300;
 const INTRADAY_FAST_SCAN_MS = 3000;
@@ -1352,6 +1352,7 @@ function getIntradaySignals(stock) {
 }
 
 const STRATEGY_DEFS = [
+  { id: "foreign_trust_breakout", label: "外資投信連買準突破", short: "準突破", icon: "◆" },
   { id: "momentum", label: "動能分數 75+", short: "動能", icon: "⚡" },
   { id: "main_force_chip", label: "主力籌碼盤整", short: "主力", icon: "♣" },
   { id: "twenty_day_breakout", label: "突破20日新高", short: "突破", icon: "↑" },
@@ -1373,17 +1374,7 @@ const STRATEGY_DEFS = [
 const STRATEGY_BY_ID = Object.fromEntries(STRATEGY_DEFS.map((item) => [item.id, item]));
 const STRATEGY5_IDS = ["short_fund_flow", "chip_health_strong", "one_day_rebound", "short_squeeze", "ultra_short"];
 const STRATEGY5_PRESET_IDS = [
-  "momentum",
-  "main_force_chip",
-  "twenty_day_breakout",
-  "opening_power",
-  "red_to_green",
-  "investment_trust",
-  "vcp",
-  "ma_bull",
-  "sync_backtest",
-  "overnight_chip",
-  ...STRATEGY5_IDS,
+  "foreign_trust_breakout",
 ];
 const INTRADAY_EXCLUDED_CODES = new Set([
   "2330", "2412", "3045",
@@ -1560,6 +1551,12 @@ function strategyHit(id, stock) {
   const volumeRank = stock.volumeRank || 0;
   const inst = stock.inst || getInstitutionTotal(stock.code);
   const smartMoney = inst.total + inst.trust * 1.4;
+  const close = cleanNumber(stock.close);
+  const highest20Prev = cleanNumber(stock.swingDaily?.highest20Prev);
+  const nearBreakout = highest20Prev ? close >= highest20Prev * 0.965 && close <= highest20Prev * 1.035 : valueRank >= 65;
+  const trustBuying = cleanNumber(inst.trust) > 0;
+  const foreignBuying = cleanNumber(inst.foreign) > 0;
+  const jointBuying = cleanNumber(inst.total) > 0 && trustBuying && foreignBuying;
 
   const scoreBase = clamp(
     Math.round(35 + pct * 7 + valueRank * 0.24 + volumeRank * 0.18 + Math.sign(smartMoney) * 8),
@@ -1568,6 +1565,11 @@ function strategyHit(id, stock) {
   );
 
   const rules = {
+    foreign_trust_breakout: {
+      hit: jointBuying && nearBreakout && pct > -1.5 && pct <= 7.5 && valueRank >= 45 && close >= 10,
+      score: clamp(scoreBase + 18 + (trustBuying ? 8 : 0) + (foreignBuying ? 6 : 0) + (nearBreakout ? 8 : 0), 0, 100),
+      reason: `外資 ${formatInstitution(inst.foreign)}、投信 ${formatInstitution(inst.trust)} 同買，法人合計 ${formatInstitution(inst.total)}；股價接近突破區，漲幅 ${pct.toFixed(2)}%。`,
+    },
     momentum: {
       hit: pct >= 2.2 && valueRank >= 55,
       score: clamp(scoreBase + 10, 0, 100),
@@ -3556,7 +3558,7 @@ function renderStrategy5Dashboard(evaluated) {
       byId[match.id].push({ ...stock, activeMatch: match });
     });
   });
-  if (!STRATEGY5_PRESET_IDS.includes(strategy5ActiveId)) strategy5ActiveId = "momentum";
+  if (!STRATEGY5_PRESET_IDS.includes(strategy5ActiveId)) strategy5ActiveId = "foreign_trust_breakout";
   if (!(byId[strategy5ActiveId] || []).length) {
     const firstHit = STRATEGY5_PRESET_IDS.find((id) => (byId[id] || []).length);
     if (firstHit) strategy5ActiveId = firstHit;
@@ -3565,7 +3567,7 @@ function renderStrategy5Dashboard(evaluated) {
   const list = (byId[strategy5ActiveId] || [])
     .sort((a, b) => b.score - a.score || b.percent - a.percent || b.value - a.value)
     .slice(0, 12);
-  const active = STRATEGY_BY_ID[strategy5ActiveId] || STRATEGY_BY_ID.momentum;
+  const active = STRATEGY_BY_ID[strategy5ActiveId] || STRATEGY_BY_ID.foreign_trust_breakout;
   const totalMatches = new Set(evaluated
     .filter((stock) => stock.matches.some((match) => STRATEGY5_PRESET_IDS.includes(match.id)))
     .map((stock) => stock.code)).size;
@@ -3576,6 +3578,7 @@ function renderStrategy5Dashboard(evaluated) {
   if (strategyTopHit) strategyTopHit.textContent = list.length ? `${Math.max(...list.map((stock) => stock.matches.filter((match) => STRATEGY5_PRESET_IDS.includes(match.id)).length))}/${STRATEGY5_PRESET_IDS.length}` : "--";
 
   const descriptions = {
+    foreign_trust_breakout: "外資與投信同步買超，股價貼近突破區，優先觀察準突破名單。",
     momentum: "價格趨勢與成交值同步轉強。",
     main_force_chip: "法人、大戶或主力籌碼偏買。",
     twenty_day_breakout: "收盤價接近近期強勢突破。",
@@ -4786,25 +4789,9 @@ function applyStrategyPresetFromLink(link) {
     : text.includes("策略3")
     ? new Set(["overnight_chip"])
     : text.includes("策略5")
-    ? new Set([
-        "momentum",
-        "main_force_chip",
-        "twenty_day_breakout",
-        "opening_power",
-        "red_to_green",
-        "investment_trust",
-        "vcp",
-        "ma_bull",
-        "sync_backtest",
-        "overnight_chip",
-        "short_fund_flow",
-        "chip_health_strong",
-        "one_day_rebound",
-        "short_squeeze",
-        "ultra_short",
-      ])
+    ? new Set(["foreign_trust_breakout"])
     : new Set([text.includes("策略4") ? "swing_radar" : "intraday_2m"]);
-  if (text.includes("策略5")) strategy5ActiveId = "momentum";
+  if (text.includes("策略5")) strategy5ActiveId = "foreign_trust_breakout";
   if (text.includes("策略3")) strategy5ActiveId = "overnight_chip";
   if (text.includes("策略4")) swingSignalFilter = "all";
   if (text.includes("策略2")) intradaySignalFilter = "all";
