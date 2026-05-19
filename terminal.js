@@ -3830,7 +3830,7 @@ async function loadWarrantFlow(force = false) {
   if (!warrantFlowData.length) {
     loadWarrantFlowLocalCache();
   }
-  if (!force && hasFreshWarrantFlow()) {
+  if (!force && hasFreshWarrantFlow() && warrantFlowData.length >= 100) {
     renderWarrantFlow();
     return;
   }
@@ -3841,7 +3841,7 @@ async function loadWarrantFlow(force = false) {
   }
   try {
     if (!latestStocks.length) loadStrategyStocks();
-    let payload = force ? await fetchJson(`${endpoints.scanWarrantFlow}?t=${Date.now()}`, 25000) : null;
+    let payload = await fetchJson(`${endpoints.scanWarrantFlow}?t=${Date.now()}`, 35000);
     if (!payload?.ok) {
       payload = await fetchJson(`${endpoints.warrantFlowCache}?t=${Date.now()}`, 10000);
     }
