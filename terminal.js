@@ -262,6 +262,7 @@ let warrantFlowLoading = false;
 let warrantFlowData = [];
 let warrantFlowUpdatedAt = 0;
 let warrantFlowKeyword = "";
+let warrantFlowSearchTimer = null;
 const WARRANT_FLOW_LOCAL_CACHE_KEY = "fuman_warrant_flow_cache_v1";
 const CACHE_FRESH_MS = 10 * 60 * 1000;
 let selectedStrategyIds = new Set();
@@ -3700,12 +3701,19 @@ function hydrateWarrantFlowItem(item) {
   const name = String(item.underlyingName || "").trim();
   const exact = latestStocks.find((stock) => stock.name === name);
   const partial = exact || latestStocks.find((stock) => name && (stock.name.includes(name) || name.includes(stock.name)));
+  const code = String(item.underlyingCode || item.code || partial?.code || "").trim();
+  const stockPercent = Number.isFinite(Number(item.underlyingPercent))
+    ? Number(item.underlyingPercent)
+    : Number.isFinite(Number(item.percent))
+      ? Number(item.percent)
+      : partial?.percent || 0;
+  const stockClose = cleanNumber(item.underlyingClose) || cleanNumber(item.close) || cleanNumber(item.displayClose) || partial?.close || 0;
   return {
     ...item,
-    code: partial?.code || "",
-    name: partial?.name || name || "--",
-    stockPercent: partial?.percent || 0,
-    stockClose: cleanNumber(item.underlyingClose) || partial?.close || 0,
+    code,
+    name: name || partial?.name || "--",
+    stockPercent,
+    stockClose,
     stockValue: partial?.value || 0,
   };
 }
@@ -3723,6 +3731,7 @@ function renderWarrantFlow() {
   const keyword = warrantFlowKeyword.trim().toLowerCase();
   const allRows = warrantFlowData
     .map(hydrateWarrantFlowItem)
+    .filter((item) => String(item.level || "").toUpperCase() === "A")
     .map((item) => ({
       ...item,
       observeScore: Math.round(
@@ -3739,11 +3748,11 @@ function renderWarrantFlow() {
       item.code.includes(keyword) ||
       item.name.toLowerCase().includes(keyword) ||
       item.underlyingName.toLowerCase().includes(keyword))
-    : allRows.filter((item) => item.stockPercent <= 4.5).slice(0, 10);
-  const listLabel = keyword ? `搜尋結果 ${rows.length} 筆｜完整候選 ${allRows.length} 筆` : "優先觀察 Top 10";
+    : allRows;
+  const listLabel = keyword ? `搜尋結果 ${rows.length} 筆｜全部 A 級 ${allRows.length} 筆` : `全部 A 級權證 ${allRows.length} 筆`;
   const helperText = keyword
-    ? "搜尋會查完整候選名單，就算沒有進 Top 10 也會顯示目前權證資金狀況。"
-    : "只顯示可優先觀察前十名：認購集中、認售偏低、股票尚未大漲者優先。";
+    ? "搜尋會查全部 A 級權證候選名單，股票代號或名稱都可以搜尋。"
+    : "只顯示 A 級權證：認購集中、認售偏低、權證資金熱度最高的候選。";
 
   const body = rows.length ? rows.map((item) => {
     const sign = item.stockPercent >= 0 ? "+" : "";
@@ -3762,7 +3771,7 @@ function renderWarrantFlow() {
       </tr>
     `;
   }).join("") : `
-    <tr><td colspan="9">${keyword ? "完整候選名單內找不到這檔股票；代表目前權證資金熱度尚未進候選名單。" : "權證資金走向讀取中。只顯示「認購權證先熱、股票尚未噴出」的前十名。"}</td></tr>
+    <tr><td colspan="9">${keyword ? "A 級權證名單內找不到這檔股票；代表目前權證資金熱度尚未達 A 級。" : "權證資金走向讀取中。只顯示 A 級權證候選。"}</td></tr>
   `;
 
   panel.innerHTML = `
@@ -3800,10 +3809,6 @@ function renderWarrantFlow() {
     </section>
   `;
 
-  panel.querySelector("#warrant-flow-search")?.addEventListener("input", (event) => {
-    warrantFlowKeyword = event.target.value || "";
-    renderWarrantFlow();
-  });
   panel.querySelector("#warrant-flow-refresh")?.addEventListener("click", () => loadWarrantFlow(true));
 }
 
@@ -5380,7 +5385,8 @@ document.addEventListener("input", (event) => {
   const input = event.target.closest("[data-warrant-flow-search]");
   if (!input) return;
   warrantFlowKeyword = input.value || "";
-  renderWarrantFlow();
+  clearTimeout(warrantFlowSearchTimer);
+  warrantFlowSearchTimer = setTimeout(renderWarrantFlow, 250);
 });
 
 document.addEventListener("click", (event) => {
