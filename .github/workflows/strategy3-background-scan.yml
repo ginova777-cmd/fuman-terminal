@@ -1,0 +1,38 @@
+name: Strategy3 Overnight Cache
+
+on:
+  schedule:
+    # Taiwan time 13:00 on trading days.
+    - cron: "0 5 * * 1-5"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: strategy3-background-cache
+  cancel-in-progress: false
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Update strategy3 cache
+        run: |
+          node scripts/scan-institution-cache.js
+          node scripts/scan-strategy3-cache.js
+
+      - name: Commit strategy3 cache
+        run: |
+          git config user.name "fuman-terminal-bot"
+          git config user.email "actions@github.com"
+          git add data/strategy3-latest.json data/strategy3-backup.json data/institution-latest.json data/institution-backup.json
+          git diff --cached --quiet || git commit -m "Update strategy3 cache"
+          git push
