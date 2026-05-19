@@ -207,6 +207,7 @@ let strategyRealtimeCursor = 0;
 let strategyRealtimeQuotes = {};
 let strategyLastScanAt = 0;
 let strategyRealtimeBackgroundCursor = 0;
+let intradayCandidateSeenAt = {};
 let strategyHistoryLoading = false;
 let strategyHistoryCursor = 0;
 let strategyHistoryData = {};
@@ -260,6 +261,9 @@ let strategyPresetMode = "";
 let strategy5ActiveId = "momentum";
 const INTRADAY_HOT_SCAN_LIMIT = 450;
 const INTRADAY_BACKGROUND_BATCH = 300;
+const INTRADAY_FAST_SCAN_MS = 3000;
+const INTRADAY_BACKGROUND_SCAN_MS = 20000;
+const INTRADAY_CANDIDATE_TTL_MS = 15 * 60 * 1000;
 
 const SECTOR_MAP = {
   "2454":"CPU/ASIC/IP","3443":"CPU/ASIC/IP","3661":"CPU/ASIC/IP","3529":"CPU/ASIC/IP",
@@ -2969,7 +2973,7 @@ function renderIntradayRadar(evaluated) {
     ? new Date(strategyLastScanAt).toLocaleTimeString("zh-TW", { hour12: false })
     : "等待開盤";
 
-  if (strategySummary) strategySummary.textContent = `熱門優先即時掃｜5秒刷新｜背景補完整市場｜最後更新 ${scanTime}`;
+  if (strategySummary) strategySummary.textContent = `秒級熱門池｜3秒快掃｜20秒背景補完整市場｜最後更新 ${scanTime}`;
   if (strategyMatchCount) strategyMatchCount.textContent = rows.length.toLocaleString("zh-TW");
   if (strategyAvgScore) strategyAvgScore.textContent = rows.length ? Math.round(rows.reduce((sum, stock) => sum + stock.score, 0) / rows.length) : "--";
   if (strategyTopHit) strategyTopHit.textContent = rows.length ? `${Math.max(...rows.map((stock) => stock.intradaySignals.length))}/6` : "0/6";
@@ -4627,6 +4631,35 @@ function uniqueStocksByCode(stocks) {
   });
 }
 
+function pruneIntradayCandidates(now = Date.now()) {
+  Object.entries(intradayCandidateSeenAt).forEach(([code, seenAt]) => {
+    if (now - seenAt > INTRADAY_CANDIDATE_TTL_MS) delete intradayCandidateSeenAt[code];
+  });
+}
+
+function markIntradayCandidates(stocks) {
+  const now = Date.now();
+  pruneIntradayCandidates(now);
+  stocks.forEach((stock) => {
+    const live = applyStrategyQuote(stock);
+    const code = String(live.code || "");
+    if (!code) return;
+    const pct = cleanNumber(live.percent);
+    const value = cleanNumber(live.value);
+    const volume = cleanNumber(live.tradeVolume);
+    const latestDelta = cleanNumber(strategyRealtimeQuotes[code]?.history?.at(-1)?.deltaVolume);
+    if (pct >= 1.5 || value >= 80000000 || volume >= 1000 || latestDelta >= 50) {
+      intradayCandidateSeenAt[code] = now;
+    }
+  });
+}
+
+function getIntradayCandidateStocks(scanSource) {
+  pruneIntradayCandidates();
+  const byCode = Object.fromEntries(scanSource.map((stock) => [stock.code, stock]));
+  return Object.keys(intradayCandidateSeenAt).map((code) => byCode[code]).filter(Boolean);
+}
+
 function sliceBackgroundScan(stocks, count) {
   if (!stocks.length || count <= 0) return [];
   const result = [];
@@ -4653,30 +4686,41 @@ async function fetchStrategyRealtimeBatches(stocks, batchSize = 80) {
   });
 }
 
-async function refreshStrategyRealtimeScan(force = false) {
+async function refreshStrategyRealtimeScan(mode = "hot") {
   if (strategyRealtimeLoading || !latestStocks.length) return;
   const isStrategyVisible = document.querySelector("#strategy-view")?.classList.contains("active");
   const isRealtimeStrategy = selectedStrategyIds.has("intraday_2m");
-  if (!force && (!isStrategyVisible || !isRealtimeStrategy)) return;
+  const scanMode = mode === true ? "force" : String(mode || "hot");
+  if (scanMode !== "force" && (!isStrategyVisible || !isRealtimeStrategy)) return;
 
   strategyRealtimeLoading = true;
   try {
     const scanSource = latestStocks.filter((stock) => isIntradayTradable(applyStrategyQuote(stock)));
-    const hotStocks = [...scanSource]
+    const rankedHotStocks = [...scanSource]
       .sort((a, b) => getIntradayHotScore(b) - getIntradayHotScore(a))
       .slice(0, INTRADAY_HOT_SCAN_LIMIT);
+    const candidateStocks = getIntradayCandidateStocks(scanSource);
+    const hotStocks = uniqueStocksByCode([...candidateStocks, ...rankedHotStocks]).slice(0, scanMode === "force" ? INTRADAY_HOT_SCAN_LIMIT + 150 : INTRADAY_HOT_SCAN_LIMIT);
     const hotCodes = new Set(hotStocks.map((stock) => stock.code));
     const backgroundPool = scanSource.filter((stock) => !hotCodes.has(stock.code));
-    const backgroundStocks = sliceBackgroundScan(backgroundPool, force ? INTRADAY_BACKGROUND_BATCH * 2 : INTRADAY_BACKGROUND_BATCH);
+    const shouldScanHot = scanMode === "hot" || scanMode === "force";
+    const shouldScanBackground = scanMode === "background" || scanMode === "force";
+    const backgroundStocks = shouldScanBackground
+      ? sliceBackgroundScan(backgroundPool, scanMode === "force" ? INTRADAY_BACKGROUND_BATCH * 2 : INTRADAY_BACKGROUND_BATCH)
+      : [];
     const hotBatchSize = 75;
     const backgroundBatchSize = 90;
 
     strategyRealtimeCursor = (strategyRealtimeCursor + hotStocks.length + backgroundStocks.length) % Math.max(scanSource.length, 1);
-    await fetchStrategyRealtimeBatches(hotStocks, hotBatchSize);
-    strategyLastScanAt = Date.now();
-    renderStrategyScanner();
+    if (shouldScanHot) {
+      await fetchStrategyRealtimeBatches(hotStocks, hotBatchSize);
+      markIntradayCandidates(hotStocks);
+      strategyLastScanAt = Date.now();
+      renderStrategyScanner();
+    }
     if (backgroundStocks.length) {
       await fetchStrategyRealtimeBatches(backgroundStocks, backgroundBatchSize);
+      markIntradayCandidates(backgroundStocks);
       strategyLastScanAt = Date.now();
       renderStrategyScanner();
     }
@@ -4744,7 +4788,8 @@ document.querySelectorAll("[data-chip-filter]").forEach((button) => {
 });
 setInterval(tickClock, 1000);
 setInterval(loadMarketData, 15*1000);
-setInterval(refreshStrategyRealtimeScan, 5*1000);
+setInterval(() => refreshStrategyRealtimeScan("hot"), INTRADAY_FAST_SCAN_MS);
+setInterval(() => refreshStrategyRealtimeScan("background"), INTRADAY_BACKGROUND_SCAN_MS);
 setInterval(loadHeatmap, 10*60*1000);
 setInterval(loadInstitution, 10*60*1000);
 
