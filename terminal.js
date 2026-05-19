@@ -3699,7 +3699,7 @@ function renderOvernightDashboard(evaluated) {
         <section class="strategy5-results">
           <div class="strategy5-results-head">
             <div>
-              <h3>隔日沖候選排行</h3>
+              <h3>${titleWithSchedule("◐", "隔日沖候選排行", "strategy3")}</h3>
               <p>以 13:00 固定條件完整掃描結果排序，開網頁不再臨時重算。</p>
             </div>
           </div>
