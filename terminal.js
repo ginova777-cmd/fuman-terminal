@@ -1038,6 +1038,7 @@ function getIntradaySignals(stock) {
   const priorPrice = prices.at(-2) || 0;
   const burstPct = priorPrice ? ((lastPrice - priorPrice) / priorPrice) * 100 : 0;
   const latestPoint = history.at(-1) || {};
+  const recentDeltaVolume = latestPoint.deltaVolume || 0;
   const priorRates = history.slice(0, -1).map((item) => item.volumeRate || 0).filter((rate) => rate > 0);
   const recentBaseRate = avg(priorRates.slice(-5));
   const elapsedSeconds = quote?.updatedAt ? Math.max((quote.updatedAt - new Date().setHours(9, 0, 0, 0)) / 1000, 1) : 0;
@@ -1054,6 +1055,7 @@ function getIntradaySignals(stock) {
   const signals = [];
   if (pct < 2 || !close) return signals;
   const volumeMilestone = volume >= 10000 ? 10000 : volume >= 5000 ? 5000 : volume >= 2000 ? 2000 : 0;
+  const minuteBurst = recentDeltaVolume >= 300 || (dayAvgRate && currentRate >= dayAvgRate * 3 && recentDeltaVolume >= 120) || (recentBaseRate && currentRate >= recentBaseRate * 2.5 && recentDeltaVolume >= 120);
 
   if (isNearLimit && (volumeRank >= 55 || valueRank >= 55 || volume >= 1200)) {
     signals.push({
@@ -1064,12 +1066,12 @@ function getIntradaySignals(stock) {
     });
   }
 
-  if (volumeMilestone || volumeRank >= 82 || valueRank >= 82 || dailyVolumeRatio >= 1.6 || (volume >= 3000 && value >= 120000000) || (pct >= 5 && volume >= 1000)) {
+  if (volumeMilestone && minuteBurst) {
     signals.push({
       id: "volume_burst",
-      short: volumeMilestone ? `量${Math.round(volumeMilestone / 1000)}千` : "爆量",
+      short: `分時爆量${Math.round(volumeMilestone / 1000)}千`,
       icon: "📊",
-      reason: `盤中爆量，成交量 ${Math.round(volume).toLocaleString("zh-TW")} 張${volumeMilestone ? `，已突破 ${volumeMilestone.toLocaleString("zh-TW")} 張門檻` : ""}，量能排名 ${volumeRank}%，成交值排名 ${valueRank}%。`,
+      reason: `分時爆量，最近一輪新增 ${Math.round(recentDeltaVolume).toLocaleString("zh-TW")} 張，總量 ${Math.round(volume).toLocaleString("zh-TW")} 張，量速約今日均速 ${rateVsDay ? rateVsDay.toFixed(1) : "--"} 倍。`,
     });
   }
 
@@ -1274,7 +1276,7 @@ function strategyHit(id, stock) {
       reason: `由弱轉強候選，漲幅 ${pct.toFixed(2)}%，成交值排名 ${valueRank}%。`,
     },
     intraday_2m: {
-      hit: isIntradayTradable(stock) && pct >= 2 && ((stock.intradaySignals?.length || 0) > 0 || (valueRank >= 68 && volumeRank >= 68)),
+      hit: isIntradayTradable(stock) && pct >= 2 && (stock.intradaySignals?.length || 0) > 0,
       score: clamp(scoreBase + 12 + Math.min(pct * 4, 28) + (stock.intradaySignals?.length || 0) * 8, 0, 100),
       reason: stock.intradaySignals?.length
         ? stock.intradaySignals.map((signal) => signal.reason).join(" ")
