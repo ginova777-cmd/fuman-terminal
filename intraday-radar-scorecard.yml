@@ -88,6 +88,16 @@ jobs:
           SCORECARD_MODE: ${{ steps.mode.outputs.mode }}
           GITHUB_RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
 
+      - name: Retry intraday report once
+        if: failure() && steps.mode.outputs.mode == 'report'
+        run: node scripts/send-intraday-report.js
+        env:
+          REPORT_EMAIL_TO: ${{ secrets.REPORT_EMAIL_TO }}
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASS: ${{ secrets.SMTP_PASS }}
+          SMTP_HOST: ${{ secrets.SMTP_HOST }}
+          SMTP_PORT: ${{ secrets.SMTP_PORT }}
+
       - name: Save private intraday cache
         if: steps.mode.outputs.mode == 'record'
         uses: actions/cache/save@v4
