@@ -225,8 +225,7 @@ async function main() {
   const user = process.env.SMTP_USER;
   const pass = process.env.SMTP_PASS;
   if (!to || !user || !pass) {
-    console.log("SMTP secrets missing; report printed only.");
-    return;
+    throw new Error("Missing REPORT_EMAIL_TO, SMTP_USER, or SMTP_PASS");
   }
   await sendMail({
     host: process.env.SMTP_HOST || "smtp.gmail.com",

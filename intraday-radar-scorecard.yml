@@ -1,0 +1,96 @@
+name: Intraday Radar Scorecard
+
+on:
+  schedule:
+    # Taiwan trading hours: record every 5 minutes from 09:05 to 13:30.
+    - cron: "*/5 1-5 * * 1-5"
+    # Taiwan time 14:15 initial report.
+    - cron: "15 6 * * 1-5"
+    # Taiwan time 15:30 final report.
+    - cron: "30 7 * * 1-5"
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "record or report"
+        required: true
+        default: "record"
+        type: choice
+        options:
+          - record
+          - report
+
+permissions:
+  contents: read
+
+concurrency:
+  group: intraday-radar-scorecard
+  cancel-in-progress: false
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Restore private intraday cache
+        uses: actions/cache/restore@v4
+        with:
+          path: .intraday-cache
+          key: intraday-radar-${{ github.run_id }}
+          restore-keys: |
+            intraday-radar-
+
+      - name: Decide mode
+        id: mode
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "mode=${{ inputs.mode }}" >> "$GITHUB_OUTPUT"
+          else
+            HOUR="$(TZ=Asia/Taipei date +%H)"
+            MIN="$(TZ=Asia/Taipei date +%M)"
+            if [ "$HOUR:$MIN" = "14:15" ] || [ "$HOUR:$MIN" = "15:30" ]; then
+              echo "mode=report" >> "$GITHUB_OUTPUT"
+            elif [ "$HOUR" -ge 9 ] && { [ "$HOUR" -lt 13 ] || { [ "$HOUR" -eq 13 ] && [ "$MIN" -le 30 ]; }; }; then
+              echo "mode=record" >> "$GITHUB_OUTPUT"
+            else
+              echo "mode=skip" >> "$GITHUB_OUTPUT"
+            fi
+          fi
+
+      - name: Record intraday signals
+        if: steps.mode.outputs.mode == 'record'
+        run: node scripts/scan-intraday-signals.js
+
+      - name: Send intraday report
+        if: steps.mode.outputs.mode == 'report'
+        run: node scripts/send-intraday-report.js
+        env:
+          REPORT_EMAIL_TO: ${{ secrets.REPORT_EMAIL_TO }}
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASS: ${{ secrets.SMTP_PASS }}
+          SMTP_HOST: ${{ secrets.SMTP_HOST }}
+          SMTP_PORT: ${{ secrets.SMTP_PORT }}
+
+      - name: Send failure alert
+        if: failure()
+        run: node scripts/send-workflow-alert.js
+        env:
+          REPORT_EMAIL_TO: ${{ secrets.REPORT_EMAIL_TO }}
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASS: ${{ secrets.SMTP_PASS }}
+          SMTP_HOST: ${{ secrets.SMTP_HOST }}
+          SMTP_PORT: ${{ secrets.SMTP_PORT }}
+          SCORECARD_MODE: ${{ steps.mode.outputs.mode }}
+          GITHUB_RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+
+      - name: Save private intraday cache
+        if: steps.mode.outputs.mode == 'record'
+        uses: actions/cache/save@v4
+        with:
+          path: .intraday-cache
+          key: intraday-radar-${{ github.run_id }}
