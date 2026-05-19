@@ -263,6 +263,7 @@ let warrantFlowData = [];
 let warrantFlowUpdatedAt = 0;
 let warrantFlowKeyword = "";
 let warrantFlowSearchTimer = null;
+let warrantFlowPage = 1;
 const WARRANT_FLOW_LOCAL_CACHE_KEY = "fuman_warrant_flow_cache_v1";
 const CACHE_FRESH_MS = 10 * 60 * 1000;
 let selectedStrategyIds = new Set();
@@ -2158,6 +2159,32 @@ intradayRadarStyles.textContent = `
     align-items: center;
     gap: 10px;
   }
+  .warrant-pagination {
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    gap: 8px;
+    padding: 12px;
+    border-top: 1px solid rgba(117, 133, 170, 0.16);
+  }
+  .warrant-pagination button {
+    min-width: 34px;
+    border: 1px solid rgba(117, 133, 170, 0.28);
+    border-radius: 8px;
+    background: rgba(10, 15, 26, 0.72);
+    color: #dce7ff;
+    padding: 7px 10px;
+    font-weight: 800;
+  }
+  .warrant-pagination button.active {
+    border-color: rgba(255, 80, 80, 0.58);
+    background: rgba(255, 80, 80, 0.22);
+    color: #fff;
+  }
+  .warrant-pagination button:disabled {
+    opacity: 0.42;
+    cursor: not-allowed;
+  }
   .swing-actions button,
   .swing-tabs button {
     border: 1px solid rgba(117, 133, 170, 0.28);
@@ -3743,16 +3770,33 @@ function renderWarrantFlow() {
     }))
     .sort((a, b) => b.observeScore - a.observeScore || b.score - a.score || b.callValue - a.callValue)
     .map((item, index) => ({ ...item, rank: index + 1 }));
-  const rows = keyword
+  const filteredRows = keyword
     ? allRows.filter((item) =>
       item.code.includes(keyword) ||
       item.name.toLowerCase().includes(keyword) ||
       item.underlyingName.toLowerCase().includes(keyword))
     : allRows;
-  const listLabel = keyword ? `搜尋結果 ${rows.length} 筆｜全部 A 級 ${allRows.length} 筆` : `全部 A 級權證 ${allRows.length} 筆`;
+  const pageSize = 10;
+  const pageCount = Math.max(1, Math.ceil(filteredRows.length / pageSize));
+  warrantFlowPage = Math.min(Math.max(1, warrantFlowPage), pageCount);
+  const pageStart = (warrantFlowPage - 1) * pageSize;
+  const rows = filteredRows.slice(pageStart, pageStart + pageSize);
+  const listLabel = keyword
+    ? `搜尋結果 ${filteredRows.length} 筆｜第 ${warrantFlowPage}/${pageCount} 頁`
+    : `全部 A 級權證 ${allRows.length} 筆｜第 ${warrantFlowPage}/${pageCount} 頁`;
   const helperText = keyword
     ? "搜尋會查全部 A 級權證候選名單，股票代號或名稱都可以搜尋。"
     : "只顯示 A 級權證：認購集中、認售偏低、權證資金熱度最高的候選。";
+  const pagination = filteredRows.length > pageSize ? `
+    <div class="warrant-pagination">
+      <button type="button" data-warrant-page="prev" ${warrantFlowPage <= 1 ? "disabled" : ""}>上一頁</button>
+      ${Array.from({ length: pageCount }, (_, index) => {
+        const page = index + 1;
+        return `<button class="${page === warrantFlowPage ? "active" : ""}" type="button" data-warrant-page="${page}">${page}</button>`;
+      }).join("")}
+      <button type="button" data-warrant-page="next" ${warrantFlowPage >= pageCount ? "disabled" : ""}>下一頁</button>
+    </div>
+  ` : "";
 
   const body = rows.length ? rows.map((item) => {
     const sign = item.stockPercent >= 0 ? "+" : "";
@@ -3805,6 +3849,7 @@ function renderWarrantFlow() {
           </thead>
           <tbody>${body}</tbody>
         </table>
+        ${pagination}
       </section>
     </section>
   `;
@@ -3830,6 +3875,7 @@ async function loadWarrantFlow(force = false) {
       payload = await fetchJson(`${endpoints.warrantFlowBackup}?t=${Date.now()}`, 10000);
     }
     warrantFlowData = normalizeArray(payload.matches);
+    warrantFlowPage = 1;
     const updatedAt = Date.parse(payload?.updatedAt || "");
     warrantFlowUpdatedAt = Number.isFinite(updatedAt) ? updatedAt : Date.now();
     saveWarrantFlowLocalCache();
@@ -5385,8 +5431,19 @@ document.addEventListener("input", (event) => {
   const input = event.target.closest("[data-warrant-flow-search]");
   if (!input) return;
   warrantFlowKeyword = input.value || "";
+  warrantFlowPage = 1;
   clearTimeout(warrantFlowSearchTimer);
   warrantFlowSearchTimer = setTimeout(renderWarrantFlow, 250);
+});
+
+document.addEventListener("click", (event) => {
+  const pageButton = event.target.closest("[data-warrant-page]");
+  if (!pageButton || pageButton.disabled) return;
+  const action = pageButton.dataset.warrantPage;
+  if (action === "prev") warrantFlowPage -= 1;
+  else if (action === "next") warrantFlowPage += 1;
+  else warrantFlowPage = cleanNumber(action) || 1;
+  renderWarrantFlow();
 });
 
 document.addEventListener("click", (event) => {
