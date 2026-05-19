@@ -2991,6 +2991,14 @@ intradayRadarStyles.textContent = `
   .strategy3-clean .strategy5-results {
     width: 100%;
   }
+  .strategy3-clean .strategy5-results-head h3 {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0;
+    font-size: 24px;
+    line-height: 1.2;
+  }
   .strategy3-stock-card {
     grid-template-columns: 44px minmax(170px, 0.75fr) minmax(100px, 0.45fr) minmax(300px, 1fr) minmax(420px, 1.35fr);
     align-items: center;
@@ -3283,7 +3291,7 @@ function renderIntradayRadar(evaluated) {
     <section class="intraday-dashboard">
       <div class="intraday-topbar">
         <div>
-          <h2>${titleWithSchedule("◔", "2分K當沖雷達", "intraday")}</h2>
+          <h2>${titleWithSchedule("◔", "策略2-當沖雷達", "intraday")}</h2>
           <p>盤中即時偵測強勢訊號，5秒刷新、每次掃完整市場。</p>
         </div>
         <div class="intraday-controls">
@@ -3699,7 +3707,7 @@ function renderOvernightDashboard(evaluated) {
         <section class="strategy5-results">
           <div class="strategy5-results-head">
             <div>
-              <h3>${titleWithSchedule("◐", "隔日沖候選排行", "strategy3")}</h3>
+              <h3>${titleWithSchedule("◐", "策略3-隔日沖", "strategy3")}</h3>
               <p>以 13:00 固定條件完整掃描結果排序，開網頁不再臨時重算。</p>
             </div>
           </div>
