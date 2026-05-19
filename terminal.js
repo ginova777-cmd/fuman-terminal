@@ -3740,11 +3740,6 @@ function renderWarrantFlow() {
       item.name.toLowerCase().includes(keyword) ||
       item.underlyingName.toLowerCase().includes(keyword))
     : allRows.filter((item) => item.stockPercent <= 4.5).slice(0, 10);
-  const totalCall = warrantFlowData.reduce((sum, item) => sum + cleanNumber(item.callValue), 0);
-  const totalPut = warrantFlowData.reduce((sum, item) => sum + cleanNumber(item.putValue), 0);
-  const updatedText = warrantFlowUpdatedAt
-    ? new Date(warrantFlowUpdatedAt).toLocaleTimeString("zh-TW", { hour12: false })
-    : "等待更新";
   const listLabel = keyword ? `搜尋結果 ${rows.length} 筆｜完整候選 ${allRows.length} 筆` : "優先觀察 Top 10";
   const helperText = keyword
     ? "搜尋會查完整候選名單，就算沒有進 Top 10 也會顯示目前權證資金狀況。"
@@ -3758,18 +3753,16 @@ function renderWarrantFlow() {
         <td><span class="swing-score">${item.rank || "--"}</span></td>
         <td><span class="code">${item.code || "--"}</span></td>
         <td>${item.name}</td>
-        <td><span class="swing-score">${item.observeScore}</span></td>
+        <td class="price">${formatNumber(item.stockClose, item.stockClose >= 100 ? 0 : 2)}</td>
         <td class="price">${formatWarrantMoney(item.callValue)}</td>
         <td>${formatWarrantMoney(item.putValue)}</td>
         <td><b class="swing-stage ${hot}">${item.callPutRatio >= 99 ? "99+" : item.callPutRatio}</b></td>
         <td>${item.callCount} / ${item.putCount}</td>
-        <td class="pct">${sign}${item.stockPercent.toFixed(2)}%</td>
-        <td>${item.topWarrants.map((warrant) => `<b>${warrant.code}</b>`).join(" ")}</td>
         <td>${item.reason}</td>
       </tr>
     `;
   }).join("") : `
-    <tr><td colspan="11">${keyword ? "完整候選名單內找不到這檔股票；代表目前權證資金熱度尚未進候選名單。" : "權證資金走向讀取中。只顯示「認購權證先熱、股票尚未噴出」的前十名。"}</td></tr>
+    <tr><td colspan="9">${keyword ? "完整候選名單內找不到這檔股票；代表目前權證資金熱度尚未進候選名單。" : "權證資金走向讀取中。只顯示「認購權證先熱、股票尚未噴出」的前十名。"}</td></tr>
   `;
 
   panel.innerHTML = `
@@ -3783,17 +3776,6 @@ function renderWarrantFlow() {
           <label>更新模式：<select><option>07:00 / 14:30 完整掃</option></select></label>
           <label>模式：<select><option>認購偏多</option></select></label>
         </div>
-      </div>
-      <div class="swing-signal-grid">
-        <button class="swing-card active selected" type="button">
-          <div><strong>命中標的</strong><small>權證資金偏多</small></div><em>${warrantFlowData.length}</em>
-        </button>
-        <button class="swing-card active" type="button">
-          <div><strong>認購金額</strong><small>候選合計</small></div><em>${formatWarrantMoney(totalCall)}</em>
-        </button>
-        <button class="swing-card ${totalPut ? "active" : ""}" type="button">
-          <div><strong>認售金額</strong><small>候選合計</small></div><em>${formatWarrantMoney(totalPut)}</em>
-        </button>
       </div>
       <section class="swing-panel">
         <div class="swing-tabs">
@@ -3809,7 +3791,7 @@ function renderWarrantFlow() {
         <table class="swing-table">
           <thead>
             <tr>
-              <th>排名</th><th>股票代號</th><th>標的名稱</th><th>觀察分數</th><th>認購金額</th><th>認售金額</th><th>購/售比</th><th>購/售檔數</th><th>股票漲幅</th><th>代表權證</th><th>原因</th>
+              <th>排名</th><th>股票代號</th><th>標的名稱</th><th>收盤價</th><th>認購金額</th><th>認售金額</th><th>購/售比</th><th>購/售檔數</th><th>原因</th>
             </tr>
           </thead>
           <tbody>${body}</tbody>
