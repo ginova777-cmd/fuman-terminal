@@ -1039,6 +1039,12 @@ function getIntradaySignals(stock) {
   const burstPct = priorPrice ? ((lastPrice - priorPrice) / priorPrice) * 100 : 0;
   const latestPoint = history.at(-1) || {};
   const recentDeltaVolume = latestPoint.deltaVolume || 0;
+  const recentDeltas = history.slice(-3).map((item) => item.deltaVolume || 0);
+  const deltaVolumeRising = recentDeltas.length >= 3
+    && recentDeltas.every((value) => value > 0)
+    && recentDeltas[2] > recentDeltas[1]
+    && recentDeltas[1] > recentDeltas[0]
+    && recentDeltas[2] >= 50;
   const priorRates = history.slice(0, -1).map((item) => item.volumeRate || 0).filter((rate) => rate > 0);
   const recentBaseRate = avg(priorRates.slice(-5));
   const elapsedSeconds = quote?.updatedAt ? Math.max((quote.updatedAt - new Date().setHours(9, 0, 0, 0)) / 1000, 1) : 0;
@@ -1055,6 +1061,7 @@ function getIntradaySignals(stock) {
   const signals = [];
   if (pct < 2 || !close) return signals;
   const volumeMilestone = volume >= 10000 ? 10000 : volume >= 5000 ? 5000 : volume >= 2000 ? 2000 : 0;
+  const minuteVolumeRising = deltaVolumeRising || recentDeltaVolume >= 100;
   const minuteBurst = recentDeltaVolume >= 300 || (dayAvgRate && currentRate >= dayAvgRate * 3 && recentDeltaVolume >= 120) || (recentBaseRate && currentRate >= recentBaseRate * 2.5 && recentDeltaVolume >= 120);
 
   if (isNearLimit && (volumeRank >= 55 || valueRank >= 55 || volume >= 1200)) {
@@ -1066,12 +1073,20 @@ function getIntradaySignals(stock) {
     });
   }
 
-  if (volumeMilestone && minuteBurst) {
+  if (volumeMilestone && minuteVolumeRising) {
+    const burstLabel = minuteBurst
+      ? "急拉爆量"
+      : recentDeltaVolume >= 100
+      ? "分時爆量"
+      : "分時放大";
+    const deltaText = deltaVolumeRising
+      ? `最近三輪新增量 ${recentDeltas.map((value) => Math.round(value).toLocaleString("zh-TW")).join(" → ")} 張`
+      : `最近一輪新增 ${Math.round(recentDeltaVolume).toLocaleString("zh-TW")} 張`;
     signals.push({
       id: "volume_burst",
-      short: `分時爆量${Math.round(volumeMilestone / 1000)}千`,
+      short: `${burstLabel}${Math.round(volumeMilestone / 1000)}千`,
       icon: "📊",
-      reason: `分時爆量，最近一輪新增 ${Math.round(recentDeltaVolume).toLocaleString("zh-TW")} 張，總量 ${Math.round(volume).toLocaleString("zh-TW")} 張，量速約今日均速 ${rateVsDay ? rateVsDay.toFixed(1) : "--"} 倍。`,
+      reason: `${burstLabel}，${deltaText}，總量 ${Math.round(volume).toLocaleString("zh-TW")} 張，量速約今日均速 ${rateVsDay ? rateVsDay.toFixed(1) : "--"} 倍。`,
     });
   }
 
