@@ -57,6 +57,40 @@ function buildRanks(stocks) {
   };
 }
 
+function classifySignalState(stock, signals, context = {}) {
+  const pct = cleanNumber(stock.percent);
+  const volume = cleanNumber(stock.tradeVolume);
+  const value = cleanNumber(stock.value) || cleanNumber(stock.close) * volume;
+  const close = cleanNumber(stock.close);
+  const open = cleanNumber(stock.open);
+  const high = cleanNumber(stock.high) || close;
+  const ids = new Set(signals.map((signal) => signal.id));
+  const hasVolume = ids.has("volume_burst");
+  const hasTrigger = ids.has("limit_lock") || ids.has("gap") || ids.has("breakout");
+  const hasSupport = ids.has("ma35_buy") || ids.has("diamond");
+  const liquid = value >= 150000000 || volume >= 2000;
+  const tradable = value >= 80000000 || volume >= 1000;
+  const aboveOpen = !open || close >= open;
+  const nearHigh = !high || close >= high * 0.985;
+  const score = Math.min(100, Math.round(
+    Math.max(pct, 0) * 8 +
+    (context.valueRank || 0) * 0.28 +
+    (context.volumeRank || 0) * 0.24 +
+    signals.length * 8 +
+    (hasVolume ? 10 : 0) +
+    (hasTrigger ? 12 : 0) +
+    (hasSupport ? 8 : 0)
+  ));
+
+  if (liquid && hasVolume && (hasTrigger || hasSupport) && aboveOpen && nearHigh && pct >= 2 && pct <= 8.8) {
+    return { id: "go", label: "A區 可進場", reason: "量勢、價位與觸發訊號同步，偏可進場。" , score };
+  }
+  if (tradable && signals.length && pct >= 2) {
+    return { id: "wait", label: "B區 待確認", reason: "已有訊號，但仍需等站穩或再放量。" , score };
+  }
+  return { id: "watch", label: "C區 觀察", reason: "量能或型態尚未完全到位。" , score };
+}
+
 function detectSignals(stock, previous = null, ranks = null) {
   const close = cleanNumber(stock.close);
   const open = cleanNumber(stock.open);
@@ -118,8 +152,14 @@ function detectSignals(stock, previous = null, ranks = null) {
   const stopLoss = roundTradePrice(Math.min(entryLow || close, vwap || close, ma35Proxy || close) * 0.985);
   const chaseLimit = roundTradePrice(Math.min(high || close * 1.012, close * 1.01));
 
+  const state = classifySignalState(stock, signals, { valueRank, volumeRank, deltaVolume });
+
   return signals.map((signal) => ({
     ...signal,
+    stateId: state.id,
+    stateLabel: state.label,
+    stateReason: state.reason,
+    score: state.score,
     entryPrice,
     supportPrice,
     entryLow,
@@ -133,6 +173,7 @@ function detectSignals(stock, previous = null, ranks = null) {
 
 module.exports = {
   cleanNumber,
+  classifySignalState,
   detectSignals,
   formatTradePrice,
   isIntradayTradable,

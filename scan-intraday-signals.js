@@ -24,6 +24,7 @@ function taipeiParts(date = new Date()) {
     day: "2-digit",
     hour: "2-digit",
     minute: "2-digit",
+    second: "2-digit",
     hour12: false,
   }).formatToParts(date);
   return Object.fromEntries(parts.map((part) => [part.type, part.value]));
@@ -34,7 +35,7 @@ function dateKey(parts = taipeiParts()) {
 }
 
 function timestampKey(parts = taipeiParts()) {
-  return `${parts.year}-${parts.month}-${parts.day} ${parts.hour}:${parts.minute}`;
+  return `${parts.year}-${parts.month}-${parts.day} ${parts.hour}:${parts.minute}:${parts.second}`;
 }
 
 async function fetchJson(url, timeout = 30000) {
@@ -144,6 +145,10 @@ async function main() {
         code: stock.code,
         name: stock.name,
         strategy: signal.label,
+        stateId: signal.stateId,
+        stateLabel: signal.stateLabel,
+        stateReason: signal.stateReason,
+        score: signal.score,
         entryPrice: signal.entryPrice,
         supportPrice: signal.supportPrice,
         entryLow: signal.entryLow,
