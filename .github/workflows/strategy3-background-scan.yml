@@ -2,8 +2,9 @@ name: Strategy3 Overnight Cache
 
 on:
   schedule:
-    # Taiwan time 13:00 on trading days.
-    - cron: "0 5 * * 1-5"
+    # Taiwan time 07:00 and 14:30 on trading days.
+    - cron: "0 23 * * 0-4"
+    - cron: "30 6 * * 1-5"
   workflow_dispatch:
 
 permissions:
