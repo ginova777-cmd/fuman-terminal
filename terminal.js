@@ -102,7 +102,7 @@ const SCHEDULE_META = {
   openBuy: { label: "07:00 / 14:30", times: ["07:00", "14:30"] },
   strategy3: { label: "13:00", times: ["13:00"] },
   swing: { label: "07:00 / 14:30", times: ["07:00", "14:30"] },
-  strategy5: { label: "依各策略", next: "依策略排程" },
+  strategy5: { label: "21:00", times: ["21:00"] },
   chip: { label: "06:00 / 21:00", times: ["06:00", "21:00"] },
   warrant: { label: "06:00 / 21:00", times: ["06:00", "21:00"] },
 };
@@ -250,6 +250,8 @@ const endpoints = {
   strategy4Backup: "/data/strategy4-backup.json",
   strategy3Cache: "/data/strategy3-latest.json",
   strategy3Backup: "/data/strategy3-backup.json",
+  strategy5Cache: "/data/strategy5-latest.json",
+  strategy5Backup: "/data/strategy5-backup.json",
   institutionCache: "/data/institution-latest.json",
   institutionBackup: "/data/institution-backup.json",
   warrantFlowCache: "/data/warrant-flow-latest.json",
@@ -290,9 +292,10 @@ let strategy4CacheLoading = false;
 let strategy3Data = [];
 let strategy3UpdatedAt = 0;
 let strategy3CacheLoading = false;
+let strategy5Data = [];
+let strategy5UpdatedAt = 0;
+let strategy5CacheLoading = false;
 let strategyStocksPromise = null;
-let strategy5RealtimeRetryTimer = null;
-let strategy5RealtimeReady = false;
 const STRATEGY4_LOCAL_CACHE_KEY = "fuman_strategy4_scan_cache_v1";
 const STRATEGY4_BACKUP_CACHE_KEY = "fuman_strategy4_nonempty_backup_v1";
 const OPEN_BUY_LOCAL_CACHE_KEY = "fuman_open_buy_scan_cache_v1";
@@ -1059,6 +1062,25 @@ async function loadStrategy3Cache(force = false) {
   } catch (error) {
   } finally {
     strategy3CacheLoading = false;
+  }
+}
+
+async function loadStrategy5Cache(force = false) {
+  if (strategy5CacheLoading) return;
+  if (!force && strategy5Data.length) return;
+  strategy5CacheLoading = true;
+  try {
+    let payload = await fetchJson(`${endpoints.strategy5Cache}?t=${Date.now()}`, 10000);
+    if (!normalizeArray(payload?.matches).length) {
+      payload = await fetchJson(`${endpoints.strategy5Backup}?t=${Date.now()}`, 10000);
+    }
+    strategy5Data = normalizeArray(payload?.matches);
+    const updatedAt = Date.parse(payload?.updatedAt || "");
+    strategy5UpdatedAt = Number.isFinite(updatedAt) ? updatedAt : Date.now();
+    renderStrategyScanner();
+  } catch (error) {
+  } finally {
+    strategy5CacheLoading = false;
   }
 }
 
@@ -3623,15 +3645,17 @@ function renderStrategy5Dashboard(evaluated) {
     `;
   }).join("") : `<div class="empty-state">目前沒有符合「${active.label}」的股票。</div>`;
 
-  const now = new Date();
+  const scanText = strategy5UpdatedAt
+    ? `21:00 完整掃｜${new Date(strategy5UpdatedAt).toLocaleDateString("zh-TW")}`
+    : "21:00 完整掃結果讀取中";
   strategyTable.innerHTML = `
     <section class="strategy5-shell strategy5-clean">
       <section class="strategy5-dashboard">
         <section class="strategy5-results">
           <div class="strategy5-results-head">
             <div>
-              <h3>${active.label}</h3>
-              <p>${descriptions[strategy5ActiveId] || "符合策略5條件的股票。"}｜MIS 即時偵測中</p>
+              <h3>${titleWithSchedule("▰", "策略5-綜合策略", "strategy5")}</h3>
+              <p>${descriptions[strategy5ActiveId] || "符合策略5條件的股票。"}｜${scanText}，結果固定到下一次掃描。</p>
             </div>
           </div>
           ${rows}
@@ -3641,9 +3665,9 @@ function renderStrategy5Dashboard(evaluated) {
   `;
 }
 
-function renderStrategy5RealtimeLoading() {
+function renderStrategy5CacheLoading() {
   setStrategyChrome("strategy5");
-  if (strategySummary) strategySummary.textContent = "策略5：MIS 即時股價更新中，暫不顯示舊資料。";
+  if (strategySummary) strategySummary.textContent = "策略5：21:00 完整掃結果讀取中。";
   if (strategyMatchCount) strategyMatchCount.textContent = "更新中";
   if (strategyAvgScore) strategyAvgScore.textContent = "--";
   if (strategyTopHit) strategyTopHit.textContent = "--";
@@ -3653,11 +3677,11 @@ function renderStrategy5RealtimeLoading() {
         <section class="strategy5-results">
           <div class="strategy5-results-head">
             <div>
-              <h3>外資投信連買準突破</h3>
-              <p>MIS 即時股價更新中，完成前先剔除舊股票池資料。</p>
+              <h3>${titleWithSchedule("▰", "策略5-綜合策略", "strategy5")}</h3>
+              <p>正在讀取 21:00 完整掃結果，完成後固定顯示到下一次掃描。</p>
             </div>
           </div>
-          <div class="empty-state">正在重新抓取全台股即時股價，請稍等。</div>
+          <div class="empty-state">策略5完整掃結果讀取中，請稍等。</div>
         </section>
       </section>
     </section>
@@ -3790,11 +3814,16 @@ function renderStrategyScanner() {
     return;
   }
   if (strategyPresetMode === "strategy5") {
-    if (!strategy5RealtimeReady) {
-      renderStrategy5RealtimeLoading();
+    if (!strategy5Data.length && !strategy5UpdatedAt && !strategy5CacheLoading) loadStrategy5Cache();
+    if (!strategy5Data.length && !strategy5UpdatedAt) {
+      renderStrategy5CacheLoading();
       return;
     }
-    renderStrategy5Dashboard(evaluated);
+    const rows = strategy5Data.filter((stock) => {
+      const name = String(stock.name || "").toLowerCase();
+      return !keyword || String(stock.code || "").includes(keyword) || name.includes(keyword);
+    });
+    renderStrategy5Dashboard(rows);
     return;
   }
 
@@ -4084,7 +4113,6 @@ async function loadStrategyStocks() {
     if (parsed.length) {
       latestStocks = parsed;
       renderStrategyScanner();
-      if (strategyPresetMode === "strategy5") deferUiWork(refreshStrategy5RealtimeNow, 40);
     } else if (strategyTable) {
       strategyTable.innerHTML = `<div class="empty-state">策略5目前沒有可篩選的股票資料。</div>`;
     }
@@ -4107,33 +4135,6 @@ async function loadStrategyStocks() {
 async function ensureStrategyStocksLoaded() {
   if (latestStocks.length) return latestStocks;
   return await loadStrategyStocks();
-}
-
-async function refreshStrategy5RealtimeNow() {
-  if (strategy5RealtimeRetryTimer) {
-    clearTimeout(strategy5RealtimeRetryTimer);
-    strategy5RealtimeRetryTimer = null;
-  }
-  strategy5RealtimeReady = false;
-  renderStrategy5RealtimeLoading();
-  await ensureStrategyStocksLoaded();
-  if (!latestStocks.length) return;
-  if (strategyRealtimeLoading) {
-    scheduleStrategy5RealtimeRetry();
-    return;
-  }
-  const scanStartedAt = Date.now();
-  await refreshStrategyRealtimeScan("strategy5-full");
-  strategy5RealtimeReady = strategyLastScanAt >= scanStartedAt;
-  renderStrategyScanner();
-}
-
-function scheduleStrategy5RealtimeRetry(delay = 800) {
-  if (strategy5RealtimeRetryTimer) return;
-  strategy5RealtimeRetryTimer = setTimeout(() => {
-    strategy5RealtimeRetryTimer = null;
-    refreshStrategy5RealtimeNow();
-  }, delay);
 }
 
 function getSectorColor(pct) {
@@ -4840,12 +4841,11 @@ function applyStrategyPresetFromLink(link) {
   if (text.includes("策略3")) strategy5ActiveId = "overnight_chip";
   if (text.includes("策略4")) swingSignalFilter = "all";
   if (text.includes("策略2")) intradaySignalFilter = "all";
-  if (text.includes("策略5")) strategy5RealtimeReady = false;
   strategyMode = "any";
   strategyKeyword = "";
   if (strategySearch) strategySearch.value = "";
   if (text.includes("策略5")) {
-    deferUiWork(refreshStrategy5RealtimeNow, 60);
+    deferUiWork(() => loadStrategy5Cache(true), 60);
   } else if (text.includes("策略3")) {
     deferUiWork(async () => {
       await loadStrategyStocks();
@@ -4949,13 +4949,13 @@ async function fetchStrategyRealtimeBatches(stocks, batchSize = 80) {
 async function refreshStrategyRealtimeScan(mode = "hot") {
   const scanMode = mode === true ? "force" : String(mode || "hot");
   if (strategyRealtimeLoading) {
-    if (scanMode === "strategy5-full") scheduleStrategy5RealtimeRetry();
     return;
   }
+  if (scanMode === "strategy5-full") return;
   if (!latestStocks.length) return;
   const isStrategyVisible = document.querySelector("#strategy-view")?.classList.contains("active");
   const isRealtimeStrategy = selectedStrategyIds.has("intraday_2m");
-  const isStrategy5Realtime = strategyPresetMode === "strategy5";
+  const isStrategy5Realtime = false;
   if (scanMode !== "force" && scanMode !== "strategy5-full" && (!isStrategyVisible || (!isRealtimeStrategy && !isStrategy5Realtime))) return;
 
   strategyRealtimeLoading = true;
