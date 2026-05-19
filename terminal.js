@@ -2895,6 +2895,9 @@ intradayRadarStyles.textContent = `
     line-height: 1.5;
     font-size: 12px;
   }
+  .strategy3-clean {
+    grid-template-columns: 1fr;
+  }
   .page-title-icon {
     display: inline-flex;
     align-items: center;
@@ -3570,33 +3573,16 @@ function renderOvernightDashboard(evaluated) {
     <section class="strategy5-shell">
       <div class="strategy5-hero">
         <div>
-          <b>固定快取名單</b>
           <h2>${titleWithIcon("◐", "策略3-隔日沖")} <span class="swing-live">● ${scanText}</span></h2>
         </div>
-        <div class="strategy5-date">
-          <span>符合</span>
-          <strong>${rows.length}</strong>
-          <span>隔日沖候選</span>
-        </div>
       </div>
-      <section class="strategy5-dashboard">
-        <aside class="strategy5-list">
-          <button class="strategy5-filter-card active" type="button">
-            <span>⌬</span>
-            <div>
-              <strong>固定條件監控</strong>
-              <small>每天 13:00 完整掃一次：漲幅 3%-5%、成交量 1000張、周轉率 >5%、量比 >1。</small>
-            </div>
-            <em>${rows.length} 檔</em>
-          </button>
-        </aside>
+      <section class="strategy5-dashboard strategy3-clean">
         <section class="strategy5-results">
           <div class="strategy5-results-head">
             <div>
               <h3>隔日沖候選排行</h3>
               <p>以 13:00 固定條件完整掃描結果排序，開網頁不再臨時重算。</p>
             </div>
-            <span class="strategy5-count">${rows.length} 檔</span>
           </div>
           ${cards}
         </section>
