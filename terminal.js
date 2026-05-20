@@ -1145,6 +1145,7 @@ function applyStrategyQuote(stock) {
     low: quote.low,
     prevClose: prevClose || quote.prevClose,
     limitUp: quote.limitUp,
+    quoteTime: quote.time || stock.quoteTime,
     isRealtime: true,
   };
 }
@@ -3306,10 +3307,8 @@ function renderIntradayRadar(evaluated) {
     const sign = stock.percent >= 0 ? "+" : "";
     const mainSignal = stock.intradaySignals[0]?.short || "量價";
     const entry = formatEntryRange(stock.intradayEntry);
-    const firstSeenTime = stock.intradayGoFirstSeenAt
-      ? new Date(stock.intradayGoFirstSeenAt).toLocaleTimeString("zh-TW", { hour12: false, hour: "2-digit", minute: "2-digit", second: "2-digit" })
-      : scanTime;
-    const timeText = zoneId === "go" ? `<span class="intraday-pick-time">${firstSeenTime}</span>` : `<span class="intraday-pick-time"></span>`;
+    const quoteTime = stock.quoteTime || strategyRealtimeQuotes[stock.code]?.time || scanTime;
+    const timeText = `<span class="intraday-pick-time">${quoteTime}</span>`;
     return `
       <div class="intraday-pick">
         <span class="intraday-rank">${index + 1}</span>
