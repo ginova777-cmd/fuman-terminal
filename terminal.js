@@ -1206,7 +1206,7 @@ function getIntradaySignals(stock) {
   const ibRange = high && low ? high - low : 0;
   const f618 = ibRange > 0 ? high - ibRange * 0.618 : 0;
   const signals = [];
-  if (pct < 0.5 || !close || !hasIntradayLiquidity(stock)) return signals;
+  if (!close || !hasIntradayLiquidity(stock)) return signals;
   const volumeMilestone = volume >= 10000 ? 10000 : volume >= 5000 ? 5000 : volume >= 2000 ? 2000 : 0;
   const minuteVolumeRising = deltaVolumeRising || recentDeltaVolume >= 100;
   const minuteBurst = recentDeltaVolume >= 300 || (dayAvgRate && currentRate >= dayAvgRate * 3 && recentDeltaVolume >= 120) || (recentBaseRate && currentRate >= recentBaseRate * 2.5 && recentDeltaVolume >= 120);
@@ -1220,12 +1220,12 @@ function getIntradaySignals(stock) {
   const guaAngelLong = guaAllowed && vwap && low <= vwap && close > vwap && rsi > 45 && close > open && ema9 > ema20;
   const guaVwapLong = guaAllowed && vwap && priorPrice <= vwap && close > vwap && rsi > 50 && close > open;
 
-  if (pct >= 0.5 && (close >= open || pct >= 1.2) && (value >= INTRADAY_MIN_VALUE || volume >= INTRADAY_MIN_VOLUME)) {
+  if ((pct > 2 || (open && close >= open) || volumeMilestone) && (value >= INTRADAY_MIN_VALUE || volume >= INTRADAY_MIN_VOLUME)) {
     signals.push({
       id: "early_strength",
       short: "早盤強",
       icon: "⚡",
-      reason: `早盤即時偵測：漲幅 ${pct.toFixed(2)}%，成交量 ${Math.round(volume).toLocaleString("zh-TW")} 張，先列入雷達觀察。`,
+      reason: `早盤即時偵測：漲幅 ${pct.toFixed(2)}%，現價${open && close >= open ? "站上" : "未站上"}開盤價，成交量 ${Math.round(volume).toLocaleString("zh-TW")} 張${volumeMilestone ? `，已達 ${volumeMilestone.toLocaleString("zh-TW")} 張級距` : ""}。`,
     });
   }
 
@@ -3352,7 +3352,7 @@ function renderIntradayRadar(evaluated) {
       <div class="intraday-topbar">
         <div>
           <h2>${titleWithSchedule("◔", "策略2-當沖雷達", "intraday")}</h2>
-          <p>盤中即時偵測強勢訊號，3秒巡邏熱門池，背景同步分批補全市場。</p>
+          <p>盤中即時偵測強勢訊號，3秒巡邏熱門池，背景同步分批補全市場。最後更新 ${scanTime}${scanStatus}</p>
         </div>
         <div class="intraday-controls">
           <label>偵測頻率：<select><option>3秒</option></select></label>
