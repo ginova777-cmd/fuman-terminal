@@ -153,6 +153,52 @@ function isMobileViewport() {
   return typeof window !== "undefined" && window.matchMedia("(max-width: 760px)").matches;
 }
 
+function getActiveViewName() {
+  return Object.entries(viewPanels).find(([, panel]) => panel?.classList.contains("active"))?.[0] || "market";
+}
+
+function runMobileAutoOrganize() {
+  const active = getActiveViewName();
+  if (active === "market") {
+    loadMarketData();
+    loadHeatmap();
+    return;
+  }
+  if (active === "strategy") {
+    renderStrategyScanner();
+    const text = [...selectedStrategyIds].join(" ");
+    if (text.includes("intraday_2m")) refreshStrategyRealtimeScan("force");
+    if (text.includes("open_buy")) loadOpenBuyCache(true);
+    if (text.includes("swing_radar")) loadStrategy4Cache(true);
+    return;
+  }
+  if (active === "chip-trade") {
+    loadChipTradeData();
+    return;
+  }
+  if (active === "warrant-flow") {
+    loadWarrantFlow(true);
+    return;
+  }
+  renderWatchlist?.();
+  refreshSelectedWatchlistQuote?.();
+}
+
+function ensureMobileAutoOrganizeButton() {
+  document.querySelectorAll(".mobile-auto-organize").forEach((button) => button.remove());
+  const active = getActiveViewName();
+  const panel = viewPanels[active];
+  if (!panel) return;
+  const button = document.createElement("button");
+  button.className = "mobile-auto-organize";
+  button.type = "button";
+  button.title = "自動整理";
+  button.setAttribute("aria-label", "自動整理");
+  button.textContent = "↻";
+  button.addEventListener("click", runMobileAutoOrganize);
+  panel.appendChild(button);
+}
+
 function applyStaticTitleIcons() {
   const marketTitle = document.querySelector("#market-view .page-header h1");
   const settlementBadge = isMobileViewport() ? getTaiexMajorSettlementBadge() : "";
@@ -3131,8 +3177,34 @@ intradayRadarStyles.textContent = `
       overflow-x: hidden !important;
     }
     .dashboard {
-      padding-left: 8px;
-      padding-right: 8px;
+      padding-left: 10px;
+      padding-right: 10px;
+    }
+    .view-panel.active {
+      position: relative;
+    }
+    .mobile-auto-organize {
+      position: absolute;
+      top: 6px;
+      right: 8px;
+      z-index: 20;
+      display: inline-grid;
+      width: 46px;
+      height: 46px;
+      place-items: center;
+      border: 1px solid rgba(134, 151, 190, 0.18);
+      border-radius: 14px;
+      background: rgba(24, 28, 45, 0.92);
+      color: #aeb8cc;
+      font-size: 26px;
+      font-weight: 800;
+      line-height: 1;
+      box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.03);
+    }
+    .page-header,
+    .strategy-header,
+    .swing-topbar {
+      padding-right: 58px !important;
     }
     .intraday-signal-grid { grid-template-columns: 1fr; }
     .intraday-side-panel .intraday-signal-grid { grid-template-columns: 1fr; }
@@ -3159,12 +3231,17 @@ intradayRadarStyles.textContent = `
     .swing-card em { font-size: 22px; }
     .swing-panel,
     .intraday-panel {
-      width: 100%;
-      max-width: calc(100vw - 16px);
+      width: calc(100vw - 36px);
+      max-width: calc(100vw - 36px);
       min-width: 0;
+      margin-right: auto;
+      margin-left: auto;
       overflow: hidden !important;
     }
-    .strategy-results { padding: 10px; }
+    .strategy-results {
+      padding: 12px;
+      border-radius: 14px;
+    }
     #strategy-view .swing-actions,
     #strategy-view .intraday-actions {
       display: none !important;
@@ -3186,7 +3263,7 @@ intradayRadarStyles.textContent = `
     .swing-table tbody,
     .intraday-table tbody {
       display: grid;
-      gap: 10px;
+      gap: 12px;
       width: 100%;
       max-width: 100%;
     }
@@ -3196,14 +3273,15 @@ intradayRadarStyles.textContent = `
       width: 100%;
       max-width: 100%;
       border: 1px solid rgba(255, 84, 103, 0.18);
-      border-radius: 8px;
-      background: rgba(10, 12, 24, 0.86);
-      padding: 10px 11px;
+      border-radius: 12px;
+      background: rgba(24, 30, 47, 0.9);
+      padding: 12px;
+      box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.025);
     }
     .swing-table td,
     .intraday-table td {
       display: grid;
-      grid-template-columns: 58px minmax(0, 1fr);
+      grid-template-columns: 48px minmax(0, 1fr);
       gap: 8px;
       border: 0 !important;
       padding: 5px 0;
@@ -3217,7 +3295,7 @@ intradayRadarStyles.textContent = `
     .swing-table td::before,
     .intraday-table td::before {
       color: #8994aa;
-      font-size: 12px;
+      font-size: 11px;
       font-weight: 800;
       text-align: left;
     }
@@ -3253,6 +3331,7 @@ intradayRadarStyles.textContent = `
       justify-content: flex-start;
       max-width: 100%;
       gap: 5px;
+      overflow: hidden;
     }
     #strategy-view .swing-stage,
     #strategy-view .swing-score,
@@ -3945,6 +4024,7 @@ function renderOvernightDashboard(evaluated) {
 
 function renderStrategyScanner() {
   if (!strategyTable) return;
+  deferUiWork(ensureMobileAutoOrganizeButton);
   const selected = [...selectedStrategyIds];
   if (!(selected.length === 1 && (selected[0] === "intraday_2m" || selected[0] === "swing_radar" || selected[0] === "open_buy"))) setStrategyChrome("normal");
   strategyCards.forEach((card) => card.classList.toggle("selected", selectedStrategyIds.has(card.dataset.strategy)));
@@ -4911,6 +4991,7 @@ function showView(viewName, activeLink) {
   if (viewName === "strategy") deferUiWork(renderStrategyScanner);
   if (viewName === "chip-trade") deferUiWork(loadChipTradeData);
   if (viewName === "warrant-flow") deferUiWork(loadWarrantFlow);
+  deferUiWork(ensureMobileAutoOrganizeButton);
   const focusTarget = activeLink.dataset.focus ? document.querySelector(`#${activeLink.dataset.focus}`) : null;
   if (focusTarget) setTimeout(()=>focusTarget.focus(),0);
 }
@@ -5296,6 +5377,7 @@ async function refreshStrategyHistoryScan(force = false) {
 tickClock();
 labelChipTradeMode();
 applyStaticTitleIcons();
+ensureMobileAutoOrganizeButton();
 loadMarketData();
 loadHeatmap();
 loadInstitution();
