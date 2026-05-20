@@ -38,6 +38,7 @@ const strategyHeaderText = document.querySelector("#strategy-view .strategy-head
 const strategyHeaderBadge = document.querySelector("#strategy-view .strategy-header .console-badge");
 const strategyTerminal = document.querySelector(".strategy-terminal");
 const strategyList = document.querySelector(".strategy-list");
+const brandRefresh = document.querySelector(".brand");
 
 function installBasicDevtoolsGuard() {
   const blockedKeys = new Set(["F12"]);
@@ -5042,6 +5043,18 @@ applyStaticTitleIcons();
 loadMarketData();
 loadHeatmap();
 loadInstitution();
+if (brandRefresh) {
+  brandRefresh.setAttribute("role", "button");
+  brandRefresh.setAttribute("tabindex", "0");
+  brandRefresh.setAttribute("title", "重新整理頁面");
+  brandRefresh.style.cursor = "pointer";
+  brandRefresh.addEventListener("click", () => window.location.reload());
+  brandRefresh.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter" && event.key !== " ") return;
+    event.preventDefault();
+    window.location.reload();
+  });
+}
 stockSearch.addEventListener("input", (e)=>searchStocks(e.target.value));
 viewLinks.forEach((link)=>{
   link.addEventListener("click",(e)=>{
