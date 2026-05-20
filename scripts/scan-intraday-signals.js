@@ -16,12 +16,49 @@ function writeJson(file, value) {
   fs.writeFileSync(file, `${JSON.stringify(value, null, 2)}\n`);
 }
 
-function taipeiNow() {
-  return new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Taipei" }));
+function taipeiParts(date = new Date()) {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Taipei",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  }).formatToParts(date);
+  return Object.fromEntries(parts.map((part) => [part.type, part.value]));
 }
 
-function dateKey(date = taipeiNow()) {
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+function dateKey(parts = taipeiParts()) {
+  return `${parts.year}-${parts.month}-${parts.day}`;
+}
+
+function timestampKey(parts = taipeiParts()) {
+  return `${parts.year}-${parts.month}-${parts.day} ${parts.hour}:${parts.minute}:${parts.second}`;
+}
+
+function updateTrackedExtremes(cache, stock, timestamp, key) {
+  const high = cleanNumber(stock.high) || cleanNumber(stock.close);
+  const low = cleanNumber(stock.low) || cleanNumber(stock.close);
+  const close = cleanNumber(stock.close);
+  cache.records
+    .filter((record) => record.date === key && record.code === stock.code)
+    .forEach((record) => {
+      const currentHigh = cleanNumber(record.observedHigh);
+      const currentLow = cleanNumber(record.observedLow);
+      record.observedPrice = close || record.observedPrice;
+      record.volume = cleanNumber(stock.tradeVolume) || record.volume;
+      record.percent = cleanNumber(stock.percent) || record.percent;
+      if (high && (!currentHigh || high > currentHigh)) {
+        record.observedHigh = high;
+        record.observedHighAt = timestamp;
+      }
+      if (low && (!currentLow || low < currentLow)) {
+        record.observedLow = low;
+        record.observedLowAt = timestamp;
+      }
+    });
 }
 
 async function fetchJson(url, timeout = 30000) {
@@ -93,8 +130,8 @@ async function fetchRealtime(stocks) {
 }
 
 async function main() {
-  const now = taipeiNow();
-  const key = dateKey(now);
+  const parts = taipeiParts();
+  const key = dateKey(parts);
   const cache = readJson(SIGNAL_FILE, { date: key, records: [], previous: {} });
   if (cache.date !== key) {
     cache.date = key;
@@ -105,12 +142,13 @@ async function main() {
   const rawStocks = await fetchStocks();
   const liveStocks = (await fetchRealtime(rawStocks)).filter(isIntradayTradable);
   const ranks = buildRanks(liveStocks);
-  const timestamp = now.toISOString().replace("T", " ").slice(0, 16);
+  const timestamp = timestampKey(parts);
   let added = 0;
 
   for (const stock of liveStocks) {
+    updateTrackedExtremes(cache, stock, timestamp, key);
     const previous = cache.previous[stock.code] || null;
-    const signals = detectSignals(stock, previous, ranks);
+    const signals = detectSignals(stock, previous || { tradeVolume: stock.tradeVolume }, ranks);
     cache.previous[stock.code] = {
       close: stock.close,
       high: stock.high,
@@ -128,16 +166,25 @@ async function main() {
       cache.records.push({
         date: key,
         timestamp,
+        entryAt: timestamp,
         code: stock.code,
         name: stock.name,
         strategy: signal.label,
+        stateId: signal.stateId,
+        stateLabel: signal.stateLabel,
+        stateReason: signal.stateReason,
+        score: signal.score,
         entryPrice: signal.entryPrice,
+        supportPrice: signal.supportPrice,
         entryLow: signal.entryLow,
         entryHigh: signal.entryHigh,
         stopLoss: signal.stopLoss,
         chaseLimit: signal.chaseLimit,
         observedPrice: stock.close,
         observedHigh: stock.high || stock.close,
+        observedHighAt: timestamp,
+        observedLow: stock.low || stock.close,
+        observedLowAt: timestamp,
         volume: stock.tradeVolume,
         percent: stock.percent,
         reason: signal.reason,

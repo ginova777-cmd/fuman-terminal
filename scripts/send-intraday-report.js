@@ -5,7 +5,6 @@ const { cleanNumber, formatTradePrice } = require("./intraday-radar-rules");
 
 const ROOT = path.resolve(__dirname, "..");
 const SIGNAL_FILE = path.join(ROOT, ".intraday-cache", "signals.json");
-const REPORT_SENT_DIR = path.join(ROOT, ".intraday-cache", "sent-reports");
 const OPEN_BUY_FILE = path.join(ROOT, "data", "open-buy-latest.json");
 const OPEN_BUY_BACKUP_FILE = path.join(ROOT, "data", "open-buy-backup.json");
 const STRATEGY3_FILE = path.join(ROOT, "data", "strategy3-latest.json");
@@ -16,6 +15,8 @@ const LOT_SIZE = Number(process.env.REPORT_LOT_SIZE || 1000);
 function readJson(file, fallback) {
   try { return JSON.parse(fs.readFileSync(file, "utf8")); } catch { return fallback; }
 }
+
+const REPORT_SENT_PATH = process.env.REPORT_SENT_DIR || path.join(ROOT, ".intraday-report-cache", "sent-reports");
 
 function taipeiDateKey(date = new Date()) {
   const parts = new Intl.DateTimeFormat("en-CA", {
@@ -220,7 +221,18 @@ function mergeRecords(records) {
     const entry = cleanNumber(record.entryPrice);
     const currentEntry = cleanNumber(current.entryPrice);
     if (entry && (!currentEntry || entry < currentEntry)) current.entryPrice = entry;
-    current.observedHigh = Math.max(cleanNumber(current.observedHigh), cleanNumber(record.observedHigh));
+    const currentHigh = cleanNumber(current.observedHigh);
+    const nextHigh = cleanNumber(record.observedHigh);
+    if (nextHigh && (!currentHigh || nextHigh > currentHigh)) {
+      current.observedHigh = nextHigh;
+      current.observedHighAt = record.observedHighAt || record.timestamp;
+    }
+    const currentLow = cleanNumber(current.observedLow);
+    const nextLow = cleanNumber(record.observedLow);
+    if (nextLow && (!currentLow || nextLow < currentLow)) {
+      current.observedLow = nextLow;
+      current.observedLowAt = record.observedLowAt || record.timestamp;
+    }
     current.observedPrice = cleanNumber(current.observedPrice) || cleanNumber(record.observedPrice);
     current.supportPrice = cleanNumber(current.supportPrice) || cleanNumber(record.supportPrice);
     if (STATE_ORDER[state.id] < STATE_ORDER[current.stateId || "watch"]) {
@@ -334,7 +346,7 @@ async function main() {
   const strategy3Payload = readCacheWithBackup(STRATEGY3_FILE, STRATEGY3_BACKUP_FILE);
   const today = taipeiDateKey();
   const reportSlot = process.env.REPORT_SLOT || (taipeiHour() >= 15 ? "final" : "initial");
-  const sentFile = path.join(REPORT_SENT_DIR, `${today}-${reportSlot}.json`);
+  const sentFile = path.join(REPORT_SENT_PATH, `${today}-${reportSlot}.json`);
   if (fs.existsSync(sentFile) && process.env.FORCE_REPORT !== "1") {
     console.log(`scorecard already sent for ${today} ${reportSlot}`);
     return;
@@ -368,9 +380,10 @@ async function main() {
     lines.push(`${STATE_LABELS[stateId]}｜${list.length} 筆`, "");
     list.forEach((record) => {
     const quote = quotes.get(record.code) || {};
-    const exitPrice = cleanNumber(quote.high) || cleanNumber(record.observedHigh) || cleanNumber(record.observedPrice);
+    const exitPrice = cleanNumber(record.observedHigh) || cleanNumber(quote.high) || cleanNumber(record.observedPrice);
     const entryPrice = cleanNumber(record.entryPrice);
     const supportPrice = cleanNumber(record.supportPrice);
+    const exitTime = tradeTimeLabel(record.observedHighAt || record.timestamp, reportExitTime);
     const profit = entryPrice ? (exitPrice - entryPrice) * LOT_SIZE : 0;
     const profitPct = entryPrice ? ((exitPrice - entryPrice) / entryPrice) * 100 : 0;
     const state = inferState(record);
@@ -384,13 +397,14 @@ async function main() {
       supportPrice ? `支撐位：${formatTradePrice(supportPrice)}，不破後觀察` : "",
       tradeSummaryLine({
         date: tradeDateLabel(record.timestamp, today),
-        entryTime: tradeTimeLabel(record.timestamp, "09:00"),
+        entryTime: tradeTimeLabel(record.entryAt || record.timestamp, "09:00"),
         entryPrice,
-        exitTime: reportExitTime,
+        exitTime,
         exitPrice,
         profitPct,
         profit,
       }),
+      `盤中最高：${formatTradePrice(record.observedHigh)}｜最高時間：${tradeTimeLabel(record.observedHighAt || record.timestamp, "--:--")}｜盤中最低：${formatTradePrice(record.observedLow)}｜最低時間：${tradeTimeLabel(record.observedLowAt || record.timestamp, "--:--")}`,
       `建議進場價：${formatTradePrice(entryPrice)}`,
       `出場價：${formatTradePrice(exitPrice)}`,
       `預計獲利金額：${money(profit)}`,
@@ -425,7 +439,7 @@ async function main() {
     pass,
     to,
   });
-  fs.mkdirSync(REPORT_SENT_DIR, { recursive: true });
+  fs.mkdirSync(REPORT_SENT_PATH, { recursive: true });
   fs.writeFileSync(sentFile, `${JSON.stringify({ date: today, slot: reportSlot, sentAt: new Date().toISOString(), to }, null, 2)}\n`);
 }
 
