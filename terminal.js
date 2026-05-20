@@ -3508,6 +3508,116 @@ intradayRadarStyles.textContent = `
       font-size: 14px;
       line-height: 1.55;
     }
+    html,
+    body,
+    .app-shell,
+    .dashboard,
+    #strategy-view,
+    .strategy-terminal,
+    #strategy-table {
+      width: 100% !important;
+      max-width: 100% !important;
+      min-width: 0 !important;
+      margin-left: 0 !important;
+      margin-right: 0 !important;
+      overflow-x: hidden !important;
+      transform: none !important;
+    }
+    #strategy-view .strategy-results,
+    #strategy-view .strategy5-shell,
+    #strategy-view .strategy5-dashboard,
+    #strategy-view .strategy5-results,
+    #strategy-view .swing-panel,
+    #strategy-view .intraday-panel {
+      display: block !important;
+      box-sizing: border-box !important;
+      width: 100% !important;
+      max-width: 100% !important;
+      min-width: 0 !important;
+      margin: 0 !important;
+      padding: 12px !important;
+      overflow-x: hidden !important;
+    }
+    #strategy-view .strategy5-stock-card,
+    #strategy-view .strategy3-stock-card,
+    #strategy-view .swing-table tr,
+    #strategy-view .intraday-table tr {
+      display: block !important;
+      width: 100% !important;
+      max-width: 100% !important;
+      min-width: 0 !important;
+      margin: 12px 0 !important;
+      padding: 16px !important;
+      border-radius: 12px !important;
+      overflow: visible !important;
+    }
+    #strategy-view .swing-table,
+    #strategy-view .intraday-table,
+    #strategy-view .swing-table tbody,
+    #strategy-view .intraday-table tbody {
+      display: block !important;
+      width: 100% !important;
+      max-width: 100% !important;
+      min-width: 0 !important;
+      overflow-x: hidden !important;
+    }
+    #strategy-view .swing-table td,
+    #strategy-view .intraday-table td {
+      display: grid !important;
+      grid-template-columns: 72px minmax(0, 1fr) !important;
+      gap: 10px !important;
+      width: 100% !important;
+      max-width: 100% !important;
+      min-width: 0 !important;
+      overflow: visible !important;
+      padding: 7px 0 !important;
+      white-space: normal !important;
+      overflow-wrap: anywhere !important;
+      word-break: break-word !important;
+    }
+    #strategy-view .swing-table td::before,
+    #strategy-view .intraday-table td::before {
+      display: block !important;
+      width: 72px !important;
+      margin: 0 !important;
+    }
+    #strategy-view .strategy5-stock-card *,
+    #strategy-view .strategy3-stock-card *,
+    #strategy-view .swing-table td > *,
+    #strategy-view .intraday-table td > * {
+      max-width: 100% !important;
+      min-width: 0 !important;
+      white-space: normal !important;
+      overflow-wrap: anywhere !important;
+      word-break: break-word !important;
+    }
+    #strategy-view .swing-badges,
+    #strategy-view .intraday-badges,
+    #strategy-view .strategy-chips,
+    #strategy-view .strategy5-chips {
+      display: flex !important;
+      flex-wrap: wrap !important;
+      justify-content: flex-start !important;
+      max-width: 100% !important;
+      gap: 6px !important;
+      overflow: visible !important;
+    }
+    #strategy-view .swing-badges b,
+    #strategy-view .intraday-badges b,
+    #strategy-view .strategy-chips b,
+    #strategy-view .strategy5-chips b,
+    #strategy-view .swing-stage,
+    #strategy-view .swing-score,
+    #strategy-view .intraday-state,
+    #strategy-view .intraday-score {
+      width: fit-content !important;
+      max-width: 100% !important;
+      min-width: 0 !important;
+      justify-self: start !important;
+      white-space: normal !important;
+      overflow-wrap: anywhere !important;
+      word-break: break-word !important;
+    }
   }
 `;
 document.head.appendChild(intradayRadarStyles);
