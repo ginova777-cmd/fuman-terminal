@@ -2203,3 +2203,206 @@ h1 {
     width: 100% !important;
   }
 }
+
+@media (max-width: 760px) {
+  .strategy-results,
+  .strategy5-results,
+  .intraday-panel,
+  .swing-panel {
+    overflow: visible !important;
+  }
+
+  .strategy5-results {
+    padding: 14px;
+    border-radius: 10px;
+    background: rgba(16, 18, 31, 0.86);
+  }
+
+  .strategy5-results-head {
+    padding: 4px 2px 12px;
+  }
+
+  .strategy5-results-head h3 {
+    font-size: 28px;
+    line-height: 1.18;
+  }
+
+  .strategy5-results-head p {
+    color: #9ca6bb;
+    font-size: 14px;
+    line-height: 1.65;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
+  .strategy5-stock-card,
+  .strategy3-stock-card {
+    display: block !important;
+    width: 100%;
+    margin: 14px 0;
+    padding: 18px;
+    border: 1px solid rgba(255, 84, 103, 0.22);
+    border-radius: 10px;
+    background: rgba(10, 12, 24, 0.88);
+  }
+
+  .strategy5-stock-card .rank {
+    display: inline-block;
+    margin-bottom: 10px;
+    color: #ffd166;
+    font-size: 14px;
+  }
+
+  .strategy5-stock-card strong {
+    display: block;
+    color: #ffffff;
+    font-size: 26px;
+    line-height: 1.22;
+    overflow-wrap: anywhere;
+  }
+
+  .strategy5-stock-card strong small {
+    display: inline;
+    color: #8994aa;
+    font-size: 22px;
+  }
+
+  .strategy5-stock-card small {
+    color: #8994aa;
+    font-size: 14px;
+    line-height: 1.45;
+    white-space: normal;
+  }
+
+  .strategy5-price {
+    margin-top: 18px;
+    color: #ff6478;
+    font-size: 38px;
+    line-height: 1;
+  }
+
+  .strategy5-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 16px;
+  }
+
+  .strategy5-chips b {
+    max-width: 100%;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
+  .strategy5-reason {
+    margin-top: 16px;
+    color: #dce6ff;
+    font-size: 16px;
+    line-height: 1.7;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
+  .swing-table,
+  .intraday-table,
+  .chip-table {
+    display: block;
+    width: 100%;
+    min-width: 0 !important;
+    border-collapse: separate;
+    border-spacing: 0;
+    font-size: 15px;
+  }
+
+  .swing-table thead,
+  .intraday-table thead,
+  .chip-table thead {
+    display: none;
+  }
+
+  .swing-table tbody,
+  .intraday-table tbody,
+  .chip-table tbody {
+    display: grid;
+    gap: 14px;
+  }
+
+  .swing-table tr,
+  .intraday-table tr,
+  .chip-table tr {
+    display: block;
+    width: 100%;
+    border: 1px solid rgba(255, 84, 103, 0.18);
+    border-radius: 10px;
+    background: rgba(10, 12, 24, 0.86);
+    padding: 14px;
+  }
+
+  .swing-table td,
+  .intraday-table td,
+  .chip-table td {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    border: 0 !important;
+    padding: 7px 0;
+    color: #dce6ff;
+    line-height: 1.55;
+    text-align: right;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
+  .swing-table td::before,
+  .intraday-table td::before,
+  .chip-table td::before {
+    flex: 0 0 86px;
+    color: #8994aa;
+    font-size: 13px;
+    font-weight: 800;
+    text-align: left;
+  }
+
+  .intraday-table td:nth-child(1)::before,
+  .swing-table td:nth-child(1)::before,
+  .chip-table td:nth-child(1)::before { content: "代號"; }
+  .intraday-table td:nth-child(2)::before,
+  .swing-table td:nth-child(2)::before,
+  .chip-table td:nth-child(2)::before { content: "名稱"; }
+  .intraday-table td:nth-child(3)::before,
+  .swing-table td:nth-child(3)::before,
+  .chip-table td:nth-child(3)::before { content: "狀態"; }
+  .intraday-table td:nth-child(4)::before,
+  .swing-table td:nth-child(4)::before,
+  .chip-table td:nth-child(4)::before { content: "訊號/價格"; }
+  .intraday-table td:nth-child(5)::before,
+  .swing-table td:nth-child(5)::before,
+  .chip-table td:nth-child(5)::before { content: "漲幅"; }
+  .intraday-table td:nth-child(6)::before,
+  .swing-table td:nth-child(6)::before,
+  .chip-table td:nth-child(6)::before { content: "成交量"; }
+  .intraday-table td:nth-child(7)::before,
+  .swing-table td:nth-child(7)::before,
+  .chip-table td:nth-child(7)::before { content: "條件"; }
+  .intraday-table td:nth-child(8)::before,
+  .swing-table td:nth-child(8)::before,
+  .chip-table td:nth-child(8)::before { content: "分數"; }
+  .intraday-table td:nth-child(9)::before,
+  .swing-table td:nth-child(9)::before,
+  .chip-table td:nth-child(9)::before { content: "原因"; }
+
+  .intraday-actions,
+  .swing-actions {
+    width: 100%;
+    margin-left: 0;
+    flex-wrap: wrap;
+  }
+
+  .intraday-actions input,
+  .swing-actions input,
+  .warrant-search-row input {
+    min-width: 0;
+    width: 100%;
+  }
+}
