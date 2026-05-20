@@ -181,6 +181,26 @@ function percent(value) {
   return `${number >= 0 ? "+" : ""}${number.toFixed(2)}%`;
 }
 
+function settlementHigh(track, quote) {
+  const tracked = cleanNumber(track?.observedHigh);
+  if (tracked) return { price: tracked, time: tradeTimeLabel(track?.observedHighAt, "--:--"), source: "patrol" };
+  const quoteHigh = cleanNumber(quote?.high);
+  if (quoteHigh) return { price: quoteHigh, time: "--:--", source: "mis" };
+  return { price: 0, time: "--:--", source: "missing" };
+}
+
+function settlementLow(track, quote) {
+  const tracked = cleanNumber(track?.observedLow);
+  if (tracked) return { price: tracked, time: tradeTimeLabel(track?.observedLowAt, "--:--"), source: "patrol" };
+  const quoteLow = cleanNumber(quote?.low);
+  if (quoteLow) return { price: quoteLow, time: "--:--", source: "mis" };
+  return { price: 0, time: "--:--", source: "missing" };
+}
+
+function settlementTimeLabel(settlement) {
+  return settlement.source === "mis" ? `${settlement.time}（MIS補價）` : settlement.time;
+}
+
 function readCacheWithBackup(file, backupFile) {
   const payload = readJson(file, { ok: true, matches: [] });
   if ((payload.matches || []).length) return payload;
@@ -285,8 +305,10 @@ function buildOpenBuyReport(payload, quotes, today, tracker) {
     const quote = quotes.get(item.code) || {};
     const track = scorecardTrack(tracker, "openBuy", item.code) || {};
     const entryPrice = cleanNumber(track.entryPrice) || cleanNumber(quote.open);
-    const exitPrice = cleanNumber(track.observedHigh);
-    const exitTime = tradeTimeLabel(track.observedHighAt, "--:--");
+    const high = settlementHigh(track, quote);
+    const low = settlementLow(track, quote);
+    const exitPrice = high.price;
+    const exitTime = settlementTimeLabel(high);
     const profit = entryPrice ? (exitPrice - entryPrice) * LOT_SIZE : 0;
     const profitPct = entryPrice ? ((exitPrice - entryPrice) / entryPrice) * 100 : 0;
     totalProfit += profit;
@@ -304,7 +326,7 @@ function buildOpenBuyReport(payload, quotes, today, tracker) {
         profit,
       }),
       `建議進場：${item.entry || "開盤觀察"}｜出場時間：${exitTime}`,
-      `盤中最高：${formatTradePrice(track.observedHigh)}｜最高時間：${tradeTimeLabel(track.observedHighAt, "--:--")}｜盤中最低：${formatTradePrice(track.observedLow)}｜最低時間：${tradeTimeLabel(track.observedLowAt, "--:--")}`,
+      `盤中最高：${formatTradePrice(high.price)}｜最高時間：${settlementTimeLabel(high)}｜盤中最低：${formatTradePrice(low.price)}｜最低時間：${settlementTimeLabel(low)}`,
       `進場價：${formatTradePrice(entryPrice)}｜出場價：${formatTradePrice(exitPrice)}`,
       `停利：${formatTradePrice(item.takeProfit)}｜停損：${formatTradePrice(item.stopLoss)}｜不追高：${formatTradePrice(item.noChase)}`,
       `預計獲利金額：${money(profit)}`,
@@ -329,8 +351,10 @@ function buildStrategy3Report(payload, quotes, today, tracker) {
     const quote = quotes.get(item.code) || {};
     const track = scorecardTrack(tracker, "strategy3", item.code) || {};
     const entryPrice = cleanNumber(item.close);
-    const exitPrice = cleanNumber(track.observedHigh);
-    const exitTime = tradeTimeLabel(track.observedHighAt, "--:--");
+    const high = settlementHigh(track, quote);
+    const low = settlementLow(track, quote);
+    const exitPrice = high.price;
+    const exitTime = settlementTimeLabel(high);
     const profit = entryPrice ? (exitPrice - entryPrice) * LOT_SIZE : 0;
     const profitPct = entryPrice ? ((exitPrice - entryPrice) / entryPrice) * 100 : 0;
     const reason = (item.matches || []).map((match) => match.reason).filter(Boolean).join("；");
@@ -349,7 +373,7 @@ function buildStrategy3Report(payload, quotes, today, tracker) {
         profit,
       }),
       `收盤價：${formatTradePrice(item.close)}｜今日最高/出場：${formatTradePrice(exitPrice)}｜出場時間：${exitTime}`,
-      `盤中最高：${formatTradePrice(track.observedHigh)}｜最高時間：${tradeTimeLabel(track.observedHighAt, "--:--")}｜盤中最低：${formatTradePrice(track.observedLow)}｜最低時間：${tradeTimeLabel(track.observedLowAt, "--:--")}`,
+      `盤中最高：${formatTradePrice(high.price)}｜最高時間：${settlementTimeLabel(high)}｜盤中最低：${formatTradePrice(low.price)}｜最低時間：${settlementTimeLabel(low)}`,
       `漲幅：${percent(cleanNumber(item.percent))}｜成交量：${Math.round(cleanNumber(item.volumeLots || item.tradeVolume / 1000)).toLocaleString("zh-TW")} 張`,
       `周轉率：${(cleanNumber(item.turnoverRate)).toFixed(2)}%｜量比：${(cleanNumber(item.volumeRatio)).toFixed(2)}`,
       `預計獲利金額：${money(profit)}`,
@@ -417,10 +441,12 @@ async function main() {
     lines.push(`${STATE_LABELS[stateId]}｜${list.length} 筆`, "");
     list.forEach((record) => {
     const quote = quotes.get(record.code) || {};
-    const exitPrice = cleanNumber(record.observedHigh);
+    const high = settlementHigh(record, quote);
+    const low = settlementLow(record, quote);
+    const exitPrice = high.price;
     const entryPrice = cleanNumber(record.entryPrice);
     const supportPrice = cleanNumber(record.supportPrice);
-    const exitTime = tradeTimeLabel(record.observedHighAt, "--:--");
+    const exitTime = settlementTimeLabel(high);
     const profit = entryPrice ? (exitPrice - entryPrice) * LOT_SIZE : 0;
     const profitPct = entryPrice ? ((exitPrice - entryPrice) / entryPrice) * 100 : 0;
     const state = inferState(record);
@@ -442,7 +468,7 @@ async function main() {
         profitPct,
         profit,
       }),
-      `盤中最高：${formatTradePrice(record.observedHigh)}｜最高時間：${tradeTimeLabel(record.observedHighAt, "--:--")}｜盤中最低：${formatTradePrice(record.observedLow)}｜最低時間：${tradeTimeLabel(record.observedLowAt, "--:--")}`,
+      `盤中最高：${formatTradePrice(high.price)}｜最高時間：${settlementTimeLabel(high)}｜盤中最低：${formatTradePrice(low.price)}｜最低時間：${settlementTimeLabel(low)}`,
       `建議進場價：${formatTradePrice(entryPrice)}`,
       `出場價：${formatTradePrice(exitPrice)}`,
       `預計獲利金額：${money(profit)}`,
