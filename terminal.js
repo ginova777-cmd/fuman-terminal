@@ -3133,6 +3133,53 @@ intradayRadarStyles.textContent = `
   @media (max-width: 760px) {
     .intraday-signal-grid { grid-template-columns: 1fr; }
     .intraday-side-panel .intraday-signal-grid { grid-template-columns: 1fr; }
+    .swing-signal-grid {
+      display: flex;
+      gap: 10px;
+      overflow-x: auto;
+      padding: 2px 2px 10px;
+      scroll-snap-type: x mandatory;
+    }
+    .swing-card {
+      flex: 0 0 118px;
+      min-height: 132px;
+      padding: 13px 12px;
+      scroll-snap-align: start;
+    }
+    .swing-card strong,
+    .swing-card small {
+      writing-mode: horizontal-tb;
+      line-height: 1.35;
+    }
+    .swing-card strong { font-size: 16px; }
+    .swing-card small { font-size: 12px; }
+    .swing-card em { font-size: 27px; }
+    .swing-panel {
+      width: 100%;
+      max-width: 100%;
+      overflow-x: auto;
+    }
+    .swing-table,
+    .intraday-table {
+      min-width: 680px;
+    }
+    .strategy5-shell,
+    .strategy5-dashboard,
+    .strategy5-results,
+    .strategy5-results-head {
+      width: 100%;
+      max-width: 100%;
+      min-width: 0;
+    }
+    .strategy5-results-head h3 {
+      font-size: 26px;
+      line-height: 1.2;
+    }
+    .strategy5-results-head p {
+      overflow-wrap: anywhere;
+      font-size: 14px;
+      line-height: 1.55;
+    }
   }
 `;
 document.head.appendChild(intradayRadarStyles);
