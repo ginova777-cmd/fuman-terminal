@@ -335,13 +335,12 @@ let intradaySortDir = "desc";
 let intradaySignalFilter = "all";
 let strategyPresetMode = "";
 let strategy5ActiveId = "foreign_trust_breakout";
-const INTRADAY_HOT_SCAN_LIMIT = 450;
-const INTRADAY_BACKGROUND_BATCH = 300;
+const INTRADAY_HOT_SCAN_LIMIT = 900;
+const INTRADAY_BACKGROUND_BATCH = 450;
 const INTRADAY_FAST_SCAN_MS = 3000;
 const INTRADAY_BACKGROUND_SCAN_MS = 3000;
 const INTRADAY_CANDIDATE_TTL_MS = 15 * 60 * 1000;
-const INTRADAY_MIN_VOLUME = 500;
-const INTRADAY_MIN_VALUE = 20000000;
+const INTRADAY_MIN_VOLUME = 2000;
 
 const SECTOR_MAP = {
   "2454":"CPU/ASIC/IP","3443":"CPU/ASIC/IP","3661":"CPU/ASIC/IP","3529":"CPU/ASIC/IP",
@@ -1107,10 +1106,29 @@ function updateStrategyQuote(quote) {
   strategyRealtimeQuotes[quote.code] = { ...previous, ...quote, history, updatedAt: now };
 }
 
+function normalizeTradeVolumeLots(volume) {
+  const value = cleanNumber(volume);
+  if (!value) return 0;
+  return value > 100000 ? value / 1000 : value;
+}
+
+function estimateTradeValue(close, volumeLots) {
+  const price = cleanNumber(close);
+  const lots = cleanNumber(volumeLots);
+  return price && lots ? price * lots * 1000 : 0;
+}
+
+function estimateVwap(value, volumeLots) {
+  const tradeValue = cleanNumber(value);
+  const lots = cleanNumber(volumeLots);
+  return tradeValue && lots ? tradeValue / (lots * 1000) : 0;
+}
+
 function applyStrategyQuote(stock) {
   const quote = strategyRealtimeQuotes[stock.code];
   if (!quote?.close) return stock;
-  const value = quote.tradeVolume && quote.close ? quote.tradeVolume * quote.close : stock.value;
+  const quoteVolume = normalizeTradeVolumeLots(quote.tradeVolume);
+  const value = cleanNumber(quote.value || quote.tradeValue) || estimateTradeValue(quote.close, quoteVolume) || stock.value;
   const prevClose = cleanNumber(quote.prevClose);
   const change = prevClose ? quote.close - prevClose : cleanNumber(quote.change);
   const percent = prevClose ? (change / prevClose) * 100 : cleanNumber(quote.percent);
@@ -1120,7 +1138,7 @@ function applyStrategyQuote(stock) {
     close: quote.close,
     change,
     percent,
-    tradeVolume: quote.tradeVolume || stock.tradeVolume,
+    tradeVolume: quoteVolume || stock.tradeVolume,
     value: value || stock.value,
     open: quote.open,
     high: quote.high,
@@ -1162,7 +1180,6 @@ function getIntradaySignals(stock) {
   const pct = stock.percent || 0;
   const valueRank = stock.valueRank || 0;
   const volumeRank = stock.volumeRank || 0;
-  const value = cleanNumber(stock.value);
   const volume = cleanNumber(stock.tradeVolume);
   const inferredLimitUp = prevClose ? prevClose * 1.1 : 0;
   const limitUp = cleanNumber(stock.limitUp) || inferredLimitUp;
@@ -1170,7 +1187,7 @@ function getIntradaySignals(stock) {
   const dailyVolumeRatio = daily?.volumeRatio || 0;
   const yesterdayHigh = cleanNumber(daily?.prev?.high);
   const highest20Prev = cleanNumber(daily?.highest20Prev);
-  const vwap = stock.vwap || ((stock.value && stock.tradeVolume) ? stock.value / stock.tradeVolume : 0);
+  const vwap = stock.vwap || estimateVwap(stock.value, stock.tradeVolume);
   const gapPct = open && prevClose ? ((open - prevClose) / prevClose) * 100 : 0;
   const isNearLimit = limitUp && close >= limitUp * 0.985;
   const breaksYesterdayHigh = yesterdayHigh && close >= yesterdayHigh * 1.002;
@@ -1220,7 +1237,7 @@ function getIntradaySignals(stock) {
   const guaAngelLong = guaAllowed && vwap && low <= vwap && close > vwap && rsi > 45 && close > open && ema9 > ema20;
   const guaVwapLong = guaAllowed && vwap && priorPrice <= vwap && close > vwap && rsi > 50 && close > open;
 
-  if ((pct > 2 || (open && close >= open) || volumeMilestone) && (value >= INTRADAY_MIN_VALUE || volume >= INTRADAY_MIN_VOLUME)) {
+  if ((pct > 2 || (open && close >= open) || volumeMilestone) && volume >= INTRADAY_MIN_VOLUME) {
     signals.push({
       id: "early_strength",
       short: "早盤強",
@@ -1318,8 +1335,8 @@ function getIntradaySignals(stock) {
     });
   }
 
-  if (pct >= 1 && valueRank >= 55 && volumeRank >= 55 && (!open || close >= open) && (!vwap || close >= vwap || pct >= 5) && (!high || close >= high * 0.992 || pct >= 5)) {
-    signals.push({ id: "breakout", short: "突破", icon: "🔥", reason: `突破盤中強勢區，漲幅 ${pct.toFixed(2)}%，成交值/量能同步放大。` });
+  if (pct >= 1 && (volumeRank >= 55 || volume >= 5000) && (!open || close >= open) && (!vwap || close >= vwap || pct >= 5) && (!high || close >= high * 0.992 || pct >= 5)) {
+    signals.push({ id: "breakout", short: "突破", icon: "🔥", reason: `突破盤中強勢區，漲幅 ${pct.toFixed(2)}%，成交張數同步放大。` });
   }
 
   if (close > yesterdayHigh && (!vwap || close > vwap) && open && close > open && (volumeRank >= 50 || minuteVolumeRising || volumeMilestone)) {
@@ -1331,7 +1348,7 @@ function getIntradaySignals(stock) {
     });
   }
 
-  if (close > ma35Proxy && macdUp && pct > 0 && valueRank >= 55) {
+  if (close > ma35Proxy && macdUp && pct > 0 && (volumeRank >= 55 || volume >= 5000)) {
     signals.push({ id: "ma35_macd", short: "MA35", icon: "🟢", reason: `站上 MA35 近似線，短線均值高於長線均值，MACD 動能向上。` });
   }
 
@@ -1357,7 +1374,7 @@ function getIntradaySignals(stock) {
     });
   }
 
-  if (minuteVolumeRising && close > ma35Proxy && close >= open && (macdUp || valueRank >= 55 || volumeRank >= 55)) {
+  if (minuteVolumeRising && close > ma35Proxy && close >= open && (macdUp || volumeRank >= 55 || volume >= 5000)) {
     signals.push({
       id: "volume_ma35",
       short: "量+MA35",
@@ -1486,14 +1503,12 @@ function isIntradayTradable(stock) {
   if (/軍工|航太|漢翔|雷虎|駐龍|寶一|晟田|長榮航太|龍德造船|台船|榮剛/i.test(name)) return false;
   if (/^(28|58)/.test(code)) return false;
   if (INTRADAY_EXCLUDED_CODES.has(code)) return false;
-  if (close >= 900) return false;
   return true;
 }
 
 function hasIntradayLiquidity(stock) {
   const volume = cleanNumber(stock?.tradeVolume);
-  const value = cleanNumber(stock?.value) || cleanNumber(stock?.close) * volume;
-  return volume >= INTRADAY_MIN_VOLUME && value >= INTRADAY_MIN_VALUE;
+  return volume >= INTRADAY_MIN_VOLUME;
 }
 
 function roundTradePrice(price) {
@@ -1517,7 +1532,7 @@ function getIntradayEntryPlan(stock) {
   const tradedLow = low || close;
   const executableClose = Math.max(close, tradedLow);
   const prevHigh = cleanNumber(stock.swingDaily?.prev?.high);
-  const vwap = stock.vwap || ((stock.value && stock.tradeVolume) ? stock.value / stock.tradeVolume : 0);
+  const vwap = stock.vwap || estimateVwap(stock.value, stock.tradeVolume);
   const prices = strategyRealtimeQuotes[stock.code]?.history?.map((item) => item.price).filter(Boolean) || [];
   const ma35 = avg(prices.slice(-8)) || avg([open, high, low, close].filter(Boolean));
   const ibRange = high && low ? high - low : 0;
@@ -1713,7 +1728,7 @@ function evaluateStrategyStock(stock) {
 
 const INTRADAY_SIGNAL_DEFS = [
   { id: "early_strength", title: "早盤強勢", icon: "⚡", hint: "漲幅與量能先進雷達" },
-  { id: "volume_burst", title: "爆量", icon: "📊", hint: "成交量/成交值進市場前段" },
+  { id: "volume_burst", title: "爆量", icon: "📊", hint: "成交張數進市場前段" },
   { id: "daily_breakout", title: "日K突破", icon: "▲", hint: "突破昨日或20日壓力" },
   { id: "gap", title: "跳空", icon: "🚀", hint: "開盤高於昨收且量能放大" },
   { id: "breakout", title: "突破", icon: "🔥", hint: "站上盤中強勢區與 VWAP" },
@@ -2012,20 +2027,27 @@ function getIntradayState(stock) {
   ].includes(signal.id));
   const hasVolumeSignal = signals.some((signal) => signal.id === "volume_burst");
   const hasDailyTrigger = signals.some((signal) => signal.id === "daily_breakout" || signal.id === "gap" || signal.id === "breakout");
-  const liquid = value >= 150000000 || volume >= 2000;
-  const tradableLiquidity = value >= 80000000 || volume >= 1000;
+  const liquid = volume >= 10000;
+  const tradableLiquidity = volume >= 5000;
   const aboveOpen = !open || close >= open;
   const nearHigh = !high || close >= high * 0.985;
   const tooHotToChase = pct >= 8.8;
   const dailyOk = !daily || daily.stage?.tone !== "hot" || hasDailyTrigger;
   const winRateSetup = liquid && dailyOk && hasVolumeSignal && hasDailyTrigger && aboveOpen && nearHigh && pct >= 1 && pct <= 8.8;
+  const earlyEntrySetup = tradableLiquidity
+    && hasSignal
+    && !tooHotToChase
+    && aboveOpen
+    && pct >= 0.5
+    && pct <= 7.5
+    && (volumeIncreasing || hasVolumeSignal || hasDailyTrigger);
   const candidateSetup = tradableLiquidity && hasSignal && !tooHotToChase && (volumeIncreasing || (hasVolumeSignal && pct >= 0.5));
 
-  if (winRateSetup) {
+  if (winRateSetup || earlyEntrySetup || candidateSetup) {
     return { id: "go", label: "可進場", cls: "go" };
   }
-  if (candidateSetup || (tradableLiquidity && hasSignal && pct >= 0.5 && hasStrongSignal)) {
-    return { id: "wait", label: "待確認", cls: "wait" };
+  if (tradableLiquidity && hasSignal && pct >= 0.5 && hasStrongSignal) {
+    return { id: "watch", label: "觀察", cls: "watch" };
   }
   return { id: "watch", label: "觀察", cls: "watch" };
 }
@@ -2725,7 +2747,7 @@ intradayRadarStyles.textContent = `
   }
   .intraday-zones {
     display: grid;
-    grid-template-columns: 1.12fr 1fr 1fr;
+    grid-template-columns: 1.12fr 1fr;
     gap: 12px;
   }
   .intraday-zone {
@@ -3205,7 +3227,7 @@ function renderIntradayRadar(evaluated) {
       return { ...row, intradayState, intradayGoFirstSeenAt: intradayGoFirstSeenAt.get(row.code) || null };
     });
   const tradableRows = allRows;
-  const stateFilters = new Set(["go", "wait", "watch"]);
+  const stateFilters = new Set(["go", "watch"]);
   const filteredRows = intradaySignalFilter === "all"
     ? tradableRows
     : stateFilters.has(intradaySignalFilter)
@@ -3213,7 +3235,7 @@ function renderIntradayRadar(evaluated) {
       : allRows.filter((stock) => (stock.intradaySignals || []).some((signal) => signal.id === intradaySignalFilter));
   const rows = sortIntradayRows(filteredRows).slice(0, 80);
   const signalCounts = Object.fromEntries(INTRADAY_SIGNAL_DEFS.map((signal) => [signal.id, 0]));
-  const stateCounts = { go: 0, wait: 0, watch: 0 };
+  const stateCounts = { go: 0, watch: 0 };
   allRows.forEach((stock) => {
     stateCounts[stock.intradayState.id] += 1;
     (stock.intradaySignals || []).forEach((signal) => {
@@ -3223,7 +3245,6 @@ function renderIntradayRadar(evaluated) {
   const sortedAllRows = sortIntradayRows(tradableRows);
   const zoneRows = {
     go: sortedAllRows.filter((stock) => stock.intradayState.id === "go").slice(0, 3),
-    wait: sortedAllRows.filter((stock) => stock.intradayState.id === "wait").slice(0, 3),
     watch: sortedAllRows.filter((stock) => stock.intradayState.id === "watch").slice(0, 3),
   };
   const scanTime = strategyLastScanAt
@@ -3276,9 +3297,8 @@ function renderIntradayRadar(evaluated) {
 
   const tabs = [
     ["all", "全部", tradableRows.length],
-    ["go", "可進場", stateCounts.go],
-    ["wait", "待確認", stateCounts.wait],
-    ["watch", "觀察", stateCounts.watch],
+    ["go", "A進場", stateCounts.go],
+    ["watch", "B觀察", stateCounts.watch],
     ...INTRADAY_SIGNAL_DEFS.map((signal) => [signal.id, signal.title, signalCounts[signal.id] || 0]),
   ].map(([id, label, count]) => `<button class="${intradaySignalFilter === id ? "active" : ""}" type="button" data-intraday-filter="${id}">${label}(${count})</button>`).join("");
 
@@ -3309,15 +3329,11 @@ function renderIntradayRadar(evaluated) {
   const zones = `
     <section class="intraday-zones">
       <article class="intraday-zone go">
-        <header><div><h3>A區 可進場</h3><small>量夠、價強、靠近高點</small></div><strong>${stateCounts.go}</strong></header>
+        <header><div><h3>A區 進場區</h3><small>量夠、價強、靠近高點</small></div><strong>${stateCounts.go}</strong></header>
         <div class="intraday-picks">${renderZonePicks(zoneRows.go, "go")}</div>
       </article>
-      <article class="intraday-zone wait">
-        <header><div><h3>B區 待確認</h3><small>等站穩開盤價或再放量</small></div><strong>${stateCounts.wait}</strong></header>
-        <div class="intraday-picks">${renderZonePicks(zoneRows.wait, "wait")}</div>
-      </article>
       <article class="intraday-zone watch">
-        <header><div><h3>C區 觀察</h3><small>量能或型態還沒到位</small></div><strong>${stateCounts.watch}</strong></header>
+        <header><div><h3>B區 觀察區</h3><small>有右側訊號，持續觀察量價延續</small></div><strong>${stateCounts.watch}</strong></header>
         <div class="intraday-picks">${renderZonePicks(zoneRows.watch, "watch")}</div>
       </article>
     </section>
@@ -4591,7 +4607,7 @@ function parseStocksForLatest(stocks) {
     const code = valueOf(stock, ["證券代號", "Code"]);
     const name = valueOf(stock, ["證券名稱", "Name"]);
     const value = cleanNumber(valueOf(stock, ["成交金額", "TradeValue"]));
-    const tradeVolume = cleanNumber(valueOf(stock, ["成交股數", "TradeVolume"]));
+    const tradeVolume = normalizeTradeVolumeLots(valueOf(stock, ["成交股數", "TradeVolume"]));
     return { code, name, value, tradeVolume, ...stockChange(stock) };
   }).filter((s) => s.code && s.name && s.close);
 }
@@ -4904,11 +4920,10 @@ function getIntradayHotScore(stock) {
   const latestDelta = cleanNumber(history.at(-1)?.deltaVolume);
   const signalBonus = (live.intradaySignals?.length || 0) * 900;
   const pctScore = Math.max(pct, -2) * 150;
-  const valueScore = Math.log10(Math.max(value, 1)) * 42;
   const volumeScore = Math.log10(Math.max(volume, 1)) * 38;
   const deltaScore = Math.log10(Math.max(latestDelta, 1)) * 70;
   const pricePenalty = close >= 900 ? 9999 : 0;
-  return signalBonus + pctScore + valueScore + volumeScore + deltaScore - pricePenalty;
+  return signalBonus + pctScore + volumeScore + deltaScore - pricePenalty;
 }
 
 function uniqueStocksByCode(stocks) {
@@ -4938,10 +4953,27 @@ function markIntradayCandidates(stocks) {
     const value = cleanNumber(live.value);
     const volume = cleanNumber(live.tradeVolume);
     const latestDelta = cleanNumber(strategyRealtimeQuotes[code]?.history?.at(-1)?.deltaVolume);
-    if (hasIntradayLiquidity(live) && (pct >= 1.5 || value >= INTRADAY_MIN_VALUE || volume >= INTRADAY_MIN_VOLUME || latestDelta >= 50)) {
+    if (hasIntradayLiquidity(live) && (pct >= 1.5 || volume >= INTRADAY_MIN_VOLUME || latestDelta >= 50)) {
       intradayCandidateSeenAt[code] = now;
     }
   });
+}
+
+function getBaseStrongIntradayStocks(scanSource) {
+  return scanSource
+    .filter((stock) => {
+      const live = applyStrategyQuote(stock);
+      const pct = cleanNumber(live.percent);
+      const volume = cleanNumber(live.tradeVolume);
+      const close = cleanNumber(live.close);
+      const open = cleanNumber(live.open);
+      return close && (
+        pct >= 2 ||
+        (open && close >= open && pct >= 0.5) ||
+        volume >= 2000
+      );
+    })
+    .sort((a, b) => getIntradayHotScore(b) - getIntradayHotScore(a));
 }
 
 function getIntradayCandidateStocks(scanSource) {
@@ -5024,10 +5056,12 @@ async function refreshStrategyRealtimeScan(mode = "hot") {
     const rankedHotStocks = [...scanSource]
       .sort((a, b) => getIntradayHotScore(b) - getIntradayHotScore(a))
       .slice(0, INTRADAY_HOT_SCAN_LIMIT);
+    const baseStrongStocks = getBaseStrongIntradayStocks(scanSource);
     const candidateStocks = getIntradayCandidateStocks(scanSource);
     const hotStocks = isStrategy5Realtime
       ? []
-      : uniqueStocksByCode([...candidateStocks, ...rankedHotStocks]).slice(0, scanMode === "force" ? INTRADAY_HOT_SCAN_LIMIT + 150 : INTRADAY_HOT_SCAN_LIMIT);
+      : uniqueStocksByCode([...candidateStocks, ...baseStrongStocks, ...rankedHotStocks])
+        .slice(0, scanMode === "force" ? INTRADAY_HOT_SCAN_LIMIT + 300 : INTRADAY_HOT_SCAN_LIMIT);
     const hotCodes = new Set(hotStocks.map((stock) => stock.code));
     const backgroundPool = scanSource.filter((stock) => !hotCodes.has(stock.code));
     const shouldScanHot = !isStrategy5Realtime && (scanMode === "hot" || scanMode === "force");
@@ -5487,7 +5521,7 @@ async function fetchDailyStockFallback(code) {
     const change = cleanNumber(item.Change);
     const previous = close - change;
     const percent = previous ? (change / previous) * 100 : 0;
-    return { code, name: item.Name || code, close, change, percent, tradeVolume: cleanNumber(item.TradeVolume) };
+    return { code, name: item.Name || code, close, change, percent, tradeVolume: normalizeTradeVolumeLots(item.TradeVolume) };
   } catch {
     return null;
   }
