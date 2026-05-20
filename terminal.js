@@ -273,6 +273,7 @@ let strategyRealtimeLoading = false;
 let strategyRealtimeCursor = 0;
 let strategyRealtimeQuotes = {};
 let strategyLastScanAt = 0;
+let strategyRealtimeStats = { requested: 0, received: 0, failed: 0, lastError: "" };
 let strategyRealtimeBackgroundCursor = 0;
 const intradayGoFirstSeenAt = new Map();
 let intradayCandidateSeenAt = {};
@@ -339,8 +340,8 @@ const INTRADAY_BACKGROUND_BATCH = 300;
 const INTRADAY_FAST_SCAN_MS = 3000;
 const INTRADAY_BACKGROUND_SCAN_MS = 20000;
 const INTRADAY_CANDIDATE_TTL_MS = 15 * 60 * 1000;
-const INTRADAY_MIN_VOLUME = 2000;
-const INTRADAY_MIN_VALUE = 80000000;
+const INTRADAY_MIN_VOLUME = 500;
+const INTRADAY_MIN_VALUE = 20000000;
 
 const SECTOR_MAP = {
   "2454":"CPU/ASIC/IP","3443":"CPU/ASIC/IP","3661":"CPU/ASIC/IP","3529":"CPU/ASIC/IP",
@@ -1205,7 +1206,7 @@ function getIntradaySignals(stock) {
   const ibRange = high && low ? high - low : 0;
   const f618 = ibRange > 0 ? high - ibRange * 0.618 : 0;
   const signals = [];
-  if (pct < 2 || !close || !hasIntradayLiquidity(stock)) return signals;
+  if (pct < 0.5 || !close || !hasIntradayLiquidity(stock)) return signals;
   const volumeMilestone = volume >= 10000 ? 10000 : volume >= 5000 ? 5000 : volume >= 2000 ? 2000 : 0;
   const minuteVolumeRising = deltaVolumeRising || recentDeltaVolume >= 100;
   const minuteBurst = recentDeltaVolume >= 300 || (dayAvgRate && currentRate >= dayAvgRate * 3 && recentDeltaVolume >= 120) || (recentBaseRate && currentRate >= recentBaseRate * 2.5 && recentDeltaVolume >= 120);
@@ -1218,6 +1219,15 @@ function getIntradaySignals(stock) {
   const guaOrbLong = guaAllowed && guaPriorHigh && close > guaPriorHigh && close > open;
   const guaAngelLong = guaAllowed && vwap && low <= vwap && close > vwap && rsi > 45 && close > open && ema9 > ema20;
   const guaVwapLong = guaAllowed && vwap && priorPrice <= vwap && close > vwap && rsi > 50 && close > open;
+
+  if (pct >= 0.5 && (close >= open || pct >= 1.2) && (value >= INTRADAY_MIN_VALUE || volume >= INTRADAY_MIN_VOLUME)) {
+    signals.push({
+      id: "early_strength",
+      short: "早盤強",
+      icon: "⚡",
+      reason: `早盤即時偵測：漲幅 ${pct.toFixed(2)}%，成交量 ${Math.round(volume).toLocaleString("zh-TW")} 張，先列入雷達觀察。`,
+    });
+  }
 
   if (volumeMilestone && minuteVolumeRising) {
     const burstLabel = minuteBurst
@@ -1702,6 +1712,7 @@ function evaluateStrategyStock(stock) {
 }
 
 const INTRADAY_SIGNAL_DEFS = [
+  { id: "early_strength", title: "早盤強勢", icon: "⚡", hint: "漲幅與量能先進雷達" },
   { id: "volume_burst", title: "爆量", icon: "📊", hint: "成交量/成交值進市場前段" },
   { id: "daily_breakout", title: "日K突破", icon: "▲", hint: "突破昨日或20日壓力" },
   { id: "gap", title: "跳空", icon: "🚀", hint: "開盤高於昨收且量能放大" },
@@ -1974,6 +1985,7 @@ function getIntradayState(stock) {
   const hasFallback = (stock.matches || []).some((match) => match.id === "intraday_2m");
   const hasSignal = signals.length > 0 || hasFallback;
   const hasStrongSignal = signals.some((signal) => [
+    "early_strength",
     "volume_burst",
     "daily_breakout",
     "gap",
@@ -3172,15 +3184,23 @@ function renderIntradayRadar(evaluated) {
   const keyword = strategyKeyword.trim().toLowerCase();
   const now = Date.now();
   const allRows = evaluated
-    .filter((stock) => stock.isRealtime)
     .filter(isIntradayTradable)
-    .filter((stock) => cleanNumber(stock.percent) >= 2)
-    .filter((stock) => (stock.intradaySignals || []).length || (stock.matches || []).some((match) => match.id === "intraday_2m"))
+    .filter((stock) => {
+      const pct = cleanNumber(stock.percent);
+      const value = cleanNumber(stock.value);
+      const volume = cleanNumber(stock.tradeVolume);
+      return pct >= 0.3 || value >= INTRADAY_MIN_VALUE || volume >= INTRADAY_MIN_VOLUME;
+    })
     .filter((stock) => !keyword || stock.code.includes(keyword) || stock.name.toLowerCase().includes(keyword))
     .map((stock) => {
       const signals = (stock.intradaySignals || []).length
         ? stock.intradaySignals
-        : [{ id: "volume_price", short: "量價", icon: "⚡", reason: (stock.matches || []).find((match) => match.id === "intraday_2m")?.reason || "盤中量價同步偏強，列入當沖雷達觀察。" }];
+        : [{
+            id: "early_strength",
+            short: "雷達",
+            icon: "⚡",
+            reason: (stock.matches || []).find((match) => match.id === "intraday_2m")?.reason || "已取得即時報價，先列入策略2雷達觀察；等待量價訊號升級。",
+          }];
       const row = { ...stock, intradaySignals: signals };
       const intradayState = getIntradayState(row);
       if (intradayState.id === "go" && !intradayGoFirstSeenAt.has(row.code)) {
@@ -3213,13 +3233,17 @@ function renderIntradayRadar(evaluated) {
   const scanTime = strategyLastScanAt
     ? new Date(strategyLastScanAt).toLocaleTimeString("zh-TW", { hour12: false })
     : "等待開盤";
+  const scanStatus = strategyLastScanAt
+    ? `｜本輪巡邏 ${strategyRealtimeStats.received}/${strategyRealtimeStats.requested} 筆${strategyRealtimeStats.failed ? `｜失敗批次 ${strategyRealtimeStats.failed}` : ""}${strategyRealtimeStats.lastError ? `｜${strategyRealtimeStats.lastError}` : ""}`
+    : "";
 
-  if (strategySummary) strategySummary.textContent = `秒級熱門池｜3秒快掃｜20秒背景補完整市場｜最後更新 ${scanTime}`;
+  if (strategySummary) strategySummary.textContent = `秒級熱門池｜3秒快掃｜20秒背景補完整市場｜最後更新 ${scanTime}${scanStatus}`;
   if (strategyMatchCount) strategyMatchCount.textContent = rows.length.toLocaleString("zh-TW");
   if (strategyAvgScore) strategyAvgScore.textContent = stateCounts.go.toLocaleString("zh-TW");
   if (strategyTopHit) strategyTopHit.textContent = rows.length ? `${Math.max(...rows.map((stock) => stock.intradaySignals.length))}/6` : "0/6";
 
   const cardClass = {
+    early_strength: "warn",
     volume_burst: "ma",
     daily_breakout: "ma",
     ma35_macd: "ma",
@@ -3324,7 +3348,7 @@ function renderIntradayRadar(evaluated) {
       `;
     }).join("")}
   ` : `
-    <tr><td colspan="9">2分K當沖雷達框架已啟動。現在沒有觸發訊號；開盤後會輪巡可當沖股票並顯示符合「跳空 / 突破 / MA35+MACD / 鑽石 / 瞬間拉抬」的股票。</td></tr>
+    <tr><td colspan="9">策略2即時巡邏中：目前尚未取得符合基本量價的候選。請確認本輪巡邏筆數是否有增加；若為 0/0，代表前端尚未啟動即時批次。</td></tr>
   `;
 
   strategyTable.innerHTML = `
@@ -4860,7 +4884,12 @@ function applyStrategyPresetFromLink(link) {
   } else {
     deferUiWork(loadStrategyStocks);
   }
-  if (text.includes("策略2")) deferUiWork(() => refreshStrategyRealtimeScan(true), 80);
+  if (text.includes("策略2")) {
+    deferUiWork(async () => {
+      await ensureStrategyStocksLoaded();
+      await refreshStrategyRealtimeScan("force");
+    }, 80);
+  }
   if (text.includes("策略1")) {
     deferUiWork(() => loadOpenBuyCache(true), 60);
   }
@@ -4939,16 +4968,29 @@ function sliceBackgroundScan(stocks, count) {
 
 async function fetchStrategyRealtimeBatches(stocks, batchSize = 80) {
   const requests = [];
+  let requested = 0;
   for (let start = 0; start < stocks.length; start += batchSize) {
     const codes = stocks.slice(start, start + batchSize).map((stock) => stock.code).filter(Boolean);
     if (codes.length) {
+      requested += codes.length;
       requests.push(fetchJson(`${endpoints.realtime}?codes=${encodeURIComponent(codes.join(","))}&t=${Date.now()}`, 12000));
     }
   }
   const payloads = await Promise.allSettled(requests);
+  let received = 0;
+  let failed = 0;
+  let lastError = "";
   payloads.forEach((result) => {
-    if (result.status === "fulfilled") normalizeArray(result.value?.quotes).forEach(updateStrategyQuote);
+    if (result.status === "fulfilled") {
+      const quotes = normalizeArray(result.value?.quotes);
+      received += quotes.length;
+      quotes.forEach(updateStrategyQuote);
+    } else {
+      failed += 1;
+      lastError = result.reason?.message || String(result.reason || "realtime failed");
+    }
   });
+  return { requested, received, failed, lastError };
 }
 
 async function refreshStrategyRealtimeScan(mode = "hot") {
@@ -4957,11 +4999,22 @@ async function refreshStrategyRealtimeScan(mode = "hot") {
     return;
   }
   if (scanMode === "strategy5-full") return;
-  if (!latestStocks.length) return;
   const isStrategyVisible = document.querySelector("#strategy-view")?.classList.contains("active");
   const isRealtimeStrategy = selectedStrategyIds.has("intraday_2m");
   const isStrategy5Realtime = false;
   if (scanMode !== "force" && scanMode !== "strategy5-full" && (!isStrategyVisible || (!isRealtimeStrategy && !isStrategy5Realtime))) return;
+  if (!latestStocks.length) {
+    if (isStrategyVisible && isRealtimeStrategy && strategySummary) {
+      strategySummary.textContent = "策略2-當沖雷達｜正在載入股票清單，載入後會立即掃描。";
+    }
+    await ensureStrategyStocksLoaded();
+  }
+  if (!latestStocks.length) {
+    if (isStrategyVisible && isRealtimeStrategy && strategyTable) {
+      strategyTable.innerHTML = `<div class="empty-state">策略2暫時無法取得股票清單，請稍後再重新整理。</div>`;
+    }
+    return;
+  }
 
   strategyRealtimeLoading = true;
   try {
@@ -4990,21 +5043,39 @@ async function refreshStrategyRealtimeScan(mode = "hot") {
       : [];
     const hotBatchSize = 75;
     const backgroundBatchSize = 90;
+    let requested = 0;
+    let received = 0;
+    let failed = 0;
+    let lastError = "";
 
     strategyRealtimeCursor = (strategyRealtimeCursor + hotStocks.length + backgroundStocks.length) % Math.max(scanSource.length, 1);
     if (shouldScanHot) {
-      await fetchStrategyRealtimeBatches(hotStocks, hotBatchSize);
+      const stats = await fetchStrategyRealtimeBatches(hotStocks, hotBatchSize);
+      requested += stats.requested;
+      received += stats.received;
+      failed += stats.failed;
+      lastError = stats.lastError || lastError;
       markIntradayCandidates(hotStocks);
       strategyLastScanAt = Date.now();
+      strategyRealtimeStats = { requested, received, failed, lastError };
       renderStrategyScanner();
     }
     if (backgroundStocks.length) {
-      await fetchStrategyRealtimeBatches(backgroundStocks, backgroundBatchSize);
+      const stats = await fetchStrategyRealtimeBatches(backgroundStocks, backgroundBatchSize);
+      requested += stats.requested;
+      received += stats.received;
+      failed += stats.failed;
+      lastError = stats.lastError || lastError;
       markIntradayCandidates(backgroundStocks);
       strategyLastScanAt = Date.now();
+      strategyRealtimeStats = { requested, received, failed, lastError };
       renderStrategyScanner();
     }
   } catch (error) {
+    strategyRealtimeStats = { ...strategyRealtimeStats, lastError: error?.message || String(error || "scan failed") };
+    if (isViewActive("strategy") && selectedStrategyIds.has("intraday_2m") && strategySummary) {
+      strategySummary.textContent = `策略2即時巡邏失敗：${strategyRealtimeStats.lastError}`;
+    }
   } finally {
     strategyRealtimeLoading = false;
   }
@@ -5055,7 +5126,7 @@ if (brandRefresh) {
     window.location.reload();
   });
 }
-stockSearch.addEventListener("input", (e)=>searchStocks(e.target.value));
+stockSearch?.addEventListener("input", (e)=>searchStocks(e.target.value));
 viewLinks.forEach((link)=>{
   link.addEventListener("click",(e)=>{
     e.preventDefault();
