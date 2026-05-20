@@ -26,6 +26,30 @@ function preserveScorecardSource(payload) {
   }, null, 2)}\n`);
 }
 
+function sourceDate(payload) {
+  const direct = String(payload?.usedDate || payload?.date || payload?.quoteDate || "").replace(/\D/g, "");
+  if (/^\d{8}$/.test(direct)) return direct;
+  const matchDate = String((payload?.matches || []).find((item) => item?.quoteDate)?.quoteDate || "").replace(/\D/g, "");
+  if (/^\d{8}$/.test(matchDate)) return matchDate;
+  const updated = Date.parse(payload?.updatedAt || "");
+  if (!Number.isFinite(updated)) return "";
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Taipei",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date(updated)).replace(/\D/g, "");
+}
+
+function preservePreviousTradingSource(previousPayload, currentPayload) {
+  const previousDate = sourceDate(previousPayload);
+  const currentDate = sourceDate(currentPayload);
+  if (!(previousPayload.matches || []).length) return;
+  if (!/^\d{8}$/.test(previousDate) || !/^\d{8}$/.test(currentDate)) return;
+  if (previousDate >= currentDate) return;
+  preserveScorecardSource(previousPayload);
+}
+
 function normalizeCode(value) {
   return String(value || "").replace(/\D/g, "").slice(0, 4);
 }
@@ -119,7 +143,6 @@ async function main() {
 
   const previousRaw = readJson(OUT_FILE, { ok: true, cursor: 0, total: codes.length, scannedCodes: [], matches: [] });
   const backup = readJson(BACKUP_FILE, { ok: true, matches: [] });
-  preserveScorecardSource((previousRaw.matches || []).length ? previousRaw : backup);
   const previous = (previousRaw.matches || []).length ? previousRaw : { ...previousRaw, matches: backup.matches || [] };
   const previousMatches = new Map((previous.matches || []).map((item) => [item.code, item]));
   const scanned = new Set(FULL_SCAN ? [] : (previous.scannedCodes || []));
@@ -158,10 +181,12 @@ async function main() {
   const matches = [...previousMatches.values()]
     .sort((a, b) => (b.score || 0) - (a.score || 0) || (b.percent || 0) - (a.percent || 0))
     .slice(0, 200);
+  const quoteDate = universe.find((stock) => stock.quoteDate)?.quoteDate || "";
   const output = {
     ok: true,
     source: "github-actions",
     updatedAt: new Date().toISOString(),
+    usedDate: quoteDate,
     fullScan: FULL_SCAN,
     cursor,
     total: codes.length,
@@ -170,6 +195,8 @@ async function main() {
     count: matches.length,
     matches,
   };
+
+  preservePreviousTradingSource((previousRaw.matches || []).length ? previousRaw : backup, output);
 
   fs.mkdirSync(path.dirname(OUT_FILE), { recursive: true });
   fs.writeFileSync(OUT_FILE, `${JSON.stringify(output, null, 2)}\n`);
