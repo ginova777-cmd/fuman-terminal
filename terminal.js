@@ -3435,6 +3435,62 @@ intradayRadarStyles.textContent = `
       overflow-wrap: anywhere;
       word-break: break-all;
     }
+    #strategy-view .swing-panel,
+    #strategy-view .intraday-panel,
+    #strategy-view .strategy5-results {
+      overflow: visible !important;
+    }
+    #strategy-view .swing-table tr,
+    #strategy-view .intraday-table tr {
+      overflow: visible !important;
+      padding: 10px !important;
+    }
+    #strategy-view .swing-table td,
+    #strategy-view .intraday-table td {
+      display: block !important;
+      grid-template-columns: none !important;
+      width: 100% !important;
+      max-width: 100% !important;
+      min-width: 0 !important;
+      overflow: visible !important;
+      padding: 6px 0 !important;
+      white-space: normal !important;
+      overflow-wrap: anywhere !important;
+      word-break: break-word !important;
+    }
+    #strategy-view .swing-table td::before,
+    #strategy-view .intraday-table td::before {
+      display: block !important;
+      width: auto !important;
+      margin: 0 0 4px !important;
+      font-size: 12px !important;
+      line-height: 1.25 !important;
+    }
+    #strategy-view .swing-table td > *,
+    #strategy-view .intraday-table td > *,
+    #strategy-view .swing-badges,
+    #strategy-view .intraday-badges,
+    #strategy-view .strategy-chips {
+      max-width: 100% !important;
+      overflow: visible !important;
+      white-space: normal !important;
+      overflow-wrap: anywhere !important;
+      word-break: break-word !important;
+    }
+    #strategy-view .swing-badges,
+    #strategy-view .intraday-badges,
+    #strategy-view .strategy-chips {
+      display: flex !important;
+      flex-wrap: wrap !important;
+      gap: 6px !important;
+    }
+    #strategy-view .swing-stage,
+    #strategy-view .swing-score,
+    #strategy-view .intraday-state,
+    #strategy-view .intraday-score {
+      max-width: 100% !important;
+      white-space: normal !important;
+    }
     .strategy5-shell,
     .strategy5-dashboard,
     .strategy5-results,
