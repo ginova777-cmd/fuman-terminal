@@ -5,6 +5,7 @@ const { cleanNumber, formatTradePrice } = require("./intraday-radar-rules");
 
 const ROOT = path.resolve(__dirname, "..");
 const SIGNAL_FILE = path.join(ROOT, ".intraday-cache", "signals.json");
+const REPORT_SENT_DIR = path.join(ROOT, ".intraday-cache", "sent-reports");
 const OPEN_BUY_FILE = path.join(ROOT, "data", "open-buy-latest.json");
 const OPEN_BUY_BACKUP_FILE = path.join(ROOT, "data", "open-buy-backup.json");
 const STRATEGY3_FILE = path.join(ROOT, "data", "strategy3-latest.json");
@@ -25,6 +26,14 @@ function taipeiDateKey(date = new Date()) {
   }).formatToParts(date);
   const byType = Object.fromEntries(parts.map((part) => [part.type, part.value]));
   return `${byType.year}-${byType.month}-${byType.day}`;
+}
+
+function taipeiHour(date = new Date()) {
+  return Number(new Intl.DateTimeFormat("en-US", {
+    timeZone: "Asia/Taipei",
+    hour: "2-digit",
+    hour12: false,
+  }).format(date));
 }
 
 function dateSlash(value) {
@@ -273,6 +282,12 @@ async function main() {
   const openBuyPayload = readCacheWithBackup(OPEN_BUY_FILE, OPEN_BUY_BACKUP_FILE);
   const strategy3Payload = readCacheWithBackup(STRATEGY3_FILE, STRATEGY3_BACKUP_FILE);
   const today = cache.date || taipeiDateKey();
+  const reportSlot = process.env.REPORT_SLOT || (taipeiHour() >= 15 ? "final" : "initial");
+  const sentFile = path.join(REPORT_SENT_DIR, `${today}-${reportSlot}.json`);
+  if (fs.existsSync(sentFile) && process.env.FORCE_REPORT !== "1") {
+    console.log(`scorecard already sent for ${today} ${reportSlot}`);
+    return;
+  }
   const records = mergeRecords(cache.records || []);
   const codes = [...new Set([
     ...records.map((record) => record.code),
@@ -346,6 +361,8 @@ async function main() {
     pass,
     to,
   });
+  fs.mkdirSync(REPORT_SENT_DIR, { recursive: true });
+  fs.writeFileSync(sentFile, `${JSON.stringify({ date: today, slot: reportSlot, sentAt: new Date().toISOString(), to }, null, 2)}\n`);
 }
 
 main().catch((error) => {
