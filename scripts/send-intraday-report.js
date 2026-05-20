@@ -6,6 +6,7 @@ const { cleanNumber, formatTradePrice } = require("./intraday-radar-rules");
 const ROOT = path.resolve(__dirname, "..");
 const SIGNAL_FILE = path.join(ROOT, ".intraday-cache", "signals.json");
 const SCORECARD_TRACK_FILE = path.join(ROOT, ".intraday-cache", "scorecard-trades.json");
+const STRATEGY2_REPORT_FILE = path.join(ROOT, "data", "strategy2-intraday-latest.json");
 const OPEN_BUY_FILE = path.join(ROOT, "data", "open-buy-latest.json");
 const OPEN_BUY_BACKUP_FILE = path.join(ROOT, "data", "open-buy-backup.json");
 const OPEN_BUY_SCORECARD_SOURCE_FILE = path.join(ROOT, "data", "open-buy-scorecard-source.json");
@@ -370,6 +371,78 @@ function buildStrategy3Report(payload, quotes, today, tracker) {
   return lines.join("\n");
 }
 
+function buildStrategy2EventReport(payload, today) {
+  const events = Array.isArray(payload.events) ? payload.events : [];
+  const aRows = events.filter((event) => event.firstAAt);
+  const bRows = events.filter((event) => !event.firstAAt && event.firstBAt);
+  let totalProfit = 0;
+  let bTotalProfit = 0;
+  const lines = [`策略2當沖成績單｜${dateSlash(today)}`, "", "來源：09:00-13:30 盤中巡邏紀錄", ""];
+
+  if (!events.length) {
+    lines.push(
+      "今日 09:00-13:30 當沖巡邏紀錄未取得，無法結算成績單。",
+      `資料日期：${payload.date || "--"}｜報告日期：${today}`,
+      ""
+    );
+    return lines.join("\n");
+  }
+
+  lines.push(`A區 可進場｜正式進場回測｜${aRows.length} 筆`, "");
+  aRows.forEach((event) => {
+    const entryPrice = cleanNumber(event.firstAPrice);
+    const exitPrice = cleanNumber(event.highAfterA) || cleanNumber(event.highestPrice);
+    const profit = entryPrice ? (exitPrice - entryPrice) * LOT_SIZE : 0;
+    const profitPct = entryPrice ? ((exitPrice - entryPrice) / entryPrice) * 100 : 0;
+    totalProfit += profit;
+    lines.push(
+      `名單${event.code} ${event.name || ""}`,
+      `交易日期 ${tradeDateLabel(today)}`,
+      `首次進入B區：${event.firstBAt || "未記錄"}  價格${formatTradePrice(event.firstBPrice)}元`,
+      `B區後最高價：${formatTradePrice(event.highAfterB)}元`,
+      `首次進入A區：${event.firstAAt}  進場價${formatTradePrice(entryPrice)}元`,
+      `A區後最高價：${formatTradePrice(event.highAfterA)}元`,
+      `出場日期:${tradeDateLabel(today)}`,
+      `出場價格:${formatTradePrice(exitPrice)}元`,
+      `漲幅:${percent(profitPct)} 預計獲利:${money(profit)}`,
+      `分數：${Math.round(cleanNumber(event.maxScore)) || "--"}`,
+      `策略：${(event.strategies || []).join("、") || "--"}`,
+      event.stateReason ? `判斷：${event.stateReason}` : "",
+      cleanNumber(event.supportPrice) ? `支撐位：${formatTradePrice(event.supportPrice)}，不破後觀察` : "",
+      ""
+    );
+  });
+
+  lines.push(`B區 待確認｜未正式進場觀察｜${bRows.length} 筆`, "");
+  bRows.forEach((event) => {
+    const entryPrice = cleanNumber(event.firstBPrice);
+    const exitPrice = cleanNumber(event.highAfterB) || cleanNumber(event.highestPrice);
+    const profit = entryPrice ? (exitPrice - entryPrice) * LOT_SIZE : 0;
+    const profitPct = entryPrice ? ((exitPrice - entryPrice) / entryPrice) * 100 : 0;
+    bTotalProfit += profit;
+    lines.push(
+      `名單${event.code} ${event.name || ""}`,
+      `交易日期 ${tradeDateLabel(today)}`,
+      `首次進入B區：${event.firstBAt}  價格${formatTradePrice(event.firstBPrice)}元`,
+      `B區後最高價：${formatTradePrice(event.highAfterB || event.highestPrice)}元`,
+      `B區觀察漲幅:${percent(profitPct)} 預計獲利:${money(profit)}`,
+      "首次進入A區：未進入",
+      `最高分數：${Math.round(cleanNumber(event.maxScore)) || "--"}`,
+      `策略：${(event.strategies || []).join("、") || "--"}`,
+      event.stateReason ? `判斷：${event.stateReason}` : "",
+      cleanNumber(event.supportPrice) ? `支撐位：${formatTradePrice(event.supportPrice)}，不破後觀察` : "",
+      "結果：未進入A區，不列入策略2正式合計；另列B區觀察合計",
+      ""
+    );
+  });
+
+  lines.push(`策略2合計：${money(totalProfit)}`);
+  lines.push(`B區觀察合計：${money(bTotalProfit)}`);
+  lines.push(`A區進場：${aRows.length} 筆`);
+  lines.push(`B區未進場：${bRows.length} 筆`);
+  return lines.join("\n");
+}
+
 async function sendReports(reports, mailConfig) {
   const failures = [];
   for (const report of reports) {
@@ -384,12 +457,19 @@ async function sendReports(reports, mailConfig) {
   if (failures.length) throw new Error(`Report email failed: ${failures.join(" | ")}`);
 }
 
+function readIntradayCache() {
+  const primary = readJson(SIGNAL_FILE, { date: "", records: [] });
+  const reportSource = readJson(STRATEGY2_REPORT_FILE, { date: "", records: [] });
+  if ((reportSource.records || []).length && reportSource.date === taipeiDateKey()) return reportSource;
+  return primary;
+}
+
 async function main() {
-  const cache = readJson(SIGNAL_FILE, { date: "", records: [] });
+  const today = taipeiDateKey();
+  let cache = readIntradayCache();
   const scorecardTracker = readJson(SCORECARD_TRACK_FILE, { date: "", trades: {} });
   const openBuyPayload = readScorecardSource(OPEN_BUY_SCORECARD_SOURCE_FILE, OPEN_BUY_FILE, OPEN_BUY_BACKUP_FILE);
   const strategy3Payload = readScorecardSource(STRATEGY3_SCORECARD_SOURCE_FILE, STRATEGY3_FILE, STRATEGY3_BACKUP_FILE);
-  const today = taipeiDateKey();
   const reportSlot = process.env.REPORT_SLOT || (taipeiHour() >= 15 ? "final" : "initial");
   const sentFile = path.join(REPORT_SENT_PATH, `${today}-${reportSlot}.json`);
   if (fs.existsSync(sentFile) && process.env.FORCE_REPORT !== "1") {
@@ -399,7 +479,7 @@ async function main() {
   if (cache.date && cache.date !== today) {
     console.log(`ignore stale intraday cache ${cache.date}; report date is ${today}`);
   }
-  const records = cache.date === today ? mergeRecords(cache.records || []) : [];
+  let records = cache.date === today ? mergeRecords(cache.records || []) : [];
   const codes = [...new Set([
     ...records.map((record) => record.code),
     ...reportRows(openBuyPayload).map((item) => item.code),
@@ -408,10 +488,44 @@ async function main() {
   const quotes = await fetchRealtimeMap(codes);
   let totalProfit = 0;
   const reportExitTime = taipeiTimeLabel();
+  if (Array.isArray(cache.events)) {
+    const text = buildStrategy2EventReport(cache, today);
+    console.log(text);
+    const openBuyText = buildOpenBuyReport(openBuyPayload, quotes, today, scorecardTracker);
+    const strategy3Text = buildStrategy3Report(strategy3Payload, quotes, today, scorecardTracker);
+    console.log(openBuyText);
+    console.log(strategy3Text);
+
+    const to = process.env.REPORT_EMAIL_TO;
+    const user = process.env.SMTP_USER;
+    const pass = process.env.SMTP_PASS;
+    if (!to || !user || !pass) {
+      throw new Error("Missing REPORT_EMAIL_TO, SMTP_USER, or SMTP_PASS");
+    }
+    await sendReports([
+      { subject: `策略1開盤沖成績單｜${dateSlash(today)}`, text: openBuyText },
+      { subject: `策略2當沖成績單｜${dateSlash(today)}`, text },
+      { subject: `策略3隔日沖成績單｜${dateSlash(today)}`, text: strategy3Text },
+    ], {
+      host: process.env.SMTP_HOST || "smtp.gmail.com",
+      port: Number(process.env.SMTP_PORT || 465),
+      user,
+      pass,
+      to,
+    });
+    fs.mkdirSync(REPORT_SENT_PATH, { recursive: true });
+    fs.writeFileSync(sentFile, `${JSON.stringify({ date: today, slot: reportSlot, sentAt: new Date().toISOString(), to }, null, 2)}\n`);
+    return;
+  }
 
   const lines = [`策略2當沖雷達成績單｜${dateSlash(today)}`, ""];
   if (!records.length) {
-    lines.push("今天沒有偵測到符合條件的標的。", "");
+    lines.push(
+      "今日 09:00-13:30 當沖巡邏紀錄未取得，無法結算成績單。",
+      `快取日期：${cache.date || "--"}｜報告日期：${today}`,
+      "策略2成績單只接受盤中巡邏紀錄，不使用盤後補掃資料。",
+      ""
+    );
   }
 
   const grouped = {
