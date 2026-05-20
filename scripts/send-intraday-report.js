@@ -40,6 +40,39 @@ function dateSlash(value) {
   return String(value || "").replace(/-/g, "/");
 }
 
+function tradeDateLabel(value, fallback = taipeiDateKey()) {
+  const text = String(value || fallback || "");
+  const match = text.match(/(\d{4})[-/](\d{2})[-/](\d{2})/);
+  if (!match) return dateSlash(fallback).slice(5).replace(/^0/, "").replace("/0", "/");
+  return `${Number(match[2])}/${Number(match[3])}`;
+}
+
+function tradeTimeLabel(value, fallback = "--:--") {
+  const match = String(value || "").match(/(\d{2}):(\d{2})/);
+  return match ? `${match[1]}:${match[2]}` : fallback;
+}
+
+function taipeiTimeLabel(date = new Date()) {
+  return new Intl.DateTimeFormat("en-US", {
+    timeZone: "Asia/Taipei",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).format(date);
+}
+
+function tradeSummaryLine({ date, entryTime, entryPrice, exitTime, exitPrice, profitPct, profit }) {
+  return [
+    `日期 ${date}`,
+    `時間${entryTime}`,
+    `進場價${formatTradePrice(entryPrice)}元`,
+    `出場時間${exitTime}`,
+    `出場價格:${formatTradePrice(exitPrice)}元`,
+    `漲幅:${percent(profitPct)}`,
+    `預計獲利:${money(profit)}`,
+  ].join(" ");
+}
+
 async function fetchJson(url, timeout = 30000) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeout);
@@ -218,6 +251,15 @@ function buildOpenBuyReport(payload, quotes, today) {
     lines.push(
       `#${index + 1} ${item.code} ${item.name || ""}`,
       `分數：${Math.round(cleanNumber(item.score)) || "--"}｜狀態：${item.status || "--"}`,
+      tradeSummaryLine({
+        date: tradeDateLabel(today),
+        entryTime: "09:00",
+        entryPrice,
+        exitTime: item.exitTime || "09:10",
+        exitPrice,
+        profitPct,
+        profit,
+      }),
       `建議進場：${item.entry || "開盤觀察"}｜出場時間：${item.exitTime || "09:10"}`,
       `進場價：${formatTradePrice(entryPrice)}｜出場價：${formatTradePrice(exitPrice)}`,
       `停利：${formatTradePrice(item.takeProfit)}｜停損：${formatTradePrice(item.stopLoss)}｜不追高：${formatTradePrice(item.noChase)}`,
@@ -250,6 +292,15 @@ function buildStrategy3Report(payload, quotes, today) {
     lines.push(
       `#${index + 1} ${item.code} ${item.name || ""}`,
       `分數：${Math.round(cleanNumber(item.score || item.overnightScore)) || "--"}｜狀態：${item.overnightState || "--"}`,
+      tradeSummaryLine({
+        date: tradeDateLabel(today),
+        entryTime: "09:00",
+        entryPrice,
+        exitTime: "13:30",
+        exitPrice,
+        profitPct,
+        profit,
+      }),
       `收盤價：${formatTradePrice(item.close)}｜今日最高/出場：${formatTradePrice(exitPrice)}`,
       `漲幅：${percent(cleanNumber(item.percent))}｜成交量：${Math.round(cleanNumber(item.volumeLots || item.tradeVolume / 1000)).toLocaleString("zh-TW")} 張`,
       `周轉率：${(cleanNumber(item.turnoverRate)).toFixed(2)}%｜量比：${(cleanNumber(item.volumeRatio)).toFixed(2)}`,
@@ -281,14 +332,17 @@ async function main() {
   const cache = readJson(SIGNAL_FILE, { date: "", records: [] });
   const openBuyPayload = readCacheWithBackup(OPEN_BUY_FILE, OPEN_BUY_BACKUP_FILE);
   const strategy3Payload = readCacheWithBackup(STRATEGY3_FILE, STRATEGY3_BACKUP_FILE);
-  const today = cache.date || taipeiDateKey();
+  const today = taipeiDateKey();
   const reportSlot = process.env.REPORT_SLOT || (taipeiHour() >= 15 ? "final" : "initial");
   const sentFile = path.join(REPORT_SENT_DIR, `${today}-${reportSlot}.json`);
   if (fs.existsSync(sentFile) && process.env.FORCE_REPORT !== "1") {
     console.log(`scorecard already sent for ${today} ${reportSlot}`);
     return;
   }
-  const records = mergeRecords(cache.records || []);
+  if (cache.date && cache.date !== today) {
+    console.log(`ignore stale intraday cache ${cache.date}; report date is ${today}`);
+  }
+  const records = cache.date === today ? mergeRecords(cache.records || []) : [];
   const codes = [...new Set([
     ...records.map((record) => record.code),
     ...reportRows(openBuyPayload).map((item) => item.code),
@@ -296,6 +350,7 @@ async function main() {
   ].filter(Boolean))];
   const quotes = await fetchRealtimeMap(codes);
   let totalProfit = 0;
+  const reportExitTime = taipeiTimeLabel();
 
   const lines = [`策略2當沖雷達成績單｜${dateSlash(today)}`, ""];
   if (!records.length) {
@@ -327,6 +382,15 @@ async function main() {
       `策略：${(record.strategies?.length ? record.strategies : [record.strategy]).filter(Boolean).join("、")}`,
       state.reason ? `判斷：${state.reason}` : "",
       supportPrice ? `支撐位：${formatTradePrice(supportPrice)}，不破後觀察` : "",
+      tradeSummaryLine({
+        date: tradeDateLabel(record.timestamp, today),
+        entryTime: tradeTimeLabel(record.timestamp, "09:00"),
+        entryPrice,
+        exitTime: reportExitTime,
+        exitPrice,
+        profitPct,
+        profit,
+      }),
       `建議進場價：${formatTradePrice(entryPrice)}`,
       `出場價：${formatTradePrice(exitPrice)}`,
       `預計獲利金額：${money(profit)}`,
