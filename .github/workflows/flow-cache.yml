@@ -34,8 +34,24 @@ jobs:
       - name: Update buy-sell and warrant-flow cache
         if: steps.retry.outputs.mode == 'run'
         run: |
-          node scripts/scan-institution-cache.js
-          node scripts/scan-warrant-flow-cache.js
+          retry() {
+            label="$1"
+            shift
+            for attempt in 1 2 3; do
+              echo "$label attempt $attempt"
+              if "$@"; then
+                echo "$label succeeded"
+                return 0
+              fi
+              echo "$label failed"
+              if [ "$attempt" -lt 3 ]; then
+                sleep 30
+              fi
+            done
+            return 1
+          }
+          retry "institution cache" node scripts/scan-institution-cache.js
+          retry "warrant-flow cache" node scripts/scan-warrant-flow-cache.js
 
       - name: Commit cache
         if: steps.retry.outputs.mode == 'run'
