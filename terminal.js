@@ -3120,6 +3120,20 @@ intradayRadarStyles.textContent = `
     .intraday-side-panel .intraday-signal-grid { grid-template-columns: 1fr; }
   }
   @media (max-width: 760px) {
+    html,
+    body,
+    .app-shell,
+    .dashboard,
+    #strategy-view,
+    .strategy-terminal,
+    #strategy-table {
+      max-width: 100vw;
+      overflow-x: hidden !important;
+    }
+    .dashboard {
+      padding-left: 8px;
+      padding-right: 8px;
+    }
     .intraday-signal-grid { grid-template-columns: 1fr; }
     .intraday-side-panel .intraday-signal-grid { grid-template-columns: 1fr; }
     .swing-signal-grid {
@@ -3146,9 +3160,11 @@ intradayRadarStyles.textContent = `
     .swing-panel,
     .intraday-panel {
       width: 100%;
-      max-width: 100%;
-      overflow: visible;
+      max-width: calc(100vw - 16px);
+      min-width: 0;
+      overflow: hidden !important;
     }
+    .strategy-results { padding: 10px; }
     #strategy-view .swing-actions,
     #strategy-view .intraday-actions {
       display: none !important;
@@ -3157,6 +3173,7 @@ intradayRadarStyles.textContent = `
     .intraday-table {
       display: block;
       width: 100%;
+      max-width: 100%;
       min-width: 0 !important;
       border-collapse: separate;
       border-spacing: 0;
@@ -3170,11 +3187,14 @@ intradayRadarStyles.textContent = `
     .intraday-table tbody {
       display: grid;
       gap: 10px;
+      width: 100%;
+      max-width: 100%;
     }
     .swing-table tr,
     .intraday-table tr {
       display: block;
       width: 100%;
+      max-width: 100%;
       border: 1px solid rgba(255, 84, 103, 0.18);
       border-radius: 8px;
       background: rgba(10, 12, 24, 0.86);
@@ -3192,6 +3212,7 @@ intradayRadarStyles.textContent = `
       text-align: left;
       white-space: normal;
       overflow-wrap: anywhere;
+      word-break: break-word;
     }
     .swing-table td::before,
     .intraday-table td::before {
@@ -3206,6 +3227,7 @@ intradayRadarStyles.textContent = `
       max-width: 100%;
       white-space: normal;
       overflow-wrap: anywhere;
+      word-break: break-word;
     }
     .intraday-table td:nth-child(1)::before,
     .swing-table td:nth-child(1)::before { content: "代號"; }
@@ -3227,7 +3249,7 @@ intradayRadarStyles.textContent = `
     .swing-table td:nth-child(9)::before { content: "原因"; }
     .swing-table td:nth-child(10)::before { content: "原因"; }
     .swing-table .swing-badges,
-    .intraday-table .swing-badges {
+    .intraday-table .intraday-badges {
       justify-content: flex-start;
       max-width: 100%;
       gap: 5px;
@@ -3245,6 +3267,7 @@ intradayRadarStyles.textContent = `
       line-height: 1.2;
       white-space: normal;
       overflow-wrap: anywhere;
+      word-break: break-word;
     }
     #strategy-view .swing-badges b,
     #strategy-view .intraday-badges b,
@@ -3255,6 +3278,14 @@ intradayRadarStyles.textContent = `
       line-height: 1.25;
       white-space: normal;
       overflow-wrap: anywhere;
+      word-break: break-word;
+    }
+    #strategy-view .swing-table td:nth-child(9),
+    #strategy-view .swing-table td:nth-child(10),
+    #strategy-view .intraday-table td:nth-child(9) {
+      overflow: hidden;
+      overflow-wrap: anywhere;
+      word-break: break-all;
     }
     .strategy5-shell,
     .strategy5-dashboard,
