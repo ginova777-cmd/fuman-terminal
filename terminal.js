@@ -3124,15 +3124,15 @@ intradayRadarStyles.textContent = `
     .intraday-side-panel .intraday-signal-grid { grid-template-columns: 1fr; }
     .swing-signal-grid {
       display: flex;
-      gap: 10px;
+      gap: 8px;
       overflow-x: auto;
-      padding: 2px 2px 10px;
+      padding: 2px 2px 8px;
       scroll-snap-type: x mandatory;
     }
     .swing-card {
-      flex: 0 0 118px;
-      min-height: 132px;
-      padding: 13px 12px;
+      flex: 0 0 98px;
+      min-height: 104px;
+      padding: 10px 9px;
       scroll-snap-align: start;
     }
     .swing-card strong,
@@ -3140,9 +3140,9 @@ intradayRadarStyles.textContent = `
       writing-mode: horizontal-tb;
       line-height: 1.35;
     }
-    .swing-card strong { font-size: 16px; }
-    .swing-card small { font-size: 12px; }
-    .swing-card em { font-size: 27px; }
+    .swing-card strong { font-size: 13px; }
+    .swing-card small { font-size: 11px; }
+    .swing-card em { font-size: 22px; }
     .swing-panel,
     .intraday-panel {
       width: 100%;
@@ -3160,7 +3160,7 @@ intradayRadarStyles.textContent = `
       min-width: 0 !important;
       border-collapse: separate;
       border-spacing: 0;
-      font-size: 15px;
+      font-size: 13px;
     }
     .swing-table thead,
     .intraday-table thead {
@@ -3169,26 +3169,26 @@ intradayRadarStyles.textContent = `
     .swing-table tbody,
     .intraday-table tbody {
       display: grid;
-      gap: 14px;
+      gap: 10px;
     }
     .swing-table tr,
     .intraday-table tr {
       display: block;
       width: 100%;
       border: 1px solid rgba(255, 84, 103, 0.18);
-      border-radius: 10px;
+      border-radius: 8px;
       background: rgba(10, 12, 24, 0.86);
-      padding: 14px;
+      padding: 10px 11px;
     }
     .swing-table td,
     .intraday-table td {
       display: grid;
-      grid-template-columns: 86px minmax(0, 1fr);
-      gap: 12px;
+      grid-template-columns: 58px minmax(0, 1fr);
+      gap: 8px;
       border: 0 !important;
-      padding: 7px 0;
+      padding: 5px 0;
       color: #dce6ff;
-      line-height: 1.55;
+      line-height: 1.38;
       text-align: left;
       white-space: normal;
       overflow-wrap: anywhere;
@@ -3196,7 +3196,7 @@ intradayRadarStyles.textContent = `
     .swing-table td::before,
     .intraday-table td::before {
       color: #8994aa;
-      font-size: 13px;
+      font-size: 12px;
       font-weight: 800;
       text-align: left;
     }
@@ -3229,6 +3229,32 @@ intradayRadarStyles.textContent = `
     .swing-table .swing-badges,
     .intraday-table .swing-badges {
       justify-content: flex-start;
+      max-width: 100%;
+      gap: 5px;
+    }
+    #strategy-view .swing-stage,
+    #strategy-view .swing-score,
+    #strategy-view .intraday-state,
+    #strategy-view .intraday-score {
+      width: fit-content;
+      min-width: 0;
+      max-width: 100%;
+      justify-self: start;
+      padding: 4px 9px;
+      font-size: 13px;
+      line-height: 1.2;
+      white-space: normal;
+      overflow-wrap: anywhere;
+    }
+    #strategy-view .swing-badges b,
+    #strategy-view .intraday-badges b,
+    #strategy-view .strategy-chips b {
+      max-width: 100%;
+      padding: 3px 6px;
+      font-size: 12px;
+      line-height: 1.25;
+      white-space: normal;
+      overflow-wrap: anywhere;
     }
     .strategy5-shell,
     .strategy5-dashboard,
