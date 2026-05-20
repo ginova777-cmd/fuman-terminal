@@ -3,6 +3,7 @@ const path = require("path");
 const tls = require("tls");
 
 const ROOT = path.resolve(__dirname, "..");
+const BASE_URL = process.env.FUMAN_BASE_URL || "https://fuman-terminal.vercel.app";
 
 const WORKFLOWS = [
   "flow-cache.yml",
@@ -19,6 +20,45 @@ const CACHE_RULES = [
   { label: "盤後籌碼", file: "data/institution-latest.json", slots: ["06:00", "21:00"], graceMinutes: 90 },
   { label: "權證走向", file: "data/warrant-flow-latest.json", slots: ["06:00", "21:00"], graceMinutes: 90 },
   { label: "策略5", file: "data/strategy5-latest.json", slots: ["21:00"], graceMinutes: 90 },
+];
+
+const API_RULES = [
+  {
+    label: "市場總覽 /api/market",
+    path: "/api/market",
+    validate: (payload) => payload && typeof payload === "object" && (
+      payload.ok === true ||
+      Array.isArray(payload.indexes) ||
+      payload.marketStatus ||
+      payload.futuresNear
+    ),
+  },
+  {
+    label: "市場總覽 /api/stocks",
+    path: "/api/stocks",
+    validate: (payload) => {
+      const rows = Array.isArray(payload) ? payload : payload?.stocks;
+      return Array.isArray(rows) && rows.length > 100;
+    },
+  },
+  {
+    label: "市場總覽 /api/heatmap",
+    path: "/api/heatmap",
+    validate: (payload) => payload?.ok === true && Array.isArray(payload?.sectors) && payload.sectors.length > 0,
+  },
+  {
+    label: "自選股 /api/realtime",
+    path: "/api/realtime?codes=2330",
+    validate: (payload) => {
+      const rows = Array.isArray(payload) ? payload : (payload?.quotes || payload?.stocks || payload?.data);
+      return payload?.ok === true || (Array.isArray(rows) && rows.length > 0);
+    },
+  },
+  {
+    label: "自選股 /api/proxy",
+    path: "/api/proxy?code=2330",
+    validate: (payload) => Array.isArray(payload?.msgArray) && payload.msgArray.length > 0,
+  },
 ];
 
 function readJson(file, fallback) {
@@ -104,6 +144,24 @@ async function fetchJson(url) {
   return response.json();
 }
 
+async function fetchApiJson(url, timeout = 20000) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeout);
+  try {
+    const response = await fetch(url, {
+      signal: controller.signal,
+      headers: {
+        "Accept": "application/json,text/plain,*/*",
+        "User-Agent": "fuman-terminal-schedule-patrol",
+      },
+    });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    return await response.json();
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 async function workflowIssues() {
   const repo = process.env.GITHUB_REPOSITORY;
   if (!repo) return ["Schedule Patrol：缺少 GITHUB_REPOSITORY"];
@@ -121,6 +179,22 @@ async function workflowIssues() {
     }
   }
 
+  return issues;
+}
+
+async function apiIssues() {
+  const issues = [];
+  for (const rule of API_RULES) {
+    const url = `${BASE_URL}${rule.path}`;
+    try {
+      const payload = await fetchApiJson(url);
+      if (!rule.validate(payload)) {
+        issues.push(`${rule.label}：回應格式異常，${url}`);
+      }
+    } catch (error) {
+      issues.push(`${rule.label}：無法取得資料，${url}，${error.message}`);
+    }
+  }
   return issues;
 }
 
@@ -203,6 +277,7 @@ async function alert(issues) {
 async function main() {
   const issues = [
     ...(await workflowIssues()),
+    ...(await apiIssues()),
     ...cacheIssues(),
   ];
   if (!issues.length) {

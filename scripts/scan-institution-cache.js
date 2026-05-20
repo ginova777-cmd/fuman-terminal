@@ -1,12 +1,12 @@
 const fs = require("fs");
 const path = require("path");
 const scanInstitution = require("../api/institution");
-const scanStocks = require("../stocks");
 const { fetchMisQuotes } = require("../lib/mis-quotes");
 
 const ROOT = path.resolve(__dirname, "..");
 const OUT_FILE = path.join(ROOT, "data", "institution-latest.json");
 const BACKUP_FILE = path.join(ROOT, "data", "institution-backup.json");
+const STOCK_URL = process.env.STOCK_UNIVERSE_URL || "https://fuman-terminal.vercel.app/api/stocks";
 
 function readJson(file, fallback) {
   try { return JSON.parse(fs.readFileSync(file, "utf8")); } catch { return fallback; }
@@ -30,19 +30,31 @@ function runHandler() {
   });
 }
 
-function runStocksHandler() {
-  return new Promise((resolve) => {
-    const req = { method: "GET", query: {} };
-    const res = {
-      statusCode: 200,
-      headers: {},
-      setHeader(key, value) { this.headers[key] = value; },
-      status(code) { this.statusCode = code; return this; },
-      json(payload) { resolve(this.statusCode >= 400 ? { ok: false, stocks: [] } : payload); },
-      end() { resolve({ ok: false, stocks: [] }); },
-    };
-    Promise.resolve(scanStocks(req, res)).catch(() => resolve({ ok: false, stocks: [] }));
-  });
+async function fetchJson(url, timeout = 30000) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeout);
+  try {
+    const response = await fetch(url, {
+      signal: controller.signal,
+      headers: {
+        "User-Agent": "Mozilla/5.0 (compatible; FumanTerminalBot/1.0)",
+        Accept: "application/json,text/plain,*/*",
+      },
+    });
+    if (!response.ok) throw new Error(`${url} HTTP ${response.status}`);
+    return await response.json();
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function runStocksHandler() {
+  try {
+    return await fetchJson(STOCK_URL, 30000);
+  } catch (error) {
+    console.log(`stock universe fetch failed: ${error.message}`);
+    return { ok: false, stocks: [] };
+  }
 }
 
 function cleanNumber(value) {
