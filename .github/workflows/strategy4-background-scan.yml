@@ -2,9 +2,9 @@ name: Strategy Background Cache
 
 on:
   schedule:
-    # Taiwan time 07:00 and 14:30 on trading days.
-    - cron: "0 23 * * 0-4"
-    - cron: "30 6 * * 1-5"
+    # Taiwan time 07:00 and 14:30 on trading days. Retry every 10 minutes until cache is updated.
+    - cron: "*/10 23 * * 0-4"
+    - cron: "*/10 0-14 * * 1-5"
   workflow_dispatch:
     inputs:
       full_scan:
@@ -21,7 +21,7 @@ permissions:
 
 concurrency:
   group: strategy-background-cache
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   scan:
@@ -34,16 +34,15 @@ jobs:
         with:
           node-version: "20"
 
+      - name: Decide retry need
+        id: retry
+        run: echo "mode=$(node scripts/should-run-scheduled-cache.js strategy4)" >> "$GITHUB_OUTPUT"
+        env:
+          GITHUB_EVENT_NAME: ${{ github.event_name }}
+
       - name: Update strategy caches
+        if: steps.retry.outputs.mode == 'run'
         run: |
-          if [ ! -f scripts/scan-strategy4-cache.js ] && [ -f scan-strategy4-cache.js ]; then
-            mkdir -p scripts
-            cp scan-strategy4-cache.js scripts/scan-strategy4-cache.js
-          fi
-          if [ ! -f scripts/scan-open-buy-cache.js ] && [ -f scan-open-buy-cache.js ]; then
-            mkdir -p scripts
-            cp scan-open-buy-cache.js scripts/scan-open-buy-cache.js
-          fi
           RUN_OPEN_BUY="0"
           if [ "${{ github.event_name }}" = "workflow_dispatch" ] || [ "${{ github.event_name }}" = "schedule" ]; then
             RUN_OPEN_BUY="1"
@@ -62,9 +61,11 @@ jobs:
           FULL_SCAN: ${{ (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.full_scan == 'true')) && '1' || '0' }}
 
       - name: Commit cache
+        if: steps.retry.outputs.mode == 'run'
         run: |
           git config user.name "fuman-terminal-bot"
           git config user.email "actions@github.com"
           git add data/strategy4-latest.json data/strategy4-backup.json data/open-buy-latest.json data/open-buy-backup.json
           git diff --cached --quiet || git commit -m "Update strategy caches"
+          git pull --rebase origin main
           git push
