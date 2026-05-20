@@ -338,7 +338,7 @@ let strategy5ActiveId = "foreign_trust_breakout";
 const INTRADAY_HOT_SCAN_LIMIT = 450;
 const INTRADAY_BACKGROUND_BATCH = 300;
 const INTRADAY_FAST_SCAN_MS = 3000;
-const INTRADAY_BACKGROUND_SCAN_MS = 20000;
+const INTRADAY_BACKGROUND_SCAN_MS = 3000;
 const INTRADAY_CANDIDATE_TTL_MS = 15 * 60 * 1000;
 const INTRADAY_MIN_VOLUME = 500;
 const INTRADAY_MIN_VALUE = 20000000;
@@ -1982,6 +1982,12 @@ function getIntradayState(stock) {
   const high = Number(stock.high) || 0;
   const signals = stock.intradaySignals || [];
   const daily = stock.swingDaily || null;
+  const history = strategyRealtimeQuotes[stock.code]?.history || [];
+  const recentDeltas = history.slice(-3).map((item) => cleanNumber(item.deltaVolume));
+  const volumeIncreasing = recentDeltas.length >= 3
+    && recentDeltas.every((value) => value > 0)
+    && recentDeltas[2] > recentDeltas[1]
+    && recentDeltas[1] > recentDeltas[0];
   const hasFallback = (stock.matches || []).some((match) => match.id === "intraday_2m");
   const hasSignal = signals.length > 0 || hasFallback;
   const hasStrongSignal = signals.some((signal) => [
@@ -2013,11 +2019,12 @@ function getIntradayState(stock) {
   const tooHotToChase = pct >= 8.8;
   const dailyOk = !daily || daily.stage?.tone !== "hot" || hasDailyTrigger;
   const winRateSetup = liquid && dailyOk && hasVolumeSignal && hasDailyTrigger && aboveOpen && nearHigh && pct >= 1 && pct <= 8.8;
+  const candidateSetup = tradableLiquidity && hasSignal && !tooHotToChase && (volumeIncreasing || (hasVolumeSignal && pct >= 0.5));
 
   if (winRateSetup) {
     return { id: "go", label: "可進場", cls: "go" };
   }
-  if (tradableLiquidity && hasSignal && pct >= 0.5 && !tooHotToChase && hasStrongSignal) {
+  if (candidateSetup || (tradableLiquidity && hasSignal && pct >= 0.5 && hasStrongSignal)) {
     return { id: "wait", label: "待確認", cls: "wait" };
   }
   return { id: "watch", label: "觀察", cls: "watch" };
@@ -3183,24 +3190,13 @@ function renderIntradayRadar(evaluated) {
   setStrategyChrome("intraday");
   const keyword = strategyKeyword.trim().toLowerCase();
   const now = Date.now();
-  const allRows = evaluated
+  const baseRows = evaluated
     .filter(isIntradayTradable)
-    .filter((stock) => {
-      const pct = cleanNumber(stock.percent);
-      const value = cleanNumber(stock.value);
-      const volume = cleanNumber(stock.tradeVolume);
-      return pct >= 0.3 || value >= INTRADAY_MIN_VALUE || volume >= INTRADAY_MIN_VOLUME;
-    })
-    .filter((stock) => !keyword || stock.code.includes(keyword) || stock.name.toLowerCase().includes(keyword))
+    .filter((stock) => !keyword || stock.code.includes(keyword) || stock.name.toLowerCase().includes(keyword));
+  const allRows = baseRows
+    .filter((stock) => (stock.intradaySignals || []).length)
     .map((stock) => {
-      const signals = (stock.intradaySignals || []).length
-        ? stock.intradaySignals
-        : [{
-            id: "early_strength",
-            short: "雷達",
-            icon: "⚡",
-            reason: (stock.matches || []).find((match) => match.id === "intraday_2m")?.reason || "已取得即時報價，先列入策略2雷達觀察；等待量價訊號升級。",
-          }];
+      const signals = stock.intradaySignals || [];
       const row = { ...stock, intradaySignals: signals };
       const intradayState = getIntradayState(row);
       if (intradayState.id === "go" && !intradayGoFirstSeenAt.has(row.code)) {
@@ -3237,7 +3233,7 @@ function renderIntradayRadar(evaluated) {
     ? `｜本輪巡邏 ${strategyRealtimeStats.received}/${strategyRealtimeStats.requested} 筆${strategyRealtimeStats.failed ? `｜失敗批次 ${strategyRealtimeStats.failed}` : ""}${strategyRealtimeStats.lastError ? `｜${strategyRealtimeStats.lastError}` : ""}`
     : "";
 
-  if (strategySummary) strategySummary.textContent = `秒級熱門池｜3秒快掃｜20秒背景補完整市場｜最後更新 ${scanTime}${scanStatus}`;
+  if (strategySummary) strategySummary.textContent = `3秒即時巡邏｜熱門池快掃｜背景分批補全市場｜最後更新 ${scanTime}${scanStatus}`;
   if (strategyMatchCount) strategyMatchCount.textContent = rows.length.toLocaleString("zh-TW");
   if (strategyAvgScore) strategyAvgScore.textContent = stateCounts.go.toLocaleString("zh-TW");
   if (strategyTopHit) strategyTopHit.textContent = rows.length ? `${Math.max(...rows.map((stock) => stock.intradaySignals.length))}/6` : "0/6";
@@ -3348,7 +3344,7 @@ function renderIntradayRadar(evaluated) {
       `;
     }).join("")}
   ` : `
-    <tr><td colspan="9">策略2即時巡邏中：目前尚未取得符合基本量價的候選。請確認本輪巡邏筆數是否有增加；若為 0/0，代表前端尚未啟動即時批次。</td></tr>
+    <tr><td colspan="9">策略2正在 3 秒巡邏；目前本輪尚未出現右側任一訊號。只要符合「早盤強勢 / 爆量 / 跳空 / 突破 / MA35 / 鑽石 / 拉抬」任一項，就會立刻顯示。</td></tr>
   `;
 
   strategyTable.innerHTML = `
@@ -3356,10 +3352,10 @@ function renderIntradayRadar(evaluated) {
       <div class="intraday-topbar">
         <div>
           <h2>${titleWithSchedule("◔", "策略2-當沖雷達", "intraday")}</h2>
-          <p>盤中即時偵測強勢訊號，5秒刷新、每次掃完整市場。</p>
+          <p>盤中即時偵測強勢訊號，3秒巡邏熱門池，背景同步分批補全市場。</p>
         </div>
         <div class="intraday-controls">
-          <label>偵測頻率：<select><option>5秒</option></select></label>
+          <label>偵測頻率：<select><option>3秒</option></select></label>
           <label>市場：<select><option>全市場</option></select></label>
         </div>
       </div>
@@ -3826,6 +3822,10 @@ function renderStrategyScanner() {
     renderSwingRadar(swingRows);
     return;
   }
+  if (selected.length === 1 && selected[0] === "intraday_2m") {
+    renderIntradayRadar(universe.map(evaluateStrategyStock));
+    return;
+  }
 
   const evaluated = universe.map(evaluateStrategyStock).filter((stock) => {
     const matchedIds = stock.matches.map((item) => item.id);
@@ -3836,10 +3836,6 @@ function renderStrategyScanner() {
     return passMode && passKeyword;
   }).sort((a, b) => b.matches.length - a.matches.length || b.score - a.score || b.value - a.value);
 
-  if (selected.length === 1 && selected[0] === "intraday_2m") {
-    renderIntradayRadar(evaluated);
-    return;
-  }
   if (strategyPresetMode === "strategy3") {
     renderOvernightDashboard(evaluated);
     return;
