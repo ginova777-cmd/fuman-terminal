@@ -5,6 +5,7 @@ const { fetchMisQuotes } = require("../lib/mis-quotes");
 const ROOT = path.resolve(__dirname, "..");
 const OUT_FILE = path.join(ROOT, "data", "strategy3-latest.json");
 const BACKUP_FILE = path.join(ROOT, "data", "strategy3-backup.json");
+const SCORECARD_SOURCE_FILE = path.join(ROOT, "data", "strategy3-scorecard-source.json");
 const STOCK_URL = process.env.STOCK_UNIVERSE_URL || "https://fuman-terminal.vercel.app/api/stocks";
 const CAPITAL_URLS = [
   "https://mopsfin.twse.com.tw/opendata/t187ap03_L.csv",
@@ -13,6 +14,16 @@ const CAPITAL_URLS = [
 
 function readJson(file, fallback) {
   try { return JSON.parse(fs.readFileSync(file, "utf8")); } catch { return fallback; }
+}
+
+function preserveScorecardSource(payload) {
+  if (!(payload.matches || []).length) return;
+  fs.mkdirSync(path.dirname(SCORECARD_SOURCE_FILE), { recursive: true });
+  fs.writeFileSync(SCORECARD_SOURCE_FILE, `${JSON.stringify({
+    ...payload,
+    source: "strategy3-scorecard-source",
+    preservedAt: new Date().toISOString(),
+  }, null, 2)}\n`);
 }
 
 function cleanNumber(value) {
@@ -263,6 +274,8 @@ function buildMatches(stocks, issuedSharesMap, volumeAverageMap) {
 
 async function main() {
   const backup = readJson(BACKUP_FILE, { ok: true, matches: [] });
+  const previousRaw = readJson(OUT_FILE, { ok: true, matches: [] });
+  preserveScorecardSource((previousRaw.matches || []).length ? previousRaw : backup);
   const [stocks, issuedSharesMap, volumeAverageMap] = await Promise.all([
     fetchUniverse(),
     fetchIssuedShares(),

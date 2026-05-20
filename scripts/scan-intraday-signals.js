@@ -5,6 +5,13 @@ const { buildRanks, cleanNumber, detectSignals, isIntradayTradable } = require("
 const ROOT = path.resolve(__dirname, "..");
 const CACHE_DIR = path.join(ROOT, ".intraday-cache");
 const SIGNAL_FILE = path.join(CACHE_DIR, "signals.json");
+const SCORECARD_TRACK_FILE = path.join(CACHE_DIR, "scorecard-trades.json");
+const OPEN_BUY_SCORECARD_SOURCE_FILE = path.join(ROOT, "data", "open-buy-scorecard-source.json");
+const OPEN_BUY_FILE = path.join(ROOT, "data", "open-buy-latest.json");
+const OPEN_BUY_BACKUP_FILE = path.join(ROOT, "data", "open-buy-backup.json");
+const STRATEGY3_SCORECARD_SOURCE_FILE = path.join(ROOT, "data", "strategy3-scorecard-source.json");
+const STRATEGY3_FILE = path.join(ROOT, "data", "strategy3-latest.json");
+const STRATEGY3_BACKUP_FILE = path.join(ROOT, "data", "strategy3-backup.json");
 const BASE_URL = process.env.FUMAN_BASE_URL || "https://fuman-terminal.vercel.app";
 
 function readJson(file, fallback) {
@@ -38,6 +45,23 @@ function timestampKey(parts = taipeiParts()) {
   return `${parts.year}-${parts.month}-${parts.day} ${parts.hour}:${parts.minute}:${parts.second}`;
 }
 
+function compactDateKey(value, fallback) {
+  const text = String(value || fallback || "");
+  const compact = text.match(/^(\d{4})(\d{2})(\d{2})$/);
+  if (compact) return `${compact[1]}-${compact[2]}-${compact[3]}`;
+  const dashed = text.match(/(\d{4})[-/](\d{2})[-/](\d{2})/);
+  if (dashed) return `${dashed[1]}-${dashed[2]}-${dashed[3]}`;
+  return fallback;
+}
+
+function readScorecardSource(sourceFile, latestFile, backupFile) {
+  const source = readJson(sourceFile, { ok: true, matches: [] });
+  if ((source.matches || []).length) return source;
+  const latest = readJson(latestFile, { ok: true, matches: [] });
+  if ((latest.matches || []).length) return latest;
+  return readJson(backupFile, latest);
+}
+
 function updateTrackedExtremes(cache, stock, timestamp, key) {
   const high = cleanNumber(stock.high) || cleanNumber(stock.close);
   const low = cleanNumber(stock.low) || cleanNumber(stock.close);
@@ -59,6 +83,69 @@ function updateTrackedExtremes(cache, stock, timestamp, key) {
         record.observedLowAt = timestamp;
       }
     });
+}
+
+function ensureTradeTrack(tracker, group, item, stock, timestamp, key) {
+  const code = String(item.code || stock.code || "");
+  if (!code) return null;
+  const trackKey = `${group}:${code}`;
+  const current = tracker.trades[trackKey] || {};
+  const open = cleanNumber(stock.open);
+  const close = cleanNumber(stock.close);
+  const high = cleanNumber(stock.high) || close;
+  const low = cleanNumber(stock.low) || close;
+  const yesterdayKey = compactDateKey(item.quoteDate, key);
+  const entryPrice = cleanNumber(current.entryPrice)
+    || (group === "openBuy" ? open : 0)
+    || (group === "strategy3" ? cleanNumber(item.close) : 0)
+    || open
+    || cleanNumber(item.close)
+    || close;
+  const entryAt = current.entryAt || (group === "strategy3" ? `${yesterdayKey} 13:30:00` : `${key} 09:00:00`);
+  const next = {
+    ...current,
+    date: key,
+    group,
+    code,
+    name: item.name || stock.name || current.name || code,
+    sourceUpdatedAt: item.updatedAt || current.sourceUpdatedAt || "",
+    entryAt,
+    entryPrice,
+    observedPrice: close || current.observedPrice,
+    volume: cleanNumber(stock.tradeVolume) || current.volume,
+    percent: cleanNumber(stock.percent) || current.percent,
+  };
+  const currentHigh = cleanNumber(next.observedHigh);
+  const currentLow = cleanNumber(next.observedLow);
+  if (high && (!currentHigh || high > currentHigh)) {
+    next.observedHigh = high;
+    next.observedHighAt = timestamp;
+  }
+  if (low && (!currentLow || low < currentLow)) {
+    next.observedLow = low;
+    next.observedLowAt = timestamp;
+  }
+  tracker.trades[trackKey] = next;
+  return next;
+}
+
+function updateScorecardTradeTracks(tracker, liveStocks, timestamp, key) {
+  if (tracker.date !== key) {
+    tracker.date = key;
+    tracker.trades = {};
+  }
+  const stockMap = new Map(liveStocks.map((stock) => [stock.code, stock]));
+  const sources = [
+    ["openBuy", readScorecardSource(OPEN_BUY_SCORECARD_SOURCE_FILE, OPEN_BUY_FILE, OPEN_BUY_BACKUP_FILE)],
+    ["strategy3", readScorecardSource(STRATEGY3_SCORECARD_SOURCE_FILE, STRATEGY3_FILE, STRATEGY3_BACKUP_FILE)],
+  ];
+  sources.forEach(([group, payload]) => {
+    (payload.matches || []).forEach((item) => {
+      const stock = stockMap.get(String(item.code || ""));
+      if (stock) ensureTradeTrack(tracker, group, item, stock, timestamp, key);
+    });
+  });
+  tracker.updatedAt = new Date().toISOString();
 }
 
 async function fetchJson(url, timeout = 30000) {
@@ -133,6 +220,7 @@ async function main() {
   const parts = taipeiParts();
   const key = dateKey(parts);
   const cache = readJson(SIGNAL_FILE, { date: key, records: [], previous: {} });
+  const scorecardTracker = readJson(SCORECARD_TRACK_FILE, { date: key, trades: {} });
   if (cache.date !== key) {
     cache.date = key;
     cache.records = [];
@@ -144,6 +232,8 @@ async function main() {
   const ranks = buildRanks(liveStocks);
   const timestamp = timestampKey(parts);
   let added = 0;
+
+  updateScorecardTradeTracks(scorecardTracker, liveStocks, timestamp, key);
 
   for (const stock of liveStocks) {
     updateTrackedExtremes(cache, stock, timestamp, key);
@@ -195,6 +285,7 @@ async function main() {
 
   cache.updatedAt = new Date().toISOString();
   writeJson(SIGNAL_FILE, cache);
+  writeJson(SCORECARD_TRACK_FILE, scorecardTracker);
   console.log(`intraday signals ${key}: added ${added}, total ${cache.records.length}`);
 }
 

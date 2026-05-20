@@ -5,10 +5,13 @@ const { cleanNumber, formatTradePrice } = require("./intraday-radar-rules");
 
 const ROOT = path.resolve(__dirname, "..");
 const SIGNAL_FILE = path.join(ROOT, ".intraday-cache", "signals.json");
+const SCORECARD_TRACK_FILE = path.join(ROOT, ".intraday-cache", "scorecard-trades.json");
 const OPEN_BUY_FILE = path.join(ROOT, "data", "open-buy-latest.json");
 const OPEN_BUY_BACKUP_FILE = path.join(ROOT, "data", "open-buy-backup.json");
+const OPEN_BUY_SCORECARD_SOURCE_FILE = path.join(ROOT, "data", "open-buy-scorecard-source.json");
 const STRATEGY3_FILE = path.join(ROOT, "data", "strategy3-latest.json");
 const STRATEGY3_BACKUP_FILE = path.join(ROOT, "data", "strategy3-backup.json");
+const STRATEGY3_SCORECARD_SOURCE_FILE = path.join(ROOT, "data", "strategy3-scorecard-source.json");
 const BASE_URL = process.env.FUMAN_BASE_URL || "https://fuman-terminal.vercel.app";
 const LOT_SIZE = Number(process.env.REPORT_LOT_SIZE || 1000);
 
@@ -43,6 +46,8 @@ function dateSlash(value) {
 
 function tradeDateLabel(value, fallback = taipeiDateKey()) {
   const text = String(value || fallback || "");
+  const compact = text.match(/^(\d{4})(\d{2})(\d{2})$/);
+  if (compact) return `${Number(compact[2])}/${Number(compact[3])}`;
   const match = text.match(/(\d{4})[-/](\d{2})[-/](\d{2})/);
   if (!match) return dateSlash(fallback).slice(5).replace(/^0/, "").replace("/0", "/");
   return `${Number(match[2])}/${Number(match[3])}`;
@@ -62,16 +67,28 @@ function taipeiTimeLabel(date = new Date()) {
   }).format(date);
 }
 
-function tradeSummaryLine({ date, entryTime, entryPrice, exitTime, exitPrice, profitPct, profit }) {
-  return [
+function strategy3EntryTime(item) {
+  return tradeTimeLabel(item.quoteTime, "13:30");
+}
+
+function strategy3EntryDate(item, payload, today) {
+  return tradeDateLabel(item.quoteDate || payload.usedDate || payload.date || today);
+}
+
+function tradeSummaryLine({ date, entryTime, entryPrice, exitDate, exitTime, exitPrice, profitPct, profit }) {
+  const parts = [
     `日期 ${date}`,
     `時間${entryTime}`,
     `進場價${formatTradePrice(entryPrice)}元`,
+  ];
+  if (exitDate) parts.push(`出場日期:${exitDate}`);
+  parts.push(
     `出場時間${exitTime}`,
     `出場價格:${formatTradePrice(exitPrice)}元`,
     `漲幅:${percent(profitPct)}`,
     `預計獲利:${money(profit)}`,
-  ].join(" ");
+  );
+  return parts.join(" ");
 }
 
 async function fetchJson(url, timeout = 30000) {
@@ -170,6 +187,12 @@ function readCacheWithBackup(file, backupFile) {
   return readJson(backupFile, payload);
 }
 
+function readScorecardSource(sourceFile, latestFile, backupFile) {
+  const source = readJson(sourceFile, { ok: true, matches: [] });
+  if ((source.matches || []).length) return source;
+  return readCacheWithBackup(latestFile, backupFile);
+}
+
 function reportRows(payload, limit = 20) {
   return (payload.matches || [])
     .filter((item) => item && item.code)
@@ -245,7 +268,12 @@ function mergeRecords(records) {
   return [...map.values()].sort((a, b) => String(a.timestamp).localeCompare(String(b.timestamp)) || String(a.code).localeCompare(String(b.code)));
 }
 
-function buildOpenBuyReport(payload, quotes, today) {
+function scorecardTrack(tracker, group, code) {
+  if (tracker.date !== taipeiDateKey()) return null;
+  return tracker.trades?.[`${group}:${code}`] || null;
+}
+
+function buildOpenBuyReport(payload, quotes, today, tracker) {
   const rows = reportRows(payload);
   let totalProfit = 0;
   const lines = [`策略1開盤入快跑成績單｜${dateSlash(today)}`, ""];
@@ -255,8 +283,10 @@ function buildOpenBuyReport(payload, quotes, today) {
   }
   rows.forEach((item, index) => {
     const quote = quotes.get(item.code) || {};
-    const entryPrice = cleanNumber(quote.open) || cleanNumber(item.close);
-    const exitPrice = cleanNumber(quote.high) || cleanNumber(quote.close) || cleanNumber(item.takeProfit) || cleanNumber(item.close);
+    const track = scorecardTrack(tracker, "openBuy", item.code) || {};
+    const entryPrice = cleanNumber(track.entryPrice) || cleanNumber(quote.open) || cleanNumber(item.close);
+    const exitPrice = cleanNumber(track.observedHigh);
+    const exitTime = tradeTimeLabel(track.observedHighAt, "--:--");
     const profit = entryPrice ? (exitPrice - entryPrice) * LOT_SIZE : 0;
     const profitPct = entryPrice ? ((exitPrice - entryPrice) / entryPrice) * 100 : 0;
     totalProfit += profit;
@@ -267,12 +297,14 @@ function buildOpenBuyReport(payload, quotes, today) {
         date: tradeDateLabel(today),
         entryTime: "09:00",
         entryPrice,
-        exitTime: item.exitTime || "09:10",
+        exitDate: tradeDateLabel(today),
+        exitTime,
         exitPrice,
         profitPct,
         profit,
       }),
-      `建議進場：${item.entry || "開盤觀察"}｜出場時間：${item.exitTime || "09:10"}`,
+      `建議進場：${item.entry || "開盤觀察"}｜出場時間：${exitTime}`,
+      `盤中最高：${formatTradePrice(track.observedHigh)}｜最高時間：${tradeTimeLabel(track.observedHighAt, "--:--")}｜盤中最低：${formatTradePrice(track.observedLow)}｜最低時間：${tradeTimeLabel(track.observedLowAt, "--:--")}`,
       `進場價：${formatTradePrice(entryPrice)}｜出場價：${formatTradePrice(exitPrice)}`,
       `停利：${formatTradePrice(item.takeProfit)}｜停損：${formatTradePrice(item.stopLoss)}｜不追高：${formatTradePrice(item.noChase)}`,
       `預計獲利金額：${money(profit)}`,
@@ -285,7 +317,7 @@ function buildOpenBuyReport(payload, quotes, today) {
   return lines.join("\n");
 }
 
-function buildStrategy3Report(payload, quotes, today) {
+function buildStrategy3Report(payload, quotes, today, tracker) {
   const rows = reportRows(payload);
   let totalProfit = 0;
   const lines = [`策略3隔日沖成績單｜${dateSlash(today)}`, ""];
@@ -295,8 +327,10 @@ function buildStrategy3Report(payload, quotes, today) {
   }
   rows.forEach((item, index) => {
     const quote = quotes.get(item.code) || {};
+    const track = scorecardTrack(tracker, "strategy3", item.code) || {};
     const entryPrice = cleanNumber(item.close);
-    const exitPrice = cleanNumber(quote.high) || cleanNumber(quote.close) || cleanNumber(item.high) || entryPrice;
+    const exitPrice = cleanNumber(track.observedHigh);
+    const exitTime = tradeTimeLabel(track.observedHighAt, "--:--");
     const profit = entryPrice ? (exitPrice - entryPrice) * LOT_SIZE : 0;
     const profitPct = entryPrice ? ((exitPrice - entryPrice) / entryPrice) * 100 : 0;
     const reason = (item.matches || []).map((match) => match.reason).filter(Boolean).join("；");
@@ -305,15 +339,17 @@ function buildStrategy3Report(payload, quotes, today) {
       `#${index + 1} ${item.code} ${item.name || ""}`,
       `分數：${Math.round(cleanNumber(item.score || item.overnightScore)) || "--"}｜狀態：${item.overnightState || "--"}`,
       tradeSummaryLine({
-        date: tradeDateLabel(today),
-        entryTime: "09:00",
+        date: strategy3EntryDate(item, payload, today),
+        entryTime: strategy3EntryTime(item),
         entryPrice,
-        exitTime: "13:30",
+        exitDate: tradeDateLabel(today),
+        exitTime,
         exitPrice,
         profitPct,
         profit,
       }),
-      `收盤價：${formatTradePrice(item.close)}｜今日最高/出場：${formatTradePrice(exitPrice)}`,
+      `收盤價：${formatTradePrice(item.close)}｜今日最高/出場：${formatTradePrice(exitPrice)}｜出場時間：${exitTime}`,
+      `盤中最高：${formatTradePrice(track.observedHigh)}｜最高時間：${tradeTimeLabel(track.observedHighAt, "--:--")}｜盤中最低：${formatTradePrice(track.observedLow)}｜最低時間：${tradeTimeLabel(track.observedLowAt, "--:--")}`,
       `漲幅：${percent(cleanNumber(item.percent))}｜成交量：${Math.round(cleanNumber(item.volumeLots || item.tradeVolume / 1000)).toLocaleString("zh-TW")} 張`,
       `周轉率：${(cleanNumber(item.turnoverRate)).toFixed(2)}%｜量比：${(cleanNumber(item.volumeRatio)).toFixed(2)}`,
       `預計獲利金額：${money(profit)}`,
@@ -342,8 +378,9 @@ async function sendReports(reports, mailConfig) {
 
 async function main() {
   const cache = readJson(SIGNAL_FILE, { date: "", records: [] });
-  const openBuyPayload = readCacheWithBackup(OPEN_BUY_FILE, OPEN_BUY_BACKUP_FILE);
-  const strategy3Payload = readCacheWithBackup(STRATEGY3_FILE, STRATEGY3_BACKUP_FILE);
+  const scorecardTracker = readJson(SCORECARD_TRACK_FILE, { date: "", trades: {} });
+  const openBuyPayload = readScorecardSource(OPEN_BUY_SCORECARD_SOURCE_FILE, OPEN_BUY_FILE, OPEN_BUY_BACKUP_FILE);
+  const strategy3Payload = readScorecardSource(STRATEGY3_SCORECARD_SOURCE_FILE, STRATEGY3_FILE, STRATEGY3_BACKUP_FILE);
   const today = taipeiDateKey();
   const reportSlot = process.env.REPORT_SLOT || (taipeiHour() >= 15 ? "final" : "initial");
   const sentFile = path.join(REPORT_SENT_PATH, `${today}-${reportSlot}.json`);
@@ -399,6 +436,7 @@ async function main() {
         date: tradeDateLabel(record.timestamp, today),
         entryTime: tradeTimeLabel(record.entryAt || record.timestamp, "09:00"),
         entryPrice,
+        exitDate: tradeDateLabel(today),
         exitTime,
         exitPrice,
         profitPct,
@@ -417,8 +455,8 @@ async function main() {
   lines.push(`我今天為您賺了：${money(totalProfit)}`);
   const text = lines.join("\n");
   console.log(text);
-  const openBuyText = buildOpenBuyReport(openBuyPayload, quotes, today);
-  const strategy3Text = buildStrategy3Report(strategy3Payload, quotes, today);
+  const openBuyText = buildOpenBuyReport(openBuyPayload, quotes, today, scorecardTracker);
+  const strategy3Text = buildStrategy3Report(strategy3Payload, quotes, today, scorecardTracker);
   console.log(openBuyText);
   console.log(strategy3Text);
 

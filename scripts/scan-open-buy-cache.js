@@ -6,6 +6,7 @@ const { fetchMisQuotes } = require("../lib/mis-quotes");
 const ROOT = path.resolve(__dirname, "..");
 const OUT_FILE = path.join(ROOT, "data", "open-buy-latest.json");
 const BACKUP_FILE = path.join(ROOT, "data", "open-buy-backup.json");
+const SCORECARD_SOURCE_FILE = path.join(ROOT, "data", "open-buy-scorecard-source.json");
 const BATCH_SIZE = Number(process.env.OPEN_BUY_BATCH_SIZE || 48);
 const BATCHES_PER_RUN = Number(process.env.OPEN_BUY_BATCHES_PER_RUN || 5);
 const FULL_SCAN = process.env.FULL_SCAN === "1";
@@ -13,6 +14,16 @@ const STOCK_URL = process.env.STOCK_UNIVERSE_URL || "https://fuman-terminal.verc
 
 function readJson(file, fallback) {
   try { return JSON.parse(fs.readFileSync(file, "utf8")); } catch { return fallback; }
+}
+
+function preserveScorecardSource(payload) {
+  if (!(payload.matches || []).length) return;
+  fs.mkdirSync(path.dirname(SCORECARD_SOURCE_FILE), { recursive: true });
+  fs.writeFileSync(SCORECARD_SOURCE_FILE, `${JSON.stringify({
+    ...payload,
+    source: "open-buy-scorecard-source",
+    preservedAt: new Date().toISOString(),
+  }, null, 2)}\n`);
 }
 
 function normalizeCode(value) {
@@ -108,6 +119,7 @@ async function main() {
 
   const previousRaw = readJson(OUT_FILE, { ok: true, cursor: 0, total: codes.length, scannedCodes: [], matches: [] });
   const backup = readJson(BACKUP_FILE, { ok: true, matches: [] });
+  preserveScorecardSource((previousRaw.matches || []).length ? previousRaw : backup);
   const previous = (previousRaw.matches || []).length ? previousRaw : { ...previousRaw, matches: backup.matches || [] };
   const previousMatches = new Map((previous.matches || []).map((item) => [item.code, item]));
   const scanned = new Set(FULL_SCAN ? [] : (previous.scannedCodes || []));
