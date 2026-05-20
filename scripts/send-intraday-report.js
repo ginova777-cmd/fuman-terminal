@@ -185,7 +185,7 @@ function settlementHigh(track, quote) {
   const tracked = cleanNumber(track?.observedHigh);
   if (tracked) return { price: tracked, time: tradeTimeLabel(track?.observedHighAt, "--:--"), source: "patrol" };
   const quoteHigh = cleanNumber(quote?.high);
-  if (quoteHigh) return { price: quoteHigh, time: "--:--", source: "mis" };
+  if (quoteHigh) return { price: quoteHigh, time: tradeTimeLabel(quote?.time, "13:30"), source: "market" };
   return { price: 0, time: "--:--", source: "missing" };
 }
 
@@ -193,12 +193,12 @@ function settlementLow(track, quote) {
   const tracked = cleanNumber(track?.observedLow);
   if (tracked) return { price: tracked, time: tradeTimeLabel(track?.observedLowAt, "--:--"), source: "patrol" };
   const quoteLow = cleanNumber(quote?.low);
-  if (quoteLow) return { price: quoteLow, time: "--:--", source: "mis" };
+  if (quoteLow) return { price: quoteLow, time: tradeTimeLabel(quote?.time, "13:30"), source: "market" };
   return { price: 0, time: "--:--", source: "missing" };
 }
 
 function settlementTimeLabel(settlement) {
-  return settlement.source === "mis" ? `${settlement.time}（MIS補價）` : settlement.time;
+  return settlement.time;
 }
 
 function readCacheWithBackup(file, backupFile) {
@@ -297,41 +297,25 @@ function buildOpenBuyReport(payload, quotes, today, tracker) {
   const rows = reportRows(payload);
   let totalProfit = 0;
   const lines = [`策略1開盤沖成績單｜${dateSlash(today)}`, ""];
-  lines.push(`資料時間：${payload.updatedAt || "--"}｜候選 ${payload.count ?? rows.length} 檔`, "");
   if (!rows.length) {
     lines.push("今天沒有符合策略1開盤沖的候選標的。", "");
   }
-  rows.forEach((item, index) => {
+  rows.forEach((item) => {
     const quote = quotes.get(item.code) || {};
     const track = scorecardTrack(tracker, "openBuy", item.code) || {};
     const entryPrice = cleanNumber(track.entryPrice) || cleanNumber(quote.open);
     const high = settlementHigh(track, quote);
-    const low = settlementLow(track, quote);
     const exitPrice = high.price;
-    const exitTime = settlementTimeLabel(high);
     const profit = entryPrice ? (exitPrice - entryPrice) * LOT_SIZE : 0;
     const profitPct = entryPrice ? ((exitPrice - entryPrice) / entryPrice) * 100 : 0;
     totalProfit += profit;
     lines.push(
-      `#${index + 1} ${item.code} ${item.name || ""}`,
-      `分數：${Math.round(cleanNumber(item.score)) || "--"}｜狀態：${item.status || "--"}`,
-      tradeSummaryLine({
-        date: tradeDateLabel(today),
-        entryTime: "09:00",
-        entryPrice,
-        exitDate: tradeDateLabel(today),
-        exitTime,
-        exitPrice,
-        profitPct,
-        profit,
-      }),
-      `建議進場：${item.entry || "開盤觀察"}｜出場時間：${exitTime}`,
-      `盤中最高：${formatTradePrice(high.price)}｜最高時間：${settlementTimeLabel(high)}｜盤中最低：${formatTradePrice(low.price)}｜最低時間：${settlementTimeLabel(low)}`,
-      `進場價：${formatTradePrice(entryPrice)}｜出場價：${formatTradePrice(exitPrice)}`,
-      `停利：${formatTradePrice(item.takeProfit)}｜停損：${formatTradePrice(item.stopLoss)}｜不追高：${formatTradePrice(item.noChase)}`,
-      `預計獲利金額：${money(profit)}`,
-      `預計獲利率：${percent(profitPct)}`,
-      item.reason ? `原因：${item.reason}` : "",
+      `名單${item.code} ${item.name || ""}`,
+      `交易日期 ${tradeDateLabel(today)}`,
+      `入場時間 09:00  進場價${formatTradePrice(entryPrice)}元`,
+      `出場日期:${tradeDateLabel(today)}`,
+      `出場價格:${formatTradePrice(exitPrice)}元`,
+      `漲幅:${percent(profitPct)} 預計獲利:${money(profit)}`,
       ""
     );
   });
