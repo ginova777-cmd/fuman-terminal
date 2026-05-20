@@ -22,7 +22,7 @@ const RULES = {
   },
   strategy5: {
     files: ["data/strategy5-latest.json"],
-    slots: ["21:00"],
+    slots: ["06:00", "21:00"],
   },
 };
 

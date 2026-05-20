@@ -19,7 +19,7 @@ const CACHE_RULES = [
   { label: "策略4", file: "data/strategy4-latest.json", slots: ["07:00", "14:30"], graceMinutes: 75 },
   { label: "盤後籌碼", file: "data/institution-latest.json", slots: ["06:00", "21:00"], graceMinutes: 90 },
   { label: "權證走向", file: "data/warrant-flow-latest.json", slots: ["06:00", "21:00"], graceMinutes: 90 },
-  { label: "策略5", file: "data/strategy5-latest.json", slots: ["21:00"], graceMinutes: 90 },
+  { label: "策略5", file: "data/strategy5-latest.json", slots: ["06:00", "21:00"], graceMinutes: 90 },
 ];
 
 const API_RULES = [

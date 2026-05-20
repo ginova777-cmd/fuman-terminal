@@ -135,7 +135,7 @@ async function main() {
     source: "github-actions-mis-realtime",
     updatedAt: new Date().toISOString(),
     usedDate: quoteDate,
-    schedule: "21:00",
+    schedule: "06:00/21:00",
     total: stocks.length,
     count: matches.length,
     matches,
