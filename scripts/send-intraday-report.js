@@ -276,15 +276,15 @@ function scorecardTrack(tracker, group, code) {
 function buildOpenBuyReport(payload, quotes, today, tracker) {
   const rows = reportRows(payload);
   let totalProfit = 0;
-  const lines = [`策略1開盤入快跑成績單｜${dateSlash(today)}`, ""];
+  const lines = [`策略1開盤沖成績單｜${dateSlash(today)}`, ""];
   lines.push(`資料時間：${payload.updatedAt || "--"}｜候選 ${payload.count ?? rows.length} 檔`, "");
   if (!rows.length) {
-    lines.push("今天沒有符合策略1開盤入快跑的候選標的。", "");
+    lines.push("今天沒有符合策略1開盤沖的候選標的。", "");
   }
   rows.forEach((item, index) => {
     const quote = quotes.get(item.code) || {};
     const track = scorecardTrack(tracker, "openBuy", item.code) || {};
-    const entryPrice = cleanNumber(track.entryPrice) || cleanNumber(quote.open) || cleanNumber(item.close);
+    const entryPrice = cleanNumber(track.entryPrice) || cleanNumber(quote.open);
     const exitPrice = cleanNumber(track.observedHigh);
     const exitTime = tradeTimeLabel(track.observedHighAt, "--:--");
     const profit = entryPrice ? (exitPrice - entryPrice) * LOT_SIZE : 0;
@@ -417,10 +417,10 @@ async function main() {
     lines.push(`${STATE_LABELS[stateId]}｜${list.length} 筆`, "");
     list.forEach((record) => {
     const quote = quotes.get(record.code) || {};
-    const exitPrice = cleanNumber(record.observedHigh) || cleanNumber(quote.high) || cleanNumber(record.observedPrice);
+    const exitPrice = cleanNumber(record.observedHigh);
     const entryPrice = cleanNumber(record.entryPrice);
     const supportPrice = cleanNumber(record.supportPrice);
-    const exitTime = tradeTimeLabel(record.observedHighAt || record.timestamp, reportExitTime);
+    const exitTime = tradeTimeLabel(record.observedHighAt, "--:--");
     const profit = entryPrice ? (exitPrice - entryPrice) * LOT_SIZE : 0;
     const profitPct = entryPrice ? ((exitPrice - entryPrice) / entryPrice) * 100 : 0;
     const state = inferState(record);
@@ -442,7 +442,7 @@ async function main() {
         profitPct,
         profit,
       }),
-      `盤中最高：${formatTradePrice(record.observedHigh)}｜最高時間：${tradeTimeLabel(record.observedHighAt || record.timestamp, "--:--")}｜盤中最低：${formatTradePrice(record.observedLow)}｜最低時間：${tradeTimeLabel(record.observedLowAt || record.timestamp, "--:--")}`,
+      `盤中最高：${formatTradePrice(record.observedHigh)}｜最高時間：${tradeTimeLabel(record.observedHighAt, "--:--")}｜盤中最低：${formatTradePrice(record.observedLow)}｜最低時間：${tradeTimeLabel(record.observedLowAt, "--:--")}`,
       `建議進場價：${formatTradePrice(entryPrice)}`,
       `出場價：${formatTradePrice(exitPrice)}`,
       `預計獲利金額：${money(profit)}`,
@@ -467,7 +467,7 @@ async function main() {
     throw new Error("Missing REPORT_EMAIL_TO, SMTP_USER, or SMTP_PASS");
   }
   await sendReports([
-    { subject: `策略1開盤入快跑成績單｜${dateSlash(today)}`, text: openBuyText },
+    { subject: `策略1開盤沖成績單｜${dateSlash(today)}`, text: openBuyText },
     { subject: `策略2當沖雷達成績單｜${dateSlash(today)}`, text },
     { subject: `策略3隔日沖成績單｜${dateSlash(today)}`, text: strategy3Text },
   ], {
