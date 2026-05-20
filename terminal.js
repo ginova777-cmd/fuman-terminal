@@ -199,6 +199,27 @@ function ensureMobileAutoOrganizeButton() {
   panel.appendChild(button);
 }
 
+function normalizeMobileHorizontalPosition() {
+  if (!isMobileViewport()) return;
+  const resetTargets = [
+    document.documentElement,
+    document.body,
+    document.querySelector(".dashboard"),
+    document.querySelector("#strategy-view"),
+    document.querySelector("#strategy-table"),
+    document.querySelector(".strategy-terminal"),
+    document.querySelector(".strategy-results"),
+    document.querySelector(".swing-dashboard"),
+    document.querySelector(".intraday-dashboard"),
+    document.querySelector(".swing-panel"),
+    document.querySelector(".intraday-panel"),
+  ];
+  resetTargets.forEach((target) => {
+    if (target) target.scrollLeft = 0;
+  });
+  if (typeof window.scrollTo === "function") window.scrollTo(0, window.scrollY || 0);
+}
+
 function applyStaticTitleIcons() {
   const marketTitle = document.querySelector("#market-view .page-header h1");
   const settlementBadge = isMobileViewport() ? getTaiexMajorSettlementBadge() : "";
@@ -3177,8 +3198,17 @@ intradayRadarStyles.textContent = `
       overflow-x: hidden !important;
     }
     .dashboard {
-      padding-left: 10px;
-      padding-right: 10px;
+      padding-left: 6px;
+      padding-right: 6px;
+    }
+    .view-panel.active {
+      left: 0 !important;
+      width: 100% !important;
+      max-width: 100% !important;
+      margin-left: 0 !important;
+      margin-right: 0 !important;
+      overflow-x: hidden !important;
+      transform: none !important;
     }
     .view-panel.active {
       position: relative;
@@ -3278,7 +3308,7 @@ intradayRadarStyles.textContent = `
       overflow-x: auto;
     }
     .strategy-results {
-      padding: 12px;
+      padding: 8px;
       border-radius: 14px;
     }
     #strategy-view .swing-actions,
@@ -4064,6 +4094,7 @@ function renderOvernightDashboard(evaluated) {
 function renderStrategyScanner() {
   if (!strategyTable) return;
   deferUiWork(ensureMobileAutoOrganizeButton);
+  deferUiWork(normalizeMobileHorizontalPosition, 40);
   const selected = [...selectedStrategyIds];
   if (!(selected.length === 1 && (selected[0] === "intraday_2m" || selected[0] === "swing_radar" || selected[0] === "open_buy"))) setStrategyChrome("normal");
   strategyCards.forEach((card) => card.classList.toggle("selected", selectedStrategyIds.has(card.dataset.strategy)));
@@ -5031,6 +5062,7 @@ function showView(viewName, activeLink) {
   if (viewName === "chip-trade") deferUiWork(loadChipTradeData);
   if (viewName === "warrant-flow") deferUiWork(loadWarrantFlow);
   deferUiWork(ensureMobileAutoOrganizeButton);
+  deferUiWork(normalizeMobileHorizontalPosition, 60);
   const focusTarget = activeLink.dataset.focus ? document.querySelector(`#${activeLink.dataset.focus}`) : null;
   if (focusTarget) setTimeout(()=>focusTarget.focus(),0);
 }

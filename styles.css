@@ -2241,12 +2241,19 @@ h1 {
   }
 
   .dashboard {
-    padding-left: 10px;
-    padding-right: 10px;
+    padding-left: 6px;
+    padding-right: 6px;
   }
 
   .view-panel.active {
     position: relative;
+    left: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+    overflow-x: hidden !important;
+    transform: none !important;
   }
 
   .mobile-auto-organize {
@@ -2332,7 +2339,7 @@ h1 {
   }
 
   .strategy-results {
-    padding: 12px;
+    padding: 8px;
     border-radius: 14px;
   }
 
