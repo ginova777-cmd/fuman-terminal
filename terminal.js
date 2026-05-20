@@ -149,9 +149,13 @@ function setTitleWithSchedule(target, icon, text, scheduleKey) {
   target.innerHTML = titleWithSchedule(icon, text, scheduleKey);
 }
 
+function isMobileViewport() {
+  return typeof window !== "undefined" && window.matchMedia("(max-width: 760px)").matches;
+}
+
 function applyStaticTitleIcons() {
   const marketTitle = document.querySelector("#market-view .page-header h1");
-  const settlementBadge = getTaiexMajorSettlementBadge();
+  const settlementBadge = isMobileViewport() ? getTaiexMajorSettlementBadge() : "";
   if (marketTitle) {
     marketTitle.innerHTML = `${titleWithIcon("●", "市場總覽")}${settlementBadge ? ` <small class="update-mode-badge settlement-title-badge">${escapeAttr(settlementBadge)}</small>` : ""} ${scheduleBadgeHtml("market")}`;
   }
@@ -205,6 +209,13 @@ function getTaiexMajorSettlementBadge(date = new Date()) {
 }
 
 function labelUpdateModes() {
+  if (!isMobileViewport()) {
+    viewLinks.forEach((link) => {
+      const text = link.textContent || "";
+      const settlementBadge = getTaiexMajorSettlementBadge();
+      if (text.includes("市場總覽") && settlementBadge) appendUpdateBadge(link, settlementBadge, "live");
+    });
+  }
   document.querySelectorAll(".strategy-card[data-strategy]").forEach((card) => {
     const text = card.textContent || "";
     if (text.includes("策略2")) appendUpdateBadge(card, "立即更新", "live");
@@ -3132,14 +3143,92 @@ intradayRadarStyles.textContent = `
     .swing-card strong { font-size: 16px; }
     .swing-card small { font-size: 12px; }
     .swing-card em { font-size: 27px; }
-    .swing-panel {
+    .swing-panel,
+    .intraday-panel {
       width: 100%;
       max-width: 100%;
-      overflow-x: auto;
+      overflow: visible;
+    }
+    #strategy-view .swing-actions,
+    #strategy-view .intraday-actions {
+      display: none !important;
     }
     .swing-table,
     .intraday-table {
-      min-width: 680px;
+      display: block;
+      width: 100%;
+      min-width: 0 !important;
+      border-collapse: separate;
+      border-spacing: 0;
+      font-size: 15px;
+    }
+    .swing-table thead,
+    .intraday-table thead {
+      display: none;
+    }
+    .swing-table tbody,
+    .intraday-table tbody {
+      display: grid;
+      gap: 14px;
+    }
+    .swing-table tr,
+    .intraday-table tr {
+      display: block;
+      width: 100%;
+      border: 1px solid rgba(255, 84, 103, 0.18);
+      border-radius: 10px;
+      background: rgba(10, 12, 24, 0.86);
+      padding: 14px;
+    }
+    .swing-table td,
+    .intraday-table td {
+      display: grid;
+      grid-template-columns: 86px minmax(0, 1fr);
+      gap: 12px;
+      border: 0 !important;
+      padding: 7px 0;
+      color: #dce6ff;
+      line-height: 1.55;
+      text-align: left;
+      white-space: normal;
+      overflow-wrap: anywhere;
+    }
+    .swing-table td::before,
+    .intraday-table td::before {
+      color: #8994aa;
+      font-size: 13px;
+      font-weight: 800;
+      text-align: left;
+    }
+    .swing-table td > *,
+    .intraday-table td > * {
+      min-width: 0;
+      max-width: 100%;
+      white-space: normal;
+      overflow-wrap: anywhere;
+    }
+    .intraday-table td:nth-child(1)::before,
+    .swing-table td:nth-child(1)::before { content: "代號"; }
+    .intraday-table td:nth-child(2)::before,
+    .swing-table td:nth-child(2)::before { content: "名稱"; }
+    .intraday-table td:nth-child(3)::before,
+    .swing-table td:nth-child(3)::before { content: "狀態"; }
+    .intraday-table td:nth-child(4)::before,
+    .swing-table td:nth-child(4)::before { content: "訊號/價格"; }
+    .intraday-table td:nth-child(5)::before,
+    .swing-table td:nth-child(5)::before { content: "漲幅"; }
+    .intraday-table td:nth-child(6)::before,
+    .swing-table td:nth-child(6)::before { content: "成交量"; }
+    .intraday-table td:nth-child(7)::before,
+    .swing-table td:nth-child(7)::before { content: "條件"; }
+    .intraday-table td:nth-child(8)::before,
+    .swing-table td:nth-child(8)::before { content: "分數"; }
+    .intraday-table td:nth-child(9)::before,
+    .swing-table td:nth-child(9)::before { content: "原因"; }
+    .swing-table td:nth-child(10)::before { content: "原因"; }
+    .swing-table .swing-badges,
+    .intraday-table .swing-badges {
+      justify-content: flex-start;
     }
     .strategy5-shell,
     .strategy5-dashboard,

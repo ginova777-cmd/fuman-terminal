@@ -774,7 +774,7 @@ h1 {
 }
 
 .settlement-title-badge {
-  display: inline-flex;
+  display: none;
   align-items: center;
   margin-left: 10px;
   padding: 4px 9px;
@@ -1997,6 +1997,7 @@ h1 {
   }
 
   #market-view .settlement-title-badge {
+    display: inline-flex;
     margin-left: 0;
     font-size: 12px;
   }
@@ -2231,6 +2232,11 @@ h1 {
     overflow: visible !important;
   }
 
+  #strategy-view .intraday-actions,
+  #strategy-view .swing-actions {
+    display: none !important;
+  }
+
   .strategy5-results {
     padding: 14px;
     border-radius: 10px;
@@ -2360,15 +2366,14 @@ h1 {
   .swing-table td,
   .intraday-table td,
   .chip-table td {
-    display: flex;
-    align-items: flex-start;
-    justify-content: space-between;
+    display: grid;
+    grid-template-columns: 86px minmax(0, 1fr);
     gap: 12px;
     border: 0 !important;
     padding: 7px 0;
     color: #dce6ff;
     line-height: 1.55;
-    text-align: right;
+    text-align: left;
     white-space: normal;
     overflow-wrap: anywhere;
   }
@@ -2376,11 +2381,19 @@ h1 {
   .swing-table td::before,
   .intraday-table td::before,
   .chip-table td::before {
-    flex: 0 0 86px;
     color: #8994aa;
     font-size: 13px;
     font-weight: 800;
     text-align: left;
+  }
+
+  .swing-table td > *,
+  .intraday-table td > *,
+  .chip-table td > * {
+    min-width: 0;
+    max-width: 100%;
+    white-space: normal;
+    overflow-wrap: anywhere;
   }
 
   .intraday-table td:nth-child(1)::before,
@@ -2410,6 +2423,13 @@ h1 {
   .intraday-table td:nth-child(9)::before,
   .swing-table td:nth-child(9)::before,
   .chip-table td:nth-child(9)::before { content: "原因"; }
+  .swing-table td:nth-child(10)::before,
+  .chip-table td:nth-child(10)::before { content: "原因"; }
+
+  .swing-badges,
+  .strategy-chips {
+    justify-content: flex-start;
+  }
 
   .intraday-actions,
   .swing-actions {
