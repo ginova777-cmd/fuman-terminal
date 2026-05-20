@@ -5,6 +5,11 @@ const { cleanNumber, formatTradePrice } = require("./intraday-radar-rules");
 
 const ROOT = path.resolve(__dirname, "..");
 const SIGNAL_FILE = path.join(ROOT, ".intraday-cache", "signals.json");
+const REPORT_SENT_DIR = path.join(ROOT, ".intraday-cache", "sent-reports");
+const OPEN_BUY_FILE = path.join(ROOT, "data", "open-buy-latest.json");
+const OPEN_BUY_BACKUP_FILE = path.join(ROOT, "data", "open-buy-backup.json");
+const STRATEGY3_FILE = path.join(ROOT, "data", "strategy3-latest.json");
+const STRATEGY3_BACKUP_FILE = path.join(ROOT, "data", "strategy3-backup.json");
 const BASE_URL = process.env.FUMAN_BASE_URL || "https://fuman-terminal.vercel.app";
 const LOT_SIZE = Number(process.env.REPORT_LOT_SIZE || 1000);
 
@@ -21,6 +26,14 @@ function taipeiDateKey(date = new Date()) {
   }).formatToParts(date);
   const byType = Object.fromEntries(parts.map((part) => [part.type, part.value]));
   return `${byType.year}-${byType.month}-${byType.day}`;
+}
+
+function taipeiHour(date = new Date()) {
+  return Number(new Intl.DateTimeFormat("en-US", {
+    timeZone: "Asia/Taipei",
+    hour: "2-digit",
+    hour12: false,
+  }).format(date));
 }
 
 function dateSlash(value) {
@@ -112,6 +125,23 @@ function money(value) {
   return `${sign}${Math.abs(Math.round(value)).toLocaleString("zh-TW")} 元`;
 }
 
+function percent(value) {
+  const number = Number(value) || 0;
+  return `${number >= 0 ? "+" : ""}${number.toFixed(2)}%`;
+}
+
+function readCacheWithBackup(file, backupFile) {
+  const payload = readJson(file, { ok: true, matches: [] });
+  if ((payload.matches || []).length) return payload;
+  return readJson(backupFile, payload);
+}
+
+function reportRows(payload, limit = 20) {
+  return (payload.matches || [])
+    .filter((item) => item && item.code)
+    .slice(0, limit);
+}
+
 function isTaipeiMarketRecord(record) {
   const match = String(record?.timestamp || "").match(/\s(\d{2}):(\d{2})(?::(\d{2}))?$/);
   if (!match) return true;
@@ -170,11 +200,100 @@ function mergeRecords(records) {
   return [...map.values()].sort((a, b) => String(a.timestamp).localeCompare(String(b.timestamp)) || String(a.code).localeCompare(String(b.code)));
 }
 
+function buildOpenBuyReport(payload, quotes, today) {
+  const rows = reportRows(payload);
+  let totalProfit = 0;
+  const lines = [`策略1開盤入快跑成績單｜${dateSlash(today)}`, ""];
+  lines.push(`資料時間：${payload.updatedAt || "--"}｜候選 ${payload.count ?? rows.length} 檔`, "");
+  if (!rows.length) {
+    lines.push("今天沒有符合策略1開盤入快跑的候選標的。", "");
+  }
+  rows.forEach((item, index) => {
+    const quote = quotes.get(item.code) || {};
+    const entryPrice = cleanNumber(quote.open) || cleanNumber(item.close);
+    const exitPrice = cleanNumber(quote.high) || cleanNumber(quote.close) || cleanNumber(item.takeProfit) || cleanNumber(item.close);
+    const profit = entryPrice ? (exitPrice - entryPrice) * LOT_SIZE : 0;
+    const profitPct = entryPrice ? ((exitPrice - entryPrice) / entryPrice) * 100 : 0;
+    totalProfit += profit;
+    lines.push(
+      `#${index + 1} ${item.code} ${item.name || ""}`,
+      `分數：${Math.round(cleanNumber(item.score)) || "--"}｜狀態：${item.status || "--"}`,
+      `建議進場：${item.entry || "開盤觀察"}｜出場時間：${item.exitTime || "09:10"}`,
+      `進場價：${formatTradePrice(entryPrice)}｜出場價：${formatTradePrice(exitPrice)}`,
+      `停利：${formatTradePrice(item.takeProfit)}｜停損：${formatTradePrice(item.stopLoss)}｜不追高：${formatTradePrice(item.noChase)}`,
+      `預計獲利金額：${money(profit)}`,
+      `預計獲利率：${percent(profitPct)}`,
+      item.reason ? `原因：${item.reason}` : "",
+      ""
+    );
+  });
+  lines.push(`策略1合計：${money(totalProfit)}`);
+  return lines.join("\n");
+}
+
+function buildStrategy3Report(payload, quotes, today) {
+  const rows = reportRows(payload);
+  let totalProfit = 0;
+  const lines = [`策略3隔日沖成績單｜${dateSlash(today)}`, ""];
+  lines.push(`資料時間：${payload.updatedAt || "--"}｜候選 ${payload.count ?? rows.length} 檔`, "");
+  if (!rows.length) {
+    lines.push("今天沒有符合策略3隔日沖的候選標的。", "");
+  }
+  rows.forEach((item, index) => {
+    const quote = quotes.get(item.code) || {};
+    const entryPrice = cleanNumber(item.close);
+    const exitPrice = cleanNumber(quote.high) || cleanNumber(quote.close) || cleanNumber(item.high) || entryPrice;
+    const profit = entryPrice ? (exitPrice - entryPrice) * LOT_SIZE : 0;
+    const profitPct = entryPrice ? ((exitPrice - entryPrice) / entryPrice) * 100 : 0;
+    const reason = (item.matches || []).map((match) => match.reason).filter(Boolean).join("；");
+    totalProfit += profit;
+    lines.push(
+      `#${index + 1} ${item.code} ${item.name || ""}`,
+      `分數：${Math.round(cleanNumber(item.score || item.overnightScore)) || "--"}｜狀態：${item.overnightState || "--"}`,
+      `收盤價：${formatTradePrice(item.close)}｜今日最高/出場：${formatTradePrice(exitPrice)}`,
+      `漲幅：${percent(cleanNumber(item.percent))}｜成交量：${Math.round(cleanNumber(item.volumeLots || item.tradeVolume / 1000)).toLocaleString("zh-TW")} 張`,
+      `周轉率：${(cleanNumber(item.turnoverRate)).toFixed(2)}%｜量比：${(cleanNumber(item.volumeRatio)).toFixed(2)}`,
+      `預計獲利金額：${money(profit)}`,
+      `預計獲利率：${percent(profitPct)}`,
+      reason ? `原因：${reason}` : "",
+      ""
+    );
+  });
+  lines.push(`策略3合計：${money(totalProfit)}`);
+  return lines.join("\n");
+}
+
+async function sendReports(reports, mailConfig) {
+  const failures = [];
+  for (const report of reports) {
+    try {
+      await sendMail({ ...mailConfig, subject: report.subject, text: report.text });
+      console.log(`report sent to ${mailConfig.to}: ${report.subject}`);
+    } catch (error) {
+      failures.push(`${report.subject}: ${error.message}`);
+      console.error(`report failed: ${report.subject}`, error);
+    }
+  }
+  if (failures.length) throw new Error(`Report email failed: ${failures.join(" | ")}`);
+}
+
 async function main() {
   const cache = readJson(SIGNAL_FILE, { date: "", records: [] });
+  const openBuyPayload = readCacheWithBackup(OPEN_BUY_FILE, OPEN_BUY_BACKUP_FILE);
+  const strategy3Payload = readCacheWithBackup(STRATEGY3_FILE, STRATEGY3_BACKUP_FILE);
   const today = cache.date || taipeiDateKey();
+  const reportSlot = process.env.REPORT_SLOT || (taipeiHour() >= 15 ? "final" : "initial");
+  const sentFile = path.join(REPORT_SENT_DIR, `${today}-${reportSlot}.json`);
+  if (fs.existsSync(sentFile) && process.env.FORCE_REPORT !== "1") {
+    console.log(`scorecard already sent for ${today} ${reportSlot}`);
+    return;
+  }
   const records = mergeRecords(cache.records || []);
-  const codes = [...new Set(records.map((record) => record.code))];
+  const codes = [...new Set([
+    ...records.map((record) => record.code),
+    ...reportRows(openBuyPayload).map((item) => item.code),
+    ...reportRows(strategy3Payload).map((item) => item.code),
+  ].filter(Boolean))];
   const quotes = await fetchRealtimeMap(codes);
   let totalProfit = 0;
 
@@ -220,6 +339,10 @@ async function main() {
   lines.push(`我今天為您賺了：${money(totalProfit)}`);
   const text = lines.join("\n");
   console.log(text);
+  const openBuyText = buildOpenBuyReport(openBuyPayload, quotes, today);
+  const strategy3Text = buildStrategy3Report(strategy3Payload, quotes, today);
+  console.log(openBuyText);
+  console.log(strategy3Text);
 
   const to = process.env.REPORT_EMAIL_TO;
   const user = process.env.SMTP_USER;
@@ -227,16 +350,19 @@ async function main() {
   if (!to || !user || !pass) {
     throw new Error("Missing REPORT_EMAIL_TO, SMTP_USER, or SMTP_PASS");
   }
-  await sendMail({
+  await sendReports([
+    { subject: `策略1開盤入快跑成績單｜${dateSlash(today)}`, text: openBuyText },
+    { subject: `策略2當沖雷達成績單｜${dateSlash(today)}`, text },
+    { subject: `策略3隔日沖成績單｜${dateSlash(today)}`, text: strategy3Text },
+  ], {
     host: process.env.SMTP_HOST || "smtp.gmail.com",
     port: Number(process.env.SMTP_PORT || 465),
     user,
     pass,
     to,
-    subject: `策略2當沖雷達成績單｜${dateSlash(today)}`,
-    text,
   });
-  console.log(`report sent to ${to}`);
+  fs.mkdirSync(REPORT_SENT_DIR, { recursive: true });
+  fs.writeFileSync(sentFile, `${JSON.stringify({ date: today, slot: reportSlot, sentAt: new Date().toISOString(), to }, null, 2)}\n`);
 }
 
 main().catch((error) => {

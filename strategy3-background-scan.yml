@@ -1,22 +1,22 @@
-name: Strategy5 Fixed Scan
+name: Strategy3 Overnight Cache
 
 on:
   schedule:
-    # Taiwan time 21:00 on trading days. Retry every 10 minutes until cache is updated.
-    - cron: "*/10 13-16 * * 1-5"
+    # Taiwan time 13:00 on trading days. Retry every 10 minutes until cache is updated.
+    - cron: "*/10 5-14 * * 1-5"
   workflow_dispatch:
 
 permissions:
   contents: write
 
 concurrency:
-  group: strategy5-background-cache
+  group: strategy3-background-cache
   cancel-in-progress: false
 
 jobs:
   scan:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
 
@@ -26,21 +26,21 @@ jobs:
 
       - name: Decide retry need
         id: retry
-        run: echo "mode=$(node scripts/should-run-scheduled-cache.js strategy5)" >> "$GITHUB_OUTPUT"
+        run: echo "mode=$(node scripts/should-run-scheduled-cache.js strategy3)" >> "$GITHUB_OUTPUT"
         env:
           GITHUB_EVENT_NAME: ${{ github.event_name }}
 
-      - name: Update strategy5 cache
+      - name: Update strategy3 cache
         if: steps.retry.outputs.mode == 'run'
         run: |
-          node scripts/scan-strategy5-cache.js
+          node scripts/scan-strategy3-cache.js
 
-      - name: Commit strategy5 cache
+      - name: Commit strategy3 cache
         if: steps.retry.outputs.mode == 'run'
         run: |
           git config user.name "fuman-terminal-bot"
           git config user.email "actions@github.com"
-          git add data/strategy5-latest.json data/strategy5-backup.json
-          git diff --cached --quiet || git commit -m "Update strategy5 cache"
+          git add data/strategy3-latest.json data/strategy3-backup.json
+          git diff --cached --quiet || git commit -m "Update strategy3 cache"
           git pull --rebase origin main
           git push

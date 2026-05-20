@@ -4,10 +4,12 @@ on:
   schedule:
     # Taiwan trading hours: record every 5 minutes from 09:05 to 13:30.
     - cron: "*/5 1-5 * * 1-5"
-    # Taiwan time 14:15 initial report.
-    - cron: "15 6 * * 1-5"
-    # Taiwan time 15:30 final report.
-    - cron: "30 7 * * 1-5"
+    # Taiwan time 14:15 initial report. Retry every 10 minutes until sent.
+    - cron: "15,25,35,45,55 6 * * 1-5"
+    - cron: "5,15 7 * * 1-5"
+    # Taiwan time 15:30 final report. Retry every 10 minutes until sent.
+    - cron: "30,40,50 7 * * 1-5"
+    - cron: "0,10,20,30 8 * * 1-5"
   workflow_dispatch:
     inputs:
       mode:
@@ -53,8 +55,12 @@ jobs:
           else
             HOUR="$(TZ=Asia/Taipei date +%H)"
             MIN="$(TZ=Asia/Taipei date +%M)"
-            if [ "$HOUR:$MIN" = "14:15" ] || [ "$HOUR:$MIN" = "15:30" ]; then
+            if { [ "$HOUR" -eq 14 ] && [ "$MIN" -ge 15 ]; } || { [ "$HOUR" -eq 15 ] && [ "$MIN" -le 15 ]; }; then
               echo "mode=report" >> "$GITHUB_OUTPUT"
+              echo "report_slot=initial" >> "$GITHUB_OUTPUT"
+            elif { [ "$HOUR" -eq 15 ] && [ "$MIN" -ge 30 ]; } || { [ "$HOUR" -eq 16 ] && [ "$MIN" -le 30 ]; }; then
+              echo "mode=report" >> "$GITHUB_OUTPUT"
+              echo "report_slot=final" >> "$GITHUB_OUTPUT"
             elif [ "$HOUR" -ge 9 ] && { [ "$HOUR" -lt 13 ] || { [ "$HOUR" -eq 13 ] && [ "$MIN" -le 30 ]; }; }; then
               echo "mode=record" >> "$GITHUB_OUTPUT"
             else
@@ -75,6 +81,7 @@ jobs:
           SMTP_PASS: ${{ secrets.SMTP_PASS }}
           SMTP_HOST: ${{ secrets.SMTP_HOST }}
           SMTP_PORT: ${{ secrets.SMTP_PORT }}
+          REPORT_SLOT: ${{ steps.mode.outputs.report_slot }}
 
       - name: Send failure alert
         if: failure()
@@ -85,6 +92,7 @@ jobs:
           SMTP_PASS: ${{ secrets.SMTP_PASS }}
           SMTP_HOST: ${{ secrets.SMTP_HOST }}
           SMTP_PORT: ${{ secrets.SMTP_PORT }}
+          REPORT_SLOT: ${{ steps.mode.outputs.report_slot }}
           SCORECARD_MODE: ${{ steps.mode.outputs.mode }}
           GITHUB_RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
 
@@ -97,9 +105,10 @@ jobs:
           SMTP_PASS: ${{ secrets.SMTP_PASS }}
           SMTP_HOST: ${{ secrets.SMTP_HOST }}
           SMTP_PORT: ${{ secrets.SMTP_PORT }}
+          REPORT_SLOT: ${{ steps.mode.outputs.report_slot }}
 
       - name: Save private intraday cache
-        if: steps.mode.outputs.mode == 'record'
+        if: steps.mode.outputs.mode == 'record' || steps.mode.outputs.mode == 'report'
         uses: actions/cache/save@v4
         with:
           path: .intraday-cache

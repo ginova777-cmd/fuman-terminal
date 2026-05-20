@@ -1,21 +1,32 @@
-name: Strategy4 Background Scan
+name: Strategy Background Cache
 
 on:
   schedule:
-    - cron: "*/5 0-6 * * 1-5"
+    # Taiwan time 07:00 and 14:30 on trading days. Retry every 10 minutes until cache is updated.
+    - cron: "*/10 23 * * 0-4"
+    - cron: "*/10 0-14 * * 1-5"
   workflow_dispatch:
+    inputs:
+      full_scan:
+        description: "Use true for manual full market scan"
+        required: true
+        default: "true"
+        type: choice
+        options:
+          - "true"
+          - "false"
 
 permissions:
   contents: write
 
 concurrency:
-  group: strategy4-background-scan
-  cancel-in-progress: true
+  group: strategy-background-cache
+  cancel-in-progress: false
 
 jobs:
   scan:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
 
@@ -23,16 +34,38 @@ jobs:
         with:
           node-version: "20"
 
-      - name: Update strategy4 cache
-        run: node scripts/scan-strategy4-cache.js
+      - name: Decide retry need
+        id: retry
+        run: echo "mode=$(node scripts/should-run-scheduled-cache.js strategy4)" >> "$GITHUB_OUTPUT"
+        env:
+          GITHUB_EVENT_NAME: ${{ github.event_name }}
+
+      - name: Update strategy caches
+        if: steps.retry.outputs.mode == 'run'
+        run: |
+          RUN_OPEN_BUY="0"
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] || [ "${{ github.event_name }}" = "schedule" ]; then
+            RUN_OPEN_BUY="1"
+          fi
+          node scripts/scan-strategy4-cache.js
+          if [ "$RUN_OPEN_BUY" = "1" ]; then
+            node scripts/scan-open-buy-cache.js
+          else
+            echo "Skip open-buy for this manual batch run."
+          fi
         env:
           STRATEGY4_BATCH_SIZE: "48"
           STRATEGY4_BATCHES_PER_RUN: "5"
+          OPEN_BUY_BATCH_SIZE: "48"
+          OPEN_BUY_BATCHES_PER_RUN: "5"
+          FULL_SCAN: ${{ (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.full_scan == 'true')) && '1' || '0' }}
 
       - name: Commit cache
+        if: steps.retry.outputs.mode == 'run'
         run: |
           git config user.name "fuman-terminal-bot"
           git config user.email "actions@github.com"
-          git add data/strategy4-latest.json
-          git diff --cached --quiet || git commit -m "Update strategy4 cache"
+          git add data/strategy4-latest.json data/strategy4-backup.json data/open-buy-latest.json data/open-buy-backup.json
+          git diff --cached --quiet || git commit -m "Update strategy caches"
+          git pull --rebase origin main
           git push
