@@ -1436,27 +1436,6 @@ const INTRADAY_EXCLUDED_CODES = new Set([
 
 function ensureStrategyCards() {
   if (!strategyList) return;
-  const descriptions = {
-    short_fund_flow: "短線資金快速集中，觀察量價同步放大的強勢股。",
-    chip_health_strong: "外資、投信與法人方向偏買，優先看籌碼乾淨的標的。",
-    one_day_rebound: "前一日大跌後出現收紅反彈，需要日K確認。",
-    short_squeeze: "強漲放量、漲幅排名靠前，列入嘎空觀察。",
-    ultra_short: "結合盤中訊號與量價強度，偏超短線操作名單。",
-  };
-  STRATEGY_DEFS.forEach((strategy) => {
-    if (strategyList.querySelector(`[data-strategy="${strategy.id}"]`)) return;
-    const card = document.createElement("article");
-    card.className = "strategy-card";
-    card.dataset.strategy = strategy.id;
-    card.innerHTML = `
-      <span>${strategy.icon}</span>
-      <div>
-        <strong>${strategy.label}</strong>
-        <p>${descriptions[strategy.id] || "策略條件已加入綜合策略掃描。"}</p>
-      </div>
-    `;
-    strategyList.appendChild(card);
-  });
   const title = strategyList.querySelector("p");
   if (title && title.textContent.includes("策略清單")) {
     title.textContent = `策略清單 (${strategyList.querySelectorAll(".strategy-card[data-strategy]").length})`;
@@ -3695,21 +3674,6 @@ function renderStrategy5Dashboard(evaluated) {
 
   const descriptions = {
     foreign_trust_breakout: "外資與投信同步買超，漲幅未過熱，優先觀察準突破名單。",
-    momentum: "價格趨勢與成交值同步轉強。",
-    main_force_chip: "法人、大戶或主力籌碼偏買。",
-    twenty_day_breakout: "收盤價接近近期強勢突破。",
-    opening_power: "盤中開盤後快速轉強。",
-    red_to_green: "弱轉強候選，觀察翻紅延續。",
-    investment_trust: "投信連買或偏買候選。",
-    vcp: "波動收斂後等待突破。",
-    ma_bull: "均線與趨勢方向偏多。",
-    sync_backtest: "量價與籌碼同步性高。",
-    overnight_chip: "隔日沖與尾盤籌碼觀察。",
-    short_fund_flow: "短線資金快速集中。",
-    chip_health_strong: "籌碼健檢偏強。",
-    one_day_rebound: "大跌後一日反彈，需日K確認。",
-    short_squeeze: "強漲放量，嘎空觀察。",
-    ultra_short: "盤中超短線操作候選。",
   };
 
   const rows = list.length ? list.map((stock, index) => {
@@ -5832,7 +5796,7 @@ document.addEventListener("click", (event) => {
 document.addEventListener("click", (event) => {
   const filterButton = event.target.closest("[data-strategy5-filter]");
   if (!filterButton) return;
-  strategy5ActiveId = filterButton.dataset.strategy5Filter || "momentum";
+  strategy5ActiveId = filterButton.dataset.strategy5Filter || "foreign_trust_breakout";
   renderStrategyScanner();
 });
 
