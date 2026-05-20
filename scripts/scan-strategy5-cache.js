@@ -86,6 +86,25 @@ function formatInstitution(value) {
   return `${sign}${Math.round(amount).toLocaleString("zh-TW")}`;
 }
 
+function buildStrategy5Match({ stock, inst, valueRank, volumeRank }) {
+  const pct = cleanNumber(stock.percent);
+  const foreign = cleanNumber(inst.foreign);
+  const trust = cleanNumber(inst.trust);
+  const total = cleanNumber(inst.total);
+  const smartMoney = total + trust * 1.4;
+  const jointBuying = total > 0 && foreign > 0 && trust > 0;
+  if (!jointBuying || pct <= -1.5 || pct > 7.5) return null;
+
+  const scoreBase = clamp(
+    Math.round(35 + pct * 7 + valueRank * 0.24 + volumeRank * 0.18 + Math.sign(smartMoney) * 8),
+    0,
+    100
+  );
+  const score = clamp(scoreBase + 32, 0, 100);
+  const reason = `外資 ${formatInstitution(foreign)}、投信 ${formatInstitution(trust)} 同買，法人合計 ${formatInstitution(total)}；漲幅 ${pct.toFixed(2)}%。`;
+  return { id: "foreign_trust_breakout", short: "準突破", icon: "◆", score, reason };
+}
+
 function buildMatches(stocks, institutionData) {
   const valueRanks = rankMap(stocks, "value");
   const volumeRanks = rankMap(stocks, "tradeVolume");
@@ -93,32 +112,26 @@ function buildMatches(stocks, institutionData) {
     const inst = institutionData[stock.code] || {};
     const valueRank = valueRanks.get(stock.code) || 0;
     const volumeRank = volumeRanks.get(stock.code) || 0;
-    const pct = cleanNumber(stock.percent);
     const close = cleanNumber(stock.close);
     const foreign = cleanNumber(inst.foreign);
     const trust = cleanNumber(inst.trust);
-    const total = cleanNumber(inst.total || (foreign + trust + cleanNumber(inst.dealer)));
-    const smartMoney = total + trust * 1.4;
-    const nearBreakout = true;
-    const jointBuying = total > 0 && foreign > 0 && trust > 0;
-    const scoreBase = clamp(
-      Math.round(35 + pct * 7 + valueRank * 0.24 + volumeRank * 0.18 + Math.sign(smartMoney) * 8),
-      0,
-      100
-    );
-    const score = clamp(scoreBase + 18 + 8 + 6, 0, 100);
-    const reason = `外資 ${formatInstitution(foreign)}、投信 ${formatInstitution(trust)} 同買，法人合計 ${formatInstitution(total)}；漲幅 ${pct.toFixed(2)}%。`;
+    const dealer = cleanNumber(inst.dealer);
+    const total = cleanNumber(inst.total || (foreign + trust + dealer));
+    const normalizedInst = { foreign, trust, dealer, total };
+    const match = buildStrategy5Match({ stock, inst: normalizedInst, valueRank, volumeRank });
+    const matches = match ? [match] : [];
+    const score = match?.score || 0;
     return {
       ...stock,
       valueRank,
       volumeRank,
-      inst: { foreign, trust, dealer: cleanNumber(inst.dealer), total },
+      inst: normalizedInst,
       score,
-      matches: [{ id: "foreign_trust_breakout", short: "準突破", icon: "◆", score, reason }],
-      activeMatch: { id: "foreign_trust_breakout", short: "準突破", icon: "◆", score, reason },
+      matches,
+      activeMatch: matches[0] || null,
     };
   })
-    .filter((stock) => stock.matches.length && stock.activeMatch && stock.score && stock.inst.total > 0 && stock.inst.foreign > 0 && stock.inst.trust > 0 && stock.percent > -1.5 && stock.percent <= 7.5 && stock.close >= 10)
+    .filter((stock) => stock.matches.length && stock.activeMatch && stock.score && stock.inst.total > 0 && stock.close >= 10)
     .sort((a, b) => b.score - a.score || b.percent - a.percent || b.value - a.value)
     .slice(0, 80);
 }
