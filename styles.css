@@ -773,6 +773,21 @@ h1 {
   font-weight: 700;
 }
 
+.settlement-title-badge {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 10px;
+  padding: 4px 9px;
+  border: 1px solid rgba(255, 77, 92, 0.55);
+  border-radius: 999px;
+  background: rgba(255, 77, 92, 0.14);
+  color: #ff9aa8;
+  font-size: 13px;
+  font-weight: 900;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
 .data-status {
   display: flex;
   width: fit-content;
@@ -1974,6 +1989,18 @@ h1 {
     font-weight: 950;
   }
 
+  #market-view .page-header h1 {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  #market-view .settlement-title-badge {
+    margin-left: 0;
+    font-size: 12px;
+  }
+
   .strategy-header p,
   .eyebrow,
   .header-time {
@@ -2048,15 +2075,7 @@ h1 {
   }
 
   .strategy-list {
-    display: flex;
-    gap: 12px;
-    overflow-x: auto;
-    overflow-y: hidden;
-    padding: 2px 2px 12px;
-    border: 0;
-    background: transparent;
-    scroll-snap-type: x mandatory;
-    scrollbar-width: none;
+    display: none !important;
   }
 
   .strategy-list::-webkit-scrollbar {

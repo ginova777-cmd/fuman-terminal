@@ -150,7 +150,11 @@ function setTitleWithSchedule(target, icon, text, scheduleKey) {
 }
 
 function applyStaticTitleIcons() {
-  setTitleWithSchedule(document.querySelector("#market-view .page-header h1"), "●", "市場總覽", "market");
+  const marketTitle = document.querySelector("#market-view .page-header h1");
+  const settlementBadge = getTaiexMajorSettlementBadge();
+  if (marketTitle) {
+    marketTitle.innerHTML = `${titleWithIcon("●", "市場總覽")}${settlementBadge ? ` <small class="update-mode-badge settlement-title-badge">${escapeAttr(settlementBadge)}</small>` : ""} ${scheduleBadgeHtml("market")}`;
+  }
   setTitleWithSchedule(document.querySelector("#watchlist-view .page-header h1"), "☆", "自選股", "watchlist");
   setTitleWithSchedule(document.querySelector("#chip-trade-view .page-header h1"), "◆", "外資 + 投信連買", "chip");
   setTitleWithSchedule(document.querySelector("#warrant-flow-view .page-header h1"), "◒", "權證走向", "warrant");
@@ -201,11 +205,6 @@ function getTaiexMajorSettlementBadge(date = new Date()) {
 }
 
 function labelUpdateModes() {
-  viewLinks.forEach((link) => {
-    const text = link.textContent || "";
-    const settlementBadge = getTaiexMajorSettlementBadge();
-    if (text.includes("市場總覽") && settlementBadge) appendUpdateBadge(link, settlementBadge, "live");
-  });
   document.querySelectorAll(".strategy-card[data-strategy]").forEach((card) => {
     const text = card.textContent || "";
     if (text.includes("策略2")) appendUpdateBadge(card, "立即更新", "live");
