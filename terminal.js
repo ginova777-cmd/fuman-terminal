@@ -103,7 +103,7 @@ const SCHEDULE_META = {
   openBuy: { label: "07:00 / 14:30", times: ["07:00", "14:30"] },
   strategy3: { label: "13:00", times: ["13:00"] },
   swing: { label: "07:00 / 14:30", times: ["07:00", "14:30"] },
-  strategy5: { label: "21:00", times: ["21:00"] },
+  strategy5: { label: "06:00 / 21:00", times: ["06:00", "21:00"] },
   chip: { label: "06:00 / 21:00", times: ["06:00", "21:00"] },
   warrant: { label: "06:00 / 21:00", times: ["06:00", "21:00"] },
 };
@@ -3688,8 +3688,8 @@ function renderStrategy5Dashboard(evaluated) {
   }).join("") : `<div class="empty-state">目前沒有符合「${active.label}」的股票。</div>`;
 
   const scanText = strategy5UpdatedAt
-    ? `21:00 完整掃｜${new Date(strategy5UpdatedAt).toLocaleDateString("zh-TW")}`
-    : "21:00 完整掃結果讀取中";
+    ? `06:00 / 21:00 完整掃｜${new Date(strategy5UpdatedAt).toLocaleDateString("zh-TW")}`
+    : "06:00 / 21:00 完整掃結果讀取中";
   strategyTable.innerHTML = `
     <section class="strategy5-shell strategy5-clean">
       <section class="strategy5-dashboard">
@@ -3709,7 +3709,7 @@ function renderStrategy5Dashboard(evaluated) {
 
 function renderStrategy5CacheLoading() {
   setStrategyChrome("strategy5");
-  if (strategySummary) strategySummary.textContent = "策略5：21:00 完整掃結果讀取中。";
+  if (strategySummary) strategySummary.textContent = "策略5：06:00 / 21:00 完整掃結果讀取中。";
   if (strategyMatchCount) strategyMatchCount.textContent = "更新中";
   if (strategyAvgScore) strategyAvgScore.textContent = "--";
   if (strategyTopHit) strategyTopHit.textContent = "--";
@@ -3720,7 +3720,7 @@ function renderStrategy5CacheLoading() {
           <div class="strategy5-results-head">
             <div>
               <h3>${titleWithSchedule("▰", "策略5-綜合策略", "strategy5")}</h3>
-              <p>正在讀取 21:00 完整掃結果，完成後固定顯示到下一次掃描。</p>
+              <p>正在讀取 06:00 / 21:00 完整掃結果，完成後固定顯示到下一次掃描。</p>
             </div>
           </div>
           <div class="empty-state">策略5完整掃結果讀取中，請稍等。</div>
