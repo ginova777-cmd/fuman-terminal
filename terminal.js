@@ -3154,8 +3154,8 @@ function setStrategyChrome(mode) {
   }
   if (strategyBadge) strategyBadge.textContent = intraday ? "FMN://intraday.2m.scan" : swing ? "FMN://swing.daily.scan" : openBuy ? "FMN://open.buy.scan" : "FMN://strategy.scan";
   const icon = intraday ? "◔" : swing ? "└" : openBuy ? "⚡" : strategy5 ? "▰" : "⚡";
-  const title = intraday ? "2分K當沖雷達" : swing ? "策略4-波段雷達" : openBuy ? "策略1-開盤入快跑" : strategy5 ? "策略5-綜合策略" : "綜合策略選股";
-  const headerTitle = intraday ? "2分K當沖雷達" : swing ? "策略4-波段雷達" : openBuy ? "策略1-開盤入快跑" : strategy5 ? "策略5-綜合策略" : "策略中心";
+  const title = intraday ? "2分K當沖雷達" : swing ? "策略4-波段雷達" : openBuy ? "策略1-明日開盤入" : strategy5 ? "策略5-綜合策略" : "綜合策略選股";
+  const headerTitle = intraday ? "2分K當沖雷達" : swing ? "策略4-波段雷達" : openBuy ? "策略1-明日開盤入" : strategy5 ? "策略5-綜合策略" : "策略中心";
   const scheduleKey = intraday ? "intraday" : swing ? "swing" : openBuy ? "openBuy" : strategy5 ? "strategy5" : "market";
   setTitleWithSchedule(strategyTitle, icon, title, scheduleKey);
   setTitleWithSchedule(strategyHeaderTitle, icon, headerTitle, scheduleKey);
@@ -3549,7 +3549,7 @@ function renderOpenBuyRadar(universe) {
     ? `已掃描 ${scannedCount}/${totalCount}｜候選 ${scanCount}｜${new Date(openBuyScanLastAt).toLocaleTimeString("zh-TW", { hour12: false })}`
     : `等待後端掃描 0/${totalCount}`;
 
-  if (strategySummary) strategySummary.textContent = `策略1-開盤入快跑｜14:30後產生明日候選｜08:55後看最終名單｜${scanText}`;
+  if (strategySummary) strategySummary.textContent = `策略1-明日開盤入｜14:30後產生明日候選｜08:55後看最終名單｜${scanText}`;
   if (strategyMatchCount) strategyMatchCount.textContent = rows.length.toLocaleString("zh-TW");
   if (strategyAvgScore) strategyAvgScore.textContent = rows.length ? Math.round(rows.reduce((sum, stock) => sum + stock.score, 0) / rows.length) : "--";
   if (strategyTopHit) strategyTopHit.textContent = rows.length ? "+1.2%" : "--";
@@ -3578,7 +3578,7 @@ function renderOpenBuyRadar(universe) {
     <section class="swing-dashboard">
       <div class="swing-topbar">
         <div>
-          <h2>${titleWithSchedule("⚡", "策略1-開盤入快跑", "openBuy")}</h2>
+          <h2>${titleWithSchedule("⚡", "策略1-明日開盤入", "openBuy")}</h2>
           <p>14:30後先出明日候選；08:55後看最終名單。買入：09:00 開盤價｜停利 +1.2%｜停損 -1.0%｜09:10 強制出場。${scanText}</p>
         </div>
         <div class="swing-controls">
@@ -3609,7 +3609,7 @@ function renderOpenBuyRadar(universe) {
         <table class="swing-table">
           <thead>
             <tr>
-              <th>股票代號</th><th>股票名稱</th><th>狀態</th><th>昨收</th><th>昨日漲幅</th><th>買入</th><th>停利</th><th>停損</th><th>分數</th><th>原因</th>
+              <th>股票代號</th><th>股票名稱</th><th>狀態</th><th>收盤價</th><th>昨日漲幅</th><th>買入</th><th>停利</th><th>停損</th><th>分數</th><th>原因</th>
             </tr>
           </thead>
           <tbody>${tableRows}</tbody>

@@ -1,0 +1,276 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>輔滿 股票終端</title>
+    <link rel="stylesheet" href="styles.css?v=market-cards-20260515">
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar">
+        <div class="brand">
+          <img class="brand-logo" src="assets/logo.png" alt="輔滿 Logo">
+          <div>
+            <strong>輔滿 <b>FUMAn</b></strong>
+            <span>股票終端</span>
+            <small>अहं नरकं अनुभूतवान्, अहं दिव्यगाथां निर्मितवान्।</small>
+          </div>
+        </div>
+
+        <nav class="nav-list" aria-label="Main navigation">
+          <a class="nav-item active" href="#" data-view="market"><span class="nav-icon globe">●</span>市場總覽</a>
+          <a class="nav-item" href="#" data-view="watchlist"><span class="nav-icon">☆</span>自選股</a>
+          <p class="nav-label">策略中心</p>
+          <a class="strategy-nav" href="#" data-view="strategy"><span class="s1">⚡</span>策略1-明日開盤入</a>
+          <a class="strategy-nav" href="#" data-view="strategy"><span class="s2">◔</span>策略2-當沖雷達</a>
+          <a class="strategy-nav" href="#" data-view="strategy"><span class="s3">◐</span>策略3-隔日沖</a>
+          <a class="strategy-nav" href="#" data-view="strategy"><span class="s4">└</span>策略4-波段</a>
+          <a class="strategy-nav" href="#" data-view="strategy"><span class="s5">▰</span>策略5-綜合策略</a>
+          <section class="chip-menu" aria-label="盤後籌碼">
+            <h2>盤後籌碼</h2>
+            <a href="#" class="chip-menu-link" data-view="chip-trade"><span>◆</span>1.買賣超</a>
+            <a href="#" class="chip-menu-link" data-view="warrant-flow"><span>◒</span>2.權證走向</a>
+          </section>
+        </nav>
+
+        <div class="sidebar-foot">
+          <div class="logout">↪ 登出</div>
+          <div class="link-state"><span></span>TWSE / TPEX</div>
+        </div>
+      </aside>
+
+      <main class="dashboard">
+
+        <!-- 策略中心 -->
+        <section class="view-panel" id="strategy-view" hidden>
+          <header class="strategy-header">
+            <div>
+              <span class="console-badge">策略控管台</span>
+              <h1>策略中心</h1>
+              <p>左側切換日線、籌碼與高波動策略；右側即時重算符合條件的股票訊號。</p>
+            </div>
+            <div class="header-time strategy-time">05/07 17:20</div>
+          </header>
+          <section class="strategy-terminal" aria-label="Strategy scanner">
+            <section class="strategy-list" aria-label="Strategy checklist">
+              <div class="strategy-list-title">策略清單 (11)</div>
+              <article class="strategy-card selected" data-strategy="momentum"><div class="strategy-icon hot">⚡</div><div><h2>動能分數 75+</h2><p>價格強勢，20日突破量比同步轉強，優先找資金加速股。</p></div><span>核心</span></article>
+              <article class="strategy-card" data-strategy="main_force_chip"><div class="strategy-icon violet">♣</div><div><h2>主力籌碼盤整</h2><p>法人、大戶成交比重高，觀察分點或區間底部的支撐力道。</p></div></article>
+              <article class="strategy-card" data-strategy="twenty_day_breakout"><div class="strategy-icon green">↑</div><div><h2>突破20日新高</h2><p>收盤價高於近20日最高價，華星突破重要壓力位。</p></div></article>
+              <article class="strategy-card" data-strategy="opening_power"><div class="strategy-icon red">✥</div><div><h2>開盤即戰力狙擊</h2><p>針對開盤10分鐘跳空與量能過濾，捕捉即時強轉強標的。</p></div><span>v1.6</span></article>
+              <article class="strategy-card" data-strategy="red_to_green"><div class="strategy-icon blue">↻</div><div><h2>昨日紅轉綠</h2><p>參考 Azix 邏輯，以昨收為準，開低走高突破昨日高點臨界。</p></div></article>
+              <article class="strategy-card" data-strategy="intraday_2m"><div class="strategy-icon yellow">⌁</div><div><h2>2分K當沖雷達</h2><p>針對台股 2 分 K 頻率進行形態捕捉，尋找 N 底或框型底。</p></div></article>
+              <article class="strategy-card" data-strategy="investment_trust"><div class="strategy-icon cyan">▦</div><div><h2>投信連買認養股</h2><p>投信連續買超 3 日以上且站上均線，籌碼高度集中穩的。</p></div></article>
+              <article class="strategy-card" data-strategy="vcp"><div class="strategy-icon indigo">⌁</div><div><h2>VCP 波段收斂</h2><p>波動度逐漸收斂，放量啟動前的關鍵轉折監控。</p></div></article>
+              <article class="strategy-card" data-strategy="ma_bull"><div class="strategy-icon pink">☰</div><div><h2>均線多頭排列</h2><p>5/10/20/60 MA 呈現多頭向上發散，趨勢型強勢股。</p></div></article>
+              <article class="strategy-card" data-strategy="sync_backtest"><div class="strategy-icon mint">▣</div><div><h2>高同步率回測</h2><p>Smart Money 重新介入，同步率從低位陡升至 60 以上。</p></div></article>
+              <article class="strategy-card" data-strategy="overnight_chip"><div class="strategy-icon rose">⌬</div><div><h2>隔日沖吸籌監控</h2><p>監控量盤異常拉抬與資金流入，捕捉隔日開高機會。</p></div></article>
+            </section>
+
+            <section class="strategy-results">
+              <div class="strategy-toolbar">
+                <div>
+                  <span class="console-badge">FMN://strategy.scan</span>
+                  <h2>綜合策略選股</h2>
+                  <p id="strategy-summary">點選左側策略，立即篩出命中股票。</p>
+                </div>
+                <div class="strategy-actions">
+                  <div class="mode-toggle" aria-label="篩選模式">
+                    <button class="active" data-strategy-mode="any">任一符合</button>
+                    <button data-strategy-mode="all">全部符合</button>
+                  </div>
+                  <button class="ghost-btn" id="strategy-clear" type="button">清除</button>
+                </div>
+              </div>
+
+              <div class="strategy-metrics">
+                <article><span>符合股票</span><strong id="strategy-match-count">--</strong></article>
+                <article><span>平均分數</span><strong id="strategy-avg-score">--</strong></article>
+                <article><span>最高命中</span><strong id="strategy-top-hit">--</strong></article>
+              </div>
+
+              <label class="strategy-search">
+                <span>搜尋股票</span>
+                <input id="strategy-search" type="search" placeholder="輸入代號或名稱" autocomplete="off">
+              </label>
+
+              <div class="strategy-table" id="strategy-table">
+                <div class="empty-state">等待官方股票資料...</div>
+              </div>
+            </section>
+          </section>
+        </section>
+
+        <!-- 市場總覽 -->
+        <section class="view-panel active" id="market-view">
+          <header class="page-header">
+            <div>
+              <p class="eyebrow">輔滿股票終端</p>
+              <h1>市場總覽</h1>
+              <span class="refresh-line">05/07  重新整理　更新 17:23:07</span>
+            </div>
+            <div class="header-time market-time">05/07 17:20</div>
+          </header>
+
+          <section class="metric-grid" aria-label="Market indexes">
+            <article class="metric-card"><span>↗ 加權指數</span><strong>--</strong><em>等待官方資料</em></article>
+            <article class="metric-card"><span>↗ 櫃買指數</span><strong>--</strong><em>等待官方資料</em></article>
+            <article class="metric-card"><span>⇅ 台指近</span><strong>--</strong><em>等待期交所資料</em></article>
+            <article class="metric-card"><span>☾ 台指次月</span><strong>--</strong><em>等待期交所資料</em></article>
+          </section>
+
+          <section class="ticker-strip" aria-label="Market ticker"><span>等待官方資料...</span></section>
+
+          <section class="strength-panel">
+            <div class="strength-head">
+              <div><h2>強勢</h2><p>等待官方資料</p></div>
+              <strong>--<span>上漲比例</span></strong>
+            </div>
+            <div class="stats-row">
+              <div><span>上漲</span><strong class="down">--</strong></div>
+              <div><span>下跌</span><strong class="up">--</strong></div>
+              <div><span>平盤</span><strong>--</strong></div>
+              <div><span>成交值</span><strong>--</strong></div>
+            </div>
+            <div class="balance-bar">
+              <span class="red-zone"></span><span class="mid-zone"></span><span class="green-zone"></span>
+            </div>
+          </section>
+
+          <section class="terminal-band" aria-label="Terminal status">
+            <div class="terminal-log">
+              <span>FMN://market.scan</span>
+              <strong id="terminal-message">等待官方資料回應...</strong>
+            </div>
+            <label class="search-box">
+              <span>搜尋</span>
+              <input id="stock-search" type="search" placeholder="輸入股票代號或名稱" autocomplete="off">
+            </label>
+          </section>
+
+          <section class="watch-section">
+            <div class="section-title">
+              <div><h2>強勢排行</h2><p>依漲幅與成交值篩選</p></div>
+              <span id="watch-count">TOP 10</span>
+            </div>
+            <div class="stock-table" id="stock-table"></div>
+          </section>
+
+          <section class="sector-section">
+            <div class="section-title">
+              <div><h2>熱力圖</h2><p>公開資料排序</p></div>
+              <span>全部 · 60 個</span>
+            </div>
+            <div class="tabs">
+              <button>全部</button><button>官方產業</button><button>電子細分</button><button>群組概念</button><button>集團股</button>
+            </div>
+            <div class="heatmap" id="heatmap"></div>
+          </section>
+        </section>
+
+        <!-- 自選股 -->
+        <section class="view-panel" id="watchlist-view" hidden>
+          <header class="page-header">
+            <div>
+              <h1>自選股</h1>
+            </div>
+            <div style="display:flex; align-items:center; gap:12px;">
+              <input id="watchlist-search-input" type="text" placeholder="輸入股票代號" autocomplete="off"
+                style="background:#1a1e2e; border:1px solid #2a2f45; color:#fff; padding:8px 14px; border-radius:8px; font-size:14px; width:160px; outline:none;">
+              <button id="watchlist-add-btn"
+                style="background:#e74c3c; color:#fff; border:none; padding:8px 18px; border-radius:8px; font-size:14px; cursor:pointer; font-weight:600;">+ 新增</button>
+            </div>
+          </header>
+
+          <div class="watchlist-layout">
+            <!-- 左側：自選股清單 -->
+            <div class="watchlist-list-pane">
+              <div id="watchlist-stocks" class="watchlist-stock-list">
+                <div style="text-align:center; padding:40px; color:#555;">尚未新增自選股，請輸入股票代號後點新增</div>
+              </div>
+            </div>
+
+            <!-- 右側：TradingView 技術分析 -->
+            <div id="watchlist-analysis" class="watchlist-analysis-pane">
+              <div style="color:#555; font-size:14px;">點擊左側股票查看技術分析</div>
+            </div>
+          </div>
+        </section>
+
+        <!-- 買賣超 -->
+        <section class="view-panel" id="chip-trade-view" hidden>
+          <header class="page-header chip-page-header">
+            <div>
+              <h1>外資 + 投信連買</h1>
+              <span class="refresh-line" id="chip-trade-date">等待盤後資料</span>
+            </div>
+          </header>
+
+          <section class="chip-tool">
+            <div class="chip-tool-row">
+              <span>個股資訊:</span>
+              <div class="chip-tabs" aria-label="買賣超資料模式">
+                <button class="active" type="button" data-chip-mode="after">盤後</button>
+              </div>
+              <select id="chip-sort">
+                <option value="trustForeign">外資+投信買超</option>
+                <option value="trust">投信買超</option>
+                <option value="foreign">外資買超</option>
+                <option value="pct">漲幅</option>
+                <option value="value">成交值</option>
+              </select>
+            </div>
+            <div class="chip-tool-row">
+              <span>項目切換:</span>
+              <button class="chip-pill active" type="button" data-chip-filter="joint">外資+投信連買</button>
+              <button class="chip-pill" type="button" data-chip-filter="trust">投信連續買超</button>
+              <button class="chip-pill" type="button" data-chip-filter="foreign">外資買超</button>
+              <button class="chip-pill" type="button" data-chip-filter="legal">法人同買</button>
+            </div>
+          </section>
+
+          <section class="chip-table-wrap">
+            <table class="chip-table">
+              <thead>
+                <tr>
+                  <th>股票代號</th>
+                  <th>股票名稱</th>
+                  <th>現價/收盤</th>
+                  <th>漲跌</th>
+                  <th>漲幅(%)</th>
+                  <th>成交量</th>
+                  <th>外資買賣超</th>
+                  <th>投信買賣超</th>
+                  <th>外資連買</th>
+                  <th>投信連買</th>
+                  <th>同買</th>
+                  <th>法人合計</th>
+                </tr>
+              </thead>
+              <tbody id="chip-trade-body">
+                <tr><td colspan="12">等待資料載入...</td></tr>
+              </tbody>
+            </table>
+          </section>
+        </section>
+
+        <!-- 權證走向 -->
+        <section class="view-panel" id="warrant-flow-view" hidden>
+          <header class="page-header chip-page-header">
+            <div>
+              <h1>權證走向</h1>
+              <span class="refresh-line">功能規劃中</span>
+            </div>
+          </header>
+          <section class="chip-empty">
+            <h2>權證走向</h2>
+            <p>下一步會接認購、認售、成交量與方向分數。</p>
+          </section>
+        </section>
+
+      </main>
+    </div>
+    <script src="terminal.js?v=market-cards-20260515"></script>
+  </body>
+</html>
