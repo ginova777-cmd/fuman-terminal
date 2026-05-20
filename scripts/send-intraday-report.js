@@ -336,14 +336,21 @@ function buildStrategy3Report(payload, quotes, today, tracker) {
     const quote = quotes.get(item.code) || {};
     const track = scorecardTrack(tracker, "strategy3", item.code) || {};
     const entryPrice = cleanNumber(item.close);
-    const high = settlementHigh(track, quote);
-    const low = settlementLow(track, quote);
+    const quoteHigh = cleanNumber(quote?.high);
+    const quoteLow = cleanNumber(quote?.low);
+    const high = quoteHigh
+      ? { price: quoteHigh, time: tradeTimeLabel(quote?.time, "13:30"), source: "market" }
+      : settlementHigh(track, quote);
+    const low = quoteLow
+      ? { price: quoteLow, time: tradeTimeLabel(quote?.time, "13:30"), source: "market" }
+      : settlementLow(track, quote);
     const exitPrice = high.price;
     const exitTime = settlementTimeLabel(high);
-    const profit = entryPrice ? (exitPrice - entryPrice) * LOT_SIZE : 0;
-    const profitPct = entryPrice ? ((exitPrice - entryPrice) / entryPrice) * 100 : 0;
+    const hasExitPrice = entryPrice > 0 && exitPrice > 0;
+    const profit = hasExitPrice ? (exitPrice - entryPrice) * LOT_SIZE : 0;
+    const profitPct = hasExitPrice ? ((exitPrice - entryPrice) / entryPrice) * 100 : 0;
     const reason = (item.matches || []).map((match) => match.reason).filter(Boolean).join("；");
-    totalProfit += profit;
+    if (hasExitPrice) totalProfit += profit;
     lines.push(
       `#${index + 1} ${item.code} ${item.name || ""}`,
       `分數：${Math.round(cleanNumber(item.score || item.overnightScore)) || "--"}｜狀態：${item.overnightState || "--"}`,

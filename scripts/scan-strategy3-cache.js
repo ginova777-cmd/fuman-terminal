@@ -26,6 +26,19 @@ function preserveScorecardSource(payload) {
   }, null, 2)}\n`);
 }
 
+function sourceDate(payload) {
+  return String(payload?.usedDate || payload?.date || payload?.quoteDate || "").replace(/\D/g, "");
+}
+
+function preservePreviousTradingSource(previousPayload, currentPayload) {
+  const previousDate = sourceDate(previousPayload);
+  const currentDate = sourceDate(currentPayload);
+  if (!(previousPayload.matches || []).length) return;
+  if (!/^\d{8}$/.test(previousDate) || !/^\d{8}$/.test(currentDate)) return;
+  if (previousDate >= currentDate) return;
+  preserveScorecardSource(previousPayload);
+}
+
 function cleanNumber(value) {
   return Number(String(value ?? "").replace(/[,+%]/g, "").trim()) || 0;
 }
@@ -275,7 +288,6 @@ function buildMatches(stocks, issuedSharesMap, volumeAverageMap) {
 async function main() {
   const backup = readJson(BACKUP_FILE, { ok: true, matches: [] });
   const previousRaw = readJson(OUT_FILE, { ok: true, matches: [] });
-  preserveScorecardSource((previousRaw.matches || []).length ? previousRaw : backup);
   const [stocks, issuedSharesMap, volumeAverageMap] = await Promise.all([
     fetchUniverse(),
     fetchIssuedShares(),
@@ -293,6 +305,8 @@ async function main() {
     count: matches.length,
     matches,
   };
+
+  preservePreviousTradingSource((previousRaw.matches || []).length ? previousRaw : backup, output);
 
   fs.mkdirSync(path.dirname(OUT_FILE), { recursive: true });
   fs.writeFileSync(OUT_FILE, `${JSON.stringify(output, null, 2)}\n`);
