@@ -1,11 +1,6 @@
 name: Schedule Patrol
 
 on:
-  schedule:
-    # Taiwan trading days 07:01-07:56. Offset minutes avoid GitHub top-of-hour drops.
-    - cron: "1,6,11,16,21,26,31,36,41,46,51,56 23 * * 0-4"
-    # Taiwan trading days 08:01-22:56. Offset minutes avoid GitHub top-of-hour drops.
-    - cron: "1,6,11,16,21,26,31,36,41,46,51,56 0-14 * * 1-5"
   workflow_dispatch:
 
 permissions:

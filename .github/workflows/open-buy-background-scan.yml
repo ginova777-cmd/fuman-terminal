@@ -1,12 +1,6 @@
 name: Open Buy Background Scan
 
 on:
-  schedule:
-    # Taiwan time 07:00 full scan, then offset retries until cache is updated.
-    - cron: "0,4,9,14,19,24,29,34,39,44,49,54,59 23 * * 0-4"
-    # Taiwan time 14:30 full scan, then offset retries until cache is updated.
-    - cron: "30,34,39,44,49,54,59 6 * * 1-5"
-    - cron: "4,9,14,19,24,29,34,39,44,49,54,59 7 * * 1-5"
   workflow_dispatch:
     inputs:
       full_scan:
