@@ -531,6 +531,31 @@ function radarSignalTags(stock) {
   return tags;
 }
 
+function radarFlowValue(stock) {
+  const value = cleanNumber(stock.value);
+  const pct = Math.abs(cleanNumber(stock.pct ?? stock.percent));
+  const tags = stock.signalTags?.length || 0;
+  const volume = cleanNumber(stock.volume || stock.tradeVolume);
+  const volumeBoost = volume >= 10000 ? 0.18 : volume >= 5000 ? 0.12 : 0.06;
+  const signalBoost = Math.min(tags * 0.11, 0.46);
+  const moveBoost = Math.min(pct / 9, 0.42);
+  return value * (0.55 + signalBoost + moveBoost + volumeBoost);
+}
+
+function radarSignalScore(stock) {
+  const pct = Math.abs(cleanNumber(stock.pct ?? stock.percent));
+  const value = cleanNumber(stock.value);
+  const volume = cleanNumber(stock.volume || stock.tradeVolume);
+  const foreign = Math.abs(cleanNumber(stock.foreign));
+  const trust = Math.abs(cleanNumber(stock.trust));
+  const tagScore = (stock.signalTags?.length || 0) * 16;
+  const moveScore = Math.min(pct * 7, 32);
+  const valueScore = Math.min(Math.log10(Math.max(value, 1)) * 5, 46);
+  const volumeScore = Math.min(Math.log10(Math.max(volume, 1)) * 5, 22);
+  const instScore = Math.min(foreign / 450 + trust / 350, 24);
+  return Math.max(1, Math.min(100, Math.round(tagScore + moveScore + valueScore + volumeScore + instScore - 42)));
+}
+
 function buildRealtimeRadarRows() {
   const intradayPool = latestStocks
     .map((stock) => applyStrategyQuote(stock))
@@ -565,15 +590,8 @@ function buildRealtimeRadarRows() {
         (volume >= 5000 && pct <= -1.2) ||
         (foreign <= -1000 && pct <= 0);
       const side = hasLongSignal && (!hasShortSignal || pct >= 0) ? "long" : hasShortSignal ? "short" : "";
-      const momentumScore = Math.abs(pct) * 22;
-      const valueScore = Math.log10(Math.max(value, 1)) * 5;
-      const volumeScore = Math.log10(Math.max(volume, 1)) * 8;
-      const instScore = side === "long"
-        ? Math.max(foreign, 0) / 600 + Math.max(trust, 0) / 450
-        : Math.max(-foreign, 0) / 600 + Math.max(-trust, 0) / 450;
-      const score = momentumScore + valueScore + volumeScore + instScore + signalTags.length * 18;
-      const flowWeight = Math.min(1, 0.38 + Math.abs(pct) / 9 + signalTags.length * 0.06);
-      const flow = value * flowWeight;
+      const score = radarSignalScore({ ...live, pct, value, volume, foreign, trust, signalTags });
+      const flow = radarFlowValue({ ...live, pct, value, volume, foreign, trust, signalTags });
       return {
         ...live,
         pct,
@@ -640,6 +658,10 @@ function renderRealtimeRadar() {
   const leaders = longFlow >= shortFlow ? longRows : shortRows;
   const major = longFlow >= shortFlow ? "偏多" : "偏空";
   const majorLabel = `${major}觀察`;
+  const totalFlow = longFlow + shortFlow;
+  const topFlow = leaders.slice(0, 3).reduce((sum, stock) => sum + stock.flow, 0);
+  const concentration = Math.round((topFlow / Math.max(totalFlow, 1)) * 100);
+  const maxSignalScore = rows.reduce((max, stock) => Math.max(max, cleanNumber(stock.score)), 0);
   const topNames = leaders.slice(0, 3).map((stock) => `${stock.code} ${stock.name}`).join("、") || "--";
   const now = new Date().toLocaleTimeString("zh-TW", { hour12: false });
   const leaderMarkup = leaders.slice(0, 6).map((stock) => {
@@ -650,7 +672,7 @@ function renderRealtimeRadar() {
         <span class="radar-time">${now}</span>
         <div class="radar-stock">
           <strong>${stock.name} <small>${stock.code}</small></strong>
-          <small>成交金額 ${radarMoney(stock.value)}｜分數 ${Math.round(stock.score)}</small>
+          <small>成交金額 ${radarMoney(stock.value)}｜訊號分數 ${Math.round(stock.score)}</small>
         </div>
         <div class="radar-price">
           <strong>${formatNumber(stock.close, stock.close >= 100 ? 0 : 2)}</strong>
@@ -673,7 +695,7 @@ function renderRealtimeRadar() {
       <div class="radar-ai-head"><span>AI 即時判斷</span><span>信心 ${Math.max(52, Math.min(95, Math.round(Math.abs(netFlow) / Math.max(longFlow + shortFlow, 1) * 100 + 55)))}%</span></div>
       <h2>${majorLabel}</h2>
       <p>${majorLabel}，淨流向 ${netFlow >= 0 ? "+" : "-"}${radarMoney(netFlow)}。主導訊號：${topNames}。</p>
-      <small>多方 ${radarMoney(longFlow)}｜空方 ${radarMoney(shortFlow)}｜集中度 ${Math.max(longAll.length, shortAll.length)} 檔</small>
+      <small>多方 ${radarMoney(longFlow)}｜空方 ${radarMoney(shortFlow)}｜集中度 ${concentration}%｜最高訊號分數 ${maxSignalScore}</small>
     </section>
     <section class="radar-team-box">
       <div class="radar-team-head"><span>自動 AI 團隊</span><span>今日 ${rows.length} 件</span></div>
