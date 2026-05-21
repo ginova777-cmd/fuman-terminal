@@ -252,6 +252,20 @@ function isMobileViewport() {
   return typeof window !== "undefined" && window.matchMedia("(max-width: 760px)").matches;
 }
 
+function installMobileWatchlistNavOrder() {
+  if (document.querySelector("#mobile-watchlist-nav-order")) return;
+  const style = document.createElement("style");
+  style.id = "mobile-watchlist-nav-order";
+  style.textContent = `
+    @media (max-width: 760px) {
+      .nav-list .nav-item[data-view="watchlist"] {
+        order: 999;
+      }
+    }
+  `;
+  document.head.appendChild(style);
+}
+
 function getActiveViewName() {
   return Object.entries(viewPanels).find(([, panel]) => panel?.classList.contains("active"))?.[0] || "market";
 }
@@ -5830,6 +5844,7 @@ async function refreshStrategyHistoryScan(force = false) {
 
 tickClock();
 labelChipTradeMode();
+installMobileWatchlistNavOrder();
 applyStaticTitleIcons();
 loadWorkflowRunStatus().catch(() => {});
 ensureMobileAutoOrganizeButton();
