@@ -1,7 +1,7 @@
 {
   "ok": true,
   "source": "github-actions",
-  "updatedAt": "2026-05-21T10:19:44.750Z",
+  "updatedAt": "2026-05-21T11:01:15.465Z",
   "usedDate": "20260521",
   "fullScan": true,
   "cursor": 15,
@@ -1962,6 +1962,71 @@
     "9960",
     "9962"
   ],
-  "count": 0,
-  "matches": []
+  "count": 2,
+  "matches": [
+    {
+      "code": "6642",
+      "name": "富致",
+      "close": 87.2,
+      "percent": 4.1816009557945035,
+      "value": 257152800,
+      "tradeVolume": 2949,
+      "change": 3.5,
+      "open": 85,
+      "high": 89.4,
+      "low": 83.2,
+      "prevClose": 83.7,
+      "volume": 2949,
+      "market": "TPEX",
+      "quoteDate": "20260521",
+      "quoteTime": "13:30:00",
+      "date": "2026-05-21",
+      "volumeRatio": 3.11,
+      "tailKeepsRising": true,
+      "matchedSetups": [
+        "突破候選"
+      ],
+      "score": 100,
+      "status": "突破候選",
+      "setup": "突破候選",
+      "entry": "09:00 開盤價",
+      "takeProfit": 88.25,
+      "stopLoss": 86.33,
+      "noChase": 91.12,
+      "exitTime": "09:10",
+      "reason": "突破候選：昨日漲幅 4.18%，量比 3.11，成交量 2,949 張，尾盤收近高點，列入開盤候選。"
+    },
+    {
+      "code": "6425",
+      "name": "易發",
+      "close": 90.2,
+      "percent": 2.7334851936218745,
+      "value": 480946400,
+      "tradeVolume": 5332,
+      "change": 2.4000000000000057,
+      "open": 88.2,
+      "high": 92.8,
+      "low": 87.4,
+      "prevClose": 87.8,
+      "volume": 5332,
+      "market": "TPEX",
+      "quoteDate": "20260521",
+      "quoteTime": "13:30:00",
+      "date": "2026-05-21",
+      "volumeRatio": 1.26,
+      "tailKeepsRising": true,
+      "matchedSetups": [
+        "突破候選"
+      ],
+      "score": 85,
+      "status": "突破候選",
+      "setup": "突破候選",
+      "entry": "09:00 開盤價",
+      "takeProfit": 91.28,
+      "stopLoss": 89.3,
+      "noChase": 94.26,
+      "exitTime": "09:10",
+      "reason": "突破候選：昨日漲幅 2.73%，量比 1.26，成交量 5,332 張，尾盤收近高點，列入開盤候選。"
+    }
+  ]
 }
