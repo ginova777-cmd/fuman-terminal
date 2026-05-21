@@ -7,6 +7,7 @@ const BASE_URL = process.env.FUMAN_BASE_URL || "https://fuman-terminal.vercel.ap
 
 const WORKFLOWS = [
   "flow-cache.yml",
+  "open-buy-background-scan.yml",
   "strategy3-background-scan.yml",
   "strategy4-background-scan.yml",
   "strategy5-background-scan.yml",
@@ -14,9 +15,9 @@ const WORKFLOWS = [
 ];
 
 const CACHE_RULES = [
-  { label: "策略1", file: "data/open-buy-latest.json", slots: ["07:00", "14:30"], graceMinutes: 75 },
-  { label: "策略3", file: "data/strategy3-latest.json", slots: ["13:00"], graceMinutes: 75 },
-  { label: "策略4", file: "data/strategy4-latest.json", slots: ["07:00", "14:30"], graceMinutes: 75 },
+  { label: "策略1", file: "data/open-buy-latest.json", slots: ["07:00", "14:30"], graceMinutes: 75, workflow: "open-buy-background-scan.yml", inputs: { full_scan: "true" } },
+  { label: "策略3", file: "data/strategy3-latest.json", slots: ["13:00"], graceMinutes: 75, workflow: "strategy3-background-scan.yml" },
+  { label: "策略4", file: "data/strategy4-latest.json", slots: ["07:00", "14:30"], graceMinutes: 75, workflow: "strategy4-background-scan.yml", inputs: { full_scan: "true" } },
   { label: "盤後籌碼", file: "data/institution-latest.json", slots: ["06:00", "21:00"], graceMinutes: 90 },
   { label: "權證走向", file: "data/warrant-flow-latest.json", slots: ["06:00", "21:00"], graceMinutes: 90 },
   { label: "策略5", file: "data/strategy5-latest.json", slots: ["06:00", "21:00"], graceMinutes: 90 },
@@ -110,13 +111,13 @@ function cacheIssues() {
     const payload = readJson(path.join(ROOT, rule.file), null);
     const updatedAt = Date.parse(payload?.updatedAt || "");
     if (!Number.isFinite(updatedAt)) {
-      issues.push(`${rule.label}：${rule.file} 沒有可解析的 updatedAt`);
+      issues.push({ ...rule, message: `${rule.label}：${rule.file} 沒有可解析的 updatedAt` });
       continue;
     }
 
     const ageHours = (now.getTime() - updatedAt) / 3600000;
     if (ageHours > 48) {
-      issues.push(`${rule.label}：快取超過 48 小時未更新，updatedAt=${payload.updatedAt}`);
+      issues.push({ ...rule, message: `${rule.label}：快取超過 48 小時未更新，updatedAt=${payload.updatedAt}` });
       continue;
     }
 
@@ -125,7 +126,7 @@ function cacheIssues() {
 
     const updated = taipeiParts(new Date(updatedAt));
     if (updated.dateKey !== today.dateKey || updated.minutes < dueSlot) {
-      issues.push(`${rule.label}：已過 ${formatMinutes(dueSlot)} 完整掃容錯時間，但快取仍是 ${payload.updatedAt}`);
+      issues.push({ ...rule, message: `${rule.label}：已過 ${formatMinutes(dueSlot)} 完整掃容錯時間，但快取仍是 ${payload.updatedAt}` });
     }
   }
 
@@ -180,6 +181,41 @@ async function workflowIssues() {
   }
 
   return issues;
+}
+
+async function dispatchWorkflow(workflow, inputs = {}) {
+  const repo = process.env.GITHUB_REPOSITORY;
+  if (!repo) throw new Error("缺少 GITHUB_REPOSITORY，無法派發補跑 workflow");
+  const response = await fetch(`https://api.github.com/repos/${repo}/actions/workflows/${workflow}/dispatches`, {
+    method: "POST",
+    headers: {
+      "Accept": "application/vnd.github+json",
+      "Authorization": `Bearer ${process.env.GITHUB_TOKEN || ""}`,
+      "Content-Type": "application/json",
+      "User-Agent": "fuman-terminal-schedule-patrol",
+    },
+    body: JSON.stringify({
+      ref: process.env.GITHUB_REF_NAME || "main",
+      inputs,
+    }),
+  });
+  if (!response.ok) {
+    const body = await response.text().catch(() => "");
+    throw new Error(`${workflow} dispatch HTTP ${response.status} ${body}`.trim());
+  }
+}
+
+async function dispatchRecoveryRuns(cacheIssueObjects) {
+  if (process.env.AUTO_DISPATCH_STALE === "0") return [];
+  const dispatched = [];
+  const seen = new Set();
+  for (const issue of cacheIssueObjects) {
+    if (!issue.workflow || seen.has(issue.workflow)) continue;
+    seen.add(issue.workflow);
+    await dispatchWorkflow(issue.workflow, issue.inputs || {});
+    dispatched.push(`${issue.label}：已自動派發 ${issue.workflow} 補跑`);
+  }
+  return dispatched;
 }
 
 async function apiIssues() {
@@ -275,10 +311,13 @@ async function alert(issues) {
 }
 
 async function main() {
+  const staleCacheIssues = cacheIssues();
+  const recoveryMessages = await dispatchRecoveryRuns(staleCacheIssues);
   const issues = [
     ...(await workflowIssues()),
     ...(await apiIssues()),
-    ...cacheIssues(),
+    ...staleCacheIssues.map((issue) => issue.message),
+    ...recoveryMessages,
   ];
   if (!issues.length) {
     console.log("schedule patrol passed");
