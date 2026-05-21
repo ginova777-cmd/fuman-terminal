@@ -2,10 +2,10 @@ name: Strategy5 Fixed Scan
 
 on:
   schedule:
-    # Taiwan time 06:00 and 21:00 on trading days. Retry every 10 minutes until cache is updated.
-    - cron: "*/10 22-23 * * 0-4"
-    - cron: "*/10 0 * * 1-5"
-    - cron: "*/10 13-16 * * 1-5"
+    # Taiwan time 06:00 and 21:00 on trading days. Offset retries reduce GitHub schedule drops.
+    - cron: "0,8,18,28,38,48,58 22-23 * * 0-4"
+    - cron: "8,18,28,38,48,58 0 * * 1-5"
+    - cron: "8,18,28,38,48,58 13-16 * * 1-5"
   workflow_dispatch:
 
 permissions:
