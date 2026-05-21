@@ -53,6 +53,10 @@ jobs:
           OPEN_BUY_BATCHES_PER_RUN: "5"
           FULL_SCAN: ${{ (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.full_scan == 'true')) && '1' || '0' }}
 
+      - name: Verify open buy cache write
+        if: steps.retry.outputs.mode == 'run'
+        run: node scripts/verify-cache-write.js data/open-buy-latest.json
+
       - name: Commit open buy cache
         if: steps.retry.outputs.mode == 'run'
         run: |

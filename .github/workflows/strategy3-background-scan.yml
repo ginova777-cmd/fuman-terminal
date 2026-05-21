@@ -35,6 +35,10 @@ jobs:
         run: |
           node scripts/scan-strategy3-cache.js
 
+      - name: Verify strategy3 cache write
+        if: steps.retry.outputs.mode == 'run'
+        run: node scripts/verify-cache-write.js data/strategy3-latest.json
+
       - name: Commit strategy3 cache
         if: steps.retry.outputs.mode == 'run'
         run: |
