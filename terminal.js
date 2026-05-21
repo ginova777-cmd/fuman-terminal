@@ -560,6 +560,25 @@ function radarReasonTags(stock) {
   return (tags.length ? tags : [stock.side === "long" ? "短線資金偏多" : "短線資金偏空"]).slice(0, 4);
 }
 
+async function ensureRealtimeRadarData() {
+  if (latestStocks.length) return latestStocks;
+  if (realtimeRadarLoading) return [];
+  realtimeRadarLoading = true;
+  try {
+    await loadMarketData();
+    if (latestStocks.length) return latestStocks;
+    return await loadStrategyStocks();
+  } catch (error) {
+    try {
+      return await loadStrategyStocks();
+    } catch {
+      return [];
+    }
+  } finally {
+    realtimeRadarLoading = false;
+  }
+}
+
 function renderRealtimeRadar() {
   installRealtimeRadarView();
   const panel = viewPanels["realtime-radar"];
@@ -567,7 +586,10 @@ function renderRealtimeRadar() {
   deferUiWork(ensureMobileAutoOrganizeButton);
   if (!latestStocks.length) {
     panel.innerHTML = `<div class="empty-state">正在載入即時雷達股票池...</div>`;
-    loadMarketData();
+    ensureRealtimeRadarData().then((stocks) => {
+      if (stocks.length) renderRealtimeRadar();
+      else panel.innerHTML = `<div class="empty-state">即時雷達暫時沒有取得股票資料，請按右上重新整理。</div>`;
+    });
     return;
   }
   const rows = buildRealtimeRadarRows();
@@ -827,6 +849,7 @@ const endpoints = {
 };
 
 let latestStocks = [];
+let realtimeRadarLoading = false;
 let sectorStocksCache = {};
 let institutionData = {};
 let institutionDate = "";
