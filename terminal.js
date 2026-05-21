@@ -108,6 +108,20 @@ const SCHEDULE_META = {
   warrant: { label: "06:00 / 21:00", times: ["06:00", "21:00"] },
 };
 
+const WORKFLOW_BY_SCHEDULE = {
+  openBuy: "open-buy-background-scan.yml",
+  intraday: "intraday-radar-scorecard.yml",
+  strategy3: "strategy3-background-scan.yml",
+  swing: "strategy4-background-scan.yml",
+  strategy5: "strategy5-background-scan.yml",
+  chip: "flow-cache.yml",
+  warrant: "flow-cache.yml",
+};
+
+const GITHUB_WORKFLOW_API = "https://api.github.com/repos/ginova777-cmd/fuman-terminal/actions/workflows";
+const workflowRunStatus = {};
+let workflowRunStatusReady = false;
+
 function scheduleDateForToday(time) {
   const [hour, minute] = time.split(":").map(Number);
   const date = new Date();
@@ -157,19 +171,67 @@ function formatScheduleDate(date) {
   return `${String(date.getMonth() + 1).padStart(2, "0")}/${String(date.getDate()).padStart(2, "0")} ${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
 }
 
+function getWorkflowRunForSchedule(key) {
+  const workflow = WORKFLOW_BY_SCHEDULE[key];
+  return workflow ? workflowRunStatus[workflow] : null;
+}
+
+function hasSuccessfulWorkflowRun(key, latestDue) {
+  const run = getWorkflowRunForSchedule(key);
+  if (!run || !latestDue) return false;
+  const finishedAt = Date.parse(run.updated_at || run.run_updated_at || run.created_at || "");
+  return run.status === "completed" && run.conclusion === "success" && Number.isFinite(finishedAt) && finishedAt >= latestDue.getTime();
+}
+
+function getWorkflowScheduleState(key) {
+  const run = getWorkflowRunForSchedule(key);
+  if (!run) return "unknown";
+  if (run.status === "queued" || run.status === "in_progress") return "running";
+  if (run.status === "completed" && run.conclusion && run.conclusion !== "success") return "failed";
+  if (run.status === "completed" && run.conclusion === "success") return "success";
+  return "unknown";
+}
+
 function scheduleBadgeHtml(key) {
   const meta = SCHEDULE_META[key] || SCHEDULE_META.market;
   if (meta.next || !meta.times?.length) {
     return `<span class="schedule-status-pill"><span>● 每日 ${meta.label} 更新</span><span>● 預計下次更新：${meta.next || ""}</span></span>`;
   }
+  if (workflowRunStatusReady) {
+    const workflowState = getWorkflowScheduleState(key);
+    if (workflowState === "failed") {
+      return `<span class="schedule-status-pill schedule-failed"><span class="schedule-failed-dot">●</span><span>更新失敗</span></span>`;
+    }
+    if (workflowState === "running") {
+      return `<span class="schedule-status-pill"><span>● 正在更新</span></span>`;
+    }
+  }
   const latestDue = latestDueScheduleTime(meta.times);
   const updatedAt = getScheduleUpdatedAt(key);
   const hasSuccessfulUpdate = updatedAt && latestDue && updatedAt >= latestDue.getTime();
-  if (!hasSuccessfulUpdate) {
-    return `<span class="schedule-status-pill schedule-failed"><span>● 更新失敗</span></span>`;
+  if (!workflowRunStatusReady && !hasSuccessfulUpdate && key === "openBuy") {
+    return `<span class="schedule-status-pill schedule-failed"><span class="schedule-failed-dot">●</span><span>更新失敗</span></span>`;
   }
   const next = formatScheduleDate(nextScheduleTime(meta.times));
   return `<span class="schedule-status-pill"><span>● 每日 ${meta.label} 更新</span><span>● 預計下次更新：${next}</span></span>`;
+}
+
+function refreshScheduleTitles() {
+  applyStaticTitleIcons();
+  if (isViewActive("strategy")) renderStrategyScanner();
+}
+
+async function loadWorkflowRunStatus() {
+  const workflows = [...new Set(Object.values(WORKFLOW_BY_SCHEDULE))];
+  const results = await Promise.allSettled(workflows.map(async (workflow) => {
+    const url = `${GITHUB_WORKFLOW_API}/${workflow}/runs?per_page=1&ts=${Date.now()}`;
+    const response = await fetch(url, { headers: { "Accept": "application/vnd.github+json" } });
+    if (!response.ok) throw new Error(`${workflow} HTTP ${response.status}`);
+    const payload = await response.json();
+    workflowRunStatus[workflow] = payload.workflow_runs?.[0] || null;
+  }));
+  workflowRunStatusReady = results.some((result) => result.status === "fulfilled");
+  refreshScheduleTitles();
 }
 
 function titleWithSchedule(icon, text, scheduleKey) {
@@ -2590,6 +2652,9 @@ intradayRadarStyles.textContent = `
     border-color: transparent;
     background: transparent;
     color: #9da6bd;
+  }
+  .schedule-status-pill.schedule-failed .schedule-failed-dot {
+    color: #b85b62;
   }
   .page-header h1,
   .strategy-toolbar h2,
@@ -5747,6 +5812,7 @@ async function refreshStrategyHistoryScan(force = false) {
 tickClock();
 labelChipTradeMode();
 applyStaticTitleIcons();
+loadWorkflowRunStatus().catch(() => {});
 ensureMobileAutoOrganizeButton();
 loadMarketData();
 loadHeatmap();
