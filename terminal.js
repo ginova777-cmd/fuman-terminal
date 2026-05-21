@@ -655,9 +655,10 @@ function renderRealtimeRadar() {
   const shortFlow = shortAll.reduce((sum, stock) => sum + stock.flow, 0);
   const netFlow = longFlow - shortFlow;
   const longShare = Math.round((longFlow / Math.max(longFlow + shortFlow, 1)) * 100);
-  const leaders = longFlow >= shortFlow ? longRows : shortRows;
   const major = longFlow >= shortFlow ? "偏多" : "偏空";
   const majorLabel = `${major}觀察`;
+  const activeRadarSide = realtimeRadarSide === "short" ? "short" : realtimeRadarSide === "long" ? "long" : major === "偏多" ? "long" : "short";
+  const leaders = activeRadarSide === "long" ? longRows : shortRows;
   const totalFlow = longFlow + shortFlow;
   const topFlow = leaders.slice(0, 3).reduce((sum, stock) => sum + stock.flow, 0);
   const concentration = Math.round((topFlow / Math.max(totalFlow, 1)) * 100);
@@ -707,8 +708,8 @@ function renderRealtimeRadar() {
       <article class="radar-flow-card"><span>淨流向</span><strong>${netFlow >= 0 ? "+" : "-"}${radarMoney(netFlow)}</strong><div class="radar-balance" style="--long-share:${longShare}%"><span></span></div></article>
     </section>
     <div class="radar-tabs">
-      <button class="${major === "偏多" ? "active" : ""}" type="button">多方</button>
-      <button class="${major === "偏空" ? "active" : ""}" type="button">空方</button>
+      <button class="${activeRadarSide === "long" ? "active" : ""}" type="button" data-radar-side="long">多方</button>
+      <button class="${activeRadarSide === "short" ? "active" : ""}" type="button" data-radar-side="short">空方</button>
     </div>
     <section class="radar-leader-list">${leaderMarkup}</section>
   `;
@@ -911,6 +912,7 @@ const endpoints = {
 
 let latestStocks = [];
 let realtimeRadarLoading = false;
+let realtimeRadarSide = "auto";
 let sectorStocksCache = {};
 let institutionData = {};
 let institutionDate = "";
@@ -6873,8 +6875,15 @@ strategyModeButtons.forEach((button) => {
 });
 
 document.addEventListener("click", (event) => {
+  const radarSide = event.target.closest("[data-radar-side]");
+  if (radarSide) {
+    realtimeRadarSide = radarSide.dataset.radarSide || "auto";
+    renderRealtimeRadar();
+    return;
+  }
   const radarRefresh = event.target.closest("[data-radar-refresh]");
   if (!radarRefresh) return;
+  realtimeRadarSide = "auto";
   renderRealtimeRadar();
 });
 
