@@ -6432,14 +6432,26 @@ function ensureWatchlistAnalysisStyles() {
       border-color: transparent;
       color: #fff;
     }
-    .watch-summary-grid,
-    .watch-card-grid {
+    .watch-summary-grid {
       display: grid;
       grid-template-columns: repeat(4, minmax(0, 1fr));
       gap: 12px;
     }
+    .watch-card-carousel {
+      position: relative;
+      min-width: 0;
+    }
     .watch-card-grid {
-      grid-template-columns: repeat(5, minmax(0, 1fr));
+      display: flex;
+      gap: 12px;
+      overflow-x: auto;
+      scroll-behavior: smooth;
+      scroll-snap-type: x mandatory;
+      padding: 0 48px 4px;
+      scrollbar-width: none;
+    }
+    .watch-card-grid::-webkit-scrollbar {
+      display: none;
     }
     .watch-metric,
     .watch-analysis-card {
@@ -6452,6 +6464,39 @@ function ensureWatchlistAnalysisStyles() {
     .watch-analysis-card {
       padding: 18px;
       min-height: 86px;
+    }
+    .watch-analysis-card {
+      flex: 0 0 min(250px, calc(100vw - 120px));
+      min-height: 132px;
+      scroll-snap-align: start;
+    }
+    .watch-scroll-btn {
+      position: absolute;
+      top: 50%;
+      z-index: 2;
+      display: grid;
+      place-items: center;
+      width: 34px;
+      height: 54px;
+      border: 1px solid rgba(127, 166, 255, 0.18);
+      border-radius: 8px;
+      background: rgba(12, 15, 26, 0.88);
+      color: #eaf1ff;
+      cursor: pointer;
+      font-size: 24px;
+      font-weight: 900;
+      transform: translateY(-50%);
+      box-shadow: 0 12px 28px rgba(0,0,0,0.28);
+    }
+    .watch-scroll-btn:hover {
+      border-color: rgba(255, 106, 61, 0.55);
+      color: #ff8a5c;
+    }
+    .watch-scroll-btn.prev {
+      left: 6px;
+    }
+    .watch-scroll-btn.next {
+      right: 6px;
     }
     .watch-metric span,
     .watch-analysis-card span {
@@ -6516,9 +6561,11 @@ function ensureWatchlistAnalysisStyles() {
     .watch-flat { color: #dbe7ff !important; }
     @media (max-width: 980px) {
       .watch-action-row,
-      .watch-summary-grid,
-      .watch-card-grid {
+      .watch-summary-grid {
         grid-template-columns: 1fr;
+      }
+      .watch-card-grid {
+        padding-inline: 42px;
       }
     }
   `;
@@ -6932,7 +6979,7 @@ async function showTradingDashboard(code, name) {
           <input value="${code}" readonly>
         </label>
         <button class="primary" type="button" data-watch-load>載入資料</button>
-        <button type="button" data-watch-analyze>分析</button>
+        <button type="button" data-watch-analyze>儀表板</button>
       </section>
 
       <section class="watch-summary-grid">
@@ -6956,37 +7003,41 @@ async function showTradingDashboard(code, name) {
         </article>
       </section>
 
-      <section class="watch-card-grid">
-        <article class="watch-analysis-card ${trendTone}">
-          <span>趨勢</span>
-          <strong>${model.trendLabel}</strong>
-          <b>${pctText(stock.percent)}</b>
-          <em>收盤位於日內區間 ${model.rangePosition}%。</em>
-        </article>
-        <article class="watch-analysis-card neutral">
-          <span>價位</span>
-          <strong>現價 ${formatStockPrice(model.close)}</strong>
-          <b>${formatStockPrice(model.supportA)} / ${formatStockPrice(model.pressureA)}</b>
-          <em>支撐觀察與壓力觀察。</em>
-        </article>
-        <article class="watch-analysis-card warn">
-          <span>籌碼</span>
-          <strong>${analysis.hasInstitution ? "籌碼待確認" : "法人盤後"}</strong>
-          <b>籌碼 ${model.chipScore || "--"} / 主力 ${analysis.hasInstitution ? Math.round((model.chipScore + analysis.score) / 2) : "--"}</b>
-          <em>外資 ${formatInstitution(model.inst.foreign)}，投信 ${formatInstitution(model.inst.trust)}。</em>
-        </article>
-        <article class="watch-analysis-card ${riskTone}">
-          <span>風險</span>
-          <strong>${model.riskLabel}</strong>
-          <b>${analysis.volumeRank ?? 0} 則</b>
-          <em>${model.riskLabel === "風險可控" ? "目前沒有明顯過熱風險。" : "需等待量價確認。"}</em>
-        </article>
-        <article class="watch-analysis-card good">
-          <span>操作提醒</span>
-          <strong>${model.actionTitle}</strong>
-          <b>支撐 ${formatStockPrice(model.supportA)}</b>
-          <em>${model.actionHint}</em>
-        </article>
+      <section class="watch-card-carousel">
+        <button class="watch-scroll-btn prev" type="button" data-watch-scroll="left" aria-label="上一張">‹</button>
+        <div class="watch-card-grid" data-watch-carousel>
+          <article class="watch-analysis-card ${trendTone}">
+            <span>趨勢</span>
+            <strong>${model.trendLabel}</strong>
+            <b>${pctText(stock.percent)}</b>
+            <em>收盤位於日內區間 ${model.rangePosition}%。</em>
+          </article>
+          <article class="watch-analysis-card neutral">
+            <span>價位</span>
+            <strong>現價 ${formatStockPrice(model.close)}</strong>
+            <b>${formatStockPrice(model.supportA)} / ${formatStockPrice(model.pressureA)}</b>
+            <em>支撐觀察與壓力觀察。</em>
+          </article>
+          <article class="watch-analysis-card warn">
+            <span>籌碼</span>
+            <strong>${analysis.hasInstitution ? "籌碼待確認" : "法人盤後"}</strong>
+            <b>籌碼 ${model.chipScore || "--"} / 主力 ${analysis.hasInstitution ? Math.round((model.chipScore + analysis.score) / 2) : "--"}</b>
+            <em>外資 ${formatInstitution(model.inst.foreign)}，投信 ${formatInstitution(model.inst.trust)}。</em>
+          </article>
+          <article class="watch-analysis-card ${riskTone}">
+            <span>風險</span>
+            <strong>${model.riskLabel}</strong>
+            <b>${analysis.volumeRank ?? 0} 則</b>
+            <em>${model.riskLabel === "風險可控" ? "目前沒有明顯過熱風險。" : "需等待量價確認。"}</em>
+          </article>
+          <article class="watch-analysis-card good">
+            <span>操作提醒</span>
+            <strong>${model.actionTitle}</strong>
+            <b>支撐 ${formatStockPrice(model.supportA)}</b>
+            <em>${model.actionHint}</em>
+          </article>
+        </div>
+        <button class="watch-scroll-btn next" type="button" data-watch-scroll="right" aria-label="下一張">›</button>
       </section>
 
       <section class="watch-note-row">
@@ -6996,7 +7047,7 @@ async function showTradingDashboard(code, name) {
       </section>
 
       <section class="ta-period-panel">
-        <h3><span>${code}</span>的技術分析</h3>
+        <h3><span>${code}</span>的儀表板</h3>
         <nav class="ta-timeframes" aria-label="技術分析週期">
           ${buildTimeframeButtons(activeTimeframe.key)}
         </nav>
@@ -7017,6 +7068,16 @@ async function showTradingDashboard(code, name) {
   });
   watchlistAnalysis.querySelector("[data-watch-analyze]")?.addEventListener("click", () => {
     showTradingDashboard(code, stock.name || name);
+  });
+  watchlistAnalysis.querySelectorAll("[data-watch-scroll]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const carousel = watchlistAnalysis.querySelector("[data-watch-carousel]");
+      if (!carousel) return;
+      const direction = button.dataset.watchScroll === "left" ? -1 : 1;
+      const card = carousel.querySelector(".watch-analysis-card");
+      const distance = card ? card.getBoundingClientRect().width + 12 : 260;
+      carousel.scrollBy({ left: direction * distance, behavior: "smooth" });
+    });
   });
 }
 
