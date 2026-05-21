@@ -7011,6 +7011,13 @@ async function showTradingDashboard(code, name) {
       showTradingDashboard(code, stock.name || name);
     });
   });
+
+  watchlistAnalysis.querySelector("[data-watch-load]")?.addEventListener("click", () => {
+    showTradingDashboard(code, stock.name || name);
+  });
+  watchlistAnalysis.querySelector("[data-watch-analyze]")?.addEventListener("click", () => {
+    showTradingDashboard(code, stock.name || name);
+  });
 }
 
 function parseQuoteNumber(...values) {
