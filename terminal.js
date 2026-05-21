@@ -6442,8 +6442,7 @@ function ensureWatchlistAnalysisStyles() {
       grid-template-columns: repeat(5, minmax(0, 1fr));
     }
     .watch-metric,
-    .watch-analysis-card,
-    .watch-report {
+    .watch-analysis-card {
       border: 1px solid rgba(127, 166, 255, 0.14);
       border-radius: 8px;
       background: rgba(18, 21, 34, 0.92);
@@ -6511,44 +6510,6 @@ function ensureWatchlistAnalysisStyles() {
       background: rgba(255, 106, 61, 0.18);
       color: #ff8a5c;
       font-size: 12px;
-    }
-    .watch-report {
-      padding: 18px;
-    }
-    .watch-report h3 {
-      color: #fff;
-      font-size: 18px;
-      margin: 0 0 6px;
-    }
-    .watch-report section {
-      border-top: 1px solid rgba(127, 166, 255, 0.12);
-      margin-top: 16px;
-      padding-top: 16px;
-    }
-    .watch-report h4 {
-      color: #fff;
-      font-size: 15px;
-      margin: 0 0 12px;
-    }
-    .watch-report ul {
-      display: grid;
-      gap: 10px;
-      margin: 0;
-      padding-left: 18px;
-      color: #bfd0f2;
-      line-height: 1.65;
-    }
-    .watch-report li strong {
-      color: #fff;
-    }
-    .watch-report .summary-lines {
-      display: grid;
-      gap: 8px;
-      color: #eaf1ff;
-      font-size: 15px;
-      font-weight: 900;
-      line-height: 1.7;
-      margin-top: 10px;
     }
     .watch-up { color: #ff5d72 !important; }
     .watch-down { color: #20d18b !important; }
@@ -6861,10 +6822,6 @@ function buildWatchAnalysisModel(stock, analysis, timeframe) {
   };
 }
 
-function renderWatchBullets(items) {
-  return `<ul>${items.map((item) => `<li>${item}</li>`).join("")}</ul>`;
-}
-
 function gaugeMarkup(title, score, size = "small") {
   const rotation = Math.round(180 + (clamp(score, 0, 100) / 100) * 180);
   const label = signalLabel(score);
@@ -7043,42 +7000,6 @@ async function showTradingDashboard(code, name) {
         <nav class="ta-timeframes" aria-label="技術分析週期">
           ${buildTimeframeButtons(activeTimeframe.key)}
         </nav>
-      </section>
-
-      <section class="watch-report">
-        <h3>AI 技術分析報告</h3>
-        <em>此報告由終端現有量價、籌碼與技術分數自動整理，不需 OpenAI API Key。</em>
-
-        <section>
-          <h4>1. 資料稽核與可用性</h4>
-          ${renderWatchBullets(model.dataQuality)}
-        </section>
-
-        <section>
-          <h4>2. 技術分析面：趨勢、量價、支撐與壓力</h4>
-          ${renderWatchBullets(model.technical)}
-        </section>
-
-        <section>
-          <h4>3. 籌碼分析面：法人與信用交易</h4>
-          ${renderWatchBullets(model.chips)}
-        </section>
-
-        <section>
-          <h4>4. 多空詳論與風控</h4>
-          <ul>
-            <li><strong>看多論述</strong>：${model.bullPoints.join(" ")}</li>
-            <li><strong>看空論述</strong>：${model.bearPoints.join(" ")}</li>
-            <li><strong>技術條件</strong>：跌破 ${formatStockPrice(model.supportB)} 後轉弱風險提高；突破 ${formatStockPrice(model.pressureA)} 並站穩，才算轉強確認。</li>
-          </ul>
-        </section>
-
-        <section>
-          <h4>5. 投資長摘要</h4>
-          <div class="summary-lines">
-            ${model.summary.map((item, index) => `<div>${index + 1}. ${item}</div>`).join("")}
-          </div>
-        </section>
       </section>
     </div>
   `;
