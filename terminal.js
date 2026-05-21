@@ -404,6 +404,10 @@ function installRealtimeRadarStyles() {
       border-color: #ff5d6c;
       color: #ff7a82;
     }
+    .radar-tabs button.short-active {
+      border-color: #23d59a;
+      color: #23d59a;
+    }
     .radar-leader-list {
       display: grid;
       gap: 10px;
@@ -564,7 +568,7 @@ function buildRealtimeRadarRows() {
     ...getIntradayCandidateStocks(intradayPool),
     ...getBaseStrongIntradayStocks(intradayPool),
     ...[...intradayPool].sort((a, b) => getIntradayHotScore(b) - getIntradayHotScore(a)),
-  ]).slice(0, INTRADAY_HOT_SCAN_LIMIT + 300);
+  ]).slice(0, REALTIME_RADAR_POOL_LIMIT);
   return rankedIntradayPool
     .map((stock) => {
       const live = applyStrategyQuote(stock);
@@ -616,21 +620,28 @@ function radarReasonTags(stock) {
 
 async function ensureRealtimeRadarData() {
   if (latestStocks.length) return latestStocks;
-  if (realtimeRadarLoading) return [];
-  realtimeRadarLoading = true;
-  try {
-    await loadMarketData();
-    if (latestStocks.length) return latestStocks;
-    return await loadStrategyStocks();
-  } catch (error) {
+  if (realtimeRadarDataPromise) return realtimeRadarDataPromise;
+  realtimeRadarDataPromise = (async () => {
+    realtimeRadarLoading = true;
     try {
-      return await loadStrategyStocks();
-    } catch {
+      const stocks = await loadStrategyStocks();
+      if (stocks.length) {
+        deferUiWork(() => {
+          loadMarketData();
+          refreshStrategyRealtimeScan("force");
+        }, 30);
+        return stocks;
+      }
+      await loadMarketData();
+      return latestStocks;
+    } catch (error) {
       return [];
+    } finally {
+      realtimeRadarLoading = false;
+      realtimeRadarDataPromise = null;
     }
-  } finally {
-    realtimeRadarLoading = false;
-  }
+  })();
+  return realtimeRadarDataPromise;
 }
 
 function renderRealtimeRadar() {
@@ -639,7 +650,7 @@ function renderRealtimeRadar() {
   if (!panel) return;
   deferUiWork(ensureMobileAutoOrganizeButton);
   if (!latestStocks.length) {
-    panel.innerHTML = `<div class="empty-state">正在載入即時雷達股票池...</div>`;
+    panel.innerHTML = `<div class="empty-state">正在快速載入當沖雷達股票池...</div>`;
     ensureRealtimeRadarData().then((stocks) => {
       if (stocks.length) renderRealtimeRadar();
       else panel.innerHTML = `<div class="empty-state">即時雷達暫時沒有取得股票資料，請按右上重新整理。</div>`;
@@ -709,7 +720,7 @@ function renderRealtimeRadar() {
     </section>
     <div class="radar-tabs">
       <button class="${activeRadarSide === "long" ? "active" : ""}" type="button" data-radar-side="long">多方</button>
-      <button class="${activeRadarSide === "short" ? "active" : ""}" type="button" data-radar-side="short">空方</button>
+      <button class="${activeRadarSide === "short" ? "active short-active" : ""}" type="button" data-radar-side="short">空方</button>
     </div>
     <section class="radar-leader-list">${leaderMarkup}</section>
   `;
@@ -912,6 +923,7 @@ const endpoints = {
 
 let latestStocks = [];
 let realtimeRadarLoading = false;
+let realtimeRadarDataPromise = null;
 let realtimeRadarSide = "auto";
 let sectorStocksCache = {};
 let institutionData = {};
@@ -988,6 +1000,7 @@ let intradaySignalFilter = "all";
 let strategyPresetMode = "";
 let strategy5ActiveId = "foreign_trust_breakout";
 const INTRADAY_HOT_SCAN_LIMIT = 900;
+const REALTIME_RADAR_POOL_LIMIT = 650;
 const INTRADAY_BACKGROUND_BATCH = 450;
 const INTRADAY_FAST_SCAN_MS = 3000;
 const INTRADAY_BACKGROUND_SCAN_MS = 3000;
