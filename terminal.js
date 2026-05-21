@@ -6390,6 +6390,180 @@ function saveWatchlist(list) {
   localStorage.setItem("fuman_watchlist", JSON.stringify(list));
 }
 
+function ensureWatchlistAnalysisStyles() {
+  if (document.querySelector("#watchlist-analysis-styles")) return;
+  const style = document.createElement("style");
+  style.id = "watchlist-analysis-styles";
+  style.textContent = `
+    .watch-analysis-panel {
+      display: grid;
+      gap: 14px;
+      color: #dbe7ff;
+    }
+    .watch-action-row {
+      display: grid;
+      grid-template-columns: minmax(120px, 1fr) minmax(180px, 2fr) minmax(160px, 1.4fr);
+      gap: 10px;
+      align-items: end;
+    }
+    .watch-action-row label {
+      display: grid;
+      gap: 5px;
+      color: #7e8dae;
+      font-size: 11px;
+      font-weight: 800;
+    }
+    .watch-action-row input,
+    .watch-action-row button {
+      border-radius: 8px;
+      border: 1px solid rgba(127, 166, 255, 0.18);
+      background: rgba(21, 24, 38, 0.96);
+      color: #eaf1ff;
+      font-weight: 900;
+      padding: 11px 14px;
+    }
+    .watch-action-row button {
+      border-color: rgba(255, 106, 61, 0.65);
+      color: #ff8a5c;
+      cursor: pointer;
+    }
+    .watch-action-row .primary {
+      background: linear-gradient(90deg, #ef6a3b, #ff6d3d);
+      border-color: transparent;
+      color: #fff;
+    }
+    .watch-summary-grid,
+    .watch-card-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 12px;
+    }
+    .watch-card-grid {
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+    }
+    .watch-metric,
+    .watch-analysis-card,
+    .watch-report {
+      border: 1px solid rgba(127, 166, 255, 0.14);
+      border-radius: 8px;
+      background: rgba(18, 21, 34, 0.92);
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.03);
+    }
+    .watch-metric,
+    .watch-analysis-card {
+      padding: 18px;
+      min-height: 86px;
+    }
+    .watch-metric span,
+    .watch-analysis-card span {
+      display: block;
+      color: #7e8dae;
+      font-size: 12px;
+      font-weight: 800;
+      margin-bottom: 8px;
+    }
+    .watch-metric strong,
+    .watch-analysis-card strong {
+      display: block;
+      color: #fff;
+      font-size: 22px;
+      font-weight: 950;
+      line-height: 1.15;
+    }
+    .watch-metric em,
+    .watch-analysis-card em,
+    .watch-note-row small {
+      display: block;
+      color: #90a5cc;
+      font-size: 12px;
+      font-style: normal;
+      margin-top: 8px;
+      line-height: 1.5;
+    }
+    .watch-analysis-card.hot { border-top: 4px solid #ff4f72; }
+    .watch-analysis-card.neutral { border-top: 4px solid #73798d; }
+    .watch-analysis-card.good { border-top: 4px solid #16d08f; }
+    .watch-analysis-card.warn { border-top: 4px solid #f7a928; }
+    .watch-analysis-card b {
+      color: #ffbf47;
+      font-size: 13px;
+    }
+    .watch-note-row {
+      display: grid;
+      gap: 8px;
+    }
+    .watch-note-row article {
+      display: grid;
+      grid-template-columns: 28px 1fr;
+      gap: 12px;
+      align-items: center;
+      border: 1px solid rgba(127, 166, 255, 0.12);
+      border-radius: 8px;
+      background: rgba(24, 27, 42, 0.86);
+      padding: 11px 14px;
+    }
+    .watch-note-row b {
+      display: grid;
+      place-items: center;
+      width: 24px;
+      height: 24px;
+      border-radius: 7px;
+      background: rgba(255, 106, 61, 0.18);
+      color: #ff8a5c;
+      font-size: 12px;
+    }
+    .watch-report {
+      padding: 18px;
+    }
+    .watch-report h3 {
+      color: #fff;
+      font-size: 18px;
+      margin: 0 0 6px;
+    }
+    .watch-report section {
+      border-top: 1px solid rgba(127, 166, 255, 0.12);
+      margin-top: 16px;
+      padding-top: 16px;
+    }
+    .watch-report h4 {
+      color: #fff;
+      font-size: 15px;
+      margin: 0 0 12px;
+    }
+    .watch-report ul {
+      display: grid;
+      gap: 10px;
+      margin: 0;
+      padding-left: 18px;
+      color: #bfd0f2;
+      line-height: 1.65;
+    }
+    .watch-report li strong {
+      color: #fff;
+    }
+    .watch-report .summary-lines {
+      display: grid;
+      gap: 8px;
+      color: #eaf1ff;
+      font-size: 15px;
+      font-weight: 900;
+      line-height: 1.7;
+      margin-top: 10px;
+    }
+    .watch-up { color: #ff5d72 !important; }
+    .watch-down { color: #20d18b !important; }
+    .watch-flat { color: #dbe7ff !important; }
+    @media (max-width: 980px) {
+      .watch-action-row,
+      .watch-summary-grid,
+      .watch-card-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+  `;
+  document.head.appendChild(style);
+}
+
 function showTVAnalysis(code, name) {
   const symbol = `TWSE:${code}`;
   watchlistAnalysis.innerHTML = `
@@ -6553,6 +6727,144 @@ function formatVolumeMetric(stock, analysis) {
   return "載入中";
 }
 
+function pctText(value) {
+  const number = cleanNumber(value);
+  return `${number >= 0 ? "+" : ""}${number.toFixed(2)}%`;
+}
+
+function watchToneClass(value) {
+  const number = cleanNumber(value);
+  if (number > 0) return "watch-up";
+  if (number < 0) return "watch-down";
+  return "watch-flat";
+}
+
+function formatLots(value) {
+  const number = normalizeTradeVolumeLots(value);
+  if (!number) return "--";
+  return `${Math.round(number).toLocaleString("zh-TW")} 張`;
+}
+
+function buildWatchAnalysisModel(stock, analysis, timeframe) {
+  const close = cleanNumber(stock.close);
+  const open = cleanNumber(stock.open);
+  const high = cleanNumber(stock.high) || Math.max(close, open || close);
+  const low = cleanNumber(stock.low) || Math.min(close, open || close);
+  const prevClose = cleanNumber(stock.prevClose) || close - cleanNumber(stock.change);
+  const pct = cleanNumber(stock.percent);
+  const range = Math.max(high - low, 0);
+  const rangePosition = range ? clamp(Math.round(((close - low) / range) * 100), 0, 100) : 50;
+  const inst = getInstitutionTotal(stock.code);
+  const supportA = close ? close * 0.997 : 0;
+  const supportB = close ? Math.max(low || 0, close * 0.985) : 0;
+  const supportC = close ? close * 0.97 : 0;
+  const pressureA = close ? Math.max(high || 0, close * 1.012) : 0;
+  const pressureB = close ? close * 1.02 : 0;
+  const pressureC = close ? close * 1.04 : 0;
+  const volumeLots = normalizeTradeVolumeLots(stock.tradeVolume || stock.volume);
+  const turnoverValue = cleanNumber(stock.value) || estimateTradeValue(close, volumeLots);
+  const chipScore = analysis.hasInstitution
+    ? clamp(Math.round(50 + Math.sign(inst.foreign) * 18 + Math.sign(inst.trust) * 22 + Math.sign(inst.total) * 10), 0, 100)
+    : 0;
+  const trendLabel = analysis.score >= 70
+    ? "強勢整理"
+    : analysis.score >= 58
+      ? "偏多整理"
+      : analysis.score >= 43
+        ? "弱勢整理"
+        : "轉弱觀察";
+  const strategyLabel = analysis.score >= 70
+    ? "等待拉回"
+    : analysis.score >= 58
+      ? "等待轉強"
+      : analysis.score >= 43
+        ? "等待確認"
+        : "先避開";
+  const riskLabel = pct >= 7
+    ? "漲幅過熱"
+    : pct <= -5
+      ? "跌幅偏深"
+      : rangePosition >= 82
+        ? "追高風險"
+        : "風險可控";
+  const actionTitle = analysis.score >= 58 ? "等待轉強" : "等待確認";
+  const actionHint = analysis.score >= 58
+    ? `先等量價延續，站回 ${formatStockPrice(pressureA)} 後再觀察。`
+    : `先看 ${formatStockPrice(supportA)} 是否守住，不急著追。`;
+  const dataQuality = [
+    `即時/收盤價格：${formatStockPrice(close)}，漲跌幅 ${pctText(pct)}，資料來源為終端現有市場資料。`,
+    analysis.hasInstitution
+      ? `法人資料可用：外資 ${formatInstitution(inst.foreign)}，投信 ${formatInstitution(inst.trust)}，法人合計 ${formatInstitution(inst.total)}。`
+      : "法人資料目前尚未完整更新，籌碼判斷以盤後資料為主。",
+    `成交量 ${formatLots(volumeLots)}，成交金額約 ${radarMoney(turnoverValue)}，量能排名 ${analysis.volumeRank ?? "--"}%。`,
+  ];
+  const technical = [
+    `趨勢方向：${trendLabel}，${timeframe.label} 動能分 ${analysis.score}，震盪分 ${analysis.oscillatorScore}，均線分 ${analysis.maScore}。`,
+    `當日位置：高 ${formatStockPrice(high)}、低 ${formatStockPrice(low)}、收 ${formatStockPrice(close)}，收盤位於區間約 ${rangePosition}%。`,
+    `支撐觀察：${formatStockPrice(supportA)}、${formatStockPrice(supportB)}、${formatStockPrice(supportC)}；壓力觀察：${formatStockPrice(pressureA)}、${formatStockPrice(pressureB)}、${formatStockPrice(pressureC)}。`,
+  ];
+  const chips = [
+    analysis.hasInstitution
+      ? `外資 ${formatInstitution(inst.foreign)}，投信 ${formatInstitution(inst.trust)}，法人合計 ${formatInstitution(inst.total)}，籌碼分 ${chipScore}。`
+      : "法人資料尚未完整，先不把籌碼視為主要決策依據。",
+    inst.total > 0
+      ? "法人合計偏買，若量價同步續強，籌碼可視為加分。"
+      : inst.total < 0
+        ? "法人合計偏賣，若價格跌破支撐，需優先控制風險。"
+        : "法人合計中性，仍以價格與成交量變化為主。",
+  ];
+  const bullPoints = [
+    pct > 0 ? `股價上漲 ${pctText(pct)}，短線仍有動能。` : "若能重新站回平盤並放量，才有轉強條件。",
+    rangePosition >= 50 ? "收盤位於日內中上區，買盤承接尚可。" : "收盤位置偏低，需要先確認承接。",
+    chipScore >= 60 ? "法人籌碼偏多，對後續續航有加分。" : "籌碼尚未明顯偏多，需等待確認。",
+  ];
+  const bearPoints = [
+    rangePosition >= 82 ? "收盤接近日內高位，短線追價風險上升。" : `跌破 ${formatStockPrice(supportA)} 後，短線轉弱機率提高。`,
+    pct >= 7 ? "單日漲幅偏大，隔日容易震盪洗盤。" : "若量能縮小，容易變成整理而非續攻。",
+    chipScore <= 40 && analysis.hasInstitution ? "法人籌碼偏弱，需避免只看價格追高。" : "若法人買盤不延續，仍需回到量價確認。",
+  ];
+  const summary = [
+    `${stock.code} ${stock.name || ""} 目前判斷為「${trendLabel}」，現價 ${formatStockPrice(close)}，漲幅 ${pctText(pct)}。`,
+    `主要支撐看 ${formatStockPrice(supportA)} / ${formatStockPrice(supportB)}，壓力看 ${formatStockPrice(pressureA)} / ${formatStockPrice(pressureB)}。`,
+    `操作提醒：${actionHint}`,
+    "以上為系統量價與籌碼整理，不構成投資建議。",
+  ];
+
+  return {
+    close,
+    prevClose,
+    pct,
+    high,
+    low,
+    rangePosition,
+    trendLabel,
+    strategyLabel,
+    riskLabel,
+    actionTitle,
+    actionHint,
+    supportA,
+    supportB,
+    supportC,
+    pressureA,
+    pressureB,
+    pressureC,
+    chipScore,
+    inst,
+    volumeLots,
+    turnoverValue,
+    dataQuality,
+    technical,
+    chips,
+    bullPoints,
+    bearPoints,
+    summary,
+  };
+}
+
+function renderWatchBullets(items) {
+  return `<ul>${items.map((item) => `<li>${item}</li>`).join("")}</ul>`;
+}
+
 function gaugeMarkup(title, score, size = "small") {
   const rotation = Math.round(180 + (clamp(score, 0, 100) / 100) * 180);
   const label = signalLabel(score);
@@ -6640,6 +6952,7 @@ function dashboardScoreMarkup(stock, analysis) {
 }
 
 async function showTradingDashboard(code, name) {
+  ensureWatchlistAnalysisStyles();
   const fallback = latestStocks.find(s => s.code === code) || { code, name, close: 0, change: 0, percent: 0 };
   const stock = await fetchStockPrice(code) || fallback;
   const activeTimeframe = getTechnicalTimeframe();
@@ -6649,19 +6962,81 @@ async function showTradingDashboard(code, name) {
   const trustText = analysis.hasInstitution ? `${analysis.trust >= 0 ? "+" : ""}${(analysis.trust / 1000).toFixed(0)}k` : "盤後";
   const trustClass = analysis.hasInstitution ? (analysis.trust >= 0 ? "down" : "up") : "";
   const volumeText = formatVolumeMetric(stock, analysis);
+  const model = buildWatchAnalysisModel(stock, analysis, activeTimeframe);
+  const trendTone = analysis.score >= 58 ? "good" : analysis.score >= 43 ? "neutral" : "warn";
+  const riskTone = model.riskLabel === "風險可控" ? "good" : "warn";
+  const changeTone = stock.percent >= 0 ? "watch-up" : "watch-down";
 
   watchlistAnalysis.innerHTML = `
-    <div class="ta-dashboard">
-      <header class="ta-head">
-        <div>
-          <span>技術分析</span>
-          <h2>${code} ${stock.name || name || ""}</h2>
-        </div>
-        <div class="ta-price">
-          <strong>${stock.close ? stock.close.toLocaleString("zh-TW") : "--"}</strong>
-          <em class="${changeClass}">${sign}${(stock.change || 0).toFixed(2)} (${sign}${(stock.percent || 0).toFixed(2)}%)</em>
-        </div>
-      </header>
+    <div class="watch-analysis-panel ta-dashboard">
+      <section class="watch-action-row">
+        <label>
+          股票代碼
+          <input value="${code}" readonly>
+        </label>
+        <button class="primary" type="button" data-watch-load>載入資料</button>
+        <button type="button" data-watch-analyze>分析</button>
+      </section>
+
+      <section class="watch-summary-grid">
+        <article class="watch-metric">
+          <span>標的</span>
+          <strong>${code} ${stock.name || name || ""}</strong>
+        </article>
+        <article class="watch-metric">
+          <span>趨勢判斷</span>
+          <strong class="${trendTone === "good" ? "watch-up" : trendTone === "warn" ? "watch-down" : "watch-flat"}">${model.trendLabel}</strong>
+        </article>
+        <article class="watch-metric">
+          <span>漲跌幅</span>
+          <strong class="${changeTone}">${pctText(stock.percent)}</strong>
+          <em>前收 ${formatStockPrice(model.prevClose)} → 現價 ${formatStockPrice(stock.close)}</em>
+        </article>
+        <article class="watch-metric">
+          <span>符合策略</span>
+          <strong>${analysis.score >= 58 ? 1 : 0}</strong>
+          <em>${model.strategyLabel}</em>
+        </article>
+      </section>
+
+      <section class="watch-card-grid">
+        <article class="watch-analysis-card ${trendTone}">
+          <span>趨勢</span>
+          <strong>${model.trendLabel}</strong>
+          <b>${pctText(stock.percent)}</b>
+          <em>收盤位於日內區間 ${model.rangePosition}%。</em>
+        </article>
+        <article class="watch-analysis-card neutral">
+          <span>價位</span>
+          <strong>現價 ${formatStockPrice(model.close)}</strong>
+          <b>${formatStockPrice(model.supportA)} / ${formatStockPrice(model.pressureA)}</b>
+          <em>支撐觀察與壓力觀察。</em>
+        </article>
+        <article class="watch-analysis-card warn">
+          <span>籌碼</span>
+          <strong>${analysis.hasInstitution ? "籌碼待確認" : "法人盤後"}</strong>
+          <b>籌碼 ${model.chipScore || "--"} / 主力 ${analysis.hasInstitution ? Math.round((model.chipScore + analysis.score) / 2) : "--"}</b>
+          <em>外資 ${formatInstitution(model.inst.foreign)}，投信 ${formatInstitution(model.inst.trust)}。</em>
+        </article>
+        <article class="watch-analysis-card ${riskTone}">
+          <span>風險</span>
+          <strong>${model.riskLabel}</strong>
+          <b>${analysis.volumeRank ?? 0} 則</b>
+          <em>${model.riskLabel === "風險可控" ? "目前沒有明顯過熱風險。" : "需等待量價確認。"}</em>
+        </article>
+        <article class="watch-analysis-card good">
+          <span>操作提醒</span>
+          <strong>${model.actionTitle}</strong>
+          <b>支撐 ${formatStockPrice(model.supportA)}</b>
+          <em>${model.actionHint}</em>
+        </article>
+      </section>
+
+      <section class="watch-note-row">
+        <article><b>1</b><small>${code} ${stock.name || ""}：${model.trendLabel}，漲跌幅 ${pctText(stock.percent)}，收盤位於日內區間 ${model.rangePosition}%。</small></article>
+        <article><b>2</b><small>支撐觀察：${formatStockPrice(model.supportA)}、${formatStockPrice(model.supportB)}、${formatStockPrice(model.supportC)}；壓力觀察：${formatStockPrice(model.pressureA)}、${formatStockPrice(model.pressureB)}、${formatStockPrice(model.pressureC)}。</small></article>
+        <article><b>3</b><small>${model.riskLabel === "風險可控" ? "目前風險可控，但仍需搭配成交量確認。" : "短線波動偏高，先等待支撐或轉強訊號。"}</small></article>
+      </section>
 
       <section class="ta-period-panel">
         <h3><span>${code}</span>的技術分析</h3>
@@ -6670,17 +7045,41 @@ async function showTradingDashboard(code, name) {
         </nav>
       </section>
 
-      <section class="ta-main">
-        ${gaugeMarkup("總覽", analysis.score, "large")}
+      <section class="watch-report">
+        <h3>AI 技術分析報告</h3>
+        <em>此報告由終端現有量價、籌碼與技術分數自動整理，不需 OpenAI API Key。</em>
+
+        <section>
+          <h4>1. 資料稽核與可用性</h4>
+          ${renderWatchBullets(model.dataQuality)}
+        </section>
+
+        <section>
+          <h4>2. 技術分析面：趨勢、量價、支撐與壓力</h4>
+          ${renderWatchBullets(model.technical)}
+        </section>
+
+        <section>
+          <h4>3. 籌碼分析面：法人與信用交易</h4>
+          ${renderWatchBullets(model.chips)}
+        </section>
+
+        <section>
+          <h4>4. 多空詳論與風控</h4>
+          <ul>
+            <li><strong>看多論述</strong>：${model.bullPoints.join(" ")}</li>
+            <li><strong>看空論述</strong>：${model.bearPoints.join(" ")}</li>
+            <li><strong>技術條件</strong>：跌破 ${formatStockPrice(model.supportB)} 後轉弱風險提高；突破 ${formatStockPrice(model.pressureA)} 並站穩，才算轉強確認。</li>
+          </ul>
+        </section>
+
+        <section>
+          <h4>5. 投資長摘要</h4>
+          <div class="summary-lines">
+            ${model.summary.map((item, index) => `<div>${index + 1}. ${item}</div>`).join("")}
+          </div>
+        </section>
       </section>
-
-      ${dashboardScoreMarkup(stock, analysis)}
-
-      <section class="ta-grid">
-        ${gaugeMarkup("震盪指標", analysis.oscillatorScore)}
-        ${gaugeMarkup("移動平均線", analysis.maScore)}
-      </section>
-
     </div>
   `;
 
