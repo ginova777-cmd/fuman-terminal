@@ -513,51 +513,87 @@ function radarStockValue(stock) {
   return cleanNumber(stock.value) || close * volume * 1000;
 }
 
+function radarSignalTags(stock) {
+  const tags = [];
+  const volume = cleanNumber(stock.tradeVolume || stock.volume);
+  const pct = cleanNumber(stock.pct ?? stock.percent);
+  const value = cleanNumber(stock.value);
+  const foreign = cleanNumber(stock.foreign);
+  const trust = cleanNumber(stock.trust);
+  if (value >= 1000000000 || (volume >= 5000 && Math.abs(pct) >= 1.2)) tags.push("即時爆量");
+  if (pct >= 3) tags.push("急拉");
+  if (foreign >= 1000) tags.push("外資買超");
+  if (pct >= 1.5 && value >= 200000000) tags.push("短線強勢");
+  if (trust >= 500) tags.push("投信買超");
+  if (pct <= -3) tags.push("急殺");
+  if (foreign <= -1000) tags.push("外資賣超");
+  if (pct <= -1.5 && value >= 200000000) tags.push("短線轉弱");
+  return tags;
+}
+
 function buildRealtimeRadarRows() {
-  return latestStocks
-    .filter((stock) => /^\d{4}$/.test(String(stock.code || "")) && !/^00/.test(String(stock.code || "")))
+  const intradayPool = latestStocks
+    .map((stock) => applyStrategyQuote(stock))
+    .filter((stock) => isIntradayTradable(stock));
+  const rankedIntradayPool = uniqueStocksByCode([
+    ...getIntradayCandidateStocks(intradayPool),
+    ...getBaseStrongIntradayStocks(intradayPool),
+    ...[...intradayPool].sort((a, b) => getIntradayHotScore(b) - getIntradayHotScore(a)),
+  ]).slice(0, INTRADAY_HOT_SCAN_LIMIT + 300);
+  return rankedIntradayPool
     .map((stock) => {
       const live = applyStrategyQuote(stock);
       const inst = getInstitutionTotal(live.code);
       const pct = cleanNumber(live.percent);
       const value = radarStockValue(live);
+      const volume = cleanNumber(live.tradeVolume || live.volume);
       const totalInst = cleanNumber(inst.total);
       const trust = cleanNumber(inst.trust);
       const foreign = cleanNumber(inst.foreign);
-      const longScore = Math.max(pct, 0) * 18 + Math.max(totalInst, 0) / 800 + Math.log10(Math.max(value, 1)) * 4;
-      const shortScore = Math.max(-pct, 0) * 18 + Math.max(-totalInst, 0) / 800 + Math.log10(Math.max(value, 1)) * 4;
-      const side = longScore >= shortScore ? "long" : "short";
-      const flow = value * Math.min(Math.abs(pct) / 100 + 0.015, 0.16);
+      const signalTags = radarSignalTags({ ...live, pct, value, volume, foreign, trust });
+      const hasLongSignal =
+        pct >= 3 ||
+        (pct >= 1.5 && value >= 200000000) ||
+        (value >= 1000000000 && pct > 0) ||
+        (volume >= 5000 && pct >= 1.2) ||
+        (foreign >= 1000 && pct >= 0) ||
+        (trust >= 500 && pct >= 0);
+      const hasShortSignal =
+        pct <= -3 ||
+        (pct <= -1.5 && value >= 200000000) ||
+        (value >= 1000000000 && pct < 0) ||
+        (volume >= 5000 && pct <= -1.2) ||
+        (foreign <= -1000 && pct <= 0);
+      const side = hasLongSignal && (!hasShortSignal || pct >= 0) ? "long" : hasShortSignal ? "short" : "";
+      const momentumScore = Math.abs(pct) * 22;
+      const valueScore = Math.log10(Math.max(value, 1)) * 5;
+      const volumeScore = Math.log10(Math.max(volume, 1)) * 8;
+      const instScore = side === "long"
+        ? Math.max(foreign, 0) / 600 + Math.max(trust, 0) / 450
+        : Math.max(-foreign, 0) / 600 + Math.max(-trust, 0) / 450;
+      const score = momentumScore + valueScore + volumeScore + instScore + signalTags.length * 18;
+      const flowWeight = Math.min(1, 0.38 + Math.abs(pct) / 9 + signalTags.length * 0.06);
+      const flow = value * flowWeight;
       return {
         ...live,
         pct,
         value,
+        volume,
         side,
-        score: side === "long" ? longScore : shortScore,
+        score,
         flow,
         trust,
         foreign,
         totalInst,
+        signalTags,
       };
     })
-    .filter((stock) => stock.value > 0)
+    .filter((stock) => stock.value > 0 && stock.side && stock.signalTags.length)
     .sort((a, b) => b.score - a.score || b.value - a.value);
 }
 
 function radarReasonTags(stock) {
-  const tags = [];
-  if (stock.side === "long") {
-    if (stock.pct >= 5) tags.push("強勢拉抬");
-    if (stock.value >= 1000000000) tags.push("成交爆量");
-    if (stock.foreign > 0) tags.push("外資買超");
-    if (stock.trust > 0) tags.push("投信買超");
-  } else {
-    if (stock.pct <= -3) tags.push("急跌轉弱");
-    if (stock.value >= 1000000000) tags.push("放量賣壓");
-    if (stock.foreign < 0) tags.push("外資賣超");
-    if (stock.trust < 0) tags.push("投信賣超");
-  }
-  return (tags.length ? tags : [stock.side === "long" ? "短線資金偏多" : "短線資金偏空"]).slice(0, 4);
+  return (stock.signalTags?.length ? stock.signalTags : [stock.side === "long" ? "短線強勢" : "短線轉弱"]).slice(0, 4);
 }
 
 async function ensureRealtimeRadarData() {
