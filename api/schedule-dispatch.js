@@ -1,0 +1,105 @@
+const DEFAULT_OWNER = "ginova777-cmd";
+const DEFAULT_REPO = "fuman-terminal";
+const DEFAULT_WORKFLOW = "schedule-patrol.yml";
+
+function sendJson(res, status, payload) {
+  res.statusCode = status;
+  res.setHeader("Content-Type", "application/json; charset=utf-8");
+  res.setHeader("Cache-Control", "no-store");
+  res.end(JSON.stringify(payload));
+}
+
+function taipeiNow(date = new Date()) {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Taipei",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    weekday: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).formatToParts(date);
+  const byType = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return {
+    date: `${byType.year}-${byType.month}-${byType.day}`,
+    weekday: byType.weekday,
+    minutes: Number(byType.hour) * 60 + Number(byType.minute),
+    time: `${byType.hour}:${byType.minute}`,
+  };
+}
+
+function isTradingPatrolWindow(now) {
+  if (now.weekday === "Sat" || now.weekday === "Sun") return false;
+  return now.minutes >= 7 * 60 && now.minutes <= 22 * 60 + 55;
+}
+
+async function dispatchWorkflow({ owner, repo, workflow, ref, token }) {
+  const response = await fetch(`https://api.github.com/repos/${owner}/${repo}/actions/workflows/${workflow}/dispatches`, {
+    method: "POST",
+    headers: {
+      "Accept": "application/vnd.github+json",
+      "Authorization": `Bearer ${token}`,
+      "Content-Type": "application/json",
+      "User-Agent": "fuman-terminal-external-schedule",
+    },
+    body: JSON.stringify({ ref }),
+  });
+  if (!response.ok) {
+    const text = await response.text().catch(() => "");
+    throw new Error(`GitHub dispatch failed HTTP ${response.status} ${text}`.trim());
+  }
+}
+
+module.exports = async function handler(req, res) {
+  if (req.method !== "GET" && req.method !== "POST") {
+    sendJson(res, 405, { ok: false, error: "method_not_allowed" });
+    return;
+  }
+
+  const expectedSecret = process.env.SCHEDULE_DISPATCH_SECRET || "";
+  const providedSecret = req.query?.secret || req.headers["x-schedule-secret"] || "";
+  if (!expectedSecret || providedSecret !== expectedSecret) {
+    sendJson(res, 401, { ok: false, error: "unauthorized" });
+    return;
+  }
+
+  const token = process.env.GITHUB_DISPATCH_TOKEN || "";
+  if (!token) {
+    sendJson(res, 500, { ok: false, error: "missing_github_dispatch_token" });
+    return;
+  }
+
+  const now = taipeiNow();
+  if (!isTradingPatrolWindow(now) && req.query?.force !== "1") {
+    sendJson(res, 200, {
+      ok: true,
+      skipped: true,
+      reason: "outside_trading_patrol_window",
+      taipei: now,
+    });
+    return;
+  }
+
+  const owner = process.env.GITHUB_OWNER || DEFAULT_OWNER;
+  const repo = process.env.GITHUB_REPO || DEFAULT_REPO;
+  const workflow = process.env.SCHEDULE_PATROL_WORKFLOW || DEFAULT_WORKFLOW;
+  const ref = process.env.GITHUB_REF_NAME || "main";
+
+  try {
+    await dispatchWorkflow({ owner, repo, workflow, ref, token });
+    sendJson(res, 200, {
+      ok: true,
+      dispatched: workflow,
+      repo: `${owner}/${repo}`,
+      ref,
+      taipei: now,
+    });
+  } catch (error) {
+    sendJson(res, 502, {
+      ok: false,
+      error: error.message,
+      taipei: now,
+    });
+  }
+};
