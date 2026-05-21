@@ -256,6 +256,20 @@ function getActiveViewName() {
   return Object.entries(viewPanels).find(([, panel]) => panel?.classList.contains("active"))?.[0] || "market";
 }
 
+function removeStrategyCenterHeader() {
+  document.querySelector("#strategy-view .strategy-header")?.remove();
+}
+
+function syncMobileStrategyVisibility(activeName = getActiveViewName()) {
+  if (!strategyView) return;
+  const shouldHideStrategy = isMobileViewport() && activeName !== "strategy";
+  strategyView.classList.toggle("mobile-hide-strategy", shouldHideStrategy);
+  if (shouldHideStrategy) {
+    strategyView.hidden = true;
+    strategyView.classList.remove("active");
+  }
+}
+
 function runMobileAutoOrganize() {
   const active = getActiveViewName();
   if (active === "market") {
@@ -2308,6 +2322,9 @@ intradayRadarStyles.textContent = `
   #strategy-view.swing-only .strategy-header {
     display: none;
   }
+  #strategy-view .strategy-header {
+    display: none !important;
+  }
   .strategy-toolbar.intraday-mode {
     border-bottom: 1px solid rgba(255, 112, 77, 0.18);
   }
@@ -3305,6 +3322,14 @@ intradayRadarStyles.textContent = `
       max-width: 100vw;
       overflow-x: hidden !important;
     }
+    .view-panel[hidden],
+    #strategy-view[hidden],
+    #strategy-view.mobile-hide-strategy {
+      display: none !important;
+    }
+    #strategy-view .strategy-header {
+      display: none !important;
+    }
     .dashboard {
       padding-left: 6px;
       padding-right: 6px;
@@ -4230,13 +4255,20 @@ function renderOpenBuyRadar(universe) {
   if (strategyAvgScore) strategyAvgScore.textContent = rows.length ? Math.round(rows.reduce((sum, stock) => sum + stock.score, 0) / rows.length) : "--";
   if (strategyTopHit) strategyTopHit.textContent = rows.length ? "+1.2%" : "--";
 
+  const getOpenBuyDisplayStatus = (stock) => {
+    const reasonTag = String(stock.reason || "").split("：")[0].trim();
+    if (reasonTag && reasonTag.length <= 8) return reasonTag;
+    return stock.status || "明日開盤可買";
+  };
+
   const tableRows = rows.length ? rows.map((stock) => {
     const sign = stock.percent >= 0 ? "+" : "";
+    const displayStatus = getOpenBuyDisplayStatus(stock);
     return `
       <tr>
         <td><span class="code">${stock.code}</span></td>
         <td>${stock.name}</td>
-        <td><b class="swing-stage mid">${stock.status || "明日開盤可買"}</b></td>
+        <td><b class="swing-stage mid">${displayStatus}</b></td>
         <td class="price">${formatNumber(stock.close, stock.close >= 100 ? 0 : 2)}</td>
         <td class="pct">${sign}${stock.percent.toFixed(2)}%</td>
         <td>${stock.entry || "09:00 開盤價"}</td>
@@ -5417,6 +5449,8 @@ function showView(viewName, activeLink) {
     panel.hidden = name !== viewName;
     panel.classList.toggle("active", name === viewName);
   });
+  removeStrategyCenterHeader();
+  syncMobileStrategyVisibility(viewName);
   applyStaticTitleIcons();
   viewLinks.forEach((link)=>link.classList.toggle("active", link===activeLink));
   if (viewName === "strategy") deferUiWork(renderStrategyScanner);
@@ -6356,6 +6390,9 @@ function removeFromWatchlist(code) {
 }
 
 viewPanels.watchlist = document.querySelector("#watchlist-view");
+removeStrategyCenterHeader();
+syncMobileStrategyVisibility();
+window.addEventListener("resize", () => deferUiWork(syncMobileStrategyVisibility, 80));
 
 watchlistSearchInput?.addEventListener("keydown", (e) => {
   if (e.key === "Enter") addToWatchlist();
