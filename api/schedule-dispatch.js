@@ -1,7 +1,17 @@
 const DEFAULT_OWNER = "ginova777-cmd";
 const DEFAULT_REPO = "fuman-terminal";
-const DEFAULT_WORKFLOW = "schedule-patrol.yml";
-const INTRADAY_WORKFLOW = "intraday-radar-scorecard.yml";
+const DEFAULT_WORKFLOW = "fuman-master-schedule.yml";
+const TASK_WORKFLOWS = {
+  master: { workflow: "fuman-master-schedule.yml" },
+  patrol: { workflow: "schedule-patrol.yml" },
+  openBuy: { workflow: "open-buy-background-scan.yml", inputs: { full_scan: "true" } },
+  strategy3: { workflow: "strategy3-background-scan.yml", inputs: { full_scan: "true" } },
+  strategy4: { workflow: "strategy4-background-scan.yml", inputs: { full_scan: "true" } },
+  strategy5: { workflow: "strategy5-background-scan.yml", inputs: { full_scan: "true" } },
+  flow: { workflow: "flow-cache.yml", inputs: { full_scan: "true" } },
+  intradayRecord: { workflow: "intraday-radar-scorecard.yml", inputs: { mode: "record", force_report: "false" } },
+  intradayReport: { workflow: "intraday-radar-scorecard.yml", inputs: { mode: "report", force_report: "false" } },
+};
 
 function sendJson(res, status, payload) {
   res.statusCode = status;
@@ -33,20 +43,6 @@ function taipeiNow(date = new Date()) {
 function isTradingPatrolWindow(now) {
   if (now.weekday === "Sat" || now.weekday === "Sun") return false;
   return now.minutes >= 7 * 60 && now.minutes <= 22 * 60 + 55;
-}
-
-function intradayDispatchInputs(now, force) {
-  if (now.weekday === "Sat" || now.weekday === "Sun") return null;
-  if (force && now.minutes < 9 * 60) return null;
-  if (force && now.minutes >= 14 * 60 + 15) return { mode: "report" };
-  if (force) return { mode: "record" };
-  if (now.minutes >= 9 * 60 && now.minutes <= 13 * 60 + 30) {
-    return { mode: "record" };
-  }
-  if (now.minutes >= 14 * 60 + 15 && now.minutes <= 16 * 60 + 30) {
-    return { mode: "report" };
-  }
-  return null;
 }
 
 async function dispatchWorkflow({ owner, repo, workflow, ref, token, inputs }) {
@@ -101,24 +97,40 @@ module.exports = async function handler(req, res) {
   const workflow = process.env.SCHEDULE_PATROL_WORKFLOW || DEFAULT_WORKFLOW;
   const ref = process.env.GITHUB_REF_NAME || "main";
   const dispatched = [];
+  const task = String(req.query?.task || "").trim();
 
   try {
-    await dispatchWorkflow({ owner, repo, workflow, ref, token });
-    dispatched.push(workflow);
-
-    const force = req.query?.force === "1";
-    const intradayInputs = intradayDispatchInputs(now, force);
-    if (intradayInputs) {
+    if (task) {
+      const target = TASK_WORKFLOWS[task];
+      if (!target) {
+        sendJson(res, 400, {
+          ok: false,
+          error: "unknown_task",
+          allowedTasks: Object.keys(TASK_WORKFLOWS),
+          taipei: now,
+        });
+        return;
+      }
       await dispatchWorkflow({
         owner,
         repo,
-        workflow: INTRADAY_WORKFLOW,
+        workflow: target.workflow,
         ref,
+        inputs: target.inputs,
         token,
-        inputs: intradayInputs,
       });
-      dispatched.push(`${INTRADAY_WORKFLOW}:${intradayInputs.mode}`);
+      sendJson(res, 200, {
+        ok: true,
+        dispatched: [`${target.workflow}:${task}`],
+        repo: `${owner}/${repo}`,
+        ref,
+        taipei: now,
+      });
+      return;
     }
+
+    await dispatchWorkflow({ owner, repo, workflow, ref, token });
+    dispatched.push(workflow);
 
     sendJson(res, 200, {
       ok: true,
