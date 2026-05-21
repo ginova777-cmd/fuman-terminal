@@ -1,6 +1,7 @@
 const DEFAULT_OWNER = "ginova777-cmd";
 const DEFAULT_REPO = "fuman-terminal";
 const DEFAULT_WORKFLOW = "schedule-patrol.yml";
+const INTRADAY_WORKFLOW = "intraday-radar-scorecard.yml";
 
 function sendJson(res, status, payload) {
   res.statusCode = status;
@@ -34,7 +35,21 @@ function isTradingPatrolWindow(now) {
   return now.minutes >= 7 * 60 && now.minutes <= 22 * 60 + 55;
 }
 
-async function dispatchWorkflow({ owner, repo, workflow, ref, token }) {
+function intradayDispatchInputs(now, force) {
+  if (now.weekday === "Sat" || now.weekday === "Sun") return null;
+  if (force && now.minutes < 9 * 60) return null;
+  if (force && now.minutes >= 14 * 60 + 15) return { mode: "report", force_report: "false" };
+  if (force) return { mode: "record", force_report: "false" };
+  if (now.minutes >= 9 * 60 && now.minutes <= 13 * 60 + 30) {
+    return { mode: "record", force_report: "false" };
+  }
+  if (now.minutes >= 14 * 60 + 15 && now.minutes <= 16 * 60 + 30) {
+    return { mode: "report", force_report: "false" };
+  }
+  return null;
+}
+
+async function dispatchWorkflow({ owner, repo, workflow, ref, token, inputs }) {
   const response = await fetch(`https://api.github.com/repos/${owner}/${repo}/actions/workflows/${workflow}/dispatches`, {
     method: "POST",
     headers: {
@@ -43,7 +58,7 @@ async function dispatchWorkflow({ owner, repo, workflow, ref, token }) {
       "Content-Type": "application/json",
       "User-Agent": "fuman-terminal-external-schedule",
     },
-    body: JSON.stringify({ ref }),
+    body: JSON.stringify({ ref, ...(inputs ? { inputs } : {}) }),
   });
   if (!response.ok) {
     const text = await response.text().catch(() => "");
@@ -85,12 +100,29 @@ module.exports = async function handler(req, res) {
   const repo = process.env.GITHUB_REPO || DEFAULT_REPO;
   const workflow = process.env.SCHEDULE_PATROL_WORKFLOW || DEFAULT_WORKFLOW;
   const ref = process.env.GITHUB_REF_NAME || "main";
+  const dispatched = [];
 
   try {
     await dispatchWorkflow({ owner, repo, workflow, ref, token });
+    dispatched.push(workflow);
+
+    const force = req.query?.force === "1";
+    const intradayInputs = intradayDispatchInputs(now, force);
+    if (intradayInputs) {
+      await dispatchWorkflow({
+        owner,
+        repo,
+        workflow: INTRADAY_WORKFLOW,
+        ref,
+        token,
+        inputs: intradayInputs,
+      });
+      dispatched.push(`${INTRADAY_WORKFLOW}:${intradayInputs.mode}`);
+    }
+
     sendJson(res, 200, {
       ok: true,
-      dispatched: workflow,
+      dispatched,
       repo: `${owner}/${repo}`,
       ref,
       taipei: now,
