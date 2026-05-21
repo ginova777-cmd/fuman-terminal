@@ -593,14 +593,17 @@ function renderRealtimeRadar() {
     return;
   }
   const rows = buildRealtimeRadarRows();
-  const longRows = rows.filter((stock) => stock.side === "long").slice(0, 8);
-  const shortRows = rows.filter((stock) => stock.side === "short").slice(0, 8);
-  const longFlow = rows.filter((stock) => stock.side === "long").reduce((sum, stock) => sum + stock.flow, 0);
-  const shortFlow = rows.filter((stock) => stock.side === "short").reduce((sum, stock) => sum + stock.flow, 0);
+  const longAll = rows.filter((stock) => stock.side === "long");
+  const shortAll = rows.filter((stock) => stock.side === "short");
+  const longRows = longAll.slice(0, 8);
+  const shortRows = shortAll.slice(0, 8);
+  const longFlow = longAll.reduce((sum, stock) => sum + stock.flow, 0);
+  const shortFlow = shortAll.reduce((sum, stock) => sum + stock.flow, 0);
   const netFlow = longFlow - shortFlow;
   const longShare = Math.round((longFlow / Math.max(longFlow + shortFlow, 1)) * 100);
-  const leaders = longRows.length >= shortRows.length ? longRows : shortRows;
+  const leaders = longFlow >= shortFlow ? longRows : shortRows;
   const major = longFlow >= shortFlow ? "偏多" : "偏空";
+  const majorLabel = `${major}觀察`;
   const topNames = leaders.slice(0, 3).map((stock) => `${stock.code} ${stock.name}`).join("、") || "--";
   const now = new Date().toLocaleTimeString("zh-TW", { hour12: false });
   const leaderMarkup = leaders.slice(0, 6).map((stock) => {
@@ -632,17 +635,17 @@ function renderRealtimeRadar() {
     </header>
     <section class="radar-ai-box">
       <div class="radar-ai-head"><span>AI 即時判斷</span><span>信心 ${Math.max(52, Math.min(95, Math.round(Math.abs(netFlow) / Math.max(longFlow + shortFlow, 1) * 100 + 55)))}%</span></div>
-      <h2>${major}</h2>
-      <p>${major}，淨流向 ${netFlow >= 0 ? "+" : "-"}${radarMoney(netFlow)}。主導訊號：${topNames}。</p>
-      <small>多方 ${radarMoney(longFlow)}｜空方 ${radarMoney(shortFlow)}｜集中度 ${Math.max(longRows.length, shortRows.length)} 檔</small>
+      <h2>${majorLabel}</h2>
+      <p>${majorLabel}，淨流向 ${netFlow >= 0 ? "+" : "-"}${radarMoney(netFlow)}。主導訊號：${topNames}。</p>
+      <small>多方 ${radarMoney(longFlow)}｜空方 ${radarMoney(shortFlow)}｜集中度 ${Math.max(longAll.length, shortAll.length)} 檔</small>
     </section>
     <section class="radar-team-box">
       <div class="radar-team-head"><span>自動 AI 團隊</span><span>今日 ${rows.length} 件</span></div>
-      <p>${major === "偏多" ? "多方雷達主導，留意強勢股續航。" : "空方雷達升溫，留意急跌與出量轉弱。"}重大訊號才會自動送出。</p>
+      <p>${major === "偏多" ? "多方雷達主導，留意強勢股續航。" : "空方雷達升溫，先看風險，不代表直接做空。"}重大訊號才會自動送出。</p>
     </section>
     <section class="radar-flow-grid">
-      <article class="radar-flow-card"><span>多方流入</span><strong>${radarMoney(longFlow)}</strong><small>最新 ${longRows.length} 則</small></article>
-      <article class="radar-flow-card short"><span>空方流出</span><strong>${radarMoney(shortFlow)}</strong><small>最新 ${shortRows.length} 則</small></article>
+      <article class="radar-flow-card"><span>多方流入</span><strong>${radarMoney(longFlow)}</strong><small>共 ${longAll.length} 則</small></article>
+      <article class="radar-flow-card short"><span>空方流出</span><strong>${radarMoney(shortFlow)}</strong><small>共 ${shortAll.length} 則</small></article>
       <article class="radar-flow-card"><span>淨流向</span><strong>${netFlow >= 0 ? "+" : "-"}${radarMoney(netFlow)}</strong><div class="radar-balance" style="--long-share:${longShare}%"><span></span></div></article>
     </section>
     <div class="radar-tabs">
