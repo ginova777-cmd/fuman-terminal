@@ -1112,6 +1112,16 @@ function formatNumber(value, digits = 2) {
   });
 }
 
+function formatStockPrice(value) {
+  const number = cleanNumber(value);
+  if (!number) return "--";
+  const decimals = Number.isInteger(number) ? 0 : 2;
+  return number.toLocaleString("zh-TW", {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: decimals,
+  });
+}
+
 function formatChange(sign, points, percent) {
   const symbol = sign === "-" ? "-" : "+";
   return `${symbol}${formatNumber(points)}　(${symbol}${formatNumber(percent)}%)`;
@@ -4835,7 +4845,7 @@ function renderStrategy5Dashboard(evaluated) {
           <small>${stock.sector || "未分類"} · ${stock.isRealtime ? "即時" : "盤中"} · ${new Date().toLocaleDateString("zh-TW")}</small>
         </div>
         <div>
-          <div class="strategy5-price">${formatNumber(stock.close, stock.close >= 100 ? 0 : 2)}</div>
+          <div class="strategy5-price">${formatStockPrice(stock.close)}</div>
           <small class="${stock.percent >= 0 ? "red" : "green"}">${sign}${stock.percent.toFixed(2)}%</small>
         </div>
         <div class="strategy5-chips">${chips}</div>
