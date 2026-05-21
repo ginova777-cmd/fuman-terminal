@@ -33,7 +33,7 @@ jobs:
       - name: Dispatch due terminal schedules
         run: node scripts/fuman-master-schedule.js
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ github.token }}
           GITHUB_REPOSITORY: ${{ github.repository }}
           GITHUB_REF_NAME: ${{ github.ref_name }}
           MASTER_FORCE_TASKS: ${{ inputs.force_tasks }}
