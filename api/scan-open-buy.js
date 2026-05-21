@@ -46,7 +46,7 @@ function yyyymmddToIso(value) {
   return `${text.slice(0, 4)}-${text.slice(4, 6)}-${text.slice(6, 8)}`;
 }
 
-function monthStarts(count = 5) {
+function monthStarts(count = 12) {
   const dates = [];
   const now = new Date();
   for (let i = count - 1; i >= 0; i--) {
@@ -131,7 +131,7 @@ async function mergeTpexDailyQuote(code, history) {
     byDate.set(quote.date, { ...(byDate.get(quote.date) || {}), ...quote });
     return {
       ...history,
-      rows: [...byDate.values()].sort((a, b) => a.date.localeCompare(b.date)).slice(-100),
+      rows: [...byDate.values()].sort((a, b) => a.date.localeCompare(b.date)).slice(-260),
     };
   } catch {
     return history;
@@ -155,7 +155,7 @@ async function fetchHistory(code) {
   const cached = cache.get(code);
   if (cached && Date.now() - cached.ts < CACHE_MS) return cached.value;
 
-  const months = monthStarts(5);
+  const months = monthStarts(12);
   let market = "TWSE";
   const twseResults = await Promise.allSettled(months.map((item) => fetchTwseMonth(code, item.twse)));
   let rows = twseResults.flatMap((result) => result.status === "fulfilled" ? result.value : []);
@@ -171,7 +171,7 @@ async function fetchHistory(code) {
   const value = {
     code,
     market,
-    rows: [...byDate.values()].sort((a, b) => a.date.localeCompare(b.date)).slice(-100),
+    rows: [...byDate.values()].sort((a, b) => a.date.localeCompare(b.date)).slice(-260),
   };
   cache.set(code, { ts: Date.now(), value });
   return value;
@@ -187,25 +187,32 @@ function sma(values, length) {
   return avg(values.slice(-length));
 }
 
+function normalizeVolumeLots(value) {
+  const number = Number(value) || 0;
+  return number > 1000000 ? number / 1000 : number;
+}
+
 function scanOpenBuy(code, market, rows) {
   if (rows.length < 35) return null;
   const last = rows.at(-1);
   const prev = rows.at(-2);
+  const lastVolume = normalizeVolumeLots(last.volume);
+  const prevVolume = normalizeVolumeLots(prev?.volume);
   const closes = rows.map((row) => row.close);
-  const volumes = rows.map((row) => row.volume);
+  const volumes = rows.map((row) => normalizeVolumeLots(row.volume));
   const ma5 = sma(closes, 5);
   const ma10 = sma(closes, 10);
   const ma20 = sma(closes, 20);
   const volMa20 = sma(volumes, 20);
   const pct = prev?.close ? ((last.close - prev.close) / prev.close) * 100 : 0;
-  const volumeRatio = volMa20 ? last.volume / volMa20 : 0;
+  const volumeRatio = volMa20 ? lastVolume / volMa20 : 0;
   const range = Math.max(last.high - last.low, 1);
   const bodyRatio = Math.abs(last.close - last.open) / range;
   const upperShadowRatio = (last.high - Math.max(last.close, last.open)) / range;
   const high20 = Math.max(...rows.slice(-21, -1).map((row) => row.high));
   const closeNearHigh = last.high ? last.close >= last.high * 0.97 : false;
   const tailKeepsRising = last.close > last.open && closeNearHigh && last.close >= last.low * 1.03;
-  const liquid = last.volume >= 2000;
+  const liquid = lastVolume >= 2000;
   const qualityPrice = last.close >= 20;
   const controlledMomentum = pct >= 1.5 && pct <= 4.5;
   const saneVolume = volumeRatio >= 1.2 && volumeRatio <= 4.5;
@@ -216,6 +223,37 @@ function scanOpenBuy(code, market, rows) {
   const reboundTurn = pct >= 1.5 && last.close > ma20 && closeNearHigh && volumeRatio >= 1.2;
   const prevPct = rows.length > 2 && rows.at(-3)?.close ? ((prev.close - rows.at(-3).close) / rows.at(-3).close) * 100 : 0;
   const high5 = Math.max(...rows.slice(-6, -1).map((row) => row.high));
+  const recent20 = rows.slice(-21, -1);
+  const rangeHigh20 = Math.max(...recent20.map((row) => row.high || row.close));
+  const rangeLow20 = Math.min(...recent20.map((row) => row.low || row.close));
+  const boxRange = rangeLow20 ? ((rangeHigh20 - rangeLow20) / rangeLow20) * 100 : 0;
+  const longRangeHigh = Math.max(...rows.map((row) => row.high || row.close));
+  const dropPercent = longRangeHigh ? ((longRangeHigh - last.close) / longRangeHigh) * 100 : 0;
+  const ma5Vol = avg(volumes.slice(-6, -1));
+  const volumeBurst = ma5Vol ? lastVolume > ma5Vol * 2 : false;
+  const volumeIncreaseRatio = prevVolume ? lastVolume / prevVolume : 0;
+  const volumeVsMa5Ratio = ma5Vol ? lastVolume / ma5Vol : 0;
+  const sustainedVolumeExpansion = ma5Vol && volMa20
+    ? volumeIncreaseRatio >= 1.2 && volumeRatio >= 1.2 && volumeVsMa5Ratio >= 1.5
+    : false;
+  const longLowerShadow = (Math.min(last.close, last.open) - last.low) / range >= 0.35;
+  const reboundCandle = last.close > last.open || longLowerShadow;
+  const bottomBreakout = last.close > rangeHigh20;
+  const exceptionalLimitBreak = lastVolume >= 10000 && pct >= 6 && breakout && closeNearHigh && last.close > ma5 && last.close > ma20;
+  const openingVolumeReady = lastVolume >= 3000 && (volumeRatio >= 0.75 || volumeVsMa5Ratio >= 0.75 || volumeIncreaseRatio >= 1.1 || exceptionalLimitBreak);
+  const openingPowerSetup = qualityPrice &&
+    openingVolumeReady &&
+    last.close > last.open &&
+    pct >= 2 &&
+    pct <= 10.1 &&
+    last.close >= last.low * 1.02 &&
+    last.close >= last.high * 0.92 &&
+    upperShadowRatio <= 0.45 &&
+    bodyRatio >= 0.18 &&
+    last.close > ma5 &&
+    last.close > ma20 &&
+    ma5 >= ma10 * 0.98 &&
+    (breakout || closeNearHigh || last.open >= prev.close * 1.005);
   const continuationSetup = liquid && qualityPrice && controlledMomentum && saneVolume &&
     tailKeepsRising && (trend || strongClose || volumeTurn || reboundTurn || breakout);
   const washoutSetup = liquid &&
@@ -229,11 +267,33 @@ function scanOpenBuy(code, market, rows) {
     last.low <= ma20 * 1.02 &&
     high5 >= ma20 * 1.08 &&
     last.close >= last.low * 1.03;
+  const deepReboundSetup = rows.length >= 120 &&
+    qualityPrice &&
+    last.close > last.open &&
+    dropPercent > 30 &&
+    boxRange <= 10 &&
+    sustainedVolumeExpansion &&
+    bottomBreakout &&
+    last.close > ma20 &&
+    pct >= -2 &&
+    pct <= 4.5 &&
+    volumeRatio >= 0.8 &&
+    volumeRatio <= 3.5 &&
+    reboundCandle;
 
-  if (!(continuationSetup || washoutSetup)) {
+  if (!(openingPowerSetup || continuationSetup || deepReboundSetup || washoutSetup)) {
     return null;
   }
 
+  const openingPowerScore = Math.min(100, Math.round(
+    62 +
+    Math.min(Math.max(pct, 0) * 3, 24) +
+    Math.min(volumeRatio * 4, 14) +
+    Math.min(volumeIncreaseRatio * 4, 12) +
+    (last.close >= last.high * 0.95 ? 8 : 0) +
+    (breakout ? 8 : 0) +
+    (last.close > ma20 ? 6 : 0)
+  ));
   const continuationScore = Math.min(100, Math.round(
     42 +
     Math.min(Math.max(pct, 0) * 3.6, 18) +
@@ -243,6 +303,16 @@ function scanOpenBuy(code, market, rows) {
     (closeNearHigh ? 6 : 0) +
     (last.close > ma20 ? 6 : 0)
   ));
+  const deepReboundScore = Math.min(94, Math.round(
+    55 +
+    Math.min(dropPercent * 0.55, 22) +
+    Math.min(Math.max(pct, 0) * 3.2, 14) +
+    Math.min(volumeRatio * 5, 14) +
+    (volumeBurst ? 10 : 0) +
+    (bottomBreakout ? 8 : 0) +
+    (longLowerShadow ? 8 : 0) +
+    (last.close > last.open ? 6 : 0)
+  ));
   const washoutScore = Math.min(94, Math.round(
     55 +
     Math.min(Math.abs(pct) * 3.2, 17) +
@@ -251,13 +321,15 @@ function scanOpenBuy(code, market, rows) {
     (last.close >= ma20 * 0.97 ? 5 : 0) +
     (last.low <= ma20 * 1.02 ? 4 : 0)
   ));
-  const primarySetup = continuationSetup ? "突破候選" : "洗盤反彈";
-  const score = primarySetup === "洗盤反彈" ? washoutScore : continuationScore;
+  const primarySetup = openingPowerSetup ? "開盤無腦入" : deepReboundSetup ? "深跌反彈" : continuationSetup ? "突破候選" : "洗盤反彈";
+  const score = primarySetup === "開盤無腦入" ? openingPowerScore : primarySetup === "深跌反彈" ? deepReboundScore : primarySetup === "洗盤反彈" ? washoutScore : continuationScore;
   const takeProfit = Number((last.close * 1.012).toFixed(last.close >= 100 ? 1 : 2));
   const stopLoss = Number((last.close * 0.99).toFixed(last.close >= 100 ? 1 : 2));
   const noChase = Number((last.close * 1.045).toFixed(last.close >= 100 ? 1 : 2));
   const matchedSetups = [
+    openingPowerSetup ? "開盤無腦入" : "",
     continuationSetup ? "突破候選" : "",
+    deepReboundSetup ? "深跌反彈" : "",
     washoutSetup ? "洗盤反彈" : "",
   ].filter(Boolean);
 
@@ -267,23 +339,33 @@ function scanOpenBuy(code, market, rows) {
     date: last.date,
     close: last.close,
     percent: pct,
-    volume: last.volume,
-    tradeVolume: last.volume,
+    volume: lastVolume,
+    tradeVolume: lastVolume,
     value: last.value,
     volumeRatio: Number(volumeRatio.toFixed(2)),
+    volumeIncreaseRatio: Number(volumeIncreaseRatio.toFixed(2)),
+    dropPercent: Number(dropPercent.toFixed(2)),
+    boxRange: Number(boxRange.toFixed(2)),
+    volumeBurstRatio: Number(volumeVsMa5Ratio.toFixed(2)),
+    sustainedVolumeExpansion,
+    longLowerShadow,
     tailKeepsRising,
     matchedSetups,
     score,
     status: primarySetup,
     setup: primarySetup,
-    entry: primarySetup === "洗盤反彈" ? "09:01 站回開盤價" : "09:00 開盤價",
+    entry: primarySetup === "開盤無腦入" ? "09:00 開盤價" : primarySetup === "突破候選" ? "09:00 開盤價" : "09:01 站回開盤價",
     takeProfit,
     stopLoss,
     noChase,
     exitTime: "09:10",
-    reason: primarySetup === "洗盤反彈"
+    reason: primarySetup === "深跌反彈"
+      ? `深跌反彈：長週期高點回落 ${dropPercent.toFixed(1)}%，20日箱體 ${boxRange.toFixed(1)}%，量增 ${volumeIncreaseRatio.toFixed(1)} 倍、量比 ${volumeRatio.toFixed(2)}，紅K突破箱體頸線並站上月線。`
+      : primarySetup === "開盤無腦入"
+      ? `開盤無腦入：漲幅 ${pct.toFixed(2)}%，成交量 ${Math.round(lastVolume).toLocaleString("zh-TW")} 張、量比 ${volumeRatio.toFixed(2)}，紅K強攻收在日內強勢區，前一天先列入開盤進場名單。`
+      : primarySetup === "洗盤反彈"
       ? `洗盤反彈：昨日漲幅 ${pct.toFixed(2)}%，前日強勢 ${prevPct.toFixed(2)}%，量比 ${volumeRatio.toFixed(2)}，回測均線後收離低點，09:01 站回開盤價才進。`
-      : `突破候選：昨日漲幅 ${pct.toFixed(2)}%，量比 ${volumeRatio.toFixed(2)}，成交量 ${Math.round(last.volume).toLocaleString("zh-TW")} 張，尾盤收近高點，列入開盤候選。`,
+      : `突破候選：昨日漲幅 ${pct.toFixed(2)}%，量比 ${volumeRatio.toFixed(2)}，成交量 ${Math.round(lastVolume).toLocaleString("zh-TW")} 張，尾盤收近高點，列入開盤候選。`,
   };
 }
 
