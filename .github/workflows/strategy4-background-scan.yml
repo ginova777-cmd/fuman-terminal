@@ -30,6 +30,9 @@ jobs:
         with:
           node-version: "20"
 
+      - name: Sync latest main
+        run: git pull --rebase origin main
+
       - name: Decide retry need
         id: retry
         run: echo "mode=$(node scripts/should-run-scheduled-cache.js strategy4)" >> "$GITHUB_OUTPUT"
@@ -39,33 +42,22 @@ jobs:
       - name: Update strategy caches
         if: steps.retry.outputs.mode == 'run'
         run: |
-          RUN_OPEN_BUY="0"
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ] || [ "${{ github.event_name }}" = "schedule" ]; then
-            RUN_OPEN_BUY="1"
-          fi
           node scripts/scan-strategy4-cache.js
-          if [ "$RUN_OPEN_BUY" = "1" ]; then
-            node scripts/scan-open-buy-cache.js
-          else
-            echo "Skip open-buy for this manual batch run."
-          fi
         env:
           STRATEGY4_BATCH_SIZE: "48"
           STRATEGY4_BATCHES_PER_RUN: "5"
-          OPEN_BUY_BATCH_SIZE: "48"
-          OPEN_BUY_BATCHES_PER_RUN: "5"
           FULL_SCAN: ${{ (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.full_scan == 'true')) && '1' || '0' }}
 
       - name: Verify strategy caches write
         if: steps.retry.outputs.mode == 'run'
-        run: node scripts/verify-cache-write.js data/strategy4-latest.json data/open-buy-latest.json
+        run: node scripts/verify-cache-write.js data/strategy4-latest.json
 
       - name: Commit cache
         if: steps.retry.outputs.mode == 'run'
         run: |
           git config user.name "fuman-terminal-bot"
           git config user.email "actions@github.com"
-          git add data/strategy4-latest.json data/strategy4-backup.json data/open-buy-latest.json data/open-buy-backup.json
+          git add data/strategy4-latest.json data/strategy4-backup.json
           git diff --cached --quiet || git commit -m "Update strategy caches"
-          git pull --rebase origin main
+          git pull --rebase --autostash origin main
           git push
