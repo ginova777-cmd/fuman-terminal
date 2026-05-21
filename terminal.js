@@ -266,6 +266,371 @@ function installMobileWatchlistNavOrder() {
   document.head.appendChild(style);
 }
 
+function installRealtimeRadarStyles() {
+  if (document.querySelector("#realtime-radar-styles")) return;
+  const style = document.createElement("style");
+  style.id = "realtime-radar-styles";
+  style.textContent = `
+    .radar-view {
+      display: grid;
+      gap: 14px;
+    }
+    .realtime-radar-nav span {
+      color: #ff7a45;
+    }
+    .radar-topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      border-bottom: 1px solid rgba(134, 151, 190, 0.14);
+      padding-bottom: 14px;
+    }
+    .radar-topbar h1 {
+      color: #f7fbff;
+      font-size: 26px;
+    }
+    .radar-topbar small {
+      color: #8da1ca;
+      font-size: 12px;
+    }
+    .radar-action {
+      border: 1px solid rgba(255, 122, 69, 0.35);
+      border-radius: 8px;
+      background: rgba(255, 122, 69, 0.12);
+      color: #ffbd8a;
+      cursor: pointer;
+      font-weight: 800;
+      padding: 10px 12px;
+    }
+    .radar-ai-box,
+    .radar-team-box,
+    .radar-flow-card,
+    .radar-leader-card {
+      border: 1px solid rgba(134, 151, 190, 0.16);
+      border-radius: 10px;
+      background: rgba(12, 14, 28, 0.72);
+    }
+    .radar-ai-box,
+    .radar-team-box {
+      padding: 16px;
+    }
+    .radar-ai-head,
+    .radar-team-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      color: #9bb5e7;
+      font-size: 12px;
+      font-weight: 900;
+    }
+    .radar-ai-box h2 {
+      margin: 10px 0 6px;
+      color: #ff6674;
+      font-size: 18px;
+    }
+    .radar-ai-box p,
+    .radar-team-box p {
+      margin: 0;
+      color: #dce7ff;
+      font-size: 14px;
+      line-height: 1.55;
+    }
+    .radar-ai-box small,
+    .radar-team-box small {
+      display: block;
+      margin-top: 8px;
+      color: #7790be;
+      font-size: 12px;
+    }
+    .radar-flow-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px;
+    }
+    .radar-flow-card {
+      padding: 18px;
+    }
+    .radar-flow-card span {
+      color: #8da1ca;
+      font-size: 12px;
+      font-weight: 800;
+    }
+    .radar-flow-card strong {
+      display: block;
+      margin-top: 8px;
+      color: #ff5d6c;
+      font-size: 26px;
+      font-weight: 950;
+    }
+    .radar-flow-card.short strong {
+      color: #23d59a;
+    }
+    .radar-flow-card small {
+      color: #8297c2;
+      font-size: 12px;
+    }
+    .radar-balance {
+      height: 7px;
+      border-radius: 999px;
+      background: rgba(35, 213, 154, 0.24);
+      overflow: hidden;
+    }
+    .radar-balance span {
+      display: block;
+      width: var(--long-share, 50%);
+      height: 100%;
+      border-radius: inherit;
+      background: #ff5d6c;
+    }
+    .radar-tabs {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0;
+      margin-top: 10px;
+      border-bottom: 1px solid rgba(134, 151, 190, 0.14);
+    }
+    .radar-tabs button {
+      border: 0;
+      border-bottom: 2px solid transparent;
+      background: transparent;
+      color: #8d9ab7;
+      cursor: pointer;
+      font-weight: 900;
+      padding: 12px;
+    }
+    .radar-tabs button.active {
+      border-color: #ff5d6c;
+      color: #ff7a82;
+    }
+    .radar-leader-list {
+      display: grid;
+      gap: 10px;
+      margin-top: 12px;
+    }
+    .radar-leader-card {
+      display: grid;
+      grid-template-columns: 90px 1fr auto minmax(220px, 0.8fr);
+      gap: 14px;
+      align-items: center;
+      padding: 14px;
+    }
+    .radar-time {
+      color: #ffd166;
+      font-size: 12px;
+      font-weight: 900;
+    }
+    .radar-stock strong {
+      color: #fff;
+      font-size: 18px;
+    }
+    .radar-stock small {
+      display: block;
+      color: #7890bc;
+      margin-top: 4px;
+    }
+    .radar-price {
+      text-align: right;
+    }
+    .radar-price strong {
+      color: #ff6573;
+      display: block;
+      font-size: 20px;
+    }
+    .radar-price small {
+      color: #ff6573;
+      font-weight: 900;
+    }
+    .radar-tags {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 6px 12px;
+      color: #ff6573;
+      font-size: 12px;
+      font-weight: 900;
+    }
+    @media (max-width: 760px) {
+      .radar-topbar {
+        align-items: flex-start;
+        padding-right: 58px;
+      }
+      .radar-topbar h1 {
+        font-size: 42px;
+      }
+      .radar-flow-grid {
+        grid-template-columns: 1fr;
+      }
+      .radar-leader-card {
+        grid-template-columns: 1fr;
+        gap: 8px;
+      }
+      .radar-price {
+        text-align: left;
+      }
+      .radar-tags {
+        grid-template-columns: 1fr;
+      }
+    }
+  `;
+  document.head.appendChild(style);
+}
+
+function installRealtimeRadarView() {
+  if (viewPanels["realtime-radar"]) return;
+  installRealtimeRadarStyles();
+  const navList = document.querySelector(".nav-list");
+  const radarLink = document.createElement("a");
+  radarLink.className = "strategy-nav realtime-radar-nav";
+  radarLink.href = "#";
+  radarLink.dataset.view = "realtime-radar";
+  radarLink.dataset.mobileLabel = "即時";
+  radarLink.innerHTML = `<span>◎</span>即時雷達`;
+  const firstStrategy = navList?.querySelector('.strategy-nav[data-view="strategy"]');
+  if (navList) navList.insertBefore(radarLink, firstStrategy || navList.firstChild?.nextSibling || null);
+  viewLinks.push(radarLink);
+
+  const panel = document.createElement("section");
+  panel.className = "view-panel radar-view";
+  panel.id = "realtime-radar-view";
+  panel.hidden = true;
+  panel.innerHTML = `<div class="empty-state">即時雷達載入中...</div>`;
+  const dashboard = document.querySelector(".dashboard");
+  dashboard?.insertBefore(panel, document.querySelector("#market-view"));
+  viewPanels["realtime-radar"] = panel;
+}
+
+function radarMoney(value) {
+  const n = Math.abs(Number(value) || 0);
+  if (n >= 100000000) return `${(n / 100000000).toLocaleString("zh-TW", { maximumFractionDigits: 2 })} 億`;
+  if (n >= 10000) return `${(n / 10000).toLocaleString("zh-TW", { maximumFractionDigits: 0 })} 萬`;
+  return n.toLocaleString("zh-TW");
+}
+
+function radarStockValue(stock) {
+  const close = cleanNumber(stock.close);
+  const volume = cleanNumber(stock.tradeVolume || stock.volume);
+  return cleanNumber(stock.value) || close * volume * 1000;
+}
+
+function buildRealtimeRadarRows() {
+  return latestStocks
+    .filter((stock) => /^\d{4}$/.test(String(stock.code || "")) && !/^00/.test(String(stock.code || "")))
+    .map((stock) => {
+      const live = applyStrategyQuote(stock);
+      const inst = getInstitutionTotal(live.code);
+      const pct = cleanNumber(live.percent);
+      const value = radarStockValue(live);
+      const totalInst = cleanNumber(inst.total);
+      const trust = cleanNumber(inst.trust);
+      const foreign = cleanNumber(inst.foreign);
+      const longScore = Math.max(pct, 0) * 18 + Math.max(totalInst, 0) / 800 + Math.log10(Math.max(value, 1)) * 4;
+      const shortScore = Math.max(-pct, 0) * 18 + Math.max(-totalInst, 0) / 800 + Math.log10(Math.max(value, 1)) * 4;
+      const side = longScore >= shortScore ? "long" : "short";
+      const flow = value * Math.min(Math.abs(pct) / 100 + 0.015, 0.16);
+      return {
+        ...live,
+        pct,
+        value,
+        side,
+        score: side === "long" ? longScore : shortScore,
+        flow,
+        trust,
+        foreign,
+        totalInst,
+      };
+    })
+    .filter((stock) => stock.value > 0)
+    .sort((a, b) => b.score - a.score || b.value - a.value);
+}
+
+function radarReasonTags(stock) {
+  const tags = [];
+  if (stock.side === "long") {
+    if (stock.pct >= 5) tags.push("強勢拉抬");
+    if (stock.value >= 1000000000) tags.push("成交爆量");
+    if (stock.foreign > 0) tags.push("外資買超");
+    if (stock.trust > 0) tags.push("投信買超");
+  } else {
+    if (stock.pct <= -3) tags.push("急跌轉弱");
+    if (stock.value >= 1000000000) tags.push("放量賣壓");
+    if (stock.foreign < 0) tags.push("外資賣超");
+    if (stock.trust < 0) tags.push("投信賣超");
+  }
+  return (tags.length ? tags : [stock.side === "long" ? "短線資金偏多" : "短線資金偏空"]).slice(0, 4);
+}
+
+function renderRealtimeRadar() {
+  installRealtimeRadarView();
+  const panel = viewPanels["realtime-radar"];
+  if (!panel) return;
+  deferUiWork(ensureMobileAutoOrganizeButton);
+  if (!latestStocks.length) {
+    panel.innerHTML = `<div class="empty-state">正在載入即時雷達股票池...</div>`;
+    loadMarketData();
+    return;
+  }
+  const rows = buildRealtimeRadarRows();
+  const longRows = rows.filter((stock) => stock.side === "long").slice(0, 8);
+  const shortRows = rows.filter((stock) => stock.side === "short").slice(0, 8);
+  const longFlow = rows.filter((stock) => stock.side === "long").reduce((sum, stock) => sum + stock.flow, 0);
+  const shortFlow = rows.filter((stock) => stock.side === "short").reduce((sum, stock) => sum + stock.flow, 0);
+  const netFlow = longFlow - shortFlow;
+  const longShare = Math.round((longFlow / Math.max(longFlow + shortFlow, 1)) * 100);
+  const leaders = longRows.length >= shortRows.length ? longRows : shortRows;
+  const major = longFlow >= shortFlow ? "偏多" : "偏空";
+  const topNames = leaders.slice(0, 3).map((stock) => `${stock.code} ${stock.name}`).join("、") || "--";
+  const now = new Date().toLocaleTimeString("zh-TW", { hour12: false });
+  const leaderMarkup = leaders.slice(0, 6).map((stock) => {
+    const sign = stock.pct >= 0 ? "+" : "";
+    const tags = radarReasonTags(stock).map((tag) => `<span>${tag}</span>`).join("");
+    return `
+      <article class="radar-leader-card">
+        <span class="radar-time">${now}</span>
+        <div class="radar-stock">
+          <strong>${stock.name} <small>${stock.code}</small></strong>
+          <small>成交金額 ${radarMoney(stock.value)}｜分數 ${Math.round(stock.score)}</small>
+        </div>
+        <div class="radar-price">
+          <strong>${formatNumber(stock.close, stock.close >= 100 ? 0 : 2)}</strong>
+          <small>${sign}${stock.pct.toFixed(2)}%</small>
+        </div>
+        <div class="radar-tags">${tags}</div>
+      </article>
+    `;
+  }).join("") || `<div class="empty-state">等待即時雷達資料...</div>`;
+
+  panel.innerHTML = `
+    <header class="radar-topbar">
+      <div>
+        <small>即時雷達</small>
+        <h1>即時多空資金流</h1>
+      </div>
+      <button class="radar-action" type="button" data-radar-refresh>刷新雷達</button>
+    </header>
+    <section class="radar-ai-box">
+      <div class="radar-ai-head"><span>AI 即時判斷</span><span>信心 ${Math.max(52, Math.min(95, Math.round(Math.abs(netFlow) / Math.max(longFlow + shortFlow, 1) * 100 + 55)))}%</span></div>
+      <h2>${major}</h2>
+      <p>${major}，淨流向 ${netFlow >= 0 ? "+" : "-"}${radarMoney(netFlow)}。主導訊號：${topNames}。</p>
+      <small>多方 ${radarMoney(longFlow)}｜空方 ${radarMoney(shortFlow)}｜集中度 ${Math.max(longRows.length, shortRows.length)} 檔</small>
+    </section>
+    <section class="radar-team-box">
+      <div class="radar-team-head"><span>自動 AI 團隊</span><span>今日 ${rows.length} 件</span></div>
+      <p>${major === "偏多" ? "多方雷達主導，留意強勢股續航。" : "空方雷達升溫，留意急跌與出量轉弱。"}重大訊號才會自動送出。</p>
+    </section>
+    <section class="radar-flow-grid">
+      <article class="radar-flow-card"><span>多方流入</span><strong>${radarMoney(longFlow)}</strong><small>最新 ${longRows.length} 則</small></article>
+      <article class="radar-flow-card short"><span>空方流出</span><strong>${radarMoney(shortFlow)}</strong><small>最新 ${shortRows.length} 則</small></article>
+      <article class="radar-flow-card"><span>淨流向</span><strong>${netFlow >= 0 ? "+" : "-"}${radarMoney(netFlow)}</strong><div class="radar-balance" style="--long-share:${longShare}%"><span></span></div></article>
+    </section>
+    <div class="radar-tabs">
+      <button class="${major === "偏多" ? "active" : ""}" type="button">多方</button>
+      <button class="${major === "偏空" ? "active" : ""}" type="button">空方</button>
+    </div>
+    <section class="radar-leader-list">${leaderMarkup}</section>
+  `;
+}
+
 function getActiveViewName() {
   return Object.entries(viewPanels).find(([, panel]) => panel?.classList.contains("active"))?.[0] || "market";
 }
@@ -5402,6 +5767,7 @@ function renderStocks(stocks) {
   ).join("");
 
   renderStockTable(topStocks);
+  if (isViewActive("realtime-radar")) deferUiWork(renderRealtimeRadar);
   if (isViewActive("strategy")) deferUiWork(renderStrategyScanner);
   if (isViewActive("chip-trade")) deferUiWork(renderChipTradeTable);
   terminalMessage.textContent = `掃描完成：${parsed.length.toLocaleString("zh-TW")} 檔，強勢股 ${topStocks.length} 檔`;
@@ -5451,6 +5817,7 @@ function showView(viewName, activeLink) {
   syncMobileStrategyVisibility(viewName);
   applyStaticTitleIcons();
   viewLinks.forEach((link)=>link.classList.toggle("active", link===activeLink));
+  if (viewName === "realtime-radar") deferUiWork(renderRealtimeRadar);
   if (viewName === "strategy") deferUiWork(renderStrategyScanner);
   if (viewName === "chip-trade") deferUiWork(loadChipTradeData);
   if (viewName === "warrant-flow") deferUiWork(loadWarrantFlow);
@@ -5845,6 +6212,7 @@ async function refreshStrategyHistoryScan(force = false) {
 tickClock();
 labelChipTradeMode();
 installMobileWatchlistNavOrder();
+installRealtimeRadarView();
 applyStaticTitleIcons();
 loadWorkflowRunStatus().catch(() => {});
 ensureMobileAutoOrganizeButton();
@@ -6418,6 +6786,12 @@ strategyModeButtons.forEach((button) => {
     strategyMode = button.dataset.strategyMode;
     renderStrategyScanner();
   });
+});
+
+document.addEventListener("click", (event) => {
+  const radarRefresh = event.target.closest("[data-radar-refresh]");
+  if (!radarRefresh) return;
+  renderRealtimeRadar();
 });
 
 document.addEventListener("click", (event) => {
