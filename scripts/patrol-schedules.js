@@ -205,6 +205,14 @@ async function dispatchWorkflow(workflow, inputs = {}) {
   }
 }
 
+async function workflowHasActiveRun(workflow) {
+  const repo = process.env.GITHUB_REPOSITORY;
+  if (!repo) return false;
+  const data = await fetchJson(`https://api.github.com/repos/${repo}/actions/workflows/${workflow}/runs?per_page=1`);
+  const run = data.workflow_runs?.[0];
+  return run && ["queued", "pending", "in_progress", "waiting", "requested"].includes(run.status);
+}
+
 async function dispatchRecoveryRuns(cacheIssueObjects) {
   if (process.env.AUTO_DISPATCH_STALE === "0") return [];
   const dispatched = [];
@@ -212,6 +220,10 @@ async function dispatchRecoveryRuns(cacheIssueObjects) {
   for (const issue of cacheIssueObjects) {
     if (!issue.workflow || seen.has(issue.workflow)) continue;
     seen.add(issue.workflow);
+    if (await workflowHasActiveRun(issue.workflow)) {
+      dispatched.push(`${issue.label}：${issue.workflow} 已在執行或排隊，跳過重複派發`);
+      continue;
+    }
     await dispatchWorkflow(issue.workflow, issue.inputs || {});
     dispatched.push(`${issue.label}：已自動派發 ${issue.workflow} 補跑`);
   }
