@@ -297,6 +297,7 @@ function scorecardTrack(tracker, group, code) {
 function buildOpenBuyReport(payload, quotes, today, tracker) {
   const rows = reportRows(payload);
   let totalProfit = 0;
+  const stateStats = new Map();
   const lines = [`策略1開盤沖成績單｜${dateSlash(today)}`, ""];
   if (!rows.length) {
     lines.push("今天沒有符合策略1開盤沖的候選標的。", "");
@@ -310,8 +311,15 @@ function buildOpenBuyReport(payload, quotes, today, tracker) {
     const profit = entryPrice ? (exitPrice - entryPrice) * LOT_SIZE : 0;
     const profitPct = entryPrice ? ((exitPrice - entryPrice) / entryPrice) * 100 : 0;
     totalProfit += profit;
+    const setupLabel = item.status || item.setup || (item.matchedSetups || [])[0] || "未標示";
+    const stat = stateStats.get(setupLabel) || { total: 0, wins: 0, profit: 0 };
+    stat.total += 1;
+    if (profit > 0) stat.wins += 1;
+    stat.profit += profit;
+    stateStats.set(setupLabel, stat);
     lines.push(
       `名單${item.code} ${item.name || ""}`,
+      `狀態 ${setupLabel}`,
       `交易日期 ${tradeDateLabel(today)}`,
       `入場時間 09:00  進場價${formatTradePrice(entryPrice)}元`,
       `出場日期:${tradeDateLabel(today)}`,
@@ -320,7 +328,19 @@ function buildOpenBuyReport(payload, quotes, today, tracker) {
       ""
     );
   });
-  lines.push(`策略1合計：${money(totalProfit)}`);
+  const stateOrder = ["開盤無腦入", "深跌反彈", "突破候選", "洗盤反彈", "未標示"];
+  stateOrder.forEach((label) => {
+    const stat = stateStats.get(label);
+    if (!stat) return;
+    const winRate = stat.total ? (stat.wins / stat.total) * 100 : 0;
+    lines.push(`狀態 ${label}  勝率:${percent(winRate)} 合計：${money(stat.profit)}`);
+  });
+  [...stateStats.entries()].forEach(([label, stat]) => {
+    if (stateOrder.includes(label)) return;
+    const winRate = stat.total ? (stat.wins / stat.total) * 100 : 0;
+    lines.push(`狀態 ${label}  勝率:${percent(winRate)} 合計：${money(stat.profit)}`);
+  });
+  lines.push(`共計: ${money(totalProfit)}`);
   return lines.join("\n");
 }
 
