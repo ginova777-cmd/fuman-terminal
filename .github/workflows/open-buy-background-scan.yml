@@ -2,11 +2,11 @@ name: Open Buy Background Scan
 
 on:
   schedule:
-    # Taiwan time 07:00 on trading days. Retry every 10 minutes until cache is updated.
-    - cron: "*/10 23 * * 0-4"
-    # Taiwan time 14:30 on trading days. Retry every 10 minutes until cache is updated.
-    - cron: "30,40,50 6 * * 1-5"
-    - cron: "0,10,20,30 7 * * 1-5"
+    # Taiwan time 07:00 on trading days. Retry every 5 minutes until cache is updated.
+    - cron: "*/5 23 * * 0-4"
+    # Taiwan time 14:30 on trading days. Retry every 5 minutes until cache is updated.
+    - cron: "30,35,40,45,50,55 6 * * 1-5"
+    - cron: "*/5 7 * * 1-5"
   workflow_dispatch:
     inputs:
       full_scan:
