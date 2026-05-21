@@ -108,13 +108,41 @@ const SCHEDULE_META = {
   warrant: { label: "06:00 / 21:00", times: ["06:00", "21:00"] },
 };
 
+function scheduleDateForToday(time) {
+  const [hour, minute] = time.split(":").map(Number);
+  const date = new Date();
+  date.setHours(hour, minute, 0, 0);
+  return date;
+}
+
+function getScheduleUpdatedAt(key) {
+  if (key === "openBuy") return openBuyScanLastAt;
+  if (key === "strategy3") return strategy3UpdatedAt;
+  if (key === "swing") return strategy4ScanLastAt;
+  if (key === "strategy5") return strategy5UpdatedAt;
+  if (key === "chip") return institutionUpdatedAt;
+  if (key === "warrant") return warrantFlowUpdatedAt;
+  return 0;
+}
+
+function latestDueScheduleTime(times = []) {
+  if (!times.length) return null;
+  const now = new Date();
+  const todaySlots = times.map(scheduleDateForToday);
+  const dueToday = todaySlots.filter((date) => date <= now).sort((a, b) => b - a)[0];
+  if (dueToday) return dueToday;
+  const [hour, minute] = times[times.length - 1].split(":").map(Number);
+  const previous = new Date(now);
+  previous.setDate(previous.getDate() - 1);
+  previous.setHours(hour, minute, 0, 0);
+  return previous;
+}
+
 function nextScheduleTime(times = []) {
   if (!times.length) return "";
   const now = new Date();
   for (const time of times) {
-    const [hour, minute] = time.split(":").map(Number);
-    const next = new Date(now);
-    next.setHours(hour, minute, 0, 0);
+    const next = scheduleDateForToday(time);
     if (next > now) return next;
   }
   const [hour, minute] = times[0].split(":").map(Number);
@@ -131,7 +159,16 @@ function formatScheduleDate(date) {
 
 function scheduleBadgeHtml(key) {
   const meta = SCHEDULE_META[key] || SCHEDULE_META.market;
-  const next = meta.next || formatScheduleDate(nextScheduleTime(meta.times));
+  if (meta.next || !meta.times?.length) {
+    return `<span class="schedule-status-pill"><span>● 每日 ${meta.label} 更新</span><span>● 預計下次更新：${meta.next || ""}</span></span>`;
+  }
+  const latestDue = latestDueScheduleTime(meta.times);
+  const updatedAt = getScheduleUpdatedAt(key);
+  const hasSuccessfulUpdate = updatedAt && latestDue && updatedAt >= latestDue.getTime();
+  if (!hasSuccessfulUpdate) {
+    return `<span class="schedule-status-pill schedule-failed"><span>● 更新失敗</span></span>`;
+  }
+  const next = formatScheduleDate(nextScheduleTime(meta.times));
   return `<span class="schedule-status-pill"><span>● 每日 ${meta.label} 更新</span><span>● 預計下次更新：${next}</span></span>`;
 }
 
@@ -342,6 +379,7 @@ let latestStocks = [];
 let sectorStocksCache = {};
 let institutionData = {};
 let institutionDate = "";
+let institutionUpdatedAt = 0;
 let chipMode = "after";
 let chipTradeLoading = false;
 let chipFilter = "joint";
@@ -2548,6 +2586,11 @@ intradayRadarStyles.textContent = `
     display: inline-flex;
     align-items: center;
   }
+  .schedule-status-pill.schedule-failed {
+    border-color: transparent;
+    background: transparent;
+    color: #9da6bd;
+  }
   .page-header h1,
   .strategy-toolbar h2,
   .intraday-topbar h2,
@@ -4653,6 +4696,7 @@ async function loadWarrantFlow(force = false) {
     const updatedAt = Date.parse(payload?.updatedAt || "");
     warrantFlowUpdatedAt = Number.isFinite(updatedAt) ? updatedAt : Date.now();
     saveWarrantFlowLocalCache();
+    applyStaticTitleIcons();
     renderWarrantFlow();
   } catch (error) {
     if (panel && !warrantFlowData.length) {
@@ -5191,8 +5235,11 @@ async function loadChipTradeData() {
     if (instPayload?.ok && instPayload?.data) {
       institutionData = instPayload.data;
       institutionDate = instPayload.usedDate || "";
+      const updatedAt = Date.parse(instPayload.updatedAt || "");
+      institutionUpdatedAt = Number.isFinite(updatedAt) ? updatedAt : Date.now();
     }
 
+    applyStaticTitleIcons();
     renderChipTradeTable();
   } catch (error) {
     if (body) body.innerHTML = `<tr><td colspan="12">資料載入失敗，請稍後再試。</td></tr>`;
@@ -5417,7 +5464,10 @@ async function loadInstitution() {
     if (data.ok && data.data) {
       institutionData = data.data;
       institutionDate = data.usedDate || "";
+      const updatedAt = Date.parse(data.updatedAt || "");
+      institutionUpdatedAt = Number.isFinite(updatedAt) ? updatedAt : Date.now();
     }
+    applyStaticTitleIcons();
     if (isViewActive("strategy")) deferUiWork(renderStrategyScanner);
     if (isViewActive("chip-trade")) deferUiWork(renderChipTradeTable);
   } catch (e) {}
