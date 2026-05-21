@@ -43,7 +43,48 @@ function shouldRunEvery(now, every, offset = 0) {
   return now.minute % every === offset;
 }
 
-function selectTasks(now) {
+function taipeiSlotIso(now, minutes) {
+  const utc = new Date(Date.UTC(
+    Number(now.date.slice(0, 4)),
+    Number(now.date.slice(5, 7)) - 1,
+    Number(now.date.slice(8, 10)),
+    Math.floor(minutes / 60) - 8,
+    minutes % 60,
+    0,
+  ));
+  return utc.toISOString();
+}
+
+async function hasWorkflowRunSince(workflow, sinceIso) {
+  const repo = process.env.GITHUB_REPOSITORY;
+  const token = process.env.GITHUB_TOKEN;
+  if (!repo || !token) return false;
+  const response = await fetch(`https://api.github.com/repos/${repo}/actions/workflows/${workflow}/runs?per_page=20`, {
+    headers: {
+      "Accept": "application/vnd.github+json",
+      "Authorization": `Bearer ${token}`,
+      "User-Agent": "fuman-master-schedule",
+    },
+  });
+  if (!response.ok) return false;
+  const payload = await response.json();
+  const since = Date.parse(sinceIso);
+  return (payload.workflow_runs || []).some((run) => {
+    const createdAt = Date.parse(run.created_at || "");
+    return Number.isFinite(createdAt) && createdAt >= since;
+  });
+}
+
+async function pushOnceInWindow(tasks, taskKey, now, start, end) {
+  if (!inRange(now, start, end)) return;
+  const workflow = WORKFLOWS[taskKey]?.workflow;
+  if (!workflow) return;
+  const sinceIso = taipeiSlotIso(now, start);
+  if (await hasWorkflowRunSince(workflow, sinceIso)) return;
+  tasks.push(taskKey);
+}
+
+async function selectTasks(now) {
   if (!isWeekday(now)) return [];
   const tasks = [];
 
@@ -51,21 +92,18 @@ function selectTasks(now) {
     tasks.push("patrol");
   }
 
-  if ((inRange(now, 7 * 60, 7 * 60 + 55) || inRange(now, 14 * 60 + 30, 15 * 60 + 55)) && shouldRunEvery(now, 10, 4)) {
-    tasks.push("openBuy");
-  }
+  await pushOnceInWindow(tasks, "openBuy", now, 7 * 60, 7 * 60 + 20);
+  await pushOnceInWindow(tasks, "openBuy", now, 14 * 60 + 30, 14 * 60 + 50);
 
   if (inRange(now, 13 * 60, 14 * 60 + 30) && shouldRunEvery(now, 10, 3)) {
     tasks.push("strategy3");
   }
 
-  if ((inRange(now, 7 * 60, 7 * 60 + 55) || inRange(now, 14 * 60 + 30, 15 * 60 + 55)) && shouldRunEvery(now, 10, 7)) {
-    tasks.push("strategy4");
-  }
+  await pushOnceInWindow(tasks, "strategy4", now, 7 * 60, 7 * 60 + 25);
+  await pushOnceInWindow(tasks, "strategy4", now, 14 * 60 + 30, 14 * 60 + 50);
 
-  if ((inRange(now, 6 * 60, 8 * 60 + 55) || inRange(now, 21 * 60, 22 * 60 + 55)) && shouldRunEvery(now, 10, 8)) {
-    tasks.push("strategy5");
-  }
+  await pushOnceInWindow(tasks, "strategy5", now, 6 * 60, 6 * 60 + 20);
+  await pushOnceInWindow(tasks, "strategy5", now, 21 * 60, 21 * 60 + 20);
 
   if ((inRange(now, 6 * 60, 8 * 60 + 55) || inRange(now, 21 * 60, 22 * 60 + 55)) && shouldRunEvery(now, 10, 6)) {
     tasks.push("flow");
@@ -111,7 +149,7 @@ async function dispatchWorkflow(taskKey) {
 async function main() {
   const now = taipeiNow();
   const forced = (process.env.MASTER_FORCE_TASKS || "").split(",").map((item) => item.trim()).filter(Boolean);
-  const tasks = forced.length ? forced : selectTasks(now);
+  const tasks = forced.length ? forced : await selectTasks(now);
   console.log(`fuman master schedule ${now.label} tasks=${tasks.join(",") || "none"}`);
   for (const task of tasks) {
     const workflow = await dispatchWorkflow(task);
