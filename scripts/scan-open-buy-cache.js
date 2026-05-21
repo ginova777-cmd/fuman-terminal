@@ -201,17 +201,6 @@ async function main() {
   fs.mkdirSync(path.dirname(OUT_FILE), { recursive: true });
   fs.writeFileSync(OUT_FILE, `${JSON.stringify(output, null, 2)}\n`);
   if (matches.length) fs.writeFileSync(BACKUP_FILE, `${JSON.stringify({ ...output, source: "github-actions-backup" }, null, 2)}\n`);
-  else if ((backup.matches || []).length) {
-    const carried = {
-      ...output,
-      source: "github-actions-backup-carry-forward",
-      carriedForward: true,
-      carriedForwardFrom: backup.updatedAt || "",
-      count: backup.matches.length,
-      matches: backup.matches,
-    };
-    fs.writeFileSync(OUT_FILE, `${JSON.stringify(carried, null, 2)}\n`);
-  }
   console.log(`open-buy cache updated: ${FULL_SCAN ? "full scan" : "batch scan"} scanned ${scannedThisRun}, progress ${output.scannedCodes.length}/${codes.length}, matches ${matches.length}`);
 }
 
