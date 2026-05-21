@@ -209,8 +209,15 @@ function scheduleBadgeHtml(key) {
   const latestDue = latestDueScheduleTime(meta.times);
   const updatedAt = getScheduleUpdatedAt(key);
   const hasSuccessfulUpdate = updatedAt && latestDue && updatedAt >= latestDue.getTime();
-  if (!workflowRunStatusReady && !hasSuccessfulUpdate && key === "openBuy") {
-    return `<span class="schedule-status-pill schedule-failed"><span class="schedule-failed-dot">●</span><span>更新失敗</span></span>`;
+  const isStale = latestDue && (!updatedAt || updatedAt < latestDue.getTime());
+  if (isStale && workflowRunStatusReady) {
+    const hasSuccessfulRun = hasSuccessfulWorkflowRun(key, latestDue);
+    if (!hasSuccessfulRun) {
+      return `<span class="schedule-status-pill schedule-failed"><span class="schedule-failed-dot">●</span><span>更新逾時，補跑中</span></span>`;
+    }
+  }
+  if (!workflowRunStatusReady && !hasSuccessfulUpdate && ["openBuy", "strategy3", "swing"].includes(key)) {
+    return `<span class="schedule-status-pill schedule-failed"><span class="schedule-failed-dot">●</span><span>快取尚未更新</span></span>`;
   }
   const next = formatScheduleDate(nextScheduleTime(meta.times));
   return `<span class="schedule-status-pill"><span>● 每日 ${meta.label} 更新</span><span>● 預計下次更新：${next}</span></span>`;
