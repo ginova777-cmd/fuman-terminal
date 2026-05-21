@@ -1,6 +1,7 @@
 const fs = require("fs");
 const path = require("path");
 const scanStrategy4 = require("../api/scan-strategy4");
+const fetchStocks = require("../stocks");
 const { fetchMisQuotes } = require("../lib/mis-quotes");
 
 const ROOT = path.resolve(__dirname, "..");
@@ -10,6 +11,7 @@ const BATCH_SIZE = Number(process.env.STRATEGY4_BATCH_SIZE || 48);
 const BATCHES_PER_RUN = Number(process.env.STRATEGY4_BATCHES_PER_RUN || 5);
 const FULL_SCAN = process.env.FULL_SCAN === "1";
 const STOCK_URL = process.env.STOCK_UNIVERSE_URL || "https://fuman-terminal.vercel.app/api/stocks";
+const MIN_UNIVERSE_SIZE = Number(process.env.STRATEGY4_MIN_UNIVERSE_SIZE || 1700);
 
 function readJson(file, fallback) {
   try {
@@ -45,6 +47,24 @@ async function fetchJson(url, timeout = 20000) {
   }
 }
 
+function callLocalStocksHandler() {
+  return new Promise((resolve, reject) => {
+    const req = { method: "GET", query: {} };
+    const res = {
+      statusCode: 200,
+      headers: {},
+      setHeader(key, value) { this.headers[key] = value; },
+      status(code) { this.statusCode = code; return this; },
+      json(payload) {
+        if (this.statusCode >= 400) reject(new Error(payload?.error || `stocks HTTP ${this.statusCode}`));
+        else resolve(payload);
+      },
+      end() { resolve({ ok: false, stocks: [] }); },
+    };
+    Promise.resolve(fetchStocks(req, res)).catch(reject);
+  });
+}
+
 function normalizeStock(row) {
   const code = normalizeCode(row.Code || row.code || row["證券代號"]);
   const name = String(row.Name || row.name || row["證券名稱"] || "").trim();
@@ -65,13 +85,24 @@ async function fetchUniverse() {
     const payload = await fetchJson(STOCK_URL, 30000);
     const rows = Array.isArray(payload) ? payload : (payload.stocks || []);
     parsed = rows.map(normalizeStock).filter(Boolean);
+    if (parsed.length < MIN_UNIVERSE_SIZE) {
+      console.log(`stock endpoint partial universe: ${parsed.length}, fallback to local TWSE+TPEX fetch`);
+      parsed = [];
+    }
   } catch (error) {
     console.log(`stock endpoint fallback: ${error.message}`);
   }
 
   if (!parsed.length) {
-    const rows = await fetchJson("https://openapi.twse.com.tw/v1/exchangeReport/STOCK_DAY_ALL", 30000);
+    const payload = await callLocalStocksHandler();
+    const rows = Array.isArray(payload) ? payload : (payload.stocks || []);
     parsed = rows.map(normalizeStock).filter(Boolean);
+  }
+  const byCode = new Map();
+  parsed.forEach((stock) => byCode.set(stock.code, stock));
+  parsed = [...byCode.values()].sort((a, b) => a.code.localeCompare(b.code));
+  if (parsed.length < MIN_UNIVERSE_SIZE) {
+    throw new Error(`Strategy4 stock universe too small: ${parsed.length}/${MIN_UNIVERSE_SIZE}`);
   }
   const quotes = await fetchMisQuotes(parsed.map((stock) => stock.code));
   return parsed.map((stock) => {
