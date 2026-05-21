@@ -4700,17 +4700,15 @@ function renderOpenBuyRadar(universe) {
   if (!openBuyCacheLoading && shouldLoadOpenBuyRemote()) {
     loadOpenBuyCache();
   }
-  const scanCount = openBuyScanCount || Object.keys(openBuyScanMatches).length;
   const scannedCount = openBuyScannedCodes.size;
   const totalCount = openBuyScanTotal || latestStocks.filter((stock) => !/^00/.test(stock.code)).length || latestStocks.length;
 
   const keyword = strategyKeyword.trim().toLowerCase();
-  const allowCodes = new Set(universe.map((stock) => stock.code));
   const rows = Object.values(openBuyScanMatches)
-    .filter((stock) => allowCodes.has(stock.code))
-    .filter((stock) => !keyword || stock.code.includes(keyword) || stock.name.toLowerCase().includes(keyword))
+    .filter((stock) => !keyword || String(stock.code || "").includes(keyword) || String(stock.name || "").toLowerCase().includes(keyword))
     .sort((a, b) => b.score - a.score || b.percent - a.percent || b.value - a.value)
     .slice(0, 80);
+  const scanCount = rows.length;
 
   const scanText = openBuyScanLastAt
     ? `已掃描 ${scannedCount}/${totalCount}｜候選 ${scanCount}｜${new Date(openBuyScanLastAt).toLocaleTimeString("zh-TW", { hour12: false })}`
