@@ -1,7 +1,7 @@
 {
   "ok": true,
-  "source": "github-actions-backup-carry-forward",
-  "updatedAt": "2026-05-21T09:51:25.802Z",
+  "source": "github-actions",
+  "updatedAt": "2026-05-21T10:19:44.750Z",
   "usedDate": "20260521",
   "fullScan": true,
   "cursor": 15,
@@ -1962,36 +1962,6 @@
     "9960",
     "9962"
   ],
-  "count": 1,
-  "matches": [
-    {
-      "code": "5425",
-      "name": "台半",
-      "close": 86.9,
-      "percent": 1.51869158878506,
-      "value": 5777720300,
-      "tradeVolume": 66487,
-      "change": 1.3000000000000114,
-      "open": 85.6,
-      "high": 89.3,
-      "low": 78.7,
-      "prevClose": 85.6,
-      "volume": 66487,
-      "market": "TPEX",
-      "quoteDate": "20260520",
-      "quoteTime": "13:30:00",
-      "date": "2026-05-20",
-      "volumeRatio": 3.32,
-      "score": 89,
-      "status": "強勢延續",
-      "entry": "09:00 開盤價",
-      "takeProfit": 87.94,
-      "stopLoss": 86.03,
-      "noChase": 90.81,
-      "exitTime": "09:10",
-      "reason": "突破候選：昨日漲幅 1.52%，量比 3.32，漲幅/量比/價格已過濾，列入高勝率開盤候選。"
-    }
-  ],
-  "carriedForward": true,
-  "carriedForwardFrom": "2026-05-20T08:35:58.832Z"
+  "count": 0,
+  "matches": []
 }
