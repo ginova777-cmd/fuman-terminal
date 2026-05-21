@@ -2,8 +2,9 @@ name: Strategy3 Overnight Cache
 
 on:
   schedule:
-    # Taiwan time 13:00-22:55 on trading days. Retry every 5 minutes until cache is updated.
-    - cron: "*/5 5-14 * * 1-5"
+    # Taiwan time 13:00 full scan, then offset retries until cache is updated.
+    - cron: "0,3,8,13,18,23,28,33,38,43,48,53,58 5 * * 1-5"
+    - cron: "3,8,13,18,23,28,33,38,43,48,53,58 6-14 * * 1-5"
   workflow_dispatch:
 
 permissions:

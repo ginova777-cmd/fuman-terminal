@@ -2,10 +2,10 @@ name: Strategy Background Cache
 
 on:
   schedule:
-    # Taiwan trading days 07:00-07:55. Retry every 5 minutes until cache is updated.
-    - cron: "*/5 23 * * 0-4"
-    # Taiwan trading days 08:00-22:55. Retry every 5 minutes until cache is updated.
-    - cron: "*/5 0-14 * * 1-5"
+    # Taiwan time 07:00 full scan, then offset retries until cache is updated.
+    - cron: "0,2,7,12,17,22,27,32,37,42,47,52,57 23 * * 0-4"
+    # Taiwan trading days 08:02-22:57. Offset retries avoid colliding with other workflows.
+    - cron: "2,7,12,17,22,27,32,37,42,47,52,57 0-14 * * 1-5"
   workflow_dispatch:
     inputs:
       full_scan:
