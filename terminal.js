@@ -256,27 +256,9 @@ function getActiveViewName() {
   return Object.entries(viewPanels).find(([, panel]) => panel?.classList.contains("active"))?.[0] || "market";
 }
 
-function removeStrategyCenterHeader() {
-  document.querySelector("#strategy-view .strategy-header")?.remove();
-}
-
-function removeStrategyScreenEntryPoints() {
-  viewLinks
-    .filter((link) => link.dataset.view === "strategy")
-    .forEach((link) => {
-      link.hidden = true;
-      link.style.display = "none";
-      link.classList.remove("active");
-    });
-}
-
-function getMarketViewLink() {
-  return viewLinks.find((link) => link.dataset.view === "market") || viewLinks[0] || null;
-}
-
 function syncMobileStrategyVisibility(activeName = getActiveViewName()) {
   if (!strategyView) return;
-  const shouldHideStrategy = true;
+  const shouldHideStrategy = isMobileViewport() && activeName !== "strategy";
   strategyView.classList.toggle("mobile-hide-strategy", shouldHideStrategy);
   if (shouldHideStrategy) {
     strategyView.hidden = true;
@@ -2336,9 +2318,6 @@ intradayRadarStyles.textContent = `
   #strategy-view.swing-only .strategy-header {
     display: none;
   }
-  #strategy-view .strategy-header {
-    display: none !important;
-  }
   .strategy-toolbar.intraday-mode {
     border-bottom: 1px solid rgba(255, 112, 77, 0.18);
   }
@@ -3341,9 +3320,6 @@ intradayRadarStyles.textContent = `
     #strategy-view.mobile-hide-strategy {
       display: none !important;
     }
-    #strategy-view .strategy-header {
-      display: none !important;
-    }
     .dashboard {
       padding-left: 6px;
       padding-right: 6px;
@@ -3853,25 +3829,15 @@ intradayRadarStyles.textContent = `
 document.head.appendChild(intradayRadarStyles);
 
 function setStrategyChrome(mode) {
-  if (mode === "normal") mode = "intraday";
   const intraday = mode === "intraday";
   const swing = mode === "swing";
   const strategy5 = mode === "strategy5";
   const openBuy = mode === "openBuy";
   const strategy3 = mode === "strategy3";
-  if (swing) {
-    document.querySelector("#strategy-view .strategy-header")?.remove();
-  }
-  if (intraday) {
-    document.querySelector("#strategy-view .strategy-header")?.remove();
-  }
-  if (openBuy) {
-    document.querySelector("#strategy-view .strategy-header")?.remove();
-  }
-  if (strategyBadge) strategyBadge.textContent = intraday ? "FMN://intraday.2m.scan" : swing ? "FMN://swing.daily.scan" : openBuy ? "FMN://open.buy.scan" : strategy5 ? "FMN://strategy5.scan" : strategy3 ? "FMN://strategy3.scan" : "FMN://intraday.2m.scan";
+  if (strategyBadge) strategyBadge.textContent = intraday ? "FMN://intraday.2m.scan" : swing ? "FMN://swing.daily.scan" : openBuy ? "FMN://open.buy.scan" : "FMN://strategy.scan";
   const icon = intraday ? "◔" : swing ? "└" : openBuy ? "⚡" : strategy5 ? "▰" : "⚡";
-  const title = intraday ? "2分K當沖雷達" : swing ? "策略4-波段雷達" : openBuy ? "策略1-明日開盤入" : strategy5 ? "策略5-綜合策略" : strategy3 ? "策略3-隔日沖" : "2分K當沖雷達";
-  const headerTitle = intraday ? "2分K當沖雷達" : swing ? "策略4-波段雷達" : openBuy ? "策略1-明日開盤入" : strategy5 ? "策略5-綜合策略" : strategy3 ? "策略3-隔日沖" : "2分K當沖雷達";
+  const title = intraday ? "2分K當沖雷達" : swing ? "策略4-波段雷達" : openBuy ? "策略1-明日開盤入" : strategy5 ? "策略5-綜合策略" : "綜合策略選股";
+  const headerTitle = intraday ? "2分K當沖雷達" : swing ? "策略4-波段雷達" : openBuy ? "策略1-明日開盤入" : strategy5 ? "策略5-綜合策略" : "策略中心";
   const scheduleKey = intraday ? "intraday" : swing ? "swing" : openBuy ? "openBuy" : strategy5 ? "strategy5" : "market";
   setTitleWithSchedule(strategyTitle, icon, title, scheduleKey);
   setTitleWithSchedule(strategyHeaderTitle, icon, headerTitle, scheduleKey);
@@ -4500,9 +4466,7 @@ function renderStrategyScanner() {
   deferUiWork(ensureMobileAutoOrganizeButton);
   deferUiWork(normalizeMobileHorizontalPosition, 40);
   let selected = [...selectedStrategyIds];
-  const isPresetDashboard = strategyPresetMode === "strategy3" || strategyPresetMode === "strategy5";
-  const isSingleSupportedStrategy = selected.length === 1 && ["intraday_2m", "swing_radar", "open_buy"].includes(selected[0]);
-  if (!isPresetDashboard && !isSingleSupportedStrategy) {
+  if (!selected.length && strategyPresetMode !== "strategy3" && strategyPresetMode !== "strategy5") {
     selectedStrategyIds = new Set(["intraday_2m"]);
     selected = ["intraday_2m"];
   }
@@ -5466,16 +5430,10 @@ function tickClock() {
 }
 
 function showView(viewName, activeLink) {
-  if (viewName === "strategy") {
-    const marketLink = getMarketViewLink();
-    showView("market", marketLink || activeLink);
-    return;
-  }
   Object.entries(viewPanels).forEach(([name, panel])=>{
     panel.hidden = name !== viewName;
     panel.classList.toggle("active", name === viewName);
   });
-  removeStrategyCenterHeader();
   syncMobileStrategyVisibility(viewName);
   applyStaticTitleIcons();
   viewLinks.forEach((link)=>link.classList.toggle("active", link===activeLink));
@@ -6417,10 +6375,7 @@ function removeFromWatchlist(code) {
 }
 
 viewPanels.watchlist = document.querySelector("#watchlist-view");
-removeStrategyCenterHeader();
-removeStrategyScreenEntryPoints();
 syncMobileStrategyVisibility();
-showView("market", getMarketViewLink());
 window.addEventListener("resize", () => deferUiWork(syncMobileStrategyVisibility, 80));
 
 watchlistSearchInput?.addEventListener("keydown", (e) => {
