@@ -38,13 +38,13 @@ function isTradingPatrolWindow(now) {
 function intradayDispatchInputs(now, force) {
   if (now.weekday === "Sat" || now.weekday === "Sun") return null;
   if (force && now.minutes < 9 * 60) return null;
-  if (force && now.minutes >= 14 * 60 + 15) return { mode: "report", force_report: "false" };
-  if (force) return { mode: "record", force_report: "false" };
+  if (force && now.minutes >= 14 * 60 + 15) return { mode: "report" };
+  if (force) return { mode: "record" };
   if (now.minutes >= 9 * 60 && now.minutes <= 13 * 60 + 30) {
-    return { mode: "record", force_report: "false" };
+    return { mode: "record" };
   }
   if (now.minutes >= 14 * 60 + 15 && now.minutes <= 16 * 60 + 30) {
-    return { mode: "report", force_report: "false" };
+    return { mode: "report" };
   }
   return null;
 }
