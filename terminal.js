@@ -2785,7 +2785,7 @@ function getSwingSignals(stock) {
     signals.push({ id: "runaway_gap", short: "逃逸缺口", icon: "🚀", reason: `跳空且站上MA20，多頭段延續，偏逃逸缺口。` });
   }
   if (vFast || vReversal) {
-    signals.push({ id: "v_reversal", short: "V轉", icon: "V", reason: vFast ? `3日急跌後放量翻紅，RSI ${daily.rsi14.toFixed(1)}，偏V型快殺反彈。` : `跌深後收紅並突破前高，V轉積分達標。` });
+    signals.push({ id: "v_reversal", short: "轉", icon: "V", reason: vFast ? `3日急跌後放量翻紅，RSI ${daily.rsi14.toFixed(1)}，偏V型快殺反彈。` : `跌深後收紅並突破前高，V轉積分達標。` });
   }
   if (threeInside) {
     signals.push({ id: "three_inside", short: "翻紅", icon: "↻", reason: `三內翻紅結構成立，站上MA20且趨勢確認。` });
