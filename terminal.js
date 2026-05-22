@@ -542,6 +542,7 @@ function radarSignalTags(stock) {
   if (trust >= 500) tags.push("投信買超");
   if (pct <= -3) tags.push("急殺");
   if (foreign <= -1000) tags.push("外資賣超");
+  if (trust <= -500) tags.push("投信賣超");
   if (pct <= -1.5 && value >= 200000000) tags.push("短線轉弱");
   return tags;
 }
@@ -575,9 +576,32 @@ function buildRealtimeRadarRows() {
   const intradayPool = latestStocks
     .map((stock) => applyStrategyQuote(stock))
     .filter((stock) => isIntradayTradable(stock));
+  const shortPressurePool = [...intradayPool]
+    .filter((stock) => {
+      const live = applyStrategyQuote(stock);
+      const inst = getInstitutionTotal(live.code);
+      const pct = cleanNumber(live.percent);
+      const value = radarStockValue(live);
+      const volume = cleanNumber(live.tradeVolume || live.volume);
+      const foreign = cleanNumber(inst.foreign);
+      const trust = cleanNumber(inst.trust);
+      return (
+        pct <= -0.6 ||
+        (pct < 0 && value >= 100000000) ||
+        (pct <= -0.3 && volume >= 2500) ||
+        (foreign <= -1000 && pct <= 0.8) ||
+        (trust <= -500 && pct <= 0.8)
+      );
+    })
+    .sort((a, b) => {
+      const av = radarStockValue(a) * (1 + Math.abs(cleanNumber(a.percent)) / 8);
+      const bv = radarStockValue(b) * (1 + Math.abs(cleanNumber(b.percent)) / 8);
+      return bv - av;
+    });
   const rankedIntradayPool = uniqueStocksByCode([
     ...getIntradayCandidateStocks(intradayPool),
     ...getBaseStrongIntradayStocks(intradayPool),
+    ...shortPressurePool,
     ...[...intradayPool].sort((a, b) => getIntradayHotScore(b) - getIntradayHotScore(a)),
   ]).slice(0, REALTIME_RADAR_POOL_LIMIT);
   return rankedIntradayPool
@@ -603,7 +627,8 @@ function buildRealtimeRadarRows() {
         (pct <= -1.5 && value >= 200000000) ||
         (value >= 1000000000 && pct < 0) ||
         (volume >= 5000 && pct <= -1.2) ||
-        (foreign <= -1000 && pct <= 0);
+        (foreign <= -1000 && pct <= 0.8) ||
+        (trust <= -500 && pct <= 0.8);
       const side = hasLongSignal && (!hasShortSignal || pct >= 0) ? "long" : hasShortSignal ? "short" : "";
       const score = radarSignalScore({ ...live, pct, value, volume, foreign, trust, signalTags });
       const flow = radarFlowValue({ ...live, pct, value, volume, foreign, trust, signalTags });
