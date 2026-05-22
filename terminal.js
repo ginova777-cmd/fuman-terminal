@@ -107,7 +107,6 @@ async function initTerminalAuth() {
     if (!authPassword) return;
     const willShow = authPassword.type === "password";
     authPassword.type = willShow ? "text" : "password";
-    authPasswordToggle.textContent = willShow ? "隱" : "👁";
     authPasswordToggle.setAttribute("aria-label", willShow ? "隱藏密碼" : "顯示密碼");
     authPasswordToggle.setAttribute("aria-pressed", willShow ? "true" : "false");
     authPassword.focus();

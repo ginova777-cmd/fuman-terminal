@@ -225,7 +225,7 @@ body.auth-ready .auth-gate {
   transform: translateY(-50%);
   border: 0;
   border-radius: 10px;
-  background: rgba(6, 17, 31, 0.08);
+  background: transparent;
   color: #102033;
   font-size: 17px;
   line-height: 1;
@@ -235,8 +235,36 @@ body.auth-ready .auth-gate {
 
 .auth-password-toggle:hover,
 .auth-password-toggle[aria-pressed="true"] {
-  background: rgba(255, 106, 61, 0.16);
-  color: #ff681f;
+  background: transparent;
+  color: #06111f;
+}
+
+.auth-eye-icon {
+  position: relative;
+  width: 22px;
+  height: 14px;
+  display: block;
+}
+
+.auth-eye-icon::before {
+  position: absolute;
+  inset: 1px 0;
+  content: "";
+  border: 2px solid #06111f;
+  border-radius: 999px 999px 999px 999px / 780px 780px 780px 780px;
+  transform: skewX(-8deg);
+}
+
+.auth-eye-icon::after {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 6px;
+  height: 6px;
+  content: "";
+  border-radius: 50%;
+  background: #06111f;
+  transform: translate(-50%, -50%);
 }
 
 .auth-form button {
