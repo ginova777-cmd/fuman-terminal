@@ -326,6 +326,50 @@ function installRealtimeRadarStyles() {
     .radar-team-box {
       padding: 16px;
     }
+    .radar-ai-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+    }
+    .radar-ai-panel {
+      border: 1px solid rgba(255, 93, 108, 0.34);
+      border-radius: 8px;
+      background: rgba(255, 93, 108, 0.08);
+      padding: 14px;
+    }
+    .radar-ai-panel.short {
+      border-color: rgba(35, 213, 154, 0.34);
+      background: rgba(35, 213, 154, 0.07);
+    }
+    .radar-ai-panel h3 {
+      margin: 0 0 10px;
+      color: #ff7a82;
+      font-size: 14px;
+      font-weight: 950;
+    }
+    .radar-ai-panel.short h3 {
+      color: #23d59a;
+    }
+    .radar-ai-chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 10px;
+    }
+    .radar-ai-chip {
+      border: 1px solid rgba(255, 93, 108, 0.35);
+      border-radius: 7px;
+      background: rgba(255, 93, 108, 0.16);
+      color: #ffd4d8;
+      font-size: 12px;
+      font-weight: 900;
+      padding: 5px 8px;
+    }
+    .radar-ai-panel.short .radar-ai-chip {
+      border-color: rgba(35, 213, 154, 0.34);
+      background: rgba(35, 213, 154, 0.14);
+      color: #bfffe9;
+    }
     .radar-ai-head,
     .radar-team-head {
       display: flex;
@@ -357,7 +401,7 @@ function installRealtimeRadarStyles() {
     }
     .radar-flow-grid {
       display: grid;
-      grid-template-columns: repeat(3, minmax(0, 1fr));
+      grid-template-columns: repeat(2, minmax(0, 1fr));
       gap: 12px;
     }
     .radar-flow-card {
@@ -474,6 +518,9 @@ function installRealtimeRadarStyles() {
         font-size: 42px;
       }
       .radar-flow-grid {
+        grid-template-columns: 1fr;
+      }
+      .radar-ai-grid {
         grid-template-columns: 1fr;
       }
       .radar-leader-card {
@@ -654,6 +701,20 @@ function radarReasonTags(stock) {
   return (stock.signalTags?.length ? stock.signalTags : [stock.side === "long" ? "短線強勢" : "短線轉弱"]).slice(0, 4);
 }
 
+function radarSessionTimeLabel() {
+  const date = new Date();
+  const minutes = date.getHours() * 60 + date.getMinutes();
+  if (minutes < 9 * 60) return "09:00:00";
+  if (minutes > 13 * 60 + 30) return "13:30:00";
+  return date.toLocaleTimeString("zh-TW", { hour12: false });
+}
+
+function isRadarDetectionWindow() {
+  const date = new Date();
+  const minutes = date.getHours() * 60 + date.getMinutes();
+  return minutes >= 9 * 60 && minutes <= 13 * 60 + 30;
+}
+
 async function ensureRealtimeRadarData() {
   if (latestStocks.length) return latestStocks;
   if (realtimeRadarDataPromise) return realtimeRadarDataPromise;
@@ -685,6 +746,24 @@ function renderRealtimeRadar() {
   const panel = viewPanels["realtime-radar"];
   if (!panel) return;
   deferUiWork(ensureMobileAutoOrganizeButton);
+  const radarOpen = isRadarDetectionWindow();
+  if (!radarOpen) {
+    panel.innerHTML = `
+      <header class="radar-topbar">
+        <div>
+          <small>即時雷達</small>
+          <h1>即時多空資金流</h1>
+          <small>偵測時間 09:00-13:30，目前停止讀取資料</small>
+        </div>
+        <button class="radar-action" type="button" disabled>09:00-13:30 偵測</button>
+      </header>
+      <section class="radar-team-box">
+        <div class="radar-team-head"><span>自動 AI 團隊</span><span>休息中</span></div>
+        <p>即時雷達只在台股盤中 09:00-13:30 偵測，盤後不讀取股票池，避免浪費終端資源。</p>
+      </section>
+    `;
+    return;
+  }
   if (!latestStocks.length) {
     panel.innerHTML = `<div class="empty-state">正在快速載入當沖雷達股票池...</div>`;
     ensureRealtimeRadarData().then((stocks) => {
@@ -701,7 +780,6 @@ function renderRealtimeRadar() {
   const longFlow = longAll.reduce((sum, stock) => sum + stock.flow, 0);
   const shortFlow = shortAll.reduce((sum, stock) => sum + stock.flow, 0);
   const netFlow = longFlow - shortFlow;
-  const longShare = Math.round((longFlow / Math.max(longFlow + shortFlow, 1)) * 100);
   const major = longFlow >= shortFlow ? "偏多" : "偏空";
   const majorLabel = `${major}觀察`;
   const activeRadarSide = realtimeRadarSide === "short" ? "short" : realtimeRadarSide === "long" ? "long" : major === "偏多" ? "long" : "short";
@@ -710,8 +788,11 @@ function renderRealtimeRadar() {
   const topFlow = leaders.slice(0, 3).reduce((sum, stock) => sum + stock.flow, 0);
   const concentration = Math.round((topFlow / Math.max(totalFlow, 1)) * 100);
   const maxSignalScore = rows.reduce((max, stock) => Math.max(max, cleanNumber(stock.score)), 0);
-  const topNames = leaders.slice(0, 3).map((stock) => `${stock.code} ${stock.name}`).join("、") || "--";
-  const now = new Date().toLocaleTimeString("zh-TW", { hour12: false });
+  const longTopNames = longRows.slice(0, 3).map((stock) => `${stock.code} ${stock.name}`);
+  const shortTopNames = shortRows.slice(0, 3).map((stock) => `${stock.code} ${stock.name}`);
+  const longChipMarkup = longTopNames.map((name) => `<span class="radar-ai-chip">${name}</span>`).join("") || `<span class="radar-ai-chip">等待多方訊號</span>`;
+  const shortChipMarkup = shortTopNames.map((name) => `<span class="radar-ai-chip">${name}</span>`).join("") || `<span class="radar-ai-chip">等待空方訊號</span>`;
+  const now = radarSessionTimeLabel();
   const leaderMarkup = leaders.slice(0, 6).map((stock) => {
     const sign = stock.pct >= 0 ? "+" : "";
     const tags = radarReasonTags(stock).map((tag) => `<span>${tag}</span>`).join("");
@@ -736,13 +817,25 @@ function renderRealtimeRadar() {
       <div>
         <small>即時雷達</small>
         <h1>即時多空資金流</h1>
+        <small>偵測時間 09:00-13:30</small>
       </div>
       <button class="radar-action" type="button" data-radar-refresh>刷新雷達</button>
     </header>
     <section class="radar-ai-box">
       <div class="radar-ai-head"><span>AI 即時判斷</span><span>信心 ${Math.max(52, Math.min(95, Math.round(Math.abs(netFlow) / Math.max(longFlow + shortFlow, 1) * 100 + 55)))}%</span></div>
       <h2>${majorLabel}</h2>
-      <p>${majorLabel}，淨流向 ${netFlow >= 0 ? "+" : "-"}${radarMoney(netFlow)}。主導訊號：${topNames}。</p>
+      <div class="radar-ai-grid">
+        <article class="radar-ai-panel">
+          <h3>偏多 AI 分析 <span>${longRows.length} 筆</span></h3>
+          <div class="radar-ai-chips">${longChipMarkup}</div>
+          <p>多方訊號集中在 ${longTopNames.join("、") || "等待資料"}，留意急拉、即時爆量、外資買超與短線強勢延續。</p>
+        </article>
+        <article class="radar-ai-panel short">
+          <h3>偏空 AI 分析 <span>${shortRows.length} 筆</span></h3>
+          <div class="radar-ai-chips">${shortChipMarkup}</div>
+          <p>空方訊號集中在 ${shortTopNames.join("、") || "等待資料"}，留意反彈失敗、賣壓轉強與短線轉弱風險。</p>
+        </article>
+      </div>
       <small>多方 ${radarMoney(longFlow)}｜空方 ${radarMoney(shortFlow)}｜集中度 ${concentration}%｜最高訊號分數 ${maxSignalScore}</small>
     </section>
     <section class="radar-team-box">
@@ -752,7 +845,6 @@ function renderRealtimeRadar() {
     <section class="radar-flow-grid">
       <article class="radar-flow-card"><span>多方流入</span><strong>${radarMoney(longFlow)}</strong><small>共 ${longAll.length} 則</small></article>
       <article class="radar-flow-card short"><span>空方流出</span><strong>${radarMoney(shortFlow)}</strong><small>共 ${shortAll.length} 則</small></article>
-      <article class="radar-flow-card"><span>淨流向</span><strong>${netFlow >= 0 ? "+" : "-"}${radarMoney(netFlow)}</strong><div class="radar-balance" style="--long-share:${longShare}%"><span></span></div></article>
     </section>
     <div class="radar-tabs">
       <button class="${activeRadarSide === "long" ? "active" : ""}" type="button" data-radar-side="long">多方</button>
