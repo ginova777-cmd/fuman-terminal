@@ -3976,8 +3976,17 @@ intradayRadarStyles.textContent = `
     background: rgba(10, 17, 30, 0.72);
   }
   .strategy5-stock-card .rank {
-    color: #7f8ca8;
+    display: inline-grid;
+    place-items: center;
+    width: 34px;
+    height: 28px;
+    border-radius: 999px;
+    background: #b93449;
+    color: #fff;
     font-weight: 800;
+    font-size: 13px;
+    line-height: 1;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.12);
   }
   .strategy5-stock-card strong {
     color: #f7fbff;
@@ -5149,7 +5158,7 @@ function renderStrategy5Dashboard(evaluated) {
     const rank = (strategy5Page - 1) * TERMINAL_PAGE_SIZE + index + 1;
     return `
       <article class="strategy5-stock-card">
-        <div class="rank">#${rank}</div>
+        <div class="rank">${rank}</div>
         <div>
           <strong>${stock.name} <small>${stock.code}</small></strong>
           <small>${stock.sector || "未分類"} · ${stock.isRealtime ? "即時" : "盤中"} · ${new Date().toLocaleDateString("zh-TW")}</small>
@@ -5239,7 +5248,7 @@ function renderOvernightDashboard(evaluated) {
     const rank = (strategy3Page - 1) * TERMINAL_PAGE_SIZE + index + 1;
     return `
       <article class="strategy5-stock-card strategy3-stock-card">
-        <div class="rank">#${rank}</div>
+        <div class="rank">${rank}</div>
         <div class="strategy3-stock-title">
           <strong>${stock.name} <small>${stock.code}</small></strong>
         </div>
