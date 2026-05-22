@@ -853,6 +853,45 @@ function isRadarDetectionWindow() {
   return minutes >= 9 * 60 && minutes <= 13 * 60 + 30;
 }
 
+function saveRealtimeRadarLastRows(rows) {
+  try {
+    if (!Array.isArray(rows) || !rows.length) return;
+    const payload = {
+      updatedAt: Date.now(),
+      rows: rows.slice(0, 80).map((stock) => ({
+        code: stock.code,
+        name: stock.name,
+        close: stock.close,
+        pct: stock.pct,
+        percent: stock.percent,
+        value: stock.value,
+        volume: stock.volume,
+        tradeVolume: stock.tradeVolume,
+        side: stock.side,
+        score: stock.score,
+        flow: stock.flow,
+        trust: stock.trust,
+        foreign: stock.foreign,
+        totalInst: stock.totalInst,
+        signalTags: stock.signalTags,
+      })),
+    };
+    localStorage.setItem(REALTIME_RADAR_LAST_CACHE_KEY, JSON.stringify(payload));
+  } catch (error) {}
+}
+
+function loadRealtimeRadarLastRows() {
+  try {
+    const payload = JSON.parse(localStorage.getItem(REALTIME_RADAR_LAST_CACHE_KEY) || "{}");
+    if (!Array.isArray(payload.rows) || !payload.rows.length) return false;
+    realtimeRadarLastRows = payload.rows;
+    realtimeRadarLastUpdatedAt = cleanNumber(payload.updatedAt) || Date.now();
+    return true;
+  } catch (error) {
+    return false;
+  }
+}
+
 async function ensureRealtimeRadarData() {
   if (latestStocks.length) return latestStocks;
   if (realtimeRadarDataPromise) return realtimeRadarDataPromise;
@@ -879,30 +918,56 @@ async function ensureRealtimeRadarData() {
   return realtimeRadarDataPromise;
 }
 
+async function ensureRealtimeRadarClosingData() {
+  if (latestStocks.length) return latestStocks;
+  if (realtimeRadarDataPromise) return realtimeRadarDataPromise;
+  realtimeRadarDataPromise = (async () => {
+    realtimeRadarLoading = true;
+    try {
+      await loadMarketData();
+      if (latestStocks.length) return latestStocks;
+      const stocks = await loadStrategyStocks();
+      return stocks.length ? stocks : latestStocks;
+    } catch (error) {
+      return latestStocks;
+    } finally {
+      realtimeRadarLoading = false;
+      realtimeRadarDataPromise = null;
+    }
+  })();
+  return realtimeRadarDataPromise;
+}
+
 function renderRealtimeRadar() {
   installRealtimeRadarView();
   const panel = viewPanels["realtime-radar"];
   if (!panel) return;
   deferUiWork(ensureMobileAutoOrganizeButton);
   const radarOpen = isRadarDetectionWindow();
+  if (!realtimeRadarLastRows.length) loadRealtimeRadarLastRows();
   if (!radarOpen && !latestStocks.length) {
-    panel.innerHTML = `
-      <header class="radar-topbar">
-        <div>
-          <small>即時雷達</small>
-          <h1>即時多空資金流</h1>
-          <small>偵測時間 09:00-13:30｜收盤後停止偵測，顯示盤中最後資料</small>
-        </div>
-        <button class="radar-action" type="button" disabled>09:00-13:30 偵測</button>
-      </header>
-      <section class="radar-team-box">
-        <div class="radar-team-head"><span>自動 AI 團隊</span><span>休息中</span></div>
-        <p>即時雷達只在台股盤中 09:00-13:30 偵測，盤後不讀取股票池，避免浪費終端資源。</p>
-      </section>
-    `;
-    return;
+    if (realtimeRadarLastRows.length) {
+      // Fall through and render the persisted closing snapshot.
+    } else {
+      panel.innerHTML = `
+        <header class="radar-topbar">
+          <div>
+            <small>即時雷達</small>
+            <h1>即時多空資金流</h1>
+            <small>偵測時間 09:00-13:30｜收盤後停止偵測，正在讀取收盤資料</small>
+          </div>
+          <button class="radar-action" type="button" disabled>09:00-13:30 偵測</button>
+        </header>
+        <div class="empty-state">正在讀取收盤資料，顯示盤中最後多空狀態...</div>
+      `;
+      ensureRealtimeRadarClosingData().then((stocks) => {
+        if (stocks.length) renderRealtimeRadar();
+        else panel.innerHTML = `<div class="empty-state">收盤資料暫時讀取失敗，請稍後再試。</div>`;
+      });
+      return;
+    }
   }
-  if (!latestStocks.length) {
+  if (!latestStocks.length && !realtimeRadarLastRows.length) {
     panel.innerHTML = `<div class="empty-state">正在快速載入當沖雷達股票池...</div>`;
     ensureRealtimeRadarData().then((stocks) => {
       if (stocks.length) renderRealtimeRadar();
@@ -914,6 +979,7 @@ function renderRealtimeRadar() {
   if (radarOpen && rows.length) {
     realtimeRadarLastRows = rows;
     realtimeRadarLastUpdatedAt = Date.now();
+    saveRealtimeRadarLastRows(rows);
   }
   const displayRows = rows.length ? rows : realtimeRadarLastRows;
   const longAll = displayRows.filter((stock) => stock.side === "long");
@@ -1195,6 +1261,7 @@ let realtimeRadarDataPromise = null;
 let realtimeRadarSide = "auto";
 let realtimeRadarLastRows = [];
 let realtimeRadarLastUpdatedAt = 0;
+const REALTIME_RADAR_LAST_CACHE_KEY = "fuman_realtime_radar_last_rows_v1";
 let sectorStocksCache = {};
 let institutionData = {};
 let institutionDate = "";
