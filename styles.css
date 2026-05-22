@@ -206,6 +206,39 @@ body.auth-ready .auth-gate {
   box-shadow: 0 0 0 3px rgba(255, 106, 61, 0.12);
 }
 
+.auth-password-wrap {
+  position: relative;
+  display: block;
+}
+
+.auth-password-wrap input {
+  padding-right: 58px;
+}
+
+.auth-password-toggle {
+  position: absolute;
+  top: 50%;
+  right: 10px;
+  width: 38px;
+  min-height: 0;
+  height: 38px;
+  transform: translateY(-50%);
+  border: 0;
+  border-radius: 10px;
+  background: rgba(6, 17, 31, 0.08);
+  color: #102033;
+  font-size: 17px;
+  line-height: 1;
+  display: grid;
+  place-items: center;
+}
+
+.auth-password-toggle:hover,
+.auth-password-toggle[aria-pressed="true"] {
+  background: rgba(255, 106, 61, 0.16);
+  color: #ff681f;
+}
+
 .auth-form button {
   border-color: transparent;
   min-height: 58px;
@@ -229,10 +262,54 @@ body.auth-ready .auth-gate {
   color: #20d18b;
 }
 
+.auth-footer {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  min-height: 50px;
+  padding: 0 28px;
+  border-top: 1px solid rgba(127, 166, 255, 0.1);
+  background: rgba(4, 8, 15, 0.68);
+  color: #6f7f9c;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 3px;
+}
+
+.auth-footer strong {
+  color: #ff9a68;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.auth-footer nav {
+  display: flex;
+  align-items: center;
+  gap: 30px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.auth-footer a {
+  color: #8290ad;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.auth-footer a:hover {
+  color: #ff9a68;
+}
+
 @media (max-width: 820px) {
   .auth-gate {
     justify-content: center;
-    padding: 22px;
+    padding: 22px 22px 72px;
   }
 
   .auth-gate::before {
@@ -244,6 +321,19 @@ body.auth-ready .auth-gate {
 
   .auth-card {
     padding: 28px;
+  }
+
+  .auth-footer {
+    align-items: flex-start;
+    flex-direction: column;
+    justify-content: center;
+    padding: 10px 18px;
+    font-size: 10px;
+    letter-spacing: 1.6px;
+  }
+
+  .auth-footer nav {
+    gap: 12px;
   }
 }
 

@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>輔滿 股票終端</title>
-    <link rel="stylesheet" href="styles.css?v=open-buy-status-20260521a">
+    <link rel="stylesheet" href="styles.css?v=supabase-auth-20260522b">
   </head>
   <body class="auth-pending">
     <section class="auth-gate" id="auth-gate" aria-label="會員登入">
@@ -26,12 +26,24 @@
           </label>
           <label>
             密碼
-            <input id="auth-password" type="password" placeholder="輸入密碼" autocomplete="current-password" minlength="6" required>
+            <span class="auth-password-wrap">
+              <input id="auth-password" type="password" placeholder="輸入密碼" autocomplete="current-password" minlength="6" required>
+              <button class="auth-password-toggle" id="auth-password-toggle" type="button" aria-label="顯示密碼" aria-pressed="false">👁</button>
+            </span>
           </label>
           <button id="auth-submit" type="submit">登入</button>
           <div class="auth-message" id="auth-message">正在檢查登入狀態...</div>
         </form>
       </div>
+      <footer class="auth-footer" aria-label="網站資訊">
+        <div><strong>Fuman</strong> © 2026 FUMAN QUANT TERMINAL. ALL RIGHTS RESERVED.</div>
+        <nav aria-label="會員條款">
+          <a href="#">TERMS OF SERVICE</a>
+          <a href="#">PRIVACY POLICY</a>
+          <a href="#">RISK DISCLOSURE</a>
+          <a href="#">CONTACT US</a>
+        </nav>
+      </footer>
     </section>
 
     <div class="app-shell">
@@ -289,6 +301,6 @@
       </main>
     </div>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="terminal.js?v=supabase-auth-20260522a"></script>
+    <script src="terminal.js?v=supabase-auth-20260522b"></script>
   </body>
 </html>

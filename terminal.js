@@ -45,6 +45,7 @@ const authGate = document.querySelector("#auth-gate");
 const authForm = document.querySelector("#auth-form");
 const authEmail = document.querySelector("#auth-email");
 const authPassword = document.querySelector("#auth-password");
+const authPasswordToggle = document.querySelector("#auth-password-toggle");
 const authSubmit = document.querySelector("#auth-submit");
 const authMessage = document.querySelector("#auth-message");
 const authModeButtons = [...document.querySelectorAll("[data-auth-mode]")];
@@ -100,6 +101,16 @@ async function initTerminalAuth() {
 
   authModeButtons.forEach((button) => {
     button.addEventListener("click", () => setAuthMode(button.dataset.authMode));
+  });
+
+  authPasswordToggle?.addEventListener("click", () => {
+    if (!authPassword) return;
+    const willShow = authPassword.type === "password";
+    authPassword.type = willShow ? "text" : "password";
+    authPasswordToggle.textContent = willShow ? "隱" : "👁";
+    authPasswordToggle.setAttribute("aria-label", willShow ? "隱藏密碼" : "顯示密碼");
+    authPasswordToggle.setAttribute("aria-pressed", willShow ? "true" : "false");
+    authPassword.focus();
   });
 
   authForm.addEventListener("submit", async (event) => {
