@@ -2814,7 +2814,11 @@ intradayRadarStyles.textContent = `
   .strategy-toolbar.intraday-mode h2 {
     color: #f5f8ff;
   }
-  #strategy-view.swing-only .strategy-header {
+  #strategy-view.intraday-only .strategy-header,
+  #strategy-view.swing-only .strategy-header,
+  #strategy-view.open-buy-only .strategy-header,
+  #strategy-view.strategy3-only .strategy-header,
+  #strategy-view.strategy5-only .strategy-header {
     display: none;
   }
   .strategy-toolbar.intraday-mode {
@@ -4369,6 +4373,9 @@ function setStrategyChrome(mode) {
   }
   if (strategyView) strategyView.classList.toggle("intraday-only", intraday);
   if (strategyView) strategyView.classList.toggle("swing-only", swing);
+  if (strategyView) strategyView.classList.toggle("open-buy-only", openBuy);
+  if (strategyView) strategyView.classList.toggle("strategy3-only", strategy3);
+  if (strategyView) strategyView.classList.toggle("strategy5-only", strategy5);
   if (strategyTerminal) strategyTerminal.classList.toggle("intraday-only", intraday);
   if (strategyTerminal) strategyTerminal.classList.toggle("swing-only", swing);
   if (strategyTerminal) strategyTerminal.classList.toggle("open-buy-only", openBuy);
