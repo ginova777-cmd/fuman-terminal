@@ -1,15 +1,6 @@
 name: Intraday Radar Scorecard
 
 on:
-  schedule:
-    # Taiwan trading hours: start a long-running 3-second patrol.
-    - cron: "0,10,20,30 1 * * 1-5"
-    # Taiwan time 14:15 initial report. Retry every 10 minutes until sent.
-    - cron: "15,25,35,45,55 6 * * 1-5"
-    - cron: "5,15 7 * * 1-5"
-    # Taiwan time 15:30 final report. Retry every 10 minutes until sent.
-    - cron: "30,40,50 7 * * 1-5"
-    - cron: "0,10,20,30 8 * * 1-5"
   workflow_dispatch:
     inputs:
       mode:
@@ -20,9 +11,17 @@ on:
         options:
           - record
           - report
+      force_report:
+        description: "force resend report even if today's report was already sent"
+        required: false
+        default: "false"
+        type: choice
+        options:
+          - "false"
+          - "true"
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: intraday-radar-scorecard
@@ -83,6 +82,17 @@ jobs:
         env:
           INTRADAY_PATROL_INTERVAL_MS: 3000
 
+      - name: Publish strategy2 intraday report source
+        if: steps.mode.outputs.mode == 'record'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git pull --rebase origin main
+          git add data/strategy2-intraday-latest.json
+          git add data/strategy2-intraday-history
+          git diff --cached --quiet || git commit -m "Update strategy2 intraday report source"
+          git push
+
       - name: Send intraday report
         if: steps.mode.outputs.mode == 'report'
         run: node scripts/send-intraday-report.js
@@ -93,6 +103,7 @@ jobs:
           SMTP_HOST: ${{ secrets.SMTP_HOST }}
           SMTP_PORT: ${{ secrets.SMTP_PORT }}
           REPORT_SLOT: ${{ steps.mode.outputs.report_slot }}
+          FORCE_REPORT: ${{ inputs.force_report == 'true' && '1' || '0' }}
 
       - name: Send failure alert
         if: failure()
@@ -104,6 +115,7 @@ jobs:
           SMTP_HOST: ${{ secrets.SMTP_HOST }}
           SMTP_PORT: ${{ secrets.SMTP_PORT }}
           REPORT_SLOT: ${{ steps.mode.outputs.report_slot }}
+          FORCE_REPORT: ${{ inputs.force_report == 'true' && '1' || '0' }}
           SCORECARD_MODE: ${{ steps.mode.outputs.mode }}
           GITHUB_RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
 
