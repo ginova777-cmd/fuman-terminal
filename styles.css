@@ -263,14 +263,17 @@ body::after {
 
 .chip-menu-link.watchlist-chip-link {
   margin-top: 10px;
-  border-color: rgba(255, 136, 71, 0.82);
-  background: rgba(33, 29, 48, 0.94);
   color: #f7fbff;
-  box-shadow: inset 0 0 0 1px rgba(255, 136, 71, 0.14);
 }
 
 .chip-menu-link.watchlist-chip-link span {
   color: #ff8847;
+}
+
+.chip-menu-link.watchlist-chip-link.active {
+  border-color: rgba(255, 93, 67, 0.86);
+  background: #211d30;
+  box-shadow: inset 0 0 0 1px rgba(255, 93, 67, 0.15);
 }
 
 .chip-menu-link.active {
