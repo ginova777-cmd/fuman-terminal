@@ -197,6 +197,13 @@ function scheduleBadgeHtml(key) {
   if (meta.next || !meta.times?.length) {
     return `<span class="schedule-status-pill"><span>● 每日 ${meta.label} 更新</span><span>● 預計下次更新：${meta.next || ""}</span></span>`;
   }
+  const latestDue = latestDueScheduleTime(meta.times);
+  const updatedAt = getScheduleUpdatedAt(key);
+  const hasSuccessfulUpdate = updatedAt && latestDue && updatedAt >= latestDue.getTime();
+  if (hasSuccessfulUpdate) {
+    const next = formatScheduleDate(nextScheduleTime(meta.times));
+    return `<span class="schedule-status-pill"><span>● 每日 ${meta.label} 更新</span><span>● 預計下次更新：${next}</span></span>`;
+  }
   if (workflowRunStatusReady) {
     const workflowState = getWorkflowScheduleState(key);
     if (workflowState === "failed") {
@@ -206,9 +213,6 @@ function scheduleBadgeHtml(key) {
       return `<span class="schedule-status-pill"><span>● 正在更新</span></span>`;
     }
   }
-  const latestDue = latestDueScheduleTime(meta.times);
-  const updatedAt = getScheduleUpdatedAt(key);
-  const hasSuccessfulUpdate = updatedAt && latestDue && updatedAt >= latestDue.getTime();
   const isStale = latestDue && (!updatedAt || updatedAt < latestDue.getTime());
   if (isStale && workflowRunStatusReady) {
     const hasSuccessfulRun = hasSuccessfulWorkflowRun(key, latestDue);
@@ -6909,16 +6913,11 @@ function ensureWatchlistAnalysisStyles() {
       min-width: 0;
     }
     .watch-card-grid {
-      display: flex;
+      display: grid;
+      grid-template-columns: repeat(5, minmax(150px, 1fr));
       gap: 12px;
-      overflow-x: auto;
-      scroll-behavior: smooth;
-      scroll-snap-type: x mandatory;
-      padding: 0 48px 4px;
-      scrollbar-width: none;
-    }
-    .watch-card-grid::-webkit-scrollbar {
-      display: none;
+      overflow: visible;
+      padding: 0 0 4px;
     }
     .watch-metric,
     .watch-analysis-card {
@@ -6933,37 +6932,10 @@ function ensureWatchlistAnalysisStyles() {
       min-height: 86px;
     }
     .watch-analysis-card {
-      flex: 0 0 min(250px, calc(100vw - 120px));
-      min-height: 132px;
-      scroll-snap-align: start;
+      min-height: 112px;
     }
     .watch-scroll-btn {
-      position: absolute;
-      top: 50%;
-      z-index: 2;
-      display: grid;
-      place-items: center;
-      width: 34px;
-      height: 54px;
-      border: 1px solid rgba(127, 166, 255, 0.18);
-      border-radius: 8px;
-      background: rgba(12, 15, 26, 0.88);
-      color: #eaf1ff;
-      cursor: pointer;
-      font-size: 24px;
-      font-weight: 900;
-      transform: translateY(-50%);
-      box-shadow: 0 12px 28px rgba(0,0,0,0.28);
-    }
-    .watch-scroll-btn:hover {
-      border-color: rgba(255, 106, 61, 0.55);
-      color: #ff8a5c;
-    }
-    .watch-scroll-btn.prev {
-      left: 6px;
-    }
-    .watch-scroll-btn.next {
-      right: 6px;
+      display: none;
     }
     .watch-metric span,
     .watch-analysis-card span {
@@ -6977,7 +6949,7 @@ function ensureWatchlistAnalysisStyles() {
     .watch-analysis-card strong {
       display: block;
       color: #fff;
-      font-size: 22px;
+      font-size: 19px;
       font-weight: 950;
       line-height: 1.15;
     }
@@ -7039,7 +7011,19 @@ function ensureWatchlistAnalysisStyles() {
         grid-template-columns: 1fr;
       }
       .watch-card-grid {
-        padding-inline: 42px;
+        display: flex;
+        overflow-x: auto;
+        scroll-behavior: smooth;
+        scroll-snap-type: x mandatory;
+        padding-inline: 0;
+        scrollbar-width: none;
+      }
+      .watch-card-grid::-webkit-scrollbar {
+        display: none;
+      }
+      .watch-analysis-card {
+        flex: 0 0 min(220px, calc(100vw - 92px));
+        scroll-snap-align: start;
       }
     }
   `;
