@@ -6849,6 +6849,10 @@ function ensureWatchlistAnalysisStyles() {
       color: #ff8a5c;
       cursor: pointer;
     }
+    .watch-action-row button.active {
+      background: rgba(255, 106, 61, 0.14);
+      box-shadow: inset 0 0 0 1px rgba(255, 106, 61, 0.25);
+    }
     .watch-action-row .primary {
       background: linear-gradient(90deg, #ef6a3b, #ff6d3d);
       border-color: transparent;
@@ -6981,6 +6985,7 @@ function ensureWatchlistAnalysisStyles() {
     .watch-up { color: #ff5d72 !important; }
     .watch-down { color: #20d18b !important; }
     .watch-flat { color: #dbe7ff !important; }
+    .ta-period-panel[hidden] { display: none; }
     @media (max-width: 980px) {
       .watch-action-row,
       .watch-summary-grid {
@@ -7402,7 +7407,7 @@ async function showTradingDashboard(code, name) {
           <input value="${code}" readonly>
         </label>
         <button class="primary" type="button" data-watch-load>載入資料</button>
-        <button type="button" data-watch-analyze>儀表板</button>
+        <button class="active" type="button" data-watch-analyze aria-expanded="true">儀表板</button>
       </section>
 
       <section class="watch-summary-grid">
@@ -7469,7 +7474,7 @@ async function showTradingDashboard(code, name) {
         <article><b>3</b><small>${model.riskLabel === "風險可控" ? "目前風險可控，但仍需搭配成交量確認。" : "短線波動偏高，先等待支撐或轉強訊號。"}</small></article>
       </section>
 
-      <section class="ta-period-panel">
+      <section class="ta-period-panel" data-watch-dashboard-panel>
         <h3><span>${code}</span>的儀表板</h3>
         <nav class="ta-timeframes" aria-label="技術分析週期">
           ${buildTimeframeButtons(activeTimeframe.key)}
@@ -7490,7 +7495,14 @@ async function showTradingDashboard(code, name) {
     showTradingDashboard(code, stock.name || name);
   });
   watchlistAnalysis.querySelector("[data-watch-analyze]")?.addEventListener("click", () => {
-    showTradingDashboard(code, stock.name || name);
+    const dashboardPanel = watchlistAnalysis.querySelector("[data-watch-dashboard-panel]");
+    const dashboardButton = watchlistAnalysis.querySelector("[data-watch-analyze]");
+    if (!dashboardPanel || !dashboardButton) return;
+    const willShow = dashboardPanel.hidden;
+    dashboardPanel.hidden = !willShow;
+    dashboardButton.classList.toggle("active", willShow);
+    dashboardButton.setAttribute("aria-expanded", String(willShow));
+    if (willShow) dashboardPanel.scrollIntoView({ behavior: "smooth", block: "nearest" });
   });
   watchlistAnalysis.querySelectorAll("[data-watch-scroll]").forEach((button) => {
     button.addEventListener("click", () => {

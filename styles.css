@@ -1277,8 +1277,8 @@ h1 {
 
 .watchlist-layout {
   display: grid;
-  grid-template-columns: minmax(240px, 0.9fr) minmax(0, 1.35fr);
-  gap: 20px;
+  grid-template-columns: minmax(340px, 430px) minmax(0, 1fr);
+  gap: 14px;
   min-height: calc(100vh - 150px);
   padding: 0 0 24px;
 }
