@@ -9,7 +9,8 @@ const TASK_WORKFLOWS = {
   strategy4: { workflow: "strategy4-background-scan.yml", inputs: { full_scan: "true" } },
   strategy5: { workflow: "strategy5-background-scan.yml", inputs: { full_scan: "true" } },
   flow: { workflow: "flow-cache.yml", inputs: { full_scan: "true" } },
-  intradayRecord: { workflow: "intraday-radar-scorecard.yml", inputs: { mode: "record", force_report: "false" } },
+  intradayRecord: { workflow: "strategy2-intraday-snapshot.yml" },
+  strategy2Snapshot: { workflow: "strategy2-intraday-snapshot.yml" },
   intradayReport: { workflow: "intraday-radar-scorecard.yml", inputs: { mode: "report", force_report: "false" } },
 };
 
