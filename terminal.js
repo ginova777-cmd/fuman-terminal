@@ -5869,15 +5869,15 @@ function stockChange(stock) {
 
 function buildSectorStocksCache(stocks) {
   for (const stock of stocks) {
-    const code = valueOf(stock, ["證券代號", "Code"]);
-    const name = valueOf(stock, ["證券名稱", "Name"]);
-    const change = parseFloat(valueOf(stock, ["漲跌價差", "Change"])) || 0;
-    const close = parseFloat(valueOf(stock, ["收盤價", "ClosingPrice"])) || 0;
-    const value = parseFloat(valueOf(stock, ["成交金額", "TradeValue"])) || 0;
-    const volume = parseFloat(valueOf(stock, ["成交股數", "TradeVolume"])) || 0;
+    const code = String(valueOf(stock, ["證券代號", "Code", "code"]) || "").trim();
+    const name = valueOf(stock, ["證券名稱", "Name", "name"]) || code;
+    const change = cleanNumber(valueOf(stock, ["漲跌價差", "Change", "change"])) || 0;
+    const close = cleanNumber(valueOf(stock, ["收盤價", "ClosingPrice", "收盤", "close"])) || 0;
+    const value = cleanNumber(valueOf(stock, ["成交金額", "TradeValue", "value"])) || 0;
+    const volume = cleanNumber(valueOf(stock, ["成交股數", "TradeVolume", "tradeVolume", "volume"])) || 0;
     if (!code || !close) continue;
     const prev = close - change;
-    const pct = prev > 0 ? (change / prev) * 100 : 0;
+    const pct = cleanNumber(valueOf(stock, ["pct", "percent", "漲跌百分比"])) || (prev > 0 ? (change / prev) * 100 : 0);
     const industry = SECTOR_MAP[code];
     if (!industry) continue;
     if (!sectorStocksCache[industry]) sectorStocksCache[industry] = [];
@@ -5886,6 +5886,12 @@ function buildSectorStocksCache(stocks) {
       sectorStocksCache[industry].push({ code, name, close, change, pct, value, volume });
     }
   }
+}
+
+function buildHeatmapFallbackFromLatestStocks() {
+  if (Object.keys(sectorStocksCache).length || !latestStocks.length) return false;
+  buildSectorStocksCache(latestStocks);
+  return renderHeatmapFromCache();
 }
 
 function renderStocks(stocks) {
@@ -6061,9 +6067,14 @@ async function loadHeatmap() {
   }
   try {
     const data = await fetchJson(endpoints.heatmap, 15000);
-    if (data.ok && data.sectors) renderHeatmapSectors(data.sectors);
+    const sectors = normalizeArray(data?.sectors);
+    if (data?.ok && sectors.length) {
+      renderHeatmapSectors(sectors);
+      return;
+    }
+    throw new Error("heatmap empty");
   } catch (e) {
-    if (!renderHeatmapFromCache()) {
+    if (!renderHeatmapFromCache() && !buildHeatmapFallbackFromLatestStocks()) {
       heatmap.innerHTML = `<div class="empty-state">產業資料載入失敗</div>`;
     }
   }
