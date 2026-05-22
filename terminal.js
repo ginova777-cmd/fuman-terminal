@@ -39,6 +39,111 @@ const strategyHeaderBadge = document.querySelector("#strategy-view .strategy-hea
 const strategyTerminal = document.querySelector(".strategy-terminal");
 const strategyList = document.querySelector(".strategy-list");
 const brandRefresh = document.querySelector(".brand");
+const FUMAN_SUPABASE_URL = "https://jxnqyqnigsppqsxinlrq.supabase.co";
+const FUMAN_SUPABASE_KEY = "sb_publishable_kCocRYzO4oCBnFRQO_pfvg_JZUl0oxm";
+const authGate = document.querySelector("#auth-gate");
+const authForm = document.querySelector("#auth-form");
+const authEmail = document.querySelector("#auth-email");
+const authPassword = document.querySelector("#auth-password");
+const authSubmit = document.querySelector("#auth-submit");
+const authMessage = document.querySelector("#auth-message");
+const authModeButtons = [...document.querySelectorAll("[data-auth-mode]")];
+const authLogoutButton = document.querySelector(".sidebar-foot .logout");
+const supabaseClient = window.supabase?.createClient?.(FUMAN_SUPABASE_URL, FUMAN_SUPABASE_KEY);
+let authMode = "login";
+
+function setAuthMessage(text, type = "") {
+  if (!authMessage) return;
+  authMessage.textContent = text || "";
+  authMessage.classList.toggle("error", type === "error");
+  authMessage.classList.toggle("success", type === "success");
+}
+
+function setAuthMode(mode) {
+  authMode = mode === "signup" ? "signup" : "login";
+  authModeButtons.forEach((button) => {
+    const active = button.dataset.authMode === authMode;
+    button.classList.toggle("active", active);
+    button.setAttribute("aria-selected", active ? "true" : "false");
+  });
+  if (authSubmit) authSubmit.textContent = authMode === "signup" ? "註冊帳號" : "登入";
+  if (authPassword) authPassword.autocomplete = authMode === "signup" ? "new-password" : "current-password";
+  setAuthMessage(authMode === "signup" ? "輸入 Email 與密碼建立帳號。" : "請登入已開通帳號。");
+}
+
+function setTerminalAuthState(session) {
+  const signedIn = Boolean(session?.user);
+  document.body.classList.toggle("auth-ready", signedIn);
+  document.body.classList.toggle("auth-locked", !signedIn);
+  document.body.classList.remove("auth-pending");
+  if (authGate) authGate.setAttribute("aria-hidden", signedIn ? "true" : "false");
+  if (signedIn) {
+    setAuthMessage("登入成功，正在開啟終端。", "success");
+  } else {
+    setAuthMode(authMode);
+  }
+}
+
+async function initTerminalAuth() {
+  if (!authGate || !authForm) {
+    document.body.classList.remove("auth-pending");
+    document.body.classList.add("auth-ready");
+    return;
+  }
+
+  if (!supabaseClient) {
+    document.body.classList.remove("auth-pending");
+    document.body.classList.add("auth-locked");
+    setAuthMessage("Supabase 載入失敗，請重新整理後再試。", "error");
+    return;
+  }
+
+  authModeButtons.forEach((button) => {
+    button.addEventListener("click", () => setAuthMode(button.dataset.authMode));
+  });
+
+  authForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const email = authEmail?.value.trim();
+    const password = authPassword?.value || "";
+    if (!email || password.length < 6) {
+      setAuthMessage("請輸入 Email，密碼至少 6 個字元。", "error");
+      return;
+    }
+
+    if (authSubmit) authSubmit.disabled = true;
+    setAuthMessage(authMode === "signup" ? "正在建立帳號..." : "正在登入...");
+    try {
+      const action = authMode === "signup"
+        ? supabaseClient.auth.signUp({ email, password })
+        : supabaseClient.auth.signInWithPassword({ email, password });
+      const { data, error } = await action;
+      if (error) throw error;
+      if (authMode === "signup" && !data.session) {
+        setAuthMessage("註冊完成。若 Supabase 要求信箱驗證，請先到 Email 點確認信。", "success");
+        return;
+      }
+      setTerminalAuthState(data.session);
+    } catch (error) {
+      setAuthMessage(error?.message || "登入失敗，請確認帳號密碼。", "error");
+    } finally {
+      if (authSubmit) authSubmit.disabled = false;
+    }
+  });
+
+  authLogoutButton?.addEventListener("click", async () => {
+    await supabaseClient.auth.signOut();
+    setTerminalAuthState(null);
+  });
+
+  const { data } = await supabaseClient.auth.getSession();
+  setTerminalAuthState(data?.session);
+  supabaseClient.auth.onAuthStateChange((_event, session) => {
+    setTerminalAuthState(session);
+  });
+}
+
+initTerminalAuth();
 
 function installBasicDevtoolsGuard() {
   const blockedKeys = new Set(["F12"]);
@@ -786,7 +891,7 @@ function renderRealtimeRadar() {
         <div>
           <small>即時雷達</small>
           <h1>即時多空資金流</h1>
-          <small>偵測時間 09:00-13:30，目前停止讀取資料</small>
+          <small>偵測時間 09:00-13:30｜收盤後停止偵測，顯示盤中最後資料</small>
         </div>
         <button class="radar-action" type="button" disabled>09:00-13:30 偵測</button>
       </header>
@@ -806,8 +911,13 @@ function renderRealtimeRadar() {
     return;
   }
   const rows = buildRealtimeRadarRows();
-  const longAll = rows.filter((stock) => stock.side === "long");
-  const shortAll = rows.filter((stock) => stock.side === "short");
+  if (radarOpen && rows.length) {
+    realtimeRadarLastRows = rows;
+    realtimeRadarLastUpdatedAt = Date.now();
+  }
+  const displayRows = rows.length ? rows : realtimeRadarLastRows;
+  const longAll = displayRows.filter((stock) => stock.side === "long");
+  const shortAll = displayRows.filter((stock) => stock.side === "short");
   const longRows = longAll.slice(0, 8);
   const shortRows = shortAll.slice(0, 8);
   const longFlow = longAll.reduce((sum, stock) => sum + stock.flow, 0);
@@ -846,7 +956,7 @@ function renderRealtimeRadar() {
       <div>
         <small>即時雷達</small>
         <h1>即時多空資金流</h1>
-        <small>偵測時間 09:00-13:30${radarOpen ? "" : "｜目前顯示盤中最後資料，不再讀取股票池"}</small>
+        <small>偵測時間 09:00-13:30${radarOpen ? "" : `｜收盤後停止偵測，顯示盤中最後資料${realtimeRadarLastUpdatedAt ? ` ${new Date(realtimeRadarLastUpdatedAt).toLocaleTimeString("zh-TW", { hour12: false })}` : ""}`}</small>
       </div>
       <button class="radar-action" type="button" ${radarOpen ? "data-radar-refresh" : "disabled"}>${radarOpen ? "刷新雷達" : "09:00-13:30 偵測"}</button>
     </header>
@@ -1083,6 +1193,8 @@ let lastHeatmapRenderSignature = "";
 let realtimeRadarLoading = false;
 let realtimeRadarDataPromise = null;
 let realtimeRadarSide = "auto";
+let realtimeRadarLastRows = [];
+let realtimeRadarLastUpdatedAt = 0;
 let sectorStocksCache = {};
 let institutionData = {};
 let institutionDate = "";
