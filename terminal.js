@@ -6848,6 +6848,21 @@ function ensureWatchlistAnalysisStyles() {
       gap: 14px;
       color: #dbe7ff;
     }
+    @media (min-width: 981px) {
+      #watchlist-view .watchlist-layout {
+        grid-template-columns: minmax(260px, 300px) minmax(0, 1fr);
+        gap: 12px;
+      }
+      #watchlist-view .watchlist-list-pane {
+        max-width: 300px;
+      }
+      #watchlist-view .watchlist-analysis-pane {
+        max-height: calc(100vh - 150px);
+      }
+      #watchlist-view .watchlist-card {
+        padding: 15px 18px !important;
+      }
+    }
     .watch-action-row {
       display: grid;
       grid-template-columns: minmax(120px, 1fr) minmax(180px, 2fr) minmax(160px, 1.4fr);
@@ -7012,6 +7027,12 @@ function ensureWatchlistAnalysisStyles() {
     .watch-down { color: #20d18b !important; }
     .watch-flat { color: #dbe7ff !important; }
     .ta-period-panel[hidden] { display: none; }
+    .ta-dashboard-tab {
+      border-color: rgba(47, 140, 255, 0.45) !important;
+      background: rgba(47, 140, 255, 0.16) !important;
+      color: #ffffff !important;
+      cursor: default !important;
+    }
     @media (max-width: 980px) {
       .watch-action-row,
       .watch-summary-grid {
@@ -7503,13 +7524,14 @@ async function showTradingDashboard(code, name) {
       <section class="ta-period-panel" data-watch-dashboard-panel>
         <h3><span>${code}</span>的儀表板</h3>
         <nav class="ta-timeframes" aria-label="技術分析週期">
+          <button class="ta-timeframe ta-dashboard-tab active" type="button" aria-current="page">儀表板</button>
           ${buildTimeframeButtons(activeTimeframe.key)}
         </nav>
       </section>
     </div>
   `;
 
-  watchlistAnalysis.querySelectorAll(".ta-timeframe").forEach((button) => {
+  watchlistAnalysis.querySelectorAll(".ta-timeframe[data-timeframe]").forEach((button) => {
     button.addEventListener("click", () => {
       selectedTechnicalTimeframe = button.dataset.timeframe;
       localStorage.setItem("fuman-technical-timeframe", selectedTechnicalTimeframe);
@@ -7524,11 +7546,10 @@ async function showTradingDashboard(code, name) {
     const dashboardPanel = watchlistAnalysis.querySelector("[data-watch-dashboard-panel]");
     const dashboardButton = watchlistAnalysis.querySelector("[data-watch-analyze]");
     if (!dashboardPanel || !dashboardButton) return;
-    const willShow = dashboardPanel.hidden;
-    dashboardPanel.hidden = !willShow;
-    dashboardButton.classList.toggle("active", willShow);
-    dashboardButton.setAttribute("aria-expanded", String(willShow));
-    if (willShow) dashboardPanel.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    dashboardPanel.hidden = false;
+    dashboardButton.classList.add("active");
+    dashboardButton.setAttribute("aria-expanded", "true");
+    dashboardPanel.scrollIntoView({ behavior: "smooth", block: "nearest" });
   });
   watchlistAnalysis.querySelectorAll("[data-watch-scroll]").forEach((button) => {
     button.addEventListener("click", () => {
