@@ -2427,7 +2427,7 @@ async function fetchBatchQuotes(stocks) {
   const query = stocks.map((stock) => `${stock.market}_${stock.code}.tw`).join("|");
   const url = `https://mis.twse.com.tw/stock/api/getStockInfo.jsp?ex_ch=${encodeURIComponent(query)}&json=1&delay=0`;
   try {
-    const payload = JSON.parse(await fetchText(url, { headers: { Referer: "https://mis.twse.com.tw/" } }));
+    const payload = JSON.parse(await fetchText(url, { headers: { Referer: "https://mis.twse.com.tw/" } }, 1800));
     return payload.msgArray || [];
   } catch {
     return [];
@@ -2436,9 +2436,9 @@ async function fetchBatchQuotes(stocks) {
 
 async function fetchRealtimeQuotes(stocks) {
   const quoteMap = new Map();
-  const chunks = chunkArray(stocks, 90);
+  const chunks = chunkArray(stocks, 120);
   const quotePromise = Promise.all(chunks.map(fetchBatchQuotes));
-  const results = await withTimeout(quotePromise, 6500, []);
+  const results = await withTimeout(quotePromise, 2200, []);
 
   results.flat().forEach((item) => {
     const code = String(item.c || "").trim();
@@ -2492,17 +2492,16 @@ module.exports = async function handler(request, response) {
   if (request.method !== "GET") { response.status(405).json({ ok: false, error: "Method not allowed" }); return; }
 
   try {
-    const [twseResult, tpexResult, profileResult] = await Promise.allSettled([
+    const [twseResult, tpexResult] = await Promise.allSettled([
       fetchTwseStocks(),
       fetchTpexStocks(),
-      fetchCompanyProfiles(),
     ]);
 
     const stocks = [
       ...(twseResult.status === "fulfilled" ? twseResult.value : []),
       ...(tpexResult.status === "fulfilled" ? tpexResult.value : []),
     ];
-    const profileMap = profileResult.status === "fulfilled" ? profileResult.value : {};
+    const profileMap = {};
     const byCode = new Map();
     stocks.forEach((stock) => byCode.set(stock.code, stock));
     const uniqueStocks = [...byCode.values()];
@@ -2572,7 +2571,7 @@ module.exports = async function handler(request, response) {
       errors: {
         twse: twseResult.status === "rejected" ? twseResult.reason.message : null,
         tpex: tpexResult.status === "rejected" ? tpexResult.reason.message : null,
-        profiles: profileResult.status === "rejected" ? profileResult.reason.message : null,
+        profiles: null,
       },
     });
   } catch (error) {

@@ -33,7 +33,8 @@ function isCommonStockCode(code) {
 
 function stockChange(close, change) {
   const previous = close - change;
-  return previous ? (change / previous) * 100 : 0;
+  const percent = previous ? (change / previous) * 100 : 0;
+  return percent;
 }
 
 function normalizeTwseRow(row) {
@@ -171,12 +172,12 @@ async function fetchTwseStocks() {
 async function fetchTpexStocks() {
   const resultBase = "https://www.tpex.org.tw/web/stock/aftertrading/daily_close_quotes/stk_quote_result.php?l=zh-tw&o=json&s=0,asc,0";
   const dataUrl = "https://www.tpex.org.tw/web/stock/aftertrading/daily_close_quotes/stk_quote_result.php?l=zh-tw&o=data";
-  const csvUrl = "https://www.tpex.org.tw/web/stock/aftertrading/daily_close_quotes/stk_quote_result.php?l=zh-tw&o=csv";
+  const downloadUrl = "https://www.tpex.org.tw/web/stock/aftertrading/daily_close_quotes/stk_quote_download.php?l=zh-tw";
+  const closeUrl = "https://www.tpex.org.tw/web/stock/aftertrading/otc_quotes_no1430/stk_wn1430_result.php?l=zh-tw&sect=EW";
 
   for (const date of recentRocDates()) {
     try {
-      const url = `${resultBase}&d=${encodeURIComponent(date)}`;
-      const payload = JSON.parse(await fetchText(url, { headers: { Referer: "https://www.tpex.org.tw/" } }));
+      const payload = JSON.parse(await fetchText(`${resultBase}&d=${encodeURIComponent(date)}`, { headers: { Referer: "https://www.tpex.org.tw/" } }));
       const parsed = parseTpexPayload(payload);
       if (parsed.length) return parsed;
     } catch (error) {}
@@ -188,8 +189,21 @@ async function fetchTpexStocks() {
     if (parsed.length) return parsed;
   } catch (error) {}
 
-  const csv = await fetchText(csvUrl, { headers: { Referer: "https://www.tpex.org.tw/" } });
-  return parseCsv(csv).map(normalizeTpexRow).filter(Boolean);
+  for (const url of [downloadUrl, closeUrl]) {
+    try {
+      const text = await fetchText(url, { headers: { Referer: "https://www.tpex.org.tw/" } });
+      const trimmed = text.trim();
+      if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
+        const payload = JSON.parse(trimmed);
+        const parsed = parseTpexPayload(payload);
+        if (parsed.length) return parsed;
+      }
+      const parsed = parseCsv(text).map(normalizeTpexRow).filter(Boolean);
+      if (parsed.length) return parsed;
+    } catch (error) {}
+  }
+
+  return [];
 }
 
 module.exports = async function handler(request, response) {
