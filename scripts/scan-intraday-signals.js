@@ -6,6 +6,8 @@ const ROOT = path.resolve(__dirname, "..");
 const CACHE_DIR = path.join(ROOT, ".intraday-cache");
 const SIGNAL_FILE = path.join(CACHE_DIR, "signals.json");
 const SCORECARD_TRACK_FILE = path.join(CACHE_DIR, "scorecard-trades.json");
+const STRATEGY2_REPORT_FILE = path.join(ROOT, "data", "strategy2-intraday-latest.json");
+const STRATEGY2_HISTORY_DIR = path.join(ROOT, "data", "strategy2-intraday-history");
 const OPEN_BUY_SCORECARD_SOURCE_FILE = path.join(ROOT, "data", "open-buy-scorecard-source.json");
 const OPEN_BUY_FILE = path.join(ROOT, "data", "open-buy-latest.json");
 const OPEN_BUY_BACKUP_FILE = path.join(ROOT, "data", "open-buy-backup.json");
@@ -148,6 +150,72 @@ function updateScorecardTradeTracks(tracker, liveStocks, timestamp, key) {
   tracker.updatedAt = new Date().toISOString();
 }
 
+function timeLabel(value) {
+  const match = String(value || "").match(/(\d{2}):(\d{2})(?::(\d{2}))?/);
+  return match ? `${match[1]}:${match[2]}${match[3] ? `:${match[3]}` : ""}` : "";
+}
+
+function mergeStrategy2Events(records, key) {
+  const events = {};
+  records
+    .filter((record) => record.date === key)
+    .sort((a, b) => String(a.timestamp).localeCompare(String(b.timestamp)) || String(a.code).localeCompare(String(b.code)))
+    .forEach((record) => {
+      const code = String(record.code || "");
+      if (!code) return;
+      const current = events[code] || {
+        code,
+        name: record.name || code,
+        date: key,
+        firstBAt: "",
+        firstBPrice: 0,
+        highAfterB: 0,
+        firstAAt: "",
+        firstAPrice: 0,
+        highAfterA: 0,
+        highestPrice: 0,
+        latestState: "",
+        maxScore: 0,
+        strategies: [],
+        stateReason: "",
+        supportPrice: 0,
+      };
+      const price = cleanNumber(record.entryPrice) || cleanNumber(record.observedPrice);
+      const observedHigh = cleanNumber(record.observedHigh) || cleanNumber(record.observedPrice) || price;
+      if (!current.firstBAt) {
+        current.firstBAt = timeLabel(record.entryAt || record.timestamp);
+        current.firstBPrice = price;
+        current.highAfterB = observedHigh || price;
+      }
+      if (current.firstBAt && observedHigh > cleanNumber(current.highAfterB)) {
+        current.highAfterB = observedHigh;
+      }
+      if (record.stateId === "go" && !current.firstAAt) {
+        current.firstAAt = timeLabel(record.entryAt || record.timestamp);
+        current.firstAPrice = price;
+        current.highAfterA = observedHigh || price;
+      }
+      if (current.firstAAt && observedHigh > cleanNumber(current.highAfterA)) {
+        current.highAfterA = observedHigh;
+      }
+      if (observedHigh > cleanNumber(current.highestPrice)) {
+        current.highestPrice = observedHigh;
+      }
+      if (record.strategy && !current.strategies.includes(record.strategy)) {
+        current.strategies.push(record.strategy);
+      }
+      current.latestState = record.stateId === "go" ? "go" : "wait";
+      current.maxScore = Math.max(cleanNumber(current.maxScore), cleanNumber(record.score));
+      current.stateReason = record.stateReason || current.stateReason;
+      current.supportPrice = cleanNumber(current.supportPrice) || cleanNumber(record.supportPrice);
+      events[code] = current;
+    });
+  return Object.values(events).sort((a, b) => {
+    if (!!b.firstAAt !== !!a.firstAAt) return b.firstAAt ? 1 : -1;
+    return cleanNumber(b.maxScore) - cleanNumber(a.maxScore) || String(a.code).localeCompare(String(b.code));
+  });
+}
+
 async function fetchJson(url, timeout = 30000) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeout);
@@ -284,7 +352,26 @@ async function main() {
   }
 
   cache.updatedAt = new Date().toISOString();
+  const strategy2Events = mergeStrategy2Events(cache.records || [], key);
   writeJson(SIGNAL_FILE, cache);
+  writeJson(STRATEGY2_REPORT_FILE, {
+    source: "strategy2-09-to-1330-patrol",
+    date: key,
+    updatedAt: cache.updatedAt,
+    records: cache.records,
+    events: strategy2Events,
+    aCount: strategy2Events.filter((event) => event.firstAAt).length,
+    bOnlyCount: strategy2Events.filter((event) => !event.firstAAt && event.firstBAt).length,
+  });
+  writeJson(path.join(STRATEGY2_HISTORY_DIR, `${key}.json`), {
+    source: "strategy2-09-to-1330-patrol",
+    date: key,
+    updatedAt: cache.updatedAt,
+    records: cache.records,
+    events: strategy2Events,
+    aCount: strategy2Events.filter((event) => event.firstAAt).length,
+    bOnlyCount: strategy2Events.filter((event) => !event.firstAAt && event.firstBAt).length,
+  });
   writeJson(SCORECARD_TRACK_FILE, scorecardTracker);
   console.log(`intraday signals ${key}: added ${added}, total ${cache.records.length}`);
 }
