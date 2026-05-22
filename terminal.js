@@ -979,6 +979,12 @@ let strategyRealtimeQuotes = {};
 let strategyLastScanAt = 0;
 let strategyRealtimeStats = { requested: 0, received: 0, failed: 0, lastError: "" };
 let strategyRealtimeBackgroundCursor = 0;
+let mobileIntradayHotScanLastAt = 0;
+let mobileIntradayBackgroundScanLastAt = 0;
+let mobileOtherStrategyRenderLastAt = 0;
+let mobileOtherStrategyRenderTimer = 0;
+let mobileOtherStrategyRenderFlushing = false;
+let mobileOtherStrategyCacheCheckedAt = {};
 const intradayGoFirstSeenAt = new Map();
 let intradayCandidateSeenAt = {};
 let strategyHistoryLoading = false;
@@ -1052,6 +1058,13 @@ const REALTIME_RADAR_POOL_LIMIT = 650;
 const INTRADAY_BACKGROUND_BATCH = 450;
 const INTRADAY_FAST_SCAN_MS = 3000;
 const INTRADAY_BACKGROUND_SCAN_MS = 3000;
+const MOBILE_INTRADAY_HOT_SCAN_LIMIT = 260;
+const MOBILE_INTRADAY_FORCE_EXTRA_LIMIT = 80;
+const MOBILE_INTRADAY_BACKGROUND_BATCH = 90;
+const MOBILE_INTRADAY_HOT_SCAN_MS = 12000;
+const MOBILE_INTRADAY_BACKGROUND_SCAN_MS = 45000;
+const MOBILE_OTHER_STRATEGY_RENDER_MS = 2500;
+const MOBILE_OTHER_STRATEGY_CACHE_MS = 45000;
 const INTRADAY_CANDIDATE_TTL_MS = 15 * 60 * 1000;
 const INTRADAY_MIN_VOLUME = 2000;
 
@@ -1177,6 +1190,33 @@ function valueOf(record, keys) {
 
 function isDocumentHidden() {
   return typeof document !== "undefined" && document.visibilityState === "hidden";
+}
+
+function shouldSkipMobileOtherStrategyCacheRefresh(key, hasData, force = false) {
+  if (!force || !isMobileViewport() || !hasData) return false;
+  const now = Date.now();
+  const last = mobileOtherStrategyCacheCheckedAt[key] || 0;
+  if (now - last < MOBILE_OTHER_STRATEGY_CACHE_MS) return true;
+  mobileOtherStrategyCacheCheckedAt[key] = now;
+  return false;
+}
+
+function shouldDeferMobileOtherStrategyRender(enabled) {
+  if (!enabled) return false;
+  const now = Date.now();
+  const wait = MOBILE_OTHER_STRATEGY_RENDER_MS - (now - mobileOtherStrategyRenderLastAt);
+  if (wait <= 0) {
+    mobileOtherStrategyRenderLastAt = now;
+    return false;
+  }
+  if (!mobileOtherStrategyRenderTimer) {
+    mobileOtherStrategyRenderTimer = setTimeout(() => {
+      mobileOtherStrategyRenderTimer = 0;
+      mobileOtherStrategyRenderLastAt = Date.now();
+      renderStrategyScanner();
+    }, wait);
+  }
+  return true;
 }
 
 async function fetchJson(url, timeout = 8000, options = {}) {
@@ -1756,6 +1796,10 @@ function mergeOpenBuyCache(payload) {
 async function loadOpenBuyCache(force = false) {
   if (openBuyCacheLoading) return;
   if (!shouldLoadOpenBuyRemote(force)) return;
+  if (shouldSkipMobileOtherStrategyCacheRefresh("openBuy", Object.keys(openBuyScanMatches).length > 0, force)) {
+    renderStrategyScanner();
+    return;
+  }
   openBuyCacheLoading = true;
   openBuyCacheCheckedAt = Date.now();
   try {
@@ -1778,6 +1822,10 @@ async function loadOpenBuyCache(force = false) {
 async function loadStrategy3Cache(force = false) {
   if (strategy3CacheLoading) return;
   if (!force && strategy3Data.length) return;
+  if (shouldSkipMobileOtherStrategyCacheRefresh("strategy3", strategy3Data.length > 0, force)) {
+    renderStrategyScanner();
+    return;
+  }
   strategy3CacheLoading = true;
   try {
     let payload = await fetchJson(`${endpoints.strategy3Cache}?t=${Date.now()}`, 10000);
@@ -1797,6 +1845,10 @@ async function loadStrategy3Cache(force = false) {
 async function loadStrategy5Cache(force = false) {
   if (strategy5CacheLoading) return;
   if (!force && strategy5Data.length) return;
+  if (shouldSkipMobileOtherStrategyCacheRefresh("strategy5", strategy5Data.length > 0, force)) {
+    renderStrategyScanner();
+    return;
+  }
   strategy5CacheLoading = true;
   try {
     let payload = await fetchJson(`${endpoints.strategy5Cache}?t=${Date.now()}`, 10000);
@@ -3111,30 +3163,46 @@ intradayRadarStyles.textContent = `
     color: #ff4f5f;
     font-weight: 700;
   }
-  .open-buy-pager {
+  .terminal-pagination,
+  .open-buy-pager,
+  .warrant-pagination {
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 12px;
+    gap: 8px;
     padding: 14px 12px 4px;
     color: #9db9ff;
     font-size: 13px;
     font-weight: 800;
   }
-  .open-buy-pager button {
+  .terminal-pagination button,
+  .open-buy-pager button,
+  .warrant-pagination button {
     border: 1px solid rgba(117, 133, 170, 0.32);
     border-radius: 8px;
     background: rgba(23, 31, 50, 0.86);
     color: #dbe7ff;
-    padding: 8px 12px;
+    min-width: 36px;
+    padding: 8px 10px;
     font-weight: 900;
     cursor: pointer;
   }
-  .open-buy-pager button:not(:disabled):hover {
+  .terminal-pagination button.active,
+  .open-buy-pager button.active,
+  .warrant-pagination button.active {
+    border-color: rgba(255, 84, 103, 0.78);
+    background: rgba(255, 84, 103, 0.28);
+    color: #fff;
+  }
+  .terminal-pagination button:not(:disabled):hover,
+  .open-buy-pager button:not(:disabled):hover,
+  .warrant-pagination button:not(:disabled):hover {
     border-color: rgba(255, 84, 103, 0.7);
     color: #fff;
   }
-  .open-buy-pager button:disabled {
+  .terminal-pagination button:disabled,
+  .open-buy-pager button:disabled,
+  .warrant-pagination button:disabled {
     opacity: 0.45;
     cursor: not-allowed;
   }
@@ -4722,8 +4790,10 @@ function renderSwingRadar(universe) {
   const filteredRows = swingSignalFilter === "all"
     ? allRows
     : allRows.filter((stock) => (stock.swingSignals || []).some((signal) => signal.id === swingSignalFilter));
-  const rows = sortSwingRows(filteredRows)
-    .slice(0, 100);
+  const rows = sortSwingRows(filteredRows).slice(0, 100);
+  const swingPaged = paginateTerminalRows(rows, swingPage);
+  swingPage = swingPaged.page;
+  const pageRows = swingPaged.rows;
   const signalCounts = Object.fromEntries(SWING_SIGNAL_DEFS.map((signal) => [signal.id, 0]));
   allRows.forEach((stock) => {
     (stock.swingSignals || []).forEach((signal) => {
@@ -4761,7 +4831,7 @@ function renderSwingRadar(universe) {
     ...SWING_SIGNAL_DEFS.map((signal) => [signal.id, signal.title, signalCounts[signal.id] || 0]),
   ].map(([id, label, count]) => `<button class="${swingSignalFilter === id ? "active" : ""}" type="button" data-swing-filter="${id}">${label}(${count})</button>`).join("");
 
-  const tableRows = rows.length ? rows.map((stock) => {
+  const tableRows = pageRows.length ? pageRows.map((stock) => {
     const sign = stock.percent >= 0 ? "+" : "";
     const chips = stock.swingSignals.map((signal) => `<b>${signal.icon} ${signal.short}</b>`).join("");
     const stage = stock.swingStage || getSwingStage(stock);
@@ -4782,6 +4852,7 @@ function renderSwingRadar(universe) {
   }).join("") : `
     <tr><td colspan="9">後端策略4掃描 API 已啟動。正在分批抓日K並計算符合股票；命中後會自動顯示在這裡。</td></tr>
   `;
+  const pagination = buildTerminalPagination("swing", swingPage, swingPaged.totalPages, rows.length);
 
   strategyTable.innerHTML = `
     <section class="swing-dashboard">
@@ -4813,6 +4884,7 @@ function renderSwingRadar(universe) {
           </thead>
           <tbody>${tableRows}</tbody>
         </table>
+        ${pagination}
       </section>
     </section>
   `;
@@ -4832,11 +4904,9 @@ function renderOpenBuyRadar(universe) {
     .sort((a, b) => b.score - a.score || b.percent - a.percent || b.value - a.value)
     .slice(0, 80);
   const scanCount = rows.length;
-  const pageSize = 10;
-  const totalPages = Math.max(1, Math.ceil(rows.length / pageSize));
-  openBuyPage = Math.min(Math.max(openBuyPage, 1), totalPages);
-  const pageStart = (openBuyPage - 1) * pageSize;
-  const pageRows = rows.slice(pageStart, pageStart + pageSize);
+  const openBuyPaged = paginateTerminalRows(rows, openBuyPage);
+  openBuyPage = openBuyPaged.page;
+  const pageRows = openBuyPaged.rows;
 
   const scanText = openBuyScanLastAt
     ? `已掃描 ${scannedCount}/${totalCount}｜候選 ${scanCount}｜${new Date(openBuyScanLastAt).toLocaleTimeString("zh-TW", { hour12: false })}`
@@ -4873,13 +4943,7 @@ function renderOpenBuyRadar(universe) {
   }).join("") : `
     <tr><td colspan="10">策略1後端掃描中。14:30後可看明日候選，08:55後用盤前狀態做最終確認；第一版先用日K條件產生開盤入名單。</td></tr>
   `;
-  const pager = rows.length > pageSize ? `
-    <div class="open-buy-pager">
-      <button type="button" data-open-buy-page="prev" ${openBuyPage <= 1 ? "disabled" : ""}>上一頁</button>
-      <span>第 ${openBuyPage} / ${totalPages} 頁｜每頁 10 筆｜共 ${rows.length} 筆</span>
-      <button type="button" data-open-buy-page="next" ${openBuyPage >= totalPages ? "disabled" : ""}>下一頁</button>
-    </div>
-  ` : "";
+  const pager = buildTerminalPagination("openBuy", openBuyPage, openBuyPaged.totalPages, rows.length);
 
   strategyTable.innerHTML = `
     <section class="swing-dashboard">
@@ -4943,7 +5007,10 @@ function renderStrategy5Dashboard(evaluated) {
 
   const list = (byId[strategy5ActiveId] || [])
     .sort((a, b) => b.score - a.score || b.percent - a.percent || b.value - a.value)
-    .slice(0, 12);
+    .slice(0, 80);
+  const strategy5Paged = paginateTerminalRows(list, strategy5Page);
+  strategy5Page = strategy5Paged.page;
+  const pageList = strategy5Paged.rows;
   const active = STRATEGY_BY_ID[strategy5ActiveId] || STRATEGY_BY_ID.foreign_trust_breakout;
   const totalMatches = new Set(evaluated
     .filter((stock) => stock.matches.some((match) => STRATEGY5_PRESET_IDS.includes(match.id)))
@@ -4958,14 +5025,15 @@ function renderStrategy5Dashboard(evaluated) {
     foreign_trust_breakout: "外資與投信同步買超，漲幅未過熱，優先觀察準突破名單。",
   };
 
-  const rows = list.length ? list.map((stock, index) => {
+  const rows = pageList.length ? pageList.map((stock, index) => {
     const sign = stock.percent >= 0 ? "+" : "";
     const strategyMatches = stock.matches.filter((match) => STRATEGY5_PRESET_IDS.includes(match.id));
     const main = stock.activeMatch || strategyMatches[0] || stock.matches[0];
     const chips = strategyMatches.slice(0, 5).map((match) => `<b>${match.icon} ${match.short}</b>`).join("");
+    const rank = (strategy5Page - 1) * TERMINAL_PAGE_SIZE + index + 1;
     return `
       <article class="strategy5-stock-card">
-        <div class="rank">#${index + 1}</div>
+        <div class="rank">#${rank}</div>
         <div>
           <strong>${stock.name} <small>${stock.code}</small></strong>
           <small>${stock.sector || "未分類"} · ${stock.isRealtime ? "即時" : "盤中"} · ${new Date().toLocaleDateString("zh-TW")}</small>
@@ -4979,6 +5047,7 @@ function renderStrategy5Dashboard(evaluated) {
       </article>
     `;
   }).join("") : `<div class="empty-state">目前沒有符合「${active.label}」的股票。</div>`;
+  const pagination = buildTerminalPagination("strategy5", strategy5Page, strategy5Paged.totalPages, list.length);
 
   const scanText = strategy5UpdatedAt
     ? `06:00 / 21:00 完整掃｜${new Date(strategy5UpdatedAt).toLocaleDateString("zh-TW")}`
@@ -4994,6 +5063,7 @@ function renderStrategy5Dashboard(evaluated) {
             </div>
           </div>
           ${rows}
+          ${pagination}
         </section>
       </section>
     </section>
@@ -5036,6 +5106,9 @@ function renderOvernightDashboard(evaluated) {
     .map((stock) => ({ ...stock, activeMatch: stock.matches.find((match) => match.id === "overnight_chip") }))
     .sort((a, b) => b.score - a.score || b.value - a.value || b.percent - a.percent)
     .slice(0, 30);
+  const strategy3Paged = paginateTerminalRows(rows, strategy3Page);
+  strategy3Page = strategy3Paged.page;
+  const pageRows = strategy3Paged.rows;
   const scanText = strategy3UpdatedAt
     ? `13:00 掃描｜${new Date(strategy3UpdatedAt).toLocaleDateString("zh-TW")}`
     : "13:00 掃描快取讀取中";
@@ -5045,11 +5118,12 @@ function renderOvernightDashboard(evaluated) {
   if (strategyAvgScore) strategyAvgScore.textContent = rows.length ? Math.round(avg(rows.map((stock) => stock.score))) : "--";
   if (strategyTopHit) strategyTopHit.textContent = rows.length ? `${Math.max(...rows.map((stock) => stock.matches.length))}` : "--";
 
-  const cards = rows.length ? rows.map((stock, index) => {
+  const cards = pageRows.length ? pageRows.map((stock, index) => {
     const sign = stock.percent >= 0 ? "+" : "";
+    const rank = (strategy3Page - 1) * TERMINAL_PAGE_SIZE + index + 1;
     return `
       <article class="strategy5-stock-card strategy3-stock-card">
-        <div class="rank">#${index + 1}</div>
+        <div class="rank">#${rank}</div>
         <div class="strategy3-stock-title">
           <strong>${stock.name} <small>${stock.code}</small></strong>
         </div>
@@ -5062,6 +5136,7 @@ function renderOvernightDashboard(evaluated) {
       </article>
     `;
   }).join("") : `<div class="empty-state">目前沒有符合隔日沖條件的股票。</div>`;
+  const pagination = buildTerminalPagination("strategy3", strategy3Page, strategy3Paged.totalPages, rows.length);
 
   strategyTable.innerHTML = `
     <section class="strategy5-shell">
@@ -5074,6 +5149,7 @@ function renderOvernightDashboard(evaluated) {
             </div>
           </div>
           ${cards}
+          ${pagination}
         </section>
       </section>
     </section>
@@ -5089,6 +5165,8 @@ function renderStrategyScanner() {
     selectedStrategyIds = new Set(["intraday_2m"]);
     selected = ["intraday_2m"];
   }
+  const mobileOtherStrategy = isMobileViewport() && selected.length && !selected.includes("intraday_2m");
+  if (shouldDeferMobileOtherStrategyRender(mobileOtherStrategy)) return;
   if (!(selected.length === 1 && (selected[0] === "intraday_2m" || selected[0] === "swing_radar" || selected[0] === "open_buy"))) setStrategyChrome("normal");
   strategyCards.forEach((card) => card.classList.toggle("selected", selectedStrategyIds.has(card.dataset.strategy)));
   strategyModeButtons.forEach((button) => button.classList.toggle("active", button.dataset.strategyMode === strategyMode));
@@ -5307,16 +5385,7 @@ function renderWarrantFlow() {
   const helperText = keyword
     ? "搜尋只查優先區權證候選；不在優先區的 A 級權證已剔除。"
     : "只顯示優先區：A級、認購熱、認售低、價平/價內足夠，且股票未過熱。";
-  const pagination = filteredRows.length > pageSize ? `
-    <div class="warrant-pagination">
-      <button type="button" data-warrant-page="prev" ${warrantFlowPage <= 1 ? "disabled" : ""}>上一頁</button>
-      ${Array.from({ length: pageCount }, (_, index) => {
-        const page = index + 1;
-        return `<button class="${page === warrantFlowPage ? "active" : ""}" type="button" data-warrant-page="${page}">${page}</button>`;
-      }).join("")}
-      <button type="button" data-warrant-page="next" ${warrantFlowPage >= pageCount ? "disabled" : ""}>下一頁</button>
-    </div>
-  ` : "";
+  const pagination = buildTerminalPagination("warrant", warrantFlowPage, pageCount, filteredRows.length);
 
   const body = rows.length ? rows.map((item) => {
     const sign = item.stockPercent >= 0 ? "+" : "";
@@ -5825,7 +5894,17 @@ function renderChipTradeTable() {
     return (b.jointStreak - a.jointStreak) || ((b.foreign + b.trust) - (a.foreign + a.trust));
   });
 
-  const shown = rows.slice(0, 80);
+  const chipPaged = paginateTerminalRows(rows.slice(0, 80), chipTradePage);
+  chipTradePage = chipPaged.page;
+  const shown = chipPaged.rows;
+  const table = body.closest("table");
+  let pagination = document.querySelector("#chip-trade-pagination");
+  if (!pagination && table) {
+    pagination = document.createElement("div");
+    pagination.id = "chip-trade-pagination";
+    table.insertAdjacentElement("afterend", pagination);
+  }
+  if (pagination) pagination.innerHTML = buildTerminalPagination("chip", chipTradePage, chipPaged.totalPages, rows.slice(0, 80).length);
   if (!shown.length) {
     const emptyText = {
       joint: "目前沒有符合「外資 + 投信同買」的資料，盤後資料更新後會自動刷新。",
@@ -5834,6 +5913,7 @@ function renderChipTradeTable() {
       legal: "目前沒有符合「法人同買」的資料，盤後資料更新後會自動刷新。",
     }[chipFilter] || "目前沒有符合條件的資料。";
     body.innerHTML = `<tr><td colspan="12">${emptyText}</td></tr>`;
+    if (pagination) pagination.innerHTML = "";
     return;
   }
 
@@ -6233,6 +6313,9 @@ function applyStrategyPresetFromLink(link) {
   if (text.includes("策略4")) swingSignalFilter = "all";
   if (text.includes("策略2")) intradaySignalFilter = "all";
   if (text.includes("策略1")) openBuyPage = 1;
+  if (text.includes("策略3")) strategy3Page = 1;
+  if (text.includes("策略4")) swingPage = 1;
+  if (text.includes("策略5")) strategy5Page = 1;
   strategyMode = "any";
   strategyKeyword = "";
   if (strategySearch) strategySearch.value = "";
@@ -6378,6 +6461,18 @@ async function refreshStrategyRealtimeScan(mode = "hot") {
     return;
   }
   if (scanMode === "strategy5-full") return;
+  const mobileStrategy2 = isMobileViewport();
+  if (mobileStrategy2 && scanMode !== "force") {
+    const now = Date.now();
+    if (scanMode === "hot") {
+      if (now - mobileIntradayHotScanLastAt < MOBILE_INTRADAY_HOT_SCAN_MS) return;
+      mobileIntradayHotScanLastAt = now;
+    }
+    if (scanMode === "background") {
+      if (now - mobileIntradayBackgroundScanLastAt < MOBILE_INTRADAY_BACKGROUND_SCAN_MS) return;
+      mobileIntradayBackgroundScanLastAt = now;
+    }
+  }
   const isStrategyVisible = document.querySelector("#strategy-view")?.classList.contains("active");
   const isRealtimeStrategy = selectedStrategyIds.has("intraday_2m");
   const isStrategy5Realtime = false;
@@ -6404,15 +6499,18 @@ async function refreshStrategyRealtimeScan(mode = "hot") {
           return /^\d{4}$/.test(code) && !/^00/.test(code) && !/ETF|ETN|指數|台灣50|高股息|正2|反1|期貨|債/i.test(name);
         })
       : latestStocks.filter((stock) => isIntradayTradable(applyStrategyQuote(stock)));
+    const hotScanLimit = mobileStrategy2 ? MOBILE_INTRADAY_HOT_SCAN_LIMIT : INTRADAY_HOT_SCAN_LIMIT;
+    const forceExtraLimit = mobileStrategy2 ? MOBILE_INTRADAY_FORCE_EXTRA_LIMIT : 300;
+    const backgroundBatchLimit = mobileStrategy2 ? MOBILE_INTRADAY_BACKGROUND_BATCH : INTRADAY_BACKGROUND_BATCH;
     const rankedHotStocks = [...scanSource]
       .sort((a, b) => getIntradayHotScore(b) - getIntradayHotScore(a))
-      .slice(0, INTRADAY_HOT_SCAN_LIMIT);
+      .slice(0, hotScanLimit);
     const baseStrongStocks = getBaseStrongIntradayStocks(scanSource);
     const candidateStocks = getIntradayCandidateStocks(scanSource);
     const hotStocks = isStrategy5Realtime
       ? []
       : uniqueStocksByCode([...candidateStocks, ...baseStrongStocks, ...rankedHotStocks])
-        .slice(0, scanMode === "force" ? INTRADAY_HOT_SCAN_LIMIT + 300 : INTRADAY_HOT_SCAN_LIMIT);
+        .slice(0, scanMode === "force" ? hotScanLimit + forceExtraLimit : hotScanLimit);
     const hotCodes = new Set(hotStocks.map((stock) => stock.code));
     const backgroundPool = scanSource.filter((stock) => !hotCodes.has(stock.code));
     const shouldScanHot = !isStrategy5Realtime && (scanMode === "hot" || scanMode === "force");
@@ -6420,10 +6518,10 @@ async function refreshStrategyRealtimeScan(mode = "hot") {
     const backgroundStocks = scanMode === "strategy5-full"
       ? backgroundPool
       : shouldScanBackground
-      ? sliceBackgroundScan(backgroundPool, isStrategy5Realtime ? INTRADAY_BACKGROUND_BATCH * 2 : scanMode === "force" ? INTRADAY_BACKGROUND_BATCH * 2 : INTRADAY_BACKGROUND_BATCH)
+      ? sliceBackgroundScan(backgroundPool, isStrategy5Realtime ? backgroundBatchLimit * 2 : scanMode === "force" ? backgroundBatchLimit * 2 : backgroundBatchLimit)
       : [];
-    const hotBatchSize = 75;
-    const backgroundBatchSize = 90;
+    const hotBatchSize = mobileStrategy2 ? 45 : 75;
+    const backgroundBatchSize = mobileStrategy2 ? 45 : 90;
     let requested = 0;
     let received = 0;
     let failed = 0;
@@ -6469,6 +6567,10 @@ async function refreshOpenBuyScan(force = false) {
 async function loadStrategy4Cache(force = false) {
   if (strategy4CacheLoading) return;
   if (!force && strategy4ScanLastAt) return;
+  if (shouldSkipMobileOtherStrategyCacheRefresh("strategy4", Boolean(strategy4ScanLastAt), force)) {
+    renderStrategyScanner();
+    return;
+  }
   strategy4CacheLoading = true;
   try {
     let payload = await fetchJson(`${endpoints.strategy4Cache}?t=${Date.now()}`, 10000);
@@ -6526,10 +6628,14 @@ document.querySelectorAll("[data-chip-mode]").forEach((button) => {
     renderChipTradeTable();
   });
 });
-document.querySelector("#chip-sort")?.addEventListener("change", renderChipTradeTable);
+document.querySelector("#chip-sort")?.addEventListener("change", () => {
+  chipTradePage = 1;
+  renderChipTradeTable();
+});
 document.querySelectorAll("[data-chip-filter]").forEach((button) => {
   button.addEventListener("click", () => {
     chipFilter = button.dataset.chipFilter || "joint";
+    chipTradePage = 1;
     document.querySelectorAll("[data-chip-filter]").forEach((item) => item.classList.toggle("active", item === button));
     renderChipTradeTable();
   });
@@ -7481,6 +7587,7 @@ document.addEventListener("click", (event) => {
     swingSortKey = key;
     swingSortDir = key === "code" ? "asc" : "desc";
   }
+  swingPage = 1;
   renderStrategyScanner();
 });
 
@@ -7488,6 +7595,7 @@ document.addEventListener("click", (event) => {
   const filterButton = event.target.closest("[data-swing-filter]");
   if (!filterButton) return;
   swingSignalFilter = filterButton.dataset.swingFilter || "all";
+  swingPage = 1;
   renderStrategyScanner();
 });
 
@@ -7496,6 +7604,9 @@ document.addEventListener("input", (event) => {
   if (!input) return;
   strategyKeyword = input.value || "";
   openBuyPage = 1;
+  swingPage = 1;
+  strategy3Page = 1;
+  strategy5Page = 1;
   renderStrategyScanner();
 });
 
@@ -7509,28 +7620,20 @@ document.addEventListener("input", (event) => {
 });
 
 document.addEventListener("click", (event) => {
-  const pageButton = event.target.closest("[data-open-buy-page]");
+  const pageButton = event.target.closest("[data-terminal-page]");
   if (!pageButton || pageButton.disabled) return;
-  const action = pageButton.dataset.openBuyPage;
-  if (action === "prev") openBuyPage -= 1;
-  if (action === "next") openBuyPage += 1;
-  renderStrategyScanner();
-});
-
-document.addEventListener("click", (event) => {
-  const refreshTarget = event.target.closest("[data-warrant-refresh]");
-  if (!refreshTarget) return;
-  loadWarrantFlow(true);
-});
-
-document.addEventListener("click", (event) => {
-  const pageButton = event.target.closest("[data-warrant-page]");
-  if (!pageButton || pageButton.disabled) return;
-  const action = pageButton.dataset.warrantPage;
-  if (action === "prev") warrantFlowPage -= 1;
-  else if (action === "next") warrantFlowPage += 1;
-  else warrantFlowPage = cleanNumber(action) || 1;
-  renderWarrantFlow();
+  const scope = pageButton.dataset.terminalPageScope || "";
+  const action = pageButton.dataset.terminalPage;
+  const applyPage = (current) => action === "prev" ? current - 1 : action === "next" ? current + 1 : cleanNumber(action) || 1;
+  if (scope === "openBuy") openBuyPage = applyPage(openBuyPage);
+  if (scope === "swing") swingPage = applyPage(swingPage);
+  if (scope === "strategy3") strategy3Page = applyPage(strategy3Page);
+  if (scope === "strategy5") strategy5Page = applyPage(strategy5Page);
+  if (scope === "warrant") warrantFlowPage = applyPage(warrantFlowPage);
+  if (scope === "chip") chipTradePage = applyPage(chipTradePage);
+  if (scope === "warrant") renderWarrantFlow();
+  else if (scope === "chip") renderChipTradeTable();
+  else renderStrategyScanner();
 });
 
 document.addEventListener("click", (event) => {
@@ -7557,7 +7660,14 @@ document.addEventListener("click", (event) => {
   const filterButton = event.target.closest("[data-strategy5-filter]");
   if (!filterButton) return;
   strategy5ActiveId = filterButton.dataset.strategy5Filter || "foreign_trust_breakout";
+  strategy5Page = 1;
   renderStrategyScanner();
+});
+
+document.addEventListener("click", (event) => {
+  const refreshTarget = event.target.closest("[data-warrant-refresh]");
+  if (!refreshTarget) return;
+  loadWarrantFlow(true);
 });
 
 document.addEventListener("click", (event) => {
@@ -7583,6 +7693,9 @@ strategyClear?.addEventListener("click", () => {
 strategySearch?.addEventListener("input", (event) => {
   strategyKeyword = event.target.value;
   openBuyPage = 1;
+  swingPage = 1;
+  strategy3Page = 1;
+  strategy5Page = 1;
   renderStrategyScanner();
 });
 
