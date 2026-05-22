@@ -6,7 +6,34 @@
     <title>輔滿 股票終端</title>
     <link rel="stylesheet" href="styles.css?v=open-buy-status-20260521a">
   </head>
-  <body>
+  <body class="auth-pending">
+    <section class="auth-gate" id="auth-gate" aria-label="會員登入">
+      <div class="auth-card">
+        <span class="auth-badge">FUMAN TERMINAL</span>
+        <h1>輔滿</h1>
+        <h2>股票終端</h2>
+        <p>登入後查看市場總覽、策略中心、自選股與籌碼內容。</p>
+
+        <div class="auth-tabs" role="tablist" aria-label="登入或註冊">
+          <button class="active" type="button" data-auth-mode="login">登入</button>
+          <button type="button" data-auth-mode="signup">註冊</button>
+        </div>
+
+        <form class="auth-form" id="auth-form">
+          <label>
+            電子郵件 / 帳號
+            <input id="auth-email" type="email" placeholder="輸入 Email" autocomplete="email" required>
+          </label>
+          <label>
+            密碼
+            <input id="auth-password" type="password" placeholder="輸入密碼" autocomplete="current-password" minlength="6" required>
+          </label>
+          <button id="auth-submit" type="submit">登入</button>
+          <div class="auth-message" id="auth-message">正在檢查登入狀態...</div>
+        </form>
+      </div>
+    </section>
+
     <div class="app-shell">
       <aside class="sidebar">
         <div class="brand">
@@ -261,6 +288,7 @@
 
       </main>
     </div>
-    <script src="terminal.js?v=open-buy-status-20260521a"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="terminal.js?v=supabase-auth-20260522a"></script>
   </body>
 </html>
