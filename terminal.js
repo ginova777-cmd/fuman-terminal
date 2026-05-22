@@ -1015,6 +1015,7 @@ let openBuyScannedCodes = new Set();
 let openBuyScanTotal = 0;
 let openBuyCacheLoading = false;
 let openBuyCacheCheckedAt = 0;
+let openBuyPage = 1;
 let warrantFlowLoading = false;
 let warrantFlowData = [];
 let warrantFlowUpdatedAt = 0;
@@ -1721,6 +1722,7 @@ function loadOpenBuyLocalCache() {
 function mergeOpenBuyCache(payload) {
   openBuyScanMatches = {};
   openBuyScannedCodes = new Set();
+  openBuyPage = 1;
   normalizeArray(payload?.scannedCodes).forEach((code) => {
     if (code) openBuyScannedCodes.add(code);
   });
@@ -3060,6 +3062,33 @@ intradayRadarStyles.textContent = `
   .swing-table .price {
     color: #ff4f5f;
     font-weight: 700;
+  }
+  .open-buy-pager {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    padding: 14px 12px 4px;
+    color: #9db9ff;
+    font-size: 13px;
+    font-weight: 800;
+  }
+  .open-buy-pager button {
+    border: 1px solid rgba(117, 133, 170, 0.32);
+    border-radius: 8px;
+    background: rgba(23, 31, 50, 0.86);
+    color: #dbe7ff;
+    padding: 8px 12px;
+    font-weight: 900;
+    cursor: pointer;
+  }
+  .open-buy-pager button:not(:disabled):hover {
+    border-color: rgba(255, 84, 103, 0.7);
+    color: #fff;
+  }
+  .open-buy-pager button:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
   }
   .swing-badges {
     display: flex;
@@ -4755,6 +4784,11 @@ function renderOpenBuyRadar(universe) {
     .sort((a, b) => b.score - a.score || b.percent - a.percent || b.value - a.value)
     .slice(0, 80);
   const scanCount = rows.length;
+  const pageSize = 10;
+  const totalPages = Math.max(1, Math.ceil(rows.length / pageSize));
+  openBuyPage = Math.min(Math.max(openBuyPage, 1), totalPages);
+  const pageStart = (openBuyPage - 1) * pageSize;
+  const pageRows = rows.slice(pageStart, pageStart + pageSize);
 
   const scanText = openBuyScanLastAt
     ? `已掃描 ${scannedCount}/${totalCount}｜候選 ${scanCount}｜${new Date(openBuyScanLastAt).toLocaleTimeString("zh-TW", { hour12: false })}`
@@ -4771,7 +4805,7 @@ function renderOpenBuyRadar(universe) {
     return stock.status || "明日開盤可買";
   };
 
-  const tableRows = rows.length ? rows.map((stock) => {
+  const tableRows = pageRows.length ? pageRows.map((stock) => {
     const sign = stock.percent >= 0 ? "+" : "";
     const displayStatus = getOpenBuyDisplayStatus(stock);
     return `
@@ -4791,6 +4825,13 @@ function renderOpenBuyRadar(universe) {
   }).join("") : `
     <tr><td colspan="10">策略1後端掃描中。14:30後可看明日候選，08:55後用盤前狀態做最終確認；第一版先用日K條件產生開盤入名單。</td></tr>
   `;
+  const pager = rows.length > pageSize ? `
+    <div class="open-buy-pager">
+      <button type="button" data-open-buy-page="prev" ${openBuyPage <= 1 ? "disabled" : ""}>上一頁</button>
+      <span>第 ${openBuyPage} / ${totalPages} 頁｜每頁 10 筆｜共 ${rows.length} 筆</span>
+      <button type="button" data-open-buy-page="next" ${openBuyPage >= totalPages ? "disabled" : ""}>下一頁</button>
+    </div>
+  ` : "";
 
   strategyTable.innerHTML = `
     <section class="swing-dashboard">
@@ -4832,6 +4873,7 @@ function renderOpenBuyRadar(universe) {
           </thead>
           <tbody>${tableRows}</tbody>
         </table>
+        ${pager}
       </section>
     </section>
   `;
@@ -6114,6 +6156,7 @@ function applyStrategyPresetFromLink(link) {
   if (text.includes("策略3")) strategy5ActiveId = "overnight_chip";
   if (text.includes("策略4")) swingSignalFilter = "all";
   if (text.includes("策略2")) intradaySignalFilter = "all";
+  if (text.includes("策略1")) openBuyPage = 1;
   strategyMode = "any";
   strategyKeyword = "";
   if (strategySearch) strategySearch.value = "";
@@ -7374,6 +7417,7 @@ document.addEventListener("input", (event) => {
   const input = event.target.closest("[data-strategy-inline-search]");
   if (!input) return;
   strategyKeyword = input.value || "";
+  openBuyPage = 1;
   renderStrategyScanner();
 });
 
@@ -7384,6 +7428,15 @@ document.addEventListener("input", (event) => {
   warrantFlowPage = 1;
   clearTimeout(warrantFlowSearchTimer);
   warrantFlowSearchTimer = setTimeout(renderWarrantFlow, 250);
+});
+
+document.addEventListener("click", (event) => {
+  const pageButton = event.target.closest("[data-open-buy-page]");
+  if (!pageButton || pageButton.disabled) return;
+  const action = pageButton.dataset.openBuyPage;
+  if (action === "prev") openBuyPage -= 1;
+  if (action === "next") openBuyPage += 1;
+  renderStrategyScanner();
 });
 
 document.addEventListener("click", (event) => {
@@ -7451,6 +7504,7 @@ strategyClear?.addEventListener("click", () => {
 
 strategySearch?.addEventListener("input", (event) => {
   strategyKeyword = event.target.value;
+  openBuyPage = 1;
   renderStrategyScanner();
 });
 
