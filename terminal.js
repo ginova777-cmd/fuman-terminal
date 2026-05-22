@@ -7005,6 +7005,24 @@ function ensureWatchlistAnalysisStyles() {
       color: #ffffff !important;
       cursor: default !important;
     }
+    .watch-ta-panel {
+      display: grid;
+      justify-items: center;
+      gap: 20px;
+      padding: 24px 12px 6px;
+    }
+    .watch-ta-panel .ta-gauge-card {
+      max-width: 520px;
+    }
+    .watch-ta-panel .ta-gauge-card h3 {
+      margin-bottom: 28px;
+    }
+    .watch-ta-panel .ta-gauge-card > strong {
+      margin-top: 16px;
+    }
+    .watch-ta-panel .ta-gauge-votes {
+      margin-top: 22px;
+    }
     @media (max-width: 980px) {
       .watch-action-row,
       .watch-summary-grid {
@@ -7097,6 +7115,14 @@ function buildTimeframeButtons(activeKey) {
       ${item.label}
     </button>
   `).join("");
+}
+
+function dashboardGaugeMarkup(code, analysis) {
+  return `
+    <section class="watch-ta-panel">
+      ${gaugeMarkup(`${code}的技術分析`, analysis.score, "large")}
+    </section>
+  `;
 }
 
 function hexToRgb(hex) {
@@ -7506,11 +7532,11 @@ async function showTradingDashboard(code, name) {
       </section>
 
       <section class="ta-period-panel" data-watch-dashboard-panel>
-        <h3><span>${code}</span>的儀表板</h3>
         <nav class="ta-timeframes" aria-label="技術分析週期">
           <button class="ta-timeframe ta-dashboard-tab active" type="button" aria-current="page">儀表板</button>
           ${buildTimeframeButtons(activeTimeframe.key)}
         </nav>
+        ${dashboardGaugeMarkup(code, analysis)}
       </section>
     </div>
   `;
