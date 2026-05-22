@@ -958,6 +958,10 @@ const endpoints = {
 };
 
 let latestStocks = [];
+let marketDataLoading = false;
+let marketDataLastStartedAt = 0;
+let marketDataLastRenderedAt = 0;
+let lastMarketRenderSignature = "";
 let realtimeRadarLoading = false;
 let realtimeRadarDataPromise = null;
 let realtimeRadarSide = "auto";
@@ -1016,14 +1020,21 @@ let openBuyScanTotal = 0;
 let openBuyCacheLoading = false;
 let openBuyCacheCheckedAt = 0;
 let openBuyPage = 1;
+let swingPage = 1;
+let strategy3Page = 1;
+let strategy5Page = 1;
 let warrantFlowLoading = false;
 let warrantFlowData = [];
 let warrantFlowUpdatedAt = 0;
 let warrantFlowKeyword = "";
 let warrantFlowSearchTimer = null;
 let warrantFlowPage = 1;
+let chipTradePage = 1;
 const WARRANT_FLOW_LOCAL_CACHE_KEY = "fuman_warrant_flow_cache_v1";
 const CACHE_FRESH_MS = 10 * 60 * 1000;
+const MARKET_REFRESH_MS = 30 * 1000;
+const MARKET_REFRESH_HIDDEN_MS = 90 * 1000;
+const MARKET_DOM_REFRESH_MS = 60 * 1000;
 let selectedStrategyIds = new Set();
 let strategyMode = "any";
 let strategyKeyword = "";
@@ -1164,11 +1175,15 @@ function valueOf(record, keys) {
   return "";
 }
 
-async function fetchJson(url, timeout = 8000) {
+function isDocumentHidden() {
+  return typeof document !== "undefined" && document.visibilityState === "hidden";
+}
+
+async function fetchJson(url, timeout = 8000, options = {}) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeout);
   try {
-    const response = await fetch(url, { signal: controller.signal, cache: "no-store" });
+    const response = await fetch(url, { signal: controller.signal, cache: options.cache || "no-store" });
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     return await response.json();
   } finally {
@@ -2749,6 +2764,39 @@ function intradaySortHeader(key, label) {
   const active = intradaySortKey === key;
   const mark = active ? (intradaySortDir === "asc" ? " ▲" : " ▼") : " ↕";
   return `<button type="button" data-intraday-sort="${key}">${label}${mark}</button>`;
+}
+
+const TERMINAL_PAGE_SIZE = 10;
+
+function paginateTerminalRows(rows, currentPage) {
+  const list = Array.isArray(rows) ? rows : [];
+  const totalPages = Math.max(1, Math.ceil(list.length / TERMINAL_PAGE_SIZE));
+  const page = Math.min(Math.max(Number(currentPage) || 1, 1), totalPages);
+  const start = (page - 1) * TERMINAL_PAGE_SIZE;
+  return {
+    page,
+    totalPages,
+    rows: list.slice(start, start + TERMINAL_PAGE_SIZE),
+  };
+}
+
+function buildTerminalPagination(scope, page, totalPages, totalRows) {
+  if (totalRows <= TERMINAL_PAGE_SIZE) return "";
+  const maxButtons = 5;
+  let start = Math.max(1, page - 2);
+  let end = Math.min(totalPages, start + maxButtons - 1);
+  start = Math.max(1, end - maxButtons + 1);
+  const numberButtons = [];
+  for (let item = start; item <= end; item += 1) {
+    numberButtons.push(`<button class="${item === page ? "active" : ""}" type="button" data-terminal-page-scope="${scope}" data-terminal-page="${item}">${item}</button>`);
+  }
+  return `
+    <div class="terminal-pagination" data-terminal-pagination="${scope}">
+      <button type="button" data-terminal-page-scope="${scope}" data-terminal-page="prev" ${page <= 1 ? "disabled" : ""}>上一頁</button>
+      ${numberButtons.join("")}
+      <button type="button" data-terminal-page-scope="${scope}" data-terminal-page="next" ${page >= totalPages ? "disabled" : ""}>下一頁</button>
+    </div>
+  `;
 }
 
 const intradayRadarStyles = document.createElement("style");
@@ -5936,13 +5984,34 @@ function buildHeatmapFallbackFromLatestStocks() {
   return renderHeatmapFromCache();
 }
 
+function getMarketRenderSignature(stocks) {
+  const leaders = stocks
+    .filter((stock) => stock.percent > 0)
+    .sort((a, b) => b.percent - a.percent)
+    .slice(0, 12)
+    .map((stock) => `${stock.code}:${stock.close}:${stock.percent.toFixed(2)}:${Math.round(stock.value / 1000000)}`)
+    .join("|");
+  const up = stocks.filter((stock) => stock.change > 0).length;
+  const down = stocks.filter((stock) => stock.change < 0).length;
+  return `${stocks.length}:${up}:${down}:${leaders}`;
+}
+
 function renderStocks(stocks) {
   const parsed = parseStocksForLatest(stocks);
 
   if (!parsed.length) return;
   latestStocks = parsed;
-  buildSectorStocksCache(stocks);
-  renderHeatmapFromCache();
+  const now = Date.now();
+  const signature = getMarketRenderSignature(parsed);
+  const canReuseDom = signature === lastMarketRenderSignature && now - marketDataLastRenderedAt < MARKET_DOM_REFRESH_MS;
+  if (canReuseDom) return;
+  lastMarketRenderSignature = signature;
+  marketDataLastRenderedAt = now;
+
+  if (isViewActive("market") || !Object.keys(sectorStocksCache).length) {
+    buildSectorStocksCache(stocks);
+    renderHeatmapFromCache();
+  }
 
   const up = parsed.filter((s) => s.change > 0).length;
   const down = parsed.filter((s) => s.change < 0).length;
@@ -6075,6 +6144,11 @@ async function fetchFuturesDirect() {
 }
 
 async function loadMarketData() {
+  const now = Date.now();
+  const minInterval = isDocumentHidden() ? MARKET_REFRESH_HIDDEN_MS : MARKET_REFRESH_MS;
+  if (marketDataLoading || (marketDataLastStartedAt && now - marketDataLastStartedAt < minInterval)) return;
+  marketDataLoading = true;
+  marketDataLastStartedAt = now;
   try {
     const payload = await fetchJson(endpoints.backend, 12000);
 
@@ -6098,6 +6172,8 @@ async function loadMarketData() {
     } catch (e2) {
       tickerStrip.innerHTML = `<span>官方資料暫時無法連線</span>`;
     }
+  } finally {
+    marketDataLoading = false;
   }
 }
 
@@ -6418,7 +6494,7 @@ labelChipTradeMode();
 installMobileWatchlistNavOrder();
 installRealtimeRadarView();
 applyStaticTitleIcons();
-loadWorkflowRunStatus().catch(() => {});
+deferUiWork(() => loadWorkflowRunStatus().catch(() => {}), 2000);
 ensureMobileAutoOrganizeButton();
 loadMarketData();
 loadHeatmap();
@@ -6459,10 +6535,12 @@ document.querySelectorAll("[data-chip-filter]").forEach((button) => {
   });
 });
 setInterval(tickClock, 1000);
-setInterval(loadMarketData, 15*1000);
+setInterval(loadMarketData, MARKET_REFRESH_MS);
 setInterval(() => refreshStrategyRealtimeScan("hot"), INTRADAY_FAST_SCAN_MS);
 setInterval(() => refreshStrategyRealtimeScan("background"), INTRADAY_BACKGROUND_SCAN_MS);
-setInterval(loadHeatmap, 10*60*1000);
+setInterval(() => {
+  if (!isDocumentHidden() && isViewActive("market")) loadHeatmap();
+}, 15*60*1000);
 
 // ===== 自選股功能 =====
 const watchlistView = document.querySelector("#watchlist-view");
@@ -7509,6 +7587,7 @@ strategySearch?.addEventListener("input", (event) => {
 });
 
 async function refreshSelectedWatchlistQuote() {
+  if (isDocumentHidden()) return;
   const card = document.querySelector(".watchlist-card.selected");
   if (!card) return;
   const stock = await fetchStockPrice(card.dataset.code);
@@ -7525,4 +7604,4 @@ async function refreshSelectedWatchlistQuote() {
 }
 
 renderWatchlist();
-setInterval(refreshSelectedWatchlistQuote, 5000);
+setInterval(refreshSelectedWatchlistQuote, 10000);
