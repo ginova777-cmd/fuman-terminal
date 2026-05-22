@@ -264,17 +264,12 @@ function installMobileWatchlistNavOrder() {
   const style = document.createElement("style");
   style.id = "mobile-watchlist-nav-order";
   style.textContent = `
-    .nav-list .nav-item[data-view="watchlist"] {
+    .nav-list > .nav-item[data-view="watchlist"] {
       order: 999;
+      display: none;
     }
   `;
   document.head.appendChild(style);
-
-  const navList = document.querySelector(".nav-list");
-  const watchlistLink = navList?.querySelector('.nav-item[data-view="watchlist"]');
-  if (navList && watchlistLink) {
-    navList.appendChild(watchlistLink);
-  }
 }
 
 function installRealtimeRadarStyles() {
@@ -1143,6 +1138,7 @@ const MARKET_DOM_REFRESH_MS = 60 * 1000;
 let selectedStrategyIds = new Set();
 let strategyMode = "any";
 let strategyKeyword = "";
+let strategySearchTimer = null;
 let strategyStocksLoading = false;
 let swingSortKey = "score";
 let swingSortDir = "desc";
@@ -1322,6 +1318,14 @@ function shouldDeferMobileOtherStrategyRender(enabled) {
     }, wait);
   }
   return true;
+}
+
+function scheduleStrategySearchRender(delay = 380) {
+  clearTimeout(strategySearchTimer);
+  strategySearchTimer = setTimeout(() => {
+    strategySearchTimer = null;
+    renderStrategyScanner();
+  }, delay);
 }
 
 async function fetchJson(url, timeout = 8000, options = {}) {
@@ -7743,7 +7747,7 @@ document.addEventListener("input", (event) => {
   swingPage = 1;
   strategy3Page = 1;
   strategy5Page = 1;
-  renderStrategyScanner();
+  scheduleStrategySearchRender();
 });
 
 document.addEventListener("input", (event) => {
@@ -7832,7 +7836,7 @@ strategySearch?.addEventListener("input", (event) => {
   swingPage = 1;
   strategy3Page = 1;
   strategy5Page = 1;
-  renderStrategyScanner();
+  scheduleStrategySearchRender();
 });
 
 async function refreshSelectedWatchlistQuote() {
