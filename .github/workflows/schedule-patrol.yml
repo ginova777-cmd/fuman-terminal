@@ -1,6 +1,8 @@
-name: Schedule Patrol
+name: Schedule Patrol - Emergency Only
 
 on:
+  # 緊急巡邏員：不是策略執行者，必要時才手動按 Run workflow。
+  # 用途：檢查快取、API、其他 workflow 狀態；發現異常時寄信或補跑。
   workflow_dispatch:
 
 permissions:
