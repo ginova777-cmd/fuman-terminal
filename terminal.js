@@ -41,12 +41,15 @@ const strategyList = document.querySelector(".strategy-list");
 const brandRefresh = document.querySelector(".brand");
 const FUMAN_SUPABASE_URL = "https://jxnqyqnigsppqsxinlrq.supabase.co";
 const FUMAN_SUPABASE_KEY = "sb_publishable_kCocRYzO4oCBnFRQO_pfvg_JZUl0oxm";
+const FUMAN_ACCESS_TABLE = "fuman_user_access";
+const FUMAN_ADMIN_EMAILS = new Set(["ginova777@gmail.com"]);
 const authGate = document.querySelector("#auth-gate");
 const authForm = document.querySelector("#auth-form");
 const authEmail = document.querySelector("#auth-email");
 const authPassword = document.querySelector("#auth-password");
 const authPasswordToggle = document.querySelector("#auth-password-toggle");
 const authSubmit = document.querySelector("#auth-submit");
+const authSignout = document.querySelector("#auth-signout");
 const authMessage = document.querySelector("#auth-message");
 const authModeButtons = [...document.querySelectorAll("[data-auth-mode]")];
 const authLogoutButton = document.querySelector(".sidebar-foot .logout");
@@ -72,14 +75,76 @@ function setAuthMode(mode) {
   setAuthMessage(authMode === "signup" ? "輸入 Email 與密碼建立帳號。" : "請登入已開通帳號。");
 }
 
-function setTerminalAuthState(session) {
+function normalizeAuthEmail(email) {
+  return String(email || "").trim().toLowerCase();
+}
+
+function isAdminSession(session) {
+  return FUMAN_ADMIN_EMAILS.has(normalizeAuthEmail(session?.user?.email));
+}
+
+async function ensureAccessRequest(session) {
+  if (!session?.user) return { allowed: false, status: "signed_out" };
+  const email = normalizeAuthEmail(session.user.email);
+  if (isAdminSession(session)) return { allowed: true, status: "admin" };
+
+  const { data, error } = await supabaseClient
+    .from(FUMAN_ACCESS_TABLE)
+    .select("status")
+    .eq("user_id", session.user.id)
+    .maybeSingle();
+
+  if (error && error.code !== "PGRST116") throw error;
+
+  if (!data) {
+    const { error: insertError } = await supabaseClient
+      .from(FUMAN_ACCESS_TABLE)
+      .insert({
+        user_id: session.user.id,
+        email,
+        status: "pending",
+      });
+    if (insertError && insertError.code !== "23505") throw insertError;
+    return { allowed: false, status: "pending" };
+  }
+
+  const status = String(data.status || "pending").toLowerCase();
+  return {
+    allowed: ["approved", "trial", "active"].includes(status),
+    status,
+  };
+}
+
+async function refreshTerminalAuthState(session) {
+  let access = { allowed: false, status: "signed_out" };
+  if (session?.user) {
+    try {
+      access = await ensureAccessRequest(session);
+    } catch (error) {
+      console.warn("Fuman access check failed", error);
+      access = { allowed: false, status: "access_error" };
+    }
+  }
+
+  setTerminalAuthState(session, access);
+}
+
+function setTerminalAuthState(session, access = { allowed: false, status: "signed_out" }) {
   const signedIn = Boolean(session?.user);
-  document.body.classList.toggle("auth-ready", signedIn);
-  document.body.classList.toggle("auth-locked", !signedIn);
+  const allowed = signedIn && access.allowed;
+  document.body.classList.toggle("auth-ready", allowed);
+  document.body.classList.toggle("auth-locked", !allowed);
   document.body.classList.remove("auth-pending");
-  if (authGate) authGate.setAttribute("aria-hidden", signedIn ? "true" : "false");
-  if (signedIn) {
+  if (authGate) authGate.setAttribute("aria-hidden", allowed ? "true" : "false");
+  if (authSignout) authSignout.hidden = !signedIn || allowed;
+  if (allowed) {
     setAuthMessage("登入成功，正在開啟終端。", "success");
+  } else if (signedIn && access.status === "blocked") {
+    setAuthMessage("此帳號尚未開通或已停權，請聯絡管理者。", "error");
+  } else if (signedIn && access.status === "access_error") {
+    setAuthMessage("權限資料尚未建立，請先完成 Supabase 開通資料表設定。", "error");
+  } else if (signedIn) {
+    setAuthMessage("試用申請已送出，等待管理者開通權限後才能查看完整終端。", "success");
   } else {
     setAuthMode(authMode);
   }
@@ -130,10 +195,10 @@ async function initTerminalAuth() {
       const { data, error } = await action;
       if (error) throw error;
       if (authMode === "signup" && !data.session) {
-        setAuthMessage("註冊完成。若 Supabase 要求信箱驗證，請先到 Email 點確認信。", "success");
+        setAuthMessage("註冊完成。若 Supabase 要求信箱驗證，請先到 Email 點確認信；確認後登入會送出試用申請。", "success");
         return;
       }
-      setTerminalAuthState(data.session);
+      await refreshTerminalAuthState(data.session);
     } catch (error) {
       setAuthMessage(error?.message || "登入失敗，請確認帳號密碼。", "error");
     } finally {
@@ -146,10 +211,16 @@ async function initTerminalAuth() {
     setTerminalAuthState(null);
   });
 
+  authSignout?.addEventListener("click", async () => {
+    await supabaseClient.auth.signOut();
+    setAuthMode("login");
+    setTerminalAuthState(null);
+  });
+
   const { data } = await supabaseClient.auth.getSession();
-  setTerminalAuthState(data?.session);
+  await refreshTerminalAuthState(data?.session);
   supabaseClient.auth.onAuthStateChange((_event, session) => {
-    setTerminalAuthState(session);
+    refreshTerminalAuthState(session);
   });
 }
 

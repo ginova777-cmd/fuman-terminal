@@ -275,6 +275,19 @@ body.auth-ready .auth-gate {
   font-size: 18px;
 }
 
+.auth-form .auth-secondary-button {
+  min-height: 44px;
+  border: 1px solid rgba(127, 166, 255, 0.2);
+  background: rgba(19, 23, 38, 0.88);
+  color: #dbe7ff;
+  font-size: 14px;
+}
+
+.auth-form .auth-secondary-button:hover {
+  border-color: rgba(255, 106, 61, 0.55);
+  color: #ffb174;
+}
+
 .auth-message {
   min-height: 20px;
   color: #9db5dd;
