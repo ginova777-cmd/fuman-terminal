@@ -752,12 +752,52 @@ body::after {
 }
 
 .sidebar-foot {
-  display: none;
-  gap: 18px;
+  display: grid;
+  gap: 10px;
   margin-top: auto;
-  padding: 0 22px 24px;
+  padding: 16px 22px 24px;
   color: #a9b4ca;
   font-size: 13px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.member-state {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  min-height: 28px;
+  padding: 5px 10px;
+  border: 1px solid rgba(255, 115, 60, 0.45);
+  border-radius: 8px;
+  color: #ffb077;
+  background: rgba(255, 115, 60, 0.09);
+  font-weight: 800;
+}
+
+.member-state[data-status="admin"],
+.member-state[data-status="approved"],
+.member-state[data-status="active"] {
+  color: #36e1a2;
+  border-color: rgba(54, 225, 162, 0.5);
+  background: rgba(54, 225, 162, 0.09);
+}
+
+.member-state[data-status="trial"] {
+  color: #7fb0ff;
+  border-color: rgba(127, 176, 255, 0.48);
+  background: rgba(127, 176, 255, 0.1);
+}
+
+.sidebar-foot .logout {
+  width: fit-content;
+  padding: 6px 10px;
+  border: 1px solid rgba(255, 77, 92, 0.42);
+  border-radius: 8px;
+  color: #ff9aa8;
+  background: rgba(255, 77, 92, 0.08);
+  font: inherit;
+  font-weight: 800;
+  cursor: pointer;
 }
 
 .link-state {

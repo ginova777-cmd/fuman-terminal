@@ -53,6 +53,7 @@ const authSignout = document.querySelector("#auth-signout");
 const authMessage = document.querySelector("#auth-message");
 const authModeButtons = [...document.querySelectorAll("[data-auth-mode]")];
 const authLogoutButton = document.querySelector(".sidebar-foot .logout");
+const memberState = document.querySelector("#member-state");
 const supabaseClient = window.supabase?.createClient?.(FUMAN_SUPABASE_URL, FUMAN_SUPABASE_KEY);
 let authMode = "login";
 
@@ -129,6 +130,16 @@ async function refreshTerminalAuthState(session) {
   setTerminalAuthState(session, access);
 }
 
+function getMemberStatusLabel(status) {
+  const normalized = String(status || "signed_out").toLowerCase();
+  if (normalized === "admin") return "管理者";
+  if (["approved", "active"].includes(normalized)) return "VIP";
+  if (normalized === "trial") return "試用會員";
+  if (normalized === "pending") return "待審核";
+  if (normalized === "blocked") return "已停權";
+  return "未登入";
+}
+
 function setTerminalAuthState(session, access = { allowed: false, status: "signed_out" }) {
   const signedIn = Boolean(session?.user);
   const allowed = signedIn && access.allowed;
@@ -137,6 +148,11 @@ function setTerminalAuthState(session, access = { allowed: false, status: "signe
   document.body.classList.remove("auth-pending");
   if (authGate) authGate.setAttribute("aria-hidden", allowed ? "true" : "false");
   if (authSignout) authSignout.hidden = !signedIn || allowed;
+  if (memberState) {
+    const label = getMemberStatusLabel(access.status);
+    memberState.textContent = `會員狀態：${label}`;
+    memberState.dataset.status = String(access.status || "signed_out").toLowerCase();
+  }
   if (allowed) {
     setAuthMessage("登入成功，正在開啟終端。", "success");
   } else if (signedIn && access.status === "blocked") {
