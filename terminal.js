@@ -264,13 +264,17 @@ function installMobileWatchlistNavOrder() {
   const style = document.createElement("style");
   style.id = "mobile-watchlist-nav-order";
   style.textContent = `
-    @media (max-width: 760px) {
-      .nav-list .nav-item[data-view="watchlist"] {
-        order: 999;
-      }
+    .nav-list .nav-item[data-view="watchlist"] {
+      order: 999;
     }
   `;
   document.head.appendChild(style);
+
+  const navList = document.querySelector(".nav-list");
+  const watchlistLink = navList?.querySelector('.nav-item[data-view="watchlist"]');
+  if (navList && watchlistLink) {
+    navList.appendChild(watchlistLink);
+  }
 }
 
 function installRealtimeRadarStyles() {
