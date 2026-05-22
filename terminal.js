@@ -1054,6 +1054,7 @@ let marketDataLoading = false;
 let marketDataLastStartedAt = 0;
 let marketDataLastRenderedAt = 0;
 let lastMarketRenderSignature = "";
+let lastHeatmapRenderSignature = "";
 let realtimeRadarLoading = false;
 let realtimeRadarDataPromise = null;
 let realtimeRadarSide = "auto";
@@ -1065,6 +1066,7 @@ let chipMode = "after";
 let chipTradeLoading = false;
 let chipFilter = "joint";
 let chipQuoteHydrating = false;
+let chipTradeLastRenderSignature = "";
 let strategyRealtimeLoading = false;
 let strategyRealtimeCursor = 0;
 let strategyRealtimeQuotes = {};
@@ -1077,6 +1079,8 @@ let mobileOtherStrategyRenderLastAt = 0;
 let mobileOtherStrategyRenderTimer = 0;
 let mobileOtherStrategyRenderFlushing = false;
 let mobileOtherStrategyCacheCheckedAt = {};
+let watchlistDashboardSignature = "";
+let watchlistRefreshLoading = false;
 const intradayGoFirstSeenAt = new Map();
 let intradayCandidateSeenAt = {};
 let strategyHistoryLoading = false;
@@ -1124,6 +1128,9 @@ let strategy5Page = 1;
 let warrantFlowLoading = false;
 let warrantFlowData = [];
 let warrantFlowUpdatedAt = 0;
+let warrantFlowPriorityCache = [];
+let warrantFlowPrioritySignature = "";
+let warrantFlowLastRenderSignature = "";
 let warrantFlowKeyword = "";
 let warrantFlowSearchTimer = null;
 let warrantFlowPage = 1;
@@ -5460,11 +5467,13 @@ function getWarrantPriority(item) {
   };
 }
 
-function renderWarrantFlow() {
-  const panel = viewPanels["warrant-flow"];
-  if (!panel) return;
-  const keyword = warrantFlowKeyword.trim().toLowerCase();
-  const allRows = warrantFlowData
+function getWarrantPriorityRows() {
+  const signature = `${warrantFlowUpdatedAt || 0}:${warrantFlowData.length}:${latestStocks.length}`;
+  if (signature === warrantFlowPrioritySignature && warrantFlowPriorityCache.length) {
+    return warrantFlowPriorityCache;
+  }
+  warrantFlowPrioritySignature = signature;
+  warrantFlowPriorityCache = warrantFlowData
     .map(hydrateWarrantFlowItem)
     .map((item) => ({
       ...item,
@@ -5473,6 +5482,14 @@ function renderWarrantFlow() {
     .filter((item) => item.priority.isPriority)
     .sort((a, b) => b.priority.score - a.priority.score || b.score - a.score || b.callValue - a.callValue)
     .map((item, index) => ({ ...item, rank: index + 1 }));
+  return warrantFlowPriorityCache;
+}
+
+function renderWarrantFlow() {
+  const panel = viewPanels["warrant-flow"];
+  if (!panel) return;
+  const keyword = warrantFlowKeyword.trim().toLowerCase();
+  const allRows = getWarrantPriorityRows();
   const filteredRows = keyword
     ? allRows.filter((item) =>
       item.code.includes(keyword) ||
@@ -5491,6 +5508,9 @@ function renderWarrantFlow() {
     ? "搜尋只查優先區權證候選；不在優先區的 A 級權證已剔除。"
     : "只顯示優先區：A級、認購熱、認售低、價平/價內足夠，且股票未過熱。";
   const pagination = buildTerminalPagination("warrant", warrantFlowPage, pageCount, filteredRows.length);
+  const renderSignature = `${warrantFlowUpdatedAt || 0}:${keyword}:${warrantFlowPage}:${filteredRows.length}:${rows.map((item) => `${item.code}:${item.rank}:${item.priority.score}`).join("|")}`;
+  if (renderSignature === warrantFlowLastRenderSignature) return;
+  warrantFlowLastRenderSignature = renderSignature;
 
   const body = rows.length ? rows.map((item) => {
     const sign = item.stockPercent >= 0 ? "+" : "";
@@ -5567,6 +5587,8 @@ async function loadWarrantFlow(force = false) {
       payload = await fetchJson(`${endpoints.warrantFlowBackup}?t=${Date.now()}`, 10000);
     }
     warrantFlowData = normalizeArray(payload.matches);
+    warrantFlowPrioritySignature = "";
+    warrantFlowLastRenderSignature = "";
     warrantFlowPage = 1;
     const updatedAt = Date.parse(payload?.updatedAt || "");
     warrantFlowUpdatedAt = Number.isFinite(updatedAt) ? updatedAt : Date.now();
@@ -5802,6 +5824,7 @@ function openSectorModal(sector) {
 function renderHeatmapSectors(sectors) {
   if (!sectors || !sectors.length) {
     heatmap.innerHTML = `<div class="empty-state">等待產業資料...</div>`;
+    lastHeatmapRenderSignature = "";
     return;
   }
 
@@ -5811,6 +5834,11 @@ function renderHeatmapSectors(sectors) {
       sectorStocksCache[s.name] = s.stocks;
     }
   });
+  const signature = sectors
+    .map((s) => `${s.name}:${Number(s.pct || 0).toFixed(2)}:${s.count}:${s.up}:${s.down}:${s.totalValue}:${s.leader || ""}`)
+    .join("|");
+  if (signature === lastHeatmapRenderSignature) return;
+  lastHeatmapRenderSignature = signature;
 
   heatmap.innerHTML = sectors.map(s => {
     const pct = s.pct || 0;
@@ -6010,6 +6038,9 @@ function renderChipTradeTable() {
     table.insertAdjacentElement("afterend", pagination);
   }
   if (pagination) pagination.innerHTML = buildTerminalPagination("chip", chipTradePage, chipPaged.totalPages, rows.slice(0, 80).length);
+  const renderSignature = `${institutionUpdatedAt || 0}:${chipFilter}:${sortBy}:${chipTradePage}:${rows.length}:${shown.map((row) => `${row.code}:${row.price}:${row.percent}:${row.foreign}:${row.trust}:${row.total}`).join("|")}`;
+  if (renderSignature === chipTradeLastRenderSignature) return;
+  chipTradeLastRenderSignature = renderSignature;
   if (!shown.length) {
     const emptyText = {
       joint: "目前沒有符合「外資 + 投信同買」的資料，盤後資料更新後會自動刷新。",
@@ -6143,6 +6174,7 @@ function stockChange(stock) {
 }
 
 function buildSectorStocksCache(stocks) {
+  const nextCache = {};
   for (const stock of stocks) {
     const code = String(valueOf(stock, ["證券代號", "Code", "code"]) || "").trim();
     const name = valueOf(stock, ["證券名稱", "Name", "name"]) || code;
@@ -6155,12 +6187,10 @@ function buildSectorStocksCache(stocks) {
     const pct = cleanNumber(valueOf(stock, ["pct", "percent", "漲跌百分比"])) || (prev > 0 ? (change / prev) * 100 : 0);
     const industry = SECTOR_MAP[code];
     if (!industry) continue;
-    if (!sectorStocksCache[industry]) sectorStocksCache[industry] = [];
-    // 避免重複
-    if (!sectorStocksCache[industry].find(s => s.code === code)) {
-      sectorStocksCache[industry].push({ code, name, close, change, pct, value, volume });
-    }
+    if (!nextCache[industry]) nextCache[industry] = [];
+    nextCache[industry].push({ code, name, close, change, pct, value, volume });
   }
+  sectorStocksCache = nextCache;
 }
 
 function buildHeatmapFallbackFromLatestStocks() {
@@ -7339,6 +7369,7 @@ async function showTradingDashboard(code, name) {
   const fallback = latestStocks.find(s => s.code === code) || { code, name, close: 0, change: 0, percent: 0 };
   const stock = await fetchStockPrice(code) || fallback;
   const activeTimeframe = getTechnicalTimeframe();
+  watchlistDashboardSignature = `${code}:${stock.close}:${stock.change.toFixed(2)}:${stock.percent.toFixed(2)}:${activeTimeframe.key}`;
   const analysis = buildTechnicalSummary(stock, activeTimeframe.key);
   const sign = stock.change >= 0 ? "+" : "";
   const changeClass = stock.change >= 0 ? "down" : "up";
@@ -7721,7 +7752,7 @@ document.addEventListener("input", (event) => {
   warrantFlowKeyword = input.value || "";
   warrantFlowPage = 1;
   clearTimeout(warrantFlowSearchTimer);
-  warrantFlowSearchTimer = setTimeout(renderWarrantFlow, 250);
+  warrantFlowSearchTimer = setTimeout(renderWarrantFlow, 450);
 });
 
 document.addEventListener("click", (event) => {
@@ -7806,19 +7837,28 @@ strategySearch?.addEventListener("input", (event) => {
 
 async function refreshSelectedWatchlistQuote() {
   if (isDocumentHidden()) return;
+  if (watchlistRefreshLoading) return;
   const card = document.querySelector(".watchlist-card.selected");
   if (!card) return;
-  const stock = await fetchStockPrice(card.dataset.code);
-  if (!stock) return;
-  const priceEl = document.querySelector(`#wprice-${card.dataset.code}`);
-  const changeEl = document.querySelector(`#wchange-${card.dataset.code}`);
-  if (priceEl) priceEl.textContent = stock.close ? stock.close.toLocaleString("zh-TW") : "--";
-  if (changeEl) {
-    const sign = stock.change >= 0 ? "+" : "";
-    changeEl.style.color = stock.change > 0 ? "#e74c3c" : stock.change < 0 ? "#27ae60" : "#aaa";
-    changeEl.textContent = `${sign}${stock.change.toFixed(2)} (${sign}${stock.percent.toFixed(2)}%)`;
+  watchlistRefreshLoading = true;
+  try {
+    const stock = await fetchStockPrice(card.dataset.code);
+    if (!stock) return;
+    const priceEl = document.querySelector(`#wprice-${card.dataset.code}`);
+    const changeEl = document.querySelector(`#wchange-${card.dataset.code}`);
+    if (priceEl) priceEl.textContent = stock.close ? stock.close.toLocaleString("zh-TW") : "--";
+    if (changeEl) {
+      const sign = stock.change >= 0 ? "+" : "";
+      changeEl.style.color = stock.change > 0 ? "#e74c3c" : stock.change < 0 ? "#27ae60" : "#aaa";
+      changeEl.textContent = `${sign}${stock.change.toFixed(2)} (${sign}${stock.percent.toFixed(2)}%)`;
+    }
+    const signature = `${card.dataset.code}:${stock.close}:${stock.change.toFixed(2)}:${stock.percent.toFixed(2)}:${selectedTechnicalTimeframe}`;
+    if (signature === watchlistDashboardSignature) return;
+    watchlistDashboardSignature = signature;
+    showTradingDashboard(card.dataset.code, stock.name || card.dataset.name);
+  } finally {
+    watchlistRefreshLoading = false;
   }
-  showTradingDashboard(card.dataset.code, stock.name || card.dataset.name);
 }
 
 renderWatchlist();
