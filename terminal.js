@@ -6869,7 +6869,7 @@ function ensureWatchlistAnalysisStyles() {
     }
     .watch-action-row {
       display: grid;
-      grid-template-columns: minmax(120px, 1fr) minmax(180px, 2fr) minmax(160px, 1.4fr);
+      grid-template-columns: minmax(120px, 1fr) minmax(180px, 2fr);
       gap: 10px;
       align-items: end;
     }
@@ -7464,7 +7464,6 @@ async function showTradingDashboard(code, name) {
           <input value="${code}" readonly>
         </label>
         <button class="primary" type="button" data-watch-load>載入資料</button>
-        <button class="active" type="button" data-watch-analyze aria-expanded="true">儀表板</button>
       </section>
 
       <section class="watch-summary-grid">
@@ -7551,15 +7550,6 @@ async function showTradingDashboard(code, name) {
 
   watchlistAnalysis.querySelector("[data-watch-load]")?.addEventListener("click", () => {
     showTradingDashboard(code, stock.name || name);
-  });
-  watchlistAnalysis.querySelector("[data-watch-analyze]")?.addEventListener("click", () => {
-    const dashboardPanel = watchlistAnalysis.querySelector("[data-watch-dashboard-panel]");
-    const dashboardButton = watchlistAnalysis.querySelector("[data-watch-analyze]");
-    if (!dashboardPanel || !dashboardButton) return;
-    dashboardPanel.hidden = false;
-    dashboardButton.classList.add("active");
-    dashboardButton.setAttribute("aria-expanded", "true");
-    dashboardPanel.scrollIntoView({ behavior: "smooth", block: "nearest" });
   });
   watchlistAnalysis.querySelectorAll("[data-watch-scroll]").forEach((button) => {
     button.addEventListener("click", () => {
