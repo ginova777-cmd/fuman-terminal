@@ -23,6 +23,9 @@ jobs:
         with:
           node-version: "20"
 
+      - name: Sync latest main
+        run: git pull --rebase origin main
+
       - name: Restore intraday cache
         uses: actions/cache/restore@v4
         with:
@@ -47,7 +50,6 @@ jobs:
           else
             git commit -m "Update strategy2 intraday snapshot"
           fi
-          git pull --rebase origin main
           git push
 
       - name: Save intraday cache
