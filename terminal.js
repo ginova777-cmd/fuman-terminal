@@ -5017,8 +5017,10 @@ function renderOpenBuyRadar(universe) {
 
   const getOpenBuyDisplayStatus = (stock) => {
     const reasonTag = String(stock.reason || "").split("：")[0].trim();
+    if (reasonTag === "開盤無腦入") return "開盤入";
     if (reasonTag && reasonTag.length <= 8) return reasonTag;
-    return stock.status || "明日開盤可買";
+    if (stock.status === "開盤無腦入") return "開盤入";
+    return stock.status || "開盤入";
   };
 
   const tableRows = pageRows.length ? pageRows.map((stock) => {
