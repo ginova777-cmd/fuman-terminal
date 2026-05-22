@@ -25,7 +25,7 @@ jobs:
       - name: Patrol workflows and caches
         run: node scripts/patrol-schedules.js
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ github.token }}
           GITHUB_REPOSITORY: ${{ github.repository }}
           GITHUB_REF_NAME: ${{ github.ref_name }}
           AUTO_DISPATCH_STALE: "1"
