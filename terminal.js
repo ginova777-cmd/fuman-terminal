@@ -4929,9 +4929,14 @@ function renderSwingRadar(universe) {
     ...SWING_SIGNAL_DEFS.map((signal) => [signal.id, signal.title, signalCounts[signal.id] || 0]),
   ].map(([id, label, count]) => `<button class="${swingSignalFilter === id ? "active" : ""}" type="button" data-swing-filter="${id}">${label}(${count})</button>`).join("");
 
+  const formatSwingSignalChip = (signal) => {
+    if (signal?.id === "v_reversal") return "<b>V轉</b>";
+    return `<b>${signal.icon || ""} ${signal.short || ""}</b>`;
+  };
+
   const tableRows = pageRows.length ? pageRows.map((stock) => {
     const sign = stock.percent >= 0 ? "+" : "";
-    const chips = stock.swingSignals.map((signal) => `<b>${signal.icon} ${signal.short}</b>`).join("");
+    const chips = stock.swingSignals.map(formatSwingSignalChip).join("");
     const stage = stock.swingStage || getSwingStage(stock);
     const reason = stock.swingSignals[0]?.reason || "波段訊號觸發";
     return `
