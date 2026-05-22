@@ -1203,6 +1203,7 @@ function shouldSkipMobileOtherStrategyCacheRefresh(key, hasData, force = false) 
 
 function shouldDeferMobileOtherStrategyRender(enabled) {
   if (!enabled) return false;
+  if (mobileOtherStrategyRenderFlushing) return false;
   const now = Date.now();
   const wait = MOBILE_OTHER_STRATEGY_RENDER_MS - (now - mobileOtherStrategyRenderLastAt);
   if (wait <= 0) {
@@ -1213,7 +1214,12 @@ function shouldDeferMobileOtherStrategyRender(enabled) {
     mobileOtherStrategyRenderTimer = setTimeout(() => {
       mobileOtherStrategyRenderTimer = 0;
       mobileOtherStrategyRenderLastAt = Date.now();
-      renderStrategyScanner();
+      mobileOtherStrategyRenderFlushing = true;
+      try {
+        renderStrategyScanner();
+      } finally {
+        mobileOtherStrategyRenderFlushing = false;
+      }
     }, wait);
   }
   return true;
