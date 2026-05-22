@@ -203,6 +203,7 @@ function scanOpenBuy(code, market, rows) {
   const ma5 = sma(closes, 5);
   const ma10 = sma(closes, 10);
   const ma20 = sma(closes, 20);
+  const ma35 = sma(closes, 35);
   const volMa20 = sma(volumes, 20);
   const pct = prev?.close ? ((last.close - prev.close) / prev.close) * 100 : 0;
   const volumeRatio = volMa20 ? lastVolume / volMa20 : 0;
@@ -214,6 +215,7 @@ function scanOpenBuy(code, market, rows) {
   const tailKeepsRising = last.close > last.open && closeNearHigh && last.close >= last.low * 1.03;
   const liquid = lastVolume >= 2000;
   const qualityPrice = last.close >= 20;
+  const closeAboveMa35 = ma35 > 0 && last.close > ma35;
   const controlledMomentum = pct >= 1.5 && pct <= 4.5;
   const saneVolume = volumeRatio >= 1.2 && volumeRatio <= 4.5;
   const trend = last.close > ma20 || (last.close > ma5 && ma5 >= ma10 * 0.995);
@@ -242,6 +244,7 @@ function scanOpenBuy(code, market, rows) {
   const exceptionalLimitBreak = lastVolume >= 10000 && pct >= 6 && breakout && closeNearHigh && last.close > ma5 && last.close > ma20;
   const openingVolumeReady = lastVolume >= 3000 && (volumeRatio >= 0.75 || volumeVsMa5Ratio >= 0.75 || volumeIncreaseRatio >= 1.1 || exceptionalLimitBreak);
   const openingPowerSetup = qualityPrice &&
+    closeAboveMa35 &&
     openingVolumeReady &&
     last.close > last.open &&
     pct >= 2 &&
@@ -254,10 +257,11 @@ function scanOpenBuy(code, market, rows) {
     last.close > ma20 &&
     ma5 >= ma10 * 0.98 &&
     (breakout || closeNearHigh || last.open >= prev.close * 1.005);
-  const continuationSetup = liquid && qualityPrice && controlledMomentum && saneVolume &&
+  const continuationSetup = liquid && qualityPrice && closeAboveMa35 && controlledMomentum && saneVolume &&
     tailKeepsRising && (trend || strongClose || volumeTurn || reboundTurn || breakout);
   const washoutSetup = liquid &&
     qualityPrice &&
+    closeAboveMa35 &&
     pct >= -5.8 &&
     pct <= 2.5 &&
     prevPct >= 1.5 &&
@@ -269,6 +273,7 @@ function scanOpenBuy(code, market, rows) {
     last.close >= last.low * 1.03;
   const deepReboundSetup = rows.length >= 120 &&
     qualityPrice &&
+    closeAboveMa35 &&
     last.close > last.open &&
     dropPercent > 30 &&
     boxRange <= 10 &&
@@ -344,6 +349,8 @@ function scanOpenBuy(code, market, rows) {
     value: last.value,
     volumeRatio: Number(volumeRatio.toFixed(2)),
     volumeIncreaseRatio: Number(volumeIncreaseRatio.toFixed(2)),
+    ma35: Number(ma35.toFixed(2)),
+    closeAboveMa35,
     dropPercent: Number(dropPercent.toFixed(2)),
     boxRange: Number(boxRange.toFixed(2)),
     volumeBurstRatio: Number(volumeVsMa5Ratio.toFixed(2)),
@@ -360,12 +367,12 @@ function scanOpenBuy(code, market, rows) {
     noChase,
     exitTime: "09:10",
     reason: primarySetup === "深跌反彈"
-      ? `深跌反彈：長週期高點回落 ${dropPercent.toFixed(1)}%，20日箱體 ${boxRange.toFixed(1)}%，量增 ${volumeIncreaseRatio.toFixed(1)} 倍、量比 ${volumeRatio.toFixed(2)}，紅K突破箱體頸線並站上月線。`
+      ? `深跌反彈：長週期高點回落 ${dropPercent.toFixed(1)}%，20日箱體 ${boxRange.toFixed(1)}%，量增 ${volumeIncreaseRatio.toFixed(1)} 倍、量比 ${volumeRatio.toFixed(2)}，收盤站上MA35 ${ma35.toFixed(2)}，紅K突破箱體頸線並站上月線。`
       : primarySetup === "開盤無腦入"
-      ? `開盤無腦入：漲幅 ${pct.toFixed(2)}%，成交量 ${Math.round(lastVolume).toLocaleString("zh-TW")} 張、量比 ${volumeRatio.toFixed(2)}，紅K強攻收在日內強勢區，前一天先列入開盤進場名單。`
+      ? `開盤無腦入：漲幅 ${pct.toFixed(2)}%，成交量 ${Math.round(lastVolume).toLocaleString("zh-TW")} 張、量比 ${volumeRatio.toFixed(2)}，收盤站上MA35 ${ma35.toFixed(2)}，紅K強攻收在日內強勢區，前一天先列入開盤進場名單。`
       : primarySetup === "洗盤反彈"
-      ? `洗盤反彈：昨日漲幅 ${pct.toFixed(2)}%，前日強勢 ${prevPct.toFixed(2)}%，量比 ${volumeRatio.toFixed(2)}，回測均線後收離低點，09:01 站回開盤價才進。`
-      : `突破候選：昨日漲幅 ${pct.toFixed(2)}%，量比 ${volumeRatio.toFixed(2)}，成交量 ${Math.round(lastVolume).toLocaleString("zh-TW")} 張，尾盤收近高點，列入開盤候選。`,
+      ? `洗盤反彈：昨日漲幅 ${pct.toFixed(2)}%，前日強勢 ${prevPct.toFixed(2)}%，量比 ${volumeRatio.toFixed(2)}，收盤站上MA35 ${ma35.toFixed(2)}，回測均線後收離低點，09:01 站回開盤價才進。`
+      : `突破候選：昨日漲幅 ${pct.toFixed(2)}%，量比 ${volumeRatio.toFixed(2)}，成交量 ${Math.round(lastVolume).toLocaleString("zh-TW")} 張，收盤站上MA35 ${ma35.toFixed(2)}，尾盤收近高點，列入開盤候選。`,
   };
 }
 
