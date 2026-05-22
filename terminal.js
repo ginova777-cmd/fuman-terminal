@@ -747,7 +747,7 @@ function renderRealtimeRadar() {
   if (!panel) return;
   deferUiWork(ensureMobileAutoOrganizeButton);
   const radarOpen = isRadarDetectionWindow();
-  if (!radarOpen) {
+  if (!radarOpen && !latestStocks.length) {
     panel.innerHTML = `
       <header class="radar-topbar">
         <div>
@@ -817,9 +817,9 @@ function renderRealtimeRadar() {
       <div>
         <small>即時雷達</small>
         <h1>即時多空資金流</h1>
-        <small>偵測時間 09:00-13:30</small>
+        <small>偵測時間 09:00-13:30${radarOpen ? "" : "｜目前顯示盤中最後資料，不再讀取股票池"}</small>
       </div>
-      <button class="radar-action" type="button" data-radar-refresh>刷新雷達</button>
+      <button class="radar-action" type="button" ${radarOpen ? "data-radar-refresh" : "disabled"}>${radarOpen ? "刷新雷達" : "09:00-13:30 偵測"}</button>
     </header>
     <section class="radar-ai-box">
       <div class="radar-ai-head"><span>AI 即時判斷</span><span>信心 ${Math.max(52, Math.min(95, Math.round(Math.abs(netFlow) / Math.max(longFlow + shortFlow, 1) * 100 + 55)))}%</span></div>
