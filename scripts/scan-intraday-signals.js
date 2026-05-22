@@ -216,6 +216,51 @@ function mergeStrategy2Events(records, key) {
   });
 }
 
+function inferLegacyRecordState(record) {
+  const pct = cleanNumber(record.percent);
+  const volume = cleanNumber(record.volume);
+  const observedPrice = cleanNumber(record.observedPrice);
+  const observedHigh = cleanNumber(record.observedHigh) || observedPrice;
+  const strategy = String(record.strategy || "");
+  const reason = String(record.reason || "");
+  const nearHigh = observedHigh && observedPrice ? observedPrice >= observedHigh * 0.985 : true;
+  const hasTrigger = /轉強|突破|跳空|鑽石|MA35|買點|爆量|放大/.test(strategy + reason);
+  const liquid = volume >= 2000;
+
+  if (liquid && hasTrigger && nearHigh && pct >= 2 && pct <= 8.8) {
+    return {
+      stateId: "go",
+      stateLabel: "A區 可進場",
+      stateReason: "量勢、價位與觸發訊號同步，偏可進場。",
+      score: cleanNumber(record.score) || Math.min(100, Math.round(pct * 8 + 56)),
+    };
+  }
+  if ((volume >= 1000 || hasTrigger) && pct >= 2) {
+    return {
+      stateId: "wait",
+      stateLabel: "B區 待確認",
+      stateReason: "已有訊號，但仍需等站穩或再放量。",
+      score: cleanNumber(record.score) || Math.min(88, Math.round(pct * 8 + 42)),
+    };
+  }
+  return {
+    stateId: "watch",
+    stateLabel: "C區 觀察",
+    stateReason: "量能或型態尚未完全到位。",
+    score: cleanNumber(record.score) || Math.min(70, Math.round(Math.max(pct, 0) * 8 + 28)),
+  };
+}
+
+function normalizeStrategy2Records(records) {
+  return (records || []).map((record) => {
+    if (record.stateId && record.stateLabel) return record;
+    return {
+      ...record,
+      ...inferLegacyRecordState(record),
+    };
+  });
+}
+
 async function fetchJson(url, timeout = 30000) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeout);
@@ -351,6 +396,7 @@ async function main() {
     });
   }
 
+  cache.records = normalizeStrategy2Records(cache.records || []);
   cache.updatedAt = new Date().toISOString();
   const strategy2Events = mergeStrategy2Events(cache.records || [], key);
   writeJson(SIGNAL_FILE, cache);
