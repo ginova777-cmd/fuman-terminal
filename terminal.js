@@ -55,6 +55,7 @@ const authModeButtons = [...document.querySelectorAll("[data-auth-mode]")];
 const authLogoutButton = document.querySelector(".sidebar-foot .logout");
 const memberState = document.querySelector("#member-state");
 const supabaseClient = window.supabase?.createClient?.(FUMAN_SUPABASE_URL, FUMAN_SUPABASE_KEY);
+const PUBLIC_VIEWS = new Set(["market"]);
 let authMode = "login";
 
 function setAuthMessage(text, type = "") {
@@ -74,6 +75,73 @@ function setAuthMode(mode) {
   if (authSubmit) authSubmit.textContent = authMode === "signup" ? "註冊帳號" : "登入";
   if (authPassword) authPassword.autocomplete = authMode === "signup" ? "new-password" : "current-password";
   setAuthMessage(authMode === "signup" ? "輸入 Email 與密碼建立帳號。" : "請登入已開通帳號。");
+}
+
+function isTerminalUnlocked() {
+  return document.body.classList.contains("auth-ready");
+}
+
+function isProtectedView(viewName) {
+  return Boolean(viewName) && !PUBLIC_VIEWS.has(viewName);
+}
+
+function getActiveViewName() {
+  return Object.entries(viewPanels).find(([, panel]) => panel?.classList.contains("active"))?.[0] || "market";
+}
+
+function openAuthGate(mode = "login") {
+  setAuthMode(mode);
+  document.body.classList.add("auth-login-open");
+  if (authGate) authGate.setAttribute("aria-hidden", "false");
+  setTimeout(() => authEmail?.focus(), 0);
+}
+
+function closeAuthGate() {
+  document.body.classList.remove("auth-login-open");
+  if (authGate) authGate.setAttribute("aria-hidden", "true");
+}
+
+function ensureMemberLock(panel, viewName, activeLink) {
+  if (!panel) return;
+  const host = viewName === "strategy" ? panel.querySelector(".strategy-results") || panel : panel;
+  host.classList.add("member-lock-host");
+  let overlay = host.querySelector(":scope > .member-lock-overlay");
+  if (!overlay) {
+    overlay = document.createElement("div");
+    overlay.className = "member-lock-overlay";
+    host.appendChild(overlay);
+  }
+  const title = activeLink?.textContent?.replace(/\s+/g, " ").trim() || "會員專屬功能";
+  overlay.innerHTML = `
+    <div class="member-lock-card" role="dialog" aria-label="會員登入解鎖">
+      <span class="member-lock-kicker">MEMBER ACCESS</span>
+      <h2>登入後解鎖 ${escapeAttr(title)}</h2>
+      <p>登出狀態只能完整查看市場總覽與熱力圖；策略中心、自選股與盤後籌碼需登入已開通帳號後才能操作。</p>
+      <div class="member-lock-actions">
+        <button type="button" data-member-login>登入已開通帳號</button>
+        <button type="button" data-member-signup>註冊 / 申請試用</button>
+      </div>
+    </div>
+  `;
+  overlay.querySelector("[data-member-login]")?.addEventListener("click", () => openAuthGate("login"));
+  overlay.querySelector("[data-member-signup]")?.addEventListener("click", () => openAuthGate("signup"));
+}
+
+function applyMemberLocks(viewName = getActiveViewName(), activeLink = null) {
+  const unlocked = isTerminalUnlocked();
+  viewLinks.forEach((link) => {
+    link.classList.toggle("member-locked-link", isProtectedView(link.dataset.view) && !unlocked);
+  });
+  Object.entries(viewPanels).forEach(([name, panel]) => {
+    const locked = name === viewName && isProtectedView(name) && !unlocked;
+    panel?.classList.toggle("member-locked-view", locked);
+    if (locked) ensureMemberLock(panel, name, activeLink);
+    else {
+      panel?.querySelectorAll(".member-lock-overlay").forEach((overlay) => overlay.remove());
+      panel?.querySelectorAll(".member-lock-host").forEach((host) => host.classList.remove("member-lock-host"));
+    }
+  });
+  return isProtectedView(viewName) && !unlocked;
 }
 
 function normalizeAuthEmail(email) {
@@ -146,7 +214,8 @@ function setTerminalAuthState(session, access = { allowed: false, status: "signe
   document.body.classList.toggle("auth-ready", allowed);
   document.body.classList.toggle("auth-locked", !allowed);
   document.body.classList.remove("auth-pending");
-  if (authGate) authGate.setAttribute("aria-hidden", allowed ? "true" : "false");
+  if (allowed) closeAuthGate();
+  else if (authGate) authGate.setAttribute("aria-hidden", document.body.classList.contains("auth-login-open") ? "false" : "true");
   if (authSignout) authSignout.hidden = !signedIn || allowed;
   if (memberState) {
     const label = getMemberStatusLabel(access.status);
@@ -164,6 +233,7 @@ function setTerminalAuthState(session, access = { allowed: false, status: "signe
   } else {
     setAuthMode(authMode);
   }
+  applyMemberLocks();
 }
 
 async function initTerminalAuth() {
@@ -225,6 +295,8 @@ async function initTerminalAuth() {
   authLogoutButton?.addEventListener("click", async () => {
     await supabaseClient.auth.signOut();
     setTerminalAuthState(null);
+    const marketLink = viewLinks.find((link) => link.dataset.view === "market");
+    showView("market", marketLink);
   });
 
   authSignout?.addEventListener("click", async () => {
@@ -6618,6 +6690,8 @@ function showView(viewName, activeLink) {
   syncMobileStrategyVisibility(viewName);
   applyStaticTitleIcons();
   viewLinks.forEach((link)=>link.classList.toggle("active", link===activeLink));
+  const locked = applyMemberLocks(viewName, activeLink);
+  if (locked) return;
   if (viewName === "realtime-radar") deferUiWork(renderRealtimeRadar);
   if (viewName === "strategy") deferUiWork(renderStrategyScanner);
   if (viewName === "chip-trade") deferUiWork(loadChipTradeData);
@@ -7071,7 +7145,7 @@ stockSearch?.addEventListener("input", (e)=>searchStocks(e.target.value));
 viewLinks.forEach((link)=>{
   link.addEventListener("click",(e)=>{
     e.preventDefault();
-    applyStrategyPresetFromLink(link);
+    if (!isProtectedView(link.dataset.view) || isTerminalUnlocked()) applyStrategyPresetFromLink(link);
     showView(link.dataset.view, link);
   });
 });

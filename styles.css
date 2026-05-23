@@ -34,19 +34,19 @@ body {
 }
 
 body.auth-pending,
-body.auth-locked {
+body.auth-login-open {
   min-height: 100vh;
   background:
     linear-gradient(90deg, rgba(5, 9, 18, 0.94), rgba(5, 9, 18, 0.72) 52%, rgba(5, 9, 18, 0.96)),
     linear-gradient(135deg, #060914 0%, #111827 48%, #070a12 100%);
 }
 
-body.auth-pending .app-shell,
-body.auth-locked .app-shell {
+body.auth-pending .app-shell {
   display: none;
 }
 
-body.auth-ready .auth-gate {
+body.auth-ready .auth-gate,
+body.auth-locked:not(.auth-login-open) .auth-gate {
   display: none;
 }
 
@@ -751,6 +751,24 @@ body::after {
   color: var(--orange);
 }
 
+.member-locked-link {
+  position: relative;
+  color: #7f8aa3;
+}
+
+.member-locked-link::after {
+  margin-left: auto;
+  content: "鎖";
+  border: 1px solid rgba(255, 122, 69, 0.34);
+  border-radius: 999px;
+  background: rgba(255, 122, 69, 0.11);
+  color: #ffb180;
+  font-size: 11px;
+  font-weight: 900;
+  line-height: 1;
+  padding: 4px 6px;
+}
+
 .sidebar-foot {
   display: flex;
   align-items: center;
@@ -830,6 +848,98 @@ body::after {
 
 .view-panel[hidden] {
   display: none !important;
+}
+
+.view-panel {
+  position: relative;
+}
+
+.member-lock-host {
+  position: relative;
+  min-height: 430px;
+  overflow: hidden;
+}
+
+.member-lock-host > :not(.member-lock-overlay) {
+  filter: blur(5px) saturate(0.72);
+  opacity: 0.28;
+  pointer-events: none;
+  user-select: none;
+}
+
+.member-lock-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 30;
+  display: grid;
+  align-items: start;
+  justify-items: center;
+  padding: 72px 28px 40px;
+  background:
+    linear-gradient(180deg, rgba(7, 10, 19, 0.12), rgba(7, 10, 19, 0.74) 78%),
+    radial-gradient(circle at 34% 16%, rgba(255, 122, 69, 0.18), transparent 34%),
+    radial-gradient(circle at 76% 12%, rgba(63, 108, 255, 0.14), transparent 28%);
+}
+
+.member-lock-card {
+  width: min(760px, 100%);
+  border: 1px solid rgba(255, 122, 69, 0.42);
+  border-radius: 8px;
+  background:
+    linear-gradient(135deg, rgba(60, 38, 42, 0.96), rgba(17, 23, 40, 0.96) 58%),
+    rgba(13, 17, 29, 0.96);
+  box-shadow: 0 30px 90px rgba(0, 0, 0, 0.46);
+  padding: 28px;
+}
+
+.member-lock-kicker {
+  display: inline-flex;
+  margin-bottom: 16px;
+  border-radius: 999px;
+  background: rgba(255, 122, 69, 0.16);
+  color: #ff9b52;
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: 0;
+  padding: 6px 10px;
+}
+
+.member-lock-card h2 {
+  margin: 0;
+  color: #fff7ee;
+  font-size: 28px;
+  line-height: 1.25;
+}
+
+.member-lock-card p {
+  max-width: 680px;
+  margin: 14px 0 22px;
+  color: #d5deef;
+  font-size: 15px;
+  line-height: 1.8;
+}
+
+.member-lock-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.member-lock-actions button {
+  min-height: 42px;
+  border: 1px solid rgba(255, 146, 91, 0.42);
+  border-radius: 7px;
+  background: rgba(255, 122, 69, 0.18);
+  color: #fff4ea;
+  cursor: pointer;
+  font-weight: 900;
+  padding: 0 18px;
+}
+
+.member-lock-actions button:first-child {
+  background: linear-gradient(135deg, #ff7a45, #ff4d5c);
+  color: #fff;
+  box-shadow: 0 12px 32px rgba(255, 83, 73, 0.22);
 }
 
 .strategy-header {
