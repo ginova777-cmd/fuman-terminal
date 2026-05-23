@@ -115,11 +115,40 @@ function ensureMemberLock(panel, viewName, activeLink) {
   overlay.innerHTML = `
     <div class="member-lock-card" role="dialog" aria-label="會員登入解鎖">
       <span class="member-lock-kicker">MEMBER ACCESS</span>
-      <h2>登入後解鎖 ${escapeAttr(title)}</h2>
-      <p>登出狀態只能完整查看市場總覽與熱力圖；策略中心、自選股與盤後籌碼需登入已開通帳號後才能操作。</p>
+      <h2>解鎖完整標的</h2>
+      <p>登入已開通帳號後可看完整股票代號、名稱、方向、分數、關鍵價位與 AI 可執行結論。</p>
       <div class="member-lock-actions">
         <button type="button" data-member-login>登入已開通帳號</button>
         <button type="button" data-member-signup>註冊 / 申請試用</button>
+      </div>
+      <div class="member-lock-preview" aria-hidden="true">
+        <section class="member-lock-metrics">
+          <article><span>今日偵測</span><strong>30</strong></article>
+          <article><span>強訊號</span><strong>21</strong></article>
+          <article><span>最高分區間</span><strong>80+</strong></article>
+          <article><span>平均量能</span><strong>3.0x+</strong></article>
+        </section>
+        <section class="member-lock-band">
+          <h3>資金集中分類</h3>
+          <div><span>電子 19 檔</span><span>其他 4 檔</span><span>AI伺服器 1 檔</span><span>IC設計 1 檔</span></div>
+        </section>
+        <section class="member-lock-band">
+          <h3>今日訊號味道</h3>
+          <div><span>量能急速放大</span><span>成交金額集中</span><span>法人籌碼活躍</span><span>高強度訊號出現</span></div>
+        </section>
+        <section class="member-lock-samples">
+          <h3>遮罩樣本</h3>
+          <div class="member-lock-sample-grid">
+            ${[1, 2, 3, 4, 5, 6].map((item, index) => `
+              <article>
+                <b>#${item}</b>
+                <strong>${["23••", "37••", "53••", "62••", "24••", "23••"][index]}</strong>
+                <small>80+ / 高強度</small>
+                <p>高強度訊號 · 量能放大 · 籌碼活躍</p>
+              </article>
+            `).join("")}
+          </div>
+        </section>
       </div>
     </div>
   `;
