@@ -752,7 +752,9 @@ body::after {
 }
 
 .sidebar-foot {
-  display: grid;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
   gap: 10px;
   margin-top: auto;
   padding: 16px 22px 24px;
@@ -790,6 +792,7 @@ body::after {
 
 .sidebar-foot .logout {
   width: fit-content;
+  min-height: 28px;
   padding: 6px 10px;
   border: 1px solid rgba(255, 77, 92, 0.42);
   border-radius: 8px;
@@ -801,6 +804,7 @@ body::after {
 }
 
 .link-state {
+  flex-basis: 100%;
   color: #5c6b82;
   font-size: 11px;
 }
