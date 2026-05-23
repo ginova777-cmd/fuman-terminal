@@ -60,31 +60,27 @@ body.auth-locked:not(.auth-login-open) .auth-gate {
   overflow: hidden;
   padding: 48px min(7vw, 118px);
   background:
-    linear-gradient(90deg, rgba(4, 7, 13, 0.92), rgba(5, 9, 18, 0.64) 54%, rgba(5, 9, 18, 0.96)),
-    radial-gradient(circle at 50% 46%, rgba(255, 177, 97, 0.18), transparent 27%),
-    radial-gradient(circle at 82% 26%, rgba(255, 106, 61, 0.16), transparent 24%),
+    linear-gradient(rgba(255, 255, 255, 0.026) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.022) 1px, transparent 1px),
+    radial-gradient(circle at 54% 50%, rgba(255, 177, 97, 0.12), transparent 26%),
+    radial-gradient(circle at 83% 26%, rgba(255, 106, 61, 0.13), transparent 24%),
     linear-gradient(135deg, #050812, #101827 50%, #060914);
+  background-size: 28px 28px, 28px 28px, auto, auto, auto;
 }
 
 .auth-gate::before {
   position: absolute;
-  left: min(26vw, 480px);
-  top: 50%;
+  left: min(25vw, 470px);
+  top: 51%;
   z-index: 0;
-  width: min(46vw, 760px);
-  height: min(46vw, 760px);
+  width: min(42vw, 760px);
+  height: min(42vw, 760px);
   transform: translate(-50%, -50%);
-  border: 2px solid rgba(255, 220, 160, 0.18);
-  border-radius: 42px;
-  content: "FUMAN";
-  display: grid;
-  place-items: center;
-  color: rgba(255, 225, 176, 0.16);
-  font-size: clamp(64px, 8vw, 150px);
-  font-weight: 1000;
-  letter-spacing: 0;
+  border: 2px solid rgba(255, 220, 160, 0.2);
+  border-radius: 34px;
+  content: "";
   background:
-    linear-gradient(135deg, transparent 0 48%, rgba(255, 220, 160, 0.15) 48% 49%, transparent 49%),
+    linear-gradient(135deg, transparent 0 48.5%, rgba(255, 220, 160, 0.18) 48.5% 49.4%, transparent 49.4%),
     radial-gradient(circle at 55% 45%, rgba(255, 220, 160, 0.12), transparent 34%),
     rgba(12, 18, 30, 0.42);
   box-shadow: inset 0 0 90px rgba(0, 0, 0, 0.55);
@@ -103,6 +99,46 @@ body.auth-locked:not(.auth-login-open) .auth-gate {
   background-size: 44px 44px, 44px 44px, 28px 28px;
   opacity: 0.9;
   pointer-events: none;
+}
+
+.auth-brand-scene {
+  position: absolute;
+  left: min(25vw, 470px);
+  top: 51%;
+  z-index: 1;
+  width: min(42vw, 760px);
+  height: min(42vw, 760px);
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+
+.auth-brand-frame {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+}
+
+.auth-brand-frame img {
+  position: absolute;
+  top: 18%;
+  left: 50%;
+  width: min(16vw, 210px);
+  max-width: 42%;
+  transform: translateX(-50%);
+  opacity: 0.18;
+  filter: grayscale(0.15) drop-shadow(0 0 22px rgba(143, 191, 255, 0.16));
+}
+
+.auth-brand-frame span {
+  position: absolute;
+  top: 43%;
+  left: 50%;
+  transform: translateX(-50%);
+  color: rgba(255, 225, 176, 0.18);
+  font-size: clamp(64px, 8vw, 150px);
+  font-weight: 1000;
+  letter-spacing: 0;
 }
 
 .auth-card {
@@ -358,6 +394,17 @@ body.auth-locked:not(.auth-login-open) .auth-gate {
     width: 84vw;
     height: 84vw;
     opacity: 0.45;
+  }
+
+  .auth-brand-scene {
+    left: 50%;
+    width: 84vw;
+    height: 84vw;
+    opacity: 0.45;
+  }
+
+  .auth-brand-frame img {
+    width: min(34vw, 160px);
   }
 
   .auth-card {
