@@ -60,13 +60,16 @@ body.auth-locked:not(.auth-login-open) .auth-gate {
   overflow: hidden;
   padding: 48px min(7vw, 118px);
   background:
+    linear-gradient(90deg, rgba(3, 6, 12, 0.18), rgba(3, 6, 12, 0.08) 58%, rgba(3, 6, 12, 0.78)),
+    url("assets/login-bg-fuman.png"),
     linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px),
     linear-gradient(90deg, rgba(255, 255, 255, 0.024) 1px, transparent 1px),
     radial-gradient(circle at 28% 46%, rgba(143, 191, 255, 0.12), transparent 27%),
     radial-gradient(circle at 47% 56%, rgba(255, 177, 97, 0.16), transparent 28%),
     radial-gradient(circle at 83% 26%, rgba(255, 106, 61, 0.16), transparent 23%),
     linear-gradient(135deg, #050812, #0d1524 46%, #050812);
-  background-size: 28px 28px, 28px 28px, auto, auto, auto, auto;
+  background-size: auto, cover, 28px 28px, 28px 28px, auto, auto, auto, auto;
+  background-position: center, center, center, center, center, center, center, center;
 }
 
 .auth-gate::before {
