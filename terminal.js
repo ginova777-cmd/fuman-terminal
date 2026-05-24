@@ -1927,11 +1927,22 @@ function shouldDeferMobileOtherStrategyRender(enabled) {
   return true;
 }
 
+function refocusStrategyInlineSearch() {
+  const input = document.querySelector("[data-strategy-inline-search]");
+  if (!input) return;
+  input.focus({ preventScroll: true });
+  const caret = input.value.length;
+  try {
+    input.setSelectionRange(caret, caret);
+  } catch {}
+}
+
 function scheduleStrategySearchRender(delay = 380) {
   clearTimeout(strategySearchTimer);
   strategySearchTimer = setTimeout(() => {
     strategySearchTimer = null;
     renderStrategyScanner();
+    refocusStrategyInlineSearch();
   }, delay);
 }
 
@@ -3768,7 +3779,17 @@ intradayRadarStyles.textContent = `
     outline: none;
   }
   .swing-actions {
+    position: relative;
+    z-index: 5;
     margin-left: auto;
+  }
+  .swing-actions input,
+  .intraday-actions input {
+    position: relative;
+    z-index: 6;
+    min-width: 190px;
+    pointer-events: auto;
+    user-select: text;
   }
   .warrant-search-hint {
     display: inline-flex;
@@ -4224,6 +4245,8 @@ intradayRadarStyles.textContent = `
     color: #fff;
   }
   .intraday-actions {
+    position: relative;
+    z-index: 5;
     display: flex;
     gap: 8px;
     margin-left: auto;
@@ -5715,7 +5738,7 @@ function renderIntradayRadar(evaluated) {
             <div class="intraday-tabs">
               ${tabs}
               <div class="intraday-actions">
-                <input type="search" placeholder="搜尋代號/名稱" value="${escapeAttr(strategyKeyword)}" data-strategy-inline-search>
+                <input type="search" placeholder="搜尋代號/名稱" value="${escapeAttr(strategyKeyword)}" autocomplete="off" spellcheck="false" inputmode="search" data-strategy-inline-search>
                 <button type="button" data-export-action>匯出</button>
                 <button type="button" data-export-settings>設定</button>
               </div>
@@ -5852,7 +5875,7 @@ function renderSwingRadar(universe) {
         <div class="swing-tabs">
           ${tabs}
           <div class="swing-actions">
-            <input type="search" placeholder="搜尋代號/名稱" value="${escapeAttr(strategyKeyword)}" data-strategy-inline-search>
+            <input type="search" placeholder="搜尋代號/名稱" value="${escapeAttr(strategyKeyword)}" autocomplete="off" spellcheck="false" inputmode="search" data-strategy-inline-search>
             <button type="button" data-export-action>匯出</button>
             <button type="button" data-export-settings>設定</button>
           </div>
@@ -5955,7 +5978,7 @@ function renderOpenBuyRadar(universe) {
         <div class="swing-tabs">
           <button class="active" type="button">全部(${rows.length})</button>
           <div class="swing-actions">
-            <input type="search" placeholder="搜尋代號/名稱" value="${escapeAttr(strategyKeyword)}" data-strategy-inline-search>
+            <input type="search" placeholder="搜尋代號/名稱" value="${escapeAttr(strategyKeyword)}" autocomplete="off" spellcheck="false" inputmode="search" data-strategy-inline-search>
             <button type="button" data-export-action>匯出</button>
             <button type="button" data-export-settings>設定</button>
           </div>
