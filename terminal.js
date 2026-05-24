@@ -85,6 +85,10 @@ function isProtectedView(viewName) {
   return Boolean(viewName) && !PUBLIC_VIEWS.has(viewName);
 }
 
+function canRunViewWork(viewName) {
+  return !isProtectedView(viewName) || isTerminalUnlocked();
+}
+
 function getActiveViewName() {
   return Object.entries(viewPanels).find(([, panel]) => panel?.classList.contains("active"))?.[0] || "market";
 }
@@ -1269,6 +1273,7 @@ function syncMobileStrategyVisibility(activeName = getActiveViewName()) {
 
 function runMobileAutoOrganize() {
   const active = getActiveViewName();
+  if (!canRunViewWork(active)) return;
   if (active === "market") {
     loadMarketData();
     loadHeatmap();
@@ -7116,6 +7121,8 @@ async function loadHeatmap() {
 }
 
 async function loadInstitution() {
+  const active = getActiveViewName();
+  if (!canRunViewWork(active)) return null;
   if (institutionDataPromise) return institutionDataPromise;
   institutionDataPromise = (async () => {
     try {
@@ -7301,6 +7308,7 @@ async function fetchStrategyRealtimeBatches(stocks, batchSize = 80) {
 
 async function refreshStrategyRealtimeScan(mode = "hot") {
   const scanMode = mode === true ? "force" : String(mode || "hot");
+  if (scanMode !== "force" && (isDocumentHidden() || !isTerminalUnlocked())) return;
   if (strategyRealtimeLoading) {
     return;
   }
@@ -7485,10 +7493,14 @@ document.querySelectorAll("[data-chip-filter]").forEach((button) => {
 });
 setInterval(tickClock, 1000);
 setInterval(() => {
-  if (isViewActive("market") || isDocumentHidden() || !latestStocks.length) loadMarketData();
+  if (!isDocumentHidden() && (isViewActive("market") || !latestStocks.length)) loadMarketData();
 }, MARKET_REFRESH_MS);
-setInterval(() => refreshStrategyRealtimeScan("hot"), INTRADAY_FAST_SCAN_MS);
-setInterval(() => refreshStrategyRealtimeScan("background"), INTRADAY_BACKGROUND_SCAN_MS);
+setInterval(() => {
+  if (!isDocumentHidden() && isTerminalUnlocked() && isViewActive("strategy") && selectedStrategyIds.has("intraday_2m")) refreshStrategyRealtimeScan("hot");
+}, INTRADAY_FAST_SCAN_MS);
+setInterval(() => {
+  if (!isDocumentHidden() && isTerminalUnlocked() && isViewActive("strategy") && selectedStrategyIds.has("intraday_2m")) refreshStrategyRealtimeScan("background");
+}, INTRADAY_BACKGROUND_SCAN_MS);
 setInterval(() => {
   if (!isDocumentHidden() && isViewActive("market")) loadHeatmap();
 }, 15*60*1000);
@@ -8299,6 +8311,7 @@ async function fetchStockPrice(code) {
 }
 
 async function renderWatchlist() {
+  if (!isViewActive("watchlist") || !isTerminalUnlocked()) return;
   const list = getWatchlist();
   if (!list.length) {
     watchlistStocks.innerHTML = `<div style="text-align:center; padding:40px; color:#555;">尚未新增自選股，請輸入股票代號後點新增</div>`;
@@ -8382,6 +8395,7 @@ async function renderWatchlist() {
 }
 
 async function addToWatchlist() {
+  if (!isTerminalUnlocked()) return;
   const code = watchlistSearchInput.value.trim().replace(/\D/g, "");
   if (!code) return;
 
@@ -8402,6 +8416,7 @@ async function addToWatchlist() {
 }
 
 function removeFromWatchlist(code) {
+  if (!isTerminalUnlocked()) return;
   const list = getWatchlist().filter(w => w.code !== code);
   saveWatchlist(list);
   renderWatchlist();
