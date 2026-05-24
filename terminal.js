@@ -1745,6 +1745,7 @@ let selectedStrategyIds = new Set();
 let strategyMode = "any";
 let strategyKeyword = "";
 let strategySearchTimer = null;
+let strategyInlineSearchComposing = false;
 let strategyStocksLoading = false;
 let swingSortKey = "score";
 let swingSortDir = "desc";
@@ -1928,13 +1929,19 @@ function shouldDeferMobileOtherStrategyRender(enabled) {
 }
 
 function refocusStrategyInlineSearch() {
+  if (strategyInlineSearchComposing) return;
   const input = document.querySelector("[data-strategy-inline-search]");
   if (!input) return;
   input.focus({ preventScroll: true });
-  const caret = input.value.length;
-  try {
-    input.setSelectionRange(caret, caret);
-  } catch {}
+}
+
+function applyStrategyInlineDomFilter() {
+  const keyword = strategyKeyword.trim().toLowerCase();
+  const rows = document.querySelectorAll(".swing-table tbody tr, .intraday-table tbody tr");
+  rows.forEach((row) => {
+    const hit = !keyword || row.textContent.toLowerCase().includes(keyword);
+    row.hidden = !hit;
+  });
 }
 
 function scheduleStrategySearchRender(delay = 380) {
@@ -8728,7 +8735,23 @@ document.addEventListener("input", (event) => {
   swingPage = 1;
   strategy3Page = 1;
   strategy5Page = 1;
-  scheduleStrategySearchRender();
+  applyStrategyInlineDomFilter();
+  scheduleStrategySearchRender(900);
+});
+
+document.addEventListener("compositionstart", (event) => {
+  if (event.target.closest("[data-strategy-inline-search]")) {
+    strategyInlineSearchComposing = true;
+  }
+});
+
+document.addEventListener("compositionend", (event) => {
+  const input = event.target.closest("[data-strategy-inline-search]");
+  if (!input) return;
+  strategyInlineSearchComposing = false;
+  strategyKeyword = input.value || "";
+  applyStrategyInlineDomFilter();
+  scheduleStrategySearchRender(120);
 });
 
 document.addEventListener("input", (event) => {
