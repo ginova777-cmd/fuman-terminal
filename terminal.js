@@ -3825,11 +3825,11 @@ intradayRadarStyles.textContent = `
     z-index: 20;
     display: flex;
     justify-content: flex-end;
-    margin: 12px 0 10px;
+    margin-left: auto;
     pointer-events: auto;
   }
   .strategy4-visible-search-row input {
-    width: min(260px, 100%);
+    width: 250px;
     height: 38px;
     border: 1px solid rgba(117, 133, 170, 0.32);
     border-radius: 8px;
@@ -5934,12 +5934,12 @@ function renderSwingRadar(universe) {
         </div>
       </div>
       <div class="swing-signal-grid">${cards}</div>
-      <div class="strategy4-visible-search-row">
-        <input type="search" placeholder="搜尋目前結果代號/名稱" value="${escapeAttr(swingVisibleKeyword)}" autocomplete="off" spellcheck="false" inputmode="search" data-swing-visible-search>
-      </div>
       <section class="swing-panel">
         <div class="swing-tabs">
           ${tabs}
+          <div class="strategy4-visible-search-row">
+            <input type="text" placeholder="搜尋目前結果代號/名稱" value="${escapeAttr(swingVisibleKeyword)}" autocomplete="off" spellcheck="false" inputmode="numeric" data-swing-visible-search>
+          </div>
         </div>
         <table class="swing-table">
           <thead>
@@ -8810,6 +8810,13 @@ document.addEventListener("input", (event) => {
   if (!input) return;
   swingVisibleKeyword = input.value || "";
   applySwingFilterToVisibleRows();
+});
+
+["click", "pointerdown", "keydown", "keyup", "beforeinput", "compositionstart", "compositionend"].forEach((eventName) => {
+  document.addEventListener(eventName, (event) => {
+    if (!event.target.closest("[data-swing-visible-search]")) return;
+    event.stopPropagation();
+  }, true);
 });
 
 document.addEventListener("input", (event) => {

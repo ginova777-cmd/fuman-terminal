@@ -1288,12 +1288,12 @@ body::after {
   z-index: 20;
   display: flex;
   justify-content: flex-end;
-  margin: 12px 0 10px;
+  margin-left: auto;
   pointer-events: auto;
 }
 
 .strategy4-visible-search-row input {
-  width: min(260px, 100%);
+  width: 250px;
   height: 38px;
   border: 1px solid rgba(117, 133, 170, 0.32);
   border-radius: 8px;
