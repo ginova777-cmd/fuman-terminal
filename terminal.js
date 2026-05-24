@@ -5874,10 +5874,11 @@ function renderSwingRadar(universe) {
   const tableRows = pageRows.length ? pageRows.map((stock) => {
     const sign = stock.percent >= 0 ? "+" : "";
     const chips = stock.swingSignals.map(formatSwingSignalChip).join("");
+    const signalIds = (stock.swingSignals || []).map((signal) => signal.id).join(" ");
     const stage = stock.swingStage || getSwingStage(stock);
     const reason = stock.swingSignals[0]?.reason || "波段訊號觸發";
     return `
-      <tr>
+      <tr data-swing-row data-swing-signals="${escapeAttr(signalIds)}">
         <td><span class="code">${stock.code}</span></td>
         <td>${stock.name}</td>
         <td><span class="swing-badges">${chips}</span></td>
@@ -5923,6 +5924,21 @@ function renderSwingRadar(universe) {
       </section>
     </section>
   `;
+}
+
+function applySwingFilterToVisibleRows() {
+  const panel = strategyTable?.querySelector(".swing-dashboard");
+  if (!panel) return false;
+  panel.querySelectorAll("[data-swing-filter]").forEach((button) => {
+    const active = (button.dataset.swingFilter || "all") === swingSignalFilter;
+    button.classList.toggle("active", active);
+    button.classList.toggle("selected", active);
+  });
+  panel.querySelectorAll("[data-swing-row]").forEach((row) => {
+    const signals = String(row.dataset.swingSignals || "").split(/\s+/);
+    row.hidden = swingSignalFilter !== "all" && !signals.includes(swingSignalFilter);
+  });
+  return true;
 }
 
 function renderOpenBuyRadar(universe) {
@@ -8754,7 +8770,7 @@ document.addEventListener("click", (event) => {
   if (!filterButton) return;
   swingSignalFilter = filterButton.dataset.swingFilter || "all";
   swingPage = 1;
-  renderStrategyScanner();
+  if (!applySwingFilterToVisibleRows()) renderStrategyScanner();
 });
 
 document.addEventListener("input", (event) => {
