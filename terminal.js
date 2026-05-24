@@ -1937,7 +1937,16 @@ function refocusStrategyInlineSearch() {
 
 function applyStrategyInlineDomFilter() {
   const keyword = strategyKeyword.trim().toLowerCase();
-  const rows = document.querySelectorAll(".swing-table tbody tr, .intraday-table tbody tr");
+  applyVisibleRowsFilter(strategyView || document, keyword);
+}
+
+function applyWarrantInlineDomFilter() {
+  const keyword = warrantFlowKeyword.trim().toLowerCase();
+  applyVisibleRowsFilter(viewPanels["warrant-flow"] || document, keyword);
+}
+
+function applyVisibleRowsFilter(root, keyword) {
+  const rows = root.querySelectorAll(".swing-table tbody tr, .intraday-table tbody tr");
   rows.forEach((row) => {
     const hit = !keyword || row.textContent.toLowerCase().includes(keyword);
     row.hidden = !hit;
@@ -1949,6 +1958,10 @@ function matchesStrategyKeyword(stock, keyword) {
   const code = String(stock?.code || "");
   const name = String(stock?.name || "").toLowerCase();
   return code.includes(keyword) || name.includes(keyword);
+}
+
+function isNumericStrategyKeyword(keyword) {
+  return /^\d{2,}$/.test(String(keyword || "").trim());
 }
 
 function scheduleStrategySearchRender(delay = 380) {
@@ -5793,11 +5806,16 @@ function renderSwingRadar(universe) {
   if (latestStocks.length && !strategy4ScanLoading && !hasFreshStrategy4Scan()) {
     setTimeout(() => refreshStrategyHistoryScan(true), 0);
   }
-  const allowCodes = new Set(universe.map((stock) => String(stock.code || "")));
   const keyword = strategyKeyword.trim().toLowerCase();
-  const allRows = Object.values(strategy4ScanMatches)
+  const numericKeyword = isNumericStrategyKeyword(keyword);
+  const allowCodes = new Set(universe.map((stock) => String(stock.code || "")));
+  const latestByCode = new Map(latestStocks.map((stock) => [String(stock.code || ""), stock]));
+  const sourceRows = numericKeyword
+    ? Object.values(strategy4ScanMatches).filter((stock) => String(stock.code || "").includes(keyword))
+    : Object.values(strategy4ScanMatches);
+  const allRows = sourceRows
     .filter((stock) => allowCodes.has(String(stock.code || "")) && (stock.swingSignals || []).length)
-    .filter((stock) => !isStaleStrategyPrice(stock, latestStocks.find((item) => String(item.code || "") === String(stock.code || ""))))
+    .filter((stock) => !isStaleStrategyPrice(stock, latestByCode.get(String(stock.code || ""))))
     .filter((stock) => matchesStrategyKeyword(stock, keyword))
     .map((stock) => ({ ...stock, swingScore: stock.swingScore || stock.score || 0 }));
   const filteredRows = keyword || swingSignalFilter === "all"
@@ -8743,7 +8761,6 @@ document.addEventListener("input", (event) => {
   strategy3Page = 1;
   strategy5Page = 1;
   applyStrategyInlineDomFilter();
-  scheduleStrategySearchRender(450);
 });
 
 document.addEventListener("compositionstart", (event) => {
@@ -8758,7 +8775,6 @@ document.addEventListener("compositionend", (event) => {
   strategyInlineSearchComposing = false;
   strategyKeyword = input.value || "";
   applyStrategyInlineDomFilter();
-  scheduleStrategySearchRender(120);
 });
 
 document.addEventListener("input", (event) => {
@@ -8766,8 +8782,7 @@ document.addEventListener("input", (event) => {
   if (!input) return;
   warrantFlowKeyword = input.value || "";
   warrantFlowPage = 1;
-  clearTimeout(warrantFlowSearchTimer);
-  warrantFlowSearchTimer = setTimeout(renderWarrantFlow, 450);
+  applyWarrantInlineDomFilter();
 });
 
 document.addEventListener("click", (event) => {
