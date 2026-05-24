@@ -1665,6 +1665,8 @@ let institutionDate = "";
 let institutionUpdatedAt = 0;
 let chipMode = "after";
 let chipTradeLoading = false;
+let chipTradeLoadedAt = 0;
+const CHIP_TRADE_CACHE_MS = 10 * 60 * 1000;
 let chipFilter = "joint";
 let chipQuoteHydrating = false;
 let chipTradeLastRenderSignature = "";
@@ -6991,6 +6993,7 @@ function isTwseTradingTime(date = new Date()) {
 }
 
 function renderChipTradeTable() {
+  if (!isViewActive("chip-trade")) return;
   const body = document.querySelector("#chip-trade-body");
   const dateEl = document.querySelector("#chip-trade-date");
   const sortEl = document.querySelector("#chip-sort");
@@ -7169,7 +7172,12 @@ function parseStocksForLatest(stocks) {
   }).filter((s) => s.code && s.name && s.close);
 }
 
-async function loadChipTradeData() {
+async function loadChipTradeData(force = false) {
+  if (!isViewActive("chip-trade") || !canRunViewWork("chip-trade")) return;
+  if (!force && chipTradeLoadedAt && Date.now() - chipTradeLoadedAt < CHIP_TRADE_CACHE_MS) {
+    renderChipTradeTable();
+    return;
+  }
   if (chipTradeLoading) return;
   chipTradeLoading = true;
   const body = document.querySelector("#chip-trade-body");
@@ -7198,6 +7206,7 @@ async function loadChipTradeData() {
       institutionUpdatedAt = Number.isFinite(updatedAt) ? updatedAt : Date.now();
     }
 
+    chipTradeLoadedAt = Date.now();
     applyStaticTitleIcons();
     renderChipTradeTable();
   } catch (error) {
@@ -7350,12 +7359,10 @@ function showView(viewName, activeLink) {
   }
   if (viewName === "chip-trade") {
     deferUiWork(loadChipTradeData);
-    deferUiWork(loadInstitution, 600);
   }
   if (viewName === "warrant-flow") deferUiWork(loadWarrantFlow);
   if (viewName === "watchlist") {
     deferUiWork(renderWatchlist);
-    deferUiWork(loadInstitution, 600);
   }
   deferUiWork(ensureMobileAutoOrganizeButton);
   deferUiWork(normalizeMobileHorizontalPosition, 60);
