@@ -5135,7 +5135,10 @@ intradayRadarStyles.textContent = `
     }
     #strategy-view .swing-actions,
     #strategy-view .intraday-actions {
-      display: none !important;
+      display: flex !important;
+      position: relative !important;
+      z-index: 80 !important;
+      pointer-events: auto !important;
     }
     .swing-table,
     .intraday-table {
