@@ -1205,7 +1205,7 @@ function renderRealtimeRadar() {
           <small>成交金額 ${radarMoney(stock.value)}｜訊號分數 ${Math.round(stock.score)}</small>
         </div>
         <div class="radar-price">
-          <strong>${formatNumber(stock.close, stock.close >= 100 ? 0 : 2)}</strong>
+          <strong>${formatNumber(stock.close, stock.close >= 100 ? 1 : 2)}</strong>
           <small>${sign}${stock.pct.toFixed(2)}%</small>
         </div>
         <div class="radar-tags">${tags}</div>
