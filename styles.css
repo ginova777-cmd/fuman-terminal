@@ -1283,6 +1283,33 @@ body::after {
   padding: 0 13px;
 }
 
+.strategy4-visible-search-row {
+  position: relative;
+  z-index: 20;
+  display: flex;
+  justify-content: flex-end;
+  margin: 12px 0 10px;
+  pointer-events: auto;
+}
+
+.strategy4-visible-search-row input {
+  width: min(260px, 100%);
+  height: 38px;
+  border: 1px solid rgba(117, 133, 170, 0.32);
+  border-radius: 8px;
+  outline: 0;
+  background: rgba(10, 15, 26, 0.86);
+  color: var(--text);
+  padding: 0 12px;
+  pointer-events: auto;
+  user-select: text;
+}
+
+.strategy4-visible-search-row input:focus {
+  border-color: rgba(117, 183, 255, 0.78);
+  box-shadow: 0 0 0 3px rgba(117, 183, 255, 0.12);
+}
+
 .strategy-table {
   display: grid;
   gap: 7px;

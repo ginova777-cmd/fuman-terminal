@@ -1751,6 +1751,7 @@ let strategyStocksLoading = false;
 let swingSortKey = "score";
 let swingSortDir = "desc";
 let swingSignalFilter = "all";
+let swingVisibleKeyword = "";
 let intradaySortKey = "score";
 let intradaySortDir = "desc";
 let intradaySignalFilter = "all";
@@ -3819,6 +3820,30 @@ intradayRadarStyles.textContent = `
     pointer-events: auto;
     user-select: text;
   }
+  .strategy4-visible-search-row {
+    position: relative;
+    z-index: 20;
+    display: flex;
+    justify-content: flex-end;
+    margin: 12px 0 10px;
+    pointer-events: auto;
+  }
+  .strategy4-visible-search-row input {
+    width: min(260px, 100%);
+    height: 38px;
+    border: 1px solid rgba(117, 133, 170, 0.32);
+    border-radius: 8px;
+    background: rgba(10, 15, 26, 0.86);
+    color: #eaf2ff;
+    padding: 0 12px;
+    outline: none;
+    pointer-events: auto;
+    user-select: text;
+  }
+  .strategy4-visible-search-row input:focus {
+    border-color: rgba(117, 183, 255, 0.78);
+    box-shadow: 0 0 0 3px rgba(117, 183, 255, 0.12);
+  }
   .warrant-search-hint {
     display: inline-flex;
     width: max-content;
@@ -5875,10 +5900,11 @@ function renderSwingRadar(universe) {
     const sign = stock.percent >= 0 ? "+" : "";
     const chips = stock.swingSignals.map(formatSwingSignalChip).join("");
     const signalIds = (stock.swingSignals || []).map((signal) => signal.id).join(" ");
+    const searchText = `${stock.code || ""} ${stock.name || ""}`.toLowerCase();
     const stage = stock.swingStage || getSwingStage(stock);
     const reason = stock.swingSignals[0]?.reason || "波段訊號觸發";
     return `
-      <tr data-swing-row data-swing-signals="${escapeAttr(signalIds)}">
+      <tr data-swing-row data-swing-signals="${escapeAttr(signalIds)}" data-swing-search="${escapeAttr(searchText)}">
         <td><span class="code">${stock.code}</span></td>
         <td>${stock.name}</td>
         <td><span class="swing-badges">${chips}</span></td>
@@ -5908,6 +5934,9 @@ function renderSwingRadar(universe) {
         </div>
       </div>
       <div class="swing-signal-grid">${cards}</div>
+      <div class="strategy4-visible-search-row">
+        <input type="search" placeholder="搜尋目前結果代號/名稱" value="${escapeAttr(swingVisibleKeyword)}" autocomplete="off" spellcheck="false" inputmode="search" data-swing-visible-search>
+      </div>
       <section class="swing-panel">
         <div class="swing-tabs">
           ${tabs}
@@ -5929,6 +5958,7 @@ function renderSwingRadar(universe) {
 function applySwingFilterToVisibleRows() {
   const panel = strategyTable?.querySelector(".swing-dashboard");
   if (!panel) return false;
+  const keyword = swingVisibleKeyword.trim().toLowerCase();
   panel.querySelectorAll("[data-swing-filter]").forEach((button) => {
     const active = (button.dataset.swingFilter || "all") === swingSignalFilter;
     button.classList.toggle("active", active);
@@ -5936,7 +5966,9 @@ function applySwingFilterToVisibleRows() {
   });
   panel.querySelectorAll("[data-swing-row]").forEach((row) => {
     const signals = String(row.dataset.swingSignals || "").split(/\s+/);
-    row.hidden = swingSignalFilter !== "all" && !signals.includes(swingSignalFilter);
+    const passSignal = swingSignalFilter === "all" || signals.includes(swingSignalFilter);
+    const passKeyword = !keyword || String(row.dataset.swingSearch || row.textContent || "").toLowerCase().includes(keyword);
+    row.hidden = !passSignal || !passKeyword;
   });
   return true;
 }
@@ -8771,6 +8803,13 @@ document.addEventListener("click", (event) => {
   swingSignalFilter = filterButton.dataset.swingFilter || "all";
   swingPage = 1;
   if (!applySwingFilterToVisibleRows()) renderStrategyScanner();
+});
+
+document.addEventListener("input", (event) => {
+  const input = event.target.closest("[data-swing-visible-search]");
+  if (!input) return;
+  swingVisibleKeyword = input.value || "";
+  applySwingFilterToVisibleRows();
 });
 
 document.addEventListener("input", (event) => {
