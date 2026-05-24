@@ -1907,6 +1907,15 @@ function shouldSkipMobileOtherStrategyCacheRefresh(key, hasData, force = false) 
   return false;
 }
 
+function isStrategyCacheActive(key) {
+  if (!isViewActive("strategy") || !canRunViewWork("strategy")) return false;
+  if (key === "strategy3") return strategyPresetMode === "strategy3";
+  if (key === "strategy5") return strategyPresetMode === "strategy5";
+  if (key === "strategy4") return selectedStrategyIds.has("swing_radar");
+  if (key === "openBuy") return selectedStrategyIds.has("open_buy");
+  return true;
+}
+
 function shouldDeferMobileOtherStrategyRender(enabled) {
   if (!enabled) return false;
   if (mobileOtherStrategyRenderFlushing) return false;
@@ -2551,6 +2560,7 @@ function mergeOpenBuyCache(payload) {
 }
 
 async function loadOpenBuyCache(force = false) {
+  if (!isStrategyCacheActive("openBuy")) return;
   if (openBuyCacheLoading) return;
   if (!shouldLoadOpenBuyRemote(force)) return;
   if (shouldSkipMobileOtherStrategyCacheRefresh("openBuy", Object.keys(openBuyScanMatches).length > 0, force)) {
@@ -2577,6 +2587,7 @@ async function loadOpenBuyCache(force = false) {
 }
 
 async function loadStrategy3Cache(force = false) {
+  if (!isStrategyCacheActive("strategy3")) return;
   if (strategy3CacheLoading) return;
   if (!force && strategy3Data.length) return;
   if (shouldSkipMobileOtherStrategyCacheRefresh("strategy3", strategy3Data.length > 0, force)) {
@@ -2600,6 +2611,7 @@ async function loadStrategy3Cache(force = false) {
 }
 
 async function loadStrategy5Cache(force = false) {
+  if (!isStrategyCacheActive("strategy5")) return;
   if (strategy5CacheLoading) return;
   if (!force && strategy5Data.length) return;
   if (shouldSkipMobileOtherStrategyCacheRefresh("strategy5", strategy5Data.length > 0, force)) {
@@ -5830,12 +5842,7 @@ function renderSwingRadar(universe) {
   const scanCount = strategy4ScanCount || Object.keys(strategy4ScanMatches).length;
   const scannedCount = strategy4ScannedCodes.size;
   const totalCount = strategy4ScanTotal || latestStocks.filter((stock) => !/^00/.test(stock.code)).length || latestStocks.length;
-  if (!strategy4ScanLastAt && !strategy4CacheLoading) {
-    loadStrategy4Cache();
-  }
-  if (latestStocks.length && !strategy4ScanLoading && !hasFreshStrategy4Scan()) {
-    setTimeout(() => refreshStrategyHistoryScan(true), 0);
-  }
+  if (!strategy4ScanLastAt && !strategy4CacheLoading) loadStrategy4Cache();
   const keyword = strategyKeyword.trim().toLowerCase();
   const numericKeyword = isNumericStrategyKeyword(keyword);
   const allowCodes = new Set(universe.map((stock) => String(stock.code || "")));
@@ -7512,11 +7519,11 @@ function applyStrategyPresetFromLink(link) {
   strategyKeyword = "";
   if (strategySearch) strategySearch.value = "";
   if (text.includes("策略5")) {
-    deferUiWork(() => loadStrategy5Cache(true), 60);
+    deferUiWork(() => loadStrategy5Cache(false), 60);
   } else if (text.includes("策略3")) {
     deferUiWork(async () => {
       await loadStrategyStocks();
-      await loadStrategy3Cache(true);
+      await loadStrategy3Cache(false);
       renderStrategyScanner();
     }, 60);
   } else {
@@ -7532,7 +7539,7 @@ function applyStrategyPresetFromLink(link) {
     deferUiWork(() => loadOpenBuyCache(true), 60);
   }
   if (text.includes("策略4")) {
-    deferUiWork(() => loadStrategy4Cache(true), 60);
+    deferUiWork(() => loadStrategy4Cache(false), 60);
   }
 }
 
@@ -7758,6 +7765,7 @@ async function refreshOpenBuyScan(force = false) {
 }
 
 async function loadStrategy4Cache(force = false) {
+  if (!isStrategyCacheActive("strategy4")) return;
   if (strategy4CacheLoading) return;
   if (!force && strategy4ScanLastAt) return;
   if (shouldSkipMobileOtherStrategyCacheRefresh("strategy4", Boolean(strategy4ScanLastAt), force)) {
