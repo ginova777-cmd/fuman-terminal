@@ -3810,30 +3810,6 @@ intradayRadarStyles.textContent = `
     z-index: 5;
     margin-left: auto;
   }
-  .strategy4-search-row {
-    position: relative;
-    z-index: 90;
-    display: flex;
-    justify-content: flex-end;
-    margin: 12px 0 10px;
-    pointer-events: auto;
-  }
-  .strategy4-search-row input {
-    width: min(260px, 100%);
-    height: 38px;
-    border: 1px solid rgba(117, 133, 170, 0.32);
-    border-radius: 8px;
-    background: rgba(10, 15, 26, 0.86);
-    color: #eaf2ff;
-    padding: 0 12px;
-    outline: none;
-    pointer-events: auto;
-    user-select: text;
-  }
-  .strategy4-search-row input:focus {
-    border-color: rgba(117, 183, 255, 0.78);
-    box-shadow: 0 0 0 3px rgba(117, 183, 255, 0.12);
-  }
   .swing-actions input,
   .intraday-actions input {
     position: relative;
@@ -5930,16 +5906,9 @@ function renderSwingRadar(universe) {
         </div>
       </div>
       <div class="swing-signal-grid">${cards}</div>
-      <div class="strategy4-search-row">
-        <input type="search" placeholder="搜尋代號/名稱" value="${escapeAttr(strategyKeyword)}" autocomplete="off" spellcheck="false" inputmode="numeric" data-strategy-inline-search data-strategy4-search>
-      </div>
       <section class="swing-panel">
         <div class="swing-tabs">
           ${tabs}
-          <div class="swing-actions">
-            <button type="button" data-export-action>匯出</button>
-            <button type="button" data-export-settings>設定</button>
-          </div>
         </div>
         <table class="swing-table">
           <thead>
