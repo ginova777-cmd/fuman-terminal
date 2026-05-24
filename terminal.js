@@ -536,7 +536,7 @@ function scheduleBadgeHtml(key) {
 
 function refreshScheduleTitles() {
   applyStaticTitleIcons();
-  if (isViewActive("strategy")) renderStrategyScanner();
+  if (isViewActive("strategy") && canRunViewWork("strategy")) renderStrategyScanner();
 }
 
 async function loadWorkflowRunStatus() {
@@ -5965,6 +5965,7 @@ function renderOvernightDashboard(evaluated) {
 
 function renderStrategyScanner() {
   if (!strategyTable) return;
+  if (!canRunViewWork("strategy")) return;
   deferUiWork(ensureMobileAutoOrganizeButton);
   deferUiWork(normalizeMobileHorizontalPosition, 40);
   let selected = [...selectedStrategyIds];
@@ -7100,6 +7101,7 @@ async function loadMarketData() {
 }
 
 async function loadHeatmap() {
+  if (isDocumentHidden() || !isViewActive("market")) return;
   if (!Object.keys(sectorStocksCache).length && !heatmap.children.length) {
     heatmap.innerHTML = `<div class="empty-state">載入產業資料中...</div>`;
   } else {
@@ -7308,7 +7310,7 @@ async function fetchStrategyRealtimeBatches(stocks, batchSize = 80) {
 
 async function refreshStrategyRealtimeScan(mode = "hot") {
   const scanMode = mode === true ? "force" : String(mode || "hot");
-  if (scanMode !== "force" && (isDocumentHidden() || !isTerminalUnlocked())) return;
+  if (isDocumentHidden() || !isTerminalUnlocked()) return;
   if (strategyRealtimeLoading) {
     return;
   }
@@ -7451,7 +7453,8 @@ applyStaticTitleIcons();
 deferUiWork(() => loadWorkflowRunStatus().catch(() => {}), 2000);
 ensureMobileAutoOrganizeButton();
 loadMarketData();
-loadHeatmap();
+if (isMobileViewport()) deferUiWork(loadHeatmap, 1600);
+else loadHeatmap();
 if (brandRefresh) {
   brandRefresh.setAttribute("role", "button");
   brandRefresh.setAttribute("tabindex", "0");
@@ -8590,7 +8593,7 @@ strategySearch?.addEventListener("input", (event) => {
 });
 
 async function refreshSelectedWatchlistQuote() {
-  if (isDocumentHidden()) return;
+  if (isDocumentHidden() || !isViewActive("watchlist") || !isTerminalUnlocked()) return;
   if (watchlistRefreshLoading) return;
   const card = document.querySelector(".watchlist-card.selected");
   if (!card) return;
@@ -8617,5 +8620,5 @@ async function refreshSelectedWatchlistQuote() {
 
 if (isViewActive("watchlist")) renderWatchlist();
 setInterval(() => {
-  if (!isDocumentHidden() && isViewActive("watchlist")) refreshSelectedWatchlistQuote();
+  if (!isDocumentHidden() && isTerminalUnlocked() && isViewActive("watchlist")) refreshSelectedWatchlistQuote();
 }, 10000);
