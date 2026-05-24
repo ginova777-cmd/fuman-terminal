@@ -1735,6 +1735,7 @@ let warrantFlowLastRenderSignature = "";
 let warrantFlowKeyword = "";
 let warrantFlowSearchTimer = null;
 let warrantFlowPage = 1;
+let warrantFlowHasOpened = false;
 let chipTradePage = 1;
 const WARRANT_FLOW_LOCAL_CACHE_KEY = "fuman_warrant_flow_cache_v1";
 const CACHE_FRESH_MS = 10 * 60 * 1000;
@@ -6513,9 +6514,15 @@ function renderWarrantFlow() {
 }
 
 async function loadWarrantFlow(force = false) {
+  if (!isViewActive("warrant-flow")) return;
+  warrantFlowHasOpened = true;
   if (warrantFlowLoading) return;
   if (!warrantFlowData.length) {
     loadWarrantFlowLocalCache();
+  }
+  if (!force && warrantFlowData.length) {
+    renderWarrantFlow();
+    return;
   }
   warrantFlowLoading = true;
   const panel = viewPanels["warrant-flow"];
