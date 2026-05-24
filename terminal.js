@@ -1944,6 +1944,13 @@ function applyStrategyInlineDomFilter() {
   });
 }
 
+function matchesStrategyKeyword(stock, keyword) {
+  if (!keyword) return true;
+  const code = String(stock?.code || "");
+  const name = String(stock?.name || "").toLowerCase();
+  return code.includes(keyword) || name.includes(keyword);
+}
+
 function scheduleStrategySearchRender(delay = 380) {
   clearTimeout(strategySearchTimer);
   strategySearchTimer = setTimeout(() => {
@@ -5579,7 +5586,7 @@ function renderIntradayRadar(evaluated) {
   const now = Date.now();
   const baseRows = evaluated
     .filter(isIntradayTradable)
-    .filter((stock) => !keyword || stock.code.includes(keyword) || stock.name.toLowerCase().includes(keyword));
+    .filter((stock) => matchesStrategyKeyword(stock, keyword));
   const allRows = baseRows
     .filter((stock) => (stock.intradaySignals || []).length)
     .map((stock) => {
@@ -5786,12 +5793,12 @@ function renderSwingRadar(universe) {
   if (latestStocks.length && !strategy4ScanLoading && !hasFreshStrategy4Scan()) {
     setTimeout(() => refreshStrategyHistoryScan(true), 0);
   }
-  const allowCodes = new Set(universe.map((stock) => stock.code));
+  const allowCodes = new Set(universe.map((stock) => String(stock.code || "")));
   const keyword = strategyKeyword.trim().toLowerCase();
   const allRows = Object.values(strategy4ScanMatches)
-    .filter((stock) => allowCodes.has(stock.code) && (stock.swingSignals || []).length)
-    .filter((stock) => !isStaleStrategyPrice(stock, latestStocks.find((item) => item.code === stock.code)))
-    .filter((stock) => !keyword || stock.code.includes(keyword) || stock.name.toLowerCase().includes(keyword))
+    .filter((stock) => allowCodes.has(String(stock.code || "")) && (stock.swingSignals || []).length)
+    .filter((stock) => !isStaleStrategyPrice(stock, latestStocks.find((item) => String(item.code || "") === String(stock.code || ""))))
+    .filter((stock) => matchesStrategyKeyword(stock, keyword))
     .map((stock) => ({ ...stock, swingScore: stock.swingScore || stock.score || 0 }));
   const filteredRows = swingSignalFilter === "all"
     ? allRows
@@ -6232,7 +6239,7 @@ function renderStrategyScanner() {
   }
   if (selected.length === 1 && selected[0] === "open_buy") {
     const openBuyRows = universe.filter((stock) => {
-      const passKeyword = !keyword || stock.code.includes(keyword) || stock.name.toLowerCase().includes(keyword);
+      const passKeyword = matchesStrategyKeyword(stock, keyword);
       return passKeyword;
     });
     renderOpenBuyRadar(openBuyRows);
@@ -6240,7 +6247,7 @@ function renderStrategyScanner() {
   }
   if (selected.length === 1 && selected[0] === "swing_radar") {
     const swingRows = universe.filter((stock) => {
-      const passKeyword = !keyword || stock.code.includes(keyword) || stock.name.toLowerCase().includes(keyword);
+      const passKeyword = matchesStrategyKeyword(stock, keyword);
       return passKeyword;
     });
     renderSwingRadar(swingRows);
@@ -6256,7 +6263,7 @@ function renderStrategyScanner() {
     const passMode = strategyMode === "all"
       ? selected.every((id) => matchedIds.includes(id))
       : selected.some((id) => matchedIds.includes(id));
-    const passKeyword = !keyword || stock.code.includes(keyword) || stock.name.toLowerCase().includes(keyword);
+    const passKeyword = matchesStrategyKeyword(stock, keyword);
     return passMode && passKeyword;
   }).sort((a, b) => b.matches.length - a.matches.length || b.score - a.score || b.value - a.value);
 
