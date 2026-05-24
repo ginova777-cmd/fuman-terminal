@@ -846,6 +846,132 @@ function installRealtimeRadarStyles() {
     .radar-leader-card.short .radar-tags {
       color: #23d59a;
     }
+    .radar-board-tabs {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 0;
+      margin-top: 12px;
+      border-bottom: 1px solid rgba(134, 151, 190, 0.14);
+    }
+    .radar-board-tabs button {
+      border: 0;
+      border-bottom: 3px solid transparent;
+      background: transparent;
+      color: #7182ab;
+      cursor: pointer;
+      font-size: 18px;
+      font-weight: 950;
+      padding: 18px 10px;
+    }
+    .radar-board-tabs button.active {
+      border-color: #ff4d5c;
+      color: #ff6674;
+    }
+    .radar-board-tabs button.short-active {
+      border-color: #7890bc;
+      color: #8da1ca;
+    }
+    .radar-board-list {
+      display: grid;
+      gap: 14px;
+      margin-top: 18px;
+    }
+    .radar-signal-card {
+      display: grid;
+      grid-template-columns: 88px minmax(250px, 1.15fr) minmax(110px, 0.45fr) minmax(250px, 0.95fr) minmax(260px, 0.95fr);
+      gap: 26px;
+      align-items: center;
+      min-height: 232px;
+      border: 1px solid rgba(255, 77, 92, 0.22);
+      border-radius: 14px;
+      background: rgba(10, 12, 24, 0.78);
+      padding: 20px;
+    }
+    .radar-signal-card.short {
+      border-color: rgba(120, 144, 188, 0.22);
+    }
+    .radar-jump span {
+      display: block;
+      color: #7890bc;
+      font-size: 13px;
+      font-weight: 800;
+    }
+    .radar-jump strong {
+      display: block;
+      margin-top: 4px;
+      color: #ffd166;
+      font-size: 22px;
+      font-weight: 950;
+    }
+    .radar-signal-main {
+      min-width: 0;
+    }
+    .radar-signal-name {
+      color: #fff;
+      font-size: 22px;
+      font-weight: 950;
+    }
+    .radar-signal-name small {
+      color: #61749a;
+      font-size: 20px;
+      margin-left: 8px;
+    }
+    .radar-signal-meta {
+      color: #7890bc;
+      font-size: 15px;
+      margin-top: 12px;
+    }
+    .radar-signal-chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 14px;
+    }
+    .radar-signal-chips span {
+      border: 1px solid rgba(255, 103, 116, 0.38);
+      border-radius: 8px;
+      background: rgba(255, 77, 92, 0.13);
+      color: #ffd4d8;
+      font-size: 14px;
+      font-weight: 950;
+      padding: 7px 10px;
+    }
+    .radar-signal-price {
+      text-align: right;
+    }
+    .radar-signal-price strong {
+      display: block;
+      color: #ff6573;
+      font-size: 30px;
+      font-weight: 950;
+    }
+    .radar-signal-price small {
+      color: #ff6573;
+      font-size: 18px;
+      font-weight: 950;
+    }
+    .radar-condition-list,
+    .radar-chip-list {
+      display: grid;
+      gap: 12px;
+      border-left: 1px solid rgba(134, 151, 190, 0.12);
+      min-height: 192px;
+      align-content: center;
+      padding-left: 26px;
+    }
+    .radar-condition-list span,
+    .radar-chip-list span {
+      color: #ff6573;
+      font-size: 21px;
+      font-weight: 950;
+      line-height: 1.15;
+    }
+    .radar-signal-card.short .radar-signal-price strong,
+    .radar-signal-card.short .radar-signal-price small,
+    .radar-signal-card.short .radar-condition-list span,
+    .radar-signal-card.short .radar-chip-list span {
+      color: #8da1ca;
+    }
     @media (max-width: 760px) {
       .radar-topbar {
         align-items: flex-start;
@@ -872,6 +998,30 @@ function installRealtimeRadarStyles() {
       }
       .radar-tags {
         grid-template-columns: 1fr;
+      }
+      .radar-board-tabs button {
+        font-size: 16px;
+        padding: 14px 8px;
+      }
+      .radar-signal-card {
+        grid-template-columns: 1fr;
+        gap: 12px;
+        min-height: 0;
+        padding: 18px;
+      }
+      .radar-signal-price {
+        text-align: left;
+      }
+      .radar-condition-list,
+      .radar-chip-list {
+        border-left: 0;
+        border-top: 1px solid rgba(134, 151, 190, 0.12);
+        min-height: 0;
+        padding: 14px 0 0;
+      }
+      .radar-condition-list span,
+      .radar-chip-list span {
+        font-size: 18px;
       }
     }
   `;
@@ -922,16 +1072,48 @@ function radarSignalTags(stock) {
   const value = cleanNumber(stock.value);
   const foreign = cleanNumber(stock.foreign);
   const trust = cleanNumber(stock.trust);
+  const totalInst = cleanNumber(stock.totalInst);
+  const close = cleanNumber(stock.close);
+  const open = cleanNumber(stock.open);
+  const daily = stock.swingDaily || analyzeSwingDaily(stock);
+  const last = daily?.last;
+  const prev = daily?.prev;
+  const dailyRows = normalizeArray(daily?.rows);
+  const priorRows = dailyRows.slice(0, -1);
+  const volumeRatio = daily?.volumeRatio || 0;
+  const bodyPct = open ? ((close - open) / open) * 100 : 0;
+  const longRed = close && open && close > open && bodyPct >= 3;
+  const shortWeak = close && open && close < open && bodyPct <= -1.5;
+  const breaksHigh = (length) => {
+    if (!close || priorRows.length < length) return false;
+    const high = Math.max(...priorRows.slice(-length).map((row) => cleanNumber(row.high)).filter(Boolean));
+    return high > 0 && close > high;
+  };
+  if (longRed) tags.push("長紅逾3%");
+  if (shortWeak) tags.push("長黑轉弱");
+  if (close && daily?.ma5 && close > daily.ma5) tags.push("突破5日均");
+  if (close && daily?.ma10 && close > daily.ma10) tags.push("突破10日均");
+  if (close && daily?.ma20 && close > daily.ma20) tags.push("突破20日均");
+  if (close && daily?.ma60 && close > daily.ma60) tags.push("突破60日均");
+  if (breaksHigh(10)) tags.push("突破10日高");
+  if (breaksHigh(20)) tags.push("突破20日高");
+  if (breaksHigh(60)) tags.push("突破60日高");
+  if (breaksHigh(120)) tags.push("突破120日高");
+  if (volumeRatio >= 2) tags.push("量增2倍");
+  else if (volumeRatio >= 1.5) tags.push("量增1.5倍");
   if (value >= 1000000000 || (volume >= 5000 && Math.abs(pct) >= 1.2)) tags.push("即時爆量");
-  if (pct >= 3) tags.push("急拉");
+  if (pct >= 3) tags.push("短線急拉");
   if (foreign >= 1000) tags.push("外資買超");
+  if (totalInst >= 1000) tags.push("三大法人買超");
   if (pct >= 1.5 && value >= 200000000) tags.push("短線強勢");
   if (trust >= 500) tags.push("投信買超");
   if (pct <= -3) tags.push("急殺");
   if (foreign <= -1000) tags.push("外資賣超");
+  if (totalInst <= -1000) tags.push("三大法人賣超");
   if (trust <= -500) tags.push("投信賣超");
   if (pct <= -1.5 && value >= 200000000) tags.push("短線轉弱");
-  return tags;
+  if (prev?.high && close > prev.high) tags.push("突破昨日高");
+  return [...new Set(tags)];
 }
 
 function radarFlowValue(stock) {
@@ -1001,8 +1183,10 @@ function buildRealtimeRadarRows() {
       const totalInst = cleanNumber(inst.total);
       const trust = cleanNumber(inst.trust);
       const foreign = cleanNumber(inst.foreign);
-      const signalTags = radarSignalTags({ ...live, pct, value, volume, foreign, trust });
+      const daily = live.swingDaily || analyzeSwingDaily(live);
+      const signalTags = radarSignalTags({ ...live, pct, value, volume, foreign, trust, totalInst, swingDaily: daily });
       const hasLongSignal =
+        signalTags.some((tag) => /突破|長紅|量增|買超|強勢|急拉/.test(tag)) ||
         pct >= 3 ||
         (pct >= 1.5 && value >= 200000000) ||
         (value >= 1000000000 && pct > 0) ||
@@ -1010,6 +1194,7 @@ function buildRealtimeRadarRows() {
         (foreign >= 1000 && pct >= 0) ||
         (trust >= 500 && pct >= 0);
       const hasShortSignal =
+        signalTags.some((tag) => /急殺|賣超|轉弱|長黑/.test(tag)) ||
         pct <= -3 ||
         (pct <= -1.5 && value >= 200000000) ||
         (value >= 1000000000 && pct < 0) ||
@@ -1030,6 +1215,7 @@ function buildRealtimeRadarRows() {
         trust,
         foreign,
         totalInst,
+        swingDaily: daily,
         signalTags,
       };
     })
@@ -1102,6 +1288,8 @@ async function ensureRealtimeRadarData() {
     try {
       const stocks = await loadStrategyStocks();
       if (stocks.length) {
+        const sample = stocks.find((stock) => stock?.code);
+        if (sample && !strategyHistoryData[sample.code]) loadStrategy4Cache(true);
         deferUiWork(() => {
           loadMarketData();
           refreshStrategyRealtimeScan("force");
@@ -1177,6 +1365,7 @@ function renderRealtimeRadar() {
     });
     return;
   }
+  if (!Object.keys(strategyHistoryData).length && !strategy4CacheLoading) loadStrategy4Cache(true);
   const rows = buildRealtimeRadarRows();
   if (radarOpen && rows.length) {
     realtimeRadarLastRows = rows;
@@ -1190,34 +1379,58 @@ function renderRealtimeRadar() {
   const shortRows = shortAll.slice(0, 8);
   const longFlow = longAll.reduce((sum, stock) => sum + stock.flow, 0);
   const shortFlow = shortAll.reduce((sum, stock) => sum + stock.flow, 0);
-  const netFlow = longFlow - shortFlow;
   const major = longFlow >= shortFlow ? "偏多" : "偏空";
-  const majorLabel = `${major}觀察`;
-  const longTopNames = longRows.slice(0, 3).map((stock) => `${stock.code} ${stock.name}`);
-  const shortTopNames = shortRows.slice(0, 3).map((stock) => `${stock.code} ${stock.name}`);
-  const longChipMarkup = longTopNames.map((name) => `<span class="radar-ai-chip">${name}</span>`).join("") || `<span class="radar-ai-chip">等待多方訊號</span>`;
-  const shortChipMarkup = shortTopNames.map((name) => `<span class="radar-ai-chip">${name}</span>`).join("") || `<span class="radar-ai-chip">等待空方訊號</span>`;
+  const activeSide = realtimeRadarSide === "short" ? "short" : realtimeRadarSide === "long" ? "long" : (major === "偏空" ? "short" : "long");
+  const activeRows = activeSide === "short" ? shortRows : longRows;
   const now = radarSessionTimeLabel();
-  const leaderCard = (stock) => {
+  const radarInstitutionTags = (stock) => {
+    const tags = [];
+    if (stock.side === "short") {
+      if (stock.totalInst < 0) tags.push("三大法人賣超");
+      if (stock.foreign < 0) tags.push("外資賣超");
+      if (stock.trust < 0) tags.push("投信賣超");
+      if (stock.totalInst >= 0) tags.push("法人買盤轉弱");
+      tags.push("短線賣壓");
+    } else {
+      if (stock.totalInst > 0) tags.push("三大法人買超");
+      if (stock.foreign > 0) tags.push("外資買超");
+      if (stock.trust > 0) tags.push("投信買超");
+      tags.push(stock.totalInst >= 0 ? "融資減少" : "法人買盤觀察");
+    }
+    return tags.slice(0, 4);
+  };
+  const radarDetailChips = (stock) => {
+    const chips = [
+      `價 ${stock.pct >= 0 ? "+" : ""}${stock.pct.toFixed(0)}`,
+      `量 +${Math.max(1, Math.round((stock.volume || stock.tradeVolume || 0) / 1000)).toLocaleString("zh-TW")}`,
+      `突 +${Math.round(stock.score / 2)}`,
+      `籌 ${stock.totalInst >= 0 ? "+" : ""}${Math.round((stock.totalInst || 0) / 1000).toLocaleString("zh-TW")}`,
+      `資 ${stock.flow >= 0 ? "+" : ""}${Math.round(stock.flow / 1000000).toLocaleString("zh-TW")}`,
+    ];
+    return chips.map((chip) => `<span>${chip}</span>`).join("");
+  };
+  const boardCard = (stock) => {
     const sign = stock.pct >= 0 ? "+" : "";
     const tags = radarReasonTags(stock).map((tag) => `<span>${tag}</span>`).join("");
+    const instTags = radarInstitutionTags(stock).map((tag) => `<span>${tag}</span>`).join("");
     return `
-      <article class="radar-leader-card ${stock.side === "short" ? "short" : ""}">
-        <span class="radar-time">${now}</span>
-        <div class="radar-stock">
-          <strong>${stock.name} <small>${stock.code}</small></strong>
-          <small>成交金額 ${radarMoney(stock.value)}｜訊號分數 ${Math.round(stock.score)}</small>
+      <article class="radar-signal-card ${stock.side === "short" ? "short" : ""}">
+        <div class="radar-jump"><span>跳出</span><strong>${now.slice(0, 5)}</strong></div>
+        <div class="radar-signal-main">
+          <div class="radar-signal-name">${stock.name}<small>${stock.code}</small></div>
+          <div class="radar-signal-meta">成交金額 ${radarMoney(stock.value)} · 量比 ${formatNumber(Math.max(1, Math.abs(stock.flow) / Math.max(stock.value || 1, 1) * 100), 2)} · 分數 ${Math.round(stock.score)}</div>
+          <div class="radar-signal-chips">${radarDetailChips(stock)}</div>
         </div>
-        <div class="radar-price">
+        <div class="radar-signal-price">
           <strong>${formatNumber(stock.close, stock.close >= 100 ? 1 : 2)}</strong>
-          <small>${sign}${stock.pct.toFixed(2)}%</small>
+          <small>▲ ${sign}${stock.pct.toFixed(2)}%</small>
         </div>
-        <div class="radar-tags">${tags}</div>
+        <div class="radar-condition-list">${tags}</div>
+        <div class="radar-chip-list">${instTags}</div>
       </article>
     `;
   };
-  const longLeaderMarkup = longRows.slice(0, 8).map(leaderCard).join("") || `<div class="empty-state">等待多方訊號...</div>`;
-  const shortLeaderMarkup = shortRows.slice(0, 8).map(leaderCard).join("") || `<div class="empty-state">等待空方訊號...</div>`;
+  const boardMarkup = activeRows.slice(0, 10).map(boardCard).join("") || `<div class="empty-state">等待${activeSide === "short" ? "空方" : "多方"}訊號...</div>`;
 
   panel.innerHTML = `
     <header class="radar-topbar">
@@ -1228,31 +1441,12 @@ function renderRealtimeRadar() {
       </div>
       <button class="radar-action" type="button" ${radarOpen ? "data-radar-refresh" : "disabled"}>${radarOpen ? "刷新雷達" : "09:00-13:30 偵測"}</button>
     </header>
-    <section class="radar-ai-box">
-      <div class="radar-ai-head"><span>AI 即時判斷</span><span>信心 ${Math.max(52, Math.min(95, Math.round(Math.abs(netFlow) / Math.max(longFlow + shortFlow, 1) * 100 + 55)))}%</span></div>
-      <h2>${majorLabel}</h2>
-      <div class="radar-ai-grid">
-        <article class="radar-ai-panel">
-          <h3>偏多 AI 分析 <span>${longRows.length} 筆</span></h3>
-          <div class="radar-ai-chips">${longChipMarkup}</div>
-          <p>多方訊號集中在 ${longTopNames.join("、") || "等待資料"}，留意急拉、即時爆量、外資買超與短線強勢延續。</p>
-        </article>
-        <article class="radar-ai-panel short">
-          <h3>偏空 AI 分析 <span>${shortRows.length} 筆</span></h3>
-          <div class="radar-ai-chips">${shortChipMarkup}</div>
-          <p>空方訊號集中在 ${shortTopNames.join("、") || "等待資料"}，留意反彈失敗、賣壓轉強與短線轉弱風險。</p>
-        </article>
-      </div>
+    <section class="radar-board-tabs" role="tablist" aria-label="即時雷達多空切換">
+      <button type="button" class="${activeSide === "long" ? "active" : ""}" data-radar-side="long">多方</button>
+      <button type="button" class="${activeSide === "short" ? "active short-active" : ""}" data-radar-side="short">空方</button>
     </section>
-    <section class="radar-leader-list">
-      <div class="radar-leader-column">
-        <h3>多方</h3>
-        ${longLeaderMarkup}
-      </div>
-      <div class="radar-leader-column short">
-        <h3>空方</h3>
-        ${shortLeaderMarkup}
-      </div>
+    <section class="radar-board-list">
+      ${boardMarkup}
     </section>
   `;
 }
