@@ -1,9 +1,9 @@
 {
   "ok": true,
   "source": "github-actions",
-  "updatedAt": "2026-05-24T13:09:11.726Z",
+  "updatedAt": "2026-05-24T23:01:48.356Z",
   "fullScan": false,
-  "cursor": 254,
+  "cursor": 494,
   "total": 1961,
   "scannedThisRun": 240,
   "scannedCodes": [
@@ -1957,9 +1957,10 @@
     "9960",
     "9962",
     "1472",
-    "1538"
+    "1538",
+    "2321"
   ],
-  "count": 187,
+  "count": 186,
   "matches": [
     {
       "code": "1570",
@@ -8062,50 +8063,6 @@
       "reason": "MA5 > MA10 > MA20 且收紅，多金釵候選。"
     },
     {
-      "code": "2067",
-      "name": "嘉鋼",
-      "close": 6.92,
-      "percent": 0.7278020378457034,
-      "value": 339080,
-      "tradeVolume": 49,
-      "change": 0.04999999999999982,
-      "open": 6.87,
-      "high": 7.09,
-      "low": 6.71,
-      "prevClose": 6.87,
-      "volume": 49,
-      "market": "TPEX",
-      "quoteDate": "20260522",
-      "quoteTime": "13:30:00",
-      "date": "2026-05-22",
-      "volumeRatio": 0.59,
-      "swingStage": {
-        "label": "低基期",
-        "ratio": "0.12",
-        "tone": "low",
-        "value": 0.12131147540983611
-      },
-      "swingScore": 78,
-      "score": 78,
-      "swingSignals": [
-        {
-          "id": "v_reversal",
-          "short": "V轉",
-          "icon": "V",
-          "reason": "跌深後收紅並突破前高，V轉積分達標。"
-        }
-      ],
-      "signals": [
-        {
-          "id": "v_reversal",
-          "short": "V轉",
-          "icon": "V",
-          "reason": "跌深後收紅並突破前高，V轉積分達標。"
-        }
-      ],
-      "reason": "跌深後收紅並突破前高，V轉積分達標。"
-    },
-    {
       "code": "5324",
       "name": "士開",
       "close": 11.95,
@@ -9198,50 +9155,6 @@
       "reason": "MA5 > MA10 > MA20 且收紅，多金釵候選。"
     },
     {
-      "code": "2221",
-      "name": "大甲",
-      "close": 44.4,
-      "percent": 2.540415704387994,
-      "value": 39560400,
-      "tradeVolume": 891,
-      "change": 1.1000000000000014,
-      "open": 43.4,
-      "high": 45.9,
-      "low": 42.3,
-      "prevClose": 43.3,
-      "volume": 891,
-      "market": "TPEX",
-      "quoteDate": "20260522",
-      "quoteTime": "13:30:00",
-      "date": "2026-05-22",
-      "volumeRatio": 0.88,
-      "swingStage": {
-        "label": "高基期",
-        "ratio": "0.76",
-        "tone": "high",
-        "value": 0.7578947368421052
-      },
-      "swingScore": 74,
-      "score": 74,
-      "swingSignals": [
-        {
-          "id": "golden_cross",
-          "short": "金釵",
-          "icon": "✦",
-          "reason": "MA5 > MA10 > MA20 且收紅，多金釵候選。"
-        }
-      ],
-      "signals": [
-        {
-          "id": "golden_cross",
-          "short": "金釵",
-          "icon": "✦",
-          "reason": "MA5 > MA10 > MA20 且收紅，多金釵候選。"
-        }
-      ],
-      "reason": "MA5 > MA10 > MA20 且收紅，多金釵候選。"
-    },
-    {
       "code": "8097",
       "name": "常珵",
       "close": 57.3,
@@ -9352,6 +9265,50 @@
         "ratio": "0.95",
         "tone": "high",
         "value": 0.9479166666666666
+      },
+      "swingScore": 73,
+      "score": 73,
+      "swingSignals": [
+        {
+          "id": "golden_cross",
+          "short": "金釵",
+          "icon": "✦",
+          "reason": "MA5 > MA10 > MA20 且收紅，多金釵候選。"
+        }
+      ],
+      "signals": [
+        {
+          "id": "golden_cross",
+          "short": "金釵",
+          "icon": "✦",
+          "reason": "MA5 > MA10 > MA20 且收紅，多金釵候選。"
+        }
+      ],
+      "reason": "MA5 > MA10 > MA20 且收紅，多金釵候選。"
+    },
+    {
+      "code": "2221",
+      "name": "大甲",
+      "close": 44.4,
+      "percent": 2.540415704387994,
+      "value": 39560400,
+      "tradeVolume": 891,
+      "change": 1.1000000000000014,
+      "open": 43.4,
+      "high": 45.9,
+      "low": 42.3,
+      "prevClose": 43.3,
+      "volume": 891,
+      "market": "TPEX",
+      "quoteDate": "20260522",
+      "quoteTime": "13:30:00",
+      "date": "2026-05-22",
+      "volumeRatio": 0.74,
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.75",
+        "tone": "high",
+        "value": 0.7540106951871657
       },
       "swingScore": 73,
       "score": 73,
