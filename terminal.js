@@ -5800,10 +5800,10 @@ function renderSwingRadar(universe) {
     .filter((stock) => !isStaleStrategyPrice(stock, latestStocks.find((item) => String(item.code || "") === String(stock.code || ""))))
     .filter((stock) => matchesStrategyKeyword(stock, keyword))
     .map((stock) => ({ ...stock, swingScore: stock.swingScore || stock.score || 0 }));
-  const filteredRows = swingSignalFilter === "all"
+  const filteredRows = keyword || swingSignalFilter === "all"
     ? allRows
     : allRows.filter((stock) => (stock.swingSignals || []).some((signal) => signal.id === swingSignalFilter));
-  const rows = sortSwingRows(filteredRows).slice(0, 100);
+  const rows = keyword ? sortSwingRows(filteredRows) : sortSwingRows(filteredRows).slice(0, 100);
   const swingPaged = paginateTerminalRows(rows, swingPage);
   swingPage = swingPaged.page;
   const pageRows = swingPaged.rows;
@@ -8743,7 +8743,7 @@ document.addEventListener("input", (event) => {
   strategy3Page = 1;
   strategy5Page = 1;
   applyStrategyInlineDomFilter();
-  scheduleStrategySearchRender(900);
+  scheduleStrategySearchRender(450);
 });
 
 document.addEventListener("compositionstart", (event) => {
