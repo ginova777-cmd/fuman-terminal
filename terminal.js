@@ -4439,7 +4439,7 @@ intradayRadarStyles.textContent = `
   .strategy5-table-head,
   .strategy5-table-row {
     display: grid;
-    grid-template-columns: 72px 110px minmax(150px, 0.8fr) minmax(132px, 0.65fr) minmax(150px, 0.7fr) minmax(360px, 1.8fr);
+    grid-template-columns: 72px 110px minmax(150px, 0.8fr) minmax(132px, 0.65fr) minmax(360px, 2.2fr);
     align-items: center;
     gap: 14px;
   }
@@ -4502,16 +4502,6 @@ intradayRadarStyles.textContent = `
     color: #9db9ff;
     font-weight: 700;
   }
-  .strategy5-state {
-    width: fit-content;
-    border-radius: 999px;
-    border: 1px solid rgba(255, 77, 92, 0.34);
-    background: rgba(255, 77, 92, 0.14);
-    color: #ff9a9d;
-    padding: 6px 10px;
-    font-size: 12px;
-    font-weight: 900;
-  }
   .strategy5-table-reason {
     color: #b8c8e8;
     font-size: 13px;
@@ -4557,7 +4547,7 @@ intradayRadarStyles.textContent = `
   .strategy3-table-head,
   .strategy3-table-row {
     display: grid;
-    grid-template-columns: 72px 110px minmax(150px, 0.8fr) minmax(132px, 0.65fr) minmax(110px, 0.5fr) minmax(360px, 1.8fr);
+    grid-template-columns: 72px 110px minmax(150px, 0.8fr) minmax(132px, 0.65fr) minmax(360px, 2.2fr);
     align-items: center;
     gap: 14px;
   }
@@ -4613,16 +4603,6 @@ intradayRadarStyles.textContent = `
     margin-top: 4px;
     color: #9db9ff;
     font-weight: 700;
-  }
-  .strategy3-state {
-    width: fit-content;
-    border-radius: 999px;
-    border: 1px solid rgba(255, 77, 92, 0.34);
-    background: rgba(255, 77, 92, 0.14);
-    color: #ff9a9d;
-    padding: 6px 10px;
-    font-size: 12px;
-    font-weight: 900;
   }
   .strategy3-reason {
     color: #b8c8e8;
@@ -4753,9 +4733,6 @@ intradayRadarStyles.textContent = `
       font-size: 12px;
       font-weight: 800;
       margin-bottom: 4px;
-    }
-    .strategy3-state::before {
-      content: "";
     }
     .strategy3-reason {
       grid-column: 2 / -1;
@@ -5836,7 +5813,6 @@ function renderStrategy5Dashboard(evaluated) {
     const sign = stock.percent >= 0 ? "+" : "";
     const strategyMatches = stock.matches.filter((match) => STRATEGY5_PRESET_IDS.includes(match.id));
     const main = stock.activeMatch || strategyMatches[0] || stock.matches[0];
-    const status = main ? `${main.icon || ""} ${main.short || main.label || active.label}`.trim() : active.label;
     const rank = (strategy5Page - 1) * TERMINAL_PAGE_SIZE + index + 1;
     return `
       <article class="strategy5-table-row">
@@ -5847,7 +5823,6 @@ function renderStrategy5Dashboard(evaluated) {
           <strong>${formatStockPrice(stock.close)}</strong>
           <small class="${stock.percent >= 0 ? "red" : "green"}">${sign}${stock.percent.toFixed(2)}%</small>
         </div>
-        <div><span class="strategy5-state">${status}</span></div>
         <div class="strategy5-table-reason">${main?.reason || "符合策略5條件。"}</div>
       </article>
     `;
@@ -5859,7 +5834,6 @@ function renderStrategy5Dashboard(evaluated) {
         <span>股票代號</span>
         <span>股票名稱</span>
         <span>進場價</span>
-        <span>狀態</span>
         <span>原因</span>
       </div>
       ${tableRows}
@@ -5939,7 +5913,6 @@ function renderOvernightDashboard(evaluated) {
   const tableRows = pageRows.length ? pageRows.map((stock, index) => {
     const sign = stock.percent >= 0 ? "+" : "";
     const rank = (strategy3Page - 1) * TERMINAL_PAGE_SIZE + index + 1;
-    const state = stock.overnightState || (stock.activeMatch ? "通過" : "觀察");
     return `
       <article class="strategy3-table-row">
         <div class="strategy3-rank-cell"><span class="strategy3-rank">${rank}</span></div>
@@ -5949,7 +5922,6 @@ function renderOvernightDashboard(evaluated) {
           <strong>${formatNumber(stock.close, stock.close >= 100 ? 0 : 2)}</strong>
           <small class="${stock.percent >= 0 ? "red" : "green"}">${sign}${stock.percent.toFixed(2)}%</small>
         </div>
-        <div><span class="strategy3-state">${state}</span></div>
         <div class="strategy3-reason">${stock.activeMatch?.reason || "隔日沖籌碼與量價候選。"}</div>
       </article>
     `;
@@ -5961,7 +5933,6 @@ function renderOvernightDashboard(evaluated) {
         <span>股票代號</span>
         <span>股票名稱</span>
         <span>尾盤進場價</span>
-        <span>狀態</span>
         <span>原因</span>
       </div>
       ${tableRows}
