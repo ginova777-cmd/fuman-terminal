@@ -4428,6 +4428,95 @@ intradayRadarStyles.textContent = `
     line-height: 1.5;
     font-size: 12px;
   }
+  .strategy5-table {
+    width: calc(100% - 24px);
+    margin: 10px 12px 12px;
+    border: 1px solid rgba(132, 161, 208, 0.16);
+    border-radius: 8px;
+    overflow: hidden;
+    background: rgba(7, 13, 27, 0.34);
+  }
+  .strategy5-table-head,
+  .strategy5-table-row {
+    display: grid;
+    grid-template-columns: 72px 110px minmax(150px, 0.8fr) minmax(132px, 0.65fr) minmax(150px, 0.7fr) minmax(360px, 1.8fr);
+    align-items: center;
+    gap: 14px;
+  }
+  .strategy5-table-head {
+    padding: 12px 16px;
+    color: #8fa2c8;
+    font-size: 12px;
+    font-weight: 800;
+    letter-spacing: 0;
+    background: rgba(255, 255, 255, 0.03);
+    border-bottom: 1px solid rgba(132, 161, 208, 0.14);
+  }
+  .strategy5-table-row {
+    min-height: 72px;
+    padding: 14px 16px;
+    border-bottom: 1px solid rgba(132, 161, 208, 0.10);
+  }
+  .strategy5-table-row:last-child {
+    border-bottom: 0;
+  }
+  .strategy5-table-row:hover {
+    background: rgba(122, 160, 255, 0.05);
+  }
+  .strategy5-rank {
+    width: 36px;
+    height: 36px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 999px;
+    background: linear-gradient(135deg, #d64561, #aa2846);
+    color: #fff;
+    font-weight: 900;
+    font-size: 14px;
+  }
+  .strategy5-code {
+    color: #8fb2ff;
+    font-weight: 800;
+  }
+  .strategy5-name {
+    color: #f5f8ff;
+    font-weight: 900;
+  }
+  .strategy5-name small {
+    display: block;
+    margin-top: 4px;
+    color: #7f8ca8;
+    font-weight: 700;
+  }
+  .strategy5-entry-price strong {
+    display: block;
+    color: #ff4f68;
+    font-size: 22px;
+    line-height: 1.05;
+    font-weight: 900;
+  }
+  .strategy5-entry-price small {
+    display: block;
+    margin-top: 4px;
+    color: #9db9ff;
+    font-weight: 700;
+  }
+  .strategy5-state {
+    width: fit-content;
+    border-radius: 999px;
+    border: 1px solid rgba(255, 77, 92, 0.34);
+    background: rgba(255, 77, 92, 0.14);
+    color: #ff9a9d;
+    padding: 6px 10px;
+    font-size: 12px;
+    font-weight: 900;
+  }
+  .strategy5-table-reason {
+    color: #b8c8e8;
+    font-size: 13px;
+    line-height: 1.55;
+  }
   .strategy3-clean {
     grid-template-columns: 1fr;
   }
@@ -4595,6 +4684,57 @@ intradayRadarStyles.textContent = `
     }
     .strategy3-table-row .strategy3-rank-cell {
       grid-row: 1 / 4;
+    }
+    .strategy5-table-head {
+      display: none;
+    }
+    .strategy5-table {
+      width: 100%;
+      margin: 12px 0;
+      border: 0;
+      background: transparent;
+    }
+    .strategy5-table-row {
+      display: grid;
+      grid-template-columns: 46px minmax(0, 1fr);
+      gap: 8px 12px;
+      margin: 12px 0;
+      padding: 14px;
+      border: 1px solid rgba(132, 161, 208, 0.15);
+      border-radius: 8px;
+      background: rgba(8, 15, 31, 0.78);
+    }
+    .strategy5-table-row > div {
+      min-width: 0;
+    }
+    .strategy5-table-row .strategy5-rank-cell {
+      grid-row: 1 / 4;
+    }
+    .strategy5-code::before {
+      content: "股票代號：";
+      color: #8190ad;
+      font-weight: 700;
+    }
+    .strategy5-name::before {
+      content: "股票名稱：";
+      color: #8190ad;
+      font-weight: 700;
+    }
+    .strategy5-entry-price::before {
+      content: "進場價";
+      display: block;
+      color: #8190ad;
+      font-size: 12px;
+      font-weight: 800;
+      margin-bottom: 4px;
+    }
+    .strategy5-table-reason {
+      grid-column: 2 / -1;
+    }
+    .strategy5-table-reason::before {
+      content: "原因：";
+      color: #8190ad;
+      font-weight: 800;
     }
     .strategy3-code::before {
       content: "股票代號：";
@@ -5692,28 +5832,39 @@ function renderStrategy5Dashboard(evaluated) {
     foreign_trust_breakout: "外資與投信同步買超，漲幅未過熱，優先觀察準突破名單。",
   };
 
-  const rows = pageList.length ? pageList.map((stock, index) => {
+  const tableRows = pageList.length ? pageList.map((stock, index) => {
     const sign = stock.percent >= 0 ? "+" : "";
     const strategyMatches = stock.matches.filter((match) => STRATEGY5_PRESET_IDS.includes(match.id));
     const main = stock.activeMatch || strategyMatches[0] || stock.matches[0];
-    const chips = strategyMatches.slice(0, 5).map((match) => `<b>${match.icon} ${match.short}</b>`).join("");
+    const status = main ? `${main.icon || ""} ${main.short || main.label || active.label}`.trim() : active.label;
     const rank = (strategy5Page - 1) * TERMINAL_PAGE_SIZE + index + 1;
     return `
-      <article class="strategy5-stock-card">
-        <div class="rank">${rank}</div>
-        <div>
-          <strong>${stock.name} <small>${stock.code}</small></strong>
-          <small>${stock.sector || "未分類"} · ${stock.isRealtime ? "即時" : "盤中"} · ${new Date().toLocaleDateString("zh-TW")}</small>
-        </div>
-        <div>
-          <div class="strategy5-price">${formatStockPrice(stock.close)}</div>
+      <article class="strategy5-table-row">
+        <div class="strategy5-rank-cell"><span class="strategy5-rank">${rank}</span></div>
+        <div class="strategy5-code">${stock.code}</div>
+        <div class="strategy5-name">${stock.name}<small>${stock.sector || "未分類"} · ${stock.isRealtime ? "即時" : "盤中"}</small></div>
+        <div class="strategy5-entry-price">
+          <strong>${formatStockPrice(stock.close)}</strong>
           <small class="${stock.percent >= 0 ? "red" : "green"}">${sign}${stock.percent.toFixed(2)}%</small>
         </div>
-        <div class="strategy5-chips">${chips}</div>
-        <div class="strategy5-reason">${main?.reason || "符合策略5條件。"}</div>
+        <div><span class="strategy5-state">${status}</span></div>
+        <div class="strategy5-table-reason">${main?.reason || "符合策略5條件。"}</div>
       </article>
     `;
   }).join("") : `<div class="empty-state">目前沒有符合「${active.label}」的股票。</div>`;
+  const table = pageList.length ? `
+    <section class="strategy5-table" aria-label="策略5綜合策略清單">
+      <div class="strategy5-table-head">
+        <span>排名</span>
+        <span>股票代號</span>
+        <span>股票名稱</span>
+        <span>進場價</span>
+        <span>狀態</span>
+        <span>原因</span>
+      </div>
+      ${tableRows}
+    </section>
+  ` : tableRows;
   const pagination = buildTerminalPagination("strategy5", strategy5Page, strategy5Paged.totalPages, list.length);
 
   const scanText = strategy5UpdatedAt
@@ -5729,7 +5880,7 @@ function renderStrategy5Dashboard(evaluated) {
               <p>${descriptions[strategy5ActiveId] || "符合策略5條件的股票。"}｜${scanText}，結果固定到下一次掃描。</p>
             </div>
           </div>
-          ${rows}
+          ${table}
           ${pagination}
         </section>
       </section>
