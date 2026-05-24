@@ -6071,7 +6071,7 @@ function renderStrategy5Dashboard(evaluated) {
       <article class="strategy5-table-row">
         <div class="strategy5-rank-cell"><span class="strategy5-rank">${rank}</span></div>
         <div class="strategy5-code">${stock.code}</div>
-        <div class="strategy5-name">${stock.name}<small>${stock.sector || "未分類"} · ${stock.isRealtime ? "即時" : "盤中"}</small></div>
+        <div class="strategy5-name">${stock.name}</div>
         <div class="strategy5-entry-price">
           <strong>${formatStockPrice(stock.close)}</strong>
           <small class="${stock.percent >= 0 ? "red" : "green"}">${sign}${stock.percent.toFixed(2)}%</small>
