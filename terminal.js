@@ -1462,6 +1462,7 @@ let realtimeRadarLastUpdatedAt = 0;
 const REALTIME_RADAR_LAST_CACHE_KEY = "fuman_realtime_radar_last_rows_v1";
 let sectorStocksCache = {};
 let institutionData = {};
+let institutionDataPromise = null;
 let institutionDate = "";
 let institutionUpdatedAt = 0;
 let chipMode = "after";
@@ -4457,6 +4458,88 @@ intradayRadarStyles.textContent = `
     grid-template-columns: 44px minmax(170px, 0.75fr) minmax(100px, 0.45fr) minmax(300px, 1fr) minmax(420px, 1.35fr);
     align-items: center;
   }
+  .strategy3-table {
+    width: 100%;
+    border: 1px solid rgba(132, 161, 208, 0.16);
+    border-radius: 8px;
+    overflow: hidden;
+    background: rgba(7, 13, 27, 0.34);
+  }
+  .strategy3-table-head,
+  .strategy3-table-row {
+    display: grid;
+    grid-template-columns: 72px 110px minmax(150px, 0.8fr) minmax(132px, 0.65fr) minmax(110px, 0.5fr) minmax(360px, 1.8fr);
+    align-items: center;
+    gap: 14px;
+  }
+  .strategy3-table-head {
+    padding: 12px 16px;
+    color: #8fa2c8;
+    font-size: 12px;
+    font-weight: 800;
+    letter-spacing: 0;
+    background: rgba(255, 255, 255, 0.03);
+    border-bottom: 1px solid rgba(132, 161, 208, 0.14);
+  }
+  .strategy3-table-row {
+    min-height: 72px;
+    padding: 14px 16px;
+    border-bottom: 1px solid rgba(132, 161, 208, 0.10);
+  }
+  .strategy3-table-row:last-child {
+    border-bottom: 0;
+  }
+  .strategy3-table-row:hover {
+    background: rgba(122, 160, 255, 0.05);
+  }
+  .strategy3-rank {
+    width: 36px;
+    height: 36px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 999px;
+    background: linear-gradient(135deg, #d64561, #aa2846);
+    color: #fff;
+    font-weight: 900;
+    font-size: 14px;
+  }
+  .strategy3-code {
+    color: #8fb2ff;
+    font-weight: 800;
+  }
+  .strategy3-name {
+    color: #f5f8ff;
+    font-weight: 900;
+  }
+  .strategy3-entry-price strong {
+    display: block;
+    color: #ff4f68;
+    font-size: 22px;
+    line-height: 1.05;
+    font-weight: 900;
+  }
+  .strategy3-entry-price small {
+    display: block;
+    margin-top: 4px;
+    color: #9db9ff;
+    font-weight: 700;
+  }
+  .strategy3-state {
+    width: fit-content;
+    border-radius: 999px;
+    border: 1px solid rgba(255, 77, 92, 0.34);
+    background: rgba(255, 77, 92, 0.14);
+    color: #ff9a9d;
+    padding: 6px 10px;
+    font-size: 12px;
+    font-weight: 900;
+  }
+  .strategy3-reason {
+    color: #b8c8e8;
+    font-size: 13px;
+    line-height: 1.55;
+  }
   .strategy3-stock-title strong {
     display: flex;
     align-items: baseline;
@@ -4489,6 +4572,58 @@ intradayRadarStyles.textContent = `
     }
     .strategy3-stock-card .strategy5-reason {
       grid-column: 2 / -1;
+    }
+    .strategy3-table-head {
+      display: none;
+    }
+    .strategy3-table {
+      border: 0;
+      background: transparent;
+    }
+    .strategy3-table-row {
+      display: grid;
+      grid-template-columns: 46px minmax(0, 1fr);
+      gap: 8px 12px;
+      margin: 12px 0;
+      padding: 14px;
+      border: 1px solid rgba(132, 161, 208, 0.15);
+      border-radius: 8px;
+      background: rgba(8, 15, 31, 0.78);
+    }
+    .strategy3-table-row > div {
+      min-width: 0;
+    }
+    .strategy3-table-row .strategy3-rank-cell {
+      grid-row: 1 / 4;
+    }
+    .strategy3-code::before {
+      content: "股票代號：";
+      color: #8190ad;
+      font-weight: 700;
+    }
+    .strategy3-name::before {
+      content: "股票名稱：";
+      color: #8190ad;
+      font-weight: 700;
+    }
+    .strategy3-entry-price::before {
+      content: "尾盤進場價";
+      display: block;
+      color: #8190ad;
+      font-size: 12px;
+      font-weight: 800;
+      margin-bottom: 4px;
+    }
+    .strategy3-state::before {
+      content: "";
+    }
+    .strategy3-reason {
+      grid-column: 2 / -1;
+    }
+    .strategy3-reason::before {
+      content: "原因：";
+      color: #8190ad;
+      font-weight: 800;
     }
     .intraday-main-layout { grid-template-columns: 1fr; }
     .intraday-side-panel {
@@ -5650,24 +5785,37 @@ function renderOvernightDashboard(evaluated) {
   if (strategyAvgScore) strategyAvgScore.textContent = rows.length ? Math.round(avg(rows.map((stock) => stock.score))) : "--";
   if (strategyTopHit) strategyTopHit.textContent = rows.length ? `${Math.max(...rows.map((stock) => stock.matches.length))}` : "--";
 
-  const cards = pageRows.length ? pageRows.map((stock, index) => {
+  const tableRows = pageRows.length ? pageRows.map((stock, index) => {
     const sign = stock.percent >= 0 ? "+" : "";
     const rank = (strategy3Page - 1) * TERMINAL_PAGE_SIZE + index + 1;
+    const state = stock.overnightState || (stock.activeMatch ? "通過" : "觀察");
     return `
-      <article class="strategy5-stock-card strategy3-stock-card">
-        <div class="rank">${rank}</div>
-        <div class="strategy3-stock-title">
-          <strong>${stock.name} <small>${stock.code}</small></strong>
-        </div>
-        <div>
-          <div class="strategy5-price">${formatNumber(stock.close, stock.close >= 100 ? 0 : 2)}</div>
+      <article class="strategy3-table-row">
+        <div class="strategy3-rank-cell"><span class="strategy3-rank">${rank}</span></div>
+        <div class="strategy3-code">${stock.code}</div>
+        <div class="strategy3-name">${stock.name}</div>
+        <div class="strategy3-entry-price">
+          <strong>${formatNumber(stock.close, stock.close >= 100 ? 0 : 2)}</strong>
           <small class="${stock.percent >= 0 ? "red" : "green"}">${sign}${stock.percent.toFixed(2)}%</small>
         </div>
-        <div class="strategy5-chips"><b>⌬ 隔日</b><b>${Math.round(stock.volumeLots || (stock.tradeVolume || 0) / 1000).toLocaleString("zh-TW")}張</b><b>周轉 ${formatNumber(stock.turnoverRate || 0, 2)}%</b><b>量比 ${formatNumber(stock.volumeRatio || 0, 2)}</b></div>
-        <div class="strategy5-reason">${stock.activeMatch?.reason || "隔日沖籌碼與量價候選。"}</div>
+        <div><span class="strategy3-state">${state}</span></div>
+        <div class="strategy3-reason">${stock.activeMatch?.reason || "隔日沖籌碼與量價候選。"}</div>
       </article>
     `;
   }).join("") : `<div class="empty-state">目前沒有符合隔日沖條件的股票。</div>`;
+  const table = pageRows.length ? `
+    <section class="strategy3-table" aria-label="策略3隔日沖清單">
+      <div class="strategy3-table-head">
+        <span>排名</span>
+        <span>股票代號</span>
+        <span>股票名稱</span>
+        <span>尾盤進場價</span>
+        <span>狀態</span>
+        <span>原因</span>
+      </div>
+      ${tableRows}
+    </section>
+  ` : tableRows;
   const pagination = buildTerminalPagination("strategy3", strategy3Page, strategy3Paged.totalPages, rows.length);
 
   strategyTable.innerHTML = `
@@ -5680,7 +5828,7 @@ function renderOvernightDashboard(evaluated) {
               <p>以 13:00 固定條件完整掃描結果排序，開網頁不再臨時重算。</p>
             </div>
           </div>
-          ${cards}
+          ${table}
           ${pagination}
         </section>
       </section>
@@ -6722,9 +6870,19 @@ function showView(viewName, activeLink) {
   const locked = applyMemberLocks(viewName, activeLink);
   if (locked) return;
   if (viewName === "realtime-radar") deferUiWork(renderRealtimeRadar);
-  if (viewName === "strategy") deferUiWork(renderStrategyScanner);
-  if (viewName === "chip-trade") deferUiWork(loadChipTradeData);
+  if (viewName === "strategy") {
+    deferUiWork(renderStrategyScanner);
+    deferUiWork(loadInstitution, 600);
+  }
+  if (viewName === "chip-trade") {
+    deferUiWork(loadChipTradeData);
+    deferUiWork(loadInstitution, 600);
+  }
   if (viewName === "warrant-flow") deferUiWork(loadWarrantFlow);
+  if (viewName === "watchlist") {
+    deferUiWork(renderWatchlist);
+    deferUiWork(loadInstitution, 600);
+  }
   deferUiWork(ensureMobileAutoOrganizeButton);
   deferUiWork(normalizeMobileHorizontalPosition, 60);
   const focusTarget = activeLink?.dataset.focus ? document.querySelector(`#${activeLink.dataset.focus}`) : null;
@@ -6836,21 +6994,28 @@ async function loadHeatmap() {
 }
 
 async function loadInstitution() {
-  try {
-    let data = await fetchJson(`${endpoints.institutionCache}?t=${Date.now()}`, 10000);
-    if (!data?.ok || !data?.data || !Object.keys(data.data).length) {
-      data = await fetchJson(`${endpoints.institutionBackup}?t=${Date.now()}`, 10000);
+  if (institutionDataPromise) return institutionDataPromise;
+  institutionDataPromise = (async () => {
+    try {
+      let data = await fetchJson(`${endpoints.institutionCache}?t=${Date.now()}`, 10000);
+      if (!data?.ok || !data?.data || !Object.keys(data.data).length) {
+        data = await fetchJson(`${endpoints.institutionBackup}?t=${Date.now()}`, 10000);
+      }
+      if (data.ok && data.data) {
+        institutionData = data.data;
+        institutionDate = data.usedDate || "";
+        const updatedAt = Date.parse(data.updatedAt || "");
+        institutionUpdatedAt = Number.isFinite(updatedAt) ? updatedAt : Date.now();
+      }
+      applyStaticTitleIcons();
+      if (isViewActive("strategy")) deferUiWork(renderStrategyScanner);
+      if (isViewActive("chip-trade")) deferUiWork(renderChipTradeTable);
+    } catch (e) {
+    } finally {
+      institutionDataPromise = null;
     }
-    if (data.ok && data.data) {
-      institutionData = data.data;
-      institutionDate = data.usedDate || "";
-      const updatedAt = Date.parse(data.updatedAt || "");
-      institutionUpdatedAt = Number.isFinite(updatedAt) ? updatedAt : Date.now();
-    }
-    applyStaticTitleIcons();
-    if (isViewActive("strategy")) deferUiWork(renderStrategyScanner);
-    if (isViewActive("chip-trade")) deferUiWork(renderChipTradeTable);
-  } catch (e) {}
+  })();
+  return institutionDataPromise;
 }
 
 function applyStrategyPresetFromLink(link) {
@@ -7157,7 +7322,6 @@ deferUiWork(() => loadWorkflowRunStatus().catch(() => {}), 2000);
 ensureMobileAutoOrganizeButton();
 loadMarketData();
 loadHeatmap();
-loadInstitution();
 if (brandRefresh) {
   brandRefresh.setAttribute("role", "button");
   brandRefresh.setAttribute("tabindex", "0");
@@ -7198,7 +7362,9 @@ document.querySelectorAll("[data-chip-filter]").forEach((button) => {
   });
 });
 setInterval(tickClock, 1000);
-setInterval(loadMarketData, MARKET_REFRESH_MS);
+setInterval(() => {
+  if (isViewActive("market") || isDocumentHidden() || !latestStocks.length) loadMarketData();
+}, MARKET_REFRESH_MS);
 setInterval(() => refreshStrategyRealtimeScan("hot"), INTRADAY_FAST_SCAN_MS);
 setInterval(() => refreshStrategyRealtimeScan("background"), INTRADAY_BACKGROUND_SCAN_MS);
 setInterval(() => {
@@ -8312,5 +8478,7 @@ async function refreshSelectedWatchlistQuote() {
   }
 }
 
-renderWatchlist();
-setInterval(refreshSelectedWatchlistQuote, 10000);
+if (isViewActive("watchlist")) renderWatchlist();
+setInterval(() => {
+  if (!isDocumentHidden() && isViewActive("watchlist")) refreshSelectedWatchlistQuote();
+}, 10000);
