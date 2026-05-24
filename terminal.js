@@ -1658,6 +1658,7 @@ let realtimeRadarDataPromise = null;
 let realtimeRadarSide = "auto";
 let realtimeRadarLastRows = [];
 let realtimeRadarLastUpdatedAt = 0;
+let realtimeRadarRefreshLoading = false;
 const REALTIME_RADAR_LAST_CACHE_KEY = "fuman_realtime_radar_last_rows_v1";
 let sectorStocksCache = {};
 let institutionData = {};
@@ -1760,6 +1761,7 @@ const REALTIME_RADAR_POOL_LIMIT = 650;
 const INTRADAY_BACKGROUND_BATCH = 450;
 const INTRADAY_FAST_SCAN_MS = 3000;
 const INTRADAY_BACKGROUND_SCAN_MS = 3000;
+const REALTIME_RADAR_REFRESH_MS = 3000;
 const MOBILE_INTRADAY_HOT_SCAN_LIMIT = 260;
 const MOBILE_INTRADAY_FORCE_EXTRA_LIMIT = 80;
 const MOBILE_INTRADAY_BACKGROUND_BATCH = 90;
@@ -7260,10 +7262,10 @@ async function fetchFuturesDirect() {
   }
 }
 
-async function loadMarketData() {
+async function loadMarketData(force = false) {
   const now = Date.now();
   const minInterval = isDocumentHidden() ? MARKET_REFRESH_HIDDEN_MS : MARKET_REFRESH_MS;
-  if (marketDataLoading || (marketDataLastStartedAt && now - marketDataLastStartedAt < minInterval)) return;
+  if (marketDataLoading || (!force && marketDataLastStartedAt && now - marketDataLastStartedAt < minInterval)) return;
   marketDataLoading = true;
   marketDataLastStartedAt = now;
   try {
@@ -7698,6 +7700,17 @@ setInterval(() => {
 setInterval(() => {
   if (!isDocumentHidden() && isTerminalUnlocked() && isViewActive("strategy") && selectedStrategyIds.has("intraday_2m")) refreshStrategyRealtimeScan("background");
 }, INTRADAY_BACKGROUND_SCAN_MS);
+setInterval(async () => {
+  if (realtimeRadarRefreshLoading) return;
+  if (isDocumentHidden() || !isTerminalUnlocked() || !isViewActive("realtime-radar") || !isRadarDetectionWindow()) return;
+  realtimeRadarRefreshLoading = true;
+  try {
+    await loadMarketData(true);
+    renderRealtimeRadar();
+  } finally {
+    realtimeRadarRefreshLoading = false;
+  }
+}, REALTIME_RADAR_REFRESH_MS);
 setInterval(() => {
   if (!isDocumentHidden() && isViewActive("market")) loadHeatmap();
 }, 15*60*1000);
