@@ -5953,6 +5953,7 @@ function renderSwingRadar(universe) {
       </section>
     </section>
   `;
+  bindSwingVisibleSearchInput();
 }
 
 function applySwingFilterToVisibleRows() {
@@ -5971,6 +5972,19 @@ function applySwingFilterToVisibleRows() {
     row.hidden = !passSignal || !passKeyword;
   });
   return true;
+}
+
+function bindSwingVisibleSearchInput() {
+  const input = strategyTable?.querySelector("[data-swing-visible-search]");
+  if (!input) return;
+  input.value = swingVisibleKeyword || "";
+  input.addEventListener("input", () => {
+    swingVisibleKeyword = input.value || "";
+    applySwingFilterToVisibleRows();
+  });
+  input.addEventListener("click", (event) => event.stopPropagation());
+  input.addEventListener("keydown", (event) => event.stopPropagation());
+  input.addEventListener("keyup", (event) => event.stopPropagation());
 }
 
 function renderOpenBuyRadar(universe) {
@@ -8805,19 +8819,6 @@ document.addEventListener("click", (event) => {
   if (!applySwingFilterToVisibleRows()) renderStrategyScanner();
 });
 
-document.addEventListener("input", (event) => {
-  const input = event.target.closest("[data-swing-visible-search]");
-  if (!input) return;
-  swingVisibleKeyword = input.value || "";
-  applySwingFilterToVisibleRows();
-});
-
-["click", "pointerdown", "keydown", "keyup", "beforeinput", "compositionstart", "compositionend"].forEach((eventName) => {
-  document.addEventListener(eventName, (event) => {
-    if (!event.target.closest("[data-swing-visible-search]")) return;
-    event.stopPropagation();
-  }, true);
-});
 
 document.addEventListener("input", (event) => {
   const input = event.target.closest("[data-strategy-inline-search]");
