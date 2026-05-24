@@ -1342,8 +1342,7 @@ function renderRealtimeRadar() {
       panel.innerHTML = `
         <header class="radar-topbar">
           <div>
-            <small>即時雷達</small>
-            <h1>即時多空資金流</h1>
+            <h1>↗ 即時多空資金流</h1>
             <small>偵測時間 09:00-13:30｜收盤後停止偵測，正在讀取收盤資料</small>
           </div>
           <button class="radar-action" type="button" disabled>09:00-13:30 偵測</button>
@@ -1435,8 +1434,7 @@ function renderRealtimeRadar() {
   panel.innerHTML = `
     <header class="radar-topbar">
       <div>
-        <small>即時雷達</small>
-        <h1>即時多空資金流</h1>
+        <h1>↗ 即時多空資金流</h1>
         <small>偵測時間 09:00-13:30${radarOpen ? "" : `｜收盤後停止偵測，顯示盤中最後資料${realtimeRadarLastUpdatedAt ? ` ${new Date(realtimeRadarLastUpdatedAt).toLocaleTimeString("zh-TW", { hour12: false })}` : ""}`}</small>
       </div>
       <button class="radar-action" type="button" ${radarOpen ? "data-radar-refresh" : "disabled"}>${radarOpen ? "刷新雷達" : "09:00-13:30 偵測"}</button>
