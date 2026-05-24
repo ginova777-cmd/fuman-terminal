@@ -1752,6 +1752,7 @@ let swingSortKey = "score";
 let swingSortDir = "desc";
 let swingSignalFilter = "all";
 let swingVisibleKeyword = "";
+let swingVisibleSearchInput = null;
 let intradaySortKey = "score";
 let intradaySortDir = "desc";
 let intradaySignalFilter = "all";
@@ -5920,6 +5921,9 @@ function renderSwingRadar(universe) {
     <tr><td colspan="9">後端策略4掃描 API 已啟動。正在分批抓日K並計算符合股票；命中後會自動顯示在這裡。</td></tr>
   `;
   const pagination = buildTerminalPagination("swing", swingPage, swingPaged.totalPages, rows.length);
+  const hadSearchFocus = document.activeElement === swingVisibleSearchInput;
+  const searchSelectionStart = hadSearchFocus ? swingVisibleSearchInput.selectionStart : null;
+  const searchSelectionEnd = hadSearchFocus ? swingVisibleSearchInput.selectionEnd : null;
 
   strategyTable.innerHTML = `
     <section class="swing-dashboard">
@@ -5937,9 +5941,7 @@ function renderSwingRadar(universe) {
       <section class="swing-panel">
         <div class="swing-tabs">
           ${tabs}
-          <div class="strategy4-visible-search-row">
-            <input type="text" placeholder="搜尋目前結果代號/名稱" value="${escapeAttr(swingVisibleKeyword)}" autocomplete="off" spellcheck="false" inputmode="numeric" data-swing-visible-search>
-          </div>
+          <div class="strategy4-visible-search-row" data-swing-search-host></div>
         </div>
         <table class="swing-table">
           <thead>
@@ -5953,7 +5955,7 @@ function renderSwingRadar(universe) {
       </section>
     </section>
   `;
-  bindSwingVisibleSearchInput();
+  mountSwingVisibleSearchInput(hadSearchFocus, searchSelectionStart, searchSelectionEnd);
 }
 
 function applySwingFilterToVisibleRows() {
@@ -5974,10 +5976,15 @@ function applySwingFilterToVisibleRows() {
   return true;
 }
 
-function bindSwingVisibleSearchInput() {
-  const input = strategyTable?.querySelector("[data-swing-visible-search]");
-  if (!input) return;
-  input.value = swingVisibleKeyword || "";
+function getSwingVisibleSearchInput() {
+  if (swingVisibleSearchInput) return swingVisibleSearchInput;
+  const input = document.createElement("input");
+  input.type = "text";
+  input.placeholder = "搜尋目前結果代號/名稱";
+  input.autocomplete = "off";
+  input.spellcheck = false;
+  input.inputMode = "numeric";
+  input.dataset.swingVisibleSearch = "";
   input.addEventListener("input", () => {
     swingVisibleKeyword = input.value || "";
     applySwingFilterToVisibleRows();
@@ -5985,6 +5992,22 @@ function bindSwingVisibleSearchInput() {
   input.addEventListener("click", (event) => event.stopPropagation());
   input.addEventListener("keydown", (event) => event.stopPropagation());
   input.addEventListener("keyup", (event) => event.stopPropagation());
+  swingVisibleSearchInput = input;
+  return input;
+}
+
+function mountSwingVisibleSearchInput(restoreFocus = false, selectionStart = null, selectionEnd = null) {
+  const host = strategyTable?.querySelector("[data-swing-search-host]");
+  if (!host) return;
+  const input = getSwingVisibleSearchInput();
+  input.value = swingVisibleKeyword || "";
+  host.replaceChildren(input);
+  if (restoreFocus) {
+    input.focus({ preventScroll: true });
+    if (Number.isInteger(selectionStart) && Number.isInteger(selectionEnd)) {
+      input.setSelectionRange(selectionStart, selectionEnd);
+    }
+  }
 }
 
 function renderOpenBuyRadar(universe) {
