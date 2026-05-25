@@ -2,6 +2,7 @@ const fs = require("fs");
 const path = require("path");
 const tls = require("tls");
 const { cleanNumber, formatTradePrice } = require("./intraday-radar-rules");
+const { hasLineConfig, sendLineText } = require("./line-push");
 
 const ROOT = path.resolve(__dirname, "..");
 const SIGNAL_FILE = path.join(ROOT, ".intraday-cache", "signals.json");
@@ -13,6 +14,8 @@ const OPEN_BUY_SCORECARD_SOURCE_FILE = path.join(ROOT, "data", "open-buy-scoreca
 const STRATEGY3_FILE = path.join(ROOT, "data", "strategy3-latest.json");
 const STRATEGY3_BACKUP_FILE = path.join(ROOT, "data", "strategy3-backup.json");
 const STRATEGY3_SCORECARD_SOURCE_FILE = path.join(ROOT, "data", "strategy3-scorecard-source.json");
+const STRATEGY5_FILE = path.join(ROOT, "data", "strategy5-latest.json");
+const STRATEGY5_BACKUP_FILE = path.join(ROOT, "data", "strategy5-backup.json");
 const BASE_URL = process.env.FUMAN_BASE_URL || "https://fuman-terminal.vercel.app";
 const LOT_SIZE = Number(process.env.REPORT_LOT_SIZE || 1000);
 
@@ -69,25 +72,34 @@ function taipeiTimeLabel(date = new Date()) {
 }
 
 function strategy3EntryTime(item) {
-  return tradeTimeLabel(item.quoteTime, "13:30");
+  return "13:00";
 }
 
 function strategy3EntryDate(item, payload, today) {
   return tradeDateLabel(item.quoteDate || payload.usedDate || payload.date || today);
 }
 
+function strategy3EntryPrice(item, quote) {
+  return cleanNumber(item.entryPrice)
+    || cleanNumber(item.quotePrice)
+    || cleanNumber(item.price1300)
+    || cleanNumber(item.priceAt1300)
+    || cleanNumber(quote?.open)
+    || cleanNumber(item.close);
+}
+
 function tradeSummaryLine({ date, entryTime, entryPrice, exitDate, exitTime, exitPrice, profitPct, profit }) {
   const parts = [
     `日期 ${date}`,
     `時間${entryTime}`,
-    `進場價${formatTradePrice(entryPrice)}元`,
+    `進場價格:${formatTradePrice(entryPrice)}元`,
   ];
   if (exitDate) parts.push(`出場日期:${exitDate}`);
   parts.push(
     `出場時間${exitTime}`,
-    `出場價格:${formatTradePrice(exitPrice)}元`,
-    `漲幅:${percent(profitPct)}`,
-    `預計獲利:${money(profit)}`,
+    `出場價格/盤中高點:${formatTradePrice(exitPrice)}元`,
+    `損益率:${percent(profitPct)}`,
+    `損益:${money(profit)}`,
   );
   return parts.join(" ");
 }
@@ -220,6 +232,28 @@ function reportRows(payload, limit = 20) {
     .slice(0, limit);
 }
 
+function scorecardEntryPrice(item, quote) {
+  return cleanNumber(item.entryPrice)
+    || cleanNumber(item.quotePrice)
+    || cleanNumber(item.price)
+    || cleanNumber(item.close)
+    || cleanNumber(item.lastPrice)
+    || cleanNumber(item.currentPrice)
+    || cleanNumber(quote?.open)
+    || cleanNumber(quote?.close);
+}
+
+function scorecardReason(item) {
+  if (Array.isArray(item.matches)) {
+    return item.matches.map((match) => match.reason || match.label || match.name).filter(Boolean).join("；");
+  }
+  return item.reason || item.note || item.why || "";
+}
+
+function scorecardRank(item, index) {
+  return cleanNumber(item.rank) || index + 1;
+}
+
 function isTaipeiMarketRecord(record) {
   const match = String(record?.timestamp || "").match(/\s(\d{2}):(\d{2})(?::(\d{2}))?$/);
   if (!match) return true;
@@ -321,10 +355,10 @@ function buildOpenBuyReport(payload, quotes, today, tracker) {
       `名單${item.code} ${item.name || ""}`,
       `狀態 ${setupLabel}`,
       `交易日期 ${tradeDateLabel(today)}`,
-      `入場時間 09:00  進場價${formatTradePrice(entryPrice)}元`,
+      `入場時間 09:00  進場價格:${formatTradePrice(entryPrice)}元`,
       `出場日期:${tradeDateLabel(today)}`,
-      `出場價格:${formatTradePrice(exitPrice)}元`,
-      `漲幅:${percent(profitPct)} 預計獲利:${money(profit)}`,
+      `出場時間:${settlementTimeLabel(high)}｜出場價格/盤中高點:${formatTradePrice(exitPrice)}元`,
+      `損益率:${percent(profitPct)}｜損益:${money(profit)}`,
       ""
     );
   });
@@ -344,6 +378,48 @@ function buildOpenBuyReport(payload, quotes, today, tracker) {
   return lines.join("\n");
 }
 
+function buildStrategy5Report(payload, quotes, today, tracker) {
+  const rows = reportRows(payload);
+  let totalProfit = 0;
+  const lines = [`策略5綜合策略成績單｜${dateSlash(today)}`, ""];
+  lines.push(`資料時間：${payload.updatedAt || "--"}｜候選 ${payload.count ?? rows.length} 檔`, "");
+  if (!rows.length) {
+    lines.push("今天沒有符合策略5綜合策略的候選標的。", "");
+  }
+  rows.forEach((item, index) => {
+    const quote = quotes.get(item.code) || {};
+    const track = scorecardTrack(tracker, "strategy5", item.code) || {};
+    const entryPrice = scorecardEntryPrice(item, quote);
+    const high = settlementHigh(track, quote);
+    const low = settlementLow(track, quote);
+    const exitPrice = high.price;
+    const profit = entryPrice ? (exitPrice - entryPrice) * LOT_SIZE : 0;
+    const profitPct = entryPrice ? ((exitPrice - entryPrice) / entryPrice) * 100 : 0;
+    const reason = scorecardReason(item);
+    totalProfit += profit;
+    lines.push(
+      `#${scorecardRank(item, index)} ${item.code} ${item.name || ""}`,
+      `分數：${Math.round(cleanNumber(item.score || item.totalScore || item.finalScore)) || "--"}`,
+      tradeSummaryLine({
+        date: tradeDateLabel(payload.usedDate || payload.date || today),
+        entryTime: tradeTimeLabel(item.entryAt || item.updatedAt || payload.updatedAt, "09:00"),
+        entryPrice,
+        exitDate: tradeDateLabel(today),
+        exitTime: settlementTimeLabel(high),
+        exitPrice,
+        profitPct,
+        profit,
+      }),
+      `盤中最高：${formatTradePrice(high.price)}｜最高時間：${settlementTimeLabel(high)}｜盤中最低：${formatTradePrice(low.price)}｜最低時間：${settlementTimeLabel(low)}`,
+      `損益金額：${money(profit)}｜損益率：${percent(profitPct)}`,
+      reason ? `原因：${reason}` : "",
+      ""
+    );
+  });
+  lines.push(`策略5合計：${money(totalProfit)}`);
+  return lines.join("\n");
+}
+
 function buildStrategy3Report(payload, quotes, today, tracker) {
   const rows = reportRows(payload);
   let totalProfit = 0;
@@ -355,7 +431,7 @@ function buildStrategy3Report(payload, quotes, today, tracker) {
   rows.forEach((item, index) => {
     const quote = quotes.get(item.code) || {};
     const track = scorecardTrack(tracker, "strategy3", item.code) || {};
-    const entryPrice = cleanNumber(item.close);
+    const entryPrice = strategy3EntryPrice(item, quote);
     const quoteHigh = cleanNumber(quote?.high);
     const quoteLow = cleanNumber(quote?.low);
     const high = quoteHigh
@@ -384,8 +460,8 @@ function buildStrategy3Report(payload, quotes, today, tracker) {
         profitPct,
         profit,
       }),
-      `收盤價：${formatTradePrice(item.close)}｜今日最高/出場：${formatTradePrice(exitPrice)}｜出場時間：${exitTime}`,
-      `盤中最高：${formatTradePrice(high.price)}｜最高時間：${settlementTimeLabel(high)}｜盤中最低：${formatTradePrice(low.price)}｜最低時間：${settlementTimeLabel(low)}`,
+      `策略3進場價：${formatTradePrice(entryPrice)}｜隔日高點/出場價：${formatTradePrice(exitPrice)}｜出場時間：${exitTime}`,
+      `隔日盤中高點：${formatTradePrice(high.price)}｜高點時間：${settlementTimeLabel(high)}｜隔日盤中低點：${formatTradePrice(low.price)}｜低點時間：${settlementTimeLabel(low)}`,
       `漲幅：${percent(cleanNumber(item.percent))}｜成交量：${Math.round(cleanNumber(item.volumeLots || item.tradeVolume / 1000)).toLocaleString("zh-TW")} 張`,
       `周轉率：${(cleanNumber(item.turnoverRate)).toFixed(2)}%｜量比：${(cleanNumber(item.volumeRatio)).toFixed(2)}`,
       `預計獲利金額：${money(profit)}`,
@@ -427,11 +503,11 @@ function buildStrategy2EventReport(payload, today) {
       `交易日期 ${tradeDateLabel(today)}`,
       `首次進入B區：${event.firstBAt || "未記錄"}  價格${formatTradePrice(event.firstBPrice)}元`,
       `B區後最高價：${formatTradePrice(event.highAfterB)}元`,
-      `首次進入A區：${event.firstAAt}  進場價${formatTradePrice(entryPrice)}元`,
+      `首次進入A區：${event.firstAAt}  進場價格:${formatTradePrice(entryPrice)}元`,
       `A區後最高價：${formatTradePrice(event.highAfterA)}元`,
       `出場日期:${tradeDateLabel(today)}`,
-      `出場價格:${formatTradePrice(exitPrice)}元`,
-      `漲幅:${percent(profitPct)} 預計獲利:${money(profit)}`,
+      `出場價格/盤中高點:${formatTradePrice(exitPrice)}元`,
+      `損益率:${percent(profitPct)}｜損益:${money(profit)}`,
       `分數：${Math.round(cleanNumber(event.maxScore)) || "--"}`,
       `策略：${(event.strategies || []).join("、") || "--"}`,
       event.stateReason ? `判斷：${event.stateReason}` : "",
@@ -450,9 +526,9 @@ function buildStrategy2EventReport(payload, today) {
     lines.push(
       `名單${event.code} ${event.name || ""}`,
       `交易日期 ${tradeDateLabel(today)}`,
-      `首次進入B區：${event.firstBAt}  價格${formatTradePrice(event.firstBPrice)}元`,
-      `B區後最高價：${formatTradePrice(event.highAfterB || event.highestPrice)}元`,
-      `B區觀察漲幅:${percent(profitPct)} 預計獲利:${money(profit)}`,
+      `首次進入B區：${event.firstBAt}  進場價格:${formatTradePrice(event.firstBPrice)}元`,
+      `出場價格/盤中高點:${formatTradePrice(event.highAfterB || event.highestPrice)}元`,
+      `B區觀察損益率:${percent(profitPct)}｜損益:${money(profit)}`,
       "首次進入A區：未進入",
       `最高分數：${Math.round(cleanNumber(event.maxScore)) || "--"}`,
       `策略：${(event.strategies || []).join("、") || "--"}`,
@@ -470,6 +546,50 @@ function buildStrategy2EventReport(payload, today) {
   return lines.join("\n");
 }
 
+function buildRealtimeRadarReport(records, quotes, today) {
+  let totalProfit = 0;
+  const lines = [`即時雷達成績單｜${dateSlash(today)}`, "", "來源：mini PC 盤中巡邏紀錄", ""];
+  if (!records.length) {
+    lines.push(
+      "今日尚未取得即時雷達盤中巡邏紀錄。",
+      "若要完整統計，請讓策略2 LINE 巡邏在 09:00-13:30 保持啟動。",
+      ""
+    );
+    return lines.join("\n");
+  }
+  records.slice(0, 30).forEach((record, index) => {
+    const quote = quotes.get(record.code) || {};
+    const high = settlementHigh(record, quote);
+    const low = settlementLow(record, quote);
+    const entryPrice = cleanNumber(record.entryPrice) || cleanNumber(record.observedPrice) || cleanNumber(quote.open);
+    const exitPrice = high.price;
+    const profit = entryPrice ? (exitPrice - entryPrice) * LOT_SIZE : 0;
+    const profitPct = entryPrice ? ((exitPrice - entryPrice) / entryPrice) * 100 : 0;
+    const state = inferState(record);
+    totalProfit += profit;
+    lines.push(
+      `#${index + 1} ${record.code} ${record.name || ""}`,
+      `分區：${state.label}${record.score ? `｜分數：${Math.round(cleanNumber(record.score))}` : ""}`,
+      `策略：${(record.strategies?.length ? record.strategies : [record.strategy]).filter(Boolean).join("、") || "--"}`,
+      tradeSummaryLine({
+        date: tradeDateLabel(record.timestamp, today),
+        entryTime: tradeTimeLabel(record.entryAt || record.timestamp, "09:00"),
+        entryPrice,
+        exitDate: tradeDateLabel(today),
+        exitTime: settlementTimeLabel(high),
+        exitPrice,
+        profitPct,
+        profit,
+      }),
+      `盤中最高：${formatTradePrice(high.price)}｜最高時間：${settlementTimeLabel(high)}｜盤中最低：${formatTradePrice(low.price)}｜最低時間：${settlementTimeLabel(low)}`,
+      state.reason ? `判斷：${state.reason}` : "",
+      ""
+    );
+  });
+  lines.push(`即時雷達合計：${money(totalProfit)}`);
+  return lines.join("\n");
+}
+
 async function sendReports(reports, mailConfig) {
   const failures = [];
   for (const report of reports) {
@@ -482,6 +602,35 @@ async function sendReports(reports, mailConfig) {
     }
   }
   if (failures.length) throw new Error(`Report email failed: ${failures.join(" | ")}`);
+}
+
+function mailConfigFromEnv() {
+  const to = process.env.REPORT_EMAIL_TO;
+  const user = process.env.SMTP_USER;
+  const pass = process.env.SMTP_PASS;
+  if (!to || !user || !pass) return null;
+  return {
+    host: process.env.SMTP_HOST || "smtp.gmail.com",
+    port: Number(process.env.SMTP_PORT || 465),
+    user,
+    pass,
+    to,
+  };
+}
+
+async function sendScorecardNotifications(reports) {
+  const mailConfig = mailConfigFromEnv();
+  const usingLine = hasLineConfig();
+  if (!mailConfig && !usingLine) {
+    throw new Error("Missing notification config: set LINE_CHANNEL_ACCESS_TOKEN + LINE_TO or SMTP settings");
+  }
+  if (mailConfig) await sendReports(reports, mailConfig);
+  if (usingLine) {
+    for (const report of reports) {
+      await sendLineText(report.text);
+      console.log(`line report sent: ${report.subject}`);
+    }
+  }
 }
 
 function readIntradayCache() {
@@ -497,6 +646,7 @@ async function main() {
   const scorecardTracker = readJson(SCORECARD_TRACK_FILE, { date: "", trades: {} });
   const openBuyPayload = readScorecardSource(OPEN_BUY_SCORECARD_SOURCE_FILE, OPEN_BUY_FILE, OPEN_BUY_BACKUP_FILE);
   const strategy3Payload = readScorecardSource(STRATEGY3_SCORECARD_SOURCE_FILE, STRATEGY3_FILE, STRATEGY3_BACKUP_FILE);
+  const strategy5Payload = readCacheWithBackup(STRATEGY5_FILE, STRATEGY5_BACKUP_FILE);
   const reportSlot = process.env.REPORT_SLOT || (taipeiHour() >= 15 ? "final" : "initial");
   const sentFile = path.join(REPORT_SENT_PATH, `${today}-${reportSlot}.json`);
   if (fs.existsSync(sentFile) && process.env.FORCE_REPORT !== "1") {
@@ -511,6 +661,7 @@ async function main() {
     ...records.map((record) => record.code),
     ...reportRows(openBuyPayload).map((item) => item.code),
     ...reportRows(strategy3Payload).map((item) => item.code),
+    ...reportRows(strategy5Payload).map((item) => item.code),
   ].filter(Boolean))];
   const quotes = await fetchRealtimeMap(codes);
   let totalProfit = 0;
@@ -520,28 +671,22 @@ async function main() {
     console.log(text);
     const openBuyText = buildOpenBuyReport(openBuyPayload, quotes, today, scorecardTracker);
     const strategy3Text = buildStrategy3Report(strategy3Payload, quotes, today, scorecardTracker);
+    const strategy5Text = buildStrategy5Report(strategy5Payload, quotes, today, scorecardTracker);
+    const radarText = buildRealtimeRadarReport(records, quotes, today);
     console.log(openBuyText);
     console.log(strategy3Text);
+    console.log(strategy5Text);
+    console.log(radarText);
 
-    const to = process.env.REPORT_EMAIL_TO;
-    const user = process.env.SMTP_USER;
-    const pass = process.env.SMTP_PASS;
-    if (!to || !user || !pass) {
-      throw new Error("Missing REPORT_EMAIL_TO, SMTP_USER, or SMTP_PASS");
-    }
-    await sendReports([
+    await sendScorecardNotifications([
       { subject: `策略1開盤沖成績單｜${dateSlash(today)}`, text: openBuyText },
       { subject: `策略2當沖成績單｜${dateSlash(today)}`, text },
       { subject: `策略3隔日沖成績單｜${dateSlash(today)}`, text: strategy3Text },
-    ], {
-      host: process.env.SMTP_HOST || "smtp.gmail.com",
-      port: Number(process.env.SMTP_PORT || 465),
-      user,
-      pass,
-      to,
-    });
+      { subject: `策略5綜合策略成績單｜${dateSlash(today)}`, text: strategy5Text },
+      { subject: `即時雷達成績單｜${dateSlash(today)}`, text: radarText },
+    ]);
     fs.mkdirSync(REPORT_SENT_PATH, { recursive: true });
-    fs.writeFileSync(sentFile, `${JSON.stringify({ date: today, slot: reportSlot, sentAt: new Date().toISOString(), to }, null, 2)}\n`);
+    fs.writeFileSync(sentFile, `${JSON.stringify({ date: today, slot: reportSlot, sentAt: new Date().toISOString() }, null, 2)}\n`);
     return;
   }
 
@@ -608,28 +753,22 @@ async function main() {
   console.log(text);
   const openBuyText = buildOpenBuyReport(openBuyPayload, quotes, today, scorecardTracker);
   const strategy3Text = buildStrategy3Report(strategy3Payload, quotes, today, scorecardTracker);
+  const strategy5Text = buildStrategy5Report(strategy5Payload, quotes, today, scorecardTracker);
+  const radarText = buildRealtimeRadarReport(records, quotes, today);
   console.log(openBuyText);
   console.log(strategy3Text);
+  console.log(strategy5Text);
+  console.log(radarText);
 
-  const to = process.env.REPORT_EMAIL_TO;
-  const user = process.env.SMTP_USER;
-  const pass = process.env.SMTP_PASS;
-  if (!to || !user || !pass) {
-    throw new Error("Missing REPORT_EMAIL_TO, SMTP_USER, or SMTP_PASS");
-  }
-  await sendReports([
+  await sendScorecardNotifications([
     { subject: `策略1開盤沖成績單｜${dateSlash(today)}`, text: openBuyText },
     { subject: `策略2當沖雷達成績單｜${dateSlash(today)}`, text },
     { subject: `策略3隔日沖成績單｜${dateSlash(today)}`, text: strategy3Text },
-  ], {
-    host: process.env.SMTP_HOST || "smtp.gmail.com",
-    port: Number(process.env.SMTP_PORT || 465),
-    user,
-    pass,
-    to,
-  });
+    { subject: `策略5綜合策略成績單｜${dateSlash(today)}`, text: strategy5Text },
+    { subject: `即時雷達成績單｜${dateSlash(today)}`, text: radarText },
+  ]);
   fs.mkdirSync(REPORT_SENT_PATH, { recursive: true });
-  fs.writeFileSync(sentFile, `${JSON.stringify({ date: today, slot: reportSlot, sentAt: new Date().toISOString(), to }, null, 2)}\n`);
+  fs.writeFileSync(sentFile, `${JSON.stringify({ date: today, slot: reportSlot, sentAt: new Date().toISOString() }, null, 2)}\n`);
 }
 
 main().catch((error) => {
