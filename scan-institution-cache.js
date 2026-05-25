@@ -1,11 +1,12 @@
 const fs = require("fs");
 const path = require("path");
 const scanInstitution = require("../api/institution");
-const scanStocks = require("../stocks");
+const { fetchMisQuotes } = require("../lib/mis-quotes");
 
 const ROOT = path.resolve(__dirname, "..");
 const OUT_FILE = path.join(ROOT, "data", "institution-latest.json");
 const BACKUP_FILE = path.join(ROOT, "data", "institution-backup.json");
+const STOCK_URL = process.env.STOCK_UNIVERSE_URL || "https://fuman-terminal.vercel.app/api/stocks";
 
 function readJson(file, fallback) {
   try { return JSON.parse(fs.readFileSync(file, "utf8")); } catch { return fallback; }
@@ -29,23 +30,71 @@ function runHandler() {
   });
 }
 
-function runStocksHandler() {
-  return new Promise((resolve) => {
-    const req = { method: "GET", query: {} };
-    const res = {
-      statusCode: 200,
-      headers: {},
-      setHeader(key, value) { this.headers[key] = value; },
-      status(code) { this.statusCode = code; return this; },
-      json(payload) { resolve(this.statusCode >= 400 ? { ok: false, stocks: [] } : payload); },
-      end() { resolve({ ok: false, stocks: [] }); },
-    };
-    Promise.resolve(scanStocks(req, res)).catch(() => resolve({ ok: false, stocks: [] }));
-  });
+async function fetchJson(url, timeout = 30000) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeout);
+  try {
+    const response = await fetch(url, {
+      signal: controller.signal,
+      headers: {
+        "User-Agent": "Mozilla/5.0 (compatible; FumanTerminalBot/1.0)",
+        Accept: "application/json,text/plain,*/*",
+      },
+    });
+    if (!response.ok) throw new Error(`${url} HTTP ${response.status}`);
+    return await response.json();
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function runStocksHandler() {
+  try {
+    return await fetchJson(STOCK_URL, 30000);
+  } catch (error) {
+    console.log(`stock universe fetch failed: ${error.message}`);
+    return { ok: false, stocks: [] };
+  }
 }
 
 function cleanNumber(value) {
   return Number(String(value ?? "").replace(/[,+%]/g, "").trim()) || 0;
+}
+
+function taipeiParts(date = new Date()) {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Taipei",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    weekday: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).formatToParts(date);
+  return Object.fromEntries(parts.map((part) => [part.type, part.value]));
+}
+
+function ymdFromParts(parts) {
+  return `${parts.year}${parts.month}${parts.day}`;
+}
+
+function latestExpectedInstitutionDate() {
+  const parts = taipeiParts();
+  const date = new Date(Number(parts.year), Number(parts.month) - 1, Number(parts.day));
+  const minutes = Number(parts.hour) * 60 + Number(parts.minute);
+  if (minutes < 21 * 60) date.setDate(date.getDate() - 1);
+  while (date.getDay() === 0 || date.getDay() === 6) date.setDate(date.getDate() - 1);
+  return `${date.getFullYear()}${String(date.getMonth() + 1).padStart(2, "0")}${String(date.getDate()).padStart(2, "0")}`;
+}
+
+function assertFreshInstitutionDate(output) {
+  if (process.env.REQUIRE_FRESH_INSTITUTION !== "1") return;
+  const usedDate = String(output.usedDate || "").replace(/\D/g, "");
+  const expected = latestExpectedInstitutionDate();
+  if (!/^\d{8}$/.test(usedDate) || usedDate < expected) {
+    throw new Error(`institution data is stale: usedDate=${usedDate || "--"}, expected>=${expected}`);
+  }
 }
 
 function buildQuoteMap(payload) {
@@ -97,6 +146,17 @@ async function main() {
   const backup = readJson(BACKUP_FILE, { ok: true, data: {} });
   const [payload, stockPayload] = await Promise.all([runHandler(), runStocksHandler()]);
   const quoteMap = buildQuoteMap(stockPayload);
+  const misQuotes = await fetchMisQuotes(Object.keys(payload.data || {}));
+  misQuotes.forEach((quote, code) => quoteMap.set(code, {
+    code,
+    name: quote.name,
+    close: quote.close,
+    change: quote.change,
+    percent: Number(quote.percent.toFixed(2)),
+    tradeVolume: quote.tradeVolume,
+    value: quote.value,
+    market: quote.market,
+  }));
   const data = enrichInstitutionData(payload.data || {}, quoteMap);
   const count = Object.keys(data).length;
   const output = {
@@ -108,6 +168,8 @@ async function main() {
     count,
     data,
   };
+
+  assertFreshInstitutionDate(output);
 
   fs.mkdirSync(path.dirname(OUT_FILE), { recursive: true });
   fs.writeFileSync(OUT_FILE, `${JSON.stringify(output, null, 2)}\n`);
