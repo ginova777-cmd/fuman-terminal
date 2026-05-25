@@ -1645,6 +1645,7 @@ const endpoints = {
   strategy3Backup: "/data/strategy3-backup.json",
   strategy5Cache: "/data/strategy5-latest.json",
   strategy5Backup: "/data/strategy5-backup.json",
+  strategy2IntradayCache: "/data/strategy2-intraday-latest.json",
   institutionCache: "/data/institution-latest.json",
   institutionBackup: "/data/institution-backup.json",
   warrantFlowCache: "/data/warrant-flow-latest.json",
@@ -1694,6 +1695,9 @@ let watchlistDashboardSignature = "";
 let watchlistRefreshLoading = false;
 const intradayGoFirstSeenAt = new Map();
 const intradayFirstSeenAt = new Map();
+let strategy2IntradayEventByCode = new Map();
+let strategy2IntradayCacheDate = "";
+let strategy2IntradayCacheLoading = false;
 let intradayCandidateSeenAt = {};
 let strategyHistoryLoading = false;
 let strategyHistoryCursor = 0;
@@ -3531,8 +3535,12 @@ function intradayTimeToValue(value) {
 }
 
 function getIntradayEntryTime(stock) {
+  if (stock?.intradayEntryTime) return stock.intradayEntryTime;
+  const tracked = strategy2IntradayEventByCode.get(String(stock?.code || ""));
+  if (tracked?.firstAAt) return tracked.firstAAt;
+  if (tracked?.firstBAt) return tracked.firstBAt;
   const quoteTime = stock?.quoteTime || strategyRealtimeQuotes[stock?.code]?.time || "";
-  if (quoteTime) return quoteTime;
+  if (quoteTime && !/^13:30(?::00)?$/.test(String(quoteTime))) return quoteTime;
   const seenAt = cleanNumber(stock?.intradayFirstSeenAt) || cleanNumber(intradayFirstSeenAt.get(stock?.code));
   if (seenAt) return new Date(seenAt).toLocaleTimeString("zh-TW", { hour12: false });
   return "--:--";
@@ -3558,6 +3566,26 @@ function sortIntradayRows(rows) {
     const diff = av === bv ? ((b.intradaySignals?.length || 0) - (a.intradaySignals?.length || 0)) : av - bv;
     return intradaySortDir === "asc" ? diff : -diff;
   });
+}
+
+async function loadStrategy2IntradayCache(force = false) {
+  if (strategy2IntradayCacheLoading) return;
+  if (!force && strategy2IntradayEventByCode.size) return;
+  strategy2IntradayCacheLoading = true;
+  try {
+    const payload = await fetchJson(`${endpoints.strategy2IntradayCache}?t=${Date.now()}`, 10000);
+    const events = normalizeArray(payload?.events);
+    strategy2IntradayCacheDate = payload?.date || "";
+    strategy2IntradayEventByCode = new Map(events
+      .filter((event) => event?.code)
+      .map((event) => [String(event.code), event]));
+    if (isViewActive("strategy") && selectedStrategyIds.has("intraday_2m")) {
+      renderStrategyScanner();
+    }
+  } catch (error) {
+  } finally {
+    strategy2IntradayCacheLoading = false;
+  }
 }
 
 function getIntradayState(stock) {
@@ -5680,6 +5708,9 @@ function setStrategyChrome(mode) {
 
 function renderIntradayRadar(evaluated) {
   setStrategyChrome("intraday");
+  if (!strategy2IntradayEventByCode.size && !strategy2IntradayCacheLoading) {
+    loadStrategy2IntradayCache(false);
+  }
   const keyword = strategyKeyword.trim().toLowerCase();
   const now = Date.now();
   const baseRows = evaluated
@@ -5691,6 +5722,10 @@ function renderIntradayRadar(evaluated) {
       const signals = stock.intradaySignals || [];
       const row = { ...stock, intradaySignals: signals };
       const intradayState = getIntradayState(row);
+      const trackedEvent = strategy2IntradayEventByCode.get(String(row.code || ""));
+      const trackedTime = intradayState.id === "go"
+        ? trackedEvent?.firstAAt || trackedEvent?.firstBAt || ""
+        : trackedEvent?.firstBAt || trackedEvent?.firstAAt || "";
       if (!intradayFirstSeenAt.has(row.code)) {
         intradayFirstSeenAt.set(row.code, now);
       }
@@ -5700,6 +5735,8 @@ function renderIntradayRadar(evaluated) {
       return {
         ...row,
         intradayState,
+        strategy2Event: trackedEvent || null,
+        intradayEntryTime: trackedTime,
         intradayFirstSeenAt: intradayFirstSeenAt.get(row.code) || null,
         intradayGoFirstSeenAt: intradayGoFirstSeenAt.get(row.code) || null,
       };
