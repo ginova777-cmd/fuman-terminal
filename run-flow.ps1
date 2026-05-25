@@ -9,13 +9,25 @@ git pull --rebase origin main >> $log 2>&1
 
 $env:REQUIRE_FRESH_INSTITUTION = "1"
 
-node scripts\scan-institution-cache.js >> $log 2>&1
-$institutionExit = $LASTEXITCODE
+$institutionExit = 1
+for ($attempt = 1; $attempt -le 6; $attempt++) {
+  "Institution scan attempt $attempt/6" >> $log
+  node scripts\scan-institution-cache.js >> $log 2>&1
+  $institutionExit = $LASTEXITCODE
+  if ($institutionExit -eq 0) {
+    "Institution scan succeeded on attempt $attempt" >> $log
+    break
+  }
+  if ($attempt -lt 6) {
+    "Institution scan not fresh yet, retrying in 10 minutes" >> $log
+    Start-Sleep -Seconds 600
+  }
+}
 
 Remove-Item Env:REQUIRE_FRESH_INSTITUTION -ErrorAction SilentlyContinue
 
 if ($institutionExit -ne 0) {
-  "Institution scan failed with exit code $institutionExit" >> $log
+  "Institution scan failed after retries with exit code $institutionExit" >> $log
   exit $institutionExit
 }
 
