@@ -426,6 +426,7 @@ const WORKFLOW_BY_SCHEDULE = {
 };
 
 const GITHUB_WORKFLOW_API = "https://api.github.com/repos/ginova777-cmd/fuman-terminal/actions/workflows";
+const MINI_PC_CACHE_SCHEDULES = new Set(["chip", "warrant"]);
 const workflowRunStatus = {};
 let workflowRunStatusReady = false;
 
@@ -521,6 +522,9 @@ function scheduleBadgeHtml(key) {
     }
   }
   const isStale = latestDue && (!updatedAt || updatedAt < latestDue.getTime());
+  if (isStale && MINI_PC_CACHE_SCHEDULES.has(key)) {
+    return `<span class="schedule-status-pill schedule-failed"><span class="schedule-failed-dot">●</span><span>更新逾時，補跑中</span></span>`;
+  }
   if (isStale && workflowRunStatusReady) {
     const hasSuccessfulRun = hasSuccessfulWorkflowRun(key, latestDue);
     if (!hasSuccessfulRun) {
