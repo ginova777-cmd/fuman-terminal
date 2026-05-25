@@ -3543,11 +3543,18 @@ function isIntradayClockTime(value) {
   return seconds >= 9 * 3600 && seconds <= (13 * 3600 + 30 * 60);
 }
 
+function intradayOnlyTime(value) {
+  const text = String(value || "");
+  const match = text.match(/(\d{2}:\d{2}(?::\d{2})?)/);
+  return match && isIntradayClockTime(match[1]) ? match[1] : "";
+}
+
 function getIntradayEntryTime(stock) {
   if (stock?.intradayEntryTime) return stock.intradayEntryTime;
   const tracked = strategy2IntradayEventByCode.get(String(stock?.code || ""));
   if (tracked?.firstAAt) return tracked.firstAAt;
   if (tracked?.firstBAt) return tracked.firstBAt;
+  if (tracked?.firstSeenAt) return tracked.firstSeenAt;
   const quoteTime = stock?.quoteTime || strategyRealtimeQuotes[stock?.code]?.time || "";
   if (quoteTime && isIntradayClockTime(quoteTime)) return quoteTime;
   const seenAt = cleanNumber(stock?.intradayFirstSeenAt) || cleanNumber(intradayFirstSeenAt.get(stock?.code));
@@ -3555,7 +3562,7 @@ function getIntradayEntryTime(stock) {
     const seenTime = new Date(seenAt).toLocaleTimeString("zh-TW", { hour12: false });
     if (isIntradayClockTime(seenTime)) return seenTime;
   }
-  return isIntradayScanWindow() ? "--:--" : "13:30:00";
+  return "--:--";
 }
 
 function getIntradaySortValue(stock, key) {
@@ -3587,10 +3594,25 @@ async function loadStrategy2IntradayCache(force = false) {
   try {
     const payload = await fetchJson(`${endpoints.strategy2IntradayCache}?t=${Date.now()}`, 10000);
     const events = normalizeArray(payload?.events);
-    strategy2IntradayCacheDate = payload?.date || "";
-    strategy2IntradayEventByCode = new Map(events
+    const byCode = new Map(events
       .filter((event) => event?.code)
-      .map((event) => [String(event.code), event]));
+      .map((event) => [String(event.code), { ...event }]));
+    normalizeArray(payload?.records).forEach((record) => {
+      const code = String(record?.code || "");
+      if (!code) return;
+      const seenTime = intradayOnlyTime(record.timestamp || record.entryAt || record.firstAAt || record.firstBAt);
+      if (!seenTime) return;
+      const current = byCode.get(code) || { code, name: record.name || "" };
+      const currentSeen = current.firstSeenAt || current.firstBAt || current.firstAAt || "";
+      if (!currentSeen || intradayTimeToValue(seenTime) < intradayTimeToValue(currentSeen)) {
+        current.firstSeenAt = seenTime;
+      }
+      if (record.stateId === "go" && !current.firstAAt) current.firstAAt = seenTime;
+      if (record.stateId !== "go" && !current.firstBAt) current.firstBAt = seenTime;
+      byCode.set(code, current);
+    });
+    strategy2IntradayCacheDate = payload?.date || "";
+    strategy2IntradayEventByCode = byCode;
     if (isViewActive("strategy") && selectedStrategyIds.has("intraday_2m")) {
       renderStrategyScanner();
     }
@@ -5725,6 +5747,7 @@ function renderIntradayRadar(evaluated) {
   }
   const keyword = strategyKeyword.trim().toLowerCase();
   const now = Date.now();
+  const scanClosed = !isIntradayScanWindow();
   const baseRows = evaluated
     .filter(isIntradayTradable)
     .filter((stock) => matchesStrategyKeyword(stock, keyword));
@@ -5753,7 +5776,9 @@ function renderIntradayRadar(evaluated) {
         intradayGoFirstSeenAt: intradayGoFirstSeenAt.get(row.code) || null,
       };
     });
-  const tradableRows = allRows;
+  const tradableRows = scanClosed
+    ? allRows.filter((stock) => stock.strategy2Event && getIntradayEntryTime(stock) !== "--:--")
+    : allRows;
   const stateFilters = new Set(["go", "watch"]);
   const filteredRows = intradaySignalFilter === "all"
     ? tradableRows
@@ -5777,7 +5802,6 @@ function renderIntradayRadar(evaluated) {
   const scanTime = strategyLastScanAt
     ? new Date(strategyLastScanAt).toLocaleTimeString("zh-TW", { hour12: false })
     : "等待開盤";
-  const scanClosed = !isIntradayScanWindow();
   const scanStatus = scanClosed
     ? "｜盤後停止偵測，顯示 09:00-13:30 最後資料"
     : strategyLastScanAt
