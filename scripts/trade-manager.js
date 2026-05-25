@@ -16,6 +16,7 @@ const DRY_RUN = process.env.TRADE_MANAGER_DRY_RUN === "1";
 const BACKFILL_EXISTING = process.env.TRADE_MANAGER_BACKFILL_EXISTING === "1";
 const MIN_A_SCORE = Number(process.env.TRADE_MANAGER_MIN_A_SCORE || 80);
 const MIN_VOLUME_LOTS = Number(process.env.TRADE_MANAGER_MIN_VOLUME_LOTS || 2000);
+const VOLUME_MILESTONES = [2000, 5000, 10000];
 const MIN_TRADE_VALUE = Number(process.env.TRADE_MANAGER_MIN_TRADE_VALUE || 80000000);
 const MIN_INTRADAY_PCT = Number(process.env.TRADE_MANAGER_MIN_INTRADAY_PCT || 2);
 const MAX_INTRADAY_PCT = Number(process.env.TRADE_MANAGER_MAX_INTRADAY_PCT || 7.5);
@@ -109,7 +110,8 @@ function buildBuyMessage(event, position) {
     `停利價：${formatTradePrice(position.takeProfitPrice)} 元（+${TAKE_PROFIT_PCT}%）`,
     `停損價：${formatTradePrice(position.stopLossPrice)} 元（-${STOP_LOSS_PCT}%）`,
     `今日通知：${position.dailyTradeCount}/${MAX_DAILY_TRADES} 筆`,
-    `品質：分數${Math.round(position.qualityScore)}｜漲幅${position.qualityPct.toFixed(2)}%｜高點貼近${position.nearHighText}`,
+    `品質：分數${Math.round(position.qualityScore)}｜漲幅${position.qualityPct.toFixed(2)}%｜量${Math.round(position.qualityVolume).toLocaleString("zh-TW")}張(${position.volumeMilestone.toLocaleString("zh-TW")}級距)`,
+    `動能：${position.volumeTrendText}｜${position.signalText}｜高點貼近${position.nearHighText}`,
     "",
     `原因：${event.stateReason || "首次進入A區，量價條件符合。"}`
   ].join("\n");
@@ -121,22 +123,98 @@ function eventKey(event) {
 
 function quoteTradeValue(quote, event) {
   const close = cleanNumber(quote?.close) || cleanNumber(event.entryPrice);
-  const volume = cleanNumber(quote?.tradeVolume) || cleanNumber(event.volume) || cleanNumber(event.tradeVolume);
+  const volume = normalizeVolumeLots(cleanNumber(quote?.tradeVolume) || cleanNumber(event.volume) || cleanNumber(event.tradeVolume));
   const value = cleanNumber(quote?.value) || cleanNumber(event.value) || close * volume * 1000;
   return { close, volume, value };
 }
 
-function intradayQuality(event, quote) {
+function normalizeVolumeLots(value) {
+  const volume = cleanNumber(value);
+  if (!volume) return 0;
+  return volume >= 100000 ? volume / 1000 : volume;
+}
+
+function eventText(event) {
+  return [
+    event.strategy,
+    event.reason,
+    event.stateReason,
+    ...(Array.isArray(event.strategies) ? event.strategies : []),
+  ].filter(Boolean).join(" ");
+}
+
+function volumeMilestone(volumeLots) {
+  return VOLUME_MILESTONES.filter((level) => volumeLots >= level).at(-1) || 0;
+}
+
+function recordsForEvent(payload, event) {
+  return (payload.records || [])
+    .filter((record) => normalizeCode(record.code) === event.code && record.date === event.date)
+    .sort((a, b) => String(a.timestamp || a.entryAt || "").localeCompare(String(b.timestamp || b.entryAt || "")));
+}
+
+function minuteVolumeTrend(records, event) {
+  const recent = records.slice(-6)
+    .map((record) => ({
+      time: String(record.timestamp || record.entryAt || ""),
+      volume: normalizeVolumeLots(record.volume || record.tradeVolume),
+    }))
+    .filter((point) => point.time && point.volume > 0);
+  const unique = [];
+  for (const point of recent) {
+    if (!unique.length || unique.at(-1).time !== point.time) unique.push(point);
+    else unique[unique.length - 1] = point;
+  }
+  if (unique.length < 3) {
+    return {
+      ok: /量勢|放量|量/.test(eventText(event)),
+      text: unique.length ? "資料少，以量勢訊號輔助" : "尚無分時量資料",
+    };
+  }
+  const a = unique.at(-3);
+  const b = unique.at(-2);
+  const c = unique.at(-1);
+  const prevDelta = Math.max(0, b.volume - a.volume);
+  const latestDelta = Math.max(0, c.volume - b.volume);
+  const ok = latestDelta > 0 && (prevDelta === 0 || latestDelta >= prevDelta * 0.8 || latestDelta >= 100);
+  return {
+    ok,
+    text: `近兩段量增 ${Math.round(prevDelta).toLocaleString("zh-TW")}→${Math.round(latestDelta).toLocaleString("zh-TW")} 張`,
+  };
+}
+
+function signalQuality(event) {
+  const text = eventText(event);
+  const hasMa35 = /MA35|均線|強勢區|VWAP/.test(text);
+  const hasBreakout = /轉強突破|突破|站上|量勢/.test(text);
+  return {
+    dailyTrendOk: hasMa35,
+    ma35KdMacdOk: hasMa35 && hasBreakout,
+    text: [
+      hasMa35 ? "日均線/MA35多頭" : "",
+      hasBreakout ? "突破動能向上" : "",
+    ].filter(Boolean).join("、") || "缺少均線動能訊號",
+  };
+}
+
+function intradayQuality(event, quote, payload) {
   const score = cleanNumber(event.score);
   const pct = cleanNumber(quote?.percent) || cleanNumber(event.percent);
   const high = cleanNumber(quote?.high);
   const close = cleanNumber(quote?.close) || cleanNumber(event.entryPrice);
   const { volume, value } = quoteTradeValue(quote, event);
+  const milestone = volumeMilestone(volume);
+  const volumeTrend = minuteVolumeTrend(recordsForEvent(payload, event), event);
+  const signal = signalQuality(event);
   const reasons = [];
   if (score < MIN_A_SCORE) reasons.push(`分數${Math.round(score)}低於${MIN_A_SCORE}`);
   if (pct < MIN_INTRADAY_PCT) reasons.push(`漲幅${pct.toFixed(2)}%不足`);
   if (pct > MAX_INTRADAY_PCT) reasons.push(`漲幅${pct.toFixed(2)}%過熱`);
   if (volume < MIN_VOLUME_LOTS) reasons.push(`成交量${Math.round(volume).toLocaleString("zh-TW")}張不足`);
+  if (!milestone) reasons.push("成交量未達2000張級距");
+  if (!volumeTrend.ok) reasons.push(`分時量未持續上升（${volumeTrend.text}）`);
+  if (!signal.dailyTrendOk) reasons.push("日均線多頭排列不足");
+  if (!signal.ma35KdMacdOk) reasons.push("MA35/KD/MACD動能不足");
   if (value < MIN_TRADE_VALUE) reasons.push("成交金額不足");
   if (high && close < high * NEAR_HIGH_RATIO) reasons.push("現價離盤中高點太遠");
   return {
@@ -146,6 +224,9 @@ function intradayQuality(event, quote) {
     pct,
     volume,
     value,
+    milestone,
+    volumeTrendText: volumeTrend.text,
+    signalText: signal.text,
     nearHighText: high ? `${((close / high) * 100).toFixed(1)}%` : "--",
   };
 }
@@ -200,6 +281,7 @@ function getFreshAEvents(payload, today) {
       ...event,
       code: normalizeCode(event.code),
       entryPrice: cleanNumber(event.firstAPrice),
+      score: cleanNumber(event.maxScore || event.score),
     }))
     .filter((event) => event.code && event.entryPrice)
     .sort((a, b) => String(a.firstAAt).localeCompare(String(b.firstAAt)));
@@ -233,7 +315,7 @@ async function main() {
     state.seenEvents[key] = { seenAt: new Date().toISOString() };
     if (state.dailyTradeCount >= MAX_DAILY_TRADES) continue;
     const quote = quoteByCode.get(event.code);
-    const quality = intradayQuality(event, quote);
+    const quality = intradayQuality(event, quote, payload);
     if (!quality.pass) {
       console.log(`trade manager skip ${event.code}: ${quality.reasons.join("；")}`);
       continue;
@@ -258,6 +340,9 @@ async function main() {
       qualityPct: quality.pct,
       qualityVolume: quality.volume,
       qualityValue: quality.value,
+      volumeMilestone: quality.milestone,
+      volumeTrendText: quality.volumeTrendText,
+      signalText: quality.signalText,
       nearHighText: quality.nearHighText,
       dailyTradeCount: state.dailyTradeCount + 1,
     };
