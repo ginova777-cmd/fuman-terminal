@@ -507,6 +507,10 @@ function scheduleBadgeHtml(key) {
   }
   const latestDue = latestDueScheduleTime(meta.times);
   const updatedAt = getScheduleUpdatedAt(key);
+  if (MINI_PC_CACHE_SCHEDULES.has(key) && updatedAt) {
+    const next = formatScheduleDate(nextScheduleTime(meta.times));
+    return `<span class="schedule-status-pill"><span>● 已更新 ${formatScheduleDate(new Date(updatedAt))}</span><span>● 預計下次更新：${next}</span></span>`;
+  }
   const hasSuccessfulUpdate = updatedAt && latestDue && updatedAt >= latestDue.getTime();
   if (hasSuccessfulUpdate) {
     const next = formatScheduleDate(nextScheduleTime(meta.times));
