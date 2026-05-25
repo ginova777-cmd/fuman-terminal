@@ -55,7 +55,7 @@ function taipeiSlotIso(now, minutes) {
   return utc.toISOString();
 }
 
-async function hasWorkflowRunSince(workflow, sinceIso) {
+async function hasHealthyWorkflowRunSince(workflow, sinceIso) {
   const repo = process.env.GITHUB_REPOSITORY;
   const token = process.env.GITHUB_TOKEN;
   if (!repo || !token) return false;
@@ -71,7 +71,9 @@ async function hasWorkflowRunSince(workflow, sinceIso) {
   const since = Date.parse(sinceIso);
   return (payload.workflow_runs || []).some((run) => {
     const createdAt = Date.parse(run.created_at || "");
-    return Number.isFinite(createdAt) && createdAt >= since;
+    if (!Number.isFinite(createdAt) || createdAt < since) return false;
+    if (run.status === "queued" || run.status === "in_progress") return true;
+    return run.status === "completed" && run.conclusion === "success";
   });
 }
 
@@ -80,7 +82,7 @@ async function pushOnceInWindow(tasks, taskKey, now, start, end) {
   const workflow = WORKFLOWS[taskKey]?.workflow;
   if (!workflow) return;
   const sinceIso = taipeiSlotIso(now, start);
-  if (await hasWorkflowRunSince(workflow, sinceIso)) return;
+  if (await hasHealthyWorkflowRunSince(workflow, sinceIso)) return;
   tasks.push(taskKey);
 }
 
@@ -99,8 +101,8 @@ async function selectTasks(now) {
     tasks.push("strategy3");
   }
 
-  await pushOnceInWindow(tasks, "strategy4", now, 7 * 60, 7 * 60 + 25);
-  await pushOnceInWindow(tasks, "strategy4", now, 14 * 60 + 30, 14 * 60 + 50);
+  await pushOnceInWindow(tasks, "strategy4", now, 7 * 60, 8 * 60 + 30);
+  await pushOnceInWindow(tasks, "strategy4", now, 14 * 60 + 30, 16 * 60);
 
   await pushOnceInWindow(tasks, "strategy5", now, 6 * 60, 6 * 60 + 20);
   await pushOnceInWindow(tasks, "strategy5", now, 21 * 60, 21 * 60 + 20);
