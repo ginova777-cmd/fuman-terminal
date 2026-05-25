@@ -1689,6 +1689,7 @@ let mobileOtherStrategyCacheCheckedAt = {};
 let watchlistDashboardSignature = "";
 let watchlistRefreshLoading = false;
 const intradayGoFirstSeenAt = new Map();
+const intradayFirstSeenAt = new Map();
 let intradayCandidateSeenAt = {};
 let strategyHistoryLoading = false;
 let strategyHistoryCursor = 0;
@@ -1759,7 +1760,7 @@ let swingSortDir = "desc";
 let swingSignalFilter = "all";
 let swingVisibleKeyword = "";
 let swingVisibleSearchInput = null;
-let intradaySortKey = "score";
+let intradaySortKey = "time";
 let intradaySortDir = "desc";
 let intradaySignalFilter = "all";
 let strategyPresetMode = "";
@@ -3503,8 +3504,24 @@ function swingSortHeader(key, label) {
   return `<button type="button" data-swing-sort="${key}">${label}${mark}</button>`;
 }
 
+function intradayTimeToValue(value) {
+  const match = String(value || "").match(/(\d{2}):(\d{2})(?::(\d{2}))?/);
+  if (!match) return 0;
+  return Number(match[1]) * 3600 + Number(match[2]) * 60 + Number(match[3] || 0);
+}
+
+function getIntradayEntryTime(stock) {
+  const quoteTime = stock?.quoteTime || strategyRealtimeQuotes[stock?.code]?.time || "";
+  if (quoteTime) return quoteTime;
+  const seenAt = cleanNumber(stock?.intradayFirstSeenAt) || cleanNumber(intradayFirstSeenAt.get(stock?.code));
+  if (seenAt) return new Date(seenAt).toLocaleTimeString("zh-TW", { hour12: false });
+  return "--:--";
+}
+
 function getIntradaySortValue(stock, key) {
+  const seenAt = cleanNumber(stock.intradayFirstSeenAt) || cleanNumber(intradayFirstSeenAt.get(stock.code));
   const values = {
+    time: seenAt || intradayTimeToValue(getIntradayEntryTime(stock)),
     code: Number(stock.code) || 0,
     price: cleanNumber(stock.close),
     percent: stock.percent || 0,
@@ -5654,10 +5671,18 @@ function renderIntradayRadar(evaluated) {
       const signals = stock.intradaySignals || [];
       const row = { ...stock, intradaySignals: signals };
       const intradayState = getIntradayState(row);
+      if (!intradayFirstSeenAt.has(row.code)) {
+        intradayFirstSeenAt.set(row.code, now);
+      }
       if (intradayState.id === "go" && !intradayGoFirstSeenAt.has(row.code)) {
         intradayGoFirstSeenAt.set(row.code, now);
       }
-      return { ...row, intradayState, intradayGoFirstSeenAt: intradayGoFirstSeenAt.get(row.code) || null };
+      return {
+        ...row,
+        intradayState,
+        intradayFirstSeenAt: intradayFirstSeenAt.get(row.code) || null,
+        intradayGoFirstSeenAt: intradayGoFirstSeenAt.get(row.code) || null,
+      };
     });
   const tradableRows = allRows;
   const stateFilters = new Set(["go", "watch"]);
@@ -5776,8 +5801,10 @@ function renderIntradayRadar(evaluated) {
       const chips = stock.intradaySignals.map((signal) => `<b>${signal.icon} ${signal.short}</b>`).join("");
       const reason = stock.intradaySignals[0]?.reason || "盤中訊號觸發";
       const state = stock.intradayState || getIntradayState(stock);
+      const entryTime = getIntradayEntryTime(stock);
       return `
         <tr>
+          <td><span class="intraday-table-time">${entryTime}</span></td>
           <td><span class="code">${stock.code}</span></td>
           <td>${stock.name}</td>
           <td><span class="intraday-state ${state.cls}">${state.label}</span></td>
@@ -5791,7 +5818,7 @@ function renderIntradayRadar(evaluated) {
       `;
     }).join("")}
   ` : `
-    <tr><td colspan="9">策略2正在 3 秒巡邏；目前本輪尚未出現右側任一訊號。只要符合「早盤強勢 / 爆量 / 跳空 / 突破 / MA35 / 鑽石 / 拉抬」任一項，就會立刻顯示。</td></tr>
+    <tr><td colspan="10">策略2正在 3 秒巡邏；目前本輪尚未出現右側任一訊號。只要符合「早盤強勢 / 爆量 / 跳空 / 突破 / MA35 / 鑽石 / 拉抬」任一項，就會立刻顯示。</td></tr>
   `;
 
   strategyTable.innerHTML = `
@@ -5821,7 +5848,7 @@ function renderIntradayRadar(evaluated) {
             <table class="intraday-table">
               <thead>
                 <tr>
-                  <th>${intradaySortHeader("code", "股票代號")}</th><th>股票名稱</th><th>狀態</th><th>訊號</th><th>${intradaySortHeader("price", "進場價")}</th><th>${intradaySortHeader("percent", "漲幅")}</th><th>${intradaySortHeader("volume", "成交量")}</th><th>風控</th><th>原因</th>
+                  <th>${intradaySortHeader("time", "進場時間")}</th><th>${intradaySortHeader("code", "股票代號")}</th><th>股票名稱</th><th>狀態</th><th>訊號</th><th>${intradaySortHeader("price", "進場價")}</th><th>${intradaySortHeader("percent", "漲幅")}</th><th>${intradaySortHeader("volume", "成交量")}</th><th>風控</th><th>原因</th>
                 </tr>
               </thead>
               <tbody>${tableRows}</tbody>
