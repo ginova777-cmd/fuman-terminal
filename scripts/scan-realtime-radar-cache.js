@@ -5,11 +5,38 @@ const { cleanNumber, isIntradayTradable } = require("./intraday-radar-rules");
 const ROOT = path.resolve(__dirname, "..");
 const OUT_FILE = path.join(ROOT, "data", "realtime-radar-latest.json");
 const BASE_URL = process.env.FUMAN_BASE_URL || "https://fuman-terminal.vercel.app";
+const SUPABASE_URL = process.env.FUMAN_SUPABASE_URL || "https://jxnqyqnigsppqsxinlrq.supabase.co";
+const SUPABASE_KEY = process.env.FUMAN_SUPABASE_SERVICE_KEY || process.env.FUMAN_SUPABASE_KEY || "";
+const SUPABASE_TABLE = process.env.FUMAN_REALTIME_RADAR_TABLE || "fuman_realtime_radar_cache";
 const STALE_AFTER_MS = Number(process.env.REALTIME_RADAR_STALE_MS || 20000);
 
 function writeJson(file, value) {
   fs.mkdirSync(path.dirname(file), { recursive: true });
   fs.writeFileSync(file, `${JSON.stringify(value, null, 2)}\n`);
+}
+
+async function uploadRealtimeRadarPayload(payload) {
+  if (!SUPABASE_URL || !SUPABASE_KEY) return false;
+  const url = `${SUPABASE_URL.replace(/\/$/, "")}/rest/v1/${SUPABASE_TABLE}`;
+  const response = await fetch(url, {
+    method: "POST",
+    headers: {
+      "apikey": SUPABASE_KEY,
+      "Authorization": `Bearer ${SUPABASE_KEY}`,
+      "Content-Type": "application/json",
+      "Prefer": "resolution=merge-duplicates",
+    },
+    body: JSON.stringify({
+      id: "latest",
+      payload,
+      updated_at: new Date(payload.updatedAtMs || Date.now()).toISOString(),
+    }),
+  });
+  if (!response.ok) {
+    const text = await response.text().catch(() => "");
+    throw new Error(`supabase upload failed HTTP ${response.status} ${text}`.trim());
+  }
+  return true;
 }
 
 function taipeiParts(date = new Date()) {
@@ -208,7 +235,7 @@ async function main() {
   const detectedAt = Date.now();
   const timestamp = timestampKey(parts);
   if (!isMarketTime(parts)) {
-    writeJson(OUT_FILE, {
+    const payload = {
       source: "mini-pc-realtime-radar",
       status: "outside_market_time",
       date: key,
@@ -219,7 +246,9 @@ async function main() {
       rows: [],
       longCount: 0,
       shortCount: 0,
-    });
+    };
+    writeJson(OUT_FILE, payload);
+    await uploadRealtimeRadarPayload(payload);
     console.log(`realtime radar skipped outside market time ${timestamp}`);
     return;
   }
@@ -227,7 +256,7 @@ async function main() {
   const rawStocks = await fetchStocks();
   const liveStocks = await fetchRealtime(rawStocks);
   const rows = buildRadarRows(liveStocks, detectedAt);
-  writeJson(OUT_FILE, {
+  const payload = {
     source: "mini-pc-realtime-radar",
     status: "ok",
     date: key,
@@ -238,7 +267,9 @@ async function main() {
     rows,
     longCount: rows.filter((row) => row.side === "long").length,
     shortCount: rows.filter((row) => row.side === "short").length,
-  });
+  };
+  writeJson(OUT_FILE, payload);
+  await uploadRealtimeRadarPayload(payload);
   console.log(`realtime radar ${timestamp}: rows ${rows.length}`);
 }
 
