@@ -1380,7 +1380,8 @@ async function loadRealtimeRadarCache(force = false) {
   realtimeRadarCacheLoading = true;
   realtimeRadarCacheCheckedAt = Date.now();
   try {
-    const payload = await fetchJson(`${endpoints.realtimeRadarCache}?t=${Date.now()}`, 6000);
+    const supabasePayload = await fetchRealtimeRadarSupabaseCache();
+    const payload = supabasePayload || await fetchJson(`${endpoints.realtimeRadarCache}?t=${Date.now()}`, 6000);
     realtimeRadarCachePayload = payload || null;
     if (isRealtimeRadarCacheFresh(realtimeRadarCachePayload)) {
       const updatedAt = cleanNumber(realtimeRadarCachePayload.updatedAtMs) || Date.parse(realtimeRadarCachePayload.updatedAt || "") || Date.now();
@@ -1397,6 +1398,22 @@ async function loadRealtimeRadarCache(force = false) {
     realtimeRadarCacheLoading = false;
   }
   return realtimeRadarCachePayload;
+}
+
+async function fetchRealtimeRadarSupabaseCache() {
+  if (!FUMAN_SUPABASE_URL || !FUMAN_SUPABASE_KEY) return null;
+  const url = `${FUMAN_SUPABASE_URL}/rest/v1/fuman_realtime_radar_cache?id=eq.latest&select=payload,updated_at&limit=1&t=${Date.now()}`;
+  const response = await fetch(url, {
+    headers: {
+      "apikey": FUMAN_SUPABASE_KEY,
+      "Authorization": `Bearer ${FUMAN_SUPABASE_KEY}`,
+      "Accept": "application/json",
+    },
+  });
+  if (!response.ok) return null;
+  const rows = await response.json();
+  const item = Array.isArray(rows) ? rows[0] : null;
+  return item?.payload || null;
 }
 
 function renderRealtimeRadar() {
