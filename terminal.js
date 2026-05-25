@@ -1872,6 +1872,22 @@ function isStaleStrategyPrice(item, base) {
   return Math.abs(cachedClose - latestClose) > 0.001;
 }
 
+function mergeLatestStrategyPrice(item, base) {
+  if (!base) return item;
+  const close = cleanNumber(base.close);
+  const percent = cleanNumber(base.percent);
+  const tradeVolume = cleanNumber(base.tradeVolume);
+  const value = cleanNumber(base.value);
+  return {
+    ...item,
+    name: base.name || item.name,
+    close: close || item.close,
+    percent: base.percent !== undefined && base.percent !== "" ? percent : item.percent,
+    tradeVolume: tradeVolume || item.tradeVolume,
+    value: value || item.value,
+  };
+}
+
 function formatNumber(value, digits = 2) {
   return cleanNumber(value).toLocaleString("zh-TW", {
     minimumFractionDigits: digits,
@@ -5884,14 +5900,14 @@ function renderSwingRadar(universe) {
     ? Object.values(strategy4ScanMatches).filter((stock) => String(stock.code || "").includes(keyword))
     : Object.values(strategy4ScanMatches);
   const allRows = sourceRows
+    .map((stock) => mergeLatestStrategyPrice(stock, latestByCode.get(String(stock.code || ""))))
     .filter((stock) => allowCodes.has(String(stock.code || "")) && (stock.swingSignals || []).length)
-    .filter((stock) => !isStaleStrategyPrice(stock, latestByCode.get(String(stock.code || ""))))
     .filter((stock) => matchesStrategyKeyword(stock, keyword))
     .map((stock) => ({ ...stock, swingScore: stock.swingScore || stock.score || 0 }));
   const filteredRows = keyword || swingSignalFilter === "all"
     ? allRows
     : allRows.filter((stock) => (stock.swingSignals || []).some((signal) => signal.id === swingSignalFilter));
-  const rows = keyword ? sortSwingRows(filteredRows) : sortSwingRows(filteredRows).slice(0, 100);
+  const rows = sortSwingRows(filteredRows);
   const swingPaged = paginateTerminalRows(rows, swingPage);
   swingPage = swingPaged.page;
   const pageRows = swingPaged.rows;
