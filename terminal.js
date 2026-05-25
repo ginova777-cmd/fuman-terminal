@@ -1365,12 +1365,52 @@ async function ensureRealtimeRadarClosingData() {
   return realtimeRadarDataPromise;
 }
 
+function isRealtimeRadarCacheFresh(payload = realtimeRadarCachePayload) {
+  if (!payload || payload.status !== "ok") return false;
+  if (payload.date && payload.date !== radarTradeDateKey()) return false;
+  const updatedAt = cleanNumber(payload.updatedAtMs) || Date.parse(payload.updatedAt || "");
+  if (!Number.isFinite(updatedAt) || updatedAt <= 0) return false;
+  const freshMs = cleanNumber(payload.staleAfterMs) || REALTIME_RADAR_CACHE_FRESH_MS;
+  return Date.now() - updatedAt <= freshMs;
+}
+
+async function loadRealtimeRadarCache(force = false) {
+  if (realtimeRadarCacheLoading) return realtimeRadarCachePayload;
+  if (!force && Date.now() - realtimeRadarCacheCheckedAt < REALTIME_RADAR_CACHE_POLL_MS) return realtimeRadarCachePayload;
+  realtimeRadarCacheLoading = true;
+  realtimeRadarCacheCheckedAt = Date.now();
+  try {
+    const payload = await fetchJson(`${endpoints.realtimeRadarCache}?t=${Date.now()}`, 6000);
+    realtimeRadarCachePayload = payload || null;
+    if (isRealtimeRadarCacheFresh(realtimeRadarCachePayload)) {
+      const updatedAt = cleanNumber(realtimeRadarCachePayload.updatedAtMs) || Date.parse(realtimeRadarCachePayload.updatedAt || "") || Date.now();
+      realtimeRadarLastUpdatedAt = updatedAt;
+      realtimeRadarLastRows = normalizeArray(realtimeRadarCachePayload.rows).map((stock) => ({
+        ...stock,
+        detectedAt: cleanNumber(stock.detectedAt) || updatedAt,
+      }));
+      saveRealtimeRadarLastRows(realtimeRadarLastRows);
+    }
+  } catch (error) {
+    realtimeRadarCachePayload = null;
+  } finally {
+    realtimeRadarCacheLoading = false;
+  }
+  return realtimeRadarCachePayload;
+}
+
 function renderRealtimeRadar() {
   installRealtimeRadarView();
   const panel = viewPanels["realtime-radar"];
   if (!panel) return;
   deferUiWork(ensureMobileAutoOrganizeButton);
   const radarOpen = isRadarDetectionWindow();
+  const remoteFresh = radarOpen && isRealtimeRadarCacheFresh();
+  if (radarOpen && !remoteFresh && !realtimeRadarCacheLoading) {
+    loadRealtimeRadarCache(false).then(() => {
+      if (isViewActive("realtime-radar") && isRealtimeRadarCacheFresh()) renderRealtimeRadar();
+    });
+  }
   if (!realtimeRadarLastRows.length) loadRealtimeRadarLastRows();
   if (!radarOpen && !latestStocks.length) {
     if (realtimeRadarLastRows.length) {
@@ -1402,11 +1442,18 @@ function renderRealtimeRadar() {
     return;
   }
   if (!Object.keys(strategyHistoryData).length && !strategy4CacheLoading) loadStrategy4Cache(true);
-  const rows = buildRealtimeRadarRows();
-  if (radarOpen && rows.length) {
+  const remoteRows = remoteFresh ? normalizeArray(realtimeRadarCachePayload?.rows).map((stock) => ({
+    ...stock,
+    detectedAt: cleanNumber(stock.detectedAt) || cleanNumber(realtimeRadarCachePayload?.updatedAtMs) || Date.now(),
+  })) : [];
+  const rows = remoteRows.length ? remoteRows : buildRealtimeRadarRows();
+  if (radarOpen && rows.length && !remoteRows.length) {
     realtimeRadarLastUpdatedAt = Date.now();
     realtimeRadarLastRows = rows.map((stock) => ({ ...stock, detectedAt: realtimeRadarLastUpdatedAt }));
     saveRealtimeRadarLastRows(rows);
+  } else if (remoteRows.length) {
+    realtimeRadarLastUpdatedAt = cleanNumber(realtimeRadarCachePayload?.updatedAtMs) || Date.parse(realtimeRadarCachePayload?.updatedAt || "") || Date.now();
+    realtimeRadarLastRows = remoteRows;
   }
   const displayRows = rows.length ? rows : realtimeRadarLastRows;
   const longAll = displayRows.filter((stock) => stock.side === "long");
@@ -1418,8 +1465,18 @@ function renderRealtimeRadar() {
   const major = longFlow >= shortFlow ? "偏多" : "偏空";
   const activeSide = realtimeRadarSide === "short" ? "short" : realtimeRadarSide === "long" ? "long" : (major === "偏空" ? "short" : "long");
   const activeRows = activeSide === "short" ? shortRows : longRows;
-  const displayUpdatedAt = radarOpen && rows.length ? Date.now() : realtimeRadarLastUpdatedAt;
+  const displayUpdatedAt = remoteRows.length
+    ? realtimeRadarLastUpdatedAt
+    : radarOpen && rows.length ? Date.now() : realtimeRadarLastUpdatedAt;
   const fallbackJumpTime = radarSessionTimeLabel(displayUpdatedAt || Date.now());
+  const radarSourceText = (() => {
+    if (remoteRows.length) {
+      const lag = Math.max(0, Math.round((Date.now() - displayUpdatedAt) / 1000));
+      return `｜Mini PC 即時 ${new Date(displayUpdatedAt).toLocaleTimeString("zh-TW", { hour12: false })}｜延遲 ${lag} 秒`;
+    }
+    if (radarOpen) return realtimeRadarCacheLoading ? "｜Mini PC 快取讀取中，網頁即時掃描" : "｜網頁即時掃描";
+    return "";
+  })();
   const radarInstitutionTags = (stock) => {
     const tags = [];
     if (stock.side === "short") {
@@ -1474,7 +1531,7 @@ function renderRealtimeRadar() {
     <header class="radar-topbar">
       <div>
         <h1>◎ 即時多空資金流</h1>
-        <small>偵測時間 09:00-13:30${radarOpen ? "" : `｜收盤後停止偵測，顯示今日盤中最後資料${displayUpdatedAt ? ` ${new Date(displayUpdatedAt).toLocaleTimeString("zh-TW", { hour12: false })}` : ""}`}</small>
+        <small>偵測時間 09:00-13:30${radarOpen ? radarSourceText : `｜收盤後停止偵測，顯示今日盤中最後資料${displayUpdatedAt ? ` ${new Date(displayUpdatedAt).toLocaleTimeString("zh-TW", { hour12: false })}` : ""}`}</small>
       </div>
       <button class="radar-action" type="button" ${radarOpen ? "data-radar-refresh" : "disabled"}>${radarOpen ? "刷新雷達" : "09:00-13:30 偵測"}</button>
     </header>
@@ -1677,6 +1734,7 @@ const endpoints = {
   strategy5Cache: "/data/strategy5-latest.json",
   strategy5Backup: "/data/strategy5-backup.json",
   strategy2IntradayCache: "/data/strategy2-intraday-latest.json",
+  realtimeRadarCache: "/data/realtime-radar-latest.json",
   institutionCache: "/data/institution-latest.json",
   institutionBackup: "/data/institution-backup.json",
   warrantFlowCache: "/data/warrant-flow-latest.json",
@@ -1697,6 +1755,9 @@ let realtimeRadarSide = "auto";
 let realtimeRadarLastRows = [];
 let realtimeRadarLastUpdatedAt = 0;
 let realtimeRadarRefreshLoading = false;
+let realtimeRadarCachePayload = null;
+let realtimeRadarCacheLoading = false;
+let realtimeRadarCacheCheckedAt = 0;
 const REALTIME_RADAR_LAST_CACHE_KEY = "fuman_realtime_radar_last_rows_v1";
 let sectorStocksCache = {};
 let institutionData = {};
@@ -1810,6 +1871,8 @@ const INTRADAY_BACKGROUND_BATCH = 450;
 const INTRADAY_FAST_SCAN_MS = 3000;
 const INTRADAY_BACKGROUND_SCAN_MS = 3000;
 const REALTIME_RADAR_REFRESH_MS = 3000;
+const REALTIME_RADAR_CACHE_POLL_MS = 3000;
+const REALTIME_RADAR_CACHE_FRESH_MS = 20000;
 const MOBILE_INTRADAY_HOT_SCAN_LIMIT = 260;
 const MOBILE_INTRADAY_FORCE_EXTRA_LIMIT = 80;
 const MOBILE_INTRADAY_BACKGROUND_BATCH = 90;
@@ -8043,7 +8106,8 @@ setInterval(async () => {
   if (isDocumentHidden() || !isTerminalUnlocked() || !isViewActive("realtime-radar") || !isRadarDetectionWindow()) return;
   realtimeRadarRefreshLoading = true;
   try {
-    await loadMarketData(true);
+    await loadRealtimeRadarCache(true);
+    if (!isRealtimeRadarCacheFresh()) await loadMarketData(true);
     renderRealtimeRadar();
   } finally {
     realtimeRadarRefreshLoading = false;
