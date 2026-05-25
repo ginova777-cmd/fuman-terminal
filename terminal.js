@@ -1249,6 +1249,10 @@ function isRadarDetectionWindow() {
   return minutes >= 9 * 60 && minutes <= 13 * 60 + 30;
 }
 
+function isIntradayScanWindow() {
+  return isRadarDetectionWindow();
+}
+
 function saveRealtimeRadarLastRows(rows) {
   try {
     if (!Array.isArray(rows) || !rows.length) return;
@@ -1300,7 +1304,7 @@ async function ensureRealtimeRadarData() {
         if (sample && !strategyHistoryData[sample.code]) loadStrategy4Cache(true);
         deferUiWork(() => {
           loadMarketData();
-          refreshStrategyRealtimeScan("force");
+          if (isIntradayScanWindow()) refreshStrategyRealtimeScan("force");
         }, 30);
         return stocks;
       }
@@ -1482,7 +1486,7 @@ function runMobileAutoOrganize() {
   if (active === "strategy") {
     renderStrategyScanner();
     const text = [...selectedStrategyIds].join(" ");
-    if (text.includes("intraday_2m")) refreshStrategyRealtimeScan("force");
+    if (text.includes("intraday_2m") && isIntradayScanWindow()) refreshStrategyRealtimeScan("force");
     if (text.includes("open_buy")) loadOpenBuyCache(true);
     if (text.includes("swing_radar")) loadStrategy4Cache(true);
     return;
@@ -3534,16 +3538,24 @@ function intradayTimeToValue(value) {
   return Number(match[1]) * 3600 + Number(match[2]) * 60 + Number(match[3] || 0);
 }
 
+function isIntradayClockTime(value) {
+  const seconds = intradayTimeToValue(value);
+  return seconds >= 9 * 3600 && seconds <= (13 * 3600 + 30 * 60);
+}
+
 function getIntradayEntryTime(stock) {
   if (stock?.intradayEntryTime) return stock.intradayEntryTime;
   const tracked = strategy2IntradayEventByCode.get(String(stock?.code || ""));
   if (tracked?.firstAAt) return tracked.firstAAt;
   if (tracked?.firstBAt) return tracked.firstBAt;
   const quoteTime = stock?.quoteTime || strategyRealtimeQuotes[stock?.code]?.time || "";
-  if (quoteTime && !/^13:30(?::00)?$/.test(String(quoteTime))) return quoteTime;
+  if (quoteTime && isIntradayClockTime(quoteTime)) return quoteTime;
   const seenAt = cleanNumber(stock?.intradayFirstSeenAt) || cleanNumber(intradayFirstSeenAt.get(stock?.code));
-  if (seenAt) return new Date(seenAt).toLocaleTimeString("zh-TW", { hour12: false });
-  return "--:--";
+  if (seenAt) {
+    const seenTime = new Date(seenAt).toLocaleTimeString("zh-TW", { hour12: false });
+    if (isIntradayClockTime(seenTime)) return seenTime;
+  }
+  return isIntradayScanWindow() ? "--:--" : "13:30:00";
 }
 
 function getIntradaySortValue(stock, key) {
@@ -5765,11 +5777,16 @@ function renderIntradayRadar(evaluated) {
   const scanTime = strategyLastScanAt
     ? new Date(strategyLastScanAt).toLocaleTimeString("zh-TW", { hour12: false })
     : "等待開盤";
-  const scanStatus = strategyLastScanAt
+  const scanClosed = !isIntradayScanWindow();
+  const scanStatus = scanClosed
+    ? "｜盤後停止偵測，顯示 09:00-13:30 最後資料"
+    : strategyLastScanAt
     ? `｜本輪巡邏 ${strategyRealtimeStats.received}/${strategyRealtimeStats.requested} 筆${strategyRealtimeStats.failed ? `｜失敗批次 ${strategyRealtimeStats.failed}` : ""}${strategyRealtimeStats.lastError ? `｜${strategyRealtimeStats.lastError}` : ""}`
     : "";
 
-  if (strategySummary) strategySummary.textContent = `3秒即時巡邏｜熱門池快掃｜背景分批補全市場｜最後更新 ${scanTime}${scanStatus}`;
+  if (strategySummary) strategySummary.textContent = scanClosed
+    ? `偵測時間 09:00-13:30｜收盤後停止偵測｜最後更新 ${scanTime}${scanStatus}`
+    : `3秒即時巡邏｜熱門池快掃｜背景分批補全市場｜最後更新 ${scanTime}${scanStatus}`;
   if (strategyMatchCount) strategyMatchCount.textContent = rows.length.toLocaleString("zh-TW");
   if (strategyAvgScore) strategyAvgScore.textContent = stateCounts.go.toLocaleString("zh-TW");
   if (strategyTopHit) strategyTopHit.textContent = rows.length ? `${Math.max(...rows.map((stock) => stock.intradaySignals.length))}/6` : "0/6";
@@ -5821,7 +5838,7 @@ function renderIntradayRadar(evaluated) {
     const sign = stock.percent >= 0 ? "+" : "";
     const mainSignal = stock.intradaySignals[0]?.short || "量價";
     const entry = formatEntryRange(stock.intradayEntry);
-    const quoteTime = stock.quoteTime || strategyRealtimeQuotes[stock.code]?.time || scanTime;
+    const quoteTime = getIntradayEntryTime(stock);
     const timeText = `<span class="intraday-pick-time">${quoteTime}</span>`;
     return `
       <div class="intraday-pick">
@@ -5852,6 +5869,13 @@ function renderIntradayRadar(evaluated) {
     </section>
   `;
 
+  const emptyText = scanClosed
+    ? "策略2偵測時間為 09:00-13:30；收盤後停止新增訊號，顯示盤中最後資料。"
+    : "策略2正在 3 秒巡邏；目前本輪尚未出現右側任一訊號。只要符合「早盤強勢 / 爆量 / 跳空 / 突破 / MA35 / 鑽石 / 拉抬」任一項，就會立刻顯示。";
+  const headerText = scanClosed
+    ? `偵測時間 09:00-13:30，收盤後停止偵測。最後更新 ${scanTime}${scanStatus}`
+    : `盤中即時偵測強勢訊號，3秒巡邏熱門池，背景同步分批補全市場。最後更新 ${scanTime}${scanStatus}`;
+
   const tableRows = rows.length ? `
     ${rows.map((stock) => {
       const sign = stock.percent >= 0 ? "+" : "";
@@ -5875,7 +5899,7 @@ function renderIntradayRadar(evaluated) {
       `;
     }).join("")}
   ` : `
-    <tr><td colspan="10">策略2正在 3 秒巡邏；目前本輪尚未出現右側任一訊號。只要符合「早盤強勢 / 爆量 / 跳空 / 突破 / MA35 / 鑽石 / 拉抬」任一項，就會立刻顯示。</td></tr>
+    <tr><td colspan="10">${emptyText}</td></tr>
   `;
 
   strategyTable.innerHTML = `
@@ -5883,10 +5907,10 @@ function renderIntradayRadar(evaluated) {
       <div class="intraday-topbar">
         <div>
           <h2>${titleWithSchedule("◔", "策略2-當沖雷達", "intraday")}</h2>
-          <p>盤中即時偵測強勢訊號，3秒巡邏熱門池，背景同步分批補全市場。最後更新 ${scanTime}${scanStatus}</p>
+          <p>${headerText}</p>
         </div>
         <div class="intraday-controls">
-          <label>偵測頻率：<select><option>3秒</option></select></label>
+          <label>偵測頻率：<select><option>${scanClosed ? "09:00-13:30" : "3秒"}</option></select></label>
           <label>市場：<select><option>全市場</option></select></label>
         </div>
       </div>
@@ -7627,7 +7651,8 @@ function applyStrategyPresetFromLink(link) {
   if (text.includes("策略2") || isRadarNav) {
     deferUiWork(async () => {
       await ensureStrategyStocksLoaded();
-      await refreshStrategyRealtimeScan("force");
+      if (isIntradayScanWindow()) await refreshStrategyRealtimeScan("force");
+      else renderStrategyScanner();
     }, 80);
   }
   if (text.includes("策略1")) {
@@ -7772,6 +7797,16 @@ async function refreshStrategyRealtimeScan(mode = "hot") {
   const isRealtimeStrategy = selectedStrategyIds.has("intraday_2m");
   const isStrategy5Realtime = false;
   if (scanMode !== "force" && scanMode !== "strategy5-full" && (!isStrategyVisible || (!isRealtimeStrategy && !isStrategy5Realtime))) return;
+  if (isRealtimeStrategy && !isIntradayScanWindow()) {
+    if (isStrategyVisible && strategySummary) {
+      const closingTime = strategyLastScanAt
+        ? new Date(strategyLastScanAt).toLocaleTimeString("zh-TW", { hour12: false })
+        : "13:30:00";
+      strategySummary.textContent = `策略2-當沖雷達｜偵測時間 09:00-13:30，盤後停止掃描｜最後盤中更新 ${closingTime}`;
+    }
+    if (isStrategyVisible && latestStocks.length) renderStrategyScanner();
+    return;
+  }
   if (!latestStocks.length) {
     if (isStrategyVisible && isRealtimeStrategy && strategySummary) {
       strategySummary.textContent = "策略2-當沖雷達｜正在載入股票清單，載入後會立即掃描。";
@@ -7941,10 +7976,10 @@ setInterval(() => {
   if (!isDocumentHidden() && (isViewActive("market") || !latestStocks.length)) loadMarketData();
 }, MARKET_REFRESH_MS);
 setInterval(() => {
-  if (!isDocumentHidden() && isTerminalUnlocked() && isViewActive("strategy") && selectedStrategyIds.has("intraday_2m")) refreshStrategyRealtimeScan("hot");
+  if (!isDocumentHidden() && isTerminalUnlocked() && isViewActive("strategy") && selectedStrategyIds.has("intraday_2m") && isIntradayScanWindow()) refreshStrategyRealtimeScan("hot");
 }, INTRADAY_FAST_SCAN_MS);
 setInterval(() => {
-  if (!isDocumentHidden() && isTerminalUnlocked() && isViewActive("strategy") && selectedStrategyIds.has("intraday_2m")) refreshStrategyRealtimeScan("background");
+  if (!isDocumentHidden() && isTerminalUnlocked() && isViewActive("strategy") && selectedStrategyIds.has("intraday_2m") && isIntradayScanWindow()) refreshStrategyRealtimeScan("background");
 }, INTRADAY_BACKGROUND_SCAN_MS);
 setInterval(async () => {
   if (realtimeRadarRefreshLoading) return;
