@@ -2434,10 +2434,16 @@ function loadWarrantFlowLocalCache() {
     const payload = JSON.parse(localStorage.getItem(WARRANT_FLOW_LOCAL_CACHE_KEY) || "{}");
     if (!String(payload.source || "").includes("github-actions")) return false;
     if (!Array.isArray(payload.matches) || !payload.matches.length) return false;
+    const updatedAt = cleanNumber(payload.updatedAt) || 0;
+    if (!updatedAt || Date.now() - updatedAt >= CACHE_FRESH_MS) {
+      localStorage.removeItem(WARRANT_FLOW_LOCAL_CACHE_KEY);
+      return false;
+    }
     warrantFlowData = payload.matches;
-    warrantFlowUpdatedAt = cleanNumber(payload.updatedAt) || Date.now();
+    warrantFlowUpdatedAt = updatedAt;
     return true;
   } catch (error) {
+    try { localStorage.removeItem(WARRANT_FLOW_LOCAL_CACHE_KEY); } catch (cleanupError) {}
     return false;
   }
 }
@@ -6857,7 +6863,7 @@ async function loadWarrantFlow(force = false) {
   if (!warrantFlowData.length) {
     loadWarrantFlowLocalCache();
   }
-  if (!force && warrantFlowData.length) {
+  if (!force && hasFreshWarrantFlow()) {
     renderWarrantFlow();
     return;
   }
