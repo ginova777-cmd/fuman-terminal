@@ -13,6 +13,7 @@ const TAKE_PROFIT_PCT = Number(process.env.TRADE_MANAGER_TAKE_PROFIT_PCT || 3);
 const STOP_LOSS_PCT = Number(process.env.TRADE_MANAGER_STOP_LOSS_PCT || 2);
 const MAX_DAILY_TRADES = Math.max(1, Number(process.env.TRADE_MANAGER_MAX_DAILY_TRADES || 5));
 const DRY_RUN = process.env.TRADE_MANAGER_DRY_RUN === "1";
+const BACKFILL_EXISTING = process.env.TRADE_MANAGER_BACKFILL_EXISTING === "1";
 
 function readJson(file, fallback) {
   try { return JSON.parse(fs.readFileSync(file, "utf8")); } catch { return fallback; }
@@ -44,6 +45,8 @@ function taipeiParts(date = new Date()) {
 function defaultState(dateKey) {
   return {
     date: dateKey,
+    initialized: false,
+    seenEvents: {},
     notified: {},
     positions: {},
     closed: {},
@@ -54,6 +57,7 @@ function defaultState(dateKey) {
 function loadState(dateKey) {
   const state = readJson(STATE_FILE, defaultState(dateKey));
   if (state.date !== dateKey) return defaultState(dateKey);
+  state.seenEvents ||= {};
   state.notified ||= {};
   state.positions ||= {};
   state.closed ||= {};
@@ -102,6 +106,10 @@ function buildBuyMessage(event, position) {
     "",
     `原因：${event.stateReason || "首次進入A區，量價條件符合。"}`
   ].join("\n");
+}
+
+function eventKey(event) {
+  return `${event.code}:${event.firstAAt || ""}:${formatTradePrice(event.firstAPrice)}`;
 }
 
 function buildExitMessage(position, quote, action) {
@@ -170,8 +178,20 @@ async function main() {
   const quoteByCode = new Map((quotesPayload.quotes || []).map((quote) => [String(quote.code), quote]));
   const messages = [];
 
+  if (!state.initialized && !BACKFILL_EXISTING) {
+    for (const event of events) {
+      state.seenEvents[eventKey(event)] = { seenAt: new Date().toISOString() };
+    }
+    state.initialized = true;
+    writeJson(STATE_FILE, state);
+    console.log(`trade manager ${now.dateKey} ${now.time}: initialized, skipped ${events.length} existing event(s)`);
+    return;
+  }
+  state.initialized = true;
+
   for (const event of events) {
-    if (state.notified[event.code] || state.positions[event.code] || state.closed[event.code]) continue;
+    const key = eventKey(event);
+    if (state.seenEvents[key] || state.notified[event.code] || state.positions[event.code] || state.closed[event.code]) continue;
     if (state.dailyTradeCount >= MAX_DAILY_TRADES) continue;
     const quote = quoteByCode.get(event.code);
     const entryPrice = cleanNumber(event.entryPrice) || cleanNumber(quote?.close);
@@ -193,6 +213,7 @@ async function main() {
       dailyTradeCount: state.dailyTradeCount + 1,
     };
     state.positions[event.code] = position;
+    state.seenEvents[key] = { seenAt: new Date().toISOString() };
     state.notified[event.code] = { buyAt: new Date().toISOString(), entryTime: position.entryTime };
     state.dailyTradeCount += 1;
     messages.push(buildBuyMessage(event, position));
@@ -223,7 +244,9 @@ async function main() {
     console.log(`trade manager ${now.dateKey} ${now.time}: no new action`);
     return;
   }
-  await notify(messages.join("\n\n---\n\n"));
+  for (const message of messages) {
+    await notify(message);
+  }
   console.log(`trade manager ${now.dateKey} ${now.time}: sent ${messages.length} message(s)`);
 }
 
