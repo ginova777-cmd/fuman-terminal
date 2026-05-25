@@ -30,6 +30,24 @@ if ($status) {
   git commit -m "Update strategy4 cache from mini pc" >> $log 2>&1
   git pull --rebase --autostash origin main >> $log 2>&1
   git push >> $log 2>&1
+  $pushExit = $LASTEXITCODE
+
+  if ($pushExit -ne 0) {
+    "Strategy4 first push failed with exit code $pushExit, retrying pull/rebase then push" >> $log
+    git pull --rebase --autostash origin main >> $log 2>&1
+    $pullExit = $LASTEXITCODE
+    if ($pullExit -ne 0) {
+      "Strategy4 retry pull/rebase failed with exit code $pullExit" >> $log
+      exit $pullExit
+    }
+
+    git push >> $log 2>&1
+    $retryPushExit = $LASTEXITCODE
+    if ($retryPushExit -ne 0) {
+      "Strategy4 retry push failed with exit code $retryPushExit" >> $log
+      exit $retryPushExit
+    }
+  }
 } else {
   "No strategy4 cache changes" >> $log
 }
