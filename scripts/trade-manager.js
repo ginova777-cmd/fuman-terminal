@@ -14,6 +14,12 @@ const STOP_LOSS_PCT = Number(process.env.TRADE_MANAGER_STOP_LOSS_PCT || 2);
 const MAX_DAILY_TRADES = Math.max(1, Number(process.env.TRADE_MANAGER_MAX_DAILY_TRADES || 5));
 const DRY_RUN = process.env.TRADE_MANAGER_DRY_RUN === "1";
 const BACKFILL_EXISTING = process.env.TRADE_MANAGER_BACKFILL_EXISTING === "1";
+const MIN_A_SCORE = Number(process.env.TRADE_MANAGER_MIN_A_SCORE || 80);
+const MIN_VOLUME_LOTS = Number(process.env.TRADE_MANAGER_MIN_VOLUME_LOTS || 2000);
+const MIN_TRADE_VALUE = Number(process.env.TRADE_MANAGER_MIN_TRADE_VALUE || 80000000);
+const MIN_INTRADAY_PCT = Number(process.env.TRADE_MANAGER_MIN_INTRADAY_PCT || 2);
+const MAX_INTRADAY_PCT = Number(process.env.TRADE_MANAGER_MAX_INTRADAY_PCT || 7.5);
+const NEAR_HIGH_RATIO = Number(process.env.TRADE_MANAGER_NEAR_HIGH_RATIO || 0.985);
 
 function readJson(file, fallback) {
   try { return JSON.parse(fs.readFileSync(file, "utf8")); } catch { return fallback; }
@@ -103,6 +109,7 @@ function buildBuyMessage(event, position) {
     `停利價：${formatTradePrice(position.takeProfitPrice)} 元（+${TAKE_PROFIT_PCT}%）`,
     `停損價：${formatTradePrice(position.stopLossPrice)} 元（-${STOP_LOSS_PCT}%）`,
     `今日通知：${position.dailyTradeCount}/${MAX_DAILY_TRADES} 筆`,
+    `品質：分數${Math.round(position.qualityScore)}｜漲幅${position.qualityPct.toFixed(2)}%｜高點貼近${position.nearHighText}`,
     "",
     `原因：${event.stateReason || "首次進入A區，量價條件符合。"}`
   ].join("\n");
@@ -110,6 +117,37 @@ function buildBuyMessage(event, position) {
 
 function eventKey(event) {
   return `${event.code}:${event.firstAAt || ""}:${formatTradePrice(event.firstAPrice)}`;
+}
+
+function quoteTradeValue(quote, event) {
+  const close = cleanNumber(quote?.close) || cleanNumber(event.entryPrice);
+  const volume = cleanNumber(quote?.tradeVolume) || cleanNumber(event.volume) || cleanNumber(event.tradeVolume);
+  const value = cleanNumber(quote?.value) || cleanNumber(event.value) || close * volume * 1000;
+  return { close, volume, value };
+}
+
+function intradayQuality(event, quote) {
+  const score = cleanNumber(event.score);
+  const pct = cleanNumber(quote?.percent) || cleanNumber(event.percent);
+  const high = cleanNumber(quote?.high);
+  const close = cleanNumber(quote?.close) || cleanNumber(event.entryPrice);
+  const { volume, value } = quoteTradeValue(quote, event);
+  const reasons = [];
+  if (score < MIN_A_SCORE) reasons.push(`分數${Math.round(score)}低於${MIN_A_SCORE}`);
+  if (pct < MIN_INTRADAY_PCT) reasons.push(`漲幅${pct.toFixed(2)}%不足`);
+  if (pct > MAX_INTRADAY_PCT) reasons.push(`漲幅${pct.toFixed(2)}%過熱`);
+  if (volume < MIN_VOLUME_LOTS) reasons.push(`成交量${Math.round(volume).toLocaleString("zh-TW")}張不足`);
+  if (value < MIN_TRADE_VALUE) reasons.push("成交金額不足");
+  if (high && close < high * NEAR_HIGH_RATIO) reasons.push("現價離盤中高點太遠");
+  return {
+    pass: reasons.length === 0,
+    reasons,
+    score,
+    pct,
+    volume,
+    value,
+    nearHighText: high ? `${((close / high) * 100).toFixed(1)}%` : "--",
+  };
 }
 
 function buildExitMessage(position, quote, action) {
@@ -192,8 +230,14 @@ async function main() {
   for (const event of events) {
     const key = eventKey(event);
     if (state.seenEvents[key] || state.notified[event.code] || state.positions[event.code] || state.closed[event.code]) continue;
+    state.seenEvents[key] = { seenAt: new Date().toISOString() };
     if (state.dailyTradeCount >= MAX_DAILY_TRADES) continue;
     const quote = quoteByCode.get(event.code);
+    const quality = intradayQuality(event, quote);
+    if (!quality.pass) {
+      console.log(`trade manager skip ${event.code}: ${quality.reasons.join("；")}`);
+      continue;
+    }
     const entryPrice = cleanNumber(event.entryPrice) || cleanNumber(quote?.close);
     if (!entryPrice) continue;
     const plan = lotPlan(entryPrice);
@@ -210,10 +254,14 @@ async function main() {
       amount: plan.amount,
       openedAt: new Date().toISOString(),
       lastPrice: cleanNumber(quote?.close) || entryPrice,
+      qualityScore: quality.score,
+      qualityPct: quality.pct,
+      qualityVolume: quality.volume,
+      qualityValue: quality.value,
+      nearHighText: quality.nearHighText,
       dailyTradeCount: state.dailyTradeCount + 1,
     };
     state.positions[event.code] = position;
-    state.seenEvents[key] = { seenAt: new Date().toISOString() };
     state.notified[event.code] = { buyAt: new Date().toISOString(), entryTime: position.entryTime };
     state.dailyTradeCount += 1;
     messages.push(buildBuyMessage(event, position));
