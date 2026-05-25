@@ -1235,8 +1235,16 @@ function radarReasonTags(stock) {
   return (stock.signalTags?.length ? stock.signalTags : [stock.side === "long" ? "短線強勢" : "短線轉弱"]).slice(0, 4);
 }
 
-function radarSessionTimeLabel() {
-  const date = new Date();
+function radarTradeDateKey(date = new Date()) {
+  return [
+    date.getFullYear(),
+    String(date.getMonth() + 1).padStart(2, "0"),
+    String(date.getDate()).padStart(2, "0"),
+  ].join("-");
+}
+
+function radarSessionTimeLabel(value = Date.now()) {
+  const date = new Date(value || Date.now());
   const minutes = date.getHours() * 60 + date.getMinutes();
   if (minutes < 9 * 60) return "09:00:00";
   if (minutes > 13 * 60 + 30) return "13:30:00";
@@ -1260,8 +1268,10 @@ function shouldRunLivePolling() {
 function saveRealtimeRadarLastRows(rows) {
   try {
     if (!Array.isArray(rows) || !rows.length) return;
+    const updatedAt = Date.now();
     const payload = {
-      updatedAt: Date.now(),
+      tradeDate: radarTradeDateKey(new Date(updatedAt)),
+      updatedAt,
       rows: rows.slice(0, 80).map((stock) => ({
         code: stock.code,
         name: stock.name,
@@ -1278,6 +1288,7 @@ function saveRealtimeRadarLastRows(rows) {
         foreign: stock.foreign,
         totalInst: stock.totalInst,
         signalTags: stock.signalTags,
+        detectedAt: stock.detectedAt || updatedAt,
       })),
     };
     localStorage.setItem(REALTIME_RADAR_LAST_CACHE_KEY, JSON.stringify(payload));
@@ -1288,8 +1299,18 @@ function loadRealtimeRadarLastRows() {
   try {
     const payload = JSON.parse(localStorage.getItem(REALTIME_RADAR_LAST_CACHE_KEY) || "{}");
     if (!Array.isArray(payload.rows) || !payload.rows.length) return false;
-    realtimeRadarLastRows = payload.rows;
     realtimeRadarLastUpdatedAt = cleanNumber(payload.updatedAt) || Date.now();
+    const cacheDate = payload.tradeDate || radarTradeDateKey(new Date(realtimeRadarLastUpdatedAt));
+    if (cacheDate !== radarTradeDateKey()) {
+      localStorage.removeItem(REALTIME_RADAR_LAST_CACHE_KEY);
+      realtimeRadarLastRows = [];
+      realtimeRadarLastUpdatedAt = 0;
+      return false;
+    }
+    realtimeRadarLastRows = payload.rows.map((stock) => ({
+      ...stock,
+      detectedAt: cleanNumber(stock.detectedAt) || realtimeRadarLastUpdatedAt,
+    }));
     return true;
   } catch (error) {
     return false;
@@ -1383,8 +1404,8 @@ function renderRealtimeRadar() {
   if (!Object.keys(strategyHistoryData).length && !strategy4CacheLoading) loadStrategy4Cache(true);
   const rows = buildRealtimeRadarRows();
   if (radarOpen && rows.length) {
-    realtimeRadarLastRows = rows;
     realtimeRadarLastUpdatedAt = Date.now();
+    realtimeRadarLastRows = rows.map((stock) => ({ ...stock, detectedAt: realtimeRadarLastUpdatedAt }));
     saveRealtimeRadarLastRows(rows);
   }
   const displayRows = rows.length ? rows : realtimeRadarLastRows;
@@ -1397,7 +1418,8 @@ function renderRealtimeRadar() {
   const major = longFlow >= shortFlow ? "偏多" : "偏空";
   const activeSide = realtimeRadarSide === "short" ? "short" : realtimeRadarSide === "long" ? "long" : (major === "偏空" ? "short" : "long");
   const activeRows = activeSide === "short" ? shortRows : longRows;
-  const now = radarSessionTimeLabel();
+  const displayUpdatedAt = radarOpen && rows.length ? Date.now() : realtimeRadarLastUpdatedAt;
+  const fallbackJumpTime = radarSessionTimeLabel(displayUpdatedAt || Date.now());
   const radarInstitutionTags = (stock) => {
     const tags = [];
     if (stock.side === "short") {
@@ -1428,9 +1450,10 @@ function renderRealtimeRadar() {
     const sign = stock.pct >= 0 ? "+" : "";
     const tags = radarReasonTags(stock).map((tag) => `<span>${tag}</span>`).join("");
     const instTags = radarInstitutionTags(stock).map((tag) => `<span>${tag}</span>`).join("");
+    const jumpTime = radarSessionTimeLabel(stock.detectedAt || displayUpdatedAt || Date.now()).slice(0, 5);
     return `
       <article class="radar-signal-card ${stock.side === "short" ? "short" : ""}">
-        <div class="radar-jump"><span>跳出</span><strong>${now.slice(0, 5)}</strong></div>
+        <div class="radar-jump"><span>跳出</span><strong>${jumpTime || fallbackJumpTime.slice(0, 5)}</strong></div>
         <div class="radar-signal-main">
           <div class="radar-signal-name">${stock.name}<small>${stock.code}</small></div>
           <div class="radar-signal-meta">成交金額 ${radarMoney(stock.value)} · 量比 ${formatNumber(Math.max(1, Math.abs(stock.flow) / Math.max(stock.value || 1, 1) * 100), 2)} · 分數 ${Math.round(stock.score)}</div>
@@ -1451,7 +1474,7 @@ function renderRealtimeRadar() {
     <header class="radar-topbar">
       <div>
         <h1>◎ 即時多空資金流</h1>
-        <small>偵測時間 09:00-13:30${radarOpen ? "" : `｜收盤後停止偵測，顯示盤中最後資料${realtimeRadarLastUpdatedAt ? ` ${new Date(realtimeRadarLastUpdatedAt).toLocaleTimeString("zh-TW", { hour12: false })}` : ""}`}</small>
+        <small>偵測時間 09:00-13:30${radarOpen ? "" : `｜收盤後停止偵測，顯示今日盤中最後資料${displayUpdatedAt ? ` ${new Date(displayUpdatedAt).toLocaleTimeString("zh-TW", { hour12: false })}` : ""}`}</small>
       </div>
       <button class="radar-action" type="button" ${radarOpen ? "data-radar-refresh" : "disabled"}>${radarOpen ? "刷新雷達" : "09:00-13:30 偵測"}</button>
     </header>
