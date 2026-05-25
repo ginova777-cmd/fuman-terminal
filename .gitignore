@@ -2,3 +2,14 @@ node_modules/
 .vercel/
 .env
 .env.local
+.intraday-report-cache/
+.trade-manager-cache/
+logs/
+check-fuman.ps1
+run-scorecard.ps1
+run-strategy2-line.ps1
+run-strategy3.ps1
+run-strategy5.ps1
+run-warrant-flow.ps1
+stop-strategy2-line.ps1
+terminal-conflict-backup.js
