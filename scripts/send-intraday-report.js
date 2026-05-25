@@ -2,7 +2,7 @@ const fs = require("fs");
 const path = require("path");
 const tls = require("tls");
 const { cleanNumber, formatTradePrice } = require("./intraday-radar-rules");
-const { hasLineConfig, sendLineText } = require("./line-push");
+const { hasLineConfig, sendLineText, splitLineText } = require("./line-push");
 const { fetchMisQuotes } = require("../lib/mis-quotes");
 
 const ROOT = path.resolve(__dirname, "..");
@@ -756,8 +756,12 @@ async function sendScorecardNotifications(reports) {
   if (mailConfig) await sendReports(reports, mailConfig);
   if (usingLine) {
     for (const report of reports) {
-      await sendLineText(report.text);
-      console.log(`line report sent: ${report.subject}`);
+      const parts = splitLineText(report.text);
+      for (let index = 0; index < parts.length; index++) {
+        const header = parts.length > 1 ? `${report.subject}（${index + 1}/${parts.length}）\n\n` : "";
+        await sendLineText(`${header}${parts[index]}`);
+      }
+      console.log(`line report sent: ${report.subject}${parts.length > 1 ? ` (${parts.length} parts)` : ""}`);
     }
   }
 }

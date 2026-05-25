@@ -17,6 +17,32 @@ function trimLineText(text, limit = 4800) {
   return `${value.slice(0, limit - 22).trimEnd()}\n\n...內容過長已截斷`;
 }
 
+function splitLineText(text, limit = 3200) {
+  const value = String(text || "").trim();
+  if (value.length <= limit) return [value];
+  const chunks = [];
+  let current = "";
+  const blocks = value.split(/\n{2,}/);
+  blocks.forEach((block) => {
+    const next = current ? `${current}\n\n${block}` : block;
+    if (next.length <= limit) {
+      current = next;
+      return;
+    }
+    if (current) chunks.push(current);
+    if (block.length <= limit) {
+      current = block;
+      return;
+    }
+    for (let i = 0; i < block.length; i += limit) {
+      chunks.push(block.slice(i, i + limit));
+    }
+    current = "";
+  });
+  if (current) chunks.push(current);
+  return chunks.filter(Boolean);
+}
+
 async function sendLineText(text) {
   const token = process.env.LINE_CHANNEL_ACCESS_TOKEN;
   const targets = lineTargets();
@@ -46,5 +72,6 @@ async function sendLineText(text) {
 module.exports = {
   hasLineConfig,
   sendLineText,
+  splitLineText,
   trimLineText,
 };
