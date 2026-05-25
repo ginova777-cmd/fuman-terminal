@@ -1253,6 +1253,10 @@ function isIntradayScanWindow() {
   return isRadarDetectionWindow();
 }
 
+function shouldRunLivePolling() {
+  return isIntradayScanWindow();
+}
+
 function saveRealtimeRadarLastRows(rows) {
   try {
     if (!Array.isArray(rows) || !rows.length) return;
@@ -6828,7 +6832,7 @@ async function loadStrategyStocks() {
 
     if (parsed.length) {
       latestStocks = parsed;
-      renderStrategyScanner();
+      if (isViewActive("strategy")) renderStrategyScanner();
     } else if (strategyTable) {
       strategyTable.innerHTML = `<div class="empty-state">策略5目前沒有可篩選的股票資料。</div>`;
     }
@@ -7488,6 +7492,10 @@ function showView(viewName, activeLink) {
   viewLinks.forEach((link)=>link.classList.toggle("active", link===activeLink));
   const locked = applyMemberLocks(viewName, activeLink);
   if (locked) return;
+  if (viewName === "market") {
+    deferUiWork(loadMarketData);
+    deferUiWork(loadHeatmap, 500);
+  }
   if (viewName === "realtime-radar") deferUiWork(renderRealtimeRadar);
   if (viewName === "strategy") {
     deferUiWork(renderStrategyScanner);
@@ -7953,9 +7961,11 @@ installRealtimeRadarView();
 applyStaticTitleIcons();
 deferUiWork(() => loadWorkflowRunStatus().catch(() => {}), 2000);
 ensureMobileAutoOrganizeButton();
-loadMarketData();
-if (isMobileViewport()) deferUiWork(loadHeatmap, 1600);
-else loadHeatmap();
+if (isViewActive("market")) {
+  loadMarketData();
+  if (isMobileViewport()) deferUiWork(loadHeatmap, 1600);
+  else loadHeatmap();
+}
 if (brandRefresh) {
   brandRefresh.setAttribute("role", "button");
   brandRefresh.setAttribute("tabindex", "0");
@@ -7997,7 +8007,7 @@ document.querySelectorAll("[data-chip-filter]").forEach((button) => {
 });
 setInterval(tickClock, 1000);
 setInterval(() => {
-  if (!isDocumentHidden() && (isViewActive("market") || !latestStocks.length)) loadMarketData();
+  if (!isDocumentHidden() && isViewActive("market") && shouldRunLivePolling()) loadMarketData();
 }, MARKET_REFRESH_MS);
 setInterval(() => {
   if (!isDocumentHidden() && isTerminalUnlocked() && isViewActive("strategy") && selectedStrategyIds.has("intraday_2m") && isIntradayScanWindow()) refreshStrategyRealtimeScan("hot");
@@ -8017,7 +8027,7 @@ setInterval(async () => {
   }
 }, REALTIME_RADAR_REFRESH_MS);
 setInterval(() => {
-  if (!isDocumentHidden() && isViewActive("market")) loadHeatmap();
+  if (!isDocumentHidden() && isViewActive("market") && shouldRunLivePolling()) loadHeatmap();
 }, 15*60*1000);
 
 // ===== 自選股功能 =====
