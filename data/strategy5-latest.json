@@ -1,77 +1,77 @@
 {
   "ok": true,
   "source": "github-actions-mis-realtime",
-  "updatedAt": "2026-05-24T22:00:12.045Z",
-  "usedDate": "20260522",
+  "updatedAt": "2026-05-25T13:01:11.217Z",
+  "usedDate": "20260525",
   "schedule": "06:00/21:00",
-  "total": 1961,
-  "count": 77,
+  "total": 1960,
+  "count": 59,
   "matches": [
     {
-      "code": "3037",
-      "name": "欣興",
-      "close": 970,
-      "change": 65,
-      "percent": 7.18232044198895,
-      "value": 36367240000,
-      "tradeVolume": 37492000,
+      "code": "3413",
+      "name": "京鼎",
+      "close": 349,
+      "change": 24,
+      "percent": 7.384615384615385,
+      "value": 1586554000,
+      "tradeVolume": 4546000,
       "market": "TWSE",
-      "open": 932,
-      "high": 986,
-      "low": 931,
-      "prevClose": 905,
-      "volume": 37492,
-      "quoteDate": "20260522",
+      "open": 326.5,
+      "high": 349.5,
+      "low": 326.5,
+      "prevClose": 325,
+      "volume": 4546,
+      "quoteDate": "20260525",
+      "quoteTime": "13:30:00",
+      "valueRank": 91,
+      "volumeRank": 83,
+      "inst": {
+        "foreign": 190074,
+        "trust": 23000,
+        "dealer": 0,
+        "total": 203270
+      },
+      "score": 100,
+      "matches": [
+        {
+          "id": "foreign_trust_breakout",
+          "short": "準突破",
+          "icon": "◆",
+          "score": 100,
+          "reason": "外資 +190,074、投信 +23,000 同買，法人合計 +203,270；漲幅 7.38%。"
+        }
+      ],
+      "activeMatch": {
+        "id": "foreign_trust_breakout",
+        "short": "準突破",
+        "icon": "◆",
+        "score": 100,
+        "reason": "外資 +190,074、投信 +23,000 同買，法人合計 +203,270；漲幅 7.38%。"
+      }
+    },
+    {
+      "code": "2313",
+      "name": "華通",
+      "close": 298.5,
+      "change": 20.5,
+      "percent": 7.374100719424461,
+      "value": 29193897000,
+      "tradeVolume": 97802000,
+      "market": "TWSE",
+      "open": 296,
+      "high": 305.5,
+      "low": 287,
+      "prevClose": 278,
+      "volume": 97802,
+      "quoteDate": "20260525",
       "quoteTime": "13:30:00",
       "valueRank": 100,
-      "volumeRank": 98,
-      "inst": {
-        "foreign": 6819681,
-        "trust": 410100,
-        "dealer": 0,
-        "total": 8358462
-      },
-      "score": 100,
-      "matches": [
-        {
-          "id": "foreign_trust_breakout",
-          "short": "準突破",
-          "icon": "◆",
-          "score": 100,
-          "reason": "外資 +6,819,681、投信 +410,100 同買，法人合計 +8,358,462；漲幅 7.18%。"
-        }
-      ],
-      "activeMatch": {
-        "id": "foreign_trust_breakout",
-        "short": "準突破",
-        "icon": "◆",
-        "score": 100,
-        "reason": "外資 +6,819,681、投信 +410,100 同買，法人合計 +8,358,462；漲幅 7.18%。"
-      }
-    },
-    {
-      "code": "6282",
-      "name": "康舒",
-      "close": 57.4,
-      "change": 3.799999999999997,
-      "percent": 7.089552238805965,
-      "value": 4460955800,
-      "tradeVolume": 77717000,
-      "market": "TWSE",
-      "open": 54.6,
-      "high": 58.3,
-      "low": 54.4,
-      "prevClose": 53.6,
-      "volume": 77717,
-      "quoteDate": "20260522",
-      "quoteTime": "13:30:00",
-      "valueRank": 97,
       "volumeRank": 99,
       "inst": {
-        "foreign": 18682924,
-        "trust": 21000,
+        "foreign": 29085348,
+        "trust": 119000,
         "dealer": 0,
-        "total": 20636853
+        "total": 31435999
       },
       "score": 100,
       "matches": [
@@ -80,7 +80,7 @@
           "short": "準突破",
           "icon": "◆",
           "score": 100,
-          "reason": "外資 +18,682,924、投信 +21,000 同買，法人合計 +20,636,853；漲幅 7.09%。"
+          "reason": "外資 +29,085,348、投信 +119,000 同買，法人合計 +31,435,999；漲幅 7.37%。"
         }
       ],
       "activeMatch": {
@@ -88,32 +88,32 @@
         "short": "準突破",
         "icon": "◆",
         "score": 100,
-        "reason": "外資 +18,682,924、投信 +21,000 同買，法人合計 +20,636,853；漲幅 7.09%。"
+        "reason": "外資 +29,085,348、投信 +119,000 同買，法人合計 +31,435,999；漲幅 7.37%。"
       }
     },
     {
-      "code": "7749",
-      "name": "意騰-KY",
-      "close": 544,
-      "change": 32,
-      "percent": 6.25,
-      "value": 802944000,
-      "tradeVolume": 1476000,
+      "code": "6770",
+      "name": "力積電",
+      "close": 67.6,
+      "change": 3.799999999999997,
+      "percent": 5.956112852664573,
+      "value": 21580624000,
+      "tradeVolume": 319240000,
       "market": "TWSE",
-      "open": 520,
-      "high": 550,
-      "low": 506,
-      "prevClose": 512,
-      "volume": 1476,
-      "quoteDate": "20260522",
+      "open": 65,
+      "high": 68.2,
+      "low": 62.3,
+      "prevClose": 63.8,
+      "volume": 319240,
+      "quoteDate": "20260525",
       "quoteTime": "13:30:00",
-      "valueRank": 87,
-      "volumeRank": 68,
+      "valueRank": 99,
+      "volumeRank": 100,
       "inst": {
-        "foreign": 167000,
-        "trust": 8000,
+        "foreign": 96770994,
+        "trust": 588000,
         "dealer": 0,
-        "total": 201631
+        "total": 98774204
       },
       "score": 100,
       "matches": [
@@ -122,7 +122,7 @@
           "short": "準突破",
           "icon": "◆",
           "score": 100,
-          "reason": "外資 +167,000、投信 +8,000 同買，法人合計 +201,631；漲幅 6.25%。"
+          "reason": "外資 +96,770,994、投信 +588,000 同買，法人合計 +98,774,204；漲幅 5.96%。"
         }
       ],
       "activeMatch": {
@@ -130,158 +130,32 @@
         "short": "準突破",
         "icon": "◆",
         "score": 100,
-        "reason": "外資 +167,000、投信 +8,000 同買，法人合計 +201,631；漲幅 6.25%。"
+        "reason": "外資 +96,770,994、投信 +588,000 同買，法人合計 +98,774,204；漲幅 5.96%。"
       }
     },
     {
-      "code": "4979",
-      "name": "華星光",
-      "close": 630,
-      "change": 37,
-      "percent": 6.239460370994941,
-      "value": 667800000,
-      "tradeVolume": 1060000,
-      "market": "TPEX",
-      "open": 625,
-      "high": 630,
-      "low": 620,
-      "prevClose": 593,
-      "volume": 1060,
-      "quoteDate": "20260522",
-      "quoteTime": "13:30:00",
-      "valueRank": 85,
-      "volumeRank": 63,
-      "inst": {
-        "foreign": 106140,
-        "trust": 46000,
-        "dealer": -62501,
-        "total": 89639
-      },
-      "score": 100,
-      "matches": [
-        {
-          "id": "foreign_trust_breakout",
-          "short": "準突破",
-          "icon": "◆",
-          "score": 100,
-          "reason": "外資 +106,140、投信 +46,000 同買，法人合計 +89,639；漲幅 6.24%。"
-        }
-      ],
-      "activeMatch": {
-        "id": "foreign_trust_breakout",
-        "short": "準突破",
-        "icon": "◆",
-        "score": 100,
-        "reason": "外資 +106,140、投信 +46,000 同買，法人合計 +89,639；漲幅 6.24%。"
-      }
-    },
-    {
-      "code": "2363",
-      "name": "矽統",
-      "close": 66.7,
-      "change": 3.9000000000000057,
-      "percent": 6.210191082802557,
-      "value": 3021376600,
-      "tradeVolume": 45298000,
+      "code": "3167",
+      "name": "大量",
+      "close": 879,
+      "change": 48,
+      "percent": 5.776173285198556,
+      "value": 6817524000,
+      "tradeVolume": 7756000,
       "market": "TWSE",
-      "open": 65.2,
-      "high": 68.7,
-      "low": 64,
-      "prevClose": 62.8,
-      "volume": 45298,
-      "quoteDate": "20260522",
+      "open": 860,
+      "high": 914,
+      "low": 845,
+      "prevClose": 831,
+      "volume": 7756,
+      "quoteDate": "20260525",
       "quoteTime": "13:30:00",
-      "valueRank": 95,
-      "volumeRank": 98,
-      "inst": {
-        "foreign": 5435868,
-        "trust": 5000,
-        "dealer": 0,
-        "total": 5699267
-      },
-      "score": 100,
-      "matches": [
-        {
-          "id": "foreign_trust_breakout",
-          "short": "準突破",
-          "icon": "◆",
-          "score": 100,
-          "reason": "外資 +5,435,868、投信 +5,000 同買，法人合計 +5,699,267；漲幅 6.21%。"
-        }
-      ],
-      "activeMatch": {
-        "id": "foreign_trust_breakout",
-        "short": "準突破",
-        "icon": "◆",
-        "score": 100,
-        "reason": "外資 +5,435,868、投信 +5,000 同買，法人合計 +5,699,267；漲幅 6.21%。"
-      }
-    },
-    {
-      "code": "2352",
-      "name": "佳世達",
-      "close": 28.75,
-      "change": 1.5500000000000007,
-      "percent": 5.698529411764708,
-      "value": 883516250,
-      "tradeVolume": 30731000,
-      "market": "TWSE",
-      "open": 28.2,
-      "high": 29.3,
-      "low": 28.05,
-      "prevClose": 27.2,
-      "volume": 30731,
-      "quoteDate": "20260522",
-      "quoteTime": "13:30:00",
-      "valueRank": 87,
-      "volumeRank": 97,
-      "inst": {
-        "foreign": 2119354,
-        "trust": 525000,
-        "dealer": 0,
-        "total": 2830968
-      },
-      "score": 100,
-      "matches": [
-        {
-          "id": "foreign_trust_breakout",
-          "short": "準突破",
-          "icon": "◆",
-          "score": 100,
-          "reason": "外資 +2,119,354、投信 +525,000 同買，法人合計 +2,830,968；漲幅 5.70%。"
-        }
-      ],
-      "activeMatch": {
-        "id": "foreign_trust_breakout",
-        "short": "準突破",
-        "icon": "◆",
-        "score": 100,
-        "reason": "外資 +2,119,354、投信 +525,000 同買，法人合計 +2,830,968；漲幅 5.70%。"
-      }
-    },
-    {
-      "code": "8215",
-      "name": "明基材",
-      "close": 29.35,
-      "change": 1.5500000000000007,
-      "percent": 5.5755395683453255,
-      "value": 187517150,
-      "tradeVolume": 6389000,
-      "market": "TWSE",
-      "open": 28.15,
-      "high": 29.85,
-      "low": 27.9,
-      "prevClose": 27.8,
-      "volume": 6389,
-      "quoteDate": "20260522",
-      "quoteTime": "13:30:00",
-      "valueRank": 74,
+      "valueRank": 98,
       "volumeRank": 88,
       "inst": {
-        "foreign": 758400,
-        "trust": 21000,
+        "foreign": 650016,
+        "trust": 81000,
         "dealer": 0,
-        "total": 781570
+        "total": 785274
       },
       "score": 100,
       "matches": [
@@ -290,7 +164,7 @@
           "short": "準突破",
           "icon": "◆",
           "score": 100,
-          "reason": "外資 +758,400、投信 +21,000 同買，法人合計 +781,570；漲幅 5.58%。"
+          "reason": "外資 +650,016、投信 +81,000 同買，法人合計 +785,274；漲幅 5.78%。"
         }
       ],
       "activeMatch": {
@@ -298,32 +172,32 @@
         "short": "準突破",
         "icon": "◆",
         "score": 100,
-        "reason": "外資 +758,400、投信 +21,000 同買，法人合計 +781,570；漲幅 5.58%。"
+        "reason": "外資 +650,016、投信 +81,000 同買，法人合計 +785,274；漲幅 5.78%。"
       }
     },
     {
-      "code": "2328",
-      "name": "廣宇",
-      "close": 54.8,
-      "change": 2.6999999999999957,
-      "percent": 5.182341650671777,
-      "value": 909570400,
-      "tradeVolume": 16598000,
+      "code": "8473",
+      "name": "山林水",
+      "close": 41.9,
+      "change": 2.1000000000000014,
+      "percent": 5.276381909547743,
+      "value": 83255300,
+      "tradeVolume": 1987000,
       "market": "TWSE",
-      "open": 52.5,
-      "high": 55.6,
-      "low": 52.1,
-      "prevClose": 52.1,
-      "volume": 16598,
-      "quoteDate": "20260522",
+      "open": 40.05,
+      "high": 42.3,
+      "low": 40.05,
+      "prevClose": 39.8,
+      "volume": 1987,
+      "quoteDate": "20260525",
       "quoteTime": "13:30:00",
-      "valueRank": 87,
-      "volumeRank": 94,
+      "valueRank": 64,
+      "volumeRank": 70,
       "inst": {
-        "foreign": 1781468,
-        "trust": 168000,
+        "foreign": 73083,
+        "trust": 5000,
         "dealer": 0,
-        "total": 2242229
+        "total": 68089
       },
       "score": 100,
       "matches": [
@@ -332,7 +206,7 @@
           "short": "準突破",
           "icon": "◆",
           "score": 100,
-          "reason": "外資 +1,781,468、投信 +168,000 同買，法人合計 +2,242,229；漲幅 5.18%。"
+          "reason": "外資 +73,083、投信 +5,000 同買，法人合計 +68,089；漲幅 5.28%。"
         }
       ],
       "activeMatch": {
@@ -340,578 +214,32 @@
         "short": "準突破",
         "icon": "◆",
         "score": 100,
-        "reason": "外資 +1,781,468、投信 +168,000 同買，法人合計 +2,242,229；漲幅 5.18%。"
+        "reason": "外資 +73,083、投信 +5,000 同買，法人合計 +68,089；漲幅 5.28%。"
       }
     },
     {
-      "code": "3706",
-      "name": "神達",
-      "close": 87.8,
-      "change": 4.299999999999997,
-      "percent": 5.149700598802392,
-      "value": 3216904200,
-      "tradeVolume": 36639000,
-      "market": "TWSE",
-      "open": 84.3,
-      "high": 88.4,
-      "low": 83.6,
-      "prevClose": 83.5,
-      "volume": 36639,
-      "quoteDate": "20260522",
-      "quoteTime": "13:30:00",
-      "valueRank": 95,
-      "volumeRank": 98,
-      "inst": {
-        "foreign": 4967924,
-        "trust": 2866000,
-        "dealer": 0,
-        "total": 8162052
-      },
-      "score": 100,
-      "matches": [
-        {
-          "id": "foreign_trust_breakout",
-          "short": "準突破",
-          "icon": "◆",
-          "score": 100,
-          "reason": "外資 +4,967,924、投信 +2,866,000 同買，法人合計 +8,162,052；漲幅 5.15%。"
-        }
-      ],
-      "activeMatch": {
-        "id": "foreign_trust_breakout",
-        "short": "準突破",
-        "icon": "◆",
-        "score": 100,
-        "reason": "外資 +4,967,924、投信 +2,866,000 同買，法人合計 +8,162,052；漲幅 5.15%。"
-      }
-    },
-    {
-      "code": "5269",
-      "name": "祥碩",
-      "close": 1480,
-      "change": 70,
-      "percent": 4.964539007092199,
-      "value": 2527840000,
-      "tradeVolume": 1708000,
-      "market": "TWSE",
-      "open": 1430,
-      "high": 1495,
-      "low": 1420,
-      "prevClose": 1410,
-      "volume": 1708,
-      "quoteDate": "20260522",
-      "quoteTime": "13:30:00",
-      "valueRank": 94,
-      "volumeRank": 71,
-      "inst": {
-        "foreign": 224226,
-        "trust": 158000,
-        "dealer": 0,
-        "total": 394306
-      },
-      "score": 100,
-      "matches": [
-        {
-          "id": "foreign_trust_breakout",
-          "short": "準突破",
-          "icon": "◆",
-          "score": 100,
-          "reason": "外資 +224,226、投信 +158,000 同買，法人合計 +394,306；漲幅 4.96%。"
-        }
-      ],
-      "activeMatch": {
-        "id": "foreign_trust_breakout",
-        "short": "準突破",
-        "icon": "◆",
-        "score": 100,
-        "reason": "外資 +224,226、投信 +158,000 同買，法人合計 +394,306；漲幅 4.96%。"
-      }
-    },
-    {
-      "code": "6533",
-      "name": "晶心科",
-      "close": 240,
-      "change": 10,
-      "percent": 4.3478260869565215,
-      "value": 238800000,
-      "tradeVolume": 995000,
-      "market": "TWSE",
-      "open": 234,
-      "high": 246,
-      "low": 230.5,
-      "prevClose": 230,
-      "volume": 995,
-      "quoteDate": "20260522",
-      "quoteTime": "13:30:00",
-      "valueRank": 76,
-      "volumeRank": 63,
-      "inst": {
-        "foreign": 384000,
-        "trust": 12000,
-        "dealer": 0,
-        "total": 396024
-      },
-      "score": 100,
-      "matches": [
-        {
-          "id": "foreign_trust_breakout",
-          "short": "準突破",
-          "icon": "◆",
-          "score": 100,
-          "reason": "外資 +384,000、投信 +12,000 同買，法人合計 +396,024；漲幅 4.35%。"
-        }
-      ],
-      "activeMatch": {
-        "id": "foreign_trust_breakout",
-        "short": "準突破",
-        "icon": "◆",
-        "score": 100,
-        "reason": "外資 +384,000、投信 +12,000 同買，法人合計 +396,024；漲幅 4.35%。"
-      }
-    },
-    {
-      "code": "2421",
-      "name": "建準",
-      "close": 158.5,
-      "change": 6.5,
-      "percent": 4.276315789473684,
-      "value": 2537743500,
-      "tradeVolume": 16011000,
-      "market": "TWSE",
-      "open": 154.5,
-      "high": 163.5,
-      "low": 153.5,
-      "prevClose": 152,
-      "volume": 16011,
-      "quoteDate": "20260522",
-      "quoteTime": "13:30:00",
-      "valueRank": 94,
-      "volumeRank": 94,
-      "inst": {
-        "foreign": 3753646,
-        "trust": 936000,
-        "dealer": 0,
-        "total": 4804320
-      },
-      "score": 100,
-      "matches": [
-        {
-          "id": "foreign_trust_breakout",
-          "short": "準突破",
-          "icon": "◆",
-          "score": 100,
-          "reason": "外資 +3,753,646、投信 +936,000 同買，法人合計 +4,804,320；漲幅 4.28%。"
-        }
-      ],
-      "activeMatch": {
-        "id": "foreign_trust_breakout",
-        "short": "準突破",
-        "icon": "◆",
-        "score": 100,
-        "reason": "外資 +3,753,646、投信 +936,000 同買，法人合計 +4,804,320；漲幅 4.28%。"
-      }
-    },
-    {
-      "code": "4755",
-      "name": "三福化",
-      "close": 146.5,
-      "change": 6,
-      "percent": 4.270462633451958,
-      "value": 160710500,
-      "tradeVolume": 1097000,
-      "market": "TWSE",
-      "open": 140,
-      "high": 148.5,
-      "low": 140,
-      "prevClose": 140.5,
-      "volume": 1097,
-      "quoteDate": "20260522",
-      "quoteTime": "13:30:00",
-      "valueRank": 72,
-      "volumeRank": 64,
-      "inst": {
-        "foreign": 6000,
-        "trust": 56000,
-        "dealer": 0,
-        "total": 62985
-      },
-      "score": 100,
-      "matches": [
-        {
-          "id": "foreign_trust_breakout",
-          "short": "準突破",
-          "icon": "◆",
-          "score": 100,
-          "reason": "外資 +6,000、投信 +56,000 同買，法人合計 +62,985；漲幅 4.27%。"
-        }
-      ],
-      "activeMatch": {
-        "id": "foreign_trust_breakout",
-        "short": "準突破",
-        "icon": "◆",
-        "score": 100,
-        "reason": "外資 +6,000、投信 +56,000 同買，法人合計 +62,985；漲幅 4.27%。"
-      }
-    },
-    {
-      "code": "1773",
-      "name": "勝一",
-      "close": 184.5,
-      "change": 7.5,
-      "percent": 4.23728813559322,
-      "value": 498519000,
-      "tradeVolume": 2702000,
-      "market": "TWSE",
-      "open": 179.5,
-      "high": 188,
-      "low": 177,
-      "prevClose": 177,
-      "volume": 2702,
-      "quoteDate": "20260522",
-      "quoteTime": "13:30:00",
-      "valueRank": 83,
-      "volumeRank": 77,
-      "inst": {
-        "foreign": 800011,
-        "trust": 280000,
-        "dealer": 0,
-        "total": 1126200
-      },
-      "score": 100,
-      "matches": [
-        {
-          "id": "foreign_trust_breakout",
-          "short": "準突破",
-          "icon": "◆",
-          "score": 100,
-          "reason": "外資 +800,011、投信 +280,000 同買，法人合計 +1,126,200；漲幅 4.24%。"
-        }
-      ],
-      "activeMatch": {
-        "id": "foreign_trust_breakout",
-        "short": "準突破",
-        "icon": "◆",
-        "score": 100,
-        "reason": "外資 +800,011、投信 +280,000 同買，法人合計 +1,126,200；漲幅 4.24%。"
-      }
-    },
-    {
-      "code": "3363",
-      "name": "上詮",
-      "close": 852,
-      "change": 34,
-      "percent": 4.156479217603912,
-      "value": 1844580000,
-      "tradeVolume": 2165000,
-      "market": "TPEX",
-      "open": 841,
-      "high": 865,
-      "low": 835,
-      "prevClose": 818,
-      "volume": 2165,
-      "quoteDate": "20260522",
-      "quoteTime": "13:30:00",
-      "valueRank": 92,
-      "volumeRank": 74,
-      "inst": {
-        "foreign": 51772,
-        "trust": 7000,
-        "dealer": 1127,
-        "total": 59899
-      },
-      "score": 100,
-      "matches": [
-        {
-          "id": "foreign_trust_breakout",
-          "short": "準突破",
-          "icon": "◆",
-          "score": 100,
-          "reason": "外資 +51,772、投信 +7,000 同買，法人合計 +59,899；漲幅 4.16%。"
-        }
-      ],
-      "activeMatch": {
-        "id": "foreign_trust_breakout",
-        "short": "準突破",
-        "icon": "◆",
-        "score": 100,
-        "reason": "外資 +51,772、投信 +7,000 同買，法人合計 +59,899；漲幅 4.16%。"
-      }
-    },
-    {
-      "code": "1717",
-      "name": "長興",
-      "close": 83,
-      "change": 3.299999999999997,
-      "percent": 4.140526976160599,
-      "value": 5589386000,
-      "tradeVolume": 67342000,
-      "market": "TWSE",
-      "open": 80.6,
-      "high": 84.4,
-      "low": 80.1,
-      "prevClose": 79.7,
-      "volume": 67342,
-      "quoteDate": "20260522",
-      "quoteTime": "13:30:00",
-      "valueRank": 97,
-      "volumeRank": 99,
-      "inst": {
-        "foreign": 26671865,
-        "trust": 707000,
-        "dealer": 0,
-        "total": 27900479
-      },
-      "score": 100,
-      "matches": [
-        {
-          "id": "foreign_trust_breakout",
-          "short": "準突破",
-          "icon": "◆",
-          "score": 100,
-          "reason": "外資 +26,671,865、投信 +707,000 同買，法人合計 +27,900,479；漲幅 4.14%。"
-        }
-      ],
-      "activeMatch": {
-        "id": "foreign_trust_breakout",
-        "short": "準突破",
-        "icon": "◆",
-        "score": 100,
-        "reason": "外資 +26,671,865、投信 +707,000 同買，法人合計 +27,900,479；漲幅 4.14%。"
-      }
-    },
-    {
-      "code": "2059",
-      "name": "川湖",
-      "close": 5090,
-      "change": 195,
-      "percent": 3.983656792645557,
-      "value": 936560000,
-      "tradeVolume": 184000,
-      "market": "TWSE",
-      "open": 4605,
-      "high": 5200,
-      "low": 4605,
-      "prevClose": 4895,
-      "volume": 184,
-      "quoteDate": "20260522",
-      "quoteTime": "13:30:00",
-      "valueRank": 88,
-      "volumeRank": 35,
-      "inst": {
-        "foreign": 67947,
-        "trust": 1000,
-        "dealer": 0,
-        "total": 78855
-      },
-      "score": 100,
-      "matches": [
-        {
-          "id": "foreign_trust_breakout",
-          "short": "準突破",
-          "icon": "◆",
-          "score": 100,
-          "reason": "外資 +67,947、投信 +1,000 同買，法人合計 +78,855；漲幅 3.98%。"
-        }
-      ],
-      "activeMatch": {
-        "id": "foreign_trust_breakout",
-        "short": "準突破",
-        "icon": "◆",
-        "score": 100,
-        "reason": "外資 +67,947、投信 +1,000 同買，法人合計 +78,855；漲幅 3.98%。"
-      }
-    },
-    {
-      "code": "2371",
-      "name": "大同",
-      "close": 29.5,
-      "change": 1.1000000000000014,
-      "percent": 3.8732394366197234,
-      "value": 561149000,
-      "tradeVolume": 19022000,
-      "market": "TWSE",
-      "open": 28.5,
-      "high": 29.6,
-      "low": 28.5,
-      "prevClose": 28.4,
-      "volume": 19022,
-      "quoteDate": "20260522",
-      "quoteTime": "13:30:00",
-      "valueRank": 84,
-      "volumeRank": 95,
-      "inst": {
-        "foreign": 2614282,
-        "trust": 9000,
-        "dealer": 0,
-        "total": 2511914
-      },
-      "score": 100,
-      "matches": [
-        {
-          "id": "foreign_trust_breakout",
-          "short": "準突破",
-          "icon": "◆",
-          "score": 100,
-          "reason": "外資 +2,614,282、投信 +9,000 同買，法人合計 +2,511,914；漲幅 3.87%。"
-        }
-      ],
-      "activeMatch": {
-        "id": "foreign_trust_breakout",
-        "short": "準突破",
-        "icon": "◆",
-        "score": 100,
-        "reason": "外資 +2,614,282、投信 +9,000 同買，法人合計 +2,511,914；漲幅 3.87%。"
-      }
-    },
-    {
-      "code": "2615",
-      "name": "萬海",
-      "close": 84.3,
-      "change": 3.0999999999999943,
-      "percent": 3.817733990147776,
-      "value": 1934347800,
-      "tradeVolume": 22946000,
-      "market": "TWSE",
-      "open": 82.7,
-      "high": 85.2,
-      "low": 82.4,
-      "prevClose": 81.2,
-      "volume": 22946,
-      "quoteDate": "20260522",
-      "quoteTime": "13:30:00",
-      "valueRank": 93,
-      "volumeRank": 95,
-      "inst": {
-        "foreign": 1218878,
-        "trust": 1412000,
-        "dealer": 0,
-        "total": 2694510
-      },
-      "score": 100,
-      "matches": [
-        {
-          "id": "foreign_trust_breakout",
-          "short": "準突破",
-          "icon": "◆",
-          "score": 100,
-          "reason": "外資 +1,218,878、投信 +1,412,000 同買，法人合計 +2,694,510；漲幅 3.82%。"
-        }
-      ],
-      "activeMatch": {
-        "id": "foreign_trust_breakout",
-        "short": "準突破",
-        "icon": "◆",
-        "score": 100,
-        "reason": "外資 +1,218,878、投信 +1,412,000 同買，法人合計 +2,694,510；漲幅 3.82%。"
-      }
-    },
-    {
-      "code": "1514",
-      "name": "亞力",
-      "close": 122.5,
-      "change": 4.5,
-      "percent": 3.8135593220338984,
-      "value": 586652500,
-      "tradeVolume": 4789000,
-      "market": "TWSE",
-      "open": 120,
-      "high": 123,
-      "low": 118,
-      "prevClose": 118,
-      "volume": 4789,
-      "quoteDate": "20260522",
-      "quoteTime": "13:30:00",
-      "valueRank": 84,
-      "volumeRank": 84,
-      "inst": {
-        "foreign": 864941,
-        "trust": 20000,
-        "dealer": 0,
-        "total": 1042333
-      },
-      "score": 100,
-      "matches": [
-        {
-          "id": "foreign_trust_breakout",
-          "short": "準突破",
-          "icon": "◆",
-          "score": 100,
-          "reason": "外資 +864,941、投信 +20,000 同買，法人合計 +1,042,333；漲幅 3.81%。"
-        }
-      ],
-      "activeMatch": {
-        "id": "foreign_trust_breakout",
-        "short": "準突破",
-        "icon": "◆",
-        "score": 100,
-        "reason": "外資 +864,941、投信 +20,000 同買，法人合計 +1,042,333；漲幅 3.81%。"
-      }
-    },
-    {
-      "code": "2436",
-      "name": "偉詮電",
-      "close": 77.6,
-      "change": 2.799999999999997,
-      "percent": 3.7433155080213867,
-      "value": 956808000,
-      "tradeVolume": 12330000,
-      "market": "TWSE",
-      "open": 76.2,
-      "high": 78,
-      "low": 75.7,
-      "prevClose": 74.8,
-      "volume": 12330,
-      "quoteDate": "20260522",
-      "quoteTime": "13:30:00",
-      "valueRank": 88,
-      "volumeRank": 92,
-      "inst": {
-        "foreign": 1219725,
-        "trust": 20000,
-        "dealer": 0,
-        "total": 1405542
-      },
-      "score": 100,
-      "matches": [
-        {
-          "id": "foreign_trust_breakout",
-          "short": "準突破",
-          "icon": "◆",
-          "score": 100,
-          "reason": "外資 +1,219,725、投信 +20,000 同買，法人合計 +1,405,542；漲幅 3.74%。"
-        }
-      ],
-      "activeMatch": {
-        "id": "foreign_trust_breakout",
-        "short": "準突破",
-        "icon": "◆",
-        "score": 100,
-        "reason": "外資 +1,219,725、投信 +20,000 同買，法人合計 +1,405,542；漲幅 3.74%。"
-      }
-    },
-    {
-      "code": "6449",
-      "name": "鈺邦",
-      "close": 305.5,
+      "code": "3376",
+      "name": "新日興",
+      "close": 220.5,
       "change": 10.5,
-      "percent": 3.5593220338983054,
-      "value": 345826000,
-      "tradeVolume": 1132000,
+      "percent": 5,
+      "value": 2875761000,
+      "tradeVolume": 13042000,
       "market": "TWSE",
-      "open": 295,
-      "high": 316.5,
-      "low": 286.5,
-      "prevClose": 295,
-      "volume": 1132,
-      "quoteDate": "20260522",
+      "open": 212.5,
+      "high": 226,
+      "low": 209.5,
+      "prevClose": 210,
+      "volume": 13042,
+      "quoteDate": "20260525",
       "quoteTime": "13:30:00",
-      "valueRank": 80,
-      "volumeRank": 64,
+      "valueRank": 94,
+      "volumeRank": 91,
       "inst": {
-        "foreign": 345840,
-        "trust": 38000,
+        "foreign": 636500,
+        "trust": 2000,
         "dealer": 0,
-        "total": 396671
+        "total": 600461
       },
       "score": 100,
       "matches": [
@@ -920,7 +248,7 @@
           "short": "準突破",
           "icon": "◆",
           "score": 100,
-          "reason": "外資 +345,840、投信 +38,000 同買，法人合計 +396,671；漲幅 3.56%。"
+          "reason": "外資 +636,500、投信 +2,000 同買，法人合計 +600,461；漲幅 5.00%。"
         }
       ],
       "activeMatch": {
@@ -928,74 +256,32 @@
         "short": "準突破",
         "icon": "◆",
         "score": 100,
-        "reason": "外資 +345,840、投信 +38,000 同買，法人合計 +396,671；漲幅 3.56%。"
-      }
-    },
-    {
-      "code": "6412",
-      "name": "群電",
-      "close": 100.5,
-      "change": 3.4000000000000057,
-      "percent": 3.501544799176113,
-      "value": 483505500,
-      "tradeVolume": 4811000,
-      "market": "TWSE",
-      "open": 99.8,
-      "high": 101,
-      "low": 96.5,
-      "prevClose": 97.1,
-      "volume": 4811,
-      "quoteDate": "20260522",
-      "quoteTime": "13:30:00",
-      "valueRank": 83,
-      "volumeRank": 84,
-      "inst": {
-        "foreign": 1172520,
-        "trust": 118000,
-        "dealer": 0,
-        "total": 1343725
-      },
-      "score": 100,
-      "matches": [
-        {
-          "id": "foreign_trust_breakout",
-          "short": "準突破",
-          "icon": "◆",
-          "score": 100,
-          "reason": "外資 +1,172,520、投信 +118,000 同買，法人合計 +1,343,725；漲幅 3.50%。"
-        }
-      ],
-      "activeMatch": {
-        "id": "foreign_trust_breakout",
-        "short": "準突破",
-        "icon": "◆",
-        "score": 100,
-        "reason": "外資 +1,172,520、投信 +118,000 同買，法人合計 +1,343,725；漲幅 3.50%。"
+        "reason": "外資 +636,500、投信 +2,000 同買，法人合計 +600,461；漲幅 5.00%。"
       }
     },
     {
       "code": "2323",
       "name": "中環",
-      "close": 10.2,
-      "change": 0.33999999999999986,
-      "percent": 3.448275862068964,
-      "value": 106855200,
-      "tradeVolume": 10476000,
+      "close": 10.7,
+      "change": 0.5,
+      "percent": 4.901960784313726,
+      "value": 176025700,
+      "tradeVolume": 16451000,
       "market": "TWSE",
-      "open": 9.93,
-      "high": 10.25,
-      "low": 9.88,
-      "prevClose": 9.86,
-      "volume": 10476,
-      "quoteDate": "20260522",
+      "open": 10.4,
+      "high": 10.7,
+      "low": 10.15,
+      "prevClose": 10.2,
+      "volume": 16451,
+      "quoteDate": "20260525",
       "quoteTime": "13:30:00",
-      "valueRank": 68,
-      "volumeRank": 91,
+      "valueRank": 71,
+      "volumeRank": 93,
       "inst": {
-        "foreign": 2400010,
-        "trust": 818000,
+        "foreign": 347800,
+        "trust": 815000,
         "dealer": 0,
-        "total": 3256524
+        "total": 1575890
       },
       "score": 100,
       "matches": [
@@ -1004,7 +290,7 @@
           "short": "準突破",
           "icon": "◆",
           "score": 100,
-          "reason": "外資 +2,400,010、投信 +818,000 同買，法人合計 +3,256,524；漲幅 3.45%。"
+          "reason": "外資 +347,800、投信 +815,000 同買，法人合計 +1,575,890；漲幅 4.90%。"
         }
       ],
       "activeMatch": {
@@ -1012,74 +298,74 @@
         "short": "準突破",
         "icon": "◆",
         "score": 100,
-        "reason": "外資 +2,400,010、投信 +818,000 同買，法人合計 +3,256,524；漲幅 3.45%。"
+        "reason": "外資 +347,800、投信 +815,000 同買，法人合計 +1,575,890；漲幅 4.90%。"
       }
     },
     {
-      "code": "3169",
-      "name": "亞信",
-      "close": 122,
-      "change": 4,
-      "percent": 3.389830508474576,
-      "value": 218502000,
-      "tradeVolume": 1791000,
-      "market": "TPEX",
-      "open": 119.5,
-      "high": 124,
-      "low": 116.5,
-      "prevClose": 118,
-      "volume": 1791,
-      "quoteDate": "20260522",
-      "quoteTime": "13:30:00",
-      "valueRank": 75,
-      "volumeRank": 71,
-      "inst": {
-        "foreign": 375471,
-        "trust": 15000,
-        "dealer": 12986,
-        "total": 403457
-      },
-      "score": 100,
-      "matches": [
-        {
-          "id": "foreign_trust_breakout",
-          "short": "準突破",
-          "icon": "◆",
-          "score": 100,
-          "reason": "外資 +375,471、投信 +15,000 同買，法人合計 +403,457；漲幅 3.39%。"
-        }
-      ],
-      "activeMatch": {
-        "id": "foreign_trust_breakout",
-        "short": "準突破",
-        "icon": "◆",
-        "score": 100,
-        "reason": "外資 +375,471、投信 +15,000 同買，法人合計 +403,457；漲幅 3.39%。"
-      }
-    },
-    {
-      "code": "2603",
-      "name": "長榮",
-      "close": 219,
-      "change": 7,
-      "percent": 3.30188679245283,
-      "value": 6430278000,
-      "tradeVolume": 29362000,
+      "code": "1802",
+      "name": "台玻",
+      "close": 73.9,
+      "change": 3.4000000000000057,
+      "percent": 4.822695035461002,
+      "value": 13532568000,
+      "tradeVolume": 183120000,
       "market": "TWSE",
-      "open": 214.5,
-      "high": 219,
-      "low": 214,
-      "prevClose": 212,
-      "volume": 29362,
-      "quoteDate": "20260522",
+      "open": 73,
+      "high": 76.8,
+      "low": 71.9,
+      "prevClose": 70.5,
+      "volume": 183120,
+      "quoteDate": "20260525",
+      "quoteTime": "13:30:00",
+      "valueRank": 99,
+      "volumeRank": 100,
+      "inst": {
+        "foreign": 36032532,
+        "trust": 11000,
+        "dealer": 0,
+        "total": 37461672
+      },
+      "score": 100,
+      "matches": [
+        {
+          "id": "foreign_trust_breakout",
+          "short": "準突破",
+          "icon": "◆",
+          "score": 100,
+          "reason": "外資 +36,032,532、投信 +11,000 同買，法人合計 +37,461,672；漲幅 4.82%。"
+        }
+      ],
+      "activeMatch": {
+        "id": "foreign_trust_breakout",
+        "short": "準突破",
+        "icon": "◆",
+        "score": 100,
+        "reason": "外資 +36,032,532、投信 +11,000 同買，法人合計 +37,461,672；漲幅 4.82%。"
+      }
+    },
+    {
+      "code": "2455",
+      "name": "全新",
+      "close": 444,
+      "change": 19,
+      "percent": 4.470588235294118,
+      "value": 9524688000,
+      "tradeVolume": 21452000,
+      "market": "TWSE",
+      "open": 435,
+      "high": 460,
+      "low": 422.5,
+      "prevClose": 425,
+      "volume": 21452,
+      "quoteDate": "20260525",
       "quoteTime": "13:30:00",
       "valueRank": 98,
-      "volumeRank": 97,
+      "volumeRank": 95,
       "inst": {
-        "foreign": 1819214,
-        "trust": 986220,
+        "foreign": 5032531,
+        "trust": 153000,
         "dealer": 0,
-        "total": 2903653
+        "total": 5520547
       },
       "score": 100,
       "matches": [
@@ -1088,7 +374,7 @@
           "short": "準突破",
           "icon": "◆",
           "score": 100,
-          "reason": "外資 +1,819,214、投信 +986,220 同買，法人合計 +2,903,653；漲幅 3.30%。"
+          "reason": "外資 +5,032,531、投信 +153,000 同買，法人合計 +5,520,547；漲幅 4.47%。"
         }
       ],
       "activeMatch": {
@@ -1096,32 +382,410 @@
         "short": "準突破",
         "icon": "◆",
         "score": 100,
-        "reason": "外資 +1,819,214、投信 +986,220 同買，法人合計 +2,903,653；漲幅 3.30%。"
+        "reason": "外資 +5,032,531、投信 +153,000 同買，法人合計 +5,520,547；漲幅 4.47%。"
       }
     },
     {
-      "code": "6202",
-      "name": "盛群",
-      "close": 60.8,
-      "change": 1.8999999999999986,
-      "percent": 3.2258064516129012,
-      "value": 543187200,
-      "tradeVolume": 8934000,
+      "code": "4755",
+      "name": "三福化",
+      "close": 153,
+      "change": 6.5,
+      "percent": 4.436860068259386,
+      "value": 178245000,
+      "tradeVolume": 1165000,
       "market": "TWSE",
-      "open": 59.7,
-      "high": 61.5,
-      "low": 58.9,
-      "prevClose": 58.9,
-      "volume": 8934,
-      "quoteDate": "20260522",
+      "open": 149.5,
+      "high": 153.5,
+      "low": 148,
+      "prevClose": 146.5,
+      "volume": 1165,
+      "quoteDate": "20260525",
+      "quoteTime": "13:30:00",
+      "valueRank": 72,
+      "volumeRank": 62,
+      "inst": {
+        "foreign": 262253,
+        "trust": 65000,
+        "dealer": 0,
+        "total": 331818
+      },
+      "score": 100,
+      "matches": [
+        {
+          "id": "foreign_trust_breakout",
+          "short": "準突破",
+          "icon": "◆",
+          "score": 100,
+          "reason": "外資 +262,253、投信 +65,000 同買，法人合計 +331,818；漲幅 4.44%。"
+        }
+      ],
+      "activeMatch": {
+        "id": "foreign_trust_breakout",
+        "short": "準突破",
+        "icon": "◆",
+        "score": 100,
+        "reason": "外資 +262,253、投信 +65,000 同買，法人合計 +331,818；漲幅 4.44%。"
+      }
+    },
+    {
+      "code": "2495",
+      "name": "普安",
+      "close": 46.15,
+      "change": 1.9499999999999957,
+      "percent": 4.411764705882343,
+      "value": 813486050,
+      "tradeVolume": 17627000,
+      "market": "TWSE",
+      "open": 45.05,
+      "high": 46.6,
+      "low": 43.7,
+      "prevClose": 44.2,
+      "volume": 17627,
+      "quoteDate": "20260525",
+      "quoteTime": "13:30:00",
+      "valueRank": 86,
+      "volumeRank": 94,
+      "inst": {
+        "foreign": 1640359,
+        "trust": 210000,
+        "dealer": 0,
+        "total": 2115410
+      },
+      "score": 100,
+      "matches": [
+        {
+          "id": "foreign_trust_breakout",
+          "short": "準突破",
+          "icon": "◆",
+          "score": 100,
+          "reason": "外資 +1,640,359、投信 +210,000 同買，法人合計 +2,115,410；漲幅 4.41%。"
+        }
+      ],
+      "activeMatch": {
+        "id": "foreign_trust_breakout",
+        "short": "準突破",
+        "icon": "◆",
+        "score": 100,
+        "reason": "外資 +1,640,359、投信 +210,000 同買，法人合計 +2,115,410；漲幅 4.41%。"
+      }
+    },
+    {
+      "code": "2357",
+      "name": "華碩",
+      "close": 709,
+      "change": 27,
+      "percent": 3.9589442815249267,
+      "value": 4638278000,
+      "tradeVolume": 6542000,
+      "market": "TWSE",
+      "open": 692,
+      "high": 717,
+      "low": 690,
+      "prevClose": 682,
+      "volume": 6542,
+      "quoteDate": "20260525",
+      "quoteTime": "13:30:00",
+      "valueRank": 97,
+      "volumeRank": 86,
+      "inst": {
+        "foreign": 1434807,
+        "trust": 852751,
+        "dealer": 0,
+        "total": 2369883
+      },
+      "score": 100,
+      "matches": [
+        {
+          "id": "foreign_trust_breakout",
+          "short": "準突破",
+          "icon": "◆",
+          "score": 100,
+          "reason": "外資 +1,434,807、投信 +852,751 同買，法人合計 +2,369,883；漲幅 3.96%。"
+        }
+      ],
+      "activeMatch": {
+        "id": "foreign_trust_breakout",
+        "short": "準突破",
+        "icon": "◆",
+        "score": 100,
+        "reason": "外資 +1,434,807、投信 +852,751 同買，法人合計 +2,369,883；漲幅 3.96%。"
+      }
+    },
+    {
+      "code": "2363",
+      "name": "矽統",
+      "close": 69.2,
+      "change": 2.5,
+      "percent": 3.7481259370314843,
+      "value": 3063484000,
+      "tradeVolume": 44270000,
+      "market": "TWSE",
+      "open": 68.9,
+      "high": 72,
+      "low": 66.4,
+      "prevClose": 66.7,
+      "volume": 44270,
+      "quoteDate": "20260525",
+      "quoteTime": "13:30:00",
+      "valueRank": 95,
+      "volumeRank": 98,
+      "inst": {
+        "foreign": 4144413,
+        "trust": 10742,
+        "dealer": 4000,
+        "total": 4741137
+      },
+      "score": 100,
+      "matches": [
+        {
+          "id": "foreign_trust_breakout",
+          "short": "準突破",
+          "icon": "◆",
+          "score": 100,
+          "reason": "外資 +4,144,413、投信 +10,742 同買，法人合計 +4,741,137；漲幅 3.75%。"
+        }
+      ],
+      "activeMatch": {
+        "id": "foreign_trust_breakout",
+        "short": "準突破",
+        "icon": "◆",
+        "score": 100,
+        "reason": "外資 +4,144,413、投信 +10,742 同買，法人合計 +4,741,137；漲幅 3.75%。"
+      }
+    },
+    {
+      "code": "2436",
+      "name": "偉詮電",
+      "close": 80.5,
+      "change": 2.9000000000000057,
+      "percent": 3.7371134020618633,
+      "value": 1491182000,
+      "tradeVolume": 18524000,
+      "market": "TWSE",
+      "open": 80.1,
+      "high": 82,
+      "low": 78.6,
+      "prevClose": 77.6,
+      "volume": 18524,
+      "quoteDate": "20260525",
+      "quoteTime": "13:30:00",
+      "valueRank": 91,
+      "volumeRank": 94,
+      "inst": {
+        "foreign": 3999802,
+        "trust": 10000,
+        "dealer": 0,
+        "total": 4212832
+      },
+      "score": 100,
+      "matches": [
+        {
+          "id": "foreign_trust_breakout",
+          "short": "準突破",
+          "icon": "◆",
+          "score": 100,
+          "reason": "外資 +3,999,802、投信 +10,000 同買，法人合計 +4,212,832；漲幅 3.74%。"
+        }
+      ],
+      "activeMatch": {
+        "id": "foreign_trust_breakout",
+        "short": "準突破",
+        "icon": "◆",
+        "score": 100,
+        "reason": "外資 +3,999,802、投信 +10,000 同買，法人合計 +4,212,832；漲幅 3.74%。"
+      }
+    },
+    {
+      "code": "5269",
+      "name": "祥碩",
+      "close": 1535,
+      "change": 55,
+      "percent": 3.7162162162162162,
+      "value": 2979435000,
+      "tradeVolume": 1941000,
+      "market": "TWSE",
+      "open": 1535,
+      "high": 1550,
+      "low": 1515,
+      "prevClose": 1480,
+      "volume": 1941,
+      "quoteDate": "20260525",
+      "quoteTime": "13:30:00",
+      "valueRank": 95,
+      "volumeRank": 70,
+      "inst": {
+        "foreign": 214892,
+        "trust": 143000,
+        "dealer": 0,
+        "total": 417934
+      },
+      "score": 100,
+      "matches": [
+        {
+          "id": "foreign_trust_breakout",
+          "short": "準突破",
+          "icon": "◆",
+          "score": 100,
+          "reason": "外資 +214,892、投信 +143,000 同買，法人合計 +417,934；漲幅 3.72%。"
+        }
+      ],
+      "activeMatch": {
+        "id": "foreign_trust_breakout",
+        "short": "準突破",
+        "icon": "◆",
+        "score": 100,
+        "reason": "外資 +214,892、投信 +143,000 同買，法人合計 +417,934；漲幅 3.72%。"
+      }
+    },
+    {
+      "code": "6414",
+      "name": "樺漢",
+      "close": 363.5,
+      "change": 13,
+      "percent": 3.7089871611982885,
+      "value": 797519000,
+      "tradeVolume": 2194000,
+      "market": "TWSE",
+      "open": 356.5,
+      "high": 368,
+      "low": 355,
+      "prevClose": 350.5,
+      "volume": 2194,
+      "quoteDate": "20260525",
+      "quoteTime": "13:30:00",
+      "valueRank": 86,
+      "volumeRank": 71,
+      "inst": {
+        "foreign": 168460,
+        "trust": 19000,
+        "dealer": 0,
+        "total": 160332
+      },
+      "score": 100,
+      "matches": [
+        {
+          "id": "foreign_trust_breakout",
+          "short": "準突破",
+          "icon": "◆",
+          "score": 100,
+          "reason": "外資 +168,460、投信 +19,000 同買，法人合計 +160,332；漲幅 3.71%。"
+        }
+      ],
+      "activeMatch": {
+        "id": "foreign_trust_breakout",
+        "short": "準突破",
+        "icon": "◆",
+        "score": 100,
+        "reason": "外資 +168,460、投信 +19,000 同買，法人合計 +160,332；漲幅 3.71%。"
+      }
+    },
+    {
+      "code": "6412",
+      "name": "群電",
+      "close": 104,
+      "change": 3.5,
+      "percent": 3.482587064676617,
+      "value": 445744000,
+      "tradeVolume": 4286000,
+      "market": "TWSE",
+      "open": 103,
+      "high": 107,
+      "low": 100.5,
+      "prevClose": 100.5,
+      "volume": 4286,
+      "quoteDate": "20260525",
+      "quoteTime": "13:30:00",
+      "valueRank": 81,
+      "volumeRank": 82,
+      "inst": {
+        "foreign": 1098892,
+        "trust": 110000,
+        "dealer": 0,
+        "total": 1250574
+      },
+      "score": 100,
+      "matches": [
+        {
+          "id": "foreign_trust_breakout",
+          "short": "準突破",
+          "icon": "◆",
+          "score": 100,
+          "reason": "外資 +1,098,892、投信 +110,000 同買，法人合計 +1,250,574；漲幅 3.48%。"
+        }
+      ],
+      "activeMatch": {
+        "id": "foreign_trust_breakout",
+        "short": "準突破",
+        "icon": "◆",
+        "score": 100,
+        "reason": "外資 +1,098,892、投信 +110,000 同買，法人合計 +1,250,574；漲幅 3.48%。"
+      }
+    },
+    {
+      "code": "6526",
+      "name": "達發",
+      "close": 750,
+      "change": 25,
+      "percent": 3.4482758620689653,
+      "value": 1811250000,
+      "tradeVolume": 2415000,
+      "market": "TWSE",
+      "open": 745,
+      "high": 774,
+      "low": 741,
+      "prevClose": 725,
+      "volume": 2415,
+      "quoteDate": "20260525",
+      "quoteTime": "13:30:00",
+      "valueRank": 91,
+      "volumeRank": 73,
+      "inst": {
+        "foreign": 51495,
+        "trust": 15000,
+        "dealer": 0,
+        "total": 72166
+      },
+      "score": 100,
+      "matches": [
+        {
+          "id": "foreign_trust_breakout",
+          "short": "準突破",
+          "icon": "◆",
+          "score": 100,
+          "reason": "外資 +51,495、投信 +15,000 同買，法人合計 +72,166；漲幅 3.45%。"
+        }
+      ],
+      "activeMatch": {
+        "id": "foreign_trust_breakout",
+        "short": "準突破",
+        "icon": "◆",
+        "score": 100,
+        "reason": "外資 +51,495、投信 +15,000 同買，法人合計 +72,166；漲幅 3.45%。"
+      }
+    },
+    {
+      "code": "2329",
+      "name": "華泰",
+      "close": 56.4,
+      "change": 1.7999999999999972,
+      "percent": 3.296703296703291,
+      "value": 631454400,
+      "tradeVolume": 11196000,
+      "market": "TWSE",
+      "open": 55.7,
+      "high": 56.7,
+      "low": 54.4,
+      "prevClose": 54.6,
+      "volume": 11196,
+      "quoteDate": "20260525",
       "quoteTime": "13:30:00",
       "valueRank": 84,
-      "volumeRank": 90,
+      "volumeRank": 91,
       "inst": {
-        "foreign": 2340025,
-        "trust": 198000,
+        "foreign": 1112059,
+        "trust": 38000,
         "dealer": 0,
-        "total": 2556192
+        "total": 973669
       },
       "score": 100,
       "matches": [
@@ -1130,7 +794,7 @@
           "short": "準突破",
           "icon": "◆",
           "score": 100,
-          "reason": "外資 +2,340,025、投信 +198,000 同買，法人合計 +2,556,192；漲幅 3.23%。"
+          "reason": "外資 +1,112,059、投信 +38,000 同買，法人合計 +973,669；漲幅 3.30%。"
         }
       ],
       "activeMatch": {
@@ -1138,32 +802,326 @@
         "short": "準突破",
         "icon": "◆",
         "score": 100,
-        "reason": "外資 +2,340,025、投信 +198,000 同買，法人合計 +2,556,192；漲幅 3.23%。"
+        "reason": "外資 +1,112,059、投信 +38,000 同買，法人合計 +973,669；漲幅 3.30%。"
       }
     },
     {
-      "code": "3231",
-      "name": "緯創",
-      "close": 144.5,
-      "change": 4.5,
-      "percent": 3.214285714285714,
-      "value": 9977869500,
-      "tradeVolume": 69051000,
+      "code": "2328",
+      "name": "廣宇",
+      "close": 56.5,
+      "change": 1.7000000000000028,
+      "percent": 3.1021897810219032,
+      "value": 1542958500,
+      "tradeVolume": 27309000,
       "market": "TWSE",
-      "open": 142.5,
-      "high": 146,
-      "low": 139.5,
-      "prevClose": 140,
-      "volume": 69051,
-      "quoteDate": "20260522",
+      "open": 55.9,
+      "high": 57.2,
+      "low": 54.4,
+      "prevClose": 54.8,
+      "volume": 27309,
+      "quoteDate": "20260525",
+      "quoteTime": "13:30:00",
+      "valueRank": 91,
+      "volumeRank": 96,
+      "inst": {
+        "foreign": 4150751,
+        "trust": 167000,
+        "dealer": 0,
+        "total": 5238100
+      },
+      "score": 100,
+      "matches": [
+        {
+          "id": "foreign_trust_breakout",
+          "short": "準突破",
+          "icon": "◆",
+          "score": 100,
+          "reason": "外資 +4,150,751、投信 +167,000 同買，法人合計 +5,238,100；漲幅 3.10%。"
+        }
+      ],
+      "activeMatch": {
+        "id": "foreign_trust_breakout",
+        "short": "準突破",
+        "icon": "◆",
+        "score": 100,
+        "reason": "外資 +4,150,751、投信 +167,000 同買，法人合計 +5,238,100；漲幅 3.10%。"
+      }
+    },
+    {
+      "code": "6120",
+      "name": "達運",
+      "close": 15.15,
+      "change": 0.45000000000000107,
+      "percent": 3.0612244897959258,
+      "value": 177891300,
+      "tradeVolume": 11742000,
+      "market": "TWSE",
+      "open": 15,
+      "high": 15.55,
+      "low": 14.85,
+      "prevClose": 14.7,
+      "volume": 11742,
+      "quoteDate": "20260525",
+      "quoteTime": "13:30:00",
+      "valueRank": 72,
+      "volumeRank": 91,
+      "inst": {
+        "foreign": 6592760,
+        "trust": 84000,
+        "dealer": 0,
+        "total": 7196543
+      },
+      "score": 100,
+      "matches": [
+        {
+          "id": "foreign_trust_breakout",
+          "short": "準突破",
+          "icon": "◆",
+          "score": 100,
+          "reason": "外資 +6,592,760、投信 +84,000 同買，法人合計 +7,196,543；漲幅 3.06%。"
+        }
+      ],
+      "activeMatch": {
+        "id": "foreign_trust_breakout",
+        "short": "準突破",
+        "icon": "◆",
+        "score": 100,
+        "reason": "外資 +6,592,760、投信 +84,000 同買，法人合計 +7,196,543；漲幅 3.06%。"
+      }
+    },
+    {
+      "code": "3653",
+      "name": "健策",
+      "close": 3770,
+      "change": 110,
+      "percent": 3.0054644808743167,
+      "value": 2292160000,
+      "tradeVolume": 608000,
+      "market": "TWSE",
+      "open": 3750,
+      "high": 3770,
+      "low": 3700,
+      "prevClose": 3660,
+      "volume": 608,
+      "quoteDate": "20260525",
+      "quoteTime": "13:30:00",
+      "valueRank": 93,
+      "volumeRank": 51,
+      "inst": {
+        "foreign": 226418,
+        "trust": 1000,
+        "dealer": 0,
+        "total": 224122
+      },
+      "score": 100,
+      "matches": [
+        {
+          "id": "foreign_trust_breakout",
+          "short": "準突破",
+          "icon": "◆",
+          "score": 100,
+          "reason": "外資 +226,418、投信 +1,000 同買，法人合計 +224,122；漲幅 3.01%。"
+        }
+      ],
+      "activeMatch": {
+        "id": "foreign_trust_breakout",
+        "short": "準突破",
+        "icon": "◆",
+        "score": 100,
+        "reason": "外資 +226,418、投信 +1,000 同買，法人合計 +224,122；漲幅 3.01%。"
+      }
+    },
+    {
+      "code": "6679",
+      "name": "鈺太",
+      "close": 345.5,
+      "change": 10,
+      "percent": 2.9806259314456036,
+      "value": 194516500,
+      "tradeVolume": 563000,
+      "market": "TPEX",
+      "open": 338.5,
+      "high": 350,
+      "low": 337,
+      "prevClose": 335.5,
+      "volume": 563,
+      "quoteDate": "20260525",
+      "quoteTime": "13:30:00",
+      "valueRank": 73,
+      "volumeRank": 49,
+      "inst": {
+        "foreign": 176133,
+        "trust": 5000,
+        "dealer": -67563,
+        "total": 113570
+      },
+      "score": 100,
+      "matches": [
+        {
+          "id": "foreign_trust_breakout",
+          "short": "準突破",
+          "icon": "◆",
+          "score": 100,
+          "reason": "外資 +176,133、投信 +5,000 同買，法人合計 +113,570；漲幅 2.98%。"
+        }
+      ],
+      "activeMatch": {
+        "id": "foreign_trust_breakout",
+        "short": "準突破",
+        "icon": "◆",
+        "score": 100,
+        "reason": "外資 +176,133、投信 +5,000 同買，法人合計 +113,570；漲幅 2.98%。"
+      }
+    },
+    {
+      "code": "6664",
+      "name": "群翊",
+      "close": 444,
+      "change": 11.5,
+      "percent": 2.6589595375722546,
+      "value": 722388000,
+      "tradeVolume": 1627000,
+      "market": "TPEX",
+      "open": 447,
+      "high": 454.5,
+      "low": 439,
+      "prevClose": 432.5,
+      "volume": 1627,
+      "quoteDate": "20260525",
+      "quoteTime": "13:30:00",
+      "valueRank": 85,
+      "volumeRank": 67,
+      "inst": {
+        "foreign": 48004,
+        "trust": 1000,
+        "dealer": 58726,
+        "total": 107730
+      },
+      "score": 100,
+      "matches": [
+        {
+          "id": "foreign_trust_breakout",
+          "short": "準突破",
+          "icon": "◆",
+          "score": 100,
+          "reason": "外資 +48,004、投信 +1,000 同買，法人合計 +107,730；漲幅 2.66%。"
+        }
+      ],
+      "activeMatch": {
+        "id": "foreign_trust_breakout",
+        "short": "準突破",
+        "icon": "◆",
+        "score": 100,
+        "reason": "外資 +48,004、投信 +1,000 同買，法人合計 +107,730；漲幅 2.66%。"
+      }
+    },
+    {
+      "code": "2421",
+      "name": "建準",
+      "close": 162.5,
+      "change": 4,
+      "percent": 2.5236593059936907,
+      "value": 2465612500,
+      "tradeVolume": 15173000,
+      "market": "TWSE",
+      "open": 163,
+      "high": 166,
+      "low": 158.5,
+      "prevClose": 158.5,
+      "volume": 15173,
+      "quoteDate": "20260525",
+      "quoteTime": "13:30:00",
+      "valueRank": 94,
+      "volumeRank": 93,
+      "inst": {
+        "foreign": 1973754,
+        "trust": 947000,
+        "dealer": 0,
+        "total": 3105524
+      },
+      "score": 100,
+      "matches": [
+        {
+          "id": "foreign_trust_breakout",
+          "short": "準突破",
+          "icon": "◆",
+          "score": 100,
+          "reason": "外資 +1,973,754、投信 +947,000 同買，法人合計 +3,105,524；漲幅 2.52%。"
+        }
+      ],
+      "activeMatch": {
+        "id": "foreign_trust_breakout",
+        "short": "準突破",
+        "icon": "◆",
+        "score": 100,
+        "reason": "外資 +1,973,754、投信 +947,000 同買，法人合計 +3,105,524；漲幅 2.52%。"
+      }
+    },
+    {
+      "code": "1773",
+      "name": "勝一",
+      "close": 189,
+      "change": 4.5,
+      "percent": 2.4390243902439024,
+      "value": 366660000,
+      "tradeVolume": 1940000,
+      "market": "TWSE",
+      "open": 189,
+      "high": 192,
+      "low": 185.5,
+      "prevClose": 184.5,
+      "volume": 1940,
+      "quoteDate": "20260525",
+      "quoteTime": "13:30:00",
+      "valueRank": 79,
+      "volumeRank": 70,
+      "inst": {
+        "foreign": 527890,
+        "trust": 280000,
+        "dealer": 0,
+        "total": 857429
+      },
+      "score": 100,
+      "matches": [
+        {
+          "id": "foreign_trust_breakout",
+          "short": "準突破",
+          "icon": "◆",
+          "score": 100,
+          "reason": "外資 +527,890、投信 +280,000 同買，法人合計 +857,429；漲幅 2.44%。"
+        }
+      ],
+      "activeMatch": {
+        "id": "foreign_trust_breakout",
+        "short": "準突破",
+        "icon": "◆",
+        "score": 100,
+        "reason": "外資 +527,890、投信 +280,000 同買，法人合計 +857,429；漲幅 2.44%。"
+      }
+    },
+    {
+      "code": "2377",
+      "name": "微星",
+      "close": 127,
+      "change": 3,
+      "percent": 2.4193548387096775,
+      "value": 10026777000,
+      "tradeVolume": 78951000,
+      "market": "TWSE",
+      "open": 131.5,
+      "high": 136,
+      "low": 127,
+      "prevClose": 124,
+      "volume": 78951,
+      "quoteDate": "20260525",
       "quoteTime": "13:30:00",
       "valueRank": 99,
       "volumeRank": 99,
       "inst": {
-        "foreign": 27614851,
-        "trust": 574000,
+        "foreign": 19983929,
+        "trust": 2656000,
         "dealer": 0,
-        "total": 29833804
+        "total": 23424962
       },
       "score": 100,
       "matches": [
@@ -1172,7 +1130,7 @@
           "short": "準突破",
           "icon": "◆",
           "score": 100,
-          "reason": "外資 +27,614,851、投信 +574,000 同買，法人合計 +29,833,804；漲幅 3.21%。"
+          "reason": "外資 +19,983,929、投信 +2,656,000 同買，法人合計 +23,424,962；漲幅 2.42%。"
         }
       ],
       "activeMatch": {
@@ -1180,32 +1138,32 @@
         "short": "準突破",
         "icon": "◆",
         "score": 100,
-        "reason": "外資 +27,614,851、投信 +574,000 同買，法人合計 +29,833,804；漲幅 3.21%。"
+        "reason": "外資 +19,983,929、投信 +2,656,000 同買，法人合計 +23,424,962；漲幅 2.42%。"
       }
     },
     {
-      "code": "2467",
-      "name": "志聖",
-      "close": 603,
-      "change": 18,
-      "percent": 3.076923076923077,
-      "value": 1418256000,
-      "tradeVolume": 2352000,
+      "code": "1409",
+      "name": "新纖",
+      "close": 17.6,
+      "change": 0.40000000000000213,
+      "percent": 2.32558139534885,
+      "value": 228694400,
+      "tradeVolume": 12994000,
       "market": "TWSE",
-      "open": 598,
-      "high": 625,
-      "low": 591,
-      "prevClose": 585,
-      "volume": 2352,
-      "quoteDate": "20260522",
+      "open": 17.35,
+      "high": 17.65,
+      "low": 17.25,
+      "prevClose": 17.2,
+      "volume": 12994,
+      "quoteDate": "20260525",
       "quoteTime": "13:30:00",
-      "valueRank": 90,
-      "volumeRank": 75,
+      "valueRank": 74,
+      "volumeRank": 91,
       "inst": {
-        "foreign": 223795,
-        "trust": 47000,
+        "foreign": 6442352,
+        "trust": 6000,
         "dealer": 0,
-        "total": 247676
+        "total": 6461728
       },
       "score": 100,
       "matches": [
@@ -1214,7 +1172,7 @@
           "short": "準突破",
           "icon": "◆",
           "score": 100,
-          "reason": "外資 +223,795、投信 +47,000 同買，法人合計 +247,676；漲幅 3.08%。"
+          "reason": "外資 +6,442,352、投信 +6,000 同買，法人合計 +6,461,728；漲幅 2.33%。"
         }
       ],
       "activeMatch": {
@@ -1222,74 +1180,32 @@
         "short": "準突破",
         "icon": "◆",
         "score": 100,
-        "reason": "外資 +223,795、投信 +47,000 同買，法人合計 +247,676；漲幅 3.08%。"
+        "reason": "外資 +6,442,352、投信 +6,000 同買，法人合計 +6,461,728；漲幅 2.33%。"
       }
     },
     {
-      "code": "6196",
-      "name": "帆宣",
-      "close": 442,
-      "change": 12.5,
-      "percent": 2.910360884749709,
-      "value": 1244672000,
-      "tradeVolume": 2816000,
-      "market": "TWSE",
-      "open": 444,
-      "high": 447.5,
-      "low": 436,
-      "prevClose": 429.5,
-      "volume": 2816,
-      "quoteDate": "20260522",
-      "quoteTime": "13:30:00",
-      "valueRank": 89,
-      "volumeRank": 77,
-      "inst": {
-        "foreign": 782489,
-        "trust": 231000,
-        "dealer": 0,
-        "total": 1082350
-      },
-      "score": 100,
-      "matches": [
-        {
-          "id": "foreign_trust_breakout",
-          "short": "準突破",
-          "icon": "◆",
-          "score": 100,
-          "reason": "外資 +782,489、投信 +231,000 同買，法人合計 +1,082,350；漲幅 2.91%。"
-        }
-      ],
-      "activeMatch": {
-        "id": "foreign_trust_breakout",
-        "short": "準突破",
-        "icon": "◆",
-        "score": 100,
-        "reason": "外資 +782,489、投信 +231,000 同買，法人合計 +1,082,350；漲幅 2.91%。"
-      }
-    },
-    {
-      "code": "6462",
-      "name": "神盾",
-      "close": 144.5,
-      "change": 4,
-      "percent": 2.8469750889679712,
-      "value": 857607500,
-      "tradeVolume": 5935000,
+      "code": "3105",
+      "name": "穩懋",
+      "close": 543,
+      "change": 12,
+      "percent": 2.2598870056497176,
+      "value": 22375944000,
+      "tradeVolume": 41208000,
       "market": "TPEX",
-      "open": 148.5,
-      "high": 150,
-      "low": 140,
-      "prevClose": 140.5,
-      "volume": 5935,
-      "quoteDate": "20260522",
+      "open": 551,
+      "high": 565,
+      "low": 538,
+      "prevClose": 531,
+      "volume": 41208,
+      "quoteDate": "20260525",
       "quoteTime": "13:30:00",
-      "valueRank": 87,
-      "volumeRank": 87,
+      "valueRank": 99,
+      "volumeRank": 97,
       "inst": {
-        "foreign": 945925,
-        "trust": 20000,
-        "dealer": -52589,
-        "total": 913336
+        "foreign": 3923738,
+        "trust": 651000,
+        "dealer": 859328,
+        "total": 5434066
       },
       "score": 100,
       "matches": [
@@ -1298,7 +1214,7 @@
           "short": "準突破",
           "icon": "◆",
           "score": 100,
-          "reason": "外資 +945,925、投信 +20,000 同買，法人合計 +913,336；漲幅 2.85%。"
+          "reason": "外資 +3,923,738、投信 +651,000 同買，法人合計 +5,434,066；漲幅 2.26%。"
         }
       ],
       "activeMatch": {
@@ -1306,74 +1222,32 @@
         "short": "準突破",
         "icon": "◆",
         "score": 100,
-        "reason": "外資 +945,925、投信 +20,000 同買，法人合計 +913,336；漲幅 2.85%。"
+        "reason": "外資 +3,923,738、投信 +651,000 同買，法人合計 +5,434,066；漲幅 2.26%。"
       }
     },
     {
-      "code": "3483",
-      "name": "力致",
-      "close": 94.6,
-      "change": 2.5999999999999943,
-      "percent": 2.826086956521733,
-      "value": 122034000,
-      "tradeVolume": 1290000,
-      "market": "TPEX",
-      "open": 92.5,
-      "high": 95.5,
-      "low": 92.3,
-      "prevClose": 92,
-      "volume": 1290,
-      "quoteDate": "20260522",
-      "quoteTime": "13:30:00",
-      "valueRank": 70,
-      "volumeRank": 67,
-      "inst": {
-        "foreign": 351420,
-        "trust": 26000,
-        "dealer": -1656,
-        "total": 375764
-      },
-      "score": 100,
-      "matches": [
-        {
-          "id": "foreign_trust_breakout",
-          "short": "準突破",
-          "icon": "◆",
-          "score": 100,
-          "reason": "外資 +351,420、投信 +26,000 同買，法人合計 +375,764；漲幅 2.83%。"
-        }
-      ],
-      "activeMatch": {
-        "id": "foreign_trust_breakout",
-        "short": "準突破",
-        "icon": "◆",
-        "score": 100,
-        "reason": "外資 +351,420、投信 +26,000 同買，法人合計 +375,764；漲幅 2.83%。"
-      }
-    },
-    {
-      "code": "5222",
-      "name": "全訊",
-      "close": 128,
+      "code": "1513",
+      "name": "中興電",
+      "close": 160,
       "change": 3.5,
-      "percent": 2.8112449799196786,
-      "value": 71680000,
-      "tradeVolume": 560000,
+      "percent": 2.2364217252396164,
+      "value": 1944800000,
+      "tradeVolume": 12155000,
       "market": "TWSE",
-      "open": 125.5,
-      "high": 128,
-      "low": 125.5,
-      "prevClose": 124.5,
-      "volume": 560,
-      "quoteDate": "20260522",
+      "open": 158,
+      "high": 160,
+      "low": 155.5,
+      "prevClose": 156.5,
+      "volume": 12155,
+      "quoteDate": "20260525",
       "quoteTime": "13:30:00",
-      "valueRank": 64,
-      "volumeRank": 53,
+      "valueRank": 92,
+      "volumeRank": 91,
       "inst": {
-        "foreign": 79862,
-        "trust": 9000,
+        "foreign": 2100686,
+        "trust": 264840,
         "dealer": 0,
-        "total": 85008
+        "total": 2447452
       },
       "score": 100,
       "matches": [
@@ -1382,7 +1256,7 @@
           "short": "準突破",
           "icon": "◆",
           "score": 100,
-          "reason": "外資 +79,862、投信 +9,000 同買，法人合計 +85,008；漲幅 2.81%。"
+          "reason": "外資 +2,100,686、投信 +264,840 同買，法人合計 +2,447,452；漲幅 2.24%。"
         }
       ],
       "activeMatch": {
@@ -1390,32 +1264,116 @@
         "short": "準突破",
         "icon": "◆",
         "score": 100,
-        "reason": "外資 +79,862、投信 +9,000 同買，法人合計 +85,008；漲幅 2.81%。"
+        "reason": "外資 +2,100,686、投信 +264,840 同買，法人合計 +2,447,452；漲幅 2.24%。"
+      }
+    },
+    {
+      "code": "3037",
+      "name": "欣興",
+      "close": 990,
+      "change": 20,
+      "percent": 2.0618556701030926,
+      "value": 21978990000,
+      "tradeVolume": 22201000,
+      "market": "TWSE",
+      "open": 1020,
+      "high": 1030,
+      "low": 978,
+      "prevClose": 970,
+      "volume": 22201,
+      "quoteDate": "20260525",
+      "quoteTime": "13:30:00",
+      "valueRank": 99,
+      "volumeRank": 95,
+      "inst": {
+        "foreign": 4659543,
+        "trust": 771843,
+        "dealer": 0,
+        "total": 5246331
+      },
+      "score": 100,
+      "matches": [
+        {
+          "id": "foreign_trust_breakout",
+          "short": "準突破",
+          "icon": "◆",
+          "score": 100,
+          "reason": "外資 +4,659,543、投信 +771,843 同買，法人合計 +5,246,331；漲幅 2.06%。"
+        }
+      ],
+      "activeMatch": {
+        "id": "foreign_trust_breakout",
+        "short": "準突破",
+        "icon": "◆",
+        "score": 100,
+        "reason": "外資 +4,659,543、投信 +771,843 同買，法人合計 +5,246,331；漲幅 2.06%。"
+      }
+    },
+    {
+      "code": "2337",
+      "name": "旺宏",
+      "close": 152.5,
+      "change": 3,
+      "percent": 2.0066889632107023,
+      "value": 20448877500,
+      "tradeVolume": 134091000,
+      "market": "TWSE",
+      "open": 148,
+      "high": 154.5,
+      "low": 140.5,
+      "prevClose": 149.5,
+      "volume": 134091,
+      "quoteDate": "20260525",
+      "quoteTime": "13:30:00",
+      "valueRank": 99,
+      "volumeRank": 100,
+      "inst": {
+        "foreign": 9084948,
+        "trust": 24000,
+        "dealer": 0,
+        "total": 9706793
+      },
+      "score": 100,
+      "matches": [
+        {
+          "id": "foreign_trust_breakout",
+          "short": "準突破",
+          "icon": "◆",
+          "score": 100,
+          "reason": "外資 +9,084,948、投信 +24,000 同買，法人合計 +9,706,793；漲幅 2.01%。"
+        }
+      ],
+      "activeMatch": {
+        "id": "foreign_trust_breakout",
+        "short": "準突破",
+        "icon": "◆",
+        "score": 100,
+        "reason": "外資 +9,084,948、投信 +24,000 同買，法人合計 +9,706,793；漲幅 2.01%。"
       }
     },
     {
       "code": "3078",
       "name": "僑威",
-      "close": 56.7,
-      "change": 1.5,
-      "percent": 2.717391304347826,
-      "value": 96049800,
-      "tradeVolume": 1694000,
+      "close": 57.5,
+      "change": 0.7999999999999972,
+      "percent": 1.4109347442680724,
+      "value": 100107500,
+      "tradeVolume": 1741000,
       "market": "TPEX",
-      "open": 56,
-      "high": 56.9,
-      "low": 55.2,
-      "prevClose": 55.2,
-      "volume": 1694,
-      "quoteDate": "20260522",
+      "open": 57.4,
+      "high": 58.2,
+      "low": 56.6,
+      "prevClose": 56.7,
+      "volume": 1741,
+      "quoteDate": "20260525",
       "quoteTime": "13:30:00",
-      "valueRank": 67,
-      "volumeRank": 70,
+      "valueRank": 65,
+      "volumeRank": 68,
       "inst": {
-        "foreign": 711739,
-        "trust": 65000,
-        "dealer": -8465,
-        "total": 768274
+        "foreign": 302644,
+        "trust": 66000,
+        "dealer": 35291,
+        "total": 403935
       },
       "score": 100,
       "matches": [
@@ -1424,7 +1382,7 @@
           "short": "準突破",
           "icon": "◆",
           "score": 100,
-          "reason": "外資 +711,739、投信 +65,000 同買，法人合計 +768,274；漲幅 2.72%。"
+          "reason": "外資 +302,644、投信 +66,000 同買，法人合計 +403,935；漲幅 1.41%。"
         }
       ],
       "activeMatch": {
@@ -1432,32 +1390,32 @@
         "short": "準突破",
         "icon": "◆",
         "score": 100,
-        "reason": "外資 +711,739、投信 +65,000 同買，法人合計 +768,274；漲幅 2.72%。"
+        "reason": "外資 +302,644、投信 +66,000 同買，法人合計 +403,935；漲幅 1.41%。"
       }
     },
     {
-      "code": "2382",
-      "name": "廣達",
-      "close": 316,
-      "change": 8,
-      "percent": 2.5974025974025974,
-      "value": 11161436000,
-      "tradeVolume": 35321000,
+      "code": "1536",
+      "name": "和大",
+      "close": 52.3,
+      "change": 0.6999999999999957,
+      "percent": 1.3565891472868135,
+      "value": 193980700,
+      "tradeVolume": 3709000,
       "market": "TWSE",
-      "open": 310,
-      "high": 317,
-      "low": 305.5,
-      "prevClose": 308,
-      "volume": 35321,
-      "quoteDate": "20260522",
+      "open": 52.3,
+      "high": 52.8,
+      "low": 50.9,
+      "prevClose": 51.6,
+      "volume": 3709,
+      "quoteDate": "20260525",
       "quoteTime": "13:30:00",
-      "valueRank": 99,
-      "volumeRank": 97,
+      "valueRank": 73,
+      "volumeRank": 80,
       "inst": {
-        "foreign": 1296833,
-        "trust": 9439000,
-        "dealer": 0,
-        "total": 10555175
+        "foreign": 485094,
+        "trust": 16233,
+        "dealer": -10000,
+        "total": 543270
       },
       "score": 100,
       "matches": [
@@ -1466,7 +1424,7 @@
           "short": "準突破",
           "icon": "◆",
           "score": 100,
-          "reason": "外資 +1,296,833、投信 +9,439,000 同買，法人合計 +10,555,175；漲幅 2.60%。"
+          "reason": "外資 +485,094、投信 +16,233 同買，法人合計 +543,270；漲幅 1.36%。"
         }
       ],
       "activeMatch": {
@@ -1474,32 +1432,116 @@
         "short": "準突破",
         "icon": "◆",
         "score": 100,
-        "reason": "外資 +1,296,833、投信 +9,439,000 同買，法人合計 +10,555,175；漲幅 2.60%。"
+        "reason": "外資 +485,094、投信 +16,233 同買，法人合計 +543,270；漲幅 1.36%。"
+      }
+    },
+    {
+      "code": "6191",
+      "name": "精成科",
+      "close": 98,
+      "change": 1.2000000000000028,
+      "percent": 1.2396694214876063,
+      "value": 552720000,
+      "tradeVolume": 5640000,
+      "market": "TWSE",
+      "open": 98.9,
+      "high": 99,
+      "low": 97.5,
+      "prevClose": 96.8,
+      "volume": 5640,
+      "quoteDate": "20260525",
+      "quoteTime": "13:30:00",
+      "valueRank": 83,
+      "volumeRank": 85,
+      "inst": {
+        "foreign": 1460050,
+        "trust": 79000,
+        "dealer": 0,
+        "total": 1563490
+      },
+      "score": 100,
+      "matches": [
+        {
+          "id": "foreign_trust_breakout",
+          "short": "準突破",
+          "icon": "◆",
+          "score": 100,
+          "reason": "外資 +1,460,050、投信 +79,000 同買，法人合計 +1,563,490；漲幅 1.24%。"
+        }
+      ],
+      "activeMatch": {
+        "id": "foreign_trust_breakout",
+        "short": "準突破",
+        "icon": "◆",
+        "score": 100,
+        "reason": "外資 +1,460,050、投信 +79,000 同買，法人合計 +1,563,490；漲幅 1.24%。"
+      }
+    },
+    {
+      "code": "3015",
+      "name": "全漢",
+      "close": 52,
+      "change": 0.5,
+      "percent": 0.9708737864077669,
+      "value": 35828000,
+      "tradeVolume": 689000,
+      "market": "TWSE",
+      "open": 51.8,
+      "high": 52.2,
+      "low": 51.4,
+      "prevClose": 51.5,
+      "volume": 689,
+      "quoteDate": "20260525",
+      "quoteTime": "13:30:00",
+      "valueRank": 54,
+      "volumeRank": 53,
+      "inst": {
+        "foreign": 133000,
+        "trust": 63000,
+        "dealer": 0,
+        "total": 199000
+      },
+      "score": 100,
+      "matches": [
+        {
+          "id": "foreign_trust_breakout",
+          "short": "準突破",
+          "icon": "◆",
+          "score": 100,
+          "reason": "外資 +133,000、投信 +63,000 同買，法人合計 +199,000；漲幅 0.97%。"
+        }
+      ],
+      "activeMatch": {
+        "id": "foreign_trust_breakout",
+        "short": "準突破",
+        "icon": "◆",
+        "score": 100,
+        "reason": "外資 +133,000、投信 +63,000 同買，法人合計 +199,000；漲幅 0.97%。"
       }
     },
     {
       "code": "4549",
       "name": "桓達",
-      "close": 104.5,
-      "change": 2.5,
-      "percent": 2.450980392156863,
-      "value": 27901500,
-      "tradeVolume": 267000,
+      "close": 105.5,
+      "change": 1,
+      "percent": 0.9569377990430622,
+      "value": 46947500,
+      "tradeVolume": 445000,
       "market": "TPEX",
-      "open": 103,
-      "high": 105.5,
-      "low": 102.5,
-      "prevClose": 102,
-      "volume": 267,
-      "quoteDate": "20260522",
+      "open": 106,
+      "high": 109.5,
+      "low": 105,
+      "prevClose": 104.5,
+      "volume": 445,
+      "quoteDate": "20260525",
       "quoteTime": "13:30:00",
-      "valueRank": 55,
-      "volumeRank": 41,
+      "valueRank": 58,
+      "volumeRank": 44,
       "inst": {
-        "foreign": 53020,
-        "trust": 83000,
-        "dealer": -2000,
-        "total": 134020
+        "foreign": 56015,
+        "trust": 85000,
+        "dealer": 0,
+        "total": 141015
       },
       "score": 100,
       "matches": [
@@ -1508,7 +1550,7 @@
           "short": "準突破",
           "icon": "◆",
           "score": 100,
-          "reason": "外資 +53,020、投信 +83,000 同買，法人合計 +134,020；漲幅 2.45%。"
+          "reason": "外資 +56,015、投信 +85,000 同買，法人合計 +141,015；漲幅 0.96%。"
         }
       ],
       "activeMatch": {
@@ -1516,368 +1558,368 @@
         "short": "準突破",
         "icon": "◆",
         "score": 100,
-        "reason": "外資 +53,020、投信 +83,000 同買，法人合計 +134,020；漲幅 2.45%。"
+        "reason": "外資 +56,015、投信 +85,000 同買，法人合計 +141,015；漲幅 0.96%。"
+      }
+    },
+    {
+      "code": "2458",
+      "name": "義隆",
+      "close": 163.5,
+      "change": 1.5,
+      "percent": 0.9259259259259258,
+      "value": 654490500,
+      "tradeVolume": 4003000,
+      "market": "TWSE",
+      "open": 167,
+      "high": 169,
+      "low": 163,
+      "prevClose": 162,
+      "volume": 4003,
+      "quoteDate": "20260525",
+      "quoteTime": "13:30:00",
+      "valueRank": 84,
+      "volumeRank": 81,
+      "inst": {
+        "foreign": 798983,
+        "trust": 61681,
+        "dealer": 0,
+        "total": 886148
+      },
+      "score": 100,
+      "matches": [
+        {
+          "id": "foreign_trust_breakout",
+          "short": "準突破",
+          "icon": "◆",
+          "score": 100,
+          "reason": "外資 +798,983、投信 +61,681 同買，法人合計 +886,148；漲幅 0.93%。"
+        }
+      ],
+      "activeMatch": {
+        "id": "foreign_trust_breakout",
+        "short": "準突破",
+        "icon": "◆",
+        "score": 100,
+        "reason": "外資 +798,983、投信 +61,681 同買，法人合計 +886,148；漲幅 0.93%。"
+      }
+    },
+    {
+      "code": "4968",
+      "name": "立積",
+      "close": 120.5,
+      "change": 1,
+      "percent": 0.8368200836820083,
+      "value": 163277500,
+      "tradeVolume": 1355000,
+      "market": "TWSE",
+      "open": 122,
+      "high": 122.5,
+      "low": 119,
+      "prevClose": 119.5,
+      "volume": 1355,
+      "quoteDate": "20260525",
+      "quoteTime": "13:30:00",
+      "valueRank": 71,
+      "volumeRank": 64,
+      "inst": {
+        "foreign": 576000,
+        "trust": 5000,
+        "dealer": 0,
+        "total": 616901
+      },
+      "score": 100,
+      "matches": [
+        {
+          "id": "foreign_trust_breakout",
+          "short": "準突破",
+          "icon": "◆",
+          "score": 100,
+          "reason": "外資 +576,000、投信 +5,000 同買，法人合計 +616,901；漲幅 0.84%。"
+        }
+      ],
+      "activeMatch": {
+        "id": "foreign_trust_breakout",
+        "short": "準突破",
+        "icon": "◆",
+        "score": 100,
+        "reason": "外資 +576,000、投信 +5,000 同買，法人合計 +616,901；漲幅 0.84%。"
+      }
+    },
+    {
+      "code": "3706",
+      "name": "神達",
+      "close": 88.5,
+      "change": 0.7000000000000028,
+      "percent": 0.7972665148063813,
+      "value": 2656681500,
+      "tradeVolume": 30019000,
+      "market": "TWSE",
+      "open": 89.3,
+      "high": 89.3,
+      "low": 87.2,
+      "prevClose": 87.8,
+      "volume": 30019,
+      "quoteDate": "20260525",
+      "quoteTime": "13:30:00",
+      "valueRank": 94,
+      "volumeRank": 96,
+      "inst": {
+        "foreign": 10470266,
+        "trust": 2587000,
+        "dealer": 0,
+        "total": 13739910
+      },
+      "score": 100,
+      "matches": [
+        {
+          "id": "foreign_trust_breakout",
+          "short": "準突破",
+          "icon": "◆",
+          "score": 100,
+          "reason": "外資 +10,470,266、投信 +2,587,000 同買，法人合計 +13,739,910；漲幅 0.80%。"
+        }
+      ],
+      "activeMatch": {
+        "id": "foreign_trust_breakout",
+        "short": "準突破",
+        "icon": "◆",
+        "score": 100,
+        "reason": "外資 +10,470,266、投信 +2,587,000 同買，法人合計 +13,739,910；漲幅 0.80%。"
+      }
+    },
+    {
+      "code": "6913",
+      "name": "鴻呈",
+      "close": 141,
+      "change": 1,
+      "percent": 0.7142857142857143,
+      "value": 144102000,
+      "tradeVolume": 1022000,
+      "market": "TPEX",
+      "open": 142,
+      "high": 146,
+      "low": 137.5,
+      "prevClose": 140,
+      "volume": 1022,
+      "quoteDate": "20260525",
+      "quoteTime": "13:30:00",
+      "valueRank": 69,
+      "volumeRank": 60,
+      "inst": {
+        "foreign": 33181,
+        "trust": 13000,
+        "dealer": -5505,
+        "total": 40676
+      },
+      "score": 100,
+      "matches": [
+        {
+          "id": "foreign_trust_breakout",
+          "short": "準突破",
+          "icon": "◆",
+          "score": 100,
+          "reason": "外資 +33,181、投信 +13,000 同買，法人合計 +40,676；漲幅 0.71%。"
+        }
+      ],
+      "activeMatch": {
+        "id": "foreign_trust_breakout",
+        "short": "準突破",
+        "icon": "◆",
+        "score": 100,
+        "reason": "外資 +33,181、投信 +13,000 同買，法人合計 +40,676；漲幅 0.71%。"
+      }
+    },
+    {
+      "code": "1735",
+      "name": "日勝化",
+      "close": 26.95,
+      "change": 0.14999999999999858,
+      "percent": 0.559701492537308,
+      "value": 23257850,
+      "tradeVolume": 863000,
+      "market": "TWSE",
+      "open": 27.6,
+      "high": 27.6,
+      "low": 26.55,
+      "prevClose": 26.8,
+      "volume": 863,
+      "quoteDate": "20260525",
+      "quoteTime": "13:30:00",
+      "valueRank": 48,
+      "volumeRank": 58,
+      "inst": {
+        "foreign": 86000,
+        "trust": 3068,
+        "dealer": -1000,
+        "total": 86932
+      },
+      "score": 100,
+      "matches": [
+        {
+          "id": "foreign_trust_breakout",
+          "short": "準突破",
+          "icon": "◆",
+          "score": 100,
+          "reason": "外資 +86,000、投信 +3,068 同買，法人合計 +86,932；漲幅 0.56%。"
+        }
+      ],
+      "activeMatch": {
+        "id": "foreign_trust_breakout",
+        "short": "準突破",
+        "icon": "◆",
+        "score": 100,
+        "reason": "外資 +86,000、投信 +3,068 同買，法人合計 +86,932；漲幅 0.56%。"
+      }
+    },
+    {
+      "code": "4933",
+      "name": "友輝",
+      "close": 74.3,
+      "change": 0.3999999999999915,
+      "percent": 0.5412719891745487,
+      "value": 77123400,
+      "tradeVolume": 1038000,
+      "market": "TPEX",
+      "open": 75,
+      "high": 75.9,
+      "low": 74.2,
+      "prevClose": 73.9,
+      "volume": 1038,
+      "quoteDate": "20260525",
+      "quoteTime": "13:30:00",
+      "valueRank": 63,
+      "volumeRank": 60,
+      "inst": {
+        "foreign": 59000,
+        "trust": 113000,
+        "dealer": 3000,
+        "total": 175000
+      },
+      "score": 100,
+      "matches": [
+        {
+          "id": "foreign_trust_breakout",
+          "short": "準突破",
+          "icon": "◆",
+          "score": 100,
+          "reason": "外資 +59,000、投信 +113,000 同買，法人合計 +175,000；漲幅 0.54%。"
+        }
+      ],
+      "activeMatch": {
+        "id": "foreign_trust_breakout",
+        "short": "準突破",
+        "icon": "◆",
+        "score": 100,
+        "reason": "外資 +59,000、投信 +113,000 同買，法人合計 +175,000；漲幅 0.54%。"
+      }
+    },
+    {
+      "code": "6202",
+      "name": "盛群",
+      "close": 61.1,
+      "change": 0.30000000000000426,
+      "percent": 0.4934210526315859,
+      "value": 436926100,
+      "tradeVolume": 7151000,
+      "market": "TWSE",
+      "open": 62,
+      "high": 62.3,
+      "low": 60.5,
+      "prevClose": 60.8,
+      "volume": 7151,
+      "quoteDate": "20260525",
+      "quoteTime": "13:30:00",
+      "valueRank": 81,
+      "volumeRank": 87,
+      "inst": {
+        "foreign": 3605567,
+        "trust": 180000,
+        "dealer": 0,
+        "total": 3810478
+      },
+      "score": 100,
+      "matches": [
+        {
+          "id": "foreign_trust_breakout",
+          "short": "準突破",
+          "icon": "◆",
+          "score": 100,
+          "reason": "外資 +3,605,567、投信 +180,000 同買，法人合計 +3,810,478；漲幅 0.49%。"
+        }
+      ],
+      "activeMatch": {
+        "id": "foreign_trust_breakout",
+        "short": "準突破",
+        "icon": "◆",
+        "score": 100,
+        "reason": "外資 +3,605,567、投信 +180,000 同買，法人合計 +3,810,478；漲幅 0.49%。"
+      }
+    },
+    {
+      "code": "6203",
+      "name": "海韻電",
+      "close": 72.6,
+      "change": 0.29999999999999716,
+      "percent": 0.41493775933609567,
+      "value": 42035400,
+      "tradeVolume": 579000,
+      "market": "TPEX",
+      "open": 72.5,
+      "high": 73.5,
+      "low": 72.1,
+      "prevClose": 72.3,
+      "volume": 579,
+      "quoteDate": "20260525",
+      "quoteTime": "13:30:00",
+      "valueRank": 56,
+      "volumeRank": 50,
+      "inst": {
+        "foreign": 33000,
+        "trust": 65000,
+        "dealer": -2006,
+        "total": 95994
+      },
+      "score": 100,
+      "matches": [
+        {
+          "id": "foreign_trust_breakout",
+          "short": "準突破",
+          "icon": "◆",
+          "score": 100,
+          "reason": "外資 +33,000、投信 +65,000 同買，法人合計 +95,994；漲幅 0.41%。"
+        }
+      ],
+      "activeMatch": {
+        "id": "foreign_trust_breakout",
+        "short": "準突破",
+        "icon": "◆",
+        "score": 100,
+        "reason": "外資 +33,000、投信 +65,000 同買，法人合計 +95,994；漲幅 0.41%。"
       }
     },
     {
       "code": "6176",
       "name": "瑞儀",
       "close": 107.5,
-      "change": 2.5,
-      "percent": 2.380952380952381,
-      "value": 760562500,
-      "tradeVolume": 7075000,
+      "change": 0,
+      "percent": 0,
+      "value": 737235000,
+      "tradeVolume": 6858000,
       "market": "TWSE",
-      "open": 105.5,
-      "high": 108,
-      "low": 104.5,
-      "prevClose": 105,
-      "volume": 7075,
-      "quoteDate": "20260522",
-      "quoteTime": "13:30:00",
-      "valueRank": 86,
-      "volumeRank": 88,
-      "inst": {
-        "foreign": 296850,
-        "trust": 72000,
-        "dealer": 0,
-        "total": 432493
-      },
-      "score": 100,
-      "matches": [
-        {
-          "id": "foreign_trust_breakout",
-          "short": "準突破",
-          "icon": "◆",
-          "score": 100,
-          "reason": "外資 +296,850、投信 +72,000 同買，法人合計 +432,493；漲幅 2.38%。"
-        }
-      ],
-      "activeMatch": {
-        "id": "foreign_trust_breakout",
-        "short": "準突破",
-        "icon": "◆",
-        "score": 100,
-        "reason": "外資 +296,850、投信 +72,000 同買，法人合計 +432,493；漲幅 2.38%。"
-      }
-    },
-    {
-      "code": "2388",
-      "name": "威盛",
-      "close": 88,
-      "change": 2,
-      "percent": 2.3255813953488373,
-      "value": 3109216000,
-      "tradeVolume": 35332000,
-      "market": "TWSE",
-      "open": 88.5,
-      "high": 90.5,
-      "low": 84.2,
-      "prevClose": 86,
-      "volume": 35332,
-      "quoteDate": "20260522",
-      "quoteTime": "13:30:00",
-      "valueRank": 95,
-      "volumeRank": 97,
-      "inst": {
-        "foreign": 609738,
-        "trust": 160000,
-        "dealer": 0,
-        "total": 1218334
-      },
-      "score": 100,
-      "matches": [
-        {
-          "id": "foreign_trust_breakout",
-          "short": "準突破",
-          "icon": "◆",
-          "score": 100,
-          "reason": "外資 +609,738、投信 +160,000 同買，法人合計 +1,218,334；漲幅 2.33%。"
-        }
-      ],
-      "activeMatch": {
-        "id": "foreign_trust_breakout",
-        "short": "準突破",
-        "icon": "◆",
-        "score": 100,
-        "reason": "外資 +609,738、投信 +160,000 同買，法人合計 +1,218,334；漲幅 2.33%。"
-      }
-    },
-    {
-      "code": "3008",
-      "name": "大立光",
-      "close": 3540,
-      "change": 80,
-      "percent": 2.312138728323699,
-      "value": 4000200000,
-      "tradeVolume": 1130000,
-      "market": "TWSE",
-      "open": 3450,
-      "high": 3595,
-      "low": 3450,
-      "prevClose": 3460,
-      "volume": 1130,
-      "quoteDate": "20260522",
-      "quoteTime": "13:30:00",
-      "valueRank": 96,
-      "volumeRank": 64,
-      "inst": {
-        "foreign": 142931,
-        "trust": 24000,
-        "dealer": 0,
-        "total": 313182
-      },
-      "score": 100,
-      "matches": [
-        {
-          "id": "foreign_trust_breakout",
-          "short": "準突破",
-          "icon": "◆",
-          "score": 100,
-          "reason": "外資 +142,931、投信 +24,000 同買，法人合計 +313,182；漲幅 2.31%。"
-        }
-      ],
-      "activeMatch": {
-        "id": "foreign_trust_breakout",
-        "short": "準突破",
-        "icon": "◆",
-        "score": 100,
-        "reason": "外資 +142,931、投信 +24,000 同買，法人合計 +313,182；漲幅 2.31%。"
-      }
-    },
-    {
-      "code": "3010",
-      "name": "華立",
-      "close": 138,
-      "change": 3,
-      "percent": 2.2222222222222223,
-      "value": 197340000,
-      "tradeVolume": 1430000,
-      "market": "TWSE",
-      "open": 135,
-      "high": 138,
-      "low": 134,
-      "prevClose": 135,
-      "volume": 1430,
-      "quoteDate": "20260522",
-      "quoteTime": "13:30:00",
-      "valueRank": 75,
-      "volumeRank": 68,
-      "inst": {
-        "foreign": 905380,
-        "trust": 30000,
-        "dealer": 0,
-        "total": 961549
-      },
-      "score": 100,
-      "matches": [
-        {
-          "id": "foreign_trust_breakout",
-          "short": "準突破",
-          "icon": "◆",
-          "score": 100,
-          "reason": "外資 +905,380、投信 +30,000 同買，法人合計 +961,549；漲幅 2.22%。"
-        }
-      ],
-      "activeMatch": {
-        "id": "foreign_trust_breakout",
-        "short": "準突破",
-        "icon": "◆",
-        "score": 100,
-        "reason": "外資 +905,380、投信 +30,000 同買，法人合計 +961,549；漲幅 2.22%。"
-      }
-    },
-    {
-      "code": "2458",
-      "name": "義隆",
-      "close": 162,
-      "change": 3.5,
-      "percent": 2.2082018927444795,
-      "value": 714420000,
-      "tradeVolume": 4410000,
-      "market": "TWSE",
-      "open": 160,
-      "high": 164.5,
-      "low": 157,
-      "prevClose": 158.5,
-      "volume": 4410,
-      "quoteDate": "20260522",
-      "quoteTime": "13:30:00",
-      "valueRank": 86,
-      "volumeRank": 83,
-      "inst": {
-        "foreign": 602909,
-        "trust": 214841,
-        "dealer": 0,
-        "total": 762924
-      },
-      "score": 100,
-      "matches": [
-        {
-          "id": "foreign_trust_breakout",
-          "short": "準突破",
-          "icon": "◆",
-          "score": 100,
-          "reason": "外資 +602,909、投信 +214,841 同買，法人合計 +762,924；漲幅 2.21%。"
-        }
-      ],
-      "activeMatch": {
-        "id": "foreign_trust_breakout",
-        "short": "準突破",
-        "icon": "◆",
-        "score": 100,
-        "reason": "外資 +602,909、投信 +214,841 同買，法人合計 +762,924；漲幅 2.21%。"
-      }
-    },
-    {
-      "code": "6913",
-      "name": "鴻呈",
-      "close": 140,
-      "change": 3,
-      "percent": 2.18978102189781,
-      "value": 91560000,
-      "tradeVolume": 654000,
-      "market": "TPEX",
-      "open": 139.5,
-      "high": 140,
-      "low": 134.5,
-      "prevClose": 137,
-      "volume": 654,
-      "quoteDate": "20260522",
-      "quoteTime": "13:30:00",
-      "valueRank": 67,
-      "volumeRank": 56,
-      "inst": {
-        "foreign": 229069,
-        "trust": 26000,
-        "dealer": 10600,
-        "total": 265669
-      },
-      "score": 100,
-      "matches": [
-        {
-          "id": "foreign_trust_breakout",
-          "short": "準突破",
-          "icon": "◆",
-          "score": 100,
-          "reason": "外資 +229,069、投信 +26,000 同買，法人合計 +265,669；漲幅 2.19%。"
-        }
-      ],
-      "activeMatch": {
-        "id": "foreign_trust_breakout",
-        "short": "準突破",
-        "icon": "◆",
-        "score": 100,
-        "reason": "外資 +229,069、投信 +26,000 同買，法人合計 +265,669；漲幅 2.19%。"
-      }
-    },
-    {
-      "code": "3014",
-      "name": "聯陽",
-      "close": 148,
-      "change": 3,
-      "percent": 2.0689655172413794,
-      "value": 679912000,
-      "tradeVolume": 4594000,
-      "market": "TWSE",
-      "open": 146,
-      "high": 149,
-      "low": 143,
-      "prevClose": 145,
-      "volume": 4594,
-      "quoteDate": "20260522",
+      "open": 109,
+      "high": 109.5,
+      "low": 106.5,
+      "prevClose": 107.5,
+      "volume": 6858,
+      "quoteDate": "20260525",
       "quoteTime": "13:30:00",
       "valueRank": 85,
-      "volumeRank": 83,
-      "inst": {
-        "foreign": 3043907,
-        "trust": 6690,
-        "dealer": 0,
-        "total": 3147344
-      },
-      "score": 100,
-      "matches": [
-        {
-          "id": "foreign_trust_breakout",
-          "short": "準突破",
-          "icon": "◆",
-          "score": 100,
-          "reason": "外資 +3,043,907、投信 +6,690 同買，法人合計 +3,147,344；漲幅 2.07%。"
-        }
-      ],
-      "activeMatch": {
-        "id": "foreign_trust_breakout",
-        "short": "準突破",
-        "icon": "◆",
-        "score": 100,
-        "reason": "外資 +3,043,907、投信 +6,690 同買，法人合計 +3,147,344；漲幅 2.07%。"
-      }
-    },
-    {
-      "code": "4938",
-      "name": "和碩",
-      "close": 80.7,
-      "change": 1.6000000000000085,
-      "percent": 2.022756005056901,
-      "value": 976066500,
-      "tradeVolume": 12095000,
-      "market": "TWSE",
-      "open": 79.1,
-      "high": 81.1,
-      "low": 79.1,
-      "prevClose": 79.1,
-      "volume": 12095,
-      "quoteDate": "20260522",
-      "quoteTime": "13:30:00",
-      "valueRank": 88,
-      "volumeRank": 92,
-      "inst": {
-        "foreign": 1582978,
-        "trust": 891001,
-        "dealer": 0,
-        "total": 2372001
-      },
-      "score": 100,
-      "matches": [
-        {
-          "id": "foreign_trust_breakout",
-          "short": "準突破",
-          "icon": "◆",
-          "score": 100,
-          "reason": "外資 +1,582,978、投信 +891,001 同買，法人合計 +2,372,001；漲幅 2.02%。"
-        }
-      ],
-      "activeMatch": {
-        "id": "foreign_trust_breakout",
-        "short": "準突破",
-        "icon": "◆",
-        "score": 100,
-        "reason": "外資 +1,582,978、投信 +891,001 同買，法人合計 +2,372,001；漲幅 2.02%。"
-      }
-    },
-    {
-      "code": "6509",
-      "name": "聚和",
-      "close": 50.1,
-      "change": 0.9500000000000028,
-      "percent": 1.9328585961342886,
-      "value": 296642100,
-      "tradeVolume": 5921000,
-      "market": "TPEX",
-      "open": 49.95,
-      "high": 50.6,
-      "low": 49.25,
-      "prevClose": 49.15,
-      "volume": 5921,
-      "quoteDate": "20260522",
-      "quoteTime": "13:30:00",
-      "valueRank": 78,
       "volumeRank": 87,
       "inst": {
-        "foreign": 1620050,
-        "trust": 5000,
-        "dealer": -14703,
-        "total": 1610347
+        "foreign": 1152020,
+        "trust": 164000,
+        "dealer": 0,
+        "total": 1483065
       },
       "score": 100,
       "matches": [
@@ -1886,7 +1928,7 @@
           "short": "準突破",
           "icon": "◆",
           "score": 100,
-          "reason": "外資 +1,620,050、投信 +5,000 同買，法人合計 +1,610,347；漲幅 1.93%。"
+          "reason": "外資 +1,152,020、投信 +164,000 同買，法人合計 +1,483,065；漲幅 0.00%。"
         }
       ],
       "activeMatch": {
@@ -1894,998 +1936,32 @@
         "short": "準突破",
         "icon": "◆",
         "score": 100,
-        "reason": "外資 +1,620,050、投信 +5,000 同買，法人合計 +1,610,347；漲幅 1.93%。"
+        "reason": "外資 +1,152,020、投信 +164,000 同買，法人合計 +1,483,065；漲幅 0.00%。"
       }
     },
     {
-      "code": "6561",
-      "name": "是方",
-      "close": 361.5,
-      "change": 6.5,
-      "percent": 1.8309859154929577,
-      "value": 54586500,
-      "tradeVolume": 151000,
+      "code": "6104",
+      "name": "創惟",
+      "close": 103,
+      "change": 0,
+      "percent": 0,
+      "value": 242462000,
+      "tradeVolume": 2354000,
       "market": "TPEX",
-      "open": 358.5,
-      "high": 363,
-      "low": 355.5,
-      "prevClose": 355,
-      "volume": 151,
-      "quoteDate": "20260522",
+      "open": 104.5,
+      "high": 104.5,
+      "low": 102.5,
+      "prevClose": 103,
+      "volume": 2354,
+      "quoteDate": "20260525",
       "quoteTime": "13:30:00",
-      "valueRank": 61,
-      "volumeRank": 32,
-      "inst": {
-        "foreign": 7002,
-        "trust": 9000,
-        "dealer": 1899,
-        "total": 17901
-      },
-      "score": 100,
-      "matches": [
-        {
-          "id": "foreign_trust_breakout",
-          "short": "準突破",
-          "icon": "◆",
-          "score": 100,
-          "reason": "外資 +7,002、投信 +9,000 同買，法人合計 +17,901；漲幅 1.83%。"
-        }
-      ],
-      "activeMatch": {
-        "id": "foreign_trust_breakout",
-        "short": "準突破",
-        "icon": "◆",
-        "score": 100,
-        "reason": "外資 +7,002、投信 +9,000 同買，法人合計 +17,901；漲幅 1.83%。"
-      }
-    },
-    {
-      "code": "2316",
-      "name": "楠梓電",
-      "close": 153.5,
-      "change": 2.5,
-      "percent": 1.6556291390728477,
-      "value": 2617175000,
-      "tradeVolume": 17050000,
-      "market": "TWSE",
-      "open": 160,
-      "high": 163.5,
-      "low": 153,
-      "prevClose": 151,
-      "volume": 17050,
-      "quoteDate": "20260522",
-      "quoteTime": "13:30:00",
-      "valueRank": 94,
-      "volumeRank": 94,
-      "inst": {
-        "foreign": 128871,
-        "trust": 690000,
-        "dealer": 0,
-        "total": 903127
-      },
-      "score": 100,
-      "matches": [
-        {
-          "id": "foreign_trust_breakout",
-          "short": "準突破",
-          "icon": "◆",
-          "score": 100,
-          "reason": "外資 +128,871、投信 +690,000 同買，法人合計 +903,127；漲幅 1.66%。"
-        }
-      ],
-      "activeMatch": {
-        "id": "foreign_trust_breakout",
-        "short": "準突破",
-        "icon": "◆",
-        "score": 100,
-        "reason": "外資 +128,871、投信 +690,000 同買，法人合計 +903,127；漲幅 1.66%。"
-      }
-    },
-    {
-      "code": "6446",
-      "name": "藥華藥",
-      "close": 810,
-      "change": 12,
-      "percent": 1.5037593984962405,
-      "value": 1036800000,
-      "tradeVolume": 1280000,
-      "market": "TWSE",
-      "open": 800,
-      "high": 810,
-      "low": 799,
-      "prevClose": 798,
-      "volume": 1280,
-      "quoteDate": "20260522",
-      "quoteTime": "13:30:00",
-      "valueRank": 88,
-      "volumeRank": 66,
-      "inst": {
-        "foreign": 236972,
-        "trust": 1000,
-        "dealer": 0,
-        "total": 241046
-      },
-      "score": 100,
-      "matches": [
-        {
-          "id": "foreign_trust_breakout",
-          "short": "準突破",
-          "icon": "◆",
-          "score": 100,
-          "reason": "外資 +236,972、投信 +1,000 同買，法人合計 +241,046；漲幅 1.50%。"
-        }
-      ],
-      "activeMatch": {
-        "id": "foreign_trust_breakout",
-        "short": "準突破",
-        "icon": "◆",
-        "score": 100,
-        "reason": "外資 +236,972、投信 +1,000 同買，法人合計 +241,046；漲幅 1.50%。"
-      }
-    },
-    {
-      "code": "1409",
-      "name": "新纖",
-      "close": 17.2,
-      "change": 0.25,
-      "percent": 1.4749262536873156,
-      "value": 153974400,
-      "tradeVolume": 8952000,
-      "market": "TWSE",
-      "open": 17,
-      "high": 17.25,
-      "low": 16.9,
-      "prevClose": 16.95,
-      "volume": 8952,
-      "quoteDate": "20260522",
-      "quoteTime": "13:30:00",
-      "valueRank": 72,
-      "volumeRank": 90,
-      "inst": {
-        "foreign": 3775000,
-        "trust": 166000,
-        "dealer": 0,
-        "total": 4057001
-      },
-      "score": 100,
-      "matches": [
-        {
-          "id": "foreign_trust_breakout",
-          "short": "準突破",
-          "icon": "◆",
-          "score": 100,
-          "reason": "外資 +3,775,000、投信 +166,000 同買，法人合計 +4,057,001；漲幅 1.47%。"
-        }
-      ],
-      "activeMatch": {
-        "id": "foreign_trust_breakout",
-        "short": "準突破",
-        "icon": "◆",
-        "score": 100,
-        "reason": "外資 +3,775,000、投信 +166,000 同買，法人合計 +4,057,001；漲幅 1.47%。"
-      }
-    },
-    {
-      "code": "3035",
-      "name": "智原",
-      "close": 211,
-      "change": 3,
-      "percent": 1.4423076923076923,
-      "value": 5882891000,
-      "tradeVolume": 27881000,
-      "market": "TWSE",
-      "open": 210,
-      "high": 216.5,
-      "low": 205,
-      "prevClose": 208,
-      "volume": 27881,
-      "quoteDate": "20260522",
-      "quoteTime": "13:30:00",
-      "valueRank": 98,
-      "volumeRank": 96,
-      "inst": {
-        "foreign": 7839823,
-        "trust": 5000,
-        "dealer": 0,
-        "total": 8698377
-      },
-      "score": 100,
-      "matches": [
-        {
-          "id": "foreign_trust_breakout",
-          "short": "準突破",
-          "icon": "◆",
-          "score": 100,
-          "reason": "外資 +7,839,823、投信 +5,000 同買，法人合計 +8,698,377；漲幅 1.44%。"
-        }
-      ],
-      "activeMatch": {
-        "id": "foreign_trust_breakout",
-        "short": "準突破",
-        "icon": "◆",
-        "score": 100,
-        "reason": "外資 +7,839,823、投信 +5,000 同買，法人合計 +8,698,377；漲幅 1.44%。"
-      }
-    },
-    {
-      "code": "1513",
-      "name": "中興電",
-      "close": 156.5,
-      "change": 2,
-      "percent": 1.2944983818770228,
-      "value": 961849000,
-      "tradeVolume": 6146000,
-      "market": "TWSE",
-      "open": 155,
-      "high": 157,
-      "low": 153.5,
-      "prevClose": 154.5,
-      "volume": 6146,
-      "quoteDate": "20260522",
-      "quoteTime": "13:30:00",
-      "valueRank": 88,
-      "volumeRank": 87,
-      "inst": {
-        "foreign": 1268219,
-        "trust": 409000,
-        "dealer": 0,
-        "total": 1789211
-      },
-      "score": 100,
-      "matches": [
-        {
-          "id": "foreign_trust_breakout",
-          "short": "準突破",
-          "icon": "◆",
-          "score": 100,
-          "reason": "外資 +1,268,219、投信 +409,000 同買，法人合計 +1,789,211；漲幅 1.29%。"
-        }
-      ],
-      "activeMatch": {
-        "id": "foreign_trust_breakout",
-        "short": "準突破",
-        "icon": "◆",
-        "score": 100,
-        "reason": "外資 +1,268,219、投信 +409,000 同買，法人合計 +1,789,211；漲幅 1.29%。"
-      }
-    },
-    {
-      "code": "2395",
-      "name": "研華",
-      "close": 469,
-      "change": 5.5,
-      "percent": 1.186623516720604,
-      "value": 2306073000,
-      "tradeVolume": 4917000,
-      "market": "TWSE",
-      "open": 467,
-      "high": 472.5,
-      "low": 458.5,
-      "prevClose": 463.5,
-      "volume": 4917,
-      "quoteDate": "20260522",
-      "quoteTime": "13:30:00",
-      "valueRank": 94,
-      "volumeRank": 84,
-      "inst": {
-        "foreign": 247640,
-        "trust": 10000,
-        "dealer": 0,
-        "total": 256658
-      },
-      "score": 100,
-      "matches": [
-        {
-          "id": "foreign_trust_breakout",
-          "short": "準突破",
-          "icon": "◆",
-          "score": 100,
-          "reason": "外資 +247,640、投信 +10,000 同買，法人合計 +256,658；漲幅 1.19%。"
-        }
-      ],
-      "activeMatch": {
-        "id": "foreign_trust_breakout",
-        "short": "準突破",
-        "icon": "◆",
-        "score": 100,
-        "reason": "外資 +247,640、投信 +10,000 同買，法人合計 +256,658；漲幅 1.19%。"
-      }
-    },
-    {
-      "code": "2330",
-      "name": "台積電",
-      "close": 2255,
-      "change": 25,
-      "percent": 1.1210762331838564,
-      "value": 54902485000,
-      "tradeVolume": 24347000,
-      "market": "TWSE",
-      "open": 2245,
-      "high": 2260,
-      "low": 2225,
-      "prevClose": 2230,
-      "volume": 24347,
-      "quoteDate": "20260522",
-      "quoteTime": "13:30:00",
-      "valueRank": 100,
-      "volumeRank": 96,
-      "inst": {
-        "foreign": 1014338,
-        "trust": 167000,
-        "dealer": 0,
-        "total": 1604835
-      },
-      "score": 100,
-      "matches": [
-        {
-          "id": "foreign_trust_breakout",
-          "short": "準突破",
-          "icon": "◆",
-          "score": 100,
-          "reason": "外資 +1,014,338、投信 +167,000 同買，法人合計 +1,604,835；漲幅 1.12%。"
-        }
-      ],
-      "activeMatch": {
-        "id": "foreign_trust_breakout",
-        "short": "準突破",
-        "icon": "◆",
-        "score": 100,
-        "reason": "外資 +1,014,338、投信 +167,000 同買，法人合計 +1,604,835；漲幅 1.12%。"
-      }
-    },
-    {
-      "code": "6414",
-      "name": "樺漢",
-      "close": 350.5,
-      "change": 3,
-      "percent": 0.8633093525179856,
-      "value": 494205000,
-      "tradeVolume": 1410000,
-      "market": "TWSE",
-      "open": 352,
-      "high": 353.5,
-      "low": 347,
-      "prevClose": 347.5,
-      "volume": 1410,
-      "quoteDate": "20260522",
-      "quoteTime": "13:30:00",
-      "valueRank": 83,
-      "volumeRank": 68,
-      "inst": {
-        "foreign": 873438,
-        "trust": 45000,
-        "dealer": 0,
-        "total": 890134
-      },
-      "score": 100,
-      "matches": [
-        {
-          "id": "foreign_trust_breakout",
-          "short": "準突破",
-          "icon": "◆",
-          "score": 100,
-          "reason": "外資 +873,438、投信 +45,000 同買，法人合計 +890,134；漲幅 0.86%。"
-        }
-      ],
-      "activeMatch": {
-        "id": "foreign_trust_breakout",
-        "short": "準突破",
-        "icon": "◆",
-        "score": 100,
-        "reason": "外資 +873,438、投信 +45,000 同買，法人合計 +890,134；漲幅 0.86%。"
-      }
-    },
-    {
-      "code": "7769",
-      "name": "鴻勁",
-      "close": 7730,
-      "change": 55,
-      "percent": 0.7166123778501629,
-      "value": 3694940000,
-      "tradeVolume": 478000,
-      "market": "TWSE",
-      "open": 7750,
-      "high": 7785,
-      "low": 7205,
-      "prevClose": 7675,
-      "volume": 478,
-      "quoteDate": "20260522",
-      "quoteTime": "13:30:00",
-      "valueRank": 96,
-      "volumeRank": 51,
-      "inst": {
-        "foreign": 46264,
-        "trust": 35000,
-        "dealer": 0,
-        "total": 81857
-      },
-      "score": 100,
-      "matches": [
-        {
-          "id": "foreign_trust_breakout",
-          "short": "準突破",
-          "icon": "◆",
-          "score": 100,
-          "reason": "外資 +46,264、投信 +35,000 同買，法人合計 +81,857；漲幅 0.72%。"
-        }
-      ],
-      "activeMatch": {
-        "id": "foreign_trust_breakout",
-        "short": "準突破",
-        "icon": "◆",
-        "score": 100,
-        "reason": "外資 +46,264、投信 +35,000 同買，法人合計 +81,857；漲幅 0.72%。"
-      }
-    },
-    {
-      "code": "6831",
-      "name": "邁科",
-      "close": 786,
-      "change": 5,
-      "percent": 0.6402048655569782,
-      "value": 339552000,
-      "tradeVolume": 432000,
-      "market": "TWSE",
-      "open": 769,
-      "high": 787,
-      "low": 767,
-      "prevClose": 781,
-      "volume": 432,
-      "quoteDate": "20260522",
-      "quoteTime": "13:30:00",
-      "valueRank": 79,
-      "volumeRank": 49,
-      "inst": {
-        "foreign": 2000,
-        "trust": 158252,
-        "dealer": 0,
-        "total": 163961
-      },
-      "score": 100,
-      "matches": [
-        {
-          "id": "foreign_trust_breakout",
-          "short": "準突破",
-          "icon": "◆",
-          "score": 100,
-          "reason": "外資 +2,000、投信 +158,252 同買，法人合計 +163,961；漲幅 0.64%。"
-        }
-      ],
-      "activeMatch": {
-        "id": "foreign_trust_breakout",
-        "short": "準突破",
-        "icon": "◆",
-        "score": 100,
-        "reason": "外資 +2,000、投信 +158,252 同買，法人合計 +163,961；漲幅 0.64%。"
-      }
-    },
-    {
-      "code": "2618",
-      "name": "長榮航",
-      "close": 35.5,
-      "change": 0.20000000000000284,
-      "percent": 0.5665722379603481,
-      "value": 1602292500,
-      "tradeVolume": 45135000,
-      "market": "TWSE",
-      "open": 35.5,
-      "high": 35.65,
-      "low": 35.1,
-      "prevClose": 35.3,
-      "volume": 45135,
-      "quoteDate": "20260522",
-      "quoteTime": "13:30:00",
-      "valueRank": 91,
-      "volumeRank": 98,
-      "inst": {
-        "foreign": 1536886,
-        "trust": 11859558,
-        "dealer": 0,
-        "total": 13122263
-      },
-      "score": 100,
-      "matches": [
-        {
-          "id": "foreign_trust_breakout",
-          "short": "準突破",
-          "icon": "◆",
-          "score": 100,
-          "reason": "外資 +1,536,886、投信 +11,859,558 同買，法人合計 +13,122,263；漲幅 0.57%。"
-        }
-      ],
-      "activeMatch": {
-        "id": "foreign_trust_breakout",
-        "short": "準突破",
-        "icon": "◆",
-        "score": 100,
-        "reason": "外資 +1,536,886、投信 +11,859,558 同買，法人合計 +13,122,263；漲幅 0.57%。"
-      }
-    },
-    {
-      "code": "3044",
-      "name": "健鼎",
-      "close": 490.5,
-      "change": 2.5,
-      "percent": 0.5122950819672131,
-      "value": 1753537500,
-      "tradeVolume": 3575000,
-      "market": "TWSE",
-      "open": 494.5,
-      "high": 497.5,
-      "low": 485,
-      "prevClose": 488,
-      "volume": 3575,
-      "quoteDate": "20260522",
-      "quoteTime": "13:30:00",
-      "valueRank": 92,
-      "volumeRank": 80,
-      "inst": {
-        "foreign": 956705,
-        "trust": 36000,
-        "dealer": 0,
-        "total": 1068541
-      },
-      "score": 100,
-      "matches": [
-        {
-          "id": "foreign_trust_breakout",
-          "short": "準突破",
-          "icon": "◆",
-          "score": 100,
-          "reason": "外資 +956,705、投信 +36,000 同買，法人合計 +1,068,541；漲幅 0.51%。"
-        }
-      ],
-      "activeMatch": {
-        "id": "foreign_trust_breakout",
-        "short": "準突破",
-        "icon": "◆",
-        "score": 100,
-        "reason": "外資 +956,705、投信 +36,000 同買，法人合計 +1,068,541；漲幅 0.51%。"
-      }
-    },
-    {
-      "code": "1723",
-      "name": "中碳",
-      "close": 81.7,
-      "change": 0.29999999999999716,
-      "percent": 0.36855036855036505,
-      "value": 56699800,
-      "tradeVolume": 694000,
-      "market": "TWSE",
-      "open": 81.4,
-      "high": 82.4,
-      "low": 81.2,
-      "prevClose": 81.4,
-      "volume": 694,
-      "quoteDate": "20260522",
-      "quoteTime": "13:30:00",
-      "valueRank": 62,
-      "volumeRank": 57,
-      "inst": {
-        "foreign": 34000,
-        "trust": 103000,
-        "dealer": 0,
-        "total": 171134
-      },
-      "score": 100,
-      "matches": [
-        {
-          "id": "foreign_trust_breakout",
-          "short": "準突破",
-          "icon": "◆",
-          "score": 100,
-          "reason": "外資 +34,000、投信 +103,000 同買，法人合計 +171,134；漲幅 0.37%。"
-        }
-      ],
-      "activeMatch": {
-        "id": "foreign_trust_breakout",
-        "short": "準突破",
-        "icon": "◆",
-        "score": 100,
-        "reason": "外資 +34,000、投信 +103,000 同買，法人合計 +171,134；漲幅 0.37%。"
-      }
-    },
-    {
-      "code": "2420",
-      "name": "新巨",
-      "close": 62.7,
-      "change": 0.20000000000000284,
-      "percent": 0.32000000000000456,
-      "value": 69283500,
-      "tradeVolume": 1105000,
-      "market": "TWSE",
-      "open": 62.6,
-      "high": 63.2,
-      "low": 62.1,
-      "prevClose": 62.5,
-      "volume": 1105,
-      "quoteDate": "20260522",
-      "quoteTime": "13:30:00",
-      "valueRank": 64,
-      "volumeRank": 64,
-      "inst": {
-        "foreign": 737089,
-        "trust": 34000,
-        "dealer": 0,
-        "total": 762089
-      },
-      "score": 100,
-      "matches": [
-        {
-          "id": "foreign_trust_breakout",
-          "short": "準突破",
-          "icon": "◆",
-          "score": 100,
-          "reason": "外資 +737,089、投信 +34,000 同買，法人合計 +762,089；漲幅 0.32%。"
-        }
-      ],
-      "activeMatch": {
-        "id": "foreign_trust_breakout",
-        "short": "準突破",
-        "icon": "◆",
-        "score": 100,
-        "reason": "外資 +737,089、投信 +34,000 同買，法人合計 +762,089；漲幅 0.32%。"
-      }
-    },
-    {
-      "code": "3376",
-      "name": "新日興",
-      "close": 210,
-      "change": 0.5,
-      "percent": 0.23866348448687352,
-      "value": 1235010000,
-      "tradeVolume": 5881000,
-      "market": "TWSE",
-      "open": 211,
-      "high": 216,
-      "low": 207,
-      "prevClose": 209.5,
-      "volume": 5881,
-      "quoteDate": "20260522",
-      "quoteTime": "13:30:00",
-      "valueRank": 89,
-      "volumeRank": 87,
-      "inst": {
-        "foreign": 2277500,
-        "trust": 10000,
-        "dealer": 0,
-        "total": 2492573
-      },
-      "score": 100,
-      "matches": [
-        {
-          "id": "foreign_trust_breakout",
-          "short": "準突破",
-          "icon": "◆",
-          "score": 100,
-          "reason": "外資 +2,277,500、投信 +10,000 同買，法人合計 +2,492,573；漲幅 0.24%。"
-        }
-      ],
-      "activeMatch": {
-        "id": "foreign_trust_breakout",
-        "short": "準突破",
-        "icon": "◆",
-        "score": 100,
-        "reason": "外資 +2,277,500、投信 +10,000 同買，法人合計 +2,492,573；漲幅 0.24%。"
-      }
-    },
-    {
-      "code": "3034",
-      "name": "聯詠",
-      "close": 485.5,
-      "change": 1,
-      "percent": 0.20639834881320948,
-      "value": 3940318000,
-      "tradeVolume": 8116000,
-      "market": "TWSE",
-      "open": 482,
-      "high": 490,
-      "low": 476,
-      "prevClose": 484.5,
-      "volume": 8116,
-      "quoteDate": "20260522",
-      "quoteTime": "13:30:00",
-      "valueRank": 96,
-      "volumeRank": 89,
-      "inst": {
-        "foreign": 1208845,
-        "trust": 19605,
-        "dealer": 0,
-        "total": 1151840
-      },
-      "score": 100,
-      "matches": [
-        {
-          "id": "foreign_trust_breakout",
-          "short": "準突破",
-          "icon": "◆",
-          "score": 100,
-          "reason": "外資 +1,208,845、投信 +19,605 同買，法人合計 +1,151,840；漲幅 0.21%。"
-        }
-      ],
-      "activeMatch": {
-        "id": "foreign_trust_breakout",
-        "short": "準突破",
-        "icon": "◆",
-        "score": 100,
-        "reason": "外資 +1,208,845、投信 +19,605 同買，法人合計 +1,151,840；漲幅 0.21%。"
-      }
-    },
-    {
-      "code": "6679",
-      "name": "鈺太",
-      "close": 335.5,
-      "change": 0.5,
-      "percent": 0.1492537313432836,
-      "value": 321073500,
-      "tradeVolume": 957000,
-      "market": "TPEX",
-      "open": 341,
-      "high": 343.5,
-      "low": 333.5,
-      "prevClose": 335,
-      "volume": 957,
-      "quoteDate": "20260522",
-      "quoteTime": "13:30:00",
-      "valueRank": 79,
-      "volumeRank": 62,
-      "inst": {
-        "foreign": 143000,
-        "trust": 16000,
-        "dealer": 56890,
-        "total": 215890
-      },
-      "score": 100,
-      "matches": [
-        {
-          "id": "foreign_trust_breakout",
-          "short": "準突破",
-          "icon": "◆",
-          "score": 100,
-          "reason": "外資 +143,000、投信 +16,000 同買，法人合計 +215,890；漲幅 0.15%。"
-        }
-      ],
-      "activeMatch": {
-        "id": "foreign_trust_breakout",
-        "short": "準突破",
-        "icon": "◆",
-        "score": 100,
-        "reason": "外資 +143,000、投信 +16,000 同買，法人合計 +215,890；漲幅 0.15%。"
-      }
-    },
-    {
-      "code": "6584",
-      "name": "南俊國際",
-      "close": 681,
-      "change": 1,
-      "percent": 0.14705882352941177,
-      "value": 375231000,
-      "tradeVolume": 551000,
-      "market": "TPEX",
-      "open": 700,
-      "high": 700,
-      "low": 676,
-      "prevClose": 680,
-      "volume": 551,
-      "quoteDate": "20260522",
-      "quoteTime": "13:30:00",
-      "valueRank": 81,
-      "volumeRank": 53,
-      "inst": {
-        "foreign": 26128,
-        "trust": 183000,
-        "dealer": -1864,
-        "total": 207264
-      },
-      "score": 100,
-      "matches": [
-        {
-          "id": "foreign_trust_breakout",
-          "short": "準突破",
-          "icon": "◆",
-          "score": 100,
-          "reason": "外資 +26,128、投信 +183,000 同買，法人合計 +207,264；漲幅 0.15%。"
-        }
-      ],
-      "activeMatch": {
-        "id": "foreign_trust_breakout",
-        "short": "準突破",
-        "icon": "◆",
-        "score": 100,
-        "reason": "外資 +26,128、投信 +183,000 同買，法人合計 +207,264；漲幅 0.15%。"
-      }
-    },
-    {
-      "code": "8926",
-      "name": "台汽電",
-      "close": 60.9,
-      "change": -0.10000000000000142,
-      "percent": -0.16393442622951052,
-      "value": 409126200,
-      "tradeVolume": 6718000,
-      "market": "TWSE",
-      "open": 60.8,
-      "high": 62.3,
-      "low": 60.5,
-      "prevClose": 61,
-      "volume": 6718,
-      "quoteDate": "20260522",
-      "quoteTime": "13:30:00",
-      "valueRank": 81,
-      "volumeRank": 88,
-      "inst": {
-        "foreign": 2042645,
-        "trust": 56000,
-        "dealer": 0,
-        "total": 2104645
-      },
-      "score": 100,
-      "matches": [
-        {
-          "id": "foreign_trust_breakout",
-          "short": "準突破",
-          "icon": "◆",
-          "score": 100,
-          "reason": "外資 +2,042,645、投信 +56,000 同買，法人合計 +2,104,645；漲幅 -0.16%。"
-        }
-      ],
-      "activeMatch": {
-        "id": "foreign_trust_breakout",
-        "short": "準突破",
-        "icon": "◆",
-        "score": 100,
-        "reason": "外資 +2,042,645、投信 +56,000 同買，法人合計 +2,104,645；漲幅 -0.16%。"
-      }
-    },
-    {
-      "code": "3592",
-      "name": "瑞鼎",
-      "close": 265.5,
-      "change": -0.5,
-      "percent": -0.18796992481203006,
-      "value": 233109000,
-      "tradeVolume": 878000,
-      "market": "TWSE",
-      "open": 268.5,
-      "high": 269.5,
-      "low": 262.5,
-      "prevClose": 266,
-      "volume": 878,
-      "quoteDate": "20260522",
-      "quoteTime": "13:30:00",
-      "valueRank": 76,
-      "volumeRank": 61,
-      "inst": {
-        "foreign": 440877,
-        "trust": 3322,
-        "dealer": 0,
-        "total": 463591
-      },
-      "score": 100,
-      "matches": [
-        {
-          "id": "foreign_trust_breakout",
-          "short": "準突破",
-          "icon": "◆",
-          "score": 100,
-          "reason": "外資 +440,877、投信 +3,322 同買，法人合計 +463,591；漲幅 -0.19%。"
-        }
-      ],
-      "activeMatch": {
-        "id": "foreign_trust_breakout",
-        "short": "準突破",
-        "icon": "◆",
-        "score": 100,
-        "reason": "外資 +440,877、投信 +3,322 同買，法人合計 +463,591；漲幅 -0.19%。"
-      }
-    },
-    {
-      "code": "1229",
-      "name": "聯華",
-      "close": 38.7,
-      "change": -0.14999999999999858,
-      "percent": -0.38610038610038244,
-      "value": 118383300,
-      "tradeVolume": 3059000,
-      "market": "TWSE",
-      "open": 38.9,
-      "high": 39.05,
-      "low": 38.55,
-      "prevClose": 38.85,
-      "volume": 3059,
-      "quoteDate": "20260522",
-      "quoteTime": "13:30:00",
-      "valueRank": 69,
-      "volumeRank": 78,
-      "inst": {
-        "foreign": 441000,
-        "trust": 34000,
-        "dealer": 0,
-        "total": 464000
-      },
-      "score": 100,
-      "matches": [
-        {
-          "id": "foreign_trust_breakout",
-          "short": "準突破",
-          "icon": "◆",
-          "score": 100,
-          "reason": "外資 +441,000、投信 +34,000 同買，法人合計 +464,000；漲幅 -0.39%。"
-        }
-      ],
-      "activeMatch": {
-        "id": "foreign_trust_breakout",
-        "short": "準突破",
-        "icon": "◆",
-        "score": 100,
-        "reason": "外資 +441,000、投信 +34,000 同買，法人合計 +464,000；漲幅 -0.39%。"
-      }
-    },
-    {
-      "code": "3708",
-      "name": "上緯投控",
-      "close": 126,
-      "change": -0.5,
-      "percent": -0.3952569169960474,
-      "value": 164052000,
-      "tradeVolume": 1302000,
-      "market": "TWSE",
-      "open": 126,
-      "high": 128,
-      "low": 125,
-      "prevClose": 126.5,
-      "volume": 1302,
-      "quoteDate": "20260522",
-      "quoteTime": "13:30:00",
-      "valueRank": 72,
-      "volumeRank": 67,
-      "inst": {
-        "foreign": 1688510,
-        "trust": 3000,
-        "dealer": 0,
-        "total": 1868753
-      },
-      "score": 100,
-      "matches": [
-        {
-          "id": "foreign_trust_breakout",
-          "short": "準突破",
-          "icon": "◆",
-          "score": 100,
-          "reason": "外資 +1,688,510、投信 +3,000 同買，法人合計 +1,868,753；漲幅 -0.40%。"
-        }
-      ],
-      "activeMatch": {
-        "id": "foreign_trust_breakout",
-        "short": "準突破",
-        "icon": "◆",
-        "score": 100,
-        "reason": "外資 +1,688,510、投信 +3,000 同買，法人合計 +1,868,753；漲幅 -0.40%。"
-      }
-    },
-    {
-      "code": "1722",
-      "name": "台肥",
-      "close": 46.05,
-      "change": -0.20000000000000284,
-      "percent": -0.4324324324324386,
-      "value": 91225050,
-      "tradeVolume": 1981000,
-      "market": "TWSE",
-      "open": 46.25,
-      "high": 46.4,
-      "low": 45.9,
-      "prevClose": 46.25,
-      "volume": 1981,
-      "quoteDate": "20260522",
-      "quoteTime": "13:30:00",
-      "valueRank": 67,
+      "valueRank": 75,
       "volumeRank": 73,
       "inst": {
-        "foreign": 478278,
-        "trust": 84000,
-        "dealer": 0,
-        "total": 560278
+        "foreign": 884132,
+        "trust": 5000,
+        "dealer": 9293,
+        "total": 898425
       },
       "score": 100,
       "matches": [
@@ -2894,7 +1970,7 @@
           "short": "準突破",
           "icon": "◆",
           "score": 100,
-          "reason": "外資 +478,278、投信 +84,000 同買，法人合計 +560,278；漲幅 -0.43%。"
+          "reason": "外資 +884,132、投信 +5,000 同買，法人合計 +898,425；漲幅 0.00%。"
         }
       ],
       "activeMatch": {
@@ -2902,32 +1978,32 @@
         "short": "準突破",
         "icon": "◆",
         "score": 100,
-        "reason": "外資 +478,278、投信 +84,000 同買，法人合計 +560,278；漲幅 -0.43%。"
+        "reason": "外資 +884,132、投信 +5,000 同買，法人合計 +898,425；漲幅 0.00%。"
       }
     },
     {
-      "code": "3413",
-      "name": "京鼎",
-      "close": 325,
-      "change": -1.5,
-      "percent": -0.45941807044410415,
-      "value": 345150000,
-      "tradeVolume": 1062000,
+      "code": "3545",
+      "name": "敦泰",
+      "close": 61.6,
+      "change": 0,
+      "percent": 0,
+      "value": 230876800,
+      "tradeVolume": 3748000,
       "market": "TWSE",
-      "open": 327.5,
-      "high": 328.5,
-      "low": 324,
-      "prevClose": 326.5,
-      "volume": 1062,
-      "quoteDate": "20260522",
+      "open": 62.7,
+      "high": 63.4,
+      "low": 61.1,
+      "prevClose": 61.6,
+      "volume": 3748,
+      "quoteDate": "20260525",
       "quoteTime": "13:30:00",
-      "valueRank": 80,
-      "volumeRank": 63,
+      "valueRank": 74,
+      "volumeRank": 80,
       "inst": {
-        "foreign": 489348,
+        "foreign": 233000,
         "trust": 3000,
         "dealer": 0,
-        "total": 505244
+        "total": 274378
       },
       "score": 100,
       "matches": [
@@ -2936,7 +2012,7 @@
           "short": "準突破",
           "icon": "◆",
           "score": 100,
-          "reason": "外資 +489,348、投信 +3,000 同買，法人合計 +505,244；漲幅 -0.46%。"
+          "reason": "外資 +233,000、投信 +3,000 同買，法人合計 +274,378；漲幅 0.00%。"
         }
       ],
       "activeMatch": {
@@ -2944,32 +2020,284 @@
         "short": "準突破",
         "icon": "◆",
         "score": 100,
-        "reason": "外資 +489,348、投信 +3,000 同買，法人合計 +505,244；漲幅 -0.46%。"
+        "reason": "外資 +233,000、投信 +3,000 同買，法人合計 +274,378；漲幅 0.00%。"
       }
     },
     {
-      "code": "1303",
-      "name": "南亞",
-      "close": 86.7,
-      "change": -0.5999999999999943,
-      "percent": -0.687285223367691,
-      "value": 3946584000,
-      "tradeVolume": 45520000,
+      "code": "1504",
+      "name": "東元",
+      "close": 72,
+      "change": -0.09999999999999432,
+      "percent": -0.1386962552011017,
+      "value": 918216000,
+      "tradeVolume": 12753000,
       "market": "TWSE",
-      "open": 88,
-      "high": 89.1,
-      "low": 86.7,
-      "prevClose": 87.3,
-      "volume": 45520,
-      "quoteDate": "20260522",
+      "open": 73.3,
+      "high": 73.3,
+      "low": 71.6,
+      "prevClose": 72.1,
+      "volume": 12753,
+      "quoteDate": "20260525",
+      "quoteTime": "13:30:00",
+      "valueRank": 87,
+      "volumeRank": 91,
+      "inst": {
+        "foreign": 2392169,
+        "trust": 4416,
+        "dealer": 0,
+        "total": 2537858
+      },
+      "score": 100,
+      "matches": [
+        {
+          "id": "foreign_trust_breakout",
+          "short": "準突破",
+          "icon": "◆",
+          "score": 100,
+          "reason": "外資 +2,392,169、投信 +4,416 同買，法人合計 +2,537,858；漲幅 -0.14%。"
+        }
+      ],
+      "activeMatch": {
+        "id": "foreign_trust_breakout",
+        "short": "準突破",
+        "icon": "◆",
+        "score": 100,
+        "reason": "外資 +2,392,169、投信 +4,416 同買，法人合計 +2,537,858；漲幅 -0.14%。"
+      }
+    },
+    {
+      "code": "2634",
+      "name": "漢翔",
+      "close": 46.4,
+      "change": -0.10000000000000142,
+      "percent": -0.21505376344086324,
+      "value": 233252800,
+      "tradeVolume": 5027000,
+      "market": "TWSE",
+      "open": 46.6,
+      "high": 47,
+      "low": 46.2,
+      "prevClose": 46.5,
+      "volume": 5027,
+      "quoteDate": "20260525",
+      "quoteTime": "13:30:00",
+      "valueRank": 75,
+      "volumeRank": 84,
+      "inst": {
+        "foreign": 115441,
+        "trust": 12000,
+        "dealer": 0,
+        "total": 112821
+      },
+      "score": 100,
+      "matches": [
+        {
+          "id": "foreign_trust_breakout",
+          "short": "準突破",
+          "icon": "◆",
+          "score": 100,
+          "reason": "外資 +115,441、投信 +12,000 同買，法人合計 +112,821；漲幅 -0.22%。"
+        }
+      ],
+      "activeMatch": {
+        "id": "foreign_trust_breakout",
+        "short": "準突破",
+        "icon": "◆",
+        "score": 100,
+        "reason": "外資 +115,441、投信 +12,000 同買，法人合計 +112,821；漲幅 -0.22%。"
+      }
+    },
+    {
+      "code": "5284",
+      "name": "jpp-KY",
+      "close": 408.5,
+      "change": -1.5,
+      "percent": -0.3658536585365854,
+      "value": 831706000,
+      "tradeVolume": 2036000,
+      "market": "TWSE",
+      "open": 417.5,
+      "high": 417.5,
+      "low": 399,
+      "prevClose": 410,
+      "volume": 2036,
+      "quoteDate": "20260525",
+      "quoteTime": "13:30:00",
+      "valueRank": 86,
+      "volumeRank": 71,
+      "inst": {
+        "foreign": 17202,
+        "trust": 26000,
+        "dealer": 0,
+        "total": 49796
+      },
+      "score": 100,
+      "matches": [
+        {
+          "id": "foreign_trust_breakout",
+          "short": "準突破",
+          "icon": "◆",
+          "score": 100,
+          "reason": "外資 +17,202、投信 +26,000 同買，法人合計 +49,796；漲幅 -0.37%。"
+        }
+      ],
+      "activeMatch": {
+        "id": "foreign_trust_breakout",
+        "short": "準突破",
+        "icon": "◆",
+        "score": 100,
+        "reason": "外資 +17,202、投信 +26,000 同買，法人合計 +49,796；漲幅 -0.37%。"
+      }
+    },
+    {
+      "code": "3059",
+      "name": "華晶科",
+      "close": 43.3,
+      "change": -0.25,
+      "percent": -0.5740528128587831,
+      "value": 863315400,
+      "tradeVolume": 19938000,
+      "market": "TWSE",
+      "open": 44.2,
+      "high": 45.3,
+      "low": 43.15,
+      "prevClose": 43.55,
+      "volume": 19938,
+      "quoteDate": "20260525",
+      "quoteTime": "13:30:00",
+      "valueRank": 86,
+      "volumeRank": 94,
+      "inst": {
+        "foreign": 441465,
+        "trust": 1000,
+        "dealer": 0,
+        "total": 516756
+      },
+      "score": 100,
+      "matches": [
+        {
+          "id": "foreign_trust_breakout",
+          "short": "準突破",
+          "icon": "◆",
+          "score": 100,
+          "reason": "外資 +441,465、投信 +1,000 同買，法人合計 +516,756；漲幅 -0.57%。"
+        }
+      ],
+      "activeMatch": {
+        "id": "foreign_trust_breakout",
+        "short": "準突破",
+        "icon": "◆",
+        "score": 100,
+        "reason": "外資 +441,465、投信 +1,000 同買，法人合計 +516,756；漲幅 -0.57%。"
+      }
+    },
+    {
+      "code": "3088",
+      "name": "艾訊",
+      "close": 141,
+      "change": -1,
+      "percent": -0.7042253521126761,
+      "value": 268746000,
+      "tradeVolume": 1906000,
+      "market": "TPEX",
+      "open": 145,
+      "high": 146.5,
+      "low": 140,
+      "prevClose": 142,
+      "volume": 1906,
+      "quoteDate": "20260525",
+      "quoteTime": "13:30:00",
+      "valueRank": 76,
+      "volumeRank": 70,
+      "inst": {
+        "foreign": 410231,
+        "trust": 82000,
+        "dealer": 11190,
+        "total": 503421
+      },
+      "score": 100,
+      "matches": [
+        {
+          "id": "foreign_trust_breakout",
+          "short": "準突破",
+          "icon": "◆",
+          "score": 100,
+          "reason": "外資 +410,231、投信 +82,000 同買，法人合計 +503,421；漲幅 -0.70%。"
+        }
+      ],
+      "activeMatch": {
+        "id": "foreign_trust_breakout",
+        "short": "準突破",
+        "icon": "◆",
+        "score": 100,
+        "reason": "外資 +410,231、投信 +82,000 同買，法人合計 +503,421；漲幅 -0.70%。"
+      }
+    },
+    {
+      "code": "3293",
+      "name": "鈊象",
+      "close": 741,
+      "change": -7,
+      "percent": -0.9358288770053476,
+      "value": 1225614000,
+      "tradeVolume": 1654000,
+      "market": "TPEX",
+      "open": 757,
+      "high": 757,
+      "low": 741,
+      "prevClose": 748,
+      "volume": 1654,
+      "quoteDate": "20260525",
+      "quoteTime": "13:30:00",
+      "valueRank": 89,
+      "volumeRank": 67,
+      "inst": {
+        "foreign": 161927,
+        "trust": 464000,
+        "dealer": 11317,
+        "total": 637244
+      },
+      "score": 100,
+      "matches": [
+        {
+          "id": "foreign_trust_breakout",
+          "short": "準突破",
+          "icon": "◆",
+          "score": 100,
+          "reason": "外資 +161,927、投信 +464,000 同買，法人合計 +637,244；漲幅 -0.94%。"
+        }
+      ],
+      "activeMatch": {
+        "id": "foreign_trust_breakout",
+        "short": "準突破",
+        "icon": "◆",
+        "score": 100,
+        "reason": "外資 +161,927、投信 +464,000 同買，法人合計 +637,244；漲幅 -0.94%。"
+      }
+    },
+    {
+      "code": "1717",
+      "name": "長興",
+      "close": 82.2,
+      "change": -0.7999999999999972,
+      "percent": -0.9638554216867437,
+      "value": 3982425600,
+      "tradeVolume": 48448000,
+      "market": "TWSE",
+      "open": 85,
+      "high": 86,
+      "low": 82.1,
+      "prevClose": 83,
+      "volume": 48448,
+      "quoteDate": "20260525",
       "quoteTime": "13:30:00",
       "valueRank": 96,
       "volumeRank": 98,
       "inst": {
-        "foreign": 32941181,
-        "trust": 304000,
+        "foreign": 23653936,
+        "trust": 540000,
         "dealer": 0,
-        "total": 33437230
+        "total": 24337126
       },
       "score": 100,
       "matches": [
@@ -2978,7 +2306,7 @@
           "short": "準突破",
           "icon": "◆",
           "score": 100,
-          "reason": "外資 +32,941,181、投信 +304,000 同買，法人合計 +33,437,230；漲幅 -0.69%。"
+          "reason": "外資 +23,653,936、投信 +540,000 同買，法人合計 +24,337,126；漲幅 -0.96%。"
         }
       ],
       "activeMatch": {
@@ -2986,74 +2314,32 @@
         "short": "準突破",
         "icon": "◆",
         "score": 100,
-        "reason": "外資 +32,941,181、投信 +304,000 同買，法人合計 +33,437,230；漲幅 -0.69%。"
+        "reason": "外資 +23,653,936、投信 +540,000 同買，法人合計 +24,337,126；漲幅 -0.96%。"
       }
     },
     {
-      "code": "9933",
-      "name": "中鼎",
-      "close": 39.3,
-      "change": -0.30000000000000426,
-      "percent": -0.7575757575757683,
-      "value": 196107000,
-      "tradeVolume": 4990000,
+      "code": "2615",
+      "name": "萬海",
+      "close": 83.3,
+      "change": -1,
+      "percent": -1.1862396204033214,
+      "value": 1538884200,
+      "tradeVolume": 18474000,
       "market": "TWSE",
-      "open": 39.75,
-      "high": 40,
-      "low": 39.15,
-      "prevClose": 39.6,
-      "volume": 4990,
-      "quoteDate": "20260522",
-      "quoteTime": "13:30:00",
-      "valueRank": 74,
-      "volumeRank": 84,
-      "inst": {
-        "foreign": 2623000,
-        "trust": 161000,
-        "dealer": 0,
-        "total": 2982779
-      },
-      "score": 100,
-      "matches": [
-        {
-          "id": "foreign_trust_breakout",
-          "short": "準突破",
-          "icon": "◆",
-          "score": 100,
-          "reason": "外資 +2,623,000、投信 +161,000 同買，法人合計 +2,982,779；漲幅 -0.76%。"
-        }
-      ],
-      "activeMatch": {
-        "id": "foreign_trust_breakout",
-        "short": "準突破",
-        "icon": "◆",
-        "score": 100,
-        "reason": "外資 +2,623,000、投信 +161,000 同買，法人合計 +2,982,779；漲幅 -0.76%。"
-      }
-    },
-    {
-      "code": "6805",
-      "name": "富世達",
-      "close": 1795,
-      "change": -15,
-      "percent": -0.8287292817679558,
-      "value": 1662170000,
-      "tradeVolume": 926000,
-      "market": "TWSE",
-      "open": 1830,
-      "high": 1845,
-      "low": 1785,
-      "prevClose": 1810,
-      "volume": 926,
-      "quoteDate": "20260522",
+      "open": 84.4,
+      "high": 85.3,
+      "low": 80.9,
+      "prevClose": 84.3,
+      "volume": 18474,
+      "quoteDate": "20260525",
       "quoteTime": "13:30:00",
       "valueRank": 91,
-      "volumeRank": 62,
+      "volumeRank": 94,
       "inst": {
-        "foreign": 5628,
-        "trust": 99000,
+        "foreign": 7408084,
+        "trust": 1782559,
         "dealer": 0,
-        "total": 117855
+        "total": 9505045
       },
       "score": 100,
       "matches": [
@@ -3062,7 +2348,7 @@
           "short": "準突破",
           "icon": "◆",
           "score": 100,
-          "reason": "外資 +5,628、投信 +99,000 同買，法人合計 +117,855；漲幅 -0.83%。"
+          "reason": "外資 +7,408,084、投信 +1,782,559 同買，法人合計 +9,505,045；漲幅 -1.19%。"
         }
       ],
       "activeMatch": {
@@ -3070,175 +2356,133 @@
         "short": "準突破",
         "icon": "◆",
         "score": 100,
-        "reason": "外資 +5,628、投信 +99,000 同買，法人合計 +117,855；漲幅 -0.83%。"
+        "reason": "外資 +7,408,084、投信 +1,782,559 同買，法人合計 +9,505,045；漲幅 -1.19%。"
       }
     },
     {
-      "code": "2542",
-      "name": "興富發",
-      "close": 43.2,
-      "change": -0.44999999999999574,
-      "percent": -1.0309278350515367,
-      "value": 388324800,
-      "tradeVolume": 8989000,
+      "code": "6214",
+      "name": "精誠",
+      "close": 129,
+      "change": -1,
+      "percent": -0.7692307692307693,
+      "value": 199305000,
+      "tradeVolume": 1545000,
       "market": "TWSE",
-      "open": 43.6,
-      "high": 43.6,
-      "low": 42.9,
-      "prevClose": 43.65,
-      "volume": 8989,
-      "quoteDate": "20260522",
+      "open": 132,
+      "high": 132.5,
+      "low": 128.5,
+      "prevClose": 130,
+      "volume": 1545,
+      "quoteDate": "20260525",
       "quoteTime": "13:30:00",
-      "valueRank": 81,
-      "volumeRank": 90,
+      "valueRank": 73,
+      "volumeRank": 66,
       "inst": {
-        "foreign": 512658,
-        "trust": 9000,
-        "dealer": 0,
-        "total": 504209
-      },
-      "score": 100,
-      "matches": [
-        {
-          "id": "foreign_trust_breakout",
-          "short": "準突破",
-          "icon": "◆",
-          "score": 100,
-          "reason": "外資 +512,658、投信 +9,000 同買，法人合計 +504,209；漲幅 -1.03%。"
-        }
-      ],
-      "activeMatch": {
-        "id": "foreign_trust_breakout",
-        "short": "準突破",
-        "icon": "◆",
-        "score": 100,
-        "reason": "外資 +512,658、投信 +9,000 同買，法人合計 +504,209；漲幅 -1.03%。"
-      }
-    },
-    {
-      "code": "2497",
-      "name": "怡利電",
-      "close": 57,
-      "change": 0.20000000000000284,
-      "percent": 0.35211267605634305,
-      "value": 19779000,
-      "tradeVolume": 347000,
-      "market": "TWSE",
-      "open": 56.9,
-      "high": 57.4,
-      "low": 56.3,
-      "prevClose": 56.8,
-      "volume": 347,
-      "quoteDate": "20260522",
-      "quoteTime": "13:30:00",
-      "valueRank": 50,
-      "volumeRank": 45,
-      "inst": {
-        "foreign": 115029,
-        "trust": 8000,
-        "dealer": 0,
-        "total": 124029
-      },
-      "score": 98,
-      "matches": [
-        {
-          "id": "foreign_trust_breakout",
-          "short": "準突破",
-          "icon": "◆",
-          "score": 98,
-          "reason": "外資 +115,029、投信 +8,000 同買，法人合計 +124,029；漲幅 0.35%。"
-        }
-      ],
-      "activeMatch": {
-        "id": "foreign_trust_breakout",
-        "short": "準突破",
-        "icon": "◆",
-        "score": 98,
-        "reason": "外資 +115,029、投信 +8,000 同買，法人合計 +124,029；漲幅 0.35%。"
-      }
-    },
-    {
-      "code": "2645",
-      "name": "長榮航太",
-      "close": 160.5,
-      "change": -2,
-      "percent": -1.2307692307692308,
-      "value": 230157000,
-      "tradeVolume": 1434000,
-      "market": "TWSE",
-      "open": 163,
-      "high": 164.5,
-      "low": 159,
-      "prevClose": 162.5,
-      "volume": 1434,
-      "quoteDate": "20260522",
-      "quoteTime": "13:30:00",
-      "valueRank": 76,
-      "volumeRank": 68,
-      "inst": {
-        "foreign": 2043988,
-        "trust": 88000,
-        "dealer": 0,
-        "total": 2195583
-      },
-      "score": 97,
-      "matches": [
-        {
-          "id": "foreign_trust_breakout",
-          "short": "準突破",
-          "icon": "◆",
-          "score": 97,
-          "reason": "外資 +2,043,988、投信 +88,000 同買，法人合計 +2,195,583；漲幅 -1.23%。"
-        }
-      ],
-      "activeMatch": {
-        "id": "foreign_trust_breakout",
-        "short": "準突破",
-        "icon": "◆",
-        "score": 97,
-        "reason": "外資 +2,043,988、投信 +88,000 同買，法人合計 +2,195,583；漲幅 -1.23%。"
-      }
-    },
-    {
-      "code": "6640",
-      "name": "均華",
-      "close": 1360,
-      "change": -15,
-      "percent": -1.090909090909091,
-      "value": 554880000,
-      "tradeVolume": 408000,
-      "market": "TPEX",
-      "open": 1415,
-      "high": 1430,
-      "low": 1355,
-      "prevClose": 1375,
-      "volume": 408,
-      "quoteDate": "20260522",
-      "quoteTime": "13:30:00",
-      "valueRank": 84,
-      "volumeRank": 48,
-      "inst": {
-        "foreign": 69993,
+        "foreign": 1307003,
         "trust": 1000,
-        "dealer": 18167,
-        "total": 89160
+        "dealer": 0,
+        "total": 1364021
       },
-      "score": 96,
+      "score": 99,
       "matches": [
         {
           "id": "foreign_trust_breakout",
           "short": "準突破",
           "icon": "◆",
-          "score": 96,
-          "reason": "外資 +69,993、投信 +1,000 同買，法人合計 +89,160；漲幅 -1.09%。"
+          "score": 99,
+          "reason": "外資 +1,307,003、投信 +1,000 同買，法人合計 +1,364,021；漲幅 -0.77%。"
         }
       ],
       "activeMatch": {
         "id": "foreign_trust_breakout",
         "short": "準突破",
         "icon": "◆",
-        "score": 96,
-        "reason": "外資 +69,993、投信 +1,000 同買，法人合計 +89,160；漲幅 -1.09%。"
+        "score": 99,
+        "reason": "外資 +1,307,003、投信 +1,000 同買，法人合計 +1,364,021；漲幅 -0.77%。"
+      }
+    },
+    {
+      "code": "2364",
+      "name": "倫飛",
+      "close": 69.1,
+      "change": -0.6000000000000085,
+      "percent": -0.8608321377331543,
+      "value": 25290600,
+      "tradeVolume": 366000,
+      "market": "TWSE",
+      "open": 70.5,
+      "high": 70.8,
+      "low": 68.6,
+      "prevClose": 69.7,
+      "volume": 366,
+      "quoteDate": "20260525",
+      "quoteTime": "13:30:00",
+      "valueRank": 49,
+      "volumeRank": 40,
+      "inst": {
+        "foreign": 125506,
+        "trust": 1000,
+        "dealer": 0,
+        "total": 124506
+      },
+      "score": 88,
+      "matches": [
+        {
+          "id": "foreign_trust_breakout",
+          "short": "準突破",
+          "icon": "◆",
+          "score": 88,
+          "reason": "外資 +125,506、投信 +1,000 同買，法人合計 +124,506；漲幅 -0.86%。"
+        }
+      ],
+      "activeMatch": {
+        "id": "foreign_trust_breakout",
+        "short": "準突破",
+        "icon": "◆",
+        "score": 88,
+        "reason": "外資 +125,506、投信 +1,000 同買，法人合計 +124,506；漲幅 -0.86%。"
+      }
+    },
+    {
+      "code": "1235",
+      "name": "興泰",
+      "close": 37.95,
+      "change": -0.3999999999999986,
+      "percent": -1.0430247718383274,
+      "value": 531300,
+      "tradeVolume": 14000,
+      "market": "TWSE",
+      "open": 38.35,
+      "high": 39.4,
+      "low": 37.3,
+      "prevClose": 38.35,
+      "volume": 14,
+      "quoteDate": "20260525",
+      "quoteTime": "13:30:00",
+      "valueRank": 5,
+      "volumeRank": 4,
+      "inst": {
+        "foreign": 1000,
+        "trust": 1000,
+        "dealer": 0,
+        "total": 2000
+      },
+      "score": 70,
+      "matches": [
+        {
+          "id": "foreign_trust_breakout",
+          "short": "準突破",
+          "icon": "◆",
+          "score": 70,
+          "reason": "外資 +1,000、投信 +1,000 同買，法人合計 +2,000；漲幅 -1.04%。"
+        }
+      ],
+      "activeMatch": {
+        "id": "foreign_trust_breakout",
+        "short": "準突破",
+        "icon": "◆",
+        "score": 70,
+        "reason": "外資 +1,000、投信 +1,000 同買，法人合計 +2,000；漲幅 -1.04%。"
       }
     }
   ]
