@@ -2252,6 +2252,14 @@ function installRealtimeRadarStyles() {
       border-color: rgba(239, 68, 68, 0.36) !important;
       box-shadow: 0 10px 24px rgba(15, 23, 42, 0.06) !important;
     }
+    body.fuman-light-theme .radar-topbar small {
+      color: #475569 !important;
+      font-weight: 750 !important;
+    }
+    body.fuman-light-theme .radar-ai-head,
+    body.fuman-light-theme .radar-ai-head span {
+      color: #334155 !important;
+    }
     body.fuman-light-theme .radar-ai-panel {
       background: #fff7f7 !important;
       border-color: rgba(239, 68, 68, 0.34) !important;
@@ -3058,6 +3066,30 @@ function radarReasonTags(stock) {
   return (stock.signalTags?.length ? stock.signalTags : [stock.side === "long" ? "短線強勢" : "短線轉弱"]).slice(0, 4);
 }
 
+function radarTechnicalTags(stock) {
+  const tags = normalizeArray(stock.signalTags)
+    .filter((tag) => !/法人|外資|投信|買超|賣超|融資|融券/.test(tag));
+  const fallback = stock.side === "short" ? "短線轉弱" : "短線強勢";
+  return (tags.length ? tags : [fallback]).slice(0, 5);
+}
+
+function radarChipTags(stock) {
+  const tags = normalizeArray(stock.signalTags)
+    .filter((tag) => /法人|外資|投信|買超|賣超|融資|融券/.test(tag));
+  if (stock.side === "short") {
+    if (stock.totalInst < 0) tags.push("三大法人賣超");
+    if (stock.foreign < 0) tags.push("外資賣超");
+    if (stock.trust < 0) tags.push("投信賣超");
+    if (stock.shortMarginChange > 0) tags.push("融券增加");
+  } else {
+    if (stock.totalInst > 0) tags.push("三大法人買超");
+    if (stock.foreign > 0) tags.push("外資買超");
+    if (stock.trust > 0) tags.push("投信買超");
+    if (stock.marginChange > 0) tags.push("融資增加");
+  }
+  return [...new Set(tags)].slice(0, 5);
+}
+
 function radarSessionTimeLabel() {
   const date = new Date();
   const minutes = date.getHours() * 60 + date.getMinutes();
@@ -3382,24 +3414,6 @@ function renderRealtimeRadar() {
   const activeSide = realtimeRadarSide === "short" ? "short" : realtimeRadarSide === "long" ? "long" : (major === "偏空" ? "short" : "long");
   const activeRows = activeSide === "short" ? shortRows : longRows;
   const now = radarSessionTimeLabel();
-  const radarInstitutionTags = (stock) => {
-    const tags = [];
-    if (stock.side === "short") {
-      if (stock.totalInst < 0) tags.push("三大法人賣超");
-      if (stock.foreign < 0) tags.push("外資賣超");
-      if (stock.trust < 0) tags.push("投信賣超");
-      if (stock.shortMarginChange > 0) tags.push("融券增加");
-      if (stock.totalInst >= 0) tags.push("法人買盤轉弱");
-      tags.push("短線賣壓");
-    } else {
-      if (stock.totalInst > 0) tags.push("三大法人買超");
-      if (stock.foreign > 0) tags.push("外資買超");
-      if (stock.trust > 0) tags.push("投信買超");
-      if (stock.marginChange > 0) tags.push("融資增加");
-      if (!stock.marginChange && stock.totalInst < 0) tags.push("法人買盤觀察");
-    }
-    return tags.slice(0, 4);
-  };
   const radarDetailChips = (stock) => {
     const chips = [
       `價 ${stock.pct >= 0 ? "+" : ""}${stock.pct.toFixed(0)}`,
@@ -3412,8 +3426,8 @@ function renderRealtimeRadar() {
   };
   const boardCard = (stock) => {
     const sign = stock.pct >= 0 ? "+" : "";
-    const tags = radarReasonTags(stock).map((tag) => `<span>${tag}</span>`).join("");
-    const instTags = radarInstitutionTags(stock).map((tag) => `<span>${tag}</span>`).join("");
+    const tags = radarTechnicalTags(stock).map((tag) => `<span>${tag}</span>`).join("");
+    const instTags = radarChipTags(stock).map((tag) => `<span>${tag}</span>`).join("");
     const volumeRatio = cleanNumber(stock.volumeRatio) || radarVolumeRatio(stock);
     const eventTime = cleanNumber(stock.radarUpdatedAt)
       ? new Date(cleanNumber(stock.radarUpdatedAt)).toLocaleTimeString("zh-TW", { hour12: false, hour: "2-digit", minute: "2-digit" })
@@ -9913,7 +9927,8 @@ function parseStocksForLatest(stocks) {
     const name = valueOf(stock, ["證券名稱", "Name"]);
     const value = cleanNumber(valueOf(stock, ["成交金額", "TradeValue"]));
     const tradeVolume = normalizeTradeVolumeLots(valueOf(stock, ["成交股數", "TradeVolume"]));
-    return { code, name, value, tradeVolume, ...stockChange(stock) };
+    const volumeRatio = cleanNumber(valueOf(stock, ["量比", "VolumeRatio", "volumeRatio", "volume_ratio"]));
+    return { code, name, value, tradeVolume, volumeRatio, ...stockChange(stock) };
   }).filter((s) => s.code && s.name && s.close);
 }
 
