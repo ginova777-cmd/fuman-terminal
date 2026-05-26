@@ -2935,6 +2935,37 @@ function radarVolumeRatio(stock) {
   return ratio > 0 ? ratio : 0;
 }
 
+function enrichRealtimeRadarSnapshotRows(rows = []) {
+  let changed = false;
+  const enriched = normalizeArray(rows).map((stock) => {
+    const daily = stock.swingDaily || analyzeSwingDaily(stock);
+    const volumeRatio = cleanNumber(stock.volumeRatio) || radarVolumeRatio({ ...stock, swingDaily: daily });
+    const signalTags = daily
+      ? radarSignalTags({
+          ...stock,
+          pct: cleanNumber(stock.pct ?? stock.percent),
+          value: cleanNumber(stock.value),
+          volume: cleanNumber(stock.volume || stock.tradeVolume),
+          volumeRatio,
+          swingDaily: daily,
+        })
+      : stock.signalTags;
+    if (volumeRatio && volumeRatio !== cleanNumber(stock.volumeRatio)) changed = true;
+    if (signalTags?.length && signalTags.join("|") !== normalizeArray(stock.signalTags).join("|")) changed = true;
+    return {
+      ...stock,
+      swingDaily: daily || stock.swingDaily,
+      volumeRatio: volumeRatio || stock.volumeRatio,
+      signalTags: signalTags?.length ? signalTags : stock.signalTags,
+    };
+  });
+  if (changed) {
+    realtimeRadarLastRows = enriched;
+    saveRealtimeRadarLastRows(realtimeRadarLastRows);
+  }
+  return enriched;
+}
+
 function radarSignalScore(stock) {
   const pct = Math.abs(cleanNumber(stock.pct ?? stock.percent));
   const value = cleanNumber(stock.value);
@@ -3279,10 +3310,15 @@ function renderRealtimeRadar() {
     return;
   }
   if (!Object.keys(strategyHistoryData).length && !strategy4CacheLoading) loadStrategy4Cache(true);
-  const historyTargets = radarOpen ? getRealtimeRadarHistoryTargets() : [];
-  if (historyTargets.length && !realtimeRadarHistoryPromise && Date.now() - realtimeRadarHistoryLastAt >= REALTIME_RADAR_HISTORY_REFRESH_MS) {
-    loadRealtimeRadarHistory(historyTargets).then((loaded) => {
-      if (loaded) renderRealtimeRadar();
+  const historyTargets = getRealtimeRadarHistoryTargets();
+  const snapshotHistoryTargets = historyTargets.length ? [] : getRealtimeRadarSnapshotHistoryTargets(realtimeRadarLastRows);
+  const pendingHistoryTargets = historyTargets.length ? historyTargets : snapshotHistoryTargets;
+  if (pendingHistoryTargets.length && !realtimeRadarHistoryPromise && Date.now() - realtimeRadarHistoryLastAt >= REALTIME_RADAR_HISTORY_REFRESH_MS) {
+    loadRealtimeRadarHistory(pendingHistoryTargets).then((loaded) => {
+      if (loaded) {
+        enrichRealtimeRadarSnapshotRows(realtimeRadarLastRows);
+        renderRealtimeRadar();
+      }
     });
   }
   const radarNeedsUpdate = radarOpen && (realtimeRadarNeedsFreshScan || !isRealtimeRadarFresh());
@@ -3359,7 +3395,7 @@ function renderRealtimeRadar() {
     realtimeRadarLastUpdatedAt = Date.now();
     saveRealtimeRadarLastRows(realtimeRadarLastRows);
   }
-  const displayRows = realtimeRadarLastRows.length ? realtimeRadarLastRows : rows;
+  const displayRows = realtimeRadarLastRows.length ? enrichRealtimeRadarSnapshotRows(realtimeRadarLastRows) : rows;
   const sortRadarLedger = (items) => [...items].sort((a, b) => (cleanNumber(b.radarUpdatedAt) - cleanNumber(a.radarUpdatedAt)) || cleanNumber(b.score) - cleanNumber(a.score));
   const longAll = sortRadarLedger(displayRows.filter((stock) => stock.side === "long"));
   const shortAll = sortRadarLedger(displayRows.filter((stock) => stock.side === "short"));
@@ -4179,6 +4215,12 @@ function getRealtimeRadarHistoryTargets(limit = REALTIME_RADAR_HISTORY_TARGET_LI
     ...shortPressurePool,
     ...[...pool].sort((a, b) => getIntradayHotScore(b) - getIntradayHotScore(a)),
   ])
+    .filter((stock) => stock?.code && !hasStrategyHistoryRows(stock.code))
+    .slice(0, limit);
+}
+
+function getRealtimeRadarSnapshotHistoryTargets(rows = [], limit = REALTIME_RADAR_HISTORY_TARGET_LIMIT) {
+  return uniqueStocksByCode(normalizeArray(rows))
     .filter((stock) => stock?.code && !hasStrategyHistoryRows(stock.code))
     .slice(0, limit);
 }
