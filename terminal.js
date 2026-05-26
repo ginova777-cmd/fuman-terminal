@@ -303,13 +303,14 @@ function installThemeToggle() {
       }
       body.fuman-light-theme #warrant-flow-view,
       body.fuman-light-theme #warrant-flow-view .swing-dashboard {
-        background: #f7fafc !important;
+        background: #f5f7fa !important;
         color: #0f172a !important;
       }
       body.fuman-light-theme #warrant-flow-view .page-header {
         background: #ffffff !important;
-        border: 1px solid #dbe4ee !important;
-        box-shadow: 0 8px 20px rgba(15, 23, 42, 0.05) !important;
+        border: 1px solid #e5e7eb !important;
+        border-top: 3px solid #d71920 !important;
+        box-shadow: 0 6px 16px rgba(15, 23, 42, 0.04) !important;
       }
       body.fuman-light-theme #warrant-flow-view .page-header h1,
       body.fuman-light-theme #warrant-flow-view .page-header h1 *,
@@ -318,10 +319,11 @@ function installThemeToggle() {
       }
       body.fuman-light-theme #warrant-flow-view .swing-topbar {
         background: #ffffff !important;
-        border: 1px solid #dbe4ee !important;
-        border-radius: 12px !important;
+        border: 1px solid #e5e7eb !important;
+        border-left: 4px solid #d71920 !important;
+        border-radius: 8px !important;
         padding: 14px 16px !important;
-        box-shadow: 0 8px 20px rgba(15, 23, 42, 0.05) !important;
+        box-shadow: 0 6px 16px rgba(15, 23, 42, 0.04) !important;
       }
       body.fuman-light-theme #warrant-flow-view .swing-topbar h2,
       body.fuman-light-theme #warrant-flow-view .swing-topbar h2 *,
@@ -331,18 +333,18 @@ function installThemeToggle() {
       }
       body.fuman-light-theme #warrant-flow-view .swing-tabs {
         background: #ffffff !important;
-        border-color: #dbe4ee !important;
+        border-color: #e5e7eb !important;
       }
       body.fuman-light-theme #warrant-flow-view .swing-panel {
         background: #ffffff !important;
-        border-color: #dbe4ee !important;
-        box-shadow: 0 10px 24px rgba(15, 23, 42, 0.05) !important;
+        border-color: #e5e7eb !important;
+        box-shadow: 0 8px 18px rgba(15, 23, 42, 0.04) !important;
         overflow: hidden !important;
       }
       body.fuman-light-theme #warrant-flow-view .swing-tabs button.active {
-        background: #eef2f7 !important;
-        color: #0f172a !important;
-        border-color: #cbd5e1 !important;
+        background: #fff1f2 !important;
+        color: #be123c !important;
+        border-color: #fecdd3 !important;
       }
       body.fuman-light-theme #warrant-flow-view .warrant-search-box,
       body.fuman-light-theme #warrant-flow-view .warrant-search-row {
@@ -354,14 +356,14 @@ function installThemeToggle() {
         border-color: #cbd5e1 !important;
       }
       body.fuman-light-theme #warrant-flow-view #warrant-flow-refresh {
-        background: #475569 !important;
+        background: #d71920 !important;
         color: #ffffff !important;
-        border-color: #475569 !important;
+        border-color: #d71920 !important;
       }
       body.fuman-light-theme #warrant-flow-view .swing-table th {
-        background: #f1f5f9 !important;
-        color: #0f172a !important;
-        border-color: #dbe4ee !important;
+        background: #d71920 !important;
+        color: #ffffff !important;
+        border-color: #c8171d !important;
       }
       body.fuman-light-theme #warrant-flow-view .swing-table td,
       body.fuman-light-theme #warrant-flow-view .swing-table td *,
@@ -372,29 +374,29 @@ function installThemeToggle() {
         background: #ffffff !important;
       }
       body.fuman-light-theme #warrant-flow-view .swing-table tbody tr:nth-child(even) {
-        background: #f8fafc !important;
+        background: #fafafa !important;
       }
       body.fuman-light-theme #warrant-flow-view .swing-table tbody tr:hover {
-        background: #eef6ff !important;
+        background: #fff7ed !important;
       }
       body.fuman-light-theme #warrant-flow-view .swing-table .price {
         color: #e11d48 !important;
       }
       body.fuman-light-theme #warrant-flow-view .swing-score,
       body.fuman-light-theme #warrant-flow-view .rank-badge {
-        background: #fb7185 !important;
+        background: #d71920 !important;
         color: #ffffff !important;
-        border-color: #fb7185 !important;
+        border-color: #d71920 !important;
       }
       body.fuman-light-theme #warrant-flow-view .swing-stage {
-        background: #fff1f2 !important;
-        color: #be123c !important;
-        border-color: #fecdd3 !important;
+        background: #fff7d6 !important;
+        color: #854d0e !important;
+        border-color: #fde68a !important;
       }
       body.fuman-light-theme #warrant-flow-view .terminal-pagination,
       body.fuman-light-theme #warrant-flow-view .warrant-pagination {
-        background: #f8fafc !important;
-        border: 1px solid #dbe4ee !important;
+        background: #ffffff !important;
+        border: 1px solid #e5e7eb !important;
         border-top: 0 !important;
         color: #0f172a !important;
       }
@@ -406,9 +408,9 @@ function installThemeToggle() {
       }
       body.fuman-light-theme #warrant-flow-view .terminal-pagination button.active,
       body.fuman-light-theme #warrant-flow-view .warrant-pagination button.active {
-        background: #ffedd5 !important;
-        color: #c2410c !important;
-        border-color: #fdba74 !important;
+        background: #d71920 !important;
+        color: #ffffff !important;
+        border-color: #d71920 !important;
       }
       body.fuman-light-theme #chip-trade-view {
         background: #f6f9fd !important;
