@@ -2927,6 +2927,20 @@ function getStrategy3CachedVolumeRatio(code) {
   return cleanNumber(item.volumeRatio || item.VolumeRatio || item.volume_ratio || item["量比"]);
 }
 
+function requestRealtimeRadarVolumeRatio(stock) {
+  const code = String(stock?.code || "").replace(/\D/g, "").slice(0, 4);
+  if (!/^\d{4}$/.test(code) || realtimeRadarHistoryPromise || realtimeRadarVolumeRatioRequestedCodes.has(code) || hasStrategyHistoryRows(code)) return;
+  realtimeRadarVolumeRatioRequestedCodes.add(code);
+  loadRealtimeRadarHistory([{ ...stock, code }], { force: true }).then((loaded) => {
+    if (!loaded) {
+      realtimeRadarVolumeRatioRequestedCodes.delete(code);
+      return;
+    }
+    enrichRealtimeRadarSnapshotRows(realtimeRadarLastRows);
+    if (isViewActive("realtime-radar")) renderRealtimeRadar();
+  });
+}
+
 function radarVolumeRatio(stock) {
   const cachedRatio = cleanNumber(stock.volumeRatio || stock.VolumeRatio || stock.volume_ratio || stock["量比"]) || getStrategy3CachedVolumeRatio(stock.code);
   if (cachedRatio > 0) return cachedRatio;
@@ -3471,6 +3485,10 @@ function renderRealtimeRadar() {
     const tags = radarTechnicalTags(stock).map((tag) => `<span>${tag}</span>`).join("");
     const instTags = radarChipTags(stock).map((tag) => `<span>${tag}</span>`).join("");
     const volumeRatio = cleanNumber(stock.volumeRatio) || radarVolumeRatio(stock);
+    if (!volumeRatio) requestRealtimeRadarVolumeRatio(stock);
+    const volumeRatioText = volumeRatio
+      ? formatNumber(volumeRatio, 2)
+      : realtimeRadarVolumeRatioRequestedCodes.has(String(stock.code || "")) ? "計算中" : "--";
     const eventTime = cleanNumber(stock.radarUpdatedAt)
       ? new Date(cleanNumber(stock.radarUpdatedAt)).toLocaleTimeString("zh-TW", { hour12: false, hour: "2-digit", minute: "2-digit" })
       : now.slice(0, 5);
@@ -3479,7 +3497,7 @@ function renderRealtimeRadar() {
         <div class="radar-jump"><strong>${eventTime}</strong></div>
         <div class="radar-signal-main">
           <div class="radar-signal-name">${stock.name}<small>${stock.code}</small></div>
-          <div class="radar-signal-meta">成交金額 ${radarMoney(stock.value)} · 量比 ${volumeRatio ? formatNumber(volumeRatio, 2) : "--"} · 分數 ${Math.round(stock.score)}</div>
+          <div class="radar-signal-meta">成交金額 ${radarMoney(stock.value)} · 量比 ${volumeRatioText} · 分數 ${Math.round(stock.score)}</div>
           <div class="radar-signal-chips">${radarDetailChips(stock)}</div>
         </div>
         <div class="radar-signal-price">
@@ -3736,6 +3754,7 @@ let realtimeRadarRefreshLoading = false;
 let realtimeRadarNeedsFreshScan = true;
 let realtimeRadarHistoryPromise = null;
 let realtimeRadarHistoryLastAt = 0;
+const realtimeRadarVolumeRatioRequestedCodes = new Set();
 const REALTIME_RADAR_LAST_CACHE_KEY = "fuman_realtime_radar_last_rows_v1";
 const REALTIME_RADAR_HISTORY_TARGET_LIMIT = 72;
 const REALTIME_RADAR_HISTORY_BATCH_SIZE = 12;
@@ -3833,6 +3852,9 @@ const MARKET_REFRESH_HIDDEN_MS = 90 * 1000;
 const MARKET_HEATMAP_CLOSED_MS = 180 * 1000;
 const MARKET_POLL_TICK_MS = 5 * 1000;
 const MARKET_DOM_REFRESH_MS = 60 * 1000;
+const WATCHLIST_REFRESH_LIVE_MS = 30 * 1000;
+const WATCHLIST_REFRESH_CLOSED_MS = 120 * 1000;
+const WATCHLIST_REFRESH_HIDDEN_MS = 180 * 1000;
 let selectedStrategyIds = new Set();
 let strategyMode = "any";
 let strategyKeyword = "";
@@ -9539,9 +9561,8 @@ function getMarketAiHotGroups(hotStocks) {
   const groups = {
     all: hotStocks,
     momentum: hotStocks.filter((stock) => stock.buckets.momentum).sort((a, b) => b.score - a.score || b.capitalFlowScore - a.capitalFlowScore || b.momentumScore - a.momentumScore),
-    legal: sortMarketAiLegalStocks(hotStocks.filter((stock) => stock.buckets.legal && cleanNumber(stock.percent) > 0 && !stock.buckets.risk)),
-    intraday: sortMarketAiIntradayStocks(hotStocks.filter((stock) => stock.buckets.intraday && !stock.buckets.risk)),
-    risk: hotStocks.filter((stock) => stock.buckets.risk).sort((a, b) => b.riskScore - a.riskScore || b.capitalFlowScore - a.capitalFlowScore || b.score - a.score),
+    legal: sortMarketAiLegalStocks(hotStocks.filter((stock) => stock.buckets.legal && cleanNumber(stock.percent) > 0)),
+    intraday: sortMarketAiIntradayStocks(hotStocks.filter((stock) => stock.buckets.intraday)),
   };
   return groups;
 }
@@ -9585,7 +9606,6 @@ function getMarketAiFilterMeta(groups) {
     { key: "momentum", label: "動能強", count: groups.momentum.length },
     { key: "legal", label: "法人買超", count: groups.legal.length },
     { key: "intraday", label: "當沖熱", count: groups.intraday.length },
-    { key: "risk", label: "風險高", count: groups.risk.length },
   ];
 }
 
@@ -9602,8 +9622,7 @@ function buildMarketAiData() {
   const weakSectors = [...sectors].sort((a, b) => a.pct - b.pct).slice(0, 4);
   const classifiedStocks = stocks
     .filter((stock) => cleanNumber(stock.percent) > 0 && cleanNumber(stock.value) > 0)
-    .map((stock) => classifyMarketAiStock(stock, sectors))
-    .filter((stock) => cleanNumber(stock.percent) > 0 && !stock.buckets.risk);
+    .map((stock) => classifyMarketAiStock(stock, sectors));
   const hotStocks = classifiedStocks
     .sort((a, b) => b.score - a.score || cleanNumber(b.percent) - cleanNumber(a.percent) || cleanNumber(b.value) - cleanNumber(a.value))
     .slice(0, 40);
@@ -9633,7 +9652,7 @@ function renderMarketAiPanel() {
     return;
   }
   if (!Object.keys(institutionData).length) deferUiWork(ensureMarketAiInstitutionData, 100);
-  const priorityStocks = sortMarketAiPriorityStocks(data.hotStocks.filter((stock) => cleanNumber(stock.percent) >= 1 && !stock.buckets.risk));
+  const priorityStocks = sortMarketAiPriorityStocks(data.hotStocks.filter((stock) => cleanNumber(stock.percent) >= 1));
   const topHot = priorityStocks[0] || data.hotStocks[0];
   const filterMeta = getMarketAiFilterMeta(data.hotGroups);
   const activeFilterLabel = filterMeta.find((item) => item.key === marketAiHotFilter)?.label || "全部";
@@ -9649,7 +9668,7 @@ function renderMarketAiPanel() {
   const operate = data.bias === "多方偏強"
     ? ["順勢追蹤", "只看強族群前 3 名", "跌破量價支撐先降槓桿"]
     : data.bias === "空方壓制"
-    ? ["降低追價", "只做逆勢強股", "風險高標的先排除"]
+    ? ["降低追價", "只做逆勢強股", "等待反彈量價確認"]
     : ["等待方向", "縮小部位", "觀察族群是否擴散"];
   marketAiPanel.innerHTML = `
     <section class="market-ai-summary">
