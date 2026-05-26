@@ -1369,6 +1369,15 @@ function installThemeToggle() {
         color: #334155 !important;
         border-color: #cbd5e1 !important;
       }
+      body.fuman-light-theme #strategy-view .intraday-state,
+      body.fuman-light-theme #strategy-view .intraday-state.go,
+      body.fuman-light-theme #strategy-view .intraday-state.wait,
+      body.fuman-light-theme #strategy-view .intraday-state.watch {
+        background: #ffffff !important;
+        color: #111827 !important;
+        border: 1px solid #cbd5e1 !important;
+        box-shadow: none !important;
+      }
       body.fuman-light-theme #strategy-view .strategy-nav.active,
       body.fuman-light-theme #strategy-view [data-strategy-mode].active,
       body.fuman-light-theme #strategy-view [data-swing-filter].active,
