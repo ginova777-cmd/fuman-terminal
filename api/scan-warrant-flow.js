@@ -283,6 +283,7 @@ async function fetchUnderlyingQuotes(codes) {
           close,
           percent: ((close - prevClose) / prevClose) * 100,
           tradeVolume: firstPositive(item.v, item.tv),
+          source: `MIS ${item.ex || ""}`.trim(),
         });
       }
     } catch {}
@@ -290,6 +291,57 @@ async function fetchUnderlyingQuotes(codes) {
   return byCode;
 }
 
+function normalizeTwseStockQuote(row) {
+  const code = String(row.Code || row.StockNo || row["證券代號"] || "").trim();
+  const name = String(row.Name || row.StockName || row["證券名稱"] || "").trim();
+  const close = cleanNumber(row.ClosingPrice || row.Close || row["收盤價"] || row["收盤"]);
+  const change = cleanNumber(row.Change || row["漲跌價差"] || row["漲跌"]);
+  const volume = cleanNumber(row.TradeVolume || row["成交股數"] || row["成交股數(股)"]);
+  if (!/^\d{4}$/.test(code) || !close) return null;
+  const prevClose = close - change;
+  return { code, name, close, percent: prevClose > 0 ? (change / prevClose) * 100 : 0, tradeVolume: volume, source: "TWSE STOCK_DAY_ALL" };
+}
+
+function normalizeTpexStockQuote(row) {
+  const code = String(getValue(row, ["代號", "證券代號", "SecuritiesCompanyCode", "Code"])).trim();
+  const name = String(getValue(row, ["名稱", "證券名稱", "CompanyName", "Name"])).trim();
+  const close = cleanNumber(getValue(row, ["收盤", "收盤價", "Close", "ClosingPrice"]));
+  const change = cleanNumber(getValue(row, ["漲跌", "漲跌價差", "Change"]));
+  const volume = cleanNumber(getValue(row, ["成交股數", "成交數量", "成交張數", "TradingShares", "Volume"]));
+  if (!/^\d{4}$/.test(code) || !close) return null;
+  const prevClose = close - change;
+  return { code, name, close, percent: prevClose > 0 ? (change / prevClose) * 100 : 0, tradeVolume: volume, source: "TPEX daily_close_quotes" };
+}
+
+async function fetchOfficialUnderlyingQuotes(codes) {
+  const wanted = new Set([...new Set(codes)].filter((code) => /^\d{4}$/.test(code)));
+  const byCode = new Map();
+  const errors = [];
+  try {
+    const twseRows = await fetchJson("https://openapi.twse.com.tw/v1/exchangeReport/STOCK_DAY_ALL", 25000);
+    for (const quote of (Array.isArray(twseRows) ? twseRows : []).map(normalizeTwseStockQuote).filter(Boolean)) {
+      if (!wanted.size || wanted.has(quote.code)) byCode.set(quote.code, quote);
+    }
+  } catch (error) {
+    errors.push(`TWSE 官方日收盤: ${error.message}`);
+  }
+  for (const date of recentTradingDates(5)) {
+    const tradeDate = formatTpexDate(date);
+    const url = `https://www.tpex.org.tw/web/stock/aftertrading/daily_close_quotes/stk_quote_result.php?l=zh-tw&o=json&d=${encodeURIComponent(tradeDate)}&s=0,asc,0`;
+    try {
+      const payload = await fetchJson(url, 25000);
+      const table = (payload.tables || [payload]).find((entry) => (entry.data || entry.aaData || []).length);
+      const quotes = tableRecords(table).map(normalizeTpexStockQuote).filter(Boolean);
+      if (quotes.length) {
+        for (const quote of quotes) if (!wanted.size || wanted.has(quote.code)) byCode.set(quote.code, quote);
+        break;
+      }
+    } catch (error) {
+      errors.push(`TPEX 官方日收盤 ${tradeDate}: ${error.message}`);
+    }
+  }
+  return { byCode, errors };
+}
 function recentTradingDates(limit = 10) {
   const dates = [];
   const date = new Date();
@@ -414,32 +466,51 @@ async function fetchWarrants() {
     if (rows.length) errors.push("MOPS 權證成交檔為空，已改用 TWSE/TPEX 收盤行情備援。");
   }
   const basics = await fetchWarrantBasics();
+  let missingBasics = 0;
   const enriched = rows.map((row) => {
-    const basic = basics.byCode.get(row.code) || {};
+    const basic = basics.byCode.get(row.code);
+    if (!basic?.underlyingCode || !basic?.underlyingName) {
+      missingBasics += 1;
+      return null;
+    }
     return {
       ...row,
       ...basic,
       type: basic.type || row.type,
-      underlyingName: basic.underlyingName || row.underlyingName,
-      underlyingCode: basic.underlyingCode || row.underlyingCode || "",
+      underlyingName: basic.underlyingName,
+      underlyingCode: basic.underlyingCode,
+      basicVerified: true,
+      basicSource: "TWSE/TPEX warrant basics",
     };
-  });
-  const quotes = await fetchUnderlyingQuotes(enriched.map((row) => row.underlyingCode).filter(Boolean));
-  enriched.forEach((row) => {
-    const quote = quotes.get(row.underlyingCode);
-    if (!quote) return;
+  }).filter(Boolean);
+
+  const officialQuotes = await fetchOfficialUnderlyingQuotes(enriched.map((row) => row.underlyingCode));
+  const misQuotes = await fetchUnderlyingQuotes(enriched.map((row) => row.underlyingCode));
+  let missingQuotes = 0;
+  const verifiedRows = enriched.map((row) => {
+    const quote = officialQuotes.byCode.get(row.underlyingCode) || misQuotes.get(row.underlyingCode);
+    if (!quote) {
+      missingQuotes += 1;
+      return null;
+    }
     row.underlyingClose = quote.close;
     row.underlyingPercent = quote.percent;
     row.underlyingVolume = quote.tradeVolume;
+    row.priceVerified = true;
+    row.quoteSource = quote.source || "official/MIS quote";
     if (row.strike) {
       row.moneynessPct = row.type === "put"
         ? ((row.strike - quote.close) / row.strike) * 100
         : ((quote.close - row.strike) / row.strike) * 100;
       row.isAtMoney = row.moneynessPct >= -5 && row.moneynessPct <= 20;
     }
-  });
-  return { rows: enriched, errors: [...errors, ...basics.errors] };
-}
+    return row;
+  }).filter(Boolean);
+
+  const verificationErrors = [];
+  if (missingBasics) verificationErrors.push(`已剔除 ${missingBasics} 筆無權證基本資料對照的權證。`);
+  if (missingQuotes) verificationErrors.push(`已剔除 ${missingQuotes} 筆找不到官方標的收盤價的權證。`);
+  return { rows: verifiedRows, errors: [...errors, ...basics.errors, ...officialQuotes.errors, ...verificationErrors] };}
 
 function normalizeSearchKeyword(value) {
   return String(value ?? "").trim().toLowerCase();
@@ -524,6 +595,11 @@ function aggregate(rows, keyword = "") {
         strike: warrant.strike || 0,
         daysToExpiry: warrant.daysToExpiry ?? null,
         moneynessPct: Number.isFinite(Number(warrant.moneynessPct)) ? Number(Number(warrant.moneynessPct).toFixed(2)) : null,
+        underlyingCode: warrant.underlyingCode,
+        underlyingName: warrant.underlyingName,
+        basicVerified: Boolean(warrant.basicVerified),
+        priceVerified: Boolean(warrant.priceVerified),
+        quoteSource: warrant.quoteSource || "",
       }));
     const totalValue = item.callValue + item.putValue;
     const ratio = item.putValue ? item.callValue / item.putValue : item.callValue ? 99 : 0;
@@ -565,6 +641,9 @@ function aggregate(rows, keyword = "") {
       tradeDate: item.tradeDate,
       underlyingClose: item.underlyingClose,
       underlyingPercent: item.underlyingPercent,
+      priceVerified: true,
+      basicVerified: true,
+      quoteSource: item.topWarrants[0]?.quoteSource || "",
       callValue: item.callValue,
       putValue: item.putValue,
       totalValue,
@@ -645,3 +724,4 @@ module.exports = async function handler(request, response) {
     response.status(502).json({ ok: false, error: error.message, matches: [] });
   }
 };
+
