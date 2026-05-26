@@ -9172,6 +9172,7 @@ labelChipTradeMode();
 installMobileWatchlistNavOrder();
 installRealtimeRadarView();
 applyStaticTitleIcons();
+installMarketTabs();
 deferUiWork(() => loadWorkflowRunStatus().catch(() => {}), 2000);
 ensureMobileAutoOrganizeButton();
 if (isViewActive("market")) {
@@ -9192,6 +9193,32 @@ if (brandRefresh) {
   });
 }
 stockSearch?.addEventListener("input", (e)=>searchStocks(e.target.value));
+document.addEventListener("click", (event) => {
+  const modeButton = event.target.closest("[data-market-mode]");
+  if (modeButton) {
+    applyMarketMode(modeButton.dataset.marketMode);
+    return;
+  }
+  const analyzeButton = event.target.closest("[data-ai-stock-code]");
+  if (analyzeButton) {
+    const code = analyzeButton.dataset.aiStockCode || "";
+    if (stockSearch) stockSearch.value = code;
+    applyMarketMode("overview");
+    searchStocks(code);
+    return;
+  }
+  const watchButton = event.target.closest("[data-ai-watch-code]");
+  if (!watchButton || typeof getWatchlist !== "function" || typeof saveWatchlist !== "function") return;
+  const code = watchButton.dataset.aiWatchCode || "";
+  const name = watchButton.dataset.aiWatchName || code;
+  if (!code) return;
+  const list = getWatchlist();
+  if (!list.some((item) => item.code === code)) {
+    list.push({ code, name });
+    saveWatchlist(list);
+  }
+  watchButton.textContent = "已加入";
+});
 viewLinks.forEach((link)=>{
   link.addEventListener("click",(e)=>{
     e.preventDefault();
