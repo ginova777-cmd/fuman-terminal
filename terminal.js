@@ -8241,6 +8241,61 @@ function getMarketAiTags(stock, score, sectors) {
   return tags.slice(0, 4);
 }
 
+function classifyMarketAiStock(stock, sectors) {
+  const code = String(stock.code || "");
+  const pct = cleanNumber(stock.percent);
+  const valueYi = cleanNumber(stock.value) / 100000000;
+  const volume = cleanNumber(stock.tradeVolume);
+  const industry = SECTOR_MAP[code] || "其他";
+  const sector = sectors.find((item) => item.name === industry);
+  const inst = institutionData[code] || {};
+  const legal = Number(inst.total) || Number(inst.foreign || 0) + Number(inst.trust || 0) + Number(inst.dealer || 0);
+  const score = scoreMarketAiStock(stock, sectors);
+  const momentumScore = Math.round(clamp(pct * 10 + valueYi * 1.4 + (sector?.pct || 0) * 8, 0, 100));
+  const intradayScore = Math.round(clamp(pct * 8 + volume / 300 + valueYi * 1.2, 0, 100));
+  const legalScore = Math.round(clamp(Math.abs(legal) / 900 + (legal > 0 ? 18 : 0), 0, 100));
+  const riskScore = Math.round(clamp(Math.max(0, pct - 7.5) * 18 + Math.max(0, -pct - 3) * 14 + (valueYi >= 20 ? 8 : 0), 0, 100));
+  return {
+    ...stock,
+    score,
+    industry,
+    legal,
+    momentumScore,
+    intradayScore,
+    legalScore,
+    riskScore,
+    tags: getMarketAiTags(stock, score, sectors),
+    buckets: {
+      all: true,
+      momentum: momentumScore >= 45 || pct >= 5,
+      legal: legal > 0,
+      intraday: intradayScore >= 40 || (volume >= 2000 && pct >= 2),
+      risk: riskScore >= 35 || pct >= 8.5 || pct <= -3,
+    },
+  };
+}
+
+function getMarketAiHotGroups(hotStocks) {
+  const groups = {
+    all: hotStocks,
+    momentum: hotStocks.filter((stock) => stock.buckets.momentum).sort((a, b) => b.momentumScore - a.momentumScore || b.score - a.score),
+    legal: hotStocks.filter((stock) => stock.buckets.legal).sort((a, b) => b.legalScore - a.legalScore || b.score - a.score),
+    intraday: hotStocks.filter((stock) => stock.buckets.intraday).sort((a, b) => b.intradayScore - a.intradayScore || b.score - a.score),
+    risk: hotStocks.filter((stock) => stock.buckets.risk).sort((a, b) => b.riskScore - a.riskScore || b.score - a.score),
+  };
+  return groups;
+}
+
+function getMarketAiFilterMeta(groups) {
+  return [
+    { key: "all", label: "全部", count: groups.all.length },
+    { key: "momentum", label: "動能強", count: groups.momentum.length },
+    { key: "legal", label: "法人買超", count: groups.legal.length },
+    { key: "intraday", label: "當沖熱", count: groups.intraday.length },
+    { key: "risk", label: "風險高", count: groups.risk.length },
+  ];
+}
+
 function buildMarketAiData() {
   const stocks = latestStocks.length ? latestStocks : [];
   const sample = stocks.length;
@@ -8254,26 +8309,26 @@ function buildMarketAiData() {
   const weakSectors = [...sectors].sort((a, b) => a.pct - b.pct).slice(0, 4);
   const hotStocks = stocks
     .filter((stock) => cleanNumber(stock.percent) > 0 && cleanNumber(stock.value) > 0)
-    .map((stock) => {
-      const score = scoreMarketAiStock(stock, sectors);
-      return { ...stock, score, industry: SECTOR_MAP[String(stock.code || "")] || "其他", tags: getMarketAiTags(stock, score, sectors) };
-    })
+    .map((stock) => classifyMarketAiStock(stock, sectors))
     .sort((a, b) => b.score - a.score || cleanNumber(b.value) - cleanNumber(a.value))
-    .slice(0, 10);
+    .slice(0, 40);
+  const hotGroups = getMarketAiHotGroups(hotStocks);
+  if (!hotGroups[marketAiHotFilter]) marketAiHotFilter = "all";
+  const visibleHotStocks = hotGroups[marketAiHotFilter].slice(0, 10);
   const riskStocks = stocks
     .filter((stock) => cleanNumber(stock.percent) <= -3 || cleanNumber(stock.percent) >= 8.5)
     .sort((a, b) => Math.abs(cleanNumber(b.percent)) - Math.abs(cleanNumber(a.percent)))
     .slice(0, 5);
   const bias = upRatio >= 55 ? "多方偏強" : upRatio <= 45 ? "空方壓制" : "震盪分歧";
   const confidence = sample >= 1000 ? (Math.min(92, 58 + Math.abs(upRatio - 50) * 1.4)).toFixed(0) : "中";
-  return { stocks, sample, upRows, downRows, flatRows, upRatio, totalValue, sectors, strongSectors, weakSectors, hotStocks, riskStocks, bias, confidence };
+  return { stocks, sample, upRows, downRows, flatRows, upRatio, totalValue, sectors, strongSectors, weakSectors, hotStocks, hotGroups, visibleHotStocks, riskStocks, bias, confidence };
 }
 
 function renderMarketAiPanel() {
   installMarketTabs();
   if (!marketAiPanel) return;
   const data = buildMarketAiData();
-  const signature = `${data.sample}:${data.upRows.length}:${data.downRows.length}:${data.hotStocks.map((stock) => `${stock.code}:${stock.score}:${cleanNumber(stock.percent).toFixed(2)}`).join("|")}`;
+  const signature = `${marketAiHotFilter}:${data.sample}:${data.upRows.length}:${data.downRows.length}:${data.hotStocks.map((stock) => `${stock.code}:${stock.score}:${cleanNumber(stock.percent).toFixed(2)}`).join("|")}`;
   if (signature === marketAiLastSignature && marketAiPanel.innerHTML) return;
   marketAiLastSignature = signature;
   if (!data.sample) {
@@ -8282,6 +8337,8 @@ function renderMarketAiPanel() {
     return;
   }
   const topHot = data.hotStocks[0];
+  const filterMeta = getMarketAiFilterMeta(data.hotGroups);
+  const activeFilterLabel = filterMeta.find((item) => item.key === marketAiHotFilter)?.label || "全部";
   const strongNames = data.strongSectors.map((sector) => sector.name).join("、") || "尚未形成明顯主流";
   const weakNames = data.weakSectors.filter((sector) => sector.pct < 0).map((sector) => sector.name).join("、") || "暫無明顯弱勢族群";
   const riskNames = data.riskStocks.map((stock) => `${stock.code} ${stock.name}`).join("、") || "暫無極端標的";
@@ -8360,8 +8417,16 @@ function renderMarketAiPanel() {
     <section class="market-ai-block">
       <h3>熱門觀察股</h3>
       <small>依綜合分數與成交量排序</small>
+      <div class="market-ai-filterbar">
+        ${filterMeta.map((item) => `
+          <button type="button" class="${item.key === marketAiHotFilter ? "active" : ""}" data-ai-hot-filter="${item.key}">
+            ${item.label}<em>${item.count}</em>
+          </button>
+        `).join("")}
+      </div>
+      <div class="market-ai-sort-note">目前排序 <b>${escapeAttr(activeFilterLabel)}</b>，依綜合分數與入選策略排序，適合快速掌握今日熱門觀察股。</div>
       <div class="market-ai-hot">
-        ${data.hotStocks.map((stock, index) => `
+        ${data.visibleHotStocks.map((stock, index) => `
           <article class="market-ai-stock-row">
             <div class="market-ai-rank">#${index + 1}</div>
             <div>
@@ -8383,7 +8448,7 @@ function renderMarketAiPanel() {
               <button type="button" data-ai-watch-code="${escapeAttr(stock.code)}" data-ai-watch-name="${escapeAttr(stock.name)}">加入自選</button>
             </div>
           </article>
-        `).join("") || `<div class="empty-state">目前沒有符合熱門觀察條件的股票。</div>`}
+        `).join("") || `<div class="empty-state">目前沒有符合「${escapeAttr(activeFilterLabel)}」的股票。</div>`}
       </div>
     </section>
   `;
@@ -9326,6 +9391,13 @@ document.addEventListener("click", (event) => {
   const modeButton = event.target.closest("[data-market-mode]");
   if (modeButton) {
     applyMarketMode(modeButton.dataset.marketMode);
+    return;
+  }
+  const hotFilterButton = event.target.closest("[data-ai-hot-filter]");
+  if (hotFilterButton) {
+    marketAiHotFilter = hotFilterButton.dataset.aiHotFilter || "all";
+    marketAiLastSignature = "";
+    renderMarketAiPanel();
     return;
   }
   const analyzeButton = event.target.closest("[data-ai-stock-code]");
