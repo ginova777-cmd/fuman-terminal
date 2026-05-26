@@ -9224,8 +9224,7 @@ function normalizeInstitutionLots(val) {
 }
 
 function formatInstitutionLots(val) {
-  if (val === undefined || val === null) return "--";
-  const n = Math.trunc(cleanNumber(val));
+  const n = normalizeInstitutionLots(val);
   if (!Number.isFinite(n)) return "--";
   const sign = n >= 0 ? "+" : "";
   return `${sign}${n.toLocaleString("zh-TW")} 張`;
@@ -9263,10 +9262,6 @@ function renderSectorModalRows(sector, stocks) {
         ? cleanNumber(rawForeign) + cleanNumber(rawTrust) + cleanNumber(rawDealer)
         : null
     );
-    const foreign = normalizeInstitutionLots(rawForeign);
-    const trust = normalizeInstitutionLots(rawTrust);
-    const dealer = normalizeInstitutionLots(rawDealer);
-    const total = normalizeInstitutionLots(rawTotal);
     const market = /otc|tpex|上櫃/i.test(String(s.exchange || s.market || "")) ? "上櫃" : "上市";
     return `
       <tr style="border-bottom:1px solid #161925; ${i % 2 === 0 ? "" : "background:#0c0f1a"}">
@@ -9279,10 +9274,10 @@ function renderSectorModalRows(sector, stocks) {
         <td class="${pctClass}" style="padding:10px 12px; text-align:right;">${pctSign}${formatNumber(s.pct || 0, 2)}%</td>
         <td style="padding:10px 12px; text-align:right; color:#aaa;">${s.value ? (s.value/100000000).toFixed(1) : "0.0"} 億</td>
         <td style="padding:10px 12px; text-align:right; color:#aaa;">${s.volume ? s.volume.toLocaleString("zh-TW", { maximumFractionDigits: 0 }) : "0"} 張</td>
-        <td class="${getSectorValueToneClass(foreign, "sector-inst")}" style="padding:10px 12px; text-align:right;">${formatInstitutionLots(foreign)}</td>
-        <td class="${getSectorValueToneClass(trust, "sector-inst")}" style="padding:10px 12px; text-align:right;">${formatInstitutionLots(trust)}</td>
-        <td class="${getSectorValueToneClass(dealer, "sector-inst")}" style="padding:10px 12px; text-align:right;">${formatInstitutionLots(dealer)}</td>
-        <td class="${getSectorValueToneClass(total, "sector-inst")}" style="padding:10px 16px; text-align:right;">${formatInstitutionLots(total)}</td>
+        <td class="${getSectorValueToneClass(rawForeign, "sector-inst")}" style="padding:10px 12px; text-align:right;">${formatInstitutionLots(rawForeign)}</td>
+        <td class="${getSectorValueToneClass(rawTrust, "sector-inst")}" style="padding:10px 12px; text-align:right;">${formatInstitutionLots(rawTrust)}</td>
+        <td class="${getSectorValueToneClass(rawDealer, "sector-inst")}" style="padding:10px 12px; text-align:right;">${formatInstitutionLots(rawDealer)}</td>
+        <td class="${getSectorValueToneClass(rawTotal, "sector-inst")}" style="padding:10px 16px; text-align:right;">${formatInstitutionLots(rawTotal)}</td>
       </tr>
     `;
   }).join("");
