@@ -1129,30 +1129,14 @@ function installThemeToggle() {
         z-index: 10000;
         display: inline-flex;
         align-items: center;
-        gap: 10px;
-        padding: 5px 6px 5px 10px;
+        justify-content: center;
+        padding: 5px;
         border: 1px solid rgba(148, 163, 184, 0.22);
         border-radius: 10px;
         background: rgba(15, 23, 42, 0.72);
         color: #9fb3d9;
         box-shadow: 0 14px 34px rgba(0, 0, 0, 0.18);
         backdrop-filter: blur(10px);
-      }
-      .global-refresh-widget span {
-        display: inline-flex;
-        align-items: center;
-        gap: 7px;
-        font-size: 13px;
-        font-weight: 700;
-        white-space: nowrap;
-      }
-      .global-refresh-widget span::before {
-        content: "";
-        width: 6px;
-        height: 6px;
-        border-radius: 999px;
-        background: #86efac;
-        box-shadow: 0 0 0 3px rgba(134, 239, 172, 0.14);
       }
       .global-refresh-widget button {
         width: 34px;
@@ -1463,10 +1447,6 @@ function installThemeToggle() {
         .global-refresh-widget {
           top: 14px;
           right: 62px;
-          gap: 7px;
-        }
-        .global-refresh-widget span {
-          font-size: 12px;
         }
         .global-refresh-widget button {
           width: 32px;
@@ -1503,7 +1483,6 @@ function installGlobalRefreshWidget() {
   widget.id = "global-refresh-widget";
   widget.className = "global-refresh-widget";
   widget.innerHTML = `
-    <span data-global-refresh-time>更新 --:--:--</span>
     <button type="button" data-global-refresh title="重新整理" aria-label="重新整理">↻</button>
   `;
   document.body.appendChild(widget);
@@ -1522,12 +1501,6 @@ function arrangeWatchlistSearch() {
   row.appendChild(input);
   row.appendChild(button);
   header.insertAdjacentElement("afterend", row);
-}
-
-function updateGlobalRefreshTime(timeText = "") {
-  const target = document.querySelector("[data-global-refresh-time]");
-  if (!target) return;
-  target.textContent = `更新 ${timeText || new Date().toLocaleTimeString("zh-TW", { hour12: false })}`;
 }
 
 function handleGlobalRefresh() {
@@ -9462,11 +9435,23 @@ function getMarketAiHotGroups(hotStocks) {
   const groups = {
     all: hotStocks,
     momentum: hotStocks.filter((stock) => stock.buckets.momentum).sort((a, b) => b.score - a.score || b.capitalFlowScore - a.capitalFlowScore || b.momentumScore - a.momentumScore),
-    legal: hotStocks.filter((stock) => stock.buckets.legal).sort((a, b) => b.legalScore - a.legalScore || b.score - a.score),
+    legal: sortMarketAiLegalStocks(hotStocks.filter((stock) => stock.buckets.legal && cleanNumber(stock.percent) > 0 && !stock.buckets.risk)),
     intraday: hotStocks.filter((stock) => stock.buckets.intraday).sort((a, b) => b.intradayScore - a.intradayScore || b.score - a.score),
     risk: hotStocks.filter((stock) => stock.buckets.risk).sort((a, b) => b.riskScore - a.riskScore || b.score - a.score),
   };
   return groups;
+}
+
+function sortMarketAiLegalStocks(stocks = []) {
+  return [...stocks].sort((a, b) =>
+    (b.tags?.length || 0) - (a.tags?.length || 0) ||
+    cleanNumber(b.capitalFlowScore) - cleanNumber(a.capitalFlowScore) ||
+    cleanNumber(b.intradayScore) - cleanNumber(a.intradayScore) ||
+    cleanNumber(b.momentumScore) - cleanNumber(a.momentumScore) ||
+    cleanNumber(b.score) - cleanNumber(a.score) ||
+    cleanNumber(b.value) - cleanNumber(a.value) ||
+    cleanNumber(b.percent) - cleanNumber(a.percent)
+  );
 }
 
 function sortMarketAiPriorityStocks(stocks = []) {
@@ -9534,6 +9519,9 @@ function renderMarketAiPanel() {
   const topHot = priorityStocks[0] || data.hotStocks[0];
   const filterMeta = getMarketAiFilterMeta(data.hotGroups);
   const activeFilterLabel = filterMeta.find((item) => item.key === marketAiHotFilter)?.label || "全部";
+  const sortNote = marketAiHotFilter === "legal"
+    ? "法人買超只是入選條件，排序依 AI 訊號數、盤中資金流、當沖熱度、動能與成交值。"
+    : "依綜合分數與入選策略排序，適合快速掌握今日熱門觀察股。";
   const strongNames = data.strongSectors.map((sector) => sector.name).join("、") || "尚未形成明顯主流";
   const weakNames = data.weakSectors.filter((sector) => sector.pct < 0).map((sector) => sector.name).join("、") || "暫無明顯弱勢族群";
   const riskNames = data.riskStocks.map((stock) => `${stock.code} ${stock.name}`).join("、") || "暫無極端標的";
@@ -9620,7 +9608,7 @@ function renderMarketAiPanel() {
           </button>
         `).join("")}
       </div>
-      <div class="market-ai-sort-note">目前排序 <b>${escapeAttr(activeFilterLabel)}</b>，依綜合分數與入選策略排序，適合快速掌握今日熱門觀察股。</div>
+      <div class="market-ai-sort-note">目前排序 <b>${escapeAttr(activeFilterLabel)}</b>，${escapeAttr(sortNote)}</div>
       <div class="market-ai-hot">
         ${data.visibleHotStocks.map((stock, index) => `
           <article class="market-ai-stock-row">
@@ -9628,7 +9616,7 @@ function renderMarketAiPanel() {
             <div>
               <h4><span class="market-ai-code">${escapeAttr(stock.code)}</span><span class="market-ai-name">${escapeAttr(stock.name)}</span></h4>
               <p>主力籌碼入選，綜合分數 ${stock.score}</p>
-              <p>排序主因：盤中資金流 ${Math.round(clamp(stock.score, 1, 100))}，再交叉看族群強弱。</p>
+              <p>排序主因：盤中資金流 ${Math.round(clamp(stock.capitalFlowScore || stock.score, 1, 100))}，再交叉看族群強弱。</p>
             </div>
             <div>
               <span class="market-ai-chip">${escapeAttr(stock.industry)}</span>
@@ -10054,7 +10042,6 @@ function tickClock() {
   const day = String(now.getDate()).padStart(2,"0");
   const time = now.toLocaleTimeString("zh-TW",{hour12:false,hour:"2-digit",minute:"2-digit",second:"2-digit"});
   refreshLine.textContent = `${month}/${day}  重新整理　更新 ${time}`;
-  updateGlobalRefreshTime(time);
   headerTimes.forEach((item)=>{item.textContent=`${month}/${day} ${time.slice(0,5)}`;});
 }
 
