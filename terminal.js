@@ -3411,6 +3411,7 @@ let marketAiPanel = null;
 let marketAiLastSignature = "";
 let marketAiStockLoading = false;
 let marketAiHotFilter = "all";
+let marketAiInstitutionLoading = false;
 let realtimeRadarLoading = false;
 let realtimeRadarDataPromise = null;
 let realtimeRadarSide = "auto";
@@ -8983,6 +8984,21 @@ async function loadMarketAiStocksFallback() {
   }
 }
 
+async function ensureMarketAiInstitutionData() {
+  if (marketAiInstitutionLoading || Object.keys(institutionData).length) return;
+  marketAiInstitutionLoading = true;
+  try {
+    await loadInstitution();
+  } catch (error) {
+  } finally {
+    marketAiInstitutionLoading = false;
+    if (marketMode === "ai") {
+      marketAiLastSignature = "";
+      renderMarketAiPanel();
+    }
+  }
+}
+
 function scoreMarketAiStock(stock, sectors) {
   const code = String(stock.code || "");
   const industry = SECTOR_MAP[code] || "其他";
@@ -8998,6 +9014,9 @@ function scoreMarketAiStock(stock, sectors) {
   score += volume >= 10000 ? 8 : volume >= 5000 ? 5 : volume >= 2000 ? 3 : 0;
   score += sector?.pct > 1 ? 8 : sector?.pct > 0 ? 4 : 0;
   score += legal > 0 ? 6 : 0;
+  if (pct < 0) score -= Math.min(42, Math.abs(pct) * 10);
+  if (pct <= -3) score = Math.min(score, 45);
+  else if (pct <= -1) score = Math.min(score, 58);
   return clamp(Math.round(score), 1, 100);
 }
 
@@ -9015,7 +9034,7 @@ function getMarketAiTags(stock, score, sectors) {
   if (sector?.pct > 1) tags.push("族群強");
   if ((Number(inst.total) || 0) > 0) tags.push("法人買超");
   if ((Number(inst.foreign) || 0) > 0) tags.push("外資買超");
-  if (score >= 75) tags.push("優先觀察");
+  if (score >= 75 && pct >= 1 && !tags.includes("風險高")) tags.push("優先觀察");
   return tags.slice(0, 4);
 }
 
@@ -9114,6 +9133,7 @@ function renderMarketAiPanel() {
     deferUiWork(loadMarketAiStocksFallback, 100);
     return;
   }
+  if (!Object.keys(institutionData).length) deferUiWork(ensureMarketAiInstitutionData, 100);
   const topHot = data.hotStocks[0];
   const filterMeta = getMarketAiFilterMeta(data.hotGroups);
   const activeFilterLabel = filterMeta.find((item) => item.key === marketAiHotFilter)?.label || "全部";
