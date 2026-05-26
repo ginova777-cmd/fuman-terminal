@@ -4014,6 +4014,14 @@ const SECTOR_ASSEMBLY_CLASSIFICATION_OVERRIDES = {
 };
 Object.assign(SECTOR_MAP, SECTOR_ASSEMBLY_CLASSIFICATION_OVERRIDES);
 
+const SECTOR_GREEN_ENV_OVERRIDES = {
+  "8390":"綠能環保","3551":"綠能環保","6894":"綠能環保","6803":"綠能環保","5432":"綠能環保",
+  "7820":"綠能環保","7842":"綠能環保","7715":"綠能環保","8171":"綠能環保","8440":"綠能環保",
+  "3073":"綠能環保","6624":"綠能環保","8087":"綠能環保","3713":"綠能環保","6692":"綠能環保",
+  "6971":"綠能環保","8423":"綠能環保","5205":"綠能環保",
+};
+Object.assign(SECTOR_MAP, SECTOR_GREEN_ENV_OVERRIDES);
+
 const SECTOR_EQUIPMENT_TEST_OVERRIDES = {
   "6223":"半導體設備/測試","2360":"半導體設備/測試","6187":"半導體設備/測試","6510":"半導體設備/測試",
   "3680":"半導體設備/測試","6515":"半導體設備/測試","6196":"半導體設備/測試","3413":"半導體設備/測試",
