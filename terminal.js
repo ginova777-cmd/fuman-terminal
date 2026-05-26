@@ -3998,6 +3998,12 @@ const SECTOR_ELECTRONIC_CHANNEL_OVERRIDES = {
 };
 Object.assign(SECTOR_MAP, SECTOR_ELECTRONIC_CHANNEL_OVERRIDES);
 
+const SECTOR_GLASS_CERAMICS_OVERRIDES = {
+  "1802":"玻璃陶瓷","1809":"玻璃陶瓷","1810":"玻璃陶瓷","1806":"玻璃陶瓷","1817":"玻璃陶瓷",
+  "9902":"其他","1805":"建材營造",
+};
+Object.assign(SECTOR_MAP, SECTOR_GLASS_CERAMICS_OVERRIDES);
+
 const SECTOR_EQUIPMENT_TEST_OVERRIDES = {
   "6223":"半導體設備/測試","2360":"半導體設備/測試","6187":"半導體設備/測試","6510":"半導體設備/測試",
   "3680":"半導體設備/測試","6515":"半導體設備/測試","6196":"半導體設備/測試","3413":"半導體設備/測試",
