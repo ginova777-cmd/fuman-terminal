@@ -1222,6 +1222,7 @@ function installThemeToggle() {
         box-shadow: none !important;
       }
       body.fuman-light-theme #strategy-view .strategy5-results,
+      body.fuman-light-theme #strategy-view .strategy5-table,
       body.fuman-light-theme #strategy-view .strategy3-table,
       body.fuman-light-theme #strategy-view .swing-table,
       body.fuman-light-theme #strategy-view .intraday-table,
@@ -1234,6 +1235,7 @@ function installThemeToggle() {
         box-shadow: 0 8px 22px rgba(15, 23, 42, 0.07) !important;
       }
       body.fuman-light-theme #strategy-view .strategy5-results-head,
+      body.fuman-light-theme #strategy-view .strategy5-table-head,
       body.fuman-light-theme #strategy-view .strategy3-table-head,
       body.fuman-light-theme #strategy-view .swing-table thead,
       body.fuman-light-theme #strategy-view .intraday-table thead,
@@ -1244,6 +1246,7 @@ function installThemeToggle() {
         border-color: #dbe3ee !important;
       }
       body.fuman-light-theme #strategy-view .strategy5-stock-card,
+      body.fuman-light-theme #strategy-view .strategy5-table-row,
       body.fuman-light-theme #strategy-view .strategy3-stock-card,
       body.fuman-light-theme #strategy-view .intraday-side-panel,
       body.fuman-light-theme #strategy-view .intraday-signal-card,
@@ -1292,12 +1295,14 @@ function installThemeToggle() {
         color: #334155 !important;
       }
       body.fuman-light-theme #strategy-view .strategy3-table-row:nth-child(even),
+      body.fuman-light-theme #strategy-view .strategy5-table-row:nth-child(even),
       body.fuman-light-theme #strategy-view .swing-table tbody tr:nth-child(even),
       body.fuman-light-theme #strategy-view .intraday-table tbody tr:nth-child(even),
       body.fuman-light-theme #strategy-view table tbody tr:nth-child(even) {
         background: #fbfdff !important;
       }
       body.fuman-light-theme #strategy-view .strategy3-table-row:hover,
+      body.fuman-light-theme #strategy-view .strategy5-table-row:hover,
       body.fuman-light-theme #strategy-view .strategy5-stock-card:hover,
       body.fuman-light-theme #strategy-view .swing-table tbody tr:hover,
       body.fuman-light-theme #strategy-view .intraday-table tbody tr:hover,
@@ -1312,7 +1317,8 @@ function installThemeToggle() {
       body.fuman-light-theme #strategy-view .strategy3-name,
       body.fuman-light-theme #strategy-view .strategy5-stock-card strong,
       body.fuman-light-theme #strategy-view .strategy3-stock-title strong,
-      body.fuman-light-theme #strategy-view .strategy5-results-head h3 {
+      body.fuman-light-theme #strategy-view .strategy5-results-head h3,
+      body.fuman-light-theme #strategy-view .strategy5-name {
         color: #111827 !important;
       }
       body.fuman-light-theme #strategy-view p,
@@ -1321,6 +1327,8 @@ function installThemeToggle() {
       body.fuman-light-theme #strategy-view th,
       body.fuman-light-theme #strategy-view .strategy3-reason,
       body.fuman-light-theme #strategy-view .strategy5-table-reason,
+      body.fuman-light-theme #strategy-view .strategy5-table-row,
+      body.fuman-light-theme #strategy-view .strategy5-table-row > div,
       body.fuman-light-theme #strategy-view .strategy5-results-head p,
       body.fuman-light-theme #strategy-view .strategy-summary,
       body.fuman-light-theme #strategy-view .strategy-card p {
@@ -9199,9 +9207,16 @@ function getSectorValueToneClass(val, prefix) {
   return n > 0 ? `${prefix}-pos` : `${prefix}-neg`;
 }
 
+function normalizeInstitutionLots(val) {
+  if (val === undefined || val === null) return null;
+  const n = cleanNumber(val);
+  if (!Number.isFinite(n)) return null;
+  return Math.trunc(n / 1000);
+}
+
 function formatInstitutionLots(val) {
   if (val === undefined || val === null) return "--";
-  const n = Math.round(cleanNumber(val));
+  const n = Math.trunc(cleanNumber(val));
   if (!Number.isFinite(n)) return "--";
   const sign = n >= 0 ? "+" : "";
   return `${sign}${n.toLocaleString("zh-TW")} 張`;
@@ -9231,11 +9246,18 @@ function renderSectorModalRows(sector, stocks) {
     const pctClass = s.pct > 0 ? "sector-pct-up" : s.pct < 0 ? "sector-pct-down" : "sector-pct-flat";
     const pctSign = s.pct >= 0 ? "+" : "";
     const inst = institutionData[s.code] || {};
-    const foreign = inst.foreign ?? null;
-    const trust = inst.trust ?? null;
-    const dealer = inst.dealer ?? null;
-    const total = (foreign !== null && trust !== null && dealer !== null)
-      ? foreign + trust + dealer : null;
+    const rawForeign = inst.foreign ?? null;
+    const rawTrust = inst.trust ?? null;
+    const rawDealer = inst.dealer ?? null;
+    const rawTotal = inst.total ?? (
+      rawForeign !== null && rawTrust !== null && rawDealer !== null
+        ? cleanNumber(rawForeign) + cleanNumber(rawTrust) + cleanNumber(rawDealer)
+        : null
+    );
+    const foreign = normalizeInstitutionLots(rawForeign);
+    const trust = normalizeInstitutionLots(rawTrust);
+    const dealer = normalizeInstitutionLots(rawDealer);
+    const total = normalizeInstitutionLots(rawTotal);
     const market = /otc|tpex|上櫃/i.test(String(s.exchange || s.market || "")) ? "上櫃" : "上市";
     return `
       <tr style="border-bottom:1px solid #161925; ${i % 2 === 0 ? "" : "background:#0c0f1a"}">
