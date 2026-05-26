@@ -1478,15 +1478,7 @@ function installThemeToggle() {
 }
 
 function installGlobalRefreshWidget() {
-  if (document.querySelector("#global-refresh-widget")) return;
-  const widget = document.createElement("div");
-  widget.id = "global-refresh-widget";
-  widget.className = "global-refresh-widget";
-  widget.innerHTML = `
-    <button type="button" data-global-refresh title="重新整理" aria-label="重新整理">↻</button>
-  `;
-  document.body.appendChild(widget);
-  widget.querySelector("[data-global-refresh]")?.addEventListener("click", handleGlobalRefresh);
+  document.querySelector("#global-refresh-widget")?.remove();
 }
 
 function arrangeWatchlistSearch() {
