@@ -684,6 +684,12 @@ function installThemeToggle() {
         color: #1d4ed8 !important;
         border-color: #bfdbfe !important;
       }
+      #market-view.market-ai-mode > :not(.page-header):not(.market-mode-tabs):not(.market-ai-panel) {
+        display: none !important;
+      }
+      #market-view.market-overview-mode .market-ai-panel {
+        display: none !important;
+      }
       @media (max-width: 720px) {
         .fuman-theme-toggle {
           top: 12px;
@@ -2543,6 +2549,7 @@ let lastHeatmapRenderSignature = "";
 let marketMode = "overview";
 let marketAiPanel = null;
 let marketAiLastSignature = "";
+let marketAiStockLoading = false;
 let realtimeRadarLoading = false;
 let realtimeRadarDataPromise = null;
 let realtimeRadarSide = "auto";
@@ -8050,6 +8057,8 @@ function applyMarketMode(mode = "overview") {
   const panel = viewPanels.market;
   if (!panel) return;
   marketMode = mode === "ai" ? "ai" : "overview";
+  panel.classList.toggle("market-ai-mode", marketMode === "ai");
+  panel.classList.toggle("market-overview-mode", marketMode !== "ai");
   panel.querySelectorAll("[data-market-mode]").forEach((button) => {
     button.classList.toggle("active", button.dataset.marketMode === marketMode);
   });
@@ -8083,6 +8092,28 @@ function getMarketAiSectors() {
     const down = rows.filter((stock) => stock.pct < 0).length;
     return { name, rows, pct: pct || 0, totalValue, up, down };
   }).filter(Boolean);
+}
+
+async function loadMarketAiStocksFallback() {
+  if (marketAiStockLoading || latestStocks.length) return;
+  marketAiStockLoading = true;
+  try {
+    const payload = await fetchJson(`${endpoints.strategyStocks}?t=${Date.now()}`, 15000);
+    const rows = normalizeArray(payload?.stocks || payload);
+    if (rows.length) {
+      renderStocks(rows);
+      return;
+    }
+    const fallback = await fetchJson(`${endpoints.stocks}?t=${Date.now()}`, 15000);
+    renderStocks(Array.isArray(fallback) ? fallback : normalizeArray(fallback));
+  } catch (error) {
+  } finally {
+    marketAiStockLoading = false;
+    if (marketMode === "ai") {
+      marketAiLastSignature = "";
+      renderMarketAiPanel();
+    }
+  }
 }
 
 function scoreMarketAiStock(stock, sectors) {
@@ -8158,6 +8189,7 @@ function renderMarketAiPanel() {
   marketAiLastSignature = signature;
   if (!data.sample) {
     marketAiPanel.innerHTML = `<div class="empty-state">等待市場資料載入後產生 AI 判讀。</div>`;
+    deferUiWork(loadMarketAiStocksFallback, 100);
     return;
   }
   const topHot = data.hotStocks[0];
@@ -8780,7 +8812,15 @@ async function loadMarketData(force = false) {
       payload.marketStatus || null,
       payload.otcSignal || null
     );
-    renderStocks(normalizeArray(payload.stocks));
+    const backendStocks = normalizeArray(payload.stocks);
+    if (backendStocks.length) {
+      renderStocks(backendStocks);
+    } else {
+      const stocks = await fetchJson(`${endpoints.strategyStocks}?t=${Date.now()}`, 15000);
+      const rows = normalizeArray(stocks?.stocks || stocks);
+      if (rows.length) renderStocks(rows);
+      else renderStocks(normalizeArray(await fetchJson(`${endpoints.stocks}?t=${Date.now()}`, 15000)));
+    }
   } catch (e) {
     try {
       const stocks = await fetchJson(endpoints.stocks);
