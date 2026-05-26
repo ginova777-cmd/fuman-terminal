@@ -1224,6 +1224,20 @@ function installGlobalRefreshWidget() {
   widget.querySelector("[data-global-refresh]")?.addEventListener("click", handleGlobalRefresh);
 }
 
+function arrangeWatchlistSearch() {
+  const panel = viewPanels.watchlist || document.querySelector("#watchlist-view");
+  const header = panel?.querySelector(".page-header");
+  const input = document.querySelector("#watchlist-search-input");
+  const button = document.querySelector("#watchlist-add-btn");
+  if (!panel || !header || !input || !button || document.querySelector("#watchlist-search-row")) return;
+  const row = document.createElement("div");
+  row.id = "watchlist-search-row";
+  row.className = "watchlist-search-row";
+  row.appendChild(input);
+  row.appendChild(button);
+  header.insertAdjacentElement("afterend", row);
+}
+
 function updateGlobalRefreshTime(timeText = "") {
   const target = document.querySelector("[data-global-refresh-time]");
   if (!target) return;
@@ -2922,7 +2936,7 @@ function renderRealtimeRadar() {
   if (!panel) return;
   deferUiWork(ensureMobileAutoOrganizeButton);
   const radarOpen = isRadarDetectionWindow();
-  if (!radarOpen && !realtimeRadarLastRows.length) loadRealtimeRadarLastRows();
+  if (!realtimeRadarLastRows.length) loadRealtimeRadarLastRows();
   if (!radarOpen && !latestStocks.length) {
     if (realtimeRadarLastRows.length) {
       // Fall through and render the persisted closing snapshot.
@@ -2954,7 +2968,20 @@ function renderRealtimeRadar() {
     return;
   }
   if (!Object.keys(strategyHistoryData).length && !strategy4CacheLoading) loadStrategy4Cache(true);
-  if (radarOpen && (realtimeRadarNeedsFreshScan || !isRealtimeRadarFresh())) {
+  const radarNeedsUpdate = radarOpen && (realtimeRadarNeedsFreshScan || !isRealtimeRadarFresh());
+  if (radarNeedsUpdate && realtimeRadarLastRows.length) {
+    if (!realtimeRadarRefreshLoading && !strategyRealtimeLoading) {
+      realtimeRadarRefreshLoading = true;
+      refreshStrategyRealtimeScan("force")
+        .then(() => {
+          realtimeRadarNeedsFreshScan = false;
+          renderRealtimeRadar();
+        })
+        .finally(() => {
+          realtimeRadarRefreshLoading = false;
+        });
+    }
+  } else if (radarNeedsUpdate) {
     panel.innerHTML = `
       <header class="radar-topbar">
         <div>
@@ -10244,6 +10271,54 @@ function ensureWatchlistAnalysisStyles() {
       border-color: transparent;
       color: #fff;
     }
+    #watchlist-view .page-header > div:last-child:empty {
+      display: none !important;
+    }
+    .watchlist-search-row {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      width: fit-content;
+      margin: 0 0 14px;
+      padding: 8px;
+      border: 1px solid rgba(127, 166, 255, 0.14);
+      border-radius: 10px;
+      background: rgba(18, 21, 34, 0.68);
+    }
+    .watchlist-search-row input {
+      width: 180px !important;
+      background: rgba(21, 24, 38, 0.96) !important;
+      border: 1px solid rgba(127, 166, 255, 0.20) !important;
+      color: #eaf1ff !important;
+      padding: 9px 14px !important;
+      border-radius: 8px !important;
+      outline: none !important;
+      font-weight: 800 !important;
+    }
+    .watchlist-search-row button {
+      background: linear-gradient(90deg, #ef6a3b, #ff6d3d) !important;
+      color: #ffffff !important;
+      border: 0 !important;
+      padding: 9px 18px !important;
+      border-radius: 8px !important;
+      cursor: pointer !important;
+      font-weight: 900 !important;
+    }
+    .watch-market-badge {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 22px;
+      padding: 2px 8px;
+      border: 1px solid #dbe3ee;
+      border-radius: 7px;
+      background: #ffffff;
+      color: #2563eb;
+      font-size: 11px;
+      font-weight: 900;
+      line-height: 1;
+      box-shadow: 0 2px 6px rgba(15, 23, 42, 0.08);
+    }
     .watch-summary-grid {
       display: grid;
       grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -10389,6 +10464,26 @@ function ensureWatchlistAnalysisStyles() {
       color: #ffffff !important;
       border-color: transparent !important;
       box-shadow: 0 10px 20px rgba(249, 115, 22, 0.18) !important;
+    }
+    body.fuman-light-theme #watchlist-view .watchlist-search-row {
+      background: #ffffff !important;
+      border-color: #dbe3ee !important;
+      box-shadow: 0 8px 20px rgba(15, 23, 42, 0.06) !important;
+    }
+    body.fuman-light-theme #watchlist-view .watchlist-search-row input {
+      background: #ffffff !important;
+      color: #0f172a !important;
+      border-color: #cbd8e6 !important;
+    }
+    body.fuman-light-theme #watchlist-view .watchlist-search-row button {
+      background: linear-gradient(90deg, #df4b09, #f97316) !important;
+      color: #ffffff !important;
+      box-shadow: 0 8px 18px rgba(249, 115, 22, 0.18) !important;
+    }
+    body.fuman-light-theme #watchlist-view .watch-market-badge {
+      background: #ffffff !important;
+      color: #2563eb !important;
+      border-color: #dbe3ee !important;
     }
     body.fuman-light-theme #watchlist-view .watch-metric,
     body.fuman-light-theme #watchlist-view .watch-analysis-card,
@@ -11100,7 +11195,7 @@ async function renderWatchlist() {
           <div style="display:flex; align-items:center; gap:8px;">
             <span style="color:#7ec8e3; font-size:16px; font-weight:700;">${item.code}</span>
             <span style="color:#fff; font-size:15px; font-weight:600;">${item.name || ""}</span>
-            <span style="background:#1e3a5f; color:#7ec8e3; font-size:11px; padding:2px 6px; border-radius:4px;">上市</span>
+            <span class="watch-market-badge">上市</span>
           </div>
           <div style="margin-top:6px;">
             <span id="wprice-${item.code}" style="font-size:24px; font-weight:700; color:#fff;">--</span>
@@ -11199,6 +11294,7 @@ function removeFromWatchlist(code) {
 
 viewPanels.watchlist = document.querySelector("#watchlist-view");
 syncMobileStrategyVisibility();
+arrangeWatchlistSearch();
 window.addEventListener("resize", () => deferUiWork(syncMobileStrategyVisibility, 80));
 
 watchlistSearchInput?.addEventListener("keydown", (e) => {
