@@ -3966,6 +3966,14 @@ const SECTOR_MAP = {
   "6550":"創新板股","6730":"創新板股","6754":"創新板股","6811":"創新板股",
 };
 
+const SECTOR_TOPIC_OVERRIDES = {
+  "6285":"網通設備組件","2345":"網通設備組件","3596":"網通設備組件","5388":"網通設備組件",
+  "3380":"網通設備組件","3025":"網通設備組件","2419":"網通設備組件","6216":"網通設備組件",
+  "6284":"網通設備組件","2332":"網通設備組件","3062":"網通設備組件","3491":"網通設備組件",
+  "6282":"網通設備組件",
+};
+Object.assign(SECTOR_MAP, SECTOR_TOPIC_OVERRIDES);
+
 function cleanNumber(value) {
   if (value === undefined || value === null || value === "") return 0;
   return Number(String(value).replace(/[,+%]/g, "")) || 0;
@@ -10063,8 +10071,8 @@ function stockChange(stock) {
   return { change, close, percent };
 }
 
-function buildSectorStocksCache(stocks) {
-  const nextCache = {};
+function buildSectorStocksCache(stocks, options = {}) {
+  const nextCache = options.merge ? { ...sectorStocksCache } : {};
   for (const stock of stocks) {
     const code = String(valueOf(stock, ["證券代號", "Code", "code"]) || "").trim();
     const name = valueOf(stock, ["證券名稱", "Name", "name"]) || code;
@@ -10078,7 +10086,10 @@ function buildSectorStocksCache(stocks) {
     const industry = SECTOR_MAP[code];
     if (!industry) continue;
     if (!nextCache[industry]) nextCache[industry] = [];
-    nextCache[industry].push({ code, name, close, change, pct, value, volume });
+    const row = { code, name, close, change, pct, value, volume };
+    const existingIndex = nextCache[industry].findIndex((item) => String(item.code) === code);
+    if (existingIndex >= 0) nextCache[industry][existingIndex] = { ...nextCache[industry][existingIndex], ...row };
+    else nextCache[industry].push(row);
   }
   sectorStocksCache = nextCache;
 }
@@ -10336,6 +10347,10 @@ async function loadHeatmap(force = false) {
     const sectors = normalizeArray(data?.sectors);
     if (data?.ok && sectors.length) {
       renderHeatmapSectors(sectors);
+      if (latestStocks.length) {
+        buildSectorStocksCache(latestStocks, { merge: true });
+        renderHeatmapFromCache();
+      }
       return;
     }
     throw new Error("heatmap empty");
