@@ -9372,6 +9372,26 @@ function getMarketAiDayTradeHeatScore(stock, sector) {
   return Math.round(clamp(hotTurnover + hotVolume + moveHeat + sectorHeat + chipHeat - overheatingPenalty, 0, 100));
 }
 
+function getMarketAiRiskControlScore(stock, sector, base = {}) {
+  const pct = cleanNumber(stock.percent);
+  const valueYi = cleanNumber(stock.value) / 100000000;
+  const volume = cleanNumber(stock.tradeVolume);
+  const legal = getMarketAiLegalValue(stock.code);
+  const capitalFlowScore = cleanNumber(base.capitalFlowScore) || getMarketAiCapitalFlowScore(stock, sector);
+  const sectorScore = cleanNumber(base.sectorScore);
+  const momentumScore = cleanNumber(base.momentumScore);
+  const score = cleanNumber(base.score);
+  const hotChaseRisk = Math.max(0, pct - 3.2) * 11;
+  const valueCrowding = Math.min(24, valueYi * 0.85);
+  const volumeCrowding = Math.min(16, volume / 1600);
+  const sectorCrowding = sectorScore >= 45 ? 15 : sector?.pct > 1.2 ? 10 : 0;
+  const legalCrowding = legal > 0 && capitalFlowScore >= 50 ? 12 : legal > 0 ? 6 : 0;
+  const scoreGap = Math.max(0, Math.max(momentumScore, capitalFlowScore) - score) * 0.45;
+  const weakButHot = pct < 1 && capitalFlowScore >= 55 ? 10 : 0;
+  const downRisk = pct <= -2 ? Math.abs(pct) * 12 : 0;
+  return Math.round(clamp(hotChaseRisk + valueCrowding + volumeCrowding + sectorCrowding + legalCrowding + scoreGap + weakButHot + downRisk, 0, 100));
+}
+
 function scoreMarketAiStock(stock, sectors) {
   const code = String(stock.code || "");
   const industry = SECTOR_MAP[code] || "其他";
@@ -9425,7 +9445,7 @@ function classifyMarketAiStock(stock, sectors) {
   const momentumScore = Math.round(clamp(capitalFlowScore * 0.5 + score * 0.3 + Math.max(0, pct) * 4 + sectorScore * 0.2, 0, 100));
   const intradayScore = Math.round(clamp(dayTradeHeatScore * 0.62 + capitalFlowScore * 0.18 + momentumScore * 0.12 + sectorScore * 0.08, 0, 100));
   const legalScore = Math.round(clamp(Math.abs(legal) / 900 + (legal > 0 ? 18 : 0), 0, 100));
-  const riskScore = Math.round(clamp(Math.max(0, pct - 7.5) * 18 + Math.max(0, -pct - 3) * 14 + (valueYi >= 20 ? 8 : 0), 0, 100));
+  const riskScore = getMarketAiRiskControlScore(stock, sector, { score, capitalFlowScore, sectorScore, momentumScore });
   return {
     ...stock,
     score,
@@ -9444,7 +9464,7 @@ function classifyMarketAiStock(stock, sectors) {
       momentum: momentumScore >= 70 && (capitalFlowScore >= 55 || score >= 72 || sectorScore >= 45),
       legal: legal > 0,
       intraday: dayTradeHeatScore >= 55 || intradayScore >= 58,
-      risk: riskScore >= 35 || pct >= 8.5 || pct <= -3,
+      risk: riskScore >= 58 || (riskScore >= 48 && (score >= 68 || capitalFlowScore >= 55)) || pct >= 8.5 || pct <= -3,
     },
   };
 }
@@ -9455,7 +9475,7 @@ function getMarketAiHotGroups(hotStocks) {
     momentum: hotStocks.filter((stock) => stock.buckets.momentum).sort((a, b) => b.score - a.score || b.capitalFlowScore - a.capitalFlowScore || b.momentumScore - a.momentumScore),
     legal: sortMarketAiLegalStocks(hotStocks.filter((stock) => stock.buckets.legal && cleanNumber(stock.percent) > 0 && !stock.buckets.risk)),
     intraday: sortMarketAiIntradayStocks(hotStocks.filter((stock) => stock.buckets.intraday && !stock.buckets.risk)),
-    risk: hotStocks.filter((stock) => stock.buckets.risk).sort((a, b) => b.riskScore - a.riskScore || b.score - a.score),
+    risk: hotStocks.filter((stock) => stock.buckets.risk).sort((a, b) => b.riskScore - a.riskScore || b.capitalFlowScore - a.capitalFlowScore || b.score - a.score),
   };
   return groups;
 }
