@@ -192,6 +192,115 @@ function installThemeToggle() {
       body.fuman-light-theme .sidebar .chip-menu-link:hover span {
         color: #ea580c !important;
       }
+      body.fuman-light-theme #strategy-view .swing-dashboard {
+        color: #172033 !important;
+      }
+      body.fuman-light-theme #strategy-view .swing-topbar h2 {
+        color: #111827 !important;
+      }
+      body.fuman-light-theme #strategy-view .swing-topbar p,
+      body.fuman-light-theme #strategy-view .swing-controls,
+      body.fuman-light-theme #strategy-view .swing-table td small {
+        color: #64748b !important;
+      }
+      body.fuman-light-theme #strategy-view .swing-controls select,
+      body.fuman-light-theme #strategy-view .swing-actions input,
+      body.fuman-light-theme #strategy-view .strategy4-visible-search-row input,
+      body.fuman-light-theme #strategy-view .swing-actions button,
+      body.fuman-light-theme #strategy-view .swing-tabs button {
+        background: #ffffff !important;
+        color: #0f172a !important;
+        border-color: #cbd8e6 !important;
+        box-shadow: none !important;
+      }
+      body.fuman-light-theme #strategy-view .swing-signal-grid {
+        align-items: stretch;
+      }
+      body.fuman-light-theme #strategy-view .swing-card {
+        background: linear-gradient(135deg, #ffffff 0%, #f8fbff 100%) !important;
+        border-color: #d8e2ee !important;
+        box-shadow: 0 10px 22px rgba(15, 23, 42, 0.07) !important;
+      }
+      body.fuman-light-theme #strategy-view .swing-card.active {
+        background: linear-gradient(135deg, #fff7ed 0%, #ffffff 62%, #f8fbff 100%) !important;
+        border-color: rgba(249, 115, 22, 0.38) !important;
+      }
+      body.fuman-light-theme #strategy-view .swing-card.selected {
+        border-color: rgba(249, 115, 22, 0.76) !important;
+        box-shadow: inset 0 0 0 1px rgba(249, 115, 22, 0.22), 0 12px 24px rgba(249, 115, 22, 0.10) !important;
+      }
+      body.fuman-light-theme #strategy-view .swing-card strong {
+        color: #111827 !important;
+      }
+      body.fuman-light-theme #strategy-view .swing-card small {
+        color: #64748b !important;
+      }
+      body.fuman-light-theme #strategy-view .swing-card em {
+        color: #2563eb !important;
+      }
+      body.fuman-light-theme #strategy-view .swing-panel {
+        background: #ffffff !important;
+        border-color: #d8e2ee !important;
+        box-shadow: 0 12px 28px rgba(15, 23, 42, 0.07) !important;
+      }
+      body.fuman-light-theme #strategy-view .swing-tabs {
+        background: #f8fafc !important;
+        border-color: #d8e2ee !important;
+      }
+      body.fuman-light-theme #strategy-view .swing-tabs button.active {
+        background: #fff7ed !important;
+        color: #c2410c !important;
+        border-color: rgba(249, 115, 22, 0.45) !important;
+      }
+      body.fuman-light-theme #strategy-view .swing-table {
+        background: #ffffff !important;
+        color: #172033 !important;
+      }
+      body.fuman-light-theme #strategy-view .swing-table th {
+        background: #eef4fb !important;
+        color: #475569 !important;
+        border-color: #d8e2ee !important;
+      }
+      body.fuman-light-theme #strategy-view .swing-table td {
+        color: #334155 !important;
+        border-color: #d8e2ee !important;
+      }
+      body.fuman-light-theme #strategy-view .swing-table tbody tr:nth-child(even) {
+        background: #fbfdff !important;
+      }
+      body.fuman-light-theme #strategy-view .swing-table .code {
+        color: #0f172a !important;
+      }
+      body.fuman-light-theme #strategy-view .swing-table .price,
+      body.fuman-light-theme #strategy-view .swing-table .pct {
+        color: #dc2626 !important;
+      }
+      body.fuman-light-theme #strategy-view .swing-badges b {
+        background: #ffeadc !important;
+        color: #c2410c !important;
+        font-weight: 850 !important;
+      }
+      body.fuman-light-theme #strategy-view .terminal-pagination,
+      body.fuman-light-theme #strategy-view .open-buy-pager,
+      body.fuman-light-theme #strategy-view .warrant-pagination {
+        background: #f8fafc !important;
+        color: #475569 !important;
+        border-top: 1px solid #d8e2ee !important;
+      }
+      body.fuman-light-theme #strategy-view .terminal-pagination button,
+      body.fuman-light-theme #strategy-view .open-buy-pager button,
+      body.fuman-light-theme #strategy-view .warrant-pagination button {
+        background: #ffffff !important;
+        color: #334155 !important;
+        border-color: #cbd8e6 !important;
+      }
+      body.fuman-light-theme #strategy-view .terminal-pagination button.active,
+      body.fuman-light-theme #strategy-view .open-buy-pager button.active,
+      body.fuman-light-theme #strategy-view .warrant-pagination button.active {
+        background: #a93145 !important;
+        color: #ffffff !important;
+        border-color: #a93145 !important;
+      }
       body.fuman-light-theme h1,
       body.fuman-light-theme h2,
       body.fuman-light-theme h3,
