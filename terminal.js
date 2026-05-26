@@ -3182,10 +3182,11 @@ function getMarketHeatmapRefreshInterval() {
 
 function saveRealtimeRadarLastRows(rows) {
   try {
-    if (!Array.isArray(rows) || !rows.length) return;
+    const safeRows = normalizeArray(rows).filter((stock) => isIntradayTradable(stock));
+    if (!safeRows.length) return;
     const payload = {
       updatedAt: Date.now(),
-      rows: rows.slice(0, 80).map((stock) => ({
+      rows: safeRows.slice(0, 80).map((stock) => ({
         code: stock.code,
         name: stock.name,
         close: stock.close,
@@ -3213,6 +3214,7 @@ function mergeRealtimeRadarRows(newRows = [], oldRows = []) {
   const merged = new Map();
   [...normalizeArray(newRows), ...normalizeArray(oldRows)].forEach((stock) => {
     if (!stock?.code || !stock.side) return;
+    if (!isIntradayTradable(stock)) return;
     const key = `${stock.side}:${stock.code}`;
     const existing = merged.get(key);
     const currentTime = cleanNumber(stock.radarUpdatedAt) || 0;
@@ -3230,7 +3232,8 @@ function loadRealtimeRadarLastRows() {
   try {
     const payload = JSON.parse(localStorage.getItem(REALTIME_RADAR_LAST_CACHE_KEY) || "{}");
     if (!Array.isArray(payload.rows) || !payload.rows.length) return false;
-    realtimeRadarLastRows = payload.rows;
+    realtimeRadarLastRows = payload.rows.filter((stock) => isIntradayTradable(stock));
+    if (!realtimeRadarLastRows.length) return false;
     realtimeRadarLastUpdatedAt = cleanNumber(payload.updatedAt) || Date.now();
     return true;
   } catch (error) {
@@ -4034,6 +4037,13 @@ const SECTOR_TRADING_RETAIL_OVERRIDES = {
   "5907":"貿易百貨","2910":"貿易百貨","5906":"貿易百貨","8443":"貿易百貨",
 };
 Object.assign(SECTOR_MAP, SECTOR_TRADING_RETAIL_OVERRIDES);
+
+const SECTOR_THERMAL_OVERRIDES = {
+  "3653":"液冷/散熱","3017":"液冷/散熱","3324":"液冷/散熱","8996":"液冷/散熱",
+  "2421":"液冷/散熱","3338":"液冷/散熱","6275":"液冷/散熱","6230":"液冷/散熱",
+  "3540":"液冷/散熱",
+};
+Object.assign(SECTOR_MAP, SECTOR_THERMAL_OVERRIDES);
 
 function cleanNumber(value) {
   if (value === undefined || value === null || value === "") return 0;
