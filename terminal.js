@@ -9356,10 +9356,12 @@ async function refreshSectorModalRealtime(sector, stocks) {
   }
 }
 
-function openSectorModal(sector) {
+async function openSectorModal(sector) {
   const stocks = sectorStocksCache[sector.name] || [];
   const existing = document.querySelector("#sector-modal");
   if (existing) existing.remove();
+
+  if (!Object.keys(institutionData).length) await loadInstitution();
 
   const sortedStocks = [...stocks].sort((a, b) => b.pct - a.pct);
   const today = new Date();
