@@ -2,10 +2,11 @@ const fs = require("fs");
 const path = require("path");
 const { spawnSync } = require("child_process");
 
-const ROOT = path.resolve(__dirname, "..");
-const STRATEGY2_REPORT_FILE = path.join(ROOT, "data", "strategy2-intraday-latest.json");
+const { ROOT, dataPath, statePath } = require("./runtime-paths");
+const STRATEGY2_REPORT_FILE = dataPath("strategy2-intraday-latest.json");
 const INTERVAL_MS = Math.max(1000, Number(process.env.STRATEGY2_LIVE_INTERVAL_MS || 1000));
 const NOTIFIER = path.join(__dirname, "send-strategy2-live-alert.js");
+const MAX_LOOPS = Number(process.env.STRATEGY2_LIVE_MAX_LOOPS || 0);
 
 function readJson(file, fallback) {
   try { return JSON.parse(fs.readFileSync(file, "utf8")); } catch { return fallback; }
@@ -36,7 +37,9 @@ let lastSignature = "";
 
 async function loop() {
   console.log(`strategy2 live LINE patrol start: every ${INTERVAL_MS}ms`);
+  let loopCount = 0;
   while (true) {
+    loopCount += 1;
     try {
       const signature = latestSignature();
       if (signature && signature !== lastSignature) {
@@ -46,8 +49,14 @@ async function loop() {
     } catch (error) {
       console.error(`strategy2 live patrol error: ${error.message}`);
     }
+    if (MAX_LOOPS > 0 && loopCount >= MAX_LOOPS) {
+      console.log(`strategy2 live LINE patrol stop: max loops ${MAX_LOOPS}`);
+      break;
+    }
     await new Promise((resolve) => setTimeout(resolve, INTERVAL_MS));
   }
 }
 
 loop();
+
+

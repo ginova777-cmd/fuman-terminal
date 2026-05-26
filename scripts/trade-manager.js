@@ -2,11 +2,12 @@ const fs = require("fs");
 const path = require("path");
 const realtimeHandler = require("../api/realtime");
 const { cleanNumber, formatTradePrice, roundTradePrice } = require("./intraday-radar-rules");
-const { hasLineConfig, sendLineText } = require("./line-push");
+const { hasLineConfig, sendLineFlex, sendLineText } = require("./line-push");
+const { tradeBuyFlex, tradeExitFlex } = require("./line-flex-templates");
 
-const ROOT = path.resolve(__dirname, "..");
-const STRATEGY2_REPORT_FILE = path.join(ROOT, "data", "strategy2-intraday-latest.json");
-const STATE_FILE = path.join(ROOT, ".trade-manager-cache", "state.json");
+const { ROOT, dataPath, statePath } = require("./runtime-paths");
+const STRATEGY2_REPORT_FILE = dataPath("strategy2-intraday-latest.json");
+const STATE_FILE = statePath("trade-manager-state.json");
 
 const BUDGET_PER_TRADE = Math.max(1000, Number(process.env.TRADE_MANAGER_BUDGET_PER_TRADE || 20000));
 const TAKE_PROFIT_PCT = Number(process.env.TRADE_MANAGER_TAKE_PROFIT_PCT || 3);
@@ -20,6 +21,7 @@ const VOLUME_MILESTONES = [2000, 5000, 10000];
 const MIN_TRADE_VALUE = Number(process.env.TRADE_MANAGER_MIN_TRADE_VALUE || 80000000);
 const MIN_INTRADAY_PCT = Number(process.env.TRADE_MANAGER_MIN_INTRADAY_PCT || 2);
 const MAX_INTRADAY_PCT = Number(process.env.TRADE_MANAGER_MAX_INTRADAY_PCT || 7.5);
+const REALTIME_TIMEOUT_MS = Math.max(3000, Number(process.env.TRADE_MANAGER_REALTIME_TIMEOUT_MS || 15000));
 const NEAR_HIGH_RATIO = Number(process.env.TRADE_MANAGER_NEAR_HIGH_RATIO || 0.985);
 
 function readJson(file, fallback) {
@@ -198,13 +200,17 @@ function signalQuality(event) {
 }
 
 function intradayQuality(event, quote, payload) {
-  const score = cleanNumber(event.score);
-  const pct = cleanNumber(quote?.percent) || cleanNumber(event.percent);
-  const high = cleanNumber(quote?.high);
-  const close = cleanNumber(quote?.close) || cleanNumber(event.entryPrice);
-  const { volume, value } = quoteTradeValue(quote, event);
+  const eventRecords = recordsForEvent(payload, event);
+  const latestRecord = eventRecords.at(-1) || {};
+  const score = cleanNumber(event.score) || cleanNumber(latestRecord.score);
+  const pct = cleanNumber(quote?.percent) || cleanNumber(event.percent) || cleanNumber(latestRecord.percent);
+  const high = cleanNumber(quote?.high) || cleanNumber(event.highestPrice) || cleanNumber(latestRecord.observedHigh) || cleanNumber(latestRecord.entryHigh);
+  const close = cleanNumber(quote?.close) || cleanNumber(event.entryPrice) || cleanNumber(latestRecord.observedPrice) || cleanNumber(latestRecord.entryPrice);
+  let { volume, value } = quoteTradeValue(quote, event);
+  if (!volume) volume = normalizeVolumeLots(cleanNumber(latestRecord.volume) || cleanNumber(latestRecord.tradeVolume));
+  if (!value && close && volume) value = close * volume * 1000;
   const milestone = volumeMilestone(volume);
-  const volumeTrend = minuteVolumeTrend(recordsForEvent(payload, event), event);
+  const volumeTrend = minuteVolumeTrend(eventRecords, event);
   const signal = signalQuality(event);
   const reasons = [];
   if (score < MIN_A_SCORE) reasons.push(`分數${Math.round(score)}低於${MIN_A_SCORE}`);
@@ -247,7 +253,7 @@ function buildExitMessage(position, quote, action) {
 }
 
 function callRealtime(codes) {
-  return new Promise((resolve, reject) => {
+  const request = new Promise((resolve, reject) => {
     const req = { method: "GET", query: { codes: codes.join(",") } };
     const res = {
       statusCode: 200,
@@ -262,17 +268,22 @@ function callRealtime(codes) {
     };
     Promise.resolve(realtimeHandler(req, res)).catch(reject);
   });
+  const timeout = new Promise((resolve) => setTimeout(() => resolve({ ok: false, quotes: [], timeout: true }), REALTIME_TIMEOUT_MS));
+  return Promise.race([request, timeout]);
 }
 
-async function notify(text) {
-  if (!hasLineConfig()) throw new Error("Missing LINE_CHANNEL_ACCESS_TOKEN and LINE_TO or LINE_USER_ID");
+async function notify(message) {
   if (DRY_RUN) {
-    console.log(text);
+    console.log(typeof message === "string" ? message : message.text);
     return;
   }
-  await sendLineText(text);
+  if (!hasLineConfig()) throw new Error("Missing LINE_CHANNEL_ACCESS_TOKEN and LINE_TO or LINE_USER_ID");
+  if (typeof message === "object" && message.flex && process.env.LINE_FLEX_DISABLED !== "1") {
+    await sendLineFlex(message.altText || message.text || "交易管家通知", message.flex);
+    return;
+  }
+  await sendLineText(typeof message === "string" ? message : message.text);
 }
-
 function getFreshAEvents(payload, today) {
   if (payload.date !== today) return [];
   return (payload.events || [])
@@ -289,6 +300,8 @@ function getFreshAEvents(payload, today) {
 
 async function main() {
   const now = taipeiParts();
+  if (DRY_RUN && process.env.TRADE_MANAGER_TEST_DATE) now.dateKey = process.env.TRADE_MANAGER_TEST_DATE;
+  if (DRY_RUN && process.env.TRADE_MANAGER_TEST_TIME) now.time = process.env.TRADE_MANAGER_TEST_TIME;
   const payload = readJson(STRATEGY2_REPORT_FILE, { date: "", events: [] });
   const state = loadState(now.dateKey);
   const events = getFreshAEvents(payload, now.dateKey);
@@ -349,7 +362,12 @@ async function main() {
     state.positions[event.code] = position;
     state.notified[event.code] = { buyAt: new Date().toISOString(), entryTime: position.entryTime };
     state.dailyTradeCount += 1;
-    messages.push(buildBuyMessage(event, position));
+    const text = buildBuyMessage(event, position);
+    messages.push({
+      text,
+      altText: `交易管家可買：${event.code} ${event.name || ""}`.trim(),
+      flex: tradeBuyFlex(event, position),
+    });
   }
 
   for (const [code, position] of Object.entries(state.positions)) {
@@ -362,7 +380,13 @@ async function main() {
     if (current >= cleanNumber(position.takeProfitPrice)) action = "takeProfit";
     if (current <= cleanNumber(position.stopLossPrice)) action = "stopLoss";
     if (!action) continue;
-    messages.push(buildExitMessage(position, quote, action));
+    const text = buildExitMessage(position, quote, action);
+    const pnl = profitText(position.entryPrice, current, position.shares);
+    messages.push({
+      text,
+      altText: `交易管家${action === "takeProfit" ? "停利" : "停損"}：${position.code} ${position.name || ""}`.trim(),
+      flex: tradeExitFlex(position, quote, action, pnl.text),
+    });
     state.closed[code] = {
       ...position,
       exitPrice: current,
@@ -380,10 +404,17 @@ async function main() {
   for (const message of messages) {
     await notify(message);
   }
-  console.log(`trade manager ${now.dateKey} ${now.time}: sent ${messages.length} message(s)`);
+  console.log(`trade manager ${now.dateKey} ${now.time}: ${DRY_RUN ? "dry-run generated" : "sent"} ${messages.length} message(s)`);
 }
 
 main().catch((error) => {
   console.error(error);
   process.exit(1);
 });
+
+
+
+
+
+
+

@@ -1,10 +1,11 @@
 const fs = require("fs");
 const path = require("path");
 const { formatTradePrice } = require("./intraday-radar-rules");
-const { hasLineConfig, sendLineText } = require("./line-push");
+const { hasLineConfig, sendLineFlex, sendLineText } = require("./line-push");
+const { strategy2LiveFlex } = require("./line-flex-templates");
 
-const ROOT = path.resolve(__dirname, "..");
-const STRATEGY2_REPORT_FILE = path.join(ROOT, "data", "strategy2-intraday-latest.json");
+const { ROOT, dataPath, statePath } = require("./runtime-paths");
+const STRATEGY2_REPORT_FILE = dataPath("strategy2-intraday-latest.json");
 const LIVE_LIMIT = Math.max(1, Number(process.env.STRATEGY2_LIVE_LIMIT || 3));
 
 function readJson(file, fallback) {
@@ -56,14 +57,28 @@ async function main() {
     console.log("strategy2 live alert skipped: no A-zone events");
     return;
   }
+  const altText = `策略2 A區通知：${latestEvents.map((event) => `${event.code} ${event.name || ""}`.trim()).join("、")}`;
+  if (process.env.STRATEGY2_LIVE_DRY_RUN === "1" || process.env.LINE_DRY_RUN === "1") {
+    console.log(`[dry-run] ${altText}`);
+    console.log(buildMessage(latestEvents));
+    return;
+  }
   if (!hasLineConfig()) {
     throw new Error("Missing LINE_CHANNEL_ACCESS_TOKEN and LINE_TO or LINE_USER_ID");
   }
-  await sendLineText(buildMessage(latestEvents));
-  console.log(`strategy2 live alert sent: latest ${latestEvents.length}`);
+  if (process.env.LINE_FLEX_DISABLED === "1") {
+    await sendLineText(buildMessage(latestEvents));
+  } else {
+    await sendLineFlex(altText, strategy2LiveFlex(latestEvents, today));
+  }
+  console.log(`strategy2 live alert sent: latest ${latestEvents.length}${process.env.LINE_FLEX_DISABLED === "1" ? " text" : " flex"}`);
 }
 
 main().catch((error) => {
   console.error(error);
   process.exit(1);
 });
+
+
+
+
