@@ -326,18 +326,60 @@ function installThemeToggle() {
       body.fuman-light-theme #warrant-flow-view .swing-panel {
         background: #ffffff !important;
         border-color: #cfe3f3 !important;
+        box-shadow: 0 14px 32px rgba(14, 116, 144, 0.08) !important;
+        overflow: hidden !important;
       }
       body.fuman-light-theme #warrant-flow-view .swing-table th {
         background: #eaf6ff !important;
         color: #1f2937 !important;
+        border-color: #d7e8f7 !important;
       }
       body.fuman-light-theme #warrant-flow-view .swing-table td,
       body.fuman-light-theme #warrant-flow-view .swing-table td *,
       body.fuman-light-theme #warrant-flow-view .swing-table .code {
         color: #111827 !important;
       }
+      body.fuman-light-theme #warrant-flow-view .swing-table tbody tr {
+        background: #ffffff !important;
+      }
+      body.fuman-light-theme #warrant-flow-view .swing-table tbody tr:nth-child(even) {
+        background: #f8fcff !important;
+      }
+      body.fuman-light-theme #warrant-flow-view .swing-table tbody tr:hover {
+        background: #fff8ed !important;
+      }
       body.fuman-light-theme #warrant-flow-view .swing-table .price {
         color: #e11d48 !important;
+      }
+      body.fuman-light-theme #warrant-flow-view .swing-score,
+      body.fuman-light-theme #warrant-flow-view .rank-badge {
+        background: #fb7185 !important;
+        color: #ffffff !important;
+        border-color: #fb7185 !important;
+      }
+      body.fuman-light-theme #warrant-flow-view .swing-stage {
+        background: #fff1f2 !important;
+        color: #be123c !important;
+        border-color: #fecdd3 !important;
+      }
+      body.fuman-light-theme #warrant-flow-view .terminal-pagination,
+      body.fuman-light-theme #warrant-flow-view .warrant-pagination {
+        background: #f5fbff !important;
+        border: 1px solid #cfe3f3 !important;
+        border-top: 0 !important;
+        color: #475569 !important;
+      }
+      body.fuman-light-theme #warrant-flow-view .terminal-pagination button,
+      body.fuman-light-theme #warrant-flow-view .warrant-pagination button {
+        background: #ffffff !important;
+        color: #334155 !important;
+        border-color: #cbd8e6 !important;
+      }
+      body.fuman-light-theme #warrant-flow-view .terminal-pagination button.active,
+      body.fuman-light-theme #warrant-flow-view .warrant-pagination button.active {
+        background: #ffedd5 !important;
+        color: #c2410c !important;
+        border-color: #fdba74 !important;
       }
       body.fuman-light-theme #chip-trade-view {
         background: #f6f9fd !important;
@@ -1202,6 +1244,14 @@ function installThemeToggle() {
       body.fuman-light-theme #strategy-view .intraday-signal-card.diamond strong,
       body.fuman-light-theme #strategy-view .intraday-signal-card.warn strong,
       body.fuman-light-theme #strategy-view .intraday-count {
+        color: #111827 !important;
+      }
+      body.fuman-light-theme #strategy-view .intraday-side-panel .intraday-signal-card,
+      body.fuman-light-theme #strategy-view .intraday-side-panel .intraday-signal-card *,
+      body.fuman-light-theme #strategy-view .intraday-side-panel .intraday-card-top,
+      body.fuman-light-theme #strategy-view .intraday-side-panel .intraday-card-top *,
+      body.fuman-light-theme #strategy-view .intraday-side-panel .intraday-strength,
+      body.fuman-light-theme #strategy-view .intraday-side-panel .intraday-strength * {
         color: #111827 !important;
       }
       body.fuman-light-theme #strategy-view .intraday-signal-card small {
@@ -2772,7 +2822,7 @@ function radarSignalTags(stock) {
   const prev = daily?.prev;
   const dailyRows = normalizeArray(daily?.rows);
   const priorRows = dailyRows.slice(0, -1);
-  const volumeRatio = daily?.volumeRatio || 0;
+  const volumeRatio = cleanNumber(stock.volumeRatio) || cleanNumber(daily?.volumeRatio);
   const bodyPct = open ? ((close - open) / open) * 100 : 0;
   const longRed = close && open && close > open && bodyPct >= 3;
   const longBlack = close && open && close < open && bodyPct <= -3;
@@ -2815,9 +2865,11 @@ function radarSignalTags(stock) {
   if (breaksLow(20)) tags.push("跌破20日低");
   if (breaksLow(60)) tags.push("跌破60日低");
   if (breaksLow(120)) tags.push("跌破120日低");
-  if (volumeRatio >= 2) tags.push("量增2倍");
-  else if (volumeRatio >= 1.5) tags.push("量增1.5倍");
-  if (value >= 1000000000 || (volume >= 5000 && Math.abs(pct) >= 1.2)) tags.push("即時爆量");
+  if (pct >= 0 && volumeRatio >= 2) tags.push("量增2倍");
+  else if (pct >= 0 && volumeRatio >= 1.5) tags.push("量增1.5倍");
+  if (pct < 0 && volumeRatio >= 2) tags.push("量增2倍");
+  else if (pct < 0 && volumeRatio >= 1.5) tags.push("量增1.5倍");
+  if ((pct > 0 && (value >= 1000000000 || (volume >= 5000 && pct >= 1.2))) || (pct < 0 && (value >= 1000000000 || (volume >= 5000 && pct <= -1.2)))) tags.push("即時爆量");
   if (pct >= 3) tags.push("短線急拉");
   if (foreign >= 1000) tags.push("外資買超");
   if (totalInst >= 1000) tags.push("三大法人買超");
@@ -2935,7 +2987,8 @@ function buildRealtimeRadarRows() {
       const shortMarginChange = radarShortMarginChange({ ...live, swingDaily: daily });
       const upperShadowPct = radarUpperShadowPct({ ...live, swingDaily: daily });
       const lowerShadowPct = radarLowerShadowPct({ ...live, swingDaily: daily });
-      const signalTags = radarSignalTags({ ...live, pct, value, volume, foreign, trust, totalInst, marginChange, shortMarginChange, swingDaily: daily });
+      const volumeRatio = radarVolumeRatio({ ...live, volume, swingDaily: daily });
+      const signalTags = radarSignalTags({ ...live, pct, value, volume, volumeRatio, foreign, trust, totalInst, marginChange, shortMarginChange, swingDaily: daily });
       const hasLongTag = signalTags.some((tag) => /突破|長紅|長下影|量增|買超|強勢|急拉|融資增加/.test(tag));
       const hasShortTag = signalTags.some((tag) => /跌破|長上影|急殺|賣超|轉弱|長黑|接近跌停|融券增加/.test(tag));
       const hasLongSignal =
@@ -2971,6 +3024,7 @@ function buildRealtimeRadarRows() {
         side,
         score,
         flow,
+        volumeRatio,
         trust,
         foreign,
         totalInst,
@@ -3030,6 +3084,7 @@ function saveRealtimeRadarLastRows(rows) {
         value: stock.value,
         volume: stock.volume,
         tradeVolume: stock.tradeVolume,
+        volumeRatio: stock.volumeRatio,
         side: stock.side,
         score: stock.score,
         flow: stock.flow,
@@ -3205,6 +3260,12 @@ function renderRealtimeRadar() {
     return;
   }
   if (!Object.keys(strategyHistoryData).length && !strategy4CacheLoading) loadStrategy4Cache(true);
+  const historyTargets = radarOpen ? getRealtimeRadarHistoryTargets() : [];
+  if (historyTargets.length && !realtimeRadarHistoryPromise && Date.now() - realtimeRadarHistoryLastAt >= REALTIME_RADAR_HISTORY_REFRESH_MS) {
+    loadRealtimeRadarHistory(historyTargets).then((loaded) => {
+      if (loaded) renderRealtimeRadar();
+    });
+  }
   const radarNeedsUpdate = radarOpen && (realtimeRadarNeedsFreshScan || !isRealtimeRadarFresh());
   if (radarNeedsUpdate && realtimeRadarLastRows.length) {
     if (!realtimeRadarRefreshLoading && !strategyRealtimeLoading) {
@@ -3323,7 +3384,7 @@ function renderRealtimeRadar() {
     const sign = stock.pct >= 0 ? "+" : "";
     const tags = radarReasonTags(stock).map((tag) => `<span>${tag}</span>`).join("");
     const instTags = radarInstitutionTags(stock).map((tag) => `<span>${tag}</span>`).join("");
-    const volumeRatio = radarVolumeRatio(stock);
+    const volumeRatio = cleanNumber(stock.volumeRatio) || radarVolumeRatio(stock);
     const eventTime = cleanNumber(stock.radarUpdatedAt)
       ? new Date(cleanNumber(stock.radarUpdatedAt)).toLocaleTimeString("zh-TW", { hour12: false, hour: "2-digit", minute: "2-digit" })
       : now.slice(0, 5);
@@ -3587,7 +3648,12 @@ let realtimeRadarLastRows = [];
 let realtimeRadarLastUpdatedAt = 0;
 let realtimeRadarRefreshLoading = false;
 let realtimeRadarNeedsFreshScan = true;
+let realtimeRadarHistoryPromise = null;
+let realtimeRadarHistoryLastAt = 0;
 const REALTIME_RADAR_LAST_CACHE_KEY = "fuman_realtime_radar_last_rows_v1";
+const REALTIME_RADAR_HISTORY_TARGET_LIMIT = 72;
+const REALTIME_RADAR_HISTORY_BATCH_SIZE = 12;
+const REALTIME_RADAR_HISTORY_REFRESH_MS = 10 * 60 * 1000;
 let sectorStocksCache = {};
 let institutionData = {};
 let institutionDataPromise = null;
@@ -4061,6 +4127,74 @@ function updateStrategyHistory(item) {
       .sort((a, b) => a.date.localeCompare(b.date)),
     updatedAt: Date.now(),
   };
+}
+
+function hasStrategyHistoryRows(code, minRows = 60) {
+  const rows = normalizeArray(strategyHistoryData[code]?.rows);
+  return rows.length >= minRows;
+}
+
+function getRealtimeRadarHistoryTargets(limit = REALTIME_RADAR_HISTORY_TARGET_LIMIT) {
+  const pool = latestStocks
+    .map((stock) => applyStrategyQuote(stock))
+    .filter((stock) => isIntradayTradable(stock))
+    .filter((stock) => !isRealtimeRadarLimitUp(stock));
+  const shortPressurePool = [...pool]
+    .filter((stock) => {
+      const inst = getInstitutionTotal(stock.code);
+      const pct = cleanNumber(stock.percent ?? stock.pct);
+      const value = radarStockValue(stock);
+      const volume = cleanNumber(stock.tradeVolume || stock.volume);
+      return (
+        pct <= -0.6 ||
+        (pct < 0 && value >= 100000000) ||
+        (pct <= -0.3 && volume >= 2500) ||
+        (cleanNumber(inst.foreign) <= -1000 && pct <= 0.8) ||
+        (cleanNumber(inst.trust) <= -500 && pct <= 0.8)
+      );
+    })
+    .sort((a, b) => radarStockValue(b) - radarStockValue(a));
+  return uniqueStocksByCode([
+    ...getIntradayCandidateStocks(pool),
+    ...getBaseStrongIntradayStocks(pool),
+    ...shortPressurePool,
+    ...[...pool].sort((a, b) => getIntradayHotScore(b) - getIntradayHotScore(a)),
+  ])
+    .filter((stock) => stock?.code && !hasStrategyHistoryRows(stock.code))
+    .slice(0, limit);
+}
+
+async function loadRealtimeRadarHistory(stocks = [], options = {}) {
+  const force = options.force === true;
+  if (realtimeRadarHistoryPromise) return realtimeRadarHistoryPromise;
+  if (!force && Date.now() - realtimeRadarHistoryLastAt < REALTIME_RADAR_HISTORY_REFRESH_MS) return 0;
+  const codes = [...new Set(normalizeArray(stocks)
+    .map((stock) => String(stock?.code || "").replace(/\D/g, "").slice(0, 4))
+    .filter((code) => /^\d{4}$/.test(code) && (force || !hasStrategyHistoryRows(code))))];
+  if (!codes.length) return 0;
+
+  realtimeRadarHistoryPromise = (async () => {
+    let loaded = 0;
+    try {
+      for (let index = 0; index < codes.length; index += REALTIME_RADAR_HISTORY_BATCH_SIZE) {
+        const chunk = codes.slice(index, index + REALTIME_RADAR_HISTORY_BATCH_SIZE);
+        const payload = await fetchJson(`${endpoints.history}?codes=${encodeURIComponent(chunk.join(","))}&t=${Date.now()}`, 20000);
+        const histories = normalizeArray(payload?.histories || payload?.results || payload?.data);
+        histories.forEach((item) => {
+          const before = normalizeArray(strategyHistoryData[item?.code]?.rows).length;
+          updateStrategyHistory(item);
+          if (normalizeArray(strategyHistoryData[item?.code]?.rows).length > before) loaded += 1;
+        });
+      }
+    } catch (error) {
+      console.warn("Realtime radar history load failed", error);
+    } finally {
+      realtimeRadarHistoryLastAt = Date.now();
+      realtimeRadarHistoryPromise = null;
+    }
+    return loaded;
+  })();
+  return realtimeRadarHistoryPromise;
 }
 
 function updateStrategy4Scan(payload, options = {}) {
@@ -11605,6 +11739,7 @@ document.addEventListener("click", (event) => {
   if (!radarRefresh) return;
   realtimeRadarSide = "auto";
   realtimeRadarNeedsFreshScan = true;
+  realtimeRadarHistoryLastAt = 0;
   renderRealtimeRadar();
 });
 
