@@ -4029,6 +4029,12 @@ const SECTOR_RUBBER_OVERRIDES = {
 };
 Object.assign(SECTOR_MAP, SECTOR_RUBBER_OVERRIDES);
 
+const SECTOR_PAPER_OVERRIDES = {
+  "1905":"造紙工業","1904":"造紙工業","1909":"造紙工業","1903":"造紙工業",
+  "1907":"造紙工業","6790":"造紙工業","1906":"造紙工業","9929":"造紙工業",
+};
+Object.assign(SECTOR_MAP, SECTOR_PAPER_OVERRIDES);
+
 const SECTOR_TRADING_RETAIL_OVERRIDES = {
   "2912":"貿易百貨","2915":"貿易百貨","2903":"貿易百貨","2913":"貿易百貨",
   "4807":"貿易百貨","2905":"貿易百貨","2601":"貿易百貨","2908":"貿易百貨",
