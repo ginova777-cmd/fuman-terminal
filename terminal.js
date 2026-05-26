@@ -4004,6 +4004,12 @@ const SECTOR_GLASS_CERAMICS_OVERRIDES = {
 };
 Object.assign(SECTOR_MAP, SECTOR_GLASS_CERAMICS_OVERRIDES);
 
+const SECTOR_ASSEMBLY_CLASSIFICATION_OVERRIDES = {
+  "2317":"組裝代工","4938":"組裝代工",
+  "2382":"AI伺服器","2356":"電腦週邊","2324":"電腦週邊","2353":"電腦週邊","2354":"其他電子",
+};
+Object.assign(SECTOR_MAP, SECTOR_ASSEMBLY_CLASSIFICATION_OVERRIDES);
+
 const SECTOR_EQUIPMENT_TEST_OVERRIDES = {
   "6223":"半導體設備/測試","2360":"半導體設備/測試","6187":"半導體設備/測試","6510":"半導體設備/測試",
   "3680":"半導體設備/測試","6515":"半導體設備/測試","6196":"半導體設備/測試","3413":"半導體設備/測試",
@@ -9313,14 +9319,25 @@ function mergeHeatmapApiSectorsIntoCache(sectors) {
       if (!code) return;
       const industry = SECTOR_MAP[code] || sector.name;
       if (!industry) return;
-      if (!nextCache[industry]) nextCache[industry] = [];
       const row = { ...stock, code, name: stock.name || stock.Name || stock.證券名稱 || code };
-      const existingIndex = nextCache[industry].findIndex((item) => String(item.code || item.Code || item.證券代號) === code);
-      if (existingIndex >= 0) nextCache[industry][existingIndex] = { ...nextCache[industry][existingIndex], ...row };
-      else nextCache[industry].push(row);
+      upsertSectorStock(nextCache, industry, row);
     });
   });
   sectorStocksCache = nextCache;
+}
+
+function upsertSectorStock(cache, industry, row) {
+  const code = String(row?.code || row?.Code || row?.證券代號 || "").trim();
+  if (!code || !industry) return;
+  Object.keys(cache).forEach((name) => {
+    if (name === industry) return;
+    cache[name] = normalizeArray(cache[name]).filter((item) => String(item.code || item.Code || item.證券代號) !== code);
+    if (!cache[name].length) delete cache[name];
+  });
+  if (!cache[industry]) cache[industry] = [];
+  const existingIndex = cache[industry].findIndex((item) => String(item.code || item.Code || item.證券代號) === code);
+  if (existingIndex >= 0) cache[industry][existingIndex] = { ...cache[industry][existingIndex], ...row };
+  else cache[industry].push(row);
 }
 
 // ★ 修改：從 API 回傳的 stocks 直接存進 cache，並依本地族群表重新分桶
@@ -10143,11 +10160,8 @@ function buildSectorStocksCache(stocks, options = {}) {
     const pct = cleanNumber(valueOf(stock, ["pct", "percent", "漲跌百分比"])) || (prev > 0 ? (change / prev) * 100 : 0);
     const industry = SECTOR_MAP[code];
     if (!industry) continue;
-    if (!nextCache[industry]) nextCache[industry] = [];
     const row = { code, name, close, change, pct, value, volume };
-    const existingIndex = nextCache[industry].findIndex((item) => String(item.code) === code);
-    if (existingIndex >= 0) nextCache[industry][existingIndex] = { ...nextCache[industry][existingIndex], ...row };
-    else nextCache[industry].push(row);
+    upsertSectorStock(nextCache, industry, row);
   }
   sectorStocksCache = nextCache;
 }
