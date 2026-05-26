@@ -898,6 +898,71 @@ function installThemeToggle() {
         border-color: #dbe3ee !important;
         color: #334155 !important;
       }
+      .global-refresh-widget {
+        position: fixed;
+        top: 24px;
+        right: 76px;
+        z-index: 9997;
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+        padding: 5px 6px 5px 10px;
+        border: 1px solid rgba(148, 163, 184, 0.22);
+        border-radius: 10px;
+        background: rgba(15, 23, 42, 0.72);
+        color: #9fb3d9;
+        box-shadow: 0 14px 34px rgba(0, 0, 0, 0.18);
+        backdrop-filter: blur(10px);
+      }
+      .global-refresh-widget span {
+        display: inline-flex;
+        align-items: center;
+        gap: 7px;
+        font-size: 13px;
+        font-weight: 700;
+        white-space: nowrap;
+      }
+      .global-refresh-widget span::before {
+        content: "";
+        width: 6px;
+        height: 6px;
+        border-radius: 999px;
+        background: #86efac;
+        box-shadow: 0 0 0 3px rgba(134, 239, 172, 0.14);
+      }
+      .global-refresh-widget button {
+        width: 34px;
+        height: 34px;
+        display: grid;
+        place-items: center;
+        border: 1px solid rgba(148, 163, 184, 0.28);
+        border-radius: 9px;
+        background: rgba(255, 255, 255, 0.06);
+        color: #9fb3d9;
+        cursor: pointer;
+        font-size: 18px;
+        font-weight: 900;
+        line-height: 1;
+      }
+      .global-refresh-widget button:hover {
+        color: #ffbd8a;
+        border-color: rgba(255, 122, 69, 0.45);
+      }
+      body.fuman-light-theme .global-refresh-widget {
+        background: rgba(255, 255, 255, 0.92) !important;
+        color: #64748b !important;
+        border-color: #dbe3ee !important;
+        box-shadow: 0 12px 30px rgba(15, 23, 42, 0.08) !important;
+      }
+      body.fuman-light-theme .global-refresh-widget button {
+        background: #ffffff !important;
+        color: #64748b !important;
+        border-color: #cbd5e1 !important;
+      }
+      body.fuman-light-theme .global-refresh-widget button:hover {
+        color: #c2410c !important;
+        border-color: #fed7aa !important;
+      }
       body.fuman-light-theme #strategy-view,
       body.fuman-light-theme #strategy-view.strategy3-only,
       body.fuman-light-theme #strategy-view .strategy-terminal,
@@ -1088,6 +1153,18 @@ function installThemeToggle() {
         .market-ai-metrics {
           grid-template-columns: repeat(2, minmax(0, 1fr));
         }
+        .global-refresh-widget {
+          top: 14px;
+          right: 62px;
+          gap: 7px;
+        }
+        .global-refresh-widget span {
+          font-size: 12px;
+        }
+        .global-refresh-widget button {
+          width: 32px;
+          height: 32px;
+        }
       }
     `;
     document.head.appendChild(style);
@@ -1111,6 +1188,63 @@ function installThemeToggle() {
     applyTheme(next);
   });
   document.body.appendChild(button);
+}
+
+function installGlobalRefreshWidget() {
+  if (document.querySelector("#global-refresh-widget")) return;
+  const widget = document.createElement("div");
+  widget.id = "global-refresh-widget";
+  widget.className = "global-refresh-widget";
+  widget.innerHTML = `
+    <span data-global-refresh-time>更新 --:--:--</span>
+    <button type="button" data-global-refresh title="重新整理" aria-label="重新整理">↻</button>
+  `;
+  document.body.appendChild(widget);
+  widget.querySelector("[data-global-refresh]")?.addEventListener("click", handleGlobalRefresh);
+}
+
+function updateGlobalRefreshTime(timeText = "") {
+  const target = document.querySelector("[data-global-refresh-time]");
+  if (!target) return;
+  target.textContent = `更新 ${timeText || new Date().toLocaleTimeString("zh-TW", { hour12: false })}`;
+}
+
+function handleGlobalRefresh() {
+  const active = getActiveViewName();
+  if (active === "market") {
+    loadMarketData(true);
+    loadHeatmap();
+    return;
+  }
+  if (active === "realtime-radar") {
+    realtimeRadarSide = "auto";
+    realtimeRadarNeedsFreshScan = true;
+    renderRealtimeRadar();
+    return;
+  }
+  if (active === "strategy") {
+    if (strategyPresetMode === "strategy3") loadStrategy3Cache(true);
+    else if (strategyPresetMode === "strategy5") loadStrategy5Cache(true);
+    else if (selectedStrategyIds.has("open_buy")) loadOpenBuyCache(true);
+    else if (selectedStrategyIds.has("swing_radar")) loadStrategy4Cache(true);
+    else if (selectedStrategyIds.has("intraday_2m")) refreshStrategyRealtimeScan("force");
+    else renderStrategyScanner();
+    return;
+  }
+  if (active === "chip-trade") {
+    loadChipTradeData(true);
+    return;
+  }
+  if (active === "warrant-flow") {
+    loadWarrantFlow(true);
+    return;
+  }
+  if (active === "watchlist") {
+    renderWatchlist();
+    refreshSelectedWatchlistQuote();
+    return;
+  }
+  window.location.reload();
 }
 
 function setAuthMessage(text, type = "") {
@@ -9347,6 +9481,7 @@ function tickClock() {
   const day = String(now.getDate()).padStart(2,"0");
   const time = now.toLocaleTimeString("zh-TW",{hour12:false,hour:"2-digit",minute:"2-digit",second:"2-digit"});
   refreshLine.textContent = `${month}/${day}  重新整理　更新 ${time}`;
+  updateGlobalRefreshTime(time);
   headerTimes.forEach((item)=>{item.textContent=`${month}/${day} ${time.slice(0,5)}`;});
 }
 
@@ -9856,6 +9991,7 @@ installMobileWatchlistNavOrder();
 installRealtimeRadarView();
 applyStaticTitleIcons();
 installMarketTabs();
+installGlobalRefreshWidget();
 deferUiWork(() => loadWorkflowRunStatus().catch(() => {}), 2000);
 ensureMobileAutoOrganizeButton();
 if (isViewActive("market")) {
