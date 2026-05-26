@@ -9461,7 +9461,7 @@ function classifyMarketAiStock(stock, sectors) {
 function getMarketAiHotGroups(hotStocks) {
   const groups = {
     all: hotStocks,
-    momentum: hotStocks.filter((stock) => stock.buckets.momentum).sort((a, b) => b.momentumScore - a.momentumScore || b.score - a.score),
+    momentum: hotStocks.filter((stock) => stock.buckets.momentum).sort((a, b) => b.score - a.score || b.capitalFlowScore - a.capitalFlowScore || b.momentumScore - a.momentumScore),
     legal: hotStocks.filter((stock) => stock.buckets.legal).sort((a, b) => b.legalScore - a.legalScore || b.score - a.score),
     intraday: hotStocks.filter((stock) => stock.buckets.intraday).sort((a, b) => b.intradayScore - a.intradayScore || b.score - a.score),
     risk: hotStocks.filter((stock) => stock.buckets.risk).sort((a, b) => b.riskScore - a.riskScore || b.score - a.score),
