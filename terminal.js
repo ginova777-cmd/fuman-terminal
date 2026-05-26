@@ -4051,6 +4051,15 @@ const SECTOR_THERMAL_OVERRIDES = {
 };
 Object.assign(SECTOR_MAP, SECTOR_THERMAL_OVERRIDES);
 
+const SECTOR_MEMORY_STORAGE_OVERRIDES = {
+  "2408":"記憶體/儲存","2337":"記憶體/儲存","2344":"記憶體/儲存","6770":"記憶體/儲存",
+  "3260":"記憶體/儲存","5289":"記憶體/儲存","4967":"記憶體/儲存","3006":"記憶體/儲存",
+  "2451":"記憶體/儲存","8299":"記憶體/儲存","8150":"記憶體/儲存","8271":"記憶體/儲存",
+  "8112":"記憶體/儲存","5351":"記憶體/儲存","2329":"記憶體/儲存","4973":"記憶體/儲存",
+  "3135":"記憶體/儲存","8088":"記憶體/儲存","8277":"記憶體/儲存",
+};
+Object.assign(SECTOR_MAP, SECTOR_MEMORY_STORAGE_OVERRIDES);
+
 function cleanNumber(value) {
   if (value === undefined || value === null || value === "") return 0;
   return Number(String(value).replace(/[,+%]/g, "")) || 0;
