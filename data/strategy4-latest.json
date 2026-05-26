@@ -1,9 +1,9 @@
 {
   "ok": true,
   "source": "github-actions",
-  "updatedAt": "2026-05-26T11:59:54.715Z",
+  "updatedAt": "2026-05-26T23:09:47.320Z",
   "fullScan": true,
-  "cursor": 43,
+  "cursor": 11,
   "total": 1957,
   "scannedThisRun": 1957,
   "scannedCodes": [
@@ -1965,193 +1965,21 @@
     "9960",
     "9962"
   ],
-  "count": 35,
+  "count": 58,
   "matches": [
     {
-      "code": "6735",
-      "name": "美達科技",
-      "close": 115,
-      "percent": 107.95660036166366,
-      "value": 126500000,
-      "tradeVolume": 1100,
-      "change": 4.5,
-      "open": 112,
-      "high": 116,
-      "low": 109,
-      "prevClose": 110.5,
-      "volume": 1100,
-      "market": "TPEX",
-      "quoteDate": "20260526",
-      "quoteTime": "13:30:00",
-      "date": "2026-05-26",
-      "volumeRatio": 12.49,
-      "swingStage": {
-        "label": "高基期",
-        "ratio": "0.98",
-        "tone": "high",
-        "value": 0.9845916795069336
-      },
-      "swingScore": 100,
-      "score": 100,
-      "swingSignals": [
-        {
-          "id": "bull_attack",
-          "short": "攻擊",
-          "icon": "🔥",
-          "reason": "站上MA20/EMA21，MACD多頭，量比 12.49，日K多頭攻擊。"
-        },
-        {
-          "id": "n_base",
-          "short": "N字",
-          "icon": "",
-          "reason": "突破近10日壓力，站上MA20且趨勢確認，位階 高基期。"
-        },
-        {
-          "id": "saucer",
-          "short": "圓弧",
-          "icon": "◜",
-          "reason": "突破40日整理頸線，量能放大，偏圓弧底突破。"
-        },
-        {
-          "id": "breakaway_gap",
-          "short": "突破缺口",
-          "icon": "◆",
-          "reason": "跳空突破近20日整理高點，偏突破缺口。"
-        },
-        {
-          "id": "golden_cross",
-          "short": "金釵",
-          "icon": "✦",
-          "reason": "MA5 > MA10 > MA20 且收紅，多金釵候選。"
-        }
-      ],
-      "signals": [
-        {
-          "id": "bull_attack",
-          "short": "攻擊",
-          "icon": "🔥",
-          "reason": "站上MA20/EMA21，MACD多頭，量比 12.49，日K多頭攻擊。"
-        },
-        {
-          "id": "n_base",
-          "short": "N字",
-          "icon": "",
-          "reason": "突破近10日壓力，站上MA20且趨勢確認，位階 高基期。"
-        },
-        {
-          "id": "saucer",
-          "short": "圓弧",
-          "icon": "◜",
-          "reason": "突破40日整理頸線，量能放大，偏圓弧底突破。"
-        },
-        {
-          "id": "breakaway_gap",
-          "short": "突破缺口",
-          "icon": "◆",
-          "reason": "跳空突破近20日整理高點，偏突破缺口。"
-        },
-        {
-          "id": "golden_cross",
-          "short": "金釵",
-          "icon": "✦",
-          "reason": "MA5 > MA10 > MA20 且收紅，多金釵候選。"
-        }
-      ],
-      "reason": "站上MA20/EMA21，MACD多頭，量比 12.49，日K多頭攻擊。"
-    },
-    {
-      "code": "6548",
-      "name": "長科*",
-      "close": 60.3,
-      "percent": 29.122055674518187,
-      "value": 1430677800,
-      "tradeVolume": 23726,
-      "change": 5.399999999999999,
-      "open": 56.5,
-      "high": 60.3,
-      "low": 55.8,
-      "prevClose": 54.9,
-      "volume": 23726,
-      "market": "TPEX",
-      "quoteDate": "20260526",
-      "quoteTime": "13:30:00",
-      "date": "2026-05-26",
-      "volumeRatio": 3.27,
-      "swingStage": {
-        "label": "高基期",
-        "ratio": "0.80",
-        "tone": "high",
-        "value": 0.7956521739130433
-      },
-      "swingScore": 100,
-      "score": 100,
-      "swingSignals": [
-        {
-          "id": "bull_attack",
-          "short": "攻擊",
-          "icon": "🔥",
-          "reason": "站上MA20/EMA21，MACD多頭，量比 3.27，日K多頭攻擊。"
-        },
-        {
-          "id": "n_base",
-          "short": "N字",
-          "icon": "",
-          "reason": "突破近10日壓力，站上MA20且趨勢確認，位階 高基期。"
-        },
-        {
-          "id": "breakaway_gap",
-          "short": "突破缺口",
-          "icon": "◆",
-          "reason": "跳空突破近20日整理高點，偏突破缺口。"
-        },
-        {
-          "id": "golden_cross",
-          "short": "金釵",
-          "icon": "✦",
-          "reason": "MA5 > MA10 > MA20 且收紅，多金釵候選。"
-        }
-      ],
-      "signals": [
-        {
-          "id": "bull_attack",
-          "short": "攻擊",
-          "icon": "🔥",
-          "reason": "站上MA20/EMA21，MACD多頭，量比 3.27，日K多頭攻擊。"
-        },
-        {
-          "id": "n_base",
-          "short": "N字",
-          "icon": "",
-          "reason": "突破近10日壓力，站上MA20且趨勢確認，位階 高基期。"
-        },
-        {
-          "id": "breakaway_gap",
-          "short": "突破缺口",
-          "icon": "◆",
-          "reason": "跳空突破近20日整理高點，偏突破缺口。"
-        },
-        {
-          "id": "golden_cross",
-          "short": "金釵",
-          "icon": "✦",
-          "reason": "MA5 > MA10 > MA20 且收紅，多金釵候選。"
-        }
-      ],
-      "reason": "站上MA20/EMA21，MACD多頭，量比 3.27，日K多頭攻擊。"
-    },
-    {
-      "code": "6016",
-      "name": "康和證",
-      "close": 24.3,
-      "percent": 24.935732647814916,
-      "value": 266692500,
-      "tradeVolume": 10975,
-      "change": 0.8000000000000007,
-      "open": 23.8,
-      "high": 24.45,
-      "low": 23.25,
-      "prevClose": 23.5,
-      "volume": 10975,
+      "code": "4542",
+      "name": "科嶠",
+      "close": 276,
+      "percent": 38.69346733668342,
+      "value": 511704000,
+      "tradeVolume": 1854,
+      "change": 11,
+      "open": 260,
+      "high": 278,
+      "low": 251,
+      "prevClose": 265,
+      "volume": 1854,
       "market": "TPEX",
       "quoteDate": "20260526",
       "quoteTime": "13:30:00",
@@ -2161,7 +1989,7 @@
         "label": "高基期",
         "ratio": "0.99",
         "tone": "high",
-        "value": 0.9869565217391305
+        "value": 0.989010989010989
       },
       "swingScore": 100,
       "score": 100,
@@ -2239,9 +2067,9 @@
       "volumeRatio": 2.19,
       "swingStage": {
         "label": "高基期",
-        "ratio": "0.98",
+        "ratio": "0.97",
         "tone": "high",
-        "value": 0.9758064516129035
+        "value": 0.9734513274336286
       },
       "swingScore": 100,
       "score": 100,
@@ -2312,256 +2140,28 @@
       "reason": "站上MA20/EMA21，MACD多頭，量比 2.19，日K多頭攻擊。"
     },
     {
-      "code": "4951",
-      "name": "精拓科",
-      "close": 134.5,
-      "percent": 13.025210084033615,
-      "value": 204036500,
-      "tradeVolume": 1517,
-      "change": 2.5,
-      "open": 132,
-      "high": 135,
-      "low": 127,
-      "prevClose": 132,
-      "volume": 1517,
+      "code": "3141",
+      "name": "晶宏",
+      "close": 79.2,
+      "percent": 65.51724137931035,
+      "value": 512344800,
+      "tradeVolume": 6469,
+      "change": 0.7000000000000028,
+      "open": 78.7,
+      "high": 82,
+      "low": 75.8,
+      "prevClose": 78.5,
+      "volume": 6469,
       "market": "TPEX",
       "quoteDate": "20260526",
       "quoteTime": "13:30:00",
       "date": "2026-05-26",
-      "volumeRatio": 2.07,
-      "swingStage": {
-        "label": "高基期",
-        "ratio": "0.99",
-        "tone": "high",
-        "value": 0.9927641099855282
-      },
-      "swingScore": 100,
-      "score": 100,
-      "swingSignals": [
-        {
-          "id": "bull_attack",
-          "short": "攻擊",
-          "icon": "🔥",
-          "reason": "站上MA20/EMA21，MACD多頭，量比 2.07，日K多頭攻擊。"
-        },
-        {
-          "id": "n_base",
-          "short": "N字",
-          "icon": "",
-          "reason": "突破近10日壓力，站上MA20且趨勢確認，位階 高基期。"
-        },
-        {
-          "id": "breakaway_gap",
-          "short": "突破缺口",
-          "icon": "◆",
-          "reason": "跳空突破近20日整理高點，偏突破缺口。"
-        },
-        {
-          "id": "golden_cross",
-          "short": "金釵",
-          "icon": "✦",
-          "reason": "MA5 > MA10 > MA20 且收紅，多金釵候選。"
-        }
-      ],
-      "signals": [
-        {
-          "id": "bull_attack",
-          "short": "攻擊",
-          "icon": "🔥",
-          "reason": "站上MA20/EMA21，MACD多頭，量比 2.07，日K多頭攻擊。"
-        },
-        {
-          "id": "n_base",
-          "short": "N字",
-          "icon": "",
-          "reason": "突破近10日壓力，站上MA20且趨勢確認，位階 高基期。"
-        },
-        {
-          "id": "breakaway_gap",
-          "short": "突破缺口",
-          "icon": "◆",
-          "reason": "跳空突破近20日整理高點，偏突破缺口。"
-        },
-        {
-          "id": "golden_cross",
-          "short": "金釵",
-          "icon": "✦",
-          "reason": "MA5 > MA10 > MA20 且收紅，多金釵候選。"
-        }
-      ],
-      "reason": "站上MA20/EMA21，MACD多頭，量比 2.07，日K多頭攻擊。"
-    },
-    {
-      "code": "6913",
-      "name": "鴻呈",
-      "close": 149,
-      "percent": 5.673758865248227,
-      "value": 291891000,
-      "tradeVolume": 1959,
-      "change": 8,
-      "open": 144,
-      "high": 152,
-      "low": 144,
-      "prevClose": 141,
-      "volume": 1959,
-      "market": "TPEX",
-      "quoteDate": "20260526",
-      "quoteTime": "13:30:00",
-      "date": "2026-05-26",
-      "volumeRatio": 2.61,
+      "volumeRatio": 5.99,
       "swingStage": {
         "label": "高基期",
         "ratio": "0.93",
         "tone": "high",
-        "value": 0.9340659340659341
-      },
-      "swingScore": 100,
-      "score": 100,
-      "swingSignals": [
-        {
-          "id": "bull_attack",
-          "short": "攻擊",
-          "icon": "🔥",
-          "reason": "站上MA20/EMA21，MACD多頭，量比 2.61，日K多頭攻擊。"
-        },
-        {
-          "id": "n_base",
-          "short": "N字",
-          "icon": "",
-          "reason": "突破近10日壓力，站上MA20且趨勢確認，位階 高基期。"
-        },
-        {
-          "id": "saucer",
-          "short": "圓弧",
-          "icon": "◜",
-          "reason": "突破40日整理頸線，量能放大，偏圓弧底突破。"
-        },
-        {
-          "id": "golden_cross",
-          "short": "金釵",
-          "icon": "✦",
-          "reason": "MA5 > MA10 > MA20 且收紅，多金釵候選。"
-        }
-      ],
-      "signals": [
-        {
-          "id": "bull_attack",
-          "short": "攻擊",
-          "icon": "🔥",
-          "reason": "站上MA20/EMA21，MACD多頭，量比 2.61，日K多頭攻擊。"
-        },
-        {
-          "id": "n_base",
-          "short": "N字",
-          "icon": "",
-          "reason": "突破近10日壓力，站上MA20且趨勢確認，位階 高基期。"
-        },
-        {
-          "id": "saucer",
-          "short": "圓弧",
-          "icon": "◜",
-          "reason": "突破40日整理頸線，量能放大，偏圓弧底突破。"
-        },
-        {
-          "id": "golden_cross",
-          "short": "金釵",
-          "icon": "✦",
-          "reason": "MA5 > MA10 > MA20 且收紅，多金釵候選。"
-        }
-      ],
-      "reason": "站上MA20/EMA21，MACD多頭，量比 2.61，日K多頭攻擊。"
-    },
-    {
-      "code": "6844",
-      "name": "諾貝兒",
-      "close": 66,
-      "percent": 2.8037383177570048,
-      "value": 2112000,
-      "tradeVolume": 32,
-      "change": -0.5999999999999943,
-      "open": 65.4,
-      "high": 66,
-      "low": 65,
-      "prevClose": 66.6,
-      "volume": 32,
-      "market": "TPEX",
-      "quoteDate": "20260526",
-      "quoteTime": "13:30:00",
-      "date": "2026-05-26",
-      "volumeRatio": 3.15,
-      "swingStage": {
-        "label": "中位階",
-        "ratio": "0.54",
-        "tone": "mid",
-        "value": 0.5393258426966294
-      },
-      "swingScore": 100,
-      "score": 100,
-      "swingSignals": [
-        {
-          "id": "bull_attack",
-          "short": "攻擊",
-          "icon": "🔥",
-          "reason": "站上MA20/EMA21，MACD多頭，量比 3.15，日K多頭攻擊。"
-        },
-        {
-          "id": "n_base",
-          "short": "N字",
-          "icon": "",
-          "reason": "突破近10日壓力，站上MA20且趨勢確認，位階 中位階。"
-        },
-        {
-          "id": "breakaway_gap",
-          "short": "突破缺口",
-          "icon": "◆",
-          "reason": "跳空突破近20日整理高點，偏突破缺口。"
-        }
-      ],
-      "signals": [
-        {
-          "id": "bull_attack",
-          "short": "攻擊",
-          "icon": "🔥",
-          "reason": "站上MA20/EMA21，MACD多頭，量比 3.15，日K多頭攻擊。"
-        },
-        {
-          "id": "n_base",
-          "short": "N字",
-          "icon": "",
-          "reason": "突破近10日壓力，站上MA20且趨勢確認，位階 中位階。"
-        },
-        {
-          "id": "breakaway_gap",
-          "short": "突破缺口",
-          "icon": "◆",
-          "reason": "跳空突破近20日整理高點，偏突破缺口。"
-        }
-      ],
-      "reason": "站上MA20/EMA21，MACD多頭，量比 3.15，日K多頭攻擊。"
-    },
-    {
-      "code": "6245",
-      "name": "立端",
-      "close": 90.9,
-      "percent": 32.7007299270073,
-      "value": 171437400,
-      "tradeVolume": 1886,
-      "change": 1.1000000000000085,
-      "open": 90.5,
-      "high": 91.8,
-      "low": 89.4,
-      "prevClose": 89.8,
-      "volume": 1886,
-      "market": "TPEX",
-      "quoteDate": "20260526",
-      "quoteTime": "13:30:00",
-      "date": "2026-05-26",
-      "volumeRatio": 3.02,
-      "swingStage": {
-        "label": "高基期",
-        "ratio": "0.96",
-        "tone": "high",
-        "value": 0.9629629629629634
+        "value": 0.9325301204819277
       },
       "swingScore": 99,
       "score": 99,
@@ -2608,23 +2208,295 @@
       "reason": "突破近10日壓力，站上MA20且趨勢確認，位階 高基期。"
     },
     {
-      "code": "8050",
-      "name": "廣積",
-      "close": 60.1,
-      "percent": 44.645006016847184,
-      "value": 300139400,
-      "tradeVolume": 4994,
-      "change": 5.399999999999999,
-      "open": 54.9,
-      "high": 60.1,
-      "low": 53.9,
-      "prevClose": 54.7,
-      "volume": 4994,
+      "code": "3691",
+      "name": "碩禾",
+      "close": 157,
+      "percent": 21.705426356589147,
+      "value": 895214000,
+      "tradeVolume": 5702,
+      "change": 12.5,
+      "open": 145,
+      "high": 158.5,
+      "low": 139,
+      "prevClose": 144.5,
+      "volume": 5702,
       "market": "TPEX",
       "quoteDate": "20260526",
       "quoteTime": "13:30:00",
       "date": "2026-05-26",
-      "volumeRatio": 8.06,
+      "volumeRatio": 3.71,
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.98",
+        "tone": "high",
+        "value": 0.9821428571428571
+      },
+      "swingScore": 99,
+      "score": 99,
+      "swingSignals": [
+        {
+          "id": "bull_attack",
+          "short": "攻擊",
+          "icon": "🔥",
+          "reason": "站上MA20/EMA21，MACD多頭，量比 3.71，日K多頭攻擊。"
+        },
+        {
+          "id": "saucer",
+          "short": "圓弧",
+          "icon": "◜",
+          "reason": "突破40日整理頸線，量能放大，偏圓弧底突破。"
+        },
+        {
+          "id": "breakaway_gap",
+          "short": "突破缺口",
+          "icon": "◆",
+          "reason": "跳空突破近20日整理高點，偏突破缺口。"
+        }
+      ],
+      "signals": [
+        {
+          "id": "bull_attack",
+          "short": "攻擊",
+          "icon": "🔥",
+          "reason": "站上MA20/EMA21，MACD多頭，量比 3.71，日K多頭攻擊。"
+        },
+        {
+          "id": "saucer",
+          "short": "圓弧",
+          "icon": "◜",
+          "reason": "突破40日整理頸線，量能放大，偏圓弧底突破。"
+        },
+        {
+          "id": "breakaway_gap",
+          "short": "突破缺口",
+          "icon": "◆",
+          "reason": "跳空突破近20日整理高點，偏突破缺口。"
+        }
+      ],
+      "reason": "站上MA20/EMA21，MACD多頭，量比 3.71，日K多頭攻擊。"
+    },
+    {
+      "code": "8088",
+      "name": "品安",
+      "close": 60.4,
+      "percent": 20.079522862823065,
+      "value": 560632800,
+      "tradeVolume": 9282,
+      "change": 0.6000000000000014,
+      "open": 59.6,
+      "high": 61.5,
+      "low": 58.2,
+      "prevClose": 59.8,
+      "volume": 9282,
+      "market": "TPEX",
+      "quoteDate": "20260526",
+      "quoteTime": "13:30:00",
+      "date": "2026-05-26",
+      "volumeRatio": 3.04,
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.82",
+        "tone": "high",
+        "value": 0.8240343347639484
+      },
+      "swingScore": 99,
+      "score": 99,
+      "swingSignals": [
+        {
+          "id": "n_base",
+          "short": "N字",
+          "icon": "",
+          "reason": "突破近10日壓力，站上MA20且趨勢確認，位階 高基期。"
+        },
+        {
+          "id": "breakaway_gap",
+          "short": "突破缺口",
+          "icon": "◆",
+          "reason": "跳空突破近20日整理高點，偏突破缺口。"
+        },
+        {
+          "id": "golden_cross",
+          "short": "金釵",
+          "icon": "✦",
+          "reason": "MA5 > MA10 > MA20 且收紅，多金釵候選。"
+        }
+      ],
+      "signals": [
+        {
+          "id": "n_base",
+          "short": "N字",
+          "icon": "",
+          "reason": "突破近10日壓力，站上MA20且趨勢確認，位階 高基期。"
+        },
+        {
+          "id": "breakaway_gap",
+          "short": "突破缺口",
+          "icon": "◆",
+          "reason": "跳空突破近20日整理高點，偏突破缺口。"
+        },
+        {
+          "id": "golden_cross",
+          "short": "金釵",
+          "icon": "✦",
+          "reason": "MA5 > MA10 > MA20 且收紅，多金釵候選。"
+        }
+      ],
+      "reason": "突破近10日壓力，站上MA20且趨勢確認，位階 高基期。"
+    },
+    {
+      "code": "5483",
+      "name": "中美晶",
+      "close": 164,
+      "percent": 22.388059701492537,
+      "value": 5541560000,
+      "tradeVolume": 33790,
+      "change": 9.5,
+      "open": 162.5,
+      "high": 168,
+      "low": 158,
+      "prevClose": 154.5,
+      "volume": 33790,
+      "market": "TPEX",
+      "quoteDate": "20260526",
+      "quoteTime": "13:30:00",
+      "date": "2026-05-26",
+      "volumeRatio": 2.13,
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.94",
+        "tone": "high",
+        "value": 0.937007874015748
+      },
+      "swingScore": 98,
+      "score": 98,
+      "swingSignals": [
+        {
+          "id": "n_base",
+          "short": "N字",
+          "icon": "",
+          "reason": "突破近10日壓力，站上MA20且趨勢確認，位階 高基期。"
+        },
+        {
+          "id": "breakaway_gap",
+          "short": "突破缺口",
+          "icon": "◆",
+          "reason": "跳空突破近20日整理高點，偏突破缺口。"
+        },
+        {
+          "id": "golden_cross",
+          "short": "金釵",
+          "icon": "✦",
+          "reason": "MA5 > MA10 > MA20 且收紅，多金釵候選。"
+        }
+      ],
+      "signals": [
+        {
+          "id": "n_base",
+          "short": "N字",
+          "icon": "",
+          "reason": "突破近10日壓力，站上MA20且趨勢確認，位階 高基期。"
+        },
+        {
+          "id": "breakaway_gap",
+          "short": "突破缺口",
+          "icon": "◆",
+          "reason": "跳空突破近20日整理高點，偏突破缺口。"
+        },
+        {
+          "id": "golden_cross",
+          "short": "金釵",
+          "icon": "✦",
+          "reason": "MA5 > MA10 > MA20 且收紅，多金釵候選。"
+        }
+      ],
+      "reason": "突破近10日壓力，站上MA20且趨勢確認，位階 高基期。"
+    },
+    {
+      "code": "3221",
+      "name": "台嘉碩",
+      "close": 59.3,
+      "percent": 67.98866855524079,
+      "value": 895963700,
+      "tradeVolume": 15109,
+      "change": -0.9000000000000057,
+      "open": 59.1,
+      "high": 59.4,
+      "low": 55.1,
+      "prevClose": 60.2,
+      "volume": 15109,
+      "market": "TPEX",
+      "quoteDate": "20260526",
+      "quoteTime": "13:30:00",
+      "date": "2026-05-26",
+      "volumeRatio": 1.97,
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "1.00",
+        "tone": "high",
+        "value": 0.9974093264248706
+      },
+      "swingScore": 97,
+      "score": 97,
+      "swingSignals": [
+        {
+          "id": "n_base",
+          "short": "N字",
+          "icon": "",
+          "reason": "突破近10日壓力，站上MA20且趨勢確認，位階 高基期。"
+        },
+        {
+          "id": "breakaway_gap",
+          "short": "突破缺口",
+          "icon": "◆",
+          "reason": "跳空突破近20日整理高點，偏突破缺口。"
+        },
+        {
+          "id": "golden_cross",
+          "short": "金釵",
+          "icon": "✦",
+          "reason": "MA5 > MA10 > MA20 且收紅，多金釵候選。"
+        }
+      ],
+      "signals": [
+        {
+          "id": "n_base",
+          "short": "N字",
+          "icon": "",
+          "reason": "突破近10日壓力，站上MA20且趨勢確認，位階 高基期。"
+        },
+        {
+          "id": "breakaway_gap",
+          "short": "突破缺口",
+          "icon": "◆",
+          "reason": "跳空突破近20日整理高點，偏突破缺口。"
+        },
+        {
+          "id": "golden_cross",
+          "short": "金釵",
+          "icon": "✦",
+          "reason": "MA5 > MA10 > MA20 且收紅，多金釵候選。"
+        }
+      ],
+      "reason": "突破近10日壓力，站上MA20且趨勢確認，位階 高基期。"
+    },
+    {
+      "code": "5299",
+      "name": "杰力",
+      "close": 127.5,
+      "percent": 72.06477732793523,
+      "value": 462570000,
+      "tradeVolume": 3628,
+      "change": 11.5,
+      "open": 115,
+      "high": 127.5,
+      "low": 114,
+      "prevClose": 116,
+      "volume": 3628,
+      "market": "TPEX",
+      "quoteDate": "20260526",
+      "quoteTime": "13:30:00",
+      "date": "2026-05-26",
+      "volumeRatio": 11.76,
       "swingStage": {
         "label": "過熱",
         "ratio": "1.00+",
@@ -2638,7 +2510,7 @@
           "id": "bull_attack",
           "short": "攻擊",
           "icon": "🔥",
-          "reason": "站上MA20/EMA21，MACD多頭，量比 8.06，日K多頭攻擊。"
+          "reason": "站上MA20/EMA21，MACD多頭，量比 11.76，日K多頭攻擊。"
         },
         {
           "id": "saucer",
@@ -2664,7 +2536,7 @@
           "id": "bull_attack",
           "short": "攻擊",
           "icon": "🔥",
-          "reason": "站上MA20/EMA21，MACD多頭，量比 8.06，日K多頭攻擊。"
+          "reason": "站上MA20/EMA21，MACD多頭，量比 11.76，日K多頭攻擊。"
         },
         {
           "id": "saucer",
@@ -2685,7 +2557,87 @@
           "reason": "MA5 > MA10 > MA20 且收紅，多金釵候選。"
         }
       ],
-      "reason": "站上MA20/EMA21，MACD多頭，量比 8.06，日K多頭攻擊。"
+      "reason": "站上MA20/EMA21，MACD多頭，量比 11.76，日K多頭攻擊。"
+    },
+    {
+      "code": "4923",
+      "name": "力士",
+      "close": 45.15,
+      "percent": 57.86713286713285,
+      "value": 101497200,
+      "tradeVolume": 2248,
+      "change": 4.100000000000001,
+      "open": 41.3,
+      "high": 45.15,
+      "low": 39.2,
+      "prevClose": 41.05,
+      "volume": 2248,
+      "market": "TPEX",
+      "quoteDate": "20260526",
+      "quoteTime": "13:30:00",
+      "date": "2026-05-26",
+      "volumeRatio": 15.45,
+      "swingStage": {
+        "label": "過熱",
+        "ratio": "1.00+",
+        "tone": "hot",
+        "value": 1
+      },
+      "swingScore": 96,
+      "score": 96,
+      "swingSignals": [
+        {
+          "id": "bull_attack",
+          "short": "攻擊",
+          "icon": "🔥",
+          "reason": "站上MA20/EMA21，MACD多頭，量比 15.45，日K多頭攻擊。"
+        },
+        {
+          "id": "saucer",
+          "short": "圓弧",
+          "icon": "◜",
+          "reason": "突破40日整理頸線，量能放大，偏圓弧底突破。"
+        },
+        {
+          "id": "breakaway_gap",
+          "short": "突破缺口",
+          "icon": "◆",
+          "reason": "跳空突破近20日整理高點，偏突破缺口。"
+        },
+        {
+          "id": "golden_cross",
+          "short": "金釵",
+          "icon": "✦",
+          "reason": "MA5 > MA10 > MA20 且收紅，多金釵候選。"
+        }
+      ],
+      "signals": [
+        {
+          "id": "bull_attack",
+          "short": "攻擊",
+          "icon": "🔥",
+          "reason": "站上MA20/EMA21，MACD多頭，量比 15.45，日K多頭攻擊。"
+        },
+        {
+          "id": "saucer",
+          "short": "圓弧",
+          "icon": "◜",
+          "reason": "突破40日整理頸線，量能放大，偏圓弧底突破。"
+        },
+        {
+          "id": "breakaway_gap",
+          "short": "突破缺口",
+          "icon": "◆",
+          "reason": "跳空突破近20日整理高點，偏突破缺口。"
+        },
+        {
+          "id": "golden_cross",
+          "short": "金釵",
+          "icon": "✦",
+          "reason": "MA5 > MA10 > MA20 且收紅，多金釵候選。"
+        }
+      ],
+      "reason": "站上MA20/EMA21，MACD多頭，量比 15.45，日K多頭攻擊。"
     },
     {
       "code": "4168",
@@ -2756,86 +2708,6 @@
       "reason": "站上MA20/EMA21，MACD多頭，量比 1.92，日K多頭攻擊。"
     },
     {
-      "code": "8086",
-      "name": "宏捷科",
-      "close": 179,
-      "percent": 51.69491525423729,
-      "value": 2545022000,
-      "tradeVolume": 14218,
-      "change": 16,
-      "open": 166,
-      "high": 179,
-      "low": 158.5,
-      "prevClose": 163,
-      "volume": 14218,
-      "market": "TPEX",
-      "quoteDate": "20260526",
-      "quoteTime": "13:30:00",
-      "date": "2026-05-26",
-      "volumeRatio": 2,
-      "swingStage": {
-        "label": "過熱",
-        "ratio": "1.00+",
-        "tone": "hot",
-        "value": 1
-      },
-      "swingScore": 94,
-      "score": 94,
-      "swingSignals": [
-        {
-          "id": "bull_attack",
-          "short": "攻擊",
-          "icon": "🔥",
-          "reason": "站上MA20/EMA21，MACD多頭，量比 2.00，日K多頭攻擊。"
-        },
-        {
-          "id": "saucer",
-          "short": "圓弧",
-          "icon": "◜",
-          "reason": "突破40日整理頸線，量能放大，偏圓弧底突破。"
-        },
-        {
-          "id": "breakaway_gap",
-          "short": "突破缺口",
-          "icon": "◆",
-          "reason": "跳空突破近20日整理高點，偏突破缺口。"
-        },
-        {
-          "id": "golden_cross",
-          "short": "金釵",
-          "icon": "✦",
-          "reason": "MA5 > MA10 > MA20 且收紅，多金釵候選。"
-        }
-      ],
-      "signals": [
-        {
-          "id": "bull_attack",
-          "short": "攻擊",
-          "icon": "🔥",
-          "reason": "站上MA20/EMA21，MACD多頭，量比 2.00，日K多頭攻擊。"
-        },
-        {
-          "id": "saucer",
-          "short": "圓弧",
-          "icon": "◜",
-          "reason": "突破40日整理頸線，量能放大，偏圓弧底突破。"
-        },
-        {
-          "id": "breakaway_gap",
-          "short": "突破缺口",
-          "icon": "◆",
-          "reason": "跳空突破近20日整理高點，偏突破缺口。"
-        },
-        {
-          "id": "golden_cross",
-          "short": "金釵",
-          "icon": "✦",
-          "reason": "MA5 > MA10 > MA20 且收紅，多金釵候選。"
-        }
-      ],
-      "reason": "站上MA20/EMA21，MACD多頭，量比 2.00，日K多頭攻擊。"
-    },
-    {
       "code": "6150",
       "name": "撼訊",
       "close": 70,
@@ -2904,179 +2776,179 @@
       "reason": "突破近10日壓力，站上MA20且趨勢確認，位階 高基期。"
     },
     {
-      "code": "5536",
-      "name": "聖暉*",
-      "close": 1035,
-      "percent": 9.062170706006324,
-      "value": 2740680000,
-      "tradeVolume": 2648,
-      "change": 86,
-      "open": 967,
-      "high": 1040,
-      "low": 966,
-      "prevClose": 949,
-      "volume": 2648,
+      "code": "6651",
+      "name": "全宇昕",
+      "close": 157.5,
+      "percent": 6.779661016949152,
+      "value": 224752500,
+      "tradeVolume": 1427,
+      "change": 10,
+      "open": 147,
+      "high": 162,
+      "low": 144.5,
+      "prevClose": 147.5,
+      "volume": 1427,
       "market": "TPEX",
       "quoteDate": "20260526",
       "quoteTime": "13:30:00",
       "date": "2026-05-26",
-      "volumeRatio": 1.36,
+      "volumeRatio": 1.52,
       "swingStage": {
         "label": "高基期",
         "ratio": "0.95",
         "tone": "high",
-        "value": 0.9503722084367245
+        "value": 0.9456521739130435
+      },
+      "swingScore": 93,
+      "score": 93,
+      "swingSignals": [
+        {
+          "id": "bull_attack",
+          "short": "攻擊",
+          "icon": "🔥",
+          "reason": "站上MA20/EMA21，MACD多頭，量比 1.52，日K多頭攻擊。"
+        },
+        {
+          "id": "n_base",
+          "short": "N字",
+          "icon": "",
+          "reason": "突破近10日壓力，站上MA20且趨勢確認，位階 高基期。"
+        },
+        {
+          "id": "golden_cross",
+          "short": "金釵",
+          "icon": "✦",
+          "reason": "MA5 > MA10 > MA20 且收紅，多金釵候選。"
+        }
+      ],
+      "signals": [
+        {
+          "id": "bull_attack",
+          "short": "攻擊",
+          "icon": "🔥",
+          "reason": "站上MA20/EMA21，MACD多頭，量比 1.52，日K多頭攻擊。"
+        },
+        {
+          "id": "n_base",
+          "short": "N字",
+          "icon": "",
+          "reason": "突破近10日壓力，站上MA20且趨勢確認，位階 高基期。"
+        },
+        {
+          "id": "golden_cross",
+          "short": "金釵",
+          "icon": "✦",
+          "reason": "MA5 > MA10 > MA20 且收紅，多金釵候選。"
+        }
+      ],
+      "reason": "站上MA20/EMA21，MACD多頭，量比 1.52，日K多頭攻擊。"
+    },
+    {
+      "code": "6612",
+      "name": "奈米醫材",
+      "close": 73.9,
+      "percent": 3.5014005602240896,
+      "value": 6281500,
+      "tradeVolume": 85,
+      "change": 2.5,
+      "open": 71.5,
+      "high": 75,
+      "low": 70.2,
+      "prevClose": 71.4,
+      "volume": 85,
+      "market": "TPEX",
+      "quoteDate": "20260526",
+      "quoteTime": "13:30:00",
+      "date": "2026-05-26",
+      "volumeRatio": 1.52,
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.67",
+        "tone": "high",
+        "value": 0.6666666666666675
+      },
+      "swingScore": 93,
+      "score": 93,
+      "swingSignals": [
+        {
+          "id": "bull_attack",
+          "short": "攻擊",
+          "icon": "🔥",
+          "reason": "站上MA20/EMA21，MACD多頭，量比 1.52，日K多頭攻擊。"
+        },
+        {
+          "id": "saucer",
+          "short": "圓弧",
+          "icon": "◜",
+          "reason": "突破40日整理頸線，量能放大，偏圓弧底突破。"
+        },
+        {
+          "id": "golden_cross",
+          "short": "金釵",
+          "icon": "✦",
+          "reason": "MA5 > MA10 > MA20 且收紅，多金釵候選。"
+        }
+      ],
+      "signals": [
+        {
+          "id": "bull_attack",
+          "short": "攻擊",
+          "icon": "🔥",
+          "reason": "站上MA20/EMA21，MACD多頭，量比 1.52，日K多頭攻擊。"
+        },
+        {
+          "id": "saucer",
+          "short": "圓弧",
+          "icon": "◜",
+          "reason": "突破40日整理頸線，量能放大，偏圓弧底突破。"
+        },
+        {
+          "id": "golden_cross",
+          "short": "金釵",
+          "icon": "✦",
+          "reason": "MA5 > MA10 > MA20 且收紅，多金釵候選。"
+        }
+      ],
+      "reason": "站上MA20/EMA21，MACD多頭，量比 1.52，日K多頭攻擊。"
+    },
+    {
+      "code": "3516",
+      "name": "亞帝歐",
+      "close": 23.95,
+      "percent": 34.5505617977528,
+      "value": 7879550,
+      "tradeVolume": 329,
+      "change": 0.34999999999999787,
+      "open": 23.45,
+      "high": 25.65,
+      "low": 23.45,
+      "prevClose": 23.6,
+      "volume": 329,
+      "market": "TPEX",
+      "quoteDate": "20260526",
+      "quoteTime": "13:30:00",
+      "date": "2026-05-26",
+      "volumeRatio": 5.94,
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.78",
+        "tone": "high",
+        "value": 0.7834394904458599
       },
       "swingScore": 92,
       "score": 92,
       "swingSignals": [
         {
-          "id": "bull_attack",
-          "short": "攻擊",
-          "icon": "🔥",
-          "reason": "站上MA20/EMA21，MACD多頭，量比 1.36，日K多頭攻擊。"
-        },
-        {
-          "id": "saucer",
-          "short": "圓弧",
-          "icon": "◜",
-          "reason": "突破40日整理頸線，量能放大，偏圓弧底突破。"
-        },
-        {
-          "id": "runaway_gap",
-          "short": "逃逸缺口",
-          "icon": "🚀",
-          "reason": "跳空且站上MA20，多頭段延續，偏逃逸缺口。"
-        }
-      ],
-      "signals": [
-        {
-          "id": "bull_attack",
-          "short": "攻擊",
-          "icon": "🔥",
-          "reason": "站上MA20/EMA21，MACD多頭，量比 1.36，日K多頭攻擊。"
-        },
-        {
-          "id": "saucer",
-          "short": "圓弧",
-          "icon": "◜",
-          "reason": "突破40日整理頸線，量能放大，偏圓弧底突破。"
-        },
-        {
-          "id": "runaway_gap",
-          "short": "逃逸缺口",
-          "icon": "🚀",
-          "reason": "跳空且站上MA20，多頭段延續，偏逃逸缺口。"
-        }
-      ],
-      "reason": "站上MA20/EMA21，MACD多頭，量比 1.36，日K多頭攻擊。"
-    },
-    {
-      "code": "4542",
-      "name": "科嶠",
-      "close": 276,
-      "percent": 68.80733944954129,
-      "value": 511704000,
-      "tradeVolume": 1854,
-      "change": 11,
-      "open": 260,
-      "high": 278,
-      "low": 251,
-      "prevClose": 265,
-      "volume": 1854,
-      "market": "TPEX",
-      "quoteDate": "20260526",
-      "quoteTime": "13:30:00",
-      "date": "2026-05-26",
-      "volumeRatio": 1.18,
-      "swingStage": {
-        "label": "高基期",
-        "ratio": "0.99",
-        "tone": "high",
-        "value": 0.9893503727369543
-      },
-      "swingScore": 90,
-      "score": 90,
-      "swingSignals": [
-        {
-          "id": "saucer",
-          "short": "圓弧",
-          "icon": "◜",
-          "reason": "突破40日整理頸線，量能放大，偏圓弧底突破。"
-        },
-        {
-          "id": "breakaway_gap",
-          "short": "突破缺口",
-          "icon": "◆",
-          "reason": "跳空突破近20日整理高點，偏突破缺口。"
-        },
-        {
-          "id": "golden_cross",
-          "short": "金釵",
-          "icon": "✦",
-          "reason": "MA5 > MA10 > MA20 且收紅，多金釵候選。"
-        }
-      ],
-      "signals": [
-        {
-          "id": "saucer",
-          "short": "圓弧",
-          "icon": "◜",
-          "reason": "突破40日整理頸線，量能放大，偏圓弧底突破。"
-        },
-        {
-          "id": "breakaway_gap",
-          "short": "突破缺口",
-          "icon": "◆",
-          "reason": "跳空突破近20日整理高點，偏突破缺口。"
-        },
-        {
-          "id": "golden_cross",
-          "short": "金釵",
-          "icon": "✦",
-          "reason": "MA5 > MA10 > MA20 且收紅，多金釵候選。"
-        }
-      ],
-      "reason": "突破40日整理頸線，量能放大，偏圓弧底突破。"
-    },
-    {
-      "code": "6667",
-      "name": "信紘科",
-      "close": 267,
-      "percent": 14.102564102564102,
-      "value": 230955000,
-      "tradeVolume": 865,
-      "change": 8.5,
-      "open": 264.5,
-      "high": 269,
-      "low": 262.5,
-      "prevClose": 258.5,
-      "volume": 865,
-      "market": "TPEX",
-      "quoteDate": "20260526",
-      "quoteTime": "13:30:00",
-      "date": "2026-05-26",
-      "volumeRatio": 1.94,
-      "swingStage": {
-        "label": "高基期",
-        "ratio": "0.69",
-        "tone": "high",
-        "value": 0.6862745098039216
-      },
-      "swingScore": 90,
-      "score": 90,
-      "swingSignals": [
-        {
           "id": "n_base",
           "short": "N字",
           "icon": "",
           "reason": "突破近10日壓力，站上MA20且趨勢確認，位階 高基期。"
         },
         {
-          "id": "runaway_gap",
-          "short": "逃逸缺口",
-          "icon": "🚀",
-          "reason": "跳空且站上MA20，多頭段延續，偏逃逸缺口。"
+          "id": "breakaway_gap",
+          "short": "突破缺口",
+          "icon": "◆",
+          "reason": "跳空突破近20日整理高點，偏突破缺口。"
         }
       ],
       "signals": [
@@ -3087,32 +2959,32 @@
           "reason": "突破近10日壓力，站上MA20且趨勢確認，位階 高基期。"
         },
         {
-          "id": "runaway_gap",
-          "short": "逃逸缺口",
-          "icon": "🚀",
-          "reason": "跳空且站上MA20，多頭段延續，偏逃逸缺口。"
+          "id": "breakaway_gap",
+          "short": "突破缺口",
+          "icon": "◆",
+          "reason": "跳空突破近20日整理高點，偏突破缺口。"
         }
       ],
       "reason": "突破近10日壓力，站上MA20且趨勢確認，位階 高基期。"
     },
     {
-      "code": "2061",
-      "name": "風青",
-      "close": 32.2,
-      "percent": 9.897610921501714,
-      "value": 258694800,
-      "tradeVolume": 8034,
-      "change": 2.900000000000002,
-      "open": 30.95,
-      "high": 32.2,
-      "low": 30,
-      "prevClose": 29.3,
-      "volume": 8034,
+      "code": "5011",
+      "name": "久陽",
+      "close": 19.45,
+      "percent": 31.864406779661014,
+      "value": 66635700,
+      "tradeVolume": 3426,
+      "change": 1.75,
+      "open": 18.1,
+      "high": 19.45,
+      "low": 17.9,
+      "prevClose": 17.7,
+      "volume": 3426,
       "market": "TPEX",
       "quoteDate": "20260526",
       "quoteTime": "13:30:00",
       "date": "2026-05-26",
-      "volumeRatio": 3.48,
+      "volumeRatio": 5.98,
       "swingStage": {
         "label": "過熱",
         "ratio": "1.00+",
@@ -3126,7 +2998,7 @@
           "id": "bull_attack",
           "short": "攻擊",
           "icon": "🔥",
-          "reason": "站上MA20/EMA21，MACD多頭，量比 3.48，日K多頭攻擊。"
+          "reason": "站上MA20/EMA21，MACD多頭，量比 5.98，日K多頭攻擊。"
         },
         {
           "id": "breakaway_gap",
@@ -3146,7 +3018,7 @@
           "id": "bull_attack",
           "short": "攻擊",
           "icon": "🔥",
-          "reason": "站上MA20/EMA21，MACD多頭，量比 3.48，日K多頭攻擊。"
+          "reason": "站上MA20/EMA21，MACD多頭，量比 5.98，日K多頭攻擊。"
         },
         {
           "id": "breakaway_gap",
@@ -3161,31 +3033,355 @@
           "reason": "MA5 > MA10 > MA20 且收紅，多金釵候選。"
         }
       ],
-      "reason": "站上MA20/EMA21，MACD多頭，量比 3.48，日K多頭攻擊。"
+      "reason": "站上MA20/EMA21，MACD多頭，量比 5.98，日K多頭攻擊。"
     },
     {
-      "code": "6716",
-      "name": "應廣",
-      "close": 107,
-      "percent": 1.9047619047619049,
-      "value": 277344000,
-      "tradeVolume": 2592,
-      "change": 2,
-      "open": 106.5,
-      "high": 115.5,
-      "low": 105,
-      "prevClose": 105,
-      "volume": 2592,
+      "code": "3564",
+      "name": "其陽",
+      "close": 46.8,
+      "percent": 16.12903225806452,
+      "value": 15865200,
+      "tradeVolume": 339,
+      "change": 1.1999999999999957,
+      "open": 46.1,
+      "high": 46.8,
+      "low": 44.95,
+      "prevClose": 45.6,
+      "volume": 339,
       "market": "TPEX",
       "quoteDate": "20260526",
       "quoteTime": "13:30:00",
       "date": "2026-05-26",
-      "volumeRatio": 2.86,
+      "volumeRatio": 2.7,
+      "swingStage": {
+        "label": "過熱",
+        "ratio": "1.00+",
+        "tone": "hot",
+        "value": 1
+      },
+      "swingScore": 89,
+      "score": 89,
+      "swingSignals": [
+        {
+          "id": "bull_attack",
+          "short": "攻擊",
+          "icon": "🔥",
+          "reason": "站上MA20/EMA21，MACD多頭，量比 2.70，日K多頭攻擊。"
+        },
+        {
+          "id": "saucer",
+          "short": "圓弧",
+          "icon": "◜",
+          "reason": "突破40日整理頸線，量能放大，偏圓弧底突破。"
+        },
+        {
+          "id": "breakaway_gap",
+          "short": "突破缺口",
+          "icon": "◆",
+          "reason": "跳空突破近20日整理高點，偏突破缺口。"
+        }
+      ],
+      "signals": [
+        {
+          "id": "bull_attack",
+          "short": "攻擊",
+          "icon": "🔥",
+          "reason": "站上MA20/EMA21，MACD多頭，量比 2.70，日K多頭攻擊。"
+        },
+        {
+          "id": "saucer",
+          "short": "圓弧",
+          "icon": "◜",
+          "reason": "突破40日整理頸線，量能放大，偏圓弧底突破。"
+        },
+        {
+          "id": "breakaway_gap",
+          "short": "突破缺口",
+          "icon": "◆",
+          "reason": "跳空突破近20日整理高點，偏突破缺口。"
+        }
+      ],
+      "reason": "站上MA20/EMA21，MACD多頭，量比 2.70，日K多頭攻擊。"
+    },
+    {
+      "code": "6654",
+      "name": "天正國際",
+      "close": 116,
+      "percent": 9.95260663507109,
+      "value": 26448000,
+      "tradeVolume": 228,
+      "change": 10.5,
+      "open": 110,
+      "high": 116,
+      "low": 110,
+      "prevClose": 105.5,
+      "volume": 228,
+      "market": "TPEX",
+      "quoteDate": "20260526",
+      "quoteTime": "13:30:00",
+      "date": "2026-05-26",
+      "volumeRatio": 3.36,
+      "swingStage": {
+        "label": "過熱",
+        "ratio": "1.00+",
+        "tone": "hot",
+        "value": 1
+      },
+      "swingScore": 89,
+      "score": 89,
+      "swingSignals": [
+        {
+          "id": "bull_attack",
+          "short": "攻擊",
+          "icon": "🔥",
+          "reason": "站上MA20/EMA21，MACD多頭，量比 3.36，日K多頭攻擊。"
+        },
+        {
+          "id": "breakaway_gap",
+          "short": "突破缺口",
+          "icon": "◆",
+          "reason": "跳空突破近20日整理高點，偏突破缺口。"
+        },
+        {
+          "id": "golden_cross",
+          "short": "金釵",
+          "icon": "✦",
+          "reason": "MA5 > MA10 > MA20 且收紅，多金釵候選。"
+        }
+      ],
+      "signals": [
+        {
+          "id": "bull_attack",
+          "short": "攻擊",
+          "icon": "🔥",
+          "reason": "站上MA20/EMA21，MACD多頭，量比 3.36，日K多頭攻擊。"
+        },
+        {
+          "id": "breakaway_gap",
+          "short": "突破缺口",
+          "icon": "◆",
+          "reason": "跳空突破近20日整理高點，偏突破缺口。"
+        },
+        {
+          "id": "golden_cross",
+          "short": "金釵",
+          "icon": "✦",
+          "reason": "MA5 > MA10 > MA20 且收紅，多金釵候選。"
+        }
+      ],
+      "reason": "站上MA20/EMA21，MACD多頭，量比 3.36，日K多頭攻擊。"
+    },
+    {
+      "code": "6180",
+      "name": "橘子",
+      "close": 40.65,
+      "percent": 4.097311139564665,
+      "value": 40934550,
+      "tradeVolume": 1007,
+      "change": 1.6000000000000014,
+      "open": 39.5,
+      "high": 40.7,
+      "low": 38.5,
+      "prevClose": 39.05,
+      "volume": 1007,
+      "market": "TPEX",
+      "quoteDate": "20260526",
+      "quoteTime": "13:30:00",
+      "date": "2026-05-26",
+      "volumeRatio": 2.01,
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.20",
+        "tone": "low",
+        "value": 0.19935691318327978
+      },
+      "swingScore": 89,
+      "score": 89,
+      "swingSignals": [
+        {
+          "id": "n_base",
+          "short": "N字",
+          "icon": "",
+          "reason": "突破近10日壓力，站上MA20且趨勢確認，位階 低基期。"
+        }
+      ],
+      "signals": [
+        {
+          "id": "n_base",
+          "short": "N字",
+          "icon": "",
+          "reason": "突破近10日壓力，站上MA20且趨勢確認，位階 低基期。"
+        }
+      ],
+      "reason": "突破近10日壓力，站上MA20且趨勢確認，位階 低基期。"
+    },
+    {
+      "code": "6844",
+      "name": "諾貝兒",
+      "close": 66,
+      "percent": -0.9009009009008924,
+      "value": 2112000,
+      "tradeVolume": 32,
+      "change": -0.5999999999999943,
+      "open": 65.4,
+      "high": 66,
+      "low": 65,
+      "prevClose": 66.6,
+      "volume": 32,
+      "market": "TPEX",
+      "quoteDate": "20260526",
+      "quoteTime": "13:30:00",
+      "date": "2026-05-26",
+      "volumeRatio": 1.54,
       "swingStage": {
         "label": "高基期",
-        "ratio": "0.84",
+        "ratio": "0.86",
         "tone": "high",
-        "value": 0.8362235067437379
+        "value": 0.8571428571428575
+      },
+      "swingScore": 86,
+      "score": 86,
+      "swingSignals": [
+        {
+          "id": "bull_attack",
+          "short": "攻擊",
+          "icon": "🔥",
+          "reason": "站上MA20/EMA21，MACD多頭，量比 1.54，日K多頭攻擊。"
+        },
+        {
+          "id": "golden_cross",
+          "short": "金釵",
+          "icon": "✦",
+          "reason": "MA5 > MA10 > MA20 且收紅，多金釵候選。"
+        }
+      ],
+      "signals": [
+        {
+          "id": "bull_attack",
+          "short": "攻擊",
+          "icon": "🔥",
+          "reason": "站上MA20/EMA21，MACD多頭，量比 1.54，日K多頭攻擊。"
+        },
+        {
+          "id": "golden_cross",
+          "short": "金釵",
+          "icon": "✦",
+          "reason": "MA5 > MA10 > MA20 且收紅，多金釵候選。"
+        }
+      ],
+      "reason": "站上MA20/EMA21，MACD多頭，量比 1.54，日K多頭攻擊。"
+    },
+    {
+      "code": "6855",
+      "name": "數泓科",
+      "close": 111,
+      "percent": 8.823529411764707,
+      "value": 4329000,
+      "tradeVolume": 39,
+      "change": 9,
+      "open": 103,
+      "high": 112,
+      "low": 103,
+      "prevClose": 102,
+      "volume": 39,
+      "market": "TPEX",
+      "quoteDate": "20260526",
+      "quoteTime": "13:30:00",
+      "date": "2026-05-26",
+      "volumeRatio": 3.31,
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.71",
+        "tone": "high",
+        "value": 0.7142857142857143
+      },
+      "swingScore": 85,
+      "score": 85,
+      "swingSignals": [
+        {
+          "id": "n_base",
+          "short": "N字",
+          "icon": "",
+          "reason": "突破近10日壓力，站上MA20且趨勢確認，位階 高基期。"
+        }
+      ],
+      "signals": [
+        {
+          "id": "n_base",
+          "short": "N字",
+          "icon": "",
+          "reason": "突破近10日壓力，站上MA20且趨勢確認，位階 高基期。"
+        }
+      ],
+      "reason": "突破近10日壓力，站上MA20且趨勢確認，位階 高基期。"
+    },
+    {
+      "code": "5523",
+      "name": "豐謙",
+      "close": 30.45,
+      "percent": 4.280821917808219,
+      "value": 2679600,
+      "tradeVolume": 88,
+      "change": 0,
+      "open": 30.2,
+      "high": 30.45,
+      "low": 30.15,
+      "prevClose": 30.45,
+      "volume": 88,
+      "market": "TPEX",
+      "quoteDate": "20260526",
+      "quoteTime": "13:30:00",
+      "date": "2026-05-26",
+      "volumeRatio": 2.63,
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.90",
+        "tone": "high",
+        "value": 0.9
+      },
+      "swingScore": 85,
+      "score": 85,
+      "swingSignals": [
+        {
+          "id": "runaway_gap",
+          "short": "逃逸缺口",
+          "icon": "🚀",
+          "reason": "跳空且站上MA20，多頭段延續，偏逃逸缺口。"
+        }
+      ],
+      "signals": [
+        {
+          "id": "runaway_gap",
+          "short": "逃逸缺口",
+          "icon": "🚀",
+          "reason": "跳空且站上MA20，多頭段延續，偏逃逸缺口。"
+        }
+      ],
+      "reason": "跳空且站上MA20，多頭段延續，偏逃逸缺口。"
+    },
+    {
+      "code": "6982",
+      "name": "大井泵浦",
+      "close": 57.1,
+      "percent": 0.35149384885765,
+      "value": 11248700,
+      "tradeVolume": 197,
+      "change": 0.20000000000000284,
+      "open": 56.9,
+      "high": 59.8,
+      "low": 55.8,
+      "prevClose": 56.9,
+      "volume": 197,
+      "market": "TPEX",
+      "quoteDate": "20260526",
+      "quoteTime": "13:30:00",
+      "date": "2026-05-26",
+      "volumeRatio": 2.6,
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.66",
+        "tone": "high",
+        "value": 0.6578947368421053
       },
       "swingScore": 85,
       "score": 85,
@@ -3208,28 +3404,72 @@
       "reason": "MA5 > MA10 > MA20 且收紅，多金釵候選。"
     },
     {
-      "code": "2937",
-      "name": "集雅社",
-      "close": 47.75,
-      "percent": 0.5263157894736842,
-      "value": 525250,
-      "tradeVolume": 11,
-      "change": 0.25,
-      "open": 47.5,
-      "high": 47.75,
-      "low": 47.15,
-      "prevClose": 47.5,
-      "volume": 11,
+      "code": "8067",
+      "name": "志旭",
+      "close": 13,
+      "percent": -4.411764705882351,
+      "value": 195000,
+      "tradeVolume": 15,
+      "change": -0.5999999999999996,
+      "open": 12.5,
+      "high": 13.6,
+      "low": 12.5,
+      "prevClose": 13.6,
+      "volume": 15,
       "market": "TPEX",
       "quoteDate": "20260526",
       "quoteTime": "13:30:00",
       "date": "2026-05-26",
-      "volumeRatio": 1.22,
+      "volumeRatio": 1.44,
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.23",
+        "tone": "low",
+        "value": 0.22535211267605648
+      },
+      "swingScore": 85,
+      "score": 85,
+      "swingSignals": [
+        {
+          "id": "golden_cross",
+          "short": "金釵",
+          "icon": "✦",
+          "reason": "MA5 > MA10 > MA20 且收紅，多金釵候選。"
+        }
+      ],
+      "signals": [
+        {
+          "id": "golden_cross",
+          "short": "金釵",
+          "icon": "✦",
+          "reason": "MA5 > MA10 > MA20 且收紅，多金釵候選。"
+        }
+      ],
+      "reason": "MA5 > MA10 > MA20 且收紅，多金釵候選。"
+    },
+    {
+      "code": "5536",
+      "name": "聖暉*",
+      "close": 1035,
+      "percent": 9.062170706006324,
+      "value": 2740680000,
+      "tradeVolume": 2648,
+      "change": 86,
+      "open": 967,
+      "high": 1040,
+      "low": 966,
+      "prevClose": 949,
+      "volume": 2648,
+      "market": "TPEX",
+      "quoteDate": "20260526",
+      "quoteTime": "13:30:00",
+      "date": "2026-05-26",
+      "volumeRatio": 1.27,
       "swingStage": {
         "label": "高基期",
-        "ratio": "0.76",
+        "ratio": "0.96",
         "tone": "high",
-        "value": 0.7577639751552793
+        "value": 0.9564270152505446
       },
       "swingScore": 84,
       "score": 84,
@@ -3238,7 +3478,69 @@
           "id": "bull_attack",
           "short": "攻擊",
           "icon": "🔥",
-          "reason": "站上MA20/EMA21，MACD多頭，量比 1.22，日K多頭攻擊。"
+          "reason": "站上MA20/EMA21，MACD多頭，量比 1.27，日K多頭攻擊。"
+        },
+        {
+          "id": "runaway_gap",
+          "short": "逃逸缺口",
+          "icon": "🚀",
+          "reason": "跳空且站上MA20，多頭段延續，偏逃逸缺口。"
+        }
+      ],
+      "signals": [
+        {
+          "id": "bull_attack",
+          "short": "攻擊",
+          "icon": "🔥",
+          "reason": "站上MA20/EMA21，MACD多頭，量比 1.27，日K多頭攻擊。"
+        },
+        {
+          "id": "runaway_gap",
+          "short": "逃逸缺口",
+          "icon": "🚀",
+          "reason": "跳空且站上MA20，多頭段延續，偏逃逸缺口。"
+        }
+      ],
+      "reason": "站上MA20/EMA21，MACD多頭，量比 1.27，日K多頭攻擊。"
+    },
+    {
+      "code": "6127",
+      "name": "九豪",
+      "close": 57.2,
+      "percent": 10.000000000000005,
+      "value": 1391275600,
+      "tradeVolume": 24323,
+      "change": 5.200000000000003,
+      "open": 52.1,
+      "high": 57.2,
+      "low": 49.2,
+      "prevClose": 52,
+      "volume": 24323,
+      "market": "TPEX",
+      "quoteDate": "20260526",
+      "quoteTime": "13:30:00",
+      "date": "2026-05-26",
+      "volumeRatio": 1.46,
+      "swingStage": {
+        "label": "過熱",
+        "ratio": "1.00+",
+        "tone": "hot",
+        "value": 1
+      },
+      "swingScore": 83,
+      "score": 83,
+      "swingSignals": [
+        {
+          "id": "bull_attack",
+          "short": "攻擊",
+          "icon": "🔥",
+          "reason": "站上MA20/EMA21，MACD多頭，量比 1.46，日K多頭攻擊。"
+        },
+        {
+          "id": "saucer",
+          "short": "圓弧",
+          "icon": "◜",
+          "reason": "突破40日整理頸線，量能放大，偏圓弧底突破。"
         },
         {
           "id": "golden_cross",
@@ -3252,7 +3554,13 @@
           "id": "bull_attack",
           "short": "攻擊",
           "icon": "🔥",
-          "reason": "站上MA20/EMA21，MACD多頭，量比 1.22，日K多頭攻擊。"
+          "reason": "站上MA20/EMA21，MACD多頭，量比 1.46，日K多頭攻擊。"
+        },
+        {
+          "id": "saucer",
+          "short": "圓弧",
+          "icon": "◜",
+          "reason": "突破40日整理頸線，量能放大，偏圓弧底突破。"
         },
         {
           "id": "golden_cross",
@@ -3261,102 +3569,40 @@
           "reason": "MA5 > MA10 > MA20 且收紅，多金釵候選。"
         }
       ],
-      "reason": "站上MA20/EMA21，MACD多頭，量比 1.22，日K多頭攻擊。"
+      "reason": "站上MA20/EMA21，MACD多頭，量比 1.46，日K多頭攻擊。"
     },
     {
-      "code": "6261",
-      "name": "久元",
-      "close": 123,
-      "percent": 34.42622950819672,
-      "value": 691383000,
-      "tradeVolume": 5621,
-      "change": 2,
-      "open": 122,
-      "high": 124.5,
-      "low": 115.5,
-      "prevClose": 121,
-      "volume": 5621,
+      "code": "6667",
+      "name": "信紘科",
+      "close": 267,
+      "percent": 3.2882011605415857,
+      "value": 230955000,
+      "tradeVolume": 865,
+      "change": 8.5,
+      "open": 264.5,
+      "high": 269,
+      "low": 262.5,
+      "prevClose": 258.5,
+      "volume": 865,
       "market": "TPEX",
       "quoteDate": "20260526",
       "quoteTime": "13:30:00",
       "date": "2026-05-26",
-      "volumeRatio": 0.91,
+      "volumeRatio": 1.62,
       "swingStage": {
-        "label": "高基期",
-        "ratio": "0.97",
-        "tone": "high",
-        "value": 0.9747899159663865
+        "label": "中位階",
+        "ratio": "0.50",
+        "tone": "mid",
+        "value": 0.49645390070921985
       },
-      "swingScore": 81,
-      "score": 81,
-      "swingSignals": [
-        {
-          "id": "breakaway_gap",
-          "short": "突破缺口",
-          "icon": "◆",
-          "reason": "跳空突破近20日整理高點，偏突破缺口。"
-        },
-        {
-          "id": "golden_cross",
-          "short": "金釵",
-          "icon": "✦",
-          "reason": "MA5 > MA10 > MA20 且收紅，多金釵候選。"
-        }
-      ],
-      "signals": [
-        {
-          "id": "breakaway_gap",
-          "short": "突破缺口",
-          "icon": "◆",
-          "reason": "跳空突破近20日整理高點，偏突破缺口。"
-        },
-        {
-          "id": "golden_cross",
-          "short": "金釵",
-          "icon": "✦",
-          "reason": "MA5 > MA10 > MA20 且收紅，多金釵候選。"
-        }
-      ],
-      "reason": "跳空突破近20日整理高點，偏突破缺口。"
-    },
-    {
-      "code": "6417",
-      "name": "韋僑",
-      "close": 146.5,
-      "percent": 1.0344827586206897,
-      "value": 50982000,
-      "tradeVolume": 348,
-      "change": 1.5,
-      "open": 145.5,
-      "high": 147.5,
-      "low": 141.5,
-      "prevClose": 145,
-      "volume": 348,
-      "market": "TPEX",
-      "quoteDate": "20260526",
-      "quoteTime": "13:30:00",
-      "date": "2026-05-26",
-      "volumeRatio": 0.93,
-      "swingStage": {
-        "label": "高基期",
-        "ratio": "0.89",
-        "tone": "high",
-        "value": 0.8942307692307693
-      },
-      "swingScore": 81,
-      "score": 81,
+      "swingScore": 83,
+      "score": 83,
       "swingSignals": [
         {
           "id": "runaway_gap",
           "short": "逃逸缺口",
           "icon": "🚀",
           "reason": "跳空且站上MA20，多頭段延續，偏逃逸缺口。"
-        },
-        {
-          "id": "golden_cross",
-          "short": "金釵",
-          "icon": "✦",
-          "reason": "MA5 > MA10 > MA20 且收紅，多金釵候選。"
         }
       ],
       "signals": [
@@ -3365,86 +3611,36 @@
           "short": "逃逸缺口",
           "icon": "🚀",
           "reason": "跳空且站上MA20，多頭段延續，偏逃逸缺口。"
-        },
-        {
-          "id": "golden_cross",
-          "short": "金釵",
-          "icon": "✦",
-          "reason": "MA5 > MA10 > MA20 且收紅，多金釵候選。"
         }
       ],
       "reason": "跳空且站上MA20，多頭段延續，偏逃逸缺口。"
     },
     {
-      "code": "3141",
-      "name": "晶宏",
-      "close": 79.2,
-      "percent": 0.8917197452229335,
-      "value": 512344800,
-      "tradeVolume": 6469,
-      "change": 0.7000000000000028,
-      "open": 78.7,
-      "high": 82,
-      "low": 75.8,
-      "prevClose": 78.5,
-      "volume": 6469,
+      "code": "5210",
+      "name": "寶碩",
+      "close": 26.65,
+      "percent": 17.14285714285714,
+      "value": 11779300,
+      "tradeVolume": 442,
+      "change": 0.04999999999999716,
+      "open": 26.6,
+      "high": 26.65,
+      "low": 25.8,
+      "prevClose": 26.6,
+      "volume": 442,
       "market": "TPEX",
       "quoteDate": "20260526",
       "quoteTime": "13:30:00",
       "date": "2026-05-26",
-      "volumeRatio": 1.75,
+      "volumeRatio": 2.64,
       "swingStage": {
-        "label": "高基期",
-        "ratio": "0.93",
-        "tone": "high",
-        "value": 0.9317073170731708
+        "label": "過熱",
+        "ratio": "1.00+",
+        "tone": "hot",
+        "value": 1
       },
-      "swingScore": 81,
-      "score": 81,
-      "swingSignals": [
-        {
-          "id": "golden_cross",
-          "short": "金釵",
-          "icon": "✦",
-          "reason": "MA5 > MA10 > MA20 且收紅，多金釵候選。"
-        }
-      ],
-      "signals": [
-        {
-          "id": "golden_cross",
-          "short": "金釵",
-          "icon": "✦",
-          "reason": "MA5 > MA10 > MA20 且收紅，多金釵候選。"
-        }
-      ],
-      "reason": "MA5 > MA10 > MA20 且收紅，多金釵候選。"
-    },
-    {
-      "code": "5543",
-      "name": "桓鼎-KY",
-      "close": 29.95,
-      "percent": 8.51449275362318,
-      "value": 479200,
-      "tradeVolume": 16,
-      "change": -0.3500000000000014,
-      "open": 29.65,
-      "high": 30.25,
-      "low": 29.4,
-      "prevClose": 30.3,
-      "volume": 16,
-      "market": "TPEX",
-      "quoteDate": "20260526",
-      "quoteTime": "13:30:00",
-      "date": "2026-05-26",
-      "volumeRatio": 0.79,
-      "swingStage": {
-        "label": "高基期",
-        "ratio": "0.95",
-        "tone": "high",
-        "value": 0.9548872180451127
-      },
-      "swingScore": 80,
-      "score": 80,
+      "swingScore": 82,
+      "score": 82,
       "swingSignals": [
         {
           "id": "breakaway_gap",
@@ -3476,28 +3672,196 @@
       "reason": "跳空突破近20日整理高點，偏突破缺口。"
     },
     {
-      "code": "4153",
-      "name": "鈺緯",
-      "close": 30.6,
-      "percent": -0.16313213703098584,
-      "value": 734400,
-      "tradeVolume": 24,
-      "change": -0.04999999999999716,
-      "open": 30.2,
-      "high": 30.9,
-      "low": 30.15,
-      "prevClose": 30.65,
-      "volume": 24,
+      "code": "8050",
+      "name": "廣積",
+      "close": 60.1,
+      "percent": 9.872029250457036,
+      "value": 300139400,
+      "tradeVolume": 4994,
+      "change": 5.399999999999999,
+      "open": 54.9,
+      "high": 60.1,
+      "low": 53.9,
+      "prevClose": 54.7,
+      "volume": 4994,
       "market": "TPEX",
       "quoteDate": "20260526",
       "quoteTime": "13:30:00",
       "date": "2026-05-26",
-      "volumeRatio": 0.84,
+      "volumeRatio": 3.36,
       "swingStage": {
-        "label": "低基期",
-        "ratio": "0.27",
-        "tone": "low",
-        "value": 0.26506024096385583
+        "label": "過熱",
+        "ratio": "1.00+",
+        "tone": "hot",
+        "value": 1
+      },
+      "swingScore": 82,
+      "score": 82,
+      "swingSignals": [
+        {
+          "id": "bull_attack",
+          "short": "攻擊",
+          "icon": "🔥",
+          "reason": "站上MA20/EMA21，MACD多頭，量比 3.36，日K多頭攻擊。"
+        },
+        {
+          "id": "golden_cross",
+          "short": "金釵",
+          "icon": "✦",
+          "reason": "MA5 > MA10 > MA20 且收紅，多金釵候選。"
+        }
+      ],
+      "signals": [
+        {
+          "id": "bull_attack",
+          "short": "攻擊",
+          "icon": "🔥",
+          "reason": "站上MA20/EMA21，MACD多頭，量比 3.36，日K多頭攻擊。"
+        },
+        {
+          "id": "golden_cross",
+          "short": "金釵",
+          "icon": "✦",
+          "reason": "MA5 > MA10 > MA20 且收紅，多金釵候選。"
+        }
+      ],
+      "reason": "站上MA20/EMA21，MACD多頭，量比 3.36，日K多頭攻擊。"
+    },
+    {
+      "code": "6207",
+      "name": "雷科",
+      "close": 108.5,
+      "percent": 9.81781376518219,
+      "value": 2524795000,
+      "tradeVolume": 23270,
+      "change": 9.700000000000003,
+      "open": 105.5,
+      "high": 108.5,
+      "low": 104.5,
+      "prevClose": 98.8,
+      "volume": 23270,
+      "market": "TPEX",
+      "quoteDate": "20260526",
+      "quoteTime": "13:30:00",
+      "date": "2026-05-26",
+      "volumeRatio": 1.42,
+      "swingStage": {
+        "label": "過熱",
+        "ratio": "1.00+",
+        "tone": "hot",
+        "value": 1
+      },
+      "swingScore": 82,
+      "score": 82,
+      "swingSignals": [
+        {
+          "id": "bull_attack",
+          "short": "攻擊",
+          "icon": "🔥",
+          "reason": "站上MA20/EMA21，MACD多頭，量比 1.42，日K多頭攻擊。"
+        },
+        {
+          "id": "breakaway_gap",
+          "short": "突破缺口",
+          "icon": "◆",
+          "reason": "跳空突破近20日整理高點，偏突破缺口。"
+        },
+        {
+          "id": "golden_cross",
+          "short": "金釵",
+          "icon": "✦",
+          "reason": "MA5 > MA10 > MA20 且收紅，多金釵候選。"
+        }
+      ],
+      "signals": [
+        {
+          "id": "bull_attack",
+          "short": "攻擊",
+          "icon": "🔥",
+          "reason": "站上MA20/EMA21，MACD多頭，量比 1.42，日K多頭攻擊。"
+        },
+        {
+          "id": "breakaway_gap",
+          "short": "突破缺口",
+          "icon": "◆",
+          "reason": "跳空突破近20日整理高點，偏突破缺口。"
+        },
+        {
+          "id": "golden_cross",
+          "short": "金釵",
+          "icon": "✦",
+          "reason": "MA5 > MA10 > MA20 且收紅，多金釵候選。"
+        }
+      ],
+      "reason": "站上MA20/EMA21，MACD多頭，量比 1.42，日K多頭攻擊。"
+    },
+    {
+      "code": "4991",
+      "name": "環宇-KY",
+      "close": 870,
+      "percent": 28.698224852071007,
+      "value": 3474780000,
+      "tradeVolume": 3994,
+      "change": 30,
+      "open": 850,
+      "high": 877,
+      "low": 791,
+      "prevClose": 840,
+      "volume": 3994,
+      "market": "TPEX",
+      "quoteDate": "20260526",
+      "quoteTime": "13:30:00",
+      "date": "2026-05-26",
+      "volumeRatio": 1.66,
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.99",
+        "tone": "high",
+        "value": 0.9881154499151104
+      },
+      "swingScore": 80,
+      "score": 80,
+      "swingSignals": [
+        {
+          "id": "breakaway_gap",
+          "short": "突破缺口",
+          "icon": "◆",
+          "reason": "跳空突破近20日整理高點，偏突破缺口。"
+        }
+      ],
+      "signals": [
+        {
+          "id": "breakaway_gap",
+          "short": "突破缺口",
+          "icon": "◆",
+          "reason": "跳空突破近20日整理高點，偏突破缺口。"
+        }
+      ],
+      "reason": "跳空突破近20日整理高點，偏突破缺口。"
+    },
+    {
+      "code": "7777",
+      "name": "能率亞洲",
+      "close": 36,
+      "percent": 3.151862464183385,
+      "value": 211392000,
+      "tradeVolume": 5872,
+      "change": 1.1000000000000014,
+      "open": 35.5,
+      "high": 36,
+      "low": 33.9,
+      "prevClose": 34.9,
+      "volume": 5872,
+      "market": "TPEX",
+      "quoteDate": "20260526",
+      "quoteTime": "13:30:00",
+      "date": "2026-05-26",
+      "volumeRatio": 1.6,
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.91",
+        "tone": "high",
+        "value": 0.9078014184397165
       },
       "swingScore": 80,
       "score": 80,
@@ -3520,31 +3884,351 @@
       "reason": "MA5 > MA10 > MA20 且收紅，多金釵候選。"
     },
     {
-      "code": "2949",
-      "name": "欣新網",
-      "close": 62.2,
-      "percent": -1.112877583465812,
-      "value": 684200,
-      "tradeVolume": 11,
-      "change": -0.6999999999999957,
-      "open": 62.1,
-      "high": 62.9,
-      "low": 62,
-      "prevClose": 62.9,
-      "volume": 11,
+      "code": "6859",
+      "name": "伯特光",
+      "close": 123.5,
+      "percent": 3.7815126050420167,
+      "value": 18031000,
+      "tradeVolume": 146,
+      "change": 4.5,
+      "open": 119,
+      "high": 123.5,
+      "low": 117,
+      "prevClose": 119,
+      "volume": 146,
       "market": "TPEX",
       "quoteDate": "20260526",
       "quoteTime": "13:30:00",
       "date": "2026-05-26",
-      "volumeRatio": 0.71,
+      "volumeRatio": 1.44,
       "swingStage": {
-        "label": "中位階",
-        "ratio": "0.59",
-        "tone": "mid",
-        "value": 0.5913978494623657
+        "label": "高基期",
+        "ratio": "0.80",
+        "tone": "high",
+        "value": 0.8
+      },
+      "swingScore": 79,
+      "score": 79,
+      "swingSignals": [
+        {
+          "id": "bull_attack",
+          "short": "攻擊",
+          "icon": "🔥",
+          "reason": "站上MA20/EMA21，MACD多頭，量比 1.44，日K多頭攻擊。"
+        }
+      ],
+      "signals": [
+        {
+          "id": "bull_attack",
+          "short": "攻擊",
+          "icon": "🔥",
+          "reason": "站上MA20/EMA21，MACD多頭，量比 1.44，日K多頭攻擊。"
+        }
+      ],
+      "reason": "站上MA20/EMA21，MACD多頭，量比 1.44，日K多頭攻擊。"
+    },
+    {
+      "code": "4549",
+      "name": "桓達",
+      "close": 107,
+      "percent": 7.537688442211055,
+      "value": 42051000,
+      "tradeVolume": 393,
+      "change": 1.5,
+      "open": 106.5,
+      "high": 109,
+      "low": 104,
+      "prevClose": 105.5,
+      "volume": 393,
+      "market": "TPEX",
+      "quoteDate": "20260526",
+      "quoteTime": "13:30:00",
+      "date": "2026-05-26",
+      "volumeRatio": 1.34,
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.91",
+        "tone": "high",
+        "value": 0.9141630901287554
+      },
+      "swingScore": 78,
+      "score": 78,
+      "swingSignals": [
+        {
+          "id": "runaway_gap",
+          "short": "逃逸缺口",
+          "icon": "🚀",
+          "reason": "跳空且站上MA20，多頭段延續，偏逃逸缺口。"
+        }
+      ],
+      "signals": [
+        {
+          "id": "runaway_gap",
+          "short": "逃逸缺口",
+          "icon": "🚀",
+          "reason": "跳空且站上MA20，多頭段延續，偏逃逸缺口。"
+        }
+      ],
+      "reason": "跳空且站上MA20，多頭段延續，偏逃逸缺口。"
+    },
+    {
+      "code": "5864",
+      "name": "致和證",
+      "close": 35.1,
+      "percent": 4.000000000000004,
+      "value": 273815100,
+      "tradeVolume": 7801,
+      "change": 1.3500000000000014,
+      "open": 34,
+      "high": 35.45,
+      "low": 33.45,
+      "prevClose": 33.75,
+      "volume": 7801,
+      "market": "TPEX",
+      "quoteDate": "20260526",
+      "quoteTime": "13:30:00",
+      "date": "2026-05-26",
+      "volumeRatio": 1.32,
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.82",
+        "tone": "high",
+        "value": 0.8197278911564627
+      },
+      "swingScore": 78,
+      "score": 78,
+      "swingSignals": [
+        {
+          "id": "golden_cross",
+          "short": "金釵",
+          "icon": "✦",
+          "reason": "MA5 > MA10 > MA20 且收紅，多金釵候選。"
+        }
+      ],
+      "signals": [
+        {
+          "id": "golden_cross",
+          "short": "金釵",
+          "icon": "✦",
+          "reason": "MA5 > MA10 > MA20 且收紅，多金釵候選。"
+        }
+      ],
+      "reason": "MA5 > MA10 > MA20 且收紅，多金釵候選。"
+    },
+    {
+      "code": "6016",
+      "name": "康和證",
+      "close": 24.3,
+      "percent": 3.404255319148939,
+      "value": 266692500,
+      "tradeVolume": 10975,
+      "change": 0.8000000000000007,
+      "open": 23.8,
+      "high": 24.45,
+      "low": 23.25,
+      "prevClose": 23.5,
+      "volume": 10975,
+      "market": "TPEX",
+      "quoteDate": "20260526",
+      "quoteTime": "13:30:00",
+      "date": "2026-05-26",
+      "volumeRatio": 1.27,
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.86",
+        "tone": "high",
+        "value": 0.8634146341463416
+      },
+      "swingScore": 77,
+      "score": 77,
+      "swingSignals": [
+        {
+          "id": "golden_cross",
+          "short": "金釵",
+          "icon": "✦",
+          "reason": "MA5 > MA10 > MA20 且收紅，多金釵候選。"
+        }
+      ],
+      "signals": [
+        {
+          "id": "golden_cross",
+          "short": "金釵",
+          "icon": "✦",
+          "reason": "MA5 > MA10 > MA20 且收紅，多金釵候選。"
+        }
+      ],
+      "reason": "MA5 > MA10 > MA20 且收紅，多金釵候選。"
+    },
+    {
+      "code": "6245",
+      "name": "立端",
+      "close": 90.9,
+      "percent": 1.2249443207127044,
+      "value": 171437400,
+      "tradeVolume": 1886,
+      "change": 1.1000000000000085,
+      "open": 90.5,
+      "high": 91.8,
+      "low": 89.4,
+      "prevClose": 89.8,
+      "volume": 1886,
+      "market": "TPEX",
+      "quoteDate": "20260526",
+      "quoteTime": "13:30:00",
+      "date": "2026-05-26",
+      "volumeRatio": 1.27,
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.93",
+        "tone": "high",
+        "value": 0.9291044776119406
+      },
+      "swingScore": 77,
+      "score": 77,
+      "swingSignals": [
+        {
+          "id": "golden_cross",
+          "short": "金釵",
+          "icon": "✦",
+          "reason": "MA5 > MA10 > MA20 且收紅，多金釵候選。"
+        }
+      ],
+      "signals": [
+        {
+          "id": "golden_cross",
+          "short": "金釵",
+          "icon": "✦",
+          "reason": "MA5 > MA10 > MA20 且收紅，多金釵候選。"
+        }
+      ],
+      "reason": "MA5 > MA10 > MA20 且收紅，多金釵候選。"
+    },
+    {
+      "code": "8446",
+      "name": "華研",
+      "close": 84.7,
+      "percent": 0.23668639053254772,
+      "value": 5844300,
+      "tradeVolume": 69,
+      "change": 0.20000000000000284,
+      "open": 84.3,
+      "high": 84.9,
+      "low": 84,
+      "prevClose": 84.5,
+      "volume": 69,
+      "market": "TPEX",
+      "quoteDate": "20260526",
+      "quoteTime": "13:30:00",
+      "date": "2026-05-26",
+      "volumeRatio": 0.51,
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.15",
+        "tone": "low",
+        "value": 0.15000000000000016
+      },
+      "swingScore": 77,
+      "score": 77,
+      "swingSignals": [
+        {
+          "id": "golden_cross",
+          "short": "金釵",
+          "icon": "✦",
+          "reason": "MA5 > MA10 > MA20 且收紅，多金釵候選。"
+        }
+      ],
+      "signals": [
+        {
+          "id": "golden_cross",
+          "short": "金釵",
+          "icon": "✦",
+          "reason": "MA5 > MA10 > MA20 且收紅，多金釵候選。"
+        }
+      ],
+      "reason": "MA5 > MA10 > MA20 且收紅，多金釵候選。"
+    },
+    {
+      "code": "6173",
+      "name": "信昌電",
+      "close": 224,
+      "percent": 5.91016548463357,
+      "value": 370944000,
+      "tradeVolume": 1656,
+      "change": 12.5,
+      "open": 212,
+      "high": 228,
+      "low": 200,
+      "prevClose": 211.5,
+      "volume": 1656,
+      "market": "TPEX",
+      "quoteDate": "20260526",
+      "quoteTime": "13:30:00",
+      "date": "2026-05-26",
+      "volumeRatio": 0.23,
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.98",
+        "tone": "high",
+        "value": 0.9762046400951815
       },
       "swingScore": 76,
       "score": 76,
+      "swingSignals": [
+        {
+          "id": "breakaway_gap",
+          "short": "突破缺口",
+          "icon": "◆",
+          "reason": "跳空突破近20日整理高點，偏突破缺口。"
+        },
+        {
+          "id": "golden_cross",
+          "short": "金釵",
+          "icon": "✦",
+          "reason": "MA5 > MA10 > MA20 且收紅，多金釵候選。"
+        }
+      ],
+      "signals": [
+        {
+          "id": "breakaway_gap",
+          "short": "突破缺口",
+          "icon": "◆",
+          "reason": "跳空突破近20日整理高點，偏突破缺口。"
+        },
+        {
+          "id": "golden_cross",
+          "short": "金釵",
+          "icon": "✦",
+          "reason": "MA5 > MA10 > MA20 且收紅，多金釵候選。"
+        }
+      ],
+      "reason": "跳空突破近20日整理高點，偏突破缺口。"
+    },
+    {
+      "code": "6121",
+      "name": "新普",
+      "close": 394.5,
+      "percent": 2.4675324675324677,
+      "value": 339270000,
+      "tradeVolume": 860,
+      "change": 9.5,
+      "open": 386,
+      "high": 397.5,
+      "low": 385.5,
+      "prevClose": 385,
+      "volume": 860,
+      "market": "TPEX",
+      "quoteDate": "20260526",
+      "quoteTime": "13:30:00",
+      "date": "2026-05-26",
+      "volumeRatio": 1.02,
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.94",
+        "tone": "high",
+        "value": 0.9389312977099237
+      },
+      "swingScore": 75,
+      "score": 75,
       "swingSignals": [
         {
           "id": "golden_cross",
@@ -3601,18 +4285,18 @@
       "reason": "跳空且站上MA20，多頭段延續，偏逃逸缺口。"
     },
     {
-      "code": "6894",
-      "name": "衛司特",
-      "close": 376,
-      "percent": 0.4005340453938585,
-      "value": 62792000,
-      "tradeVolume": 167,
-      "change": 1.5,
-      "open": 375,
-      "high": 386.5,
-      "low": 368,
-      "prevClose": 374.5,
-      "volume": 167,
+      "code": "6996",
+      "name": "力領科技",
+      "close": 191.5,
+      "percent": 2.1333333333333333,
+      "value": 43662000,
+      "tradeVolume": 228,
+      "change": 4,
+      "open": 190,
+      "high": 192.5,
+      "low": 188,
+      "prevClose": 187.5,
+      "volume": 228,
       "market": "TPEX",
       "quoteDate": "20260526",
       "quoteTime": "13:30:00",
@@ -3620,9 +4304,9 @@
       "volumeRatio": 1.04,
       "swingStage": {
         "label": "高基期",
-        "ratio": "0.78",
+        "ratio": "0.70",
         "tone": "high",
-        "value": 0.78125
+        "value": 0.6951219512195121
       },
       "swingScore": 75,
       "score": 75,
@@ -3645,119 +4329,31 @@
       "reason": "MA5 > MA10 > MA20 且收紅，多金釵候選。"
     },
     {
-      "code": "8097",
-      "name": "常珵",
-      "close": 57.7,
-      "percent": -0.51724137931034,
-      "value": 3346600,
-      "tradeVolume": 58,
-      "change": -0.29999999999999716,
-      "open": 57.4,
-      "high": 58.2,
-      "low": 57.3,
-      "prevClose": 58,
-      "volume": 58,
+      "code": "6620",
+      "name": "漢達",
+      "close": 72.8,
+      "percent": 0.8310249307479145,
+      "value": 23296000,
+      "tradeVolume": 320,
+      "change": 0.5999999999999943,
+      "open": 72.3,
+      "high": 73.2,
+      "low": 70.7,
+      "prevClose": 72.2,
+      "volume": 320,
       "market": "TPEX",
       "quoteDate": "20260526",
       "quoteTime": "13:30:00",
       "date": "2026-05-26",
-      "volumeRatio": 0.74,
-      "swingStage": {
-        "label": "高基期",
-        "ratio": "0.86",
-        "tone": "high",
-        "value": 0.8625000000000007
-      },
-      "swingScore": 73,
-      "score": 73,
-      "swingSignals": [
-        {
-          "id": "golden_cross",
-          "short": "金釵",
-          "icon": "✦",
-          "reason": "MA5 > MA10 > MA20 且收紅，多金釵候選。"
-        }
-      ],
-      "signals": [
-        {
-          "id": "golden_cross",
-          "short": "金釵",
-          "icon": "✦",
-          "reason": "MA5 > MA10 > MA20 且收紅，多金釵候選。"
-        }
-      ],
-      "reason": "MA5 > MA10 > MA20 且收紅，多金釵候選。"
-    },
-    {
-      "code": "3131",
-      "name": "弘塑",
-      "close": 3115,
-      "percent": 6.678082191780822,
-      "value": 2915640000,
-      "tradeVolume": 936,
-      "change": 195,
-      "open": 3045,
-      "high": 3205,
-      "low": 3000,
-      "prevClose": 2920,
-      "volume": 936,
-      "market": "TPEX",
-      "quoteDate": "20260526",
-      "quoteTime": "13:30:00",
-      "date": "2026-05-26",
-      "volumeRatio": 1.31,
+      "volumeRatio": 0.68,
       "swingStage": {
         "label": "中位階",
-        "ratio": "0.53",
+        "ratio": "0.39",
         "tone": "mid",
-        "value": 0.5255813953488372
+        "value": 0.3900709219858154
       },
-      "swingScore": 71,
-      "score": 71,
-      "swingSignals": [
-        {
-          "id": "runaway_gap",
-          "short": "逃逸缺口",
-          "icon": "🚀",
-          "reason": "跳空且站上MA20，多頭段延續，偏逃逸缺口。"
-        }
-      ],
-      "signals": [
-        {
-          "id": "runaway_gap",
-          "short": "逃逸缺口",
-          "icon": "🚀",
-          "reason": "跳空且站上MA20，多頭段延續，偏逃逸缺口。"
-        }
-      ],
-      "reason": "跳空且站上MA20，多頭段延續，偏逃逸缺口。"
-    },
-    {
-      "code": "7709",
-      "name": "榮田",
-      "close": 91.7,
-      "percent": 0.6586169045005583,
-      "value": 38697400,
-      "tradeVolume": 422,
-      "change": 0.6000000000000085,
-      "open": 91.3,
-      "high": 93.7,
-      "low": 90.3,
-      "prevClose": 91.1,
-      "volume": 422,
-      "market": "TPEX",
-      "quoteDate": "20260526",
-      "quoteTime": "13:30:00",
-      "date": "2026-05-26",
-      "volumeRatio": 0.56,
-      "swingStage": {
-        "label": "高基期",
-        "ratio": "0.76",
-        "tone": "high",
-        "value": 0.7633587786259542
-      },
-      "swingScore": 71,
-      "score": 71,
+      "swingScore": 75,
+      "score": 75,
       "swingSignals": [
         {
           "id": "golden_cross",
@@ -3777,31 +4373,31 @@
       "reason": "MA5 > MA10 > MA20 且收紅，多金釵候選。"
     },
     {
-      "code": "2064",
-      "name": "晉椿",
-      "close": 13.3,
-      "percent": 0,
-      "value": 359100,
-      "tradeVolume": 27,
-      "change": 0,
-      "open": 13.15,
-      "high": 13.4,
-      "low": 13.15,
-      "prevClose": 13.3,
-      "volume": 27,
+      "code": "6894",
+      "name": "衛司特",
+      "close": 376,
+      "percent": 0.4005340453938585,
+      "value": 62792000,
+      "tradeVolume": 167,
+      "change": 1.5,
+      "open": 375,
+      "high": 386.5,
+      "low": 368,
+      "prevClose": 374.5,
+      "volume": 167,
       "market": "TPEX",
       "quoteDate": "20260526",
       "quoteTime": "13:30:00",
       "date": "2026-05-26",
-      "volumeRatio": 0.53,
+      "volumeRatio": 1.04,
       "swingStage": {
         "label": "高基期",
-        "ratio": "0.83",
+        "ratio": "0.64",
         "tone": "high",
-        "value": 0.8333333333333338
+        "value": 0.6440677966101694
       },
-      "swingScore": 71,
-      "score": 71,
+      "swingScore": 75,
+      "score": 75,
       "swingSignals": [
         {
           "id": "golden_cross",
@@ -3821,28 +4417,160 @@
       "reason": "MA5 > MA10 > MA20 且收紅，多金釵候選。"
     },
     {
-      "code": "2035",
-      "name": "唐榮",
-      "close": 27.7,
-      "percent": -2.2927689594356337,
-      "value": 55400,
-      "tradeVolume": 2,
-      "change": -0.6500000000000021,
-      "open": 27.65,
-      "high": 28.15,
-      "low": 27.65,
-      "prevClose": 28.35,
-      "volume": 2,
+      "code": "6613",
+      "name": "朋億*",
+      "close": 277.5,
+      "percent": 1.834862385321101,
+      "value": 116827500,
+      "tradeVolume": 421,
+      "change": 5,
+      "open": 275.5,
+      "high": 283.5,
+      "low": 274.5,
+      "prevClose": 272.5,
+      "volume": 421,
       "market": "TPEX",
       "quoteDate": "20260526",
       "quoteTime": "13:30:00",
       "date": "2026-05-26",
-      "volumeRatio": 0.1,
+      "volumeRatio": 0.92,
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.93",
+        "tone": "high",
+        "value": 0.9310344827586207
+      },
+      "swingScore": 74,
+      "score": 74,
+      "swingSignals": [
+        {
+          "id": "golden_cross",
+          "short": "金釵",
+          "icon": "✦",
+          "reason": "MA5 > MA10 > MA20 且收紅，多金釵候選。"
+        }
+      ],
+      "signals": [
+        {
+          "id": "golden_cross",
+          "short": "金釵",
+          "icon": "✦",
+          "reason": "MA5 > MA10 > MA20 且收紅，多金釵候選。"
+        }
+      ],
+      "reason": "MA5 > MA10 > MA20 且收紅，多金釵候選。"
+    },
+    {
+      "code": "5543",
+      "name": "桓鼎-KY",
+      "close": 29.95,
+      "percent": 0.6722689075630228,
+      "value": 479200,
+      "tradeVolume": 16,
+      "change": -0.3500000000000014,
+      "open": 29.65,
+      "high": 30.25,
+      "low": 29.4,
+      "prevClose": 30.3,
+      "volume": 16,
+      "market": "TPEX",
+      "quoteDate": "20260526",
+      "quoteTime": "13:30:00",
+      "date": "2026-05-26",
+      "volumeRatio": 0.52,
       "swingStage": {
         "label": "中位階",
-        "ratio": "0.62",
+        "ratio": "0.39",
         "tone": "mid",
-        "value": 0.6153846153846151
+        "value": 0.39035087719298245
+      },
+      "swingScore": 74,
+      "score": 74,
+      "swingSignals": [
+        {
+          "id": "golden_cross",
+          "short": "金釵",
+          "icon": "✦",
+          "reason": "MA5 > MA10 > MA20 且收紅，多金釵候選。"
+        }
+      ],
+      "signals": [
+        {
+          "id": "golden_cross",
+          "short": "金釵",
+          "icon": "✦",
+          "reason": "MA5 > MA10 > MA20 且收紅，多金釵候選。"
+        }
+      ],
+      "reason": "MA5 > MA10 > MA20 且收紅，多金釵候選。"
+    },
+    {
+      "code": "8042",
+      "name": "金山電",
+      "close": 147,
+      "percent": 8.88888888888889,
+      "value": 336042000,
+      "tradeVolume": 2286,
+      "change": 12,
+      "open": 133,
+      "high": 148.5,
+      "low": 121.5,
+      "prevClose": 135,
+      "volume": 2286,
+      "market": "TPEX",
+      "quoteDate": "20260526",
+      "quoteTime": "13:30:00",
+      "date": "2026-05-26",
+      "volumeRatio": 0.46,
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.98",
+        "tone": "high",
+        "value": 0.9846625766871165
+      },
+      "swingScore": 71,
+      "score": 71,
+      "swingSignals": [
+        {
+          "id": "golden_cross",
+          "short": "金釵",
+          "icon": "✦",
+          "reason": "MA5 > MA10 > MA20 且收紅，多金釵候選。"
+        }
+      ],
+      "signals": [
+        {
+          "id": "golden_cross",
+          "short": "金釵",
+          "icon": "✦",
+          "reason": "MA5 > MA10 > MA20 且收紅，多金釵候選。"
+        }
+      ],
+      "reason": "MA5 > MA10 > MA20 且收紅，多金釵候選。"
+    },
+    {
+      "code": "6578",
+      "name": "達邦蛋白",
+      "close": 17.35,
+      "percent": 1.7595307917888603,
+      "value": 2134050,
+      "tradeVolume": 123,
+      "change": 0.3000000000000007,
+      "open": 16.95,
+      "high": 17.7,
+      "low": 16.95,
+      "prevClose": 17.05,
+      "volume": 123,
+      "market": "TPEX",
+      "quoteDate": "20260526",
+      "quoteTime": "13:30:00",
+      "date": "2026-05-26",
+      "volumeRatio": 0.54,
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.78",
+        "tone": "high",
+        "value": 0.7792207792207797
       },
       "swingScore": 71,
       "score": 71,
@@ -3921,6 +4649,94 @@
       "reason": "跳空突破近20日整理高點，偏突破缺口。"
     },
     {
+      "code": "3491",
+      "name": "昇達科",
+      "close": 2075,
+      "percent": -0.7177033492822966,
+      "value": 1056175000,
+      "tradeVolume": 509,
+      "change": -15,
+      "open": 2060,
+      "high": 2075,
+      "low": 2005,
+      "prevClose": 2090,
+      "volume": 509,
+      "market": "TPEX",
+      "quoteDate": "20260526",
+      "quoteTime": "13:30:00",
+      "date": "2026-05-26",
+      "volumeRatio": 0.2,
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.94",
+        "tone": "high",
+        "value": 0.935251798561151
+      },
+      "swingScore": 69,
+      "score": 69,
+      "swingSignals": [
+        {
+          "id": "golden_cross",
+          "short": "金釵",
+          "icon": "✦",
+          "reason": "MA5 > MA10 > MA20 且收紅，多金釵候選。"
+        }
+      ],
+      "signals": [
+        {
+          "id": "golden_cross",
+          "short": "金釵",
+          "icon": "✦",
+          "reason": "MA5 > MA10 > MA20 且收紅，多金釵候選。"
+        }
+      ],
+      "reason": "MA5 > MA10 > MA20 且收紅，多金釵候選。"
+    },
+    {
+      "code": "7747",
+      "name": "昕奇雲端",
+      "close": 130,
+      "percent": 4,
+      "value": 1300000,
+      "tradeVolume": 10,
+      "change": 5,
+      "open": 126.5,
+      "high": 130,
+      "low": 125.5,
+      "prevClose": 125,
+      "volume": 10,
+      "market": "TPEX",
+      "quoteDate": "20260526",
+      "quoteTime": "13:30:00",
+      "date": "2026-05-26",
+      "volumeRatio": 1.42,
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.69",
+        "tone": "high",
+        "value": 0.6862745098039216
+      },
+      "swingScore": 68,
+      "score": 68,
+      "swingSignals": [
+        {
+          "id": "runaway_gap",
+          "short": "逃逸缺口",
+          "icon": "🚀",
+          "reason": "跳空且站上MA20，多頭段延續，偏逃逸缺口。"
+        }
+      ],
+      "signals": [
+        {
+          "id": "runaway_gap",
+          "short": "逃逸缺口",
+          "icon": "🚀",
+          "reason": "跳空且站上MA20，多頭段延續，偏逃逸缺口。"
+        }
+      ],
+      "reason": "跳空且站上MA20，多頭段延續，偏逃逸缺口。"
+    },
+    {
       "code": "3162",
       "name": "精確",
       "close": 90.1,
@@ -3937,12 +4753,12 @@
       "quoteDate": "20260526",
       "quoteTime": "13:30:00",
       "date": "2026-05-26",
-      "volumeRatio": 1.4,
+      "volumeRatio": 1.42,
       "swingStage": {
         "label": "高基期",
         "ratio": "0.83",
         "tone": "high",
-        "value": 0.8336933045356371
+        "value": 0.8300220750551875
       },
       "swingScore": 68,
       "score": 68,
@@ -3965,31 +4781,175 @@
       "reason": "MA5 > MA10 > MA20 且收紅，多金釵候選。"
     },
     {
-      "code": "6291",
-      "name": "沛亨",
-      "close": 587,
-      "percent": 9.925093632958802,
-      "value": 1435215000,
-      "tradeVolume": 2445,
-      "change": 53,
-      "open": 549,
-      "high": 587,
-      "low": 526,
-      "prevClose": 534,
-      "volume": 2445,
+      "code": "3163",
+      "name": "波若威",
+      "close": 1220,
+      "percent": 6.550218340611353,
+      "value": 5117900000,
+      "tradeVolume": 4195,
+      "change": 10,
+      "open": 1215,
+      "high": 1250,
+      "low": 1150,
+      "prevClose": 1210,
+      "volume": 4195,
       "market": "TPEX",
       "quoteDate": "20260526",
       "quoteTime": "13:30:00",
       "date": "2026-05-26",
-      "volumeRatio": 1.18,
+      "volumeRatio": 1.13,
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.86",
+        "tone": "high",
+        "value": 0.8571428571428571
+      },
+      "swingScore": 66,
+      "score": 66,
+      "swingSignals": [
+        {
+          "id": "runaway_gap",
+          "short": "逃逸缺口",
+          "icon": "🚀",
+          "reason": "跳空且站上MA20，多頭段延續，偏逃逸缺口。"
+        }
+      ],
+      "signals": [
+        {
+          "id": "runaway_gap",
+          "short": "逃逸缺口",
+          "icon": "🚀",
+          "reason": "跳空且站上MA20，多頭段延續，偏逃逸缺口。"
+        }
+      ],
+      "reason": "跳空且站上MA20，多頭段延續，偏逃逸缺口。"
+    },
+    {
+      "code": "4971",
+      "name": "IET-KY",
+      "close": 765,
+      "percent": 33.74125874125874,
+      "value": 185895000,
+      "tradeVolume": 243,
+      "change": 20,
+      "open": 750,
+      "high": 765,
+      "low": 716,
+      "prevClose": 745,
+      "volume": 243,
+      "market": "TPEX",
+      "quoteDate": "20260526",
+      "quoteTime": "13:30:00",
+      "date": "2026-05-26",
+      "volumeRatio": 0.07,
       "swingStage": {
         "label": "過熱",
         "ratio": "1.00+",
         "tone": "hot",
         "value": 1
       },
-      "swingScore": 66,
-      "score": 66,
+      "swingScore": 65,
+      "score": 65,
+      "swingSignals": [
+        {
+          "id": "breakaway_gap",
+          "short": "突破缺口",
+          "icon": "◆",
+          "reason": "跳空突破近20日整理高點，偏突破缺口。"
+        },
+        {
+          "id": "golden_cross",
+          "short": "金釵",
+          "icon": "✦",
+          "reason": "MA5 > MA10 > MA20 且收紅，多金釵候選。"
+        }
+      ],
+      "signals": [
+        {
+          "id": "breakaway_gap",
+          "short": "突破缺口",
+          "icon": "◆",
+          "reason": "跳空突破近20日整理高點，偏突破缺口。"
+        },
+        {
+          "id": "golden_cross",
+          "short": "金釵",
+          "icon": "✦",
+          "reason": "MA5 > MA10 > MA20 且收紅，多金釵候選。"
+        }
+      ],
+      "reason": "跳空突破近20日整理高點，偏突破缺口。"
+    },
+    {
+      "code": "5609",
+      "name": "中菲行",
+      "close": 80.4,
+      "percent": 3.076923076923084,
+      "value": 11416800,
+      "tradeVolume": 142,
+      "change": 0.10000000000000853,
+      "open": 80.3,
+      "high": 81.1,
+      "low": 80.2,
+      "prevClose": 80.3,
+      "volume": 142,
+      "market": "TPEX",
+      "quoteDate": "20260526",
+      "quoteTime": "13:30:00",
+      "date": "2026-05-26",
+      "volumeRatio": 0.99,
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.83",
+        "tone": "high",
+        "value": 0.8333333333333356
+      },
+      "swingScore": 65,
+      "score": 65,
+      "swingSignals": [
+        {
+          "id": "runaway_gap",
+          "short": "逃逸缺口",
+          "icon": "🚀",
+          "reason": "跳空且站上MA20，多頭段延續，偏逃逸缺口。"
+        }
+      ],
+      "signals": [
+        {
+          "id": "runaway_gap",
+          "short": "逃逸缺口",
+          "icon": "🚀",
+          "reason": "跳空且站上MA20，多頭段延續，偏逃逸缺口。"
+        }
+      ],
+      "reason": "跳空且站上MA20，多頭段延續，偏逃逸缺口。"
+    },
+    {
+      "code": "4951",
+      "name": "精拓科",
+      "close": 134.5,
+      "percent": 1.893939393939394,
+      "value": 204036500,
+      "tradeVolume": 1517,
+      "change": 2.5,
+      "open": 132,
+      "high": 135,
+      "low": 127,
+      "prevClose": 132,
+      "volume": 1517,
+      "market": "TPEX",
+      "quoteDate": "20260526",
+      "quoteTime": "13:30:00",
+      "date": "2026-05-26",
+      "volumeRatio": 0.82,
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.88",
+        "tone": "high",
+        "value": 0.884020618556701
+      },
+      "swingScore": 64,
+      "score": 64,
       "swingSignals": [
         {
           "id": "golden_cross",
@@ -4009,31 +4969,119 @@
       "reason": "MA5 > MA10 > MA20 且收紅，多金釵候選。"
     },
     {
-      "code": "6693",
-      "name": "廣閎科",
-      "close": 157.5,
-      "percent": 12.903225806451612,
-      "value": 212152500,
-      "tradeVolume": 1347,
-      "change": 9.5,
-      "open": 148,
-      "high": 157.5,
-      "low": 146,
-      "prevClose": 148,
-      "volume": 1347,
+      "code": "6261",
+      "name": "久元",
+      "close": 123,
+      "percent": 1.6528925619834711,
+      "value": 691383000,
+      "tradeVolume": 5621,
+      "change": 2,
+      "open": 122,
+      "high": 124.5,
+      "low": 115.5,
+      "prevClose": 121,
+      "volume": 5621,
       "market": "TPEX",
       "quoteDate": "20260526",
       "quoteTime": "13:30:00",
       "date": "2026-05-26",
-      "volumeRatio": 0.92,
+      "volumeRatio": 0.7,
       "swingStage": {
         "label": "高基期",
-        "ratio": "0.89",
+        "ratio": "0.80",
         "tone": "high",
-        "value": 0.8853711790393013
+        "value": 0.8009188361408882
       },
-      "swingScore": 64,
-      "score": 64,
+      "swingScore": 63,
+      "score": 63,
+      "swingSignals": [
+        {
+          "id": "golden_cross",
+          "short": "金釵",
+          "icon": "✦",
+          "reason": "MA5 > MA10 > MA20 且收紅，多金釵候選。"
+        }
+      ],
+      "signals": [
+        {
+          "id": "golden_cross",
+          "short": "金釵",
+          "icon": "✦",
+          "reason": "MA5 > MA10 > MA20 且收紅，多金釵候選。"
+        }
+      ],
+      "reason": "MA5 > MA10 > MA20 且收紅，多金釵候選。"
+    },
+    {
+      "code": "4721",
+      "name": "美琪瑪",
+      "close": 92.1,
+      "percent": 10.299401197604784,
+      "value": 109599000,
+      "tradeVolume": 1190,
+      "change": 1.1999999999999886,
+      "open": 91.4,
+      "high": 93.2,
+      "low": 90.4,
+      "prevClose": 90.9,
+      "volume": 1190,
+      "market": "TPEX",
+      "quoteDate": "20260526",
+      "quoteTime": "13:30:00",
+      "date": "2026-05-26",
+      "volumeRatio": 0.47,
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.88",
+        "tone": "high",
+        "value": 0.8797814207650272
+      },
+      "swingScore": 61,
+      "score": 61,
+      "swingSignals": [
+        {
+          "id": "runaway_gap",
+          "short": "逃逸缺口",
+          "icon": "🚀",
+          "reason": "跳空且站上MA20，多頭段延續，偏逃逸缺口。"
+        }
+      ],
+      "signals": [
+        {
+          "id": "runaway_gap",
+          "short": "逃逸缺口",
+          "icon": "🚀",
+          "reason": "跳空且站上MA20，多頭段延續，偏逃逸缺口。"
+        }
+      ],
+      "reason": "跳空且站上MA20，多頭段延續，偏逃逸缺口。"
+    },
+    {
+      "code": "4979",
+      "name": "華星光",
+      "close": 680,
+      "percent": 3.816793893129771,
+      "value": 942480000,
+      "tradeVolume": 1386,
+      "change": 25,
+      "open": 665,
+      "high": 682,
+      "low": 630,
+      "prevClose": 655,
+      "volume": 1386,
+      "market": "TPEX",
+      "quoteDate": "20260526",
+      "quoteTime": "13:30:00",
+      "date": "2026-05-26",
+      "volumeRatio": 0.26,
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.80",
+        "tone": "high",
+        "value": 0.8049940546967895
+      },
+      "swingScore": 59,
+      "score": 59,
       "swingSignals": [
         {
           "id": "runaway_gap",
