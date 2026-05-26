@@ -789,6 +789,40 @@ function installThemeToggle() {
         border-color: #dbe3ee !important;
         color: #334155 !important;
       }
+      html,
+      body,
+      .dashboard,
+      main,
+      .view-panel,
+      #market-view {
+        max-width: 100% !important;
+        overflow-x: hidden !important;
+        scrollbar-width: none;
+        -ms-overflow-style: none;
+      }
+      html::-webkit-scrollbar,
+      body::-webkit-scrollbar,
+      .dashboard::-webkit-scrollbar,
+      main::-webkit-scrollbar,
+      .view-panel::-webkit-scrollbar,
+      #market-view::-webkit-scrollbar {
+        width: 0 !important;
+        height: 0 !important;
+        display: none !important;
+      }
+      #market-view .metrics-grid,
+      #market-view .metric-grid,
+      #market-view .market-metrics {
+        max-width: 100% !important;
+        overflow-x: hidden !important;
+      }
+      #heatmap {
+        max-width: 100% !important;
+        overflow: visible !important;
+      }
+      #heatmap .sector-card {
+        min-width: 0 !important;
+      }
       #market-view.market-ai-mode > :not(.page-header):not(.market-mode-tabs):not(.market-ai-panel) {
         display: none !important;
       }
