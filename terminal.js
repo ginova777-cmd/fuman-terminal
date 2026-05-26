@@ -4060,6 +4060,15 @@ const SECTOR_MEMORY_STORAGE_OVERRIDES = {
 };
 Object.assign(SECTOR_MAP, SECTOR_MEMORY_STORAGE_OVERRIDES);
 
+const SECTOR_POWER_BBU_OVERRIDES = {
+  "2308":"電源/BBU/UPS","2301":"電源/BBU/UPS","3211":"電源/BBU/UPS","6781":"電源/BBU/UPS",
+  "6282":"電源/BBU/UPS","4931":"電源/BBU/UPS","6409":"電源/BBU/UPS","5309":"電源/BBU/UPS",
+  "2476":"電源/BBU/UPS","6121":"電源/BBU/UPS","6412":"電源/BBU/UPS","3323":"電源/BBU/UPS",
+  "2457":"電源/BBU/UPS","6558":"電源/BBU/UPS","8104":"電源/BBU/UPS","3015":"電源/BBU/UPS",
+  "3625":"電源/BBU/UPS",
+};
+Object.assign(SECTOR_MAP, SECTOR_POWER_BBU_OVERRIDES);
+
 function cleanNumber(value) {
   if (value === undefined || value === null || value === "") return 0;
   return Number(String(value).replace(/[,+%]/g, "")) || 0;
