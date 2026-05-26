@@ -1492,7 +1492,7 @@ function renderRealtimeRadar() {
   if (!panel) return;
   deferUiWork(ensureMobileAutoOrganizeButton);
   const radarOpen = isRadarDetectionWindow();
-  if (!realtimeRadarLastRows.length) loadRealtimeRadarLastRows();
+  if (!radarOpen && !realtimeRadarLastRows.length) loadRealtimeRadarLastRows();
   if (!radarOpen && !latestStocks.length) {
     if (realtimeRadarLastRows.length) {
       // Fall through and render the persisted closing snapshot.
@@ -1524,6 +1524,31 @@ function renderRealtimeRadar() {
   }
   if (!Object.keys(strategyHistoryData).length && !strategy4CacheLoading) loadStrategy4Cache(true);
   const rows = buildRealtimeRadarRows();
+  if (radarOpen && !rows.length) {
+    panel.innerHTML = `
+      <header class="radar-topbar">
+        <div>
+          <h1>◎ 即時多空資金流</h1>
+          <small>偵測時間 09:00-13:30｜正在更新即時訊號</small>
+        </div>
+        <button class="radar-action" type="button" data-radar-refresh>刷新雷達</button>
+      </header>
+      <section class="radar-board-tabs" role="tablist" aria-label="即時雷達多空切換">
+        <button type="button" class="${realtimeRadarSide !== "short" ? "active" : ""}" data-radar-side="long">多方</button>
+        <button type="button" class="${realtimeRadarSide === "short" ? "active short-active" : ""}" data-radar-side="short">空方</button>
+      </section>
+      <div class="empty-state">正在更新${realtimeRadarSide === "short" ? "空方" : "多方"}訊號...</div>
+    `;
+    if (!realtimeRadarRefreshLoading) {
+      realtimeRadarRefreshLoading = true;
+      loadMarketData(true)
+        .then(() => renderRealtimeRadar())
+        .finally(() => {
+          realtimeRadarRefreshLoading = false;
+        });
+    }
+    return;
+  }
   if (radarOpen && rows.length) {
     realtimeRadarLastRows = rows;
     realtimeRadarLastUpdatedAt = Date.now();
