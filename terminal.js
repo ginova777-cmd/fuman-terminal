@@ -1123,9 +1123,27 @@ function installThemeToggle() {
       .dashboard,
       main,
       .view-panel,
-      #market-view {
+      #market-view,
+      #strategy-view,
+      #watchlist-view,
+      #chip-trade-view,
+      #warrant-flow-view,
+      #realtime-radar-view,
+      .strategy-terminal,
+      .strategy-results,
+      .strategy5-results,
+      .watchlist-analysis-pane,
+      .watchlist-list-pane,
+      .ta-dashboard,
+      .swing-panel,
+      .intraday-panel,
+      .terminal-card,
+      .terminal-table-wrap,
+      .stock-table,
+      .heatmap,
+      .sector-section,
+      .watch-section {
         max-width: 100% !important;
-        overflow-x: hidden !important;
         scrollbar-width: none;
         -ms-overflow-style: none;
       }
@@ -1134,10 +1152,41 @@ function installThemeToggle() {
       .dashboard::-webkit-scrollbar,
       main::-webkit-scrollbar,
       .view-panel::-webkit-scrollbar,
-      #market-view::-webkit-scrollbar {
+      #market-view::-webkit-scrollbar,
+      #strategy-view::-webkit-scrollbar,
+      #watchlist-view::-webkit-scrollbar,
+      #chip-trade-view::-webkit-scrollbar,
+      #warrant-flow-view::-webkit-scrollbar,
+      #realtime-radar-view::-webkit-scrollbar,
+      .strategy-terminal::-webkit-scrollbar,
+      .strategy-results::-webkit-scrollbar,
+      .strategy5-results::-webkit-scrollbar,
+      .watchlist-analysis-pane::-webkit-scrollbar,
+      .watchlist-list-pane::-webkit-scrollbar,
+      .ta-dashboard::-webkit-scrollbar,
+      .swing-panel::-webkit-scrollbar,
+      .intraday-panel::-webkit-scrollbar,
+      .terminal-card::-webkit-scrollbar,
+      .terminal-table-wrap::-webkit-scrollbar,
+      .stock-table::-webkit-scrollbar,
+      .heatmap::-webkit-scrollbar,
+      .sector-section::-webkit-scrollbar,
+      .watch-section::-webkit-scrollbar,
+      *::-webkit-scrollbar {
         width: 0 !important;
         height: 0 !important;
         display: none !important;
+      }
+      * {
+        scrollbar-width: none;
+        -ms-overflow-style: none;
+      }
+      html,
+      body,
+      .dashboard,
+      main,
+      .view-panel {
+        overflow-x: hidden !important;
       }
       #market-view .metrics-grid,
       #market-view .metric-grid,
@@ -2745,6 +2794,7 @@ function buildRealtimeRadarRows() {
       const side = hasLongSignal && (!hasShortSignal || pct >= 0) ? "long" : hasShortSignal ? "short" : "";
       const score = radarSignalScore({ ...live, pct, value, volume, foreign, trust, signalTags });
       const flow = radarFlowValue({ ...live, pct, value, volume, foreign, trust, signalTags });
+      const radarUpdatedAt = cleanNumber(strategyRealtimeQuotes[live.code]?.updatedAt) || strategyLastScanAt || Date.now();
       return {
         ...live,
         pct,
@@ -2760,6 +2810,7 @@ function buildRealtimeRadarRows() {
         shortMarginChange,
         swingDaily: daily,
         signalTags,
+        radarUpdatedAt,
       };
     })
     .filter((stock) => stock.value > 0 && stock.side && stock.signalTags.length)
@@ -2818,10 +2869,28 @@ function saveRealtimeRadarLastRows(rows) {
         foreign: stock.foreign,
         totalInst: stock.totalInst,
         signalTags: stock.signalTags,
+        radarUpdatedAt: stock.radarUpdatedAt,
       })),
     };
     localStorage.setItem(REALTIME_RADAR_LAST_CACHE_KEY, JSON.stringify(payload));
   } catch (error) {}
+}
+
+function mergeRealtimeRadarRows(newRows = [], oldRows = []) {
+  const merged = new Map();
+  [...normalizeArray(newRows), ...normalizeArray(oldRows)].forEach((stock) => {
+    if (!stock?.code || !stock.side) return;
+    const key = `${stock.side}:${stock.code}`;
+    const existing = merged.get(key);
+    const currentTime = cleanNumber(stock.radarUpdatedAt) || 0;
+    const existingTime = cleanNumber(existing?.radarUpdatedAt) || 0;
+    if (!existing || currentTime >= existingTime) {
+      merged.set(key, { ...stock, radarUpdatedAt: currentTime || Date.now() });
+    }
+  });
+  return [...merged.values()]
+    .sort((a, b) => (cleanNumber(b.radarUpdatedAt) - cleanNumber(a.radarUpdatedAt)) || cleanNumber(b.score) - cleanNumber(a.score))
+    .slice(0, 120);
 }
 
 function loadRealtimeRadarLastRows() {
@@ -3038,13 +3107,14 @@ function renderRealtimeRadar() {
     return;
   }
   if (radarOpen && rows.length) {
-    realtimeRadarLastRows = rows;
+    realtimeRadarLastRows = mergeRealtimeRadarRows(rows, realtimeRadarLastRows);
     realtimeRadarLastUpdatedAt = Date.now();
-    saveRealtimeRadarLastRows(rows);
+    saveRealtimeRadarLastRows(realtimeRadarLastRows);
   }
-  const displayRows = rows.length ? rows : realtimeRadarLastRows;
-  const longAll = displayRows.filter((stock) => stock.side === "long");
-  const shortAll = displayRows.filter((stock) => stock.side === "short");
+  const displayRows = realtimeRadarLastRows.length ? realtimeRadarLastRows : rows;
+  const sortRadarLedger = (items) => [...items].sort((a, b) => (cleanNumber(b.radarUpdatedAt) - cleanNumber(a.radarUpdatedAt)) || cleanNumber(b.score) - cleanNumber(a.score));
+  const longAll = sortRadarLedger(displayRows.filter((stock) => stock.side === "long"));
+  const shortAll = sortRadarLedger(displayRows.filter((stock) => stock.side === "short"));
   const longRows = longAll.slice(0, 8);
   const shortRows = shortAll.slice(0, 8);
   const longFlow = longAll.reduce((sum, stock) => sum + stock.flow, 0);
@@ -3086,9 +3156,12 @@ function renderRealtimeRadar() {
     const tags = radarReasonTags(stock).map((tag) => `<span>${tag}</span>`).join("");
     const instTags = radarInstitutionTags(stock).map((tag) => `<span>${tag}</span>`).join("");
     const volumeRatio = radarVolumeRatio(stock);
+    const eventTime = cleanNumber(stock.radarUpdatedAt)
+      ? new Date(cleanNumber(stock.radarUpdatedAt)).toLocaleTimeString("zh-TW", { hour12: false, hour: "2-digit", minute: "2-digit" })
+      : now.slice(0, 5);
     return `
       <article class="radar-signal-card ${stock.side === "short" ? "short" : ""}">
-        <div class="radar-jump"><span>跳出</span><strong>${now.slice(0, 5)}</strong></div>
+        <div class="radar-jump"><span>最新</span><strong>${eventTime}</strong></div>
         <div class="radar-signal-main">
           <div class="radar-signal-name">${stock.name}<small>${stock.code}</small></div>
           <div class="radar-signal-meta">成交金額 ${radarMoney(stock.value)} · 量比 ${volumeRatio ? formatNumber(volumeRatio, 2) : "--"} · 分數 ${Math.round(stock.score)}</div>
