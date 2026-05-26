@@ -4619,6 +4619,8 @@ function hasFreshWarrantFlow() {
 function saveWarrantFlowLocalCache() {
   try {
     if (!warrantFlowData.length) return;
+    localStorage.removeItem(WARRANT_FLOW_LOCAL_CACHE_KEY);
+    return;
     localStorage.setItem(WARRANT_FLOW_LOCAL_CACHE_KEY, JSON.stringify({
       source: "github-actions",
       updatedAt: warrantFlowUpdatedAt || Date.now(),
@@ -4628,18 +4630,9 @@ function saveWarrantFlowLocalCache() {
 }
 
 function loadWarrantFlowLocalCache() {
-  try {
-    const payload = JSON.parse(localStorage.getItem(WARRANT_FLOW_LOCAL_CACHE_KEY) || "{}");
-    if (!String(payload.source || "").includes("github-actions")) return false;
-    if (!Array.isArray(payload.matches) || !payload.matches.length) return false;
-    warrantFlowData = payload.matches;
-    warrantFlowUpdatedAt = cleanNumber(payload.updatedAt) || Date.now();
-    return true;
-  } catch (error) {
-    return false;
-  }
+  try { localStorage.removeItem(WARRANT_FLOW_LOCAL_CACHE_KEY); } catch (error) {}
+  return false;
 }
-
 function showExportNotice(message) {
   if (terminalMessage) terminalMessage.textContent = message;
   const notice = document.createElement("div");
@@ -12355,3 +12348,4 @@ if (isViewActive("watchlist")) renderWatchlist();
 setInterval(() => {
   if (!isDocumentHidden() && isTerminalUnlocked() && isViewActive("watchlist")) refreshSelectedWatchlistQuote();
 }, 10000);
+
