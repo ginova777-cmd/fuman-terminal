@@ -2946,8 +2946,8 @@ function radarVolumeRatio(stock) {
   if (cachedRatio > 0) return cachedRatio;
   const daily = stock.swingDaily || analyzeSwingDaily(stock);
   const rows = normalizeArray(daily?.rows);
-  const currentVolume = cleanNumber(stock.volume || stock.tradeVolume);
-  const priorVolumes = rows.slice(-21, -1).map((row) => cleanNumber(row.volume)).filter((value) => value > 0);
+  const currentVolume = normalizeTradeVolumeLots(stock.volume || stock.tradeVolume);
+  const priorVolumes = rows.slice(-21, -1).map((row) => normalizeTradeVolumeLots(row.volume)).filter((value) => value > 0);
   const averageVolume = avg(priorVolumes);
   if (currentVolume && averageVolume) {
     const now = new Date();
@@ -4231,7 +4231,7 @@ function updateStrategyHistory(item) {
         high: cleanNumber(row.high),
         low: cleanNumber(row.low),
         close: cleanNumber(row.close),
-        volume: cleanNumber(row.volume),
+        volume: normalizeTradeVolumeLots(row.volume),
         value: cleanNumber(row.value),
       }))
       .filter((row) => row.date && row.close)
