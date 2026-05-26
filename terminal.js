@@ -2099,6 +2099,82 @@ function installRealtimeRadarStyles() {
     .radar-signal-card.short .radar-chip-list span {
       color: #8da1ca;
     }
+    body.fuman-light-theme .radar-board-tabs {
+      border-bottom-color: #cbd8e6 !important;
+    }
+    body.fuman-light-theme .radar-board-tabs button {
+      color: #64748b !important;
+    }
+    body.fuman-light-theme .radar-board-tabs button.active {
+      border-color: #ef4444 !important;
+      color: #dc2626 !important;
+    }
+    body.fuman-light-theme .radar-board-tabs button.short-active {
+      border-color: #64748b !important;
+      color: #475569 !important;
+    }
+    body.fuman-light-theme .radar-signal-card {
+      background: #ffffff !important;
+      border: 1px solid #fecaca !important;
+      box-shadow: 0 10px 22px rgba(15, 23, 42, 0.06) !important;
+    }
+    body.fuman-light-theme .radar-signal-card.short {
+      background: #ffffff !important;
+      border-color: #cbd8e6 !important;
+    }
+    body.fuman-light-theme .radar-jump span {
+      color: #4f6f9f !important;
+      font-weight: 850 !important;
+    }
+    body.fuman-light-theme .radar-jump strong {
+      color: #f59e0b !important;
+      font-weight: 950 !important;
+    }
+    body.fuman-light-theme .radar-signal-name {
+      color: #111827 !important;
+      font-weight: 950 !important;
+    }
+    body.fuman-light-theme .radar-signal-name small {
+      color: #4f6f9f !important;
+      font-weight: 900 !important;
+    }
+    body.fuman-light-theme .radar-signal-meta {
+      color: #385a8f !important;
+      font-weight: 750 !important;
+      border-color: transparent !important;
+    }
+    body.fuman-light-theme .radar-signal-chips span {
+      background: #ffe4e6 !important;
+      border-color: #fecaca !important;
+      color: #dc2626 !important;
+      font-weight: 950 !important;
+    }
+    body.fuman-light-theme .radar-signal-price strong,
+    body.fuman-light-theme .radar-signal-price small {
+      color: #dc2626 !important;
+      font-weight: 950 !important;
+    }
+    body.fuman-light-theme .radar-condition-list,
+    body.fuman-light-theme .radar-chip-list {
+      border-left-color: #e2e8f0 !important;
+    }
+    body.fuman-light-theme .radar-condition-list span,
+    body.fuman-light-theme .radar-chip-list span {
+      color: #ef4444 !important;
+      font-weight: 950 !important;
+      text-shadow: none !important;
+    }
+    body.fuman-light-theme .radar-signal-card.short .radar-signal-price strong,
+    body.fuman-light-theme .radar-signal-card.short .radar-signal-price small,
+    body.fuman-light-theme .radar-signal-card.short .radar-condition-list span,
+    body.fuman-light-theme .radar-signal-card.short .radar-chip-list span {
+      color: #475569 !important;
+    }
+    body.fuman-light-theme .radar-signal-card.short .radar-signal-chips span {
+      background: #eef4fb !important;
+      border-color: #cbd8e6 !important;
+      color: #334155 !important;
+    }
     @media (max-width: 760px) {
       .radar-topbar {
         align-items: flex-start;
