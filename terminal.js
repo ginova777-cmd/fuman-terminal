@@ -1149,10 +1149,20 @@ function radarSignalScore(stock) {
   return Math.max(1, Math.min(100, Math.round(tagScore + moveScore + valueScore + volumeScore + instScore - 42)));
 }
 
+function isRealtimeRadarLimitUp(stock) {
+  const close = cleanNumber(stock.close);
+  const pct = cleanNumber(stock.percent ?? stock.pct);
+  const prevClose = cleanNumber(stock.prevClose) || (close - cleanNumber(stock.change));
+  const limitUp = cleanNumber(stock.limitUp) || (prevClose ? prevClose * 1.1 : 0);
+  if (limitUp && close >= limitUp * 0.995) return true;
+  return pct >= 9.7;
+}
+
 function buildRealtimeRadarRows() {
   const intradayPool = latestStocks
     .map((stock) => applyStrategyQuote(stock))
-    .filter((stock) => isIntradayTradable(stock));
+    .filter((stock) => isIntradayTradable(stock))
+    .filter((stock) => !isRealtimeRadarLimitUp(stock));
   const shortPressurePool = [...intradayPool]
     .filter((stock) => {
       const live = applyStrategyQuote(stock);
