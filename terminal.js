@@ -1624,6 +1624,11 @@ function deferUiWork(callback, delay = 0) {
   else run();
 }
 
+function deferIdleWork(callback, timeout = 900) {
+  if (typeof requestIdleCallback === "function") requestIdleCallback(callback, { timeout });
+  else deferUiWork(callback, Math.min(timeout, 180));
+}
+
 function isViewActive(name) {
   return Boolean(viewPanels[name]?.classList.contains("active"));
 }
@@ -2949,19 +2954,7 @@ function renderRealtimeRadar() {
     return;
   }
   if (!Object.keys(strategyHistoryData).length && !strategy4CacheLoading) loadStrategy4Cache(true);
-  const radarNeedsUpdate = radarOpen && (realtimeRadarNeedsFreshScan || !isRealtimeRadarFresh());
-  if (radarNeedsUpdate && realtimeRadarLastRows.length && !realtimeRadarRefreshLoading && !strategyRealtimeLoading) {
-    realtimeRadarRefreshLoading = true;
-    refreshStrategyRealtimeScan("force")
-      .then(() => {
-        realtimeRadarNeedsFreshScan = false;
-        if (isViewActive("realtime-radar")) renderRealtimeRadar();
-      })
-      .finally(() => {
-        realtimeRadarRefreshLoading = false;
-      });
-  }
-  if (radarNeedsUpdate && !realtimeRadarLastRows.length) {
+  if (radarOpen && (realtimeRadarNeedsFreshScan || !isRealtimeRadarFresh())) {
     panel.innerHTML = `
       <header class="radar-topbar">
         <div>
@@ -9571,8 +9564,8 @@ function showView(viewName, activeLink) {
     deferUiWork(renderRealtimeRadar);
   }
   if (viewName === "strategy") {
-    if (!sameViewQuick) deferUiWork(renderStrategyScanner);
-    deferIdleWork(loadInstitution, 1200);
+    deferUiWork(renderStrategyScanner);
+    deferUiWork(loadInstitution, 600);
   }
   if (viewName === "chip-trade") {
     deferUiWork(loadChipTradeData);
@@ -9581,8 +9574,8 @@ function showView(viewName, activeLink) {
   if (viewName === "watchlist") {
     deferUiWork(renderWatchlist);
   }
-  deferIdleWork(ensureMobileAutoOrganizeButton, 900);
-  deferIdleWork(normalizeMobileHorizontalPosition, 900);
+  deferUiWork(ensureMobileAutoOrganizeButton);
+  deferUiWork(normalizeMobileHorizontalPosition, 60);
   const focusTarget = activeLink?.dataset.focus ? document.querySelector(`#${activeLink.dataset.focus}`) : null;
   if (focusTarget) setTimeout(()=>focusTarget.focus(),0);
 }
@@ -10161,7 +10154,7 @@ setInterval(async () => {
   if (isDocumentHidden() || !isTerminalUnlocked() || !isViewActive("realtime-radar") || !isRadarDetectionWindow()) return;
   realtimeRadarRefreshLoading = true;
   try {
-    await loadMarketData();
+    await loadMarketData(true);
     renderRealtimeRadar();
   } finally {
     realtimeRadarRefreshLoading = false;
