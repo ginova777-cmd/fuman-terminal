@@ -1236,6 +1236,17 @@ function radarFlowValue(stock) {
   return value * (0.55 + signalBoost + moveBoost + volumeBoost);
 }
 
+function radarVolumeRatio(stock) {
+  const daily = stock.swingDaily || analyzeSwingDaily(stock);
+  const ratio = cleanNumber(daily?.volumeRatio);
+  if (ratio > 0) return ratio;
+  const rows = normalizeArray(daily?.rows);
+  const currentVolume = cleanNumber(stock.volume || stock.tradeVolume);
+  const priorVolumes = rows.slice(-21, -1).map((row) => cleanNumber(row.volume)).filter((value) => value > 0);
+  const averageVolume = avg(priorVolumes);
+  return currentVolume && averageVolume ? currentVolume / averageVolume : 0;
+}
+
 function radarSignalScore(stock) {
   const pct = Math.abs(cleanNumber(stock.pct ?? stock.percent));
   const value = cleanNumber(stock.value);
@@ -1554,12 +1565,13 @@ function renderRealtimeRadar() {
     const sign = stock.pct >= 0 ? "+" : "";
     const tags = radarReasonTags(stock).map((tag) => `<span>${tag}</span>`).join("");
     const instTags = radarInstitutionTags(stock).map((tag) => `<span>${tag}</span>`).join("");
+    const volumeRatio = radarVolumeRatio(stock);
     return `
       <article class="radar-signal-card ${stock.side === "short" ? "short" : ""}">
         <div class="radar-jump"><span>跳出</span><strong>${now.slice(0, 5)}</strong></div>
         <div class="radar-signal-main">
           <div class="radar-signal-name">${stock.name}<small>${stock.code}</small></div>
-          <div class="radar-signal-meta">成交金額 ${radarMoney(stock.value)} · 量比 ${formatNumber(Math.max(1, Math.abs(stock.flow) / Math.max(stock.value || 1, 1) * 100), 2)} · 分數 ${Math.round(stock.score)}</div>
+          <div class="radar-signal-meta">成交金額 ${radarMoney(stock.value)} · 量比 ${volumeRatio ? formatNumber(volumeRatio, 2) : "--"} · 分數 ${Math.round(stock.score)}</div>
           <div class="radar-signal-chips">${radarDetailChips(stock)}</div>
         </div>
         <div class="radar-signal-price">
