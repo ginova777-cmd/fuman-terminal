@@ -1082,6 +1082,15 @@ function radarLowerShadowPct(stock) {
   return close ? ((bodyLow - low) / close) * 100 : 0;
 }
 
+function radarUpperShadowPct(stock) {
+  const close = cleanNumber(stock.close);
+  const open = cleanNumber(stock.open);
+  const high = cleanNumber(stock.high);
+  const bodyHigh = Math.max(open || close, close || open);
+  if (!bodyHigh || !high || high <= bodyHigh) return 0;
+  return close ? ((high - bodyHigh) / close) * 100 : 0;
+}
+
 function radarMarginChange(stock) {
   const daily = stock.swingDaily || {};
   const last = daily.last || {};
@@ -1112,6 +1121,32 @@ function radarMarginChange(stock) {
   return 0;
 }
 
+function radarShortMarginChange(stock) {
+  const daily = stock.swingDaily || {};
+  const last = daily.last || {};
+  const candidates = [
+    stock.shortMarginChange,
+    stock.securitiesLendingChange,
+    stock.marginShortChange,
+    stock.shortSellChange,
+    stock.shortBalanceChange,
+    stock.lendingChange,
+    last.shortMarginChange,
+    last.securitiesLendingChange,
+    last.marginShortChange,
+    last.shortSellChange,
+    last.shortBalanceChange,
+    last.lendingChange,
+    last["融券增減"],
+    last["融券買賣超"],
+  ];
+  for (const value of candidates) {
+    const number = cleanNumber(value);
+    if (number) return number;
+  }
+  return 0;
+}
+
 function radarSignalTags(stock) {
   const tags = [];
   const volume = cleanNumber(stock.tradeVolume || stock.volume);
@@ -1130,39 +1165,62 @@ function radarSignalTags(stock) {
   const volumeRatio = daily?.volumeRatio || 0;
   const bodyPct = open ? ((close - open) / open) * 100 : 0;
   const longRed = close && open && close > open && bodyPct >= 3;
+  const longBlack = close && open && close < open && bodyPct <= -3;
   const shortWeak = close && open && close < open && bodyPct <= -1.5;
   const lowerShadowPct = radarLowerShadowPct({ ...stock, swingDaily: daily });
+  const upperShadowPct = radarUpperShadowPct({ ...stock, swingDaily: daily });
   const marginChange = radarMarginChange({ ...stock, swingDaily: daily });
+  const shortMarginChange = radarShortMarginChange({ ...stock, swingDaily: daily });
+  const prevClose = cleanNumber(stock.prevClose) || (close - cleanNumber(stock.change));
+  const limitDown = cleanNumber(stock.limitDown) || (prevClose ? prevClose * 0.9 : 0);
+  const isNearLimitDown = limitDown && close <= limitDown * 1.005;
   const breaksHigh = (length) => {
     if (!close || priorRows.length < length) return false;
     const high = Math.max(...priorRows.slice(-length).map((row) => cleanNumber(row.high)).filter(Boolean));
     return high > 0 && close > high;
   };
+  const breaksLow = (length) => {
+    if (!close || priorRows.length < length) return false;
+    const low = Math.min(...priorRows.slice(-length).map((row) => cleanNumber(row.low)).filter(Boolean));
+    return low > 0 && close < low;
+  };
   if (longRed) tags.push("長紅逾3%");
   if (lowerShadowPct >= 3) tags.push("長下影逾3%");
+  if (upperShadowPct >= 3) tags.push("長上影逾3%");
+  if (longBlack) tags.push("長黑逾3%");
   if (shortWeak) tags.push("長黑轉弱");
   if (close && daily?.ma5 && close > daily.ma5) tags.push("突破5日均");
   if (close && daily?.ma10 && close > daily.ma10) tags.push("突破10日均");
   if (close && daily?.ma20 && close > daily.ma20) tags.push("突破20日均");
   if (close && daily?.ma60 && close > daily.ma60) tags.push("突破60日均");
+  if (close && daily?.ma5 && close < daily.ma5) tags.push("跌破5日均");
+  if (close && daily?.ma10 && close < daily.ma10) tags.push("跌破10日均");
+  if (close && daily?.ma20 && close < daily.ma20) tags.push("跌破20日均");
+  if (close && daily?.ma60 && close < daily.ma60) tags.push("跌破60日均");
   if (breaksHigh(10)) tags.push("突破10日高");
   if (breaksHigh(20)) tags.push("突破20日高");
   if (breaksHigh(60)) tags.push("突破60日高");
   if (breaksHigh(120)) tags.push("突破120日高");
+  if (breaksLow(10)) tags.push("跌破10日低");
+  if (breaksLow(20)) tags.push("跌破20日低");
+  if (breaksLow(60)) tags.push("跌破60日低");
+  if (breaksLow(120)) tags.push("跌破120日低");
   if (volumeRatio >= 2) tags.push("量增2倍");
   else if (volumeRatio >= 1.5) tags.push("量增1.5倍");
   if (value >= 1000000000 || (volume >= 5000 && Math.abs(pct) >= 1.2)) tags.push("即時爆量");
   if (pct >= 3) tags.push("短線急拉");
   if (foreign >= 1000) tags.push("外資買超");
   if (totalInst >= 1000) tags.push("三大法人買超");
-  if (pct >= 1.5 && value >= 200000000) tags.push("短線強勢");
+  if (pct >= 1.5 && volume >= INTRADAY_MIN_VOLUME) tags.push("短線強勢");
   if (trust >= 500) tags.push("投信買超");
   if (marginChange > 0) tags.push("融資增加");
+  if (shortMarginChange > 0) tags.push("融券增加");
   if (pct <= -3) tags.push("急殺");
+  if (isNearLimitDown || pct <= -9.5) tags.push("接近跌停");
   if (foreign <= -1000) tags.push("外資賣超");
   if (totalInst <= -1000) tags.push("三大法人賣超");
   if (trust <= -500) tags.push("投信賣超");
-  if (pct <= -1.5 && value >= 200000000) tags.push("短線轉弱");
+  if (pct <= -1.5 && volume >= INTRADAY_MIN_VOLUME) tags.push("短線轉弱");
   if (prev?.high && close > prev.high) tags.push("突破昨日高");
   return [...new Set(tags)];
 }
@@ -1246,21 +1304,29 @@ function buildRealtimeRadarRows() {
       const foreign = cleanNumber(inst.foreign);
       const daily = live.swingDaily || analyzeSwingDaily(live);
       const marginChange = radarMarginChange({ ...live, swingDaily: daily });
-      const signalTags = radarSignalTags({ ...live, pct, value, volume, foreign, trust, totalInst, marginChange, swingDaily: daily });
+      const shortMarginChange = radarShortMarginChange({ ...live, swingDaily: daily });
+      const upperShadowPct = radarUpperShadowPct({ ...live, swingDaily: daily });
+      const lowerShadowPct = radarLowerShadowPct({ ...live, swingDaily: daily });
+      const signalTags = radarSignalTags({ ...live, pct, value, volume, foreign, trust, totalInst, marginChange, shortMarginChange, swingDaily: daily });
+      const hasLongTag = signalTags.some((tag) => /突破|長紅|長下影|量增|買超|強勢|急拉|融資增加/.test(tag));
+      const hasShortTag = signalTags.some((tag) => /跌破|長上影|急殺|賣超|轉弱|長黑|接近跌停|融券增加/.test(tag));
       const hasLongSignal =
-        signalTags.some((tag) => /突破|長紅|長下影|量增|買超|強勢|急拉|融資增加/.test(tag)) ||
-        radarLowerShadowPct({ ...live, swingDaily: daily }) >= 3 ||
+        hasLongTag ||
+        lowerShadowPct >= 3 ||
         marginChange > 0 ||
         pct >= 3 ||
-        (pct >= 1.5 && value >= 200000000) ||
+        (pct >= 1.5 && volume >= INTRADAY_MIN_VOLUME) ||
         (value >= 1000000000 && pct > 0) ||
         (volume >= 5000 && pct >= 1.2) ||
         (foreign >= 1000 && pct >= 0) ||
         (trust >= 500 && pct >= 0);
       const hasShortSignal =
-        signalTags.some((tag) => /急殺|賣超|轉弱|長黑/.test(tag)) ||
+        hasShortTag ||
+        upperShadowPct >= 3 ||
+        shortMarginChange > 0 ||
+        (signalTags.some((tag) => /量增|即時爆量/.test(tag)) && pct < 0) ||
         pct <= -3 ||
-        (pct <= -1.5 && value >= 200000000) ||
+        (pct <= -1.5 && volume >= INTRADAY_MIN_VOLUME) ||
         (value >= 1000000000 && pct < 0) ||
         (volume >= 5000 && pct <= -1.2) ||
         (foreign <= -1000 && pct <= 0.8) ||
@@ -1280,6 +1346,7 @@ function buildRealtimeRadarRows() {
         foreign,
         totalInst,
         marginChange,
+        shortMarginChange,
         swingDaily: daily,
         signalTags,
       };
@@ -1461,6 +1528,7 @@ function renderRealtimeRadar() {
       if (stock.totalInst < 0) tags.push("三大法人賣超");
       if (stock.foreign < 0) tags.push("外資賣超");
       if (stock.trust < 0) tags.push("投信賣超");
+      if (stock.shortMarginChange > 0) tags.push("融券增加");
       if (stock.totalInst >= 0) tags.push("法人買盤轉弱");
       tags.push("短線賣壓");
     } else {
@@ -7771,13 +7839,15 @@ function getIntradayHotScore(stock) {
   const history = strategyRealtimeQuotes[live.code]?.history || [];
   const latestDelta = cleanNumber(history.at(-1)?.deltaVolume);
   const lowerShadowBonus = radarLowerShadowPct(live) >= 3 ? 1200 : 0;
+  const upperShadowBonus = radarUpperShadowPct(live) >= 3 ? 1200 : 0;
   const marginBonus = radarMarginChange(live) > 0 ? 1200 : 0;
+  const shortMarginBonus = radarShortMarginChange(live) > 0 ? 1200 : 0;
   const signalBonus = (live.intradaySignals?.length || 0) * 900;
   const pctScore = Math.max(pct, -2) * 150;
   const volumeScore = Math.log10(Math.max(volume, 1)) * 38;
   const deltaScore = Math.log10(Math.max(latestDelta, 1)) * 70;
   const pricePenalty = close >= 900 ? 9999 : 0;
-  return signalBonus + lowerShadowBonus + marginBonus + pctScore + volumeScore + deltaScore - pricePenalty;
+  return signalBonus + lowerShadowBonus + upperShadowBonus + marginBonus + shortMarginBonus + pctScore + volumeScore + deltaScore - pricePenalty;
 }
 
 function uniqueStocksByCode(stocks) {
@@ -7808,8 +7878,10 @@ function markIntradayCandidates(stocks) {
     const volume = cleanNumber(live.tradeVolume);
     const latestDelta = cleanNumber(strategyRealtimeQuotes[code]?.history?.at(-1)?.deltaVolume);
     const lowerShadowHit = radarLowerShadowPct(live) >= 3;
+    const upperShadowHit = radarUpperShadowPct(live) >= 3;
     const marginIncreaseHit = radarMarginChange(live) > 0;
-    if (hasIntradayLiquidity(live) && (pct >= 1.5 || volume >= INTRADAY_MIN_VOLUME || latestDelta >= 50 || lowerShadowHit || marginIncreaseHit)) {
+    const shortMarginIncreaseHit = radarShortMarginChange(live) > 0;
+    if (hasIntradayLiquidity(live) && (pct >= 1.5 || pct <= -0.5 || volume >= INTRADAY_MIN_VOLUME || latestDelta >= 50 || lowerShadowHit || upperShadowHit || marginIncreaseHit || shortMarginIncreaseHit)) {
       intradayCandidateSeenAt[code] = now;
     }
   });
@@ -7824,13 +7896,18 @@ function getBaseStrongIntradayStocks(scanSource) {
       const close = cleanNumber(live.close);
       const open = cleanNumber(live.open);
       const lowerShadowHit = radarLowerShadowPct(live) >= 3;
+      const upperShadowHit = radarUpperShadowPct(live) >= 3;
       const marginIncreaseHit = radarMarginChange(live) > 0;
+      const shortMarginIncreaseHit = radarShortMarginChange(live) > 0;
       return close && (
         pct >= 2 ||
+        pct <= -0.5 ||
         (open && close >= open && pct >= 0.5) ||
         volume >= 2000 ||
         lowerShadowHit ||
-        marginIncreaseHit
+        upperShadowHit ||
+        marginIncreaseHit ||
+        shortMarginIncreaseHit
       );
     })
     .sort((a, b) => getIntradayHotScore(b) - getIntradayHotScore(a));
