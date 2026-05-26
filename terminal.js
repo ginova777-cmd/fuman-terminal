@@ -69,7 +69,7 @@ function installThemeToggle() {
         position: fixed;
         top: 18px;
         right: 18px;
-        z-index: 9999;
+        z-index: 10001;
         width: 46px;
         height: 46px;
         display: grid;
@@ -923,7 +923,7 @@ function installThemeToggle() {
         position: fixed;
         top: 24px;
         right: 76px;
-        z-index: 9997;
+        z-index: 10000;
         display: inline-flex;
         align-items: center;
         gap: 10px;
@@ -1921,7 +1921,7 @@ function installRealtimeRadarStyles() {
       position: fixed;
       top: 76px;
       right: 18px;
-      z-index: 9998;
+      z-index: 9999;
       border: 1px solid rgba(255, 122, 69, 0.35);
       border-radius: 8px;
       background: rgba(255, 122, 69, 0.12);
