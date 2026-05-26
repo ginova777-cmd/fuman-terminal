@@ -4012,6 +4012,13 @@ const SECTOR_EQUIPMENT_TEST_OVERRIDES = {
 };
 Object.assign(SECTOR_MAP, SECTOR_EQUIPMENT_TEST_OVERRIDES);
 
+const SECTOR_RUBBER_OVERRIDES = {
+  "2103":"橡膠工業","2105":"橡膠工業","2104":"橡膠工業","2108":"橡膠工業",
+  "2101":"橡膠工業","2102":"橡膠工業","2106":"橡膠工業","2107":"橡膠工業",
+  "2114":"橡膠工業","6582":"橡膠工業","2109":"橡膠工業",
+};
+Object.assign(SECTOR_MAP, SECTOR_RUBBER_OVERRIDES);
+
 function cleanNumber(value) {
   if (value === undefined || value === null || value === "") return 0;
   return Number(String(value).replace(/[,+%]/g, "")) || 0;
