@@ -4077,6 +4077,15 @@ const SECTOR_POWER_BBU_OVERRIDES = {
 };
 Object.assign(SECTOR_MAP, SECTOR_POWER_BBU_OVERRIDES);
 
+const SECTOR_ELECTRIC_CABLE_OVERRIDES = {
+  "1605":"電器電纜","1609":"電器電纜","1608":"電器電纜","1623":"電器電纜",
+  "2061":"電器電纜","1612":"電器電纜","1618":"電器電纜","1603":"電器電纜",
+  "1615":"電器電纜","1616":"電器電纜","1604":"電器電纜","5283":"電器電纜",
+  "1611":"電器電纜","1617":"電器電纜","1614":"電器電纜","1626":"電器電纜",
+  "4930":"電器電纜",
+};
+Object.assign(SECTOR_MAP, SECTOR_ELECTRIC_CABLE_OVERRIDES);
+
 function cleanNumber(value) {
   if (value === undefined || value === null || value === "") return 0;
   return Number(String(value).replace(/[,+%]/g, "")) || 0;
