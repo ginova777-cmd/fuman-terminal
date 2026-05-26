@@ -3120,6 +3120,16 @@ function shouldRunLivePolling() {
   return isIntradayScanWindow();
 }
 
+function getMarketRefreshInterval() {
+  if (isDocumentHidden()) return MARKET_REFRESH_HIDDEN_MS;
+  return shouldRunLivePolling() ? MARKET_REFRESH_LIVE_MS : MARKET_REFRESH_CLOSED_MS;
+}
+
+function getMarketHeatmapRefreshInterval() {
+  if (isDocumentHidden()) return MARKET_REFRESH_HIDDEN_MS;
+  return shouldRunLivePolling() ? MARKET_REFRESH_LIVE_MS : MARKET_HEATMAP_CLOSED_MS;
+}
+
 function saveRealtimeRadarLastRows(rows) {
   try {
     if (!Array.isArray(rows) || !rows.length) return;
@@ -3796,8 +3806,11 @@ let warrantFlowHasOpened = false;
 let chipTradePage = 1;
 const WARRANT_FLOW_LOCAL_CACHE_KEY = "fuman_warrant_flow_cache_v1";
 const CACHE_FRESH_MS = 10 * 60 * 1000;
-const MARKET_REFRESH_MS = 5 * 1000;
+const MARKET_REFRESH_LIVE_MS = 5 * 1000;
+const MARKET_REFRESH_CLOSED_MS = 120 * 1000;
 const MARKET_REFRESH_HIDDEN_MS = 90 * 1000;
+const MARKET_HEATMAP_CLOSED_MS = 180 * 1000;
+const MARKET_POLL_TICK_MS = 5 * 1000;
 const MARKET_DOM_REFRESH_MS = 60 * 1000;
 let selectedStrategyIds = new Set();
 let strategyMode = "any";
@@ -9358,6 +9371,19 @@ async function ensureMarketAiInstitutionData() {
   }
 }
 
+function getMarketAiLegalValue(code) {
+  const inst = institutionData[String(code || "")] || {};
+  return Number(inst.total) || Number(inst.foreign || 0) + Number(inst.trust || 0) + Number(inst.dealer || 0);
+}
+
+function getMarketAiCapitalFlowScore(stock, sector) {
+  const pct = cleanNumber(stock.percent);
+  const valueYi = cleanNumber(stock.value) / 100000000;
+  const volume = cleanNumber(stock.tradeVolume);
+  const sectorPct = cleanNumber(sector?.pct);
+  return Math.round(clamp(valueYi * 1.35 + Math.min(24, volume / 900) + Math.max(0, pct) * 5 + Math.max(0, sectorPct) * 7, 0, 100));
+}
+
 function scoreMarketAiStock(stock, sectors) {
   const code = String(stock.code || "");
   const industry = SECTOR_MAP[code] || "其他";
@@ -9365,14 +9391,12 @@ function scoreMarketAiStock(stock, sectors) {
   const pct = cleanNumber(stock.percent);
   const valueYi = cleanNumber(stock.value) / 100000000;
   const volume = cleanNumber(stock.tradeVolume);
-  const inst = institutionData[code] || {};
-  const legal = Number(inst.total) || Number(inst.foreign || 0) + Number(inst.trust || 0) + Number(inst.dealer || 0);
-  let score = 40;
-  score += Math.max(0, Math.min(30, pct * 4));
-  score += Math.max(0, Math.min(18, valueYi / 4));
-  score += volume >= 10000 ? 8 : volume >= 5000 ? 5 : volume >= 2000 ? 3 : 0;
-  score += sector?.pct > 1 ? 8 : sector?.pct > 0 ? 4 : 0;
-  score += legal > 0 ? 6 : 0;
+  const legal = getMarketAiLegalValue(code);
+  const capitalFlowScore = getMarketAiCapitalFlowScore(stock, sector);
+  const sectorScore = Math.round(clamp((sector?.pct || 0) * 18 + (sector?.up || 0) * 1.2 - (sector?.down || 0) * 0.8, 0, 100));
+  const legalScore = Math.round(clamp(Math.abs(legal) / 900 + (legal > 0 ? 20 : 0), 0, 100));
+  const momentumScore = Math.round(clamp(Math.max(0, pct) * 9 + valueYi * 0.45 + Math.min(16, volume / 1400), 0, 100));
+  let score = capitalFlowScore * 0.42 + sectorScore * 0.22 + legalScore * 0.18 + momentumScore * 0.18;
   if (pct < 0) score -= Math.min(42, Math.abs(pct) * 10);
   if (pct <= -3) score = Math.min(score, 45);
   else if (pct <= -1) score = Math.min(score, 58);
@@ -9404,10 +9428,11 @@ function classifyMarketAiStock(stock, sectors) {
   const volume = cleanNumber(stock.tradeVolume);
   const industry = SECTOR_MAP[code] || "其他";
   const sector = sectors.find((item) => item.name === industry);
-  const inst = institutionData[code] || {};
-  const legal = Number(inst.total) || Number(inst.foreign || 0) + Number(inst.trust || 0) + Number(inst.dealer || 0);
+  const legal = getMarketAiLegalValue(code);
   const score = scoreMarketAiStock(stock, sectors);
-  const momentumScore = Math.round(clamp(pct * 10 + valueYi * 1.4 + (sector?.pct || 0) * 8, 0, 100));
+  const capitalFlowScore = getMarketAiCapitalFlowScore(stock, sector);
+  const sectorScore = Math.round(clamp((sector?.pct || 0) * 18 + (sector?.up || 0) * 1.2 - (sector?.down || 0) * 0.8, 0, 100));
+  const momentumScore = Math.round(clamp(capitalFlowScore * 0.5 + score * 0.3 + Math.max(0, pct) * 4 + sectorScore * 0.2, 0, 100));
   const intradayScore = Math.round(clamp(pct * 8 + volume / 300 + valueYi * 1.2, 0, 100));
   const legalScore = Math.round(clamp(Math.abs(legal) / 900 + (legal > 0 ? 18 : 0), 0, 100));
   const riskScore = Math.round(clamp(Math.max(0, pct - 7.5) * 18 + Math.max(0, -pct - 3) * 14 + (valueYi >= 20 ? 8 : 0), 0, 100));
@@ -9416,6 +9441,8 @@ function classifyMarketAiStock(stock, sectors) {
     score,
     industry,
     legal,
+    capitalFlowScore,
+    sectorScore,
     momentumScore,
     intradayScore,
     legalScore,
@@ -9423,7 +9450,7 @@ function classifyMarketAiStock(stock, sectors) {
     tags: getMarketAiTags(stock, score, sectors),
     buckets: {
       all: true,
-      momentum: momentumScore >= 45 || pct >= 5,
+      momentum: momentumScore >= 70 && (capitalFlowScore >= 55 || score >= 72 || sectorScore >= 45),
       legal: legal > 0,
       intraday: intradayScore >= 40 || (volume >= 2000 && pct >= 2),
       risk: riskScore >= 35 || pct >= 8.5 || pct <= -3,
@@ -10122,7 +10149,7 @@ async function fetchFuturesDirect() {
 
 async function loadMarketData(force = false) {
   const now = Date.now();
-  const minInterval = isDocumentHidden() ? MARKET_REFRESH_HIDDEN_MS : MARKET_REFRESH_MS;
+  const minInterval = getMarketRefreshInterval();
   if (marketDataLoading || (!force && marketDataLastStartedAt && now - marketDataLastStartedAt < minInterval)) return;
   marketDataLoading = true;
   marketDataLastStartedAt = now;
@@ -10165,7 +10192,8 @@ async function loadMarketData(force = false) {
 async function loadHeatmap(force = false) {
   if (isDocumentHidden() || !isViewActive("market")) return;
   const now = Date.now();
-  if (heatmapLoading || (!force && heatmapLastStartedAt && now - heatmapLastStartedAt < MARKET_REFRESH_MS)) {
+  const minInterval = getMarketHeatmapRefreshInterval();
+  if (heatmapLoading || (!force && heatmapLastStartedAt && now - heatmapLastStartedAt < minInterval)) {
     renderHeatmapFromCache();
     return;
   }
@@ -10632,8 +10660,8 @@ document.querySelectorAll("[data-chip-filter]").forEach((button) => {
 });
 setInterval(tickClock, 1000);
 setInterval(() => {
-  if (!isDocumentHidden() && isViewActive("market") && shouldRunLivePolling()) loadMarketData();
-}, MARKET_REFRESH_MS);
+  if (!isDocumentHidden() && isViewActive("market")) loadMarketData();
+}, MARKET_POLL_TICK_MS);
 setInterval(() => {
   if (!isDocumentHidden() && isTerminalUnlocked() && isViewActive("strategy") && selectedStrategyIds.has("intraday_2m") && isIntradayScanWindow()) refreshStrategyRealtimeScan("hot");
 }, INTRADAY_FAST_SCAN_MS);
@@ -10652,11 +10680,12 @@ setInterval(async () => {
   }
 }, REALTIME_RADAR_REFRESH_MS);
 setInterval(() => {
-  if (isDocumentHidden() || !isViewActive("market") || !shouldRunLivePolling()) return;
+  if (isDocumentHidden() || !isViewActive("market")) return;
+  if (!shouldRunLivePolling() && heatmapLastStartedAt && Date.now() - heatmapLastStartedAt < MARKET_HEATMAP_CLOSED_MS) return;
   if (renderHeatmapFromCache()) return;
   if (buildHeatmapFallbackFromLatestStocks()) return;
   loadHeatmap();
-}, 5 * 1000);
+}, MARKET_POLL_TICK_MS);
 
 // ===== 自選股功能 =====
 const watchlistView = document.querySelector("#watchlist-view");
