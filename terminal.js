@@ -315,6 +315,79 @@ function installThemeToggle() {
       body.fuman-light-theme .watch-down {
         color: #059669 !important;
       }
+      body.fuman-light-theme #sector-modal {
+        background: rgba(15, 23, 42, 0.28) !important;
+        backdrop-filter: blur(6px);
+      }
+      body.fuman-light-theme #sector-modal > div {
+        background: #ffffff !important;
+        border: 1px solid #d8e2ee !important;
+        border-radius: 12px !important;
+        box-shadow: 0 24px 70px rgba(15, 23, 42, 0.22) !important;
+      }
+      body.fuman-light-theme #sector-modal > div > div:first-child {
+        background: #ffffff !important;
+        border-bottom: 1px solid #d8e2ee !important;
+      }
+      body.fuman-light-theme #sector-modal > div > div:first-child > div:first-child {
+        color: #64748b !important;
+      }
+      body.fuman-light-theme #sector-modal > div > div:first-child div[style*="font-size:20px"] {
+        color: #111827 !important;
+      }
+      body.fuman-light-theme #sector-modal > div > div:first-child div[style*="font-size:12px"] {
+        color: #64748b !important;
+      }
+      body.fuman-light-theme #sector-modal > div > div:first-child div[style*="background:#1a1e2e"] {
+        background: #f8fafc !important;
+        border: 1px solid #d8e2ee !important;
+        color: #111827 !important;
+      }
+      body.fuman-light-theme #sector-modal > div > div:first-child div[style*="color:#888"] {
+        color: #64748b !important;
+      }
+      body.fuman-light-theme #sector-modal > div > div:first-child div[style*="color:#fff"],
+      body.fuman-light-theme #sector-modal > div > div:first-child div[style*="color:#7ec8e3"] {
+        color: #111827 !important;
+      }
+      body.fuman-light-theme #sector-modal #modal-close {
+        background: #ffffff !important;
+        color: #64748b !important;
+        border: 1px solid #cbd5e1 !important;
+        box-shadow: 0 4px 12px rgba(15, 23, 42, 0.12) !important;
+      }
+      body.fuman-light-theme #sector-modal table {
+        background: #ffffff !important;
+        color: #111827 !important;
+        box-shadow: none !important;
+      }
+      body.fuman-light-theme #sector-modal thead tr {
+        background: #f1f5f9 !important;
+        color: #475569 !important;
+      }
+      body.fuman-light-theme #sector-modal th {
+        color: #475569 !important;
+        border-color: #d8e2ee !important;
+      }
+      body.fuman-light-theme #sector-modal tbody tr {
+        background: #ffffff !important;
+        border-bottom: 1px solid #e2e8f0 !important;
+      }
+      body.fuman-light-theme #sector-modal tbody tr:nth-child(even) {
+        background: #fbfdff !important;
+      }
+      body.fuman-light-theme #sector-modal td {
+        color: #334155 !important;
+      }
+      body.fuman-light-theme #sector-modal td div[style*="color:#7ec8e3"],
+      body.fuman-light-theme #sector-modal td[style*="color:#fff"] {
+        color: #0f172a !important;
+      }
+      body.fuman-light-theme #sector-modal td div[style*="color:#555"],
+      body.fuman-light-theme #sector-modal td[style*="color:#888"],
+      body.fuman-light-theme #sector-modal td[style*="color:#aaa"] {
+        color: #64748b !important;
+      }
       @media (max-width: 720px) {
         .fuman-theme-toggle {
           top: 12px;
