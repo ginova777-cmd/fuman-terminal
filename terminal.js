@@ -1,4 +1,4 @@
-﻿const heatmap = document.querySelector("#heatmap");
+const heatmap = document.querySelector("#heatmap");
 const refreshLine = document.querySelector(".refresh-line");
 const headerTimes = [...document.querySelectorAll(".header-time")];
 const metricCards = [...document.querySelectorAll(".metric-card")];
@@ -1676,6 +1676,10 @@ function installRealtimeRadarStyles() {
       font-size: 12px;
     }
     .radar-action {
+      position: fixed;
+      top: 76px;
+      right: 18px;
+      z-index: 9998;
       border: 1px solid rgba(255, 122, 69, 0.35);
       border-radius: 8px;
       background: rgba(255, 122, 69, 0.12);
@@ -1683,6 +1687,12 @@ function installRealtimeRadarStyles() {
       cursor: pointer;
       font-weight: 800;
       padding: 10px 12px;
+    }
+    body.fuman-light-theme .radar-action {
+      background: #fff7ed !important;
+      color: #c2410c !important;
+      border-color: #fed7aa !important;
+      box-shadow: 0 10px 24px rgba(15, 23, 42, 0.08) !important;
     }
     .radar-ai-box,
     .radar-team-box,
@@ -2093,6 +2103,11 @@ function installRealtimeRadarStyles() {
       .radar-topbar {
         align-items: flex-start;
         padding-right: 58px;
+      }
+      .radar-action {
+        top: 64px;
+        right: 12px;
+        padding: 8px 10px;
       }
       .radar-topbar h1 {
         font-size: 42px;
@@ -2691,7 +2706,7 @@ function renderRealtimeRadar() {
           <h1>◎ 即時多空資金流</h1>
           <small>偵測時間 09:00-13:30｜正在更新即時訊號</small>
         </div>
-        <button class="radar-action" type="button" data-radar-refresh>刷新雷達</button>
+        <button class="radar-action" type="button" data-radar-refresh>重新整理</button>
       </header>
       ${buildRealtimeRadarAiPanel(realtimeRadarLastRows, { loading: true })}
       <section class="radar-board-tabs" role="tablist" aria-label="即時雷達多空切換">
@@ -2721,7 +2736,7 @@ function renderRealtimeRadar() {
           <h1>◎ 即時多空資金流</h1>
           <small>偵測時間 09:00-13:30｜正在更新即時訊號</small>
         </div>
-        <button class="radar-action" type="button" data-radar-refresh>刷新雷達</button>
+        <button class="radar-action" type="button" data-radar-refresh>重新整理</button>
       </header>
       ${buildRealtimeRadarAiPanel(realtimeRadarLastRows, { loading: true })}
       <section class="radar-board-tabs" role="tablist" aria-label="即時雷達多空切換">
@@ -2815,7 +2830,7 @@ function renderRealtimeRadar() {
         <h1>◎ 即時多空資金流</h1>
         <small>偵測時間 09:00-13:30${radarOpen ? "" : `｜收盤後停止偵測，顯示盤中最後資料${realtimeRadarLastUpdatedAt ? ` ${new Date(realtimeRadarLastUpdatedAt).toLocaleTimeString("zh-TW", { hour12: false })}` : ""}`}</small>
       </div>
-      <button class="radar-action" type="button" ${radarOpen ? "data-radar-refresh" : "disabled"}>${radarOpen ? "刷新雷達" : "09:00-13:30 偵測"}</button>
+      <button class="radar-action" type="button" ${radarOpen ? "data-radar-refresh" : "disabled"}>${radarOpen ? "重新整理" : "09:00-13:30 偵測"}</button>
     </header>
     ${aiPanelMarkup}
     <section class="radar-board-tabs" role="tablist" aria-label="即時雷達多空切換">
