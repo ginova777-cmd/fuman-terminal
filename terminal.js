@@ -9083,6 +9083,15 @@ function getMarketAiHotGroups(hotStocks) {
   return groups;
 }
 
+function sortMarketAiPriorityStocks(stocks = []) {
+  return [...stocks].sort((a, b) =>
+    (b.tags?.length || 0) - (a.tags?.length || 0) ||
+    cleanNumber(b.score) - cleanNumber(a.score) ||
+    cleanNumber(b.percent) - cleanNumber(a.percent) ||
+    cleanNumber(b.value) - cleanNumber(a.value)
+  );
+}
+
 function getMarketAiFilterMeta(groups) {
   return [
     { key: "all", label: "全部", count: groups.all.length },
@@ -9135,7 +9144,8 @@ function renderMarketAiPanel() {
     return;
   }
   if (!Object.keys(institutionData).length) deferUiWork(ensureMarketAiInstitutionData, 100);
-  const topHot = data.hotStocks.find((stock) => cleanNumber(stock.percent) >= 1 && !stock.buckets.risk) || data.hotStocks[0];
+  const priorityStocks = sortMarketAiPriorityStocks(data.hotStocks.filter((stock) => cleanNumber(stock.percent) >= 1 && !stock.buckets.risk));
+  const topHot = priorityStocks[0] || data.hotStocks[0];
   const filterMeta = getMarketAiFilterMeta(data.hotGroups);
   const activeFilterLabel = filterMeta.find((item) => item.key === marketAiHotFilter)?.label || "全部";
   const strongNames = data.strongSectors.map((sector) => sector.name).join("、") || "尚未形成明顯主流";
@@ -9193,7 +9203,7 @@ function renderMarketAiPanel() {
           ${[
             `市場廣度目前上漲家數占 ${data.upRatio.toFixed(1)}%，${data.bias === "空方壓制" ? "盤面偏弱，先看風險。" : "可追蹤強勢族群是否擴散。"}`,
             `族群焦點落在 ${strongNames}，弱勢端留意 ${weakNames}。`,
-            `熱門觀察優先看 ${data.hotStocks.filter((stock) => !stock.buckets.risk && cleanNumber(stock.percent) > 0).slice(0, 3).map((stock) => `${stock.code} ${stock.name}`).join("、") || "等待資料"}。`,
+            `熱門觀察優先看 ${priorityStocks.slice(0, 3).map((stock) => `${stock.code} ${stock.name}`).join("、") || "等待資料"}。`,
             `盤中雷達目前偏向「${data.bias}」，分數高也要等量價延續確認。`,
           ].map((text, index) => `<div class="market-ai-point"><b>${index + 1}</b><span>${escapeAttr(text)}</span></div>`).join("")}
         </div>
