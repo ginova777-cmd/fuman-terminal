@@ -7461,6 +7461,14 @@ function getInstColor(val) {
   return n > 0 ? "#e74c3c" : "#27ae60";
 }
 
+function formatInstitutionLots(val) {
+  if (val === undefined || val === null) return "--";
+  const n = Math.round(cleanNumber(val));
+  if (!Number.isFinite(n)) return "--";
+  const sign = n >= 0 ? "+" : "";
+  return `${sign}${n.toLocaleString("zh-TW")} 張`;
+}
+
 function normalizeSectorRealtimeStock(stock, quote = {}) {
   const close = parseQuoteNumber(quote.close, quote.z, stock.close);
   const prevClose = parseQuoteNumber(quote.prevClose, quote.y);
@@ -7502,10 +7510,10 @@ function renderSectorModalRows(sector, stocks) {
         <td style="padding:10px 12px; text-align:right; color:${pctColor}; font-weight:700;">${pctSign}${formatNumber(s.pct || 0, 2)}%</td>
         <td style="padding:10px 12px; text-align:right; color:#aaa;">${s.value ? (s.value/100000000).toFixed(1) : "0.0"} 億</td>
         <td style="padding:10px 12px; text-align:right; color:#aaa;">${s.volume ? s.volume.toLocaleString("zh-TW", { maximumFractionDigits: 0 }) : "0"} 張</td>
-        <td style="padding:10px 12px; text-align:right; color:${getInstColor(foreign)}; font-weight:500;">${formatInstitution(foreign)}</td>
-        <td style="padding:10px 12px; text-align:right; color:${getInstColor(trust)}; font-weight:500;">${formatInstitution(trust)}</td>
-        <td style="padding:10px 12px; text-align:right; color:${getInstColor(dealer)}; font-weight:500;">${formatInstitution(dealer)}</td>
-        <td style="padding:10px 16px; text-align:right; color:${getInstColor(total)}; font-weight:600;">${formatInstitution(total)}</td>
+        <td style="padding:10px 12px; text-align:right; color:${getInstColor(foreign)}; font-weight:600;">${formatInstitutionLots(foreign)}</td>
+        <td style="padding:10px 12px; text-align:right; color:${getInstColor(trust)}; font-weight:600;">${formatInstitutionLots(trust)}</td>
+        <td style="padding:10px 12px; text-align:right; color:${getInstColor(dealer)}; font-weight:600;">${formatInstitutionLots(dealer)}</td>
+        <td style="padding:10px 16px; text-align:right; color:${getInstColor(total)}; font-weight:700;">${formatInstitutionLots(total)}</td>
       </tr>
     `;
   }).join("");
