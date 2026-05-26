@@ -2328,7 +2328,7 @@ let warrantFlowHasOpened = false;
 let chipTradePage = 1;
 const WARRANT_FLOW_LOCAL_CACHE_KEY = "fuman_warrant_flow_cache_v1";
 const CACHE_FRESH_MS = 10 * 60 * 1000;
-const MARKET_REFRESH_MS = 30 * 1000;
+const MARKET_REFRESH_MS = 5 * 1000;
 const MARKET_REFRESH_HIDDEN_MS = 90 * 1000;
 const MARKET_DOM_REFRESH_MS = 60 * 1000;
 let selectedStrategyIds = new Set();
@@ -8669,8 +8669,11 @@ setInterval(async () => {
   }
 }, REALTIME_RADAR_REFRESH_MS);
 setInterval(() => {
-  if (!isDocumentHidden() && isViewActive("market") && shouldRunLivePolling()) loadHeatmap();
-}, 15*60*1000);
+  if (isDocumentHidden() || !isViewActive("market") || !shouldRunLivePolling()) return;
+  if (renderHeatmapFromCache()) return;
+  if (buildHeatmapFallbackFromLatestStocks()) return;
+  loadHeatmap();
+}, 5 * 1000);
 
 // ===== 自選股功能 =====
 const watchlistView = document.querySelector("#watchlist-view");
