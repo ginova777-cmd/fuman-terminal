@@ -153,15 +153,27 @@ function installThemeToggle() {
       body.fuman-light-theme [data-view],
       body.fuman-light-theme .nav-list a,
       body.fuman-light-theme .sidebar a {
-        color: #475569 !important;
+        background: #f8fafc !important;
+        color: #334155 !important;
+        border: 1px solid #e2e8f0 !important;
+        box-shadow: none !important;
       }
       body.fuman-light-theme .strategy-nav.active,
       body.fuman-light-theme [data-view].active,
       body.fuman-light-theme .nav-list a.active,
       body.fuman-light-theme .sidebar a.active {
-        background: #fff1ed !important;
+        background: #fff7ed !important;
         color: #ea580c !important;
-        border-color: rgba(249, 115, 22, 0.38) !important;
+        border-color: rgba(249, 115, 22, 0.42) !important;
+        box-shadow: inset 3px 0 0 #f97316 !important;
+      }
+      body.fuman-light-theme .strategy-nav:hover,
+      body.fuman-light-theme [data-view]:hover,
+      body.fuman-light-theme .nav-list a:hover,
+      body.fuman-light-theme .sidebar a:hover {
+        background: #eef6ff !important;
+        color: #1e3a8a !important;
+        border-color: #bfdbfe !important;
       }
       body.fuman-light-theme h1,
       body.fuman-light-theme h2,
