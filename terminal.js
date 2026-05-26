@@ -953,10 +953,10 @@ function installThemeToggle() {
       }
       .market-ai-stock-row {
         display: grid;
-        grid-template-columns: 48px minmax(160px, 1fr) minmax(180px, 0.9fr) minmax(150px, 0.7fr) minmax(220px, 1fr) 150px;
-        gap: 14px;
+        grid-template-columns: 52px minmax(260px, 1.35fr) minmax(180px, 0.72fr) minmax(120px, 0.48fr) minmax(220px, 1fr) 150px;
+        gap: 18px;
         align-items: center;
-        padding: 16px 18px;
+        padding: 22px 18px;
       }
       .market-ai-rank {
         display: grid;
@@ -969,14 +969,29 @@ function installThemeToggle() {
         font-weight: 900;
       }
       .market-ai-stock-row h4 {
-        margin: 0 0 6px;
+        display: flex;
+        align-items: baseline;
+        gap: 9px;
+        margin: 0 0 8px;
         color: #f8fafc;
-        font-size: 20px;
+        line-height: 1.05;
+      }
+      .market-ai-code {
+        color: inherit;
+        font-size: 28px;
+        font-weight: 950;
+        letter-spacing: 0;
+      }
+      .market-ai-name {
+        color: #9fb3d9;
+        font-size: 14px;
+        font-weight: 800;
       }
       .market-ai-stock-row p {
         margin: 0;
         color: #9fb3d9;
         font-size: 13px;
+        line-height: 1.55;
       }
       .market-ai-score strong {
         display: block;
@@ -1035,8 +1050,12 @@ function installThemeToggle() {
       }
       body.fuman-light-theme .market-ai-card h3,
       body.fuman-light-theme .market-ai-block h3,
-      body.fuman-light-theme .market-ai-stock-row h4 {
+      body.fuman-light-theme .market-ai-stock-row h4,
+      body.fuman-light-theme .market-ai-code {
         color: #111827 !important;
+      }
+      body.fuman-light-theme .market-ai-name {
+        color: #334155 !important;
       }
       body.fuman-light-theme .market-ai-card p,
       body.fuman-light-theme .market-ai-block p,
@@ -3390,7 +3409,7 @@ function renderRealtimeRadar() {
       : now.slice(0, 5);
     return `
       <article class="radar-signal-card ${stock.side === "short" ? "short" : ""}">
-        <div class="radar-jump"><span>最新</span><strong>${eventTime}</strong></div>
+        <div class="radar-jump"><strong>${eventTime}</strong></div>
         <div class="radar-signal-main">
           <div class="radar-signal-name">${stock.name}<small>${stock.code}</small></div>
           <div class="radar-signal-meta">成交金額 ${radarMoney(stock.value)} · 量比 ${volumeRatio ? formatNumber(volumeRatio, 2) : "--"} · 分數 ${Math.round(stock.score)}</div>
@@ -9538,7 +9557,7 @@ function renderMarketAiPanel() {
           <article class="market-ai-stock-row">
             <div class="market-ai-rank">#${index + 1}</div>
             <div>
-              <h4>${escapeAttr(stock.code)} <span>${escapeAttr(stock.name)}</span></h4>
+              <h4><span class="market-ai-code">${escapeAttr(stock.code)}</span><span class="market-ai-name">${escapeAttr(stock.name)}</span></h4>
               <p>主力籌碼入選，綜合分數 ${stock.score}</p>
               <p>排序主因：盤中資金流 ${Math.round(clamp(stock.score, 1, 100))}，再交叉看族群強弱。</p>
             </div>
