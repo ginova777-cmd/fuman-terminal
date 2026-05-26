@@ -8003,6 +8003,57 @@ intradayRadarStyles.textContent = `
       font-size: 24px !important;
     }
   }
+  body.fuman-light-theme #strategy-view.strategy5-only .strategy5-shell,
+  body.fuman-light-theme #strategy-view.strategy5-only .strategy5-dashboard,
+  body.fuman-light-theme #strategy-view.strategy5-only .strategy5-results,
+  body.fuman-light-theme #strategy-view.strategy5-only .strategy5-table {
+    background: #ffffff !important;
+    color: #111827 !important;
+    border-color: #dbe3ee !important;
+    box-shadow: none !important;
+    opacity: 1 !important;
+    filter: none !important;
+    mix-blend-mode: normal !important;
+  }
+  body.fuman-light-theme #strategy-view.strategy5-only .strategy5-results-head,
+  body.fuman-light-theme #strategy-view.strategy5-only .strategy5-table-head {
+    background: #f1f5f9 !important;
+    color: #334155 !important;
+    border-color: #dbe3ee !important;
+  }
+  body.fuman-light-theme #strategy-view.strategy5-only .strategy5-table-row,
+  body.fuman-light-theme #strategy-view.strategy5-only .strategy5-table-row:nth-child(even),
+  body.fuman-light-theme #strategy-view.strategy5-only .strategy5-table-row:last-child {
+    background: #ffffff !important;
+    color: #111827 !important;
+    border-color: #e2e8f0 !important;
+    opacity: 1 !important;
+    filter: none !important;
+    mix-blend-mode: normal !important;
+  }
+  body.fuman-light-theme #strategy-view.strategy5-only .strategy5-table-row:hover {
+    background: #f8fbff !important;
+  }
+  body.fuman-light-theme #strategy-view.strategy5-only .strategy5-table-row *,
+  body.fuman-light-theme #strategy-view.strategy5-only .strategy5-name,
+  body.fuman-light-theme #strategy-view.strategy5-only .strategy5-table-reason {
+    color: #111827 !important;
+    opacity: 1 !important;
+    filter: none !important;
+    mix-blend-mode: normal !important;
+  }
+  body.fuman-light-theme #strategy-view.strategy5-only .strategy5-code {
+    color: #2563eb !important;
+  }
+  body.fuman-light-theme #strategy-view.strategy5-only .strategy5-entry-price strong {
+    color: #dc2626 !important;
+  }
+  body.fuman-light-theme #strategy-view.strategy5-only .strategy5-entry-price small {
+    color: #059669 !important;
+  }
+  body.fuman-light-theme #strategy-view.strategy5-only .strategy5-rank {
+    color: #ffffff !important;
+  }
 `;
 document.head.appendChild(intradayRadarStyles);
 
