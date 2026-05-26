@@ -56,7 +56,188 @@ const authLogoutButton = document.querySelector(".sidebar-foot .logout");
 const memberState = document.querySelector("#member-state");
 const supabaseClient = window.supabase?.createClient?.(FUMAN_SUPABASE_URL, FUMAN_SUPABASE_KEY);
 const PUBLIC_VIEWS = new Set(["market"]);
+const FUMAN_THEME_KEY = "fuman-terminal-theme";
 let authMode = "login";
+
+function installThemeToggle() {
+  if (document.querySelector("#fuman-theme-toggle")) return;
+  if (!document.querySelector("#fuman-theme-toggle-styles")) {
+    const style = document.createElement("style");
+    style.id = "fuman-theme-toggle-styles";
+    style.textContent = `
+      .fuman-theme-toggle {
+        position: fixed;
+        top: 18px;
+        right: 18px;
+        z-index: 9999;
+        width: 46px;
+        height: 46px;
+        display: grid;
+        place-items: center;
+        border: 1px solid rgba(148, 163, 184, 0.28);
+        border-radius: 12px;
+        background: rgba(15, 23, 42, 0.82);
+        color: #facc15;
+        font-size: 24px;
+        line-height: 1;
+        cursor: pointer;
+        box-shadow: 0 16px 38px rgba(0, 0, 0, 0.28);
+        backdrop-filter: blur(10px);
+        transition: transform 0.18s ease, background 0.18s ease, color 0.18s ease, border-color 0.18s ease;
+      }
+      .fuman-theme-toggle:hover {
+        transform: translateY(-1px);
+        border-color: rgba(96, 165, 250, 0.65);
+      }
+      body.fuman-light-theme {
+        background: #f4f7fb !important;
+        color: #172033 !important;
+      }
+      body.fuman-light-theme .fuman-theme-toggle {
+        background: rgba(255, 255, 255, 0.92);
+        color: #facc15;
+        border-color: rgba(203, 213, 225, 0.95);
+        box-shadow: 0 14px 34px rgba(15, 23, 42, 0.14);
+      }
+      body.fuman-light-theme .sidebar,
+      body.fuman-light-theme aside,
+      body.fuman-light-theme .side-nav {
+        background: #ffffff !important;
+        color: #1f2937 !important;
+        border-color: #dbe3ee !important;
+      }
+      body.fuman-light-theme .dashboard,
+      body.fuman-light-theme main,
+      body.fuman-light-theme .view-panel,
+      body.fuman-light-theme .strategy-terminal,
+      body.fuman-light-theme .strategy-results {
+        background: #f4f7fb !important;
+        color: #172033 !important;
+      }
+      body.fuman-light-theme .page-header,
+      body.fuman-light-theme .strategy-header,
+      body.fuman-light-theme .radar-topbar,
+      body.fuman-light-theme .strategy-toolbar,
+      body.fuman-light-theme .intraday-topbar {
+        background: transparent !important;
+        color: #172033 !important;
+        border-color: #dbe3ee !important;
+      }
+      body.fuman-light-theme .metric-card,
+      body.fuman-light-theme .strategy-card,
+      body.fuman-light-theme .strength-panel,
+      body.fuman-light-theme .radar-ai-box,
+      body.fuman-light-theme .radar-team-box,
+      body.fuman-light-theme .radar-signal-card,
+      body.fuman-light-theme .radar-flow-card,
+      body.fuman-light-theme .radar-leader-card,
+      body.fuman-light-theme .swing-dashboard,
+      body.fuman-light-theme .intraday-dashboard,
+      body.fuman-light-theme .strategy5-dashboard,
+      body.fuman-light-theme .intraday-zone,
+      body.fuman-light-theme .intraday-pick,
+      body.fuman-light-theme .watchlist-card,
+      body.fuman-light-theme .ta-dashboard,
+      body.fuman-light-theme table,
+      body.fuman-light-theme .terminal-card {
+        background: #ffffff !important;
+        color: #172033 !important;
+        border-color: #dbe3ee !important;
+        box-shadow: 0 12px 30px rgba(15, 23, 42, 0.08) !important;
+      }
+      body.fuman-light-theme .radar-signal-card.short,
+      body.fuman-light-theme .intraday-zone.watch {
+        background: #f8fbff !important;
+      }
+      body.fuman-light-theme .strategy-nav,
+      body.fuman-light-theme [data-view],
+      body.fuman-light-theme .nav-list a,
+      body.fuman-light-theme .sidebar a {
+        color: #475569 !important;
+      }
+      body.fuman-light-theme .strategy-nav.active,
+      body.fuman-light-theme [data-view].active,
+      body.fuman-light-theme .nav-list a.active,
+      body.fuman-light-theme .sidebar a.active {
+        background: #fff1ed !important;
+        color: #ea580c !important;
+        border-color: rgba(249, 115, 22, 0.38) !important;
+      }
+      body.fuman-light-theme h1,
+      body.fuman-light-theme h2,
+      body.fuman-light-theme h3,
+      body.fuman-light-theme strong,
+      body.fuman-light-theme b,
+      body.fuman-light-theme .code {
+        color: #111827 !important;
+      }
+      body.fuman-light-theme p,
+      body.fuman-light-theme small,
+      body.fuman-light-theme span,
+      body.fuman-light-theme td,
+      body.fuman-light-theme th,
+      body.fuman-light-theme .radar-signal-meta,
+      body.fuman-light-theme .refresh-line,
+      body.fuman-light-theme .terminal-message {
+        border-color: #dbe3ee !important;
+      }
+      body.fuman-light-theme input,
+      body.fuman-light-theme select,
+      body.fuman-light-theme button:not(.fuman-theme-toggle) {
+        border-color: #cbd5e1 !important;
+      }
+      body.fuman-light-theme input,
+      body.fuman-light-theme select {
+        background: #ffffff !important;
+        color: #172033 !important;
+      }
+      body.fuman-light-theme .radar-board-tabs,
+      body.fuman-light-theme .radar-tabs,
+      body.fuman-light-theme .intraday-tabs,
+      body.fuman-light-theme .terminal-tabs {
+        border-color: #dbe3ee !important;
+      }
+      body.fuman-light-theme table thead,
+      body.fuman-light-theme .stock-head {
+        background: #eef4fb !important;
+        color: #334155 !important;
+      }
+      body.fuman-light-theme .empty-state {
+        background: #ffffff !important;
+        color: #64748b !important;
+        border-color: #dbe3ee !important;
+      }
+      @media (max-width: 720px) {
+        .fuman-theme-toggle {
+          top: 12px;
+          right: 12px;
+          width: 42px;
+          height: 42px;
+        }
+      }
+    `;
+    document.head.appendChild(style);
+  }
+  const button = document.createElement("button");
+  button.id = "fuman-theme-toggle";
+  button.className = "fuman-theme-toggle";
+  button.type = "button";
+  const applyTheme = (theme) => {
+    const light = theme === "light";
+    document.body.classList.toggle("fuman-light-theme", light);
+    button.textContent = light ? "☀" : "☾";
+    button.title = light ? "切換黑夜模式" : "切換白天模式";
+    button.setAttribute("aria-label", button.title);
+  };
+  const savedTheme = localStorage.getItem(FUMAN_THEME_KEY) || "dark";
+  applyTheme(savedTheme === "light" ? "light" : "dark");
+  button.addEventListener("click", () => {
+    const next = document.body.classList.contains("fuman-light-theme") ? "dark" : "light";
+    localStorage.setItem(FUMAN_THEME_KEY, next);
+    applyTheme(next);
+  });
+  document.body.appendChild(button);
+}
 
 function setAuthMessage(text, type = "") {
   if (!authMessage) return;
@@ -9389,6 +9570,7 @@ async function refreshSelectedWatchlistQuote() {
   }
 }
 
+installThemeToggle();
 if (isViewActive("watchlist")) renderWatchlist();
 setInterval(() => {
   if (!isDocumentHidden() && isTerminalUnlocked() && isViewActive("watchlist")) refreshSelectedWatchlistQuote();
