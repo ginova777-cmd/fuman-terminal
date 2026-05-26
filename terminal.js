@@ -1169,6 +1169,8 @@ function installThemeToggle() {
       }
       body.fuman-light-theme #strategy-view .strategy5-stock-card,
       body.fuman-light-theme #strategy-view .strategy3-stock-card,
+      body.fuman-light-theme #strategy-view .intraday-side-panel,
+      body.fuman-light-theme #strategy-view .intraday-signal-card,
       body.fuman-light-theme #strategy-view .strategy3-table-row,
       body.fuman-light-theme #strategy-view .swing-table tbody tr,
       body.fuman-light-theme #strategy-view .intraday-table tbody tr,
@@ -1180,6 +1182,30 @@ function installThemeToggle() {
         color: #172033 !important;
         border-color: #e2e8f0 !important;
         box-shadow: none !important;
+      }
+      body.fuman-light-theme #strategy-view .intraday-side-panel {
+        background: #f7f9fc !important;
+      }
+      body.fuman-light-theme #strategy-view .intraday-signal-card,
+      body.fuman-light-theme #strategy-view .intraday-signal-card.active,
+      body.fuman-light-theme #strategy-view .intraday-signal-card.ma,
+      body.fuman-light-theme #strategy-view .intraday-signal-card.ma.active,
+      body.fuman-light-theme #strategy-view .intraday-signal-card.diamond,
+      body.fuman-light-theme #strategy-view .intraday-signal-card.diamond.active,
+      body.fuman-light-theme #strategy-view .intraday-signal-card.warn,
+      body.fuman-light-theme #strategy-view .intraday-signal-card.warn.active {
+        background: #ffffff !important;
+        color: #111827 !important;
+      }
+      body.fuman-light-theme #strategy-view .intraday-card-top strong,
+      body.fuman-light-theme #strategy-view .intraday-signal-card.ma strong,
+      body.fuman-light-theme #strategy-view .intraday-signal-card.diamond strong,
+      body.fuman-light-theme #strategy-view .intraday-signal-card.warn strong,
+      body.fuman-light-theme #strategy-view .intraday-count {
+        color: #111827 !important;
+      }
+      body.fuman-light-theme #strategy-view .intraday-signal-card small {
+        color: #334155 !important;
       }
       body.fuman-light-theme #strategy-view .strategy3-table-row:nth-child(even),
       body.fuman-light-theme #strategy-view .swing-table tbody tr:nth-child(even),
