@@ -1234,7 +1234,7 @@ function handleGlobalRefresh() {
   const active = getActiveViewName();
   if (active === "market") {
     loadMarketData(true);
-    loadHeatmap();
+    loadHeatmap(true);
     return;
   }
   if (active === "realtime-radar") {
@@ -1266,6 +1266,25 @@ function handleGlobalRefresh() {
     return;
   }
   window.location.reload();
+}
+
+async function addStockToWatchlistAndOpen(code, name = code) {
+  if (!code || typeof getWatchlist !== "function" || typeof saveWatchlist !== "function") return;
+  const list = getWatchlist();
+  if (!list.some((item) => item.code === code)) {
+    list.push({ code, name });
+    saveWatchlist(list);
+  }
+  const watchLink = viewLinks.find((link) => link.dataset.view === "watchlist");
+  if (watchLink) showView("watchlist", watchLink);
+  await renderWatchlist();
+  const card = document.querySelector(`#wcard-${code}`);
+  if (card) {
+    card.click();
+    card.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  } else if (typeof showTradingDashboard === "function") {
+    showTradingDashboard(code, name);
+  }
 }
 
 function setAuthMessage(text, type = "") {
@@ -3416,9 +3435,9 @@ let strategy5ActiveId = "foreign_trust_breakout";
 const INTRADAY_HOT_SCAN_LIMIT = 900;
 const REALTIME_RADAR_POOL_LIMIT = 650;
 const INTRADAY_BACKGROUND_BATCH = 450;
-const INTRADAY_FAST_SCAN_MS = 5 * 1000;
-const INTRADAY_BACKGROUND_SCAN_MS = 5 * 1000;
-const REALTIME_RADAR_REFRESH_MS = 5 * 1000;
+const INTRADAY_FAST_SCAN_MS = 3000;
+const INTRADAY_BACKGROUND_SCAN_MS = 3000;
+const REALTIME_RADAR_REFRESH_MS = 3000;
 const MOBILE_INTRADAY_HOT_SCAN_LIMIT = 260;
 const MOBILE_INTRADAY_FORCE_EXTRA_LIMIT = 80;
 const MOBILE_INTRADAY_BACKGROUND_BATCH = 90;
@@ -9110,7 +9129,7 @@ function renderMarketAiPanel() {
             </div>
             <div class="market-ai-tags">${stock.tags.map((tag) => `<span>${escapeAttr(tag)}</span>`).join("")}</div>
             <div class="market-ai-actions">
-              <button type="button" data-ai-stock-code="${escapeAttr(stock.code)}">看分析</button>
+              <button type="button" data-ai-stock-code="${escapeAttr(stock.code)}" data-ai-stock-name="${escapeAttr(stock.name)}">看分析</button>
               <button type="button" data-ai-watch-code="${escapeAttr(stock.code)}" data-ai-watch-name="${escapeAttr(stock.name)}">加入自選</button>
             </div>
           </article>
@@ -9548,7 +9567,7 @@ function showView(viewName, activeLink) {
     deferIdleWork(() => loadHeatmap(), 1000);
   }
   if (viewName === "realtime-radar") {
-    if (!isRealtimeRadarFresh()) realtimeRadarNeedsFreshScan = true;
+    realtimeRadarNeedsFreshScan = true;
     deferUiWork(renderRealtimeRadar);
   }
   if (viewName === "strategy") {
@@ -10085,9 +10104,8 @@ document.addEventListener("click", (event) => {
   const analyzeButton = event.target.closest("[data-ai-stock-code]");
   if (analyzeButton) {
     const code = analyzeButton.dataset.aiStockCode || "";
-    if (stockSearch) stockSearch.value = code;
-    applyMarketMode("overview");
-    searchStocks(code);
+    const name = analyzeButton.dataset.aiStockName || latestStocks.find((stock) => stock.code === code)?.name || code;
+    addStockToWatchlistAndOpen(code, name);
     return;
   }
   const watchButton = event.target.closest("[data-ai-watch-code]");
