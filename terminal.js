@@ -175,6 +175,23 @@ function installThemeToggle() {
         color: #1e3a8a !important;
         border-color: #bfdbfe !important;
       }
+      body.fuman-light-theme .sidebar .nav-icon,
+      body.fuman-light-theme .sidebar .strategy-nav span,
+      body.fuman-light-theme .sidebar .chip-menu-link span {
+        color: #f97316 !important;
+        opacity: 1 !important;
+        filter: none !important;
+        text-shadow: none !important;
+        font-weight: 900 !important;
+      }
+      body.fuman-light-theme .sidebar a.active .nav-icon,
+      body.fuman-light-theme .sidebar .strategy-nav.active span,
+      body.fuman-light-theme .sidebar .chip-menu-link.active span,
+      body.fuman-light-theme .sidebar a:hover .nav-icon,
+      body.fuman-light-theme .sidebar .strategy-nav:hover span,
+      body.fuman-light-theme .sidebar .chip-menu-link:hover span {
+        color: #ea580c !important;
+      }
       body.fuman-light-theme h1,
       body.fuman-light-theme h2,
       body.fuman-light-theme h3,
