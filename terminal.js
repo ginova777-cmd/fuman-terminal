@@ -2919,7 +2919,15 @@ function radarFlowValue(stock) {
   return value * (0.55 + signalBoost + moveBoost + volumeBoost);
 }
 
+function getStrategy3CachedVolumeRatio(code) {
+  const item = strategy3Data.find((stock) => String(stock.code || "") === String(code || ""));
+  if (!item) return 0;
+  return cleanNumber(item.volumeRatio || item.VolumeRatio || item.volume_ratio || item["量比"]);
+}
+
 function radarVolumeRatio(stock) {
+  const cachedRatio = cleanNumber(stock.volumeRatio || stock.VolumeRatio || stock.volume_ratio || stock["量比"]) || getStrategy3CachedVolumeRatio(stock.code);
+  if (cachedRatio > 0) return cachedRatio;
   const daily = stock.swingDaily || analyzeSwingDaily(stock);
   const rows = normalizeArray(daily?.rows);
   const currentVolume = cleanNumber(stock.volume || stock.tradeVolume);
@@ -3313,6 +3321,9 @@ function renderRealtimeRadar() {
   const panel = viewPanels["realtime-radar"];
   if (!panel) return;
   deferUiWork(ensureMobileAutoOrganizeButton);
+  if (!strategy3Data.length && !strategy3CacheLoading) {
+    loadStrategy3RadarVolumeCache();
+  }
   const radarOpen = isRadarDetectionWindow();
   if (!realtimeRadarLastRows.length) loadRealtimeRadarLastRows();
   if (!radarOpen && !latestStocks.length) {
@@ -4772,6 +4783,24 @@ async function loadStrategy3Cache(force = false) {
     const updatedAt = Date.parse(payload?.updatedAt || "");
     strategy3UpdatedAt = Number.isFinite(updatedAt) ? updatedAt : Date.now();
     renderStrategyScanner();
+  } catch (error) {
+  } finally {
+    strategy3CacheLoading = false;
+  }
+}
+
+async function loadStrategy3RadarVolumeCache() {
+  if (strategy3Data.length || strategy3CacheLoading) return;
+  strategy3CacheLoading = true;
+  try {
+    let payload = await fetchJson(`${endpoints.strategy3Cache}?t=${Date.now()}`, 10000);
+    if (!normalizeArray(payload?.matches).length) {
+      payload = await fetchJson(`${endpoints.strategy3Backup}?t=${Date.now()}`, 10000);
+    }
+    strategy3Data = normalizeArray(payload?.matches);
+    const updatedAt = Date.parse(payload?.updatedAt || "");
+    strategy3UpdatedAt = Number.isFinite(updatedAt) ? updatedAt : Date.now();
+    if (isViewActive("realtime-radar")) renderRealtimeRadar();
   } catch (error) {
   } finally {
     strategy3CacheLoading = false;
