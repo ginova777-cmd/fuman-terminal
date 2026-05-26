@@ -12403,10 +12403,10 @@
       "dealer": 0,
       "total": 6579882,
       "market": "上市",
-      "foreignStreak": 4,
+      "foreignStreak": 1,
       "trustStreak": 8,
       "dealerStreak": 0,
-      "jointStreak": 4,
+      "jointStreak": 1,
       "close": 696,
       "change": 27,
       "percent": 4.04,
@@ -35924,6 +35924,6 @@
     "TPEx 3itrade_hedge_result"
   ],
   "source": "github-actions",
-  "updatedAt": "2026-05-26T12:18:31.552Z",
-  "quoteUpdatedAt": "2026-05-26T12:18:25.833Z"
+  "updatedAt": "2026-05-26T13:10:22.259Z",
+  "quoteUpdatedAt": "2026-05-26T13:10:15.795Z"
 }
