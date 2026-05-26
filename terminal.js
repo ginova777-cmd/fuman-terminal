@@ -1391,6 +1391,11 @@ function isRadarDetectionWindow() {
   return minutes >= 9 * 60 && minutes <= 13 * 60 + 30;
 }
 
+function isRealtimeRadarFresh() {
+  if (!isRadarDetectionWindow()) return true;
+  return strategyLastScanAt && Date.now() - strategyLastScanAt <= Math.max(REALTIME_RADAR_REFRESH_MS * 2, 8000);
+}
+
 function isIntradayScanWindow() {
   return isRadarDetectionWindow();
 }
@@ -1523,6 +1528,34 @@ function renderRealtimeRadar() {
     return;
   }
   if (!Object.keys(strategyHistoryData).length && !strategy4CacheLoading) loadStrategy4Cache(true);
+  if (radarOpen && (realtimeRadarNeedsFreshScan || !isRealtimeRadarFresh())) {
+    panel.innerHTML = `
+      <header class="radar-topbar">
+        <div>
+          <h1>◎ 即時多空資金流</h1>
+          <small>偵測時間 09:00-13:30｜正在更新即時訊號</small>
+        </div>
+        <button class="radar-action" type="button" data-radar-refresh>刷新雷達</button>
+      </header>
+      <section class="radar-board-tabs" role="tablist" aria-label="即時雷達多空切換">
+        <button type="button" class="${realtimeRadarSide !== "short" ? "active" : ""}" data-radar-side="long">多方</button>
+        <button type="button" class="${realtimeRadarSide === "short" ? "active short-active" : ""}" data-radar-side="short">空方</button>
+      </section>
+      <div class="empty-state">正在更新${realtimeRadarSide === "short" ? "空方" : "多方"}訊號...</div>
+    `;
+    if (!realtimeRadarRefreshLoading && !strategyRealtimeLoading) {
+      realtimeRadarRefreshLoading = true;
+      refreshStrategyRealtimeScan("force")
+        .then(() => {
+          realtimeRadarNeedsFreshScan = false;
+          renderRealtimeRadar();
+        })
+        .finally(() => {
+          realtimeRadarRefreshLoading = false;
+        });
+    }
+    return;
+  }
   const rows = buildRealtimeRadarRows();
   if (radarOpen && !rows.length) {
     panel.innerHTML = `
@@ -1844,6 +1877,7 @@ let realtimeRadarSide = "auto";
 let realtimeRadarLastRows = [];
 let realtimeRadarLastUpdatedAt = 0;
 let realtimeRadarRefreshLoading = false;
+let realtimeRadarNeedsFreshScan = true;
 const REALTIME_RADAR_LAST_CACHE_KEY = "fuman_realtime_radar_last_rows_v1";
 let sectorStocksCache = {};
 let institutionData = {};
@@ -7675,7 +7709,10 @@ function showView(viewName, activeLink) {
     deferUiWork(loadMarketData);
     deferUiWork(loadHeatmap, 500);
   }
-  if (viewName === "realtime-radar") deferUiWork(renderRealtimeRadar);
+  if (viewName === "realtime-radar") {
+    realtimeRadarNeedsFreshScan = true;
+    deferUiWork(renderRealtimeRadar);
+  }
   if (viewName === "strategy") {
     deferUiWork(renderStrategyScanner);
     deferUiWork(loadInstitution, 600);
@@ -9179,12 +9216,14 @@ document.addEventListener("click", (event) => {
   const radarSide = event.target.closest("[data-radar-side]");
   if (radarSide) {
     realtimeRadarSide = radarSide.dataset.radarSide || "auto";
+    realtimeRadarNeedsFreshScan = true;
     renderRealtimeRadar();
     return;
   }
   const radarRefresh = event.target.closest("[data-radar-refresh]");
   if (!radarRefresh) return;
   realtimeRadarSide = "auto";
+  realtimeRadarNeedsFreshScan = true;
   renderRealtimeRadar();
 });
 
