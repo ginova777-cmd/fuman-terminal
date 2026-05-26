@@ -9357,6 +9357,21 @@ function getMarketAiCapitalFlowScore(stock, sector) {
   return Math.round(clamp(valueYi * 1.35 + Math.min(24, volume / 900) + Math.max(0, pct) * 5 + Math.max(0, sectorPct) * 7, 0, 100));
 }
 
+function getMarketAiDayTradeHeatScore(stock, sector) {
+  const pct = cleanNumber(stock.percent);
+  const valueYi = cleanNumber(stock.value) / 100000000;
+  const volume = cleanNumber(stock.tradeVolume);
+  const sectorPct = cleanNumber(sector?.pct);
+  const legal = getMarketAiLegalValue(stock.code);
+  const hotTurnover = Math.min(34, valueYi * 1.8);
+  const hotVolume = Math.min(24, volume / 700);
+  const moveHeat = Math.max(0, 18 - Math.abs(pct - 2.4) * 4);
+  const sectorHeat = Math.max(0, Math.min(12, sectorPct * 4));
+  const chipHeat = legal > 0 ? 8 : 0;
+  const overheatingPenalty = pct >= 8.5 ? 24 : pct >= 6.5 ? 10 : 0;
+  return Math.round(clamp(hotTurnover + hotVolume + moveHeat + sectorHeat + chipHeat - overheatingPenalty, 0, 100));
+}
+
 function scoreMarketAiStock(stock, sectors) {
   const code = String(stock.code || "");
   const industry = SECTOR_MAP[code] || "其他";
@@ -9366,10 +9381,11 @@ function scoreMarketAiStock(stock, sectors) {
   const volume = cleanNumber(stock.tradeVolume);
   const legal = getMarketAiLegalValue(code);
   const capitalFlowScore = getMarketAiCapitalFlowScore(stock, sector);
+  const dayTradeHeatScore = getMarketAiDayTradeHeatScore(stock, sector);
   const sectorScore = Math.round(clamp((sector?.pct || 0) * 18 + (sector?.up || 0) * 1.2 - (sector?.down || 0) * 0.8, 0, 100));
   const legalScore = Math.round(clamp(Math.abs(legal) / 900 + (legal > 0 ? 20 : 0), 0, 100));
   const momentumScore = Math.round(clamp(Math.max(0, pct) * 9 + valueYi * 0.45 + Math.min(16, volume / 1400), 0, 100));
-  let score = capitalFlowScore * 0.42 + sectorScore * 0.22 + legalScore * 0.18 + momentumScore * 0.18;
+  let score = capitalFlowScore * 0.34 + dayTradeHeatScore * 0.20 + sectorScore * 0.18 + legalScore * 0.12 + momentumScore * 0.16;
   if (pct < 0) score -= Math.min(42, Math.abs(pct) * 10);
   if (pct <= -3) score = Math.min(score, 45);
   else if (pct <= -1) score = Math.min(score, 58);
@@ -9404,9 +9420,10 @@ function classifyMarketAiStock(stock, sectors) {
   const legal = getMarketAiLegalValue(code);
   const score = scoreMarketAiStock(stock, sectors);
   const capitalFlowScore = getMarketAiCapitalFlowScore(stock, sector);
+  const dayTradeHeatScore = getMarketAiDayTradeHeatScore(stock, sector);
   const sectorScore = Math.round(clamp((sector?.pct || 0) * 18 + (sector?.up || 0) * 1.2 - (sector?.down || 0) * 0.8, 0, 100));
   const momentumScore = Math.round(clamp(capitalFlowScore * 0.5 + score * 0.3 + Math.max(0, pct) * 4 + sectorScore * 0.2, 0, 100));
-  const intradayScore = Math.round(clamp(pct * 8 + volume / 300 + valueYi * 1.2, 0, 100));
+  const intradayScore = Math.round(clamp(dayTradeHeatScore * 0.62 + capitalFlowScore * 0.18 + momentumScore * 0.12 + sectorScore * 0.08, 0, 100));
   const legalScore = Math.round(clamp(Math.abs(legal) / 900 + (legal > 0 ? 18 : 0), 0, 100));
   const riskScore = Math.round(clamp(Math.max(0, pct - 7.5) * 18 + Math.max(0, -pct - 3) * 14 + (valueYi >= 20 ? 8 : 0), 0, 100));
   return {
@@ -9415,6 +9432,7 @@ function classifyMarketAiStock(stock, sectors) {
     industry,
     legal,
     capitalFlowScore,
+    dayTradeHeatScore,
     sectorScore,
     momentumScore,
     intradayScore,
@@ -9425,7 +9443,7 @@ function classifyMarketAiStock(stock, sectors) {
       all: true,
       momentum: momentumScore >= 70 && (capitalFlowScore >= 55 || score >= 72 || sectorScore >= 45),
       legal: legal > 0,
-      intraday: intradayScore >= 40 || (volume >= 2000 && pct >= 2),
+      intraday: dayTradeHeatScore >= 55 || intradayScore >= 58,
       risk: riskScore >= 35 || pct >= 8.5 || pct <= -3,
     },
   };
@@ -9436,10 +9454,22 @@ function getMarketAiHotGroups(hotStocks) {
     all: hotStocks,
     momentum: hotStocks.filter((stock) => stock.buckets.momentum).sort((a, b) => b.score - a.score || b.capitalFlowScore - a.capitalFlowScore || b.momentumScore - a.momentumScore),
     legal: sortMarketAiLegalStocks(hotStocks.filter((stock) => stock.buckets.legal && cleanNumber(stock.percent) > 0 && !stock.buckets.risk)),
-    intraday: hotStocks.filter((stock) => stock.buckets.intraday).sort((a, b) => b.intradayScore - a.intradayScore || b.score - a.score),
+    intraday: sortMarketAiIntradayStocks(hotStocks.filter((stock) => stock.buckets.intraday && !stock.buckets.risk)),
     risk: hotStocks.filter((stock) => stock.buckets.risk).sort((a, b) => b.riskScore - a.riskScore || b.score - a.score),
   };
   return groups;
+}
+
+function sortMarketAiIntradayStocks(stocks = []) {
+  return [...stocks].sort((a, b) =>
+    cleanNumber(b.dayTradeHeatScore) - cleanNumber(a.dayTradeHeatScore) ||
+    cleanNumber(b.intradayScore) - cleanNumber(a.intradayScore) ||
+    (b.tags?.length || 0) - (a.tags?.length || 0) ||
+    cleanNumber(b.capitalFlowScore) - cleanNumber(a.capitalFlowScore) ||
+    cleanNumber(b.momentumScore) - cleanNumber(a.momentumScore) ||
+    cleanNumber(b.score) - cleanNumber(a.score) ||
+    cleanNumber(b.value) - cleanNumber(a.value)
+  );
 }
 
 function sortMarketAiLegalStocks(stocks = []) {
@@ -9484,13 +9514,15 @@ function buildMarketAiData() {
   const sectors = getMarketAiSectors();
   const strongSectors = [...sectors].sort((a, b) => b.pct - a.pct).slice(0, 4);
   const weakSectors = [...sectors].sort((a, b) => a.pct - b.pct).slice(0, 4);
-  const hotStocks = stocks
+  const classifiedStocks = stocks
     .filter((stock) => cleanNumber(stock.percent) > 0 && cleanNumber(stock.value) > 0)
     .map((stock) => classifyMarketAiStock(stock, sectors))
-    .filter((stock) => cleanNumber(stock.percent) > 0 && !stock.buckets.risk)
+    .filter((stock) => cleanNumber(stock.percent) > 0 && !stock.buckets.risk);
+  const hotStocks = classifiedStocks
     .sort((a, b) => b.score - a.score || cleanNumber(b.percent) - cleanNumber(a.percent) || cleanNumber(b.value) - cleanNumber(a.value))
     .slice(0, 40);
   const hotGroups = getMarketAiHotGroups(hotStocks);
+  hotGroups.intraday = sortMarketAiIntradayStocks(classifiedStocks.filter((stock) => stock.buckets.intraday)).slice(0, 40);
   if (!hotGroups[marketAiHotFilter]) marketAiHotFilter = "all";
   const visibleHotStocks = hotGroups[marketAiHotFilter].slice(0, 10);
   const riskStocks = stocks
@@ -9521,6 +9553,8 @@ function renderMarketAiPanel() {
   const activeFilterLabel = filterMeta.find((item) => item.key === marketAiHotFilter)?.label || "全部";
   const sortNote = marketAiHotFilter === "legal"
     ? "法人買超只是入選條件，排序依 AI 訊號數、盤中資金流、當沖熱度、動能與成交值。"
+    : marketAiHotFilter === "intraday"
+    ? "當沖熱依當沖/隔日沖熱度、AI 訊號數、盤中資金流與動能排序，不代表適合追價。"
     : "依綜合分數與入選策略排序，適合快速掌握今日熱門觀察股。";
   const strongNames = data.strongSectors.map((sector) => sector.name).join("、") || "尚未形成明顯主流";
   const weakNames = data.weakSectors.filter((sector) => sector.pct < 0).map((sector) => sector.name).join("、") || "暫無明顯弱勢族群";
@@ -9615,8 +9649,8 @@ function renderMarketAiPanel() {
             <div class="market-ai-rank">#${index + 1}</div>
             <div>
               <h4><span class="market-ai-code">${escapeAttr(stock.code)}</span><span class="market-ai-name">${escapeAttr(stock.name)}</span></h4>
-              <p>主力籌碼入選，綜合分數 ${stock.score}</p>
-              <p>排序主因：盤中資金流 ${Math.round(clamp(stock.capitalFlowScore || stock.score, 1, 100))}，再交叉看族群強弱。</p>
+              <p>${marketAiHotFilter === "intraday" ? `當沖熱度 ${stock.dayTradeHeatScore || stock.intradayScore}` : "主力籌碼入選"}，綜合分數 ${stock.score}</p>
+              <p>排序主因：${marketAiHotFilter === "intraday" ? `當沖熱 ${Math.round(clamp(stock.dayTradeHeatScore || stock.intradayScore, 1, 100))}` : `盤中資金流 ${Math.round(clamp(stock.capitalFlowScore || stock.score, 1, 100))}`}，再交叉看族群強弱。</p>
             </div>
             <div>
               <span class="market-ai-chip">${escapeAttr(stock.industry)}</span>
@@ -10645,7 +10679,7 @@ document.querySelectorAll("[data-chip-filter]").forEach((button) => {
     renderChipTradeTable();
   });
 });
-setInterval(tickClock, 1000);
+setInterval(tickClock, 60 * 1000);
 setInterval(() => {
   if (!isDocumentHidden() && isViewActive("market")) loadMarketData();
 }, MARKET_POLL_TICK_MS);
