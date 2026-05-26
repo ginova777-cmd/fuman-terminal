@@ -219,6 +219,102 @@ function installThemeToggle() {
         color: #64748b !important;
         border-color: #dbe3ee !important;
       }
+      body.fuman-light-theme #market-view {
+        background: #f7f9fc !important;
+        color: #101827 !important;
+      }
+      body.fuman-light-theme #market-view .page-header h1,
+      body.fuman-light-theme #market-view .strength-head h2,
+      body.fuman-light-theme #market-view .heatmap-title,
+      body.fuman-light-theme #market-view h2,
+      body.fuman-light-theme #market-view h3 {
+        color: #111827 !important;
+      }
+      body.fuman-light-theme #market-view .page-header p,
+      body.fuman-light-theme #market-view .metric-card span,
+      body.fuman-light-theme #market-view .metric-card small,
+      body.fuman-light-theme #market-view .strength-head p,
+      body.fuman-light-theme #market-view .sector-card p,
+      body.fuman-light-theme #market-view .sector-card small {
+        color: #64748b !important;
+      }
+      body.fuman-light-theme #market-view .metric-card {
+        background: linear-gradient(135deg, #ffffff 0%, #f8fbff 100%) !important;
+        border-color: #dbe6f2 !important;
+        box-shadow: 0 8px 22px rgba(15, 23, 42, 0.08) !important;
+      }
+      body.fuman-light-theme #market-view .metric-card strong,
+      body.fuman-light-theme #market-view .strength-panel strong {
+        color: #111827 !important;
+      }
+      body.fuman-light-theme #market-view .ticker-strip {
+        background: #ffffff !important;
+        color: #111827 !important;
+        border-color: #dbe6f2 !important;
+        box-shadow: 0 6px 18px rgba(15, 23, 42, 0.06) !important;
+      }
+      body.fuman-light-theme #market-view .strength-panel {
+        background: #ffffff !important;
+        border-color: #dbe6f2 !important;
+      }
+      body.fuman-light-theme #market-view .stats-row article {
+        background: #f8fafc !important;
+        border-color: #dbe6f2 !important;
+      }
+      body.fuman-light-theme #heatmap {
+        background: transparent !important;
+      }
+      body.fuman-light-theme #heatmap .sector-card {
+        position: relative;
+        background: #ffffff !important;
+        border: 1px solid #d7e4ef !important;
+        border-left: 4px solid #ef4444 !important;
+        border-radius: 8px !important;
+        color: #111827 !important;
+        box-shadow: 0 4px 12px rgba(15, 23, 42, 0.10) !important;
+      }
+      body.fuman-light-theme #heatmap .sector-card.cold {
+        border-left-color: #059669 !important;
+        background: #fbfffd !important;
+      }
+      body.fuman-light-theme #heatmap .sector-card.hot {
+        border-left-color: #ef4444 !important;
+        background: #fffdfd !important;
+      }
+      body.fuman-light-theme #heatmap .sector-card h3 {
+        color: #111827 !important;
+      }
+      body.fuman-light-theme #heatmap .sector-card h3 span {
+        color: #dc2626 !important;
+        font-weight: 800 !important;
+      }
+      body.fuman-light-theme #heatmap .sector-card.cold h3 span {
+        color: #059669 !important;
+      }
+      body.fuman-light-theme #heatmap .sector-card p,
+      body.fuman-light-theme #heatmap .sector-card small {
+        color: #111827 !important;
+      }
+      body.fuman-light-theme #heatmap .sector-card span {
+        color: #dc2626 !important;
+        font-weight: 700 !important;
+      }
+      body.fuman-light-theme #heatmap .sector-card b {
+        color: #059669 !important;
+        font-weight: 700 !important;
+      }
+      body.fuman-light-theme .down,
+      body.fuman-light-theme .red,
+      body.fuman-light-theme .pct.red,
+      body.fuman-light-theme .watch-up {
+        color: #dc2626 !important;
+      }
+      body.fuman-light-theme .up,
+      body.fuman-light-theme .green,
+      body.fuman-light-theme .pct.green,
+      body.fuman-light-theme .watch-down {
+        color: #059669 !important;
+      }
       @media (max-width: 720px) {
         .fuman-theme-toggle {
           top: 12px;
