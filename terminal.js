@@ -3974,6 +3974,13 @@ const SECTOR_TOPIC_OVERRIDES = {
 };
 Object.assign(SECTOR_MAP, SECTOR_TOPIC_OVERRIDES);
 
+const SECTOR_DR_OVERRIDES = {
+  "9103":"存托憑證","9105":"存托憑證","9106":"存托憑證","9110":"存托憑證",
+  "9136":"存托憑證","910322":"存托憑證","910482":"存托憑證","910861":"存托憑證",
+  "911608":"存托憑證","911616":"存托憑證","911619":"存托憑證","911622":"存托憑證",
+};
+Object.assign(SECTOR_MAP, SECTOR_DR_OVERRIDES);
+
 function cleanNumber(value) {
   if (value === undefined || value === null || value === "") return 0;
   return Number(String(value).replace(/[,+%]/g, "")) || 0;
