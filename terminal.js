@@ -565,6 +565,61 @@ function installThemeToggle() {
         display: grid;
         gap: 10px;
       }
+      .market-ai-filterbar {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin: 10px 0 12px;
+      }
+      .market-ai-filterbar button {
+        min-height: 34px;
+        padding: 0 13px;
+        border: 1px solid rgba(249, 115, 22, 0.42);
+        border-radius: 8px;
+        background: rgba(249, 115, 22, 0.08);
+        color: #fb923c;
+        font-weight: 900;
+        cursor: pointer;
+      }
+      .market-ai-filterbar button[data-ai-hot-filter="momentum"] {
+        border-color: rgba(244, 63, 94, 0.48);
+        color: #fb7185;
+      }
+      .market-ai-filterbar button[data-ai-hot-filter="legal"] {
+        border-color: rgba(59, 130, 246, 0.48);
+        color: #93c5fd;
+      }
+      .market-ai-filterbar button[data-ai-hot-filter="intraday"] {
+        border-color: rgba(20, 184, 166, 0.48);
+        color: #5eead4;
+      }
+      .market-ai-filterbar button[data-ai-hot-filter="risk"] {
+        border-color: rgba(245, 158, 11, 0.52);
+        color: #fbbf24;
+      }
+      .market-ai-filterbar button.active {
+        background: rgba(249, 115, 22, 0.18);
+        box-shadow: inset 0 0 0 1px currentColor;
+      }
+      .market-ai-filterbar em {
+        display: inline-grid;
+        place-items: center;
+        min-width: 22px;
+        margin-left: 6px;
+        padding: 2px 6px;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.10);
+        font-style: normal;
+        font-size: 11px;
+      }
+      .market-ai-sort-note {
+        margin: 0 0 12px;
+        padding: 12px 14px;
+        border: 1px solid rgba(148, 163, 184, 0.18);
+        border-radius: 8px;
+        color: #9fb3d9;
+        background: rgba(15, 23, 42, 0.38);
+      }
       .market-ai-stock-row {
         display: grid;
         grid-template-columns: 48px minmax(160px, 1fr) minmax(180px, 0.9fr) minmax(150px, 0.7fr) minmax(220px, 1fr) 150px;
@@ -683,6 +738,39 @@ function installThemeToggle() {
         background: #eff6ff !important;
         color: #1d4ed8 !important;
         border-color: #bfdbfe !important;
+      }
+      body.fuman-light-theme .market-ai-filterbar button {
+        background: #fff7ed !important;
+        color: #c2410c !important;
+        border-color: #fed7aa !important;
+      }
+      body.fuman-light-theme .market-ai-filterbar button[data-ai-hot-filter="momentum"] {
+        background: #fff1f2 !important;
+        color: #be123c !important;
+        border-color: #fecdd3 !important;
+      }
+      body.fuman-light-theme .market-ai-filterbar button[data-ai-hot-filter="legal"] {
+        background: #eff6ff !important;
+        color: #1d4ed8 !important;
+        border-color: #bfdbfe !important;
+      }
+      body.fuman-light-theme .market-ai-filterbar button[data-ai-hot-filter="intraday"] {
+        background: #f0fdfa !important;
+        color: #0f766e !important;
+        border-color: #99f6e4 !important;
+      }
+      body.fuman-light-theme .market-ai-filterbar button[data-ai-hot-filter="risk"] {
+        background: #fffbeb !important;
+        color: #b45309 !important;
+        border-color: #fde68a !important;
+      }
+      body.fuman-light-theme .market-ai-filterbar em {
+        background: rgba(255, 255, 255, 0.75) !important;
+      }
+      body.fuman-light-theme .market-ai-sort-note {
+        background: #ffffff !important;
+        border-color: #dbe3ee !important;
+        color: #334155 !important;
       }
       #market-view.market-ai-mode > :not(.page-header):not(.market-mode-tabs):not(.market-ai-panel) {
         display: none !important;
@@ -2550,6 +2638,7 @@ let marketMode = "overview";
 let marketAiPanel = null;
 let marketAiLastSignature = "";
 let marketAiStockLoading = false;
+let marketAiHotFilter = "all";
 let realtimeRadarLoading = false;
 let realtimeRadarDataPromise = null;
 let realtimeRadarSide = "auto";
