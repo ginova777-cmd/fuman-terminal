@@ -1238,13 +1238,20 @@ function radarFlowValue(stock) {
 
 function radarVolumeRatio(stock) {
   const daily = stock.swingDaily || analyzeSwingDaily(stock);
-  const ratio = cleanNumber(daily?.volumeRatio);
-  if (ratio > 0) return ratio;
   const rows = normalizeArray(daily?.rows);
   const currentVolume = cleanNumber(stock.volume || stock.tradeVolume);
   const priorVolumes = rows.slice(-21, -1).map((row) => cleanNumber(row.volume)).filter((value) => value > 0);
   const averageVolume = avg(priorVolumes);
-  return currentVolume && averageVolume ? currentVolume / averageVolume : 0;
+  if (currentVolume && averageVolume) {
+    const now = new Date();
+    const minutes = now.getHours() * 60 + now.getMinutes() + now.getSeconds() / 60;
+    const open = 9 * 60;
+    const close = 13 * 60 + 30;
+    const elapsedRatio = clamp((minutes - open) / (close - open), 0.05, 1);
+    return (currentVolume / elapsedRatio) / averageVolume;
+  }
+  const ratio = cleanNumber(daily?.volumeRatio);
+  return ratio > 0 ? ratio : 0;
 }
 
 function radarSignalScore(stock) {
