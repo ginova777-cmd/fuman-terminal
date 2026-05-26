@@ -5772,6 +5772,7 @@ function renderIntradayRadar(evaluated) {
   const scanClosed = !isIntradayScanWindow();
   const baseRows = evaluated
     .filter(isIntradayTradable)
+    .filter((stock) => !isRealtimeRadarLimitUp(stock))
     .filter((stock) => matchesStrategyKeyword(stock, keyword));
   const allRows = baseRows
     .filter((stock) => (stock.intradaySignals || []).length)
