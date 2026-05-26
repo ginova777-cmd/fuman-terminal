@@ -3981,6 +3981,20 @@ const SECTOR_DR_OVERRIDES = {
 };
 Object.assign(SECTOR_MAP, SECTOR_DR_OVERRIDES);
 
+const SECTOR_IC_PACKAGING_OVERRIDES = {
+  "2449":"IC封測","6147":"IC封測","6271":"IC封測","3374":"IC封測","2441":"IC封測",
+  "6789":"IC封測","6451":"IC封測","3265":"IC封測","3289":"IC封測",
+};
+Object.assign(SECTOR_MAP, SECTOR_IC_PACKAGING_OVERRIDES);
+
+const SECTOR_EQUIPMENT_TEST_OVERRIDES = {
+  "6223":"半導體設備/測試","2360":"半導體設備/測試","6187":"半導體設備/測試","6510":"半導體設備/測試",
+  "3680":"半導體設備/測試","6515":"半導體設備/測試","6196":"半導體設備/測試","3413":"半導體設備/測試",
+  "3587":"半導體設備/測試","3030":"半導體設備/測試","6207":"半導體設備/測試","6691":"半導體設備/測試",
+  "6125":"半導體設備/測試",
+};
+Object.assign(SECTOR_MAP, SECTOR_EQUIPMENT_TEST_OVERRIDES);
+
 function cleanNumber(value) {
   if (value === undefined || value === null || value === "") return 0;
   return Number(String(value).replace(/[,+%]/g, "")) || 0;
@@ -9267,7 +9281,25 @@ function openSectorModal(sector) {
   refreshSectorModalRealtime(sector, sortedStocks);
 }
 
-// ★ 修改：從 API 回傳的 stocks 直接存進 cache
+function mergeHeatmapApiSectorsIntoCache(sectors) {
+  const nextCache = { ...sectorStocksCache };
+  normalizeArray(sectors).forEach((sector) => {
+    normalizeArray(sector?.stocks).forEach((stock) => {
+      const code = String(stock?.code || stock?.Code || stock?.證券代號 || "").trim();
+      if (!code) return;
+      const industry = SECTOR_MAP[code] || sector.name;
+      if (!industry) return;
+      if (!nextCache[industry]) nextCache[industry] = [];
+      const row = { ...stock, code, name: stock.name || stock.Name || stock.證券名稱 || code };
+      const existingIndex = nextCache[industry].findIndex((item) => String(item.code || item.Code || item.證券代號) === code);
+      if (existingIndex >= 0) nextCache[industry][existingIndex] = { ...nextCache[industry][existingIndex], ...row };
+      else nextCache[industry].push(row);
+    });
+  });
+  sectorStocksCache = nextCache;
+}
+
+// ★ 修改：從 API 回傳的 stocks 直接存進 cache，並依本地族群表重新分桶
 function renderHeatmapSectors(sectors) {
   if (!sectors || !sectors.length) {
     heatmap.innerHTML = `<div class="empty-state">等待產業資料...</div>`;
@@ -9275,12 +9307,7 @@ function renderHeatmapSectors(sectors) {
     return;
   }
 
-  // 把個股資料存進 cache
-  sectors.forEach(s => {
-    if (s.stocks && s.stocks.length) {
-      sectorStocksCache[s.name] = s.stocks;
-    }
-  });
+  mergeHeatmapApiSectorsIntoCache(sectors);
   const signature = sectors
     .map((s) => `${s.name}:${Number(s.pct || 0).toFixed(2)}:${s.count}:${s.up}:${s.down}:${s.totalValue}:${s.leader || ""}`)
     .join("|");
