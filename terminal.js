@@ -863,6 +863,7 @@ function getWorkflowScheduleState(key) {
 }
 
 function scheduleBadgeHtml(key) {
+  return "";
   const meta = SCHEDULE_META[key] || SCHEDULE_META.market;
   if (meta.next || !meta.times?.length) {
     return `<span class="schedule-status-pill"><span>● 每日 ${meta.label} 更新</span><span>● 預計下次更新：${meta.next || ""}</span></span>`;
