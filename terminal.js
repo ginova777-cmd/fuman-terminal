@@ -9107,7 +9107,8 @@ function buildMarketAiData() {
   const hotStocks = stocks
     .filter((stock) => cleanNumber(stock.percent) > 0 && cleanNumber(stock.value) > 0)
     .map((stock) => classifyMarketAiStock(stock, sectors))
-    .sort((a, b) => b.score - a.score || cleanNumber(b.value) - cleanNumber(a.value))
+    .filter((stock) => cleanNumber(stock.percent) > 0 && !stock.buckets.risk)
+    .sort((a, b) => b.score - a.score || cleanNumber(b.percent) - cleanNumber(a.percent) || cleanNumber(b.value) - cleanNumber(a.value))
     .slice(0, 40);
   const hotGroups = getMarketAiHotGroups(hotStocks);
   if (!hotGroups[marketAiHotFilter]) marketAiHotFilter = "all";
@@ -9134,12 +9135,13 @@ function renderMarketAiPanel() {
     return;
   }
   if (!Object.keys(institutionData).length) deferUiWork(ensureMarketAiInstitutionData, 100);
-  const topHot = data.hotStocks[0];
+  const topHot = data.hotStocks.find((stock) => cleanNumber(stock.percent) >= 1 && !stock.buckets.risk) || data.hotStocks[0];
   const filterMeta = getMarketAiFilterMeta(data.hotGroups);
   const activeFilterLabel = filterMeta.find((item) => item.key === marketAiHotFilter)?.label || "全部";
   const strongNames = data.strongSectors.map((sector) => sector.name).join("、") || "尚未形成明顯主流";
   const weakNames = data.weakSectors.filter((sector) => sector.pct < 0).map((sector) => sector.name).join("、") || "暫無明顯弱勢族群";
   const riskNames = data.riskStocks.map((stock) => `${stock.code} ${stock.name}`).join("、") || "暫無極端標的";
+  const topHotTags = topHot?.tags?.length ? topHot.tags.join("、") : "";
   const operate = data.bias === "多方偏強"
     ? ["順勢追蹤", "只看強族群前 3 名", "跌破量價支撐先降槓桿"]
     : data.bias === "空方壓制"
@@ -9171,7 +9173,7 @@ function renderMarketAiPanel() {
       <article class="market-ai-card">
         <small>優先觀察</small>
         <strong>${topHot ? `${topHot.code} ${topHot.name}` : "--"}</strong>
-        <p>${topHot ? `綜合分數 ${topHot.score}，族群 ${topHot.industry}，成交值 ${(cleanNumber(topHot.value) / 100000000).toFixed(1)} 億。` : "等待資料。"}</p>
+        <p>${topHot ? `${topHot.tags.length} 個訊號${topHotTags ? `：${escapeAttr(topHotTags)}` : ""}。綜合分數 ${topHot.score}，族群 ${topHot.industry}，成交值 ${(cleanNumber(topHot.value) / 100000000).toFixed(1)} 億。` : "等待資料。"}</p>
       </article>
     </section>
     <section class="market-ai-advice">
@@ -9191,7 +9193,7 @@ function renderMarketAiPanel() {
           ${[
             `市場廣度目前上漲家數占 ${data.upRatio.toFixed(1)}%，${data.bias === "空方壓制" ? "盤面偏弱，先看風險。" : "可追蹤強勢族群是否擴散。"}`,
             `族群焦點落在 ${strongNames}，弱勢端留意 ${weakNames}。`,
-            `熱門觀察優先看 ${data.hotStocks.slice(0, 3).map((stock) => `${stock.code} ${stock.name}`).join("、") || "等待資料"}。`,
+            `熱門觀察優先看 ${data.hotStocks.filter((stock) => !stock.buckets.risk && cleanNumber(stock.percent) > 0).slice(0, 3).map((stock) => `${stock.code} ${stock.name}`).join("、") || "等待資料"}。`,
             `盤中雷達目前偏向「${data.bias}」，分數高也要等量價延續確認。`,
           ].map((text, index) => `<div class="market-ai-point"><b>${index + 1}</b><span>${escapeAttr(text)}</span></div>`).join("")}
         </div>
