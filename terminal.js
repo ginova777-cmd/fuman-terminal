@@ -898,6 +898,140 @@ function installThemeToggle() {
         border-color: #dbe3ee !important;
         color: #334155 !important;
       }
+      body.fuman-light-theme #strategy-view,
+      body.fuman-light-theme #strategy-view.strategy3-only,
+      body.fuman-light-theme #strategy-view .strategy-terminal,
+      body.fuman-light-theme #strategy-view .strategy-results,
+      body.fuman-light-theme #strategy-view #strategy-table,
+      body.fuman-light-theme #strategy-view .strategy5-shell,
+      body.fuman-light-theme #strategy-view .strategy5-dashboard,
+      body.fuman-light-theme #strategy-view .strategy5-results,
+      body.fuman-light-theme #strategy-view .strategy3-clean,
+      body.fuman-light-theme #strategy-view .swing-dashboard,
+      body.fuman-light-theme #strategy-view .swing-panel,
+      body.fuman-light-theme #strategy-view .intraday-dashboard,
+      body.fuman-light-theme #strategy-view .intraday-panel,
+      body.fuman-light-theme #strategy-view .openbuy-panel {
+        background: #f7f9fc !important;
+        color: #172033 !important;
+        border-color: #dbe3ee !important;
+        box-shadow: none !important;
+      }
+      body.fuman-light-theme #strategy-view .strategy5-results,
+      body.fuman-light-theme #strategy-view .strategy3-table,
+      body.fuman-light-theme #strategy-view .swing-table,
+      body.fuman-light-theme #strategy-view .intraday-table,
+      body.fuman-light-theme #strategy-view .strategy-table,
+      body.fuman-light-theme #strategy-view table {
+        background: #ffffff !important;
+        color: #172033 !important;
+        border: 1px solid #dbe3ee !important;
+        border-radius: 8px !important;
+        box-shadow: 0 8px 22px rgba(15, 23, 42, 0.07) !important;
+      }
+      body.fuman-light-theme #strategy-view .strategy5-results-head,
+      body.fuman-light-theme #strategy-view .strategy3-table-head,
+      body.fuman-light-theme #strategy-view .swing-table thead,
+      body.fuman-light-theme #strategy-view .intraday-table thead,
+      body.fuman-light-theme #strategy-view table thead,
+      body.fuman-light-theme #strategy-view .stock-head {
+        background: #eef4fb !important;
+        color: #475569 !important;
+        border-color: #dbe3ee !important;
+      }
+      body.fuman-light-theme #strategy-view .strategy5-stock-card,
+      body.fuman-light-theme #strategy-view .strategy3-stock-card,
+      body.fuman-light-theme #strategy-view .strategy3-table-row,
+      body.fuman-light-theme #strategy-view .swing-table tbody tr,
+      body.fuman-light-theme #strategy-view .intraday-table tbody tr,
+      body.fuman-light-theme #strategy-view table tbody tr,
+      body.fuman-light-theme #strategy-view .intraday-pick,
+      body.fuman-light-theme #strategy-view .intraday-zone,
+      body.fuman-light-theme #strategy-view .terminal-card {
+        background: #ffffff !important;
+        color: #172033 !important;
+        border-color: #e2e8f0 !important;
+        box-shadow: none !important;
+      }
+      body.fuman-light-theme #strategy-view .strategy3-table-row:nth-child(even),
+      body.fuman-light-theme #strategy-view .swing-table tbody tr:nth-child(even),
+      body.fuman-light-theme #strategy-view .intraday-table tbody tr:nth-child(even),
+      body.fuman-light-theme #strategy-view table tbody tr:nth-child(even) {
+        background: #fbfdff !important;
+      }
+      body.fuman-light-theme #strategy-view .strategy3-table-row:hover,
+      body.fuman-light-theme #strategy-view .strategy5-stock-card:hover,
+      body.fuman-light-theme #strategy-view .swing-table tbody tr:hover,
+      body.fuman-light-theme #strategy-view .intraday-table tbody tr:hover,
+      body.fuman-light-theme #strategy-view table tbody tr:hover {
+        background: #f0f7ff !important;
+      }
+      body.fuman-light-theme #strategy-view h1,
+      body.fuman-light-theme #strategy-view h2,
+      body.fuman-light-theme #strategy-view h3,
+      body.fuman-light-theme #strategy-view h4,
+      body.fuman-light-theme #strategy-view .strategy-title,
+      body.fuman-light-theme #strategy-view .strategy3-name,
+      body.fuman-light-theme #strategy-view .strategy5-stock-card strong,
+      body.fuman-light-theme #strategy-view .strategy3-stock-title strong,
+      body.fuman-light-theme #strategy-view .strategy5-results-head h3 {
+        color: #111827 !important;
+      }
+      body.fuman-light-theme #strategy-view p,
+      body.fuman-light-theme #strategy-view small,
+      body.fuman-light-theme #strategy-view td,
+      body.fuman-light-theme #strategy-view th,
+      body.fuman-light-theme #strategy-view .strategy3-reason,
+      body.fuman-light-theme #strategy-view .strategy5-table-reason,
+      body.fuman-light-theme #strategy-view .strategy5-results-head p,
+      body.fuman-light-theme #strategy-view .strategy-summary,
+      body.fuman-light-theme #strategy-view .strategy-card p {
+        color: #334155 !important;
+      }
+      body.fuman-light-theme #strategy-view .strategy3-code,
+      body.fuman-light-theme #strategy-view .strategy5-code,
+      body.fuman-light-theme #strategy-view a {
+        color: #2563eb !important;
+      }
+      body.fuman-light-theme #strategy-view .strategy3-entry-price strong,
+      body.fuman-light-theme #strategy-view .strategy5-entry-price strong,
+      body.fuman-light-theme #strategy-view .red,
+      body.fuman-light-theme #strategy-view .down {
+        color: #dc2626 !important;
+      }
+      body.fuman-light-theme #strategy-view .strategy3-entry-price small,
+      body.fuman-light-theme #strategy-view .strategy5-entry-price small,
+      body.fuman-light-theme #strategy-view .green,
+      body.fuman-light-theme #strategy-view .up {
+        color: #059669 !important;
+      }
+      body.fuman-light-theme #strategy-view .strategy3-rank,
+      body.fuman-light-theme #strategy-view .strategy-rank,
+      body.fuman-light-theme #strategy-view .rank-badge {
+        background: linear-gradient(135deg, #fb7185, #be123c) !important;
+        color: #ffffff !important;
+      }
+      body.fuman-light-theme #strategy-view .strategy-chips b,
+      body.fuman-light-theme #strategy-view .strategy5-chips b,
+      body.fuman-light-theme #strategy-view .swing-badges b,
+      body.fuman-light-theme #strategy-view .intraday-badges b,
+      body.fuman-light-theme #strategy-view .swing-stage,
+      body.fuman-light-theme #strategy-view .swing-score,
+      body.fuman-light-theme #strategy-view .intraday-state,
+      body.fuman-light-theme #strategy-view .intraday-score {
+        background: #f8fafc !important;
+        color: #334155 !important;
+        border-color: #cbd5e1 !important;
+      }
+      body.fuman-light-theme #strategy-view .strategy-nav.active,
+      body.fuman-light-theme #strategy-view [data-strategy-mode].active,
+      body.fuman-light-theme #strategy-view [data-swing-filter].active,
+      body.fuman-light-theme #strategy-view [data-intraday-filter].active,
+      body.fuman-light-theme #strategy-view [data-strategy5-filter].active {
+        background: #fff7ed !important;
+        color: #c2410c !important;
+        border-color: #fed7aa !important;
+      }
       html,
       body,
       .dashboard,
