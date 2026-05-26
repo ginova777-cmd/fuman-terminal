@@ -301,6 +301,44 @@ function installThemeToggle() {
         color: #ffffff !important;
         border-color: #a93145 !important;
       }
+      body.fuman-light-theme #warrant-flow-view,
+      body.fuman-light-theme #warrant-flow-view .swing-dashboard {
+        background: linear-gradient(180deg, #fffdf5 0%, #f2fbff 46%, #f8fff4 100%) !important;
+        color: #111827 !important;
+      }
+      body.fuman-light-theme #warrant-flow-view .swing-topbar {
+        background: rgba(255, 255, 255, 0.72) !important;
+        border: 1px solid #dbeafe !important;
+        border-radius: 12px !important;
+        padding: 14px 16px !important;
+        box-shadow: 0 10px 26px rgba(14, 116, 144, 0.08) !important;
+      }
+      body.fuman-light-theme #warrant-flow-view .swing-topbar h2,
+      body.fuman-light-theme #warrant-flow-view .swing-topbar h2 *,
+      body.fuman-light-theme #warrant-flow-view .swing-topbar p,
+      body.fuman-light-theme #warrant-flow-view .warrant-search-hint {
+        color: #111827 !important;
+      }
+      body.fuman-light-theme #warrant-flow-view .swing-tabs {
+        background: #fff7ed !important;
+        border-color: #fed7aa !important;
+      }
+      body.fuman-light-theme #warrant-flow-view .swing-panel {
+        background: #ffffff !important;
+        border-color: #cfe3f3 !important;
+      }
+      body.fuman-light-theme #warrant-flow-view .swing-table th {
+        background: #eaf6ff !important;
+        color: #1f2937 !important;
+      }
+      body.fuman-light-theme #warrant-flow-view .swing-table td,
+      body.fuman-light-theme #warrant-flow-view .swing-table td *,
+      body.fuman-light-theme #warrant-flow-view .swing-table .code {
+        color: #111827 !important;
+      }
+      body.fuman-light-theme #warrant-flow-view .swing-table .price {
+        color: #e11d48 !important;
+      }
       body.fuman-light-theme h1,
       body.fuman-light-theme h2,
       body.fuman-light-theme h3,
@@ -8470,10 +8508,6 @@ function renderWarrantFlow() {
         <div>
           <h2 data-warrant-refresh title="重新整理權證資金走向">${titleWithSchedule("◒", "策略6：權證資金走向", "warrant")}</h2>
           <p>${helperText}</p>
-        </div>
-        <div class="swing-controls">
-          <label>更新模式：<select><option>每日 06:00 / 21:00 完整掃</option></select></label>
-          <label>模式：<select><option>權證先熱股票未噴</option></select></label>
         </div>
       </div>
       <section class="swing-panel">
