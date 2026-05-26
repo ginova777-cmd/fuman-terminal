@@ -9356,7 +9356,7 @@ function ensureWatchlistAnalysisStyles() {
     }
     .watch-action-row {
       display: grid;
-      grid-template-columns: minmax(120px, 1fr) minmax(180px, 2fr);
+      grid-template-columns: minmax(150px, 180px) minmax(240px, 1fr);
       gap: 10px;
       align-items: end;
     }
