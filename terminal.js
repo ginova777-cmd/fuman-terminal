@@ -7460,6 +7460,78 @@ function getInstColor(val) {
   return n > 0 ? "#e74c3c" : "#27ae60";
 }
 
+function normalizeSectorRealtimeStock(stock, quote = {}) {
+  const close = parseQuoteNumber(quote.close, quote.z, stock.close);
+  const prevClose = parseQuoteNumber(quote.prevClose, quote.y);
+  const change = prevClose && close ? close - prevClose : cleanNumber(quote.change) || cleanNumber(stock.change);
+  const pct = prevClose && close ? (change / prevClose) * 100 : cleanNumber(quote.percent ?? quote.pct ?? stock.pct);
+  const volume = normalizeTradeVolumeLots(quote.tradeVolume || quote.volume || quote.v || stock.volume);
+  const value = cleanNumber(quote.value || quote.tradeValue) || estimateTradeValue(close, volume) || cleanNumber(stock.value);
+  return {
+    ...stock,
+    code: String(quote.code || quote.c || stock.code || ""),
+    name: quote.name || quote.n || stock.name,
+    close: close || cleanNumber(stock.close),
+    pct: Number.isFinite(pct) ? pct : cleanNumber(stock.pct),
+    value,
+    volume,
+    exchange: stock.exchange || quote.exchange || quote.ex || "",
+  };
+}
+
+function renderSectorModalRows(sector, stocks) {
+  return stocks.map((s, i) => {
+    const pctColor = s.pct > 0 ? "#e74c3c" : s.pct < 0 ? "#27ae60" : "#aaa";
+    const pctSign = s.pct >= 0 ? "+" : "";
+    const inst = institutionData[s.code] || {};
+    const foreign = inst.foreign ?? null;
+    const trust = inst.trust ?? null;
+    const dealer = inst.dealer ?? null;
+    const total = (foreign !== null && trust !== null && dealer !== null)
+      ? foreign + trust + dealer : null;
+    const market = /otc|tpex|上櫃/i.test(String(s.exchange || s.market || "")) ? "上櫃" : "上市";
+    return `
+      <tr style="border-bottom:1px solid #161925; ${i % 2 === 0 ? "" : "background:#0c0f1a"}">
+        <td style="padding:10px 16px;">
+          <div style="color:#7ec8e3; font-weight:600; font-size:13px;">${s.code} ${s.name}</div>
+          <div style="color:#555; font-size:11px; margin-top:2px;">${sector.name}</div>
+        </td>
+        <td style="padding:10px 8px; text-align:center; color:#888; font-size:12px;">${market}</td>
+        <td style="padding:10px 12px; text-align:right; color:#fff; font-weight:600;">${s.close ? s.close.toLocaleString("zh-TW") : "--"}</td>
+        <td style="padding:10px 12px; text-align:right; color:${pctColor}; font-weight:700;">${pctSign}${formatNumber(s.pct || 0, 2)}%</td>
+        <td style="padding:10px 12px; text-align:right; color:#aaa;">${s.value ? (s.value/100000000).toFixed(1) : "0.0"} 億</td>
+        <td style="padding:10px 12px; text-align:right; color:#aaa;">${s.volume ? s.volume.toLocaleString("zh-TW", { maximumFractionDigits: 0 }) : "0"} 張</td>
+        <td style="padding:10px 12px; text-align:right; color:${getInstColor(foreign)}; font-weight:500;">${formatInstitution(foreign)}</td>
+        <td style="padding:10px 12px; text-align:right; color:${getInstColor(trust)}; font-weight:500;">${formatInstitution(trust)}</td>
+        <td style="padding:10px 12px; text-align:right; color:${getInstColor(dealer)}; font-weight:500;">${formatInstitution(dealer)}</td>
+        <td style="padding:10px 16px; text-align:right; color:${getInstColor(total)}; font-weight:600;">${formatInstitution(total)}</td>
+      </tr>
+    `;
+  }).join("");
+}
+
+async function refreshSectorModalRealtime(sector, stocks) {
+  const body = document.querySelector("#sector-modal-body");
+  if (!body || !stocks.length) return;
+  const codes = stocks.map((stock) => String(stock.code || "")).filter(Boolean);
+  if (!codes.length) return;
+  try {
+    if (!Object.keys(institutionData).length) await loadInstitution();
+    const payload = await fetchJson(`${endpoints.realtime}?codes=${encodeURIComponent(codes.join(","))}&t=${Date.now()}`, 12000);
+    const quotes = normalizeArray(payload?.quotes || payload?.msgArray || payload);
+    const quoteByCode = new Map(quotes.map((quote) => [String(quote.code || quote.c || ""), quote]));
+    const merged = stocks
+      .map((stock) => normalizeSectorRealtimeStock(stock, quoteByCode.get(String(stock.code || ""))))
+      .sort((a, b) => cleanNumber(b.value) - cleanNumber(a.value));
+    body.innerHTML = renderSectorModalRows(sector, merged);
+    const totalValue = merged.reduce((sum, stock) => sum + cleanNumber(stock.value), 0) / 100000000;
+    const valueEl = document.querySelector("[data-sector-modal-value]");
+    if (valueEl) valueEl.textContent = `${totalValue.toLocaleString("zh-TW", { maximumFractionDigits: 1 })} 億`;
+  } catch (error) {
+    body.dataset.realtimeError = "true";
+  }
+}
+
 function openSectorModal(sector) {
   const stocks = sectorStocksCache[sector.name] || [];
   const existing = document.querySelector("#sector-modal");
@@ -7500,7 +7572,7 @@ function openSectorModal(sector) {
             </div>
             <div style="background:#1a1e2e; border-radius:8px; padding:10px 16px; text-align:center;">
               <div style="color:#888; font-size:11px;">成交金額</div>
-              <div style="font-size:18px; font-weight:600; color:#fff">${sector.totalValue} 億</div>
+              <div data-sector-modal-value style="font-size:18px; font-weight:600; color:#fff">${sector.totalValue} 億</div>
             </div>
             <div style="background:#1a1e2e; border-radius:8px; padding:10px 16px; text-align:center;">
               <div style="color:#888; font-size:11px;">上漲 / 下跌</div>
@@ -7539,34 +7611,8 @@ function openSectorModal(sector) {
               <th style="padding:10px 16px; font-weight:500;">法人</th>
             </tr>
           </thead>
-          <tbody>
-            ${sortedStocks.map((s, i) => {
-              const pctColor = s.pct > 0 ? "#e74c3c" : s.pct < 0 ? "#27ae60" : "#aaa";
-              const pctSign = s.pct >= 0 ? "+" : "";
-              const inst = institutionData[s.code] || {};
-              const foreign = inst.foreign ?? null;
-              const trust = inst.trust ?? null;
-              const dealer = inst.dealer ?? null;
-              const total = (foreign !== null && trust !== null && dealer !== null)
-                ? foreign + trust + dealer : null;
-              return `
-                <tr style="border-bottom:1px solid #161925; ${i % 2 === 0 ? "" : "background:#0c0f1a"}">
-                  <td style="padding:10px 16px;">
-                    <div style="color:#7ec8e3; font-weight:600; font-size:13px;">${s.code} ${s.name}</div>
-                    <div style="color:#555; font-size:11px; margin-top:2px;">${sector.name}</div>
-                  </td>
-                  <td style="padding:10px 8px; text-align:center; color:#888; font-size:12px;">上市</td>
-                  <td style="padding:10px 12px; text-align:right; color:#fff; font-weight:600;">${s.close.toLocaleString("zh-TW")}</td>
-                  <td style="padding:10px 12px; text-align:right; color:${pctColor}; font-weight:700;">${pctSign}${s.pct.toFixed(2)}%</td>
-                  <td style="padding:10px 12px; text-align:right; color:#aaa;">${(s.value/100000000).toFixed(1)} 億</td>
-                  <td style="padding:10px 12px; text-align:right; color:#aaa;">${(s.volume/1000).toFixed(0)} 張</td>
-                  <td style="padding:10px 12px; text-align:right; color:${getInstColor(foreign)}; font-weight:500;">${formatInstitution(foreign)}</td>
-                  <td style="padding:10px 12px; text-align:right; color:${getInstColor(trust)}; font-weight:500;">${formatInstitution(trust)}</td>
-                  <td style="padding:10px 12px; text-align:right; color:${getInstColor(dealer)}; font-weight:500;">${formatInstitution(dealer)}</td>
-                  <td style="padding:10px 16px; text-align:right; color:${getInstColor(total)}; font-weight:600;">${formatInstitution(total)}</td>
-                </tr>
-              `;
-            }).join("")}
+          <tbody id="sector-modal-body">
+            ${renderSectorModalRows(sector, sortedStocks)}
           </tbody>
         </table>
         ${sortedStocks.length === 0 ? `<div style="text-align:center; padding:40px; color:#666;">載入個股資料中...</div>` : ""}
@@ -7577,6 +7623,7 @@ function openSectorModal(sector) {
   document.body.appendChild(modal);
   modal.querySelector("#modal-close").addEventListener("click", () => modal.remove());
   modal.addEventListener("click", (e) => { if (e.target === modal) modal.remove(); });
+  refreshSectorModalRealtime(sector, sortedStocks);
 }
 
 // ★ 修改：從 API 回傳的 stocks 直接存進 cache
