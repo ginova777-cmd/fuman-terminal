@@ -514,6 +514,27 @@ function installThemeToggle() {
       body.fuman-light-theme #sector-modal td[style*="color:#aaa"] {
         color: #64748b !important;
       }
+      #sector-modal .sector-pct-up,
+      #sector-modal .sector-inst-pos,
+      body.fuman-light-theme #sector-modal .sector-pct-up,
+      body.fuman-light-theme #sector-modal .sector-inst-pos {
+        color: #dc2626 !important;
+        font-weight: 800 !important;
+      }
+      #sector-modal .sector-pct-down,
+      #sector-modal .sector-inst-neg,
+      body.fuman-light-theme #sector-modal .sector-pct-down,
+      body.fuman-light-theme #sector-modal .sector-inst-neg {
+        color: #059669 !important;
+        font-weight: 800 !important;
+      }
+      #sector-modal .sector-pct-flat,
+      #sector-modal .sector-inst-zero,
+      body.fuman-light-theme #sector-modal .sector-pct-flat,
+      body.fuman-light-theme #sector-modal .sector-inst-zero {
+        color: #64748b !important;
+        font-weight: 700 !important;
+      }
       .market-mode-tabs {
         display: inline-flex;
         align-items: center;
@@ -2909,7 +2930,19 @@ function renderRealtimeRadar() {
     return;
   }
   if (!Object.keys(strategyHistoryData).length && !strategy4CacheLoading) loadStrategy4Cache(true);
-  if (radarOpen && (realtimeRadarNeedsFreshScan || !isRealtimeRadarFresh())) {
+  const radarNeedsUpdate = radarOpen && (realtimeRadarNeedsFreshScan || !isRealtimeRadarFresh());
+  if (radarNeedsUpdate && realtimeRadarLastRows.length && !realtimeRadarRefreshLoading && !strategyRealtimeLoading) {
+    realtimeRadarRefreshLoading = true;
+    refreshStrategyRealtimeScan("force")
+      .then(() => {
+        realtimeRadarNeedsFreshScan = false;
+        if (isViewActive("realtime-radar")) renderRealtimeRadar();
+      })
+      .finally(() => {
+        realtimeRadarRefreshLoading = false;
+      });
+  }
+  if (radarNeedsUpdate && !realtimeRadarLastRows.length) {
     panel.innerHTML = `
       <header class="radar-topbar">
         <div>
@@ -3255,6 +3288,10 @@ let latestStocks = [];
 let marketDataLoading = false;
 let marketDataLastStartedAt = 0;
 let marketDataLastRenderedAt = 0;
+let heatmapLoading = false;
+let heatmapLastStartedAt = 0;
+let lastViewName = "";
+let lastViewShownAt = 0;
 let lastMarketRenderSignature = "";
 let lastHeatmapRenderSignature = "";
 let marketMode = "overview";
@@ -3379,9 +3416,9 @@ let strategy5ActiveId = "foreign_trust_breakout";
 const INTRADAY_HOT_SCAN_LIMIT = 900;
 const REALTIME_RADAR_POOL_LIMIT = 650;
 const INTRADAY_BACKGROUND_BATCH = 450;
-const INTRADAY_FAST_SCAN_MS = 3000;
-const INTRADAY_BACKGROUND_SCAN_MS = 3000;
-const REALTIME_RADAR_REFRESH_MS = 3000;
+const INTRADAY_FAST_SCAN_MS = 5 * 1000;
+const INTRADAY_BACKGROUND_SCAN_MS = 5 * 1000;
+const REALTIME_RADAR_REFRESH_MS = 5 * 1000;
 const MOBILE_INTRADAY_HOT_SCAN_LIMIT = 260;
 const MOBILE_INTRADAY_FORCE_EXTRA_LIMIT = 80;
 const MOBILE_INTRADAY_BACKGROUND_BATCH = 90;
@@ -8489,6 +8526,12 @@ function getInstColor(val) {
   return n > 0 ? "#e74c3c" : "#27ae60";
 }
 
+function getSectorValueToneClass(val, prefix) {
+  const n = cleanNumber(val);
+  if (!Number.isFinite(n) || n === 0) return `${prefix}-zero`;
+  return n > 0 ? `${prefix}-pos` : `${prefix}-neg`;
+}
+
 function formatInstitutionLots(val) {
   if (val === undefined || val === null) return "--";
   const n = Math.round(cleanNumber(val));
@@ -8518,7 +8561,7 @@ function normalizeSectorRealtimeStock(stock, quote = {}) {
 
 function renderSectorModalRows(sector, stocks) {
   return stocks.map((s, i) => {
-    const pctColor = s.pct > 0 ? "#e74c3c" : s.pct < 0 ? "#27ae60" : "#aaa";
+    const pctClass = s.pct > 0 ? "sector-pct-up" : s.pct < 0 ? "sector-pct-down" : "sector-pct-flat";
     const pctSign = s.pct >= 0 ? "+" : "";
     const inst = institutionData[s.code] || {};
     const foreign = inst.foreign ?? null;
@@ -8535,13 +8578,13 @@ function renderSectorModalRows(sector, stocks) {
         </td>
         <td style="padding:10px 8px; text-align:center; color:#888; font-size:12px;">${market}</td>
         <td style="padding:10px 12px; text-align:right; color:#fff; font-weight:600;">${s.close ? s.close.toLocaleString("zh-TW") : "--"}</td>
-        <td style="padding:10px 12px; text-align:right; color:${pctColor}; font-weight:700;">${pctSign}${formatNumber(s.pct || 0, 2)}%</td>
+        <td class="${pctClass}" style="padding:10px 12px; text-align:right;">${pctSign}${formatNumber(s.pct || 0, 2)}%</td>
         <td style="padding:10px 12px; text-align:right; color:#aaa;">${s.value ? (s.value/100000000).toFixed(1) : "0.0"} 億</td>
         <td style="padding:10px 12px; text-align:right; color:#aaa;">${s.volume ? s.volume.toLocaleString("zh-TW", { maximumFractionDigits: 0 }) : "0"} 張</td>
-        <td style="padding:10px 12px; text-align:right; color:${getInstColor(foreign)}; font-weight:600;">${formatInstitutionLots(foreign)}</td>
-        <td style="padding:10px 12px; text-align:right; color:${getInstColor(trust)}; font-weight:600;">${formatInstitutionLots(trust)}</td>
-        <td style="padding:10px 12px; text-align:right; color:${getInstColor(dealer)}; font-weight:600;">${formatInstitutionLots(dealer)}</td>
-        <td style="padding:10px 16px; text-align:right; color:${getInstColor(total)}; font-weight:700;">${formatInstitutionLots(total)}</td>
+        <td class="${getSectorValueToneClass(foreign, "sector-inst")}" style="padding:10px 12px; text-align:right;">${formatInstitutionLots(foreign)}</td>
+        <td class="${getSectorValueToneClass(trust, "sector-inst")}" style="padding:10px 12px; text-align:right;">${formatInstitutionLots(trust)}</td>
+        <td class="${getSectorValueToneClass(dealer, "sector-inst")}" style="padding:10px 12px; text-align:right;">${formatInstitutionLots(dealer)}</td>
+        <td class="${getSectorValueToneClass(total, "sector-inst")}" style="padding:10px 16px; text-align:right;">${formatInstitutionLots(total)}</td>
       </tr>
     `;
   }).join("");
@@ -9486,6 +9529,10 @@ function tickClock() {
 }
 
 function showView(viewName, activeLink) {
+  const now = Date.now();
+  const sameViewQuick = lastViewName === viewName && now - lastViewShownAt < 2500;
+  lastViewName = viewName;
+  lastViewShownAt = now;
   Object.entries(viewPanels).forEach(([name, panel])=>{
     panel.hidden = name !== viewName;
     panel.classList.toggle("active", name === viewName);
@@ -9496,16 +9543,17 @@ function showView(viewName, activeLink) {
   const locked = applyMemberLocks(viewName, activeLink);
   if (locked) return;
   if (viewName === "market") {
-    deferUiWork(loadMarketData);
-    deferUiWork(loadHeatmap, 500);
+    if (Object.keys(sectorStocksCache).length) renderHeatmapFromCache();
+    if (!sameViewQuick) deferUiWork(loadMarketData);
+    deferIdleWork(() => loadHeatmap(), 1000);
   }
   if (viewName === "realtime-radar") {
-    realtimeRadarNeedsFreshScan = true;
+    if (!isRealtimeRadarFresh()) realtimeRadarNeedsFreshScan = true;
     deferUiWork(renderRealtimeRadar);
   }
   if (viewName === "strategy") {
-    deferUiWork(renderStrategyScanner);
-    deferUiWork(loadInstitution, 600);
+    if (!sameViewQuick) deferUiWork(renderStrategyScanner);
+    deferIdleWork(loadInstitution, 1200);
   }
   if (viewName === "chip-trade") {
     deferUiWork(loadChipTradeData);
@@ -9514,8 +9562,8 @@ function showView(viewName, activeLink) {
   if (viewName === "watchlist") {
     deferUiWork(renderWatchlist);
   }
-  deferUiWork(ensureMobileAutoOrganizeButton);
-  deferUiWork(normalizeMobileHorizontalPosition, 60);
+  deferIdleWork(ensureMobileAutoOrganizeButton, 900);
+  deferIdleWork(normalizeMobileHorizontalPosition, 900);
   const focusTarget = activeLink?.dataset.focus ? document.querySelector(`#${activeLink.dataset.focus}`) : null;
   if (focusTarget) setTimeout(()=>focusTarget.focus(),0);
 }
@@ -9611,8 +9659,15 @@ async function loadMarketData(force = false) {
   }
 }
 
-async function loadHeatmap() {
+async function loadHeatmap(force = false) {
   if (isDocumentHidden() || !isViewActive("market")) return;
+  const now = Date.now();
+  if (heatmapLoading || (!force && heatmapLastStartedAt && now - heatmapLastStartedAt < MARKET_REFRESH_MS)) {
+    renderHeatmapFromCache();
+    return;
+  }
+  heatmapLoading = true;
+  heatmapLastStartedAt = now;
   if (!Object.keys(sectorStocksCache).length && !heatmap.children.length) {
     heatmap.innerHTML = `<div class="empty-state">載入產業資料中...</div>`;
   } else {
@@ -9630,6 +9685,8 @@ async function loadHeatmap() {
     if (!renderHeatmapFromCache() && !buildHeatmapFallbackFromLatestStocks()) {
       heatmap.innerHTML = `<div class="empty-state">產業資料載入失敗</div>`;
     }
+  } finally {
+    heatmapLoading = false;
   }
 }
 
@@ -10086,7 +10143,7 @@ setInterval(async () => {
   if (isDocumentHidden() || !isTerminalUnlocked() || !isViewActive("realtime-radar") || !isRadarDetectionWindow()) return;
   realtimeRadarRefreshLoading = true;
   try {
-    await loadMarketData(true);
+    await loadMarketData();
     renderRealtimeRadar();
   } finally {
     realtimeRadarRefreshLoading = false;
