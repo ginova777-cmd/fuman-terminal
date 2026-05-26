@@ -8767,14 +8767,14 @@ function renderWarrantFlow() {
   `;
 
   panel.innerHTML = `
-    <section class="swing-dashboard">
+    <section class="swing-dashboard warrant-flow-dashboard">
       <div class="swing-topbar">
         <div>
           <h2 data-warrant-refresh title="重新整理權證資金走向">${titleWithSchedule("◒", "策略6：權證資金走向", "warrant")}</h2>
           <p>${helperText}</p>
         </div>
       </div>
-      <section class="swing-panel">
+      <section class="swing-panel warrant-flow-panel">
         <div class="swing-tabs">
           <button class="active" type="button" data-warrant-refresh>${listLabel}</button>
           <div class="swing-actions warrant-search-box">
