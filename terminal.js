@@ -339,6 +339,110 @@ function installThemeToggle() {
       body.fuman-light-theme #warrant-flow-view .swing-table .price {
         color: #e11d48 !important;
       }
+      body.fuman-light-theme #chip-trade-view {
+        background: #f6f9fd !important;
+        color: #172033 !important;
+      }
+      body.fuman-light-theme #chip-trade-view .chip-tool {
+        background: #ffffff !important;
+        border-color: #dbe7f3 !important;
+        box-shadow: 0 12px 28px rgba(15, 23, 42, 0.07) !important;
+      }
+      body.fuman-light-theme #chip-trade-view .chip-tool::before {
+        background: linear-gradient(135deg, #eaf4ff 0%, #fff7ed 100%) !important;
+        color: #0f172a !important;
+        border-bottom: 1px solid #dbe7f3 !important;
+      }
+      body.fuman-light-theme #chip-trade-view .chip-tool-row {
+        background: #ffffff !important;
+        color: #334155 !important;
+        border-top-color: #e2edf7 !important;
+      }
+      body.fuman-light-theme #chip-trade-view .chip-tool-row span,
+      body.fuman-light-theme #chip-trade-view .chip-source-note {
+        color: #2563eb !important;
+      }
+      body.fuman-light-theme #chip-trade-view .chip-tabs button,
+      body.fuman-light-theme #chip-trade-view .chip-pill,
+      body.fuman-light-theme #chip-trade-view #chip-sort {
+        background: #f8fbff !important;
+        color: #334155 !important;
+        border-color: #cbdced !important;
+        box-shadow: none !important;
+      }
+      body.fuman-light-theme #chip-trade-view .chip-tabs button.active,
+      body.fuman-light-theme #chip-trade-view .chip-pill.active {
+        background: #eff6ff !important;
+        color: #1d4ed8 !important;
+        border-color: #93c5fd !important;
+        box-shadow: inset 0 0 0 1px rgba(37, 99, 235, 0.10) !important;
+      }
+      body.fuman-light-theme #chip-trade-view .chip-tabs button:hover,
+      body.fuman-light-theme #chip-trade-view .chip-pill:hover {
+        background: #fff7ed !important;
+        color: #c2410c !important;
+        border-color: #fed7aa !important;
+      }
+      body.fuman-light-theme #chip-trade-view .chip-table-wrap {
+        background: #ffffff !important;
+        border: 1px solid #dbe7f3 !important;
+        border-radius: 8px !important;
+        box-shadow: 0 12px 28px rgba(15, 23, 42, 0.07) !important;
+      }
+      body.fuman-light-theme #chip-trade-view .chip-table {
+        background: #ffffff !important;
+        color: #172033 !important;
+        border-color: #dbe7f3 !important;
+        box-shadow: none !important;
+      }
+      body.fuman-light-theme #chip-trade-view .chip-table thead,
+      body.fuman-light-theme #chip-trade-view .chip-table th {
+        background: #eef5fc !important;
+        color: #334155 !important;
+        border-color: #d2dfec !important;
+      }
+      body.fuman-light-theme #chip-trade-view .chip-table td {
+        background: #ffffff !important;
+        color: #172033 !important;
+        border-color: #dbe7f3 !important;
+      }
+      body.fuman-light-theme #chip-trade-view .chip-table tbody tr:nth-child(even) td {
+        background: #fbfdff !important;
+      }
+      body.fuman-light-theme #chip-trade-view .chip-table tbody tr.highlight td {
+        background: #fff3e8 !important;
+      }
+      body.fuman-light-theme #chip-trade-view .chip-table tbody tr:hover td {
+        background: #f0f7ff !important;
+      }
+      body.fuman-light-theme #chip-trade-view .chip-table a {
+        color: #3b82f6 !important;
+      }
+      body.fuman-light-theme #chip-trade-view .terminal-pagination {
+        margin-top: 0 !important;
+        padding: 14px 12px !important;
+        background: #f8fbff !important;
+        color: #64748b !important;
+        border: 1px solid #dbe7f3 !important;
+        border-top: 0 !important;
+        border-radius: 0 0 8px 8px !important;
+        box-shadow: 0 12px 28px rgba(15, 23, 42, 0.06) !important;
+      }
+      body.fuman-light-theme #chip-trade-view .terminal-pagination button {
+        background: #ffffff !important;
+        color: #334155 !important;
+        border-color: #cbdced !important;
+      }
+      body.fuman-light-theme #chip-trade-view .terminal-pagination button.active {
+        background: #eff6ff !important;
+        color: #1d4ed8 !important;
+        border-color: #93c5fd !important;
+      }
+      body.fuman-light-theme #chip-trade-view .terminal-pagination button:not(:disabled):hover {
+        background: #fff7ed !important;
+        color: #c2410c !important;
+        border-color: #fed7aa !important;
+      }
       body.fuman-light-theme h1,
       body.fuman-light-theme h2,
       body.fuman-light-theme h3,
