@@ -214,19 +214,19 @@ function mergeStrategy2Events(records, key) {
         && eventTime !== current.firstAAt
         && record.stateId === "go"
         && (
-          deltaVolume >= 100
+          deltaVolume >= 0
           || /急拉爆量|分時爆量|分時放大|持續放量|爆量|放大/.test(enhancementText)
-          || (recordScore && previousMaxScore && recordScore >= previousMaxScore + 3)
+          || (recordScore && previousMaxScore && recordScore >= previousMaxScore)
         );
-      if (isAEnhancement && !current.enhancements.some((item) => item.at === eventTime && item.strategy === record.strategy)) {
+      if (isAEnhancement && !current.enhancements.some((item) => item.at === eventTime)) {
         current.enhancements.push({
           at: eventTime,
           price: price || cleanNumber(record.observedPrice),
           score: recordScore,
           deltaVolume,
           totalVolume: cleanNumber(record.volume),
-          strategy: record.strategy || "持續放量",
-          reason: record.reason || record.stateReason || "A區持續增強",
+          strategy: "持續放量",
+          reason: `${record.name || code} 持續放量`,
         });
       }
       current.latestState = record.stateId === "go" ? "go" : "wait";

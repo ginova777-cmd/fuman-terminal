@@ -113,7 +113,10 @@ async function main() {
       }
     });
   });
-  if (!newEvents.length && !newEnhancements.length) {
+  const latestEnhancements = newEnhancements
+    .sort((a, b) => String(a.enhancement.at).localeCompare(String(b.enhancement.at)))
+    .slice(-LIVE_LIMIT);
+  if (!newEvents.length && !latestEnhancements.length) {
     console.log(`strategy2 live alert skipped: no new A-zone or enhancement events after ${process.env.STRATEGY2_LIVE_STARTED_AT || "--"}`);
     return;
   }
@@ -125,9 +128,9 @@ async function main() {
       console.log(`[dry-run] ${altText}`);
       console.log(buildMessage(latestEvents));
     }
-    if (newEnhancements.length) {
+    if (latestEnhancements.length) {
       console.log("[dry-run] 策略2 A區持續放量");
-      console.log(buildEnhancementMessage(newEnhancements));
+      console.log(buildEnhancementMessage(latestEnhancements));
     }
     return;
   }
@@ -142,16 +145,16 @@ async function main() {
     }
     latestEvents.forEach((event) => sent.add(eventKey(event)));
   }
-  if (newEnhancements.length) {
-    await sendLineText(buildEnhancementMessage(newEnhancements));
-    newEnhancements.forEach((item) => sent.add(item.key));
+  if (latestEnhancements.length) {
+    await sendLineText(buildEnhancementMessage(latestEnhancements));
+    latestEnhancements.forEach((item) => sent.add(item.key));
   }
   writeJson(LIVE_ALERT_STATE_FILE, {
     date: today,
     updatedAt: new Date().toISOString(),
     sent: Array.from(sent),
   });
-  console.log(`strategy2 live alert sent: new ${latestEvents.length}, enhancements ${newEnhancements.length}`);
+  console.log(`strategy2 live alert sent: new ${latestEvents.length}, enhancements ${latestEnhancements.length}`);
 }
 
 main().catch((error) => {
