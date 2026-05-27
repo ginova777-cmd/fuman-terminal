@@ -1808,7 +1808,14 @@ h1 {
 }
 
 #market-view > .page-header {
-  margin-bottom: 20px;
+  min-height: 0;
+  margin-bottom: 6px;
+  padding-bottom: 10px;
+}
+
+#market-view > .market-mode-tabs {
+  margin-top: 4px;
+  margin-bottom: 14px;
 }
 
 .tabs {
