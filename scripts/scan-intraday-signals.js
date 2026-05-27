@@ -104,8 +104,8 @@ function updateTrackedExtremes(cache, stock, timestamp, key) {
       const currentHigh = cleanNumber(record.observedHigh);
       const currentLow = cleanNumber(record.observedLow);
       record.observedPrice = close || record.observedPrice;
-      record.volume = cleanNumber(stock.tradeVolume) || record.volume;
-      record.percent = cleanNumber(stock.percent) || record.percent;
+      record.currentVolume = cleanNumber(stock.tradeVolume) || record.currentVolume || record.volume;
+      record.currentPercent = cleanNumber(stock.percent) || record.currentPercent || record.percent;
       if (high && (!currentHigh || high > currentHigh)) {
         record.observedHigh = high;
         record.observedHighAt = timestamp;
