@@ -248,7 +248,10 @@ function analyzeRows(rows) {
   const ma5 = sma(closes, 5);
   const ma10 = sma(closes, 10);
   const ma20 = sma(closes, 20);
+  const ma5Prev = sma(closes, 5, 1);
+  const ma10Prev = sma(closes, 10, 1);
   const ma20Prev3 = sma(closes, 20, 3);
+  const ma20Offset = closes.at(-20) || ma20;
   const ema21All = emaSeries(closes, 21);
   const ema21 = ema21All.at(-1) || 0;
   const ema21Prev = ema21All.at(-2) || ema21;
@@ -267,13 +270,25 @@ function analyzeRows(rows) {
     : { label: "低基期", ratio: position.toFixed(2), tone: "low", value: position };
   const highest20Prev = Math.max(...rows.slice(-21, -1).map((row) => row.high));
   const highest10Prev = Math.max(...rows.slice(-11, -1).map((row) => row.high));
+  const highest2Prev = Math.max(...rows.slice(-3, -1).map((row) => row.high));
   const neckline = Math.max(...lookback.slice(0, Math.max(8, Math.floor(lookback.length * 0.6))).map((row) => row.high));
+  const prevLookback = rows.slice(-41, -1);
+  const prevSwHigh = Math.max(...prevLookback.map((row) => row.high));
+  const prevSwLow = Math.min(...prevLookback.map((row) => row.low));
+  const prevSwDiff = Math.max(prevSwHigh - prevSwLow, 0);
+  const fib382 = swLow + swDiff * 0.382;
+  const fib500 = swLow + swDiff * 0.5;
+  const fib618 = swLow + swDiff * 0.618;
+  const prevNeckline = prevLookback.length
+    ? Math.max(...prevLookback.slice(0, Math.max(8, Math.floor(prevLookback.length * 0.6))).map((row) => row.high))
+    : neckline;
   const pct = prev?.close ? ((last.close - prev.close) / prev.close) * 100 : 0;
   const gapUp = prev && last.open > prev.high && last.close > last.open;
   const realBody = (last.high - last.low) > 0 ? Math.abs(last.close - last.open) / (last.high - last.low) > 0.3 : false;
   const bullTrend = last.close > ma20 && last.close > ema21 && ema21 > ema21Prev && macd.macd > macd.signal && ma20 > ma20Prev3;
   const volumeRatio = volMa20 ? last.volume / volMa20 : 0;
   const deepFall = ma20 ? ((last.close - ma20) / ma20) * 100 < -1.5 : false;
+  const bias20 = ma20 ? ((last.close - ma20) / ma20) * 100 : 0;
   return {
     rows,
     last,
@@ -282,6 +297,9 @@ function analyzeRows(rows) {
     ma5,
     ma10,
     ma20,
+    ma5Prev,
+    ma10Prev,
+    ma20Offset,
     ema21,
     volMa20,
     volumeRatio,
@@ -291,13 +309,64 @@ function analyzeRows(rows) {
     stage,
     highest20Prev,
     highest10Prev,
+    highest2Prev,
     neckline,
+    prevNeckline,
+    fib382,
+    fib500,
+    fib618,
     pct,
     gapUp,
     realBody,
     bullTrend,
     deepFall,
+    bias20,
   };
+}
+
+function crossedOver(current, previous, levelNow, levelPrev = levelNow) {
+  return Number.isFinite(current) && Number.isFinite(previous) &&
+    Number.isFinite(levelNow) && Number.isFinite(levelPrev) &&
+    previous <= levelPrev && current > levelNow;
+}
+
+function detectNBase(rows, volMa20) {
+  let fLow = null;
+  let fHigh = null;
+  let sLow = null;
+  for (let index = Math.max(1, rows.length - 80); index < rows.length; index++) {
+    const row = rows[index];
+    const prev = rows[index - 1];
+    if (!row || !prev) continue;
+    if (volMa20 && row.volume > volMa20 * 1.5 && row.close > prev.high) {
+      fLow = row.low;
+      fHigh = row.high;
+    }
+    if (fLow != null && fHigh != null && row.low > (fLow + (fHigh - fLow) * 0.5) && row.low > fLow) {
+      sLow = row.low;
+    }
+  }
+  const last = rows.at(-1);
+  const prev = rows.at(-2);
+  return {
+    fLow,
+    fHigh,
+    sLow,
+    triggered: fHigh != null && sLow != null && crossedOver(last.close, prev.close, fHigh),
+  };
+}
+
+function calcBuyStreak(rows, ma20, volMa20) {
+  let streak = 0;
+  for (let index = Math.max(1, rows.length - 20); index < rows.length; index++) {
+    const row = rows[index];
+    const prev = rows[index - 1];
+    const bias20 = ma20 ? ((row.close - ma20) / ma20) * 100 : 0;
+    const deepFall = bias20 < -1.5;
+    const instStopDrop = deepFall && row.close > row.open && row.close > prev.high && row.volume > volMa20 * 0.8;
+    streak = instStopDrop ? streak + 1 : (row.close < prev.low ? 0 : streak);
+  }
+  return streak;
 }
 
 function scanStrategy4(code, market, rows) {
@@ -311,17 +380,23 @@ function scanStrategy4(code, market, rows) {
   const trendConfirmed = daily.ema21 > daily.ma20;
   const signals = [];
   const bullAttack = daily.bullTrend && isRed && volStrong && daily.realBody &&
-    (daily.gapUp || (prev && last.volume > prev.volume * 1.2) || last.high > daily.highest10Prev);
-  const goldenCross = daily.ma5 > daily.ma10 && daily.ma10 > daily.ma20 && isRed;
+    (daily.gapUp || (prev && last.volume > prev.volume * 1.2) || last.high > daily.highest2Prev) &&
+    trendConfirmed;
+  const goldenCross = crossedOver(daily.ma5, daily.ma5Prev, daily.ma10, daily.ma10Prev) && daily.ma10 > daily.ma20 && isRed;
   const breakawayGap = daily.gapUp && last.close > daily.highest20Prev;
   const runawayGap = daily.gapUp && last.close > daily.ma20 && !breakawayGap;
-  const saucerBreakout = last.close > daily.neckline && prev?.close <= daily.neckline && daily.volumeRatio >= 1.1 && isRed && daily.realBody;
-  const nBase = last.close > daily.highest10Prev && last.close > daily.ma20 && trendConfirmed && volStrong && isRed && daily.stage.tone !== "hot";
+  const rightHighBreak = crossedOver(last.close, prev?.close, daily.highest10Prev) && prev?.close > daily.prevNeckline;
+  const saucerBreakout = (crossedOver(last.close, prev?.close, daily.neckline, daily.prevNeckline) || rightHighBreak) &&
+    daily.volumeRatio >= 1.1 && isRed && daily.realBody;
+  const nState = detectNBase(daily.rows, daily.volMa20);
+  const nBase = nState.triggered && daily.realBody && isRed;
   const roc3 = daily.closes.length > 3 ? ((last.close - daily.closes.at(-4)) / daily.closes.at(-4)) * 100 : 0;
   const vFast = roc3 < -10 && daily.volumeRatio >= 1.5 && isRed && prev && last.close > prev.high && daily.rsi14 < 50;
+  const buyStreak = calcBuyStreak(daily.rows, daily.ma20, daily.volMa20);
   const vReversal = daily.deepFall && isRed && (
     (roc3 < -5 ? 35 : 0) +
     (prev && last.close > prev.high ? 25 : 0) +
+    (buyStreak >= 1 ? 20 : 0) +
     (runawayGap ? 20 : 0) +
     (daily.rsi14 < 40 ? 10 : 0)
   ) >= 60;
@@ -344,7 +419,7 @@ function scanStrategy4(code, market, rows) {
   })();
 
   if (bullAttack) signals.push({ id: "bull_attack", short: "攻擊", icon: "🔥", reason: `站上MA20/EMA21，MACD多頭，量比 ${daily.volumeRatio.toFixed(2)}，日K多頭攻擊。` });
-  if (nBase) signals.push({ id: "n_base", short: "N字", icon: "", reason: `突破近10日壓力，站上MA20且趨勢確認，位階 ${daily.stage.label}。` });
+  if (nBase) signals.push({ id: "n_base", short: "N字", icon: "", reason: `爆量突破後回檔不破半分位，再突破前高 ${nState.fHigh?.toFixed?.(2) || ""}，N字共振。` });
   if (saucerBreakout) signals.push({ id: "saucer", short: "圓弧", icon: "◜", reason: "突破40日整理頸線，量能放大，偏圓弧底突破。" });
   if (breakawayGap) signals.push({ id: "breakaway_gap", short: "突破缺口", icon: "◆", reason: "跳空突破近20日整理高點，偏突破缺口。" });
   if (runawayGap) signals.push({ id: "runaway_gap", short: "逃逸缺口", icon: "🚀", reason: "跳空且站上MA20，多頭段延續，偏逃逸缺口。" });
@@ -352,12 +427,65 @@ function scanStrategy4(code, market, rows) {
   if (threeInside) signals.push({ id: "three_inside", short: "翻紅", icon: "↻", reason: "三內翻紅結構成立，站上MA20且趨勢確認。" });
   if (goldenCross) signals.push({ id: "golden_cross", short: "金釵", icon: "✦", reason: "MA5 > MA10 > MA20 且收紅，多金釵候選。" });
 
+  const aboveMa20 = last.close > daily.ma20;
+  const nearMa20 = daily.ma20 ? Math.abs((last.close - daily.ma20) / daily.ma20) <= 0.06 : false;
+  const ma5TurningUp = daily.ma5 > sma(daily.closes, 5, 1);
+  const macdImproving = daily.macd.rising || daily.macd.macd > daily.macd.signal;
+  const healthyRsi = daily.rsi14 >= 45 && daily.rsi14 <= 72;
+  const setupRsi = daily.rsi14 >= 38 && daily.rsi14 <= 62;
+  const stageNotHot = daily.stage.tone !== "hot";
+  const trendScore = [
+    aboveMa20,
+    last.close > daily.ema21,
+    daily.ema21 >= daily.ema21Prev,
+    ma5TurningUp,
+    macdImproving,
+    healthyRsi,
+    daily.volumeRatio >= 0.8,
+    stageNotHot,
+  ].filter(Boolean).length;
+  const prepScore = [
+    daily.stage.tone === "low" || daily.stage.tone === "mid",
+    nearMa20 || last.close > daily.ma20 * 0.94,
+    macdImproving,
+    setupRsi,
+    daily.volumeRatio >= 0.45,
+    daily.volumeRatio <= 1.8,
+    ma5TurningUp || isRed,
+  ].filter(Boolean).length;
+
+  let swingZone = "A";
+  let swingZoneLabel = "A區可進場";
+  if (!signals.length && trendScore >= 5) {
+    swingZone = "B";
+    swingZoneLabel = "B區觀察";
+    signals.push({
+      id: "watch_trend",
+      short: "B觀察",
+      icon: "B",
+      reason: `趨勢轉強但尚未觸發突破買點；趨勢分 ${trendScore}/8，量比 ${daily.volumeRatio.toFixed(2)}，位階 ${daily.stage.label}。`,
+    });
+  }
+  if (!signals.length && prepScore >= 5) {
+    swingZone = "C";
+    swingZoneLabel = "C區準備";
+    signals.push({
+      id: "base_setup",
+      short: "C準備",
+      icon: "C",
+      reason: `低/中位階整理接近發動；準備分 ${prepScore}/7，RSI ${daily.rsi14.toFixed(1)}，量比 ${daily.volumeRatio.toFixed(2)}。`,
+    });
+  }
+
   if (!signals.length) return null;
+  const zoneBase = swingZone === "A" ? 48 : swingZone === "B" ? 38 : 32;
   const score = Math.min(100, Math.round(
-    48 +
+    zoneBase +
     signals.length * 7 +
+    trendScore * 3 +
+    prepScore * 2 +
     Math.min(daily.volumeRatio * 8, 18) +
-    (daily.macd.macd > daily.macd.signal ? 10 : 0) +
+    (daily.macd.macd > daily.macd.signal ? 8 : 0) +
     (daily.stage.tone === "low" ? 8 : daily.stage.tone === "mid" ? 5 : daily.stage.tone === "high" ? 2 : -8)
   ));
 
@@ -372,6 +500,10 @@ function scanStrategy4(code, market, rows) {
     value: last.value,
     volumeRatio: Number(daily.volumeRatio.toFixed(2)),
     swingStage: daily.stage,
+    swingZone,
+    swingZoneLabel,
+    trendScore,
+    prepScore,
     swingScore: score,
     score,
     swingSignals: signals,
