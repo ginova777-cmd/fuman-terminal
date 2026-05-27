@@ -11996,10 +11996,21 @@ async function showTradingDashboard(code, name) {
 
 function parseQuoteNumber(...values) {
   for (const value of values) {
-    const number = Number(String(value ?? "").replace(/,/g, ""));
+    const text = String(value ?? "").replace(/,/g, "").trim();
+    const firstLevel = text.includes("_") ? text.split("_").find(Boolean) : text;
+    const number = Number(firstLevel);
     if (Number.isFinite(number) && number > 0) return number;
   }
   return 0;
+}
+
+function parseRealtimeQuotePrice(item) {
+  const last = parseQuoteNumber(item?.z, item?.pz);
+  if (last) return last;
+  const bestBid = parseQuoteNumber(item?.b);
+  const bestAsk = parseQuoteNumber(item?.a);
+  if (bestBid && bestAsk) return roundTradePrice((bestBid + bestAsk) / 2);
+  return parseQuoteNumber(bestBid, bestAsk, item?.o, item?.h, item?.l, item?.y);
 }
 
 async function fetchDailyStockFallback(code) {
@@ -12051,7 +12062,7 @@ async function fetchStockPrice(code) {
     const item = data?.msgArray?.[0];
     if (!item) return await fetchHeatmapStockFallback(code) || await fetchDailyStockFallback(code) || cached;
 
-    const close = parseQuoteNumber(item.z, item.y, item.o, item.h, item.l);
+    const close = parseRealtimeQuotePrice(item);
     const prev = parseQuoteNumber(item.y, item.z, item.o, item.h, item.l);
     if (!close || !prev) return await fetchHeatmapStockFallback(code) || await fetchDailyStockFallback(code) || cached;
     const change = close - prev;
