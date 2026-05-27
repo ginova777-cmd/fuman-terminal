@@ -3,6 +3,8 @@ const path = require("path");
 
 const SCAN_SCRIPT = path.join(__dirname, "scan-realtime-radar-cache.js");
 const INTERVAL_MS = Number(process.env.REALTIME_RADAR_PATROL_INTERVAL_MS || 3000);
+const MARKET_START_MINUTES = 9 * 60;
+const MARKET_END_MINUTES = 13 * 60 + 30;
 
 function taipeiParts(date = new Date()) {
   const parts = new Intl.DateTimeFormat("en-CA", {
@@ -14,9 +16,22 @@ function taipeiParts(date = new Date()) {
   return Object.fromEntries(parts.map((part) => [part.type, part.value]));
 }
 
+function taipeiMinuteOfDay(parts = taipeiParts()) {
+  return Number(parts.hour) * 60 + Number(parts.minute);
+}
+
 function isMarketTime(parts = taipeiParts()) {
-  const minutes = Number(parts.hour) * 60 + Number(parts.minute);
-  return minutes >= 9 * 60 && minutes <= 13 * 60 + 30;
+  const minutes = taipeiMinuteOfDay(parts);
+  return minutes >= MARKET_START_MINUTES && minutes <= MARKET_END_MINUTES;
+}
+
+function isBeforeMarket(parts = taipeiParts()) {
+  return taipeiMinuteOfDay(parts) < MARKET_START_MINUTES;
+}
+
+function msUntilMarketOpen(parts = taipeiParts()) {
+  const minutes = taipeiMinuteOfDay(parts);
+  return Math.max(0, (MARKET_START_MINUTES - minutes) * 60 * 1000);
 }
 
 function sleep(ms) {
@@ -35,6 +50,11 @@ function runScan() {
 async function main() {
   let successCount = 0;
   let failureCount = 0;
+
+  if (isBeforeMarket()) {
+    console.log("realtime radar patrol waiting for 09:00 market open");
+    await sleep(msUntilMarketOpen() + 1000);
+  }
 
   if (!isMarketTime()) {
     if (runScan()) successCount += 1;
