@@ -5882,6 +5882,24 @@ function getIntradayEntryTime(stock) {
   return "--:--";
 }
 
+function isStrategy2EnhancementVisible(enhancement) {
+  if (!enhancement) return false;
+  const trigger = String(enhancement.trigger || "");
+  const deltaVolume = cleanNumber(enhancement.deltaVolume);
+  const ma35 = cleanNumber(enhancement.ma35);
+  const ma35Prev = cleanNumber(enhancement.ma35Prev);
+  const aboveMa35 = enhancement.aboveMa35 !== false && ma35 > 0;
+  const ma35TrendUp = enhancement.ma35TrendUp === true || (ma35 > 0 && ma35Prev > 0 && ma35 > ma35Prev);
+  return aboveMa35
+    && ma35TrendUp
+    && (
+      trigger === "volume"
+      || trigger === "text"
+      || trigger === "score"
+      || deltaVolume >= 50
+    );
+}
+
 function getIntradaySortValue(stock, key) {
   const seenAt = cleanNumber(stock.intradayFirstSeenAt) || cleanNumber(intradayFirstSeenAt.get(stock.code));
   const values = {
@@ -5921,7 +5939,10 @@ async function loadStrategy2IntradayCache(force = false) {
     const events = normalizeArray(payload?.events);
     const byCode = new Map(events
       .filter((event) => event?.code)
-      .map((event) => [String(event.code), { ...event }]));
+      .map((event) => [String(event.code), {
+        ...event,
+        enhancements: normalizeArray(event.enhancements).filter(isStrategy2EnhancementVisible),
+      }]));
     normalizeArray(payload?.records).forEach((record) => {
       const code = String(record?.code || "");
       if (!code) return;
@@ -8301,7 +8322,9 @@ function renderIntradayRadar(evaluated) {
     ${rows.map((stock) => {
       const sign = stock.percent >= 0 ? "+" : "";
       const entryTime = getIntradayEntryTime(stock);
-      const latestEnhancement = (stock.strategy2Event?.enhancements || []).at(-1);
+      const latestEnhancement = normalizeArray(stock.strategy2Event?.enhancements)
+        .filter(isStrategy2EnhancementVisible)
+        .at(-1);
       const enhancementChip = latestEnhancement ? `<b>🔥 持續放量</b>` : "";
       const chips = `${enhancementChip}${stock.intradaySignals.map((signal) => `<b>${signal.icon} ${signal.short}</b>`).join("")}`;
       const reason = latestEnhancement

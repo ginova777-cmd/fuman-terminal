@@ -208,16 +208,23 @@ function mergeStrategy2Events(records, key) {
       const previousMaxScore = cleanNumber(current.maxScore);
       const recordScore = cleanNumber(record.score);
       const deltaVolume = cleanNumber(record.deltaVolume);
+      const stillAboveMa35 = record.aboveMa35 !== false && cleanNumber(record.ma35) > 0;
+      const ma35TrendUp = record.ma35TrendUp === true;
       const enhancementText = `${record.strategy || ""} ${record.reason || ""}`;
+      const enhancementTrigger = deltaVolume >= 50
+        ? "volume"
+        : /急拉爆量|分時爆量|分時放大|持續放量|爆量|放大/.test(enhancementText)
+        ? "text"
+        : (recordScore && previousMaxScore && recordScore >= previousMaxScore + 3)
+        ? "score"
+        : "";
       const isAEnhancement = current.firstAAt
         && eventTime
         && eventTime !== current.firstAAt
         && record.stateId === "go"
-        && (
-          deltaVolume >= 0
-          || /急拉爆量|分時爆量|分時放大|持續放量|爆量|放大/.test(enhancementText)
-          || (recordScore && previousMaxScore && recordScore >= previousMaxScore)
-        );
+        && stillAboveMa35
+        && ma35TrendUp
+        && enhancementTrigger;
       if (isAEnhancement && !current.enhancements.some((item) => item.at === eventTime)) {
         current.enhancements.push({
           at: eventTime,
@@ -225,6 +232,11 @@ function mergeStrategy2Events(records, key) {
           score: recordScore,
           deltaVolume,
           totalVolume: cleanNumber(record.volume),
+          trigger: enhancementTrigger,
+          ma35: cleanNumber(record.ma35),
+          ma35Prev: cleanNumber(record.ma35Prev),
+          aboveMa35: record.aboveMa35 !== false,
+          ma35TrendUp,
           strategy: "持續放量",
           reason: `${record.name || code} 持續放量`,
         });
