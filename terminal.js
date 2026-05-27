@@ -6620,9 +6620,11 @@ intradayRadarStyles.textContent = `
     text-align: left;
   }
   .intraday-side-panel .intraday-signal-card {
-    min-height: 86px;
+    min-height: 118px;
+    height: auto;
     padding: 12px;
     border-radius: 10px;
+    overflow: visible;
   }
   .intraday-side-panel .intraday-icon {
     width: 34px;
