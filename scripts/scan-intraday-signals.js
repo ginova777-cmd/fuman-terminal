@@ -177,6 +177,7 @@ function mergeStrategy2Events(records, key) {
         latestState: "",
         maxScore: 0,
         strategies: [],
+        enhancements: [],
         stateReason: "",
         supportPrice: 0,
       };
@@ -204,8 +205,32 @@ function mergeStrategy2Events(records, key) {
       if (record.strategy && !current.strategies.includes(record.strategy)) {
         current.strategies.push(record.strategy);
       }
+      const previousMaxScore = cleanNumber(current.maxScore);
+      const recordScore = cleanNumber(record.score);
+      const deltaVolume = cleanNumber(record.deltaVolume);
+      const enhancementText = `${record.strategy || ""} ${record.reason || ""}`;
+      const isAEnhancement = current.firstAAt
+        && eventTime
+        && eventTime !== current.firstAAt
+        && record.stateId === "go"
+        && (
+          deltaVolume >= 100
+          || /急拉爆量|分時爆量|分時放大|持續放量|爆量|放大/.test(enhancementText)
+          || (recordScore && previousMaxScore && recordScore >= previousMaxScore + 3)
+        );
+      if (isAEnhancement && !current.enhancements.some((item) => item.at === eventTime && item.strategy === record.strategy)) {
+        current.enhancements.push({
+          at: eventTime,
+          price: price || cleanNumber(record.observedPrice),
+          score: recordScore,
+          deltaVolume,
+          totalVolume: cleanNumber(record.volume),
+          strategy: record.strategy || "持續放量",
+          reason: record.reason || record.stateReason || "A區持續增強",
+        });
+      }
       current.latestState = record.stateId === "go" ? "go" : "wait";
-      current.maxScore = Math.max(cleanNumber(current.maxScore), cleanNumber(record.score));
+      current.maxScore = Math.max(previousMaxScore, recordScore);
       current.stateReason = record.stateReason || current.stateReason;
       current.supportPrice = cleanNumber(current.supportPrice) || cleanNumber(record.supportPrice);
       events[code] = current;
@@ -391,6 +416,9 @@ async function main() {
         volume: stock.tradeVolume,
         percent: stock.percent,
         reason: signal.reason,
+        signalId: signal.id,
+        deltaVolume: signal.deltaVolume,
+        volumeMilestone: signal.volumeMilestone,
       });
       added += 1;
     });

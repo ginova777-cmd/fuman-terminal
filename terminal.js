@@ -6484,6 +6484,9 @@ intradayRadarStyles.textContent = `
     gap: 14px;
     align-items: start;
   }
+  .intraday-main-layout-full {
+    grid-template-columns: minmax(0, 1fr);
+  }
   .intraday-main-panel {
     display: grid;
     gap: 14px;
@@ -8297,14 +8300,18 @@ function renderIntradayRadar(evaluated) {
   const tableRows = rows.length ? `
     ${rows.map((stock) => {
       const sign = stock.percent >= 0 ? "+" : "";
-      const chips = stock.intradaySignals.map((signal) => `<b>${signal.icon} ${signal.short}</b>`).join("");
-      const reason = stock.intradaySignals[0]?.reason || "盤中訊號觸發";
-      const state = stock.intradayState || getIntradayState(stock);
       const entryTime = getIntradayEntryTime(stock);
+      const latestEnhancement = (stock.strategy2Event?.enhancements || []).at(-1);
+      const enhancementChip = latestEnhancement ? `<b>🔥 持續放量</b>` : "";
+      const chips = `${enhancementChip}${stock.intradaySignals.map((signal) => `<b>${signal.icon} ${signal.short}</b>`).join("")}`;
+      const reason = latestEnhancement
+        ? `${latestEnhancement.at || entryTime} ${stock.code} ${stock.name} 持續放量${latestEnhancement.deltaVolume ? `｜新增量 ${Math.round(latestEnhancement.deltaVolume).toLocaleString("zh-TW")} 張` : ""}`
+        : stock.intradaySignals[0]?.reason || "盤中訊號觸發";
+      const state = stock.intradayState || getIntradayState(stock);
       return `
         <tr>
           <td><span class="intraday-table-time">${entryTime}</span></td>
-          <td><span class="code">${stock.code}</span></td>
+          <td><span class="code">${stock.code}${latestEnhancement ? " 🔥" : ""}</span></td>
           <td>${stock.name}</td>
           <td><span class="intraday-state ${state.cls}">${state.label}</span></td>
           <td><span class="intraday-badges">${chips}</span></td>
@@ -8332,7 +8339,7 @@ function renderIntradayRadar(evaluated) {
           <label>市場：<select><option>全市場</option></select></label>
         </div>
       </div>
-      <section class="intraday-main-layout">
+      <section class="intraday-main-layout intraday-main-layout-full">
         <div class="intraday-main-panel">
           ${zones}
           <section class="intraday-panel">
@@ -8354,13 +8361,6 @@ function renderIntradayRadar(evaluated) {
             </table>
           </section>
         </div>
-        <aside class="intraday-side-panel">
-          <div class="intraday-side-head">
-            <strong>訊號分類</strong>
-            <span>由上到下</span>
-          </div>
-          <div class="intraday-signal-grid">${cards}</div>
-        </aside>
       </section>
     </section>
   `;
