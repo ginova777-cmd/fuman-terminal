@@ -6416,6 +6416,85 @@ intradayRadarStyles.textContent = `
     background: rgba(8, 14, 25, 0.62);
     overflow: hidden;
   }
+  .swing-zone-summary {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 10px;
+    padding: 12px;
+    border-bottom: 1px solid rgba(117, 133, 170, 0.16);
+  }
+  .swing-zone-card {
+    min-height: 86px;
+    border: 1px solid rgba(117, 133, 170, 0.28);
+    border-radius: 10px;
+    background: rgba(12, 20, 35, 0.72);
+    padding: 12px;
+    display: grid;
+    gap: 5px;
+  }
+  .swing-zone-card span {
+    color: #eaf2ff;
+    font-weight: 900;
+  }
+  .swing-zone-card strong {
+    color: #8fb1ff;
+    font-size: 28px;
+    line-height: 1;
+  }
+  .swing-zone-card small {
+    color: #8f9bb4;
+    font-size: 12px;
+  }
+  .swing-zone-card.zone-a,
+  .swing-zone-panel.zone-a {
+    border-color: rgba(255, 80, 80, 0.5);
+  }
+  .swing-zone-card.zone-b,
+  .swing-zone-panel.zone-b {
+    border-color: rgba(255, 160, 80, 0.42);
+  }
+  .swing-zone-card.zone-c,
+  .swing-zone-panel.zone-c {
+    border-color: rgba(90, 180, 125, 0.42);
+  }
+  .swing-zone-stack {
+    display: grid;
+    gap: 12px;
+    padding: 12px;
+  }
+  .swing-zone-panel {
+    border: 1px solid rgba(117, 133, 170, 0.2);
+    border-radius: 10px;
+    overflow: hidden;
+    background: rgba(8, 14, 25, 0.66);
+  }
+  .swing-zone-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 12px;
+    border-bottom: 1px solid rgba(117, 133, 170, 0.14);
+    background: rgba(18, 28, 48, 0.72);
+  }
+  .swing-zone-head h3 {
+    margin: 0;
+    color: #f7fbff;
+    font-size: 18px;
+  }
+  .swing-zone-head small {
+    color: #9ba8c1;
+    font-size: 12px;
+  }
+  .swing-zone-head strong {
+    min-width: 42px;
+    text-align: right;
+    color: #8fb1ff;
+    font-size: 26px;
+  }
+  .swing-zone-table th {
+    background: rgba(24, 36, 58, 0.72);
+  }
   .swing-table {
     width: 100%;
     border-collapse: collapse;
@@ -8461,6 +8540,11 @@ function renderSwingRadar(universe) {
     ? allRows
     : allRows.filter((stock) => (stock.swingSignals || []).some((signal) => signal.id === swingSignalFilter));
   const rows = sortSwingRows(filteredRows);
+  const zoneRows = {
+    A: sortSwingRows(allRows.filter((stock) => (stock.swingZone || "A") === "A")),
+    B: sortSwingRows(allRows.filter((stock) => stock.swingZone === "B")),
+    C: sortSwingRows(allRows.filter((stock) => stock.swingZone === "C")),
+  };
   const swingPaged = paginateTerminalRows(rows, swingPage);
   swingPage = swingPaged.page;
   const pageRows = swingPaged.rows;
@@ -8506,7 +8590,7 @@ function renderSwingRadar(universe) {
     return `<b>${signal.icon || ""} ${signal.short || ""}</b>`;
   };
 
-  const tableRows = pageRows.length ? pageRows.map((stock) => {
+  const renderSwingRows = (items) => items.map((stock) => {
     const sign = stock.percent >= 0 ? "+" : "";
     const chips = stock.swingSignals.map(formatSwingSignalChip).join("");
     const signalIds = (stock.swingSignals || []).map((signal) => signal.id).join(" ");
@@ -8526,9 +8610,45 @@ function renderSwingRadar(universe) {
         <td>${reason}</td>
       </tr>
     `;
-  }).join("") : `
+  }).join("");
+  const tableRows = pageRows.length ? renderSwingRows(pageRows) : `
     <tr><td colspan="9">後端策略4掃描 API 已啟動。正在分批抓日K並計算符合股票；命中後會自動顯示在這裡。</td></tr>
   `;
+  const swingTableHead = `
+    <thead>
+      <tr>
+        <th>${swingSortHeader("code", "股票代號")}</th><th>股票名稱</th><th>訊號</th><th>${swingSortHeader("price", "現價")}</th><th>${swingSortHeader("percent", "漲幅")}</th><th>${swingSortHeader("volume", "成交量")}</th><th>${swingSortHeader("stage", "位階")}</th><th>${swingSortHeader("score", "分數")}</th><th>原因</th>
+      </tr>
+    </thead>
+  `;
+  const renderZoneSection = (zone, title, subtitle, items) => `
+    <section class="swing-zone-panel zone-${zone.toLowerCase()}">
+      <div class="swing-zone-head">
+        <div>
+          <h3>${title}</h3>
+          <small>${subtitle}</small>
+        </div>
+        <strong>${items.length}</strong>
+      </div>
+      <table class="swing-table swing-zone-table">
+        ${swingTableHead}
+        <tbody>${items.length ? renderSwingRows(items.slice(0, 18)) : `<tr><td colspan="9">目前沒有符合 ${title} 的股票。</td></tr>`}</tbody>
+      </table>
+    </section>
+  `;
+  const showZoneLayout = swingSignalFilter === "all" && !visibleKeyword && !numericKeyword;
+  const zoneSections = showZoneLayout ? `
+    <div class="swing-zone-summary">
+      <div class="swing-zone-card zone-a"><span>A區可進場</span><strong>${zoneRows.A.length}</strong><small>正式波段買點</small></div>
+      <div class="swing-zone-card zone-b"><span>B區觀察</span><strong>${zoneRows.B.length}</strong><small>趨勢轉強等待買點</small></div>
+      <div class="swing-zone-card zone-c"><span>C區準備</span><strong>${zoneRows.C.length}</strong><small>低中位階整理</small></div>
+    </div>
+    <div class="swing-zone-stack">
+      ${renderZoneSection("A", "A區可進場", "正式波段買點", zoneRows.A)}
+      ${renderZoneSection("B", "B區觀察", "趨勢轉強，等待突破", zoneRows.B)}
+      ${renderZoneSection("C", "C區準備", "低/中位階整理，提前蹲點", zoneRows.C)}
+    </div>
+  ` : "";
   const pagination = buildTerminalPagination("swing", swingPage, swingPaged.totalPages, rows.length);
   const hadSearchFocus = document.activeElement === swingVisibleSearchInput;
   const searchSelectionStart = hadSearchFocus ? swingVisibleSearchInput.selectionStart : null;
@@ -8552,15 +8672,13 @@ function renderSwingRadar(universe) {
           ${tabs}
           <div class="strategy4-visible-search-row" data-swing-search-host></div>
         </div>
-        <table class="swing-table">
-          <thead>
-            <tr>
-              <th>${swingSortHeader("code", "股票代號")}</th><th>股票名稱</th><th>訊號</th><th>${swingSortHeader("price", "現價")}</th><th>${swingSortHeader("percent", "漲幅")}</th><th>${swingSortHeader("volume", "成交量")}</th><th>${swingSortHeader("stage", "位階")}</th><th>${swingSortHeader("score", "分數")}</th><th>原因</th>
-            </tr>
-          </thead>
-          <tbody>${tableRows}</tbody>
-        </table>
-        ${pagination}
+        ${showZoneLayout ? zoneSections : `
+          <table class="swing-table">
+            ${swingTableHead}
+            <tbody>${tableRows}</tbody>
+          </table>
+          ${pagination}
+        `}
       </section>
     </section>
   `;
