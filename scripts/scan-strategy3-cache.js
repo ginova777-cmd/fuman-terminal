@@ -309,8 +309,21 @@ async function main() {
   preservePreviousTradingSource((previousRaw.matches || []).length ? previousRaw : backup, output);
 
   fs.mkdirSync(path.dirname(OUT_FILE), { recursive: true });
+  if (!matches.length) {
+    const previousUsable = (previousRaw.matches || []).length && previousRaw.source !== "github-actions-backup-readonly";
+    const fallback = previousUsable ? previousRaw : backup;
+    if ((fallback.matches || []).length) {
+      fs.writeFileSync(OUT_FILE, `${JSON.stringify({
+        ...fallback,
+        source: fallback.source === "github-actions-backup-readonly" ? "github-actions-backup" : fallback.source,
+        preservedAt: new Date().toISOString(),
+        preservedReason: "strategy3 current scan produced zero matches",
+      }, null, 2)}\n`);
+    }
+    throw new Error("Strategy3 scan produced zero matches; preserved previous valid output and refused to publish an empty result");
+  }
   fs.writeFileSync(OUT_FILE, `${JSON.stringify(output, null, 2)}\n`);
-  if (matches.length) fs.writeFileSync(BACKUP_FILE, `${JSON.stringify({ ...output, source: "github-actions-backup" }, null, 2)}\n`);
+  fs.writeFileSync(BACKUP_FILE, `${JSON.stringify({ ...output, source: "github-actions-backup" }, null, 2)}\n`);
   console.log(`strategy3 cache updated: matches ${matches.length}`);
 }
 
