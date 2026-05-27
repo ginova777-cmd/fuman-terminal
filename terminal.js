@@ -8654,6 +8654,7 @@ function renderSwingRadar(universe) {
   };
   const [activeZoneTitle, activeZoneSubtitle, activeZoneCount] = zoneMeta[swingZoneFilter] || zoneMeta.all;
   const showZoneLayout = !visibleKeyword && !numericKeyword;
+  const pagination = buildTerminalPagination("swing", swingPage, swingPaged.totalPages, rows.length);
   const zoneSections = showZoneLayout ? `
     <div class="swing-zone-summary">
       <button type="button" class="swing-zone-card zone-a ${swingZoneFilter === "A" ? "active" : ""}" data-swing-zone-filter="A"><span>A區可進場</span><strong>${zoneRows.A.length}</strong><small>正式波段買點</small></button>
@@ -8665,7 +8666,6 @@ function renderSwingRadar(universe) {
       ${pagination}
     </div>
   ` : "";
-  const pagination = buildTerminalPagination("swing", swingPage, swingPaged.totalPages, rows.length);
   const hadSearchFocus = document.activeElement === swingVisibleSearchInput;
   const searchSelectionStart = hadSearchFocus ? swingVisibleSearchInput.selectionStart : null;
   const searchSelectionEnd = hadSearchFocus ? swingVisibleSearchInput.selectionEnd : null;
