@@ -8049,6 +8049,21 @@ intradayRadarStyles.textContent = `
   body.fuman-light-theme #strategy-view.strategy5-only .strategy5-rank {
     color: #ffffff !important;
   }
+  #strategy-view .intraday-side-panel .intraday-signal-card {
+    min-height: 140px !important;
+    height: auto !important;
+    overflow: visible !important;
+    align-items: stretch !important;
+  }
+  #strategy-view .intraday-side-panel .intraday-card-top,
+  #strategy-view .intraday-side-panel .intraday-count,
+  #strategy-view .intraday-side-panel .intraday-signal-card small,
+  #strategy-view .intraday-side-panel .intraday-strength {
+    flex-shrink: 0;
+  }
+  #strategy-view .intraday-side-panel .intraday-signal-grid {
+    align-items: stretch;
+  }
 `;
 document.head.appendChild(intradayRadarStyles);
 
