@@ -25,6 +25,36 @@ function writeJson(file, value) {
   fs.writeFileSync(file, `${JSON.stringify(value, null, 2)}\n`);
 }
 
+function normalizeVolumeLots(value) {
+  const number = cleanNumber(value);
+  if (!number) return 0;
+  return number > 100000 ? Math.round(number / 1000) : number;
+}
+
+function classifyStrategy2State(stock, signal) {
+  const pct = cleanNumber(stock.percent);
+  const volume = cleanNumber(stock.tradeVolume);
+  const close = cleanNumber(stock.close);
+  const high = cleanNumber(stock.high) || close;
+  if (pct <= 2 || volume < 2000 || signal.aboveMa35 !== true) return null;
+  const nearHigh = !high || close >= high * 0.985;
+  const score = Math.min(100, Math.round(pct * 8 + (volume >= 10000 ? 56 : 42) + (signal.id === "volume_burst" ? 6 : 0)));
+  if (volume >= 10000 && nearHigh && pct <= 8.8) {
+    return {
+      stateId: "go",
+      stateLabel: "A區 可進場",
+      stateReason: "量勢、價位與觸發訊號同步，偏可進場。",
+      score,
+    };
+  }
+  return {
+    stateId: "wait",
+    stateLabel: "B區 待確認",
+    stateReason: "已有訊號，但仍需等站穩或再放量。",
+    score: Math.min(88, score),
+  };
+}
+
 function taipeiParts(date = new Date()) {
   const parts = new Intl.DateTimeFormat("en-CA", {
     timeZone: "Asia/Taipei",
@@ -321,7 +351,7 @@ async function fetchStocks() {
         change: cleanNumber(stock.change),
         percent: cleanNumber(stock.pct ?? stock.percent),
         value: cleanNumber(stock.value),
-        tradeVolume: cleanNumber(stock.volume ?? stock.tradeVolume),
+        tradeVolume: normalizeVolumeLots(stock.volume ?? stock.tradeVolume),
       })).filter((stock) => stock.code && stock.name);
     }
   } catch {}
@@ -338,7 +368,7 @@ async function fetchStocks() {
       change,
       percent: prevClose ? (change / prevClose) * 100 : 0,
       value: cleanNumber(stock.TradeValue || stock["成交金額"]),
-      tradeVolume: cleanNumber(stock.TradeVolume || stock["成交股數"]),
+      tradeVolume: normalizeVolumeLots(stock.TradeVolume || stock["成交股數"]),
     };
   }).filter((stock) => stock.code && stock.name && stock.close);
 }
@@ -358,11 +388,12 @@ async function fetchRealtime(stocks) {
   }
   return stocks.map((stock) => {
     const quote = quotes.get(stock.code);
-    if (!quote?.close) return stock;
-    const value = cleanNumber(quote.tradeVolume) && cleanNumber(quote.close)
-      ? cleanNumber(quote.tradeVolume) * cleanNumber(quote.close)
+    if (!quote?.close) return { ...stock, isRealtime: false };
+    const quoteVolume = normalizeVolumeLots(quote.tradeVolume);
+    const value = quoteVolume && cleanNumber(quote.close)
+      ? quoteVolume * cleanNumber(quote.close)
       : stock.value;
-    return { ...stock, ...quote, value, isRealtime: true };
+    return { ...stock, ...quote, tradeVolume: quoteVolume, value, isRealtime: true };
   });
 }
 
@@ -378,7 +409,9 @@ async function main() {
   }
 
   const rawStocks = await fetchStocks();
-  const liveStocks = (await fetchRealtime(rawStocks)).filter(isIntradayTradable);
+  const liveStocks = (await fetchRealtime(rawStocks))
+    .filter((stock) => stock.isRealtime === true)
+    .filter(isIntradayTradable);
   const ranks = buildRanks(liveStocks);
   const timestamp = timestampKey(parts);
   let added = 0;
@@ -410,10 +443,10 @@ async function main() {
         code: stock.code,
         name: stock.name,
         strategy: signal.label,
-        stateId: signal.stateId,
-        stateLabel: signal.stateLabel,
-        stateReason: signal.stateReason,
-        score: signal.score,
+        stateId: state.stateId,
+        stateLabel: state.stateLabel,
+        stateReason: state.stateReason,
+        score: state.score,
         entryPrice: signal.entryPrice,
         supportPrice: signal.supportPrice,
         entryLow: signal.entryLow,
