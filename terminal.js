@@ -838,7 +838,10 @@ function installThemeToggle() {
         border-top: 4px solid rgba(248, 113, 113, 0.92);
       }
       .market-ai-card[data-ai-advice] {
+        position: relative;
         cursor: pointer;
+        overflow: hidden;
+        padding-right: 48px;
         transition: border-color 0.16s ease, box-shadow 0.16s ease, transform 0.16s ease;
       }
       .market-ai-card[data-ai-advice]:hover,
@@ -847,6 +850,70 @@ function installThemeToggle() {
         box-shadow: 0 16px 34px rgba(0, 0, 0, 0.24);
         transform: translateY(-1px);
         outline: none;
+      }
+      .market-ai-card[data-ai-advice="sector"] {
+        border-top-color: rgba(244, 63, 94, 0.94);
+      }
+      .market-ai-card[data-ai-advice="risk"] {
+        border-top-color: rgba(244, 63, 94, 0.94);
+      }
+      .market-ai-advice-arrow {
+        position: absolute;
+        top: 52px;
+        right: 22px;
+        transform: translateY(-50%);
+        color: #94a3b8;
+        font-size: 26px;
+        font-weight: 900;
+        line-height: 1;
+        transition: transform 0.18s ease, color 0.18s ease;
+      }
+      .market-ai-card[data-ai-advice].is-open .market-ai-advice-arrow {
+        transform: translateY(-50%) rotate(90deg);
+        color: #fb923c;
+      }
+      .market-ai-advice-detail {
+        display: none;
+        grid-column: 1 / -1;
+        margin-top: 16px;
+        padding-top: 14px;
+        border-top: 1px solid rgba(148, 163, 184, 0.2);
+      }
+      .market-ai-card[data-ai-advice].is-open .market-ai-advice-detail {
+        display: grid;
+        gap: 10px;
+      }
+      .market-ai-advice-detail-item {
+        padding: 12px;
+        border: 1px solid rgba(148, 163, 184, 0.2);
+        border-radius: 8px;
+        background: rgba(15, 23, 42, 0.42);
+      }
+      .market-ai-advice-detail-item b {
+        display: block;
+        margin-bottom: 6px;
+        color: #f8fafc;
+        font-size: 15px;
+      }
+      .market-ai-advice-detail-item p {
+        margin: 0;
+        color: #b8c7e6;
+        line-height: 1.55;
+      }
+      .market-ai-advice-detail-chips {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-top: 10px;
+      }
+      .market-ai-advice-detail-chips span {
+        padding: 5px 9px;
+        border: 1px solid rgba(251, 146, 60, 0.38);
+        border-radius: 999px;
+        background: rgba(249, 115, 22, 0.1);
+        color: #fdba74;
+        font-size: 12px;
+        font-weight: 850;
       }
       .market-ai-card.hero {
         border-top-color: rgba(20, 184, 166, 0.75);
@@ -1330,6 +1397,30 @@ function installThemeToggle() {
         background: #ffffff !important;
         border-color: #dbe3ee !important;
         color: #334155 !important;
+      }
+      body.fuman-light-theme .market-ai-advice-arrow {
+        color: #64748b !important;
+      }
+      body.fuman-light-theme .market-ai-card[data-ai-advice].is-open .market-ai-advice-arrow {
+        color: #ea580c !important;
+      }
+      body.fuman-light-theme .market-ai-advice-detail {
+        border-top-color: #dbe3ee !important;
+      }
+      body.fuman-light-theme .market-ai-advice-detail-item {
+        border-color: #dbe3ee !important;
+        background: #f8fafc !important;
+      }
+      body.fuman-light-theme .market-ai-advice-detail-item b {
+        color: #0f172a !important;
+      }
+      body.fuman-light-theme .market-ai-advice-detail-item p {
+        color: #475569 !important;
+      }
+      body.fuman-light-theme .market-ai-advice-detail-chips span {
+        border-color: #fed7aa !important;
+        background: #fff7ed !important;
+        color: #c2410c !important;
       }
       .global-refresh-widget {
         position: fixed;
@@ -8829,7 +8920,6 @@ function renderSwingRadar(universe) {
           <label>市場：<select><option>全市場</option></select></label>
         </div>
       </div>
-      <div class="swing-zone-summary swing-zone-summary-main">${zoneCards}</div>
       <div class="swing-signal-grid">${cards}</div>
       <section class="swing-panel">
         <div class="swing-tabs">
@@ -10446,6 +10536,34 @@ function renderMarketAiPanel() {
     : data.bias === "空方壓制"
     ? ["降低追價", "只做逆勢強股", "等待反彈量價確認"]
     : ["等待方向", "縮小部位", "觀察族群是否擴散"];
+  const adviceKinds = ["entry", "sector", "risk"];
+  const adviceMeta = ["進場紀律", "族群聚焦", "風險排除"];
+  const adviceCopy = [
+    `目前主流族群：${strongNames}。`,
+    "依綜合分數與成交量排序，適合快速掌握今日熱門觀察股。",
+    "漲幅過熱或弱勢族群，不納入第一優先。",
+  ];
+  const adviceHtml = operate.map((item, index) => {
+    const kind = adviceKinds[index] || "entry";
+    const detail = getMarketAiAdviceDetails(kind, data);
+    return `
+        <article class="market-ai-card" data-ai-advice="${kind}" role="button" tabindex="0" aria-expanded="false" title="展開判讀細節">
+          <small>${escapeAttr(adviceMeta[index] || detail.kicker)}</small>
+          <strong>${escapeAttr(item)}</strong>
+          <p>${escapeAttr(adviceCopy[index] || detail.subtitle)}</p>
+          <span class="market-ai-advice-arrow" aria-hidden="true">›</span>
+          <div class="market-ai-advice-detail" aria-hidden="true">
+            ${detail.cards.map((card) => `
+              <div class="market-ai-advice-detail-item">
+                <b>${escapeAttr(card.kicker)}｜${escapeAttr(card.title)}</b>
+                <p>${escapeAttr(card.body)}</p>
+                ${normalizeArray(card.chips).length ? `<div class="market-ai-advice-detail-chips">${normalizeArray(card.chips).slice(0, 6).map((chip) => `<span>${escapeAttr(chip)}</span>`).join("")}</div>` : ""}
+              </div>
+            `).join("")}
+          </div>
+        </article>
+      `;
+  }).join("");
   marketAiPanel.innerHTML = `
     <section class="market-ai-summary">
       <article class="market-ai-card hero">
@@ -10476,13 +10594,7 @@ function renderMarketAiPanel() {
       </article>
     </section>
     <section class="market-ai-advice">
-      ${operate.map((item, index) => `
-        <article class="market-ai-card" data-ai-advice="${index === 0 ? "entry" : index === 1 ? "sector" : "risk"}" role="button" tabindex="0" title="查看判讀細節">
-          <small>${index === 0 ? "進場紀律" : index === 1 ? "族群聚焦" : "風險排除"}</small>
-          <strong>${item}</strong>
-          <p>${index === 0 ? `目前主流族群：${strongNames}。` : index === 1 ? "依綜合分數與成交量排序，適合快速掌握今日熱門觀察股。" : "漲幅過熱或弱勢族群，不納入第一優先。"}</p>
-        </article>
-      `).join("")}
+      ${adviceHtml}
     </section>
     <section class="market-ai-main">
       <article class="market-ai-block">
@@ -11515,7 +11627,9 @@ document.addEventListener("click", (event) => {
   }
   const adviceCard = event.target.closest("[data-ai-advice]");
   if (adviceCard) {
-    openMarketAiAdviceModal(adviceCard.dataset.aiAdvice || "entry");
+    const isOpen = adviceCard.classList.toggle("is-open");
+    adviceCard.setAttribute("aria-expanded", isOpen ? "true" : "false");
+    adviceCard.querySelector(".market-ai-advice-detail")?.setAttribute("aria-hidden", isOpen ? "false" : "true");
     return;
   }
   const hotFilterButton = event.target.closest("[data-ai-hot-filter]");
@@ -11549,7 +11663,9 @@ document.addEventListener("keydown", (event) => {
   const adviceCard = event.target.closest?.("[data-ai-advice]");
   if (!adviceCard) return;
   event.preventDefault();
-  openMarketAiAdviceModal(adviceCard.dataset.aiAdvice || "entry");
+  const isOpen = adviceCard.classList.toggle("is-open");
+  adviceCard.setAttribute("aria-expanded", isOpen ? "true" : "false");
+  adviceCard.querySelector(".market-ai-advice-detail")?.setAttribute("aria-hidden", isOpen ? "false" : "true");
 });
 viewLinks.forEach((link)=>{
   link.addEventListener("click",(e)=>{
@@ -12938,3 +13054,4 @@ if (isViewActive("watchlist")) renderWatchlist();
 setInterval(() => {
   if (!isDocumentHidden() && isTerminalUnlocked() && isViewActive("watchlist")) refreshSelectedWatchlistQuote();
 }, 10000);
+
