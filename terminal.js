@@ -9525,13 +9525,14 @@ function renderHeatmapSectors(sectors) {
   }
 
   mergeHeatmapApiSectorsIntoCache(sectors);
-  const signature = sectors
+  const sortedSectors = [...sectors].sort((a, b) => cleanNumber(b.pct) - cleanNumber(a.pct));
+  const signature = sortedSectors
     .map((s) => `${s.name}:${Number(s.pct || 0).toFixed(2)}:${s.count}:${s.up}:${s.down}:${s.totalValue}:${s.leader || ""}`)
     .join("|");
   if (signature === lastHeatmapRenderSignature) return;
   lastHeatmapRenderSignature = signature;
 
-  heatmap.innerHTML = sectors.map(s => {
+  heatmap.innerHTML = sortedSectors.map(s => {
     const pct = s.pct || 0;
     const sign = pct >= 0 ? "+" : "";
     const bg = getSectorColor(pct);
@@ -9580,7 +9581,7 @@ function renderHeatmapFromCache() {
       leader: leader ? `${leader.code} ${leader.name}` : "--",
       stocks: rows,
     };
-  }).filter(Boolean).sort((a, b) => Math.abs(b.pct) - Math.abs(a.pct)).slice(0, 36);
+  }).filter(Boolean).sort((a, b) => cleanNumber(b.pct) - cleanNumber(a.pct)).slice(0, 36);
 
   if (sectors.length) renderHeatmapSectors(sectors);
   return sectors.length > 0;
@@ -12401,4 +12402,3 @@ if (isViewActive("watchlist")) renderWatchlist();
 setInterval(() => {
   if (!isDocumentHidden() && isTerminalUnlocked() && isViewActive("watchlist")) refreshSelectedWatchlistQuote();
 }, 10000);
-
