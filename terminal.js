@@ -837,6 +837,17 @@ function installThemeToggle() {
         padding: 18px;
         border-top: 4px solid rgba(248, 113, 113, 0.92);
       }
+      .market-ai-card[data-ai-advice] {
+        cursor: pointer;
+        transition: border-color 0.16s ease, box-shadow 0.16s ease, transform 0.16s ease;
+      }
+      .market-ai-card[data-ai-advice]:hover,
+      .market-ai-card[data-ai-advice]:focus-visible {
+        border-color: rgba(249, 115, 22, 0.66);
+        box-shadow: 0 16px 34px rgba(0, 0, 0, 0.24);
+        transform: translateY(-1px);
+        outline: none;
+      }
       .market-ai-card.hero {
         border-top-color: rgba(20, 184, 166, 0.75);
         background: linear-gradient(135deg, rgba(15, 23, 42, 0.84), rgba(6, 78, 59, 0.22));
@@ -960,6 +971,135 @@ function installThemeToggle() {
         background: rgba(127, 29, 29, 0.18);
         font-size: 12px;
         font-weight: 800;
+      }
+      .market-ai-detail-overlay {
+        position: fixed;
+        inset: 0;
+        z-index: 12000;
+        display: grid;
+        place-items: center;
+        padding: 22px;
+        background: rgba(15, 23, 42, 0.72);
+        backdrop-filter: blur(7px);
+      }
+      .market-ai-detail-dialog {
+        width: min(945px, 96vw);
+        max-height: min(86vh, 820px);
+        overflow: hidden;
+        border: 1px solid rgba(203, 213, 225, 0.72);
+        border-radius: 16px;
+        background: #f8fafc;
+        color: #111827;
+        box-shadow: 0 26px 80px rgba(0, 0, 0, 0.34);
+      }
+      .market-ai-detail-head {
+        position: relative;
+        padding: 26px 58px 22px 22px;
+        border-bottom: 1px solid #e2e8f0;
+      }
+      .market-ai-detail-head small {
+        display: block;
+        margin-bottom: 8px;
+        color: #64748b;
+        font-weight: 800;
+      }
+      .market-ai-detail-head h2 {
+        margin: 0 0 10px;
+        color: #111827;
+        font-size: 28px;
+        line-height: 1.16;
+      }
+      .market-ai-detail-head p {
+        margin: 0;
+        color: #475569;
+        line-height: 1.55;
+      }
+      .market-ai-detail-close {
+        position: absolute;
+        top: 18px;
+        right: 20px;
+        width: 40px;
+        height: 40px;
+        border: 1px solid #dbe3ee;
+        border-radius: 9px;
+        background: #ffffff;
+        color: #64748b;
+        font-size: 28px;
+        line-height: 1;
+        cursor: pointer;
+      }
+      .market-ai-detail-body {
+        display: grid;
+        gap: 12px;
+        max-height: calc(min(86vh, 820px) - 146px);
+        overflow: auto;
+        padding: 16px 22px 20px;
+      }
+      .market-ai-detail-card {
+        position: relative;
+        padding: 20px 18px;
+        border: 1px solid #bae6fd;
+        border-left: 3px solid #0284c7;
+        border-radius: 8px;
+        background: linear-gradient(135deg, #f8fafc, #eff6ff);
+      }
+      .market-ai-detail-card.danger {
+        border-color: #fecaca;
+        border-left-color: #ef4444;
+        background: linear-gradient(135deg, #fff7f7, #fffaf7);
+      }
+      .market-ai-detail-card.warn {
+        border-color: #fed7aa;
+        border-left-color: #ea580c;
+        background: linear-gradient(135deg, #fff7ed, #fffaf5);
+      }
+      .market-ai-detail-card small {
+        display: block;
+        margin-bottom: 8px;
+        color: #64748b;
+        font-weight: 800;
+      }
+      .market-ai-detail-card h3 {
+        margin: 0 0 8px;
+        color: #111827;
+        font-size: 22px;
+      }
+      .market-ai-detail-card p {
+        margin: 0;
+        color: #475569;
+        line-height: 1.55;
+      }
+      .market-ai-detail-action {
+        position: absolute;
+        top: 18px;
+        right: 18px;
+        color: #c2410c;
+        font-weight: 900;
+      }
+      .market-ai-detail-chips {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        margin-top: 14px;
+      }
+      .market-ai-detail-chip {
+        padding: 7px 12px;
+        border: 1px solid #fecaca;
+        border-radius: 999px;
+        background: #fff1f2;
+        color: #dc2626;
+        font-size: 13px;
+        font-weight: 850;
+      }
+      .market-ai-detail-card.info .market-ai-detail-chip {
+        border-color: #bfdbfe;
+        background: #eff6ff;
+        color: #1d4ed8;
+      }
+      .market-ai-detail-card.warn .market-ai-detail-chip {
+        border-color: #fed7aa;
+        background: #fff7ed;
+        color: #c2410c;
       }
       .market-ai-hot {
         display: grid;
@@ -9822,7 +9962,7 @@ function applyMarketMode(mode = "overview") {
     if (marketMode === "ai") {
       marketAiLastSignature = "";
       renderMarketAiPanel();
-      deferUiWork(() => loadMarketData(true), 100);
+      deferUiWork(() => loadMarketData(), 100);
     }
   }
   const title = panel.querySelector(".page-header h1");
@@ -10070,8 +10210,7 @@ function isMarketAiLongCandidate(stock, options = {}) {
   const close = cleanNumber(stock.close);
   const value = cleanNumber(stock.value);
   if (!close || !value) return false;
-  if (pct <= 0 || change < 0) return false;
-  if (options.priority && pct < 1) return false;
+  if (pct <= 2 || change < 0) return false;
   return true;
 }
 
@@ -10112,6 +10251,168 @@ function marketAiUpdatedLabel() {
   const day = String(date.getDate()).padStart(2, "0");
   const time = date.toLocaleTimeString("zh-TW", { hour12: false, hour: "2-digit", minute: "2-digit", second: "2-digit" });
   return `${month}/${day} 即時巡邏 · 更新 ${time}`;
+}
+
+function marketAiStockLabel(stock) {
+  if (!stock) return "";
+  return `${stock.code || ""} ${stock.name || ""}`.trim();
+}
+
+function marketAiChipList(items = [], tone = "") {
+  return items.filter(Boolean).slice(0, 8).map((item) =>
+    `<span class="market-ai-detail-chip ${tone ? `market-ai-detail-chip-${tone}` : ""}">${escapeAttr(item)}</span>`
+  ).join("");
+}
+
+function marketAiSectorChips(sector) {
+  return normalizeArray(sector?.rows)
+    .sort((a, b) => cleanNumber(b.value) - cleanNumber(a.value) || cleanNumber(b.pct) - cleanNumber(a.pct))
+    .slice(0, 3)
+    .map(marketAiStockLabel);
+}
+
+function marketAiDetailCard({ tone = "info", kicker = "", title = "", action = "", body = "", chips = [], meta = "" }) {
+  return `
+    <article class="market-ai-detail-card ${escapeAttr(tone)}">
+      ${action ? `<span class="market-ai-detail-action">${escapeAttr(action)}</span>` : ""}
+      ${kicker ? `<small>${escapeAttr(kicker)}</small>` : ""}
+      <h3>${escapeAttr(title)}</h3>
+      ${meta ? `<p><b>${escapeAttr(meta)}</b></p>` : ""}
+      <p>${escapeAttr(body)}</p>
+      ${chips.length ? `<div class="market-ai-detail-chips">${marketAiChipList(chips, tone)}</div>` : ""}
+    </article>
+  `;
+}
+
+function getMarketAiAdviceDetails(kind, data) {
+  const strongSectors = normalizeArray(data.strongSectors);
+  const riskStocks = normalizeArray(data.riskStocks);
+  const hotStocks = normalizeArray(data.hotStocks);
+  const riskChips = (riskStocks.length ? riskStocks : normalizeArray(data.downRows)
+    .sort((a, b) => cleanNumber(a.percent) - cleanNumber(b.percent))
+    .slice(0, 5))
+    .map(marketAiStockLabel)
+    .filter(Boolean);
+  const topSector = strongSectors[0] || {};
+  const secondSector = strongSectors[1] || {};
+  const thirdSector = strongSectors[2] || {};
+  const upCount = data.upRows.length;
+  const downCount = data.downRows.length;
+  const hotObserveCount = hotStocks.length || data.visibleHotStocks.length || 0;
+
+  if (kind === "sector") {
+    return {
+      kicker: "族群聚焦",
+      title: "只看強族群前 3 名",
+      subtitle: `目前有 ${strongSectors.slice(0, 3).length} 組族群強度較佳，先聚焦領頭股與同族群擴散。`,
+      cards: strongSectors.slice(0, 3).map((sector, index) => {
+        const rows = normalizeArray(sector.rows);
+        const upRatio = rows.length ? (rows.filter((stock) => cleanNumber(stock.pct) > 0).length / rows.length) * 100 : 0;
+        return {
+          tone: index === 0 ? "danger" : "warn",
+          kicker: `#${index + 1}`,
+          title: sector.name || "未分類族群",
+          action: `上漲 ${upRatio.toFixed(1)}%`,
+          body: `${rows.length} 檔樣本，平均漲跌 ${(cleanNumber(sector.pct) >= 0 ? "+" : "")}${cleanNumber(sector.pct).toFixed(2)}%，成交額約 ${(cleanNumber(sector.totalValue) / 100000000).toFixed(1)} 億。`,
+          chips: marketAiSectorChips(sector),
+        };
+      }),
+    };
+  }
+
+  if (kind === "risk") {
+    const financePressure = riskChips.slice(0, 4);
+    return {
+      kicker: "風險排除",
+      title: "風險高標的先排除",
+      subtitle: `先排除 ${riskChips[0] || "高波動標的"} 等風險標的，等風險降溫再追蹤。`,
+      cards: [
+        {
+          tone: "danger",
+          kicker: "高風險標的",
+          title: `${Math.max(riskChips.length, riskStocks.length)} 檔優先排除`,
+          action: "風控清單",
+          body: "偏空、券資壓力或反轉文字被標記時，先移出追價名單，風險降溫再回看。",
+          chips: riskChips,
+        },
+        {
+          tone: "info",
+          kicker: "資訊",
+          title: "族群集中",
+          action: "追蹤",
+          body: "設備或廠務工程、電子與強勢族群如果只集中少數領頭股，避免只追單一領頭股。",
+          chips: [topSector.name, secondSector.name, thirdSector.name].filter(Boolean),
+        },
+        {
+          tone: "danger",
+          kicker: "高風險",
+          title: "融券壓力",
+          action: "先排除",
+          body: `${financePressure.join("、") || "高波動標的"} 出現偏空或券資壓力，追蹤軋空、急拉後反轉與追價風險。`,
+          chips: financePressure,
+        },
+      ],
+    };
+  }
+
+  return {
+    kicker: "進場紀律",
+    title: "降低追價",
+    subtitle: "盤面風險偏高，先把進場條件收緊，避免追高。",
+    cards: [
+      {
+        tone: "warn",
+        kicker: "市場廣度",
+        title: `上漲 ${data.upRatio.toFixed(1)}% / 下跌 ${(data.sample ? downCount / data.sample * 100 : 0).toFixed(1)}%`,
+        action: data.upRatio >= 50 ? "偏多" : "保守",
+        body: "下跌家數偏多時，先縮小追價範圍並確認停損位置。",
+        chips: [`${upCount.toLocaleString("zh-TW")} 檔上漲`, `${downCount.toLocaleString("zh-TW")} 檔下跌`],
+      },
+      {
+        tone: "info",
+        kicker: "訊號池",
+        title: `熱門觀察 ${hotObserveCount.toLocaleString("zh-TW")} 檔`,
+        action: `${data.riskStocks.length} / ${hotObserveCount || 30}`,
+        body: "先用熱門觀察股交叉確認當沖、盤中雷達與族群擴散，不讓單一訊號決定進場。",
+        chips: ["當沖候選", "盤中雷達", "熱門觀察"],
+      },
+    ],
+  };
+}
+
+function openMarketAiAdviceModal(kind) {
+  const data = buildMarketAiData();
+  const detail = getMarketAiAdviceDetails(kind, data);
+  const existing = document.querySelector("#market-ai-detail-modal");
+  if (existing) existing.remove();
+  const overlay = document.createElement("div");
+  overlay.id = "market-ai-detail-modal";
+  overlay.className = "market-ai-detail-overlay";
+  overlay.innerHTML = `
+    <section class="market-ai-detail-dialog" role="dialog" aria-modal="true" aria-label="${escapeAttr(detail.title)}">
+      <header class="market-ai-detail-head">
+        <small>${escapeAttr(detail.kicker)}</small>
+        <h2>${escapeAttr(detail.title)}</h2>
+        <p>${escapeAttr(detail.subtitle)}</p>
+        <button type="button" class="market-ai-detail-close" data-market-ai-detail-close aria-label="關閉">×</button>
+      </header>
+      <div class="market-ai-detail-body">
+        ${detail.cards.map(marketAiDetailCard).join("")}
+      </div>
+    </section>
+  `;
+  const closeModal = () => {
+    overlay.remove();
+    document.removeEventListener("keydown", closeOnEscape);
+  };
+  const closeOnEscape = (event) => {
+    if (event.key === "Escape") closeModal();
+  };
+  overlay.addEventListener("click", (event) => {
+    if (event.target === overlay || event.target.closest("[data-market-ai-detail-close]")) closeModal();
+  });
+  document.addEventListener("keydown", closeOnEscape);
+  document.body.appendChild(overlay);
 }
 
 function renderMarketAiPanel() {
@@ -10176,7 +10477,7 @@ function renderMarketAiPanel() {
     </section>
     <section class="market-ai-advice">
       ${operate.map((item, index) => `
-        <article class="market-ai-card">
+        <article class="market-ai-card" data-ai-advice="${index === 0 ? "entry" : index === 1 ? "sector" : "risk"}" role="button" tabindex="0" title="查看判讀細節">
           <small>${index === 0 ? "進場紀律" : index === 1 ? "族群聚焦" : "風險排除"}</small>
           <strong>${item}</strong>
           <p>${index === 0 ? `目前主流族群：${strongNames}。` : index === 1 ? "依綜合分數與成交量排序，適合快速掌握今日熱門觀察股。" : "漲幅過熱或弱勢族群，不納入第一優先。"}</p>
@@ -11212,6 +11513,11 @@ document.addEventListener("click", (event) => {
     applyMarketMode(modeButton.dataset.marketMode);
     return;
   }
+  const adviceCard = event.target.closest("[data-ai-advice]");
+  if (adviceCard) {
+    openMarketAiAdviceModal(adviceCard.dataset.aiAdvice || "entry");
+    return;
+  }
   const hotFilterButton = event.target.closest("[data-ai-hot-filter]");
   if (hotFilterButton) {
     marketAiHotFilter = hotFilterButton.dataset.aiHotFilter || "all";
@@ -11237,6 +11543,13 @@ document.addEventListener("click", (event) => {
     saveWatchlist(list);
   }
   watchButton.textContent = "已加入";
+});
+document.addEventListener("keydown", (event) => {
+  if (event.key !== "Enter" && event.key !== " ") return;
+  const adviceCard = event.target.closest?.("[data-ai-advice]");
+  if (!adviceCard) return;
+  event.preventDefault();
+  openMarketAiAdviceModal(adviceCard.dataset.aiAdvice || "entry");
 });
 viewLinks.forEach((link)=>{
   link.addEventListener("click",(e)=>{
@@ -11267,11 +11580,6 @@ document.querySelectorAll("[data-chip-filter]").forEach((button) => {
 setInterval(tickClock, 60 * 1000);
 setInterval(() => {
   if (!isDocumentHidden() && isViewActive("market")) loadMarketData();
-}, MARKET_POLL_TICK_MS);
-setInterval(() => {
-  if (isDocumentHidden() || !isViewActive("market") || marketMode !== "ai") return;
-  marketAiLastSignature = "";
-  loadMarketData(true);
 }, MARKET_POLL_TICK_MS);
 setInterval(() => {
   if (!isDocumentHidden() && isTerminalUnlocked() && isViewActive("strategy") && selectedStrategyIds.has("intraday_2m") && isIntradayScanWindow()) refreshStrategyRealtimeScan("hot");
