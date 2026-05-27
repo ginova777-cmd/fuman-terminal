@@ -6027,9 +6027,9 @@ function getIntradayState(stock) {
     return { id: "go", label: "可進場", cls: "go" };
   }
   if (tradableLiquidity && hasSignal && pct >= 0.5 && hasStrongSignal) {
-    return { id: "watch", label: "觀察", cls: "watch" };
+    return { id: "watch", label: "待確認", cls: "watch" };
   }
-  return { id: "watch", label: "觀察", cls: "watch" };
+  return { id: "watch", label: "待確認", cls: "watch" };
 }
 
 function intradaySortHeader(key, label) {
@@ -8272,7 +8272,7 @@ function renderIntradayRadar(evaluated) {
   const tabs = [
     ["all", "全部", tradableRows.length],
     ["go", "A進場", stateCounts.go],
-    ["watch", "B觀察", stateCounts.watch],
+    ["watch", "B待確認", stateCounts.watch],
     ...INTRADAY_SIGNAL_DEFS.map((signal) => [signal.id, signal.title, signalCounts[signal.id] || 0]),
   ].map(([id, label, count]) => `<button class="${intradaySignalFilter === id ? "active" : ""}" type="button" data-intraday-filter="${id}">${label}(${count})</button>`).join("");
 
@@ -8305,7 +8305,7 @@ function renderIntradayRadar(evaluated) {
         <div class="intraday-picks">${renderZonePicks(zoneRows.go, "go")}</div>
       </article>
       <article class="intraday-zone watch">
-        <header><div><h3>B區 觀察區</h3><small>有右側訊號，持續觀察量價延續</small></div><strong>${stateCounts.watch}</strong></header>
+        <header><div><h3>B區 待確認</h3><small>有右側訊號，等待站穩或再放量</small></div><strong>${stateCounts.watch}</strong></header>
         <div class="intraday-picks">${renderZonePicks(zoneRows.watch, "watch")}</div>
       </article>
     </section>

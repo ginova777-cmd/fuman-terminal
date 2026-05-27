@@ -281,10 +281,10 @@ function inferLegacyRecordState(record) {
     };
   }
   return {
-    stateId: "watch",
-    stateLabel: "C區 觀察",
-    stateReason: "量能或型態尚未完全到位。",
-    score: cleanNumber(record.score) || Math.min(70, Math.round(Math.max(pct, 0) * 8 + 28)),
+    stateId: "wait",
+    stateLabel: "B區 待確認",
+    stateReason: "已有訊號，但仍需等站穩或再放量。",
+    score: cleanNumber(record.score) || Math.min(88, Math.round(Math.max(pct, 0) * 8 + 42)),
   };
 }
 
