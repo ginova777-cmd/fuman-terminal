@@ -8359,18 +8359,19 @@ function renderSwingRadar(universe) {
   const totalCount = strategy4ScanTotal || latestStocks.filter((stock) => !/^00/.test(stock.code)).length || latestStocks.length;
   if (!strategy4ScanLastAt && !strategy4CacheLoading) loadStrategy4Cache();
   const keyword = strategyKeyword.trim().toLowerCase();
+  const visibleKeyword = swingVisibleKeyword.trim().toLowerCase();
   const numericKeyword = isNumericStrategyKeyword(keyword);
-  const allowCodes = new Set(universe.map((stock) => String(stock.code || "")));
   const latestByCode = new Map(latestStocks.map((stock) => [String(stock.code || ""), stock]));
   const sourceRows = numericKeyword
     ? Object.values(strategy4ScanMatches).filter((stock) => String(stock.code || "").includes(keyword))
     : Object.values(strategy4ScanMatches);
   const allRows = sourceRows
     .map((stock) => mergeLatestStrategyPrice(stock, latestByCode.get(String(stock.code || ""))))
-    .filter((stock) => allowCodes.has(String(stock.code || "")) && (stock.swingSignals || []).length)
+    .filter((stock) => (stock.swingSignals || []).length)
     .filter((stock) => matchesStrategyKeyword(stock, keyword))
+    .filter((stock) => !visibleKeyword || `${stock.code || ""} ${stock.name || ""}`.toLowerCase().includes(visibleKeyword))
     .map((stock) => ({ ...stock, swingScore: stock.swingScore || stock.score || 0 }));
-  const filteredRows = keyword || swingSignalFilter === "all"
+  const filteredRows = swingSignalFilter === "all"
     ? allRows
     : allRows.filter((stock) => (stock.swingSignals || []).some((signal) => signal.id === swingSignalFilter));
   const rows = sortSwingRows(filteredRows);
@@ -8509,7 +8510,8 @@ function getSwingVisibleSearchInput() {
   input.dataset.swingVisibleSearch = "";
   input.addEventListener("input", () => {
     swingVisibleKeyword = input.value || "";
-    applySwingFilterToVisibleRows();
+    swingPage = 1;
+    renderStrategyScanner();
   });
   input.addEventListener("click", (event) => event.stopPropagation());
   input.addEventListener("keydown", (event) => event.stopPropagation());
@@ -12200,7 +12202,7 @@ document.addEventListener("click", (event) => {
   if (!filterButton) return;
   swingSignalFilter = filterButton.dataset.swingFilter || "all";
   swingPage = 1;
-  if (!applySwingFilterToVisibleRows()) renderStrategyScanner();
+  renderStrategyScanner();
 });
 
 
