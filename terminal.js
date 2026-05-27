@@ -149,6 +149,44 @@ function installThemeToggle() {
       body.fuman-light-theme .intraday-zone.watch {
         background: #f8fbff !important;
       }
+
+      body.fuman-light-theme .intraday-zone.go {
+        background: linear-gradient(135deg, #fff1f2 0%, #fff7ed 58%, #ffffff 100%) !important;
+        border-color: rgba(244, 63, 94, 0.38) !important;
+        box-shadow: 0 16px 34px rgba(244, 63, 94, 0.12) !important;
+      }
+      body.fuman-light-theme .intraday-zone.go header {
+        background: linear-gradient(90deg, rgba(244, 63, 94, 0.14), rgba(249, 115, 22, 0.08)) !important;
+        border-bottom-color: rgba(244, 63, 94, 0.16) !important;
+      }
+      body.fuman-light-theme .intraday-zone.go h3,
+      body.fuman-light-theme .intraday-zone.go strong {
+        color: #9f1239 !important;
+      }
+      body.fuman-light-theme .intraday-zone.go small {
+        color: #be123c !important;
+      }
+      body.fuman-light-theme .intraday-zone.watch {
+        background: linear-gradient(135deg, #eff6ff 0%, #eef2ff 58%, #ffffff 100%) !important;
+        border-color: rgba(59, 130, 246, 0.36) !important;
+        box-shadow: 0 16px 34px rgba(59, 130, 246, 0.12) !important;
+      }
+      body.fuman-light-theme .intraday-zone.watch header {
+        background: linear-gradient(90deg, rgba(59, 130, 246, 0.13), rgba(99, 102, 241, 0.08)) !important;
+        border-bottom-color: rgba(59, 130, 246, 0.16) !important;
+      }
+      body.fuman-light-theme .intraday-zone.watch h3,
+      body.fuman-light-theme .intraday-zone.watch strong {
+        color: #1d4ed8 !important;
+      }
+      body.fuman-light-theme .intraday-zone.watch small {
+        color: #2563eb !important;
+      }
+      body.fuman-light-theme .intraday-zone.go .intraday-pick,
+      body.fuman-light-theme .intraday-zone.watch .intraday-pick {
+        background: rgba(255, 255, 255, 0.72) !important;
+        border: 1px solid rgba(148, 163, 184, 0.18) !important;
+      }
       body.fuman-light-theme .strategy-nav,
       body.fuman-light-theme [data-view],
       body.fuman-light-theme .nav-list a,
@@ -6888,16 +6926,24 @@ intradayRadarStyles.textContent = `
     font-size: 22px;
   }
   .intraday-zone.go {
-    border-color: rgba(48, 214, 142, 0.38);
-    background: linear-gradient(135deg, rgba(21, 83, 64, 0.46), rgba(8, 14, 25, 0.72));
+    border-color: rgba(255, 92, 92, 0.58);
+    background: linear-gradient(135deg, rgba(92, 24, 36, 0.58), rgba(40, 16, 24, 0.84));
+    box-shadow: inset 0 0 0 1px rgba(255, 126, 87, 0.08);
+  }
+  .intraday-zone.go header {
+    background: linear-gradient(90deg, rgba(255, 87, 87, 0.15), rgba(255, 145, 77, 0.06));
   }
   .intraday-zone.wait {
     border-color: rgba(245, 166, 35, 0.36);
     background: linear-gradient(135deg, rgba(82, 55, 18, 0.42), rgba(8, 14, 25, 0.72));
   }
   .intraday-zone.watch {
-    border-color: rgba(117, 151, 255, 0.3);
-    background: linear-gradient(135deg, rgba(34, 48, 86, 0.42), rgba(8, 14, 25, 0.72));
+    border-color: rgba(121, 157, 255, 0.5);
+    background: linear-gradient(135deg, rgba(33, 54, 112, 0.56), rgba(15, 21, 44, 0.84));
+    box-shadow: inset 0 0 0 1px rgba(121, 157, 255, 0.08);
+  }
+  .intraday-zone.watch header {
+    background: linear-gradient(90deg, rgba(92, 130, 255, 0.15), rgba(114, 92, 255, 0.06));
   }
   .intraday-picks {
     display: grid;
