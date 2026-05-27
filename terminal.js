@@ -3922,6 +3922,7 @@ let strategyStocksLoading = false;
 let swingSortKey = "score";
 let swingSortDir = "desc";
 let swingSignalFilter = "all";
+let swingZoneFilter = "all";
 let swingVisibleKeyword = "";
 let swingVisibleSearchInput = null;
 let intradaySortKey = "time";
@@ -6431,6 +6432,12 @@ intradayRadarStyles.textContent = `
     padding: 12px;
     display: grid;
     gap: 5px;
+    text-align: left;
+    cursor: pointer;
+  }
+  .swing-zone-card.active {
+    box-shadow: inset 0 0 0 1px rgba(143, 177, 255, 0.32), 0 0 18px rgba(143, 177, 255, 0.12);
+    filter: brightness(1.08);
   }
   .swing-zone-card span {
     color: #eaf2ff;
@@ -8536,15 +8543,18 @@ function renderSwingRadar(universe) {
     .filter((stock) => matchesStrategyKeyword(stock, keyword))
     .filter((stock) => !visibleKeyword || `${stock.code || ""} ${stock.name || ""}`.toLowerCase().includes(visibleKeyword))
     .map((stock) => ({ ...stock, swingScore: stock.swingScore || stock.score || 0 }));
-  const filteredRows = swingSignalFilter === "all"
-    ? allRows
-    : allRows.filter((stock) => (stock.swingSignals || []).some((signal) => signal.id === swingSignalFilter));
-  const rows = sortSwingRows(filteredRows);
   const zoneRows = {
     A: sortSwingRows(allRows.filter((stock) => (stock.swingZone || "A") === "A")),
     B: sortSwingRows(allRows.filter((stock) => stock.swingZone === "B")),
     C: sortSwingRows(allRows.filter((stock) => stock.swingZone === "C")),
   };
+  const zoneFilteredRows = swingZoneFilter === "all"
+    ? allRows
+    : allRows.filter((stock) => (stock.swingZone || "A") === swingZoneFilter);
+  const filteredRows = swingSignalFilter === "all"
+    ? zoneFilteredRows
+    : zoneFilteredRows.filter((stock) => (stock.swingSignals || []).some((signal) => signal.id === swingSignalFilter));
+  const rows = sortSwingRows(filteredRows);
   const swingPaged = paginateTerminalRows(rows, swingPage);
   swingPage = swingPaged.page;
   const pageRows = swingPaged.rows;
@@ -8632,21 +8642,27 @@ function renderSwingRadar(universe) {
       </div>
       <table class="swing-table swing-zone-table">
         ${swingTableHead}
-        <tbody>${items.length ? renderSwingRows(items.slice(0, 18)) : `<tr><td colspan="9">目前沒有符合 ${title} 的股票。</td></tr>`}</tbody>
+        <tbody>${items.length ? renderSwingRows(items) : `<tr><td colspan="9">目前沒有符合 ${title} 的股票。</td></tr>`}</tbody>
       </table>
     </section>
   `;
-  const showZoneLayout = swingSignalFilter === "all" && !visibleKeyword && !numericKeyword;
+  const zoneMeta = {
+    all: ["全部區域", "A/B/C 合併列表", allRows.length],
+    A: ["A區可進場", "正式波段買點", zoneRows.A.length],
+    B: ["B區觀察", "趨勢轉強，等待突破", zoneRows.B.length],
+    C: ["C區準備", "低/中位階整理，提前蹲點", zoneRows.C.length],
+  };
+  const [activeZoneTitle, activeZoneSubtitle, activeZoneCount] = zoneMeta[swingZoneFilter] || zoneMeta.all;
+  const showZoneLayout = !visibleKeyword && !numericKeyword;
   const zoneSections = showZoneLayout ? `
     <div class="swing-zone-summary">
-      <div class="swing-zone-card zone-a"><span>A區可進場</span><strong>${zoneRows.A.length}</strong><small>正式波段買點</small></div>
-      <div class="swing-zone-card zone-b"><span>B區觀察</span><strong>${zoneRows.B.length}</strong><small>趨勢轉強等待買點</small></div>
-      <div class="swing-zone-card zone-c"><span>C區準備</span><strong>${zoneRows.C.length}</strong><small>低中位階整理</small></div>
+      <button type="button" class="swing-zone-card zone-a ${swingZoneFilter === "A" ? "active" : ""}" data-swing-zone-filter="A"><span>A區可進場</span><strong>${zoneRows.A.length}</strong><small>正式波段買點</small></button>
+      <button type="button" class="swing-zone-card zone-b ${swingZoneFilter === "B" ? "active" : ""}" data-swing-zone-filter="B"><span>B區觀察</span><strong>${zoneRows.B.length}</strong><small>趨勢轉強等待買點</small></button>
+      <button type="button" class="swing-zone-card zone-c ${swingZoneFilter === "C" ? "active" : ""}" data-swing-zone-filter="C"><span>C區準備</span><strong>${zoneRows.C.length}</strong><small>低中位階整理</small></button>
     </div>
     <div class="swing-zone-stack">
-      ${renderZoneSection("A", "A區可進場", "正式波段買點", zoneRows.A)}
-      ${renderZoneSection("B", "B區觀察", "趨勢轉強，等待突破", zoneRows.B)}
-      ${renderZoneSection("C", "C區準備", "低/中位階整理，提前蹲點", zoneRows.C)}
+      ${renderZoneSection(swingZoneFilter === "all" ? "A" : swingZoneFilter, activeZoneTitle, activeZoneSubtitle, pageRows)}
+      ${pagination}
     </div>
   ` : "";
   const pagination = buildTerminalPagination("swing", swingPage, swingPaged.totalPages, rows.length);
@@ -8693,6 +8709,9 @@ function applySwingFilterToVisibleRows() {
     const active = (button.dataset.swingFilter || "all") === swingSignalFilter;
     button.classList.toggle("active", active);
     button.classList.toggle("selected", active);
+  });
+  panel.querySelectorAll("[data-swing-zone-filter]").forEach((button) => {
+    button.classList.toggle("active", (button.dataset.swingZoneFilter || "all") === swingZoneFilter);
   });
   panel.querySelectorAll("[data-swing-row]").forEach((row) => {
     const signals = String(row.dataset.swingSignals || "").split(/\s+/);
@@ -12414,9 +12433,17 @@ document.addEventListener("click", (event) => {
 });
 
 document.addEventListener("click", (event) => {
+  const zoneButton = event.target.closest("[data-swing-zone-filter]");
+  if (zoneButton) {
+    swingZoneFilter = zoneButton.dataset.swingZoneFilter || "all";
+    swingPage = 1;
+    renderStrategyScanner();
+    return;
+  }
   const filterButton = event.target.closest("[data-swing-filter]");
   if (!filterButton) return;
   swingSignalFilter = filterButton.dataset.swingFilter || "all";
+  if (swingSignalFilter === "all") swingZoneFilter = "all";
   swingPage = 1;
   renderStrategyScanner();
 });
