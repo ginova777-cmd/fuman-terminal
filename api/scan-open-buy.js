@@ -2,6 +2,7 @@ const cache = new Map();
 const CACHE_MS = 30 * 60 * 1000;
 let tpexDailyCache = null;
 const { fetchMisQuotes, mergeMisQuoteIntoHistory } = require("../lib/mis-quotes");
+const USE_MIS_QUOTES = process.env.OPEN_BUY_USE_MIS === "1";
 
 async function fetchText(url, options = {}, timeout = 12000) {
   const controller = new AbortController();
@@ -397,7 +398,7 @@ module.exports = async function handler(request, response) {
     return;
   }
 
-  const quoteMap = await fetchMisQuotes(codes);
+  const quoteMap = USE_MIS_QUOTES ? await fetchMisQuotes(codes) : new Map();
   const results = await Promise.allSettled(codes.map(async (code) => {
     const history = mergeMisQuoteIntoHistory(await mergeTpexDailyQuote(code, await fetchHistory(code)), quoteMap.get(code));
     if (!history.rows.length) return null;
@@ -428,5 +429,8 @@ module.exports = async function handler(request, response) {
       .filter(Boolean),
   });
 };
+
+
+
 
 

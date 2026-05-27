@@ -3,14 +3,15 @@ const path = require("path");
 const scanOpenBuy = require("../api/scan-open-buy");
 const { fetchMisQuotes } = require("../lib/mis-quotes");
 
-const ROOT = path.resolve(__dirname, "..");
-const OUT_FILE = path.join(ROOT, "data", "open-buy-latest.json");
-const BACKUP_FILE = path.join(ROOT, "data", "open-buy-backup.json");
-const SCORECARD_SOURCE_FILE = path.join(ROOT, "data", "open-buy-scorecard-source.json");
+const { ROOT, dataPath } = require("./runtime-paths");
+const OUT_FILE = dataPath("open-buy-latest.json");
+const BACKUP_FILE = dataPath("open-buy-backup.json");
+const SCORECARD_SOURCE_FILE = dataPath("open-buy-scorecard-source.json");
 const BATCH_SIZE = Number(process.env.OPEN_BUY_BATCH_SIZE || 48);
 const BATCHES_PER_RUN = Number(process.env.OPEN_BUY_BATCHES_PER_RUN || 5);
 const FULL_SCAN = process.env.FULL_SCAN === "1";
 const STOCK_URL = process.env.STOCK_UNIVERSE_URL || "https://fuman-terminal.vercel.app/api/stocks";
+const USE_MIS_QUOTES = process.env.OPEN_BUY_USE_MIS === "1";
 
 function readJson(file, fallback) {
   try { return JSON.parse(fs.readFileSync(file, "utf8")); } catch { return fallback; }
@@ -94,6 +95,7 @@ async function fetchUniverse() {
   const payload = await fetchJson(STOCK_URL);
   const rows = Array.isArray(payload) ? payload : (payload.stocks || []);
   const base = rows.map(normalizeStock).filter(Boolean);
+  if (!USE_MIS_QUOTES) return base;
   const quotes = await fetchMisQuotes(base.map((stock) => stock.code));
   return base.map((stock) => {
     const quote = quotes.get(stock.code);
@@ -181,7 +183,7 @@ async function main() {
   const matches = [...previousMatches.values()]
     .sort((a, b) => (b.score || 0) - (a.score || 0) || (b.percent || 0) - (a.percent || 0))
     .slice(0, 200);
-  const quoteDate = universe.find((stock) => stock.quoteDate)?.quoteDate || "";
+  const quoteDate = universe.find((stock) => stock.quoteDate)?.quoteDate || String(matches[0]?.date || "").replace(/\D/g, "");
   const output = {
     ok: true,
     source: "github-actions",
@@ -208,3 +210,6 @@ main().catch((error) => {
   console.error(error);
   process.exit(1);
 });
+
+
+
