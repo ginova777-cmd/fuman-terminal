@@ -6452,6 +6452,9 @@ intradayRadarStyles.textContent = `
     color: #8f9bb4;
     font-size: 12px;
   }
+  .swing-zone-card.zone-all {
+    border-color: rgba(143, 177, 255, 0.42);
+  }
   .swing-zone-card.zone-a,
   .swing-zone-panel.zone-a {
     border-color: rgba(255, 80, 80, 0.5);
@@ -8361,7 +8364,7 @@ function renderIntradayRadar(evaluated) {
   if (strategySummary) strategySummary.textContent = scanClosed
     ? `偵測時間 09:00-13:30｜收盤後停止偵測｜最後更新 ${scanTime}${scanStatus}`
     : `3秒即時巡邏｜熱門池快掃｜背景分批補全市場｜最後更新 ${scanTime}${scanStatus}`;
-  if (strategyMatchCount) strategyMatchCount.textContent = rows.length.toLocaleString("zh-TW");
+  if (strategyMatchCount) strategyMatchCount.textContent = allRows.length.toLocaleString("zh-TW");
   if (strategyAvgScore) strategyAvgScore.textContent = stateCounts.go.toLocaleString("zh-TW");
   if (strategyTopHit) strategyTopHit.textContent = rows.length ? `${Math.max(...rows.map((stock) => stock.intradaySignals.length))}/6` : "0/6";
 
@@ -8621,6 +8624,12 @@ function renderSwingRadar(universe) {
       </tr>
     `;
   }).join("");
+  const zoneCards = `
+    <div class="swing-zone-card zone-all ${swingZoneFilter === "all" ? "active" : ""}" data-swing-zone-filter="all"><span>總命中</span><strong>${allRows.length}</strong><small>A/B/C全部</small></div>
+    <div class="swing-zone-card zone-a ${swingZoneFilter === "A" ? "active" : ""}" data-swing-zone-filter="A"><span>A區可進場</span><strong>${zoneRows.A.length}</strong><small>正式波段買點</small></div>
+    <div class="swing-zone-card zone-b ${swingZoneFilter === "B" ? "active" : ""}" data-swing-zone-filter="B"><span>B區觀察</span><strong>${zoneRows.B.length}</strong><small>趨勢轉強等待買點</small></div>
+    <div class="swing-zone-card zone-c ${swingZoneFilter === "C" ? "active" : ""}" data-swing-zone-filter="C"><span>C區準備</span><strong>${zoneRows.C.length}</strong><small>低中位階整理</small></div>
+  `;
   const tableRows = pageRows.length ? renderSwingRows(pageRows) : `
     <tr><td colspan="9">後端策略4掃描 API 已啟動。正在分批抓日K並計算符合股票；命中後會自動顯示在這裡。</td></tr>
   `;
@@ -8657,9 +8666,7 @@ function renderSwingRadar(universe) {
   const pagination = buildTerminalPagination("swing", swingPage, swingPaged.totalPages, rows.length);
   const zoneSections = showZoneLayout ? `
     <div class="swing-zone-summary">
-      <button type="button" class="swing-zone-card zone-a ${swingZoneFilter === "A" ? "active" : ""}" data-swing-zone-filter="A"><span>A區可進場</span><strong>${zoneRows.A.length}</strong><small>正式波段買點</small></button>
-      <button type="button" class="swing-zone-card zone-b ${swingZoneFilter === "B" ? "active" : ""}" data-swing-zone-filter="B"><span>B區觀察</span><strong>${zoneRows.B.length}</strong><small>趨勢轉強等待買點</small></button>
-      <button type="button" class="swing-zone-card zone-c ${swingZoneFilter === "C" ? "active" : ""}" data-swing-zone-filter="C"><span>C區準備</span><strong>${zoneRows.C.length}</strong><small>低中位階整理</small></button>
+      ${zoneCards}
     </div>
     <div class="swing-zone-stack">
       ${renderZoneSection(swingZoneFilter === "all" ? "A" : swingZoneFilter, activeZoneTitle, activeZoneSubtitle, pageRows)}
@@ -8682,6 +8689,7 @@ function renderSwingRadar(universe) {
           <label>市場：<select><option>全市場</option></select></label>
         </div>
       </div>
+      <div class="swing-zone-summary swing-zone-summary-main">${zoneCards}</div>
       <div class="swing-signal-grid">${cards}</div>
       <section class="swing-panel">
         <div class="swing-tabs">
@@ -9811,7 +9819,11 @@ function applyMarketMode(mode = "overview") {
   });
   if (marketAiPanel) {
     marketAiPanel.hidden = marketMode !== "ai";
-    if (marketMode === "ai") renderMarketAiPanel();
+    if (marketMode === "ai") {
+      marketAiLastSignature = "";
+      renderMarketAiPanel();
+      deferUiWork(() => loadMarketData(true), 100);
+    }
   }
   const title = panel.querySelector(".page-header h1");
   if (title) {
@@ -10052,6 +10064,17 @@ function getMarketAiFilterMeta(groups) {
   ];
 }
 
+function isMarketAiLongCandidate(stock, options = {}) {
+  const pct = cleanNumber(stock.percent);
+  const change = cleanNumber(stock.change);
+  const close = cleanNumber(stock.close);
+  const value = cleanNumber(stock.value);
+  if (!close || !value) return false;
+  if (pct <= 0 || change < 0) return false;
+  if (options.priority && pct < 1) return false;
+  return true;
+}
+
 function buildMarketAiData() {
   const stocks = latestStocks.length ? latestStocks : [];
   const sample = stocks.length;
@@ -10064,7 +10087,7 @@ function buildMarketAiData() {
   const strongSectors = [...sectors].sort((a, b) => b.pct - a.pct).slice(0, 4);
   const weakSectors = [...sectors].sort((a, b) => a.pct - b.pct).slice(0, 4);
   const classifiedStocks = stocks
-    .filter((stock) => cleanNumber(stock.percent) > 0 && cleanNumber(stock.value) > 0)
+    .filter((stock) => isMarketAiLongCandidate(stock))
     .map((stock) => classifyMarketAiStock(stock, sectors));
   const hotStocks = classifiedStocks
     .sort((a, b) => b.score - a.score || cleanNumber(b.percent) - cleanNumber(a.percent) || cleanNumber(b.value) - cleanNumber(a.value))
@@ -10072,7 +10095,7 @@ function buildMarketAiData() {
   const hotGroups = getMarketAiHotGroups(hotStocks);
   hotGroups.intraday = sortMarketAiIntradayStocks(classifiedStocks.filter((stock) => stock.buckets.intraday)).slice(0, 40);
   if (!hotGroups[marketAiHotFilter]) marketAiHotFilter = "all";
-  const visibleHotStocks = hotGroups[marketAiHotFilter].slice(0, 10);
+  const visibleHotStocks = hotGroups[marketAiHotFilter].filter((stock) => isMarketAiLongCandidate(stock)).slice(0, 10);
   const riskStocks = stocks
     .filter((stock) => cleanNumber(stock.percent) <= -3 || cleanNumber(stock.percent) >= 8.5)
     .sort((a, b) => Math.abs(cleanNumber(b.percent)) - Math.abs(cleanNumber(a.percent)))
@@ -10080,6 +10103,15 @@ function buildMarketAiData() {
   const bias = upRatio >= 55 ? "多方偏強" : upRatio <= 45 ? "空方壓制" : "震盪分歧";
   const confidence = sample >= 1000 ? (Math.min(92, 58 + Math.abs(upRatio - 50) * 1.4)).toFixed(0) : "中";
   return { stocks, sample, upRows, downRows, flatRows, upRatio, totalValue, sectors, strongSectors, weakSectors, hotStocks, hotGroups, visibleHotStocks, riskStocks, bias, confidence };
+}
+
+function marketAiUpdatedLabel() {
+  const at = marketDataLastStartedAt || marketDataLastRenderedAt || Date.now();
+  const date = new Date(at);
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  const time = date.toLocaleTimeString("zh-TW", { hour12: false, hour: "2-digit", minute: "2-digit", second: "2-digit" });
+  return `${month}/${day} 即時巡邏 · 更新 ${time}`;
 }
 
 function renderMarketAiPanel() {
@@ -10095,7 +10127,7 @@ function renderMarketAiPanel() {
     return;
   }
   if (!Object.keys(institutionData).length) deferUiWork(ensureMarketAiInstitutionData, 100);
-  const priorityStocks = sortMarketAiPriorityStocks(data.hotStocks.filter((stock) => cleanNumber(stock.percent) >= 1));
+  const priorityStocks = sortMarketAiPriorityStocks(data.hotStocks.filter((stock) => isMarketAiLongCandidate(stock, { priority: true })));
   const topHot = priorityStocks[0] || data.hotStocks[0];
   const filterMeta = getMarketAiFilterMeta(data.hotGroups);
   const activeFilterLabel = filterMeta.find((item) => item.key === marketAiHotFilter)?.label || "全部";
@@ -10154,7 +10186,7 @@ function renderMarketAiPanel() {
     <section class="market-ai-main">
       <article class="market-ai-block">
         <h3>AI 今日重點</h3>
-        <small>05/26 最新資料</small>
+        <small>${marketAiUpdatedLabel()}</small>
         <div class="market-ai-list">
           ${[
             `市場廣度目前上漲家數占 ${data.upRatio.toFixed(1)}%，${data.bias === "空方壓制" ? "盤面偏弱，先看風險。" : "可追蹤強勢族群是否擴散。"}`,
@@ -11235,6 +11267,11 @@ document.querySelectorAll("[data-chip-filter]").forEach((button) => {
 setInterval(tickClock, 60 * 1000);
 setInterval(() => {
   if (!isDocumentHidden() && isViewActive("market")) loadMarketData();
+}, MARKET_POLL_TICK_MS);
+setInterval(() => {
+  if (isDocumentHidden() || !isViewActive("market") || marketMode !== "ai") return;
+  marketAiLastSignature = "";
+  loadMarketData(true);
 }, MARKET_POLL_TICK_MS);
 setInterval(() => {
   if (!isDocumentHidden() && isTerminalUnlocked() && isViewActive("strategy") && selectedStrategyIds.has("intraday_2m") && isIntradayScanWindow()) refreshStrategyRealtimeScan("hot");
