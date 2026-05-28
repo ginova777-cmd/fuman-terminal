@@ -285,7 +285,7 @@ function tradeManagerRows(dateText) {
   for (const item of closed) {
     const result = tradeManagerResult(item);
     rows.push([
-      item.exitAction === "takeProfit" ? "停利" : item.exitAction === "stopLoss" ? "停損" : "已出場",
+      item.exitAction === "takeProfit" ? "停利" : item.exitAction === "stopLoss" ? "停損" : item.exitAction === "dayClose" ? "當沖出場" : "已出場",
       item.code || "",
       item.name || "",
       item.strategy || "",
@@ -679,8 +679,9 @@ async function strategy5Rows(payloadInfo, dateText) {
   const plans = matches.map((item) => {
     const code = String(item.code || "");
     return { item, plan: strategy5TradePlan(item, tracker.trades?.[`strategy5:${code}`], tradeDateRaw, intradayMap.get(code)) };
-  });
+  }).sort((a, b) => Number(b.item?.percent || 0) - Number(a.item?.percent || 0) || String(a.item?.code || "").localeCompare(String(b.item?.code || "")));
   const sourceDate = formatYmd(payload.usedDate || matches[0]?.quoteDate || matches[0]?.date || "");
+  const updatedLabel = formatYmd(payload.updatedAt || payload.usedDate || dateText) || payload.updatedAt || "";
   const recordPayload = {
     source: "strategy5-scorecard",
     sourceFile: payloadInfo.file,
@@ -714,13 +715,14 @@ async function strategy5Rows(payloadInfo, dateText) {
   }, 0);
   const rows = [
     ["策略5成績單"],
-    ["資料日期", payload.usedDate || dateText, "更新時間", payload.updatedAt || "", "來源", payloadInfo.file, "", ""],
-    ["今日損益", totalPnl, "", "", "", "", "", ""],
-    ["股票代碼", "股票名稱", "進場時間", "進場價格", "出場時間", "出場價格", "漲幅(%)", "損益", "判斷原因"],
+    ["資料日期", payload.usedDate || dateText, "更新時間", updatedLabel, "來源", payloadInfo.file, "", "", "", ""],
+    ["今日損益", totalPnl, "", "", "", "", "", "", "", ""],
+    ["排序", "股票代碼", "股票名稱", "進場時間", "進場價格", "出場時間", "出場價格", "漲幅(%)", "損益", "判斷原因"],
   ];
-  for (const row of plans) {
+  plans.forEach((row, index) => {
     const { item, plan } = row;
     rows.push([
+      index + 1,
       item.code || "",
       item.name || "",
       plan.entryTime,
@@ -731,8 +733,8 @@ async function strategy5Rows(payloadInfo, dateText) {
       plan.pnl,
       plan.reason,
     ]);
-  }
-  if (!matches.length) rows.push(["目前沒有符合資料", "", "", "", "", "", "", "", ""]);
+  });
+  if (!matches.length) rows.push(["目前沒有符合資料", "", "", "", "", "", "", "", "", ""]);
   return rows;
 }
 
@@ -895,7 +897,7 @@ async function formatWorkbook(token, spreadsheet, titles) {
   for (const title of titles) {
     const sheetId = sheetIdByTitle(spreadsheet, title);
     if (sheetId == null) continue;
-    requests.push({ updateSheetProperties: { properties: { sheetId, gridProperties: { frozenRowCount: title === "歷史與區間損益" ? 4 : 1 } }, fields: "gridProperties.frozenRowCount" } });
+    requests.push({ updateSheetProperties: { properties: { sheetId, gridProperties: { frozenRowCount: title === "歷史與區間損益" || title === "策略5成績單" ? 4 : 1 } }, fields: "gridProperties.frozenRowCount" } });
     requests.push({ autoResizeDimensions: { dimensions: { sheetId, dimension: "COLUMNS", startIndex: 0, endIndex: 16 } } });
     if (title === "策略2成績單") {
       requests.push({ repeatCell: { range: { sheetId, startRowIndex: 0, endColumnIndex: 16 }, cell: { userEnteredFormat: { numberFormat: { type: "TEXT", pattern: "@" } } }, fields: "userEnteredFormat.numberFormat" } });
@@ -903,12 +905,17 @@ async function formatWorkbook(token, spreadsheet, titles) {
     if (title === "策略1成績單") {
       requests.push({ repeatCell: { range: { sheetId, startRowIndex: 1, startColumnIndex: 4, endColumnIndex: 7 }, cell: { userEnteredFormat: { horizontalAlignment: "LEFT" } }, fields: "userEnteredFormat.horizontalAlignment" } });
     }
+    if (title === "策略5成績單") {
+      requests.push({ updateDimensionProperties: { range: { sheetId, dimension: "COLUMNS", startIndex: 0, endIndex: 1 }, properties: { pixelSize: 58 }, fields: "pixelSize" } });
+      requests.push({ updateDimensionProperties: { range: { sheetId, dimension: "COLUMNS", startIndex: 1, endIndex: 3 }, properties: { pixelSize: 78 }, fields: "pixelSize" } });
+      requests.push({ updateDimensionProperties: { range: { sheetId, dimension: "COLUMNS", startIndex: 3, endIndex: 9 }, properties: { pixelSize: 88 }, fields: "pixelSize" } });
+      requests.push({ updateDimensionProperties: { range: { sheetId, dimension: "COLUMNS", startIndex: 9, endIndex: 10 }, properties: { pixelSize: 430 }, fields: "pixelSize" } });
+      requests.push({ repeatCell: { range: { sheetId, startRowIndex: 0, endRowIndex: 1, startColumnIndex: 0, endColumnIndex: 10 }, cell: { userEnteredFormat: { backgroundColor: { red: 0.93, green: 0.96, blue: 1 }, textFormat: { bold: true } } }, fields: "userEnteredFormat(backgroundColor,textFormat)" } });
+      requests.push({ repeatCell: { range: { sheetId, startRowIndex: 3, endRowIndex: 4, startColumnIndex: 0, endColumnIndex: 10 }, cell: { userEnteredFormat: { backgroundColor: { red: 0.95, green: 0.95, blue: 0.95 }, horizontalAlignment: "CENTER", textFormat: { bold: true } } }, fields: "userEnteredFormat(backgroundColor,horizontalAlignment,textFormat)" } });
+      requests.push({ repeatCell: { range: { sheetId, startRowIndex: 4, startColumnIndex: 0, endColumnIndex: 9 }, cell: { userEnteredFormat: { horizontalAlignment: "CENTER" } }, fields: "userEnteredFormat.horizontalAlignment" } });
+      requests.push({ repeatCell: { range: { sheetId, startRowIndex: 4, startColumnIndex: 9, endColumnIndex: 10 }, cell: { userEnteredFormat: { horizontalAlignment: "LEFT", wrapStrategy: "WRAP" } }, fields: "userEnteredFormat(horizontalAlignment,wrapStrategy)" } });
+    }
     requests.push({ repeatCell: { range: { sheetId, startRowIndex: 0, endRowIndex: 1 }, cell: { userEnteredFormat: { backgroundColor: { red: 0.96, green: 0.98, blue: 1 }, textFormat: { bold: true, foregroundColor: { red: 0.2, green: 0.25, blue: 0.35 } } } }, fields: "userEnteredFormat(backgroundColor,textFormat)" } });
-  }
-
-  const tradeId = sheetIdByTitle(spreadsheet, "今日帳務交割");
-  if (tradeId != null) {
-    requests.push({ updateDimensionProperties: { range: { sheetId: tradeId, dimension: "COLUMNS", startIndex: 0, endIndex: 10 }, properties: { pixelSize: 95 }, fields: "pixelSize" } });
   }
 
   const strategy3Id = sheetIdByTitle(spreadsheet, "策略3成績單");
@@ -1007,7 +1014,7 @@ function loadBacktestRows(stamp) {
   const dateText = `${stamp.slice(0, 4)}-${stamp.slice(4, 6)}-${stamp.slice(6, 8)}`;
   const totalPnl = report?.manager?.summary?.pnl ?? "";
   const historyRows = [
-    ["交易管家成績單", "即時雷達成績單", "策略1成績單", "策略2成績單", "策略3成績單", "策略5成績單", "歷史與區間損益", "今日帳務交割", "回測摘要"],
+    ["交易管家成績單", "即時雷達成績單", "策略1成績單", "策略2成績單", "策略3成績單", "策略5成績單", "歷史與區間損益", "回測摘要"],
     ["起始日:", dateText, "結束日:", dateText, "查詢損益", "", "區間總損益:", totalPnl === "" ? "" : `${Number(totalPnl).toLocaleString("zh-TW")} 元`],
     ["", "", "", "", "", "", "", ""],
     ["日期", "股票", "股名", "買進股數", "買均價", "賣均價", "出場原因", "實現損益(元)"],
@@ -1044,24 +1051,22 @@ async function main() {
   const scorecardSheets = await loadScorecardSheets(stamp, radar, report);
   const token = await getAccessToken();
   let spreadsheet = await sheets("GET", "?fields=sheets.properties(title,sheetId)", token);
-  const tradeSheet = "今日帳務交割";
   const summarySheet = "回測摘要";
   const historySheet = "歷史與區間損益";
   const obsoleteSheets = ["實體庫存與TA分析", "自選股監控池", "策略監控區"];
   await deleteSheets(token, spreadsheet, obsoleteSheets);
   spreadsheet = await sheets("GET", "?fields=sheets.properties(title,sheetId)", token);
-  const titles = [summarySheet, tradeSheet, historySheet, ...Object.keys(scorecardSheets)];
+  const titles = [summarySheet, historySheet, ...Object.keys(scorecardSheets)];
   for (const title of titles) await ensureSheet(token, spreadsheet, title);
   spreadsheet = await sheets("GET", "?fields=sheets.properties(title,sheetId)", token);
   await putValues(token, summarySheet, summary);
   await putValues(token, historySheet, historyRows);
-  await putValues(token, tradeSheet, trades);
   for (const [title, rows] of Object.entries(scorecardSheets)) await putValues(token, title, rows);
   spreadsheet = await sheets("GET", "?fields=sheets.properties(title,sheetId)", token);
   await formatWorkbook(token, spreadsheet, titles);
-  await setSheetNavLinks(token, spreadsheet, historySheet, ["交易管家成績單", "即時雷達成績單", "策略1成績單", "策略2成績單", "策略3成績單", "策略5成績單", "歷史與區間損益", "今日帳務交割", "回測摘要"]);
+  await setSheetNavLinks(token, spreadsheet, historySheet, ["交易管家成績單", "即時雷達成績單", "策略1成績單", "策略2成績單", "策略3成績單", "策略5成績單", "歷史與區間損益", "回測摘要"]);
   console.log("Uploaded " + stamp + " to Google Sheet " + SHEET_ID);
-  console.log("Sheets: " + [historySheet, tradeSheet, summarySheet, ...Object.keys(scorecardSheets)].join(", "));
+  console.log("Sheets: " + [historySheet, summarySheet, ...Object.keys(scorecardSheets)].join(", "));
 }
 
 main().catch((error) => {
