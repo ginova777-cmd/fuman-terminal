@@ -5746,6 +5746,24 @@ function formatEntryRange(plan) {
     : `${formatTradePrice(plan.entryLow)}-${formatTradePrice(plan.entryHigh)}`;
 }
 
+function getIntradayTrackedEntryPrice(stock) {
+  const stateId = stock?.intradayState?.id || getIntradayState(stock)?.id || "";
+  const tracked = stock?.strategy2Event || strategy2IntradayEventByCode.get(String(stock?.code || ""));
+  const price = stateId === "go"
+    ? cleanNumber(tracked?.firstAPrice) || cleanNumber(tracked?.firstBPrice)
+    : cleanNumber(tracked?.firstBPrice) || cleanNumber(tracked?.firstAPrice);
+  return price
+    || cleanNumber(stock?.intradayEntry?.entryPrice)
+    || cleanNumber(stock?.intradayEntry?.entryLow)
+    || cleanNumber(stock?.entryPrice)
+    || cleanNumber(stock?.observedPrice)
+    || cleanNumber(stock?.close);
+}
+
+function formatIntradayTrackedEntry(stock) {
+  return formatTradePrice(getIntradayTrackedEntryPrice(stock));
+}
+
 function strategyHit(id, stock) {
   const pct = stock.percent || 0;
   const valueRank = stock.valueRank || 0;
@@ -8645,7 +8663,7 @@ function renderIntradayRadar(evaluated) {
   const renderZonePicks = (list, zoneId) => list.length ? list.map((stock, index) => {
     const sign = stock.percent >= 0 ? "+" : "";
     const mainSignal = stock.intradaySignals[0]?.short || "量價";
-    const entry = formatEntryRange(stock.intradayEntry);
+    const entry = formatIntradayTrackedEntry(stock);
     const quoteTime = getIntradayEntryTime(stock);
     const timeText = `<span class="intraday-pick-time">${quoteTime}</span>`;
     return `
@@ -8704,7 +8722,7 @@ function renderIntradayRadar(evaluated) {
           <td>${stock.name}</td>
           <td><span class="intraday-state ${state.cls}">${state.label}</span></td>
           <td><span class="intraday-badges">${chips}</span></td>
-          <td class="price">${formatEntryRange(stock.intradayEntry)}</td>
+          <td class="price">${formatIntradayTrackedEntry(stock)}</td>
           <td class="pct">${sign}${stock.percent.toFixed(2)}%</td>
           <td>${Math.round(stock.tradeVolume || 0).toLocaleString("zh-TW")}</td>
           <td class="intraday-entry">${renderEntryPlan(stock.intradayEntry)}</td>
