@@ -903,7 +903,7 @@ async function strategy2Rows(dateText) {
     ["策略2成績單"],
     ["日期", payload.date || dateText, "今日損益", totalPnl],
     ["範圍", "09:00-13:30"],
-    ["排序", "股票代碼", "股票名稱", "策略2跳出時間", "跳出價格", "出場時間", "出場價格", "損益", "結果"],
+    ["排序", "股票代碼", "股票名稱", "策略2跳出時間", "跳出價格", "出場時間", "出場價格", "損益", "進場原因"],
   ];
   plans.forEach(({ index, event, plan }) => {
     rows.push([
@@ -915,7 +915,7 @@ async function strategy2Rows(dateText) {
       plan.exitTime || "--",
       fmtPrice(plan.exitPrice) || "--",
       plan.pnl,
-      strategy2SimpleResult(plan),
+      event.stateReason || "1分K站上MA35，MACD/KD同步向上且爆量",
     ]);
   });
   if (!plans.length) rows.push(["目前沒有進場區交易資料", "", "", "", "", "", "", "", ""]);
