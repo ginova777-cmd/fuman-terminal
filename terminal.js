@@ -10187,6 +10187,7 @@ function marketAiQuoteDateKey(stock) {
 
 function isMarketAiStaleStock(stock) {
   const quoteDate = marketAiQuoteDateKey(stock);
+  if (!isMarketAiActiveSession() && !quoteDate) return true;
   return quoteDate && quoteDate !== marketAiTodayKey();
 }
 
