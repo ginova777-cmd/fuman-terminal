@@ -10185,6 +10185,20 @@ function marketAiQuoteDateKey(stock) {
   ]));
 }
 
+function formatMarketAiDateKey(value) {
+  const key = normalizeMarketAiDateKey(value);
+  return key && key.length === 8 ? `${key.slice(0, 4)}-${key.slice(4, 6)}-${key.slice(6, 8)}` : "未知";
+}
+
+function marketAiDataDateKey(stocks = []) {
+  const counts = new Map();
+  normalizeArray(stocks).forEach((stock) => {
+    const key = marketAiQuoteDateKey(stock);
+    if (key) counts.set(key, (counts.get(key) || 0) + 1);
+  });
+  return [...counts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] || "";
+}
+
 function isMarketAiStaleStock(stock) {
   const quoteDate = marketAiQuoteDateKey(stock);
   if (!isMarketAiActiveSession() && !quoteDate) return true;
@@ -10460,7 +10474,8 @@ function buildMarketAiData() {
     .slice(0, 5);
   const bias = upRatio >= 55 ? "多方偏強" : upRatio <= 45 ? "空方壓制" : "震盪分歧";
   const confidence = sample >= 1000 ? (Math.min(92, 58 + Math.abs(upRatio - 50) * 1.4)).toFixed(0) : "中";
-  return { stocks, allStocks, staleRows, sample, upRows, downRows, flatRows, upRatio, totalValue, sectors, strongSectors, weakSectors, hotStocks, hotGroups, visibleHotStocks, riskStocks, bias, confidence };
+  const dataDate = marketAiDataDateKey(stocks);
+  return { stocks, allStocks, staleRows, dataDate, sample, upRows, downRows, flatRows, upRatio, totalValue, sectors, strongSectors, weakSectors, hotStocks, hotGroups, visibleHotStocks, riskStocks, bias, confidence };
 }
 
 function marketAiUpdatedLabel() {
@@ -10697,7 +10712,9 @@ function renderMarketAiPanel() {
   const staleNotice = data.staleRows.length
     ? `<div class="market-ai-sort-note">已排除 ${data.staleRows.length.toLocaleString("zh-TW")} 檔非今日資料，AI 多方推薦只使用今日或無日期標記的最新行情。</div>`
     : "";
+  const dataDateNotice = `<div class="market-ai-sort-note">模式：${isMarketAiActiveSession() ? "盤中即時巡邏" : "收盤資料"}｜資料日期：${escapeAttr(formatMarketAiDateKey(data.dataDate))}｜今日：${escapeAttr(formatMarketAiDateKey(marketAiTodayKey()))}</div>`;
   marketAiPanel.innerHTML = `
+    ${dataDateNotice}
     ${staleNotice}
     <section class="market-ai-summary">
       <article class="market-ai-card hero">
