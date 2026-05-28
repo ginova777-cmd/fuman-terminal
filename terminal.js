@@ -10106,7 +10106,10 @@ function applyMarketMode(mode = "overview") {
 }
 
 async function refreshMarketAiPanelOnOpen() {
-  if (marketDataLoading) return;
+  if (marketDataLoading) {
+    renderMarketAiPanel();
+    return;
+  }
   try {
     await loadMarketData(true);
   } finally {
@@ -10188,7 +10191,7 @@ function isMarketAiStaleStock(stock) {
 }
 
 function isMarketAiFreshRealtimeStock(stock) {
-  if (!isMarketAiActiveSession()) return false;
+  if (!isMarketAiActiveSession()) return true;
   if (!stock?.isRealtime) return false;
   const updatedAt = cleanNumber(stock.quoteUpdatedAt);
   return updatedAt > 0 && Date.now() - updatedAt <= Math.max(INTRADAY_FAST_SCAN_MS * 4, 15000);
@@ -10200,18 +10203,7 @@ function isMarketAiActiveSession() {
     && isIntradayScanWindow();
 }
 
-function renderMarketAiPaused() {
-  if (!marketAiPanel) return;
-  const label = marketRealtimeState.marketStatus === "night" ? "夜盤時間" : "非日盤交易中";
-  marketAiPanel.innerHTML = `
-    <div class="empty-state">
-      AI 判讀只在日盤 09:00-13:30 每 5 秒巡邏。現在是${escapeAttr(label)}，已停止盤中推薦，避免使用舊行情誤判。
-    </div>
-  `;
-}
-
 async function loadMarketAiStocksFallback() {
-  if (!isMarketAiActiveSession()) return;
   if (marketAiStockLoading || latestStocks.length) return;
   marketAiStockLoading = true;
   try {
@@ -10437,7 +10429,9 @@ function isMarketAiLongCandidate(stock, options = {}) {
 }
 
 function buildMarketAiData() {
-  const allStocks = latestStocks.length ? latestStocks.map((stock) => applyStrategyQuote(stock)) : [];
+  const allStocks = latestStocks.length
+    ? latestStocks.map((stock) => isMarketAiActiveSession() ? applyStrategyQuote(stock) : stock)
+    : [];
   const staleRows = allStocks.filter((stock) => isMarketAiStaleStock(stock));
   const stocks = allStocks.filter((stock) => !isMarketAiStaleStock(stock));
   const sample = stocks.length;
@@ -10474,7 +10468,7 @@ function marketAiUpdatedLabel() {
   const month = String(date.getMonth() + 1).padStart(2, "0");
   const day = String(date.getDate()).padStart(2, "0");
   const time = date.toLocaleTimeString("zh-TW", { hour12: false, hour: "2-digit", minute: "2-digit", second: "2-digit" });
-  return `${month}/${day} 即時巡邏 · 更新 ${time}`;
+  return `${month}/${day} ${isMarketAiActiveSession() ? "即時巡邏" : "收盤資料"} · 更新 ${time}`;
 }
 
 function marketAiStockLabel(stock) {
@@ -10642,11 +10636,6 @@ function openMarketAiAdviceModal(kind) {
 function renderMarketAiPanel() {
   installMarketTabs();
   if (!marketAiPanel) return;
-  if (!isMarketAiActiveSession()) {
-    marketAiLastSignature = "";
-    renderMarketAiPaused();
-    return;
-  }
   const data = buildMarketAiData();
   const signature = `${marketAiHotFilter}:${data.sample}:${data.staleRows.length}:${data.upRows.length}:${data.downRows.length}:${data.hotStocks.map((stock) => `${stock.code}:${stock.score}:${cleanNumber(stock.percent).toFixed(2)}`).join("|")}`;
   if (signature === marketAiLastSignature && marketAiPanel.innerHTML) return;
