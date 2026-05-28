@@ -744,8 +744,18 @@ function ma35AttemptText(item) {
 }
 
 function strategy2Rows(dateText) {
-  const info = readFirstJson([path.join(DATA_DIR, "strategy2-intraday-latest.json"), path.join(REPO_DATA_DIR, "strategy2-intraday-latest.json")]);
-  const payload = info.value || {};
+  let info = readFirstJson([path.join(DATA_DIR, "strategy2-intraday-latest.json"), path.join(REPO_DATA_DIR, "strategy2-intraday-latest.json")]);
+  let payload = info.value || {};
+  if (!Array.isArray(payload.records) || payload.records.length === 0) {
+    const historyInfo = readFirstJson([
+      path.join(DATA_DIR, "strategy2-intraday-history", `${dateText}.json`),
+      path.join(REPO_DATA_DIR, "strategy2-intraday-history", `${dateText}.json`),
+    ]);
+    if (Array.isArray(historyInfo.value?.records) && historyInfo.value.records.length) {
+      info = historyInfo;
+      payload = historyInfo.value;
+    }
+  }
   const events = (Array.isArray(payload.events) ? payload.events : []).filter((item) => !isDrStock(item));
   const records = (Array.isArray(payload.records) ? payload.records : []).filter((item) => !isDrStock(item));
   const timeOnly = (value) => String(value || "").match(/\d{2}:\d{2}(?::\d{2})?/)?.[0] || "";
