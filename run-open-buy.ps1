@@ -14,7 +14,7 @@ $log = "C:\fuman-runtime\logs\open-buy-$(Get-Date -Format yyyyMMdd-HHmmss).log"
 "=== Open buy full scan start $(Get-Date) ===" | Out-File $log -Encoding utf8
 
 $env:FULL_SCAN = "1"
-$env:OPEN_BUY_BATCH_SIZE = "80"
+$env:OPEN_BUY_BATCH_SIZE = "9999"
 $env:OPEN_BUY_BATCHES_PER_RUN = "999"
 $env:OPEN_BUY_USE_MIS = "0"
 
@@ -33,5 +33,6 @@ if ($exitCode -ne 0) {
 
 "Open buy cache files written locally; Git sync is handled by run-cache-sync.ps1" >> $log
 "=== Open buy full scan end $(Get-Date) ===" >> $log
+
 
 

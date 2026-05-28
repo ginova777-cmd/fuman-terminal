@@ -42,8 +42,9 @@ function Invoke-CacheSyncWithRetry($scriptPath, $maxAttempts = 3) {
 Write-Log "=== Strategy4 full scan start $(Get-Date) ==="
 
 $env:FULL_SCAN = "1"
-$env:STRATEGY4_BATCH_SIZE = "80"
+$env:STRATEGY4_BATCH_SIZE = "9999"
 $env:STRATEGY4_BATCHES_PER_RUN = "999"
+$env:STRATEGY4_USE_MIS = "0"
 
 try {
   & $nodeExe "scripts\scan-strategy4-cache.js" *>&1 | Tee-Object -FilePath $log -Append
@@ -52,6 +53,7 @@ try {
   Remove-Item Env:FULL_SCAN -ErrorAction SilentlyContinue
   Remove-Item Env:STRATEGY4_BATCH_SIZE -ErrorAction SilentlyContinue
   Remove-Item Env:STRATEGY4_BATCHES_PER_RUN -ErrorAction SilentlyContinue
+  Remove-Item Env:STRATEGY4_USE_MIS -ErrorAction SilentlyContinue
 }
 
 if ($scanExit -ne 0) {
@@ -79,3 +81,5 @@ if (Test-Path -LiteralPath $syncScript) {
 }
 
 Write-Log "=== Strategy4 full scan end $(Get-Date) ==="
+
+
