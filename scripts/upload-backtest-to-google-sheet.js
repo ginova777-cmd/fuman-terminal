@@ -901,23 +901,26 @@ async function strategy2Rows(dateText) {
   const lastRecordTime = timeOnly(entryRecords[entryRecords.length - 1]?.timestamp || entryRecords[entryRecords.length - 1]?.entryAt || entryEvents[entryEvents.length - 1]?.firstAAt);
   const rows = [
     ["策略2成績單"],
-    ["日期", payload.date || dateText, "今日損益", totalPnl, "交易", plans.length],
-    ["範圍", `${firstRecordTime || "無"}-${lastRecordTime || "無"}`, "規則", "只看進場區", "出場", "智慧賣壓/停損/收盤"],
-    ["排序", "股票", "策略2跳出時間", "賣出", "損益", "結果"],
+    ["日期", payload.date || dateText, "今日損益", totalPnl],
+    ["範圍", "09:00-13:30"],
+    ["排序", "股票代碼", "股票名稱", "策略2跳出時間", "跳出價格", "出場時間", "出場價格", "損益", "結果"],
   ];
   plans.forEach(({ index, event, plan }) => {
     rows.push([
       index,
-      `${event.code || ""} ${event.name || ""}`.trim(),
-      `${plan.entryTime || "--"} / ${fmtPrice(plan.entryPrice) || "--"}`,
-      `${plan.exitTime || "--"} / ${fmtPrice(plan.exitPrice) || "--"}`,
+      event.code || "",
+      event.name || "",
+      plan.entryTime || "--",
+      fmtPrice(plan.entryPrice) || "--",
+      plan.exitTime || "--",
+      fmtPrice(plan.exitPrice) || "--",
       plan.pnl,
       strategy2SimpleResult(plan),
     ]);
   });
-  if (!plans.length) rows.push(["目前沒有進場區交易資料", "", "", "", "", ""]);
+  if (!plans.length) rows.push(["目前沒有進場區交易資料", "", "", "", "", "", "", "", ""]);
   if (firstRecordTime && firstRecordTime > "09:05:00") {
-    rows.push(["提醒", `第一筆進場區 ${firstRecordTime}`, "09:00後無進場區紀錄", "", "", ""]);
+    rows.push(["提醒", `第一筆進場區 ${firstRecordTime}`, "09:00後到第一筆前無進場區紀錄", "", "", "", "", "", ""]);
   }
   return rows;
 }
@@ -1095,13 +1098,13 @@ async function formatWorkbook(token, spreadsheet, titles) {
     requests.push({ updateSheetProperties: { properties: { sheetId, gridProperties: { frozenRowCount: title === "歷史與區間損益" || title === "策略5成績單" || title === "策略2成績單" ? 4 : 1 } }, fields: "gridProperties.frozenRowCount" } });
     requests.push({ autoResizeDimensions: { dimensions: { sheetId, dimension: "COLUMNS", startIndex: 0, endIndex: 16 } } });
     if (title === "策略2成績單") {
-      requests.push({ repeatCell: { range: { sheetId, startRowIndex: 0, endColumnIndex: 8 }, cell: { userEnteredFormat: { numberFormat: { type: "TEXT", pattern: "@" } } }, fields: "userEnteredFormat.numberFormat" } });
+      requests.push({ repeatCell: { range: { sheetId, startRowIndex: 0, endColumnIndex: 9 }, cell: { userEnteredFormat: { numberFormat: { type: "TEXT", pattern: "@" } } }, fields: "userEnteredFormat.numberFormat" } });
       requests.push({ updateDimensionProperties: { range: { sheetId, dimension: "COLUMNS", startIndex: 0, endIndex: 1 }, properties: { pixelSize: 58 }, fields: "pixelSize" } });
-      requests.push({ updateDimensionProperties: { range: { sheetId, dimension: "COLUMNS", startIndex: 1, endIndex: 2 }, properties: { pixelSize: 120 }, fields: "pixelSize" } });
-      requests.push({ updateDimensionProperties: { range: { sheetId, dimension: "COLUMNS", startIndex: 2, endIndex: 4 }, properties: { pixelSize: 120 }, fields: "pixelSize" } });
-      requests.push({ updateDimensionProperties: { range: { sheetId, dimension: "COLUMNS", startIndex: 4, endIndex: 6 }, properties: { pixelSize: 90 }, fields: "pixelSize" } });
-      requests.push({ repeatCell: { range: { sheetId, startRowIndex: 3, endRowIndex: 4, startColumnIndex: 0, endColumnIndex: 6 }, cell: { userEnteredFormat: { backgroundColor: { red: 0.95, green: 0.95, blue: 0.95 }, horizontalAlignment: "CENTER", textFormat: { bold: true } } }, fields: "userEnteredFormat(backgroundColor,horizontalAlignment,textFormat)" } });
-      requests.push({ repeatCell: { range: { sheetId, startRowIndex: 4, startColumnIndex: 0, endColumnIndex: 6 }, cell: { userEnteredFormat: { horizontalAlignment: "CENTER" } }, fields: "userEnteredFormat.horizontalAlignment" } });
+      requests.push({ updateDimensionProperties: { range: { sheetId, dimension: "COLUMNS", startIndex: 1, endIndex: 3 }, properties: { pixelSize: 86 }, fields: "pixelSize" } });
+      requests.push({ updateDimensionProperties: { range: { sheetId, dimension: "COLUMNS", startIndex: 3, endIndex: 7 }, properties: { pixelSize: 92 }, fields: "pixelSize" } });
+      requests.push({ updateDimensionProperties: { range: { sheetId, dimension: "COLUMNS", startIndex: 7, endIndex: 9 }, properties: { pixelSize: 80 }, fields: "pixelSize" } });
+      requests.push({ repeatCell: { range: { sheetId, startRowIndex: 3, endRowIndex: 4, startColumnIndex: 0, endColumnIndex: 9 }, cell: { userEnteredFormat: { backgroundColor: { red: 0.95, green: 0.95, blue: 0.95 }, horizontalAlignment: "CENTER", textFormat: { bold: true } } }, fields: "userEnteredFormat(backgroundColor,horizontalAlignment,textFormat)" } });
+      requests.push({ repeatCell: { range: { sheetId, startRowIndex: 4, startColumnIndex: 0, endColumnIndex: 9 }, cell: { userEnteredFormat: { horizontalAlignment: "CENTER" } }, fields: "userEnteredFormat.horizontalAlignment" } });
     }
     if (title === "策略1成績單") {
       requests.push({ repeatCell: { range: { sheetId, startRowIndex: 1, startColumnIndex: 4, endColumnIndex: 7 }, cell: { userEnteredFormat: { horizontalAlignment: "LEFT" } }, fields: "userEnteredFormat.horizontalAlignment" } });
