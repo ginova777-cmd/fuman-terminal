@@ -395,6 +395,10 @@ async function fetchYahooIntraday(item, dateText) {
     && Number.isFinite(row.high)
     && Number.isFinite(row.low)
     && Number.isFinite(row.close)
+    && row.open > 0
+    && row.high > 0
+    && row.low > 0
+    && row.close > 0
     && timeToSeconds(row.time) >= timeToSeconds("09:00:00")
     && timeToSeconds(row.time) <= timeToSeconds("13:30:00")
   ));
@@ -446,6 +450,13 @@ function strategy5PlanFromCandles(item, intraday) {
   }
   if (!entry) return null;
   const entryPrice = roundTradePrice(entry.close);
+  const initialBalanceCandles = candles.slice(0, entry.index + 1);
+  const ibh = initialBalanceCandles.reduce((max, row) => Math.max(max, row.high || 0), 0);
+  const ibl = initialBalanceCandles.reduce((min, row) => {
+    const low = Number(row.low);
+    return Number.isFinite(low) && low > 0 ? Math.min(min, low) : min;
+  }, Number.POSITIVE_INFINITY);
+  const fib618 = Number.isFinite(ibl) && ibh > ibl ? roundTradePrice(ibh - (ibh - ibl) * 0.618) : 0;
   const takeProfitPrice = roundTradePrice(entryPrice * (1 + STRATEGY5_TAKE_PROFIT_PCT / 100));
   const protectProfitPrice = roundTradePrice(entryPrice * (1 + STRATEGY5_PROTECT_PROFIT_PCT / 100));
   const stopLossPrice = roundTradePrice(entryPrice * (1 - STRATEGY5_STOP_LOSS_PCT / 100));
@@ -467,9 +478,11 @@ function strategy5PlanFromCandles(item, intraday) {
     const volumeSpike = avgVolume > 0 && (candle.volume || 0) >= avgVolume * 1.5;
     const redCandle = candle.close < candle.open;
     const priceWeak = candle.close < previous.close || candle.close < vwap || highGivebackPct >= 0.6;
+    const fibBroken = fib618 > 0 && candle.close < fib618;
     const sellPressure = profitHighPct >= STRATEGY5_PROTECT_PROFIT_PCT && priceWeak && (volumeSpike || redCandle || highGivebackPct >= 0.8);
     const buyMomentumFailed = profitHighPct < STRATEGY5_PROTECT_PROFIT_PCT
       && offset >= 1
+      && fibBroken
       && (candle.close < vwap || candle.close < previous.close)
       && (redCandle || volumeSpike || highGivebackPct >= 0.6);
     postEntryVolumes.push(candle.volume || 0);
@@ -478,7 +491,7 @@ function strategy5PlanFromCandles(item, intraday) {
     if (hitStop && hitProfit) {
       exit = candle.close >= entryPrice
         ? { time: candle.time, price: takeProfitPrice, reason: `觸及 ${STRATEGY5_TAKE_PROFIT_PCT}% 停利` }
-        : { time: candle.time, price: stopLossPrice, reason: `跌破智慧防守價，買量未延續` };
+        : { time: candle.time, price: stopLossPrice, reason: `跌破IB 0.618防守 ${fmtPrice(fib618)}，買量未延續` };
       break;
     }
     if (hitProfit) {
@@ -498,12 +511,12 @@ function strategy5PlanFromCandles(item, intraday) {
       exit = {
         time: candle.time,
         price: roundTradePrice(candle.close),
-        reason: `買量未延續：高點${fmtNumber(postEntryHigh, postEntryHigh >= 100 ? 1 : 2)}、回吐${highGivebackPct.toFixed(2)}%、${redCandle ? "紅轉黑" : "價格轉弱"}、${candle.close < vwap ? "跌破VWAP" : "未破VWAP"}`,
+        reason: `買量未延續且跌破IB 0.618：IBH ${fmtPrice(ibh)}、IBL ${fmtPrice(ibl)}、0.618 ${fmtPrice(fib618)}、收${fmtPrice(candle.close)}`,
       };
       break;
     }
-    if (hitStop) {
-      exit = { time: candle.time, price: stopLossPrice, reason: `跌破智慧防守價，買量未延續` };
+    if (hitStop && fibBroken) {
+      exit = { time: candle.time, price: stopLossPrice, reason: `跌破IB 0.618防守 ${fmtPrice(fib618)}，智慧停損` };
       break;
     }
   }
@@ -519,7 +532,7 @@ function strategy5PlanFromCandles(item, intraday) {
     exitTime: exit.time,
     exitPrice: exit.price,
     pnl,
-    reason: `1分K智慧進場：漲幅${entry.pct.toFixed(2)}%、站上VWAP、買量延續、高點回吐${entry.highGivebackPct.toFixed(2)}%；${exit.reason}`,
+    reason: `1分K智慧進場：漲幅${entry.pct.toFixed(2)}%、站上VWAP、買量延續、高點回吐${entry.highGivebackPct.toFixed(2)}%、IBH ${fmtPrice(ibh)} / IBL ${fmtPrice(ibl)} / 0.618 ${fmtPrice(fib618)}；${exit.reason}`,
     source: intraday.source,
   };
 }

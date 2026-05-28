@@ -189,6 +189,8 @@ function exitSignal(position, quote, current) {
   const deltaVolume = previousVolume && volume > previousVolume ? volume - previousVolume : 0;
   const dropPct = previousPrice && current < previousPrice ? ((previousPrice - current) / previousPrice) * 100 : 0;
   const highGivebackPct = high && current < high ? ((high - current) / high) * 100 : 0;
+  const fib618 = cleanNumber(position.ibFib618);
+  const fibBroken = !isStrategy5 || !fib618 || current < fib618;
   const minProfitPct = isStrategy5 ? STRATEGY5_PROFIT_EXIT_MIN_PCT : PROFIT_EXIT_MIN_PCT;
   const minSellDelta = isStrategy5 ? STRATEGY5_SELL_PRESSURE_VOLUME_DELTA_LOTS : SELL_PRESSURE_VOLUME_DELTA_LOTS;
   const largeSellVolume = deltaVolume >= minSellDelta;
@@ -196,9 +198,10 @@ function exitSignal(position, quote, current) {
   const profitSellPressure = profitPct >= minProfitPct && largeSellVolume && priceWeak;
   const buyMomentumFailed = isStrategy5
     && profitPct < minProfitPct
+    && fibBroken
     && priceWeak
     && (largeSellVolume || current < previousPrice);
-  const hardStop = current <= cleanNumber(position.stopLossPrice);
+  const hardStop = current <= cleanNumber(position.stopLossPrice) && fibBroken;
   return {
     action: hardStop ? "stopLoss" : profitSellPressure ? "takeProfit" : buyMomentumFailed ? "momentumFail" : "",
     profitPct,
@@ -212,7 +215,7 @@ function exitSignal(position, quote, current) {
       : profitSellPressure
       ? `獲利${profitPct.toFixed(2)}%，本輪新增${Math.round(deltaVolume).toLocaleString("zh-TW")}張，回落${dropPct.toFixed(2)}%，高點回吐${highGivebackPct.toFixed(2)}%`
       : buyMomentumFailed
-      ? `策略5買量未延續，本輪新增${Math.round(deltaVolume).toLocaleString("zh-TW")}張，回落${dropPct.toFixed(2)}%，高點回吐${highGivebackPct.toFixed(2)}%`
+      ? `策略5買量未延續且跌破IB 0.618 ${formatTradePrice(fib618)}，本輪新增${Math.round(deltaVolume).toLocaleString("zh-TW")}張，回落${dropPct.toFixed(2)}%，高點回吐${highGivebackPct.toFixed(2)}%`
       : "",
   };
 }
@@ -232,6 +235,7 @@ function buildBuyMessage(event, position) {
     `停利邏輯：獲利${event.strategy === "strategy5" ? STRATEGY5_PROFIT_EXIT_MIN_PCT : PROFIT_EXIT_MIN_PCT}%以上，且出現放量賣壓才提醒`,
     `智慧停損：${formatTradePrice(position.stopLossPrice)} 元（-${position.stopLossPct.toFixed(2)}%）`,
     `停損依據：${position.stopLossBasis}`,
+    event.strategy === "strategy5" ? `IB防守：IBH ${formatTradePrice(position.ibHigh)}｜IBL ${formatTradePrice(position.ibLow)}｜0.618 ${formatTradePrice(position.ibFib618)}` : "",
     `今日通知：${position.dailyTradeCount}/${MAX_DAILY_TRADES} 筆`,
     `品質：分數${Math.round(position.qualityScore)}｜漲幅${position.qualityPct.toFixed(2)}%｜量${Math.round(position.qualityVolume).toLocaleString("zh-TW")}張(${position.volumeMilestone.toLocaleString("zh-TW")}級距)`,
     `動能：${position.volumeTrendText}｜${position.signalText}｜高點貼近${position.nearHighText}`,
@@ -635,6 +639,9 @@ async function main() {
       continue;
     }
     const stopLoss = smartStopLoss(event, quote, entryPrice, quality);
+    const ibHigh = cleanNumber(quote?.high) || entryPrice;
+    const ibLow = cleanNumber(quote?.low) || entryPrice;
+    const ibFib618 = ibHigh > ibLow ? roundTradePrice(ibHigh - (ibHigh - ibLow) * 0.618) : 0;
     const position = {
       code: event.code,
       name: event.name || quote?.name || "",
@@ -645,6 +652,9 @@ async function main() {
       stopLossPrice: stopLoss.price,
       stopLossPct: stopLoss.pct,
       stopLossBasis: stopLoss.basis,
+      ibHigh,
+      ibLow,
+      ibFib618,
       shares: plan.shares,
       lots: plan.lots,
       amount: plan.amount,
