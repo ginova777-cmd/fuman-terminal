@@ -468,13 +468,17 @@ function strategy5PlanFromCandles(item, intraday) {
     const redCandle = candle.close < candle.open;
     const priceWeak = candle.close < previous.close || candle.close < vwap || highGivebackPct >= 0.6;
     const sellPressure = profitHighPct >= STRATEGY5_PROTECT_PROFIT_PCT && priceWeak && (volumeSpike || redCandle || highGivebackPct >= 0.8);
+    const buyMomentumFailed = profitHighPct < STRATEGY5_PROTECT_PROFIT_PCT
+      && offset >= 1
+      && (candle.close < vwap || candle.close < previous.close)
+      && (redCandle || volumeSpike || highGivebackPct >= 0.6);
     postEntryVolumes.push(candle.volume || 0);
     const hitStop = stopLossPrice && candle.low <= stopLossPrice;
     const hitProfit = takeProfitPrice && candle.high >= takeProfitPrice;
     if (hitStop && hitProfit) {
       exit = candle.close >= entryPrice
         ? { time: candle.time, price: takeProfitPrice, reason: `觸及 ${STRATEGY5_TAKE_PROFIT_PCT}% 停利` }
-        : { time: candle.time, price: stopLossPrice, reason: `跌破 ${STRATEGY5_STOP_LOSS_PCT}% 停損` };
+        : { time: candle.time, price: stopLossPrice, reason: `跌破智慧防守價，買量未延續` };
       break;
     }
     if (hitProfit) {
@@ -490,8 +494,16 @@ function strategy5PlanFromCandles(item, intraday) {
       };
       break;
     }
+    if (buyMomentumFailed) {
+      exit = {
+        time: candle.time,
+        price: roundTradePrice(candle.close),
+        reason: `買量未延續：高點${fmtNumber(postEntryHigh, postEntryHigh >= 100 ? 1 : 2)}、回吐${highGivebackPct.toFixed(2)}%、${redCandle ? "紅轉黑" : "價格轉弱"}、${candle.close < vwap ? "跌破VWAP" : "未破VWAP"}`,
+      };
+      break;
+    }
     if (hitStop) {
-      exit = { time: candle.time, price: stopLossPrice, reason: `跌破 ${STRATEGY5_STOP_LOSS_PCT}% 停損` };
+      exit = { time: candle.time, price: stopLossPrice, reason: `跌破智慧防守價，買量未延續` };
       break;
     }
   }

@@ -194,9 +194,13 @@ function exitSignal(position, quote, current) {
   const largeSellVolume = deltaVolume >= minSellDelta;
   const priceWeak = dropPct >= SELL_PRESSURE_DROP_PCT || highGivebackPct >= SELL_PRESSURE_HIGH_GIVEBACK_PCT;
   const profitSellPressure = profitPct >= minProfitPct && largeSellVolume && priceWeak;
+  const buyMomentumFailed = isStrategy5
+    && profitPct < minProfitPct
+    && priceWeak
+    && (largeSellVolume || current < previousPrice);
   const hardStop = current <= cleanNumber(position.stopLossPrice);
   return {
-    action: hardStop ? "stopLoss" : profitSellPressure ? "takeProfit" : "",
+    action: hardStop ? "stopLoss" : profitSellPressure ? "takeProfit" : buyMomentumFailed ? "momentumFail" : "",
     profitPct,
     deltaVolume,
     dropPct,
@@ -207,6 +211,8 @@ function exitSignal(position, quote, current) {
       ? `跌破防守價 ${formatTradePrice(position.stopLossPrice)}`
       : profitSellPressure
       ? `獲利${profitPct.toFixed(2)}%，本輪新增${Math.round(deltaVolume).toLocaleString("zh-TW")}張，回落${dropPct.toFixed(2)}%，高點回吐${highGivebackPct.toFixed(2)}%`
+      : buyMomentumFailed
+      ? `策略5買量未延續，本輪新增${Math.round(deltaVolume).toLocaleString("zh-TW")}張，回落${dropPct.toFixed(2)}%，高點回吐${highGivebackPct.toFixed(2)}%`
       : "",
   };
 }
@@ -408,8 +414,8 @@ function listStrategyQuality(event, quote, now) {
 function buildExitMessage(position, quote, action) {
   const current = cleanNumber(quote?.close) || cleanNumber(position.lastPrice) || cleanNumber(position.entryPrice);
   const pnl = profitText(position.entryPrice, current, position.shares);
-  const title = action === "takeProfit" ? "可賣通知｜放量賣壓停利" : action === "dayClose" ? "當沖強制出場" : "停損通知";
-  const actionText = action === "takeProfit" ? "放量賣壓停利出場" : action === "dayClose" ? "當天交易結束，不留倉" : "停損出場";
+  const title = action === "takeProfit" ? "可賣通知｜放量賣壓停利" : action === "momentumFail" ? "可賣通知｜買量轉弱" : action === "dayClose" ? "當沖強制出場" : "停損通知";
+  const actionText = action === "takeProfit" ? "放量賣壓停利出場" : action === "momentumFail" ? "買量未延續，先出場" : action === "dayClose" ? "當天交易結束，不留倉" : "停損出場";
   return [
     `交易管家｜${position.strategy || "策略"} ${title}`,
     "",
