@@ -7,8 +7,9 @@ const { tradeBuyFlex, tradeExitFlex } = require("./line-flex-templates");
 const { hasTelegramConfig, sendTelegramText } = require("./telegram-push");
 
 const { ROOT, dataPath, statePath } = require("./runtime-paths");
+const OPEN_BUY_FILE = dataPath("open-buy-latest.json");
 const STRATEGY2_REPORT_FILE = dataPath("strategy2-intraday-latest.json");
-const STRATEGY5_SCORECARD_FILE = dataPath("strategy5-scorecard-latest.json");
+const STRATEGY5_FILE = dataPath("strategy5-latest.json");
 const STATE_FILE = statePath("trade-manager-state.json");
 
 const TAKE_PROFIT_PCT = Number(process.env.TRADE_MANAGER_TAKE_PROFIT_PCT || 3);
@@ -19,18 +20,29 @@ const DEFAULT_BUDGET_PER_TRADE = MAX_DAILY_AMOUNT ? Math.floor(MAX_DAILY_AMOUNT 
 const BUDGET_PER_TRADE = Math.max(1000, Number(process.env.TRADE_MANAGER_BUDGET_PER_TRADE || DEFAULT_BUDGET_PER_TRADE));
 const DRY_RUN = process.env.TRADE_MANAGER_DRY_RUN === "1";
 const BACKFILL_EXISTING = process.env.TRADE_MANAGER_BACKFILL_EXISTING === "1";
-const ENABLE_STRATEGY5 = process.env.TRADE_MANAGER_ENABLE_STRATEGY5 === "1";
+const ENABLE_STRATEGY1 = process.env.TRADE_MANAGER_ENABLE_STRATEGY1 !== "0";
+const ENABLE_STRATEGY2 = process.env.TRADE_MANAGER_ENABLE_STRATEGY2 !== "0";
+const ENABLE_STRATEGY5 = process.env.TRADE_MANAGER_ENABLE_STRATEGY5 !== "0";
 const MIN_A_SCORE = Number(process.env.TRADE_MANAGER_MIN_A_SCORE || 80);
 const MIN_VOLUME_LOTS = Number(process.env.TRADE_MANAGER_MIN_VOLUME_LOTS || 2000);
 const VOLUME_MILESTONES = [2000, 5000, 10000];
 const MIN_TRADE_VALUE = Number(process.env.TRADE_MANAGER_MIN_TRADE_VALUE || 80000000);
+const LIST_MIN_TRADE_VALUE = Number(process.env.TRADE_MANAGER_LIST_MIN_TRADE_VALUE || 50000000);
+const LIST_MIN_VOLUME_LOTS = Number(process.env.TRADE_MANAGER_LIST_MIN_VOLUME_LOTS || 1000);
 const MIN_INTRADAY_PCT = Number(process.env.TRADE_MANAGER_MIN_INTRADAY_PCT || 2);
 const MAX_INTRADAY_PCT = Number(process.env.TRADE_MANAGER_MAX_INTRADAY_PCT || 7.5);
 const REALTIME_TIMEOUT_MS = Math.max(3000, Number(process.env.TRADE_MANAGER_REALTIME_TIMEOUT_MS || 15000));
 const NEAR_HIGH_RATIO = Number(process.env.TRADE_MANAGER_NEAR_HIGH_RATIO || 0.985);
 const MIN_ENTRY_TIME = process.env.TRADE_MANAGER_MIN_ENTRY_TIME || "09:05:00";
+const STRATEGY5_MIN_ENTRY_TIME = process.env.TRADE_MANAGER_STRATEGY5_MIN_ENTRY_TIME || "09:00:00";
+const MAX_ENTRY_TIME = process.env.TRADE_MANAGER_MAX_ENTRY_TIME || "13:20:00";
+const FORCE_DAY_EXIT_TIME = process.env.TRADE_MANAGER_FORCE_DAY_EXIT_TIME || "13:25:00";
+const SMART_STOP_MIN_PCT = Number(process.env.TRADE_MANAGER_SMART_STOP_MIN_PCT || 0.8);
+const SMART_STOP_MAX_PCT = Number(process.env.TRADE_MANAGER_SMART_STOP_MAX_PCT || 3.2);
 const PROFIT_EXIT_MIN_PCT = Number(process.env.TRADE_MANAGER_PROFIT_EXIT_MIN_PCT || 1.5);
+const STRATEGY5_PROFIT_EXIT_MIN_PCT = Number(process.env.TRADE_MANAGER_STRATEGY5_PROFIT_EXIT_MIN_PCT || process.env.STRATEGY5_PROTECT_PROFIT_PCT || 0.8);
 const SELL_PRESSURE_VOLUME_DELTA_LOTS = Number(process.env.TRADE_MANAGER_SELL_PRESSURE_VOLUME_DELTA_LOTS || 300);
+const STRATEGY5_SELL_PRESSURE_VOLUME_DELTA_LOTS = Number(process.env.TRADE_MANAGER_STRATEGY5_SELL_PRESSURE_VOLUME_DELTA_LOTS || 80);
 const SELL_PRESSURE_DROP_PCT = Number(process.env.TRADE_MANAGER_SELL_PRESSURE_DROP_PCT || 0.35);
 const SELL_PRESSURE_HIGH_GIVEBACK_PCT = Number(process.env.TRADE_MANAGER_SELL_PRESSURE_HIGH_GIVEBACK_PCT || 0.8);
 
@@ -119,8 +131,56 @@ function profitText(entry, current, shares) {
   };
 }
 
+function clamp(value, min, max) {
+  return Math.min(max, Math.max(min, value));
+}
+
+function smartStopLoss(event, quote, entryPrice, quality = {}) {
+  const entry = cleanNumber(entryPrice);
+  if (!entry) return { price: 0, pct: 0, basis: "無有效進場價" };
+  const pct = cleanNumber(quality.pct) || cleanNumber(event.percent) || cleanNumber(quote?.percent);
+  const score = cleanNumber(quality.score) || cleanNumber(event.score) || 80;
+  const volume = cleanNumber(quality.volume) || normalizeVolumeLots(cleanNumber(quote?.tradeVolume) || cleanNumber(event.volume));
+  const strategy = event.strategy || "strategy2-entry";
+  let riskPct = strategy === "strategy1-open" ? 1.1 : strategy === "strategy5" ? 1.5 : 1.3;
+  if (pct >= 5) riskPct += 0.35;
+  if (pct >= 7) riskPct += 0.35;
+  if (volume >= 5000) riskPct += 0.2;
+  if (score >= 95) riskPct -= 0.15;
+  riskPct = clamp(riskPct, SMART_STOP_MIN_PCT, SMART_STOP_MAX_PCT);
+
+  const minStop = roundTradePrice(entry * (1 - SMART_STOP_MIN_PCT / 100));
+  const maxStop = roundTradePrice(entry * (1 - SMART_STOP_MAX_PCT / 100));
+  const candidates = [];
+  const addCandidate = (label, rawPrice) => {
+    const value = cleanNumber(rawPrice);
+    if (!value || value >= entry) return;
+    const pctAway = ((entry - value) / entry) * 100;
+    if (pctAway < SMART_STOP_MIN_PCT || pctAway > SMART_STOP_MAX_PCT) return;
+    candidates.push({ label, price: roundTradePrice(value), pctAway });
+  };
+
+  addCandidate("名單原始停損", event.stopLoss);
+  addCandidate("盤中低點下緣", cleanNumber(quote?.low) ? cleanNumber(quote.low) * 0.995 : 0);
+  addCandidate("候選資料低點下緣", cleanNumber(event.low) ? cleanNumber(event.low) * 0.995 : 0);
+  addCandidate("MA35防守", cleanNumber(event.ma35) ? cleanNumber(event.ma35) * 0.995 : 0);
+  addCandidate("波動風險", entry * (1 - riskPct / 100));
+
+  const selected = candidates.length
+    ? candidates.sort((a, b) => b.price - a.price)[0]
+    : { label: "固定風險", price: roundTradePrice(entry * (1 - riskPct / 100)), pctAway: riskPct };
+  const price = Math.max(maxStop, Math.min(minStop, selected.price));
+  const pctAway = ((entry - price) / entry) * 100;
+  return {
+    price,
+    pct: pctAway,
+    basis: `${selected.label}，風險${pctAway.toFixed(2)}%`,
+  };
+}
+
 function exitSignal(position, quote, current) {
   const entry = cleanNumber(position.entryPrice);
+  const isStrategy5 = position.strategy === "strategy5";
   const previousPrice = cleanNumber(position.lastPrice);
   const previousVolume = cleanNumber(position.lastVolume);
   const volume = normalizeVolumeLots(cleanNumber(quote?.tradeVolume));
@@ -129,9 +189,11 @@ function exitSignal(position, quote, current) {
   const deltaVolume = previousVolume && volume > previousVolume ? volume - previousVolume : 0;
   const dropPct = previousPrice && current < previousPrice ? ((previousPrice - current) / previousPrice) * 100 : 0;
   const highGivebackPct = high && current < high ? ((high - current) / high) * 100 : 0;
-  const largeSellVolume = deltaVolume >= SELL_PRESSURE_VOLUME_DELTA_LOTS;
+  const minProfitPct = isStrategy5 ? STRATEGY5_PROFIT_EXIT_MIN_PCT : PROFIT_EXIT_MIN_PCT;
+  const minSellDelta = isStrategy5 ? STRATEGY5_SELL_PRESSURE_VOLUME_DELTA_LOTS : SELL_PRESSURE_VOLUME_DELTA_LOTS;
+  const largeSellVolume = deltaVolume >= minSellDelta;
   const priceWeak = dropPct >= SELL_PRESSURE_DROP_PCT || highGivebackPct >= SELL_PRESSURE_HIGH_GIVEBACK_PCT;
-  const profitSellPressure = profitPct >= PROFIT_EXIT_MIN_PCT && largeSellVolume && priceWeak;
+  const profitSellPressure = profitPct >= minProfitPct && largeSellVolume && priceWeak;
   const hardStop = current <= cleanNumber(position.stopLossPrice);
   return {
     action: hardStop ? "stopLoss" : profitSellPressure ? "takeProfit" : "",
@@ -150,15 +212,20 @@ function exitSignal(position, quote, current) {
 }
 
 function buildBuyMessage(event, position) {
-  const title = event.strategy === "strategy5" ? "交易管家｜策略5 可買通知" : "交易管家｜策略2-進場區 可買通知";
+  const title = event.strategy === "strategy1-open"
+    ? "交易管家｜策略1 可買通知"
+    : event.strategy === "strategy5"
+    ? "交易管家｜策略5 可買通知"
+    : "交易管家｜策略2-進場區 可買通知";
   return [
     title,
     "",
     `股票：${event.code} ${event.name || ""}`,
     `進場時間：${event.firstAAt || "--"}`,
     `建議進場價：${formatTradePrice(position.entryPrice)} 元`,
-    `停利邏輯：獲利${PROFIT_EXIT_MIN_PCT}%以上，且出現放量賣壓才提醒`,
-    `停損價：${formatTradePrice(position.stopLossPrice)} 元（-${STOP_LOSS_PCT}%）`,
+    `停利邏輯：獲利${event.strategy === "strategy5" ? STRATEGY5_PROFIT_EXIT_MIN_PCT : PROFIT_EXIT_MIN_PCT}%以上，且出現放量賣壓才提醒`,
+    `智慧停損：${formatTradePrice(position.stopLossPrice)} 元（-${position.stopLossPct.toFixed(2)}%）`,
+    `停損依據：${position.stopLossBasis}`,
     `今日通知：${position.dailyTradeCount}/${MAX_DAILY_TRADES} 筆`,
     `品質：分數${Math.round(position.qualityScore)}｜漲幅${position.qualityPct.toFixed(2)}%｜量${Math.round(position.qualityVolume).toLocaleString("zh-TW")}張(${position.volumeMilestone.toLocaleString("zh-TW")}級距)`,
     `動能：${position.volumeTrendText}｜${position.signalText}｜高點貼近${position.nearHighText}`,
@@ -307,19 +374,51 @@ function strategy5Quality(event, quote, now) {
   };
 }
 
+function listStrategyQuality(event, quote, now) {
+  const current = cleanNumber(quote?.close);
+  const volume = normalizeVolumeLots(cleanNumber(quote?.tradeVolume || event.volume || event.tradeVolume));
+  const value = cleanNumber(quote?.value) || cleanNumber(event.value) || (current && volume ? current * volume * 1000 : 0);
+  const pct = cleanNumber(quote?.percent || event.percent);
+  const score = cleanNumber(event.score || event.activeMatch?.score) || 80;
+  const high = cleanNumber(quote?.high);
+  const noChase = cleanNumber(event.noChase);
+  const reasons = [];
+  if (!current) reasons.push("即時報價不足");
+  if (timeValue(now.time) < timeValue(MIN_ENTRY_TIME)) reasons.push(`尚未到進場時間 ${MIN_ENTRY_TIME}`);
+  if (current && noChase && current > noChase) reasons.push(`現價${formatTradePrice(current)}超過追價上限${formatTradePrice(noChase)}`);
+  if (Number.isFinite(pct) && pct < -1.5) reasons.push(`盤中轉弱 ${pct.toFixed(2)}%`);
+  if (Number.isFinite(pct) && pct > MAX_INTRADAY_PCT) reasons.push(`漲幅${pct.toFixed(2)}%過熱`);
+  if (volume < LIST_MIN_VOLUME_LOTS) reasons.push(`成交量${Math.round(volume).toLocaleString("zh-TW")}張不足`);
+  if (value < LIST_MIN_TRADE_VALUE) reasons.push("成交金額不足");
+  if (high && current && current < high * 0.97) reasons.push("現價離盤中高點過遠");
+  return {
+    pass: reasons.length === 0,
+    reasons,
+    score,
+    pct: Number.isFinite(pct) ? pct : 0,
+    volume,
+    value,
+    milestone: volumeMilestone(volume),
+    volumeTrendText: `${event.strategyLabel || event.strategy || "名單"}，盤中量${Math.round(volume).toLocaleString("zh-TW")}張`,
+    signalText: event.activeMatch?.short || event.setup || event.status || event.strategyLabel || event.strategy,
+    nearHighText: high && current ? `${((current / high) * 100).toFixed(1)}%` : "--",
+  };
+}
+
 function buildExitMessage(position, quote, action) {
   const current = cleanNumber(quote?.close) || cleanNumber(position.lastPrice) || cleanNumber(position.entryPrice);
   const pnl = profitText(position.entryPrice, current, position.shares);
-  const title = action === "takeProfit" ? "可賣通知｜放量賣壓停利" : "停損通知";
+  const title = action === "takeProfit" ? "可賣通知｜放量賣壓停利" : action === "dayClose" ? "當沖強制出場" : "停損通知";
+  const actionText = action === "takeProfit" ? "放量賣壓停利出場" : action === "dayClose" ? "當天交易結束，不留倉" : "停損出場";
   return [
-    `交易管家｜策略2-進場區 ${title}`,
+    `交易管家｜${position.strategy || "策略"} ${title}`,
     "",
     `股票：${position.code} ${position.name || ""}`,
     `進場價：${formatTradePrice(position.entryPrice)} 元`,
     `目前價：${formatTradePrice(current)} 元`,
     `損益率/損益：${pnl.text}`,
     position.exitReason ? `出場訊號：${position.exitReason}` : "",
-    `建議動作：${action === "takeProfit" ? "放量賣壓停利出場" : "停損出場"}`,
+    `建議動作：${actionText}`,
   ].join("\n");
 }
 
@@ -340,7 +439,11 @@ function callRealtime(codes) {
     Promise.resolve(realtimeHandler(req, res)).catch(reject);
   });
   const timeout = new Promise((resolve) => setTimeout(() => resolve({ ok: false, quotes: [], timeout: true }), REALTIME_TIMEOUT_MS));
-  return Promise.race([request, timeout]);
+  return Promise.race([request, timeout]).catch((error) => ({
+    ok: false,
+    quotes: [],
+    error: error?.message || String(error),
+  }));
 }
 
 async function notify(message) {
@@ -365,12 +468,43 @@ function timeValue(value) {
   if (!match) return 0;
   return Number(match[1]) * 3600 + Number(match[2]) * 60 + Number(match[3] || 0);
 }
+
+function isAfterTime(current, target) {
+  return timeValue(current) >= timeValue(target);
+}
+
+function forceDayExitReason(now) {
+  return `當沖規則：${now.time} 已到 ${FORCE_DAY_EXIT_TIME}，交易管家不留倉`;
+}
+
+function closePosition(state, code, position, quote, action, reason) {
+  const current = cleanNumber(quote?.close) || cleanNumber(position.lastPrice) || cleanNumber(position.entryPrice);
+  if (!current) return null;
+  position.lastPrice = current;
+  position.lastVolume = normalizeVolumeLots(cleanNumber(quote?.tradeVolume)) || cleanNumber(position.lastVolume);
+  position.highestPrice = Math.max(cleanNumber(position.highestPrice), cleanNumber(quote?.high), current);
+  position.lastUpdatedAt = new Date().toISOString();
+  position.exitReason = reason || position.exitReason || "";
+  const closed = {
+    ...position,
+    exitPrice: current,
+    exitAction: action,
+    closedAt: new Date().toISOString(),
+  };
+  state.closed[code] = closed;
+  delete state.positions[code];
+  return closed;
+}
+
 function getFreshAEvents(payload, today) {
+  if (!ENABLE_STRATEGY2) return [];
   if (payload.date !== today) return [];
   return (payload.events || [])
     .filter((event) => event.firstAAt)
     .map((event) => ({
       ...event,
+      strategy: "strategy2-entry",
+      strategyLabel: "策略2",
       code: normalizeCode(event.code),
       originalFirstAAt: event.firstAAt,
       originalFirstAPrice: cleanNumber(event.firstAPrice),
@@ -384,24 +518,46 @@ function getFreshAEvents(payload, today) {
     .sort((a, b) => String(a.firstAAt).localeCompare(String(b.firstAAt)));
 }
 
+function getStrategy1Events(today) {
+  if (!ENABLE_STRATEGY1) return [];
+  const payload = readJson(OPEN_BUY_FILE, { matches: [] });
+  return (payload.matches || [])
+    .map((item) => ({
+      ...item,
+      strategy: "strategy1-open",
+      strategyLabel: "策略1",
+      code: normalizeCode(item.code),
+      firstAAt: timeValue(MIN_ENTRY_TIME) > timeValue("09:00:00") ? MIN_ENTRY_TIME : "09:00:00",
+      firstAPrice: cleanNumber(item.entryPrice || item.open || item.close),
+      entryPrice: 0,
+      score: cleanNumber(item.score) || 80,
+      stateReason: item.reason || "策略1名單，交由交易管家盤中擇時當沖",
+      strategies: ["策略1"],
+      sourceDate: payload.usedDate || item.date || "",
+      tradeDate: today,
+    }))
+    .filter((event) => event.code)
+    .sort((a, b) => (cleanNumber(b.score) - cleanNumber(a.score)) || String(a.code).localeCompare(String(b.code)));
+}
+
 function getStrategy5Events(today) {
   if (!ENABLE_STRATEGY5) return [];
-  const payload = readJson(STRATEGY5_SCORECARD_FILE, { tradeDate: "", trades: [] });
-  if (payload.tradeDate !== today) return [];
-  return (payload.trades || [])
-    .filter((trade) => trade.automationReady)
-    .map((trade) => ({
-      ...trade,
+  const payload = readJson(STRATEGY5_FILE, { matches: [] });
+  return (payload.matches || [])
+    .map((item) => ({
+      ...item,
       strategy: "strategy5",
-      code: normalizeCode(trade.code),
-      firstAAt: trade.entryTime || "09:00:00",
-      firstAPrice: cleanNumber(trade.entryPrice),
-      entryPrice: cleanNumber(trade.entryPrice),
-      score: 100,
-      stateReason: trade.reason || "策略5隔日交易計畫",
+      strategyLabel: "策略5",
+      code: normalizeCode(item.code),
+      firstAAt: STRATEGY5_MIN_ENTRY_TIME,
+      firstAPrice: cleanNumber(item.open || item.close),
+      entryPrice: 0,
+      score: cleanNumber(item.score || item.activeMatch?.score) || 80,
+      stateReason: item.activeMatch?.reason || item.reason || "策略5名單，交由交易管家盤中擇時當沖",
       strategies: ["策略5"],
     }))
-    .filter((event) => event.code && event.entryPrice);
+    .filter((event) => event.code)
+    .sort((a, b) => (cleanNumber(b.score) - cleanNumber(a.score)) || String(a.code).localeCompare(String(b.code)));
 }
 
 async function main() {
@@ -410,14 +566,16 @@ async function main() {
   if (DRY_RUN && process.env.TRADE_MANAGER_TEST_TIME) now.time = process.env.TRADE_MANAGER_TEST_TIME;
   const payload = readJson(STRATEGY2_REPORT_FILE, { date: "", events: [] });
   const state = loadState(now.dateKey);
-  const events = [...getFreshAEvents(payload, now.dateKey), ...getStrategy5Events(now.dateKey)]
-    .sort((a, b) => String(a.firstAAt).localeCompare(String(b.firstAAt)));
+  const events = [...getStrategy1Events(now.dateKey), ...getFreshAEvents(payload, now.dateKey), ...getStrategy5Events(now.dateKey)]
+    .sort((a, b) => String(a.firstAAt).localeCompare(String(b.firstAAt)) || (cleanNumber(b.score) - cleanNumber(a.score)));
   const eventByCode = new Map(events.map((event) => [event.code, event]));
   const codes = [...new Set([...events.map((event) => event.code), ...Object.keys(state.positions)])];
   const quotesPayload = codes.length ? await callRealtime(codes) : { quotes: [] };
   const quoteByCode = new Map((quotesPayload.quotes || []).map((quote) => [String(quote.code), quote]));
   const messages = [];
   const openedThisRun = new Set();
+  const afterMaxEntryTime = isAfterTime(now.time, MAX_ENTRY_TIME);
+  const afterForceDayExitTime = isAfterTime(now.time, FORCE_DAY_EXIT_TIME);
 
   if (!state.initialized && !BACKFILL_EXISTING) {
     for (const event of events) {
@@ -430,15 +588,34 @@ async function main() {
   }
   state.initialized = true;
 
+  if (afterForceDayExitTime) {
+    for (const [code, position] of Object.entries(state.positions)) {
+      const quote = quoteByCode.get(code);
+      const closed = closePosition(state, code, position, quote, "dayClose", forceDayExitReason(now));
+      if (!closed) continue;
+      const pnl = profitText(closed.entryPrice, closed.exitPrice, closed.shares);
+      messages.push({
+        text: buildExitMessage(closed, quote, "dayClose"),
+        altText: `交易管家當沖出場：${closed.code} ${closed.name || ""}`.trim(),
+        flex: tradeExitFlex(closed, { ...quote, close: closed.exitPrice }, "dayClose", pnl.text),
+      });
+    }
+  }
+
   for (const event of events) {
+    if (timeValue(event.firstAAt) > timeValue(now.time)) continue;
+    if (afterMaxEntryTime) {
+      state.seenEvents[eventKey(event)] ||= { seenAt: new Date().toISOString(), skipped: `超過進場截止 ${MAX_ENTRY_TIME}` };
+      continue;
+    }
     const key = eventKey(event);
     if (state.seenEvents[key] || state.notified[event.code] || state.positions[event.code] || state.closed[event.code]) continue;
     state.seenEvents[key] = { seenAt: new Date().toISOString() };
     if (state.dailyTradeCount >= MAX_DAILY_TRADES) continue;
     const quote = quoteByCode.get(event.code);
-    const quality = event.strategy === "strategy5"
-      ? strategy5Quality(event, quote, now)
-      : intradayQuality(event, quote, payload);
+    const quality = event.strategy === "strategy2-entry"
+      ? intradayQuality(event, quote, payload)
+      : listStrategyQuality(event, quote, now);
     if (!quality.pass) {
       console.log(`trade manager skip ${event.code}: ${quality.reasons.join("；")}`);
       continue;
@@ -451,6 +628,7 @@ async function main() {
       console.log(`trade manager skip ${event.code}: 今日交易金額${nextDailyAmount.toLocaleString("zh-TW")}超過上限${MAX_DAILY_AMOUNT.toLocaleString("zh-TW")}`);
       continue;
     }
+    const stopLoss = smartStopLoss(event, quote, entryPrice, quality);
     const position = {
       code: event.code,
       name: event.name || quote?.name || "",
@@ -458,7 +636,9 @@ async function main() {
       entryTime: event.firstAAt || now.time,
       entryPrice,
       takeProfitPrice: roundTradePrice(entryPrice * (1 + TAKE_PROFIT_PCT / 100)),
-      stopLossPrice: roundTradePrice(entryPrice * (1 - STOP_LOSS_PCT / 100)),
+      stopLossPrice: stopLoss.price,
+      stopLossPct: stopLoss.pct,
+      stopLossBasis: stopLoss.basis,
       shares: plan.shares,
       lots: plan.lots,
       amount: plan.amount,
@@ -502,21 +682,14 @@ async function main() {
     position.lastUpdatedAt = new Date().toISOString();
     const action = signal.action;
     if (!action) continue;
-    position.exitReason = signal.reason;
-    const text = buildExitMessage(position, quote, action);
-    const pnl = profitText(position.entryPrice, current, position.shares);
+    const closed = closePosition(state, code, position, quote, action, signal.reason);
+    if (!closed) continue;
+    const pnl = profitText(closed.entryPrice, closed.exitPrice, closed.shares);
     messages.push({
-      text,
-      altText: `交易管家${action === "takeProfit" ? "停利" : "停損"}：${position.code} ${position.name || ""}`.trim(),
-      flex: tradeExitFlex(position, quote, action, pnl.text),
+      text: buildExitMessage(closed, quote, action),
+      altText: `交易管家${action === "takeProfit" ? "停利" : "停損"}：${closed.code} ${closed.name || ""}`.trim(),
+      flex: tradeExitFlex(closed, quote, action, pnl.text),
     });
-    state.closed[code] = {
-      ...position,
-      exitPrice: current,
-      exitAction: action,
-      closedAt: new Date().toISOString(),
-    };
-    delete state.positions[code];
   }
 
   writeJson(STATE_FILE, state);

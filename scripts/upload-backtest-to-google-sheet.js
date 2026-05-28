@@ -21,6 +21,8 @@ const STRATEGY5_TRACK_FILE = path.join(CACHE_DIR, "intraday", "strategy5-scoreca
 const TRADE_MANAGER_STATE_FILE = path.join(RUNTIME_DIR, "state", "trade-manager-state.json");
 const STRATEGY5_TAKE_PROFIT_PCT = Number(process.env.STRATEGY5_TAKE_PROFIT_PCT || process.env.TRADE_MANAGER_TAKE_PROFIT_PCT || 3);
 const STRATEGY5_STOP_LOSS_PCT = Number(process.env.STRATEGY5_STOP_LOSS_PCT || process.env.TRADE_MANAGER_STOP_LOSS_PCT || 2);
+const STRATEGY5_PROTECT_PROFIT_PCT = Number(process.env.STRATEGY5_PROTECT_PROFIT_PCT || 0.8);
+const STRATEGY5_MIN_ENTRY_TIME = process.env.STRATEGY5_MIN_ENTRY_TIME || "09:00:00";
 const REDIRECT_PORT = Number(process.env.GOOGLE_OAUTH_PORT || 53682);
 const REDIRECT_URI = `http://127.0.0.1:${REDIRECT_PORT}/oauth2callback`;
 const SCOPES = ["https://www.googleapis.com/auth/spreadsheets"];
@@ -298,7 +300,7 @@ function tradeManagerRows(dateText) {
       fmtPrice(item.takeProfitPrice),
       fmtPrice(item.stopLossPrice),
       item.shares || "",
-      item.exitReason || "",
+      [item.exitReason, item.stopLossBasis ? `智慧停損：${item.stopLossBasis}` : ""].filter(Boolean).join("；"),
     ]);
   }
   for (const item of open) {
@@ -317,7 +319,7 @@ function tradeManagerRows(dateText) {
       fmtPrice(item.takeProfitPrice),
       fmtPrice(item.stopLossPrice),
       item.shares || "",
-      "",
+      item.stopLossBasis ? `智慧停損：${item.stopLossBasis}` : "",
     ]);
   }
   if (!closed.length && !open.length) rows.push(["今天交易管家沒有建立交易計畫", "", "", "", "", "", "", "", "", "", "", "", "", ""]);
@@ -418,27 +420,53 @@ function strategy5PlanFromCandles(item, intraday) {
   let cumulativeValue = 0;
   let rollingHigh = 0;
   let entry = null;
+  const entryVolumes = [];
   for (let index = 0; index < candles.length; index += 1) {
     const candle = candles[index];
     cumulativeVolume += candle.volume || 0;
     cumulativeValue += (candle.close || 0) * (candle.volume || 0);
     rollingHigh = Math.max(rollingHigh, candle.high || 0);
-    if (timeToSeconds(candle.time) < timeToSeconds("09:05:00")) continue;
+    const previous = index > 0 ? candles[index - 1] : null;
+    const recentVolumes = entryVolumes.slice(-5);
+    const avgVolume = recentVolumes.length ? recentVolumes.reduce((sum, value) => sum + value, 0) / recentVolumes.length : 0;
+    const volumeExpanding = avgVolume > 0 ? (candle.volume || 0) >= avgVolume * 1.1 : (candle.volume || 0) > 0;
+    entryVolumes.push(candle.volume || 0);
+    if (timeToSeconds(candle.time) < timeToSeconds(STRATEGY5_MIN_ENTRY_TIME)) continue;
     const vwap = cumulativeVolume ? cumulativeValue / cumulativeVolume : candle.close;
     const pct = prevClose ? ((candle.close - prevClose) / prevClose) * 100 : Number(item.percent || 0);
     const nearHigh = rollingHigh ? candle.close >= rollingHigh * 0.985 : true;
     const notOverheated = pct <= 8.5;
-    if (pct >= 2 && notOverheated && candle.close >= vwap && nearHigh && cumulativeVolume >= 100) {
-      entry = { ...candle, index, pct, vwap, cumulativeVolume };
+    const buyPressure = candle.close >= candle.open && (!previous || candle.close >= previous.close) && volumeExpanding;
+    if (pct >= 2 && notOverheated && candle.close >= vwap && nearHigh && cumulativeVolume >= 100 && buyPressure) {
+      entry = { ...candle, index, pct, vwap, cumulativeVolume, volumeExpanding };
       break;
     }
   }
   if (!entry) return null;
   const entryPrice = roundTradePrice(entry.close);
   const takeProfitPrice = roundTradePrice(entryPrice * (1 + STRATEGY5_TAKE_PROFIT_PCT / 100));
+  const protectProfitPrice = roundTradePrice(entryPrice * (1 + STRATEGY5_PROTECT_PROFIT_PCT / 100));
   const stopLossPrice = roundTradePrice(entryPrice * (1 - STRATEGY5_STOP_LOSS_PCT / 100));
   let exit = null;
-  for (const candle of candles.slice(entry.index + 1)) {
+  let postEntryHigh = entry.high || entryPrice;
+  let postEntryVolume = entry.cumulativeVolume || cumulativeVolume;
+  const postEntryVolumes = [];
+  const afterEntryCandles = candles.slice(entry.index + 1);
+  for (let offset = 0; offset < afterEntryCandles.length; offset += 1) {
+    const candle = afterEntryCandles[offset];
+    const previous = offset > 0 ? afterEntryCandles[offset - 1] : entry;
+    postEntryVolume += candle.volume || 0;
+    postEntryHigh = Math.max(postEntryHigh, candle.high || 0);
+    const vwap = postEntryVolume ? ((entry.vwap || entryPrice) * (entry.cumulativeVolume || 1) + afterEntryCandles.slice(0, offset + 1).reduce((sum, row) => sum + (row.close || 0) * (row.volume || 0), 0)) / postEntryVolume : candle.close;
+    const recentVolumes = postEntryVolumes.slice(-5);
+    const avgVolume = recentVolumes.length ? recentVolumes.reduce((sum, value) => sum + value, 0) / recentVolumes.length : 0;
+    const profitHighPct = entryPrice ? ((postEntryHigh - entryPrice) / entryPrice) * 100 : 0;
+    const highGivebackPct = postEntryHigh ? ((postEntryHigh - candle.close) / postEntryHigh) * 100 : 0;
+    const volumeSpike = avgVolume > 0 && (candle.volume || 0) >= avgVolume * 1.5;
+    const redCandle = candle.close < candle.open;
+    const priceWeak = candle.close < previous.close || candle.close < vwap || highGivebackPct >= 0.6;
+    const sellPressure = profitHighPct >= STRATEGY5_PROTECT_PROFIT_PCT && priceWeak && (volumeSpike || redCandle || highGivebackPct >= 0.8);
+    postEntryVolumes.push(candle.volume || 0);
     const hitStop = stopLossPrice && candle.low <= stopLossPrice;
     const hitProfit = takeProfitPrice && candle.high >= takeProfitPrice;
     if (hitStop && hitProfit) {
@@ -449,6 +477,15 @@ function strategy5PlanFromCandles(item, intraday) {
     }
     if (hitProfit) {
       exit = { time: candle.time, price: takeProfitPrice, reason: `觸及 ${STRATEGY5_TAKE_PROFIT_PCT}% 停利` };
+      break;
+    }
+    if (sellPressure) {
+      const exitPrice = roundTradePrice(Math.max(candle.close, Math.min(protectProfitPrice, postEntryHigh)));
+      exit = {
+        time: candle.time,
+        price: exitPrice,
+        reason: `獲利後偵測賣壓：高點${fmtNumber(postEntryHigh, postEntryHigh >= 100 ? 1 : 2)}、回吐${highGivebackPct.toFixed(2)}%、${volumeSpike ? "放量" : "量縮"}、${candle.close < vwap ? "跌破VWAP" : "未破VWAP"}`,
+      };
       break;
     }
     if (hitStop) {
@@ -468,7 +505,7 @@ function strategy5PlanFromCandles(item, intraday) {
     exitTime: exit.time,
     exitPrice: exit.price,
     pnl,
-    reason: `1分K觸發：漲幅${entry.pct.toFixed(2)}%、站上VWAP、貼近當時高點；${exit.reason}`,
+    reason: `1分K智慧進場：漲幅${entry.pct.toFixed(2)}%、站上VWAP、貼近當時高點、買量延續；${exit.reason}`,
     source: intraday.source,
   };
 }
