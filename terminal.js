@@ -10287,10 +10287,9 @@ function sortMarketAiPriorityStocks(stocks = []) {
 
 function getMarketAiFilterMeta(groups) {
   return [
-    { key: "all", label: "全部", count: groups.all.length },
-    { key: "momentum", label: "動能強", count: groups.momentum.length },
-    { key: "legal", label: "法人買超", count: groups.legal.length },
-    { key: "intraday", label: "當沖熱", count: groups.intraday.length },
+    { key: "momentum", label: "動能強", count: 10 },
+    { key: "legal", label: "法人買超", count: 10 },
+    { key: "intraday", label: "當沖熱", count: 10 },
   ];
 }
 
@@ -10323,7 +10322,7 @@ function buildMarketAiData() {
     .slice(0, 40);
   const hotGroups = getMarketAiHotGroups(hotStocks);
   hotGroups.intraday = sortMarketAiIntradayStocks(classifiedStocks.filter((stock) => stock.buckets.intraday)).slice(0, 40);
-  if (!hotGroups[marketAiHotFilter]) marketAiHotFilter = "all";
+  if (!hotGroups[marketAiHotFilter] || marketAiHotFilter === "all") marketAiHotFilter = "momentum";
   const visibleHotStocks = hotGroups[marketAiHotFilter].filter((stock) => isMarketAiLongCandidate(stock)).slice(0, 10);
   const riskStocks = stocks
     .filter((stock) => cleanNumber(stock.percent) <= -3 || cleanNumber(stock.percent) >= 8.5)
