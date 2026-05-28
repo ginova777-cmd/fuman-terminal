@@ -2,6 +2,7 @@ const cache = new Map();
 const CACHE_MS = 30 * 60 * 1000;
 let tpexDailyCache = null;
 const { fetchMisQuotes, mergeMisQuoteIntoHistory } = require("../lib/mis-quotes");
+const USE_MIS_QUOTES = process.env.STRATEGY4_USE_MIS === "1";
 
 async function fetchText(url, options = {}, timeout = 12000) {
   const controller = new AbortController();
@@ -534,13 +535,15 @@ module.exports = async function handler(request, response) {
     return;
   }
 
-  const quoteMap = await fetchMisQuotes(codes);
+  const quoteMap = USE_MIS_QUOTES ? await fetchMisQuotes(codes) : new Map();
   const results = await Promise.allSettled(codes.map(async (code) => {
-    const history = mergeMisQuoteIntoHistory(await mergeTpexDailyQuote(code, await fetchHistory(code)), quoteMap.get(code));
+    const officialHistory = await mergeTpexDailyQuote(code, await fetchHistory(code));
+    const history = USE_MIS_QUOTES
+      ? mergeMisQuoteIntoHistory(officialHistory, quoteMap.get(code))
+      : officialHistory;
     if (!history.rows.length) return null;
     return scanStrategy4(code, history.market, history.rows);
   }));
-
   const matches = results
     .filter((result) => result.status === "fulfilled" && result.value)
     .map((result) => result.value)
@@ -550,6 +553,7 @@ module.exports = async function handler(request, response) {
   response.status(200).json({
     ok: true,
     updatedAt: new Date().toISOString(),
+    priceSource: USE_MIS_QUOTES ? "official-daily-k-plus-mis" : "official-daily-k",
     scanned: codes.length,
     scannedCodes: codes,
     count: matches.length,
@@ -559,3 +563,4 @@ module.exports = async function handler(request, response) {
       .filter(Boolean),
   });
 };
+
