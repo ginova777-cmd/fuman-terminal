@@ -15,6 +15,8 @@ const STRATEGY3_SCORECARD_SOURCE_FILE = path.join(ROOT, "data", "strategy3-score
 const STRATEGY3_FILE = path.join(ROOT, "data", "strategy3-latest.json");
 const STRATEGY3_BACKUP_FILE = path.join(ROOT, "data", "strategy3-backup.json");
 const BASE_URL = process.env.FUMAN_BASE_URL || "https://fuman-terminal.vercel.app";
+const REALTIME_BATCH_SIZE = Number(process.env.STRATEGY2_REALTIME_BATCH_SIZE || 80);
+const REALTIME_RETRY_BATCH_SIZE = Number(process.env.STRATEGY2_REALTIME_RETRY_BATCH_SIZE || 20);
 
 function readJson(file, fallback) {
   try { return JSON.parse(fs.readFileSync(file, "utf8")); } catch { return fallback; }
@@ -375,17 +377,84 @@ async function fetchStocks() {
 
 async function fetchRealtime(stocks) {
   const quotes = new Map();
-  const batchSize = 100;
-  for (let i = 0; i < stocks.length; i += batchSize) {
-    const codes = stocks.slice(i, i + batchSize).map((stock) => stock.code);
-    if (!codes.length) continue;
-    try {
-      const payload = await fetchJson(`${BASE_URL}/api/realtime?codes=${encodeURIComponent(codes.join(","))}&t=${Date.now()}`, 20000);
-      (payload.quotes || []).forEach((quote) => quotes.set(quote.code, quote));
-    } catch (error) {
-      console.log(`realtime batch failed ${codes[0]}-${codes.at(-1)}: ${error.message}`);
+  const recoveredCodes = new Set();
+  const failedBatches = [];
+  const retryBatches = [];
+  const missedCodes = new Set();
+
+  async function fetchRealtimeBatch(codes) {
+    if (!codes.length) return;
+    const payload = await fetchJson(`${BASE_URL}/api/realtime?codes=${encodeURIComponent(codes.join(","))}&t=${Date.now()}`, 12000);
+    (payload.quotes || []).forEach((quote) => quotes.set(quote.code, quote));
+  }
+
+  async function fetchSmallRetries(codes, parentLabel) {
+    const stillFailed = [];
+    for (let i = 0; i < codes.length; i += REALTIME_RETRY_BATCH_SIZE) {
+      const retryCodes = codes.slice(i, i + REALTIME_RETRY_BATCH_SIZE);
+      const label = `${retryCodes[0]}-${retryCodes.at(-1)}`;
+      try {
+        await fetchRealtimeBatch(retryCodes);
+        retryCodes.forEach((code) => {
+          if (quotes.has(code)) recoveredCodes.add(code);
+        });
+        retryBatches.push({ range: label, size: retryCodes.length, parent: parentLabel, ok: true });
+      } catch (error) {
+        console.log(`realtime retry batch failed ${label} (${retryCodes.length}) from ${parentLabel}: ${error.message}`);
+        retryBatches.push({ range: label, size: retryCodes.length, parent: parentLabel, ok: false, error: error.message });
+        stillFailed.push(...retryCodes);
+      }
+    }
+    return stillFailed;
+  }
+
+  async function fetchSingleRetries(codes, parentLabel) {
+    for (const code of codes) {
+      try {
+        await fetchRealtimeBatch([code]);
+        if (quotes.has(code)) recoveredCodes.add(code);
+      } catch (error) {
+        if (/^\d{4}$/.test(String(code)) && !String(code).startsWith("00")) missedCodes.add(code);
+        console.log(`realtime single failed ${code} from ${parentLabel}: ${error.message}`);
+      }
     }
   }
+
+  const requests = [];
+  for (let i = 0; i < stocks.length; i += REALTIME_BATCH_SIZE) {
+    const codes = stocks.slice(i, i + REALTIME_BATCH_SIZE).map((stock) => stock.code);
+    if (!codes.length) continue;
+    requests.push({ codes, promise: fetchRealtimeBatch(codes) });
+  }
+  const results = await Promise.allSettled(requests.map((request) => request.promise));
+  const failed = results
+    .map((result, index) => ({ result, codes: requests[index].codes }))
+    .filter((item) => item.result.status === "rejected");
+  failed.forEach((item) => {
+    const error = item.result.reason?.message || String(item.result.reason || "");
+    const label = `${item.codes[0]}-${item.codes.at(-1)}`;
+    failedBatches.push({ range: label, size: item.codes.length, codes: item.codes, error });
+    console.log(`realtime batch failed ${label} (${item.codes.length}): ${error}`);
+  });
+  for (const item of failed) {
+    const label = `${item.codes[0]}-${item.codes.at(-1)}`;
+    const stillFailed = await fetchSmallRetries(item.codes, label);
+    await fetchSingleRetries(stillFailed, label);
+  }
+  stocks.forEach((stock) => {
+    const code = String(stock.code || "");
+    if (!quotes.has(code) && /^\d{4}$/.test(code) && !code.startsWith("00")) missedCodes.add(code);
+  });
+  fetchRealtime.lastStats = {
+    requested: stocks.length,
+    received: quotes.size,
+    failed: failed.length,
+    failedBatches,
+    retryBatches,
+    recoveredCodes: [...recoveredCodes],
+    missedCodes: [...missedCodes],
+    missedCount: missedCodes.size,
+  };
   return stocks.map((stock) => {
     const quote = quotes.get(stock.code);
     if (!quote?.close) return { ...stock, isRealtime: false };
@@ -393,7 +462,7 @@ async function fetchRealtime(stocks) {
     const value = quoteVolume && cleanNumber(quote.close)
       ? quoteVolume * cleanNumber(quote.close)
       : stock.value;
-    return { ...stock, ...quote, tradeVolume: quoteVolume, value, isRealtime: true };
+    return { ...stock, ...quote, quoteTime: quote.time, tradeVolume: quoteVolume, value, isRealtime: true, recoveredFromRealtimeFallback: recoveredCodes.has(stock.code) };
   });
 }
 
@@ -409,9 +478,12 @@ async function main() {
   }
 
   const rawStocks = await fetchStocks();
-  const liveStocks = (await fetchRealtime(rawStocks))
+  const realtimePayload = await fetchRealtime(rawStocks);
+  const realtimeStats = fetchRealtime.lastStats || { requested: rawStocks.length, received: 0, failed: 0, missedCount: 0, missedCodes: [] };
+  const liveStocks = realtimePayload
     .filter((stock) => stock.isRealtime === true)
     .filter(isIntradayTradable);
+  const coverage = rawStocks.length ? liveStocks.length / rawStocks.length : 0;
   const ranks = buildRanks(liveStocks);
   const timestamp = timestampKey(parts);
   let added = 0;
@@ -472,11 +544,19 @@ async function main() {
   cache.records = normalizeStrategy2Records(cache.records || []);
   cache.updatedAt = new Date().toISOString();
   const strategy2Events = mergeStrategy2Events(cache.records || [], key);
+  const realtimeSummary = {
+    ...realtimeStats,
+    coverage: Number(coverage.toFixed(4)),
+    usable: liveStocks.length,
+    initialBatchSize: REALTIME_BATCH_SIZE,
+    retryBatchSize: REALTIME_RETRY_BATCH_SIZE,
+  };
   writeJson(SIGNAL_FILE, cache);
   writeJson(STRATEGY2_REPORT_FILE, {
     source: "strategy2-09-to-1330-patrol",
     date: key,
     updatedAt: cache.updatedAt,
+    realtime: realtimeSummary,
     records: cache.records,
     events: strategy2Events,
     aCount: strategy2Events.filter((event) => event.firstAAt).length,
@@ -486,6 +566,7 @@ async function main() {
     source: "strategy2-09-to-1330-patrol",
     date: key,
     updatedAt: cache.updatedAt,
+    realtime: realtimeSummary,
     records: cache.records,
     events: strategy2Events,
     aCount: strategy2Events.filter((event) => event.firstAAt).length,
