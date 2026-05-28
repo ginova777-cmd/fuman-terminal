@@ -37,6 +37,11 @@ function writeJson(file, payload) {
   fs.writeFileSync(file, JSON.stringify(payload, null, 2) + "\n", "utf8");
 }
 
+function cleanNumber(value) {
+  const number = Number(String(value ?? "").replace(/,/g, ""));
+  return Number.isFinite(number) ? number : 0;
+}
+
 function parseCsv(text) {
   const rows = [];
   let row = [];
@@ -417,10 +422,14 @@ async function fetchYahooIntradayMap(matches, dateText) {
   return map;
 }
 
-function strategy5PlanFromCandles(item, intraday) {
+function strategy5PlanFromCandles(item, intraday, options = {}) {
   const candles = intraday?.candles || [];
   if (!candles.length) return null;
   const prevClose = Number(intraday.prevClose || item.prevClose || 0);
+  const forcedEntryTime = scorecardTime(options.entryTime);
+  const forcedEntryPrice = cleanNumber(options.entryPrice);
+  const minEntryTime = forcedEntryTime || options.minEntryTime || STRATEGY5_MIN_ENTRY_TIME;
+  const reasonPrefix = options.reasonPrefix || "1分K智慧進場";
   let cumulativeVolume = 0;
   let cumulativeValue = 0;
   let rollingHigh = 0;
@@ -436,13 +445,17 @@ function strategy5PlanFromCandles(item, intraday) {
     const avgVolume = recentVolumes.length ? recentVolumes.reduce((sum, value) => sum + value, 0) / recentVolumes.length : 0;
     const volumeExpanding = avgVolume > 0 ? (candle.volume || 0) >= avgVolume * 1.1 : (candle.volume || 0) > 0;
     entryVolumes.push(candle.volume || 0);
-    if (timeToSeconds(candle.time) < timeToSeconds(STRATEGY5_MIN_ENTRY_TIME)) continue;
+    if (timeToSeconds(candle.time) < timeToSeconds(minEntryTime)) continue;
     const vwap = cumulativeVolume ? cumulativeValue / cumulativeVolume : candle.close;
     const pct = prevClose ? ((candle.close - prevClose) / prevClose) * 100 : Number(item.percent || 0);
     const nearHigh = rollingHigh ? candle.close >= rollingHigh * 0.985 : true;
     const highGivebackPct = rollingHigh ? ((rollingHigh - candle.close) / rollingHigh) * 100 : 0;
     const notOverheated = pct <= 8.5;
     const buyPressure = candle.close >= candle.open && (!previous || candle.close >= previous.close) && volumeExpanding;
+    if (forcedEntryTime && timeToSeconds(candle.time) >= timeToSeconds(forcedEntryTime)) {
+      entry = { ...candle, close: forcedEntryPrice || candle.close, index, pct, vwap, cumulativeVolume, volumeExpanding, highGivebackPct, forcedEntry: true };
+      break;
+    }
     if (pct >= STRATEGY5_MIN_ENTRY_PCT && notOverheated && candle.close >= vwap && nearHigh && highGivebackPct <= 1.5 && cumulativeVolume >= 100 && buyPressure) {
       entry = { ...candle, index, pct, vwap, cumulativeVolume, volumeExpanding, highGivebackPct };
       break;
@@ -532,7 +545,7 @@ function strategy5PlanFromCandles(item, intraday) {
     exitTime: exit.time,
     exitPrice: exit.price,
     pnl,
-    reason: `1分K智慧進場：漲幅${entry.pct.toFixed(2)}%、站上VWAP、買量延續、高點回吐${entry.highGivebackPct.toFixed(2)}%、IBH ${fmtPrice(ibh)} / IBL ${fmtPrice(ibl)} / 0.618 ${fmtPrice(fib618)}；${exit.reason}`,
+    reason: `${reasonPrefix}：${entry.forcedEntry ? `進場區${entry.time}觸發` : `漲幅${entry.pct.toFixed(2)}%`}、站上VWAP、買量延續、高點回吐${entry.highGivebackPct.toFixed(2)}%、IBH ${fmtPrice(ibh)} / IBL ${fmtPrice(ibl)} / 0.618 ${fmtPrice(fib618)}；${exit.reason}`,
     source: intraday.source,
   };
 }
@@ -807,7 +820,125 @@ function ma35AttemptText(item) {
   return attempts.map((attempt) => `${attempt.source}:${attempt.ok ? "OK" : "NO"}${attempt.configured === false ? "(no-key)" : ""}${attempt.error ? ` ${attempt.error}` : ""}`).join(" / ");
 }
 
-function strategy2Rows(dateText) {
+function strategy2TradePlan(event, intraday) {
+  const entryTime = scorecardTime(event.firstTradableAAt, event.firstAAt);
+  const entryPrice = cleanNumber(event.firstTradableAPrice) || cleanNumber(event.firstAPrice);
+  const candlePlan = strategy5PlanFromCandles(
+    { ...event, percent: event.percent ?? event.maxPercent ?? 0, shares: event.shares ?? 1000 },
+    intraday,
+    { entryTime, entryPrice, reasonPrefix: "策略2進場區智慧進出" },
+  );
+  if (candlePlan) return candlePlan;
+  if (!entryTime || !entryPrice) return { entryTime: "", entryPrice: "", exitTime: "", exitPrice: "", pnl: "", reason: "尚未觸發進場區條件" };
+  const exitPrice = roundTradePrice(cleanNumber(event.highAfterA) || cleanNumber(event.highestPrice) || entryPrice);
+  const shares = Number(event.shares ?? 1000);
+  return {
+    entryTime,
+    entryPrice: roundTradePrice(entryPrice),
+    exitTime: scorecardTime(event.highAfterAAt, event.highestAt) || "資料不足",
+    exitPrice,
+    pnl: Number.isFinite(shares) ? Math.round((exitPrice - entryPrice) * shares) : "",
+    reason: intraday?.error
+      ? `1分K資料不足：${intraday.error}`
+      : "1分K資料不足，暫用進場區後高點估算",
+    source: intraday?.source || "",
+  };
+}
+
+async function strategy2Rows(dateText) {
+  let info = readFirstJson([path.join(DATA_DIR, "strategy2-intraday-latest.json"), path.join(REPO_DATA_DIR, "strategy2-intraday-latest.json")]);
+  let payload = info.value || {};
+  if (!Array.isArray(payload.records) || payload.records.length === 0) {
+    const historyInfo = readFirstJson([
+      path.join(DATA_DIR, "strategy2-intraday-history", `${dateText}.json`),
+      path.join(REPO_DATA_DIR, "strategy2-intraday-history", `${dateText}.json`),
+    ]);
+    if (Array.isArray(historyInfo.value?.records) && historyInfo.value.records.length) {
+      info = historyInfo;
+      payload = historyInfo.value;
+    }
+  }
+  const events = (Array.isArray(payload.events) ? payload.events : []).filter((item) => !isDrStock(item));
+  const records = (Array.isArray(payload.records) ? payload.records : []).filter((item) => !isDrStock(item));
+  const timeOnly = (value) => String(value || "").match(/\d{2}:\d{2}(?::\d{2})?/)?.[0] || "";
+  const strategyText = (item) => Array.isArray(item.strategies) ? item.strategies.join(" / ") : item.strategy || "";
+  const entryEvents = events
+    .filter((event) => event.firstAAt)
+    .sort((a, b) => String(a.firstAAt).localeCompare(String(b.firstAAt)) || String(a.code || "").localeCompare(String(b.code || "")));
+  const entryRecords = records
+    .filter((item) => item.stateId === "entry" || item.stateId === "go")
+    .sort((a, b) => {
+      const at = Date.parse(String(a.timestamp || a.entryAt || "").replace(" ", "T"));
+      const bt = Date.parse(String(b.timestamp || b.entryAt || "").replace(" ", "T"));
+      if (Number.isFinite(bt) && Number.isFinite(at) && bt !== at) return at - bt;
+      return Number(b.score || 0) - Number(a.score || 0);
+    });
+  const intradayMap = await fetchYahooIntradayMap(entryEvents, dateText);
+  const plans = entryEvents.map((event, index) => ({
+    index: index + 1,
+    event,
+    plan: strategy2TradePlan(event, intradayMap.get(String(event.code || ""))),
+  }));
+  const totalPnl = plans.reduce((sum, row) => {
+    const pnl = Number(row.plan.pnl);
+    return sum + (Number.isFinite(pnl) ? pnl : 0);
+  }, 0);
+  const firstRecordTime = timeOnly(entryRecords[0]?.timestamp || entryRecords[0]?.entryAt || entryEvents[0]?.firstAAt);
+  const lastRecordTime = timeOnly(entryRecords[entryRecords.length - 1]?.timestamp || entryRecords[entryRecords.length - 1]?.entryAt || entryEvents[entryEvents.length - 1]?.firstAAt);
+  const rows = [
+    ["策略2成績單"],
+    ["資料日期", payload.date || dateText, "更新時間", payload.updatedAt || "", "來源", info.file, "", "", "", ""],
+    ["今日損益", totalPnl, "進場區交易", plans.length, "規則", "只保留進場區，套用策略5智慧進出", "", "", "", ""],
+    ["寫入範圍", firstRecordTime || "無", "到", lastRecordTime || "無", "逐筆顯示", "進場區紀錄，最早在上", "", "", "", ""],
+    ["排序", "股票代碼", "股票名稱", "進場時間", "進場價格", "出場時間", "出場價格", "漲幅(%)", "損益", "判斷原因"],
+  ];
+  plans.forEach(({ index, event, plan }) => {
+    rows.push([
+      index,
+      event.code || "",
+      event.name || "",
+      plan.entryTime,
+      fmtPrice(plan.entryPrice),
+      plan.exitTime,
+      fmtPrice(plan.exitPrice),
+      fmtNumber(event.percent ?? event.maxPercent),
+      plan.pnl,
+      plan.reason,
+    ]);
+  });
+  if (!plans.length) rows.push(["目前沒有進場區交易資料", "", "", "", "", "", "", "", "", ""]);
+
+  rows.push([""]);
+  rows.push(["進場區逐筆紀錄（最早在上，只保留進場區）"]);
+  rows.push(["掃描時間", "股票代碼", "股票名稱", "分數", "進場價", "最高價", "最高時間", "漲幅(%)", "成交量", "策略", "MA35來源", "MA35代號", "MA35時間", "MA35值", "備援嘗試", "原因"]);
+  if (firstRecordTime && firstRecordTime > "09:05:00") {
+    rows.push(["早盤提醒", `本日第一筆進場區紀錄為 ${firstRecordTime}；09:00 到第一筆之前沒有寫入進場區紀錄，需回看巡邏日誌確認是否為無訊號或報價失敗。`, "", "", "", "", "", "", "", "", "", "", "", "", "", ""]);
+  }
+  for (const item of entryRecords) {
+    rows.push([
+      timeOnly(item.timestamp || item.entryAt),
+      item.code || "",
+      item.name || "",
+      item.score ?? "",
+      fmtPrice(item.entryPrice),
+      fmtPrice(item.observedHigh ?? item.highestPrice),
+      timeOnly(item.observedHighAt || item.highestAt),
+      fmtNumber(item.percent),
+      item.volume ?? "",
+      strategyText(item),
+      item.ma35Source || "",
+      item.ma35Symbol || "",
+      item.ma35At || "",
+      fmtPrice(item.ma35),
+      ma35AttemptText(item),
+      item.stateReason || item.reason || "",
+    ]);
+  }
+  if (!entryRecords.length) rows.push(["目前沒有進場區逐筆資料", "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]);
+  return rows;
+}
+
+function legacyStrategy2Rows(dateText) {
   let info = readFirstJson([path.join(DATA_DIR, "strategy2-intraday-latest.json"), path.join(REPO_DATA_DIR, "strategy2-intraday-latest.json")]);
   let payload = info.value || {};
   if (!Array.isArray(payload.records) || payload.records.length === 0) {
@@ -961,7 +1092,7 @@ async function loadScorecardSheets(stamp, radarCsv, report) {
     "即時雷達成績單": realtimeRadarRows(radarCsv, report, dateText),
     "交易管家成績單": tradeManagerRows(dateText),
     "策略1成績單": await strategy1Rows(readFirstJson([path.join(DATA_DIR, "open-buy-latest.json"), path.join(REPO_DATA_DIR, "open-buy-latest.json"), path.join(DATA_DIR, "open-buy-scorecard-source.json"), path.join(REPO_DATA_DIR, "open-buy-scorecard-source.json")]), dateText),
-    "策略2成績單": strategy2Rows(dateText),
+    "策略2成績單": await strategy2Rows(dateText),
     "策略3成績單": await strategy3Rows(readFirstJson([path.join(DATA_DIR, "strategy3-scorecard-source.json"), path.join(REPO_DATA_DIR, "strategy3-scorecard-source.json"), path.join(DATA_DIR, "strategy3-latest.json"), path.join(REPO_DATA_DIR, "strategy3-latest.json")]), dateText),
     "策略5成績單": await strategy5Rows(readFirstJson([path.join(DATA_DIR, "strategy5-latest.json"), path.join(REPO_DATA_DIR, "strategy5-latest.json")]), dateText),
   };
