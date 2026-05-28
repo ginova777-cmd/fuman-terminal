@@ -1227,6 +1227,29 @@ function installThemeToggle() {
         color: #9fb3d9;
         background: rgba(15, 23, 42, 0.38);
       }
+      .data-freshness-bar {
+        margin: 12px 0 18px;
+        padding: 12px 16px;
+        border: 1px solid rgba(148, 163, 184, 0.26);
+        border-radius: 8px;
+        color: #bdd2ff;
+        background: rgba(15, 23, 42, 0.74);
+        font-size: 15px;
+        line-height: 1.65;
+        letter-spacing: 0;
+      }
+      .data-freshness-bar b {
+        color: #ffffff;
+        font-weight: 800;
+      }
+      .data-freshness-bar .warn {
+        color: #fbbf24;
+        font-weight: 800;
+      }
+      .data-freshness-bar .live {
+        color: #34d399;
+        font-weight: 800;
+      }
       .market-ai-stock-row {
         display: grid;
         grid-template-columns: 52px minmax(260px, 1.35fr) minmax(180px, 0.72fr) minmax(120px, 0.48fr) minmax(220px, 1fr) 150px;
@@ -2217,6 +2240,98 @@ function isViewActive(name) {
 
 function titleWithIcon(icon, text) {
   return `<span class="page-title-icon">${icon}</span>${text}`;
+}
+
+function formatDataStatusDate(value) {
+  const key = typeof normalizeMarketAiDateKey === "function" ? normalizeMarketAiDateKey(value) : String(value || "").replace(/\D/g, "");
+  if (key && key.length === 8) return `${key.slice(0, 4)}-${key.slice(4, 6)}-${key.slice(6, 8)}`;
+  const time = cleanNumber(value);
+  if (time > 0) {
+    const date = new Date(time);
+    if (!Number.isNaN(date.getTime())) {
+      return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+    }
+  }
+  return "未知";
+}
+
+function formatDataStatusTime(value) {
+  const time = cleanNumber(value);
+  if (!time) return "";
+  const date = new Date(time);
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toLocaleTimeString("zh-TW", { hour12: false, hour: "2-digit", minute: "2-digit", second: "2-digit" });
+}
+
+function firstDateFromRows(rows = []) {
+  for (const row of normalizeArray(rows)) {
+    const key = marketAiQuoteDateKey?.(row) || normalizeMarketAiDateKey?.(row?.date || row?.usedDate || row?.tradeDate || row?.quoteDate);
+    if (key) return key;
+  }
+  return "";
+}
+
+function currentStrategyDataStatus() {
+  if (selectedStrategyIds.has("open_buy")) {
+    return { mode: "策略1 07:00 / 16:00 完整掃", date: firstDateFromRows(Object.values(openBuyScanMatches)), base: firstDateFromRows(Object.values(openBuyScanMatches)), updatedAt: openBuyScanLastAt, source: "open-buy-latest.json" };
+  }
+  if (selectedStrategyIds.has("intraday_2m")) {
+    return { mode: isIntradayScanWindow() ? "策略2 盤中即時巡邏" : "策略2 盤後最後快照", date: marketAiTodayKey(), base: marketAiTodayKey(), updatedAt: strategyLastScanAt || realtimeRadarLastUpdatedAt, source: "/api/realtime" };
+  }
+  if (selectedStrategyIds.has("overnight_chip")) {
+    return { mode: "策略3 13:00 完整掃", date: firstDateFromRows(strategy3Data), base: firstDateFromRows(strategy3Data), updatedAt: strategy3UpdatedAt, source: "strategy3-latest.json" };
+  }
+  if (selectedStrategyIds.has("swing_radar")) {
+    return { mode: "策略4 07:00 / 14:30 完整掃", date: firstDateFromRows(Object.values(strategy4ScanMatches)), base: firstDateFromRows(Object.values(strategy4ScanMatches)), updatedAt: strategy4ScanLastAt, source: "strategy4-latest.json" };
+  }
+  if (strategyPresetMode === "strategy5") {
+    return { mode: "策略5 06:00 / 21:00 完整掃", date: firstDateFromRows(strategy5Data), base: firstDateFromRows(strategy5Data), updatedAt: strategy5UpdatedAt, source: "strategy5-latest.json" };
+  }
+  return { mode: "策略中心", date: marketAiTargetDateKey(), base: marketAiTargetDateKey(), updatedAt: Date.now(), source: "目前選取策略" };
+}
+
+function getViewDataStatus(viewName = getActiveViewName()) {
+  if (viewName === "market") {
+    const live = isMarketAiActiveSession();
+    const base = live ? marketAiTodayKey() : marketAiTargetDateKey();
+    return { mode: live ? "市場總覽 / AI 盤中即時巡邏" : marketStockDataState.isFallbackDate ? "市場總覽 / 最新可用收盤資料" : "市場總覽 / 收盤資料", date: base, base, updatedAt: marketDataLastRenderedAt || marketDataLastStartedAt, source: marketStockDataState.source || marketRealtimeState.source || "/api/market" };
+  }
+  if (viewName === "strategy") return currentStrategyDataStatus();
+  if (viewName === "realtime-radar") {
+    return { mode: isRadarDetectionWindow() ? "即時雷達 09:00-13:30 巡邏" : "即時雷達 盤後最後快照", date: marketAiTodayKey(), base: marketAiTodayKey(), updatedAt: realtimeRadarLastUpdatedAt || strategyLastScanAt, source: "/api/realtime" };
+  }
+  if (viewName === "chip-trade") {
+    return { mode: "盤後籌碼 06:00 / 21:00 完整掃", date: institutionDate, base: institutionDate, updatedAt: institutionUpdatedAt, source: "institution-latest.json" };
+  }
+  if (viewName === "warrant-flow") {
+    return { mode: "權證走向 06:00 / 21:00 完整掃", date: firstDateFromRows(warrantFlowData) || marketAiTargetDateKey(), base: firstDateFromRows(warrantFlowData) || marketAiTargetDateKey(), updatedAt: warrantFlowUpdatedAt, source: "warrant-flow-latest.json" };
+  }
+  if (viewName === "watchlist") {
+    return { mode: "自選股盤中即時 / 盤後收盤", date: marketAiTargetDateKey(), base: marketAiTargetDateKey(), updatedAt: watchlistDashboardSignature ? Date.now() : marketDataLastRenderedAt, source: "自選股即時報價" };
+  }
+  return { mode: "資料狀態", date: marketAiTargetDateKey(), base: marketAiTargetDateKey(), updatedAt: Date.now(), source: "終端資料" };
+}
+
+function updateViewDataStatus(viewName = getActiveViewName()) {
+  const panel = viewPanels[viewName];
+  if (!panel) return;
+  let bar = panel.querySelector(":scope > .data-freshness-bar");
+  if (!bar) {
+    bar = document.createElement("div");
+    bar.className = "data-freshness-bar";
+    const marketTabs = viewName === "market" ? panel.querySelector("#market-mode-tabs") : null;
+    const header = panel.querySelector(":scope > .page-header");
+    if (marketTabs) marketTabs.insertAdjacentElement("afterend", bar);
+    else if (header) header.insertAdjacentElement("afterend", bar);
+    else panel.prepend(bar);
+  }
+  const status = getViewDataStatus(viewName);
+  const date = formatDataStatusDate(status.date);
+  const base = formatDataStatusDate(status.base || status.date);
+  const today = formatDataStatusDate(marketAiTodayKey());
+  const updated = formatDataStatusTime(status.updatedAt);
+  const stale = base !== "未知" && today !== "未知" && base !== today;
+  bar.innerHTML = `模式：<b>${escapeAttr(status.mode || "資料狀態")}</b>｜資料日期：<b class="${stale ? "warn" : "live"}">${escapeAttr(date)}</b>｜最新基準：<b>${escapeAttr(base)}</b>｜今日：<b>${escapeAttr(today)}</b>${updated ? `｜更新：<b>${escapeAttr(updated)}</b>` : ""}${status.source ? `｜來源：<b>${escapeAttr(status.source)}</b>` : ""}`;
 }
 
 const SCHEDULE_META = {
@@ -3674,6 +3789,7 @@ function renderRealtimeRadar() {
   installRealtimeRadarView();
   const panel = viewPanels["realtime-radar"];
   if (!panel) return;
+  updateViewDataStatus("realtime-radar");
   deferUiWork(ensureMobileAutoOrganizeButton);
   if (!strategy3Data.length && !strategy3CacheLoading) {
     loadStrategy3RadarVolumeCache();
@@ -9378,6 +9494,7 @@ function renderOvernightDashboard(evaluated) {
 function renderStrategyScanner() {
   if (!strategyTable) return;
   if (!canRunViewWork("strategy")) return;
+  updateViewDataStatus("strategy");
   deferUiWork(ensureMobileAutoOrganizeButton);
   deferUiWork(normalizeMobileHorizontalPosition, 40);
   let selected = [...selectedStrategyIds];
@@ -9596,6 +9713,7 @@ function getWarrantPriorityRows() {
 function renderWarrantFlow() {
   const panel = viewPanels["warrant-flow"];
   if (!panel) return;
+  updateViewDataStatus("warrant-flow");
   const keyword = warrantFlowKeyword.trim().toLowerCase();
   const allRows = getWarrantPriorityRows();
   const filteredRows = keyword
@@ -10956,6 +11074,7 @@ function renderChipTradeTable() {
     const modeText = "盤後收盤";
     dateEl.textContent = `${formatChipDate(institutionDate)}｜${modeText}　更新 ${time}`;
   }
+  updateViewDataStatus("chip-trade");
 
   const rows = latestStocks
     .map((stock) => {
@@ -11263,6 +11382,7 @@ function renderStocks(stocks) {
   if (isViewActive("strategy")) deferUiWork(renderStrategyScanner);
   if (isViewActive("chip-trade")) deferUiWork(renderChipTradeTable);
   terminalMessage.textContent = `掃描完成：${parsed.length.toLocaleString("zh-TW")} 檔，強勢股 ${topStocks.length} 檔`;
+  updateViewDataStatus(getActiveViewName());
 }
 
 function renderStockTable(stocks) {
@@ -11337,6 +11457,7 @@ function showView(viewName, activeLink) {
   }
   deferUiWork(ensureMobileAutoOrganizeButton);
   deferUiWork(normalizeMobileHorizontalPosition, 60);
+  deferUiWork(() => updateViewDataStatus(viewName), 90);
   const focusTarget = activeLink?.dataset.focus ? document.querySelector(`#${activeLink.dataset.focus}`) : null;
   if (focusTarget) setTimeout(()=>focusTarget.focus(),0);
 }
@@ -12972,6 +13093,7 @@ async function fetchStockPrice(code) {
 
 async function renderWatchlist() {
   if (!isViewActive("watchlist") || !isTerminalUnlocked()) return;
+  updateViewDataStatus("watchlist");
   const list = getWatchlist();
   if (!list.length) {
     watchlistStocks.innerHTML = `<div style="text-align:center; padding:40px; color:#555;">尚未新增自選股，請輸入股票代號後點新增</div>`;
