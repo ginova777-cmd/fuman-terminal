@@ -23,6 +23,11 @@ function cleanNumber(value) {
   return Number(String(value).replace(/[,+%]/g, "").replace(/^X/i, "")) || 0;
 }
 
+function normalizeArray(value) {
+  if (Array.isArray(value)) return value;
+  return [];
+}
+
 function normalizeCode(value) {
   return String(value || "").trim();
 }
@@ -37,6 +42,17 @@ function stockChange(close, change) {
   return percent;
 }
 
+function taipeiDate() {
+  return new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Taipei" }));
+}
+
+function formatDateKey(date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}${month}${day}`;
+}
+
 function normalizeTradeDate(value) {
   const text = String(value || "").trim();
   const digits = text.replace(/\D/g, "");
@@ -48,12 +64,31 @@ function normalizeTradeDate(value) {
   return "";
 }
 
+function recentDateKeys(days = 10) {
+  const base = taipeiDate();
+  const dates = [];
+  for (let offset = 0; offset < days; offset++) {
+    const date = new Date(base);
+    date.setDate(base.getDate() - offset);
+    dates.push(formatDateKey(date));
+  }
+  return dates;
+}
+
+function signedChange(sign, value) {
+  const amount = cleanNumber(value);
+  const text = String(sign || "");
+  if (text.includes("-") || text.includes("color:green")) return -Math.abs(amount);
+  if (text.includes("+") || text.includes("color:red")) return Math.abs(amount);
+  return amount;
+}
+
 function normalizeTwseRow(row) {
   const code = normalizeCode(row["證券代號"] || row.Code);
   if (!isCommonStockCode(code)) return null;
   const name = String(row["證券名稱"] || row.Name || "").trim();
   const close = cleanNumber(row["收盤價"] || row.ClosingPrice);
-  const change = cleanNumber(row["漲跌價差"] || row.Change);
+  const change = signedChange(row["漲跌(+/-)"] || row.Sign, row["漲跌價差"] || row.Change);
   const value = cleanNumber(row["成交金額"] || row.TradeValue);
   const volume = cleanNumber(row["成交股數"] || row.TradeVolume);
   const tradeDate = normalizeTradeDate(row.Date || row["日期"] || row["資料日期"]);
@@ -118,7 +153,11 @@ function parseTpexPayload(payload) {
   const fields = table?.fields || payload.fields || payload.iTotalRecords?.fields || [];
   const rows = table?.data || payload.aaData || payload.data || [];
   if (!Array.isArray(rows) || !rows.length) return [];
-  return recordsFromFields(fields, rows).map(normalizeTpexRow).filter(Boolean);
+  const payloadDate = payload.date || table?.date || "";
+  return recordsFromFields(fields, rows)
+    .map((row) => ({ ...row, Date: row.Date || payloadDate }))
+    .map(normalizeTpexRow)
+    .filter(Boolean);
 }
 
 function formatRocDate(date) {
@@ -129,7 +168,7 @@ function formatRocDate(date) {
 }
 
 function recentRocDates(days = 10) {
-  const base = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Taipei" }));
+  const base = taipeiDate();
   const dates = [];
   for (let offset = 0; offset < days; offset++) {
     const date = new Date(base);
@@ -185,6 +224,25 @@ function parseCsv(text) {
 }
 
 async function fetchTwseStocks() {
+  for (const date of recentDateKeys()) {
+    try {
+      const text = await fetchText(`https://www.twse.com.tw/rwd/zh/afterTrading/MI_INDEX?date=${date}&type=ALL&response=json`, {}, 30000);
+      const payload = JSON.parse(text);
+      const table = normalizeArray(payload.tables).find((item) =>
+        normalizeArray(item.fields).includes("證券代號") &&
+        normalizeArray(item.fields).includes("收盤價") &&
+        Array.isArray(item.data) &&
+        item.data.length
+      );
+      if (!table) continue;
+      const parsed = recordsFromFields(table.fields, table.data)
+        .map((row) => ({ ...row, Date: date }))
+        .map(normalizeTwseRow)
+        .filter(Boolean);
+      if (parsed.length) return parsed;
+    } catch (error) {}
+  }
+
   const text = await fetchText("https://openapi.twse.com.tw/v1/exchangeReport/STOCK_DAY_ALL");
   const rows = JSON.parse(text);
   return rows.map(normalizeTwseRow).filter(Boolean);
