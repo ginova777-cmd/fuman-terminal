@@ -903,7 +903,7 @@ async function strategy2Rows(dateText) {
     ["策略2成績單"],
     ["日期", payload.date || dateText, "今日損益", totalPnl, "交易", plans.length],
     ["範圍", `${firstRecordTime || "無"}-${lastRecordTime || "無"}`, "規則", "只看進場區", "出場", "智慧賣壓/停損/收盤"],
-    ["排序", "股票", "買進", "賣出", "損益", "結果"],
+    ["排序", "股票", "策略2跳出時間", "賣出", "損益", "結果"],
   ];
   plans.forEach(({ index, event, plan }) => {
     rows.push([
