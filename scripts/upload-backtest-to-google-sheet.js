@@ -954,7 +954,7 @@ async function loadScorecardSheets(stamp, radarCsv, report) {
   return {
     "即時雷達成績單": realtimeRadarRows(radarCsv, report, dateText),
     "交易管家成績單": tradeManagerRows(dateText),
-    "策略1成績單": await strategy1Rows(readFirstJson([path.join(DATA_DIR, "open-buy-scorecard-source.json"), path.join(REPO_DATA_DIR, "open-buy-scorecard-source.json")]), dateText),
+    "策略1成績單": await strategy1Rows(readFirstJson([path.join(DATA_DIR, "open-buy-latest.json"), path.join(REPO_DATA_DIR, "open-buy-latest.json"), path.join(DATA_DIR, "open-buy-scorecard-source.json"), path.join(REPO_DATA_DIR, "open-buy-scorecard-source.json")]), dateText),
     "策略2成績單": strategy2Rows(dateText),
     "策略3成績單": await strategy3Rows(readFirstJson([path.join(DATA_DIR, "strategy3-scorecard-source.json"), path.join(REPO_DATA_DIR, "strategy3-scorecard-source.json"), path.join(DATA_DIR, "strategy3-latest.json"), path.join(REPO_DATA_DIR, "strategy3-latest.json")]), dateText),
     "策略5成績單": await strategy5Rows(readFirstJson([path.join(DATA_DIR, "strategy5-latest.json"), path.join(REPO_DATA_DIR, "strategy5-latest.json")]), dateText),
@@ -1123,8 +1123,20 @@ async function main() {
   const stamp = todayStamp();
   const { trades, radar, report, summary, historyRows } = loadBacktestRows(stamp);
   const scorecardSheets = await loadScorecardSheets(stamp, radar, report);
+  const onlySheet = process.env.GOOGLE_SHEET_ONLY || "";
   const token = await getAccessToken();
   let spreadsheet = await sheets("GET", "?fields=sheets.properties(title,sheetId)", token);
+  if (onlySheet) {
+    const rows = scorecardSheets[onlySheet];
+    if (!rows) throw new Error(`Unknown GOOGLE_SHEET_ONLY: ${onlySheet}`);
+    await ensureSheet(token, spreadsheet, onlySheet);
+    spreadsheet = await sheets("GET", "?fields=sheets.properties(title,sheetId)", token);
+    await putValues(token, onlySheet, rows);
+    spreadsheet = await sheets("GET", "?fields=sheets.properties(title,sheetId)", token);
+    await formatWorkbook(token, spreadsheet, [onlySheet]);
+    console.log("Uploaded only " + onlySheet + " for " + stamp + " to Google Sheet " + SHEET_ID);
+    return;
+  }
   const summarySheet = "回測摘要";
   const historySheet = "歷史與區間損益";
   const obsoleteSheets = ["實體庫存與TA分析", "自選股監控池", "策略監控區"];

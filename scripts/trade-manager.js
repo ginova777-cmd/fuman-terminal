@@ -366,21 +366,28 @@ function strategy5Quality(event, quote, now) {
   const current = cleanNumber(quote?.close);
   const volume = normalizeVolumeLots(cleanNumber(quote?.tradeVolume || event.volume));
   const value = cleanNumber(quote?.value) || (current && volume ? current * volume * 1000 : 0);
+  const pct = cleanNumber(quote?.percent || event.percent);
+  const high = cleanNumber(quote?.high);
   const reasons = [];
   if (!current) reasons.push("即時報價不足");
   if (timeValue(now.time) < timeValue(event.firstAAt)) reasons.push("尚未到策略5進場時間");
   if (timeValue(now.time) > timeValue("09:30:00")) reasons.push("策略5開盤交易時間已過");
+  if (Number.isFinite(pct) && pct < -1.5) reasons.push(`盤中轉弱 ${pct.toFixed(2)}%`);
+  if (Number.isFinite(pct) && pct > 8.5) reasons.push(`漲幅${pct.toFixed(2)}%過熱`);
+  if (volume < LIST_MIN_VOLUME_LOTS) reasons.push(`成交量${Math.round(volume).toLocaleString("zh-TW")}張不足`);
+  if (value < LIST_MIN_TRADE_VALUE) reasons.push("成交金額不足");
+  if (high && current && current < high * 0.97) reasons.push("現價離盤中高點過遠");
   return {
     pass: reasons.length === 0,
     reasons,
     score: cleanNumber(event.score) || 100,
-    pct: cleanNumber(quote?.percent || event.percent),
+    pct: Number.isFinite(pct) ? pct : 0,
     volume,
     value,
     milestone: volumeMilestone(volume),
-    volumeTrendText: "策略5使用前日名單與隔日開盤計畫",
-    signalText: "策略5",
-    nearHighText: quote?.high && current ? `${((current / cleanNumber(quote.high)) * 100).toFixed(1)}%` : "--",
+    volumeTrendText: "策略5前日名單，盤中量價確認",
+    signalText: "策略5｜VWAP與買量由成績單/盤中結構回測校驗",
+    nearHighText: high && current ? `${((current / high) * 100).toFixed(1)}%` : "--",
   };
 }
 
@@ -625,6 +632,8 @@ async function main() {
     const quote = quoteByCode.get(event.code);
     const quality = event.strategy === "strategy2-entry"
       ? intradayQuality(event, quote, payload)
+      : event.strategy === "strategy5"
+      ? strategy5Quality(event, quote, now)
       : listStrategyQuality(event, quote, now);
     if (!quality.pass) {
       console.log(`trade manager skip ${event.code}: ${quality.reasons.join("；")}`);
