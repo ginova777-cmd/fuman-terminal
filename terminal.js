@@ -4023,6 +4023,7 @@ let marketDataLoading = false;
 let marketDataLastStartedAt = 0;
 let marketDataLastRenderedAt = 0;
 let marketRealtimeState = { trading: false, marketStatus: "", updatedAt: "", source: "" };
+let marketStockDataState = { resolvedTradeDate: "", today: "", source: "", updatedAt: "", isFallbackDate: false, marketDates: {} };
 let heatmapLoading = false;
 let heatmapLastStartedAt = 0;
 let lastViewName = "";
@@ -10185,6 +10186,10 @@ function marketAiQuoteDateKey(stock) {
   ]));
 }
 
+function marketAiTargetDateKey() {
+  return isMarketAiActiveSession() ? marketAiTodayKey() : normalizeMarketAiDateKey(marketStockDataState.resolvedTradeDate) || marketAiTodayKey();
+}
+
 function formatMarketAiDateKey(value) {
   const key = normalizeMarketAiDateKey(value);
   return key && key.length === 8 ? `${key.slice(0, 4)}-${key.slice(4, 6)}-${key.slice(6, 8)}` : "未知";
@@ -10202,7 +10207,7 @@ function marketAiDataDateKey(stocks = []) {
 function isMarketAiStaleStock(stock) {
   const quoteDate = marketAiQuoteDateKey(stock);
   if (!isMarketAiActiveSession() && !quoteDate) return true;
-  return quoteDate && quoteDate !== marketAiTodayKey();
+  return quoteDate && quoteDate !== marketAiTargetDateKey();
 }
 
 function isMarketAiFreshRealtimeStock(stock) {
@@ -10225,11 +10230,13 @@ async function loadMarketAiStocksFallback() {
     const payload = await fetchJson(`${endpoints.strategyStocks}?t=${Date.now()}`, 15000);
     const rows = normalizeArray(payload?.stocks || payload);
     if (rows.length) {
+      updateMarketStockDataState(payload);
       renderStocks(rows);
       return;
     }
     const fallback = await fetchJson(`${endpoints.stocks}?t=${Date.now()}`, 15000);
-    renderStocks(Array.isArray(fallback) ? fallback : normalizeArray(fallback));
+    updateMarketStockDataState(fallback);
+    renderStocks(Array.isArray(fallback) ? fallback : normalizeArray(fallback?.stocks || fallback));
   } catch (error) {
   } finally {
     marketAiStockLoading = false;
@@ -10238,6 +10245,18 @@ async function loadMarketAiStocksFallback() {
       renderMarketAiPanel();
     }
   }
+}
+
+function updateMarketStockDataState(payload) {
+  if (!payload || Array.isArray(payload)) return;
+  marketStockDataState = {
+    resolvedTradeDate: normalizeMarketAiDateKey(payload.resolvedTradeDate || payload.tradeDate || payload.quoteDate) || marketStockDataState.resolvedTradeDate || "",
+    today: normalizeMarketAiDateKey(payload.today) || marketAiTodayKey(),
+    source: payload.source || marketStockDataState.source || "",
+    updatedAt: payload.updatedAt || marketStockDataState.updatedAt || "",
+    isFallbackDate: Boolean(payload.isFallbackDate),
+    marketDates: payload.marketDates || marketStockDataState.marketDates || {},
+  };
 }
 
 async function ensureMarketAiInstitutionData() {
@@ -10712,7 +10731,12 @@ function renderMarketAiPanel() {
   const staleNotice = data.staleRows.length
     ? `<div class="market-ai-sort-note">已排除 ${data.staleRows.length.toLocaleString("zh-TW")} 檔非今日資料，AI 多方推薦只使用今日或無日期標記的最新行情。</div>`
     : "";
-  const dataDateNotice = `<div class="market-ai-sort-note">模式：${isMarketAiActiveSession() ? "盤中即時巡邏" : "收盤資料"}｜資料日期：${escapeAttr(formatMarketAiDateKey(data.dataDate))}｜今日：${escapeAttr(formatMarketAiDateKey(marketAiTodayKey()))}</div>`;
+  const dateModeText = isMarketAiActiveSession()
+    ? "盤中即時巡邏"
+    : marketStockDataState.isFallbackDate
+    ? "最新可用收盤資料"
+    : "收盤資料";
+  const dataDateNotice = `<div class="market-ai-sort-note">模式：${dateModeText}｜資料日期：${escapeAttr(formatMarketAiDateKey(data.dataDate))}｜最新基準：${escapeAttr(formatMarketAiDateKey(marketAiTargetDateKey()))}｜今日：${escapeAttr(formatMarketAiDateKey(marketAiTodayKey()))}</div>`;
   marketAiPanel.innerHTML = `
     ${dataDateNotice}
     ${staleNotice}
@@ -11349,13 +11373,20 @@ async function loadMarketData(force = false) {
     } else {
       const stocks = await fetchJson(`${endpoints.strategyStocks}?t=${Date.now()}`, 15000);
       const rows = normalizeArray(stocks?.stocks || stocks);
-      if (rows.length) renderStocks(rows);
-      else renderStocks(normalizeArray(await fetchJson(`${endpoints.stocks}?t=${Date.now()}`, 15000)));
+      if (rows.length) {
+        updateMarketStockDataState(stocks);
+        renderStocks(rows);
+      } else {
+        const fallback = await fetchJson(`${endpoints.stocks}?t=${Date.now()}`, 15000);
+        updateMarketStockDataState(fallback);
+        renderStocks(normalizeArray(fallback?.stocks || fallback));
+      }
     }
   } catch (e) {
     try {
-      const stocks = await fetchJson(endpoints.stocks);
-      renderStocks(Array.isArray(stocks) ? stocks : []);
+      const stocks = await fetchJson(`${endpoints.strategyStocks}?t=${Date.now()}`, 15000);
+      updateMarketStockDataState(stocks);
+      renderStocks(normalizeArray(stocks?.stocks || stocks));
     } catch (e2) {
       tickerStrip.innerHTML = `<span>官方資料暫時無法連線</span>`;
     }

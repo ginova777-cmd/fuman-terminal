@@ -75,6 +75,15 @@ function recentDateKeys(days = 10) {
   return dates;
 }
 
+function mostCommonDate(stocks) {
+  const counts = new Map();
+  normalizeArray(stocks).forEach((stock) => {
+    const key = normalizeTradeDate(stock.tradeDate || stock.quoteDate || stock.TradeDate || stock.Date);
+    if (key) counts.set(key, (counts.get(key) || 0) + 1);
+  });
+  return [...counts.entries()].sort((a, b) => b[1] - a[1] || b[0].localeCompare(a[0]))[0]?.[0] || "";
+}
+
 function signedChange(sign, value) {
   const amount = cleanNumber(value);
   const text = String(sign || "");
@@ -239,13 +248,14 @@ async function fetchTwseStocks() {
         .map((row) => ({ ...row, Date: date }))
         .map(normalizeTwseRow)
         .filter(Boolean);
-      if (parsed.length) return parsed;
+      if (parsed.length) return { stocks: parsed, tradeDate: date, source: "TWSE MI_INDEX" };
     } catch (error) {}
   }
 
   const text = await fetchText("https://openapi.twse.com.tw/v1/exchangeReport/STOCK_DAY_ALL");
   const rows = JSON.parse(text);
-  return rows.map(normalizeTwseRow).filter(Boolean);
+  const parsed = rows.map(normalizeTwseRow).filter(Boolean);
+  return { stocks: parsed, tradeDate: mostCommonDate(parsed), source: "TWSE STOCK_DAY_ALL fallback" };
 }
 
 async function fetchTpexStocks() {
@@ -258,14 +268,14 @@ async function fetchTpexStocks() {
     try {
       const payload = JSON.parse(await fetchText(`${resultBase}&d=${encodeURIComponent(date)}`, { headers: { Referer: "https://www.tpex.org.tw/" } }));
       const parsed = parseTpexPayload(payload);
-      if (parsed.length) return parsed;
+      if (parsed.length) return { stocks: parsed, tradeDate: mostCommonDate(parsed), source: "TPEx daily_close_quotes" };
     } catch (error) {}
   }
 
   try {
     const payload = JSON.parse(await fetchText(dataUrl, { headers: { Referer: "https://www.tpex.org.tw/" } }));
     const parsed = parseTpexPayload(payload);
-    if (parsed.length) return parsed;
+    if (parsed.length) return { stocks: parsed, tradeDate: mostCommonDate(parsed), source: "TPEx daily_close_quotes fallback" };
   } catch (error) {}
 
   for (const url of [downloadUrl, closeUrl]) {
@@ -275,14 +285,14 @@ async function fetchTpexStocks() {
       if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
         const payload = JSON.parse(trimmed);
         const parsed = parseTpexPayload(payload);
-        if (parsed.length) return parsed;
+        if (parsed.length) return { stocks: parsed, tradeDate: mostCommonDate(parsed), source: "TPEx fallback" };
       }
       const parsed = parseCsv(text).map(normalizeTpexRow).filter(Boolean);
-      if (parsed.length) return parsed;
+      if (parsed.length) return { stocks: parsed, tradeDate: mostCommonDate(parsed), source: "TPEx fallback" };
     } catch (error) {}
   }
 
-  return [];
+  return { stocks: [], tradeDate: "", source: "TPEx unavailable" };
 }
 
 module.exports = async function handler(request, response) {
@@ -300,20 +310,34 @@ module.exports = async function handler(request, response) {
     fetchTpexStocks(),
   ]);
 
-  const twse = twseResult.status === "fulfilled" ? twseResult.value : [];
-  const tpex = tpexResult.status === "fulfilled" ? tpexResult.value : [];
+  const twsePayload = twseResult.status === "fulfilled" ? twseResult.value : { stocks: [], tradeDate: "", source: "TWSE failed" };
+  const tpexPayload = tpexResult.status === "fulfilled" ? tpexResult.value : { stocks: [], tradeDate: "", source: "TPEx failed" };
+  const twse = normalizeArray(twsePayload.stocks);
+  const tpex = normalizeArray(tpexPayload.stocks);
+  const todayKey = formatDateKey(taipeiDate());
+  const resolvedTradeDate = [twsePayload.tradeDate, tpexPayload.tradeDate].filter(Boolean).sort().pop() || "";
+  const isFallbackDate = Boolean(resolvedTradeDate && resolvedTradeDate !== todayKey);
   const byCode = new Map();
-  [...twse, ...tpex].forEach((stock) => byCode.set(stock.Code, stock));
+  [...twse, ...tpex]
+    .filter((stock) => normalizeTradeDate(stock.tradeDate || stock.quoteDate || stock.TradeDate || stock.Date) === resolvedTradeDate)
+    .forEach((stock) => byCode.set(stock.Code, stock));
   const stocks = [...byCode.values()].sort((a, b) => a.Code.localeCompare(b.Code));
 
   response.setHeader("Cache-Control", "s-maxage=60, stale-while-revalidate=300");
   response.status(stocks.length ? 200 : 502).json({
     ok: stocks.length > 0,
-    source: "TWSE STOCK_DAY_ALL + TPEx daily_close_quotes",
+    source: `${twsePayload.source} + ${tpexPayload.source}`,
     updatedAt: new Date().toISOString(),
+    today: todayKey,
+    resolvedTradeDate,
+    isFallbackDate,
+    marketDates: {
+      twse: twsePayload.tradeDate || "",
+      tpex: tpexPayload.tradeDate || "",
+    },
     count: stocks.length,
-    twseCount: twse.length,
-    tpexCount: tpex.length,
+    twseCount: twse.filter((stock) => normalizeTradeDate(stock.tradeDate || stock.quoteDate || stock.TradeDate || stock.Date) === resolvedTradeDate).length,
+    tpexCount: tpex.filter((stock) => normalizeTradeDate(stock.tradeDate || stock.quoteDate || stock.TradeDate || stock.Date) === resolvedTradeDate).length,
     errors: {
       twse: twseResult.status === "rejected" ? twseResult.reason.message : null,
       tpex: tpexResult.status === "rejected" ? tpexResult.reason.message : null,
