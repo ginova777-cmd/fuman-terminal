@@ -23,6 +23,7 @@ const STRATEGY5_TAKE_PROFIT_PCT = Number(process.env.STRATEGY5_TAKE_PROFIT_PCT |
 const STRATEGY5_STOP_LOSS_PCT = Number(process.env.STRATEGY5_STOP_LOSS_PCT || process.env.TRADE_MANAGER_STOP_LOSS_PCT || 2);
 const STRATEGY5_PROTECT_PROFIT_PCT = Number(process.env.STRATEGY5_PROTECT_PROFIT_PCT || 0.8);
 const STRATEGY5_MIN_ENTRY_TIME = process.env.STRATEGY5_MIN_ENTRY_TIME || "09:00:00";
+const STRATEGY5_MIN_ENTRY_PCT = Number(process.env.STRATEGY5_MIN_ENTRY_PCT || 0);
 const REDIRECT_PORT = Number(process.env.GOOGLE_OAUTH_PORT || 53682);
 const REDIRECT_URI = `http://127.0.0.1:${REDIRECT_PORT}/oauth2callback`;
 const SCOPES = ["https://www.googleapis.com/auth/spreadsheets"];
@@ -435,10 +436,11 @@ function strategy5PlanFromCandles(item, intraday) {
     const vwap = cumulativeVolume ? cumulativeValue / cumulativeVolume : candle.close;
     const pct = prevClose ? ((candle.close - prevClose) / prevClose) * 100 : Number(item.percent || 0);
     const nearHigh = rollingHigh ? candle.close >= rollingHigh * 0.985 : true;
+    const highGivebackPct = rollingHigh ? ((rollingHigh - candle.close) / rollingHigh) * 100 : 0;
     const notOverheated = pct <= 8.5;
     const buyPressure = candle.close >= candle.open && (!previous || candle.close >= previous.close) && volumeExpanding;
-    if (pct >= 2 && notOverheated && candle.close >= vwap && nearHigh && cumulativeVolume >= 100 && buyPressure) {
-      entry = { ...candle, index, pct, vwap, cumulativeVolume, volumeExpanding };
+    if (pct >= STRATEGY5_MIN_ENTRY_PCT && notOverheated && candle.close >= vwap && nearHigh && highGivebackPct <= 1.5 && cumulativeVolume >= 100 && buyPressure) {
+      entry = { ...candle, index, pct, vwap, cumulativeVolume, volumeExpanding, highGivebackPct };
       break;
     }
   }
@@ -505,7 +507,7 @@ function strategy5PlanFromCandles(item, intraday) {
     exitTime: exit.time,
     exitPrice: exit.price,
     pnl,
-    reason: `1分K智慧進場：漲幅${entry.pct.toFixed(2)}%、站上VWAP、貼近當時高點、買量延續；${exit.reason}`,
+    reason: `1分K智慧進場：漲幅${entry.pct.toFixed(2)}%、站上VWAP、買量延續、高點回吐${entry.highGivebackPct.toFixed(2)}%；${exit.reason}`,
     source: intraday.source,
   };
 }
