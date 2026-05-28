@@ -3,8 +3,9 @@ const path = require("path");
 const { formatTradePrice } = require("./intraday-radar-rules");
 const { hasLineConfig, sendLineFlex, sendLineText } = require("./line-push");
 const { strategy2LiveFlex } = require("./line-flex-templates");
+const { hasTelegramConfig, sendTelegramText } = require("./telegram-push");
 
-const { dataPath, statePath } = require("./runtime-paths");
+const { ROOT, dataPath, statePath } = require("./runtime-paths");
 const STRATEGY2_REPORT_FILE = dataPath("strategy2-intraday-latest.json");
 const LIVE_ALERT_STATE_FILE = statePath("strategy2-live-alert-state.json");
 const LIVE_LIMIT = Math.max(1, Number(process.env.STRATEGY2_LIVE_LIMIT || 3));
@@ -29,6 +30,10 @@ function taipeiDateKey(date = new Date()) {
   return `${byType.year}-${byType.month}-${byType.day}`;
 }
 
+function dateSlash(value) {
+  return String(value || "").replace(/-/g, "/");
+}
+
 function normalizeKeyNumber(value) {
   const number = Number(value);
   if (!Number.isFinite(number)) return String(value || "");
@@ -44,7 +49,7 @@ function isAtOrAfterCutoff(timeText) {
 function eventLine(event, index) {
   return [
     `${index + 1}. ${event.code} ${event.name || ""}`,
-    `A區 ${event.firstAAt || "--"}｜進場價格${formatTradePrice(event.firstAPrice)}`,
+    `進場區 ${event.firstAAt || "--"}｜進場價格${formatTradePrice(event.firstAPrice)}`,
   ].join("\n");
 }
 
@@ -69,7 +74,7 @@ function enhancementKey(event, enhancement) {
 
 function buildMessage(events) {
   return [
-    "策略2 當沖通知A區",
+    "策略2 當沖通知進場區",
     "",
     events.map(eventLine).join("\n\n"),
   ].filter(Boolean).join("\n");
@@ -97,7 +102,7 @@ async function main() {
     .filter((event) => event.firstAAt)
     .sort((a, b) => String(a.firstAAt).localeCompare(String(b.firstAAt)));
   if (!aEvents.length) {
-    console.log("strategy2 live alert skipped: no A-zone events");
+    console.log("strategy2 live alert skipped: no entry-zone events");
     return;
   }
 
@@ -120,25 +125,26 @@ async function main() {
     console.log(`strategy2 live alert skipped: no new A-zone or enhancement events after ${process.env.STRATEGY2_LIVE_STARTED_AT || "--"}`);
     return;
   }
-
   const latestEvents = newEvents.slice(-LIVE_LIMIT);
-  const altText = `策略2 A區通知：${latestEvents.map((event) => `${event.code} ${event.name || ""}`.trim()).join("、")}`;
+  const altText = `策略2 進場區通知：${latestEvents.map((event) => `${event.code} ${event.name || ""}`.trim()).join("、")}`;
   if (process.env.STRATEGY2_LIVE_DRY_RUN === "1" || process.env.LINE_DRY_RUN === "1") {
     if (latestEvents.length) {
       console.log(`[dry-run] ${altText}`);
       console.log(buildMessage(latestEvents));
     }
     if (latestEnhancements.length) {
-      console.log("[dry-run] 策略2 A區持續放量");
+      console.log("[dry-run] 策略2 進場區持續放量");
       console.log(buildEnhancementMessage(latestEnhancements));
     }
     return;
   }
-  if (!hasLineConfig()) {
-    throw new Error("Missing LINE_CHANNEL_ACCESS_TOKEN and LINE_TO or LINE_USER_ID");
+  if (!hasTelegramConfig() && !hasLineConfig()) {
+    throw new Error("Missing Telegram or LINE notification config");
   }
   if (latestEvents.length) {
-    if (process.env.LINE_FLEX_DISABLED === "1") {
+    if (hasTelegramConfig()) {
+      await sendTelegramText(buildMessage(latestEvents));
+    } else if (process.env.LINE_FLEX_DISABLED === "1") {
       await sendLineText(buildMessage(latestEvents));
     } else {
       await sendLineFlex(altText, strategy2LiveFlex(latestEvents, today));
@@ -146,7 +152,11 @@ async function main() {
     latestEvents.forEach((event) => sent.add(eventKey(event)));
   }
   if (latestEnhancements.length) {
-    await sendLineText(buildEnhancementMessage(latestEnhancements));
+    if (hasTelegramConfig()) {
+      await sendTelegramText(buildEnhancementMessage(latestEnhancements));
+    } else {
+      await sendLineText(buildEnhancementMessage(latestEnhancements));
+    }
     latestEnhancements.forEach((item) => sent.add(item.key));
   }
   writeJson(LIVE_ALERT_STATE_FILE, {
@@ -161,3 +171,7 @@ main().catch((error) => {
   console.error(error);
   process.exit(1);
 });
+
+
+
+

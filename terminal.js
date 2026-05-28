@@ -6241,8 +6241,9 @@ async function loadStrategy2IntradayCache(force = false) {
       if (!currentSeen || intradayTimeToValue(seenTime) < intradayTimeToValue(currentSeen)) {
         current.firstSeenAt = seenTime;
       }
-      if (record.stateId === "go" && !current.firstAAt) current.firstAAt = seenTime;
-      if (record.stateId !== "go" && !current.firstBAt) current.firstBAt = seenTime;
+      const isEntryState = record.stateId === "entry" || record.stateId === "go";
+      if (isEntryState && !current.firstAAt) current.firstAAt = seenTime;
+      if (!isEntryState && !current.firstBAt) current.firstBAt = seenTime;
       byCode.set(code, current);
     });
     strategy2IntradayCacheDate = payload?.date || "";
@@ -6312,7 +6313,7 @@ function getIntradayState(stock) {
   const candidateSetup = tradableLiquidity && hasSignal && !tooHotToChase && (volumeIncreasing || (hasVolumeSignal && pct >= 0.5));
 
   if (winRateSetup || earlyEntrySetup || candidateSetup) {
-    return { id: "go", label: "可進場", cls: "go" };
+    return { id: "go", label: "進場區", cls: "go" };
   }
   if (tradableLiquidity && hasSignal && pct >= 0.5 && hasStrongSignal) {
     return { id: "watch", label: "待確認", cls: "watch" };
@@ -8667,8 +8668,7 @@ function renderIntradayRadar(evaluated) {
 
   const tabs = [
     ["all", "全部", tradableRows.length],
-    ["go", "A進場", stateCounts.go],
-    ["watch", "B待確認", stateCounts.watch],
+    ["go", "進場區", stateCounts.go],
     ...INTRADAY_SIGNAL_DEFS.map((signal) => [signal.id, signal.title, signalCounts[signal.id] || 0]),
   ].map(([id, label, count]) => `<button class="${intradaySignalFilter === id ? "active" : ""}" type="button" data-intraday-filter="${id}">${label}(${count})</button>`).join("");
 
@@ -8697,12 +8697,8 @@ function renderIntradayRadar(evaluated) {
   const zones = `
     <section class="intraday-zones">
       <article class="intraday-zone go">
-        <header><div><h3>A區 進場區</h3><small>量夠、價強、靠近高點</small></div><strong>${stateCounts.go}</strong></header>
+        <header><div><h3>進場區</h3><small>1分K站上MA35，MACD/KD向上且爆量</small></div><strong>${stateCounts.go}</strong></header>
         <div class="intraday-picks">${renderZonePicks(zoneRows.go, "go")}</div>
-      </article>
-      <article class="intraday-zone watch">
-        <header><div><h3>B區 待確認</h3><small>有右側訊號，等待站穩或再放量</small></div><strong>${stateCounts.watch}</strong></header>
-        <div class="intraday-picks">${renderZonePicks(zoneRows.watch, "watch")}</div>
       </article>
     </section>
   `;
@@ -8731,7 +8727,7 @@ function renderIntradayRadar(evaluated) {
       return `
         <tr>
           <td><span class="intraday-table-time">${entryTime}</span></td>
-          <td><span class="code intraday-hot-code">${repeatAHot ? `<span class="intraday-hot-fire" title="持續爆量且多次進入A區">🔥</span>` : ""}${stock.code}</span></td>
+          <td><span class="code intraday-hot-code">${repeatAHot ? `<span class="intraday-hot-fire" title="持續爆量且多次進入進場區">🔥</span>` : ""}${stock.code}</span></td>
           <td>${stock.name}</td>
           <td><span class="intraday-state ${state.cls}">${state.label}</span></td>
           <td><span class="intraday-badges">${chips}</span></td>

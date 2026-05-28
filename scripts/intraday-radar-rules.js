@@ -1,10 +1,6 @@
 const EXCLUDED_CODES = new Set([
   "2330", "2412", "3045",
-  "2208", "2634", "2645", "4541", "4572", "5009", "6753", "8033", "8222",
-  "9103", "9105", "9110", "9136",
 ]);
-const INTRADAY_MIN_VOLUME = 2000;
-const INTRADAY_MIN_VALUE = 80000000;
 
 function cleanNumber(value) {
   return Number(String(value ?? "").replace(/[,+%]/g, "").trim()) || 0;
@@ -22,19 +18,11 @@ function isIntradayTradable(stock) {
   const volume = cleanNumber(stock?.tradeVolume);
   const name = String(stock?.name || "");
   if (!/^\d{4}$/.test(code) || /^00/.test(code)) return false;
-  if (/ETF|ETN|指數|台灣50|高股息|正2|反1|期貨|債/i.test(name)) return false;
-  if (/軍工|航太|漢翔|雷虎|駐龍|寶一|晟田|長榮航太|龍德造船|台船|榮剛/i.test(name)) return false;
+  if (/ETF|ETN|DR|指數|台灣50|高股息|正2|反1|期貨|債/i.test(name)) return false;
   if (/^(28|58)/.test(code)) return false;
   if (EXCLUDED_CODES.has(code)) return false;
   if (close >= 900) return false;
   return true;
-}
-
-function hasIntradayLiquidity(stock) {
-  const close = cleanNumber(stock?.close);
-  const volume = cleanNumber(stock?.tradeVolume);
-  const value = cleanNumber(stock?.value) || close * volume;
-  return volume >= INTRADAY_MIN_VOLUME && value >= INTRADAY_MIN_VALUE;
 }
 
 function roundTradePrice(price) {
@@ -69,40 +57,6 @@ function buildRanks(stocks) {
   };
 }
 
-function classifySignalState(stock, signals, context = {}) {
-  const pct = cleanNumber(stock.percent);
-  const volume = cleanNumber(stock.tradeVolume);
-  const value = cleanNumber(stock.value) || cleanNumber(stock.close) * volume;
-  const close = cleanNumber(stock.close);
-  const open = cleanNumber(stock.open);
-  const high = cleanNumber(stock.high) || close;
-  const ids = new Set(signals.map((signal) => signal.id));
-  const hasVolume = ids.has("volume_burst");
-  const hasTrigger = ids.has("gap") || ids.has("breakout");
-  const hasSupport = ids.has("ma35_buy") || ids.has("diamond");
-  const liquid = value >= 150000000 || volume >= 2000;
-  const tradable = value >= 80000000 || volume >= 1000;
-  const aboveOpen = !open || close >= open;
-  const nearHigh = !high || close >= high * 0.985;
-  const score = Math.min(100, Math.round(
-    Math.max(pct, 0) * 8 +
-    (context.valueRank || 0) * 0.28 +
-    (context.volumeRank || 0) * 0.24 +
-    signals.length * 8 +
-    (hasVolume ? 10 : 0) +
-    (hasTrigger ? 12 : 0) +
-    (hasSupport ? 8 : 0)
-  ));
-
-  if (liquid && hasVolume && (hasTrigger || hasSupport) && aboveOpen && nearHigh && pct >= 2 && pct <= 8.8) {
-    return { id: "go", label: "A區 可進場", reason: "量勢、價位與觸發訊號同步，偏可進場。" , score };
-  }
-  if (tradable && signals.length && pct >= 2) {
-    return { id: "wait", label: "B區 待確認", reason: "已有訊號，但仍需等站穩或再放量。" , score };
-  }
-  return { id: "watch", label: "C區 觀察", reason: "量能或型態尚未完全到位。" , score };
-}
-
 function detectSignals(stock, previous = null, ranks = null) {
   const close = cleanNumber(stock.close);
   const open = cleanNumber(stock.open);
@@ -119,12 +73,21 @@ function detectSignals(stock, previous = null, ranks = null) {
   const limitUp = cleanNumber(stock.limitUp) || (prevClose ? prevClose * 1.1 : 0);
   const vwap = volume ? value / volume : 0;
   const gapPct = open && prevClose ? ((open - prevClose) / prevClose) * 100 : 0;
-  const ma35Proxy = avg([open, high, low, close]);
+  const ma35Source = String(stock.ma35Source || "");
+  const ma35Proxy = ma35Source === "yahoo-1m" ? cleanNumber(stock.ma35) : 0;
+  const aboveMa35 = ma35Proxy > 0 && close > ma35Proxy;
+  const ma35Prev = ma35Source === "yahoo-1m" ? cleanNumber(stock.ma35Prev) : 0;
+  const ma35TrendUp = ma35Proxy > 0 && ma35Prev > 0 && ma35Proxy > ma35Prev;
+  const macdUp = stock.macdUp === true;
+  const kdUp = stock.kdUp === true;
   const ibRange = high && low ? high - low : 0;
   const f618 = ibRange ? high - ibRange * 0.618 : 0;
   const signals = [];
 
-  if (!isIntradayTradable(stock) || !hasIntradayLiquidity(stock) || pct < 2) return signals;
+  if (!isIntradayTradable(stock) || pct <= 2 || volume < 2000) return signals;
+  if (!aboveMa35) return signals;
+  const intradayVolumeBurst = deltaVolume >= 50 || volume >= 10000;
+  if (!ma35TrendUp || !macdUp || !kdUp || !intradayVolumeBurst) return signals;
 
   const volumeMilestone = volume >= 10000 ? 10000 : volume >= 5000 ? 5000 : 2000;
   if (deltaVolume >= 50) {
@@ -135,6 +98,10 @@ function detectSignals(stock, previous = null, ranks = null) {
     });
   }
 
+  if (limitUp && close >= limitUp * 0.985 && (volumeRank >= 55 || valueRank >= 55 || volume >= 1200)) {
+    signals.push({ id: "limit_lock", label: close >= limitUp * 0.998 ? "漲停鎖定" : "接近漲停", reason: "接近漲停或亮燈鎖住" });
+  }
+
   if (open && prevClose && gapPct >= 2 && close >= open && (volume >= volumeMilestone || volumeRank >= 55)) {
     signals.push({ id: "gap", label: "真跳空", reason: `跳空 ${gapPct.toFixed(2)}% 且站在開盤價上方` });
   }
@@ -143,48 +110,49 @@ function detectSignals(stock, previous = null, ranks = null) {
     signals.push({ id: "breakout", label: "轉強突破", reason: "站上強勢區與 VWAP" });
   }
 
-  if (close > ma35Proxy && close > open && valueRank >= 55) {
-    signals.push({ id: "ma35_buy", label: "MA35買點", reason: "整根站上 MA35 近似線" });
-  }
+  signals.push({ id: "ma35_buy", label: "進場區", reason: `1分K站上 MA35 ${ma35Proxy.toFixed(2)}，MACD/KD向上且爆量` });
 
-  if (f618 && low <= f618 && high >= f618 && close >= open && close > ma35Proxy) {
+  if (f618 && low <= f618 && high >= f618 && close >= open) {
     signals.push({ id: "diamond", label: "鑽石", reason: "回測 0.618 後收紅轉強" });
   }
 
-  const supportPrice = roundTradePrice(Math.max(vwap || 0, open || 0, close * 0.997));
-  const tradedLow = low || close;
-  const executableClose = Math.max(close, tradedLow);
-  const entryLow = roundTradePrice(Math.max(supportPrice || 0, executableClose * 0.997, tradedLow));
-  const entryHigh = roundTradePrice(Math.max(entryLow, executableClose));
-  const entryPrice = roundTradePrice(executableClose) || entryHigh || roundTradePrice(close);
+  const entryLow = roundTradePrice(Math.max(vwap || 0, open || 0, close * 0.997));
+  const entryHigh = roundTradePrice(Math.max(entryLow, close * 1.002));
+  const entryPrice = roundTradePrice(close);
   const stopLoss = roundTradePrice(Math.min(entryLow || close, vwap || close, ma35Proxy || close) * 0.985);
   const chaseLimit = roundTradePrice(Math.min(high || close * 1.012, close * 1.01));
 
-  const state = classifySignalState(stock, signals, { valueRank, volumeRank, deltaVolume });
-
   return signals.map((signal) => ({
     ...signal,
-    stateId: state.id,
-    stateLabel: state.label,
-    stateReason: state.reason,
-    score: state.score,
     entryPrice,
-    supportPrice,
     entryLow,
     entryHigh,
     stopLoss,
     chaseLimit,
     volumeMilestone,
     deltaVolume,
+    ma35: ma35Proxy,
+    ma35Prev,
+    aboveMa35,
+    ma35TrendUp,
+    ma35Source,
+    ma35Symbol: stock.ma35Symbol || "",
+    ma35At: stock.ma35At || "",
+    macdDif: cleanNumber(stock.macdDif),
+    macdSignal: cleanNumber(stock.macdSignal),
+    macdHist: cleanNumber(stock.macdHist),
+    macdUp,
+    kdK: cleanNumber(stock.kdK),
+    kdD: cleanNumber(stock.kdD),
+    kdUp,
+    intradayVolumeBurst,
   }));
 }
 
 module.exports = {
   cleanNumber,
-  classifySignalState,
   detectSignals,
   formatTradePrice,
-  hasIntradayLiquidity,
   isIntradayTradable,
   roundTradePrice,
   buildRanks,
