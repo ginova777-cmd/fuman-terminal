@@ -4022,6 +4022,7 @@ let latestStocks = [];
 let marketDataLoading = false;
 let marketDataLastStartedAt = 0;
 let marketDataLastRenderedAt = 0;
+let marketRealtimeState = { trading: false, marketStatus: "", updatedAt: "", source: "" };
 let heatmapLoading = false;
 let heatmapLastStartedAt = 0;
 let lastViewName = "";
@@ -10187,13 +10188,30 @@ function isMarketAiStaleStock(stock) {
 }
 
 function isMarketAiFreshRealtimeStock(stock) {
-  if (!isIntradayScanWindow()) return true;
+  if (!isMarketAiActiveSession()) return false;
   if (!stock?.isRealtime) return false;
   const updatedAt = cleanNumber(stock.quoteUpdatedAt);
   return updatedAt > 0 && Date.now() - updatedAt <= Math.max(INTRADAY_FAST_SCAN_MS * 4, 15000);
 }
 
+function isMarketAiActiveSession() {
+  return marketRealtimeState.trading === true
+    && marketRealtimeState.marketStatus === "day"
+    && isIntradayScanWindow();
+}
+
+function renderMarketAiPaused() {
+  if (!marketAiPanel) return;
+  const label = marketRealtimeState.marketStatus === "night" ? "夜盤時間" : "非日盤交易中";
+  marketAiPanel.innerHTML = `
+    <div class="empty-state">
+      AI 判讀只在日盤 09:00-13:30 每 5 秒巡邏。現在是${escapeAttr(label)}，已停止盤中推薦，避免使用舊行情誤判。
+    </div>
+  `;
+}
+
 async function loadMarketAiStocksFallback() {
+  if (!isMarketAiActiveSession()) return;
   if (marketAiStockLoading || latestStocks.length) return;
   marketAiStockLoading = true;
   try {
@@ -10624,6 +10642,11 @@ function openMarketAiAdviceModal(kind) {
 function renderMarketAiPanel() {
   installMarketTabs();
   if (!marketAiPanel) return;
+  if (!isMarketAiActiveSession()) {
+    marketAiLastSignature = "";
+    renderMarketAiPaused();
+    return;
+  }
   const data = buildMarketAiData();
   const signature = `${marketAiHotFilter}:${data.sample}:${data.staleRows.length}:${data.upRows.length}:${data.downRows.length}:${data.hotStocks.map((stock) => `${stock.code}:${stock.score}:${cleanNumber(stock.percent).toFixed(2)}`).join("|")}`;
   if (signature === marketAiLastSignature && marketAiPanel.innerHTML) return;
@@ -11296,6 +11319,12 @@ async function loadMarketData(force = false) {
     const payload = await fetchJson(`${endpoints.backend}?t=${Date.now()}`, 12000);
 
     if (!payload.ok) throw new Error("Backend failed");
+    marketRealtimeState = {
+      trading: payload.trading === true,
+      marketStatus: payload.marketStatus || "",
+      updatedAt: payload.updatedAt || "",
+      source: payload.source || "",
+    };
 
     const near = payload.futuresNear || payload.futures || null;
     const next = payload.futuresNext || null;
@@ -11833,8 +11862,8 @@ setInterval(() => {
   if (!isDocumentHidden() && isTerminalUnlocked() && isViewActive("strategy") && selectedStrategyIds.has("intraday_2m") && isIntradayScanWindow()) refreshStrategyRealtimeScan("hot");
 }, INTRADAY_FAST_SCAN_MS);
 setInterval(() => {
-  if (!isDocumentHidden() && isTerminalUnlocked() && isViewActive("market") && marketMode === "ai" && isIntradayScanWindow()) refreshStrategyRealtimeScan("hot");
-}, INTRADAY_FAST_SCAN_MS);
+  if (!isDocumentHidden() && isTerminalUnlocked() && isViewActive("market") && marketMode === "ai" && isMarketAiActiveSession()) refreshStrategyRealtimeScan("hot");
+}, MARKET_POLL_TICK_MS);
 setInterval(() => {
   if (!isDocumentHidden() && isTerminalUnlocked() && isViewActive("strategy") && selectedStrategyIds.has("intraday_2m") && isIntradayScanWindow()) refreshStrategyRealtimeScan("background");
 }, INTRADAY_BACKGROUND_SCAN_MS);
