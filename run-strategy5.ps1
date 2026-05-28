@@ -39,7 +39,13 @@ if ($scanExit -ne 0) {
 }
 
 Remove-Item Env:STRATEGY5_USE_MIS -ErrorAction SilentlyContinue
-"Strategy5 cache files written locally; Git sync is handled by run-cache-sync.ps1" >> $log
+$syncAfterOutput = "C:\fuman-terminal\run-sync-after-output.ps1"
+if (Test-Path -LiteralPath $syncAfterOutput) {
+  & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $syncAfterOutput -Label "Strategy5 cache" -LogPath $log >> $log 2>&1
+  if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+} else {
+  "Strategy5 cache files written locally; sync helper not found." >> $log
+}
 "=== Strategy5 scan end $(Get-Date) ===" >> $log
 
 

@@ -3987,7 +3987,7 @@ function runMobileAutoOrganize() {
     return;
   }
   if (active === "chip-trade") {
-    loadChipTradeData();
+    loadChipTradeData(true);
     return;
   }
   if (active === "warrant-flow") {
@@ -4195,6 +4195,7 @@ let chipMode = "after";
 let chipTradeLoading = false;
 let chipTradeLoadedAt = 0;
 const CHIP_TRADE_CACHE_MS = 10 * 60 * 1000;
+const CHIP_WARRANT_ACTIVE_REFRESH_MS = 60 * 1000;
 let chipFilter = "joint";
 let chipQuoteHydrating = false;
 let chipTradeLastRenderSignature = "";
@@ -11474,9 +11475,9 @@ function showView(viewName, activeLink) {
     deferUiWork(loadInstitution, 600);
   }
   if (viewName === "chip-trade") {
-    deferUiWork(loadChipTradeData);
+    deferUiWork(() => loadChipTradeData(true));
   }
-  if (viewName === "warrant-flow") deferUiWork(loadWarrantFlow);
+  if (viewName === "warrant-flow") deferUiWork(() => loadWarrantFlow(true));
   if (viewName === "watchlist") {
     deferUiWork(renderWatchlist);
   }
@@ -12119,6 +12120,21 @@ setInterval(() => {
   if (buildHeatmapFallbackFromLatestStocks()) return;
   loadHeatmap();
 }, MARKET_POLL_TICK_MS);
+function refreshActiveChipWarrantView(force = true) {
+  if (isDocumentHidden() || !isTerminalUnlocked()) return;
+  if (isViewActive("chip-trade")) {
+    loadChipTradeData(force);
+    return;
+  }
+  if (isViewActive("warrant-flow")) {
+    loadWarrantFlow(force);
+  }
+}
+setInterval(() => refreshActiveChipWarrantView(true), CHIP_WARRANT_ACTIVE_REFRESH_MS);
+document.addEventListener("visibilitychange", () => {
+  if (!isDocumentHidden()) refreshActiveChipWarrantView(true);
+});
+window.addEventListener("focus", () => refreshActiveChipWarrantView(true));
 
 // ===== 自選股功能 =====
 const watchlistView = document.querySelector("#watchlist-view");
