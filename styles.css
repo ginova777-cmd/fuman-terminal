@@ -1573,6 +1573,18 @@ h1 {
   color: var(--green) !important;
 }
 
+.pct-up {
+  color: var(--red) !important;
+}
+
+.pct-down {
+  color: var(--green) !important;
+}
+
+.pct-flat {
+  color: var(--text) !important;
+}
+
 .ticker-strip {
   display: flex;
   gap: 28px;

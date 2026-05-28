@@ -4408,6 +4408,13 @@ function formatNumber(value, digits = 2) {
   });
 }
 
+function pctToneClass(value) {
+  const number = cleanNumber(value);
+  if (number > 0) return "pct-up";
+  if (number < 0) return "pct-down";
+  return "pct-flat";
+}
+
 function formatStockPrice(value) {
   const number = cleanNumber(value);
   if (!number) return "--";
@@ -8674,6 +8681,7 @@ function renderIntradayRadar(evaluated) {
 
   const renderZonePicks = (list, zoneId) => list.length ? list.map((stock, index) => {
     const sign = stock.percent >= 0 ? "+" : "";
+    const pctClass = pctToneClass(stock.percent);
     const mainSignal = stock.intradaySignals[0]?.short || "量價";
     const entry = formatIntradayTrackedEntry(stock);
     const quoteTime = getIntradayEntryTime(stock);
@@ -8687,7 +8695,7 @@ function renderIntradayRadar(evaluated) {
           <span>${mainSignal}｜進場 ${entry}</span>
         </div>
         <div class="intraday-pick-price">
-          <b>${sign}${stock.percent.toFixed(2)}%</b>
+          <b class="${pctClass}">${sign}${stock.percent.toFixed(2)}%</b>
           <span>${formatNumber(stock.close, stock.close >= 100 ? 0 : 2)}</span>
         </div>
       </div>
@@ -8713,6 +8721,7 @@ function renderIntradayRadar(evaluated) {
   const tableRows = rows.length ? `
     ${rows.map((stock) => {
       const sign = stock.percent >= 0 ? "+" : "";
+      const pctClass = pctToneClass(stock.percent);
       const entryTime = getIntradayEntryTime(stock);
       const latestEnhancement = normalizeArray(stock.strategy2Event?.enhancements)
         .filter(isStrategy2EnhancementVisible)
@@ -8732,7 +8741,7 @@ function renderIntradayRadar(evaluated) {
           <td><span class="intraday-state ${state.cls}">${state.label}</span></td>
           <td><span class="intraday-badges">${chips}</span></td>
           <td class="price">${formatIntradayTrackedEntry(stock)}</td>
-          <td class="pct">${sign}${stock.percent.toFixed(2)}%</td>
+          <td class="pct ${pctClass}">${sign}${stock.percent.toFixed(2)}%</td>
           <td>${Math.round(stock.tradeVolume || 0).toLocaleString("zh-TW")}</td>
           <td class="intraday-entry">${renderEntryPlan(stock.intradayEntry)}</td>
           <td>現價 ${formatTradePrice(stock.close)}｜${reason}</td>
@@ -8863,6 +8872,7 @@ function renderSwingRadar(universe) {
 
   const renderSwingRows = (items) => items.map((stock) => {
     const sign = stock.percent >= 0 ? "+" : "";
+    const pctClass = pctToneClass(stock.percent);
     const chips = stock.swingSignals.map(formatSwingSignalChip).join("");
     const signalIds = (stock.swingSignals || []).map((signal) => signal.id).join(" ");
     const searchText = `${stock.code || ""} ${stock.name || ""}`.toLowerCase();
@@ -8874,7 +8884,7 @@ function renderSwingRadar(universe) {
         <td>${stock.name}</td>
         <td><span class="swing-badges">${chips}</span></td>
         <td class="price">${formatNumber(stock.close, stock.close >= 100 ? 0 : 2)}</td>
-        <td class="pct">${sign}${stock.percent.toFixed(2)}%</td>
+        <td class="pct ${pctClass}">${sign}${stock.percent.toFixed(2)}%</td>
         <td>${Math.round(stock.tradeVolume || 0).toLocaleString("zh-TW")}</td>
         <td><span class="swing-stage ${stage.tone}">${stage.label}</span><small>${stage.ratio}</small></td>
         <td><span class="swing-score">${stock.swingScore}</span></td>
@@ -9059,6 +9069,7 @@ function renderOpenBuyRadar(universe) {
 
   const tableRows = pageRows.length ? pageRows.map((stock) => {
     const sign = stock.percent >= 0 ? "+" : "";
+    const pctClass = pctToneClass(stock.percent);
     const displayStatus = getOpenBuyDisplayStatus(stock);
     return `
       <tr>
@@ -9066,7 +9077,7 @@ function renderOpenBuyRadar(universe) {
         <td>${stock.name}</td>
         <td><b class="swing-stage mid">${displayStatus}</b></td>
         <td class="price">${formatNumber(stock.close, stock.close >= 100 ? 0 : 2)}</td>
-        <td class="pct">${sign}${stock.percent.toFixed(2)}%</td>
+        <td class="pct ${pctClass}">${sign}${stock.percent.toFixed(2)}%</td>
         <td>${stock.entry || "09:00 開盤價"}</td>
         <td class="price">${formatNumber(stock.takeProfit, stock.takeProfit >= 100 ? 1 : 2)}</td>
         <td class="price">${formatNumber(stock.stopLoss, stock.stopLoss >= 100 ? 1 : 2)}</td>
