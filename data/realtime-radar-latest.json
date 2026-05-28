@@ -1,11 +1,13 @@
 {
   "source": "mini-pc-realtime-radar",
   "status": "outside_market_time",
-  "date": "2026-05-27",
-  "timestamp": "2026-05-27 08:58:01",
-  "updatedAt": "2026-05-27T00:58:01.295Z",
-  "updatedAtMs": 1779843481295,
+  "date": "2026-05-28",
+  "timestamp": "2026-05-28 20:45:42",
+  "updatedAt": "2026-05-28T12:45:42.345Z",
+  "updatedAtMs": 1779972342345,
   "staleAfterMs": 20000,
+  "maxQuoteAgeSeconds": 150,
+  "staleQuoteCount": 0,
   "rows": [],
   "longCount": 0,
   "shortCount": 0
