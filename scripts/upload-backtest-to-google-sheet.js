@@ -825,22 +825,28 @@ function strategy2Rows(dateText) {
   const timeOnly = (value) => String(value || "").match(/\d{2}:\d{2}(?::\d{2})?/)?.[0] || "";
   const zoneLabel = (item) => item.stateLabel || (item.stateId === "go" || item.stateId === "entry" ? "進場區" : item.stateId === "wait" ? "觀察區" : item.status || "");
   const strategyText = (item) => Array.isArray(item.strategies) ? item.strategies.join(" / ") : item.strategy || "";
-  const latestRecords = [...records].sort((a, b) => {
+  const chronologicalRecords = [...records].sort((a, b) => {
     const at = Date.parse(String(a.timestamp || a.entryAt || "").replace(" ", "T"));
     const bt = Date.parse(String(b.timestamp || b.entryAt || "").replace(" ", "T"));
-    if (Number.isFinite(bt) && Number.isFinite(at) && bt !== at) return bt - at;
+    if (Number.isFinite(bt) && Number.isFinite(at) && bt !== at) return at - bt;
     return Number(b.score || 0) - Number(a.score || 0);
   });
+  const firstRecordTime = timeOnly(chronologicalRecords[0]?.timestamp || chronologicalRecords[0]?.entryAt);
+  const lastRecordTime = timeOnly(chronologicalRecords[chronologicalRecords.length - 1]?.timestamp || chronologicalRecords[chronologicalRecords.length - 1]?.entryAt);
   const rows = [
     ["策略2成績單"],
     ["資料日期", payload.date || dateText, "更新時間", payload.updatedAt || "", "來源", info.file],
     ["掃描筆數", records.length, "事件筆數", events.length, "進場區筆數", events.filter((event) => event.firstAAt).length, "觀察筆數", events.filter((event) => !event.firstAAt && event.firstBAt).length],
+    ["寫入範圍", firstRecordTime || "無", "到", lastRecordTime || "無", "逐筆顯示", "完整符合條件紀錄，最早在上"],
     ["MA35規則", "Yahoo優先，Fugle備援，本機1分鐘快取第三順位", "允許來源", "yahoo-1m / fugle-1m / local-1m-cache", "缺資料處理", "不發訊號"],
     [""],
-    ["盤中逐筆掃描紀錄（最新在上，不是只有首次觸發）"],
+    ["盤中逐筆掃描紀錄（最早在上，完整列出符合條件紀錄）"],
     ["掃描時間", "股票代碼", "股票名稱", "區域", "分數", "進場價", "觀察價", "最高價", "最高時間", "漲幅(%)", "成交量", "策略", "MA35來源", "MA35代號", "MA35時間", "MA35值", "備援嘗試", "原因"],
   ];
-  for (const item of latestRecords.slice(0, 500)) {
+  if (firstRecordTime && firstRecordTime > "09:05:00") {
+    rows.push(["早盤提醒", `本日第一筆符合條件紀錄為 ${firstRecordTime}；09:00 到第一筆之前沒有寫入符合條件紀錄，需回看巡邏日誌確認是否為無訊號或報價失敗。`, "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]);
+  }
+  for (const item of chronologicalRecords) {
     rows.push([
       timeOnly(item.timestamp || item.entryAt),
       item.code || "",
