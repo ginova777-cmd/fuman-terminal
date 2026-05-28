@@ -2223,7 +2223,7 @@ const SCHEDULE_META = {
   market: { label: "盤中即時", next: "持續輪巡" },
   watchlist: { label: "盤中即時", next: "持續輪巡" },
   intraday: { label: "盤中即時", next: "持續輪巡" },
-  openBuy: { label: "07:00 / 14:30", times: ["07:00", "14:30"] },
+  openBuy: { label: "07:00 / 16:00", times: ["07:00", "16:00"] },
   strategy3: { label: "13:00", times: ["13:00"] },
   swing: { label: "07:00 / 14:30", times: ["07:00", "14:30"] },
   strategy5: { label: "06:00 / 21:00", times: ["06:00", "21:00"] },
@@ -3207,6 +3207,47 @@ function radarFlowValue(stock) {
   return value * (0.55 + signalBoost + moveBoost + volumeBoost);
 }
 
+function hasRealtimeRadarQuote(stock) {
+  const code = String(stock?.code || "");
+  const quote = strategyRealtimeQuotes[code];
+  return isRealtimeRadarUsableQuote(quote);
+}
+
+function realtimeRadarDateKeyFromTimestamp(timestamp) {
+  const value = cleanNumber(timestamp);
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return `${date.getFullYear()}${String(date.getMonth() + 1).padStart(2, "0")}${String(date.getDate()).padStart(2, "0")}`;
+}
+
+function realtimeRadarTimeSeconds(value) {
+  const parts = String(value || "").match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?/);
+  if (!parts) return 0;
+  return Number(parts[1]) * 3600 + Number(parts[2]) * 60 + Number(parts[3] || 0);
+}
+
+function isRealtimeRadarQuoteTime(quote) {
+  const seconds = realtimeRadarTimeSeconds(quote?.time);
+  return seconds >= 9 * 3600 && seconds <= (13 * 3600 + 30 * 60);
+}
+
+function isRealtimeRadarUsableQuote(quote) {
+  if (!quote?.close || !quote?.time) return false;
+  if (!isRealtimeRadarQuoteTime(quote)) return false;
+  const updatedAt = cleanNumber(quote.updatedAt);
+  if (updatedAt && realtimeRadarDateKeyFromTimestamp(updatedAt) !== marketAiTodayKey()) return false;
+  if (isRadarDetectionWindow() && (!updatedAt || Date.now() - updatedAt > Math.max(REALTIME_RADAR_REFRESH_MS * 4, 15000))) return false;
+  return true;
+}
+
+function isRealtimeRadarTodaySnapshot(stock) {
+  const rowDate = normalizeMarketAiDateKey(stock?.radarDate || stock?.quoteDate || stock?.tradeDate);
+  if (rowDate && rowDate !== marketAiTodayKey()) return false;
+  const updatedAt = cleanNumber(stock?.radarUpdatedAt);
+  return updatedAt > 0 && realtimeRadarDateKeyFromTimestamp(updatedAt) === marketAiTodayKey();
+}
+
 function getStrategy3CachedVolumeRatio(code) {
   const item = strategy3Data.find((stock) => String(stock.code || "") === String(code || ""));
   if (!item) return 0;
@@ -3304,6 +3345,7 @@ function isRealtimeRadarLimitUp(stock) {
 function buildRealtimeRadarRows() {
   const intradayPool = latestStocks
     .map((stock) => applyStrategyQuote(stock))
+    .filter((stock) => hasRealtimeRadarQuote(stock))
     .filter((stock) => isIntradayTradable(stock))
     .filter((stock) => !isRealtimeRadarLimitUp(stock));
   const shortPressurePool = [...intradayPool]
@@ -3468,10 +3510,14 @@ function getMarketHeatmapRefreshInterval() {
 
 function saveRealtimeRadarLastRows(rows) {
   try {
-    const safeRows = normalizeArray(rows).filter((stock) => isIntradayTradable(stock));
+    const today = marketAiTodayKey();
+    const safeRows = normalizeArray(rows)
+      .filter((stock) => isIntradayTradable(stock))
+      .filter((stock) => isRealtimeRadarTodaySnapshot({ ...stock, radarDate: stock.radarDate || today }));
     if (!safeRows.length) return;
     const payload = {
       updatedAt: Date.now(),
+      date: today,
       rows: safeRows.slice(0, 80).map((stock) => ({
         code: stock.code,
         name: stock.name,
@@ -3490,6 +3536,7 @@ function saveRealtimeRadarLastRows(rows) {
         totalInst: stock.totalInst,
         signalTags: stock.signalTags,
         radarUpdatedAt: stock.radarUpdatedAt,
+        radarDate: today,
       })),
     };
     localStorage.setItem(REALTIME_RADAR_LAST_CACHE_KEY, JSON.stringify(payload));
@@ -3518,7 +3565,11 @@ function loadRealtimeRadarLastRows() {
   try {
     const payload = JSON.parse(localStorage.getItem(REALTIME_RADAR_LAST_CACHE_KEY) || "{}");
     if (!Array.isArray(payload.rows) || !payload.rows.length) return false;
-    realtimeRadarLastRows = payload.rows.filter((stock) => isIntradayTradable(stock));
+    const payloadDate = normalizeMarketAiDateKey(payload.date) || realtimeRadarDateKeyFromTimestamp(payload.updatedAt);
+    if (payloadDate && payloadDate !== marketAiTodayKey()) return false;
+    realtimeRadarLastRows = payload.rows
+      .filter((stock) => isIntradayTradable(stock))
+      .filter((stock) => isRealtimeRadarTodaySnapshot({ ...stock, radarDate: stock.radarDate || payloadDate }));
     if (!realtimeRadarLastRows.length) return false;
     realtimeRadarLastUpdatedAt = cleanNumber(payload.updatedAt) || Date.now();
     return true;
@@ -3556,17 +3607,15 @@ async function ensureRealtimeRadarData() {
 }
 
 async function ensureRealtimeRadarClosingData() {
-  if (latestStocks.length) return latestStocks;
+  if (realtimeRadarLastRows.length) return realtimeRadarLastRows;
   if (realtimeRadarDataPromise) return realtimeRadarDataPromise;
   realtimeRadarDataPromise = (async () => {
     realtimeRadarLoading = true;
     try {
-      await loadMarketData();
-      if (latestStocks.length) return latestStocks;
-      const stocks = await loadStrategyStocks();
-      return stocks.length ? stocks : latestStocks;
+      loadRealtimeRadarLastRows();
+      return realtimeRadarLastRows;
     } catch (error) {
-      return latestStocks;
+      return [];
     } finally {
       realtimeRadarLoading = false;
       realtimeRadarDataPromise = null;
@@ -3631,7 +3680,7 @@ function renderRealtimeRadar() {
   }
   const radarOpen = isRadarDetectionWindow();
   if (!realtimeRadarLastRows.length) loadRealtimeRadarLastRows();
-  if (!radarOpen && !latestStocks.length) {
+  if (!radarOpen && !realtimeRadarLastRows.length) {
     if (realtimeRadarLastRows.length) {
       // Fall through and render the persisted closing snapshot.
     } else {
@@ -3639,16 +3688,16 @@ function renderRealtimeRadar() {
         <header class="radar-topbar">
           <div>
             <h1>◎ 即時多空資金流</h1>
-            <small>偵測時間 09:00-13:30｜收盤後停止偵測，正在讀取收盤資料</small>
+            <small>偵測時間 09:00-13:30｜收盤後停止偵測，只顯示今日盤中快照</small>
           </div>
           <button class="radar-action" type="button" disabled>09:00-13:30 偵測</button>
         </header>
         ${buildRealtimeRadarAiPanel(realtimeRadarLastRows, { loading: true })}
-        <div class="empty-state">正在讀取收盤資料，顯示盤中最後多空狀態...</div>
+        <div class="empty-state">正在讀取今日盤中快照...</div>
       `;
       ensureRealtimeRadarClosingData().then((stocks) => {
         if (stocks.length) renderRealtimeRadar();
-        else panel.innerHTML = `<div class="empty-state">收盤資料暫時讀取失敗，請稍後再試。</div>`;
+        else panel.innerHTML = `<div class="empty-state">今日沒有可用的盤中雷達快照，已停止使用收盤或舊快取資料。</div>`;
       });
       return;
     }
@@ -3965,7 +4014,7 @@ function labelUpdateModes() {
   document.querySelectorAll(".strategy-card[data-strategy]").forEach((card) => {
     const text = card.textContent || "";
     if (text.includes("策略2")) appendUpdateBadge(card, "立即更新", "live");
-    if (text.includes("策略1")) appendUpdateBadge(card, "07/14:30完整掃", "slow");
+    if (text.includes("策略1")) appendUpdateBadge(card, "07/16:00完整掃", "slow");
     if (text.includes("策略3")) appendUpdateBadge(card, "13:00完整掃", "slow");
     if (text.includes("策略4")) appendUpdateBadge(card, "07/14:30完整掃", "slow");
     if (text.includes("策略5")) appendUpdateBadge(card, "MIS即時", "live");
@@ -4877,10 +4926,10 @@ function hasFreshOpenBuyScan() {
 function getOpenBuyActiveScanTime() {
   const now = new Date();
   const today0700 = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 7, 0, 0, 0).getTime();
-  const today1430 = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 14, 30, 0, 0).getTime();
-  if (now.getTime() >= today1430) return today1430;
+  const today1600 = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 16, 0, 0, 0).getTime();
+  if (now.getTime() >= today1600) return today1600;
   if (now.getTime() >= today0700) return today0700;
-  return new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1, 14, 30, 0, 0).getTime();
+  return new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1, 16, 0, 0, 0).getTime();
 }
 
 function shouldLoadOpenBuyRemote(force = false) {
@@ -5266,6 +5315,7 @@ async function loadStrategy5Cache(force = false) {
 
 function updateStrategyQuote(quote) {
   if (!quote?.code || !quote.close) return;
+  if (!isRealtimeRadarQuoteTime(quote)) return;
   const previous = strategyRealtimeQuotes[quote.code];
   const now = Date.now();
   const prevPoint = previous?.history?.at(-1);
@@ -8521,7 +8571,7 @@ function setStrategyChrome(mode) {
       : swing
       ? "用波段指標邏輯整理全台股，盤中即時更新價量，分類突破缺口、逃逸缺口、V轉與多頭攻擊。"
       : openBuy
-      ? "14:30 後產生明日候選，08:55 後看最終名單，09:00 開盤入，有賺就走。"
+      ? "16:00 後產生明日候選，08:55 後看最終名單，09:00 開盤入，有賺就走。"
       : strategy3
       ? ""
       : "左側切換日線、籌碼與高波動策略；右側即時重算符合條件的股票訊號。";
@@ -9101,16 +9151,16 @@ function renderOpenBuyRadar(universe) {
       <div class="swing-topbar">
         <div>
           <h2>${titleWithSchedule("⚡", "策略1-明日開盤入", "openBuy")}</h2>
-          <p>14:30後先出明日候選；08:55後看最終名單。買入：09:00 開盤價｜停利 +1.2%｜停損 -1.0%｜09:10 強制出場。${scanText}</p>
+          <p>16:00後先出明日候選；08:55後看最終名單。買入：09:00 開盤價｜停利 +1.2%｜停損 -1.0%｜09:10 強制出場。${scanText}</p>
         </div>
         <div class="swing-controls">
-          <label>更新模式：<select><option>07:00 / 14:30 完整掃</option></select></label>
+          <label>更新模式：<select><option>07:00 / 16:00 完整掃</option></select></label>
           <label>市場：<select><option>排除ETF</option></select></label>
         </div>
       </div>
       <div class="swing-signal-grid">
         <button class="swing-card active selected" type="button">
-          <div><strong>14:30 候選</strong><small>收盤後用日K篩明日名單</small></div><em>${scanCount}</em>
+          <div><strong>16:00 候選</strong><small>收盤後用日K篩明日名單</small></div><em>${scanCount}</em>
         </button>
         <button class="swing-card active" type="button">
           <div><strong>08:55 最終</strong><small>盤前最後確認後開盤買</small></div><em>待接</em>
