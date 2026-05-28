@@ -37,6 +37,17 @@ function stockChange(close, change) {
   return percent;
 }
 
+function normalizeTradeDate(value) {
+  const text = String(value || "").trim();
+  const digits = text.replace(/\D/g, "");
+  if (/^\d{8}$/.test(digits)) return digits;
+  if (/^\d{7}$/.test(digits)) {
+    const rocYear = Number(digits.slice(0, 3));
+    if (rocYear > 0) return `${rocYear + 1911}${digits.slice(3)}`;
+  }
+  return "";
+}
+
 function normalizeTwseRow(row) {
   const code = normalizeCode(row["證券代號"] || row.Code);
   if (!isCommonStockCode(code)) return null;
@@ -45,10 +56,15 @@ function normalizeTwseRow(row) {
   const change = cleanNumber(row["漲跌價差"] || row.Change);
   const value = cleanNumber(row["成交金額"] || row.TradeValue);
   const volume = cleanNumber(row["成交股數"] || row.TradeVolume);
+  const tradeDate = normalizeTradeDate(row.Date || row["日期"] || row["資料日期"]);
   if (!name || !close) return null;
   return {
     Code: code,
     Name: name,
+    Date: tradeDate,
+    TradeDate: tradeDate,
+    quoteDate: tradeDate,
+    tradeDate,
     ClosingPrice: String(close),
     Change: String(change),
     TradeValue: String(value),
@@ -66,10 +82,15 @@ function normalizeTpexRow(row) {
   const change = cleanNumber(row["漲跌"] || row.Change);
   const value = cleanNumber(row["成交金額(元)"] || row["成交金額"] || row.TradeValue);
   const volume = cleanNumber(row["成交股數"] || row.TradeVolume);
+  const tradeDate = normalizeTradeDate(row.Date || row["日期"] || row["資料日期"]);
   if (!name || !close) return null;
   return {
     Code: code,
     Name: name,
+    Date: tradeDate,
+    TradeDate: tradeDate,
+    quoteDate: tradeDate,
+    tradeDate,
     ClosingPrice: String(close),
     Change: String(change),
     TradeValue: String(value),
