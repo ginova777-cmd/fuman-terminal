@@ -5322,7 +5322,9 @@ function applyStrategyQuote(stock) {
     low: quote.low,
     prevClose: prevClose || quote.prevClose,
     limitUp: quote.limitUp,
+    quoteDate: quote.quoteDate || quote.tradeDate || stock.quoteDate || marketAiTodayKey(),
     quoteTime: quote.time || stock.quoteTime,
+    quoteUpdatedAt: quote.updatedAt || Date.now(),
     isRealtime: true,
   };
 }
@@ -10091,8 +10093,8 @@ function applyMarketMode(mode = "overview") {
     marketAiPanel.hidden = marketMode !== "ai";
     if (marketMode === "ai") {
       marketAiLastSignature = "";
-      renderMarketAiPanel();
-      deferUiWork(() => loadMarketData(), 100);
+      marketAiPanel.innerHTML = `<div class="empty-state">載入最新 AI 判讀資料中...</div>`;
+      deferUiWork(refreshMarketAiPanelOnOpen, 80);
     }
   }
   const title = panel.querySelector(".page-header h1");
@@ -10102,8 +10104,37 @@ function applyMarketMode(mode = "overview") {
   }
 }
 
-function getMarketAiSectors() {
-  return Object.entries(sectorStocksCache).map(([name, stocks]) => {
+async function refreshMarketAiPanelOnOpen() {
+  if (marketDataLoading) return;
+  try {
+    await loadMarketData(true);
+  } finally {
+    if (marketMode === "ai") {
+      marketAiLastSignature = "";
+      renderMarketAiPanel();
+    }
+  }
+}
+
+function getMarketAiSectors(sourceStocks = null) {
+  const sourceCache = Array.isArray(sourceStocks)
+    ? sourceStocks.reduce((cache, stock) => {
+        const code = String(stock?.code || "").trim();
+        const industry = SECTOR_MAP[code];
+        if (!industry) return cache;
+        upsertSectorStock(cache, industry, {
+          code,
+          name: stock.name || code,
+          close: cleanNumber(stock.close),
+          change: cleanNumber(stock.change),
+          pct: cleanNumber(stock.percent ?? stock.pct),
+          value: cleanNumber(stock.value),
+          volume: cleanNumber(stock.tradeVolume || stock.volume),
+        });
+        return cache;
+      }, {})
+    : sectorStocksCache;
+  return Object.entries(sourceCache).map(([name, stocks]) => {
     const rows = normalizeArray(stocks).map((stock) => ({
       ...stock,
       pct: cleanNumber(stock.pct ?? stock.percent),
@@ -10118,6 +10149,48 @@ function getMarketAiSectors() {
     const down = rows.filter((stock) => stock.pct < 0).length;
     return { name, rows, pct: pct || 0, totalValue, up, down };
   }).filter(Boolean);
+}
+
+function marketAiTodayKey() {
+  const now = new Date();
+  return `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}${String(now.getDate()).padStart(2, "0")}`;
+}
+
+function normalizeMarketAiDateKey(value) {
+  const text = String(value || "").trim();
+  if (!text) return "";
+  const digits = text.replace(/\D/g, "");
+  if (/^\d{8}$/.test(digits)) return digits;
+  if (/^\d{7}$/.test(digits)) {
+    const rocYear = Number(digits.slice(0, 3));
+    if (rocYear > 0) return `${rocYear + 1911}${digits.slice(3)}`;
+  }
+  return "";
+}
+
+function marketAiQuoteDateKey(stock) {
+  return normalizeMarketAiDateKey(valueOf(stock || {}, [
+    "quoteDate",
+    "QuoteDate",
+    "tradeDate",
+    "TradeDate",
+    "date",
+    "Date",
+    "資料日期",
+    "交易日期",
+  ]));
+}
+
+function isMarketAiStaleStock(stock) {
+  const quoteDate = marketAiQuoteDateKey(stock);
+  return quoteDate && quoteDate !== marketAiTodayKey();
+}
+
+function isMarketAiFreshRealtimeStock(stock) {
+  if (!isIntradayScanWindow()) return true;
+  if (!stock?.isRealtime) return false;
+  const updatedAt = cleanNumber(stock.quoteUpdatedAt);
+  return updatedAt > 0 && Date.now() - updatedAt <= Math.max(INTRADAY_FAST_SCAN_MS * 4, 15000);
 }
 
 async function loadMarketAiStocksFallback() {
@@ -10334,6 +10407,8 @@ function getMarketAiFilterMeta(groups) {
 }
 
 function isMarketAiLongCandidate(stock, options = {}) {
+  if (isMarketAiStaleStock(stock)) return false;
+  if (!isMarketAiFreshRealtimeStock(stock)) return false;
   const pct = cleanNumber(stock.percent);
   const change = cleanNumber(stock.change);
   const close = cleanNumber(stock.close);
@@ -10344,14 +10419,16 @@ function isMarketAiLongCandidate(stock, options = {}) {
 }
 
 function buildMarketAiData() {
-  const stocks = latestStocks.length ? latestStocks : [];
+  const allStocks = latestStocks.length ? latestStocks.map((stock) => applyStrategyQuote(stock)) : [];
+  const staleRows = allStocks.filter((stock) => isMarketAiStaleStock(stock));
+  const stocks = allStocks.filter((stock) => !isMarketAiStaleStock(stock));
   const sample = stocks.length;
   const upRows = stocks.filter((stock) => cleanNumber(stock.percent) > 0);
   const downRows = stocks.filter((stock) => cleanNumber(stock.percent) < 0);
   const flatRows = sample - upRows.length - downRows.length;
   const upRatio = sample ? (upRows.length / sample) * 100 : 0;
   const totalValue = stocks.reduce((sum, stock) => sum + cleanNumber(stock.value), 0) / 100000000;
-  const sectors = getMarketAiSectors();
+  const sectors = getMarketAiSectors(stocks);
   const strongSectors = [...sectors].sort((a, b) => b.pct - a.pct).slice(0, 4);
   const weakSectors = [...sectors].sort((a, b) => a.pct - b.pct).slice(0, 4);
   const classifiedStocks = stocks
@@ -10370,7 +10447,7 @@ function buildMarketAiData() {
     .slice(0, 5);
   const bias = upRatio >= 55 ? "多方偏強" : upRatio <= 45 ? "空方壓制" : "震盪分歧";
   const confidence = sample >= 1000 ? (Math.min(92, 58 + Math.abs(upRatio - 50) * 1.4)).toFixed(0) : "中";
-  return { stocks, sample, upRows, downRows, flatRows, upRatio, totalValue, sectors, strongSectors, weakSectors, hotStocks, hotGroups, visibleHotStocks, riskStocks, bias, confidence };
+  return { stocks, allStocks, staleRows, sample, upRows, downRows, flatRows, upRatio, totalValue, sectors, strongSectors, weakSectors, hotStocks, hotGroups, visibleHotStocks, riskStocks, bias, confidence };
 }
 
 function marketAiUpdatedLabel() {
@@ -10548,12 +10625,13 @@ function renderMarketAiPanel() {
   installMarketTabs();
   if (!marketAiPanel) return;
   const data = buildMarketAiData();
-  const signature = `${marketAiHotFilter}:${data.sample}:${data.upRows.length}:${data.downRows.length}:${data.hotStocks.map((stock) => `${stock.code}:${stock.score}:${cleanNumber(stock.percent).toFixed(2)}`).join("|")}`;
+  const signature = `${marketAiHotFilter}:${data.sample}:${data.staleRows.length}:${data.upRows.length}:${data.downRows.length}:${data.hotStocks.map((stock) => `${stock.code}:${stock.score}:${cleanNumber(stock.percent).toFixed(2)}`).join("|")}`;
   if (signature === marketAiLastSignature && marketAiPanel.innerHTML) return;
   marketAiLastSignature = signature;
   if (!data.sample) {
-    marketAiPanel.innerHTML = `<div class="empty-state">等待市場資料載入後產生 AI 判讀。</div>`;
-    deferUiWork(loadMarketAiStocksFallback, 100);
+    const staleDate = data.staleRows.length ? marketAiQuoteDateKey(data.staleRows[0]) : "";
+    marketAiPanel.innerHTML = `<div class="empty-state">${data.staleRows.length ? `目前資料日期 ${escapeAttr(staleDate || "未知")}，不是今日 ${escapeAttr(marketAiTodayKey())}，已暫停 AI 多方推薦。` : "等待市場資料載入後產生 AI 判讀。"}</div>`;
+    if (!data.staleRows.length) deferUiWork(loadMarketAiStocksFallback, 100);
     return;
   }
   if (!Object.keys(institutionData).length) deferUiWork(ensureMarketAiInstitutionData, 100);
@@ -10603,7 +10681,11 @@ function renderMarketAiPanel() {
         </article>
       `;
   }).join("");
+  const staleNotice = data.staleRows.length
+    ? `<div class="market-ai-sort-note">已排除 ${data.staleRows.length.toLocaleString("zh-TW")} 檔非今日資料，AI 多方推薦只使用今日或無日期標記的最新行情。</div>`
+    : "";
   marketAiPanel.innerHTML = `
+    ${staleNotice}
     <section class="market-ai-summary">
       <article class="market-ai-card hero">
         <small>盤中決策節奏</small>
@@ -10929,12 +11011,14 @@ async function hydrateChipRealtimeQuotes(rows) {
 
 function parseStocksForLatest(stocks) {
   return stocks.map((stock) => {
-    const code = valueOf(stock, ["證券代號", "Code"]);
-    const name = valueOf(stock, ["證券名稱", "Name"]);
-    const value = cleanNumber(valueOf(stock, ["成交金額", "TradeValue"]));
-    const tradeVolume = normalizeTradeVolumeLots(valueOf(stock, ["成交股數", "TradeVolume"]));
+    const code = valueOf(stock, ["證券代號", "Code", "code"]);
+    const name = valueOf(stock, ["證券名稱", "Name", "name"]);
+    const value = cleanNumber(valueOf(stock, ["成交金額", "TradeValue", "value"]));
+    const tradeVolume = normalizeTradeVolumeLots(valueOf(stock, ["成交股數", "TradeVolume", "tradeVolume", "volume"]));
     const volumeRatio = cleanNumber(valueOf(stock, ["量比", "VolumeRatio", "volumeRatio", "volume_ratio"]));
-    return { code, name, value, tradeVolume, volumeRatio, ...stockChange(stock) };
+    const quoteDate = valueOf(stock, ["quoteDate", "QuoteDate", "tradeDate", "TradeDate", "date", "Date", "資料日期", "交易日期"]);
+    const market = valueOf(stock, ["market", "Market", "市場"]);
+    return { code, name, value, tradeVolume, volumeRatio, quoteDate, market, ...stockChange(stock) };
   }).filter((s) => s.code && s.name && s.close);
 }
 
@@ -10983,10 +11067,11 @@ async function loadChipTradeData(force = false) {
 }
 
 function stockChange(stock) {
-  const change = cleanNumber(valueOf(stock, ["漲跌價差", "Change", "漲跌"]));
-  const close = cleanNumber(valueOf(stock, ["收盤價", "ClosingPrice", "收盤"]));
+  const change = cleanNumber(valueOf(stock, ["漲跌價差", "Change", "change", "漲跌"]));
+  const close = cleanNumber(valueOf(stock, ["收盤價", "ClosingPrice", "close", "price", "收盤"]));
+  const rawPercent = valueOf(stock, ["percent", "pct", "漲跌百分比", "漲跌百分比(%)"]);
   const previous = close - change;
-  const percent = previous ? (change / previous) * 100 : 0;
+  const percent = rawPercent !== "" ? cleanNumber(rawPercent) : previous ? (change / previous) * 100 : 0;
   return { change, close, percent };
 }
 
@@ -11208,7 +11293,7 @@ async function loadMarketData(force = false) {
   marketDataLoading = true;
   marketDataLastStartedAt = now;
   try {
-    const payload = await fetchJson(endpoints.backend, 12000);
+    const payload = await fetchJson(`${endpoints.backend}?t=${Date.now()}`, 12000);
 
     if (!payload.ok) throw new Error("Backend failed");
 
@@ -11577,6 +11662,10 @@ async function refreshStrategyRealtimeScan(mode = "hot") {
       strategyLastScanAt = Date.now();
       strategyRealtimeStats = { requested, received, failed, lastError };
       renderStrategyScanner();
+      if (marketMode === "ai") {
+        marketAiLastSignature = "";
+        renderMarketAiPanel();
+      }
     }
     if (backgroundStocks.length) {
       const stats = await fetchStrategyRealtimeBatches(backgroundStocks, backgroundBatchSize);
@@ -11588,6 +11677,10 @@ async function refreshStrategyRealtimeScan(mode = "hot") {
       strategyLastScanAt = Date.now();
       strategyRealtimeStats = { requested, received, failed, lastError };
       renderStrategyScanner();
+      if (marketMode === "ai") {
+        marketAiLastSignature = "";
+        renderMarketAiPanel();
+      }
     }
   } catch (error) {
     strategyRealtimeStats = { ...strategyRealtimeStats, lastError: error?.message || String(error || "scan failed") };
@@ -11738,6 +11831,9 @@ setInterval(() => {
 }, MARKET_POLL_TICK_MS);
 setInterval(() => {
   if (!isDocumentHidden() && isTerminalUnlocked() && isViewActive("strategy") && selectedStrategyIds.has("intraday_2m") && isIntradayScanWindow()) refreshStrategyRealtimeScan("hot");
+}, INTRADAY_FAST_SCAN_MS);
+setInterval(() => {
+  if (!isDocumentHidden() && isTerminalUnlocked() && isViewActive("market") && marketMode === "ai" && isIntradayScanWindow()) refreshStrategyRealtimeScan("hot");
 }, INTRADAY_FAST_SCAN_MS);
 setInterval(() => {
   if (!isDocumentHidden() && isTerminalUnlocked() && isViewActive("strategy") && selectedStrategyIds.has("intraday_2m") && isIntradayScanWindow()) refreshStrategyRealtimeScan("background");
