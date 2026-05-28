@@ -7190,6 +7190,18 @@ intradayRadarStyles.textContent = `
     color: #75b7ff;
     font-weight: 700;
   }
+  .intraday-hot-code {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+  }
+  .intraday-hot-fire {
+    display: inline-block;
+    font-size: 12px;
+    line-height: 1;
+    transform: translateY(-1px);
+    filter: drop-shadow(0 0 5px rgba(255, 122, 40, 0.75));
+  }
   .intraday-table .price,
   .intraday-table .pct {
     color: #ff4f5f;
@@ -8709,6 +8721,7 @@ function renderIntradayRadar(evaluated) {
       const latestEnhancement = normalizeArray(stock.strategy2Event?.enhancements)
         .filter(isStrategy2EnhancementVisible)
         .at(-1);
+      const repeatAHot = Boolean(latestEnhancement);
       const enhancementChip = latestEnhancement ? `<b>🔥 持續放量</b>` : "";
       const chips = `${enhancementChip}${stock.intradaySignals.map((signal) => `<b>${signal.icon} ${signal.short}</b>`).join("")}`;
       const reason = latestEnhancement
@@ -8718,7 +8731,7 @@ function renderIntradayRadar(evaluated) {
       return `
         <tr>
           <td><span class="intraday-table-time">${entryTime}</span></td>
-          <td><span class="code">${stock.code}${latestEnhancement ? " 🔥" : ""}</span></td>
+          <td><span class="code intraday-hot-code">${repeatAHot ? `<span class="intraday-hot-fire" title="持續爆量且多次進入A區">🔥</span>` : ""}${stock.code}</span></td>
           <td>${stock.name}</td>
           <td><span class="intraday-state ${state.cls}">${state.label}</span></td>
           <td><span class="intraday-badges">${chips}</span></td>
