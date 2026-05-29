@@ -38,10 +38,21 @@ function Get-FumanTaskDescription($TaskName) {
     "Fuman Daily Health Summary 1545" { return "綜合策略每日健康摘要，15:45 發送" }
     "Fuman Flow Cache 0600" { return "買賣超與權證走向，早上 06:00 合併掃描並發布終端" }
     "Fuman Flow Cache 2100" { return "買賣超與權證走向，晚上 21:00 合併掃描並發布終端" }
-    "Fuman 買賣超 Cache 0600" { return "買賣超資料，早上 06:00 快取" }
-    "Fuman 買賣超 Cache 2102" { return "買賣超資料，晚上 21:02 快取" }
-    "Fuman 權證走向 Cache 0600" { return "權證資金走向，早上 06:00 快取" }
-    "Fuman 權證走向 Cache 2100" { return "權證資金走向，晚上 21:00 快取" }
+    "Fuman 買賣超 Cache 0600" { return "舊版買賣超單獨任務；預期停用，已由 Fuman Flow Cache 0600 接手" }
+    "Fuman 買賣超 Cache 2102" { return "舊版買賣超單獨任務；預期停用，已由 Fuman Flow Cache 2100 接手" }
+    "Fuman 權證走向 Cache 0600" { return "舊版權證走向單獨任務；預期停用，已由 Fuman Flow Cache 0600 接手" }
+    "Fuman 權證走向 Cache 2100" { return "舊版權證走向單獨任務；預期停用，已由 Fuman Flow Cache 2100 接手" }
+    default { return "" }
+  }
+}
+
+function Get-ExpectedDisabledReason($TaskName) {
+  switch -Wildcard ($TaskName) {
+    "Fuman 買賣超 Cache 0600" { return "預期停用：已由 Fuman Flow Cache 0600 合併掃描取代" }
+    "Fuman 買賣超 Cache 2102" { return "預期停用：已由 Fuman Flow Cache 2100 合併掃描取代" }
+    "Fuman 權證走向 Cache 0600" { return "預期停用：已由 Fuman Flow Cache 0600 合併掃描取代" }
+    "Fuman 權證走向 Cache 2100" { return "預期停用：已由 Fuman Flow Cache 2100 合併掃描取代" }
+    "Fuman Market Overview Patrol" { return "預期停用：舊版任務，已由 Fuman Market Overview Patrol 0900 取代" }
     default { return "" }
   }
 }
@@ -212,6 +223,7 @@ function Get-ScheduleRows {
     [pscustomobject]@{
       排程 = $task.TaskName
       中文說明 = Get-FumanTaskDescription $task.TaskName
+      停用說明 = Get-ExpectedDisabledReason $task.TaskName
       狀態 = [string]$task.State
       上次執行 = Format-DateTimeText $info.LastRunTime
       下次執行 = Format-DateTimeText $info.NextRunTime
@@ -264,20 +276,21 @@ $rows |
 Write-Host ""
 Write-Host "==== 異常提醒 ====" -ForegroundColor Cyan
 $errors = @($rows | Where-Object { $_.狀態 -ne "Disabled" -and $_.原始結果碼 -notin @(0, 267009, 267011) })
-$disabled = @($rows | Where-Object { $_.狀態 -eq "Disabled" })
+$expectedDisabled = @($rows | Where-Object { $_.狀態 -eq "Disabled" -and $_.停用說明 })
+$unexpectedDisabled = @($rows | Where-Object { $_.狀態 -eq "Disabled" -and -not $_.停用說明 })
 $missed = @($rows | Where-Object { $_.錯過次數 -gt 0 })
 $logIssues = @($rows | Where-Object { $_.最新Log異常 })
 
-if ($errors.Count -eq 0 -and $disabled.Count -eq 0 -and $missed.Count -eq 0 -and $logIssues.Count -eq 0) {
-  Write-Host "目前沒有錯誤、停用或錯過次數。" -ForegroundColor Green
+if ($errors.Count -eq 0 -and $unexpectedDisabled.Count -eq 0 -and $missed.Count -eq 0 -and $logIssues.Count -eq 0) {
+  Write-Host "目前沒有錯誤、非預期停用或錯過次數。" -ForegroundColor Green
 } else {
   if ($errors.Count -gt 0) {
     Write-Host "錯誤任務：" -ForegroundColor Red
     $errors | Write-RenderedObject -Renderer { param($items) $items | Select-Object 排程, 上次結果, 上次執行, 下次執行 | Format-Table -AutoSize -Wrap }
   }
-  if ($disabled.Count -gt 0) {
-    Write-Host "停用任務：" -ForegroundColor Yellow
-    $disabled | Write-RenderedObject -Renderer { param($items) $items | Select-Object 排程, 中文說明, 上次結果 | Format-Table -AutoSize -Wrap }
+  if ($unexpectedDisabled.Count -gt 0) {
+    Write-Host "非預期停用任務：" -ForegroundColor Yellow
+    $unexpectedDisabled | Write-RenderedObject -Renderer { param($items) $items | Select-Object 排程, 中文說明, 上次結果 | Format-Table -AutoSize -Wrap }
   }
   if ($missed.Count -gt 0) {
     Write-Host "有錯過次數的任務：" -ForegroundColor Yellow
@@ -287,6 +300,12 @@ if ($errors.Count -eq 0 -and $disabled.Count -eq 0 -and $missed.Count -eq 0 -and
     Write-Host "最新 log 疑似異常：" -ForegroundColor Red
     $logIssues | Write-RenderedObject -Renderer { param($items) $items | Select-Object 排程, 上次執行, 最新Log異常 | Format-Table -AutoSize -Wrap }
   }
+}
+
+if ($expectedDisabled.Count -gt 0) {
+  Write-Host ""
+  Write-Host "==== 預期停用任務 ====" -ForegroundColor Cyan
+  $expectedDisabled | Write-RenderedObject -Renderer { param($items) $items | Select-Object 排程, 停用說明 | Format-Table -AutoSize -Wrap }
 }
 
 if ($ExportCsv) {
