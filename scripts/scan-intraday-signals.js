@@ -10,6 +10,7 @@ const SCORECARD_TRACK_FILE = path.join(CACHE_DIR, "scorecard-trades.json");
 const STRATEGY5_TRACK_FILE = path.join(CACHE_DIR, "strategy5-scorecard-trades.json");
 const STRATEGY2_REPORT_FILE = dataPath("strategy2-intraday-latest.json");
 const STRATEGY2_HISTORY_DIR = dataPath("strategy2-intraday-history");
+const STRATEGY2_HISTORY_WRITE_INTERVAL_MS = Math.max(0, Number(process.env.STRATEGY2_HISTORY_WRITE_INTERVAL_MS || 5 * 60 * 1000));
 const OPEN_BUY_SCORECARD_SOURCE_FILE = dataPath("open-buy-scorecard-source.json");
 const OPEN_BUY_FILE = dataPath("open-buy-latest.json");
 const OPEN_BUY_BACKUP_FILE = dataPath("open-buy-backup.json");
