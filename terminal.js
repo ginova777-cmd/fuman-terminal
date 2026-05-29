@@ -3655,9 +3655,48 @@ function hydrateRealtimeRadarDisplayRows(rows = []) {
     const quote = strategyRealtimeQuotes[String(stock?.code || "")];
     if (!isRealtimeRadarUsableQuote(quote)) return stock;
     const live = applyStrategyQuote(stock);
+    if (isRealtimeRadarLimitUp(live)) return null;
+    const inst = getInstitutionTotal(live.code);
     const pct = cleanNumber(live.percent ?? live.pct);
     const volume = normalizeTradeVolumeLots(live.tradeVolume || live.volume);
     const value = radarStockValue({ ...live, volume });
+    const totalInst = cleanNumber(inst.total);
+    const trust = cleanNumber(inst.trust);
+    const foreign = cleanNumber(inst.foreign);
+    const daily = live.swingDaily || stock.swingDaily || analyzeSwingDaily(live);
+    const marginChange = radarMarginChange({ ...live, swingDaily: daily });
+    const shortMarginChange = radarShortMarginChange({ ...live, swingDaily: daily });
+    const upperShadowPct = radarUpperShadowPct({ ...live, swingDaily: daily });
+    const lowerShadowPct = radarLowerShadowPct({ ...live, swingDaily: daily });
+    const volumeRatio = radarVolumeRatio({ ...live, volume, swingDaily: daily });
+    const signalTags = radarSignalTags({ ...live, pct, value, volume, volumeRatio, foreign, trust, totalInst, marginChange, shortMarginChange, swingDaily: daily });
+    const hasLongTag = signalTags.some((tag) => /突破|長紅|長下影|量增|買超|強勢|急拉|融資增加/.test(tag));
+    const hasShortTag = signalTags.some((tag) => /跌破|長上影|急殺|賣超|轉弱|長黑|接近跌停|融券增加/.test(tag));
+    const hasLongSignal =
+      hasLongTag ||
+      lowerShadowPct >= 3 ||
+      marginChange > 0 ||
+      pct >= 3 ||
+      (pct >= 1.5 && volume >= INTRADAY_MIN_VOLUME) ||
+      (value >= 1000000000 && pct > 0) ||
+      (volume >= 5000 && pct >= 1.2) ||
+      (foreign >= 1000 && pct >= 0) ||
+      (trust >= 500 && pct >= 0);
+    const hasShortSignal =
+      hasShortTag ||
+      upperShadowPct >= 3 ||
+      shortMarginChange > 0 ||
+      (signalTags.some((tag) => /量增|即時爆量/.test(tag)) && pct < 0) ||
+      pct <= -3 ||
+      (pct <= -1.5 && volume >= INTRADAY_MIN_VOLUME) ||
+      (value >= 1000000000 && pct < 0) ||
+      (volume >= 5000 && pct <= -1.2) ||
+      (foreign <= -1000 && pct <= 0.8) ||
+      (trust <= -500 && pct <= 0.8);
+    const side = hasLongSignal && (!hasShortSignal || pct >= 0) ? "long" : hasShortSignal ? "short" : "";
+    if (!side || !signalTags.length) return null;
+    const score = radarSignalScore({ ...live, pct, value, volume, foreign, trust, signalTags });
+    const flow = radarFlowValue({ ...live, pct, value, volume, foreign, trust, signalTags });
     const radarUpdatedAt = Math.max(cleanNumber(stock.radarUpdatedAt), cleanNumber(live.quoteUpdatedAt), cleanNumber(quote.updatedAt));
     return {
       ...stock,
@@ -3667,9 +3706,20 @@ function hydrateRealtimeRadarDisplayRows(rows = []) {
       volume: volume || stock.volume,
       tradeVolume: volume || stock.tradeVolume,
       value: value || stock.value,
+      side,
+      score,
+      flow,
+      volumeRatio,
+      trust,
+      foreign,
+      totalInst,
+      marginChange,
+      shortMarginChange,
+      swingDaily: daily,
+      signalTags,
       radarUpdatedAt: radarUpdatedAt || stock.radarUpdatedAt,
     };
-  });
+  }).filter(Boolean);
 }
 
 function recentRealtimeRadarDisplayRows(rows = [], radarOpen = isRadarDetectionWindow()) {
@@ -3681,7 +3731,7 @@ function recentRealtimeRadarDisplayRows(rows = [], radarOpen = isRadarDetectionW
   if (!latest) return hydrated;
   const cutoff = Math.max(Date.now() - Math.max(REALTIME_RADAR_REFRESH_MS * 25, 75000), latest - Math.max(REALTIME_RADAR_REFRESH_MS * 12, 45000));
   const freshRows = hydrated.filter((stock) => cleanNumber(stock.radarUpdatedAt) >= cutoff);
-  return freshRows.length ? freshRows : hydrated.slice(0, 20);
+  return freshRows;
 }
 
 function loadRealtimeRadarLastRows() {
