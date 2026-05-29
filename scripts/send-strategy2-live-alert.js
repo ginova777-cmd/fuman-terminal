@@ -10,6 +10,7 @@ const STRATEGY2_REPORT_FILE = dataPath("strategy2-intraday-latest.json");
 const LIVE_ALERT_STATE_FILE = statePath("strategy2-live-alert-state.json");
 const LIVE_LIMIT = Math.max(1, Number(process.env.STRATEGY2_LIVE_LIMIT || 3));
 const STRATEGY2_LIVE_MIN_PERCENT = Number(process.env.STRATEGY2_LIVE_MIN_PERCENT || 2);
+const ENHANCEMENT_COOLDOWN_MS = Math.max(0, Number(process.env.STRATEGY2_ENHANCEMENT_COOLDOWN_MS || 5 * 60 * 1000));
 
 function readJson(file, fallback) {
   try { return JSON.parse(fs.readFileSync(file, "utf8")); } catch { return fallback; }
@@ -85,6 +86,36 @@ function enhancementKey(event, enhancement) {
   ].join("|");
 }
 
+function enhancementCooldownKey(event, enhancement) {
+  return [
+    "enhance-cooldown",
+    event.code || "",
+    enhancement.strategy || "持續放量",
+  ].join("|");
+}
+
+function todayTimeToMs(today, timeText) {
+  const match = String(timeText || "").match(/^(\d{2}):(\d{2})(?::(\d{2}))?$/);
+  if (!match) return 0;
+  const [, hour, minute, second = "00"] = match;
+  const value = Date.parse(`${today}T${hour}:${minute}:${second}+08:00`);
+  return Number.isFinite(value) ? value : 0;
+}
+
+function recentEnhancementSentAt(state, key, today, event, enhancement) {
+  if (state.date !== today) return 0;
+  const map = state.enhancementCooldown || {};
+  const value = Date.parse(map[key] || "");
+  if (Number.isFinite(value)) return value;
+  const strategy = enhancement.strategy || "";
+  return (state.sent || []).reduce((latest, item) => {
+    const parts = String(item || "").split("|");
+    if (parts.length < 4 || parts[0] !== "enhance" || parts[1] !== String(event.code || "")) return latest;
+    if (strategy && parts[3] !== strategy) return latest;
+    return Math.max(latest, todayTimeToMs(today, parts[2]));
+  }, 0);
+}
+
 function buildMessage(events) {
   return [
     "策略2 當沖通知進場區",
@@ -134,13 +165,18 @@ async function main() {
 
   const state = readJson(LIVE_ALERT_STATE_FILE, { date: today, sent: [] });
   const sent = new Set(state.date === today ? (state.sent || []) : []);
+  const enhancementCooldown = state.date === today ? { ...(state.enhancementCooldown || {}) } : {};
+  const nowMs = Date.now();
   const newEvents = aEvents.filter((event) => isAtOrAfterCutoff(event.firstAAt) && !sent.has(eventKey(event)));
   const newEnhancements = [];
   aEvents.forEach((event) => {
     (event.enhancements || []).forEach((enhancement) => {
       const key = enhancementKey(event, enhancement);
-      if (isAtOrAfterCutoff(enhancement.at) && !sent.has(key)) {
-        newEnhancements.push({ event, enhancement, key });
+      const cooldownKey = enhancementCooldownKey(event, enhancement);
+      const lastSentAt = recentEnhancementSentAt(state, cooldownKey, today, event, enhancement);
+      const cooldownPassed = !ENHANCEMENT_COOLDOWN_MS || !lastSentAt || nowMs - lastSentAt >= ENHANCEMENT_COOLDOWN_MS;
+      if (isAtOrAfterCutoff(enhancement.at) && !sent.has(key) && cooldownPassed) {
+        newEnhancements.push({ event, enhancement, key, cooldownKey });
       }
     });
   });
@@ -184,11 +220,15 @@ async function main() {
       await sendLineText(buildEnhancementMessage(latestEnhancements));
     }
     latestEnhancements.forEach((item) => sent.add(item.key));
+    latestEnhancements.forEach((item) => {
+      if (item.cooldownKey) enhancementCooldown[item.cooldownKey] = new Date().toISOString();
+    });
   }
   writeJson(LIVE_ALERT_STATE_FILE, {
     date: today,
     updatedAt: new Date().toISOString(),
     sent: Array.from(sent),
+    enhancementCooldown,
   });
   console.log(`strategy2 live alert sent: new ${latestEvents.length}, enhancements ${latestEnhancements.length}`);
 }
