@@ -11,6 +11,9 @@ const LIVE_ALERT_STATE_FILE = statePath("strategy2-live-alert-state.json");
 const LIVE_LIMIT = Math.max(1, Number(process.env.STRATEGY2_LIVE_LIMIT || 3));
 const STRATEGY2_LIVE_MIN_PERCENT = Number(process.env.STRATEGY2_LIVE_MIN_PERCENT || 2);
 const ENHANCEMENT_COOLDOWN_MS = Math.max(0, Number(process.env.STRATEGY2_ENHANCEMENT_COOLDOWN_MS || 5 * 60 * 1000));
+const ENHANCEMENT_BREAKOUT_PERCENT_DELTA = Number(process.env.STRATEGY2_ENHANCEMENT_BREAKOUT_PERCENT_DELTA || 1);
+const ENHANCEMENT_BREAKOUT_VOLUME_RATIO = Number(process.env.STRATEGY2_ENHANCEMENT_BREAKOUT_VOLUME_RATIO || 0.5);
+const ENHANCEMENT_BREAKOUT_VOLUME_DELTA = Number(process.env.STRATEGY2_ENHANCEMENT_BREAKOUT_VOLUME_DELTA || 3000);
 
 function readJson(file, fallback) {
   try { return JSON.parse(fs.readFileSync(file, "utf8")); } catch { return fallback; }
@@ -42,6 +45,10 @@ function cleanNumber(value) {
 
 function strategy2EventPercent(event) {
   return cleanNumber(event?.percent ?? event?.pct ?? event?.latestRecord?.percent ?? event?.record?.percent);
+}
+
+function strategy2EventVolume(event) {
+  return cleanNumber(event?.tradeVolume ?? event?.volume ?? event?.latestRecord?.tradeVolume ?? event?.latestRecord?.volume ?? event?.record?.tradeVolume ?? event?.record?.volume);
 }
 
 function isStrategy2LiveDisplayEvent(event) {
@@ -116,7 +123,8 @@ function todayTimeToMs(today, timeText) {
 function recentEnhancementSentAt(state, key, today, event, enhancement) {
   if (state.date !== today) return 0;
   const map = state.enhancementCooldown || {};
-  const value = Date.parse(map[key] || "");
+  const entry = map[key];
+  const value = Date.parse(typeof entry === "object" && entry ? entry.sentAt : entry || "");
   if (Number.isFinite(value)) return value;
   const strategy = enhancement.strategy || "";
   return (state.sent || []).reduce((latest, item) => {
@@ -125,6 +133,38 @@ function recentEnhancementSentAt(state, key, today, event, enhancement) {
     if (strategy && parts[3] !== strategy) return latest;
     return Math.max(latest, todayTimeToMs(today, parts[2]));
   }, 0);
+}
+
+function recentEnhancementMetrics(state, key) {
+  const entry = state?.enhancementCooldown?.[key];
+  if (!entry || typeof entry !== "object") return {};
+  return {
+    percent: cleanNumber(entry.percent),
+    tradeVolume: cleanNumber(entry.tradeVolume),
+  };
+}
+
+function enhancementBreakoutReason(state, cooldownKey, event) {
+  const previous = recentEnhancementMetrics(state, cooldownKey);
+  const percent = strategy2EventPercent(event);
+  const tradeVolume = strategy2EventVolume(event);
+  if (previous.percent > 0 && percent - previous.percent >= ENHANCEMENT_BREAKOUT_PERCENT_DELTA) {
+    return `漲幅+${(percent - previous.percent).toFixed(2)}%`;
+  }
+  if (previous.tradeVolume > 0) {
+    const volumeDelta = tradeVolume - previous.tradeVolume;
+    if (volumeDelta >= ENHANCEMENT_BREAKOUT_VOLUME_DELTA) return `新增量+${Math.round(volumeDelta).toLocaleString("zh-TW")}張`;
+    if (volumeDelta / previous.tradeVolume >= ENHANCEMENT_BREAKOUT_VOLUME_RATIO) return `量增+${Math.round((volumeDelta / previous.tradeVolume) * 100)}%`;
+  }
+  return "";
+}
+
+function enhancementCooldownEntry(event) {
+  return {
+    sentAt: new Date().toISOString(),
+    percent: strategy2EventPercent(event),
+    tradeVolume: strategy2EventVolume(event),
+  };
 }
 
 function buildMessage(events) {
@@ -141,8 +181,9 @@ function buildEnhancementMessage(items) {
       const name = `${event.code} ${event.name || ""}`.trim();
       const at = enhancement.at ? ` ${enhancement.at}` : "";
       const delta = Number(enhancement.deltaVolume) > 0 ? `｜新增量 ${Math.round(Number(enhancement.deltaVolume)).toLocaleString("zh-TW")} 張` : "";
+      const breakout = enhancement.breakoutReason ? `｜突破冷卻：${enhancement.breakoutReason}` : "";
       const source = ma35SourceLabel(enhancement.ma35Source || event?.ma35Source || event?.latestRecord?.ma35Source);
-      return `${name} 持續放量${at}${delta}${source ? `｜MA35來源：${source}` : ""}`;
+      return `${name} 持續放量${at}${delta}${breakout}${source ? `｜MA35來源：${source}` : ""}`;
     })
     .join("\n");
 }
@@ -187,8 +228,9 @@ async function main() {
       const cooldownKey = enhancementCooldownKey(event, enhancement);
       const lastSentAt = recentEnhancementSentAt(state, cooldownKey, today, event, enhancement);
       const cooldownPassed = !ENHANCEMENT_COOLDOWN_MS || !lastSentAt || nowMs - lastSentAt >= ENHANCEMENT_COOLDOWN_MS;
-      if (isAtOrAfterCutoff(enhancement.at) && !sent.has(key) && cooldownPassed) {
-        newEnhancements.push({ event, enhancement, key, cooldownKey });
+      const breakoutReason = cooldownPassed ? "" : enhancementBreakoutReason(state, cooldownKey, event);
+      if (isAtOrAfterCutoff(enhancement.at) && !sent.has(key) && (cooldownPassed || breakoutReason)) {
+        newEnhancements.push({ event, enhancement: { ...enhancement, breakoutReason }, key, cooldownKey });
       }
     });
   });
@@ -233,7 +275,7 @@ async function main() {
     }
     latestEnhancements.forEach((item) => sent.add(item.key));
     latestEnhancements.forEach((item) => {
-      if (item.cooldownKey) enhancementCooldown[item.cooldownKey] = new Date().toISOString();
+      if (item.cooldownKey) enhancementCooldown[item.cooldownKey] = enhancementCooldownEntry(item.event);
     });
   }
   writeJson(LIVE_ALERT_STATE_FILE, {
