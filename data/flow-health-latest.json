@@ -1,16 +1,4 @@
 {
-  "institution": {
-    "scope": "institution",
-    "status": "watchdog_rerun",
-    "message": "Watchdog rerun started",
-    "updatedAt": "2026-05-29T15:27:50.2176852Z",
-    "detail": {
-      "log": "C:\\fuman-runtime\\logs\\flow-watchdog-institution-20260529-232750.log",
-      "reason": "institution not updated after 21:00; updatedAt=05/29/2026 15:25:24",
-      "expectedTime": "21:00"
-    }
-  },
-  "updatedAt": "2026-05-29T15:27:50.2190213Z",
   "warrant": {
     "scope": "warrant",
     "status": "ok",
@@ -20,6 +8,18 @@
       "log": "C:\\fuman-runtime\\logs\\flow-watchdog-warrant-20260529-195310.log",
       "reason": "ok count=120 updatedAt=05/28/2026 22:00:16",
       "expectedTime": ""
+    }
+  },
+  "updatedAt": "2026-05-29T15:31:25.1823099Z",
+  "institution": {
+    "scope": "institution",
+    "status": "ok",
+    "message": "Watchdog verified cache",
+    "updatedAt": "2026-05-29T15:31:25.1808656Z",
+    "detail": {
+      "log": "C:\\fuman-runtime\\logs\\flow-watchdog-institution-20260529-233125.log",
+      "expectedTime": "21:00",
+      "reason": "ok count=1619 usedDate=20260529"
     }
   }
 }
