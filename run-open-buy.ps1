@@ -12,18 +12,18 @@ $env:NODE_OPTIONS = "--use-system-ca"
 New-Item -ItemType Directory -Force -Path "C:\fuman-runtime\logs" | Out-Null
 $log = "C:\fuman-runtime\logs\open-buy-$(Get-Date -Format yyyyMMdd-HHmmss).log"
 "=== Open buy full scan start $(Get-Date) ===" | Out-File $log -Encoding utf8
-. "C:\fuman-terminal\schedule-guard.ps1"
-Invoke-FumanWeekdayGuard -Label "Open buy full scan" -LogPath $log
 
 $env:FULL_SCAN = "1"
-$env:OPEN_BUY_CHUNK_SIZE = "48"
+$env:OPEN_BUY_BATCH_SIZE = "9999"
+$env:OPEN_BUY_BATCHES_PER_RUN = "999"
 $env:OPEN_BUY_USE_MIS = "0"
 
 & $nodeExe "scripts\scan-open-buy-cache.js" >> $log 2>&1
 $exitCode = $LASTEXITCODE
 
 Remove-Item Env:FULL_SCAN -ErrorAction SilentlyContinue
-Remove-Item Env:OPEN_BUY_CHUNK_SIZE -ErrorAction SilentlyContinue
+Remove-Item Env:OPEN_BUY_BATCH_SIZE -ErrorAction SilentlyContinue
+Remove-Item Env:OPEN_BUY_BATCHES_PER_RUN -ErrorAction SilentlyContinue
 Remove-Item Env:OPEN_BUY_USE_MIS -ErrorAction SilentlyContinue
 
 if ($exitCode -ne 0) {
@@ -31,37 +31,7 @@ if ($exitCode -ne 0) {
   exit $exitCode
 }
 
-"Open buy cache files written locally; starting cache sync" >> $log
-$syncScript = Join-Path $PWD "run-cache-sync.ps1"
-if (Test-Path $syncScript) {
-  $sourceFile = "C:\fuman-runtime\data\open-buy-latest.json"
-  $localFile = "C:\fuman-terminal\data\open-buy-latest.json"
-  $synced = $false
-  for ($attempt = 1; $attempt -le 4; $attempt++) {
-    "Open buy cache sync attempt $attempt/4" >> $log
-    & $syncScript >> $log 2>&1
-    $syncExitCode = $LASTEXITCODE
-    if ($syncExitCode -ne 0) {
-      "Open buy cache sync failed with exit code $syncExitCode" >> $log
-      exit $syncExitCode
-    }
-    if ((Test-Path $sourceFile) -and (Test-Path $localFile)) {
-      $sourceHash = (Get-FileHash -LiteralPath $sourceFile -Algorithm SHA256).Hash
-      $localHash = (Get-FileHash -LiteralPath $localFile -Algorithm SHA256).Hash
-      if ($sourceHash -eq $localHash) {
-        $synced = $true
-        break
-      }
-      "Open buy cache sync hash mismatch after attempt $attempt; retrying" >> $log
-    }
-    Start-Sleep -Seconds 30
-  }
-  if (-not $synced) {
-    "Open buy cache sync did not update local terminal data after retries" >> $log
-    exit 1
-  }
-  "Open buy cache sync completed" >> $log
-}
+"Open buy cache files written locally; Git sync is handled by run-cache-sync.ps1" >> $log
 "=== Open buy full scan end $(Get-Date) ===" >> $log
 
 

@@ -40,9 +40,9 @@ function runOnce() {
 async function loop() {
   console.log(`trade manager patrol start: every ${INTERVAL_MS}ms`);
   let loopCount = 0;
-  while (FORCE_RUN || inTradingWindow()) {
+  while (true) {
     loopCount += 1;
-    runOnce();
+    if (FORCE_RUN || inTradingWindow()) runOnce();
     if (MAX_LOOPS > 0 && loopCount >= MAX_LOOPS) {
       console.log(`trade manager patrol stop: max loops ${MAX_LOOPS}`);
       break;

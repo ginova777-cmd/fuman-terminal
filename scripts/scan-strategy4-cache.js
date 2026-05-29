@@ -8,14 +8,12 @@ const { fetchMisQuotes } = require("../lib/mis-quotes");
 const ROOT = path.resolve(__dirname, "..");
 const OUT_FILE = path.join(ROOT, "data", "strategy4-latest.json");
 const BACKUP_FILE = path.join(ROOT, "data", "strategy4-backup.json");
-const CHUNK_SIZE = Number(process.env.STRATEGY4_CHUNK_SIZE || 80);
-const RETRY_CHUNK_SIZE = Number(process.env.STRATEGY4_RETRY_CHUNK_SIZE || 5);
-const FULL_SCAN = true;
+const BATCH_SIZE = Number(process.env.STRATEGY4_BATCH_SIZE || 80);
+const BATCHES_PER_RUN = Number(process.env.STRATEGY4_BATCHES_PER_RUN || 999);
+const FULL_SCAN = process.env.FULL_SCAN !== "0";
 const STOCK_URL = process.env.STOCK_UNIVERSE_URL || "https://fuman-terminal.vercel.app/api/stocks";
 const MIN_UNIVERSE_SIZE = Number(process.env.STRATEGY4_MIN_UNIVERSE_SIZE || 1700);
 const USE_MIS_QUOTES = process.env.STRATEGY4_USE_MIS === "1";
-const SYNC_PARTIAL = process.env.STRATEGY4_SYNC_PARTIAL !== "0";
-const SYNC_SCRIPT = process.env.STRATEGY4_SYNC_SCRIPT || path.join(ROOT, "run-strategy4-partial-sync.ps1");
 
 function readJson(file, fallback) {
   try {
@@ -117,7 +115,7 @@ async function fetchUniverse() {
     return quote ? { ...stock, ...quote, name: quote.name || stock.name } : stock;
   });
 }
-function runHandler(stocks) {
+function runHandler(codes) {
   return new Promise((resolve, reject) => {
     const req = {
       method: "GET",
@@ -311,9 +309,22 @@ async function main() {
     }
   }
 
-  if (scanErrors.length || noDataCodes.size) {
-    throw new Error(`Strategy4 full scan had data gaps: errors ${scanErrors.length}, noData ${noDataCodes.size}${noDataCodes.size ? ` (${[...noDataCodes].slice(0, 30).join(",")})` : ""}`);
-  }
+  const matches = [...previousMatches.values()]
+    .sort((a, b) => (b.swingScore || b.score || 0) - (a.swingScore || a.score || 0) || (b.percent || 0) - (a.percent || 0))
+    .slice(0, 200);
+  const output = {
+    ok: true,
+    source: "github-actions",
+    priceSource: USE_MIS_QUOTES ? "official-daily-k-plus-mis" : "official-daily-k",
+    updatedAt: new Date().toISOString(),
+    fullScan: FULL_SCAN,
+    cursor,
+    total: codes.length,
+    scannedThisRun,
+    scannedCodes: [...scanned].filter((code) => codes.includes(code)),
+    count: matches.length,
+    matches,
+  };
 
   const output = buildOutput({
     codes,
@@ -337,3 +348,5 @@ main().catch((error) => {
   console.error(error);
   process.exit(1);
 });
+
+

@@ -28,9 +28,6 @@ function Invoke-NodeScan($scriptPath, $label) {
 }
 
 "=== Institution scan start $(Get-Date) ===" | Out-File $log -Encoding utf8
-. "C:\fuman-terminal\schedule-guard.ps1"
-Invoke-FumanWeekdayGuard -Label "Institution scan" -LogPath $log
-
 $scanExit = Invoke-NodeScan "scripts\scan-institution-cache.js" "Institution scan"
 if ($scanExit -ne 0) {
   "Institution scan failed with exit code $scanExit" >> $log

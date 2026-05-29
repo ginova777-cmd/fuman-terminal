@@ -8,11 +8,11 @@ const { ROOT, dataPath } = require("./runtime-paths");
 const OUT_FILE = dataPath("open-buy-latest.json");
 const BACKUP_FILE = dataPath("open-buy-backup.json");
 const SCORECARD_SOURCE_FILE = dataPath("open-buy-scorecard-source.json");
-const CHUNK_SIZE = Number(process.env.OPEN_BUY_CHUNK_SIZE || 48);
-const FULL_SCAN = true;
+const BATCH_SIZE = Number(process.env.OPEN_BUY_BATCH_SIZE || 48);
+const BATCHES_PER_RUN = Number(process.env.OPEN_BUY_BATCHES_PER_RUN || 5);
+const FULL_SCAN = process.env.FULL_SCAN === "1";
 const STOCK_URL = process.env.STOCK_UNIVERSE_URL || "https://fuman-terminal.vercel.app/api/stocks";
 const USE_MIS_QUOTES = process.env.OPEN_BUY_USE_MIS === "1";
-const MIN_UNIVERSE_SIZE = Number(process.env.OPEN_BUY_MIN_UNIVERSE_SIZE || 1700);
 
 function readJson(file, fallback) {
   try { return JSON.parse(fs.readFileSync(file, "utf8")); } catch { return fallback; }
@@ -115,29 +115,9 @@ function normalizeStock(row) {
 }
 
 async function fetchUniverse() {
-  let base = [];
-  try {
-    const payload = await fetchJson(STOCK_URL);
-    const rows = Array.isArray(payload) ? payload : (payload.stocks || []);
-    base = rows.map(normalizeStock).filter(Boolean);
-    if (base.length < MIN_UNIVERSE_SIZE) {
-      console.log(`stock endpoint partial universe: ${base.length}, fallback to local TWSE+TPEX fetch`);
-      base = [];
-    }
-  } catch (error) {
-    console.log(`stock endpoint fallback: ${error.message}`);
-  }
-  if (!base.length) {
-    const payload = await callLocalStocksHandler();
-    const rows = Array.isArray(payload) ? payload : (payload.stocks || []);
-    base = rows.map(normalizeStock).filter(Boolean);
-  }
-  const byCode = new Map();
-  base.forEach((stock) => byCode.set(stock.code, stock));
-  base = [...byCode.values()].sort((a, b) => a.code.localeCompare(b.code));
-  if (base.length < MIN_UNIVERSE_SIZE) {
-    throw new Error(`Open-buy stock universe too small: ${base.length}/${MIN_UNIVERSE_SIZE}`);
-  }
+  const payload = await fetchJson(STOCK_URL);
+  const rows = Array.isArray(payload) ? payload : (payload.stocks || []);
+  const base = rows.map(normalizeStock).filter(Boolean);
   if (!USE_MIS_QUOTES) return base;
   const quotes = await fetchMisQuotes(base.map((stock) => stock.code));
   return base.map((stock) => {
@@ -243,3 +223,6 @@ main().catch((error) => {
   console.error(error);
   process.exit(1);
 });
+
+
+

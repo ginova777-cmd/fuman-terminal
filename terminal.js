@@ -1172,18 +1172,13 @@ function installThemeToggle() {
         display: grid;
         gap: 10px;
       }
-      .market-ai-filterbar,
-      .market-ai-mini-filter {
+      .market-ai-filterbar {
         display: flex;
         flex-wrap: wrap;
         gap: 8px;
         margin: 10px 0 12px;
       }
-      .market-ai-mini-filter {
-        margin: 12px 0 0;
-      }
-      .market-ai-filterbar button,
-      .market-ai-mini-filter button {
+      .market-ai-filterbar button {
         min-height: 34px;
         padding: 0 13px;
         border: 1px solid rgba(249, 115, 22, 0.42);
@@ -1193,28 +1188,15 @@ function installThemeToggle() {
         font-weight: 900;
         cursor: pointer;
       }
-      .market-ai-filterbar button[data-ai-hot-filter="momentum"],
-      .market-ai-mini-filter button[data-ai-observe-mode="priority"] {
+      .market-ai-filterbar button[data-ai-hot-filter="momentum"] {
         border-color: rgba(244, 63, 94, 0.48);
         color: #fb7185;
       }
-      .market-ai-filterbar button[data-ai-hot-filter="rebound"],
-      .market-ai-mini-filter button[data-ai-observe-mode="rebound"] {
-        border-color: rgba(245, 158, 11, 0.52);
-        color: #fbbf24;
-      }
-      .market-ai-filterbar button[data-ai-hot-filter="volume"],
-      .market-ai-mini-filter button[data-ai-observe-mode="volume"] {
-        border-color: rgba(34, 197, 94, 0.5);
-        color: #86efac;
-      }
-      .market-ai-filterbar button[data-ai-hot-filter="legal"],
-      .market-ai-mini-filter button[data-ai-observe-mode="legal"] {
+      .market-ai-filterbar button[data-ai-hot-filter="legal"] {
         border-color: rgba(59, 130, 246, 0.48);
         color: #93c5fd;
       }
-      .market-ai-filterbar button[data-ai-hot-filter="intraday"],
-      .market-ai-mini-filter button[data-ai-observe-mode="intraday"] {
+      .market-ai-filterbar button[data-ai-hot-filter="intraday"] {
         border-color: rgba(20, 184, 166, 0.48);
         color: #5eead4;
       }
@@ -1222,13 +1204,11 @@ function installThemeToggle() {
         border-color: rgba(245, 158, 11, 0.52);
         color: #fbbf24;
       }
-      .market-ai-filterbar button.active,
-      .market-ai-mini-filter button.active {
+      .market-ai-filterbar button.active {
         background: rgba(249, 115, 22, 0.18);
         box-shadow: inset 0 0 0 1px currentColor;
       }
-      .market-ai-filterbar em,
-      .market-ai-mini-filter em {
+      .market-ai-filterbar em {
         display: inline-grid;
         place-items: center;
         min-width: 22px;
@@ -1408,38 +1388,22 @@ function installThemeToggle() {
         color: #1d4ed8 !important;
         border-color: #bfdbfe !important;
       }
-      body.fuman-light-theme .market-ai-filterbar button,
-      body.fuman-light-theme .market-ai-mini-filter button {
+      body.fuman-light-theme .market-ai-filterbar button {
         background: #fff7ed !important;
         color: #c2410c !important;
         border-color: #fed7aa !important;
       }
-      body.fuman-light-theme .market-ai-filterbar button[data-ai-hot-filter="momentum"],
-      body.fuman-light-theme .market-ai-mini-filter button[data-ai-observe-mode="priority"] {
+      body.fuman-light-theme .market-ai-filterbar button[data-ai-hot-filter="momentum"] {
         background: #fff1f2 !important;
         color: #be123c !important;
         border-color: #fecdd3 !important;
       }
-      body.fuman-light-theme .market-ai-filterbar button[data-ai-hot-filter="rebound"],
-      body.fuman-light-theme .market-ai-mini-filter button[data-ai-observe-mode="rebound"] {
-        background: #fffbeb !important;
-        color: #b45309 !important;
-        border-color: #fde68a !important;
-      }
-      body.fuman-light-theme .market-ai-filterbar button[data-ai-hot-filter="volume"],
-      body.fuman-light-theme .market-ai-mini-filter button[data-ai-observe-mode="volume"] {
-        background: #f0fdf4 !important;
-        color: #15803d !important;
-        border-color: #bbf7d0 !important;
-      }
-      body.fuman-light-theme .market-ai-filterbar button[data-ai-hot-filter="legal"],
-      body.fuman-light-theme .market-ai-mini-filter button[data-ai-observe-mode="legal"] {
+      body.fuman-light-theme .market-ai-filterbar button[data-ai-hot-filter="legal"] {
         background: #eff6ff !important;
         color: #1d4ed8 !important;
         border-color: #bfdbfe !important;
       }
-      body.fuman-light-theme .market-ai-filterbar button[data-ai-hot-filter="intraday"],
-      body.fuman-light-theme .market-ai-mini-filter button[data-ai-observe-mode="intraday"] {
+      body.fuman-light-theme .market-ai-filterbar button[data-ai-hot-filter="intraday"] {
         background: #f0fdfa !important;
         color: #0f766e !important;
         border-color: #99f6e4 !important;
@@ -1449,8 +1413,7 @@ function installThemeToggle() {
         color: #b45309 !important;
         border-color: #fde68a !important;
       }
-      body.fuman-light-theme .market-ai-filterbar em,
-      body.fuman-light-theme .market-ai-mini-filter em {
+      body.fuman-light-theme .market-ai-filterbar em {
         background: rgba(255, 255, 255, 0.75) !important;
       }
       body.fuman-light-theme .market-ai-sort-note {
@@ -4609,7 +4572,6 @@ let marketAiPanel = null;
 let marketAiLastSignature = "";
 let marketAiStockLoading = false;
 let marketAiHotFilter = "all";
-let marketAiObserveMode = "priority";
 let marketAiInstitutionLoading = false;
 let marketAiRealtimeScanRequestedAt = 0;
 let realtimeRadarLoading = false;
@@ -11305,27 +11267,6 @@ function getMarketAiRiskControlScore(stock, sector, base = {}) {
   return Math.round(clamp(hotChaseRisk + valueCrowding + volumeCrowding + sectorCrowding + legalCrowding + scoreGap + weakButHot + downRisk, 0, 100));
 }
 
-function getMarketAiVolumeSpikeScore(stock) {
-  const pct = cleanNumber(stock.percent);
-  const valueYi = cleanNumber(stock.value) / 100000000;
-  const volume = cleanNumber(stock.tradeVolume);
-  const volumeRatio = cleanNumber(stock.volumeRatio || stock.VolumeRatio || stock.volume_ratio || stock["量比"]);
-  const ratioScore = volumeRatio ? Math.min(38, volumeRatio * 22) : 0;
-  return Math.round(clamp(ratioScore + Math.min(32, volume / 900) + valueYi * 1.15 + Math.max(0, pct) * 4, 0, 100));
-}
-
-function getMarketAiReboundScore(stock, base = {}) {
-  const pct = cleanNumber(stock.percent);
-  const legal = getMarketAiLegalValue(stock.code);
-  const score = cleanNumber(base.score);
-  const sectorScore = cleanNumber(base.sectorScore);
-  const capitalFlowScore = cleanNumber(base.capitalFlowScore);
-  const dayTradeHeatScore = cleanNumber(base.dayTradeHeatScore);
-  const weakSectorLift = Math.max(0, 45 - sectorScore) * 0.32;
-  const hotPenalty = pct >= 8.5 ? 20 : pct >= 6.5 ? 8 : 0;
-  return Math.round(clamp(score * 0.32 + capitalFlowScore * 0.26 + dayTradeHeatScore * 0.12 + Math.max(0, pct) * 8 + weakSectorLift + (legal > 0 ? 8 : 0) - hotPenalty, 0, 100));
-}
-
 function scoreMarketAiStock(stock, sectors) {
   const code = String(stock.code || "");
   const industry = SECTOR_MAP[code] || "其他";
@@ -11380,8 +11321,6 @@ function classifyMarketAiStock(stock, sectors) {
   const intradayScore = Math.round(clamp(dayTradeHeatScore * 0.62 + capitalFlowScore * 0.18 + momentumScore * 0.12 + sectorScore * 0.08, 0, 100));
   const legalScore = Math.round(clamp(Math.abs(legal) / 900 + (legal > 0 ? 18 : 0), 0, 100));
   const riskScore = getMarketAiRiskControlScore(stock, sector, { score, capitalFlowScore, sectorScore, momentumScore });
-  const volumeSpikeScore = getMarketAiVolumeSpikeScore(stock);
-  const reboundScore = getMarketAiReboundScore(stock, { score, sectorScore, capitalFlowScore, dayTradeHeatScore });
   return {
     ...stock,
     score,
@@ -11394,16 +11333,12 @@ function classifyMarketAiStock(stock, sectors) {
     intradayScore,
     legalScore,
     riskScore,
-    volumeSpikeScore,
-    reboundScore,
     tags: getMarketAiTags(stock, score, sectors),
     buckets: {
       all: true,
       momentum: momentumScore >= 70 && (capitalFlowScore >= 55 || score >= 72 || sectorScore >= 45),
       legal: legal > 0,
       intraday: dayTradeHeatScore >= 55 || intradayScore >= 58,
-      rebound: reboundScore >= 58 && pct > 0 && (sectorScore <= 45 || capitalFlowScore >= 55),
-      volume: volumeSpikeScore >= 62 && cleanNumber(stock.value) >= 800000000,
       risk: riskScore >= 58 || (riskScore >= 48 && (score >= 68 || capitalFlowScore >= 55)) || pct >= 8.5 || pct <= -3,
     },
   };
@@ -11413,8 +11348,6 @@ function getMarketAiHotGroups(hotStocks) {
   const groups = {
     all: hotStocks,
     momentum: hotStocks.filter((stock) => stock.buckets.momentum).sort((a, b) => b.score - a.score || b.capitalFlowScore - a.capitalFlowScore || b.momentumScore - a.momentumScore),
-    rebound: sortMarketAiReboundStocks(hotStocks.filter((stock) => stock.buckets.rebound)),
-    volume: sortMarketAiVolumeSpikeStocks(hotStocks.filter((stock) => stock.buckets.volume)),
     legal: sortMarketAiLegalStocks(hotStocks.filter((stock) => stock.buckets.legal && cleanNumber(stock.percent) > 0)),
     intraday: sortMarketAiIntradayStocks(hotStocks.filter((stock) => stock.buckets.intraday)),
   };
@@ -11454,60 +11387,12 @@ function sortMarketAiPriorityStocks(stocks = []) {
   );
 }
 
-function sortMarketAiReboundStocks(stocks = []) {
-  return [...stocks].sort((a, b) =>
-    cleanNumber(b.reboundScore) - cleanNumber(a.reboundScore) ||
-    cleanNumber(b.capitalFlowScore) - cleanNumber(a.capitalFlowScore) ||
-    cleanNumber(b.score) - cleanNumber(a.score) ||
-    cleanNumber(b.percent) - cleanNumber(a.percent) ||
-    cleanNumber(b.value) - cleanNumber(a.value)
-  );
-}
-
-function sortMarketAiVolumeSpikeStocks(stocks = []) {
-  return [...stocks].sort((a, b) =>
-    cleanNumber(b.volumeSpikeScore) - cleanNumber(a.volumeSpikeScore) ||
-    cleanNumber(b.value) - cleanNumber(a.value) ||
-    cleanNumber(b.tradeVolume) - cleanNumber(a.tradeVolume) ||
-    cleanNumber(b.percent) - cleanNumber(a.percent) ||
-    cleanNumber(b.score) - cleanNumber(a.score)
-  );
-}
-
 function getMarketAiFilterMeta(groups) {
   return [
-    { key: "momentum", label: "動能強", count: normalizeArray(groups.momentum).length },
-    { key: "rebound", label: "逆勢反彈", count: normalizeArray(groups.rebound).length },
-    { key: "volume", label: "爆量大增", count: normalizeArray(groups.volume).length },
-    { key: "legal", label: "法人買超", count: normalizeArray(groups.legal).length },
-    { key: "intraday", label: "當沖熱", count: normalizeArray(groups.intraday).length },
+    { key: "momentum", label: "動能強", count: 10 },
+    { key: "legal", label: "法人買超", count: 10 },
+    { key: "intraday", label: "當沖熱", count: 10 },
   ];
-}
-
-function getMarketAiObserveMeta(groups) {
-  return [
-    { key: "priority", label: "綜合優先", count: normalizeArray(groups.priority).length },
-    { key: "rebound", label: "逆勢反彈", count: normalizeArray(groups.rebound).length },
-    { key: "volume", label: "爆量大增", count: normalizeArray(groups.volume).length },
-    { key: "legal", label: "法人買超", count: normalizeArray(groups.legal).length },
-    { key: "intraday", label: "當沖熱", count: normalizeArray(groups.intraday).length },
-  ];
-}
-
-function getMarketAiObserveGroups(classifiedStocks, hotStocks, bias) {
-  const reboundSource = classifiedStocks.filter((stock) =>
-    stock.buckets.rebound &&
-    (bias === "空方壓制" || cleanNumber(stock.sectorScore) <= 45 || cleanNumber(stock.capitalFlowScore) >= 58)
-  );
-  const groups = {
-    priority: sortMarketAiPriorityStocks(hotStocks),
-    rebound: sortMarketAiReboundStocks(reboundSource),
-    volume: sortMarketAiVolumeSpikeStocks(classifiedStocks.filter((stock) => stock.buckets.volume)),
-    legal: sortMarketAiLegalStocks(classifiedStocks.filter((stock) => stock.buckets.legal && cleanNumber(stock.percent) > 0)),
-    intraday: sortMarketAiIntradayStocks(classifiedStocks.filter((stock) => stock.buckets.intraday)),
-  };
-  if (!groups[marketAiObserveMode]) marketAiObserveMode = "priority";
-  return groups;
 }
 
 function isMarketAiLongCandidate(stock, options = {}) {
@@ -11547,7 +11432,6 @@ function buildMarketAiData() {
   const sectors = getMarketAiSectors(stocks);
   const strongSectors = [...sectors].sort((a, b) => b.pct - a.pct).slice(0, 4);
   const weakSectors = [...sectors].sort((a, b) => a.pct - b.pct).slice(0, 4);
-  const bias = upRatio >= 55 ? "多方偏強" : upRatio <= 45 ? "空方壓制" : "震盪分歧";
   const classifiedStocks = stocks
     .filter((stock) => isMarketAiLongCandidate(stock, { allowReference: isReferenceDate }))
     .map((stock) => classifyMarketAiStock(stock, sectors));
@@ -11556,19 +11440,16 @@ function buildMarketAiData() {
     .slice(0, 40);
   const hotGroups = getMarketAiHotGroups(hotStocks);
   hotGroups.intraday = sortMarketAiIntradayStocks(classifiedStocks.filter((stock) => stock.buckets.intraday)).slice(0, 40);
-  hotGroups.rebound = sortMarketAiReboundStocks(classifiedStocks.filter((stock) => stock.buckets.rebound)).slice(0, 40);
-  hotGroups.volume = sortMarketAiVolumeSpikeStocks(classifiedStocks.filter((stock) => stock.buckets.volume)).slice(0, 40);
   if (!hotGroups[marketAiHotFilter] || marketAiHotFilter === "all") marketAiHotFilter = "momentum";
   const visibleHotStocks = hotGroups[marketAiHotFilter].filter((stock) => isMarketAiLongCandidate(stock, { allowReference: isReferenceDate })).slice(0, 10);
-  const observeGroups = getMarketAiObserveGroups(classifiedStocks, hotStocks, bias);
-  const visibleObserveStocks = normalizeArray(observeGroups[marketAiObserveMode]).filter((stock) => isMarketAiLongCandidate(stock, { allowReference: isReferenceDate })).slice(0, 10);
   const riskStocks = stocks
     .filter((stock) => cleanNumber(stock.percent) <= -3 || cleanNumber(stock.percent) >= 8.5)
     .sort((a, b) => Math.abs(cleanNumber(b.percent)) - Math.abs(cleanNumber(a.percent)))
     .slice(0, 5);
+  const bias = upRatio >= 55 ? "多方偏強" : upRatio <= 45 ? "空方壓制" : "震盪分歧";
   const confidence = sample >= 1000 ? (Math.min(92, 58 + Math.abs(upRatio - 50) * 1.4)).toFixed(0) : "中";
   const dataDate = marketAiDataDateKey(stocks);
-  return { stocks, allStocks, staleRows, dataDate, targetDate, isReferenceDate, isDateFallback, isRealtimeFallback, freshRealtimeCount: freshRealtimeRows.length, sample, upRows, downRows, flatRows, upRatio, totalValue, sectors, strongSectors, weakSectors, hotStocks, hotGroups, visibleHotStocks, observeGroups, visibleObserveStocks, riskStocks, bias, confidence };
+  return { stocks, allStocks, staleRows, dataDate, targetDate, isReferenceDate, isDateFallback, isRealtimeFallback, freshRealtimeCount: freshRealtimeRows.length, sample, upRows, downRows, flatRows, upRatio, totalValue, sectors, strongSectors, weakSectors, hotStocks, hotGroups, visibleHotStocks, riskStocks, bias, confidence };
 }
 
 function requestMarketAiRealtimeScan(reason = "hot") {
@@ -11591,52 +11472,6 @@ function marketAiUpdatedLabel() {
   const day = String(date.getDate()).padStart(2, "0");
   const time = date.toLocaleTimeString("zh-TW", { hour12: false, hour: "2-digit", minute: "2-digit", second: "2-digit" });
   return `${month}/${day} ${isMarketAiActiveSession() ? "即時巡邏" : "收盤資料"} · 更新 ${time}`;
-}
-
-function getMarketAiObserveTitle(mode = marketAiObserveMode) {
-  return ({
-    priority: "優先觀察",
-    rebound: "逆勢強股 / 反彈觀察",
-    volume: "爆量大增",
-    legal: "法人買超",
-    intraday: "當沖熱",
-  })[mode] || "優先觀察";
-}
-
-function getMarketAiObserveReason(stock, mode = marketAiObserveMode) {
-  if (!stock) return "等待資料。";
-  const valueYi = (cleanNumber(stock.value) / 100000000).toFixed(1);
-  const volumeLots = cleanNumber(stock.tradeVolume).toLocaleString("zh-TW");
-  const volumeRatio = cleanNumber(stock.volumeRatio || stock.VolumeRatio || stock.volume_ratio || stock["量比"]);
-  if (mode === "rebound") {
-    return `${stock.tags.length} 個訊號${stock.tags.length ? `：${stock.tags.join("、")}` : ""}。反彈分數 ${stock.reboundScore}，綜合分數 ${stock.score}，盤中資金流 ${stock.capitalFlowScore}，族群 ${stock.industry}。`;
-  }
-  if (mode === "volume") {
-    return `${stock.tags.length} 個訊號${stock.tags.length ? `：${stock.tags.join("、")}` : ""}。爆量分數 ${stock.volumeSpikeScore}，成交量 ${volumeLots} 張${volumeRatio ? `，量比 ${formatNumber(volumeRatio, 2)}` : ""}，成交值 ${valueYi} 億。`;
-  }
-  if (mode === "legal") {
-    return `${stock.tags.length} 個訊號${stock.tags.length ? `：${stock.tags.join("、")}` : ""}。法人合計 ${formatInstitution(stock.legal)}，綜合分數 ${stock.score}，成交值 ${valueYi} 億。`;
-  }
-  if (mode === "intraday") {
-    return `${stock.tags.length} 個訊號${stock.tags.length ? `：${stock.tags.join("、")}` : ""}。當沖熱 ${stock.dayTradeHeatScore || stock.intradayScore}，盤中資金流 ${stock.capitalFlowScore}，成交值 ${valueYi} 億。`;
-  }
-  return `${stock.tags.length} 個訊號${stock.tags.length ? `：${stock.tags.join("、")}` : ""}。綜合分數 ${stock.score}，族群 ${stock.industry}，成交值 ${valueYi} 億。`;
-}
-
-function getMarketAiStockRowLead(stock, mode = marketAiHotFilter) {
-  if (mode === "rebound") return `反彈分數 ${stock.reboundScore}，綜合分數 ${stock.score}`;
-  if (mode === "volume") return `爆量分數 ${stock.volumeSpikeScore}，成交量 ${cleanNumber(stock.tradeVolume).toLocaleString("zh-TW")} 張`;
-  if (mode === "intraday") return `當沖熱度 ${stock.dayTradeHeatScore || stock.intradayScore}，綜合分數 ${stock.score}`;
-  if (mode === "legal") return `法人合計 ${formatInstitution(stock.legal)}，綜合分數 ${stock.score}`;
-  return `主力籌碼入選，綜合分數 ${stock.score}`;
-}
-
-function getMarketAiStockRowSortReason(stock, mode = marketAiHotFilter) {
-  if (mode === "rebound") return `排序主因：反彈分數 ${stock.reboundScore}，再交叉看盤中資金流 ${Math.round(clamp(stock.capitalFlowScore || stock.score, 1, 100))} 與族群位置。`;
-  if (mode === "volume") return `排序主因：爆量分數 ${stock.volumeSpikeScore}，再交叉看成交值 ${(cleanNumber(stock.value) / 100000000).toFixed(1)} 億與漲幅。`;
-  if (mode === "intraday") return `排序主因：綜合分數 ${stock.score}，再交叉看當沖熱 ${Math.round(clamp(stock.dayTradeHeatScore || stock.intradayScore, 1, 100))} 與族群強弱。`;
-  if (mode === "legal") return `排序主因：綜合分數 ${stock.score}，再交叉看法人合計 ${formatInstitution(stock.legal)}、盤中資金流與成交值。`;
-  return `排序主因：綜合分數 ${stock.score}，再交叉看盤中資金流 ${Math.round(clamp(stock.capitalFlowScore || stock.score, 1, 100))} 與族群強弱。`;
 }
 
 function marketAiStockLabel(stock) {
@@ -11808,7 +11643,7 @@ function renderMarketAiPanel() {
   if (data.isReferenceDate && isMarketAiActiveSession()) {
     requestMarketAiRealtimeScan("hot");
   }
-  const signature = `${marketAiHotFilter}:${marketAiObserveMode}:${data.dataDate}:${data.targetDate}:${data.isReferenceDate ? 1 : 0}:${strategyRealtimeStats.received}:${data.sample}:${data.staleRows.length}:${data.upRows.length}:${data.downRows.length}:${data.hotStocks.map((stock) => `${stock.code}:${stock.score}:${cleanNumber(stock.percent).toFixed(2)}`).join("|")}`;
+  const signature = `${marketAiHotFilter}:${data.dataDate}:${data.targetDate}:${data.isReferenceDate ? 1 : 0}:${strategyRealtimeStats.received}:${data.sample}:${data.staleRows.length}:${data.upRows.length}:${data.downRows.length}:${data.hotStocks.map((stock) => `${stock.code}:${stock.score}:${cleanNumber(stock.percent).toFixed(2)}`).join("|")}`;
   if (signature === marketAiLastSignature && marketAiPanel.innerHTML) return;
   marketAiLastSignature = signature;
   if (!data.sample) {
@@ -11818,11 +11653,8 @@ function renderMarketAiPanel() {
   }
   if (!Object.keys(institutionData).length) deferUiWork(ensureMarketAiInstitutionData, 100);
   const priorityStocks = sortMarketAiPriorityStocks(data.hotStocks.filter((stock) => isMarketAiLongCandidate(stock, { priority: true, allowReference: data.isReferenceDate })));
-  const observeMeta = getMarketAiObserveMeta(data.observeGroups);
-  const observeStocks = normalizeArray(data.visibleObserveStocks);
-  const topHot = observeStocks[0] || (marketAiObserveMode === "priority" ? priorityStocks[0] || data.hotStocks[0] : null);
+  const topHot = priorityStocks[0] || data.hotStocks[0];
   const filterMeta = getMarketAiFilterMeta(data.hotGroups);
-  const activeObserveLabel = observeMeta.find((item) => item.key === marketAiObserveMode)?.label || "綜合優先";
   const activeFilterLabel = filterMeta.find((item) => item.key === marketAiHotFilter)?.label || "全部";
   const sortNote = marketAiHotFilter === "legal"
     ? "法人買超只是入選條件，排序先看綜合分數，再交叉看 AI 訊號數、盤中資金流、動能與成交值。"
@@ -11832,6 +11664,7 @@ function renderMarketAiPanel() {
   const strongNames = data.strongSectors.map((sector) => sector.name).join("、") || "尚未形成明顯主流";
   const weakNames = data.weakSectors.filter((sector) => sector.pct < 0).map((sector) => sector.name).join("、") || "暫無明顯弱勢族群";
   const riskNames = data.riskStocks.map((stock) => `${stock.code} ${stock.name}`).join("、") || "暫無極端標的";
+  const topHotTags = topHot?.tags?.length ? topHot.tags.join("、") : "";
   const operate = data.bias === "多方偏強"
     ? ["順勢追蹤", "只看強族群前 3 名", "跌破量價支撐先降槓桿"]
     : data.bias === "空方壓制"
@@ -11908,16 +11741,9 @@ function renderMarketAiPanel() {
         <p>${weakNames} 需要留意；極端波動標的：${riskNames}。</p>
       </article>
       <article class="market-ai-card">
-        <small>${escapeAttr(getMarketAiObserveTitle(marketAiObserveMode))}</small>
+        <small>優先觀察</small>
         <strong>${topHot ? `${topHot.code} ${topHot.name}` : "--"}</strong>
-        <p>${topHot ? escapeAttr(getMarketAiObserveReason(topHot, marketAiObserveMode)) : "等待資料。"}</p>
-        <div class="market-ai-mini-filter">
-          ${observeMeta.map((item) => `
-            <button type="button" class="${item.key === marketAiObserveMode ? "active" : ""}" data-ai-observe-mode="${item.key}">
-              ${escapeAttr(item.label)}<em>${item.count}</em>
-            </button>
-          `).join("")}
-        </div>
+        <p>${topHot ? `${topHot.tags.length} 個訊號${topHotTags ? `：${escapeAttr(topHotTags)}` : ""}。綜合分數 ${topHot.score}，族群 ${topHot.industry}，成交值 ${(cleanNumber(topHot.value) / 100000000).toFixed(1)} 億。` : "等待資料。"}</p>
       </article>
     </section>
     <section class="market-ai-advice">
@@ -11931,7 +11757,7 @@ function renderMarketAiPanel() {
           ${[
             `市場廣度目前上漲家數占 ${data.upRatio.toFixed(1)}%，${data.bias === "空方壓制" ? "盤面偏弱，先看風險。" : "可追蹤強勢族群是否擴散。"}`,
             `族群焦點落在 ${strongNames}，弱勢端留意 ${weakNames}。`,
-            `${activeObserveLabel}優先看 ${observeStocks.slice(0, 3).map((stock) => `${stock.code} ${stock.name}`).join("、") || priorityStocks.slice(0, 3).map((stock) => `${stock.code} ${stock.name}`).join("、") || "等待資料"}。`,
+            `熱門觀察優先看 ${priorityStocks.slice(0, 3).map((stock) => `${stock.code} ${stock.name}`).join("、") || "等待資料"}。`,
             `盤中雷達目前偏向「${data.bias}」，分數高也要等量價延續確認。`,
           ].map((text, index) => `<div class="market-ai-point"><b>${index + 1}</b><span>${escapeAttr(text)}</span></div>`).join("")}
         </div>
@@ -11964,13 +11790,13 @@ function renderMarketAiPanel() {
       </div>
       <div class="market-ai-sort-note">目前排序 <b>${escapeAttr(activeFilterLabel)}</b>，${escapeAttr(sortNote)}</div>
       <div class="market-ai-hot">
-        ${(marketAiHotFilter === marketAiObserveMode ? observeStocks : data.visibleHotStocks).map((stock, index) => `
+        ${data.visibleHotStocks.map((stock, index) => `
           <article class="market-ai-stock-row">
             <div class="market-ai-rank">#${index + 1}</div>
             <div>
               <h4><span class="market-ai-code">${escapeAttr(stock.code)}</span><span class="market-ai-name">${escapeAttr(stock.name)}</span></h4>
-              <p>${escapeAttr(getMarketAiStockRowLead(stock, marketAiHotFilter))}</p>
-              <p>${escapeAttr(getMarketAiStockRowSortReason(stock, marketAiHotFilter))}</p>
+              <p>${marketAiHotFilter === "intraday" ? `當沖熱度 ${stock.dayTradeHeatScore || stock.intradayScore}` : "主力籌碼入選"}，綜合分數 ${stock.score}</p>
+              <p>排序主因：綜合分數 ${stock.score}，再交叉看${marketAiHotFilter === "intraday" ? `當沖熱 ${Math.round(clamp(stock.dayTradeHeatScore || stock.intradayScore, 1, 100))}` : `盤中資金流 ${Math.round(clamp(stock.capitalFlowScore || stock.score, 1, 100))}`}與族群強弱。</p>
             </div>
             <div>
               <span class="market-ai-chip">${escapeAttr(stock.industry)}</span>
@@ -12996,22 +12822,9 @@ document.addEventListener("click", (event) => {
     adviceCard.querySelector(".market-ai-advice-detail")?.setAttribute("aria-hidden", isOpen ? "false" : "true");
     return;
   }
-  const observeButton = event.target.closest("[data-ai-observe-mode]");
-  if (observeButton) {
-    marketAiObserveMode = observeButton.dataset.aiObserveMode || "priority";
-    if (["rebound", "volume", "legal", "intraday"].includes(marketAiObserveMode)) {
-      marketAiHotFilter = marketAiObserveMode;
-    }
-    marketAiLastSignature = "";
-    renderMarketAiPanel();
-    return;
-  }
   const hotFilterButton = event.target.closest("[data-ai-hot-filter]");
   if (hotFilterButton) {
     marketAiHotFilter = hotFilterButton.dataset.aiHotFilter || "all";
-    if (["rebound", "volume", "legal", "intraday"].includes(marketAiHotFilter)) {
-      marketAiObserveMode = marketAiHotFilter;
-    }
     marketAiLastSignature = "";
     renderMarketAiPanel();
     return;
@@ -14469,9 +14282,6 @@ if (isViewActive("watchlist")) renderWatchlist();
 setInterval(() => {
   if (!isDocumentHidden() && isTerminalUnlocked() && isViewActive("watchlist")) refreshSelectedWatchlistQuote();
 }, 10000);
-
-
-
 
 
 

@@ -54,8 +54,10 @@ jobs:
             echo "Skip open-buy for this manual run."
           fi
         env:
-          STRATEGY4_CHUNK_SIZE: "80"
-          OPEN_BUY_CHUNK_SIZE: "48"
+          STRATEGY4_BATCH_SIZE: "80"
+          STRATEGY4_BATCHES_PER_RUN: "999"
+          OPEN_BUY_BATCH_SIZE: "48"
+          OPEN_BUY_BATCHES_PER_RUN: "5"
           FULL_SCAN: "1"
 
       - name: Commit cache
@@ -67,3 +69,4 @@ jobs:
           git diff --cached --quiet || git commit -m "Update strategy caches"
           git pull --rebase origin main
           git push
+

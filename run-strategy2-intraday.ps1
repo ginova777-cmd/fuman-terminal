@@ -13,8 +13,6 @@ $env:NODE_OPTIONS = "--use-system-ca"
 New-Item -ItemType Directory -Force -Path "C:\fuman-runtime\logs" | Out-Null
 $log = "C:\fuman-runtime\logs\strategy2-intraday-$(Get-Date -Format yyyyMMdd-HHmmss).log"
 "=== Strategy2 intraday patrol start $(Get-Date) ===" | Out-File $log -Encoding utf8
-. "C:\fuman-terminal\schedule-guard.ps1"
-Invoke-FumanWeekdayGuard -Label "Strategy2 intraday patrol" -LogPath $log
 
 & $nodeExe "scripts\patrol-intraday-signals.js" >> $log 2>&1
 $exitCode = $LASTEXITCODE

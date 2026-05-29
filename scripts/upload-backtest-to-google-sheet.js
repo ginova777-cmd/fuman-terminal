@@ -219,7 +219,7 @@ async function authorizeWithBrowser(client) {
 
 async function getAccessToken() {
   const client = getClientConfig();
-  const token = readJson(TOKEN_PATH);
+  const token = readGoogleSheetsToken();
   if (token?.access_token && token?.created_at && Date.now() - token.created_at < (token.expires_in || 3600) * 900) {
     return token.access_token;
   }
@@ -636,40 +636,6 @@ function formatYmd(value) {
 
 function compactYmd(value) {
   return String(value || "").replace(/\D/g, "").slice(0, 8);
-}
-
-function previousWeekdayCompact(dateText) {
-  const raw = compactYmd(dateText);
-  if (!/^\d{8}$/.test(raw)) return "";
-  const date = new Date(`${raw.slice(0, 4)}-${raw.slice(4, 6)}-${raw.slice(6, 8)}T12:00:00+08:00`);
-  do {
-    date.setDate(date.getDate() - 1);
-  } while (date.getDay() === 0 || date.getDay() === 6);
-  return [
-    date.getFullYear(),
-    String(date.getMonth() + 1).padStart(2, "0"),
-    String(date.getDate()).padStart(2, "0"),
-  ].join("");
-}
-
-function payloadSourceDate(payload) {
-  return compactYmd(payload?.usedDate || payload?.date || payload?.quoteDate || payload?.matches?.[0]?.quoteDate || payload?.matches?.[0]?.date);
-}
-
-function readStrategy1ScorecardSource(dateText) {
-  const expectedSourceDate = previousWeekdayCompact(dateText);
-  const candidates = [
-    path.join(DATA_DIR, "open-buy-scorecard-source.json"),
-    path.join(REPO_DATA_DIR, "open-buy-scorecard-source.json"),
-    path.join(DATA_DIR, "open-buy-latest.json"),
-    path.join(REPO_DATA_DIR, "open-buy-latest.json"),
-  ];
-  const loaded = candidates
-    .map((file) => ({ file, value: readJson(file) }))
-    .filter((item) => Array.isArray(item.value?.matches) && item.value.matches.length);
-  return loaded.find((item) => payloadSourceDate(item.value) === expectedSourceDate)
-    || loaded[0]
-    || { file: "", value: null };
 }
 
 function strategy1Pnl(openPrice, highPrice, shares = 1000) {
@@ -1166,7 +1132,7 @@ async function loadScorecardSheets(stamp, radarCsv, report) {
   return {
     "即時雷達成績單": realtimeRadarRows(radarCsv, report, dateText),
     "交易管家成績單": tradeManagerRows(dateText),
-    "策略1成績單": await strategy1Rows(readStrategy1ScorecardSource(dateText), dateText),
+    "策略1成績單": await strategy1Rows(readFirstJson([path.join(DATA_DIR, "open-buy-latest.json"), path.join(REPO_DATA_DIR, "open-buy-latest.json"), path.join(DATA_DIR, "open-buy-scorecard-source.json"), path.join(REPO_DATA_DIR, "open-buy-scorecard-source.json")]), dateText),
     "策略2成績單": await strategy2Rows(dateText),
     "策略3成績單": await strategy3Rows(readFirstJson([path.join(DATA_DIR, "strategy3-scorecard-source.json"), path.join(REPO_DATA_DIR, "strategy3-scorecard-source.json"), path.join(DATA_DIR, "strategy3-latest.json"), path.join(REPO_DATA_DIR, "strategy3-latest.json")]), dateText),
     "策略5成績單": await strategy5Rows(readFirstJson([path.join(DATA_DIR, "strategy5-latest.json"), path.join(REPO_DATA_DIR, "strategy5-latest.json")]), dateText),
@@ -1304,70 +1270,35 @@ function loadBacktestRows(stamp) {
   const radar = parseCsv(fs.readFileSync(radarPath, "utf8"));
   const report = readJson(reportPath, {});
   const dateText = `${stamp.slice(0, 4)}-${stamp.slice(4, 6)}-${stamp.slice(6, 8)}`;
-  const managerState = readJson(TRADE_MANAGER_STATE_FILE, { date: dateText, positions: {}, closed: {} });
-  const managerClosed = Object.values(managerState.closed || {})
-    .filter((item) => !dateText || managerState.date === dateText || String(item.closedAt || item.openedAt || "").startsWith(dateText))
-    .sort((a, b) => Date.parse(a.closedAt || "") - Date.parse(b.closedAt || ""));
-  const managerHistory = managerClosed.map((item) => {
-    const result = tradeManagerResult(item);
-    return {
-      date: managerState.date || dateText,
-      code: item.code || "",
-      name: item.name || "",
-      shares: item.shares || "",
-      entry: item.entryPrice ?? "",
-      exit: result.exit,
-      reason: item.exitAction === "takeProfit" ? "停利" : item.exitAction === "stopLoss" ? "停損" : item.exitAction === "dayClose" ? "當沖出場" : item.exitReason || "已出場",
-      pnl: result.pnl,
-    };
-  });
-  const managerTotalPnl = managerHistory.reduce((sum, row) => {
-    const pnl = Number(row.pnl);
-    return sum + (Number.isFinite(pnl) ? pnl : 0);
-  }, 0);
-  const totalPnl = managerHistory.length ? managerTotalPnl : (report?.manager?.summary?.pnl ?? "");
+  const totalPnl = report?.manager?.summary?.pnl ?? "";
   const historyRows = [
     ["交易管家成績單", "即時雷達成績單", "策略1成績單", "策略2成績單", "策略3成績單", "策略5成績單", "歷史與區間損益", "回測摘要"],
     ["起始日:", dateText, "結束日:", dateText, "查詢損益", "", "區間總損益:", totalPnl === "" ? "" : `${Number(totalPnl).toLocaleString("zh-TW")} 元`],
     ["", "", "", "", "", "", "", ""],
     ["日期", "股票", "股名", "買進股數", "買均價", "賣均價", "出場原因", "實現損益(元)"],
   ];
-  for (const row of managerHistory) {
+  for (const row of trades.slice(1)) {
     historyRows.push([
-      row.date || dateText,
-      row.code,
-      row.name,
-      row.shares,
-      fmtPrice(row.entry),
-      fmtPrice(row.exit),
-      row.reason,
-      row.pnl,
+      row[0] || dateText,
+      row[1] || "",
+      row[2] || "",
+      "1",
+      row[4] || "0",
+      row[6] || "0",
+      row[7] || "",
+      row[9] || "0",
     ]);
-  }
-  if (!managerHistory.length) {
-    for (const row of trades.slice(1)) {
-      historyRows.push([
-        row[0] || dateText,
-        row[1] || "",
-        row[2] || "",
-        "1",
-        row[4] || "0",
-        row[6] || "0",
-        row[7] || "",
-        row[9] || "0",
-      ]);
-    }
   }
   const summary = [
     ["項目", "數值"],
     ["日期", dateText],
     ["產生時間", new Date().toLocaleString("zh-TW")],
-    ["管家交易筆數", managerHistory.length || report?.manager?.summary?.total || Math.max(0, trades.length - 1)],
+    ["管家交易筆數", report?.manager?.summary?.total ?? Math.max(0, trades.length - 1)],
     ["管家勝率", report?.manager?.summary ? `${report.manager.summary.winRate.toFixed(1)}%` : ""],
     ["管家總損益", totalPnl],
     ["管家平均報酬", report?.manager?.summary ? `${report.manager.summary.avgReturn.toFixed(2)}%` : ""],
     ["即時雷達命中", report?.radar?.hits?.length ?? Math.max(0, radar.length - 1)],
-    ["來源資料", managerHistory.length ? TRADE_MANAGER_STATE_FILE : (report?.sourceFile || "")],
+    ["來源資料", report?.sourceFile || ""],
   ];
   return { trades, radar, report, summary, historyRows };
 }
@@ -1379,10 +1310,8 @@ async function main() {
   const onlySheet = process.env.GOOGLE_SHEET_ONLY || "";
   const token = await getAccessToken();
   let spreadsheet = await sheets("GET", "?fields=sheets.properties(title,sheetId)", token);
-  const summarySheet = "回測摘要";
-  const historySheet = "歷史與區間損益";
   if (onlySheet) {
-    const rows = onlySheet === historySheet ? historyRows : onlySheet === summarySheet ? summary : scorecardSheets[onlySheet];
+    const rows = scorecardSheets[onlySheet];
     if (!rows) throw new Error(`Unknown GOOGLE_SHEET_ONLY: ${onlySheet}`);
     await ensureSheet(token, spreadsheet, onlySheet);
     spreadsheet = await sheets("GET", "?fields=sheets.properties(title,sheetId)", token);
@@ -1392,6 +1321,8 @@ async function main() {
     console.log("Uploaded only " + onlySheet + " for " + stamp + " to Google Sheet " + SHEET_ID);
     return;
   }
+  const summarySheet = "回測摘要";
+  const historySheet = "歷史與區間損益";
   const obsoleteSheets = ["實體庫存與TA分析", "自選股監控池", "策略監控區"];
   await deleteSheets(token, spreadsheet, obsoleteSheets);
   spreadsheet = await sheets("GET", "?fields=sheets.properties(title,sheetId)", token);
@@ -1412,8 +1343,6 @@ main().catch((error) => {
   console.error(error.message || error);
   process.exit(1);
 });
-
-
 
 
 

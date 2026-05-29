@@ -252,6 +252,7 @@ function scanOpenBuy(code, market, rows) {
     pct <= 10.1 &&
     last.close >= last.low * 1.02 &&
     last.close >= last.high * 0.92 &&
+    upperShadowRatio <= 0.55 &&
     bodyRatio >= 0.12 &&
     last.close > ma5 &&
     last.close > ma20 &&

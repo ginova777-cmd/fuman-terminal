@@ -8,7 +8,6 @@ const BACKUP_FILE = dataPath("strategy5-backup.json");
 const INSTITUTION_FILE = dataPath("institution-latest.json");
 const STOCK_URL = process.env.STOCK_UNIVERSE_URL || "https://fuman-terminal.vercel.app/api/stocks";
 const USE_MIS_QUOTES = process.env.STRATEGY5_USE_MIS === "1";
-const MIN_UNIVERSE_SIZE = Number(process.env.STRATEGY5_MIN_UNIVERSE_SIZE || 1700);
 
 function readJson(file, fallback) {
   try { return JSON.parse(fs.readFileSync(file, "utf8")); } catch { return fallback; }
@@ -65,9 +64,6 @@ async function fetchUniverse() {
   const payload = await fetchJson(STOCK_URL);
   const rows = Array.isArray(payload) ? payload : (payload.stocks || []);
   const base = rows.map(normalizeStock).filter(Boolean);
-  if (base.length < MIN_UNIVERSE_SIZE) {
-    throw new Error(`Strategy5 stock universe too small: ${base.length}/${MIN_UNIVERSE_SIZE}`);
-  }
   if (!USE_MIS_QUOTES) return base;
   const quotes = await fetchMisQuotes(base.map((stock) => stock.code));
   return base.map((stock) => {
@@ -174,3 +170,5 @@ main().catch((error) => {
   console.error(error);
   process.exit(1);
 });
+
+

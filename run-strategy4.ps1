@@ -40,25 +40,19 @@ function Invoke-CacheSyncWithRetry($scriptPath, $maxAttempts = 3) {
 }
 
 Write-Log "=== Strategy4 full scan start $(Get-Date) ==="
-. "C:\fuman-terminal\schedule-guard.ps1"
-Invoke-FumanWeekdayGuard -Label "Strategy4 full scan" -LogPath $log
 
 $env:FULL_SCAN = "1"
 $env:STRATEGY4_BATCH_SIZE = "9999"
-$env:STRATEGY4_CHUNK_SIZE = "80"
-$env:STRATEGY4_SCAN_CONCURRENCY = "6"
-$env:STRATEGY4_SYNC_PARTIAL = "1"
+$env:STRATEGY4_BATCHES_PER_RUN = "999"
 $env:STRATEGY4_USE_MIS = "0"
 
 try {
-  & $nodeExe "--use-system-ca" "scripts\scan-strategy4-cache.js" *>&1 | Tee-Object -FilePath $log -Append
+  & $nodeExe "scripts\scan-strategy4-cache.js" *>&1 | Tee-Object -FilePath $log -Append
   $scanExit = $LASTEXITCODE
 } finally {
   Remove-Item Env:FULL_SCAN -ErrorAction SilentlyContinue
   Remove-Item Env:STRATEGY4_BATCH_SIZE -ErrorAction SilentlyContinue
-  Remove-Item Env:STRATEGY4_CHUNK_SIZE -ErrorAction SilentlyContinue
-  Remove-Item Env:STRATEGY4_SCAN_CONCURRENCY -ErrorAction SilentlyContinue
-  Remove-Item Env:STRATEGY4_SYNC_PARTIAL -ErrorAction SilentlyContinue
+  Remove-Item Env:STRATEGY4_BATCHES_PER_RUN -ErrorAction SilentlyContinue
   Remove-Item Env:STRATEGY4_USE_MIS -ErrorAction SilentlyContinue
 }
 
@@ -87,3 +81,5 @@ if (Test-Path -LiteralPath $syncScript) {
 }
 
 Write-Log "=== Strategy4 full scan end $(Get-Date) ==="
+
+

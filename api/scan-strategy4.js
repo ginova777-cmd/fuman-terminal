@@ -3,11 +3,6 @@ const CACHE_MS = 30 * 60 * 1000;
 let tpexDailyCache = null;
 const { fetchMisQuotes, mergeMisQuoteIntoHistory } = require("../lib/mis-quotes");
 const USE_MIS_QUOTES = process.env.STRATEGY4_USE_MIS === "1";
-const SCAN_CONCURRENCY = Math.max(1, Number(process.env.STRATEGY4_SCAN_CONCURRENCY || 6));
-
-function sleep(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
 
 async function fetchText(url, options = {}, timeout = 12000) {
   let lastError = null;
@@ -358,23 +353,6 @@ function analyzeRows(rows) {
   };
 }
 
-async function mapWithConcurrency(items, limit, worker) {
-  const results = new Array(items.length);
-  let cursor = 0;
-  async function runNext() {
-    while (cursor < items.length) {
-      const index = cursor++;
-      try {
-        results[index] = { status: "fulfilled", value: await worker(items[index], index) };
-      } catch (error) {
-        results[index] = { status: "rejected", reason: error };
-      }
-    }
-  }
-  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, runNext));
-  return results;
-}
-
 function crossedOver(current, previous, levelNow, levelPrev = levelNow) {
   return Number.isFinite(current) && Number.isFinite(previous) &&
     Number.isFinite(levelNow) && Number.isFinite(levelPrev) &&
@@ -578,9 +556,6 @@ module.exports = async function handler(request, response) {
     .map(normalizeCode)
     .filter((code) => /^\d{4}$/.test(code))
     .filter((code) => !/^00/.test(code));
-  const marketHints = String(request.query?.markets || "")
-    .split(",")
-    .map((market) => String(market || "").trim().toUpperCase());
 
   if (!codes.length) {
     response.status(400).json({ ok: false, error: "Missing codes", matches: [] });
@@ -588,14 +563,14 @@ module.exports = async function handler(request, response) {
   }
 
   const quoteMap = USE_MIS_QUOTES ? await fetchMisQuotes(codes) : new Map();
-  const results = await mapWithConcurrency(codes, SCAN_CONCURRENCY, async (code, index) => {
-    const officialHistory = await mergeTpexDailyQuote(code, await fetchHistory(code, marketHints[index]));
+  const results = await Promise.allSettled(codes.map(async (code) => {
+    const officialHistory = await mergeTpexDailyQuote(code, await fetchHistory(code));
     const history = USE_MIS_QUOTES
       ? mergeMisQuoteIntoHistory(officialHistory, quoteMap.get(code))
       : officialHistory;
-    if (!history.rows.length) return { code, noData: true, match: null };
-    return { code, noData: false, match: scanStrategy4(code, history.market, history.rows) };
-  });
+    if (!history.rows.length) return null;
+    return scanStrategy4(code, history.market, history.rows);
+  }));
   const matches = results
     .filter((result) => result.status === "fulfilled" && result.value?.match)
     .map((result) => result.value.match)

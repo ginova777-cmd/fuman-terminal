@@ -22,77 +22,6 @@ function readJson(file, fallback) {
   try { return JSON.parse(fs.readFileSync(file, "utf8")); } catch { return fallback; }
 }
 
-function roundTradePrice(price) {
-  const value = cleanNumber(price);
-  if (!value) return 0;
-  const tick = value >= 1000 ? 5 : value >= 500 ? 1 : value >= 100 ? 0.5 : value >= 50 ? 0.1 : value >= 10 ? 0.05 : 0.01;
-  return Math.round(value / tick) * tick;
-}
-
-function timeOnly(value) {
-  return String(value || "").match(/\d{2}:\d{2}(?::\d{2})?/)?.[0] || "";
-}
-
-function updateRealtimeRadarScorecard(payload) {
-  if (payload.status !== "ok" || !Array.isArray(payload.rows)) return;
-  const existing = readJson(SCORECARD_FILE, { rows: [] });
-  const sameDate = existing.date === payload.date;
-  const rows = sameDate && Array.isArray(existing.rows) ? existing.rows : [];
-  const byCode = new Map(rows.map((row) => [String(row.code || ""), row]));
-  for (const item of payload.rows) {
-    const code = String(item.code || "");
-    if (!code) continue;
-    const price = roundTradePrice(item.close);
-    if (!price) continue;
-    const high = roundTradePrice(item.high || item.close);
-    const current = byCode.get(code);
-    if (!current) {
-      const row = {
-        date: payload.date,
-        code,
-        name: item.name || "",
-        entryAt: payload.timestamp,
-        entryTime: timeOnly(payload.timestamp),
-        entryPrice: price,
-        dayHigh: high || price,
-        highestPrice: high || price,
-        highestAt: payload.timestamp,
-        signalSide: item.side || "",
-        signalTags: Array.isArray(item.signalTags) ? item.signalTags.join(" / ") : "",
-        score: item.score ?? "",
-        profit: Math.round(((high || price) - price) * 1000),
-      };
-      rows.push(row);
-      byCode.set(code, row);
-      continue;
-    }
-    const currentHigh = Number(current.dayHigh || current.highestPrice || current.entryPrice || 0);
-    if (high > currentHigh) {
-      current.dayHigh = high;
-      current.highestPrice = high;
-      current.highestAt = payload.timestamp;
-    }
-    current.name = current.name || item.name || "";
-    current.signalSide = current.signalSide || item.side || "";
-    current.signalTags = current.signalTags || (Array.isArray(item.signalTags) ? item.signalTags.join(" / ") : "");
-    current.score = Math.max(Number(current.score || 0), Number(item.score || 0)) || current.score || "";
-    current.profit = Math.round((Number(current.dayHigh || current.highestPrice || current.entryPrice) - Number(current.entryPrice)) * 1000);
-  }
-  rows.sort((a, b) => String(a.entryAt || "").localeCompare(String(b.entryAt || "")) || String(a.code || "").localeCompare(String(b.code || "")));
-  const totalProfit = rows.reduce((sum, row) => sum + (Number(row.profit) || 0), 0);
-  const scorecard = {
-    source: "terminal-realtime-radar-events",
-    sourceFile: "data/realtime-radar-latest.json",
-    date: payload.date,
-    updatedAt: payload.updatedAt,
-    total: rows.length,
-    totalProfit,
-    rows,
-  };
-  writeJson(SCORECARD_FILE, scorecard);
-  writeJson(path.join(SCORECARD_HISTORY_DIR, `${payload.date.replace(/-/g, "")}.json`), scorecard);
-}
-
 async function uploadRealtimeRadarPayload(payload) {
   if (!SUPABASE_URL || !SUPABASE_KEY) return false;
   const url = `${SUPABASE_URL.replace(/\/$/, "")}/rest/v1/${SUPABASE_TABLE}`;
@@ -169,6 +98,33 @@ function chunkStocks(stocks = [], size = REALTIME_RESCAN_BATCH_SIZE) {
 function isMarketTime(parts = taipeiParts()) {
   const minutes = Number(parts.hour) * 60 + Number(parts.minute);
   return minutes >= 9 * 60 && minutes <= 13 * 60 + 30;
+}
+
+function secondsOfDay(value) {
+  const match = String(value || "").match(/(\d{1,2}):(\d{2})(?::(\d{2}))?/);
+  if (!match) return null;
+  return Number(match[1]) * 3600 + Number(match[2]) * 60 + Number(match[3] || 0);
+}
+
+function quoteAgeSeconds(scanTimestamp, quoteTime) {
+  const scanSeconds = secondsOfDay(scanTimestamp);
+  const quoteSeconds = secondsOfDay(quoteTime);
+  if (scanSeconds == null || quoteSeconds == null) return null;
+  return Math.abs(scanSeconds - quoteSeconds);
+}
+
+function hasFreshQuote(stock, scanTimestamp) {
+  const age = quoteAgeSeconds(scanTimestamp, stock.quoteTime || stock.time);
+  return age != null && age <= MAX_QUOTE_AGE_SECONDS;
+}
+
+function chunkStocks(stocks = [], size = REALTIME_RESCAN_BATCH_SIZE) {
+  const chunks = [];
+  for (let index = 0; index < stocks.length; index += size) {
+    const batchStocks = stocks.slice(index, index + size);
+    chunks.push({ stocks: batchStocks, codes: batchStocks.map((stock) => stock.code).filter(Boolean) });
+  }
+  return chunks.filter((batch) => batch.codes.length);
 }
 
 async function fetchJson(url, timeout = 30000) {
@@ -517,7 +473,6 @@ async function main() {
           staleRescanCount: staleStocks.length,
         };
         writeJson(OUT_FILE, patchedPayload);
-        updateRealtimeRadarScorecard(patchedPayload);
         await uploadRealtimeRadarPayload(patchedPayload);
         console.log(`realtime radar ${timestamp}: deferred rescan merged rows ${mergedRows.length} recovered ${retry.recoveredBatches}/${deferredBatches.length}`);
       }

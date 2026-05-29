@@ -14,14 +14,8 @@ const STATE_FILE = statePath("trade-manager-state.json");
 
 const TAKE_PROFIT_PCT = Number(process.env.TRADE_MANAGER_TAKE_PROFIT_PCT || 3);
 const STOP_LOSS_PCT = Number(process.env.TRADE_MANAGER_STOP_LOSS_PCT || 2);
-const REQUIRED_DAILY_TRADES = Math.max(1, Number(process.env.TRADE_MANAGER_REQUIRED_DAILY_TRADES || 10));
-const MAX_DAILY_TRADES = Math.max(REQUIRED_DAILY_TRADES, Number(process.env.TRADE_MANAGER_MAX_DAILY_TRADES || REQUIRED_DAILY_TRADES));
-const MIN_DAILY_TRADES = Math.min(
-  MAX_DAILY_TRADES,
-  Math.max(REQUIRED_DAILY_TRADES, Number(process.env.TRADE_MANAGER_MIN_DAILY_TRADES || REQUIRED_DAILY_TRADES))
-);
-const REQUIRED_DAILY_AMOUNT = REQUIRED_DAILY_TRADES * Math.max(1000, Number(process.env.TRADE_MANAGER_REQUIRED_BUDGET_PER_TRADE || 1000000));
-const MAX_DAILY_AMOUNT = Math.max(REQUIRED_DAILY_AMOUNT, Number(process.env.TRADE_MANAGER_MAX_DAILY_AMOUNT || REQUIRED_DAILY_AMOUNT));
+const MAX_DAILY_TRADES = Math.max(1, Number(process.env.TRADE_MANAGER_MAX_DAILY_TRADES || 5));
+const MAX_DAILY_AMOUNT = Math.max(0, Number(process.env.TRADE_MANAGER_MAX_DAILY_AMOUNT || 5000000));
 const DEFAULT_BUDGET_PER_TRADE = MAX_DAILY_AMOUNT ? Math.floor(MAX_DAILY_AMOUNT / MAX_DAILY_TRADES) : 20000;
 const BUDGET_PER_TRADE = Math.max(1000, Number(process.env.TRADE_MANAGER_BUDGET_PER_TRADE || DEFAULT_BUDGET_PER_TRADE));
 const DRY_RUN = process.env.TRADE_MANAGER_DRY_RUN === "1";
@@ -42,7 +36,6 @@ const NEAR_HIGH_RATIO = Number(process.env.TRADE_MANAGER_NEAR_HIGH_RATIO || 0.98
 const MIN_ENTRY_TIME = process.env.TRADE_MANAGER_MIN_ENTRY_TIME || "09:05:00";
 const STRATEGY5_MIN_ENTRY_TIME = process.env.TRADE_MANAGER_STRATEGY5_MIN_ENTRY_TIME || "09:00:00";
 const MAX_ENTRY_TIME = process.env.TRADE_MANAGER_MAX_ENTRY_TIME || "13:20:00";
-const FORCE_MIN_TRADE_TIME = process.env.TRADE_MANAGER_FORCE_MIN_TRADE_TIME || "10:30:00";
 const FORCE_DAY_EXIT_TIME = process.env.TRADE_MANAGER_FORCE_DAY_EXIT_TIME || "13:25:00";
 const SMART_STOP_MIN_PCT = Number(process.env.TRADE_MANAGER_SMART_STOP_MIN_PCT || 0.8);
 const SMART_STOP_MAX_PCT = Number(process.env.TRADE_MANAGER_SMART_STOP_MAX_PCT || 3.2);
@@ -429,101 +422,6 @@ function listStrategyQuality(event, quote, now) {
   };
 }
 
-function qualityForEvent(event, quote, payload, now) {
-  return event.strategy === "strategy2-entry"
-    ? intradayQuality(event, quote, payload)
-    : event.strategy === "strategy5"
-    ? strategy5Quality(event, quote, now)
-    : listStrategyQuality(event, quote, now);
-}
-
-function qualityRank(event, quality) {
-  const strategyBonus = event.strategy === "strategy5" ? 8 : event.strategy === "strategy2-entry" ? 5 : 0;
-  const passBonus = quality.pass ? 100 : 0;
-  const score = cleanNumber(quality.score);
-  const pct = cleanNumber(quality.pct);
-  const volume = cleanNumber(quality.volume);
-  const value = cleanNumber(quality.value);
-  const reasonPenalty = Array.isArray(quality.reasons) ? quality.reasons.length * 12 : 0;
-  return passBonus
-    + score
-    + Math.max(-10, Math.min(12, pct)) * 2
-    + Math.log10(Math.max(1, volume)) * 8
-    + Math.log10(Math.max(1, value)) * 3
-    + strategyBonus
-    - reasonPenalty;
-}
-
-function openPosition(state, event, quote, quality, options = {}) {
-  const entryPrice = cleanNumber(event.entryPrice) || cleanNumber(quote?.close);
-  if (!entryPrice) return { skipped: "無有效進場價" };
-  const plan = lotPlan(entryPrice);
-  const nextDailyAmount = cleanNumber(state.dailyTradeAmount) + cleanNumber(plan.amount);
-  if (MAX_DAILY_AMOUNT && nextDailyAmount > MAX_DAILY_AMOUNT) {
-    return { skipped: `今日交易金額${nextDailyAmount.toLocaleString("zh-TW")}超過上限${MAX_DAILY_AMOUNT.toLocaleString("zh-TW")}` };
-  }
-  const stopLoss = smartStopLoss(event, quote, entryPrice, quality);
-  const ibHigh = cleanNumber(quote?.high) || entryPrice;
-  const ibLow = cleanNumber(quote?.low) || entryPrice;
-  const ibFib618 = ibHigh > ibLow ? roundTradePrice(ibHigh - (ibHigh - ibLow) * 0.618) : 0;
-  const position = {
-    code: event.code,
-    name: event.name || quote?.name || "",
-    strategy: event.strategy || "strategy2-entry",
-    entryTime: event.firstAAt || options.now?.time || "",
-    entryPrice,
-    takeProfitPrice: roundTradePrice(entryPrice * (1 + TAKE_PROFIT_PCT / 100)),
-    stopLossPrice: stopLoss.price,
-    stopLossPct: stopLoss.pct,
-    stopLossBasis: stopLoss.basis,
-    ibHigh,
-    ibLow,
-    ibFib618,
-    shares: plan.shares,
-    lots: plan.lots,
-    amount: plan.amount,
-    openedAt: new Date().toISOString(),
-    lastPrice: cleanNumber(quote?.close) || entryPrice,
-    lastVolume: normalizeVolumeLots(cleanNumber(quote?.tradeVolume)),
-    highestPrice: cleanNumber(quote?.high) || cleanNumber(quote?.close) || entryPrice,
-    qualityScore: quality.score,
-    qualityPct: quality.pct,
-    qualityVolume: quality.volume,
-    qualityValue: quality.value,
-    volumeMilestone: quality.milestone,
-    volumeTrendText: quality.volumeTrendText,
-    signalText: quality.signalText,
-    nearHighText: quality.nearHighText,
-    dailyTradeCount: state.dailyTradeCount + 1,
-    dailyTradeAmount: nextDailyAmount,
-    forcedMinimumTrade: Boolean(options.forcedMinimumTrade),
-  };
-  state.positions[event.code] = position;
-  state.notified[event.code] = { buyAt: new Date().toISOString(), entryTime: position.entryTime };
-  state.dailyTradeCount += 1;
-  state.dailyTradeAmount = nextDailyAmount;
-
-  const noticeEvent = options.forcedMinimumTrade
-    ? {
-      ...event,
-      stateReason: [
-        `每日最低交易規則：今日尚未達 ${MIN_DAILY_TRADES} 筆，於 ${options.now?.time || "--"} 啟動保底進場`,
-        quality.reasons?.length ? `原本未通過：${quality.reasons.join("；")}` : "",
-        event.stateReason || "",
-      ].filter(Boolean).join("。"),
-    }
-    : event;
-  const text = buildBuyMessage(noticeEvent, position);
-  return {
-    position,
-    message: {
-      text,
-      altText: `交易管家可買：${event.code} ${event.name || ""}`.trim(),
-      flex: tradeBuyFlex(noticeEvent, position),
-    },
-  };
-}
-
 function buildExitMessage(position, quote, action) {
   const current = cleanNumber(quote?.close) || cleanNumber(position.lastPrice) || cleanNumber(position.entryPrice);
   const pnl = profitText(position.entryPrice, current, position.shares);
@@ -732,7 +630,11 @@ async function main() {
     if ((seen && !seen.retryable) || state.notified[event.code] || state.positions[event.code] || state.closed[event.code]) continue;
     if (state.dailyTradeCount >= MAX_DAILY_TRADES) continue;
     const quote = quoteByCode.get(event.code);
-    const quality = qualityForEvent(event, quote, payload, now);
+    const quality = event.strategy === "strategy2-entry"
+      ? intradayQuality(event, quote, payload)
+      : event.strategy === "strategy5"
+      ? strategy5Quality(event, quote, now)
+      : listStrategyQuality(event, quote, now);
     if (!quality.pass) {
       state.seenEvents[key] = {
         seenAt: seen?.seenAt || new Date().toISOString(),
@@ -743,56 +645,60 @@ async function main() {
       console.log(`trade manager skip ${event.code}: ${quality.reasons.join("；")}`);
       continue;
     }
-    const opened = openPosition(state, event, quote, quality, { now });
-    if (!opened.position) {
-      state.seenEvents[key] = {
-        seenAt: seen?.seenAt || new Date().toISOString(),
-        lastCheckedAt: new Date().toISOString(),
-        skipped: opened.skipped,
-      };
-      console.log(`trade manager skip ${event.code}: ${opened.skipped}`);
+    const entryPrice = cleanNumber(event.entryPrice) || cleanNumber(quote?.close);
+    if (!entryPrice) continue;
+    const plan = lotPlan(entryPrice);
+    const nextDailyAmount = cleanNumber(state.dailyTradeAmount) + cleanNumber(plan.amount);
+    if (MAX_DAILY_AMOUNT && nextDailyAmount > MAX_DAILY_AMOUNT) {
+      console.log(`trade manager skip ${event.code}: 今日交易金額${nextDailyAmount.toLocaleString("zh-TW")}超過上限${MAX_DAILY_AMOUNT.toLocaleString("zh-TW")}`);
       continue;
     }
-    state.seenEvents[key] = { seenAt: seen?.seenAt || new Date().toISOString(), tradedAt: new Date().toISOString() };
+    const stopLoss = smartStopLoss(event, quote, entryPrice, quality);
+    const ibHigh = cleanNumber(quote?.high) || entryPrice;
+    const ibLow = cleanNumber(quote?.low) || entryPrice;
+    const ibFib618 = ibHigh > ibLow ? roundTradePrice(ibHigh - (ibHigh - ibLow) * 0.618) : 0;
+    const position = {
+      code: event.code,
+      name: event.name || quote?.name || "",
+      strategy: event.strategy || "strategy2-entry",
+      entryTime: event.firstAAt || now.time,
+      entryPrice,
+      takeProfitPrice: roundTradePrice(entryPrice * (1 + TAKE_PROFIT_PCT / 100)),
+      stopLossPrice: stopLoss.price,
+      stopLossPct: stopLoss.pct,
+      stopLossBasis: stopLoss.basis,
+      ibHigh,
+      ibLow,
+      ibFib618,
+      shares: plan.shares,
+      lots: plan.lots,
+      amount: plan.amount,
+      openedAt: new Date().toISOString(),
+      lastPrice: cleanNumber(quote?.close) || entryPrice,
+      lastVolume: normalizeVolumeLots(cleanNumber(quote?.tradeVolume)),
+      highestPrice: cleanNumber(quote?.high) || cleanNumber(quote?.close) || entryPrice,
+      qualityScore: quality.score,
+      qualityPct: quality.pct,
+      qualityVolume: quality.volume,
+      qualityValue: quality.value,
+      volumeMilestone: quality.milestone,
+      volumeTrendText: quality.volumeTrendText,
+      signalText: quality.signalText,
+      nearHighText: quality.nearHighText,
+      dailyTradeCount: state.dailyTradeCount + 1,
+      dailyTradeAmount: nextDailyAmount,
+    };
+    state.positions[event.code] = position;
     openedThisRun.add(event.code);
-    messages.push(opened.message);
-  }
-
-  const shouldForceMinimumTrade = MIN_DAILY_TRADES > 0
-    && state.dailyTradeCount < MIN_DAILY_TRADES
-    && state.dailyTradeCount < MAX_DAILY_TRADES
-    && !afterMaxEntryTime
-    && timeValue(now.time) >= timeValue(FORCE_MIN_TRADE_TIME);
-  if (shouldForceMinimumTrade) {
-    const candidates = events
-      .filter((event) => timeValue(event.firstAAt) <= timeValue(now.time))
-      .filter((event) => !state.notified[event.code] && !state.positions[event.code] && !state.closed[event.code])
-      .map((event) => {
-        const quote = quoteByCode.get(event.code);
-        const quality = qualityForEvent(event, quote, payload, now);
-        return { event, quote, quality, rank: qualityRank(event, quality) };
-      })
-      .filter((candidate) => cleanNumber(candidate.event.entryPrice) || cleanNumber(candidate.quote?.close))
-      .sort((a, b) => b.rank - a.rank);
-    for (const candidate of candidates) {
-      if (state.dailyTradeCount >= MIN_DAILY_TRADES || state.dailyTradeCount >= MAX_DAILY_TRADES) break;
-      const opened = openPosition(state, candidate.event, candidate.quote, candidate.quality, {
-        now,
-        forcedMinimumTrade: true,
-      });
-      if (!opened.position) {
-        console.log(`trade manager force-min skip ${candidate.event.code}: ${opened.skipped}`);
-        continue;
-      }
-      state.seenEvents[eventKey(candidate.event)] = {
-        seenAt: state.seenEvents[eventKey(candidate.event)]?.seenAt || new Date().toISOString(),
-        tradedAt: new Date().toISOString(),
-        forcedMinimumTrade: true,
-      };
-      openedThisRun.add(candidate.event.code);
-      messages.push(opened.message);
-      console.log(`trade manager force-min opened ${candidate.event.code}: rank ${candidate.rank.toFixed(1)}`);
-    }
+    state.notified[event.code] = { buyAt: new Date().toISOString(), entryTime: position.entryTime };
+    state.dailyTradeCount += 1;
+    state.dailyTradeAmount = nextDailyAmount;
+    const text = buildBuyMessage(event, position);
+    messages.push({
+      text,
+      altText: `交易管家可買：${event.code} ${event.name || ""}`.trim(),
+      flex: tradeBuyFlex(event, position),
+    });
   }
 
   for (const [code, position] of Object.entries(state.positions)) {

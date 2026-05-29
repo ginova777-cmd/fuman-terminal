@@ -15,12 +15,8 @@ foreach ($name in @(
   "TELEGRAM_CHAT_ID",
   "TELEGRAM_TO",
   "TRADE_MANAGER_MAX_DAILY_AMOUNT",
-  "TRADE_MANAGER_REQUIRED_DAILY_TRADES",
-  "TRADE_MANAGER_REQUIRED_BUDGET_PER_TRADE",
-  "TRADE_MANAGER_MIN_DAILY_TRADES",
   "TRADE_MANAGER_BUDGET_PER_TRADE",
   "TRADE_MANAGER_MAX_DAILY_TRADES",
-  "TRADE_MANAGER_FORCE_MIN_TRADE_TIME",
   "TRADE_MANAGER_PROFIT_EXIT_MIN_PCT",
   "TRADE_MANAGER_STRATEGY5_PROFIT_EXIT_MIN_PCT",
   "TRADE_MANAGER_SELL_PRESSURE_VOLUME_DELTA_LOTS",
@@ -40,9 +36,6 @@ New-Item -ItemType Directory -Force -Path "C:\fuman-runtime\logs" | Out-Null
 $log = "C:\fuman-runtime\logs\trade-manager-patrol-$(Get-Date -Format yyyyMMdd-HHmmss).log"
 
 "=== Trade manager patrol start $(Get-Date) ===" | Out-File $log -Encoding utf8
-. "C:\fuman-terminal\schedule-guard.ps1"
-Invoke-FumanWeekdayGuard -Label "Trade manager patrol" -LogPath $log
-
 & $nodeExe "scripts\patrol-trade-manager.js" >> $log 2>&1
 $exitCode = $LASTEXITCODE
 if ($exitCode -ne 0) {

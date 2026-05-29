@@ -2,9 +2,8 @@ name: Strategy3 Overnight Cache
 
 on:
   schedule:
-    # Taiwan time 13:00 full scan, then offset retries until cache is updated.
-    - cron: "0,3,8,13,18,23,28,33,38,43,48,53,58 5 * * 1-5"
-    - cron: "3,8,13,18,23,28,33,38,43,48,53,58 6-14 * * 1-5"
+    # Taipei 13:00-13:40 Mon-Fri. Later attempts skip automatically once today's cache is fresh.
+    - cron: "0,10,20,30,40 5 * * 1-5"
   workflow_dispatch:
 
 permissions:
@@ -46,6 +45,15 @@ jobs:
           git config user.name "fuman-terminal-bot"
           git config user.email "actions@github.com"
           git add data/strategy3-latest.json data/strategy3-backup.json data/strategy3-scorecard-source.json
-          git diff --cached --quiet || git commit -m "Update strategy3 cache"
-          git pull --rebase origin main
-          git push
+          if git diff --cached --quiet; then
+            echo "strategy3 cache unchanged"
+            exit 0
+          fi
+          git commit -m "Update strategy3 cache"
+          for attempt in 1 2 3; do
+            git pull --rebase origin main && git push && exit 0
+            git rebase --abort || true
+            sleep $((attempt * 5))
+          done
+          echo "strategy3 cache push failed after retries"
+          exit 1

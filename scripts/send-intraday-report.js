@@ -864,7 +864,6 @@ async function sendScorecardNotifications(reports) {
     throw new Error("Missing notification config: set SMTP settings");
   }
   await sendReports(reports, mailConfig);
-  return true;
 }
 
 function readIntradayCache() {

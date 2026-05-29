@@ -16,8 +16,6 @@ $log = "C:\fuman-runtime\logs\scorecard-$(Get-Date -Format yyyyMMdd-HHmmss).log"
 "=== Scorecard start $(Get-Date) ===" | Out-File $log -Encoding utf8
 "REPORT_SLOT=$env:REPORT_SLOT" >> $log
 "Scorecard notifications disabled; Google Sheet upload only." >> $log
-. "C:\fuman-terminal\schedule-guard.ps1"
-Invoke-FumanWeekdayGuard -Label "Scorecard $env:REPORT_SLOT" -LogPath $log
 
 & $nodeExe "scripts\send-intraday-report.js" >> $log 2>&1
 $exitCode = $LASTEXITCODE
