@@ -4,6 +4,10 @@ let tpexDailyCache = null;
 const { fetchMisQuotes, mergeMisQuoteIntoHistory } = require("../lib/mis-quotes");
 const USE_MIS_QUOTES = process.env.STRATEGY4_USE_MIS === "1";
 
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 async function fetchText(url, options = {}, timeout = 12000) {
   let lastError = null;
   for (let attempt = 1; attempt <= 3; attempt++) {
