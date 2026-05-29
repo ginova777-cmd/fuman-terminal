@@ -9,6 +9,7 @@ $PSNativeCommandUseErrorActionPreference = $false
 $sourceRepo = "C:\fuman-runtime"
 $codeRepo = "C:\fuman-terminal"
 $syncRepo = "C:\fuman-terminal-sync"
+$publishToCodeRepo = $env:CACHE_SYNC_WRITE_CODE_REPO -eq "1"
 $repoUrl = "https://github.com/ginova777-cmd/fuman-terminal.git"
 $logDir = Join-Path $sourceRepo "logs"
 $lockFile = Join-Path $sourceRepo "locks\cache-sync.lock"
@@ -154,7 +155,7 @@ function Replay-OutboxSnapshots {
         continue
       }
       Copy-CacheFile $file $source $syncRepo "outbox"
-      Copy-CacheFile $file $source $codeRepo "outbox local"
+      Copy-CodeRepoCacheFile $file $source "outbox local"
     }
 
     Run-Git "Stage outbox cache files" (@("add", "-f") + $files)
@@ -229,6 +230,13 @@ function Copy-CacheFile($file, $source, $targetRoot, $label) {
   New-Item -ItemType Directory -Force -Path (Split-Path $target -Parent) | Out-Null
   Copy-Item -LiteralPath $source -Destination $target -Force
   Assert-CopiedFile "$label $file" $source $target
+}
+function Copy-CodeRepoCacheFile($file, $source, $label) {
+  if ($publishToCodeRepo) {
+    Copy-CacheFile $file $source $codeRepo $label
+    return
+  }
+  Write-Log "Skipping code repo cache copy ($label): $file"
 }
 
 function Get-TextSha256($text) {
@@ -457,7 +465,7 @@ try {
       continue
     }
     Copy-CacheFile $file $source $syncRepo "sync"
-    Copy-CacheFile $file $source $codeRepo "local"
+    Copy-CodeRepoCacheFile $file $source "local"
     $copiedFiles.Add($file) | Out-Null
   }
 
@@ -503,7 +511,7 @@ try {
           continue
         }
         Copy-CacheFile $file $source $syncRepo "sync retry"
-        Copy-CacheFile $file $source $codeRepo "local retry"
+        Copy-CodeRepoCacheFile $file $source "local retry"
       }
     }
     foreach ($file in $localPublishedFiles) {
