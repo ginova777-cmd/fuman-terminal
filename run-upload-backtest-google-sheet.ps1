@@ -10,6 +10,10 @@ $env:ALLOW_LEGACY_RADAR_QUOTES = "0"
 $nodeExe = "C:\Program Files\nodejs\node.exe"
 $reportDir = "C:\Users\ginov\OneDrive\Desktop\回測報告"
 
+[Console]::InputEncoding = [System.Text.UTF8Encoding]::new($false)
+[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)
+$OutputEncoding = [System.Text.UTF8Encoding]::new($false)
+
 $dateArg = [string](@($args | Where-Object { [string]$_ -match '^\d{8}$|^\d{4}-\d{2}-\d{2}$' } | Select-Object -First 1)[0])
 $backtestArg = $null
 $stamp = $null
@@ -48,7 +52,7 @@ if ($forceBacktest -or $missingBacktest) {
     Write-Host "Rebuilding backtest because --rebuild-backtest was requested."
   }
   if ($backtestArg) {
-  & $nodeExe "scripts\backtest-strategy2-manager-radar.js" $backtestArg
+    & $nodeExe "scripts\backtest-strategy2-manager-radar.js" $backtestArg
   } else {
     & $nodeExe "scripts\backtest-strategy2-manager-radar.js"
   }
@@ -59,8 +63,3 @@ if ($forceBacktest -or $missingBacktest) {
 
 & $nodeExe "scripts\upload-backtest-to-google-sheet.js" @args
 exit $LASTEXITCODE
-
-
-
-
-
