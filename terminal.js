@@ -3853,7 +3853,16 @@ async function loadRealtimeRadarLatestCache(force = false) {
   if (!force && realtimeRadarCacheLoadedAt && Date.now() - realtimeRadarCacheLoadedAt < REALTIME_RADAR_REFRESH_MS) return false;
   realtimeRadarCacheLoading = true;
   try {
-    const payload = await fetchJson(`${endpoints.realtimeRadarCache}?t=${Date.now()}`, 8000);
+    let payload = null;
+    if (supabaseClient) {
+      const { data, error } = await supabaseClient
+        .from("fuman_realtime_radar_cache")
+        .select("payload,updated_at")
+        .eq("id", "latest")
+        .maybeSingle();
+      if (!error && data?.payload) payload = data.payload;
+    }
+    if (!payload) payload = await fetchJson(`${endpoints.realtimeRadarCache}?t=${Date.now()}`, 8000);
     const payloadDate = normalizeMarketAiDateKey(payload?.date || payload?.updatedAt);
     const rows = normalizeArray(payload?.rows);
     if (payload?.status !== "ok" || payloadDate !== marketAiTodayKey() || !rows.length) return false;
