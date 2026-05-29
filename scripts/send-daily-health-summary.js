@@ -40,9 +40,11 @@ function summarizeIssues(radar = {}) {
 
 function staleSummary(radar = {}) {
   const details = Array.isArray(radar.staleQuoteDetails) ? radar.staleQuoteDetails : [];
-  if (!Number(radar.staleQuoteCount || 0)) return "0";
+  const count = Number(radar.staleQuoteCount || 0);
+  if (!count) return "0";
+  if (!Array.isArray(radar.staleQuoteDetails)) return `${count}｜legacy snapshot missing details`;
   const codes = details.slice(0, 10).map((item) => `${item.code}${item.quoteAgeSeconds ? `(${item.quoteAgeSeconds}s)` : ""}`).join(",");
-  return `${radar.staleQuoteCount}${codes ? `｜${codes}` : "｜details missing"}`;
+  return `${count}${codes ? `｜${codes}` : "｜details empty"}`;
 }
 
 async function sendOpsText(text) {

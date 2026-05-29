@@ -429,6 +429,16 @@ function buildStaleQuoteDetails(staleStocks = [], scanTimestamp = "") {
     .slice(0, 80);
 }
 
+function staleQuoteLogText(staleQuoteDetails = [], staleQuoteCount = 0) {
+  const count = Number(staleQuoteCount || 0);
+  if (!count) return "stale 0";
+  const sample = staleQuoteDetails
+    .slice(0, 12)
+    .map((item) => `${item.code}${item.quoteAgeSeconds ? `(${item.quoteAgeSeconds}s)` : ""}`)
+    .join(",");
+  return `stale ${count}${sample ? ` [${sample}]` : " [details empty]"}`;
+}
+
 function radarSignalTags(stock) {
   const tags = [];
   const pct = cleanNumber(stock.percent);
@@ -603,7 +613,7 @@ async function main() {
   payload = { ...payload, supabaseUpload };
   writeJson(OUT_FILE, payload);
   await maybeSendRealtimeRadarAlert(payload);
-  console.log(`realtime radar ${timestamp}: rows ${payload.rows.length} status ${payload.status} failed ${realtime.failedBatches.length}/${realtime.totalBatches}`);
+  console.log(`realtime radar ${timestamp}: rows ${payload.rows.length} status ${payload.status} ${staleQuoteLogText(payload.staleQuoteDetails, payload.staleQuoteCount)} failed ${realtime.failedBatches.length}/${realtime.totalBatches}`);
 
   const deferredBatches = [...queuedBatches, ...realtime.failedBatches, ...chunkStocks(staleStocks).map((batch) => ({ ...batch, reason: "stale_quote" }))];
   if (deferredBatches.length) {
@@ -637,7 +647,7 @@ async function main() {
         writeJson(OUT_FILE, patchedPayload);
         await safeUploadRealtimeRadarPayload(patchedPayload);
         await maybeSendRealtimeRadarAlert(patchedPayload);
-        console.log(`realtime radar ${timestamp}: deferred rescan merged rows ${mergedRows.length} recovered ${retry.recoveredBatches}/${deferredBatches.length}`);
+        console.log(`realtime radar ${timestamp}: deferred rescan merged rows ${mergedRows.length} ${staleQuoteLogText(patchedPayload.staleQuoteDetails, patchedPayload.staleQuoteCount)} recovered ${retry.recoveredBatches}/${deferredBatches.length}`);
       }
     }
   }
