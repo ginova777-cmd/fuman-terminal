@@ -231,6 +231,20 @@ function Copy-CacheFile($file, $source, $targetRoot, $label) {
   Copy-Item -LiteralPath $source -Destination $target -Force
   Assert-CopiedFile "$label $file" $source $target
 }
+
+function Test-IntradayFlowProtectedFile($file) {
+  if ($Scope -ne "all") { return $false }
+  if ($file -notin @(
+    "data\institution-latest.json",
+    "data\institution-backup.json",
+    "data\warrant-flow-latest.json",
+    "data\warrant-flow-backup.json",
+    "data\flow-health-latest.json"
+  )) { return $false }
+  $now = Get-Date
+  $minutes = $now.Hour * 60 + $now.Minute
+  return $minutes -ge (8 * 60 + 30) -and $minutes -le (13 * 60 + 45)
+}
 function Copy-CodeRepoCacheFile($file, $source, $label) {
   if ($publishToCodeRepo) {
     Copy-CacheFile $file $source $codeRepo $label
@@ -352,13 +366,19 @@ function Should-SkipCacheFile($file, $source) {
   return $false
 }
 
-if (Test-Path $lockFile) {
+for ($lockAttempt = 1; $lockAttempt -le 40; $lockAttempt++) {
+  if (-not (Test-Path $lockFile)) { break }
   $age = (Get-Date) - (Get-Item $lockFile).LastWriteTime
-  if ($age.TotalMinutes -lt 30) {
-    Write-Log "Another cache sync appears to be running; lock age $([math]::Round($age.TotalMinutes, 1)) minutes."
-    exit 0
+  if ($age.TotalMinutes -ge 30) {
+    Write-Log "Removing stale cache sync lock; lock age $([math]::Round($age.TotalMinutes, 1)) minutes."
+    Remove-Item -LiteralPath $lockFile -Force
+    break
   }
-  Remove-Item -LiteralPath $lockFile -Force
+  Write-Log "Another cache sync is running; waiting for lock release attempt $lockAttempt/40, age $([math]::Round($age.TotalMinutes, 1)) minutes."
+  Start-Sleep -Seconds 30
+}
+if (Test-Path $lockFile) {
+  throw "Cache sync lock did not clear after waiting; refusing to skip publish silently."
 }
 
 New-Item -ItemType File -Force -Path $lockFile | Out-Null
@@ -459,6 +479,10 @@ try {
     )
   }
 
+  if ($Scope -eq "all") {
+    $criticalLatestFiles = @($criticalLatestFiles | Where-Object { -not (Test-IntradayFlowProtectedFile $_) })
+  }
+
   $copiedFiles = New-Object System.Collections.Generic.List[string]
   $localPublishedFiles = @()
   if ($env:SYNC_STRATEGY2_FULL_LATEST -eq "1") {
@@ -485,6 +509,10 @@ try {
   foreach ($file in $dataFiles) {
     $source = Join-Path $sourceRepo $file
     $target = Join-Path $syncRepo $file
+    if (Test-IntradayFlowProtectedFile $file) {
+      Write-Log "$file skipped during intraday protected window for all-scope sync."
+      continue
+    }
     if (-not (Test-Path $source)) {
       Write-Log "Missing source file, skipped: $source"
       continue
@@ -508,7 +536,7 @@ try {
   }
 
   foreach ($requiredFile in $criticalLatestFiles) {
-    if ((Test-Path (Join-Path $sourceRepo $requiredFile)) -and (-not $copiedFiles.Contains($requiredFile))) {
+    if (-not $copiedFiles.Contains($requiredFile)) {
       throw "$requiredFile was not copied; refusing to publish partial latest cache set."
     }
   }
@@ -534,6 +562,10 @@ try {
     foreach ($file in $dataFiles) {
       $source = Join-Path $sourceRepo $file
       $target = Join-Path $syncRepo $file
+      if (Test-IntradayFlowProtectedFile $file) {
+        Write-Log "$file skipped during intraday protected window for all-scope sync retry."
+        continue
+      }
       if (Test-Path $source) {
         if (Should-SkipCacheFile $file $source) {
           continue
