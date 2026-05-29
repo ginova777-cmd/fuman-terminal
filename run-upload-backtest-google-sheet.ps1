@@ -58,6 +58,7 @@ if ($forceBacktest -or $missingBacktest) {
 }
 
 & $nodeExe "scripts\upload-backtest-to-google-sheet.js" @args
+exit $LASTEXITCODE
 
 
 
