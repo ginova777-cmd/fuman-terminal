@@ -45,6 +45,97 @@ function writeJson(file, payload) {
   fs.writeFileSync(file, JSON.stringify(payload, null, 2) + "\n", "utf8");
 }
 
+function compactError(error) {
+  return {
+    message: String(error?.message || error || "unknown error").slice(0, 500),
+    name: error?.name || "",
+  };
+}
+
+function queueFiles() {
+  try {
+    return fs.readdirSync(GOOGLE_SHEET_QUEUE_DIR)
+      .filter((name) => name.endsWith(".json"))
+      .map((name) => path.join(GOOGLE_SHEET_QUEUE_DIR, name))
+      .sort();
+  } catch {
+    return [];
+  }
+}
+
+function queueGoogleSheetUpload(plan, error) {
+  if (!plan?.stamp) return "";
+  const file = path.join(GOOGLE_SHEET_QUEUE_DIR, `${plan.stamp}-${Date.now()}.json`);
+  writeJson(file, {
+    queuedAt: new Date().toISOString(),
+    error: compactError(error),
+    plan,
+  });
+  return file;
+}
+
+function markQueuedUploadDone(file) {
+  try {
+    fs.mkdirSync(GOOGLE_SHEET_DONE_DIR, { recursive: true });
+    fs.renameSync(file, path.join(GOOGLE_SHEET_DONE_DIR, path.basename(file).replace(/\.json$/i, ".done.json")));
+  } catch {
+  }
+}
+
+async function maybeSendGoogleSheetFailureAlert(status) {
+  if (process.env.GOOGLE_SHEET_FAILURE_NOTIFY === "0") return false;
+  if (!hasTelegramConfig()) return false;
+  const lastAlertAt = status.lastAlertAt ? Date.parse(status.lastAlertAt) : 0;
+  if (lastAlertAt && Date.now() - lastAlertAt < GOOGLE_SHEET_ALERT_COOLDOWN_MS) return false;
+  await sendTelegramText([
+    "策略2成績單 Google Sheet 備份失敗",
+    "",
+    `連續失敗：${status.consecutiveFailures} 次`,
+    `日期：${status.lastStamp || "--"}`,
+    `錯誤：${status.lastError?.message || "--"}`,
+    `本機 queue：${GOOGLE_SHEET_QUEUE_DIR}`,
+    "",
+    "主偵測、Supabase、Telegram/LINE 進場通知不受影響；成績單已先排隊，下一次 Google Sheet 成功連線會補傳。",
+  ].join("\n"));
+  return true;
+}
+
+async function recordGoogleSheetFailure(error, plan) {
+  const previous = readJson(GOOGLE_SHEET_STATUS_FILE, {});
+  const queuedFile = queueGoogleSheetUpload(plan, error);
+  const status = {
+    ok: false,
+    updatedAt: new Date().toISOString(),
+    lastStamp: plan?.stamp || previous.lastStamp || "",
+    consecutiveFailures: Number(previous.consecutiveFailures || 0) + 1,
+    lastError: compactError(error),
+    lastQueuedFile: queuedFile,
+    pendingCount: queueFiles().length,
+    lastSuccessAt: previous.lastSuccessAt || "",
+    lastAlertAt: previous.lastAlertAt || "",
+  };
+  if (status.consecutiveFailures >= GOOGLE_SHEET_ALERT_THRESHOLD) {
+    try {
+      if (await maybeSendGoogleSheetFailureAlert(status)) status.lastAlertAt = new Date().toISOString();
+    } catch (alertError) {
+      status.lastAlertError = compactError(alertError);
+    }
+  }
+  writeJson(GOOGLE_SHEET_STATUS_FILE, status);
+}
+
+function recordGoogleSheetSuccess(stamp, replayed = 0) {
+  writeJson(GOOGLE_SHEET_STATUS_FILE, {
+    ok: true,
+    updatedAt: new Date().toISOString(),
+    lastSuccessAt: new Date().toISOString(),
+    lastStamp: stamp || "",
+    consecutiveFailures: 0,
+    replayed,
+    pendingCount: queueFiles().length,
+  });
+}
+
 function isGoogleTokenUsable(token) {
   return Boolean(token && typeof token === "object" && (token.refresh_token || token.access_token));
 }
@@ -1274,6 +1365,56 @@ function todayStamp() {
   return files.at(-1).match(/(\d{8})/)[1];
 }
 
+function dataRowCount(rows) {
+  return Math.max(0, Array.isArray(rows) ? rows.length - 1 : 0);
+}
+
+function loadStrategy2SourceHealth(report, stamp) {
+  const dateText = `${stamp.slice(0, 4)}-${stamp.slice(4, 6)}-${stamp.slice(6, 8)}`;
+  const sourceFile = report?.sourceFile || path.join(DATA_DIR, "strategy2-intraday-history", `${dateText}.json`);
+  const payload = readJson(sourceFile, {});
+  const records = Array.isArray(payload.records) ? payload.records.length : 0;
+  const events = Array.isArray(payload.events) ? payload.events.length : 0;
+  const aEvents = Array.isArray(payload.events)
+    ? payload.events.filter((event) => event.firstAAt || event.latestState === "entry").length
+    : 0;
+  const skipped = Array.isArray(report?.manager?.skipped) ? report.manager.skipped.length : 0;
+  const reasonCounts = new Map();
+  for (const item of report?.manager?.skipped || []) {
+    for (const reason of item.reasons || []) {
+      reasonCounts.set(reason, (reasonCounts.get(reason) || 0) + 1);
+    }
+  }
+  const topSkipReasons = [...reasonCounts.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 3)
+    .map(([reason, count]) => `${reason} x${count}`);
+  return { sourceFile, records, events, aEvents, skipped, topSkipReasons };
+}
+
+function assertBacktestRowsConsistent(stamp, trades, radar, report) {
+  const managerTotal = Number(report?.manager?.summary?.total ?? dataRowCount(trades));
+  const radarHits = Number(report?.radar?.hits?.length ?? dataRowCount(radar));
+  const health = loadStrategy2SourceHealth(report, stamp);
+  if (
+    process.env.ALLOW_EMPTY_STRATEGY2_SCORECARD !== "1"
+    && managerTotal === 0
+    && radarHits === 0
+    && (health.aEvents > 0 || health.events > 0 || health.skipped > 0)
+  ) {
+    const details = [
+      `source=${health.sourceFile}`,
+      `records=${health.records}`,
+      `events=${health.events}`,
+      `aEvents=${health.aEvents}`,
+      `skipped=${health.skipped}`,
+      `topSkipReasons=${health.topSkipReasons.join("；") || "--"}`,
+    ].join(", ");
+    throw new Error(`Strategy2 scorecard consistency guard blocked empty upload for ${stamp}: source has signals but manager/radar are both 0. ${details}`);
+  }
+  return { managerTotal, radarHits, health };
+}
+
 function loadBacktestRows(stamp) {
   const tradesPath = path.join(REPORT_DIR, `backtest-trades-${stamp}.csv`);
   const radarPath = path.join(REPORT_DIR, `backtest-radar-${stamp}.csv`);
@@ -1286,6 +1427,7 @@ function loadBacktestRows(stamp) {
   }
   const radar = parseCsv(fs.readFileSync(radarPath, "utf8"));
   const report = readJson(reportPath, {});
+  const consistency = assertBacktestRowsConsistent(stamp, trades, radar, report);
   const dateText = `${stamp.slice(0, 4)}-${stamp.slice(4, 6)}-${stamp.slice(6, 8)}`;
   const totalPnl = report?.manager?.summary?.pnl ?? "";
   const historyRows = [
@@ -1316,16 +1458,32 @@ function loadBacktestRows(stamp) {
     ["管家平均報酬", report?.manager?.summary ? `${report.manager.summary.avgReturn.toFixed(2)}%` : ""],
     ["即時雷達命中", report?.radar?.hits?.length ?? Math.max(0, radar.length - 1)],
     ["來源資料", report?.sourceFile || ""],
+    ["來源records/events", `${consistency.health.records}/${consistency.health.events}`],
+    ["來源A事件/skipped", `${consistency.health.aEvents}/${consistency.health.skipped}`],
+    ["主要skip原因", consistency.health.topSkipReasons.join("；")],
   ];
   return { trades, radar, report, summary, historyRows };
 }
 
-async function main() {
-  const stamp = todayStamp();
+async function buildUploadPlan(stamp = todayStamp()) {
   const { trades, radar, report, summary, historyRows } = loadBacktestRows(stamp);
   const scorecardSheets = await loadScorecardSheets(stamp, radar, report);
   const onlySheet = process.env.GOOGLE_SHEET_ONLY || "";
-  const token = await getAccessToken();
+  return {
+    stamp,
+    onlySheet,
+    summary,
+    historyRows,
+    scorecardSheets,
+    summarySheet: "回測摘要",
+    historySheet: "歷史與區間損益",
+    obsoleteSheets: ["實體庫存與TA分析", "自選股監控池", "策略監控區"],
+    navTitles: ["交易管家成績單", "即時雷達成績單", "策略1成績單", "策略2成績單", "策略3成績單", "策略4成績單", "策略5成績單", "歷史與區間損益", "回測摘要"],
+  };
+}
+
+async function uploadPlan(token, plan, replay = false) {
+  const { stamp, onlySheet, summary, historyRows, scorecardSheets, summarySheet, historySheet } = plan;
   let spreadsheet = await sheets("GET", "?fields=sheets.properties(title,sheetId)", token);
   if (onlySheet) {
     const rows = scorecardSheets[onlySheet];
@@ -1335,13 +1493,10 @@ async function main() {
     await putValues(token, onlySheet, rows);
     spreadsheet = await sheets("GET", "?fields=sheets.properties(title,sheetId)", token);
     await formatWorkbook(token, spreadsheet, [onlySheet]);
-    console.log("Uploaded only " + onlySheet + " for " + stamp + " to Google Sheet " + SHEET_ID);
+    console.log(`${replay ? "Replayed" : "Uploaded"} only ${onlySheet} for ${stamp} to Google Sheet ${SHEET_ID}`);
     return;
   }
-  const summarySheet = "回測摘要";
-  const historySheet = "歷史與區間損益";
-  const obsoleteSheets = ["實體庫存與TA分析", "自選股監控池", "策略監控區"];
-  await deleteSheets(token, spreadsheet, obsoleteSheets);
+  await deleteSheets(token, spreadsheet, plan.obsoleteSheets || []);
   spreadsheet = await sheets("GET", "?fields=sheets.properties(title,sheetId)", token);
   const titles = [summarySheet, historySheet, ...Object.keys(scorecardSheets)];
   for (const title of titles) await ensureSheet(token, spreadsheet, title);
@@ -1351,9 +1506,35 @@ async function main() {
   for (const [title, rows] of Object.entries(scorecardSheets)) await putValues(token, title, rows);
   spreadsheet = await sheets("GET", "?fields=sheets.properties(title,sheetId)", token);
   await formatWorkbook(token, spreadsheet, titles);
-  await setSheetNavLinks(token, spreadsheet, historySheet, ["交易管家成績單", "即時雷達成績單", "策略1成績單", "策略2成績單", "策略3成績單", "策略4成績單", "策略5成績單", "歷史與區間損益", "回測摘要"]);
-  console.log("Uploaded " + stamp + " to Google Sheet " + SHEET_ID);
+  await setSheetNavLinks(token, spreadsheet, historySheet, plan.navTitles || []);
+  console.log(`${replay ? "Replayed" : "Uploaded"} ${stamp} to Google Sheet ${SHEET_ID}`);
   console.log("Sheets: " + [historySheet, summarySheet, ...Object.keys(scorecardSheets)].join(", "));
+}
+
+async function replayQueuedUploads(token) {
+  let replayed = 0;
+  for (const file of queueFiles()) {
+    const item = readJson(file, {});
+    if (!item?.plan?.stamp) continue;
+    await uploadPlan(token, item.plan, true);
+    markQueuedUploadDone(file);
+    replayed += 1;
+  }
+  return replayed;
+}
+
+async function main() {
+  let plan = null;
+  try {
+    plan = await buildUploadPlan();
+    const token = await getAccessToken();
+    const replayed = process.env.GOOGLE_SHEET_REPLAY_QUEUE === "0" ? 0 : await replayQueuedUploads(token);
+    await uploadPlan(token, plan);
+    recordGoogleSheetSuccess(plan.stamp, replayed);
+  } catch (error) {
+    await recordGoogleSheetFailure(error, plan);
+    throw error;
+  }
 }
 
 main().catch((error) => {
