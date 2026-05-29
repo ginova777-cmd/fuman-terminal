@@ -109,6 +109,8 @@ const OFFICIAL_TO_HEATMAP_GROUP = {
 };
 
 function resolveHeatmapGroup(stock, officialIndustry) {
+  const primaryGroup = HEATMAP_PRIMARY_GROUP_OVERRIDES[String(stock.code || "")];
+  if (primaryGroup) return primaryGroup;
   const bbGroup = BB_HEATMAP_GROUP_BY_CODE[String(stock.code || "")];
   if (bbGroup) return bbGroup;
   const codeGroup = HEATMAP_GROUP_BY_CODE[String(stock.code || "")];
@@ -2254,6 +2256,56 @@ const BB_HEATMAP_GROUP_BY_CODE = Object.fromEntries(
   Object.entries(BB_HEATMAP_GROUPS).flatMap(([group, codes]) => codes.map((code) => [code, group]))
 );
 
+const HEATMAP_PRIMARY_GROUP_OVERRIDES = {
+  "2330": "IC生產製造",
+  "2303": "IC生產製造",
+  "5347": "IC生產製造",
+  "6770": "IC生產製造",
+  "3105": "IC生產製造",
+  "2455": "IC生產製造",
+  "8086": "IC生產製造",
+  "3707": "IC生產製造",
+  "3711": "IC封測",
+};
+
+const AI_SUPPLY_CHAIN_GROUPS = new Set([
+  "AI伺服器",
+  "CPU/ASIC/IP",
+  "先進封裝/CoWoS",
+  "液冷/散熱",
+  "電源/BBU/UPS",
+  "PCB/載板",
+  "光通訊/CPO",
+  "記憶體/儲存",
+  "工業電腦",
+]);
+
+function uniqueIndustryList(items) {
+  return [...new Set(items.map((item) => String(item || "").trim()).filter(Boolean))];
+}
+
+function buildIndustryProfile(stock, officialIndustry, primaryIndustry) {
+  const code = String(stock.code || "");
+  const officialGroup = OFFICIAL_TO_HEATMAP_GROUP[officialIndustry] || officialIndustry || "";
+  const primary = primaryIndustry || resolveHeatmapGroup(stock, officialIndustry);
+  const manualPrimary = HEATMAP_PRIMARY_GROUP_OVERRIDES[code];
+  const bbGroup = BB_HEATMAP_GROUP_BY_CODE[code];
+  const codeGroup = HEATMAP_GROUP_BY_CODE[code];
+  const themes = uniqueIndustryList([bbGroup, codeGroup, officialGroup]).filter((item) => item !== primary);
+  const confidence = manualPrimary ? "high" : bbGroup || codeGroup ? "medium-high" : officialGroup ? "medium" : "low";
+  return {
+    code,
+    officialIndustry: officialIndustry || "",
+    officialGroup,
+    primaryIndustry: primary,
+    themes,
+    isAiSupplyChain: AI_SUPPLY_CHAIN_GROUPS.has(primary) || themes.some((theme) => AI_SUPPLY_CHAIN_GROUPS.has(theme)),
+    source: manualPrimary ? "manual-primary" : bbGroup ? "manual-theme" : codeGroup ? "legacy-code-map" : officialGroup ? "official-industry" : "fallback",
+    confidence,
+    updatedAt: "2026-05-29",
+  };
+}
+
 const INDUSTRY_NAMES = {
   "01": "水泥工業",
   "02": "食品工業",
@@ -2515,15 +2567,25 @@ module.exports = async function handler(request, response) {
       const sector = resolveHeatmapGroup(baseStock, officialIndustry);
       const stock = mergeQuote(baseStock, quoteMap.get(baseStock.code));
       if (!stock.close) return;
+      const industryProfile = buildIndustryProfile(baseStock, officialIndustry, sector);
+      const profiledStock = {
+        ...stock,
+        industry: sector,
+        primaryIndustry: industryProfile.primaryIndustry,
+        officialIndustry: industryProfile.officialIndustry,
+        themes: industryProfile.themes,
+        isAiSupplyChain: industryProfile.isAiSupplyChain,
+        industryProfile,
+      };
 
       if (!groups[sector]) {
         groups[sector] = { name: sector, stocks: [], totalValue: 0, up: 0, down: 0, flat: 0 };
       }
 
-      groups[sector].stocks.push(stock);
-      groups[sector].totalValue += stock.amountYi;
-      if (stock.change > 0) groups[sector].up++;
-      else if (stock.change < 0) groups[sector].down++;
+      groups[sector].stocks.push(profiledStock);
+      groups[sector].totalValue += profiledStock.amountYi;
+      if (profiledStock.change > 0) groups[sector].up++;
+      else if (profiledStock.change < 0) groups[sector].down++;
       else groups[sector].flat++;
     });
 
@@ -2555,10 +2617,30 @@ module.exports = async function handler(request, response) {
             amountYi: Number(stock.amountYi.toFixed(2)),
             value: stock.value,
             volume: stock.volume,
+            industry: stock.industry,
+            primaryIndustry: stock.primaryIndustry,
+            officialIndustry: stock.officialIndustry,
+            themes: stock.themes,
+            isAiSupplyChain: stock.isAiSupplyChain,
+            industryProfile: stock.industryProfile,
           })),
         };
       })
       .sort((a, b) => b.pct - a.pct);
+    const industryMaster = sectors.flatMap((sector) =>
+      sector.stocks.map((stock) => ({
+        code: stock.code,
+        name: stock.name,
+        officialIndustry: stock.officialIndustry || "",
+        primaryIndustry: stock.primaryIndustry || sector.name,
+        heatmapSector: sector.name,
+        themes: stock.themes || [],
+        isAiSupplyChain: Boolean(stock.isAiSupplyChain),
+        confidence: stock.industryProfile?.confidence || "low",
+        source: stock.industryProfile?.source || "fallback",
+        updatedAt: stock.industryProfile?.updatedAt || "2026-05-29",
+      }))
+    );
 
     response.setHeader("Cache-Control", "s-maxage=60, stale-while-revalidate=120");
     response.status(200).json({
@@ -2567,6 +2649,8 @@ module.exports = async function handler(request, response) {
       updatedAt: new Date().toISOString(),
       stockCount: uniqueStocks.length,
       sectorCount: sectors.length,
+      industryMasterCount: industryMaster.length,
+      industryMaster,
       sectors,
       errors: {
         twse: twseResult.status === "rejected" ? twseResult.reason.message : null,

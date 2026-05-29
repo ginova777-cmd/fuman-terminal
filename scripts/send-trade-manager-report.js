@@ -5,8 +5,9 @@ const realtimeHandler = require("../api/realtime");
 const { cleanNumber, formatTradePrice } = require("./intraday-radar-rules");
 const { hasLineConfig, sendLineText, splitLineText } = require("./line-push");
 
-const ROOT = path.resolve(__dirname, "..");
-const STATE_FILE = path.join(ROOT, ".trade-manager-cache", "state.json");
+const { ROOT, statePath } = require("./runtime-paths");
+const STATE_FILE = statePath("trade-manager-state.json");
+const REQUIRED_DAILY_TRADES = Math.max(1, Number(process.env.TRADE_MANAGER_REQUIRED_DAILY_TRADES || 10));
 
 function readJson(file, fallback) {
   try { return JSON.parse(fs.readFileSync(file, "utf8")); } catch { return fallback; }
@@ -69,6 +70,7 @@ function positionResult(position, quote = null) {
 function actionLabel(action) {
   if (action === "takeProfit") return "停利";
   if (action === "stopLoss") return "停損";
+  if (action === "dayClose") return "當沖出場";
   return "追蹤中";
 }
 
@@ -125,8 +127,9 @@ function buildReport(state, quotes) {
   const lines = [
     `交易管家成績單｜${dateSlash(state.date)}`,
     "",
-    `今日交易計畫：${rows.length} 筆`,
+    `今日交易計畫：${rows.length}/${REQUIRED_DAILY_TRADES} 筆`,
     `已出場：${closed.length} 筆｜追蹤中：${open.length} 筆`,
+    `日內結清：${closed.length}/${rows.length || REQUIRED_DAILY_TRADES} 筆${open.length ? "｜尚有未結清部位" : "｜全數日內"}`,
     `已出場勝率：${winRate}`,
     `最大回撤：${formatMoney(-maxDrawdown)}`,
     `最大連輸：${losingStreak} 筆`,
@@ -141,27 +144,31 @@ function buildReport(state, quotes) {
 
   closed.forEach((item, index) => {
     const result = positionResult(item, quotes.get(item.code));
-    lines.push(
+    lines.push(...[
       `#${index + 1} ${item.code} ${item.name || ""}`,
       `狀態：${actionLabel(item.exitAction)}`,
+      `日內：${item.exitAction === "dayClose" || item.closedAt ? "是" : "否"}${item.forcedMinimumTrade ? "｜保底交易" : ""}`,
       `進場時間：${item.entryTime || "--"}  進場價格:${formatTradePrice(item.entryPrice)}元`,
       `出場時間：${timeLabel(item.closedAt)}  出場價格:${formatTradePrice(result.exit)}元`,
       `損益率:${result.pctText}｜損益:${result.pnlText}`,
+      item.stopLossBasis ? `智慧停損：${formatTradePrice(item.stopLossPrice)}元｜${item.stopLossBasis}` : "",
       ""
-    );
+    ].filter(Boolean));
   });
 
   open.forEach((item, index) => {
     const result = positionResult(item, quotes.get(item.code));
-    lines.push(
+    lines.push(...[
       `#${closed.length + index + 1} ${item.code} ${item.name || ""}`,
       "狀態：追蹤中",
+      `日內：尚未結清${item.forcedMinimumTrade ? "｜保底交易" : ""}`,
       `進場時間：${item.entryTime || "--"}  進場價格:${formatTradePrice(item.entryPrice)}元`,
       `目前價格:${formatTradePrice(result.exit)}元`,
       `損益率:${result.pctText}｜損益:${result.pnlText}`,
       `停利價:${formatTradePrice(item.takeProfitPrice)}元｜停損價:${formatTradePrice(item.stopLossPrice)}元`,
+      item.stopLossBasis ? `智慧停損：${item.stopLossBasis}` : "",
       ""
-    );
+    ].filter(Boolean));
   });
 
   return lines.join("\n").trim();
@@ -236,22 +243,43 @@ async function main() {
     state.closed = {};
   }
   const codes = [...new Set([...Object.keys(state.positions || {}), ...Object.keys(state.closed || {})])];
-  const quotesPayload = codes.length ? await callRealtime(codes) : { quotes: [] };
+  let quotesPayload = { quotes: [] };
+  try {
+    quotesPayload = codes.length ? await callRealtime(codes) : { quotes: [] };
+  } catch (error) {
+    console.error(`trade manager report realtime skipped: ${error.message}`);
+  }
   const quotes = new Map((quotesPayload.quotes || []).map((quote) => [String(quote.code), quote]));
   const report = buildReport(state, quotes);
   const subject = `交易管家成績單｜${dateSlash(today)}`;
   console.log(report);
 
-  if (hasLineConfig()) {
-    const parts = splitLineText(report);
-    for (let index = 0; index < parts.length; index++) {
-      const header = parts.length > 1 ? `${subject}（${index + 1}/${parts.length}）\n\n` : "";
-      await sendLineText(`${header}${parts[index]}`);
-    }
-    console.log(`trade manager LINE report sent: ${subject}${parts.length > 1 ? ` (${parts.length} parts)` : ""}`);
+  if (process.env.TRADE_MANAGER_REPORT_NOTIFY === "0" || process.env.DISABLE_SCORECARD_NOTIFY === "1") {
+    console.log("trade manager report notifications skipped; Google Sheet upload only");
+    return;
   }
-  if (await sendMail({ subject, text: report })) {
-    console.log(`trade manager email report sent: ${process.env.REPORT_EMAIL_TO}`);
+
+  if (process.env.TRADE_MANAGER_REPORT_LINE === "1" && hasLineConfig()) {
+    try {
+      const parts = splitLineText(report);
+      for (let index = 0; index < parts.length; index++) {
+        const header = parts.length > 1 ? `${subject}（${index + 1}/${parts.length}）\n\n` : "";
+        await sendLineText(`${header}${parts[index]}`);
+      }
+      console.log(`trade manager LINE report sent${parts.length > 1 ? ` (${parts.length} parts)` : ""}`);
+    } catch (error) {
+      console.error(`trade manager LINE report failed: ${error.message}`);
+    }
+  } else if (process.env.TRADE_MANAGER_REPORT_LINE === "1") {
+    console.log("trade manager LINE report skipped: missing LINE config");
+  }
+
+  try {
+    if (await sendMail({ subject, text: report })) {
+      console.log(`trade manager email report sent: ${process.env.REPORT_EMAIL_TO}`);
+    }
+  } catch (error) {
+    console.error(`trade manager email report failed: ${error.message}`);
   }
 }
 
@@ -259,3 +287,4 @@ main().catch((error) => {
   console.error(error);
   process.exit(1);
 });
+

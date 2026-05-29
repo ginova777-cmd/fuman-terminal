@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
     inputs:
       full_scan:
-        description: "Use true for manual full market scan"
+        description: "Always true: every run scans the full Taiwan stock universe once"
         required: true
         default: "true"
         type: choice
@@ -51,14 +51,12 @@ jobs:
           if [ "$RUN_OPEN_BUY" = "1" ]; then
             node scripts/scan-open-buy-cache.js
           else
-            echo "Skip open-buy for this manual batch run."
+            echo "Skip open-buy for this manual run."
           fi
         env:
-          STRATEGY4_BATCH_SIZE: "48"
-          STRATEGY4_BATCHES_PER_RUN: "5"
-          OPEN_BUY_BATCH_SIZE: "48"
-          OPEN_BUY_BATCHES_PER_RUN: "5"
-          FULL_SCAN: ${{ (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.full_scan == 'true')) && '1' || '0' }}
+          STRATEGY4_CHUNK_SIZE: "80"
+          OPEN_BUY_CHUNK_SIZE: "48"
+          FULL_SCAN: "1"
 
       - name: Commit cache
         if: steps.retry.outputs.mode == 'run'

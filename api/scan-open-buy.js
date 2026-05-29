@@ -2,6 +2,7 @@ const cache = new Map();
 const CACHE_MS = 30 * 60 * 1000;
 let tpexDailyCache = null;
 const { fetchMisQuotes, mergeMisQuoteIntoHistory } = require("../lib/mis-quotes");
+const USE_MIS_QUOTES = process.env.OPEN_BUY_USE_MIS === "1";
 
 async function fetchText(url, options = {}, timeout = 12000) {
   const controller = new AbortController();
@@ -211,18 +212,18 @@ function scanOpenBuy(code, market, rows) {
   const bodyRatio = Math.abs(last.close - last.open) / range;
   const upperShadowRatio = (last.high - Math.max(last.close, last.open)) / range;
   const high20 = Math.max(...rows.slice(-21, -1).map((row) => row.high));
-  const closeNearHigh = last.high ? last.close >= last.high * 0.97 : false;
+  const closeNearHigh = last.high ? last.close >= last.high * 0.95 : false;
   const tailKeepsRising = last.close > last.open && closeNearHigh && last.close >= last.low * 1.03;
-  const liquid = lastVolume >= 2000;
-  const qualityPrice = last.close >= 20;
+  const liquid = lastVolume >= 1000;
+  const qualityPrice = last.close >= 15;
   const closeAboveMa35 = ma35 > 0 && last.close > ma35;
-  const controlledMomentum = pct >= 1.5 && pct <= 4.5;
-  const saneVolume = volumeRatio >= 1.2 && volumeRatio <= 4.5;
+  const controlledMomentum = pct >= 1.0 && pct <= 6.5;
+  const saneVolume = volumeRatio >= 0.8 && volumeRatio <= 6.0;
   const trend = last.close > ma20 || (last.close > ma5 && ma5 >= ma10 * 0.995);
   const breakout = last.close > high20 || (last.close >= high20 * 0.965 && closeNearHigh);
-  const strongClose = last.close > last.open && bodyRatio >= 0.18 && pct >= 0.3;
-  const volumeTurn = volumeRatio >= 1.2 && pct >= 1.5 && last.close >= ma5;
-  const reboundTurn = pct >= 1.5 && last.close > ma20 && closeNearHigh && volumeRatio >= 1.2;
+  const strongClose = last.close > last.open && bodyRatio >= 0.12 && pct >= 0.2;
+  const volumeTurn = volumeRatio >= 0.8 && pct >= 1.0 && last.close >= ma5;
+  const reboundTurn = pct >= 1.0 && last.close > ma20 && closeNearHigh && volumeRatio >= 0.8;
   const prevPct = rows.length > 2 && rows.at(-3)?.close ? ((prev.close - rows.at(-3).close) / rows.at(-3).close) * 100 : 0;
   const high5 = Math.max(...rows.slice(-6, -1).map((row) => row.high));
   const recent20 = rows.slice(-21, -1);
@@ -242,7 +243,7 @@ function scanOpenBuy(code, market, rows) {
   const reboundCandle = last.close > last.open || longLowerShadow;
   const bottomBreakout = last.close > rangeHigh20;
   const exceptionalLimitBreak = lastVolume >= 10000 && pct >= 6 && breakout && closeNearHigh && last.close > ma5 && last.close > ma20;
-  const openingVolumeReady = lastVolume >= 3000 && (volumeRatio >= 0.75 || volumeVsMa5Ratio >= 0.75 || volumeIncreaseRatio >= 1.1 || exceptionalLimitBreak);
+  const openingVolumeReady = lastVolume >= 1500 && (volumeRatio >= 0.6 || volumeVsMa5Ratio >= 0.7 || volumeIncreaseRatio >= 1.05 || exceptionalLimitBreak);
   const openingPowerSetup = qualityPrice &&
     closeAboveMa35 &&
     openingVolumeReady &&
@@ -251,11 +252,10 @@ function scanOpenBuy(code, market, rows) {
     pct <= 10.1 &&
     last.close >= last.low * 1.02 &&
     last.close >= last.high * 0.92 &&
-    upperShadowRatio <= 0.45 &&
-    bodyRatio >= 0.18 &&
+    bodyRatio >= 0.12 &&
     last.close > ma5 &&
     last.close > ma20 &&
-    ma5 >= ma10 * 0.98 &&
+    ma5 >= ma10 * 0.96 &&
     (breakout || closeNearHigh || last.open >= prev.close * 1.005);
   const continuationSetup = liquid && qualityPrice && closeAboveMa35 && controlledMomentum && saneVolume &&
     tailKeepsRising && (trend || strongClose || volumeTurn || reboundTurn || breakout);
@@ -265,8 +265,8 @@ function scanOpenBuy(code, market, rows) {
     pct >= -5.8 &&
     pct <= 2.5 &&
     prevPct >= 1.5 &&
-    volumeRatio >= 0.45 &&
-    volumeRatio <= 2.2 &&
+    volumeRatio >= 0.35 &&
+    volumeRatio <= 3.0 &&
     last.close >= ma20 * 0.94 &&
     last.low <= ma20 * 1.02 &&
     high5 >= ma20 * 1.08 &&
@@ -281,9 +281,9 @@ function scanOpenBuy(code, market, rows) {
     bottomBreakout &&
     last.close > ma20 &&
     pct >= -2 &&
-    pct <= 4.5 &&
-    volumeRatio >= 0.8 &&
-    volumeRatio <= 3.5 &&
+    pct <= 6.5 &&
+    volumeRatio >= 0.6 &&
+    volumeRatio <= 5.0 &&
     reboundCandle;
 
   if (!(openingPowerSetup || continuationSetup || deepReboundSetup || washoutSetup)) {
@@ -390,15 +390,14 @@ module.exports = async function handler(request, response) {
     .split(",")
     .map(normalizeCode)
     .filter((code) => /^\d{4}$/.test(code))
-    .filter((code) => !/^00/.test(code))
-    .slice(0, 48);
+    .filter((code) => !/^00/.test(code));
 
   if (!codes.length) {
     response.status(400).json({ ok: false, error: "Missing codes", matches: [] });
     return;
   }
 
-  const quoteMap = await fetchMisQuotes(codes);
+  const quoteMap = USE_MIS_QUOTES ? await fetchMisQuotes(codes) : new Map();
   const results = await Promise.allSettled(codes.map(async (code) => {
     const history = mergeMisQuoteIntoHistory(await mergeTpexDailyQuote(code, await fetchHistory(code)), quoteMap.get(code));
     if (!history.rows.length) return null;
@@ -429,3 +428,8 @@ module.exports = async function handler(request, response) {
       .filter(Boolean),
   });
 };
+
+
+
+
+

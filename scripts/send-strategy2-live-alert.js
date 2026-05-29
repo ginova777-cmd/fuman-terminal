@@ -1,14 +1,27 @@
 const fs = require("fs");
 const path = require("path");
 const { formatTradePrice } = require("./intraday-radar-rules");
-const { hasLineConfig, sendLineText } = require("./line-push");
+const { hasLineConfig, sendLineFlex, sendLineText } = require("./line-push");
+const { strategy2LiveFlex } = require("./line-flex-templates");
+const { hasTelegramConfig, sendTelegramText } = require("./telegram-push");
 
-const ROOT = path.resolve(__dirname, "..");
-const STRATEGY2_REPORT_FILE = path.join(ROOT, "data", "strategy2-intraday-latest.json");
+const { ROOT, dataPath, statePath } = require("./runtime-paths");
+const STRATEGY2_REPORT_FILE = dataPath("strategy2-intraday-latest.json");
+const LIVE_ALERT_STATE_FILE = statePath("strategy2-live-alert-state.json");
 const LIVE_LIMIT = Math.max(1, Number(process.env.STRATEGY2_LIVE_LIMIT || 3));
+const STRATEGY2_LIVE_MIN_PERCENT = Number(process.env.STRATEGY2_LIVE_MIN_PERCENT || 2);
+const ENHANCEMENT_COOLDOWN_MS = Math.max(0, Number(process.env.STRATEGY2_ENHANCEMENT_COOLDOWN_MS || 5 * 60 * 1000));
+const ENHANCEMENT_BREAKOUT_PERCENT_DELTA = Number(process.env.STRATEGY2_ENHANCEMENT_BREAKOUT_PERCENT_DELTA || 1);
+const ENHANCEMENT_BREAKOUT_VOLUME_RATIO = Number(process.env.STRATEGY2_ENHANCEMENT_BREAKOUT_VOLUME_RATIO || 0.5);
+const ENHANCEMENT_BREAKOUT_VOLUME_DELTA = Number(process.env.STRATEGY2_ENHANCEMENT_BREAKOUT_VOLUME_DELTA || 3000);
 
 function readJson(file, fallback) {
   try { return JSON.parse(fs.readFileSync(file, "utf8")); } catch { return fallback; }
+}
+
+function writeJson(file, payload) {
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.writeFileSync(file, `${JSON.stringify(payload, null, 2)}\n`, "utf8");
 }
 
 function taipeiDateKey(date = new Date()) {
@@ -26,19 +39,165 @@ function dateSlash(value) {
   return String(value || "").replace(/-/g, "/");
 }
 
+function cleanNumber(value) {
+  return Number(String(value ?? "").replace(/[, +%]/g, "").trim()) || 0;
+}
+
+function strategy2EventPercent(event) {
+  return cleanNumber(event?.percent ?? event?.pct ?? event?.latestRecord?.percent ?? event?.record?.percent);
+}
+
+function strategy2EventVolume(event) {
+  return cleanNumber(event?.tradeVolume ?? event?.volume ?? event?.latestRecord?.tradeVolume ?? event?.latestRecord?.volume ?? event?.record?.tradeVolume ?? event?.record?.volume);
+}
+
+function isStrategy2LiveDisplayEvent(event) {
+  return strategy2EventPercent(event) >= STRATEGY2_LIVE_MIN_PERCENT;
+}
+
+function normalizeKeyNumber(value) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return String(value || "");
+  return number.toFixed(4).replace(/\.?0+$/, "");
+}
+
+function ma35SourceLabel(source) {
+  const text = String(source || "");
+  if (text.includes("yahoo")) return "Yahoo";
+  if (text.includes("fugle")) return "Fugle";
+  if (text.includes("twelve")) return "Twelve Data";
+  if (text.includes("local")) return "Local cache";
+  return "";
+}
+
+function isAtOrAfterCutoff(timeText) {
+  const cutoff = String(process.env.STRATEGY2_LIVE_STARTED_AT || "").trim();
+  if (!cutoff) return true;
+  return String(timeText || "") >= cutoff;
+}
+
 function eventLine(event, index) {
+  const source = ma35SourceLabel(event?.ma35Source || event?.latestRecord?.ma35Source);
   return [
     `${index + 1}. ${event.code} ${event.name || ""}`,
-    `A區 ${event.firstAAt || "--"}｜進場價格${formatTradePrice(event.firstAPrice)}`,
-  ].join("\n");
+    `進場區 ${event.firstAAt || "--"}｜進場價格${formatTradePrice(event.firstAPrice)}`,
+    source ? `MA35來源：${source}` : "",
+  ].filter(Boolean).join("\n");
+}
+
+function eventKey(event) {
+  return [
+    event.code || "",
+    event.firstAAt || "",
+    normalizeKeyNumber(event.firstAPrice),
+  ].join("|");
+}
+
+function enhancementKey(event, enhancement) {
+  return [
+    "enhance",
+    event.code || "",
+    enhancement.at || "",
+    enhancement.strategy || "",
+    normalizeKeyNumber(enhancement.price),
+    normalizeKeyNumber(enhancement.deltaVolume),
+  ].join("|");
+}
+
+function enhancementCooldownKey(event, enhancement) {
+  return [
+    "enhance-cooldown",
+    event.code || "",
+    enhancement.strategy || "持續放量",
+  ].join("|");
+}
+
+function todayTimeToMs(today, timeText) {
+  const match = String(timeText || "").match(/^(\d{2}):(\d{2})(?::(\d{2}))?$/);
+  if (!match) return 0;
+  const [, hour, minute, second = "00"] = match;
+  const value = Date.parse(`${today}T${hour}:${minute}:${second}+08:00`);
+  return Number.isFinite(value) ? value : 0;
+}
+
+function recentEnhancementSentAt(state, key, today, event, enhancement) {
+  if (state.date !== today) return 0;
+  const map = state.enhancementCooldown || {};
+  const entry = map[key];
+  const value = Date.parse(typeof entry === "object" && entry ? entry.sentAt : entry || "");
+  if (Number.isFinite(value)) return value;
+  const strategy = enhancement.strategy || "";
+  return (state.sent || []).reduce((latest, item) => {
+    const parts = String(item || "").split("|");
+    if (parts.length < 4 || parts[0] !== "enhance" || parts[1] !== String(event.code || "")) return latest;
+    if (strategy && parts[3] !== strategy) return latest;
+    return Math.max(latest, todayTimeToMs(today, parts[2]));
+  }, 0);
+}
+
+function recentEnhancementMetrics(state, key) {
+  const entry = state?.enhancementCooldown?.[key];
+  if (!entry || typeof entry !== "object") return {};
+  return {
+    percent: cleanNumber(entry.percent),
+    tradeVolume: cleanNumber(entry.tradeVolume),
+  };
+}
+
+function enhancementBreakoutReason(state, cooldownKey, event) {
+  const previous = recentEnhancementMetrics(state, cooldownKey);
+  const percent = strategy2EventPercent(event);
+  const tradeVolume = strategy2EventVolume(event);
+  if (previous.percent > 0 && percent - previous.percent >= ENHANCEMENT_BREAKOUT_PERCENT_DELTA) {
+    return `漲幅+${(percent - previous.percent).toFixed(2)}%`;
+  }
+  if (previous.tradeVolume > 0) {
+    const volumeDelta = tradeVolume - previous.tradeVolume;
+    if (volumeDelta >= ENHANCEMENT_BREAKOUT_VOLUME_DELTA) return `新增量+${Math.round(volumeDelta).toLocaleString("zh-TW")}張`;
+    if (volumeDelta / previous.tradeVolume >= ENHANCEMENT_BREAKOUT_VOLUME_RATIO) return `量增+${Math.round((volumeDelta / previous.tradeVolume) * 100)}%`;
+  }
+  return "";
+}
+
+function enhancementCooldownEntry(event) {
+  return {
+    sentAt: new Date().toISOString(),
+    percent: strategy2EventPercent(event),
+    tradeVolume: strategy2EventVolume(event),
+  };
 }
 
 function buildMessage(events) {
   return [
-    "策略2 當沖通知A區",
+    "策略2 當沖通知進場區",
     "",
     events.map(eventLine).join("\n\n"),
   ].filter(Boolean).join("\n");
+}
+
+function buildEnhancementMessage(items) {
+  return items
+    .map(({ event, enhancement }) => {
+      const name = `${event.code} ${event.name || ""}`.trim();
+      const at = enhancement.at ? ` ${enhancement.at}` : "";
+      const delta = Number(enhancement.deltaVolume) > 0 ? `｜新增量 ${Math.round(Number(enhancement.deltaVolume)).toLocaleString("zh-TW")} 張` : "";
+      const breakout = enhancement.breakoutReason ? `｜突破冷卻：${enhancement.breakoutReason}` : "";
+      const source = ma35SourceLabel(enhancement.ma35Source || event?.ma35Source || event?.latestRecord?.ma35Source);
+      return `${name} 持續放量${at}${delta}${breakout}${source ? `｜MA35來源：${source}` : ""}`;
+    })
+    .join("\n");
+}
+
+function attachLatestRecords(events, records) {
+  const latestRecordByCode = new Map();
+  (records || []).forEach((record) => {
+    if (!record?.code) return;
+    latestRecordByCode.set(String(record.code), record);
+  });
+  return (events || []).map((event) => ({
+    ...event,
+    latestRecord: event.latestRecord || latestRecordByCode.get(String(event.code)),
+  }));
 }
 
 async function main() {
@@ -48,22 +207,91 @@ async function main() {
     console.log(`strategy2 live alert skipped: stale date ${payload.date || "--"}`);
     return;
   }
-  const aEvents = (payload.events || [])
+  const aEvents = attachLatestRecords(payload.events, payload.records)
     .filter((event) => event.firstAAt)
+    .filter(isStrategy2LiveDisplayEvent)
     .sort((a, b) => String(a.firstAAt).localeCompare(String(b.firstAAt)));
-  const latestEvents = aEvents.slice(-LIVE_LIMIT);
-  if (!latestEvents.length) {
-    console.log("strategy2 live alert skipped: no A-zone events");
+  if (!aEvents.length) {
+    console.log("strategy2 live alert skipped: no entry-zone events");
     return;
   }
-  if (!hasLineConfig()) {
-    throw new Error("Missing LINE_CHANNEL_ACCESS_TOKEN and LINE_TO or LINE_USER_ID");
+
+  const state = readJson(LIVE_ALERT_STATE_FILE, { date: today, sent: [] });
+  const sent = new Set(state.date === today ? (state.sent || []) : []);
+  const enhancementCooldown = state.date === today ? { ...(state.enhancementCooldown || {}) } : {};
+  const nowMs = Date.now();
+  const newEvents = aEvents.filter((event) => isAtOrAfterCutoff(event.firstAAt) && !sent.has(eventKey(event)));
+  const newEnhancements = [];
+  aEvents.forEach((event) => {
+    (event.enhancements || []).forEach((enhancement) => {
+      const key = enhancementKey(event, enhancement);
+      const cooldownKey = enhancementCooldownKey(event, enhancement);
+      const lastSentAt = recentEnhancementSentAt(state, cooldownKey, today, event, enhancement);
+      const cooldownPassed = !ENHANCEMENT_COOLDOWN_MS || !lastSentAt || nowMs - lastSentAt >= ENHANCEMENT_COOLDOWN_MS;
+      const breakoutReason = cooldownPassed ? "" : enhancementBreakoutReason(state, cooldownKey, event);
+      if (isAtOrAfterCutoff(enhancement.at) && !sent.has(key) && (cooldownPassed || breakoutReason)) {
+        newEnhancements.push({ event, enhancement: { ...enhancement, breakoutReason }, key, cooldownKey });
+      }
+    });
+  });
+  const latestEnhancements = newEnhancements
+    .sort((a, b) => String(a.enhancement.at).localeCompare(String(b.enhancement.at)))
+    .slice(-LIVE_LIMIT);
+  if (!newEvents.length && !latestEnhancements.length) {
+    console.log(`strategy2 live alert skipped: no new A-zone or enhancement events after ${process.env.STRATEGY2_LIVE_STARTED_AT || "--"}`);
+    return;
   }
-  await sendLineText(buildMessage(latestEvents));
-  console.log(`strategy2 live alert sent: latest ${latestEvents.length}`);
+  const latestEvents = newEvents.slice(-LIVE_LIMIT);
+  const altText = `策略2 進場區通知：${latestEvents.map((event) => `${event.code} ${event.name || ""}`.trim()).join("、")}`;
+  if (process.env.STRATEGY2_LIVE_DRY_RUN === "1" || process.env.LINE_DRY_RUN === "1") {
+    if (latestEvents.length) {
+      console.log(`[dry-run] ${altText}`);
+      console.log(buildMessage(latestEvents));
+    }
+    if (latestEnhancements.length) {
+      console.log("[dry-run] 策略2 進場區持續放量");
+      console.log(buildEnhancementMessage(latestEnhancements));
+    }
+    return;
+  }
+  if (!hasTelegramConfig() && !hasLineConfig()) {
+    throw new Error("Missing Telegram or LINE notification config");
+  }
+  if (latestEvents.length) {
+    if (hasTelegramConfig()) {
+      await sendTelegramText(buildMessage(latestEvents));
+    } else if (process.env.LINE_FLEX_DISABLED === "1") {
+      await sendLineText(buildMessage(latestEvents));
+    } else {
+      await sendLineFlex(altText, strategy2LiveFlex(latestEvents, today));
+    }
+    latestEvents.forEach((event) => sent.add(eventKey(event)));
+  }
+  if (latestEnhancements.length) {
+    if (hasTelegramConfig()) {
+      await sendTelegramText(buildEnhancementMessage(latestEnhancements));
+    } else {
+      await sendLineText(buildEnhancementMessage(latestEnhancements));
+    }
+    latestEnhancements.forEach((item) => sent.add(item.key));
+    latestEnhancements.forEach((item) => {
+      if (item.cooldownKey) enhancementCooldown[item.cooldownKey] = enhancementCooldownEntry(item.event);
+    });
+  }
+  writeJson(LIVE_ALERT_STATE_FILE, {
+    date: today,
+    updatedAt: new Date().toISOString(),
+    sent: Array.from(sent),
+    enhancementCooldown,
+  });
+  console.log(`strategy2 live alert sent: new ${latestEvents.length}, enhancements ${latestEnhancements.length}`);
 }
 
 main().catch((error) => {
   console.error(error);
   process.exit(1);
 });
+
+
+
+

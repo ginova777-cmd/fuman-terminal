@@ -2,7 +2,7 @@ const fs = require("fs");
 const path = require("path");
 const tls = require("tls");
 
-const ROOT = path.resolve(__dirname, "..");
+const { ROOT, dataPath } = require("./runtime-paths");
 const BASE_URL = process.env.FUMAN_BASE_URL || "https://fuman-terminal.vercel.app";
 
 const WORKFLOWS = [
@@ -15,7 +15,7 @@ const WORKFLOWS = [
 ];
 
 const CACHE_RULES = [
-  { label: "策略1", file: "data/open-buy-latest.json", slots: ["07:00", "14:30"], graceMinutes: 10, workflow: "open-buy-background-scan.yml", inputs: { full_scan: "true" } },
+  { label: "策略1", file: "data/open-buy-latest.json", slots: ["07:00", "16:00"], graceMinutes: 10, workflow: "open-buy-background-scan.yml", inputs: { full_scan: "true" } },
   { label: "策略3", file: "data/strategy3-latest.json", slots: ["13:00"], graceMinutes: 10, workflow: "strategy3-background-scan.yml" },
   { label: "策略4", file: "data/strategy4-latest.json", slots: ["07:00", "14:30"], graceMinutes: 10, workflow: "strategy4-background-scan.yml", inputs: { full_scan: "true" } },
   { label: "盤後籌碼", file: "data/institution-latest.json", slots: ["06:00", "21:00"], graceMinutes: 10, workflow: "flow-cache.yml" },
@@ -108,7 +108,7 @@ function cacheIssues() {
   const issues = [];
 
   for (const rule of CACHE_RULES) {
-    const payload = readJson(path.join(ROOT, rule.file), null);
+    const payload = readJson(dataPath(rule.file.replace(/^data\//, "")), null);
     const updatedAt = Date.parse(payload?.updatedAt || "");
     if (!Number.isFinite(updatedAt)) {
       issues.push({ ...rule, message: `${rule.label}：${rule.file} 沒有可解析的 updatedAt` });
@@ -344,3 +344,5 @@ main().catch((error) => {
   console.error(error);
   process.exit(1);
 });
+
+

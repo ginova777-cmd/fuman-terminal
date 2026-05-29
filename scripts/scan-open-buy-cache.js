@@ -1,16 +1,18 @@
 const fs = require("fs");
 const path = require("path");
 const scanOpenBuy = require("../api/scan-open-buy");
+const fetchStocks = require("../stocks");
 const { fetchMisQuotes } = require("../lib/mis-quotes");
 
-const ROOT = path.resolve(__dirname, "..");
-const OUT_FILE = path.join(ROOT, "data", "open-buy-latest.json");
-const BACKUP_FILE = path.join(ROOT, "data", "open-buy-backup.json");
-const SCORECARD_SOURCE_FILE = path.join(ROOT, "data", "open-buy-scorecard-source.json");
-const BATCH_SIZE = Number(process.env.OPEN_BUY_BATCH_SIZE || 48);
-const BATCHES_PER_RUN = Number(process.env.OPEN_BUY_BATCHES_PER_RUN || 5);
-const FULL_SCAN = process.env.FULL_SCAN === "1";
+const { ROOT, dataPath } = require("./runtime-paths");
+const OUT_FILE = dataPath("open-buy-latest.json");
+const BACKUP_FILE = dataPath("open-buy-backup.json");
+const SCORECARD_SOURCE_FILE = dataPath("open-buy-scorecard-source.json");
+const CHUNK_SIZE = Number(process.env.OPEN_BUY_CHUNK_SIZE || 48);
+const FULL_SCAN = true;
 const STOCK_URL = process.env.STOCK_UNIVERSE_URL || "https://fuman-terminal.vercel.app/api/stocks";
+const USE_MIS_QUOTES = process.env.OPEN_BUY_USE_MIS === "1";
+const MIN_UNIVERSE_SIZE = Number(process.env.OPEN_BUY_MIN_UNIVERSE_SIZE || 1700);
 
 function readJson(file, fallback) {
   try { return JSON.parse(fs.readFileSync(file, "utf8")); } catch { return fallback; }
@@ -46,7 +48,12 @@ function preservePreviousTradingSource(previousPayload, currentPayload) {
   const currentDate = sourceDate(currentPayload);
   if (!(previousPayload.matches || []).length) return;
   if (!/^\d{8}$/.test(previousDate) || !/^\d{8}$/.test(currentDate)) return;
-  if (previousDate >= currentDate) return;
+  if (previousDate > currentDate) return;
+  if (previousDate === currentDate) {
+    const previousUpdated = Date.parse(previousPayload.updatedAt || previousPayload.preservedAt || "");
+    const currentUpdated = Date.parse(currentPayload.updatedAt || currentPayload.preservedAt || "");
+    if (!Number.isFinite(previousUpdated) || !Number.isFinite(currentUpdated) || previousUpdated >= currentUpdated) return;
+  }
   preserveScorecardSource(previousPayload);
 }
 
@@ -76,6 +83,23 @@ async function fetchJson(url, timeout = 30000) {
   }
 }
 
+function callLocalStocksHandler() {
+  return new Promise((resolve, reject) => {
+    const req = { method: "GET", query: {} };
+    const res = {
+      statusCode: 200,
+      setHeader() {},
+      status(code) { this.statusCode = code; return this; },
+      json(payload) {
+        if (this.statusCode >= 400) reject(new Error(payload?.error || `stocks HTTP ${this.statusCode}`));
+        else resolve(payload);
+      },
+      end() { resolve({ ok: false, stocks: [] }); },
+    };
+    Promise.resolve(fetchStocks(req, res)).catch(reject);
+  });
+}
+
 function normalizeStock(row) {
   const code = normalizeCode(row.Code || row.code);
   const name = String(row.Name || row.name || "").trim();
@@ -91,9 +115,30 @@ function normalizeStock(row) {
 }
 
 async function fetchUniverse() {
-  const payload = await fetchJson(STOCK_URL);
-  const rows = Array.isArray(payload) ? payload : (payload.stocks || []);
-  const base = rows.map(normalizeStock).filter(Boolean);
+  let base = [];
+  try {
+    const payload = await fetchJson(STOCK_URL);
+    const rows = Array.isArray(payload) ? payload : (payload.stocks || []);
+    base = rows.map(normalizeStock).filter(Boolean);
+    if (base.length < MIN_UNIVERSE_SIZE) {
+      console.log(`stock endpoint partial universe: ${base.length}, fallback to local TWSE+TPEX fetch`);
+      base = [];
+    }
+  } catch (error) {
+    console.log(`stock endpoint fallback: ${error.message}`);
+  }
+  if (!base.length) {
+    const payload = await callLocalStocksHandler();
+    const rows = Array.isArray(payload) ? payload : (payload.stocks || []);
+    base = rows.map(normalizeStock).filter(Boolean);
+  }
+  const byCode = new Map();
+  base.forEach((stock) => byCode.set(stock.code, stock));
+  base = [...byCode.values()].sort((a, b) => a.code.localeCompare(b.code));
+  if (base.length < MIN_UNIVERSE_SIZE) {
+    throw new Error(`Open-buy stock universe too small: ${base.length}/${MIN_UNIVERSE_SIZE}`);
+  }
+  if (!USE_MIS_QUOTES) return base;
   const quotes = await fetchMisQuotes(base.map((stock) => stock.code));
   return base.map((stock) => {
     const quote = quotes.get(stock.code);
@@ -110,6 +155,7 @@ function runHandler(codes) {
       status(code) { this.statusCode = code; return this; },
       json(payload) {
         if (this.statusCode >= 400) reject(new Error(payload?.error || `HTTP ${this.statusCode}`));
+        else if ((payload?.errors || []).length) reject(new Error(payload.errors.join("; ")));
         else resolve(payload);
       },
       end() { resolve({ ok: false, matches: [] }); },
@@ -141,54 +187,43 @@ async function main() {
   const codes = universe.map((stock) => stock.code);
   if (!codes.length) throw new Error("No stock universe");
 
-  const previousRaw = readJson(OUT_FILE, { ok: true, cursor: 0, total: codes.length, scannedCodes: [], matches: [] });
+  const previousRaw = readJson(OUT_FILE, { ok: true, total: codes.length, scannedCodes: [], matches: [] });
   const backup = readJson(BACKUP_FILE, { ok: true, matches: [] });
-  const previous = (previousRaw.matches || []).length ? previousRaw : { ...previousRaw, matches: backup.matches || [] };
-  const previousMatches = new Map((previous.matches || []).map((item) => [item.code, item]));
-  const scanned = new Set(FULL_SCAN ? [] : (previous.scannedCodes || []));
-  let cursor = FULL_SCAN ? 0 : Number(previous.cursor || 0) % codes.length;
+  const currentMatches = new Map();
+  const scanned = new Set();
   let scannedThisRun = 0;
-  const batchesToRun = FULL_SCAN ? Math.ceil(codes.length / BATCH_SIZE) : BATCHES_PER_RUN;
+  const chunksToRun = Math.ceil(codes.length / CHUNK_SIZE);
 
-  console.log(`open-buy cache start: ${FULL_SCAN ? "full scan" : "batch scan"}, ${codes.length} codes, ${batchesToRun} batches`);
-  for (let batch = 0; batch < batchesToRun; batch++) {
-    const start = cursor;
-    const slice = codes.slice(start, start + BATCH_SIZE);
-    const wrapped = !FULL_SCAN && slice.length < BATCH_SIZE ? codes.slice(0, BATCH_SIZE - slice.length) : [];
-    const batchCodes = [...slice, ...wrapped];
-    if (!batchCodes.length) break;
-    cursor = (start + BATCH_SIZE) % codes.length;
-
-    const label = `open-buy batch ${batch + 1}/${batchesToRun} (${batchCodes[0]}-${batchCodes[batchCodes.length - 1]})`;
+  console.log(`open-buy cache start: full market scan, ${codes.length} codes, ${chunksToRun} chunks in one run`);
+  for (let chunk = 0; chunk < chunksToRun; chunk++) {
+    const start = chunk * CHUNK_SIZE;
+    const chunkCodes = codes.slice(start, start + CHUNK_SIZE);
+    const label = `open-buy chunk ${chunk + 1}/${chunksToRun} (${chunkCodes[0]}-${chunkCodes[chunkCodes.length - 1]})`;
     console.log(`${label} start`);
-    try {
-      const payload = await runHandlerWithRetry(batchCodes, label);
-      batchCodes.forEach((code) => {
-        scanned.add(code);
-        previousMatches.delete(code);
-      });
-      (payload.matches || []).forEach((item) => {
-        const base = universe.find((stock) => stock.code === item.code) || {};
-        previousMatches.set(item.code, { ...base, ...item, name: base.name || item.name || item.code });
-      });
-      scannedThisRun += batchCodes.length;
-      console.log(`${label} done: matches ${(payload.matches || []).length}`);
-    } catch (error) {
-      console.log(`${label} skipped after retries: ${error.message}`);
-    }
+    const payload = await runHandlerWithRetry(chunkCodes, label);
+    chunkCodes.forEach((code) => scanned.add(code));
+    (payload.matches || []).forEach((item) => {
+      const base = universe.find((stock) => stock.code === item.code) || {};
+      currentMatches.set(item.code, { ...base, ...item, name: base.name || item.name || item.code });
+    });
+    scannedThisRun += chunkCodes.length;
+    console.log(`${label} done: matches ${(payload.matches || []).length}`);
   }
 
-  const matches = [...previousMatches.values()]
+  if (scanned.size !== codes.length || scannedThisRun !== codes.length) {
+    throw new Error(`Open-buy full scan incomplete: scanned ${scanned.size}/${codes.length}`);
+  }
+
+  const matches = [...currentMatches.values()]
     .sort((a, b) => (b.score || 0) - (a.score || 0) || (b.percent || 0) - (a.percent || 0))
     .slice(0, 200);
-  const quoteDate = universe.find((stock) => stock.quoteDate)?.quoteDate || "";
+  const quoteDate = universe.find((stock) => stock.quoteDate)?.quoteDate || String(matches[0]?.date || "").replace(/\D/g, "");
   const output = {
     ok: true,
     source: "github-actions",
     updatedAt: new Date().toISOString(),
     usedDate: quoteDate,
     fullScan: FULL_SCAN,
-    cursor,
     total: codes.length,
     scannedThisRun,
     scannedCodes: [...scanned].filter((code) => codes.includes(code)),
@@ -201,7 +236,7 @@ async function main() {
   fs.mkdirSync(path.dirname(OUT_FILE), { recursive: true });
   fs.writeFileSync(OUT_FILE, `${JSON.stringify(output, null, 2)}\n`);
   if (matches.length) fs.writeFileSync(BACKUP_FILE, `${JSON.stringify({ ...output, source: "github-actions-backup" }, null, 2)}\n`);
-  console.log(`open-buy cache updated: ${FULL_SCAN ? "full scan" : "batch scan"} scanned ${scannedThisRun}, progress ${output.scannedCodes.length}/${codes.length}, matches ${matches.length}`);
+  console.log(`open-buy cache updated: full market scan scanned ${scannedThisRun}/${codes.length}, matches ${matches.length}`);
 }
 
 main().catch((error) => {

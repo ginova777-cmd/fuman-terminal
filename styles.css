@@ -1573,6 +1573,18 @@ h1 {
   color: var(--green) !important;
 }
 
+.pct-up {
+  color: var(--red) !important;
+}
+
+.pct-down {
+  color: var(--green) !important;
+}
+
+.pct-flat {
+  color: var(--text) !important;
+}
+
 .ticker-strip {
   display: flex;
   gap: 28px;
@@ -1808,7 +1820,14 @@ h1 {
 }
 
 #market-view > .page-header {
-  margin-bottom: 20px;
+  min-height: 0;
+  margin-bottom: 6px;
+  padding-bottom: 10px;
+}
+
+#market-view > .market-mode-tabs {
+  margin-top: 4px;
+  margin-bottom: 14px;
 }
 
 .tabs {
@@ -1900,6 +1919,125 @@ h1 {
   color: #7cf4c2;
   font-weight: 900;
   text-align: right;
+}
+
+#market-view .sector-section {
+  border: 1px solid rgba(148, 163, 184, 0.14);
+  border-radius: 8px;
+  background: rgba(15, 18, 31, 0.72);
+  padding: 18px 18px 22px;
+}
+
+#market-view .sector-section .section-title p,
+#market-view .sector-section .tabs {
+  display: flex !important;
+}
+
+#market-view .sector-section .section-title {
+  align-items: flex-start;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.14);
+  margin-bottom: 0;
+  padding-bottom: 14px;
+}
+
+#market-view .sector-section .section-title h2 {
+  font-size: 15px;
+  letter-spacing: 0;
+}
+
+#market-view .sector-section .section-title p {
+  margin-top: 4px;
+  color: #7f8da8;
+  font-size: 12px;
+}
+
+#market-view .sector-section .section-title > span {
+  align-self: flex-end;
+  color: #9fb0cd;
+  font-size: 11px;
+}
+
+#market-view .sector-section .tabs {
+  gap: 8px;
+  margin: 0;
+  padding: 12px 0 18px;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.08);
+}
+
+#market-view .sector-section .tabs button {
+  cursor: pointer;
+  border-color: rgba(148, 163, 184, 0.16);
+  background: rgba(31, 38, 58, 0.84);
+  color: #9aa8c3;
+  font-weight: 800;
+}
+
+#market-view .sector-section .tabs button.active {
+  border-color: rgba(249, 115, 22, 0.55);
+  background: rgba(249, 115, 22, 0.14);
+  color: #ff7a3d;
+}
+
+#market-view .heatmap {
+  grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
+  gap: 8px;
+}
+
+#market-view .sector-card {
+  min-height: 116px;
+  display: grid;
+  align-content: space-between;
+  padding: 12px 12px 10px;
+  overflow: hidden;
+}
+
+#market-view .sector-card h3 {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: start;
+  font-size: 13px;
+  line-height: 1.28;
+}
+
+#market-view .sector-card .sector-name {
+  color: #f7fbff;
+  word-break: keep-all;
+  overflow-wrap: anywhere;
+}
+
+#market-view .sector-card .sector-pct {
+  white-space: nowrap;
+  font-size: 12px;
+}
+
+#market-view .sector-card p {
+  margin: 8px 0 0;
+  color: #dfe7f6;
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+#market-view .sector-card small {
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+#market-view .sector-card small span {
+  color: #ffd2d8;
+}
+
+#market-view .sector-card em {
+  display: block;
+  margin-top: 8px;
+  color: #f4f7ff;
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 800;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .watchlist-layout {

@@ -10,7 +10,7 @@ async function fetchText(url, options = {}, timeout = 12000) {
       ...options,
       signal: controller.signal,
       headers: {
-        "User-Agent": "Mozilla/5.0 (compatible; FumanTerminal/1.0)",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0 Safari/537.36",
         Accept: "application/json, text/plain, */*",
         Referer: "https://www.twse.com.tw/",
         ...(options.headers || {}),
@@ -137,7 +137,7 @@ async function mergeTpexDailyQuote(code, history) {
 }
 
 async function fetchTwseMonth(code, date) {
-  const url = `https://www.twse.com.tw/rwd/zh/afterTrading/STOCK_DAY?response=json&date=${date}&stockNo=${code}`;
+  const url = `https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=${date}&stockNo=${code}`;
   const payload = JSON.parse(await fetchText(url, { headers: { Referer: "https://www.twse.com.tw/" } }));
   if (payload?.stat && payload.stat !== "OK") return [];
   return normalizeTwseRows(payload);
@@ -393,8 +393,7 @@ module.exports = async function handler(request, response) {
     .split(",")
     .map(normalizeCode)
     .filter((code) => /^\d{4}$/.test(code))
-    .filter((code) => !/^00/.test(code))
-    .slice(0, 48);
+    .filter((code) => !/^00/.test(code));
 
   if (!codes.length) {
     response.status(400).json({ ok: false, error: "Missing codes", matches: [] });

@@ -17,6 +17,12 @@ function trimLineText(text, limit = 4800) {
   return `${value.slice(0, limit - 22).trimEnd()}\n\n...內容過長已截斷`;
 }
 
+function trimAltText(text, limit = 400) {
+  const value = String(text || "富滿通知").replace(/\s+/g, " ").trim();
+  if (value.length <= limit) return value;
+  return `${value.slice(0, limit - 1)}…`;
+}
+
 function splitLineText(text, limit = 3200) {
   const value = String(text || "").trim();
   if (value.length <= limit) return [value];
@@ -43,13 +49,12 @@ function splitLineText(text, limit = 3200) {
   return chunks.filter(Boolean);
 }
 
-async function sendLineText(text) {
+async function pushLineMessages(messages) {
   const token = process.env.LINE_CHANNEL_ACCESS_TOKEN;
   const targets = lineTargets();
   if (!token || !targets.length) {
     throw new Error("Missing LINE_CHANNEL_ACCESS_TOKEN and LINE_TO or LINE_USER_ID");
   }
-  const message = trimLineText(text);
   for (const to of targets) {
     const response = await fetch(LINE_PUSH_URL, {
       method: "POST",
@@ -57,10 +62,7 @@ async function sendLineText(text) {
         "Authorization": `Bearer ${token}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({
-        to,
-        messages: [{ type: "text", text: message }],
-      }),
+      body: JSON.stringify({ to, messages }),
     });
     if (!response.ok) {
       const detail = await response.text().catch(() => "");
@@ -69,9 +71,21 @@ async function sendLineText(text) {
   }
 }
 
+async function sendLineText(text) {
+  await pushLineMessages([{ type: "text", text: trimLineText(text) }]);
+}
+
+async function sendLineFlex(altText, contents) {
+  await pushLineMessages([{ type: "flex", altText: trimAltText(altText), contents }]);
+}
+
 module.exports = {
   hasLineConfig,
+  lineTargets,
+  pushLineMessages,
+  sendLineFlex,
   sendLineText,
   splitLineText,
+  trimAltText,
   trimLineText,
 };

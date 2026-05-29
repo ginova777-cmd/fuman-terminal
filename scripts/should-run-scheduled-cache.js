@@ -1,7 +1,7 @@
 const fs = require("fs");
 const path = require("path");
 
-const ROOT = path.resolve(__dirname, "..");
+const { ROOT, dataPath } = require("./runtime-paths");
 
 const RULES = {
   flow: {
@@ -14,7 +14,7 @@ const RULES = {
   },
   openBuy: {
     files: ["data/open-buy-latest.json"],
-    slots: ["07:00", "14:30"],
+    slots: ["07:00", "16:00"],
   },
   strategy4: {
     files: ["data/strategy4-latest.json"],
@@ -57,7 +57,7 @@ function activeSlot(rule, now) {
 
 function readUpdatedAt(file) {
   try {
-    const payload = JSON.parse(fs.readFileSync(path.join(ROOT, file), "utf8"));
+    const payload = JSON.parse(fs.readFileSync(dataPath(file.replace(/^data\//, "")), "utf8"));
     return Date.parse(payload.updatedAt || "");
   } catch {
     return NaN;
@@ -92,3 +92,5 @@ function main() {
 }
 
 main();
+
+

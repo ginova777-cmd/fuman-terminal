@@ -2,10 +2,10 @@ const fs = require("fs");
 const path = require("path");
 const { fetchMisQuotes } = require("../lib/mis-quotes");
 
-const ROOT = path.resolve(__dirname, "..");
-const OUT_FILE = path.join(ROOT, "data", "strategy3-latest.json");
-const BACKUP_FILE = path.join(ROOT, "data", "strategy3-backup.json");
-const SCORECARD_SOURCE_FILE = path.join(ROOT, "data", "strategy3-scorecard-source.json");
+const { ROOT, dataPath } = require("./runtime-paths");
+const OUT_FILE = dataPath("strategy3-latest.json");
+const BACKUP_FILE = dataPath("strategy3-backup.json");
+const SCORECARD_SOURCE_FILE = dataPath("strategy3-scorecard-source.json");
 const STOCK_URL = process.env.STOCK_UNIVERSE_URL || "https://fuman-terminal.vercel.app/api/stocks";
 const CAPITAL_URLS = [
   "https://mopsfin.twse.com.tw/opendata/t187ap03_L.csv",
@@ -255,12 +255,15 @@ function buildMatches(stocks, issuedSharesMap, volumeAverageMap) {
       Math.min(volumeRatio * 12, 20) -
       heatPenalty
     ), 0, 100);
-    const pass = pct > 3 && pct <= 5 && volumeLots >= 1000 && turnoverRate > 5 && volumeRatio > 1;
+    const pass = pct > 2 && pct <= 5 && volumeLots >= 1000 && turnoverRate > 5 && volumeRatio > 1;
     const reason = pass
       ? `符合固定條件：漲幅 ${pct.toFixed(2)}%、成交量 ${Math.round(volumeLots).toLocaleString("zh-TW")} 張、周轉率 ${turnoverRate.toFixed(2)}%、量比 ${volumeRatio.toFixed(2)}。`
       : "未符合固定隔日沖條件。";
     return {
       ...stock,
+      entryPrice: stock.close,
+      entryTime: stock.quoteTime || "",
+      entryAt: stock.quoteDate && stock.quoteTime ? `${stock.quoteDate} ${stock.quoteTime}` : "",
       valueRank,
       volumeRank,
       volumeLots: Math.round(volumeLots),
@@ -275,7 +278,7 @@ function buildMatches(stocks, issuedSharesMap, volumeAverageMap) {
   })
     .filter((stock) => (
       stock.close >= 10 &&
-      stock.percent > 3 &&
+      stock.percent > 2 &&
       stock.percent <= 5 &&
       stock.volumeLots >= 1000 &&
       stock.turnoverRate > 5 &&
@@ -305,13 +308,24 @@ async function main() {
     count: matches.length,
     matches,
   };
-
   preservePreviousTradingSource((previousRaw.matches || []).length ? previousRaw : backup, output);
 
   fs.mkdirSync(path.dirname(OUT_FILE), { recursive: true });
+  if (!matches.length) {
+    const previousUsable = (previousRaw.matches || []).length && previousRaw.source !== "github-actions-backup-readonly";
+    const fallback = previousUsable ? previousRaw : backup;
+    if ((fallback.matches || []).length) {
+      fs.writeFileSync(OUT_FILE, `${JSON.stringify({
+        ...fallback,
+        source: fallback.source === "github-actions-backup-readonly" ? "github-actions-backup" : fallback.source,
+        preservedAt: new Date().toISOString(),
+        preservedReason: "strategy3 current scan produced zero matches",
+      }, null, 2)}\n`);
+    }
+    throw new Error("Strategy3 scan produced zero matches; preserved previous valid output and refused to publish an empty result");
+  }
   fs.writeFileSync(OUT_FILE, `${JSON.stringify(output, null, 2)}\n`);
-  if (matches.length) fs.writeFileSync(BACKUP_FILE, `${JSON.stringify({ ...output, source: "github-actions-backup" }, null, 2)}\n`);
-  else if ((backup.matches || []).length) fs.writeFileSync(OUT_FILE, `${JSON.stringify({ ...backup, source: "github-actions-backup-readonly" }, null, 2)}\n`);
+  fs.writeFileSync(BACKUP_FILE, `${JSON.stringify({ ...output, source: "github-actions-backup" }, null, 2)}\n`);
   console.log(`strategy3 cache updated: matches ${matches.length}`);
 }
 
@@ -319,3 +333,4 @@ main().catch((error) => {
   console.error(error);
   process.exit(1);
 });
+

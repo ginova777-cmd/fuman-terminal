@@ -18,7 +18,7 @@ function isIntradayTradable(stock) {
   const volume = cleanNumber(stock?.tradeVolume);
   const name = String(stock?.name || "");
   if (!/^\d{4}$/.test(code) || /^00/.test(code)) return false;
-  if (/ETF|ETN|指數|台灣50|高股息|正2|反1|期貨|債/i.test(name)) return false;
+  if (/ETF|ETN|DR|指數|台灣50|高股息|正2|反1|期貨|債/i.test(name)) return false;
   if (/^(28|58)/.test(code)) return false;
   if (EXCLUDED_CODES.has(code)) return false;
   if (close >= 900) return false;
@@ -35,6 +35,15 @@ function roundTradePrice(price) {
 function formatTradePrice(price) {
   const value = roundTradePrice(price);
   return value ? value.toFixed(value >= 100 ? 1 : 2) : "--";
+}
+
+function ma35SourceLabel(source) {
+  const text = String(source || "");
+  if (text.includes("yahoo")) return "Yahoo";
+  if (text.includes("fugle")) return "Fugle";
+  if (text.includes("twelve")) return "Twelve Data";
+  if (text.includes("local")) return "Local cache";
+  return "無";
 }
 
 function rankValue(value, sorted) {
@@ -73,12 +82,20 @@ function detectSignals(stock, previous = null, ranks = null) {
   const limitUp = cleanNumber(stock.limitUp) || (prevClose ? prevClose * 1.1 : 0);
   const vwap = volume ? value / volume : 0;
   const gapPct = open && prevClose ? ((open - prevClose) / prevClose) * 100 : 0;
-  const ma35Proxy = avg([open, high, low, close]);
+  const ma35Source = String(stock.ma35Source || "");
+  const hasIntradayMa35 = /(?:yahoo|fugle|twelve|local)-1m/.test(ma35Source);
+  const ma35Proxy = hasIntradayMa35 ? cleanNumber(stock.ma35) : 0;
+  const aboveMa35 = ma35Proxy > 0 && close > ma35Proxy;
+  const ma35Prev = hasIntradayMa35 ? cleanNumber(stock.ma35Prev) : 0;
+  const ma35TrendUp = ma35Proxy > 0 && ma35Prev > 0 && ma35Proxy > ma35Prev;
+  const macdUp = stock.macdUp === true;
+  const kdUp = stock.kdUp === true;
   const ibRange = high && low ? high - low : 0;
   const f618 = ibRange ? high - ibRange * 0.618 : 0;
   const signals = [];
 
-  if (!isIntradayTradable(stock) || pct < 2 || volume < 2000) return signals;
+  if (!isIntradayTradable(stock) || pct <= 2 || volume < 2000) return signals;
+  const intradayVolumeBurst = deltaVolume >= 50 || volume >= 10000;
 
   const volumeMilestone = volume >= 10000 ? 10000 : volume >= 5000 ? 5000 : 2000;
   if (deltaVolume >= 50) {
@@ -101,17 +118,17 @@ function detectSignals(stock, previous = null, ranks = null) {
     signals.push({ id: "breakout", label: "轉強突破", reason: "站上強勢區與 VWAP" });
   }
 
-  if (close > ma35Proxy && close > open && valueRank >= 55) {
-    signals.push({ id: "ma35_buy", label: "MA35買點", reason: "整根站上 MA35 近似線" });
+  if (aboveMa35 && ma35TrendUp && macdUp && kdUp && intradayVolumeBurst) {
+    signals.push({ id: "ma35_buy", label: "進場區", reason: `1分K站上 MA35 ${ma35Proxy.toFixed(2)}，MACD/KD向上且爆量，MA35來源：${ma35SourceLabel(ma35Source)}` });
   }
 
-  if (f618 && low <= f618 && high >= f618 && close >= open && close > ma35Proxy) {
+  if (f618 && low <= f618 && high >= f618 && close >= open) {
     signals.push({ id: "diamond", label: "鑽石", reason: "回測 0.618 後收紅轉強" });
   }
 
   const entryLow = roundTradePrice(Math.max(vwap || 0, open || 0, close * 0.997));
   const entryHigh = roundTradePrice(Math.max(entryLow, close * 1.002));
-  const entryPrice = entryHigh || roundTradePrice(close);
+  const entryPrice = roundTradePrice(close);
   const stopLoss = roundTradePrice(Math.min(entryLow || close, vwap || close, ma35Proxy || close) * 0.985);
   const chaseLimit = roundTradePrice(Math.min(high || close * 1.012, close * 1.01));
 
@@ -124,6 +141,21 @@ function detectSignals(stock, previous = null, ranks = null) {
     chaseLimit,
     volumeMilestone,
     deltaVolume,
+    ma35: ma35Proxy,
+    ma35Prev,
+    aboveMa35,
+    ma35TrendUp,
+    ma35Source,
+    ma35Symbol: stock.ma35Symbol || "",
+    ma35At: stock.ma35At || "",
+    macdDif: cleanNumber(stock.macdDif),
+    macdSignal: cleanNumber(stock.macdSignal),
+    macdHist: cleanNumber(stock.macdHist),
+    macdUp,
+    kdK: cleanNumber(stock.kdK),
+    kdD: cleanNumber(stock.kdD),
+    kdUp,
+    intradayVolumeBurst,
   }));
 }
 
@@ -132,6 +164,7 @@ module.exports = {
   detectSignals,
   formatTradePrice,
   isIntradayTradable,
+  ma35SourceLabel,
   roundTradePrice,
   buildRanks,
 };

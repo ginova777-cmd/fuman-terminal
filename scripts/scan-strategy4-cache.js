@@ -1,5 +1,6 @@
 const fs = require("fs");
 const path = require("path");
+const { spawnSync } = require("child_process");
 const scanStrategy4 = require("../api/scan-strategy4");
 const fetchStocks = require("../stocks");
 const { fetchMisQuotes } = require("../lib/mis-quotes");
@@ -7,11 +8,14 @@ const { fetchMisQuotes } = require("../lib/mis-quotes");
 const ROOT = path.resolve(__dirname, "..");
 const OUT_FILE = path.join(ROOT, "data", "strategy4-latest.json");
 const BACKUP_FILE = path.join(ROOT, "data", "strategy4-backup.json");
-const BATCH_SIZE = Number(process.env.STRATEGY4_BATCH_SIZE || 48);
-const BATCHES_PER_RUN = Number(process.env.STRATEGY4_BATCHES_PER_RUN || 5);
-const FULL_SCAN = process.env.FULL_SCAN === "1";
+const CHUNK_SIZE = Number(process.env.STRATEGY4_CHUNK_SIZE || 80);
+const RETRY_CHUNK_SIZE = Number(process.env.STRATEGY4_RETRY_CHUNK_SIZE || 5);
+const FULL_SCAN = true;
 const STOCK_URL = process.env.STOCK_UNIVERSE_URL || "https://fuman-terminal.vercel.app/api/stocks";
 const MIN_UNIVERSE_SIZE = Number(process.env.STRATEGY4_MIN_UNIVERSE_SIZE || 1700);
+const USE_MIS_QUOTES = process.env.STRATEGY4_USE_MIS === "1";
+const SYNC_PARTIAL = process.env.STRATEGY4_SYNC_PARTIAL !== "0";
+const SYNC_SCRIPT = process.env.STRATEGY4_SYNC_SCRIPT || path.join(ROOT, "run-strategy4-partial-sync.ps1");
 
 function readJson(file, fallback) {
   try {
@@ -57,6 +61,7 @@ function callLocalStocksHandler() {
       status(code) { this.statusCode = code; return this; },
       json(payload) {
         if (this.statusCode >= 400) reject(new Error(payload?.error || `stocks HTTP ${this.statusCode}`));
+        else if ((payload?.errors || []).length) reject(new Error(payload.errors.join("; ")));
         else resolve(payload);
       },
       end() { resolve({ ok: false, stocks: [] }); },
@@ -72,6 +77,7 @@ function normalizeStock(row) {
   return {
     code,
     name,
+    market: String(row.Market || row.market || row["市場"] || "").trim().toUpperCase(),
     close: cleanNumber(row.ClosingPrice || row.close),
     percent: cleanNumber(row.Percent || row.percent),
     value: cleanNumber(row.TradeValue || row.value),
@@ -104,16 +110,22 @@ async function fetchUniverse() {
   if (parsed.length < MIN_UNIVERSE_SIZE) {
     throw new Error(`Strategy4 stock universe too small: ${parsed.length}/${MIN_UNIVERSE_SIZE}`);
   }
+  if (!USE_MIS_QUOTES) return parsed;
   const quotes = await fetchMisQuotes(parsed.map((stock) => stock.code));
   return parsed.map((stock) => {
     const quote = quotes.get(stock.code);
     return quote ? { ...stock, ...quote, name: quote.name || stock.name } : stock;
   });
 }
-
-function runHandler(codes) {
+function runHandler(stocks) {
   return new Promise((resolve, reject) => {
-    const req = { method: "GET", query: { codes: codes.join(",") } };
+    const req = {
+      method: "GET",
+      query: {
+        codes: stocks.map((stock) => stock.code).join(","),
+        markets: stocks.map((stock) => stock.market || "").join(","),
+      },
+    };
     const res = {
       statusCode: 200,
       headers: {},
@@ -147,6 +159,76 @@ async function runHandlerWithRetry(codes, label) {
   throw lastError;
 }
 
+function mergeMatches(matches, universe, currentMatches) {
+  (matches || []).forEach((item) => {
+    const base = universe.find((stock) => stock.code === item.code) || {};
+    currentMatches.set(item.code, {
+      ...base,
+      ...item,
+      name: base.name || item.name || item.code,
+    });
+  });
+}
+
+function buildOutput({ codes, scannedThisRun, scanned, noDataCodes, scanErrors, currentMatches, complete }) {
+  const matches = [...currentMatches.values()]
+    .sort((a, b) => (b.swingScore || b.score || 0) - (a.swingScore || a.score || 0) || (b.percent || 0) - (a.percent || 0));
+  return {
+    ok: true,
+    source: complete ? "github-actions" : "github-actions-partial",
+    priceSource: USE_MIS_QUOTES ? "official-daily-k-plus-mis" : "official-daily-k",
+    updatedAt: new Date().toISOString(),
+    fullScan: FULL_SCAN,
+    complete,
+    total: codes.length,
+    scannedThisRun,
+    scannedCodes: [...scanned].filter((code) => codes.includes(code)),
+    noDataCodes: [...noDataCodes],
+    errors: scanErrors,
+    count: matches.length,
+    matches,
+  };
+}
+
+function writeStrategy4Output(output, writeBackup = false) {
+  fs.mkdirSync(path.dirname(OUT_FILE), { recursive: true });
+  fs.writeFileSync(OUT_FILE, `${JSON.stringify(output, null, 2)}\n`);
+  if (writeBackup && output.matches.length) {
+    fs.writeFileSync(BACKUP_FILE, `${JSON.stringify({ ...output, source: "github-actions-backup" }, null, 2)}\n`);
+  }
+}
+
+function syncStrategy4Output(label) {
+  if (!SYNC_PARTIAL) return;
+  if (!fs.existsSync(SYNC_SCRIPT)) {
+    console.log(`strategy4 sync skipped (${label}): missing ${SYNC_SCRIPT}`);
+    return;
+  }
+  console.log(`strategy4 sync start (${label})`);
+  const result = spawnSync("powershell.exe", [
+    "-NoProfile",
+    "-ExecutionPolicy",
+    "Bypass",
+    "-File",
+    SYNC_SCRIPT,
+  ], {
+    cwd: ROOT,
+    encoding: "utf8",
+    timeout: 180000,
+  });
+  const output = `${result.stdout || ""}${result.stderr || ""}`.trim();
+  if (output) {
+    output.split(/\r?\n/).filter(Boolean).slice(-20).forEach((line) => console.log(`strategy4 sync: ${line}`));
+  }
+  if (result.error) {
+    console.log(`strategy4 sync failed (${label}): ${result.error.message}`);
+  } else if (result.status !== 0) {
+    console.log(`strategy4 sync failed (${label}): exit ${result.status}`);
+  } else {
+    console.log(`strategy4 sync done (${label})`);
+  }
+}
+
 async function main() {
   const universe = await fetchUniverse();
   const codes = universe.map((stock) => stock.code);
@@ -154,75 +236,101 @@ async function main() {
 
   const previousRaw = readJson(OUT_FILE, {
     ok: true,
-    cursor: 0,
     total: codes.length,
     scannedCodes: [],
     matches: [],
   });
   const backup = readJson(BACKUP_FILE, { ok: true, matches: [] });
-  const previous = (previousRaw.matches || []).length ? previousRaw : { ...previousRaw, matches: backup.matches || [] };
-  const previousMatches = new Map((previous.matches || []).map((item) => [item.code, item]));
-  const scanned = new Set(FULL_SCAN ? [] : (previous.scannedCodes || []));
-  let cursor = FULL_SCAN ? 0 : Number(previous.cursor || 0) % codes.length;
+  const currentMatches = new Map();
+  const scanned = new Set();
+  const noDataCodes = new Set();
+  const scanErrors = [];
   let scannedThisRun = 0;
-  const batchesToRun = FULL_SCAN ? Math.ceil(codes.length / BATCH_SIZE) : BATCHES_PER_RUN;
+  const chunksToRun = Math.ceil(codes.length / CHUNK_SIZE);
 
-  console.log(`strategy4 cache start: ${FULL_SCAN ? "full scan" : "batch scan"}, ${codes.length} codes, ${batchesToRun} batches`);
-  for (let batch = 0; batch < batchesToRun; batch++) {
-    const start = cursor;
-    const slice = codes.slice(start, start + BATCH_SIZE);
-    const wrapped = !FULL_SCAN && slice.length < BATCH_SIZE ? codes.slice(0, BATCH_SIZE - slice.length) : [];
-    const batchCodes = [...slice, ...wrapped];
-    if (!batchCodes.length) break;
-    cursor = (start + BATCH_SIZE) % codes.length;
-
-    const label = `strategy4 batch ${batch + 1}/${batchesToRun} (${batchCodes[0]}-${batchCodes[batchCodes.length - 1]})`;
+  console.log(`strategy4 cache start: full market scan, ${codes.length} codes, ${chunksToRun} chunks in one run`);
+  for (let chunk = 0; chunk < chunksToRun; chunk++) {
+    const start = chunk * CHUNK_SIZE;
+    const chunkStocks = universe.slice(start, start + CHUNK_SIZE);
+    const chunkCodes = chunkStocks.map((stock) => stock.code);
+    const label = `strategy4 chunk ${chunk + 1}/${chunksToRun} (${chunkCodes[0]}-${chunkCodes[chunkCodes.length - 1]})`;
     console.log(`${label} start`);
-    try {
-      const payload = await runHandlerWithRetry(batchCodes, label);
-      batchCodes.forEach((code) => {
-        scanned.add(code);
-        previousMatches.delete(code);
+    const payload = await runHandlerWithRetry(chunkStocks, label);
+    (payload.noDataCodes || []).forEach((code) => noDataCodes.add(code));
+    (payload.errors || []).forEach((error) => scanErrors.push(`${label}: ${error}`));
+    chunkCodes.forEach((code) => scanned.add(code));
+    mergeMatches(payload.matches, universe, currentMatches);
+    scannedThisRun += chunkCodes.length;
+    console.log(`${label} done: matches ${(payload.matches || []).length}`);
+  }
+
+  if (scanned.size !== codes.length || scannedThisRun !== codes.length) {
+    throw new Error(`Strategy4 full scan incomplete: scanned ${scanned.size}/${codes.length}`);
+  }
+
+  const firstPassOutput = buildOutput({
+    codes,
+    scannedThisRun,
+    scanned,
+    noDataCodes,
+    scanErrors,
+    currentMatches,
+    complete: !scanErrors.length && !noDataCodes.size,
+  });
+  writeStrategy4Output(firstPassOutput, false);
+  console.log(`strategy4 partial cache updated: full market first pass scanned ${scannedThisRun}/${codes.length}, matches ${firstPassOutput.count}, noData ${noDataCodes.size}`);
+  syncStrategy4Output("first-pass");
+
+  if (noDataCodes.size) {
+    const retryCodes = [...noDataCodes];
+    console.log(`strategy4 retry noData start: ${retryCodes.length} codes, chunk size ${RETRY_CHUNK_SIZE}`);
+    for (let index = 0; index < retryCodes.length; index += RETRY_CHUNK_SIZE) {
+      const retryChunkCodes = retryCodes.slice(index, index + RETRY_CHUNK_SIZE);
+      const retryStocks = retryChunkCodes
+        .map((code) => universe.find((stock) => stock.code === code))
+        .filter(Boolean);
+      const label = `strategy4 retry ${Math.floor(index / RETRY_CHUNK_SIZE) + 1}/${Math.ceil(retryCodes.length / RETRY_CHUNK_SIZE)} (${retryChunkCodes[0]}-${retryChunkCodes[retryChunkCodes.length - 1]})`;
+      console.log(`${label} start`);
+      const payload = await runHandlerWithRetry(retryStocks, label);
+      retryChunkCodes.forEach((code) => noDataCodes.delete(code));
+      (payload.noDataCodes || []).forEach((code) => noDataCodes.add(code));
+      (payload.errors || []).forEach((error) => scanErrors.push(`${label}: ${error}`));
+      mergeMatches(payload.matches, universe, currentMatches);
+      const retryOutput = buildOutput({
+        codes,
+        scannedThisRun,
+        scanned,
+        noDataCodes,
+        scanErrors,
+        currentMatches,
+        complete: false,
       });
-      (payload.matches || []).forEach((item) => {
-        const base = universe.find((stock) => stock.code === item.code) || {};
-        previousMatches.set(item.code, {
-          ...base,
-          ...item,
-          name: base.name || item.name || item.code,
-        });
-      });
-      scannedThisRun += batchCodes.length;
-      console.log(`${label} done: matches ${(payload.matches || []).length}`);
-    } catch (error) {
-      console.log(`${label} skipped after retries: ${error.message}`);
+      writeStrategy4Output(retryOutput, false);
+      console.log(`${label} done: matches ${(payload.matches || []).length}, remaining noData ${noDataCodes.size}`);
+      await sleep(500);
     }
   }
 
-  const matches = [...previousMatches.values()]
-    .sort((a, b) => (b.swingScore || b.score || 0) - (a.swingScore || a.score || 0) || (b.percent || 0) - (a.percent || 0))
-    .slice(0, 200);
-  const output = {
-    ok: true,
-    source: "github-actions",
-    updatedAt: new Date().toISOString(),
-    fullScan: FULL_SCAN,
-    cursor,
-    total: codes.length,
-    scannedThisRun,
-    scannedCodes: [...scanned].filter((code) => codes.includes(code)),
-    count: matches.length,
-    matches,
-  };
+  if (scanErrors.length || noDataCodes.size) {
+    throw new Error(`Strategy4 full scan had data gaps: errors ${scanErrors.length}, noData ${noDataCodes.size}${noDataCodes.size ? ` (${[...noDataCodes].slice(0, 30).join(",")})` : ""}`);
+  }
 
-  fs.mkdirSync(path.dirname(OUT_FILE), { recursive: true });
-  fs.writeFileSync(OUT_FILE, `${JSON.stringify(output, null, 2)}\n`);
-  if (matches.length) {
-    fs.writeFileSync(BACKUP_FILE, `${JSON.stringify({ ...output, source: "github-actions-backup" }, null, 2)}\n`);
-  } else if ((backup.matches || []).length) {
+  const output = buildOutput({
+    codes,
+    scannedThisRun,
+    scanned,
+    noDataCodes,
+    scanErrors,
+    currentMatches,
+    complete: true,
+  });
+
+  writeStrategy4Output(output, true);
+  syncStrategy4Output("complete");
+  if (!output.matches.length && (backup.matches || []).length) {
     fs.writeFileSync(OUT_FILE, `${JSON.stringify({ ...backup, source: "github-actions-backup-readonly", updatedAt: backup.updatedAt || new Date().toISOString() }, null, 2)}\n`);
   }
-  console.log(`strategy4 cache updated: ${FULL_SCAN ? "full scan" : "batch scan"} scanned ${scannedThisRun}, total progress ${output.scannedCodes.length}/${codes.length}, matches ${matches.length}`);
+  console.log(`strategy4 cache updated: full market scan scanned ${scannedThisRun}/${codes.length}, matches ${output.count}`);
 }
 
 main().catch((error) => {

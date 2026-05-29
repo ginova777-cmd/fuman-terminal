@@ -1,4 +1,4 @@
-﻿const heatmap = document.querySelector("#heatmap");
+const heatmap = document.querySelector("#heatmap");
 const refreshLine = document.querySelector(".refresh-line");
 const headerTimes = [...document.querySelectorAll(".header-time")];
 const metricCards = [...document.querySelectorAll(".metric-card")];
@@ -56,7 +56,1878 @@ const authLogoutButton = document.querySelector(".sidebar-foot .logout");
 const memberState = document.querySelector("#member-state");
 const supabaseClient = window.supabase?.createClient?.(FUMAN_SUPABASE_URL, FUMAN_SUPABASE_KEY);
 const PUBLIC_VIEWS = new Set(["market"]);
+const FUMAN_THEME_KEY = "fuman-terminal-theme";
 let authMode = "login";
+
+function installThemeToggle() {
+  if (document.querySelector("#fuman-theme-toggle")) return;
+  if (!document.querySelector("#fuman-theme-toggle-styles")) {
+    const style = document.createElement("style");
+    style.id = "fuman-theme-toggle-styles";
+    style.textContent = `
+      .fuman-theme-toggle {
+        position: fixed;
+        top: 18px;
+        right: 18px;
+        z-index: 10001;
+        width: 46px;
+        height: 46px;
+        display: grid;
+        place-items: center;
+        border: 1px solid rgba(148, 163, 184, 0.28);
+        border-radius: 12px;
+        background: rgba(15, 23, 42, 0.82);
+        color: #facc15;
+        font-size: 24px;
+        line-height: 1;
+        cursor: pointer;
+        box-shadow: 0 16px 38px rgba(0, 0, 0, 0.28);
+        backdrop-filter: blur(10px);
+        transition: transform 0.18s ease, background 0.18s ease, color 0.18s ease, border-color 0.18s ease;
+      }
+      .fuman-theme-toggle:hover {
+        transform: translateY(-1px);
+        border-color: rgba(96, 165, 250, 0.65);
+      }
+      body.fuman-light-theme {
+        background: #f4f7fb !important;
+        color: #172033 !important;
+      }
+      body.fuman-light-theme .fuman-theme-toggle {
+        background: rgba(255, 255, 255, 0.92);
+        color: #facc15;
+        border-color: rgba(203, 213, 225, 0.95);
+        box-shadow: 0 14px 34px rgba(15, 23, 42, 0.14);
+      }
+      body.fuman-light-theme .sidebar,
+      body.fuman-light-theme aside,
+      body.fuman-light-theme .side-nav {
+        background: #ffffff !important;
+        color: #1f2937 !important;
+        border-color: #dbe3ee !important;
+      }
+      body.fuman-light-theme .dashboard,
+      body.fuman-light-theme main,
+      body.fuman-light-theme .view-panel,
+      body.fuman-light-theme .strategy-terminal,
+      body.fuman-light-theme .strategy-results {
+        background: #f4f7fb !important;
+        color: #172033 !important;
+      }
+      body.fuman-light-theme .page-header,
+      body.fuman-light-theme .strategy-header,
+      body.fuman-light-theme .radar-topbar,
+      body.fuman-light-theme .strategy-toolbar,
+      body.fuman-light-theme .intraday-topbar {
+        background: transparent !important;
+        color: #172033 !important;
+        border-color: #dbe3ee !important;
+      }
+      body.fuman-light-theme .metric-card,
+      body.fuman-light-theme .strategy-card,
+      body.fuman-light-theme .strength-panel,
+      body.fuman-light-theme .radar-ai-box,
+      body.fuman-light-theme .radar-team-box,
+      body.fuman-light-theme .radar-signal-card,
+      body.fuman-light-theme .radar-flow-card,
+      body.fuman-light-theme .radar-leader-card,
+      body.fuman-light-theme .swing-dashboard,
+      body.fuman-light-theme .intraday-dashboard,
+      body.fuman-light-theme .strategy5-dashboard,
+      body.fuman-light-theme .intraday-zone,
+      body.fuman-light-theme .intraday-pick,
+      body.fuman-light-theme .watchlist-card,
+      body.fuman-light-theme .ta-dashboard,
+      body.fuman-light-theme table,
+      body.fuman-light-theme .terminal-card {
+        background: #ffffff !important;
+        color: #172033 !important;
+        border-color: #dbe3ee !important;
+        box-shadow: 0 12px 30px rgba(15, 23, 42, 0.08) !important;
+      }
+      body.fuman-light-theme .radar-signal-card.short,
+      body.fuman-light-theme .intraday-zone.watch {
+        background: #f8fbff !important;
+      }
+
+      body.fuman-light-theme .intraday-zone.go {
+        background: linear-gradient(135deg, #fff1f2 0%, #fff7ed 58%, #ffffff 100%) !important;
+        border-color: rgba(244, 63, 94, 0.38) !important;
+        box-shadow: 0 16px 34px rgba(244, 63, 94, 0.12) !important;
+      }
+      body.fuman-light-theme .intraday-zone.go header {
+        background: linear-gradient(90deg, rgba(244, 63, 94, 0.14), rgba(249, 115, 22, 0.08)) !important;
+        border-bottom-color: rgba(244, 63, 94, 0.16) !important;
+      }
+      body.fuman-light-theme .intraday-zone.go h3,
+      body.fuman-light-theme .intraday-zone.go strong {
+        color: #9f1239 !important;
+      }
+      body.fuman-light-theme .intraday-zone.go small {
+        color: #be123c !important;
+      }
+      body.fuman-light-theme .intraday-zone.watch {
+        background: linear-gradient(135deg, #eff6ff 0%, #eef2ff 58%, #ffffff 100%) !important;
+        border-color: rgba(59, 130, 246, 0.36) !important;
+        box-shadow: 0 16px 34px rgba(59, 130, 246, 0.12) !important;
+      }
+      body.fuman-light-theme .intraday-zone.watch header {
+        background: linear-gradient(90deg, rgba(59, 130, 246, 0.13), rgba(99, 102, 241, 0.08)) !important;
+        border-bottom-color: rgba(59, 130, 246, 0.16) !important;
+      }
+      body.fuman-light-theme .intraday-zone.watch h3,
+      body.fuman-light-theme .intraday-zone.watch strong {
+        color: #1d4ed8 !important;
+      }
+      body.fuman-light-theme .intraday-zone.watch small {
+        color: #2563eb !important;
+      }
+      body.fuman-light-theme .intraday-zone.go .intraday-pick,
+      body.fuman-light-theme .intraday-zone.watch .intraday-pick {
+        background: rgba(255, 255, 255, 0.72) !important;
+        border: 1px solid rgba(148, 163, 184, 0.18) !important;
+      }
+      body.fuman-light-theme .strategy-nav,
+      body.fuman-light-theme [data-view],
+      body.fuman-light-theme .nav-list a,
+      body.fuman-light-theme .sidebar a {
+        background: #f8fafc !important;
+        color: #334155 !important;
+        border: 1px solid #e2e8f0 !important;
+        box-shadow: none !important;
+      }
+      body.fuman-light-theme .strategy-nav.active,
+      body.fuman-light-theme [data-view].active,
+      body.fuman-light-theme .nav-list a.active,
+      body.fuman-light-theme .sidebar a.active {
+        background: #fff7ed !important;
+        color: #ea580c !important;
+        border-color: rgba(249, 115, 22, 0.42) !important;
+        box-shadow: inset 3px 0 0 #f97316 !important;
+      }
+      body.fuman-light-theme .strategy-nav:hover,
+      body.fuman-light-theme [data-view]:hover,
+      body.fuman-light-theme .nav-list a:hover,
+      body.fuman-light-theme .sidebar a:hover {
+        background: #eef6ff !important;
+        color: #1e3a8a !important;
+        border-color: #bfdbfe !important;
+      }
+      body.fuman-light-theme .sidebar .nav-icon,
+      body.fuman-light-theme .sidebar .strategy-nav span,
+      body.fuman-light-theme .sidebar .chip-menu-link span {
+        color: #f97316 !important;
+        opacity: 1 !important;
+        filter: none !important;
+        text-shadow: none !important;
+        font-weight: 900 !important;
+      }
+      body.fuman-light-theme .sidebar a.active .nav-icon,
+      body.fuman-light-theme .sidebar .strategy-nav.active span,
+      body.fuman-light-theme .sidebar .chip-menu-link.active span,
+      body.fuman-light-theme .sidebar a:hover .nav-icon,
+      body.fuman-light-theme .sidebar .strategy-nav:hover span,
+      body.fuman-light-theme .sidebar .chip-menu-link:hover span {
+        color: #ea580c !important;
+      }
+      body.fuman-light-theme #strategy-view .swing-dashboard {
+        color: #172033 !important;
+      }
+      body.fuman-light-theme #strategy-view .swing-topbar h2 {
+        color: #111827 !important;
+      }
+      body.fuman-light-theme #strategy-view .swing-topbar p,
+      body.fuman-light-theme #strategy-view .swing-controls,
+      body.fuman-light-theme #strategy-view .swing-table td small {
+        color: #64748b !important;
+      }
+      body.fuman-light-theme #strategy-view .swing-controls select,
+      body.fuman-light-theme #strategy-view .swing-actions input,
+      body.fuman-light-theme #strategy-view .strategy4-visible-search-row input,
+      body.fuman-light-theme #strategy-view .swing-actions button,
+      body.fuman-light-theme #strategy-view .swing-tabs button {
+        background: #ffffff !important;
+        color: #0f172a !important;
+        border-color: #cbd8e6 !important;
+        box-shadow: none !important;
+      }
+      body.fuman-light-theme #strategy-view .swing-signal-grid {
+        align-items: stretch;
+      }
+      body.fuman-light-theme #strategy-view .swing-card {
+        background: linear-gradient(135deg, #ffffff 0%, #f8fbff 100%) !important;
+        border-color: #d8e2ee !important;
+        box-shadow: 0 10px 22px rgba(15, 23, 42, 0.07) !important;
+      }
+      body.fuman-light-theme #strategy-view .swing-card.active {
+        background: linear-gradient(135deg, #fff7ed 0%, #ffffff 62%, #f8fbff 100%) !important;
+        border-color: rgba(249, 115, 22, 0.38) !important;
+      }
+      body.fuman-light-theme #strategy-view .swing-card.selected {
+        border-color: rgba(249, 115, 22, 0.76) !important;
+        box-shadow: inset 0 0 0 1px rgba(249, 115, 22, 0.22), 0 12px 24px rgba(249, 115, 22, 0.10) !important;
+      }
+      body.fuman-light-theme #strategy-view .swing-card strong {
+        color: #111827 !important;
+      }
+      body.fuman-light-theme #strategy-view .swing-card small {
+        color: #64748b !important;
+      }
+      body.fuman-light-theme #strategy-view .swing-card em {
+        color: #2563eb !important;
+      }
+      body.fuman-light-theme #strategy-view .swing-panel {
+        background: #ffffff !important;
+        border-color: #d8e2ee !important;
+        box-shadow: 0 12px 28px rgba(15, 23, 42, 0.07) !important;
+      }
+      body.fuman-light-theme #strategy-view .swing-tabs {
+        background: #f8fafc !important;
+        border-color: #d8e2ee !important;
+      }
+      body.fuman-light-theme #strategy-view .swing-tabs button.active {
+        background: #fff7ed !important;
+        color: #c2410c !important;
+        border-color: rgba(249, 115, 22, 0.45) !important;
+      }
+      body.fuman-light-theme #strategy-view .swing-table {
+        background: #ffffff !important;
+        color: #172033 !important;
+      }
+      body.fuman-light-theme #strategy-view .swing-table th {
+        background: #eef4fb !important;
+        color: #475569 !important;
+        border-color: #d8e2ee !important;
+      }
+      body.fuman-light-theme #strategy-view .swing-table td {
+        color: #334155 !important;
+        border-color: #d8e2ee !important;
+      }
+      body.fuman-light-theme #strategy-view .swing-table tbody tr:nth-child(even) {
+        background: #fbfdff !important;
+      }
+      body.fuman-light-theme #strategy-view .swing-table .code {
+        color: #0f172a !important;
+      }
+      body.fuman-light-theme #strategy-view .swing-table .price,
+      body.fuman-light-theme #strategy-view .swing-table .pct {
+        color: #dc2626 !important;
+      }
+      body.fuman-light-theme #strategy-view .swing-badges b {
+        background: #ffeadc !important;
+        color: #c2410c !important;
+        font-weight: 850 !important;
+      }
+      body.fuman-light-theme #strategy-view .terminal-pagination,
+      body.fuman-light-theme #strategy-view .open-buy-pager,
+      body.fuman-light-theme #strategy-view .warrant-pagination {
+        background: #f8fafc !important;
+        color: #475569 !important;
+        border-top: 1px solid #d8e2ee !important;
+      }
+      body.fuman-light-theme #strategy-view .terminal-pagination button,
+      body.fuman-light-theme #strategy-view .open-buy-pager button,
+      body.fuman-light-theme #strategy-view .warrant-pagination button {
+        background: #ffffff !important;
+        color: #334155 !important;
+        border-color: #cbd8e6 !important;
+      }
+      body.fuman-light-theme #strategy-view .terminal-pagination button.active,
+      body.fuman-light-theme #strategy-view .open-buy-pager button.active,
+      body.fuman-light-theme #strategy-view .warrant-pagination button.active {
+        background: #a93145 !important;
+        color: #ffffff !important;
+        border-color: #a93145 !important;
+      }
+      body.fuman-light-theme #warrant-flow-view,
+      body.fuman-light-theme #warrant-flow-view .swing-dashboard {
+        background: #f5f7fa !important;
+        color: #0f172a !important;
+      }
+      body.fuman-light-theme #warrant-flow-view .page-header {
+        background: #ffffff !important;
+        border: 1px solid #e5e7eb !important;
+        border-top: 3px solid #d71920 !important;
+        box-shadow: 0 6px 16px rgba(15, 23, 42, 0.04) !important;
+      }
+      body.fuman-light-theme #warrant-flow-view .page-header h1,
+      body.fuman-light-theme #warrant-flow-view .page-header h1 *,
+      body.fuman-light-theme #warrant-flow-view .page-header p {
+        color: #0f172a !important;
+      }
+      body.fuman-light-theme #warrant-flow-view .swing-topbar {
+        background: #ffffff !important;
+        border: 1px solid #e5e7eb !important;
+        border-left: 4px solid #d71920 !important;
+        border-radius: 8px !important;
+        padding: 14px 16px !important;
+        box-shadow: 0 6px 16px rgba(15, 23, 42, 0.04) !important;
+      }
+      body.fuman-light-theme #warrant-flow-view .swing-topbar h2,
+      body.fuman-light-theme #warrant-flow-view .swing-topbar h2 *,
+      body.fuman-light-theme #warrant-flow-view .swing-topbar p,
+      body.fuman-light-theme #warrant-flow-view .warrant-search-hint {
+        color: #0f172a !important;
+      }
+      body.fuman-light-theme #warrant-flow-view .swing-tabs {
+        background: #ffffff !important;
+        border-color: #e5e7eb !important;
+      }
+      body.fuman-light-theme #warrant-flow-view .swing-panel {
+        background: #ffffff !important;
+        border-color: #e5e7eb !important;
+        box-shadow: 0 8px 18px rgba(15, 23, 42, 0.04) !important;
+        overflow: hidden !important;
+      }
+      body.fuman-light-theme #warrant-flow-view .swing-tabs button.active {
+        background: #fff1f2 !important;
+        color: #be123c !important;
+        border-color: #fecdd3 !important;
+      }
+      body.fuman-light-theme #warrant-flow-view .warrant-search-box,
+      body.fuman-light-theme #warrant-flow-view .warrant-search-row {
+        background: transparent !important;
+      }
+      body.fuman-light-theme #warrant-flow-view #warrant-flow-search {
+        background: #ffffff !important;
+        color: #0f172a !important;
+        border-color: #cbd5e1 !important;
+      }
+      body.fuman-light-theme #warrant-flow-view #warrant-flow-refresh {
+        background: #d71920 !important;
+        color: #ffffff !important;
+        border-color: #d71920 !important;
+      }
+      body.fuman-light-theme #warrant-flow-view .swing-table th {
+        background: #d71920 !important;
+        color: #ffffff !important;
+        border-color: #c8171d !important;
+      }
+      body.fuman-light-theme #warrant-flow-view .swing-table td,
+      body.fuman-light-theme #warrant-flow-view .swing-table td *,
+      body.fuman-light-theme #warrant-flow-view .swing-table .code {
+        color: #0f172a !important;
+      }
+      body.fuman-light-theme #warrant-flow-view .swing-table tbody tr {
+        background: #ffffff !important;
+      }
+      body.fuman-light-theme #warrant-flow-view .swing-table tbody tr:nth-child(even) {
+        background: #fafafa !important;
+      }
+      body.fuman-light-theme #warrant-flow-view .swing-table tbody tr:hover {
+        background: #fff7ed !important;
+      }
+      body.fuman-light-theme #warrant-flow-view .swing-table .price {
+        color: #e11d48 !important;
+      }
+      body.fuman-light-theme #warrant-flow-view .swing-score,
+      body.fuman-light-theme #warrant-flow-view .rank-badge {
+        background: #d71920 !important;
+        color: #ffffff !important;
+        border-color: #d71920 !important;
+      }
+      body.fuman-light-theme #warrant-flow-view .swing-stage {
+        background: #fff7d6 !important;
+        color: #854d0e !important;
+        border-color: #fde68a !important;
+      }
+      body.fuman-light-theme #warrant-flow-view .terminal-pagination,
+      body.fuman-light-theme #warrant-flow-view .warrant-pagination {
+        background: #ffffff !important;
+        border: 1px solid #e5e7eb !important;
+        border-top: 0 !important;
+        color: #0f172a !important;
+      }
+      body.fuman-light-theme #warrant-flow-view .terminal-pagination button,
+      body.fuman-light-theme #warrant-flow-view .warrant-pagination button {
+        background: #ffffff !important;
+        color: #334155 !important;
+        border-color: #cbd8e6 !important;
+      }
+      body.fuman-light-theme #warrant-flow-view .terminal-pagination button.active,
+      body.fuman-light-theme #warrant-flow-view .warrant-pagination button.active {
+        background: #d71920 !important;
+        color: #ffffff !important;
+        border-color: #d71920 !important;
+      }
+      body.fuman-light-theme #chip-trade-view {
+        background: #f6f9fd !important;
+        color: #172033 !important;
+      }
+      body.fuman-light-theme #chip-trade-view .chip-tool {
+        background: #ffffff !important;
+        border-color: #dbe7f3 !important;
+        box-shadow: 0 12px 28px rgba(15, 23, 42, 0.07) !important;
+      }
+      body.fuman-light-theme #chip-trade-view .chip-tool::before {
+        background: linear-gradient(135deg, #eaf4ff 0%, #fff7ed 100%) !important;
+        color: #0f172a !important;
+        border-bottom: 1px solid #dbe7f3 !important;
+      }
+      body.fuman-light-theme #chip-trade-view .chip-tool-row {
+        background: #ffffff !important;
+        color: #334155 !important;
+        border-top-color: #e2edf7 !important;
+      }
+      body.fuman-light-theme #chip-trade-view .chip-tool-row span,
+      body.fuman-light-theme #chip-trade-view .chip-source-note {
+        color: #2563eb !important;
+      }
+      body.fuman-light-theme #chip-trade-view .chip-tabs button,
+      body.fuman-light-theme #chip-trade-view .chip-pill,
+      body.fuman-light-theme #chip-trade-view #chip-sort {
+        background: #f8fbff !important;
+        color: #334155 !important;
+        border-color: #cbdced !important;
+        box-shadow: none !important;
+      }
+      body.fuman-light-theme #chip-trade-view .chip-tabs button.active,
+      body.fuman-light-theme #chip-trade-view .chip-pill.active {
+        background: #eff6ff !important;
+        color: #1d4ed8 !important;
+        border-color: #93c5fd !important;
+        box-shadow: inset 0 0 0 1px rgba(37, 99, 235, 0.10) !important;
+      }
+      body.fuman-light-theme #chip-trade-view .chip-tabs button:hover,
+      body.fuman-light-theme #chip-trade-view .chip-pill:hover {
+        background: #fff7ed !important;
+        color: #c2410c !important;
+        border-color: #fed7aa !important;
+      }
+      body.fuman-light-theme #chip-trade-view .chip-table-wrap {
+        background: #ffffff !important;
+        border: 1px solid #dbe7f3 !important;
+        border-radius: 8px !important;
+        box-shadow: 0 12px 28px rgba(15, 23, 42, 0.07) !important;
+      }
+      body.fuman-light-theme #chip-trade-view .chip-table {
+        background: #ffffff !important;
+        color: #172033 !important;
+        border-color: #dbe7f3 !important;
+        box-shadow: none !important;
+      }
+      body.fuman-light-theme #chip-trade-view .chip-table thead,
+      body.fuman-light-theme #chip-trade-view .chip-table th {
+        background: #eef5fc !important;
+        color: #334155 !important;
+        border-color: #d2dfec !important;
+      }
+      body.fuman-light-theme #chip-trade-view .chip-table td {
+        background: #ffffff !important;
+        color: #172033 !important;
+        border-color: #dbe7f3 !important;
+      }
+      body.fuman-light-theme #chip-trade-view .chip-table tbody tr:nth-child(even) td {
+        background: #fbfdff !important;
+      }
+      body.fuman-light-theme #chip-trade-view .chip-table tbody tr.highlight td {
+        background: #fff3e8 !important;
+      }
+      body.fuman-light-theme #chip-trade-view .chip-table tbody tr:hover td {
+        background: #f0f7ff !important;
+      }
+      body.fuman-light-theme #chip-trade-view .chip-table a {
+        color: #3b82f6 !important;
+      }
+      body.fuman-light-theme #chip-trade-view .terminal-pagination {
+        margin-top: 0 !important;
+        padding: 14px 12px !important;
+        background: #f8fbff !important;
+        color: #64748b !important;
+        border: 1px solid #dbe7f3 !important;
+        border-top: 0 !important;
+        border-radius: 0 0 8px 8px !important;
+        box-shadow: 0 12px 28px rgba(15, 23, 42, 0.06) !important;
+      }
+      body.fuman-light-theme #chip-trade-view .terminal-pagination button {
+        background: #ffffff !important;
+        color: #334155 !important;
+        border-color: #cbdced !important;
+      }
+      body.fuman-light-theme #chip-trade-view .terminal-pagination button.active {
+        background: #eff6ff !important;
+        color: #1d4ed8 !important;
+        border-color: #93c5fd !important;
+      }
+      body.fuman-light-theme #chip-trade-view .terminal-pagination button:not(:disabled):hover {
+        background: #fff7ed !important;
+        color: #c2410c !important;
+        border-color: #fed7aa !important;
+      }
+      body.fuman-light-theme h1,
+      body.fuman-light-theme h2,
+      body.fuman-light-theme h3,
+      body.fuman-light-theme strong,
+      body.fuman-light-theme b,
+      body.fuman-light-theme .code {
+        color: #111827 !important;
+      }
+      body.fuman-light-theme p,
+      body.fuman-light-theme small,
+      body.fuman-light-theme span,
+      body.fuman-light-theme td,
+      body.fuman-light-theme th,
+      body.fuman-light-theme .radar-signal-meta,
+      body.fuman-light-theme .refresh-line,
+      body.fuman-light-theme .terminal-message {
+        border-color: #dbe3ee !important;
+      }
+      body.fuman-light-theme input,
+      body.fuman-light-theme select,
+      body.fuman-light-theme button:not(.fuman-theme-toggle) {
+        border-color: #cbd5e1 !important;
+      }
+      body.fuman-light-theme input,
+      body.fuman-light-theme select {
+        background: #ffffff !important;
+        color: #172033 !important;
+      }
+      body.fuman-light-theme .radar-board-tabs,
+      body.fuman-light-theme .radar-tabs,
+      body.fuman-light-theme .intraday-tabs,
+      body.fuman-light-theme .terminal-tabs {
+        border-color: #dbe3ee !important;
+      }
+      body.fuman-light-theme table thead,
+      body.fuman-light-theme .stock-head {
+        background: #eef4fb !important;
+        color: #334155 !important;
+      }
+      body.fuman-light-theme .empty-state {
+        background: #ffffff !important;
+        color: #64748b !important;
+        border-color: #dbe3ee !important;
+      }
+      body.fuman-light-theme #market-view {
+        background: #f7f9fc !important;
+        color: #101827 !important;
+      }
+      body.fuman-light-theme #market-view .page-header h1,
+      body.fuman-light-theme #market-view .strength-head h2,
+      body.fuman-light-theme #market-view .heatmap-title,
+      body.fuman-light-theme #market-view h2,
+      body.fuman-light-theme #market-view h3 {
+        color: #111827 !important;
+      }
+      body.fuman-light-theme #market-view .page-header p,
+      body.fuman-light-theme #market-view .metric-card span,
+      body.fuman-light-theme #market-view .metric-card small,
+      body.fuman-light-theme #market-view .strength-head p,
+      body.fuman-light-theme #market-view .sector-card p,
+      body.fuman-light-theme #market-view .sector-card small {
+        color: #64748b !important;
+      }
+      body.fuman-light-theme #market-view .metric-card {
+        background: linear-gradient(135deg, #ffffff 0%, #f8fbff 100%) !important;
+        border-color: #dbe6f2 !important;
+        box-shadow: 0 8px 22px rgba(15, 23, 42, 0.08) !important;
+      }
+      body.fuman-light-theme #market-view .metric-card strong,
+      body.fuman-light-theme #market-view .strength-panel strong {
+        color: #111827 !important;
+      }
+      body.fuman-light-theme #market-view .ticker-strip {
+        background: #ffffff !important;
+        color: #111827 !important;
+        border-color: #dbe6f2 !important;
+        box-shadow: 0 6px 18px rgba(15, 23, 42, 0.06) !important;
+      }
+      body.fuman-light-theme #market-view .strength-panel {
+        background: #ffffff !important;
+        border-color: #dbe6f2 !important;
+      }
+      body.fuman-light-theme #market-view .stats-row article {
+        background: #f8fafc !important;
+        border-color: #dbe6f2 !important;
+      }
+      body.fuman-light-theme #heatmap {
+        background: transparent !important;
+      }
+      body.fuman-light-theme #heatmap .sector-card {
+        position: relative;
+        background: #ffffff !important;
+        border: 1px solid #d7e4ef !important;
+        border-left: 4px solid #ef4444 !important;
+        border-radius: 8px !important;
+        color: #111827 !important;
+        box-shadow: 0 4px 12px rgba(15, 23, 42, 0.10) !important;
+      }
+      body.fuman-light-theme #heatmap .sector-card.cold {
+        border-left-color: #059669 !important;
+        background: #fbfffd !important;
+      }
+      body.fuman-light-theme #heatmap .sector-card.hot {
+        border-left-color: #ef4444 !important;
+        background: #fffdfd !important;
+      }
+      body.fuman-light-theme #heatmap .sector-card h3 {
+        color: #111827 !important;
+      }
+      body.fuman-light-theme #heatmap .sector-card h3 span {
+        color: #dc2626 !important;
+        font-weight: 800 !important;
+      }
+      body.fuman-light-theme #heatmap .sector-card.cold h3 span {
+        color: #059669 !important;
+      }
+      body.fuman-light-theme #heatmap .sector-card p,
+      body.fuman-light-theme #heatmap .sector-card small {
+        color: #111827 !important;
+      }
+      body.fuman-light-theme #heatmap .sector-card span {
+        color: #dc2626 !important;
+        font-weight: 700 !important;
+      }
+      body.fuman-light-theme #heatmap .sector-card b {
+        color: #059669 !important;
+        font-weight: 700 !important;
+      }
+      body.fuman-light-theme .down,
+      body.fuman-light-theme .red,
+      body.fuman-light-theme .pct.red,
+      body.fuman-light-theme .watch-up {
+        color: #dc2626 !important;
+      }
+      body.fuman-light-theme .up,
+      body.fuman-light-theme .green,
+      body.fuman-light-theme .pct.green,
+      body.fuman-light-theme .watch-down {
+        color: #059669 !important;
+      }
+      body.fuman-light-theme #sector-modal {
+        background: rgba(15, 23, 42, 0.28) !important;
+        backdrop-filter: blur(6px);
+      }
+      body.fuman-light-theme #sector-modal > div {
+        background: #ffffff !important;
+        border: 1px solid #d8e2ee !important;
+        border-radius: 12px !important;
+        box-shadow: 0 24px 70px rgba(15, 23, 42, 0.22) !important;
+      }
+      body.fuman-light-theme #sector-modal > div > div:first-child {
+        background: #ffffff !important;
+        border-bottom: 1px solid #d8e2ee !important;
+      }
+      body.fuman-light-theme #sector-modal > div > div:first-child > div:first-child {
+        color: #64748b !important;
+      }
+      body.fuman-light-theme #sector-modal > div > div:first-child div[style*="font-size:20px"] {
+        color: #111827 !important;
+      }
+      body.fuman-light-theme #sector-modal > div > div:first-child div[style*="font-size:12px"] {
+        color: #64748b !important;
+      }
+      body.fuman-light-theme #sector-modal > div > div:first-child div[style*="background:#1a1e2e"] {
+        background: #f8fafc !important;
+        border: 1px solid #d8e2ee !important;
+        color: #111827 !important;
+      }
+      body.fuman-light-theme #sector-modal > div > div:first-child div[style*="color:#888"] {
+        color: #64748b !important;
+      }
+      body.fuman-light-theme #sector-modal > div > div:first-child div[style*="color:#fff"],
+      body.fuman-light-theme #sector-modal > div > div:first-child div[style*="color:#7ec8e3"] {
+        color: #111827 !important;
+      }
+      body.fuman-light-theme #sector-modal #modal-close {
+        background: #ffffff !important;
+        color: #64748b !important;
+        border: 1px solid #cbd5e1 !important;
+        box-shadow: 0 4px 12px rgba(15, 23, 42, 0.12) !important;
+      }
+      body.fuman-light-theme #sector-modal table {
+        background: #ffffff !important;
+        color: #111827 !important;
+        box-shadow: none !important;
+      }
+      body.fuman-light-theme #sector-modal thead tr {
+        background: #f1f5f9 !important;
+        color: #475569 !important;
+      }
+      body.fuman-light-theme #sector-modal th {
+        color: #475569 !important;
+        border-color: #d8e2ee !important;
+      }
+      body.fuman-light-theme #sector-modal tbody tr {
+        background: #ffffff !important;
+        border-bottom: 1px solid #e2e8f0 !important;
+      }
+      body.fuman-light-theme #sector-modal tbody tr:nth-child(even) {
+        background: #fbfdff !important;
+      }
+      body.fuman-light-theme #sector-modal td {
+        color: #334155 !important;
+      }
+      body.fuman-light-theme #sector-modal td div[style*="color:#7ec8e3"],
+      body.fuman-light-theme #sector-modal td[style*="color:#fff"] {
+        color: #0f172a !important;
+      }
+      body.fuman-light-theme #sector-modal td div[style*="color:#555"],
+      body.fuman-light-theme #sector-modal td[style*="color:#888"],
+      body.fuman-light-theme #sector-modal td[style*="color:#aaa"] {
+        color: #64748b !important;
+      }
+      #sector-modal .sector-pct-up,
+      #sector-modal .sector-inst-pos,
+      body.fuman-light-theme #sector-modal .sector-pct-up,
+      body.fuman-light-theme #sector-modal .sector-inst-pos {
+        color: #dc2626 !important;
+        font-weight: 800 !important;
+      }
+      #sector-modal .sector-pct-down,
+      #sector-modal .sector-inst-neg,
+      body.fuman-light-theme #sector-modal .sector-pct-down,
+      body.fuman-light-theme #sector-modal .sector-inst-neg {
+        color: #059669 !important;
+        font-weight: 800 !important;
+      }
+      #sector-modal .sector-pct-flat,
+      #sector-modal .sector-inst-zero,
+      body.fuman-light-theme #sector-modal .sector-pct-flat,
+      body.fuman-light-theme #sector-modal .sector-inst-zero {
+        color: #64748b !important;
+        font-weight: 700 !important;
+      }
+      .market-mode-tabs {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        margin: 14px 0 16px;
+        padding: 6px;
+        border: 1px solid rgba(148, 163, 184, 0.22);
+        border-radius: 10px;
+        background: rgba(15, 23, 42, 0.46);
+      }
+      .market-mode-tabs button {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        min-height: 36px;
+        padding: 0 14px;
+        border: 1px solid transparent;
+        border-radius: 8px;
+        background: transparent;
+        color: #9fb3d9;
+        font-weight: 800;
+        cursor: pointer;
+      }
+      .market-mode-tabs button.active {
+        border-color: rgba(249, 115, 22, 0.58);
+        background: rgba(249, 115, 22, 0.12);
+        color: #ff7a3d;
+      }
+      .market-ai-panel {
+        display: grid;
+        gap: 14px;
+      }
+      .market-ai-summary {
+        display: grid;
+        grid-template-columns: minmax(320px, 1.1fr) repeat(3, minmax(210px, 1fr));
+        gap: 14px;
+      }
+      .market-ai-card,
+      .market-ai-block,
+      .market-ai-stock-row {
+        border: 1px solid rgba(148, 163, 184, 0.22);
+        border-radius: 8px;
+        background: rgba(15, 23, 42, 0.72);
+        box-shadow: 0 12px 28px rgba(0, 0, 0, 0.16);
+      }
+      .market-ai-card {
+        padding: 18px;
+        border-top: 4px solid rgba(248, 113, 113, 0.92);
+      }
+      .market-ai-card[data-ai-advice] {
+        position: relative;
+        cursor: pointer;
+        overflow: hidden;
+        padding-right: 48px;
+        transition: border-color 0.16s ease, box-shadow 0.16s ease, transform 0.16s ease;
+      }
+      .market-ai-card[data-ai-advice]:hover,
+      .market-ai-card[data-ai-advice]:focus-visible {
+        border-color: rgba(249, 115, 22, 0.66);
+        box-shadow: 0 16px 34px rgba(0, 0, 0, 0.24);
+        transform: translateY(-1px);
+        outline: none;
+      }
+      .market-ai-card[data-ai-advice="sector"] {
+        border-top-color: rgba(244, 63, 94, 0.94);
+      }
+      .market-ai-card[data-ai-advice="risk"] {
+        border-top-color: rgba(244, 63, 94, 0.94);
+      }
+      .market-ai-advice-arrow {
+        position: absolute;
+        top: 52px;
+        right: 22px;
+        transform: translateY(-50%);
+        color: #94a3b8;
+        font-size: 26px;
+        font-weight: 900;
+        line-height: 1;
+        transition: transform 0.18s ease, color 0.18s ease;
+      }
+      .market-ai-card[data-ai-advice].is-open .market-ai-advice-arrow {
+        transform: translateY(-50%) rotate(90deg);
+        color: #fb923c;
+      }
+      .market-ai-advice-detail {
+        display: none;
+        grid-column: 1 / -1;
+        margin-top: 16px;
+        padding-top: 14px;
+        border-top: 1px solid rgba(148, 163, 184, 0.2);
+      }
+      .market-ai-card[data-ai-advice].is-open .market-ai-advice-detail {
+        display: grid;
+        gap: 10px;
+      }
+      .market-ai-advice-detail-item {
+        padding: 12px;
+        border: 1px solid rgba(148, 163, 184, 0.2);
+        border-radius: 8px;
+        background: rgba(15, 23, 42, 0.42);
+      }
+      .market-ai-advice-detail-item b {
+        display: block;
+        margin-bottom: 6px;
+        color: #f8fafc;
+        font-size: 15px;
+      }
+      .market-ai-advice-detail-item p {
+        margin: 0;
+        color: #b8c7e6;
+        line-height: 1.55;
+      }
+      .market-ai-advice-detail-chips {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-top: 10px;
+      }
+      .market-ai-advice-detail-chips span {
+        padding: 5px 9px;
+        border: 1px solid rgba(251, 146, 60, 0.38);
+        border-radius: 999px;
+        background: rgba(249, 115, 22, 0.1);
+        color: #fdba74;
+        font-size: 12px;
+        font-weight: 850;
+      }
+      .market-ai-card.hero {
+        border-top-color: rgba(20, 184, 166, 0.75);
+        background: linear-gradient(135deg, rgba(15, 23, 42, 0.84), rgba(6, 78, 59, 0.22));
+      }
+      .market-ai-card.warning {
+        border-top-color: #f59e0b;
+      }
+      .market-ai-card h3,
+      .market-ai-block h3 {
+        margin: 0 0 8px;
+        color: #f8fafc;
+        font-size: 16px;
+      }
+      .market-ai-card small,
+      .market-ai-block small {
+        display: block;
+        margin-bottom: 8px;
+        color: #8ba0c3;
+        font-weight: 700;
+      }
+      .market-ai-card strong {
+        display: block;
+        margin-bottom: 8px;
+        color: #f97316;
+        font-size: 28px;
+        line-height: 1.1;
+      }
+      .market-ai-card p,
+      .market-ai-block p {
+        margin: 0;
+        color: #b8c7e6;
+        line-height: 1.6;
+      }
+      .market-ai-metrics {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 8px;
+        margin-top: 14px;
+      }
+      .market-ai-metrics span {
+        display: block;
+        padding: 10px;
+        border: 1px solid rgba(148, 163, 184, 0.2);
+        border-radius: 8px;
+        background: rgba(15, 23, 42, 0.46);
+        color: #8ba0c3;
+        font-size: 12px;
+      }
+      .market-ai-metrics b {
+        display: block;
+        margin-top: 4px;
+        color: #fb923c;
+        font-size: 18px;
+      }
+      .market-ai-advice {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 14px;
+      }
+      .market-ai-advice .market-ai-card {
+        border-top-color: #f59e0b;
+      }
+      .market-ai-main {
+        display: grid;
+        grid-template-columns: minmax(0, 1.5fr) minmax(280px, 0.85fr);
+        gap: 14px;
+      }
+      .market-ai-block {
+        padding: 16px;
+      }
+      .market-ai-list {
+        display: grid;
+        gap: 10px;
+      }
+      .market-ai-point {
+        display: grid;
+        grid-template-columns: 34px 1fr;
+        gap: 12px;
+        align-items: center;
+        padding: 12px;
+        border: 1px solid rgba(148, 163, 184, 0.18);
+        border-radius: 8px;
+        background: rgba(15, 23, 42, 0.42);
+        color: #cbd5e1;
+      }
+      .market-ai-point b {
+        display: grid;
+        place-items: center;
+        width: 28px;
+        height: 28px;
+        border-radius: 999px;
+        background: rgba(251, 146, 60, 0.16);
+        color: #fb923c;
+      }
+      .market-ai-risk {
+        display: grid;
+        gap: 10px;
+      }
+      .market-ai-risk article {
+        padding: 14px;
+        border: 1px solid rgba(248, 113, 113, 0.45);
+        border-radius: 8px;
+        background: rgba(127, 29, 29, 0.16);
+      }
+      .market-ai-risk h4 {
+        margin: 0 0 8px;
+        color: #fecaca;
+        font-size: 16px;
+      }
+      .market-ai-chips {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-top: 10px;
+      }
+      .market-ai-chip {
+        padding: 5px 10px;
+        border: 1px solid rgba(248, 113, 113, 0.42);
+        border-radius: 999px;
+        color: #fca5a5;
+        background: rgba(127, 29, 29, 0.18);
+        font-size: 12px;
+        font-weight: 800;
+      }
+      .market-ai-detail-overlay {
+        position: fixed;
+        inset: 0;
+        z-index: 12000;
+        display: grid;
+        place-items: center;
+        padding: 22px;
+        background: rgba(15, 23, 42, 0.72);
+        backdrop-filter: blur(7px);
+      }
+      .market-ai-detail-dialog {
+        width: min(945px, 96vw);
+        max-height: min(86vh, 820px);
+        overflow: hidden;
+        border: 1px solid rgba(203, 213, 225, 0.72);
+        border-radius: 16px;
+        background: #f8fafc;
+        color: #111827;
+        box-shadow: 0 26px 80px rgba(0, 0, 0, 0.34);
+      }
+      .market-ai-detail-head {
+        position: relative;
+        padding: 26px 58px 22px 22px;
+        border-bottom: 1px solid #e2e8f0;
+      }
+      .market-ai-detail-head small {
+        display: block;
+        margin-bottom: 8px;
+        color: #64748b;
+        font-weight: 800;
+      }
+      .market-ai-detail-head h2 {
+        margin: 0 0 10px;
+        color: #111827;
+        font-size: 28px;
+        line-height: 1.16;
+      }
+      .market-ai-detail-head p {
+        margin: 0;
+        color: #475569;
+        line-height: 1.55;
+      }
+      .market-ai-detail-close {
+        position: absolute;
+        top: 18px;
+        right: 20px;
+        width: 40px;
+        height: 40px;
+        border: 1px solid #dbe3ee;
+        border-radius: 9px;
+        background: #ffffff;
+        color: #64748b;
+        font-size: 28px;
+        line-height: 1;
+        cursor: pointer;
+      }
+      .market-ai-detail-body {
+        display: grid;
+        gap: 12px;
+        max-height: calc(min(86vh, 820px) - 146px);
+        overflow: auto;
+        padding: 16px 22px 20px;
+      }
+      .market-ai-detail-card {
+        position: relative;
+        padding: 20px 18px;
+        border: 1px solid #bae6fd;
+        border-left: 3px solid #0284c7;
+        border-radius: 8px;
+        background: linear-gradient(135deg, #f8fafc, #eff6ff);
+      }
+      .market-ai-detail-card.danger {
+        border-color: #fecaca;
+        border-left-color: #ef4444;
+        background: linear-gradient(135deg, #fff7f7, #fffaf7);
+      }
+      .market-ai-detail-card.warn {
+        border-color: #fed7aa;
+        border-left-color: #ea580c;
+        background: linear-gradient(135deg, #fff7ed, #fffaf5);
+      }
+      .market-ai-detail-card small {
+        display: block;
+        margin-bottom: 8px;
+        color: #64748b;
+        font-weight: 800;
+      }
+      .market-ai-detail-card h3 {
+        margin: 0 0 8px;
+        color: #111827;
+        font-size: 22px;
+      }
+      .market-ai-detail-card p {
+        margin: 0;
+        color: #475569;
+        line-height: 1.55;
+      }
+      .market-ai-detail-action {
+        position: absolute;
+        top: 18px;
+        right: 18px;
+        color: #c2410c;
+        font-weight: 900;
+      }
+      .market-ai-detail-chips {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        margin-top: 14px;
+      }
+      .market-ai-detail-chip {
+        padding: 7px 12px;
+        border: 1px solid #fecaca;
+        border-radius: 999px;
+        background: #fff1f2;
+        color: #dc2626;
+        font-size: 13px;
+        font-weight: 850;
+      }
+      .market-ai-detail-card.info .market-ai-detail-chip {
+        border-color: #bfdbfe;
+        background: #eff6ff;
+        color: #1d4ed8;
+      }
+      .market-ai-detail-card.warn .market-ai-detail-chip {
+        border-color: #fed7aa;
+        background: #fff7ed;
+        color: #c2410c;
+      }
+      .market-ai-hot {
+        display: grid;
+        gap: 10px;
+      }
+      .market-ai-filterbar,
+      .market-ai-mini-filter {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin: 10px 0 12px;
+      }
+      .market-ai-mini-filter {
+        margin: 12px 0 0;
+      }
+      .market-ai-filterbar button,
+      .market-ai-mini-filter button {
+        min-height: 34px;
+        padding: 0 13px;
+        border: 1px solid rgba(249, 115, 22, 0.42);
+        border-radius: 8px;
+        background: rgba(249, 115, 22, 0.08);
+        color: #fb923c;
+        font-weight: 900;
+        cursor: pointer;
+      }
+      .market-ai-filterbar button[data-ai-hot-filter="momentum"],
+      .market-ai-mini-filter button[data-ai-observe-mode="priority"] {
+        border-color: rgba(244, 63, 94, 0.48);
+        color: #fb7185;
+      }
+      .market-ai-filterbar button[data-ai-hot-filter="rebound"],
+      .market-ai-mini-filter button[data-ai-observe-mode="rebound"] {
+        border-color: rgba(245, 158, 11, 0.52);
+        color: #fbbf24;
+      }
+      .market-ai-filterbar button[data-ai-hot-filter="volume"],
+      .market-ai-mini-filter button[data-ai-observe-mode="volume"] {
+        border-color: rgba(34, 197, 94, 0.5);
+        color: #86efac;
+      }
+      .market-ai-filterbar button[data-ai-hot-filter="legal"],
+      .market-ai-mini-filter button[data-ai-observe-mode="legal"] {
+        border-color: rgba(59, 130, 246, 0.48);
+        color: #93c5fd;
+      }
+      .market-ai-filterbar button[data-ai-hot-filter="intraday"],
+      .market-ai-mini-filter button[data-ai-observe-mode="intraday"] {
+        border-color: rgba(20, 184, 166, 0.48);
+        color: #5eead4;
+      }
+      .market-ai-filterbar button[data-ai-hot-filter="risk"] {
+        border-color: rgba(245, 158, 11, 0.52);
+        color: #fbbf24;
+      }
+      .market-ai-filterbar button.active,
+      .market-ai-mini-filter button.active {
+        background: rgba(249, 115, 22, 0.18);
+        box-shadow: inset 0 0 0 1px currentColor;
+      }
+      .market-ai-filterbar em,
+      .market-ai-mini-filter em {
+        display: inline-grid;
+        place-items: center;
+        min-width: 22px;
+        margin-left: 6px;
+        padding: 2px 6px;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.10);
+        font-style: normal;
+        font-size: 11px;
+      }
+      .market-ai-sort-note {
+        margin: 0 0 12px;
+        padding: 12px 14px;
+        border: 1px solid rgba(148, 163, 184, 0.18);
+        border-radius: 8px;
+        color: #9fb3d9;
+        background: rgba(15, 23, 42, 0.38);
+      }
+      .data-freshness-bar {
+        margin: 10px 0 18px;
+        padding: 14px 18px;
+        border: 1px solid rgba(148, 163, 184, 0.22);
+        border-radius: 8px;
+        color: #b7cdfc;
+        background: rgba(15, 23, 42, 0.34);
+        font-size: 15px;
+        font-weight: 800;
+        line-height: 1.7;
+      }
+      .data-freshness-bar strong {
+        color: #e2edff;
+      }
+      .data-freshness-bar.is-live {
+        border-color: rgba(20, 184, 166, 0.38);
+        background: rgba(13, 148, 136, 0.10);
+      }
+      .data-freshness-bar.is-stale {
+        border-color: rgba(248, 113, 113, 0.46);
+        color: #fecaca;
+        background: rgba(127, 29, 29, 0.16);
+      }
+      .market-ai-stock-row {
+        display: grid;
+        grid-template-columns: 52px minmax(260px, 1.35fr) minmax(180px, 0.72fr) minmax(120px, 0.48fr) minmax(220px, 1fr) 150px;
+        gap: 18px;
+        align-items: center;
+        padding: 22px 18px;
+      }
+      .market-ai-rank {
+        display: grid;
+        place-items: center;
+        width: 42px;
+        height: 42px;
+        border-radius: 8px;
+        background: rgba(251, 146, 60, 0.14);
+        color: #fb923c;
+        font-weight: 900;
+      }
+      .market-ai-stock-row h4 {
+        display: flex;
+        align-items: baseline;
+        gap: 9px;
+        margin: 0 0 8px;
+        color: #f8fafc;
+        line-height: 1.05;
+      }
+      .market-ai-code {
+        color: inherit;
+        font-size: 28px;
+        font-weight: 950;
+        letter-spacing: 0;
+      }
+      .market-ai-name {
+        color: #9fb3d9;
+        font-size: 14px;
+        font-weight: 800;
+      }
+      .market-ai-stock-row p {
+        margin: 0;
+        color: #9fb3d9;
+        font-size: 13px;
+        line-height: 1.55;
+      }
+      .market-ai-score strong {
+        display: block;
+        color: #fb923c;
+        font-size: 26px;
+      }
+      .market-ai-tags {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 7px;
+      }
+      .market-ai-tags span {
+        padding: 5px 9px;
+        border: 1px solid rgba(96, 165, 250, 0.38);
+        border-radius: 7px;
+        background: rgba(59, 130, 246, 0.12);
+        color: #93c5fd;
+        font-size: 12px;
+        font-weight: 800;
+      }
+      .market-ai-actions {
+        display: grid;
+        gap: 8px;
+      }
+      .market-ai-actions button {
+        min-height: 40px;
+        border-radius: 8px;
+        border: 1px solid rgba(249, 115, 22, 0.42);
+        background: rgba(249, 115, 22, 0.10);
+        color: #fb923c;
+        font-weight: 900;
+        cursor: pointer;
+      }
+      body.fuman-light-theme .market-mode-tabs {
+        background: #ffffff !important;
+        border-color: #dbe3ee !important;
+        box-shadow: 0 5px 14px rgba(15, 23, 42, 0.06);
+      }
+      body.fuman-light-theme .market-mode-tabs button {
+        color: #334155 !important;
+      }
+      body.fuman-light-theme .market-mode-tabs button.active {
+        background: #fff7ed !important;
+        color: #c2410c !important;
+        border-color: rgba(249, 115, 22, 0.46) !important;
+      }
+      body.fuman-light-theme .market-ai-card,
+      body.fuman-light-theme .market-ai-block,
+      body.fuman-light-theme .market-ai-stock-row {
+        background: #ffffff !important;
+        border-color: #dbe3ee !important;
+        box-shadow: 0 8px 22px rgba(15, 23, 42, 0.07) !important;
+      }
+      body.fuman-light-theme .market-ai-card.hero {
+        background: linear-gradient(135deg, #fffaf4, #f0fdfa) !important;
+      }
+      body.fuman-light-theme .market-ai-card h3,
+      body.fuman-light-theme .market-ai-block h3,
+      body.fuman-light-theme .market-ai-stock-row h4,
+      body.fuman-light-theme .market-ai-code {
+        color: #111827 !important;
+      }
+      body.fuman-light-theme .market-ai-name {
+        color: #334155 !important;
+      }
+      body.fuman-light-theme .market-ai-card p,
+      body.fuman-light-theme .market-ai-block p,
+      body.fuman-light-theme .market-ai-point,
+      body.fuman-light-theme .market-ai-stock-row p {
+        color: #334155 !important;
+      }
+      body.fuman-light-theme .market-ai-card small,
+      body.fuman-light-theme .market-ai-block small {
+        color: #64748b !important;
+      }
+      body.fuman-light-theme .market-ai-metrics span,
+      body.fuman-light-theme .market-ai-point {
+        background: #f8fafc !important;
+        border-color: #dbe3ee !important;
+      }
+      body.fuman-light-theme .market-ai-risk article {
+        background: #fff7f7 !important;
+        border-color: #fecaca !important;
+      }
+      body.fuman-light-theme .market-ai-risk h4 {
+        color: #991b1b !important;
+      }
+      body.fuman-light-theme .market-ai-chip {
+        background: #fff1f2 !important;
+        color: #dc2626 !important;
+        border-color: #fecaca !important;
+      }
+      body.fuman-light-theme .market-ai-tags span {
+        background: #eff6ff !important;
+        color: #1d4ed8 !important;
+        border-color: #bfdbfe !important;
+      }
+      body.fuman-light-theme .market-ai-filterbar button,
+      body.fuman-light-theme .market-ai-mini-filter button {
+        background: #fff7ed !important;
+        color: #c2410c !important;
+        border-color: #fed7aa !important;
+      }
+      body.fuman-light-theme .market-ai-filterbar button[data-ai-hot-filter="momentum"],
+      body.fuman-light-theme .market-ai-mini-filter button[data-ai-observe-mode="priority"] {
+        background: #fff1f2 !important;
+        color: #be123c !important;
+        border-color: #fecdd3 !important;
+      }
+      body.fuman-light-theme .market-ai-filterbar button[data-ai-hot-filter="rebound"],
+      body.fuman-light-theme .market-ai-mini-filter button[data-ai-observe-mode="rebound"] {
+        background: #fffbeb !important;
+        color: #b45309 !important;
+        border-color: #fde68a !important;
+      }
+      body.fuman-light-theme .market-ai-filterbar button[data-ai-hot-filter="volume"],
+      body.fuman-light-theme .market-ai-mini-filter button[data-ai-observe-mode="volume"] {
+        background: #f0fdf4 !important;
+        color: #15803d !important;
+        border-color: #bbf7d0 !important;
+      }
+      body.fuman-light-theme .market-ai-filterbar button[data-ai-hot-filter="legal"],
+      body.fuman-light-theme .market-ai-mini-filter button[data-ai-observe-mode="legal"] {
+        background: #eff6ff !important;
+        color: #1d4ed8 !important;
+        border-color: #bfdbfe !important;
+      }
+      body.fuman-light-theme .market-ai-filterbar button[data-ai-hot-filter="intraday"],
+      body.fuman-light-theme .market-ai-mini-filter button[data-ai-observe-mode="intraday"] {
+        background: #f0fdfa !important;
+        color: #0f766e !important;
+        border-color: #99f6e4 !important;
+      }
+      body.fuman-light-theme .market-ai-filterbar button[data-ai-hot-filter="risk"] {
+        background: #fffbeb !important;
+        color: #b45309 !important;
+        border-color: #fde68a !important;
+      }
+      body.fuman-light-theme .market-ai-filterbar em,
+      body.fuman-light-theme .market-ai-mini-filter em {
+        background: rgba(255, 255, 255, 0.75) !important;
+      }
+      body.fuman-light-theme .market-ai-sort-note {
+        background: #ffffff !important;
+        border-color: #dbe3ee !important;
+        color: #334155 !important;
+      }
+      body.fuman-light-theme .market-ai-advice-arrow {
+        color: #64748b !important;
+      }
+      body.fuman-light-theme .market-ai-card[data-ai-advice].is-open .market-ai-advice-arrow {
+        color: #ea580c !important;
+      }
+      body.fuman-light-theme .market-ai-advice-detail {
+        border-top-color: #dbe3ee !important;
+      }
+      body.fuman-light-theme .market-ai-advice-detail-item {
+        border-color: #dbe3ee !important;
+        background: #f8fafc !important;
+      }
+      body.fuman-light-theme .market-ai-advice-detail-item b {
+        color: #0f172a !important;
+      }
+      body.fuman-light-theme .market-ai-advice-detail-item p {
+        color: #475569 !important;
+      }
+      body.fuman-light-theme .market-ai-advice-detail-chips span {
+        border-color: #fed7aa !important;
+        background: #fff7ed !important;
+        color: #c2410c !important;
+      }
+      .global-refresh-widget {
+        position: fixed;
+        top: 24px;
+        right: 76px;
+        z-index: 10000;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        padding: 5px;
+        border: 1px solid rgba(148, 163, 184, 0.22);
+        border-radius: 10px;
+        background: rgba(15, 23, 42, 0.72);
+        color: #9fb3d9;
+        box-shadow: 0 14px 34px rgba(0, 0, 0, 0.18);
+        backdrop-filter: blur(10px);
+      }
+      .global-refresh-widget button {
+        width: 34px;
+        height: 34px;
+        display: grid;
+        place-items: center;
+        border: 1px solid rgba(148, 163, 184, 0.28);
+        border-radius: 9px;
+        background: rgba(255, 255, 255, 0.06);
+        color: #9fb3d9;
+        cursor: pointer;
+        font-size: 18px;
+        font-weight: 900;
+        line-height: 1;
+      }
+      .global-refresh-widget button:hover {
+        color: #ffbd8a;
+        border-color: rgba(255, 122, 69, 0.45);
+      }
+      body.fuman-light-theme .global-refresh-widget {
+        background: rgba(255, 255, 255, 0.92) !important;
+        color: #64748b !important;
+        border-color: #dbe3ee !important;
+        box-shadow: 0 12px 30px rgba(15, 23, 42, 0.08) !important;
+      }
+      body.fuman-light-theme .global-refresh-widget button {
+        background: #ffffff !important;
+        color: #64748b !important;
+        border-color: #cbd5e1 !important;
+      }
+      body.fuman-light-theme .global-refresh-widget button:hover {
+        color: #c2410c !important;
+        border-color: #fed7aa !important;
+      }
+      body.fuman-light-theme #strategy-view,
+      body.fuman-light-theme #strategy-view.strategy3-only,
+      body.fuman-light-theme #strategy-view .strategy-terminal,
+      body.fuman-light-theme #strategy-view .strategy-results,
+      body.fuman-light-theme #strategy-view #strategy-table,
+      body.fuman-light-theme #strategy-view .strategy5-shell,
+      body.fuman-light-theme #strategy-view .strategy5-dashboard,
+      body.fuman-light-theme #strategy-view .strategy5-results,
+      body.fuman-light-theme #strategy-view .strategy3-clean,
+      body.fuman-light-theme #strategy-view .swing-dashboard,
+      body.fuman-light-theme #strategy-view .swing-panel,
+      body.fuman-light-theme #strategy-view .intraday-dashboard,
+      body.fuman-light-theme #strategy-view .intraday-panel,
+      body.fuman-light-theme #strategy-view .openbuy-panel {
+        background: #f7f9fc !important;
+        color: #172033 !important;
+        border-color: #dbe3ee !important;
+        box-shadow: none !important;
+      }
+      body.fuman-light-theme #strategy-view .strategy5-results,
+      body.fuman-light-theme #strategy-view .strategy5-table,
+      body.fuman-light-theme #strategy-view .strategy3-table,
+      body.fuman-light-theme #strategy-view .swing-table,
+      body.fuman-light-theme #strategy-view .intraday-table,
+      body.fuman-light-theme #strategy-view .strategy-table,
+      body.fuman-light-theme #strategy-view table {
+        background: #ffffff !important;
+        color: #172033 !important;
+        border: 1px solid #dbe3ee !important;
+        border-radius: 8px !important;
+        box-shadow: 0 8px 22px rgba(15, 23, 42, 0.07) !important;
+      }
+      body.fuman-light-theme #strategy-view .strategy5-results-head,
+      body.fuman-light-theme #strategy-view .strategy5-table-head,
+      body.fuman-light-theme #strategy-view .strategy3-table-head,
+      body.fuman-light-theme #strategy-view .swing-table thead,
+      body.fuman-light-theme #strategy-view .intraday-table thead,
+      body.fuman-light-theme #strategy-view table thead,
+      body.fuman-light-theme #strategy-view .stock-head {
+        background: #eef4fb !important;
+        color: #475569 !important;
+        border-color: #dbe3ee !important;
+      }
+      body.fuman-light-theme #strategy-view .strategy5-stock-card,
+      body.fuman-light-theme #strategy-view .strategy5-table-row,
+      body.fuman-light-theme #strategy-view .strategy3-stock-card,
+      body.fuman-light-theme #strategy-view .intraday-side-panel,
+      body.fuman-light-theme #strategy-view .intraday-signal-card,
+      body.fuman-light-theme #strategy-view .strategy3-table-row,
+      body.fuman-light-theme #strategy-view .swing-table tbody tr,
+      body.fuman-light-theme #strategy-view .intraday-table tbody tr,
+      body.fuman-light-theme #strategy-view table tbody tr,
+      body.fuman-light-theme #strategy-view .intraday-pick,
+      body.fuman-light-theme #strategy-view .intraday-zone,
+      body.fuman-light-theme #strategy-view .terminal-card {
+        background: #ffffff !important;
+        color: #172033 !important;
+        border-color: #e2e8f0 !important;
+        box-shadow: none !important;
+      }
+      body.fuman-light-theme #strategy-view .intraday-side-panel {
+        background: #f7f9fc !important;
+      }
+      body.fuman-light-theme #strategy-view .intraday-signal-card,
+      body.fuman-light-theme #strategy-view .intraday-signal-card.active,
+      body.fuman-light-theme #strategy-view .intraday-signal-card.ma,
+      body.fuman-light-theme #strategy-view .intraday-signal-card.ma.active,
+      body.fuman-light-theme #strategy-view .intraday-signal-card.diamond,
+      body.fuman-light-theme #strategy-view .intraday-signal-card.diamond.active,
+      body.fuman-light-theme #strategy-view .intraday-signal-card.warn,
+      body.fuman-light-theme #strategy-view .intraday-signal-card.warn.active {
+        background: #ffffff !important;
+        color: #111827 !important;
+      }
+      body.fuman-light-theme #strategy-view .intraday-card-top strong,
+      body.fuman-light-theme #strategy-view .intraday-signal-card.ma strong,
+      body.fuman-light-theme #strategy-view .intraday-signal-card.diamond strong,
+      body.fuman-light-theme #strategy-view .intraday-signal-card.warn strong,
+      body.fuman-light-theme #strategy-view .intraday-count {
+        color: #111827 !important;
+      }
+      body.fuman-light-theme #strategy-view .intraday-side-panel .intraday-signal-card,
+      body.fuman-light-theme #strategy-view .intraday-side-panel .intraday-signal-card *,
+      body.fuman-light-theme #strategy-view .intraday-side-panel .intraday-card-top,
+      body.fuman-light-theme #strategy-view .intraday-side-panel .intraday-card-top *,
+      body.fuman-light-theme #strategy-view .intraday-side-panel .intraday-strength,
+      body.fuman-light-theme #strategy-view .intraday-side-panel .intraday-strength * {
+        color: #111827 !important;
+      }
+      body.fuman-light-theme #strategy-view .intraday-signal-card small {
+        color: #334155 !important;
+      }
+      body.fuman-light-theme #strategy-view .strategy3-table-row:nth-child(even),
+      body.fuman-light-theme #strategy-view .strategy5-table-row:nth-child(even),
+      body.fuman-light-theme #strategy-view .swing-table tbody tr:nth-child(even),
+      body.fuman-light-theme #strategy-view .intraday-table tbody tr:nth-child(even),
+      body.fuman-light-theme #strategy-view table tbody tr:nth-child(even) {
+        background: #fbfdff !important;
+      }
+      body.fuman-light-theme #strategy-view .strategy3-table-row:hover,
+      body.fuman-light-theme #strategy-view .strategy5-table-row:hover,
+      body.fuman-light-theme #strategy-view .strategy5-stock-card:hover,
+      body.fuman-light-theme #strategy-view .swing-table tbody tr:hover,
+      body.fuman-light-theme #strategy-view .intraday-table tbody tr:hover,
+      body.fuman-light-theme #strategy-view table tbody tr:hover {
+        background: #f0f7ff !important;
+      }
+      body.fuman-light-theme #strategy-view h1,
+      body.fuman-light-theme #strategy-view h2,
+      body.fuman-light-theme #strategy-view h3,
+      body.fuman-light-theme #strategy-view h4,
+      body.fuman-light-theme #strategy-view .strategy-title,
+      body.fuman-light-theme #strategy-view .strategy3-name,
+      body.fuman-light-theme #strategy-view .strategy5-stock-card strong,
+      body.fuman-light-theme #strategy-view .strategy3-stock-title strong,
+      body.fuman-light-theme #strategy-view .strategy5-results-head h3,
+      body.fuman-light-theme #strategy-view .strategy5-name {
+        color: #111827 !important;
+      }
+      body.fuman-light-theme #strategy-view p,
+      body.fuman-light-theme #strategy-view small,
+      body.fuman-light-theme #strategy-view td,
+      body.fuman-light-theme #strategy-view th,
+      body.fuman-light-theme #strategy-view .strategy3-reason,
+      body.fuman-light-theme #strategy-view .strategy5-table-reason,
+      body.fuman-light-theme #strategy-view .strategy5-table-row,
+      body.fuman-light-theme #strategy-view .strategy5-table-row > div,
+      body.fuman-light-theme #strategy-view .strategy5-results-head p,
+      body.fuman-light-theme #strategy-view .strategy-summary,
+      body.fuman-light-theme #strategy-view .strategy-card p {
+        color: #334155 !important;
+      }
+      body.fuman-light-theme #strategy-view .strategy3-code,
+      body.fuman-light-theme #strategy-view .strategy5-code,
+      body.fuman-light-theme #strategy-view a {
+        color: #2563eb !important;
+      }
+      body.fuman-light-theme #strategy-view .strategy3-entry-price strong,
+      body.fuman-light-theme #strategy-view .strategy5-entry-price strong,
+      body.fuman-light-theme #strategy-view .red,
+      body.fuman-light-theme #strategy-view .down {
+        color: #dc2626 !important;
+      }
+      body.fuman-light-theme #strategy-view .strategy3-entry-price small,
+      body.fuman-light-theme #strategy-view .strategy5-entry-price small,
+      body.fuman-light-theme #strategy-view .green,
+      body.fuman-light-theme #strategy-view .up {
+        color: #059669 !important;
+      }
+      body.fuman-light-theme #strategy-view .strategy3-rank,
+      body.fuman-light-theme #strategy-view .strategy-rank,
+      body.fuman-light-theme #strategy-view .rank-badge {
+        background: linear-gradient(135deg, #fb7185, #be123c) !important;
+        color: #ffffff !important;
+      }
+      body.fuman-light-theme #strategy-view .strategy-chips b,
+      body.fuman-light-theme #strategy-view .strategy5-chips b,
+      body.fuman-light-theme #strategy-view .swing-badges b,
+      body.fuman-light-theme #strategy-view .intraday-badges b,
+      body.fuman-light-theme #strategy-view .swing-stage,
+      body.fuman-light-theme #strategy-view .swing-score,
+      body.fuman-light-theme #strategy-view .intraday-state,
+      body.fuman-light-theme #strategy-view .intraday-score {
+        background: #f8fafc !important;
+        color: #334155 !important;
+        border-color: #cbd5e1 !important;
+      }
+      body.fuman-light-theme #strategy-view .intraday-state,
+      body.fuman-light-theme #strategy-view .intraday-state.go,
+      body.fuman-light-theme #strategy-view .intraday-state.wait,
+      body.fuman-light-theme #strategy-view .intraday-state.watch {
+        background: #ffffff !important;
+        color: #111827 !important;
+        border: 1px solid #cbd5e1 !important;
+        box-shadow: none !important;
+      }
+      body.fuman-light-theme #strategy-view .strategy-nav.active,
+      body.fuman-light-theme #strategy-view [data-strategy-mode].active,
+      body.fuman-light-theme #strategy-view [data-swing-filter].active,
+      body.fuman-light-theme #strategy-view [data-intraday-filter].active,
+      body.fuman-light-theme #strategy-view [data-strategy5-filter].active {
+        background: #fff7ed !important;
+        color: #c2410c !important;
+        border-color: #fed7aa !important;
+      }
+      html,
+      body,
+      .dashboard,
+      main,
+      .view-panel,
+      #market-view,
+      #strategy-view,
+      #watchlist-view,
+      #chip-trade-view,
+      #warrant-flow-view,
+      #realtime-radar-view,
+      .strategy-terminal,
+      .strategy-results,
+      .strategy5-results,
+      .watchlist-analysis-pane,
+      .watchlist-list-pane,
+      .ta-dashboard,
+      .swing-panel,
+      .intraday-panel,
+      .terminal-card,
+      .terminal-table-wrap,
+      .stock-table,
+      .heatmap,
+      .sector-section,
+      .watch-section {
+        max-width: 100% !important;
+        scrollbar-width: none;
+        -ms-overflow-style: none;
+      }
+      html::-webkit-scrollbar,
+      body::-webkit-scrollbar,
+      .dashboard::-webkit-scrollbar,
+      main::-webkit-scrollbar,
+      .view-panel::-webkit-scrollbar,
+      #market-view::-webkit-scrollbar,
+      #strategy-view::-webkit-scrollbar,
+      #watchlist-view::-webkit-scrollbar,
+      #chip-trade-view::-webkit-scrollbar,
+      #warrant-flow-view::-webkit-scrollbar,
+      #realtime-radar-view::-webkit-scrollbar,
+      .strategy-terminal::-webkit-scrollbar,
+      .strategy-results::-webkit-scrollbar,
+      .strategy5-results::-webkit-scrollbar,
+      .watchlist-analysis-pane::-webkit-scrollbar,
+      .watchlist-list-pane::-webkit-scrollbar,
+      .ta-dashboard::-webkit-scrollbar,
+      .swing-panel::-webkit-scrollbar,
+      .intraday-panel::-webkit-scrollbar,
+      .terminal-card::-webkit-scrollbar,
+      .terminal-table-wrap::-webkit-scrollbar,
+      .stock-table::-webkit-scrollbar,
+      .heatmap::-webkit-scrollbar,
+      .sector-section::-webkit-scrollbar,
+      .watch-section::-webkit-scrollbar,
+      *::-webkit-scrollbar {
+        width: 0 !important;
+        height: 0 !important;
+        display: none !important;
+      }
+      * {
+        scrollbar-width: none;
+        -ms-overflow-style: none;
+      }
+      html,
+      body,
+      .dashboard,
+      main,
+      .view-panel {
+        overflow-x: hidden !important;
+      }
+      #market-view .metrics-grid,
+      #market-view .metric-grid,
+      #market-view .market-metrics {
+        max-width: 100% !important;
+        overflow-x: hidden !important;
+      }
+      #heatmap {
+        max-width: 100% !important;
+        overflow: visible !important;
+      }
+      #heatmap .sector-card {
+        min-width: 0 !important;
+      }
+      #market-view.market-ai-mode > :not(.page-header):not(.data-freshness-bar):not(.market-mode-tabs):not(.market-ai-panel) {
+        display: none !important;
+      }
+      #market-view.market-overview-mode .market-ai-panel {
+        display: none !important;
+      }
+      @media (max-width: 720px) {
+        .fuman-theme-toggle {
+          top: 12px;
+          right: 12px;
+          width: 42px;
+          height: 42px;
+        }
+        .market-ai-summary,
+        .market-ai-advice,
+        .market-ai-main,
+        .market-ai-stock-row {
+          grid-template-columns: 1fr;
+        }
+        .market-ai-metrics {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+        .global-refresh-widget {
+          top: 14px;
+          right: 62px;
+        }
+        .global-refresh-widget button {
+          width: 32px;
+          height: 32px;
+        }
+      }
+    `;
+    document.head.appendChild(style);
+  }
+  const button = document.createElement("button");
+  button.id = "fuman-theme-toggle";
+  button.className = "fuman-theme-toggle";
+  button.type = "button";
+  const applyTheme = (theme) => {
+    const light = theme === "light";
+    document.body.classList.toggle("fuman-light-theme", light);
+    button.textContent = light ? "☀" : "☾";
+    button.title = light ? "切換黑夜模式" : "切換白天模式";
+    button.setAttribute("aria-label", button.title);
+  };
+  const savedTheme = localStorage.getItem(FUMAN_THEME_KEY) || "dark";
+  applyTheme(savedTheme === "light" ? "light" : "dark");
+  button.addEventListener("click", () => {
+    const next = document.body.classList.contains("fuman-light-theme") ? "dark" : "light";
+    localStorage.setItem(FUMAN_THEME_KEY, next);
+    applyTheme(next);
+  });
+  document.body.appendChild(button);
+}
+
+function installGlobalRefreshWidget() {
+  document.querySelector("#global-refresh-widget")?.remove();
+}
+
+function arrangeWatchlistSearch() {
+  const panel = viewPanels.watchlist || document.querySelector("#watchlist-view");
+  const header = panel?.querySelector(".page-header");
+  const input = document.querySelector("#watchlist-search-input");
+  const button = document.querySelector("#watchlist-add-btn");
+  if (!panel || !header || !input || !button || document.querySelector("#watchlist-search-row")) return;
+  const row = document.createElement("div");
+  row.id = "watchlist-search-row";
+  row.className = "watchlist-search-row";
+  row.appendChild(input);
+  row.appendChild(button);
+  header.insertAdjacentElement("afterend", row);
+}
+
+function handleGlobalRefresh() {
+  const active = getActiveViewName();
+  if (active === "market") {
+    loadMarketData(true);
+    loadHeatmap(true);
+    return;
+  }
+  if (active === "realtime-radar") {
+    realtimeRadarSide = "auto";
+    if (!realtimeRadarLastRows.length && !isRealtimeRadarFresh()) realtimeRadarNeedsFreshScan = true;
+    renderRealtimeRadar();
+    return;
+  }
+  if (active === "strategy") {
+    if (strategyPresetMode === "strategy3") loadStrategy3Cache(true);
+    else if (strategyPresetMode === "strategy5") loadStrategy5Cache(true);
+    else if (selectedStrategyIds.has("open_buy")) loadOpenBuyCache(true);
+    else if (selectedStrategyIds.has("swing_radar")) loadStrategy4Cache(true);
+    else if (selectedStrategyIds.has("intraday_2m")) refreshStrategyRealtimeScan("force");
+    else renderStrategyScanner();
+    return;
+  }
+  if (active === "chip-trade") {
+    loadChipTradeData(true);
+    return;
+  }
+  if (active === "warrant-flow") {
+    loadWarrantFlow(true);
+    return;
+  }
+  if (active === "watchlist") {
+    renderWatchlist();
+    refreshSelectedWatchlistQuote();
+    return;
+  }
+  window.location.reload();
+}
+
+async function addStockToWatchlistAndOpen(code, name = code) {
+  if (!code || typeof getWatchlist !== "function" || typeof saveWatchlist !== "function") return;
+  const list = getWatchlist();
+  if (!list.some((item) => item.code === code)) {
+    list.push({ code, name });
+    saveWatchlist(list);
+  }
+  const watchLink = viewLinks.find((link) => link.dataset.view === "watchlist");
+  if (watchLink) showView("watchlist", watchLink);
+  await renderWatchlist();
+  const card = document.querySelector(`#wcard-${code}`);
+  if (card) {
+    card.click();
+    card.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  } else if (typeof showTradingDashboard === "function") {
+    showTradingDashboard(code, name);
+  }
+}
 
 function setAuthMessage(text, type = "") {
   if (!authMessage) return;
@@ -395,6 +2266,11 @@ function deferUiWork(callback, delay = 0) {
   else run();
 }
 
+function deferIdleWork(callback, timeout = 900) {
+  if (typeof requestIdleCallback === "function") requestIdleCallback(callback, { timeout });
+  else deferUiWork(callback, Math.min(timeout, 180));
+}
+
 function isViewActive(name) {
   return Boolean(viewPanels[name]?.classList.contains("active"));
 }
@@ -407,7 +2283,7 @@ const SCHEDULE_META = {
   market: { label: "盤中即時", next: "持續輪巡" },
   watchlist: { label: "盤中即時", next: "持續輪巡" },
   intraday: { label: "盤中即時", next: "持續輪巡" },
-  openBuy: { label: "07:00 / 14:30", times: ["07:00", "14:30"] },
+  openBuy: { label: "07:00 / 16:00", times: ["07:00", "16:00"] },
   strategy3: { label: "13:00", times: ["13:00"] },
   swing: { label: "07:00 / 14:30", times: ["07:00", "14:30"] },
   strategy5: { label: "06:00 / 21:00", times: ["06:00", "21:00"] },
@@ -501,6 +2377,7 @@ function getWorkflowScheduleState(key) {
 }
 
 function scheduleBadgeHtml(key) {
+  return "";
   const meta = SCHEDULE_META[key] || SCHEDULE_META.market;
   if (meta.next || !meta.times?.length) {
     return `<span class="schedule-status-pill"><span>● 每日 ${meta.label} 更新</span><span>● 預計下次更新：${meta.next || ""}</span></span>`;
@@ -620,6 +2497,10 @@ function installRealtimeRadarStyles() {
       font-size: 12px;
     }
     .radar-action {
+      position: fixed;
+      top: 76px;
+      right: 18px;
+      z-index: 9999;
       border: 1px solid rgba(255, 122, 69, 0.35);
       border-radius: 8px;
       background: rgba(255, 122, 69, 0.12);
@@ -627,6 +2508,12 @@ function installRealtimeRadarStyles() {
       cursor: pointer;
       font-weight: 800;
       padding: 10px 12px;
+    }
+    body.fuman-light-theme .radar-action {
+      background: #fff7ed !important;
+      color: #c2410c !important;
+      border-color: #fed7aa !important;
+      box-shadow: 0 10px 24px rgba(15, 23, 42, 0.08) !important;
     }
     .radar-ai-box,
     .radar-team-box,
@@ -639,6 +2526,20 @@ function installRealtimeRadarStyles() {
     .radar-ai-box,
     .radar-team-box {
       padding: 16px;
+    }
+    .radar-ai-box.overview {
+      border-color: rgba(255, 112, 77, 0.34);
+      background: rgba(18, 22, 36, 0.72);
+      display: grid;
+      gap: 12px;
+    }
+    .radar-ai-box.overview .radar-ai-head {
+      padding-bottom: 2px;
+    }
+    .radar-ai-box.overview .radar-ai-note {
+      margin: 0;
+      color: #c9d7f5;
+      font-size: 13px;
     }
     .radar-ai-grid {
       display: grid;
@@ -688,6 +2589,12 @@ function installRealtimeRadarStyles() {
       background: rgba(35, 213, 154, 0.14);
       color: #bfffe9;
     }
+    .radar-ai-panel p {
+      margin: 0;
+      color: #dce7ff;
+      font-size: 13px;
+      line-height: 1.55;
+    }
     .radar-ai-head,
     .radar-team-head {
       display: flex;
@@ -716,6 +2623,47 @@ function installRealtimeRadarStyles() {
       margin-top: 8px;
       color: #7790be;
       font-size: 12px;
+    }
+    body.fuman-light-theme .radar-ai-box.overview {
+      background: #ffffff !important;
+      border-color: rgba(239, 68, 68, 0.36) !important;
+      box-shadow: 0 10px 24px rgba(15, 23, 42, 0.06) !important;
+    }
+    body.fuman-light-theme .radar-topbar small {
+      color: #475569 !important;
+      font-weight: 750 !important;
+    }
+    body.fuman-light-theme .radar-ai-head,
+    body.fuman-light-theme .radar-ai-head span {
+      color: #334155 !important;
+    }
+    body.fuman-light-theme .radar-ai-panel {
+      background: #fff7f7 !important;
+      border-color: rgba(239, 68, 68, 0.34) !important;
+    }
+    body.fuman-light-theme .radar-ai-panel.short {
+      background: #f1fbf7 !important;
+      border-color: rgba(16, 185, 129, 0.36) !important;
+    }
+    body.fuman-light-theme .radar-ai-panel h3 {
+      color: #dc2626 !important;
+    }
+    body.fuman-light-theme .radar-ai-panel.short h3 {
+      color: #059669 !important;
+    }
+    body.fuman-light-theme .radar-ai-panel p,
+    body.fuman-light-theme .radar-ai-box.overview .radar-ai-note {
+      color: #334155 !important;
+    }
+    body.fuman-light-theme .radar-ai-chip {
+      background: #ffe4e6 !important;
+      border-color: #fecdd3 !important;
+      color: #be123c !important;
+    }
+    body.fuman-light-theme .radar-ai-panel.short .radar-ai-chip {
+      background: #d1fae5 !important;
+      border-color: #a7f3d0 !important;
+      color: #047857 !important;
     }
     .radar-flow-grid {
       display: grid;
@@ -860,6 +2808,9 @@ function installRealtimeRadarStyles() {
       gap: 0;
       margin-top: 12px;
       border-bottom: 1px solid rgba(134, 151, 190, 0.14);
+      position: relative;
+      z-index: 30;
+      pointer-events: auto;
     }
     .radar-board-tabs button {
       border: 0;
@@ -870,6 +2821,7 @@ function installRealtimeRadarStyles() {
       font-size: 18px;
       font-weight: 950;
       padding: 18px 10px;
+      pointer-events: auto;
     }
     .radar-board-tabs button.active {
       border-color: #ff4d5c;
@@ -980,10 +2932,91 @@ function installRealtimeRadarStyles() {
     .radar-signal-card.short .radar-chip-list span {
       color: #8da1ca;
     }
+    body.fuman-light-theme .radar-board-tabs {
+      border-bottom-color: #cbd8e6 !important;
+    }
+    body.fuman-light-theme .radar-board-tabs button {
+      color: #64748b !important;
+    }
+    body.fuman-light-theme .radar-board-tabs button.active {
+      border-color: #ef4444 !important;
+      color: #dc2626 !important;
+    }
+    body.fuman-light-theme .radar-board-tabs button.short-active {
+      border-color: #64748b !important;
+      color: #475569 !important;
+    }
+    body.fuman-light-theme .radar-signal-card {
+      background: #ffffff !important;
+      border: 1px solid #fecaca !important;
+      box-shadow: 0 10px 22px rgba(15, 23, 42, 0.06) !important;
+    }
+    body.fuman-light-theme .radar-signal-card.short {
+      background: #ffffff !important;
+      border-color: #cbd8e6 !important;
+    }
+    body.fuman-light-theme .radar-jump span {
+      color: #4f6f9f !important;
+      font-weight: 850 !important;
+    }
+    body.fuman-light-theme .radar-jump strong {
+      color: #f59e0b !important;
+      font-weight: 950 !important;
+    }
+    body.fuman-light-theme .radar-signal-name {
+      color: #111827 !important;
+      font-weight: 950 !important;
+    }
+    body.fuman-light-theme .radar-signal-name small {
+      color: #4f6f9f !important;
+      font-weight: 900 !important;
+    }
+    body.fuman-light-theme .radar-signal-meta {
+      color: #385a8f !important;
+      font-weight: 750 !important;
+      border-color: transparent !important;
+    }
+    body.fuman-light-theme .radar-signal-chips span {
+      background: #ffe4e6 !important;
+      border-color: #fecaca !important;
+      color: #dc2626 !important;
+      font-weight: 950 !important;
+    }
+    body.fuman-light-theme .radar-signal-price strong,
+    body.fuman-light-theme .radar-signal-price small {
+      color: #dc2626 !important;
+      font-weight: 950 !important;
+    }
+    body.fuman-light-theme .radar-condition-list,
+    body.fuman-light-theme .radar-chip-list {
+      border-left-color: #e2e8f0 !important;
+    }
+    body.fuman-light-theme .radar-condition-list span,
+    body.fuman-light-theme .radar-chip-list span {
+      color: #ef4444 !important;
+      font-weight: 950 !important;
+      text-shadow: none !important;
+    }
+    body.fuman-light-theme .radar-signal-card.short .radar-signal-price strong,
+    body.fuman-light-theme .radar-signal-card.short .radar-signal-price small,
+    body.fuman-light-theme .radar-signal-card.short .radar-condition-list span,
+    body.fuman-light-theme .radar-signal-card.short .radar-chip-list span {
+      color: #475569 !important;
+    }
+    body.fuman-light-theme .radar-signal-card.short .radar-signal-chips span {
+      background: #eef4fb !important;
+      border-color: #cbd8e6 !important;
+      color: #334155 !important;
+    }
     @media (max-width: 760px) {
       .radar-topbar {
         align-items: flex-start;
         padding-right: 58px;
+      }
+      .radar-action {
+        top: 64px;
+        right: 12px;
+        padding: 8px 10px;
       }
       .radar-topbar h1 {
         font-size: 42px;
@@ -1073,6 +3106,80 @@ function radarStockValue(stock) {
   return cleanNumber(stock.value) || close * volume * 1000;
 }
 
+function radarLowerShadowPct(stock) {
+  const close = cleanNumber(stock.close);
+  const open = cleanNumber(stock.open);
+  const low = cleanNumber(stock.low);
+  const bodyLow = Math.min(open || close, close || open);
+  if (!bodyLow || !low || low >= bodyLow) return 0;
+  return close ? ((bodyLow - low) / close) * 100 : 0;
+}
+
+function radarUpperShadowPct(stock) {
+  const close = cleanNumber(stock.close);
+  const open = cleanNumber(stock.open);
+  const high = cleanNumber(stock.high);
+  const bodyHigh = Math.max(open || close, close || open);
+  if (!bodyHigh || !high || high <= bodyHigh) return 0;
+  return close ? ((high - bodyHigh) / close) * 100 : 0;
+}
+
+function radarMarginChange(stock) {
+  const daily = stock.swingDaily || {};
+  const last = daily.last || {};
+  const candidates = [
+    stock.marginChange,
+    stock.financingChange,
+    stock.marginBalanceChange,
+    stock.marginBuySell,
+    stock.marginDiff,
+    stock.creditChange,
+    stock.marginTradingBalanceChange,
+    stock.marginPurchase,
+    stock.marginBuy,
+    last.marginChange,
+    last.financingChange,
+    last.marginBalanceChange,
+    last.marginDiff,
+    last.creditChange,
+    last.marginPurchase,
+    last.marginBuy,
+    last["融資增減"],
+    last["融資買賣超"],
+  ];
+  for (const value of candidates) {
+    const number = cleanNumber(value);
+    if (number) return number;
+  }
+  return 0;
+}
+
+function radarShortMarginChange(stock) {
+  const daily = stock.swingDaily || {};
+  const last = daily.last || {};
+  const candidates = [
+    stock.shortMarginChange,
+    stock.securitiesLendingChange,
+    stock.marginShortChange,
+    stock.shortSellChange,
+    stock.shortBalanceChange,
+    stock.lendingChange,
+    last.shortMarginChange,
+    last.securitiesLendingChange,
+    last.marginShortChange,
+    last.shortSellChange,
+    last.shortBalanceChange,
+    last.lendingChange,
+    last["融券增減"],
+    last["融券買賣超"],
+  ];
+  for (const value of candidates) {
+    const number = cleanNumber(value);
+    if (number) return number;
+  }
+  return 0;
+}
+
 function radarSignalTags(stock) {
   const tags = [];
   const volume = cleanNumber(stock.tradeVolume || stock.volume);
@@ -1088,38 +3195,67 @@ function radarSignalTags(stock) {
   const prev = daily?.prev;
   const dailyRows = normalizeArray(daily?.rows);
   const priorRows = dailyRows.slice(0, -1);
-  const volumeRatio = daily?.volumeRatio || 0;
+  const volumeRatio = cleanNumber(stock.volumeRatio) || cleanNumber(daily?.volumeRatio);
   const bodyPct = open ? ((close - open) / open) * 100 : 0;
   const longRed = close && open && close > open && bodyPct >= 3;
+  const longBlack = close && open && close < open && bodyPct <= -3;
   const shortWeak = close && open && close < open && bodyPct <= -1.5;
+  const lowerShadowPct = radarLowerShadowPct({ ...stock, swingDaily: daily });
+  const upperShadowPct = radarUpperShadowPct({ ...stock, swingDaily: daily });
+  const marginChange = radarMarginChange({ ...stock, swingDaily: daily });
+  const shortMarginChange = radarShortMarginChange({ ...stock, swingDaily: daily });
+  const prevClose = cleanNumber(stock.prevClose) || (close - cleanNumber(stock.change));
+  const limitDown = cleanNumber(stock.limitDown) || (prevClose ? prevClose * 0.9 : 0);
+  const isNearLimitDown = limitDown && close <= limitDown * 1.005;
   const breaksHigh = (length) => {
     if (!close || priorRows.length < length) return false;
     const high = Math.max(...priorRows.slice(-length).map((row) => cleanNumber(row.high)).filter(Boolean));
     return high > 0 && close > high;
   };
+  const breaksLow = (length) => {
+    if (!close || priorRows.length < length) return false;
+    const low = Math.min(...priorRows.slice(-length).map((row) => cleanNumber(row.low)).filter(Boolean));
+    return low > 0 && close < low;
+  };
   if (longRed) tags.push("長紅逾3%");
+  if (lowerShadowPct >= 3) tags.push("長下影逾3%");
+  if (upperShadowPct >= 3) tags.push("長上影逾3%");
+  if (longBlack) tags.push("長黑逾3%");
   if (shortWeak) tags.push("長黑轉弱");
   if (close && daily?.ma5 && close > daily.ma5) tags.push("突破5日均");
   if (close && daily?.ma10 && close > daily.ma10) tags.push("突破10日均");
   if (close && daily?.ma20 && close > daily.ma20) tags.push("突破20日均");
   if (close && daily?.ma60 && close > daily.ma60) tags.push("突破60日均");
+  if (close && daily?.ma5 && close < daily.ma5) tags.push("跌破5日均");
+  if (close && daily?.ma10 && close < daily.ma10) tags.push("跌破10日均");
+  if (close && daily?.ma20 && close < daily.ma20) tags.push("跌破20日均");
+  if (close && daily?.ma60 && close < daily.ma60) tags.push("跌破60日均");
   if (breaksHigh(10)) tags.push("突破10日高");
   if (breaksHigh(20)) tags.push("突破20日高");
   if (breaksHigh(60)) tags.push("突破60日高");
   if (breaksHigh(120)) tags.push("突破120日高");
-  if (volumeRatio >= 2) tags.push("量增2倍");
-  else if (volumeRatio >= 1.5) tags.push("量增1.5倍");
-  if (value >= 1000000000 || (volume >= 5000 && Math.abs(pct) >= 1.2)) tags.push("即時爆量");
+  if (breaksLow(10)) tags.push("跌破10日低");
+  if (breaksLow(20)) tags.push("跌破20日低");
+  if (breaksLow(60)) tags.push("跌破60日低");
+  if (breaksLow(120)) tags.push("跌破120日低");
+  if (pct >= 0 && volumeRatio >= 2) tags.push("量增2倍");
+  else if (pct >= 0 && volumeRatio >= 1.5) tags.push("量增1.5倍");
+  if (pct < 0 && volumeRatio >= 2) tags.push("量增2倍");
+  else if (pct < 0 && volumeRatio >= 1.5) tags.push("量增1.5倍");
+  if ((pct > 0 && (value >= 1000000000 || (volume >= 5000 && pct >= 1.2))) || (pct < 0 && (value >= 1000000000 || (volume >= 5000 && pct <= -1.2)))) tags.push("即時爆量");
   if (pct >= 3) tags.push("短線急拉");
   if (foreign >= 1000) tags.push("外資買超");
   if (totalInst >= 1000) tags.push("三大法人買超");
-  if (pct >= 1.5 && value >= 200000000) tags.push("短線強勢");
+  if (pct >= 1.5 && volume >= INTRADAY_MIN_VOLUME) tags.push("短線強勢");
   if (trust >= 500) tags.push("投信買超");
+  if (marginChange > 0) tags.push("融資增加");
+  if (shortMarginChange > 0) tags.push("融券增加");
   if (pct <= -3) tags.push("急殺");
+  if (isNearLimitDown || pct <= -9.5) tags.push("接近跌停");
   if (foreign <= -1000) tags.push("外資賣超");
   if (totalInst <= -1000) tags.push("三大法人賣超");
   if (trust <= -500) tags.push("投信賣超");
-  if (pct <= -1.5 && value >= 200000000) tags.push("短線轉弱");
+  if (pct <= -1.5 && volume >= INTRADAY_MIN_VOLUME) tags.push("短線轉弱");
   if (prev?.high && close > prev.high) tags.push("突破昨日高");
   return [...new Set(tags)];
 }
@@ -1133,6 +3269,118 @@ function radarFlowValue(stock) {
   const signalBoost = Math.min(tags * 0.11, 0.46);
   const moveBoost = Math.min(pct / 9, 0.42);
   return value * (0.55 + signalBoost + moveBoost + volumeBoost);
+}
+
+function hasRealtimeRadarQuote(stock) {
+  const code = String(stock?.code || "");
+  const quote = strategyRealtimeQuotes[code];
+  return isRealtimeRadarUsableQuote(quote);
+}
+
+function realtimeRadarDateKeyFromTimestamp(timestamp) {
+  const value = cleanNumber(timestamp);
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return `${date.getFullYear()}${String(date.getMonth() + 1).padStart(2, "0")}${String(date.getDate()).padStart(2, "0")}`;
+}
+
+function realtimeRadarTimeSeconds(value) {
+  const parts = String(value || "").match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?/);
+  if (!parts) return 0;
+  return Number(parts[1]) * 3600 + Number(parts[2]) * 60 + Number(parts[3] || 0);
+}
+
+function isRealtimeRadarQuoteTime(quote) {
+  const seconds = realtimeRadarTimeSeconds(quote?.time);
+  return seconds >= 9 * 3600 && seconds <= (13 * 3600 + 30 * 60);
+}
+
+function isRealtimeRadarUsableQuote(quote) {
+  if (!quote?.close || !quote?.time) return false;
+  if (!isRealtimeRadarQuoteTime(quote)) return false;
+  const updatedAt = cleanNumber(quote.updatedAt);
+  if (updatedAt && realtimeRadarDateKeyFromTimestamp(updatedAt) !== marketAiTodayKey()) return false;
+  if (isRadarDetectionWindow() && (!updatedAt || Date.now() - updatedAt > Math.max(REALTIME_RADAR_REFRESH_MS * 4, 15000))) return false;
+  return true;
+}
+
+function isRealtimeRadarTodaySnapshot(stock) {
+  const rowDate = normalizeMarketAiDateKey(stock?.radarDate || stock?.quoteDate || stock?.tradeDate);
+  if (rowDate && rowDate !== marketAiTodayKey()) return false;
+  const updatedAt = cleanNumber(stock?.radarUpdatedAt);
+  return updatedAt > 0 && realtimeRadarDateKeyFromTimestamp(updatedAt) === marketAiTodayKey();
+}
+
+function getStrategy3CachedVolumeRatio(code) {
+  const item = strategy3Data.find((stock) => String(stock.code || "") === String(code || ""));
+  if (!item) return 0;
+  return cleanNumber(item.volumeRatio || item.VolumeRatio || item.volume_ratio || item["量比"]);
+}
+
+function requestRealtimeRadarVolumeRatio(stock) {
+  const code = String(stock?.code || "").replace(/\D/g, "").slice(0, 4);
+  if (!/^\d{4}$/.test(code) || realtimeRadarHistoryPromise || realtimeRadarVolumeRatioRequestedCodes.has(code) || hasStrategyHistoryRows(code)) return;
+  realtimeRadarVolumeRatioRequestedCodes.add(code);
+  loadRealtimeRadarHistory([{ ...stock, code }], { force: true }).then((loaded) => {
+    if (!loaded) {
+      realtimeRadarVolumeRatioRequestedCodes.delete(code);
+      return;
+    }
+    enrichRealtimeRadarSnapshotRows(realtimeRadarLastRows);
+    if (isViewActive("realtime-radar")) renderRealtimeRadar();
+  });
+}
+
+function radarVolumeRatio(stock) {
+  const cachedRatio = cleanNumber(stock.volumeRatio || stock.VolumeRatio || stock.volume_ratio || stock["量比"]) || getStrategy3CachedVolumeRatio(stock.code);
+  if (cachedRatio > 0) return cachedRatio;
+  const daily = stock.swingDaily || analyzeSwingDaily(stock);
+  const rows = normalizeArray(daily?.rows);
+  const currentVolume = normalizeTradeVolumeLots(stock.volume || stock.tradeVolume);
+  const priorVolumes = rows.slice(-21, -1).map((row) => normalizeTradeVolumeLots(row.volume)).filter((value) => value > 0);
+  const averageVolume = avg(priorVolumes);
+  if (currentVolume && averageVolume) {
+    const now = new Date();
+    const minutes = now.getHours() * 60 + now.getMinutes() + now.getSeconds() / 60;
+    const open = 9 * 60;
+    const close = 13 * 60 + 30;
+    const elapsedRatio = clamp((minutes - open) / (close - open), 0.05, 1);
+    return (currentVolume / elapsedRatio) / averageVolume;
+  }
+  const ratio = cleanNumber(daily?.volumeRatio);
+  return ratio > 0 ? ratio : 0;
+}
+
+function enrichRealtimeRadarSnapshotRows(rows = []) {
+  let changed = false;
+  const enriched = normalizeArray(rows).map((stock) => {
+    const daily = stock.swingDaily || analyzeSwingDaily(stock);
+    const volumeRatio = cleanNumber(stock.volumeRatio) || radarVolumeRatio({ ...stock, swingDaily: daily });
+    const signalTags = daily
+      ? radarSignalTags({
+          ...stock,
+          pct: cleanNumber(stock.pct ?? stock.percent),
+          value: cleanNumber(stock.value),
+          volume: cleanNumber(stock.volume || stock.tradeVolume),
+          volumeRatio,
+          swingDaily: daily,
+        })
+      : stock.signalTags;
+    if (volumeRatio && volumeRatio !== cleanNumber(stock.volumeRatio)) changed = true;
+    if (signalTags?.length && signalTags.join("|") !== normalizeArray(stock.signalTags).join("|")) changed = true;
+    return {
+      ...stock,
+      swingDaily: daily || stock.swingDaily,
+      volumeRatio: volumeRatio || stock.volumeRatio,
+      signalTags: signalTags?.length ? signalTags : stock.signalTags,
+    };
+  });
+  if (changed) {
+    realtimeRadarLastRows = enriched;
+    saveRealtimeRadarLastRows(realtimeRadarLastRows);
+  }
+  return enriched;
 }
 
 function radarSignalScore(stock) {
@@ -1149,13 +3397,52 @@ function radarSignalScore(stock) {
   return Math.max(1, Math.min(100, Math.round(tagScore + moveScore + valueScore + volumeScore + instScore - 42)));
 }
 
-function buildRealtimeRadarRows() {
-  const intradayPool = latestStocks
-    .map((stock) => applyStrategyQuote(stock))
-    .filter((stock) => isIntradayTradable(stock));
-  const shortPressurePool = [...intradayPool]
+function isRealtimeRadarLimitUp(stock) {
+  const close = cleanNumber(stock.close);
+  const pct = cleanNumber(stock.percent ?? stock.pct);
+  const prevClose = cleanNumber(stock.prevClose) || (close - cleanNumber(stock.change));
+  const limitUp = cleanNumber(stock.limitUp) || (prevClose ? prevClose * 1.1 : 0);
+  if (limitUp && close >= limitUp * 0.995) return true;
+  return pct >= 9.7;
+}
+
+function realtimeRadarClosedDataDateKey() {
+  return normalizeMarketAiDateKey(marketStockDataState.resolvedTradeDate)
+    || marketAiDataDateKey(latestStocks)
+    || marketAiTodayKey();
+}
+
+function realtimeRadarModeText(radarOpen = isRadarDetectionWindow()) {
+  if (radarOpen) return "盤中即時巡邏";
+  const dateKey = realtimeRadarClosedDataDateKey();
+  return dateKey === marketAiTodayKey() ? "收盤資料" : "最新可用收盤資料";
+}
+
+function realtimeRadarModeNote(radarOpen = isRadarDetectionWindow(), count = 0) {
+  const mode = realtimeRadarModeText(radarOpen);
+  if (radarOpen) return `${radarSessionTimeLabel()} · 最新盤中訊號 ${count} 則`;
+  return `${mode} · 資料日期 ${formatMarketAiDateKey(realtimeRadarClosedDataDateKey())} · 訊號 ${count} 則`;
+}
+
+function isRealtimeRadarClosedStockUsable(stock) {
+  if (!stock) return false;
+  if (isMarketAiStaleStock(stock)) return false;
+  const close = cleanNumber(stock.close);
+  const pct = cleanNumber(stock.percent ?? stock.pct);
+  const value = radarStockValue(stock);
+  return close > 0 && Number.isFinite(pct) && value > 0;
+}
+
+function buildRealtimeRadarRows(options = {}) {
+  const requireRealtime = options.mode !== "closed";
+  const radarPool = latestStocks
+    .map((stock) => requireRealtime ? applyStrategyQuote(stock) : stock)
+    .filter((stock) => requireRealtime ? hasRealtimeRadarQuote(stock) : isRealtimeRadarClosedStockUsable(stock))
+    .filter((stock) => isIntradayTradable(stock))
+    .filter((stock) => !isRealtimeRadarLimitUp(stock));
+  const shortPressurePool = [...radarPool]
     .filter((stock) => {
-      const live = applyStrategyQuote(stock);
+      const live = requireRealtime ? applyStrategyQuote(stock) : stock;
       const inst = getInstitutionTotal(live.code);
       const pct = cleanNumber(live.percent);
       const value = radarStockValue(live);
@@ -1176,14 +3463,14 @@ function buildRealtimeRadarRows() {
       return bv - av;
     });
   const rankedIntradayPool = uniqueStocksByCode([
-    ...getIntradayCandidateStocks(intradayPool),
-    ...getBaseStrongIntradayStocks(intradayPool),
+    ...getIntradayCandidateStocks(radarPool),
+    ...getBaseStrongIntradayStocks(radarPool),
     ...shortPressurePool,
-    ...[...intradayPool].sort((a, b) => getIntradayHotScore(b) - getIntradayHotScore(a)),
+    ...[...radarPool].sort((a, b) => getIntradayHotScore(b) - getIntradayHotScore(a)),
   ]).slice(0, REALTIME_RADAR_POOL_LIMIT);
   return rankedIntradayPool
     .map((stock) => {
-      const live = applyStrategyQuote(stock);
+      const live = requireRealtime ? applyStrategyQuote(stock) : stock;
       const inst = getInstitutionTotal(live.code);
       const pct = cleanNumber(live.percent);
       const value = radarStockValue(live);
@@ -1192,19 +3479,31 @@ function buildRealtimeRadarRows() {
       const trust = cleanNumber(inst.trust);
       const foreign = cleanNumber(inst.foreign);
       const daily = live.swingDaily || analyzeSwingDaily(live);
-      const signalTags = radarSignalTags({ ...live, pct, value, volume, foreign, trust, totalInst, swingDaily: daily });
+      const marginChange = radarMarginChange({ ...live, swingDaily: daily });
+      const shortMarginChange = radarShortMarginChange({ ...live, swingDaily: daily });
+      const upperShadowPct = radarUpperShadowPct({ ...live, swingDaily: daily });
+      const lowerShadowPct = radarLowerShadowPct({ ...live, swingDaily: daily });
+      const volumeRatio = radarVolumeRatio({ ...live, volume, swingDaily: daily });
+      const signalTags = radarSignalTags({ ...live, pct, value, volume, volumeRatio, foreign, trust, totalInst, marginChange, shortMarginChange, swingDaily: daily });
+      const hasLongTag = signalTags.some((tag) => /突破|長紅|長下影|量增|買超|強勢|急拉|融資增加/.test(tag));
+      const hasShortTag = signalTags.some((tag) => /跌破|長上影|急殺|賣超|轉弱|長黑|接近跌停|融券增加/.test(tag));
       const hasLongSignal =
-        signalTags.some((tag) => /突破|長紅|量增|買超|強勢|急拉/.test(tag)) ||
+        hasLongTag ||
+        lowerShadowPct >= 3 ||
+        marginChange > 0 ||
         pct >= 3 ||
-        (pct >= 1.5 && value >= 200000000) ||
+        (pct >= 1.5 && volume >= INTRADAY_MIN_VOLUME) ||
         (value >= 1000000000 && pct > 0) ||
         (volume >= 5000 && pct >= 1.2) ||
         (foreign >= 1000 && pct >= 0) ||
         (trust >= 500 && pct >= 0);
       const hasShortSignal =
-        signalTags.some((tag) => /急殺|賣超|轉弱|長黑/.test(tag)) ||
+        hasShortTag ||
+        upperShadowPct >= 3 ||
+        shortMarginChange > 0 ||
+        (signalTags.some((tag) => /量增|即時爆量/.test(tag)) && pct < 0) ||
         pct <= -3 ||
-        (pct <= -1.5 && value >= 200000000) ||
+        (pct <= -1.5 && volume >= INTRADAY_MIN_VOLUME) ||
         (value >= 1000000000 && pct < 0) ||
         (volume >= 5000 && pct <= -1.2) ||
         (foreign <= -1000 && pct <= 0.8) ||
@@ -1212,6 +3511,9 @@ function buildRealtimeRadarRows() {
       const side = hasLongSignal && (!hasShortSignal || pct >= 0) ? "long" : hasShortSignal ? "short" : "";
       const score = radarSignalScore({ ...live, pct, value, volume, foreign, trust, signalTags });
       const flow = radarFlowValue({ ...live, pct, value, volume, foreign, trust, signalTags });
+      const radarUpdatedAt = requireRealtime
+        ? cleanNumber(strategyRealtimeQuotes[live.code]?.updatedAt) || strategyLastScanAt || Date.now()
+        : cleanNumber(live.quoteUpdatedAt || live.updatedAt) || Date.now();
       return {
         ...live,
         pct,
@@ -1220,33 +3522,172 @@ function buildRealtimeRadarRows() {
         side,
         score,
         flow,
+        volumeRatio,
         trust,
         foreign,
         totalInst,
+        marginChange,
+        shortMarginChange,
         swingDaily: daily,
         signalTags,
+        radarUpdatedAt,
+        radarMode: requireRealtime ? "intraday" : "closed",
+        radarDate: requireRealtime ? marketAiTodayKey() : realtimeRadarClosedDataDateKey(),
       };
     })
     .filter((stock) => stock.value > 0 && stock.side && stock.signalTags.length)
     .sort((a, b) => b.score - a.score || b.value - a.value);
 }
 
+function realtimeRadarTimestampFromIntradayTime(timeText, dateText = "") {
+  const time = String(timeText || "").match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?/);
+  if (!time) return Date.now();
+  const dateKey = normalizeMarketAiDateKey(dateText) || marketAiTodayKey();
+  const yyyy = dateKey.slice(0, 4);
+  const mm = dateKey.slice(4, 6);
+  const dd = dateKey.slice(6, 8);
+  const timestamp = Date.parse(`${yyyy}-${mm}-${dd}T${String(time[1]).padStart(2, "0")}:${time[2]}:${time[3] || "00"}+08:00`);
+  return Number.isFinite(timestamp) ? timestamp : Date.now();
+}
+
+function buildRealtimeRadarRowsFromStrategy2Cache() {
+  const stockByCode = new Map(latestStocks.map((stock) => [String(stock.code || ""), stock]));
+  return [...strategy2IntradayEventByCode.values()]
+    .map((event) => {
+      const code = String(event?.code || "");
+      if (!/^\d{4}$/.test(code)) return null;
+      const base = stockByCode.get(code) || {};
+      const quote = strategyRealtimeQuotes[code];
+      const live = quote?.close ? applyStrategyQuote({ ...base, code, name: event.name || base.name }) : { ...base, code, name: event.name || base.name };
+      const latestEnhancement = normalizeArray(event.enhancements)
+        .filter((item) => isIntradayVisibleTimeText(item?.at))
+        .sort((a, b) => intradayTimeToValue(b.at) - intradayTimeToValue(a.at))[0] || {};
+      const latestTime = event.latestSeenAt || event.latestAAt || latestEnhancement.at || event.firstAAt || event.firstBAt || quote?.time || "";
+      const close = cleanNumber(live.close) || cleanNumber(event.latestSeenPrice || event.latestAPrice || latestEnhancement.price || event.firstAPrice || event.firstBPrice);
+      const firstPrice = cleanNumber(event.firstAPrice || event.firstBPrice || event.firstSeenPrice);
+      const volume = normalizeTradeVolumeLots(live.tradeVolume || live.volume || latestEnhancement.totalVolume);
+      const value = radarStockValue({ ...live, close, volume }) || estimateTradeValue(close, volume);
+      const pct = Number.isFinite(cleanNumber(live.percent)) && cleanNumber(live.percent)
+        ? cleanNumber(live.percent)
+        : firstPrice ? ((close - firstPrice) / firstPrice) * 100 : 0;
+      const inst = getInstitutionTotal(code);
+      const trust = cleanNumber(inst.trust);
+      const foreign = cleanNumber(inst.foreign);
+      const totalInst = cleanNumber(inst.total);
+      const side = pct < 0 ? "short" : "long";
+      const strategyTags = normalizeArray(event.strategies).slice(0, 4);
+      const enhancementTags = latestEnhancement.strategy ? [latestEnhancement.strategy] : [];
+      const signalTags = [...new Set([...strategyTags, ...enhancementTags, side === "short" ? "短線轉弱" : "短線強勢"])];
+      const score = Math.max(1, Math.min(100, cleanNumber(event.maxScore || latestEnhancement.score) || radarSignalScore({ ...live, pct, value, volume, foreign, trust, signalTags })));
+      return {
+        ...live,
+        code,
+        name: event.name || live.name || code,
+        close,
+        pct,
+        percent: pct,
+        value,
+        volume,
+        tradeVolume: volume,
+        side,
+        score,
+        flow: radarFlowValue({ ...live, pct, value, volume, foreign, trust, signalTags }),
+        volumeRatio: cleanNumber(live.volumeRatio),
+        trust,
+        foreign,
+        totalInst,
+        marginChange: 0,
+        shortMarginChange: 0,
+        signalTags,
+        radarUpdatedAt: realtimeRadarTimestampFromIntradayTime(latestTime, event.date),
+        radarMode: "intraday",
+        radarDate: normalizeMarketAiDateKey(event.date) || marketAiTodayKey(),
+        strategy2Event: event,
+      };
+    })
+    .filter((stock) => stock?.close > 0 && stock.side)
+    .sort((a, b) => cleanNumber(b.radarUpdatedAt) - cleanNumber(a.radarUpdatedAt) || cleanNumber(b.score) - cleanNumber(a.score));
+}
+
 function radarReasonTags(stock) {
   return (stock.signalTags?.length ? stock.signalTags : [stock.side === "long" ? "短線強勢" : "短線轉弱"]).slice(0, 4);
 }
 
+function radarTechnicalTags(stock) {
+  const tags = normalizeArray(stock.signalTags)
+    .filter((tag) => !/法人|外資|投信|買超|賣超|融資|融券/.test(tag));
+  const fallback = stock.side === "short" ? "短線轉弱" : "短線強勢";
+  return (tags.length ? tags : [fallback]).slice(0, 5);
+}
+
+function radarChipTags(stock) {
+  const tags = normalizeArray(stock.signalTags)
+    .filter((tag) => /法人|外資|投信|買超|賣超|融資|融券/.test(tag));
+  if (stock.side === "short") {
+    if (stock.totalInst < 0) tags.push("三大法人賣超");
+    if (stock.foreign < 0) tags.push("外資賣超");
+    if (stock.trust < 0) tags.push("投信賣超");
+    if (stock.shortMarginChange > 0) tags.push("融券增加");
+  } else {
+    if (stock.totalInst > 0) tags.push("三大法人買超");
+    if (stock.foreign > 0) tags.push("外資買超");
+    if (stock.trust > 0) tags.push("投信買超");
+    if (stock.marginChange > 0) tags.push("融資增加");
+  }
+  return [...new Set(tags)].slice(0, 5);
+}
+
+function taipeiClockParts(date = new Date()) {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Taipei",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  }).formatToParts(date);
+  return Object.fromEntries(parts.map((part) => [part.type, part.value]));
+}
+
 function radarSessionTimeLabel() {
   const date = new Date();
-  const minutes = date.getHours() * 60 + date.getMinutes();
+  const parts = taipeiClockParts(date);
+  const minutes = Number(parts.hour) * 60 + Number(parts.minute);
   if (minutes < 9 * 60) return "09:00:00";
   if (minutes > 13 * 60 + 30) return "13:30:00";
-  return date.toLocaleTimeString("zh-TW", { hour12: false });
+  return `${parts.hour}:${parts.minute}:${parts.second}`;
 }
 
 function isRadarDetectionWindow() {
-  const date = new Date();
-  const minutes = date.getHours() * 60 + date.getMinutes();
+  const parts = taipeiClockParts();
+  const minutes = Number(parts.hour) * 60 + Number(parts.minute);
   return minutes >= 9 * 60 && minutes <= 13 * 60 + 30;
+}
+
+function isRealtimeRadarFresh() {
+  if (!isRadarDetectionWindow()) return true;
+  return strategyLastScanAt && Date.now() - strategyLastScanAt <= Math.max(REALTIME_RADAR_REFRESH_MS * 2, 8000);
+}
+
+function latestRealtimeRadarSignalAt(rows = realtimeRadarLastRows) {
+  return normalizeArray(rows).reduce((latest, stock) => Math.max(latest, cleanNumber(stock?.radarUpdatedAt)), 0);
+}
+
+function realtimeRadarSignalTimeText(timestamp, options = {}) {
+  const value = cleanNumber(timestamp);
+  if (!value) return "";
+  return new Date(value).toLocaleTimeString("zh-TW", {
+    hour12: false,
+    hour: "2-digit",
+    minute: "2-digit",
+    second: options.seconds === false ? undefined : "2-digit",
+  });
+}
+
+function isRealtimeRadarSignalStale(rows = realtimeRadarLastRows) {
+  if (!isRadarDetectionWindow()) return false;
+  const latest = latestRealtimeRadarSignalAt(rows);
+  if (!latest) return false;
+  return Date.now() - latest > Math.max(REALTIME_RADAR_REFRESH_MS * 2, 15000);
 }
 
 function isIntradayScanWindow() {
@@ -1257,12 +3698,27 @@ function shouldRunLivePolling() {
   return isIntradayScanWindow();
 }
 
+function getMarketRefreshInterval() {
+  if (isDocumentHidden()) return MARKET_REFRESH_HIDDEN_MS;
+  return shouldRunLivePolling() ? MARKET_REFRESH_LIVE_MS : MARKET_REFRESH_CLOSED_MS;
+}
+
+function getMarketHeatmapRefreshInterval() {
+  if (isDocumentHidden()) return MARKET_REFRESH_HIDDEN_MS;
+  return shouldRunLivePolling() ? MARKET_REFRESH_LIVE_MS : MARKET_HEATMAP_CLOSED_MS;
+}
+
 function saveRealtimeRadarLastRows(rows) {
   try {
-    if (!Array.isArray(rows) || !rows.length) return;
+    const today = marketAiTodayKey();
+    const safeRows = normalizeArray(rows)
+      .filter((stock) => isIntradayTradable(stock))
+      .filter((stock) => isRealtimeRadarTodaySnapshot({ ...stock, radarDate: stock.radarDate || today }));
+    if (!safeRows.length) return;
     const payload = {
       updatedAt: Date.now(),
-      rows: rows.slice(0, 80).map((stock) => ({
+      date: today,
+      rows: safeRows.slice(0, 80).map((stock) => ({
         code: stock.code,
         name: stock.name,
         close: stock.close,
@@ -1271,6 +3727,7 @@ function saveRealtimeRadarLastRows(rows) {
         value: stock.value,
         volume: stock.volume,
         tradeVolume: stock.tradeVolume,
+        volumeRatio: stock.volumeRatio,
         side: stock.side,
         score: stock.score,
         flow: stock.flow,
@@ -1278,21 +3735,244 @@ function saveRealtimeRadarLastRows(rows) {
         foreign: stock.foreign,
         totalInst: stock.totalInst,
         signalTags: stock.signalTags,
+        radarUpdatedAt: stock.radarUpdatedAt,
+        radarDate: today,
       })),
     };
     localStorage.setItem(REALTIME_RADAR_LAST_CACHE_KEY, JSON.stringify(payload));
   } catch (error) {}
 }
 
+function mergeRealtimeRadarRows(newRows = [], oldRows = []) {
+  const merged = new Map();
+  [...normalizeArray(newRows), ...normalizeArray(oldRows)].forEach((stock) => {
+    if (!stock?.code || !stock.side) return;
+    if (!isIntradayTradable(stock)) return;
+    const key = `${stock.side}:${stock.code}`;
+    const existing = merged.get(key);
+    const currentTime = cleanNumber(stock.radarUpdatedAt) || 0;
+    const existingTime = cleanNumber(existing?.radarUpdatedAt) || 0;
+    if (!existing || currentTime >= existingTime) {
+      merged.set(key, { ...stock, radarUpdatedAt: currentTime || Date.now() });
+    }
+  });
+  return [...merged.values()]
+    .sort((a, b) => (cleanNumber(b.radarUpdatedAt) - cleanNumber(a.radarUpdatedAt)) || cleanNumber(b.score) - cleanNumber(a.score))
+    .slice(0, 120);
+}
+
+function hydrateRealtimeRadarDisplayRows(rows = []) {
+  return normalizeArray(rows).map((stock) => {
+    const quote = strategyRealtimeQuotes[String(stock?.code || "")];
+    if (!isRealtimeRadarUsableQuote(quote)) return stock;
+    const live = applyStrategyQuote(stock);
+    if (isRealtimeRadarLimitUp(live)) return null;
+    const inst = getInstitutionTotal(live.code);
+    const pct = cleanNumber(live.percent ?? live.pct);
+    const volume = normalizeTradeVolumeLots(live.tradeVolume || live.volume);
+    const value = radarStockValue({ ...live, volume });
+    const totalInst = cleanNumber(inst.total);
+    const trust = cleanNumber(inst.trust);
+    const foreign = cleanNumber(inst.foreign);
+    const daily = live.swingDaily || stock.swingDaily || analyzeSwingDaily(live);
+    const marginChange = radarMarginChange({ ...live, swingDaily: daily });
+    const shortMarginChange = radarShortMarginChange({ ...live, swingDaily: daily });
+    const upperShadowPct = radarUpperShadowPct({ ...live, swingDaily: daily });
+    const lowerShadowPct = radarLowerShadowPct({ ...live, swingDaily: daily });
+    const volumeRatio = radarVolumeRatio({ ...live, volume, swingDaily: daily });
+    const signalTags = radarSignalTags({ ...live, pct, value, volume, volumeRatio, foreign, trust, totalInst, marginChange, shortMarginChange, swingDaily: daily });
+    const hasLongTag = signalTags.some((tag) => /突破|長紅|長下影|量增|買超|強勢|急拉|融資增加/.test(tag));
+    const hasShortTag = signalTags.some((tag) => /跌破|長上影|急殺|賣超|轉弱|長黑|接近跌停|融券增加/.test(tag));
+    const hasLongSignal =
+      hasLongTag ||
+      lowerShadowPct >= 3 ||
+      marginChange > 0 ||
+      pct >= 3 ||
+      (pct >= 1.5 && volume >= INTRADAY_MIN_VOLUME) ||
+      (value >= 1000000000 && pct > 0) ||
+      (volume >= 5000 && pct >= 1.2) ||
+      (foreign >= 1000 && pct >= 0) ||
+      (trust >= 500 && pct >= 0);
+    const hasShortSignal =
+      hasShortTag ||
+      upperShadowPct >= 3 ||
+      shortMarginChange > 0 ||
+      (signalTags.some((tag) => /量增|即時爆量/.test(tag)) && pct < 0) ||
+      pct <= -3 ||
+      (pct <= -1.5 && volume >= INTRADAY_MIN_VOLUME) ||
+      (value >= 1000000000 && pct < 0) ||
+      (volume >= 5000 && pct <= -1.2) ||
+      (foreign <= -1000 && pct <= 0.8) ||
+      (trust <= -500 && pct <= 0.8);
+    const side = hasLongSignal && (!hasShortSignal || pct >= 0) ? "long" : hasShortSignal ? "short" : "";
+    if (!side || !signalTags.length) return null;
+    const score = radarSignalScore({ ...live, pct, value, volume, foreign, trust, signalTags });
+    const flow = radarFlowValue({ ...live, pct, value, volume, foreign, trust, signalTags });
+    const radarUpdatedAt = Math.max(cleanNumber(stock.radarUpdatedAt), cleanNumber(live.quoteUpdatedAt), cleanNumber(quote.updatedAt));
+    return {
+      ...stock,
+      ...live,
+      pct,
+      percent: pct,
+      volume: volume || stock.volume,
+      tradeVolume: volume || stock.tradeVolume,
+      value: value || stock.value,
+      side,
+      score,
+      flow,
+      volumeRatio,
+      trust,
+      foreign,
+      totalInst,
+      marginChange,
+      shortMarginChange,
+      swingDaily: daily,
+      signalTags,
+      radarUpdatedAt: radarUpdatedAt || stock.radarUpdatedAt,
+    };
+  }).filter(Boolean);
+}
+
+function recentRealtimeRadarDisplayRows(rows = [], radarOpen = isRadarDetectionWindow()) {
+  const hydrated = hydrateRealtimeRadarDisplayRows(rows)
+    .filter((stock) => isIntradayTradable(stock))
+    .filter((stock) => isRealtimeRadarTodaySnapshot({ ...stock, radarDate: stock.radarDate || marketAiTodayKey() }));
+  if (!radarOpen) return hydrated;
+  const latest = latestRealtimeRadarSignalAt(hydrated);
+  if (!latest) return hydrated;
+  const cutoff = Math.max(Date.now() - Math.max(REALTIME_RADAR_REFRESH_MS * 25, 75000), latest - Math.max(REALTIME_RADAR_REFRESH_MS * 12, 45000));
+  const freshRows = hydrated.filter((stock) => cleanNumber(stock.radarUpdatedAt) >= cutoff);
+  return freshRows.length ? freshRows : hydrated;
+}
+
+function switchRealtimeRadarSide(sideInput = "long") {
+  const side = sideInput === "short" ? "short" : "long";
+  realtimeRadarSide = side;
+  const panel = viewPanels["realtime-radar"];
+  const board = panel?.querySelector(".radar-board-list");
+  const cachedMarkup = realtimeRadarBoardMarkupCache[side] || `<div class="empty-state">目前沒有${side === "short" ? "空方" : "多方"}訊號</div>`;
+  if (!panel || !board) {
+    realtimeRadarManualSideSwitch = true;
+    renderRealtimeRadar();
+    return;
+  }
+  panel.querySelectorAll("[data-radar-side]").forEach((button) => {
+    const isActive = button.dataset.radarSide === side;
+    button.classList.toggle("active", isActive);
+    button.classList.toggle("short-active", isActive && side === "short");
+    button.setAttribute("aria-selected", isActive ? "true" : "false");
+  });
+  board.innerHTML = cachedMarkup;
+  realtimeRadarManualSideSwitch = false;
+}
+window.switchRealtimeRadarSide = switchRealtimeRadarSide;
+
 function loadRealtimeRadarLastRows() {
   try {
+    localStorage.removeItem("fuman_realtime_radar_last_rows_v1");
     const payload = JSON.parse(localStorage.getItem(REALTIME_RADAR_LAST_CACHE_KEY) || "{}");
     if (!Array.isArray(payload.rows) || !payload.rows.length) return false;
-    realtimeRadarLastRows = payload.rows;
+    const payloadDate = normalizeMarketAiDateKey(payload.date) || realtimeRadarDateKeyFromTimestamp(payload.updatedAt);
+    if (payloadDate && payloadDate !== marketAiTodayKey()) return false;
+    realtimeRadarLastRows = payload.rows
+      .filter((stock) => isIntradayTradable(stock))
+      .filter((stock) => isRealtimeRadarTodaySnapshot({ ...stock, radarDate: stock.radarDate || payloadDate }));
+    if (!realtimeRadarLastRows.length) return false;
     realtimeRadarLastUpdatedAt = cleanNumber(payload.updatedAt) || Date.now();
+    realtimeRadarCacheSource = "localStorage";
+    realtimeRadarCacheSourceStatus = "fallback";
     return true;
   } catch (error) {
     return false;
+  }
+}
+
+function realtimeRadarPayloadUpdatedAt(payload) {
+  return cleanNumber(payload?.updatedAtMs)
+    || Date.parse(payload?.updatedAt || payload?.timestamp || "")
+    || cleanNumber(payload?.updatedAt)
+    || 0;
+}
+
+function normalizeRealtimeRadarPayloadCandidate(candidate) {
+  const payload = candidate?.payload;
+  const payloadDate = normalizeMarketAiDateKey(payload?.date || payload?.updatedAt);
+  const rows = normalizeArray(payload?.rows);
+  if (payload?.status !== "ok" || payloadDate !== marketAiTodayKey() || !rows.length) return null;
+  return {
+    ...candidate,
+    payloadDate,
+    rows,
+    updatedAt: realtimeRadarPayloadUpdatedAt(payload) || Date.now(),
+  };
+}
+
+async function loadRealtimeRadarLatestCache(force = false) {
+  if (realtimeRadarCacheLoading) return false;
+  if (!force && realtimeRadarCacheLoadedAt && Date.now() - realtimeRadarCacheLoadedAt < REALTIME_RADAR_REFRESH_MS) return false;
+  realtimeRadarCacheLoading = true;
+  try {
+    const candidates = [];
+    const errors = [];
+    if (supabaseClient) {
+      try {
+        const { data, error } = await supabaseClient
+          .from("fuman_realtime_radar_cache")
+          .select("payload,updated_at")
+          .eq("id", "latest")
+          .maybeSingle();
+        if (error) errors.push("Supabase 讀取失敗");
+        if (!error && data?.payload) {
+          candidates.push({
+            source: "supabase",
+            payload: {
+              ...data.payload,
+              updatedAt: data.payload.updatedAt || data.updated_at,
+            },
+          });
+        }
+      } catch (error) {
+        errors.push("Supabase 讀取失敗");
+      }
+    }
+    try {
+      const staticPayload = await fetchJson(`${endpoints.realtimeRadarCache}?t=${Date.now()}`, 8000);
+      if (staticPayload) candidates.push({ source: "static", payload: staticPayload });
+    } catch (error) {
+      errors.push("靜態備援讀取失敗");
+    }
+    const validCandidates = candidates.map(normalizeRealtimeRadarPayloadCandidate).filter(Boolean);
+    if (!validCandidates.length) {
+      realtimeRadarCacheError = errors.join("、");
+      realtimeRadarCacheSourceStatus = realtimeRadarLastRows.length ? "stale" : "missing";
+      return false;
+    }
+    const chosen = validCandidates.sort((a, b) => b.updatedAt - a.updatedAt)[0];
+    const normalizedRows = chosen.rows
+      .map((row) => ({
+        ...row,
+        pct: cleanNumber(row.pct ?? row.percent),
+        percent: cleanNumber(row.percent ?? row.pct),
+        radarUpdatedAt: cleanNumber(row.radarUpdatedAt || row.detectedAt) || chosen.updatedAt,
+        radarDate: chosen.payloadDate,
+        radarMode: "intraday",
+      }))
+      .filter((row) => /^\d{4}$/.test(String(row.code || "")) && row.side && cleanNumber(row.close) > 0);
+    if (!normalizedRows.length) return false;
+    realtimeRadarLastRows = mergeRealtimeRadarRows(normalizedRows, realtimeRadarLastRows);
+    realtimeRadarLastUpdatedAt = chosen.updatedAt;
+    realtimeRadarCacheSource = chosen.source;
+    realtimeRadarCacheSourceStatus = chosen.source === "supabase" ? "ok" : "fallback";
+    realtimeRadarCacheError = errors.join("、");
+    realtimeRadarCacheLoadedAt = Date.now();
+    saveRealtimeRadarLastRows(realtimeRadarLastRows);
+    return true;
+  } catch (error) {
+    realtimeRadarCacheError = error?.message || String(error || "即時資料讀取失敗");
+    realtimeRadarCacheSourceStatus = realtimeRadarLastRows.length ? "stale" : "missing";
+    return false;
+  } finally {
+    realtimeRadarCacheLoading = false;
   }
 }
 
@@ -1325,17 +4005,31 @@ async function ensureRealtimeRadarData() {
 }
 
 async function ensureRealtimeRadarClosingData() {
+  if (realtimeRadarLastRows.length) return realtimeRadarLastRows;
   if (latestStocks.length) return latestStocks;
   if (realtimeRadarDataPromise) return realtimeRadarDataPromise;
   realtimeRadarDataPromise = (async () => {
     realtimeRadarLoading = true;
     try {
-      await loadMarketData();
-      if (latestStocks.length) return latestStocks;
-      const stocks = await loadStrategyStocks();
-      return stocks.length ? stocks : latestStocks;
+      loadRealtimeRadarLastRows();
+      if (realtimeRadarLastRows.length) return realtimeRadarLastRows;
+      const stocksPayload = await fetchJson(`${endpoints.strategyStocks}?t=${Date.now()}`, 15000);
+      const stocks = normalizeArray(stocksPayload?.stocks || stocksPayload);
+      if (stocks.length) {
+        updateMarketStockDataState(stocksPayload);
+        renderStocks(stocks);
+        return latestStocks;
+      }
+      const fallback = await fetchJson(`${endpoints.stocks}?t=${Date.now()}`, 15000);
+      const fallbackStocks = normalizeArray(Array.isArray(fallback) ? fallback : fallback?.stocks || fallback);
+      if (fallbackStocks.length) {
+        updateMarketStockDataState(fallback);
+        renderStocks(fallbackStocks);
+        return latestStocks;
+      }
+      return [];
     } catch (error) {
-      return latestStocks;
+      return [];
     } finally {
       realtimeRadarLoading = false;
       realtimeRadarDataPromise = null;
@@ -1344,33 +4038,121 @@ async function ensureRealtimeRadarClosingData() {
   return realtimeRadarDataPromise;
 }
 
+function formatRealtimeRadarAge(ms) {
+  const seconds = Math.max(0, Math.floor(ms / 1000));
+  if (seconds < 60) return `${seconds}秒前`;
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}分前`;
+  return `${Math.floor(minutes / 60)}小時前`;
+}
+
+function realtimeRadarSourceText() {
+  return {
+    supabase: "Supabase",
+    static: "靜態備援",
+    localStorage: "本機暫存",
+    browserScan: "前端巡邏",
+  }[realtimeRadarCacheSource] || "等待資料";
+}
+
+function realtimeRadarFreshnessText() {
+  if (!realtimeRadarLastUpdatedAt) return realtimeRadarCacheError ? `資料源異常｜${realtimeRadarCacheError}` : "等待即時資料";
+  const age = Date.now() - realtimeRadarLastUpdatedAt;
+  const ageText = formatRealtimeRadarAge(age);
+  const state = age <= REALTIME_RADAR_FRESH_MS
+    ? "資料新鮮"
+    : age <= REALTIME_RADAR_STALE_MS
+    ? "資料延遲"
+    : "即時資料失聯";
+  const sourceStatus = realtimeRadarCacheSourceStatus === "fallback" ? "備援" : realtimeRadarCacheSourceStatus === "stale" ? "保留舊資料" : "";
+  return `來源 ${realtimeRadarSourceText()}${sourceStatus ? ` ${sourceStatus}` : ""}｜${state} ${ageText}`;
+}
+function buildRealtimeRadarAiPanel(rows = [], options = {}) {
+  const list = normalizeArray(rows);
+  const longs = list.filter((stock) => stock.side === "long").sort((a, b) => cleanNumber(b.score) - cleanNumber(a.score)).slice(0, 5);
+  const shorts = list.filter((stock) => stock.side === "short").sort((a, b) => cleanNumber(b.score) - cleanNumber(a.score)).slice(0, 5);
+  const longFlow = list.filter((stock) => stock.side === "long").reduce((sum, stock) => sum + Math.max(cleanNumber(stock.flow), 0), 0);
+  const shortFlow = list.filter((stock) => stock.side === "short").reduce((sum, stock) => sum + Math.max(cleanNumber(stock.flow), 0), 0);
+  const totalFlow = longFlow + shortFlow;
+  const longShare = totalFlow ? Math.round((longFlow / totalFlow) * 100) : 50;
+  const renderChip = (stock) => `<span class="radar-ai-chip">${stock.code} ${stock.name || ""}</span>`;
+  const renderNames = (items) => items.map((stock) => `${stock.code} ${stock.name || ""}`.trim()).join("　");
+  const longText = longs.length
+    ? `多方訊號集中在 ${renderNames(longs)}，留意續強與量能延續。`
+    : "多方訊號更新中，等待成交量與資金流同步確認。";
+  const shortText = shorts.length
+    ? `空方訊號集中在 ${renderNames(shorts)}，留意賣壓與反彈失敗壓力。`
+    : "空方訊號更新中，等待轉弱與賣壓確認。";
+  const trustFlow = list.reduce((sum, stock) => sum + cleanNumber(stock.trust), 0);
+  const foreignFlow = list.reduce((sum, stock) => sum + cleanNumber(stock.foreign), 0);
+  const avgScore = list.length ? Math.round(list.reduce((sum, stock) => sum + cleanNumber(stock.score), 0) / list.length) : 0;
+  const updateText = options.loading
+    ? "正在更新即時訊號"
+    : options.updateText || realtimeRadarModeNote(options.radarOpen, list.length);
+
+  return `
+    <section class="radar-ai-box overview" aria-label="AI 即時判斷">
+      <div class="radar-ai-head">
+        <span>◎ AI 即時判斷</span>
+        <span>信心 ${Math.max(55, Math.min(95, avgScore || longShare))}%</span>
+      </div>
+      <div class="radar-ai-grid">
+        <article class="radar-ai-panel">
+          <div class="radar-ai-head"><h3>↗ 偏多 AI 分析</h3><span>${longs.length} 檔</span></div>
+          <div class="radar-ai-chips">${longs.length ? longs.map(renderChip).join("") : `<span class="radar-ai-chip">更新中</span>`}</div>
+          <p>${longText}</p>
+        </article>
+        <article class="radar-ai-panel short">
+          <div class="radar-ai-head"><h3>↘ 偏空 AI 分析</h3><span>${shorts.length} 檔</span></div>
+          <div class="radar-ai-chips">${shorts.length ? shorts.map(renderChip).join("") : `<span class="radar-ai-chip">更新中</span>`}</div>
+          <p>${shortText}</p>
+        </article>
+      </div>
+      <p class="radar-ai-note">多方 ${radarMoney(longFlow)} ｜ 空方 ${radarMoney(shortFlow)} ｜ 淨流向 ${radarMoney(longFlow - shortFlow)} ｜ 集中度 ${longShare}% ｜ 外資 ${formatInstitution(foreignFlow)} ｜ 投信 ${formatInstitution(trustFlow)} ｜ ${updateText}</p>
+    </section>
+  `;
+  requestAnimationFrame(refreshDataFreshnessBars);
+}
+
 function renderRealtimeRadar() {
   installRealtimeRadarView();
   const panel = viewPanels["realtime-radar"];
   if (!panel) return;
+  requestAnimationFrame(refreshDataFreshnessBars);
+  const isManualSideSwitch = realtimeRadarManualSideSwitch;
+  realtimeRadarManualSideSwitch = false;
   deferUiWork(ensureMobileAutoOrganizeButton);
+  if (!strategy3Data.length && !strategy3CacheLoading) {
+    loadStrategy3RadarVolumeCache();
+  }
   const radarOpen = isRadarDetectionWindow();
   if (!realtimeRadarLastRows.length) loadRealtimeRadarLastRows();
-  if (!radarOpen && !latestStocks.length) {
-    if (realtimeRadarLastRows.length) {
-      // Fall through and render the persisted closing snapshot.
-    } else {
-      panel.innerHTML = `
-        <header class="radar-topbar">
-          <div>
-            <h1>◎ 即時多空資金流</h1>
-            <small>偵測時間 09:00-13:30｜收盤後停止偵測，正在讀取收盤資料</small>
-          </div>
-          <button class="radar-action" type="button" disabled>09:00-13:30 偵測</button>
-        </header>
-        <div class="empty-state">正在讀取收盤資料，顯示盤中最後多空狀態...</div>
-      `;
-      ensureRealtimeRadarClosingData().then((stocks) => {
-        if (stocks.length) renderRealtimeRadar();
-        else panel.innerHTML = `<div class="empty-state">收盤資料暫時讀取失敗，請稍後再試。</div>`;
+  if (radarOpen) {
+    const radarCacheDue = !realtimeRadarCacheLoadedAt || Date.now() - realtimeRadarCacheLoadedAt >= REALTIME_RADAR_REFRESH_MS;
+    if (radarCacheDue && !realtimeRadarCacheLoading) {
+      loadRealtimeRadarLatestCache(true).then((loaded) => {
+        if (loaded && isViewActive("realtime-radar")) renderRealtimeRadar();
       });
-      return;
     }
+  }
+  if (!realtimeRadarLastRows.length) loadRealtimeRadarLastRows();
+  if (!radarOpen && !realtimeRadarLastRows.length && !latestStocks.length) {
+    panel.innerHTML = `
+      <header class="radar-topbar">
+        <div>
+          <h1>◎ 即時多空資金流</h1>
+          <small>偵測時間 09:00-13:30｜收盤後停止偵測，正在讀取收盤資料</small>
+        </div>
+        <button class="radar-action" type="button" disabled>09:00-13:30 偵測</button>
+      </header>
+      ${buildRealtimeRadarAiPanel(realtimeRadarLastRows, { loading: true, radarOpen })}
+      <div class="empty-state">正在讀取今日收盤 / 最新可用交易日雷達資料...</div>
+    `;
+    ensureRealtimeRadarClosingData().then((stocks) => {
+      if (stocks.length) renderRealtimeRadar();
+      else panel.innerHTML = `<div class="empty-state">目前沒有可用的即時雷達資料，請稍後重新整理。</div>`;
+    });
+    return;
   }
   if (!latestStocks.length && !realtimeRadarLastRows.length) {
     panel.innerHTML = `<div class="empty-state">正在快速載入當沖雷達股票池...</div>`;
@@ -1380,16 +4162,146 @@ function renderRealtimeRadar() {
     });
     return;
   }
+
   if (!Object.keys(strategyHistoryData).length && !strategy4CacheLoading) loadStrategy4Cache(true);
-  const rows = buildRealtimeRadarRows();
-  if (radarOpen && rows.length) {
-    realtimeRadarLastRows = rows;
-    realtimeRadarLastUpdatedAt = Date.now();
-    saveRealtimeRadarLastRows(rows);
+  const historyTargets = getRealtimeRadarHistoryTargets();
+  const snapshotHistoryTargets = historyTargets.length ? [] : getRealtimeRadarSnapshotHistoryTargets(realtimeRadarLastRows);
+  const pendingHistoryTargets = historyTargets.length ? historyTargets : snapshotHistoryTargets;
+  if (pendingHistoryTargets.length && !realtimeRadarHistoryPromise && Date.now() - realtimeRadarHistoryLastAt >= REALTIME_RADAR_HISTORY_REFRESH_MS) {
+    loadRealtimeRadarHistory(pendingHistoryTargets).then((loaded) => {
+      if (loaded) {
+        enrichRealtimeRadarSnapshotRows(realtimeRadarLastRows);
+        renderRealtimeRadar();
+      }
+    });
   }
-  const displayRows = rows.length ? rows : realtimeRadarLastRows;
-  const longAll = displayRows.filter((stock) => stock.side === "long");
-  const shortAll = displayRows.filter((stock) => stock.side === "short");
+  const shouldReuseRadarRows = isManualSideSwitch && realtimeRadarLastRows.length;
+  const cacheRows = [];
+  const liveRows = shouldReuseRadarRows ? [] : buildRealtimeRadarRows({ mode: radarOpen ? "intraday" : "closed" });
+  const rows = radarOpen ? mergeRealtimeRadarRows([...liveRows, ...cacheRows], []) : liveRows;
+  if (!shouldReuseRadarRows && radarOpen && rows.length) {
+    realtimeRadarLastRows = mergeRealtimeRadarRows(rows, realtimeRadarLastRows);
+    realtimeRadarLastUpdatedAt = Date.now();
+    realtimeRadarCacheSource = "browserScan";
+    realtimeRadarCacheSourceStatus = "ok";
+    saveRealtimeRadarLastRows(realtimeRadarLastRows);
+  }
+  const radarSignalStale = radarOpen && isRealtimeRadarSignalStale(realtimeRadarLastRows);
+  const radarNeedsUpdate = radarOpen && (realtimeRadarNeedsFreshScan || !isRealtimeRadarFresh() || radarSignalStale);
+  if (radarNeedsUpdate && realtimeRadarLastRows.length) {
+    if (!realtimeRadarRefreshLoading && !strategyRealtimeLoading) {
+      realtimeRadarRefreshLoading = true;
+      refreshStrategyRealtimeScan(radarSignalStale ? "force" : "hot")
+        .then(() => {
+          realtimeRadarNeedsFreshScan = false;
+          renderRealtimeRadar();
+        })
+        .finally(() => {
+          realtimeRadarRefreshLoading = false;
+        });
+    }
+  } else if (radarNeedsUpdate) {
+    if (!isManualSideSwitch && panel.querySelector(".radar-board-list")) {
+      if (!realtimeRadarRefreshLoading && !strategyRealtimeLoading) {
+        realtimeRadarRefreshLoading = true;
+        refreshStrategyRealtimeScan(radarSignalStale ? "force" : "hot")
+          .then(() => {
+            realtimeRadarNeedsFreshScan = false;
+            renderRealtimeRadar();
+          })
+          .finally(() => {
+            realtimeRadarRefreshLoading = false;
+          });
+      }
+      return;
+    }
+    panel.innerHTML = `
+      <header class="radar-topbar">
+        <div>
+          <h1>◎ 即時多空資金流</h1>
+          <small>偵測時間 09:00-13:30｜正在更新即時訊號</small>
+        </div>
+        <button class="radar-action" type="button" data-radar-refresh>重新整理</button>
+      </header>
+      ${buildRealtimeRadarAiPanel(realtimeRadarLastRows, { loading: true })}
+      <section class="radar-board-tabs" role="tablist" aria-label="即時雷達多空切換">
+        <button type="button" class="${realtimeRadarSide !== "short" ? "active" : ""}" data-radar-side="long" onclick="switchRealtimeRadarSide('long')">多方</button>
+        <button type="button" class="${realtimeRadarSide === "short" ? "active short-active" : ""}" data-radar-side="short" onclick="switchRealtimeRadarSide('short')">空方</button>
+      </section>
+      <div class="empty-state">正在更新${realtimeRadarSide === "short" ? "空方" : "多方"}訊號...</div>
+    `;
+    if (!realtimeRadarRefreshLoading && !strategyRealtimeLoading) {
+      realtimeRadarRefreshLoading = true;
+      refreshStrategyRealtimeScan("hot")
+        .then(() => {
+          realtimeRadarNeedsFreshScan = false;
+          renderRealtimeRadar();
+        })
+        .finally(() => {
+          realtimeRadarRefreshLoading = false;
+        });
+    }
+    return;
+  }
+  if (radarOpen && !rows.length && !realtimeRadarLastRows.length) {
+    if (!isManualSideSwitch && panel.querySelector(".radar-board-list")) {
+      if (!realtimeRadarRefreshLoading) {
+        realtimeRadarRefreshLoading = true;
+        loadMarketData(true)
+          .then(() => renderRealtimeRadar())
+          .finally(() => {
+            realtimeRadarRefreshLoading = false;
+          });
+      }
+      return;
+    }
+    panel.innerHTML = `
+      <header class="radar-topbar">
+        <div>
+          <h1>◎ 即時多空資金流</h1>
+          <small>偵測時間 09:00-13:30｜正在更新即時訊號</small>
+        </div>
+        <button class="radar-action" type="button" data-radar-refresh>重新整理</button>
+      </header>
+      ${buildRealtimeRadarAiPanel(realtimeRadarLastRows, { loading: true })}
+      <section class="radar-board-tabs" role="tablist" aria-label="即時雷達多空切換">
+        <button type="button" class="${realtimeRadarSide !== "short" ? "active" : ""}" data-radar-side="long" onclick="switchRealtimeRadarSide('long')">多方</button>
+        <button type="button" class="${realtimeRadarSide === "short" ? "active short-active" : ""}" data-radar-side="short" onclick="switchRealtimeRadarSide('short')">空方</button>
+      </section>
+      <div class="empty-state">正在更新${realtimeRadarSide === "short" ? "空方" : "多方"}訊號...</div>
+    `;
+    if (!realtimeRadarRefreshLoading) {
+      realtimeRadarRefreshLoading = true;
+      loadMarketData(true)
+        .then(() => renderRealtimeRadar())
+        .finally(() => {
+          realtimeRadarRefreshLoading = false;
+        });
+    }
+    return;
+  }
+  if (!radarOpen && !rows.length && !realtimeRadarLastRows.length) {
+    panel.innerHTML = `
+      <header class="radar-topbar">
+        <div>
+          <h1>◎ 即時多空資金流</h1>
+          <small>偵測時間 09:00-13:30｜${realtimeRadarModeText(false)}｜資料日期 ${formatMarketAiDateKey(realtimeRadarClosedDataDateKey())}</small>
+        </div>
+        <button class="radar-action" type="button" disabled>09:00-13:30 偵測</button>
+      </header>
+      ${buildRealtimeRadarAiPanel([], { radarOpen: false })}
+      <div class="empty-state">收盤資料暫無可用雷達訊號，請稍後重新整理。</div>
+    `;
+    return;
+  }
+  const displayRows = realtimeRadarLastRows.length
+    ? recentRealtimeRadarDisplayRows(shouldReuseRadarRows ? realtimeRadarLastRows : enrichRealtimeRadarSnapshotRows(realtimeRadarLastRows), radarOpen)
+    : rows;
+  const displaySignalAt = latestRealtimeRadarSignalAt(displayRows);
+  const displaySignalStale = radarOpen && isRealtimeRadarSignalStale(displayRows);
+  const sortRadarLedger = (items) => [...items].sort((a, b) => (cleanNumber(b.radarUpdatedAt) - cleanNumber(a.radarUpdatedAt)) || cleanNumber(b.score) - cleanNumber(a.score));
+  const longAll = sortRadarLedger(displayRows.filter((stock) => stock.side === "long"));
+  const shortAll = sortRadarLedger(displayRows.filter((stock) => stock.side === "short"));
   const longRows = longAll.slice(0, 8);
   const shortRows = shortAll.slice(0, 8);
   const longFlow = longAll.reduce((sum, stock) => sum + stock.flow, 0);
@@ -1398,22 +4310,6 @@ function renderRealtimeRadar() {
   const activeSide = realtimeRadarSide === "short" ? "short" : realtimeRadarSide === "long" ? "long" : (major === "偏空" ? "short" : "long");
   const activeRows = activeSide === "short" ? shortRows : longRows;
   const now = radarSessionTimeLabel();
-  const radarInstitutionTags = (stock) => {
-    const tags = [];
-    if (stock.side === "short") {
-      if (stock.totalInst < 0) tags.push("三大法人賣超");
-      if (stock.foreign < 0) tags.push("外資賣超");
-      if (stock.trust < 0) tags.push("投信賣超");
-      if (stock.totalInst >= 0) tags.push("法人買盤轉弱");
-      tags.push("短線賣壓");
-    } else {
-      if (stock.totalInst > 0) tags.push("三大法人買超");
-      if (stock.foreign > 0) tags.push("外資買超");
-      if (stock.trust > 0) tags.push("投信買超");
-      tags.push(stock.totalInst >= 0 ? "融資減少" : "法人買盤觀察");
-    }
-    return tags.slice(0, 4);
-  };
   const radarDetailChips = (stock) => {
     const chips = [
       `價 ${stock.pct >= 0 ? "+" : ""}${stock.pct.toFixed(0)}`,
@@ -1426,14 +4322,22 @@ function renderRealtimeRadar() {
   };
   const boardCard = (stock) => {
     const sign = stock.pct >= 0 ? "+" : "";
-    const tags = radarReasonTags(stock).map((tag) => `<span>${tag}</span>`).join("");
-    const instTags = radarInstitutionTags(stock).map((tag) => `<span>${tag}</span>`).join("");
+    const tags = radarTechnicalTags(stock).map((tag) => `<span>${tag}</span>`).join("");
+    const instTags = radarChipTags(stock).map((tag) => `<span>${tag}</span>`).join("");
+    const volumeRatio = cleanNumber(stock.volumeRatio) || radarVolumeRatio(stock);
+    if (!volumeRatio) requestRealtimeRadarVolumeRatio(stock);
+    const volumeRatioText = volumeRatio
+      ? formatNumber(volumeRatio, 2)
+      : realtimeRadarVolumeRatioRequestedCodes.has(String(stock.code || "")) ? "計算中" : "--";
+    const eventTime = cleanNumber(stock.radarUpdatedAt)
+      ? new Date(cleanNumber(stock.radarUpdatedAt)).toLocaleTimeString("zh-TW", { hour12: false, hour: "2-digit", minute: "2-digit" })
+      : now.slice(0, 5);
     return `
       <article class="radar-signal-card ${stock.side === "short" ? "short" : ""}">
-        <div class="radar-jump"><span>跳出</span><strong>${now.slice(0, 5)}</strong></div>
+        <div class="radar-jump"><strong>${eventTime}</strong></div>
         <div class="radar-signal-main">
           <div class="radar-signal-name">${stock.name}<small>${stock.code}</small></div>
-          <div class="radar-signal-meta">成交金額 ${radarMoney(stock.value)} · 量比 ${formatNumber(Math.max(1, Math.abs(stock.flow) / Math.max(stock.value || 1, 1) * 100), 2)} · 分數 ${Math.round(stock.score)}</div>
+          <div class="radar-signal-meta">成交金額 ${radarMoney(stock.value)} · 量比 ${volumeRatioText} · 分數 ${Math.round(stock.score)}</div>
           <div class="radar-signal-chips">${radarDetailChips(stock)}</div>
         </div>
         <div class="radar-signal-price">
@@ -1445,19 +4349,42 @@ function renderRealtimeRadar() {
       </article>
     `;
   };
-  const boardMarkup = activeRows.slice(0, 10).map(boardCard).join("") || `<div class="empty-state">等待${activeSide === "short" ? "空方" : "多方"}訊號...</div>`;
+  realtimeRadarBoardMarkupCache = {
+    long: longRows.slice(0, 10).map(boardCard).join("") || `<div class="empty-state">目前無多方訊號</div>`,
+    short: shortRows.slice(0, 10).map(boardCard).join("") || `<div class="empty-state">目前無空方訊號</div>`,
+  };
+  const boardMarkup = realtimeRadarBoardMarkupCache[activeSide] || `<div class="empty-state">目前無${activeSide === "short" ? "空方" : "多方"}訊號</div>`;
+  const signalTimeText = realtimeRadarSignalTimeText(displaySignalAt);
+  const aiUpdateText = radarOpen && displaySignalAt
+    ? displaySignalStale
+      ? `最後訊號 ${signalTimeText}｜補掃最新報價中`
+      : `最新訊號 ${signalTimeText}｜${displayRows.length.toLocaleString("zh-TW")} 則`
+    : realtimeRadarModeNote(radarOpen, displayRows.length);
+  const radarFreshnessText = radarOpen ? realtimeRadarFreshnessText() : "";
+  const aiPanelMarkup = buildRealtimeRadarAiPanel(displayRows, { radarOpen, updateText: [aiUpdateText, radarFreshnessText].filter(Boolean).join("｜") });
+  const radarHeaderFreshness = radarOpen ? realtimeRadarFreshnessText() : "";
+  const radarHeaderNote = radarOpen
+    ? displaySignalAt
+      ? displaySignalStale
+        ? `盤中即時巡邏｜最後訊號 ${signalTimeText}，正在強制補掃`
+        : `盤中即時巡邏｜最新訊號 ${signalTimeText}`
+      : "盤中即時巡邏｜3秒輪巡同步中"
+    : realtimeRadarLastRows.length
+      ? `收盤後停止偵測，顯示今日盤中最後資料${realtimeRadarLastUpdatedAt ? ` ${new Date(realtimeRadarLastUpdatedAt).toLocaleTimeString("zh-TW", { hour12: false })}` : ""}`
+      : `${realtimeRadarModeText(false)}｜資料日期 ${formatMarketAiDateKey(realtimeRadarClosedDataDateKey())}`;
 
   panel.innerHTML = `
     <header class="radar-topbar">
       <div>
         <h1>◎ 即時多空資金流</h1>
-        <small>偵測時間 09:00-13:30${radarOpen ? "" : `｜收盤後停止偵測，顯示盤中最後資料${realtimeRadarLastUpdatedAt ? ` ${new Date(realtimeRadarLastUpdatedAt).toLocaleTimeString("zh-TW", { hour12: false })}` : ""}`}</small>
+        <small>偵測時間 09:00-13:30｜${radarHeaderNote}${radarHeaderFreshness ? `｜${radarHeaderFreshness}` : ""}</small>
       </div>
-      <button class="radar-action" type="button" ${radarOpen ? "data-radar-refresh" : "disabled"}>${radarOpen ? "刷新雷達" : "09:00-13:30 偵測"}</button>
+      <button class="radar-action" type="button" ${radarOpen ? "data-radar-refresh" : "disabled"}>${radarOpen ? "重新整理" : "09:00-13:30 偵測"}</button>
     </header>
+    ${aiPanelMarkup}
     <section class="radar-board-tabs" role="tablist" aria-label="即時雷達多空切換">
-      <button type="button" class="${activeSide === "long" ? "active" : ""}" data-radar-side="long">多方</button>
-      <button type="button" class="${activeSide === "short" ? "active short-active" : ""}" data-radar-side="short">空方</button>
+      <button type="button" class="${activeSide === "long" ? "active" : ""}" data-radar-side="long" onclick="switchRealtimeRadarSide('long')">多方</button>
+      <button type="button" class="${activeSide === "short" ? "active short-active" : ""}" data-radar-side="short" onclick="switchRealtimeRadarSide('short')">空方</button>
     </section>
     <section class="radar-board-list">
       ${boardMarkup}
@@ -1496,7 +4423,7 @@ function runMobileAutoOrganize() {
     return;
   }
   if (active === "chip-trade") {
-    loadChipTradeData();
+    loadChipTradeData(true);
     return;
   }
   if (active === "warrant-flow") {
@@ -1547,7 +4474,8 @@ function applyStaticTitleIcons() {
   const marketTitle = document.querySelector("#market-view .page-header h1");
   const settlementBadge = isMobileViewport() ? getTaiexMajorSettlementBadge() : "";
   if (marketTitle) {
-    marketTitle.innerHTML = `${titleWithIcon("●", "市場總覽")}${settlementBadge ? ` <small class="update-mode-badge settlement-title-badge">${escapeAttr(settlementBadge)}</small>` : ""} ${scheduleBadgeHtml("market")}`;
+    const marketText = marketMode === "ai" ? "AI 盤面判讀" : "市場總覽";
+    marketTitle.innerHTML = `${titleWithIcon("●", marketText)}${marketMode === "overview" && settlementBadge ? ` <small class="update-mode-badge settlement-title-badge">${escapeAttr(settlementBadge)}</small>` : ""} ${scheduleBadgeHtml("market")}`;
   }
   setTitleWithSchedule(document.querySelector("#watchlist-view .page-header h1"), "☆", "自選股", "watchlist");
   setTitleWithSchedule(document.querySelector("#chip-trade-view .page-header h1"), "◆", "外資 + 投信連買", "chip");
@@ -1609,7 +4537,7 @@ function labelUpdateModes() {
   document.querySelectorAll(".strategy-card[data-strategy]").forEach((card) => {
     const text = card.textContent || "";
     if (text.includes("策略2")) appendUpdateBadge(card, "立即更新", "live");
-    if (text.includes("策略1")) appendUpdateBadge(card, "07/14:30完整掃", "slow");
+    if (text.includes("策略1")) appendUpdateBadge(card, "07/16:00完整掃", "slow");
     if (text.includes("策略3")) appendUpdateBadge(card, "13:00完整掃", "slow");
     if (text.includes("策略4")) appendUpdateBadge(card, "07/14:30完整掃", "slow");
     if (text.includes("策略5")) appendUpdateBadge(card, "MIS即時", "live");
@@ -1653,6 +4581,7 @@ const endpoints = {
   strategy3Backup: "/data/strategy3-backup.json",
   strategy5Cache: "/data/strategy5-latest.json",
   strategy5Backup: "/data/strategy5-backup.json",
+  realtimeRadarCache: "/data/realtime-radar-latest.json",
   strategy2IntradayCache: "/data/strategy2-intraday-latest.json",
   institutionCache: "/data/institution-latest.json",
   institutionBackup: "/data/institution-backup.json",
@@ -1666,16 +4595,48 @@ let latestStocks = [];
 let marketDataLoading = false;
 let marketDataLastStartedAt = 0;
 let marketDataLastRenderedAt = 0;
+let marketRealtimeState = { trading: false, marketStatus: "", updatedAt: "", source: "" };
+let marketStockDataState = { resolvedTradeDate: "", today: "", source: "", updatedAt: "", isFallbackDate: false, marketDates: {} };
+let heatmapLoading = false;
+let heatmapLastStartedAt = 0;
+let heatmapMode = "all";
+let lastViewName = "";
+let lastViewShownAt = 0;
 let lastMarketRenderSignature = "";
 let lastHeatmapRenderSignature = "";
+let marketMode = "overview";
+let marketAiPanel = null;
+let marketAiLastSignature = "";
+let marketAiStockLoading = false;
+let marketAiHotFilter = "all";
+let marketAiObserveMode = "priority";
+let marketAiInstitutionLoading = false;
+let marketAiRealtimeScanRequestedAt = 0;
 let realtimeRadarLoading = false;
 let realtimeRadarDataPromise = null;
 let realtimeRadarSide = "auto";
+let realtimeRadarManualSideSwitch = false;
+let realtimeRadarBoardMarkupCache = { long: "", short: "" };
 let realtimeRadarLastRows = [];
 let realtimeRadarLastUpdatedAt = 0;
+let realtimeRadarCacheSource = "none";
+let realtimeRadarCacheSourceStatus = "unknown";
+let realtimeRadarCacheError = "";
+const REALTIME_RADAR_FRESH_MS = 2 * 60 * 1000;
+const REALTIME_RADAR_STALE_MS = 5 * 60 * 1000;
+let realtimeRadarCacheLoading = false;
+let realtimeRadarCacheLoadedAt = 0;
 let realtimeRadarRefreshLoading = false;
-const REALTIME_RADAR_LAST_CACHE_KEY = "fuman_realtime_radar_last_rows_v1";
+let realtimeRadarNeedsFreshScan = true;
+let realtimeRadarHistoryPromise = null;
+let realtimeRadarHistoryLastAt = 0;
+const realtimeRadarVolumeRatioRequestedCodes = new Set();
+const REALTIME_RADAR_LAST_CACHE_KEY = "fuman_realtime_radar_last_rows_v2";
+const REALTIME_RADAR_HISTORY_TARGET_LIMIT = 72;
+const REALTIME_RADAR_HISTORY_BATCH_SIZE = 12;
+const REALTIME_RADAR_HISTORY_REFRESH_MS = 10 * 60 * 1000;
 let sectorStocksCache = {};
+let industryMasterByCode = {};
 let institutionData = {};
 let institutionDataPromise = null;
 let institutionDate = "";
@@ -1684,6 +4645,7 @@ let chipMode = "after";
 let chipTradeLoading = false;
 let chipTradeLoadedAt = 0;
 const CHIP_TRADE_CACHE_MS = 10 * 60 * 1000;
+const CHIP_WARRANT_ACTIVE_REFRESH_MS = 60 * 1000;
 let chipFilter = "joint";
 let chipQuoteHydrating = false;
 let chipTradeLastRenderSignature = "";
@@ -1706,6 +4668,7 @@ const intradayFirstSeenAt = new Map();
 let strategy2IntradayEventByCode = new Map();
 let strategy2IntradayCacheDate = "";
 let strategy2IntradayCacheLoading = false;
+let strategy2IntradayCacheLoadedAt = 0;
 let intradayCandidateSeenAt = {};
 let strategyHistoryLoading = false;
 let strategyHistoryCursor = 0;
@@ -1762,9 +4725,15 @@ let warrantFlowHasOpened = false;
 let chipTradePage = 1;
 const WARRANT_FLOW_LOCAL_CACHE_KEY = "fuman_warrant_flow_cache_v1";
 const CACHE_FRESH_MS = 10 * 60 * 1000;
-const MARKET_REFRESH_MS = 30 * 1000;
-const MARKET_REFRESH_HIDDEN_MS = 90 * 1000;
+const MARKET_REFRESH_LIVE_MS = 5 * 1000;
+const MARKET_REFRESH_CLOSED_MS = 10 * 60 * 1000;
+const MARKET_REFRESH_HIDDEN_MS = 5 * 60 * 1000;
+const MARKET_HEATMAP_CLOSED_MS = 10 * 60 * 1000;
+const MARKET_POLL_TICK_MS = 5 * 1000;
 const MARKET_DOM_REFRESH_MS = 60 * 1000;
+const WATCHLIST_REFRESH_LIVE_MS = 30 * 1000;
+const WATCHLIST_REFRESH_CLOSED_MS = 120 * 1000;
+const WATCHLIST_REFRESH_HIDDEN_MS = 180 * 1000;
 let selectedStrategyIds = new Set();
 let strategyMode = "any";
 let strategyKeyword = "";
@@ -1774,6 +4743,7 @@ let strategyStocksLoading = false;
 let swingSortKey = "score";
 let swingSortDir = "desc";
 let swingSignalFilter = "all";
+let swingZoneFilter = "all";
 let swingVisibleKeyword = "";
 let swingVisibleSearchInput = null;
 let intradaySortKey = "time";
@@ -1796,6 +4766,7 @@ const MOBILE_OTHER_STRATEGY_RENDER_MS = 2500;
 const MOBILE_OTHER_STRATEGY_CACHE_MS = 45000;
 const INTRADAY_CANDIDATE_TTL_MS = 15 * 60 * 1000;
 const INTRADAY_MIN_VOLUME = 2000;
+const STRATEGY2_INTRADAY_MIN_DISPLAY_PCT = 2;
 
 const SECTOR_MAP = {
   "2454":"CPU/ASIC/IP","3443":"CPU/ASIC/IP","3661":"CPU/ASIC/IP","3529":"CPU/ASIC/IP",
@@ -1813,13 +4784,16 @@ const SECTOR_MAP = {
   "2317":"組裝代工","2354":"組裝代工","2353":"組裝代工","2356":"組裝代工","2324":"組裝代工","4938":"組裝代工","2382":"組裝代工",
   "2327":"被動元件","2492":"被動元件","2049":"被動元件","2447":"被動元件","2351":"被動元件",
   "6271":"被動元件","2483":"被動元件","3231":"被動元件","2390":"被動元件","2441":"被動元件",
-  "2395":"工業電腦","6414":"工業電腦","3596":"工業電腦","6438":"工業電腦","3026":"工業電腦","6485":"工業電腦",
+  "2395":"工業電腦","6414":"工業電腦","3479":"工業電腦","3416":"工業電腦","3005":"工業電腦",
+  "6206":"工業電腦","6166":"工業電腦","8114":"工業電腦","3577":"工業電腦","3088":"工業電腦",
+  "8234":"工業電腦","6579":"工業電腦","8050":"工業電腦","2397":"工業電腦","3022":"工業電腦",
+  "6570":"工業電腦","2364":"工業電腦","3594":"工業電腦","3652":"工業電腦","6680":"工業電腦",
   "3708":"通訊/CPO","4904":"通訊/CPO","2412":"通訊/CPO","3704":"通訊/CPO","6547":"通訊/CPO","4977":"通訊/CPO","3706":"通訊/CPO",
   "2379":"IC設計服務","3711":"IC設計服務","6415":"IC設計服務","4966":"IC設計服務","3034":"IC設計服務",
   "6146":"IC設計服務","2385":"IC設計服務","3645":"IC設計服務","3163":"IC設計服務","5388":"IC設計服務",
   "6274":"IC設計服務","3561":"IC設計服務","6191":"IC設計服務",
   "3051":"網通設備組件","6277":"網通設備組件","4906":"網通設備組件","2399":"網通設備組件","3321":"網通設備組件",
-  "3037":"PCB/載板","6269":"PCB/載板","2383":"PCB/載板","3005":"PCB/載板","3044":"PCB/載板",
+  "3037":"PCB/載板","6269":"PCB/載板","2383":"PCB/載板","3044":"PCB/載板",
   "2365":"PCB/載板","3406":"PCB/載板","8046":"PCB/載板","2457":"PCB/載板","3376":"PCB/載板","2461":"PCB/載板","6289":"PCB/載板",
   "2308":"半導體","2449":"半導體","2344":"半導體","3711":"半導體","2337":"半導體",
   "3034":"半導體","6415":"半導體","2385":"半導體","3529":"半導體","4966":"半導體",
@@ -1876,6 +4850,161 @@ const SECTOR_MAP = {
   "6550":"創新板股","6730":"創新板股","6754":"創新板股","6811":"創新板股",
 };
 
+const SECTOR_TOPIC_OVERRIDES = {
+  "6285":"網通設備組件","2345":"網通設備組件","3596":"網通設備組件","5388":"網通設備組件",
+  "3380":"網通設備組件","3025":"網通設備組件","2419":"網通設備組件","6216":"網通設備組件",
+  "6284":"網通設備組件","2332":"網通設備組件","3062":"網通設備組件","3491":"網通設備組件",
+  "6282":"網通設備組件","4906":"網通設備組件","3051":"網通設備組件","6277":"網通設備組件",
+  "3321":"網通設備組件",
+};
+Object.assign(SECTOR_MAP, SECTOR_TOPIC_OVERRIDES);
+
+const SECTOR_DR_OVERRIDES = {
+  "9103":"存托憑證","9105":"存托憑證","9106":"存托憑證","9110":"存托憑證",
+  "9136":"存托憑證","910322":"存托憑證","910482":"存托憑證","910861":"存托憑證",
+  "911608":"存托憑證","911616":"存托憑證","911619":"存托憑證","911622":"存托憑證",
+};
+Object.assign(SECTOR_MAP, SECTOR_DR_OVERRIDES);
+
+const SECTOR_IC_PACKAGING_OVERRIDES = {
+  "2449":"IC封測","6147":"IC封測","6271":"IC封測","3374":"IC封測","2441":"IC封測",
+  "6789":"IC封測","6451":"IC封測","3265":"IC封測","3289":"IC封測",
+};
+Object.assign(SECTOR_MAP, SECTOR_IC_PACKAGING_OVERRIDES);
+
+const SECTOR_ELECTRONIC_CHANNEL_OVERRIDES = {
+  "6265":"電子通路","3055":"電子通路","3209":"電子通路","2347":"電子通路","3444":"電子通路",
+  "8032":"電子通路","6776":"電子通路","6118":"電子通路","2414":"電子通路","8072":"電子通路",
+  "3224":"電子通路","6281":"電子通路","3360":"電子通路","8084":"電子通路","6474":"電子通路",
+  "2430":"電子通路","3232":"電子通路","6154":"電子通路","8067":"電子通路",
+};
+Object.assign(SECTOR_MAP, SECTOR_ELECTRONIC_CHANNEL_OVERRIDES);
+
+const SECTOR_GLASS_CERAMICS_OVERRIDES = {
+  "1802":"玻璃陶瓷","1809":"玻璃陶瓷","1810":"玻璃陶瓷","1806":"玻璃陶瓷","1817":"玻璃陶瓷",
+  "9902":"其他","1805":"建材營造",
+};
+Object.assign(SECTOR_MAP, SECTOR_GLASS_CERAMICS_OVERRIDES);
+
+const SECTOR_ASSEMBLY_CLASSIFICATION_OVERRIDES = {
+  "2317":"組裝代工","4938":"組裝代工",
+  "2382":"AI伺服器","2356":"電腦週邊","2324":"電腦週邊","2353":"電腦週邊","2354":"其他電子",
+};
+Object.assign(SECTOR_MAP, SECTOR_ASSEMBLY_CLASSIFICATION_OVERRIDES);
+
+const SECTOR_GREEN_ENV_OVERRIDES = {
+  "8390":"綠能環保","3551":"綠能環保","6894":"綠能環保","6803":"綠能環保","5432":"綠能環保",
+  "7820":"綠能環保","7842":"綠能環保","7715":"綠能環保","8171":"綠能環保","8440":"綠能環保",
+  "3073":"綠能環保","6624":"綠能環保","8087":"綠能環保","3713":"綠能環保","6692":"綠能環保",
+  "6971":"綠能環保","8423":"綠能環保","5205":"綠能環保",
+};
+Object.assign(SECTOR_MAP, SECTOR_GREEN_ENV_OVERRIDES);
+
+const SECTOR_EQUIPMENT_TEST_OVERRIDES = {
+  "6223":"半導體設備/測試","2360":"半導體設備/測試","6187":"半導體設備/測試","6510":"半導體設備/測試",
+  "3680":"半導體設備/測試","6515":"半導體設備/測試","6196":"半導體設備/測試","3413":"半導體設備/測試",
+  "3587":"半導體設備/測試","3030":"半導體設備/測試","6207":"半導體設備/測試","6691":"半導體設備/測試",
+  "6125":"半導體設備/測試",
+};
+Object.assign(SECTOR_MAP, SECTOR_EQUIPMENT_TEST_OVERRIDES);
+
+const SECTOR_RUBBER_OVERRIDES = {
+  "2103":"橡膠工業","2105":"橡膠工業","2104":"橡膠工業","2108":"橡膠工業",
+  "2101":"橡膠工業","2102":"橡膠工業","2106":"橡膠工業","2107":"橡膠工業",
+  "2114":"橡膠工業","6582":"橡膠工業","2109":"橡膠工業",
+};
+Object.assign(SECTOR_MAP, SECTOR_RUBBER_OVERRIDES);
+
+const SECTOR_PAPER_OVERRIDES = {
+  "1905":"造紙工業","1904":"造紙工業","1909":"造紙工業","1903":"造紙工業",
+  "1907":"造紙工業","6790":"造紙工業","1906":"造紙工業","9929":"造紙工業",
+};
+Object.assign(SECTOR_MAP, SECTOR_PAPER_OVERRIDES);
+
+const SECTOR_TRADING_RETAIL_OVERRIDES = {
+  "2912":"貿易百貨","2915":"貿易百貨","2903":"貿易百貨","2913":"貿易百貨",
+  "4807":"貿易百貨","2905":"貿易百貨","2601":"貿易百貨","2908":"貿易百貨",
+  "2904":"貿易百貨","2906":"貿易百貨","2929":"貿易百貨","8429":"貿易百貨",
+  "2901":"貿易百貨","2911":"貿易百貨","2939":"貿易百貨","2945":"貿易百貨",
+  "5907":"貿易百貨","2910":"貿易百貨","5906":"貿易百貨","8443":"貿易百貨",
+};
+Object.assign(SECTOR_MAP, SECTOR_TRADING_RETAIL_OVERRIDES);
+
+const SECTOR_THERMAL_OVERRIDES = {
+  "3653":"液冷/散熱","3017":"液冷/散熱","3324":"液冷/散熱","8996":"液冷/散熱",
+  "2421":"液冷/散熱","3338":"液冷/散熱","6275":"液冷/散熱","6230":"液冷/散熱",
+  "3540":"液冷/散熱",
+};
+Object.assign(SECTOR_MAP, SECTOR_THERMAL_OVERRIDES);
+
+const SECTOR_MEMORY_STORAGE_OVERRIDES = {
+  "2408":"記憶體/儲存","2337":"記憶體/儲存","2344":"記憶體/儲存","6770":"記憶體/儲存",
+  "3260":"記憶體/儲存","5289":"記憶體/儲存","4967":"記憶體/儲存","3006":"記憶體/儲存",
+  "2451":"記憶體/儲存","8299":"記憶體/儲存","8150":"記憶體/儲存","8271":"記憶體/儲存",
+  "8112":"記憶體/儲存","5351":"記憶體/儲存","2329":"記憶體/儲存","4973":"記憶體/儲存",
+  "3135":"記憶體/儲存","8088":"記憶體/儲存","8277":"記憶體/儲存",
+};
+Object.assign(SECTOR_MAP, SECTOR_MEMORY_STORAGE_OVERRIDES);
+
+const SECTOR_POWER_BBU_OVERRIDES = {
+  "2308":"電源/BBU/UPS","2301":"電源/BBU/UPS","3211":"電源/BBU/UPS","6781":"電源/BBU/UPS",
+  "6282":"電源/BBU/UPS","4931":"電源/BBU/UPS","6409":"電源/BBU/UPS","5309":"電源/BBU/UPS",
+  "2476":"電源/BBU/UPS","6121":"電源/BBU/UPS","6412":"電源/BBU/UPS","3323":"電源/BBU/UPS",
+  "2457":"電源/BBU/UPS","6558":"電源/BBU/UPS","8104":"電源/BBU/UPS","3015":"電源/BBU/UPS",
+  "3625":"電源/BBU/UPS",
+};
+Object.assign(SECTOR_MAP, SECTOR_POWER_BBU_OVERRIDES);
+
+const SECTOR_ELECTRIC_CABLE_OVERRIDES = {
+  "1605":"電器電纜","1609":"電器電纜","1608":"電器電纜","1623":"電器電纜",
+  "2061":"電器電纜","1612":"電器電纜","1618":"電器電纜","1603":"電器電纜",
+  "1615":"電器電纜","1616":"電器電纜","1604":"電器電纜","5283":"電器電纜",
+  "1611":"電器電纜","1617":"電器電纜","1614":"電器電纜","1626":"電器電纜",
+  "4930":"電器電纜",
+};
+Object.assign(SECTOR_MAP, SECTOR_ELECTRIC_CABLE_OVERRIDES);
+
+const SECTOR_HEATMAP_TOPIC_OVERRIDES = {
+  "2395":"工業電腦","3005":"工業電腦","3416":"工業電腦","6414":"工業電腦","6579":"工業電腦","8050":"工業電腦",
+  "8114":"工業電腦","2360":"半導體設備/測試","3030":"半導體設備/測試","3413":"半導體設備/測試","3587":"半導體設備/測試","3680":"半導體設備/測試",
+  "6125":"半導體設備/測試","6187":"半導體設備/測試","6196":"半導體設備/測試","6207":"半導體設備/測試","6223":"半導體設備/測試","6510":"半導體設備/測試",
+  "6515":"半導體設備/測試","6691":"半導體設備/測試","2330":"先進封裝/CoWoS","3131":"先進封裝/CoWoS","3264":"先進封裝/CoWoS","3711":"先進封裝/CoWoS",
+  "6239":"先進封裝/CoWoS","6257":"先進封裝/CoWoS","3081":"光通訊/CPO","3163":"光通訊/CPO","3234":"光通訊/CPO","3363":"光通訊/CPO",
+  "3450":"光通訊/CPO","3491":"光通訊/CPO","4908":"光通訊/CPO","4979":"光通訊/CPO","6442":"光通訊/CPO","2329":"記憶體/儲存",
+  "2337":"記憶體/儲存","2344":"記憶體/儲存","2408":"記憶體/儲存","2451":"記憶體/儲存","3006":"記憶體/儲存","3135":"記憶體/儲存",
+  "3260":"記憶體/儲存","4967":"記憶體/儲存","4973":"記憶體/儲存","5289":"記憶體/儲存","5351":"記憶體/儲存","6770":"記憶體/儲存",
+  "8088":"記憶體/儲存","8112":"記憶體/儲存","8150":"記憶體/儲存","8271":"記憶體/儲存","8277":"記憶體/儲存","8299":"記憶體/儲存",
+  "2421":"液冷/散熱","3017":"液冷/散熱","3324":"液冷/散熱","3338":"液冷/散熱","3540":"液冷/散熱","3653":"液冷/散熱",
+  "6230":"液冷/散熱","6275":"液冷/散熱","8996":"液冷/散熱","2324":"組裝代工","2353":"組裝代工","2347":"電子通路",
+  "2414":"電子通路","2430":"電子通路","3010":"電子通路","3028":"電子通路","3033":"電子通路","3036":"電子通路",
+  "3048":"電子通路","3055":"電子通路","3209":"電子通路","3224":"電子通路","3232":"電子通路","3312":"電子通路",
+  "3360":"電子通路","3444":"電子通路","3528":"電子通路","3702":"電子通路","5434":"電子通路","6113":"電子通路",
+  "6118":"電子通路","6154":"電子通路","6189":"電子通路","6227":"電子通路","6265":"電子通路","6270":"電子通路",
+  "6281":"電子通路","6474":"電子通路","6776":"電子通路","8032":"電子通路","8068":"電子通路","8070":"電子通路",
+  "8072":"電子通路","8084":"電子通路","8096":"電子通路","2301":"電源/BBU/UPS","2308":"電源/BBU/UPS","2457":"電源/BBU/UPS",
+  "2476":"電源/BBU/UPS","3015":"電源/BBU/UPS","3211":"電源/BBU/UPS","3323":"電源/BBU/UPS","3625":"電源/BBU/UPS","4931":"電源/BBU/UPS",
+  "5309":"電源/BBU/UPS","6121":"電源/BBU/UPS","6282":"電源/BBU/UPS","6409":"電源/BBU/UPS","6412":"電源/BBU/UPS","6558":"電源/BBU/UPS",
+  "6781":"電源/BBU/UPS","8104":"電源/BBU/UPS","2345":"網通設備組件","2419":"網通設備組件","3025":"網通設備組件","3380":"網通設備組件",
+  "3596":"網通設備組件","4906":"網通設備組件","5388":"網通設備組件","6285":"網通設備組件","2317":"AI伺服器","2356":"AI伺服器",
+  "2357":"AI伺服器","2376":"AI伺服器","2382":"AI伺服器","3013":"AI伺服器","3231":"AI伺服器","3706":"AI伺服器",
+  "4938":"AI伺服器","6669":"AI伺服器","8210":"AI伺服器","2454":"CPU/ASIC/IP","3035":"CPU/ASIC/IP","3443":"CPU/ASIC/IP",
+  "3529":"CPU/ASIC/IP","3661":"CPU/ASIC/IP","6533":"CPU/ASIC/IP","6643":"CPU/ASIC/IP","2449":"IC封測","3265":"IC封測",
+  "3289":"IC封測","3374":"IC封測","6147":"IC封測","6271":"IC封測","6451":"IC封測","6789":"IC封測",
+  "2313":"PCB/載板","2316":"PCB/載板","2367":"PCB/載板","2368":"PCB/載板","2383":"PCB/載板","3037":"PCB/載板",
+  "3044":"PCB/載板","3189":"PCB/載板","3715":"PCB/載板","4958":"PCB/載板","4989":"PCB/載板","5439":"PCB/載板",
+  "5469":"PCB/載板","6108":"PCB/載板","6153":"PCB/載板","6191":"PCB/載板","6213":"PCB/載板","6269":"PCB/載板",
+  "6274":"PCB/載板","6552":"PCB/載板","8021":"PCB/載板","8039":"PCB/載板","8046":"PCB/載板","8213":"PCB/載板",
+  "8358":"PCB/載板",
+};
+Object.assign(SECTOR_MAP, SECTOR_HEATMAP_TOPIC_OVERRIDES);
+
+const SECTOR_PRIMARY_INDUSTRY_OVERRIDES = {
+  "2330":"IC生產製造","2303":"IC生產製造","5347":"IC生產製造","6770":"IC生產製造",
+  "3105":"IC生產製造","2455":"IC生產製造","8086":"IC生產製造","3707":"IC生產製造",
+  "3711":"IC封測",
+};
+Object.assign(SECTOR_MAP, SECTOR_PRIMARY_INDUSTRY_OVERRIDES);
+
 function cleanNumber(value) {
   if (value === undefined || value === null || value === "") return 0;
   return Number(String(value).replace(/[,+%]/g, "")) || 0;
@@ -1909,6 +5038,13 @@ function formatNumber(value, digits = 2) {
     minimumFractionDigits: digits,
     maximumFractionDigits: digits,
   });
+}
+
+function pctToneClass(value) {
+  const number = cleanNumber(value);
+  if (number > 0) return "pct-up";
+  if (number < 0) return "pct-down";
+  return "pct-flat";
 }
 
 function formatStockPrice(value) {
@@ -2141,13 +5277,87 @@ function updateStrategyHistory(item) {
         high: cleanNumber(row.high),
         low: cleanNumber(row.low),
         close: cleanNumber(row.close),
-        volume: cleanNumber(row.volume),
+        volume: normalizeTradeVolumeLots(row.volume),
         value: cleanNumber(row.value),
       }))
       .filter((row) => row.date && row.close)
       .sort((a, b) => a.date.localeCompare(b.date)),
     updatedAt: Date.now(),
   };
+}
+
+function hasStrategyHistoryRows(code, minRows = 60) {
+  const rows = normalizeArray(strategyHistoryData[code]?.rows);
+  return rows.length >= minRows;
+}
+
+function getRealtimeRadarHistoryTargets(limit = REALTIME_RADAR_HISTORY_TARGET_LIMIT) {
+  const pool = latestStocks
+    .map((stock) => applyStrategyQuote(stock))
+    .filter((stock) => isIntradayTradable(stock))
+    .filter((stock) => !isRealtimeRadarLimitUp(stock));
+  const shortPressurePool = [...pool]
+    .filter((stock) => {
+      const inst = getInstitutionTotal(stock.code);
+      const pct = cleanNumber(stock.percent ?? stock.pct);
+      const value = radarStockValue(stock);
+      const volume = cleanNumber(stock.tradeVolume || stock.volume);
+      return (
+        pct <= -0.6 ||
+        (pct < 0 && value >= 100000000) ||
+        (pct <= -0.3 && volume >= 2500) ||
+        (cleanNumber(inst.foreign) <= -1000 && pct <= 0.8) ||
+        (cleanNumber(inst.trust) <= -500 && pct <= 0.8)
+      );
+    })
+    .sort((a, b) => radarStockValue(b) - radarStockValue(a));
+  return uniqueStocksByCode([
+    ...getIntradayCandidateStocks(pool),
+    ...getBaseStrongIntradayStocks(pool),
+    ...shortPressurePool,
+    ...[...pool].sort((a, b) => getIntradayHotScore(b) - getIntradayHotScore(a)),
+  ])
+    .filter((stock) => stock?.code && !hasStrategyHistoryRows(stock.code))
+    .slice(0, limit);
+}
+
+function getRealtimeRadarSnapshotHistoryTargets(rows = [], limit = REALTIME_RADAR_HISTORY_TARGET_LIMIT) {
+  return uniqueStocksByCode(normalizeArray(rows))
+    .filter((stock) => stock?.code && !hasStrategyHistoryRows(stock.code))
+    .slice(0, limit);
+}
+
+async function loadRealtimeRadarHistory(stocks = [], options = {}) {
+  const force = options.force === true;
+  if (realtimeRadarHistoryPromise) return realtimeRadarHistoryPromise;
+  if (!force && Date.now() - realtimeRadarHistoryLastAt < REALTIME_RADAR_HISTORY_REFRESH_MS) return 0;
+  const codes = [...new Set(normalizeArray(stocks)
+    .map((stock) => String(stock?.code || "").replace(/\D/g, "").slice(0, 4))
+    .filter((code) => /^\d{4}$/.test(code) && (force || !hasStrategyHistoryRows(code))))];
+  if (!codes.length) return 0;
+
+  realtimeRadarHistoryPromise = (async () => {
+    let loaded = 0;
+    try {
+      for (let index = 0; index < codes.length; index += REALTIME_RADAR_HISTORY_BATCH_SIZE) {
+        const chunk = codes.slice(index, index + REALTIME_RADAR_HISTORY_BATCH_SIZE);
+        const payload = await fetchJson(`${endpoints.history}?codes=${encodeURIComponent(chunk.join(","))}&t=${Date.now()}`, 20000);
+        const histories = normalizeArray(payload?.histories || payload?.results || payload?.data);
+        histories.forEach((item) => {
+          const before = normalizeArray(strategyHistoryData[item?.code]?.rows).length;
+          updateStrategyHistory(item);
+          if (normalizeArray(strategyHistoryData[item?.code]?.rows).length > before) loaded += 1;
+        });
+      }
+    } catch (error) {
+      console.warn("Realtime radar history load failed", error);
+    } finally {
+      realtimeRadarHistoryLastAt = Date.now();
+      realtimeRadarHistoryPromise = null;
+    }
+    return loaded;
+  })();
+  return realtimeRadarHistoryPromise;
 }
 
 function updateStrategy4Scan(payload, options = {}) {
@@ -2297,10 +5507,10 @@ function hasFreshOpenBuyScan() {
 function getOpenBuyActiveScanTime() {
   const now = new Date();
   const today0700 = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 7, 0, 0, 0).getTime();
-  const today1430 = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 14, 30, 0, 0).getTime();
-  if (now.getTime() >= today1430) return today1430;
+  const today1600 = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 16, 0, 0, 0).getTime();
+  if (now.getTime() >= today1600) return today1600;
   if (now.getTime() >= today0700) return today0700;
-  return new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1, 14, 30, 0, 0).getTime();
+  return new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1, 16, 0, 0, 0).getTime();
 }
 
 function shouldLoadOpenBuyRemote(force = false) {
@@ -2318,6 +5528,8 @@ function hasFreshWarrantFlow() {
 function saveWarrantFlowLocalCache() {
   try {
     if (!warrantFlowData.length) return;
+    localStorage.removeItem(WARRANT_FLOW_LOCAL_CACHE_KEY);
+    return;
     localStorage.setItem(WARRANT_FLOW_LOCAL_CACHE_KEY, JSON.stringify({
       source: "github-actions",
       updatedAt: warrantFlowUpdatedAt || Date.now(),
@@ -2327,18 +5539,9 @@ function saveWarrantFlowLocalCache() {
 }
 
 function loadWarrantFlowLocalCache() {
-  try {
-    const payload = JSON.parse(localStorage.getItem(WARRANT_FLOW_LOCAL_CACHE_KEY) || "{}");
-    if (!String(payload.source || "").includes("github-actions")) return false;
-    if (!Array.isArray(payload.matches) || !payload.matches.length) return false;
-    warrantFlowData = payload.matches;
-    warrantFlowUpdatedAt = cleanNumber(payload.updatedAt) || Date.now();
-    return true;
-  } catch (error) {
-    return false;
-  }
+  try { localStorage.removeItem(WARRANT_FLOW_LOCAL_CACHE_KEY); } catch (error) {}
+  return false;
 }
-
 function showExportNotice(message) {
   if (terminalMessage) terminalMessage.textContent = message;
   const notice = document.createElement("div");
@@ -2649,6 +5852,24 @@ async function loadStrategy3Cache(force = false) {
   }
 }
 
+async function loadStrategy3RadarVolumeCache() {
+  if (strategy3Data.length || strategy3CacheLoading) return;
+  strategy3CacheLoading = true;
+  try {
+    let payload = await fetchJson(`${endpoints.strategy3Cache}?t=${Date.now()}`, 10000);
+    if (!normalizeArray(payload?.matches).length) {
+      payload = await fetchJson(`${endpoints.strategy3Backup}?t=${Date.now()}`, 10000);
+    }
+    strategy3Data = normalizeArray(payload?.matches);
+    const updatedAt = Date.parse(payload?.updatedAt || "");
+    strategy3UpdatedAt = Number.isFinite(updatedAt) ? updatedAt : Date.now();
+    if (isViewActive("realtime-radar")) renderRealtimeRadar();
+  } catch (error) {
+  } finally {
+    strategy3CacheLoading = false;
+  }
+}
+
 async function loadStrategy5Cache(force = false) {
   if (!isStrategyCacheActive("strategy5")) return;
   if (strategy5CacheLoading) return;
@@ -2675,6 +5896,7 @@ async function loadStrategy5Cache(force = false) {
 
 function updateStrategyQuote(quote) {
   if (!quote?.code || !quote.close) return;
+  if (!isRealtimeRadarQuoteTime(quote)) return;
   const previous = strategyRealtimeQuotes[quote.code];
   const now = Date.now();
   const prevPoint = previous?.history?.at(-1);
@@ -2733,7 +5955,9 @@ function applyStrategyQuote(stock) {
     low: quote.low,
     prevClose: prevClose || quote.prevClose,
     limitUp: quote.limitUp,
+    quoteDate: quote.quoteDate || quote.tradeDate || (isMarketAiActiveSession() ? marketAiTodayKey() : stock.quoteDate) || marketAiTodayKey(),
     quoteTime: quote.time || stock.quoteTime,
+    quoteUpdatedAt: quote.updatedAt || Date.now(),
     isRealtime: true,
   };
 }
@@ -3020,6 +6244,7 @@ const STRATEGY5_PRESET_IDS = [
 const INTRADAY_EXCLUDED_CODES = new Set([
   "2330", "2412", "3045",
   "2208", "2634", "2645", "4541", "4572", "5009", "6753", "8033", "8222",
+  "9103", "9105", "9110", "9136",
 ]);
 
 function ensureStrategyCards() {
@@ -3161,6 +6386,24 @@ function formatEntryRange(plan) {
   return plan.entryLow === plan.entryHigh
     ? formatTradePrice(plan.entryLow)
     : `${formatTradePrice(plan.entryLow)}-${formatTradePrice(plan.entryHigh)}`;
+}
+
+function getIntradayTrackedEntryPrice(stock) {
+  const stateId = stock?.intradayState?.id || getIntradayState(stock)?.id || "";
+  const tracked = stock?.strategy2Event || strategy2IntradayEventByCode.get(String(stock?.code || ""));
+  const price = stateId === "go"
+    ? cleanNumber(tracked?.latestAPrice) || cleanNumber(tracked?.firstAPrice) || cleanNumber(tracked?.latestBPrice) || cleanNumber(tracked?.firstBPrice)
+    : cleanNumber(tracked?.latestBPrice) || cleanNumber(tracked?.firstBPrice) || cleanNumber(tracked?.latestAPrice) || cleanNumber(tracked?.firstAPrice);
+  return price
+    || cleanNumber(stock?.intradayEntry?.entryPrice)
+    || cleanNumber(stock?.intradayEntry?.entryLow)
+    || cleanNumber(stock?.entryPrice)
+    || cleanNumber(stock?.observedPrice)
+    || cleanNumber(stock?.close);
+}
+
+function formatIntradayTrackedEntry(stock) {
+  return formatTradePrice(getIntradayTrackedEntryPrice(stock));
 }
 
 function strategyHit(id, stock) {
@@ -3322,6 +6565,8 @@ const SWING_SIGNAL_DEFS = [
   { id: "v_reversal", title: "V轉反彈", icon: "", hint: "跌深後快速翻紅" },
   { id: "three_inside", title: "三內翻紅", icon: "↻", hint: "弱轉強反轉型態" },
   { id: "golden_cross", title: "多金釵", icon: "✦", hint: "短均線轉強候選" },
+  { id: "watch_trend", title: "B觀察", icon: "B", hint: "趨勢轉強觀察名單" },
+  { id: "base_setup", title: "C準備", icon: "C", hint: "低/中位階整理接近發動" },
 ];
 
 function buildSwingDailyRows(stock) {
@@ -3553,14 +6798,86 @@ function intradayOnlyTime(value) {
   return match && isIntradayClockTime(match[1]) ? match[1] : "";
 }
 
+function intradayNowSeconds() {
+  const scanDate = strategyLastScanAt ? realtimeRadarDateKeyFromTimestamp(strategyLastScanAt) : "";
+  const sourceTime = scanDate === marketAiTodayKey() ? strategyLastScanAt : Date.now();
+  const timeText = new Date(sourceTime).toLocaleTimeString("zh-TW", {
+    timeZone: "Asia/Taipei",
+    hour12: false,
+  });
+  return intradayTimeToValue(timeText);
+}
+
+function intradayVisibleTimeLimit() {
+  if (!isIntradayScanWindow()) return 13 * 3600 + 30 * 60;
+  return Math.min(Math.max(intradayNowSeconds(), 9 * 3600), 13 * 3600 + 30 * 60);
+}
+
+function isIntradayVisibleSessionRow(stock) {
+  const seconds = intradayTimeToValue(getIntradayEntryTime(stock));
+  return seconds >= 9 * 3600 && seconds <= intradayVisibleTimeLimit();
+}
+
+function isIntradayVisibleTimeText(value) {
+  const seconds = intradayTimeToValue(value);
+  return seconds >= 9 * 3600 && seconds <= intradayVisibleTimeLimit();
+}
+
+function sanitizeStrategy2IntradayEvent(event) {
+  if (!event) return null;
+  const copy = { ...event };
+  [
+    "firstBAt",
+    "highAfterBAt",
+    "firstAAt",
+    "firstTradableAAt",
+    "latestAAt",
+    "latestBAt",
+    "latestSeenAt",
+    "highAfterAAt",
+    "highestAt",
+  ].forEach((key) => {
+    if (copy[key] && !isIntradayVisibleTimeText(copy[key])) copy[key] = "";
+  });
+  copy.enhancements = normalizeArray(copy.enhancements).filter((item) => isIntradayVisibleTimeText(item?.at));
+  const hasVisibleTime = [
+    copy.firstBAt,
+    copy.firstAAt,
+    copy.latestAAt,
+    copy.latestBAt,
+    copy.latestSeenAt,
+  ].some(Boolean);
+  return hasVisibleTime ? copy : null;
+}
+
+function isStrategy2TodayIntradayStock(stock) {
+  if (!isIntradayScanWindow()) return true;
+  const today = marketAiTodayKey();
+  const quoteDate = marketAiQuoteDateKey(stock);
+  if (quoteDate && quoteDate !== today) return false;
+  const updatedAt = cleanNumber(stock?.quoteUpdatedAt || stock?.updatedAt);
+  if (updatedAt && realtimeRadarDateKeyFromTimestamp(updatedAt) !== today) return false;
+  return true;
+}
+
 function getIntradayEntryTime(stock) {
-  if (stock?.intradayEntryTime) return stock.intradayEntryTime;
+  if (stock?.intradayEntryTime && isIntradayVisibleTimeText(stock.intradayEntryTime)) return stock.intradayEntryTime;
   const tracked = strategy2IntradayEventByCode.get(String(stock?.code || ""));
-  if (tracked?.firstAAt) return tracked.firstAAt;
-  if (tracked?.firstBAt) return tracked.firstBAt;
-  if (tracked?.firstSeenAt) return tracked.firstSeenAt;
+  const stateId = stock?.intradayState?.id || "";
+  if (stateId === "go") {
+    if (tracked?.latestAAt && isIntradayVisibleTimeText(tracked.latestAAt)) return tracked.latestAAt;
+    if (tracked?.firstAAt && isIntradayVisibleTimeText(tracked.firstAAt)) return tracked.firstAAt;
+    if (tracked?.latestSeenAt && isIntradayVisibleTimeText(tracked.latestSeenAt)) return tracked.latestSeenAt;
+    if (tracked?.firstSeenAt && isIntradayVisibleTimeText(tracked.firstSeenAt)) return tracked.firstSeenAt;
+  }
+  if (tracked?.latestBAt && isIntradayVisibleTimeText(tracked.latestBAt)) return tracked.latestBAt;
+  if (tracked?.latestAAt && isIntradayVisibleTimeText(tracked.latestAAt)) return tracked.latestAAt;
+  if (tracked?.latestSeenAt && isIntradayVisibleTimeText(tracked.latestSeenAt)) return tracked.latestSeenAt;
+  if (tracked?.firstBAt && isIntradayVisibleTimeText(tracked.firstBAt)) return tracked.firstBAt;
+  if (tracked?.firstAAt && isIntradayVisibleTimeText(tracked.firstAAt)) return tracked.firstAAt;
+  if (tracked?.firstSeenAt && isIntradayVisibleTimeText(tracked.firstSeenAt)) return tracked.firstSeenAt;
   const quoteTime = stock?.quoteTime || strategyRealtimeQuotes[stock?.code]?.time || "";
-  if (quoteTime && isIntradayClockTime(quoteTime)) return quoteTime;
+  if (quoteTime && isIntradayVisibleTimeText(quoteTime)) return quoteTime;
   const seenAt = cleanNumber(stock?.intradayFirstSeenAt) || cleanNumber(intradayFirstSeenAt.get(stock?.code));
   if (seenAt) {
     const seenTime = new Date(seenAt).toLocaleTimeString("zh-TW", { hour12: false });
@@ -3569,10 +6886,42 @@ function getIntradayEntryTime(stock) {
   return "--:--";
 }
 
+function resetStrategy2IntradaySessionCache() {
+  strategy2IntradayEventByCode = new Map();
+  strategy2IntradayCacheDate = "";
+  strategy2IntradayCacheLoadedAt = 0;
+  intradayFirstSeenAt.clear();
+  intradayGoFirstSeenAt.clear();
+}
+
+function ensureStrategy2IntradayTodayCache() {
+  const cacheDate = normalizeMarketAiDateKey(strategy2IntradayCacheDate);
+  if (!cacheDate || cacheDate === marketAiTodayKey()) return;
+  resetStrategy2IntradaySessionCache();
+}
+
+function isStrategy2EnhancementVisible(enhancement) {
+  if (!enhancement) return false;
+  const trigger = String(enhancement.trigger || "");
+  const deltaVolume = cleanNumber(enhancement.deltaVolume);
+  const ma35 = cleanNumber(enhancement.ma35);
+  const ma35Prev = cleanNumber(enhancement.ma35Prev);
+  const aboveMa35 = enhancement.aboveMa35 !== false && ma35 > 0;
+  const ma35TrendUp = enhancement.ma35TrendUp === true || (ma35 > 0 && ma35Prev > 0 && ma35 > ma35Prev);
+  return aboveMa35
+    && ma35TrendUp
+    && (
+      trigger === "volume"
+      || trigger === "text"
+      || trigger === "score"
+      || deltaVolume >= 50
+    );
+}
+
 function getIntradaySortValue(stock, key) {
   const seenAt = cleanNumber(stock.intradayFirstSeenAt) || cleanNumber(intradayFirstSeenAt.get(stock.code));
   const values = {
-    time: seenAt || intradayTimeToValue(getIntradayEntryTime(stock)),
+    time: intradayTimeToValue(getIntradayEntryTime(stock)) || seenAt,
     code: Number(stock.code) || 0,
     price: cleanNumber(stock.close),
     percent: stock.percent || 0,
@@ -3591,32 +6940,66 @@ function sortIntradayRows(rows) {
   });
 }
 
+function sortIntradayZoneRows(rows) {
+  return [...rows].sort((a, b) => {
+    const diff = getIntradaySortValue(b, "time") - getIntradaySortValue(a, "time");
+    if (diff) return diff;
+    return (b.intradaySignals?.length || 0) - (a.intradaySignals?.length || 0);
+  });
+}
+
 async function loadStrategy2IntradayCache(force = false) {
+  ensureStrategy2IntradayTodayCache();
   if (strategy2IntradayCacheLoading) return;
   if (!force && strategy2IntradayEventByCode.size) return;
   strategy2IntradayCacheLoading = true;
   try {
     const payload = await fetchJson(`${endpoints.strategy2IntradayCache}?t=${Date.now()}`, 10000);
-    const events = normalizeArray(payload?.events);
+    const payloadDate = normalizeMarketAiDateKey(payload?.date || payload?.updatedAt);
+    if (payloadDate && payloadDate !== marketAiTodayKey()) {
+      resetStrategy2IntradaySessionCache();
+      return;
+    }
+    const events = normalizeArray(payload?.events).map(sanitizeStrategy2IntradayEvent).filter(Boolean);
     const byCode = new Map(events
       .filter((event) => event?.code)
-      .map((event) => [String(event.code), { ...event }]));
+      .map((event) => [String(event.code), {
+        ...event,
+        enhancements: normalizeArray(event.enhancements).filter(isStrategy2EnhancementVisible),
+      }]));
     normalizeArray(payload?.records).forEach((record) => {
       const code = String(record?.code || "");
       if (!code) return;
       const seenTime = intradayOnlyTime(record.timestamp || record.entryAt || record.firstAAt || record.firstBAt);
       if (!seenTime) return;
+      if (!isIntradayVisibleTimeText(seenTime)) return;
       const current = byCode.get(code) || { code, name: record.name || "" };
       const currentSeen = current.firstSeenAt || current.firstBAt || current.firstAAt || "";
       if (!currentSeen || intradayTimeToValue(seenTime) < intradayTimeToValue(currentSeen)) {
         current.firstSeenAt = seenTime;
       }
-      if (record.stateId === "go" && !current.firstAAt) current.firstAAt = seenTime;
-      if (record.stateId !== "go" && !current.firstBAt) current.firstBAt = seenTime;
+      const isEntryState = record.stateId === "entry" || record.stateId === "go";
+      const seenValue = intradayTimeToValue(seenTime);
+      const currentLatestValue = intradayTimeToValue(current.latestSeenAt || "");
+      if (!current.latestSeenAt || seenValue >= currentLatestValue) {
+        current.latestSeenAt = seenTime;
+        current.latestSeenPrice = cleanNumber(record.entryPrice) || cleanNumber(record.observedPrice) || cleanNumber(record.close);
+      }
+      if (isEntryState && !current.firstAAt) current.firstAAt = seenTime;
+      if (isEntryState && (!current.latestAAt || seenValue >= intradayTimeToValue(current.latestAAt))) {
+        current.latestAAt = seenTime;
+        current.latestAPrice = cleanNumber(record.entryPrice) || cleanNumber(record.observedPrice) || cleanNumber(record.close);
+      }
+      if (!isEntryState && !current.firstBAt) current.firstBAt = seenTime;
+      if (!isEntryState && (!current.latestBAt || seenValue >= intradayTimeToValue(current.latestBAt))) {
+        current.latestBAt = seenTime;
+        current.latestBPrice = cleanNumber(record.entryPrice) || cleanNumber(record.observedPrice) || cleanNumber(record.close);
+      }
       byCode.set(code, current);
     });
     strategy2IntradayCacheDate = payload?.date || "";
     strategy2IntradayEventByCode = byCode;
+    strategy2IntradayCacheLoadedAt = Date.now();
     if (isViewActive("strategy") && selectedStrategyIds.has("intraday_2m")) {
       renderStrategyScanner();
     }
@@ -3682,12 +7065,12 @@ function getIntradayState(stock) {
   const candidateSetup = tradableLiquidity && hasSignal && !tooHotToChase && (volumeIncreasing || (hasVolumeSignal && pct >= 0.5));
 
   if (winRateSetup || earlyEntrySetup || candidateSetup) {
-    return { id: "go", label: "可進場", cls: "go" };
+    return { id: "go", label: "進場區", cls: "go" };
   }
   if (tradableLiquidity && hasSignal && pct >= 0.5 && hasStrongSignal) {
-    return { id: "watch", label: "觀察", cls: "watch" };
+    return { id: "watch", label: "待確認", cls: "watch" };
   }
-  return { id: "watch", label: "觀察", cls: "watch" };
+  return { id: "watch", label: "待確認", cls: "watch" };
 }
 
 function intradaySortHeader(key, label) {
@@ -4036,6 +7419,94 @@ intradayRadarStyles.textContent = `
     background: rgba(8, 14, 25, 0.62);
     overflow: hidden;
   }
+  .swing-zone-summary {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 10px;
+    padding: 12px;
+    border-bottom: 1px solid rgba(117, 133, 170, 0.16);
+  }
+  .swing-zone-card {
+    min-height: 86px;
+    border: 1px solid rgba(117, 133, 170, 0.28);
+    border-radius: 10px;
+    background: rgba(12, 20, 35, 0.72);
+    padding: 12px;
+    display: grid;
+    gap: 5px;
+    text-align: left;
+    cursor: pointer;
+  }
+  .swing-zone-card.active {
+    box-shadow: inset 0 0 0 1px rgba(143, 177, 255, 0.32), 0 0 18px rgba(143, 177, 255, 0.12);
+    filter: brightness(1.08);
+  }
+  .swing-zone-card span {
+    color: #eaf2ff;
+    font-weight: 900;
+  }
+  .swing-zone-card strong {
+    color: #8fb1ff;
+    font-size: 28px;
+    line-height: 1;
+  }
+  .swing-zone-card small {
+    color: #8f9bb4;
+    font-size: 12px;
+  }
+  .swing-zone-card.zone-all {
+    border-color: rgba(143, 177, 255, 0.42);
+  }
+  .swing-zone-card.zone-a,
+  .swing-zone-panel.zone-a {
+    border-color: rgba(255, 80, 80, 0.5);
+  }
+  .swing-zone-card.zone-b,
+  .swing-zone-panel.zone-b {
+    border-color: rgba(255, 160, 80, 0.42);
+  }
+  .swing-zone-card.zone-c,
+  .swing-zone-panel.zone-c {
+    border-color: rgba(90, 180, 125, 0.42);
+  }
+  .swing-zone-stack {
+    display: grid;
+    gap: 12px;
+    padding: 12px;
+  }
+  .swing-zone-panel {
+    border: 1px solid rgba(117, 133, 170, 0.2);
+    border-radius: 10px;
+    overflow: hidden;
+    background: rgba(8, 14, 25, 0.66);
+  }
+  .swing-zone-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 12px;
+    border-bottom: 1px solid rgba(117, 133, 170, 0.14);
+    background: rgba(18, 28, 48, 0.72);
+  }
+  .swing-zone-head h3 {
+    margin: 0;
+    color: #f7fbff;
+    font-size: 18px;
+  }
+  .swing-zone-head small {
+    color: #9ba8c1;
+    font-size: 12px;
+  }
+  .swing-zone-head strong {
+    min-width: 42px;
+    text-align: right;
+    color: #8fb1ff;
+    font-size: 26px;
+  }
+  .swing-zone-table th {
+    background: rgba(24, 36, 58, 0.72);
+  }
   .swing-table {
     width: 100%;
     border-collapse: collapse;
@@ -4162,6 +7633,9 @@ intradayRadarStyles.textContent = `
     grid-template-columns: minmax(0, 1fr) 300px;
     gap: 14px;
     align-items: start;
+  }
+  .intraday-main-layout-full {
+    grid-template-columns: minmax(0, 1fr);
   }
   .intraday-main-panel {
     display: grid;
@@ -4299,9 +7773,11 @@ intradayRadarStyles.textContent = `
     text-align: left;
   }
   .intraday-side-panel .intraday-signal-card {
-    min-height: 86px;
+    min-height: 118px;
+    height: auto;
     padding: 12px;
     border-radius: 10px;
+    overflow: visible;
   }
   .intraday-side-panel .intraday-icon {
     width: 34px;
@@ -4467,6 +7943,18 @@ intradayRadarStyles.textContent = `
     color: #75b7ff;
     font-weight: 700;
   }
+  .intraday-hot-code {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+  }
+  .intraday-hot-fire {
+    display: inline-block;
+    font-size: 12px;
+    line-height: 1;
+    transform: translateY(-1px);
+    filter: drop-shadow(0 0 5px rgba(255, 122, 40, 0.75));
+  }
   .intraday-table .price,
   .intraday-table .pct {
     color: #ff4f5f;
@@ -4541,16 +8029,24 @@ intradayRadarStyles.textContent = `
     font-size: 22px;
   }
   .intraday-zone.go {
-    border-color: rgba(48, 214, 142, 0.38);
-    background: linear-gradient(135deg, rgba(21, 83, 64, 0.46), rgba(8, 14, 25, 0.72));
+    border-color: rgba(255, 92, 92, 0.58);
+    background: linear-gradient(135deg, rgba(92, 24, 36, 0.58), rgba(40, 16, 24, 0.84));
+    box-shadow: inset 0 0 0 1px rgba(255, 126, 87, 0.08);
+  }
+  .intraday-zone.go header {
+    background: linear-gradient(90deg, rgba(255, 87, 87, 0.15), rgba(255, 145, 77, 0.06));
   }
   .intraday-zone.wait {
     border-color: rgba(245, 166, 35, 0.36);
     background: linear-gradient(135deg, rgba(82, 55, 18, 0.42), rgba(8, 14, 25, 0.72));
   }
   .intraday-zone.watch {
-    border-color: rgba(117, 151, 255, 0.3);
-    background: linear-gradient(135deg, rgba(34, 48, 86, 0.42), rgba(8, 14, 25, 0.72));
+    border-color: rgba(121, 157, 255, 0.5);
+    background: linear-gradient(135deg, rgba(33, 54, 112, 0.56), rgba(15, 21, 44, 0.84));
+    box-shadow: inset 0 0 0 1px rgba(121, 157, 255, 0.08);
+  }
+  .intraday-zone.watch header {
+    background: linear-gradient(90deg, rgba(92, 130, 255, 0.15), rgba(114, 92, 255, 0.06));
   }
   .intraday-picks {
     display: grid;
@@ -5675,6 +9171,72 @@ intradayRadarStyles.textContent = `
       font-size: 24px !important;
     }
   }
+  body.fuman-light-theme #strategy-view.strategy5-only .strategy5-shell,
+  body.fuman-light-theme #strategy-view.strategy5-only .strategy5-dashboard,
+  body.fuman-light-theme #strategy-view.strategy5-only .strategy5-results,
+  body.fuman-light-theme #strategy-view.strategy5-only .strategy5-table {
+    background: #ffffff !important;
+    color: #111827 !important;
+    border-color: #dbe3ee !important;
+    box-shadow: none !important;
+    opacity: 1 !important;
+    filter: none !important;
+    mix-blend-mode: normal !important;
+  }
+  body.fuman-light-theme #strategy-view.strategy5-only .strategy5-results-head,
+  body.fuman-light-theme #strategy-view.strategy5-only .strategy5-table-head {
+    background: #f1f5f9 !important;
+    color: #334155 !important;
+    border-color: #dbe3ee !important;
+  }
+  body.fuman-light-theme #strategy-view.strategy5-only .strategy5-table-row,
+  body.fuman-light-theme #strategy-view.strategy5-only .strategy5-table-row:nth-child(even),
+  body.fuman-light-theme #strategy-view.strategy5-only .strategy5-table-row:last-child {
+    background: #ffffff !important;
+    color: #111827 !important;
+    border-color: #e2e8f0 !important;
+    opacity: 1 !important;
+    filter: none !important;
+    mix-blend-mode: normal !important;
+  }
+  body.fuman-light-theme #strategy-view.strategy5-only .strategy5-table-row:hover {
+    background: #f8fbff !important;
+  }
+  body.fuman-light-theme #strategy-view.strategy5-only .strategy5-table-row *,
+  body.fuman-light-theme #strategy-view.strategy5-only .strategy5-name,
+  body.fuman-light-theme #strategy-view.strategy5-only .strategy5-table-reason {
+    color: #111827 !important;
+    opacity: 1 !important;
+    filter: none !important;
+    mix-blend-mode: normal !important;
+  }
+  body.fuman-light-theme #strategy-view.strategy5-only .strategy5-code {
+    color: #2563eb !important;
+  }
+  body.fuman-light-theme #strategy-view.strategy5-only .strategy5-entry-price strong {
+    color: #dc2626 !important;
+  }
+  body.fuman-light-theme #strategy-view.strategy5-only .strategy5-entry-price small {
+    color: #059669 !important;
+  }
+  body.fuman-light-theme #strategy-view.strategy5-only .strategy5-rank {
+    color: #ffffff !important;
+  }
+  #strategy-view .intraday-side-panel .intraday-signal-card {
+    min-height: 140px !important;
+    height: auto !important;
+    overflow: visible !important;
+    align-items: stretch !important;
+  }
+  #strategy-view .intraday-side-panel .intraday-card-top,
+  #strategy-view .intraday-side-panel .intraday-count,
+  #strategy-view .intraday-side-panel .intraday-signal-card small,
+  #strategy-view .intraday-side-panel .intraday-strength {
+    flex-shrink: 0;
+  }
+  #strategy-view .intraday-side-panel .intraday-signal-grid {
+    align-items: stretch;
+  }
 `;
 document.head.appendChild(intradayRadarStyles);
 
@@ -5698,7 +9260,7 @@ function setStrategyChrome(mode) {
       : swing
       ? "用波段指標邏輯整理全台股，盤中即時更新價量，分類突破缺口、逃逸缺口、V轉與多頭攻擊。"
       : openBuy
-      ? "14:30 後產生明日候選，08:55 後看最終名單，09:00 開盤入，有賺就走。"
+      ? "16:00 後產生明日候選，08:55 後看最終名單，09:00 開盤入，有賺就走。"
       : strategy3
       ? ""
       : "左側切換日線、籌碼與高波動策略；右側即時重算符合條件的股票訊號。";
@@ -5729,6 +9291,7 @@ function setStrategyChrome(mode) {
   if (strategyTerminal) strategyTerminal.classList.toggle("strategy5-only", strategy5);
   if (strategyTerminal) strategyTerminal.classList.toggle("strategy3-only", strategy3);
   if (strategyList) strategyList.hidden = intraday || swing || strategy5 || openBuy;
+  refreshDataFreshnessBars();
   const labels = intraday
     ? ["觸發股票", "A區數量", "最多訊號"]
     : swing
@@ -5746,14 +9309,19 @@ function setStrategyChrome(mode) {
 
 function renderIntradayRadar(evaluated) {
   setStrategyChrome("intraday");
-  if (!strategy2IntradayEventByCode.size && !strategy2IntradayCacheLoading) {
-    loadStrategy2IntradayCache(false);
+  ensureStrategy2IntradayTodayCache();
+  const cacheRefreshDue = isIntradayScanWindow()
+    && (!strategy2IntradayCacheLoadedAt || Date.now() - strategy2IntradayCacheLoadedAt > Math.max(REALTIME_RADAR_REFRESH_MS, 3000));
+  if ((!strategy2IntradayEventByCode.size || cacheRefreshDue) && !strategy2IntradayCacheLoading) {
+    loadStrategy2IntradayCache(cacheRefreshDue);
   }
   const keyword = strategyKeyword.trim().toLowerCase();
   const now = Date.now();
   const scanClosed = !isIntradayScanWindow();
   const baseRows = evaluated
     .filter(isIntradayTradable)
+    .filter(isStrategy2TodayIntradayStock)
+    .filter((stock) => !isRealtimeRadarLimitUp(stock))
     .filter((stock) => matchesStrategyKeyword(stock, keyword));
   const allRows = baseRows
     .filter((stock) => (stock.intradaySignals || []).length)
@@ -5763,8 +9331,8 @@ function renderIntradayRadar(evaluated) {
       const intradayState = getIntradayState(row);
       const trackedEvent = strategy2IntradayEventByCode.get(String(row.code || ""));
       const trackedTime = intradayState.id === "go"
-        ? trackedEvent?.firstAAt || trackedEvent?.firstBAt || ""
-        : trackedEvent?.firstBAt || trackedEvent?.firstAAt || "";
+        ? trackedEvent?.latestAAt || trackedEvent?.firstAAt || trackedEvent?.latestSeenAt || trackedEvent?.firstSeenAt || ""
+        : trackedEvent?.latestBAt || trackedEvent?.latestSeenAt || trackedEvent?.firstBAt || trackedEvent?.firstAAt || "";
       if (!intradayFirstSeenAt.has(row.code)) {
         intradayFirstSeenAt.set(row.code, now);
       }
@@ -5780,25 +9348,28 @@ function renderIntradayRadar(evaluated) {
         intradayGoFirstSeenAt: intradayGoFirstSeenAt.get(row.code) || null,
       };
     });
+  const sessionRows = allRows.filter(isIntradayVisibleSessionRow);
   const tradableRows = scanClosed
-    ? allRows.filter((stock) => stock.strategy2Event && getIntradayEntryTime(stock) !== "--:--")
-    : allRows;
+    ? sessionRows.filter((stock) => stock.strategy2Event && getIntradayEntryTime(stock) !== "--:--")
+    : sessionRows;
+  const signalScopeRows = tradableRows.filter((stock) => cleanNumber(stock.percent) >= STRATEGY2_INTRADAY_MIN_DISPLAY_PCT);
+  const displayPoolRows = signalScopeRows;
   const stateFilters = new Set(["go", "watch"]);
   const filteredRows = intradaySignalFilter === "all"
-    ? tradableRows
+    ? signalScopeRows
     : stateFilters.has(intradaySignalFilter)
-      ? tradableRows.filter((stock) => stock.intradayState.id === intradaySignalFilter)
-      : allRows.filter((stock) => (stock.intradaySignals || []).some((signal) => signal.id === intradaySignalFilter));
+      ? signalScopeRows.filter((stock) => stock.intradayState.id === intradaySignalFilter)
+      : displayPoolRows.filter((stock) => (stock.intradaySignals || []).some((signal) => signal.id === intradaySignalFilter));
   const rows = sortIntradayRows(filteredRows).slice(0, 80);
   const signalCounts = Object.fromEntries(INTRADAY_SIGNAL_DEFS.map((signal) => [signal.id, 0]));
   const stateCounts = { go: 0, watch: 0 };
-  allRows.forEach((stock) => {
+  signalScopeRows.forEach((stock) => {
     stateCounts[stock.intradayState.id] += 1;
     (stock.intradaySignals || []).forEach((signal) => {
       signalCounts[signal.id] = (signalCounts[signal.id] || 0) + 1;
     });
   });
-  const sortedAllRows = sortIntradayRows(tradableRows);
+  const sortedAllRows = sortIntradayZoneRows(signalScopeRows);
   const zoneRows = {
     go: sortedAllRows.filter((stock) => stock.intradayState.id === "go").slice(0, 3),
     watch: sortedAllRows.filter((stock) => stock.intradayState.id === "watch").slice(0, 3),
@@ -5814,8 +9385,8 @@ function renderIntradayRadar(evaluated) {
 
   if (strategySummary) strategySummary.textContent = scanClosed
     ? `偵測時間 09:00-13:30｜收盤後停止偵測｜最後更新 ${scanTime}${scanStatus}`
-    : `3秒即時巡邏｜熱門池快掃｜背景分批補全市場｜最後更新 ${scanTime}${scanStatus}`;
-  if (strategyMatchCount) strategyMatchCount.textContent = rows.length.toLocaleString("zh-TW");
+    : `09:00-13:30 即時巡邏｜不顯示目前時間之後的舊快取｜最後更新 ${scanTime}${scanStatus}`;
+  if (strategyMatchCount) strategyMatchCount.textContent = signalScopeRows.length.toLocaleString("zh-TW");
   if (strategyAvgScore) strategyAvgScore.textContent = stateCounts.go.toLocaleString("zh-TW");
   if (strategyTopHit) strategyTopHit.textContent = rows.length ? `${Math.max(...rows.map((stock) => stock.intradaySignals.length))}/6` : "0/6";
 
@@ -5856,16 +9427,20 @@ function renderIntradayRadar(evaluated) {
   }).join("");
 
   const tabs = [
-    ["all", "全部", tradableRows.length],
-    ["go", "A進場", stateCounts.go],
-    ["watch", "B觀察", stateCounts.watch],
+    ["all", "全部", signalScopeRows.length],
+    ["go", "進場區", stateCounts.go],
     ...INTRADAY_SIGNAL_DEFS.map((signal) => [signal.id, signal.title, signalCounts[signal.id] || 0]),
   ].map(([id, label, count]) => `<button class="${intradaySignalFilter === id ? "active" : ""}" type="button" data-intraday-filter="${id}">${label}(${count})</button>`).join("");
 
   const renderZonePicks = (list, zoneId) => list.length ? list.map((stock, index) => {
     const sign = stock.percent >= 0 ? "+" : "";
-    const mainSignal = stock.intradaySignals[0]?.short || "量價";
-    const entry = formatEntryRange(stock.intradayEntry);
+    const pctClass = pctToneClass(stock.percent);
+    const latestEnhancement = normalizeArray(stock.strategy2Event?.enhancements)
+      .filter(isStrategy2EnhancementVisible)
+      .at(-1);
+    const hotFire = latestEnhancement ? `<span class="intraday-hot-fire" title="持續爆量且多次進入進場區">🔥</span>` : "";
+    const mainSignal = latestEnhancement ? "持續放量" : stock.intradaySignals[0]?.short || "量價";
+    const entry = formatIntradayTrackedEntry(stock);
     const quoteTime = getIntradayEntryTime(stock);
     const timeText = `<span class="intraday-pick-time">${quoteTime}</span>`;
     return `
@@ -5873,11 +9448,11 @@ function renderIntradayRadar(evaluated) {
         <span class="intraday-rank">${index + 1}</span>
         ${timeText}
         <div class="intraday-pick-main">
-          <b>${stock.code} ${stock.name}</b>
+          <b>${hotFire}${stock.code} ${stock.name}</b>
           <span>${mainSignal}｜進場 ${entry}</span>
         </div>
         <div class="intraday-pick-price">
-          <b>${sign}${stock.percent.toFixed(2)}%</b>
+          <b class="${pctClass}">${sign}${stock.percent.toFixed(2)}%</b>
           <span>${formatNumber(stock.close, stock.close >= 100 ? 0 : 2)}</span>
         </div>
       </div>
@@ -5887,39 +9462,43 @@ function renderIntradayRadar(evaluated) {
   const zones = `
     <section class="intraday-zones">
       <article class="intraday-zone go">
-        <header><div><h3>A區 進場區</h3><small>量夠、價強、靠近高點</small></div><strong>${stateCounts.go}</strong></header>
+        <header><div><h3>進場區</h3><small>1分K站上MA35，MACD/KD向上且爆量</small></div><strong>${stateCounts.go}</strong></header>
         <div class="intraday-picks">${renderZonePicks(zoneRows.go, "go")}</div>
-      </article>
-      <article class="intraday-zone watch">
-        <header><div><h3>B區 觀察區</h3><small>有右側訊號，持續觀察量價延續</small></div><strong>${stateCounts.watch}</strong></header>
-        <div class="intraday-picks">${renderZonePicks(zoneRows.watch, "watch")}</div>
       </article>
     </section>
   `;
 
   const emptyText = scanClosed
     ? "策略2偵測時間為 09:00-13:30；收盤後停止新增訊號，顯示盤中最後資料。"
-    : "策略2正在 3 秒巡邏；目前本輪尚未出現右側任一訊號。只要符合「早盤強勢 / 爆量 / 跳空 / 突破 / MA35 / 鑽石 / 拉抬」任一項，就會立刻顯示。";
+    : "策略2正在 3 秒巡邏；目前本輪尚未出現漲幅 +2% 以上且符合右側訊號的股票。";
   const headerText = scanClosed
     ? `偵測時間 09:00-13:30，收盤後停止偵測。最後更新 ${scanTime}${scanStatus}`
-    : `盤中即時偵測強勢訊號，3秒巡邏熱門池，背景同步分批補全市場。最後更新 ${scanTime}${scanStatus}`;
+    : `09:00-13:30 即時偵測漲幅 +2% 以上強勢訊號，3秒巡邏熱門池，不顯示目前時間之後的快取資料。最後更新 ${scanTime}${scanStatus}`;
 
   const tableRows = rows.length ? `
     ${rows.map((stock) => {
       const sign = stock.percent >= 0 ? "+" : "";
-      const chips = stock.intradaySignals.map((signal) => `<b>${signal.icon} ${signal.short}</b>`).join("");
-      const reason = stock.intradaySignals[0]?.reason || "盤中訊號觸發";
-      const state = stock.intradayState || getIntradayState(stock);
+      const pctClass = pctToneClass(stock.percent);
       const entryTime = getIntradayEntryTime(stock);
+      const latestEnhancement = normalizeArray(stock.strategy2Event?.enhancements)
+        .filter(isStrategy2EnhancementVisible)
+        .at(-1);
+      const repeatAHot = Boolean(latestEnhancement);
+      const enhancementChip = latestEnhancement ? `<b>🔥 持續放量</b>` : "";
+      const chips = `${enhancementChip}${stock.intradaySignals.map((signal) => `<b>${signal.icon} ${signal.short}</b>`).join("")}`;
+      const reason = latestEnhancement
+        ? `${latestEnhancement.at || entryTime} ${stock.code} ${stock.name} 持續放量${latestEnhancement.deltaVolume ? `｜新增量 ${Math.round(latestEnhancement.deltaVolume).toLocaleString("zh-TW")} 張` : ""}`
+        : stock.intradaySignals[0]?.reason || "盤中訊號觸發";
+      const state = stock.intradayState || getIntradayState(stock);
       return `
         <tr>
           <td><span class="intraday-table-time">${entryTime}</span></td>
-          <td><span class="code">${stock.code}</span></td>
+          <td><span class="code intraday-hot-code">${repeatAHot ? `<span class="intraday-hot-fire" title="持續爆量且多次進入進場區">🔥</span>` : ""}${stock.code}</span></td>
           <td>${stock.name}</td>
           <td><span class="intraday-state ${state.cls}">${state.label}</span></td>
           <td><span class="intraday-badges">${chips}</span></td>
-          <td class="price">${formatEntryRange(stock.intradayEntry)}</td>
-          <td class="pct">${sign}${stock.percent.toFixed(2)}%</td>
+          <td class="price">${formatIntradayTrackedEntry(stock)}</td>
+          <td class="pct ${pctClass}">${sign}${stock.percent.toFixed(2)}%</td>
           <td>${Math.round(stock.tradeVolume || 0).toLocaleString("zh-TW")}</td>
           <td class="intraday-entry">${renderEntryPlan(stock.intradayEntry)}</td>
           <td>現價 ${formatTradePrice(stock.close)}｜${reason}</td>
@@ -5942,7 +9521,8 @@ function renderIntradayRadar(evaluated) {
           <label>市場：<select><option>全市場</option></select></label>
         </div>
       </div>
-      <section class="intraday-main-layout">
+      ${renderDataFreshnessBarHtml("strategy")}
+      <section class="intraday-main-layout intraday-main-layout-full">
         <div class="intraday-main-panel">
           ${zones}
           <section class="intraday-panel">
@@ -5964,13 +9544,6 @@ function renderIntradayRadar(evaluated) {
             </table>
           </section>
         </div>
-        <aside class="intraday-side-panel">
-          <div class="intraday-side-head">
-            <strong>訊號分類</strong>
-            <span>由上到下</span>
-          </div>
-          <div class="intraday-signal-grid">${cards}</div>
-        </aside>
       </section>
     </section>
   `;
@@ -5986,20 +9559,29 @@ function renderSwingRadar(universe) {
   const totalCount = strategy4ScanTotal || latestStocks.filter((stock) => !/^00/.test(stock.code)).length || latestStocks.length;
   if (!strategy4ScanLastAt && !strategy4CacheLoading) loadStrategy4Cache();
   const keyword = strategyKeyword.trim().toLowerCase();
+  const visibleKeyword = swingVisibleKeyword.trim().toLowerCase();
   const numericKeyword = isNumericStrategyKeyword(keyword);
-  const allowCodes = new Set(universe.map((stock) => String(stock.code || "")));
   const latestByCode = new Map(latestStocks.map((stock) => [String(stock.code || ""), stock]));
   const sourceRows = numericKeyword
     ? Object.values(strategy4ScanMatches).filter((stock) => String(stock.code || "").includes(keyword))
     : Object.values(strategy4ScanMatches);
   const allRows = sourceRows
     .map((stock) => mergeLatestStrategyPrice(stock, latestByCode.get(String(stock.code || ""))))
-    .filter((stock) => allowCodes.has(String(stock.code || "")) && (stock.swingSignals || []).length)
+    .filter((stock) => (stock.swingSignals || []).length)
     .filter((stock) => matchesStrategyKeyword(stock, keyword))
+    .filter((stock) => !visibleKeyword || `${stock.code || ""} ${stock.name || ""}`.toLowerCase().includes(visibleKeyword))
     .map((stock) => ({ ...stock, swingScore: stock.swingScore || stock.score || 0 }));
-  const filteredRows = keyword || swingSignalFilter === "all"
+  const zoneRows = {
+    A: sortSwingRows(allRows.filter((stock) => (stock.swingZone || "A") === "A")),
+    B: sortSwingRows(allRows.filter((stock) => stock.swingZone === "B")),
+    C: sortSwingRows(allRows.filter((stock) => stock.swingZone === "C")),
+  };
+  const zoneFilteredRows = swingZoneFilter === "all"
     ? allRows
-    : allRows.filter((stock) => (stock.swingSignals || []).some((signal) => signal.id === swingSignalFilter));
+    : allRows.filter((stock) => (stock.swingZone || "A") === swingZoneFilter);
+  const filteredRows = swingSignalFilter === "all"
+    ? zoneFilteredRows
+    : zoneFilteredRows.filter((stock) => (stock.swingSignals || []).some((signal) => signal.id === swingSignalFilter));
   const rows = sortSwingRows(filteredRows);
   const swingPaged = paginateTerminalRows(rows, swingPage);
   swingPage = swingPaged.page;
@@ -6046,8 +9628,9 @@ function renderSwingRadar(universe) {
     return `<b>${signal.icon || ""} ${signal.short || ""}</b>`;
   };
 
-  const tableRows = pageRows.length ? pageRows.map((stock) => {
+  const renderSwingRows = (items) => items.map((stock) => {
     const sign = stock.percent >= 0 ? "+" : "";
+    const pctClass = pctToneClass(stock.percent);
     const chips = stock.swingSignals.map(formatSwingSignalChip).join("");
     const signalIds = (stock.swingSignals || []).map((signal) => signal.id).join(" ");
     const searchText = `${stock.code || ""} ${stock.name || ""}`.toLowerCase();
@@ -6059,17 +9642,63 @@ function renderSwingRadar(universe) {
         <td>${stock.name}</td>
         <td><span class="swing-badges">${chips}</span></td>
         <td class="price">${formatNumber(stock.close, stock.close >= 100 ? 0 : 2)}</td>
-        <td class="pct">${sign}${stock.percent.toFixed(2)}%</td>
+        <td class="pct ${pctClass}">${sign}${stock.percent.toFixed(2)}%</td>
         <td>${Math.round(stock.tradeVolume || 0).toLocaleString("zh-TW")}</td>
         <td><span class="swing-stage ${stage.tone}">${stage.label}</span><small>${stage.ratio}</small></td>
         <td><span class="swing-score">${stock.swingScore}</span></td>
         <td>${reason}</td>
       </tr>
     `;
-  }).join("") : `
-    <tr><td colspan="9">後端策略4掃描 API 已啟動。正在分批抓日K並計算符合股票；命中後會自動顯示在這裡。</td></tr>
+  }).join("");
+  const zoneCards = `
+    <div class="swing-zone-card zone-all ${swingZoneFilter === "all" ? "active" : ""}" data-swing-zone-filter="all"><span>總命中</span><strong>${allRows.length}</strong><small>A/B/C全部</small></div>
+    <div class="swing-zone-card zone-a ${swingZoneFilter === "A" ? "active" : ""}" data-swing-zone-filter="A"><span>A區可進場</span><strong>${zoneRows.A.length}</strong><small>正式波段買點</small></div>
+    <div class="swing-zone-card zone-b ${swingZoneFilter === "B" ? "active" : ""}" data-swing-zone-filter="B"><span>B區觀察</span><strong>${zoneRows.B.length}</strong><small>趨勢轉強等待買點</small></div>
+    <div class="swing-zone-card zone-c ${swingZoneFilter === "C" ? "active" : ""}" data-swing-zone-filter="C"><span>C區準備</span><strong>${zoneRows.C.length}</strong><small>低中位階整理</small></div>
   `;
+  const tableRows = pageRows.length ? renderSwingRows(pageRows) : `
+    <tr><td colspan="9">後端策略4掃描 API 已啟動。正在完整掃描全台股官方日K並計算符合股票；命中後會自動顯示在這裡。</td></tr>
+  `;
+  const swingTableHead = `
+    <thead>
+      <tr>
+        <th>${swingSortHeader("code", "股票代號")}</th><th>股票名稱</th><th>訊號</th><th>${swingSortHeader("price", "現價")}</th><th>${swingSortHeader("percent", "漲幅")}</th><th>${swingSortHeader("volume", "成交量")}</th><th>${swingSortHeader("stage", "位階")}</th><th>${swingSortHeader("score", "分數")}</th><th>原因</th>
+      </tr>
+    </thead>
+  `;
+  const renderZoneSection = (zone, title, subtitle, items) => `
+    <section class="swing-zone-panel zone-${zone.toLowerCase()}">
+      <div class="swing-zone-head">
+        <div>
+          <h3>${title}</h3>
+          <small>${subtitle}</small>
+        </div>
+        <strong>${items.length}</strong>
+      </div>
+      <table class="swing-table swing-zone-table">
+        ${swingTableHead}
+        <tbody>${items.length ? renderSwingRows(items) : `<tr><td colspan="9">目前沒有符合 ${title} 的股票。</td></tr>`}</tbody>
+      </table>
+    </section>
+  `;
+  const zoneMeta = {
+    all: ["全部區域", "A/B/C 合併列表", allRows.length],
+    A: ["A區可進場", "正式波段買點", zoneRows.A.length],
+    B: ["B區觀察", "趨勢轉強，等待突破", zoneRows.B.length],
+    C: ["C區準備", "低/中位階整理，提前蹲點", zoneRows.C.length],
+  };
+  const [activeZoneTitle, activeZoneSubtitle, activeZoneCount] = zoneMeta[swingZoneFilter] || zoneMeta.all;
+  const showZoneLayout = !visibleKeyword && !numericKeyword;
   const pagination = buildTerminalPagination("swing", swingPage, swingPaged.totalPages, rows.length);
+  const zoneSections = showZoneLayout ? `
+    <div class="swing-zone-summary">
+      ${zoneCards}
+    </div>
+    <div class="swing-zone-stack">
+      ${renderZoneSection(swingZoneFilter === "all" ? "A" : swingZoneFilter, activeZoneTitle, activeZoneSubtitle, pageRows)}
+      ${pagination}
+    </div>
+  ` : "";
   const hadSearchFocus = document.activeElement === swingVisibleSearchInput;
   const searchSelectionStart = hadSearchFocus ? swingVisibleSearchInput.selectionStart : null;
   const searchSelectionEnd = hadSearchFocus ? swingVisibleSearchInput.selectionEnd : null;
@@ -6092,15 +9721,13 @@ function renderSwingRadar(universe) {
           ${tabs}
           <div class="strategy4-visible-search-row" data-swing-search-host></div>
         </div>
-        <table class="swing-table">
-          <thead>
-            <tr>
-              <th>${swingSortHeader("code", "股票代號")}</th><th>股票名稱</th><th>訊號</th><th>${swingSortHeader("price", "現價")}</th><th>${swingSortHeader("percent", "漲幅")}</th><th>${swingSortHeader("volume", "成交量")}</th><th>${swingSortHeader("stage", "位階")}</th><th>${swingSortHeader("score", "分數")}</th><th>原因</th>
-            </tr>
-          </thead>
-          <tbody>${tableRows}</tbody>
-        </table>
-        ${pagination}
+        ${showZoneLayout ? zoneSections : `
+          <table class="swing-table">
+            ${swingTableHead}
+            <tbody>${tableRows}</tbody>
+          </table>
+          ${pagination}
+        `}
       </section>
     </section>
   `;
@@ -6115,6 +9742,9 @@ function applySwingFilterToVisibleRows() {
     const active = (button.dataset.swingFilter || "all") === swingSignalFilter;
     button.classList.toggle("active", active);
     button.classList.toggle("selected", active);
+  });
+  panel.querySelectorAll("[data-swing-zone-filter]").forEach((button) => {
+    button.classList.toggle("active", (button.dataset.swingZoneFilter || "all") === swingZoneFilter);
   });
   panel.querySelectorAll("[data-swing-row]").forEach((row) => {
     const signals = String(row.dataset.swingSignals || "").split(/\s+/);
@@ -6136,7 +9766,8 @@ function getSwingVisibleSearchInput() {
   input.dataset.swingVisibleSearch = "";
   input.addEventListener("input", () => {
     swingVisibleKeyword = input.value || "";
-    applySwingFilterToVisibleRows();
+    swingPage = 1;
+    renderStrategyScanner();
   });
   input.addEventListener("click", (event) => event.stopPropagation());
   input.addEventListener("keydown", (event) => event.stopPropagation());
@@ -6196,6 +9827,7 @@ function renderOpenBuyRadar(universe) {
 
   const tableRows = pageRows.length ? pageRows.map((stock) => {
     const sign = stock.percent >= 0 ? "+" : "";
+    const pctClass = pctToneClass(stock.percent);
     const displayStatus = getOpenBuyDisplayStatus(stock);
     return `
       <tr>
@@ -6203,7 +9835,7 @@ function renderOpenBuyRadar(universe) {
         <td>${stock.name}</td>
         <td><b class="swing-stage mid">${displayStatus}</b></td>
         <td class="price">${formatNumber(stock.close, stock.close >= 100 ? 0 : 2)}</td>
-        <td class="pct">${sign}${stock.percent.toFixed(2)}%</td>
+        <td class="pct ${pctClass}">${sign}${stock.percent.toFixed(2)}%</td>
         <td>${stock.entry || "09:00 開盤價"}</td>
         <td class="price">${formatNumber(stock.takeProfit, stock.takeProfit >= 100 ? 1 : 2)}</td>
         <td class="price">${formatNumber(stock.stopLoss, stock.stopLoss >= 100 ? 1 : 2)}</td>
@@ -6221,16 +9853,16 @@ function renderOpenBuyRadar(universe) {
       <div class="swing-topbar">
         <div>
           <h2>${titleWithSchedule("⚡", "策略1-明日開盤入", "openBuy")}</h2>
-          <p>14:30後先出明日候選；08:55後看最終名單。買入：09:00 開盤價｜停利 +1.2%｜停損 -1.0%｜09:10 強制出場。${scanText}</p>
+          <p>16:00後先出明日候選；08:55後看最終名單。買入：09:00 開盤價｜停利 +1.2%｜停損 -1.0%｜09:10 強制出場。${scanText}</p>
         </div>
         <div class="swing-controls">
-          <label>更新模式：<select><option>07:00 / 14:30 完整掃</option></select></label>
+          <label>更新模式：<select><option>07:00 / 16:00 完整掃</option></select></label>
           <label>市場：<select><option>排除ETF</option></select></label>
         </div>
       </div>
       <div class="swing-signal-grid">
         <button class="swing-card active selected" type="button">
-          <div><strong>14:30 候選</strong><small>收盤後用日K篩明日名單</small></div><em>${scanCount}</em>
+          <div><strong>16:00 候選</strong><small>收盤後用日K篩明日名單</small></div><em>${scanCount}</em>
         </button>
         <button class="swing-card active" type="button">
           <div><strong>08:55 最終</strong><small>盤前最後確認後開盤買</small></div><em>待接</em>
@@ -6711,18 +10343,14 @@ function renderWarrantFlow() {
   `;
 
   panel.innerHTML = `
-    <section class="swing-dashboard">
+    <section class="swing-dashboard warrant-flow-dashboard">
       <div class="swing-topbar">
         <div>
           <h2 data-warrant-refresh title="重新整理權證資金走向">${titleWithSchedule("◒", "策略6：權證資金走向", "warrant")}</h2>
           <p>${helperText}</p>
         </div>
-        <div class="swing-controls">
-          <label>更新模式：<select><option>每日 06:00 / 21:00 完整掃</option></select></label>
-          <label>模式：<select><option>權證先熱股票未噴</option></select></label>
-        </div>
       </div>
-      <section class="swing-panel">
+      <section class="swing-panel warrant-flow-panel">
         <div class="swing-tabs">
           <button class="active" type="button" data-warrant-refresh>${listLabel}</button>
           <div class="swing-actions warrant-search-box">
@@ -6885,10 +10513,107 @@ function getInstColor(val) {
   return n > 0 ? "#e74c3c" : "#27ae60";
 }
 
-function openSectorModal(sector) {
+function getSectorValueToneClass(val, prefix) {
+  const n = cleanNumber(val);
+  if (!Number.isFinite(n) || n === 0) return `${prefix}-zero`;
+  return n > 0 ? `${prefix}-pos` : `${prefix}-neg`;
+}
+
+function normalizeInstitutionLots(val) {
+  if (val === undefined || val === null) return null;
+  const n = cleanNumber(val);
+  if (!Number.isFinite(n)) return null;
+  return Math.trunc(n / 1000);
+}
+
+function formatInstitutionLots(val) {
+  const n = normalizeInstitutionLots(val);
+  if (!Number.isFinite(n)) return "--";
+  const sign = n >= 0 ? "+" : "";
+  return `${sign}${n.toLocaleString("zh-TW")} 張`;
+}
+
+function normalizeSectorRealtimeStock(stock, quote = {}) {
+  const close = parseQuoteNumber(quote.close, quote.z, stock.close);
+  const prevClose = parseQuoteNumber(quote.prevClose, quote.y);
+  const change = prevClose && close ? close - prevClose : cleanNumber(quote.change) || cleanNumber(stock.change);
+  const pct = prevClose && close ? (change / prevClose) * 100 : cleanNumber(quote.percent ?? quote.pct ?? stock.pct);
+  const volume = normalizeTradeVolumeLots(quote.tradeVolume || quote.volume || quote.v || stock.volume);
+  const value = cleanNumber(quote.value || quote.tradeValue) || estimateTradeValue(close, volume) || cleanNumber(stock.value);
+  return {
+    ...stock,
+    code: String(quote.code || quote.c || stock.code || ""),
+    name: quote.name || quote.n || stock.name,
+    close: close || cleanNumber(stock.close),
+    pct: Number.isFinite(pct) ? pct : cleanNumber(stock.pct),
+    value,
+    volume,
+    exchange: stock.exchange || quote.exchange || quote.ex || "",
+  };
+}
+
+function renderSectorModalRows(sector, stocks) {
+  return stocks.map((s, i) => {
+    const pctClass = s.pct > 0 ? "sector-pct-up" : s.pct < 0 ? "sector-pct-down" : "sector-pct-flat";
+    const pctSign = s.pct >= 0 ? "+" : "";
+    const inst = institutionData[s.code] || {};
+    const rawForeign = inst.foreign ?? null;
+    const rawTrust = inst.trust ?? null;
+    const rawDealer = inst.dealer ?? null;
+    const rawTotal = inst.total ?? (
+      rawForeign !== null && rawTrust !== null && rawDealer !== null
+        ? cleanNumber(rawForeign) + cleanNumber(rawTrust) + cleanNumber(rawDealer)
+        : null
+    );
+    const market = /otc|tpex|上櫃/i.test(String(s.exchange || s.market || "")) ? "上櫃" : "上市";
+    return `
+      <tr style="border-bottom:1px solid #161925; ${i % 2 === 0 ? "" : "background:#0c0f1a"}">
+        <td style="padding:10px 16px;">
+          <div style="color:#7ec8e3; font-weight:600; font-size:13px;">${s.code} ${s.name}</div>
+          <div style="color:#555; font-size:11px; margin-top:2px;">${sector.name}</div>
+        </td>
+        <td style="padding:10px 8px; text-align:center; color:#888; font-size:12px;">${market}</td>
+        <td style="padding:10px 12px; text-align:right; color:#fff; font-weight:600;">${s.close ? s.close.toLocaleString("zh-TW") : "--"}</td>
+        <td class="${pctClass}" style="padding:10px 12px; text-align:right;">${pctSign}${formatNumber(s.pct || 0, 2)}%</td>
+        <td style="padding:10px 12px; text-align:right; color:#aaa;">${s.value ? (s.value/100000000).toFixed(1) : "0.0"} 億</td>
+        <td style="padding:10px 12px; text-align:right; color:#aaa;">${s.volume ? s.volume.toLocaleString("zh-TW", { maximumFractionDigits: 0 }) : "0"} 張</td>
+        <td class="${getSectorValueToneClass(rawForeign, "sector-inst")}" style="padding:10px 12px; text-align:right;">${formatInstitutionLots(rawForeign)}</td>
+        <td class="${getSectorValueToneClass(rawTrust, "sector-inst")}" style="padding:10px 12px; text-align:right;">${formatInstitutionLots(rawTrust)}</td>
+        <td class="${getSectorValueToneClass(rawDealer, "sector-inst")}" style="padding:10px 12px; text-align:right;">${formatInstitutionLots(rawDealer)}</td>
+        <td class="${getSectorValueToneClass(rawTotal, "sector-inst")}" style="padding:10px 16px; text-align:right;">${formatInstitutionLots(rawTotal)}</td>
+      </tr>
+    `;
+  }).join("");
+}
+
+async function refreshSectorModalRealtime(sector, stocks) {
+  const body = document.querySelector("#sector-modal-body");
+  if (!body || !stocks.length) return;
+  const codes = stocks.map((stock) => String(stock.code || "")).filter(Boolean);
+  if (!codes.length) return;
+  try {
+    if (!Object.keys(institutionData).length) await loadInstitution();
+    const payload = await fetchJson(`${endpoints.realtime}?codes=${encodeURIComponent(codes.join(","))}&t=${Date.now()}`, 12000);
+    const quotes = normalizeArray(payload?.quotes || payload?.msgArray || payload);
+    const quoteByCode = new Map(quotes.map((quote) => [String(quote.code || quote.c || ""), quote]));
+    const merged = stocks
+      .map((stock) => normalizeSectorRealtimeStock(stock, quoteByCode.get(String(stock.code || ""))))
+      .sort((a, b) => cleanNumber(b.value) - cleanNumber(a.value));
+    body.innerHTML = renderSectorModalRows(sector, merged);
+    const totalValue = merged.reduce((sum, stock) => sum + cleanNumber(stock.value), 0) / 100000000;
+    const valueEl = document.querySelector("[data-sector-modal-value]");
+    if (valueEl) valueEl.textContent = `${totalValue.toLocaleString("zh-TW", { maximumFractionDigits: 1 })} 億`;
+  } catch (error) {
+    body.dataset.realtimeError = "true";
+  }
+}
+
+async function openSectorModal(sector) {
   const stocks = sectorStocksCache[sector.name] || [];
   const existing = document.querySelector("#sector-modal");
   if (existing) existing.remove();
+
+  if (!Object.keys(institutionData).length) await loadInstitution();
 
   const sortedStocks = [...stocks].sort((a, b) => b.pct - a.pct);
   const today = new Date();
@@ -6925,7 +10650,7 @@ function openSectorModal(sector) {
             </div>
             <div style="background:#1a1e2e; border-radius:8px; padding:10px 16px; text-align:center;">
               <div style="color:#888; font-size:11px;">成交金額</div>
-              <div style="font-size:18px; font-weight:600; color:#fff">${sector.totalValue} 億</div>
+              <div data-sector-modal-value style="font-size:18px; font-weight:600; color:#fff">${sector.totalValue} 億</div>
             </div>
             <div style="background:#1a1e2e; border-radius:8px; padding:10px 16px; text-align:center;">
               <div style="color:#888; font-size:11px;">上漲 / 下跌</div>
@@ -6964,34 +10689,8 @@ function openSectorModal(sector) {
               <th style="padding:10px 16px; font-weight:500;">法人</th>
             </tr>
           </thead>
-          <tbody>
-            ${sortedStocks.map((s, i) => {
-              const pctColor = s.pct > 0 ? "#e74c3c" : s.pct < 0 ? "#27ae60" : "#aaa";
-              const pctSign = s.pct >= 0 ? "+" : "";
-              const inst = institutionData[s.code] || {};
-              const foreign = inst.foreign ?? null;
-              const trust = inst.trust ?? null;
-              const dealer = inst.dealer ?? null;
-              const total = (foreign !== null && trust !== null && dealer !== null)
-                ? foreign + trust + dealer : null;
-              return `
-                <tr style="border-bottom:1px solid #161925; ${i % 2 === 0 ? "" : "background:#0c0f1a"}">
-                  <td style="padding:10px 16px;">
-                    <div style="color:#7ec8e3; font-weight:600; font-size:13px;">${s.code} ${s.name}</div>
-                    <div style="color:#555; font-size:11px; margin-top:2px;">${sector.name}</div>
-                  </td>
-                  <td style="padding:10px 8px; text-align:center; color:#888; font-size:12px;">上市</td>
-                  <td style="padding:10px 12px; text-align:right; color:#fff; font-weight:600;">${s.close.toLocaleString("zh-TW")}</td>
-                  <td style="padding:10px 12px; text-align:right; color:${pctColor}; font-weight:700;">${pctSign}${s.pct.toFixed(2)}%</td>
-                  <td style="padding:10px 12px; text-align:right; color:#aaa;">${(s.value/100000000).toFixed(1)} 億</td>
-                  <td style="padding:10px 12px; text-align:right; color:#aaa;">${(s.volume/1000).toFixed(0)} 張</td>
-                  <td style="padding:10px 12px; text-align:right; color:${getInstColor(foreign)}; font-weight:500;">${formatInstitution(foreign)}</td>
-                  <td style="padding:10px 12px; text-align:right; color:${getInstColor(trust)}; font-weight:500;">${formatInstitution(trust)}</td>
-                  <td style="padding:10px 12px; text-align:right; color:${getInstColor(dealer)}; font-weight:500;">${formatInstitution(dealer)}</td>
-                  <td style="padding:10px 16px; text-align:right; color:${getInstColor(total)}; font-weight:600;">${formatInstitution(total)}</td>
-                </tr>
-              `;
-            }).join("")}
+          <tbody id="sector-modal-body">
+            ${renderSectorModalRows(sector, sortedStocks)}
           </tbody>
         </table>
         ${sortedStocks.length === 0 ? `<div style="text-align:center; padding:40px; color:#666;">載入個股資料中...</div>` : ""}
@@ -7002,9 +10701,179 @@ function openSectorModal(sector) {
   document.body.appendChild(modal);
   modal.querySelector("#modal-close").addEventListener("click", () => modal.remove());
   modal.addEventListener("click", (e) => { if (e.target === modal) modal.remove(); });
+  refreshSectorModalRealtime(sector, sortedStocks);
 }
 
-// ★ 修改：從 API 回傳的 stocks 直接存進 cache
+function mergeHeatmapApiSectorsIntoCache(sectors) {
+  const nextCache = { ...sectorStocksCache };
+  normalizeArray(sectors).forEach((sector) => {
+    const apiIndustry = String(sector?.name || "").trim();
+    normalizeArray(sector?.stocks).forEach((stock) => {
+      const code = String(stock?.code || stock?.Code || stock?.證券代號 || "").trim();
+      if (!code) return;
+      const industry = apiIndustry || SECTOR_MAP[code];
+      if (!industry) return;
+      SECTOR_MAP[code] = industry;
+      const row = { ...stock, code, name: stock.name || stock.Name || stock.證券名稱 || code };
+      upsertSectorStock(nextCache, industry, row);
+    });
+  });
+  sectorStocksCache = nextCache;
+}
+
+function mergeIndustryMaster(masterRows) {
+  normalizeArray(masterRows).forEach((row) => {
+    const code = String(row?.code || "").trim();
+    const primaryIndustry = String(row?.primaryIndustry || row?.heatmapSector || "").trim();
+    if (!code || !primaryIndustry) return;
+    industryMasterByCode[code] = { ...industryMasterByCode[code], ...row, code, primaryIndustry };
+    SECTOR_MAP[code] = primaryIndustry;
+  });
+}
+
+const HEATMAP_FILTERS = [
+  { key: "all", label: "全部" },
+  { key: "official", label: "官方產業" },
+  { key: "electronic", label: "電子細分" },
+  { key: "theme", label: "題材概念" },
+  { key: "group", label: "集團股" },
+];
+
+const HEATMAP_ELECTRONIC_GROUPS = new Set([
+  "IC生產製造", "IC設計服務", "IC封測", "半導體", "半導體設備/測試", "先進封裝/CoWoS",
+  "CPU/ASIC/IP", "記憶體/儲存", "PCB/載板", "電子零組件", "電子通路", "電腦週邊",
+  "其他電子", "光電", "通訊網路", "網通設備組件", "面板業", "資訊服務", "數位雲端",
+]);
+
+const HEATMAP_THEME_GROUPS = new Set([
+  "AI伺服器", "液冷/散熱", "光通訊/CPO", "電源/BBU/UPS", "工業電腦", "組裝代工",
+  "綠能環保", "綠能環保類", "電器電纜", "生技醫療", "化學生技醫療", "運動休閒",
+]);
+
+const HEATMAP_GROUP_STOCKS = {
+  "台塑集團": ["1301", "1303", "1326", "6505", "1604"],
+  "鴻海集團": ["2317", "2354", "2357", "2328", "3481", "6239", "6414", "6451", "6669"],
+  "遠東集團": ["1402", "1460", "1710", "2903", "4904", "2606"],
+  "統一集團": ["1216", "1229", "2912", "2207", "2855", "9907"],
+  "華新集團": ["1605", "1608", "2412", "2492", "3023", "3665", "6116"],
+  "中信集團": ["2891", "2809", "2610", "9945"],
+  "富邦集團": ["2881", "8454", "5820"],
+  "國泰集團": ["2882", "2501", "2723"],
+  "新光集團": ["2888", "2511", "9925"],
+  "永豐集團": ["2890", "1907", "9938"],
+  "台新集團": ["2887", "2812"],
+  "玉山集團": ["2884"],
+  "元大集團": ["2885", "8069"],
+  "兆豐集團": ["2886", "2609"],
+  "第一金集團": ["2892"],
+  "合庫集團": ["5880"],
+  "台泥集團": ["1101", "1102", "1513", "8463"],
+  "長榮集團": ["2603", "2618", "2636", "2645"],
+  "陽明集團": ["2609", "2612"],
+  "裕隆集團": ["2201", "2204", "2227", "9941"],
+};
+
+const HEATMAP_GROUP_BY_CODE = Object.fromEntries(
+  Object.entries(HEATMAP_GROUP_STOCKS).flatMap(([group, codes]) => codes.map((code) => [code, group]))
+);
+
+function buildHeatmapGroupSectors(sectors) {
+  const groups = {};
+  normalizeArray(sectors).forEach((sector) => {
+    normalizeArray(sector?.stocks).forEach((stock) => {
+      const code = String(stock?.code || "").trim();
+      const groupName = HEATMAP_GROUP_BY_CODE[code];
+      if (!code || !groupName) return;
+      if (!groups[groupName]) groups[groupName] = { name: groupName, stocks: [], seen: new Set(), totalValue: 0, up: 0, down: 0, flat: 0 };
+      const group = groups[groupName];
+      if (group.seen.has(code)) return;
+      group.seen.add(code);
+      const pct = cleanNumber(stock.pct ?? stock.percent);
+      const change = cleanNumber(stock.change);
+      const amountYi = cleanNumber(stock.amountYi || stock.valueYi || cleanNumber(stock.value) / 100000000);
+      const row = { ...stock, code, pct, amountYi, groupIndustry: groupName };
+      group.stocks.push(row);
+      group.totalValue += amountYi;
+      if (change > 0 || pct > 0) group.up++;
+      else if (change < 0 || pct < 0) group.down++;
+      else group.flat++;
+    });
+  });
+
+  return Object.values(groups)
+    .filter((group) => group.stocks.length)
+    .map((group) => {
+      const sortedStocks = [...group.stocks].sort((a, b) => cleanNumber(b.amountYi) - cleanNumber(a.amountYi));
+      const leader = sortedStocks[0];
+      const pct = group.stocks.reduce((sum, stock) => sum + cleanNumber(stock.pct), 0) / group.stocks.length;
+      const totalValue = Number(group.totalValue.toFixed(1));
+      return {
+        name: group.name,
+        pct: Number(pct.toFixed(2)),
+        totalValue,
+        amountYi: totalValue,
+        count: group.stocks.length,
+        up: group.up,
+        down: group.down,
+        flat: group.flat,
+        leader: leader ? `${leader.name || leader.code} ${cleanNumber(leader.pct) >= 0 ? "+" : ""}${cleanNumber(leader.pct).toFixed(2)}%` : "--",
+        leaderCode: leader?.code || "",
+        stocks: sortedStocks,
+      };
+    })
+    .sort((a, b) => cleanNumber(b.pct) - cleanNumber(a.pct));
+}
+
+function filterHeatmapSectors(sectors) {
+  if (heatmapMode === "official") {
+    return sectors.filter((sector) => !HEATMAP_ELECTRONIC_GROUPS.has(sector.name) && !HEATMAP_THEME_GROUPS.has(sector.name));
+  }
+  if (heatmapMode === "electronic") return sectors.filter((sector) => HEATMAP_ELECTRONIC_GROUPS.has(sector.name));
+  if (heatmapMode === "theme") return sectors.filter((sector) => HEATMAP_THEME_GROUPS.has(sector.name));
+  if (heatmapMode === "group") return buildHeatmapGroupSectors(sectors);
+  return sectors;
+}
+
+function syncHeatmapTabs(allSectors, visibleSectors) {
+  const section = heatmap?.closest(".sector-section");
+  const titleCount = section?.querySelector(".section-title > span");
+  if (titleCount) {
+    const activeLabel = HEATMAP_FILTERS.find((item) => item.key === heatmapMode)?.label || "全部";
+    titleCount.textContent = `${activeLabel} · ${visibleSectors.length} 個`;
+  }
+  const tabs = section?.querySelector(".tabs");
+  if (!tabs) return;
+  const buttons = [...tabs.querySelectorAll("button")];
+  buttons.forEach((button, index) => {
+    const meta = HEATMAP_FILTERS[index];
+    if (!meta) return;
+    button.dataset.heatmapMode = meta.key;
+    button.type = "button";
+    button.classList.toggle("active", meta.key === heatmapMode);
+    button.disabled = false;
+    button.onclick = () => {
+      heatmapMode = meta.key;
+      lastHeatmapRenderSignature = "";
+      renderHeatmapSectors(allSectors);
+    };
+  });
+}
+
+function upsertSectorStock(cache, industry, row) {
+  const code = String(row?.code || row?.Code || row?.證券代號 || "").trim();
+  if (!code || !industry) return;
+  Object.keys(cache).forEach((name) => {
+    if (name === industry) return;
+    cache[name] = normalizeArray(cache[name]).filter((item) => String(item.code || item.Code || item.證券代號) !== code);
+    if (!cache[name].length) delete cache[name];
+  });
+  if (!cache[industry]) cache[industry] = [];
+  const existingIndex = cache[industry].findIndex((item) => String(item.code || item.Code || item.證券代號) === code);
+  if (existingIndex >= 0) cache[industry][existingIndex] = { ...cache[industry][existingIndex], ...row };
+  else cache[industry].push(row);
+}
+
+// ★ 修改：從 API 回傳的 stocks 直接存進 cache，並依本地族群表重新分桶
 function renderHeatmapSectors(sectors) {
   if (!sectors || !sectors.length) {
     heatmap.innerHTML = `<div class="empty-state">等待產業資料...</div>`;
@@ -7012,33 +10881,38 @@ function renderHeatmapSectors(sectors) {
     return;
   }
 
-  // 把個股資料存進 cache
-  sectors.forEach(s => {
-    if (s.stocks && s.stocks.length) {
-      sectorStocksCache[s.name] = s.stocks;
-    }
-  });
-  const signature = sectors
+  mergeHeatmapApiSectorsIntoCache(sectors);
+  const sortedSectors = [...sectors].sort((a, b) => cleanNumber(b.pct) - cleanNumber(a.pct));
+  const visibleSectors = filterHeatmapSectors(sortedSectors);
+  syncHeatmapTabs(sortedSectors, visibleSectors);
+  const signature = visibleSectors
     .map((s) => `${s.name}:${Number(s.pct || 0).toFixed(2)}:${s.count}:${s.up}:${s.down}:${s.totalValue}:${s.leader || ""}`)
-    .join("|");
+    .join("|") + `:${heatmapMode}`;
   if (signature === lastHeatmapRenderSignature) return;
   lastHeatmapRenderSignature = signature;
 
-  heatmap.innerHTML = sectors.map(s => {
+  if (!visibleSectors.length) {
+    heatmap.innerHTML = `<div class="empty-state">這個分類目前沒有產業資料</div>`;
+    return;
+  }
+
+  heatmap.innerHTML = visibleSectors.map(s => {
     const pct = s.pct || 0;
     const sign = pct >= 0 ? "+" : "";
     const bg = getSectorColor(pct);
     const toneClass = pct >= 0 ? "hot" : "cold";
+    const totalValue = cleanNumber(s.totalValue || s.amountYi).toLocaleString("zh-TW", { maximumFractionDigits: 1 });
+    const leader = String(s.leader || "--").replace(/\s+/g, " ");
     // 不把 stocks 放進 data-sector，太大了
     const sectorMeta = { name: s.name, pct: s.pct, totalValue: s.totalValue, count: s.count, up: s.up, down: s.down, flat: s.flat, leader: s.leader };
     return `
       <article class="sector-card ${toneClass}" style="--sector-bg:${bg}; cursor:pointer;" data-sector="${encodeURIComponent(JSON.stringify(sectorMeta))}">
-        <h3>${s.name}<span>${sign}${pct.toFixed(2)}%</span></h3>
-        <p>${s.count} 檔 · ${s.totalValue} 億</p>
+        <h3><span class="sector-name">${escapeAttr(s.name)}</span><span class="sector-pct">${sign}${pct.toFixed(2)}%</span></h3>
+        <p>${cleanNumber(s.count).toLocaleString("zh-TW")} 檔 · ${totalValue} 億</p>
         <small>
-          <span>▲ ${s.up}</span><b>▼ ${s.down}</b>
-          <span>${s.leader || "--"}</span>
+          <span>▲ ${cleanNumber(s.up).toLocaleString("zh-TW")}</span><b>▼ ${cleanNumber(s.down).toLocaleString("zh-TW")}</b>
         </small>
+        <em>${escapeAttr(leader)}</em>
       </article>
     `;
   }).join("");
@@ -7073,10 +10947,1049 @@ function renderHeatmapFromCache() {
       leader: leader ? `${leader.code} ${leader.name}` : "--",
       stocks: rows,
     };
-  }).filter(Boolean).sort((a, b) => Math.abs(b.pct) - Math.abs(a.pct)).slice(0, 36);
+  }).filter(Boolean).sort((a, b) => cleanNumber(b.pct) - cleanNumber(a.pct)).slice(0, 60);
 
   if (sectors.length) renderHeatmapSectors(sectors);
   return sectors.length > 0;
+}
+
+function installMarketTabs() {
+  const panel = viewPanels.market;
+  if (!panel || document.querySelector("#market-mode-tabs")) return;
+  const tabs = document.createElement("div");
+  tabs.id = "market-mode-tabs";
+  tabs.className = "market-mode-tabs";
+  tabs.innerHTML = `
+    <button type="button" class="active" data-market-mode="overview">◉ 市場總覽</button>
+    <button type="button" data-market-mode="ai">♙ AI 判讀</button>
+  `;
+  const header = panel.querySelector(".page-header");
+  if (header) header.insertAdjacentElement("afterend", tabs);
+  else panel.prepend(tabs);
+
+  marketAiPanel = document.createElement("section");
+  marketAiPanel.id = "market-ai-panel";
+  marketAiPanel.className = "market-ai-panel";
+  marketAiPanel.hidden = true;
+  panel.appendChild(marketAiPanel);
+
+  [...panel.children].forEach((child) => {
+    if (child === header || child === tabs || child === marketAiPanel) return;
+    child.dataset.marketOverviewNode = "true";
+  });
+  applyMarketMode(marketMode);
+}
+
+function applyMarketMode(mode = "overview") {
+  const panel = viewPanels.market;
+  if (!panel) return;
+  marketMode = mode === "ai" ? "ai" : "overview";
+  panel.classList.toggle("market-ai-mode", marketMode === "ai");
+  panel.classList.toggle("market-overview-mode", marketMode !== "ai");
+  panel.querySelectorAll("[data-market-mode]").forEach((button) => {
+    button.classList.toggle("active", button.dataset.marketMode === marketMode);
+  });
+  panel.querySelectorAll("[data-market-overview-node]").forEach((node) => {
+    node.hidden = marketMode === "ai";
+  });
+  if (marketAiPanel) {
+    marketAiPanel.hidden = marketMode !== "ai";
+    if (marketMode === "ai") {
+      marketAiLastSignature = "";
+      marketAiPanel.innerHTML = `<div class="empty-state">載入最新 AI 判讀資料中...</div>`;
+      deferUiWork(refreshMarketAiPanelOnOpen, 80);
+    }
+  }
+  const title = panel.querySelector(".page-header h1");
+  if (title) {
+    const text = marketMode === "ai" ? "AI 盤面判讀" : "市場總覽";
+    title.innerHTML = `${titleWithIcon("●", text)} ${scheduleBadgeHtml("market")}`;
+  }
+  refreshDataFreshnessBars();
+}
+
+async function refreshMarketAiPanelOnOpen() {
+  if (marketDataLoading) {
+    renderMarketAiPanel();
+    return;
+  }
+  try {
+    await loadMarketData(true);
+  } finally {
+    if (marketMode === "ai") {
+      marketAiLastSignature = "";
+      renderMarketAiPanel();
+      requestMarketAiRealtimeScan("hot");
+    }
+  }
+}
+
+function getMarketAiSectors(sourceStocks = null) {
+  const sourceCache = Array.isArray(sourceStocks)
+    ? sourceStocks.reduce((cache, stock) => {
+        const code = String(stock?.code || "").trim();
+        const industry = SECTOR_MAP[code];
+        if (!industry) return cache;
+        upsertSectorStock(cache, industry, {
+          code,
+          name: stock.name || code,
+          close: cleanNumber(stock.close),
+          change: cleanNumber(stock.change),
+          pct: cleanNumber(stock.percent ?? stock.pct),
+          value: cleanNumber(stock.value),
+          volume: cleanNumber(stock.tradeVolume || stock.volume),
+        });
+        return cache;
+      }, {})
+    : sectorStocksCache;
+  return Object.entries(sourceCache).map(([name, stocks]) => {
+    const rows = normalizeArray(stocks).map((stock) => ({
+      ...stock,
+      pct: cleanNumber(stock.pct ?? stock.percent),
+      value: cleanNumber(stock.value),
+    })).filter((stock) => stock.code);
+    if (!rows.length) return null;
+    const totalValue = rows.reduce((sum, stock) => sum + stock.value, 0);
+    const pct = totalValue
+      ? rows.reduce((sum, stock) => sum + stock.pct * stock.value, 0) / totalValue
+      : avg(rows.map((stock) => stock.pct));
+    const up = rows.filter((stock) => stock.pct > 0).length;
+    const down = rows.filter((stock) => stock.pct < 0).length;
+    return { name, rows, pct: pct || 0, totalValue, up, down };
+  }).filter(Boolean);
+}
+
+function marketAiTodayKey() {
+  const now = new Date();
+  return `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}${String(now.getDate()).padStart(2, "0")}`;
+}
+
+function normalizeMarketAiDateKey(value) {
+  const text = String(value || "").trim();
+  if (!text) return "";
+  const digits = text.replace(/\D/g, "");
+  if (/^\d{8}$/.test(digits)) return digits;
+  if (/^\d{7}$/.test(digits)) {
+    const rocYear = Number(digits.slice(0, 3));
+    if (rocYear > 0) return `${rocYear + 1911}${digits.slice(3)}`;
+  }
+  return "";
+}
+
+function marketAiQuoteDateKey(stock) {
+  return normalizeMarketAiDateKey(valueOf(stock || {}, [
+    "quoteDate",
+    "QuoteDate",
+    "tradeDate",
+    "TradeDate",
+    "date",
+    "Date",
+    "資料日期",
+    "交易日期",
+  ]));
+}
+
+function marketAiTargetDateKey() {
+  return isMarketAiActiveSession() ? marketAiTodayKey() : normalizeMarketAiDateKey(marketStockDataState.resolvedTradeDate) || marketAiTodayKey();
+}
+
+function formatMarketAiDateKey(value) {
+  const key = normalizeMarketAiDateKey(value);
+  return key && key.length === 8 ? `${key.slice(0, 4)}-${key.slice(4, 6)}-${key.slice(6, 8)}` : "未知";
+}
+
+function getPanelFreshnessMeta(viewName) {
+  const today = marketAiTodayKey();
+  const marketAiLiveRows = viewName === "market" && marketMode === "ai" && isMarketAiActiveSession()
+    ? latestStocks.map((stock) => applyStrategyQuote(stock)).filter((stock) => !isMarketAiStaleStock(stock))
+    : [];
+  const dataDate = marketAiDataDateKey(marketAiLiveRows)
+    || marketAiDataDateKey(latestStocks)
+    || normalizeMarketAiDateKey(marketStockDataState.resolvedTradeDate)
+    || today;
+  const isToday = dataDate === today;
+  const marketModeText = isMarketAiActiveSession()
+    ? "盤中巡邏"
+    : marketStockDataState.isFallbackDate
+    ? "最新可用交易日"
+    : "收盤資料";
+  if (viewName === "market") {
+    return { mode: marketMode === "ai" ? `AI 判讀｜${marketModeText}` : `市場總覽｜${marketModeText}`, dataDate, today, isToday };
+  }
+  if (viewName === "strategy") {
+    const mode = strategyView?.classList.contains("swing-only")
+      ? "策略4｜14:30完整掃"
+      : strategyView?.classList.contains("intraday-only")
+      ? "策略2當沖｜盤中巡邏"
+      : strategyView?.classList.contains("open-buy-only")
+      ? "策略1｜07:00/16:00完整掃"
+      : strategyView?.classList.contains("strategy3-only")
+      ? "策略3｜13:00完整掃"
+      : strategyView?.classList.contains("strategy5-only")
+      ? "策略5｜MIS即時"
+      : "策略中心｜即時重算";
+    const strategyDataDate = strategyView?.classList.contains("intraday-only")
+      ? normalizeMarketAiDateKey(strategy2IntradayCacheDate) || marketAiDataDateKey(latestStocks) || dataDate
+      : dataDate;
+    return { mode, dataDate: strategyDataDate, today, isToday: strategyDataDate === today };
+  }
+  if (viewName === "chip-trade") return { mode: "盤後籌碼｜法人資料", dataDate, today, isToday };
+  if (viewName === "warrant-flow") return { mode: "權證走向｜盤後資料", dataDate, today, isToday };
+  if (viewName === "watchlist") return { mode: `自選股｜${marketModeText}`, dataDate, today, isToday };
+  if (viewName === "realtime-radar") {
+    const radarDataDate = isRadarDetectionWindow()
+      ? normalizeMarketAiDateKey(strategy2IntradayCacheDate) || marketAiDataDateKey(latestStocks) || dataDate
+      : realtimeRadarClosedDataDateKey() || dataDate;
+    return { mode: "即時雷達｜盤中巡邏", dataDate: radarDataDate, today, isToday: radarDataDate === today };
+  }
+  return { mode: marketModeText, dataDate, today, isToday };
+}
+
+function renderDataFreshnessBarHtml(viewName) {
+  const meta = getPanelFreshnessMeta(viewName);
+  const staleText = meta.isToday ? "" : meta.mode.includes("AI 判讀") ? "｜非今日資料僅供參考" : "｜非今日資料不採用";
+  const signature = `${meta.mode}:${meta.dataDate}:${meta.today}:${meta.isToday}`;
+  const stateClass = meta.isToday ? "is-live" : "is-stale";
+  return `<div class="data-freshness-bar ${stateClass}" data-signature="${escapeAttr(signature)}">模式：<strong>${escapeAttr(meta.mode)}</strong>｜資料日期：<strong>${escapeAttr(formatMarketAiDateKey(meta.dataDate))}</strong>｜今日：<strong>${escapeAttr(formatMarketAiDateKey(meta.today))}</strong>${staleText}</div>`;
+}
+function refreshDataFreshnessBars() {
+  Object.entries(viewPanels).forEach(([viewName, panel]) => {
+    if (!panel) return;
+    const header = viewName === "strategy" && strategyView?.classList.contains("intraday-only")
+      ? panel.querySelector(".intraday-topbar") || panel.querySelector(".page-header")
+      : panel.querySelector(".page-header, .radar-topbar");
+    if (!header) return;
+    const barContainer = header.parentElement || panel;
+    let bar = barContainer.querySelector(":scope > .data-freshness-bar");
+    if (!bar) {
+      bar = document.createElement("div");
+      bar.className = "data-freshness-bar";
+      header.insertAdjacentElement("afterend", bar);
+    }
+    const meta = getPanelFreshnessMeta(viewName);
+    const signature = `${meta.mode}:${meta.dataDate}:${meta.today}:${meta.isToday}`;
+    if (bar.dataset.signature === signature) return;
+    bar.dataset.signature = signature;
+    bar.classList.toggle("is-live", meta.isToday);
+    bar.classList.toggle("is-stale", !meta.isToday);
+    const staleText = meta.isToday ? "" : meta.mode.includes("AI 判讀") ? "｜非今日資料僅供參考" : "｜非今日資料不採用";
+    bar.innerHTML = `模式：<strong>${escapeAttr(meta.mode)}</strong>｜資料日期：<strong>${escapeAttr(formatMarketAiDateKey(meta.dataDate))}</strong>｜今日：<strong>${escapeAttr(formatMarketAiDateKey(meta.today))}</strong>${staleText}`;
+  });
+}
+
+function marketAiDataDateKey(stocks = []) {
+  const counts = new Map();
+  normalizeArray(stocks).forEach((stock) => {
+    const key = marketAiQuoteDateKey(stock);
+    if (key) counts.set(key, (counts.get(key) || 0) + 1);
+  });
+  return [...counts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] || "";
+}
+
+function isMarketAiStaleStock(stock) {
+  const quoteDate = marketAiQuoteDateKey(stock);
+  if (!isMarketAiActiveSession() && !quoteDate) return true;
+  return quoteDate && quoteDate !== marketAiTargetDateKey();
+}
+
+function isMarketAiFreshRealtimeStock(stock) {
+  if (!isMarketAiActiveSession()) return true;
+  if (!stock?.isRealtime) return false;
+  const updatedAt = cleanNumber(stock.quoteUpdatedAt);
+  return updatedAt > 0 && Date.now() - updatedAt <= Math.max(INTRADAY_FAST_SCAN_MS * 6, 30000);
+}
+
+function isMarketAiActiveSession() {
+  return marketRealtimeState.trading === true
+    && marketRealtimeState.marketStatus === "day"
+    && isIntradayScanWindow();
+}
+
+async function loadMarketAiStocksFallback() {
+  if (marketAiStockLoading || latestStocks.length) return;
+  marketAiStockLoading = true;
+  try {
+    const payload = await fetchJson(`${endpoints.strategyStocks}?t=${Date.now()}`, 15000);
+    const rows = normalizeArray(payload?.stocks || payload);
+    if (rows.length) {
+      updateMarketStockDataState(payload);
+      renderStocks(rows);
+      return;
+    }
+    const fallback = await fetchJson(`${endpoints.stocks}?t=${Date.now()}`, 15000);
+    updateMarketStockDataState(fallback);
+    renderStocks(Array.isArray(fallback) ? fallback : normalizeArray(fallback?.stocks || fallback));
+  } catch (error) {
+  } finally {
+    marketAiStockLoading = false;
+    if (marketMode === "ai") {
+      marketAiLastSignature = "";
+      renderMarketAiPanel();
+    }
+  }
+}
+
+function updateMarketStockDataState(payload) {
+  if (!payload || Array.isArray(payload)) return;
+  marketStockDataState = {
+    resolvedTradeDate: normalizeMarketAiDateKey(payload.resolvedTradeDate || payload.tradeDate || payload.quoteDate) || marketStockDataState.resolvedTradeDate || "",
+    today: normalizeMarketAiDateKey(payload.today) || marketAiTodayKey(),
+    source: payload.source || marketStockDataState.source || "",
+    updatedAt: payload.updatedAt || marketStockDataState.updatedAt || "",
+    isFallbackDate: Boolean(payload.isFallbackDate),
+    marketDates: payload.marketDates || marketStockDataState.marketDates || {},
+  };
+  refreshDataFreshnessBars();
+}
+
+async function ensureMarketAiInstitutionData() {
+  if (marketAiInstitutionLoading || Object.keys(institutionData).length) return;
+  marketAiInstitutionLoading = true;
+  try {
+    await loadInstitution();
+  } catch (error) {
+  } finally {
+    marketAiInstitutionLoading = false;
+    if (marketMode === "ai") {
+      marketAiLastSignature = "";
+      renderMarketAiPanel();
+    }
+  }
+}
+
+function getMarketAiLegalValue(code) {
+  const inst = institutionData[String(code || "")] || {};
+  return Number(inst.total) || Number(inst.foreign || 0) + Number(inst.trust || 0) + Number(inst.dealer || 0);
+}
+
+function getMarketAiCapitalFlowScore(stock, sector) {
+  const pct = cleanNumber(stock.percent);
+  const valueYi = cleanNumber(stock.value) / 100000000;
+  const volume = cleanNumber(stock.tradeVolume);
+  const sectorPct = cleanNumber(sector?.pct);
+  return Math.round(clamp(valueYi * 1.35 + Math.min(24, volume / 900) + Math.max(0, pct) * 5 + Math.max(0, sectorPct) * 7, 0, 100));
+}
+
+function getMarketAiDayTradeHeatScore(stock, sector) {
+  const pct = cleanNumber(stock.percent);
+  const valueYi = cleanNumber(stock.value) / 100000000;
+  const volume = cleanNumber(stock.tradeVolume);
+  const sectorPct = cleanNumber(sector?.pct);
+  const legal = getMarketAiLegalValue(stock.code);
+  const hotTurnover = Math.min(34, valueYi * 1.8);
+  const hotVolume = Math.min(24, volume / 700);
+  const moveHeat = Math.max(0, 18 - Math.abs(pct - 2.4) * 4);
+  const sectorHeat = Math.max(0, Math.min(12, sectorPct * 4));
+  const chipHeat = legal > 0 ? 8 : 0;
+  const overheatingPenalty = pct >= 8.5 ? 24 : pct >= 6.5 ? 10 : 0;
+  return Math.round(clamp(hotTurnover + hotVolume + moveHeat + sectorHeat + chipHeat - overheatingPenalty, 0, 100));
+}
+
+function getMarketAiRiskControlScore(stock, sector, base = {}) {
+  const pct = cleanNumber(stock.percent);
+  const valueYi = cleanNumber(stock.value) / 100000000;
+  const volume = cleanNumber(stock.tradeVolume);
+  const legal = getMarketAiLegalValue(stock.code);
+  const capitalFlowScore = cleanNumber(base.capitalFlowScore) || getMarketAiCapitalFlowScore(stock, sector);
+  const sectorScore = cleanNumber(base.sectorScore);
+  const momentumScore = cleanNumber(base.momentumScore);
+  const score = cleanNumber(base.score);
+  const hotChaseRisk = Math.max(0, pct - 3.2) * 11;
+  const valueCrowding = Math.min(24, valueYi * 0.85);
+  const volumeCrowding = Math.min(16, volume / 1600);
+  const sectorCrowding = sectorScore >= 45 ? 15 : sector?.pct > 1.2 ? 10 : 0;
+  const legalCrowding = legal > 0 && capitalFlowScore >= 50 ? 12 : legal > 0 ? 6 : 0;
+  const scoreGap = Math.max(0, Math.max(momentumScore, capitalFlowScore) - score) * 0.45;
+  const weakButHot = pct < 1 && capitalFlowScore >= 55 ? 10 : 0;
+  const downRisk = pct <= -2 ? Math.abs(pct) * 12 : 0;
+  return Math.round(clamp(hotChaseRisk + valueCrowding + volumeCrowding + sectorCrowding + legalCrowding + scoreGap + weakButHot + downRisk, 0, 100));
+}
+
+function getMarketAiVolumeSpikeScore(stock) {
+  const pct = cleanNumber(stock.percent);
+  const valueYi = cleanNumber(stock.value) / 100000000;
+  const volume = cleanNumber(stock.tradeVolume);
+  const volumeRatio = cleanNumber(stock.volumeRatio || stock.VolumeRatio || stock.volume_ratio || stock["量比"]);
+  const ratioScore = volumeRatio ? Math.min(38, volumeRatio * 22) : 0;
+  return Math.round(clamp(ratioScore + Math.min(32, volume / 900) + valueYi * 1.15 + Math.max(0, pct) * 4, 0, 100));
+}
+
+function getMarketAiReboundScore(stock, base = {}) {
+  const pct = cleanNumber(stock.percent);
+  const legal = getMarketAiLegalValue(stock.code);
+  const score = cleanNumber(base.score);
+  const sectorScore = cleanNumber(base.sectorScore);
+  const capitalFlowScore = cleanNumber(base.capitalFlowScore);
+  const dayTradeHeatScore = cleanNumber(base.dayTradeHeatScore);
+  const weakSectorLift = Math.max(0, 45 - sectorScore) * 0.32;
+  const hotPenalty = pct >= 8.5 ? 20 : pct >= 6.5 ? 8 : 0;
+  return Math.round(clamp(score * 0.32 + capitalFlowScore * 0.26 + dayTradeHeatScore * 0.12 + Math.max(0, pct) * 8 + weakSectorLift + (legal > 0 ? 8 : 0) - hotPenalty, 0, 100));
+}
+
+function scoreMarketAiStock(stock, sectors) {
+  const code = String(stock.code || "");
+  const industry = SECTOR_MAP[code] || "其他";
+  const sector = sectors.find((item) => item.name === industry);
+  const pct = cleanNumber(stock.percent);
+  const valueYi = cleanNumber(stock.value) / 100000000;
+  const volume = cleanNumber(stock.tradeVolume);
+  const legal = getMarketAiLegalValue(code);
+  const capitalFlowScore = getMarketAiCapitalFlowScore(stock, sector);
+  const dayTradeHeatScore = getMarketAiDayTradeHeatScore(stock, sector);
+  const sectorScore = Math.round(clamp((sector?.pct || 0) * 18 + (sector?.up || 0) * 1.2 - (sector?.down || 0) * 0.8, 0, 100));
+  const legalScore = Math.round(clamp(Math.abs(legal) / 900 + (legal > 0 ? 20 : 0), 0, 100));
+  const momentumScore = Math.round(clamp(Math.max(0, pct) * 9 + valueYi * 0.45 + Math.min(16, volume / 1400), 0, 100));
+  let score = capitalFlowScore * 0.34 + dayTradeHeatScore * 0.20 + sectorScore * 0.18 + legalScore * 0.12 + momentumScore * 0.16;
+  if (pct < 0) score -= Math.min(42, Math.abs(pct) * 10);
+  if (pct <= -3) score = Math.min(score, 45);
+  else if (pct <= -1) score = Math.min(score, 58);
+  return clamp(Math.round(score), 1, 100);
+}
+
+function getMarketAiTags(stock, score, sectors) {
+  const code = String(stock.code || "");
+  const industry = SECTOR_MAP[code] || "其他";
+  const sector = sectors.find((item) => item.name === industry);
+  const pct = cleanNumber(stock.percent);
+  const valueYi = cleanNumber(stock.value) / 100000000;
+  const inst = institutionData[code] || {};
+  const tags = [];
+  if (pct >= 6) tags.push("動能強");
+  if (pct >= 3) tags.push("漲幅領先");
+  if (valueYi >= 20) tags.push("量能大");
+  if (sector?.pct > 1) tags.push("族群強");
+  if ((Number(inst.total) || 0) > 0) tags.push("法人買超");
+  if ((Number(inst.foreign) || 0) > 0) tags.push("外資買超");
+  if (score >= 75 && pct >= 1 && !tags.includes("風險高")) tags.push("優先觀察");
+  return tags.slice(0, 4);
+}
+
+function classifyMarketAiStock(stock, sectors) {
+  const code = String(stock.code || "");
+  const pct = cleanNumber(stock.percent);
+  const valueYi = cleanNumber(stock.value) / 100000000;
+  const volume = cleanNumber(stock.tradeVolume);
+  const industry = SECTOR_MAP[code] || "其他";
+  const sector = sectors.find((item) => item.name === industry);
+  const legal = getMarketAiLegalValue(code);
+  const score = scoreMarketAiStock(stock, sectors);
+  const capitalFlowScore = getMarketAiCapitalFlowScore(stock, sector);
+  const dayTradeHeatScore = getMarketAiDayTradeHeatScore(stock, sector);
+  const sectorScore = Math.round(clamp((sector?.pct || 0) * 18 + (sector?.up || 0) * 1.2 - (sector?.down || 0) * 0.8, 0, 100));
+  const momentumScore = Math.round(clamp(capitalFlowScore * 0.5 + score * 0.3 + Math.max(0, pct) * 4 + sectorScore * 0.2, 0, 100));
+  const intradayScore = Math.round(clamp(dayTradeHeatScore * 0.62 + capitalFlowScore * 0.18 + momentumScore * 0.12 + sectorScore * 0.08, 0, 100));
+  const legalScore = Math.round(clamp(Math.abs(legal) / 900 + (legal > 0 ? 18 : 0), 0, 100));
+  const riskScore = getMarketAiRiskControlScore(stock, sector, { score, capitalFlowScore, sectorScore, momentumScore });
+  const volumeSpikeScore = getMarketAiVolumeSpikeScore(stock);
+  const reboundScore = getMarketAiReboundScore(stock, { score, sectorScore, capitalFlowScore, dayTradeHeatScore });
+  return {
+    ...stock,
+    score,
+    industry,
+    legal,
+    capitalFlowScore,
+    dayTradeHeatScore,
+    sectorScore,
+    momentumScore,
+    intradayScore,
+    legalScore,
+    riskScore,
+    volumeSpikeScore,
+    reboundScore,
+    tags: getMarketAiTags(stock, score, sectors),
+    buckets: {
+      all: true,
+      momentum: momentumScore >= 70 && (capitalFlowScore >= 55 || score >= 72 || sectorScore >= 45),
+      legal: legal > 0,
+      intraday: dayTradeHeatScore >= 55 || intradayScore >= 58,
+      rebound: reboundScore >= 58 && pct > 0 && (sectorScore <= 45 || capitalFlowScore >= 55),
+      volume: volumeSpikeScore >= 62 && cleanNumber(stock.value) >= 800000000,
+      risk: riskScore >= 58 || (riskScore >= 48 && (score >= 68 || capitalFlowScore >= 55)) || pct >= 8.5 || pct <= -3,
+    },
+  };
+}
+
+function getMarketAiHotGroups(hotStocks) {
+  const groups = {
+    all: hotStocks,
+    momentum: hotStocks.filter((stock) => stock.buckets.momentum).sort((a, b) => b.score - a.score || b.capitalFlowScore - a.capitalFlowScore || b.momentumScore - a.momentumScore),
+    rebound: sortMarketAiReboundStocks(hotStocks.filter((stock) => stock.buckets.rebound)),
+    volume: sortMarketAiVolumeSpikeStocks(hotStocks.filter((stock) => stock.buckets.volume)),
+    legal: sortMarketAiLegalStocks(hotStocks.filter((stock) => stock.buckets.legal && cleanNumber(stock.percent) > 0)),
+    intraday: sortMarketAiIntradayStocks(hotStocks.filter((stock) => stock.buckets.intraday)),
+  };
+  return groups;
+}
+
+function sortMarketAiIntradayStocks(stocks = []) {
+  return [...stocks].sort((a, b) =>
+    cleanNumber(b.score) - cleanNumber(a.score) ||
+    cleanNumber(b.dayTradeHeatScore) - cleanNumber(a.dayTradeHeatScore) ||
+    cleanNumber(b.intradayScore) - cleanNumber(a.intradayScore) ||
+    (b.tags?.length || 0) - (a.tags?.length || 0) ||
+    cleanNumber(b.capitalFlowScore) - cleanNumber(a.capitalFlowScore) ||
+    cleanNumber(b.momentumScore) - cleanNumber(a.momentumScore) ||
+    cleanNumber(b.value) - cleanNumber(a.value)
+  );
+}
+
+function sortMarketAiLegalStocks(stocks = []) {
+  return [...stocks].sort((a, b) =>
+    cleanNumber(b.score) - cleanNumber(a.score) ||
+    (b.tags?.length || 0) - (a.tags?.length || 0) ||
+    cleanNumber(b.capitalFlowScore) - cleanNumber(a.capitalFlowScore) ||
+    cleanNumber(b.intradayScore) - cleanNumber(a.intradayScore) ||
+    cleanNumber(b.momentumScore) - cleanNumber(a.momentumScore) ||
+    cleanNumber(b.value) - cleanNumber(a.value) ||
+    cleanNumber(b.percent) - cleanNumber(a.percent)
+  );
+}
+
+function sortMarketAiPriorityStocks(stocks = []) {
+  return [...stocks].sort((a, b) =>
+    cleanNumber(b.score) - cleanNumber(a.score) ||
+    (b.tags?.length || 0) - (a.tags?.length || 0) ||
+    cleanNumber(b.percent) - cleanNumber(a.percent) ||
+    cleanNumber(b.value) - cleanNumber(a.value)
+  );
+}
+
+function sortMarketAiReboundStocks(stocks = []) {
+  return [...stocks].sort((a, b) =>
+    cleanNumber(b.reboundScore) - cleanNumber(a.reboundScore) ||
+    cleanNumber(b.capitalFlowScore) - cleanNumber(a.capitalFlowScore) ||
+    cleanNumber(b.score) - cleanNumber(a.score) ||
+    cleanNumber(b.percent) - cleanNumber(a.percent) ||
+    cleanNumber(b.value) - cleanNumber(a.value)
+  );
+}
+
+function sortMarketAiVolumeSpikeStocks(stocks = []) {
+  return [...stocks].sort((a, b) =>
+    cleanNumber(b.volumeSpikeScore) - cleanNumber(a.volumeSpikeScore) ||
+    cleanNumber(b.value) - cleanNumber(a.value) ||
+    cleanNumber(b.tradeVolume) - cleanNumber(a.tradeVolume) ||
+    cleanNumber(b.percent) - cleanNumber(a.percent) ||
+    cleanNumber(b.score) - cleanNumber(a.score)
+  );
+}
+
+function getMarketAiFilterMeta(groups) {
+  return [
+    { key: "momentum", label: "動能強", count: normalizeArray(groups.momentum).length },
+    { key: "rebound", label: "逆勢反彈", count: normalizeArray(groups.rebound).length },
+    { key: "volume", label: "爆量大增", count: normalizeArray(groups.volume).length },
+    { key: "legal", label: "法人買超", count: normalizeArray(groups.legal).length },
+    { key: "intraday", label: "當沖熱", count: normalizeArray(groups.intraday).length },
+  ];
+}
+
+function getMarketAiObserveMeta(groups) {
+  return [
+    { key: "priority", label: "綜合優先", count: normalizeArray(groups.priority).length },
+    { key: "rebound", label: "逆勢反彈", count: normalizeArray(groups.rebound).length },
+    { key: "volume", label: "爆量大增", count: normalizeArray(groups.volume).length },
+    { key: "legal", label: "法人買超", count: normalizeArray(groups.legal).length },
+    { key: "intraday", label: "當沖熱", count: normalizeArray(groups.intraday).length },
+  ];
+}
+
+function getMarketAiObserveGroups(classifiedStocks, hotStocks, bias) {
+  const reboundSource = classifiedStocks.filter((stock) =>
+    stock.buckets.rebound &&
+    (bias === "空方壓制" || cleanNumber(stock.sectorScore) <= 45 || cleanNumber(stock.capitalFlowScore) >= 58)
+  );
+  const groups = {
+    priority: sortMarketAiPriorityStocks(hotStocks),
+    rebound: sortMarketAiReboundStocks(reboundSource),
+    volume: sortMarketAiVolumeSpikeStocks(classifiedStocks.filter((stock) => stock.buckets.volume)),
+    legal: sortMarketAiLegalStocks(classifiedStocks.filter((stock) => stock.buckets.legal && cleanNumber(stock.percent) > 0)),
+    intraday: sortMarketAiIntradayStocks(classifiedStocks.filter((stock) => stock.buckets.intraday)),
+  };
+  if (!groups[marketAiObserveMode]) marketAiObserveMode = "priority";
+  return groups;
+}
+
+function isMarketAiLongCandidate(stock, options = {}) {
+  const allowReference = options.allowReference === true;
+  if (!allowReference && isMarketAiStaleStock(stock)) return false;
+  if (!allowReference && !isMarketAiFreshRealtimeStock(stock)) return false;
+  const pct = cleanNumber(stock.percent);
+  const change = cleanNumber(stock.change);
+  const close = cleanNumber(stock.close);
+  const value = cleanNumber(stock.value);
+  if (!close || !value) return false;
+  if (pct <= 2 || change < 0) return false;
+  return true;
+}
+
+function buildMarketAiData() {
+  const allStocks = latestStocks.length
+    ? latestStocks.map((stock) => isMarketAiActiveSession() ? applyStrategyQuote(stock) : stock)
+    : [];
+  const targetDate = marketAiTargetDateKey();
+  const preferredRows = allStocks.filter((stock) => !isMarketAiStaleStock(stock));
+  const freshRealtimeRows = preferredRows.filter((stock) => isMarketAiFreshRealtimeStock(stock));
+  const fallbackDate = marketAiDataDateKey(allStocks);
+  const isDateFallback = !preferredRows.length && Boolean(fallbackDate) && fallbackDate !== targetDate;
+  const isRealtimeFallback = isMarketAiActiveSession() && preferredRows.length > 0 && freshRealtimeRows.length < Math.min(60, preferredRows.length);
+  const isReferenceDate = isDateFallback || isRealtimeFallback;
+  const stocks = preferredRows.length
+    ? preferredRows
+    : allStocks.filter((stock) => !fallbackDate || marketAiQuoteDateKey(stock) === fallbackDate);
+  const staleRows = preferredRows.length ? allStocks.filter((stock) => isMarketAiStaleStock(stock)) : [];
+  const sample = stocks.length;
+  const upRows = stocks.filter((stock) => cleanNumber(stock.percent) > 0);
+  const downRows = stocks.filter((stock) => cleanNumber(stock.percent) < 0);
+  const flatRows = sample - upRows.length - downRows.length;
+  const upRatio = sample ? (upRows.length / sample) * 100 : 0;
+  const totalValue = stocks.reduce((sum, stock) => sum + cleanNumber(stock.value), 0) / 100000000;
+  const sectors = getMarketAiSectors(stocks);
+  const strongSectors = [...sectors].sort((a, b) => b.pct - a.pct).slice(0, 4);
+  const weakSectors = [...sectors].sort((a, b) => a.pct - b.pct).slice(0, 4);
+  const bias = upRatio >= 55 ? "多方偏強" : upRatio <= 45 ? "空方壓制" : "震盪分歧";
+  const classifiedStocks = stocks
+    .filter((stock) => isMarketAiLongCandidate(stock, { allowReference: isReferenceDate }))
+    .map((stock) => classifyMarketAiStock(stock, sectors));
+  const hotStocks = classifiedStocks
+    .sort((a, b) => b.score - a.score || cleanNumber(b.percent) - cleanNumber(a.percent) || cleanNumber(b.value) - cleanNumber(a.value))
+    .slice(0, 40);
+  const hotGroups = getMarketAiHotGroups(hotStocks);
+  hotGroups.intraday = sortMarketAiIntradayStocks(classifiedStocks.filter((stock) => stock.buckets.intraday)).slice(0, 40);
+  hotGroups.rebound = sortMarketAiReboundStocks(classifiedStocks.filter((stock) => stock.buckets.rebound)).slice(0, 40);
+  hotGroups.volume = sortMarketAiVolumeSpikeStocks(classifiedStocks.filter((stock) => stock.buckets.volume)).slice(0, 40);
+  if (!hotGroups[marketAiHotFilter] || marketAiHotFilter === "all") marketAiHotFilter = "momentum";
+  const visibleHotStocks = hotGroups[marketAiHotFilter].filter((stock) => isMarketAiLongCandidate(stock, { allowReference: isReferenceDate })).slice(0, 10);
+  const observeGroups = getMarketAiObserveGroups(classifiedStocks, hotStocks, bias);
+  const visibleObserveStocks = normalizeArray(observeGroups[marketAiObserveMode]).filter((stock) => isMarketAiLongCandidate(stock, { allowReference: isReferenceDate })).slice(0, 10);
+  const riskStocks = stocks
+    .filter((stock) => cleanNumber(stock.percent) <= -3 || cleanNumber(stock.percent) >= 8.5)
+    .sort((a, b) => Math.abs(cleanNumber(b.percent)) - Math.abs(cleanNumber(a.percent)))
+    .slice(0, 5);
+  const confidence = sample >= 1000 ? (Math.min(92, 58 + Math.abs(upRatio - 50) * 1.4)).toFixed(0) : "中";
+  const dataDate = marketAiDataDateKey(stocks);
+  return { stocks, allStocks, staleRows, dataDate, targetDate, isReferenceDate, isDateFallback, isRealtimeFallback, freshRealtimeCount: freshRealtimeRows.length, sample, upRows, downRows, flatRows, upRatio, totalValue, sectors, strongSectors, weakSectors, hotStocks, hotGroups, visibleHotStocks, observeGroups, visibleObserveStocks, riskStocks, bias, confidence };
+}
+
+function requestMarketAiRealtimeScan(reason = "hot") {
+  if (!isMarketAiActiveSession() || !isTerminalUnlocked() || isDocumentHidden()) return;
+  const now = Date.now();
+  if (strategyRealtimeLoading || now - marketAiRealtimeScanRequestedAt < 8000) return;
+  marketAiRealtimeScanRequestedAt = now;
+  deferUiWork(async () => {
+    await ensureStrategyStocksLoaded();
+    await refreshStrategyRealtimeScan(reason === "force" ? "hot" : reason);
+    marketAiLastSignature = "";
+    renderMarketAiPanel();
+  }, 80);
+}
+
+function marketAiUpdatedLabel() {
+  const at = marketDataLastStartedAt || marketDataLastRenderedAt || Date.now();
+  const date = new Date(at);
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  const time = date.toLocaleTimeString("zh-TW", { hour12: false, hour: "2-digit", minute: "2-digit", second: "2-digit" });
+  return `${month}/${day} ${isMarketAiActiveSession() ? "即時巡邏" : "收盤資料"} · 更新 ${time}`;
+}
+
+function getMarketAiObserveTitle(mode = marketAiObserveMode) {
+  return ({
+    priority: "優先觀察",
+    rebound: "逆勢強股 / 反彈觀察",
+    volume: "爆量大增",
+    legal: "法人買超",
+    intraday: "當沖熱",
+  })[mode] || "優先觀察";
+}
+
+function getMarketAiObserveReason(stock, mode = marketAiObserveMode) {
+  if (!stock) return "等待資料。";
+  const valueYi = (cleanNumber(stock.value) / 100000000).toFixed(1);
+  const volumeLots = cleanNumber(stock.tradeVolume).toLocaleString("zh-TW");
+  const volumeRatio = cleanNumber(stock.volumeRatio || stock.VolumeRatio || stock.volume_ratio || stock["量比"]);
+  if (mode === "rebound") {
+    return `${stock.tags.length} 個訊號${stock.tags.length ? `：${stock.tags.join("、")}` : ""}。反彈分數 ${stock.reboundScore}，綜合分數 ${stock.score}，盤中資金流 ${stock.capitalFlowScore}，族群 ${stock.industry}。`;
+  }
+  if (mode === "volume") {
+    return `${stock.tags.length} 個訊號${stock.tags.length ? `：${stock.tags.join("、")}` : ""}。爆量分數 ${stock.volumeSpikeScore}，成交量 ${volumeLots} 張${volumeRatio ? `，量比 ${formatNumber(volumeRatio, 2)}` : ""}，成交值 ${valueYi} 億。`;
+  }
+  if (mode === "legal") {
+    return `${stock.tags.length} 個訊號${stock.tags.length ? `：${stock.tags.join("、")}` : ""}。法人合計 ${formatInstitution(stock.legal)}，綜合分數 ${stock.score}，成交值 ${valueYi} 億。`;
+  }
+  if (mode === "intraday") {
+    return `${stock.tags.length} 個訊號${stock.tags.length ? `：${stock.tags.join("、")}` : ""}。當沖熱 ${stock.dayTradeHeatScore || stock.intradayScore}，盤中資金流 ${stock.capitalFlowScore}，成交值 ${valueYi} 億。`;
+  }
+  return `${stock.tags.length} 個訊號${stock.tags.length ? `：${stock.tags.join("、")}` : ""}。綜合分數 ${stock.score}，族群 ${stock.industry}，成交值 ${valueYi} 億。`;
+}
+
+function getMarketAiStockRowLead(stock, mode = marketAiHotFilter) {
+  if (mode === "rebound") return `反彈分數 ${stock.reboundScore}，綜合分數 ${stock.score}`;
+  if (mode === "volume") return `爆量分數 ${stock.volumeSpikeScore}，成交量 ${cleanNumber(stock.tradeVolume).toLocaleString("zh-TW")} 張`;
+  if (mode === "intraday") return `當沖熱度 ${stock.dayTradeHeatScore || stock.intradayScore}，綜合分數 ${stock.score}`;
+  if (mode === "legal") return `法人合計 ${formatInstitution(stock.legal)}，綜合分數 ${stock.score}`;
+  return `主力籌碼入選，綜合分數 ${stock.score}`;
+}
+
+function getMarketAiStockRowSortReason(stock, mode = marketAiHotFilter) {
+  if (mode === "rebound") return `排序主因：反彈分數 ${stock.reboundScore}，再交叉看盤中資金流 ${Math.round(clamp(stock.capitalFlowScore || stock.score, 1, 100))} 與族群位置。`;
+  if (mode === "volume") return `排序主因：爆量分數 ${stock.volumeSpikeScore}，再交叉看成交值 ${(cleanNumber(stock.value) / 100000000).toFixed(1)} 億與漲幅。`;
+  if (mode === "intraday") return `排序主因：綜合分數 ${stock.score}，再交叉看當沖熱 ${Math.round(clamp(stock.dayTradeHeatScore || stock.intradayScore, 1, 100))} 與族群強弱。`;
+  if (mode === "legal") return `排序主因：綜合分數 ${stock.score}，再交叉看法人合計 ${formatInstitution(stock.legal)}、盤中資金流與成交值。`;
+  return `排序主因：綜合分數 ${stock.score}，再交叉看盤中資金流 ${Math.round(clamp(stock.capitalFlowScore || stock.score, 1, 100))} 與族群強弱。`;
+}
+
+function marketAiStockLabel(stock) {
+  if (!stock) return "";
+  return `${stock.code || ""} ${stock.name || ""}`.trim();
+}
+
+function marketAiChipList(items = [], tone = "") {
+  return items.filter(Boolean).slice(0, 8).map((item) =>
+    `<span class="market-ai-detail-chip ${tone ? `market-ai-detail-chip-${tone}` : ""}">${escapeAttr(item)}</span>`
+  ).join("");
+}
+
+function marketAiSectorChips(sector) {
+  return normalizeArray(sector?.rows)
+    .sort((a, b) => cleanNumber(b.value) - cleanNumber(a.value) || cleanNumber(b.pct) - cleanNumber(a.pct))
+    .slice(0, 3)
+    .map(marketAiStockLabel);
+}
+
+function marketAiDetailCard({ tone = "info", kicker = "", title = "", action = "", body = "", chips = [], meta = "" }) {
+  return `
+    <article class="market-ai-detail-card ${escapeAttr(tone)}">
+      ${action ? `<span class="market-ai-detail-action">${escapeAttr(action)}</span>` : ""}
+      ${kicker ? `<small>${escapeAttr(kicker)}</small>` : ""}
+      <h3>${escapeAttr(title)}</h3>
+      ${meta ? `<p><b>${escapeAttr(meta)}</b></p>` : ""}
+      <p>${escapeAttr(body)}</p>
+      ${chips.length ? `<div class="market-ai-detail-chips">${marketAiChipList(chips, tone)}</div>` : ""}
+    </article>
+  `;
+}
+
+function getMarketAiAdviceDetails(kind, data) {
+  const strongSectors = normalizeArray(data.strongSectors);
+  const riskStocks = normalizeArray(data.riskStocks);
+  const hotStocks = normalizeArray(data.hotStocks);
+  const riskChips = (riskStocks.length ? riskStocks : normalizeArray(data.downRows)
+    .sort((a, b) => cleanNumber(a.percent) - cleanNumber(b.percent))
+    .slice(0, 5))
+    .map(marketAiStockLabel)
+    .filter(Boolean);
+  const topSector = strongSectors[0] || {};
+  const secondSector = strongSectors[1] || {};
+  const thirdSector = strongSectors[2] || {};
+  const upCount = data.upRows.length;
+  const downCount = data.downRows.length;
+  const hotObserveCount = hotStocks.length || data.visibleHotStocks.length || 0;
+
+  if (kind === "sector") {
+    return {
+      kicker: "族群聚焦",
+      title: "只看強族群前 3 名",
+      subtitle: `目前有 ${strongSectors.slice(0, 3).length} 組族群強度較佳，先聚焦領頭股與同族群擴散。`,
+      cards: strongSectors.slice(0, 3).map((sector, index) => {
+        const rows = normalizeArray(sector.rows);
+        const upRatio = rows.length ? (rows.filter((stock) => cleanNumber(stock.pct) > 0).length / rows.length) * 100 : 0;
+        return {
+          tone: index === 0 ? "danger" : "warn",
+          kicker: `#${index + 1}`,
+          title: sector.name || "未分類族群",
+          action: `上漲 ${upRatio.toFixed(1)}%`,
+          body: `${rows.length} 檔樣本，平均漲跌 ${(cleanNumber(sector.pct) >= 0 ? "+" : "")}${cleanNumber(sector.pct).toFixed(2)}%，成交額約 ${(cleanNumber(sector.totalValue) / 100000000).toFixed(1)} 億。`,
+          chips: marketAiSectorChips(sector),
+        };
+      }),
+    };
+  }
+
+  if (kind === "risk") {
+    const financePressure = riskChips.slice(0, 4);
+    return {
+      kicker: "風險排除",
+      title: "風險高標的先排除",
+      subtitle: `先排除 ${riskChips[0] || "高波動標的"} 等風險標的，等風險降溫再追蹤。`,
+      cards: [
+        {
+          tone: "danger",
+          kicker: "高風險標的",
+          title: `${Math.max(riskChips.length, riskStocks.length)} 檔優先排除`,
+          action: "風控清單",
+          body: "偏空、券資壓力或反轉文字被標記時，先移出追價名單，風險降溫再回看。",
+          chips: riskChips,
+        },
+        {
+          tone: "info",
+          kicker: "資訊",
+          title: "族群集中",
+          action: "追蹤",
+          body: "設備或廠務工程、電子與強勢族群如果只集中少數領頭股，避免只追單一領頭股。",
+          chips: [topSector.name, secondSector.name, thirdSector.name].filter(Boolean),
+        },
+        {
+          tone: "danger",
+          kicker: "高風險",
+          title: "融券壓力",
+          action: "先排除",
+          body: `${financePressure.join("、") || "高波動標的"} 出現偏空或券資壓力，追蹤軋空、急拉後反轉與追價風險。`,
+          chips: financePressure,
+        },
+      ],
+    };
+  }
+
+  return {
+    kicker: "進場紀律",
+    title: "降低追價",
+    subtitle: "盤面風險偏高，先把進場條件收緊，避免追高。",
+    cards: [
+      {
+        tone: "warn",
+        kicker: "市場廣度",
+        title: `上漲 ${data.upRatio.toFixed(1)}% / 下跌 ${(data.sample ? downCount / data.sample * 100 : 0).toFixed(1)}%`,
+        action: data.upRatio >= 50 ? "偏多" : "保守",
+        body: "下跌家數偏多時，先縮小追價範圍並確認停損位置。",
+        chips: [`${upCount.toLocaleString("zh-TW")} 檔上漲`, `${downCount.toLocaleString("zh-TW")} 檔下跌`],
+      },
+      {
+        tone: "info",
+        kicker: "訊號池",
+        title: `熱門觀察 ${hotObserveCount.toLocaleString("zh-TW")} 檔`,
+        action: `${data.riskStocks.length} / ${hotObserveCount || 30}`,
+        body: "先用熱門觀察股交叉確認當沖、盤中雷達與族群擴散，不讓單一訊號決定進場。",
+        chips: ["當沖候選", "盤中雷達", "熱門觀察"],
+      },
+    ],
+  };
+}
+
+function openMarketAiAdviceModal(kind) {
+  const data = buildMarketAiData();
+  const detail = getMarketAiAdviceDetails(kind, data);
+  const existing = document.querySelector("#market-ai-detail-modal");
+  if (existing) existing.remove();
+  const overlay = document.createElement("div");
+  overlay.id = "market-ai-detail-modal";
+  overlay.className = "market-ai-detail-overlay";
+  overlay.innerHTML = `
+    <section class="market-ai-detail-dialog" role="dialog" aria-modal="true" aria-label="${escapeAttr(detail.title)}">
+      <header class="market-ai-detail-head">
+        <small>${escapeAttr(detail.kicker)}</small>
+        <h2>${escapeAttr(detail.title)}</h2>
+        <p>${escapeAttr(detail.subtitle)}</p>
+        <button type="button" class="market-ai-detail-close" data-market-ai-detail-close aria-label="關閉">×</button>
+      </header>
+      <div class="market-ai-detail-body">
+        ${detail.cards.map(marketAiDetailCard).join("")}
+      </div>
+    </section>
+  `;
+  const closeModal = () => {
+    overlay.remove();
+    document.removeEventListener("keydown", closeOnEscape);
+  };
+  const closeOnEscape = (event) => {
+    if (event.key === "Escape") closeModal();
+  };
+  overlay.addEventListener("click", (event) => {
+    if (event.target === overlay || event.target.closest("[data-market-ai-detail-close]")) closeModal();
+  });
+  document.addEventListener("keydown", closeOnEscape);
+  document.body.appendChild(overlay);
+}
+
+function renderMarketAiPanel() {
+  installMarketTabs();
+  if (!marketAiPanel) return;
+  const data = buildMarketAiData();
+  if (data.isReferenceDate && isMarketAiActiveSession()) {
+    requestMarketAiRealtimeScan("hot");
+  }
+  const signature = `${marketAiHotFilter}:${marketAiObserveMode}:${data.dataDate}:${data.targetDate}:${data.isReferenceDate ? 1 : 0}:${strategyRealtimeStats.received}:${data.sample}:${data.staleRows.length}:${data.upRows.length}:${data.downRows.length}:${data.hotStocks.map((stock) => `${stock.code}:${stock.score}:${cleanNumber(stock.percent).toFixed(2)}`).join("|")}`;
+  if (signature === marketAiLastSignature && marketAiPanel.innerHTML) return;
+  marketAiLastSignature = signature;
+  if (!data.sample) {
+    marketAiPanel.innerHTML = `<div class="empty-state">等待市場資料載入後產生 AI 判讀。</div>`;
+    deferUiWork(loadMarketAiStocksFallback, 100);
+    return;
+  }
+  if (!Object.keys(institutionData).length) deferUiWork(ensureMarketAiInstitutionData, 100);
+  const priorityStocks = sortMarketAiPriorityStocks(data.hotStocks.filter((stock) => isMarketAiLongCandidate(stock, { priority: true, allowReference: data.isReferenceDate })));
+  const observeMeta = getMarketAiObserveMeta(data.observeGroups);
+  const observeStocks = normalizeArray(data.visibleObserveStocks);
+  const topHot = observeStocks[0] || (marketAiObserveMode === "priority" ? priorityStocks[0] || data.hotStocks[0] : null);
+  const filterMeta = getMarketAiFilterMeta(data.hotGroups);
+  const activeObserveLabel = observeMeta.find((item) => item.key === marketAiObserveMode)?.label || "綜合優先";
+  const activeFilterLabel = filterMeta.find((item) => item.key === marketAiHotFilter)?.label || "全部";
+  const sortNote = marketAiHotFilter === "legal"
+    ? "法人買超只是入選條件，排序先看綜合分數，再交叉看 AI 訊號數、盤中資金流、動能與成交值。"
+    : marketAiHotFilter === "intraday"
+    ? "當沖熱只是入選條件，排序先看綜合分數，再交叉看當沖熱度、AI 訊號數、盤中資金流與動能。"
+    : "依綜合分數與入選策略排序，適合快速掌握今日熱門觀察股。";
+  const strongNames = data.strongSectors.map((sector) => sector.name).join("、") || "尚未形成明顯主流";
+  const weakNames = data.weakSectors.filter((sector) => sector.pct < 0).map((sector) => sector.name).join("、") || "暫無明顯弱勢族群";
+  const riskNames = data.riskStocks.map((stock) => `${stock.code} ${stock.name}`).join("、") || "暫無極端標的";
+  const operate = data.bias === "多方偏強"
+    ? ["順勢追蹤", "只看強族群前 3 名", "跌破量價支撐先降槓桿"]
+    : data.bias === "空方壓制"
+    ? ["降低追價", "只做逆勢強股", "等待反彈量價確認"]
+    : ["等待方向", "縮小部位", "觀察族群是否擴散"];
+  const adviceKinds = ["entry", "sector", "risk"];
+  const adviceMeta = ["進場紀律", "族群聚焦", "風險排除"];
+  const adviceCopy = [
+    `目前主流族群：${strongNames}。`,
+    "依綜合分數與成交量排序，適合快速掌握今日熱門觀察股。",
+    "漲幅過熱或弱勢族群，不納入第一優先。",
+  ];
+  const adviceHtml = operate.map((item, index) => {
+    const kind = adviceKinds[index] || "entry";
+    const detail = getMarketAiAdviceDetails(kind, data);
+    return `
+        <article class="market-ai-card" data-ai-advice="${kind}" role="button" tabindex="0" aria-expanded="false" title="展開判讀細節">
+          <small>${escapeAttr(adviceMeta[index] || detail.kicker)}</small>
+          <strong>${escapeAttr(item)}</strong>
+          <p>${escapeAttr(adviceCopy[index] || detail.subtitle)}</p>
+          <span class="market-ai-advice-arrow" aria-hidden="true">›</span>
+          <div class="market-ai-advice-detail" aria-hidden="true">
+            ${detail.cards.map((card) => `
+              <div class="market-ai-advice-detail-item">
+                <b>${escapeAttr(card.kicker)}｜${escapeAttr(card.title)}</b>
+                <p>${escapeAttr(card.body)}</p>
+                ${normalizeArray(card.chips).length ? `<div class="market-ai-advice-detail-chips">${normalizeArray(card.chips).slice(0, 6).map((chip) => `<span>${escapeAttr(chip)}</span>`).join("")}</div>` : ""}
+              </div>
+            `).join("")}
+          </div>
+        </article>
+      `;
+  }).join("");
+  const staleNotice = data.isDateFallback
+    ? `<div class="market-ai-sort-note">今日即時資料尚未完成更新，以下先用 ${escapeAttr(formatMarketAiDateKey(data.dataDate))} 最新可用資料做參考判讀。</div>`
+    : data.isRealtimeFallback
+    ? `<div class="market-ai-sort-note">即時報價仍在補齊，先用目前可用行情做盤中參考；已取得即時 ${data.freshRealtimeCount.toLocaleString("zh-TW")} / ${data.sample.toLocaleString("zh-TW")} 檔。</div>`
+    : data.staleRows.length
+    ? `<div class="market-ai-sort-note">已排除 ${data.staleRows.length.toLocaleString("zh-TW")} 檔非今日資料，AI 多方推薦只使用今日或無日期標記的最新行情。</div>`
+    : "";
+  const dateModeText = data.isDateFallback
+    ? "最新可用資料參考"
+    : data.isRealtimeFallback
+    ? "盤中補齊中參考"
+    : isMarketAiActiveSession()
+    ? "盤中即時巡邏"
+    : marketStockDataState.isFallbackDate
+    ? "最新可用收盤資料"
+    : "收盤資料";
+  const dataDateNotice = `<div class="market-ai-sort-note">模式：${dateModeText}｜資料日期：${escapeAttr(formatMarketAiDateKey(data.dataDate))}｜最新基準：${escapeAttr(formatMarketAiDateKey(marketAiTargetDateKey()))}｜今日：${escapeAttr(formatMarketAiDateKey(marketAiTodayKey()))}</div>`;
+  marketAiPanel.innerHTML = `
+    ${dataDateNotice}
+    ${staleNotice}
+    <section class="market-ai-summary">
+      <article class="market-ai-card hero">
+        <small>盤中決策節奏</small>
+        <strong>${data.bias}</strong>
+        <p>${data.upRatio >= 50 ? "上漲家數仍占優勢" : "下跌家數較多"}，盤面以${data.bias === "空方壓制" ? "風險控管" : "族群輪動"}為主，避免追高與流動性不足標的。</p>
+        <div class="market-ai-metrics">
+          <span>樣本<b>${data.sample.toLocaleString("zh-TW")}</b></span>
+          <span>多方<b>${data.upRows.length.toLocaleString("zh-TW")}</b></span>
+          <span>空方<b>${data.downRows.length.toLocaleString("zh-TW")}</b></span>
+          <span>信心<b>${data.confidence}</b></span>
+        </div>
+      </article>
+      <article class="market-ai-card">
+        <small>盤勢廣度</small>
+        <strong>${data.bias}</strong>
+        <p>上漲 ${data.upRows.length.toLocaleString("zh-TW")} / 下跌 ${data.downRows.length.toLocaleString("zh-TW")}，成交值約 ${data.totalValue.toLocaleString("zh-TW", { maximumFractionDigits: 1 })} 億。</p>
+      </article>
+      <article class="market-ai-card warning">
+        <small>風險控管</small>
+        <strong>${data.riskStocks.length ? "先控風險" : "風險正常"}</strong>
+        <p>${weakNames} 需要留意；極端波動標的：${riskNames}。</p>
+      </article>
+      <article class="market-ai-card">
+        <small>${escapeAttr(getMarketAiObserveTitle(marketAiObserveMode))}</small>
+        <strong>${topHot ? `${topHot.code} ${topHot.name}` : "--"}</strong>
+        <p>${topHot ? escapeAttr(getMarketAiObserveReason(topHot, marketAiObserveMode)) : "等待資料。"}</p>
+        <div class="market-ai-mini-filter">
+          ${observeMeta.map((item) => `
+            <button type="button" class="${item.key === marketAiObserveMode ? "active" : ""}" data-ai-observe-mode="${item.key}">
+              ${escapeAttr(item.label)}<em>${item.count}</em>
+            </button>
+          `).join("")}
+        </div>
+      </article>
+    </section>
+    <section class="market-ai-advice">
+      ${adviceHtml}
+    </section>
+    <section class="market-ai-main">
+      <article class="market-ai-block">
+        <h3>AI 今日重點</h3>
+        <small>${marketAiUpdatedLabel()}</small>
+        <div class="market-ai-list">
+          ${[
+            `市場廣度目前上漲家數占 ${data.upRatio.toFixed(1)}%，${data.bias === "空方壓制" ? "盤面偏弱，先看風險。" : "可追蹤強勢族群是否擴散。"}`,
+            `族群焦點落在 ${strongNames}，弱勢端留意 ${weakNames}。`,
+            `${activeObserveLabel}優先看 ${observeStocks.slice(0, 3).map((stock) => `${stock.code} ${stock.name}`).join("、") || priorityStocks.slice(0, 3).map((stock) => `${stock.code} ${stock.name}`).join("、") || "等待資料"}。`,
+            `盤中雷達目前偏向「${data.bias}」，分數高也要等量價延續確認。`,
+          ].map((text, index) => `<div class="market-ai-point"><b>${index + 1}</b><span>${escapeAttr(text)}</span></div>`).join("")}
+        </div>
+      </article>
+      <aside class="market-ai-block">
+        <h3>風險提醒</h3>
+        <small>${data.riskStocks.length} 則</small>
+        <div class="market-ai-risk">
+          <article>
+            <h4>族群集中</h4>
+            <p>主流若只集中在少數股票，盤中容易出現追價後回落，先等第二波確認。</p>
+            <div class="market-ai-chips">${data.strongSectors.slice(0, 4).map((sector) => `<span class="market-ai-chip">${escapeAttr(sector.name)}</span>`).join("")}</div>
+          </article>
+          <article>
+            <h4>波動過熱</h4>
+            <p>${riskNames} 有極端波動，放進觀察但不要直接當成追價清單。</p>
+          </article>
+        </div>
+      </aside>
+    </section>
+    <section class="market-ai-block">
+      <h3>熱門觀察股</h3>
+      <small>依綜合分數與成交量排序</small>
+      <div class="market-ai-filterbar">
+        ${filterMeta.map((item) => `
+          <button type="button" class="${item.key === marketAiHotFilter ? "active" : ""}" data-ai-hot-filter="${item.key}">
+            ${item.label}<em>${item.count}</em>
+          </button>
+        `).join("")}
+      </div>
+      <div class="market-ai-sort-note">目前排序 <b>${escapeAttr(activeFilterLabel)}</b>，${escapeAttr(sortNote)}</div>
+      <div class="market-ai-hot">
+        ${(marketAiHotFilter === marketAiObserveMode ? observeStocks : data.visibleHotStocks).map((stock, index) => `
+          <article class="market-ai-stock-row">
+            <div class="market-ai-rank">#${index + 1}</div>
+            <div>
+              <h4><span class="market-ai-code">${escapeAttr(stock.code)}</span><span class="market-ai-name">${escapeAttr(stock.name)}</span></h4>
+              <p>${escapeAttr(getMarketAiStockRowLead(stock, marketAiHotFilter))}</p>
+              <p>${escapeAttr(getMarketAiStockRowSortReason(stock, marketAiHotFilter))}</p>
+            </div>
+            <div>
+              <span class="market-ai-chip">${escapeAttr(stock.industry)}</span>
+              <span class="market-ai-chip">${(cleanNumber(stock.value) / 100000000).toFixed(1)} 億</span>
+            </div>
+            <div class="market-ai-score">
+              <small>綜合分數</small>
+              <strong>${stock.score}</strong>
+            </div>
+            <div class="market-ai-tags">${stock.tags.map((tag) => `<span>${escapeAttr(tag)}</span>`).join("")}</div>
+            <div class="market-ai-actions">
+              <button type="button" data-ai-stock-code="${escapeAttr(stock.code)}" data-ai-stock-name="${escapeAttr(stock.name)}">看分析</button>
+              <button type="button" data-ai-watch-code="${escapeAttr(stock.code)}" data-ai-watch-name="${escapeAttr(stock.name)}">加入自選</button>
+            </div>
+          </article>
+        `).join("") || `<div class="empty-state">目前沒有符合「${escapeAttr(activeFilterLabel)}」的股票。</div>`}
+      </div>
+    </section>
+  `;
 }
 
 function renderIndexes(indexes, futuresNear, futuresNext, marketStatus, otcSignal) {
@@ -7304,11 +12217,14 @@ async function hydrateChipRealtimeQuotes(rows) {
 
 function parseStocksForLatest(stocks) {
   return stocks.map((stock) => {
-    const code = valueOf(stock, ["證券代號", "Code"]);
-    const name = valueOf(stock, ["證券名稱", "Name"]);
-    const value = cleanNumber(valueOf(stock, ["成交金額", "TradeValue"]));
-    const tradeVolume = normalizeTradeVolumeLots(valueOf(stock, ["成交股數", "TradeVolume"]));
-    return { code, name, value, tradeVolume, ...stockChange(stock) };
+    const code = valueOf(stock, ["證券代號", "Code", "code"]);
+    const name = valueOf(stock, ["證券名稱", "Name", "name"]);
+    const value = cleanNumber(valueOf(stock, ["成交金額", "TradeValue", "value"]));
+    const tradeVolume = normalizeTradeVolumeLots(valueOf(stock, ["成交股數", "TradeVolume", "tradeVolume", "volume"]));
+    const volumeRatio = cleanNumber(valueOf(stock, ["量比", "VolumeRatio", "volumeRatio", "volume_ratio"]));
+    const quoteDate = valueOf(stock, ["quoteDate", "QuoteDate", "tradeDate", "TradeDate", "date", "Date", "資料日期", "交易日期"]);
+    const market = valueOf(stock, ["market", "Market", "市場"]);
+    return { code, name, value, tradeVolume, volumeRatio, quoteDate, market, ...stockChange(stock) };
   }).filter((s) => s.code && s.name && s.close);
 }
 
@@ -7357,15 +12273,16 @@ async function loadChipTradeData(force = false) {
 }
 
 function stockChange(stock) {
-  const change = cleanNumber(valueOf(stock, ["漲跌價差", "Change", "漲跌"]));
-  const close = cleanNumber(valueOf(stock, ["收盤價", "ClosingPrice", "收盤"]));
+  const change = cleanNumber(valueOf(stock, ["漲跌價差", "Change", "change", "漲跌"]));
+  const close = cleanNumber(valueOf(stock, ["收盤價", "ClosingPrice", "close", "price", "收盤"]));
+  const rawPercent = valueOf(stock, ["percent", "pct", "漲跌百分比", "漲跌百分比(%)"]);
   const previous = close - change;
-  const percent = previous ? (change / previous) * 100 : 0;
+  const percent = rawPercent !== "" ? cleanNumber(rawPercent) : previous ? (change / previous) * 100 : 0;
   return { change, close, percent };
 }
 
-function buildSectorStocksCache(stocks) {
-  const nextCache = {};
+function buildSectorStocksCache(stocks, options = {}) {
+  const nextCache = options.merge ? { ...sectorStocksCache } : {};
   for (const stock of stocks) {
     const code = String(valueOf(stock, ["證券代號", "Code", "code"]) || "").trim();
     const name = valueOf(stock, ["證券名稱", "Name", "name"]) || code;
@@ -7378,8 +12295,8 @@ function buildSectorStocksCache(stocks) {
     const pct = cleanNumber(valueOf(stock, ["pct", "percent", "漲跌百分比"])) || (prev > 0 ? (change / prev) * 100 : 0);
     const industry = SECTOR_MAP[code];
     if (!industry) continue;
-    if (!nextCache[industry]) nextCache[industry] = [];
-    nextCache[industry].push({ code, name, close, change, pct, value, volume });
+    const row = { code, name, close, change, pct, value, volume };
+    upsertSectorStock(nextCache, industry, row);
   }
   sectorStocksCache = nextCache;
 }
@@ -7407,10 +12324,15 @@ function renderStocks(stocks) {
 
   if (!parsed.length) return;
   latestStocks = parsed;
+  refreshDataFreshnessBars();
   const now = Date.now();
   const signature = getMarketRenderSignature(parsed);
   const canReuseDom = signature === lastMarketRenderSignature && now - marketDataLastRenderedAt < MARKET_DOM_REFRESH_MS;
-  if (canReuseDom) return;
+  if (canReuseDom) {
+    refreshDataFreshnessBars();
+    if (marketMode === "ai") renderMarketAiPanel();
+    return;
+  }
   lastMarketRenderSignature = signature;
   marketDataLastRenderedAt = now;
 
@@ -7418,6 +12340,7 @@ function renderStocks(stocks) {
     buildSectorStocksCache(stocks);
     renderHeatmapFromCache();
   }
+  if (marketMode === "ai") renderMarketAiPanel();
 
   const up = parsed.filter((s) => s.change > 0).length;
   const down = parsed.filter((s) => s.change < 0).length;
@@ -7483,6 +12406,10 @@ function tickClock() {
 }
 
 function showView(viewName, activeLink) {
+  const now = Date.now();
+  const sameViewQuick = lastViewName === viewName && now - lastViewShownAt < 2500;
+  lastViewName = viewName;
+  lastViewShownAt = now;
   Object.entries(viewPanels).forEach(([name, panel])=>{
     panel.hidden = name !== viewName;
     panel.classList.toggle("active", name === viewName);
@@ -7490,21 +12417,26 @@ function showView(viewName, activeLink) {
   syncMobileStrategyVisibility(viewName);
   applyStaticTitleIcons();
   viewLinks.forEach((link)=>link.classList.toggle("active", link===activeLink));
+  refreshDataFreshnessBars();
   const locked = applyMemberLocks(viewName, activeLink);
   if (locked) return;
   if (viewName === "market") {
-    deferUiWork(loadMarketData);
-    deferUiWork(loadHeatmap, 500);
+    if (Object.keys(sectorStocksCache).length) renderHeatmapFromCache();
+    if (!sameViewQuick) deferUiWork(loadMarketData);
+    deferIdleWork(() => loadHeatmap(), 1000);
   }
-  if (viewName === "realtime-radar") deferUiWork(renderRealtimeRadar);
+  if (viewName === "realtime-radar") {
+    realtimeRadarNeedsFreshScan = true;
+    deferUiWork(renderRealtimeRadar);
+  }
   if (viewName === "strategy") {
     deferUiWork(renderStrategyScanner);
     deferUiWork(loadInstitution, 600);
   }
   if (viewName === "chip-trade") {
-    deferUiWork(loadChipTradeData);
+    deferUiWork(() => loadChipTradeData(true));
   }
-  if (viewName === "warrant-flow") deferUiWork(loadWarrantFlow);
+  if (viewName === "warrant-flow") deferUiWork(() => loadWarrantFlow(true));
   if (viewName === "watchlist") {
     deferUiWork(renderWatchlist);
   }
@@ -7565,14 +12497,21 @@ async function fetchFuturesDirect() {
 
 async function loadMarketData(force = false) {
   const now = Date.now();
-  const minInterval = isDocumentHidden() ? MARKET_REFRESH_HIDDEN_MS : MARKET_REFRESH_MS;
+  const minInterval = getMarketRefreshInterval();
   if (marketDataLoading || (!force && marketDataLastStartedAt && now - marketDataLastStartedAt < minInterval)) return;
   marketDataLoading = true;
   marketDataLastStartedAt = now;
   try {
-    const payload = await fetchJson(endpoints.backend, 12000);
+    const payload = await fetchJson(`${endpoints.backend}?t=${Date.now()}`, 12000);
 
     if (!payload.ok) throw new Error("Backend failed");
+    updateMarketStockDataState(payload);
+    marketRealtimeState = {
+      trading: payload.trading === true,
+      marketStatus: payload.marketStatus || "",
+      updatedAt: payload.updatedAt || "",
+      source: payload.source || "",
+    };
 
     const near = payload.futuresNear || payload.futures || null;
     const next = payload.futuresNext || null;
@@ -7584,11 +12523,26 @@ async function loadMarketData(force = false) {
       payload.marketStatus || null,
       payload.otcSignal || null
     );
-    renderStocks(normalizeArray(payload.stocks));
+    const backendStocks = normalizeArray(payload.stocks);
+    if (backendStocks.length) {
+      renderStocks(backendStocks);
+    } else {
+      const stocks = await fetchJson(`${endpoints.strategyStocks}?t=${Date.now()}`, 15000);
+      const rows = normalizeArray(stocks?.stocks || stocks);
+      if (rows.length) {
+        updateMarketStockDataState(stocks);
+        renderStocks(rows);
+      } else {
+        const fallback = await fetchJson(`${endpoints.stocks}?t=${Date.now()}`, 15000);
+        updateMarketStockDataState(fallback);
+        renderStocks(normalizeArray(fallback?.stocks || fallback));
+      }
+    }
   } catch (e) {
     try {
-      const stocks = await fetchJson(endpoints.stocks);
-      renderStocks(Array.isArray(stocks) ? stocks : []);
+      const stocks = await fetchJson(`${endpoints.strategyStocks}?t=${Date.now()}`, 15000);
+      updateMarketStockDataState(stocks);
+      renderStocks(normalizeArray(stocks?.stocks || stocks));
     } catch (e2) {
       tickerStrip.innerHTML = `<span>官方資料暫時無法連線</span>`;
     }
@@ -7597,8 +12551,16 @@ async function loadMarketData(force = false) {
   }
 }
 
-async function loadHeatmap() {
+async function loadHeatmap(force = false) {
   if (isDocumentHidden() || !isViewActive("market")) return;
+  const now = Date.now();
+  const minInterval = getMarketHeatmapRefreshInterval();
+  if (heatmapLoading || (!force && heatmapLastStartedAt && now - heatmapLastStartedAt < minInterval)) {
+    renderHeatmapFromCache();
+    return;
+  }
+  heatmapLoading = true;
+  heatmapLastStartedAt = now;
   if (!Object.keys(sectorStocksCache).length && !heatmap.children.length) {
     heatmap.innerHTML = `<div class="empty-state">載入產業資料中...</div>`;
   } else {
@@ -7606,9 +12568,14 @@ async function loadHeatmap() {
   }
   try {
     const data = await fetchJson(endpoints.heatmap, 15000);
+    mergeIndustryMaster(data?.industryMaster);
     const sectors = normalizeArray(data?.sectors);
     if (data?.ok && sectors.length) {
       renderHeatmapSectors(sectors);
+      if (latestStocks.length) {
+        buildSectorStocksCache(latestStocks, { merge: true });
+      }
+      renderHeatmapFromCache();
       return;
     }
     throw new Error("heatmap empty");
@@ -7616,6 +12583,8 @@ async function loadHeatmap() {
     if (!renderHeatmapFromCache() && !buildHeatmapFallbackFromLatestStocks()) {
       heatmap.innerHTML = `<div class="empty-state">產業資料載入失敗</div>`;
     }
+  } finally {
+    heatmapLoading = false;
   }
 }
 
@@ -7703,12 +12672,16 @@ function getIntradayHotScore(stock) {
   const close = cleanNumber(live.close);
   const history = strategyRealtimeQuotes[live.code]?.history || [];
   const latestDelta = cleanNumber(history.at(-1)?.deltaVolume);
+  const lowerShadowBonus = radarLowerShadowPct(live) >= 3 ? 1200 : 0;
+  const upperShadowBonus = radarUpperShadowPct(live) >= 3 ? 1200 : 0;
+  const marginBonus = radarMarginChange(live) > 0 ? 1200 : 0;
+  const shortMarginBonus = radarShortMarginChange(live) > 0 ? 1200 : 0;
   const signalBonus = (live.intradaySignals?.length || 0) * 900;
   const pctScore = Math.max(pct, -2) * 150;
   const volumeScore = Math.log10(Math.max(volume, 1)) * 38;
   const deltaScore = Math.log10(Math.max(latestDelta, 1)) * 70;
   const pricePenalty = close >= 900 ? 9999 : 0;
-  return signalBonus + pctScore + volumeScore + deltaScore - pricePenalty;
+  return signalBonus + lowerShadowBonus + upperShadowBonus + marginBonus + shortMarginBonus + pctScore + volumeScore + deltaScore - pricePenalty;
 }
 
 function uniqueStocksByCode(stocks) {
@@ -7738,7 +12711,11 @@ function markIntradayCandidates(stocks) {
     const value = cleanNumber(live.value);
     const volume = cleanNumber(live.tradeVolume);
     const latestDelta = cleanNumber(strategyRealtimeQuotes[code]?.history?.at(-1)?.deltaVolume);
-    if (hasIntradayLiquidity(live) && (pct >= 1.5 || volume >= INTRADAY_MIN_VOLUME || latestDelta >= 50)) {
+    const lowerShadowHit = radarLowerShadowPct(live) >= 3;
+    const upperShadowHit = radarUpperShadowPct(live) >= 3;
+    const marginIncreaseHit = radarMarginChange(live) > 0;
+    const shortMarginIncreaseHit = radarShortMarginChange(live) > 0;
+    if (hasIntradayLiquidity(live) && (pct >= 1.5 || pct <= -0.5 || volume >= INTRADAY_MIN_VOLUME || latestDelta >= 50 || lowerShadowHit || upperShadowHit || marginIncreaseHit || shortMarginIncreaseHit)) {
       intradayCandidateSeenAt[code] = now;
     }
   });
@@ -7752,10 +12729,19 @@ function getBaseStrongIntradayStocks(scanSource) {
       const volume = cleanNumber(live.tradeVolume);
       const close = cleanNumber(live.close);
       const open = cleanNumber(live.open);
+      const lowerShadowHit = radarLowerShadowPct(live) >= 3;
+      const upperShadowHit = radarUpperShadowPct(live) >= 3;
+      const marginIncreaseHit = radarMarginChange(live) > 0;
+      const shortMarginIncreaseHit = radarShortMarginChange(live) > 0;
       return close && (
         pct >= 2 ||
+        pct <= -0.5 ||
         (open && close >= open && pct >= 0.5) ||
-        volume >= 2000
+        volume >= 2000 ||
+        lowerShadowHit ||
+        upperShadowHit ||
+        marginIncreaseHit ||
+        shortMarginIncreaseHit
       );
     })
     .sort((a, b) => getIntradayHotScore(b) - getIntradayHotScore(a));
@@ -7813,8 +12799,11 @@ async function refreshStrategyRealtimeScan(mode = "hot") {
     return;
   }
   if (scanMode === "strategy5-full") return;
+  const isStrategyVisible = document.querySelector("#strategy-view")?.classList.contains("active");
+  const isMarketAiVisible = isViewActive("market") && marketMode === "ai" && isMarketAiActiveSession();
+  const isRealtimeRadarVisible = isViewActive("realtime-radar") && isRadarDetectionWindow();
   const mobileStrategy2 = isMobileViewport();
-  if (mobileStrategy2 && scanMode !== "force") {
+  if (mobileStrategy2 && !isRealtimeRadarVisible && scanMode !== "force") {
     const now = Date.now();
     if (scanMode === "hot") {
       if (now - mobileIntradayHotScanLastAt < MOBILE_INTRADAY_HOT_SCAN_MS) return;
@@ -7825,10 +12814,9 @@ async function refreshStrategyRealtimeScan(mode = "hot") {
       mobileIntradayBackgroundScanLastAt = now;
     }
   }
-  const isStrategyVisible = document.querySelector("#strategy-view")?.classList.contains("active");
   const isRealtimeStrategy = selectedStrategyIds.has("intraday_2m");
   const isStrategy5Realtime = false;
-  if (scanMode !== "force" && scanMode !== "strategy5-full" && (!isStrategyVisible || (!isRealtimeStrategy && !isStrategy5Realtime))) return;
+  if (scanMode !== "force" && scanMode !== "strategy5-full" && !isMarketAiVisible && !isRealtimeRadarVisible && (!isStrategyVisible || (!isRealtimeStrategy && !isStrategy5Realtime))) return;
   if (isRealtimeStrategy && !isIntradayScanWindow()) {
     if (isStrategyVisible && strategySummary) {
       const closingTime = strategyLastScanAt
@@ -7900,6 +12888,13 @@ async function refreshStrategyRealtimeScan(mode = "hot") {
       strategyLastScanAt = Date.now();
       strategyRealtimeStats = { requested, received, failed, lastError };
       renderStrategyScanner();
+      if (isViewActive("realtime-radar")) {
+        renderRealtimeRadar();
+      }
+      if (marketMode === "ai") {
+        marketAiLastSignature = "";
+        renderMarketAiPanel();
+      }
     }
     if (backgroundStocks.length) {
       const stats = await fetchStrategyRealtimeBatches(backgroundStocks, backgroundBatchSize);
@@ -7911,6 +12906,13 @@ async function refreshStrategyRealtimeScan(mode = "hot") {
       strategyLastScanAt = Date.now();
       strategyRealtimeStats = { requested, received, failed, lastError };
       renderStrategyScanner();
+      if (isViewActive("realtime-radar")) {
+        renderRealtimeRadar();
+      }
+      if (marketMode === "ai") {
+        marketAiLastSignature = "";
+        renderMarketAiPanel();
+      }
     }
   } catch (error) {
     strategyRealtimeStats = { ...strategyRealtimeStats, lastError: error?.message || String(error || "scan failed") };
@@ -7959,6 +12961,8 @@ labelChipTradeMode();
 installMobileWatchlistNavOrder();
 installRealtimeRadarView();
 applyStaticTitleIcons();
+installMarketTabs();
+installGlobalRefreshWidget();
 deferUiWork(() => loadWorkflowRunStatus().catch(() => {}), 2000);
 ensureMobileAutoOrganizeButton();
 if (isViewActive("market")) {
@@ -7979,6 +12983,67 @@ if (brandRefresh) {
   });
 }
 stockSearch?.addEventListener("input", (e)=>searchStocks(e.target.value));
+document.addEventListener("click", (event) => {
+  const modeButton = event.target.closest("[data-market-mode]");
+  if (modeButton) {
+    applyMarketMode(modeButton.dataset.marketMode);
+    return;
+  }
+  const adviceCard = event.target.closest("[data-ai-advice]");
+  if (adviceCard) {
+    const isOpen = adviceCard.classList.toggle("is-open");
+    adviceCard.setAttribute("aria-expanded", isOpen ? "true" : "false");
+    adviceCard.querySelector(".market-ai-advice-detail")?.setAttribute("aria-hidden", isOpen ? "false" : "true");
+    return;
+  }
+  const observeButton = event.target.closest("[data-ai-observe-mode]");
+  if (observeButton) {
+    marketAiObserveMode = observeButton.dataset.aiObserveMode || "priority";
+    if (["rebound", "volume", "legal", "intraday"].includes(marketAiObserveMode)) {
+      marketAiHotFilter = marketAiObserveMode;
+    }
+    marketAiLastSignature = "";
+    renderMarketAiPanel();
+    return;
+  }
+  const hotFilterButton = event.target.closest("[data-ai-hot-filter]");
+  if (hotFilterButton) {
+    marketAiHotFilter = hotFilterButton.dataset.aiHotFilter || "all";
+    if (["rebound", "volume", "legal", "intraday"].includes(marketAiHotFilter)) {
+      marketAiObserveMode = marketAiHotFilter;
+    }
+    marketAiLastSignature = "";
+    renderMarketAiPanel();
+    return;
+  }
+  const analyzeButton = event.target.closest("[data-ai-stock-code]");
+  if (analyzeButton) {
+    const code = analyzeButton.dataset.aiStockCode || "";
+    const name = analyzeButton.dataset.aiStockName || latestStocks.find((stock) => stock.code === code)?.name || code;
+    addStockToWatchlistAndOpen(code, name);
+    return;
+  }
+  const watchButton = event.target.closest("[data-ai-watch-code]");
+  if (!watchButton || typeof getWatchlist !== "function" || typeof saveWatchlist !== "function") return;
+  const code = watchButton.dataset.aiWatchCode || "";
+  const name = watchButton.dataset.aiWatchName || code;
+  if (!code) return;
+  const list = getWatchlist();
+  if (!list.some((item) => item.code === code)) {
+    list.push({ code, name });
+    saveWatchlist(list);
+  }
+  watchButton.textContent = "已加入";
+});
+document.addEventListener("keydown", (event) => {
+  if (event.key !== "Enter" && event.key !== " ") return;
+  const adviceCard = event.target.closest?.("[data-ai-advice]");
+  if (!adviceCard) return;
+  event.preventDefault();
+  const isOpen = adviceCard.classList.toggle("is-open");
+  adviceCard.setAttribute("aria-expanded", isOpen ? "true" : "false");
+  adviceCard.querySelector(".market-ai-advice-detail")?.setAttribute("aria-hidden", isOpen ? "false" : "true");
+});
 viewLinks.forEach((link)=>{
   link.addEventListener("click",(e)=>{
     e.preventDefault();
@@ -8005,13 +13070,16 @@ document.querySelectorAll("[data-chip-filter]").forEach((button) => {
     renderChipTradeTable();
   });
 });
-setInterval(tickClock, 1000);
+setInterval(tickClock, 60 * 1000);
 setInterval(() => {
-  if (!isDocumentHidden() && isViewActive("market") && shouldRunLivePolling()) loadMarketData();
-}, MARKET_REFRESH_MS);
+  if (!isDocumentHidden() && isViewActive("market")) loadMarketData();
+}, MARKET_POLL_TICK_MS);
 setInterval(() => {
   if (!isDocumentHidden() && isTerminalUnlocked() && isViewActive("strategy") && selectedStrategyIds.has("intraday_2m") && isIntradayScanWindow()) refreshStrategyRealtimeScan("hot");
 }, INTRADAY_FAST_SCAN_MS);
+setInterval(() => {
+  if (!isDocumentHidden() && isTerminalUnlocked() && isViewActive("market") && marketMode === "ai" && isMarketAiActiveSession()) refreshStrategyRealtimeScan("hot");
+}, MARKET_POLL_TICK_MS);
 setInterval(() => {
   if (!isDocumentHidden() && isTerminalUnlocked() && isViewActive("strategy") && selectedStrategyIds.has("intraday_2m") && isIntradayScanWindow()) refreshStrategyRealtimeScan("background");
 }, INTRADAY_BACKGROUND_SCAN_MS);
@@ -8021,14 +13089,34 @@ setInterval(async () => {
   realtimeRadarRefreshLoading = true;
   try {
     await loadMarketData(true);
+    await refreshStrategyRealtimeScan(isRealtimeRadarSignalStale(realtimeRadarLastRows) ? "force" : "hot");
     renderRealtimeRadar();
   } finally {
     realtimeRadarRefreshLoading = false;
   }
 }, REALTIME_RADAR_REFRESH_MS);
 setInterval(() => {
-  if (!isDocumentHidden() && isViewActive("market") && shouldRunLivePolling()) loadHeatmap();
-}, 15*60*1000);
+  if (isDocumentHidden() || !isViewActive("market")) return;
+  if (!shouldRunLivePolling() && heatmapLastStartedAt && Date.now() - heatmapLastStartedAt < MARKET_HEATMAP_CLOSED_MS) return;
+  if (renderHeatmapFromCache()) return;
+  if (buildHeatmapFallbackFromLatestStocks()) return;
+  loadHeatmap();
+}, MARKET_POLL_TICK_MS);
+function refreshActiveChipWarrantView(force = true) {
+  if (isDocumentHidden() || !isTerminalUnlocked()) return;
+  if (isViewActive("chip-trade")) {
+    loadChipTradeData(force);
+    return;
+  }
+  if (isViewActive("warrant-flow")) {
+    loadWarrantFlow(force);
+  }
+}
+setInterval(() => refreshActiveChipWarrantView(true), CHIP_WARRANT_ACTIVE_REFRESH_MS);
+document.addEventListener("visibilitychange", () => {
+  if (!isDocumentHidden()) refreshActiveChipWarrantView(true);
+});
+window.addEventListener("focus", () => refreshActiveChipWarrantView(true));
 
 // ===== 自選股功能 =====
 const watchlistView = document.querySelector("#watchlist-view");
@@ -8073,7 +13161,7 @@ function ensureWatchlistAnalysisStyles() {
     }
     .watch-action-row {
       display: grid;
-      grid-template-columns: minmax(120px, 1fr) minmax(180px, 2fr);
+      grid-template-columns: minmax(150px, 180px) minmax(240px, 1fr);
       gap: 10px;
       align-items: end;
     }
@@ -8106,6 +13194,54 @@ function ensureWatchlistAnalysisStyles() {
       background: linear-gradient(90deg, #ef6a3b, #ff6d3d);
       border-color: transparent;
       color: #fff;
+    }
+    #watchlist-view .page-header > div:last-child:empty {
+      display: none !important;
+    }
+    .watchlist-search-row {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      width: fit-content;
+      margin: 0 0 14px;
+      padding: 8px;
+      border: 1px solid rgba(127, 166, 255, 0.14);
+      border-radius: 10px;
+      background: rgba(18, 21, 34, 0.68);
+    }
+    .watchlist-search-row input {
+      width: 180px !important;
+      background: rgba(21, 24, 38, 0.96) !important;
+      border: 1px solid rgba(127, 166, 255, 0.20) !important;
+      color: #eaf1ff !important;
+      padding: 9px 14px !important;
+      border-radius: 8px !important;
+      outline: none !important;
+      font-weight: 800 !important;
+    }
+    .watchlist-search-row button {
+      background: linear-gradient(90deg, #ef6a3b, #ff6d3d) !important;
+      color: #ffffff !important;
+      border: 0 !important;
+      padding: 9px 18px !important;
+      border-radius: 8px !important;
+      cursor: pointer !important;
+      font-weight: 900 !important;
+    }
+    .watch-market-badge {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 22px;
+      padding: 2px 8px;
+      border: 1px solid #dbe3ee;
+      border-radius: 7px;
+      background: #ffffff;
+      color: #2563eb;
+      font-size: 11px;
+      font-weight: 900;
+      line-height: 1;
+      box-shadow: 0 2px 6px rgba(15, 23, 42, 0.08);
     }
     .watch-summary-grid {
       display: grid;
@@ -8202,6 +13338,138 @@ function ensureWatchlistAnalysisStyles() {
     .watch-up { color: #ff5d72 !important; }
     .watch-down { color: #20d18b !important; }
     .watch-flat { color: #dbe7ff !important; }
+    body.fuman-light-theme #watchlist-view,
+    body.fuman-light-theme #watchlist-view .watch-analysis-panel {
+      color: #172033 !important;
+      font-family: "Noto Sans TC", "Microsoft JhengHei", "PingFang TC", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      -webkit-font-smoothing: antialiased;
+      text-rendering: geometricPrecision;
+    }
+    body.fuman-light-theme #watchlist-view .watchlist-analysis-pane,
+    body.fuman-light-theme #watchlist-view .ta-dashboard {
+      background: #ffffff !important;
+      color: #172033 !important;
+      border-color: #dbe3ee !important;
+    }
+    body.fuman-light-theme #watchlist-view .watchlist-card {
+      background: #ffffff !important;
+      color: #172033 !important;
+      border: 1px solid #d9e2ee !important;
+      border-radius: 10px !important;
+      box-shadow: 0 10px 24px rgba(15, 23, 42, 0.06) !important;
+    }
+    body.fuman-light-theme #watchlist-view .watchlist-card.selected {
+      border-color: rgba(249, 115, 22, 0.48) !important;
+      background: #fffaf5 !important;
+    }
+    body.fuman-light-theme #watchlist-view .watchlist-card span[style*="color:#7ec8e3"] {
+      color: #2563eb !important;
+    }
+    body.fuman-light-theme #watchlist-view .watchlist-card span[style*="color:#fff"],
+    body.fuman-light-theme #watchlist-view .watchlist-card span[style*="color:#aaa"],
+    body.fuman-light-theme #watchlist-view .watchlist-card div[style*="color:#666"] {
+      color: #334155 !important;
+    }
+    body.fuman-light-theme #watchlist-view .watch-action-row label,
+    body.fuman-light-theme #watchlist-view .watch-metric span,
+    body.fuman-light-theme #watchlist-view .watch-analysis-card span {
+      color: #51627a !important;
+      font-weight: 800 !important;
+    }
+    body.fuman-light-theme #watchlist-view .watch-action-row input,
+    body.fuman-light-theme #watchlist-view .watch-action-row button {
+      background: #ffffff !important;
+      color: #0f172a !important;
+      border-color: #cbd8e6 !important;
+      box-shadow: none !important;
+    }
+    body.fuman-light-theme #watchlist-view .watch-action-row .primary {
+      background: linear-gradient(90deg, #df4b09, #f97316) !important;
+      color: #ffffff !important;
+      border-color: transparent !important;
+      box-shadow: 0 10px 20px rgba(249, 115, 22, 0.18) !important;
+    }
+    body.fuman-light-theme #watchlist-view .watchlist-search-row {
+      background: #ffffff !important;
+      border-color: #dbe3ee !important;
+      box-shadow: 0 8px 20px rgba(15, 23, 42, 0.06) !important;
+    }
+    body.fuman-light-theme #watchlist-view .watchlist-search-row input {
+      background: #ffffff !important;
+      color: #0f172a !important;
+      border-color: #cbd8e6 !important;
+    }
+    body.fuman-light-theme #watchlist-view .watchlist-search-row button {
+      background: linear-gradient(90deg, #df4b09, #f97316) !important;
+      color: #ffffff !important;
+      box-shadow: 0 8px 18px rgba(249, 115, 22, 0.18) !important;
+    }
+    body.fuman-light-theme #watchlist-view .watch-market-badge {
+      background: #ffffff !important;
+      color: #2563eb !important;
+      border-color: #dbe3ee !important;
+    }
+    body.fuman-light-theme #watchlist-view .watch-metric,
+    body.fuman-light-theme #watchlist-view .watch-analysis-card,
+    body.fuman-light-theme #watchlist-view .watch-note-row article,
+    body.fuman-light-theme #watchlist-view .watch-ta-panel .ta-gauge-card {
+      background: #ffffff !important;
+      color: #172033 !important;
+      border-color: #dbe3ee !important;
+      box-shadow: 0 8px 18px rgba(15, 23, 42, 0.06), inset 0 1px 0 rgba(255,255,255,0.92) !important;
+    }
+    body.fuman-light-theme #watchlist-view .watch-metric {
+      background: linear-gradient(135deg, #ffffff 0%, #fff8f3 100%) !important;
+    }
+    body.fuman-light-theme #watchlist-view .watch-metric:nth-child(2) {
+      background: linear-gradient(135deg, #ffffff 0%, #f4f8ff 100%) !important;
+    }
+    body.fuman-light-theme #watchlist-view .watch-metric:nth-child(3) {
+      background: linear-gradient(135deg, #ffffff 0%, #fff5f6 100%) !important;
+    }
+    body.fuman-light-theme #watchlist-view .watch-metric:nth-child(4) {
+      background: linear-gradient(135deg, #ffffff 0%, #f2fbf8 100%) !important;
+    }
+    body.fuman-light-theme #watchlist-view .watch-metric strong,
+    body.fuman-light-theme #watchlist-view .watch-analysis-card strong,
+    body.fuman-light-theme #watchlist-view .watch-ta-panel .ta-gauge-card h3,
+    body.fuman-light-theme #watchlist-view .watch-ta-panel .ta-gauge-card > strong {
+      color: #111827 !important;
+      font-weight: 900 !important;
+      letter-spacing: 0 !important;
+    }
+    body.fuman-light-theme #watchlist-view .watch-metric em,
+    body.fuman-light-theme #watchlist-view .watch-analysis-card em,
+    body.fuman-light-theme #watchlist-view .watch-note-row small,
+    body.fuman-light-theme #watchlist-view .watch-ta-panel .ta-gauge-card small {
+      color: #475569 !important;
+      font-weight: 600 !important;
+    }
+    body.fuman-light-theme #watchlist-view .watch-analysis-card b {
+      color: #f59e0b !important;
+      font-weight: 850 !important;
+    }
+    body.fuman-light-theme #watchlist-view .watch-analysis-card.hot { border-top-color: #ef4444 !important; }
+    body.fuman-light-theme #watchlist-view .watch-analysis-card.neutral { border-top-color: #cbd5e1 !important; }
+    body.fuman-light-theme #watchlist-view .watch-analysis-card.good { border-top-color: #10b981 !important; }
+    body.fuman-light-theme #watchlist-view .watch-analysis-card.warn { border-top-color: #f59e0b !important; }
+    body.fuman-light-theme #watchlist-view .watch-note-row b {
+      background: #ffeadc !important;
+      color: #f97316 !important;
+      font-weight: 900 !important;
+    }
+    body.fuman-light-theme #watchlist-view .ta-timeframe {
+      background: #ffffff !important;
+      color: #64748b !important;
+      border-color: #cbd8e6 !important;
+      font-weight: 850 !important;
+    }
+    body.fuman-light-theme #watchlist-view .ta-timeframe.active,
+    body.fuman-light-theme #watchlist-view .ta-dashboard-tab {
+      background: #eaf4ff !important;
+      color: #2563eb !important;
+      border-color: #93c5fd !important;
+    }
     .ta-period-panel[hidden] { display: none; }
     .ta-dashboard-tab {
       border-color: rgba(47, 140, 255, 0.45) !important;
@@ -8769,10 +14037,21 @@ async function showTradingDashboard(code, name) {
 
 function parseQuoteNumber(...values) {
   for (const value of values) {
-    const number = Number(String(value ?? "").replace(/,/g, ""));
+    const text = String(value ?? "").replace(/,/g, "").trim();
+    const firstLevel = text.includes("_") ? text.split("_").find(Boolean) : text;
+    const number = Number(firstLevel);
     if (Number.isFinite(number) && number > 0) return number;
   }
   return 0;
+}
+
+function parseRealtimeQuotePrice(item) {
+  const last = parseQuoteNumber(item?.z, item?.pz);
+  if (last) return last;
+  const bestBid = parseQuoteNumber(item?.b);
+  const bestAsk = parseQuoteNumber(item?.a);
+  if (bestBid && bestAsk) return roundTradePrice((bestBid + bestAsk) / 2);
+  return parseQuoteNumber(bestBid, bestAsk, item?.o, item?.h, item?.l, item?.y);
 }
 
 async function fetchDailyStockFallback(code) {
@@ -8824,7 +14103,7 @@ async function fetchStockPrice(code) {
     const item = data?.msgArray?.[0];
     if (!item) return await fetchHeatmapStockFallback(code) || await fetchDailyStockFallback(code) || cached;
 
-    const close = parseQuoteNumber(item.z, item.y, item.o, item.h, item.l);
+    const close = parseRealtimeQuotePrice(item);
     const prev = parseQuoteNumber(item.y, item.z, item.o, item.h, item.l);
     if (!close || !prev) return await fetchHeatmapStockFallback(code) || await fetchDailyStockFallback(code) || cached;
     const change = close - prev;
@@ -8851,7 +14130,7 @@ async function renderWatchlist() {
           <div style="display:flex; align-items:center; gap:8px;">
             <span style="color:#7ec8e3; font-size:16px; font-weight:700;">${item.code}</span>
             <span style="color:#fff; font-size:15px; font-weight:600;">${item.name || ""}</span>
-            <span style="background:#1e3a5f; color:#7ec8e3; font-size:11px; padding:2px 6px; border-radius:4px;">上市</span>
+            <span class="watch-market-badge">上市</span>
           </div>
           <div style="margin-top:6px;">
             <span id="wprice-${item.code}" style="font-size:24px; font-weight:700; color:#fff;">--</span>
@@ -8950,6 +14229,7 @@ function removeFromWatchlist(code) {
 
 viewPanels.watchlist = document.querySelector("#watchlist-view");
 syncMobileStrategyVisibility();
+arrangeWatchlistSearch();
 window.addEventListener("resize", () => deferUiWork(syncMobileStrategyVisibility, 80));
 
 watchlistSearchInput?.addEventListener("keydown", (e) => {
@@ -8979,16 +14259,38 @@ strategyModeButtons.forEach((button) => {
   });
 });
 
+document.addEventListener("pointerdown", (event) => {
+  const radarSide = event.target.closest("[data-radar-side]");
+  if (!radarSide) return;
+  event.preventDefault();
+  event.stopImmediatePropagation();
+  switchRealtimeRadarSide(radarSide.dataset.radarSide || "long");
+}, true);
+
 document.addEventListener("click", (event) => {
   const radarSide = event.target.closest("[data-radar-side]");
   if (radarSide) {
-    realtimeRadarSide = radarSide.dataset.radarSide || "auto";
-    renderRealtimeRadar();
+    switchRealtimeRadarSide(radarSide.dataset.radarSide || "long");
     return;
   }
   const radarRefresh = event.target.closest("[data-radar-refresh]");
   if (!radarRefresh) return;
   realtimeRadarSide = "auto";
+  realtimeRadarNeedsFreshScan = true;
+  realtimeRadarHistoryLastAt = 0;
+  if (!realtimeRadarRefreshLoading) {
+    realtimeRadarRefreshLoading = true;
+    Promise.resolve()
+      .then(async () => {
+        await loadMarketData(true);
+        await refreshStrategyRealtimeScan("force");
+        realtimeRadarNeedsFreshScan = false;
+      })
+      .finally(() => {
+        realtimeRadarRefreshLoading = false;
+        renderRealtimeRadar();
+      });
+  }
   renderRealtimeRadar();
 });
 
@@ -9007,11 +14309,19 @@ document.addEventListener("click", (event) => {
 });
 
 document.addEventListener("click", (event) => {
+  const zoneButton = event.target.closest("[data-swing-zone-filter]");
+  if (zoneButton) {
+    swingZoneFilter = zoneButton.dataset.swingZoneFilter || "all";
+    swingPage = 1;
+    renderStrategyScanner();
+    return;
+  }
   const filterButton = event.target.closest("[data-swing-filter]");
   if (!filterButton) return;
   swingSignalFilter = filterButton.dataset.swingFilter || "all";
+  if (swingSignalFilter === "all") swingZoneFilter = "all";
   swingPage = 1;
-  if (!applySwingFilterToVisibleRows()) renderStrategyScanner();
+  renderStrategyScanner();
 });
 
 
@@ -9154,7 +14464,17 @@ async function refreshSelectedWatchlistQuote() {
   }
 }
 
+installThemeToggle();
 if (isViewActive("watchlist")) renderWatchlist();
 setInterval(() => {
   if (!isDocumentHidden() && isTerminalUnlocked() && isViewActive("watchlist")) refreshSelectedWatchlistQuote();
 }, 10000);
+
+
+
+
+
+
+
+
+

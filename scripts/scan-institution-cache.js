@@ -3,13 +3,35 @@ const path = require("path");
 const scanInstitution = require("../api/institution");
 const { fetchMisQuotes } = require("../lib/mis-quotes");
 
-const ROOT = path.resolve(__dirname, "..");
-const OUT_FILE = path.join(ROOT, "data", "institution-latest.json");
-const BACKUP_FILE = path.join(ROOT, "data", "institution-backup.json");
+const { ROOT, dataPath } = require("./runtime-paths");
+const OUT_FILE = dataPath("institution-latest.json");
+const BACKUP_FILE = dataPath("institution-backup.json");
 const STOCK_URL = process.env.STOCK_UNIVERSE_URL || "https://fuman-terminal.vercel.app/api/stocks";
 
 function readJson(file, fallback) {
   try { return JSON.parse(fs.readFileSync(file, "utf8")); } catch { return fallback; }
+}
+
+function ymdToDate(ymd) {
+  const text = String(ymd || "");
+  if (!/^\d{8}$/.test(text)) return null;
+  return new Date(`${text.slice(0, 4)}-${text.slice(4, 6)}-${text.slice(6, 8)}T00:00:00+08:00`);
+}
+
+function taipeiDateOnly() {
+  const text = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Taipei",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
+  return new Date(`${text}T00:00:00+08:00`);
+}
+
+function ageInDays(ymd) {
+  const date = ymdToDate(ymd);
+  if (!date) return Infinity;
+  return Math.floor((taipeiDateOnly() - date) / 86400000);
 }
 
 function runHandler() {
@@ -133,10 +155,19 @@ async function main() {
     data,
   };
 
+  const dataAge = ageInDays(output.usedDate);
+  if (!count) {
+    console.error("institution cache scan returned 0 rows; keeping existing cache files unchanged");
+    process.exit(2);
+  }
+  if (dataAge > 3) {
+    console.error(`institution cache is stale: usedDate ${output.usedDate || "--"}, age ${dataAge} days; keeping existing cache files unchanged`);
+    process.exit(2);
+  }
+
   fs.mkdirSync(path.dirname(OUT_FILE), { recursive: true });
   fs.writeFileSync(OUT_FILE, `${JSON.stringify(output, null, 2)}\n`);
-  if (count) fs.writeFileSync(BACKUP_FILE, `${JSON.stringify({ ...output, source: "github-actions-backup" }, null, 2)}\n`);
-  else if (Object.keys(backup.data || {}).length) fs.writeFileSync(OUT_FILE, `${JSON.stringify({ ...backup, source: "github-actions-backup-readonly" }, null, 2)}\n`);
+  fs.writeFileSync(BACKUP_FILE, `${JSON.stringify({ ...output, source: "github-actions-backup" }, null, 2)}\n`);
   console.log(`institution cache updated: rows ${count}, usedDate ${output.usedDate || "--"}`);
 }
 
@@ -144,3 +175,4 @@ main().catch((error) => {
   console.error(error);
   process.exit(1);
 });
+

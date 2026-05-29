@@ -2,21 +2,23 @@ const fs = require("fs");
 const path = require("path");
 const tls = require("tls");
 const { cleanNumber, formatTradePrice } = require("./intraday-radar-rules");
-const { hasLineConfig, sendLineText, splitLineText } = require("./line-push");
+const { splitLineText } = require("./line-push");
 const { fetchMisQuotes } = require("../lib/mis-quotes");
 
-const ROOT = path.resolve(__dirname, "..");
-const SIGNAL_FILE = path.join(ROOT, ".intraday-cache", "signals.json");
-const SCORECARD_TRACK_FILE = path.join(ROOT, ".intraday-cache", "scorecard-trades.json");
-const STRATEGY2_REPORT_FILE = path.join(ROOT, "data", "strategy2-intraday-latest.json");
-const OPEN_BUY_FILE = path.join(ROOT, "data", "open-buy-latest.json");
-const OPEN_BUY_BACKUP_FILE = path.join(ROOT, "data", "open-buy-backup.json");
-const OPEN_BUY_SCORECARD_SOURCE_FILE = path.join(ROOT, "data", "open-buy-scorecard-source.json");
-const STRATEGY3_FILE = path.join(ROOT, "data", "strategy3-latest.json");
-const STRATEGY3_BACKUP_FILE = path.join(ROOT, "data", "strategy3-backup.json");
-const STRATEGY3_SCORECARD_SOURCE_FILE = path.join(ROOT, "data", "strategy3-scorecard-source.json");
-const STRATEGY5_FILE = path.join(ROOT, "data", "strategy5-latest.json");
-const STRATEGY5_BACKUP_FILE = path.join(ROOT, "data", "strategy5-backup.json");
+const { ROOT, dataPath, cachePath } = require("./runtime-paths");
+const SIGNAL_FILE = path.join(cachePath("intraday"), "signals.json");
+const SCORECARD_TRACK_FILE = path.join(cachePath("intraday"), "scorecard-trades.json");
+const STRATEGY5_TRACK_FILE = path.join(cachePath("intraday"), "strategy5-scorecard-trades.json");
+const STRATEGY2_REPORT_FILE = dataPath("strategy2-intraday-latest.json");
+const OPEN_BUY_FILE = dataPath("open-buy-latest.json");
+const OPEN_BUY_BACKUP_FILE = dataPath("open-buy-backup.json");
+const OPEN_BUY_SCORECARD_SOURCE_FILE = dataPath("open-buy-scorecard-source.json");
+const STRATEGY3_FILE = dataPath("strategy3-latest.json");
+const STRATEGY3_BACKUP_FILE = dataPath("strategy3-backup.json");
+const STRATEGY3_SCORECARD_SOURCE_FILE = dataPath("strategy3-scorecard-source.json");
+const STRATEGY5_FILE = dataPath("strategy5-latest.json");
+const STRATEGY5_BACKUP_FILE = dataPath("strategy5-backup.json");
+const REALTIME_RADAR_SCORECARD_FILE = dataPath("realtime-radar-scorecard-latest.json");
 const BASE_URL = process.env.FUMAN_BASE_URL || "https://fuman-terminal.vercel.app";
 const LOT_SIZE = Number(process.env.REPORT_LOT_SIZE || 1000);
 
@@ -24,7 +26,12 @@ function readJson(file, fallback) {
   try { return JSON.parse(fs.readFileSync(file, "utf8")); } catch { return fallback; }
 }
 
-const REPORT_SENT_PATH = process.env.REPORT_SENT_DIR || path.join(ROOT, ".intraday-report-cache", "sent-reports");
+function writeJson(file, value) {
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.writeFileSync(file, `${JSON.stringify(value, null, 2)}\n`);
+}
+
+const REPORT_SENT_PATH = process.env.REPORT_SENT_DIR || path.join(cachePath("intraday-report"), "sent-reports");
 
 function taipeiDateKey(date = new Date()) {
   const parts = new Intl.DateTimeFormat("en-CA", {
@@ -63,6 +70,33 @@ function tradeTimeLabel(value, fallback = "--:--") {
   return match ? `${match[1]}:${match[2]}` : fallback;
 }
 
+function compactTradeDate(value) {
+  const text = String(value || "");
+  const compact = text.match(/^(\d{4})(\d{2})(\d{2})$/);
+  if (compact) return `${compact[1]}${compact[2]}${compact[3]}`;
+  const dashed = text.match(/(\d{4})[-/](\d{2})[-/](\d{2})/);
+  return dashed ? `${dashed[1]}${dashed[2]}${dashed[3]}` : "";
+}
+
+function previousWeekdayCompact(value) {
+  const compact = compactTradeDate(value);
+  const match = compact.match(/^(\d{4})(\d{2})(\d{2})$/);
+  if (!match) return "";
+  const date = new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3])));
+  do {
+    date.setUTCDate(date.getUTCDate() - 1);
+  } while (date.getUTCDay() === 0 || date.getUTCDay() === 6);
+  return `${date.getUTCFullYear()}${String(date.getUTCMonth() + 1).padStart(2, "0")}${String(date.getUTCDate()).padStart(2, "0")}`;
+}
+
+function payloadTradeDate(payload) {
+  return compactTradeDate(payload?.usedDate || payload?.date || payload?.quoteDate || payload?.matches?.[0]?.quoteDate);
+}
+
+function isStrategy3ScorecardSource(payload, today) {
+  return (payload?.matches || []).length && payloadTradeDate(payload) === previousWeekdayCompact(today);
+}
+
 function normalizeCode(value) {
   return String(value || "").replace(/\D/g, "").slice(0, 4);
 }
@@ -89,8 +123,19 @@ function strategy3EntryPrice(item, quote) {
     || cleanNumber(item.quotePrice)
     || cleanNumber(item.price1300)
     || cleanNumber(item.priceAt1300)
-    || cleanNumber(quote?.open)
-    || cleanNumber(item.close);
+    || cleanNumber(item.close)
+    || cleanNumber(item.price)
+    || cleanNumber(item.lastPrice)
+    || cleanNumber(item.currentPrice)
+    || cleanNumber(quote?.open);
+}
+
+function strategy5EntryTime(item) {
+  return tradeTimeLabel(item.entryAt || item.quoteTime || item.signalTime, "09:00");
+}
+
+function strategy5EntryDate(payload, today) {
+  return tradeDateLabel(today);
 }
 
 function tradeSummaryLine({ date, entryTime, entryPrice, exitDate, exitTime, exitPrice, profitPct, profit }) {
@@ -100,8 +145,8 @@ function tradeSummaryLine({ date, entryTime, entryPrice, exitDate, exitTime, exi
     `進場價格:${formatTradePrice(entryPrice)}元`,
   ];
   if (exitDate) parts.push(`出場日期:${exitDate}`);
+  if (exitTime) parts.push(`出場時間${exitTime}`);
   parts.push(
-    `出場時間${exitTime}`,
     `出場價格/盤中高點:${formatTradePrice(exitPrice)}元`,
     `損益率:${percent(profitPct)}`,
     `損益:${money(profit)}`,
@@ -333,6 +378,26 @@ function settlementHigh(track, quote, fallback = {}) {
   return { price: 0, time: "--:--", source: "missing" };
 }
 
+function openBuyEntryPrice(item, quote, track = {}) {
+  return firstPrice(
+    quote?.open,
+    item?.open,
+    item?.entryPrice,
+    track?.entryPrice,
+    item?.quotePrice,
+    item?.price,
+    item?.close,
+    quote?.prevClose,
+    quote?.close
+  );
+}
+
+function openBuySettlementHigh(track, quote, fallback = {}) {
+  const quoteHigh = firstPrice(quote?.high, quote?.dayHigh, quote?.highestPrice);
+  if (quoteHigh) return { price: quoteHigh, time: quoteTime(quote), source: "market" };
+  return settlementHigh(track, quote, fallback);
+}
+
 function settlementLow(track, quote, fallback = {}) {
   const tracked = firstPrice(track?.observedLow);
   if (tracked) return { price: tracked, time: tradeTimeLabel(track?.observedLowAt, "--:--"), source: "patrol" };
@@ -347,6 +412,18 @@ function settlementTimeLabel(settlement) {
   return settlement.time;
 }
 
+function strategy3SettlementHigh(track, quote, fallback = {}) {
+  const tracked = firstPrice(track?.observedHigh, track?.highAfterA, track?.highAfterB, track?.highestPrice);
+  const quoteHigh = firstPrice(quote?.high, quote?.dayHigh, quote?.highestPrice);
+  if (tracked && (!quoteHigh || tracked >= quoteHigh)) {
+    return { price: tracked, time: tradeTimeLabel(track?.observedHighAt, ""), source: "patrol" };
+  }
+  if (quoteHigh) return { price: quoteHigh, time: quoteTime(quote, ""), source: "daily-settlement" };
+  const fallbackHigh = firstPrice(fallback?.high, fallback?.observedHigh, fallback?.highAfterA, fallback?.highAfterB, fallback?.highestPrice);
+  if (fallbackHigh) return { price: fallbackHigh, time: tradeTimeLabel(fallback?.observedHighAt || fallback?.updatedAt, ""), source: "fallback" };
+  return { price: 0, time: "", source: "missing" };
+}
+
 function readCacheWithBackup(file, backupFile) {
   const payload = readJson(file, { ok: true, matches: [] });
   if ((payload.matches || []).length) return payload;
@@ -357,6 +434,22 @@ function readScorecardSource(sourceFile, latestFile, backupFile) {
   const source = readJson(sourceFile, { ok: true, matches: [] });
   if ((source.matches || []).length) return source;
   return readCacheWithBackup(latestFile, backupFile);
+}
+
+function readStrategy3ScorecardSource(today) {
+  const empty = { ok: true, matches: [] };
+  const source = readJson(STRATEGY3_SCORECARD_SOURCE_FILE, empty);
+  if (isStrategy3ScorecardSource(source, today)) return source;
+  const latest = readJson(STRATEGY3_FILE, empty);
+  if (isStrategy3ScorecardSource(latest, today)) return latest;
+  const backup = readJson(STRATEGY3_BACKUP_FILE, empty);
+  if (isStrategy3ScorecardSource(backup, today)) return backup;
+  return {
+    ok: true,
+    matches: [],
+    staleSourceDate: payloadTradeDate(source) || payloadTradeDate(latest) || payloadTradeDate(backup),
+    expectedSourceDate: previousWeekdayCompact(today),
+  };
 }
 
 function reportRows(payload, limit = 20) {
@@ -397,9 +490,9 @@ function isTaipeiMarketRecord(record) {
 
 const STATE_ORDER = { go: 1, wait: 2, watch: 3 };
 const STATE_LABELS = {
-  go: "A區 可進場",
-  wait: "B區 待確認",
-  watch: "C區 觀察",
+  go: "進場區",
+  wait: "觀察區",
+  watch: "觀察區",
 };
 
 function inferState(record) {
@@ -473,8 +566,8 @@ function buildOpenBuyReport(payload, quotes, today, tracker) {
   rows.forEach((item) => {
     const quote = quotes.get(item.code) || {};
     const track = scorecardTrack(tracker, "openBuy", item.code) || {};
-    const entryPrice = firstPrice(track.entryPrice, item.entryPrice, item.open, item.quotePrice, item.price, item.close, quote.open, quote.prevClose, quote.close);
-    const high = settlementHigh(track, quote, item);
+    const entryPrice = openBuyEntryPrice(item, quote, track);
+    const high = openBuySettlementHigh(track, quote, item);
     const exitPrice = high.price;
     const profit = profitAmount(entryPrice, exitPrice);
     const profitPct = profitRate(entryPrice, exitPrice);
@@ -514,9 +607,8 @@ function buildOpenBuyReport(payload, quotes, today, tracker) {
 
 function buildStrategy5Report(payload, quotes, today, tracker) {
   const rows = reportRows(payload);
-  let totalProfit = 0;
+  let correctCount = 0;
   const lines = [`策略5綜合策略成績單｜${dateSlash(today)}`, ""];
-  lines.push(`資料時間：${payload.updatedAt || "--"}｜候選 ${payload.count ?? rows.length} 檔`, "");
   if (!rows.length) {
     lines.push("今天沒有符合策略5綜合策略的候選標的。", "");
   }
@@ -527,30 +619,18 @@ function buildStrategy5Report(payload, quotes, today, tracker) {
     const high = settlementHigh(track, quote, item);
     const low = settlementLow(track, quote, item);
     const exitPrice = high.price;
-    const profit = profitAmount(entryPrice, exitPrice);
-    const profitPct = profitRate(entryPrice, exitPrice);
-    const reason = scorecardReason(item);
-    totalProfit += profit;
+    const risePct = profitRate(entryPrice, exitPrice);
+    const isCorrect = risePct > 0;
+    if (isCorrect) correctCount += 1;
     lines.push(
-      `#${scorecardRank(item, index)} ${item.code} ${item.name || ""}`,
-      `分數：${Math.round(cleanNumber(item.score || item.totalScore || item.finalScore)) || "--"}`,
-      tradeSummaryLine({
-        date: tradeDateLabel(payload.usedDate || payload.date || today),
-        entryTime: tradeTimeLabel(item.entryAt || item.updatedAt || payload.updatedAt, "09:00"),
-        entryPrice,
-        exitDate: tradeDateLabel(today),
-        exitTime: settlementTimeLabel(high),
-        exitPrice,
-        profitPct,
-        profit,
-      }),
-      `盤中最高：${formatTradePrice(high.price)}｜最高時間：${settlementTimeLabel(high)}｜盤中最低：${formatTradePrice(low.price)}｜最低時間：${settlementTimeLabel(low)}`,
-      `損益金額：${money(profit)}｜損益率：${percent(profitPct)}`,
-      reason ? `原因：${reason}` : "",
+      `提示標的 ${item.code} ${item.name || ""}`,
+      `隔天盤中高點:${formatTradePrice(exitPrice)}元`,
+      `漲幅${percent(risePct)}`,
+      `判斷${isCorrect ? "正確" : "錯誤"}。`,
       ""
     );
   });
-  lines.push(`策略5合計：${money(totalProfit)}`);
+  if (rows.length) lines.push(`策略5判斷正確：${correctCount}/${rows.length}`);
   return lines.join("\n");
 }
 
@@ -565,11 +645,8 @@ function buildStrategy3Report(payload, quotes, today, tracker) {
     const quote = quotes.get(item.code) || {};
     const track = scorecardTrack(tracker, "strategy3", item.code) || {};
     const entryPrice = strategy3EntryPrice(item, quote);
-    const quoteHigh = firstPrice(quote?.high);
     const quoteLow = firstPrice(quote?.low, quote?.close);
-    const high = quoteHigh
-      ? { price: quoteHigh, time: quoteTime(quote), source: "market" }
-      : settlementHigh(track, quote, item);
+    const high = strategy3SettlementHigh(track, quote, item);
     const exitPrice = high.price;
     const exitTime = settlementTimeLabel(high);
     const hasExitPrice = entryPrice > 0 && exitPrice > 0;
@@ -595,11 +672,11 @@ function buildStrategy3Report(payload, quotes, today, tracker) {
   return lines.join("\n");
 }
 
-function buildStrategy2AEventReport(payload, quotes, today) {
+function buildStrategy2EntryEventReport(payload, quotes, today) {
   const events = Array.isArray(payload.events) ? payload.events : [];
-  const aRows = events.filter((event) => event.firstAAt);
+  const entryRows = events.filter((event) => event.firstAAt && cleanNumber(event.firstAPrice));
   let totalProfit = 0;
-  const lines = [`策略2當沖成績單-A區｜${dateSlash(today)}`, ""];
+  const lines = [`策略2進場區成績單｜${dateSlash(today)}`, ""];
 
   if (!events.length) {
     lines.push(
@@ -610,10 +687,10 @@ function buildStrategy2AEventReport(payload, quotes, today) {
     return lines.join("\n");
   }
 
-  if (!aRows.length) {
-    lines.push("今日沒有進入 A區 的正式進場紀錄。", "");
+  if (!entryRows.length) {
+    lines.push("今日沒有符合進場區的正式進場紀錄。", "");
   }
-  aRows.forEach((event) => {
+  entryRows.forEach((event) => {
     const quote = quotes.get(event.code) || {};
     const entryPrice = cleanNumber(event.firstAPrice);
     const high = settlementHigh({
@@ -627,107 +704,137 @@ function buildStrategy2AEventReport(payload, quotes, today) {
     lines.push(
       `名單${event.code} ${event.name || ""}`,
       `交易日期 ${tradeDateLabel(today)}`,
-      `首次進入B區：${event.firstBAt || "未記錄"}  價格${formatTradePrice(event.firstBPrice)}元`,
-      `B區後最高價：${formatTradePrice(event.highAfterB)}元`,
-      `首次進入A區：${event.firstAAt}  進場價格:${formatTradePrice(entryPrice)}元`,
-      `A區後最高價：${formatTradePrice(high.price)}元`,
+      event.firstBAt ? `首次觀察時間：${event.firstBAt}  價格${formatTradePrice(event.firstBPrice)}元` : "",
+      `首次進入進場區：${event.firstAAt}  進場價格:${formatTradePrice(entryPrice)}元`,
+      `進場區後最高價：${formatTradePrice(high.price)}元`,
       `出場日期:${tradeDateLabel(today)}`,
-      `出場時間:${settlementTimeLabel(high)}`,
+      settlementTimeLabel(high) ? `出場時間:${settlementTimeLabel(high)}` : "",
       `出場價格/盤中高點:${formatTradePrice(exitPrice)}元`,
       `損益率:${percent(profitPct)}｜損益:${money(profit)}`,
       ""
     );
   });
 
-  lines.push(`策略2-A區合計：${money(totalProfit)}`);
+  lines.push(`策略2進場區合計：${money(totalProfit)}`);
   return lines.join("\n");
 }
 
-function buildStrategy2BEventReport(payload, quotes, today) {
-  const events = Array.isArray(payload.events) ? payload.events : [];
-  const bRows = events.filter((event) => !event.firstAAt && event.firstBAt);
-  let totalProfit = 0;
-  const lines = [`策略2當沖成績單-B區｜${dateSlash(today)}`, ""];
+function realtimeRadarRows(records, quotes) {
+  const map = new Map();
+  records
+    .filter(isTaipeiMarketRecord)
+    .sort((a, b) => String(a.entryAt || a.timestamp).localeCompare(String(b.entryAt || b.timestamp)) || String(a.code).localeCompare(String(b.code)))
+    .forEach((record) => {
+      const code = String(record.code || "");
+      if (!code) return;
+      const current = map.get(code);
+      if (!current) {
+        map.set(code, { ...record, entryAt: record.entryAt || record.timestamp });
+        return;
+      }
+      const currentHigh = cleanNumber(current.observedHigh);
+      const nextHigh = cleanNumber(record.observedHigh);
+      if (nextHigh && (!currentHigh || nextHigh > currentHigh)) {
+        current.observedHigh = nextHigh;
+        current.observedHighAt = record.observedHighAt || record.timestamp;
+      }
+      const currentLow = cleanNumber(current.observedLow);
+      const nextLow = cleanNumber(record.observedLow);
+      if (nextLow && (!currentLow || nextLow < currentLow)) {
+        current.observedLow = nextLow;
+        current.observedLowAt = record.observedLowAt || record.timestamp;
+      }
+      current.score = Math.max(cleanNumber(current.score), cleanNumber(record.score));
+    });
 
-  if (!events.length) {
-    lines.push(
-      "今日 09:00-13:30 當沖巡邏紀錄未取得，無法結算成績單。",
-      `資料日期：${payload.date || "--"}｜報告日期：${today}`,
-      ""
-    );
-    return lines.join("\n");
-  }
-
-  if (!bRows.length) {
-    lines.push("今日沒有停留在 B區 的觀察紀錄。", "");
-  }
-  bRows.forEach((event) => {
-    const quote = quotes.get(event.code) || {};
-    const entryPrice = cleanNumber(event.firstBPrice);
-    const high = settlementHigh({
-      observedHigh: event.highAfterB || event.highestPrice,
-      observedHighAt: event.highAfterBAt || event.highestAt || event.lastAt,
-    }, quote, event);
-    const exitPrice = high.price;
-    const profit = profitAmount(entryPrice, exitPrice);
-    const profitPct = profitRate(entryPrice, exitPrice);
-    totalProfit += profit;
-    lines.push(
-      `名單${event.code} ${event.name || ""}`,
-      `交易日期 ${tradeDateLabel(today)}`,
-      `首次進入B區：${event.firstBAt}  進場價格:${formatTradePrice(event.firstBPrice)}元`,
-      `出場時間:${settlementTimeLabel(high)}｜出場價格/盤中高點:${formatTradePrice(exitPrice)}元`,
-      `損益率:${percent(profitPct)}｜損益:${money(profit)}`,
-      ""
-    );
-  });
-
-  lines.push(`策略2-B區觀察合計：${money(totalProfit)}`);
-  return lines.join("\n");
+  return [...map.values()]
+    .map((record) => {
+      const quote = quotes.get(record.code) || {};
+      const observedHigh = firstPrice(record.observedHigh, record.high);
+      const quoteHigh = firstPrice(quote?.high, quote?.dayHigh, quote?.highestPrice);
+      const exitPrice = Math.max(observedHigh, quoteHigh);
+      const exitTime = observedHigh && observedHigh >= quoteHigh ? tradeTimeLabel(record.observedHighAt, "") : "";
+      return { ...record, settlementHigh: { price: exitPrice, time: exitTime } };
+    })
+    .sort((a, b) => cleanNumber(b.score) - cleanNumber(a.score) || String(a.entryAt || a.timestamp).localeCompare(String(b.entryAt || b.timestamp)) || String(a.code).localeCompare(String(b.code)));
 }
 
 function buildRealtimeRadarReport(records, quotes, today) {
   let totalProfit = 0;
   const lines = [`即時雷達成績單｜${dateSlash(today)}`, ""];
-  if (!records.length) {
+  const rows = realtimeRadarRows(records, quotes);
+  const scorecardRows = [];
+  if (!rows.length) {
     lines.push(
       "今日尚未取得即時雷達盤中巡邏紀錄。",
       ""
     );
     return lines.join("\n");
   }
-  records.slice(0, 30).forEach((record, index) => {
+  rows.forEach((record, index) => {
     const quote = quotes.get(record.code) || {};
-    const high = settlementHigh(record, quote, record);
-    const low = settlementLow(record, quote, record);
+    const high = record.settlementHigh || settlementHigh(record, quote, record);
     const entryPrice = firstPrice(record.entryPrice, record.observedPrice, quote.open, quote.prevClose, quote.close);
     const exitPrice = high.price;
+    const entryTime = tradeTimeLabel(record.entryAt || record.timestamp, "--:--");
+    const highTime = settlementTimeLabel(high);
     const profit = profitAmount(entryPrice, exitPrice);
     const profitPct = profitRate(entryPrice, exitPrice);
     totalProfit += profit;
+    scorecardRows.push({
+      rank: index + 1,
+      code: record.code,
+      name: record.name || "",
+      tradeDate: tradeDateLabel(record.timestamp, today),
+      entryAt: record.entryAt || record.timestamp || "",
+      entryTime,
+      entryPrice,
+      signals: (record.strategies?.length ? record.strategies : [record.strategy]).filter(Boolean),
+      dayHigh: exitPrice,
+      dayHighAt: highTime,
+      profitPct,
+      profit,
+      source: high.source || "",
+    });
     lines.push(
       `#${index + 1} ${record.code} ${record.name || ""}`,
       `交易日期 ${tradeDateLabel(record.timestamp, today)}`,
-      `入場時間 ${tradeTimeLabel(record.entryAt || record.timestamp, "09:00")}  進場價格:${formatTradePrice(entryPrice)}元`,
+      `入場時間 ${entryTime}  進場價格:${formatTradePrice(entryPrice)}元`,
       "",
-      `盤中高點:${formatTradePrice(exitPrice)}元`,
+      `盤中高點:${formatTradePrice(exitPrice)}元${highTime ? `  最高時間:${highTime}` : ""}`,
       `損益率:${percent(profitPct)}｜損益:${money(profit)}`,
       ""
     );
   });
-  lines.push(`即時雷達合計：${money(totalProfit)}`);
-  return lines.join("\n");
+  lines.push(`即時雷達共 ${rows.length} 檔｜合計：${money(totalProfit)}`);
+  const text = lines.join("\n");
+  writeJson(REALTIME_RADAR_SCORECARD_FILE, {
+    ok: true,
+    source: "realtime-radar-scorecard",
+    date: today,
+    updatedAt: new Date().toISOString(),
+    count: scorecardRows.length,
+    totalProfit,
+    rows: scorecardRows,
+    text,
+  });
+  return text;
 }
 
 async function sendReports(reports, mailConfig) {
   const failures = [];
   for (const report of reports) {
-    try {
-      await sendMail({ ...mailConfig, subject: report.subject, text: report.text });
-      console.log(`report sent to ${mailConfig.to}: ${report.subject}`);
-    } catch (error) {
-      failures.push(`${report.subject}: ${error.message}`);
-      console.error(`report failed: ${report.subject}`, error);
+    const parts = splitLineText(report.text);
+    for (let index = 0; index < parts.length; index++) {
+      const subject = parts.length > 1 ? `${report.subject}（${index + 1}/${parts.length}）` : report.subject;
+      const text = parts.length > 1 ? `${subject}\n\n${parts[index]}` : parts[index];
+      try {
+        await sendMail({ ...mailConfig, subject, text });
+        console.log(`report sent to ${mailConfig.to}: ${subject}`);
+      } catch (error) {
+        failures.push(`${subject}: ${error.message}`);
+        console.error(`report failed: ${subject}`, error);
+      }
     }
   }
   if (failures.length) throw new Error(`Report email failed: ${failures.join(" | ")}`);
@@ -748,22 +855,16 @@ function mailConfigFromEnv() {
 }
 
 async function sendScorecardNotifications(reports) {
+  if (process.env.SCORECARD_NOTIFY === "0" || process.env.DISABLE_SCORECARD_NOTIFY === "1") {
+    console.log("scorecard notifications skipped; Google Sheet upload only");
+    return false;
+  }
   const mailConfig = mailConfigFromEnv();
-  const usingLine = hasLineConfig();
-  if (!mailConfig && !usingLine) {
-    throw new Error("Missing notification config: set LINE_CHANNEL_ACCESS_TOKEN + LINE_TO or SMTP settings");
+  if (!mailConfig) {
+    throw new Error("Missing notification config: set SMTP settings");
   }
-  if (mailConfig) await sendReports(reports, mailConfig);
-  if (usingLine) {
-    for (const report of reports) {
-      const parts = splitLineText(report.text);
-      for (let index = 0; index < parts.length; index++) {
-        const header = parts.length > 1 ? `${report.subject}（${index + 1}/${parts.length}）\n\n` : "";
-        await sendLineText(`${header}${parts[index]}`);
-      }
-      console.log(`line report sent: ${report.subject}${parts.length > 1 ? ` (${parts.length} parts)` : ""}`);
-    }
-  }
+  await sendReports(reports, mailConfig);
+  return true;
 }
 
 function readIntradayCache() {
@@ -777,8 +878,9 @@ async function main() {
   const today = taipeiDateKey();
   let cache = readIntradayCache();
   const scorecardTracker = readJson(SCORECARD_TRACK_FILE, { date: "", trades: {} });
+  const strategy5Tracker = readJson(STRATEGY5_TRACK_FILE, { date: "", trades: {} });
   const openBuyPayload = readScorecardSource(OPEN_BUY_SCORECARD_SOURCE_FILE, OPEN_BUY_FILE, OPEN_BUY_BACKUP_FILE);
-  const strategy3Payload = readScorecardSource(STRATEGY3_SCORECARD_SOURCE_FILE, STRATEGY3_FILE, STRATEGY3_BACKUP_FILE);
+  const strategy3Payload = readStrategy3ScorecardSource(today);
   const strategy5Payload = readCacheWithBackup(STRATEGY5_FILE, STRATEGY5_BACKUP_FILE);
   const reportSlot = process.env.REPORT_SLOT || (taipeiHour() >= 15 ? "final" : "initial");
   const sentFile = path.join(REPORT_SENT_PATH, `${today}-${reportSlot}.json`);
@@ -800,29 +902,28 @@ async function main() {
   let totalProfit = 0;
   const reportExitTime = taipeiTimeLabel();
   if (Array.isArray(cache.events)) {
-    const strategy2AText = buildStrategy2AEventReport(cache, quotes, today);
-    const strategy2BText = buildStrategy2BEventReport(cache, quotes, today);
-    console.log(strategy2AText);
-    console.log(strategy2BText);
+    const strategy2EntryText = buildStrategy2EntryEventReport(cache, quotes, today);
+    console.log(strategy2EntryText);
     const openBuyText = buildOpenBuyReport(openBuyPayload, quotes, today, scorecardTracker);
     const strategy3Text = buildStrategy3Report(strategy3Payload, quotes, today, scorecardTracker);
-    const strategy5Text = buildStrategy5Report(strategy5Payload, quotes, today, scorecardTracker);
+    const strategy5Text = buildStrategy5Report(strategy5Payload, quotes, today, strategy5Tracker);
     const radarText = buildRealtimeRadarReport(records, quotes, today);
     console.log(openBuyText);
     console.log(strategy3Text);
     console.log(strategy5Text);
     console.log(radarText);
 
-    await sendScorecardNotifications([
+    const didNotify = await sendScorecardNotifications([
       { subject: `策略1開盤沖成績單｜${dateSlash(today)}`, text: openBuyText },
-      { subject: `策略2當沖成績單-A區｜${dateSlash(today)}`, text: strategy2AText },
-      { subject: `策略2當沖成績單-B區｜${dateSlash(today)}`, text: strategy2BText },
+      { subject: `策略2進場區成績單｜${dateSlash(today)}`, text: strategy2EntryText },
       { subject: `策略3隔日沖成績單｜${dateSlash(today)}`, text: strategy3Text },
       { subject: `策略5綜合策略成績單｜${dateSlash(today)}`, text: strategy5Text },
       { subject: `即時雷達成績單｜${dateSlash(today)}`, text: radarText },
     ]);
-    fs.mkdirSync(REPORT_SENT_PATH, { recursive: true });
-    fs.writeFileSync(sentFile, `${JSON.stringify({ date: today, slot: reportSlot, sentAt: new Date().toISOString() }, null, 2)}\n`);
+    if (didNotify) {
+      fs.mkdirSync(REPORT_SENT_PATH, { recursive: true });
+      fs.writeFileSync(sentFile, `${JSON.stringify({ date: today, slot: reportSlot, sentAt: new Date().toISOString() }, null, 2)}\n`);
+    }
     return;
   }
 
@@ -866,7 +967,7 @@ async function main() {
       supportPrice ? `支撐位：${formatTradePrice(supportPrice)}，不破後觀察` : "",
       tradeSummaryLine({
         date: tradeDateLabel(record.timestamp, today),
-        entryTime: tradeTimeLabel(record.entryAt || record.timestamp, "09:00"),
+        entryTime: tradeTimeLabel(record.entryAt || record.timestamp, "--:--"),
         entryPrice,
         exitDate: tradeDateLabel(today),
         exitTime,
@@ -889,25 +990,28 @@ async function main() {
   console.log(text);
   const openBuyText = buildOpenBuyReport(openBuyPayload, quotes, today, scorecardTracker);
   const strategy3Text = buildStrategy3Report(strategy3Payload, quotes, today, scorecardTracker);
-  const strategy5Text = buildStrategy5Report(strategy5Payload, quotes, today, scorecardTracker);
+  const strategy5Text = buildStrategy5Report(strategy5Payload, quotes, today, strategy5Tracker);
   const radarText = buildRealtimeRadarReport(records, quotes, today);
   console.log(openBuyText);
   console.log(strategy3Text);
   console.log(strategy5Text);
   console.log(radarText);
 
-  await sendScorecardNotifications([
+  const didNotify = await sendScorecardNotifications([
     { subject: `策略1開盤沖成績單｜${dateSlash(today)}`, text: openBuyText },
     { subject: `策略2當沖雷達成績單｜${dateSlash(today)}`, text },
     { subject: `策略3隔日沖成績單｜${dateSlash(today)}`, text: strategy3Text },
     { subject: `策略5綜合策略成績單｜${dateSlash(today)}`, text: strategy5Text },
     { subject: `即時雷達成績單｜${dateSlash(today)}`, text: radarText },
   ]);
-  fs.mkdirSync(REPORT_SENT_PATH, { recursive: true });
-  fs.writeFileSync(sentFile, `${JSON.stringify({ date: today, slot: reportSlot, sentAt: new Date().toISOString() }, null, 2)}\n`);
+  if (didNotify) {
+    fs.mkdirSync(REPORT_SENT_PATH, { recursive: true });
+    fs.writeFileSync(sentFile, `${JSON.stringify({ date: today, slot: reportSlot, sentAt: new Date().toISOString() }, null, 2)}\n`);
+  }
 }
 
 main().catch((error) => {
   console.error(error);
   process.exit(1);
 });
+

@@ -1,55 +1,87 @@
-Set-Location "C:\fuman-terminal"
+$ErrorActionPreference = "Stop"
+$PSNativeCommandUseErrorActionPreference = $false
 
-New-Item -ItemType Directory -Force -Path "C:\fuman-terminal\logs" | Out-Null
-$log = "C:\fuman-terminal\logs\strategy4-$(Get-Date -Format yyyyMMdd-HHmmss).log"
+$repo = "C:\fuman-terminal"
+$runtime = "C:\fuman-runtime"
+$nodeExe = "C:\Program Files\nodejs\node.exe"
+$gitPath = "C:\Program Files\Git\cmd"
+$env:Path = "$gitPath;C:\Program Files\nodejs;" + $env:Path
+$env:NODE_OPTIONS = "--use-system-ca"
 
-"=== Strategy4 full scan start $(Get-Date) ===" | Out-File $log -Encoding utf8
+Set-Location $repo
 
-git pull --rebase origin main >> $log 2>&1
+$logDir = Join-Path $repo "logs"
+New-Item -ItemType Directory -Force -Path $logDir | Out-Null
+$log = Join-Path $logDir ("strategy4-{0}.log" -f (Get-Date -Format yyyyMMdd-HHmmss))
+
+function Write-Log($message) {
+  $message | Tee-Object -FilePath $log -Append | Out-Null
+}
+
+function Invoke-CacheSyncWithRetry($scriptPath, $maxAttempts = 3) {
+  for ($attempt = 1; $attempt -le $maxAttempts; $attempt++) {
+    Write-Log "=== Strategy4 clean cache sync attempt $attempt/$maxAttempts start $(Get-Date) ==="
+    & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $scriptPath *>&1 | Tee-Object -FilePath $log -Append | Out-Null
+    $syncExit = $LASTEXITCODE
+    if ($syncExit -eq 0) {
+      Write-Log "=== Strategy4 clean cache sync attempt $attempt/$maxAttempts succeeded $(Get-Date) ==="
+      return 0
+    }
+
+    Write-Log "Strategy4 clean cache sync attempt $attempt/$maxAttempts failed with exit code $syncExit"
+    if ($attempt -lt $maxAttempts) {
+      $delaySeconds = 30 * $attempt
+      Write-Log "Retrying Strategy4 clean cache sync in $delaySeconds seconds."
+      Start-Sleep -Seconds $delaySeconds
+    }
+  }
+
+  return $syncExit
+}
+
+Write-Log "=== Strategy4 full scan start $(Get-Date) ==="
 
 $env:FULL_SCAN = "1"
-$env:STRATEGY4_BATCH_SIZE = "80"
-$env:STRATEGY4_BATCHES_PER_RUN = "999"
+$env:STRATEGY4_BATCH_SIZE = "9999"
+$env:STRATEGY4_CHUNK_SIZE = "80"
+$env:STRATEGY4_SCAN_CONCURRENCY = "6"
+$env:STRATEGY4_SYNC_PARTIAL = "1"
+$env:STRATEGY4_USE_MIS = "0"
 
-node scripts\scan-strategy4-cache.js >> $log 2>&1
-$scanExit = $LASTEXITCODE
-
-Remove-Item Env:FULL_SCAN -ErrorAction SilentlyContinue
-Remove-Item Env:STRATEGY4_BATCH_SIZE -ErrorAction SilentlyContinue
-Remove-Item Env:STRATEGY4_BATCHES_PER_RUN -ErrorAction SilentlyContinue
+try {
+  & $nodeExe "--use-system-ca" "scripts\scan-strategy4-cache.js" *>&1 | Tee-Object -FilePath $log -Append
+  $scanExit = $LASTEXITCODE
+} finally {
+  Remove-Item Env:FULL_SCAN -ErrorAction SilentlyContinue
+  Remove-Item Env:STRATEGY4_BATCH_SIZE -ErrorAction SilentlyContinue
+  Remove-Item Env:STRATEGY4_CHUNK_SIZE -ErrorAction SilentlyContinue
+  Remove-Item Env:STRATEGY4_SCAN_CONCURRENCY -ErrorAction SilentlyContinue
+  Remove-Item Env:STRATEGY4_SYNC_PARTIAL -ErrorAction SilentlyContinue
+  Remove-Item Env:STRATEGY4_USE_MIS -ErrorAction SilentlyContinue
+}
 
 if ($scanExit -ne 0) {
-  "Strategy4 scan failed with exit code $scanExit" >> $log
+  Write-Log "Strategy4 scan failed with exit code $scanExit"
   exit $scanExit
 }
 
-git add data\strategy4-latest.json data\strategy4-backup.json >> $log 2>&1
-$status = git status --porcelain data\strategy4-latest.json data\strategy4-backup.json
+$runtimeData = Join-Path $runtime "data"
+New-Item -ItemType Directory -Force -Path $runtimeData | Out-Null
+Copy-Item -LiteralPath (Join-Path $repo "data\strategy4-latest.json") -Destination (Join-Path $runtimeData "strategy4-latest.json") -Force
+Copy-Item -LiteralPath (Join-Path $repo "data\strategy4-backup.json") -Destination (Join-Path $runtimeData "strategy4-backup.json") -Force
+Write-Log "Strategy4 cache copied to runtime data for clean sync."
 
-if ($status) {
-  git commit -m "Update strategy4 cache from mini pc" >> $log 2>&1
-  git pull --rebase --autostash origin main >> $log 2>&1
-  git push >> $log 2>&1
-  $pushExit = $LASTEXITCODE
-
-  if ($pushExit -ne 0) {
-    "Strategy4 first push failed with exit code $pushExit, retrying pull/rebase then push" >> $log
-    git pull --rebase --autostash origin main >> $log 2>&1
-    $pullExit = $LASTEXITCODE
-    if ($pullExit -ne 0) {
-      "Strategy4 retry pull/rebase failed with exit code $pullExit" >> $log
-      exit $pullExit
-    }
-
-    git push >> $log 2>&1
-    $retryPushExit = $LASTEXITCODE
-    if ($retryPushExit -ne 0) {
-      "Strategy4 retry push failed with exit code $retryPushExit" >> $log
-      exit $retryPushExit
-    }
+$syncScript = Join-Path $repo "run-cache-sync.ps1"
+if (Test-Path -LiteralPath $syncScript) {
+  Write-Log "=== Strategy4 clean cache sync start $(Get-Date) ==="
+  $syncExit = Invoke-CacheSyncWithRetry $syncScript 3
+  if ($syncExit -ne 0) {
+    Write-Log "Strategy4 clean cache sync failed with exit code $syncExit"
+    exit $syncExit
   }
+  Write-Log "=== Strategy4 clean cache sync end $(Get-Date) ==="
 } else {
-  "No strategy4 cache changes" >> $log
+  Write-Log "run-cache-sync.ps1 not found; strategy4 files updated locally only."
 }
 
-"=== Strategy4 full scan end $(Get-Date) ===" >> $log
+Write-Log "=== Strategy4 full scan end $(Get-Date) ==="
