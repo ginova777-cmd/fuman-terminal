@@ -4047,6 +4047,7 @@ function renderRealtimeRadar() {
     });
     return;
   }
+
   if (!Object.keys(strategyHistoryData).length && !strategy4CacheLoading) loadStrategy4Cache(true);
   const historyTargets = getRealtimeRadarHistoryTargets();
   const snapshotHistoryTargets = historyTargets.length ? [] : getRealtimeRadarSnapshotHistoryTargets(realtimeRadarLastRows);
@@ -4479,6 +4480,7 @@ let marketRealtimeState = { trading: false, marketStatus: "", updatedAt: "", sou
 let marketStockDataState = { resolvedTradeDate: "", today: "", source: "", updatedAt: "", isFallbackDate: false, marketDates: {} };
 let heatmapLoading = false;
 let heatmapLastStartedAt = 0;
+let heatmapMode = "all";
 let lastViewName = "";
 let lastViewShownAt = 0;
 let lastMarketRenderSignature = "";
@@ -4509,6 +4511,7 @@ const REALTIME_RADAR_HISTORY_TARGET_LIMIT = 72;
 const REALTIME_RADAR_HISTORY_BATCH_SIZE = 12;
 const REALTIME_RADAR_HISTORY_REFRESH_MS = 10 * 60 * 1000;
 let sectorStocksCache = {};
+let industryMasterByCode = {};
 let institutionData = {};
 let institutionDataPromise = null;
 let institutionDate = "";
@@ -4835,6 +4838,47 @@ const SECTOR_ELECTRIC_CABLE_OVERRIDES = {
   "4930":"電器電纜",
 };
 Object.assign(SECTOR_MAP, SECTOR_ELECTRIC_CABLE_OVERRIDES);
+
+const SECTOR_HEATMAP_TOPIC_OVERRIDES = {
+  "2395":"工業電腦","3005":"工業電腦","3416":"工業電腦","6414":"工業電腦","6579":"工業電腦","8050":"工業電腦",
+  "8114":"工業電腦","2360":"半導體設備/測試","3030":"半導體設備/測試","3413":"半導體設備/測試","3587":"半導體設備/測試","3680":"半導體設備/測試",
+  "6125":"半導體設備/測試","6187":"半導體設備/測試","6196":"半導體設備/測試","6207":"半導體設備/測試","6223":"半導體設備/測試","6510":"半導體設備/測試",
+  "6515":"半導體設備/測試","6691":"半導體設備/測試","2330":"先進封裝/CoWoS","3131":"先進封裝/CoWoS","3264":"先進封裝/CoWoS","3711":"先進封裝/CoWoS",
+  "6239":"先進封裝/CoWoS","6257":"先進封裝/CoWoS","3081":"光通訊/CPO","3163":"光通訊/CPO","3234":"光通訊/CPO","3363":"光通訊/CPO",
+  "3450":"光通訊/CPO","3491":"光通訊/CPO","4908":"光通訊/CPO","4979":"光通訊/CPO","6442":"光通訊/CPO","2329":"記憶體/儲存",
+  "2337":"記憶體/儲存","2344":"記憶體/儲存","2408":"記憶體/儲存","2451":"記憶體/儲存","3006":"記憶體/儲存","3135":"記憶體/儲存",
+  "3260":"記憶體/儲存","4967":"記憶體/儲存","4973":"記憶體/儲存","5289":"記憶體/儲存","5351":"記憶體/儲存","6770":"記憶體/儲存",
+  "8088":"記憶體/儲存","8112":"記憶體/儲存","8150":"記憶體/儲存","8271":"記憶體/儲存","8277":"記憶體/儲存","8299":"記憶體/儲存",
+  "2421":"液冷/散熱","3017":"液冷/散熱","3324":"液冷/散熱","3338":"液冷/散熱","3540":"液冷/散熱","3653":"液冷/散熱",
+  "6230":"液冷/散熱","6275":"液冷/散熱","8996":"液冷/散熱","2324":"組裝代工","2353":"組裝代工","2347":"電子通路",
+  "2414":"電子通路","2430":"電子通路","3010":"電子通路","3028":"電子通路","3033":"電子通路","3036":"電子通路",
+  "3048":"電子通路","3055":"電子通路","3209":"電子通路","3224":"電子通路","3232":"電子通路","3312":"電子通路",
+  "3360":"電子通路","3444":"電子通路","3528":"電子通路","3702":"電子通路","5434":"電子通路","6113":"電子通路",
+  "6118":"電子通路","6154":"電子通路","6189":"電子通路","6227":"電子通路","6265":"電子通路","6270":"電子通路",
+  "6281":"電子通路","6474":"電子通路","6776":"電子通路","8032":"電子通路","8068":"電子通路","8070":"電子通路",
+  "8072":"電子通路","8084":"電子通路","8096":"電子通路","2301":"電源/BBU/UPS","2308":"電源/BBU/UPS","2457":"電源/BBU/UPS",
+  "2476":"電源/BBU/UPS","3015":"電源/BBU/UPS","3211":"電源/BBU/UPS","3323":"電源/BBU/UPS","3625":"電源/BBU/UPS","4931":"電源/BBU/UPS",
+  "5309":"電源/BBU/UPS","6121":"電源/BBU/UPS","6282":"電源/BBU/UPS","6409":"電源/BBU/UPS","6412":"電源/BBU/UPS","6558":"電源/BBU/UPS",
+  "6781":"電源/BBU/UPS","8104":"電源/BBU/UPS","2345":"網通設備組件","2419":"網通設備組件","3025":"網通設備組件","3380":"網通設備組件",
+  "3596":"網通設備組件","4906":"網通設備組件","5388":"網通設備組件","6285":"網通設備組件","2317":"AI伺服器","2356":"AI伺服器",
+  "2357":"AI伺服器","2376":"AI伺服器","2382":"AI伺服器","3013":"AI伺服器","3231":"AI伺服器","3706":"AI伺服器",
+  "4938":"AI伺服器","6669":"AI伺服器","8210":"AI伺服器","2454":"CPU/ASIC/IP","3035":"CPU/ASIC/IP","3443":"CPU/ASIC/IP",
+  "3529":"CPU/ASIC/IP","3661":"CPU/ASIC/IP","6533":"CPU/ASIC/IP","6643":"CPU/ASIC/IP","2449":"IC封測","3265":"IC封測",
+  "3289":"IC封測","3374":"IC封測","6147":"IC封測","6271":"IC封測","6451":"IC封測","6789":"IC封測",
+  "2313":"PCB/載板","2316":"PCB/載板","2367":"PCB/載板","2368":"PCB/載板","2383":"PCB/載板","3037":"PCB/載板",
+  "3044":"PCB/載板","3189":"PCB/載板","3715":"PCB/載板","4958":"PCB/載板","4989":"PCB/載板","5439":"PCB/載板",
+  "5469":"PCB/載板","6108":"PCB/載板","6153":"PCB/載板","6191":"PCB/載板","6213":"PCB/載板","6269":"PCB/載板",
+  "6274":"PCB/載板","6552":"PCB/載板","8021":"PCB/載板","8039":"PCB/載板","8046":"PCB/載板","8213":"PCB/載板",
+  "8358":"PCB/載板",
+};
+Object.assign(SECTOR_MAP, SECTOR_HEATMAP_TOPIC_OVERRIDES);
+
+const SECTOR_PRIMARY_INDUSTRY_OVERRIDES = {
+  "2330":"IC生產製造","2303":"IC生產製造","5347":"IC生產製造","6770":"IC生產製造",
+  "3105":"IC生產製造","2455":"IC生產製造","8086":"IC生產製造","3707":"IC生產製造",
+  "3711":"IC封測",
+};
+Object.assign(SECTOR_MAP, SECTOR_PRIMARY_INDUSTRY_OVERRIDES);
 
 function cleanNumber(value) {
   if (value === undefined || value === null || value === "") return 0;
@@ -10538,16 +10582,86 @@ async function openSectorModal(sector) {
 function mergeHeatmapApiSectorsIntoCache(sectors) {
   const nextCache = { ...sectorStocksCache };
   normalizeArray(sectors).forEach((sector) => {
+    const apiIndustry = String(sector?.name || "").trim();
     normalizeArray(sector?.stocks).forEach((stock) => {
       const code = String(stock?.code || stock?.Code || stock?.證券代號 || "").trim();
       if (!code) return;
-      const industry = SECTOR_MAP[code] || sector.name;
+      const industry = apiIndustry || SECTOR_MAP[code];
       if (!industry) return;
+      SECTOR_MAP[code] = industry;
       const row = { ...stock, code, name: stock.name || stock.Name || stock.證券名稱 || code };
       upsertSectorStock(nextCache, industry, row);
     });
   });
   sectorStocksCache = nextCache;
+}
+
+function mergeIndustryMaster(masterRows) {
+  normalizeArray(masterRows).forEach((row) => {
+    const code = String(row?.code || "").trim();
+    const primaryIndustry = String(row?.primaryIndustry || row?.heatmapSector || "").trim();
+    if (!code || !primaryIndustry) return;
+    industryMasterByCode[code] = { ...industryMasterByCode[code], ...row, code, primaryIndustry };
+    SECTOR_MAP[code] = primaryIndustry;
+  });
+}
+
+const HEATMAP_FILTERS = [
+  { key: "all", label: "全部" },
+  { key: "official", label: "官方產業" },
+  { key: "electronic", label: "電子細分" },
+  { key: "theme", label: "題材概念" },
+  { key: "group", label: "集團股" },
+];
+
+const HEATMAP_ELECTRONIC_GROUPS = new Set([
+  "IC生產製造", "IC設計服務", "IC封測", "半導體", "半導體設備/測試", "先進封裝/CoWoS",
+  "CPU/ASIC/IP", "記憶體/儲存", "PCB/載板", "電子零組件", "電子通路", "電腦週邊",
+  "其他電子", "光電", "通訊網路", "網通設備組件", "面板業", "資訊服務", "數位雲端",
+]);
+
+const HEATMAP_THEME_GROUPS = new Set([
+  "AI伺服器", "液冷/散熱", "光通訊/CPO", "電源/BBU/UPS", "工業電腦", "組裝代工",
+  "綠能環保", "綠能環保類", "電器電纜", "生技醫療", "化學生技醫療", "運動休閒",
+]);
+
+function isHeatmapGroupSector(name) {
+  return /集團|控股|金控|富邦|國泰|台塑|鴻海|華新|遠東|中信|統一/.test(String(name || ""));
+}
+
+function filterHeatmapSectors(sectors) {
+  if (heatmapMode === "official") {
+    return sectors.filter((sector) => !HEATMAP_ELECTRONIC_GROUPS.has(sector.name) && !HEATMAP_THEME_GROUPS.has(sector.name));
+  }
+  if (heatmapMode === "electronic") return sectors.filter((sector) => HEATMAP_ELECTRONIC_GROUPS.has(sector.name));
+  if (heatmapMode === "theme") return sectors.filter((sector) => HEATMAP_THEME_GROUPS.has(sector.name));
+  if (heatmapMode === "group") return sectors.filter((sector) => isHeatmapGroupSector(sector.name));
+  return sectors;
+}
+
+function syncHeatmapTabs(allSectors, visibleSectors) {
+  const section = heatmap?.closest(".sector-section");
+  const titleCount = section?.querySelector(".section-title > span");
+  if (titleCount) {
+    const activeLabel = HEATMAP_FILTERS.find((item) => item.key === heatmapMode)?.label || "全部";
+    titleCount.textContent = `${activeLabel} · ${visibleSectors.length} 個`;
+  }
+  const tabs = section?.querySelector(".tabs");
+  if (!tabs) return;
+  const buttons = [...tabs.querySelectorAll("button")];
+  buttons.forEach((button, index) => {
+    const meta = HEATMAP_FILTERS[index];
+    if (!meta) return;
+    button.dataset.heatmapMode = meta.key;
+    button.type = "button";
+    button.classList.toggle("active", meta.key === heatmapMode);
+    button.disabled = false;
+    button.onclick = () => {
+      heatmapMode = meta.key;
+      lastHeatmapRenderSignature = "";
+      renderHeatmapSectors(allSectors);
+    };
+  });
 }
 
 function upsertSectorStock(cache, industry, row) {
@@ -10574,27 +10688,36 @@ function renderHeatmapSectors(sectors) {
 
   mergeHeatmapApiSectorsIntoCache(sectors);
   const sortedSectors = [...sectors].sort((a, b) => cleanNumber(b.pct) - cleanNumber(a.pct));
-  const signature = sortedSectors
+  const visibleSectors = filterHeatmapSectors(sortedSectors);
+  syncHeatmapTabs(sortedSectors, visibleSectors);
+  const signature = visibleSectors
     .map((s) => `${s.name}:${Number(s.pct || 0).toFixed(2)}:${s.count}:${s.up}:${s.down}:${s.totalValue}:${s.leader || ""}`)
-    .join("|");
+    .join("|") + `:${heatmapMode}`;
   if (signature === lastHeatmapRenderSignature) return;
   lastHeatmapRenderSignature = signature;
 
-  heatmap.innerHTML = sortedSectors.map(s => {
+  if (!visibleSectors.length) {
+    heatmap.innerHTML = `<div class="empty-state">這個分類目前沒有產業資料</div>`;
+    return;
+  }
+
+  heatmap.innerHTML = visibleSectors.map(s => {
     const pct = s.pct || 0;
     const sign = pct >= 0 ? "+" : "";
     const bg = getSectorColor(pct);
     const toneClass = pct >= 0 ? "hot" : "cold";
+    const totalValue = cleanNumber(s.totalValue || s.amountYi).toLocaleString("zh-TW", { maximumFractionDigits: 1 });
+    const leader = String(s.leader || "--").replace(/\s+/g, " ");
     // 不把 stocks 放進 data-sector，太大了
     const sectorMeta = { name: s.name, pct: s.pct, totalValue: s.totalValue, count: s.count, up: s.up, down: s.down, flat: s.flat, leader: s.leader };
     return `
       <article class="sector-card ${toneClass}" style="--sector-bg:${bg}; cursor:pointer;" data-sector="${encodeURIComponent(JSON.stringify(sectorMeta))}">
-        <h3>${s.name}<span>${sign}${pct.toFixed(2)}%</span></h3>
-        <p>${s.count} 檔 · ${s.totalValue} 億</p>
+        <h3><span class="sector-name">${escapeAttr(s.name)}</span><span class="sector-pct">${sign}${pct.toFixed(2)}%</span></h3>
+        <p>${cleanNumber(s.count).toLocaleString("zh-TW")} 檔 · ${totalValue} 億</p>
         <small>
-          <span>▲ ${s.up}</span><b>▼ ${s.down}</b>
-          <span>${s.leader || "--"}</span>
+          <span>▲ ${cleanNumber(s.up).toLocaleString("zh-TW")}</span><b>▼ ${cleanNumber(s.down).toLocaleString("zh-TW")}</b>
         </small>
+        <em>${escapeAttr(leader)}</em>
       </article>
     `;
   }).join("");
@@ -12114,6 +12237,7 @@ async function loadHeatmap(force = false) {
   }
   try {
     const data = await fetchJson(endpoints.heatmap, 15000);
+    mergeIndustryMaster(data?.industryMaster);
     const sectors = normalizeArray(data?.sectors);
     if (data?.ok && sectors.length) {
       renderHeatmapSectors(sectors);
@@ -14001,6 +14125,8 @@ if (isViewActive("watchlist")) renderWatchlist();
 setInterval(() => {
   if (!isDocumentHidden() && isTerminalUnlocked() && isViewActive("watchlist")) refreshSelectedWatchlistQuote();
 }, 10000);
+
+
 
 
 
