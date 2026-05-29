@@ -772,12 +772,12 @@
       "name": "聯成",
       "foreign": 1034000,
       "trust": 0,
-      "dealer": 8001,
+      "dealer": 0,
       "total": 1031054,
       "market": "上市",
       "foreignStreak": 3,
       "trustStreak": 0,
-      "dealerStreak": 1,
+      "dealerStreak": 0,
       "jointStreak": 0,
       "close": 10.7,
       "change": 0.09999999999999964,
@@ -36266,6 +36266,6 @@
     "TPEx 3itrade_hedge_result"
   ],
   "source": "github-actions",
-  "updatedAt": "2026-05-29T13:00:40.044Z",
-  "quoteUpdatedAt": "2026-05-29T13:00:17.368Z"
+  "updatedAt": "2026-05-29T13:11:22.432Z",
+  "quoteUpdatedAt": "2026-05-29T13:10:53.918Z"
 }
