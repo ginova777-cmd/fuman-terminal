@@ -1,25 +1,25 @@
-﻿{
-    "updatedAt":  "2026-05-29T13:20:15.9343848Z",
-    "warrant":  {
-                    "scope":  "warrant",
-                    "status":  "ok",
-                    "message":  "Watchdog verified cache",
-                    "updatedAt":  "2026-05-29T11:53:10.8809065Z",
-                    "detail":  {
-                                   "log":  "C:\\fuman-runtime\\logs\\flow-watchdog-warrant-20260529-195310.log",
-                                   "reason":  "ok count=120 updatedAt=05/28/2026 22:00:16",
-                                   "expectedTime":  ""
-                               }
-                },
-    "institution":  {
-                        "scope":  "institution",
-                        "status":  "watchdog_rerun",
-                        "message":  "Watchdog rerun started",
-                        "updatedAt":  "2026-05-29T13:20:15.9313447Z",
-                        "detail":  {
-                                       "expectedTime":  "21:00",
-                                       "reason":  "institution count too low: 0",
-                                       "log":  "C:\\fuman-runtime\\logs\\flow-watchdog-institution-20260529-212000.log"
-                                   }
-                    }
+{
+  "updatedAt": "2026-05-29T15:25:01.5322868Z",
+  "institution": {
+    "scope": "institution",
+    "status": "watchdog_rerun",
+    "message": "Watchdog rerun started",
+    "updatedAt": "2026-05-29T15:25:01.5300835Z",
+    "detail": {
+      "expectedTime": "21:00",
+      "reason": "institution not updated after 21:00; updatedAt=05/29/2026 13:20:37",
+      "log": "C:\\fuman-runtime\\logs\\flow-watchdog-institution-20260529-232501.log"
+    }
+  },
+  "warrant": {
+    "scope": "warrant",
+    "status": "ok",
+    "message": "Watchdog verified cache",
+    "updatedAt": "2026-05-29T11:53:10.8809065Z",
+    "detail": {
+      "log": "C:\\fuman-runtime\\logs\\flow-watchdog-warrant-20260529-195310.log",
+      "reason": "ok count=120 updatedAt=05/28/2026 22:00:16",
+      "expectedTime": ""
+    }
+  }
 }
