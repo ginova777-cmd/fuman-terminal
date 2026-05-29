@@ -274,8 +274,8 @@ function Test-VercelCacheVisibility($file) {
 
   $urlPath = ($file -replace "\\", "/")
   $url = "$($baseUrl.TrimEnd('/'))/$urlPath?v=$(Get-Date -Format yyyyMMddHHmmss)"
-  $attempts = if ($env:VERCEL_VISIBLE_ATTEMPTS -match '^\d+$') { [int]$env:VERCEL_VISIBLE_ATTEMPTS } else { 6 }
-  $delaySeconds = if ($env:VERCEL_VISIBLE_RETRY_SECONDS -match '^\d+$') { [int]$env:VERCEL_VISIBLE_RETRY_SECONDS } else { 20 }
+  $attempts = if ($env:VERCEL_VISIBLE_ATTEMPTS -match '^\d+$') { [int]$env:VERCEL_VISIBLE_ATTEMPTS } else { 12 }
+  $delaySeconds = if ($env:VERCEL_VISIBLE_RETRY_SECONDS -match '^\d+$') { [int]$env:VERCEL_VISIBLE_RETRY_SECONDS } else { 30 }
   for ($attempt = 1; $attempt -le $attempts; $attempt++) {
     try {
       Write-Log "=== Vercel visibility check $file attempt $attempt/$attempts $(Get-Date) ==="

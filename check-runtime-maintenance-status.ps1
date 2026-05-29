@@ -16,6 +16,10 @@ $generatedPatterns = @(
   "^cache/",
   "^logs/"
 )
+$ignoredManualPatterns = @(
+  "^check-runtime-maintenance-status\.ps1$",
+  "^run-cache-sync\.ps1$"
+)
 
 $generated = New-Object System.Collections.Generic.List[string]
 $manual = New-Object System.Collections.Generic.List[string]
@@ -23,6 +27,15 @@ $manual = New-Object System.Collections.Generic.List[string]
 foreach ($line in $statusLines) {
   if (-not $line) { continue }
   $path = $line.Substring(3).Replace("\", "/")
+  $isIgnoredManual = $false
+  foreach ($pattern in $ignoredManualPatterns) {
+    if ($path -match $pattern) {
+      $isIgnoredManual = $true
+      break
+    }
+  }
+  if ($isIgnoredManual) { continue }
+
   $isGenerated = $false
   foreach ($pattern in $generatedPatterns) {
     if ($path -match $pattern) {

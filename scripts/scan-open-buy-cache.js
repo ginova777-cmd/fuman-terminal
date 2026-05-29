@@ -33,6 +33,7 @@ const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY
   || process.env.FUMAN_SUPABASE_ANON_KEY
   || readSecretText(path.join(ROOT, "secrets", "supabase-anon-key.txt"))
   || readSecretText(path.join(process.env.FUMAN_RUNTIME_DIR || "C:/fuman-runtime", "secrets", "supabase-anon-key.txt"));
+const SUPABASE_READBACK_KEY = SUPABASE_ANON_KEY || SUPABASE_SERVICE_ROLE_KEY;
 const SUPABASE_OPEN_BUY_TABLE = process.env.SUPABASE_OPEN_BUY_TABLE || "strategy1_open_buy_latest";
 
 function readJson(file, fallback) {
@@ -53,12 +54,12 @@ function writeSupabaseStatus(ok, details = {}) {
 }
 
 async function verifyOpenBuySupabaseReadback(baseUrl, expected) {
-  if (!SUPABASE_ANON_KEY) throw new Error("missing Supabase anon key for readback");
+  if (!SUPABASE_READBACK_KEY) throw new Error("missing Supabase readback key");
   const url = `${baseUrl}/rest/v1/${SUPABASE_OPEN_BUY_TABLE}?id=eq.latest&select=id,updated_at,match_count,scanned_count,total_count`;
   const response = await fetch(url, {
     headers: {
-      apikey: SUPABASE_ANON_KEY,
-      Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+      apikey: SUPABASE_READBACK_KEY,
+      Authorization: `Bearer ${SUPABASE_READBACK_KEY}`,
     },
   });
   if (!response.ok) {

@@ -11,8 +11,23 @@ const FAILED_QUEUE_FILE = path.join(STATE_DIR, "realtime-radar-failed-batches.js
 const ALERT_STATUS_FILE = path.join(STATE_DIR, "realtime-radar-alert-status.json");
 const SUPABASE_STATUS_FILE = path.join(STATE_DIR, "realtime-radar-supabase-status.json");
 const BASE_URL = process.env.FUMAN_BASE_URL || "https://fuman-terminal.vercel.app";
-const SUPABASE_URL = process.env.FUMAN_SUPABASE_URL || "https://jxnqyqnigsppqsxinlrq.supabase.co";
-const SUPABASE_KEY = process.env.FUMAN_SUPABASE_SERVICE_KEY || process.env.FUMAN_SUPABASE_KEY || "";
+
+function readSecretText(file) {
+  try { return fs.readFileSync(file, "utf8").trim(); } catch { return ""; }
+}
+
+const RUNTIME_DIR = process.env.FUMAN_RUNTIME_DIR || "C:/fuman-runtime";
+const SUPABASE_URL = process.env.FUMAN_SUPABASE_URL
+  || process.env.SUPABASE_URL
+  || readSecretText(path.join(ROOT, "secrets", "supabase-url.txt"))
+  || readSecretText(path.join(RUNTIME_DIR, "secrets", "supabase-url.txt"))
+  || "https://jxnqyqnigsppqsxinlrq.supabase.co";
+const SUPABASE_KEY = process.env.FUMAN_SUPABASE_SERVICE_KEY
+  || process.env.FUMAN_SUPABASE_KEY
+  || process.env.SUPABASE_SERVICE_ROLE_KEY
+  || process.env.SUPABASE_SERVICE_KEY
+  || readSecretText(path.join(ROOT, "secrets", "supabase-service-role-key.txt"))
+  || readSecretText(path.join(RUNTIME_DIR, "secrets", "supabase-service-role-key.txt"));
 const SUPABASE_TABLE = process.env.FUMAN_REALTIME_RADAR_TABLE || "fuman_realtime_radar_cache";
 const STALE_AFTER_MS = Number(process.env.REALTIME_RADAR_STALE_MS || 20000);
 const MAX_QUOTE_AGE_SECONDS = Number(process.env.REALTIME_RADAR_MAX_QUOTE_AGE_SECONDS || 150);
