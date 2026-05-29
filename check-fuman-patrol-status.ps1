@@ -141,7 +141,10 @@ function Show-ScheduledTasks {
       "Fuman Scorecard Final 1530" { return "成績單含輔滿回測終版，15:30 產生" }
       "Fuman Flow Cache 0600" { return "買賣超與權證走向，早上 06:00 合併掃描並發布終端" }
       "Fuman Flow Cache 2100" { return "買賣超與權證走向，晚上 21:00 合併掃描並發布終端" }
-      "Fuman 買賣超 Cache 0600" { return "買賣超資料，早上 06:00 快取" }
+      "Fuman 買賣超 Cache 2100" { return "買賣超資料，晚上 21:00 快取並發布終端" }
+    "Fuman 權證走向 Cache 0500" { return "權證資金走向，早上 05:00 快取並發布終端" }
+    "Fuman 權證走向 Cache 2200" { return "權證資金走向，晚上 22:00 快取並發布終端" }
+    "Fuman 買賣超 Cache 0600" { return "買賣超資料，早上 06:00 快取" }
       "Fuman 買賣超 Cache 2102" { return "買賣超資料，晚上 21:02 快取" }
       "Fuman 權證走向 Cache 0600" { return "權證資金走向，早上 06:00 快取" }
       "Fuman 權證走向 Cache 2100" { return "權證資金走向，晚上 21:00 快取" }
@@ -343,4 +346,3 @@ Show-DataSourceNote
 Show-DataFreshness
 Show-RealtimeRadarQuoteHealth
 Show-LatestLogs
-
