@@ -64,7 +64,7 @@ function Run-Git($description, $arguments, $cwd = $syncRepo) {
   if ($result.ExitCode -ne 0) {
     throw "$description failed with exit code $($result.ExitCode): $($result.Output)"
   }
-  return $result
+  $script:LastGitResult = $result
 }
 
 function Run-GitWithRetry($description, $arguments, $cwd = $syncRepo) {
@@ -72,7 +72,8 @@ function Run-GitWithRetry($description, $arguments, $cwd = $syncRepo) {
   while ($true) {
     $result = Invoke-GitRaw "$description attempt $attempt/$gitRetryCount" $arguments $cwd
     if ($result.ExitCode -eq 0) {
-      return $result
+      $script:LastGitResult = $result
+      break
     }
     $isTransient = Test-TransientGitFailure $result.Output
     if ((-not $isTransient) -or $attempt -ge $gitRetryCount) {
