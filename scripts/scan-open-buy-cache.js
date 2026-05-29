@@ -29,6 +29,10 @@ const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY
   || process.env.FUMAN_SUPABASE_SERVICE_KEY
   || readSecretText(path.join(ROOT, "secrets", "supabase-service-role-key.txt"))
   || readSecretText(path.join(process.env.FUMAN_RUNTIME_DIR || "C:/fuman-runtime", "secrets", "supabase-service-role-key.txt"));
+const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY
+  || process.env.FUMAN_SUPABASE_ANON_KEY
+  || readSecretText(path.join(ROOT, "secrets", "supabase-anon-key.txt"))
+  || readSecretText(path.join(process.env.FUMAN_RUNTIME_DIR || "C:/fuman-runtime", "secrets", "supabase-anon-key.txt"));
 const SUPABASE_OPEN_BUY_TABLE = process.env.SUPABASE_OPEN_BUY_TABLE || "strategy1_open_buy_latest";
 
 function readJson(file, fallback) {
@@ -46,6 +50,34 @@ function writeSupabaseStatus(ok, details = {}) {
     checkedAt: new Date().toISOString(),
     ...details,
   });
+}
+
+async function verifyOpenBuySupabaseReadback(baseUrl, expected) {
+  if (!SUPABASE_ANON_KEY) throw new Error("missing Supabase anon key for readback");
+  const url = `${baseUrl}/rest/v1/${SUPABASE_OPEN_BUY_TABLE}?id=eq.latest&select=id,updated_at,match_count,scanned_count,total_count`;
+  const response = await fetch(url, {
+    headers: {
+      apikey: SUPABASE_ANON_KEY,
+      Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+    },
+  });
+  if (!response.ok) {
+    const text = await response.text().catch(() => "");
+    throw new Error(`readback HTTP ${response.status} ${text.slice(0, 160)}`.trim());
+  }
+  const rows = await response.json();
+  const row = Array.isArray(rows) ? rows[0] : null;
+  if (!row) throw new Error("readback missing latest row");
+  const expectedMs = Date.parse(expected.updated_at || "");
+  const actualMs = Date.parse(row.updated_at || "");
+  const timeOk = Number.isFinite(expectedMs) && Number.isFinite(actualMs) && actualMs >= expectedMs - 5000;
+  if (Number(row.match_count) !== expected.match_count ||
+      Number(row.scanned_count) !== expected.scanned_count ||
+      Number(row.total_count) !== expected.total_count ||
+      !timeOk) {
+    throw new Error(`readback mismatch updated=${row.updated_at} match=${row.match_count}/${expected.match_count} scanned=${row.scanned_count}/${expected.scanned_count} total=${row.total_count}/${expected.total_count}`);
+  }
+  return row;
 }
 
 async function upsertOpenBuyLatestToSupabase(payload) {
@@ -81,6 +113,7 @@ async function upsertOpenBuyLatestToSupabase(payload) {
         const text = await response.text().catch(() => "");
         lastMessage = `HTTP ${response.status} ${text.slice(0, 240)}`.trim();
       } else {
+        await verifyOpenBuySupabaseReadback(baseUrl, body);
         writeSupabaseStatus(true, {
           table: SUPABASE_OPEN_BUY_TABLE,
           updatedAt: body.updated_at,
@@ -88,8 +121,9 @@ async function upsertOpenBuyLatestToSupabase(payload) {
           scannedCount: body.scanned_count,
           totalCount: body.total_count,
           attempt,
+          readbackVerified: true,
         });
-        console.log(`open-buy supabase upsert ok: matches ${body.match_count}, scanned ${body.scanned_count}/${body.total_count}`);
+        console.log(`open-buy supabase upsert/readback ok: matches ${body.match_count}, scanned ${body.scanned_count}/${body.total_count}`);
         return true;
       }
     } catch (error) {
@@ -297,10 +331,11 @@ async function main() {
   const backup = readJson(BACKUP_FILE, { ok: true, matches: [] });
   const currentMatches = new Map();
   const scanned = new Set();
+  const failedCodes = new Set();
   let scannedThisRun = 0;
   const chunksToRun = Math.ceil(codes.length / BATCH_SIZE);
 
-  function buildOutput(completedChunks, complete) {
+  function buildOutput(completedChunks, complete, statusOverride = null) {
     const matches = [...currentMatches.values()]
       .sort((a, b) => (b.score || 0) - (a.score || 0) || (b.percent || 0) - (a.percent || 0))
       .slice(0, 200);
@@ -332,6 +367,39 @@ async function main() {
     await upsertOpenBuyLatestToSupabase(output);
   }
 
+  function mergePayloadMatches(payload) {
+    (payload.matches || []).forEach((item) => {
+      const base = universe.find((stock) => stock.code === item.code) || {};
+      currentMatches.set(item.code, { ...base, ...item, name: base.name || item.name || item.code });
+    });
+  }
+
+  async function scanCodesWithFallback(chunkCodes, label, completedChunks, depth = 0) {
+    try {
+      const payload = await runHandlerWithRetry(chunkCodes, label);
+      chunkCodes.forEach((code) => {
+        scanned.add(code);
+        failedCodes.delete(code);
+      });
+      scannedThisRun += chunkCodes.length;
+      mergePayloadMatches(payload);
+      return payload.matches || [];
+    } catch (error) {
+      console.warn(`${label} failed after retries: ${error.message}`);
+      if (chunkCodes.length <= 1) {
+        failedCodes.add(chunkCodes[0]);
+        return [];
+      }
+      const midpoint = Math.ceil(chunkCodes.length / 2);
+      const left = chunkCodes.slice(0, midpoint);
+      const right = chunkCodes.slice(midpoint);
+      console.log(`${label} splitting failed chunk into ${left.length}+${right.length}`);
+      const leftMatches = await scanCodesWithFallback(left, `${label} retry-a${depth + 1}`, completedChunks, depth + 1);
+      const rightMatches = await scanCodesWithFallback(right, `${label} retry-b${depth + 1}`, completedChunks, depth + 1);
+      return [...leftMatches, ...rightMatches];
+    }
+  }
+
   console.log(`open-buy cache start: full market scan, ${codes.length} codes, ${chunksToRun} chunks in one run`);
   let lastPublishedCount = 0;
   for (let chunk = 0; chunk < chunksToRun; chunk++) {
@@ -339,14 +407,8 @@ async function main() {
     const chunkCodes = codes.slice(start, start + BATCH_SIZE);
     const label = `open-buy chunk ${chunk + 1}/${chunksToRun} (${chunkCodes[0]}-${chunkCodes[chunkCodes.length - 1]})`;
     console.log(`${label} start`);
-    const payload = await runHandlerWithRetry(chunkCodes, label);
-    chunkCodes.forEach((code) => scanned.add(code));
-    (payload.matches || []).forEach((item) => {
-      const base = universe.find((stock) => stock.code === item.code) || {};
-      currentMatches.set(item.code, { ...base, ...item, name: base.name || item.name || item.code });
-    });
-    scannedThisRun += chunkCodes.length;
-    console.log(`${label} done: matches ${(payload.matches || []).length}`);
+    const matches = await scanCodesWithFallback(chunkCodes, label, chunk + 1);
+    console.log(`${label} done: matches ${matches.length}, failed so far ${failedCodes.size}`);
     if (currentMatches.size > lastPublishedCount) {
       const partialOutput = buildOutput(chunk + 1, false);
       await publishOutput(partialOutput);
@@ -355,8 +417,10 @@ async function main() {
     }
   }
 
-  if (scanned.size !== codes.length || scannedThisRun !== codes.length) {
-    throw new Error(`Open-buy full scan incomplete: scanned ${scanned.size}/${codes.length}`);
+  if (failedCodes.size || scanned.size !== codes.length || scannedThisRun !== codes.length) {
+    const incompleteOutput = buildOutput(chunksToRun, false, "incomplete");
+    await publishOutput(incompleteOutput, { backupOnMatches: true });
+    throw new Error(`Open-buy full scan incomplete: scanned ${scanned.size}/${codes.length}, failed ${failedCodes.size}`);
   }
 
   const output = buildOutput(chunksToRun, true);

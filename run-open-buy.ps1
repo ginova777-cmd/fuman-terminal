@@ -16,7 +16,7 @@ $log = "C:\fuman-runtime\logs\open-buy-$(Get-Date -Format yyyyMMdd-HHmmss).log"
 Invoke-FumanWeekdayGuard -Label "Open buy full scan" -LogPath $log
 
 $env:FULL_SCAN = "1"
-$env:OPEN_BUY_BATCH_SIZE = "48"
+$env:OPEN_BUY_BATCH_SIZE = "64"
 $env:OPEN_BUY_BATCHES_PER_RUN = "999"
 $env:OPEN_BUY_USE_MIS = "0"
 
