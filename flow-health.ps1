@@ -15,10 +15,10 @@ function Write-FumanFlowHealth {
 
   $runtime = Get-FumanRuntimeDir
   $stateDir = Join-Path $runtime "state"
-  New-Item -ItemType Directory -Force -Path $stateDir | Out-Null
-  $path = Join-Path $stateDir "flow-health-latest.json"
   $dataDir = Join-Path $runtime "data"
+  New-Item -ItemType Directory -Force -Path $stateDir | Out-Null
   New-Item -ItemType Directory -Force -Path $dataDir | Out-Null
+  $path = Join-Path $stateDir "flow-health-latest.json"
   $dataPath = Join-Path $dataDir "flow-health-latest.json"
   $payload = @{}
   if (Test-Path -LiteralPath $path) {

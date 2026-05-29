@@ -260,29 +260,35 @@ function Test-VercelCacheVisibility($file) {
 
   $urlPath = ($file -replace "\\", "/")
   $url = "$($baseUrl.TrimEnd('/'))/$urlPath?v=$(Get-Date -Format yyyyMMddHHmmss)"
-  try {
-    Write-Log "=== Vercel visibility check $file $(Get-Date) ==="
-    $response = Invoke-WebRequest -Uri $url -UseBasicParsing -TimeoutSec 30
-    $remoteText = [string]$response.Content
-    $localText = Get-Content -LiteralPath $localPath -Raw
-    $remoteJson = $remoteText | ConvertFrom-Json -ErrorAction Stop
-    $localJson = $localText | ConvertFrom-Json -ErrorAction Stop
-    $sameHash = (Get-TextSha256 $remoteText) -eq (Get-TextSha256 $localText)
-    $remoteCount = if ($null -ne $remoteJson.count) { [int]$remoteJson.count } else { -1 }
-    $localCount = if ($null -ne $localJson.count) { [int]$localJson.count } else { -1 }
-    $sameSummary = (
-      [string]$remoteJson.updatedAt -eq [string]$localJson.updatedAt -and
-      [string]$remoteJson.usedDate -eq [string]$localJson.usedDate -and
-      $remoteCount -eq $localCount
-    )
-    if ($sameHash -or $sameSummary) {
-      Write-Log "VERCEL_VISIBLE_OK file=$file updatedAt=$($remoteJson.updatedAt) usedDate=$($remoteJson.usedDate) count=$remoteCount"
-    } else {
-      Write-Log "VERCEL_VISIBLE_WARN file=$file remote differs from pushed cache localUpdatedAt=$($localJson.updatedAt) remoteUpdatedAt=$($remoteJson.updatedAt) localCount=$localCount remoteCount=$remoteCount"
+  $attempts = if ($env:VERCEL_VISIBLE_ATTEMPTS -match '^\d+$') { [int]$env:VERCEL_VISIBLE_ATTEMPTS } else { 6 }
+  $delaySeconds = if ($env:VERCEL_VISIBLE_RETRY_SECONDS -match '^\d+$') { [int]$env:VERCEL_VISIBLE_RETRY_SECONDS } else { 20 }
+  for ($attempt = 1; $attempt -le $attempts; $attempt++) {
+    try {
+      Write-Log "=== Vercel visibility check $file attempt $attempt/$attempts $(Get-Date) ==="
+      $response = Invoke-WebRequest -Uri $url -UseBasicParsing -TimeoutSec 30
+      $remoteText = [string]$response.Content
+      $localText = Get-Content -LiteralPath $localPath -Raw
+      $remoteJson = $remoteText | ConvertFrom-Json -ErrorAction Stop
+      $localJson = $localText | ConvertFrom-Json -ErrorAction Stop
+      $sameHash = (Get-TextSha256 $remoteText) -eq (Get-TextSha256 $localText)
+      $remoteCount = if ($null -ne $remoteJson.count) { [int]$remoteJson.count } else { -1 }
+      $localCount = if ($null -ne $localJson.count) { [int]$localJson.count } else { -1 }
+      $sameSummary = (
+        [string]$remoteJson.updatedAt -eq [string]$localJson.updatedAt -and
+        [string]$remoteJson.usedDate -eq [string]$localJson.usedDate -and
+        $remoteCount -eq $localCount
+      )
+      if ($sameHash -or $sameSummary) {
+        Write-Log "VERCEL_VISIBLE_OK file=$file updatedAt=$($remoteJson.updatedAt) usedDate=$($remoteJson.usedDate) count=$remoteCount attempt=$attempt"
+        return
+      }
+      Write-Log "VERCEL_VISIBLE_WAIT file=$file remote differs localUpdatedAt=$($localJson.updatedAt) remoteUpdatedAt=$($remoteJson.updatedAt) localCount=$localCount remoteCount=$remoteCount"
+    } catch {
+      Write-Log "VERCEL_VISIBLE_WAIT file=$file check failed: $($_.Exception.Message)"
     }
-  } catch {
-    Write-Log "VERCEL_VISIBLE_WARN file=$file check failed: $($_.Exception.Message)"
+    if ($attempt -lt $attempts) { Start-Sleep -Seconds $delaySeconds }
   }
+  Write-Log "VERCEL_VISIBLE_WARN file=$file not visible after $attempts attempts"
 }
 
 function Get-RocTradeDateAgeDays($tradeDate) {
@@ -370,7 +376,8 @@ try {
       "data\institution-latest.json",
       "data\institution-backup.json",
       "data\warrant-flow-latest.json",
-      "data\warrant-flow-backup.json"
+      "data\warrant-flow-backup.json",
+      "data\flow-health-latest.json"
     )
   } elseif ($Scope -eq "institution") {
     $criticalLatestFiles = @(
@@ -379,7 +386,8 @@ try {
 
     $dataFiles = @(
       "data\institution-latest.json",
-      "data\institution-backup.json"
+      "data\institution-backup.json",
+      "data\flow-health-latest.json"
     )
   } elseif ($Scope -eq "warrant") {
     $criticalLatestFiles = @(
@@ -388,7 +396,8 @@ try {
 
     $dataFiles = @(
       "data\warrant-flow-latest.json",
-      "data\warrant-flow-backup.json"
+      "data\warrant-flow-backup.json",
+      "data\flow-health-latest.json"
     )
   } elseif ($Scope -eq "openBuy") {
     $criticalLatestFiles = @(
@@ -434,6 +443,7 @@ try {
       "data\institution-backup.json",
       "data\warrant-flow-latest.json",
       "data\warrant-flow-backup.json",
+      "data\flow-health-latest.json",
       "data\open-buy-latest.json",
       "data\open-buy-backup.json",
       "data\open-buy-scorecard-source.json",
@@ -573,4 +583,3 @@ try {
 } finally {
   Remove-Item -LiteralPath $lockFile -Force -ErrorAction SilentlyContinue
 }
-
