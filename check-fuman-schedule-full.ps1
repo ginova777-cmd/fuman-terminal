@@ -116,7 +116,38 @@ function Get-LatestFumanLogIssue {
   } | Select-Object -Last 3)
   if (-not $bad.Count) { return $null }
 
-  return "$($latest.Name): " + (($bad -join " | ") -replace "\s+", " ").Trim()
+  $summary = (($bad -join " | ") -replace "\s+", " ").Trim()
+  if ($summary -match '(?i)(could not resolve host|getaddrinfo|timed out|timeout|failed to connect|connection was reset|network is unreachable|cannot lock ref|remote rejected|failed to push some refs)') {
+    return "$($latest.Name): 暫時網路/GitHub同步異常: $summary"
+  }
+  return "$($latest.Name): $summary"
+}
+
+function Get-CacheSyncOutboxStatus {
+  $runtime = $env:FUMAN_RUNTIME_DIR
+  if (-not $runtime) { $runtime = "C:\fuman-runtime" }
+  $outboxRoot = Join-Path $runtime "outbox\cache-sync"
+  if (-not (Test-Path -LiteralPath $outboxRoot)) {
+    return [pscustomobject]@{
+      狀態 = "OK"
+      PendingCount = 0
+      ScopeSummary = ""
+      Oldest = ""
+      Newest = ""
+      路徑 = $outboxRoot
+    }
+  }
+  $snapshots = @(Get-ChildItem -LiteralPath $outboxRoot -Directory -Recurse -ErrorAction SilentlyContinue |
+    Where-Object { Test-Path -LiteralPath (Join-Path $_.FullName "manifest.json") })
+  $scopeGroups = $snapshots | Group-Object { Split-Path $_.Parent.FullName -Leaf }
+  [pscustomobject]@{
+    狀態 = if ($snapshots.Count) { "WARN" } else { "OK" }
+    PendingCount = $snapshots.Count
+    ScopeSummary = (($scopeGroups | ForEach-Object { "$($_.Name):$($_.Count)" }) -join "; ")
+    Oldest = ($snapshots | Sort-Object LastWriteTime | Select-Object -First 1).FullName
+    Newest = ($snapshots | Sort-Object LastWriteTime -Descending | Select-Object -First 1).FullName
+    路徑 = $outboxRoot
+  }
 }
 
 function Get-GoogleSheetsTokenStatus {
@@ -257,4 +288,12 @@ $googleTokenStatus = Get-GoogleSheetsTokenStatus
 $googleTokenStatus | Format-List
 if ($googleTokenStatus.狀態 -ne "OK") {
   Write-Host "Google Sheet OAuth 備援不完整：$($googleTokenStatus.問題)" -ForegroundColor Yellow
+}
+
+Write-Host ""
+Write-Host "==== Cache Sync Outbox 檢查 ====" -ForegroundColor Cyan
+$outboxStatus = Get-CacheSyncOutboxStatus
+$outboxStatus | Format-List
+if ($outboxStatus.狀態 -ne "OK") {
+  Write-Host "仍有 cache sync outbox 待補送；下一次網路正常同步會優先補送。" -ForegroundColor Yellow
 }

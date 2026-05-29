@@ -12,16 +12,19 @@ $syncRepo = "C:\fuman-terminal-sync"
 $repoUrl = "https://github.com/ginova777-cmd/fuman-terminal.git"
 $logDir = Join-Path $sourceRepo "logs"
 $lockFile = Join-Path $sourceRepo "locks\cache-sync.lock"
+$outboxRoot = Join-Path $sourceRepo "outbox\cache-sync"
 $gitExe = "C:\Program Files\Git\cmd\git.exe"
 New-Item -ItemType Directory -Force -Path $logDir | Out-Null
 $log = Join-Path $logDir ("cache-sync-{0}.log" -f (Get-Date -Format "yyyyMMdd-HHmmss"))
+$gitRetryCount = if ($env:CACHE_SYNC_GIT_RETRY_COUNT -match '^\d+$') { [int]$env:CACHE_SYNC_GIT_RETRY_COUNT } else { 5 }
+$gitRetryDelaySeconds = if ($env:CACHE_SYNC_GIT_RETRY_DELAY_SECONDS -match '^\d+$') { [int]$env:CACHE_SYNC_GIT_RETRY_DELAY_SECONDS } else { 45 }
 
 function Write-Log($message) {
   Write-Host $message
   Add-Content -LiteralPath $log -Value $message -Encoding utf8
 }
 
-function Run-Git($description, $arguments, $cwd = $syncRepo) {
+function Invoke-GitRaw($description, $arguments, $cwd = $syncRepo) {
   Write-Log "=== $description $(Get-Date) ==="
   $psi = [System.Diagnostics.ProcessStartInfo]::new()
   $psi.FileName = $gitExe
@@ -46,8 +49,124 @@ function Run-Git($description, $arguments, $cwd = $syncRepo) {
       Write-Log $line
     }
   }
-  if ($process.ExitCode -ne 0) {
-    throw "$description failed with exit code $($process.ExitCode)"
+  [pscustomobject]@{
+    ExitCode = $process.ExitCode
+    Output = (($stdout + $stderr) -replace "\s+", " ").Trim()
+  }
+}
+
+function Test-TransientGitFailure($text) {
+  return ($text -match '(?i)(could not resolve host|getaddrinfo|thread failed to start|timed out|timeout|failed to connect|connection was reset|connection reset|network is unreachable|remote end hung up|TLS|SSL|cannot lock ref|remote rejected|failed to push some refs)')
+}
+
+function Run-Git($description, $arguments, $cwd = $syncRepo) {
+  $result = Invoke-GitRaw $description $arguments $cwd
+  if ($result.ExitCode -ne 0) {
+    throw "$description failed with exit code $($result.ExitCode): $($result.Output)"
+  }
+  return $result
+}
+
+function Run-GitWithRetry($description, $arguments, $cwd = $syncRepo) {
+  $attempt = 1
+  while ($true) {
+    $result = Invoke-GitRaw "$description attempt $attempt/$gitRetryCount" $arguments $cwd
+    if ($result.ExitCode -eq 0) {
+      return $result
+    }
+    $isTransient = Test-TransientGitFailure $result.Output
+    if ((-not $isTransient) -or $attempt -ge $gitRetryCount) {
+      $kind = if ($isTransient) { "transient network/git" } else { "non-transient git" }
+      throw "$description failed after $attempt attempt(s) [$kind] with exit code $($result.ExitCode): $($result.Output)"
+    }
+    Write-Log "Transient GitHub/network failure detected; retrying in $gitRetryDelaySeconds seconds."
+    Start-Sleep -Seconds $gitRetryDelaySeconds
+    $attempt++
+  }
+}
+
+function Get-OutboxScopeDir {
+  Join-Path $outboxRoot $Scope
+}
+
+function Save-OutboxSnapshot($reason, $dataFiles, $localPublishedFiles) {
+  $stamp = Get-Date -Format "yyyyMMdd-HHmmss"
+  $snapshotDir = Join-Path (Get-OutboxScopeDir) $stamp
+  New-Item -ItemType Directory -Force -Path $snapshotDir | Out-Null
+  $savedFiles = New-Object System.Collections.Generic.List[string]
+
+  foreach ($file in $dataFiles) {
+    $source = Join-Path $sourceRepo $file
+    if (Test-Path -LiteralPath $source) {
+      $target = Join-Path $snapshotDir $file
+      New-Item -ItemType Directory -Force -Path (Split-Path $target -Parent) | Out-Null
+      Copy-Item -LiteralPath $source -Destination $target -Force
+      $savedFiles.Add($file) | Out-Null
+    }
+  }
+
+  foreach ($file in $localPublishedFiles) {
+    $source = Join-Path $codeRepo $file
+    if (Test-Path -LiteralPath $source) {
+      $target = Join-Path $snapshotDir $file
+      New-Item -ItemType Directory -Force -Path (Split-Path $target -Parent) | Out-Null
+      Copy-Item -LiteralPath $source -Destination $target -Force
+      $savedFiles.Add($file) | Out-Null
+    }
+  }
+
+  $manifest = [pscustomobject]@{
+    createdAt = (Get-Date).ToString("o")
+    scope = $Scope
+    reason = $reason
+    files = @($savedFiles)
+  }
+  $manifest | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $snapshotDir "manifest.json") -Encoding utf8
+  Write-Log "OUTBOX_SAVED scope=$Scope path=$snapshotDir files=$($savedFiles.Count) reason=$reason"
+}
+
+function Replay-OutboxSnapshots {
+  $scopeDir = Get-OutboxScopeDir
+  if (-not (Test-Path -LiteralPath $scopeDir)) { return }
+  $snapshots = @(Get-ChildItem -LiteralPath $scopeDir -Directory -ErrorAction SilentlyContinue | Sort-Object Name)
+  if (-not $snapshots.Count) { return }
+
+  foreach ($snapshot in $snapshots) {
+    $manifestPath = Join-Path $snapshot.FullName "manifest.json"
+    if (-not (Test-Path -LiteralPath $manifestPath)) {
+      Write-Log "Outbox snapshot missing manifest, skipped: $($snapshot.FullName)"
+      continue
+    }
+    $manifest = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
+    $files = @($manifest.files)
+    if (-not $files.Count) {
+      Write-Log "Outbox snapshot has no files, removing: $($snapshot.FullName)"
+      Remove-Item -LiteralPath $snapshot.FullName -Recurse -Force
+      continue
+    }
+
+    Write-Log "OUTBOX_REPLAY_START scope=$Scope path=$($snapshot.FullName) files=$($files.Count)"
+    foreach ($file in $files) {
+      $source = Join-Path $snapshot.FullName $file
+      if (-not (Test-Path -LiteralPath $source)) {
+        Write-Log "Outbox file missing, skipped: $source"
+        continue
+      }
+      Copy-CacheFile $file $source $syncRepo "outbox"
+      Copy-CacheFile $file $source $codeRepo "outbox local"
+    }
+
+    Run-Git "Stage outbox cache files" (@("add", "-f") + $files)
+    $changed = & $gitExe -C $syncRepo diff --cached --name-only -- $files
+    if ($changed) {
+      $outboxStamp = Get-Date -Format "yyyy-MM-dd HH:mm"
+      Run-Git "Commit outbox cache files" @("commit", "-m", "Replay scheduled cache $outboxStamp")
+      Run-GitWithRetry "Push outbox cache commit" @("push", "origin", "main")
+    } else {
+      Write-Log "No outbox changes to sync for $($snapshot.Name)."
+    }
+    Remove-Item -LiteralPath $snapshot.FullName -Recurse -Force
+    Write-Log "OUTBOX_REPLAY_DONE scope=$Scope path=$($snapshot.FullName)"
   }
 }
 
@@ -243,9 +362,16 @@ try {
     Run-Git "Clone clean sync repository" @("clone", $repoUrl, $syncRepo) (Split-Path $syncRepo -Parent)
   }
 
-  Run-Git "Fetch origin main" @("fetch", "origin", "main")
+  try {
+    Run-GitWithRetry "Fetch origin main" @("fetch", "origin", "main")
+  } catch {
+    Save-OutboxSnapshot "fetch failed: $($_.Exception.Message)" $dataFiles $localPublishedFiles
+    throw
+  }
   Run-Git "Reset clean sync repository" @("reset", "--hard", "origin/main")
   Run-Git "Clean generated sync repository files" @("clean", "-fd")
+
+  Replay-OutboxSnapshots
 
   foreach ($file in $dataFiles) {
     $source = Join-Path $sourceRepo $file
@@ -290,10 +416,11 @@ try {
   Run-Git "Commit cache files" @("commit", "-m", "Update scheduled cache $stamp")
 
   try {
-    Run-Git "Push cache commit" @("push", "origin", "main")
+    Run-GitWithRetry "Push cache commit" @("push", "origin", "main")
   } catch {
     Write-Log "Push failed; resetting to latest origin/main, replaying cache files, and retrying once."
-    Run-Git "Fetch origin main after push failure" @("fetch", "origin", "main")
+    Save-OutboxSnapshot "push failed: $($_.Exception.Message)" $dataFiles $localPublishedFiles
+    Run-GitWithRetry "Fetch origin main after push failure" @("fetch", "origin", "main")
     Run-Git "Reset after push failure" @("reset", "--hard", "origin/main")
     foreach ($file in $dataFiles) {
       $source = Join-Path $sourceRepo $file
@@ -316,7 +443,17 @@ try {
     $retryChanged = & $gitExe -C $syncRepo diff --cached --name-only -- ($dataFiles + $localPublishedFiles)
     if ($retryChanged) {
       Run-Git "Commit cache files after retry reset" @("commit", "-m", "Update scheduled cache $stamp retry")
-      Run-Git "Retry push cache commit" @("push", "origin", "main")
+      Run-GitWithRetry "Retry push cache commit" @("push", "origin", "main")
+      $scopeDir = Get-OutboxScopeDir
+      if (Test-Path -LiteralPath $scopeDir) {
+        Get-ChildItem -LiteralPath $scopeDir -Directory -ErrorAction SilentlyContinue |
+          Sort-Object Name -Descending |
+          Select-Object -First 1 |
+          ForEach-Object {
+            Remove-Item -LiteralPath $_.FullName -Recurse -Force
+            Write-Log "OUTBOX_REMOVED_AFTER_RETRY scope=$Scope path=$($_.FullName)"
+          }
+      }
     } else {
       Write-Log "No cache changes after retry reset."
     }
