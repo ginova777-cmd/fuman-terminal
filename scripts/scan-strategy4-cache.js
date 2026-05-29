@@ -309,23 +309,6 @@ async function main() {
     }
   }
 
-  const matches = [...previousMatches.values()]
-    .sort((a, b) => (b.swingScore || b.score || 0) - (a.swingScore || a.score || 0) || (b.percent || 0) - (a.percent || 0))
-    .slice(0, 200);
-  const output = {
-    ok: true,
-    source: "github-actions",
-    priceSource: USE_MIS_QUOTES ? "official-daily-k-plus-mis" : "official-daily-k",
-    updatedAt: new Date().toISOString(),
-    fullScan: FULL_SCAN,
-    cursor,
-    total: codes.length,
-    scannedThisRun,
-    scannedCodes: [...scanned].filter((code) => codes.includes(code)),
-    count: matches.length,
-    matches,
-  };
-
   const output = buildOutput({
     codes,
     scannedThisRun,
