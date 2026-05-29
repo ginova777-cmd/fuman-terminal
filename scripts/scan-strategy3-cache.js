@@ -2,10 +2,10 @@ const fs = require("fs");
 const path = require("path");
 const { fetchMisQuotes } = require("../lib/mis-quotes");
 
-const { ROOT, dataPath } = require("./runtime-paths");
-const OUT_FILE = dataPath("strategy3-latest.json");
-const BACKUP_FILE = dataPath("strategy3-backup.json");
-const SCORECARD_SOURCE_FILE = dataPath("strategy3-scorecard-source.json");
+const ROOT = path.resolve(__dirname, "..");
+const OUT_FILE = path.join(ROOT, "data", "strategy3-latest.json");
+const BACKUP_FILE = path.join(ROOT, "data", "strategy3-backup.json");
+const SCORECARD_SOURCE_FILE = path.join(ROOT, "data", "strategy3-scorecard-source.json");
 const STOCK_URL = process.env.STOCK_UNIVERSE_URL || "https://fuman-terminal.vercel.app/api/stocks";
 const CAPITAL_URLS = [
   "https://mopsfin.twse.com.tw/opendata/t187ap03_L.csv",
@@ -155,6 +155,7 @@ async function fetchUniverse() {
 
 async function fetchIssuedShares() {
   const map = new Map();
+  const warnings = [];
   await Promise.all(CAPITAL_URLS.map(async (url) => {
     try {
       const rows = parseCsv(await fetchText(url));
@@ -163,9 +164,11 @@ async function fetchIssuedShares() {
         const shares = cleanNumber(row["已發行普通股數或TDR原股發行股數"]);
         if (/^\d{4}$/.test(code) && shares > 0) map.set(code, shares);
       });
-    } catch {}
+    } catch (error) {
+      warnings.push(`issued shares fetch failed: ${url} :: ${error.message}`);
+    }
   }));
-  return map;
+  return { map, warnings };
 }
 
 function formatTwseDate(date) {
@@ -197,6 +200,7 @@ function collectVolume(bucket, code, volume) {
 
 async function fetchHistoricalVolumes() {
   const bucket = new Map();
+  const warnings = [];
   for (const date of recentTradingDates()) {
     try {
       const payload = await fetchJson(`https://www.twse.com.tw/rwd/zh/afterTrading/MI_INDEX?date=${formatTwseDate(date)}&type=ALLBUT0999&response=json`, 25000);
@@ -206,7 +210,9 @@ async function fetchHistoricalVolumes() {
       const codeIndex = fields.findIndex((field) => String(field).includes("證券代號"));
       const volumeIndex = fields.findIndex((field) => String(field).includes("成交股數"));
       if (codeIndex >= 0 && volumeIndex >= 0) data.forEach((row) => collectVolume(bucket, normalizeCode(row[codeIndex]), cleanNumber(row[volumeIndex])));
-    } catch {}
+    } catch (error) {
+      warnings.push(`twse volume fetch failed: ${formatTwseDate(date)} :: ${error.message}`);
+    }
     try {
       const payload = await fetchJson(`https://www.tpex.org.tw/web/stock/aftertrading/daily_close_quotes/stk_quote_result.php?l=zh-tw&o=json&d=${encodeURIComponent(formatTpexDate(date))}&s=0,asc,0`, 25000);
       const table = (payload.tables || []).find((item) => (item.data || []).length);
@@ -215,14 +221,16 @@ async function fetchHistoricalVolumes() {
       const codeIndex = fields.findIndex((field) => String(field).includes("代號"));
       const volumeIndex = fields.findIndex((field) => String(field).includes("成交股數"));
       if (codeIndex >= 0 && volumeIndex >= 0) data.forEach((row) => collectVolume(bucket, normalizeCode(row[codeIndex]), cleanNumber(row[volumeIndex])));
-    } catch {}
+    } catch (error) {
+      warnings.push(`tpex volume fetch failed: ${formatTpexDate(date)} :: ${error.message}`);
+    }
   }
   const averages = new Map();
   bucket.forEach((values, code) => {
     const usable = values.slice(0, 5);
     if (usable.length) averages.set(code, usable.reduce((sum, value) => sum + value, 0) / usable.length);
   });
-  return averages;
+  return { map: averages, warnings };
 }
 
 function rankMap(stocks, key) {
@@ -255,15 +263,12 @@ function buildMatches(stocks, issuedSharesMap, volumeAverageMap) {
       Math.min(volumeRatio * 12, 20) -
       heatPenalty
     ), 0, 100);
-    const pass = pct > 2 && pct <= 5 && volumeLots >= 1000 && turnoverRate > 5 && volumeRatio > 1;
+    const pass = pct > 3 && pct <= 5 && volumeLots >= 1000 && turnoverRate > 5 && volumeRatio > 1;
     const reason = pass
       ? `符合固定條件：漲幅 ${pct.toFixed(2)}%、成交量 ${Math.round(volumeLots).toLocaleString("zh-TW")} 張、周轉率 ${turnoverRate.toFixed(2)}%、量比 ${volumeRatio.toFixed(2)}。`
       : "未符合固定隔日沖條件。";
     return {
       ...stock,
-      entryPrice: stock.close,
-      entryTime: stock.quoteTime || "",
-      entryAt: stock.quoteDate && stock.quoteTime ? `${stock.quoteDate} ${stock.quoteTime}` : "",
       valueRank,
       volumeRank,
       volumeLots: Math.round(volumeLots),
@@ -278,7 +283,7 @@ function buildMatches(stocks, issuedSharesMap, volumeAverageMap) {
   })
     .filter((stock) => (
       stock.close >= 10 &&
-      stock.percent > 2 &&
+      stock.percent > 3 &&
       stock.percent <= 5 &&
       stock.volumeLots >= 1000 &&
       stock.turnoverRate > 5 &&
@@ -291,12 +296,19 @@ function buildMatches(stocks, issuedSharesMap, volumeAverageMap) {
 async function main() {
   const backup = readJson(BACKUP_FILE, { ok: true, matches: [] });
   const previousRaw = readJson(OUT_FILE, { ok: true, matches: [] });
-  const [stocks, issuedSharesMap, volumeAverageMap] = await Promise.all([
+  const [stocks, issuedSharesResult, volumeAverageResult] = await Promise.all([
     fetchUniverse(),
     fetchIssuedShares(),
     fetchHistoricalVolumes(),
   ]);
   if (!stocks.length) throw new Error("No stock universe");
+  const issuedSharesMap = issuedSharesResult.map;
+  const volumeAverageMap = volumeAverageResult.map;
+  const sourceWarnings = [
+    ...issuedSharesResult.warnings,
+    ...volumeAverageResult.warnings,
+  ];
+  sourceWarnings.forEach((warning) => console.warn(`strategy3 source warning: ${warning}`));
   const matches = buildMatches(stocks, issuedSharesMap, volumeAverageMap);
   const quoteDate = stocks.find((stock) => stock.quoteDate)?.quoteDate || "";
   const output = {
@@ -306,8 +318,15 @@ async function main() {
     usedDate: quoteDate,
     total: stocks.length,
     count: matches.length,
+    sourceWarnings,
+    sourceHealth: {
+      issuedSharesCount: issuedSharesMap.size,
+      volumeAverageCount: volumeAverageMap.size,
+      warningCount: sourceWarnings.length,
+    },
     matches,
   };
+
   preservePreviousTradingSource((previousRaw.matches || []).length ? previousRaw : backup, output);
 
   fs.mkdirSync(path.dirname(OUT_FILE), { recursive: true });
@@ -333,4 +352,3 @@ main().catch((error) => {
   console.error(error);
   process.exit(1);
 });
-

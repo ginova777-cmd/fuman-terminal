@@ -82,6 +82,81 @@ function Get-ActionText($Actions) {
   return ($items -join " | ")
 }
 
+function Get-LatestFumanLogIssue {
+  param(
+    [Parameter(Mandatory = $true)][string]$TaskName
+  )
+
+  $logDir = "C:\fuman-runtime\logs"
+  if (-not (Test-Path -LiteralPath $logDir)) { return $null }
+
+  $patterns = switch -Wildcard ($TaskName) {
+    "*Strategy3*" { @("strategy3-*.log", "cache-sync-*.log") }
+    "*Strategy4*" { @("strategy4-*.log", "cache-sync-*.log") }
+    "*Scorecard*" { @("scorecard-*.log") }
+    "*Trade Manager*" { @("trade-manager-*.log") }
+    "*即時雷達*" { @("realtime-radar-*.log") }
+    "*Strategy2 Intraday*" { @("strategy2-intraday-*.log") }
+    default { @() }
+  }
+  if (-not $patterns.Count) { return $null }
+
+  $latest = Get-ChildItem -LiteralPath $logDir -File -ErrorAction SilentlyContinue |
+    Where-Object {
+      $name = $_.Name
+      @($patterns | Where-Object { $name -like $_ }).Count -gt 0
+    } |
+    Sort-Object LastWriteTime -Descending |
+    Select-Object -First 1
+  if (-not $latest) { return $null }
+
+  $tail = Get-Content -LiteralPath $latest.FullName -Tail 160 -ErrorAction SilentlyContinue
+  $bad = @($tail | Where-Object {
+    $_ -match '(?i)(failed|threw|rejected|HTTP\s+[45]\d\d|exit code\s+[1-9]|error:|fatal:)'
+  } | Select-Object -Last 3)
+  if (-not $bad.Count) { return $null }
+
+  return "$($latest.Name): " + (($bad -join " | ") -replace "\s+", " ").Trim()
+}
+
+function Get-GoogleSheetsTokenStatus {
+  $runtime = $env:FUMAN_RUNTIME_DIR
+  if (-not $runtime) { $runtime = "C:\fuman-runtime" }
+  $secretDir = $env:GOOGLE_OAUTH_DIR
+  if (-not $secretDir) { $secretDir = Join-Path $runtime "secrets" }
+  $tokenPath = Join-Path $secretDir "google-sheets-token.json"
+  $clientPath = $env:GOOGLE_OAUTH_CLIENT
+  if (-not $clientPath) { $clientPath = Join-Path $secretDir "google-oauth-client.json" }
+
+  $tokenExists = Test-Path -LiteralPath $tokenPath
+  $clientExists = Test-Path -LiteralPath $clientPath
+  $backups = @(Get-ChildItem -LiteralPath $secretDir -Filter "google-sheets-token.backup*.json" -File -ErrorAction SilentlyContinue)
+  $token = $null
+  if ($tokenExists) {
+    try { $token = Get-Content -LiteralPath $tokenPath -Raw | ConvertFrom-Json -ErrorAction Stop } catch {}
+  }
+
+  $hasRefreshToken = [bool]($token -and $token.refresh_token)
+  $hasAccessToken = [bool]($token -and $token.access_token)
+  $ok = $tokenExists -and $clientExists -and $hasRefreshToken -and $backups.Count -gt 0
+  $issues = @()
+  if (-not $clientExists) { $issues += "missing oauth client" }
+  if (-not $tokenExists) { $issues += "missing token" }
+  if ($tokenExists -and -not $hasRefreshToken) { $issues += "token has no refresh_token" }
+  if ($backups.Count -eq 0) { $issues += "no token backup" }
+
+  [pscustomobject]@{
+    狀態 = if ($ok) { "OK" } else { "WARN" }
+    Token = $tokenPath
+    OAuthClient = $clientPath
+    HasAccessToken = $hasAccessToken
+    HasRefreshToken = $hasRefreshToken
+    BackupCount = $backups.Count
+    最新備份 = ($backups | Sort-Object LastWriteTime -Descending | Select-Object -First 1).Name
+    問題 = ($issues -join "; ")
+  }
+}
+
 function Get-ScheduleRows {
   $tasks = Get-ScheduledTask | Where-Object {
     if ($IncludeMatchedSystemTasks) {
@@ -95,6 +170,7 @@ function Get-ScheduleRows {
     $info = Get-ScheduledTaskInfo -TaskName $task.TaskName -TaskPath $task.TaskPath
     $resultText = Get-TaskResultText $info.LastTaskResult $task.State
     $isError = ($task.State -ne "Disabled" -and $info.LastTaskResult -notin @(0, 267009, 267011))
+    $logIssue = Get-LatestFumanLogIssue -TaskName $task.TaskName
     if ($OnlyErrors -and !$isError) { continue }
 
     [pscustomobject]@{
@@ -106,6 +182,7 @@ function Get-ScheduleRows {
       上次結果 = $resultText
       原始結果碼 = $info.LastTaskResult
       錯過次數 = $info.NumberOfMissedRuns
+      最新Log異常 = $logIssue
       工作路徑 = $task.TaskPath
       觸發器 = Get-TriggerText $task.Triggers
       執行指令 = Get-ActionText $task.Actions
@@ -127,7 +204,7 @@ $rows = @(Get-ScheduleRows | Sort-Object 排程)
 Write-Host ""
 Write-Host "==== 摘要表 ====" -ForegroundColor Cyan
 $rows |
-  Select-Object 排程, 中文說明, 狀態, 上次執行, 下次執行, 上次結果, 錯過次數 |
+  Select-Object 排程, 中文說明, 狀態, 上次執行, 下次執行, 上次結果, 錯過次數, 最新Log異常 |
   Format-Table -AutoSize -Wrap
 
 Write-Host ""
@@ -141,8 +218,9 @@ Write-Host "==== 異常提醒 ====" -ForegroundColor Cyan
 $errors = @($rows | Where-Object { $_.狀態 -ne "Disabled" -and $_.原始結果碼 -notin @(0, 267009, 267011) })
 $disabled = @($rows | Where-Object { $_.狀態 -eq "Disabled" })
 $missed = @($rows | Where-Object { $_.錯過次數 -gt 0 })
+$logIssues = @($rows | Where-Object { $_.最新Log異常 })
 
-if ($errors.Count -eq 0 -and $disabled.Count -eq 0 -and $missed.Count -eq 0) {
+if ($errors.Count -eq 0 -and $disabled.Count -eq 0 -and $missed.Count -eq 0 -and $logIssues.Count -eq 0) {
   Write-Host "目前沒有錯誤、停用或錯過次數。" -ForegroundColor Green
 } else {
   if ($errors.Count -gt 0) {
@@ -157,6 +235,10 @@ if ($errors.Count -eq 0 -and $disabled.Count -eq 0 -and $missed.Count -eq 0) {
     Write-Host "有錯過次數的任務：" -ForegroundColor Yellow
     $missed | Select-Object 排程, 錯過次數, 上次執行, 下次執行 | Format-Table -AutoSize -Wrap
   }
+  if ($logIssues.Count -gt 0) {
+    Write-Host "最新 log 疑似異常：" -ForegroundColor Red
+    $logIssues | Select-Object 排程, 上次執行, 最新Log異常 | Format-Table -AutoSize -Wrap
+  }
 }
 
 if ($ExportCsv) {
@@ -167,4 +249,12 @@ if ($ExportCsv) {
   $rows | Export-Csv -LiteralPath $exportPath -NoTypeInformation -Encoding UTF8
   Write-Host ""
   Write-Host "已匯出 CSV：$exportPath" -ForegroundColor Green
+}
+
+Write-Host ""
+Write-Host "==== Google Sheet OAuth 檢查 ====" -ForegroundColor Cyan
+$googleTokenStatus = Get-GoogleSheetsTokenStatus
+$googleTokenStatus | Format-List
+if ($googleTokenStatus.狀態 -ne "OK") {
+  Write-Host "Google Sheet OAuth 備援不完整：$($googleTokenStatus.問題)" -ForegroundColor Yellow
 }

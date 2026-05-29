@@ -21,7 +21,7 @@ function Write-Log($message) {
 function Invoke-CacheSyncWithRetry($scriptPath, $maxAttempts = 3) {
   for ($attempt = 1; $attempt -le $maxAttempts; $attempt++) {
     Write-Log "=== Strategy4 clean cache sync attempt $attempt/$maxAttempts start $(Get-Date) ==="
-    & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $scriptPath *>&1 | Tee-Object -FilePath $log -Append | Out-Null
+    & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $scriptPath -Scope strategy4 *>&1 | Tee-Object -FilePath $log -Append | Out-Null
     $syncExit = $LASTEXITCODE
     if ($syncExit -eq 0) {
       Write-Log "=== Strategy4 clean cache sync attempt $attempt/$maxAttempts succeeded $(Get-Date) ==="

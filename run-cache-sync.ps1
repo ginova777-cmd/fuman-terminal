@@ -1,5 +1,5 @@
 param(
-  [ValidateSet("all", "strategy3")]
+  [ValidateSet("all", "strategy3", "strategy4")]
   [string]$Scope = "all"
 )
 
@@ -181,6 +181,15 @@ try {
       "data\strategy3-latest.json",
       "data\strategy3-backup.json",
       "data\strategy3-scorecard-source.json"
+    )
+  } elseif ($Scope -eq "strategy4") {
+    $criticalLatestFiles = @(
+      "data\strategy4-latest.json"
+    )
+
+    $dataFiles = @(
+      "data\strategy4-latest.json",
+      "data\strategy4-backup.json"
     )
   } else {
     $criticalLatestFiles = @(

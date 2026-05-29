@@ -5,10 +5,6 @@ node_modules/
 .intraday-report-cache/
 .trade-manager-cache/
 logs/
+data/strategy2-intraday-latest.json
 check-fuman.ps1
-run-scorecard.ps1
-run-strategy2-line.ps1
-run-strategy5.ps1
-run-warrant-flow.ps1
-stop-strategy2-line.ps1
 terminal-conflict-backup.js
