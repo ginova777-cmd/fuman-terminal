@@ -1,25 +1,23 @@
-{
-  "warrant": {
-    "scope": "warrant",
-    "status": "ok",
-    "message": "Watchdog verified cache",
-    "updatedAt": "2026-05-29T11:53:10.8809065Z",
-    "detail": {
-      "log": "C:\\fuman-runtime\\logs\\flow-watchdog-warrant-20260529-195310.log",
-      "reason": "ok count=120 updatedAt=05/28/2026 22:00:16",
-      "expectedTime": ""
-    }
-  },
-  "institution": {
-    "scope": "institution",
-    "status": "ok",
-    "message": "Watchdog verified cache",
-    "updatedAt": "2026-05-29T11:53:10.8262631Z",
-    "detail": {
-      "log": "C:\\fuman-runtime\\logs\\flow-watchdog-institution-20260529-195310.log",
-      "reason": "ok count=1894 usedDate=20260528",
-      "expectedTime": ""
-    }
-  },
-  "updatedAt": "2026-05-29T11:53:10.8809712Z"
+﻿{
+    "updatedAt":  "2026-05-29T13:06:20.4308540Z",
+    "warrant":  {
+                    "scope":  "warrant",
+                    "status":  "ok",
+                    "message":  "Watchdog verified cache",
+                    "updatedAt":  "2026-05-29T11:53:10.8809065Z",
+                    "detail":  {
+                                   "log":  "C:\\fuman-runtime\\logs\\flow-watchdog-warrant-20260529-195310.log",
+                                   "reason":  "ok count=120 updatedAt=05/28/2026 22:00:16",
+                                   "expectedTime":  ""
+                               }
+                },
+    "institution":  {
+                        "scope":  "institution",
+                        "status":  "ok",
+                        "message":  "Institution scan and publish completed",
+                        "updatedAt":  "2026-05-29T13:06:20.4221777Z",
+                        "detail":  {
+                                       "log":  "C:\\fuman-runtime\\logs\\institution-20260529-210001.log"
+                                   }
+                    }
 }
