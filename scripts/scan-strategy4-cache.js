@@ -327,9 +327,6 @@ async function main() {
 
   writeStrategy4Output(output, true);
   syncStrategy4Output("complete");
-  if (!output.matches.length && (backup.matches || []).length) {
-    fs.writeFileSync(OUT_FILE, `${JSON.stringify({ ...backup, source: "github-actions-backup-readonly", updatedAt: backup.updatedAt || new Date().toISOString() }, null, 2)}\n`);
-  }
   console.log(`strategy4 cache updated: full market scan scanned ${scannedThisRun}/${codes.length}, matches ${output.count}`);
 }
 
