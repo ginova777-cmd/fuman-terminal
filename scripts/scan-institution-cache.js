@@ -166,8 +166,8 @@ async function main() {
   };
 
   const dataAge = ageInDays(output.usedDate);
-  if (!count) {
-    console.error("institution cache scan returned 0 rows; keeping existing cache files unchanged");
+  if (count < 1000) {
+    console.error(`institution cache scan returned too few rows (${count}); keeping existing cache files unchanged`);
     process.exit(2);
   }
   if (dataAge > 3) {
