@@ -221,6 +221,9 @@ try {
   }
 
   $copiedFiles = New-Object System.Collections.Generic.List[string]
+  $localPublishedFiles = @(
+    "data\strategy2-intraday-latest.json"
+  )
 
   if (-not (Test-Path (Join-Path $syncRepo ".git"))) {
     if (Test-Path $syncRepo) {
@@ -248,15 +251,25 @@ try {
     $copiedFiles.Add($file) | Out-Null
   }
 
+  foreach ($file in $localPublishedFiles) {
+    $source = Join-Path $codeRepo $file
+    if (-not (Test-Path $source)) {
+      Write-Log "Missing local published file, skipped: $source"
+      continue
+    }
+    Copy-CacheFile $file $source $syncRepo "local-published"
+    $copiedFiles.Add($file) | Out-Null
+  }
+
   foreach ($requiredFile in $criticalLatestFiles) {
     if ((Test-Path (Join-Path $sourceRepo $requiredFile)) -and (-not $copiedFiles.Contains($requiredFile))) {
       throw "$requiredFile was not copied; refusing to publish partial latest cache set."
     }
   }
 
-  Run-Git "Stage cache files" (@("add") + $dataFiles)
+  Run-Git "Stage cache files" (@("add", "-f") + $dataFiles + $localPublishedFiles)
 
-  $changed = & $gitExe -C $syncRepo diff --cached --name-only -- $dataFiles
+  $changed = & $gitExe -C $syncRepo diff --cached --name-only -- ($dataFiles + $localPublishedFiles)
   if (-not $changed) {
     Write-Log "No cache changes to sync."
     exit 0
@@ -282,8 +295,14 @@ try {
         Copy-CacheFile $file $source $codeRepo "local retry"
       }
     }
-    Run-Git "Stage cache files after retry reset" (@("add") + $dataFiles)
-    $retryChanged = & $gitExe -C $syncRepo diff --cached --name-only -- $dataFiles
+    foreach ($file in $localPublishedFiles) {
+      $source = Join-Path $codeRepo $file
+      if (Test-Path $source) {
+        Copy-CacheFile $file $source $syncRepo "local-published retry"
+      }
+    }
+    Run-Git "Stage cache files after retry reset" (@("add", "-f") + $dataFiles + $localPublishedFiles)
+    $retryChanged = & $gitExe -C $syncRepo diff --cached --name-only -- ($dataFiles + $localPublishedFiles)
     if ($retryChanged) {
       Run-Git "Commit cache files after retry reset" @("commit", "-m", "Update scheduled cache $stamp retry")
       Run-Git "Retry push cache commit" @("push", "origin", "main")

@@ -142,6 +142,83 @@ function writeJson(file, value) {
   fs.writeFileSync(file, `${JSON.stringify(value, null, 2)}\n`);
 }
 
+function pickStrategy2PublicRecord(record) {
+  const out = {};
+  [
+    "code",
+    "name",
+    "date",
+    "timestamp",
+    "entryAt",
+    "firstAAt",
+    "firstBAt",
+    "stateId",
+    "entryPrice",
+    "observedPrice",
+    "close",
+    "observedHigh",
+    "observedHighAt",
+    "percent",
+    "volume",
+    "tradeVolume",
+    "deltaVolume",
+    "score",
+    "strategy",
+    "reason",
+    "stateReason",
+    "supportPrice",
+    "ma35",
+    "ma35Prev",
+    "aboveMa35",
+    "ma35TrendUp",
+    "ma35Source",
+    "ma35At",
+    "ma35Symbol",
+    "ma35Attempts",
+  ].forEach((key) => {
+    const value = record?.[key];
+    if (value !== undefined && value !== null && value !== "") out[key] = value;
+  });
+  return out;
+}
+
+function strategy2RecordSortTime(record) {
+  return String(record?.timestamp || record?.entryAt || record?.firstAAt || record?.firstBAt || "");
+}
+
+function buildStrategy2PublicReport(report) {
+  const latestByCode = new Map();
+  (report.records || []).forEach((record) => {
+    const code = String(record?.code || "");
+    if (!code) return;
+    const current = latestByCode.get(code);
+    if (!current || strategy2RecordSortTime(record).localeCompare(strategy2RecordSortTime(current)) >= 0) {
+      latestByCode.set(code, record);
+    }
+  });
+  const records = [...latestByCode.values()]
+    .sort((a, b) => strategy2RecordSortTime(b).localeCompare(strategy2RecordSortTime(a)) || String(a.code).localeCompare(String(b.code)))
+    .map(pickStrategy2PublicRecord);
+  return {
+    source: report.source || "strategy2-09-to-1330-patrol",
+    profile: "strategy2-public-slim",
+    date: report.date || "",
+    updatedAt: report.updatedAt || new Date().toISOString(),
+    realtime: report.realtime || {},
+    records,
+    events: report.events || [],
+    entryCount: report.entryCount || 0,
+    aCount: report.aCount || report.entryCount || 0,
+    bOnlyCount: report.bOnlyCount || 0,
+    slim: {
+      generatedAt: new Date().toISOString(),
+      sourceRecords: (report.records || []).length,
+      records: records.length,
+      events: (report.events || []).length,
+    },
+  };
+}
+
 function shouldWriteStrategy2History(file) {
   if (STRATEGY2_HISTORY_WRITE_INTERVAL_MS <= 0) return true;
   try {
@@ -153,13 +230,13 @@ function shouldWriteStrategy2History(file) {
 }
 
 function publishStaticDataJson(name, value) {
-  if (name === "strategy2-intraday-latest.json") return;
+  const payload = name === "strategy2-intraday-latest.json" ? buildStrategy2PublicReport(value) : value;
   const targets = [repoPath("data", name)];
   const syncRoot = process.env.FUMAN_SYNC_DIR || "C:\\fuman-terminal-sync";
   if (fs.existsSync(syncRoot)) targets.push(path.join(syncRoot, "data", name));
   [...new Set(targets.map((file) => path.resolve(file)))].forEach((file) => {
     if (file === path.resolve(dataPath(name))) return;
-    writeJson(file, value);
+    writeJson(file, payload);
   });
 }
 
