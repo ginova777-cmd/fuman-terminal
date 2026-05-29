@@ -22,6 +22,8 @@ $log = "C:\fuman-runtime\logs\trade-manager-report-$(Get-Date -Format yyyyMMdd-H
 
 "=== Trade manager settlement report start $(Get-Date) ===" | Out-File $log -Encoding utf8
 "Trade manager notifications disabled; Google Sheet upload only." >> $log
+. "C:\fuman-terminal\schedule-guard.ps1"
+Invoke-FumanWeekdayGuard -Label "Trade manager settlement report" -LogPath $log
 & $nodeExe "scripts\send-trade-manager-report.js" >> $log 2>&1
 $exitCode = $LASTEXITCODE
 if ($exitCode -ne 0) {

@@ -12,6 +12,8 @@ $env:NODE_OPTIONS = "--use-system-ca"
 New-Item -ItemType Directory -Force -Path "C:\fuman-runtime\logs" | Out-Null
 $log = "C:\fuman-runtime\logs\open-buy-$(Get-Date -Format yyyyMMdd-HHmmss).log"
 "=== Open buy full scan start $(Get-Date) ===" | Out-File $log -Encoding utf8
+. "C:\fuman-terminal\schedule-guard.ps1"
+Invoke-FumanWeekdayGuard -Label "Open buy full scan" -LogPath $log
 
 $env:FULL_SCAN = "1"
 $env:OPEN_BUY_BATCH_SIZE = "9999"

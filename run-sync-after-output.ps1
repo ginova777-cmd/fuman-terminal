@@ -11,7 +11,7 @@ $syncScript = "C:\fuman-terminal\run-cache-sync.ps1"
 function Write-SyncLog($message) {
   $line = "[$(Get-Date)] $message"
   if ($LogPath) {
-    $line >> $LogPath
+    Add-Content -LiteralPath $LogPath -Value $line -Encoding utf8
   } else {
     Write-Host $line
   }

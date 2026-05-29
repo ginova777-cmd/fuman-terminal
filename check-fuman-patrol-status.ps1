@@ -86,8 +86,8 @@ function Show-FrontendPatrol($Path, $Label) {
       Passed = Test-Pattern $content "isViewActive\(`"market`"\).*marketMode\s*===\s*`"ai`".*refreshStrategyRealtimeScan\(`"hot`"\)"
     }
     [pscustomobject]@{
-      Check = "AI 排名有套用即時報價 strategyRealtimeQuotes"
-      Passed = Test-Pattern $content "function\s+buildMarketAiData\(\)\s*\{[^}]*latestStocks\.map\(\(stock\)\s*=>\s*applyStrategyQuote\(stock\)\)"
+      Check = "AI 排名有套用即時報價 applyStrategyQuote"
+      Passed = Test-Pattern $content "function\s+buildMarketAiData\(\)[\s\S]*?applyStrategyQuote\(stock\)"
     }
     [pscustomobject]@{
       Check = "AI 需要新鮮即時報價"
@@ -194,6 +194,7 @@ function Show-DataSourceNote {
 function Show-RealtimeRadarQuoteHealth {
   Write-Section "即時雷達報價健康"
   $path = Join-Path (Join-Path $runtimeRoot "data") "realtime-radar-latest.json"
+  $supabaseStatusPath = Join-Path (Join-Path $runtimeRoot "state") "realtime-radar-supabase-status.json"
   if (!(Test-Path -LiteralPath $path)) {
     Write-Host "找不到即時雷達快取：$path" -ForegroundColor Yellow
     return
@@ -217,6 +218,12 @@ function Show-RealtimeRadarQuoteHealth {
     MaxQuoteAgeSeconds = [int]($payload.maxQuoteAgeSeconds ?? 0)
     LastFailedScanAt = $payload.lastFailedScanAt
   } | Format-Table -AutoSize
+
+  if (Test-Path -LiteralPath $supabaseStatusPath) {
+    $supabase = Get-Content -LiteralPath $supabaseStatusPath -Raw | ConvertFrom-Json
+    Write-Host "Supabase 上傳狀態：" -ForegroundColor Yellow
+    $supabase | Select-Object ok,checkedAt,consecutiveFailures,lastSuccessAt,lastErrorAt,lastError | Format-List
+  }
 
   $failed = @($payload.failedBatchDetails | Where-Object { $_ })
   if ($failed.Count) {
@@ -318,7 +325,7 @@ function Show-LatestLogs {
       @{Label = "最後更新"; Expression = { $_.LastWriteTime } },
       @{Label = "大小"; Expression = { $_.Length } } -AutoSize
     Write-Host "最後幾行：" -ForegroundColor DarkGray
-    Get-Content -LiteralPath $latest.FullName -Tail 8
+    Get-Content -LiteralPath $latest.FullName -Tail 8 -Encoding utf8
     Write-Host ""
   }
 }

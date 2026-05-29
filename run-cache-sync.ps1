@@ -17,7 +17,8 @@ New-Item -ItemType Directory -Force -Path $logDir | Out-Null
 $log = Join-Path $logDir ("cache-sync-{0}.log" -f (Get-Date -Format "yyyyMMdd-HHmmss"))
 
 function Write-Log($message) {
-  $message | Tee-Object -FilePath $log -Append
+  Write-Host $message
+  Add-Content -LiteralPath $log -Value $message -Encoding utf8
 }
 
 function Run-Git($description, $arguments, $cwd = $syncRepo) {

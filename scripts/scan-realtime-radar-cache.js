@@ -2,8 +2,10 @@ const fs = require("fs");
 const path = require("path");
 const { cleanNumber, isIntradayTradable } = require("./intraday-radar-rules");
 
-const { ROOT, dataPath } = require("./runtime-paths");
+const { ROOT, dataPath, statePath } = require("./runtime-paths");
 const OUT_FILE = dataPath("realtime-radar-latest.json");
+const FAILED_QUEUE_FILE = statePath("realtime-radar-failed-batches.json");
+const SUPABASE_STATUS_FILE = statePath("realtime-radar-supabase-status.json");
 const SCORECARD_FILE = dataPath("realtime-radar-scorecard-latest.json");
 const SCORECARD_HISTORY_DIR = dataPath("realtime-radar-scorecard-history");
 const BASE_URL = process.env.FUMAN_BASE_URL || "https://fuman-terminal.vercel.app";
@@ -21,6 +23,77 @@ function writeJson(file, value) {
 function readJson(file, fallback) {
   try { return JSON.parse(fs.readFileSync(file, "utf8")); } catch { return fallback; }
 }
+
+function normalizeDeferredBatch(batch = {}, reason = "failed_batch") {
+  const codes = (batch.codes || []).map((code) => String(code || "")).filter(Boolean);
+  return {
+    reason: batch.reason || reason,
+    batchIndex: batch.batchIndex || "",
+    startCode: batch.startCode || codes[0] || "",
+    endCode: batch.endCode || codes.at(-1) || "",
+    count: batch.count || codes.length,
+    codes,
+    error: String(batch.error || "").slice(0, 240),
+    failedAt: batch.failedAt || new Date().toISOString(),
+  };
+}
+
+function readFailedBatchQueue() {
+  const payload = readJson(FAILED_QUEUE_FILE, { batches: [] });
+  return Array.isArray(payload?.batches) ? payload.batches : [];
+}
+
+function writeFailedBatchQueue(batches = []) {
+  const byKey = new Map();
+  for (const batch of batches) {
+    const normalized = normalizeDeferredBatch(batch, batch.reason || "failed_batch");
+    if (!normalized.codes.length) continue;
+    const key = normalized.codes.join(",");
+    byKey.set(key, normalized);
+  }
+  const queue = [...byKey.values()].slice(0, 60);
+  writeJson(FAILED_QUEUE_FILE, {
+    updatedAt: new Date().toISOString(),
+    count: queue.length,
+    batches: queue,
+  });
+}
+
+function hydrateQueuedBatches(queuedBatches = [], stocks = []) {
+  const stockByCode = new Map(stocks.map((stock) => [String(stock.code || ""), stock]));
+  return queuedBatches
+    .map((batch) => {
+      const codes = (batch.codes || []).map((code) => String(code || "")).filter(Boolean);
+      const batchStocks = codes.map((code) => stockByCode.get(code)).filter(Boolean);
+      return { ...batch, codes, stocks: batchStocks };
+    })
+    .filter((batch) => batch.codes.length && batch.stocks.length);
+}
+
+function updateSupabaseUploadStatus(ok, error = "") {
+  const previous = readJson(SUPABASE_STATUS_FILE, { consecutiveFailures: 0 });
+  const payload = {
+    ok,
+    checkedAt: new Date().toISOString(),
+    consecutiveFailures: ok ? 0 : Number(previous.consecutiveFailures || 0) + 1,
+    lastSuccessAt: ok ? new Date().toISOString() : previous.lastSuccessAt || "",
+    lastErrorAt: ok ? previous.lastErrorAt || "" : new Date().toISOString(),
+    lastError: ok ? "" : String(error || "").slice(0, 500),
+  };
+  writeJson(SUPABASE_STATUS_FILE, payload);
+  return payload;
+}
+
+async function safeUploadRealtimeRadarPayload(payload) {
+  try {
+    const uploaded = await uploadRealtimeRadarPayload(payload);
+    return updateSupabaseUploadStatus(uploaded !== false, uploaded === false ? "Supabase credentials missing; upload skipped." : "");
+  } catch (error) {
+    console.log(`realtime radar supabase upload failed: ${error.message}`);
+    return updateSupabaseUploadStatus(false, error.message);
+  }
+}
+
 
 async function uploadRealtimeRadarPayload(payload) {
   if (!SUPABASE_URL || !SUPABASE_KEY) return false;
@@ -235,6 +308,7 @@ function applyRealtimeQuotes(stocks, quotes) {
 
 async function rescanRealtimeBatches(failedBatches = []) {
   const quotes = new Map();
+  const stillFailedBatches = [];
   let recoveredBatches = 0;
   for (const batch of failedBatches) {
     const codes = batch.codes || [];
@@ -245,10 +319,11 @@ async function rescanRealtimeBatches(failedBatches = []) {
       (payload.quotes || []).forEach((quote) => quotes.set(quote.code, quote));
       recoveredBatches += 1;
     } catch (error) {
+      stillFailedBatches.push(normalizeDeferredBatch({ ...batch, error: error.message }, batch.reason || "retry_failed"));
       console.log(`realtime deferred batch failed ${codes[0]}-${codes.at(-1)}: ${error.message}`);
     }
   }
-  return { quotes, recoveredBatches };
+  return { quotes, recoveredBatches, failedBatches: stillFailedBatches };
 }
 
 function buildFailedBatchDetails(failedBatches = []) {
@@ -391,7 +466,8 @@ async function main() {
       shortCount: 0,
     };
     writeJson(OUT_FILE, payload);
-    await uploadRealtimeRadarPayload(payload);
+    await safeUploadRealtimeRadarPayload(payload);
+    writeFailedBatchQueue([]);
     console.log(`realtime radar skipped outside market time ${timestamp}`);
     return;
   }
@@ -447,11 +523,13 @@ async function main() {
     }
   }
   writeJson(OUT_FILE, payload);
-  if (payload.status !== "degraded_keepalive") updateRealtimeRadarScorecard(payload);
-  await uploadRealtimeRadarPayload(payload);
+  if (payload.status !== "degraded_keepalive" && typeof updateRealtimeRadarScorecard === "function") updateRealtimeRadarScorecard(payload);
+  const supabaseUpload = await safeUploadRealtimeRadarPayload(payload);
+  payload = { ...payload, supabaseUpload };
+  writeJson(OUT_FILE, payload);
   console.log(`realtime radar ${timestamp}: rows ${payload.rows.length} status ${payload.status} failed ${realtime.failedBatches.length}/${realtime.totalBatches}`);
 
-  const deferredBatches = [...realtime.failedBatches, ...chunkStocks(staleStocks)];
+  const deferredBatches = [...queuedBatches, ...realtime.failedBatches, ...chunkStocks(staleStocks).map((batch) => ({ ...batch, reason: "stale_quote" }))];
   if (deferredBatches.length) {
     const retry = await rescanRealtimeBatches(deferredBatches);
     if (retry.quotes.size) {
@@ -473,7 +551,7 @@ async function main() {
           staleRescanCount: staleStocks.length,
         };
         writeJson(OUT_FILE, patchedPayload);
-        await uploadRealtimeRadarPayload(patchedPayload);
+        await safeUploadRealtimeRadarPayload(patchedPayload);
         console.log(`realtime radar ${timestamp}: deferred rescan merged rows ${mergedRows.length} recovered ${retry.recoveredBatches}/${deferredBatches.length}`);
       }
     }

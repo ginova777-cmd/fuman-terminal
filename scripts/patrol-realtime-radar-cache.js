@@ -9,6 +9,7 @@ const MARKET_END_MINUTES = 13 * 60 + 30;
 const STATE_DIR = process.env.FUMAN_STATE_DIR || path.resolve(__dirname, "..", "state");
 const LOCK_FILE = process.env.REALTIME_RADAR_PATROL_LOCK_FILE || path.join(STATE_DIR, "realtime-radar-patrol.lock");
 const LOCK_MAX_AGE_MS = Number(process.env.REALTIME_RADAR_PATROL_LOCK_MAX_AGE_MS || 8 * 60 * 60 * 1000);
+const LOCK_HEARTBEAT_MAX_AGE_MS = Number(process.env.REALTIME_RADAR_PATROL_HEARTBEAT_MAX_AGE_MS || 2 * 60 * 1000);
 
 function isPidAlive(pid) {
   if (!Number.isInteger(pid) || pid <= 0 || pid === process.pid) return false;
@@ -40,6 +41,7 @@ function acquirePatrolLock() {
     token,
     startedAt: new Date().toISOString(),
     script: path.basename(__filename),
+    heartbeatAt: new Date().toISOString(),
   };
 
   for (let attempt = 0; attempt < 2; attempt += 1) {
@@ -54,8 +56,10 @@ function acquirePatrolLock() {
       const current = readLockFile();
       const currentPid = Number(current?.pid || 0);
       const startedAt = Date.parse(current?.startedAt || "");
+      const heartbeatAt = Date.parse(current?.heartbeatAt || current?.startedAt || "");
       const tooOld = Number.isFinite(startedAt) && Date.now() - startedAt > LOCK_MAX_AGE_MS;
-      if (isPidAlive(currentPid) && !tooOld) {
+      const heartbeatStale = !Number.isFinite(heartbeatAt) || Date.now() - heartbeatAt > LOCK_HEARTBEAT_MAX_AGE_MS;
+      if (isPidAlive(currentPid) && !tooOld && !heartbeatStale) {
         console.log(`realtime radar patrol already running pid ${currentPid}; exiting`);
         return null;
       }
@@ -74,6 +78,15 @@ function releasePatrolLock(lock) {
     console.log("realtime radar patrol lock released");
   }
 }
+
+function touchPatrolLock(lock) {
+  if (!lock?.token) return;
+  const current = readLockFile();
+  if (current?.token !== lock.token) return;
+  const next = { ...current, heartbeatAt: new Date().toISOString() };
+  fs.writeFileSync(LOCK_FILE, `${JSON.stringify(next, null, 2)}\n`);
+}
+
 
 function taipeiParts(date = new Date()) {
   const parts = new Intl.DateTimeFormat("en-CA", {
@@ -126,16 +139,26 @@ async function main() {
   }
 
   if (!isMarketTime()) {
-    if (runScan()) successCount += 1;
-    else failureCount += 1;
+    touchPatrolLock(patrolLock);
+    if (runScan()) {
+      successCount += 1;
+    } else {
+      failureCount += 1;
+    }
+    touchPatrolLock(patrolLock);
     console.log(`realtime radar patrol single run: success ${successCount}, failure ${failureCount}`);
     if (!successCount) process.exit(1);
     return;
   }
 
   while (isMarketTime()) {
-    if (runScan()) successCount += 1;
-    else failureCount += 1;
+    touchPatrolLock(patrolLock);
+    if (runScan()) {
+      successCount += 1;
+    } else {
+      failureCount += 1;
+    }
+    touchPatrolLock(patrolLock);
     await sleep(INTERVAL_MS);
   }
 
