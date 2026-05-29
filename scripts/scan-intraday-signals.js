@@ -52,6 +52,7 @@ let fugleMa35Failures = 0;
 let yahooMa35BlockedReason = "";
 let fugleMa35BlockedReason = "";
 let twelveDataBlockedReason = "";
+const yahooMa35NotFoundSymbols = new Set();
 
 function disableMa35Provider(provider, reason) {
   if (provider === "yahoo" && !yahooMa35BlockedReason) {
@@ -1204,6 +1205,7 @@ async function fetchYahooIntradaySma35(code, scanTimestamp) {
   if (!targetMinute || !targetDate) return null;
   for (const suffix of ["TW", "TWO"]) {
     const symbol = `${code}.${suffix}`;
+    if (yahooMa35NotFoundSymbols.has(symbol)) continue;
     const url = `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}?interval=1m&range=1d`;
     try {
       const payload = await fetchJson(url, 20000);
@@ -1232,7 +1234,12 @@ async function fetchYahooIntradaySma35(code, scanTimestamp) {
         };
       }
     } catch (error) {
-      console.log(`sma35 1m failed ${symbol}: ${error.message}`);
+      if (/HTTP 404/.test(error.message || "")) {
+        yahooMa35NotFoundSymbols.add(symbol);
+        console.log(`sma35 1m unavailable ${symbol}: HTTP 404; fallback providers will be used`);
+      } else {
+        console.log(`sma35 1m failed ${symbol}: ${error.message}`);
+      }
     }
   }
   return null;

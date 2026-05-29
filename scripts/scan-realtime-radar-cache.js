@@ -530,6 +530,8 @@ async function main() {
         .sort((a, b) => b.score - a.score || b.value - a.value)
         .slice(0, 80);
       if (mergedRows.length > payload.rows.length) {
+        const retryFreshCodes = new Set(retryStocks.map((stock) => String(stock.code || "")).filter(Boolean));
+        const remainingStaleStocks = staleStocks.filter((stock) => !retryFreshCodes.has(String(stock.code || "")));
         const patchedPayload = {
           ...payload,
           status: "ok_after_deferred_rescan",
@@ -538,6 +540,8 @@ async function main() {
           shortCount: mergedRows.filter((row) => row.side === "short").length,
           recoveredBatchCount: retry.recoveredBatches,
           staleRescanCount: staleStocks.length,
+          staleQuoteCount: remainingStaleStocks.length,
+          staleQuoteDetails: buildStaleQuoteDetails(remainingStaleStocks, timestamp),
         };
         writeJson(OUT_FILE, patchedPayload);
         await safeUploadRealtimeRadarPayload(patchedPayload);
@@ -551,5 +555,6 @@ main().catch((error) => {
   console.error(error);
   process.exit(1);
 });
+
 
 
