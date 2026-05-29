@@ -23,6 +23,7 @@ const GOOGLE_SHEET_DONE_DIR = path.join(GOOGLE_SHEET_QUEUE_DIR, "done");
 const GOOGLE_SHEET_STATUS_FILE = path.join(STATE_DIR, "google-sheet-upload-status.json");
 const GOOGLE_SHEET_ALERT_THRESHOLD = Math.max(1, Number(process.env.GOOGLE_SHEET_ALERT_THRESHOLD || 2));
 const GOOGLE_SHEET_ALERT_COOLDOWN_MS = Math.max(0, Number(process.env.GOOGLE_SHEET_ALERT_COOLDOWN_MS || 15 * 60 * 1000));
+const RADAR_SHEET_TIME_BUCKET_LIMIT = Math.max(0, Number(process.env.RADAR_SHEET_TIME_BUCKET_LIMIT || 500));
 const STRATEGY5_SCORECARD_FILE = path.join(DATA_DIR, "strategy5-scorecard-latest.json");
 const STRATEGY5_SCORECARD_HISTORY_DIR = path.join(DATA_DIR, "strategy5-scorecard-history");
 const STRATEGY5_TRACK_FILE = path.join(CACHE_DIR, "intraday", "strategy5-scorecard-trades.json");
@@ -1245,17 +1246,37 @@ function realtimeRadarRows(radarCsv, report, dateText) {
     highestPrice: indexOf("exitPrice"),
     pnl: indexOf("pnl"),
   };
+  const mappedRows = radarCsv.slice(1).map((row) => ({
+    date: row[idx.date] ?? "",
+    code: row[idx.code] ?? "",
+    name: row[idx.name] ?? "",
+    eventAt: row[idx.eventAt] ?? "",
+    entryPrice: fmtPrice(row[idx.entryPrice]),
+    highestPrice: fmtPrice(row[idx.highestPrice]),
+    pnl: Number(row[idx.pnl] ?? 0),
+  }));
+  const uniqueByCode = new Map();
+  for (const row of mappedRows) {
+    const current = uniqueByCode.get(row.code);
+    if (!current || row.pnl > current.pnl || (row.pnl === current.pnl && String(row.eventAt).localeCompare(String(current.eventAt)) < 0)) {
+      uniqueByCode.set(row.code, row);
+    }
+  }
+  const uniqueRows = [...uniqueByCode.values()]
+    .sort((a, b) => b.pnl - a.pnl || String(a.eventAt).localeCompare(String(b.eventAt)) || String(a.code).localeCompare(String(b.code)));
+  const timeBucketRows = mappedRows
+    .sort((a, b) => String(a.eventAt).localeCompare(String(b.eventAt)) || b.pnl - a.pnl || String(a.code).localeCompare(String(b.code)))
+    .slice(0, RADAR_SHEET_TIME_BUCKET_LIMIT);
+  const uniqueTable = [
+    ["股票去重摘要"],
+    ["date", "code", "name", "最佳eventAt", "實際進場價", "盤中最高價", "最佳損益"],
+    ...uniqueRows.map((row) => [row.date, row.code, row.name, row.eventAt, row.entryPrice, row.highestPrice, row.pnl]),
+  ];
   const radarRows = [
+    [""],
+    [`時間桶明細（前 ${RADAR_SHEET_TIME_BUCKET_LIMIT} 筆；完整資料保留 CSV/JSON）`],
     ["date", "code", "name", "eventAt", "實際進場價", "盤中最高價", "損益"],
-    ...radarCsv.slice(1).map((row) => [
-      row[idx.date] ?? "",
-      row[idx.code] ?? "",
-      row[idx.name] ?? "",
-      row[idx.eventAt] ?? "",
-      fmtPrice(row[idx.entryPrice]),
-      fmtPrice(row[idx.highestPrice]),
-      row[idx.pnl] ?? "",
-    ]),
+    ...timeBucketRows.map((row) => [row.date, row.code, row.name, row.eventAt, row.entryPrice, row.highestPrice, row.pnl]),
   ];
   const rows = [
     ["即時雷達成績單"],
@@ -1264,6 +1285,7 @@ function realtimeRadarRows(radarCsv, report, dateText) {
     ["巡邏狀態", latestValue.status || "", "stale報價", latestValue.staleQuoteCount ?? "", "stale代號", staleCodes || (latestValue.staleQuoteCount ? "details missing; rerun patrol" : "")],
     ["外部資料源異常", externalIssues || failedRanges || "", "失敗批次", latestValue.failedBatchCount ?? "", "總批次", latestValue.totalBatchCount ?? ""],
   ];
+  rows.push(...uniqueTable);
   rows.push(...radarRows);
   return rows;
 }

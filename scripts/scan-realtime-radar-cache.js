@@ -1,11 +1,14 @@
 const fs = require("fs");
 const path = require("path");
+const { hasLineConfig, sendLineText } = require("./line-push");
+const { hasTelegramConfig, sendTelegramText } = require("./telegram-push");
 const { cleanNumber, isIntradayTradable } = require("./intraday-radar-rules");
 
 const ROOT = path.resolve(__dirname, "..");
 const OUT_FILE = path.join(ROOT, "data", "realtime-radar-latest.json");
 const STATE_DIR = process.env.FUMAN_STATE_DIR || path.join(ROOT, "state");
 const FAILED_QUEUE_FILE = path.join(STATE_DIR, "realtime-radar-failed-batches.json");
+const ALERT_STATUS_FILE = path.join(STATE_DIR, "realtime-radar-alert-status.json");
 const SUPABASE_STATUS_FILE = path.join(STATE_DIR, "realtime-radar-supabase-status.json");
 const BASE_URL = process.env.FUMAN_BASE_URL || "https://fuman-terminal.vercel.app";
 const SUPABASE_URL = process.env.FUMAN_SUPABASE_URL || "https://jxnqyqnigsppqsxinlrq.supabase.co";
@@ -14,6 +17,7 @@ const SUPABASE_TABLE = process.env.FUMAN_REALTIME_RADAR_TABLE || "fuman_realtime
 const STALE_AFTER_MS = Number(process.env.REALTIME_RADAR_STALE_MS || 20000);
 const MAX_QUOTE_AGE_SECONDS = Number(process.env.REALTIME_RADAR_MAX_QUOTE_AGE_SECONDS || 150);
 const REALTIME_RESCAN_BATCH_SIZE = Number(process.env.REALTIME_RADAR_RESCAN_BATCH_SIZE || 80);
+const REALTIME_RADAR_ALERT_COOLDOWN_MS = Math.max(0, Number(process.env.REALTIME_RADAR_ALERT_COOLDOWN_MS || 15 * 60 * 1000));
 
 function writeJson(file, value) {
   fs.mkdirSync(path.dirname(file), { recursive: true });
@@ -21,6 +25,59 @@ function writeJson(file, value) {
 }
 function readJson(file, fallback) {
   try { return JSON.parse(fs.readFileSync(file, "utf8")); } catch { return fallback; }
+}
+
+async function sendOpsText(text) {
+  if (hasTelegramConfig()) {
+    await sendTelegramText(text);
+    return "telegram";
+  }
+  if (hasLineConfig()) {
+    await sendLineText(text);
+    return "line";
+  }
+  return "";
+}
+
+function alertSignature(payload) {
+  const staleCodes = (payload.staleQuoteDetails || []).map((item) => item.code).filter(Boolean).join(",");
+  const issues = (payload.externalSourceIssues || [])
+    .map((item) => `${item.source}:${item.type}:${item.status || ""}:${item.count || 0}:${item.sampleCodes || ""}`)
+    .join("|");
+  return `${payload.date || ""}|stale=${payload.staleQuoteCount || 0}:${staleCodes}|issues=${issues}|failed=${payload.failedBatchCount || 0}`;
+}
+
+async function maybeSendRealtimeRadarAlert(payload) {
+  if (process.env.REALTIME_RADAR_NOTIFY === "0") return;
+  const staleDetails = payload.staleQuoteDetails || [];
+  const issues = payload.externalSourceIssues || [];
+  const hasProblem = Number(payload.staleQuoteCount || 0) > 0 || Number(payload.failedBatchCount || 0) > 0 || issues.length > 0;
+  if (!hasProblem) return;
+  const previous = readJson(ALERT_STATUS_FILE, {});
+  const signature = alertSignature(payload);
+  const lastAlertAt = previous.lastAlertAt ? Date.parse(previous.lastAlertAt) : 0;
+  if (previous.signature === signature && lastAlertAt && Date.now() - lastAlertAt < REALTIME_RADAR_ALERT_COOLDOWN_MS) return;
+  const staleLines = staleDetails.slice(0, 10).map((item) => `${item.code} ${item.name || ""} age=${item.quoteAgeSeconds ?? ""}s quote=${item.quoteTime || "--"}`);
+  const issueLines = issues.slice(0, 8).map((item) => `${item.source || ""} ${item.type || ""}${item.status ? ` HTTP ${item.status}` : ""} x${item.count || 0}${item.sampleCodes ? ` ${item.sampleCodes}` : ""}`.trim());
+  const text = [
+    `即時雷達資料源警示｜${payload.timestamp || ""}`,
+    `狀態：${payload.status || ""}`,
+    `staleQuoteCount：${payload.staleQuoteCount || 0}`,
+    `failedBatch：${payload.failedBatchCount || 0}/${payload.totalBatchCount || 0}`,
+    staleLines.length ? "" : null,
+    staleLines.length ? "stale 標的：" : null,
+    ...staleLines,
+    issueLines.length ? "" : null,
+    issueLines.length ? "外部資料源：" : null,
+    ...issueLines,
+  ].filter((line) => line !== null).join("\n");
+  try {
+    const channel = await sendOpsText(text);
+    writeJson(ALERT_STATUS_FILE, { signature, lastAlertAt: new Date().toISOString(), channel, lastError: "" });
+  } catch (error) {
+    writeJson(ALERT_STATUS_FILE, { signature, lastAlertAt: previous.lastAlertAt || "", channel: "", lastError: String(error.message || error).slice(0, 500), checkedAt: new Date().toISOString() });
+    console.log(`realtime radar alert failed: ${error.message}`);
+  }
 }
 
 function normalizeDeferredBatch(batch = {}, reason = "failed_batch") {
@@ -545,6 +602,7 @@ async function main() {
   const supabaseUpload = await safeUploadRealtimeRadarPayload(payload);
   payload = { ...payload, supabaseUpload };
   writeJson(OUT_FILE, payload);
+  await maybeSendRealtimeRadarAlert(payload);
   console.log(`realtime radar ${timestamp}: rows ${payload.rows.length} status ${payload.status} failed ${realtime.failedBatches.length}/${realtime.totalBatches}`);
 
   const deferredBatches = [...queuedBatches, ...realtime.failedBatches, ...chunkStocks(staleStocks).map((batch) => ({ ...batch, reason: "stale_quote" }))];
@@ -578,6 +636,7 @@ async function main() {
         };
         writeJson(OUT_FILE, patchedPayload);
         await safeUploadRealtimeRadarPayload(patchedPayload);
+        await maybeSendRealtimeRadarAlert(patchedPayload);
         console.log(`realtime radar ${timestamp}: deferred rescan merged rows ${mergedRows.length} recovered ${retry.recoveredBatches}/${deferredBatches.length}`);
       }
     }

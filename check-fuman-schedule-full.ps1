@@ -35,6 +35,7 @@ function Get-FumanTaskDescription($TaskName) {
     "Fuman Trade Manager Settlement 1340" { return "管家結算，13:40 執行" }
     "Fuman Scorecard Initial 1410" { return "成績單含輔滿回測初版，14:10 產生" }
     "Fuman Scorecard Final 1530" { return "成績單含輔滿回測終版，15:30 產生" }
+    "Fuman Daily Health Summary 1545" { return "綜合策略每日健康摘要，15:45 發送" }
     "Fuman Flow Cache 0600" { return "買賣超與權證走向，早上 06:00 合併掃描並發布終端" }
     "Fuman Flow Cache 2100" { return "買賣超與權證走向，晚上 21:00 合併掃描並發布終端" }
     "Fuman 買賣超 Cache 0600" { return "買賣超資料，早上 06:00 快取" }
@@ -97,6 +98,7 @@ function Get-LatestFumanLogIssue {
     "*Strategy3*" { @("strategy3-*.log", "cache-sync-*.log") }
     "*Strategy4*" { @("strategy4-*.log", "cache-sync-*.log") }
     "*Scorecard*" { @("scorecard-*.log") }
+    "*Daily Health Summary*" { @("daily-health-summary-*.log") }
     "*Trade Manager*" { @("trade-manager-*.log") }
     "*即時雷達*" { @("realtime-radar-*.log") }
     "*Strategy2 Intraday*" { @("strategy2-intraday-*.log") }
