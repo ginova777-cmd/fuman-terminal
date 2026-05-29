@@ -31,6 +31,28 @@ function cleanNumber(value) {
   return Number(String(value ?? "").replace(/[,+%]/g, "").trim()) || 0;
 }
 
+function rocDateToDate(value) {
+  const text = String(value || "");
+  const match = text.match(/^(\d{3})(\d{2})(\d{2})$/);
+  if (!match) return null;
+  return new Date(`${1911 + Number(match[1])}-${match[2]}-${match[3]}T00:00:00+08:00`);
+}
+
+function taipeiDateOnly() {
+  const text = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Taipei",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
+  return new Date(`${text}T00:00:00+08:00`);
+}
+
+function ageInDaysFromRoc(value) {
+  const date = rocDateToDate(value);
+  if (!date) return Infinity;
+  return Math.floor((taipeiDateOnly() - date) / 86400000);
+}
 function normalizeMatch(item) {
   const code = String(item.underlyingCode || item.code || "").trim();
   const name = String(item.underlyingName || item.name || "").trim();
@@ -69,11 +91,18 @@ async function main() {
     console.error("warrant-flow scan returned 0 matches; keeping existing cache files unchanged");
     process.exit(2);
   }
+  const tradeDates = [...new Set(matches.map((item) => String(item.tradeDate || "")).filter(Boolean))];
+  const newestTradeDate = tradeDates.sort().at(-1) || "";
+  const dataAge = ageInDaysFromRoc(newestTradeDate);
+  if (dataAge > 3) {
+    console.error(`warrant-flow cache is stale: newest tradeDate ${newestTradeDate || "--"}, age ${dataAge} days; keeping existing cache files unchanged`);
+    process.exit(2);
+  }
 
   fs.mkdirSync(path.dirname(OUT_FILE), { recursive: true });
   fs.writeFileSync(OUT_FILE, `${JSON.stringify(output, null, 2)}\n`);
   fs.writeFileSync(BACKUP_FILE, `${JSON.stringify({ ...output, source: "github-actions-backup" }, null, 2)}\n`);
-  console.log(`warrant-flow cache updated: matches ${matches.length}`);
+  console.log(`warrant-flow cache updated: matches ${matches.length}, tradeDate ${newestTradeDate || "--"}`);
 }
 
 main().catch((error) => {
