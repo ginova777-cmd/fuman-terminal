@@ -485,6 +485,63 @@ function tradeManagerRows(dateText) {
   return rows;
 }
 
+function tradeManagerEventRows(dateText) {
+  const state = readJson(TRADE_MANAGER_STATE_FILE, { date: dateText, positions: {}, closed: {}, notified: {}, seenEvents: {} });
+  const seenEvents = Object.entries(state.seenEvents || {}).map(([eventId, event]) => ({
+    type: "候選事件",
+    eventId,
+    code: eventId.split(":")[1] || "",
+    strategy: eventId.split(":")[0] || "",
+    status: event.tradedAt ? "已交易" : event.skipped ? "略過" : event.retryable ? "待重試" : "已看過",
+    seenAt: event.seenAt || "",
+    actionAt: event.tradedAt || event.lastCheckedAt || "",
+    note: event.skipped || "",
+  }));
+  const notified = Object.entries(state.notified || {}).map(([code, item]) => ({
+    type: "通知/買進",
+    eventId: code,
+    code,
+    strategy: "",
+    status: "已通知",
+    seenAt: item.buyAt || "",
+    actionAt: item.buyAt || "",
+    note: item.entryTime ? `entryTime=${item.entryTime}` : "",
+  }));
+  const open = Object.values(state.positions || {}).map((item) => ({
+    type: "持倉",
+    eventId: item.code || "",
+    code: item.code || "",
+    strategy: item.strategy || "",
+    status: "追蹤中",
+    seenAt: item.openedAt || "",
+    actionAt: item.lastUpdatedAt || "",
+    note: [item.name, item.entryTime ? `entry=${item.entryTime}` : "", item.stopLossBasis ? `stop=${item.stopLossBasis}` : ""].filter(Boolean).join("；"),
+  }));
+  const closed = Object.values(state.closed || {}).map((item) => ({
+    type: "結清",
+    eventId: item.code || "",
+    code: item.code || "",
+    strategy: item.strategy || "",
+    status: item.exitAction || "closed",
+    seenAt: item.openedAt || "",
+    actionAt: item.closedAt || "",
+    note: [item.name, item.entryTime ? `entry=${item.entryTime}` : "", item.exitReason || ""].filter(Boolean).join("；"),
+  }));
+  const events = [...seenEvents, ...notified, ...open, ...closed].sort((a, b) => Date.parse(a.actionAt || a.seenAt || "") - Date.parse(b.actionAt || b.seenAt || ""));
+  const rows = [
+    ["交易管家事件明細"],
+    ["日期", state.date || dateText, "產生時間", new Date().toLocaleString("zh-TW"), "來源", TRADE_MANAGER_STATE_FILE],
+    ["候選事件", seenEvents.length, "通知/買進", notified.length, "追蹤中", open.length, "已結清", closed.length],
+    [""],
+    ["類型", "事件ID", "股票代碼", "策略", "狀態", "首次看到", "動作/檢查時間", "備註"],
+  ];
+  for (const item of events) {
+    rows.push([item.type, item.eventId, item.code, item.strategy, item.status, item.seenAt, item.actionAt, item.note]);
+  }
+  if (!events.length) rows.push(["今天沒有交易管家事件", "", "", "", "", "", "", ""]);
+  return rows;
+}
+
 function roundTradePrice(price) {
   const value = Number(price);
   if (!Number.isFinite(value) || value <= 0) return "";
@@ -926,7 +983,25 @@ function strategyMatchesRows(title, payloadInfo, dateText, options = {}) {
 }
 
 async function strategy4Rows(payloadInfo, dateText) {
-  return strategyMatchesRows("策略4成績單", payloadInfo, dateText);
+  const rows = strategyMatchesRows("策略4成績單", payloadInfo, dateText);
+  const payload = payloadInfo.value || {};
+  rows.splice(3, 0, [
+    "完整狀態",
+    payload.complete === true ? "完整" : "未完整",
+    "品質",
+    payload.qualityStatus || (payload.complete === true ? "complete" : "unknown"),
+    "noData",
+    payload.noDataCount ?? (Array.isArray(payload.noDataCodes) ? payload.noDataCodes.length : ""),
+  ]);
+  rows.splice(4, 0, [
+    "errors",
+    payload.errorCount ?? (Array.isArray(payload.errors) ? payload.errors.length : ""),
+    "掃描數",
+    payload.scannedThisRun ?? "",
+    "總檔數",
+    payload.total ?? "",
+  ]);
+  return rows;
 }
 
 async function strategy5Rows(payloadInfo, dateText) {
@@ -1290,17 +1365,22 @@ function realtimeRadarRows(radarCsv, report, dateText) {
   return rows;
 }
 
-async function loadScorecardSheets(stamp, radarCsv, report) {
+async function loadScorecardSheets(stamp, radarCsv, report, onlySheet = "") {
   const dateText = stamp.slice(0, 4) + "-" + stamp.slice(4, 6) + "-" + stamp.slice(6, 8);
-  return {
-    "即時雷達成績單": realtimeRadarRows(radarCsv, report, dateText),
-    "交易管家成績單": tradeManagerRows(dateText),
-    "策略1成績單": await strategy1Rows(readFirstJson([path.join(DATA_DIR, "open-buy-scorecard-source.json"), path.join(REPO_DATA_DIR, "open-buy-scorecard-source.json"), path.join(DATA_DIR, "open-buy-latest.json"), path.join(REPO_DATA_DIR, "open-buy-latest.json")]), dateText),
-    "策略2成績單": await strategy2Rows(dateText),
-    "策略3成績單": await strategy3Rows(readFirstJson([path.join(DATA_DIR, "strategy3-scorecard-source.json"), path.join(REPO_DATA_DIR, "strategy3-scorecard-source.json"), path.join(DATA_DIR, "strategy3-latest.json"), path.join(REPO_DATA_DIR, "strategy3-latest.json")]), dateText),
-    "策略4成績單": await strategy4Rows(readFirstJson([path.join(DATA_DIR, "strategy4-latest.json"), path.join(REPO_DATA_DIR, "strategy4-latest.json"), path.join(DATA_DIR, "strategy4-backup.json"), path.join(REPO_DATA_DIR, "strategy4-backup.json")]), dateText),
-    "策略5成績單": await strategy5Rows(readFirstJson([path.join(DATA_DIR, "strategy5-latest.json"), path.join(REPO_DATA_DIR, "strategy5-latest.json")]), dateText),
-  };
+  const sheets = {};
+  async function add(title, build) {
+    if (onlySheet && onlySheet !== title) return;
+    sheets[title] = await build();
+  }
+  await add("即時雷達成績單", async () => realtimeRadarRows(radarCsv, report, dateText));
+  await add("交易管家成績單", async () => tradeManagerRows(dateText));
+  await add("交易管家事件明細", async () => tradeManagerEventRows(dateText));
+  await add("策略1成績單", async () => strategy1Rows(readFirstJson([path.join(DATA_DIR, "open-buy-scorecard-source.json"), path.join(REPO_DATA_DIR, "open-buy-scorecard-source.json"), path.join(DATA_DIR, "open-buy-latest.json"), path.join(REPO_DATA_DIR, "open-buy-latest.json")]), dateText));
+  await add("策略2成績單", async () => strategy2Rows(dateText));
+  await add("策略3成績單", async () => strategy3Rows(readFirstJson([path.join(DATA_DIR, "strategy3-scorecard-source.json"), path.join(REPO_DATA_DIR, "strategy3-scorecard-source.json"), path.join(DATA_DIR, "strategy3-latest.json"), path.join(REPO_DATA_DIR, "strategy3-latest.json")]), dateText));
+  await add("策略4成績單", async () => strategy4Rows(readFirstJson([path.join(DATA_DIR, "strategy4-latest.json"), path.join(REPO_DATA_DIR, "strategy4-latest.json"), path.join(DATA_DIR, "strategy4-backup.json"), path.join(REPO_DATA_DIR, "strategy4-backup.json")]), dateText));
+  await add("策略5成績單", async () => strategy5Rows(readFirstJson([path.join(DATA_DIR, "strategy5-latest.json"), path.join(REPO_DATA_DIR, "strategy5-latest.json")]), dateText));
+  return sheets;
 }
 
 function sheetIdByTitle(spreadsheet, title) {
@@ -1494,7 +1574,7 @@ function loadBacktestRows(stamp) {
   const dateText = `${stamp.slice(0, 4)}-${stamp.slice(4, 6)}-${stamp.slice(6, 8)}`;
   const totalPnl = report?.manager?.summary?.pnl ?? "";
   const historyRows = [
-    ["交易管家成績單", "即時雷達成績單", "策略1成績單", "策略2成績單", "策略3成績單", "策略5成績單", "歷史與區間損益", "回測摘要"],
+    ["交易管家成績單", "即時雷達成績單", "策略1成績單", "策略2成績單", "策略3成績單", "策略4成績單", "策略5成績單", "歷史與區間損益", "回測摘要"],
     ["起始日:", dateText, "結束日:", dateText, "查詢損益", "", "區間總損益:", totalPnl === "" ? "" : `${Number(totalPnl).toLocaleString("zh-TW")} 元`],
     ["", "", "", "", "", "", "", ""],
     ["日期", "股票", "股名", "買進股數", "買均價", "賣均價", "出場原因", "實現損益(元)"],
@@ -1532,8 +1612,8 @@ function loadBacktestRows(stamp) {
 
 async function buildUploadPlan(stamp = todayStamp()) {
   const { trades, radar, report, summary, historyRows } = loadBacktestRows(stamp);
-  const scorecardSheets = await loadScorecardSheets(stamp, radar, report);
   const onlySheet = process.env.GOOGLE_SHEET_ONLY || "";
+  const scorecardSheets = await loadScorecardSheets(stamp, radar, report, onlySheet);
   return {
     stamp,
     onlySheet,
@@ -1543,7 +1623,7 @@ async function buildUploadPlan(stamp = todayStamp()) {
     summarySheet: "回測摘要",
     historySheet: "歷史與區間損益",
     obsoleteSheets: ["實體庫存與TA分析", "自選股監控池", "策略監控區"],
-    navTitles: ["交易管家成績單", "即時雷達成績單", "策略1成績單", "策略2成績單", "策略3成績單", "策略4成績單", "策略5成績單", "歷史與區間損益", "回測摘要"],
+    navTitles: ["交易管家成績單", "交易管家事件明細", "即時雷達成績單", "策略1成績單", "策略2成績單", "策略3成績單", "策略4成績單", "策略5成績單", "歷史與區間損益", "回測摘要"],
   };
 }
 

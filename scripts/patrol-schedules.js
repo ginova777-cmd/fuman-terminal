@@ -2,7 +2,7 @@ const fs = require("fs");
 const path = require("path");
 const tls = require("tls");
 
-const { ROOT, dataPath } = require("./runtime-paths");
+const { ROOT, dataPath, runtimePath } = require("./runtime-paths");
 const BASE_URL = process.env.FUMAN_BASE_URL || "https://fuman-terminal.vercel.app";
 
 const WORKFLOWS = [
@@ -17,7 +17,7 @@ const WORKFLOWS = [
 const CACHE_RULES = [
   { label: "策略1", file: "data/open-buy-latest.json", slots: ["07:00", "16:00"], graceMinutes: 10, workflow: "open-buy-background-scan.yml", inputs: { full_scan: "true" } },
   { label: "策略3", file: "data/strategy3-latest.json", slots: ["13:00"], graceMinutes: 10, workflow: "strategy3-background-scan.yml" },
-  { label: "策略4", file: "data/strategy4-latest.json", slots: ["07:00", "14:30"], graceMinutes: 10, workflow: "strategy4-background-scan.yml", inputs: { full_scan: "true" } },
+  { label: "策略4", file: "data/strategy4-latest.json", slots: ["07:00", "14:30"], graceMinutes: 10, workflow: "strategy4-background-scan.yml", inputs: { full_scan: "true" }, requireComplete: true, minTotal: 1700 },
   { label: "盤後籌碼", file: "data/institution-latest.json", slots: ["06:00", "21:00"], graceMinutes: 10, workflow: "flow-cache.yml" },
   { label: "權證走向", file: "data/warrant-flow-latest.json", slots: ["06:00", "21:00"], graceMinutes: 10, workflow: "flow-cache.yml" },
   { label: "策略5", file: "data/strategy5-latest.json", slots: ["06:00", "21:00"], graceMinutes: 10, workflow: "strategy5-background-scan.yml" },
@@ -65,6 +65,12 @@ const API_RULES = [
 function readJson(file, fallback) {
   try { return JSON.parse(fs.readFileSync(file, "utf8")); } catch { return fallback; }
 }
+
+function readText(file) {
+  try { return fs.readFileSync(file, "utf8").trim(); } catch { return ""; }
+}
+
+const GITHUB_TOKEN = process.env.GITHUB_TOKEN || readText(runtimePath("secrets", "github-token.txt"));
 
 function taipeiParts(date = new Date()) {
   const parts = new Intl.DateTimeFormat("en-CA", {
@@ -115,6 +121,20 @@ function cacheIssues() {
       continue;
     }
 
+    if (rule.requireComplete) {
+      const errors = Array.isArray(payload?.errors) ? payload.errors.length : Number(payload?.errorCount || 0);
+      const noData = Array.isArray(payload?.noDataCodes) ? payload.noDataCodes.length : Number(payload?.noDataCount || 0);
+      if (payload?.complete !== true || payload?.qualityStatus === "incomplete" || errors > 0 || noData > 0) {
+        issues.push({ ...rule, message: `${rule.label}：快取未完整，complete=${payload?.complete}，qualityStatus=${payload?.qualityStatus || "--"}，noData=${noData}，errors=${errors}` });
+      }
+      if (rule.minTotal && Number(payload?.total || 0) < rule.minTotal) {
+        issues.push({ ...rule, message: `${rule.label}：股票 universe 過小，total=${payload?.total || 0}/${rule.minTotal}` });
+      }
+      if (Number(payload?.scannedThisRun || 0) < Number(payload?.total || 0)) {
+        issues.push({ ...rule, message: `${rule.label}：掃描數不足，scannedThisRun=${payload?.scannedThisRun || 0}/total=${payload?.total || 0}` });
+      }
+    }
+
     const ageHours = (now.getTime() - updatedAt) / 3600000;
     if (ageHours > 48) {
       issues.push({ ...rule, message: `${rule.label}：快取超過 48 小時未更新，updatedAt=${payload.updatedAt}` });
@@ -134,12 +154,13 @@ function cacheIssues() {
 }
 
 async function fetchJson(url) {
+  const headers = {
+    "Accept": "application/vnd.github+json",
+    "User-Agent": "fuman-terminal-schedule-patrol",
+  };
+  if (GITHUB_TOKEN) headers.Authorization = `Bearer ${GITHUB_TOKEN}`;
   const response = await fetch(url, {
-    headers: {
-      "Accept": "application/vnd.github+json",
-      "Authorization": `Bearer ${process.env.GITHUB_TOKEN || ""}`,
-      "User-Agent": "fuman-terminal-schedule-patrol",
-    },
+    headers,
   });
   if (!response.ok) throw new Error(`${url} HTTP ${response.status}`);
   return response.json();
@@ -165,6 +186,10 @@ async function fetchApiJson(url, timeout = 20000) {
 
 async function workflowIssues() {
   const repo = process.env.GITHUB_REPOSITORY;
+  if (!GITHUB_TOKEN) {
+    console.log("Schedule Patrol：未設定 GITHUB_TOKEN，略過 GitHub workflow 最新狀態檢查");
+    return [];
+  }
   if (!repo) return ["Schedule Patrol：缺少 GITHUB_REPOSITORY"];
   const issues = [];
 
@@ -186,11 +211,12 @@ async function workflowIssues() {
 async function dispatchWorkflow(workflow, inputs = {}) {
   const repo = process.env.GITHUB_REPOSITORY;
   if (!repo) throw new Error("缺少 GITHUB_REPOSITORY，無法派發補跑 workflow");
+  if (!GITHUB_TOKEN) throw new Error("缺少 GITHUB_TOKEN，無法派發補跑 workflow");
   const response = await fetch(`https://api.github.com/repos/${repo}/actions/workflows/${workflow}/dispatches`, {
     method: "POST",
     headers: {
       "Accept": "application/vnd.github+json",
-      "Authorization": `Bearer ${process.env.GITHUB_TOKEN || ""}`,
+      "Authorization": `Bearer ${GITHUB_TOKEN}`,
       "Content-Type": "application/json",
       "User-Agent": "fuman-terminal-schedule-patrol",
     },
@@ -207,7 +233,7 @@ async function dispatchWorkflow(workflow, inputs = {}) {
 
 async function workflowHasActiveRun(workflow) {
   const repo = process.env.GITHUB_REPOSITORY;
-  if (!repo) return false;
+  if (!repo || !GITHUB_TOKEN) return false;
   const data = await fetchJson(`https://api.github.com/repos/${repo}/actions/workflows/${workflow}/runs?per_page=1`);
   const run = data.workflow_runs?.[0];
   return run && ["queued", "pending", "in_progress", "waiting", "requested"].includes(run.status);

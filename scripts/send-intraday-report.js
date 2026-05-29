@@ -309,6 +309,8 @@ async function smtpCommand(socket, command, expect = /^[23]/) {
 }
 
 async function sendMail({ host, port, user, pass, to, subject, text }) {
+  console.log("scorecard email disabled; Google Sheet upload only");
+  return false;
   const socket = tls.connect({ host, port, servername: host });
   await new Promise((resolve, reject) => {
     socket.once("secureConnect", resolve);
@@ -822,6 +824,8 @@ function buildRealtimeRadarReport(records, quotes, today) {
 }
 
 async function sendReports(reports, mailConfig) {
+  console.log("scorecard report delivery disabled; Google Sheet upload only");
+  return false;
   const failures = [];
   for (const report of reports) {
     const parts = splitLineText(report.text);
@@ -855,15 +859,8 @@ function mailConfigFromEnv() {
 }
 
 async function sendScorecardNotifications(reports) {
-  if (process.env.SCORECARD_NOTIFY === "0" || process.env.DISABLE_SCORECARD_NOTIFY === "1") {
-    console.log("scorecard notifications skipped; Google Sheet upload only");
-    return false;
-  }
-  const mailConfig = mailConfigFromEnv();
-  if (!mailConfig) {
-    throw new Error("Missing notification config: set SMTP settings");
-  }
-  await sendReports(reports, mailConfig);
+  console.log("scorecard notifications skipped; Google Sheet upload only");
+  return false;
 }
 
 function readIntradayCache() {

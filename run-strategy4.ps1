@@ -7,6 +7,10 @@ $nodeExe = "C:\Program Files\nodejs\node.exe"
 $gitPath = "C:\Program Files\Git\cmd"
 $env:Path = "$gitPath;C:\Program Files\nodejs;" + $env:Path
 $env:NODE_OPTIONS = "--use-system-ca"
+$env:FUMAN_RUNTIME_DIR = $runtime
+$env:FUMAN_DATA_DIR = Join-Path $runtime "data"
+$env:FUMAN_CACHE_DIR = Join-Path $runtime "cache"
+$env:FUMAN_STATE_DIR = Join-Path $runtime "state"
 
 Set-Location $repo
 
@@ -40,11 +44,14 @@ function Invoke-CacheSyncWithRetry($scriptPath, $maxAttempts = 3) {
 }
 
 Write-Log "=== Strategy4 full scan start $(Get-Date) ==="
+. "C:\fuman-terminal\schedule-guard.ps1"
+Invoke-FumanWeekdayGuard -Label "Strategy4 full scan" -LogPath $log
 
 $env:FULL_SCAN = "1"
-$env:STRATEGY4_BATCH_SIZE = "9999"
+$env:STRATEGY4_BATCH_SIZE = "80"
 $env:STRATEGY4_BATCHES_PER_RUN = "999"
 $env:STRATEGY4_USE_MIS = "0"
+$env:STRATEGY4_FAIL_ON_INCOMPLETE = "1"
 
 try {
   & $nodeExe "scripts\scan-strategy4-cache.js" *>&1 | Tee-Object -FilePath $log -Append
@@ -54,6 +61,7 @@ try {
   Remove-Item Env:STRATEGY4_BATCH_SIZE -ErrorAction SilentlyContinue
   Remove-Item Env:STRATEGY4_BATCHES_PER_RUN -ErrorAction SilentlyContinue
   Remove-Item Env:STRATEGY4_USE_MIS -ErrorAction SilentlyContinue
+  Remove-Item Env:STRATEGY4_FAIL_ON_INCOMPLETE -ErrorAction SilentlyContinue
 }
 
 if ($scanExit -ne 0) {
@@ -78,6 +86,35 @@ if (Test-Path -LiteralPath $syncScript) {
   Write-Log "=== Strategy4 clean cache sync end $(Get-Date) ==="
 } else {
   Write-Log "run-cache-sync.ps1 not found; strategy4 files updated locally only."
+}
+
+if ($env:STRATEGY4_UPLOAD_SHEET_AFTER_SCAN -ne "0") {
+  $uploadScript = Join-Path $repo "run-upload-backtest-google-sheet.ps1"
+  if (Test-Path -LiteralPath $uploadScript) {
+    Write-Log "=== Strategy4 Google Sheet upload start $(Get-Date) ==="
+    $previousOnly = $env:GOOGLE_SHEET_ONLY
+    $env:GOOGLE_SHEET_ONLY = "策略4成績單"
+    try {
+      & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $uploadScript (Get-Date -Format yyyyMMdd) *>&1 | Tee-Object -FilePath $log -Append | Out-Null
+      $sheetExit = $LASTEXITCODE
+    } finally {
+      if ($null -ne $previousOnly) {
+        $env:GOOGLE_SHEET_ONLY = $previousOnly
+      } else {
+        Remove-Item Env:GOOGLE_SHEET_ONLY -ErrorAction SilentlyContinue
+      }
+    }
+    if ($sheetExit -ne 0) {
+      Write-Log "Strategy4 Google Sheet upload failed with exit code $sheetExit"
+      exit $sheetExit
+    }
+    Write-Log "=== Strategy4 Google Sheet upload end $(Get-Date) ==="
+  } else {
+    Write-Log "Strategy4 Google Sheet upload script not found: $uploadScript"
+    exit 1
+  }
+} else {
+  Write-Log "Strategy4 Google Sheet upload skipped because STRATEGY4_UPLOAD_SHEET_AFTER_SCAN=0."
 }
 
 Write-Log "=== Strategy4 full scan end $(Get-Date) ==="

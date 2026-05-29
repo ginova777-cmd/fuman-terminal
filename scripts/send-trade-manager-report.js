@@ -198,6 +198,8 @@ async function smtpCommand(socket, command, expect = /^[23]/) {
 }
 
 async function sendMail({ subject, text }) {
+  console.log("trade manager email disabled; Google Sheet upload only");
+  return false;
   const to = process.env.REPORT_EMAIL_TO;
   const user = process.env.SMTP_USER;
   const pass = process.env.SMTP_PASS;
@@ -254,33 +256,7 @@ async function main() {
   const subject = `交易管家成績單｜${dateSlash(today)}`;
   console.log(report);
 
-  if (process.env.TRADE_MANAGER_REPORT_NOTIFY === "0" || process.env.DISABLE_SCORECARD_NOTIFY === "1") {
-    console.log("trade manager report notifications skipped; Google Sheet upload only");
-    return;
-  }
-
-  if (process.env.TRADE_MANAGER_REPORT_LINE === "1" && hasLineConfig()) {
-    try {
-      const parts = splitLineText(report);
-      for (let index = 0; index < parts.length; index++) {
-        const header = parts.length > 1 ? `${subject}（${index + 1}/${parts.length}）\n\n` : "";
-        await sendLineText(`${header}${parts[index]}`);
-      }
-      console.log(`trade manager LINE report sent${parts.length > 1 ? ` (${parts.length} parts)` : ""}`);
-    } catch (error) {
-      console.error(`trade manager LINE report failed: ${error.message}`);
-    }
-  } else if (process.env.TRADE_MANAGER_REPORT_LINE === "1") {
-    console.log("trade manager LINE report skipped: missing LINE config");
-  }
-
-  try {
-    if (await sendMail({ subject, text: report })) {
-      console.log(`trade manager email report sent: ${process.env.REPORT_EMAIL_TO}`);
-    }
-  } catch (error) {
-    console.error(`trade manager email report failed: ${error.message}`);
-  }
+  console.log("trade manager report notifications skipped; Google Sheet upload only");
 }
 
 main().catch((error) => {

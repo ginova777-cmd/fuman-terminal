@@ -10,6 +10,7 @@ const TOKEN_PATH = path.join(SECRET_DIR, "google-sheets-token.json");
 const CREDENTIALS_PATH = process.env.GOOGLE_OAUTH_CLIENT || path.join(SECRET_DIR, "google-oauth-client.json");
 const STATE_FILE = path.join(RUNTIME_DIR, "state", "trade-manager-state.json");
 const TARGET_SHEET = process.env.TRADE_MANAGER_SHEET_NAME || "交易管家成績單";
+const EVENT_SHEET = process.env.TRADE_MANAGER_EVENT_SHEET_NAME || "交易管家事件明細";
 const REQUIRED_DAILY_TRADES = Math.max(1, Number(process.env.TRADE_MANAGER_REQUIRED_DAILY_TRADES || 10));
 
 function readJson(file, fallback = null) {
@@ -87,8 +88,8 @@ async function sheets(method, endpoint, token, body) {
   return requestJson(method, `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}${endpoint}`, { token, body });
 }
 
-async function sheetHasRows(token) {
-  const range = encodeURIComponent(`${a1Quote(TARGET_SHEET)}!A:A`);
+async function sheetHasRows(token, sheetName) {
+  const range = encodeURIComponent(`${a1Quote(sheetName)}!A:A`);
   const payload = await sheets("GET", `/values/${range}?majorDimension=ROWS`, token);
   return Boolean(payload.values?.some((row) => row.some((cell) => String(cell || "").trim())));
 }
@@ -195,35 +196,96 @@ function buildRows() {
   return rows;
 }
 
-async function formatSheet(token, spreadsheet) {
-  const sheetId = sheetIdByTitle(spreadsheet, TARGET_SHEET);
+function buildEventRows() {
+  const state = readJson(STATE_FILE, { date: "", positions: {}, closed: {}, notified: {}, seenEvents: {} });
+  const seenEvents = Object.entries(state.seenEvents || {}).map(([eventId, event]) => ({
+    type: "候選事件",
+    eventId,
+    code: eventId.split(":")[1] || "",
+    strategy: eventId.split(":")[0] || "",
+    status: event.tradedAt ? "已交易" : event.skipped ? "略過" : event.retryable ? "待重試" : "已看過",
+    seenAt: event.seenAt || "",
+    actionAt: event.tradedAt || event.lastCheckedAt || "",
+    note: event.skipped || "",
+  }));
+  const notified = Object.entries(state.notified || {}).map(([code, item]) => ({
+    type: "通知/買進",
+    eventId: code,
+    code,
+    strategy: "",
+    status: "已通知",
+    seenAt: item.buyAt || "",
+    actionAt: item.buyAt || "",
+    note: item.entryTime ? `entryTime=${item.entryTime}` : "",
+  }));
+  const open = Object.values(state.positions || {}).map((item) => ({
+    type: "持倉",
+    eventId: item.code || "",
+    code: item.code || "",
+    strategy: item.strategy || "",
+    status: "追蹤中",
+    seenAt: item.openedAt || "",
+    actionAt: item.lastUpdatedAt || "",
+    note: [item.name, item.entryTime ? `entry=${item.entryTime}` : "", item.stopLossBasis ? `stop=${item.stopLossBasis}` : ""].filter(Boolean).join("；"),
+  }));
+  const closed = Object.values(state.closed || {}).map((item) => ({
+    type: "結清",
+    eventId: item.code || "",
+    code: item.code || "",
+    strategy: item.strategy || "",
+    status: item.exitAction || "closed",
+    seenAt: item.openedAt || "",
+    actionAt: item.closedAt || "",
+    note: [item.name, item.entryTime ? `entry=${item.entryTime}` : "", item.exitReason || ""].filter(Boolean).join("；"),
+  }));
+  const events = [...seenEvents, ...notified, ...open, ...closed].sort((a, b) => Date.parse(a.actionAt || a.seenAt || "") - Date.parse(b.actionAt || b.seenAt || ""));
+  const rows = [
+    ["交易管家事件明細"],
+    ["日期", state.date || "", "產生時間", new Date().toLocaleString("zh-TW"), "來源", STATE_FILE],
+    ["候選事件", seenEvents.length, "通知/買進", notified.length, "追蹤中", open.length, "已結清", closed.length],
+    [""],
+    ["類型", "事件ID", "股票代碼", "策略", "狀態", "首次看到", "動作/檢查時間", "備註"],
+  ];
+  for (const item of events) rows.push([item.type, item.eventId, item.code, item.strategy, item.status, item.seenAt, item.actionAt, item.note]);
+  if (!events.length) rows.push(["今天沒有交易管家事件", "", "", "", "", "", "", ""]);
+  return rows;
+}
+
+async function formatSheet(token, spreadsheet, sheetName, endIndex) {
+  const sheetId = sheetIdByTitle(spreadsheet, sheetName);
   if (sheetId == null) return;
   await sheets("POST", ":batchUpdate", token, {
     requests: [
       { updateSheetProperties: { properties: { sheetId, gridProperties: { frozenRowCount: 5 } }, fields: "gridProperties.frozenRowCount" } },
-      { autoResizeDimensions: { dimensions: { sheetId, dimension: "COLUMNS", startIndex: 0, endIndex: 16 } } },
+      { autoResizeDimensions: { dimensions: { sheetId, dimension: "COLUMNS", startIndex: 0, endIndex } } },
       { repeatCell: { range: { sheetId, startRowIndex: 0, endRowIndex: 1 }, cell: { userEnteredFormat: { backgroundColor: { red: 0.96, green: 0.98, blue: 1 }, textFormat: { bold: true } } }, fields: "userEnteredFormat(backgroundColor,textFormat)" } },
       { repeatCell: { range: { sheetId, startRowIndex: 4, endRowIndex: 5 }, cell: { userEnteredFormat: { backgroundColor: { red: 0.94, green: 0.94, blue: 0.94 }, textFormat: { bold: true } } }, fields: "userEnteredFormat(backgroundColor,textFormat)" } },
     ],
   });
 }
 
+async function appendRows(token, sheetName, rows) {
+  if (await sheetHasRows(token, sheetName)) rows.unshift([""]);
+  await sheets(
+    "POST",
+    `/values/${encodeURIComponent(`${a1Quote(sheetName)}!A1`)}:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`,
+    token,
+    { values: rows }
+  );
+}
+
 async function main() {
   const token = await getAccessToken();
   let spreadsheet = await sheets("GET", "?fields=sheets.properties(title,sheetId)", token);
   await ensureSheet(token, spreadsheet, TARGET_SHEET);
+  await ensureSheet(token, spreadsheet, EVENT_SHEET);
   spreadsheet = await sheets("GET", "?fields=sheets.properties(title,sheetId)", token);
-  const rows = buildRows();
-  if (await sheetHasRows(token)) rows.unshift([""]);
-  await sheets(
-    "POST",
-    `/values/${encodeURIComponent(`${a1Quote(TARGET_SHEET)}!A1`)}:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`,
-    token,
-    { values: rows }
-  );
+  await appendRows(token, TARGET_SHEET, buildRows());
+  await appendRows(token, EVENT_SHEET, buildEventRows());
   spreadsheet = await sheets("GET", "?fields=sheets.properties(title,sheetId)", token);
-  await formatSheet(token, spreadsheet);
-  console.log(`Appended trade manager scorecard: ${TARGET_SHEET}`);
+  await formatSheet(token, spreadsheet, TARGET_SHEET, 16);
+  await formatSheet(token, spreadsheet, EVENT_SHEET, 8);
+  console.log(`Appended trade manager scorecard: ${TARGET_SHEET}, ${EVENT_SHEET}`);
 }
 
 main().catch((error) => {

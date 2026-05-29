@@ -18,6 +18,7 @@ const SYNC_SCRIPT = path.join(ROOT, "run-strategy4-partial-sync.ps1");
 const STOCK_URL = process.env.STOCK_UNIVERSE_URL || "https://fuman-terminal.vercel.app/api/stocks";
 const MIN_UNIVERSE_SIZE = Number(process.env.STRATEGY4_MIN_UNIVERSE_SIZE || 1700);
 const USE_MIS_QUOTES = process.env.STRATEGY4_USE_MIS === "1";
+const FAIL_ON_INCOMPLETE = process.env.STRATEGY4_FAIL_ON_INCOMPLETE !== "0";
 
 function readJson(file, fallback) {
   try {
@@ -175,13 +176,19 @@ function mergeMatches(matches, universe, currentMatches) {
 function buildOutput({ codes, scannedThisRun, scanned, noDataCodes, scanErrors, currentMatches, complete }) {
   const matches = [...currentMatches.values()]
     .sort((a, b) => (b.swingScore || b.score || 0) - (a.swingScore || a.score || 0) || (b.percent || 0) - (a.percent || 0));
+  const noDataCount = noDataCodes.size;
+  const errorCount = scanErrors.length;
+  const qualityStatus = complete && noDataCount === 0 && errorCount === 0 ? "complete" : "incomplete";
   return {
     ok: true,
-    source: complete ? "github-actions" : "github-actions-partial",
+    source: qualityStatus === "complete" ? "github-actions" : "github-actions-partial",
     priceSource: USE_MIS_QUOTES ? "official-daily-k-plus-mis" : "official-daily-k",
     updatedAt: new Date().toISOString(),
     fullScan: FULL_SCAN,
-    complete,
+    complete: qualityStatus === "complete",
+    qualityStatus,
+    noDataCount,
+    errorCount,
     total: codes.length,
     scannedThisRun,
     scannedCodes: [...scanned].filter((code) => codes.includes(code)),
@@ -195,8 +202,8 @@ function buildOutput({ codes, scannedThisRun, scanned, noDataCodes, scanErrors, 
 function writeStrategy4Output(output, writeBackup = false) {
   fs.mkdirSync(path.dirname(OUT_FILE), { recursive: true });
   fs.writeFileSync(OUT_FILE, `${JSON.stringify(output, null, 2)}\n`);
-  if (writeBackup && output.matches.length) {
-    fs.writeFileSync(BACKUP_FILE, `${JSON.stringify({ ...output, source: "github-actions-backup" }, null, 2)}\n`);
+  if (writeBackup) {
+    fs.writeFileSync(BACKUP_FILE, `${JSON.stringify({ ...output, source: "github-actions-backup", backupUpdatedAt: new Date().toISOString() }, null, 2)}\n`);
   }
 }
 
@@ -324,12 +331,15 @@ async function main() {
     noDataCodes,
     scanErrors,
     currentMatches,
-    complete: true,
+    complete: !scanErrors.length && !noDataCodes.size,
   });
 
   writeStrategy4Output(output, true);
   syncStrategy4Output("complete");
   console.log(`strategy4 cache updated: full market scan scanned ${scannedThisRun}/${codes.length}, matches ${output.count}`);
+  if (FAIL_ON_INCOMPLETE && !output.complete) {
+    throw new Error(`Strategy4 scan incomplete: noData ${output.noDataCount}, errors ${output.errorCount}`);
+  }
 }
 
 main().catch((error) => {
