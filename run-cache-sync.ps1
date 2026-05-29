@@ -1,5 +1,5 @@
 param(
-  [ValidateSet("all", "flow", "institution", "warrant", "openBuy", "strategy3", "strategy4")]
+  [ValidateSet("all", "flow", "institution", "warrant", "openBuy", "strategy3", "strategy4", "strategy5")]
   [string]$Scope = "all"
 )
 
@@ -274,7 +274,7 @@ function Test-VercelCacheVisibility($file) {
 
   $urlPath = ($file -replace "\\", "/")
   $url = "$($baseUrl.TrimEnd('/'))/$urlPath?v=$(Get-Date -Format yyyyMMddHHmmss)"
-  $attempts = if ($env:VERCEL_VISIBLE_ATTEMPTS -match '^\d+$') { [int]$env:VERCEL_VISIBLE_ATTEMPTS } else { 12 }
+  $attempts = if ($env:VERCEL_VISIBLE_ATTEMPTS -match '^\d+$') { [int]$env:VERCEL_VISIBLE_ATTEMPTS } else { 3 }
   $delaySeconds = if ($env:VERCEL_VISIBLE_RETRY_SECONDS -match '^\d+$') { [int]$env:VERCEL_VISIBLE_RETRY_SECONDS } else { 30 }
   for ($attempt = 1; $attempt -le $attempts; $attempt++) {
     try {
@@ -298,7 +298,12 @@ function Test-VercelCacheVisibility($file) {
       }
       Write-Log "VERCEL_VISIBLE_WAIT file=$file remote differs localUpdatedAt=$($localJson.updatedAt) remoteUpdatedAt=$($remoteJson.updatedAt) localCount=$localCount remoteCount=$remoteCount"
     } catch {
-      Write-Log "VERCEL_VISIBLE_WAIT file=$file check failed: $($_.Exception.Message)"
+      $message = $_.Exception.Message
+      if ($message -match '\(404\)|404') {
+        Write-Log "VERCEL_VISIBLE_WARN file=$file not found on Vercel; skipping retries for this non-blocking visibility check."
+        return
+      }
+      Write-Log "VERCEL_VISIBLE_WAIT file=$file check failed: $message"
     }
     if ($attempt -lt $attempts) { Start-Sleep -Seconds $delaySeconds }
   }
@@ -448,6 +453,15 @@ try {
       "data\strategy4-latest.json",
       "data\strategy4-backup.json"
     )
+  } elseif ($Scope -eq "strategy5") {
+    $criticalLatestFiles = @(
+      "data\strategy5-latest.json"
+    )
+
+    $dataFiles = @(
+      "data\strategy5-latest.json",
+      "data\strategy5-backup.json"
+    )
   } else {
     $criticalLatestFiles = @(
       "data\institution-latest.json",
@@ -541,9 +555,15 @@ try {
     }
   }
 
-  Run-Git "Stage cache files" (@("add", "-f") + $dataFiles + $localPublishedFiles)
+  $stageFiles = @($copiedFiles | Select-Object -Unique)
+  if (-not $stageFiles.Count) {
+    Write-Log "No copied cache files to stage."
+    exit 0
+  }
 
-  $changed = & $gitExe -C $syncRepo diff --cached --name-only -- ($dataFiles + $localPublishedFiles)
+  Run-Git "Stage cache files" (@("add", "-f") + $stageFiles)
+
+  $changed = & $gitExe -C $syncRepo diff --cached --name-only -- $stageFiles
   if (-not $changed) {
     Write-Log "No cache changes to sync."
     exit 0
@@ -559,6 +579,7 @@ try {
     Save-OutboxSnapshot "push failed: $($_.Exception.Message)" $dataFiles $localPublishedFiles
     Run-GitWithRetry "Fetch origin main after push failure" @("fetch", "origin", "main")
     Run-Git "Reset after push failure" @("reset", "--hard", "origin/main")
+    $retryStageFiles = New-Object System.Collections.Generic.List[string]
     foreach ($file in $dataFiles) {
       $source = Join-Path $sourceRepo $file
       $target = Join-Path $syncRepo $file
@@ -572,16 +593,23 @@ try {
         }
         Copy-CacheFile $file $source $syncRepo "sync retry"
         Copy-CodeRepoCacheFile $file $source "local retry"
+        $retryStageFiles.Add($file) | Out-Null
       }
     }
     foreach ($file in $localPublishedFiles) {
       $source = Join-Path $codeRepo $file
       if (Test-Path $source) {
         Copy-CacheFile $file $source $syncRepo "local-published retry"
+        $retryStageFiles.Add($file) | Out-Null
       }
     }
-    Run-Git "Stage cache files after retry reset" (@("add", "-f") + $dataFiles + $localPublishedFiles)
-    $retryChanged = & $gitExe -C $syncRepo diff --cached --name-only -- ($dataFiles + $localPublishedFiles)
+    $retryStageFiles = @($retryStageFiles | Select-Object -Unique)
+    if (-not $retryStageFiles.Count) {
+      Write-Log "No copied cache files to stage after retry reset."
+      return
+    }
+    Run-Git "Stage cache files after retry reset" (@("add", "-f") + $retryStageFiles)
+    $retryChanged = & $gitExe -C $syncRepo diff --cached --name-only -- $retryStageFiles
     if ($retryChanged) {
       Run-Git "Commit cache files after retry reset" @("commit", "-m", "Update scheduled cache $stamp retry")
       Run-GitWithRetry "Retry push cache commit" @("push", "origin", "main")
