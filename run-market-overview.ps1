@@ -20,6 +20,8 @@ foreach ($name in @("LINE_CHANNEL_ACCESS_TOKEN", "LINE_TO", "LINE_USER_ID")) {
 New-Item -ItemType Directory -Force -Path "C:\fuman-runtime\logs" | Out-Null
 $log = "C:\fuman-runtime\logs\market-overview-$(Get-Date -Format yyyyMMdd-HHmmss).log"
 "=== Market overview patrol start $(Get-Date) ===" | Out-File $log -Encoding utf8
+. "C:\fuman-terminal\schedule-guard.ps1"
+Invoke-FumanWeekdayGuard -Label "Market overview patrol" -LogPath $log
 
 & $nodeExe "scripts\patrol-market-overview.js" >> $log 2>&1
 $exitCode = $LASTEXITCODE

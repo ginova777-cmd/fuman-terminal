@@ -40,6 +40,9 @@ New-Item -ItemType Directory -Force -Path "C:\fuman-runtime\logs" | Out-Null
 $log = "C:\fuman-runtime\logs\trade-manager-patrol-$(Get-Date -Format yyyyMMdd-HHmmss).log"
 
 "=== Trade manager patrol start $(Get-Date) ===" | Out-File $log -Encoding utf8
+. "C:\fuman-terminal\schedule-guard.ps1"
+Invoke-FumanWeekdayGuard -Label "Trade manager patrol" -LogPath $log
+
 & $nodeExe "scripts\patrol-trade-manager.js" >> $log 2>&1
 $exitCode = $LASTEXITCODE
 if ($exitCode -ne 0) {

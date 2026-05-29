@@ -10,7 +10,7 @@ $env:NODE_OPTIONS = "--use-system-ca"
 $nodeExe = "C:\Program Files\nodejs\node.exe"
 $logDir = "C:\fuman-runtime\logs"
 New-Item -ItemType Directory -Force -Path $logDir | Out-Null
-$log = Join-Path $logDir ("institution-{0}.log" -f (Get-Date -Format "yyyyMMdd-HHmmss"))
+$log = Join-Path $logDir ("warrant-flow-{0}.log" -f (Get-Date -Format "yyyyMMdd-HHmmss"))
 
 function Invoke-NodeScan($scriptPath, $label) {
   for ($attempt = 1; $attempt -le 3; $attempt++) {
@@ -27,24 +27,24 @@ function Invoke-NodeScan($scriptPath, $label) {
   return $exitCode
 }
 
-"=== Institution scan start $(Get-Date) ===" | Out-File $log -Encoding utf8
+"=== Warrant flow scan start $(Get-Date) ===" | Out-File $log -Encoding utf8
 . "C:\fuman-terminal\schedule-guard.ps1"
-Invoke-FumanWeekdayGuard -Label "Institution scan" -LogPath $log
+Invoke-FumanWeekdayGuard -Label "Warrant flow scan" -LogPath $log
 
-$scanExit = Invoke-NodeScan "scripts\scan-institution-cache.js" "Institution scan"
+$scanExit = Invoke-NodeScan "scripts\scan-warrant-flow-cache.js" "Warrant flow scan"
 if ($scanExit -ne 0) {
-  "Institution scan failed with exit code $scanExit" >> $log
+  "Warrant flow scan failed with exit code $scanExit" >> $log
   exit $scanExit
 }
 $syncScript = "C:\fuman-terminal\run-cache-sync.ps1"
 if (Test-Path $syncScript) {
-  "Institution cache files written locally; starting Git sync now" >> $log
+  "Warrant flow cache files written locally; starting Git sync now" >> $log
   & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $syncScript >> $log 2>&1
   $syncExit = $LASTEXITCODE
   if ($syncExit -ne 0) {
     "Cache sync failed with exit code $syncExit; scheduled sync remains as fallback" >> $log
   }
 } else {
-  "Institution cache files written locally; Git sync script not found" >> $log
+  "Warrant flow cache files written locally; Git sync script not found" >> $log
 }
-"=== Institution scan end $(Get-Date) ===" >> $log
+"=== Warrant flow scan end $(Get-Date) ===" >> $log

@@ -40,6 +40,8 @@ function Invoke-CacheSyncWithRetry($scriptPath, $maxAttempts = 3) {
 }
 
 Write-Log "=== Strategy4 full scan start $(Get-Date) ==="
+. "C:\fuman-terminal\schedule-guard.ps1"
+Invoke-FumanWeekdayGuard -Label "Strategy4 full scan" -LogPath $log
 
 $env:FULL_SCAN = "1"
 $env:STRATEGY4_BATCH_SIZE = "9999"

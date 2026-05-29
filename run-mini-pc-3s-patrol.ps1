@@ -60,7 +60,9 @@ $env:REALTIME_RADAR_PATROL_INTERVAL_MS = "3000"
 $env:NODE_OPTIONS = "--use-system-ca"
 
 Write-PatrolLog "Mini PC 3s patrol launcher start"
+. "C:\fuman-terminal\schedule-guard.ps1"
+Invoke-FumanWeekdayGuard -Label "Mini PC 3s patrol launcher" -LogPath $launcherLog
+
 Start-FumanPatrol -Name "strategy2-intraday-3s" -Script "run-strategy2-intraday.ps1"
 Start-FumanPatrol -Name "realtime-radar-3s" -Script "run-realtime-radar.ps1"
 Write-PatrolLog "Mini PC 3s patrol launcher end"
-

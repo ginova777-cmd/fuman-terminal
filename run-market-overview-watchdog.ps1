@@ -13,6 +13,9 @@ function Write-WatchdogLog {
   "[{0}] {1}" -f (Get-Date -Format "yyyy-MM-dd HH:mm:ss"), $Message | Out-File -FilePath $log -Encoding utf8 -Append
 }
 
+. "C:\fuman-terminal\schedule-guard.ps1"
+Invoke-FumanWeekdayGuard -Label "Market overview watchdog" -LogPath $log
+
 function Get-TaipeiMinuteOfDay {
   $taipeiNow = [System.TimeZoneInfo]::ConvertTimeBySystemTimeZoneId((Get-Date), "Taipei Standard Time")
   return ($taipeiNow.Hour * 60) + $taipeiNow.Minute

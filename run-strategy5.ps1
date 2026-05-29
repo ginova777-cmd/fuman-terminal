@@ -31,6 +31,8 @@ function Invoke-NodeScan($scriptPath, $label) {
 }
 
 "=== Strategy5 scan start $(Get-Date) ===" | Out-File $log -Encoding utf8
+. "C:\fuman-terminal\schedule-guard.ps1"
+Invoke-FumanWeekdayGuard -Label "Strategy5 scan" -LogPath $log
 
 $scanExit = Invoke-NodeScan "scripts\scan-strategy5-cache.js" "Strategy5 scan"
 if ($scanExit -ne 0) {
