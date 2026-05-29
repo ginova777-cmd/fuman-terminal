@@ -309,7 +309,9 @@ async function main() {
         currentMatches,
         complete: false,
       });
-      writeStrategy4Output(retryOutput, false);
+      if (SYNC_PARTIAL) {
+        writeStrategy4Output(retryOutput, false);
+      }
       console.log(`${label} done: matches ${(payload.matches || []).length}, remaining noData ${noDataCodes.size}`);
       await sleep(500);
     }
