@@ -104,6 +104,18 @@ function buildEnhancementMessage(items) {
     .join("\n");
 }
 
+function attachLatestRecords(events, records) {
+  const latestRecordByCode = new Map();
+  (records || []).forEach((record) => {
+    if (!record?.code) return;
+    latestRecordByCode.set(String(record.code), record);
+  });
+  return (events || []).map((event) => ({
+    ...event,
+    latestRecord: event.latestRecord || latestRecordByCode.get(String(event.code)),
+  }));
+}
+
 async function main() {
   const today = taipeiDateKey();
   const payload = readJson(STRATEGY2_REPORT_FILE, { date: "", events: [] });
@@ -111,7 +123,7 @@ async function main() {
     console.log(`strategy2 live alert skipped: stale date ${payload.date || "--"}`);
     return;
   }
-  const aEvents = (payload.events || [])
+  const aEvents = attachLatestRecords(payload.events, payload.records)
     .filter((event) => event.firstAAt)
     .filter(isStrategy2LiveDisplayEvent)
     .sort((a, b) => String(a.firstAAt).localeCompare(String(b.firstAAt)));
