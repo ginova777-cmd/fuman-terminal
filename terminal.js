@@ -4005,6 +4005,11 @@ function renderRealtimeRadar() {
     });
     return;
   }
+  if (radarOpen && hasStrategy2CacheRows && !latestStocks.length && !realtimeRadarLoading) {
+    ensureRealtimeRadarData().then((stocks) => {
+      if (stocks.length && isViewActive("realtime-radar")) renderRealtimeRadar();
+    });
+  }
   if (!Object.keys(strategyHistoryData).length && !strategy4CacheLoading) loadStrategy4Cache(true);
   const historyTargets = getRealtimeRadarHistoryTargets();
   const snapshotHistoryTargets = historyTargets.length ? [] : getRealtimeRadarSnapshotHistoryTargets(realtimeRadarLastRows);
