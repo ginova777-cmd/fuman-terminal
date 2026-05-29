@@ -300,7 +300,40 @@ async function main() {
   let scannedThisRun = 0;
   const chunksToRun = Math.ceil(codes.length / BATCH_SIZE);
 
+  function buildOutput(completedChunks, complete) {
+    const matches = [...currentMatches.values()]
+      .sort((a, b) => (b.score || 0) - (a.score || 0) || (b.percent || 0) - (a.percent || 0))
+      .slice(0, 200);
+    const quoteDate = universe.find((stock) => stock.quoteDate)?.quoteDate || String(matches[0]?.date || "").replace(/\D/g, "");
+    return {
+      ok: true,
+      source: "github-actions",
+      updatedAt: new Date().toISOString(),
+      usedDate: quoteDate,
+      fullScan: complete && FULL_SCAN,
+      partialScan: !complete,
+      scanStatus: complete ? "complete" : "running",
+      completedChunks,
+      totalChunks: chunksToRun,
+      total: codes.length,
+      scannedThisRun,
+      scannedCodes: [...scanned].filter((code) => codes.includes(code)),
+      count: matches.length,
+      matches,
+    };
+  }
+
+  async function publishOutput(output, { backupOnMatches = false } = {}) {
+    fs.mkdirSync(path.dirname(OUT_FILE), { recursive: true });
+    fs.writeFileSync(OUT_FILE, `${JSON.stringify(output, null, 2)}\n`);
+    if (backupOnMatches && output.matches.length) {
+      fs.writeFileSync(BACKUP_FILE, `${JSON.stringify({ ...output, source: "github-actions-backup" }, null, 2)}\n`);
+    }
+    await upsertOpenBuyLatestToSupabase(output);
+  }
+
   console.log(`open-buy cache start: full market scan, ${codes.length} codes, ${chunksToRun} chunks in one run`);
+  let lastPublishedCount = 0;
   for (let chunk = 0; chunk < chunksToRun; chunk++) {
     const start = chunk * BATCH_SIZE;
     const chunkCodes = codes.slice(start, start + BATCH_SIZE);
@@ -314,36 +347,24 @@ async function main() {
     });
     scannedThisRun += chunkCodes.length;
     console.log(`${label} done: matches ${(payload.matches || []).length}`);
+    if (currentMatches.size > lastPublishedCount) {
+      const partialOutput = buildOutput(chunk + 1, false);
+      await publishOutput(partialOutput);
+      lastPublishedCount = currentMatches.size;
+      console.log(`open-buy partial published: chunks ${chunk + 1}/${chunksToRun}, scanned ${scannedThisRun}/${codes.length}, matches ${partialOutput.matches.length}`);
+    }
   }
 
   if (scanned.size !== codes.length || scannedThisRun !== codes.length) {
     throw new Error(`Open-buy full scan incomplete: scanned ${scanned.size}/${codes.length}`);
   }
 
-  const matches = [...currentMatches.values()]
-    .sort((a, b) => (b.score || 0) - (a.score || 0) || (b.percent || 0) - (a.percent || 0))
-    .slice(0, 200);
-  const quoteDate = universe.find((stock) => stock.quoteDate)?.quoteDate || String(matches[0]?.date || "").replace(/\D/g, "");
-  const output = {
-    ok: true,
-    source: "github-actions",
-    updatedAt: new Date().toISOString(),
-    usedDate: quoteDate,
-    fullScan: FULL_SCAN,
-    total: codes.length,
-    scannedThisRun,
-    scannedCodes: [...scanned].filter((code) => codes.includes(code)),
-    count: matches.length,
-    matches,
-  };
+  const output = buildOutput(chunksToRun, true);
 
   preservePreviousTradingSource((previousRaw.matches || []).length ? previousRaw : backup, output);
 
-  fs.mkdirSync(path.dirname(OUT_FILE), { recursive: true });
-  fs.writeFileSync(OUT_FILE, `${JSON.stringify(output, null, 2)}\n`);
-  if (matches.length) fs.writeFileSync(BACKUP_FILE, `${JSON.stringify({ ...output, source: "github-actions-backup" }, null, 2)}\n`);
-  await upsertOpenBuyLatestToSupabase(output);
-  console.log(`open-buy cache updated: full market scan scanned ${scannedThisRun}/${codes.length}, matches ${matches.length}`);
+  await publishOutput(output, { backupOnMatches: true });
+  console.log(`open-buy cache updated: full market scan scanned ${scannedThisRun}/${codes.length}, matches ${output.matches.length}`);
 }
 
 main().catch((error) => {
