@@ -3877,7 +3877,13 @@ async function loadRealtimeRadarLatestCache(force = false) {
   try {
     const candidates = [];
     const errors = [];
-    if (supabaseClient) {
+    const restPayload = await fetchSupabaseLatestPayload("fuman_realtime_radar_cache", isMobileViewport() ? 3000 : 4500);
+    if (restPayload) {
+      candidates.push({
+        source: "supabase",
+        payload: restPayload,
+      });
+    } else if (supabaseClient) {
       try {
         const { data, error } = await supabaseClient
           .from("fuman_realtime_radar_cache")
@@ -5132,11 +5138,39 @@ async function fetchJson(url, timeout = 8000, options = {}) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeout);
   try {
-    const response = await fetch(url, { signal: controller.signal, cache: options.cache || "no-store" });
+    const response = await fetch(url, {
+      signal: controller.signal,
+      cache: options.cache || "no-store",
+      headers: options.headers || undefined,
+    });
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     return await response.json();
   } finally {
     clearTimeout(timer);
+  }
+}
+
+async function fetchSupabaseLatestPayload(table, timeout = 3500) {
+  if (!FUMAN_SUPABASE_URL || !FUMAN_SUPABASE_KEY || !table) return null;
+  try {
+    const base = FUMAN_SUPABASE_URL.replace(/\/+$/, "");
+    const url = `${base}/rest/v1/${encodeURIComponent(table)}?id=eq.latest&select=payload,updated_at&limit=1&t=${Date.now()}`;
+    const rows = await fetchJson(url, timeout, {
+      headers: {
+        apikey: FUMAN_SUPABASE_KEY,
+        Authorization: `Bearer ${FUMAN_SUPABASE_KEY}`,
+        Accept: "application/json",
+      },
+    });
+    const row = Array.isArray(rows) ? rows[0] : rows;
+    if (!row?.payload) return null;
+    return {
+      ...row.payload,
+      updatedAt: row.payload.updatedAt || row.updated_at,
+      cacheSource: "supabase",
+    };
+  } catch (error) {
+    return null;
   }
 }
 
@@ -5770,6 +5804,8 @@ function mergeOpenBuyCache(payload) {
 }
 
 async function loadOpenBuySupabasePayload() {
+  const restPayload = await fetchSupabaseLatestPayload("strategy1_open_buy_latest", isMobileViewport() ? 3000 : 4500);
+  if (restPayload) return restPayload;
   if (!supabaseClient) return null;
   try {
     const { data, error } = await supabaseClient
@@ -6946,6 +6982,8 @@ function sortIntradayZoneRows(rows) {
 }
 
 async function loadStrategy2IntradayPayload() {
+  const restPayload = await fetchSupabaseLatestPayload("strategy2_latest", isMobileViewport() ? 3000 : 4500);
+  if (restPayload) return restPayload;
   if (supabaseClient) {
     try {
       const { data, error } = await supabaseClient
