@@ -2771,6 +2771,9 @@ function installRealtimeRadarStyles() {
       gap: 0;
       margin-top: 12px;
       border-bottom: 1px solid rgba(134, 151, 190, 0.14);
+      position: relative;
+      z-index: 30;
+      pointer-events: auto;
     }
     .radar-board-tabs button {
       border: 0;
@@ -2781,6 +2784,7 @@ function installRealtimeRadarStyles() {
       font-size: 18px;
       font-weight: 950;
       padding: 18px 10px;
+      pointer-events: auto;
     }
     .radar-board-tabs button.active {
       border-color: #ff4d5c;
@@ -3498,6 +3502,76 @@ function buildRealtimeRadarRows(options = {}) {
     .sort((a, b) => b.score - a.score || b.value - a.value);
 }
 
+function realtimeRadarTimestampFromIntradayTime(timeText, dateText = "") {
+  const time = String(timeText || "").match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?/);
+  if (!time) return Date.now();
+  const dateKey = normalizeMarketAiDateKey(dateText) || marketAiTodayKey();
+  const yyyy = dateKey.slice(0, 4);
+  const mm = dateKey.slice(4, 6);
+  const dd = dateKey.slice(6, 8);
+  const timestamp = Date.parse(`${yyyy}-${mm}-${dd}T${String(time[1]).padStart(2, "0")}:${time[2]}:${time[3] || "00"}+08:00`);
+  return Number.isFinite(timestamp) ? timestamp : Date.now();
+}
+
+function buildRealtimeRadarRowsFromStrategy2Cache() {
+  const stockByCode = new Map(latestStocks.map((stock) => [String(stock.code || ""), stock]));
+  return [...strategy2IntradayEventByCode.values()]
+    .map((event) => {
+      const code = String(event?.code || "");
+      if (!/^\d{4}$/.test(code)) return null;
+      const base = stockByCode.get(code) || {};
+      const quote = strategyRealtimeQuotes[code];
+      const live = quote?.close ? applyStrategyQuote({ ...base, code, name: event.name || base.name }) : { ...base, code, name: event.name || base.name };
+      const latestEnhancement = normalizeArray(event.enhancements)
+        .filter((item) => isIntradayVisibleTimeText(item?.at))
+        .sort((a, b) => intradayTimeToValue(b.at) - intradayTimeToValue(a.at))[0] || {};
+      const latestTime = event.latestSeenAt || event.latestAAt || latestEnhancement.at || event.firstAAt || event.firstBAt || quote?.time || "";
+      const close = cleanNumber(live.close) || cleanNumber(event.latestSeenPrice || event.latestAPrice || latestEnhancement.price || event.firstAPrice || event.firstBPrice);
+      const firstPrice = cleanNumber(event.firstAPrice || event.firstBPrice || event.firstSeenPrice);
+      const volume = normalizeTradeVolumeLots(live.tradeVolume || live.volume || latestEnhancement.totalVolume);
+      const value = radarStockValue({ ...live, close, volume }) || estimateTradeValue(close, volume);
+      const pct = Number.isFinite(cleanNumber(live.percent)) && cleanNumber(live.percent)
+        ? cleanNumber(live.percent)
+        : firstPrice ? ((close - firstPrice) / firstPrice) * 100 : 0;
+      const inst = getInstitutionTotal(code);
+      const trust = cleanNumber(inst.trust);
+      const foreign = cleanNumber(inst.foreign);
+      const totalInst = cleanNumber(inst.total);
+      const side = pct < 0 ? "short" : "long";
+      const strategyTags = normalizeArray(event.strategies).slice(0, 4);
+      const enhancementTags = latestEnhancement.strategy ? [latestEnhancement.strategy] : [];
+      const signalTags = [...new Set([...strategyTags, ...enhancementTags, side === "short" ? "短線轉弱" : "短線強勢"])];
+      const score = Math.max(1, Math.min(100, cleanNumber(event.maxScore || latestEnhancement.score) || radarSignalScore({ ...live, pct, value, volume, foreign, trust, signalTags })));
+      return {
+        ...live,
+        code,
+        name: event.name || live.name || code,
+        close,
+        pct,
+        percent: pct,
+        value,
+        volume,
+        tradeVolume: volume,
+        side,
+        score,
+        flow: radarFlowValue({ ...live, pct, value, volume, foreign, trust, signalTags }),
+        volumeRatio: cleanNumber(live.volumeRatio),
+        trust,
+        foreign,
+        totalInst,
+        marginChange: 0,
+        shortMarginChange: 0,
+        signalTags,
+        radarUpdatedAt: realtimeRadarTimestampFromIntradayTime(latestTime, event.date),
+        radarMode: "intraday",
+        radarDate: normalizeMarketAiDateKey(event.date) || marketAiTodayKey(),
+        strategy2Event: event,
+      };
+    })
+    .filter((stock) => stock?.close > 0 && stock.side)
+    .sort((a, b) => cleanNumber(b.radarUpdatedAt) - cleanNumber(a.radarUpdatedAt) || cleanNumber(b.score) - cleanNumber(a.score));
+}
+
 function radarReasonTags(stock) {
   return (stock.signalTags?.length ? stock.signalTags : [stock.side === "long" ? "短線強勢" : "短線轉弱"]).slice(0, 4);
 }
@@ -3731,8 +3805,30 @@ function recentRealtimeRadarDisplayRows(rows = [], radarOpen = isRadarDetectionW
   if (!latest) return hydrated;
   const cutoff = Math.max(Date.now() - Math.max(REALTIME_RADAR_REFRESH_MS * 25, 75000), latest - Math.max(REALTIME_RADAR_REFRESH_MS * 12, 45000));
   const freshRows = hydrated.filter((stock) => cleanNumber(stock.radarUpdatedAt) >= cutoff);
-  return freshRows;
+  return freshRows.length ? freshRows : hydrated;
 }
+
+function switchRealtimeRadarSide(sideInput = "long") {
+  const side = sideInput === "short" ? "short" : "long";
+  realtimeRadarSide = side;
+  const panel = viewPanels["realtime-radar"];
+  const board = panel?.querySelector(".radar-board-list");
+  const cachedMarkup = realtimeRadarBoardMarkupCache[side] || `<div class="empty-state">目前沒有${side === "short" ? "空方" : "多方"}訊號</div>`;
+  if (!panel || !board) {
+    realtimeRadarManualSideSwitch = true;
+    renderRealtimeRadar();
+    return;
+  }
+  panel.querySelectorAll("[data-radar-side]").forEach((button) => {
+    const isActive = button.dataset.radarSide === side;
+    button.classList.toggle("active", isActive);
+    button.classList.toggle("short-active", isActive && side === "short");
+    button.setAttribute("aria-selected", isActive ? "true" : "false");
+  });
+  board.innerHTML = cachedMarkup;
+  realtimeRadarManualSideSwitch = false;
+}
+window.switchRealtimeRadarSide = switchRealtimeRadarSide;
 
 function loadRealtimeRadarLastRows() {
   try {
@@ -3871,6 +3967,17 @@ function renderRealtimeRadar() {
     loadStrategy3RadarVolumeCache();
   }
   const radarOpen = isRadarDetectionWindow();
+  let hasStrategy2CacheRows = false;
+  if (radarOpen) {
+    ensureStrategy2IntradayTodayCache();
+    hasStrategy2CacheRows = strategy2IntradayEventByCode.size > 0;
+    const cacheRefreshDue = !strategy2IntradayCacheLoadedAt || Date.now() - strategy2IntradayCacheLoadedAt > Math.max(REALTIME_RADAR_REFRESH_MS, 3000);
+    if ((!strategy2IntradayEventByCode.size || cacheRefreshDue) && !strategy2IntradayCacheLoading) {
+      loadStrategy2IntradayCache(cacheRefreshDue).then(() => {
+        if (isViewActive("realtime-radar")) renderRealtimeRadar();
+      });
+    }
+  }
   if (!realtimeRadarLastRows.length) loadRealtimeRadarLastRows();
   if (!radarOpen && !realtimeRadarLastRows.length && !latestStocks.length) {
     panel.innerHTML = `
@@ -3890,7 +3997,7 @@ function renderRealtimeRadar() {
     });
     return;
   }
-  if (!latestStocks.length && !realtimeRadarLastRows.length) {
+  if (!latestStocks.length && !realtimeRadarLastRows.length && !hasStrategy2CacheRows) {
     panel.innerHTML = `<div class="empty-state">正在快速載入當沖雷達股票池...</div>`;
     ensureRealtimeRadarData().then((stocks) => {
       if (stocks.length) renderRealtimeRadar();
@@ -3911,7 +4018,9 @@ function renderRealtimeRadar() {
     });
   }
   const shouldReuseRadarRows = isManualSideSwitch && realtimeRadarLastRows.length;
-  const rows = shouldReuseRadarRows ? [] : buildRealtimeRadarRows({ mode: radarOpen ? "intraday" : "closed" });
+  const cacheRows = radarOpen ? buildRealtimeRadarRowsFromStrategy2Cache() : [];
+  const liveRows = shouldReuseRadarRows ? [] : buildRealtimeRadarRows({ mode: radarOpen ? "intraday" : "closed" });
+  const rows = radarOpen ? mergeRealtimeRadarRows([...liveRows, ...cacheRows], []) : liveRows;
   if (!shouldReuseRadarRows && radarOpen && rows.length) {
     realtimeRadarLastRows = mergeRealtimeRadarRows(rows, realtimeRadarLastRows);
     realtimeRadarLastUpdatedAt = Date.now();
@@ -3956,8 +4065,8 @@ function renderRealtimeRadar() {
       </header>
       ${buildRealtimeRadarAiPanel(realtimeRadarLastRows, { loading: true })}
       <section class="radar-board-tabs" role="tablist" aria-label="即時雷達多空切換">
-        <button type="button" class="${realtimeRadarSide !== "short" ? "active" : ""}" data-radar-side="long">多方</button>
-        <button type="button" class="${realtimeRadarSide === "short" ? "active short-active" : ""}" data-radar-side="short">空方</button>
+        <button type="button" class="${realtimeRadarSide !== "short" ? "active" : ""}" data-radar-side="long" onclick="switchRealtimeRadarSide('long')">多方</button>
+        <button type="button" class="${realtimeRadarSide === "short" ? "active short-active" : ""}" data-radar-side="short" onclick="switchRealtimeRadarSide('short')">空方</button>
       </section>
       <div class="empty-state">正在更新${realtimeRadarSide === "short" ? "空方" : "多方"}訊號...</div>
     `;
@@ -3996,8 +4105,8 @@ function renderRealtimeRadar() {
       </header>
       ${buildRealtimeRadarAiPanel(realtimeRadarLastRows, { loading: true })}
       <section class="radar-board-tabs" role="tablist" aria-label="即時雷達多空切換">
-        <button type="button" class="${realtimeRadarSide !== "short" ? "active" : ""}" data-radar-side="long">多方</button>
-        <button type="button" class="${realtimeRadarSide === "short" ? "active short-active" : ""}" data-radar-side="short">空方</button>
+        <button type="button" class="${realtimeRadarSide !== "short" ? "active" : ""}" data-radar-side="long" onclick="switchRealtimeRadarSide('long')">多方</button>
+        <button type="button" class="${realtimeRadarSide === "short" ? "active short-active" : ""}" data-radar-side="short" onclick="switchRealtimeRadarSide('short')">空方</button>
       </section>
       <div class="empty-state">正在更新${realtimeRadarSide === "short" ? "空方" : "多方"}訊號...</div>
     `;
@@ -4080,7 +4189,11 @@ function renderRealtimeRadar() {
       </article>
     `;
   };
-  const boardMarkup = activeRows.slice(0, 10).map(boardCard).join("") || `<div class="empty-state">等待${activeSide === "short" ? "空方" : "多方"}訊號...</div>`;
+  realtimeRadarBoardMarkupCache = {
+    long: longRows.slice(0, 10).map(boardCard).join("") || `<div class="empty-state">目前無多方訊號</div>`,
+    short: shortRows.slice(0, 10).map(boardCard).join("") || `<div class="empty-state">目前無空方訊號</div>`,
+  };
+  const boardMarkup = realtimeRadarBoardMarkupCache[activeSide] || `<div class="empty-state">目前無${activeSide === "short" ? "空方" : "多方"}訊號</div>`;
   const signalTimeText = realtimeRadarSignalTimeText(displaySignalAt);
   const aiUpdateText = radarOpen && displaySignalAt
     ? displaySignalStale
@@ -4093,7 +4206,7 @@ function renderRealtimeRadar() {
       ? displaySignalStale
         ? `盤中即時巡邏｜最後訊號 ${signalTimeText}，正在強制補掃`
         : `盤中即時巡邏｜最新訊號 ${signalTimeText}`
-      : "盤中即時巡邏｜等待第一批即時訊號"
+      : "盤中即時巡邏｜3秒輪巡同步中"
     : realtimeRadarLastRows.length
       ? `收盤後停止偵測，顯示今日盤中最後資料${realtimeRadarLastUpdatedAt ? ` ${new Date(realtimeRadarLastUpdatedAt).toLocaleTimeString("zh-TW", { hour12: false })}` : ""}`
       : `${realtimeRadarModeText(false)}｜資料日期 ${formatMarketAiDateKey(realtimeRadarClosedDataDateKey())}`;
@@ -4108,8 +4221,8 @@ function renderRealtimeRadar() {
     </header>
     ${aiPanelMarkup}
     <section class="radar-board-tabs" role="tablist" aria-label="即時雷達多空切換">
-      <button type="button" class="${activeSide === "long" ? "active" : ""}" data-radar-side="long">多方</button>
-      <button type="button" class="${activeSide === "short" ? "active short-active" : ""}" data-radar-side="short">空方</button>
+      <button type="button" class="${activeSide === "long" ? "active" : ""}" data-radar-side="long" onclick="switchRealtimeRadarSide('long')">多方</button>
+      <button type="button" class="${activeSide === "short" ? "active short-active" : ""}" data-radar-side="short" onclick="switchRealtimeRadarSide('short')">空方</button>
     </section>
     <section class="radar-board-list">
       ${boardMarkup}
@@ -4338,6 +4451,7 @@ let realtimeRadarLoading = false;
 let realtimeRadarDataPromise = null;
 let realtimeRadarSide = "auto";
 let realtimeRadarManualSideSwitch = false;
+let realtimeRadarBoardMarkupCache = { long: "", short: "" };
 let realtimeRadarLastRows = [];
 let realtimeRadarLastUpdatedAt = 0;
 let realtimeRadarRefreshLoading = false;
@@ -9107,7 +9221,11 @@ function renderIntradayRadar(evaluated) {
   const renderZonePicks = (list, zoneId) => list.length ? list.map((stock, index) => {
     const sign = stock.percent >= 0 ? "+" : "";
     const pctClass = pctToneClass(stock.percent);
-    const mainSignal = stock.intradaySignals[0]?.short || "量價";
+    const latestEnhancement = normalizeArray(stock.strategy2Event?.enhancements)
+      .filter(isStrategy2EnhancementVisible)
+      .at(-1);
+    const hotFire = latestEnhancement ? `<span class="intraday-hot-fire" title="持續爆量且多次進入進場區">🔥</span>` : "";
+    const mainSignal = latestEnhancement ? "持續放量" : stock.intradaySignals[0]?.short || "量價";
     const entry = formatIntradayTrackedEntry(stock);
     const quoteTime = getIntradayEntryTime(stock);
     const timeText = `<span class="intraday-pick-time">${quoteTime}</span>`;
@@ -9116,7 +9234,7 @@ function renderIntradayRadar(evaluated) {
         <span class="intraday-rank">${index + 1}</span>
         ${timeText}
         <div class="intraday-pick-main">
-          <b>${stock.code} ${stock.name}</b>
+          <b>${hotFire}${stock.code} ${stock.name}</b>
           <span>${mainSignal}｜進場 ${entry}</span>
         </div>
         <div class="intraday-pick-price">
@@ -13607,13 +13725,18 @@ strategyModeButtons.forEach((button) => {
   });
 });
 
+document.addEventListener("pointerdown", (event) => {
+  const radarSide = event.target.closest("[data-radar-side]");
+  if (!radarSide) return;
+  event.preventDefault();
+  event.stopImmediatePropagation();
+  switchRealtimeRadarSide(radarSide.dataset.radarSide || "long");
+}, true);
+
 document.addEventListener("click", (event) => {
   const radarSide = event.target.closest("[data-radar-side]");
   if (radarSide) {
-    realtimeRadarSide = radarSide.dataset.radarSide || "auto";
-    realtimeRadarManualSideSwitch = true;
-    if (!realtimeRadarLastRows.length && !isRealtimeRadarFresh()) realtimeRadarNeedsFreshScan = true;
-    renderRealtimeRadar();
+    switchRealtimeRadarSide(radarSide.dataset.radarSide || "long");
     return;
   }
   const radarRefresh = event.target.closest("[data-radar-refresh]");

@@ -9,6 +9,7 @@ const { ROOT, dataPath, statePath } = require("./runtime-paths");
 const STRATEGY2_REPORT_FILE = dataPath("strategy2-intraday-latest.json");
 const LIVE_ALERT_STATE_FILE = statePath("strategy2-live-alert-state.json");
 const LIVE_LIMIT = Math.max(1, Number(process.env.STRATEGY2_LIVE_LIMIT || 3));
+const STRATEGY2_LIVE_MIN_PERCENT = Number(process.env.STRATEGY2_LIVE_MIN_PERCENT || 2);
 
 function readJson(file, fallback) {
   try { return JSON.parse(fs.readFileSync(file, "utf8")); } catch { return fallback; }
@@ -32,6 +33,18 @@ function taipeiDateKey(date = new Date()) {
 
 function dateSlash(value) {
   return String(value || "").replace(/-/g, "/");
+}
+
+function cleanNumber(value) {
+  return Number(String(value ?? "").replace(/[, +%]/g, "").trim()) || 0;
+}
+
+function strategy2EventPercent(event) {
+  return cleanNumber(event?.percent ?? event?.pct ?? event?.latestRecord?.percent ?? event?.record?.percent);
+}
+
+function isStrategy2LiveDisplayEvent(event) {
+  return strategy2EventPercent(event) >= STRATEGY2_LIVE_MIN_PERCENT;
 }
 
 function normalizeKeyNumber(value) {
@@ -100,6 +113,7 @@ async function main() {
   }
   const aEvents = (payload.events || [])
     .filter((event) => event.firstAAt)
+    .filter(isStrategy2LiveDisplayEvent)
     .sort((a, b) => String(a.firstAAt).localeCompare(String(b.firstAAt)));
   if (!aEvents.length) {
     console.log("strategy2 live alert skipped: no entry-zone events");
