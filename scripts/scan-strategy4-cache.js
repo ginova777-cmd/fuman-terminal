@@ -13,6 +13,8 @@ const CHUNK_SIZE = Number(process.env.STRATEGY4_CHUNK_SIZE || BATCH_SIZE);
 const RETRY_CHUNK_SIZE = Number(process.env.STRATEGY4_RETRY_CHUNK_SIZE || CHUNK_SIZE);
 const BATCHES_PER_RUN = Number(process.env.STRATEGY4_BATCHES_PER_RUN || 999);
 const FULL_SCAN = process.env.FULL_SCAN !== "0";
+const SYNC_PARTIAL = process.env.STRATEGY4_SYNC_PARTIAL === "1";
+const SYNC_SCRIPT = path.join(ROOT, "run-strategy4-partial-sync.ps1");
 const STOCK_URL = process.env.STOCK_UNIVERSE_URL || "https://fuman-terminal.vercel.app/api/stocks";
 const MIN_UNIVERSE_SIZE = Number(process.env.STRATEGY4_MIN_UNIVERSE_SIZE || 1700);
 const USE_MIS_QUOTES = process.env.STRATEGY4_USE_MIS === "1";
