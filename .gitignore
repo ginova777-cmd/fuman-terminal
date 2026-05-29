@@ -7,5 +7,6 @@ node_modules/
 logs/
 locks/
 data/strategy2-intraday-latest.json
+archive/strategy2-intraday/
 check-fuman.ps1
 terminal-conflict-backup.js

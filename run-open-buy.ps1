@@ -33,8 +33,17 @@ if ($exitCode -ne 0) {
   exit $exitCode
 }
 
-"Open buy cache files written locally; Git sync is handled by run-cache-sync.ps1" >> $log
+$syncScript = "C:\fuman-terminal\run-cache-sync.ps1"
+if (Test-Path -LiteralPath $syncScript) {
+  "Open buy cache files written locally; starting isolated openBuy Git sync" >> $log
+  & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $syncScript -Scope openBuy >> $log 2>&1
+  $syncExitCode = $LASTEXITCODE
+  if ($syncExitCode -ne 0) {
+    "Open buy isolated Git sync failed with exit code $syncExitCode" >> $log
+    exit $syncExitCode
+  }
+} else {
+  "Open buy isolated Git sync skipped; missing $syncScript" >> $log
+}
 "=== Open buy full scan end $(Get-Date) ===" >> $log
-
-
 

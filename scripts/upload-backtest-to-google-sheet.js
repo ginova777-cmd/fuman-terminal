@@ -801,6 +801,10 @@ function strategyMatchesRows(title, payloadInfo, dateText, options = {}) {
   return rows;
 }
 
+async function strategy4Rows(payloadInfo, dateText) {
+  return strategyMatchesRows("策略4成績單", payloadInfo, dateText);
+}
+
 async function strategy5Rows(payloadInfo, dateText) {
   const payload = payloadInfo.value || {};
   const matches = Array.isArray(payload.matches) ? payload.matches : [];
@@ -913,19 +917,35 @@ function strategy2SimpleResult(plan) {
   return "平盤";
 }
 
-async function strategy2Rows(dateText) {
-  let info = readFirstJson([path.join(DATA_DIR, "strategy2-intraday-latest.json"), path.join(REPO_DATA_DIR, "strategy2-intraday-latest.json")]);
+function readStrategy2ScorecardPayload(dateText) {
+  let info = readFirstJson([
+    path.join(DATA_DIR, "strategy2-scorecard-source.json"),
+    path.join(REPO_DATA_DIR, "strategy2-scorecard-source.json"),
+  ]);
   let payload = info.value || {};
-  if (!Array.isArray(payload.records) || payload.records.length === 0) {
-    const historyInfo = readFirstJson([
-      path.join(DATA_DIR, "strategy2-intraday-history", `${dateText}.json`),
-      path.join(REPO_DATA_DIR, "strategy2-intraday-history", `${dateText}.json`),
-    ]);
-    if (Array.isArray(historyInfo.value?.records) && historyInfo.value.records.length) {
-      info = historyInfo;
-      payload = historyInfo.value;
-    }
+  if (Array.isArray(payload.events) || Array.isArray(payload.records)) {
+    return { info, payload };
   }
+  info = readFirstJson([
+    path.join(DATA_DIR, "strategy2-intraday-latest.json"),
+    path.join(REPO_DATA_DIR, "strategy2-intraday-latest.json"),
+  ]);
+  payload = info.value || {};
+  if (Array.isArray(payload.records) && payload.records.length) {
+    return { info, payload };
+  }
+  const historyInfo = readFirstJson([
+    path.join(DATA_DIR, "strategy2-intraday-history", `${dateText}.json`),
+    path.join(REPO_DATA_DIR, "strategy2-intraday-history", `${dateText}.json`),
+  ]);
+  if (Array.isArray(historyInfo.value?.records) && historyInfo.value.records.length) {
+    return { info: historyInfo, payload: historyInfo.value };
+  }
+  return { info, payload };
+}
+
+async function strategy2Rows(dateText) {
+  const { payload } = readStrategy2ScorecardPayload(dateText);
   const events = (Array.isArray(payload.events) ? payload.events : []).filter((item) => !isDrStock(item));
   const records = (Array.isArray(payload.records) ? payload.records : []).filter((item) => !isDrStock(item));
   const timeOnly = (value) => String(value || "").match(/\d{2}:\d{2}(?::\d{2})?/)?.[0] || "";
@@ -980,18 +1000,7 @@ async function strategy2Rows(dateText) {
 }
 
 function legacyStrategy2Rows(dateText) {
-  let info = readFirstJson([path.join(DATA_DIR, "strategy2-intraday-latest.json"), path.join(REPO_DATA_DIR, "strategy2-intraday-latest.json")]);
-  let payload = info.value || {};
-  if (!Array.isArray(payload.records) || payload.records.length === 0) {
-    const historyInfo = readFirstJson([
-      path.join(DATA_DIR, "strategy2-intraday-history", `${dateText}.json`),
-      path.join(REPO_DATA_DIR, "strategy2-intraday-history", `${dateText}.json`),
-    ]);
-    if (Array.isArray(historyInfo.value?.records) && historyInfo.value.records.length) {
-      info = historyInfo;
-      payload = historyInfo.value;
-    }
-  }
+  const { info, payload } = readStrategy2ScorecardPayload(dateText);
   const events = (Array.isArray(payload.events) ? payload.events : []).filter((item) => !isDrStock(item));
   const records = (Array.isArray(payload.records) ? payload.records : []).filter((item) => !isDrStock(item));
   const timeOnly = (value) => String(value || "").match(/\d{2}:\d{2}(?::\d{2})?/)?.[0] || "";
@@ -1135,6 +1144,7 @@ async function loadScorecardSheets(stamp, radarCsv, report) {
     "策略1成績單": await strategy1Rows(readFirstJson([path.join(DATA_DIR, "open-buy-latest.json"), path.join(REPO_DATA_DIR, "open-buy-latest.json"), path.join(DATA_DIR, "open-buy-scorecard-source.json"), path.join(REPO_DATA_DIR, "open-buy-scorecard-source.json")]), dateText),
     "策略2成績單": await strategy2Rows(dateText),
     "策略3成績單": await strategy3Rows(readFirstJson([path.join(DATA_DIR, "strategy3-scorecard-source.json"), path.join(REPO_DATA_DIR, "strategy3-scorecard-source.json"), path.join(DATA_DIR, "strategy3-latest.json"), path.join(REPO_DATA_DIR, "strategy3-latest.json")]), dateText),
+    "策略4成績單": await strategy4Rows(readFirstJson([path.join(DATA_DIR, "strategy4-latest.json"), path.join(REPO_DATA_DIR, "strategy4-latest.json"), path.join(DATA_DIR, "strategy4-backup.json"), path.join(REPO_DATA_DIR, "strategy4-backup.json")]), dateText),
     "策略5成績單": await strategy5Rows(readFirstJson([path.join(DATA_DIR, "strategy5-latest.json"), path.join(REPO_DATA_DIR, "strategy5-latest.json")]), dateText),
   };
 }
@@ -1334,7 +1344,7 @@ async function main() {
   for (const [title, rows] of Object.entries(scorecardSheets)) await putValues(token, title, rows);
   spreadsheet = await sheets("GET", "?fields=sheets.properties(title,sheetId)", token);
   await formatWorkbook(token, spreadsheet, titles);
-  await setSheetNavLinks(token, spreadsheet, historySheet, ["交易管家成績單", "即時雷達成績單", "策略1成績單", "策略2成績單", "策略3成績單", "策略5成績單", "歷史與區間損益", "回測摘要"]);
+  await setSheetNavLinks(token, spreadsheet, historySheet, ["交易管家成績單", "即時雷達成績單", "策略1成績單", "策略2成績單", "策略3成績單", "策略4成績單", "策略5成績單", "歷史與區間損益", "回測摘要"]);
   console.log("Uploaded " + stamp + " to Google Sheet " + SHEET_ID);
   console.log("Sheets: " + [historySheet, summarySheet, ...Object.keys(scorecardSheets)].join(", "));
 }
@@ -1343,11 +1353,4 @@ main().catch((error) => {
   console.error(error.message || error);
   process.exit(1);
 });
-
-
-
-
-
-
-
 

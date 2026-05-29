@@ -9,6 +9,7 @@ const SIGNAL_FILE = path.join(CACHE_DIR, "signals.json");
 const SCORECARD_TRACK_FILE = path.join(CACHE_DIR, "scorecard-trades.json");
 const STRATEGY5_TRACK_FILE = path.join(CACHE_DIR, "strategy5-scorecard-trades.json");
 const STRATEGY2_REPORT_FILE = dataPath("strategy2-intraday-latest.json");
+const STRATEGY2_SCORECARD_SOURCE_FILE = dataPath("strategy2-scorecard-source.json");
 const STRATEGY2_HISTORY_DIR = dataPath("strategy2-intraday-history");
 const STRATEGY2_HISTORY_WRITE_INTERVAL_MS = Math.max(0, Number(process.env.STRATEGY2_HISTORY_WRITE_INTERVAL_MS || 5 * 60 * 1000));
 const OPEN_BUY_SCORECARD_SOURCE_FILE = dataPath("open-buy-scorecard-source.json");
@@ -212,6 +213,29 @@ function buildStrategy2PublicReport(report) {
     bOnlyCount: report.bOnlyCount || 0,
     slim: {
       generatedAt: new Date().toISOString(),
+      sourceRecords: (report.records || []).length,
+      records: records.length,
+      events: (report.events || []).length,
+    },
+  };
+}
+
+function buildStrategy2ScorecardSource(report) {
+  const records = (report.records || [])
+    .filter((record) => record?.stateId === "entry" || record?.stateId === "go")
+    .sort((a, b) => strategy2RecordSortTime(a).localeCompare(strategy2RecordSortTime(b)) || String(a.code || "").localeCompare(String(b.code || "")))
+    .map(pickStrategy2PublicRecord);
+  return {
+    source: "strategy2-scorecard-source",
+    date: report.date || "",
+    updatedAt: report.updatedAt || new Date().toISOString(),
+    realtime: report.realtime || {},
+    records,
+    events: report.events || [],
+    entryCount: report.entryCount || 0,
+    aCount: report.aCount || report.entryCount || 0,
+    bOnlyCount: report.bOnlyCount || 0,
+    summary: {
       sourceRecords: (report.records || []).length,
       records: records.length,
       events: (report.events || []).length,
@@ -1372,5 +1396,4 @@ main().catch((error) => {
   console.error(error);
   process.exit(1);
 });
-
 

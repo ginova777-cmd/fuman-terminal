@@ -1,5 +1,5 @@
 param(
-  [ValidateSet("all", "strategy3", "strategy4")]
+  [ValidateSet("all", "openBuy", "strategy3", "strategy4")]
   [string]$Scope = "all"
 )
 
@@ -172,7 +172,17 @@ New-Item -ItemType File -Force -Path $lockFile | Out-Null
 try {
   Write-Log "=== Cache sync start $(Get-Date) scope=$Scope ==="
 
-  if ($Scope -eq "strategy3") {
+  if ($Scope -eq "openBuy") {
+    $criticalLatestFiles = @(
+      "data\open-buy-latest.json"
+    )
+
+    $dataFiles = @(
+      "data\open-buy-latest.json",
+      "data\open-buy-backup.json",
+      "data\open-buy-scorecard-source.json"
+    )
+  } elseif ($Scope -eq "strategy3") {
     $criticalLatestFiles = @(
       "data\strategy3-latest.json"
     )
@@ -212,6 +222,7 @@ try {
       "data\strategy3-latest.json",
       "data\strategy3-backup.json",
       "data\strategy3-scorecard-source.json",
+      "data\strategy2-scorecard-source.json",
       "data\strategy4-latest.json",
       "data\strategy4-backup.json",
       "data\strategy5-latest.json",
@@ -221,10 +232,10 @@ try {
   }
 
   $copiedFiles = New-Object System.Collections.Generic.List[string]
-  $localPublishedFiles = @(
-    "data\strategy2-intraday-latest.json"
-  )
-
+  $localPublishedFiles = @()
+  if ($env:SYNC_STRATEGY2_FULL_LATEST -eq "1") {
+    $localPublishedFiles += "data\strategy2-intraday-latest.json"
+  }
   if (-not (Test-Path (Join-Path $syncRepo ".git"))) {
     if (Test-Path $syncRepo) {
       throw "$syncRepo exists but is not a git repository. Rename or remove it before cache sync can initialize."
@@ -315,9 +326,4 @@ try {
 } finally {
   Remove-Item -LiteralPath $lockFile -Force -ErrorAction SilentlyContinue
 }
-
-
-
-
-
 
