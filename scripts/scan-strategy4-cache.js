@@ -9,6 +9,8 @@ const ROOT = path.resolve(__dirname, "..");
 const OUT_FILE = path.join(ROOT, "data", "strategy4-latest.json");
 const BACKUP_FILE = path.join(ROOT, "data", "strategy4-backup.json");
 const BATCH_SIZE = Number(process.env.STRATEGY4_BATCH_SIZE || 80);
+const CHUNK_SIZE = Number(process.env.STRATEGY4_CHUNK_SIZE || BATCH_SIZE);
+const RETRY_CHUNK_SIZE = Number(process.env.STRATEGY4_RETRY_CHUNK_SIZE || CHUNK_SIZE);
 const BATCHES_PER_RUN = Number(process.env.STRATEGY4_BATCHES_PER_RUN || 999);
 const FULL_SCAN = process.env.FULL_SCAN !== "0";
 const STOCK_URL = process.env.STOCK_UNIVERSE_URL || "https://fuman-terminal.vercel.app/api/stocks";

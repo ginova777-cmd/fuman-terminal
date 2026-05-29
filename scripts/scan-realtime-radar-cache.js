@@ -2,12 +2,11 @@ const fs = require("fs");
 const path = require("path");
 const { cleanNumber, isIntradayTradable } = require("./intraday-radar-rules");
 
-const { ROOT, dataPath, statePath } = require("./runtime-paths");
-const OUT_FILE = dataPath("realtime-radar-latest.json");
-const FAILED_QUEUE_FILE = statePath("realtime-radar-failed-batches.json");
-const SUPABASE_STATUS_FILE = statePath("realtime-radar-supabase-status.json");
-const SCORECARD_FILE = dataPath("realtime-radar-scorecard-latest.json");
-const SCORECARD_HISTORY_DIR = dataPath("realtime-radar-scorecard-history");
+const ROOT = path.resolve(__dirname, "..");
+const OUT_FILE = path.join(ROOT, "data", "realtime-radar-latest.json");
+const STATE_DIR = process.env.FUMAN_STATE_DIR || path.join(ROOT, "state");
+const FAILED_QUEUE_FILE = path.join(STATE_DIR, "realtime-radar-failed-batches.json");
+const SUPABASE_STATUS_FILE = path.join(STATE_DIR, "realtime-radar-supabase-status.json");
 const BASE_URL = process.env.FUMAN_BASE_URL || "https://fuman-terminal.vercel.app";
 const SUPABASE_URL = process.env.FUMAN_SUPABASE_URL || "https://jxnqyqnigsppqsxinlrq.supabase.co";
 const SUPABASE_KEY = process.env.FUMAN_SUPABASE_SERVICE_KEY || process.env.FUMAN_SUPABASE_KEY || "";
@@ -48,26 +47,18 @@ function writeFailedBatchQueue(batches = []) {
   for (const batch of batches) {
     const normalized = normalizeDeferredBatch(batch, batch.reason || "failed_batch");
     if (!normalized.codes.length) continue;
-    const key = normalized.codes.join(",");
-    byKey.set(key, normalized);
+    byKey.set(normalized.codes.join(","), normalized);
   }
   const queue = [...byKey.values()].slice(0, 60);
-  writeJson(FAILED_QUEUE_FILE, {
-    updatedAt: new Date().toISOString(),
-    count: queue.length,
-    batches: queue,
-  });
+  writeJson(FAILED_QUEUE_FILE, { updatedAt: new Date().toISOString(), count: queue.length, batches: queue });
 }
 
 function hydrateQueuedBatches(queuedBatches = [], stocks = []) {
   const stockByCode = new Map(stocks.map((stock) => [String(stock.code || ""), stock]));
-  return queuedBatches
-    .map((batch) => {
-      const codes = (batch.codes || []).map((code) => String(code || "")).filter(Boolean);
-      const batchStocks = codes.map((code) => stockByCode.get(code)).filter(Boolean);
-      return { ...batch, codes, stocks: batchStocks };
-    })
-    .filter((batch) => batch.codes.length && batch.stocks.length);
+  return queuedBatches.map((batch) => {
+    const codes = (batch.codes || []).map((code) => String(code || "")).filter(Boolean);
+    return { ...batch, codes, stocks: codes.map((code) => stockByCode.get(code)).filter(Boolean) };
+  }).filter((batch) => batch.codes.length && batch.stocks.length);
 }
 
 function updateSupabaseUploadStatus(ok, error = "") {
@@ -93,7 +84,6 @@ async function safeUploadRealtimeRadarPayload(payload) {
     return updateSupabaseUploadStatus(false, error.message);
   }
 }
-
 
 async function uploadRealtimeRadarPayload(payload) {
   if (!SUPABASE_URL || !SUPABASE_KEY) return false;
@@ -523,7 +513,6 @@ async function main() {
     }
   }
   writeJson(OUT_FILE, payload);
-  if (payload.status !== "degraded_keepalive" && typeof updateRealtimeRadarScorecard === "function") updateRealtimeRadarScorecard(payload);
   const supabaseUpload = await safeUploadRealtimeRadarPayload(payload);
   payload = { ...payload, supabaseUpload };
   writeJson(OUT_FILE, payload);

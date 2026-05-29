@@ -83,8 +83,7 @@ function touchPatrolLock(lock) {
   if (!lock?.token) return;
   const current = readLockFile();
   if (current?.token !== lock.token) return;
-  const next = { ...current, heartbeatAt: new Date().toISOString() };
-  fs.writeFileSync(LOCK_FILE, `${JSON.stringify(next, null, 2)}\n`);
+  fs.writeFileSync(LOCK_FILE, `${JSON.stringify({ ...current, heartbeatAt: new Date().toISOString() }, null, 2)}\n`);
 }
 
 
@@ -140,11 +139,8 @@ async function main() {
 
   if (!isMarketTime()) {
     touchPatrolLock(patrolLock);
-    if (runScan()) {
-      successCount += 1;
-    } else {
-      failureCount += 1;
-    }
+    if (runScan()) successCount += 1;
+    else failureCount += 1;
     touchPatrolLock(patrolLock);
     console.log(`realtime radar patrol single run: success ${successCount}, failure ${failureCount}`);
     if (!successCount) process.exit(1);
@@ -153,11 +149,8 @@ async function main() {
 
   while (isMarketTime()) {
     touchPatrolLock(patrolLock);
-    if (runScan()) {
-      successCount += 1;
-    } else {
-      failureCount += 1;
-    }
+    if (runScan()) successCount += 1;
+    else failureCount += 1;
     touchPatrolLock(patrolLock);
     await sleep(INTERVAL_MS);
   }
