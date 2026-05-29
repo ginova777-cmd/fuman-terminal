@@ -231,6 +231,52 @@ function Copy-CacheFile($file, $source, $targetRoot, $label) {
   Assert-CopiedFile "$label $file" $source $target
 }
 
+function Get-TextSha256($text) {
+  $bytes = [System.Text.Encoding]::UTF8.GetBytes(([string]$text).Trim())
+  $sha = [System.Security.Cryptography.SHA256]::Create()
+  try {
+    return ([System.BitConverter]::ToString($sha.ComputeHash($bytes)) -replace "-", "")
+  } finally {
+    $sha.Dispose()
+  }
+}
+
+function Test-VercelCacheVisibility($file) {
+  $baseUrl = $env:FUMAN_VERCEL_BASE_URL
+  if (-not $baseUrl) { $baseUrl = "https://fuman-terminal.vercel.app" }
+  $localPath = Join-Path $syncRepo $file
+  if (-not (Test-Path -LiteralPath $localPath)) {
+    Write-Log "VERCEL_VISIBLE_SKIPPED file=$file reason=missing-local-sync-file"
+    return
+  }
+
+  $urlPath = ($file -replace "\\", "/")
+  $url = "$($baseUrl.TrimEnd('/'))/$urlPath?v=$(Get-Date -Format yyyyMMddHHmmss)"
+  try {
+    Write-Log "=== Vercel visibility check $file $(Get-Date) ==="
+    $response = Invoke-WebRequest -Uri $url -UseBasicParsing -TimeoutSec 30
+    $remoteText = [string]$response.Content
+    $localText = Get-Content -LiteralPath $localPath -Raw
+    $remoteJson = $remoteText | ConvertFrom-Json -ErrorAction Stop
+    $localJson = $localText | ConvertFrom-Json -ErrorAction Stop
+    $sameHash = (Get-TextSha256 $remoteText) -eq (Get-TextSha256 $localText)
+    $remoteCount = if ($null -ne $remoteJson.count) { [int]$remoteJson.count } else { -1 }
+    $localCount = if ($null -ne $localJson.count) { [int]$localJson.count } else { -1 }
+    $sameSummary = (
+      [string]$remoteJson.updatedAt -eq [string]$localJson.updatedAt -and
+      [string]$remoteJson.usedDate -eq [string]$localJson.usedDate -and
+      $remoteCount -eq $localCount
+    )
+    if ($sameHash -or $sameSummary) {
+      Write-Log "VERCEL_VISIBLE_OK file=$file updatedAt=$($remoteJson.updatedAt) usedDate=$($remoteJson.usedDate) count=$remoteCount"
+    } else {
+      Write-Log "VERCEL_VISIBLE_WARN file=$file remote differs from pushed cache localUpdatedAt=$($localJson.updatedAt) remoteUpdatedAt=$($remoteJson.updatedAt) localCount=$localCount remoteCount=$remoteCount"
+    }
+  } catch {
+    Write-Log "VERCEL_VISIBLE_WARN file=$file check failed: $($_.Exception.Message)"
+  }
+}
+
 function Get-RocTradeDateAgeDays($tradeDate) {
   $text = [string]$tradeDate
   if ($text -match "^\d{8}$") {
@@ -472,6 +518,10 @@ try {
     } else {
       Write-Log "No cache changes after retry reset."
     }
+  }
+
+  if ($Scope -eq "strategy3" -or $Scope -eq "all") {
+    Test-VercelCacheVisibility "data\strategy3-latest.json"
   }
 
   Write-Log "=== Cache sync end $(Get-Date) ==="

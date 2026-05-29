@@ -11,6 +11,9 @@ const CAPITAL_URLS = [
   "https://mopsfin.twse.com.tw/opendata/t187ap03_L.csv",
   "https://mopsfin.twse.com.tw/opendata/t187ap03_O.csv",
 ];
+const SOURCE_WARNING_LIMIT = Number(process.env.STRATEGY3_SOURCE_WARNING_LIMIT || 3);
+const MIN_ISSUED_SHARES_COUNT = Number(process.env.STRATEGY3_MIN_ISSUED_SHARES_COUNT || 1000);
+const MIN_VOLUME_AVERAGE_COUNT = Number(process.env.STRATEGY3_MIN_VOLUME_AVERAGE_COUNT || 1000);
 
 function readJson(file, fallback) {
   try { return JSON.parse(fs.readFileSync(file, "utf8")); } catch { return fallback; }
@@ -24,6 +27,30 @@ function preserveScorecardSource(payload) {
     source: "strategy3-scorecard-source",
     preservedAt: new Date().toISOString(),
   }, null, 2)}\n`);
+}
+
+function buildSourceHealth(stocks, issuedSharesMap, volumeAverageMap, sourceWarnings) {
+  const issues = [];
+  if (issuedSharesMap.size < MIN_ISSUED_SHARES_COUNT) {
+    issues.push(`issuedSharesCount ${issuedSharesMap.size} below ${MIN_ISSUED_SHARES_COUNT}`);
+  }
+  if (volumeAverageMap.size < MIN_VOLUME_AVERAGE_COUNT) {
+    issues.push(`volumeAverageCount ${volumeAverageMap.size} below ${MIN_VOLUME_AVERAGE_COUNT}`);
+  }
+  if (sourceWarnings.length > SOURCE_WARNING_LIMIT) {
+    issues.push(`warningCount ${sourceWarnings.length} above ${SOURCE_WARNING_LIMIT}`);
+  }
+  return {
+    status: issues.length ? "failed" : (sourceWarnings.length ? "degraded" : "ok"),
+    issuedSharesCount: issuedSharesMap.size,
+    volumeAverageCount: volumeAverageMap.size,
+    stockUniverseCount: stocks.length,
+    warningCount: sourceWarnings.length,
+    warningLimit: SOURCE_WARNING_LIMIT,
+    minIssuedSharesCount: MIN_ISSUED_SHARES_COUNT,
+    minVolumeAverageCount: MIN_VOLUME_AVERAGE_COUNT,
+    issues,
+  };
 }
 
 function sourceDate(payload) {
@@ -309,6 +336,13 @@ async function main() {
     ...volumeAverageResult.warnings,
   ];
   sourceWarnings.forEach((warning) => console.warn(`strategy3 source warning: ${warning}`));
+  const sourceHealth = buildSourceHealth(stocks, issuedSharesMap, volumeAverageMap, sourceWarnings);
+  if (sourceHealth.status !== "ok") {
+    console.warn(`strategy3 source health ${sourceHealth.status}: ${sourceHealth.issues.join("; ") || "warnings present"}`);
+  }
+  if (sourceHealth.status === "failed") {
+    throw new Error(`Strategy3 source health failed: ${sourceHealth.issues.join("; ")}`);
+  }
   const matches = buildMatches(stocks, issuedSharesMap, volumeAverageMap);
   const quoteDate = stocks.find((stock) => stock.quoteDate)?.quoteDate || "";
   const output = {
@@ -319,11 +353,8 @@ async function main() {
     total: stocks.length,
     count: matches.length,
     sourceWarnings,
-    sourceHealth: {
-      issuedSharesCount: issuedSharesMap.size,
-      volumeAverageCount: volumeAverageMap.size,
-      warningCount: sourceWarnings.length,
-    },
+    qualityStatus: sourceHealth.status,
+    sourceHealth,
     matches,
   };
 

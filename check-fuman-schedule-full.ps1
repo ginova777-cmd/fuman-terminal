@@ -221,6 +221,20 @@ function Get-ScheduleRows {
   }
 }
 
+function Write-RenderedObject {
+  param(
+    [Parameter(ValueFromPipeline = $true)]$InputObject,
+    [scriptblock]$Renderer
+  )
+  begin { $items = @() }
+  process { $items += $InputObject }
+  end {
+    if (-not $items.Count) { return }
+    $text = (& $Renderer $items | Out-String -Width 240).TrimEnd()
+    if ($text) { Write-Host $text }
+  }
+}
+
 Write-Host ""
 Write-Host "富滿終端完整排程檢查" -ForegroundColor Green
 Write-Host "查詢時間：$(Get-Date -Format 'yyyy/MM/dd HH:mm:ss')" -ForegroundColor DarkGray
@@ -235,14 +249,12 @@ $rows = @(Get-ScheduleRows | Sort-Object 排程)
 Write-Host ""
 Write-Host "==== 摘要表 ====" -ForegroundColor Cyan
 $rows |
-  Select-Object 排程, 中文說明, 狀態, 上次執行, 下次執行, 上次結果, 錯過次數, 最新Log異常 |
-  Format-Table -AutoSize -Wrap
+  Write-RenderedObject -Renderer { param($items) $items | Select-Object 排程, 中文說明, 狀態, 上次執行, 下次執行, 上次結果, 錯過次數, 最新Log異常 | Format-Table -AutoSize -Wrap }
 
 Write-Host ""
 Write-Host "==== 詳細表：觸發器與執行指令 ====" -ForegroundColor Cyan
 $rows |
-  Select-Object 排程, 觸發器, 執行指令 |
-  Format-List
+  Write-RenderedObject -Renderer { param($items) $items | Select-Object 排程, 觸發器, 執行指令 | Format-List }
 
 Write-Host ""
 Write-Host "==== 異常提醒 ====" -ForegroundColor Cyan
@@ -256,19 +268,19 @@ if ($errors.Count -eq 0 -and $disabled.Count -eq 0 -and $missed.Count -eq 0 -and
 } else {
   if ($errors.Count -gt 0) {
     Write-Host "錯誤任務：" -ForegroundColor Red
-    $errors | Select-Object 排程, 上次結果, 上次執行, 下次執行 | Format-Table -AutoSize -Wrap
+    $errors | Write-RenderedObject -Renderer { param($items) $items | Select-Object 排程, 上次結果, 上次執行, 下次執行 | Format-Table -AutoSize -Wrap }
   }
   if ($disabled.Count -gt 0) {
     Write-Host "停用任務：" -ForegroundColor Yellow
-    $disabled | Select-Object 排程, 中文說明, 上次結果 | Format-Table -AutoSize -Wrap
+    $disabled | Write-RenderedObject -Renderer { param($items) $items | Select-Object 排程, 中文說明, 上次結果 | Format-Table -AutoSize -Wrap }
   }
   if ($missed.Count -gt 0) {
     Write-Host "有錯過次數的任務：" -ForegroundColor Yellow
-    $missed | Select-Object 排程, 錯過次數, 上次執行, 下次執行 | Format-Table -AutoSize -Wrap
+    $missed | Write-RenderedObject -Renderer { param($items) $items | Select-Object 排程, 錯過次數, 上次執行, 下次執行 | Format-Table -AutoSize -Wrap }
   }
   if ($logIssues.Count -gt 0) {
     Write-Host "最新 log 疑似異常：" -ForegroundColor Red
-    $logIssues | Select-Object 排程, 上次執行, 最新Log異常 | Format-Table -AutoSize -Wrap
+    $logIssues | Write-RenderedObject -Renderer { param($items) $items | Select-Object 排程, 上次執行, 最新Log異常 | Format-Table -AutoSize -Wrap }
   }
 }
 
@@ -285,7 +297,7 @@ if ($ExportCsv) {
 Write-Host ""
 Write-Host "==== Google Sheet OAuth 檢查 ====" -ForegroundColor Cyan
 $googleTokenStatus = Get-GoogleSheetsTokenStatus
-$googleTokenStatus | Format-List
+$googleTokenStatus | Write-RenderedObject -Renderer { param($items) $items | Format-List }
 if ($googleTokenStatus.狀態 -ne "OK") {
   Write-Host "Google Sheet OAuth 備援不完整：$($googleTokenStatus.問題)" -ForegroundColor Yellow
 }
@@ -293,7 +305,7 @@ if ($googleTokenStatus.狀態 -ne "OK") {
 Write-Host ""
 Write-Host "==== Cache Sync Outbox 檢查 ====" -ForegroundColor Cyan
 $outboxStatus = Get-CacheSyncOutboxStatus
-$outboxStatus | Format-List
+$outboxStatus | Write-RenderedObject -Renderer { param($items) $items | Format-List }
 if ($outboxStatus.狀態 -ne "OK") {
   Write-Host "仍有 cache sync outbox 待補送；下一次網路正常同步會優先補送。" -ForegroundColor Yellow
 }
