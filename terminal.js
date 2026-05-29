@@ -9366,6 +9366,7 @@ function renderIntradayRadar(evaluated) {
           <label>市場：<select><option>全市場</option></select></label>
         </div>
       </div>
+      ${renderDataFreshnessBarHtml("strategy")}
       <section class="intraday-main-layout intraday-main-layout-full">
         <div class="intraday-main-panel">
           ${zones}
@@ -10840,6 +10841,13 @@ function getPanelFreshnessMeta(viewName) {
   return { mode: marketModeText, dataDate, today, isToday };
 }
 
+function renderDataFreshnessBarHtml(viewName) {
+  const meta = getPanelFreshnessMeta(viewName);
+  const staleText = meta.isToday ? "" : meta.mode.includes("AI 判讀") ? "｜非今日資料僅供參考" : "｜非今日資料不採用";
+  const signature = `${meta.mode}:${meta.dataDate}:${meta.today}:${meta.isToday}`;
+  const stateClass = meta.isToday ? "is-live" : "is-stale";
+  return `<div class="data-freshness-bar ${stateClass}" data-signature="${escapeAttr(signature)}">模式：<strong>${escapeAttr(meta.mode)}</strong>｜資料日期：<strong>${escapeAttr(formatMarketAiDateKey(meta.dataDate))}</strong>｜今日：<strong>${escapeAttr(formatMarketAiDateKey(meta.today))}</strong>${staleText}</div>`;
+}
 function refreshDataFreshnessBars() {
   Object.entries(viewPanels).forEach(([viewName, panel]) => {
     if (!panel) return;
@@ -14007,4 +14015,6 @@ if (isViewActive("watchlist")) renderWatchlist();
 setInterval(() => {
   if (!isDocumentHidden() && isTerminalUnlocked() && isViewActive("watchlist")) refreshSelectedWatchlistQuote();
 }, 10000);
+
+
 
