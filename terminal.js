@@ -3996,6 +3996,7 @@ function buildRealtimeRadarAiPanel(rows = [], options = {}) {
       <p class="radar-ai-note">多方 ${radarMoney(longFlow)} ｜ 空方 ${radarMoney(shortFlow)} ｜ 淨流向 ${radarMoney(longFlow - shortFlow)} ｜ 集中度 ${longShare}% ｜ 外資 ${formatInstitution(foreignFlow)} ｜ 投信 ${formatInstitution(trustFlow)} ｜ ${updateText}</p>
     </section>
   `;
+  requestAnimationFrame(refreshDataFreshnessBars);
 }
 
 function renderRealtimeRadar() {
@@ -10842,9 +10843,12 @@ function getPanelFreshnessMeta(viewName) {
 function refreshDataFreshnessBars() {
   Object.entries(viewPanels).forEach(([viewName, panel]) => {
     if (!panel) return;
-    const header = panel.querySelector(".page-header, .radar-topbar");
+    const header = viewName === "strategy" && strategyView?.classList.contains("intraday-only")
+      ? panel.querySelector(".intraday-topbar") || panel.querySelector(".page-header")
+      : panel.querySelector(".page-header, .radar-topbar");
     if (!header) return;
-    let bar = panel.querySelector(":scope > .data-freshness-bar");
+    const barContainer = header.parentElement || panel;
+    let bar = barContainer.querySelector(":scope > .data-freshness-bar");
     if (!bar) {
       bar = document.createElement("div");
       bar.className = "data-freshness-bar";
