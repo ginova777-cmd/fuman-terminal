@@ -117,7 +117,7 @@ async function fetchUniverse() {
     return quote ? { ...stock, ...quote, name: quote.name || stock.name } : stock;
   });
 }
-function runHandler(codes) {
+function runHandler(stocks) {
   return new Promise((resolve, reject) => {
     const req = {
       method: "GET",
