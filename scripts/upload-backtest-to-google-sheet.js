@@ -10,6 +10,7 @@ const SHEET_ID = process.env.GOOGLE_SHEET_ID || "1UCpEBXmOWNA57eLXH62WffnPrflly6
 const RUNTIME_DIR = process.env.FUMAN_RUNTIME_DIR || "C:\\fuman-runtime";
 const SECRET_DIR = process.env.GOOGLE_OAUTH_DIR || path.join(RUNTIME_DIR, "secrets");
 const TOKEN_PATH = path.join(SECRET_DIR, "google-sheets-token.json");
+const TOKEN_BACKUP_NAME_RE = /^google-sheets-token\.backup(?:[-.].*)?\.json$/i;
 const CREDENTIALS_PATH = process.env.GOOGLE_OAUTH_CLIENT || path.join(SECRET_DIR, "google-oauth-client.json");
 const REPORT_DIR = process.env.BACKTEST_REPORT_DIR || path.join(process.env.USERPROFILE || "C:\\Users\\ginov", "OneDrive", "Desktop", "回測報告");
 const DATA_DIR = process.env.FUMAN_DATA_DIR || path.join(RUNTIME_DIR, "data");
@@ -35,6 +36,59 @@ function readJson(file, fallback = null) {
 function writeJson(file, payload) {
   fs.mkdirSync(path.dirname(file), { recursive: true });
   fs.writeFileSync(file, JSON.stringify(payload, null, 2) + "\n", "utf8");
+}
+
+function isGoogleTokenUsable(token) {
+  return Boolean(token && typeof token === "object" && (token.refresh_token || token.access_token));
+}
+
+function isGoogleTokenRefreshable(token) {
+  return Boolean(token && typeof token === "object" && token.refresh_token);
+}
+
+function listGoogleTokenBackups() {
+  try {
+    return fs.readdirSync(SECRET_DIR)
+      .filter((name) => TOKEN_BACKUP_NAME_RE.test(name))
+      .map((name) => {
+        const file = path.join(SECRET_DIR, name);
+        const stat = fs.statSync(file);
+        return { file, name, mtimeMs: stat.mtimeMs };
+      })
+      .sort((a, b) => b.mtimeMs - a.mtimeMs);
+  } catch {
+    return [];
+  }
+}
+
+function restoreGoogleTokenFromBackup() {
+  for (const backup of listGoogleTokenBackups()) {
+    const token = readJson(backup.file);
+    if (!isGoogleTokenRefreshable(token)) continue;
+    fs.mkdirSync(path.dirname(TOKEN_PATH), { recursive: true });
+    writeJson(TOKEN_PATH, token);
+    console.log(`Google Sheets token restored from backup: ${backup.name}`);
+    return token;
+  }
+  return null;
+}
+
+function readGoogleSheetsToken() {
+  const token = readJson(TOKEN_PATH);
+  if (isGoogleTokenUsable(token)) return token;
+  if (token) {
+    console.warn("Google Sheets token file is present but missing usable OAuth fields; checking backups.");
+  }
+  const restored = restoreGoogleTokenFromBackup();
+  if (restored) return restored;
+  return token || null;
+}
+
+function writeGoogleSheetsToken(token) {
+  writeJson(TOKEN_PATH, token);
+  if (isGoogleTokenRefreshable(token)) {
+    writeJson(path.join(SECRET_DIR, "google-sheets-token.backup.json"), token);
+  }
 }
 
 function cleanNumber(value) {
@@ -159,13 +213,13 @@ async function authorizeWithBrowser(client) {
     },
   });
   token.created_at = Date.now();
-  writeJson(TOKEN_PATH, token);
+  writeGoogleSheetsToken(token);
   return token;
 }
 
 async function getAccessToken() {
   const client = getClientConfig();
-  const token = readJson(TOKEN_PATH);
+  const token = readGoogleSheetsToken();
   if (token?.access_token && token?.created_at && Date.now() - token.created_at < (token.expires_in || 3600) * 900) {
     return token.access_token;
   }
@@ -179,7 +233,7 @@ async function getAccessToken() {
       },
     });
     const merged = { ...token, ...refreshed, created_at: Date.now() };
-    writeJson(TOKEN_PATH, merged);
+    writeGoogleSheetsToken(merged);
     return merged.access_token;
   }
   const authorized = await authorizeWithBrowser(client);
