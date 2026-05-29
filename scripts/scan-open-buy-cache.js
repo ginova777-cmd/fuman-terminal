@@ -14,6 +14,7 @@ const BATCHES_PER_RUN = Number(process.env.OPEN_BUY_BATCHES_PER_RUN || 5);
 const FULL_SCAN = process.env.FULL_SCAN === "1";
 const STOCK_URL = process.env.STOCK_UNIVERSE_URL || "https://fuman-terminal.vercel.app/api/stocks";
 const USE_MIS_QUOTES = process.env.OPEN_BUY_USE_MIS === "1";
+const MIN_UNIVERSE_COUNT = Number(process.env.OPEN_BUY_MIN_UNIVERSE_COUNT || 1500);
 
 function readSecretText(file) {
   try { return fs.readFileSync(file, "utf8").trim(); } catch { return ""; }
@@ -204,17 +205,45 @@ function normalizeStock(row) {
   };
 }
 
+function summarizeUniverse(payload, rows, source) {
+  const normalized = rows.map(normalizeStock).filter(Boolean);
+  const marketCounts = normalized.reduce((counts, stock) => {
+    const market = stock.market || "UNKNOWN";
+    counts[market] = (counts[market] || 0) + 1;
+    return counts;
+  }, {});
+  const twseCount = Number(payload?.twseCount || marketCounts.TWSE || 0);
+  const tpexCount = Number(payload?.tpexCount || marketCounts.TPEX || 0);
+  return { source, normalized, twseCount, tpexCount, total: normalized.length };
+}
+
+function assertCompleteUniverse(summary) {
+  const errors = [];
+  if (summary.total < MIN_UNIVERSE_COUNT) errors.push(`total ${summary.total} < ${MIN_UNIVERSE_COUNT}`);
+  if (summary.twseCount <= 0) errors.push("missing TWSE");
+  if (summary.tpexCount <= 0) errors.push("missing TPEX");
+  if (errors.length) {
+    throw new Error(`Incomplete stock universe from ${summary.source}: ${errors.join(", ")}`);
+  }
+}
+
+async function loadUniverseFromPayload(payload, source) {
+  const rows = Array.isArray(payload) ? payload : (payload.stocks || []);
+  const summary = summarizeUniverse(payload, rows, source);
+  assertCompleteUniverse(summary);
+  console.log(`stock universe ${source}: total ${summary.total}, TWSE ${summary.twseCount}, TPEX ${summary.tpexCount}`);
+  return summary.normalized;
+}
+
 async function fetchUniverse() {
   const timeout = Number(process.env.STOCK_UNIVERSE_TIMEOUT_MS || 90000);
-  let payload;
+  let base;
   try {
-    payload = await fetchJson(STOCK_URL, timeout);
+    base = await loadUniverseFromPayload(await fetchJson(STOCK_URL, timeout), "remote");
   } catch (error) {
-    console.log("stock universe remote fetch failed: " + error.message + "; using local handler fallback");
-    payload = await callLocalStocksHandler();
+    console.log("stock universe remote incomplete/failed: " + error.message + "; using local handler fallback");
+    base = await loadUniverseFromPayload(await callLocalStocksHandler(), "local");
   }
-  const rows = Array.isArray(payload) ? payload : (payload.stocks || []);
-  const base = rows.map(normalizeStock).filter(Boolean);
   if (!USE_MIS_QUOTES) return base;
   const quotes = await fetchMisQuotes(base.map((stock) => stock.code));
   return base.map((stock) => {
