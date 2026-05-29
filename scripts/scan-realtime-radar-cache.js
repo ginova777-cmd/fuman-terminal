@@ -9,6 +9,8 @@ const SUPABASE_URL = process.env.FUMAN_SUPABASE_URL || "https://jxnqyqnigsppqsxi
 const SUPABASE_KEY = process.env.FUMAN_SUPABASE_SERVICE_KEY || process.env.FUMAN_SUPABASE_KEY || "";
 const SUPABASE_TABLE = process.env.FUMAN_REALTIME_RADAR_TABLE || "fuman_realtime_radar_cache";
 const STALE_AFTER_MS = Number(process.env.REALTIME_RADAR_STALE_MS || 20000);
+const MAX_QUOTE_AGE_SECONDS = Number(process.env.REALTIME_RADAR_MAX_QUOTE_AGE_SECONDS || 150);
+const REALTIME_RESCAN_BATCH_SIZE = Number(process.env.REALTIME_RADAR_RESCAN_BATCH_SIZE || 80);
 
 function writeJson(file, value) {
   fs.mkdirSync(path.dirname(file), { recursive: true });
@@ -67,6 +69,33 @@ function timestampKey(parts = taipeiParts()) {
 function isMarketTime(parts = taipeiParts()) {
   const minutes = Number(parts.hour) * 60 + Number(parts.minute);
   return minutes >= 9 * 60 && minutes <= 13 * 60 + 30;
+}
+
+function secondsOfDay(value) {
+  const match = String(value || "").match(/(\d{1,2}):(\d{2})(?::(\d{2}))?/);
+  if (!match) return null;
+  return Number(match[1]) * 3600 + Number(match[2]) * 60 + Number(match[3] || 0);
+}
+
+function quoteAgeSeconds(scanTimestamp, quoteTime) {
+  const scanSeconds = secondsOfDay(scanTimestamp);
+  const quoteSeconds = secondsOfDay(quoteTime);
+  if (scanSeconds == null || quoteSeconds == null) return null;
+  return Math.abs(scanSeconds - quoteSeconds);
+}
+
+function hasFreshQuote(stock, scanTimestamp) {
+  const age = quoteAgeSeconds(scanTimestamp, stock.quoteTime || stock.time);
+  return age != null && age <= MAX_QUOTE_AGE_SECONDS;
+}
+
+function chunkStocks(stocks = [], size = REALTIME_RESCAN_BATCH_SIZE) {
+  const chunks = [];
+  for (let index = 0; index < stocks.length; index += size) {
+    const batchStocks = stocks.slice(index, index + size);
+    chunks.push({ stocks: batchStocks, codes: batchStocks.map((stock) => stock.code).filter(Boolean) });
+  }
+  return chunks.filter((batch) => batch.codes.length);
 }
 
 async function fetchJson(url, timeout = 30000) {
@@ -146,6 +175,8 @@ function applyRealtimeQuotes(stocks, quotes) {
       ...stock,
       ...quote,
       close,
+      quoteTime: quote.time || "",
+      quoteSource: "api/realtime",
       tradeVolume: volume,
       value: volume && close ? volume * close * 1000 : cleanNumber(stock.value),
       isRealtime: true,
@@ -274,6 +305,8 @@ async function main() {
       updatedAt: new Date(detectedAt).toISOString(),
       updatedAtMs: detectedAt,
       staleAfterMs: STALE_AFTER_MS,
+      maxQuoteAgeSeconds: MAX_QUOTE_AGE_SECONDS,
+      staleQuoteCount: 0,
       rows: [],
       longCount: 0,
       shortCount: 0,
@@ -287,7 +320,10 @@ async function main() {
   const rawStocks = await fetchStocks();
   const realtime = await fetchRealtime(rawStocks);
   const liveStocks = realtime.stocks;
-  const rows = buildRadarRows(liveStocks, detectedAt);
+  const freshStocks = liveStocks.filter((stock) => stock.isRealtime === true && hasFreshQuote(stock, timestamp));
+  const staleStocks = liveStocks.filter((stock) => stock.isRealtime === true && !hasFreshQuote(stock, timestamp));
+  const staleQuoteCount = staleStocks.length;
+  const rows = buildRadarRows(freshStocks, detectedAt);
   let payload = {
     source: "mini-pc-realtime-radar",
     status: realtime.failedBatches.length ? "degraded" : "ok",
@@ -296,6 +332,8 @@ async function main() {
     updatedAt: new Date(detectedAt).toISOString(),
     updatedAtMs: detectedAt,
     staleAfterMs: STALE_AFTER_MS,
+    maxQuoteAgeSeconds: MAX_QUOTE_AGE_SECONDS,
+    staleQuoteCount,
     failedBatchCount: realtime.failedBatches.length,
     totalBatchCount: realtime.totalBatches,
     quoteCount: realtime.quoteCount,
@@ -313,6 +351,8 @@ async function main() {
         updatedAt: new Date(detectedAt).toISOString(),
         updatedAtMs: detectedAt,
         staleAfterMs: STALE_AFTER_MS,
+        maxQuoteAgeSeconds: MAX_QUOTE_AGE_SECONDS,
+        staleQuoteCount,
         failedBatchCount: realtime.failedBatches.length,
         totalBatchCount: realtime.totalBatches,
         quoteCount: realtime.quoteCount,
@@ -325,10 +365,12 @@ async function main() {
   await uploadRealtimeRadarPayload(payload);
   console.log(`realtime radar ${timestamp}: rows ${payload.rows.length} status ${payload.status} failed ${realtime.failedBatches.length}/${realtime.totalBatches}`);
 
-  if (realtime.failedBatches.length) {
-    const retry = await rescanRealtimeBatches(realtime.failedBatches);
+  const deferredBatches = [...realtime.failedBatches, ...chunkStocks(staleStocks)];
+  if (deferredBatches.length) {
+    const retry = await rescanRealtimeBatches(deferredBatches);
     if (retry.quotes.size) {
-      const retryStocks = applyRealtimeQuotes(realtime.failedBatches.flatMap((batch) => batch.stocks || []), retry.quotes);
+      const retryStocks = applyRealtimeQuotes(deferredBatches.flatMap((batch) => batch.stocks || []), retry.quotes)
+        .filter((stock) => stock.isRealtime === true && hasFreshQuote(stock, timestamp));
       const retryRows = buildRadarRows(retryStocks, detectedAt);
       const mergedRows = [...retryRows, ...payload.rows]
         .filter((row, index, rows) => rows.findIndex((item) => item.code === row.code) === index)
@@ -342,10 +384,11 @@ async function main() {
           longCount: mergedRows.filter((row) => row.side === "long").length,
           shortCount: mergedRows.filter((row) => row.side === "short").length,
           recoveredBatchCount: retry.recoveredBatches,
+          staleRescanCount: staleStocks.length,
         };
         writeJson(OUT_FILE, patchedPayload);
         await uploadRealtimeRadarPayload(patchedPayload);
-        console.log(`realtime radar ${timestamp}: deferred rescan merged rows ${mergedRows.length} recovered ${retry.recoveredBatches}/${realtime.failedBatches.length}`);
+        console.log(`realtime radar ${timestamp}: deferred rescan merged rows ${mergedRows.length} recovered ${retry.recoveredBatches}/${deferredBatches.length}`);
       }
     }
   }
