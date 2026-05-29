@@ -3848,6 +3848,39 @@ function loadRealtimeRadarLastRows() {
   }
 }
 
+async function loadRealtimeRadarLatestCache(force = false) {
+  if (realtimeRadarCacheLoading) return false;
+  if (!force && realtimeRadarCacheLoadedAt && Date.now() - realtimeRadarCacheLoadedAt < REALTIME_RADAR_REFRESH_MS) return false;
+  realtimeRadarCacheLoading = true;
+  try {
+    const payload = await fetchJson(`${endpoints.realtimeRadarCache}?t=${Date.now()}`, 8000);
+    const payloadDate = normalizeMarketAiDateKey(payload?.date || payload?.updatedAt);
+    const rows = normalizeArray(payload?.rows);
+    if (payload?.status !== "ok" || payloadDate !== marketAiTodayKey() || !rows.length) return false;
+    const updatedAt = cleanNumber(payload.updatedAtMs) || Date.parse(payload.updatedAt || "") || Date.now();
+    const normalizedRows = rows
+      .map((row) => ({
+        ...row,
+        pct: cleanNumber(row.pct ?? row.percent),
+        percent: cleanNumber(row.percent ?? row.pct),
+        radarUpdatedAt: cleanNumber(row.radarUpdatedAt || row.detectedAt) || updatedAt,
+        radarDate: payloadDate,
+        radarMode: "intraday",
+      }))
+      .filter((row) => /^\d{4}$/.test(String(row.code || "")) && row.side && cleanNumber(row.close) > 0);
+    if (!normalizedRows.length) return false;
+    realtimeRadarLastRows = mergeRealtimeRadarRows(normalizedRows, realtimeRadarLastRows);
+    realtimeRadarLastUpdatedAt = updatedAt;
+    realtimeRadarCacheLoadedAt = Date.now();
+    saveRealtimeRadarLastRows(realtimeRadarLastRows);
+    return true;
+  } catch (error) {
+    return false;
+  } finally {
+    realtimeRadarCacheLoading = false;
+  }
+}
+
 async function ensureRealtimeRadarData() {
   if (latestStocks.length) return latestStocks;
   if (realtimeRadarDataPromise) return realtimeRadarDataPromise;
@@ -3967,12 +4000,19 @@ function renderRealtimeRadar() {
     loadStrategy3RadarVolumeCache();
   }
   const radarOpen = isRadarDetectionWindow();
+  if (!realtimeRadarLastRows.length) loadRealtimeRadarLastRows();
   let hasStrategy2CacheRows = false;
   if (radarOpen) {
+    const radarCacheDue = !realtimeRadarCacheLoadedAt || Date.now() - realtimeRadarCacheLoadedAt >= REALTIME_RADAR_REFRESH_MS;
+    if (radarCacheDue && !realtimeRadarCacheLoading) {
+      loadRealtimeRadarLatestCache(true).then((loaded) => {
+        if (loaded && isViewActive("realtime-radar")) renderRealtimeRadar();
+      });
+    }
     ensureStrategy2IntradayTodayCache();
     hasStrategy2CacheRows = strategy2IntradayEventByCode.size > 0;
     const cacheRefreshDue = !strategy2IntradayCacheLoadedAt || Date.now() - strategy2IntradayCacheLoadedAt > Math.max(REALTIME_RADAR_REFRESH_MS, 3000);
-    if ((!strategy2IntradayEventByCode.size || cacheRefreshDue) && !strategy2IntradayCacheLoading) {
+    if (!realtimeRadarLastRows.length && (!strategy2IntradayEventByCode.size || cacheRefreshDue) && !strategy2IntradayCacheLoading) {
       loadStrategy2IntradayCache(cacheRefreshDue).then(() => {
         if (isViewActive("realtime-radar")) renderRealtimeRadar();
       });
@@ -4424,6 +4464,7 @@ const endpoints = {
   strategy3Backup: "/data/strategy3-backup.json",
   strategy5Cache: "/data/strategy5-latest.json",
   strategy5Backup: "/data/strategy5-backup.json",
+  realtimeRadarCache: "/data/realtime-radar-latest.json",
   strategy2IntradayCache: "/data/strategy2-intraday-latest.json",
   institutionCache: "/data/institution-latest.json",
   institutionBackup: "/data/institution-backup.json",
@@ -4459,6 +4500,8 @@ let realtimeRadarManualSideSwitch = false;
 let realtimeRadarBoardMarkupCache = { long: "", short: "" };
 let realtimeRadarLastRows = [];
 let realtimeRadarLastUpdatedAt = 0;
+let realtimeRadarCacheLoading = false;
+let realtimeRadarCacheLoadedAt = 0;
 let realtimeRadarRefreshLoading = false;
 let realtimeRadarNeedsFreshScan = true;
 let realtimeRadarHistoryPromise = null;
