@@ -23,6 +23,7 @@ const MAX_QUOTE_AGE_SECONDS = Number(process.env.STRATEGY2_MAX_QUOTE_AGE_SECONDS
 const MIN_REALTIME_COVERAGE = Number(process.env.STRATEGY2_MIN_REALTIME_COVERAGE || 0.5);
 const REALTIME_BATCH_SIZE = Number(process.env.STRATEGY2_REALTIME_BATCH_SIZE || 80);
 const REALTIME_RETRY_BATCH_SIZE = Number(process.env.STRATEGY2_REALTIME_RETRY_BATCH_SIZE || 20);
+const MA35_PROVIDER_FAILURE_LIMIT = Math.max(1, Number(process.env.STRATEGY2_MA35_PROVIDER_FAILURE_LIMIT || 8));
 
 function readSecretText(file) {
   try { return fs.readFileSync(file, "utf8").trim(); } catch { return ""; }
@@ -36,6 +37,34 @@ const TWELVE_DATA_API_KEY = process.env.TWELVE_DATA_API_KEY
   || process.env.TWELVEDATA_API_KEY
   || readSecretText(path.join(ROOT, "secrets", "twelve-data-api-key.txt"))
   || readSecretText(path.join(process.env.FUMAN_RUNTIME_DIR || "C:/fuman-runtime", "secrets", "twelve-data-api-key.txt"));
+let yahooMa35Failures = 0;
+let fugleMa35Failures = 0;
+let yahooMa35BlockedReason = "";
+let fugleMa35BlockedReason = "";
+let twelveDataBlockedReason = "";
+
+function disableMa35Provider(provider, reason) {
+  if (provider === "yahoo" && !yahooMa35BlockedReason) {
+    yahooMa35BlockedReason = reason;
+    console.log(`sma35 1m yahoo disabled for this scan: ${reason}`);
+  }
+  if (provider === "fugle" && !fugleMa35BlockedReason) {
+    fugleMa35BlockedReason = reason;
+    console.log(`sma35 1m fugle disabled for this scan: ${reason}`);
+  }
+}
+
+function noteMa35ProviderFailure(provider, reason) {
+  if (provider === "yahoo") {
+    yahooMa35Failures += 1;
+    if (yahooMa35Failures >= MA35_PROVIDER_FAILURE_LIMIT) disableMa35Provider("yahoo", `${reason || "failed"}-${yahooMa35Failures}`);
+  }
+  if (provider === "fugle") {
+    fugleMa35Failures += 1;
+    if (/HTTP (?:401|403|429)/i.test(reason || "")) disableMa35Provider("fugle", reason);
+    if (fugleMa35Failures >= MA35_PROVIDER_FAILURE_LIMIT) disableMa35Provider("fugle", `${reason || "failed"}-${fugleMa35Failures}`);
+  }
+}
 
 function readJson(file, fallback) {
   try { return JSON.parse(fs.readFileSync(file, "utf8")); } catch { return fallback; }
@@ -884,6 +913,7 @@ function fetchLocalIntradaySma35(cache, code, scanTimestamp) {
 
 async function fetchFugleIntradaySma35(code, scanTimestamp) {
   if (!FUGLE_API_KEY) return null;
+  if (fugleMa35BlockedReason) return null;
   const targetMinute = minuteKey(scanTimestamp);
   const targetDate = targetMinute.slice(0, 10);
   if (!targetMinute || !targetDate) return null;
@@ -917,20 +947,34 @@ async function fetchFugleIntradaySma35(code, scanTimestamp) {
 
 async function fetchTwelveDataIntradaySma35(code, scanTimestamp) {
   if (!TWELVE_DATA_API_KEY) return null;
+  if (twelveDataBlockedReason) return null;
   const targetMinute = minuteKey(scanTimestamp);
   const targetDate = targetMinute.slice(0, 10);
   if (!targetMinute || !targetDate) return null;
-  const symbols = [`${code}:TWSE`, `${code}:TPEX`];
-  for (const symbol of symbols) {
+  const symbols = [
+    { symbol: code, exchange: "TWSE", label: `${code}:TWSE` },
+    { symbol: `${code}:TWSE`, label: `${code}:TWSE` },
+    { symbol: `${code}:TPEX`, label: `${code}:TPEX` },
+  ];
+  for (const request of symbols) {
     const url = new URL("https://api.twelvedata.com/time_series");
-    url.searchParams.set("symbol", symbol);
+    url.searchParams.set("symbol", request.symbol);
+    if (request.exchange) url.searchParams.set("exchange", request.exchange);
     url.searchParams.set("interval", "1min");
     url.searchParams.set("outputsize", "90");
     url.searchParams.set("timezone", "Asia/Taipei");
     url.searchParams.set("apikey", TWELVE_DATA_API_KEY);
     try {
       const payload = await fetchJson(url.toString(), 20000);
-      if (payload?.status === "error" || payload?.code) throw new Error(payload?.message || "twelve data error");
+      if (payload?.status === "error" || payload?.code) {
+        const message = payload?.message || "twelve data error";
+        if (/Pro or Venture plan|upgrade/i.test(message)) {
+          twelveDataBlockedReason = "plan-blocked";
+          console.log(`sma35 1m twelve disabled for this scan: ${message}`);
+          return null;
+        }
+        throw new Error(message);
+      }
       const rows = (payload.values || [])
         .map((row) => ({
           minute: minuteKey(String(row.datetime || "").replace("T", " ")),
@@ -940,10 +984,10 @@ async function fetchTwelveDataIntradaySma35(code, scanTimestamp) {
           volume: cleanNumber(row.volume),
         }))
         .filter((row) => row.minute.startsWith(targetDate) && row.close > 0);
-      const info = buildSma35Info(rows, targetMinute, "twelve-1m", { ma35Symbol: symbol });
+      const info = buildSma35Info(rows, targetMinute, "twelve-1m", { ma35Symbol: request.label });
       if (cleanNumber(info?.ma35) > 0) return info;
     } catch (error) {
-      console.log(`sma35 1m failed ${symbol}: ${error.message}`);
+      console.log(`sma35 1m failed ${request.label}: ${error.message}`);
     }
   }
   return null;
@@ -951,23 +995,41 @@ async function fetchTwelveDataIntradaySma35(code, scanTimestamp) {
 
 async function fetchIntradaySma35WithFallback(code, scanTimestamp, cache) {
   const attempts = [];
-  try {
-    const yahoo = await fetchYahooIntradaySma35(code, scanTimestamp);
-    attempts.push({ source: "yahoo-1m", ok: Boolean(yahoo) });
-    if (yahoo) return { ...yahoo, ma35Attempts: attempts };
-  } catch (error) {
-    attempts.push({ source: "yahoo-1m", ok: false, error: error.message });
+  if (yahooMa35BlockedReason) {
+    attempts.push({ source: "yahoo-1m", ok: false, skipped: true, error: yahooMa35BlockedReason });
+  } else {
+    try {
+      const yahoo = await fetchYahooIntradaySma35(code, scanTimestamp);
+      attempts.push({ source: "yahoo-1m", ok: Boolean(yahoo) });
+      if (yahoo) {
+        yahooMa35Failures = 0;
+        return { ...yahoo, ma35Attempts: attempts };
+      }
+      noteMa35ProviderFailure("yahoo", "empty");
+    } catch (error) {
+      attempts.push({ source: "yahoo-1m", ok: false, error: error.message });
+      noteMa35ProviderFailure("yahoo", error.message);
+    }
   }
-  try {
-    const fugle = await fetchFugleIntradaySma35(code, scanTimestamp);
-    attempts.push({ source: "fugle-1m", ok: Boolean(fugle), configured: Boolean(FUGLE_API_KEY) });
-    if (fugle) return { ...fugle, ma35Attempts: attempts };
-  } catch (error) {
-    attempts.push({ source: "fugle-1m", ok: false, configured: Boolean(FUGLE_API_KEY), error: error.message });
+  if (fugleMa35BlockedReason) {
+    attempts.push({ source: "fugle-1m", ok: false, configured: Boolean(FUGLE_API_KEY), skipped: true, error: fugleMa35BlockedReason });
+  } else {
+    try {
+      const fugle = await fetchFugleIntradaySma35(code, scanTimestamp);
+      attempts.push({ source: "fugle-1m", ok: Boolean(fugle), configured: Boolean(FUGLE_API_KEY) });
+      if (fugle) {
+        fugleMa35Failures = 0;
+        return { ...fugle, ma35Attempts: attempts };
+      }
+      if (FUGLE_API_KEY) noteMa35ProviderFailure("fugle", "empty");
+    } catch (error) {
+      attempts.push({ source: "fugle-1m", ok: false, configured: Boolean(FUGLE_API_KEY), error: error.message });
+      noteMa35ProviderFailure("fugle", error.message);
+    }
   }
   try {
     const twelve = await fetchTwelveDataIntradaySma35(code, scanTimestamp);
-    attempts.push({ source: "twelve-1m", ok: Boolean(twelve), configured: Boolean(TWELVE_DATA_API_KEY) });
+    attempts.push({ source: "twelve-1m", ok: Boolean(twelve), configured: Boolean(TWELVE_DATA_API_KEY), skipped: Boolean(twelveDataBlockedReason), error: twelveDataBlockedReason || undefined });
     if (twelve) return { ...twelve, ma35Attempts: attempts };
   } catch (error) {
     attempts.push({ source: "twelve-1m", ok: false, configured: Boolean(TWELVE_DATA_API_KEY), error: error.message });
@@ -978,6 +1040,7 @@ async function fetchIntradaySma35WithFallback(code, scanTimestamp, cache) {
 }
 
 async function fetchYahooIntradaySma35(code, scanTimestamp) {
+  if (yahooMa35BlockedReason) return null;
   const targetMinute = minuteKey(scanTimestamp);
   const targetDate = targetMinute.slice(0, 10);
   if (!targetMinute || !targetDate) return null;
