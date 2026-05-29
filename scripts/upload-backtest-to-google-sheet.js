@@ -103,7 +103,13 @@ async function maybeSendGoogleSheetFailureAlert(status) {
 
 async function recordGoogleSheetFailure(error, plan) {
   const previous = readJson(GOOGLE_SHEET_STATUS_FILE, {});
-  const queuedFile = queueGoogleSheetUpload(plan, error);
+  let queuedFile = "";
+  let queueError = null;
+  try {
+    queuedFile = queueGoogleSheetUpload(plan, error);
+  } catch (err) {
+    queueError = err;
+  }
   const status = {
     ok: false,
     updatedAt: new Date().toISOString(),
@@ -115,6 +121,7 @@ async function recordGoogleSheetFailure(error, plan) {
     lastSuccessAt: previous.lastSuccessAt || "",
     lastAlertAt: previous.lastAlertAt || "",
   };
+  if (queueError) status.lastQueueError = compactError(queueError);
   if (status.consecutiveFailures >= GOOGLE_SHEET_ALERT_THRESHOLD) {
     try {
       if (await maybeSendGoogleSheetFailureAlert(status)) status.lastAlertAt = new Date().toISOString();
