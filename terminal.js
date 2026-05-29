@@ -5763,6 +5763,37 @@ function mergeOpenBuyCache(payload) {
   saveOpenBuyLocalCache();
 }
 
+async function loadOpenBuySupabasePayload() {
+  if (!supabaseClient) return null;
+  try {
+    const { data, error } = await supabaseClient
+      .from("strategy1_open_buy_latest")
+      .select("payload,updated_at")
+      .eq("id", "latest")
+      .maybeSingle();
+    if (!error && data?.payload) {
+      return {
+        ...data.payload,
+        updatedAt: data.payload.updatedAt || data.updated_at,
+        cacheSource: "supabase",
+      };
+    }
+  } catch (error) {
+  }
+  return null;
+}
+
+async function loadOpenBuyStaticPayload() {
+  let payload = await fetchJson(`${endpoints.openBuyCache}?t=${Date.now()}`, 10000);
+  if (!normalizeArray(payload?.matches).length) {
+    payload = await fetchJson(`${endpoints.openBuyBackup}?t=${Date.now()}`, 10000);
+  }
+  return {
+    ...payload,
+    cacheSource: "static",
+  };
+}
+
 async function loadOpenBuyCache(force = false) {
   if (!isStrategyCacheActive("openBuy")) return;
   if (openBuyCacheLoading) return;
@@ -5780,7 +5811,8 @@ async function loadOpenBuyCache(force = false) {
     }
     const incomingMatches = normalizeArray(payload?.matches);
     const hasCurrentMatches = Object.keys(openBuyScanMatches).length > 0;
-    if (payload?.ok && Array.isArray(payload.matches) && (incomingMatches.length || !hasCurrentMatches)) {
+    const hasCompleteScan = payload?.fullScan && normalizeArray(payload?.scannedCodes).length;
+    if (payload?.ok && Array.isArray(payload.matches) && (incomingMatches.length || !hasCurrentMatches || hasCompleteScan)) {
       mergeOpenBuyCache(payload);
       renderStrategyScanner();
     }
@@ -14307,9 +14339,4 @@ if (isViewActive("watchlist")) renderWatchlist();
 setInterval(() => {
   if (!isDocumentHidden() && isTerminalUnlocked() && isViewActive("watchlist")) refreshSelectedWatchlistQuote();
 }, 10000);
-
-
-
-
-
 

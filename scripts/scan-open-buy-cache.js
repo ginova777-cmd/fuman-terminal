@@ -4,20 +4,110 @@ const scanOpenBuy = require("../api/scan-open-buy");
 const fetchStocks = require("../stocks");
 const { fetchMisQuotes } = require("../lib/mis-quotes");
 
-const { ROOT, dataPath } = require("./runtime-paths");
+const { ROOT, dataPath, statePath } = require("./runtime-paths");
 const OUT_FILE = dataPath("open-buy-latest.json");
 const BACKUP_FILE = dataPath("open-buy-backup.json");
 const SCORECARD_SOURCE_FILE = dataPath("open-buy-scorecard-source.json");
+const SUPABASE_STATUS_FILE = statePath("open-buy-supabase-status.json");
 const BATCH_SIZE = Number(process.env.OPEN_BUY_BATCH_SIZE || 48);
 const BATCHES_PER_RUN = Number(process.env.OPEN_BUY_BATCHES_PER_RUN || 5);
 const FULL_SCAN = process.env.FULL_SCAN === "1";
 const STOCK_URL = process.env.STOCK_UNIVERSE_URL || "https://fuman-terminal.vercel.app/api/stocks";
 const USE_MIS_QUOTES = process.env.OPEN_BUY_USE_MIS === "1";
 
+function readSecretText(file) {
+  try { return fs.readFileSync(file, "utf8").trim(); } catch { return ""; }
+}
+
+const SUPABASE_URL = process.env.SUPABASE_URL
+  || process.env.FUMAN_SUPABASE_URL
+  || readSecretText(path.join(ROOT, "secrets", "supabase-url.txt"))
+  || readSecretText(path.join(process.env.FUMAN_RUNTIME_DIR || "C:/fuman-runtime", "secrets", "supabase-url.txt"));
+const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY
+  || process.env.SUPABASE_SERVICE_KEY
+  || process.env.FUMAN_SUPABASE_SERVICE_KEY
+  || readSecretText(path.join(ROOT, "secrets", "supabase-service-role-key.txt"))
+  || readSecretText(path.join(process.env.FUMAN_RUNTIME_DIR || "C:/fuman-runtime", "secrets", "supabase-service-role-key.txt"));
+const SUPABASE_OPEN_BUY_TABLE = process.env.SUPABASE_OPEN_BUY_TABLE || "strategy1_open_buy_latest";
+
 function readJson(file, fallback) {
   try { return JSON.parse(fs.readFileSync(file, "utf8")); } catch { return fallback; }
 }
 
+function writeJson(file, payload) {
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.writeFileSync(file, `${JSON.stringify(payload, null, 2)}\n`);
+}
+
+function writeSupabaseStatus(ok, details = {}) {
+  writeJson(SUPABASE_STATUS_FILE, {
+    ok,
+    checkedAt: new Date().toISOString(),
+    ...details,
+  });
+}
+
+async function upsertOpenBuyLatestToSupabase(payload) {
+  if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
+    writeSupabaseStatus(false, { skipped: true, reason: "missing Supabase credentials" });
+    return false;
+  }
+  const baseUrl = SUPABASE_URL.replace(/\/+$/, "");
+  const body = {
+    id: "latest",
+    date: payload.usedDate || payload.date || "",
+    updated_at: payload.updatedAt || new Date().toISOString(),
+    payload,
+    match_count: Array.isArray(payload.matches) ? payload.matches.length : 0,
+    scanned_count: Array.isArray(payload.scannedCodes) ? payload.scannedCodes.length : 0,
+    total_count: Number(payload.total || 0),
+  };
+  const attempts = Number(process.env.OPEN_BUY_SUPABASE_ATTEMPTS || 4);
+  let lastMessage = "";
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    try {
+      const response = await fetch(`${baseUrl}/rest/v1/${SUPABASE_OPEN_BUY_TABLE}?on_conflict=id`, {
+        method: "POST",
+        headers: {
+          apikey: SUPABASE_SERVICE_ROLE_KEY,
+          Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+          "Content-Type": "application/json",
+          Prefer: "resolution=merge-duplicates",
+        },
+        body: JSON.stringify(body),
+      });
+      if (!response.ok) {
+        const text = await response.text().catch(() => "");
+        lastMessage = `HTTP ${response.status} ${text.slice(0, 240)}`.trim();
+      } else {
+        writeSupabaseStatus(true, {
+          table: SUPABASE_OPEN_BUY_TABLE,
+          updatedAt: body.updated_at,
+          matchCount: body.match_count,
+          scannedCount: body.scanned_count,
+          totalCount: body.total_count,
+          attempt,
+        });
+        console.log(`open-buy supabase upsert ok: matches ${body.match_count}, scanned ${body.scanned_count}/${body.total_count}`);
+        return true;
+      }
+    } catch (error) {
+      const cause = error?.cause?.message ? ` (${error.cause.message})` : "";
+      lastMessage = `${error?.message || String(error || "unknown error")}${cause}`;
+    }
+
+    console.warn(`open-buy supabase upsert attempt ${attempt}/${attempts} failed: ${lastMessage}`);
+    if (attempt < attempts) {
+      await new Promise((resolve) => setTimeout(resolve, Math.min(15000, 1500 * attempt)));
+    }
+  }
+  writeSupabaseStatus(false, {
+    table: SUPABASE_OPEN_BUY_TABLE,
+    error: lastMessage || "unknown error",
+    attempts,
+  });
+  return false;
+}
 function preserveScorecardSource(payload) {
   if (!(payload.matches || []).length) return;
   fs.mkdirSync(path.dirname(SCORECARD_SOURCE_FILE), { recursive: true });
@@ -223,6 +313,7 @@ async function main() {
   fs.mkdirSync(path.dirname(OUT_FILE), { recursive: true });
   fs.writeFileSync(OUT_FILE, `${JSON.stringify(output, null, 2)}\n`);
   if (matches.length) fs.writeFileSync(BACKUP_FILE, `${JSON.stringify({ ...output, source: "github-actions-backup" }, null, 2)}\n`);
+  await upsertOpenBuyLatestToSupabase(output);
   console.log(`open-buy cache updated: full market scan scanned ${scannedThisRun}/${codes.length}, matches ${matches.length}`);
 }
 
