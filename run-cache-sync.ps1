@@ -1,3 +1,8 @@
+param(
+  [ValidateSet("all", "strategy3")]
+  [string]$Scope = "all"
+)
+
 $ErrorActionPreference = "Continue"
 $PSNativeCommandUseErrorActionPreference = $false
 
@@ -84,6 +89,13 @@ function Assert-CopiedFile($file, $source, $target) {
   Write-Log "$file copied and verified: $sourceHash"
 }
 
+function Copy-CacheFile($file, $source, $targetRoot, $label) {
+  $target = Join-Path $targetRoot $file
+  New-Item -ItemType Directory -Force -Path (Split-Path $target -Parent) | Out-Null
+  Copy-Item -LiteralPath $source -Destination $target -Force
+  Assert-CopiedFile "$label $file" $source $target
+}
+
 function Get-RocTradeDateAgeDays($tradeDate) {
   $text = [string]$tradeDate
   if ($text -match "^\d{8}$") {
@@ -157,38 +169,48 @@ if (Test-Path $lockFile) {
 New-Item -ItemType File -Force -Path $lockFile | Out-Null
 
 try {
-  Write-Log "=== Cache sync start $(Get-Date) ==="
+  Write-Log "=== Cache sync start $(Get-Date) scope=$Scope ==="
 
-  $criticalLatestFiles = @(
-    "data\institution-latest.json",
-    "data\warrant-flow-latest.json",
-    "data\open-buy-latest.json",
-    "data\strategy2-intraday-latest.json",
-    "data\strategy3-latest.json",
-    "data\strategy4-latest.json",
-    "data\strategy5-latest.json"
-  )
+  if ($Scope -eq "strategy3") {
+    $criticalLatestFiles = @(
+      "data\strategy3-latest.json"
+    )
+
+    $dataFiles = @(
+      "data\strategy3-latest.json",
+      "data\strategy3-backup.json",
+      "data\strategy3-scorecard-source.json"
+    )
+  } else {
+    $criticalLatestFiles = @(
+      "data\institution-latest.json",
+      "data\warrant-flow-latest.json",
+      "data\open-buy-latest.json",
+      "data\strategy3-latest.json",
+      "data\strategy4-latest.json",
+      "data\strategy5-latest.json"
+    )
+
+    $dataFiles = @(
+      "data\institution-latest.json",
+      "data\institution-backup.json",
+      "data\warrant-flow-latest.json",
+      "data\warrant-flow-backup.json",
+      "data\open-buy-latest.json",
+      "data\open-buy-backup.json",
+      "data\open-buy-scorecard-source.json",
+      "data\strategy3-latest.json",
+      "data\strategy3-backup.json",
+      "data\strategy3-scorecard-source.json",
+      "data\strategy4-latest.json",
+      "data\strategy4-backup.json",
+      "data\strategy5-latest.json",
+      "data\strategy5-backup.json",
+      "data\realtime-radar-latest.json"
+    )
+  }
 
   $copiedFiles = New-Object System.Collections.Generic.List[string]
-
-  $dataFiles = @(
-    "data\institution-latest.json",
-    "data\institution-backup.json",
-    "data\warrant-flow-latest.json",
-    "data\warrant-flow-backup.json",
-    "data\open-buy-latest.json",
-    "data\open-buy-backup.json",
-    "data\open-buy-scorecard-source.json",
-    "data\strategy2-intraday-latest.json",
-    "data\strategy3-latest.json",
-    "data\strategy3-backup.json",
-    "data\strategy3-scorecard-source.json",
-    "data\strategy4-latest.json",
-    "data\strategy4-backup.json",
-    "data\strategy5-latest.json",
-    "data\strategy5-backup.json",
-    "data\realtime-radar-latest.json"
-  )
 
   if (-not (Test-Path (Join-Path $syncRepo ".git"))) {
     if (Test-Path $syncRepo) {
@@ -211,9 +233,8 @@ try {
     if (Should-SkipCacheFile $file $source) {
       continue
     }
-    New-Item -ItemType Directory -Force -Path (Split-Path $target -Parent) | Out-Null
-    Copy-Item -LiteralPath $source -Destination $target -Force
-    Assert-CopiedFile $file $source $target
+    Copy-CacheFile $file $source $syncRepo "sync"
+    Copy-CacheFile $file $source $codeRepo "local"
     $copiedFiles.Add($file) | Out-Null
   }
 
@@ -247,7 +268,8 @@ try {
         if (Should-SkipCacheFile $file $source) {
           continue
         }
-        Copy-Item -LiteralPath $source -Destination $target -Force
+        Copy-CacheFile $file $source $syncRepo "sync retry"
+        Copy-CacheFile $file $source $codeRepo "local retry"
       }
     }
     Run-Git "Stage cache files after retry reset" (@("add") + $dataFiles)
