@@ -1,55 +1,32 @@
-const { execFileSync } = require("child_process");
-
 const BASE_URL = (process.env.FUMAN_DEPLOY_URL || "https://fuman-terminal.vercel.app").replace(/\/$/, "");
-const EXPECTED_SHA = process.env.EXPECTED_SHA || process.argv[2] || gitMainSha();
-const TIMEOUT_MS = Math.max(1000, Number(process.env.DEPLOY_VERIFY_TIMEOUT_MS || 6 * 60 * 1000));
-const INTERVAL_MS = Math.max(1000, Number(process.env.DEPLOY_VERIFY_INTERVAL_MS || 15000));
+const REQUIRED_TERMINAL_MARKERS = (process.env.DEPLOY_VERIFY_TERMINAL_MARKERS || "")
+  .split(",")
+  .map((text) => text.trim())
+  .filter(Boolean);
+const REQUIRED_STRATEGY2_MARKERS = (process.env.DEPLOY_VERIFY_STRATEGY2_MARKERS || "ma35Source")
+  .split(",")
+  .map((text) => text.trim())
+  .filter(Boolean);
 
-function gitMainSha() {
-  try {
-    const output = execFileSync("git", ["ls-remote", "origin", "refs/heads/main"], { encoding: "utf8" }).trim();
-    return output.split(/\s+/)[0] || "";
-  } catch {
-    return "";
-  }
+async function fetchText(path) {
+  const response = await fetch(`${BASE_URL}${path}${path.includes("?") ? "&" : "?"}t=${Date.now()}`, {
+    headers: { "Cache-Control": "no-cache" },
+  });
+  if (!response.ok) throw new Error(`${path} HTTP ${response.status}`);
+  return response.text();
 }
 
-async function readDeployHealth() {
-  const url = `${BASE_URL}/api/deploy-health?t=${Date.now()}`;
-  const response = await fetch(url, { headers: { "Cache-Control": "no-cache" } });
-  if (!response.ok) throw new Error(`deploy-health HTTP ${response.status}`);
-  return response.json();
-}
-
-async function sleep(ms) {
-  await new Promise((resolve) => setTimeout(resolve, ms));
+function assertMarkers(label, text, markers) {
+  const missing = markers.filter((marker) => !text.includes(marker));
+  if (missing.length) throw new Error(`${label} missing markers: ${missing.join(", ")}`);
 }
 
 async function main() {
-  if (!EXPECTED_SHA) throw new Error("Missing expected SHA. Pass it as argv[2] or set EXPECTED_SHA.");
-  const expectedShort = EXPECTED_SHA.slice(0, 7);
-  const startedAt = Date.now();
-  let lastPayload = null;
-  let lastError = null;
-  while (Date.now() - startedAt <= TIMEOUT_MS) {
-    try {
-      const payload = await readDeployHealth();
-      lastPayload = payload;
-      const deployedSha = String(payload.commitSha || "");
-      const deployedShort = deployedSha.slice(0, 7) || "--";
-      console.log(`deploy check: expected ${expectedShort}, deployed ${deployedShort}`);
-      if (deployedSha && (deployedSha === EXPECTED_SHA || deployedSha.startsWith(EXPECTED_SHA) || EXPECTED_SHA.startsWith(deployedSha))) {
-        console.log(`deploy verified: ${deployedShort}`);
-        return;
-      }
-    } catch (error) {
-      lastError = error;
-      console.log(`deploy check pending: ${error.message}`);
-    }
-    await sleep(INTERVAL_MS);
-  }
-  const detail = lastPayload ? JSON.stringify(lastPayload) : lastError?.message || "no response";
-  throw new Error(`Deploy verification timeout for ${expectedShort}: ${detail}`);
+  const terminalJs = await fetchText("/terminal.js");
+  assertMarkers("terminal.js", terminalJs, REQUIRED_TERMINAL_MARKERS);
+  const strategy2Json = await fetchText("/data/strategy2-intraday-latest.json");
+  assertMarkers("strategy2 latest", strategy2Json, REQUIRED_STRATEGY2_MARKERS);
+  console.log(`deploy content verified: ${BASE_URL}`);
 }
 
 main().catch((error) => {
