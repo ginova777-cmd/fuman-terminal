@@ -1,6 +1,7 @@
 const fs = require("fs");
 const path = require("path");
 const { buildRanks, cleanNumber, detectSignals, isIntradayTradable, ma35SourceLabel } = require("./intraday-radar-rules");
+const { rotateStrategy2IntradayCache } = require("./strategy2-cache-rotation");
 
 const { ROOT, dataPath, cachePath, repoPath } = require("./runtime-paths");
 const CACHE_DIR = cachePath("intraday");
@@ -141,6 +142,7 @@ function writeJson(file, value) {
 }
 
 function publishStaticDataJson(name, value) {
+  if (name === "strategy2-intraday-latest.json") return;
   const targets = [repoPath("data", name)];
   const syncRoot = process.env.FUMAN_SYNC_DIR || "C:\\fuman-terminal-sync";
   if (fs.existsSync(syncRoot)) targets.push(path.join(syncRoot, "data", name));
@@ -1278,6 +1280,8 @@ async function main() {
     aCount: strategy2Events.filter((event) => event.firstAAt).length,
     bOnlyCount: 0,
   });
+  const rotationMessages = rotateStrategy2IntradayCache({ currentDateKey: key });
+  rotationMessages.forEach((message) => console.log(`strategy2 cache rotation: ${message}`));
   writeJson(SCORECARD_TRACK_FILE, scorecardTracker);
   writeJson(STRATEGY5_TRACK_FILE, strategy5Tracker);
   console.log(`intraday signals ${key}: added ${added}, total ${cache.records.length}`);
