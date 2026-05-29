@@ -4012,20 +4012,11 @@ function renderRealtimeRadar() {
   }
   const radarOpen = isRadarDetectionWindow();
   if (!realtimeRadarLastRows.length) loadRealtimeRadarLastRows();
-  let hasStrategy2CacheRows = false;
   if (radarOpen) {
     const radarCacheDue = !realtimeRadarCacheLoadedAt || Date.now() - realtimeRadarCacheLoadedAt >= REALTIME_RADAR_REFRESH_MS;
     if (radarCacheDue && !realtimeRadarCacheLoading) {
       loadRealtimeRadarLatestCache(true).then((loaded) => {
         if (loaded && isViewActive("realtime-radar")) renderRealtimeRadar();
-      });
-    }
-    ensureStrategy2IntradayTodayCache();
-    hasStrategy2CacheRows = strategy2IntradayEventByCode.size > 0;
-    const cacheRefreshDue = !strategy2IntradayCacheLoadedAt || Date.now() - strategy2IntradayCacheLoadedAt > Math.max(REALTIME_RADAR_REFRESH_MS, 3000);
-    if (!realtimeRadarLastRows.length && (!strategy2IntradayEventByCode.size || cacheRefreshDue) && !strategy2IntradayCacheLoading) {
-      loadStrategy2IntradayCache(cacheRefreshDue).then(() => {
-        if (isViewActive("realtime-radar")) renderRealtimeRadar();
       });
     }
   }
@@ -4048,18 +4039,13 @@ function renderRealtimeRadar() {
     });
     return;
   }
-  if (!latestStocks.length && !realtimeRadarLastRows.length && !hasStrategy2CacheRows) {
+  if (!latestStocks.length && !realtimeRadarLastRows.length) {
     panel.innerHTML = `<div class="empty-state">正在快速載入當沖雷達股票池...</div>`;
     ensureRealtimeRadarData().then((stocks) => {
       if (stocks.length) renderRealtimeRadar();
       else panel.innerHTML = `<div class="empty-state">即時雷達暫時沒有取得股票資料，請按右上重新整理。</div>`;
     });
     return;
-  }
-  if (radarOpen && hasStrategy2CacheRows && !latestStocks.length && !realtimeRadarLoading) {
-    ensureRealtimeRadarData().then((stocks) => {
-      if (stocks.length && isViewActive("realtime-radar")) renderRealtimeRadar();
-    });
   }
   if (!Object.keys(strategyHistoryData).length && !strategy4CacheLoading) loadStrategy4Cache(true);
   const historyTargets = getRealtimeRadarHistoryTargets();
@@ -4074,7 +4060,7 @@ function renderRealtimeRadar() {
     });
   }
   const shouldReuseRadarRows = isManualSideSwitch && realtimeRadarLastRows.length;
-  const cacheRows = radarOpen ? buildRealtimeRadarRowsFromStrategy2Cache() : [];
+  const cacheRows = [];
   const liveRows = shouldReuseRadarRows ? [] : buildRealtimeRadarRows({ mode: radarOpen ? "intraday" : "closed" });
   const rows = radarOpen ? mergeRealtimeRadarRows([...liveRows, ...cacheRows], []) : liveRows;
   if (!shouldReuseRadarRows && radarOpen && rows.length) {
