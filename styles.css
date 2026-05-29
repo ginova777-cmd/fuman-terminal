@@ -3713,3 +3713,28 @@ h1 {
     font-size: 24px !important;
   }
 }
+
+@media (max-width: 760px) {
+  #market-view,
+  #market-view > .metric-grid,
+  #market-view .metric-card,
+  #market-view .strength-panel,
+  #market-view #heatmap,
+  #market-view #heatmap .sector-card {
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+    transform: none !important;
+  }
+
+  #market-view > .metric-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  #market-view #heatmap {
+    grid-template-columns: 1fr !important;
+    overflow-x: hidden !important;
+  }
+}
