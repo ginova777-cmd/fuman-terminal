@@ -1005,14 +1005,15 @@ async function main() {
   }
 
   const rawStocks = await fetchStocks();
-  const realtimePayload = await fetchRealtime(rawStocks);
+  const realtimeSourceStocks = rawStocks.filter(isIntradayTradable);
+  const realtimePayload = await fetchRealtime(realtimeSourceStocks);
   const timestamp = timestampKey();
   const realtimeStats = fetchRealtime.lastStats || { requested: rawStocks.length, received: 0, failed: 0 };
   const realtimeStocks = realtimePayload
     .filter((stock) => stock.isRealtime === true)
     .filter((stock) => hasFreshQuote(stock, timestamp))
     .filter(isIntradayTradable);
-  const coverage = rawStocks.length ? realtimeStocks.length / rawStocks.length : 0;
+  const coverage = realtimeSourceStocks.length ? realtimeStocks.length / realtimeSourceStocks.length : 0;
   const realtimeSummaryBase = {
     ...realtimeStats,
     coverage: Number(coverage.toFixed(4)),
@@ -1020,11 +1021,11 @@ async function main() {
     initialBatchSize: REALTIME_BATCH_SIZE,
     retryBatchSize: REALTIME_RETRY_BATCH_SIZE,
   };
-  if (rawStocks.length && coverage < MIN_REALTIME_COVERAGE) {
+  if (realtimeSourceStocks.length && coverage < MIN_REALTIME_COVERAGE) {
     cache.updatedAt = new Date().toISOString();
     cache.realtime = { ...realtimeSummaryBase, skippedPartialCoverage: true };
     writeJson(SIGNAL_FILE, cache);
-    console.log(`intraday signals ${key}: skipped partial realtime coverage ${realtimeStocks.length}/${rawStocks.length} (received ${realtimeStats.received}, failed ${realtimeStats.failed}, missed ${realtimeStats.missedCount || 0})`);
+    console.log(`intraday signals ${key}: skipped partial realtime coverage ${realtimeStocks.length}/${realtimeSourceStocks.length} (received ${realtimeStats.received}, failed ${realtimeStats.failed}, missed ${realtimeStats.missedCount || 0})`);
     return;
   }
   updateMinuteCloseCache(cache, realtimeStocks, timestamp, key);
