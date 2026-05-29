@@ -5811,10 +5811,7 @@ async function loadOpenBuyCache(force = false) {
   openBuyCacheLoading = true;
   openBuyCacheCheckedAt = Date.now();
   try {
-    let payload = await fetchJson(`${endpoints.openBuyCache}?t=${Date.now()}`, 10000);
-    if (!normalizeArray(payload?.matches).length) {
-      payload = await fetchJson(`${endpoints.openBuyBackup}?t=${Date.now()}`, 10000);
-    }
+    const payload = await loadOpenBuySupabasePayload() || await loadOpenBuyStaticPayload();
     const incomingMatches = normalizeArray(payload?.matches);
     const hasCurrentMatches = Object.keys(openBuyScanMatches).length > 0;
     const hasCompleteScan = payload?.fullScan && normalizeArray(payload?.scannedCodes).length;
