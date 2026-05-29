@@ -225,16 +225,36 @@ async function fetchRealtime(stocks) {
     const batchStocks = stocks.slice(i, i + batchSize);
     const codes = batchStocks.map((stock) => stock.code);
     if (!codes.length) continue;
+    const batchIndex = totalBatches + 1;
     totalBatches += 1;
     try {
       const payload = await fetchJson(`${BASE_URL}/api/realtime?codes=${encodeURIComponent(codes.join(","))}&t=${Date.now()}`, 20000);
       (payload.quotes || []).forEach((quote) => quotes.set(quote.code, quote));
     } catch (error) {
-      failedBatches.push({ codes, stocks: batchStocks, error: error.message });
-      console.log(`realtime batch deferred ${codes[0]}-${codes.at(-1)}: ${error.message}`);
+      failedBatches.push({
+        batchIndex,
+        startCode: codes[0],
+        endCode: codes.at(-1),
+        count: codes.length,
+        codes,
+        stocks: batchStocks,
+        error: error.message,
+      });
+      console.log(`realtime batch deferred #${batchIndex} ${codes[0]}-${codes.at(-1)}: ${error.message}`);
     }
   }
-  const liveStocks = applyRealtimeQuotes(stocks, quotes);
+  const batchByCode = new Map();
+  for (let i = 0; i < stocks.length; i += batchSize) {
+    const codes = stocks.slice(i, i + batchSize).map((stock) => stock.code).filter(Boolean);
+    const batchIndex = Math.floor(i / batchSize) + 1;
+    for (const code of codes) {
+      batchByCode.set(code, { batchIndex, startCode: codes[0], endCode: codes.at(-1) });
+    }
+  }
+  const liveStocks = applyRealtimeQuotes(stocks, quotes).map((stock) => ({
+    ...stock,
+    realtimeBatch: batchByCode.get(stock.code) || null,
+  }));
   return { stocks: liveStocks, failedBatches, totalBatches, quoteCount: quotes.size };
 }
 
@@ -273,6 +293,36 @@ async function rescanRealtimeBatches(failedBatches = []) {
     }
   }
   return { quotes, recoveredBatches };
+}
+
+function buildFailedBatchDetails(failedBatches = []) {
+  return failedBatches.map((batch) => ({
+    batchIndex: batch.batchIndex || "",
+    range: batch.startCode && batch.endCode ? `${batch.startCode}-${batch.endCode}` : "",
+    count: batch.count || (batch.codes || []).length,
+    sampleCodes: (batch.codes || []).slice(0, 12).join(","),
+    error: String(batch.error || "").slice(0, 240),
+  }));
+}
+
+function buildStaleQuoteDetails(staleStocks = [], scanTimestamp = "") {
+  return staleStocks
+    .map((stock) => {
+      const batch = stock.realtimeBatch || {};
+      const quoteTime = stock.quoteTime || stock.time || "";
+      return {
+        code: String(stock.code || ""),
+        name: String(stock.name || ""),
+        quoteTime,
+        quoteAgeSeconds: quoteAgeSeconds(scanTimestamp, quoteTime),
+        batchIndex: batch.batchIndex || "",
+        batchRange: batch.startCode && batch.endCode ? `${batch.startCode}-${batch.endCode}` : "",
+        close: cleanNumber(stock.close),
+        percent: cleanNumber(stock.percent),
+      };
+    })
+    .sort((a, b) => (Number(b.quoteAgeSeconds) || 0) - (Number(a.quoteAgeSeconds) || 0) || a.code.localeCompare(b.code))
+    .slice(0, 80);
 }
 
 function radarSignalTags(stock) {
@@ -396,6 +446,8 @@ async function main() {
   const freshStocks = liveStocks.filter((stock) => stock.isRealtime === true && hasFreshQuote(stock, timestamp));
   const staleStocks = liveStocks.filter((stock) => stock.isRealtime === true && !hasFreshQuote(stock, timestamp));
   const staleQuoteCount = staleStocks.length;
+  const staleQuoteDetails = buildStaleQuoteDetails(staleStocks, timestamp);
+  const failedBatchDetails = buildFailedBatchDetails(realtime.failedBatches);
   const rows = buildRadarRows(freshStocks, detectedAt);
   let payload = {
     source: "mini-pc-realtime-radar",
@@ -410,6 +462,8 @@ async function main() {
     failedBatchCount: realtime.failedBatches.length,
     totalBatchCount: realtime.totalBatches,
     quoteCount: realtime.quoteCount,
+    staleQuoteDetails,
+    failedBatchDetails,
     rows,
     longCount: rows.filter((row) => row.side === "long").length,
     shortCount: rows.filter((row) => row.side === "short").length,
@@ -429,6 +483,8 @@ async function main() {
         failedBatchCount: realtime.failedBatches.length,
         totalBatchCount: realtime.totalBatches,
         quoteCount: realtime.quoteCount,
+        staleQuoteDetails,
+        failedBatchDetails,
         lastFailedScanAt: timestamp,
       };
       console.log(`realtime radar ${timestamp}: kept previous rows ${previous.rows.length} after ${realtime.failedBatches.length}/${realtime.totalBatches} failed batches`);

@@ -191,6 +191,64 @@ function Show-DataSourceNote {
   Write-Host "判讀原則：若 repo /data 較舊，但 runtime/Supabase 正常更新，不代表即時雷達停住。" -ForegroundColor Yellow
   Write-Host "除錯順序：先看 runtime data 與最新 realtime-radar log，再看 Supabase；repo /data 只用來確認同步備份。"
 }
+function Show-RealtimeRadarQuoteHealth {
+  Write-Section "即時雷達報價健康"
+  $path = Join-Path (Join-Path $runtimeRoot "data") "realtime-radar-latest.json"
+  if (!(Test-Path -LiteralPath $path)) {
+    Write-Host "找不到即時雷達快取：$path" -ForegroundColor Yellow
+    return
+  }
+  try {
+    $payload = Get-Content -LiteralPath $path -Raw | ConvertFrom-Json
+  } catch {
+    Write-Host "即時雷達 JSON 解析失敗：$($_.Exception.Message)" -ForegroundColor Red
+    return
+  }
+
+  [pscustomobject]@{
+    Status = $payload.status
+    Timestamp = $payload.timestamp
+    UpdatedAt = $payload.updatedAt
+    Rows = @($payload.rows).Count
+    StaleQuoteCount = [int]($payload.staleQuoteCount ?? 0)
+    FailedBatchCount = [int]($payload.failedBatchCount ?? 0)
+    TotalBatchCount = [int]($payload.totalBatchCount ?? 0)
+    QuoteCount = [int]($payload.quoteCount ?? 0)
+    MaxQuoteAgeSeconds = [int]($payload.maxQuoteAgeSeconds ?? 0)
+    LastFailedScanAt = $payload.lastFailedScanAt
+  } | Format-Table -AutoSize
+
+  $failed = @($payload.failedBatchDetails | Where-Object { $_ })
+  if ($failed.Count) {
+    Write-Host "失敗批次：" -ForegroundColor Yellow
+    $failed | Select-Object -First 12 | Format-Table `
+      @{Label = "批次"; Expression = { $_.batchIndex } },
+      @{Label = "範圍"; Expression = { $_.range } },
+      @{Label = "檔數"; Expression = { $_.count } },
+      @{Label = "樣本"; Expression = { $_.sampleCodes } },
+      @{Label = "錯誤"; Expression = { $_.error } } -AutoSize
+  } else {
+    Write-Host "失敗批次：0"
+  }
+
+  $stale = @($payload.staleQuoteDetails | Where-Object { $_ })
+  if ($stale.Count) {
+    Write-Host "Stale 報價明細（最多 20 檔，依延遲秒數排序）：" -ForegroundColor Yellow
+    $stale | Select-Object -First 20 | Format-Table `
+      @{Label = "代號"; Expression = { $_.code } },
+      @{Label = "名稱"; Expression = { $_.name } },
+      @{Label = "最後報價"; Expression = { $_.quoteTime } },
+      @{Label = "延遲秒"; Expression = { $_.quoteAgeSeconds } },
+      @{Label = "批次"; Expression = { $_.batchIndex } },
+      @{Label = "批次範圍"; Expression = { $_.batchRange } },
+      @{Label = "漲跌%"; Expression = { $_.percent } } -AutoSize
+  } elseif (($payload.staleQuoteCount ?? 0) -gt 0) {
+    Write-Host "staleQuoteCount > 0，但目前快取尚未含 staleQuoteDetails；等下一輪新版巡邏寫入後會出現明細。" -ForegroundColor Yellow
+  } else {
+    Write-Host "Stale 報價：0"
+  }
+}
+
 function Show-DataFreshness {
   Write-Section "資料檔新鮮度"
   $important = @(
@@ -274,5 +332,6 @@ Show-FrontendPatrol $syncTerminalJs "C:\fuman-terminal-sync"
 Show-ScheduledTasks
 Show-DataSourceNote
 Show-DataFreshness
+Show-RealtimeRadarQuoteHealth
 Show-LatestLogs
 
