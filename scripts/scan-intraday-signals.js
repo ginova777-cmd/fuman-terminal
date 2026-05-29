@@ -1,6 +1,6 @@
 const fs = require("fs");
 const path = require("path");
-const { buildRanks, cleanNumber, detectSignals, isIntradayTradable } = require("./intraday-radar-rules");
+const { buildRanks, cleanNumber, detectSignals, isIntradayTradable, ma35SourceLabel } = require("./intraday-radar-rules");
 
 const { ROOT, dataPath, cachePath, repoPath } = require("./runtime-paths");
 const CACHE_DIR = cachePath("intraday");
@@ -32,6 +32,10 @@ const FUGLE_API_KEY = process.env.FUGLE_API_KEY
   || process.env.FUGLE_MARKETDATA_API_KEY
   || readSecretText(path.join(ROOT, "secrets", "fugle-api-key.txt"))
   || readSecretText(path.join(process.env.FUMAN_RUNTIME_DIR || "C:/fuman-runtime", "secrets", "fugle-api-key.txt"));
+const TWELVE_DATA_API_KEY = process.env.TWELVE_DATA_API_KEY
+  || process.env.TWELVEDATA_API_KEY
+  || readSecretText(path.join(ROOT, "secrets", "twelve-data-api-key.txt"))
+  || readSecretText(path.join(process.env.FUMAN_RUNTIME_DIR || "C:/fuman-runtime", "secrets", "twelve-data-api-key.txt"));
 
 function readJson(file, fallback) {
   try { return JSON.parse(fs.readFileSync(file, "utf8")); } catch { return fallback; }
@@ -129,7 +133,7 @@ function classifyStrategy2State(stock, signal) {
   const close = cleanNumber(stock.close);
   const high = cleanNumber(stock.high) || close;
   const open = cleanNumber(stock.open);
-  const hasIntradaySma35 = /(?:yahoo|fugle|local)-1m/.test(String(signal.ma35Source || "")) && cleanNumber(signal.ma35) > 0;
+  const hasIntradaySma35 = /(?:yahoo|fugle|twelve|local)-1m/.test(String(signal.ma35Source || "")) && cleanNumber(signal.ma35) > 0;
   const strictMa35Entry = signal.id === "ma35_buy"
     && signal.aboveMa35 === true
     && hasIntradaySma35
@@ -151,7 +155,7 @@ function classifyStrategy2State(stock, signal) {
     stateId: "entry",
     stateLabel: "進場區",
     stateReason: strictMa35Entry
-      ? "1分K站上MA35，MACD/KD同步向上且爆量，偏進場區。"
+      ? `1分K站上MA35，MACD/KD同步向上且爆量，偏進場區。MA35來源：${ma35SourceLabel(signal.ma35Source)}。`
       : `${signal.label || "盤中轉強"}，量價符合當沖進場區。`,
     score,
   };
@@ -606,8 +610,11 @@ function mergeStrategy2Events(records, key) {
           ma35Prev: cleanNumber(record.ma35Prev),
           aboveMa35: record.aboveMa35 !== false,
           ma35TrendUp,
+          ma35Source: record.ma35Source || "",
+          ma35At: record.ma35At || "",
+          ma35Symbol: record.ma35Symbol || "",
           strategy: "持續放量",
-          reason: `${record.name || code} 持續放量`,
+          reason: `${record.name || code} 持續放量，MA35來源：${ma35SourceLabel(record.ma35Source)}`,
         });
       }
       current.latestState = isEntryState(record) ? "entry" : "wait";
@@ -908,6 +915,40 @@ async function fetchFugleIntradaySma35(code, scanTimestamp) {
   }
 }
 
+async function fetchTwelveDataIntradaySma35(code, scanTimestamp) {
+  if (!TWELVE_DATA_API_KEY) return null;
+  const targetMinute = minuteKey(scanTimestamp);
+  const targetDate = targetMinute.slice(0, 10);
+  if (!targetMinute || !targetDate) return null;
+  const symbols = [`${code}:TWSE`, `${code}:TPEX`];
+  for (const symbol of symbols) {
+    const url = new URL("https://api.twelvedata.com/time_series");
+    url.searchParams.set("symbol", symbol);
+    url.searchParams.set("interval", "1min");
+    url.searchParams.set("outputsize", "90");
+    url.searchParams.set("timezone", "Asia/Taipei");
+    url.searchParams.set("apikey", TWELVE_DATA_API_KEY);
+    try {
+      const payload = await fetchJson(url.toString(), 20000);
+      if (payload?.status === "error" || payload?.code) throw new Error(payload?.message || "twelve data error");
+      const rows = (payload.values || [])
+        .map((row) => ({
+          minute: minuteKey(String(row.datetime || "").replace("T", " ")),
+          high: cleanNumber(row.high),
+          low: cleanNumber(row.low),
+          close: cleanNumber(row.close),
+          volume: cleanNumber(row.volume),
+        }))
+        .filter((row) => row.minute.startsWith(targetDate) && row.close > 0);
+      const info = buildSma35Info(rows, targetMinute, "twelve-1m", { ma35Symbol: symbol });
+      if (cleanNumber(info?.ma35) > 0) return info;
+    } catch (error) {
+      console.log(`sma35 1m failed ${symbol}: ${error.message}`);
+    }
+  }
+  return null;
+}
+
 async function fetchIntradaySma35WithFallback(code, scanTimestamp, cache) {
   const attempts = [];
   try {
@@ -923,6 +964,13 @@ async function fetchIntradaySma35WithFallback(code, scanTimestamp, cache) {
     if (fugle) return { ...fugle, ma35Attempts: attempts };
   } catch (error) {
     attempts.push({ source: "fugle-1m", ok: false, configured: Boolean(FUGLE_API_KEY), error: error.message });
+  }
+  try {
+    const twelve = await fetchTwelveDataIntradaySma35(code, scanTimestamp);
+    attempts.push({ source: "twelve-1m", ok: Boolean(twelve), configured: Boolean(TWELVE_DATA_API_KEY) });
+    if (twelve) return { ...twelve, ma35Attempts: attempts };
+  } catch (error) {
+    attempts.push({ source: "twelve-1m", ok: false, configured: Boolean(TWELVE_DATA_API_KEY), error: error.message });
   }
   const local = fetchLocalIntradaySma35(cache, code, scanTimestamp);
   attempts.push({ source: "local-1m-cache", ok: Boolean(local) });

@@ -54,6 +54,15 @@ function normalizeKeyNumber(value) {
   return number.toFixed(4).replace(/\.?0+$/, "");
 }
 
+function ma35SourceLabel(source) {
+  const text = String(source || "");
+  if (text.includes("yahoo")) return "Yahoo";
+  if (text.includes("fugle")) return "Fugle";
+  if (text.includes("twelve")) return "Twelve Data";
+  if (text.includes("local")) return "Local cache";
+  return "";
+}
+
 function isAtOrAfterCutoff(timeText) {
   const cutoff = String(process.env.STRATEGY2_LIVE_STARTED_AT || "").trim();
   if (!cutoff) return true;
@@ -61,10 +70,12 @@ function isAtOrAfterCutoff(timeText) {
 }
 
 function eventLine(event, index) {
+  const source = ma35SourceLabel(event?.ma35Source || event?.latestRecord?.ma35Source);
   return [
     `${index + 1}. ${event.code} ${event.name || ""}`,
     `進場區 ${event.firstAAt || "--"}｜進場價格${formatTradePrice(event.firstAPrice)}`,
-  ].join("\n");
+    source ? `MA35來源：${source}` : "",
+  ].filter(Boolean).join("\n");
 }
 
 function eventKey(event) {
@@ -130,7 +141,8 @@ function buildEnhancementMessage(items) {
       const name = `${event.code} ${event.name || ""}`.trim();
       const at = enhancement.at ? ` ${enhancement.at}` : "";
       const delta = Number(enhancement.deltaVolume) > 0 ? `｜新增量 ${Math.round(Number(enhancement.deltaVolume)).toLocaleString("zh-TW")} 張` : "";
-      return `${name} 持續放量${at}${delta}`;
+      const source = ma35SourceLabel(enhancement.ma35Source || event?.ma35Source || event?.latestRecord?.ma35Source);
+      return `${name} 持續放量${at}${delta}${source ? `｜MA35來源：${source}` : ""}`;
     })
     .join("\n");
 }

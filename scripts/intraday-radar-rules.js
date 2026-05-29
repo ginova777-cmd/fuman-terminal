@@ -37,6 +37,15 @@ function formatTradePrice(price) {
   return value ? value.toFixed(value >= 100 ? 1 : 2) : "--";
 }
 
+function ma35SourceLabel(source) {
+  const text = String(source || "");
+  if (text.includes("yahoo")) return "Yahoo";
+  if (text.includes("fugle")) return "Fugle";
+  if (text.includes("twelve")) return "Twelve Data";
+  if (text.includes("local")) return "Local cache";
+  return "無";
+}
+
 function rankValue(value, sorted) {
   if (!sorted.length) return 0;
   let low = 0;
@@ -74,7 +83,7 @@ function detectSignals(stock, previous = null, ranks = null) {
   const vwap = volume ? value / volume : 0;
   const gapPct = open && prevClose ? ((open - prevClose) / prevClose) * 100 : 0;
   const ma35Source = String(stock.ma35Source || "");
-  const hasIntradayMa35 = /(?:yahoo|fugle|local)-1m/.test(ma35Source);
+  const hasIntradayMa35 = /(?:yahoo|fugle|twelve|local)-1m/.test(ma35Source);
   const ma35Proxy = hasIntradayMa35 ? cleanNumber(stock.ma35) : 0;
   const aboveMa35 = ma35Proxy > 0 && close > ma35Proxy;
   const ma35Prev = hasIntradayMa35 ? cleanNumber(stock.ma35Prev) : 0;
@@ -110,7 +119,7 @@ function detectSignals(stock, previous = null, ranks = null) {
   }
 
   if (aboveMa35 && ma35TrendUp && macdUp && kdUp && intradayVolumeBurst) {
-    signals.push({ id: "ma35_buy", label: "進場區", reason: `1分K站上 MA35 ${ma35Proxy.toFixed(2)}，MACD/KD向上且爆量` });
+    signals.push({ id: "ma35_buy", label: "進場區", reason: `1分K站上 MA35 ${ma35Proxy.toFixed(2)}，MACD/KD向上且爆量，MA35來源：${ma35SourceLabel(ma35Source)}` });
   }
 
   if (f618 && low <= f618 && high >= f618 && close >= open) {
@@ -155,6 +164,7 @@ module.exports = {
   detectSignals,
   formatTradePrice,
   isIntradayTradable,
+  ma35SourceLabel,
   roundTradePrice,
   buildRanks,
 };
