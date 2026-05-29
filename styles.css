@@ -3737,4 +3737,18 @@ h1 {
     grid-template-columns: 1fr !important;
     overflow-x: hidden !important;
   }
+
+  #market-view .sector-section .tabs {
+    display: flex !important;
+    flex-wrap: wrap !important;
+    gap: 8px !important;
+    overflow: visible !important;
+  }
+
+  #market-view .sector-section .tabs button {
+    flex: 1 1 calc(50% - 8px) !important;
+    min-width: 0 !important;
+    justify-content: center !important;
+    white-space: normal !important;
+  }
 }
