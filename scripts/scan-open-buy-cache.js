@@ -115,7 +115,14 @@ function normalizeStock(row) {
 }
 
 async function fetchUniverse() {
-  const payload = await fetchJson(STOCK_URL);
+  const timeout = Number(process.env.STOCK_UNIVERSE_TIMEOUT_MS || 90000);
+  let payload;
+  try {
+    payload = await fetchJson(STOCK_URL, timeout);
+  } catch (error) {
+    console.log("stock universe remote fetch failed: " + error.message + "; using local handler fallback");
+    payload = await callLocalStocksHandler();
+  }
   const rows = Array.isArray(payload) ? payload : (payload.stocks || []);
   const base = rows.map(normalizeStock).filter(Boolean);
   if (!USE_MIS_QUOTES) return base;
@@ -172,12 +179,12 @@ async function main() {
   const currentMatches = new Map();
   const scanned = new Set();
   let scannedThisRun = 0;
-  const chunksToRun = Math.ceil(codes.length / CHUNK_SIZE);
+  const chunksToRun = Math.ceil(codes.length / BATCH_SIZE);
 
   console.log(`open-buy cache start: full market scan, ${codes.length} codes, ${chunksToRun} chunks in one run`);
   for (let chunk = 0; chunk < chunksToRun; chunk++) {
-    const start = chunk * CHUNK_SIZE;
-    const chunkCodes = codes.slice(start, start + CHUNK_SIZE);
+    const start = chunk * BATCH_SIZE;
+    const chunkCodes = codes.slice(start, start + BATCH_SIZE);
     const label = `open-buy chunk ${chunk + 1}/${chunksToRun} (${chunkCodes[0]}-${chunkCodes[chunkCodes.length - 1]})`;
     console.log(`${label} start`);
     const payload = await runHandlerWithRetry(chunkCodes, label);
@@ -223,6 +230,4 @@ main().catch((error) => {
   console.error(error);
   process.exit(1);
 });
-
-
 
