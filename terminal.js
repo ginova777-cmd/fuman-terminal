@@ -5462,7 +5462,7 @@ function applyStrategyQuote(stock) {
     low: quote.low,
     prevClose: prevClose || quote.prevClose,
     limitUp: quote.limitUp,
-    quoteDate: quote.quoteDate || quote.tradeDate || stock.quoteDate || marketAiTodayKey(),
+    quoteDate: quote.quoteDate || quote.tradeDate || (isMarketAiActiveSession() ? marketAiTodayKey() : stock.quoteDate) || marketAiTodayKey(),
     quoteTime: quote.time || stock.quoteTime,
     quoteUpdatedAt: quote.updatedAt || Date.now(),
     isRealtime: true,
@@ -10253,6 +10253,9 @@ async function refreshMarketAiPanelOnOpen() {
   }
   try {
     await loadMarketData(true);
+    if (marketMode === "ai" && isMarketAiActiveSession()) {
+      await refreshStrategyRealtimeScan("force");
+    }
   } finally {
     if (marketMode === "ai") {
       marketAiLastSignature = "";
@@ -11852,9 +11855,10 @@ async function refreshStrategyRealtimeScan(mode = "hot") {
     }
   }
   const isStrategyVisible = document.querySelector("#strategy-view")?.classList.contains("active");
+  const isMarketAiVisible = isViewActive("market") && marketMode === "ai" && isMarketAiActiveSession();
   const isRealtimeStrategy = selectedStrategyIds.has("intraday_2m");
   const isStrategy5Realtime = false;
-  if (scanMode !== "force" && scanMode !== "strategy5-full" && (!isStrategyVisible || (!isRealtimeStrategy && !isStrategy5Realtime))) return;
+  if (scanMode !== "force" && scanMode !== "strategy5-full" && !isMarketAiVisible && (!isStrategyVisible || (!isRealtimeStrategy && !isStrategy5Realtime))) return;
   if (isRealtimeStrategy && !isIntradayScanWindow()) {
     if (isStrategyVisible && strategySummary) {
       const closingTime = strategyLastScanAt
@@ -13468,5 +13472,6 @@ if (isViewActive("watchlist")) renderWatchlist();
 setInterval(() => {
   if (!isDocumentHidden() && isTerminalUnlocked() && isViewActive("watchlist")) refreshSelectedWatchlistQuote();
 }, 10000);
+
 
 
