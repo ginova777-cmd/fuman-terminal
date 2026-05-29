@@ -10712,8 +10712,78 @@ const HEATMAP_THEME_GROUPS = new Set([
   "綠能環保", "綠能環保類", "電器電纜", "生技醫療", "化學生技醫療", "運動休閒",
 ]);
 
-function isHeatmapGroupSector(name) {
-  return /集團|控股|金控|富邦|國泰|台塑|鴻海|華新|遠東|中信|統一/.test(String(name || ""));
+const HEATMAP_GROUP_STOCKS = {
+  "台塑集團": ["1301", "1303", "1326", "6505", "1604"],
+  "鴻海集團": ["2317", "2354", "2357", "2328", "3481", "6239", "6414", "6451", "6669"],
+  "遠東集團": ["1402", "1460", "1710", "2903", "4904", "2606"],
+  "統一集團": ["1216", "1229", "2912", "2207", "2855", "9907"],
+  "華新集團": ["1605", "1608", "2412", "2492", "3023", "3665", "6116"],
+  "中信集團": ["2891", "2809", "2610", "9945"],
+  "富邦集團": ["2881", "8454", "5820"],
+  "國泰集團": ["2882", "2501", "2723"],
+  "新光集團": ["2888", "2511", "9925"],
+  "永豐集團": ["2890", "1907", "9938"],
+  "台新集團": ["2887", "2812"],
+  "玉山集團": ["2884"],
+  "元大集團": ["2885", "8069"],
+  "兆豐集團": ["2886", "2609"],
+  "第一金集團": ["2892"],
+  "合庫集團": ["5880"],
+  "台泥集團": ["1101", "1102", "1513", "8463"],
+  "長榮集團": ["2603", "2618", "2636", "2645"],
+  "陽明集團": ["2609", "2612"],
+  "裕隆集團": ["2201", "2204", "2227", "9941"],
+};
+
+const HEATMAP_GROUP_BY_CODE = Object.fromEntries(
+  Object.entries(HEATMAP_GROUP_STOCKS).flatMap(([group, codes]) => codes.map((code) => [code, group]))
+);
+
+function buildHeatmapGroupSectors(sectors) {
+  const groups = {};
+  normalizeArray(sectors).forEach((sector) => {
+    normalizeArray(sector?.stocks).forEach((stock) => {
+      const code = String(stock?.code || "").trim();
+      const groupName = HEATMAP_GROUP_BY_CODE[code];
+      if (!code || !groupName) return;
+      if (!groups[groupName]) groups[groupName] = { name: groupName, stocks: [], seen: new Set(), totalValue: 0, up: 0, down: 0, flat: 0 };
+      const group = groups[groupName];
+      if (group.seen.has(code)) return;
+      group.seen.add(code);
+      const pct = cleanNumber(stock.pct ?? stock.percent);
+      const change = cleanNumber(stock.change);
+      const amountYi = cleanNumber(stock.amountYi || stock.valueYi || cleanNumber(stock.value) / 100000000);
+      const row = { ...stock, code, pct, amountYi, groupIndustry: groupName };
+      group.stocks.push(row);
+      group.totalValue += amountYi;
+      if (change > 0 || pct > 0) group.up++;
+      else if (change < 0 || pct < 0) group.down++;
+      else group.flat++;
+    });
+  });
+
+  return Object.values(groups)
+    .filter((group) => group.stocks.length)
+    .map((group) => {
+      const sortedStocks = [...group.stocks].sort((a, b) => cleanNumber(b.amountYi) - cleanNumber(a.amountYi));
+      const leader = sortedStocks[0];
+      const pct = group.stocks.reduce((sum, stock) => sum + cleanNumber(stock.pct), 0) / group.stocks.length;
+      const totalValue = Number(group.totalValue.toFixed(1));
+      return {
+        name: group.name,
+        pct: Number(pct.toFixed(2)),
+        totalValue,
+        amountYi: totalValue,
+        count: group.stocks.length,
+        up: group.up,
+        down: group.down,
+        flat: group.flat,
+        leader: leader ? `${leader.name || leader.code} ${cleanNumber(leader.pct) >= 0 ? "+" : ""}${cleanNumber(leader.pct).toFixed(2)}%` : "--",
+        leaderCode: leader?.code || "",
+        stocks: sortedStocks,
+      };
+    })
+    .sort((a, b) => cleanNumber(b.pct) - cleanNumber(a.pct));
 }
 
 function filterHeatmapSectors(sectors) {
@@ -10722,7 +10792,7 @@ function filterHeatmapSectors(sectors) {
   }
   if (heatmapMode === "electronic") return sectors.filter((sector) => HEATMAP_ELECTRONIC_GROUPS.has(sector.name));
   if (heatmapMode === "theme") return sectors.filter((sector) => HEATMAP_THEME_GROUPS.has(sector.name));
-  if (heatmapMode === "group") return sectors.filter((sector) => isHeatmapGroupSector(sector.name));
+  if (heatmapMode === "group") return buildHeatmapGroupSectors(sectors);
   return sectors;
 }
 
