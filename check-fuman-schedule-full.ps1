@@ -133,7 +133,13 @@ function Get-LatestFumanLogIssue {
   if (-not $latest) { return $null }
 
   $tail = Get-Content -LiteralPath $latest.FullName -Tail 160 -ErrorAction SilentlyContinue
+  $hasCleanFinish = @($tail | Where-Object {
+    $_ -match '(?i)(patrol finished|finished): success \d+, failure 0'
+  }).Count -gt 0
   $bad = @($tail | Where-Object {
+    if ($_ -match '(?i)VERCEL_VISIBLE_WAIT') { return $false }
+    if ($_ -match '(?i)(failed|failure)\s+0(/|\b)') { return $false }
+    if ($hasCleanFinish -and $_ -match '(?i)(sma35 1m failed|realtime batch failed)') { return $false }
     $_ -match '(?i)(failed|threw|rejected|HTTP\s+[45]\d\d|exit code\s+[1-9]|error:|fatal:)'
   } | Select-Object -Last 3)
   if (-not $bad.Count) { return $null }
