@@ -12,22 +12,30 @@ $env:NODE_OPTIONS = "--use-system-ca"
 
 New-Item -ItemType Directory -Force -Path "C:\fuman-runtime\logs" | Out-Null
 $log = "C:\fuman-runtime\logs\realtime-radar-$(Get-Date -Format yyyyMMdd-HHmmss).log"
-"=== Realtime radar cache start $(Get-Date) ===" | Out-File $log -Encoding utf8
+function Add-LogLine($message) {
+  Add-Content -LiteralPath $log -Value $message -Encoding utf8
+}
 
-& $nodeExe "scripts\patrol-realtime-radar-cache.js" >> $log 2>&1
-$exitCode = $LASTEXITCODE
+function Invoke-LoggedCommand([scriptblock]$Command) {
+  & $Command *>&1 | ForEach-Object { Add-LogLine ([string]$_) }
+  return $LASTEXITCODE
+}
+
+Add-LogLine "=== Realtime radar cache start $(Get-Date) ==="
+
+$exitCode = Invoke-LoggedCommand { & $nodeExe "scripts\patrol-realtime-radar-cache.js" }
 if ($exitCode -ne 0) {
-  "Realtime radar cache failed with exit code $exitCode" >> $log
+  Add-LogLine "Realtime radar cache failed with exit code $exitCode"
   exit $exitCode
 }
 
 $syncAfterOutput = "C:\fuman-terminal\run-sync-after-output.ps1"
 if (Test-Path -LiteralPath $syncAfterOutput) {
-  & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $syncAfterOutput -Label "Realtime radar cache" -LogPath $log >> $log 2>&1
-  if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+  $syncExit = Invoke-LoggedCommand { & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $syncAfterOutput -Label "Realtime radar cache" -LogPath $log }
+  if ($syncExit -ne 0) { exit $syncExit }
 } else {
-  "Realtime radar cache written; sync helper not found." >> $log
+  Add-LogLine "Realtime radar cache written; sync helper not found."
 }
 
-"=== Realtime radar cache end $(Get-Date) ===" >> $log
+Add-LogLine "=== Realtime radar cache end $(Get-Date) ==="
 

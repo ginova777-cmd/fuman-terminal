@@ -9,6 +9,7 @@ const MARKET_END_MINUTES = 13 * 60 + 30;
 const STATE_DIR = process.env.FUMAN_STATE_DIR || path.resolve(__dirname, "..", "state");
 const LOCK_FILE = process.env.REALTIME_RADAR_PATROL_LOCK_FILE || path.join(STATE_DIR, "realtime-radar-patrol.lock");
 const LOCK_MAX_AGE_MS = Number(process.env.REALTIME_RADAR_PATROL_LOCK_MAX_AGE_MS || 8 * 60 * 60 * 1000);
+const LOCK_HEARTBEAT_MAX_AGE_MS = Number(process.env.REALTIME_RADAR_PATROL_HEARTBEAT_MAX_AGE_MS || 2 * 60 * 1000);
 
 function isPidAlive(pid) {
   if (!Number.isInteger(pid) || pid <= 0 || pid === process.pid) return false;
@@ -75,6 +76,14 @@ function releasePatrolLock(lock) {
   }
 }
 
+function touchPatrolLock(lock) {
+  if (!lock?.token) return;
+  const current = readLockFile();
+  if (current?.token !== lock.token) return;
+  fs.writeFileSync(LOCK_FILE, `${JSON.stringify({ ...current, heartbeatAt: new Date().toISOString() }, null, 2)}\n`);
+}
+
+
 function taipeiParts(date = new Date()) {
   const parts = new Intl.DateTimeFormat("en-CA", {
     timeZone: "Asia/Taipei",
@@ -126,16 +135,20 @@ async function main() {
   }
 
   if (!isMarketTime()) {
+    touchPatrolLock(patrolLock);
     if (runScan()) successCount += 1;
     else failureCount += 1;
+    touchPatrolLock(patrolLock);
     console.log(`realtime radar patrol single run: success ${successCount}, failure ${failureCount}`);
     if (!successCount) process.exit(1);
     return;
   }
 
   while (isMarketTime()) {
+    touchPatrolLock(patrolLock);
     if (runScan()) successCount += 1;
     else failureCount += 1;
+    touchPatrolLock(patrolLock);
     await sleep(INTERVAL_MS);
   }
 
