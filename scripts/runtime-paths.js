@@ -1,7 +1,8 @@
 const path = require("path");
 
 const ROOT = path.resolve(__dirname, "..");
-const RUNTIME_ROOT = process.env.FUMAN_RUNTIME_DIR || ROOT;
+const DEFAULT_RUNTIME_ROOT = process.platform === "win32" ? "C:\\fuman-runtime" : ROOT;
+const RUNTIME_ROOT = process.env.FUMAN_RUNTIME_DIR || DEFAULT_RUNTIME_ROOT;
 const DATA_DIR = process.env.FUMAN_DATA_DIR || path.join(RUNTIME_ROOT, "data");
 const CACHE_DIR = process.env.FUMAN_CACHE_DIR || path.join(RUNTIME_ROOT, "cache");
 const STATE_DIR = process.env.FUMAN_STATE_DIR || path.join(RUNTIME_ROOT, "state");

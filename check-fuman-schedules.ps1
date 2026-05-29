@@ -79,6 +79,11 @@ $rules = @{
     Done = @("Strategy2 LINE", "stop", "stopped")
     Detail = @("stop", "stopped", "Strategy2 LINE")
   }
+  "run-flow.ps1" = @{
+    Log = "flow-*.log"
+    Done = @("FLOW_PUBLISH_SUCCESS", "Flow and warrant scan end")
+    Detail = @("FLOW_PUBLISH_SUCCESS", "institutionRows=\d+", "warrantMatches=\d+")
+  }
   "run-institution.ps1" = @{
     Log = "institution-*.log"
     Done = @("Institution scan end")
