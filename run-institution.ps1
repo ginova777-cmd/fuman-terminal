@@ -38,7 +38,7 @@ if ($scanExit -ne 0) {
 $syncScript = "C:\fuman-terminal\run-cache-sync.ps1"
 if (Test-Path $syncScript) {
   "Institution cache files written locally; starting Git sync now" >> $log
-  & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $syncScript >> $log 2>&1
+  & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $syncScript -Scope flow >> $log 2>&1
   $syncExit = $LASTEXITCODE
   if ($syncExit -ne 0) {
     "Cache sync failed with exit code $syncExit; scheduled sync remains as fallback" >> $log

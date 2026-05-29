@@ -131,8 +131,18 @@ function enrichInstitutionData(data, quoteMap) {
 async function main() {
   const backup = readJson(BACKUP_FILE, { ok: true, data: {} });
   const [payload, stockPayload] = await Promise.all([runHandler(), runStocksHandler()]);
+  if ((payload.errors || []).length) {
+    console.warn(`institution source warnings: ${(payload.errors || []).join(" | ")}`);
+  }
+  const stockRows = Array.isArray(stockPayload?.stocks) ? stockPayload.stocks.length : 0;
+  if (!stockPayload?.ok || stockRows < 100) {
+    console.warn(`stock universe quote enrichment weak: ok=${Boolean(stockPayload?.ok)}, rows=${stockRows}`);
+  }
   const quoteMap = buildQuoteMap(stockPayload);
   const misQuotes = await fetchMisQuotes(Object.keys(payload.data || {}));
+  if (!misQuotes.size) {
+    console.warn("MIS quote enrichment returned 0 rows; institution rows will still be guarded by official source freshness");
+  }
   misQuotes.forEach((quote, code) => quoteMap.set(code, {
     code,
     name: quote.name,
@@ -168,7 +178,7 @@ async function main() {
   fs.mkdirSync(path.dirname(OUT_FILE), { recursive: true });
   fs.writeFileSync(OUT_FILE, `${JSON.stringify(output, null, 2)}\n`);
   fs.writeFileSync(BACKUP_FILE, `${JSON.stringify({ ...output, source: "github-actions-backup" }, null, 2)}\n`);
-  console.log(`institution cache updated: rows ${count}, usedDate ${output.usedDate || "--"}`);
+  console.log(`institution cache updated: rows ${count}, usedDate ${output.usedDate || "--"}, stockRows ${stockRows}, misQuotes ${misQuotes.size}`);
 }
 
 main().catch((error) => {

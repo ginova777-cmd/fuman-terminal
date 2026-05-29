@@ -4,7 +4,7 @@ const WORKFLOWS = {
   strategy3: { workflow: "strategy3-background-scan.yml" },
   strategy4: { workflow: "strategy4-background-scan.yml", inputs: { full_scan: "true" } },
   strategy5: { workflow: "strategy5-background-scan.yml" },
-  flow: { workflow: "flow-cache.yml" },
+  flow: { workflow: "flow-cache.yml", inputs: { force_run: "false" } },
   intradayRecord: { workflow: "intraday-radar-scorecard.yml", inputs: { mode: "record", force_report: "false" } },
   intradayReport: { workflow: "intraday-radar-scorecard.yml", inputs: { mode: "report", force_report: "false" } },
 };
@@ -77,11 +77,11 @@ async function hasHealthyWorkflowRunSince(workflow, sinceIso) {
   });
 }
 
-async function pushOnceInWindow(tasks, taskKey, now, start, end) {
+async function pushOnceInWindow(tasks, taskKey, now, start, end, sinceStart = start) {
   if (!inRange(now, start, end)) return;
   const workflow = WORKFLOWS[taskKey]?.workflow;
   if (!workflow) return;
-  const sinceIso = taipeiSlotIso(now, start);
+  const sinceIso = taipeiSlotIso(now, sinceStart);
   if (await hasHealthyWorkflowRunSince(workflow, sinceIso)) return;
   tasks.push(taskKey);
 }
@@ -90,14 +90,14 @@ async function selectTasks(now) {
   if (!isWeekday(now)) return [];
   const tasks = [];
 
-  if (inRange(now, 7 * 60, 22 * 60 + 55) && shouldRunEvery(now, 10, 2)) {
+  if (inRange(now, 7 * 60, 22 * 60 + 55) && shouldRunEvery(now, 10, 0)) {
     tasks.push("patrol");
   }
 
   await pushOnceInWindow(tasks, "openBuy", now, 7 * 60, 7 * 60 + 20);
   await pushOnceInWindow(tasks, "openBuy", now, 14 * 60 + 30, 14 * 60 + 50);
 
-  if (inRange(now, 13 * 60, 14 * 60 + 30) && shouldRunEvery(now, 10, 3)) {
+  if (inRange(now, 13 * 60, 14 * 60 + 30) && shouldRunEvery(now, 10, 0)) {
     tasks.push("strategy3");
   }
 
@@ -107,9 +107,8 @@ async function selectTasks(now) {
   await pushOnceInWindow(tasks, "strategy5", now, 6 * 60, 6 * 60 + 20);
   await pushOnceInWindow(tasks, "strategy5", now, 21 * 60, 21 * 60 + 20);
 
-  if ((inRange(now, 6 * 60, 8 * 60 + 55) || inRange(now, 21 * 60, 22 * 60 + 55)) && shouldRunEvery(now, 10, 6)) {
-    tasks.push("flow");
-  }
+  await pushOnceInWindow(tasks, "flow", now, 6 * 60 + 20, 6 * 60 + 40, 6 * 60);
+  await pushOnceInWindow(tasks, "flow", now, 21 * 60 + 20, 21 * 60 + 40, 21 * 60);
 
   if (inRange(now, 9 * 60, 13 * 60 + 30) && shouldRunEvery(now, 10, 0)) {
     tasks.push("intradayRecord");

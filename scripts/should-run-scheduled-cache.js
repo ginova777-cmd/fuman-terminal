@@ -75,7 +75,7 @@ function main() {
   const key = process.argv[2];
   const rule = RULES[key];
   if (!rule) throw new Error(`Unknown schedule rule: ${key}`);
-  if (process.env.GITHUB_EVENT_NAME === "workflow_dispatch") {
+  if (process.env.GITHUB_EVENT_NAME === "workflow_dispatch" && process.env.SCHEDULE_FORCE_RUN !== "false" && process.env.SCHEDULE_FORCE_RUN !== "0") {
     console.log("run");
     return;
   }

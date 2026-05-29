@@ -1,5 +1,5 @@
 param(
-  [ValidateSet("all", "openBuy", "strategy3", "strategy4")]
+  [ValidateSet("all", "flow", "openBuy", "strategy3", "strategy4")]
   [string]$Scope = "all"
 )
 
@@ -352,7 +352,19 @@ New-Item -ItemType File -Force -Path $lockFile | Out-Null
 try {
   Write-Log "=== Cache sync start $(Get-Date) scope=$Scope ==="
 
-  if ($Scope -eq "openBuy") {
+  if ($Scope -eq "flow") {
+    $criticalLatestFiles = @(
+      "data\institution-latest.json",
+      "data\warrant-flow-latest.json"
+    )
+
+    $dataFiles = @(
+      "data\institution-latest.json",
+      "data\institution-backup.json",
+      "data\warrant-flow-latest.json",
+      "data\warrant-flow-backup.json"
+    )
+  } elseif ($Scope -eq "openBuy") {
     $criticalLatestFiles = @(
       "data\open-buy-latest.json"
     )
@@ -518,6 +530,11 @@ try {
     } else {
       Write-Log "No cache changes after retry reset."
     }
+  }
+
+  if ($Scope -eq "flow" -or $Scope -eq "all") {
+    Test-VercelCacheVisibility "data\institution-latest.json"
+    Test-VercelCacheVisibility "data\warrant-flow-latest.json"
   }
 
   if ($Scope -eq "strategy3" -or $Scope -eq "all") {
