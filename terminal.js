@@ -4002,6 +4002,7 @@ function renderRealtimeRadar() {
   installRealtimeRadarView();
   const panel = viewPanels["realtime-radar"];
   if (!panel) return;
+  requestAnimationFrame(refreshDataFreshnessBars);
   const isManualSideSwitch = realtimeRadarManualSideSwitch;
   realtimeRadarManualSideSwitch = false;
   deferUiWork(ensureMobileAutoOrganizeButton);
@@ -10812,6 +10813,8 @@ function getPanelFreshnessMeta(viewName) {
   if (viewName === "strategy") {
     const mode = strategyView?.classList.contains("swing-only")
       ? "策略4｜14:30完整掃"
+      : strategyView?.classList.contains("intraday-only")
+      ? "策略2當沖｜盤中巡邏"
       : strategyView?.classList.contains("open-buy-only")
       ? "策略1｜07:00/16:00完整掃"
       : strategyView?.classList.contains("strategy3-only")
@@ -10819,19 +10822,27 @@ function getPanelFreshnessMeta(viewName) {
       : strategyView?.classList.contains("strategy5-only")
       ? "策略5｜MIS即時"
       : "策略中心｜即時重算";
-    return { mode, dataDate, today, isToday };
+    const strategyDataDate = strategyView?.classList.contains("intraday-only")
+      ? normalizeMarketAiDateKey(strategy2IntradayCacheDate) || marketAiDataDateKey(latestStocks) || dataDate
+      : dataDate;
+    return { mode, dataDate: strategyDataDate, today, isToday: strategyDataDate === today };
   }
   if (viewName === "chip-trade") return { mode: "盤後籌碼｜法人資料", dataDate, today, isToday };
   if (viewName === "warrant-flow") return { mode: "權證走向｜盤後資料", dataDate, today, isToday };
   if (viewName === "watchlist") return { mode: `自選股｜${marketModeText}`, dataDate, today, isToday };
-  if (viewName === "realtime-radar") return { mode: "即時雷達｜盤中巡邏", dataDate, today, isToday };
+  if (viewName === "realtime-radar") {
+    const radarDataDate = isRadarDetectionWindow()
+      ? normalizeMarketAiDateKey(strategy2IntradayCacheDate) || marketAiDataDateKey(latestStocks) || dataDate
+      : realtimeRadarClosedDataDateKey() || dataDate;
+    return { mode: "即時雷達｜盤中巡邏", dataDate: radarDataDate, today, isToday: radarDataDate === today };
+  }
   return { mode: marketModeText, dataDate, today, isToday };
 }
 
 function refreshDataFreshnessBars() {
   Object.entries(viewPanels).forEach(([viewName, panel]) => {
     if (!panel) return;
-    const header = panel.querySelector(".page-header");
+    const header = panel.querySelector(".page-header, .radar-topbar");
     if (!header) return;
     let bar = panel.querySelector(":scope > .data-freshness-bar");
     if (!bar) {
