@@ -142,6 +142,16 @@ function writeJson(file, value) {
   fs.writeFileSync(file, `${JSON.stringify(value, null, 2)}\n`);
 }
 
+function shouldWriteStrategy2History(file) {
+  if (STRATEGY2_HISTORY_WRITE_INTERVAL_MS <= 0) return true;
+  try {
+    const stat = fs.statSync(file);
+    return Date.now() - stat.mtimeMs >= STRATEGY2_HISTORY_WRITE_INTERVAL_MS;
+  } catch {
+    return true;
+  }
+}
+
 function publishStaticDataJson(name, value) {
   if (name === "strategy2-intraday-latest.json") return;
   const targets = [repoPath("data", name)];
@@ -1270,17 +1280,10 @@ async function main() {
   };
   writeJson(STRATEGY2_REPORT_FILE, strategy2Report);
   publishStaticDataJson("strategy2-intraday-latest.json", strategy2Report);
-  writeJson(path.join(STRATEGY2_HISTORY_DIR, `${key}.json`), {
-    source: "strategy2-09-to-1330-patrol",
-    date: key,
-    updatedAt: cache.updatedAt,
-    realtime: realtimeSummary,
-    records: cache.records,
-    events: strategy2Events,
-    entryCount: strategy2Events.filter((event) => event.firstAAt).length,
-    aCount: strategy2Events.filter((event) => event.firstAAt).length,
-    bOnlyCount: 0,
-  });
+  const strategy2HistoryFile = path.join(STRATEGY2_HISTORY_DIR, `${key}.json`);
+  if (shouldWriteStrategy2History(strategy2HistoryFile)) {
+    writeJson(strategy2HistoryFile, strategy2Report);
+  }
   const rotationMessages = rotateStrategy2IntradayCache({ currentDateKey: key });
   rotationMessages.forEach((message) => console.log(`strategy2 cache rotation: ${message}`));
   writeJson(SCORECARD_TRACK_FILE, scorecardTracker);
