@@ -5,6 +5,7 @@ const https = require("https");
 const { URL, URLSearchParams } = require("url");
 const { execFile } = require("child_process");
 const { fetchMisQuotes } = require("../lib/mis-quotes");
+const { hasTelegramConfig, sendTelegramText } = require("./telegram-push");
 
 const SHEET_ID = process.env.GOOGLE_SHEET_ID || "1UCpEBXmOWNA57eLXH62WffnPrflly6OwmDm242JYhp8";
 const RUNTIME_DIR = process.env.FUMAN_RUNTIME_DIR || "C:\\fuman-runtime";
@@ -16,6 +17,12 @@ const REPORT_DIR = process.env.BACKTEST_REPORT_DIR || path.join(process.env.USER
 const DATA_DIR = process.env.FUMAN_DATA_DIR || path.join(RUNTIME_DIR, "data");
 const CACHE_DIR = process.env.FUMAN_CACHE_DIR || path.join(RUNTIME_DIR, "cache");
 const REPO_DATA_DIR = process.env.FUMAN_REPO_DATA_DIR || "C:\\fuman-terminal\\data";
+const STATE_DIR = process.env.FUMAN_STATE_DIR || path.join(RUNTIME_DIR, "state");
+const GOOGLE_SHEET_QUEUE_DIR = path.join(RUNTIME_DIR, "outbox", "google-sheet-upload");
+const GOOGLE_SHEET_DONE_DIR = path.join(GOOGLE_SHEET_QUEUE_DIR, "done");
+const GOOGLE_SHEET_STATUS_FILE = path.join(STATE_DIR, "google-sheet-upload-status.json");
+const GOOGLE_SHEET_ALERT_THRESHOLD = Math.max(1, Number(process.env.GOOGLE_SHEET_ALERT_THRESHOLD || 2));
+const GOOGLE_SHEET_ALERT_COOLDOWN_MS = Math.max(0, Number(process.env.GOOGLE_SHEET_ALERT_COOLDOWN_MS || 15 * 60 * 1000));
 const STRATEGY5_SCORECARD_FILE = path.join(DATA_DIR, "strategy5-scorecard-latest.json");
 const STRATEGY5_SCORECARD_HISTORY_DIR = path.join(DATA_DIR, "strategy5-scorecard-history");
 const STRATEGY5_TRACK_FILE = path.join(CACHE_DIR, "intraday", "strategy5-scorecard-trades.json");
@@ -1141,7 +1148,7 @@ async function loadScorecardSheets(stamp, radarCsv, report) {
   return {
     "即時雷達成績單": realtimeRadarRows(radarCsv, report, dateText),
     "交易管家成績單": tradeManagerRows(dateText),
-    "策略1成績單": await strategy1Rows(readFirstJson([path.join(DATA_DIR, "open-buy-latest.json"), path.join(REPO_DATA_DIR, "open-buy-latest.json"), path.join(DATA_DIR, "open-buy-scorecard-source.json"), path.join(REPO_DATA_DIR, "open-buy-scorecard-source.json")]), dateText),
+    "策略1成績單": await strategy1Rows(readFirstJson([path.join(DATA_DIR, "open-buy-scorecard-source.json"), path.join(REPO_DATA_DIR, "open-buy-scorecard-source.json"), path.join(DATA_DIR, "open-buy-latest.json"), path.join(REPO_DATA_DIR, "open-buy-latest.json")]), dateText),
     "策略2成績單": await strategy2Rows(dateText),
     "策略3成績單": await strategy3Rows(readFirstJson([path.join(DATA_DIR, "strategy3-scorecard-source.json"), path.join(REPO_DATA_DIR, "strategy3-scorecard-source.json"), path.join(DATA_DIR, "strategy3-latest.json"), path.join(REPO_DATA_DIR, "strategy3-latest.json")]), dateText),
     "策略4成績單": await strategy4Rows(readFirstJson([path.join(DATA_DIR, "strategy4-latest.json"), path.join(REPO_DATA_DIR, "strategy4-latest.json"), path.join(DATA_DIR, "strategy4-backup.json"), path.join(REPO_DATA_DIR, "strategy4-backup.json")]), dateText),

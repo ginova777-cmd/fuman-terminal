@@ -85,7 +85,10 @@ function lotPlan(entryPrice) {
 }
 
 function eventText(event) {
-  return [event.strategy, event.reason, event.stateReason, ...(Array.isArray(event.strategies) ? event.strategies : [])]
+  const enhancementText = (event.enhancements || [])
+    .flatMap((item) => [item.strategy, item.reason, item.trigger, item.ma35Source])
+    .filter(Boolean);
+  return [event.strategy, event.reason, event.stateReason, ...(Array.isArray(event.strategies) ? event.strategies : []), ...enhancementText]
     .filter(Boolean)
     .join(" ");
 }
@@ -170,6 +173,33 @@ function minuteVolumeTrend(records, event) {
   return { ok: latestDelta > 0 && (prevDelta === 0 || latestDelta >= prevDelta * 0.8 || latestDelta >= 100), text: `近兩段量增 ${Math.round(prevDelta)}→${Math.round(latestDelta)} 張` };
 }
 
+function enhancementVolumeTrend(event) {
+  const points = (event.enhancements || [])
+    .map((item) => ({
+      time: String(item.at || ""),
+      deltaVolume: normalizeVolumeLots(item.deltaVolume),
+      totalVolume: normalizeVolumeLots(item.totalVolume),
+      trigger: String(item.trigger || ""),
+    }))
+    .filter((point) => point.time && (point.deltaVolume > 0 || point.totalVolume > 0));
+  if (!points.length) return { ok: false, text: "" };
+  const latestPositive = points.filter((point) => point.deltaVolume > 0).at(-1);
+  const latest = points.at(-1);
+  const positiveCount = points.filter((point) => point.deltaVolume > 0).length;
+  return {
+    ok: positiveCount >= 1 || /volume/i.test(latest.trigger),
+    text: `增強訊號量增 ${Math.round(latestPositive?.deltaVolume || 0)} 張，累計 ${Math.round(latest.totalVolume || 0)} 張`,
+  };
+}
+
+function hasMa35Enhancement(event) {
+  return (event.enhancements || []).some((item) => (
+    cleanNumber(item.ma35) > 0
+    && (item.aboveMa35 === true || cleanNumber(item.price) >= cleanNumber(item.ma35))
+    && (item.ma35TrendUp === true || /MA35/.test(String(item.reason || "")))
+  ));
+}
+
 function qualityForEvent(payload, event) {
   const records = recordsForEvent(payload, event);
   const latestRecord = latestRecordBefore(records, event.firstAAt);
@@ -180,9 +210,11 @@ function qualityForEvent(payload, event) {
   const volume = normalizeVolumeLots(latestRecord.volume || event.volume || event.tradeVolume);
   const value = cleanNumber(latestRecord.value || event.value) || close * volume * 1000;
   const text = eventText(event);
-  const hasMa35BuyPoint = /MA35買點/.test(text);
-  const hasBreakout = /轉強突破|突破|站上|量勢/.test(text);
-  const trend = minuteVolumeTrend(records, event);
+  const hasMa35BuyPoint = /MA35買點/.test(text) || hasMa35Enhancement(event);
+  const hasBreakout = /轉強突破|突破|站上|量勢|放量|爆量/.test(text);
+  const recordTrend = minuteVolumeTrend(records, event);
+  const enhancementTrend = enhancementVolumeTrend(event);
+  const trend = recordTrend.ok ? recordTrend : (enhancementTrend.ok ? enhancementTrend : recordTrend);
   const reasons = [];
   if (score < MIN_SCORE) reasons.push(`分數${Math.round(score)}低於${MIN_SCORE}`);
   if (pct < MIN_PCT) reasons.push(`漲幅${pct.toFixed(2)}%不足`);
