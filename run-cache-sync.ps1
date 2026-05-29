@@ -1,3 +1,8 @@
+param(
+  [ValidateSet("all", "strategy3")]
+  [string]$Scope = "all"
+)
+
 $ErrorActionPreference = "Continue"
 $PSNativeCommandUseErrorActionPreference = $false
 
@@ -164,38 +169,48 @@ if (Test-Path $lockFile) {
 New-Item -ItemType File -Force -Path $lockFile | Out-Null
 
 try {
-  Write-Log "=== Cache sync start $(Get-Date) ==="
+  Write-Log "=== Cache sync start $(Get-Date) scope=$Scope ==="
 
-  $criticalLatestFiles = @(
-    "data\institution-latest.json",
-    "data\warrant-flow-latest.json",
-    "data\open-buy-latest.json",
-    "data\strategy2-intraday-latest.json",
-    "data\strategy3-latest.json",
-    "data\strategy4-latest.json",
-    "data\strategy5-latest.json"
-  )
+  if ($Scope -eq "strategy3") {
+    $criticalLatestFiles = @(
+      "data\strategy3-latest.json"
+    )
+
+    $dataFiles = @(
+      "data\strategy3-latest.json",
+      "data\strategy3-backup.json",
+      "data\strategy3-scorecard-source.json"
+    )
+  } else {
+    $criticalLatestFiles = @(
+      "data\institution-latest.json",
+      "data\warrant-flow-latest.json",
+      "data\open-buy-latest.json",
+      "data\strategy3-latest.json",
+      "data\strategy4-latest.json",
+      "data\strategy5-latest.json"
+    )
+
+    $dataFiles = @(
+      "data\institution-latest.json",
+      "data\institution-backup.json",
+      "data\warrant-flow-latest.json",
+      "data\warrant-flow-backup.json",
+      "data\open-buy-latest.json",
+      "data\open-buy-backup.json",
+      "data\open-buy-scorecard-source.json",
+      "data\strategy3-latest.json",
+      "data\strategy3-backup.json",
+      "data\strategy3-scorecard-source.json",
+      "data\strategy4-latest.json",
+      "data\strategy4-backup.json",
+      "data\strategy5-latest.json",
+      "data\strategy5-backup.json",
+      "data\realtime-radar-latest.json"
+    )
+  }
 
   $copiedFiles = New-Object System.Collections.Generic.List[string]
-
-  $dataFiles = @(
-    "data\institution-latest.json",
-    "data\institution-backup.json",
-    "data\warrant-flow-latest.json",
-    "data\warrant-flow-backup.json",
-    "data\open-buy-latest.json",
-    "data\open-buy-backup.json",
-    "data\open-buy-scorecard-source.json",
-    "data\strategy2-intraday-latest.json",
-    "data\strategy3-latest.json",
-    "data\strategy3-backup.json",
-    "data\strategy3-scorecard-source.json",
-    "data\strategy4-latest.json",
-    "data\strategy4-backup.json",
-    "data\strategy5-latest.json",
-    "data\strategy5-backup.json",
-    "data\realtime-radar-latest.json"
-  )
 
   if (-not (Test-Path (Join-Path $syncRepo ".git"))) {
     if (Test-Path $syncRepo) {

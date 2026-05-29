@@ -52,7 +52,7 @@ if (-not (Test-Path -LiteralPath $runtimeStrategy3)) {
 }
 
 Invoke-WithRetry "Strategy3 cache sync" {
-  & "C:\fuman-terminal\run-cache-sync.ps1" >> $log 2>&1
+  & "C:\fuman-terminal\run-cache-sync.ps1" -Scope strategy3 >> $log 2>&1
   if ($LASTEXITCODE -ne 0) { throw "cache sync exited with code $LASTEXITCODE" }
   if (-not (Test-Path -LiteralPath $syncStrategy3)) {
     throw "Strategy3 sync file missing after cache sync: $syncStrategy3"
