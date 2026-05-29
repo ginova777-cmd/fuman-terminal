@@ -12,4 +12,4 @@ run-strategy5.ps1
 run-warrant-flow.ps1
 stop-strategy2-line.ps1
 terminal-conflict-backup.js
-data/strategy2-intraday-latest.json\n
+data/strategy2-intraday-latest.json
