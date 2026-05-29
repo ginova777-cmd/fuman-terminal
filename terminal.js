@@ -6910,13 +6910,38 @@ function sortIntradayZoneRows(rows) {
   });
 }
 
+async function loadStrategy2IntradayPayload() {
+  if (supabaseClient) {
+    try {
+      const { data, error } = await supabaseClient
+        .from("strategy2_latest")
+        .select("payload,updated_at")
+        .eq("id", "latest")
+        .maybeSingle();
+      if (!error && data?.payload) {
+        return {
+          ...data.payload,
+          updatedAt: data.payload.updatedAt || data.updated_at,
+          cacheSource: "supabase",
+        };
+      }
+    } catch (error) {
+    }
+  }
+  const payload = await fetchJson(`${endpoints.strategy2IntradayCache}?t=${Date.now()}`, 10000);
+  return {
+    ...payload,
+    cacheSource: "static",
+  };
+}
+
 async function loadStrategy2IntradayCache(force = false) {
   ensureStrategy2IntradayTodayCache();
   if (strategy2IntradayCacheLoading) return;
   if (!force && strategy2IntradayEventByCode.size) return;
   strategy2IntradayCacheLoading = true;
   try {
-    const payload = await fetchJson(`${endpoints.strategy2IntradayCache}?t=${Date.now()}`, 10000);
+    const payload = await loadStrategy2IntradayPayload();
     const payloadDate = normalizeMarketAiDateKey(payload?.date || payload?.updatedAt);
     if (payloadDate && payloadDate !== marketAiTodayKey()) {
       resetStrategy2IntradaySessionCache();

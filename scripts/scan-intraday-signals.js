@@ -40,6 +40,13 @@ const TWELVE_DATA_API_KEY = process.env.TWELVE_DATA_API_KEY
   || process.env.TWELVEDATA_API_KEY
   || readSecretText(path.join(ROOT, "secrets", "twelve-data-api-key.txt"))
   || readSecretText(path.join(process.env.FUMAN_RUNTIME_DIR || "C:/fuman-runtime", "secrets", "twelve-data-api-key.txt"));
+const SUPABASE_URL = process.env.SUPABASE_URL
+  || readSecretText(path.join(ROOT, "secrets", "supabase-url.txt"))
+  || readSecretText(path.join(process.env.FUMAN_RUNTIME_DIR || "C:/fuman-runtime", "secrets", "supabase-url.txt"));
+const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY
+  || process.env.SUPABASE_SERVICE_KEY
+  || readSecretText(path.join(ROOT, "secrets", "supabase-service-role-key.txt"))
+  || readSecretText(path.join(process.env.FUMAN_RUNTIME_DIR || "C:/fuman-runtime", "secrets", "supabase-service-role-key.txt"));
 let yahooMa35Failures = 0;
 let fugleMa35Failures = 0;
 let yahooMa35BlockedReason = "";
@@ -262,6 +269,43 @@ function publishStaticDataJson(name, value) {
     if (file === path.resolve(dataPath(name))) return;
     writeJson(file, payload);
   });
+}
+
+async function upsertStrategy2LatestToSupabase(report) {
+  if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) return false;
+  const payload = buildStrategy2PublicReport(report);
+  const baseUrl = SUPABASE_URL.replace(/\/+$/, "");
+  const body = {
+    id: "latest",
+    date: payload.date || "",
+    updated_at: payload.updatedAt || new Date().toISOString(),
+    payload,
+    entry_count: Number(payload.entryCount || 0),
+    record_count: Array.isArray(payload.records) ? payload.records.length : 0,
+    event_count: Array.isArray(payload.events) ? payload.events.length : 0,
+  };
+  try {
+    const response = await fetch(`${baseUrl}/rest/v1/strategy2_latest?on_conflict=id`, {
+      method: "POST",
+      headers: {
+        apikey: SUPABASE_SERVICE_ROLE_KEY,
+        Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+        "Content-Type": "application/json",
+        Prefer: "resolution=merge-duplicates",
+      },
+      body: JSON.stringify(body),
+    });
+    if (!response.ok) {
+      const text = await response.text().catch(() => "");
+      console.warn(`strategy2 supabase upsert failed: HTTP ${response.status} ${text.slice(0, 160)}`);
+      return false;
+    }
+    console.log(`strategy2 supabase upsert ok: records ${body.record_count}, events ${body.event_count}`);
+    return true;
+  } catch (error) {
+    console.warn(`strategy2 supabase upsert failed: ${error?.message || error}`);
+    return false;
+  }
 }
 
 function normalizeVolumeLots(value) {
@@ -1381,6 +1425,7 @@ async function main() {
   };
   writeJson(STRATEGY2_REPORT_FILE, strategy2Report);
   publishStaticDataJson("strategy2-intraday-latest.json", strategy2Report);
+  await upsertStrategy2LatestToSupabase(strategy2Report);
   const strategy2HistoryFile = path.join(STRATEGY2_HISTORY_DIR, `${key}.json`);
   if (shouldWriteStrategy2History(strategy2HistoryFile)) {
     writeJson(strategy2HistoryFile, strategy2Report);
