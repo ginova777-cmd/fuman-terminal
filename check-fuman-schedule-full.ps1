@@ -1,4 +1,4 @@
-﻿param(
+param(
   [switch]$IncludeMatchedSystemTasks,
   [switch]$OnlyErrors,
   [switch]$ExportCsv
@@ -35,6 +35,8 @@ function Get-FumanTaskDescription($TaskName) {
     "Fuman Trade Manager Settlement 1340" { return "管家結算，13:40 執行" }
     "Fuman Scorecard Initial 1410" { return "成績單含輔滿回測初版，14:10 產生" }
     "Fuman Scorecard Final 1530" { return "成績單含輔滿回測終版，15:30 產生" }
+    "Fuman Flow Cache 0600" { return "買賣超與權證走向，早上 06:00 合併掃描並發布終端" }
+    "Fuman Flow Cache 2100" { return "買賣超與權證走向，晚上 21:00 合併掃描並發布終端" }
     "Fuman 買賣超 Cache 0600" { return "買賣超資料，早上 06:00 快取" }
     "Fuman 買賣超 Cache 2102" { return "買賣超資料，晚上 21:02 快取" }
     "Fuman 權證走向 Cache 0600" { return "權證資金走向，早上 06:00 快取" }

@@ -1,4 +1,4 @@
-﻿$ErrorActionPreference = "Continue"
+$ErrorActionPreference = "Continue"
 
 $logDir = "C:\fuman-runtime\logs"
 $taskNameFilter = "Fuman*"
@@ -121,6 +121,7 @@ function Convert-TaskText($taskName) {
   $text = $text -replace "Fuman PC Sleep", "電腦睡眠"
   $text = $text -replace "Fuman PC Wake", "電腦喚醒"
   $text = $text -replace "Fuman 即時雷達", "即時雷達"
+  $text = $text -replace "Fuman Flow Cache", "買賣超/權證合併掃描"
   $text = $text -replace "Fuman 買賣超 Cache", "買賣超掃描"
   $text = $text -replace "Fuman 權證走向 Cache", "權證走向掃描"
   return $text
