@@ -1412,6 +1412,13 @@ function assertBacktestRowsConsistent(stamp, trades, radar, report) {
     ].join(", ");
     throw new Error(`Strategy2 scorecard consistency guard blocked empty upload for ${stamp}: source has signals but manager/radar are both 0. ${details}`);
   }
+  if (
+    process.env.ALLOW_EMPTY_RADAR_BACKTEST !== "1"
+    && radarHits === 0
+    && health.records > 0
+  ) {
+    throw new Error(`Radar scorecard consistency guard blocked empty upload for ${stamp}: source has ${health.records} records but radar hits are 0. source=${health.sourceFile}`);
+  }
   return { managerTotal, radarHits, health };
 }
 
@@ -1457,6 +1464,7 @@ function loadBacktestRows(stamp) {
     ["管家總損益", totalPnl],
     ["管家平均報酬", report?.manager?.summary ? `${report.manager.summary.avgReturn.toFixed(2)}%` : ""],
     ["即時雷達命中", report?.radar?.hits?.length ?? Math.max(0, radar.length - 1)],
+    ["即時雷達候選/事件桶", `${report?.radar?.summary?.entryCandidateRecords ?? ""}/${report?.radar?.summary?.eventBuckets ?? ""}`],
     ["來源資料", report?.sourceFile || ""],
     ["來源records/events", `${consistency.health.records}/${consistency.health.events}`],
     ["來源A事件/skipped", `${consistency.health.aEvents}/${consistency.health.skipped}`],

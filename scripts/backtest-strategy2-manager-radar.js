@@ -321,6 +321,17 @@ function isVerifiedQuoteRecord(record) {
   return Boolean(record.quoteTime || record.quoteAt || record.quoteTimestamp);
 }
 
+function isRadarEntryRecord(record) {
+  const stateId = String(record.stateId || "").toLowerCase();
+  const stateLabel = String(record.stateLabel || "");
+  const strategy = String(record.strategy || "");
+  return stateId === "go"
+    || stateId === "entry"
+    || stateLabel.includes("A區")
+    || stateLabel.includes("進場區")
+    || strategy.includes("進場區");
+}
+
 async function fetchRealtimeQuotes(codes) {
   const quotes = new Map();
   const uniqueCodes = [...new Set(codes.map(normalizeCode).filter(Boolean))];
@@ -343,6 +354,7 @@ async function backtestRadar(payload) {
   const recordsByCode = new Map();
   const byEvent = new Map();
   let skippedUnverified = 0;
+  let entryCandidateRecords = 0;
   for (const record of payload.records || []) {
     if (!isVerifiedQuoteRecord(record)) {
       skippedUnverified += 1;
@@ -353,8 +365,9 @@ async function backtestRadar(payload) {
     if (!code || !eventAt) continue;
     if (!recordsByCode.has(code)) recordsByCode.set(code, []);
     recordsByCode.get(code).push(record);
-    const isAZone = String(record.stateId || "").toLowerCase() === "go" || String(record.stateLabel || "").includes("A區");
+    const isAZone = isRadarEntryRecord(record);
     if (!isAZone) continue;
+    entryCandidateRecords += 1;
     const key = `${code}|${eventAt}`;
     if (!byEvent.has(key)) byEvent.set(key, []);
     byEvent.get(key).push(record);
@@ -413,7 +426,10 @@ async function backtestRadar(payload) {
   const pnl = hits.reduce((sum, hit) => sum + hit.pnl, 0);
   const avgReturn = total ? hits.reduce((sum, hit) => sum + hit.returnPct, 0) / total : 0;
   const winRate = total ? (wins / total) * 100 : 0;
-  return { hits, summary: { total, wins, losses, flats: total - wins - losses, pnl, avgReturn, winRate, skippedUnverified } };
+  if (process.env.ALLOW_EMPTY_RADAR_BACKTEST !== "1" && total === 0 && entryCandidateRecords > 0) {
+    throw new Error(`Radar backtest consistency guard blocked empty hits: entryCandidateRecords=${entryCandidateRecords}, skippedUnverified=${skippedUnverified}`);
+  }
+  return { hits, summary: { total, wins, losses, flats: total - wins - losses, pnl, avgReturn, winRate, skippedUnverified, entryCandidateRecords, eventBuckets: byEvent.size } };
 }
 
 function summary(trades) {
