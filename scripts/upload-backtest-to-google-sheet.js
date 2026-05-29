@@ -767,9 +767,32 @@ function strategy3Pnl(entryPrice, exitPrice, shares = 1000) {
   return Math.round((exit - entry) * lot);
 }
 
+function payloadArrayCounts(payload = {}) {
+  const names = ["matches", "rows", "records", "events", "trades", "hits"];
+  return Object.fromEntries(names.map((name) => [name, Array.isArray(payload[name]) ? payload[name].length : 0]));
+}
+
+function assertScorecardRowsConsistent(title, payloadInfo, expectedArrayName, outputCount) {
+  if (process.env.ALLOW_EMPTY_SCORECARD_GUARD === "1") return;
+  const payload = payloadInfo.value || {};
+  const counts = payloadArrayCounts(payload);
+  const expectedCount = counts[expectedArrayName] || 0;
+  const otherCount = Object.entries(counts)
+    .filter(([name]) => name !== expectedArrayName)
+    .reduce((sum, [, count]) => sum + count, 0);
+  if (expectedCount > 0 && outputCount === 0) {
+    throw new Error(`${title} consistency guard blocked empty sheet: ${expectedArrayName}=${expectedCount}, outputRows=0, source=${payloadInfo.file || ""}`);
+  }
+  if (expectedCount === 0 && otherCount > 0) {
+    const detail = Object.entries(counts).filter(([, count]) => count > 0).map(([name, count]) => `${name}=${count}`).join(",");
+    throw new Error(`${title} schema guard blocked possible format drift: expected ${expectedArrayName}, found ${detail}, source=${payloadInfo.file || ""}`);
+  }
+}
+
 async function strategy1Rows(payloadInfo, dateText) {
   const payload = payloadInfo.value || {};
   const matches = Array.isArray(payload.matches) ? payload.matches : [];
+  assertScorecardRowsConsistent("策略1成績單", payloadInfo, "matches", matches.length);
   const sourceDateRaw = payload.usedDate || matches[0]?.quoteDate || matches[0]?.date || "";
   const sourceDate = formatYmd(sourceDateRaw);
   const tradeDate = dateText;
@@ -813,6 +836,7 @@ async function strategy1Rows(payloadInfo, dateText) {
 async function strategy3Rows(payloadInfo, dateText) {
   const payload = payloadInfo.value || {};
   const matches = Array.isArray(payload.matches) ? payload.matches : [];
+  assertScorecardRowsConsistent("策略3成績單", payloadInfo, "matches", matches.length);
   const sourceDateRaw = payload.usedDate || matches[0]?.quoteDate || matches[0]?.date || "";
   const sourceDate = formatYmd(sourceDateRaw);
   const tradeDate = dateText;
@@ -859,6 +883,7 @@ async function strategy3Rows(payloadInfo, dateText) {
 function strategyMatchesRows(title, payloadInfo, dateText, options = {}) {
   const payload = payloadInfo.value || {};
   const matches = Array.isArray(payload.matches) ? payload.matches : [];
+  assertScorecardRowsConsistent(title, payloadInfo, "matches", matches.length);
   const totalPnl = matches.reduce((sum, item) => {
     const pnl = Number(scorecardPnl(item));
     return sum + (Number.isFinite(pnl) ? pnl : 0);
@@ -906,6 +931,7 @@ async function strategy4Rows(payloadInfo, dateText) {
 async function strategy5Rows(payloadInfo, dateText) {
   const payload = payloadInfo.value || {};
   const matches = Array.isArray(payload.matches) ? payload.matches : [];
+  assertScorecardRowsConsistent("策略5成績單", payloadInfo, "matches", matches.length);
   const tradeDateRaw = compactYmd(dateText);
   const tracker = readJson(STRATEGY5_TRACK_FILE, { trades: {} });
   const intradayMap = await fetchYahooIntradayMap(matches, dateText);
@@ -1173,6 +1199,11 @@ function legacyStrategy2Rows(dateText) {
 function realtimeRadarRows(radarCsv, report, dateText) {
   const scorecard = readFirstJson([path.join(DATA_DIR, "realtime-radar-scorecard-latest.json"), path.join(REPO_DATA_DIR, "realtime-radar-scorecard-latest.json")]);
   const scorecardRows = Array.isArray(scorecard.value?.rows) ? scorecard.value.rows : [];
+  const latest = readFirstJson([path.join(DATA_DIR, "realtime-radar-latest.json"), path.join(REPO_DATA_DIR, "realtime-radar-latest.json")]);
+  const latestValue = latest.value || {};
+  const staleCodes = (latestValue.staleQuoteDetails || []).map((item) => item.code).filter(Boolean).join(",");
+  const failedRanges = (latestValue.failedBatchDetails || []).map((item) => `${item.range || ""}${item.error ? ` ${item.error}` : ""}`.trim()).filter(Boolean).join("；");
+  const externalIssues = (latestValue.externalSourceIssues || []).map((item) => `${item.source || ""}:${item.type || ""}${item.status ? ` HTTP ${item.status}` : ""} x${item.count || 0}${item.sampleCodes ? ` ${item.sampleCodes}` : ""}`.trim()).join("；");
   if (scorecardRows.length) {
     const totalProfit = Number.isFinite(Number(scorecard.value?.totalProfit))
       ? Math.round(Number(scorecard.value.totalProfit))
@@ -1184,6 +1215,8 @@ function realtimeRadarRows(radarCsv, report, dateText) {
       ["即時雷達成績單"],
       ["資料日期", scorecard.value?.date || dateText, "最新雷達更新", scorecard.value?.updatedAt || "", "來源", scorecard.file],
       ["今日損益", totalProfit, "回測命中", scorecardRows.length, "", "", ""],
+      ["巡邏狀態", latestValue.status || "", "stale報價", latestValue.staleQuoteCount ?? "", "stale代號", staleCodes || (latestValue.staleQuoteCount ? "details missing; rerun patrol" : "")],
+      ["外部資料源異常", externalIssues || failedRanges || "", "失敗批次", latestValue.failedBatchCount ?? "", "總批次", latestValue.totalBatchCount ?? ""],
       ["date", "code", "name", "eventAt", "實際進場價", "盤中最高價", "損益"],
     ];
     for (const item of scorecardRows) {
@@ -1201,7 +1234,6 @@ function realtimeRadarRows(radarCsv, report, dateText) {
     return rows;
   }
 
-  const latest = readFirstJson([path.join(DATA_DIR, "realtime-radar-latest.json"), path.join(REPO_DATA_DIR, "realtime-radar-latest.json")]);
   const header = radarCsv[0] || [];
   const indexOf = (name) => header.findIndex((cell) => String(cell).trim() === name);
   const idx = {
@@ -1228,7 +1260,9 @@ function realtimeRadarRows(radarCsv, report, dateText) {
   const rows = [
     ["即時雷達成績單"],
     ["資料日期", dateText, "最新雷達更新", latest.value?.updatedAt || "", "來源", latest.file],
-    ["今日損益", report?.radar?.summary?.pnl ?? "", "回測命中", report?.radar?.hits?.length ?? Math.max(0, radarCsv.length - 1), "", "", ""],
+    ["今日損益", report?.radar?.summary?.pnl ?? "", "回測命中(時間桶)", report?.radar?.hits?.length ?? Math.max(0, radarCsv.length - 1), "股票去重", report?.radar?.summary?.uniqueCodeCount ?? ""],
+    ["巡邏狀態", latestValue.status || "", "stale報價", latestValue.staleQuoteCount ?? "", "stale代號", staleCodes || (latestValue.staleQuoteCount ? "details missing; rerun patrol" : "")],
+    ["外部資料源異常", externalIssues || failedRanges || "", "失敗批次", latestValue.failedBatchCount ?? "", "總批次", latestValue.totalBatchCount ?? ""],
   ];
   rows.push(...radarRows);
   return rows;
@@ -1464,6 +1498,7 @@ function loadBacktestRows(stamp) {
     ["管家總損益", totalPnl],
     ["管家平均報酬", report?.manager?.summary ? `${report.manager.summary.avgReturn.toFixed(2)}%` : ""],
     ["即時雷達命中", report?.radar?.hits?.length ?? Math.max(0, radar.length - 1)],
+    ["即時雷達股票去重", report?.radar?.summary?.uniqueCodeCount ?? ""],
     ["即時雷達候選/事件桶", `${report?.radar?.summary?.entryCandidateRecords ?? ""}/${report?.radar?.summary?.eventBuckets ?? ""}`],
     ["來源資料", report?.sourceFile || ""],
     ["來源records/events", `${consistency.health.records}/${consistency.health.events}`],

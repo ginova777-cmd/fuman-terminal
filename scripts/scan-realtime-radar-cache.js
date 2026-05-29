@@ -326,6 +326,32 @@ function buildFailedBatchDetails(failedBatches = []) {
   }));
 }
 
+function httpStatusCounts(details = []) {
+  const counts = {};
+  for (const item of details) {
+    const status = String(item.error || "").match(/HTTP\s+(\d{3})/i)?.[1] || "other";
+    counts[status] = (counts[status] || 0) + 1;
+  }
+  return counts;
+}
+
+function buildExternalSourceIssues({ failedBatchDetails = [], staleQuoteDetails = [] } = {}) {
+  const issues = [];
+  const httpCounts = httpStatusCounts(failedBatchDetails);
+  for (const [status, count] of Object.entries(httpCounts)) {
+    issues.push({ source: "api/realtime", type: "http_error", status, count });
+  }
+  if (staleQuoteDetails.length) {
+    issues.push({
+      source: "api/realtime",
+      type: "stale_quote",
+      count: staleQuoteDetails.length,
+      sampleCodes: staleQuoteDetails.slice(0, 12).map((item) => item.code).join(","),
+    });
+  }
+  return issues;
+}
+
 function buildStaleQuoteDetails(staleStocks = [], scanTimestamp = "") {
   return staleStocks
     .map((stock) => {
@@ -470,6 +496,7 @@ async function main() {
   const staleQuoteCount = staleStocks.length;
   const staleQuoteDetails = buildStaleQuoteDetails(staleStocks, timestamp);
   const failedBatchDetails = buildFailedBatchDetails(realtime.failedBatches);
+  const externalSourceIssues = buildExternalSourceIssues({ failedBatchDetails, staleQuoteDetails });
   const rows = buildRadarRows(freshStocks, detectedAt);
   let payload = {
     source: "mini-pc-realtime-radar",
@@ -486,6 +513,7 @@ async function main() {
     quoteCount: realtime.quoteCount,
     staleQuoteDetails,
     failedBatchDetails,
+    externalSourceIssues,
     rows,
     longCount: rows.filter((row) => row.side === "long").length,
     shortCount: rows.filter((row) => row.side === "short").length,
@@ -507,6 +535,7 @@ async function main() {
         quoteCount: realtime.quoteCount,
         staleQuoteDetails,
         failedBatchDetails,
+        externalSourceIssues,
         lastFailedScanAt: timestamp,
       };
       console.log(`realtime radar ${timestamp}: kept previous rows ${previous.rows.length} after ${realtime.failedBatches.length}/${realtime.totalBatches} failed batches`);
@@ -532,6 +561,8 @@ async function main() {
       if (mergedRows.length > payload.rows.length) {
         const retryFreshCodes = new Set(retryStocks.map((stock) => String(stock.code || "")).filter(Boolean));
         const remainingStaleStocks = staleStocks.filter((stock) => !retryFreshCodes.has(String(stock.code || "")));
+        const patchedStaleQuoteDetails = buildStaleQuoteDetails(remainingStaleStocks, timestamp);
+        const patchedFailedBatchDetails = buildFailedBatchDetails(retry.failedBatches || []);
         const patchedPayload = {
           ...payload,
           status: "ok_after_deferred_rescan",
@@ -541,7 +572,9 @@ async function main() {
           recoveredBatchCount: retry.recoveredBatches,
           staleRescanCount: staleStocks.length,
           staleQuoteCount: remainingStaleStocks.length,
-          staleQuoteDetails: buildStaleQuoteDetails(remainingStaleStocks, timestamp),
+          staleQuoteDetails: patchedStaleQuoteDetails,
+          failedBatchDetails: patchedFailedBatchDetails,
+          externalSourceIssues: buildExternalSourceIssues({ failedBatchDetails: patchedFailedBatchDetails, staleQuoteDetails: patchedStaleQuoteDetails }),
         };
         writeJson(OUT_FILE, patchedPayload);
         await safeUploadRealtimeRadarPayload(patchedPayload);

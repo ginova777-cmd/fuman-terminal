@@ -426,10 +426,11 @@ async function backtestRadar(payload) {
   const pnl = hits.reduce((sum, hit) => sum + hit.pnl, 0);
   const avgReturn = total ? hits.reduce((sum, hit) => sum + hit.returnPct, 0) / total : 0;
   const winRate = total ? (wins / total) * 100 : 0;
+  const uniqueCodeCount = new Set(hits.map((hit) => hit.code).filter(Boolean)).size;
   if (process.env.ALLOW_EMPTY_RADAR_BACKTEST !== "1" && total === 0 && entryCandidateRecords > 0) {
     throw new Error(`Radar backtest consistency guard blocked empty hits: entryCandidateRecords=${entryCandidateRecords}, skippedUnverified=${skippedUnverified}`);
   }
-  return { hits, summary: { total, wins, losses, flats: total - wins - losses, pnl, avgReturn, winRate, skippedUnverified, entryCandidateRecords, eventBuckets: byEvent.size } };
+  return { hits, summary: { total, uniqueCodeCount, wins, losses, flats: total - wins - losses, pnl, avgReturn, winRate, skippedUnverified, entryCandidateRecords, eventBuckets: byEvent.size } };
 }
 
 function summary(trades) {
