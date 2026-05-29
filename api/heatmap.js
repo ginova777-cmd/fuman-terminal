@@ -2404,6 +2404,47 @@ function parseCsv(text) {
   });
 }
 
+function recordsFromFields(fields, rows) {
+  if (!Array.isArray(fields) || !Array.isArray(rows)) return [];
+  return rows.map((row) => {
+    if (!Array.isArray(row)) return row || {};
+    const record = {};
+    fields.forEach((field, index) => {
+      record[field] = row[index];
+    });
+    return record;
+  });
+}
+
+function formatRocDate(date) {
+  const year = date.getFullYear() - 1911;
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}/${month}/${day}`;
+}
+
+function taipeiDate() {
+  return new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Taipei" }));
+}
+
+function recentRocDates(days = 7) {
+  const base = taipeiDate();
+  return Array.from({ length: days }, (_, index) => {
+    const date = new Date(base);
+    date.setDate(base.getDate() - index);
+    return formatRocDate(date);
+  });
+}
+
+function parseTpexPayload(payload) {
+  const table = Array.isArray(payload?.tables)
+    ? payload.tables.find((item) => Array.isArray(item.data) && item.data.length) || payload.tables[0]
+    : null;
+  const fields = table?.fields || payload?.fields || payload?.iTotalRecords?.fields || [];
+  const rows = table?.data || payload?.aaData || payload?.data || [];
+  return recordsFromFields(fields, rows).map(normalizeTpexRow).filter(Boolean);
+}
+
 function normalizeTwseRow(row) {
   const code = String(row.Code || row["證券代號"] || "").trim();
   if (!isCommonStockCode(code)) return null;
@@ -2434,29 +2475,40 @@ async function fetchTwseStocks() {
 }
 
 async function fetchTpexStocks() {
-  const date = getTaipeiRocDate();
-  const jsonUrl = `https://www.tpex.org.tw/web/stock/aftertrading/daily_close_quotes/stk_quote_result.php?l=zh-tw&o=json&d=${encodeURIComponent(date)}&s=0,asc,0`;
-  const csvUrl = `https://www.tpex.org.tw/web/stock/aftertrading/daily_close_quotes/stk_quote_result.php?l=zh-tw&o=csv&d=${encodeURIComponent(date)}&s=0,asc,0`;
+  const resultBase = "https://www.tpex.org.tw/web/stock/aftertrading/daily_close_quotes/stk_quote_result.php?l=zh-tw&o=json&s=0,asc,0";
+  const dataUrl = "https://www.tpex.org.tw/web/stock/aftertrading/daily_close_quotes/stk_quote_result.php?l=zh-tw&o=data";
+  const downloadUrl = "https://www.tpex.org.tw/web/stock/aftertrading/daily_close_quotes/stk_quote_download.php?l=zh-tw";
+  const closeUrl = "https://www.tpex.org.tw/web/stock/aftertrading/otc_quotes_no1430/stk_wn1430_result.php?l=zh-tw&sect=EW";
+  const headers = { Referer: "https://www.tpex.org.tw/" };
+
+  for (const date of recentRocDates()) {
+    try {
+      const payload = JSON.parse(await fetchText(`${resultBase}&d=${encodeURIComponent(date)}`, { headers }));
+      const parsed = parseTpexPayload(payload);
+      if (parsed.length) return parsed;
+    } catch {}
+  }
 
   try {
-    const payload = JSON.parse(await fetchText(jsonUrl, { headers: { Referer: "https://www.tpex.org.tw/" } }));
-    const table = payload.tables?.[0] || {};
-    const fields = payload.fields || payload.iTotalRecords?.fields || table.fields || [];
-    const rows = payload.aaData || payload.data || table.data || [];
-    if (Array.isArray(rows) && rows.length) {
-      return rows.map((row) => {
-        if (!Array.isArray(row)) return normalizeTpexRow(row);
-        const record = {};
-        fields.forEach((field, index) => {
-          record[field] = row[index];
-        });
-        return normalizeTpexRow(record);
-      }).filter(Boolean);
-    }
+    const payload = JSON.parse(await fetchText(dataUrl, { headers }));
+    const parsed = parseTpexPayload(payload);
+    if (parsed.length) return parsed;
   } catch {}
 
-  const csv = await fetchText(csvUrl, { headers: { Referer: "https://www.tpex.org.tw/" } });
-  return parseCsv(csv).map(normalizeTpexRow).filter(Boolean);
+  for (const url of [downloadUrl, closeUrl]) {
+    try {
+      const text = await fetchText(url, { headers });
+      const trimmed = text.trim();
+      if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
+        const parsed = parseTpexPayload(JSON.parse(trimmed));
+        if (parsed.length) return parsed;
+      }
+      const parsed = parseCsv(text).map(normalizeTpexRow).filter(Boolean);
+      if (parsed.length) return parsed;
+    } catch {}
+  }
+
+  return [];
 }
 
 async function fetchCompanyProfiles() {
