@@ -4104,16 +4104,22 @@ function renderRealtimeRadar() {
       <header class="radar-topbar">
         <div>
           <h1>◎ 即時多空資金流</h1>
-          <small>偵測時間 09:00-13:30｜收盤後停止偵測，正在讀取收盤資料</small>
+          <small>偵測時間 09:00-13:30｜收盤後停止偵測，正在讀取最後盤中雷達資料</small>
         </div>
         <button class="radar-action" type="button" disabled>09:00-13:30 偵測</button>
       </header>
       ${buildRealtimeRadarAiPanel(realtimeRadarLastRows, { loading: true, radarOpen })}
-      <div class="empty-state">正在讀取今日收盤 / 最新可用交易日雷達資料...</div>
+      <div class="empty-state">正在讀取今日最後盤中雷達資料...</div>
     `;
-    ensureRealtimeRadarClosingData().then((stocks) => {
-      if (stocks.length) renderRealtimeRadar();
-      else panel.innerHTML = `<div class="empty-state">目前沒有可用的即時雷達資料，請稍後重新整理。</div>`;
+    loadRealtimeRadarLatestCache(true).then((loaded) => {
+      if (loaded && isViewActive("realtime-radar")) {
+        renderRealtimeRadar();
+        return;
+      }
+      ensureRealtimeRadarClosingData().then((stocks) => {
+        if (stocks.length) renderRealtimeRadar();
+        else panel.innerHTML = `<div class="empty-state">目前沒有可用的即時雷達資料，請稍後重新整理。</div>`;
+      });
     });
     return;
   }
