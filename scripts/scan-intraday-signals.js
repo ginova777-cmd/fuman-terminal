@@ -2,7 +2,7 @@ const fs = require("fs");
 const path = require("path");
 const { buildRanks, cleanNumber, detectSignals, isIntradayTradable } = require("./intraday-radar-rules");
 
-const { ROOT, dataPath, cachePath } = require("./runtime-paths");
+const { ROOT, dataPath, cachePath, repoPath } = require("./runtime-paths");
 const CACHE_DIR = cachePath("intraday");
 const SIGNAL_FILE = path.join(CACHE_DIR, "signals.json");
 const SCORECARD_TRACK_FILE = path.join(CACHE_DIR, "scorecard-trades.json");
@@ -107,6 +107,16 @@ function writeJson(file, value) {
   fs.writeFileSync(file, `${JSON.stringify(value, null, 2)}\n`);
 }
 
+function publishStaticDataJson(name, value) {
+  const targets = [repoPath("data", name)];
+  const syncRoot = process.env.FUMAN_SYNC_DIR || "C:\\fuman-terminal-sync";
+  if (fs.existsSync(syncRoot)) targets.push(path.join(syncRoot, "data", name));
+  [...new Set(targets.map((file) => path.resolve(file)))].forEach((file) => {
+    if (file === path.resolve(dataPath(name))) return;
+    writeJson(file, value);
+  });
+}
+
 function normalizeVolumeLots(value) {
   const number = cleanNumber(value);
   if (!number) return 0;
@@ -118,22 +128,31 @@ function classifyStrategy2State(stock, signal) {
   const volume = cleanNumber(stock.tradeVolume);
   const close = cleanNumber(stock.close);
   const high = cleanNumber(stock.high) || close;
-  const hasIntradaySma35 = signal.ma35Source === "yahoo-1m" && cleanNumber(signal.ma35) > 0;
-  if (
-    pct < 2 ||
-    volume < 2000 ||
-    signal.id !== "ma35_buy" ||
-    signal.aboveMa35 !== true ||
-    !hasIntradaySma35 ||
-    signal.macdUp !== true ||
-    signal.kdUp !== true ||
-    signal.intradayVolumeBurst !== true
-  ) return null;
-  const score = Math.min(100, Math.round(pct * 8 + (volume >= 10000 ? 56 : 42) + (signal.id === "volume_burst" ? 6 : 0)));
+  const open = cleanNumber(stock.open);
+  const hasIntradaySma35 = /(?:yahoo|fugle|local)-1m/.test(String(signal.ma35Source || "")) && cleanNumber(signal.ma35) > 0;
+  const strictMa35Entry = signal.id === "ma35_buy"
+    && signal.aboveMa35 === true
+    && hasIntradaySma35
+    && signal.macdUp === true
+    && signal.kdUp === true
+    && signal.intradayVolumeBurst === true;
+  const earlyEntrySignal = new Set(["volume_burst", "limit_lock", "gap", "breakout", "diamond"]).has(String(signal.id || ""));
+  const nearHigh = high > 0 && close > 0 ? close >= high * 0.985 : true;
+  const aboveOpen = !open || close >= open;
+  const fallbackEntry = earlyEntrySignal
+    && pct >= 2
+    && pct <= 8.8
+    && volume >= 2000
+    && nearHigh
+    && aboveOpen;
+  if (!strictMa35Entry && !fallbackEntry) return null;
+  const score = Math.min(100, Math.round(pct * 8 + (volume >= 10000 ? 56 : 42) + (earlyEntrySignal ? 6 : 0)));
   return {
     stateId: "entry",
     stateLabel: "進場區",
-    stateReason: "1分K站上MA35，MACD/KD同步向上且爆量，偏進場區。",
+    stateReason: strictMa35Entry
+      ? "1分K站上MA35，MACD/KD同步向上且爆量，偏進場區。"
+      : `${signal.label || "盤中轉強"}，量價符合當沖進場區。`,
     score,
   };
 }
@@ -491,6 +510,12 @@ function mergeStrategy2Events(records, key) {
         firstAPrice: 0,
         firstTradableAAt: "",
         firstTradableAPrice: 0,
+        latestAAt: "",
+        latestAPrice: 0,
+        latestBAt: "",
+        latestBPrice: 0,
+        latestSeenAt: "",
+        latestSeenPrice: 0,
         highAfterA: 0,
         highAfterAAt: "",
         highestPrice: 0,
@@ -506,11 +531,19 @@ function mergeStrategy2Events(records, key) {
       const observedHigh = cleanNumber(record.observedHigh) || cleanNumber(record.observedPrice) || price;
       const eventTime = recordTimeLabel(record);
       const highTime = timeLabel(record.observedHighAt || record.timestamp);
+      if (eventTime) {
+        current.latestSeenAt = eventTime;
+        current.latestSeenPrice = price;
+      }
       if (!current.firstBAt && eventTime) {
         current.firstBAt = eventTime;
         current.firstBPrice = price;
         current.highAfterB = observedHigh || price;
         current.highAfterBAt = highTime || eventTime;
+      }
+      if (!isEntryState(record) && eventTime) {
+        current.latestBAt = eventTime;
+        current.latestBPrice = price;
       }
       if (current.firstBAt && observedHigh > cleanNumber(current.highAfterB)) {
         current.highAfterB = observedHigh;
@@ -521,6 +554,10 @@ function mergeStrategy2Events(records, key) {
         current.firstAPrice = price;
         current.highAfterA = observedHigh || price;
         current.highAfterAAt = highTime || eventTime;
+      }
+      if (isEntryState(record) && eventTime) {
+        current.latestAAt = eventTime;
+        current.latestAPrice = price;
       }
       if (isEntryState(record) && !current.firstTradableAAt && eventTime && timeValue(eventTime) >= timeValue(MANAGER_MIN_ENTRY_TIME)) {
         current.firstTradableAAt = eventTime;
@@ -1105,7 +1142,7 @@ async function main() {
     tradable: liveStocks.length,
   };
   writeJson(SIGNAL_FILE, cache);
-  writeJson(STRATEGY2_REPORT_FILE, {
+  const strategy2Report = {
     source: "strategy2-09-to-1330-patrol",
     date: key,
     updatedAt: cache.updatedAt,
@@ -1115,7 +1152,9 @@ async function main() {
     entryCount: strategy2Events.filter((event) => event.firstAAt).length,
     aCount: strategy2Events.filter((event) => event.firstAAt).length,
     bOnlyCount: 0,
-  });
+  };
+  writeJson(STRATEGY2_REPORT_FILE, strategy2Report);
+  publishStaticDataJson("strategy2-intraday-latest.json", strategy2Report);
   writeJson(path.join(STRATEGY2_HISTORY_DIR, `${key}.json`), {
     source: "strategy2-09-to-1330-patrol",
     date: key,

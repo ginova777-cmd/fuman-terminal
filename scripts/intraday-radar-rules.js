@@ -74,9 +74,10 @@ function detectSignals(stock, previous = null, ranks = null) {
   const vwap = volume ? value / volume : 0;
   const gapPct = open && prevClose ? ((open - prevClose) / prevClose) * 100 : 0;
   const ma35Source = String(stock.ma35Source || "");
-  const ma35Proxy = ma35Source === "yahoo-1m" ? cleanNumber(stock.ma35) : 0;
+  const hasIntradayMa35 = /(?:yahoo|fugle|local)-1m/.test(ma35Source);
+  const ma35Proxy = hasIntradayMa35 ? cleanNumber(stock.ma35) : 0;
   const aboveMa35 = ma35Proxy > 0 && close > ma35Proxy;
-  const ma35Prev = ma35Source === "yahoo-1m" ? cleanNumber(stock.ma35Prev) : 0;
+  const ma35Prev = hasIntradayMa35 ? cleanNumber(stock.ma35Prev) : 0;
   const ma35TrendUp = ma35Proxy > 0 && ma35Prev > 0 && ma35Proxy > ma35Prev;
   const macdUp = stock.macdUp === true;
   const kdUp = stock.kdUp === true;
@@ -85,9 +86,7 @@ function detectSignals(stock, previous = null, ranks = null) {
   const signals = [];
 
   if (!isIntradayTradable(stock) || pct <= 2 || volume < 2000) return signals;
-  if (!aboveMa35) return signals;
   const intradayVolumeBurst = deltaVolume >= 50 || volume >= 10000;
-  if (!ma35TrendUp || !macdUp || !kdUp || !intradayVolumeBurst) return signals;
 
   const volumeMilestone = volume >= 10000 ? 10000 : volume >= 5000 ? 5000 : 2000;
   if (deltaVolume >= 50) {
@@ -110,7 +109,9 @@ function detectSignals(stock, previous = null, ranks = null) {
     signals.push({ id: "breakout", label: "轉強突破", reason: "站上強勢區與 VWAP" });
   }
 
-  signals.push({ id: "ma35_buy", label: "進場區", reason: `1分K站上 MA35 ${ma35Proxy.toFixed(2)}，MACD/KD向上且爆量` });
+  if (aboveMa35 && ma35TrendUp && macdUp && kdUp && intradayVolumeBurst) {
+    signals.push({ id: "ma35_buy", label: "進場區", reason: `1分K站上 MA35 ${ma35Proxy.toFixed(2)}，MACD/KD向上且爆量` });
+  }
 
   if (f618 && low <= f618 && high >= f618 && close >= open) {
     signals.push({ id: "diamond", label: "鑽石", reason: "回測 0.618 後收紅轉強" });

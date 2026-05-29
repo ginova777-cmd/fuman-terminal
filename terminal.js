@@ -1844,7 +1844,7 @@ function handleGlobalRefresh() {
   }
   if (active === "realtime-radar") {
     realtimeRadarSide = "auto";
-    realtimeRadarNeedsFreshScan = true;
+    if (!realtimeRadarLastRows.length && !isRealtimeRadarFresh()) realtimeRadarNeedsFreshScan = true;
     renderRealtimeRadar();
     return;
   }
@@ -3526,17 +3526,29 @@ function radarChipTags(stock) {
   return [...new Set(tags)].slice(0, 5);
 }
 
+function taipeiClockParts(date = new Date()) {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Taipei",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  }).formatToParts(date);
+  return Object.fromEntries(parts.map((part) => [part.type, part.value]));
+}
+
 function radarSessionTimeLabel() {
   const date = new Date();
-  const minutes = date.getHours() * 60 + date.getMinutes();
+  const parts = taipeiClockParts(date);
+  const minutes = Number(parts.hour) * 60 + Number(parts.minute);
   if (minutes < 9 * 60) return "09:00:00";
   if (minutes > 13 * 60 + 30) return "13:30:00";
-  return date.toLocaleTimeString("zh-TW", { hour12: false });
+  return `${parts.hour}:${parts.minute}:${parts.second}`;
 }
 
 function isRadarDetectionWindow() {
-  const date = new Date();
-  const minutes = date.getHours() * 60 + date.getMinutes();
+  const parts = taipeiClockParts();
+  const minutes = Number(parts.hour) * 60 + Number(parts.minute);
   return minutes >= 9 * 60 && minutes <= 13 * 60 + 30;
 }
 
@@ -3790,11 +3802,17 @@ function renderRealtimeRadar() {
       }
     });
   }
+  const rows = buildRealtimeRadarRows({ mode: radarOpen ? "intraday" : "closed" });
+  if (radarOpen && rows.length) {
+    realtimeRadarLastRows = mergeRealtimeRadarRows(rows, realtimeRadarLastRows);
+    realtimeRadarLastUpdatedAt = Date.now();
+    saveRealtimeRadarLastRows(realtimeRadarLastRows);
+  }
   const radarNeedsUpdate = radarOpen && (realtimeRadarNeedsFreshScan || !isRealtimeRadarFresh());
   if (radarNeedsUpdate && realtimeRadarLastRows.length) {
     if (!realtimeRadarRefreshLoading && !strategyRealtimeLoading) {
       realtimeRadarRefreshLoading = true;
-      refreshStrategyRealtimeScan("force")
+      refreshStrategyRealtimeScan("hot")
         .then(() => {
           realtimeRadarNeedsFreshScan = false;
           renderRealtimeRadar();
@@ -3821,7 +3839,7 @@ function renderRealtimeRadar() {
     `;
     if (!realtimeRadarRefreshLoading && !strategyRealtimeLoading) {
       realtimeRadarRefreshLoading = true;
-      refreshStrategyRealtimeScan("force")
+      refreshStrategyRealtimeScan("hot")
         .then(() => {
           realtimeRadarNeedsFreshScan = false;
           renderRealtimeRadar();
@@ -3832,8 +3850,7 @@ function renderRealtimeRadar() {
     }
     return;
   }
-  const rows = buildRealtimeRadarRows({ mode: radarOpen ? "intraday" : "closed" });
-  if (radarOpen && !rows.length) {
+  if (radarOpen && !rows.length && !realtimeRadarLastRows.length) {
     panel.innerHTML = `
       <header class="radar-topbar">
         <div>
@@ -3872,11 +3889,6 @@ function renderRealtimeRadar() {
       <div class="empty-state">收盤資料暫無可用雷達訊號，請稍後重新整理。</div>
     `;
     return;
-  }
-  if (radarOpen && rows.length) {
-    realtimeRadarLastRows = mergeRealtimeRadarRows(rows, realtimeRadarLastRows);
-    realtimeRadarLastUpdatedAt = Date.now();
-    saveRealtimeRadarLastRows(realtimeRadarLastRows);
   }
   const displayRows = realtimeRadarLastRows.length ? enrichRealtimeRadarSnapshotRows(realtimeRadarLastRows) : rows;
   const sortRadarLedger = (items) => [...items].sort((a, b) => (cleanNumber(b.radarUpdatedAt) - cleanNumber(a.radarUpdatedAt)) || cleanNumber(b.score) - cleanNumber(a.score));
@@ -4172,6 +4184,7 @@ let marketAiLastSignature = "";
 let marketAiStockLoading = false;
 let marketAiHotFilter = "all";
 let marketAiInstitutionLoading = false;
+let marketAiRealtimeScanRequestedAt = 0;
 let realtimeRadarLoading = false;
 let realtimeRadarDataPromise = null;
 let realtimeRadarSide = "auto";
@@ -4218,6 +4231,7 @@ const intradayFirstSeenAt = new Map();
 let strategy2IntradayEventByCode = new Map();
 let strategy2IntradayCacheDate = "";
 let strategy2IntradayCacheLoading = false;
+let strategy2IntradayCacheLoadedAt = 0;
 let intradayCandidateSeenAt = {};
 let strategyHistoryLoading = false;
 let strategyHistoryCursor = 0;
@@ -4305,7 +4319,7 @@ const REALTIME_RADAR_POOL_LIMIT = 650;
 const INTRADAY_BACKGROUND_BATCH = 450;
 const INTRADAY_FAST_SCAN_MS = 3000;
 const INTRADAY_BACKGROUND_SCAN_MS = 3000;
-const REALTIME_RADAR_REFRESH_MS = 3000;
+const REALTIME_RADAR_REFRESH_MS = 12000;
 const MOBILE_INTRADAY_HOT_SCAN_LIMIT = 260;
 const MOBILE_INTRADAY_FORCE_EXTRA_LIMIT = 80;
 const MOBILE_INTRADAY_BACKGROUND_BATCH = 90;
@@ -5899,8 +5913,8 @@ function getIntradayTrackedEntryPrice(stock) {
   const stateId = stock?.intradayState?.id || getIntradayState(stock)?.id || "";
   const tracked = stock?.strategy2Event || strategy2IntradayEventByCode.get(String(stock?.code || ""));
   const price = stateId === "go"
-    ? cleanNumber(tracked?.firstAPrice) || cleanNumber(tracked?.firstBPrice)
-    : cleanNumber(tracked?.firstBPrice) || cleanNumber(tracked?.firstAPrice);
+    ? cleanNumber(tracked?.latestAPrice) || cleanNumber(tracked?.firstAPrice) || cleanNumber(tracked?.latestBPrice) || cleanNumber(tracked?.firstBPrice)
+    : cleanNumber(tracked?.latestBPrice) || cleanNumber(tracked?.firstBPrice) || cleanNumber(tracked?.latestAPrice) || cleanNumber(tracked?.firstAPrice);
   return price
     || cleanNumber(stock?.intradayEntry?.entryPrice)
     || cleanNumber(stock?.intradayEntry?.entryLow)
@@ -6305,20 +6319,106 @@ function intradayOnlyTime(value) {
   return match && isIntradayClockTime(match[1]) ? match[1] : "";
 }
 
+function intradayNowSeconds() {
+  const scanDate = strategyLastScanAt ? realtimeRadarDateKeyFromTimestamp(strategyLastScanAt) : "";
+  const sourceTime = scanDate === marketAiTodayKey() ? strategyLastScanAt : Date.now();
+  const timeText = new Date(sourceTime).toLocaleTimeString("zh-TW", {
+    timeZone: "Asia/Taipei",
+    hour12: false,
+  });
+  return intradayTimeToValue(timeText);
+}
+
+function intradayVisibleTimeLimit() {
+  if (!isIntradayScanWindow()) return 13 * 3600 + 30 * 60;
+  return Math.min(Math.max(intradayNowSeconds(), 9 * 3600), 13 * 3600 + 30 * 60);
+}
+
+function isIntradayVisibleSessionRow(stock) {
+  const seconds = intradayTimeToValue(getIntradayEntryTime(stock));
+  return seconds >= 9 * 3600 && seconds <= intradayVisibleTimeLimit();
+}
+
+function isIntradayVisibleTimeText(value) {
+  const seconds = intradayTimeToValue(value);
+  return seconds >= 9 * 3600 && seconds <= intradayVisibleTimeLimit();
+}
+
+function sanitizeStrategy2IntradayEvent(event) {
+  if (!event) return null;
+  const copy = { ...event };
+  [
+    "firstBAt",
+    "highAfterBAt",
+    "firstAAt",
+    "firstTradableAAt",
+    "latestAAt",
+    "latestBAt",
+    "latestSeenAt",
+    "highAfterAAt",
+    "highestAt",
+  ].forEach((key) => {
+    if (copy[key] && !isIntradayVisibleTimeText(copy[key])) copy[key] = "";
+  });
+  copy.enhancements = normalizeArray(copy.enhancements).filter((item) => isIntradayVisibleTimeText(item?.at));
+  const hasVisibleTime = [
+    copy.firstBAt,
+    copy.firstAAt,
+    copy.latestAAt,
+    copy.latestBAt,
+    copy.latestSeenAt,
+  ].some(Boolean);
+  return hasVisibleTime ? copy : null;
+}
+
+function isStrategy2TodayIntradayStock(stock) {
+  if (!isIntradayScanWindow()) return true;
+  const today = marketAiTodayKey();
+  const quoteDate = marketAiQuoteDateKey(stock);
+  if (quoteDate && quoteDate !== today) return false;
+  const updatedAt = cleanNumber(stock?.quoteUpdatedAt || stock?.updatedAt);
+  if (updatedAt && realtimeRadarDateKeyFromTimestamp(updatedAt) !== today) return false;
+  return true;
+}
+
 function getIntradayEntryTime(stock) {
-  if (stock?.intradayEntryTime) return stock.intradayEntryTime;
+  if (stock?.intradayEntryTime && isIntradayVisibleTimeText(stock.intradayEntryTime)) return stock.intradayEntryTime;
   const tracked = strategy2IntradayEventByCode.get(String(stock?.code || ""));
-  if (tracked?.firstAAt) return tracked.firstAAt;
-  if (tracked?.firstBAt) return tracked.firstBAt;
-  if (tracked?.firstSeenAt) return tracked.firstSeenAt;
+  const stateId = stock?.intradayState?.id || "";
+  if (stateId === "go") {
+    if (tracked?.latestAAt && isIntradayVisibleTimeText(tracked.latestAAt)) return tracked.latestAAt;
+    if (tracked?.firstAAt && isIntradayVisibleTimeText(tracked.firstAAt)) return tracked.firstAAt;
+    if (tracked?.latestSeenAt && isIntradayVisibleTimeText(tracked.latestSeenAt)) return tracked.latestSeenAt;
+    if (tracked?.firstSeenAt && isIntradayVisibleTimeText(tracked.firstSeenAt)) return tracked.firstSeenAt;
+  }
+  if (tracked?.latestBAt && isIntradayVisibleTimeText(tracked.latestBAt)) return tracked.latestBAt;
+  if (tracked?.latestAAt && isIntradayVisibleTimeText(tracked.latestAAt)) return tracked.latestAAt;
+  if (tracked?.latestSeenAt && isIntradayVisibleTimeText(tracked.latestSeenAt)) return tracked.latestSeenAt;
+  if (tracked?.firstBAt && isIntradayVisibleTimeText(tracked.firstBAt)) return tracked.firstBAt;
+  if (tracked?.firstAAt && isIntradayVisibleTimeText(tracked.firstAAt)) return tracked.firstAAt;
+  if (tracked?.firstSeenAt && isIntradayVisibleTimeText(tracked.firstSeenAt)) return tracked.firstSeenAt;
   const quoteTime = stock?.quoteTime || strategyRealtimeQuotes[stock?.code]?.time || "";
-  if (quoteTime && isIntradayClockTime(quoteTime)) return quoteTime;
+  if (quoteTime && isIntradayVisibleTimeText(quoteTime)) return quoteTime;
   const seenAt = cleanNumber(stock?.intradayFirstSeenAt) || cleanNumber(intradayFirstSeenAt.get(stock?.code));
   if (seenAt) {
     const seenTime = new Date(seenAt).toLocaleTimeString("zh-TW", { hour12: false });
     if (isIntradayClockTime(seenTime)) return seenTime;
   }
   return "--:--";
+}
+
+function resetStrategy2IntradaySessionCache() {
+  strategy2IntradayEventByCode = new Map();
+  strategy2IntradayCacheDate = "";
+  strategy2IntradayCacheLoadedAt = 0;
+  intradayFirstSeenAt.clear();
+  intradayGoFirstSeenAt.clear();
+}
+
+function ensureStrategy2IntradayTodayCache() {
+  const cacheDate = normalizeMarketAiDateKey(strategy2IntradayCacheDate);
+  if (!cacheDate || cacheDate === marketAiTodayKey()) return;
+  resetStrategy2IntradaySessionCache();
 }
 
 function isStrategy2EnhancementVisible(enhancement) {
@@ -6370,12 +6470,18 @@ function sortIntradayZoneRows(rows) {
 }
 
 async function loadStrategy2IntradayCache(force = false) {
+  ensureStrategy2IntradayTodayCache();
   if (strategy2IntradayCacheLoading) return;
   if (!force && strategy2IntradayEventByCode.size) return;
   strategy2IntradayCacheLoading = true;
   try {
     const payload = await fetchJson(`${endpoints.strategy2IntradayCache}?t=${Date.now()}`, 10000);
-    const events = normalizeArray(payload?.events);
+    const payloadDate = normalizeMarketAiDateKey(payload?.date || payload?.updatedAt);
+    if (payloadDate && payloadDate !== marketAiTodayKey()) {
+      resetStrategy2IntradaySessionCache();
+      return;
+    }
+    const events = normalizeArray(payload?.events).map(sanitizeStrategy2IntradayEvent).filter(Boolean);
     const byCode = new Map(events
       .filter((event) => event?.code)
       .map((event) => [String(event.code), {
@@ -6387,18 +6493,34 @@ async function loadStrategy2IntradayCache(force = false) {
       if (!code) return;
       const seenTime = intradayOnlyTime(record.timestamp || record.entryAt || record.firstAAt || record.firstBAt);
       if (!seenTime) return;
+      if (!isIntradayVisibleTimeText(seenTime)) return;
       const current = byCode.get(code) || { code, name: record.name || "" };
       const currentSeen = current.firstSeenAt || current.firstBAt || current.firstAAt || "";
       if (!currentSeen || intradayTimeToValue(seenTime) < intradayTimeToValue(currentSeen)) {
         current.firstSeenAt = seenTime;
       }
       const isEntryState = record.stateId === "entry" || record.stateId === "go";
+      const seenValue = intradayTimeToValue(seenTime);
+      const currentLatestValue = intradayTimeToValue(current.latestSeenAt || "");
+      if (!current.latestSeenAt || seenValue >= currentLatestValue) {
+        current.latestSeenAt = seenTime;
+        current.latestSeenPrice = cleanNumber(record.entryPrice) || cleanNumber(record.observedPrice) || cleanNumber(record.close);
+      }
       if (isEntryState && !current.firstAAt) current.firstAAt = seenTime;
+      if (isEntryState && (!current.latestAAt || seenValue >= intradayTimeToValue(current.latestAAt))) {
+        current.latestAAt = seenTime;
+        current.latestAPrice = cleanNumber(record.entryPrice) || cleanNumber(record.observedPrice) || cleanNumber(record.close);
+      }
       if (!isEntryState && !current.firstBAt) current.firstBAt = seenTime;
+      if (!isEntryState && (!current.latestBAt || seenValue >= intradayTimeToValue(current.latestBAt))) {
+        current.latestBAt = seenTime;
+        current.latestBPrice = cleanNumber(record.entryPrice) || cleanNumber(record.observedPrice) || cleanNumber(record.close);
+      }
       byCode.set(code, current);
     });
     strategy2IntradayCacheDate = payload?.date || "";
     strategy2IntradayEventByCode = byCode;
+    strategy2IntradayCacheLoadedAt = Date.now();
     if (isViewActive("strategy") && selectedStrategyIds.has("intraday_2m")) {
       renderStrategyScanner();
     }
@@ -8708,14 +8830,18 @@ function setStrategyChrome(mode) {
 
 function renderIntradayRadar(evaluated) {
   setStrategyChrome("intraday");
-  if (!strategy2IntradayEventByCode.size && !strategy2IntradayCacheLoading) {
-    loadStrategy2IntradayCache(false);
+  ensureStrategy2IntradayTodayCache();
+  const cacheRefreshDue = isIntradayScanWindow()
+    && (!strategy2IntradayCacheLoadedAt || Date.now() - strategy2IntradayCacheLoadedAt > Math.max(REALTIME_RADAR_REFRESH_MS, 3000));
+  if ((!strategy2IntradayEventByCode.size || cacheRefreshDue) && !strategy2IntradayCacheLoading) {
+    loadStrategy2IntradayCache(cacheRefreshDue);
   }
   const keyword = strategyKeyword.trim().toLowerCase();
   const now = Date.now();
   const scanClosed = !isIntradayScanWindow();
   const baseRows = evaluated
     .filter(isIntradayTradable)
+    .filter(isStrategy2TodayIntradayStock)
     .filter((stock) => !isRealtimeRadarLimitUp(stock))
     .filter((stock) => matchesStrategyKeyword(stock, keyword));
   const allRows = baseRows
@@ -8726,8 +8852,8 @@ function renderIntradayRadar(evaluated) {
       const intradayState = getIntradayState(row);
       const trackedEvent = strategy2IntradayEventByCode.get(String(row.code || ""));
       const trackedTime = intradayState.id === "go"
-        ? trackedEvent?.firstAAt || trackedEvent?.firstBAt || ""
-        : trackedEvent?.firstBAt || trackedEvent?.firstAAt || "";
+        ? trackedEvent?.latestAAt || trackedEvent?.firstAAt || trackedEvent?.latestSeenAt || trackedEvent?.firstSeenAt || ""
+        : trackedEvent?.latestBAt || trackedEvent?.latestSeenAt || trackedEvent?.firstBAt || trackedEvent?.firstAAt || "";
       if (!intradayFirstSeenAt.has(row.code)) {
         intradayFirstSeenAt.set(row.code, now);
       }
@@ -8743,19 +8869,22 @@ function renderIntradayRadar(evaluated) {
         intradayGoFirstSeenAt: intradayGoFirstSeenAt.get(row.code) || null,
       };
     });
+  const sessionRows = allRows.filter(isIntradayVisibleSessionRow);
   const tradableRows = scanClosed
-    ? allRows.filter((stock) => stock.strategy2Event && getIntradayEntryTime(stock) !== "--:--")
-    : allRows;
+    ? sessionRows.filter((stock) => stock.strategy2Event && getIntradayEntryTime(stock) !== "--:--")
+    : sessionRows;
+  const signalScopeRows = tradableRows;
+  const displayPoolRows = tradableRows;
   const stateFilters = new Set(["go", "watch"]);
   const filteredRows = intradaySignalFilter === "all"
     ? tradableRows
     : stateFilters.has(intradaySignalFilter)
       ? tradableRows.filter((stock) => stock.intradayState.id === intradaySignalFilter)
-      : allRows.filter((stock) => (stock.intradaySignals || []).some((signal) => signal.id === intradaySignalFilter));
+      : displayPoolRows.filter((stock) => (stock.intradaySignals || []).some((signal) => signal.id === intradaySignalFilter));
   const rows = sortIntradayRows(filteredRows).slice(0, 80);
   const signalCounts = Object.fromEntries(INTRADAY_SIGNAL_DEFS.map((signal) => [signal.id, 0]));
   const stateCounts = { go: 0, watch: 0 };
-  allRows.forEach((stock) => {
+  signalScopeRows.forEach((stock) => {
     stateCounts[stock.intradayState.id] += 1;
     (stock.intradaySignals || []).forEach((signal) => {
       signalCounts[signal.id] = (signalCounts[signal.id] || 0) + 1;
@@ -8777,8 +8906,8 @@ function renderIntradayRadar(evaluated) {
 
   if (strategySummary) strategySummary.textContent = scanClosed
     ? `偵測時間 09:00-13:30｜收盤後停止偵測｜最後更新 ${scanTime}${scanStatus}`
-    : `3秒即時巡邏｜熱門池快掃｜背景分批補全市場｜最後更新 ${scanTime}${scanStatus}`;
-  if (strategyMatchCount) strategyMatchCount.textContent = allRows.length.toLocaleString("zh-TW");
+    : `09:00-13:30 即時巡邏｜不顯示目前時間之後的舊快取｜最後更新 ${scanTime}${scanStatus}`;
+  if (strategyMatchCount) strategyMatchCount.textContent = signalScopeRows.length.toLocaleString("zh-TW");
   if (strategyAvgScore) strategyAvgScore.textContent = stateCounts.go.toLocaleString("zh-TW");
   if (strategyTopHit) strategyTopHit.textContent = rows.length ? `${Math.max(...rows.map((stock) => stock.intradaySignals.length))}/6` : "0/6";
 
@@ -8861,7 +8990,7 @@ function renderIntradayRadar(evaluated) {
     : "策略2正在 3 秒巡邏；目前本輪尚未出現右側任一訊號。只要符合「早盤強勢 / 爆量 / 跳空 / 突破 / MA35 / 鑽石 / 拉抬」任一項，就會立刻顯示。";
   const headerText = scanClosed
     ? `偵測時間 09:00-13:30，收盤後停止偵測。最後更新 ${scanTime}${scanStatus}`
-    : `盤中即時偵測強勢訊號，3秒巡邏熱門池，背景同步分批補全市場。最後更新 ${scanTime}${scanStatus}`;
+    : `09:00-13:30 即時偵測強勢訊號，3秒巡邏熱門池，不顯示目前時間之後的快取資料。最後更新 ${scanTime}${scanStatus}`;
 
   const tableRows = rows.length ? `
     ${rows.map((stock) => {
@@ -10340,7 +10469,13 @@ function formatMarketAiDateKey(value) {
 
 function getPanelFreshnessMeta(viewName) {
   const today = marketAiTodayKey();
-  const dataDate = marketAiDataDateKey(latestStocks) || normalizeMarketAiDateKey(marketStockDataState.resolvedTradeDate) || today;
+  const marketAiLiveRows = viewName === "market" && marketMode === "ai" && isMarketAiActiveSession()
+    ? latestStocks.map((stock) => applyStrategyQuote(stock)).filter((stock) => !isMarketAiStaleStock(stock))
+    : [];
+  const dataDate = marketAiDataDateKey(marketAiLiveRows)
+    || marketAiDataDateKey(latestStocks)
+    || normalizeMarketAiDateKey(marketStockDataState.resolvedTradeDate)
+    || today;
   const isToday = dataDate === today;
   const marketModeText = isMarketAiActiveSession()
     ? "盤中巡邏"
@@ -10647,8 +10782,9 @@ function getMarketAiFilterMeta(groups) {
 }
 
 function isMarketAiLongCandidate(stock, options = {}) {
-  if (isMarketAiStaleStock(stock)) return false;
-  if (!isMarketAiFreshRealtimeStock(stock)) return false;
+  const allowReference = options.allowReference === true;
+  if (!allowReference && isMarketAiStaleStock(stock)) return false;
+  if (!allowReference && !isMarketAiFreshRealtimeStock(stock)) return false;
   const pct = cleanNumber(stock.percent);
   const change = cleanNumber(stock.change);
   const close = cleanNumber(stock.close);
@@ -10662,8 +10798,14 @@ function buildMarketAiData() {
   const allStocks = latestStocks.length
     ? latestStocks.map((stock) => isMarketAiActiveSession() ? applyStrategyQuote(stock) : stock)
     : [];
-  const staleRows = allStocks.filter((stock) => isMarketAiStaleStock(stock));
-  const stocks = allStocks.filter((stock) => !isMarketAiStaleStock(stock));
+  const targetDate = marketAiTargetDateKey();
+  const preferredRows = allStocks.filter((stock) => !isMarketAiStaleStock(stock));
+  const fallbackDate = marketAiDataDateKey(allStocks);
+  const isReferenceDate = !preferredRows.length && Boolean(fallbackDate) && fallbackDate !== targetDate;
+  const stocks = preferredRows.length
+    ? preferredRows
+    : allStocks.filter((stock) => !fallbackDate || marketAiQuoteDateKey(stock) === fallbackDate);
+  const staleRows = preferredRows.length ? allStocks.filter((stock) => isMarketAiStaleStock(stock)) : [];
   const sample = stocks.length;
   const upRows = stocks.filter((stock) => cleanNumber(stock.percent) > 0);
   const downRows = stocks.filter((stock) => cleanNumber(stock.percent) < 0);
@@ -10674,7 +10816,7 @@ function buildMarketAiData() {
   const strongSectors = [...sectors].sort((a, b) => b.pct - a.pct).slice(0, 4);
   const weakSectors = [...sectors].sort((a, b) => a.pct - b.pct).slice(0, 4);
   const classifiedStocks = stocks
-    .filter((stock) => isMarketAiLongCandidate(stock))
+    .filter((stock) => isMarketAiLongCandidate(stock, { allowReference: isReferenceDate }))
     .map((stock) => classifyMarketAiStock(stock, sectors));
   const hotStocks = classifiedStocks
     .sort((a, b) => b.score - a.score || cleanNumber(b.percent) - cleanNumber(a.percent) || cleanNumber(b.value) - cleanNumber(a.value))
@@ -10682,7 +10824,7 @@ function buildMarketAiData() {
   const hotGroups = getMarketAiHotGroups(hotStocks);
   hotGroups.intraday = sortMarketAiIntradayStocks(classifiedStocks.filter((stock) => stock.buckets.intraday)).slice(0, 40);
   if (!hotGroups[marketAiHotFilter] || marketAiHotFilter === "all") marketAiHotFilter = "momentum";
-  const visibleHotStocks = hotGroups[marketAiHotFilter].filter((stock) => isMarketAiLongCandidate(stock)).slice(0, 10);
+  const visibleHotStocks = hotGroups[marketAiHotFilter].filter((stock) => isMarketAiLongCandidate(stock, { allowReference: isReferenceDate })).slice(0, 10);
   const riskStocks = stocks
     .filter((stock) => cleanNumber(stock.percent) <= -3 || cleanNumber(stock.percent) >= 8.5)
     .sort((a, b) => Math.abs(cleanNumber(b.percent)) - Math.abs(cleanNumber(a.percent)))
@@ -10690,7 +10832,20 @@ function buildMarketAiData() {
   const bias = upRatio >= 55 ? "多方偏強" : upRatio <= 45 ? "空方壓制" : "震盪分歧";
   const confidence = sample >= 1000 ? (Math.min(92, 58 + Math.abs(upRatio - 50) * 1.4)).toFixed(0) : "中";
   const dataDate = marketAiDataDateKey(stocks);
-  return { stocks, allStocks, staleRows, dataDate, sample, upRows, downRows, flatRows, upRatio, totalValue, sectors, strongSectors, weakSectors, hotStocks, hotGroups, visibleHotStocks, riskStocks, bias, confidence };
+  return { stocks, allStocks, staleRows, dataDate, targetDate, isReferenceDate, sample, upRows, downRows, flatRows, upRatio, totalValue, sectors, strongSectors, weakSectors, hotStocks, hotGroups, visibleHotStocks, riskStocks, bias, confidence };
+}
+
+function requestMarketAiRealtimeScan(reason = "force") {
+  if (!isMarketAiActiveSession() || !isTerminalUnlocked() || isDocumentHidden()) return;
+  const now = Date.now();
+  if (strategyRealtimeLoading || now - marketAiRealtimeScanRequestedAt < 8000) return;
+  marketAiRealtimeScanRequestedAt = now;
+  deferUiWork(async () => {
+    await ensureStrategyStocksLoaded();
+    await refreshStrategyRealtimeScan(reason);
+    marketAiLastSignature = "";
+    renderMarketAiPanel();
+  }, 80);
 }
 
 function marketAiUpdatedLabel() {
@@ -10868,17 +11023,19 @@ function renderMarketAiPanel() {
   installMarketTabs();
   if (!marketAiPanel) return;
   const data = buildMarketAiData();
-  const signature = `${marketAiHotFilter}:${data.sample}:${data.staleRows.length}:${data.upRows.length}:${data.downRows.length}:${data.hotStocks.map((stock) => `${stock.code}:${stock.score}:${cleanNumber(stock.percent).toFixed(2)}`).join("|")}`;
+  if (data.isReferenceDate && isMarketAiActiveSession()) {
+    requestMarketAiRealtimeScan("force");
+  }
+  const signature = `${marketAiHotFilter}:${data.dataDate}:${data.targetDate}:${data.isReferenceDate ? 1 : 0}:${strategyRealtimeStats.received}:${data.sample}:${data.staleRows.length}:${data.upRows.length}:${data.downRows.length}:${data.hotStocks.map((stock) => `${stock.code}:${stock.score}:${cleanNumber(stock.percent).toFixed(2)}`).join("|")}`;
   if (signature === marketAiLastSignature && marketAiPanel.innerHTML) return;
   marketAiLastSignature = signature;
   if (!data.sample) {
-    const staleDate = data.staleRows.length ? marketAiQuoteDateKey(data.staleRows[0]) : "";
-    marketAiPanel.innerHTML = `<div class="empty-state">${data.staleRows.length ? `目前資料日期 ${escapeAttr(staleDate || "未知")}，不是今日 ${escapeAttr(marketAiTodayKey())}，已暫停 AI 多方推薦。` : "等待市場資料載入後產生 AI 判讀。"}</div>`;
-    if (!data.staleRows.length) deferUiWork(loadMarketAiStocksFallback, 100);
+    marketAiPanel.innerHTML = `<div class="empty-state">等待市場資料載入後產生 AI 判讀。</div>`;
+    deferUiWork(loadMarketAiStocksFallback, 100);
     return;
   }
   if (!Object.keys(institutionData).length) deferUiWork(ensureMarketAiInstitutionData, 100);
-  const priorityStocks = sortMarketAiPriorityStocks(data.hotStocks.filter((stock) => isMarketAiLongCandidate(stock, { priority: true })));
+  const priorityStocks = sortMarketAiPriorityStocks(data.hotStocks.filter((stock) => isMarketAiLongCandidate(stock, { priority: true, allowReference: data.isReferenceDate })));
   const topHot = priorityStocks[0] || data.hotStocks[0];
   const filterMeta = getMarketAiFilterMeta(data.hotGroups);
   const activeFilterLabel = filterMeta.find((item) => item.key === marketAiHotFilter)?.label || "全部";
@@ -10924,10 +11081,14 @@ function renderMarketAiPanel() {
         </article>
       `;
   }).join("");
-  const staleNotice = data.staleRows.length
+  const staleNotice = data.isReferenceDate
+    ? `<div class="market-ai-sort-note">今日即時資料尚未完成更新，以下先用 ${escapeAttr(formatMarketAiDateKey(data.dataDate))} 最新可用資料做參考判讀。</div>`
+    : data.staleRows.length
     ? `<div class="market-ai-sort-note">已排除 ${data.staleRows.length.toLocaleString("zh-TW")} 檔非今日資料，AI 多方推薦只使用今日或無日期標記的最新行情。</div>`
     : "";
-  const dateModeText = isMarketAiActiveSession()
+  const dateModeText = data.isReferenceDate
+    ? "最新可用資料參考"
+    : isMarketAiActiveSession()
     ? "盤中即時巡邏"
     : marketStockDataState.isFallbackDate
     ? "最新可用收盤資料"
@@ -11930,6 +12091,9 @@ async function refreshStrategyRealtimeScan(mode = "hot") {
       strategyLastScanAt = Date.now();
       strategyRealtimeStats = { requested, received, failed, lastError };
       renderStrategyScanner();
+      if (isViewActive("realtime-radar")) {
+        renderRealtimeRadar();
+      }
       if (marketMode === "ai") {
         marketAiLastSignature = "";
         renderMarketAiPanel();
@@ -11945,6 +12109,9 @@ async function refreshStrategyRealtimeScan(mode = "hot") {
       strategyLastScanAt = Date.now();
       strategyRealtimeStats = { requested, received, failed, lastError };
       renderStrategyScanner();
+      if (isViewActive("realtime-radar")) {
+        renderRealtimeRadar();
+      }
       if (marketMode === "ai") {
         marketAiLastSignature = "";
         renderMarketAiPanel();
@@ -13285,7 +13452,7 @@ document.addEventListener("click", (event) => {
   const radarSide = event.target.closest("[data-radar-side]");
   if (radarSide) {
     realtimeRadarSide = radarSide.dataset.radarSide || "auto";
-    realtimeRadarNeedsFreshScan = true;
+    if (!realtimeRadarLastRows.length && !isRealtimeRadarFresh()) realtimeRadarNeedsFreshScan = true;
     renderRealtimeRadar();
     return;
   }
@@ -13472,6 +13639,4 @@ if (isViewActive("watchlist")) renderWatchlist();
 setInterval(() => {
   if (!isDocumentHidden() && isTerminalUnlocked() && isViewActive("watchlist")) refreshSelectedWatchlistQuote();
 }, 10000);
-
-
 
