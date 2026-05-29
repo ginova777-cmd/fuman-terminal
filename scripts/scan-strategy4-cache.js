@@ -279,9 +279,11 @@ async function main() {
     currentMatches,
     complete: !scanErrors.length && !noDataCodes.size,
   });
-  writeStrategy4Output(firstPassOutput, false);
-  console.log(`strategy4 partial cache updated: full market first pass scanned ${scannedThisRun}/${codes.length}, matches ${firstPassOutput.count}, noData ${noDataCodes.size}`);
-  syncStrategy4Output("first-pass");
+  console.log(`strategy4 first pass done: full market scanned ${scannedThisRun}/${codes.length}, matches ${firstPassOutput.count}, noData ${noDataCodes.size}`);
+  if (SYNC_PARTIAL) {
+    writeStrategy4Output(firstPassOutput, false);
+    syncStrategy4Output("first-pass");
+  }
 
   if (noDataCodes.size) {
     const retryCodes = [...noDataCodes];
