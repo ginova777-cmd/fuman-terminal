@@ -1,0 +1,25 @@
+{
+  "institution": {
+    "scope": "institution",
+    "status": "ok",
+    "message": "Watchdog verified cache",
+    "updatedAt": "2026-05-29T11:45:54.9354345Z",
+    "detail": {
+      "expectedTime": "",
+      "log": "C:\\fuman-runtime\\logs\\flow-watchdog-institution-20260529-194554.log",
+      "reason": "ok count=1894 usedDate=20260528"
+    }
+  },
+  "warrant": {
+    "scope": "warrant",
+    "status": "ok",
+    "message": "Watchdog verified cache",
+    "updatedAt": "2026-05-29T11:44:08.8893311Z",
+    "detail": {
+      "reason": "ok count=120 updatedAt=05/28/2026 22:00:16",
+      "expectedTime": "",
+      "log": "C:\\fuman-runtime\\logs\\flow-watchdog-warrant-20260529-194408.log"
+    }
+  },
+  "updatedAt": "2026-05-29T11:45:54.9381071Z"
+}
