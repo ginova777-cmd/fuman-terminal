@@ -210,7 +210,21 @@ function Assert-CopiedFile($file, $source, $target) {
   Write-Log "$file copied and verified: $sourceHash"
 }
 
+function Assert-CacheFileSize($file, $source) {
+  if ($file -notlike "data\open-buy-*.json") { return }
+  $maxBytes = 1048576
+  $parsedMaxBytes = 0
+  if ([int64]::TryParse($env:OPEN_BUY_SYNC_MAX_BYTES, [ref]$parsedMaxBytes) -and $parsedMaxBytes -gt 0) {
+    $maxBytes = $parsedMaxBytes
+  }
+  $size = (Get-Item -LiteralPath $source).Length
+  if ($size -gt $maxBytes) {
+    throw "$file is too large for openBuy sync: $size bytes > $maxBytes bytes"
+  }
+}
+
 function Copy-CacheFile($file, $source, $targetRoot, $label) {
+  Assert-CacheFileSize $file $source
   $target = Join-Path $targetRoot $file
   New-Item -ItemType Directory -Force -Path (Split-Path $target -Parent) | Out-Null
   Copy-Item -LiteralPath $source -Destination $target -Force
