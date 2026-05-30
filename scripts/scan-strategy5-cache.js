@@ -8,6 +8,8 @@ const BACKUP_FILE = dataPath("strategy5-backup.json");
 const INSTITUTION_FILE = dataPath("institution-latest.json");
 const STOCK_URL = process.env.STOCK_UNIVERSE_URL || "https://fuman-terminal.vercel.app/api/stocks";
 const USE_MIS_QUOTES = process.env.STRATEGY5_USE_MIS === "1";
+const HISTORY_LIMIT = Math.max(20, Number(process.env.STRATEGY5_HISTORY_LIMIT || 420));
+const HISTORY_CONCURRENCY = Math.max(1, Number(process.env.STRATEGY5_HISTORY_CONCURRENCY || 8));
 
 function readJson(file, fallback) {
   try { return JSON.parse(fs.readFileSync(file, "utf8")); } catch { return fallback; }
@@ -52,6 +54,11 @@ function normalizeStock(row) {
     code,
     name,
     close: cleanNumber(row.ClosingPrice || row.close),
+    open: cleanNumber(row.OpeningPrice || row.open),
+    high: cleanNumber(row.HighestPrice || row.high),
+    low: cleanNumber(row.LowestPrice || row.low),
+    prevClose: cleanNumber(row.PreviousClose || row.prevClose),
+    limitUp: cleanNumber(row.LimitUp || row.limitUp),
     change: cleanNumber(row.Change || row.change),
     percent: cleanNumber(row.Percent || row.percent),
     value: cleanNumber(row.TradeValue || row.value),
@@ -107,10 +114,131 @@ function buildStrategy5Match({ stock, inst, valueRank, volumeRank }) {
   return { id: "foreign_trust_breakout", short: "準突破", icon: "◆", score, reason };
 }
 
-function buildMatches(stocks, institutionData) {
+function avg(values) {
+  const nums = values.filter((value) => Number.isFinite(value) && value > 0);
+  return nums.length ? nums.reduce((sum, value) => sum + value, 0) / nums.length : 0;
+}
+
+function yahooSuffix(stock) {
+  const market = String(stock.market || "").toUpperCase();
+  return market === "TPEX" || market === "OTC" || market === "TWO" ? "TWO" : "TW";
+}
+
+function normalizeYahooRows(payload) {
+  const result = payload?.chart?.result?.[0];
+  const timestamps = result?.timestamp || [];
+  const quote = result?.indicators?.quote?.[0] || {};
+  return timestamps.map((timestamp, index) => ({
+    date: new Date(timestamp * 1000).toISOString().slice(0, 10),
+    open: cleanNumber(quote.open?.[index]),
+    high: cleanNumber(quote.high?.[index]),
+    low: cleanNumber(quote.low?.[index]),
+    close: cleanNumber(quote.close?.[index]),
+    volume: cleanNumber(quote.volume?.[index]),
+  })).filter((row) => row.open && row.high && row.low && row.close);
+}
+
+async function fetchYahooHistory(stock, suffix = yahooSuffix(stock)) {
+  const now = Math.floor(Date.now() / 1000);
+  const period1 = now - 540 * 24 * 60 * 60;
+  const url = new URL(`https://query1.finance.yahoo.com/v8/finance/chart/${stock.code}.${suffix}`);
+  url.searchParams.set("period1", String(period1));
+  url.searchParams.set("period2", String(now + 24 * 60 * 60));
+  url.searchParams.set("interval", "1d");
+  url.searchParams.set("includePrePost", "false");
+  const payload = await fetchJson(url.toString(), 18000);
+  return normalizeYahooRows(payload).slice(-180);
+}
+
+async function fetchDailyHistory(stock) {
+  try {
+    const rows = await fetchYahooHistory(stock);
+    if (rows.length >= 30) return rows;
+  } catch {}
+  try {
+    const fallbackSuffix = yahooSuffix(stock) === "TW" ? "TWO" : "TW";
+    const rows = await fetchYahooHistory(stock, fallbackSuffix);
+    if (rows.length >= 30) return rows;
+  } catch {}
+  return [];
+}
+
+async function mapLimit(items, limit, iteratee) {
+  const results = new Array(items.length);
+  let next = 0;
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, async () => {
+    while (next < items.length) {
+      const index = next++;
+      results[index] = await iteratee(items[index], index);
+    }
+  }));
+  return results;
+}
+
+function limitUpDojiPatternFromRows(rows) {
+  if (!Array.isArray(rows) || rows.length < 12) return null;
+  const last = rows.at(-1);
+  const prev = rows.at(-2);
+  const lastVolume = cleanNumber(last?.volume);
+  const lastPct = prev?.close ? ((cleanNumber(last.close) - cleanNumber(prev.close)) / cleanNumber(prev.close)) * 100 : 0;
+  const setupStart = Math.max(0, rows.length - 36);
+
+  for (let limitIndex = rows.length - 10; limitIndex >= setupStart; limitIndex--) {
+    const limitDay = rows[limitIndex];
+    const limitPrev = rows[limitIndex - 1];
+    const limitPct = limitPrev?.close ? ((cleanNumber(limitDay.close) - cleanNumber(limitPrev.close)) / cleanNumber(limitPrev.close)) * 100 : 0;
+    const limitVolume = cleanNumber(limitDay.volume);
+    if (limitPct < 9.2 || cleanNumber(limitDay.close) < cleanNumber(limitDay.open)) continue;
+
+    const dojiEnd = Math.min(rows.length - 9, limitIndex + 5);
+    for (let dojiIndex = limitIndex + 1; dojiIndex <= dojiEnd; dojiIndex++) {
+      const doji = rows[dojiIndex];
+      const dojiRange = cleanNumber(doji.high) - cleanNumber(doji.low);
+      const dojiBodyRatio = dojiRange > 0 ? Math.abs(cleanNumber(doji.close) - cleanNumber(doji.open)) / dojiRange : 1;
+      if (dojiBodyRatio > 0.28 || cleanNumber(doji.close) < cleanNumber(limitDay.close) * 0.96) continue;
+
+      const boxRows = rows.slice(dojiIndex + 1, -1);
+      if (boxRows.length < 7) continue;
+      const boxHigh = Math.max(...boxRows.map((row) => cleanNumber(row.high)).filter(Boolean));
+      const boxLow = Math.min(...boxRows.map((row) => cleanNumber(row.low)).filter(Boolean));
+      const boxRangePct = boxLow ? ((boxHigh - boxLow) / boxLow) * 100 : 99;
+      const boxVolumes = boxRows.map((row) => cleanNumber(row.volume)).filter(Boolean);
+      const boxAvgVolume = avg(boxVolumes);
+      const recentBoxVolume = avg(boxVolumes.slice(-3));
+      const volumeContracting = boxAvgVolume > 0 && recentBoxVolume > 0 &&
+        recentBoxVolume <= boxAvgVolume * 0.9 &&
+        (!limitVolume || recentBoxVolume <= limitVolume * 0.65);
+      const breakout = cleanNumber(last.close) > boxHigh * 1.005 &&
+        cleanNumber(last.close) > cleanNumber(last.open) &&
+        lastPct >= 1 &&
+        boxAvgVolume > 0 &&
+        lastVolume >= boxAvgVolume * 1.5;
+      if (boxRangePct <= 18 && volumeContracting && breakout) {
+        return {
+          boxDays: boxRows.length,
+          boxRangePct,
+          volumeRatio: boxAvgVolume ? lastVolume / boxAvgVolume : 0,
+          pct: lastPct,
+        };
+      }
+    }
+  }
+  return null;
+}
+
+function buildLimitUpDojiMatch({ stock, valueRank, volumeRank, rows }) {
+  const pattern = limitUpDojiPatternFromRows(rows);
+  if (!pattern || cleanNumber(stock.close) < 10 || valueRank < 35) return null;
+  const scoreBase = clamp(Math.round(35 + pattern.pct * 7 + valueRank * 0.24 + volumeRank * 0.18), 0, 100);
+  const score = clamp(scoreBase + 20 + Math.min(pattern.volumeRatio * 4, 12), 0, 100);
+  const reason = `漲停後出十字星，橫盤 ${pattern.boxDays} 天、區間 ${pattern.boxRangePct.toFixed(2)}%，縮量後今日放量 ${pattern.volumeRatio.toFixed(2)} 倍突破。`;
+  return { id: "limit_up_doji", short: "漲停十字", icon: "十", score, reason };
+}
+
+async function buildMatches(stocks, institutionData) {
   const valueRanks = rankMap(stocks, "value");
   const volumeRanks = rankMap(stocks, "tradeVolume");
-  return stocks.map((stock) => {
+  const baseRows = stocks.map((stock) => {
     const inst = institutionData[stock.code] || {};
     const valueRank = valueRanks.get(stock.code) || 0;
     const volumeRank = volumeRanks.get(stock.code) || 0;
@@ -120,20 +248,41 @@ function buildMatches(stocks, institutionData) {
     const dealer = cleanNumber(inst.dealer);
     const total = cleanNumber(inst.total || (foreign + trust + dealer));
     const normalizedInst = { foreign, trust, dealer, total };
-    const match = buildStrategy5Match({ stock, inst: normalizedInst, valueRank, volumeRank });
-    const matches = match ? [match] : [];
-    const score = match?.score || 0;
+    const matches = [
+      buildStrategy5Match({ stock, inst: normalizedInst, valueRank, volumeRank }),
+    ].filter(Boolean);
     return {
       ...stock,
       valueRank,
       volumeRank,
       inst: normalizedInst,
-      score,
       matches,
-      activeMatch: matches[0] || null,
     };
+  });
+
+  const historyCandidates = baseRows
+    .filter((stock) => cleanNumber(stock.close) >= 10 && cleanNumber(stock.percent) >= 1 && stock.valueRank >= 35 && stock.volumeRank >= 35)
+    .sort((a, b) => b.valueRank - a.valueRank || b.volumeRank - a.volumeRank || cleanNumber(b.percent) - cleanNumber(a.percent))
+    .slice(0, HISTORY_LIMIT);
+  const historyByCode = new Map();
+  await mapLimit(historyCandidates, HISTORY_CONCURRENCY, async (stock) => {
+    const rows = await fetchDailyHistory(stock);
+    if (rows.length) historyByCode.set(stock.code, rows);
+  });
+
+  return baseRows.map((stock) => {
+    const limitUpDoji = buildLimitUpDojiMatch({
+      stock,
+      valueRank: stock.valueRank,
+      volumeRank: stock.volumeRank,
+      rows: historyByCode.get(stock.code) || [],
+    });
+    const matches = [...stock.matches, limitUpDoji].filter(Boolean);
+    const sortedMatches = matches.sort((a, b) => (b.score || 0) - (a.score || 0));
+    const score = sortedMatches.length ? Math.max(...sortedMatches.map((match) => match.score || 0)) : 0;
+    return { ...stock, score, matches: sortedMatches, activeMatch: sortedMatches[0] || null };
   })
-    .filter((stock) => stock.matches.length && stock.activeMatch && stock.score && stock.inst.total > 0 && stock.close >= 10)
+    .filter((stock) => stock.matches.length && stock.activeMatch && stock.score && stock.close >= 10)
     .sort((a, b) => b.score - a.score || b.percent - a.percent || b.value - a.value)
     .slice(0, 80);
 }
@@ -143,7 +292,7 @@ async function main() {
   const institution = readJson(INSTITUTION_FILE, { data: {} });
   const stocks = await fetchUniverse();
   if (!stocks.length) throw new Error("No stock universe");
-  const matches = buildMatches(stocks, institution.data || {});
+  const matches = await buildMatches(stocks, institution.data || {});
   const quoteDate = institution.usedDate || institution.date || stocks.find((stock) => stock.quoteDate)?.quoteDate || "";
   const output = {
     ok: true,

@@ -6281,7 +6281,7 @@ const STRATEGY5_CARD_META = {
     description: "外資與投信同步買超，漲幅未過熱，優先觀察準突破名單。",
   },
   limit_up_doji: {
-    description: "接近漲停且日內實體小、震幅足，鎖定漲停附近籌碼換手的十字星。",
+    description: "漲停後十字星，橫盤震盪超過 7 天且量能縮，再等放量陽線突破。",
   },
 };
 const INTRADAY_EXCLUDED_CODES = new Set([
@@ -6449,6 +6449,60 @@ function formatIntradayTrackedEntry(stock) {
   return formatTradePrice(getIntradayTrackedEntryPrice(stock));
 }
 
+function limitUpDojiPattern(stock) {
+  const daily = stock.swingDaily || analyzeSwingDaily(stock);
+  const rows = normalizeArray(daily?.rows);
+  if (rows.length < 12) return { hit: false, score: 0, reason: "日K資料不足，等待歷史資料補齊。" };
+  const last = rows.at(-1);
+  const prev = rows.at(-2);
+  const lastVolume = cleanNumber(last?.volume);
+  const lastPct = prev?.close ? ((cleanNumber(last.close) - cleanNumber(prev.close)) / cleanNumber(prev.close)) * 100 : cleanNumber(stock.percent);
+  const setupStart = Math.max(0, rows.length - 36);
+
+  for (let limitIndex = rows.length - 10; limitIndex >= setupStart; limitIndex--) {
+    const limitDay = rows[limitIndex];
+    const limitPrev = rows[limitIndex - 1];
+    const limitPct = limitPrev?.close ? ((cleanNumber(limitDay.close) - cleanNumber(limitPrev.close)) / cleanNumber(limitPrev.close)) * 100 : 0;
+    const limitVolume = cleanNumber(limitDay.volume);
+    if (limitPct < 9.2 || cleanNumber(limitDay.close) < cleanNumber(limitDay.open)) continue;
+
+    const dojiEnd = Math.min(rows.length - 9, limitIndex + 5);
+    for (let dojiIndex = limitIndex + 1; dojiIndex <= dojiEnd; dojiIndex++) {
+      const doji = rows[dojiIndex];
+      const dojiRange = cleanNumber(doji.high) - cleanNumber(doji.low);
+      const dojiBodyRatio = dojiRange > 0 ? Math.abs(cleanNumber(doji.close) - cleanNumber(doji.open)) / dojiRange : 1;
+      const dojiNearLimit = cleanNumber(doji.close) >= cleanNumber(limitDay.close) * 0.96;
+      if (dojiBodyRatio > 0.28 || !dojiNearLimit) continue;
+
+      const boxRows = rows.slice(dojiIndex + 1, -1);
+      if (boxRows.length < 7) continue;
+      const boxHigh = Math.max(...boxRows.map((row) => cleanNumber(row.high)).filter(Boolean));
+      const boxLow = Math.min(...boxRows.map((row) => cleanNumber(row.low)).filter(Boolean));
+      const boxRangePct = boxLow ? ((boxHigh - boxLow) / boxLow) * 100 : 99;
+      const boxVolumes = boxRows.map((row) => cleanNumber(row.volume)).filter(Boolean);
+      const boxAvgVolume = avg(boxVolumes);
+      const recentBoxVolume = avg(boxVolumes.slice(-3));
+      const volumeContracting = boxAvgVolume > 0 && recentBoxVolume > 0 &&
+        recentBoxVolume <= boxAvgVolume * 0.9 &&
+        (!limitVolume || recentBoxVolume <= limitVolume * 0.65);
+      const breakout = cleanNumber(last.close) > boxHigh * 1.005 &&
+        cleanNumber(last.close) > cleanNumber(last.open) &&
+        lastPct >= 1 &&
+        boxAvgVolume > 0 &&
+        lastVolume >= boxAvgVolume * 1.5;
+      if (boxRangePct <= 18 && volumeContracting && breakout) {
+        const score = clamp(Math.round(72 + Math.min(lastPct * 3, 18) + Math.min(lastVolume / boxAvgVolume * 4, 10)), 0, 100);
+        return {
+          hit: true,
+          score,
+          reason: `漲停後出十字星，橫盤 ${boxRows.length} 天、區間 ${boxRangePct.toFixed(2)}%，縮量後今日放量 ${boxAvgVolume ? (lastVolume / boxAvgVolume).toFixed(2) : "--"} 倍突破。`,
+        };
+      }
+    }
+  }
+  return { hit: false, score: 0, reason: "" };
+}
+
 function strategyHit(id, stock) {
   const pct = stock.percent || 0;
   const valueRank = stock.valueRank || 0;
@@ -6456,15 +6510,7 @@ function strategyHit(id, stock) {
   const inst = stock.inst || getInstitutionTotal(stock.code);
   const smartMoney = inst.total + inst.trust * 1.4;
   const close = cleanNumber(stock.close);
-  const open = cleanNumber(stock.open);
-  const high = cleanNumber(stock.high) || close;
-  const low = cleanNumber(stock.low) || close;
-  const prevClose = cleanNumber(stock.prevClose) || (close - cleanNumber(stock.change));
-  const limitUp = cleanNumber(stock.limitUp) || (prevClose ? prevClose * 1.1 : 0);
-  const candleBodyPct = open && close ? Math.abs(close - open) / open * 100 : 99;
-  const candleRangePct = high && low ? (high - low) / low * 100 : 0;
-  const nearLimitUp = Boolean((limitUp && close >= limitUp * 0.995) || pct >= 9.7);
-  const dojiLike = open > 0 && close > 0 && candleBodyPct <= 1.2 && candleRangePct >= 1.2;
+  const limitUpDoji = limitUpDojiPattern(stock);
   const highest20Prev = cleanNumber(stock.swingDaily?.highest20Prev);
   const nearBreakout = highest20Prev ? close >= highest20Prev * 0.965 && close <= highest20Prev * 1.035 : true;
   const trustBuying = cleanNumber(inst.trust) > 0;
@@ -6494,9 +6540,9 @@ function strategyHit(id, stock) {
       reason: `法人合計 ${formatInstitution(inst.total)}，投信 ${formatInstitution(inst.trust)}，資金偏買。`,
     },
     limit_up_doji: {
-      hit: nearLimitUp && dojiLike && close >= 10 && valueRank >= 45,
-      score: clamp(scoreBase + 20 + Math.min(candleRangePct * 2, 12), 0, 100),
-      reason: `接近漲停，實體 ${candleBodyPct.toFixed(2)}%，日內震幅 ${candleRangePct.toFixed(2)}%，留意漲停附近換手。`,
+      hit: limitUpDoji.hit && close >= 10 && valueRank >= 35,
+      score: clamp(Math.max(scoreBase, limitUpDoji.score), 0, 100),
+      reason: limitUpDoji.reason || "漲停十字星戰法型態成立。",
     },
     twenty_day_breakout: {
       hit: pct >= 3.5 && volumeRank >= 50,
@@ -10043,7 +10089,8 @@ function renderStrategy5Dashboard(evaluated) {
     const strategy = STRATEGY_BY_ID[id] || {};
     const count = (byId[id] || []).length;
     const activeClass = id === strategy5ActiveId ? "active" : "";
-    return `<button class="${activeClass}" type="button" data-strategy5-filter="${escapeAttr(id)}">${escapeAttr(strategy.label || id)}<span>${count.toLocaleString("zh-TW")}</span></button>`;
+    const tabLabel = id === "foreign_trust_breakout" ? "策略5-綜合策略" : strategy.label || id;
+    return `<button class="${activeClass}" type="button" data-strategy5-filter="${escapeAttr(id)}">${escapeAttr(tabLabel)}<span>${count.toLocaleString("zh-TW")}</span></button>`;
   }).join("");
 
   const tableRows = pageList.length ? pageList.map((stock, index) => {

@@ -26,8 +26,8 @@ function Get-FumanTaskDescription($TaskName) {
     "Fuman Strategy3 Watchdog 1320" { return "策略3 watchdog，下午 13:20 檢查並補跑" }
     "Fuman Strategy4 Cache 0700" { return "策略4 波段，早上 07:00 全台股掃描" }
     "Fuman Strategy4 Cache 1430" { return "策略4 波段，下午 14:30 全台股掃描" }
-    "Fuman Strategy5 Cache 0600" { return "策略5 綜合策略，早上 06:00 快取" }
-    "Fuman Strategy5 Cache 2100" { return "策略5 綜合策略，晚上 21:00 快取" }
+    "Fuman Strategy5 Cache 0600" { return "策略5 綜合策略與漲停十字星，早上 06:00 固定快取" }
+    "Fuman Strategy5 Cache 2100" { return "策略5 綜合策略與漲停十字星，晚上 21:00 固定快取" }
     "Fuman Market Overview Patrol 0900" { return "市場總覽 / 熱力圖 / AI判讀，09:00 啟動巡邏到 13:30" }
     "Fuman Market Overview Patrol" { return "舊版市場總覽任務；目前停用，正式任務請看 Fuman Market Overview Patrol 0900" }
     "Fuman 即時雷達" { return "即時雷達，08:58 開盤前啟動" }
