@@ -51,7 +51,7 @@ Invoke-FumanWeekdayGuard -Label "Strategy4 full scan" -LogPath $log
 $env:FULL_SCAN = "1"
 $env:STRATEGY4_BATCH_SIZE = "80"
 $env:STRATEGY4_BATCHES_PER_RUN = "999"
-$env:STRATEGY4_USE_MIS = "0"
+$env:STRATEGY4_USE_MIS = "1"
 $env:STRATEGY4_FAIL_ON_INCOMPLETE = "1"
 $env:STRATEGY4_ALLOW_PARTIAL_PUBLISH = "1"
 $env:STRATEGY4_SCAN_STAMP = $strategy4Stamp

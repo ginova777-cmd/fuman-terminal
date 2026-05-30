@@ -4,10 +4,12 @@ const { spawnSync } = require("child_process");
 const scanStrategy4 = require("../api/scan-strategy4");
 const fetchStocks = require("../stocks");
 const { fetchMisQuotes } = require("../lib/mis-quotes");
+const { writeSummary } = require("./cache-summary");
 
 const ROOT = path.resolve(__dirname, "..");
 const OUT_FILE = path.join(ROOT, "data", "strategy4-latest.json");
 const BACKUP_FILE = path.join(ROOT, "data", "strategy4-backup.json");
+const SUMMARY_FILE = path.join(ROOT, "data", "strategy4-summary.json");
 const BATCH_SIZE = Number(process.env.STRATEGY4_BATCH_SIZE || 80);
 const CHUNK_SIZE = Number(process.env.STRATEGY4_CHUNK_SIZE || BATCH_SIZE);
 const RETRY_CHUNK_SIZE = Number(process.env.STRATEGY4_RETRY_CHUNK_SIZE || CHUNK_SIZE);
@@ -196,8 +198,12 @@ function buildOutput({ codes, scannedThisRun, scanned, noDataCodes, scanErrors, 
   const yahooSourceCount = Object.entries(sourceCounts)
     .filter(([source]) => /^yahoo/i.test(source))
     .reduce((sum, [, count]) => sum + Number(count || 0), 0);
+  const misSourceCount = Object.entries(sourceCounts)
+    .filter(([source]) => /\+mis$/i.test(source) || /^mis$/i.test(source))
+    .reduce((sum, [, count]) => sum + Number(count || 0), 0);
   const totalSourceCount = Object.values(sourceCounts).reduce((sum, count) => sum + Number(count || 0), 0);
   const yahooSourceRatio = totalSourceCount ? Number((yahooSourceCount / totalSourceCount).toFixed(4)) : 0;
+  const misSourceRatio = totalSourceCount ? Number((misSourceCount / totalSourceCount).toFixed(4)) : 0;
   return {
     ok: true,
     source: qualityStatus === "complete" ? "github-actions" : "github-actions-partial",
@@ -219,6 +225,8 @@ function buildOutput({ codes, scannedThisRun, scanned, noDataCodes, scanErrors, 
     dataSourceCounts: sourceCounts,
     yahooSourceCount,
     yahooSourceRatio,
+    misSourceCount,
+    misSourceRatio,
     count: matches.length,
     matches,
   };
@@ -227,6 +235,7 @@ function buildOutput({ codes, scannedThisRun, scanned, noDataCodes, scanErrors, 
 function writeStrategy4Output(output, writeBackup = false) {
   fs.mkdirSync(path.dirname(OUT_FILE), { recursive: true });
   fs.writeFileSync(OUT_FILE, `${JSON.stringify(output, null, 2)}\n`);
+  writeSummary("strategy4", output, SUMMARY_FILE);
   if (writeBackup) {
     fs.writeFileSync(BACKUP_FILE, `${JSON.stringify({ ...output, source: "github-actions-backup", backupUpdatedAt: new Date().toISOString() }, null, 2)}\n`);
   }

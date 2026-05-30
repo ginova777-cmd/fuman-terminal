@@ -679,7 +679,9 @@ module.exports = async function handler(request, response) {
     const history = USE_MIS_QUOTES
       ? mergeMisQuoteIntoHistory(officialHistory, quoteMap.get(code))
       : officialHistory;
-    const source = history.source || "";
+    const source = USE_MIS_QUOTES && quoteMap.has(code)
+      ? `${history.source || "unknown"}+mis`
+      : history.source || "";
     if (!history.rows.length) return { code, noData: true, source };
     return {
       code,
