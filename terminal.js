@@ -3665,7 +3665,10 @@ function isKnownNonTradingMarketDate() {
 }
 
 function shouldRunLivePolling() {
-  return isIntradayScanWindow() && !isKnownNonTradingMarketDate();
+  return isIntradayScanWindow()
+    && marketRealtimeState.trading === true
+    && marketRealtimeState.marketStatus === "day"
+    && !isKnownNonTradingMarketDate();
 }
 
 function getMarketRefreshInterval() {
@@ -4101,7 +4104,7 @@ function renderRealtimeRadar() {
   if (!strategy3Data.length && !strategy3CacheLoading) {
     loadStrategy3RadarVolumeCache();
   }
-  const radarOpen = isRadarDetectionWindow();
+  const radarOpen = shouldRunLivePolling();
   if (!realtimeRadarLastRows.length) loadRealtimeRadarLastRows();
   if (radarOpen) {
     const radarCacheDue = !realtimeRadarCacheLoadedAt || Date.now() - realtimeRadarCacheLoadedAt >= REALTIME_RADAR_REFRESH_MS;
@@ -11395,10 +11398,11 @@ function getPanelFreshnessMeta(viewName) {
   if (viewName === "warrant-flow") return { mode: "權證走向｜盤後資料", dataDate, today, isToday };
   if (viewName === "watchlist") return { mode: `自選股｜${marketModeText}`, dataDate, today, isToday };
   if (viewName === "realtime-radar") {
-    const radarDataDate = isRadarDetectionWindow()
+    const radarLive = shouldRunLivePolling();
+    const radarDataDate = radarLive
       ? normalizeMarketAiDateKey(strategy2IntradayCacheDate) || marketAiDataDateKey(latestStocks) || dataDate
       : realtimeRadarClosedDataDateKey() || dataDate;
-    return { mode: "即時雷達｜盤中巡邏", dataDate: radarDataDate, today, isToday: radarDataDate === today };
+    return { mode: radarLive ? "即時雷達｜盤中巡邏" : "即時雷達｜最新可用收盤資料", dataDate: radarDataDate, today, isToday: radarDataDate === today };
   }
   return { mode: marketModeText, dataDate, today, isToday };
 }
