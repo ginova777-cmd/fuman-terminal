@@ -3,6 +3,7 @@ const path = require("path");
 const { hasLineConfig, sendLineText } = require("./line-push");
 const { hasTelegramConfig, sendTelegramText } = require("./telegram-push");
 const { cleanNumber, isIntradayTradable } = require("./intraday-radar-rules");
+const { isTwseTradingDay } = require("./twse-trading-day");
 
 const ROOT = path.resolve(__dirname, "..");
 const OUT_FILE = path.join(ROOT, "data", "realtime-radar-latest.json");
@@ -548,6 +549,12 @@ async function main() {
   const key = dateKey(parts);
   const detectedAt = Date.now();
   const timestamp = timestampKey(parts);
+  const tradingDay = await isTwseTradingDay(new Date(detectedAt), { stateDir: STATE_DIR });
+  if (!tradingDay.isTradingDay) {
+    writeFailedBatchQueue([]);
+    console.log(`realtime radar skipped non-trading day ${tradingDay.date} (${tradingDay.reason}, source=${tradingDay.source})`);
+    return;
+  }
   if (!isMarketTime(parts)) {
     const payload = {
       source: "mini-pc-realtime-radar",

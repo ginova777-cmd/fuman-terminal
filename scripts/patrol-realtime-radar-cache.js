@@ -1,6 +1,7 @@
 const { spawnSync } = require("child_process");
 const fs = require("fs");
 const path = require("path");
+const { isTwseTradingDay } = require("./twse-trading-day");
 
 const SCAN_SCRIPT = path.join(__dirname, "scan-realtime-radar-cache.js");
 const INTERVAL_MS = Number(process.env.REALTIME_RADAR_PATROL_INTERVAL_MS || 3000);
@@ -131,6 +132,12 @@ function runScan() {
 async function main() {
   let successCount = 0;
   let failureCount = 0;
+
+  const tradingDay = await isTwseTradingDay(new Date(), { stateDir: STATE_DIR });
+  if (!tradingDay.isTradingDay) {
+    console.log(`realtime radar patrol skipped non-trading day ${tradingDay.date} (${tradingDay.reason}, source=${tradingDay.source})`);
+    return;
+  }
 
   if (isBeforeMarket()) {
     console.log("realtime radar patrol waiting for 09:00 market open");
