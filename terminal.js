@@ -8397,7 +8397,7 @@ intradayRadarStyles.textContent = `
   }
   .strategy5-preset-tabs {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    grid-template-columns: minmax(0, 1fr);
     gap: 10px;
     padding: 12px 14px 6px;
   }
