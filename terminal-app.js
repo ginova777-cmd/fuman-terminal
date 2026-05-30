@@ -70,7 +70,7 @@ function getFumanWorker() {
   if (!("Worker" in window)) return null;
   if (fumanWorker) return fumanWorker;
   try {
-    fumanWorker = new Worker("terminal-worker.js?v=speed-modules-20260530-24");
+    fumanWorker = new Worker("terminal-worker.js?v=speed-modules-20260530-25");
     fumanWorker.addEventListener("message", (event) => {
       const { id, ok, rows, result, error } = event.data || {};
       const pending = fumanWorkerPending.get(id);
@@ -201,7 +201,7 @@ function loadFumanStyle(href, id) {
   const link = document.createElement("link");
   link.id = id;
   link.rel = "stylesheet";
-  link.href = href.includes("?") ? href : `${href}?v=${window.FUMAN_TERMINAL_BOOT?.version || "speed-modules-20260530-24"}`;
+  link.href = href.includes("?") ? href : `${href}?v=${window.FUMAN_TERMINAL_BOOT?.version || "speed-modules-20260530-25"}`;
   document.head.appendChild(link);
 }
 
@@ -227,7 +227,7 @@ function makeFumanModuleScope(bindings) {
 function loadFumanFeatureModule(name, src, globalName) {
   if (window[globalName]) return Promise.resolve(window[globalName]);
   if (fumanFeatureModulePromises[name]) return fumanFeatureModulePromises[name];
-  const version = window.FUMAN_TERMINAL_BOOT?.version || "speed-modules-20260530-24";
+  const version = window.FUMAN_TERMINAL_BOOT?.version || "speed-modules-20260530-25";
   fumanFeatureModulePromises[name] = new Promise((resolve, reject) => {
     const attr = "data-fuman-feature-" + name;
     const existing = document.querySelector("script[" + attr + "]");
@@ -4828,7 +4828,17 @@ function sortIntradayZoneRows(rows) {
   });
 }
 
-async function loadStrategy2IntradayPayload() {
+async function loadStrategy2IntradayPayload(force = false) {
+  const mobileFastPath = isMobileViewport() && !force && endpoints.strategy2IntradaySlim;
+  if (mobileFastPath) {
+    try {
+      const slimPayload = await fetchVersionedJson(endpoints.strategy2IntradaySlim, 5000, "latest", false);
+      if (slimPayload?.events?.length || slimPayload?.records?.length) {
+        return { ...slimPayload, cacheSource: "static-slim" };
+      }
+    } catch (error) {
+    }
+  }
   const allowSupabase = shouldRunLivePolling();
   const restPayload = allowSupabase ? await fetchSupabaseLatestPayload("strategy2_latest", isMobileViewport() ? 3000 : 4500) : null;
   if (restPayload) return restPayload;
@@ -4862,7 +4872,7 @@ async function loadStrategy2IntradayCache(force = false) {
   if (!force && strategy2IntradayEventByCode.size) return;
   strategy2IntradayCacheLoading = true;
   try {
-    const payload = await loadStrategy2IntradayPayload();
+    const payload = await loadStrategy2IntradayPayload(force);
     const payloadDate = normalizeMarketAiDateKey(payload?.date || payload?.updatedAt);
     if (payloadDate && payloadDate !== marketAiTodayKey()) {
       resetStrategy2IntradaySessionCache();
@@ -9590,6 +9600,8 @@ if (isViewActive("watchlist")) renderWatchlist();
 setInterval(() => {
   if (!isDocumentHidden() && isTerminalUnlocked() && isViewActive("watchlist")) refreshSelectedWatchlistQuote();
 }, 10000);
+
+
 
 
 

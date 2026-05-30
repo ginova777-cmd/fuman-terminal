@@ -26,6 +26,7 @@
     strategy5Backup: "/data/strategy5-backup.json",
     realtimeRadarCache: "/data/realtime-radar-latest.json",
     strategy2IntradayCache: "/data/strategy2-intraday-latest.json",
+    strategy2IntradaySlim: "/data/strategy2-intraday-slim.json",
     institutionCache: "/data/institution-latest.json",
     institutionSlim: "/data/institution-slim.json",
     institutionBackup: "/data/institution-backup.json",
@@ -53,3 +54,4 @@
     endpoints,
   };
 })();
+

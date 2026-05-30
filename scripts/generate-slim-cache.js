@@ -3,6 +3,7 @@ const path = require("path");
 
 const repoRoot = path.resolve(__dirname, "..");
 const runtimeRoot = process.env.FUMAN_RUNTIME_ROOT || "C:\\fuman-runtime";
+const syncRoot = process.env.FUMAN_SYNC_DIR || "C:\\fuman-terminal-sync";
 
 function cleanNumber(value) {
   return Number(String(value ?? "").replace(/[,+%]/g, "").trim()) || 0;
@@ -18,7 +19,7 @@ function writeJson(file, payload) {
 }
 
 function writeToBoth(output, payload) {
-  for (const root of [repoRoot, runtimeRoot]) {
+  for (const root of [...new Set([repoRoot, runtimeRoot, syncRoot])]) {
     writeJson(path.join(root, output), payload);
   }
 }
@@ -172,7 +173,133 @@ function warrantPresetFiles(payload) {
   ];
 }
 
+
+function slimStrategy2Enhancement(item) {
+  return {
+    at: String(item?.at || ""),
+    price: cleanNumber(item?.price),
+    score: cleanNumber(item?.score),
+    deltaVolume: cleanNumber(item?.deltaVolume),
+    totalVolume: cleanNumber(item?.totalVolume),
+    trigger: String(item?.trigger || ""),
+    strategy: String(item?.strategy || ""),
+    reason: String(item?.reason || ""),
+  };
+}
+
+function slimStrategy2Event(event) {
+  const enhancements = Array.isArray(event?.enhancements) ? event.enhancements : [];
+  return {
+    code: String(event?.code || ""),
+    name: String(event?.name || event?.code || ""),
+    date: event?.date || "",
+    firstBAt: event?.firstBAt || "",
+    firstBPrice: cleanNumber(event?.firstBPrice),
+    highAfterB: cleanNumber(event?.highAfterB),
+    highAfterBAt: event?.highAfterBAt || "",
+    firstAAt: event?.firstAAt || "",
+    firstAPrice: cleanNumber(event?.firstAPrice),
+    firstTradableAAt: event?.firstTradableAAt || "",
+    firstTradableAPrice: cleanNumber(event?.firstTradableAPrice),
+    latestAAt: event?.latestAAt || "",
+    latestAPrice: cleanNumber(event?.latestAPrice),
+    latestBAt: event?.latestBAt || "",
+    latestBPrice: cleanNumber(event?.latestBPrice),
+    latestSeenAt: event?.latestSeenAt || "",
+    latestSeenPrice: cleanNumber(event?.latestSeenPrice),
+    highAfterA: cleanNumber(event?.highAfterA),
+    highAfterAAt: event?.highAfterAAt || "",
+    highestPrice: cleanNumber(event?.highestPrice),
+    highestAt: event?.highestAt || "",
+    latestState: event?.latestState || "",
+    maxScore: cleanNumber(event?.maxScore),
+    strategies: Array.isArray(event?.strategies) ? event.strategies.slice(0, 8).map(String) : [],
+    enhancements: enhancements.slice(-8).map(slimStrategy2Enhancement),
+    stateReason: event?.stateReason || "",
+    supportPrice: cleanNumber(event?.supportPrice),
+  };
+}
+
+function slimStrategy2Record(record) {
+  return {
+    code: String(record?.code || ""),
+    name: String(record?.name || record?.code || ""),
+    date: record?.date || "",
+    timestamp: record?.timestamp || "",
+    entryAt: record?.entryAt || "",
+    firstAAt: record?.firstAAt || "",
+    firstBAt: record?.firstBAt || "",
+    stateId: record?.stateId || "",
+    entryPrice: cleanNumber(record?.entryPrice),
+    observedPrice: cleanNumber(record?.observedPrice),
+    close: cleanNumber(record?.close),
+    observedHigh: cleanNumber(record?.observedHigh),
+    observedHighAt: record?.observedHighAt || "",
+    percent: cleanNumber(record?.percent),
+    volume: cleanNumber(record?.volume),
+    tradeVolume: cleanNumber(record?.tradeVolume),
+    deltaVolume: cleanNumber(record?.deltaVolume),
+    score: cleanNumber(record?.score),
+    strategy: record?.strategy || "",
+    reason: record?.reason || "",
+    stateReason: record?.stateReason || "",
+    supportPrice: cleanNumber(record?.supportPrice),
+    ma35: cleanNumber(record?.ma35),
+    ma35Prev: cleanNumber(record?.ma35Prev),
+    aboveMa35: Boolean(record?.aboveMa35),
+    ma35TrendUp: Boolean(record?.ma35TrendUp),
+    ma35Source: record?.ma35Source || "",
+    ma35At: record?.ma35At || "",
+    ma35Symbol: record?.ma35Symbol || "",
+    ma35Attempts: cleanNumber(record?.ma35Attempts),
+  };
+}
+
+
+function strategy2RecordSortTime(record) {
+  return String(record?.timestamp || record?.entryAt || record?.firstAAt || record?.firstBAt || "");
+}
+function slimStrategy2(payload) {
+  const events = Array.isArray(payload?.events) ? payload.events.map(slimStrategy2Event).filter((event) => event.code) : [];
+  const latestByCode = new Map();
+  (Array.isArray(payload?.records) ? payload.records : []).forEach((record) => {
+    const code = String(record?.code || "");
+    if (!code) return;
+    const current = latestByCode.get(code);
+    if (!current || strategy2RecordSortTime(record).localeCompare(strategy2RecordSortTime(current)) >= 0) {
+      latestByCode.set(code, record);
+    }
+  });
+  const records = [...latestByCode.values()]
+    .sort((a, b) => strategy2RecordSortTime(b).localeCompare(strategy2RecordSortTime(a)) || String(a.code || "").localeCompare(String(b.code || "")))
+    .map(slimStrategy2Record)
+    .filter((record) => record.code);
+  return {
+    source: payload?.source || "strategy2-intraday-slim",
+    profile: "strategy2-fast-slim",
+    date: payload?.date || "",
+    updatedAt: payload?.updatedAt || "",
+    realtime: {
+      requested: cleanNumber(payload?.realtime?.requested),
+      received: cleanNumber(payload?.realtime?.received),
+      failed: cleanNumber(payload?.realtime?.failed),
+    },
+    records,
+    events,
+    entryCount: cleanNumber(payload?.entryCount),
+    aCount: cleanNumber(payload?.aCount),
+    bOnlyCount: cleanNumber(payload?.bOnlyCount),
+    slim: {
+      generatedAt: new Date().toISOString(),
+      sourceRecords: Array.isArray(payload?.records) ? payload.records.length : 0,
+      records: records.length,
+      events: events.length,
+      enhancementLimit: 8,
+    },
+  };
+}
 const jobs = [
+  ["strategy2", "data/strategy2-intraday-latest.json", "data/strategy2-intraday-slim.json", slimStrategy2, () => []],
   ["strategy4", "data/strategy4-latest.json", "data/strategy4-slim.json", slimStrategy4, strategy4PresetFiles],
   ["institution", "data/institution-latest.json", "data/institution-slim.json", slimInstitution, institutionPresetFiles],
   ["warrant", "data/warrant-flow-latest.json", "data/warrant-flow-slim.json", slimWarrant, warrantPresetFiles],
@@ -200,3 +327,5 @@ for (const [name, input, output, build, presets] of jobs) {
 }
 
 if (!wrote) process.exitCode = 1;
+
+

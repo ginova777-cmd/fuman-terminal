@@ -251,6 +251,70 @@ function buildStrategy2ScorecardSource(report) {
   };
 }
 
+
+function compactStrategy2Enhancement(item) {
+  return pickDefined({
+    at: item?.at,
+    price: item?.price,
+    score: item?.score,
+    deltaVolume: item?.deltaVolume,
+    totalVolume: item?.totalVolume,
+    trigger: item?.trigger,
+    strategy: item?.strategy,
+    reason: item?.reason,
+  });
+}
+
+function compactStrategy2Event(event) {
+  return pickDefined({
+    code: event?.code,
+    name: event?.name,
+    date: event?.date,
+    firstBAt: event?.firstBAt,
+    firstBPrice: event?.firstBPrice,
+    highAfterB: event?.highAfterB,
+    highAfterBAt: event?.highAfterBAt,
+    firstAAt: event?.firstAAt,
+    firstAPrice: event?.firstAPrice,
+    firstTradableAAt: event?.firstTradableAAt,
+    firstTradableAPrice: event?.firstTradableAPrice,
+    latestAAt: event?.latestAAt,
+    latestAPrice: event?.latestAPrice,
+    latestBAt: event?.latestBAt,
+    latestBPrice: event?.latestBPrice,
+    latestSeenAt: event?.latestSeenAt,
+    latestSeenPrice: event?.latestSeenPrice,
+    highAfterA: event?.highAfterA,
+    highAfterAAt: event?.highAfterAAt,
+    highestPrice: event?.highestPrice,
+    highestAt: event?.highestAt,
+    latestState: event?.latestState,
+    maxScore: event?.maxScore,
+    strategies: Array.isArray(event?.strategies) ? event.strategies.slice(0, 8) : [],
+    enhancements: Array.isArray(event?.enhancements) ? event.enhancements.slice(-8).map(compactStrategy2Enhancement) : [],
+    stateReason: event?.stateReason,
+    supportPrice: event?.supportPrice,
+  });
+}
+
+function buildStrategy2FastSlimReport(report) {
+  const publicReport = buildStrategy2PublicReport(report);
+  return {
+    ...publicReport,
+    profile: "strategy2-fast-slim",
+    realtime: {
+      requested: publicReport.realtime?.requested || 0,
+      received: publicReport.realtime?.received || 0,
+      failed: publicReport.realtime?.failed || 0,
+    },
+    events: (publicReport.events || []).map(compactStrategy2Event),
+    slim: {
+      ...(publicReport.slim || {}),
+      generatedAt: new Date().toISOString(),
+      enhancementLimit: 8,
+    },
+  };
+}
 function shouldWriteStrategy2History(file) {
   if (STRATEGY2_HISTORY_WRITE_INTERVAL_MS <= 0) return true;
   try {
@@ -1448,4 +1512,5 @@ main().catch((error) => {
   console.error(error);
   process.exit(1);
 });
+
 
