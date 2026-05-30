@@ -3,7 +3,7 @@ const STATIC_CACHE = `${CACHE_VERSION}-static`;
 const DATA_CACHE = `${CACHE_VERSION}-data`;
 
 const STATIC_ASSETS = [
-  "/styles.css?v=mobile-card-quick-20260530-4",
+  "/styles.css?v=mobile-card-quick-20260530-5",
   "/terminal-core.js?v=speed-modules-20260530-24",
   "/terminal-modules.js?v=speed-modules-20260530-24",
   "/terminal-sector-map.js?v=speed-modules-20260530-24",
@@ -116,5 +116,6 @@ self.addEventListener("fetch", (event) => {
     event.respondWith(staleWhileRevalidate(request));
   }
 });
+
 
 

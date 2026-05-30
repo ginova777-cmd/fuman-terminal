@@ -4181,4 +4181,13 @@ h1 {
     padding-bottom: 0 !important;
   }
 }
+/* mobile-member-lock-width-20260530 */
+@media (max-width: 760px) {
+  .member-lock-host > #strategy-table,
+  .member-lock-host > .strategy-table {
+    width: calc(100vw - 34px) !important;
+    max-width: calc(100vw - 34px) !important;
+    justify-self: start !important;
+  }
+}
 
