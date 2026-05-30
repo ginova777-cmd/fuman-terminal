@@ -1,0 +1,6902 @@
+{
+  "ok": true,
+  "source": "strategy4-preset",
+  "updatedAt": "2026-05-29T16:30:37.466Z",
+  "scanStamp": "",
+  "total": 1963,
+  "complete": true,
+  "zone": "C",
+  "count": 265,
+  "matches": [
+    {
+      "code": "5202",
+      "name": "力新",
+      "close": 12.2,
+      "percent": -2.0080321285140563,
+      "tradeVolume": 797.774,
+      "value": 9845703,
+      "swingScore": 97,
+      "score": 97,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.22",
+        "tone": "low",
+        "value": 0.22368421052631565
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 6/7，RSI 39.2，量比 2.86。"
+        }
+      ]
+    },
+    {
+      "code": "6752",
+      "name": "叡揚",
+      "close": 101,
+      "percent": 2.3302938196555187,
+      "tradeVolume": 104.971,
+      "value": 10562560,
+      "swingScore": 94,
+      "score": 94,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.38",
+        "tone": "low",
+        "value": 0.3750000000000001
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 7/7，RSI 43.9，量比 1.68。"
+        }
+      ]
+    },
+    {
+      "code": "1813",
+      "name": "寶利徠",
+      "close": 12.1,
+      "percent": 1.2552301255230156,
+      "tradeVolume": 296.986,
+      "value": 3520496,
+      "swingScore": 94,
+      "score": 94,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.28",
+        "tone": "low",
+        "value": 0.27906976744186024
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 6/7，RSI 43.5，量比 5.68。"
+        }
+      ]
+    },
+    {
+      "code": "6803",
+      "name": "崑鼎",
+      "close": 287,
+      "percent": 0.5253940455341506,
+      "tradeVolume": 164.275,
+      "value": 46939607,
+      "swingScore": 94,
+      "score": 94,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.31",
+        "tone": "low",
+        "value": 0.3125
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 6/7，RSI 50.0，量比 1.88。"
+        }
+      ]
+    },
+    {
+      "code": "6732",
+      "name": "昇佳電子",
+      "close": 178,
+      "percent": -3.260869565217391,
+      "tradeVolume": 618.717,
+      "value": 111365938,
+      "swingScore": 94,
+      "score": 94,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.28",
+        "tone": "low",
+        "value": 0.2833333333333333
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 6/7，RSI 54.2，量比 1.84。"
+        }
+      ]
+    },
+    {
+      "code": "9949",
+      "name": "琉園",
+      "close": 23,
+      "percent": 1.7699115044247724,
+      "tradeVolume": 119.005,
+      "value": 2748484,
+      "swingScore": 92,
+      "score": 92,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.05",
+        "tone": "low",
+        "value": 0.046052631578947324
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 5/7，RSI 34.8，量比 2.49。"
+        }
+      ]
+    },
+    {
+      "code": "3015",
+      "name": "全漢",
+      "close": 50.2,
+      "percent": -1.3752455795677716,
+      "tradeVolume": 1386150,
+      "value": 70509028,
+      "swingScore": 92,
+      "score": 92,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.35",
+        "tone": "low",
+        "value": 0.35416666666666746
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 5/7，RSI 44.9，量比 2.69。"
+        }
+      ]
+    },
+    {
+      "code": "4121",
+      "name": "優盛",
+      "close": 13.95,
+      "percent": -1.4134275618374632,
+      "tradeVolume": 392.411,
+      "value": 5473936,
+      "swingScore": 92,
+      "score": 92,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.14",
+        "tone": "low",
+        "value": 0.1355932203389826
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 5/7，RSI 38.6，量比 2.33。"
+        }
+      ]
+    },
+    {
+      "code": "2743",
+      "name": "山富",
+      "close": 67.9,
+      "percent": 0.14749262536874413,
+      "tradeVolume": 131.306,
+      "value": 8848341,
+      "swingScore": 91,
+      "score": 91,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.13",
+        "tone": "low",
+        "value": 0.12977099236641249
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 7/7，RSI 38.0，量比 1.22。"
+        }
+      ]
+    },
+    {
+      "code": "4147",
+      "name": "中裕",
+      "close": 49.25,
+      "percent": 4.564755838641186,
+      "tradeVolume": 5851.027,
+      "value": 287521872,
+      "swingScore": 89,
+      "score": 89,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.19",
+        "tone": "low",
+        "value": 0.19396551724137928
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 6/7，RSI 51.1，量比 4.14。"
+        }
+      ]
+    },
+    {
+      "code": "1742",
+      "name": "台蠟",
+      "close": 15.2,
+      "percent": 0.33003300330032304,
+      "tradeVolume": 26.606,
+      "value": 400985,
+      "swingScore": 89,
+      "score": 89,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.20",
+        "tone": "low",
+        "value": 0.19512195121951142
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 7/7，RSI 39.6，量比 0.95。"
+        }
+      ]
+    },
+    {
+      "code": "1599",
+      "name": "宏佳騰",
+      "close": 23.7,
+      "percent": -23.548387096774196,
+      "tradeVolume": 94.251,
+      "value": 2239001,
+      "swingScore": 89,
+      "score": 89,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.06",
+        "tone": "low",
+        "value": 0.058064516129032163
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 6/7，RSI 43.5，量比 1.63。"
+        }
+      ]
+    },
+    {
+      "code": "4109",
+      "name": "加捷生醫",
+      "close": 11.2,
+      "percent": 0.44843049327353307,
+      "tradeVolume": 310.402,
+      "value": 3455541,
+      "swingScore": 88,
+      "score": 88,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.33",
+        "tone": "low",
+        "value": 0.3269230769230768
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 6/7，RSI 43.2，量比 1.45。"
+        }
+      ]
+    },
+    {
+      "code": "3056",
+      "name": "富華新",
+      "close": 13.25,
+      "percent": 0.37878787878788417,
+      "tradeVolume": 1391535,
+      "value": 18423239,
+      "swingScore": 88,
+      "score": 88,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.07",
+        "tone": "low",
+        "value": 0.0714285714285716
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 7/7，RSI 45.0，量比 0.93。"
+        }
+      ]
+    },
+    {
+      "code": "3252",
+      "name": "海灣",
+      "close": 17.85,
+      "percent": -0.27932960893853165,
+      "tradeVolume": 27.219,
+      "value": 484387,
+      "swingScore": 88,
+      "score": 88,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.13",
+        "tone": "low",
+        "value": 0.13043478260869593
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 6/7，RSI 29.8，量比 1.51。"
+        }
+      ]
+    },
+    {
+      "code": "4183",
+      "name": "福永生技",
+      "close": 13,
+      "percent": -0.38314176245211273,
+      "tradeVolume": 22.001,
+      "value": 281513,
+      "swingScore": 88,
+      "score": 88,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.30",
+        "tone": "low",
+        "value": 0.3043478260869566
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 6/7，RSI 30.0，量比 1.18。"
+        }
+      ]
+    },
+    {
+      "code": "1307",
+      "name": "三芳",
+      "close": 31.55,
+      "percent": -2.3219814241485963,
+      "tradeVolume": 965339,
+      "value": 30711567,
+      "swingScore": 88,
+      "score": 88,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.25",
+        "tone": "low",
+        "value": 0.25352112676056365
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 6/7，RSI 51.8，量比 1.18。"
+        }
+      ]
+    },
+    {
+      "code": "6222",
+      "name": "立軒",
+      "close": 21,
+      "percent": 1.4492753623188441,
+      "tradeVolume": 74.417,
+      "value": 1524768,
+      "swingScore": 87,
+      "score": 87,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.32",
+        "tone": "low",
+        "value": 0.3157894736842103
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 5/7，RSI 28.4，量比 3.00。"
+        }
+      ]
+    },
+    {
+      "code": "6167",
+      "name": "久正",
+      "close": 11.6,
+      "percent": 0.8695652173913012,
+      "tradeVolume": 704.184,
+      "value": 8189836,
+      "swingScore": 87,
+      "score": 87,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.12",
+        "tone": "low",
+        "value": 0.11688311688311671
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 6/7，RSI 46.1，量比 0.95。"
+        }
+      ]
+    },
+    {
+      "code": "1234",
+      "name": "黑松",
+      "close": 34.4,
+      "percent": 0.5847953216374144,
+      "tradeVolume": 151511,
+      "value": 5210823,
+      "swingScore": 87,
+      "score": 87,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.23",
+        "tone": "low",
+        "value": 0.22916666666666677
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 7/7，RSI 41.8，量比 0.73。"
+        }
+      ]
+    },
+    {
+      "code": "6508",
+      "name": "惠光",
+      "close": 23.35,
+      "percent": 0.4301075268817265,
+      "tradeVolume": 100.166,
+      "value": 2332966,
+      "swingScore": 87,
+      "score": 87,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.07",
+        "tone": "low",
+        "value": 0.06930693069306958
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 6/7，RSI 35.5，量比 1.35。"
+        }
+      ]
+    },
+    {
+      "code": "1580",
+      "name": "新麥",
+      "close": 121.5,
+      "percent": 0,
+      "tradeVolume": 90.109,
+      "value": 10920521,
+      "swingScore": 87,
+      "score": 87,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.11",
+        "tone": "low",
+        "value": 0.10526315789473684
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 6/7，RSI 16.7，量比 1.33。"
+        }
+      ]
+    },
+    {
+      "code": "1231",
+      "name": "聯華食",
+      "close": 94.1,
+      "percent": -1.4659685863874405,
+      "tradeVolume": 348758,
+      "value": 33034563,
+      "swingScore": 87,
+      "score": 87,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.15",
+        "tone": "low",
+        "value": 0.14666666666666592
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 6/7，RSI 48.7，量比 0.98。"
+        }
+      ]
+    },
+    {
+      "code": "4192",
+      "name": "杏國",
+      "close": 20,
+      "percent": 2.564102564102564,
+      "tradeVolume": 53.326,
+      "value": 1042253,
+      "swingScore": 86,
+      "score": 86,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "中位階",
+        "ratio": "0.39",
+        "tone": "mid",
+        "value": 0.3921568627450979
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 6/7，RSI 53.1，量比 2.68。"
+        }
+      ]
+    },
+    {
+      "code": "3484",
+      "name": "崧騰",
+      "close": 43.7,
+      "percent": 1.392111368909516,
+      "tradeVolume": 313.301,
+      "value": 13608574,
+      "swingScore": 86,
+      "score": 86,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "中位階",
+        "ratio": "0.40",
+        "tone": "mid",
+        "value": 0.40170940170940184
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 7/7，RSI 49.0，量比 1.02。"
+        }
+      ]
+    },
+    {
+      "code": "1336",
+      "name": "台翰",
+      "close": 13.25,
+      "percent": 1.145038167938934,
+      "tradeVolume": 87.532,
+      "value": 1162674,
+      "swingScore": 86,
+      "score": 86,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.28",
+        "tone": "low",
+        "value": 0.2812499999999996
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 6/7，RSI 31.0，量比 0.86。"
+        }
+      ]
+    },
+    {
+      "code": "1225",
+      "name": "福懋油",
+      "close": 28.35,
+      "percent": -0.176056338028159,
+      "tradeVolume": 122308,
+      "value": 3444094,
+      "swingScore": 86,
+      "score": 86,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.18",
+        "tone": "low",
+        "value": 0.1754385964912282
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 6/7，RSI 51.8，量比 0.85。"
+        }
+      ]
+    },
+    {
+      "code": "3540",
+      "name": "曜越",
+      "close": 26.45,
+      "percent": -0.18867924528302155,
+      "tradeVolume": 267.684,
+      "value": 7096094,
+      "swingScore": 86,
+      "score": 86,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.23",
+        "tone": "low",
+        "value": 0.23364485981308405
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 6/7，RSI 37.1，量比 0.82。"
+        }
+      ]
+    },
+    {
+      "code": "4161",
+      "name": "聿新科",
+      "close": 22.85,
+      "percent": -0.21834061135369937,
+      "tradeVolume": 76.03,
+      "value": 1738654,
+      "swingScore": 86,
+      "score": 86,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.10",
+        "tone": "low",
+        "value": 0.1
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 6/7，RSI 47.6，量比 0.87。"
+        }
+      ]
+    },
+    {
+      "code": "6576",
+      "name": "逸達",
+      "close": 77,
+      "percent": -3.75,
+      "tradeVolume": 169.74,
+      "value": 13068337,
+      "swingScore": 86,
+      "score": 86,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.22",
+        "tone": "low",
+        "value": 0.22093023255813998
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 6/7，RSI 50.0，量比 0.93。"
+        }
+      ]
+    },
+    {
+      "code": "3372",
+      "name": "典範",
+      "close": 21.75,
+      "percent": -15.204678362573096,
+      "tradeVolume": 1337.916,
+      "value": 29155939,
+      "swingScore": 86,
+      "score": 86,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.38",
+        "tone": "low",
+        "value": 0.3776223776223776
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 7/7，RSI 48.6，量比 0.61。"
+        }
+      ]
+    },
+    {
+      "code": "5355",
+      "name": "佳總",
+      "close": 6.55,
+      "percent": 2.024922118380061,
+      "tradeVolume": 168.108,
+      "value": 1097407,
+      "swingScore": 85,
+      "score": 85,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.38",
+        "tone": "low",
+        "value": 0.3819444444444442
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 6/7，RSI 35.3，量比 1.70。"
+        }
+      ]
+    },
+    {
+      "code": "6469",
+      "name": "大樹",
+      "close": 71.4,
+      "percent": 1.8544935805991605,
+      "tradeVolume": 673.706,
+      "value": 47633544,
+      "swingScore": 85,
+      "score": 85,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.19",
+        "tone": "low",
+        "value": 0.18571428571428633
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 7/7，RSI 43.6，量比 0.91。"
+        }
+      ]
+    },
+    {
+      "code": "3322",
+      "name": "建舜電",
+      "close": 13.1,
+      "percent": 1.5503875968992191,
+      "tradeVolume": 566.462,
+      "value": 7402959,
+      "swingScore": 85,
+      "score": 85,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.30",
+        "tone": "low",
+        "value": 0.2950819672131148
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 7/7，RSI 49.5，量比 0.46。"
+        }
+      ]
+    },
+    {
+      "code": "1216",
+      "name": "統一",
+      "close": 71.8,
+      "percent": 1.4124293785310735,
+      "tradeVolume": 38842511,
+      "value": 2800021674,
+      "swingScore": 85,
+      "score": 85,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "中位階",
+        "ratio": "0.40",
+        "tone": "mid",
+        "value": 0.4024390243902434
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 6/7，RSI 40.9，量比 2.13。"
+        }
+      ]
+    },
+    {
+      "code": "3508",
+      "name": "位速",
+      "close": 20.35,
+      "percent": 0.7425742574257531,
+      "tradeVolume": 247.952,
+      "value": 4994187,
+      "swingScore": 85,
+      "score": 85,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.06",
+        "tone": "low",
+        "value": 0.0627705627705629
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 7/7，RSI 46.4，量比 0.54。"
+        }
+      ]
+    },
+    {
+      "code": "4157",
+      "name": "太景*-KY",
+      "close": 9.06,
+      "percent": 0.5549389567147692,
+      "tradeVolume": 1218.491,
+      "value": 11029749,
+      "swingScore": 85,
+      "score": 85,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.03",
+        "tone": "low",
+        "value": 0.034220532319391594
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 7/7，RSI 39.8，量比 0.87。"
+        }
+      ]
+    },
+    {
+      "code": "1264",
+      "name": "德麥",
+      "close": 270.5,
+      "percent": 0,
+      "tradeVolume": 43.326,
+      "value": 11756875,
+      "swingScore": 85,
+      "score": 85,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.00",
+        "tone": "low",
+        "value": 0
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 6/7，RSI 44.4，量比 1.17。"
+        }
+      ]
+    },
+    {
+      "code": "5223",
+      "name": "安力-KY",
+      "close": 24.7,
+      "percent": 0,
+      "tradeVolume": 24.241,
+      "value": 601705,
+      "swingScore": 85,
+      "score": 85,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.30",
+        "tone": "low",
+        "value": 0.2999999999999998
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 7/7，RSI 49.5，量比 0.49。"
+        }
+      ]
+    },
+    {
+      "code": "1220",
+      "name": "台榮",
+      "close": 12.45,
+      "percent": -0.40000000000000563,
+      "tradeVolume": 122979,
+      "value": 1529202,
+      "swingScore": 85,
+      "score": 85,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.36",
+        "tone": "low",
+        "value": 0.3571428571428566
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 5/7，RSI 37.5，量比 1.36。"
+        }
+      ]
+    },
+    {
+      "code": "1229",
+      "name": "聯華",
+      "close": 47.55,
+      "percent": -0.6269592476489118,
+      "tradeVolume": 898222,
+      "value": 42749346,
+      "swingScore": 85,
+      "score": 85,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.35",
+        "tone": "low",
+        "value": 0.34782608695652095
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 6/7，RSI 57.9，量比 0.74。"
+        }
+      ]
+    },
+    {
+      "code": "3163",
+      "name": "波若威",
+      "close": 1030,
+      "percent": -1.9047619047619049,
+      "tradeVolume": 3335.102,
+      "value": 3455997600,
+      "swingScore": 85,
+      "score": 85,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "中位階",
+        "ratio": "0.40",
+        "tone": "mid",
+        "value": 0.4
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 6/7，RSI 49.3，量比 1.14。"
+        }
+      ]
+    },
+    {
+      "code": "6997",
+      "name": "博弘",
+      "close": 71.5,
+      "percent": 4.37956204379562,
+      "tradeVolume": 10.529,
+      "value": 738165,
+      "swingScore": 84,
+      "score": 84,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.27",
+        "tone": "low",
+        "value": 0.27419354838709653
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 7/7，RSI 42.1，量比 0.71。"
+        }
+      ]
+    },
+    {
+      "code": "5487",
+      "name": "通泰",
+      "close": 27.35,
+      "percent": 1.1090573012939027,
+      "tradeVolume": 166.498,
+      "value": 4574616,
+      "swingScore": 84,
+      "score": 84,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.35",
+        "tone": "low",
+        "value": 0.34579439252336464
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 5/7，RSI 46.0，量比 1.89。"
+        }
+      ]
+    },
+    {
+      "code": "5530",
+      "name": "龍巖",
+      "close": 46.4,
+      "percent": 0.8695652173913012,
+      "tradeVolume": 3181.481,
+      "value": 147672886,
+      "swingScore": 84,
+      "score": 84,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.33",
+        "tone": "low",
+        "value": 0.3333333333333333
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 5/7，RSI 54.5，量比 3.16。"
+        }
+      ]
+    },
+    {
+      "code": "4506",
+      "name": "崇友",
+      "close": 117.5,
+      "percent": 0.4273504273504274,
+      "tradeVolume": 109.633,
+      "value": 12860295,
+      "swingScore": 84,
+      "score": 84,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.23",
+        "tone": "low",
+        "value": 0.23076923076923078
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 7/7，RSI 50.0，量比 1.32。"
+        }
+      ]
+    },
+    {
+      "code": "5455",
+      "name": "昇益",
+      "close": 23.1,
+      "percent": -1.28205128205127,
+      "tradeVolume": 141.284,
+      "value": 3287482,
+      "swingScore": 84,
+      "score": 84,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.22",
+        "tone": "low",
+        "value": 0.22000000000000028
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 5/7，RSI 36.2，量比 2.77。"
+        }
+      ]
+    },
+    {
+      "code": "8111",
+      "name": "立碁",
+      "close": 65.7,
+      "percent": 2.018633540372666,
+      "tradeVolume": 1558.406,
+      "value": 101814693,
+      "swingScore": 83,
+      "score": 83,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.28",
+        "tone": "low",
+        "value": 0.27843137254901973
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 7/7，RSI 48.8，量比 0.66。"
+        }
+      ]
+    },
+    {
+      "code": "1201",
+      "name": "味全",
+      "close": 12.1,
+      "percent": 0.8333333333333304,
+      "tradeVolume": 315183,
+      "value": 3837103,
+      "swingScore": 83,
+      "score": 83,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.11",
+        "tone": "low",
+        "value": 0.11428571428571388
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 7/7，RSI 44.4，量比 0.64。"
+        }
+      ]
+    },
+    {
+      "code": "6971",
+      "name": "惠民實業",
+      "close": 27.2,
+      "percent": -0.3663003663003715,
+      "tradeVolume": 64.241,
+      "value": 1735270,
+      "swingScore": 83,
+      "score": 83,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.28",
+        "tone": "low",
+        "value": 0.2771084337349395
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 6/7，RSI 35.7，量比 0.92。"
+        }
+      ]
+    },
+    {
+      "code": "2736",
+      "name": "富野",
+      "close": 12,
+      "percent": -0.4149377593361055,
+      "tradeVolume": 84.118,
+      "value": 1009502,
+      "swingScore": 83,
+      "score": 83,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.10",
+        "tone": "low",
+        "value": 0.09859154929577457
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 5/7，RSI 36.4，量比 1.14。"
+        }
+      ]
+    },
+    {
+      "code": "3630",
+      "name": "新鉅科",
+      "close": 26.15,
+      "percent": 1.9493177387914233,
+      "tradeVolume": 508.523,
+      "value": 13226558,
+      "swingScore": 82,
+      "score": 82,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.18",
+        "tone": "low",
+        "value": 0.1812080536912749
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 7/7，RSI 47.0，量比 0.52。"
+        }
+      ]
+    },
+    {
+      "code": "4743",
+      "name": "合一",
+      "close": 50.4,
+      "percent": 1.4084507042253436,
+      "tradeVolume": 2202.35,
+      "value": 111020921,
+      "swingScore": 82,
+      "score": 82,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.14",
+        "tone": "low",
+        "value": 0.13999999999999985
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 6/7，RSI 46.4，量比 0.76。"
+        }
+      ]
+    },
+    {
+      "code": "1584",
+      "name": "精剛",
+      "close": 19.8,
+      "percent": 0,
+      "tradeVolume": 662.83,
+      "value": 13171104,
+      "swingScore": 82,
+      "score": 82,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.19",
+        "tone": "low",
+        "value": 0.1875000000000005
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 6/7，RSI 37.5，量比 0.74。"
+        }
+      ]
+    },
+    {
+      "code": "5348",
+      "name": "正能量智能",
+      "close": 15.3,
+      "percent": 0,
+      "tradeVolume": 8.944,
+      "value": 135978,
+      "swingScore": 82,
+      "score": 82,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.25",
+        "tone": "low",
+        "value": 0.2500000000000003
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 6/7，RSI 55.6，量比 0.73。"
+        }
+      ]
+    },
+    {
+      "code": "8450",
+      "name": "霹靂",
+      "close": 15.5,
+      "percent": 0,
+      "tradeVolume": 65.097,
+      "value": 1000018,
+      "swingScore": 82,
+      "score": 82,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.09",
+        "tone": "low",
+        "value": 0.09230769230769252
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 5/7，RSI 32.1，量比 0.96。"
+        }
+      ]
+    },
+    {
+      "code": "6751",
+      "name": "智聯服務",
+      "close": 46.95,
+      "percent": -0.21253985122209207,
+      "tradeVolume": 34.753,
+      "value": 1643104,
+      "swingScore": 82,
+      "score": 82,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.14",
+        "tone": "low",
+        "value": 0.14062500000000014
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 5/7，RSI 32.6，量比 1.01。"
+        }
+      ]
+    },
+    {
+      "code": "8906",
+      "name": "花王",
+      "close": 24.05,
+      "percent": -1.8367346938775482,
+      "tradeVolume": 53.644,
+      "value": 1299545,
+      "swingScore": 82,
+      "score": 82,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.08",
+        "tone": "low",
+        "value": 0.08461538461538473
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 6/7，RSI 39.8，量比 0.81。"
+        }
+      ]
+    },
+    {
+      "code": "3324",
+      "name": "雙鴻",
+      "close": 1065,
+      "percent": -6.578947368421052,
+      "tradeVolume": 2917.123,
+      "value": 3058096925,
+      "swingScore": 82,
+      "score": 82,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "中位階",
+        "ratio": "0.44",
+        "tone": "mid",
+        "value": 0.4418604651162791
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 7/7，RSI 60.9，量比 0.51。"
+        }
+      ]
+    },
+    {
+      "code": "6640",
+      "name": "均華",
+      "close": 1365,
+      "percent": 1.8656716417910446,
+      "tradeVolume": 519.779,
+      "value": 717549290,
+      "swingScore": 81,
+      "score": 81,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.20",
+        "tone": "low",
+        "value": 0.1951219512195122
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 6/7，RSI 47.4，量比 1.20。"
+        }
+      ]
+    },
+    {
+      "code": "5213",
+      "name": "亞昕",
+      "close": 26.25,
+      "percent": 1.351351351351357,
+      "tradeVolume": 922.493,
+      "value": 24165228,
+      "swingScore": 81,
+      "score": 81,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "中位階",
+        "ratio": "0.40",
+        "tone": "mid",
+        "value": 0.3970588235294119
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 7/7，RSI 39.1，量比 1.71。"
+        }
+      ]
+    },
+    {
+      "code": "2641",
+      "name": "正德",
+      "close": 17.7,
+      "percent": 0.8547008547008467,
+      "tradeVolume": 1828.921,
+      "value": 32243783,
+      "swingScore": 81,
+      "score": 81,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "中位階",
+        "ratio": "0.47",
+        "tone": "mid",
+        "value": 0.4736842105263154
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 6/7，RSI 43.5，量比 1.00。"
+        }
+      ]
+    },
+    {
+      "code": "5364",
+      "name": "力麗店",
+      "close": 8.79,
+      "percent": 0.572082379862688,
+      "tradeVolume": 97.412,
+      "value": 859798,
+      "swingScore": 81,
+      "score": 81,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.09",
+        "tone": "low",
+        "value": 0.09066666666666663
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 5/7，RSI 14.3，量比 0.88。"
+        }
+      ]
+    },
+    {
+      "code": "5548",
+      "name": "安倉",
+      "close": 23.3,
+      "percent": 0.21505376344086324,
+      "tradeVolume": 58.31,
+      "value": 1356072,
+      "swingScore": 81,
+      "score": 81,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.20",
+        "tone": "low",
+        "value": 0.20000000000000048
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 7/7，RSI 44.1，量比 1.40。"
+        }
+      ]
+    },
+    {
+      "code": "6637",
+      "name": "醫影",
+      "close": 66.1,
+      "percent": 0.15151515151514292,
+      "tradeVolume": 47.509,
+      "value": 3149220,
+      "swingScore": 81,
+      "score": 81,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.13",
+        "tone": "low",
+        "value": 0.12987012987012983
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 5/7，RSI 26.0，量比 0.89。"
+        }
+      ]
+    },
+    {
+      "code": "4173",
+      "name": "久裕",
+      "close": 17.95,
+      "percent": -0.27777777777778173,
+      "tradeVolume": 132.31,
+      "value": 2375123,
+      "swingScore": 81,
+      "score": 81,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.02",
+        "tone": "low",
+        "value": 0.01754385964912305
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 5/7，RSI 15.0，量比 0.92。"
+        }
+      ]
+    },
+    {
+      "code": "8038",
+      "name": "長園科",
+      "close": 41,
+      "percent": 6.355382619974067,
+      "tradeVolume": 397.315,
+      "value": 15991851,
+      "swingScore": 80,
+      "score": 80,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.18",
+        "tone": "low",
+        "value": 0.18452380952380956
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 7/7，RSI 46.4，量比 0.82。"
+        }
+      ]
+    },
+    {
+      "code": "3029",
+      "name": "零壹",
+      "close": 96.2,
+      "percent": 1.906779661016946,
+      "tradeVolume": 760093,
+      "value": 72865010,
+      "swingScore": 80,
+      "score": 80,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.31",
+        "tone": "low",
+        "value": 0.30597014925373184
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 7/7，RSI 38.9，量比 0.64。"
+        }
+      ]
+    },
+    {
+      "code": "5529",
+      "name": "鉅陞",
+      "close": 22.25,
+      "percent": 1.5981735159817416,
+      "tradeVolume": 77.334,
+      "value": 1701867,
+      "swingScore": 80,
+      "score": 80,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.09",
+        "tone": "low",
+        "value": 0.09448818897637816
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 5/7，RSI 12.6，量比 1.37。"
+        }
+      ]
+    },
+    {
+      "code": "2719",
+      "name": "燦星旅",
+      "close": 25.4,
+      "percent": 0.9940357852882704,
+      "tradeVolume": 21.728,
+      "value": 550048,
+      "swingScore": 80,
+      "score": 80,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.07",
+        "tone": "low",
+        "value": 0.07432432432432395
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 6/7，RSI 32.1，量比 1.45。"
+        }
+      ]
+    },
+    {
+      "code": "1294",
+      "name": "漢田生技",
+      "close": 77.9,
+      "percent": 0.7761966364812529,
+      "tradeVolume": 10.952,
+      "value": 848767,
+      "swingScore": 80,
+      "score": 80,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.26",
+        "tone": "low",
+        "value": 0.25675675675675735
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 6/7，RSI 37.3，量比 0.46。"
+        }
+      ]
+    },
+    {
+      "code": "6221",
+      "name": "晉泰",
+      "close": 23.2,
+      "percent": 0.4329004329004236,
+      "tradeVolume": 154.291,
+      "value": 3574468,
+      "swingScore": 80,
+      "score": 80,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.18",
+        "tone": "low",
+        "value": 0.176470588235294
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 6/7，RSI 33.3，量比 0.49。"
+        }
+      ]
+    },
+    {
+      "code": "1440",
+      "name": "南紡",
+      "close": 13.45,
+      "percent": 0.37313432835820104,
+      "tradeVolume": 1776523,
+      "value": 23773014,
+      "swingScore": 80,
+      "score": 80,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.35",
+        "tone": "low",
+        "value": 0.3461538461538454
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 6/7，RSI 35.3，量比 1.12。"
+        }
+      ]
+    },
+    {
+      "code": "3158",
+      "name": "嘉實",
+      "close": 85.5,
+      "percent": 0,
+      "tradeVolume": 26.919,
+      "value": 2296891,
+      "swingScore": 80,
+      "score": 80,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.03",
+        "tone": "low",
+        "value": 0.02777777777777816
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 6/7，RSI 28.0，量比 1.50。"
+        }
+      ]
+    },
+    {
+      "code": "8401",
+      "name": "白紗科",
+      "close": 23.15,
+      "percent": -0.2155172413793134,
+      "tradeVolume": 40.426,
+      "value": 937134,
+      "swingScore": 80,
+      "score": 80,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.17",
+        "tone": "low",
+        "value": 0.16666666666666644
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 6/7，RSI 30.2，量比 0.55。"
+        }
+      ]
+    },
+    {
+      "code": "3048",
+      "name": "益登",
+      "close": 38.15,
+      "percent": -1.29366106080207,
+      "tradeVolume": 1616472,
+      "value": 62878925,
+      "swingScore": 80,
+      "score": 80,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "中位階",
+        "ratio": "0.43",
+        "tone": "mid",
+        "value": 0.4299999999999997
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 6/7，RSI 51.1，量比 0.49。"
+        }
+      ]
+    },
+    {
+      "code": "4166",
+      "name": "友霖",
+      "close": 24.4,
+      "percent": 4.7210300429184455,
+      "tradeVolume": 370.097,
+      "value": 8720625,
+      "swingScore": 79,
+      "score": 79,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.29",
+        "tone": "low",
+        "value": 0.2857142857142856
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 6/7，RSI 30.2，量比 1.04。"
+        }
+      ]
+    },
+    {
+      "code": "4130",
+      "name": "健亞",
+      "close": 26.6,
+      "percent": 2.9013539651837523,
+      "tradeVolume": 98.925,
+      "value": 2596649,
+      "swingScore": 79,
+      "score": 79,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.12",
+        "tone": "low",
+        "value": 0.12041884816753948
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 7/7，RSI 40.9，量比 0.56。"
+        }
+      ]
+    },
+    {
+      "code": "1565",
+      "name": "精華",
+      "close": 94,
+      "percent": 1.8418201516793096,
+      "tradeVolume": 176.422,
+      "value": 16572807,
+      "swingScore": 79,
+      "score": 79,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.07",
+        "tone": "low",
+        "value": 0.07017543859649122
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 6/7，RSI 31.3，量比 0.79。"
+        }
+      ]
+    },
+    {
+      "code": "6482",
+      "name": "弘煜科",
+      "close": 28.6,
+      "percent": 1.2389380530973502,
+      "tradeVolume": 5.38,
+      "value": 153647,
+      "swingScore": 79,
+      "score": 79,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.11",
+        "tone": "low",
+        "value": 0.11320754716981166
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 6/7，RSI 45.2，量比 0.32。"
+        }
+      ]
+    },
+    {
+      "code": "6486",
+      "name": "互動",
+      "close": 81.9,
+      "percent": 1.111111111111118,
+      "tradeVolume": 71.984,
+      "value": 5886354,
+      "swingScore": 79,
+      "score": 79,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.17",
+        "tone": "low",
+        "value": 0.16822429906542158
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 7/7，RSI 40.3，量比 0.47。"
+        }
+      ]
+    },
+    {
+      "code": "2643",
+      "name": "捷迅",
+      "close": 66.4,
+      "percent": 0.6060606060606146,
+      "tradeVolume": 19.393,
+      "value": 1279928,
+      "swingScore": 79,
+      "score": 79,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.22",
+        "tone": "low",
+        "value": 0.2187500000000007
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 7/7，RSI 44.4，量比 0.55。"
+        }
+      ]
+    },
+    {
+      "code": "5903",
+      "name": "全家",
+      "close": 187,
+      "percent": 0.2680965147453083,
+      "tradeVolume": 52.654,
+      "value": 9811194,
+      "swingScore": 79,
+      "score": 79,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.18",
+        "tone": "low",
+        "value": 0.18181818181818182
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 6/7，RSI 27.3，量比 1.36。"
+        }
+      ]
+    },
+    {
+      "code": "6593",
+      "name": "台灣銘板",
+      "close": 34.9,
+      "percent": -0.2857142857142898,
+      "tradeVolume": 69.747,
+      "value": 2432264,
+      "swingScore": 79,
+      "score": 79,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.09",
+        "tone": "low",
+        "value": 0.08888888888888857
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 6/7，RSI 43.2，量比 0.71。"
+        }
+      ]
+    },
+    {
+      "code": "5381",
+      "name": "光譜",
+      "close": 25.1,
+      "percent": -0.39682539682538837,
+      "tradeVolume": 915.041,
+      "value": 23071333,
+      "swingScore": 79,
+      "score": 79,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "中位階",
+        "ratio": "0.47",
+        "tone": "mid",
+        "value": 0.473214285714286
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 6/7，RSI 57.3，量比 0.69。"
+        }
+      ]
+    },
+    {
+      "code": "6683",
+      "name": "雍智科技",
+      "close": 1665,
+      "percent": -2.0588235294117645,
+      "tradeVolume": 1315.775,
+      "value": 2172436785,
+      "swingScore": 79,
+      "score": 79,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.25",
+        "tone": "low",
+        "value": 0.24686192468619247
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 5/7，RSI 30.9，量比 1.22。"
+        }
+      ]
+    },
+    {
+      "code": "6163",
+      "name": "華電網",
+      "close": 53,
+      "percent": 9.958506224066383,
+      "tradeVolume": 4654.185,
+      "value": 238478196,
+      "swingScore": 78,
+      "score": 78,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.19",
+        "tone": "low",
+        "value": 0.18726591760299624
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 6/7，RSI 37.3，量比 1.23。"
+        }
+      ]
+    },
+    {
+      "code": "8933",
+      "name": "愛地雅",
+      "close": 4.9,
+      "percent": 3.5940803382663833,
+      "tradeVolume": 643.15,
+      "value": 3115803,
+      "swingScore": 78,
+      "score": 78,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.23",
+        "tone": "low",
+        "value": 0.2285714285714288
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 6/7，RSI 29.8，量比 0.91。"
+        }
+      ]
+    },
+    {
+      "code": "1815",
+      "name": "富喬",
+      "close": 106,
+      "percent": 2.4154589371980677,
+      "tradeVolume": 20566.522,
+      "value": 2185870118,
+      "swingScore": 78,
+      "score": 78,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.29",
+        "tone": "low",
+        "value": 0.29216867469879526
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 6/7，RSI 43.1，量比 0.57。"
+        }
+      ]
+    },
+    {
+      "code": "2732",
+      "name": "六角",
+      "close": 64.2,
+      "percent": 1.9047619047619095,
+      "tradeVolume": 82.585,
+      "value": 5316899,
+      "swingScore": 78,
+      "score": 78,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.26",
+        "tone": "low",
+        "value": 0.261538461538462
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 5/7，RSI 37.3，量比 1.47。"
+        }
+      ]
+    },
+    {
+      "code": "8938",
+      "name": "明安",
+      "close": 53.1,
+      "percent": 0.9505703422053232,
+      "tradeVolume": 232.187,
+      "value": 12259038,
+      "swingScore": 78,
+      "score": 78,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.06",
+        "tone": "low",
+        "value": 0.057553956834532655
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 6/7，RSI 28.0，量比 0.65。"
+        }
+      ]
+    },
+    {
+      "code": "1788",
+      "name": "杏昌",
+      "close": 134.5,
+      "percent": 0.3731343283582089,
+      "tradeVolume": 41.321,
+      "value": 5538837,
+      "swingScore": 78,
+      "score": 78,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.33",
+        "tone": "low",
+        "value": 0.3333333333333333
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 7/7，RSI 42.9，量比 0.97。"
+        }
+      ]
+    },
+    {
+      "code": "7713",
+      "name": "威力德生醫",
+      "close": 67.2,
+      "percent": 0.14903129657229292,
+      "tradeVolume": 24.178,
+      "value": 1624998,
+      "swingScore": 78,
+      "score": 78,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.32",
+        "tone": "low",
+        "value": 0.3157894736842115
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 6/7，RSI 27.0，量比 1.25。"
+        }
+      ]
+    },
+    {
+      "code": "8423",
+      "name": "保綠-KY",
+      "close": 17.7,
+      "percent": -1.392757660167131,
+      "tradeVolume": 54.709,
+      "value": 957826,
+      "swingScore": 78,
+      "score": 78,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.13",
+        "tone": "low",
+        "value": 0.1250000000000002
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 6/7，RSI 39.3，量比 1.68。"
+        }
+      ]
+    },
+    {
+      "code": "6542",
+      "name": "隆中",
+      "close": 46.3,
+      "percent": -2.0105820105820165,
+      "tradeVolume": 8.463,
+      "value": 392963,
+      "swingScore": 78,
+      "score": 78,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.11",
+        "tone": "low",
+        "value": 0.1083333333333331
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 6/7，RSI 44.8，量比 0.62。"
+        }
+      ]
+    },
+    {
+      "code": "6547",
+      "name": "高端疫苗",
+      "close": 45.2,
+      "percent": -21.116928446771368,
+      "tradeVolume": 1503.649,
+      "value": 67673180,
+      "swingScore": 78,
+      "score": 78,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "中位階",
+        "ratio": "0.39",
+        "tone": "mid",
+        "value": 0.3879142300194933
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 6/7，RSI 58.7，量比 0.26。"
+        }
+      ]
+    },
+    {
+      "code": "4542",
+      "name": "科嶠",
+      "close": 270,
+      "percent": 3.2504780114722758,
+      "tradeVolume": 831.62,
+      "value": 226666685,
+      "swingScore": 77,
+      "score": 77,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.81",
+        "tone": "high",
+        "value": 0.8082191780821918
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 5/7，RSI 74.1，量比 0.78。"
+        }
+      ]
+    },
+    {
+      "code": "7714",
+      "name": "創泓科技",
+      "close": 117.5,
+      "percent": 2.6200873362445414,
+      "tradeVolume": 110.383,
+      "value": 12951039,
+      "swingScore": 77,
+      "score": 77,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.13",
+        "tone": "low",
+        "value": 0.12962962962962962
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 5/7，RSI 25.0，量比 1.32。"
+        }
+      ]
+    },
+    {
+      "code": "6158",
+      "name": "禾昌",
+      "close": 17.95,
+      "percent": 1.9886363636363515,
+      "tradeVolume": 66.738,
+      "value": 1193537,
+      "swingScore": 77,
+      "score": 77,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.10",
+        "tone": "low",
+        "value": 0.09523809523809491
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 7/7，RSI 38.2，量比 0.85。"
+        }
+      ]
+    },
+    {
+      "code": "6763",
+      "name": "綠界科技*",
+      "close": 43.25,
+      "percent": 1.1695906432748537,
+      "tradeVolume": 471.608,
+      "value": 20335641,
+      "swingScore": 77,
+      "score": 77,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.08",
+        "tone": "low",
+        "value": 0.08441558441558428
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 6/7，RSI 25.3，量比 1.09。"
+        }
+      ]
+    },
+    {
+      "code": "6118",
+      "name": "建達",
+      "close": 17.6,
+      "percent": 0.8595988538682072,
+      "tradeVolume": 322.114,
+      "value": 5691903,
+      "swingScore": 77,
+      "score": 77,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.25",
+        "tone": "low",
+        "value": 0.2500000000000005
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 5/7，RSI 52.3，量比 0.33。"
+        }
+      ]
+    },
+    {
+      "code": "3018",
+      "name": "隆銘綠能",
+      "close": 9.42,
+      "percent": 0.7486631016042812,
+      "tradeVolume": 21337,
+      "value": 202805,
+      "swingScore": 77,
+      "score": 77,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.06",
+        "tone": "low",
+        "value": 0.06181818181818179
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 5/7，RSI 27.1，量比 0.73。"
+        }
+      ]
+    },
+    {
+      "code": "5201",
+      "name": "凱衛",
+      "close": 28.35,
+      "percent": 0.17667844522968448,
+      "tradeVolume": 73.016,
+      "value": 2061205,
+      "swingScore": 77,
+      "score": 77,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.09",
+        "tone": "low",
+        "value": 0.09411764705882375
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 5/7，RSI 20.3，量比 0.79。"
+        }
+      ]
+    },
+    {
+      "code": "8409",
+      "name": "商之器",
+      "close": 19.05,
+      "percent": 0,
+      "tradeVolume": 10.061,
+      "value": 192275,
+      "swingScore": 77,
+      "score": 77,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.05",
+        "tone": "low",
+        "value": 0.04761904761904826
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 6/7，RSI 40.0，量比 0.51。"
+        }
+      ]
+    },
+    {
+      "code": "4911",
+      "name": "德英",
+      "close": 31.75,
+      "percent": -0.31397174254317556,
+      "tradeVolume": 29.279,
+      "value": 929682,
+      "swingScore": 77,
+      "score": 77,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.08",
+        "tone": "low",
+        "value": 0.07608695652173918
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 5/7，RSI 29.8，量比 0.71。"
+        }
+      ]
+    },
+    {
+      "code": "6144",
+      "name": "得利影",
+      "close": 14.45,
+      "percent": -0.34482758620690146,
+      "tradeVolume": 17.331,
+      "value": 248449,
+      "swingScore": 77,
+      "score": 77,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.20",
+        "tone": "low",
+        "value": 0.2031249999999996
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 6/7，RSI 41.8，量比 0.49。"
+        }
+      ]
+    },
+    {
+      "code": "3541",
+      "name": "西柏",
+      "close": 22.3,
+      "percent": -0.44642857142856196,
+      "tradeVolume": 107.772,
+      "value": 2406268,
+      "swingScore": 77,
+      "score": 77,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.05",
+        "tone": "low",
+        "value": 0.045454545454546115
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 5/7，RSI 27.3，量比 1.43。"
+        }
+      ]
+    },
+    {
+      "code": "6590",
+      "name": "普鴻",
+      "close": 65,
+      "percent": -0.4594180704440998,
+      "tradeVolume": 25.482,
+      "value": 1666444,
+      "swingScore": 77,
+      "score": 77,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.00",
+        "tone": "low",
+        "value": 0
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 5/7，RSI 9.3，量比 1.38。"
+        }
+      ]
+    },
+    {
+      "code": "4139",
+      "name": "馬光-KY",
+      "close": 22.8,
+      "percent": -0.653594771241824,
+      "tradeVolume": 22.009,
+      "value": 493350,
+      "swingScore": 77,
+      "score": 77,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.24",
+        "tone": "low",
+        "value": 0.23529411764705913
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 5/7，RSI 44.9，量比 1.71。"
+        }
+      ]
+    },
+    {
+      "code": "1402",
+      "name": "遠東新",
+      "close": 27.8,
+      "percent": -1.5929203539822985,
+      "tradeVolume": 14415702,
+      "value": 400724843,
+      "swingScore": 77,
+      "score": 77,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.15",
+        "tone": "low",
+        "value": 0.15000000000000036
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 5/7，RSI 42.7，量比 1.73。"
+        }
+      ]
+    },
+    {
+      "code": "6492",
+      "name": "生華科",
+      "close": 45.2,
+      "percent": -24.16107382550335,
+      "tradeVolume": 296.567,
+      "value": 13302173,
+      "swingScore": 77,
+      "score": 77,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.22",
+        "tone": "low",
+        "value": 0.21774193548387122
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 5/7，RSI 51.9，量比 0.35。"
+        }
+      ]
+    },
+    {
+      "code": "6538",
+      "name": "倉和",
+      "close": 123.5,
+      "percent": 9.777777777777779,
+      "tradeVolume": 562.281,
+      "value": 68271192,
+      "swingScore": 76,
+      "score": 76,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.83",
+        "tone": "high",
+        "value": 0.8318042813455657
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 5/7，RSI 75.9，量比 0.59。"
+        }
+      ]
+    },
+    {
+      "code": "4979",
+      "name": "華星光",
+      "close": 624,
+      "percent": 3.3112582781456954,
+      "tradeVolume": 9533.78,
+      "value": 5945295978,
+      "swingScore": 76,
+      "score": 76,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.65",
+        "tone": "high",
+        "value": 0.649746192893401
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 6/7，RSI 44.6，量比 1.39。"
+        }
+      ]
+    },
+    {
+      "code": "4402",
+      "name": "郡都開發",
+      "close": 11.95,
+      "percent": 2.1367521367521367,
+      "tradeVolume": 53.771,
+      "value": 639964,
+      "swingScore": 76,
+      "score": 76,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.09",
+        "tone": "low",
+        "value": 0.08799999999999986
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 5/7，RSI 30.9，量比 0.67。"
+        }
+      ]
+    },
+    {
+      "code": "6156",
+      "name": "松上",
+      "close": 18.45,
+      "percent": 1.3736263736263736,
+      "tradeVolume": 656.69,
+      "value": 12035143,
+      "swingScore": 76,
+      "score": 76,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.12",
+        "tone": "low",
+        "value": 0.12162162162162145
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 6/7，RSI 35.7，量比 1.00。"
+        }
+      ]
+    },
+    {
+      "code": "6148",
+      "name": "驊宏資",
+      "close": 28.8,
+      "percent": 0.6993006993006968,
+      "tradeVolume": 147.412,
+      "value": 4250864,
+      "swingScore": 76,
+      "score": 76,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.18",
+        "tone": "low",
+        "value": 0.18248175182481757
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 5/7，RSI 34.4，量比 0.58。"
+        }
+      ]
+    },
+    {
+      "code": "4950",
+      "name": "金耘國際",
+      "close": 16.3,
+      "percent": 0,
+      "tradeVolume": 93.25,
+      "value": 1498161,
+      "swingScore": 76,
+      "score": 76,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "中位階",
+        "ratio": "0.39",
+        "tone": "mid",
+        "value": 0.38738738738738754
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 6/7，RSI 45.8，量比 1.39。"
+        }
+      ]
+    },
+    {
+      "code": "6730",
+      "name": "常廣",
+      "close": 35.5,
+      "percent": 0,
+      "tradeVolume": 85.2,
+      "value": 2916539,
+      "swingScore": 76,
+      "score": 76,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.29",
+        "tone": "low",
+        "value": 0.2884615384615383
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 5/7，RSI 36.7，量比 1.60。"
+        }
+      ]
+    },
+    {
+      "code": "1438",
+      "name": "三地開發",
+      "close": 33.6,
+      "percent": -0.2967359050445146,
+      "tradeVolume": 5000,
+      "value": 168400,
+      "swingScore": 76,
+      "score": 76,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.16",
+        "tone": "low",
+        "value": 0.15584415584415615
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 5/7，RSI 54.0，量比 0.22。"
+        }
+      ]
+    },
+    {
+      "code": "1235",
+      "name": "興泰",
+      "close": 42.65,
+      "percent": -0.3504672897196229,
+      "tradeVolume": 3092,
+      "value": 130894,
+      "swingScore": 76,
+      "score": 76,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.29",
+        "tone": "low",
+        "value": 0.2889908256880733
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 5/7，RSI 36.9，量比 0.21。"
+        }
+      ]
+    },
+    {
+      "code": "3205",
+      "name": "佰研",
+      "close": 54,
+      "percent": -0.3690036900369056,
+      "tradeVolume": 104.653,
+      "value": 5652757,
+      "swingScore": 76,
+      "score": 76,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.09",
+        "tone": "low",
+        "value": 0.09090909090909073
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 5/7，RSI 36.4，量比 0.59。"
+        }
+      ]
+    },
+    {
+      "code": "4102",
+      "name": "永日",
+      "close": 16.9,
+      "percent": -0.5882352941176554,
+      "tradeVolume": 53.356,
+      "value": 897227,
+      "swingScore": 76,
+      "score": 76,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.07",
+        "tone": "low",
+        "value": 0.07017543859649095
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 5/7，RSI 31.2，量比 0.64。"
+        }
+      ]
+    },
+    {
+      "code": "7703",
+      "name": "銳澤",
+      "close": 206.5,
+      "percent": -0.9592326139088728,
+      "tradeVolume": 434.341,
+      "value": 90145486,
+      "swingScore": 76,
+      "score": 76,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.34",
+        "tone": "low",
+        "value": 0.3412698412698413
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 5/7，RSI 38.4，量比 1.30。"
+        }
+      ]
+    },
+    {
+      "code": "1295",
+      "name": "生合",
+      "close": 50,
+      "percent": -1.7681728880157142,
+      "tradeVolume": 57.512,
+      "value": 2878327,
+      "swingScore": 76,
+      "score": 76,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.03",
+        "tone": "low",
+        "value": 0.03125
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 5/7，RSI 37.6，量比 0.65。"
+        }
+      ]
+    },
+    {
+      "code": "6125",
+      "name": "廣運",
+      "close": 66.7,
+      "percent": -3.7518037518037435,
+      "tradeVolume": 7721.899,
+      "value": 517260602,
+      "swingScore": 76,
+      "score": 76,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.27",
+        "tone": "low",
+        "value": 0.26543209876543244
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 5/7，RSI 44.4，量比 1.60。"
+        }
+      ]
+    },
+    {
+      "code": "3629",
+      "name": "地心引力",
+      "close": 16.45,
+      "percent": 2.8124999999999956,
+      "tradeVolume": 1.174,
+      "value": 19155,
+      "swingScore": 75,
+      "score": 75,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.12",
+        "tone": "low",
+        "value": 0.11666666666666654
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 5/7，RSI 49.2，量比 0.11。"
+        }
+      ]
+    },
+    {
+      "code": "6185",
+      "name": "幃翔",
+      "close": 13.85,
+      "percent": 1.46520146520146,
+      "tradeVolume": 152.376,
+      "value": 2096133,
+      "swingScore": 75,
+      "score": 75,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.19",
+        "tone": "low",
+        "value": 0.19047619047619
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 7/7，RSI 46.4，量比 0.68。"
+        }
+      ]
+    },
+    {
+      "code": "6109",
+      "name": "亞元",
+      "close": 11.3,
+      "percent": 0.8928571428571557,
+      "tradeVolume": 335.596,
+      "value": 3693107,
+      "swingScore": 75,
+      "score": 75,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.15",
+        "tone": "low",
+        "value": 0.14705882352941183
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 5/7，RSI 17.9，量比 1.51。"
+        }
+      ]
+    },
+    {
+      "code": "4107",
+      "name": "邦特",
+      "close": 114.5,
+      "percent": 0.881057268722467,
+      "tradeVolume": 119.094,
+      "value": 13601478,
+      "swingScore": 75,
+      "score": 75,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.24",
+        "tone": "low",
+        "value": 0.23809523809523808
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 6/7，RSI 19.0，量比 0.93。"
+        }
+      ]
+    },
+    {
+      "code": "6767",
+      "name": "台微醫",
+      "close": 26.5,
+      "percent": 0.7604562737642558,
+      "tradeVolume": 9.001,
+      "value": 238628,
+      "swingScore": 75,
+      "score": 75,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.17",
+        "tone": "low",
+        "value": 0.17021276595744636
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 7/7，RSI 42.4，量比 0.59。"
+        }
+      ]
+    },
+    {
+      "code": "4105",
+      "name": "東洋",
+      "close": 73.4,
+      "percent": 0.5479452054794599,
+      "tradeVolume": 635.017,
+      "value": 46657030,
+      "swingScore": 75,
+      "score": 75,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.38",
+        "tone": "low",
+        "value": 0.3750000000000015
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 6/7，RSI 33.3，量比 0.88。"
+        }
+      ]
+    },
+    {
+      "code": "5251",
+      "name": "天鉞電",
+      "close": 26.7,
+      "percent": 0.18761726078799515,
+      "tradeVolume": 67.227,
+      "value": 1796358,
+      "swingScore": 75,
+      "score": 75,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.06",
+        "tone": "low",
+        "value": 0.06249999999999976
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 5/7，RSI 34.2，量比 0.53。"
+        }
+      ]
+    },
+    {
+      "code": "6114",
+      "name": "久威",
+      "close": 30.35,
+      "percent": 0.16501650165016735,
+      "tradeVolume": 58.241,
+      "value": 1776132,
+      "swingScore": 75,
+      "score": 75,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.34",
+        "tone": "low",
+        "value": 0.33750000000000036
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 6/7，RSI 39.1，量比 0.87。"
+        }
+      ]
+    },
+    {
+      "code": "6840",
+      "name": "東研信超",
+      "close": 63.4,
+      "percent": 0,
+      "tradeVolume": 82.373,
+      "value": 5204670,
+      "swingScore": 75,
+      "score": 75,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.26",
+        "tone": "low",
+        "value": 0.2625698324022345
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 7/7，RSI 39.5，量比 0.61。"
+        }
+      ]
+    },
+    {
+      "code": "5531",
+      "name": "鄉林",
+      "close": 9.1,
+      "percent": -0.21929824561403044,
+      "tradeVolume": 332532,
+      "value": 3014064,
+      "swingScore": 75,
+      "score": 75,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.29",
+        "tone": "low",
+        "value": 0.28787878787878707
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 5/7，RSI 52.8，量比 1.10。"
+        }
+      ]
+    },
+    {
+      "code": "1232",
+      "name": "大統益",
+      "close": 144.5,
+      "percent": -0.3448275862068966,
+      "tradeVolume": 53732,
+      "value": 7770439,
+      "swingScore": 75,
+      "score": 75,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "中位階",
+        "ratio": "0.44",
+        "tone": "mid",
+        "value": 0.4444444444444444
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 6/7，RSI 40.0，量比 1.22。"
+        }
+      ]
+    },
+    {
+      "code": "1315",
+      "name": "達新",
+      "close": 64.2,
+      "percent": -0.6191950464396153,
+      "tradeVolume": 11251,
+      "value": 722107,
+      "swingScore": 75,
+      "score": 75,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "中位階",
+        "ratio": "0.52",
+        "tone": "mid",
+        "value": 0.5151515151515165
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 6/7，RSI 54.3，量比 0.25。"
+        }
+      ]
+    },
+    {
+      "code": "3710",
+      "name": "連展投控",
+      "close": 6.18,
+      "percent": -0.8025682182985667,
+      "tradeVolume": 460.785,
+      "value": 2849034,
+      "swingScore": 75,
+      "score": 75,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.33",
+        "tone": "low",
+        "value": 0.33103448275862035
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 6/7，RSI 54.3，量比 0.92。"
+        }
+      ]
+    },
+    {
+      "code": "1586",
+      "name": "和勤",
+      "close": 21.75,
+      "percent": -1.8058690744920929,
+      "tradeVolume": 346.21,
+      "value": 7554430,
+      "swingScore": 75,
+      "score": 75,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.27",
+        "tone": "low",
+        "value": 0.2653061224489791
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 5/7，RSI 51.2，量比 1.12。"
+        }
+      ]
+    },
+    {
+      "code": "4120",
+      "name": "友華",
+      "close": 44.6,
+      "percent": -7.08333333333333,
+      "tradeVolume": 41.71,
+      "value": 1854803,
+      "swingScore": 75,
+      "score": 75,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.27",
+        "tone": "low",
+        "value": 0.2727272727272726
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 5/7，RSI 34.9，量比 1.48。"
+        }
+      ]
+    },
+    {
+      "code": "7728",
+      "name": "光焱科技",
+      "close": 770,
+      "percent": 11.11111111111111,
+      "tradeVolume": 144.87,
+      "value": 113371848,
+      "swingScore": 74,
+      "score": 74,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.36",
+        "tone": "low",
+        "value": 0.36363636363636365
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 6/7，RSI 43.6，量比 0.38。"
+        }
+      ]
+    },
+    {
+      "code": "7792",
+      "name": "安葆",
+      "close": 281.5,
+      "percent": 9.9609375,
+      "tradeVolume": 211.583,
+      "value": 59390111,
+      "swingScore": 74,
+      "score": 74,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.20",
+        "tone": "low",
+        "value": 0.20077220077220076
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 6/7，RSI 33.6，量比 0.80。"
+        }
+      ]
+    },
+    {
+      "code": "1784",
+      "name": "訊聯",
+      "close": 66.7,
+      "percent": 2.932098765432108,
+      "tradeVolume": 287.232,
+      "value": 18852490,
+      "swingScore": 74,
+      "score": 74,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.13",
+        "tone": "low",
+        "value": 0.13043478260869576
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 5/7，RSI 35.3，量比 1.05。"
+        }
+      ]
+    },
+    {
+      "code": "5344",
+      "name": "立衛",
+      "close": 15.6,
+      "percent": 1.9607843137254832,
+      "tradeVolume": 142.274,
+      "value": 2239890,
+      "swingScore": 74,
+      "score": 74,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "中位階",
+        "ratio": "0.42",
+        "tone": "mid",
+        "value": 0.4153846153846153
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 6/7，RSI 40.5，量比 1.09。"
+        }
+      ]
+    },
+    {
+      "code": "1108",
+      "name": "幸福",
+      "close": 13.7,
+      "percent": 1.1070110701106906,
+      "tradeVolume": 280559,
+      "value": 3835039,
+      "swingScore": 74,
+      "score": 74,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.19",
+        "tone": "low",
+        "value": 0.19354838709677363
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 6/7，RSI 20.0，量比 0.78。"
+        }
+      ]
+    },
+    {
+      "code": "5403",
+      "name": "中菲",
+      "close": 85.5,
+      "percent": 0.5882352941176471,
+      "tradeVolume": 69.961,
+      "value": 5983029,
+      "swingScore": 74,
+      "score": 74,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.08",
+        "tone": "low",
+        "value": 0.07643312101910844
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 5/7，RSI 20.2，量比 0.39。"
+        }
+      ]
+    },
+    {
+      "code": "7723",
+      "name": "築間",
+      "close": 22.8,
+      "percent": 0.4405286343612398,
+      "tradeVolume": 183.985,
+      "value": 4235155,
+      "swingScore": 74,
+      "score": 74,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.02",
+        "tone": "low",
+        "value": 0.02362204724409454
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 5/7，RSI 13.0，量比 1.02。"
+        }
+      ]
+    },
+    {
+      "code": "4114",
+      "name": "健喬",
+      "close": 30.15,
+      "percent": 0.33277870216305444,
+      "tradeVolume": 1503.031,
+      "value": 45136773,
+      "swingScore": 74,
+      "score": 74,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.09",
+        "tone": "low",
+        "value": 0.08888888888888843
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 5/7，RSI 28.2，量比 1.43。"
+        }
+      ]
+    },
+    {
+      "code": "2230",
+      "name": "泰茂",
+      "close": 28.25,
+      "percent": 0,
+      "tradeVolume": 198.382,
+      "value": 5619949,
+      "swingScore": 74,
+      "score": 74,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.15",
+        "tone": "low",
+        "value": 0.1453744493392069
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 5/7，RSI 28.8，量比 0.36。"
+        }
+      ]
+    },
+    {
+      "code": "4138",
+      "name": "曜亞",
+      "close": 50.6,
+      "percent": -0.1972386587771231,
+      "tradeVolume": 21.883,
+      "value": 1108716,
+      "swingScore": 74,
+      "score": 74,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.04",
+        "tone": "low",
+        "value": 0.037974683544303896
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 5/7，RSI 26.9，量比 0.33。"
+        }
+      ]
+    },
+    {
+      "code": "1325",
+      "name": "恆大",
+      "close": 29.95,
+      "percent": -0.4983388704319008,
+      "tradeVolume": 320301,
+      "value": 9612715,
+      "swingScore": 74,
+      "score": 74,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.10",
+        "tone": "low",
+        "value": 0.09722222222222159
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 5/7，RSI 12.2，量比 1.06。"
+        }
+      ]
+    },
+    {
+      "code": "3349",
+      "name": "寶德",
+      "close": 17.8,
+      "percent": -0.5586592178770831,
+      "tradeVolume": 219.505,
+      "value": 3867912,
+      "swingScore": 74,
+      "score": 74,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.06",
+        "tone": "low",
+        "value": 0.05579399141630918
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 5/7，RSI 10.6，量比 0.99。"
+        }
+      ]
+    },
+    {
+      "code": "8917",
+      "name": "欣泰",
+      "close": 52.6,
+      "percent": -1.3133208255159396,
+      "tradeVolume": 7.711,
+      "value": 405692,
+      "swingScore": 74,
+      "score": 74,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.23",
+        "tone": "low",
+        "value": 0.23404255319148953
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 5/7，RSI 43.4，量比 0.34。"
+        }
+      ]
+    },
+    {
+      "code": "3004",
+      "name": "豐達科",
+      "close": 123.5,
+      "percent": 4.661016949152542,
+      "tradeVolume": 606384,
+      "value": 74113558,
+      "swingScore": 73,
+      "score": 73,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "中位階",
+        "ratio": "0.55",
+        "tone": "mid",
+        "value": 0.5542168674698795
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 6/7，RSI 55.9，量比 0.63。"
+        }
+      ]
+    },
+    {
+      "code": "6423",
+      "name": "億而得",
+      "close": 95.5,
+      "percent": 0.9513742071881668,
+      "tradeVolume": 238.562,
+      "value": 22868108,
+      "swingScore": 73,
+      "score": 73,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.27",
+        "tone": "low",
+        "value": 0.27158273381294956
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 5/7，RSI 19.8，量比 0.92。"
+        }
+      ]
+    },
+    {
+      "code": "1799",
+      "name": "易威",
+      "close": 33.25,
+      "percent": 0.15060240963854563,
+      "tradeVolume": 131.421,
+      "value": 4388578,
+      "swingScore": 73,
+      "score": 73,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.02",
+        "tone": "low",
+        "value": 0.02100840336134454
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 5/7，RSI 28.7，量比 0.85。"
+        }
+      ]
+    },
+    {
+      "code": "2729",
+      "name": "瓦城",
+      "close": 159,
+      "percent": 0,
+      "tradeVolume": 36.042,
+      "value": 5742495,
+      "swingScore": 73,
+      "score": 73,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.11",
+        "tone": "low",
+        "value": 0.11428571428571428
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 5/7，RSI 20.0，量比 0.93。"
+        }
+      ]
+    },
+    {
+      "code": "8272",
+      "name": "全景軟體",
+      "close": 69.5,
+      "percent": -0.14367816091953206,
+      "tradeVolume": 21.306,
+      "value": 1491600,
+      "swingScore": 73,
+      "score": 73,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.05",
+        "tone": "low",
+        "value": 0.04629629629629631
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 5/7，RSI 18.0，量比 0.93。"
+        }
+      ]
+    },
+    {
+      "code": "1314",
+      "name": "中石化",
+      "close": 8,
+      "percent": -1.960784313725492,
+      "tradeVolume": 22484913,
+      "value": 180751124,
+      "swingScore": 73,
+      "score": 73,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.38",
+        "tone": "low",
+        "value": 0.3777777777777775
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 5/7，RSI 46.3，量比 0.88。"
+        }
+      ]
+    },
+    {
+      "code": "3611",
+      "name": "鼎翰",
+      "close": 190,
+      "percent": -2.0618556701030926,
+      "tradeVolume": 56.352,
+      "value": 10719039,
+      "swingScore": 73,
+      "score": 73,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.02",
+        "tone": "low",
+        "value": 0.022222222222222223
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 5/7，RSI 17.6，量比 1.21。"
+        }
+      ]
+    },
+    {
+      "code": "3064",
+      "name": "泰偉",
+      "close": 19.2,
+      "percent": -7.469879518072292,
+      "tradeVolume": 2.631,
+      "value": 50727,
+      "swingScore": 73,
+      "score": 73,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.02",
+        "tone": "low",
+        "value": 0.02321724709784409
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 5/7，RSI 38.2，量比 0.25。"
+        }
+      ]
+    },
+    {
+      "code": "6791",
+      "name": "虎門科技",
+      "close": 114,
+      "percent": 2.7027027027027026,
+      "tradeVolume": 50.128,
+      "value": 5620907,
+      "swingScore": 72,
+      "score": 72,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.36",
+        "tone": "low",
+        "value": 0.3634496919917865
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 7/7，RSI 39.7，量比 0.59。"
+        }
+      ]
+    },
+    {
+      "code": "5009",
+      "name": "榮剛",
+      "close": 36.05,
+      "percent": 1.5492957746478793,
+      "tradeVolume": 3128.336,
+      "value": 113329484,
+      "swingScore": 72,
+      "score": 72,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "中位階",
+        "ratio": "0.54",
+        "tone": "mid",
+        "value": 0.5355450236966821
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 6/7，RSI 26.7，量比 0.49。"
+        }
+      ]
+    },
+    {
+      "code": "6616",
+      "name": "特昇-KY",
+      "close": 9.26,
+      "percent": 0.8714596949891076,
+      "tradeVolume": 58.506,
+      "value": 536716,
+      "swingScore": 72,
+      "score": 72,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.11",
+        "tone": "low",
+        "value": 0.11351351351351303
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 5/7，RSI 31.0，量比 1.11。"
+        }
+      ]
+    },
+    {
+      "code": "8929",
+      "name": "富堡",
+      "close": 13.6,
+      "percent": 0.3690036900368925,
+      "tradeVolume": 60.848,
+      "value": 822855,
+      "swingScore": 72,
+      "score": 72,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.05",
+        "tone": "low",
+        "value": 0.05000000000000012
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 5/7，RSI 34.7，量比 1.06。"
+        }
+      ]
+    },
+    {
+      "code": "4568",
+      "name": "科際精密",
+      "close": 40.2,
+      "percent": 0.24937655860349484,
+      "tradeVolume": 2.009,
+      "value": 80764,
+      "swingScore": 72,
+      "score": 72,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.22",
+        "tone": "low",
+        "value": 0.2222222222222222
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 5/7，RSI 39.4，量比 0.15。"
+        }
+      ]
+    },
+    {
+      "code": "2073",
+      "name": "雄順",
+      "close": 26,
+      "percent": 0,
+      "tradeVolume": 1.09,
+      "value": 28304,
+      "swingScore": 72,
+      "score": 72,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.29",
+        "tone": "low",
+        "value": 0.2857142857142857
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 6/7，RSI 47.8，量比 0.19。"
+        }
+      ]
+    },
+    {
+      "code": "4907",
+      "name": "富宇",
+      "close": 35.6,
+      "percent": 0,
+      "tradeVolume": 78.421,
+      "value": 2770422,
+      "swingScore": 72,
+      "score": 72,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.07",
+        "tone": "low",
+        "value": 0.07246376811594205
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 5/7，RSI 5.7，量比 1.11。"
+        }
+      ]
+    },
+    {
+      "code": "1339",
+      "name": "昭輝",
+      "close": 43.9,
+      "percent": -0.3405221339387028,
+      "tradeVolume": 28025,
+      "value": 1224400,
+      "swingScore": 72,
+      "score": 72,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.32",
+        "tone": "low",
+        "value": 0.3228346456692908
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 6/7，RSI 43.9，量比 0.93。"
+        }
+      ]
+    },
+    {
+      "code": "2916",
+      "name": "滿心",
+      "close": 43.5,
+      "percent": -0.3436426116838455,
+      "tradeVolume": 210.65,
+      "value": 9158322,
+      "swingScore": 72,
+      "score": 72,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.05",
+        "tone": "low",
+        "value": 0.04807692307692305
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 5/7，RSI 41.8，量比 1.11。"
+        }
+      ]
+    },
+    {
+      "code": "1210",
+      "name": "大成",
+      "close": 50.9,
+      "percent": -0.3913894324853284,
+      "tradeVolume": 1917185,
+      "value": 97839385,
+      "swingScore": 72,
+      "score": 72,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.19",
+        "tone": "low",
+        "value": 0.1923076923076922
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 5/7，RSI 42.5，量比 1.12。"
+        }
+      ]
+    },
+    {
+      "code": "3045",
+      "name": "台灣大",
+      "close": 111.5,
+      "percent": -0.4464285714285714,
+      "tradeVolume": 7770207,
+      "value": 867324447,
+      "swingScore": 72,
+      "score": 72,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "中位階",
+        "ratio": "0.60",
+        "tone": "mid",
+        "value": 0.6
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 5/7，RSI 57.9，量比 0.74。"
+        }
+      ]
+    },
+    {
+      "code": "5439",
+      "name": "高技",
+      "close": 383,
+      "percent": 3.5135135135135136,
+      "tradeVolume": 2024.72,
+      "value": 768352086,
+      "swingScore": 71,
+      "score": 71,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "中位階",
+        "ratio": "0.58",
+        "tone": "mid",
+        "value": 0.5763157894736842
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 6/7，RSI 47.6，量比 0.40。"
+        }
+      ]
+    },
+    {
+      "code": "7744",
+      "name": "崴寶",
+      "close": 492,
+      "percent": 2.928870292887029,
+      "tradeVolume": 162.093,
+      "value": 79818918,
+      "swingScore": 71,
+      "score": 71,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.33",
+        "tone": "low",
+        "value": 0.32620320855614976
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 6/7，RSI 38.5，量比 0.74。"
+        }
+      ]
+    },
+    {
+      "code": "6874",
+      "name": "倍力",
+      "close": 79,
+      "percent": 1.935483870967742,
+      "tradeVolume": 48.013,
+      "value": 3756819,
+      "swingScore": 71,
+      "score": 71,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.09",
+        "tone": "low",
+        "value": 0.09230769230769216
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 6/7，RSI 28.3，量比 0.69。"
+        }
+      ]
+    },
+    {
+      "code": "6846",
+      "name": "綠茵",
+      "close": 67.2,
+      "percent": 1.0526315789473728,
+      "tradeVolume": 12.277,
+      "value": 815858,
+      "swingScore": 71,
+      "score": 71,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.22",
+        "tone": "low",
+        "value": 0.22388059701492527
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 6/7，RSI 29.2，量比 0.70。"
+        }
+      ]
+    },
+    {
+      "code": "3313",
+      "name": "斐成",
+      "close": 11.1,
+      "percent": 0.909090909090906,
+      "tradeVolume": 199.458,
+      "value": 2209397,
+      "swingScore": 71,
+      "score": 71,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.11",
+        "tone": "low",
+        "value": 0.10638297872340427
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 5/7，RSI 44.8，量比 1.03。"
+        }
+      ]
+    },
+    {
+      "code": "3489",
+      "name": "森寶",
+      "close": 21.8,
+      "percent": 0.6928406466512801,
+      "tradeVolume": 85.198,
+      "value": 1836562,
+      "swingScore": 71,
+      "score": 71,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.16",
+        "tone": "low",
+        "value": 0.15625000000000003
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 6/7，RSI 36.4，量比 0.76。"
+        }
+      ]
+    },
+    {
+      "code": "5511",
+      "name": "德昌",
+      "close": 71.6,
+      "percent": 0.42075736325385293,
+      "tradeVolume": 115.078,
+      "value": 8234026,
+      "swingScore": 71,
+      "score": 71,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "中位階",
+        "ratio": "0.39",
+        "tone": "mid",
+        "value": 0.39344262295081867
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 5/7，RSI 62.9，量比 0.63。"
+        }
+      ]
+    },
+    {
+      "code": "1409",
+      "name": "新纖",
+      "close": 15,
+      "percent": -1.315789473684206,
+      "tradeVolume": 4032530,
+      "value": 60491657,
+      "swingScore": 71,
+      "score": 71,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "中位階",
+        "ratio": "0.59",
+        "tone": "mid",
+        "value": 0.585714285714286
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 5/7，RSI 57.9，量比 1.01。"
+        }
+      ]
+    },
+    {
+      "code": "1104",
+      "name": "環泥",
+      "close": 29.35,
+      "percent": -1.675041876046901,
+      "tradeVolume": 284371,
+      "value": 8396715,
+      "swingScore": 71,
+      "score": 71,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "中位階",
+        "ratio": "0.53",
+        "tone": "mid",
+        "value": 0.5294117647058828
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 5/7，RSI 44.9，量比 0.39。"
+        }
+      ]
+    },
+    {
+      "code": "8927",
+      "name": "北基",
+      "close": 18.7,
+      "percent": 3.0303030303030347,
+      "tradeVolume": 462.215,
+      "value": 8521505,
+      "swingScore": 70,
+      "score": 70,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.11",
+        "tone": "low",
+        "value": 0.10810810810810817
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 6/7，RSI 35.9，量比 0.63。"
+        }
+      ]
+    },
+    {
+      "code": "5457",
+      "name": "宣德",
+      "close": 29.75,
+      "percent": 1.5358361774744003,
+      "tradeVolume": 498.056,
+      "value": 14734159,
+      "swingScore": 70,
+      "score": 70,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.15",
+        "tone": "low",
+        "value": 0.14634146341463422
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 5/7，RSI 27.1，量比 0.50。"
+        }
+      ]
+    },
+    {
+      "code": "5905",
+      "name": "南仁湖",
+      "close": 7.84,
+      "percent": 0.5128205128205132,
+      "tradeVolume": 403.911,
+      "value": 3163432,
+      "swingScore": 70,
+      "score": 70,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.15",
+        "tone": "low",
+        "value": 0.1481481481481482
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 6/7，RSI 25.4，量比 0.61。"
+        }
+      ]
+    },
+    {
+      "code": "7642",
+      "name": "昶瑞機電",
+      "close": 66.3,
+      "percent": 0.45454545454545026,
+      "tradeVolume": 36.647,
+      "value": 2431444,
+      "swingScore": 70,
+      "score": 70,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.26",
+        "tone": "low",
+        "value": 0.25874125874125836
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 5/7，RSI 31.4，量比 0.89。"
+        }
+      ]
+    },
+    {
+      "code": "1213",
+      "name": "大飲",
+      "close": 9.61,
+      "percent": 0.4179728317659263,
+      "tradeVolume": 15000,
+      "value": 145490,
+      "swingScore": 70,
+      "score": 70,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "中位階",
+        "ratio": "0.38",
+        "tone": "mid",
+        "value": 0.38281249999999983
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 5/7，RSI 44.6，量比 1.28。"
+        }
+      ]
+    },
+    {
+      "code": "6151",
+      "name": "晉倫",
+      "close": 43.05,
+      "percent": -0.11600928074246927,
+      "tradeVolume": 740.527,
+      "value": 32100544,
+      "swingScore": 70,
+      "score": 70,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "中位階",
+        "ratio": "0.60",
+        "tone": "mid",
+        "value": 0.6034912718204487
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 5/7，RSI 57.7，量比 0.49。"
+        }
+      ]
+    },
+    {
+      "code": "1233",
+      "name": "天仁",
+      "close": 32.1,
+      "percent": -0.1555209953343613,
+      "tradeVolume": 30043,
+      "value": 965481,
+      "swingScore": 70,
+      "score": 70,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "中位階",
+        "ratio": "0.53",
+        "tone": "mid",
+        "value": 0.5294117647058848
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 5/7，RSI 44.4，量比 1.19。"
+        }
+      ]
+    },
+    {
+      "code": "6228",
+      "name": "全譜",
+      "close": 20.65,
+      "percent": -1.6666666666666736,
+      "tradeVolume": 19.535,
+      "value": 403871,
+      "swingScore": 70,
+      "score": 70,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.05",
+        "tone": "low",
+        "value": 0.045045045045045036
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 5/7，RSI 40.5，量比 0.94。"
+        }
+      ]
+    },
+    {
+      "code": "6123",
+      "name": "上奇",
+      "close": 43.3,
+      "percent": -3.1319910514541514,
+      "tradeVolume": 74.364,
+      "value": 3215475,
+      "swingScore": 70,
+      "score": 70,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.04",
+        "tone": "low",
+        "value": 0.041666666666666255
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 5/7，RSI 30.6，量比 0.84。"
+        }
+      ]
+    },
+    {
+      "code": "8045",
+      "name": "達運光電",
+      "close": 73.7,
+      "percent": -3.153745072273314,
+      "tradeVolume": 154482,
+      "value": 11546687,
+      "swingScore": 70,
+      "score": 70,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.11",
+        "tone": "low",
+        "value": 0.1106382978723408
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 6/7，RSI 41.5，量比 0.65。"
+        }
+      ]
+    },
+    {
+      "code": "4744",
+      "name": "皇將",
+      "close": 34.6,
+      "percent": -6.486486486486482,
+      "tradeVolume": 279.181,
+      "value": 9684233,
+      "swingScore": 70,
+      "score": 70,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "中位階",
+        "ratio": "0.55",
+        "tone": "mid",
+        "value": 0.5470852017937222
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 5/7，RSI 56.3，量比 0.45。"
+        }
+      ]
+    },
+    {
+      "code": "3623",
+      "name": "富晶通",
+      "close": 23,
+      "percent": 5.5045871559633,
+      "tradeVolume": 78.03,
+      "value": 1788563,
+      "swingScore": 69,
+      "score": 69,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.21",
+        "tone": "low",
+        "value": 0.21472392638036814
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 6/7，RSI 41.1，量比 0.56。"
+        }
+      ]
+    },
+    {
+      "code": "5263",
+      "name": "智崴",
+      "close": 103.5,
+      "percent": 4.1247484909456675,
+      "tradeVolume": 259.115,
+      "value": 26774970,
+      "swingScore": 69,
+      "score": 69,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.30",
+        "tone": "low",
+        "value": 0.30079155672823227
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 6/7，RSI 44.1，量比 0.52。"
+        }
+      ]
+    },
+    {
+      "code": "3693",
+      "name": "營邦",
+      "close": 581,
+      "percent": 3.75,
+      "tradeVolume": 972.912,
+      "value": 563273599,
+      "swingScore": 69,
+      "score": 69,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.63",
+        "tone": "high",
+        "value": 0.6336336336336337
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 6/7，RSI 49.8，量比 0.55。"
+        }
+      ]
+    },
+    {
+      "code": "6875",
+      "name": "國邑*",
+      "close": 36.3,
+      "percent": 2.397743300423115,
+      "tradeVolume": 143.603,
+      "value": 5183385,
+      "swingScore": 69,
+      "score": 69,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.28",
+        "tone": "low",
+        "value": 0.27777777777777773
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 5/7，RSI 57.2，量比 0.72。"
+        }
+      ]
+    },
+    {
+      "code": "8087",
+      "name": "麗升能源",
+      "close": 32.95,
+      "percent": 2.1705426356589235,
+      "tradeVolume": 49.207,
+      "value": 1634385,
+      "swingScore": 69,
+      "score": 69,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.21",
+        "tone": "low",
+        "value": 0.2083333333333337
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 6/7，RSI 43.3，量比 0.49。"
+        }
+      ]
+    },
+    {
+      "code": "4946",
+      "name": "辣椒",
+      "close": 102,
+      "percent": 0.9900990099009901,
+      "tradeVolume": 27.051,
+      "value": 2746599,
+      "swingScore": 69,
+      "score": 69,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.07",
+        "tone": "low",
+        "value": 0.06557377049180328
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 6/7，RSI 41.0，量比 0.50。"
+        }
+      ]
+    },
+    {
+      "code": "8403",
+      "name": "盛弘",
+      "close": 19.45,
+      "percent": 0.7772020725388528,
+      "tradeVolume": 158.931,
+      "value": 3070523,
+      "swingScore": 69,
+      "score": 69,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.10",
+        "tone": "low",
+        "value": 0.10144927536231825
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 6/7，RSI 30.4，量比 0.48。"
+        }
+      ]
+    },
+    {
+      "code": "9951",
+      "name": "皇田",
+      "close": 52.8,
+      "percent": 0.38022813688212115,
+      "tradeVolume": 79.469,
+      "value": 4191192,
+      "swingScore": 69,
+      "score": 69,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.32",
+        "tone": "low",
+        "value": 0.3170731707317065
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 6/7，RSI 38.9，量比 0.56。"
+        }
+      ]
+    },
+    {
+      "code": "4111",
+      "name": "濟生",
+      "close": 30,
+      "percent": 0.33444816053512183,
+      "tradeVolume": 63.414,
+      "value": 1898454,
+      "swingScore": 69,
+      "score": 69,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "中位階",
+        "ratio": "0.53",
+        "tone": "mid",
+        "value": 0.5263157894736846
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 6/7，RSI 41.2，量比 0.46。"
+        }
+      ]
+    },
+    {
+      "code": "1796",
+      "name": "金穎生技",
+      "close": 35.9,
+      "percent": 0,
+      "tradeVolume": 21.121,
+      "value": 760080,
+      "swingScore": 69,
+      "score": 69,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.20",
+        "tone": "low",
+        "value": 0.19999999999999987
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 5/7，RSI 45.3，量比 0.69。"
+        }
+      ]
+    },
+    {
+      "code": "4129",
+      "name": "聯合",
+      "close": 90,
+      "percent": 0,
+      "tradeVolume": 289.207,
+      "value": 26026780,
+      "swingScore": 69,
+      "score": 69,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.04",
+        "tone": "low",
+        "value": 0.042553191489361555
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 5/7，RSI 16.8，量比 0.69。"
+        }
+      ]
+    },
+    {
+      "code": "5209",
+      "name": "新鼎",
+      "close": 172,
+      "percent": 0,
+      "tradeVolume": 70.515,
+      "value": 12068168,
+      "swingScore": 69,
+      "score": 69,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "中位階",
+        "ratio": "0.44",
+        "tone": "mid",
+        "value": 0.4418604651162791
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 5/7，RSI 31.6，量比 1.09。"
+        }
+      ]
+    },
+    {
+      "code": "1321",
+      "name": "大洋",
+      "close": 33.3,
+      "percent": -0.14992503748127214,
+      "tradeVolume": 126241,
+      "value": 4204172,
+      "swingScore": 69,
+      "score": 69,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.19",
+        "tone": "low",
+        "value": 0.1884057971014487
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 5/7，RSI 32.0，量比 0.77。"
+        }
+      ]
+    },
+    {
+      "code": "2640",
+      "name": "大車隊",
+      "close": 160.5,
+      "percent": -0.3105590062111801,
+      "tradeVolume": 26.513,
+      "value": 4264596,
+      "swingScore": 69,
+      "score": 69,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.04",
+        "tone": "low",
+        "value": 0.03896103896103896
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 5/7，RSI 37.0，量比 0.71。"
+        }
+      ]
+    },
+    {
+      "code": "2913",
+      "name": "農林",
+      "close": 11.25,
+      "percent": -1.7467248908296884,
+      "tradeVolume": 1455098,
+      "value": 16360946,
+      "swingScore": 69,
+      "score": 69,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.10",
+        "tone": "low",
+        "value": 0.10256410256410224
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 5/7，RSI 28.2，量比 0.71。"
+        }
+      ]
+    },
+    {
+      "code": "6620",
+      "name": "漢達",
+      "close": 72,
+      "percent": -4.127829560585878,
+      "tradeVolume": 271.937,
+      "value": 19450128,
+      "swingScore": 69,
+      "score": 69,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.33",
+        "tone": "low",
+        "value": 0.3333333333333333
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 6/7，RSI 52.3，量比 0.49。"
+        }
+      ]
+    },
+    {
+      "code": "4420",
+      "name": "光明",
+      "close": 38.2,
+      "percent": 0.6587615283267457,
+      "tradeVolume": 48.254,
+      "value": 1840922,
+      "swingScore": 68,
+      "score": 68,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.03",
+        "tone": "low",
+        "value": 0.03465346534653479
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 5/7，RSI 8.0，量比 0.61。"
+        }
+      ]
+    },
+    {
+      "code": "3052",
+      "name": "夆典",
+      "close": 10.45,
+      "percent": 0,
+      "tradeVolume": 357344,
+      "value": 3728802,
+      "swingScore": 68,
+      "score": 68,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.18",
+        "tone": "low",
+        "value": 0.17647058823529252
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 5/7，RSI 36.8，量比 0.65。"
+        }
+      ]
+    },
+    {
+      "code": "6186",
+      "name": "新潤",
+      "close": 39.6,
+      "percent": -0.9999999999999963,
+      "tradeVolume": 434.27,
+      "value": 17159831,
+      "swingScore": 68,
+      "score": 68,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.24",
+        "tone": "low",
+        "value": 0.2439024390243903
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 5/7，RSI 45.2，量比 0.61。"
+        }
+      ]
+    },
+    {
+      "code": "6693",
+      "name": "廣閎科",
+      "close": 148.5,
+      "percent": -1,
+      "tradeVolume": 889.149,
+      "value": 133514078,
+      "swingScore": 68,
+      "score": 68,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.69",
+        "tone": "high",
+        "value": 0.688
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 5/7，RSI 43.9，量比 0.68。"
+        }
+      ]
+    },
+    {
+      "code": "1218",
+      "name": "泰山",
+      "close": 18.25,
+      "percent": -1.0840108401083972,
+      "tradeVolume": 382403,
+      "value": 6998574,
+      "swingScore": 68,
+      "score": 68,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.35",
+        "tone": "low",
+        "value": 0.3529411764705885
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 5/7，RSI 45.8，量比 0.67。"
+        }
+      ]
+    },
+    {
+      "code": "3176",
+      "name": "基亞",
+      "close": 32.7,
+      "percent": -1.2084592145015063,
+      "tradeVolume": 720.074,
+      "value": 23829124,
+      "swingScore": 68,
+      "score": 68,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.24",
+        "tone": "low",
+        "value": 0.2377622377622379
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 5/7，RSI 50.2，量比 0.67。"
+        }
+      ]
+    },
+    {
+      "code": "3260",
+      "name": "威剛",
+      "close": 415,
+      "percent": 2.595797280593325,
+      "tradeVolume": 12937.393,
+      "value": 5385585876,
+      "swingScore": 67,
+      "score": 67,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "中位階",
+        "ratio": "0.47",
+        "tone": "mid",
+        "value": 0.46621621621621623
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 6/7，RSI 36.4，量比 0.60。"
+        }
+      ]
+    },
+    {
+      "code": "3684",
+      "name": "榮昌",
+      "close": 59.3,
+      "percent": 1.7152658662092626,
+      "tradeVolume": 78.012,
+      "value": 4657252,
+      "swingScore": 67,
+      "score": 67,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "中位階",
+        "ratio": "0.48",
+        "tone": "mid",
+        "value": 0.47945205479452024
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 6/7，RSI 51.2，量比 0.66。"
+        }
+      ]
+    },
+    {
+      "code": "5516",
+      "name": "雙喜",
+      "close": 10.4,
+      "percent": 1.4634146341463448,
+      "tradeVolume": 11.104,
+      "value": 114011,
+      "swingScore": 67,
+      "score": 67,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.11",
+        "tone": "low",
+        "value": 0.11290322580645151
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 6/7，RSI 41.7，量比 0.19。"
+        }
+      ]
+    },
+    {
+      "code": "4563",
+      "name": "百德",
+      "close": 48.5,
+      "percent": 0.8316008316008286,
+      "tradeVolume": 253.925,
+      "value": 12290193,
+      "swingScore": 67,
+      "score": 67,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "中位階",
+        "ratio": "0.57",
+        "tone": "mid",
+        "value": 0.5722891566265059
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 6/7，RSI 43.4，量比 0.60。"
+        }
+      ]
+    },
+    {
+      "code": "6703",
+      "name": "軒郁",
+      "close": 109,
+      "percent": 0.4608294930875576,
+      "tradeVolume": 49.103,
+      "value": 5358983,
+      "swingScore": 67,
+      "score": 67,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.04",
+        "tone": "low",
+        "value": 0.037037037037037035
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 5/7，RSI 27.7，量比 0.53。"
+        }
+      ]
+    },
+    {
+      "code": "4772",
+      "name": "台特化",
+      "close": 300,
+      "percent": 0.33444816053511706,
+      "tradeVolume": 1107.784,
+      "value": 333288508,
+      "swingScore": 67,
+      "score": 67,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.35",
+        "tone": "low",
+        "value": 0.3546099290780142
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 5/7，RSI 33.6，量比 0.51。"
+        }
+      ]
+    },
+    {
+      "code": "6506",
+      "name": "雙邦",
+      "close": 18.85,
+      "percent": 0.2659574468085144,
+      "tradeVolume": 160.91,
+      "value": 3026358,
+      "swingScore": 67,
+      "score": 67,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.69",
+        "tone": "high",
+        "value": 0.6891891891891895
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 5/7，RSI 61.1，量比 0.54。"
+        }
+      ]
+    },
+    {
+      "code": "3050",
+      "name": "鈺德",
+      "close": 12.25,
+      "percent": 0,
+      "tradeVolume": 345415,
+      "value": 4220122,
+      "swingScore": 67,
+      "score": 67,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.17",
+        "tone": "low",
+        "value": 0.17460317460317482
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 5/7，RSI 27.7，量比 0.49。"
+        }
+      ]
+    },
+    {
+      "code": "4442",
+      "name": "竣邦-KY",
+      "close": 50.1,
+      "percent": 0,
+      "tradeVolume": 38.551,
+      "value": 1933980,
+      "swingScore": 67,
+      "score": 67,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.04",
+        "tone": "low",
+        "value": 0.0358306188925084
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 5/7，RSI 22.7，量比 0.53。"
+        }
+      ]
+    },
+    {
+      "code": "5460",
+      "name": "同協",
+      "close": 15,
+      "percent": 0,
+      "tradeVolume": 30.006,
+      "value": 450732,
+      "swingScore": 67,
+      "score": 67,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.37",
+        "tone": "low",
+        "value": 0.37499999999999983
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 5/7，RSI 51.6，量比 0.48。"
+        }
+      ]
+    },
+    {
+      "code": "6844",
+      "name": "諾貝兒",
+      "close": 64.7,
+      "percent": -0.4615384615384572,
+      "tradeVolume": 20.297,
+      "value": 1304079,
+      "swingScore": 67,
+      "score": 67,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.63",
+        "tone": "high",
+        "value": 0.6250000000000007
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 5/7，RSI 47.9，量比 0.84。"
+        }
+      ]
+    },
+    {
+      "code": "8415",
+      "name": "大國鋼",
+      "close": 34.3,
+      "percent": -0.5797101449275445,
+      "tradeVolume": 492.23,
+      "value": 16956718,
+      "swingScore": 67,
+      "score": 67,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.32",
+        "tone": "low",
+        "value": 0.3181818181818176
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 5/7，RSI 47.6，量比 0.56。"
+        }
+      ]
+    },
+    {
+      "code": "3016",
+      "name": "嘉晶",
+      "close": 89.7,
+      "percent": 9.926470588235304,
+      "tradeVolume": 3049701,
+      "value": 273558056,
+      "swingScore": 66,
+      "score": 66,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "過熱",
+        "ratio": "1.00+",
+        "tone": "hot",
+        "value": 1
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 5/7，RSI 82.1，量比 0.61。"
+        }
+      ]
+    },
+    {
+      "code": "4995",
+      "name": "晶達",
+      "close": 45.2,
+      "percent": 2.0316027088036246,
+      "tradeVolume": 36.769,
+      "value": 1656307,
+      "swingScore": 66,
+      "score": 66,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "中位階",
+        "ratio": "0.45",
+        "tone": "mid",
+        "value": 0.4476190476190479
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 5/7，RSI 53.4，量比 0.39。"
+        }
+      ]
+    },
+    {
+      "code": "3303",
+      "name": "岱稜",
+      "close": 49.35,
+      "percent": 0.7142857142857172,
+      "tradeVolume": 211.567,
+      "value": 10425593,
+      "swingScore": 66,
+      "score": 66,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "中位階",
+        "ratio": "0.47",
+        "tone": "mid",
+        "value": 0.4696969696969696
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 5/7，RSI 36.3，量比 0.36。"
+        }
+      ]
+    },
+    {
+      "code": "4538",
+      "name": "大詠城",
+      "close": 17.5,
+      "percent": 0.28653295128940237,
+      "tradeVolume": 31,
+      "value": 541950,
+      "swingScore": 66,
+      "score": 66,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.20",
+        "tone": "low",
+        "value": 0.19512195121951179
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 5/7，RSI 30.2，量比 0.75。"
+        }
+      ]
+    },
+    {
+      "code": "9950",
+      "name": "萬國通",
+      "close": 10.85,
+      "percent": 0,
+      "tradeVolume": 43.182,
+      "value": 464280,
+      "swingScore": 66,
+      "score": 66,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.12",
+        "tone": "low",
+        "value": 0.12328767123287651
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 5/7，RSI 52.4，量比 0.39。"
+        }
+      ]
+    },
+    {
+      "code": "1316",
+      "name": "上曜",
+      "close": 15.3,
+      "percent": -0.3257328990227944,
+      "tradeVolume": 2670733,
+      "value": 40414046,
+      "swingScore": 66,
+      "score": 66,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "中位階",
+        "ratio": "0.48",
+        "tone": "mid",
+        "value": 0.48387096774193583
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 5/7，RSI 52.4，量比 0.71。"
+        }
+      ]
+    },
+    {
+      "code": "5234",
+      "name": "達興材料",
+      "close": 409,
+      "percent": -0.6075334143377886,
+      "tradeVolume": 670462,
+      "value": 274319217,
+      "swingScore": 66,
+      "score": 66,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "中位階",
+        "ratio": "0.43",
+        "tone": "mid",
+        "value": 0.43260188087774293
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 5/7，RSI 48.3，量比 0.76。"
+        }
+      ]
+    },
+    {
+      "code": "5276",
+      "name": "達輝-KY",
+      "close": 19.2,
+      "percent": -1.0309278350515427,
+      "tradeVolume": 26.845,
+      "value": 517803,
+      "swingScore": 66,
+      "score": 66,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "中位階",
+        "ratio": "0.58",
+        "tone": "mid",
+        "value": 0.5804195804195803
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 5/7，RSI 48.0，量比 0.42。"
+        }
+      ]
+    },
+    {
+      "code": "6465",
+      "name": "威潤",
+      "close": 47.9,
+      "percent": -1.8442622950819645,
+      "tradeVolume": 325.884,
+      "value": 15632641,
+      "swingScore": 66,
+      "score": 66,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "中位階",
+        "ratio": "0.39",
+        "tone": "mid",
+        "value": 0.39455782312925164
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 5/7，RSI 55.2，量比 0.74。"
+        }
+      ]
+    },
+    {
+      "code": "2945",
+      "name": "三商家購",
+      "close": 41.15,
+      "percent": -2.023809523809527,
+      "tradeVolume": 8353,
+      "value": 344826,
+      "swingScore": 66,
+      "score": 66,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "中位階",
+        "ratio": "0.59",
+        "tone": "mid",
+        "value": 0.5875000000000004
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 5/7，RSI 47.3，量比 0.42。"
+        }
+      ]
+    },
+    {
+      "code": "6418",
+      "name": "詠昇",
+      "close": 29.55,
+      "percent": -2.152317880794697,
+      "tradeVolume": 174.429,
+      "value": 5203342,
+      "swingScore": 66,
+      "score": 66,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.20",
+        "tone": "low",
+        "value": 0.198443579766537
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 5/7，RSI 40.5，量比 0.76。"
+        }
+      ]
+    },
+    {
+      "code": "6234",
+      "name": "高僑",
+      "close": 49.7,
+      "percent": -2.9296875,
+      "tradeVolume": 3039.288,
+      "value": 152895842,
+      "swingScore": 66,
+      "score": 66,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "中位階",
+        "ratio": "0.62",
+        "tone": "mid",
+        "value": 0.6179775280898878
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 5/7，RSI 43.4，量比 0.80。"
+        }
+      ]
+    },
+    {
+      "code": "3024",
+      "name": "憶聲",
+      "close": 14.8,
+      "percent": -4.823151125401929,
+      "tradeVolume": 3698605,
+      "value": 55186407,
+      "swingScore": 66,
+      "score": 66,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "中位階",
+        "ratio": "0.57",
+        "tone": "mid",
+        "value": 0.5724465558194776
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 5/7，RSI 51.6，量比 0.71。"
+        }
+      ]
+    },
+    {
+      "code": "3675",
+      "name": "德微",
+      "close": 413,
+      "percent": 7.552083333333333,
+      "tradeVolume": 1103.733,
+      "value": 445574975,
+      "swingScore": 65,
+      "score": 65,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "過熱",
+        "ratio": "1.00+",
+        "tone": "hot",
+        "value": 1
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 5/7，RSI 89.8，量比 0.48。"
+        }
+      ]
+    },
+    {
+      "code": "7747",
+      "name": "昕奇雲端",
+      "close": 129,
+      "percent": 1.1764705882352942,
+      "tradeVolume": 1.157,
+      "value": 148525,
+      "swingScore": 65,
+      "score": 65,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.65",
+        "tone": "high",
+        "value": 0.6470588235294118
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 5/7，RSI 42.1，量比 0.19。"
+        }
+      ]
+    },
+    {
+      "code": "1569",
+      "name": "濱川",
+      "close": 51.1,
+      "percent": 0.9881422924901186,
+      "tradeVolume": 436.945,
+      "value": 22362041,
+      "swingScore": 65,
+      "score": 65,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.12",
+        "tone": "low",
+        "value": 0.11538461538461545
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 5/7，RSI 29.2，量比 0.24。"
+        }
+      ]
+    },
+    {
+      "code": "6233",
+      "name": "旺玖",
+      "close": 25.1,
+      "percent": 0.40000000000000563,
+      "tradeVolume": 431.775,
+      "value": 10849314,
+      "swingScore": 65,
+      "score": 65,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.11",
+        "tone": "low",
+        "value": 0.10769230769230813
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 5/7，RSI 40.3，量比 0.68。"
+        }
+      ]
+    },
+    {
+      "code": "4128",
+      "name": "中天",
+      "close": 14.4,
+      "percent": 0.3484320557491339,
+      "tradeVolume": 1149.403,
+      "value": 16640407,
+      "swingScore": 65,
+      "score": 65,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.05",
+        "tone": "low",
+        "value": 0.050000000000000266
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 5/7，RSI 42.4，量比 0.66。"
+        }
+      ]
+    },
+    {
+      "code": "7715",
+      "name": "裕山",
+      "close": 28,
+      "percent": 0,
+      "tradeVolume": 21.495,
+      "value": 598380,
+      "swingScore": 65,
+      "score": 65,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.13",
+        "tone": "low",
+        "value": 0.12820512820512825
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 5/7，RSI 47.0，量比 0.21。"
+        }
+      ]
+    },
+    {
+      "code": "6441",
+      "name": "廣錠",
+      "close": 24.5,
+      "percent": -0.20366598778004363,
+      "tradeVolume": 146.614,
+      "value": 3578278,
+      "swingScore": 65,
+      "score": 65,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "中位階",
+        "ratio": "0.45",
+        "tone": "mid",
+        "value": 0.4537037037037037
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 5/7，RSI 34.5，量比 0.30。"
+        }
+      ]
+    },
+    {
+      "code": "1301",
+      "name": "台塑",
+      "close": 39,
+      "percent": -0.25575447570332843,
+      "tradeVolume": 10619995,
+      "value": 413715218,
+      "swingScore": 65,
+      "score": 65,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.30",
+        "tone": "low",
+        "value": 0.3012048192771085
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 5/7，RSI 40.0，量比 0.64。"
+        }
+      ]
+    },
+    {
+      "code": "8941",
+      "name": "關中",
+      "close": 43.6,
+      "percent": -0.4566210045662003,
+      "tradeVolume": 9.828,
+      "value": 427406,
+      "swingScore": 65,
+      "score": 65,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.12",
+        "tone": "low",
+        "value": 0.12121212121212088
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 5/7，RSI 38.8，量比 0.59。"
+        }
+      ]
+    },
+    {
+      "code": "3047",
+      "name": "訊舟",
+      "close": 14.65,
+      "percent": -1.0135135135135158,
+      "tradeVolume": 693262,
+      "value": 10157791,
+      "swingScore": 65,
+      "score": 65,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.15",
+        "tone": "low",
+        "value": 0.14754098360655768
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 5/7，RSI 38.2，量比 0.58。"
+        }
+      ]
+    },
+    {
+      "code": "2745",
+      "name": "五福",
+      "close": 102.5,
+      "percent": -1.4423076923076923,
+      "tradeVolume": 130.597,
+      "value": 13385199,
+      "swingScore": 65,
+      "score": 65,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.10",
+        "tone": "low",
+        "value": 0.09523809523809523
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 5/7，RSI 31.0，量比 0.61。"
+        }
+      ]
+    },
+    {
+      "code": "5312",
+      "name": "寶島科",
+      "close": 94.2,
+      "percent": -3.0864197530864197,
+      "tradeVolume": 23.602,
+      "value": 2218980,
+      "swingScore": 65,
+      "score": 65,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.06",
+        "tone": "low",
+        "value": 0.05970149253731426
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 5/7，RSI 28.0，量比 0.66。"
+        }
+      ]
+    },
+    {
+      "code": "5703",
+      "name": "亞都",
+      "close": 13.85,
+      "percent": -4.4827586206896575,
+      "tradeVolume": 4.001,
+      "value": 55264,
+      "swingScore": 65,
+      "score": 65,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.09",
+        "tone": "low",
+        "value": 0.08823529411764722
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 5/7，RSI 32.8，量比 0.62。"
+        }
+      ]
+    },
+    {
+      "code": "6643",
+      "name": "M31",
+      "close": 580,
+      "percent": 3.019538188277087,
+      "tradeVolume": 610.116,
+      "value": 351858378,
+      "swingScore": 64,
+      "score": 64,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "中位階",
+        "ratio": "0.48",
+        "tone": "mid",
+        "value": 0.4791666666666667
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 5/7，RSI 31.1，量比 0.51。"
+        }
+      ]
+    },
+    {
+      "code": "6179",
+      "name": "亞通",
+      "close": 23.85,
+      "percent": 0.8456659619450437,
+      "tradeVolume": 915.974,
+      "value": 21814317,
+      "swingScore": 64,
+      "score": 64,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.19",
+        "tone": "low",
+        "value": 0.18518518518518523
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 5/7，RSI 44.4，量比 0.49。"
+        }
+      ]
+    },
+    {
+      "code": "6474",
+      "name": "華豫寧",
+      "close": 37.65,
+      "percent": -0.3968253968253931,
+      "tradeVolume": 67.02,
+      "value": 2523260,
+      "swingScore": 64,
+      "score": 64,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.33",
+        "tone": "low",
+        "value": 0.3271028037383177
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 5/7，RSI 39.2，量比 0.56。"
+        }
+      ]
+    },
+    {
+      "code": "6903",
+      "name": "巨漢",
+      "close": 397,
+      "percent": -0.6257822277847309,
+      "tradeVolume": 879.939,
+      "value": 348626229,
+      "swingScore": 64,
+      "score": 64,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.68",
+        "tone": "high",
+        "value": 0.6840579710144927
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 5/7，RSI 47.9，量比 0.54。"
+        }
+      ]
+    },
+    {
+      "code": "6721",
+      "name": "信實",
+      "close": 58.6,
+      "percent": -1.1804384485666033,
+      "tradeVolume": 7.692,
+      "value": 449146,
+      "swingScore": 64,
+      "score": 64,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.09",
+        "tone": "low",
+        "value": 0.08510638297872318
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 5/7，RSI 14.8，量比 0.47。"
+        }
+      ]
+    },
+    {
+      "code": "6276",
+      "name": "安鈦克",
+      "close": 27.5,
+      "percent": -16.413373860182368,
+      "tradeVolume": 56.167,
+      "value": 1531270,
+      "swingScore": 64,
+      "score": 64,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.07",
+        "tone": "low",
+        "value": 0.07346938775510192
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 5/7，RSI 40.2，量比 0.50。"
+        }
+      ]
+    },
+    {
+      "code": "3162",
+      "name": "精確",
+      "close": 84.7,
+      "percent": 2.916160388821392,
+      "tradeVolume": 2618.898,
+      "value": 216049334,
+      "swingScore": 63,
+      "score": 63,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.69",
+        "tone": "high",
+        "value": 0.6873508353221959
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 5/7，RSI 40.3，量比 0.36。"
+        }
+      ]
+    },
+    {
+      "code": "3520",
+      "name": "華盈",
+      "close": 14.65,
+      "percent": 1.0344827586206922,
+      "tradeVolume": 120.827,
+      "value": 1759809,
+      "swingScore": 63,
+      "score": 63,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "中位階",
+        "ratio": "0.41",
+        "tone": "mid",
+        "value": 0.4081632653061223
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 5/7，RSI 30.0，量比 0.39。"
+        }
+      ]
+    },
+    {
+      "code": "6517",
+      "name": "保勝光學",
+      "close": 59,
+      "percent": 2.430555555555553,
+      "tradeVolume": 107.164,
+      "value": 6287111,
+      "swingScore": 62,
+      "score": 62,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "中位階",
+        "ratio": "0.43",
+        "tone": "mid",
+        "value": 0.43181818181818166
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 5/7，RSI 56.3，量比 0.31。"
+        }
+      ]
+    },
+    {
+      "code": "6530",
+      "name": "創威",
+      "close": 107.5,
+      "percent": 2.380952380952381,
+      "tradeVolume": 709.334,
+      "value": 76408366,
+      "swingScore": 62,
+      "score": 62,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "中位階",
+        "ratio": "0.40",
+        "tone": "mid",
+        "value": 0.39770554493307836
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 5/7，RSI 47.6，量比 0.28。"
+        }
+      ]
+    },
+    {
+      "code": "6629",
+      "name": "泰金-KY",
+      "close": 117,
+      "percent": -0.425531914893617,
+      "tradeVolume": 51.18,
+      "value": 5991300,
+      "swingScore": 62,
+      "score": 62,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "中位階",
+        "ratio": "0.44",
+        "tone": "mid",
+        "value": 0.4444444444444444
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 5/7，RSI 41.7，量比 0.58。"
+        }
+      ]
+    },
+    {
+      "code": "1419",
+      "name": "新紡",
+      "close": 66.6,
+      "percent": -0.4484304932735596,
+      "tradeVolume": 173972,
+      "value": 11587388,
+      "swingScore": 62,
+      "score": 62,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "中位階",
+        "ratio": "0.55",
+        "tone": "mid",
+        "value": 0.5504201680672267
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 5/7，RSI 40.0，量比 0.60。"
+        }
+      ]
+    },
+    {
+      "code": "1323",
+      "name": "永裕",
+      "close": 19.45,
+      "percent": -0.25641025641026005,
+      "tradeVolume": 13388,
+      "value": 260188,
+      "swingScore": 61,
+      "score": 61,
+      "swingZone": "C",
+      "swingStage": {
+        "label": "中位階",
+        "ratio": "0.44",
+        "tone": "mid",
+        "value": 0.4444444444444436
+      },
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "title": "",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 5/7，RSI 42.9，量比 0.52。"
+        }
+      ]
+    }
+  ]
+}

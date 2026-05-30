@@ -1,0 +1,8436 @@
+{
+  "ok": true,
+  "source": "strategy4-preset",
+  "updatedAt": "2026-05-29T16:30:37.466Z",
+  "scanStamp": "",
+  "total": 1963,
+  "complete": true,
+  "zone": "B",
+  "count": 324,
+  "matches": [
+    {
+      "code": "6129",
+      "name": "普誠",
+      "close": 16.6,
+      "percent": 9.933774834437099,
+      "tradeVolume": 1341.09,
+      "value": 21200159,
+      "swingScore": 100,
+      "score": 100,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "中位階",
+        "ratio": "0.54",
+        "tone": "mid",
+        "value": 0.5416666666666669
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 7/8，量比 1.44，位階 中位階。"
+        }
+      ]
+    },
+    {
+      "code": "5345",
+      "name": "馥鴻",
+      "close": 22.45,
+      "percent": 9.7799511002445,
+      "tradeVolume": 83.922,
+      "value": 1883981,
+      "swingScore": 100,
+      "score": 100,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.78",
+        "tone": "high",
+        "value": 0.7777777777777779
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 7/8，量比 3.10，位階 高基期。"
+        }
+      ]
+    },
+    {
+      "code": "6274",
+      "name": "台燿",
+      "close": 1690,
+      "percent": 9.740259740259742,
+      "tradeVolume": 9687.712,
+      "value": 16242255295,
+      "swingScore": 100,
+      "score": 100,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.96",
+        "tone": "high",
+        "value": 0.9605609114811569
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 7/8，量比 1.72，位階 高基期。"
+        }
+      ]
+    },
+    {
+      "code": "3234",
+      "name": "光環",
+      "close": 108,
+      "percent": 9.533468559837734,
+      "tradeVolume": 5114.762,
+      "value": 548568911,
+      "swingScore": 100,
+      "score": 100,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "中位階",
+        "ratio": "0.59",
+        "tone": "mid",
+        "value": 0.5872641509433962
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 7/8，量比 2.05，位階 中位階。"
+        }
+      ]
+    },
+    {
+      "code": "3218",
+      "name": "大學光",
+      "close": 138,
+      "percent": 5.747126436781609,
+      "tradeVolume": 1040.903,
+      "value": 141839271,
+      "swingScore": 100,
+      "score": 100,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.74",
+        "tone": "high",
+        "value": 0.7441860465116279
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 7/8，量比 3.02，位階 高基期。"
+        }
+      ]
+    },
+    {
+      "code": "6194",
+      "name": "育富",
+      "close": 34.55,
+      "percent": 5.657492354740043,
+      "tradeVolume": 166.164,
+      "value": 5745128,
+      "swingScore": 100,
+      "score": 100,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.66",
+        "tone": "high",
+        "value": 0.6565656565656559
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 7/8，量比 1.72，位階 高基期。"
+        }
+      ]
+    },
+    {
+      "code": "4909",
+      "name": "新復興",
+      "close": 54.9,
+      "percent": 5.37428023032629,
+      "tradeVolume": 1433.833,
+      "value": 77965047,
+      "swingScore": 100,
+      "score": 100,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.34",
+        "tone": "low",
+        "value": 0.33985330073349607
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 7/8，量比 1.12，位階 低基期。"
+        }
+      ]
+    },
+    {
+      "code": "7738",
+      "name": "東聯互動",
+      "close": 178,
+      "percent": 5.325443786982249,
+      "tradeVolume": 112.15,
+      "value": 19445145,
+      "swingScore": 100,
+      "score": 100,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "中位階",
+        "ratio": "0.50",
+        "tone": "mid",
+        "value": 0.5
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 7/8，量比 1.99，位階 中位階。"
+        }
+      ]
+    },
+    {
+      "code": "4584",
+      "name": "君帆",
+      "close": 43.85,
+      "percent": 5.029940119760482,
+      "tradeVolume": 11.478,
+      "value": 500783,
+      "swingScore": 100,
+      "score": 100,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.20",
+        "tone": "low",
+        "value": 0.2023809523809527
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 5/8，量比 2.06，位階 低基期。"
+        }
+      ]
+    },
+    {
+      "code": "3002",
+      "name": "歐格",
+      "close": 17.7,
+      "percent": 3.8123167155425137,
+      "tradeVolume": 330880,
+      "value": 5775128,
+      "swingScore": 100,
+      "score": 100,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.32",
+        "tone": "low",
+        "value": 0.3203883495145629
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 7/8，量比 1.23，位階 低基期。"
+        }
+      ]
+    },
+    {
+      "code": "4905",
+      "name": "台聯電",
+      "close": 80.2,
+      "percent": 3.617571059431521,
+      "tradeVolume": 41.102,
+      "value": 3308035,
+      "swingScore": 100,
+      "score": 100,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.27",
+        "tone": "low",
+        "value": 0.27477477477477513
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 7/8，量比 1.38，位階 低基期。"
+        }
+      ]
+    },
+    {
+      "code": "5371",
+      "name": "中光電",
+      "close": 72.6,
+      "percent": 3.566333808844508,
+      "tradeVolume": 6987.951,
+      "value": 511566011,
+      "swingScore": 100,
+      "score": 100,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "中位階",
+        "ratio": "0.42",
+        "tone": "mid",
+        "value": 0.42307692307692285
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 7/8，量比 1.39，位階 中位階。"
+        }
+      ]
+    },
+    {
+      "code": "4806",
+      "name": "桂田文創",
+      "close": 10.35,
+      "percent": 3.499999999999996,
+      "tradeVolume": 47.404,
+      "value": 474362,
+      "swingScore": 100,
+      "score": 100,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "中位階",
+        "ratio": "0.50",
+        "tone": "mid",
+        "value": 0.5
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 7/8，量比 3.05，位階 中位階。"
+        }
+      ]
+    },
+    {
+      "code": "3551",
+      "name": "世禾",
+      "close": 225,
+      "percent": 3.4482758620689653,
+      "tradeVolume": 5545.472,
+      "value": 1257669348,
+      "swingScore": 100,
+      "score": 100,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.85",
+        "tone": "high",
+        "value": 0.8538461538461538
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 7/8，量比 2.21，位階 高基期。"
+        }
+      ]
+    },
+    {
+      "code": "8171",
+      "name": "天宇",
+      "close": 23.65,
+      "percent": 3.0501089324618706,
+      "tradeVolume": 342.318,
+      "value": 8055299,
+      "swingScore": 100,
+      "score": 100,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.19",
+        "tone": "low",
+        "value": 0.19230769230769235
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 5/8，量比 1.32，位階 低基期。"
+        }
+      ]
+    },
+    {
+      "code": "3465",
+      "name": "進泰電子",
+      "close": 28.6,
+      "percent": 2.8776978417266212,
+      "tradeVolume": 181.118,
+      "value": 5340207,
+      "swingScore": 100,
+      "score": 100,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.18",
+        "tone": "low",
+        "value": 0.17721518987341783
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 6/8，量比 3.53，位階 低基期。"
+        }
+      ]
+    },
+    {
+      "code": "6728",
+      "name": "上洋",
+      "close": 112.5,
+      "percent": 2.73972602739726,
+      "tradeVolume": 50.592,
+      "value": 5591039,
+      "swingScore": 100,
+      "score": 100,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.33",
+        "tone": "low",
+        "value": 0.3333333333333333
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 6/8，量比 1.18，位階 低基期。"
+        }
+      ]
+    },
+    {
+      "code": "2755",
+      "name": "揚秦",
+      "close": 135,
+      "percent": 2.6615969581749046,
+      "tradeVolume": 44.087,
+      "value": 5936116,
+      "swingScore": 100,
+      "score": 100,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.38",
+        "tone": "low",
+        "value": 0.375
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 7/8，量比 0.91，位階 低基期。"
+        }
+      ]
+    },
+    {
+      "code": "6275",
+      "name": "元山",
+      "close": 49.2,
+      "percent": 2.6068821689259645,
+      "tradeVolume": 913.742,
+      "value": 44458359,
+      "swingScore": 100,
+      "score": 100,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.22",
+        "tone": "low",
+        "value": 0.2152777777777779
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 5/8，量比 1.31，位階 低基期。"
+        }
+      ]
+    },
+    {
+      "code": "8176",
+      "name": "智捷",
+      "close": 10.25,
+      "percent": 2.5,
+      "tradeVolume": 215.736,
+      "value": 2194922,
+      "swingScore": 100,
+      "score": 100,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.22",
+        "tone": "low",
+        "value": 0.21621621621621645
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 7/8，量比 0.99，位階 低基期。"
+        }
+      ]
+    },
+    {
+      "code": "3060",
+      "name": "銘異",
+      "close": 29.4,
+      "percent": 2.4390243902439,
+      "tradeVolume": 2896370,
+      "value": 85206622,
+      "swingScore": 100,
+      "score": 100,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "中位階",
+        "ratio": "0.51",
+        "tone": "mid",
+        "value": 0.5114503816793889
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 7/8，量比 1.26，位階 中位階。"
+        }
+      ]
+    },
+    {
+      "code": "8435",
+      "name": "鉅邁",
+      "close": 56,
+      "percent": 2.3765996343692817,
+      "tradeVolume": 64.796,
+      "value": 3543179,
+      "swingScore": 100,
+      "score": 100,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "中位階",
+        "ratio": "0.43",
+        "tone": "mid",
+        "value": 0.43478260869565205
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 7/8，量比 2.16，位階 中位階。"
+        }
+      ]
+    },
+    {
+      "code": "8936",
+      "name": "國統",
+      "close": 52.4,
+      "percent": 2.1442495126705685,
+      "tradeVolume": 6274.827,
+      "value": 329220419,
+      "swingScore": 100,
+      "score": 100,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.71",
+        "tone": "high",
+        "value": 0.7142857142857136
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 7/8，量比 2.34，位階 高基期。"
+        }
+      ]
+    },
+    {
+      "code": "1103",
+      "name": "嘉泥",
+      "close": 13.45,
+      "percent": 1.893939393939394,
+      "tradeVolume": 411524,
+      "value": 5478141,
+      "swingScore": 100,
+      "score": 100,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "中位階",
+        "ratio": "0.50",
+        "tone": "mid",
+        "value": 0.4999999999999993
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 7/8，量比 1.24，位階 中位階。"
+        }
+      ]
+    },
+    {
+      "code": "6170",
+      "name": "統振",
+      "close": 51.4,
+      "percent": 1.7821782178217793,
+      "tradeVolume": 478.349,
+      "value": 24456242,
+      "swingScore": 100,
+      "score": 100,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "中位階",
+        "ratio": "0.48",
+        "tone": "mid",
+        "value": 0.4754098360655728
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 7/8，量比 1.61，位階 中位階。"
+        }
+      ]
+    },
+    {
+      "code": "5315",
+      "name": "光聯",
+      "close": 22.25,
+      "percent": 1.5981735159817416,
+      "tradeVolume": 1044.622,
+      "value": 23139883,
+      "swingScore": 100,
+      "score": 100,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "中位階",
+        "ratio": "0.40",
+        "tone": "mid",
+        "value": 0.40476190476190516
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 7/8，量比 2.27，位階 中位階。"
+        }
+      ]
+    },
+    {
+      "code": "5450",
+      "name": "南良",
+      "close": 12.8,
+      "percent": 1.5873015873015959,
+      "tradeVolume": 73.008,
+      "value": 934648,
+      "swingScore": 100,
+      "score": 100,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.13",
+        "tone": "low",
+        "value": 0.12500000000000028
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 5/8，量比 1.39，位階 低基期。"
+        }
+      ]
+    },
+    {
+      "code": "4706",
+      "name": "大恭",
+      "close": 32.5,
+      "percent": 1.5625,
+      "tradeVolume": 30.657,
+      "value": 967640,
+      "swingScore": 100,
+      "score": 100,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "中位階",
+        "ratio": "0.55",
+        "tone": "mid",
+        "value": 0.5494505494505498
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 7/8，量比 1.65，位階 中位階。"
+        }
+      ]
+    },
+    {
+      "code": "1338",
+      "name": "廣華-KY",
+      "close": 16.35,
+      "percent": 1.5527950310559004,
+      "tradeVolume": 434511,
+      "value": 7122387,
+      "swingScore": 100,
+      "score": 100,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.20",
+        "tone": "low",
+        "value": 0.20155038759689936
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 6/8，量比 2.10，位階 低基期。"
+        }
+      ]
+    },
+    {
+      "code": "5469",
+      "name": "瀚宇博",
+      "close": 85.2,
+      "percent": 1.428571428571432,
+      "tradeVolume": 3367390,
+      "value": 288436054,
+      "swingScore": 100,
+      "score": 100,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.36",
+        "tone": "low",
+        "value": 0.3620689655172416
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 7/8，量比 0.89，位階 低基期。"
+        }
+      ]
+    },
+    {
+      "code": "8924",
+      "name": "大田",
+      "close": 64.5,
+      "percent": 1.4150943396226392,
+      "tradeVolume": 493.787,
+      "value": 31654230,
+      "swingScore": 100,
+      "score": 100,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.35",
+        "tone": "low",
+        "value": 0.3472222222222221
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 5/8，量比 1.93，位階 低基期。"
+        }
+      ]
+    },
+    {
+      "code": "3492",
+      "name": "長盛",
+      "close": 23.8,
+      "percent": 0.8474576271186409,
+      "tradeVolume": 348.906,
+      "value": 8338320,
+      "swingScore": 100,
+      "score": 100,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "中位階",
+        "ratio": "0.52",
+        "tone": "mid",
+        "value": 0.5205479452054798
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 7/8，量比 3.30，位階 中位階。"
+        }
+      ]
+    },
+    {
+      "code": "3285",
+      "name": "微端",
+      "close": 31.5,
+      "percent": 0.8,
+      "tradeVolume": 69.825,
+      "value": 2184219,
+      "swingScore": 100,
+      "score": 100,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "中位階",
+        "ratio": "0.61",
+        "tone": "mid",
+        "value": 0.6062992125984252
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 7/8，量比 1.22，位階 中位階。"
+        }
+      ]
+    },
+    {
+      "code": "5609",
+      "name": "中菲行",
+      "close": 81,
+      "percent": 0.7462686567164107,
+      "tradeVolume": 371.657,
+      "value": 30222888,
+      "swingScore": 100,
+      "score": 100,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.64",
+        "tone": "high",
+        "value": 0.6363636363636364
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 7/8，量比 1.75，位階 高基期。"
+        }
+      ]
+    },
+    {
+      "code": "5210",
+      "name": "寶碩",
+      "close": 29,
+      "percent": 0.5199306759098737,
+      "tradeVolume": 1427.141,
+      "value": 41610269,
+      "swingScore": 100,
+      "score": 100,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.80",
+        "tone": "high",
+        "value": 0.7955801104972374
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 7/8，量比 2.24，位階 高基期。"
+        }
+      ]
+    },
+    {
+      "code": "5512",
+      "name": "力麒",
+      "close": 7.01,
+      "percent": 0.42979942693408824,
+      "tradeVolume": 2399.918,
+      "value": 16817977,
+      "swingScore": 100,
+      "score": 100,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.25",
+        "tone": "low",
+        "value": 0.25190839694656486
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 6/8，量比 1.56，位階 低基期。"
+        }
+      ]
+    },
+    {
+      "code": "1416",
+      "name": "廣豐",
+      "close": 11.8,
+      "percent": 0.4255319148936231,
+      "tradeVolume": 222124,
+      "value": 2608512,
+      "swingScore": 100,
+      "score": 100,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "中位階",
+        "ratio": "0.40",
+        "tone": "mid",
+        "value": 0.40000000000000097
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 7/8，量比 0.92，位階 中位階。"
+        }
+      ]
+    },
+    {
+      "code": "5465",
+      "name": "富驊",
+      "close": 26.1,
+      "percent": 0.3846153846153901,
+      "tradeVolume": 160.012,
+      "value": 4196146,
+      "swingScore": 100,
+      "score": 100,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "中位階",
+        "ratio": "0.53",
+        "tone": "mid",
+        "value": 0.525641025641026
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 7/8，量比 0.98，位階 中位階。"
+        }
+      ]
+    },
+    {
+      "code": "1437",
+      "name": "勤益控",
+      "close": 33.3,
+      "percent": 0.30120481927709125,
+      "tradeVolume": 103763,
+      "value": 3440122,
+      "swingScore": 100,
+      "score": 100,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "中位階",
+        "ratio": "0.52",
+        "tone": "mid",
+        "value": 0.5166666666666657
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 7/8，量比 1.07，位階 中位階。"
+        }
+      ]
+    },
+    {
+      "code": "5438",
+      "name": "東友",
+      "close": 19.1,
+      "percent": 0.2624671916010536,
+      "tradeVolume": 138.325,
+      "value": 2648845,
+      "swingScore": 100,
+      "score": 100,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.32",
+        "tone": "low",
+        "value": 0.3214285714285721
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 7/8，量比 0.97，位階 低基期。"
+        }
+      ]
+    },
+    {
+      "code": "8446",
+      "name": "華研",
+      "close": 85.8,
+      "percent": 0.23364485981308744,
+      "tradeVolume": 158.618,
+      "value": 13707555,
+      "swingScore": 100,
+      "score": 100,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.22",
+        "tone": "low",
+        "value": 0.21714285714285697
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 7/8，量比 1.16，位階 低基期。"
+        }
+      ]
+    },
+    {
+      "code": "5547",
+      "name": "久舜",
+      "close": 21.8,
+      "percent": 0.2298850574712676,
+      "tradeVolume": 34.451,
+      "value": 751710,
+      "swingScore": 100,
+      "score": 100,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "中位階",
+        "ratio": "0.56",
+        "tone": "mid",
+        "value": 0.5588235294117645
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 7/8，量比 1.00，位階 中位階。"
+        }
+      ]
+    },
+    {
+      "code": "1109",
+      "name": "信大",
+      "close": 15.45,
+      "percent": 0,
+      "tradeVolume": 140092,
+      "value": 2153150,
+      "swingScore": 100,
+      "score": 100,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "中位階",
+        "ratio": "0.62",
+        "tone": "mid",
+        "value": 0.6153846153846145
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 7/8，量比 0.98，位階 中位階。"
+        }
+      ]
+    },
+    {
+      "code": "1418",
+      "name": "東華",
+      "close": 19.85,
+      "percent": 0,
+      "tradeVolume": 24215,
+      "value": 480856,
+      "swingScore": 100,
+      "score": 100,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "中位階",
+        "ratio": "0.45",
+        "tone": "mid",
+        "value": 0.44736842105263264
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 7/8，量比 2.63，位階 中位階。"
+        }
+      ]
+    },
+    {
+      "code": "2915",
+      "name": "潤泰全",
+      "close": 44,
+      "percent": 0,
+      "tradeVolume": 3484979,
+      "value": 154489062,
+      "swingScore": 100,
+      "score": 100,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.25",
+        "tone": "low",
+        "value": 0.25210084033613434
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 7/8，量比 1.22，位階 低基期。"
+        }
+      ]
+    },
+    {
+      "code": "3085",
+      "name": "新零售",
+      "close": 12.45,
+      "percent": 0,
+      "tradeVolume": 29.33,
+      "value": 363715,
+      "swingScore": 100,
+      "score": 100,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "中位階",
+        "ratio": "0.44",
+        "tone": "mid",
+        "value": 0.4354838709677419
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 7/8，量比 1.06，位階 中位階。"
+        }
+      ]
+    },
+    {
+      "code": "4175",
+      "name": "杏一",
+      "close": 53.7,
+      "percent": 0,
+      "tradeVolume": 38.641,
+      "value": 2076584,
+      "swingScore": 100,
+      "score": 100,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.26",
+        "tone": "low",
+        "value": 0.26190476190476253
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 6/8，量比 1.26，位階 低基期。"
+        }
+      ]
+    },
+    {
+      "code": "6512",
+      "name": "啟發電",
+      "close": 19.2,
+      "percent": 0,
+      "tradeVolume": 13.328,
+      "value": 256172,
+      "swingScore": 100,
+      "score": 100,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.36",
+        "tone": "low",
+        "value": 0.36363636363636265
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 6/8，量比 1.03，位階 低基期。"
+        }
+      ]
+    },
+    {
+      "code": "4972",
+      "name": "湯石照明",
+      "close": 16.45,
+      "percent": -0.3030303030303073,
+      "tradeVolume": 62.214,
+      "value": 1021758,
+      "swingScore": 100,
+      "score": 100,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.14",
+        "tone": "low",
+        "value": 0.1379310344827582
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 6/8，量比 0.87，位階 低基期。"
+        }
+      ]
+    },
+    {
+      "code": "4735",
+      "name": "豪展",
+      "close": 30.8,
+      "percent": -0.32362459546924877,
+      "tradeVolume": 61.424,
+      "value": 1892926,
+      "swingScore": 100,
+      "score": 100,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "中位階",
+        "ratio": "0.47",
+        "tone": "mid",
+        "value": 0.4666666666666671
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 6/8，量比 1.93，位階 中位階。"
+        }
+      ]
+    },
+    {
+      "code": "1319",
+      "name": "東陽",
+      "close": 97,
+      "percent": -0.410677618069821,
+      "tradeVolume": 6647548,
+      "value": 648936384,
+      "swingScore": 100,
+      "score": 100,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.67",
+        "tone": "high",
+        "value": 0.6688741721854303
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 7/8，量比 1.98，位階 高基期。"
+        }
+      ]
+    },
+    {
+      "code": "4430",
+      "name": "耀億",
+      "close": 17.15,
+      "percent": -0.5797101449275445,
+      "tradeVolume": 171.553,
+      "value": 2909320,
+      "swingScore": 100,
+      "score": 100,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.36",
+        "tone": "low",
+        "value": 0.36111111111111016
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 7/8，量比 3.86，位階 低基期。"
+        }
+      ]
+    },
+    {
+      "code": "1227",
+      "name": "佳格",
+      "close": 30,
+      "percent": -0.6622516556291367,
+      "tradeVolume": 1507145,
+      "value": 45042661,
+      "swingScore": 100,
+      "score": 100,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.63",
+        "tone": "high",
+        "value": 0.6250000000000003
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 7/8，量比 1.53，位階 高基期。"
+        }
+      ]
+    },
+    {
+      "code": "3552",
+      "name": "同致",
+      "close": 55.5,
+      "percent": -0.8928571428571428,
+      "tradeVolume": 670.883,
+      "value": 37394391,
+      "swingScore": 100,
+      "score": 100,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.31",
+        "tone": "low",
+        "value": 0.3115942028985506
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 7/8，量比 1.84，位階 低基期。"
+        }
+      ]
+    },
+    {
+      "code": "6855",
+      "name": "數泓科",
+      "close": 107,
+      "percent": -0.9259259259259258,
+      "tradeVolume": 19.121,
+      "value": 2046985,
+      "swingScore": 100,
+      "score": 100,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.27",
+        "tone": "low",
+        "value": 0.2727272727272727
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 7/8，量比 1.43，位階 低基期。"
+        }
+      ]
+    },
+    {
+      "code": "3059",
+      "name": "華晶科",
+      "close": 40.3,
+      "percent": -1.2254901960784315,
+      "tradeVolume": 7032257,
+      "value": 287730548,
+      "swingScore": 100,
+      "score": 100,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.81",
+        "tone": "high",
+        "value": 0.8091603053435114
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 7/8，量比 2.13，位階 高基期。"
+        }
+      ]
+    },
+    {
+      "code": "1110",
+      "name": "東泥",
+      "close": 15.4,
+      "percent": -1.2820512820512775,
+      "tradeVolume": 250065,
+      "value": 3832450,
+      "swingScore": 100,
+      "score": 100,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "中位階",
+        "ratio": "0.57",
+        "tone": "mid",
+        "value": 0.5675675675675681
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 7/8，量比 1.17，位階 中位階。"
+        }
+      ]
+    },
+    {
+      "code": "2929",
+      "name": "淘帝-KY",
+      "close": 5.92,
+      "percent": -1.3333333333333344,
+      "tradeVolume": 829688,
+      "value": 5011722,
+      "swingScore": 100,
+      "score": 100,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "中位階",
+        "ratio": "0.52",
+        "tone": "mid",
+        "value": 0.5165562913907285
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 7/8，量比 1.29，位階 中位階。"
+        }
+      ]
+    },
+    {
+      "code": "8112",
+      "name": "至上",
+      "close": 74.7,
+      "percent": -1.4511873350923408,
+      "tradeVolume": 37673278,
+      "value": 2870922540,
+      "swingScore": 100,
+      "score": 100,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "中位階",
+        "ratio": "0.51",
+        "tone": "mid",
+        "value": 0.5144032921810701
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 7/8，量比 1.50，位階 中位階。"
+        }
+      ]
+    },
+    {
+      "code": "8354",
+      "name": "冠好",
+      "close": 16.85,
+      "percent": -1.461988304093567,
+      "tradeVolume": 1989.902,
+      "value": 32909766,
+      "swingScore": 100,
+      "score": 100,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "中位階",
+        "ratio": "0.42",
+        "tone": "mid",
+        "value": 0.417582417582418
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 7/8，量比 6.93，位階 中位階。"
+        }
+      ]
+    },
+    {
+      "code": "1310",
+      "name": "台苯",
+      "close": 8.91,
+      "percent": -1.6556291390728517,
+      "tradeVolume": 2870516,
+      "value": 25686693,
+      "swingScore": 100,
+      "score": 100,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "中位階",
+        "ratio": "0.55",
+        "tone": "mid",
+        "value": 0.549019607843138
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 7/8，量比 0.91，位階 中位階。"
+        }
+      ]
+    },
+    {
+      "code": "1308",
+      "name": "亞聚",
+      "close": 13.85,
+      "percent": -1.773049645390071,
+      "tradeVolume": 2438666,
+      "value": 34219288,
+      "swingScore": 100,
+      "score": 100,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "中位階",
+        "ratio": "0.56",
+        "tone": "mid",
+        "value": 0.5581395348837205
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 7/8，量比 0.97，位階 中位階。"
+        }
+      ]
+    },
+    {
+      "code": "8150",
+      "name": "南茂",
+      "close": 47.15,
+      "percent": -2.279792746113993,
+      "tradeVolume": 43826180,
+      "value": 2118529817,
+      "swingScore": 100,
+      "score": 100,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.79",
+        "tone": "high",
+        "value": 0.7896039603960396
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 7/8，量比 1.62，位階 高基期。"
+        }
+      ]
+    },
+    {
+      "code": "3057",
+      "name": "喬鼎",
+      "close": 20.15,
+      "percent": -2.6570048309178778,
+      "tradeVolume": 2376732,
+      "value": 49080069,
+      "swingScore": 100,
+      "score": 100,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.72",
+        "tone": "high",
+        "value": 0.7243589743589741
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 7/8，量比 4.10，位階 高基期。"
+        }
+      ]
+    },
+    {
+      "code": "6617",
+      "name": "共信-KY",
+      "close": 72.2,
+      "percent": -3.60480640854473,
+      "tradeVolume": 332.778,
+      "value": 24196616,
+      "swingScore": 100,
+      "score": 100,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "中位階",
+        "ratio": "0.60",
+        "tone": "mid",
+        "value": 0.599137931034483
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 7/8，量比 0.95，位階 中位階。"
+        }
+      ]
+    },
+    {
+      "code": "4768",
+      "name": "晶呈科技",
+      "close": 469.5,
+      "percent": -4.378818737270876,
+      "tradeVolume": 1781.098,
+      "value": 850848920,
+      "swingScore": 100,
+      "score": 100,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.36",
+        "tone": "low",
+        "value": 0.3601108033240997
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 5/8，量比 1.29，位階 低基期。"
+        }
+      ]
+    },
+    {
+      "code": "4168",
+      "name": "醣聯",
+      "close": 25.5,
+      "percent": -7.2727272727272725,
+      "tradeVolume": 950.085,
+      "value": 24687467,
+      "swingScore": 100,
+      "score": 100,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "中位階",
+        "ratio": "0.49",
+        "tone": "mid",
+        "value": 0.4927536231884057
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 6/8，量比 1.97，位階 中位階。"
+        }
+      ]
+    },
+    {
+      "code": "6716",
+      "name": "應廣",
+      "close": 107,
+      "percent": -8.936170212765958,
+      "tradeVolume": 2235.546,
+      "value": 271355645,
+      "swingScore": 100,
+      "score": 100,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.66",
+        "tone": "high",
+        "value": 0.6615384615384615
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 7/8，量比 2.07，位階 高基期。"
+        }
+      ]
+    },
+    {
+      "code": "3444",
+      "name": "利機",
+      "close": 105,
+      "percent": -9.090909090909092,
+      "tradeVolume": 3471.737,
+      "value": 373521879,
+      "swingScore": 100,
+      "score": 100,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.70",
+        "tone": "high",
+        "value": 0.6988906497622821
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 7/8，量比 3.00，位階 高基期。"
+        }
+      ]
+    },
+    {
+      "code": "5302",
+      "name": "太欣",
+      "close": 10.8,
+      "percent": -14.285714285714276,
+      "tradeVolume": 1967.804,
+      "value": 21613013,
+      "swingScore": 100,
+      "score": 100,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "中位階",
+        "ratio": "0.52",
+        "tone": "mid",
+        "value": 0.5161290322580645
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 5/8，量比 2.41，位階 中位階。"
+        }
+      ]
+    },
+    {
+      "code": "8121",
+      "name": "越峰",
+      "close": 40.45,
+      "percent": 76.63755458515287,
+      "tradeVolume": 1575.573,
+      "value": 63905098,
+      "swingScore": 99,
+      "score": 99,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.94",
+        "tone": "high",
+        "value": 0.9401041666666667
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 6/8，量比 4.35，位階 高基期。"
+        }
+      ]
+    },
+    {
+      "code": "3388",
+      "name": "崇越電",
+      "close": 110,
+      "percent": 75.43859649122805,
+      "tradeVolume": 8079.387,
+      "value": 898293510,
+      "swingScore": 99,
+      "score": 99,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.89",
+        "tone": "high",
+        "value": 0.8909090909090909
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 6/8，量比 17.35，位階 高基期。"
+        }
+      ]
+    },
+    {
+      "code": "8289",
+      "name": "泰藝",
+      "close": 74.2,
+      "percent": 63.61631753031973,
+      "tradeVolume": 14038.123,
+      "value": 1036564721,
+      "swingScore": 99,
+      "score": 99,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.93",
+        "tone": "high",
+        "value": 0.9341421143847487
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 6/8，量比 2.72，位階 高基期。"
+        }
+      ]
+    },
+    {
+      "code": "6161",
+      "name": "捷波",
+      "close": 59.1,
+      "percent": 49.620253164556964,
+      "tradeVolume": 808.344,
+      "value": 48280661,
+      "swingScore": 99,
+      "score": 99,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.88",
+        "tone": "high",
+        "value": 0.8791946308724834
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 6/8，量比 6.37，位階 高基期。"
+        }
+      ]
+    },
+    {
+      "code": "3479",
+      "name": "安勤",
+      "close": 135,
+      "percent": 48.678414096916306,
+      "tradeVolume": 3639.939,
+      "value": 492335809,
+      "swingScore": 99,
+      "score": 99,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.92",
+        "tone": "high",
+        "value": 0.9229287090558767
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 6/8，量比 8.76，位階 高基期。"
+        }
+      ]
+    },
+    {
+      "code": "4966",
+      "name": "譜瑞-KY",
+      "close": 834,
+      "percent": 45.04347826086956,
+      "tradeVolume": 9119.478,
+      "value": 7958002574,
+      "swingScore": 99,
+      "score": 99,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.80",
+        "tone": "high",
+        "value": 0.7959183673469388
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 6/8，量比 3.55，位階 高基期。"
+        }
+      ]
+    },
+    {
+      "code": "3390",
+      "name": "旭軟",
+      "close": 28.1,
+      "percent": 36.07748184019372,
+      "tradeVolume": 1115.909,
+      "value": 31495698,
+      "swingScore": 99,
+      "score": 99,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.92",
+        "tone": "high",
+        "value": 0.9151515151515153
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 6/8，量比 2.57，位階 高基期。"
+        }
+      ]
+    },
+    {
+      "code": "6425",
+      "name": "易發",
+      "close": 94.3,
+      "percent": 35.29411764705881,
+      "tradeVolume": 2761.256,
+      "value": 259015523,
+      "swingScore": 99,
+      "score": 99,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.95",
+        "tone": "high",
+        "value": 0.9472140762463344
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 6/8，量比 4.12，位階 高基期。"
+        }
+      ]
+    },
+    {
+      "code": "7704",
+      "name": "明遠精密",
+      "close": 60.1,
+      "percent": 31.222707423580797,
+      "tradeVolume": 119.101,
+      "value": 7083612,
+      "swingScore": 99,
+      "score": 99,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.97",
+        "tone": "high",
+        "value": 0.9698795180722891
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 6/8，量比 2.32，位階 高基期。"
+        }
+      ]
+    },
+    {
+      "code": "4974",
+      "name": "亞泰",
+      "close": 78,
+      "percent": 8.484005563282327,
+      "tradeVolume": 567.981,
+      "value": 44336355,
+      "swingScore": 99,
+      "score": 99,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.89",
+        "tone": "high",
+        "value": 0.8879310344827588
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 6/8，量比 2.44，位階 高基期。"
+        }
+      ]
+    },
+    {
+      "code": "8255",
+      "name": "朋程",
+      "close": 199.5,
+      "percent": 8.130081300813007,
+      "tradeVolume": 7602.671,
+      "value": 1511220399,
+      "swingScore": 99,
+      "score": 99,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.94",
+        "tone": "high",
+        "value": 0.9375
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 6/8，量比 2.68，位階 高基期。"
+        }
+      ]
+    },
+    {
+      "code": "2923",
+      "name": "鼎固-KY",
+      "close": 25.6,
+      "percent": 7.563025210084036,
+      "tradeVolume": 220219,
+      "value": 5659037,
+      "swingScore": 99,
+      "score": 99,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.66",
+        "tone": "high",
+        "value": 0.6640316205533597
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 6/8，量比 1.97，位階 高基期。"
+        }
+      ]
+    },
+    {
+      "code": "8107",
+      "name": "大億金茂",
+      "close": 13,
+      "percent": 5.6910569105691,
+      "tradeVolume": 1204.622,
+      "value": 15823333,
+      "swingScore": 99,
+      "score": 99,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.75",
+        "tone": "high",
+        "value": 0.7500000000000002
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 6/8，量比 6.05，位階 高基期。"
+        }
+      ]
+    },
+    {
+      "code": "3537",
+      "name": "堡達",
+      "close": 77,
+      "percent": 4.194857916102833,
+      "tradeVolume": 14036.446,
+      "value": 1047903226,
+      "swingScore": 99,
+      "score": 99,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.98",
+        "tone": "high",
+        "value": 0.9779005524861879
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 6/8，量比 4.12，位階 高基期。"
+        }
+      ]
+    },
+    {
+      "code": "3051",
+      "name": "力特",
+      "close": 28.35,
+      "percent": 3.2786885245901716,
+      "tradeVolume": 11137534,
+      "value": 313387761,
+      "swingScore": 99,
+      "score": 99,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.93",
+        "tone": "high",
+        "value": 0.9308510638297873
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 6/8，量比 3.07，位階 高基期。"
+        }
+      ]
+    },
+    {
+      "code": "4953",
+      "name": "緯軟",
+      "close": 122.5,
+      "percent": 2.083333333333333,
+      "tradeVolume": 573.479,
+      "value": 70386783,
+      "swingScore": 99,
+      "score": 99,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.76",
+        "tone": "high",
+        "value": 0.7647058823529411
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 7/8，量比 1.37，位階 高基期。"
+        }
+      ]
+    },
+    {
+      "code": "3558",
+      "name": "神準",
+      "close": 144,
+      "percent": 1.76678445229682,
+      "tradeVolume": 1955.85,
+      "value": 287286378,
+      "swingScore": 99,
+      "score": 99,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.78",
+        "tone": "high",
+        "value": 0.78125
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 6/8，量比 3.03，位階 高基期。"
+        }
+      ]
+    },
+    {
+      "code": "3628",
+      "name": "盈正",
+      "close": 67.3,
+      "percent": 0.7485029940119761,
+      "tradeVolume": 114.638,
+      "value": 7640187,
+      "swingScore": 99,
+      "score": 99,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.21",
+        "tone": "low",
+        "value": 0.2081784386617099
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 6/8，量比 0.70，位階 低基期。"
+        }
+      ]
+    },
+    {
+      "code": "4767",
+      "name": "誠泰科技",
+      "close": 27,
+      "percent": 0.3717472118959161,
+      "tradeVolume": 23.1,
+      "value": 621359,
+      "swingScore": 99,
+      "score": 99,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.86",
+        "tone": "high",
+        "value": 0.8615384615384618
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 7/8，量比 1.43，位階 高基期。"
+        }
+      ]
+    },
+    {
+      "code": "6961",
+      "name": "旅天下",
+      "close": 60.1,
+      "percent": 0.3338898163606057,
+      "tradeVolume": 89.562,
+      "value": 5373353,
+      "swingScore": 99,
+      "score": 99,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.75",
+        "tone": "high",
+        "value": 0.7547169811320759
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 7/8，量比 1.40，位階 高基期。"
+        }
+      ]
+    },
+    {
+      "code": "5426",
+      "name": "振發",
+      "close": 18.65,
+      "percent": 0,
+      "tradeVolume": 400.497,
+      "value": 7469906,
+      "swingScore": 99,
+      "score": 99,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.35",
+        "tone": "low",
+        "value": 0.34848484848484795
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 6/8，量比 0.95，位階 低基期。"
+        }
+      ]
+    },
+    {
+      "code": "3259",
+      "name": "鑫創",
+      "close": 16.75,
+      "percent": -0.29761904761905184,
+      "tradeVolume": 70.353,
+      "value": 1193365,
+      "swingScore": 99,
+      "score": 99,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.22",
+        "tone": "low",
+        "value": 0.22463768115942032
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 5/8，量比 1.14，位階 低基期。"
+        }
+      ]
+    },
+    {
+      "code": "6264",
+      "name": "富裔",
+      "close": 6.07,
+      "percent": -0.3284072249589421,
+      "tradeVolume": 140.521,
+      "value": 838341,
+      "swingScore": 99,
+      "score": 99,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "中位階",
+        "ratio": "0.39",
+        "tone": "mid",
+        "value": 0.3902439024390246
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 5/8，量比 1.53，位階 中位階。"
+        }
+      ]
+    },
+    {
+      "code": "5478",
+      "name": "智冠",
+      "close": 99,
+      "percent": -0.8016032064128228,
+      "tradeVolume": 182.787,
+      "value": 18053220,
+      "swingScore": 99,
+      "score": 99,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "中位階",
+        "ratio": "0.58",
+        "tone": "mid",
+        "value": 0.5762711864406784
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 6/8，量比 1.13，位階 中位階。"
+        }
+      ]
+    },
+    {
+      "code": "6411",
+      "name": "晶焱",
+      "close": 110,
+      "percent": -0.9009009009009009,
+      "tradeVolume": 9205.564,
+      "value": 1034334209,
+      "swingScore": 99,
+      "score": 99,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.84",
+        "tone": "high",
+        "value": 0.8366013071895425
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 6/8，量比 3.51，位階 高基期。"
+        }
+      ]
+    },
+    {
+      "code": "3042",
+      "name": "晶技",
+      "close": 215.5,
+      "percent": -0.9195402298850575,
+      "tradeVolume": 46795998,
+      "value": 10239309920,
+      "swingScore": 99,
+      "score": 99,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.91",
+        "tone": "high",
+        "value": 0.9084919472913616
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 6/8，量比 2.40，位階 高基期。"
+        }
+      ]
+    },
+    {
+      "code": "6642",
+      "name": "富致",
+      "close": 90.8,
+      "percent": -1.1969532100108906,
+      "tradeVolume": 5688.411,
+      "value": 532554697,
+      "swingScore": 99,
+      "score": 99,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.79",
+        "tone": "high",
+        "value": 0.7875
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 6/8，量比 3.48，位階 高基期。"
+        }
+      ]
+    },
+    {
+      "code": "6284",
+      "name": "佳邦",
+      "close": 119.5,
+      "percent": -3.6290322580645165,
+      "tradeVolume": 14063.876,
+      "value": 1709591889,
+      "swingScore": 99,
+      "score": 99,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.80",
+        "tone": "high",
+        "value": 0.7957371225577264
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 6/8，量比 2.92，位階 高基期。"
+        }
+      ]
+    },
+    {
+      "code": "3323",
+      "name": "加百裕",
+      "close": 37.9,
+      "percent": 2.432432432432429,
+      "tradeVolume": 2623.621,
+      "value": 98904783,
+      "swingScore": 98,
+      "score": 98,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.79",
+        "tone": "high",
+        "value": 0.7948717948717947
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 7/8，量比 1.19，位階 高基期。"
+        }
+      ]
+    },
+    {
+      "code": "7753",
+      "name": "星亞",
+      "close": 43.4,
+      "percent": 2.358490566037736,
+      "tradeVolume": 27.039,
+      "value": 1165892,
+      "swingScore": 98,
+      "score": 98,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.31",
+        "tone": "low",
+        "value": 0.3079847908745245
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 6/8，量比 0.65，位階 低基期。"
+        }
+      ]
+    },
+    {
+      "code": "2070",
+      "name": "精湛",
+      "close": 77.6,
+      "percent": 2.2397891963109204,
+      "tradeVolume": 2959.495,
+      "value": 232273697,
+      "swingScore": 98,
+      "score": 98,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.88",
+        "tone": "high",
+        "value": 0.882613510520487
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 7/8，量比 1.20，位階 高基期。"
+        }
+      ]
+    },
+    {
+      "code": "5245",
+      "name": "智晶",
+      "close": 27.05,
+      "percent": 0.9328358208955223,
+      "tradeVolume": 322.073,
+      "value": 8839765,
+      "swingScore": 98,
+      "score": 98,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.80",
+        "tone": "high",
+        "value": 0.8025477707006369
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 7/8，量比 1.46，位階 高基期。"
+        }
+      ]
+    },
+    {
+      "code": "9962",
+      "name": "有益",
+      "close": 9.69,
+      "percent": 0.8324661810613951,
+      "tradeVolume": 64.749,
+      "value": 632087,
+      "swingScore": 98,
+      "score": 98,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.24",
+        "tone": "low",
+        "value": 0.23837209302325582
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 6/8，量比 0.66，位階 低基期。"
+        }
+      ]
+    },
+    {
+      "code": "1217",
+      "name": "愛之味",
+      "close": 9.72,
+      "percent": 0.8298755186721999,
+      "tradeVolume": 502027,
+      "value": 4856746,
+      "swingScore": 98,
+      "score": 98,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.37",
+        "tone": "low",
+        "value": 0.3703703703703707
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 6/8，量比 0.66，位階 低基期。"
+        }
+      ]
+    },
+    {
+      "code": "5543",
+      "name": "桓鼎-KY",
+      "close": 29.95,
+      "percent": 0.6722689075630228,
+      "tradeVolume": 40.511,
+      "value": 1184239,
+      "swingScore": 98,
+      "score": 98,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "中位階",
+        "ratio": "0.39",
+        "tone": "mid",
+        "value": 0.39035087719298245
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 6/8，量比 1.27，位階 中位階。"
+        }
+      ]
+    },
+    {
+      "code": "4153",
+      "name": "鈺緯",
+      "close": 31.7,
+      "percent": 0.3164556962025249,
+      "tradeVolume": 27.761,
+      "value": 885658,
+      "swingScore": 98,
+      "score": 98,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "中位階",
+        "ratio": "0.54",
+        "tone": "mid",
+        "value": 0.5365853658536581
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 7/8，量比 0.89，位階 中位階。"
+        }
+      ]
+    },
+    {
+      "code": "4711",
+      "name": "永純",
+      "close": 16.7,
+      "percent": -1.1834319526627177,
+      "tradeVolume": 278.772,
+      "value": 4674313,
+      "swingScore": 98,
+      "score": 98,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.66",
+        "tone": "high",
+        "value": 0.6562499999999997
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 7/8，量比 1.21，位階 高基期。"
+        }
+      ]
+    },
+    {
+      "code": "1102",
+      "name": "亞泥",
+      "close": 34.7,
+      "percent": -1.2802275960170577,
+      "tradeVolume": 15580809,
+      "value": 539356494,
+      "swingScore": 98,
+      "score": 98,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "中位階",
+        "ratio": "0.45",
+        "tone": "mid",
+        "value": 0.4516129032258081
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 5/8，量比 1.64，位階 中位階。"
+        }
+      ]
+    },
+    {
+      "code": "8923",
+      "name": "時報",
+      "close": 19.55,
+      "percent": -2.0050125313283136,
+      "tradeVolume": 24,
+      "value": 462500,
+      "swingScore": 98,
+      "score": 98,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.63",
+        "tone": "high",
+        "value": 0.6304347826086961
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 5/8，量比 4.90，位階 高基期。"
+        }
+      ]
+    },
+    {
+      "code": "4154",
+      "name": "樂威科-KY",
+      "close": 13.1,
+      "percent": -8.710801393728223,
+      "tradeVolume": 23.329,
+      "value": 300142,
+      "swingScore": 98,
+      "score": 98,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "中位階",
+        "ratio": "0.54",
+        "tone": "mid",
+        "value": 0.5447870778267254
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 7/8，量比 0.87，位階 中位階。"
+        }
+      ]
+    },
+    {
+      "code": "6174",
+      "name": "安碁",
+      "close": 46.65,
+      "percent": 50.241545893719795,
+      "tradeVolume": 2990.34,
+      "value": 139591825,
+      "swingScore": 97,
+      "score": 97,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.95",
+        "tone": "high",
+        "value": 0.9503676470588235
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 6/8，量比 1.70，位階 高基期。"
+        }
+      ]
+    },
+    {
+      "code": "8064",
+      "name": "東捷",
+      "close": 143,
+      "percent": 7.518796992481203,
+      "tradeVolume": 13462.606,
+      "value": 1897518240,
+      "swingScore": 97,
+      "score": 97,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.88",
+        "tone": "high",
+        "value": 0.882943143812709
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 7/8，量比 1.32，位階 高基期。"
+        }
+      ]
+    },
+    {
+      "code": "4973",
+      "name": "廣穎",
+      "close": 160,
+      "percent": 4.918032786885246,
+      "tradeVolume": 14062.351,
+      "value": 2243196955,
+      "swingScore": 97,
+      "score": 97,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.95",
+        "tone": "high",
+        "value": 0.95
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 6/8，量比 1.75，位階 高基期。"
+        }
+      ]
+    },
+    {
+      "code": "6290",
+      "name": "良維",
+      "close": 347,
+      "percent": 3.273809523809524,
+      "tradeVolume": 12052.358,
+      "value": 4052403305,
+      "swingScore": 97,
+      "score": 97,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.92",
+        "tone": "high",
+        "value": 0.9176470588235294
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 6/8，量比 1.77，位階 高基期。"
+        }
+      ]
+    },
+    {
+      "code": "6227",
+      "name": "茂綸",
+      "close": 134.5,
+      "percent": 3.065134099616858,
+      "tradeVolume": 4222.942,
+      "value": 578423884,
+      "swingScore": 97,
+      "score": 97,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.85",
+        "tone": "high",
+        "value": 0.8495575221238938
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 6/8，量比 1.99，位階 高基期。"
+        }
+      ]
+    },
+    {
+      "code": "3373",
+      "name": "熱映",
+      "close": 16.9,
+      "percent": 1.5015015015015016,
+      "tradeVolume": 127.187,
+      "value": 2133268,
+      "swingScore": 97,
+      "score": 97,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.25",
+        "tone": "low",
+        "value": 0.24999999999999778
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 6/8，量比 1.48，位階 低基期。"
+        }
+      ]
+    },
+    {
+      "code": "4123",
+      "name": "晟德",
+      "close": 38.25,
+      "percent": 1.190476190476198,
+      "tradeVolume": 2284.735,
+      "value": 87124127,
+      "swingScore": 97,
+      "score": 97,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.18",
+        "tone": "low",
+        "value": 0.18181818181818193
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 5/8，量比 0.83，位階 低基期。"
+        }
+      ]
+    },
+    {
+      "code": "3027",
+      "name": "盛達",
+      "close": 19.45,
+      "percent": 1.0389610389610353,
+      "tradeVolume": 687221,
+      "value": 13298402,
+      "swingScore": 97,
+      "score": 97,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.72",
+        "tone": "high",
+        "value": 0.7230769230769224
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 7/8，量比 1.38，位階 高基期。"
+        }
+      ]
+    },
+    {
+      "code": "6697",
+      "name": "東捷資訊",
+      "close": 41.05,
+      "percent": 0.9840098400983975,
+      "tradeVolume": 47.266,
+      "value": 1946488,
+      "swingScore": 97,
+      "score": 97,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.10",
+        "tone": "low",
+        "value": 0.10344827586206877
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 5/8，量比 0.84，位階 低基期。"
+        }
+      ]
+    },
+    {
+      "code": "3040",
+      "name": "遠見",
+      "close": 39.7,
+      "percent": 0.12610340479194013,
+      "tradeVolume": 124508,
+      "value": 4948916,
+      "swingScore": 97,
+      "score": 97,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.09",
+        "tone": "low",
+        "value": 0.08843537414966014
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 5/8，量比 0.89，位階 低基期。"
+        }
+      ]
+    },
+    {
+      "code": "6279",
+      "name": "胡連",
+      "close": 122.5,
+      "percent": 0,
+      "tradeVolume": 1642.512,
+      "value": 202832628,
+      "swingScore": 97,
+      "score": 97,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.80",
+        "tone": "high",
+        "value": 0.803921568627451
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 7/8，量比 1.18，位階 高基期。"
+        }
+      ]
+    },
+    {
+      "code": "6266",
+      "name": "泰詠",
+      "close": 28.1,
+      "percent": -0.17761989342805384,
+      "tradeVolume": 393.719,
+      "value": 11017206,
+      "swingScore": 97,
+      "score": 97,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.74",
+        "tone": "high",
+        "value": 0.7368421052631581
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 7/8，量比 1.15，位階 高基期。"
+        }
+      ]
+    },
+    {
+      "code": "3564",
+      "name": "其陽",
+      "close": 47.7,
+      "percent": -0.9345794392523277,
+      "tradeVolume": 389.733,
+      "value": 18697812,
+      "swingScore": 97,
+      "score": 97,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.74",
+        "tone": "high",
+        "value": 0.7444933920704847
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 7/8，量比 1.38，位階 高基期。"
+        }
+      ]
+    },
+    {
+      "code": "1305",
+      "name": "華夏",
+      "close": 12.45,
+      "percent": -1.1904761904761934,
+      "tradeVolume": 5364940,
+      "value": 67932431,
+      "swingScore": 97,
+      "score": 97,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.69",
+        "tone": "high",
+        "value": 0.6909090909090904
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 7/8，量比 1.16，位階 高基期。"
+        }
+      ]
+    },
+    {
+      "code": "5471",
+      "name": "松翰",
+      "close": 54.1,
+      "percent": -2.697841726618705,
+      "tradeVolume": 4892496,
+      "value": 265151472,
+      "swingScore": 97,
+      "score": 97,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.81",
+        "tone": "high",
+        "value": 0.8097447795823666
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 7/8，量比 1.15，位階 高基期。"
+        }
+      ]
+    },
+    {
+      "code": "3178",
+      "name": "公準",
+      "close": 71.2,
+      "percent": 26.017699115044252,
+      "tradeVolume": 151.679,
+      "value": 10841683,
+      "swingScore": 96,
+      "score": 96,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.95",
+        "tone": "high",
+        "value": 0.9516908212560387
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 6/8，量比 1.67，位階 高基期。"
+        }
+      ]
+    },
+    {
+      "code": "5484",
+      "name": "慧友",
+      "close": 48.75,
+      "percent": 4.05549626467449,
+      "tradeVolume": 1526083,
+      "value": 75082145,
+      "swingScore": 96,
+      "score": 96,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.74",
+        "tone": "high",
+        "value": 0.7424242424242424
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 7/8，量比 1.19，位階 高基期。"
+        }
+      ]
+    },
+    {
+      "code": "8416",
+      "name": "實威",
+      "close": 186,
+      "percent": 2.7624309392265194,
+      "tradeVolume": 127.395,
+      "value": 23915594,
+      "swingScore": 96,
+      "score": 96,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.76",
+        "tone": "high",
+        "value": 0.7619047619047619
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 7/8，量比 6.73，位階 高基期。"
+        }
+      ]
+    },
+    {
+      "code": "6609",
+      "name": "瀧澤科",
+      "close": 45.95,
+      "percent": 2.452619843924195,
+      "tradeVolume": 1734.131,
+      "value": 81414691,
+      "swingScore": 96,
+      "score": 96,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.71",
+        "tone": "high",
+        "value": 0.7075812274368234
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 6/8，量比 1.35，位階 高基期。"
+        }
+      ]
+    },
+    {
+      "code": "5425",
+      "name": "台半",
+      "close": 116.5,
+      "percent": 1.7467248908296942,
+      "tradeVolume": 66971.315,
+      "value": 7915818888,
+      "swingScore": 96,
+      "score": 96,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.88",
+        "tone": "high",
+        "value": 0.8756906077348066
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 6/8，量比 1.92，位階 高基期。"
+        }
+      ]
+    },
+    {
+      "code": "5288",
+      "name": "豐祥-KY",
+      "close": 156,
+      "percent": 1.2987012987012987,
+      "tradeVolume": 146345,
+      "value": 23139405,
+      "swingScore": 96,
+      "score": 96,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "中位階",
+        "ratio": "0.44",
+        "tone": "mid",
+        "value": 0.4375
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 6/8，量比 0.71，位階 中位階。"
+        }
+      ]
+    },
+    {
+      "code": "6560",
+      "name": "欣普羅",
+      "close": 38.5,
+      "percent": 1.1826544021025043,
+      "tradeVolume": 61.502,
+      "value": 2365536,
+      "swingScore": 96,
+      "score": 96,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.32",
+        "tone": "low",
+        "value": 0.31521739130434834
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 5/8，量比 0.70，位階 低基期。"
+        }
+      ]
+    },
+    {
+      "code": "5306",
+      "name": "桂盟",
+      "close": 83.4,
+      "percent": 0.9685230024213213,
+      "tradeVolume": 168217,
+      "value": 14040160,
+      "swingScore": 96,
+      "score": 96,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "中位階",
+        "ratio": "0.46",
+        "tone": "mid",
+        "value": 0.4623655913978501
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 6/8，量比 0.78，位階 中位階。"
+        }
+      ]
+    },
+    {
+      "code": "4502",
+      "name": "健信",
+      "close": 15.85,
+      "percent": 0.9554140127388558,
+      "tradeVolume": 89.969,
+      "value": 1401910,
+      "swingScore": 96,
+      "score": 96,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "中位階",
+        "ratio": "0.44",
+        "tone": "mid",
+        "value": 0.4444444444444437
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 6/8，量比 2.03，位階 中位階。"
+        }
+      ]
+    },
+    {
+      "code": "8182",
+      "name": "加高",
+      "close": 47.45,
+      "percent": -0.10526315789473085,
+      "tradeVolume": 5129.487,
+      "value": 243214700,
+      "swingScore": 96,
+      "score": 96,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.92",
+        "tone": "high",
+        "value": 0.9243697478991598
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 6/8，量比 1.60，位階 高基期。"
+        }
+      ]
+    },
+    {
+      "code": "6470",
+      "name": "宇智",
+      "close": 48.3,
+      "percent": -0.309597523219826,
+      "tradeVolume": 86.652,
+      "value": 4183837,
+      "swingScore": 96,
+      "score": 96,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.78",
+        "tone": "high",
+        "value": 0.7789473684210517
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 7/8，量比 1.01，位階 高基期。"
+        }
+      ]
+    },
+    {
+      "code": "3211",
+      "name": "順達",
+      "close": 436,
+      "percent": -1.4689265536723164,
+      "tradeVolume": 10857.73,
+      "value": 4755678466,
+      "swingScore": 96,
+      "score": 96,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.65",
+        "tone": "high",
+        "value": 0.6479750778816199
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 7/8，量比 0.98，位階 高基期。"
+        }
+      ]
+    },
+    {
+      "code": "1313",
+      "name": "聯成",
+      "close": 11.15,
+      "percent": -1.7621145374449279,
+      "tradeVolume": 5672534,
+      "value": 64380259,
+      "swingScore": 96,
+      "score": 96,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.69",
+        "tone": "high",
+        "value": 0.6904761904761905
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 7/8，量比 1.25，位階 高基期。"
+        }
+      ]
+    },
+    {
+      "code": "8032",
+      "name": "光菱",
+      "close": 43.2,
+      "percent": -1.818181818181812,
+      "tradeVolume": 315.433,
+      "value": 13735577,
+      "swingScore": 96,
+      "score": 96,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.72",
+        "tone": "high",
+        "value": 0.7184115523465705
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 7/8，量比 1.05，位階 高基期。"
+        }
+      ]
+    },
+    {
+      "code": "1326",
+      "name": "台化",
+      "close": 42.35,
+      "percent": -3.749999999999997,
+      "tradeVolume": 72858983,
+      "value": 3199756703,
+      "swingScore": 96,
+      "score": 96,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.74",
+        "tone": "high",
+        "value": 0.7438271604938272
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 6/8，量比 1.90，位階 高基期。"
+        }
+      ]
+    },
+    {
+      "code": "3037",
+      "name": "欣興",
+      "close": 883,
+      "percent": 9.9626400996264,
+      "tradeVolume": 34452546,
+      "value": 29614041091,
+      "swingScore": 95,
+      "score": 95,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.99",
+        "tone": "high",
+        "value": 0.993963782696177
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 6/8，量比 1.52，位階 高基期。"
+        }
+      ]
+    },
+    {
+      "code": "1781",
+      "name": "合世",
+      "close": 10.9,
+      "percent": 4.8076923076923075,
+      "tradeVolume": 33.246,
+      "value": 352827,
+      "swingScore": 95,
+      "score": 95,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.33",
+        "tone": "low",
+        "value": 0.3260869565217393
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 5/8，量比 0.63，位階 低基期。"
+        }
+      ]
+    },
+    {
+      "code": "3689",
+      "name": "湧德",
+      "close": 138,
+      "percent": 4.545454545454546,
+      "tradeVolume": 5113.271,
+      "value": 694875142,
+      "swingScore": 95,
+      "score": 95,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.89",
+        "tone": "high",
+        "value": 0.8901098901098901
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 7/8，量比 1.09，位階 高基期。"
+        }
+      ]
+    },
+    {
+      "code": "3264",
+      "name": "欣銓",
+      "close": 243.5,
+      "percent": 3.397027600849257,
+      "tradeVolume": 27444.021,
+      "value": 6922135307,
+      "swingScore": 95,
+      "score": 95,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.85",
+        "tone": "high",
+        "value": 0.8495145631067961
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 7/8，量比 2.08，位階 高基期。"
+        }
+      ]
+    },
+    {
+      "code": "1593",
+      "name": "祺驊",
+      "close": 31.4,
+      "percent": 1.7828200972447232,
+      "tradeVolume": 31.66,
+      "value": 990870,
+      "swingScore": 95,
+      "score": 95,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.16",
+        "tone": "low",
+        "value": 0.1599999999999996
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 5/8，量比 0.84，位階 低基期。"
+        }
+      ]
+    },
+    {
+      "code": "6569",
+      "name": "醫揚",
+      "close": 100.5,
+      "percent": 1.6177957532861418,
+      "tradeVolume": 80.404,
+      "value": 8026309,
+      "swingScore": 95,
+      "score": 95,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "中位階",
+        "ratio": "0.44",
+        "tone": "mid",
+        "value": 0.43877551020408145
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 6/8，量比 0.62，位階 中位階。"
+        }
+      ]
+    },
+    {
+      "code": "3290",
+      "name": "東浦",
+      "close": 48.5,
+      "percent": 1.1470281543274186,
+      "tradeVolume": 776.811,
+      "value": 37565928,
+      "swingScore": 95,
+      "score": 95,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.64",
+        "tone": "high",
+        "value": 0.6410256410256411
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 7/8，量比 0.87，位階 高基期。"
+        }
+      ]
+    },
+    {
+      "code": "3118",
+      "name": "進階",
+      "close": 33.65,
+      "percent": 1.0510510510510556,
+      "tradeVolume": 21.882,
+      "value": 732903,
+      "swingScore": 95,
+      "score": 95,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.34",
+        "tone": "low",
+        "value": 0.34374999999999795
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 7/8，量比 0.92，位階 低基期。"
+        }
+      ]
+    },
+    {
+      "code": "5299",
+      "name": "杰力",
+      "close": 119.5,
+      "percent": 0.42016806722689076,
+      "tradeVolume": 1391.514,
+      "value": 167400250,
+      "swingScore": 95,
+      "score": 95,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.69",
+        "tone": "high",
+        "value": 0.6903323262839879
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 7/8，量比 1.11，位階 高基期。"
+        }
+      ]
+    },
+    {
+      "code": "3434",
+      "name": "哲固",
+      "close": 29.45,
+      "percent": 0.340715502555359,
+      "tradeVolume": 44.506,
+      "value": 1308124,
+      "swingScore": 95,
+      "score": 95,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.34",
+        "tone": "low",
+        "value": 0.34285714285714297
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 6/8，量比 0.52，位階 低基期。"
+        }
+      ]
+    },
+    {
+      "code": "1442",
+      "name": "名軒",
+      "close": 29.8,
+      "percent": 0.3367003367003415,
+      "tradeVolume": 885987,
+      "value": 26354276,
+      "swingScore": 95,
+      "score": 95,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "中位階",
+        "ratio": "0.45",
+        "tone": "mid",
+        "value": 0.45038167938931306
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 5/8，量比 1.02，位階 中位階。"
+        }
+      ]
+    },
+    {
+      "code": "1417",
+      "name": "嘉裕",
+      "close": 8.82,
+      "percent": 0,
+      "tradeVolume": 79400,
+      "value": 699164,
+      "swingScore": 95,
+      "score": 95,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "中位階",
+        "ratio": "0.53",
+        "tone": "mid",
+        "value": 0.5333333333333341
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 6/8，量比 0.60，位階 中位階。"
+        }
+      ]
+    },
+    {
+      "code": "6244",
+      "name": "茂迪",
+      "close": 30.05,
+      "percent": -0.16611295681063357,
+      "tradeVolume": 7978.998,
+      "value": 240256188,
+      "swingScore": 95,
+      "score": 95,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.72",
+        "tone": "high",
+        "value": 0.7173913043478262
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 7/8，量比 0.86，位階 高基期。"
+        }
+      ]
+    },
+    {
+      "code": "3105",
+      "name": "穩懋",
+      "close": 527,
+      "percent": -0.1893939393939394,
+      "tradeVolume": 26012.181,
+      "value": 13779999089,
+      "swingScore": 95,
+      "score": 95,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "中位階",
+        "ratio": "0.59",
+        "tone": "mid",
+        "value": 0.5880149812734082
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 6/8，量比 0.82，位階 中位階。"
+        }
+      ]
+    },
+    {
+      "code": "6023",
+      "name": "元大期",
+      "close": 98.9,
+      "percent": -0.2018163471241056,
+      "tradeVolume": 329.074,
+      "value": 32612684,
+      "swingScore": 95,
+      "score": 95,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.37",
+        "tone": "low",
+        "value": 0.36842105263158026
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 5/8，量比 1.63，位階 低基期。"
+        }
+      ]
+    },
+    {
+      "code": "3287",
+      "name": "廣寰科",
+      "close": 38,
+      "percent": -0.2624671916010536,
+      "tradeVolume": 1182.472,
+      "value": 44694944,
+      "swingScore": 95,
+      "score": 95,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.84",
+        "tone": "high",
+        "value": 0.8442622950819674
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 6/8，量比 1.48，位階 高基期。"
+        }
+      ]
+    },
+    {
+      "code": "3221",
+      "name": "台嘉碩",
+      "close": 60,
+      "percent": -0.33222591362126713,
+      "tradeVolume": 15705.376,
+      "value": 951959672,
+      "swingScore": 95,
+      "score": 95,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.88",
+        "tone": "high",
+        "value": 0.8783783783783783
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 6/8，量比 1.44，位階 高基期。"
+        }
+      ]
+    },
+    {
+      "code": "5490",
+      "name": "同亨",
+      "close": 28.8,
+      "percent": -0.5181347150259018,
+      "tradeVolume": 591.584,
+      "value": 17104293,
+      "swingScore": 95,
+      "score": 95,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "中位階",
+        "ratio": "0.56",
+        "tone": "mid",
+        "value": 0.560747663551402
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 6/8，量比 0.90，位階 中位階。"
+        }
+      ]
+    },
+    {
+      "code": "6615",
+      "name": "慧智",
+      "close": 32.85,
+      "percent": -0.9049773755656023,
+      "tradeVolume": 23.279,
+      "value": 767025,
+      "swingScore": 95,
+      "score": 95,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.29",
+        "tone": "low",
+        "value": 0.2884615384615383
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 5/8，量比 0.91，位階 低基期。"
+        }
+      ]
+    },
+    {
+      "code": "6143",
+      "name": "振曜",
+      "close": 99.8,
+      "percent": -1.6748768472906432,
+      "tradeVolume": 1473.768,
+      "value": 148661714,
+      "swingScore": 95,
+      "score": 95,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.74",
+        "tone": "high",
+        "value": 0.7445652173913043
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 7/8，量比 0.91，位階 高基期。"
+        }
+      ]
+    },
+    {
+      "code": "1340",
+      "name": "勝悅-KY",
+      "close": 7.15,
+      "percent": -1.9204389574759901,
+      "tradeVolume": 153914,
+      "value": 1105119,
+      "swingScore": 95,
+      "score": 95,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "中位階",
+        "ratio": "0.38",
+        "tone": "mid",
+        "value": 0.38265306122449
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 6/8，量比 0.59，位階 中位階。"
+        }
+      ]
+    },
+    {
+      "code": "3019",
+      "name": "亞光",
+      "close": 138.5,
+      "percent": -2.464788732394366,
+      "tradeVolume": 6744292,
+      "value": 948932635,
+      "swingScore": 95,
+      "score": 95,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.64",
+        "tone": "high",
+        "value": 0.6379310344827587
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 7/8，量比 1.12，位階 高基期。"
+        }
+      ]
+    },
+    {
+      "code": "1304",
+      "name": "台聚",
+      "close": 12.3,
+      "percent": -3.529411764705877,
+      "tradeVolume": 5977546,
+      "value": 74192792,
+      "swingScore": 95,
+      "score": 95,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.73",
+        "tone": "high",
+        "value": 0.7307692307692311
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 7/8，量比 0.83，位階 高基期。"
+        }
+      ]
+    },
+    {
+      "code": "5356",
+      "name": "協益",
+      "close": 26.75,
+      "percent": 9.183673469387756,
+      "tradeVolume": 143.845,
+      "value": 3869865,
+      "swingScore": 94,
+      "score": 94,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.70",
+        "tone": "high",
+        "value": 0.6986301369863012
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 6/8，量比 1.32，位階 高基期。"
+        }
+      ]
+    },
+    {
+      "code": "1785",
+      "name": "光洋科",
+      "close": 158.5,
+      "percent": 8.561643835616438,
+      "tradeVolume": 62303.261,
+      "value": 9812187067,
+      "swingScore": 94,
+      "score": 94,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.73",
+        "tone": "high",
+        "value": 0.7268041237113402
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 7/8，量比 1.75，位階 高基期。"
+        }
+      ]
+    },
+    {
+      "code": "6291",
+      "name": "沛亨",
+      "close": 679,
+      "percent": 3.82262996941896,
+      "tradeVolume": 3369.043,
+      "value": 2323384453,
+      "swingScore": 94,
+      "score": 94,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.89",
+        "tone": "high",
+        "value": 0.893296853625171
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 6/8，量比 1.34，位階 高基期。"
+        }
+      ]
+    },
+    {
+      "code": "3014",
+      "name": "聯陽",
+      "close": 154,
+      "percent": 3.7037037037037033,
+      "tradeVolume": 3611307,
+      "value": 548111503,
+      "swingScore": 94,
+      "score": 94,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.95",
+        "tone": "high",
+        "value": 0.9512195121951219
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 7/8，量比 1.06，位階 高基期。"
+        }
+      ]
+    },
+    {
+      "code": "6712",
+      "name": "長聖",
+      "close": 134,
+      "percent": 1.9011406844106464,
+      "tradeVolume": 235.674,
+      "value": 31337184,
+      "swingScore": 94,
+      "score": 94,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "中位階",
+        "ratio": "0.40",
+        "tone": "mid",
+        "value": 0.4
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 5/8，量比 0.84，位階 中位階。"
+        }
+      ]
+    },
+    {
+      "code": "3071",
+      "name": "協禧",
+      "close": 32.2,
+      "percent": 1.7377567140600452,
+      "tradeVolume": 697.212,
+      "value": 22278358,
+      "swingScore": 94,
+      "score": 94,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.83",
+        "tone": "high",
+        "value": 0.827731092436975
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 7/8，量比 0.81，位階 高基期。"
+        }
+      ]
+    },
+    {
+      "code": "2066",
+      "name": "世德",
+      "close": 58.3,
+      "percent": 0.8650519031141869,
+      "tradeVolume": 191.568,
+      "value": 11259764,
+      "swingScore": 94,
+      "score": 94,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.85",
+        "tone": "high",
+        "value": 0.8453038674033146
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 7/8，量比 1.04，位階 高基期。"
+        }
+      ]
+    },
+    {
+      "code": "1236",
+      "name": "宏亞",
+      "close": 26.2,
+      "percent": 0.5758157389635262,
+      "tradeVolume": 65691,
+      "value": 1702986,
+      "swingScore": 94,
+      "score": 94,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.78",
+        "tone": "high",
+        "value": 0.7755102040816323
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 7/8，量比 0.81，位階 高基期。"
+        }
+      ]
+    },
+    {
+      "code": "5434",
+      "name": "崇越",
+      "close": 453,
+      "percent": 0.5549389567147613,
+      "tradeVolume": 712060,
+      "value": 324107423,
+      "swingScore": 94,
+      "score": 94,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.77",
+        "tone": "high",
+        "value": 0.7722222222222223
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 7/8，量比 0.80，位階 高基期。"
+        }
+      ]
+    },
+    {
+      "code": "3207",
+      "name": "耀勝",
+      "close": 65.1,
+      "percent": 0.1538461538461451,
+      "tradeVolume": 606.007,
+      "value": 39741136,
+      "swingScore": 94,
+      "score": 94,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.66",
+        "tone": "high",
+        "value": 0.6603773584905657
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 7/8，量比 1.03，位階 高基期。"
+        }
+      ]
+    },
+    {
+      "code": "4419",
+      "name": "皇家美食",
+      "close": 46.1,
+      "percent": 0.1085776330076097,
+      "tradeVolume": 6.492,
+      "value": 298930,
+      "swingScore": 94,
+      "score": 94,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.14",
+        "tone": "low",
+        "value": 0.14423076923076925
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 5/8，量比 0.70，位階 低基期。"
+        }
+      ]
+    },
+    {
+      "code": "5285",
+      "name": "界霖",
+      "close": 90.1,
+      "percent": 0,
+      "tradeVolume": 5421694,
+      "value": 494138493,
+      "swingScore": 94,
+      "score": 94,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.88",
+        "tone": "high",
+        "value": 0.8789743589743588
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 6/8，量比 1.37，位階 高基期。"
+        }
+      ]
+    },
+    {
+      "code": "3666",
+      "name": "光耀",
+      "close": 28.15,
+      "percent": -0.17730496453900962,
+      "tradeVolume": 107.073,
+      "value": 2965009,
+      "swingScore": 94,
+      "score": 94,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "中位階",
+        "ratio": "0.52",
+        "tone": "mid",
+        "value": 0.5196078431372545
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 6/8，量比 0.51，位階 中位階。"
+        }
+      ]
+    },
+    {
+      "code": "5013",
+      "name": "強新",
+      "close": 27.85,
+      "percent": -0.5357142857142806,
+      "tradeVolume": 7.812,
+      "value": 216032,
+      "swingScore": 94,
+      "score": 94,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.28",
+        "tone": "low",
+        "value": 0.275510204081633
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 5/8，量比 0.48，位階 低基期。"
+        }
+      ]
+    },
+    {
+      "code": "3025",
+      "name": "星通",
+      "close": 74.5,
+      "percent": -1.3245033112582782,
+      "tradeVolume": 1495762,
+      "value": 111953954,
+      "swingScore": 94,
+      "score": 94,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.63",
+        "tone": "high",
+        "value": 0.625
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 7/8，量比 1.05，位階 高基期。"
+        }
+      ]
+    },
+    {
+      "code": "3066",
+      "name": "李洲",
+      "close": 21.45,
+      "percent": 13.492063492063497,
+      "tradeVolume": 1005.119,
+      "value": 21883576,
+      "swingScore": 93,
+      "score": 93,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "中位階",
+        "ratio": "0.61",
+        "tone": "mid",
+        "value": 0.6113989637305699
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 7/8，量比 0.96，位階 中位階。"
+        }
+      ]
+    },
+    {
+      "code": "4707",
+      "name": "磐亞",
+      "close": 16.3,
+      "percent": 9.764309764309772,
+      "tradeVolume": 4782.731,
+      "value": 76076703,
+      "swingScore": 93,
+      "score": 93,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.85",
+        "tone": "high",
+        "value": 0.8524590163934428
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 7/8，量比 1.67，位階 高基期。"
+        }
+      ]
+    },
+    {
+      "code": "5274",
+      "name": "信驊",
+      "close": 18950,
+      "percent": 6.2517521726941405,
+      "tradeVolume": 686.513,
+      "value": 13089484265,
+      "swingScore": 93,
+      "score": 93,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.93",
+        "tone": "high",
+        "value": 0.933372992266508
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 7/8，量比 1.92，位階 高基期。"
+        }
+      ]
+    },
+    {
+      "code": "4933",
+      "name": "友輝",
+      "close": 77.3,
+      "percent": 3.758389261744963,
+      "tradeVolume": 1303.997,
+      "value": 99958127,
+      "swingScore": 93,
+      "score": 93,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.92",
+        "tone": "high",
+        "value": 0.9244444444444443
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 6/8，量比 1.31，位階 高基期。"
+        }
+      ]
+    },
+    {
+      "code": "1101",
+      "name": "台泥",
+      "close": 24.4,
+      "percent": 3.1712473572938693,
+      "tradeVolume": 49699249,
+      "value": 1203347116,
+      "swingScore": 93,
+      "score": 93,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.35",
+        "tone": "low",
+        "value": 0.35483870967741893
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 5/8，量比 1.62，位階 低基期。"
+        }
+      ]
+    },
+    {
+      "code": "6561",
+      "name": "是方",
+      "close": 359.5,
+      "percent": 2.7142857142857144,
+      "tradeVolume": 126.554,
+      "value": 45161154,
+      "swingScore": 93,
+      "score": 93,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "中位階",
+        "ratio": "0.56",
+        "tone": "mid",
+        "value": 0.5603448275862069
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 5/8，量比 0.77，位階 中位階。"
+        }
+      ]
+    },
+    {
+      "code": "3707",
+      "name": "漢磊",
+      "close": 89.3,
+      "percent": 2.5258323765786486,
+      "tradeVolume": 27258.609,
+      "value": 2432737363,
+      "swingScore": 93,
+      "score": 93,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.84",
+        "tone": "high",
+        "value": 0.84394250513347
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 7/8，量比 0.85，位階 高基期。"
+        }
+      ]
+    },
+    {
+      "code": "3213",
+      "name": "茂訊",
+      "close": 122,
+      "percent": 2.092050209205021,
+      "tradeVolume": 653.569,
+      "value": 79766430,
+      "swingScore": 93,
+      "score": 93,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.90",
+        "tone": "high",
+        "value": 0.8995983935742972
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 7/8，量比 0.89，位階 高基期。"
+        }
+      ]
+    },
+    {
+      "code": "6859",
+      "name": "伯特光",
+      "close": 127,
+      "percent": 1.6,
+      "tradeVolume": 109.057,
+      "value": 13794361,
+      "swingScore": 93,
+      "score": 93,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.88",
+        "tone": "high",
+        "value": 0.875
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 7/8，量比 0.92，位階 高基期。"
+        }
+      ]
+    },
+    {
+      "code": "4541",
+      "name": "晟田",
+      "close": 45.25,
+      "percent": 1.0044642857142922,
+      "tradeVolume": 1720.408,
+      "value": 78401299,
+      "swingScore": 93,
+      "score": 93,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "中位階",
+        "ratio": "0.42",
+        "tone": "mid",
+        "value": 0.42035398230088505
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 6/8，量比 1.35，位階 中位階。"
+        }
+      ]
+    },
+    {
+      "code": "3570",
+      "name": "大塚",
+      "close": 173.5,
+      "percent": 0.5797101449275363,
+      "tradeVolume": 47.357,
+      "value": 8224167,
+      "swingScore": 93,
+      "score": 93,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "中位階",
+        "ratio": "0.61",
+        "tone": "mid",
+        "value": 0.6122448979591837
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 5/8，量比 0.73，位階 中位階。"
+        }
+      ]
+    },
+    {
+      "code": "3512",
+      "name": "皇龍",
+      "close": 20.55,
+      "percent": 0,
+      "tradeVolume": 56.909,
+      "value": 1167868,
+      "swingScore": 93,
+      "score": 93,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.31",
+        "tone": "low",
+        "value": 0.3095238095238103
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 5/8，量比 0.69，位階 低基期。"
+        }
+      ]
+    },
+    {
+      "code": "8081",
+      "name": "致新",
+      "close": 243,
+      "percent": -1.6194331983805668,
+      "tradeVolume": 692213,
+      "value": 168151885,
+      "swingScore": 93,
+      "score": 93,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.69",
+        "tone": "high",
+        "value": 0.6896551724137931
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 7/8，量比 0.84，位階 高基期。"
+        }
+      ]
+    },
+    {
+      "code": "6175",
+      "name": "立敦",
+      "close": 103,
+      "percent": -3.7383177570093453,
+      "tradeVolume": 13829.232,
+      "value": 1470183966,
+      "swingScore": 93,
+      "score": 93,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.82",
+        "tone": "high",
+        "value": 0.8206599713055954
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 6/8，量比 1.24，位階 高基期。"
+        }
+      ]
+    },
+    {
+      "code": "8227",
+      "name": "巨有科技",
+      "close": 212,
+      "percent": 38.56209150326798,
+      "tradeVolume": 1720.7,
+      "value": 365525345,
+      "swingScore": 92,
+      "score": 92,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.92",
+        "tone": "high",
+        "value": 0.9227053140096618
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 6/8，量比 1.15，位階 高基期。"
+        }
+      ]
+    },
+    {
+      "code": "3680",
+      "name": "家登",
+      "close": 540,
+      "percent": 26.90951821386604,
+      "tradeVolume": 1781.715,
+      "value": 969608151,
+      "swingScore": 92,
+      "score": 92,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.93",
+        "tone": "high",
+        "value": 0.934156378600823
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 6/8，量比 1.09，位階 高基期。"
+        }
+      ]
+    },
+    {
+      "code": "6207",
+      "name": "雷科",
+      "close": 111.5,
+      "percent": 6.190476190476191,
+      "tradeVolume": 19684.713,
+      "value": 2196621790,
+      "swingScore": 92,
+      "score": 92,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.94",
+        "tone": "high",
+        "value": 0.9393939393939394
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 6/8，量比 1.08，位階 高基期。"
+        }
+      ]
+    },
+    {
+      "code": "2941",
+      "name": "米斯特",
+      "close": 32,
+      "percent": 3.3925686591276274,
+      "tradeVolume": 1.088,
+      "value": 34816,
+      "swingScore": 92,
+      "score": 92,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.22",
+        "tone": "low",
+        "value": 0.2205323193916349
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 6/8，量比 0.12，位階 低基期。"
+        }
+      ]
+    },
+    {
+      "code": "8432",
+      "name": "東生華",
+      "close": 50.7,
+      "percent": 1.4000000000000057,
+      "tradeVolume": 30.168,
+      "value": 1516161,
+      "swingScore": 92,
+      "score": 92,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "中位階",
+        "ratio": "0.53",
+        "tone": "mid",
+        "value": 0.5250000000000004
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 5/8，量比 0.59，位階 中位階。"
+        }
+      ]
+    },
+    {
+      "code": "6856",
+      "name": "鑫傳",
+      "close": 51,
+      "percent": 1.1904761904761934,
+      "tradeVolume": 7,
+      "value": 357400,
+      "swingScore": 92,
+      "score": 92,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "中位階",
+        "ratio": "0.49",
+        "tone": "mid",
+        "value": 0.49494949494949486
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 5/8，量比 0.93，位階 中位階。"
+        }
+      ]
+    },
+    {
+      "code": "8383",
+      "name": "千附",
+      "close": 60.6,
+      "percent": 1.0000000000000024,
+      "tradeVolume": 1151.715,
+      "value": 70111746,
+      "swingScore": 92,
+      "score": 92,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "中位階",
+        "ratio": "0.51",
+        "tone": "mid",
+        "value": 0.5104477611940299
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 6/8，量比 0.56，位階 中位階。"
+        }
+      ]
+    },
+    {
+      "code": "5015",
+      "name": "華祺",
+      "close": 24.25,
+      "percent": 0.8316008316008286,
+      "tradeVolume": 34.238,
+      "value": 833667,
+      "swingScore": 92,
+      "score": 92,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "中位階",
+        "ratio": "0.53",
+        "tone": "mid",
+        "value": 0.5252525252525252
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 6/8，量比 0.56，位階 中位階。"
+        }
+      ]
+    },
+    {
+      "code": "1570",
+      "name": "力肯",
+      "close": 52.1,
+      "percent": -0.38240917782025957,
+      "tradeVolume": 566.257,
+      "value": 29434516,
+      "swingScore": 92,
+      "score": 92,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.90",
+        "tone": "high",
+        "value": 0.8974358974358975
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 6/8，量比 1.11，位階 高基期。"
+        }
+      ]
+    },
+    {
+      "code": "3003",
+      "name": "健和興",
+      "close": 54.7,
+      "percent": -1.4414414414414363,
+      "tradeVolume": 625988,
+      "value": 34540486,
+      "swingScore": 92,
+      "score": 92,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.75",
+        "tone": "high",
+        "value": 0.7538461538461539
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 7/8，量比 0.80，位階 高基期。"
+        }
+      ]
+    },
+    {
+      "code": "1444",
+      "name": "力麗",
+      "close": 6.53,
+      "percent": -1.5082956259426794,
+      "tradeVolume": 938251,
+      "value": 6114792,
+      "swingScore": 92,
+      "score": 92,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "中位階",
+        "ratio": "0.42",
+        "tone": "mid",
+        "value": 0.42281879194630884
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 6/8，量比 0.53，位階 中位階。"
+        }
+      ]
+    },
+    {
+      "code": "3141",
+      "name": "晶宏",
+      "close": 80.7,
+      "percent": -1.585365853658533,
+      "tradeVolume": 5018.143,
+      "value": 405959215,
+      "swingScore": 92,
+      "score": 92,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.95",
+        "tone": "high",
+        "value": 0.9481132075471698
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 6/8，量比 1.09，位階 高基期。"
+        }
+      ]
+    },
+    {
+      "code": "6613",
+      "name": "朋億*",
+      "close": 264.5,
+      "percent": 32.25,
+      "tradeVolume": 332.953,
+      "value": 88368956,
+      "swingScore": 91,
+      "score": 91,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.91",
+        "tone": "high",
+        "value": 0.9052631578947369
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 6/8，量比 0.95，位階 高基期。"
+        }
+      ]
+    },
+    {
+      "code": "3581",
+      "name": "博磊",
+      "close": 236.5,
+      "percent": 31.75487465181058,
+      "tradeVolume": 1300.255,
+      "value": 311264278,
+      "swingScore": 91,
+      "score": 91,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.89",
+        "tone": "high",
+        "value": 0.8905295315682281
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 6/8，量比 0.95，位階 高基期。"
+        }
+      ]
+    },
+    {
+      "code": "5452",
+      "name": "佶優",
+      "close": 34.95,
+      "percent": 6.392694063926944,
+      "tradeVolume": 8035.274,
+      "value": 276499116,
+      "swingScore": 91,
+      "score": 91,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "中位階",
+        "ratio": "0.52",
+        "tone": "mid",
+        "value": 0.5203252032520327
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 6/8，量比 1.12，位階 中位階。"
+        }
+      ]
+    },
+    {
+      "code": "2718",
+      "name": "全心投控",
+      "close": 46.45,
+      "percent": 2.312775330396485,
+      "tradeVolume": 92.4,
+      "value": 4268789,
+      "swingScore": 91,
+      "score": 91,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.72",
+        "tone": "high",
+        "value": 0.7210884353741501
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 6/8，量比 1.05，位階 高基期。"
+        }
+      ]
+    },
+    {
+      "code": "3357",
+      "name": "臺慶科",
+      "close": 287,
+      "percent": 1.4134275618374559,
+      "tradeVolume": 7761.308,
+      "value": 2250893327,
+      "swingScore": 91,
+      "score": 91,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.87",
+        "tone": "high",
+        "value": 0.8746268656716418
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 6/8，量比 0.94，位階 高基期。"
+        }
+      ]
+    },
+    {
+      "code": "3265",
+      "name": "台星科",
+      "close": 190.5,
+      "percent": 0.7936507936507936,
+      "tradeVolume": 2137.347,
+      "value": 408220902,
+      "swingScore": 91,
+      "score": 91,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.77",
+        "tone": "high",
+        "value": 0.7723577235772358
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 6/8，量比 0.69，位階 高基期。"
+        }
+      ]
+    },
+    {
+      "code": "2948",
+      "name": "寶陞",
+      "close": 38,
+      "percent": 0,
+      "tradeVolume": 3.101,
+      "value": 117788,
+      "swingScore": 91,
+      "score": 91,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "中位階",
+        "ratio": "0.59",
+        "tone": "mid",
+        "value": 0.5874125874125874
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 6/8，量比 0.44，位階 中位階。"
+        }
+      ]
+    },
+    {
+      "code": "6259",
+      "name": "百徽",
+      "close": 27,
+      "percent": 0,
+      "tradeVolume": 727.401,
+      "value": 19688736,
+      "swingScore": 91,
+      "score": 91,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.85",
+        "tone": "high",
+        "value": 0.846473029045643
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 6/8，量比 0.79，位階 高基期。"
+        }
+      ]
+    },
+    {
+      "code": "5016",
+      "name": "松和",
+      "close": 25.55,
+      "percent": -0.3898635477582763,
+      "tradeVolume": 46.3,
+      "value": 1188682,
+      "swingScore": 91,
+      "score": 91,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.11",
+        "tone": "low",
+        "value": 0.10606060606060615
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 5/8，量比 0.39，位階 低基期。"
+        }
+      ]
+    },
+    {
+      "code": "6821",
+      "name": "聯寶",
+      "close": 70.1,
+      "percent": 27.686703096539155,
+      "tradeVolume": 840.923,
+      "value": 59696014,
+      "swingScore": 90,
+      "score": 90,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.93",
+        "tone": "high",
+        "value": 0.9279038718291054
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 6/8，量比 0.91，位階 高基期。"
+        }
+      ]
+    },
+    {
+      "code": "5321",
+      "name": "美而快",
+      "close": 52.2,
+      "percent": 6.5306122448979655,
+      "tradeVolume": 554.653,
+      "value": 28482292,
+      "swingScore": 90,
+      "score": 90,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.87",
+        "tone": "high",
+        "value": 0.8722222222222222
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 6/8，量比 0.87，位階 高基期。"
+        }
+      ]
+    },
+    {
+      "code": "4433",
+      "name": "興采",
+      "close": 21.25,
+      "percent": 3.6585365853658534,
+      "tradeVolume": 29.794,
+      "value": 636299,
+      "swingScore": 90,
+      "score": 90,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "中位階",
+        "ratio": "0.53",
+        "tone": "mid",
+        "value": 0.5306122448979597
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 6/8，量比 1.23，位階 中位階。"
+        }
+      ]
+    },
+    {
+      "code": "3546",
+      "name": "宇峻",
+      "close": 82,
+      "percent": 1.4851485148514887,
+      "tradeVolume": 475.363,
+      "value": 38767311,
+      "swingScore": 90,
+      "score": 90,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.92",
+        "tone": "high",
+        "value": 0.9192546583850933
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 6/8，量比 0.86，位階 高基期。"
+        }
+      ]
+    },
+    {
+      "code": "3043",
+      "name": "科風",
+      "close": 21,
+      "percent": 0.9615384615384581,
+      "tradeVolume": 169806,
+      "value": 3527384,
+      "swingScore": 90,
+      "score": 90,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "中位階",
+        "ratio": "0.50",
+        "tone": "mid",
+        "value": 0.5
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 5/8，量比 0.67，位階 中位階。"
+        }
+      ]
+    },
+    {
+      "code": "1432",
+      "name": "大魯閣",
+      "close": 18.25,
+      "percent": 0.8287292817679479,
+      "tradeVolume": 348124,
+      "value": 6299822,
+      "swingScore": 90,
+      "score": 90,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "中位階",
+        "ratio": "0.57",
+        "tone": "mid",
+        "value": 0.5714285714285716
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 5/8，量比 1.42，位階 中位階。"
+        }
+      ]
+    },
+    {
+      "code": "3402",
+      "name": "漢科",
+      "close": 147,
+      "percent": 0.684931506849315,
+      "tradeVolume": 1116.567,
+      "value": 164484607,
+      "swingScore": 90,
+      "score": 90,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.71",
+        "tone": "high",
+        "value": 0.7096774193548387
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 6/8，量比 0.57，位階 高基期。"
+        }
+      ]
+    },
+    {
+      "code": "3023",
+      "name": "信邦",
+      "close": 283.5,
+      "percent": 0.35398230088495575,
+      "tradeVolume": 2726601,
+      "value": 781664081,
+      "swingScore": 90,
+      "score": 90,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.80",
+        "tone": "high",
+        "value": 0.7955801104972375
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 7/8，量比 1.24，位階 高基期。"
+        }
+      ]
+    },
+    {
+      "code": "2937",
+      "name": "集雅社",
+      "close": 48.65,
+      "percent": 0.20597322348095043,
+      "tradeVolume": 8.191,
+      "value": 397256,
+      "swingScore": 90,
+      "score": 90,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.87",
+        "tone": "high",
+        "value": 0.8695652173913039
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 6/8，量比 0.86，位階 高基期。"
+        }
+      ]
+    },
+    {
+      "code": "1436",
+      "name": "華友聯",
+      "close": 64.9,
+      "percent": -0.6125574272587925,
+      "tradeVolume": 127013,
+      "value": 8200288,
+      "swingScore": 90,
+      "score": 90,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.70",
+        "tone": "high",
+        "value": 0.7000000000000008
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 6/8，量比 0.69，位階 高基期。"
+        }
+      ]
+    },
+    {
+      "code": "5292",
+      "name": "華懋",
+      "close": 226,
+      "percent": -2.1645021645021645,
+      "tradeVolume": 274284,
+      "value": 62372529,
+      "swingScore": 90,
+      "score": 90,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.32",
+        "tone": "low",
+        "value": 0.3208955223880597
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 5/8，量比 0.99，位階 低基期。"
+        }
+      ]
+    },
+    {
+      "code": "5701",
+      "name": "劍湖山",
+      "close": 4,
+      "percent": 9.890109890109887,
+      "tradeVolume": 270.174,
+      "value": 1080696,
+      "swingScore": 89,
+      "score": 89,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "過熱",
+        "ratio": "1.00+",
+        "tone": "hot",
+        "value": 1
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 6/8，量比 3.01，位階 過熱。"
+        }
+      ]
+    },
+    {
+      "code": "7717",
+      "name": "萊德光電-KY",
+      "close": 690,
+      "percent": 4.545454545454546,
+      "tradeVolume": 527.947,
+      "value": 350344752,
+      "swingScore": 89,
+      "score": 89,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "中位階",
+        "ratio": "0.41",
+        "tone": "mid",
+        "value": 0.4148936170212766
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 6/8，量比 1.15，位階 中位階。"
+        }
+      ]
+    },
+    {
+      "code": "3011",
+      "name": "今皓",
+      "close": 14.05,
+      "percent": 3.3088235294117725,
+      "tradeVolume": 835535,
+      "value": 11758047,
+      "swingScore": 89,
+      "score": 89,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "中位階",
+        "ratio": "0.54",
+        "tone": "mid",
+        "value": 0.5402298850574714
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 5/8，量比 0.52，位階 中位階。"
+        }
+      ]
+    },
+    {
+      "code": "6265",
+      "name": "方土昶",
+      "close": 55.2,
+      "percent": 2.602230483271386,
+      "tradeVolume": 10010.528,
+      "value": 546593026,
+      "swingScore": 89,
+      "score": 89,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.87",
+        "tone": "high",
+        "value": 0.874186550976139
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 6/8，量比 0.77，位階 高基期。"
+        }
+      ]
+    },
+    {
+      "code": "5388",
+      "name": "中磊",
+      "close": 86.7,
+      "percent": 2.3612750885478158,
+      "tradeVolume": 3895386,
+      "value": 336103473,
+      "swingScore": 89,
+      "score": 89,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.81",
+        "tone": "high",
+        "value": 0.8120300751879699
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 6/8，量比 0.55，位階 高基期。"
+        }
+      ]
+    },
+    {
+      "code": "5014",
+      "name": "建錩",
+      "close": 11.15,
+      "percent": 2.2935779816513757,
+      "tradeVolume": 379.613,
+      "value": 4250699,
+      "swingScore": 89,
+      "score": 89,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.79",
+        "tone": "high",
+        "value": 0.7863247863247863
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 6/8，量比 0.78，位階 高基期。"
+        }
+      ]
+    },
+    {
+      "code": "5324",
+      "name": "士開",
+      "close": 11.9,
+      "percent": 0.8474576271186409,
+      "tradeVolume": 260.504,
+      "value": 3089251,
+      "swingScore": 89,
+      "score": 89,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.94",
+        "tone": "high",
+        "value": 0.9444444444444446
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 5/8，量比 1.10，位階 高基期。"
+        }
+      ]
+    },
+    {
+      "code": "3467",
+      "name": "台灣精材",
+      "close": 74.7,
+      "percent": 0.809716599190295,
+      "tradeVolume": 312.013,
+      "value": 23355867,
+      "swingScore": 89,
+      "score": 89,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.85",
+        "tone": "high",
+        "value": 0.8546798029556653
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 6/8，量比 0.49，位階 高基期。"
+        }
+      ]
+    },
+    {
+      "code": "5523",
+      "name": "豐謙",
+      "close": 30.5,
+      "percent": 0.16420361247947687,
+      "tradeVolume": 47.028,
+      "value": 1429531,
+      "swingScore": 89,
+      "score": 89,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "中位階",
+        "ratio": "0.47",
+        "tone": "mid",
+        "value": 0.4742268041237117
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 6/8，量比 0.37，位階 中位階。"
+        }
+      ]
+    },
+    {
+      "code": "1342",
+      "name": "八貫",
+      "close": 89.2,
+      "percent": 0.11223344556678848,
+      "tradeVolume": 82026,
+      "value": 7308379,
+      "swingScore": 89,
+      "score": 89,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.84",
+        "tone": "high",
+        "value": 0.8431372549019613
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 6/8，量比 0.79，位階 高基期。"
+        }
+      ]
+    },
+    {
+      "code": "3033",
+      "name": "威健",
+      "close": 35.75,
+      "percent": -0.27894002789400674,
+      "tradeVolume": 3160218,
+      "value": 112924451,
+      "swingScore": 89,
+      "score": 89,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.73",
+        "tone": "high",
+        "value": 0.7299999999999998
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 6/8，量比 0.72，位階 高基期。"
+        }
+      ]
+    },
+    {
+      "code": "6417",
+      "name": "韋僑",
+      "close": 142.5,
+      "percent": -2.3972602739726026,
+      "tradeVolume": 223.485,
+      "value": 32400430,
+      "swingScore": 89,
+      "score": 89,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.81",
+        "tone": "high",
+        "value": 0.8076923076923077
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 6/8，量比 0.54，位階 高基期。"
+        }
+      ]
+    },
+    {
+      "code": "5536",
+      "name": "聖暉*",
+      "close": 993,
+      "percent": 57.61904761904761,
+      "tradeVolume": 1821.801,
+      "value": 1850900329,
+      "swingScore": 88,
+      "score": 88,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.84",
+        "tone": "high",
+        "value": 0.8441860465116279
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 6/8，量比 0.59，位階 高基期。"
+        }
+      ]
+    },
+    {
+      "code": "6913",
+      "name": "鴻呈",
+      "close": 141,
+      "percent": 6.8181818181818175,
+      "tradeVolume": 480.059,
+      "value": 68415231,
+      "swingScore": 88,
+      "score": 88,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.84",
+        "tone": "high",
+        "value": 0.8414634146341463
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 6/8，量比 0.67，位階 高基期。"
+        }
+      ]
+    },
+    {
+      "code": "5289",
+      "name": "宜鼎",
+      "close": 1810,
+      "percent": 6.470588235294119,
+      "tradeVolume": 5120.324,
+      "value": 9197572285,
+      "swingScore": 88,
+      "score": 88,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.92",
+        "tone": "high",
+        "value": 0.9160792212151728
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 7/8，量比 1.01，位階 高基期。"
+        }
+      ]
+    },
+    {
+      "code": "5309",
+      "name": "系統電",
+      "close": 69,
+      "percent": 2.831594634873332,
+      "tradeVolume": 7861.59,
+      "value": 532777352,
+      "swingScore": 88,
+      "score": 88,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.78",
+        "tone": "high",
+        "value": 0.7833333333333331
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 5/8，量比 0.74，位階 高基期。"
+        }
+      ]
+    },
+    {
+      "code": "6138",
+      "name": "茂達",
+      "close": 345.5,
+      "percent": 0.7288629737609329,
+      "tradeVolume": 1506.092,
+      "value": 524080498,
+      "swingScore": 88,
+      "score": 88,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.78",
+        "tone": "high",
+        "value": 0.7840909090909091
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 6/8，量比 0.66，位階 高基期。"
+        }
+      ]
+    },
+    {
+      "code": "3147",
+      "name": "大綜",
+      "close": 182.5,
+      "percent": 0.5509641873278237,
+      "tradeVolume": 207.54,
+      "value": 37668211,
+      "swingScore": 88,
+      "score": 88,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.88",
+        "tone": "high",
+        "value": 0.8846153846153846
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 6/8，量比 0.60，位階 高基期。"
+        }
+      ]
+    },
+    {
+      "code": "5236",
+      "name": "凌陽創新",
+      "close": 182.5,
+      "percent": 0.5509641873278237,
+      "tradeVolume": 442.151,
+      "value": 80933721,
+      "swingScore": 88,
+      "score": 88,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.85",
+        "tone": "high",
+        "value": 0.8516129032258064
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 6/8，量比 0.62，位階 高基期。"
+        }
+      ]
+    },
+    {
+      "code": "6804",
+      "name": "明係",
+      "close": 16.1,
+      "percent": 0.31152647975078324,
+      "tradeVolume": 13.125,
+      "value": 212519,
+      "swingScore": 88,
+      "score": 88,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "中位階",
+        "ratio": "0.56",
+        "tone": "mid",
+        "value": 0.5581395348837214
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 6/8，量比 0.20，位階 中位階。"
+        }
+      ]
+    },
+    {
+      "code": "8477",
+      "name": "創業家",
+      "close": 19.8,
+      "percent": -0.9999999999999963,
+      "tradeVolume": 141.525,
+      "value": 2789000,
+      "swingScore": 88,
+      "score": 88,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.70",
+        "tone": "high",
+        "value": 0.6974358974358975
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 6/8，量比 0.67，位階 高基期。"
+        }
+      ]
+    },
+    {
+      "code": "3332",
+      "name": "幸康",
+      "close": 66.8,
+      "percent": 20.143884892086323,
+      "tradeVolume": 19.212,
+      "value": 1285633,
+      "swingScore": 87,
+      "score": 87,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "中位階",
+        "ratio": "0.56",
+        "tone": "mid",
+        "value": 0.5643153526970953
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 6/8，量比 0.13，位階 中位階。"
+        }
+      ]
+    },
+    {
+      "code": "6823",
+      "name": "濾能",
+      "close": 73,
+      "percent": 19.08646003262643,
+      "tradeVolume": 220.193,
+      "value": 16035916,
+      "swingScore": 87,
+      "score": 87,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "中位階",
+        "ratio": "0.43",
+        "tone": "mid",
+        "value": 0.4310344827586207
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 6/8，量比 0.57，位階 中位階。"
+        }
+      ]
+    },
+    {
+      "code": "4991",
+      "name": "環宇-KY",
+      "close": 730,
+      "percent": 3.546099290780142,
+      "tradeVolume": 8711.499,
+      "value": 6314989209,
+      "swingScore": 87,
+      "score": 87,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.66",
+        "tone": "high",
+        "value": 0.65625
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 5/8，量比 2.15，位階 高基期。"
+        }
+      ]
+    },
+    {
+      "code": "3374",
+      "name": "精材",
+      "close": 259,
+      "percent": 1.5686274509803921,
+      "tradeVolume": 18282.41,
+      "value": 4780084528,
+      "swingScore": 87,
+      "score": 87,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.80",
+        "tone": "high",
+        "value": 0.803030303030303
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 7/8，量比 0.92，位階 高基期。"
+        }
+      ]
+    },
+    {
+      "code": "3438",
+      "name": "類比科",
+      "close": 71.5,
+      "percent": -0.8321775312066496,
+      "tradeVolume": 481.905,
+      "value": 34652106,
+      "swingScore": 87,
+      "score": 87,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.89",
+        "tone": "high",
+        "value": 0.8904538341158059
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 6/8，量比 0.56，位階 高基期。"
+        }
+      ]
+    },
+    {
+      "code": "1337",
+      "name": "再生-KY",
+      "close": 5.56,
+      "percent": -2.9668411867364886,
+      "tradeVolume": 603459,
+      "value": 3377349,
+      "swingScore": 87,
+      "score": 87,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "中位階",
+        "ratio": "0.52",
+        "tone": "mid",
+        "value": 0.5246913580246911
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 5/8，量比 0.53，位階 中位階。"
+        }
+      ]
+    },
+    {
+      "code": "7777",
+      "name": "能率亞洲",
+      "close": 41.65,
+      "percent": 51.17967332123411,
+      "tradeVolume": 9952.202,
+      "value": 414509146,
+      "swingScore": 86,
+      "score": 86,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "過熱",
+        "ratio": "1.00+",
+        "tone": "hot",
+        "value": 1
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 5/8，量比 6.97，位階 過熱。"
+        }
+      ]
+    },
+    {
+      "code": "3191",
+      "name": "雲嘉南",
+      "close": 26.45,
+      "percent": 9.979209979209973,
+      "tradeVolume": 702.183,
+      "value": 18572709,
+      "swingScore": 86,
+      "score": 86,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "過熱",
+        "ratio": "1.00+",
+        "tone": "hot",
+        "value": 1
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 5/8，量比 4.18，位階 過熱。"
+        }
+      ]
+    },
+    {
+      "code": "3288",
+      "name": "點晶",
+      "close": 16.6,
+      "percent": 9.933774834437099,
+      "tradeVolume": 160.667,
+      "value": 2666861,
+      "swingScore": 86,
+      "score": 86,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "過熱",
+        "ratio": "1.00+",
+        "tone": "hot",
+        "value": 1
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 5/8，量比 7.58，位階 過熱。"
+        }
+      ]
+    },
+    {
+      "code": "6261",
+      "name": "久元",
+      "close": 123,
+      "percent": 4.23728813559322,
+      "tradeVolume": 7773.91,
+      "value": 948481778,
+      "swingScore": 86,
+      "score": 86,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.80",
+        "tone": "high",
+        "value": 0.8009188361408882
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 6/8，量比 1.18，位階 高基期。"
+        }
+      ]
+    },
+    {
+      "code": "3511",
+      "name": "矽瑪",
+      "close": 20.8,
+      "percent": 3.482587064676613,
+      "tradeVolume": 418.296,
+      "value": 8560496,
+      "swingScore": 86,
+      "score": 86,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "中位階",
+        "ratio": "0.43",
+        "tone": "mid",
+        "value": 0.4272727272727275
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 5/8，量比 0.88，位階 中位階。"
+        }
+      ]
+    },
+    {
+      "code": "3663",
+      "name": "鑫科",
+      "close": 88,
+      "percent": 2.683780630105014,
+      "tradeVolume": 4785.238,
+      "value": 420824734,
+      "swingScore": 86,
+      "score": 86,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.82",
+        "tone": "high",
+        "value": 0.8151815181518154
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 5/8，量比 0.72，位階 高基期。"
+        }
+      ]
+    },
+    {
+      "code": "6651",
+      "name": "全宇昕",
+      "close": 149,
+      "percent": 2.405498281786942,
+      "tradeVolume": 319.144,
+      "value": 47380819,
+      "swingScore": 86,
+      "score": 86,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.84",
+        "tone": "high",
+        "value": 0.8393077873918418
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 6/8，量比 0.38，位階 高基期。"
+        }
+      ]
+    },
+    {
+      "code": "3041",
+      "name": "揚智",
+      "close": 25.65,
+      "percent": 0.984251968503937,
+      "tradeVolume": 1372519,
+      "value": 35212112,
+      "swingScore": 86,
+      "score": 86,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.70",
+        "tone": "high",
+        "value": 0.6953124999999997
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 5/8，量比 0.70，位階 高基期。"
+        }
+      ]
+    },
+    {
+      "code": "3615",
+      "name": "安可",
+      "close": 49.15,
+      "percent": 0.9240246406570753,
+      "tradeVolume": 7197.086,
+      "value": 349349131,
+      "swingScore": 86,
+      "score": 86,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.87",
+        "tone": "high",
+        "value": 0.874779541446208
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 5/8，量比 0.79，位階 高基期。"
+        }
+      ]
+    },
+    {
+      "code": "6570",
+      "name": "維田",
+      "close": 59.7,
+      "percent": 0.674536256323787,
+      "tradeVolume": 417.449,
+      "value": 25116079,
+      "swingScore": 86,
+      "score": 86,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.80",
+        "tone": "high",
+        "value": 0.795053003533569
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 5/8，量比 0.75，位階 高基期。"
+        }
+      ]
+    },
+    {
+      "code": "3567",
+      "name": "逸昌",
+      "close": 29.3,
+      "percent": 0.17094017094017336,
+      "tradeVolume": 159.68,
+      "value": 4678912,
+      "swingScore": 86,
+      "score": 86,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "中位階",
+        "ratio": "0.61",
+        "tone": "mid",
+        "value": 0.6142857142857144
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 6/8，量比 0.49，位階 中位階。"
+        }
+      ]
+    },
+    {
+      "code": "3017",
+      "name": "奇鋐",
+      "close": 2835,
+      "percent": 0,
+      "tradeVolume": 3420271,
+      "value": 9711527456,
+      "swingScore": 86,
+      "score": 86,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.87",
+        "tone": "high",
+        "value": 0.8698884758364313
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 5/8，量比 0.78，位階 高基期。"
+        }
+      ]
+    },
+    {
+      "code": "6612",
+      "name": "奈米醫材",
+      "close": 72.4,
+      "percent": 0,
+      "tradeVolume": 26.305,
+      "value": 1903223,
+      "swingScore": 86,
+      "score": 86,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "中位階",
+        "ratio": "0.54",
+        "tone": "mid",
+        "value": 0.5384615384615393
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 5/8，量比 0.43，位階 中位階。"
+        }
+      ]
+    },
+    {
+      "code": "3035",
+      "name": "智原",
+      "close": 207,
+      "percent": -0.7194244604316548,
+      "tradeVolume": 13700926,
+      "value": 2868647169,
+      "swingScore": 86,
+      "score": 86,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.74",
+        "tone": "high",
+        "value": 0.7391304347826086
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 5/8，量比 0.75，位階 高基期。"
+        }
+      ]
+    },
+    {
+      "code": "5284",
+      "name": "jpp-KY",
+      "close": 451.5,
+      "percent": -1.8478260869565217,
+      "tradeVolume": 1531179,
+      "value": 692880597,
+      "swingScore": 86,
+      "score": 86,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.86",
+        "tone": "high",
+        "value": 0.8623188405797102
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 5/8，量比 0.72，位階 高基期。"
+        }
+      ]
+    },
+    {
+      "code": "3169",
+      "name": "亞信",
+      "close": 119,
+      "percent": -2.05761316872428,
+      "tradeVolume": 805.307,
+      "value": 96499741,
+      "swingScore": 86,
+      "score": 86,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.78",
+        "tone": "high",
+        "value": 0.782051282051282
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 5/8，量比 0.77，位階 高基期。"
+        }
+      ]
+    },
+    {
+      "code": "3594",
+      "name": "磐儀",
+      "close": 50.3,
+      "percent": -3.454894433781198,
+      "tradeVolume": 437.948,
+      "value": 22153076,
+      "swingScore": 86,
+      "score": 86,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "中位階",
+        "ratio": "0.57",
+        "tone": "mid",
+        "value": 0.5674418604651161
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 5/8，量比 0.37，位階 中位階。"
+        }
+      ]
+    },
+    {
+      "code": "6527",
+      "name": "明達醫",
+      "close": 70,
+      "percent": 4.477611940298507,
+      "tradeVolume": 29.025,
+      "value": 2033142,
+      "swingScore": 85,
+      "score": 85,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.33",
+        "tone": "low",
+        "value": 0.3269230769230773
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 5/8，量比 0.62，位階 低基期。"
+        }
+      ]
+    },
+    {
+      "code": "3171",
+      "name": "炎洲流通",
+      "close": 70.1,
+      "percent": 1.8895348837209263,
+      "tradeVolume": 14.582,
+      "value": 1017838,
+      "swingScore": 85,
+      "score": 85,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.65",
+        "tone": "high",
+        "value": 0.6542056074766351
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 6/8，量比 0.25，位階 高基期。"
+        }
+      ]
+    },
+    {
+      "code": "3022",
+      "name": "威強電",
+      "close": 69,
+      "percent": 0.29069767441860883,
+      "tradeVolume": 1190558,
+      "value": 83250490,
+      "swingScore": 85,
+      "score": 85,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.79",
+        "tone": "high",
+        "value": 0.790697674418605
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 6/8，量比 1.19，位階 高基期。"
+        }
+      ]
+    },
+    {
+      "code": "1413",
+      "name": "宏洲",
+      "close": 10,
+      "percent": -1.4778325123152742,
+      "tradeVolume": 10679,
+      "value": 106745,
+      "swingScore": 85,
+      "score": 85,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "中位階",
+        "ratio": "0.56",
+        "tone": "mid",
+        "value": 0.5555555555555554
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 5/8，量比 0.31，位階 中位階。"
+        }
+      ]
+    },
+    {
+      "code": "6237",
+      "name": "驊訊",
+      "close": 50.3,
+      "percent": -3.269230769230775,
+      "tradeVolume": 1762.655,
+      "value": 89950000,
+      "swingScore": 85,
+      "score": 85,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.66",
+        "tone": "high",
+        "value": 0.6554621848739495
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 5/8，量比 0.63，位階 高基期。"
+        }
+      ]
+    },
+    {
+      "code": "3268",
+      "name": "海德威",
+      "close": 18,
+      "percent": 3.4482758620689737,
+      "tradeVolume": 212.563,
+      "value": 3745446,
+      "swingScore": 84,
+      "score": 84,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.70",
+        "tone": "high",
+        "value": 0.7037037037037036
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 6/8，量比 0.86，位階 高基期。"
+        }
+      ]
+    },
+    {
+      "code": "8271",
+      "name": "宇瞻",
+      "close": 123.5,
+      "percent": 3.3472803347280333,
+      "tradeVolume": 15928782,
+      "value": 1959464681,
+      "swingScore": 84,
+      "score": 84,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.66",
+        "tone": "high",
+        "value": 0.655831739961759
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 6/8，量比 0.93，位階 高基期。"
+        }
+      ]
+    },
+    {
+      "code": "2065",
+      "name": "世豐",
+      "close": 36.2,
+      "percent": 1.971830985915501,
+      "tradeVolume": 97.343,
+      "value": 3489384,
+      "swingScore": 84,
+      "score": 84,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.96",
+        "tone": "high",
+        "value": 0.9647058823529415
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 5/8，量比 0.51，位階 高基期。"
+        }
+      ]
+    },
+    {
+      "code": "6578",
+      "name": "達邦蛋白",
+      "close": 16.6,
+      "percent": 1.2195121951219685,
+      "tradeVolume": 38.886,
+      "value": 642363,
+      "swingScore": 84,
+      "score": 84,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "中位階",
+        "ratio": "0.58",
+        "tone": "mid",
+        "value": 0.5844155844155849
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 5/8，量比 0.18，位階 中位階。"
+        }
+      ]
+    },
+    {
+      "code": "3317",
+      "name": "尼克森",
+      "close": 83.8,
+      "percent": 1.2077294685990339,
+      "tradeVolume": 4837.089,
+      "value": 406909645,
+      "swingScore": 84,
+      "score": 84,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.90",
+        "tone": "high",
+        "value": 0.8973684210526315
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 5/8，量比 0.56，位階 高基期。"
+        }
+      ]
+    },
+    {
+      "code": "5220",
+      "name": "萬達光電",
+      "close": 23.25,
+      "percent": 1.0869565217391304,
+      "tradeVolume": 52.16,
+      "value": 1205873,
+      "swingScore": 84,
+      "score": 84,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.63",
+        "tone": "high",
+        "value": 0.6277372262773723
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 6/8，量比 0.40，位階 高基期。"
+        }
+      ]
+    },
+    {
+      "code": "5227",
+      "name": "立凱-KY",
+      "close": 24.55,
+      "percent": 0.8213552361396275,
+      "tradeVolume": 144.505,
+      "value": 3527462,
+      "swingScore": 84,
+      "score": 84,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.62",
+        "tone": "high",
+        "value": 0.6241610738255035
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 5/8，量比 0.47，位階 高基期。"
+        }
+      ]
+    },
+    {
+      "code": "6223",
+      "name": "旺矽",
+      "close": 5960,
+      "percent": 0.760777683854607,
+      "tradeVolume": 7883.195,
+      "value": 47072482470,
+      "swingScore": 84,
+      "score": 84,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.76",
+        "tone": "high",
+        "value": 0.758147512864494
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 5/8，量比 4.66，位階 高基期。"
+        }
+      ]
+    },
+    {
+      "code": "8390",
+      "name": "金益鼎",
+      "close": 121.5,
+      "percent": 0.4132231404958678,
+      "tradeVolume": 870.818,
+      "value": 106821676,
+      "swingScore": 84,
+      "score": 84,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.82",
+        "tone": "high",
+        "value": 0.8221757322175732
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 5/8，量比 0.51，位階 高基期。"
+        }
+      ]
+    },
+    {
+      "code": "3032",
+      "name": "偉訓",
+      "close": 90.5,
+      "percent": 0.22148394241417813,
+      "tradeVolume": 1292771,
+      "value": 116799279,
+      "swingScore": 84,
+      "score": 84,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.91",
+        "tone": "high",
+        "value": 0.9066265060240966
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 5/8，量比 0.49，位階 高基期。"
+        }
+      ]
+    },
+    {
+      "code": "7734",
+      "name": "印能科技",
+      "close": 3675,
+      "percent": 0.13623978201634876,
+      "tradeVolume": 235.58,
+      "value": 862743745,
+      "swingScore": 84,
+      "score": 84,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "中位階",
+        "ratio": "0.60",
+        "tone": "mid",
+        "value": 0.6008316008316008
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 5/8，量比 0.66，位階 中位階。"
+        }
+      ]
+    },
+    {
+      "code": "3036",
+      "name": "文曄",
+      "close": 288.5,
+      "percent": -0.3454231433506045,
+      "tradeVolume": 7821185,
+      "value": 2255520730,
+      "swingScore": 84,
+      "score": 84,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.82",
+        "tone": "high",
+        "value": 0.8243243243243243
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 5/8，量比 0.53，位階 高基期。"
+        }
+      ]
+    },
+    {
+      "code": "5534",
+      "name": "長虹",
+      "close": 85.6,
+      "percent": -0.6960556844547663,
+      "tradeVolume": 474330,
+      "value": 40707772,
+      "swingScore": 84,
+      "score": 84,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.79",
+        "tone": "high",
+        "value": 0.793548387096774
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 5/8，量比 0.55，位階 高基期。"
+        }
+      ]
+    },
+    {
+      "code": "4163",
+      "name": "鐿鈦",
+      "close": 115.5,
+      "percent": -2.11864406779661,
+      "tradeVolume": 65.467,
+      "value": 7578243,
+      "swingScore": 84,
+      "score": 84,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.69",
+        "tone": "high",
+        "value": 0.6895424836601307
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 6/8，量比 0.42，位階 高基期。"
+        }
+      ]
+    },
+    {
+      "code": "3026",
+      "name": "禾伸堂",
+      "close": 212.5,
+      "percent": -9.957627118644067,
+      "tradeVolume": 17109724,
+      "value": 3736898054,
+      "swingScore": 84,
+      "score": 84,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.66",
+        "tone": "high",
+        "value": 0.6558823529411765
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 5/8，量比 1.98，位階 高基期。"
+        }
+      ]
+    },
+    {
+      "code": "5351",
+      "name": "鈺創",
+      "close": 86.2,
+      "percent": 4.358353510895895,
+      "tradeVolume": 24247.76,
+      "value": 2082607609,
+      "swingScore": 83,
+      "score": 83,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.80",
+        "tone": "high",
+        "value": 0.7958115183246074
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 6/8，量比 0.74，位階 高基期。"
+        }
+      ]
+    },
+    {
+      "code": "3008",
+      "name": "大立光",
+      "close": 3515,
+      "percent": 2.627737226277372,
+      "tradeVolume": 1477877,
+      "value": 5190853410,
+      "swingScore": 83,
+      "score": 83,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.79",
+        "tone": "high",
+        "value": 0.7931034482758621
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 5/8，量比 0.68，位階 高基期。"
+        }
+      ]
+    },
+    {
+      "code": "3597",
+      "name": "映興",
+      "close": 28.05,
+      "percent": 0.1785714285714311,
+      "tradeVolume": 78.84,
+      "value": 2217765,
+      "swingScore": 83,
+      "score": 83,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.73",
+        "tone": "high",
+        "value": 0.7299270072992703
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 5/8，量比 0.38，位階 高基期。"
+        }
+      ]
+    },
+    {
+      "code": "1341",
+      "name": "富林-KY",
+      "close": 62,
+      "percent": -0.9584664536741236,
+      "tradeVolume": 2344,
+      "value": 145334,
+      "swingScore": 83,
+      "score": 83,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.89",
+        "tone": "high",
+        "value": 0.8888888888888886
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 6/8，量比 0.31，位階 高基期。"
+        }
+      ]
+    },
+    {
+      "code": "4971",
+      "name": "IET-KY",
+      "close": 750,
+      "percent": 5.485232067510549,
+      "tradeVolume": 240.591,
+      "value": 176615442,
+      "swingScore": 82,
+      "score": 82,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "中位階",
+        "ratio": "0.47",
+        "tone": "mid",
+        "value": 0.4708860759493671
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 6/8，量比 0.23，位階 中位階。"
+        }
+      ]
+    },
+    {
+      "code": "4127",
+      "name": "天良",
+      "close": 69,
+      "percent": 4.863221884498485,
+      "tradeVolume": 441.454,
+      "value": 29983389,
+      "swingScore": 82,
+      "score": 82,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.85",
+        "tone": "high",
+        "value": 0.8546365914786969
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 5/8，量比 0.44，位階 高基期。"
+        }
+      ]
+    },
+    {
+      "code": "4924",
+      "name": "欣厚-KY",
+      "close": 11.9,
+      "percent": 4.845814977973575,
+      "tradeVolume": 49.745,
+      "value": 583784,
+      "swingScore": 82,
+      "score": 82,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.71",
+        "tone": "high",
+        "value": 0.7050561797752811
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 5/8，量比 0.25，位階 高基期。"
+        }
+      ]
+    },
+    {
+      "code": "6245",
+      "name": "立端",
+      "close": 87.2,
+      "percent": 1.2775842044134826,
+      "tradeVolume": 900.255,
+      "value": 78309612,
+      "swingScore": 82,
+      "score": 82,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.73",
+        "tone": "high",
+        "value": 0.7300380228136883
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 5/8，量比 0.55，位階 高基期。"
+        }
+      ]
+    },
+    {
+      "code": "6577",
+      "name": "勁豐",
+      "close": 80.4,
+      "percent": 1.005025125628155,
+      "tradeVolume": 26.603,
+      "value": 2140838,
+      "swingScore": 82,
+      "score": 82,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "中位階",
+        "ratio": "0.60",
+        "tone": "mid",
+        "value": 0.6049382716049394
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 5/8，量比 0.60，位階 中位階。"
+        }
+      ]
+    },
+    {
+      "code": "6126",
+      "name": "信音",
+      "close": 35.5,
+      "percent": 0.4243281471004203,
+      "tradeVolume": 1031.163,
+      "value": 36676439,
+      "swingScore": 82,
+      "score": 82,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.80",
+        "tone": "high",
+        "value": 0.8036809815950919
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 5/8，量比 0.53，位階 高基期。"
+        }
+      ]
+    },
+    {
+      "code": "6739",
+      "name": "竹陞科技",
+      "close": 1235,
+      "percent": 30,
+      "tradeVolume": 177.959,
+      "value": 222225170,
+      "swingScore": 81,
+      "score": 81,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.92",
+        "tone": "high",
+        "value": 0.9235993208828522
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 5/8，量比 0.34，位階 高基期。"
+        }
+      ]
+    },
+    {
+      "code": "6597",
+      "name": "立誠",
+      "close": 71,
+      "percent": 13.782051282051286,
+      "tradeVolume": 8.249,
+      "value": 588679,
+      "swingScore": 81,
+      "score": 81,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.94",
+        "tone": "high",
+        "value": 0.9393939393939394
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 5/8，量比 0.38，位階 高基期。"
+        }
+      ]
+    },
+    {
+      "code": "3609",
+      "name": "三一東林",
+      "close": 28.05,
+      "percent": -0.5319148936170163,
+      "tradeVolume": 124.781,
+      "value": 3516487,
+      "swingScore": 81,
+      "score": 81,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.70",
+        "tone": "high",
+        "value": 0.6960784313725492
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 5/8，量比 0.39，位階 高基期。"
+        }
+      ]
+    },
+    {
+      "code": "6877",
+      "name": "鏵友益",
+      "close": 164,
+      "percent": -0.6060606060606061,
+      "tradeVolume": 297.059,
+      "value": 48854267,
+      "swingScore": 81,
+      "score": 81,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "中位階",
+        "ratio": "0.62",
+        "tone": "mid",
+        "value": 0.6179775280898876
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 5/8，量比 0.47，位階 中位階。"
+        }
+      ]
+    },
+    {
+      "code": "6488",
+      "name": "環球晶",
+      "close": 1015,
+      "percent": 104.22535211267605,
+      "tradeVolume": 11189.395,
+      "value": 11324920877,
+      "swingScore": 80,
+      "score": 80,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "過熱",
+        "ratio": "1.00+",
+        "tone": "hot",
+        "value": 1
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 5/8，量比 1.21，位階 過熱。"
+        }
+      ]
+    },
+    {
+      "code": "6654",
+      "name": "天正國際",
+      "close": 154,
+      "percent": 10,
+      "tradeVolume": 161.483,
+      "value": 24867882,
+      "swingScore": 80,
+      "score": 80,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "過熱",
+        "ratio": "1.00+",
+        "tone": "hot",
+        "value": 1
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 5/8，量比 1.30，位階 過熱。"
+        }
+      ]
+    },
+    {
+      "code": "6182",
+      "name": "合晶",
+      "close": 99.5,
+      "percent": 9.702315325248067,
+      "tradeVolume": 14736.143,
+      "value": 1458493056,
+      "swingScore": 80,
+      "score": 80,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "1.00",
+        "tone": "high",
+        "value": 0.9970972423802612
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 5/8，量比 0.28，位階 高基期。"
+        }
+      ]
+    },
+    {
+      "code": "6173",
+      "name": "信昌電",
+      "close": 237,
+      "percent": 7.972665148063782,
+      "tradeVolume": 1395.762,
+      "value": 316385952,
+      "swingScore": 80,
+      "score": 80,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.98",
+        "tone": "high",
+        "value": 0.983615510649918
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 5/8，量比 0.22，位階 高基期。"
+        }
+      ]
+    },
+    {
+      "code": "5228",
+      "name": "鈺鎧",
+      "close": 64,
+      "percent": 1.265822784810122,
+      "tradeVolume": 414.672,
+      "value": 26421500,
+      "swingScore": 80,
+      "score": 80,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.98",
+        "tone": "high",
+        "value": 0.9764705882352941
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 5/8，量比 0.26，位階 高基期。"
+        }
+      ]
+    },
+    {
+      "code": "2064",
+      "name": "晉椿",
+      "close": 13.8,
+      "percent": 0.3636363636363688,
+      "tradeVolume": 12.13,
+      "value": 167855,
+      "swingScore": 80,
+      "score": 80,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.91",
+        "tone": "high",
+        "value": 0.9090909090909091
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 5/8，量比 0.23，位階 高基期。"
+        }
+      ]
+    },
+    {
+      "code": "3236",
+      "name": "千如",
+      "close": 55,
+      "percent": 2.803738317757009,
+      "tradeVolume": 2081.536,
+      "value": 114174217,
+      "swingScore": 79,
+      "score": 79,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.78",
+        "tone": "high",
+        "value": 0.7848837209302326
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 5/8，量比 0.17，位階 高基期。"
+        }
+      ]
+    },
+    {
+      "code": "3030",
+      "name": "德律",
+      "close": 405,
+      "percent": -0.9779951100244498,
+      "tradeVolume": 4977039,
+      "value": 2049965690,
+      "swingScore": 79,
+      "score": 79,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.76",
+        "tone": "high",
+        "value": 0.7552447552447552
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 5/8，量比 1.11，位階 高基期。"
+        }
+      ]
+    },
+    {
+      "code": "1303",
+      "name": "南亞",
+      "close": 75.9,
+      "percent": -1.5564202334630204,
+      "tradeVolume": 61243981,
+      "value": 4652315267,
+      "swingScore": 79,
+      "score": 79,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.73",
+        "tone": "high",
+        "value": 0.7323943661971832
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 5/8，量比 0.38，位階 高基期。"
+        }
+      ]
+    },
+    {
+      "code": "3709",
+      "name": "鑫聯大投控",
+      "close": 88.8,
+      "percent": 1.718213058419244,
+      "tradeVolume": 1687.348,
+      "value": 149453337,
+      "swingScore": 78,
+      "score": 78,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.86",
+        "tone": "high",
+        "value": 0.8619528619528617
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 6/8，量比 0.40，位階 高基期。"
+        }
+      ]
+    },
+    {
+      "code": "8110",
+      "name": "華東",
+      "close": 79.3,
+      "percent": 0.2528445006321149,
+      "tradeVolume": 58543833,
+      "value": 4700574080,
+      "swingScore": 78,
+      "score": 78,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.83",
+        "tone": "high",
+        "value": 0.8285714285714285
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 5/8，量比 0.75，位階 高基期。"
+        }
+      ]
+    },
+    {
+      "code": "6664",
+      "name": "群翊",
+      "close": 436,
+      "percent": -1.1337868480725624,
+      "tradeVolume": 1596.34,
+      "value": 701598061,
+      "swingScore": 78,
+      "score": 78,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.68",
+        "tone": "high",
+        "value": 0.6796875
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 5/8，量比 0.81，位階 高基期。"
+        }
+      ]
+    },
+    {
+      "code": "8046",
+      "name": "南電",
+      "close": 1005,
+      "percent": 9.716157205240176,
+      "tradeVolume": 20919397,
+      "value": 20404302208,
+      "swingScore": 77,
+      "score": 77,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "過熱",
+        "ratio": "1.00+",
+        "tone": "hot",
+        "value": 1
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 5/8，量比 0.90，位階 過熱。"
+        }
+      ]
+    },
+    {
+      "code": "8147",
+      "name": "正淩",
+      "close": 176,
+      "percent": 3.5294117647058822,
+      "tradeVolume": 453.738,
+      "value": 78962598,
+      "swingScore": 77,
+      "score": 77,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.67",
+        "tone": "high",
+        "value": 0.6742424242424242
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 6/8，量比 0.28，位階 高基期。"
+        }
+      ]
+    },
+    {
+      "code": "1312",
+      "name": "國喬",
+      "close": 13.5,
+      "percent": 0.7462686567164152,
+      "tradeVolume": 7716881,
+      "value": 104123999,
+      "swingScore": 77,
+      "score": 77,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.78",
+        "tone": "high",
+        "value": 0.7761194029850746
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 5/8，量比 0.61，位階 高基期。"
+        }
+      ]
+    },
+    {
+      "code": "3034",
+      "name": "聯詠",
+      "close": 409,
+      "percent": 0.12239902080783352,
+      "tradeVolume": 2586981,
+      "value": 1058793719,
+      "swingScore": 77,
+      "score": 77,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.66",
+        "tone": "high",
+        "value": 0.6568047337278107
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 5/8，量比 0.65，位階 高基期。"
+        }
+      ]
+    },
+    {
+      "code": "3426",
+      "name": "台興",
+      "close": 47.75,
+      "percent": 0,
+      "tradeVolume": 5.776,
+      "value": 276261,
+      "swingScore": 77,
+      "score": 77,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "中位階",
+        "ratio": "0.55",
+        "tone": "mid",
+        "value": 0.5454545454545431
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 5/8，量比 0.26，位階 中位階。"
+        }
+      ]
+    },
+    {
+      "code": "3531",
+      "name": "先益",
+      "close": 23.25,
+      "percent": 0,
+      "tradeVolume": 2,
+      "value": 46500,
+      "swingScore": 77,
+      "score": 77,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "中位階",
+        "ratio": "0.60",
+        "tone": "mid",
+        "value": 0.5999999999999996
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 5/8，量比 0.24，位階 中位階。"
+        }
+      ]
+    },
+    {
+      "code": "3031",
+      "name": "佰鴻",
+      "close": 31.55,
+      "percent": -3.810975609756087,
+      "tradeVolume": 5958933,
+      "value": 190535651,
+      "swingScore": 77,
+      "score": 77,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.78",
+        "tone": "high",
+        "value": 0.7754491017964074
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 5/8，量比 0.57，位階 高基期。"
+        }
+      ]
+    },
+    {
+      "code": "3491",
+      "name": "昇達科",
+      "close": 2200,
+      "percent": 10,
+      "tradeVolume": 1371.864,
+      "value": 3001698735,
+      "swingScore": 75,
+      "score": 75,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "過熱",
+        "ratio": "1.00+",
+        "tone": "hot",
+        "value": 1
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 5/8，量比 0.57，位階 過熱。"
+        }
+      ]
+    },
+    {
+      "code": "3516",
+      "name": "亞帝歐",
+      "close": 23.2,
+      "percent": 0,
+      "tradeVolume": 63.801,
+      "value": 1490848,
+      "swingScore": 72,
+      "score": 72,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.69",
+        "tone": "high",
+        "value": 0.6918238993710693
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 5/8，量比 0.21，位階 高基期。"
+        }
+      ]
+    },
+    {
+      "code": "4305",
+      "name": "世坤",
+      "close": 44,
+      "percent": 1.033295063145816,
+      "tradeVolume": 2.009,
+      "value": 88403,
+      "swingScore": 71,
+      "score": 71,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "過熱",
+        "ratio": "1.00+",
+        "tone": "hot",
+        "value": 1
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 5/8，量比 0.36，位階 過熱。"
+        }
+      ]
+    }
+  ]
+}
