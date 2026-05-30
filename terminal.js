@@ -8304,14 +8304,14 @@ intradayRadarStyles.textContent = `
     font-weight: 900;
   }
   .strategy5-page-icon {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
+    display: inline-block;
     width: 24px;
-    height: 24px;
-    color: #dce7ff;
-    font-size: 20px;
-    font-weight: 900;
+    height: 14px;
+    border-radius: 2px;
+    background: linear-gradient(135deg, #ff8d45, #ff5f3f);
+    transform: skewX(-10deg);
+    box-shadow: 0 0 0 1px rgba(255, 141, 69, 0.22), 0 8px 18px rgba(255, 95, 63, 0.16);
+    flex: 0 0 auto;
   }
   .strategy5-page-heading p {
     margin: 10px 0 0;
@@ -10237,7 +10237,7 @@ function renderStrategy5Dashboard(evaluated) {
   strategyTable.innerHTML = `
     <section class="strategy5-shell strategy5-clean">
       <header class="strategy5-page-heading">
-        <h2><span class="strategy5-page-icon" aria-hidden="true">◎</span>策略5綜合策略</h2>
+        <h2><span class="strategy5-page-icon" aria-hidden="true"></span>策略5綜合策略</h2>
         <p>掃描時間 06:00 / 21:00｜完整掃描｜${strategy5UpdatedAt ? `最後更新 ${new Date(strategy5UpdatedAt).toLocaleTimeString("zh-TW", { hour12: false })}` : "讀取中"}｜結果固定到下一次掃描</p>
       </header>
       <section class="strategy5-dashboard strategy5-topic-layout">
