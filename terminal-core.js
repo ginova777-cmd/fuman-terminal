@@ -1,5 +1,5 @@
 (function () {
-  const version = "speed-modules-20260530-6";
+  const version = "speed-modules-20260530-7";
   window.FUMAN_TERMINAL_BOOT = {
     version,
     startedAt: Date.now(),

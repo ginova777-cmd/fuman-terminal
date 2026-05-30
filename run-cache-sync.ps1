@@ -281,7 +281,8 @@ function Update-SlimCacheFiles {
     $qualityScripts = @(
       "scripts\generate-signal-quality-report.js",
       "scripts\generate-data-quality-report.js",
-      "scripts\generate-consistency-report.js"
+      "scripts\generate-consistency-report.js",
+      "scripts\generate-strategy-weight-report.js"
     )
     foreach ($qualityScript in $qualityScripts) {
       $fullQualityScript = Join-Path $codeRepo $qualityScript
@@ -563,6 +564,7 @@ try {
       "data\signal-quality-report.json",
       "data\data-quality-report.json",
       "data\data-consistency-report.json",
+      "data\strategy-weight-report.json",
       "data\open-buy-latest.json",
       "data\open-buy-backup.json",
       "data\open-buy-scorecard-source.json",

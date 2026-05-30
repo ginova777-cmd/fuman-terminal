@@ -36,6 +36,7 @@ function main() {
     "signal-quality-report.json",
     "data-quality-report.json",
     "data-consistency-report.json",
+    "strategy-weight-report.json",
   ];
   const payload = {
     ok: true,

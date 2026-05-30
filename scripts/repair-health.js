@@ -35,6 +35,7 @@ function main() {
   run("refresh signal quality report", nodeExe, ["scripts/generate-signal-quality-report.js"]);
   run("refresh data quality report", nodeExe, ["scripts/generate-data-quality-report.js"]);
   run("refresh consistency report", nodeExe, ["scripts/generate-consistency-report.js"]);
+  run("refresh strategy weight report", nodeExe, ["scripts/generate-strategy-weight-report.js"]);
   run("refresh performance report", nodeExe, ["scripts/generate-performance-report.js"]);
   const health = readHealth();
   if (!health) {

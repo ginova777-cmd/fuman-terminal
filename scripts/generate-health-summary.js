@@ -102,6 +102,7 @@ const DATA_SLA_HOURS = {
   "signal-quality-report.json": 36,
   "data-quality-report.json": 36,
   "data-consistency-report.json": 36,
+  "strategy-weight-report.json": 36,
 };
 
 function isWeekendTaipei(date = new Date()) {
@@ -168,6 +169,7 @@ function main() {
     "signal-quality-report.json",
     "data-quality-report.json",
     "data-consistency-report.json",
+    "strategy-weight-report.json",
   ].map(dataFileStatus);
   const outbox = outboxStatus();
   const risks = buildRisks({ badTasks, outbox, data });

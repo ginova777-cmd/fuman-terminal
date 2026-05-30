@@ -71,7 +71,7 @@ function getFumanWorker() {
   if (!("Worker" in window)) return null;
   if (fumanWorker) return fumanWorker;
   try {
-    fumanWorker = new Worker("terminal-worker.js?v=speed-modules-20260530-6");
+    fumanWorker = new Worker("terminal-worker.js?v=speed-modules-20260530-7");
     fumanWorker.addEventListener("message", (event) => {
       const { id, ok, rows, result, error } = event.data || {};
       const pending = fumanWorkerPending.get(id);
@@ -3527,7 +3527,8 @@ function radarSignalScore(stock) {
   const valueScore = Math.min(Math.log10(Math.max(value, 1)) * 5, 46);
   const volumeScore = Math.min(Math.log10(Math.max(volume, 1)) * 5, 22);
   const instScore = Math.min(foreign / 450 + trust / 350, 24);
-  return Math.max(1, Math.min(100, Math.round(tagScore + moveScore + valueScore + volumeScore + instScore - 42)));
+  const baseScore = tagScore + moveScore + valueScore + volumeScore + instScore - 42;
+  return Math.max(1, Math.min(100, Math.round(baseScore * strategyWeight("radarMultiplier"))));
 }
 
 function isRealtimeRadarLimitUp(stock) {
@@ -4787,6 +4788,7 @@ const endpoints = {
   scanWarrantFlow: "/api/scan-warrant-flow",
   exportAuth: "/api/export-auth",
   frontendError: "/api/frontend-error",
+  strategyWeights: "/data/strategy-weight-report.json",
   openBuyCache: "/data/open-buy-latest.json",
   openBuyBackup: "/data/open-buy-backup.json",
   openBuySummary: "/data/open-buy-summary.json",
@@ -4820,6 +4822,14 @@ let marketSummaryLoading = false;
 let marketSummaryLoadedAt = 0;
 let marketSummaryPayload = null;
 let healthSummaryPayload = null;
+let strategyWeightPayload = {
+  weights: {
+    strategy2Multiplier: 1,
+    radarMultiplier: 1,
+    strategy4Multiplier: 1,
+  },
+  updatedAt: "",
+};
 let marketRealtimeState = { trading: false, marketStatus: "", updatedAt: "", source: "" };
 let marketStockDataState = { resolvedTradeDate: "", today: "", source: "", updatedAt: "", isFallbackDate: false, marketDates: {} };
 let heatmapLoading = false;
@@ -5451,6 +5461,20 @@ async function fetchVersionedJson(url, timeout = 8000, version = "", force = fal
     ...options,
     cache: force ? "no-store" : "default",
   });
+}
+
+function strategyWeight(key) {
+  const value = Number(strategyWeightPayload?.weights?.[key]);
+  return Number.isFinite(value) && value > 0 ? clamp(value, 0.88, 1.12) : 1;
+}
+
+async function loadStrategyWeights(force = false) {
+  try {
+    strategyWeightPayload = await fetchVersionedJson(endpoints.strategyWeights, 5000, "latest", force);
+  } catch (error) {
+    recordFrontendError("strategy-weights", error);
+  }
+  return strategyWeightPayload;
 }
 
 async function fetchLiveMemoryJson(key, url, timeout = 8000, ttlMs = 3000, force = false, options = {}) {
@@ -10509,7 +10533,10 @@ function renderSwingRadar(universe) {
     .filter((stock) => (stock.swingSignals || []).length)
     .filter((stock) => matchesStrategyKeyword(stock, keyword))
     .filter((stock) => !visibleKeyword || `${stock.code || ""} ${stock.name || ""}`.toLowerCase().includes(visibleKeyword))
-    .map((stock) => ({ ...stock, swingScore: stock.swingScore || stock.score || 0 }));
+    .map((stock) => ({
+      ...stock,
+      swingScore: Math.round(cleanNumber(stock.swingScore || stock.score || 0) * strategyWeight("strategy4Multiplier")),
+    }));
   const renderCacheSignature = [
     strategy4ScanLastAt,
     Object.keys(strategy4ScanMatches).length,
@@ -13631,7 +13658,8 @@ function getIntradayHotScore(stock) {
   const volumeScore = Math.log10(Math.max(volume, 1)) * 38;
   const deltaScore = Math.log10(Math.max(latestDelta, 1)) * 70;
   const pricePenalty = close >= 900 ? 9999 : 0;
-  return signalBonus + lowerShadowBonus + upperShadowBonus + marginBonus + shortMarginBonus + pctScore + volumeScore + deltaScore - pricePenalty;
+  const baseScore = signalBonus + lowerShadowBonus + upperShadowBonus + marginBonus + shortMarginBonus + pctScore + volumeScore + deltaScore - pricePenalty;
+  return baseScore * strategyWeight("strategy2Multiplier");
 }
 
 function uniqueStocksByCode(stocks) {
@@ -13921,6 +13949,7 @@ applyStaticTitleIcons();
 installMarketTabs();
 installGlobalRefreshWidget();
 deferUiWork(() => loadWorkflowRunStatus().catch(() => {}), 2000);
+deferUiWork(() => loadStrategyWeights(false), 450);
 ensureMobileAutoOrganizeButton();
 if (isViewActive("market")) {
   installMarketSkeleton();

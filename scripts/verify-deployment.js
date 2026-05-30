@@ -1,7 +1,7 @@
 const https = require("https");
 
 const baseUrl = (process.env.FUMAN_VERIFY_BASE_URL || "https://fuman-terminal.vercel.app").replace(/\/+$/, "");
-const version = process.env.FUMAN_VERIFY_VERSION || "speed-modules-20260530-6";
+const version = process.env.FUMAN_VERIFY_VERSION || "speed-modules-20260530-7";
 
 function fetchText(pathname, timeoutMs = 20000) {
   const url = `${baseUrl}${pathname}`;
@@ -29,6 +29,32 @@ function assertOk(name, result, check = () => true) {
   console.log(`[verify] ${name} ok ${result.status}`);
 }
 
+function postJson(pathname, payload, timeoutMs = 20000) {
+  const url = new URL(`${baseUrl}${pathname}`);
+  const body = JSON.stringify(payload);
+  return new Promise((resolve, reject) => {
+    const req = https.request({
+      protocol: url.protocol,
+      hostname: url.hostname,
+      path: `${url.pathname}${url.search}`,
+      method: "POST",
+      timeout: timeoutMs,
+      headers: {
+        "content-type": "application/json",
+        "content-length": Buffer.byteLength(body),
+      },
+    }, (res) => {
+      let text = "";
+      res.setEncoding("utf8");
+      res.on("data", (chunk) => { text += chunk; });
+      res.on("end", () => resolve({ url: url.toString(), status: res.statusCode, headers: res.headers, body: text }));
+    });
+    req.on("timeout", () => req.destroy(new Error(`timeout ${url}`)));
+    req.on("error", reject);
+    req.end(body);
+  });
+}
+
 async function main() {
   const checks = [
     ["home", "/", (r) => r.body.includes(`terminal-core.js?v=${version}`)],
@@ -36,7 +62,7 @@ async function main() {
     ["modules", `/terminal-modules.js?v=${version}`, (r) => r.body.includes("FUMAN_TERMINAL_MODULES")],
     ["worker", `/terminal-worker.js?v=${version}`, (r) => r.body.includes("swingBuckets")],
     ["service-worker", `/fuman-sw.js?v=${version}`, (r) => r.body.includes("strategy2-intraday-latest") && r.body.includes("realtime-radar-latest")],
-    ["terminal", `/terminal.js?v=${version}`, (r) => r.body.includes("FUMAN_LIVE_MEMORY_TTL_MS") && r.body.includes("healthRiskLevel")],
+    ["terminal", `/terminal.js?v=${version}`, (r) => r.body.includes("FUMAN_LIVE_MEMORY_TTL_MS") && r.body.includes("loadStrategyWeights")],
     ["health", "/data/health-summary.json?v=verify", (r) => {
       const payload = JSON.parse(r.body);
       return payload.ok === true && ["low", "medium", "high"].includes(payload.risk);
@@ -49,11 +75,17 @@ async function main() {
     ["signal-quality", "/data/signal-quality-report.json?v=verify", (r) => JSON.parse(r.body).ok === true],
     ["data-quality", "/data/data-quality-report.json?v=verify", (r) => typeof JSON.parse(r.body).ok === "boolean"],
     ["data-consistency", "/data/data-consistency-report.json?v=verify", (r) => JSON.parse(r.body).ok === true],
+    ["strategy-weights", "/data/strategy-weight-report.json?v=verify", (r) => {
+      const payload = JSON.parse(r.body);
+      return payload.weights && Number.isFinite(Number(payload.weights.strategy2Multiplier));
+    }],
   ];
   for (const [name, path, check] of checks) {
     const result = await fetchText(path);
     assertOk(name, result, check);
   }
+  const frontendError = await postJson("/api/frontend-error", { source: "verify", message: "deployment smoke" });
+  assertOk("frontend-error-api", frontendError, (r) => typeof JSON.parse(r.body).ok === "boolean");
   console.log("[verify] deployment ok");
 }
 
