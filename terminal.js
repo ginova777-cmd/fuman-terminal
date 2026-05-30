@@ -3283,7 +3283,7 @@ function getStrategy3CachedVolumeRatio(code) {
 
 function requestRealtimeRadarVolumeRatio(stock) {
   const code = String(stock?.code || "").replace(/\D/g, "").slice(0, 4);
-  if (!/^\d{4}$/.test(code) || realtimeRadarHistoryPromise || realtimeRadarVolumeRatioRequestedCodes.has(code) || hasStrategyHistoryRows(code)) return;
+  if (!shouldRunLivePolling() || !/^\d{4}$/.test(code) || realtimeRadarHistoryPromise || realtimeRadarVolumeRatioRequestedCodes.has(code) || hasStrategyHistoryRows(code)) return;
   realtimeRadarVolumeRatioRequestedCodes.add(code);
   loadRealtimeRadarHistory([{ ...stock, code }], { force: true }).then((loaded) => {
     if (!loaded) {
@@ -3370,7 +3370,8 @@ function isRealtimeRadarLimitUp(stock) {
 }
 
 function realtimeRadarClosedDataDateKey() {
-  return normalizeMarketAiDateKey(marketStockDataState.resolvedTradeDate)
+  return marketAiDataDateKey(realtimeRadarLastRows)
+    || normalizeMarketAiDateKey(marketStockDataState.resolvedTradeDate)
     || marketAiDataDateKey(latestStocks)
     || marketAiTodayKey();
 }
