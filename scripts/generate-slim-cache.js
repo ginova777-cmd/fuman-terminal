@@ -299,24 +299,52 @@ function slimStrategy2(payload) {
   };
 }
 
-function topStrategy2(payload) {
+function buildStrategy2Top(payload, options = {}) {
   const slim = slimStrategy2(payload);
   const rankTime = (item) => strategy2RecordSortTime(item).replace(/[^0-9: -]/g, "");
+  const eventLimit = options.eventLimit || 50;
+  const recordLimit = options.recordLimit || 70;
+  const source = options.source || "strategy2-mobile-top";
   const events = [...slim.events]
     .sort((a, b) => cleanNumber(b.maxScore) - cleanNumber(a.maxScore) || rankTime(b).localeCompare(rankTime(a)))
-    .slice(0, 50);
+    .slice(0, eventLimit);
   const eventCodes = new Set(events.map((event) => event.code));
   const records = [
     ...slim.records.filter((record) => eventCodes.has(record.code)),
-    ...slim.records.filter((record) => !eventCodes.has(record.code)).slice(0, 20),
-  ].slice(0, 70);
+    ...slim.records.filter((record) => !eventCodes.has(record.code)).slice(0, Math.max(0, recordLimit - eventCodes.size)),
+  ].slice(0, recordLimit);
   return {
     ...slim,
-    source: "strategy2-mobile-top",
-    profile: "strategy2-mobile-top",
+    source,
+    profile: source,
     records,
     events,
     count: events.length,
+  };
+}
+
+function topStrategy2(payload) {
+  return buildStrategy2Top(payload, { source: "strategy2-mobile-top", eventLimit: 50, recordLimit: 70 });
+}
+
+function liveTopStrategy2(payload) {
+  return buildStrategy2Top(payload, { source: "strategy2-mobile-live-top", eventLimit: 28, recordLimit: 40 });
+}
+
+function deltaStrategy2(payload) {
+  const slim = slimStrategy2(payload);
+  const events = [...slim.events]
+    .sort((a, b) => strategy2RecordSortTime(b).localeCompare(strategy2RecordSortTime(a)) || cleanNumber(b.maxScore) - cleanNumber(a.maxScore))
+    .slice(0, 24);
+  const codes = new Set(events.map((event) => event.code));
+  return {
+    ok: true,
+    source: "strategy2-intraday-delta",
+    updatedAt: slim.updatedAt,
+    since: slim.updatedAt,
+    count: events.length,
+    events,
+    records: slim.records.filter((record) => codes.has(record.code)).slice(0, 32),
   };
 }
 
@@ -358,7 +386,7 @@ function mobileHomeSummary() {
   };
   const market = readOptional("data/market-summary.json", {});
   const health = readOptional("data/health-summary.json", {});
-  const strategy2 = readOptional("data/strategy2-intraday-top.json", {});
+  const strategy2 = readOptional("data/strategy2-intraday-live-top.json", readOptional("data/strategy2-intraday-top.json", {}));
   const chip = readOptional("data/institution-mobile-top.json", {});
   const warrant = readOptional("data/warrant-flow-mobile-top.json", {});
   return {
@@ -405,7 +433,11 @@ function mobileHomeSummary() {
   };
 }
 const jobs = [
-  ["strategy2", "data/strategy2-intraday-latest.json", "data/strategy2-intraday-slim.json", slimStrategy2, (payload) => [["data/strategy2-intraday-top.json", topStrategy2(payload)]]],
+  ["strategy2", "data/strategy2-intraday-latest.json", "data/strategy2-intraday-slim.json", slimStrategy2, (payload) => [
+    ["data/strategy2-intraday-top.json", topStrategy2(payload)],
+    ["data/strategy2-intraday-live-top.json", liveTopStrategy2(payload)],
+    ["data/strategy2-intraday-delta.json", deltaStrategy2(payload)],
+  ]],
   ["strategy4", "data/strategy4-latest.json", "data/strategy4-slim.json", slimStrategy4, strategy4PresetFiles],
   ["institution", "data/institution-latest.json", "data/institution-slim.json", slimInstitution, (payload) => [...institutionPresetFiles(payload), ["data/institution-mobile-top.json", mobileInstitutionTop(payload)]]],
   ["warrant", "data/warrant-flow-latest.json", "data/warrant-flow-slim.json", slimWarrant, (payload) => [...warrantPresetFiles(payload), ["data/warrant-flow-mobile-top.json", mobileWarrantTop(payload)]]],

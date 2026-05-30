@@ -61,7 +61,7 @@ body.auth-locked:not(.auth-login-open) .auth-gate {
   padding: 48px min(7vw, 118px);
   background:
     linear-gradient(90deg, rgba(3, 6, 12, 0.18), rgba(3, 6, 12, 0.08) 58%, rgba(3, 6, 12, 0.78)),
-    url("assets/login-bg-fuman-lite.jpg"),
+    url("assets/login-bg-fuman-lite.webp"),
     linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px),
     linear-gradient(90deg, rgba(255, 255, 255, 0.024) 1px, transparent 1px),
     radial-gradient(circle at 28% 46%, rgba(143, 191, 255, 0.12), transparent 27%),
@@ -4191,3 +4191,57 @@ h1 {
   }
 }
 
+
+
+/* mobile-speed-1-8-20260530 */
+@media (max-width: 760px) {
+  .mobile-full-load {
+    border-color: rgba(125, 166, 255, 0.45) !important;
+    background: rgba(24, 39, 68, 0.92) !important;
+    color: #dce8ff !important;
+  }
+
+  .mobile-full-load:disabled {
+    opacity: 0.65;
+  }
+}
+
+.low-end-mobile * {
+  animation-duration: 0.001ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.001ms !important;
+  scroll-behavior: auto !important;
+}
+
+.low-end-mobile .auth-card,
+.low-end-mobile .metric-card,
+.low-end-mobile .chip-table tr,
+.low-end-mobile .warrant-flow-panel .swing-table tr,
+.low-end-mobile .mobile-intraday-card,
+.low-end-mobile .market-ai-card {
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+}
+
+
+
+/* mobile-strategy-width-tight-20260530 */
+@media (max-width: 760px) {
+  #strategy-table,
+  .strategy-table {
+    max-width: calc(100vw - 36px) !important;
+  }
+}
+
+
+/* mobile-strategy-width-final-20260530 */
+@media (max-width: 760px) {
+  #strategy-view .strategy-table,
+  #strategy-table {
+    width: calc(100vw - 42px) !important;
+    max-width: calc(100vw - 42px) !important;
+    min-width: 0 !important;
+    justify-self: start !important;
+    align-self: stretch !important;
+  }
+}

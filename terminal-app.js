@@ -59,6 +59,8 @@ const memberState = document.querySelector("#member-state");
 const supabaseClient = window.supabase?.createClient?.(FUMAN_SUPABASE_URL, FUMAN_SUPABASE_KEY);
 const PUBLIC_VIEWS = new Set(["market"]);
 const FUMAN_THEME_KEY = FUMAN_RUNTIME_CONFIG.themeKey || "fuman-terminal-theme";
+const FUMAN_AUTH_CACHE_KEY = FUMAN_RUNTIME_CONFIG.authCacheKey || "fuman-terminal-auth-cache-v1";
+const FUMAN_AUTH_CACHE_TTL_MS = FUMAN_RUNTIME_CONFIG.authCacheTtlMs || (5 * 60 * 1000);
 let authMode = "login";
 const FUMAN_LIVE_MEMORY_TTL_MS = FUMAN_RUNTIME_CONFIG.liveMemoryTtlMs || { strategy2: 3000, realtimeRadar: 5000 };
 const fumanLiveMemoryCache = new Map();
@@ -70,7 +72,7 @@ function getFumanWorker() {
   if (!("Worker" in window)) return null;
   if (fumanWorker) return fumanWorker;
   try {
-    fumanWorker = new Worker("terminal-worker.js?v=speed-modules-20260530-26");
+    fumanWorker = new Worker("terminal-worker.js?v=speed-modules-20260530-27");
     fumanWorker.addEventListener("message", (event) => {
       const { id, ok, rows, result, error } = event.data || {};
       const pending = fumanWorkerPending.get(id);
@@ -121,6 +123,35 @@ function setLiveMemoryCache(key, value) {
   fumanLiveMemoryCache.set(key, { at: Date.now(), value });
   return value;
 }
+
+function isLowEndMobileDevice() {
+  if (!isMobileViewport()) return false;
+  const memory = Number(navigator.deviceMemory || 0);
+  const cores = Number(navigator.hardwareConcurrency || 0);
+  const reducedMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches;
+  return reducedMotion || (memory > 0 && memory <= 4) || (cores > 0 && cores <= 4);
+}
+
+function applyFumanDeviceMode() {
+  document.body.classList.toggle("low-end-mobile", isLowEndMobileDevice());
+  document.body.classList.toggle("mobile-fast-path", isMobileViewport());
+}
+
+function installInteractionLatencyMonitor() {
+  if (window.__fumanInteractionLatencyReady) return;
+  window.__fumanInteractionLatencyReady = true;
+  document.addEventListener("click", (event) => {
+    const target = event.target.closest?.("[data-view],[data-chip-mode],[data-chip-filter],[data-warrant-refresh],[data-mobile-full-load],[data-page-action]");
+    if (!target || typeof performance === "undefined") return;
+    const label = target.dataset.view || target.dataset.chipMode || target.dataset.chipFilter || target.dataset.mobileFullLoad || target.dataset.pageAction || "tap";
+    const startedAt = performance.now();
+    requestAnimationFrame(() => {
+      setTimeout(() => recordFumanPerformance("interaction:" + label, startedAt, true), 0);
+    });
+  }, true);
+}
+
+window.addEventListener("resize", () => deferUiWork(applyFumanDeviceMode, 80));
 
 function markLazyModuleForView(viewName) {
   window.FUMAN_TERMINAL_MODULES?.preloadForView?.(viewName);
@@ -201,7 +232,7 @@ function loadFumanStyle(href, id) {
   const link = document.createElement("link");
   link.id = id;
   link.rel = "stylesheet";
-  link.href = href.includes("?") ? href : `${href}?v=${window.FUMAN_TERMINAL_BOOT?.version || "speed-modules-20260530-26"}`;
+  link.href = href.includes("?") ? href : `${href}?v=${window.FUMAN_TERMINAL_BOOT?.version || "speed-modules-20260530-27"}`;
   document.head.appendChild(link);
 }
 
@@ -227,7 +258,7 @@ function makeFumanModuleScope(bindings) {
 function loadFumanFeatureModule(name, src, globalName) {
   if (window[globalName]) return Promise.resolve(window[globalName]);
   if (fumanFeatureModulePromises[name]) return fumanFeatureModulePromises[name];
-  const version = window.FUMAN_TERMINAL_BOOT?.version || "speed-modules-20260530-26";
+  const version = window.FUMAN_TERMINAL_BOOT?.version || "speed-modules-20260530-27";
   fumanFeatureModulePromises[name] = new Promise((resolve, reject) => {
     const attr = "data-fuman-feature-" + name;
     const existing = document.querySelector("script[" + attr + "]");
@@ -354,6 +385,39 @@ function setAuthMessage(text, type = "") {
   authMessage.textContent = text || "";
   authMessage.classList.toggle("error", type === "error");
   authMessage.classList.toggle("success", type === "success");
+}
+
+function readFumanAuthCache() {
+  try {
+    const cached = JSON.parse(localStorage.getItem(FUMAN_AUTH_CACHE_KEY) || "null");
+    if (!cached || Date.now() - cleanNumber(cached.at) > FUMAN_AUTH_CACHE_TTL_MS) return null;
+    return cached;
+  } catch (error) {
+    return null;
+  }
+}
+
+function writeFumanAuthCache(session, access) {
+  try {
+    if (!session?.user || !access?.allowed) {
+      localStorage.removeItem(FUMAN_AUTH_CACHE_KEY);
+      return;
+    }
+    localStorage.setItem(FUMAN_AUTH_CACHE_KEY, JSON.stringify({
+      at: Date.now(),
+      email: normalizeAuthEmail(session.user.email),
+      status: access.status || "approved",
+    }));
+  } catch (error) {}
+}
+
+function warmFumanAuthFromCache() {
+  const cached = readFumanAuthCache();
+  document.body.classList.toggle("auth-cache-warm", Boolean(cached));
+  if (cached && memberState) {
+    memberState.textContent = "會員狀態：快速恢復中";
+    memberState.dataset.status = "cache_warming";
+  }
 }
 
 function setAuthMode(mode) {
@@ -546,6 +610,8 @@ function setTerminalAuthState(session, access = { allowed: false, status: "signe
     memberState.textContent = `會員狀態：${label}`;
     memberState.dataset.status = String(access.status || "signed_out").toLowerCase();
   }
+  document.body.classList.remove("auth-cache-warm");
+  writeFumanAuthCache(session, access);
   if (allowed) {
     setAuthMessage("登入成功，正在開啟終端。", "success");
   } else if (signedIn && access.status === "blocked") {
@@ -561,6 +627,7 @@ function setTerminalAuthState(session, access = { allowed: false, status: "signe
 }
 
 async function initTerminalAuth() {
+  warmFumanAuthFromCache();
   if (!authGate || !authForm) {
     document.body.classList.remove("auth-pending");
     document.body.classList.add("auth-ready");
@@ -617,6 +684,7 @@ async function initTerminalAuth() {
   });
 
   authLogoutButton?.addEventListener("click", async () => {
+    writeFumanAuthCache(null, null);
     await supabaseClient.auth.signOut();
     setTerminalAuthState(null);
     const marketLink = viewLinks.find((link) => link.dataset.view === "market");
@@ -624,6 +692,7 @@ async function initTerminalAuth() {
   });
 
   authSignout?.addEventListener("click", async () => {
+    writeFumanAuthCache(null, null);
     await supabaseClient.auth.signOut();
     setAuthMode("login");
     setTerminalAuthState(null);
@@ -637,6 +706,8 @@ async function initTerminalAuth() {
 }
 
 initTerminalAuth();
+applyFumanDeviceMode();
+installInteractionLatencyMonitor();
 
 function installBasicDevtoolsGuard() {
   const blockedKeys = new Set(["F12"]);
@@ -4832,12 +4903,15 @@ function sortIntradayZoneRows(rows) {
 }
 
 async function loadStrategy2IntradayPayload(force = false) {
-  const mobileFastPath = isMobileViewport() && !force && (endpoints.strategy2IntradayTop || endpoints.strategy2IntradaySlim);
+  const mobileFastPath = isMobileViewport() && !force && (endpoints.strategy2IntradayLiveTop || endpoints.strategy2IntradayTop || endpoints.strategy2IntradaySlim);
   if (mobileFastPath) {
     try {
-      const slimPayload = await fetchVersionedJson(endpoints.strategy2IntradayTop || endpoints.strategy2IntradaySlim, 4000, "latest", false);
+      const preferredTop = isIntradayScanWindow()
+        ? (endpoints.strategy2IntradayLiveTop || endpoints.strategy2IntradayTop || endpoints.strategy2IntradaySlim)
+        : (endpoints.strategy2IntradayTop || endpoints.strategy2IntradayLiveTop || endpoints.strategy2IntradaySlim);
+      const slimPayload = await fetchVersionedJson(preferredTop, 4000, "latest", false);
       if (slimPayload?.events?.length || slimPayload?.records?.length) {
-        return { ...slimPayload, cacheSource: "static-slim" };
+        return { ...slimPayload, cacheSource: slimPayload.source || "static-mobile-top" };
       }
     } catch (error) {
     }
@@ -5951,8 +6025,6 @@ function renderStrategy5CacheLoading() {
       </section>
     </section>
   `;
-  realtimeRadarRenderSignature = renderSignature;
-  realtimeRadarShellSignature = shellSignature;
 }
 function renderOvernightDashboard(evaluated) {
   setStrategyChrome("strategy3");
