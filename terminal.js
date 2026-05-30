@@ -10668,8 +10668,25 @@ async function refreshSectorModalRealtime(sector, stocks) {
   }
 }
 
+function getSectorModalStocks(sector) {
+  const name = String(sector?.name || "").trim();
+  const directStocks = normalizeArray(sector?.stocks);
+  const directRows = normalizeArray(sector?.rows);
+  const cachedStocks = normalizeArray(sectorStocksCache[name]);
+  const rows = directStocks.length ? directStocks : directRows.length ? directRows : cachedStocks;
+  return rows.map((stock) => ({
+    ...stock,
+    code: String(stock?.code || "").trim(),
+    name: stock?.name || stock?.Name || stock?.證券名稱 || stock?.code || "",
+    close: cleanNumber(stock?.close),
+    pct: cleanNumber(stock?.pct ?? stock?.percent),
+    value: cleanNumber(stock?.value) || cleanNumber(stock?.amountYi || stock?.valueYi) * 100000000,
+    volume: cleanNumber(stock?.volume ?? stock?.tradeVolume),
+  })).filter((stock) => stock.code);
+}
+
 async function openSectorModal(sector) {
-  const stocks = sectorStocksCache[sector.name] || [];
+  const stocks = getSectorModalStocks(sector);
   const existing = document.querySelector("#sector-modal");
   if (existing) existing.remove();
 
@@ -14380,4 +14397,5 @@ if (isViewActive("watchlist")) renderWatchlist();
 setInterval(() => {
   if (!isDocumentHidden() && isTerminalUnlocked() && isViewActive("watchlist")) refreshSelectedWatchlistQuote();
 }, 10000);
+
 
