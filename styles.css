@@ -2676,13 +2676,21 @@ h1 {
     display: none;
   }
 
-  .nav-list .nav-label,
+  .nav-list .nav-label {
+    display: none;
+  }
+
   .nav-list .chip-menu {
+    display: contents;
+  }
+
+  .nav-list .chip-menu h2 {
     display: none;
   }
 
   .nav-item,
-  .strategy-nav {
+  .strategy-nav,
+  .chip-menu-link {
     display: flex;
     flex: 0 0 64px;
     min-width: 0;
@@ -2702,10 +2710,12 @@ h1 {
     padding: 0 3px;
     text-align: center;
     scroll-snap-align: center;
+    margin-top: 0;
   }
 
   .nav-item::after,
-  .strategy-nav::after {
+  .strategy-nav::after,
+  .chip-menu-link::after {
     content: attr(data-mobile-label);
     display: block;
     color: currentColor;
@@ -2715,7 +2725,8 @@ h1 {
   }
 
   .nav-item span,
-  .strategy-nav span {
+  .strategy-nav span,
+  .chip-menu-link span {
     width: auto;
     min-height: 22px;
     color: currentColor;
@@ -2727,12 +2738,14 @@ h1 {
   .strategy-nav .s2,
   .strategy-nav .s3,
   .strategy-nav .s4,
-  .strategy-nav .s5 {
+  .strategy-nav .s5,
+  .chip-menu-link span {
     color: currentColor;
   }
 
   .nav-item.active,
-  .strategy-nav.active {
+  .strategy-nav.active,
+  .chip-menu-link.active {
     border: 0;
     background: transparent;
     color: #ff7a45;
@@ -2740,7 +2753,8 @@ h1 {
   }
 
   .nav-item.active::after,
-  .strategy-nav.active::after {
+  .strategy-nav.active::after,
+  .chip-menu-link.active::after {
     color: #ff7a45;
   }
 
