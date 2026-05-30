@@ -15,6 +15,7 @@ $logDir = Join-Path $sourceRepo "logs"
 $lockFile = Join-Path $sourceRepo "locks\cache-sync.lock"
 $outboxRoot = Join-Path $sourceRepo "outbox\cache-sync"
 $gitExe = "C:\Program Files\Git\cmd\git.exe"
+$nodeExe = "C:\Program Files\nodejs\node.exe"
 New-Item -ItemType Directory -Force -Path $logDir | Out-Null
 $log = Join-Path $logDir ("cache-sync-{0}.log" -f (Get-Date -Format "yyyyMMdd-HHmmss"))
 $gitRetryCount = if ($env:CACHE_SYNC_GIT_RETRY_COUNT -match '^\d+$') { [int]$env:CACHE_SYNC_GIT_RETRY_COUNT } else { 5 }
@@ -237,9 +238,11 @@ function Test-IntradayFlowProtectedFile($file) {
   if ($file -notin @(
     "data\institution-latest.json",
     "data\institution-summary.json",
+    "data\institution-slim.json",
     "data\institution-backup.json",
     "data\warrant-flow-latest.json",
     "data\warrant-flow-summary.json",
+    "data\warrant-flow-slim.json",
     "data\warrant-flow-backup.json",
     "data\flow-health-latest.json"
   )) { return $false }
@@ -253,6 +256,22 @@ function Copy-CodeRepoCacheFile($file, $source, $label) {
     return
   }
   Write-Log "Skipping code repo cache copy ($label): $file"
+}
+
+function Update-SlimCacheFiles {
+  $scriptPath = Join-Path $codeRepo "scripts\generate-slim-cache.js"
+  if (-not (Test-Path -LiteralPath $nodeExe) -or -not (Test-Path -LiteralPath $scriptPath)) {
+    Write-Log "Slim cache generation skipped: node or script missing"
+    return
+  }
+  Write-Log "=== Generate slim cache files $(Get-Date) ==="
+  $output = & $nodeExe $scriptPath 2>&1
+  foreach ($line in $output) {
+    if (-not [string]::IsNullOrWhiteSpace([string]$line)) { Write-Log $line }
+  }
+  if ($LASTEXITCODE -ne 0) {
+    Write-Log "Slim cache generation exited with code $LASTEXITCODE; continuing with available files"
+  }
 }
 
 function Get-TextSha256($text) {
@@ -392,6 +411,7 @@ New-Item -ItemType File -Force -Path $lockFile | Out-Null
 
 try {
   Write-Log "=== Cache sync start $(Get-Date) scope=$Scope ==="
+  Update-SlimCacheFiles
 
   if ($Scope -eq "flow") {
     $criticalLatestFiles = @(
@@ -402,9 +422,11 @@ try {
     $dataFiles = @(
       "data\institution-latest.json",
       "data\institution-summary.json",
+      "data\institution-slim.json",
       "data\institution-backup.json",
       "data\warrant-flow-latest.json",
       "data\warrant-flow-summary.json",
+      "data\warrant-flow-slim.json",
       "data\warrant-flow-backup.json",
       "data\flow-health-latest.json"
     )
@@ -458,6 +480,7 @@ try {
     $dataFiles = @(
       "data\strategy4-latest.json",
       "data\strategy4-summary.json",
+      "data\strategy4-slim.json",
       "data\strategy4-backup.json"
     )
   } elseif ($Scope -eq "strategy5") {
@@ -482,9 +505,11 @@ try {
     $dataFiles = @(
       "data\institution-latest.json",
       "data\institution-summary.json",
+      "data\institution-slim.json",
       "data\institution-backup.json",
       "data\warrant-flow-latest.json",
       "data\warrant-flow-summary.json",
+      "data\warrant-flow-slim.json",
       "data\warrant-flow-backup.json",
       "data\flow-health-latest.json",
       "data\market-summary.json",
@@ -498,6 +523,7 @@ try {
       "data\strategy2-scorecard-source.json",
       "data\strategy4-latest.json",
       "data\strategy4-summary.json",
+      "data\strategy4-slim.json",
       "data\strategy4-backup.json",
       "data\strategy5-latest.json",
       "data\strategy5-backup.json",

@@ -4568,6 +4568,7 @@ const endpoints = {
   openBuyBackup: "/data/open-buy-backup.json",
   openBuySummary: "/data/open-buy-summary.json",
   strategy4Cache: "/data/strategy4-latest.json",
+  strategy4Slim: "/data/strategy4-slim.json",
   strategy4Backup: "/data/strategy4-backup.json",
   strategy4Summary: "/data/strategy4-summary.json",
   strategy3Cache: "/data/strategy3-latest.json",
@@ -4577,9 +4578,11 @@ const endpoints = {
   realtimeRadarCache: "/data/realtime-radar-latest.json",
   strategy2IntradayCache: "/data/strategy2-intraday-latest.json",
   institutionCache: "/data/institution-latest.json",
+  institutionSlim: "/data/institution-slim.json",
   institutionBackup: "/data/institution-backup.json",
   institutionSummary: "/data/institution-summary.json",
   warrantFlowCache: "/data/warrant-flow-latest.json",
+  warrantFlowSlim: "/data/warrant-flow-slim.json",
   warrantFlowBackup: "/data/warrant-flow-backup.json",
   warrantFlowSummary: "/data/warrant-flow-summary.json",
   strategyStocks: "/api/stocks",
@@ -5170,6 +5173,7 @@ function scheduleStrategySearchRender(delay = 380) {
 }
 
 async function fetchJson(url, timeout = 8000, options = {}) {
+  const startedAt = performance?.now ? performance.now() : Date.now();
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeout);
   try {
@@ -5179,10 +5183,30 @@ async function fetchJson(url, timeout = 8000, options = {}) {
       headers: options.headers || undefined,
     });
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
-    return await response.json();
+    const payload = await response.json();
+    recordFumanPerformance(url, startedAt, true);
+    return payload;
+  } catch (error) {
+    recordFumanPerformance(url, startedAt, false, error);
+    throw error;
   } finally {
     clearTimeout(timer);
   }
+}
+
+function recordFumanPerformance(url, startedAt, ok, error = null) {
+  const now = performance?.now ? performance.now() : Date.now();
+  const item = {
+    url: String(url || "").replace(/[?&]t=\d+/g, "").slice(0, 120),
+    ms: Math.round(now - startedAt),
+    ok: Boolean(ok),
+    at: Date.now(),
+    error: error ? (error.message || String(error)).slice(0, 80) : "",
+  };
+  const boot = window.FUMAN_TERMINAL_BOOT || (window.FUMAN_TERMINAL_BOOT = {});
+  const list = Array.isArray(boot.performanceLog) ? boot.performanceLog : [];
+  list.push(item);
+  boot.performanceLog = list.slice(-40);
 }
 
 function versionedDataUrl(url, version = "", force = false) {
@@ -7367,21 +7391,41 @@ function intradaySortHeader(key, label) {
 }
 
 const TERMINAL_PAGE_SIZE = 10;
+const TERMINAL_PAGE_SIZE_OPTIONS = [10, 20, 50];
+const terminalPageSizes = {
+  swing: 50,
+  openBuy: 20,
+  strategy3: 20,
+  strategy5: 20,
+  warrant: 20,
+  chip: 20,
+};
 
-function paginateTerminalRows(rows, currentPage) {
+function getTerminalPageSize(scope) {
+  const configured = cleanNumber(terminalPageSizes[scope]);
+  return TERMINAL_PAGE_SIZE_OPTIONS.includes(configured) ? configured : TERMINAL_PAGE_SIZE;
+}
+
+function paginateTerminalRows(rows, currentPage, scope = "") {
   const list = Array.isArray(rows) ? rows : [];
-  const totalPages = Math.max(1, Math.ceil(list.length / TERMINAL_PAGE_SIZE));
+  const pageSize = getTerminalPageSize(scope);
+  const totalPages = Math.max(1, Math.ceil(list.length / pageSize));
   const page = Math.min(Math.max(Number(currentPage) || 1, 1), totalPages);
-  const start = (page - 1) * TERMINAL_PAGE_SIZE;
+  const start = (page - 1) * pageSize;
   return {
     page,
     totalPages,
-    rows: list.slice(start, start + TERMINAL_PAGE_SIZE),
+    pageSize,
+    rows: list.slice(start, start + pageSize),
   };
 }
 
 function buildTerminalPagination(scope, page, totalPages, totalRows) {
-  if (totalRows <= TERMINAL_PAGE_SIZE) return "";
+  const pageSize = getTerminalPageSize(scope);
+  if (totalRows <= pageSize && !scope) return "";
+  const sizeButtons = TERMINAL_PAGE_SIZE_OPTIONS.map((size) => (
+    `<button class="${pageSize === size ? "active" : ""}" type="button" data-terminal-page-size-scope="${scope}" data-terminal-page-size="${size}">${size}</button>`
+  )).join("");
   const maxButtons = 5;
   let start = Math.max(1, page - 2);
   let end = Math.min(totalPages, start + maxButtons - 1);
@@ -7395,6 +7439,7 @@ function buildTerminalPagination(scope, page, totalPages, totalRows) {
       <button type="button" data-terminal-page-scope="${scope}" data-terminal-page="prev" ${page <= 1 ? "disabled" : ""}>上一頁</button>
       ${numberButtons.join("")}
       <button type="button" data-terminal-page-scope="${scope}" data-terminal-page="next" ${page >= totalPages ? "disabled" : ""}>下一頁</button>
+      <span class="terminal-page-size" aria-label="每頁筆數">${sizeButtons}</span>
     </div>
   `;
 }
@@ -7837,6 +7882,7 @@ intradayRadarStyles.textContent = `
   .open-buy-pager,
   .warrant-pagination {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
     justify-content: center;
     gap: 8px;
@@ -7875,6 +7921,20 @@ intradayRadarStyles.textContent = `
   .warrant-pagination button:disabled {
     opacity: 0.45;
     cursor: not-allowed;
+  }
+  .terminal-page-size {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    margin-left: 8px;
+    padding-left: 8px;
+    border-left: 1px solid rgba(117, 133, 170, 0.24);
+  }
+  .terminal-page-size::before {
+    content: "每頁";
+    color: #8397c4;
+    font-size: 12px;
+    font-weight: 700;
   }
   .swing-badges {
     display: flex;
@@ -10156,7 +10216,7 @@ function renderSwingRadar(universe) {
     swingRenderCacheZoneRows = zoneRows;
     swingRenderCacheSignalCounts = signalCounts;
   }
-  const swingPaged = paginateTerminalRows(rows, swingPage);
+  const swingPaged = paginateTerminalRows(rows, swingPage, "swing");
   swingPage = swingPaged.page;
   const pageRows = swingPaged.rows;
   const scanTime = strategyLastScanAt
@@ -10373,7 +10433,7 @@ function renderOpenBuyRadar(universe) {
     .sort((a, b) => b.score - a.score || b.percent - a.percent || b.value - a.value)
     .slice(0, 80);
   const scanCount = rows.length;
-  const openBuyPaged = paginateTerminalRows(rows, openBuyPage);
+  const openBuyPaged = paginateTerminalRows(rows, openBuyPage, "openBuy");
   openBuyPage = openBuyPaged.page;
   const pageRows = openBuyPaged.rows;
 
@@ -10476,7 +10536,7 @@ function renderStrategy5Dashboard(evaluated) {
   const list = (byId[strategy5ActiveId] || [])
     .sort((a, b) => b.score - a.score || b.percent - a.percent || b.value - a.value)
     .slice(0, 80);
-  const strategy5Paged = paginateTerminalRows(list, strategy5Page);
+  const strategy5Paged = paginateTerminalRows(list, strategy5Page, "strategy5");
   strategy5Page = strategy5Paged.page;
   const pageList = strategy5Paged.rows;
   const active = STRATEGY_BY_ID[strategy5ActiveId] || STRATEGY_BY_ID.foreign_trust_breakout;
@@ -10638,7 +10698,7 @@ function renderOvernightDashboard(evaluated) {
     .map((stock) => ({ ...stock, activeMatch: stock.matches.find((match) => match.id === "overnight_chip") }))
     .sort((a, b) => b.score - a.score || b.value - a.value || b.percent - a.percent)
     .slice(0, 30);
-  const strategy3Paged = paginateTerminalRows(rows, strategy3Page);
+  const strategy3Paged = paginateTerminalRows(rows, strategy3Page, "strategy3");
   strategy3Page = strategy3Paged.page;
   const pageRows = strategy3Paged.rows;
   const scanText = strategy3UpdatedAt
@@ -11017,8 +11077,10 @@ async function loadWarrantFlow(force = false) {
   }
   try {
     if (!latestStocks.length) loadStrategyStocks();
-    let payload = await fetchVersionedJson(endpoints.warrantFlowCache, 10000, warrantFlowSummary?.updatedAt || "", force);
-    const cachedMatches = normalizeArray(payload?.matches);
+    let payload = await fetchVersionedJson(endpoints.warrantFlowSlim, 8000, warrantFlowSummary?.updatedAt || "", force);
+    if (!normalizeArray(payload?.matches).length) {
+      payload = await fetchVersionedJson(endpoints.warrantFlowCache, 10000, warrantFlowSummary?.updatedAt || "", force);
+    }
     if (!normalizeArray(payload?.matches).length) {
       payload = await fetchVersionedJson(endpoints.warrantFlowBackup, 10000, warrantFlowSummary?.updatedAt || "", force);
     }
@@ -12636,7 +12698,7 @@ function renderChipTradeTable() {
     return (b.jointStreak - a.jointStreak) || ((b.foreign + b.trust) - (a.foreign + a.trust));
   });
 
-  const chipPaged = paginateTerminalRows(rows.slice(0, 80), chipTradePage);
+  const chipPaged = paginateTerminalRows(rows.slice(0, 80), chipTradePage, "chip");
   chipTradePage = chipPaged.page;
   const shown = chipPaged.rows;
   const table = body.closest("table");
@@ -12758,8 +12820,8 @@ async function loadChipTradeData(force = false) {
 
   try {
     const [stockResult, instResult] = await Promise.allSettled([
-      fetchJson(endpoints.strategyStocks, 20000),
-      fetchJson(`${endpoints.institutionCache}?t=${Date.now()}`, 10000),
+      fetchVersionedJson(endpoints.strategyStocks, 20000, "", force),
+      fetchVersionedJson(endpoints.institutionSlim, 8000, institutionSummary?.updatedAt || "", force),
     ]);
 
     if (stockResult.status === "fulfilled") {
@@ -12770,7 +12832,10 @@ async function loadChipTradeData(force = false) {
 
     let instPayload = instResult.status === "fulfilled" ? instResult.value : null;
     if (!instPayload?.ok || !instPayload?.data || !Object.keys(instPayload.data).length) {
-      instPayload = await fetchJson(`${endpoints.institutionBackup}?t=${Date.now()}`, 10000);
+      instPayload = await fetchVersionedJson(endpoints.institutionCache, 10000, institutionSummary?.updatedAt || "", force);
+    }
+    if (!instPayload?.ok || !instPayload?.data || !Object.keys(instPayload.data).length) {
+      instPayload = await fetchVersionedJson(endpoints.institutionBackup, 10000, institutionSummary?.updatedAt || "", force);
     }
     if (instPayload?.ok && instPayload?.data) {
       institutionData = instPayload.data;
@@ -13123,7 +13188,10 @@ async function loadInstitution() {
   if (institutionDataPromise) return institutionDataPromise;
   institutionDataPromise = (async () => {
     try {
-      let data = await fetchVersionedJson(endpoints.institutionCache, 10000, institutionSummary?.updatedAt || "", false);
+      let data = await fetchVersionedJson(endpoints.institutionSlim, 8000, institutionSummary?.updatedAt || "", false);
+      if (!data?.ok || !data?.data || !Object.keys(data.data).length) {
+        data = await fetchVersionedJson(endpoints.institutionCache, 10000, institutionSummary?.updatedAt || "", false);
+      }
       if (!data?.ok || !data?.data || !Object.keys(data.data).length) {
         data = await fetchVersionedJson(endpoints.institutionBackup, 10000, institutionSummary?.updatedAt || "", false);
       }
@@ -13470,7 +13538,10 @@ async function loadStrategy4Cache(force = false) {
   }
   strategy4CacheLoading = true;
   try {
-    let payload = await fetchVersionedJson(endpoints.strategy4Cache, 10000, strategy4Summary?.updatedAt || strategy4SummaryLoadedAt || "", force);
+    let payload = await fetchVersionedJson(endpoints.strategy4Slim, 8000, strategy4Summary?.updatedAt || strategy4SummaryLoadedAt || "", force);
+    if (!normalizeArray(payload?.matches).length) {
+      payload = await fetchVersionedJson(endpoints.strategy4Cache, 10000, strategy4Summary?.updatedAt || strategy4SummaryLoadedAt || "", force);
+    }
     if (!normalizeArray(payload?.matches).length) {
       payload = await fetchVersionedJson(endpoints.strategy4Backup, 10000, strategy4Summary?.updatedAt || strategy4SummaryLoadedAt || "", force);
     }
@@ -14880,6 +14951,24 @@ document.addEventListener("input", (event) => {
 });
 
 document.addEventListener("click", (event) => {
+  const sizeButton = event.target.closest("[data-terminal-page-size]");
+  if (sizeButton) {
+    const scope = sizeButton.dataset.terminalPageSizeScope || "";
+    const size = cleanNumber(sizeButton.dataset.terminalPageSize);
+    if (TERMINAL_PAGE_SIZE_OPTIONS.includes(size)) {
+      terminalPageSizes[scope] = size;
+      if (scope === "openBuy") openBuyPage = 1;
+      if (scope === "swing") swingPage = 1;
+      if (scope === "strategy3") strategy3Page = 1;
+      if (scope === "strategy5") strategy5Page = 1;
+      if (scope === "warrant") warrantFlowPage = 1;
+      if (scope === "chip") chipTradePage = 1;
+      if (scope === "warrant") renderWarrantFlow();
+      else if (scope === "chip") renderChipTradeTable();
+      else renderStrategyScanner();
+    }
+    return;
+  }
   const pageButton = event.target.closest("[data-terminal-page]");
   if (!pageButton || pageButton.disabled) return;
   const scope = pageButton.dataset.terminalPageScope || "";
