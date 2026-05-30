@@ -1,5 +1,5 @@
 (function () {
-  const version = "speed-modules-20260530-7";
+  const version = "speed-modules-20260530-8";
   window.FUMAN_TERMINAL_BOOT = {
     version,
     startedAt: Date.now(),
@@ -41,7 +41,7 @@
     script.src = `terminal.js?v=${version}`;
     script.async = true;
     script.dataset.fumanTerminalMain = "1";
-    script.addEventListener("load", () => mark("main-loaded"), { once: true });
+    script.addEventListener("load", () => mark("bootstrap-loaded"), { once: true });
     document.body.appendChild(script);
   };
 

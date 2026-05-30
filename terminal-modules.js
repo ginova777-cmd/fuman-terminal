@@ -1,10 +1,11 @@
 (function () {
-  const VERSION = "lazy-modules-20260530";
+  const VERSION = "speed-modules-20260530-8";
   const modules = {
-    strategy4: { loaded: false, src: "terminal-worker.js" },
-    chipFlow: { loaded: false, src: "terminal-worker.js" },
-    warrantFlow: { loaded: false, src: "terminal-worker.js" },
-    realtimeRadar: { loaded: false, src: "terminal-worker.js" },
+    app: { loaded: false, src: "terminal-app.js" },
+    strategy4: { loaded: false, src: "terminal-app.js" },
+    chipFlow: { loaded: false, src: "terminal-app.js" },
+    warrantFlow: { loaded: false, src: "terminal-app.js" },
+    realtimeRadar: { loaded: false, src: "terminal-app.js" },
   };
 
   window.FUMAN_TERMINAL_MODULES = {
@@ -23,6 +24,7 @@
       document.head.appendChild(link);
     },
     preloadForView(viewName) {
+      if (window.FUMAN_TERMINAL_PREFETCH_APP) window.FUMAN_TERMINAL_PREFETCH_APP();
       if (viewName === "strategy") this.preload("strategy4");
       if (viewName === "chip-trade") this.preload("chipFlow");
       if (viewName === "warrant-flow") this.preload("warrantFlow");
