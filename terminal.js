@@ -3846,7 +3846,7 @@ function loadRealtimeRadarLastRows() {
     const payload = JSON.parse(localStorage.getItem(REALTIME_RADAR_LAST_CACHE_KEY) || "{}");
     if (!Array.isArray(payload.rows) || !payload.rows.length) return false;
     const payloadDate = normalizeMarketAiDateKey(payload.date) || realtimeRadarDateKeyFromTimestamp(payload.updatedAt);
-    if (payloadDate && payloadDate !== marketAiTodayKey()) return false;
+    if (payloadDate && payloadDate !== marketAiTodayKey() && shouldRunLivePolling()) return false;
     realtimeRadarLastRows = payload.rows
       .filter((stock) => isIntradayTradable(stock))
       .filter((stock) => isRealtimeRadarTodaySnapshot({ ...stock, radarDate: stock.radarDate || payloadDate }));
@@ -3871,7 +3871,7 @@ function normalizeRealtimeRadarPayloadCandidate(candidate) {
   const payload = candidate?.payload;
   const payloadDate = normalizeMarketAiDateKey(payload?.date || payload?.updatedAt);
   const rows = normalizeArray(payload?.rows);
-  if (payload?.status !== "ok" || payloadDate !== marketAiTodayKey() || !rows.length) return null;
+  if (payload?.status !== "ok" || (payloadDate !== marketAiTodayKey() && shouldRunLivePolling()) || !rows.length) return null;
   return {
     ...candidate,
     payloadDate,
@@ -3887,13 +3887,14 @@ async function loadRealtimeRadarLatestCache(force = false) {
   try {
     const candidates = [];
     const errors = [];
-    const restPayload = await fetchSupabaseLatestPayload("fuman_realtime_radar_cache", isMobileViewport() ? 3000 : 4500);
+    const allowSupabase = shouldRunLivePolling();
+    const restPayload = allowSupabase ? await fetchSupabaseLatestPayload("fuman_realtime_radar_cache", isMobileViewport() ? 3000 : 4500) : null;
     if (restPayload) {
       candidates.push({
         source: "supabase",
         payload: restPayload,
       });
-    } else if (supabaseClient) {
+    } else if (allowSupabase && supabaseClient) {
       try {
         const { data, error } = await supabaseClient
           .from("fuman_realtime_radar_cache")
@@ -4280,7 +4281,7 @@ function renderRealtimeRadar() {
     return;
   }
   const displayRows = realtimeRadarLastRows.length
-    ? recentRealtimeRadarDisplayRows(shouldReuseRadarRows ? realtimeRadarLastRows : enrichRealtimeRadarSnapshotRows(realtimeRadarLastRows), radarOpen)
+    ? recentRealtimeRadarDisplayRows(shouldReuseRadarRows || !radarOpen ? realtimeRadarLastRows : enrichRealtimeRadarSnapshotRows(realtimeRadarLastRows), radarOpen)
     : rows;
   const displaySignalAt = latestRealtimeRadarSignalAt(displayRows);
   const displaySignalStale = radarOpen && isRealtimeRadarSignalStale(displayRows);
@@ -7062,9 +7063,10 @@ function sortIntradayZoneRows(rows) {
 }
 
 async function loadStrategy2IntradayPayload() {
-  const restPayload = await fetchSupabaseLatestPayload("strategy2_latest", isMobileViewport() ? 3000 : 4500);
+  const allowSupabase = shouldRunLivePolling();
+  const restPayload = allowSupabase ? await fetchSupabaseLatestPayload("strategy2_latest", isMobileViewport() ? 3000 : 4500) : null;
   if (restPayload) return restPayload;
-  if (supabaseClient) {
+  if (allowSupabase && supabaseClient) {
     try {
       const { data, error } = await supabaseClient
         .from("strategy2_latest")
