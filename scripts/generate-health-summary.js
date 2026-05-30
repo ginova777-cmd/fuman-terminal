@@ -45,7 +45,9 @@ function parseCsv(text) {
 function getFumanTasks() {
   const result = spawnSync("schtasks", ["/Query", "/FO", "CSV", "/V"], { encoding: "utf8" });
   if (result.status !== 0) throw new Error((result.stderr || result.stdout || "schtasks failed").trim());
-  return parseCsv(result.stdout).filter((row) => String(row.TaskName || "").startsWith("\\Fuman"));
+  const rows = parseCsv(result.stdout).filter((row) => String(row.TaskName || "").startsWith("\\Fuman"));
+  rows.queryMethod = "schtasks";
+  return rows;
 }
 
 function isBadResult(code) {
@@ -180,7 +182,7 @@ function main() {
     updatedAt: new Date().toISOString(),
     risk: high ? "high" : medium ? "medium" : "low",
     risks,
-    schedule: { ok: badTasks.length === 0, total: tasks.length, badCount: badTasks.length, badTasks },
+    schedule: { ok: badTasks.length === 0, total: tasks.length, badCount: badTasks.length, badTasks, queryMethod: tasks.queryMethod || "schtasks", note: "Uses schtasks fallback-friendly query to avoid Get-ScheduledTask low-permission false alarms." },
     githubSync: outbox,
     runtime: { ok: data.every((item) => item.ok), data },
   };

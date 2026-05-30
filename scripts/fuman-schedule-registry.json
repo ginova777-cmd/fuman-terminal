@@ -1,0 +1,314 @@
+{
+  "updatedAt": "2026-05-30T10:31:54.983Z",
+  "tasks": [
+    {
+      "taskName": "\\Fuman PC Wake 0430",
+      "displayName": "Fuman PC Wake 0430",
+      "description": "Mini PC 凌晨 04:30 喚醒",
+      "time": "04:30",
+      "aliases": [
+        "PC Wake 0530",
+        "喚醒",
+        "wake"
+      ]
+    },
+    {
+      "taskName": "\\Fuman PC Sleep 2400",
+      "displayName": "Fuman PC Sleep 2400",
+      "description": "Mini PC 晚上 24:00 / 00:00 睡眠",
+      "time": "00:00",
+      "aliases": [
+        "PC Sleep 2200",
+        "睡眠",
+        "sleep"
+      ]
+    },
+    {
+      "taskName": "\\Fuman GitHub 統一同步 0612",
+      "displayName": "Fuman GitHub 統一同步 0612",
+      "description": "早上 06:12 把 runtime 資料同步到 GitHub",
+      "time": "06:12",
+      "aliases": [
+        "github 0612"
+      ]
+    },
+    {
+      "taskName": "\\Fuman GitHub 統一同步 0715",
+      "displayName": "Fuman GitHub 統一同步 0715",
+      "description": "早上 07:15 同步 GitHub",
+      "time": "07:15",
+      "aliases": [
+        "github 0715"
+      ]
+    },
+    {
+      "taskName": "\\Fuman GitHub 統一同步 1445",
+      "displayName": "Fuman GitHub 統一同步 1445",
+      "description": "下午 14:45 同步 GitHub",
+      "time": "14:45",
+      "aliases": [
+        "github 1445"
+      ]
+    },
+    {
+      "taskName": "\\Fuman GitHub 統一同步 2112",
+      "displayName": "Fuman GitHub 統一同步 2112",
+      "description": "晚上 21:12 同步 GitHub，補上晚間資料發布",
+      "time": "21:12",
+      "aliases": [
+        "github 2112"
+      ]
+    },
+    {
+      "taskName": "\\Fuman Open Buy Cache 0700",
+      "displayName": "Fuman Open Buy Cache 0700",
+      "description": "策略1「明日開盤入」早上 07:00 快取",
+      "time": "07:00",
+      "aliases": [
+        "策略1",
+        "open buy 0700"
+      ]
+    },
+    {
+      "taskName": "\\Fuman Open Buy Cache 1600",
+      "displayName": "Fuman Open Buy Cache 1600",
+      "description": "策略1「明日開盤入」下午 16:00 快取",
+      "time": "16:00",
+      "aliases": [
+        "open buy 1600"
+      ]
+    },
+    {
+      "taskName": "\\Fuman Open Buy Sync Retry",
+      "displayName": "Fuman Open Buy Sync Retry",
+      "description": "策略1 GitHub 同步補救，下午 16:20 執行",
+      "time": "16:20",
+      "aliases": [
+        "open buy retry"
+      ]
+    },
+    {
+      "taskName": "\\Fuman Strategy2 Intraday Scan",
+      "displayName": "Fuman Strategy2 Intraday Scan",
+      "description": "策略2當沖雷達，08:58 啟動，09:00 後巡邏到 13:30",
+      "time": "08:58",
+      "aliases": [
+        "策略2",
+        "當沖"
+      ]
+    },
+    {
+      "taskName": "\\Fuman Strategy2 LINE Start 0900",
+      "displayName": "Fuman Strategy2 LINE Start 0900",
+      "description": "策略2 LINE / Telegram 通知巡邏，09:00 啟動",
+      "time": "09:00",
+      "aliases": [
+        "line start"
+      ]
+    },
+    {
+      "taskName": "\\Fuman Strategy2 LINE Stop 1330",
+      "displayName": "Fuman Strategy2 LINE Stop 1330",
+      "description": "策略2通知巡邏，13:30 停止",
+      "time": "13:30",
+      "aliases": [
+        "line stop"
+      ]
+    },
+    {
+      "taskName": "\\Fuman 即時雷達",
+      "displayName": "Fuman 即時雷達",
+      "description": "即時雷達，08:58 啟動",
+      "time": "08:58",
+      "aliases": [
+        "即時雷達",
+        "realtime"
+      ]
+    },
+    {
+      "taskName": "\\Fuman Market Overview Patrol 0900",
+      "displayName": "Fuman Market Overview Patrol 0900",
+      "description": "市場總覽 / 熱力圖 / AI判讀，09:00 啟動巡邏",
+      "time": "09:00",
+      "aliases": [
+        "市場總覽",
+        "market"
+      ]
+    },
+    {
+      "taskName": "\\Fuman Market Overview Watchdog 0901",
+      "displayName": "Fuman Market Overview Watchdog 0901",
+      "description": "市場總覽 Watchdog，09:01 檢查狀態",
+      "time": "09:01",
+      "aliases": [
+        "market watchdog"
+      ]
+    },
+    {
+      "taskName": "\\Fuman Strategy3 Cache 1300",
+      "displayName": "Fuman Strategy3 Cache 1300",
+      "description": "策略3隔日沖，下午 13:00 快取",
+      "time": "13:00",
+      "aliases": [
+        "策略3"
+      ]
+    },
+    {
+      "taskName": "\\Fuman Strategy3 Watchdog 1320",
+      "displayName": "Fuman Strategy3 Watchdog 1320",
+      "description": "策略3 Watchdog，13:20 檢查並補跑",
+      "time": "13:20",
+      "aliases": [
+        "strategy3 watchdog"
+      ]
+    },
+    {
+      "taskName": "\\Fuman Strategy4 Cache 1430",
+      "displayName": "Fuman Strategy4 Cache 1430",
+      "description": "策略4波段，下午 14:30 全台股掃描",
+      "time": "14:30",
+      "aliases": [
+        "策略4"
+      ]
+    },
+    {
+      "taskName": "\\Fuman Strategy5 Cache 0600",
+      "displayName": "Fuman Strategy5 Cache 0600",
+      "description": "策略5綜合策略，早上 06:00 快取",
+      "time": "06:00",
+      "aliases": [
+        "策略5 0600"
+      ]
+    },
+    {
+      "taskName": "\\Fuman Strategy5 Cache 2100",
+      "displayName": "Fuman Strategy5 Cache 2100",
+      "description": "策略5綜合策略，晚上 21:00 快取",
+      "time": "21:00",
+      "aliases": [
+        "策略5 2100"
+      ]
+    },
+    {
+      "taskName": "\\Fuman Trade Manager Patrol 0900",
+      "displayName": "Fuman Trade Manager Patrol 0900",
+      "description": "交易管家巡邏，09:00 啟動",
+      "time": "09:00",
+      "aliases": [
+        "交易管家"
+      ]
+    },
+    {
+      "taskName": "\\Fuman Trade Manager Settlement 1340",
+      "displayName": "Fuman Trade Manager Settlement 1340",
+      "description": "交易管家結算，13:40 執行",
+      "time": "13:40",
+      "aliases": [
+        "settlement"
+      ]
+    },
+    {
+      "taskName": "\\Fuman Scorecard Initial 1410",
+      "displayName": "Fuman Scorecard Initial 1410",
+      "description": "成績單含輔滿回測初版，14:10 產生",
+      "time": "14:10",
+      "aliases": [
+        "scorecard initial"
+      ]
+    },
+    {
+      "taskName": "\\Fuman Scorecard Final 1530",
+      "displayName": "Fuman Scorecard Final 1530",
+      "description": "成績單含輔滿回測終版，15:30 產生",
+      "time": "15:30",
+      "aliases": [
+        "scorecard final"
+      ]
+    },
+    {
+      "taskName": "\\Fuman Daily Health Summary 1545",
+      "displayName": "Fuman Daily Health Summary 1545",
+      "description": "每日健康摘要，15:45 產生",
+      "time": "15:45",
+      "aliases": [
+        "health"
+      ]
+    },
+    {
+      "taskName": "\\Fuman 權證走向 Cache 0530",
+      "displayName": "Fuman 權證走向 Cache 0530",
+      "description": "權證資金走向，早上 05:30 快取並發布終端",
+      "time": "05:30",
+      "aliases": [
+        "權證 0530",
+        "權證 0500"
+      ]
+    },
+    {
+      "taskName": "\\Fuman 權證走向 Watchdog 0550",
+      "displayName": "Fuman 權證走向 Watchdog 0550",
+      "description": "早上 05:50 檢查權證 05:30 是否成功；失敗會重跑",
+      "time": "05:50",
+      "aliases": [
+        "權證 0550",
+        "權證 0520"
+      ]
+    },
+    {
+      "taskName": "\\Fuman 買賣超 Cache 0600",
+      "displayName": "Fuman 買賣超 Cache 0600",
+      "description": "買賣超資料，早上 06:00 快取並發布終端",
+      "time": "06:00",
+      "aliases": [
+        "買賣超 0600"
+      ]
+    },
+    {
+      "taskName": "\\Fuman 買賣超 Watchdog 0620",
+      "displayName": "Fuman 買賣超 Watchdog 0620",
+      "description": "早上 06:20 檢查買賣超 06:00 是否成功；失敗會重跑",
+      "time": "06:20",
+      "aliases": [
+        "買賣超 0620"
+      ]
+    },
+    {
+      "taskName": "\\Fuman 權證走向 Cache 2030",
+      "displayName": "Fuman 權證走向 Cache 2030",
+      "description": "權證資金走向，晚上 20:30 快取並發布終端",
+      "time": "20:30",
+      "aliases": [
+        "權證 2030",
+        "權證 2200"
+      ]
+    },
+    {
+      "taskName": "\\Fuman 權證走向 Watchdog 2050",
+      "displayName": "Fuman 權證走向 Watchdog 2050",
+      "description": "晚上 20:50 檢查權證 20:30 是否成功；失敗會重跑",
+      "time": "20:50",
+      "aliases": [
+        "權證 2050",
+        "權證 2220"
+      ]
+    },
+    {
+      "taskName": "\\Fuman 買賣超 Cache 2100",
+      "displayName": "Fuman 買賣超 Cache 2100",
+      "description": "買賣超資料，晚上 21:00 快取並發布終端",
+      "time": "21:00",
+      "aliases": [
+        "買賣超 2100"
+      ]
+    },
+    {
+      "taskName": "\\Fuman 買賣超 Watchdog 2120",
+      "displayName": "Fuman 買賣超 Watchdog 2120",
+      "description": "晚上 21:20 檢查買賣超 21:00 是否成功；失敗會重跑",
+      "time": "21:20",
+      "aliases": [
+        "買賣超 2120"
+      ]
+    }
+  ]
+}

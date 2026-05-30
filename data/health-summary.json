@@ -1,13 +1,15 @@
 {
   "ok": true,
-  "updatedAt": "2026-05-30T04:06:34.368Z",
+  "updatedAt": "2026-05-30T10:34:06.617Z",
   "risk": "low",
   "risks": [],
   "schedule": {
     "ok": true,
     "total": 33,
     "badCount": 0,
-    "badTasks": []
+    "badTasks": [],
+    "queryMethod": "schtasks",
+    "note": "Uses schtasks fallback-friendly query to avoid Get-ScheduledTask low-permission false alarms."
   },
   "githubSync": {
     "pendingCount": 0,
@@ -48,8 +50,8 @@
         "file": "warrant-flow-summary.json",
         "ok": true,
         "count": 120,
-        "updatedAt": "2026-05-28T22:00:16.146Z",
-        "bytes": 34814
+        "updatedAt": "2026-05-30T10:18:05.285Z",
+        "bytes": 34845
       },
       {
         "file": "realtime-radar-latest.json",
@@ -62,35 +64,35 @@
         "file": "performance-report.json",
         "ok": true,
         "count": 0,
-        "updatedAt": "2026-05-30T04:06:30.807Z",
+        "updatedAt": "2026-05-30T10:18:07.887Z",
         "bytes": 2393
       },
       {
         "file": "signal-quality-report.json",
         "ok": true,
         "count": 0,
-        "updatedAt": "2026-05-30T03:57:29.892Z",
+        "updatedAt": "2026-05-30T10:18:06.016Z",
         "bytes": 796
       },
       {
         "file": "data-quality-report.json",
         "ok": true,
         "count": 0,
-        "updatedAt": "2026-05-30T03:57:31.365Z",
+        "updatedAt": "2026-05-30T10:18:07.627Z",
         "bytes": 2011
       },
       {
         "file": "data-consistency-report.json",
         "ok": true,
         "count": 0,
-        "updatedAt": "2026-05-30T03:57:31.467Z",
+        "updatedAt": "2026-05-30T10:18:07.763Z",
         "bytes": 312
       },
       {
         "file": "strategy-weight-report.json",
         "ok": true,
         "count": 0,
-        "updatedAt": "2026-05-30T04:06:30.742Z",
+        "updatedAt": "2026-05-30T10:18:07.828Z",
         "bytes": 418
       }
     ]

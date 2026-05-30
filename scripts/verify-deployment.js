@@ -1,4 +1,6 @@
 const https = require("https");
+const { spawnSync } = require("child_process");
+const path = require("path");
 
 const baseUrl = (process.env.FUMAN_VERIFY_BASE_URL || "https://fuman-terminal.vercel.app").replace(/\/+$/, "");
 const version = process.env.FUMAN_VERIFY_VERSION || "speed-modules-20260530-22";
@@ -55,11 +57,21 @@ function postJson(pathname, payload, timeoutMs = 20000) {
   });
 }
 
+function verifyVersionConsistency() {
+  const script = path.join(__dirname, "verify-version-consistency.js");
+  const result = spawnSync(process.execPath, [script], { encoding: "utf8" });
+  if (result.status !== 0) {
+    throw new Error((result.stderr || result.stdout || "version consistency failed").trim());
+  }
+  process.stdout.write(result.stdout);
+}
+
 async function main() {
+  verifyVersionConsistency();
   const checks = [
     ["home", "/", (r) => r.body.includes(`terminal-core.js?v=${version}`)],
     ["core", `/terminal-core.js?v=${version}`, (r) => r.body.includes("terminal-modules.js")],
-    ["modules", `/terminal-modules.js?v=${version}`, (r) => r.body.includes("FUMAN_TERMINAL_MODULES")],
+    ["modules", `/terminal-modules.js?v=${version}`, (r) => r.body.includes("FUMAN_TERMINAL_MODULES") && r.body.includes(version)],
     ["worker", `/terminal-worker.js?v=${version}`, (r) => r.body.includes("swingBuckets")],
     ["service-worker", `/fuman-sw.js?v=${version}`, (r) => r.body.includes("strategy2-intraday-latest") && r.body.includes("realtime-radar-latest")],
     ["terminal-bootstrap", `/terminal.js?v=${version}`, (r) => r.body.includes("FUMAN_TERMINAL_LOAD_APP") && r.body.includes("terminal-app.js")],
