@@ -1,0 +1,16 @@
+{
+  "ok": true,
+  "updatedAt": "2026-05-30T04:07:08.037Z",
+  "generatedBy": "generate-strategy-weight-report",
+  "basis": {
+    "signalUpdatedAt": "2026-05-30T04:07:06.361Z",
+    "consistencyUpdatedAt": "2026-05-30T04:07:07.975Z",
+    "dataQualityUpdatedAt": "2026-05-30T04:07:07.865Z",
+    "highIssues": 0
+  },
+  "weights": {
+    "strategy2Multiplier": 1,
+    "radarMultiplier": 1,
+    "strategy4Multiplier": 1
+  }
+}
