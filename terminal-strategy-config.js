@@ -1,0 +1,84 @@
+(function () {
+const STRATEGY_DEFS = [
+  { id: "foreign_trust_breakout", label: "外資投信連買準突破", short: "準突破", icon: "◆" },
+  { id: "momentum", label: "動能分數 75+", short: "動能", icon: "⚡" },
+  { id: "main_force_chip", label: "主力籌碼盤整", short: "主力", icon: "♣" },
+  { id: "limit_up_doji", label: "漲停十字星", short: "漲停十字", icon: "十" },
+  { id: "twenty_day_breakout", label: "突破20日新高", short: "突破", icon: "↑" },
+  { id: "opening_power", label: "開盤即戰力狙擊", short: "開盤", icon: "✥" },
+  { id: "red_to_green", label: "昨日紅轉綠", short: "紅轉綠", icon: "↻" },
+  { id: "intraday_2m", label: "2分K當沖雷達", short: "當沖", icon: "⌁" },
+  { id: "investment_trust", label: "投信連買認養股", short: "投信", icon: "▦" },
+  { id: "vcp", label: "VCP 波段收斂", short: "VCP", icon: "⌁" },
+  { id: "ma_bull", label: "均線多頭排列", short: "均線", icon: "☰" },
+  { id: "sync_backtest", label: "高同步率回測", short: "同步", icon: "▣" },
+  { id: "overnight_chip", label: "隔日沖吸籌監控", short: "隔日", icon: "⌬" },
+  { id: "short_fund_flow", label: "短線資金動能", short: "資金", icon: "◇" },
+  { id: "chip_health_strong", label: "籌碼健檢強勢", short: "籌碼", icon: "▣" },
+  { id: "one_day_rebound", label: "大跌一日反彈", short: "反彈", icon: "↥" },
+  { id: "short_squeeze", label: "融券嘎空雷達", short: "嘎空", icon: "⌁" },
+  { id: "ultra_short", label: "超短線操作", short: "短打", icon: "⚡" },
+];
+
+const STRATEGY_BY_ID = Object.fromEntries(STRATEGY_DEFS.map((item) => [item.id, item]));
+const STRATEGY5_IDS = ["short_fund_flow", "chip_health_strong", "one_day_rebound", "short_squeeze", "ultra_short"];
+const STRATEGY5_PRESET_IDS = [
+  "foreign_trust_breakout",
+  "limit_up_doji",
+];
+const STRATEGY5_CARD_META = {
+  foreign_trust_breakout: {
+    description: "外資與投信同步買超，漲幅未過熱，優先觀察準突破名單。",
+  },
+  limit_up_doji: {
+    description: "漲停後十字星，橫盤震盪超過 7 天且量能縮，再等放量陽線突破。",
+  },
+};
+const INTRADAY_EXCLUDED_CODES = new Set([
+  "2330", "2412", "3045",
+  "2208", "2634", "2645", "4541", "4572", "5009", "6753", "8033", "8222",
+  "9103", "9105", "9110", "9136",
+]);
+
+const INTRADAY_SIGNAL_DEFS = [
+  { id: "early_strength", title: "早盤強勢", icon: "⚡", hint: "漲幅與量能先進雷達" },
+  { id: "volume_burst", title: "爆量", icon: "📊", hint: "成交張數進市場前段" },
+  { id: "daily_breakout", title: "日K突破", icon: "▲", hint: "突破昨日或20日壓力" },
+  { id: "gap", title: "跳空", icon: "🚀", hint: "開盤高於昨收且量能放大" },
+  { id: "breakout", title: "突破", icon: "🔥", hint: "站上盤中強勢區與 VWAP" },
+  { id: "ma35_macd", title: "MA35 + MACD", icon: "🟢", hint: "站上 MA35 且動能向上" },
+  { id: "diamond", title: "鑽石", icon: "💎", hint: "回測 0.618 後收紅轉強" },
+  { id: "volume_diamond", title: "量+鑽石", icon: "💎", hint: "分時放大搭配 0.618 回測" },
+  { id: "volume_ma35", title: "量+MA35", icon: "🟢", hint: "分時放大搭配 MA35 支撐" },
+  { id: "surge", title: "瞬間拉抬", icon: "⚡", hint: "短時間價格快速推升" },
+  { id: "gua_butterfly_buy", title: "蝴蝶買", icon: "🦋", hint: "乖離反彈後突破前高" },
+  { id: "gua_flag_long", title: "旗形多", icon: "🚩", hint: "EMA多頭排列後突破旗形" },
+  { id: "gua_abcd_long", title: "ABCD多", icon: "📈", hint: "回測 EMA9 支撐後轉強" },
+  { id: "gua_orb_long", title: "ORB多", icon: "🚀", hint: "突破近段高點啟動" },
+  { id: "gua_angel_long", title: "Angel多", icon: "👼", hint: "VWAP回測支撐成功" },
+  { id: "gua_vwap_long", title: "VWAP多", icon: "🌀", hint: "由下往上突破 VWAP" },
+];
+
+const SWING_SIGNAL_DEFS = [
+  { id: "bull_attack", title: "多頭攻擊", icon: "🔥", hint: "價量轉強且趨勢偏多" },
+  { id: "n_base", title: "N字共振", icon: "", hint: "攻擊後回檔再轉強" },
+  { id: "saucer", title: "圓弧底", icon: "◜", hint: "低位整理後突破" },
+  { id: "breakaway_gap", title: "突破缺口", icon: "◆", hint: "跳空突破整理高點" },
+  { id: "runaway_gap", title: "逃逸缺口", icon: "🚀", hint: "多頭延續型缺口" },
+  { id: "v_reversal", title: "V轉反彈", icon: "", hint: "跌深後快速翻紅" },
+  { id: "three_inside", title: "三內翻紅", icon: "↻", hint: "弱轉強反轉型態" },
+  { id: "golden_cross", title: "多金釵", icon: "✦", hint: "短均線轉強候選" },
+  { id: "watch_trend", title: "B觀察", icon: "B", hint: "趨勢轉強觀察名單" },
+  { id: "base_setup", title: "C準備", icon: "C", hint: "低/中位階整理接近發動" },
+];
+  window.FUMAN_STRATEGY_CONFIG = {
+    STRATEGY_DEFS,
+    STRATEGY_BY_ID,
+    STRATEGY5_IDS,
+    STRATEGY5_PRESET_IDS,
+    STRATEGY5_CARD_META,
+    INTRADAY_EXCLUDED_CODES,
+    INTRADAY_SIGNAL_DEFS,
+    SWING_SIGNAL_DEFS,
+  };
+})();

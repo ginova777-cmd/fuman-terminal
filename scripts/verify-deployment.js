@@ -1,7 +1,7 @@
 const https = require("https");
 
 const baseUrl = (process.env.FUMAN_VERIFY_BASE_URL || "https://fuman-terminal.vercel.app").replace(/\/+$/, "");
-const version = process.env.FUMAN_VERIFY_VERSION || "speed-modules-20260530-10";
+const version = process.env.FUMAN_VERIFY_VERSION || "speed-modules-20260530-11";
 
 function fetchText(pathname, timeoutMs = 20000) {
   const url = `${baseUrl}${pathname}`;
@@ -64,6 +64,7 @@ async function main() {
     ["service-worker", `/fuman-sw.js?v=${version}`, (r) => r.body.includes("strategy2-intraday-latest") && r.body.includes("realtime-radar-latest")],
     ["terminal-bootstrap", `/terminal.js?v=${version}`, (r) => r.body.includes("FUMAN_TERMINAL_LOAD_APP") && r.body.includes("terminal-app.js")],
     ["sector-map", `/terminal-sector-map.js?v=${version}`, (r) => r.body.includes("FUMAN_SECTOR_MAP") && r.body.includes("SECTOR_MAP")],
+    ["strategy-config", `/terminal-strategy-config.js?v=${version}`, (r) => r.body.includes("FUMAN_STRATEGY_CONFIG") && r.body.includes("STRATEGY_DEFS")],
     ["terminal-app", `/terminal-app.js?v=${version}`, (r) => r.body.includes("FUMAN_LIVE_MEMORY_TTL_MS") && r.body.includes("loadStrategyWeights")],
     ["theme-css", `/terminal-theme.css?v=${version}`, (r) => r.body.includes("fuman-light-theme")],
     ["watchlist-css", `/terminal-watchlist.css?v=${version}`, (r) => r.body.includes("watch-analysis-panel")],
