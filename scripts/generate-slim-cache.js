@@ -15,7 +15,7 @@ function readJson(file) {
 
 function writeJson(file, payload) {
   fs.mkdirSync(path.dirname(file), { recursive: true });
-  fs.writeFileSync(file, `${JSON.stringify(payload, null, 2)}\n`, "utf8");
+  fs.writeFileSync(file, `${JSON.stringify(payload)}\n`, "utf8");
 }
 
 function writeToBoth(output, payload) {
@@ -298,11 +298,117 @@ function slimStrategy2(payload) {
     },
   };
 }
+
+function topStrategy2(payload) {
+  const slim = slimStrategy2(payload);
+  const rankTime = (item) => strategy2RecordSortTime(item).replace(/[^0-9: -]/g, "");
+  const events = [...slim.events]
+    .sort((a, b) => cleanNumber(b.maxScore) - cleanNumber(a.maxScore) || rankTime(b).localeCompare(rankTime(a)))
+    .slice(0, 50);
+  const eventCodes = new Set(events.map((event) => event.code));
+  const records = [
+    ...slim.records.filter((record) => eventCodes.has(record.code)),
+    ...slim.records.filter((record) => !eventCodes.has(record.code)).slice(0, 20),
+  ].slice(0, 70);
+  return {
+    ...slim,
+    source: "strategy2-mobile-top",
+    profile: "strategy2-mobile-top",
+    records,
+    events,
+    count: events.length,
+  };
+}
+
+function mobileInstitutionTop(payload) {
+  const slim = slimInstitution(payload);
+  const rows = Object.values(slim.data || {})
+    .sort((a, b) => b.jointStreak - a.jointStreak || b.total - a.total || b.trust - a.trust)
+    .slice(0, 50);
+  return {
+    ok: slim.ok,
+    source: "institution-mobile-top",
+    updatedAt: slim.updatedAt,
+    usedDate: slim.usedDate,
+    quoteUpdatedAt: slim.quoteUpdatedAt,
+    count: rows.length,
+    rows,
+  };
+}
+
+function mobileWarrantTop(payload) {
+  const preset = warrantPresetFiles(payload)[0]?.[1] || { matches: [] };
+  const rows = (preset.matches || []).slice(0, 50);
+  return {
+    ok: Boolean(payload?.ok ?? true),
+    source: "warrant-flow-mobile-top",
+    updatedAt: payload?.updatedAt || "",
+    count: rows.length,
+    matches: rows,
+  };
+}
+
+function mobileHomeSummary() {
+  const readOptional = (rel, fallback = null) => {
+    for (const root of [runtimeRoot, repoRoot, syncRoot]) {
+      const file = path.join(root, rel);
+      if (fs.existsSync(file)) return readJson(file);
+    }
+    return fallback;
+  };
+  const market = readOptional("data/market-summary.json", {});
+  const health = readOptional("data/health-summary.json", {});
+  const strategy2 = readOptional("data/strategy2-intraday-top.json", {});
+  const chip = readOptional("data/institution-mobile-top.json", {});
+  const warrant = readOptional("data/warrant-flow-mobile-top.json", {});
+  return {
+    source: "mobile-home-summary",
+    updatedAt: new Date().toISOString(),
+    market: {
+      updatedAt: market?.updatedAt || "",
+      sample: cleanNumber(market?.sample),
+      up: cleanNumber(market?.up),
+      down: cleanNumber(market?.down),
+      flat: cleanNumber(market?.flat),
+      strongSectors: (market?.strongSectors || []).slice(0, 5),
+      weakSectors: (market?.weakSectors || []).slice(0, 5),
+    },
+    health: {
+      risk: health?.risk || health?.status || "",
+      high: cleanNumber(health?.highRiskCount || health?.high),
+      medium: cleanNumber(health?.mediumRiskCount || health?.medium),
+      low: cleanNumber(health?.lowRiskCount || health?.low),
+      updatedAt: health?.updatedAt || "",
+    },
+    strategy2: {
+      updatedAt: strategy2?.updatedAt || "",
+      count: cleanNumber(strategy2?.count || strategy2?.events?.length),
+      top: (strategy2?.events || []).slice(0, 8).map((item) => ({
+        code: item.code,
+        name: item.name,
+        latestAAt: item.latestAAt,
+        latestSeenAt: item.latestSeenAt,
+        maxScore: item.maxScore,
+        strategies: (item.strategies || []).slice(0, 3),
+      })),
+    },
+    chip: {
+      updatedAt: chip?.updatedAt || "",
+      count: cleanNumber(chip?.count || chip?.rows?.length),
+      top: (chip?.rows || []).slice(0, 8),
+    },
+    warrant: {
+      updatedAt: warrant?.updatedAt || "",
+      count: cleanNumber(warrant?.count || warrant?.matches?.length),
+      top: (warrant?.matches || []).slice(0, 8),
+    },
+  };
+}
 const jobs = [
-  ["strategy2", "data/strategy2-intraday-latest.json", "data/strategy2-intraday-slim.json", slimStrategy2, () => []],
+  ["strategy2", "data/strategy2-intraday-latest.json", "data/strategy2-intraday-slim.json", slimStrategy2, (payload) => [["data/strategy2-intraday-top.json", topStrategy2(payload)]]],
   ["strategy4", "data/strategy4-latest.json", "data/strategy4-slim.json", slimStrategy4, strategy4PresetFiles],
-  ["institution", "data/institution-latest.json", "data/institution-slim.json", slimInstitution, institutionPresetFiles],
-  ["warrant", "data/warrant-flow-latest.json", "data/warrant-flow-slim.json", slimWarrant, warrantPresetFiles],
+  ["institution", "data/institution-latest.json", "data/institution-slim.json", slimInstitution, (payload) => [...institutionPresetFiles(payload), ["data/institution-mobile-top.json", mobileInstitutionTop(payload)]]],
+  ["warrant", "data/warrant-flow-latest.json", "data/warrant-flow-slim.json", slimWarrant, (payload) => [...warrantPresetFiles(payload), ["data/warrant-flow-mobile-top.json", mobileWarrantTop(payload)]]],
 ];
 
 let wrote = 0;
@@ -326,6 +432,12 @@ for (const [name, input, output, build, presets] of jobs) {
   console.log(`[slim] wrote ${output} count=${payload.count || Object.keys(payload.data || {}).length}`);
 }
 
+if (wrote) {
+  const mobileSummary = mobileHomeSummary();
+  writeToBoth("data/mobile-home-summary.json", mobileSummary);
+  console.log(`[slim] wrote data/mobile-home-summary.json strategy2=${mobileSummary.strategy2.count || 0} chip=${mobileSummary.chip.count || 0} warrant=${mobileSummary.warrant.count || 0}`);
+}
 if (!wrote) process.exitCode = 1;
+
 
 

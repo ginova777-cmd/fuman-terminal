@@ -315,6 +315,26 @@ function buildStrategy2FastSlimReport(report) {
     },
   };
 }
+
+function buildStrategy2MobileTopReport(report) {
+  const slim = buildStrategy2FastSlimReport(report);
+  const events = (slim.events || [])
+    .sort((a, b) => (Number(b.maxScore) || 0) - (Number(a.maxScore) || 0) || String(b.latestSeenAt || b.latestAAt || "").localeCompare(String(a.latestSeenAt || a.latestAAt || "")))
+    .slice(0, 50);
+  const eventCodes = new Set(events.map((event) => String(event.code || "")));
+  const records = [
+    ...(slim.records || []).filter((record) => eventCodes.has(String(record.code || ""))),
+    ...(slim.records || []).filter((record) => !eventCodes.has(String(record.code || ""))).slice(0, 20),
+  ].slice(0, 70);
+  return {
+    ...slim,
+    source: "strategy2-mobile-top",
+    profile: "strategy2-mobile-top",
+    events,
+    records,
+    count: events.length,
+  };
+}
 function shouldWriteStrategy2History(file) {
   if (STRATEGY2_HISTORY_WRITE_INTERVAL_MS <= 0) return true;
   try {
@@ -1512,5 +1532,6 @@ main().catch((error) => {
   console.error(error);
   process.exit(1);
 });
+
 
 

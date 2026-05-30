@@ -1,22 +1,22 @@
-const CACHE_VERSION = "fuman-terminal-sw-20260530-24";
+const CACHE_VERSION = "fuman-terminal-sw-20260530-25";
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 const DATA_CACHE = `${CACHE_VERSION}-data`;
 
 const STATIC_ASSETS = [
   "/styles.css?v=mobile-card-quick-20260530-5",
-  "/terminal-core.js?v=speed-modules-20260530-25",
-  "/terminal-modules.js?v=speed-modules-20260530-25",
-  "/terminal-sector-map.js?v=speed-modules-20260530-25",
-  "/terminal-strategy-config.js?v=speed-modules-20260530-25",
-  "/terminal-market-config.js?v=speed-modules-20260530-25",
-  "/terminal-ui-config.js?v=speed-modules-20260530-25",
-  "/terminal-runtime-config.js?v=speed-modules-20260530-25",
-  "/terminal-tuning-config.js?v=speed-modules-20260530-25",
-  "/terminal-worker.js?v=speed-modules-20260530-25",
-  "/terminal.js?v=speed-modules-20260530-25",
-  "/terminal-realtime-radar.css?v=speed-modules-20260530-25",
-  "/terminal-intraday-radar.css?v=speed-modules-20260530-25",
-  "/terminal-utility.css?v=speed-modules-20260530-25",
+  "/terminal-core.js?v=speed-modules-20260530-26",
+  "/terminal-modules.js?v=speed-modules-20260530-26",
+  "/terminal-sector-map.js?v=speed-modules-20260530-26",
+  "/terminal-strategy-config.js?v=speed-modules-20260530-26",
+  "/terminal-market-config.js?v=speed-modules-20260530-26",
+  "/terminal-ui-config.js?v=speed-modules-20260530-26",
+  "/terminal-runtime-config.js?v=speed-modules-20260530-26",
+  "/terminal-tuning-config.js?v=speed-modules-20260530-26",
+  "/terminal-worker.js?v=speed-modules-20260530-26",
+  "/terminal.js?v=speed-modules-20260530-26",
+  "/terminal-realtime-radar.css?v=speed-modules-20260530-26",
+  "/terminal-intraday-radar.css?v=speed-modules-20260530-26",
+  "/terminal-utility.css?v=speed-modules-20260530-26",
   "/assets/logo.png",
   "/favicon.ico",
 ];
@@ -24,7 +24,9 @@ const STATIC_ASSETS = [
 const DATA_PATTERNS = [
   /\/data\/.*summary\.json/i,
   /\/data\/.*-slim\.json/i,
+  /\/data\/.*-top\.json/i,
   /\/data\/market-summary\.json/i,
+  /\/data\/mobile-home-summary\.json/i,
   /\/data\/health-summary\.json/i,
 ];
 
@@ -116,6 +118,8 @@ self.addEventListener("fetch", (event) => {
     event.respondWith(staleWhileRevalidate(request));
   }
 });
+
+
 
 
 

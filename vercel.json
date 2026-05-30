@@ -81,6 +81,19 @@
       ]
     },
     {
+      "source": "/data/(.*)-top.json",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=15, stale-while-revalidate=120"
+        },
+        {
+          "key": "X-Content-Type-Options",
+          "value": "nosniff"
+        }
+      ]
+    },
+    {
       "source": "/data/strategy2-intraday-latest.json",
       "headers": [
         {

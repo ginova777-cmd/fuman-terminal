@@ -2,6 +2,7 @@
   const endpoints = {
     backend: "/api/market",
     marketSummary: "/data/market-summary.json",
+    mobileHomeSummary: "/data/mobile-home-summary.json",
     healthSummary: "/data/health-summary.json",
     heatmap: "/api/heatmap",
     institution: "/api/institution",
@@ -27,14 +28,17 @@
     realtimeRadarCache: "/data/realtime-radar-latest.json",
     strategy2IntradayCache: "/data/strategy2-intraday-latest.json",
     strategy2IntradaySlim: "/data/strategy2-intraday-slim.json",
+    strategy2IntradayTop: "/data/strategy2-intraday-top.json",
     institutionCache: "/data/institution-latest.json",
     institutionSlim: "/data/institution-slim.json",
     institutionBackup: "/data/institution-backup.json",
     institutionSummary: "/data/institution-summary.json",
+    institutionMobileTop: "/data/institution-mobile-top.json",
     warrantFlowCache: "/data/warrant-flow-latest.json",
     warrantFlowSlim: "/data/warrant-flow-slim.json",
     warrantFlowBackup: "/data/warrant-flow-backup.json",
     warrantFlowSummary: "/data/warrant-flow-summary.json",
+    warrantFlowMobileTop: "/data/warrant-flow-mobile-top.json",
     strategyStocks: "/api/stocks",
     stocks: "https://openapi.twse.com.tw/v1/exchangeReport/STOCK_DAY_ALL",
   };
@@ -54,4 +58,5 @@
     endpoints,
   };
 })();
+
 

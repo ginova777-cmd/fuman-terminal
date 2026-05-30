@@ -70,7 +70,7 @@ function getFumanWorker() {
   if (!("Worker" in window)) return null;
   if (fumanWorker) return fumanWorker;
   try {
-    fumanWorker = new Worker("terminal-worker.js?v=speed-modules-20260530-25");
+    fumanWorker = new Worker("terminal-worker.js?v=speed-modules-20260530-26");
     fumanWorker.addEventListener("message", (event) => {
       const { id, ok, rows, result, error } = event.data || {};
       const pending = fumanWorkerPending.get(id);
@@ -201,7 +201,7 @@ function loadFumanStyle(href, id) {
   const link = document.createElement("link");
   link.id = id;
   link.rel = "stylesheet";
-  link.href = href.includes("?") ? href : `${href}?v=${window.FUMAN_TERMINAL_BOOT?.version || "speed-modules-20260530-25"}`;
+  link.href = href.includes("?") ? href : `${href}?v=${window.FUMAN_TERMINAL_BOOT?.version || "speed-modules-20260530-26"}`;
   document.head.appendChild(link);
 }
 
@@ -227,7 +227,7 @@ function makeFumanModuleScope(bindings) {
 function loadFumanFeatureModule(name, src, globalName) {
   if (window[globalName]) return Promise.resolve(window[globalName]);
   if (fumanFeatureModulePromises[name]) return fumanFeatureModulePromises[name];
-  const version = window.FUMAN_TERMINAL_BOOT?.version || "speed-modules-20260530-25";
+  const version = window.FUMAN_TERMINAL_BOOT?.version || "speed-modules-20260530-26";
   fumanFeatureModulePromises[name] = new Promise((resolve, reject) => {
     const attr = "data-fuman-feature-" + name;
     const existing = document.querySelector("script[" + attr + "]");
@@ -2796,6 +2796,8 @@ function recordFumanPerformance(url, startedAt, ok, error = null) {
     url: String(url || "").replace(/[?&]t=\d+/g, "").slice(0, 120),
     ms: Math.round(now - startedAt),
     ok: Boolean(ok),
+    viewport: `${window.innerWidth || 0}x${window.innerHeight || 0}`,
+    mobilePerf: isMobileViewport(),
     at: Date.now(),
     error: error ? (error.message || String(error)).slice(0, 80) : "",
   };
@@ -3309,7 +3311,7 @@ async function loadMarketSummary(force = false) {
   if (!force && marketSummaryLoadedAt && Date.now() - marketSummaryLoadedAt < MARKET_REFRESH_CLOSED_MS) return marketSummaryPayload;
   marketSummaryLoading = true;
   try {
-    const payload = await fetchVersionedJson(endpoints.marketSummary, 5000, "latest", force);
+    const payload = await fetchVersionedJson(isMobileViewport() && endpoints.mobileHomeSummary ? endpoints.mobileHomeSummary : endpoints.marketSummary, 4500, "latest", force);
     applyMarketSummaryPayload(payload);
     return payload;
   } catch (error) {
@@ -3415,7 +3417,8 @@ async function verifyExportPassword(password) {
     body: JSON.stringify({ password }),
   });
   const payload = await response.json().catch(() => ({}));
-  return { ok: response.ok && payload.ok, status: response.status, payload };
+  return { ok: response.ok && payload.ok,
+    viewport: `${window.innerWidth || 0}x${window.innerHeight || 0}`, status: response.status, payload };
 }
 
 async function unlockExport() {
@@ -4829,10 +4832,10 @@ function sortIntradayZoneRows(rows) {
 }
 
 async function loadStrategy2IntradayPayload(force = false) {
-  const mobileFastPath = isMobileViewport() && !force && endpoints.strategy2IntradaySlim;
+  const mobileFastPath = isMobileViewport() && !force && (endpoints.strategy2IntradayTop || endpoints.strategy2IntradaySlim);
   if (mobileFastPath) {
     try {
-      const slimPayload = await fetchVersionedJson(endpoints.strategy2IntradaySlim, 5000, "latest", false);
+      const slimPayload = await fetchVersionedJson(endpoints.strategy2IntradayTop || endpoints.strategy2IntradaySlim, 4000, "latest", false);
       if (slimPayload?.events?.length || slimPayload?.records?.length) {
         return { ...slimPayload, cacheSource: "static-slim" };
       }
@@ -9600,6 +9603,9 @@ if (isViewActive("watchlist")) renderWatchlist();
 setInterval(() => {
   if (!isDocumentHidden() && isTerminalUnlocked() && isViewActive("watchlist")) refreshSelectedWatchlistQuote();
 }, 10000);
+
+
+
 
 
 
