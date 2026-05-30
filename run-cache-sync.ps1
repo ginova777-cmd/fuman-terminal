@@ -278,6 +278,21 @@ function Update-SlimCacheFiles {
   }
   $perfScript = Join-Path $codeRepo "scripts\generate-performance-report.js"
   if (Test-Path -LiteralPath $perfScript) {
+    $qualityScripts = @(
+      "scripts\generate-signal-quality-report.js",
+      "scripts\generate-data-quality-report.js",
+      "scripts\generate-consistency-report.js"
+    )
+    foreach ($qualityScript in $qualityScripts) {
+      $fullQualityScript = Join-Path $codeRepo $qualityScript
+      if (Test-Path -LiteralPath $fullQualityScript) {
+        Write-Log "=== Generate $qualityScript $(Get-Date) ==="
+        $qualityOutput = & $nodeExe $fullQualityScript 2>&1
+        foreach ($line in $qualityOutput) {
+          if (-not [string]::IsNullOrWhiteSpace([string]$line)) { Write-Log $line }
+        }
+      }
+    }
     Write-Log "=== Generate performance report $(Get-Date) ==="
     $perfOutput = & $nodeExe $perfScript 2>&1
     foreach ($line in $perfOutput) {
@@ -545,6 +560,9 @@ try {
       "data\market-summary.json",
       "data\health-summary.json",
       "data\performance-report.json",
+      "data\signal-quality-report.json",
+      "data\data-quality-report.json",
+      "data\data-consistency-report.json",
       "data\open-buy-latest.json",
       "data\open-buy-backup.json",
       "data\open-buy-scorecard-source.json",

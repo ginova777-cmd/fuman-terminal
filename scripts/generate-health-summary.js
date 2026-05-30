@@ -99,6 +99,9 @@ const DATA_SLA_HOURS = {
   "warrant-flow-summary.json": 42,
   "realtime-radar-latest.json": 6,
   "performance-report.json": 36,
+  "signal-quality-report.json": 36,
+  "data-quality-report.json": 36,
+  "data-consistency-report.json": 36,
 };
 
 function isWeekendTaipei(date = new Date()) {
@@ -162,6 +165,9 @@ function main() {
     "warrant-flow-summary.json",
     "realtime-radar-latest.json",
     "performance-report.json",
+    "signal-quality-report.json",
+    "data-quality-report.json",
+    "data-consistency-report.json",
   ].map(dataFileStatus);
   const outbox = outboxStatus();
   const risks = buildRisks({ badTasks, outbox, data });

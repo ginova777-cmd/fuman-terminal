@@ -1,4 +1,4 @@
-const CACHE_VERSION = "fuman-terminal-sw-20260530-5";
+const CACHE_VERSION = "fuman-terminal-sw-20260530-6";
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 const DATA_CACHE = `${CACHE_VERSION}-data`;
 
@@ -6,10 +6,10 @@ const STATIC_ASSETS = [
   "/",
   "/index.html",
   "/styles.css?v=mobile-market-tabs-20260529",
-  "/terminal-core.js?v=speed-modules-20260530-5",
-  "/terminal-modules.js?v=speed-modules-20260530-5",
-  "/terminal-worker.js?v=speed-modules-20260530-5",
-  "/terminal.js?v=speed-modules-20260530-5",
+  "/terminal-core.js?v=speed-modules-20260530-6",
+  "/terminal-modules.js?v=speed-modules-20260530-6",
+  "/terminal-worker.js?v=speed-modules-20260530-6",
+  "/terminal.js?v=speed-modules-20260530-6",
   "/assets/logo.png",
   "/favicon.ico",
 ];

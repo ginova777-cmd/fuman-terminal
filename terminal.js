@@ -71,7 +71,7 @@ function getFumanWorker() {
   if (!("Worker" in window)) return null;
   if (fumanWorker) return fumanWorker;
   try {
-    fumanWorker = new Worker("terminal-worker.js?v=speed-modules-20260530-5");
+    fumanWorker = new Worker("terminal-worker.js?v=speed-modules-20260530-6");
     fumanWorker.addEventListener("message", (event) => {
       const { id, ok, rows, result, error } = event.data || {};
       const pending = fumanWorkerPending.get(id);
@@ -142,6 +142,17 @@ function recordFrontendError(kind, error) {
     localStorage.setItem(key, JSON.stringify(rows.slice(-40)));
     window.FUMAN_TERMINAL_BOOT = window.FUMAN_TERMINAL_BOOT || {};
     window.FUMAN_TERMINAL_BOOT.frontendErrors = rows.slice(-10);
+    const url = "/api/frontend-error";
+    if (navigator.sendBeacon) {
+      navigator.sendBeacon(url, new Blob([JSON.stringify(item)], { type: "application/json" }));
+    } else {
+      fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(item),
+        keepalive: true,
+      }).catch(() => undefined);
+    }
   } catch (e) {}
 }
 
@@ -4775,6 +4786,7 @@ const endpoints = {
   scanStrategy4: "/api/scan-strategy4",
   scanWarrantFlow: "/api/scan-warrant-flow",
   exportAuth: "/api/export-auth",
+  frontendError: "/api/frontend-error",
   openBuyCache: "/data/open-buy-latest.json",
   openBuyBackup: "/data/open-buy-backup.json",
   openBuySummary: "/data/open-buy-summary.json",

@@ -1,7 +1,7 @@
 const https = require("https");
 
 const baseUrl = (process.env.FUMAN_VERIFY_BASE_URL || "https://fuman-terminal.vercel.app").replace(/\/+$/, "");
-const version = process.env.FUMAN_VERIFY_VERSION || "speed-modules-20260530-5";
+const version = process.env.FUMAN_VERIFY_VERSION || "speed-modules-20260530-6";
 
 function fetchText(pathname, timeoutMs = 20000) {
   const url = `${baseUrl}${pathname}`;
@@ -46,6 +46,9 @@ async function main() {
     ["institution-joint-top", "/data/institution-joint-top.json?v=verify", (r) => JSON.parse(r.body).count > 0],
     ["warrant-priority-top", "/data/warrant-priority-top.json?v=verify", (r) => JSON.parse(r.body).count > 0],
     ["performance-report", "/data/performance-report.json?v=verify", (r) => JSON.parse(r.body).assets?.length > 0],
+    ["signal-quality", "/data/signal-quality-report.json?v=verify", (r) => JSON.parse(r.body).ok === true],
+    ["data-quality", "/data/data-quality-report.json?v=verify", (r) => typeof JSON.parse(r.body).ok === "boolean"],
+    ["data-consistency", "/data/data-consistency-report.json?v=verify", (r) => JSON.parse(r.body).ok === true],
   ];
   for (const [name, path, check] of checks) {
     const result = await fetchText(path);

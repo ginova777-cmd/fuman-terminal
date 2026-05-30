@@ -33,6 +33,9 @@ function main() {
     "warrant-flow-slim.json",
     "warrant-priority-top.json",
     "realtime-radar-latest.json",
+    "signal-quality-report.json",
+    "data-quality-report.json",
+    "data-consistency-report.json",
   ];
   const payload = {
     ok: true,

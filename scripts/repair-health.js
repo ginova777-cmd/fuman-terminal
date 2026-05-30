@@ -32,6 +32,10 @@ function readHealth() {
 function main() {
   run("refresh health summary", nodeExe, ["scripts/generate-health-summary.js"]);
   run("refresh slim/preset files", nodeExe, ["scripts/generate-slim-cache.js"]);
+  run("refresh signal quality report", nodeExe, ["scripts/generate-signal-quality-report.js"]);
+  run("refresh data quality report", nodeExe, ["scripts/generate-data-quality-report.js"]);
+  run("refresh consistency report", nodeExe, ["scripts/generate-consistency-report.js"]);
+  run("refresh performance report", nodeExe, ["scripts/generate-performance-report.js"]);
   const health = readHealth();
   if (!health) {
     console.log("[repair] health summary missing after refresh");
