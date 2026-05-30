@@ -1,7 +1,7 @@
 const https = require("https");
 
 const baseUrl = (process.env.FUMAN_VERIFY_BASE_URL || "https://fuman-terminal.vercel.app").replace(/\/+$/, "");
-const version = process.env.FUMAN_VERIFY_VERSION || "speed-modules-20260530-16";
+const version = process.env.FUMAN_VERIFY_VERSION || "speed-modules-20260530-17";
 
 function fetchText(pathname, timeoutMs = 20000) {
   const url = `${baseUrl}${pathname}`;
@@ -71,6 +71,7 @@ async function main() {
     ["terminal-app", `/terminal-app.js?v=${version}`, (r) => r.body.includes("FUMAN_LIVE_MEMORY_TTL_MS") && r.body.includes("loadStrategyWeights")],
     ["realtime-radar-css", `/terminal-realtime-radar.css?v=${version}`, (r) => r.body.includes("radar-signal-card")],
     ["intraday-radar-css", `/terminal-intraday-radar.css?v=${version}`, (r) => r.body.includes("intraday-signal-card")],
+    ["utility-css", `/terminal-utility.css?v=${version}`, (r) => r.body.includes("fuman-skeleton") && r.body.includes("fuman-health-performance")],
     ["theme-css", `/terminal-theme.css?v=${version}`, (r) => r.body.includes("fuman-light-theme")],
     ["watchlist-css", `/terminal-watchlist.css?v=${version}`, (r) => r.body.includes("watch-analysis-panel")],
     ["health", "/data/health-summary.json?v=verify", (r) => {

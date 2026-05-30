@@ -69,7 +69,7 @@ function getFumanWorker() {
   if (!("Worker" in window)) return null;
   if (fumanWorker) return fumanWorker;
   try {
-    fumanWorker = new Worker("terminal-worker.js?v=speed-modules-20260530-16");
+    fumanWorker = new Worker("terminal-worker.js?v=speed-modules-20260530-17");
     fumanWorker.addEventListener("message", (event) => {
       const { id, ok, rows, result, error } = event.data || {};
       const pending = fumanWorkerPending.get(id);
@@ -186,37 +186,7 @@ function installMarketSkeleton() {
   const panel = viewPanels.market;
   if (!panel || panel.dataset.marketSkeletonReady) return;
   panel.dataset.marketSkeletonReady = "1";
-  if (!document.querySelector("#fuman-market-skeleton-styles")) {
-    const style = document.createElement("style");
-    style.id = "fuman-market-skeleton-styles";
-    style.textContent = `
-      .fuman-skeleton {
-        position: relative;
-        overflow: hidden;
-        min-height: 22px;
-        border-radius: 8px;
-        background: rgba(148, 163, 184, 0.12);
-      }
-      .fuman-skeleton::after {
-        content: "";
-        position: absolute;
-        inset: 0;
-        transform: translateX(-100%);
-        background: linear-gradient(90deg, transparent, rgba(255,255,255,0.14), transparent);
-        animation: fumanSkeletonMove 1.25s infinite;
-      }
-      @keyframes fumanSkeletonMove { to { transform: translateX(100%); } }
-      .market-skeleton-grid {
-        display: grid;
-        grid-template-columns: repeat(4, minmax(0, 1fr));
-        gap: 12px;
-        margin: 12px 0;
-      }
-      .market-skeleton-grid .fuman-skeleton { min-height: 72px; }
-      @media (max-width: 720px) { .market-skeleton-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-    `;
-    document.head.appendChild(style);
-  }
+  loadFumanStyle("terminal-utility.css", "fuman-market-skeleton-styles");
   if (tickerStrip && !tickerStrip.children.length) {
     tickerStrip.innerHTML = `<span class="fuman-skeleton" style="width:100%;height:28px;"></span>`;
   }
@@ -230,7 +200,7 @@ function loadFumanStyle(href, id) {
   const link = document.createElement("link");
   link.id = id;
   link.rel = "stylesheet";
-  link.href = href.includes("?") ? href : `${href}?v=${window.FUMAN_TERMINAL_BOOT?.version || "speed-modules-20260530-16"}`;
+  link.href = href.includes("?") ? href : `${href}?v=${window.FUMAN_TERMINAL_BOOT?.version || "speed-modules-20260530-17"}`;
   document.head.appendChild(link);
 }
 
@@ -844,16 +814,7 @@ function isMobileViewport() {
 }
 
 function installMobileWatchlistNavOrder() {
-  if (document.querySelector("#mobile-watchlist-nav-order")) return;
-  const style = document.createElement("style");
-  style.id = "mobile-watchlist-nav-order";
-  style.textContent = `
-    .nav-list > .nav-item[data-view="watchlist"] {
-      order: 999;
-      display: none;
-    }
-  `;
-  document.head.appendChild(style);
+  loadFumanStyle("terminal-utility.css", "mobile-watchlist-nav-order");
 }
 
 function installRealtimeRadarStyles() {
@@ -3381,57 +3342,7 @@ function renderHealthPerformancePanel() {
     panel.className = "fuman-health-performance";
     dashboard.insertBefore(panel, dashboard.firstElementChild);
   }
-  if (!document.querySelector("#fuman-health-performance-style")) {
-    const style = document.createElement("style");
-    style.id = "fuman-health-performance-style";
-    style.textContent = `
-      .fuman-health-performance {
-        display: grid;
-        grid-template-columns: minmax(220px, 0.8fr) minmax(280px, 1.2fr);
-        gap: 10px;
-        margin: 0 0 12px;
-      }
-      .fuman-health-card {
-        border: 1px solid rgba(126, 200, 227, 0.16);
-        border-radius: 8px;
-        background: rgba(13, 19, 32, 0.74);
-        padding: 12px;
-      }
-      .fuman-health-card h3 {
-        margin: 0 0 8px;
-        font-size: 14px;
-      }
-      .fuman-risk-pill {
-        display: inline-flex;
-        align-items: center;
-        gap: 6px;
-        border-radius: 999px;
-        padding: 5px 9px;
-        font-size: 12px;
-        font-weight: 900;
-      }
-      .fuman-risk-pill.ok { background: rgba(34, 197, 94, 0.18); color: #86efac; }
-      .fuman-risk-pill.warn { background: rgba(245, 158, 11, 0.18); color: #fcd34d; }
-      .fuman-risk-pill.danger { background: rgba(239, 68, 68, 0.2); color: #fecaca; }
-      .fuman-perf-list {
-        display: grid;
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-        gap: 6px;
-      }
-      .fuman-perf-list span {
-        display: flex;
-        justify-content: space-between;
-        gap: 8px;
-        border: 1px solid rgba(148, 163, 184, 0.12);
-        border-radius: 8px;
-        padding: 7px 8px;
-        color: #cbd5e1;
-        font-size: 12px;
-      }
-      @media (max-width: 780px) { .fuman-health-performance { grid-template-columns: 1fr; } }
-    `;
-    document.head.appendChild(style);
-  }
+  loadFumanStyle("terminal-utility.css", "fuman-health-performance-style");
   const risk = healthRiskLevel();
   const data = normalizeArray(healthSummaryPayload?.runtime?.data);
   const badTasks = normalizeArray(healthSummaryPayload?.schedule?.badTasks).slice(0, 3);
