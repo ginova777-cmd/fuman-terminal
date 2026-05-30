@@ -33,6 +33,7 @@ async function main() {
     ["market-config", `/terminal-market-config.js?v=${version}`, (r) => r.body.includes("FUMAN_MARKET_CONFIG") && r.body.includes("HEATMAP_FILTERS")],
     ["ui-config", `/terminal-ui-config.js?v=${version}`, (r) => r.body.includes("FUMAN_UI_CONFIG") && r.body.includes("technicalTimeframes")],
     ["runtime-config", `/terminal-runtime-config.js?v=${version}`, (r) => r.body.includes("FUMAN_RUNTIME_CONFIG") && r.body.includes("strategy2IntradayCache")],
+    ["tuning-config", `/terminal-tuning-config.js?v=${version}`, (r) => r.body.includes("FUMAN_TUNING_CONFIG") && r.body.includes("realtimeRadarRefreshMs")],
     ["terminal-app", `/terminal-app.js?v=${version}`, (r) => r.body.includes("loadStrategyWeights") && r.body.includes("recordFrontendError")],
     ["realtime-radar-css", `/terminal-realtime-radar.css?v=${version}`, (r) => r.body.includes("radar-signal-card")],
     ["intraday-radar-css", `/terminal-intraday-radar.css?v=${version}`, (r) => r.body.includes("intraday-signal-card")],
