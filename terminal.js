@@ -3657,8 +3657,15 @@ function isIntradayScanWindow() {
   return isRadarDetectionWindow();
 }
 
+function isKnownNonTradingMarketDate() {
+  const today = normalizeMarketAiDateKey(marketStockDataState.today) || marketAiTodayKey();
+  const dataDate = normalizeMarketAiDateKey(marketStockDataState.resolvedTradeDate)
+    || marketAiDataDateKey(latestStocks);
+  return Boolean(today && dataDate && dataDate !== today && marketStockDataState.isFallbackDate);
+}
+
 function shouldRunLivePolling() {
-  return isIntradayScanWindow();
+  return isIntradayScanWindow() && !isKnownNonTradingMarketDate();
 }
 
 function getMarketRefreshInterval() {
@@ -4392,7 +4399,7 @@ function runMobileAutoOrganize() {
   if (active === "strategy") {
     renderStrategyScanner();
     const text = [...selectedStrategyIds].join(" ");
-    if (text.includes("intraday_2m") && isIntradayScanWindow()) refreshStrategyRealtimeScan("force");
+    if (text.includes("intraday_2m") && shouldRunLivePolling()) refreshStrategyRealtimeScan("force");
     if (text.includes("open_buy")) loadOpenBuyCache(true);
     if (text.includes("swing_radar")) loadStrategy4Cache(true);
     return;
@@ -12765,7 +12772,7 @@ function applyStrategyPresetFromLink(link) {
   if (text.includes("策略2") || isRadarNav) {
     deferUiWork(async () => {
       await ensureStrategyStocksLoaded();
-      if (isIntradayScanWindow()) await refreshStrategyRealtimeScan("force");
+      if (shouldRunLivePolling()) await refreshStrategyRealtimeScan("force");
       else renderStrategyScanner();
     }, 80);
   }
@@ -12912,9 +12919,10 @@ async function refreshStrategyRealtimeScan(mode = "hot") {
     return;
   }
   if (scanMode === "strategy5-full") return;
+  if (!shouldRunLivePolling() && ["force", "hot", "background"].includes(scanMode)) return;
   const isStrategyVisible = document.querySelector("#strategy-view")?.classList.contains("active");
   const isMarketAiVisible = isViewActive("market") && marketMode === "ai" && isMarketAiActiveSession();
-  const isRealtimeRadarVisible = isViewActive("realtime-radar") && isRadarDetectionWindow();
+  const isRealtimeRadarVisible = isViewActive("realtime-radar") && shouldRunLivePolling();
   const mobileStrategy2 = isMobileViewport();
   if (mobileStrategy2 && !isRealtimeRadarVisible && scanMode !== "force") {
     const now = Date.now();
@@ -12930,7 +12938,7 @@ async function refreshStrategyRealtimeScan(mode = "hot") {
   const isRealtimeStrategy = selectedStrategyIds.has("intraday_2m");
   const isStrategy5Realtime = false;
   if (scanMode !== "force" && scanMode !== "strategy5-full" && !isMarketAiVisible && !isRealtimeRadarVisible && (!isStrategyVisible || (!isRealtimeStrategy && !isStrategy5Realtime))) return;
-  if (isRealtimeStrategy && !isIntradayScanWindow()) {
+  if (isRealtimeStrategy && !shouldRunLivePolling()) {
     if (isStrategyVisible && strategySummary) {
       const closingTime = strategyLastScanAt
         ? new Date(strategyLastScanAt).toLocaleTimeString("zh-TW", { hour12: false })
@@ -13175,17 +13183,17 @@ setInterval(() => {
   if (!isDocumentHidden() && isViewActive("market")) loadMarketData();
 }, MARKET_POLL_TICK_MS);
 setInterval(() => {
-  if (!isDocumentHidden() && isTerminalUnlocked() && isViewActive("strategy") && selectedStrategyIds.has("intraday_2m") && isIntradayScanWindow()) refreshStrategyRealtimeScan("hot");
+  if (!isDocumentHidden() && isTerminalUnlocked() && isViewActive("strategy") && selectedStrategyIds.has("intraday_2m") && shouldRunLivePolling()) refreshStrategyRealtimeScan("hot");
 }, INTRADAY_FAST_SCAN_MS);
 setInterval(() => {
   if (!isDocumentHidden() && isTerminalUnlocked() && isViewActive("market") && marketMode === "ai" && isMarketAiActiveSession()) refreshStrategyRealtimeScan("hot");
 }, MARKET_POLL_TICK_MS);
 setInterval(() => {
-  if (!isDocumentHidden() && isTerminalUnlocked() && isViewActive("strategy") && selectedStrategyIds.has("intraday_2m") && isIntradayScanWindow()) refreshStrategyRealtimeScan("background");
+  if (!isDocumentHidden() && isTerminalUnlocked() && isViewActive("strategy") && selectedStrategyIds.has("intraday_2m") && shouldRunLivePolling()) refreshStrategyRealtimeScan("background");
 }, INTRADAY_BACKGROUND_SCAN_MS);
 setInterval(async () => {
   if (realtimeRadarRefreshLoading) return;
-  if (isDocumentHidden() || !isTerminalUnlocked() || !isViewActive("realtime-radar") || !isRadarDetectionWindow()) return;
+  if (isDocumentHidden() || !isTerminalUnlocked() || !isViewActive("realtime-radar") || !shouldRunLivePolling()) return;
   realtimeRadarRefreshLoading = true;
   try {
     await loadMarketData(true);
