@@ -71,7 +71,7 @@ function getFumanWorker() {
   if (!("Worker" in window)) return null;
   if (fumanWorker) return fumanWorker;
   try {
-    fumanWorker = new Worker("terminal-worker.js?v=speed-modules-20260530-11");
+    fumanWorker = new Worker("terminal-worker.js?v=speed-modules-20260530-12");
     fumanWorker.addEventListener("message", (event) => {
       const { id, ok, rows, result, error } = event.data || {};
       const pending = fumanWorkerPending.get(id);
@@ -232,7 +232,7 @@ function loadFumanStyle(href, id) {
   const link = document.createElement("link");
   link.id = id;
   link.rel = "stylesheet";
-  link.href = href.includes("?") ? href : `${href}?v=${window.FUMAN_TERMINAL_BOOT?.version || "speed-modules-20260530-11"}`;
+  link.href = href.includes("?") ? href : `${href}?v=${window.FUMAN_TERMINAL_BOOT?.version || "speed-modules-20260530-12"}`;
   document.head.appendChild(link);
 }
 
@@ -9783,51 +9783,12 @@ function mergeIndustryMaster(masterRows) {
   });
 }
 
-const HEATMAP_FILTERS = [
-  { key: "all", label: "全部" },
-  { key: "official", label: "官方產業" },
-  { key: "electronic", label: "電子細分" },
-  { key: "theme", label: "題材概念" },
-  { key: "group", label: "集團股" },
-];
-
-const HEATMAP_ELECTRONIC_GROUPS = new Set([
-  "IC生產製造", "IC設計服務", "IC封測", "半導體", "半導體設備/測試", "先進封裝/CoWoS",
-  "CPU/ASIC/IP", "記憶體/儲存", "PCB/載板", "電子零組件", "電子通路", "電腦週邊",
-  "其他電子", "光電", "通訊網路", "網通設備組件", "面板業", "資訊服務", "數位雲端",
-]);
-
-const HEATMAP_THEME_GROUPS = new Set([
-  "AI伺服器", "液冷/散熱", "光通訊/CPO", "電源/BBU/UPS", "工業電腦", "組裝代工",
-  "綠能環保", "綠能環保類", "電器電纜", "生技醫療", "化學生技醫療", "運動休閒",
-]);
-
-const HEATMAP_GROUP_STOCKS = {
-  "台塑集團": ["1301", "1303", "1326", "6505", "1604"],
-  "鴻海集團": ["2317", "2354", "2357", "2328", "3481", "6239", "6414", "6451", "6669"],
-  "遠東集團": ["1402", "1460", "1710", "2903", "4904", "2606"],
-  "統一集團": ["1216", "1229", "2912", "2207", "2855", "9907"],
-  "華新集團": ["1605", "1608", "2412", "2492", "3023", "3665", "6116"],
-  "中信集團": ["2891", "2809", "2610", "9945"],
-  "富邦集團": ["2881", "8454", "5820"],
-  "國泰集團": ["2882", "2501", "2723"],
-  "新光集團": ["2888", "2511", "9925"],
-  "永豐集團": ["2890", "1907", "9938"],
-  "台新集團": ["2887", "2812"],
-  "玉山集團": ["2884"],
-  "元大集團": ["2885", "8069"],
-  "兆豐集團": ["2886", "2609"],
-  "第一金集團": ["2892"],
-  "合庫集團": ["5880"],
-  "台泥集團": ["1101", "1102", "1513", "8463"],
-  "長榮集團": ["2603", "2618", "2636", "2645"],
-  "陽明集團": ["2609", "2612"],
-  "裕隆集團": ["2201", "2204", "2227", "9941"],
-};
-
-const HEATMAP_GROUP_BY_CODE = Object.fromEntries(
-  Object.entries(HEATMAP_GROUP_STOCKS).flatMap(([group, codes]) => codes.map((code) => [code, group]))
-);
+const FUMAN_MARKET_CONFIG = window.FUMAN_MARKET_CONFIG || {};
+const HEATMAP_FILTERS = FUMAN_MARKET_CONFIG.HEATMAP_FILTERS || [];
+const HEATMAP_ELECTRONIC_GROUPS = FUMAN_MARKET_CONFIG.HEATMAP_ELECTRONIC_GROUPS || new Set();
+const HEATMAP_THEME_GROUPS = FUMAN_MARKET_CONFIG.HEATMAP_THEME_GROUPS || new Set();
+const HEATMAP_GROUP_STOCKS = FUMAN_MARKET_CONFIG.HEATMAP_GROUP_STOCKS || {};
+const HEATMAP_GROUP_BY_CODE = FUMAN_MARKET_CONFIG.HEATMAP_GROUP_BY_CODE || {};
 
 function buildHeatmapGroupSectors(sectors) {
   const groups = {};
