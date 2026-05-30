@@ -1,0 +1,41 @@
+{
+  "ok": true,
+  "updatedAt": "2026-05-30T03:57:29.892Z",
+  "strategy2": {
+    "latestSignals": 179,
+    "latestGo": 0,
+    "backtest": {
+      "count": 0,
+      "avg": 0,
+      "winRate": 0,
+      "best": 0,
+      "worst": 0
+    },
+    "reports": []
+  },
+  "realtimeRadar": {
+    "latestSignals": 32,
+    "longSignals": 25,
+    "shortSignals": 7,
+    "scorecard": {
+      "count": 179,
+      "avg": 2.083648085919581,
+      "winRate": 93.85474860335195,
+      "best": 7.3493975903614395,
+      "worst": 0
+    },
+    "updatedAt": "2026-05-29T05:30:46.467Z"
+  },
+  "strategy4": {
+    "total": 1963,
+    "count": 675,
+    "complete": true,
+    "zoneCounts": {
+      "A": 86,
+      "B": 324,
+      "C": 265
+    },
+    "avgScore": 86.5911111111111,
+    "updatedAt": "2026-05-29T16:30:37.466Z"
+  }
+}

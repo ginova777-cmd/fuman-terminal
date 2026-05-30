@@ -1,0 +1,93 @@
+{
+  "ok": true,
+  "updatedAt": "2026-05-30T03:57:31.365Z",
+  "files": [
+    {
+      "file": "market-summary.json",
+      "ok": true,
+      "bytes": 150771,
+      "count": 80,
+      "updatedAt": "2026-05-30T02:57:38.651Z",
+      "issues": []
+    },
+    {
+      "file": "strategy2-intraday-latest.json",
+      "ok": true,
+      "bytes": 156538826,
+      "count": 0,
+      "updatedAt": "2026-05-29T05:30:52.095Z",
+      "issues": []
+    },
+    {
+      "file": "realtime-radar-latest.json",
+      "ok": true,
+      "bytes": 24796,
+      "count": 32,
+      "updatedAt": "2026-05-29T05:30:46.467Z",
+      "issues": []
+    },
+    {
+      "file": "strategy4-latest.json",
+      "ok": true,
+      "bytes": 823405,
+      "count": 675,
+      "updatedAt": "2026-05-29T16:30:37.466Z",
+      "issues": [
+        {
+          "level": "medium",
+          "message": "extreme percent rows 44"
+        }
+      ]
+    },
+    {
+      "file": "strategy4-summary.json",
+      "ok": true,
+      "bytes": 49554,
+      "count": 675,
+      "updatedAt": "2026-05-29T16:30:37.466Z",
+      "issues": []
+    },
+    {
+      "file": "strategy4-slim.json",
+      "ok": true,
+      "bytes": 450319,
+      "count": 675,
+      "updatedAt": "2026-05-29T16:30:37.466Z",
+      "issues": [
+        {
+          "level": "medium",
+          "message": "extreme percent rows 44"
+        }
+      ]
+    },
+    {
+      "file": "institution-latest.json",
+      "ok": true,
+      "bytes": 703237,
+      "count": 1619,
+      "updatedAt": "2026-05-29T15:28:06.824Z",
+      "issues": []
+    },
+    {
+      "file": "warrant-flow-latest.json",
+      "ok": true,
+      "bytes": 388677,
+      "count": 120,
+      "updatedAt": "2026-05-28T22:00:16.146Z",
+      "issues": []
+    }
+  ],
+  "highIssues": [],
+  "mediumIssues": [
+    {
+      "file": "strategy4-latest.json",
+      "level": "medium",
+      "message": "extreme percent rows 44"
+    },
+    {
+      "file": "strategy4-slim.json",
+      "level": "medium",
+      "message": "extreme percent rows 44"
+    }
+  ]
+}

@@ -1,6 +1,6 @@
 {
   "ok": true,
-  "updatedAt": "2026-05-30T03:45:21.291Z",
+  "updatedAt": "2026-05-30T03:57:09.197Z",
   "risk": "low",
   "risks": [],
   "schedule": {
@@ -62,8 +62,29 @@
         "file": "performance-report.json",
         "ok": true,
         "count": 0,
-        "updatedAt": "2026-05-30T03:45:18.207Z",
-        "bytes": 1755
+        "updatedAt": "2026-05-30T03:57:06.318Z",
+        "bytes": 2233
+      },
+      {
+        "file": "signal-quality-report.json",
+        "ok": true,
+        "count": 0,
+        "updatedAt": "2026-05-30T03:56:21.007Z",
+        "bytes": 796
+      },
+      {
+        "file": "data-quality-report.json",
+        "ok": true,
+        "count": 0,
+        "updatedAt": "2026-05-30T03:57:06.218Z",
+        "bytes": 2011
+      },
+      {
+        "file": "data-consistency-report.json",
+        "ok": true,
+        "count": 0,
+        "updatedAt": "2026-05-30T03:56:22.663Z",
+        "bytes": 312
       }
     ]
   }
