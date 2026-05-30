@@ -1,5 +1,5 @@
 (function () {
-  const version = "speed-modules-20260530-23";
+  const version = "speed-modules-20260530-24";
   window.FUMAN_TERMINAL_BOOT = {
     version,
     startedAt: Date.now(),
@@ -14,7 +14,7 @@
     if (!("serviceWorker" in navigator)) return;
     navigator.serviceWorker.register(`/fuman-sw.js?v=${version}`)
       .then((registration) => {
-        window.FUMAN_TERMINAL_BOOT.serviceWorker = registration.active ? "active" : "registered";
+        window.FUMAN_TERMINAL_BOOT.serviceWorker = registration.active ? "active" : "registered"; if (registration.waiting) registration.waiting.postMessage({ type: "SKIP_WAITING" }); if (registration.update) registration.update().catch(() => undefined);
       })
       .catch((error) => {
         window.FUMAN_TERMINAL_BOOT.serviceWorker = "disabled";
@@ -63,4 +63,6 @@
     setTimeout(loadMain, 0);
   }
 })();
+
+
 

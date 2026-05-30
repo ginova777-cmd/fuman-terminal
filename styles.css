@@ -4094,4 +4094,91 @@ h1 {
     white-space: normal !important;
   }
 }
+/* mobile-risk-polish-20260530 */
+@media (max-width: 760px) {
+  #strategy-table,
+  .strategy-table {
+    width: 100% !important;
+    max-width: calc(100vw - 24px) !important;
+    box-sizing: border-box !important;
+  }
+
+  .chip-table tr,
+  .warrant-flow-panel .swing-table tr,
+  .intraday-table tr {
+    gap: 6px 8px !important;
+    padding: 10px !important;
+  }
+
+  .chip-table td,
+  .warrant-flow-panel .swing-table td,
+  .intraday-table td {
+    gap: 5px !important;
+    font-size: 11.5px !important;
+    line-height: 1.28 !important;
+  }
+
+  .chip-table td::before,
+  .warrant-flow-panel .swing-table td::before,
+  .intraday-table td::before {
+    font-size: 10px !important;
+  }
+}
+
+@media (min-width: 380px) and (max-width: 760px) {
+  .chip-table tr,
+  .warrant-flow-panel .swing-table tr,
+  .intraday-table tr {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+}
+
+@media (orientation: landscape) and (max-height: 430px) {
+  .dashboard {
+    padding-top: 8px !important;
+    padding-bottom: 12px !important;
+  }
+
+  .page-header,
+  .strategy-header {
+    margin-bottom: 10px !important;
+  }
+
+  .page-header h1,
+  .strategy-header h1 {
+    font-size: 24px !important;
+    line-height: 1.05 !important;
+  }
+
+  .brand {
+    min-height: 72px !important;
+    padding: 8px 12px !important;
+  }
+
+  .brand-logo {
+    width: 44px !important;
+    height: 44px !important;
+  }
+
+  .brand span,
+  .brand small,
+  .nav-label,
+  .chip-menu h2 {
+    display: none !important;
+  }
+
+  .nav-list {
+    gap: 6px !important;
+    padding-top: 8px !important;
+  }
+
+  .nav-item,
+  .strategy-nav,
+  .chip-menu-link {
+    min-height: 40px !important;
+    font-size: 14px !important;
+    padding-top: 0 !important;
+    padding-bottom: 0 !important;
+  }
+}
 

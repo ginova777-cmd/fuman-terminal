@@ -1,5 +1,5 @@
 (function () {
-  const VERSION = "speed-modules-20260530-23";
+  const VERSION = "speed-modules-20260530-24";
   const modules = {
     sectorMap: { loaded: false, src: "terminal-sector-map.js" },
     strategyConfig: { loaded: false, src: "terminal-strategy-config.js" },
@@ -38,3 +38,4 @@
     },
   };
 })();
+
