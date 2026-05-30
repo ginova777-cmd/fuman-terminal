@@ -487,6 +487,8 @@ try {
       "data\warrant-flow-summary.json",
       "data\warrant-flow-backup.json",
       "data\flow-health-latest.json",
+      "data\market-summary.json",
+      "data\health-summary.json",
       "data\open-buy-latest.json",
       "data\open-buy-backup.json",
       "data\open-buy-scorecard-source.json",

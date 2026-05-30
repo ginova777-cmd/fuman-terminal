@@ -17,6 +17,7 @@ function Add-LogLine($message) {
 }
 
 Add-LogLine "=== Daily health summary start $(Get-Date) ==="
+& $nodeExe "scripts\generate-health-summary.js" *>&1 | ForEach-Object { Add-LogLine ([string]$_) }
 & $nodeExe "scripts\send-daily-health-summary.js" @args *>&1 | ForEach-Object { Add-LogLine ([string]$_) }
 $exitCode = $LASTEXITCODE
 Add-LogLine "=== Daily health summary end $(Get-Date) exit=$exitCode ==="

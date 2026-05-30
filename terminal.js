@@ -4554,6 +4554,8 @@ function labelChipTradeMode() {
 
 const endpoints = {
   backend: "/api/market",
+  marketSummary: "/data/market-summary.json",
+  healthSummary: "/data/health-summary.json",
   heatmap: "/api/heatmap",
   institution: "/api/institution",
   history: "/api/history",
@@ -4588,6 +4590,10 @@ let latestStocks = [];
 let marketDataLoading = false;
 let marketDataLastStartedAt = 0;
 let marketDataLastRenderedAt = 0;
+let marketSummaryLoading = false;
+let marketSummaryLoadedAt = 0;
+let marketSummaryPayload = null;
+let healthSummaryPayload = null;
 let marketRealtimeState = { trading: false, marketStatus: "", updatedAt: "", source: "" };
 let marketStockDataState = { resolvedTradeDate: "", today: "", source: "", updatedAt: "", isFallbackDate: false, marketDates: {} };
 let heatmapLoading = false;
@@ -4745,6 +4751,10 @@ let swingSignalFilter = "all";
 let swingZoneFilter = "all";
 let swingVisibleKeyword = "";
 let swingVisibleSearchInput = null;
+let swingRenderCacheSignature = "";
+let swingRenderCacheRows = [];
+let swingRenderCacheZoneRows = null;
+let swingRenderCacheSignalCounts = null;
 let intradaySortKey = "time";
 let intradaySortDir = "desc";
 let intradaySignalFilter = "all";
@@ -5175,6 +5185,20 @@ async function fetchJson(url, timeout = 8000, options = {}) {
   }
 }
 
+function versionedDataUrl(url, version = "", force = false) {
+  if (force) return `${url}${url.includes("?") ? "&" : "?"}t=${Date.now()}`;
+  const cleanVersion = String(version || "").replace(/[^\w.-]/g, "");
+  if (!cleanVersion) return url;
+  return `${url}${url.includes("?") ? "&" : "?"}v=${encodeURIComponent(cleanVersion)}`;
+}
+
+async function fetchVersionedJson(url, timeout = 8000, version = "", force = false, options = {}) {
+  return fetchJson(versionedDataUrl(url, version, force), timeout, {
+    ...options,
+    cache: force ? "no-store" : "default",
+  });
+}
+
 async function fetchSupabaseLatestPayload(table, timeout = 3500) {
   if (!FUMAN_SUPABASE_URL || !FUMAN_SUPABASE_KEY || !table) return null;
   try {
@@ -5528,7 +5552,7 @@ async function loadStrategy4Summary(force = false) {
   if (!force && strategy4SummaryLoadedAt && Date.now() - strategy4SummaryLoadedAt < CACHE_FRESH_MS) return strategy4Summary;
   strategy4SummaryLoading = true;
   try {
-    const payload = await fetchJson(`${endpoints.strategy4Summary}?t=${Date.now()}`, 5000);
+    const payload = await fetchVersionedJson(endpoints.strategy4Summary, 5000, "latest", force);
     strategy4Summary = payload || null;
     strategy4SummaryLoadedAt = Date.now();
     if (payload?.total) strategy4ScanTotal = cleanNumber(payload.total);
@@ -5577,7 +5601,7 @@ async function loadWarrantFlowSummary(force = false) {
   if (!force && warrantFlowSummary) return warrantFlowSummary;
   warrantFlowSummaryLoading = true;
   try {
-    warrantFlowSummary = await fetchJson(`${endpoints.warrantFlowSummary}?t=${Date.now()}`, 5000);
+    warrantFlowSummary = await fetchVersionedJson(endpoints.warrantFlowSummary, 5000, "latest", force);
     const updatedAt = Date.parse(warrantFlowSummary?.updatedAt || "");
     if (!warrantFlowUpdatedAt && Number.isFinite(updatedAt)) warrantFlowUpdatedAt = updatedAt;
     return warrantFlowSummary;
@@ -5593,7 +5617,7 @@ async function loadInstitutionSummary(force = false) {
   if (!force && institutionSummary) return institutionSummary;
   institutionSummaryLoading = true;
   try {
-    institutionSummary = await fetchJson(`${endpoints.institutionSummary}?t=${Date.now()}`, 5000);
+    institutionSummary = await fetchVersionedJson(endpoints.institutionSummary, 5000, "latest", force);
     const updatedAt = Date.parse(institutionSummary?.updatedAt || "");
     if (!institutionUpdatedAt && Number.isFinite(updatedAt)) institutionUpdatedAt = updatedAt;
     if (!institutionDate && institutionSummary?.usedDate) institutionDate = institutionSummary.usedDate;
@@ -5602,6 +5626,60 @@ async function loadInstitutionSummary(force = false) {
     return institutionSummary;
   } finally {
     institutionSummaryLoading = false;
+  }
+}
+
+function applyMarketSummaryPayload(payload) {
+  if (!payload?.ok) return false;
+  marketSummaryPayload = payload;
+  marketSummaryLoadedAt = Date.now();
+  updateMarketStockDataState(payload);
+  marketRealtimeState = {
+    trading: payload.trading === true,
+    marketStatus: payload.marketStatus || "",
+    updatedAt: payload.updatedAt || "",
+    source: payload.source || "market-summary",
+  };
+  renderIndexes(
+    normalizeArray(payload.indexes),
+    payload.futuresNear || payload.futures || null,
+    payload.futuresNext || null,
+    payload.marketStatus || null,
+    payload.otcSignal || null
+  );
+  const stocks = normalizeArray(payload.stocks);
+  if (stocks.length) renderStocks(stocks);
+  if (normalizeArray(payload.sectors).length) renderHeatmapSectors(payload.sectors);
+  return true;
+}
+
+async function loadMarketSummary(force = false) {
+  if (marketSummaryLoading) return marketSummaryPayload;
+  if (!force && marketSummaryLoadedAt && Date.now() - marketSummaryLoadedAt < MARKET_REFRESH_CLOSED_MS) return marketSummaryPayload;
+  marketSummaryLoading = true;
+  try {
+    const payload = await fetchVersionedJson(endpoints.marketSummary, 5000, "latest", force);
+    applyMarketSummaryPayload(payload);
+    return payload;
+  } catch (error) {
+    return marketSummaryPayload;
+  } finally {
+    marketSummaryLoading = false;
+  }
+}
+
+async function loadHealthSummary(force = false) {
+  try {
+    healthSummaryPayload = await fetchVersionedJson(endpoints.healthSummary, 5000, "latest", force);
+    const schedule = healthSummaryPayload?.schedule || {};
+    const github = healthSummaryPayload?.githubSync || {};
+    if (terminalMessage && healthSummaryPayload) {
+      const state = healthSummaryPayload.ok ? "健康 OK" : "健康需注意";
+      terminalMessage.textContent = `${state}｜排程異常 ${schedule.badCount ?? "--"}｜同步待補 ${github.pendingCount ?? "--"}`;
+    }
+    return healthSummaryPayload;
+  } catch (error) {
+    return healthSummaryPayload;
   }
 }
 
@@ -10036,27 +10114,51 @@ function renderSwingRadar(universe) {
     .filter((stock) => matchesStrategyKeyword(stock, keyword))
     .filter((stock) => !visibleKeyword || `${stock.code || ""} ${stock.name || ""}`.toLowerCase().includes(visibleKeyword))
     .map((stock) => ({ ...stock, swingScore: stock.swingScore || stock.score || 0 }));
-  const zoneRows = {
-    A: sortSwingRows(allRows.filter((stock) => (stock.swingZone || "A") === "A")),
-    B: sortSwingRows(allRows.filter((stock) => stock.swingZone === "B")),
-    C: sortSwingRows(allRows.filter((stock) => stock.swingZone === "C")),
-  };
-  const zoneFilteredRows = swingZoneFilter === "all"
-    ? allRows
-    : allRows.filter((stock) => (stock.swingZone || "A") === swingZoneFilter);
-  const filteredRows = swingSignalFilter === "all"
-    ? zoneFilteredRows
-    : zoneFilteredRows.filter((stock) => (stock.swingSignals || []).some((signal) => signal.id === swingSignalFilter));
-  const rows = sortSwingRows(filteredRows);
+  const renderCacheSignature = [
+    strategy4ScanLastAt,
+    Object.keys(strategy4ScanMatches).length,
+    latestStocks.length,
+    keyword,
+    visibleKeyword,
+    swingZoneFilter,
+    swingSignalFilter,
+    swingSortKey,
+    swingSortDir,
+  ].join(":");
+  let zoneRows;
+  let signalCounts;
+  let rows;
+  if (renderCacheSignature === swingRenderCacheSignature && swingRenderCacheRows.length) {
+    rows = swingRenderCacheRows;
+    zoneRows = swingRenderCacheZoneRows;
+    signalCounts = swingRenderCacheSignalCounts;
+  } else {
+    zoneRows = {
+      A: sortSwingRows(allRows.filter((stock) => (stock.swingZone || "A") === "A")),
+      B: sortSwingRows(allRows.filter((stock) => stock.swingZone === "B")),
+      C: sortSwingRows(allRows.filter((stock) => stock.swingZone === "C")),
+    };
+    const zoneFilteredRows = swingZoneFilter === "all"
+      ? allRows
+      : allRows.filter((stock) => (stock.swingZone || "A") === swingZoneFilter);
+    const filteredRows = swingSignalFilter === "all"
+      ? zoneFilteredRows
+      : zoneFilteredRows.filter((stock) => (stock.swingSignals || []).some((signal) => signal.id === swingSignalFilter));
+    rows = sortSwingRows(filteredRows);
+    signalCounts = Object.fromEntries(SWING_SIGNAL_DEFS.map((signal) => [signal.id, 0]));
+    allRows.forEach((stock) => {
+      (stock.swingSignals || []).forEach((signal) => {
+        signalCounts[signal.id] = (signalCounts[signal.id] || 0) + 1;
+      });
+    });
+    swingRenderCacheSignature = renderCacheSignature;
+    swingRenderCacheRows = rows;
+    swingRenderCacheZoneRows = zoneRows;
+    swingRenderCacheSignalCounts = signalCounts;
+  }
   const swingPaged = paginateTerminalRows(rows, swingPage);
   swingPage = swingPaged.page;
   const pageRows = swingPaged.rows;
-  const signalCounts = Object.fromEntries(SWING_SIGNAL_DEFS.map((signal) => [signal.id, 0]));
-  allRows.forEach((stock) => {
-    (stock.swingSignals || []).forEach((signal) => {
-      signalCounts[signal.id] = (signalCounts[signal.id] || 0) + 1;
-    });
-  });
   const scanTime = strategyLastScanAt
     ? new Date(strategyLastScanAt).toLocaleTimeString("zh-TW", { hour12: false })
     : new Date().toLocaleTimeString("zh-TW", { hour12: false });
@@ -10915,10 +11017,10 @@ async function loadWarrantFlow(force = false) {
   }
   try {
     if (!latestStocks.length) loadStrategyStocks();
-    let payload = await fetchJson(`${endpoints.warrantFlowCache}?t=${Date.now()}`, 10000);
+    let payload = await fetchVersionedJson(endpoints.warrantFlowCache, 10000, warrantFlowSummary?.updatedAt || "", force);
     const cachedMatches = normalizeArray(payload?.matches);
     if (!normalizeArray(payload?.matches).length) {
-      payload = await fetchJson(`${endpoints.warrantFlowBackup}?t=${Date.now()}`, 10000);
+      payload = await fetchVersionedJson(endpoints.warrantFlowBackup, 10000, warrantFlowSummary?.updatedAt || "", force);
     }
     warrantFlowData = normalizeArray(payload.matches);
     warrantFlowPrioritySignature = "";
@@ -12921,7 +13023,15 @@ async function loadMarketData(force = false) {
   marketDataLoading = true;
   marketDataLastStartedAt = now;
   try {
-    const payload = await fetchJson(`${endpoints.backend}?t=${Date.now()}`, 12000);
+    if (!force && !shouldRunLivePolling()) {
+      const summary = await loadMarketSummary(false);
+      if (summary?.ok && normalizeArray(summary.stocks).length) {
+        deferUiWork(() => loadMarketData(true), 1200);
+        return;
+      }
+    }
+
+    const payload = await fetchVersionedJson(endpoints.backend, 12000, "", force);
 
     if (!payload.ok) throw new Error("Backend failed");
     updateMarketStockDataState(payload);
@@ -12946,20 +13056,20 @@ async function loadMarketData(force = false) {
     if (backendStocks.length) {
       renderStocks(backendStocks);
     } else {
-      const stocks = await fetchJson(`${endpoints.strategyStocks}?t=${Date.now()}`, 15000);
+      const stocks = await fetchVersionedJson(endpoints.strategyStocks, 15000, "", force);
       const rows = normalizeArray(stocks?.stocks || stocks);
       if (rows.length) {
         updateMarketStockDataState(stocks);
         renderStocks(rows);
       } else {
-        const fallback = await fetchJson(`${endpoints.stocks}?t=${Date.now()}`, 15000);
+        const fallback = await fetchVersionedJson(endpoints.stocks, 15000, "", force);
         updateMarketStockDataState(fallback);
         renderStocks(normalizeArray(fallback?.stocks || fallback));
       }
     }
   } catch (e) {
     try {
-      const stocks = await fetchJson(`${endpoints.strategyStocks}?t=${Date.now()}`, 15000);
+      const stocks = await fetchVersionedJson(endpoints.strategyStocks, 15000, "", force);
       updateMarketStockDataState(stocks);
       renderStocks(normalizeArray(stocks?.stocks || stocks));
     } catch (e2) {
@@ -12986,7 +13096,7 @@ async function loadHeatmap(force = false) {
     renderHeatmapFromCache();
   }
   try {
-    const data = await fetchJson(endpoints.heatmap, 15000);
+    const data = await fetchVersionedJson(endpoints.heatmap, 15000, marketSummaryPayload?.updatedAt || "", force);
     mergeIndustryMaster(data?.industryMaster);
     const sectors = normalizeArray(data?.sectors);
     if (data?.ok && sectors.length) {
@@ -13013,9 +13123,9 @@ async function loadInstitution() {
   if (institutionDataPromise) return institutionDataPromise;
   institutionDataPromise = (async () => {
     try {
-      let data = await fetchJson(`${endpoints.institutionCache}?t=${Date.now()}`, 10000);
+      let data = await fetchVersionedJson(endpoints.institutionCache, 10000, institutionSummary?.updatedAt || "", false);
       if (!data?.ok || !data?.data || !Object.keys(data.data).length) {
-        data = await fetchJson(`${endpoints.institutionBackup}?t=${Date.now()}`, 10000);
+        data = await fetchVersionedJson(endpoints.institutionBackup, 10000, institutionSummary?.updatedAt || "", false);
       }
       if (data.ok && data.data) {
         institutionData = data.data;
@@ -13360,9 +13470,9 @@ async function loadStrategy4Cache(force = false) {
   }
   strategy4CacheLoading = true;
   try {
-    let payload = await fetchJson(`${endpoints.strategy4Cache}?t=${Date.now()}`, 10000);
+    let payload = await fetchVersionedJson(endpoints.strategy4Cache, 10000, strategy4Summary?.updatedAt || strategy4SummaryLoadedAt || "", force);
     if (!normalizeArray(payload?.matches).length) {
-      payload = await fetchJson(`${endpoints.strategy4Backup}?t=${Date.now()}`, 10000);
+      payload = await fetchVersionedJson(endpoints.strategy4Backup, 10000, strategy4Summary?.updatedAt || strategy4SummaryLoadedAt || "", force);
     }
     if (payload?.ok && Array.isArray(payload.matches)) {
       mergeStrategy4Cache(payload);
@@ -13388,6 +13498,8 @@ installGlobalRefreshWidget();
 deferUiWork(() => loadWorkflowRunStatus().catch(() => {}), 2000);
 ensureMobileAutoOrganizeButton();
 if (isViewActive("market")) {
+  deferUiWork(() => loadHealthSummary(false), 300);
+  deferUiWork(() => loadMarketSummary(false), 80);
   loadMarketData();
   if (isMobileViewport()) deferUiWork(loadHeatmap, 1600);
   else loadHeatmap();

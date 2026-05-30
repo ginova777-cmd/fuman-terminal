@@ -29,6 +29,13 @@ if ($exitCode -ne 0) {
   exit $exitCode
 }
 
+& $nodeExe "scripts\generate-market-summary.js" >> $log 2>&1
+$summaryExit = $LASTEXITCODE
+if ($summaryExit -ne 0) {
+  "Market overview summary failed with exit code $summaryExit" >> $log
+  exit $summaryExit
+}
+
 $syncAfterOutput = "C:\fuman-terminal\run-sync-after-output.ps1"
 if (Test-Path -LiteralPath $syncAfterOutput) {
   & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $syncAfterOutput -Label "Market overview patrol" -LogPath $log >> $log 2>&1
