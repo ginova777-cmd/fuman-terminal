@@ -8272,7 +8272,8 @@ intradayRadarStyles.textContent = `
     gap: 16px;
   }
   .strategy5-clean .strategy5-dashboard {
-    grid-template-columns: minmax(0, 1fr);
+    grid-template-columns: 330px minmax(0, 1fr);
+    align-items: start;
   }
   .strategy5-clean .strategy5-results {
     width: 100%;
@@ -8406,7 +8407,8 @@ intradayRadarStyles.textContent = `
     display: grid;
     grid-template-columns: minmax(0, 1fr);
     gap: 10px;
-    padding: 12px 14px 6px;
+    padding: 0;
+    align-self: start;
   }
   .strategy5-preset-tabs button {
     position: relative;
@@ -10198,15 +10200,15 @@ function renderStrategy5Dashboard(evaluated) {
     : "06:00 / 21:00 完整掃結果讀取中";
   strategyTable.innerHTML = `
     <section class="strategy5-shell strategy5-clean">
-      <section class="strategy5-dashboard">
+      <section class="strategy5-dashboard strategy5-topic-layout">
+        <nav class="strategy5-preset-tabs" aria-label="策略5主題分頁">${strategyTabs}</nav>
         <section class="strategy5-results">
           <div class="strategy5-results-head">
             <div>
-              <h3>${titleWithSchedule("▰", "策略5-綜合策略", "strategy5")}</h3>
+              <h3>${titleWithSchedule("▰", active.label || "策略5-綜合策略", "strategy5")}</h3>
               <p>${activeMeta.description || "符合策略5條件的股票。"}｜${scanText}，結果固定到下一次掃描。</p>
             </div>
           </div>
-          <div class="strategy5-preset-tabs">${strategyTabs}</div>
           ${table}
           ${pagination}
         </section>
