@@ -15,15 +15,15 @@ $log = "C:\fuman-runtime\logs\strategy5-$(Get-Date -Format yyyyMMdd-HHmmss).log"
 
 function Invoke-NodeScan($scriptPath, $label) {
   for ($attempt = 1; $attempt -le 3; $attempt++) {
-    "=== $label attempt $attempt $(Get-Date) ===" >> $log
-    & $nodeExe $scriptPath >> $log 2>&1
+    Add-Content -LiteralPath $log -Encoding utf8 -Value "=== $label attempt $attempt $(Get-Date) ==="
+    & $nodeExe $scriptPath 2>&1 | Out-File -LiteralPath $log -Encoding utf8 -Append
     $exitCode = $LASTEXITCODE
     if ($exitCode -eq 0) {
       return 0
     }
-    "$label attempt $attempt failed with exit code $exitCode" >> $log
+    Add-Content -LiteralPath $log -Encoding utf8 -Value "$label attempt $attempt failed with exit code $exitCode"
     if ($attempt -lt 3) {
-      "Waiting 60 seconds before retry" >> $log
+      Add-Content -LiteralPath $log -Encoding utf8 -Value "Waiting 60 seconds before retry"
       Start-Sleep -Seconds 60
     }
   }
@@ -36,7 +36,7 @@ Invoke-FumanWeekdayGuard -Label "Strategy5 scan" -LogPath $log
 
 $scanExit = Invoke-NodeScan "scripts\scan-strategy5-cache.js" "Strategy5 scan"
 if ($scanExit -ne 0) {
-  "Strategy5 scan failed with exit code $scanExit" >> $log
+  Add-Content -LiteralPath $log -Encoding utf8 -Value "Strategy5 scan failed with exit code $scanExit"
   exit $scanExit
 }
 
@@ -46,8 +46,8 @@ if (Test-Path -LiteralPath $syncAfterOutput) {
   & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $syncAfterOutput -Label "Strategy5 cache" -LogPath $log -Scope strategy5
   if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 } else {
-  "Strategy5 cache files written locally; sync helper not found." >> $log
+  Add-Content -LiteralPath $log -Encoding utf8 -Value "Strategy5 cache files written locally; sync helper not found."
 }
-"=== Strategy5 scan end $(Get-Date) ===" >> $log
+Add-Content -LiteralPath $log -Encoding utf8 -Value "=== Strategy5 scan end $(Get-Date) ==="
 
 
