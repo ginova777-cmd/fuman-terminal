@@ -1,7 +1,7 @@
 const https = require("https");
 
 const baseUrl = (process.env.FUMAN_VERIFY_BASE_URL || "https://fuman-terminal.vercel.app").replace(/\/+$/, "");
-const version = process.env.FUMAN_VERIFY_VERSION || "speed-modules-20260530-21";
+const version = process.env.FUMAN_VERIFY_VERSION || "speed-modules-20260530-22";
 
 function fetchText(pathname, timeoutMs = 20000) {
   const url = `${baseUrl}${pathname}`;
@@ -107,3 +107,4 @@ main().catch((error) => {
   console.error(`[verify] failed: ${error.message}`);
   process.exit(1);
 });
+
