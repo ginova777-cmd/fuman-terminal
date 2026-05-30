@@ -1,6 +1,6 @@
 {
   "ok": true,
-  "updatedAt": "2026-05-30T03:38:28.250Z",
+  "updatedAt": "2026-05-30T03:45:21.291Z",
   "risk": "low",
   "risks": [],
   "schedule": {
@@ -57,6 +57,13 @@
         "count": 0,
         "updatedAt": "2026-05-29T05:30:46.467Z",
         "bytes": 24796
+      },
+      {
+        "file": "performance-report.json",
+        "ok": true,
+        "count": 0,
+        "updatedAt": "2026-05-30T03:45:18.207Z",
+        "bytes": 1755
       }
     ]
   }

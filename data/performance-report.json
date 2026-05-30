@@ -1,0 +1,79 @@
+{
+  "ok": true,
+  "updatedAt": "2026-05-30T03:45:38.762Z",
+  "generatedBy": "generate-performance-report",
+  "assets": [
+    {
+      "file": "market-summary.json",
+      "ok": true,
+      "bytes": 150771,
+      "count": 0,
+      "updatedAt": "2026-05-30T02:57:38.651Z"
+    },
+    {
+      "file": "health-summary.json",
+      "ok": true,
+      "bytes": 1511,
+      "count": 0,
+      "updatedAt": "2026-05-30T03:45:21.291Z"
+    },
+    {
+      "file": "strategy4-summary.json",
+      "ok": true,
+      "bytes": 49554,
+      "count": 675,
+      "updatedAt": "2026-05-29T16:30:37.466Z"
+    },
+    {
+      "file": "strategy4-slim.json",
+      "ok": true,
+      "bytes": 450319,
+      "count": 675,
+      "updatedAt": "2026-05-29T16:30:37.466Z"
+    },
+    {
+      "file": "strategy4-zone-a.json",
+      "ok": true,
+      "bytes": 68374,
+      "count": 86,
+      "updatedAt": "2026-05-29T16:30:37.466Z"
+    },
+    {
+      "file": "institution-slim.json",
+      "ok": true,
+      "bytes": 478606,
+      "count": 1619,
+      "updatedAt": "2026-05-29T15:28:06.824Z"
+    },
+    {
+      "file": "institution-joint-top.json",
+      "ok": true,
+      "bytes": 46912,
+      "count": 160,
+      "updatedAt": "2026-05-29T15:28:06.824Z"
+    },
+    {
+      "file": "warrant-flow-slim.json",
+      "ok": true,
+      "bytes": 61378,
+      "count": 120,
+      "updatedAt": "2026-05-28T22:00:16.146Z"
+    },
+    {
+      "file": "warrant-priority-top.json",
+      "ok": true,
+      "bytes": 61378,
+      "count": 120,
+      "updatedAt": "2026-05-28T22:00:16.146Z"
+    },
+    {
+      "file": "realtime-radar-latest.json",
+      "ok": true,
+      "bytes": 24796,
+      "count": 32,
+      "updatedAt": "2026-05-29T05:30:46.467Z"
+    }
+  ],
+  "totalBytes": 1393599,
+  "missing": []
+}
