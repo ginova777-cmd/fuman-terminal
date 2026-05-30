@@ -1,24 +1,22 @@
-const CACHE_VERSION = "fuman-terminal-sw-20260530-17";
+const CACHE_VERSION = "fuman-terminal-sw-20260530-22";
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 const DATA_CACHE = `${CACHE_VERSION}-data`;
 
 const STATIC_ASSETS = [
-  "/",
-  "/index.html",
   "/styles.css?v=mobile-market-tabs-20260529",
-  "/terminal-core.js?v=speed-modules-20260530-21",
-  "/terminal-modules.js?v=speed-modules-20260530-21",
-  "/terminal-sector-map.js?v=speed-modules-20260530-21",
-  "/terminal-strategy-config.js?v=speed-modules-20260530-21",
-  "/terminal-market-config.js?v=speed-modules-20260530-21",
-  "/terminal-ui-config.js?v=speed-modules-20260530-21",
-  "/terminal-runtime-config.js?v=speed-modules-20260530-21",
-  "/terminal-tuning-config.js?v=speed-modules-20260530-21",
-  "/terminal-worker.js?v=speed-modules-20260530-21",
-  "/terminal.js?v=speed-modules-20260530-21",
-  "/terminal-realtime-radar.css?v=speed-modules-20260530-21",
-  "/terminal-intraday-radar.css?v=speed-modules-20260530-21",
-  "/terminal-utility.css?v=speed-modules-20260530-21",
+  "/terminal-core.js?v=speed-modules-20260530-22",
+  "/terminal-modules.js?v=speed-modules-20260530-22",
+  "/terminal-sector-map.js?v=speed-modules-20260530-22",
+  "/terminal-strategy-config.js?v=speed-modules-20260530-22",
+  "/terminal-market-config.js?v=speed-modules-20260530-22",
+  "/terminal-ui-config.js?v=speed-modules-20260530-22",
+  "/terminal-runtime-config.js?v=speed-modules-20260530-22",
+  "/terminal-tuning-config.js?v=speed-modules-20260530-22",
+  "/terminal-worker.js?v=speed-modules-20260530-22",
+  "/terminal.js?v=speed-modules-20260530-22",
+  "/terminal-realtime-radar.css?v=speed-modules-20260530-22",
+  "/terminal-intraday-radar.css?v=speed-modules-20260530-22",
+  "/terminal-utility.css?v=speed-modules-20260530-22",
   "/assets/logo.png",
   "/favicon.ico",
 ];
@@ -98,11 +96,19 @@ self.addEventListener("fetch", (event) => {
   if (!isSameOriginGet(request)) return;
   const url = new URL(request.url);
   if (isLiveRequest(url)) return;
+  if (request.mode === "navigate" || request.destination === "document" || url.pathname === "/" || url.pathname === "/index.html") {
+    event.respondWith(fetch(request, { cache: "no-store" }).catch(() => caches.match(request, { ignoreSearch: false })));
+    return;
+  }
+  if (url.pathname === "/fuman-sw.js") {
+    event.respondWith(fetch(request, { cache: "no-store" }));
+    return;
+  }
   if (isDataRequest(url)) {
     event.respondWith(networkFirst(request));
     return;
   }
-  if (["document", "script", "style", "image", "font"].includes(request.destination)) {
+  if (["script", "style", "image", "font"].includes(request.destination)) {
     event.respondWith(staleWhileRevalidate(request));
   }
 });
