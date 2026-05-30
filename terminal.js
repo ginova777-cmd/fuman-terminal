@@ -2388,6 +2388,8 @@ function refreshScheduleTitles() {
 }
 
 async function loadWorkflowRunStatus() {
+  workflowRunStatusReady = false;
+  return;
   const workflows = [...new Set(Object.values(WORKFLOW_BY_SCHEDULE))];
   const results = await Promise.allSettled(workflows.map(async (workflow) => {
     const url = `${GITHUB_WORKFLOW_API}/${workflow}/runs?per_page=1&ts=${Date.now()}`;
