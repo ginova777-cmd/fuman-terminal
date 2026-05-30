@@ -239,10 +239,14 @@ function Test-IntradayFlowProtectedFile($file) {
     "data\institution-latest.json",
     "data\institution-summary.json",
     "data\institution-slim.json",
+    "data\institution-joint-top.json",
+    "data\institution-foreign-top.json",
+    "data\institution-trust-top.json",
     "data\institution-backup.json",
     "data\warrant-flow-latest.json",
     "data\warrant-flow-summary.json",
     "data\warrant-flow-slim.json",
+    "data\warrant-priority-top.json",
     "data\warrant-flow-backup.json",
     "data\flow-health-latest.json"
   )) { return $false }
@@ -271,6 +275,14 @@ function Update-SlimCacheFiles {
   }
   if ($LASTEXITCODE -ne 0) {
     Write-Log "Slim cache generation exited with code $LASTEXITCODE; continuing with available files"
+  }
+  $perfScript = Join-Path $codeRepo "scripts\generate-performance-report.js"
+  if (Test-Path -LiteralPath $perfScript) {
+    Write-Log "=== Generate performance report $(Get-Date) ==="
+    $perfOutput = & $nodeExe $perfScript 2>&1
+    foreach ($line in $perfOutput) {
+      if (-not [string]::IsNullOrWhiteSpace([string]$line)) { Write-Log $line }
+    }
   }
 }
 
@@ -423,10 +435,14 @@ try {
       "data\institution-latest.json",
       "data\institution-summary.json",
       "data\institution-slim.json",
+      "data\institution-joint-top.json",
+      "data\institution-foreign-top.json",
+      "data\institution-trust-top.json",
       "data\institution-backup.json",
       "data\warrant-flow-latest.json",
       "data\warrant-flow-summary.json",
       "data\warrant-flow-slim.json",
+      "data\warrant-priority-top.json",
       "data\warrant-flow-backup.json",
       "data\flow-health-latest.json"
     )
@@ -438,6 +454,10 @@ try {
     $dataFiles = @(
       "data\institution-latest.json",
       "data\institution-summary.json",
+      "data\institution-slim.json",
+      "data\institution-joint-top.json",
+      "data\institution-foreign-top.json",
+      "data\institution-trust-top.json",
       "data\institution-backup.json",
       "data\flow-health-latest.json"
     )
@@ -449,6 +469,8 @@ try {
     $dataFiles = @(
       "data\warrant-flow-latest.json",
       "data\warrant-flow-summary.json",
+      "data\warrant-flow-slim.json",
+      "data\warrant-priority-top.json",
       "data\warrant-flow-backup.json",
       "data\flow-health-latest.json"
     )
@@ -481,6 +503,10 @@ try {
       "data\strategy4-latest.json",
       "data\strategy4-summary.json",
       "data\strategy4-slim.json",
+      "data\strategy4-zone-a.json",
+      "data\strategy4-zone-b.json",
+      "data\strategy4-zone-c.json",
+      "data\strategy4-score-top.json",
       "data\strategy4-backup.json"
     )
   } elseif ($Scope -eq "strategy5") {
@@ -506,14 +532,19 @@ try {
       "data\institution-latest.json",
       "data\institution-summary.json",
       "data\institution-slim.json",
+      "data\institution-joint-top.json",
+      "data\institution-foreign-top.json",
+      "data\institution-trust-top.json",
       "data\institution-backup.json",
       "data\warrant-flow-latest.json",
       "data\warrant-flow-summary.json",
       "data\warrant-flow-slim.json",
+      "data\warrant-priority-top.json",
       "data\warrant-flow-backup.json",
       "data\flow-health-latest.json",
       "data\market-summary.json",
       "data\health-summary.json",
+      "data\performance-report.json",
       "data\open-buy-latest.json",
       "data\open-buy-backup.json",
       "data\open-buy-scorecard-source.json",
@@ -524,6 +555,10 @@ try {
       "data\strategy4-latest.json",
       "data\strategy4-summary.json",
       "data\strategy4-slim.json",
+      "data\strategy4-zone-a.json",
+      "data\strategy4-zone-b.json",
+      "data\strategy4-zone-c.json",
+      "data\strategy4-score-top.json",
       "data\strategy4-backup.json",
       "data\strategy5-latest.json",
       "data\strategy5-backup.json",

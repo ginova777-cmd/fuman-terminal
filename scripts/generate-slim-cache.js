@@ -17,6 +17,12 @@ function writeJson(file, payload) {
   fs.writeFileSync(file, `${JSON.stringify(payload, null, 2)}\n`, "utf8");
 }
 
+function writeToBoth(output, payload) {
+  for (const root of [repoRoot, runtimeRoot]) {
+    writeJson(path.join(root, output), payload);
+  }
+}
+
 function slimSignal(signal) {
   return {
     id: String(signal?.id || ""),
@@ -56,6 +62,26 @@ function slimStrategy4(payload) {
   };
 }
 
+function strategy4PresetFiles(payload) {
+  const slim = slimStrategy4(payload);
+  const matches = [...slim.matches];
+  const base = {
+    ok: slim.ok,
+    source: "strategy4-preset",
+    updatedAt: slim.updatedAt,
+    scanStamp: slim.scanStamp,
+    total: slim.total,
+    complete: slim.complete,
+  };
+  const byScore = [...matches].sort((a, b) => cleanNumber(b.swingScore || b.score) - cleanNumber(a.swingScore || a.score));
+  return [
+    ["data/strategy4-zone-a.json", { ...base, zone: "A", count: matches.filter((item) => (item.swingZone || "A") === "A").length, matches: byScore.filter((item) => (item.swingZone || "A") === "A") }],
+    ["data/strategy4-zone-b.json", { ...base, zone: "B", count: matches.filter((item) => item.swingZone === "B").length, matches: byScore.filter((item) => item.swingZone === "B") }],
+    ["data/strategy4-zone-c.json", { ...base, zone: "C", count: matches.filter((item) => item.swingZone === "C").length, matches: byScore.filter((item) => item.swingZone === "C") }],
+    ["data/strategy4-score-top.json", { ...base, count: Math.min(120, byScore.length), matches: byScore.slice(0, 120) }],
+  ];
+}
+
 function slimInstitution(payload) {
   const data = payload?.data && typeof payload.data === "object" ? payload.data : {};
   const slim = {};
@@ -86,6 +112,26 @@ function slimInstitution(payload) {
   };
 }
 
+function institutionPresetFiles(payload) {
+  const slim = slimInstitution(payload);
+  const rows = Object.values(slim.data || {});
+  const base = {
+    ok: slim.ok,
+    source: "institution-preset",
+    updatedAt: slim.updatedAt,
+    usedDate: slim.usedDate,
+    quoteUpdatedAt: slim.quoteUpdatedAt,
+  };
+  const joint = [...rows].sort((a, b) => b.jointStreak - a.jointStreak || b.total - a.total).slice(0, 160);
+  const foreign = [...rows].sort((a, b) => b.foreign - a.foreign).slice(0, 160);
+  const trust = [...rows].sort((a, b) => b.trust - a.trust).slice(0, 160);
+  return [
+    ["data/institution-joint-top.json", { ...base, count: joint.length, rows: joint }],
+    ["data/institution-foreign-top.json", { ...base, count: foreign.length, rows: foreign }],
+    ["data/institution-trust-top.json", { ...base, count: trust.length, rows: trust }],
+  ];
+}
+
 function slimWarrant(payload) {
   const matches = Array.isArray(payload?.matches) ? payload.matches : [];
   return {
@@ -112,14 +158,28 @@ function slimWarrant(payload) {
   };
 }
 
+function warrantPresetFiles(payload) {
+  const slim = slimWarrant(payload);
+  const rows = [...slim.matches].sort((a, b) => cleanNumber(b.score) - cleanNumber(a.score) || cleanNumber(b.callValue) - cleanNumber(a.callValue)).slice(0, 160);
+  return [
+    ["data/warrant-priority-top.json", {
+      ok: slim.ok,
+      source: "warrant-preset",
+      updatedAt: slim.updatedAt,
+      count: rows.length,
+      matches: rows,
+    }],
+  ];
+}
+
 const jobs = [
-  ["strategy4", "data/strategy4-latest.json", "data/strategy4-slim.json", slimStrategy4],
-  ["institution", "data/institution-latest.json", "data/institution-slim.json", slimInstitution],
-  ["warrant", "data/warrant-flow-latest.json", "data/warrant-flow-slim.json", slimWarrant],
+  ["strategy4", "data/strategy4-latest.json", "data/strategy4-slim.json", slimStrategy4, strategy4PresetFiles],
+  ["institution", "data/institution-latest.json", "data/institution-slim.json", slimInstitution, institutionPresetFiles],
+  ["warrant", "data/warrant-flow-latest.json", "data/warrant-flow-slim.json", slimWarrant, warrantPresetFiles],
 ];
 
 let wrote = 0;
-for (const [name, input, output, build] of jobs) {
+for (const [name, input, output, build, presets] of jobs) {
   const candidates = [
     path.join(runtimeRoot, input),
     path.join(repoRoot, input),
@@ -130,8 +190,10 @@ for (const [name, input, output, build] of jobs) {
     continue;
   }
   const payload = build(readJson(source));
-  for (const root of [repoRoot, runtimeRoot]) {
-    writeJson(path.join(root, output), payload);
+  writeToBoth(output, payload);
+  for (const [presetOutput, presetPayload] of presets(readJson(source))) {
+    writeToBoth(presetOutput, presetPayload);
+    console.log(`[slim] wrote ${presetOutput} count=${presetPayload.count || presetPayload.rows?.length || presetPayload.matches?.length || 0}`);
   }
   wrote += 1;
   console.log(`[slim] wrote ${output} count=${payload.count || Object.keys(payload.data || {}).length}`);

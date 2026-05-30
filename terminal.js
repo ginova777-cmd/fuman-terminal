@@ -71,7 +71,7 @@ function getFumanWorker() {
   if (!("Worker" in window)) return null;
   if (fumanWorker) return fumanWorker;
   try {
-    fumanWorker = new Worker("terminal-worker.js?v=speed-modules-20260530-4");
+    fumanWorker = new Worker("terminal-worker.js?v=speed-modules-20260530-5");
     fumanWorker.addEventListener("message", (event) => {
       const { id, ok, rows, result, error } = event.data || {};
       const pending = fumanWorkerPending.get(id);
@@ -126,6 +126,27 @@ function setLiveMemoryCache(key, value) {
 function markLazyModuleForView(viewName) {
   window.FUMAN_TERMINAL_MODULES?.preloadForView?.(viewName);
 }
+
+function recordFrontendError(kind, error) {
+  try {
+    const message = error?.message || error?.reason?.message || String(error?.reason || error || "");
+    const item = {
+      kind,
+      message: message.slice(0, 160),
+      at: Date.now(),
+      view: getActiveViewName?.() || "",
+    };
+    const key = "fuman_frontend_errors_v1";
+    const rows = JSON.parse(localStorage.getItem(key) || "[]");
+    rows.push(item);
+    localStorage.setItem(key, JSON.stringify(rows.slice(-40)));
+    window.FUMAN_TERMINAL_BOOT = window.FUMAN_TERMINAL_BOOT || {};
+    window.FUMAN_TERMINAL_BOOT.frontendErrors = rows.slice(-10);
+  } catch (e) {}
+}
+
+window.addEventListener("error", (event) => recordFrontendError("error", event.error || event.message));
+window.addEventListener("unhandledrejection", (event) => recordFrontendError("promise", event.reason));
 
 function warmWorkerSortCache(cacheKey, rows, sortKey, sortDir, applyRows) {
   if (!rows?.length || rows.length < 80) return;
@@ -3864,6 +3885,21 @@ function mergeRealtimeRadarRows(newRows = [], oldRows = []) {
     const existing = merged.get(key);
     const currentTime = cleanNumber(stock.radarUpdatedAt) || 0;
     const existingTime = cleanNumber(existing?.radarUpdatedAt) || 0;
+    const currentScore = cleanNumber(stock.score);
+    const existingScore = cleanNumber(existing?.score);
+    const sameSignalWindow = existing && currentTime && existingTime && Math.abs(currentTime - existingTime) < 10000;
+    if (sameSignalWindow && Math.abs(currentScore - existingScore) < 8) {
+      merged.set(key, {
+        ...existing,
+        ...stock,
+        score: Math.max(existingScore, currentScore),
+        flow: Math.max(cleanNumber(existing.flow), cleanNumber(stock.flow)),
+        radarUpdatedAt: Math.max(existingTime, currentTime),
+        signalTags: [...new Set([...normalizeArray(existing.signalTags), ...normalizeArray(stock.signalTags)])].slice(0, 6),
+        denoised: true,
+      });
+      return;
+    }
     if (!existing || currentTime >= existingTime) {
       merged.set(key, { ...stock, radarUpdatedAt: currentTime || Date.now() });
     }

@@ -1,7 +1,7 @@
 const https = require("https");
 
 const baseUrl = (process.env.FUMAN_VERIFY_BASE_URL || "https://fuman-terminal.vercel.app").replace(/\/+$/, "");
-const version = process.env.FUMAN_VERIFY_VERSION || "speed-modules-20260530-4";
+const version = process.env.FUMAN_VERIFY_VERSION || "speed-modules-20260530-5";
 
 function fetchText(pathname, timeoutMs = 20000) {
   const url = `${baseUrl}${pathname}`;
@@ -42,6 +42,10 @@ async function main() {
       return payload.ok === true && ["low", "medium", "high"].includes(payload.risk);
     }],
     ["strategy4-slim", "/data/strategy4-slim.json?v=verify", (r) => JSON.parse(r.body).count > 0],
+    ["strategy4-zone-a", "/data/strategy4-zone-a.json?v=verify", (r) => JSON.parse(r.body).count >= 0],
+    ["institution-joint-top", "/data/institution-joint-top.json?v=verify", (r) => JSON.parse(r.body).count > 0],
+    ["warrant-priority-top", "/data/warrant-priority-top.json?v=verify", (r) => JSON.parse(r.body).count > 0],
+    ["performance-report", "/data/performance-report.json?v=verify", (r) => JSON.parse(r.body).assets?.length > 0],
   ];
   for (const [name, path, check] of checks) {
     const result = await fetchText(path);
