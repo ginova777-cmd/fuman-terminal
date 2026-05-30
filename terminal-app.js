@@ -61,6 +61,7 @@ const PUBLIC_VIEWS = new Set(["market"]);
 const FUMAN_THEME_KEY = FUMAN_RUNTIME_CONFIG.themeKey || "fuman-terminal-theme";
 const FUMAN_AUTH_CACHE_KEY = FUMAN_RUNTIME_CONFIG.authCacheKey || "fuman-terminal-auth-cache-v1";
 const FUMAN_AUTH_CACHE_TTL_MS = FUMAN_RUNTIME_CONFIG.authCacheTtlMs || (5 * 60 * 1000);
+const FUMAN_COMMON_TABS_KEY = FUMAN_RUNTIME_CONFIG.commonTabsKey || "fuman-terminal-common-tabs-v1";
 let authMode = "login";
 const FUMAN_LIVE_MEMORY_TTL_MS = FUMAN_RUNTIME_CONFIG.liveMemoryTtlMs || { strategy2: 3000, realtimeRadar: 5000 };
 const fumanLiveMemoryCache = new Map();
@@ -72,7 +73,7 @@ function getFumanWorker() {
   if (!("Worker" in window)) return null;
   if (fumanWorker) return fumanWorker;
   try {
-    fumanWorker = new Worker("terminal-worker.js?v=speed-modules-20260530-27");
+    fumanWorker = new Worker("terminal-worker.js?v=speed-modules-20260530-28");
     fumanWorker.addEventListener("message", (event) => {
       const { id, ok, rows, result, error } = event.data || {};
       const pending = fumanWorkerPending.get(id);
@@ -157,6 +158,74 @@ function markLazyModuleForView(viewName) {
   window.FUMAN_TERMINAL_MODULES?.preloadForView?.(viewName);
 }
 
+function normalizeCommonTab(viewName, text = "") {
+  const label = String(text || "");
+  if (viewName === "chip-trade" || label.includes("買賣")) return "chip";
+  if (viewName === "warrant-flow" || label.includes("權證")) return "warrant";
+  if (viewName === "realtime-radar" || label.includes("即時")) return "realtime";
+  if (label.includes("策略2") || label.includes("當沖")) return "strategy2";
+  if (label.includes("策略5")) return "strategy5";
+  return viewName || "";
+}
+
+function rememberCommonTab(viewName, text = "") {
+  const key = normalizeCommonTab(viewName, text);
+  if (!key || key === "market") return;
+  try {
+    const rows = JSON.parse(localStorage.getItem(FUMAN_COMMON_TABS_KEY) || "{}");
+    rows[key] = { count: cleanNumber(rows[key]?.count) + 1, at: Date.now() };
+    localStorage.setItem(FUMAN_COMMON_TABS_KEY, JSON.stringify(rows));
+  } catch (error) {}
+}
+
+function rankedCommonTabs() {
+  const defaults = getMobileHomeMode() === "intraday"
+    ? ["strategy2", "realtime", "chip", "warrant"]
+    : ["chip", "warrant", "strategy5", "strategy2"];
+  try {
+    const rows = JSON.parse(localStorage.getItem(FUMAN_COMMON_TABS_KEY) || "{}");
+    const ranked = Object.entries(rows)
+      .sort((a, b) => cleanNumber(b[1]?.count) - cleanNumber(a[1]?.count) || cleanNumber(b[1]?.at) - cleanNumber(a[1]?.at))
+      .map(([key]) => key);
+    return [...new Set([...ranked, ...defaults])].slice(0, 5);
+  } catch (error) {
+    return defaults;
+  }
+}
+
+function scheduleCommonTabWarmup() {
+  if (window.__fumanCommonWarmupScheduled) return;
+  window.__fumanCommonWarmupScheduled = true;
+  deferIdleWork(() => warmCommonTabs(), 1600);
+}
+
+function warmCommonTabs() {
+  if (!isTerminalUnlocked()) return;
+  for (const key of rankedCommonTabs()) {
+    if (key === "chip") {
+      markLazyModuleForView("chip-trade");
+      ensureChipFlowModule().catch(() => undefined);
+      preloadChipTradeFullData("login-warmup");
+    } else if (key === "warrant") {
+      markLazyModuleForView("warrant-flow");
+      ensureWarrantFlowModule().catch(() => undefined);
+      preloadWarrantFlowFullData("login-warmup");
+    } else if (key === "strategy2") {
+      markLazyModuleForView("strategy");
+      fetchVersionedJsonFallback([
+        { url: endpoints.strategy2IntradayLiveTop, label: "strategy2-live-top", kind: "strategy2" },
+        { url: endpoints.strategy2IntradayTop, label: "strategy2-top", kind: "strategy2" },
+      ], 3500, "strategy2").catch(() => undefined);
+    } else if (key === "strategy5") {
+      markLazyModuleForView("strategy");
+      fetchVersionedJson(endpoints.strategy5Cache, 4500, "latest", false).catch(() => undefined);
+    } else if (key === "realtime") {
+      markLazyModuleForView("realtime-radar");
+      fetchVersionedJson(endpoints.realtimeRadarCache, 4500, "latest", false).catch(() => undefined);
+    }
+  }
+}
+
 function recordFrontendError(kind, error) {
   try {
     const message = error?.message || error?.reason?.message || String(error?.reason || error || "");
@@ -232,7 +301,7 @@ function loadFumanStyle(href, id) {
   const link = document.createElement("link");
   link.id = id;
   link.rel = "stylesheet";
-  link.href = href.includes("?") ? href : `${href}?v=${window.FUMAN_TERMINAL_BOOT?.version || "speed-modules-20260530-27"}`;
+  link.href = href.includes("?") ? href : `${href}?v=${window.FUMAN_TERMINAL_BOOT?.version || "speed-modules-20260530-28"}`;
   document.head.appendChild(link);
 }
 
@@ -258,7 +327,7 @@ function makeFumanModuleScope(bindings) {
 function loadFumanFeatureModule(name, src, globalName) {
   if (window[globalName]) return Promise.resolve(window[globalName]);
   if (fumanFeatureModulePromises[name]) return fumanFeatureModulePromises[name];
-  const version = window.FUMAN_TERMINAL_BOOT?.version || "speed-modules-20260530-27";
+  const version = window.FUMAN_TERMINAL_BOOT?.version || "speed-modules-20260530-28";
   fumanFeatureModulePromises[name] = new Promise((resolve, reject) => {
     const attr = "data-fuman-feature-" + name;
     const existing = document.querySelector("script[" + attr + "]");
@@ -610,6 +679,7 @@ function setTerminalAuthState(session, access = { allowed: false, status: "signe
     memberState.textContent = `會員狀態：${label}`;
     memberState.dataset.status = String(access.status || "signed_out").toLowerCase();
   }
+  if (allowed) scheduleCommonTabWarmup();
   document.body.classList.remove("auth-cache-warm");
   writeFumanAuthCache(session, access);
   if (allowed) {
@@ -2547,6 +2617,8 @@ let institutionUpdatedAt = 0;
 let chipMode = "after";
 let chipTradeLoading = false;
 let chipTradeLoadedAt = 0;
+let chipTradePreferFull = false;
+let chipTradeFullPreloadPromise = null;
 const CHIP_TRADE_CACHE_MS = FUMAN_TUNING_CONFIG.chipTradeCacheMs ?? (10 * 60 * 1000);
 const CHIP_WARRANT_ACTIVE_REFRESH_MS = FUMAN_TUNING_CONFIG.chipWarrantActiveRefreshMs ?? (60 * 1000);
 let chipFilter = "joint";
@@ -2629,6 +2701,8 @@ let warrantFlowKeyword = "";
 let warrantFlowSearchTimer = null;
 let warrantFlowPage = 1;
 let warrantFlowHasOpened = false;
+let warrantFlowPreferFull = false;
+let warrantFlowFullPreloadPromise = null;
 let warrantFlowSummary = null;
 let warrantFlowSummaryLoading = false;
 let chipTradePage = 1;
@@ -2894,6 +2968,32 @@ async function fetchVersionedJson(url, timeout = 8000, version = "", force = fal
     ...options,
     cache: force ? "no-store" : "default",
   });
+}
+
+function healthyJsonPayload(payload, kind = "generic") {
+  if (!payload || payload.ok === false) return false;
+  if (kind === "market") return Boolean(payload.market || payload.indexes || payload.stocks || payload.strongSectors);
+  if (kind === "strategy2") return Boolean(normalizeArray(payload.events).length || normalizeArray(payload.records).length);
+  if (kind === "institution") return Boolean(payload.data && Object.keys(payload.data).length || normalizeArray(payload.rows).length);
+  if (kind === "warrant") return Boolean(normalizeArray(payload.matches).length);
+  return true;
+}
+
+async function fetchVersionedJsonFallback(candidates, timeout = 8000, kind = "generic") {
+  let lastError = null;
+  for (const item of candidates.filter(Boolean)) {
+    try {
+      const payload = await fetchVersionedJson(item.url, item.timeout || timeout, item.version || "latest", item.force || false, item.options || {});
+      const healthy = item.validate ? item.validate(payload) : healthyJsonPayload(payload, item.kind || kind);
+      if (healthy) return { ...payload, fallbackSource: item.label || item.url };
+      throw new Error("unhealthy payload");
+    } catch (error) {
+      lastError = error;
+      recordFumanPerformance((item.label || item.url) + "#fallback", performance?.now ? performance.now() : Date.now(), false, error);
+    }
+  }
+  if (lastError) throw lastError;
+  throw new Error("no fallback candidates");
 }
 
 function strategyWeight(key) {
@@ -3353,6 +3453,52 @@ async function loadInstitutionSummary(force = false) {
   }
 }
 
+function getMobileHomeMode() {
+  return isIntradayScanWindow() ? "intraday" : "after";
+}
+
+function mobileHomeQuickTargets() {
+  return getMobileHomeMode() === "intraday"
+    ? [
+      { label: "策略2", detail: "盤中當沖強訊號", view: "strategy", preset: "策略2" },
+      { label: "即時雷達", detail: "多空資金流", view: "realtime-radar" },
+      { label: "AI 判讀", detail: "市場熱區快看", view: "market", mode: "ai" },
+    ]
+    : [
+      { label: "買賣超", detail: "外資投信同買", view: "chip-trade" },
+      { label: "權證", detail: "優先區熱度", view: "warrant-flow" },
+      { label: "策略5", detail: "綜合策略結果", view: "strategy", preset: "策略5" },
+    ];
+}
+
+function renderMobileHomeMode(payload = marketSummaryPayload) {
+  const panel = viewPanels.market;
+  if (!panel || !isMobileViewport()) return;
+  let strip = panel.querySelector(".mobile-home-mode-strip");
+  if (!strip) {
+    strip = document.createElement("section");
+    strip.className = "mobile-home-mode-strip";
+    const anchor = panel.querySelector(".metric-grid");
+    if (anchor) anchor.insertAdjacentElement("beforebegin", strip);
+    else panel.prepend(strip);
+  }
+  const mode = getMobileHomeMode();
+  const updatedAt = payload?.updatedAt ? new Date(payload.updatedAt).toLocaleTimeString("zh-TW", { hour12: false }) : "更新中";
+  strip.innerHTML = `
+    <div>
+      <strong>${mode === "intraday" ? "盤中快看" : "盤後快看"}</strong>
+      <span>${updatedAt}</span>
+    </div>
+    <nav aria-label="手機首頁快速入口">
+      ${mobileHomeQuickTargets().map((item) => `
+        <button type="button" data-mobile-home-target="${item.view}" data-mobile-home-preset="${item.preset || ""}" data-mobile-home-mode="${item.mode || ""}">
+          <b>${item.label}</b><small>${item.detail}</small>
+        </button>
+      `).join("")}
+    </nav>
+  `;
+}
+
 function applyMarketSummaryPayload(payload) {
   if (!payload?.ok) return false;
   marketSummaryPayload = payload;
@@ -3374,6 +3520,7 @@ function applyMarketSummaryPayload(payload) {
   const stocks = normalizeArray(payload.stocks);
   if (stocks.length) renderStocks(stocks);
   if (normalizeArray(payload.sectors).length) renderHeatmapSectors(payload.sectors);
+  renderMobileHomeMode(payload);
   return true;
 }
 
@@ -3382,7 +3529,10 @@ async function loadMarketSummary(force = false) {
   if (!force && marketSummaryLoadedAt && Date.now() - marketSummaryLoadedAt < MARKET_REFRESH_CLOSED_MS) return marketSummaryPayload;
   marketSummaryLoading = true;
   try {
-    const payload = await fetchVersionedJson(isMobileViewport() && endpoints.mobileHomeSummary ? endpoints.mobileHomeSummary : endpoints.marketSummary, 4500, "latest", force);
+    const payload = await fetchVersionedJsonFallback([
+      isMobileViewport() && endpoints.mobileHomeSummary ? { url: endpoints.mobileHomeSummary, label: "mobile-home-summary", kind: "market", force } : null,
+      { url: endpoints.marketSummary, label: "market-summary", kind: "market", force },
+    ], 4500, "market");
     applyMarketSummaryPayload(payload);
     return payload;
   } catch (error) {
@@ -4906,10 +5056,11 @@ async function loadStrategy2IntradayPayload(force = false) {
   const mobileFastPath = isMobileViewport() && !force && (endpoints.strategy2IntradayLiveTop || endpoints.strategy2IntradayTop || endpoints.strategy2IntradaySlim);
   if (mobileFastPath && strategy2IntradayEventByCode.size && endpoints.strategy2IntradayDelta) {
     try {
-      const deltaPayload = await fetchVersionedJson(endpoints.strategy2IntradayDelta, 3000, "latest", false);
-      if (deltaPayload?.events?.length || deltaPayload?.records?.length) {
-        return { ...deltaPayload, cacheSource: deltaPayload.source || "static-delta" };
-      }
+      const deltaPayload = await fetchVersionedJsonFallback([
+        { url: endpoints.strategy2IntradayDelta, label: "strategy2-delta", kind: "strategy2" },
+        { url: endpoints.strategy2IntradayLiveTop, label: "strategy2-live-top", kind: "strategy2" },
+      ], 3000, "strategy2");
+      return { ...deltaPayload, cacheSource: deltaPayload.source || "static-delta" };
     } catch (error) {
     }
   }
@@ -4918,10 +5069,12 @@ async function loadStrategy2IntradayPayload(force = false) {
       const preferredTop = isIntradayScanWindow()
         ? (endpoints.strategy2IntradayLiveTop || endpoints.strategy2IntradayTop || endpoints.strategy2IntradaySlim)
         : (endpoints.strategy2IntradayTop || endpoints.strategy2IntradayLiveTop || endpoints.strategy2IntradaySlim);
-      const slimPayload = await fetchVersionedJson(preferredTop, 4000, "latest", false);
-      if (slimPayload?.events?.length || slimPayload?.records?.length) {
-        return { ...slimPayload, cacheSource: slimPayload.source || "static-mobile-top" };
-      }
+      const slimPayload = await fetchVersionedJsonFallback([
+        { url: preferredTop, label: "strategy2-preferred-top", kind: "strategy2" },
+        { url: endpoints.strategy2IntradayTop, label: "strategy2-top", kind: "strategy2" },
+        { url: endpoints.strategy2IntradaySlim, label: "strategy2-slim", kind: "strategy2" },
+      ], 4000, "strategy2");
+      return { ...slimPayload, cacheSource: slimPayload.source || "static-mobile-top" };
     } catch (error) {
     }
   }
@@ -6267,6 +6420,8 @@ function getWarrantFlowContext() {
       set warrantFlowHasOpened(value) { warrantFlowHasOpened = value; },
       get warrantFlowLoading() { return warrantFlowLoading; },
       set warrantFlowLoading(value) { warrantFlowLoading = value; },
+      get warrantFlowPreferFull() { return warrantFlowPreferFull; },
+      set warrantFlowPreferFull(value) { warrantFlowPreferFull = value; },
       get warrantFlowSummary() { return warrantFlowSummary; },
       set warrantFlowSummary(value) { warrantFlowSummary = value; },
       viewPanels, endpoints, CACHE_FRESH_MS,
@@ -6292,6 +6447,21 @@ function renderWarrantFlow() {
 async function loadWarrantFlow(force = false) {
   const api = await ensureWarrantFlowModule();
   return api.loadWarrantFlow(force);
+}
+
+function preloadWarrantFlowFullData(reason = "idle") {
+  if (warrantFlowFullPreloadPromise) return warrantFlowFullPreloadPromise;
+  warrantFlowFullPreloadPromise = Promise.allSettled([
+    fetchVersionedJsonFallback([
+      { url: endpoints.warrantFlowSlim, label: "warrant-slim-preload", kind: "warrant" },
+      { url: endpoints.warrantFlowCache, label: "warrant-cache-preload", kind: "warrant" },
+      { url: endpoints.warrantFlowBackup, label: "warrant-backup-preload", kind: "warrant" },
+    ], 9000, "warrant"),
+    fetchVersionedJson(endpoints.strategyStocks, 12000, "latest", false),
+  ]).finally(() => {
+    recordFumanPerformance("preload:warrant:" + reason, performance?.now ? performance.now() : Date.now(), true);
+  });
+  return warrantFlowFullPreloadPromise;
 }
 
 async function loadStrategyStocks() {
@@ -7778,6 +7948,8 @@ function getChipFlowContext() {
       set chipTradeLoadedAt(value) { chipTradeLoadedAt = value; },
       get chipTradeLoading() { return chipTradeLoading; },
       set chipTradeLoading(value) { chipTradeLoading = value; },
+      get chipTradePreferFull() { return chipTradePreferFull; },
+      set chipTradePreferFull(value) { chipTradePreferFull = value; },
       get chipQuoteHydrating() { return chipQuoteHydrating; },
       set chipQuoteHydrating(value) { chipQuoteHydrating = value; },
       endpoints, CHIP_TRADE_CACHE_MS,
@@ -7803,6 +7975,21 @@ function renderChipTradeTable() {
 async function loadChipTradeData(force = false) {
   const api = await ensureChipFlowModule();
   return api.loadChipTradeData(force);
+}
+
+function preloadChipTradeFullData(reason = "idle") {
+  if (chipTradeFullPreloadPromise) return chipTradeFullPreloadPromise;
+  chipTradeFullPreloadPromise = Promise.allSettled([
+    fetchVersionedJsonFallback([
+      { url: endpoints.institutionSlim, label: "institution-slim-preload", kind: "institution" },
+      { url: endpoints.institutionCache, label: "institution-cache-preload", kind: "institution" },
+      { url: endpoints.institutionBackup, label: "institution-backup-preload", kind: "institution" },
+    ], 9000, "institution"),
+    fetchVersionedJson(endpoints.strategyStocks, 12000, "latest", false),
+  ]).finally(() => {
+    recordFumanPerformance("preload:chip:" + reason, performance?.now ? performance.now() : Date.now(), true);
+  });
+  return chipTradeFullPreloadPromise;
 }
 
 function stockChange(stock) {
@@ -7988,11 +8175,13 @@ function showView(viewName, activeLink) {
   }
   if (viewName === "chip-trade") {
     markLazyModuleForView(viewName);
-    deferUiWork(() => loadChipTradeData(true));
+    deferUiWork(() => loadChipTradeData(false));
+    deferIdleWork(() => preloadChipTradeFullData("after-top"), 1200);
   }
   if (viewName === "warrant-flow") {
     markLazyModuleForView(viewName);
-    deferUiWork(() => loadWarrantFlow(true));
+    deferUiWork(() => loadWarrantFlow(false));
+    deferIdleWork(() => preloadWarrantFlowFullData("after-top"), 1200);
   }
   if (viewName === "watchlist") {
     deferUiWork(renderWatchlist);
@@ -8637,6 +8826,7 @@ document.addEventListener("keydown", (event) => {
 viewLinks.forEach((link)=>{
   link.addEventListener("click",(e)=>{
     e.preventDefault();
+    rememberCommonTab(link.dataset.view, link.textContent || "");
     if (!isProtectedView(link.dataset.view) || isTerminalUnlocked()) applyStrategyPresetFromLink(link);
     showView(link.dataset.view, link);
   });
@@ -8659,6 +8849,31 @@ document.querySelectorAll("[data-chip-filter]").forEach((button) => {
     document.querySelectorAll("[data-chip-filter]").forEach((item) => item.classList.toggle("active", item === button));
     renderChipTradeTable();
   });
+});
+document.addEventListener("click", async (event) => {
+  const fullLoadButton = event.target.closest("[data-mobile-full-load]");
+  if (!fullLoadButton) return;
+  event.preventDefault();
+  event.stopImmediatePropagation();
+  const target = fullLoadButton.dataset.mobileFullLoad || "";
+  fullLoadButton.disabled = true;
+  const originalText = fullLoadButton.textContent;
+  fullLoadButton.textContent = "載入中";
+  try {
+    if (target === "chip") {
+      chipTradePreferFull = true;
+      chipTradeLoadedAt = 0;
+      await preloadChipTradeFullData("manual");
+      await loadChipTradeData(false);
+    } else if (target === "warrant") {
+      warrantFlowPreferFull = true;
+      await preloadWarrantFlowFullData("manual");
+      await loadWarrantFlow(false);
+    }
+  } finally {
+    fullLoadButton.disabled = false;
+    fullLoadButton.textContent = originalText || "完整列表";
+  }
 });
 setInterval(tickClock, 60 * 1000);
 setInterval(() => {
@@ -9684,6 +9899,8 @@ if (isViewActive("watchlist")) renderWatchlist();
 setInterval(() => {
   if (!isDocumentHidden() && isTerminalUnlocked() && isViewActive("watchlist")) refreshSelectedWatchlistQuote();
 }, 10000);
+
+
 
 
 

@@ -2,7 +2,7 @@ const fs = require("fs");
 const path = require("path");
 
 const ROOT = path.resolve(__dirname, "..");
-const VERSION = process.env.FUMAN_EXPECTED_VERSION || "speed-modules-20260530-27";
+const VERSION = process.env.FUMAN_EXPECTED_VERSION || "speed-modules-20260530-28";
 const files = [
   "index.html",
   "terminal-core.js",
@@ -14,7 +14,7 @@ const files = [
   "scripts/e2e-smoke.js",
 ];
 
-const oldVersionPattern = /speed-modules-20260530-(?!27\b)\d+/g;
+const oldVersionPattern = /speed-modules-20260530-(?!28\b)\d+/g;
 const issues = [];
 for (const file of files) {
   const full = path.join(ROOT, file);

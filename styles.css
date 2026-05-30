@@ -4245,3 +4245,58 @@ h1 {
     align-self: stretch !important;
   }
 }
+
+
+/* mobile-home-mode-strip-20260530 */
+@media (max-width: 760px) {
+  .mobile-home-mode-strip {
+    border: 1px solid rgba(125, 166, 255, 0.22);
+    background: rgba(9, 15, 27, 0.88);
+    border-radius: 10px;
+    padding: 10px;
+    margin: 0 0 12px;
+  }
+
+  .mobile-home-mode-strip > div {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 8px;
+  }
+
+  .mobile-home-mode-strip strong {
+    color: #f7fbff;
+    font-size: 14px;
+  }
+
+  .mobile-home-mode-strip span,
+  .mobile-home-mode-strip small {
+    color: #8fa5ca;
+    font-size: 11px;
+  }
+
+  .mobile-home-mode-strip nav {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .mobile-home-mode-strip button {
+    min-width: 0;
+    border: 1px solid rgba(125, 166, 255, 0.26);
+    background: rgba(20, 32, 55, 0.92);
+    color: #dce8ff;
+    border-radius: 8px;
+    padding: 8px 6px;
+    text-align: left;
+  }
+
+  .mobile-home-mode-strip button b,
+  .mobile-home-mode-strip button small {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
