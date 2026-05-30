@@ -1,7 +1,10 @@
 (function () {
   const boot = window.FUMAN_TERMINAL_BOOT || (window.FUMAN_TERMINAL_BOOT = {});
-  const version = boot.version || "speed-modules-20260530-9";
+  const version = boot.version || "speed-modules-20260530-10";
   const appSrc = `/terminal-app.js?v=${version}`;
+  const dependencyScripts = [
+    { src: `/terminal-sector-map.js?v=${version}`, attr: "data-fuman-sector-map" },
+  ];
   let appPromise = null;
 
   function mark(name) {
@@ -13,7 +16,7 @@
     if (window.FUMAN_TERMINAL_APP_READY) return Promise.resolve(window.FUMAN_TERMINAL_APP_READY);
     if (appPromise) return appPromise;
     mark(`app-request:${reason}`);
-    appPromise = new Promise((resolve, reject) => {
+    appPromise = loadDependencies().then(() => new Promise((resolve, reject) => {
       const existing = document.querySelector("script[data-fuman-terminal-app]");
       if (existing) {
         existing.addEventListener("load", () => resolve(true), { once: true });
@@ -31,8 +34,36 @@
       }, { once: true });
       script.addEventListener("error", reject, { once: true });
       document.body.appendChild(script);
-    });
+    }));
     return appPromise;
+  }
+
+  function loadDependencies() {
+    return dependencyScripts.reduce((promise, item) => promise.then(() => loadScriptOnce(item)), Promise.resolve());
+  }
+
+  function loadScriptOnce(item) {
+    const selector = `script[${item.attr}]`;
+    const existing = document.querySelector(selector);
+    if (existing) {
+      if (existing.dataset.loaded === "1") return Promise.resolve(true);
+      return new Promise((resolve, reject) => {
+        existing.addEventListener("load", () => resolve(true), { once: true });
+        existing.addEventListener("error", reject, { once: true });
+      });
+    }
+    return new Promise((resolve, reject) => {
+      const script = document.createElement("script");
+      script.src = item.src;
+      script.async = false;
+      script.setAttribute(item.attr, "1");
+      script.addEventListener("load", () => {
+        script.dataset.loaded = "1";
+        resolve(true);
+      }, { once: true });
+      script.addEventListener("error", reject, { once: true });
+      document.head.appendChild(script);
+    });
   }
 
   function prefetchApp() {

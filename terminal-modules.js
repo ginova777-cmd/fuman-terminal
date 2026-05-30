@@ -1,6 +1,7 @@
 (function () {
-  const VERSION = "speed-modules-20260530-9";
+  const VERSION = "speed-modules-20260530-10";
   const modules = {
+    sectorMap: { loaded: false, src: "terminal-sector-map.js" },
     app: { loaded: false, src: "terminal-app.js" },
     strategy4: { loaded: false, src: "terminal-app.js" },
     chipFlow: { loaded: false, src: "terminal-app.js" },
