@@ -17,7 +17,7 @@ const WORKFLOWS = [
 const CACHE_RULES = [
   { label: "策略1", file: "data/open-buy-latest.json", slots: ["07:00", "16:00"], graceMinutes: 10, workflow: "open-buy-background-scan.yml", inputs: { full_scan: "true" } },
   { label: "策略3", file: "data/strategy3-latest.json", slots: ["13:00"], graceMinutes: 10, workflow: "strategy3-background-scan.yml" },
-  { label: "策略4", file: "data/strategy4-latest.json", slots: ["07:00", "14:30"], graceMinutes: 10, workflow: "strategy4-background-scan.yml", inputs: { full_scan: "true" }, requireComplete: true, minTotal: 1700 },
+  { label: "策略4", file: "data/strategy4-latest.json", slots: ["14:30"], graceMinutes: 10, workflow: "strategy4-background-scan.yml", inputs: { full_scan: "true" }, requireComplete: true, minTotal: 1700 },
   { label: "盤後籌碼", file: "data/institution-latest.json", slots: ["06:00", "21:00"], graceMinutes: 10, workflow: "flow-cache.yml" },
   { label: "權證走向", file: "data/warrant-flow-latest.json", slots: ["06:00", "21:00"], graceMinutes: 10, workflow: "flow-cache.yml" },
   { label: "策略5", file: "data/strategy5-latest.json", slots: ["06:00", "21:00"], graceMinutes: 10, workflow: "strategy5-background-scan.yml" },

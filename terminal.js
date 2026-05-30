@@ -2248,7 +2248,7 @@ const SCHEDULE_META = {
   intraday: { label: "盤中即時", next: "持續輪巡" },
   openBuy: { label: "07:00 / 16:00", times: ["07:00", "16:00"] },
   strategy3: { label: "13:00", times: ["13:00"] },
-  swing: { label: "07:00 / 14:30", times: ["07:00", "14:30"] },
+  swing: { label: "14:30", times: ["14:30"] },
   strategy5: { label: "06:00 / 21:00", times: ["06:00", "21:00"] },
   chip: { label: "06:00 / 21:00", times: ["06:00", "21:00"] },
   warrant: { label: "06:00 / 21:00", times: ["06:00", "21:00"] },
@@ -4514,7 +4514,7 @@ function labelUpdateModes() {
     if (text.includes("策略2")) appendUpdateBadge(card, "立即更新", "live");
     if (text.includes("策略1")) appendUpdateBadge(card, "07/16:00完整掃", "slow");
     if (text.includes("策略3")) appendUpdateBadge(card, "13:00完整掃", "slow");
-    if (text.includes("策略4")) appendUpdateBadge(card, "07/14:30完整掃", "slow");
+    if (text.includes("策略4")) appendUpdateBadge(card, "14:30完整掃", "slow");
     if (text.includes("策略5")) appendUpdateBadge(card, "MIS即時", "live");
   });
 }
@@ -9923,10 +9923,10 @@ function renderSwingRadar(universe) {
       <div class="swing-topbar">
         <div>
           <h2>${titleWithSchedule("└", "策略4-波段雷達", "swing")}</h2>
-          <p>排除ETF，只掃真正股票；網站讀取上一版完整快取，07:00 與 14:30 背景更新正式名單。${historyText}</p>
+          <p>排除ETF，只掃真正股票；網站讀取上一版完整快取，14:30 背景更新正式名單。${historyText}</p>
         </div>
         <div class="swing-controls">
-          <label>更新模式：<select><option>07:00 / 14:30 完整掃</option></select></label>
+          <label>更新模式：<select><option>14:30 完整掃</option></select></label>
           <label>市場：<select><option>全市場</option></select></label>
         </div>
       </div>

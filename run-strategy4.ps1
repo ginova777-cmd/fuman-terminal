@@ -17,6 +17,7 @@ Set-Location $repo
 $logDir = Join-Path $repo "logs"
 New-Item -ItemType Directory -Force -Path $logDir | Out-Null
 $log = Join-Path $logDir ("strategy4-{0}.log" -f (Get-Date -Format yyyyMMdd-HHmmss))
+$strategy4Stamp = Get-Date -Format yyyyMMdd
 
 function Write-Log($message) {
   $message | Tee-Object -FilePath $log -Append | Out-Null
@@ -52,8 +53,16 @@ $env:STRATEGY4_BATCH_SIZE = "80"
 $env:STRATEGY4_BATCHES_PER_RUN = "999"
 $env:STRATEGY4_USE_MIS = "0"
 $env:STRATEGY4_FAIL_ON_INCOMPLETE = "1"
+$env:STRATEGY4_ALLOW_PARTIAL_PUBLISH = "1"
+$env:STRATEGY4_SCAN_STAMP = $strategy4Stamp
 
 try {
+  & $nodeExe "scripts\verify-strategy4-contract.js" *>&1 | Tee-Object -FilePath $log -Append
+  $contractExit = $LASTEXITCODE
+  if ($contractExit -ne 0) {
+    Write-Log "Strategy4 contract verification failed with exit code $contractExit"
+    exit $contractExit
+  }
   & $nodeExe "scripts\scan-strategy4-cache.js" *>&1 | Tee-Object -FilePath $log -Append
   $scanExit = $LASTEXITCODE
 } finally {
@@ -62,6 +71,8 @@ try {
   Remove-Item Env:STRATEGY4_BATCHES_PER_RUN -ErrorAction SilentlyContinue
   Remove-Item Env:STRATEGY4_USE_MIS -ErrorAction SilentlyContinue
   Remove-Item Env:STRATEGY4_FAIL_ON_INCOMPLETE -ErrorAction SilentlyContinue
+  Remove-Item Env:STRATEGY4_ALLOW_PARTIAL_PUBLISH -ErrorAction SilentlyContinue
+  Remove-Item Env:STRATEGY4_SCAN_STAMP -ErrorAction SilentlyContinue
 }
 
 if ($scanExit -ne 0) {
@@ -74,6 +85,8 @@ New-Item -ItemType Directory -Force -Path $runtimeData | Out-Null
 Copy-Item -LiteralPath (Join-Path $repo "data\strategy4-latest.json") -Destination (Join-Path $runtimeData "strategy4-latest.json") -Force
 Copy-Item -LiteralPath (Join-Path $repo "data\strategy4-backup.json") -Destination (Join-Path $runtimeData "strategy4-backup.json") -Force
 Write-Log "Strategy4 cache copied to runtime data for clean sync."
+
+$strategy4Output = Get-Content -LiteralPath (Join-Path $repo "data\strategy4-latest.json") -Raw | ConvertFrom-Json
 
 $syncScript = Join-Path $repo "run-cache-sync.ps1"
 if (Test-Path -LiteralPath $syncScript) {
@@ -88,14 +101,14 @@ if (Test-Path -LiteralPath $syncScript) {
   Write-Log "run-cache-sync.ps1 not found; strategy4 files updated locally only."
 }
 
-if ($env:STRATEGY4_UPLOAD_SHEET_AFTER_SCAN -ne "0") {
+if ($env:STRATEGY4_UPLOAD_SHEET_AFTER_SCAN -ne "0" -and $strategy4Output.complete -eq $true) {
   $uploadScript = Join-Path $repo "run-upload-backtest-google-sheet.ps1"
   if (Test-Path -LiteralPath $uploadScript) {
     Write-Log "=== Strategy4 Google Sheet upload start $(Get-Date) ==="
     $previousOnly = $env:GOOGLE_SHEET_ONLY
     $env:GOOGLE_SHEET_ONLY = "策略4成績單"
     try {
-      & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $uploadScript (Get-Date -Format yyyyMMdd) *>&1 | Tee-Object -FilePath $log -Append | Out-Null
+      & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $uploadScript $strategy4Stamp *>&1 | Tee-Object -FilePath $log -Append | Out-Null
       $sheetExit = $LASTEXITCODE
     } finally {
       if ($null -ne $previousOnly) {
@@ -114,7 +127,18 @@ if ($env:STRATEGY4_UPLOAD_SHEET_AFTER_SCAN -ne "0") {
     exit 1
   }
 } else {
-  Write-Log "Strategy4 Google Sheet upload skipped because STRATEGY4_UPLOAD_SHEET_AFTER_SCAN=0."
+  if ($strategy4Output.complete -ne $true) {
+    Write-Log "Strategy4 Google Sheet upload skipped because scan is incomplete: scanned=$($strategy4Output.scannedThisRun)/$($strategy4Output.total), noData=$($strategy4Output.noDataCount), errors=$($strategy4Output.errorCount)."
+    $resumeScript = Join-Path $repo "run-strategy4-resume.ps1"
+    if (Test-Path -LiteralPath $resumeScript) {
+      Write-Log "Strategy4 resume background scan started because scan is incomplete."
+      Start-Process -FilePath "C:\Program Files\PowerShell\7\pwsh.exe" -ArgumentList @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $resumeScript) -WindowStyle Hidden | Out-Null
+    } else {
+      Write-Log "Strategy4 resume script not found: $resumeScript"
+    }
+  } else {
+    Write-Log "Strategy4 Google Sheet upload skipped because STRATEGY4_UPLOAD_SHEET_AFTER_SCAN=0."
+  }
 }
 
 Write-Log "=== Strategy4 full scan end $(Get-Date) ==="

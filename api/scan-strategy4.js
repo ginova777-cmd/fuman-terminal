@@ -1,8 +1,22 @@
 const cache = new Map();
 const CACHE_MS = 30 * 60 * 1000;
 let tpexDailyCache = null;
+const fs = require("fs");
+const path = require("path");
 const { fetchMisQuotes, mergeMisQuoteIntoHistory } = require("../lib/mis-quotes");
 const USE_MIS_QUOTES = process.env.STRATEGY4_USE_MIS === "1";
+const RUNTIME_DIR = process.env.FUMAN_RUNTIME_DIR || "C:\\fuman-runtime";
+const FUGLE_API_KEY_FILE = process.env.FUGLE_API_KEY_FILE || path.join(RUNTIME_DIR, "secrets", "fugle-api-key.txt");
+
+function readSecret(file) {
+  try {
+    return fs.readFileSync(file, "utf8").trim();
+  } catch {
+    return "";
+  }
+}
+
+const FUGLE_API_KEY = process.env.FUGLE_API_KEY || process.env.FUGLE_MARKETDATA_API_KEY || readSecret(FUGLE_API_KEY_FILE);
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -71,6 +85,12 @@ function monthStarts(count = 8) {
   return dates;
 }
 
+function isoDateDaysAgo(days) {
+  const date = new Date();
+  date.setDate(date.getDate() - days);
+  return date.toISOString().slice(0, 10);
+}
+
 function normalizeTwseRows(payload) {
   if (!Array.isArray(payload?.data)) return [];
   return payload.data.map((row) => ({
@@ -114,6 +134,36 @@ function normalizeTpexDailyRow(row, date) {
     close,
     change: cleanNumber(row[3]),
   };
+}
+
+function normalizeFugleRows(payload) {
+  if (!Array.isArray(payload?.data)) return [];
+  return payload.data.map((row) => ({
+    date: String(row.date || "").slice(0, 10),
+    volume: cleanNumber(row.volume),
+    value: cleanNumber(row.turnover),
+    open: cleanNumber(row.open),
+    high: cleanNumber(row.high),
+    low: cleanNumber(row.low),
+    close: cleanNumber(row.close),
+    change: cleanNumber(row.change),
+  })).filter((row) => row.date && row.close);
+}
+
+function normalizeYahooRows(payload) {
+  const result = payload?.chart?.result?.[0];
+  const timestamps = Array.isArray(result?.timestamp) ? result.timestamp : [];
+  const quote = result?.indicators?.quote?.[0] || {};
+  return timestamps.map((ts, index) => ({
+    date: new Date(ts * 1000).toISOString().slice(0, 10),
+    volume: cleanNumber(quote.volume?.[index]),
+    value: 0,
+    open: cleanNumber(quote.open?.[index]),
+    high: cleanNumber(quote.high?.[index]),
+    low: cleanNumber(quote.low?.[index]),
+    close: cleanNumber(quote.close?.[index]),
+    change: 0,
+  })).filter((row) => row.date && row.close);
 }
 
 async function fetchTpexDailyQuotes() {
@@ -162,6 +212,39 @@ async function fetchTpexMonth(code, date) {
   return normalizeTpexRows(payload);
 }
 
+async function fetchFugleHistory(code) {
+  if (!FUGLE_API_KEY) return { rows: [], source: "" };
+  const params = new URLSearchParams({
+    symbol: code,
+    from: isoDateDaysAgo(270),
+    to: new Date().toISOString().slice(0, 10),
+  });
+  const url = `https://api.fugle.tw/marketdata/v1.0/stock/historical/candles/${code}?${params.toString()}`;
+  const payload = JSON.parse(await fetchText(url, {
+    headers: {
+      Referer: "https://developer.fugle.tw/",
+      "X-API-KEY": FUGLE_API_KEY,
+    },
+  }, 20000));
+  return { rows: normalizeFugleRows(payload), source: "fugle" };
+}
+
+async function fetchYahooHistory(code, marketHint = "") {
+  const suffixes = marketHint === "TPEX" ? ["TWO", "TW"] : marketHint === "TWSE" ? ["TW", "TWO"] : ["TW", "TWO"];
+  for (const suffix of suffixes) {
+    try {
+      const url = `https://query1.finance.yahoo.com/v8/finance/chart/${code}.${suffix}?range=9mo&interval=1d&events=history&includeAdjustedClose=true`;
+      const payload = JSON.parse(await fetchText(url, {
+        headers: { Referer: "https://finance.yahoo.com/" },
+      }, 20000));
+      const rows = normalizeYahooRows(payload);
+      if (rows.length >= 25) return { rows, source: `yahoo-${suffix.toLowerCase()}` };
+    } catch {
+    }
+  }
+  return { rows: [], source: "" };
+}
+
 async function fetchHistory(code, preferredMarket = "") {
   const marketHint = String(preferredMarket || "").toUpperCase();
   const cacheKey = `${code}:${marketHint || "AUTO"}`;
@@ -198,11 +281,31 @@ async function fetchHistory(code, preferredMarket = "") {
     }
   }
 
+  let historySource = market === "TPEX" ? "tpex-official" : "twse-official";
+  if (rows.length < 60) {
+    try {
+      const fallback = await fetchFugleHistory(code);
+      if (fallback.rows.length >= rows.length) {
+        rows = fallback.rows;
+        historySource = fallback.source || historySource;
+      }
+    } catch {
+    }
+  }
+  if (rows.length < 60) {
+    const fallback = await fetchYahooHistory(code, marketHint || market);
+    if (fallback.rows.length >= rows.length) {
+      rows = fallback.rows;
+      historySource = fallback.source || historySource;
+    }
+  }
+
   const byDate = new Map();
   rows.forEach((row) => byDate.set(row.date, row));
   const value = {
     code,
     market,
+    source: historySource,
     rows: [...byDate.values()].sort((a, b) => a.date.localeCompare(b.date)).slice(-180),
   };
   cache.set(cacheKey, { ts: Date.now(), value });
@@ -402,7 +505,7 @@ function calcBuyStreak(rows, ma20, volMa20) {
   return streak;
 }
 
-function scanStrategy4(code, market, rows) {
+function scanStrategy4(code, market, rows, priceSource = "") {
   const daily = analyzeRows(rows);
   if (!daily) return null;
 
@@ -525,6 +628,7 @@ function scanStrategy4(code, market, rows) {
   return {
     code,
     market,
+    priceSource,
     date: last.date,
     close: last.close,
     percent: daily.pct,
@@ -560,6 +664,9 @@ module.exports = async function handler(request, response) {
     .map(normalizeCode)
     .filter((code) => /^\d{4}$/.test(code))
     .filter((code) => !/^00/.test(code));
+  const markets = String(request.query?.markets || "")
+    .split(",")
+    .map((market) => String(market || "").trim().toUpperCase());
 
   if (!codes.length) {
     response.status(400).json({ ok: false, error: "Missing codes", matches: [] });
@@ -567,17 +674,17 @@ module.exports = async function handler(request, response) {
   }
 
   const quoteMap = USE_MIS_QUOTES ? await fetchMisQuotes(codes) : new Map();
-  const results = await Promise.allSettled(codes.map(async (code) => {
-    const officialHistory = await mergeTpexDailyQuote(code, await fetchHistory(code));
+  const results = await Promise.allSettled(codes.map(async (code, index) => {
+    const officialHistory = await mergeTpexDailyQuote(code, await fetchHistory(code, markets[index] || ""));
     const history = USE_MIS_QUOTES
       ? mergeMisQuoteIntoHistory(officialHistory, quoteMap.get(code))
       : officialHistory;
-    if (!history.rows.length) return null;
-    return scanStrategy4(code, history.market, history.rows);
+    if (!history.rows.length) return { code, noData: true };
+    return scanStrategy4(code, history.market, history.rows, history.source || "");
   }));
   const matches = results
-    .filter((result) => result.status === "fulfilled" && result.value?.match)
-    .map((result) => result.value.match)
+    .filter((result) => result.status === "fulfilled" && result.value && !result.value.noData)
+    .map((result) => result.value.match || result.value)
     .sort((a, b) => b.score - a.score || b.percent - a.percent);
   const noDataCodes = results
     .filter((result) => result.status === "fulfilled" && result.value?.noData)

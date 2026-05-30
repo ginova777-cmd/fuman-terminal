@@ -17,8 +17,11 @@ const SYNC_PARTIAL = process.env.STRATEGY4_SYNC_PARTIAL === "1";
 const SYNC_SCRIPT = path.join(ROOT, "run-strategy4-partial-sync.ps1");
 const STOCK_URL = process.env.STOCK_UNIVERSE_URL || "https://fuman-terminal.vercel.app/api/stocks";
 const MIN_UNIVERSE_SIZE = Number(process.env.STRATEGY4_MIN_UNIVERSE_SIZE || 1700);
+const MIN_MATCH_COUNT = Number(process.env.STRATEGY4_MIN_MATCH_COUNT || 10);
 const USE_MIS_QUOTES = process.env.STRATEGY4_USE_MIS === "1";
 const FAIL_ON_INCOMPLETE = process.env.STRATEGY4_FAIL_ON_INCOMPLETE !== "0";
+const ALLOW_PARTIAL_PUBLISH = process.env.STRATEGY4_ALLOW_PARTIAL_PUBLISH === "1";
+const RUN_STAMP = process.env.STRATEGY4_SCAN_STAMP || new Date().toISOString().slice(0, 10).replace(/-/g, "");
 
 function readJson(file, fallback) {
   try {
@@ -173,20 +176,24 @@ function mergeMatches(matches, universe, currentMatches) {
   });
 }
 
-function buildOutput({ codes, scannedThisRun, scanned, noDataCodes, scanErrors, currentMatches, complete }) {
+function buildOutput({ codes, scannedThisRun, scanned, noDataCodes, scanErrors, currentMatches, complete, runMode, scanStamp }) {
   const matches = [...currentMatches.values()]
     .sort((a, b) => (b.swingScore || b.score || 0) - (a.swingScore || a.score || 0) || (b.percent || 0) - (a.percent || 0));
   const noDataCount = noDataCodes.size;
   const errorCount = scanErrors.length;
+  const pendingCount = codes.length - scanned.size + noDataCount;
   const qualityStatus = complete && noDataCount === 0 && errorCount === 0 ? "complete" : "incomplete";
   return {
     ok: true,
     source: qualityStatus === "complete" ? "github-actions" : "github-actions-partial",
     priceSource: USE_MIS_QUOTES ? "official-daily-k-plus-mis" : "official-daily-k",
     updatedAt: new Date().toISOString(),
+    scanStamp,
     fullScan: FULL_SCAN,
+    runMode,
     complete: qualityStatus === "complete",
     qualityStatus,
+    pendingCount,
     noDataCount,
     errorCount,
     total: codes.length,
@@ -250,30 +257,58 @@ async function main() {
     matches: [],
   });
   const backup = readJson(BACKUP_FILE, { ok: true, matches: [] });
+  const scanStamp = FULL_SCAN ? RUN_STAMP : (previousRaw.scanStamp || previousRaw.stamp || RUN_STAMP);
   const currentMatches = new Map();
   const scanned = new Set();
   const noDataCodes = new Set();
   const scanErrors = [];
   let scannedThisRun = 0;
-  const chunksToRun = Math.ceil(codes.length / CHUNK_SIZE);
+  if (!FULL_SCAN) {
+    (previousRaw.matches || []).forEach((item) => currentMatches.set(item.code, item));
+    (previousRaw.scannedCodes || []).forEach((code) => {
+      if (codes.includes(code)) scanned.add(code);
+    });
+    (previousRaw.noDataCodes || []).forEach((code) => {
+      if (codes.includes(code)) noDataCodes.add(code);
+    });
+  }
 
-  console.log(`strategy4 cache start: full market scan, ${codes.length} codes, ${chunksToRun} chunks in one run`);
+  const pendingCodes = FULL_SCAN
+    ? codes
+    : [...new Set([
+      ...codes.filter((code) => !scanned.has(code)),
+      ...noDataCodes,
+    ])].filter((code) => codes.includes(code));
+  const chunksToRun = Math.min(Math.ceil(pendingCodes.length / CHUNK_SIZE), BATCHES_PER_RUN);
+  const runMode = FULL_SCAN ? "full" : "resume";
+
+  console.log(`strategy4 cache start: ${runMode} scan, ${codes.length} total codes, ${pendingCodes.length} pending codes, ${chunksToRun} chunks in this run`);
   for (let chunk = 0; chunk < chunksToRun; chunk++) {
     const start = chunk * CHUNK_SIZE;
-    const chunkStocks = universe.slice(start, start + CHUNK_SIZE);
+    const chunkSet = new Set(pendingCodes.slice(start, start + CHUNK_SIZE));
+    const chunkStocks = universe.filter((stock) => chunkSet.has(stock.code));
     const chunkCodes = chunkStocks.map((stock) => stock.code);
     const label = `strategy4 chunk ${chunk + 1}/${chunksToRun} (${chunkCodes[0]}-${chunkCodes[chunkCodes.length - 1]})`;
     console.log(`${label} start`);
-    const payload = await runHandlerWithRetry(chunkStocks, label);
-    (payload.noDataCodes || []).forEach((code) => noDataCodes.add(code));
-    (payload.errors || []).forEach((error) => scanErrors.push(`${label}: ${error}`));
-    chunkCodes.forEach((code) => scanned.add(code));
-    mergeMatches(payload.matches, universe, currentMatches);
-    scannedThisRun += chunkCodes.length;
-    console.log(`${label} done: matches ${(payload.matches || []).length}`);
+    try {
+      const payload = await runHandlerWithRetry(chunkStocks, label);
+      chunkCodes.forEach((code) => {
+        scanned.add(code);
+        noDataCodes.delete(code);
+      });
+      (payload.noDataCodes || []).forEach((code) => noDataCodes.add(code));
+      (payload.errors || []).forEach((error) => scanErrors.push(`${label}: ${error}`));
+      mergeMatches(payload.matches, universe, currentMatches);
+      scannedThisRun += chunkCodes.length;
+      console.log(`${label} done: matches ${(payload.matches || []).length}`);
+    } catch (error) {
+      chunkCodes.forEach((code) => noDataCodes.add(code));
+      scanErrors.push(`${label}: ${error.message || error}`);
+      console.log(`${label} failed; ${chunkCodes.length} codes queued for resume`);
+    }
   }
 
-  if (scanned.size !== codes.length || scannedThisRun !== codes.length) {
+  if (FULL_SCAN && !ALLOW_PARTIAL_PUBLISH && (scanned.size !== codes.length || scannedThisRun !== codes.length)) {
     throw new Error(`Strategy4 full scan incomplete: scanned ${scanned.size}/${codes.length}`);
   }
 
@@ -284,9 +319,11 @@ async function main() {
     noDataCodes,
     scanErrors,
     currentMatches,
-    complete: !scanErrors.length && !noDataCodes.size,
+    complete: scanned.size === codes.length && !scanErrors.length && !noDataCodes.size,
+    runMode,
+    scanStamp,
   });
-  console.log(`strategy4 first pass done: full market scanned ${scannedThisRun}/${codes.length}, matches ${firstPassOutput.count}, noData ${noDataCodes.size}`);
+  console.log(`strategy4 first pass done: ${runMode} scannedThisRun ${scannedThisRun}, scannedTotal ${scanned.size}/${codes.length}, matches ${firstPassOutput.count}, noData ${noDataCodes.size}`);
   if (SYNC_PARTIAL) {
     writeStrategy4Output(firstPassOutput, false);
     syncStrategy4Output("first-pass");
@@ -315,6 +352,8 @@ async function main() {
         scanErrors,
         currentMatches,
         complete: false,
+        runMode,
+        scanStamp,
       });
       if (SYNC_PARTIAL) {
         writeStrategy4Output(retryOutput, false);
@@ -331,14 +370,19 @@ async function main() {
     noDataCodes,
     scanErrors,
     currentMatches,
-    complete: !scanErrors.length && !noDataCodes.size,
+    complete: scanned.size === codes.length && !scanErrors.length && !noDataCodes.size,
+    runMode,
+    scanStamp,
   });
 
   writeStrategy4Output(output, true);
   syncStrategy4Output("complete");
-  console.log(`strategy4 cache updated: full market scan scanned ${scannedThisRun}/${codes.length}, matches ${output.count}`);
-  if (FAIL_ON_INCOMPLETE && !output.complete) {
+  console.log(`strategy4 cache updated: ${runMode} scannedThisRun ${scannedThisRun}, scannedTotal ${scanned.size}/${codes.length}, matches ${output.count}, complete ${output.complete}`);
+  if (FAIL_ON_INCOMPLETE && !ALLOW_PARTIAL_PUBLISH && !output.complete) {
     throw new Error(`Strategy4 scan incomplete: noData ${output.noDataCount}, errors ${output.errorCount}`);
+  }
+  if (FULL_SCAN && output.complete && output.count < MIN_MATCH_COUNT) {
+    throw new Error(`Strategy4 suspiciously low match count: ${output.count}/${codes.length}, minimum ${MIN_MATCH_COUNT}`);
   }
 }
 
