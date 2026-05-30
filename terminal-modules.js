@@ -1,9 +1,10 @@
 (function () {
-  const VERSION = "speed-modules-20260530-12";
+  const VERSION = "speed-modules-20260530-13";
   const modules = {
     sectorMap: { loaded: false, src: "terminal-sector-map.js" },
     strategyConfig: { loaded: false, src: "terminal-strategy-config.js" },
     marketConfig: { loaded: false, src: "terminal-market-config.js" },
+    uiConfig: { loaded: false, src: "terminal-ui-config.js" },
     app: { loaded: false, src: "terminal-app.js" },
     strategy4: { loaded: false, src: "terminal-app.js" },
     chipFlow: { loaded: false, src: "terminal-app.js" },

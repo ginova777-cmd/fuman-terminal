@@ -1,7 +1,7 @@
 const https = require("https");
 
 const baseUrl = (process.env.FUMAN_SMOKE_BASE_URL || "https://fuman-terminal.vercel.app").replace(/\/+$/, "");
-const version = process.env.FUMAN_SMOKE_VERSION || "speed-modules-20260530-12";
+const version = process.env.FUMAN_SMOKE_VERSION || "speed-modules-20260530-13";
 
 function fetchText(pathname, timeoutMs = 20000) {
   const url = `${baseUrl}${pathname}`;
@@ -31,6 +31,7 @@ async function main() {
     ["sector-map", `/terminal-sector-map.js?v=${version}`, (r) => r.body.includes("FUMAN_SECTOR_MAP") && r.body.includes("SECTOR_MAP")],
     ["strategy-config", `/terminal-strategy-config.js?v=${version}`, (r) => r.body.includes("FUMAN_STRATEGY_CONFIG") && r.body.includes("STRATEGY_DEFS")],
     ["market-config", `/terminal-market-config.js?v=${version}`, (r) => r.body.includes("FUMAN_MARKET_CONFIG") && r.body.includes("HEATMAP_FILTERS")],
+    ["ui-config", `/terminal-ui-config.js?v=${version}`, (r) => r.body.includes("FUMAN_UI_CONFIG") && r.body.includes("technicalTimeframes")],
     ["terminal-app", `/terminal-app.js?v=${version}`, (r) => r.body.includes("loadStrategyWeights") && r.body.includes("recordFrontendError")],
     ["theme-css", `/terminal-theme.css?v=${version}`, (r) => r.body.includes("fuman-light-theme")],
     ["watchlist-css", `/terminal-watchlist.css?v=${version}`, (r) => r.body.includes("watch-analysis-panel")],
