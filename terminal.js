@@ -8396,37 +8396,88 @@ intradayRadarStyles.textContent = `
     padding: 6px 11px;
   }
   .strategy5-preset-tabs {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-    padding: 12px 14px 4px;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 10px;
+    padding: 12px 14px 6px;
   }
   .strategy5-preset-tabs button {
-    border: 1px solid rgba(132, 161, 208, 0.18);
-    border-radius: 8px;
-    background: rgba(255, 255, 255, 0.035);
-    color: #b8c8e8;
+    position: relative;
+    border: 1px solid rgba(132, 161, 208, 0.22);
+    border-radius: 12px;
+    background: rgba(18, 27, 47, 0.74);
+    color: #dce7ff;
     cursor: pointer;
-    display: inline-flex;
+    display: grid;
+    grid-template-columns: 40px minmax(0, 1fr) auto;
     align-items: center;
-    gap: 8px;
-    min-height: 36px;
-    padding: 8px 12px;
-    font-size: 13px;
-    font-weight: 800;
+    gap: 12px;
+    min-height: 86px;
+    padding: 14px 14px 14px 16px;
+    text-align: left;
+    overflow: hidden;
+  }
+  .strategy5-preset-tabs button::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 10px;
+    bottom: 10px;
+    width: 3px;
+    border-radius: 0 999px 999px 0;
+    background: transparent;
   }
   .strategy5-preset-tabs button.active {
-    border-color: rgba(255, 79, 95, 0.72);
-    background: rgba(255, 79, 95, 0.14);
+    border-color: rgba(255, 79, 95, 0.88);
+    background: linear-gradient(90deg, rgba(255, 79, 95, 0.14), rgba(18, 27, 47, 0.88));
     color: #fff;
-    box-shadow: inset 3px 0 0 #ff4f5f;
+    box-shadow: inset 0 0 0 1px rgba(255, 79, 95, 0.22);
   }
-  .strategy5-preset-tabs span {
-    color: #8fa2c8;
-    font-size: 12px;
+  .strategy5-preset-tabs button.active::before {
+    background: #ff4f5f;
+  }
+  .strategy5-tab-icon {
+    width: 38px;
+    height: 38px;
+    border-radius: 10px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(255, 79, 95, 0.12);
+    color: #ff5263;
+    font-size: 18px;
+    font-style: normal;
     font-weight: 900;
   }
-  .strategy5-preset-tabs button.active span {
+  .strategy5-preset-tabs button[data-strategy5-filter="limit_up_doji"] .strategy5-tab-icon {
+    background: rgba(255, 193, 87, 0.13);
+    color: #ffc157;
+  }
+  .strategy5-tab-copy {
+    min-width: 0;
+  }
+  .strategy5-tab-title {
+    display: block;
+    color: #f7fbff;
+    font-size: 15px;
+    font-weight: 900;
+    line-height: 1.25;
+  }
+  .strategy5-tab-desc {
+    display: block;
+    margin-top: 5px;
+    color: #8390aa;
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 1.45;
+  }
+  .strategy5-tab-count {
+    color: #b8c8e8;
+    font-size: 13px;
+    font-weight: 900;
+    white-space: nowrap;
+  }
+  .strategy5-preset-tabs button.active .strategy5-tab-count {
     color: #ffb7bd;
   }
   .strategy5-stock-card {
@@ -10090,7 +10141,17 @@ function renderStrategy5Dashboard(evaluated) {
     const count = (byId[id] || []).length;
     const activeClass = id === strategy5ActiveId ? "active" : "";
     const tabLabel = id === "foreign_trust_breakout" ? "策略5-綜合策略" : strategy.label || id;
-    return `<button class="${activeClass}" type="button" data-strategy5-filter="${escapeAttr(id)}">${escapeAttr(tabLabel)}<span>${count.toLocaleString("zh-TW")}</span></button>`;
+    const tabDesc = STRATEGY5_CARD_META[id]?.description || "符合策略5條件的股票。";
+    const icon = id === "foreign_trust_breakout" ? "↗" : strategy.icon || "十";
+    return `
+      <button class="${activeClass}" type="button" data-strategy5-filter="${escapeAttr(id)}">
+        <i class="strategy5-tab-icon" aria-hidden="true">${escapeAttr(icon)}</i>
+        <span class="strategy5-tab-copy">
+          <strong class="strategy5-tab-title">${escapeAttr(tabLabel)}</strong>
+          <small class="strategy5-tab-desc">${escapeAttr(tabDesc)}</small>
+        </span>
+        <span class="strategy5-tab-count">${count.toLocaleString("zh-TW")} 檔</span>
+      </button>`;
   }).join("");
 
   const tableRows = pageList.length ? pageList.map((stock, index) => {
