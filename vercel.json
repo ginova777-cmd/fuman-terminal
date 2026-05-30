@@ -42,7 +42,7 @@
       ]
     },
     {
-      "source": "/(.*)\\.(js|css)",
+      "source": "/((?!fuman-sw\\.js$).*)\\.(js|css)",
       "headers": [
         {
           "key": "Cache-Control",
