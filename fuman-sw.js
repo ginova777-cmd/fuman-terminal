@@ -1,4 +1,4 @@
-const CACHE_VERSION = "fuman-terminal-sw-20260530-15";
+const CACHE_VERSION = "fuman-terminal-sw-20260530-16";
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 const DATA_CACHE = `${CACHE_VERSION}-data`;
 
@@ -6,16 +6,17 @@ const STATIC_ASSETS = [
   "/",
   "/index.html",
   "/styles.css?v=mobile-market-tabs-20260529",
-  "/terminal-core.js?v=speed-modules-20260530-15",
-  "/terminal-modules.js?v=speed-modules-20260530-15",
-  "/terminal-sector-map.js?v=speed-modules-20260530-15",
-  "/terminal-strategy-config.js?v=speed-modules-20260530-15",
-  "/terminal-market-config.js?v=speed-modules-20260530-15",
-  "/terminal-ui-config.js?v=speed-modules-20260530-15",
-  "/terminal-runtime-config.js?v=speed-modules-20260530-15",
-  "/terminal-worker.js?v=speed-modules-20260530-15",
-  "/terminal.js?v=speed-modules-20260530-15",
-  "/terminal-realtime-radar.css?v=speed-modules-20260530-15",
+  "/terminal-core.js?v=speed-modules-20260530-16",
+  "/terminal-modules.js?v=speed-modules-20260530-16",
+  "/terminal-sector-map.js?v=speed-modules-20260530-16",
+  "/terminal-strategy-config.js?v=speed-modules-20260530-16",
+  "/terminal-market-config.js?v=speed-modules-20260530-16",
+  "/terminal-ui-config.js?v=speed-modules-20260530-16",
+  "/terminal-runtime-config.js?v=speed-modules-20260530-16",
+  "/terminal-worker.js?v=speed-modules-20260530-16",
+  "/terminal.js?v=speed-modules-20260530-16",
+  "/terminal-realtime-radar.css?v=speed-modules-20260530-16",
+  "/terminal-intraday-radar.css?v=speed-modules-20260530-16",
   "/assets/logo.png",
   "/favicon.ico",
 ];
