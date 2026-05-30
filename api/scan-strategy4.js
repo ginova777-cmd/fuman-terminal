@@ -254,44 +254,53 @@ async function fetchHistory(code, preferredMarket = "") {
   const months = monthStarts(8);
   let market = marketHint === "TPEX" ? "TPEX" : "TWSE";
   let rows = [];
-  if (market !== "TPEX") {
-    for (const item of months) {
-      try {
-        rows.push(...await fetchTwseMonth(code, item.twse));
-      } catch {
-        // Keep partial official daily-K history; one flaky month should not drop the whole stock.
-      }
-      await sleep(30);
+
+  let historySource = "";
+  try {
+    const primary = await fetchFugleHistory(code);
+    if (primary.rows.length >= 60) {
+      rows = primary.rows;
+      historySource = primary.source || "fugle";
     }
+  } catch {
   }
 
-  if (market === "TPEX" || (!marketHint && rows.length < 25)) {
-    const tpexRows = [];
-    for (const item of months) {
-      try {
-        tpexRows.push(...await fetchTpexMonth(code, item.tpex));
-      } catch {
-        // Same tolerance for TPEX; noDataCodes will expose true misses after all retries.
-      }
-      await sleep(30);
-    }
-    if (marketHint === "TPEX" || tpexRows.length || !rows.length) {
-      market = "TPEX";
-      rows = tpexRows;
-    }
-  }
-
-  let historySource = market === "TPEX" ? "tpex-official" : "twse-official";
   if (rows.length < 60) {
-    try {
-      const fallback = await fetchFugleHistory(code);
-      if (fallback.rows.length >= rows.length) {
-        rows = fallback.rows;
-        historySource = fallback.source || historySource;
+    const officialRows = [];
+    if (market !== "TPEX") {
+      for (const item of months) {
+        try {
+          officialRows.push(...await fetchTwseMonth(code, item.twse));
+        } catch {
+          // Keep partial official daily-K history; one flaky month should not drop the whole stock.
+        }
+        await sleep(30);
       }
-    } catch {
+    }
+
+    if (market === "TPEX" || (!marketHint && officialRows.length < 25)) {
+      const tpexRows = [];
+      for (const item of months) {
+        try {
+          tpexRows.push(...await fetchTpexMonth(code, item.tpex));
+        } catch {
+          // Same tolerance for TPEX; noDataCodes will expose true misses after all retries.
+        }
+        await sleep(30);
+      }
+      if (marketHint === "TPEX" || tpexRows.length || !officialRows.length) {
+        market = "TPEX";
+        officialRows.length = 0;
+        officialRows.push(...tpexRows);
+      }
+    }
+
+    if (officialRows.length >= rows.length) {
+      rows = officialRows;
+      historySource = market === "TPEX" ? "tpex-official" : "twse-official";
     }
   }
+
   if (rows.length < 60) {
     const fallback = await fetchYahooHistory(code, marketHint || market);
     if (fallback.rows.length >= rows.length) {
@@ -305,7 +314,7 @@ async function fetchHistory(code, preferredMarket = "") {
   const value = {
     code,
     market,
-    source: historySource,
+    source: historySource || (market === "TPEX" ? "tpex-official" : "twse-official"),
     rows: [...byDate.values()].sort((a, b) => a.date.localeCompare(b.date)).slice(-180),
   };
   cache.set(cacheKey, { ts: Date.now(), value });
