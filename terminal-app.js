@@ -4904,6 +4904,15 @@ function sortIntradayZoneRows(rows) {
 
 async function loadStrategy2IntradayPayload(force = false) {
   const mobileFastPath = isMobileViewport() && !force && (endpoints.strategy2IntradayLiveTop || endpoints.strategy2IntradayTop || endpoints.strategy2IntradaySlim);
+  if (mobileFastPath && strategy2IntradayEventByCode.size && endpoints.strategy2IntradayDelta) {
+    try {
+      const deltaPayload = await fetchVersionedJson(endpoints.strategy2IntradayDelta, 3000, "latest", false);
+      if (deltaPayload?.events?.length || deltaPayload?.records?.length) {
+        return { ...deltaPayload, cacheSource: deltaPayload.source || "static-delta" };
+      }
+    } catch (error) {
+    }
+  }
   if (mobileFastPath) {
     try {
       const preferredTop = isIntradayScanWindow()
