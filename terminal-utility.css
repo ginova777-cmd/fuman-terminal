@@ -79,3 +79,67 @@
   }
   @media (max-width: 780px) { .fuman-health-performance { grid-template-columns: 1fr; } }
 
+
+.security-notice,
+.export-notice {
+  position: fixed;
+  right: 18px;
+  bottom: 18px;
+  z-index: 99999;
+  padding: 12px 16px;
+  border-radius: 10px;
+  background: rgba(12, 16, 28, 0.96);
+  font-weight: 800;
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.35);
+}
+
+.security-notice {
+  border: 1px solid rgba(255, 77, 92, 0.45);
+  color: #ff9aa8;
+}
+
+.export-notice {
+  border: 1px solid rgba(127, 166, 255, 0.45);
+  color: #dbe7ff;
+}
+
+.update-mode-badge {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 8px;
+  padding: 2px 6px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.update-mode-badge-live {
+  border: 1px solid rgba(255, 77, 92, 0.55);
+  background: rgba(255, 77, 92, 0.14);
+  color: #ff9aa8;
+}
+
+.update-mode-badge-slow {
+  border: 1px solid rgba(127, 166, 255, 0.45);
+  background: rgba(63, 102, 204, 0.16);
+  color: #9db9ff;
+}
+
+.chip-source-note {
+  margin-top: 10px;
+  color: #9db9ff;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+#sector-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: rgba(0, 0, 0, 0.8);
+}

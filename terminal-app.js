@@ -70,7 +70,7 @@ function getFumanWorker() {
   if (!("Worker" in window)) return null;
   if (fumanWorker) return fumanWorker;
   try {
-    fumanWorker = new Worker("terminal-worker.js?v=speed-modules-20260530-18");
+    fumanWorker = new Worker("terminal-worker.js?v=speed-modules-20260530-19");
     fumanWorker.addEventListener("message", (event) => {
       const { id, ok, rows, result, error } = event.data || {};
       const pending = fumanWorkerPending.get(id);
@@ -201,7 +201,7 @@ function loadFumanStyle(href, id) {
   const link = document.createElement("link");
   link.id = id;
   link.rel = "stylesheet";
-  link.href = href.includes("?") ? href : `${href}?v=${window.FUMAN_TERMINAL_BOOT?.version || "speed-modules-20260530-18"}`;
+  link.href = href.includes("?") ? href : `${href}?v=${window.FUMAN_TERMINAL_BOOT?.version || "speed-modules-20260530-19"}`;
   document.head.appendChild(link);
 }
 
@@ -600,19 +600,6 @@ function installBasicDevtoolsGuard() {
     const notice = document.createElement("div");
     notice.className = "security-notice";
     notice.textContent = "此終端禁止檢視開發者工具。";
-    notice.style.cssText = `
-      position: fixed;
-      right: 18px;
-      bottom: 18px;
-      z-index: 99999;
-      padding: 12px 16px;
-      border: 1px solid rgba(255, 77, 92, 0.45);
-      border-radius: 10px;
-      background: rgba(12, 16, 28, 0.94);
-      color: #ff9aa8;
-      font-weight: 800;
-      box-shadow: 0 12px 36px rgba(0,0,0,0.35);
-    `;
     document.body.appendChild(notice);
     setTimeout(() => notice.remove(), 1800);
   };
@@ -2325,21 +2312,8 @@ function escapeAttr(value) {
 function appendUpdateBadge(target, text, tone = "slow") {
   if (!target || target.querySelector(".update-mode-badge")) return;
   const badge = document.createElement("small");
-  badge.className = "update-mode-badge";
+  badge.className = `update-mode-badge update-mode-badge-${tone === "live" ? "live" : "slow"}`;
   badge.textContent = text;
-  badge.style.cssText = `
-    display: inline-flex;
-    align-items: center;
-    margin-left: 8px;
-    padding: 2px 6px;
-    border-radius: 999px;
-    border: 1px solid ${tone === "live" ? "rgba(255,77,92,.55)" : "rgba(127,166,255,.45)"};
-    background: ${tone === "live" ? "rgba(255,77,92,.14)" : "rgba(63,102,204,.16)"};
-    color: ${tone === "live" ? "#ff9aa8" : "#9db9ff"};
-    font-size: 11px;
-    font-weight: 800;
-    white-space: nowrap;
-  `;
   const strong = target.querySelector("strong") || target;
   strong.appendChild(badge);
 }
@@ -2386,12 +2360,6 @@ function labelChipTradeMode() {
   const note = document.createElement("div");
   note.className = "chip-source-note";
   note.textContent = "外資、投信買賣超為盤後公布資料，每日 06:00 / 21:00 完整掃，本頁只顯示最新盤後籌碼。";
-  note.style.cssText = `
-    margin-top: 10px;
-    color: #9db9ff;
-    font-size: 12px;
-    font-weight: 800;
-  `;
   chipTool.appendChild(note);
 }
 
@@ -3384,20 +3352,8 @@ function loadWarrantFlowLocalCache() {
 function showExportNotice(message) {
   if (terminalMessage) terminalMessage.textContent = message;
   const notice = document.createElement("div");
+  notice.className = "export-notice";
   notice.textContent = message;
-  notice.style.cssText = `
-    position: fixed;
-    right: 18px;
-    bottom: 18px;
-    z-index: 99999;
-    padding: 12px 16px;
-    border: 1px solid rgba(127, 166, 255, 0.45);
-    border-radius: 10px;
-    background: rgba(12, 16, 28, 0.96);
-    color: #dbe7ff;
-    font-weight: 800;
-    box-shadow: 0 12px 36px rgba(0,0,0,0.35);
-  `;
   document.body.appendChild(notice);
   setTimeout(() => notice.remove(), 2200);
 }
@@ -6540,12 +6496,6 @@ async function openSectorModal(sector) {
 
   const modal = document.createElement("div");
   modal.id = "sector-modal";
-  modal.style.cssText = `
-    position:fixed; inset:0; z-index:9999;
-    background:rgba(0,0,0,0.8);
-    display:flex; align-items:center; justify-content:center;
-    padding:20px;
-  `;
 
   const sign = sector.pct >= 0 ? "+" : "";
 
