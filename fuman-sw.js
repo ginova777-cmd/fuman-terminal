@@ -1,4 +1,4 @@
-const CACHE_VERSION = "fuman-terminal-sw-20260530-13";
+const CACHE_VERSION = "fuman-terminal-sw-20260530-14";
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 const DATA_CACHE = `${CACHE_VERSION}-data`;
 
@@ -6,14 +6,15 @@ const STATIC_ASSETS = [
   "/",
   "/index.html",
   "/styles.css?v=mobile-market-tabs-20260529",
-  "/terminal-core.js?v=speed-modules-20260530-13",
-  "/terminal-modules.js?v=speed-modules-20260530-13",
-  "/terminal-sector-map.js?v=speed-modules-20260530-13",
-  "/terminal-strategy-config.js?v=speed-modules-20260530-13",
-  "/terminal-market-config.js?v=speed-modules-20260530-13",
-  "/terminal-ui-config.js?v=speed-modules-20260530-13",
-  "/terminal-worker.js?v=speed-modules-20260530-13",
-  "/terminal.js?v=speed-modules-20260530-13",
+  "/terminal-core.js?v=speed-modules-20260530-14",
+  "/terminal-modules.js?v=speed-modules-20260530-14",
+  "/terminal-sector-map.js?v=speed-modules-20260530-14",
+  "/terminal-strategy-config.js?v=speed-modules-20260530-14",
+  "/terminal-market-config.js?v=speed-modules-20260530-14",
+  "/terminal-ui-config.js?v=speed-modules-20260530-14",
+  "/terminal-runtime-config.js?v=speed-modules-20260530-14",
+  "/terminal-worker.js?v=speed-modules-20260530-14",
+  "/terminal.js?v=speed-modules-20260530-14",
   "/assets/logo.png",
   "/favicon.ico",
 ];

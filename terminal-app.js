@@ -39,10 +39,11 @@ const strategyHeaderBadge = document.querySelector("#strategy-view .strategy-hea
 const strategyTerminal = document.querySelector(".strategy-terminal");
 const strategyList = document.querySelector(".strategy-list");
 const brandRefresh = document.querySelector(".brand");
-const FUMAN_SUPABASE_URL = "https://jxnqyqnigsppqsxinlrq.supabase.co";
-const FUMAN_SUPABASE_KEY = "sb_publishable_kCocRYzO4oCBnFRQO_pfvg_JZUl0oxm";
-const FUMAN_ACCESS_TABLE = "fuman_user_access";
-const FUMAN_ADMIN_EMAILS = new Set(["ginova777@gmail.com"]);
+const FUMAN_RUNTIME_CONFIG = window.FUMAN_RUNTIME_CONFIG || {};
+const FUMAN_SUPABASE_URL = FUMAN_RUNTIME_CONFIG.supabaseUrl || "";
+const FUMAN_SUPABASE_KEY = FUMAN_RUNTIME_CONFIG.supabaseKey || "";
+const FUMAN_ACCESS_TABLE = FUMAN_RUNTIME_CONFIG.accessTable || "fuman_user_access";
+const FUMAN_ADMIN_EMAILS = new Set(FUMAN_RUNTIME_CONFIG.adminEmails || []);
 const authGate = document.querySelector("#auth-gate");
 const authForm = document.querySelector("#auth-form");
 const authEmail = document.querySelector("#auth-email");
@@ -56,12 +57,9 @@ const authLogoutButton = document.querySelector(".sidebar-foot .logout");
 const memberState = document.querySelector("#member-state");
 const supabaseClient = window.supabase?.createClient?.(FUMAN_SUPABASE_URL, FUMAN_SUPABASE_KEY);
 const PUBLIC_VIEWS = new Set(["market"]);
-const FUMAN_THEME_KEY = "fuman-terminal-theme";
+const FUMAN_THEME_KEY = FUMAN_RUNTIME_CONFIG.themeKey || "fuman-terminal-theme";
 let authMode = "login";
-const FUMAN_LIVE_MEMORY_TTL_MS = {
-  strategy2: 3000,
-  realtimeRadar: 5000,
-};
+const FUMAN_LIVE_MEMORY_TTL_MS = FUMAN_RUNTIME_CONFIG.liveMemoryTtlMs || { strategy2: 3000, realtimeRadar: 5000 };
 const fumanLiveMemoryCache = new Map();
 let fumanWorker = null;
 let fumanWorkerSeq = 0;
@@ -71,7 +69,7 @@ function getFumanWorker() {
   if (!("Worker" in window)) return null;
   if (fumanWorker) return fumanWorker;
   try {
-    fumanWorker = new Worker("terminal-worker.js?v=speed-modules-20260530-13");
+    fumanWorker = new Worker("terminal-worker.js?v=speed-modules-20260530-14");
     fumanWorker.addEventListener("message", (event) => {
       const { id, ok, rows, result, error } = event.data || {};
       const pending = fumanWorkerPending.get(id);
@@ -232,7 +230,7 @@ function loadFumanStyle(href, id) {
   const link = document.createElement("link");
   link.id = id;
   link.rel = "stylesheet";
-  link.href = href.includes("?") ? href : `${href}?v=${window.FUMAN_TERMINAL_BOOT?.version || "speed-modules-20260530-13"}`;
+  link.href = href.includes("?") ? href : `${href}?v=${window.FUMAN_TERMINAL_BOOT?.version || "speed-modules-20260530-14"}`;
   document.head.appendChild(link);
 }
 
@@ -689,8 +687,8 @@ const FUMAN_UI_CONFIG = window.FUMAN_UI_CONFIG || {};
 const SCHEDULE_META = FUMAN_UI_CONFIG.SCHEDULE_META || {};
 const WORKFLOW_BY_SCHEDULE = FUMAN_UI_CONFIG.WORKFLOW_BY_SCHEDULE || {};
 
-const GITHUB_WORKFLOW_API = "https://api.github.com/repos/ginova777-cmd/fuman-terminal/actions/workflows";
-const MINI_PC_CACHE_SCHEDULES = new Set(["chip", "warrant"]);
+const GITHUB_WORKFLOW_API = FUMAN_RUNTIME_CONFIG.githubWorkflowApi || "https://api.github.com/repos/ginova777-cmd/fuman-terminal/actions/workflows";
+const MINI_PC_CACHE_SCHEDULES = new Set(FUMAN_RUNTIME_CONFIG.miniPcCacheSchedules || ["chip", "warrant"]);
 const workflowRunStatus = {};
 let workflowRunStatusReady = false;
 
@@ -3032,44 +3030,7 @@ function labelChipTradeMode() {
   chipTool.appendChild(note);
 }
 
-const endpoints = {
-  backend: "/api/market",
-  marketSummary: "/data/market-summary.json",
-  healthSummary: "/data/health-summary.json",
-  heatmap: "/api/heatmap",
-  institution: "/api/institution",
-  history: "/api/history",
-  realtime: "/api/realtime",
-  scanOpenBuy: "/api/scan-open-buy",
-  scanStrategy4: "/api/scan-strategy4",
-  scanWarrantFlow: "/api/scan-warrant-flow",
-  exportAuth: "/api/export-auth",
-  frontendError: "/api/frontend-error",
-  strategyWeights: "/data/strategy-weight-report.json",
-  openBuyCache: "/data/open-buy-latest.json",
-  openBuyBackup: "/data/open-buy-backup.json",
-  openBuySummary: "/data/open-buy-summary.json",
-  strategy4Cache: "/data/strategy4-latest.json",
-  strategy4Slim: "/data/strategy4-slim.json",
-  strategy4Backup: "/data/strategy4-backup.json",
-  strategy4Summary: "/data/strategy4-summary.json",
-  strategy3Cache: "/data/strategy3-latest.json",
-  strategy3Backup: "/data/strategy3-backup.json",
-  strategy5Cache: "/data/strategy5-latest.json",
-  strategy5Backup: "/data/strategy5-backup.json",
-  realtimeRadarCache: "/data/realtime-radar-latest.json",
-  strategy2IntradayCache: "/data/strategy2-intraday-latest.json",
-  institutionCache: "/data/institution-latest.json",
-  institutionSlim: "/data/institution-slim.json",
-  institutionBackup: "/data/institution-backup.json",
-  institutionSummary: "/data/institution-summary.json",
-  warrantFlowCache: "/data/warrant-flow-latest.json",
-  warrantFlowSlim: "/data/warrant-flow-slim.json",
-  warrantFlowBackup: "/data/warrant-flow-backup.json",
-  warrantFlowSummary: "/data/warrant-flow-summary.json",
-  strategyStocks: "/api/stocks",
-  stocks: "https://openapi.twse.com.tw/v1/exchangeReport/STOCK_DAY_ALL",
-};
+const endpoints = FUMAN_RUNTIME_CONFIG.endpoints || {};
 
 let latestStocks = [];
 let marketDataLoading = false;
