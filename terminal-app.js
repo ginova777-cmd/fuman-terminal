@@ -70,7 +70,7 @@ function getFumanWorker() {
   if (!("Worker" in window)) return null;
   if (fumanWorker) return fumanWorker;
   try {
-    fumanWorker = new Worker("terminal-worker.js?v=speed-modules-20260530-19");
+    fumanWorker = new Worker("terminal-worker.js?v=speed-modules-20260530-20");
     fumanWorker.addEventListener("message", (event) => {
       const { id, ok, rows, result, error } = event.data || {};
       const pending = fumanWorkerPending.get(id);
@@ -201,8 +201,53 @@ function loadFumanStyle(href, id) {
   const link = document.createElement("link");
   link.id = id;
   link.rel = "stylesheet";
-  link.href = href.includes("?") ? href : `${href}?v=${window.FUMAN_TERMINAL_BOOT?.version || "speed-modules-20260530-19"}`;
+  link.href = href.includes("?") ? href : `${href}?v=${window.FUMAN_TERMINAL_BOOT?.version || "speed-modules-20260530-20"}`;
   document.head.appendChild(link);
+}
+
+
+const fumanFeatureModulePromises = {};
+
+function makeFumanModuleScope(bindings) {
+  return new Proxy(bindings, {
+    has() { return true; },
+    get(target, prop) {
+      if (prop === Symbol.unscopables) return undefined;
+      if (prop in target) return target[prop];
+      return window[prop];
+    },
+    set(target, prop, value) {
+      if (prop in target) target[prop] = value;
+      else window[prop] = value;
+      return true;
+    },
+  });
+}
+
+function loadFumanFeatureModule(name, src, globalName) {
+  if (window[globalName]) return Promise.resolve(window[globalName]);
+  if (fumanFeatureModulePromises[name]) return fumanFeatureModulePromises[name];
+  const version = window.FUMAN_TERMINAL_BOOT?.version || "speed-modules-20260530-20";
+  fumanFeatureModulePromises[name] = new Promise((resolve, reject) => {
+    const attr = "data-fuman-feature-" + name;
+    const existing = document.querySelector("script[" + attr + "]");
+    if (existing) {
+      existing.addEventListener("load", () => resolve(window[globalName]), { once: true });
+      existing.addEventListener("error", reject, { once: true });
+      return;
+    }
+    const script = document.createElement("script");
+    script.src = src + "?v=" + version;
+    script.async = true;
+    script.setAttribute(attr, "1");
+    script.addEventListener("load", () => {
+      if (window[globalName]) resolve(window[globalName]);
+      else reject(new Error(name + " module missing"));
+    }, { once: true });
+    script.addEventListener("error", reject, { once: true });
+    document.head.appendChild(script);
+  });
+  return fumanFeatureModulePromises[name];
 }
 
 function installThemeToggle() {
@@ -6064,214 +6109,56 @@ function renderStrategyScanner() {
   `;
 }
 
-function hydrateWarrantFlowItem(item) {
-  const name = String(item.underlyingName || "").trim();
-  const exact = latestStocks.find((stock) => stock.name === name);
-  const partial = exact || latestStocks.find((stock) => name && (stock.name.includes(name) || name.includes(stock.name)));
-  const code = String(item.underlyingCode || item.code || partial?.code || "").trim();
-  const stockPercent = Number.isFinite(Number(item.underlyingPercent))
-    ? Number(item.underlyingPercent)
-    : Number.isFinite(Number(item.percent))
-      ? Number(item.percent)
-      : partial?.percent || 0;
-  const stockClose = cleanNumber(item.underlyingClose) || cleanNumber(item.close) || cleanNumber(item.displayClose) || partial?.close || 0;
+let warrantFlowModuleApi = null;
+
+function getWarrantFlowContext() {
   return {
-    ...item,
-    code,
-    name: name || partial?.name || "--",
-    stockPercent,
-    stockClose,
-    stockValue: partial?.value || 0,
+    scope: makeFumanModuleScope({
+      get latestStocks() { return latestStocks; },
+      set latestStocks(value) { latestStocks = value; },
+      get warrantFlowData() { return warrantFlowData; },
+      set warrantFlowData(value) { warrantFlowData = value; },
+      get warrantFlowUpdatedAt() { return warrantFlowUpdatedAt; },
+      set warrantFlowUpdatedAt(value) { warrantFlowUpdatedAt = value; },
+      get warrantFlowPriorityCache() { return warrantFlowPriorityCache; },
+      set warrantFlowPriorityCache(value) { warrantFlowPriorityCache = value; },
+      get warrantFlowPrioritySignature() { return warrantFlowPrioritySignature; },
+      set warrantFlowPrioritySignature(value) { warrantFlowPrioritySignature = value; },
+      get warrantFlowLastRenderSignature() { return warrantFlowLastRenderSignature; },
+      set warrantFlowLastRenderSignature(value) { warrantFlowLastRenderSignature = value; },
+      get warrantFlowKeyword() { return warrantFlowKeyword; },
+      set warrantFlowKeyword(value) { warrantFlowKeyword = value; },
+      get warrantFlowPage() { return warrantFlowPage; },
+      set warrantFlowPage(value) { warrantFlowPage = value; },
+      get warrantFlowHasOpened() { return warrantFlowHasOpened; },
+      set warrantFlowHasOpened(value) { warrantFlowHasOpened = value; },
+      get warrantFlowLoading() { return warrantFlowLoading; },
+      set warrantFlowLoading(value) { warrantFlowLoading = value; },
+      get warrantFlowSummary() { return warrantFlowSummary; },
+      set warrantFlowSummary(value) { warrantFlowSummary = value; },
+      viewPanels, endpoints, CACHE_FRESH_MS,
+      cleanNumber, formatNumber, normalizeArray, fetchVersionedJson,
+      isViewActive, loadWarrantFlowLocalCache, loadWarrantFlowSummary,
+      loadStrategyStocks, saveWarrantFlowLocalCache, applyStaticTitleIcons,
+      titleWithSchedule, escapeAttr, buildTerminalPagination,
+    }),
   };
 }
 
-function formatWarrantMoney(value) {
-  const number = cleanNumber(value);
-  if (number >= 100000000) return `${(number / 100000000).toFixed(2)} 億`;
-  if (number >= 10000) return `${Math.round(number / 10000).toLocaleString("zh-TW")} 萬`;
-  return Math.round(number).toLocaleString("zh-TW");
-}
-
-function getWarrantPriority(item) {
-  const level = String(item.level || "").toUpperCase();
-  const callValue = cleanNumber(item.callValue);
-  const putValue = cleanNumber(item.putValue);
-  const ratio = cleanNumber(item.callPutRatio);
-  const callCount = cleanNumber(item.callCount);
-  const putCount = cleanNumber(item.putCount);
-  const atMoneyCount = cleanNumber(item.atMoneyCallCount);
-  const days = cleanNumber(item.minDaysToExpiry);
-  const pct = Number(item.stockPercent);
-  const score = cleanNumber(item.score);
-  const isPriority = (
-    level === "A" &&
-    callValue >= 20000000 &&
-    callCount >= 5 &&
-    atMoneyCount >= 2 &&
-    days >= 10 &&
-    ratio >= 2.5 &&
-    callValue > putValue &&
-    Number.isFinite(pct) &&
-    pct > -2 &&
-    pct <= 4
-  );
-  const reasons = [];
-  if (!isPriority) reasons.push("不在優先區");
-  else if (pct <= 1.5 && ratio >= 6 && atMoneyCount >= 3) reasons.push("權證先熱，股票未噴");
-  else if (pct <= 2.5) reasons.push("權證先熱，股票未過熱");
-  else reasons.push("權證熱，股票漲幅仍可控");
-  return {
-    isPriority,
-    score: Math.round(score + Math.min(callValue / 20000000, 18) + Math.min(ratio * 2, 14) + (pct <= 1.5 ? 12 : pct <= 2.5 ? 8 : 3)),
-    label: reasons[0],
-  };
-}
-
-function getWarrantPriorityRows() {
-  const signature = `${warrantFlowUpdatedAt || 0}:${warrantFlowData.length}:${latestStocks.length}`;
-  if (signature === warrantFlowPrioritySignature && warrantFlowPriorityCache.length) {
-    return warrantFlowPriorityCache;
-  }
-  warrantFlowPrioritySignature = signature;
-  warrantFlowPriorityCache = warrantFlowData
-    .map(hydrateWarrantFlowItem)
-    .map((item) => ({
-      ...item,
-      priority: getWarrantPriority(item),
-    }))
-    .filter((item) => item.priority.isPriority)
-    .sort((a, b) => b.priority.score - a.priority.score || b.score - a.score || b.callValue - a.callValue)
-    .map((item, index) => ({ ...item, rank: index + 1 }));
-  return warrantFlowPriorityCache;
+async function ensureWarrantFlowModule() {
+  if (warrantFlowModuleApi) return warrantFlowModuleApi;
+  await loadFumanFeatureModule("warrantFlow", "terminal-warrant-flow.js", "FUMAN_WARRANT_FLOW_MODULE");
+  warrantFlowModuleApi = window.FUMAN_WARRANT_FLOW_MODULE.install(getWarrantFlowContext());
+  return warrantFlowModuleApi;
 }
 
 function renderWarrantFlow() {
-  const panel = viewPanels["warrant-flow"];
-  if (!panel) return;
-  const keyword = warrantFlowKeyword.trim().toLowerCase();
-  const allRows = getWarrantPriorityRows();
-  const filteredRows = keyword
-    ? allRows.filter((item) =>
-      item.code.includes(keyword) ||
-      item.name.toLowerCase().includes(keyword) ||
-      item.underlyingName.toLowerCase().includes(keyword))
-    : allRows;
-  const pageSize = 10;
-  const pageCount = Math.max(1, Math.ceil(filteredRows.length / pageSize));
-  warrantFlowPage = Math.min(Math.max(1, warrantFlowPage), pageCount);
-  const pageStart = (warrantFlowPage - 1) * pageSize;
-  const rows = filteredRows.slice(pageStart, pageStart + pageSize);
-  const listLabel = keyword
-    ? `搜尋結果 ${filteredRows.length} 筆｜第 ${warrantFlowPage}/${pageCount} 頁`
-    : `優先區權證 ${allRows.length} 筆｜第 ${warrantFlowPage}/${pageCount} 頁`;
-  const helperText = keyword
-    ? "搜尋只查優先區權證候選；不在優先區的 A 級權證已剔除。"
-    : "只顯示優先區：A級、認購熱、認售低、價平/價內足夠，且股票未過熱。";
-  const pagination = buildTerminalPagination("warrant", warrantFlowPage, pageCount, filteredRows.length);
-  const renderSignature = `${warrantFlowUpdatedAt || 0}:${keyword}:${warrantFlowPage}:${filteredRows.length}:${rows.map((item) => `${item.code}:${item.rank}:${item.priority.score}`).join("|")}`;
-  if (renderSignature === warrantFlowLastRenderSignature) return;
-  warrantFlowLastRenderSignature = renderSignature;
-
-  const body = rows.length ? rows.map((item) => {
-    const sign = item.stockPercent >= 0 ? "+" : "";
-    const hot = item.score >= 82 ? "hot" : item.score >= 68 ? "mid" : "low";
-    return `
-      <tr>
-        <td><span class="swing-score">${item.rank || "--"}</span></td>
-        <td><span class="code">${item.code || "--"}</span></td>
-        <td>${item.name}</td>
-        <td class="price">${formatNumber(item.stockClose, item.stockClose >= 100 ? 0 : 2)}</td>
-        <td class="price">${formatWarrantMoney(item.callValue)}</td>
-        <td>${formatWarrantMoney(item.putValue)}</td>
-        <td><b class="swing-stage ${hot}">${item.callPutRatio >= 99 ? "99+" : item.callPutRatio}</b></td>
-        <td>${item.callCount} / ${item.putCount}</td>
-        <td>${item.reason}　判斷：${item.priority.label}。</td>
-      </tr>
-    `;
-  }).join("") : `
-    <tr><td colspan="9">${keyword ? "優先區名單內找不到這檔股票；代表目前 A 級權證尚未進優先觀察區。" : "權證資金走向讀取中。只顯示優先區權證候選。"}</td></tr>
-  `;
-
-  panel.innerHTML = `
-    <section class="swing-dashboard warrant-flow-dashboard">
-      <div class="swing-topbar">
-        <div>
-          <h2 data-warrant-refresh title="重新整理權證資金走向">${titleWithSchedule("◒", "策略6：權證資金走向", "warrant")}</h2>
-          <p>${helperText}</p>
-        </div>
-      </div>
-      <section class="swing-panel warrant-flow-panel">
-        <div class="swing-tabs">
-          <button class="active" type="button" data-warrant-refresh>${listLabel}</button>
-          <div class="swing-actions warrant-search-box">
-            <small class="warrant-search-hint">🔥 可搜尋全台股票權證熱度</small>
-            <div class="warrant-search-row">
-              <input id="warrant-flow-search" type="search" placeholder="搜尋股票代號/名稱" value="${escapeAttr(warrantFlowKeyword)}" data-warrant-flow-search>
-              <button id="warrant-flow-refresh" type="button" data-warrant-refresh>重新整理</button>
-            </div>
-          </div>
-        </div>
-        <table class="swing-table">
-          <thead>
-            <tr>
-              <th>排名</th><th>股票代號</th><th>標的名稱</th><th>收盤價</th><th>認購金額</th><th>認售金額</th><th>購/售比</th><th>購/售檔數</th><th>原因</th>
-            </tr>
-          </thead>
-          <tbody>${body}</tbody>
-        </table>
-        ${pagination}
-      </section>
-    </section>
-  `;
+  ensureWarrantFlowModule().then((api) => api.renderWarrantFlow()).catch(() => undefined);
 }
 
 async function loadWarrantFlow(force = false) {
-  if (!isViewActive("warrant-flow")) return;
-  warrantFlowHasOpened = true;
-  if (warrantFlowLoading) return;
-  if (!warrantFlowData.length) {
-    loadWarrantFlowLocalCache();
-    loadWarrantFlowSummary().then(() => {
-      const panel = viewPanels["warrant-flow"];
-      if (!panel || warrantFlowData.length || !isViewActive("warrant-flow")) return;
-      const count = warrantFlowSummary?.count ?? warrantFlowSummary?.priorityCount ?? 0;
-      panel.innerHTML = `<div class="empty-state">權證摘要已載入：${count} 筆。正在讀取完整權證資金走向...</div>`;
-    });
-  }
-  if (!force && warrantFlowData.length) {
-    renderWarrantFlow();
-    return;
-  }
-  warrantFlowLoading = true;
-  const panel = viewPanels["warrant-flow"];
-  if (panel && !warrantFlowData.length) {
-    panel.innerHTML = `<div class="empty-state">正在讀取權證資金走向...</div>`;
-  }
-  try {
-    if (!latestStocks.length) loadStrategyStocks();
-    let payload = await fetchVersionedJson(endpoints.warrantFlowSlim, 8000, warrantFlowSummary?.updatedAt || "", force);
-    if (!normalizeArray(payload?.matches).length) {
-      payload = await fetchVersionedJson(endpoints.warrantFlowCache, 10000, warrantFlowSummary?.updatedAt || "", force);
-    }
-    if (!normalizeArray(payload?.matches).length) {
-      payload = await fetchVersionedJson(endpoints.warrantFlowBackup, 10000, warrantFlowSummary?.updatedAt || "", force);
-    }
-    warrantFlowData = normalizeArray(payload.matches);
-    warrantFlowPrioritySignature = "";
-    warrantFlowLastRenderSignature = "";
-    warrantFlowPage = 1;
-    const updatedAt = Date.parse(payload?.updatedAt || "");
-    warrantFlowUpdatedAt = Number.isFinite(updatedAt) ? updatedAt : Date.now();
-    saveWarrantFlowLocalCache();
-    applyStaticTitleIcons();
-    renderWarrantFlow();
-  } catch (error) {
-    if (panel && !warrantFlowData.length) {
-      panel.innerHTML = `<div class="empty-state">權證資料暫時讀取失敗，請稍後再試。</div>`;
-    }
-  } finally {
-    warrantFlowLoading = false;
-  }
+  const api = await ensureWarrantFlowModule();
+  return api.loadWarrantFlow(force);
 }
 
 async function loadStrategyStocks() {
@@ -7733,252 +7620,56 @@ function renderIndexes(indexes, futuresNear, futuresNext, marketStatus, otcSigna
   if (metricCards[3]) metricCards[3].remove();
 }
 
-function formatChipDate(dateStr) {
-  if (!dateStr || dateStr.length !== 8) return "等待盤後資料";
-  return `法人資料: ${dateStr.slice(0, 4)}/${dateStr.slice(4, 6)}/${dateStr.slice(6, 8)}`;
+let chipFlowModuleApi = null;
+
+function getChipFlowContext() {
+  return {
+    scope: makeFumanModuleScope({
+      get latestStocks() { return latestStocks; },
+      set latestStocks(value) { latestStocks = value; },
+      get institutionData() { return institutionData; },
+      set institutionData(value) { institutionData = value; },
+      get institutionDate() { return institutionDate; },
+      set institutionDate(value) { institutionDate = value; },
+      get institutionUpdatedAt() { return institutionUpdatedAt; },
+      set institutionUpdatedAt(value) { institutionUpdatedAt = value; },
+      get institutionSummary() { return institutionSummary; },
+      set institutionSummary(value) { institutionSummary = value; },
+      get chipFilter() { return chipFilter; },
+      set chipFilter(value) { chipFilter = value; },
+      get chipTradePage() { return chipTradePage; },
+      set chipTradePage(value) { chipTradePage = value; },
+      get chipTradeLastRenderSignature() { return chipTradeLastRenderSignature; },
+      set chipTradeLastRenderSignature(value) { chipTradeLastRenderSignature = value; },
+      get chipTradeLoadedAt() { return chipTradeLoadedAt; },
+      set chipTradeLoadedAt(value) { chipTradeLoadedAt = value; },
+      get chipTradeLoading() { return chipTradeLoading; },
+      set chipTradeLoading(value) { chipTradeLoading = value; },
+      get chipQuoteHydrating() { return chipQuoteHydrating; },
+      set chipQuoteHydrating(value) { chipQuoteHydrating = value; },
+      endpoints, CHIP_TRADE_CACHE_MS,
+      isViewActive, canRunViewWork, cleanNumber, formatNumber, formatInstitution,
+      paginateTerminalRows, buildTerminalPagination, loadInstitutionSummary,
+      fetchVersionedJson, normalizeArray, parseStocksForLatest, applyStaticTitleIcons,
+      fetchJson, parseQuoteNumber,
+    }),
+  };
 }
 
-function isTwseTradingTime(date = new Date()) {
-  const day = date.getDay();
-  if (day === 0 || day === 6) return false;
-  const minutes = date.getHours() * 60 + date.getMinutes();
-  return minutes >= 9 * 60 && minutes <= 13 * 60 + 30;
+async function ensureChipFlowModule() {
+  if (chipFlowModuleApi) return chipFlowModuleApi;
+  await loadFumanFeatureModule("chipFlow", "terminal-chip-flow.js", "FUMAN_CHIP_FLOW_MODULE");
+  chipFlowModuleApi = window.FUMAN_CHIP_FLOW_MODULE.install(getChipFlowContext());
+  return chipFlowModuleApi;
 }
 
 function renderChipTradeTable() {
-  if (!isViewActive("chip-trade")) return;
-  const body = document.querySelector("#chip-trade-body");
-  const dateEl = document.querySelector("#chip-trade-date");
-  const sortEl = document.querySelector("#chip-sort");
-  if (!body) return;
-
-  if (dateEl) {
-    const now = new Date();
-    const time = now.toLocaleTimeString("zh-TW", { hour12: false });
-    const modeText = "盤後收盤";
-    dateEl.textContent = `${formatChipDate(institutionDate)}｜${modeText}　更新 ${time}`;
-  }
-
-  const rows = latestStocks
-    .map((stock) => {
-      const code = String(stock.code || stock.Code || "");
-      const inst = institutionData[code];
-      if (!inst) return null;
-      const foreign = Number(inst.foreign) || 0;
-      const trust = Number(inst.trust) || 0;
-      const total = Number(inst.total) || foreign + trust + (Number(inst.dealer) || 0);
-      if (chipFilter === "joint" && !(foreign > 0 && trust > 0)) return null;
-      if (chipFilter === "trust" && !(trust > 0)) return null;
-      if (chipFilter === "foreign" && !(foreign > 0)) return null;
-      if (chipFilter === "legal" && !((Number(inst.total) || foreign + trust + (Number(inst.dealer) || 0)) > 0)) return null;
-      return {
-        code,
-        name: inst.name || stock.name || code,
-        price: cleanNumber(inst.close) || cleanNumber(stock.close),
-        change: Number.isFinite(Number(inst.change)) ? Number(inst.change) : cleanNumber(stock.change),
-        percent: Number.isFinite(Number(inst.percent)) ? Number(inst.percent) : cleanNumber(stock.percent),
-        volume: cleanNumber(inst.tradeVolume) || cleanNumber(stock.tradeVolume),
-        value: cleanNumber(inst.value) || cleanNumber(stock.value),
-        foreign,
-        trust,
-        total,
-        foreignStreak: Number(inst.foreignStreak) || 0,
-        trustStreak: Number(inst.trustStreak) || 0,
-        jointStreak: Number(inst.jointStreak) || 0,
-      };
-    })
-    .filter(Boolean);
-
-  if (!rows.length && Object.keys(institutionData).length) {
-    Object.entries(institutionData).forEach(([code, inst]) => {
-      const foreign = Number(inst.foreign) || 0;
-      const trust = Number(inst.trust) || 0;
-      const total = Number(inst.total) || foreign + trust + (Number(inst.dealer) || 0);
-      if (chipFilter === "joint" && !(foreign > 0 && trust > 0)) return;
-      if (chipFilter === "trust" && !(trust > 0)) return;
-      if (chipFilter === "foreign" && !(foreign > 0)) return;
-      if (chipFilter === "legal" && !(total > 0)) return;
-      rows.push({
-        code,
-        name: inst.name || code,
-        price: cleanNumber(inst.close),
-        change: Number.isFinite(Number(inst.change)) ? Number(inst.change) : 0,
-        percent: Number.isFinite(Number(inst.percent)) ? Number(inst.percent) : 0,
-        volume: cleanNumber(inst.tradeVolume),
-        value: cleanNumber(inst.value),
-        foreign,
-        trust,
-        total,
-        foreignStreak: Number(inst.foreignStreak) || 0,
-        trustStreak: Number(inst.trustStreak) || 0,
-        jointStreak: Number(inst.jointStreak) || 0,
-      });
-    });
-  }
-
-  const sortBy = sortEl?.value || "trustForeign";
-  rows.sort((a, b) => {
-    if (sortBy === "trust") return b.trust - a.trust;
-    if (sortBy === "foreign") return b.foreign - a.foreign;
-    if (sortBy === "pct") return b.percent - a.percent;
-    if (sortBy === "value") return b.value - a.value;
-    return (b.jointStreak - a.jointStreak) || ((b.foreign + b.trust) - (a.foreign + a.trust));
-  });
-
-  const chipPaged = paginateTerminalRows(rows.slice(0, 80), chipTradePage, "chip");
-  chipTradePage = chipPaged.page;
-  const shown = chipPaged.rows;
-  const table = body.closest("table");
-  let pagination = document.querySelector("#chip-trade-pagination");
-  if (!pagination && table) {
-    pagination = document.createElement("div");
-    pagination.id = "chip-trade-pagination";
-    table.insertAdjacentElement("afterend", pagination);
-  }
-  if (pagination) pagination.innerHTML = buildTerminalPagination("chip", chipTradePage, chipPaged.totalPages, rows.slice(0, 80).length);
-  const renderSignature = `${institutionUpdatedAt || 0}:${chipFilter}:${sortBy}:${chipTradePage}:${rows.length}:${shown.map((row) => `${row.code}:${row.price}:${row.percent}:${row.foreign}:${row.trust}:${row.total}`).join("|")}`;
-  if (renderSignature === chipTradeLastRenderSignature) return;
-  chipTradeLastRenderSignature = renderSignature;
-  if (!shown.length) {
-    const emptyText = {
-      joint: "目前沒有符合「外資 + 投信同買」的資料，盤後資料更新後會自動刷新。",
-      trust: "目前沒有符合「投信買超」的資料，盤後資料更新後會自動刷新。",
-      foreign: "目前沒有符合「外資買超」的資料，盤後資料更新後會自動刷新。",
-      legal: "目前沒有符合「法人同買」的資料，盤後資料更新後會自動刷新。",
-    }[chipFilter] || "目前沒有符合條件的資料。";
-    body.innerHTML = `<tr><td colspan="12">${emptyText}</td></tr>`;
-    if (pagination) pagination.innerHTML = "";
-    return;
-  }
-
-  body.innerHTML = shown.map((row, index) => {
-    const up = row.change >= 0;
-    const hasQuote = row.price > 0;
-    return `
-      <tr class="${index === 0 ? "highlight" : ""}" data-chip-row="${row.code}">
-        <td><a href="#" data-chip-code="${row.code}">${row.code}</a></td>
-        <td>${row.name}</td>
-        <td data-chip-price>${hasQuote ? formatNumber(row.price, row.price >= 100 ? 0 : 2) : "載入..."}</td>
-        <td data-chip-change class="${up ? "red" : "green"}">${hasQuote ? `${up ? "+" : ""}${formatNumber(row.change, 2)}` : "--"}</td>
-        <td data-chip-percent class="${row.percent >= 0 ? "red" : "green"}">${hasQuote ? formatNumber(row.percent, 2) : "--"}</td>
-        <td data-chip-volume>${hasQuote ? Math.round(row.volume).toLocaleString("zh-TW") : "--"}</td>
-        <td class="${row.foreign >= 0 ? "red" : "green"}">${formatInstitution(row.foreign)}</td>
-        <td class="${row.trust >= 0 ? "red" : "green"}">${formatInstitution(row.trust)}</td>
-        <td>${row.foreignStreak} 日</td>
-        <td>${row.trustStreak} 日</td>
-        <td>${row.jointStreak} 日</td>
-        <td class="${row.total >= 0 ? "red" : "green"}">${formatInstitution(row.total)}</td>
-      </tr>
-    `;
-  }).join("");
-
-}
-
-async function hydrateChipRealtimeQuotes(rows) {
-  if (chipQuoteHydrating) return;
-  const targets = rows.slice(0, 40);
-  if (!targets.length) return;
-  chipQuoteHydrating = true;
-  try {
-    await Promise.all(targets.map(async (row) => {
-      try {
-        const data = await fetchJson(`/api/proxy?code=${row.code}`, 7000);
-        const item = data?.msgArray?.[0];
-        if (!item) return;
-        const price = parseQuoteNumber(item.z, item.a, item.b, item.y);
-        const prev = parseQuoteNumber(item.y);
-        if (!price || !prev) return;
-        const change = price - prev;
-        const percent = prev ? (change / prev) * 100 : 0;
-        const volume = parseQuoteNumber(item.v, item.tv);
-        const tr = document.querySelector(`[data-chip-row="${row.code}"]`);
-        if (!tr) return;
-        const up = change >= 0;
-        const priceEl = tr.querySelector("[data-chip-price]");
-        const changeEl = tr.querySelector("[data-chip-change]");
-        const percentEl = tr.querySelector("[data-chip-percent]");
-        const volumeEl = tr.querySelector("[data-chip-volume]");
-        if (priceEl) priceEl.textContent = formatNumber(price, price >= 100 ? 0 : 2);
-        if (changeEl) {
-          changeEl.textContent = `${up ? "+" : ""}${formatNumber(change, 2)}`;
-          changeEl.className = up ? "red" : "green";
-        }
-        if (percentEl) {
-          percentEl.textContent = formatNumber(percent, 2);
-          percentEl.className = percent >= 0 ? "red" : "green";
-        }
-        if (volumeEl) volumeEl.textContent = volume ? Math.round(volume).toLocaleString("zh-TW") : "--";
-      } catch {}
-    }));
-  } finally {
-    chipQuoteHydrating = false;
-  }
-}
-
-function parseStocksForLatest(stocks) {
-  return stocks.map((stock) => {
-    const code = valueOf(stock, ["證券代號", "Code", "code"]);
-    const name = valueOf(stock, ["證券名稱", "Name", "name"]);
-    const value = cleanNumber(valueOf(stock, ["成交金額", "TradeValue", "value"]));
-    const tradeVolume = normalizeTradeVolumeLots(valueOf(stock, ["成交股數", "TradeVolume", "tradeVolume", "volume"]));
-    const volumeRatio = cleanNumber(valueOf(stock, ["量比", "VolumeRatio", "volumeRatio", "volume_ratio"]));
-    const quoteDate = valueOf(stock, ["quoteDate", "QuoteDate", "tradeDate", "TradeDate", "date", "Date", "資料日期", "交易日期"]);
-    const market = valueOf(stock, ["market", "Market", "市場"]);
-    return { code, name, value, tradeVolume, volumeRatio, quoteDate, market, ...stockChange(stock) };
-  }).filter((s) => s.code && s.name && s.close);
+  ensureChipFlowModule().then((api) => api.renderChipTradeTable()).catch(() => undefined);
 }
 
 async function loadChipTradeData(force = false) {
-  if (!isViewActive("chip-trade") || !canRunViewWork("chip-trade")) return;
-  if (!force && chipTradeLoadedAt && Date.now() - chipTradeLoadedAt < CHIP_TRADE_CACHE_MS) {
-    renderChipTradeTable();
-    return;
-  }
-  if (chipTradeLoading) return;
-  chipTradeLoading = true;
-  const body = document.querySelector("#chip-trade-body");
-  if (body) {
-    loadInstitutionSummary().then(() => {
-      if (!chipTradeLoading || !institutionSummary || institutionData && Object.keys(institutionData).length) return;
-      body.innerHTML = `<tr><td colspan="12">法人摘要已載入：${institutionSummary.count || 0} 檔。正在讀取完整買賣超資料...</td></tr>`;
-    });
-    body.innerHTML = `<tr><td colspan="12">正在載入盤後法人資料...</td></tr>`;
-  }
-
-  try {
-    const [stockResult, instResult] = await Promise.allSettled([
-      fetchVersionedJson(endpoints.strategyStocks, 20000, "", force),
-      fetchVersionedJson(endpoints.institutionSlim, 8000, institutionSummary?.updatedAt || "", force),
-    ]);
-
-    if (stockResult.status === "fulfilled") {
-      const stocks = normalizeArray(stockResult.value?.stocks || stockResult.value);
-      const parsed = parseStocksForLatest(stocks);
-      if (parsed.length) latestStocks = parsed;
-    }
-
-    let instPayload = instResult.status === "fulfilled" ? instResult.value : null;
-    if (!instPayload?.ok || !instPayload?.data || !Object.keys(instPayload.data).length) {
-      instPayload = await fetchVersionedJson(endpoints.institutionCache, 10000, institutionSummary?.updatedAt || "", force);
-    }
-    if (!instPayload?.ok || !instPayload?.data || !Object.keys(instPayload.data).length) {
-      instPayload = await fetchVersionedJson(endpoints.institutionBackup, 10000, institutionSummary?.updatedAt || "", force);
-    }
-    if (instPayload?.ok && instPayload?.data) {
-      institutionData = instPayload.data;
-      institutionDate = instPayload.usedDate || "";
-      const updatedAt = Date.parse(instPayload.updatedAt || "");
-      institutionUpdatedAt = Number.isFinite(updatedAt) ? updatedAt : Date.now();
-    }
-
-    chipTradeLoadedAt = Date.now();
-    applyStaticTitleIcons();
-    renderChipTradeTable();
-  } catch (error) {
-    if (body) body.innerHTML = `<tr><td colspan="12">資料載入失敗，請稍後再試。</td></tr>`;
-  } finally {
-    chipTradeLoading = false;
-  }
+  const api = await ensureChipFlowModule();
+  return api.loadChipTradeData(force);
 }
 
 function stockChange(stock) {
