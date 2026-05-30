@@ -11067,6 +11067,11 @@ function renderHeatmapSectors(sectors) {
   mergeHeatmapApiSectorsIntoCache(sectors);
   const sortedSectors = [...sectors].sort((a, b) => cleanNumber(b.pct) - cleanNumber(a.pct));
   const visibleSectors = filterHeatmapSectors(sortedSectors);
+  visibleSectors.forEach((sector) => {
+    const rows = normalizeArray(sector?.stocks || sector?.rows);
+    const name = String(sector?.name || "").trim();
+    if (name && rows.length) sectorStocksCache[name] = rows;
+  });
   syncHeatmapTabs(sortedSectors, visibleSectors);
   const signature = visibleSectors
     .map((s) => `${s.name}:${Number(s.pct || 0).toFixed(2)}:${s.count}:${s.up}:${s.down}:${s.totalValue}:${s.leader || ""}`)
@@ -14503,5 +14508,6 @@ if (isViewActive("watchlist")) renderWatchlist();
 setInterval(() => {
   if (!isDocumentHidden() && isTerminalUnlocked() && isViewActive("watchlist")) refreshSelectedWatchlistQuote();
 }, 10000);
+
 
 
