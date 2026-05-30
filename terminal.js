@@ -58,6 +58,116 @@ const supabaseClient = window.supabase?.createClient?.(FUMAN_SUPABASE_URL, FUMAN
 const PUBLIC_VIEWS = new Set(["market"]);
 const FUMAN_THEME_KEY = "fuman-terminal-theme";
 let authMode = "login";
+const FUMAN_LIVE_MEMORY_TTL_MS = {
+  strategy2: 3000,
+  realtimeRadar: 5000,
+};
+const fumanLiveMemoryCache = new Map();
+let fumanWorker = null;
+let fumanWorkerSeq = 0;
+const fumanWorkerPending = new Map();
+
+function getFumanWorker() {
+  if (!("Worker" in window)) return null;
+  if (fumanWorker) return fumanWorker;
+  try {
+    fumanWorker = new Worker("terminal-worker.js?v=speed-modules-20260530-3");
+    fumanWorker.addEventListener("message", (event) => {
+      const { id, ok, rows, error } = event.data || {};
+      const pending = fumanWorkerPending.get(id);
+      if (!pending) return;
+      fumanWorkerPending.delete(id);
+      if (ok) pending.resolve(rows);
+      else pending.reject(new Error(error || "worker failed"));
+    });
+    fumanWorker.addEventListener("error", () => {
+      fumanWorkerPending.forEach((pending) => pending.reject(new Error("worker failed")));
+      fumanWorkerPending.clear();
+      fumanWorker = null;
+    });
+    return fumanWorker;
+  } catch (error) {
+    return null;
+  }
+}
+
+function sortRowsInWorker(rows, sortKey, sortDir) {
+  const worker = getFumanWorker();
+  if (!worker) return Promise.reject(new Error("worker unavailable"));
+  const id = ++fumanWorkerSeq;
+  return new Promise((resolve, reject) => {
+    fumanWorkerPending.set(id, { resolve, reject });
+    worker.postMessage({ id, type: "sortRows", rows, sortKey, sortDir });
+  });
+}
+
+function getLiveMemoryCache(key, ttlMs, force = false) {
+  if (force) return null;
+  const item = fumanLiveMemoryCache.get(key);
+  if (!item || Date.now() - item.at > ttlMs) return null;
+  return item.value;
+}
+
+function setLiveMemoryCache(key, value) {
+  fumanLiveMemoryCache.set(key, { at: Date.now(), value });
+  return value;
+}
+
+function markLazyModuleForView(viewName) {
+  window.FUMAN_TERMINAL_MODULES?.preloadForView?.(viewName);
+}
+
+function warmWorkerSortCache(cacheKey, rows, sortKey, sortDir, applyRows) {
+  if (!rows?.length || rows.length < 80) return;
+  sortRowsInWorker(rows, sortKey, sortDir)
+    .then((sorted) => {
+      if (typeof applyRows === "function") applyRows(cacheKey, sorted);
+    })
+    .catch(() => undefined);
+}
+
+function installMarketSkeleton() {
+  const panel = viewPanels.market;
+  if (!panel || panel.dataset.marketSkeletonReady) return;
+  panel.dataset.marketSkeletonReady = "1";
+  if (!document.querySelector("#fuman-market-skeleton-styles")) {
+    const style = document.createElement("style");
+    style.id = "fuman-market-skeleton-styles";
+    style.textContent = `
+      .fuman-skeleton {
+        position: relative;
+        overflow: hidden;
+        min-height: 22px;
+        border-radius: 8px;
+        background: rgba(148, 163, 184, 0.12);
+      }
+      .fuman-skeleton::after {
+        content: "";
+        position: absolute;
+        inset: 0;
+        transform: translateX(-100%);
+        background: linear-gradient(90deg, transparent, rgba(255,255,255,0.14), transparent);
+        animation: fumanSkeletonMove 1.25s infinite;
+      }
+      @keyframes fumanSkeletonMove { to { transform: translateX(100%); } }
+      .market-skeleton-grid {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 12px;
+        margin: 12px 0;
+      }
+      .market-skeleton-grid .fuman-skeleton { min-height: 72px; }
+      @media (max-width: 720px) { .market-skeleton-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+    `;
+    document.head.appendChild(style);
+  }
+  if (tickerStrip && !tickerStrip.children.length) {
+    tickerStrip.innerHTML = `<span class="fuman-skeleton" style="width:100%;height:28px;"></span>`;
+  }
+  if (strengthPanel && !strengthPanel.children.length) {
+    strengthPanel.innerHTML = `<div class="market-skeleton-grid"><div class="fuman-skeleton"></div><div class="fuman-skeleton"></div><div class="fuman-skeleton"></div><div class="fuman-skeleton"></div></div>`;
+  }
+}
 
 function installThemeToggle() {
   if (document.querySelector("#fuman-theme-toggle")) return;
@@ -3919,7 +4029,7 @@ async function loadRealtimeRadarLatestCache(force = false) {
       }
     }
     try {
-      const staticPayload = await fetchJson(`${endpoints.realtimeRadarCache}?t=${Date.now()}`, 8000);
+      const staticPayload = await fetchLiveMemoryJson("realtimeRadar:static", `${endpoints.realtimeRadarCache}?t=${Date.now()}`, 8000, FUMAN_LIVE_MEMORY_TTL_MS.realtimeRadar, force);
       if (staticPayload) candidates.push({ source: "static", payload: staticPayload });
     } catch (error) {
       errors.push("靜態備援讀取失敗");
@@ -5207,6 +5317,10 @@ function recordFumanPerformance(url, startedAt, ok, error = null) {
   const list = Array.isArray(boot.performanceLog) ? boot.performanceLog : [];
   list.push(item);
   boot.performanceLog = list.slice(-40);
+  if (document.querySelector("#fuman-health-performance")) {
+    clearTimeout(boot.performanceRenderTimer);
+    boot.performanceRenderTimer = setTimeout(renderHealthPerformancePanel, 250);
+  }
 }
 
 function versionedDataUrl(url, version = "", force = false) {
@@ -5221,6 +5335,19 @@ async function fetchVersionedJson(url, timeout = 8000, version = "", force = fal
     ...options,
     cache: force ? "no-store" : "default",
   });
+}
+
+async function fetchLiveMemoryJson(key, url, timeout = 8000, ttlMs = 3000, force = false, options = {}) {
+  const cached = getLiveMemoryCache(key, ttlMs, force);
+  if (cached) {
+    recordFumanPerformance(`${url}#memory`, performance?.now ? performance.now() : Date.now(), true);
+    return cached;
+  }
+  const payload = await fetchJson(url, timeout, {
+    ...options,
+    cache: "no-store",
+  });
+  return setLiveMemoryCache(key, payload);
 }
 
 async function fetchSupabaseLatestPayload(table, timeout = 3500) {
@@ -5701,10 +5828,103 @@ async function loadHealthSummary(force = false) {
       const state = healthSummaryPayload.ok ? "健康 OK" : "健康需注意";
       terminalMessage.textContent = `${state}｜排程異常 ${schedule.badCount ?? "--"}｜同步待補 ${github.pendingCount ?? "--"}`;
     }
+    renderHealthPerformancePanel();
     return healthSummaryPayload;
   } catch (error) {
     return healthSummaryPayload;
   }
+}
+
+function healthRiskLevel(summary = healthSummaryPayload) {
+  if (!summary) return { level: "unknown", label: "讀取中", tone: "warn" };
+  const bad = cleanNumber(summary.schedule?.badCount);
+  const pending = cleanNumber(summary.githubSync?.pendingCount);
+  const missing = normalizeArray(summary.runtime?.data).filter((item) => !item.ok).length;
+  const stale = normalizeArray(summary.risks).filter((item) => item.level === "high").length;
+  if (bad || pending > 2 || missing || stale) return { level: "high", label: "高風險", tone: "danger" };
+  if (pending || normalizeArray(summary.risks).length) return { level: "medium", label: "中風險", tone: "warn" };
+  return { level: "low", label: "低風險", tone: "ok" };
+}
+
+function renderHealthPerformancePanel() {
+  const dashboard = document.querySelector(".dashboard");
+  if (!dashboard) return;
+  let panel = document.querySelector("#fuman-health-performance");
+  if (!panel) {
+    panel = document.createElement("section");
+    panel.id = "fuman-health-performance";
+    panel.className = "fuman-health-performance";
+    dashboard.insertBefore(panel, dashboard.firstElementChild);
+  }
+  if (!document.querySelector("#fuman-health-performance-style")) {
+    const style = document.createElement("style");
+    style.id = "fuman-health-performance-style";
+    style.textContent = `
+      .fuman-health-performance {
+        display: grid;
+        grid-template-columns: minmax(220px, 0.8fr) minmax(280px, 1.2fr);
+        gap: 10px;
+        margin: 0 0 12px;
+      }
+      .fuman-health-card {
+        border: 1px solid rgba(126, 200, 227, 0.16);
+        border-radius: 8px;
+        background: rgba(13, 19, 32, 0.74);
+        padding: 12px;
+      }
+      .fuman-health-card h3 {
+        margin: 0 0 8px;
+        font-size: 14px;
+      }
+      .fuman-risk-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        border-radius: 999px;
+        padding: 5px 9px;
+        font-size: 12px;
+        font-weight: 900;
+      }
+      .fuman-risk-pill.ok { background: rgba(34, 197, 94, 0.18); color: #86efac; }
+      .fuman-risk-pill.warn { background: rgba(245, 158, 11, 0.18); color: #fcd34d; }
+      .fuman-risk-pill.danger { background: rgba(239, 68, 68, 0.2); color: #fecaca; }
+      .fuman-perf-list {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 6px;
+      }
+      .fuman-perf-list span {
+        display: flex;
+        justify-content: space-between;
+        gap: 8px;
+        border: 1px solid rgba(148, 163, 184, 0.12);
+        border-radius: 8px;
+        padding: 7px 8px;
+        color: #cbd5e1;
+        font-size: 12px;
+      }
+      @media (max-width: 780px) { .fuman-health-performance { grid-template-columns: 1fr; } }
+    `;
+    document.head.appendChild(style);
+  }
+  const risk = healthRiskLevel();
+  const data = normalizeArray(healthSummaryPayload?.runtime?.data);
+  const badTasks = normalizeArray(healthSummaryPayload?.schedule?.badTasks).slice(0, 3);
+  const perf = normalizeArray(window.FUMAN_TERMINAL_BOOT?.performanceLog).slice(-8).reverse();
+  panel.innerHTML = `
+    <article class="fuman-health-card">
+      <h3>健康風險</h3>
+      <span class="fuman-risk-pill ${risk.tone}">${risk.label}</span>
+      <p>排程異常 ${cleanNumber(healthSummaryPayload?.schedule?.badCount)}｜同步待補 ${cleanNumber(healthSummaryPayload?.githubSync?.pendingCount)}｜資料檔 ${data.filter((item) => item.ok).length}/${data.length || 0}</p>
+      ${badTasks.length ? `<small>${badTasks.map((item) => escapeAttr(item.taskName || "")).join("、")}</small>` : `<small>目前未看到高風險排程異常。</small>`}
+    </article>
+    <article class="fuman-health-card">
+      <h3>前端效能</h3>
+      <div class="fuman-perf-list">
+        ${perf.length ? perf.map((item) => `<span><b>${escapeAttr(item.url.split("/").pop() || item.url)}</b><em>${item.ok ? item.ms : "ERR"}ms</em></span>`).join("") : `<span><b>等待資料</b><em>--</em></span>`}
+      </div>
+    </article>
+  `;
 }
 
 function saveWarrantFlowLocalCache() {
@@ -10215,6 +10435,10 @@ function renderSwingRadar(universe) {
     swingRenderCacheRows = rows;
     swingRenderCacheZoneRows = zoneRows;
     swingRenderCacheSignalCounts = signalCounts;
+    warmWorkerSortCache(renderCacheSignature, filteredRows, swingSortKey === "price" ? "close" : swingSortKey === "volume" ? "tradeVolume" : swingSortKey === "percent" ? "percent" : "swingScore", swingSortDir, (key, sorted) => {
+      if (key !== swingRenderCacheSignature || swingSortKey === "stage") return;
+      swingRenderCacheRows = sorted;
+    });
   }
   const swingPaged = paginateTerminalRows(rows, swingPage, "swing");
   swingPage = swingPaged.page;
@@ -13003,15 +13227,18 @@ function showView(viewName, activeLink) {
   const locked = applyMemberLocks(viewName, activeLink);
   if (locked) return;
   if (viewName === "market") {
+    installMarketSkeleton();
     if (Object.keys(sectorStocksCache).length) renderHeatmapFromCache();
     if (!sameViewQuick) deferUiWork(loadMarketData);
     deferIdleWork(() => loadHeatmap(), 1000);
   }
   if (viewName === "realtime-radar") {
+    markLazyModuleForView(viewName);
     realtimeRadarNeedsFreshScan = true;
     deferUiWork(renderRealtimeRadar);
   }
   if (viewName === "strategy") {
+    markLazyModuleForView(viewName);
     deferUiWork(renderStrategyScanner);
     if (!selectedStrategyIds.has("swing_radar") && !selectedStrategyIds.has("intraday_2m")) {
       deferUiWork(loadInstitution, 600);
@@ -13020,9 +13247,13 @@ function showView(viewName, activeLink) {
     }
   }
   if (viewName === "chip-trade") {
+    markLazyModuleForView(viewName);
     deferUiWork(() => loadChipTradeData(true));
   }
-  if (viewName === "warrant-flow") deferUiWork(() => loadWarrantFlow(true));
+  if (viewName === "warrant-flow") {
+    markLazyModuleForView(viewName);
+    deferUiWork(() => loadWarrantFlow(true));
+  }
   if (viewName === "watchlist") {
     deferUiWork(renderWatchlist);
   }
@@ -13364,14 +13595,16 @@ function sliceBackgroundScan(stocks, count) {
   return result;
 }
 
-async function fetchStrategyRealtimeBatches(stocks, batchSize = 80) {
+async function fetchStrategyRealtimeBatches(stocks, batchSize = 80, force = false) {
   const requests = [];
   let requested = 0;
   for (let start = 0; start < stocks.length; start += batchSize) {
     const codes = stocks.slice(start, start + batchSize).map((stock) => stock.code).filter(Boolean);
     if (codes.length) {
       requested += codes.length;
-      requests.push(fetchJson(`${endpoints.realtime}?codes=${encodeURIComponent(codes.join(","))}&t=${Date.now()}`, 12000));
+      const codeText = codes.join(",");
+      const cacheKey = `strategy2:${codeText}`;
+      requests.push(fetchLiveMemoryJson(cacheKey, `${endpoints.realtime}?codes=${encodeURIComponent(codeText)}&t=${Date.now()}`, 12000, FUMAN_LIVE_MEMORY_TTL_MS.strategy2, force));
     }
   }
   const payloads = await Promise.allSettled(requests);
@@ -13479,7 +13712,7 @@ async function refreshStrategyRealtimeScan(mode = "hot") {
 
     strategyRealtimeCursor = (strategyRealtimeCursor + hotStocks.length + backgroundStocks.length) % Math.max(scanSource.length, 1);
     if (shouldScanHot) {
-      const stats = await fetchStrategyRealtimeBatches(hotStocks, hotBatchSize);
+      const stats = await fetchStrategyRealtimeBatches(hotStocks, hotBatchSize, scanMode === "force");
       requested += stats.requested;
       received += stats.received;
       failed += stats.failed;
@@ -13497,7 +13730,7 @@ async function refreshStrategyRealtimeScan(mode = "hot") {
       }
     }
     if (backgroundStocks.length) {
-      const stats = await fetchStrategyRealtimeBatches(backgroundStocks, backgroundBatchSize);
+      const stats = await fetchStrategyRealtimeBatches(backgroundStocks, backgroundBatchSize, scanMode === "force");
       requested += stats.requested;
       received += stats.received;
       failed += stats.failed;
@@ -13569,6 +13802,7 @@ installGlobalRefreshWidget();
 deferUiWork(() => loadWorkflowRunStatus().catch(() => {}), 2000);
 ensureMobileAutoOrganizeButton();
 if (isViewActive("market")) {
+  installMarketSkeleton();
   deferUiWork(() => loadHealthSummary(false), 300);
   deferUiWork(() => loadMarketSummary(false), 80);
   loadMarketData();

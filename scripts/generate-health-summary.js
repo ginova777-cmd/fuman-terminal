@@ -87,6 +87,35 @@ function dataFileStatus(name) {
   }
 }
 
+function riskItem(level, area, message, meta = {}) {
+  return { level, area, message, ...meta };
+}
+
+function buildRisks({ badTasks, outbox, data }) {
+  const risks = [];
+  if (badTasks.length) {
+    risks.push(riskItem("high", "schedule", `排程異常 ${badTasks.length} 個`, { items: badTasks.slice(0, 8) }));
+  }
+  if (outbox.pendingCount > 2) {
+    risks.push(riskItem("high", "github", `GitHub outbox 待補 ${outbox.pendingCount} 筆`));
+  } else if (outbox.pendingCount > 0) {
+    risks.push(riskItem("medium", "github", `GitHub outbox 待補 ${outbox.pendingCount} 筆`));
+  }
+  const missing = data.filter((item) => !item.ok);
+  if (missing.length) {
+    risks.push(riskItem("high", "runtime", `資料檔缺失或不可解析 ${missing.length} 個`, { files: missing.map((item) => item.file) }));
+  }
+  const now = Date.now();
+  const stale = data.filter((item) => {
+    const at = Date.parse(item.updatedAt || "");
+    return Number.isFinite(at) && now - at > 36 * 60 * 60 * 1000;
+  });
+  if (stale.length) {
+    risks.push(riskItem("medium", "freshness", `資料超過 36 小時未更新 ${stale.length} 個`, { files: stale.map((item) => item.file) }));
+  }
+  return risks;
+}
+
 function main() {
   const tasks = getFumanTasks();
   const badTasks = tasks
@@ -106,9 +135,14 @@ function main() {
     "realtime-radar-latest.json",
   ].map(dataFileStatus);
   const outbox = outboxStatus();
+  const risks = buildRisks({ badTasks, outbox, data });
+  const high = risks.filter((item) => item.level === "high").length;
+  const medium = risks.filter((item) => item.level === "medium").length;
   const summary = {
-    ok: badTasks.length === 0 && outbox.ok && data.every((item) => item.ok),
+    ok: high === 0 && badTasks.length === 0 && outbox.ok && data.every((item) => item.ok),
     updatedAt: new Date().toISOString(),
+    risk: high ? "high" : medium ? "medium" : "low",
+    risks,
     schedule: { ok: badTasks.length === 0, total: tasks.length, badCount: badTasks.length, badTasks },
     githubSync: outbox,
     runtime: { ok: data.every((item) => item.ok), data },

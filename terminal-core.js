@@ -1,5 +1,5 @@
 (function () {
-  const version = "speed-modules-20260530-2";
+  const version = "speed-modules-20260530-3";
   window.FUMAN_TERMINAL_BOOT = {
     version,
     startedAt: Date.now(),
@@ -45,7 +45,17 @@
     document.body.appendChild(script);
   };
 
+  const loadModuleRegistry = () => {
+    if (document.querySelector("script[data-fuman-terminal-modules]")) return;
+    const script = document.createElement("script");
+    script.src = `terminal-modules.js?v=${version}`;
+    script.async = true;
+    script.dataset.fumanTerminalModules = "1";
+    document.head.appendChild(script);
+  };
+
   registerServiceWorker();
+  loadModuleRegistry();
 
   if ("requestIdleCallback" in window) {
     requestIdleCallback(loadMain, { timeout: 250 });
