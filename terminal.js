@@ -8286,6 +8286,36 @@ intradayRadarStyles.textContent = `
     display: grid;
     gap: 18px;
   }
+  .strategy5-page-heading {
+    padding: 2px 2px 18px;
+    border-bottom: 1px solid rgba(117, 133, 170, 0.16);
+  }
+  .strategy5-page-heading h2 {
+    margin: 0;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    color: #f7fbff;
+    font-size: 30px;
+    line-height: 1.2;
+    font-weight: 900;
+  }
+  .strategy5-page-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    color: #dce7ff;
+    font-size: 20px;
+    font-weight: 900;
+  }
+  .strategy5-page-heading p {
+    margin: 10px 0 0;
+    color: #9eb0d2;
+    font-size: 14px;
+    line-height: 1.55;
+  }
   .strategy5-hero {
     min-height: 124px;
     border: 1px solid rgba(117, 133, 170, 0.22);
@@ -10203,6 +10233,10 @@ function renderStrategy5Dashboard(evaluated) {
     : "06:00 / 21:00 完整掃結果讀取中";
   strategyTable.innerHTML = `
     <section class="strategy5-shell strategy5-clean">
+      <header class="strategy5-page-heading">
+        <h2><span class="strategy5-page-icon" aria-hidden="true">◎</span>策略5綜合策略</h2>
+        <p>掃描時間 06:00 / 21:00｜完整掃描｜${strategy5UpdatedAt ? `最後更新 ${new Date(strategy5UpdatedAt).toLocaleTimeString("zh-TW", { hour12: false })}` : "讀取中"}｜結果固定到下一次掃描</p>
+      </header>
       <section class="strategy5-dashboard strategy5-topic-layout">
         <nav class="strategy5-preset-tabs" aria-label="策略5主題分頁">${strategyTabs}</nav>
         <section class="strategy5-results">
