@@ -1,11 +1,12 @@
 (function () {
-  const VERSION = "speed-modules-20260530-17";
+  const VERSION = "speed-modules-20260530-18";
   const modules = {
     sectorMap: { loaded: false, src: "terminal-sector-map.js" },
     strategyConfig: { loaded: false, src: "terminal-strategy-config.js" },
     marketConfig: { loaded: false, src: "terminal-market-config.js" },
     uiConfig: { loaded: false, src: "terminal-ui-config.js" },
     runtimeConfig: { loaded: false, src: "terminal-runtime-config.js" },
+    tuningConfig: { loaded: false, src: "terminal-tuning-config.js" },
     app: { loaded: false, src: "terminal-app.js" },
     strategy4: { loaded: false, src: "terminal-app.js" },
     chipFlow: { loaded: false, src: "terminal-app.js" },

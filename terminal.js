@@ -1,6 +1,6 @@
 (function () {
   const boot = window.FUMAN_TERMINAL_BOOT || (window.FUMAN_TERMINAL_BOOT = {});
-  const version = boot.version || "speed-modules-20260530-17";
+  const version = boot.version || "speed-modules-20260530-18";
   const appSrc = `/terminal-app.js?v=${version}`;
   const dependencyScripts = [
     { src: `/terminal-sector-map.js?v=${version}`, attr: "data-fuman-sector-map" },
@@ -8,6 +8,7 @@
     { src: `/terminal-market-config.js?v=${version}`, attr: "data-fuman-market-config" },
     { src: `/terminal-ui-config.js?v=${version}`, attr: "data-fuman-ui-config" },
     { src: `/terminal-runtime-config.js?v=${version}`, attr: "data-fuman-runtime-config" },
+    { src: `/terminal-tuning-config.js?v=${version}`, attr: "data-fuman-tuning-config" },
   ];
   let appPromise = null;
 

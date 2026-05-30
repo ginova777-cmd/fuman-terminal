@@ -40,6 +40,7 @@ const strategyTerminal = document.querySelector(".strategy-terminal");
 const strategyList = document.querySelector(".strategy-list");
 const brandRefresh = document.querySelector(".brand");
 const FUMAN_RUNTIME_CONFIG = window.FUMAN_RUNTIME_CONFIG || {};
+const FUMAN_TUNING_CONFIG = window.FUMAN_TUNING_CONFIG || {};
 const FUMAN_SUPABASE_URL = FUMAN_RUNTIME_CONFIG.supabaseUrl || "";
 const FUMAN_SUPABASE_KEY = FUMAN_RUNTIME_CONFIG.supabaseKey || "";
 const FUMAN_ACCESS_TABLE = FUMAN_RUNTIME_CONFIG.accessTable || "fuman_user_access";
@@ -69,7 +70,7 @@ function getFumanWorker() {
   if (!("Worker" in window)) return null;
   if (fumanWorker) return fumanWorker;
   try {
-    fumanWorker = new Worker("terminal-worker.js?v=speed-modules-20260530-17");
+    fumanWorker = new Worker("terminal-worker.js?v=speed-modules-20260530-18");
     fumanWorker.addEventListener("message", (event) => {
       const { id, ok, rows, result, error } = event.data || {};
       const pending = fumanWorkerPending.get(id);
@@ -200,7 +201,7 @@ function loadFumanStyle(href, id) {
   const link = document.createElement("link");
   link.id = id;
   link.rel = "stylesheet";
-  link.href = href.includes("?") ? href : `${href}?v=${window.FUMAN_TERMINAL_BOOT?.version || "speed-modules-20260530-17"}`;
+  link.href = href.includes("?") ? href : `${href}?v=${window.FUMAN_TERMINAL_BOOT?.version || "speed-modules-20260530-18"}`;
   document.head.appendChild(link);
 }
 
@@ -2440,8 +2441,8 @@ let realtimeRadarLastUpdatedAt = 0;
 let realtimeRadarCacheSource = "none";
 let realtimeRadarCacheSourceStatus = "unknown";
 let realtimeRadarCacheError = "";
-const REALTIME_RADAR_FRESH_MS = 2 * 60 * 1000;
-const REALTIME_RADAR_STALE_MS = 5 * 60 * 1000;
+const REALTIME_RADAR_FRESH_MS = FUMAN_TUNING_CONFIG.realtimeRadarFreshMs ?? (2 * 60 * 1000);
+const REALTIME_RADAR_STALE_MS = FUMAN_TUNING_CONFIG.realtimeRadarStaleMs ?? (5 * 60 * 1000);
 let realtimeRadarCacheLoading = false;
 let realtimeRadarCacheLoadedAt = 0;
 let realtimeRadarRefreshLoading = false;
@@ -2449,10 +2450,10 @@ let realtimeRadarNeedsFreshScan = true;
 let realtimeRadarHistoryPromise = null;
 let realtimeRadarHistoryLastAt = 0;
 const realtimeRadarVolumeRatioRequestedCodes = new Set();
-const REALTIME_RADAR_LAST_CACHE_KEY = "fuman_realtime_radar_last_rows_v2";
-const REALTIME_RADAR_HISTORY_TARGET_LIMIT = 72;
-const REALTIME_RADAR_HISTORY_BATCH_SIZE = 12;
-const REALTIME_RADAR_HISTORY_REFRESH_MS = 10 * 60 * 1000;
+const REALTIME_RADAR_LAST_CACHE_KEY = FUMAN_TUNING_CONFIG.realtimeRadarLastCacheKey || "fuman_realtime_radar_last_rows_v2";
+const REALTIME_RADAR_HISTORY_TARGET_LIMIT = FUMAN_TUNING_CONFIG.realtimeRadarHistoryTargetLimit ?? 72;
+const REALTIME_RADAR_HISTORY_BATCH_SIZE = FUMAN_TUNING_CONFIG.realtimeRadarHistoryBatchSize ?? 12;
+const REALTIME_RADAR_HISTORY_REFRESH_MS = FUMAN_TUNING_CONFIG.realtimeRadarHistoryRefreshMs ?? (10 * 60 * 1000);
 let sectorStocksCache = {};
 let industryMasterByCode = {};
 let institutionData = {};
@@ -2462,8 +2463,8 @@ let institutionUpdatedAt = 0;
 let chipMode = "after";
 let chipTradeLoading = false;
 let chipTradeLoadedAt = 0;
-const CHIP_TRADE_CACHE_MS = 10 * 60 * 1000;
-const CHIP_WARRANT_ACTIVE_REFRESH_MS = 60 * 1000;
+const CHIP_TRADE_CACHE_MS = FUMAN_TUNING_CONFIG.chipTradeCacheMs ?? (10 * 60 * 1000);
+const CHIP_WARRANT_ACTIVE_REFRESH_MS = FUMAN_TUNING_CONFIG.chipWarrantActiveRefreshMs ?? (60 * 1000);
 let chipFilter = "joint";
 let chipQuoteHydrating = false;
 let chipTradeLastRenderSignature = "";
@@ -2513,12 +2514,12 @@ let strategy5Data = [];
 let strategy5UpdatedAt = 0;
 let strategy5CacheLoading = false;
 let strategyStocksPromise = null;
-const STRATEGY4_LOCAL_CACHE_KEY = "fuman_strategy4_scan_cache_v1";
-const STRATEGY4_BACKUP_CACHE_KEY = "fuman_strategy4_nonempty_backup_v1";
-const OPEN_BUY_LOCAL_CACHE_KEY = "fuman_open_buy_scan_cache_v1";
-const OPEN_BUY_BACKUP_CACHE_KEY = "fuman_open_buy_nonempty_backup_v1";
-const EXPORT_UNLOCK_KEY = "fuman_export_unlock_until_v1";
-const EXPORT_UNLOCK_MS = 30 * 24 * 60 * 60 * 1000;
+const STRATEGY4_LOCAL_CACHE_KEY = FUMAN_TUNING_CONFIG.strategy4LocalCacheKey || "fuman_strategy4_scan_cache_v1";
+const STRATEGY4_BACKUP_CACHE_KEY = FUMAN_TUNING_CONFIG.strategy4BackupCacheKey || "fuman_strategy4_nonempty_backup_v1";
+const OPEN_BUY_LOCAL_CACHE_KEY = FUMAN_TUNING_CONFIG.openBuyLocalCacheKey || "fuman_open_buy_scan_cache_v1";
+const OPEN_BUY_BACKUP_CACHE_KEY = FUMAN_TUNING_CONFIG.openBuyBackupCacheKey || "fuman_open_buy_nonempty_backup_v1";
+const EXPORT_UNLOCK_KEY = FUMAN_TUNING_CONFIG.exportUnlockKey || "fuman_export_unlock_until_v1";
+const EXPORT_UNLOCK_MS = FUMAN_TUNING_CONFIG.exportUnlockMs ?? (30 * 24 * 60 * 60 * 1000);
 let openBuyScanLoading = false;
 let openBuyScanCursor = 0;
 let openBuyScanMatches = {};
@@ -2549,17 +2550,17 @@ let warrantFlowSummaryLoading = false;
 let chipTradePage = 1;
 let institutionSummary = null;
 let institutionSummaryLoading = false;
-const WARRANT_FLOW_LOCAL_CACHE_KEY = "fuman_warrant_flow_cache_v1";
-const CACHE_FRESH_MS = 10 * 60 * 1000;
-const MARKET_REFRESH_LIVE_MS = 5 * 1000;
-const MARKET_REFRESH_CLOSED_MS = 10 * 60 * 1000;
-const MARKET_REFRESH_HIDDEN_MS = 5 * 60 * 1000;
-const MARKET_HEATMAP_CLOSED_MS = 10 * 60 * 1000;
-const MARKET_POLL_TICK_MS = 5 * 1000;
-const MARKET_DOM_REFRESH_MS = 60 * 1000;
-const WATCHLIST_REFRESH_LIVE_MS = 30 * 1000;
-const WATCHLIST_REFRESH_CLOSED_MS = 120 * 1000;
-const WATCHLIST_REFRESH_HIDDEN_MS = 180 * 1000;
+const WARRANT_FLOW_LOCAL_CACHE_KEY = FUMAN_TUNING_CONFIG.warrantFlowLocalCacheKey || "fuman_warrant_flow_cache_v1";
+const CACHE_FRESH_MS = FUMAN_TUNING_CONFIG.cacheFreshMs ?? (10 * 60 * 1000);
+const MARKET_REFRESH_LIVE_MS = FUMAN_TUNING_CONFIG.marketRefreshLiveMs ?? (5 * 1000);
+const MARKET_REFRESH_CLOSED_MS = FUMAN_TUNING_CONFIG.marketRefreshClosedMs ?? (10 * 60 * 1000);
+const MARKET_REFRESH_HIDDEN_MS = FUMAN_TUNING_CONFIG.marketRefreshHiddenMs ?? (5 * 60 * 1000);
+const MARKET_HEATMAP_CLOSED_MS = FUMAN_TUNING_CONFIG.marketHeatmapClosedMs ?? (10 * 60 * 1000);
+const MARKET_POLL_TICK_MS = FUMAN_TUNING_CONFIG.marketPollTickMs ?? (5 * 1000);
+const MARKET_DOM_REFRESH_MS = FUMAN_TUNING_CONFIG.marketDomRefreshMs ?? (60 * 1000);
+const WATCHLIST_REFRESH_LIVE_MS = FUMAN_TUNING_CONFIG.watchlistRefreshLiveMs ?? (30 * 1000);
+const WATCHLIST_REFRESH_CLOSED_MS = FUMAN_TUNING_CONFIG.watchlistRefreshClosedMs ?? (120 * 1000);
+const WATCHLIST_REFRESH_HIDDEN_MS = FUMAN_TUNING_CONFIG.watchlistRefreshHiddenMs ?? (180 * 1000);
 let selectedStrategyIds = new Set();
 let strategyMode = "any";
 let strategyKeyword = "";
@@ -2581,22 +2582,22 @@ let intradaySortDir = "desc";
 let intradaySignalFilter = "all";
 let strategyPresetMode = "";
 let strategy5ActiveId = "foreign_trust_breakout";
-const INTRADAY_HOT_SCAN_LIMIT = 900;
-const REALTIME_RADAR_POOL_LIMIT = 650;
-const INTRADAY_BACKGROUND_BATCH = 450;
-const INTRADAY_FAST_SCAN_MS = 3000;
-const INTRADAY_BACKGROUND_SCAN_MS = 3000;
-const REALTIME_RADAR_REFRESH_MS = 3000;
-const MOBILE_INTRADAY_HOT_SCAN_LIMIT = 260;
-const MOBILE_INTRADAY_FORCE_EXTRA_LIMIT = 80;
-const MOBILE_INTRADAY_BACKGROUND_BATCH = 90;
-const MOBILE_INTRADAY_HOT_SCAN_MS = 12000;
-const MOBILE_INTRADAY_BACKGROUND_SCAN_MS = 45000;
-const MOBILE_OTHER_STRATEGY_RENDER_MS = 2500;
-const MOBILE_OTHER_STRATEGY_CACHE_MS = 45000;
-const INTRADAY_CANDIDATE_TTL_MS = 15 * 60 * 1000;
-const INTRADAY_MIN_VOLUME = 2000;
-const STRATEGY2_INTRADAY_MIN_DISPLAY_PCT = 2;
+const INTRADAY_HOT_SCAN_LIMIT = FUMAN_TUNING_CONFIG.intradayHotScanLimit ?? 900;
+const REALTIME_RADAR_POOL_LIMIT = FUMAN_TUNING_CONFIG.realtimeRadarPoolLimit ?? 650;
+const INTRADAY_BACKGROUND_BATCH = FUMAN_TUNING_CONFIG.intradayBackgroundBatch ?? 450;
+const INTRADAY_FAST_SCAN_MS = FUMAN_TUNING_CONFIG.intradayFastScanMs ?? 3000;
+const INTRADAY_BACKGROUND_SCAN_MS = FUMAN_TUNING_CONFIG.intradayBackgroundScanMs ?? 3000;
+const REALTIME_RADAR_REFRESH_MS = FUMAN_TUNING_CONFIG.realtimeRadarRefreshMs ?? 3000;
+const MOBILE_INTRADAY_HOT_SCAN_LIMIT = FUMAN_TUNING_CONFIG.mobileIntradayHotScanLimit ?? 260;
+const MOBILE_INTRADAY_FORCE_EXTRA_LIMIT = FUMAN_TUNING_CONFIG.mobileIntradayForceExtraLimit ?? 80;
+const MOBILE_INTRADAY_BACKGROUND_BATCH = FUMAN_TUNING_CONFIG.mobileIntradayBackgroundBatch ?? 90;
+const MOBILE_INTRADAY_HOT_SCAN_MS = FUMAN_TUNING_CONFIG.mobileIntradayHotScanMs ?? 12000;
+const MOBILE_INTRADAY_BACKGROUND_SCAN_MS = FUMAN_TUNING_CONFIG.mobileIntradayBackgroundScanMs ?? 45000;
+const MOBILE_OTHER_STRATEGY_RENDER_MS = FUMAN_TUNING_CONFIG.mobileOtherStrategyRenderMs ?? 2500;
+const MOBILE_OTHER_STRATEGY_CACHE_MS = FUMAN_TUNING_CONFIG.mobileOtherStrategyCacheMs ?? 45000;
+const INTRADAY_CANDIDATE_TTL_MS = FUMAN_TUNING_CONFIG.intradayCandidateTtlMs ?? (15 * 60 * 1000);
+const INTRADAY_MIN_VOLUME = FUMAN_TUNING_CONFIG.intradayMinVolume ?? 2000;
+const STRATEGY2_INTRADAY_MIN_DISPLAY_PCT = FUMAN_TUNING_CONFIG.strategy2IntradayMinDisplayPct ?? 2;
 
 const SECTOR_MAP = window.FUMAN_SECTOR_MAP || {};
 function cleanNumber(value) {
@@ -4985,8 +4986,8 @@ function intradaySortHeader(key, label) {
   return `<button type="button" data-intraday-sort="${key}">${label}${mark}</button>`;
 }
 
-const TERMINAL_PAGE_SIZE = 10;
-const TERMINAL_PAGE_SIZE_OPTIONS = [10, 20, 50];
+const TERMINAL_PAGE_SIZE = FUMAN_TUNING_CONFIG.terminalPageSize ?? 10;
+const TERMINAL_PAGE_SIZE_OPTIONS = FUMAN_TUNING_CONFIG.terminalPageSizeOptions || [10, 20, 50];
 const terminalPageSizes = {
   swing: 50,
   openBuy: 20,
@@ -4994,6 +4995,7 @@ const terminalPageSizes = {
   strategy5: 20,
   warrant: 20,
   chip: 20,
+  ...(FUMAN_TUNING_CONFIG.terminalPageSizes || {}),
 };
 
 function getTerminalPageSize(scope) {
