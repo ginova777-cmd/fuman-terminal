@@ -1,0 +1,61 @@
+{
+  "ok": true,
+  "updatedAt": "2026-05-30T02:57:52.057Z",
+  "schedule": {
+    "ok": true,
+    "total": 33,
+    "badCount": 0,
+    "badTasks": []
+  },
+  "githubSync": {
+    "pendingCount": 0,
+    "ok": true
+  },
+  "runtime": {
+    "ok": true,
+    "data": [
+      {
+        "file": "market-summary.json",
+        "ok": true,
+        "count": 0,
+        "updatedAt": "2026-05-30T02:57:38.651Z",
+        "bytes": 150771
+      },
+      {
+        "file": "strategy4-summary.json",
+        "ok": true,
+        "count": 675,
+        "updatedAt": "2026-05-29T16:30:37.466Z",
+        "bytes": 49554
+      },
+      {
+        "file": "strategy5-latest.json",
+        "ok": true,
+        "count": 37,
+        "updatedAt": "2026-05-30T00:37:53.983Z",
+        "bytes": 67629
+      },
+      {
+        "file": "institution-summary.json",
+        "ok": true,
+        "count": 1619,
+        "updatedAt": "2026-05-29T15:28:06.824Z",
+        "bytes": 53086
+      },
+      {
+        "file": "warrant-flow-summary.json",
+        "ok": true,
+        "count": 120,
+        "updatedAt": "2026-05-28T22:00:16.146Z",
+        "bytes": 34814
+      },
+      {
+        "file": "realtime-radar-latest.json",
+        "ok": true,
+        "count": 0,
+        "updatedAt": "2026-05-29T05:30:46.467Z",
+        "bytes": 24796
+      }
+    ]
+  }
+}
