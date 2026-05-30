@@ -3809,7 +3809,7 @@ function hydrateRealtimeRadarDisplayRows(rows = []) {
 function recentRealtimeRadarDisplayRows(rows = [], radarOpen = isRadarDetectionWindow()) {
   const hydrated = hydrateRealtimeRadarDisplayRows(rows)
     .filter((stock) => isIntradayTradable(stock))
-    .filter((stock) => isRealtimeRadarTodaySnapshot({ ...stock, radarDate: stock.radarDate || marketAiTodayKey() }));
+    .filter((stock) => !radarOpen || isRealtimeRadarTodaySnapshot({ ...stock, radarDate: stock.radarDate || marketAiTodayKey() }));
   if (!radarOpen) return hydrated;
   const latest = latestRealtimeRadarSignalAt(hydrated);
   if (!latest) return hydrated;
@@ -4150,10 +4150,10 @@ function renderRealtimeRadar() {
   }
 
   if (!Object.keys(strategyHistoryData).length && !strategy4CacheLoading) loadStrategy4Cache(true);
-  const historyTargets = getRealtimeRadarHistoryTargets();
-  const snapshotHistoryTargets = historyTargets.length ? [] : getRealtimeRadarSnapshotHistoryTargets(realtimeRadarLastRows);
+  const historyTargets = radarOpen ? getRealtimeRadarHistoryTargets() : [];
+  const snapshotHistoryTargets = radarOpen && historyTargets.length ? [] : (radarOpen ? getRealtimeRadarSnapshotHistoryTargets(realtimeRadarLastRows) : []);
   const pendingHistoryTargets = historyTargets.length ? historyTargets : snapshotHistoryTargets;
-  if (pendingHistoryTargets.length && !realtimeRadarHistoryPromise && Date.now() - realtimeRadarHistoryLastAt >= REALTIME_RADAR_HISTORY_REFRESH_MS) {
+  if (radarOpen && pendingHistoryTargets.length && !realtimeRadarHistoryPromise && Date.now() - realtimeRadarHistoryLastAt >= REALTIME_RADAR_HISTORY_REFRESH_MS) {
     loadRealtimeRadarHistory(pendingHistoryTargets).then((loaded) => {
       if (loaded) {
         enrichRealtimeRadarSnapshotRows(realtimeRadarLastRows);
