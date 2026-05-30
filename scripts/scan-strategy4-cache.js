@@ -18,6 +18,7 @@ const SYNC_SCRIPT = path.join(ROOT, "run-strategy4-partial-sync.ps1");
 const STOCK_URL = process.env.STOCK_UNIVERSE_URL || "https://fuman-terminal.vercel.app/api/stocks";
 const MIN_UNIVERSE_SIZE = Number(process.env.STRATEGY4_MIN_UNIVERSE_SIZE || 1700);
 const MIN_MATCH_COUNT = Number(process.env.STRATEGY4_MIN_MATCH_COUNT || 10);
+const MIN_MATCH_RATIO_TO_PREVIOUS = Number(process.env.STRATEGY4_MIN_MATCH_RATIO_TO_PREVIOUS || 0.5);
 const USE_MIS_QUOTES = process.env.STRATEGY4_USE_MIS === "1";
 const FAIL_ON_INCOMPLETE = process.env.STRATEGY4_FAIL_ON_INCOMPLETE !== "0";
 const ALLOW_PARTIAL_PUBLISH = process.env.STRATEGY4_ALLOW_PARTIAL_PUBLISH === "1";
@@ -383,6 +384,13 @@ async function main() {
   }
   if (FULL_SCAN && output.complete && output.count < MIN_MATCH_COUNT) {
     throw new Error(`Strategy4 suspiciously low match count: ${output.count}/${codes.length}, minimum ${MIN_MATCH_COUNT}`);
+  }
+  const previousCompleteCount = previousRaw?.complete === true ? Number(previousRaw.count || 0) : 0;
+  if (FULL_SCAN && output.complete && previousCompleteCount >= MIN_MATCH_COUNT) {
+    const minByHistory = Math.max(MIN_MATCH_COUNT, Math.floor(previousCompleteCount * MIN_MATCH_RATIO_TO_PREVIOUS));
+    if (output.count < minByHistory) {
+      throw new Error(`Strategy4 suspicious match drop: ${output.count} vs previous ${previousCompleteCount}, minimum ${minByHistory}`);
+    }
   }
 }
 
