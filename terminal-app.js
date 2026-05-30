@@ -70,7 +70,7 @@ function getFumanWorker() {
   if (!("Worker" in window)) return null;
   if (fumanWorker) return fumanWorker;
   try {
-    fumanWorker = new Worker("terminal-worker.js?v=speed-modules-20260530-21");
+    fumanWorker = new Worker("terminal-worker.js?v=speed-modules-20260530-22");
     fumanWorker.addEventListener("message", (event) => {
       const { id, ok, rows, result, error } = event.data || {};
       const pending = fumanWorkerPending.get(id);
@@ -201,7 +201,7 @@ function loadFumanStyle(href, id) {
   const link = document.createElement("link");
   link.id = id;
   link.rel = "stylesheet";
-  link.href = href.includes("?") ? href : `${href}?v=${window.FUMAN_TERMINAL_BOOT?.version || "speed-modules-20260530-21"}`;
+  link.href = href.includes("?") ? href : `${href}?v=${window.FUMAN_TERMINAL_BOOT?.version || "speed-modules-20260530-22"}`;
   document.head.appendChild(link);
 }
 
@@ -227,7 +227,7 @@ function makeFumanModuleScope(bindings) {
 function loadFumanFeatureModule(name, src, globalName) {
   if (window[globalName]) return Promise.resolve(window[globalName]);
   if (fumanFeatureModulePromises[name]) return fumanFeatureModulePromises[name];
-  const version = window.FUMAN_TERMINAL_BOOT?.version || "speed-modules-20260530-21";
+  const version = window.FUMAN_TERMINAL_BOOT?.version || "speed-modules-20260530-22";
   fumanFeatureModulePromises[name] = new Promise((resolve, reject) => {
     const attr = "data-fuman-feature-" + name;
     const existing = document.querySelector("script[" + attr + "]");
@@ -7681,6 +7681,19 @@ function stockChange(stock) {
   return { change, close, percent };
 }
 
+function parseStocksForLatest(stocks) {
+  return normalizeArray(stocks).map((stock) => {
+    const code = String(valueOf(stock, ["證券代號", "Code", "code"])).trim();
+    const name = valueOf(stock, ["證券名稱", "Name", "name"]);
+    const value = cleanNumber(valueOf(stock, ["成交金額", "TradeValue", "value"]));
+    const tradeVolume = normalizeTradeVolumeLots(valueOf(stock, ["成交股數", "TradeVolume", "tradeVolume", "volume"]));
+    const volumeRatio = cleanNumber(valueOf(stock, ["量比", "VolumeRatio", "volumeRatio", "volume_ratio"]));
+    const quoteDate = valueOf(stock, ["quoteDate", "QuoteDate", "tradeDate", "TradeDate", "date", "Date", "資料日期", "交易日期"]);
+    const market = valueOf(stock, ["market", "Market", "市場"]);
+    return { code, name, value, tradeVolume, volumeRatio, quoteDate, market, ...stockChange(stock) };
+  }).filter((s) => s.code && s.name && s.close);
+}
+
 function buildSectorStocksCache(stocks, options = {}) {
   const nextCache = options.merge ? { ...sectorStocksCache } : {};
   for (const stock of stocks) {
@@ -9538,6 +9551,7 @@ if (isViewActive("watchlist")) renderWatchlist();
 setInterval(() => {
   if (!isDocumentHidden() && isTerminalUnlocked() && isViewActive("watchlist")) refreshSelectedWatchlistQuote();
 }, 10000);
+
 
 
 
