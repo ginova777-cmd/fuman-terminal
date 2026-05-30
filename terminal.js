@@ -71,13 +71,13 @@ function getFumanWorker() {
   if (!("Worker" in window)) return null;
   if (fumanWorker) return fumanWorker;
   try {
-    fumanWorker = new Worker("terminal-worker.js?v=speed-modules-20260530-3");
+    fumanWorker = new Worker("terminal-worker.js?v=speed-modules-20260530-4");
     fumanWorker.addEventListener("message", (event) => {
-      const { id, ok, rows, error } = event.data || {};
+      const { id, ok, rows, result, error } = event.data || {};
       const pending = fumanWorkerPending.get(id);
       if (!pending) return;
       fumanWorkerPending.delete(id);
-      if (ok) pending.resolve(rows);
+      if (ok) pending.resolve(result ?? rows);
       else pending.reject(new Error(error || "worker failed"));
     });
     fumanWorker.addEventListener("error", () => {
@@ -98,6 +98,16 @@ function sortRowsInWorker(rows, sortKey, sortDir) {
   return new Promise((resolve, reject) => {
     fumanWorkerPending.set(id, { resolve, reject });
     worker.postMessage({ id, type: "sortRows", rows, sortKey, sortDir });
+  });
+}
+
+function buildSwingBucketsInWorker(payload) {
+  const worker = getFumanWorker();
+  if (!worker) return Promise.reject(new Error("worker unavailable"));
+  const id = ++fumanWorkerSeq;
+  return new Promise((resolve, reject) => {
+    fumanWorkerPending.set(id, { resolve, reject });
+    worker.postMessage({ id, type: "swingBuckets", ...payload });
   });
 }
 
@@ -124,6 +134,22 @@ function warmWorkerSortCache(cacheKey, rows, sortKey, sortDir, applyRows) {
       if (typeof applyRows === "function") applyRows(cacheKey, sorted);
     })
     .catch(() => undefined);
+}
+
+function warmSwingWorkerCache(cacheKey, allRows, options = {}) {
+  if (!allRows?.length || allRows.length < 80) return;
+  buildSwingBucketsInWorker({
+    allRows,
+    zoneFilter: options.zoneFilter || "all",
+    signalFilter: options.signalFilter || "all",
+    sortKey: options.sortKey || "score",
+    sortDir: options.sortDir || "desc",
+  }).then((result) => {
+    if (cacheKey !== swingRenderCacheSignature || !result?.rows) return;
+    swingRenderCacheRows = result.rows;
+    swingRenderCacheZoneRows = result.zoneRows || swingRenderCacheZoneRows;
+    swingRenderCacheSignalCounts = result.signalCounts || swingRenderCacheSignalCounts;
+  }).catch(() => undefined);
 }
 
 function installMarketSkeleton() {
@@ -3953,6 +3979,32 @@ function switchRealtimeRadarSide(sideInput = "long") {
 }
 window.switchRealtimeRadarSide = switchRealtimeRadarSide;
 
+function realtimeRadarRowsSignature(rows = []) {
+  return normalizeArray(rows)
+    .slice(0, 80)
+    .map((stock) => `${stock.side}:${stock.code}:${Math.round(cleanNumber(stock.score))}:${cleanNumber(stock.radarUpdatedAt)}`)
+    .join("|");
+}
+
+function patchRealtimeRadarBoard(activeSide, boardMarkup, displayRows) {
+  const panel = viewPanels["realtime-radar"];
+  const board = panel?.querySelector(".radar-board-list");
+  if (!panel || !board) return false;
+  panel.querySelectorAll("[data-radar-side]").forEach((button) => {
+    const isActive = button.dataset.radarSide === activeSide;
+    button.classList.toggle("active", isActive);
+    button.classList.toggle("short-active", isActive && activeSide === "short");
+    button.setAttribute("aria-selected", isActive ? "true" : "false");
+  });
+  board.innerHTML = boardMarkup;
+  const small = panel.querySelector(".radar-topbar small");
+  const latest = latestRealtimeRadarSignalAt(displayRows);
+  if (small && latest) {
+    small.textContent = `偵測時間 09:00-13:30｜盤中即時巡邏｜最新訊號 ${realtimeRadarSignalTimeText(latest)}｜${realtimeRadarFreshnessText()}`;
+  }
+  return true;
+}
+
 function loadRealtimeRadarLastRows() {
   try {
     localStorage.removeItem("fuman_realtime_radar_last_rows_v1");
@@ -4453,6 +4505,17 @@ function renderRealtimeRadar() {
     short: shortRows.slice(0, 10).map(boardCard).join("") || `<div class="empty-state">目前無空方訊號</div>`,
   };
   const boardMarkup = realtimeRadarBoardMarkupCache[activeSide] || `<div class="empty-state">目前無${activeSide === "short" ? "空方" : "多方"}訊號</div>`;
+  const renderSignature = `${activeSide}:${radarOpen ? 1 : 0}:${realtimeRadarRowsSignature(displayRows)}`;
+  const shellSignature = `${radarOpen ? 1 : 0}:${displayRows.length}:${longAll.length}:${shortAll.length}:${displaySignalStale ? 1 : 0}`;
+  if (
+    panel.querySelector(".radar-board-list")
+    && renderSignature !== realtimeRadarRenderSignature
+    && shellSignature === realtimeRadarShellSignature
+    && patchRealtimeRadarBoard(activeSide, boardMarkup, displayRows)
+  ) {
+    realtimeRadarRenderSignature = renderSignature;
+    return;
+  }
   const signalTimeText = realtimeRadarSignalTimeText(displaySignalAt);
   const aiUpdateText = radarOpen && displaySignalAt
     ? displaySignalStale
@@ -4489,6 +4552,8 @@ function renderRealtimeRadar() {
       ${boardMarkup}
     </section>
   `;
+  realtimeRadarRenderSignature = renderSignature;
+  realtimeRadarShellSignature = shellSignature;
 }
 
 function getActiveViewName() {
@@ -4728,6 +4793,8 @@ let realtimeRadarDataPromise = null;
 let realtimeRadarSide = "auto";
 let realtimeRadarManualSideSwitch = false;
 let realtimeRadarBoardMarkupCache = { long: "", short: "" };
+let realtimeRadarRenderSignature = "";
+let realtimeRadarShellSignature = "";
 let realtimeRadarLastRows = [];
 let realtimeRadarLastUpdatedAt = 0;
 let realtimeRadarCacheSource = "none";
@@ -4766,6 +4833,7 @@ let strategyRealtimeQuotes = {};
 let strategyLastScanAt = 0;
 let strategyRealtimeStats = { requested: 0, received: 0, failed: 0, lastError: "" };
 let strategyRealtimeBackgroundCursor = 0;
+let strategyRealtimePriorityCursor = 0;
 let mobileIntradayHotScanLastAt = 0;
 let mobileIntradayBackgroundScanLastAt = 0;
 let mobileOtherStrategyRenderLastAt = 0;
@@ -10435,9 +10503,11 @@ function renderSwingRadar(universe) {
     swingRenderCacheRows = rows;
     swingRenderCacheZoneRows = zoneRows;
     swingRenderCacheSignalCounts = signalCounts;
-    warmWorkerSortCache(renderCacheSignature, filteredRows, swingSortKey === "price" ? "close" : swingSortKey === "volume" ? "tradeVolume" : swingSortKey === "percent" ? "percent" : "swingScore", swingSortDir, (key, sorted) => {
-      if (key !== swingRenderCacheSignature || swingSortKey === "stage") return;
-      swingRenderCacheRows = sorted;
+    warmSwingWorkerCache(renderCacheSignature, allRows, {
+      zoneFilter: swingZoneFilter,
+      signalFilter: swingSignalFilter,
+      sortKey: swingSortKey,
+      sortDir: swingSortDir,
     });
   }
   const swingPaged = paginateTerminalRows(rows, swingPage, "swing");
@@ -10908,6 +10978,8 @@ function renderStrategy5CacheLoading() {
       </section>
     </section>
   `;
+  realtimeRadarRenderSignature = renderSignature;
+  realtimeRadarShellSignature = shellSignature;
 }
 function renderOvernightDashboard(evaluated) {
   setStrategyChrome("strategy3");
@@ -13690,9 +13762,10 @@ async function refreshStrategyRealtimeScan(mode = "hot") {
       .slice(0, hotScanLimit);
     const baseStrongStocks = getBaseStrongIntradayStocks(scanSource);
     const candidateStocks = getIntradayCandidateStocks(scanSource);
+    const priorityStocks = buildStrategyRealtimePriorityQueue(scanSource, rankedHotStocks, baseStrongStocks, candidateStocks, hotScanLimit + forceExtraLimit);
     const hotStocks = isStrategy5Realtime
       ? []
-      : uniqueStocksByCode([...candidateStocks, ...baseStrongStocks, ...rankedHotStocks])
+      : priorityStocks
         .slice(0, scanMode === "force" ? hotScanLimit + forceExtraLimit : hotScanLimit);
     const hotCodes = new Set(hotStocks.map((stock) => stock.code));
     const backgroundPool = scanSource.filter((stock) => !hotCodes.has(stock.code));
@@ -13808,6 +13881,27 @@ if (isViewActive("market")) {
   loadMarketData();
   if (isMobileViewport()) deferUiWork(loadHeatmap, 1600);
   else loadHeatmap();
+}
+
+function buildStrategyRealtimePriorityQueue(scanSource, rankedHotStocks, baseStrongStocks, candidateStocks, limit) {
+  const scored = uniqueStocksByCode([...candidateStocks, ...baseStrongStocks, ...rankedHotStocks, ...scanSource])
+    .map((stock) => {
+      const quote = strategyRealtimeQuotes[String(stock.code || "")] || {};
+      const quoteAge = cleanNumber(quote.updatedAt) ? Date.now() - cleanNumber(quote.updatedAt) : Number.MAX_SAFE_INTEGER;
+      const candidateBoost = intradayCandidateSeenAt[stock.code] ? 220 : 0;
+      const freshPenalty = quoteAge < 6000 ? 180 : quoteAge < 15000 ? 80 : 0;
+      const valueBoost = Math.min(80, cleanNumber(stock.value) / 25000000);
+      return {
+        stock,
+        priority: getIntradayHotScore(stock) + candidateBoost + valueBoost - freshPenalty,
+      };
+    })
+    .sort((a, b) => b.priority - a.priority)
+    .map((item) => item.stock);
+  if (!scored.length) return [];
+  const start = strategyRealtimePriorityCursor % scored.length;
+  strategyRealtimePriorityCursor = (strategyRealtimePriorityCursor + Math.max(limit, 1)) % scored.length;
+  return [...scored.slice(start), ...scored.slice(0, start)].slice(0, limit);
 }
 if (brandRefresh) {
   brandRefresh.setAttribute("role", "button");

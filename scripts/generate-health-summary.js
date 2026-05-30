@@ -91,6 +91,28 @@ function riskItem(level, area, message, meta = {}) {
   return { level, area, message, ...meta };
 }
 
+const DATA_SLA_HOURS = {
+  "market-summary.json": 12,
+  "strategy4-summary.json": 30,
+  "strategy5-latest.json": 30,
+  "institution-summary.json": 42,
+  "warrant-flow-summary.json": 42,
+  "realtime-radar-latest.json": 6,
+};
+
+function isWeekendTaipei(date = new Date()) {
+  const day = new Intl.DateTimeFormat("en-US", { timeZone: "Asia/Taipei", weekday: "short" }).format(date);
+  return day === "Sat" || day === "Sun";
+}
+
+function effectiveSlaHours(file) {
+  if (isWeekendTaipei()) {
+    if (file === "realtime-radar-latest.json") return 72;
+    if (file === "market-summary.json") return 72;
+  }
+  return DATA_SLA_HOURS[file] || 36;
+}
+
 function buildRisks({ badTasks, outbox, data }) {
   const risks = [];
   if (badTasks.length) {
@@ -106,12 +128,17 @@ function buildRisks({ badTasks, outbox, data }) {
     risks.push(riskItem("high", "runtime", `資料檔缺失或不可解析 ${missing.length} 個`, { files: missing.map((item) => item.file) }));
   }
   const now = Date.now();
-  const stale = data.filter((item) => {
+  const stale = data.map((item) => {
     const at = Date.parse(item.updatedAt || "");
-    return Number.isFinite(at) && now - at > 36 * 60 * 60 * 1000;
-  });
-  if (stale.length) {
-    risks.push(riskItem("medium", "freshness", `資料超過 36 小時未更新 ${stale.length} 個`, { files: stale.map((item) => item.file) }));
+    const slaHours = effectiveSlaHours(item.file);
+    const ageHours = Number.isFinite(at) ? (now - at) / 3600000 : null;
+    return { ...item, slaHours, ageHours };
+  }).filter((item) => item.ok && item.ageHours !== null && item.ageHours > item.slaHours);
+  const highStale = stale.filter((item) => item.ageHours > item.slaHours * 1.75);
+  if (highStale.length) {
+    risks.push(riskItem("high", "freshness", `資料超過 SLA 嚴重逾時 ${highStale.length} 個`, { files: highStale.map((item) => item.file), stale }));
+  } else if (stale.length) {
+    risks.push(riskItem("medium", "freshness", `資料超過 SLA ${stale.length} 個`, { files: stale.map((item) => item.file), stale }));
   }
   return risks;
 }
