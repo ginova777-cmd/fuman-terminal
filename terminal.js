@@ -8662,6 +8662,101 @@ intradayRadarStyles.textContent = `
     font-size: 13px;
     line-height: 1.55;
   }
+  .strategy5-detail-list {
+    display: grid;
+    gap: 10px;
+    margin: 14px;
+  }
+  .strategy5-detail-card {
+    display: grid;
+    grid-template-columns: 46px minmax(190px, 1.05fr) minmax(128px, 0.55fr) minmax(230px, 1fr) minmax(210px, 0.9fr);
+    gap: 18px;
+    align-items: center;
+    padding: 18px;
+    border: 1px solid rgba(132, 161, 208, 0.16);
+    border-radius: 10px;
+    background: rgba(16, 25, 44, 0.78);
+  }
+  .strategy5-detail-card:hover {
+    border-color: rgba(132, 161, 208, 0.28);
+    background: rgba(20, 30, 51, 0.86);
+  }
+  .strategy5-detail-rank {
+    color: #7f8ca8;
+    font-size: 13px;
+    font-weight: 900;
+  }
+  .strategy5-detail-main strong {
+    display: block;
+    color: #f7fbff;
+    font-size: 18px;
+    line-height: 1.2;
+    font-weight: 900;
+  }
+  .strategy5-detail-main strong span {
+    margin-left: 6px;
+    color: #91a4c6;
+    font-size: 14px;
+    font-weight: 800;
+  }
+  .strategy5-detail-main small,
+  .strategy5-detail-feature > small {
+    display: block;
+    color: #7f8ca8;
+    font-size: 11px;
+    font-weight: 700;
+    line-height: 1.45;
+    margin-top: 6px;
+  }
+  .strategy5-detail-price strong {
+    display: block;
+    color: #ff526d;
+    font-size: 24px;
+    line-height: 1.05;
+    font-weight: 900;
+  }
+  .strategy5-detail-price span {
+    display: block;
+    margin-top: 5px;
+    font-size: 12px;
+    font-weight: 900;
+  }
+  .strategy5-detail-price span.red { color: #ff6f82; }
+  .strategy5-detail-price span.green { color: #38d39f; }
+  .strategy5-detail-price small {
+    display: block;
+    margin-top: 7px;
+    color: #7f8ca8;
+    font-size: 11px;
+    font-weight: 700;
+  }
+  .strategy5-detail-feature {
+    min-width: 0;
+    border-left: 1px solid rgba(132, 161, 208, 0.16);
+    padding-left: 16px;
+  }
+  .strategy5-chip-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 7px;
+    margin-top: 7px;
+  }
+  .strategy5-chip {
+    display: inline-flex;
+    align-items: center;
+    min-height: 24px;
+    border-radius: 999px;
+    padding: 4px 8px;
+    font-size: 11px;
+    font-weight: 900;
+    line-height: 1;
+    white-space: nowrap;
+  }
+  .strategy5-chip.red { background: #fff0f2; color: #e23952; }
+  .strategy5-chip.orange { background: #fff1dd; color: #d26a00; }
+  .strategy5-chip.blue { background: #eef5ff; color: #4f6c9f; }
+  .strategy5-chip.pink { background: #ffe7ee; color: #d02a58; }
+  .strategy5-chip.gray { background: #edf2f8; color: #536176; }
   .strategy3-clean {
     grid-template-columns: 1fr;
   }
@@ -8896,6 +8991,20 @@ intradayRadarStyles.textContent = `
       content: "原因：";
       color: #8190ad;
       font-weight: 800;
+    }
+    .strategy5-detail-list { margin: 12px 0; }
+    .strategy5-detail-card {
+      grid-template-columns: 42px minmax(0, 1fr);
+      gap: 10px 14px;
+      padding: 15px;
+    }
+    .strategy5-detail-rank { grid-row: 1 / 4; }
+    .strategy5-detail-price,
+    .strategy5-detail-feature { grid-column: 2 / -1; }
+    .strategy5-detail-feature {
+      border-left: 0;
+      padding-left: 0;
+      padding-top: 4px;
     }
     .intraday-main-layout { grid-template-columns: 1fr; }
     .intraday-side-panel {
@@ -10201,33 +10310,70 @@ function renderStrategy5Dashboard(evaluated) {
       </button>`;
   }).join("");
 
+  const buildChip = (label, tone = "gray") => `<span class="strategy5-chip ${tone}">${escapeAttr(label)}</span>`;
+  const buildChipRow = (chips) => chips.map((chip) => buildChip(chip.label, chip.tone)).join("");
+  const scanDateText = strategy5UpdatedAt
+    ? new Date(strategy5UpdatedAt).toLocaleDateString("zh-TW")
+    : "固定掃描";
+  const buildStrategy5DetailChips = (stock, main) => {
+    const reason = String(main?.reason || "");
+    const priceChips = [];
+    const chipChips = [];
+    if (stock.percent >= 6) priceChips.push({ label: "強勢動能", tone: "red" });
+    else if (stock.percent >= 3) priceChips.push({ label: "動能轉強", tone: "red" });
+    else if (stock.percent >= 0) priceChips.push({ label: "紅K續強", tone: "orange" });
+    if (stock.volumeRank >= 80) priceChips.push({ label: "爆量前段", tone: "pink" });
+    else if (stock.volumeRank >= 60) priceChips.push({ label: "量能放大", tone: "orange" });
+    if (stock.valueRank >= 80) priceChips.push({ label: "資金集中", tone: "orange" });
+    if (stock.strategy4Score >= 80) priceChips.push({ label: "技術準備", tone: "blue" });
+    if (main?.id === "limit_up_doji") {
+      priceChips.push({ label: "近20日漲停", tone: "red" }, { label: "放量突破", tone: "orange" });
+      chipChips.push({ label: "十字星型態", tone: "gray" }, { label: "橫盤收斂", tone: "blue" });
+    }
+    if (/外資/.test(reason)) chipChips.push({ label: "外資同買", tone: "pink" });
+    if (/投信/.test(reason)) chipChips.push({ label: "投信照顧", tone: "pink" });
+    if (cleanNumber(stock.inst?.total) > 0) chipChips.push({ label: "法人偏買", tone: "red" });
+    if (!chipChips.length) chipChips.push({ label: main?.short || "策略命中", tone: "gray" });
+    if (!priceChips.length) priceChips.push({ label: main?.short || "條件符合", tone: "gray" });
+    return { priceChips: priceChips.slice(0, 5), chipChips: chipChips.slice(0, 4) };
+  };
+
   const tableRows = pageList.length ? pageList.map((stock, index) => {
     const sign = stock.percent >= 0 ? "+" : "";
+    const direction = stock.percent >= 0 ? "▲" : "▼";
     const strategyMatches = stock.matches.filter((match) => STRATEGY5_PRESET_IDS.includes(match.id));
     const main = stock.activeMatch || strategyMatches[0] || stock.matches[0];
     const rank = (strategy5Page - 1) * TERMINAL_PAGE_SIZE + index + 1;
+    const volumeText = cleanNumber(stock.tradeVolume) > 0
+      ? `${Math.round(cleanNumber(stock.tradeVolume) / 1000).toLocaleString("zh-TW")} 張`
+      : "-- 張";
+    const marketText = [stock.market || "TWSE", scanDateText].filter(Boolean).join("・");
+    const { priceChips, chipChips } = buildStrategy5DetailChips(stock, main);
     return `
-      <article class="strategy5-table-row">
-        <div class="strategy5-rank-cell"><span class="strategy5-rank">${rank}</span></div>
-        <div class="strategy5-code">${stock.code}</div>
-        <div class="strategy5-name">${stock.name}</div>
-        <div class="strategy5-entry-price">
-          <strong>${formatStockPrice(stock.close)}</strong>
-          <small class="${stock.percent >= 0 ? "red" : "green"}">${sign}${stock.percent.toFixed(2)}%</small>
+      <article class="strategy5-detail-card">
+        <div class="strategy5-detail-rank">#${rank}</div>
+        <div class="strategy5-detail-main">
+          <strong>${escapeAttr(stock.name)} <span>${escapeAttr(stock.code)}</span></strong>
+          <small>${escapeAttr(marketText)}</small>
         </div>
-        <div class="strategy5-table-reason">${main?.reason || "符合策略5條件。"}</div>
+        <div class="strategy5-detail-price">
+          <strong>${formatStockPrice(stock.close)}</strong>
+          <span class="${stock.percent >= 0 ? "red" : "green"}">${direction}${sign}${stock.percent.toFixed(2)}%</span>
+          <small>${volumeText}</small>
+        </div>
+        <div class="strategy5-detail-feature">
+          <small>價量特徵</small>
+          <div class="strategy5-chip-row">${buildChipRow(priceChips)}</div>
+        </div>
+        <div class="strategy5-detail-feature">
+          <small>籌碼特徵</small>
+          <div class="strategy5-chip-row">${buildChipRow(chipChips)}</div>
+        </div>
       </article>
     `;
   }).join("") : `<div class="empty-state">目前沒有符合「${active.label}」的股票。</div>`;
   const table = pageList.length ? `
-    <section class="strategy5-table" aria-label="策略5綜合策略清單">
-      <div class="strategy5-table-head">
-        <span>排名</span>
-        <span>股票代號</span>
-        <span>股票名稱</span>
-        <span>進場價</span>
-        <span>原因</span>
-      </div>
+    <section class="strategy5-detail-list" aria-label="策略5綜合策略清單">
       ${tableRows}
     </section>
   ` : tableRows;
