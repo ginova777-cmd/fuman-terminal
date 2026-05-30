@@ -57,6 +57,12 @@ $env:STRATEGY4_ALLOW_PARTIAL_PUBLISH = "1"
 $env:STRATEGY4_SCAN_STAMP = $strategy4Stamp
 
 try {
+  & $nodeExe "scripts\verify-strategy4-data-sources.js" *>&1 | Tee-Object -FilePath $log -Append
+  $sourceExit = $LASTEXITCODE
+  if ($sourceExit -ne 0) {
+    Write-Log "Strategy4 data source verification failed with exit code $sourceExit"
+    exit $sourceExit
+  }
   & $nodeExe "scripts\verify-strategy4-contract.js" *>&1 | Tee-Object -FilePath $log -Append
   $contractExit = $LASTEXITCODE
   if ($contractExit -ne 0) {

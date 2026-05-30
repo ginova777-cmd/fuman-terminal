@@ -33,8 +33,10 @@ function fail(message, payload) {
         code: item.code,
         score: item.score,
         swingZone: item.swingZone,
+        priceSource: item.priceSource,
         signalCount: Array.isArray(item.signals) ? item.signals.length : 0,
       })),
+      sourceCounts: payload.sourceCounts || {},
       noDataCodes: payload.noDataCodes || [],
       errors: payload.errors || [],
     }, null, 2));
@@ -48,6 +50,7 @@ function fail(message, payload) {
   const matches = Array.isArray(payload?.matches) ? payload.matches : [];
   if (payload?.ok !== true) fail("Strategy4 handler did not return ok=true", payload);
   if (Number(payload?.count || 0) !== matches.length) fail("Strategy4 count does not match matches.length", payload);
+  if (!payload?.sourceCounts || !Object.keys(payload.sourceCounts).length) fail("Strategy4 sourceCounts missing from handler payload", payload);
   if (matches.length < MIN_MATCHES) {
     fail(`Strategy4 contract returned too few matches: ${matches.length}/${codes.length}, minimum ${MIN_MATCHES}`, payload);
   }
@@ -56,6 +59,7 @@ function fail(message, payload) {
     !Number.isFinite(Number(item?.score)) ||
     !Array.isArray(item?.signals) ||
     !item.signals.length ||
+    !item.priceSource ||
     !item.reason
   );
   if (malformed) fail(`Strategy4 malformed match payload for ${malformed.code || "unknown code"}`, payload);

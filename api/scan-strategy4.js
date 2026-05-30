@@ -679,11 +679,22 @@ module.exports = async function handler(request, response) {
     const history = USE_MIS_QUOTES
       ? mergeMisQuoteIntoHistory(officialHistory, quoteMap.get(code))
       : officialHistory;
-    if (!history.rows.length) return { code, noData: true };
-    return scanStrategy4(code, history.market, history.rows, history.source || "");
+    const source = history.source || "";
+    if (!history.rows.length) return { code, noData: true, source };
+    return {
+      code,
+      source,
+      match: scanStrategy4(code, history.market, history.rows, source),
+    };
   }));
+  const sourceCounts = {};
+  results.forEach((result) => {
+    if (result.status !== "fulfilled") return;
+    const source = result.value?.source || result.value?.priceSource || "unknown";
+    sourceCounts[source] = (sourceCounts[source] || 0) + 1;
+  });
   const matches = results
-    .filter((result) => result.status === "fulfilled" && result.value && !result.value.noData)
+    .filter((result) => result.status === "fulfilled" && result.value?.match)
     .map((result) => result.value.match || result.value)
     .sort((a, b) => b.score - a.score || b.percent - a.percent);
   const noDataCodes = results
@@ -697,6 +708,7 @@ module.exports = async function handler(request, response) {
     priceSource: USE_MIS_QUOTES ? "official-daily-k-plus-mis" : "official-daily-k",
     scanned: codes.length,
     scannedCodes: codes,
+    sourceCounts,
     count: matches.length,
     matches,
     noDataCodes,

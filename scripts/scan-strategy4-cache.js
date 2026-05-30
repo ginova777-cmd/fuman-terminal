@@ -19,6 +19,7 @@ const STOCK_URL = process.env.STOCK_UNIVERSE_URL || "https://fuman-terminal.verc
 const MIN_UNIVERSE_SIZE = Number(process.env.STRATEGY4_MIN_UNIVERSE_SIZE || 1700);
 const MIN_MATCH_COUNT = Number(process.env.STRATEGY4_MIN_MATCH_COUNT || 10);
 const MIN_MATCH_RATIO_TO_PREVIOUS = Number(process.env.STRATEGY4_MIN_MATCH_RATIO_TO_PREVIOUS || 0.5);
+const MAX_YAHOO_SOURCE_RATIO = Number(process.env.STRATEGY4_MAX_YAHOO_SOURCE_RATIO || 0.2);
 const USE_MIS_QUOTES = process.env.STRATEGY4_USE_MIS === "1";
 const FAIL_ON_INCOMPLETE = process.env.STRATEGY4_FAIL_ON_INCOMPLETE !== "0";
 const ALLOW_PARTIAL_PUBLISH = process.env.STRATEGY4_ALLOW_PARTIAL_PUBLISH === "1";
@@ -177,13 +178,26 @@ function mergeMatches(matches, universe, currentMatches) {
   });
 }
 
-function buildOutput({ codes, scannedThisRun, scanned, noDataCodes, scanErrors, currentMatches, complete, runMode, scanStamp }) {
+function mergeSourceCounts(sourceCounts, currentSourceCounts) {
+  Object.entries(sourceCounts || {}).forEach(([source, count]) => {
+    const key = source || "unknown";
+    currentSourceCounts.set(key, (currentSourceCounts.get(key) || 0) + Number(count || 0));
+  });
+}
+
+function buildOutput({ codes, scannedThisRun, scanned, noDataCodes, scanErrors, currentMatches, dataSourceCounts, complete, runMode, scanStamp }) {
   const matches = [...currentMatches.values()]
     .sort((a, b) => (b.swingScore || b.score || 0) - (a.swingScore || a.score || 0) || (b.percent || 0) - (a.percent || 0));
   const noDataCount = noDataCodes.size;
   const errorCount = scanErrors.length;
   const pendingCount = codes.length - scanned.size + noDataCount;
   const qualityStatus = complete && noDataCount === 0 && errorCount === 0 ? "complete" : "incomplete";
+  const sourceCounts = Object.fromEntries([...dataSourceCounts.entries()].sort(([a], [b]) => a.localeCompare(b)));
+  const yahooSourceCount = Object.entries(sourceCounts)
+    .filter(([source]) => /^yahoo/i.test(source))
+    .reduce((sum, [, count]) => sum + Number(count || 0), 0);
+  const totalSourceCount = Object.values(sourceCounts).reduce((sum, count) => sum + Number(count || 0), 0);
+  const yahooSourceRatio = totalSourceCount ? Number((yahooSourceCount / totalSourceCount).toFixed(4)) : 0;
   return {
     ok: true,
     source: qualityStatus === "complete" ? "github-actions" : "github-actions-partial",
@@ -202,6 +216,9 @@ function buildOutput({ codes, scannedThisRun, scanned, noDataCodes, scanErrors, 
     scannedCodes: [...scanned].filter((code) => codes.includes(code)),
     noDataCodes: [...noDataCodes],
     errors: scanErrors,
+    dataSourceCounts: sourceCounts,
+    yahooSourceCount,
+    yahooSourceRatio,
     count: matches.length,
     matches,
   };
@@ -260,12 +277,14 @@ async function main() {
   const backup = readJson(BACKUP_FILE, { ok: true, matches: [] });
   const scanStamp = FULL_SCAN ? RUN_STAMP : (previousRaw.scanStamp || previousRaw.stamp || RUN_STAMP);
   const currentMatches = new Map();
+  const dataSourceCounts = new Map();
   const scanned = new Set();
   const noDataCodes = new Set();
   const scanErrors = [];
   let scannedThisRun = 0;
   if (!FULL_SCAN) {
     (previousRaw.matches || []).forEach((item) => currentMatches.set(item.code, item));
+    mergeSourceCounts(previousRaw.dataSourceCounts, dataSourceCounts);
     (previousRaw.scannedCodes || []).forEach((code) => {
       if (codes.includes(code)) scanned.add(code);
     });
@@ -299,6 +318,7 @@ async function main() {
       });
       (payload.noDataCodes || []).forEach((code) => noDataCodes.add(code));
       (payload.errors || []).forEach((error) => scanErrors.push(`${label}: ${error}`));
+      mergeSourceCounts(payload.sourceCounts, dataSourceCounts);
       mergeMatches(payload.matches, universe, currentMatches);
       scannedThisRun += chunkCodes.length;
       console.log(`${label} done: matches ${(payload.matches || []).length}`);
@@ -320,6 +340,7 @@ async function main() {
     noDataCodes,
     scanErrors,
     currentMatches,
+    dataSourceCounts,
     complete: scanned.size === codes.length && !scanErrors.length && !noDataCodes.size,
     runMode,
     scanStamp,
@@ -344,6 +365,7 @@ async function main() {
       retryChunkCodes.forEach((code) => noDataCodes.delete(code));
       (payload.noDataCodes || []).forEach((code) => noDataCodes.add(code));
       (payload.errors || []).forEach((error) => scanErrors.push(`${label}: ${error}`));
+      mergeSourceCounts(payload.sourceCounts, dataSourceCounts);
       mergeMatches(payload.matches, universe, currentMatches);
       const retryOutput = buildOutput({
         codes,
@@ -352,6 +374,7 @@ async function main() {
         noDataCodes,
         scanErrors,
         currentMatches,
+        dataSourceCounts,
         complete: false,
         runMode,
         scanStamp,
@@ -371,6 +394,7 @@ async function main() {
     noDataCodes,
     scanErrors,
     currentMatches,
+    dataSourceCounts,
     complete: scanned.size === codes.length && !scanErrors.length && !noDataCodes.size,
     runMode,
     scanStamp,
@@ -384,6 +408,9 @@ async function main() {
   }
   if (FULL_SCAN && output.complete && output.count < MIN_MATCH_COUNT) {
     throw new Error(`Strategy4 suspiciously low match count: ${output.count}/${codes.length}, minimum ${MIN_MATCH_COUNT}`);
+  }
+  if (FULL_SCAN && output.complete && output.yahooSourceRatio > MAX_YAHOO_SOURCE_RATIO) {
+    throw new Error(`Strategy4 excessive Yahoo fallback: ${output.yahooSourceCount}/${Object.values(output.dataSourceCounts || {}).reduce((sum, count) => sum + Number(count || 0), 0)} (${output.yahooSourceRatio}), maximum ${MAX_YAHOO_SOURCE_RATIO}`);
   }
   const previousCompleteCount = previousRaw?.complete === true ? Number(previousRaw.count || 0) : 0;
   if (FULL_SCAN && output.complete && previousCompleteCount >= MIN_MATCH_COUNT) {
