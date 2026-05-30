@@ -6253,6 +6253,7 @@ const STRATEGY_DEFS = [
   { id: "foreign_trust_breakout", label: "外資投信連買準突破", short: "準突破", icon: "◆" },
   { id: "momentum", label: "動能分數 75+", short: "動能", icon: "⚡" },
   { id: "main_force_chip", label: "主力籌碼盤整", short: "主力", icon: "♣" },
+  { id: "limit_up_doji", label: "漲停十字星", short: "漲停十字", icon: "十" },
   { id: "twenty_day_breakout", label: "突破20日新高", short: "突破", icon: "↑" },
   { id: "opening_power", label: "開盤即戰力狙擊", short: "開盤", icon: "✥" },
   { id: "red_to_green", label: "昨日紅轉綠", short: "紅轉綠", icon: "↻" },
@@ -6273,7 +6274,16 @@ const STRATEGY_BY_ID = Object.fromEntries(STRATEGY_DEFS.map((item) => [item.id, 
 const STRATEGY5_IDS = ["short_fund_flow", "chip_health_strong", "one_day_rebound", "short_squeeze", "ultra_short"];
 const STRATEGY5_PRESET_IDS = [
   "foreign_trust_breakout",
+  "limit_up_doji",
 ];
+const STRATEGY5_CARD_META = {
+  foreign_trust_breakout: {
+    description: "外資與投信同步買超，漲幅未過熱，優先觀察準突破名單。",
+  },
+  limit_up_doji: {
+    description: "接近漲停且日內實體小、震幅足，鎖定漲停附近籌碼換手的十字星。",
+  },
+};
 const INTRADAY_EXCLUDED_CODES = new Set([
   "2330", "2412", "3045",
   "2208", "2634", "2645", "4541", "4572", "5009", "6753", "8033", "8222",
@@ -6446,6 +6456,15 @@ function strategyHit(id, stock) {
   const inst = stock.inst || getInstitutionTotal(stock.code);
   const smartMoney = inst.total + inst.trust * 1.4;
   const close = cleanNumber(stock.close);
+  const open = cleanNumber(stock.open);
+  const high = cleanNumber(stock.high) || close;
+  const low = cleanNumber(stock.low) || close;
+  const prevClose = cleanNumber(stock.prevClose) || (close - cleanNumber(stock.change));
+  const limitUp = cleanNumber(stock.limitUp) || (prevClose ? prevClose * 1.1 : 0);
+  const candleBodyPct = open && close ? Math.abs(close - open) / open * 100 : 99;
+  const candleRangePct = high && low ? (high - low) / low * 100 : 0;
+  const nearLimitUp = Boolean((limitUp && close >= limitUp * 0.995) || pct >= 9.7);
+  const dojiLike = open > 0 && close > 0 && candleBodyPct <= 1.2 && candleRangePct >= 1.2;
   const highest20Prev = cleanNumber(stock.swingDaily?.highest20Prev);
   const nearBreakout = highest20Prev ? close >= highest20Prev * 0.965 && close <= highest20Prev * 1.035 : true;
   const trustBuying = cleanNumber(inst.trust) > 0;
@@ -6473,6 +6492,11 @@ function strategyHit(id, stock) {
       hit: smartMoney > 0 && valueRank >= 45,
       score: clamp(scoreBase + (inst.trust > 0 ? 10 : 0), 0, 100),
       reason: `法人合計 ${formatInstitution(inst.total)}，投信 ${formatInstitution(inst.trust)}，資金偏買。`,
+    },
+    limit_up_doji: {
+      hit: nearLimitUp && dojiLike && close >= 10 && valueRank >= 45,
+      score: clamp(scoreBase + 20 + Math.min(candleRangePct * 2, 12), 0, 100),
+      reason: `接近漲停，實體 ${candleBodyPct.toFixed(2)}%，日內震幅 ${candleRangePct.toFixed(2)}%，留意漲停附近換手。`,
     },
     twenty_day_breakout: {
       hit: pct >= 3.5 && volumeRank >= 50,
@@ -8325,6 +8349,40 @@ intradayRadarStyles.textContent = `
     font-weight: 800;
     padding: 6px 11px;
   }
+  .strategy5-preset-tabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 12px 14px 4px;
+  }
+  .strategy5-preset-tabs button {
+    border: 1px solid rgba(132, 161, 208, 0.18);
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.035);
+    color: #b8c8e8;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 36px;
+    padding: 8px 12px;
+    font-size: 13px;
+    font-weight: 800;
+  }
+  .strategy5-preset-tabs button.active {
+    border-color: rgba(255, 79, 95, 0.72);
+    background: rgba(255, 79, 95, 0.14);
+    color: #fff;
+    box-shadow: inset 3px 0 0 #ff4f5f;
+  }
+  .strategy5-preset-tabs span {
+    color: #8fa2c8;
+    font-size: 12px;
+    font-weight: 900;
+  }
+  .strategy5-preset-tabs button.active span {
+    color: #ffb7bd;
+  }
   .strategy5-stock-card {
     display: grid;
     grid-template-columns: 44px 1.25fr 0.9fr 1fr 1.2fr;
@@ -9963,10 +10021,6 @@ function renderStrategy5Dashboard(evaluated) {
     });
   });
   if (!STRATEGY5_PRESET_IDS.includes(strategy5ActiveId)) strategy5ActiveId = "foreign_trust_breakout";
-  if (!(byId[strategy5ActiveId] || []).length) {
-    const firstHit = STRATEGY5_PRESET_IDS.find((id) => (byId[id] || []).length);
-    if (firstHit) strategy5ActiveId = firstHit;
-  }
 
   const list = (byId[strategy5ActiveId] || [])
     .sort((a, b) => b.score - a.score || b.percent - a.percent || b.value - a.value)
@@ -9975,6 +10029,7 @@ function renderStrategy5Dashboard(evaluated) {
   strategy5Page = strategy5Paged.page;
   const pageList = strategy5Paged.rows;
   const active = STRATEGY_BY_ID[strategy5ActiveId] || STRATEGY_BY_ID.foreign_trust_breakout;
+  const activeMeta = STRATEGY5_CARD_META[strategy5ActiveId] || {};
   const totalMatches = new Set(evaluated
     .filter((stock) => stock.matches.some((match) => STRATEGY5_PRESET_IDS.includes(match.id)))
     .map((stock) => stock.code)).size;
@@ -9984,9 +10039,12 @@ function renderStrategy5Dashboard(evaluated) {
   if (strategyAvgScore) strategyAvgScore.textContent = list.length ? Math.round(avg(list.map((stock) => stock.score))) : "--";
   if (strategyTopHit) strategyTopHit.textContent = list.length ? `${Math.max(...list.map((stock) => stock.matches.filter((match) => STRATEGY5_PRESET_IDS.includes(match.id)).length))}/${STRATEGY5_PRESET_IDS.length}` : "--";
 
-  const descriptions = {
-    foreign_trust_breakout: "外資與投信同步買超，漲幅未過熱，優先觀察準突破名單。",
-  };
+  const strategyTabs = STRATEGY5_PRESET_IDS.map((id) => {
+    const strategy = STRATEGY_BY_ID[id] || {};
+    const count = (byId[id] || []).length;
+    const activeClass = id === strategy5ActiveId ? "active" : "";
+    return `<button class="${activeClass}" type="button" data-strategy5-filter="${escapeAttr(id)}">${escapeAttr(strategy.label || id)}<span>${count.toLocaleString("zh-TW")}</span></button>`;
+  }).join("");
 
   const tableRows = pageList.length ? pageList.map((stock, index) => {
     const sign = stock.percent >= 0 ? "+" : "";
@@ -10030,9 +10088,10 @@ function renderStrategy5Dashboard(evaluated) {
           <div class="strategy5-results-head">
             <div>
               <h3>${titleWithSchedule("▰", "策略5-綜合策略", "strategy5")}</h3>
-              <p>${descriptions[strategy5ActiveId] || "符合策略5條件的股票。"}｜${scanText}，結果固定到下一次掃描。</p>
+              <p>${activeMeta.description || "符合策略5條件的股票。"}｜${scanText}，結果固定到下一次掃描。</p>
             </div>
           </div>
+          <div class="strategy5-preset-tabs">${strategyTabs}</div>
           ${table}
           ${pagination}
         </section>
