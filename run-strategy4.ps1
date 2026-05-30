@@ -89,6 +89,7 @@ if ($scanExit -ne 0) {
 $runtimeData = Join-Path $runtime "data"
 New-Item -ItemType Directory -Force -Path $runtimeData | Out-Null
 Copy-Item -LiteralPath (Join-Path $repo "data\strategy4-latest.json") -Destination (Join-Path $runtimeData "strategy4-latest.json") -Force
+Copy-Item -LiteralPath (Join-Path $repo "data\strategy4-summary.json") -Destination (Join-Path $runtimeData "strategy4-summary.json") -Force
 Copy-Item -LiteralPath (Join-Path $repo "data\strategy4-backup.json") -Destination (Join-Path $runtimeData "strategy4-backup.json") -Force
 Write-Log "Strategy4 cache copied to runtime data for clean sync."
 

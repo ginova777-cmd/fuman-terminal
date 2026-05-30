@@ -4564,8 +4564,10 @@ const endpoints = {
   exportAuth: "/api/export-auth",
   openBuyCache: "/data/open-buy-latest.json",
   openBuyBackup: "/data/open-buy-backup.json",
+  openBuySummary: "/data/open-buy-summary.json",
   strategy4Cache: "/data/strategy4-latest.json",
   strategy4Backup: "/data/strategy4-backup.json",
+  strategy4Summary: "/data/strategy4-summary.json",
   strategy3Cache: "/data/strategy3-latest.json",
   strategy3Backup: "/data/strategy3-backup.json",
   strategy5Cache: "/data/strategy5-latest.json",
@@ -4574,8 +4576,10 @@ const endpoints = {
   strategy2IntradayCache: "/data/strategy2-intraday-latest.json",
   institutionCache: "/data/institution-latest.json",
   institutionBackup: "/data/institution-backup.json",
+  institutionSummary: "/data/institution-summary.json",
   warrantFlowCache: "/data/warrant-flow-latest.json",
   warrantFlowBackup: "/data/warrant-flow-backup.json",
+  warrantFlowSummary: "/data/warrant-flow-summary.json",
   strategyStocks: "/api/stocks",
   stocks: "https://openapi.twse.com.tw/v1/exchangeReport/STOCK_DAY_ALL",
 };
@@ -4672,6 +4676,9 @@ let strategy4ScanCount = 0;
 let strategy4ScannedCodes = new Set();
 let strategy4ScanTotal = 0;
 let strategy4CacheLoading = false;
+let strategy4SummaryLoading = false;
+let strategy4SummaryLoadedAt = 0;
+let strategy4Summary = null;
 let strategy3Data = [];
 let strategy3UpdatedAt = 0;
 let strategy3CacheLoading = false;
@@ -4710,7 +4717,11 @@ let warrantFlowKeyword = "";
 let warrantFlowSearchTimer = null;
 let warrantFlowPage = 1;
 let warrantFlowHasOpened = false;
+let warrantFlowSummary = null;
+let warrantFlowSummaryLoading = false;
 let chipTradePage = 1;
+let institutionSummary = null;
+let institutionSummaryLoading = false;
 const WARRANT_FLOW_LOCAL_CACHE_KEY = "fuman_warrant_flow_cache_v1";
 const CACHE_FRESH_MS = 10 * 60 * 1000;
 const MARKET_REFRESH_LIVE_MS = 5 * 1000;
@@ -5512,6 +5523,26 @@ function hasFreshStrategy4Scan() {
   return progress >= 0.95 && ageMs < CACHE_FRESH_MS;
 }
 
+async function loadStrategy4Summary(force = false) {
+  if (strategy4SummaryLoading) return strategy4Summary;
+  if (!force && strategy4SummaryLoadedAt && Date.now() - strategy4SummaryLoadedAt < CACHE_FRESH_MS) return strategy4Summary;
+  strategy4SummaryLoading = true;
+  try {
+    const payload = await fetchJson(`${endpoints.strategy4Summary}?t=${Date.now()}`, 5000);
+    strategy4Summary = payload || null;
+    strategy4SummaryLoadedAt = Date.now();
+    if (payload?.total) strategy4ScanTotal = cleanNumber(payload.total);
+    if (payload?.count) strategy4ScanCount = cleanNumber(payload.count);
+    const updatedAt = Date.parse(payload?.updatedAt || "");
+    if (!strategy4ScanLastAt && Number.isFinite(updatedAt)) strategy4ScanLastAt = updatedAt;
+    return strategy4Summary;
+  } catch (error) {
+    return strategy4Summary;
+  } finally {
+    strategy4SummaryLoading = false;
+  }
+}
+
 function hasFreshOpenBuyScan() {
   const total = openBuyScanTotal || latestStocks.filter((stock) => !/^00/.test(stock.code)).length || 0;
   if (!total || !openBuyScanLastAt) return false;
@@ -5539,6 +5570,39 @@ function shouldLoadOpenBuyRemote(force = false) {
 
 function hasFreshWarrantFlow() {
   return warrantFlowData.length > 0 && warrantFlowUpdatedAt && (Date.now() - warrantFlowUpdatedAt) < CACHE_FRESH_MS;
+}
+
+async function loadWarrantFlowSummary(force = false) {
+  if (warrantFlowSummaryLoading) return warrantFlowSummary;
+  if (!force && warrantFlowSummary) return warrantFlowSummary;
+  warrantFlowSummaryLoading = true;
+  try {
+    warrantFlowSummary = await fetchJson(`${endpoints.warrantFlowSummary}?t=${Date.now()}`, 5000);
+    const updatedAt = Date.parse(warrantFlowSummary?.updatedAt || "");
+    if (!warrantFlowUpdatedAt && Number.isFinite(updatedAt)) warrantFlowUpdatedAt = updatedAt;
+    return warrantFlowSummary;
+  } catch (error) {
+    return warrantFlowSummary;
+  } finally {
+    warrantFlowSummaryLoading = false;
+  }
+}
+
+async function loadInstitutionSummary(force = false) {
+  if (institutionSummaryLoading) return institutionSummary;
+  if (!force && institutionSummary) return institutionSummary;
+  institutionSummaryLoading = true;
+  try {
+    institutionSummary = await fetchJson(`${endpoints.institutionSummary}?t=${Date.now()}`, 5000);
+    const updatedAt = Date.parse(institutionSummary?.updatedAt || "");
+    if (!institutionUpdatedAt && Number.isFinite(updatedAt)) institutionUpdatedAt = updatedAt;
+    if (!institutionDate && institutionSummary?.usedDate) institutionDate = institutionSummary.usedDate;
+    return institutionSummary;
+  } catch (error) {
+    return institutionSummary;
+  } finally {
+    institutionSummaryLoading = false;
+  }
 }
 
 function saveWarrantFlowLocalCache() {
@@ -8721,8 +8785,12 @@ intradayRadarStyles.textContent = `
     font-size: 12px;
     font-weight: 900;
   }
-  .strategy5-detail-price span.red { color: #ff6f82; }
-  .strategy5-detail-price span.green { color: #38d39f; }
+  .strategy5-detail-price span.red {
+    color: #ff6f82;
+  }
+  .strategy5-detail-price span.green {
+    color: #38d39f;
+  }
   .strategy5-detail-price small {
     display: block;
     margin-top: 7px;
@@ -8752,11 +8820,26 @@ intradayRadarStyles.textContent = `
     line-height: 1;
     white-space: nowrap;
   }
-  .strategy5-chip.red { background: #fff0f2; color: #e23952; }
-  .strategy5-chip.orange { background: #fff1dd; color: #d26a00; }
-  .strategy5-chip.blue { background: #eef5ff; color: #4f6c9f; }
-  .strategy5-chip.pink { background: #ffe7ee; color: #d02a58; }
-  .strategy5-chip.gray { background: #edf2f8; color: #536176; }
+  .strategy5-chip.red {
+    background: #fff0f2;
+    color: #e23952;
+  }
+  .strategy5-chip.orange {
+    background: #fff1dd;
+    color: #d26a00;
+  }
+  .strategy5-chip.blue {
+    background: #eef5ff;
+    color: #4f6c9f;
+  }
+  .strategy5-chip.pink {
+    background: #ffe7ee;
+    color: #d02a58;
+  }
+  .strategy5-chip.gray {
+    background: #edf2f8;
+    color: #536176;
+  }
   .strategy3-clean {
     grid-template-columns: 1fr;
   }
@@ -8992,15 +9075,21 @@ intradayRadarStyles.textContent = `
       color: #8190ad;
       font-weight: 800;
     }
-    .strategy5-detail-list { margin: 12px 0; }
+    .strategy5-detail-list {
+      margin: 12px 0;
+    }
     .strategy5-detail-card {
       grid-template-columns: 42px minmax(0, 1fr);
       gap: 10px 14px;
       padding: 15px;
     }
-    .strategy5-detail-rank { grid-row: 1 / 4; }
+    .strategy5-detail-rank {
+      grid-row: 1 / 4;
+    }
     .strategy5-detail-price,
-    .strategy5-detail-feature { grid-column: 2 / -1; }
+    .strategy5-detail-feature {
+      grid-column: 2 / -1;
+    }
     .strategy5-detail-feature {
       border-left: 0;
       padding-left: 0;
@@ -9925,9 +10014,14 @@ function renderSwingRadar(universe) {
   if (!strategy4ScanLastAt) {
     loadStrategy4LocalCache();
   }
+  if (!strategy4ScanLastAt && !strategy4SummaryLoading) {
+    loadStrategy4Summary().then(() => {
+      if (isViewActive("strategy") && selectedStrategyIds.has("swing_radar")) renderStrategyScanner();
+    });
+  }
   const scanCount = strategy4ScanCount || Object.keys(strategy4ScanMatches).length;
   const scannedCount = strategy4ScannedCodes.size;
-  const totalCount = strategy4ScanTotal || latestStocks.filter((stock) => !/^00/.test(stock.code)).length || latestStocks.length;
+  const totalCount = strategy4ScanTotal || strategy4Summary?.total || latestStocks.filter((stock) => !/^00/.test(stock.code)).length || latestStocks.length;
   if (!strategy4ScanLastAt && !strategy4CacheLoading) loadStrategy4Cache();
   const keyword = strategyKeyword.trim().toLowerCase();
   const visibleKeyword = swingVisibleKeyword.trim().toLowerCase();
@@ -9968,6 +10062,8 @@ function renderSwingRadar(universe) {
     : new Date().toLocaleTimeString("zh-TW", { hour12: false });
   const historyText = strategy4ScanLastAt
     ? `波段快取 ${scannedCount}/${totalCount}｜命中 ${scanCount}｜${new Date(strategy4ScanLastAt).toLocaleTimeString("zh-TW", { hour12: false })}`
+    : strategy4Summary
+    ? `波段摘要 ${strategy4Summary.count || 0}/${totalCount}｜完整名單載入中`
     : `波段快取讀取中 0/${totalCount}`;
 
   if (strategySummary) strategySummary.textContent = `全台股波段雷達｜排除ETF｜後端策略4計算｜${historyText}`;
@@ -10028,7 +10124,7 @@ function renderSwingRadar(universe) {
     <div class="swing-zone-card zone-c ${swingZoneFilter === "C" ? "active" : ""}" data-swing-zone-filter="C"><span>C區準備</span><strong>${zoneRows.C.length}</strong><small>低中位階整理</small></div>
   `;
   const tableRows = pageRows.length ? renderSwingRows(pageRows) : `
-    <tr><td colspan="9">後端策略4掃描 API 已啟動。正在完整掃描全台股官方日K並計算符合股票；命中後會自動顯示在這裡。</td></tr>
+    <tr><td colspan="9">${strategy4Summary ? `策略4摘要已載入：命中 ${strategy4Summary.count || 0} 檔。正在背景載入完整名單...` : "後端策略4掃描 API 已啟動。正在完整掃描全台股官方日K並計算符合股票；命中後會自動顯示在這裡。"}</td></tr>
   `;
   const swingTableHead = `
     <thead>
@@ -10427,7 +10523,6 @@ function renderStrategy5CacheLoading() {
     </section>
   `;
 }
-
 function renderOvernightDashboard(evaluated) {
   setStrategyChrome("strategy3");
   setTitleWithSchedule(strategyTitle, "◐", "策略3-隔日沖", "strategy3");
@@ -10517,6 +10612,11 @@ function renderStrategyScanner() {
   strategyCards.forEach((card) => card.classList.toggle("selected", selectedStrategyIds.has(card.dataset.strategy)));
   strategyModeButtons.forEach((button) => button.classList.toggle("active", button.dataset.strategyMode === strategyMode));
 
+  if (selected.length === 1 && selected[0] === "swing_radar") {
+    renderSwingRadar(latestStocks);
+    return;
+  }
+
   if (!latestStocks.length) {
     strategyTable.innerHTML = `<div class="empty-state">載入全台股股票池...</div>`;
     if (strategySummary) strategySummary.textContent = "正在載入上市櫃全市場股票資料。";
@@ -10550,14 +10650,6 @@ function renderStrategyScanner() {
       return passKeyword;
     });
     renderOpenBuyRadar(openBuyRows);
-    return;
-  }
-  if (selected.length === 1 && selected[0] === "swing_radar") {
-    const swingRows = universe.filter((stock) => {
-      const passKeyword = matchesStrategyKeyword(stock, keyword);
-      return passKeyword;
-    });
-    renderSwingRadar(swingRows);
     return;
   }
   if (selected.length === 1 && selected[0] === "intraday_2m") {
@@ -10805,6 +10897,12 @@ async function loadWarrantFlow(force = false) {
   if (warrantFlowLoading) return;
   if (!warrantFlowData.length) {
     loadWarrantFlowLocalCache();
+    loadWarrantFlowSummary().then(() => {
+      const panel = viewPanels["warrant-flow"];
+      if (!panel || warrantFlowData.length || !isViewActive("warrant-flow")) return;
+      const count = warrantFlowSummary?.count ?? warrantFlowSummary?.priorityCount ?? 0;
+      panel.innerHTML = `<div class="empty-state">權證摘要已載入：${count} 筆。正在讀取完整權證資金走向...</div>`;
+    });
   }
   if (!force && warrantFlowData.length) {
     renderWarrantFlow();
@@ -12548,7 +12646,13 @@ async function loadChipTradeData(force = false) {
   if (chipTradeLoading) return;
   chipTradeLoading = true;
   const body = document.querySelector("#chip-trade-body");
-  if (body) body.innerHTML = `<tr><td colspan="12">正在載入盤後法人資料...</td></tr>`;
+  if (body) {
+    loadInstitutionSummary().then(() => {
+      if (!chipTradeLoading || !institutionSummary || institutionData && Object.keys(institutionData).length) return;
+      body.innerHTML = `<tr><td colspan="12">法人摘要已載入：${institutionSummary.count || 0} 檔。正在讀取完整買賣超資料...</td></tr>`;
+    });
+    body.innerHTML = `<tr><td colspan="12">正在載入盤後法人資料...</td></tr>`;
+  }
 
   try {
     const [stockResult, instResult] = await Promise.allSettled([
@@ -12742,7 +12846,11 @@ function showView(viewName, activeLink) {
   }
   if (viewName === "strategy") {
     deferUiWork(renderStrategyScanner);
-    deferUiWork(loadInstitution, 600);
+    if (!selectedStrategyIds.has("swing_radar") && !selectedStrategyIds.has("intraday_2m")) {
+      deferUiWork(loadInstitution, 600);
+    } else {
+      deferUiWork(() => loadInstitutionSummary(false), 900);
+    }
   }
   if (viewName === "chip-trade") {
     deferUiWork(() => loadChipTradeData(true));
@@ -12957,6 +13065,8 @@ function applyStrategyPresetFromLink(link) {
       await loadStrategy3Cache(false);
       renderStrategyScanner();
     }, 60);
+  } else if (text.includes("策略4")) {
+    deferUiWork(() => loadStrategy4Summary(false), 40);
   } else {
     deferUiWork(loadStrategyStocks);
   }
@@ -13243,7 +13353,7 @@ async function refreshOpenBuyScan(force = false) {
 async function loadStrategy4Cache(force = false) {
   if (!isStrategyCacheActive("strategy4")) return;
   if (strategy4CacheLoading) return;
-  if (!force && strategy4ScanLastAt) return;
+  if (!force && strategy4ScanLastAt && Object.keys(strategy4ScanMatches).length) return;
   if (shouldSkipMobileOtherStrategyCacheRefresh("strategy4", Boolean(strategy4ScanLastAt), force)) {
     renderStrategyScanner();
     return;

@@ -1,10 +1,12 @@
 const fs = require("fs");
 const path = require("path");
 const scanWarrantFlow = require("../api/scan-warrant-flow");
+const { writeSummary } = require("./cache-summary");
 
 const { ROOT, dataPath } = require("./runtime-paths");
 const OUT_FILE = dataPath("warrant-flow-latest.json");
 const BACKUP_FILE = dataPath("warrant-flow-backup.json");
+const SUMMARY_FILE = dataPath("warrant-flow-summary.json");
 
 function readJson(file, fallback) {
   try { return JSON.parse(fs.readFileSync(file, "utf8")); } catch { return fallback; }
@@ -101,6 +103,7 @@ async function main() {
 
   fs.mkdirSync(path.dirname(OUT_FILE), { recursive: true });
   fs.writeFileSync(OUT_FILE, `${JSON.stringify(output, null, 2)}\n`);
+  writeSummary("warrant", output, SUMMARY_FILE);
   fs.writeFileSync(BACKUP_FILE, `${JSON.stringify({ ...output, source: "github-actions-backup" }, null, 2)}\n`);
   console.log(`warrant-flow cache updated: matches ${matches.length}, tradeDate ${newestTradeDate || "--"}`);
 }

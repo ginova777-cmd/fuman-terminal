@@ -2,10 +2,12 @@ const fs = require("fs");
 const path = require("path");
 const scanInstitution = require("../api/institution");
 const { fetchMisQuotes } = require("../lib/mis-quotes");
+const { writeSummary } = require("./cache-summary");
 
 const { ROOT, dataPath } = require("./runtime-paths");
 const OUT_FILE = dataPath("institution-latest.json");
 const BACKUP_FILE = dataPath("institution-backup.json");
+const SUMMARY_FILE = dataPath("institution-summary.json");
 const STOCK_URL = process.env.STOCK_UNIVERSE_URL || "https://fuman-terminal.vercel.app/api/stocks";
 
 function readJson(file, fallback) {
@@ -177,6 +179,7 @@ async function main() {
 
   fs.mkdirSync(path.dirname(OUT_FILE), { recursive: true });
   fs.writeFileSync(OUT_FILE, `${JSON.stringify(output, null, 2)}\n`);
+  writeSummary("institution", output, SUMMARY_FILE);
   fs.writeFileSync(BACKUP_FILE, `${JSON.stringify({ ...output, source: "github-actions-backup" }, null, 2)}\n`);
   console.log(`institution cache updated: rows ${count}, usedDate ${output.usedDate || "--"}, stockRows ${stockRows}, misQuotes ${misQuotes.size}`);
 }

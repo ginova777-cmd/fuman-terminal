@@ -236,8 +236,10 @@ function Test-IntradayFlowProtectedFile($file) {
   if ($Scope -ne "all") { return $false }
   if ($file -notin @(
     "data\institution-latest.json",
+    "data\institution-summary.json",
     "data\institution-backup.json",
     "data\warrant-flow-latest.json",
+    "data\warrant-flow-summary.json",
     "data\warrant-flow-backup.json",
     "data\flow-health-latest.json"
   )) { return $false }
@@ -399,8 +401,10 @@ try {
 
     $dataFiles = @(
       "data\institution-latest.json",
+      "data\institution-summary.json",
       "data\institution-backup.json",
       "data\warrant-flow-latest.json",
+      "data\warrant-flow-summary.json",
       "data\warrant-flow-backup.json",
       "data\flow-health-latest.json"
     )
@@ -411,6 +415,7 @@ try {
 
     $dataFiles = @(
       "data\institution-latest.json",
+      "data\institution-summary.json",
       "data\institution-backup.json",
       "data\flow-health-latest.json"
     )
@@ -421,6 +426,7 @@ try {
 
     $dataFiles = @(
       "data\warrant-flow-latest.json",
+      "data\warrant-flow-summary.json",
       "data\warrant-flow-backup.json",
       "data\flow-health-latest.json"
     )
@@ -475,8 +481,10 @@ try {
 
     $dataFiles = @(
       "data\institution-latest.json",
+      "data\institution-summary.json",
       "data\institution-backup.json",
       "data\warrant-flow-latest.json",
+      "data\warrant-flow-summary.json",
       "data\warrant-flow-backup.json",
       "data\flow-health-latest.json",
       "data\open-buy-latest.json",
@@ -487,6 +495,7 @@ try {
       "data\strategy3-scorecard-source.json",
       "data\strategy2-scorecard-source.json",
       "data\strategy4-latest.json",
+      "data\strategy4-summary.json",
       "data\strategy4-backup.json",
       "data\strategy5-latest.json",
       "data\strategy5-backup.json",

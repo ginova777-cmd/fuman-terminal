@@ -6,7 +6,7 @@ $syncRepo = "C:\fuman-terminal-sync"
 $gitExe = "C:\Program Files\Git\cmd\git.exe"
 $logDir = Join-Path $codeRepo "logs"
 $lockFile = Join-Path $codeRepo "locks\strategy4-partial-sync.lock"
-$files = @("data\strategy4-latest.json", "data\strategy4-backup.json")
+$files = @("data\strategy4-latest.json", "data\strategy4-summary.json", "data\strategy4-backup.json")
 
 New-Item -ItemType Directory -Force -Path $logDir | Out-Null
 New-Item -ItemType Directory -Force -Path (Split-Path $lockFile -Parent) | Out-Null
