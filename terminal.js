@@ -6457,22 +6457,22 @@ function limitUpDojiPattern(stock) {
   const prev = rows.at(-2);
   const lastVolume = cleanNumber(last?.volume);
   const lastPct = prev?.close ? ((cleanNumber(last.close) - cleanNumber(prev.close)) / cleanNumber(prev.close)) * 100 : cleanNumber(stock.percent);
-  const setupStart = Math.max(0, rows.length - 36);
+  const setupStart = Math.max(0, rows.length - 21);
 
   for (let limitIndex = rows.length - 10; limitIndex >= setupStart; limitIndex--) {
     const limitDay = rows[limitIndex];
     const limitPrev = rows[limitIndex - 1];
     const limitPct = limitPrev?.close ? ((cleanNumber(limitDay.close) - cleanNumber(limitPrev.close)) / cleanNumber(limitPrev.close)) * 100 : 0;
     const limitVolume = cleanNumber(limitDay.volume);
-    if (limitPct < 9.2 || cleanNumber(limitDay.close) < cleanNumber(limitDay.open)) continue;
+    if (limitPct < 9.0 || cleanNumber(limitDay.close) < cleanNumber(limitDay.open)) continue;
 
     const dojiEnd = Math.min(rows.length - 9, limitIndex + 5);
     for (let dojiIndex = limitIndex + 1; dojiIndex <= dojiEnd; dojiIndex++) {
       const doji = rows[dojiIndex];
       const dojiRange = cleanNumber(doji.high) - cleanNumber(doji.low);
       const dojiBodyRatio = dojiRange > 0 ? Math.abs(cleanNumber(doji.close) - cleanNumber(doji.open)) / dojiRange : 1;
-      const dojiNearLimit = cleanNumber(doji.close) >= cleanNumber(limitDay.close) * 0.96;
-      if (dojiBodyRatio > 0.28 || !dojiNearLimit) continue;
+      const dojiNearLimit = cleanNumber(doji.close) >= cleanNumber(limitDay.close) * 0.93;
+      if (dojiBodyRatio > 0.35 || !dojiNearLimit) continue;
 
       const boxRows = rows.slice(dojiIndex + 1, -1);
       if (boxRows.length < 7) continue;
@@ -6483,19 +6483,19 @@ function limitUpDojiPattern(stock) {
       const boxAvgVolume = avg(boxVolumes);
       const recentBoxVolume = avg(boxVolumes.slice(-3));
       const volumeContracting = boxAvgVolume > 0 && recentBoxVolume > 0 &&
-        recentBoxVolume <= boxAvgVolume * 0.9 &&
-        (!limitVolume || recentBoxVolume <= limitVolume * 0.65);
-      const breakout = cleanNumber(last.close) > boxHigh * 1.005 &&
+        recentBoxVolume <= boxAvgVolume * 1.05 &&
+        (!limitVolume || recentBoxVolume <= limitVolume * 0.85);
+      const breakout = cleanNumber(last.close) >= boxHigh * 0.995 &&
         cleanNumber(last.close) > cleanNumber(last.open) &&
-        lastPct >= 1 &&
+        lastPct >= 0.5 &&
         boxAvgVolume > 0 &&
-        lastVolume >= boxAvgVolume * 1.5;
-      if (boxRangePct <= 18 && volumeContracting && breakout) {
+        lastVolume >= boxAvgVolume * 1.15;
+      if (boxRangePct <= 30 && volumeContracting && breakout) {
         const score = clamp(Math.round(72 + Math.min(lastPct * 3, 18) + Math.min(lastVolume / boxAvgVolume * 4, 10)), 0, 100);
         return {
           hit: true,
           score,
-          reason: `漲停後出十字星，橫盤 ${boxRows.length} 天、區間 ${boxRangePct.toFixed(2)}%，縮量後今日放量 ${boxAvgVolume ? (lastVolume / boxAvgVolume).toFixed(2) : "--"} 倍突破。`,
+          reason: `近20日漲停後出十字星，橫盤 ${boxRows.length} 天、區間 ${boxRangePct.toFixed(2)}%，縮量後今日放量 ${boxAvgVolume ? (lastVolume / boxAvgVolume).toFixed(2) : "--"} 倍突破。`,
         };
       }
     }

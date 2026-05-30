@@ -6,9 +6,11 @@ const { ROOT, dataPath } = require("./runtime-paths");
 const OUT_FILE = dataPath("strategy5-latest.json");
 const BACKUP_FILE = dataPath("strategy5-backup.json");
 const INSTITUTION_FILE = dataPath("institution-latest.json");
+const STRATEGY4_FILE = dataPath("strategy4-latest.json");
+const STRATEGY4_BACKUP_FILE = dataPath("strategy4-backup.json");
 const STOCK_URL = process.env.STOCK_UNIVERSE_URL || "https://fuman-terminal.vercel.app/api/stocks";
 const USE_MIS_QUOTES = process.env.STRATEGY5_USE_MIS === "1";
-const HISTORY_LIMIT = Math.max(20, Number(process.env.STRATEGY5_HISTORY_LIMIT || 420));
+const HISTORY_LIMIT = Math.max(20, Number(process.env.STRATEGY5_HISTORY_LIMIT || 900));
 const HISTORY_CONCURRENCY = Math.max(1, Number(process.env.STRATEGY5_HISTORY_CONCURRENCY || 8));
 
 function readJson(file, fallback) {
@@ -93,6 +95,18 @@ function formatInstitution(value) {
   const amount = cleanNumber(value);
   const sign = amount >= 0 ? "+" : "";
   return `${sign}${Math.round(amount).toLocaleString("zh-TW")}`;
+}
+
+function readStrategy4Candidates() {
+  const payloads = [
+    readJson(STRATEGY4_FILE, null),
+    readJson(STRATEGY4_BACKUP_FILE, null),
+  ].filter(Boolean);
+  for (const payload of payloads) {
+    const matches = Array.isArray(payload.matches) ? payload.matches : [];
+    if (matches.length) return matches;
+  }
+  return [];
 }
 
 function buildStrategy5Match({ stock, inst, valueRank, volumeRank }) {
@@ -181,21 +195,21 @@ function limitUpDojiPatternFromRows(rows) {
   const prev = rows.at(-2);
   const lastVolume = cleanNumber(last?.volume);
   const lastPct = prev?.close ? ((cleanNumber(last.close) - cleanNumber(prev.close)) / cleanNumber(prev.close)) * 100 : 0;
-  const setupStart = Math.max(0, rows.length - 36);
+  const setupStart = Math.max(0, rows.length - 21);
 
   for (let limitIndex = rows.length - 10; limitIndex >= setupStart; limitIndex--) {
     const limitDay = rows[limitIndex];
     const limitPrev = rows[limitIndex - 1];
     const limitPct = limitPrev?.close ? ((cleanNumber(limitDay.close) - cleanNumber(limitPrev.close)) / cleanNumber(limitPrev.close)) * 100 : 0;
     const limitVolume = cleanNumber(limitDay.volume);
-    if (limitPct < 9.2 || cleanNumber(limitDay.close) < cleanNumber(limitDay.open)) continue;
+    if (limitPct < 9.0 || cleanNumber(limitDay.close) < cleanNumber(limitDay.open)) continue;
 
     const dojiEnd = Math.min(rows.length - 9, limitIndex + 5);
     for (let dojiIndex = limitIndex + 1; dojiIndex <= dojiEnd; dojiIndex++) {
       const doji = rows[dojiIndex];
       const dojiRange = cleanNumber(doji.high) - cleanNumber(doji.low);
       const dojiBodyRatio = dojiRange > 0 ? Math.abs(cleanNumber(doji.close) - cleanNumber(doji.open)) / dojiRange : 1;
-      if (dojiBodyRatio > 0.28 || cleanNumber(doji.close) < cleanNumber(limitDay.close) * 0.96) continue;
+      if (dojiBodyRatio > 0.35 || cleanNumber(doji.close) < cleanNumber(limitDay.close) * 0.93) continue;
 
       const boxRows = rows.slice(dojiIndex + 1, -1);
       if (boxRows.length < 7) continue;
@@ -206,14 +220,14 @@ function limitUpDojiPatternFromRows(rows) {
       const boxAvgVolume = avg(boxVolumes);
       const recentBoxVolume = avg(boxVolumes.slice(-3));
       const volumeContracting = boxAvgVolume > 0 && recentBoxVolume > 0 &&
-        recentBoxVolume <= boxAvgVolume * 0.9 &&
-        (!limitVolume || recentBoxVolume <= limitVolume * 0.65);
-      const breakout = cleanNumber(last.close) > boxHigh * 1.005 &&
+        recentBoxVolume <= boxAvgVolume * 1.05 &&
+        (!limitVolume || recentBoxVolume <= limitVolume * 0.85);
+      const breakout = cleanNumber(last.close) >= boxHigh * 0.995 &&
         cleanNumber(last.close) > cleanNumber(last.open) &&
-        lastPct >= 1 &&
+        lastPct >= 0.5 &&
         boxAvgVolume > 0 &&
-        lastVolume >= boxAvgVolume * 1.5;
-      if (boxRangePct <= 18 && volumeContracting && breakout) {
+        lastVolume >= boxAvgVolume * 1.15;
+      if (boxRangePct <= 30 && volumeContracting && breakout) {
         return {
           boxDays: boxRows.length,
           boxRangePct,
@@ -231,7 +245,7 @@ function buildLimitUpDojiMatch({ stock, valueRank, volumeRank, rows }) {
   if (!pattern || cleanNumber(stock.close) < 10 || valueRank < 35) return null;
   const scoreBase = clamp(Math.round(35 + pattern.pct * 7 + valueRank * 0.24 + volumeRank * 0.18), 0, 100);
   const score = clamp(scoreBase + 20 + Math.min(pattern.volumeRatio * 4, 12), 0, 100);
-  const reason = `漲停後出十字星，橫盤 ${pattern.boxDays} 天、區間 ${pattern.boxRangePct.toFixed(2)}%，縮量後今日放量 ${pattern.volumeRatio.toFixed(2)} 倍突破。`;
+  const reason = `近20日漲停後出十字星，橫盤 ${pattern.boxDays} 天、區間 ${pattern.boxRangePct.toFixed(2)}%，縮量後今日放量 ${pattern.volumeRatio.toFixed(2)} 倍突破。`;
   return { id: "limit_up_doji", short: "漲停十字", icon: "十", score, reason };
 }
 
@@ -260,9 +274,25 @@ async function buildMatches(stocks, institutionData) {
     };
   });
 
-  const historyCandidates = baseRows
-    .filter((stock) => cleanNumber(stock.close) >= 10 && cleanNumber(stock.percent) >= 1 && stock.valueRank >= 35 && stock.volumeRank >= 35)
-    .sort((a, b) => b.valueRank - a.valueRank || b.volumeRank - a.volumeRank || cleanNumber(b.percent) - cleanNumber(a.percent))
+  const strategy4Candidates = readStrategy4Candidates();
+  const strategy4ByCode = new Map(strategy4Candidates.map((stock) => [String(stock.code || ""), stock]));
+  const strategy4HistoryCandidates = strategy4Candidates
+    .map((item) => {
+      const base = baseRows.find((stock) => stock.code === String(item.code || ""));
+      if (!base) return null;
+      return {
+        ...base,
+        strategy4Score: cleanNumber(item.swingScore || item.score),
+        strategy4Reason: item.reason || "",
+        strategy4Signals: item.signals || item.swingSignals || [],
+      };
+    })
+    .filter(Boolean)
+    .sort((a, b) => cleanNumber(b.strategy4Score) - cleanNumber(a.strategy4Score) || b.valueRank - a.valueRank || b.volumeRank - a.volumeRank);
+  const fallbackHistoryCandidates = baseRows
+    .filter((stock) => cleanNumber(stock.close) >= 10 && stock.valueRank >= 20 && stock.volumeRank >= 20)
+    .sort((a, b) => b.valueRank - a.valueRank || b.volumeRank - a.volumeRank || cleanNumber(b.percent) - cleanNumber(a.percent));
+  const historyCandidates = (strategy4HistoryCandidates.length ? strategy4HistoryCandidates : fallbackHistoryCandidates)
     .slice(0, HISTORY_LIMIT);
   const historyByCode = new Map();
   await mapLimit(historyCandidates, HISTORY_CONCURRENCY, async (stock) => {
@@ -271,8 +301,15 @@ async function buildMatches(stocks, institutionData) {
   });
 
   return baseRows.map((stock) => {
+    const strategy4 = strategy4ByCode.get(stock.code) || {};
+    const mergedStock = {
+      ...stock,
+      strategy4Score: cleanNumber(strategy4.swingScore || strategy4.score),
+      strategy4Reason: strategy4.reason || "",
+      strategy4Signals: strategy4.signals || strategy4.swingSignals || [],
+    };
     const limitUpDoji = buildLimitUpDojiMatch({
-      stock,
+      stock: mergedStock,
       valueRank: stock.valueRank,
       volumeRank: stock.volumeRank,
       rows: historyByCode.get(stock.code) || [],
@@ -280,7 +317,7 @@ async function buildMatches(stocks, institutionData) {
     const matches = [...stock.matches, limitUpDoji].filter(Boolean);
     const sortedMatches = matches.sort((a, b) => (b.score || 0) - (a.score || 0));
     const score = sortedMatches.length ? Math.max(...sortedMatches.map((match) => match.score || 0)) : 0;
-    return { ...stock, score, matches: sortedMatches, activeMatch: sortedMatches[0] || null };
+    return { ...mergedStock, score, matches: sortedMatches, activeMatch: sortedMatches[0] || null };
   })
     .filter((stock) => stock.matches.length && stock.activeMatch && stock.score && stock.close >= 10)
     .sort((a, b) => b.score - a.score || b.percent - a.percent || b.value - a.value)
