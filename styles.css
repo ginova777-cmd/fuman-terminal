@@ -3772,3 +3772,176 @@ h1 {
     white-space: normal !important;
   }
 }
+
+/* mobile-terminal-card-summaries-20260530 */
+@media (max-width: 900px) {
+  .chip-table-wrap,
+  .warrant-flow-panel,
+  .intraday-panel {
+    overflow-x: visible !important;
+  }
+
+  .chip-table,
+  .warrant-flow-panel .swing-table,
+  .intraday-table {
+    display: block !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    border-collapse: separate !important;
+    border-spacing: 0 !important;
+  }
+
+  .chip-table thead,
+  .warrant-flow-panel .swing-table thead,
+  .intraday-table thead {
+    display: none !important;
+  }
+
+  .chip-table tbody,
+  .warrant-flow-panel .swing-table tbody,
+  .intraday-table tbody {
+    display: grid !important;
+    gap: 10px !important;
+  }
+
+  .chip-table tr,
+  .warrant-flow-panel .swing-table tr,
+  .intraday-table tr {
+    display: grid !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 8px 10px !important;
+    width: 100% !important;
+    border: 1px solid rgba(127, 166, 255, 0.2) !important;
+    border-radius: 10px !important;
+    background: rgba(10, 16, 28, 0.86) !important;
+    padding: 12px !important;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.035) !important;
+  }
+
+  .chip-table td,
+  .warrant-flow-panel .swing-table td,
+  .intraday-table td {
+    display: grid !important;
+    grid-template-columns: minmax(64px, auto) minmax(0, 1fr) !important;
+    align-items: center !important;
+    gap: 7px !important;
+    min-width: 0 !important;
+    border: 0 !important;
+    padding: 0 !important;
+    color: #dbe7ff !important;
+    font-size: 12px !important;
+    line-height: 1.35 !important;
+    text-align: right !important;
+  }
+
+  .chip-table td::before,
+  .warrant-flow-panel .swing-table td::before,
+  .intraday-table td::before {
+    color: #8ea3c7 !important;
+    content: attr(data-label);
+    font-size: 11px !important;
+    font-weight: 800 !important;
+    text-align: left !important;
+    white-space: nowrap !important;
+  }
+
+  .chip-table td:nth-child(1)::before { content: "代號"; }
+  .chip-table td:nth-child(2)::before { content: "名稱"; }
+  .chip-table td:nth-child(3)::before { content: "現價"; }
+  .chip-table td:nth-child(4)::before { content: "漲跌"; }
+  .chip-table td:nth-child(5)::before { content: "漲幅"; }
+  .chip-table td:nth-child(6)::before { content: "成交量"; }
+  .chip-table td:nth-child(7)::before { content: "外資"; }
+  .chip-table td:nth-child(8)::before { content: "投信"; }
+  .chip-table td:nth-child(9)::before { content: "外資連"; }
+  .chip-table td:nth-child(10)::before { content: "投信連"; }
+  .chip-table td:nth-child(11)::before { content: "同買"; }
+  .chip-table td:nth-child(12)::before { content: "法人合計"; }
+
+  .warrant-flow-panel .swing-table td:nth-child(1)::before { content: "排名"; }
+  .warrant-flow-panel .swing-table td:nth-child(2)::before { content: "代號"; }
+  .warrant-flow-panel .swing-table td:nth-child(3)::before { content: "標的"; }
+  .warrant-flow-panel .swing-table td:nth-child(4)::before { content: "收盤"; }
+  .warrant-flow-panel .swing-table td:nth-child(5)::before { content: "認購"; }
+  .warrant-flow-panel .swing-table td:nth-child(6)::before { content: "認售"; }
+  .warrant-flow-panel .swing-table td:nth-child(7)::before { content: "購售比"; }
+  .warrant-flow-panel .swing-table td:nth-child(8)::before { content: "檔數"; }
+  .warrant-flow-panel .swing-table td:nth-child(9)::before { content: "判斷"; }
+
+  .intraday-table td:nth-child(1)::before { content: "時間"; }
+  .intraday-table td:nth-child(2)::before { content: "代號"; }
+  .intraday-table td:nth-child(3)::before { content: "名稱"; }
+  .intraday-table td:nth-child(4)::before { content: "狀態"; }
+  .intraday-table td:nth-child(5)::before { content: "訊號"; }
+  .intraday-table td:nth-child(6)::before { content: "進場"; }
+  .intraday-table td:nth-child(7)::before { content: "漲幅"; }
+  .intraday-table td:nth-child(8)::before { content: "成交量"; }
+  .intraday-table td:nth-child(9)::before { content: "風控"; }
+  .intraday-table td:nth-child(10)::before { content: "原因"; }
+
+  .chip-table td:nth-child(1),
+  .chip-table td:nth-child(2),
+  .warrant-flow-panel .swing-table td:nth-child(1),
+  .warrant-flow-panel .swing-table td:nth-child(2),
+  .warrant-flow-panel .swing-table td:nth-child(3),
+  .intraday-table td:nth-child(2),
+  .intraday-table td:nth-child(3) {
+    font-size: 13px !important;
+    font-weight: 900 !important;
+  }
+
+  .chip-table td:nth-child(2),
+  .warrant-flow-panel .swing-table td:nth-child(3),
+  .intraday-table td:nth-child(5),
+  .intraday-table td:nth-child(9),
+  .intraday-table td:nth-child(10),
+  .warrant-flow-panel .swing-table td:nth-child(9) {
+    grid-column: 1 / -1 !important;
+  }
+
+  .chip-table td[colspan],
+  .warrant-flow-panel .swing-table td[colspan],
+  .intraday-table td[colspan] {
+    grid-column: 1 / -1 !important;
+    display: block !important;
+    text-align: left !important;
+  }
+
+  .chip-table td[colspan]::before,
+  .warrant-flow-panel .swing-table td[colspan]::before,
+  .intraday-table td[colspan]::before {
+    content: "" !important;
+    display: none !important;
+  }
+
+  .intraday-badges,
+  .intraday-entry {
+    justify-content: flex-end !important;
+    text-align: right !important;
+  }
+
+  .intraday-entry small {
+    white-space: normal !important;
+  }
+
+  .intraday-table .intraday-state,
+  .intraday-table .intraday-score,
+  .warrant-flow-panel .swing-table .swing-score,
+  .warrant-flow-panel .swing-table .swing-stage {
+    margin-left: auto !important;
+  }
+}
+
+@media (max-width: 760px) {
+  .chip-table tr,
+  .warrant-flow-panel .swing-table tr,
+  .intraday-table tr {
+    grid-template-columns: 1fr !important;
+  }
+
+  .chip-table td,
+  .warrant-flow-panel .swing-table td,
+  .intraday-table td {
+    grid-template-columns: 72px minmax(0, 1fr) !important;
+  }
+}
