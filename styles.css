@@ -4056,3 +4056,42 @@ h1 {
     grid-template-columns: 1fr;
   }
 }
+/* mobile-market-ai-landscape-20260530 */
+@media (max-width: 900px) {
+  #market-view .market-ai-sort-note,
+  #market-view .market-ai-summary,
+  #market-view .market-ai-main,
+  #market-view .market-ai-advice,
+  #market-view .market-ai-hot,
+  #market-view .market-ai-card,
+  #market-view .market-ai-block,
+  #market-view .market-ai-stock-row {
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+    transform: none !important;
+    box-sizing: border-box !important;
+  }
+
+  #market-view .market-ai-summary,
+  #market-view .market-ai-main,
+  #market-view .market-ai-advice,
+  #market-view .market-ai-hot {
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  #market-view .market-ai-sort-note,
+  #market-view .market-ai-card,
+  #market-view .market-ai-card p,
+  #market-view .market-ai-stock-row,
+  #market-view .market-ai-tags,
+  #market-view .market-ai-actions {
+    overflow-wrap: anywhere !important;
+    word-break: break-word !important;
+    white-space: normal !important;
+  }
+}
+
