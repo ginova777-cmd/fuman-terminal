@@ -1,6 +1,6 @@
 (function () {
   const boot = window.FUMAN_TERMINAL_BOOT || (window.FUMAN_TERMINAL_BOOT = {});
-  const version = boot.version || "speed-modules-20260530-22";
+  const version = boot.version || "speed-modules-20260530-23";
   const appSrc = `/terminal-app.js?v=${version}`;
   const dependencyScripts = [
     { src: `/terminal-sector-map.js?v=${version}`, attr: "data-fuman-sector-map" },

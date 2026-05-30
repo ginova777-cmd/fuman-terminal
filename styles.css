@@ -3945,3 +3945,114 @@ h1 {
     grid-template-columns: 72px minmax(0, 1fr) !important;
   }
 }
+
+/* mobile-intraday-quick-20260530 */
+.mobile-intraday-quick {
+  display: none;
+}
+
+@media (max-width: 900px) {
+  .mobile-intraday-quick {
+    display: grid;
+    gap: 10px;
+    margin: 0 0 12px;
+  }
+
+  .mobile-intraday-quick-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    border: 1px solid rgba(255, 122, 69, 0.22);
+    border-radius: 10px;
+    background: rgba(17, 23, 38, 0.82);
+    padding: 10px 12px;
+  }
+
+  .mobile-intraday-quick-head span {
+    color: #ffb180;
+    font-size: 12px;
+    font-weight: 900;
+  }
+
+  .mobile-intraday-quick-head strong {
+    color: #f7fbff;
+    font-size: 13px;
+  }
+
+  .mobile-intraday-quick-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+
+  .mobile-intraday-card,
+  .mobile-intraday-empty {
+    border: 1px solid rgba(127, 166, 255, 0.2);
+    border-radius: 10px;
+    background: rgba(10, 16, 28, 0.88);
+    padding: 12px;
+  }
+
+  .mobile-intraday-card.go {
+    border-color: rgba(48, 214, 142, 0.42);
+    background: linear-gradient(135deg, rgba(13, 58, 45, 0.7), rgba(10, 16, 28, 0.9));
+  }
+
+  .mobile-intraday-card.watch {
+    border-color: rgba(127, 166, 255, 0.36);
+  }
+
+  .mobile-intraday-card header {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .mobile-intraday-card header > span {
+    color: #8ea3c7;
+    font-size: 11px;
+    font-weight: 900;
+  }
+
+  .mobile-intraday-card b {
+    color: #f7fbff;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .mobile-intraday-card-main {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 8px;
+    margin-top: 10px;
+  }
+
+  .mobile-intraday-card-main strong {
+    font-size: 18px;
+  }
+
+  .mobile-intraday-card-main span {
+    color: #b8c6df;
+    font-size: 12px;
+    font-weight: 800;
+  }
+
+  .mobile-intraday-card p,
+  .mobile-intraday-empty {
+    margin: 10px 0 0;
+    color: #9eb0d2;
+    font-size: 12px;
+    line-height: 1.45;
+  }
+}
+
+@media (max-width: 760px) {
+  .mobile-intraday-quick-grid {
+    grid-template-columns: 1fr;
+  }
+}

@@ -70,7 +70,7 @@ function getFumanWorker() {
   if (!("Worker" in window)) return null;
   if (fumanWorker) return fumanWorker;
   try {
-    fumanWorker = new Worker("terminal-worker.js?v=speed-modules-20260530-22");
+    fumanWorker = new Worker("terminal-worker.js?v=speed-modules-20260530-23");
     fumanWorker.addEventListener("message", (event) => {
       const { id, ok, rows, result, error } = event.data || {};
       const pending = fumanWorkerPending.get(id);
@@ -201,7 +201,7 @@ function loadFumanStyle(href, id) {
   const link = document.createElement("link");
   link.id = id;
   link.rel = "stylesheet";
-  link.href = href.includes("?") ? href : `${href}?v=${window.FUMAN_TERMINAL_BOOT?.version || "speed-modules-20260530-22"}`;
+  link.href = href.includes("?") ? href : `${href}?v=${window.FUMAN_TERMINAL_BOOT?.version || "speed-modules-20260530-23"}`;
   document.head.appendChild(link);
 }
 
@@ -227,7 +227,7 @@ function makeFumanModuleScope(bindings) {
 function loadFumanFeatureModule(name, src, globalName) {
   if (window[globalName]) return Promise.resolve(window[globalName]);
   if (fumanFeatureModulePromises[name]) return fumanFeatureModulePromises[name];
-  const version = window.FUMAN_TERMINAL_BOOT?.version || "speed-modules-20260530-22";
+  const version = window.FUMAN_TERMINAL_BOOT?.version || "speed-modules-20260530-23";
   fumanFeatureModulePromises[name] = new Promise((resolve, reject) => {
     const attr = "data-fuman-feature-" + name;
     const existing = document.querySelector("script[" + attr + "]");
@@ -5279,6 +5279,44 @@ function renderIntradayRadar(evaluated) {
     ? `偵測時間 09:00-13:30，收盤後停止偵測。最後更新 ${scanTime}${scanStatus}`
     : `09:00-13:30 即時偵測漲幅 +2% 以上強勢訊號，3秒巡邏熱門池，不顯示目前時間之後的快取資料。最後更新 ${scanTime}${scanStatus}`;
 
+  const quickRows = rows.slice(0, 6);
+  const mobileQuickCards = `
+    <section class="mobile-intraday-quick" aria-label="策略2手機快看">
+      <div class="mobile-intraday-quick-head">
+        <span>手機快看</span>
+        <strong>${quickRows.length ? `${quickRows.length} 檔強訊號` : "等待訊號"}</strong>
+      </div>
+      <div class="mobile-intraday-quick-grid">
+        ${quickRows.length ? quickRows.map((stock, index) => {
+          const sign = stock.percent >= 0 ? "+" : "";
+          const pctClass = pctToneClass(stock.percent);
+          const latestEnhancement = normalizeArray(stock.strategy2Event?.enhancements).filter(isStrategy2EnhancementVisible).at(-1);
+          const mainSignal = latestEnhancement ? "持續放量" : stock.intradaySignals[0]?.short || "量價";
+          const reason = latestEnhancement
+            ? `持續放量${latestEnhancement.deltaVolume ? `｜新增量 ${Math.round(latestEnhancement.deltaVolume).toLocaleString("zh-TW")} 張` : ""}`
+            : stock.intradaySignals[0]?.reason || "盤中訊號觸發";
+          const state = stock.intradayState || getIntradayState(stock);
+          return `
+            <article class="mobile-intraday-card ${state.cls}">
+              <header>
+                <span>#${index + 1}</span>
+                <b>${stock.code} ${stock.name}</b>
+                <em class="intraday-state ${state.cls}">${state.label}</em>
+              </header>
+              <div class="mobile-intraday-card-main">
+                <strong class="${pctClass}">${sign}${stock.percent.toFixed(2)}%</strong>
+                <span>進場 ${formatIntradayTrackedEntry(stock)}</span>
+                <span>量 ${Math.round(stock.tradeVolume || 0).toLocaleString("zh-TW")}</span>
+              </div>
+              <p>${mainSignal}｜${reason}</p>
+            </article>
+          `;
+        }).join("") : `<div class="mobile-intraday-empty">${emptyText}</div>`}
+      </div>
+    </section>
+  `;
+
+
   const tableRows = rows.length ? `
     ${rows.map((stock) => {
       const sign = stock.percent >= 0 ? "+" : "";
@@ -5329,6 +5367,7 @@ function renderIntradayRadar(evaluated) {
       <section class="intraday-main-layout intraday-main-layout-full">
         <div class="intraday-main-panel">
           ${zones}
+          ${mobileQuickCards}
           <section class="intraday-panel">
             <div class="intraday-tabs">
               ${tabs}
