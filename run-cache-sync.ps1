@@ -451,6 +451,7 @@ try {
 
     $dataFiles = @(
       "data\strategy4-latest.json",
+      "data\strategy4-summary.json",
       "data\strategy4-backup.json"
     )
   } elseif ($Scope -eq "strategy5") {
