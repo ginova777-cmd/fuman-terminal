@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>輔滿 股票終端</title>
     <link rel="icon" href="/favicon.ico" sizes="any">
-    <link rel="stylesheet" href="styles.css?v=light-watchlist-contrast-20260531">
+    <link rel="stylesheet" href="styles.css?v=watchlist-entry-card-20260531">
   </head>
   <body>
     <div class="app-shell">
@@ -161,15 +161,16 @@
 
         <!-- 自選股 -->
         <section class="view-panel" id="watchlist-view" hidden>
-          <header class="page-header">
-            <div>
-              <h1>自選股</h1>
-            </div>
-            <div style="display:flex; align-items:center; gap:12px;">
-              <input id="watchlist-search-input" type="text" placeholder="輸入股票代號" autocomplete="off"
-                style="background:#1a1e2e; border:1px solid #2a2f45; color:#fff; padding:8px 14px; border-radius:8px; font-size:14px; width:160px; outline:none;">
-              <button id="watchlist-add-btn"
-                style="background:#e74c3c; color:#fff; border:none; padding:8px 18px; border-radius:8px; font-size:14px; cursor:pointer; font-weight:600;">+ 新增</button>
+          <header class="page-header watchlist-entry-header">
+            <div class="watchlist-entry-card">
+              <div class="watchlist-entry-copy">
+                <h1>自選股</h1>
+                <p>點選股票後同步載入右側分析</p>
+              </div>
+              <div class="watchlist-entry-form">
+                <input id="watchlist-search-input" class="watchlist-entry-input" type="text" placeholder="股票代碼" autocomplete="off">
+                <button id="watchlist-add-btn" class="watchlist-entry-add" type="button" aria-label="新增自選股">+</button>
+              </div>
             </div>
           </header>
 
