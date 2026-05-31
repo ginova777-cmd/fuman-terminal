@@ -18,6 +18,7 @@ function slimStrategy4Match(item) {
     percent: cleanNumber(item.percent),
     tradeVolume: cleanNumber(item.tradeVolume),
     value: cleanNumber(item.value),
+    date: item.date || item.tradeDate || item.usedDate || "",
     swingScore: cleanNumber(item.swingScore || item.score),
     swingZone: item.swingZone || "A",
     swingStage: item.swingStage || item.stage || null,
@@ -49,10 +50,12 @@ function buildStrategy4Summary(payload) {
     .sort((a, b) => cleanNumber(b.swingScore || b.score) - cleanNumber(a.swingScore || a.score))
     .slice(0, 60)
     .map(slimStrategy4Match);
+  const dataDate = payload?.dataDate || [...new Set(matches.map((item) => item.date || item.tradeDate || item.usedDate).filter(Boolean))].sort().at(-1) || "";
   return {
     ok: Boolean(payload?.ok ?? true),
     source: payload?.source || "",
     updatedAt: payload?.updatedAt || "",
+    dataDate,
     scanStamp: payload?.scanStamp || "",
     total: cleanNumber(payload?.total),
     scannedCount: Array.isArray(payload?.scannedCodes) ? payload.scannedCodes.length : cleanNumber(payload?.scannedCount),

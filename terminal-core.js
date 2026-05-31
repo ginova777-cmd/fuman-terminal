@@ -1,5 +1,5 @@
 (function () {
-  const version = "watchlist-strategy-source-20260531-63";
+  const version = "strategy4-data-date-20260601-01";
   window.FUMAN_TERMINAL_BOOT = {
     version,
     startedAt: Date.now(),

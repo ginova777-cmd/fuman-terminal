@@ -1,22 +1,22 @@
-const CACHE_VERSION = "fuman-terminal-sw-20260531-46";
+const CACHE_VERSION = "fuman-terminal-sw-20260601-01";
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 const DATA_CACHE = `${CACHE_VERSION}-data`;
 
 const STATIC_ASSETS = [
-  "/styles.css?v=watchlist-strategy-source-20260531-63",
-  "/terminal-core.js?v=watchlist-strategy-source-20260531-63",
-  "/terminal-modules.js?v=watchlist-strategy-source-20260531-63",
-  "/terminal-sector-map.js?v=watchlist-strategy-source-20260531-63",
-  "/terminal-strategy-config.js?v=watchlist-strategy-source-20260531-63",
-  "/terminal-market-config.js?v=watchlist-strategy-source-20260531-63",
-  "/terminal-ui-config.js?v=watchlist-strategy-source-20260531-63",
-  "/terminal-runtime-config.js?v=watchlist-strategy-source-20260531-63",
-  "/terminal-tuning-config.js?v=watchlist-strategy-source-20260531-63",
-  "/terminal-worker.js?v=watchlist-strategy-source-20260531-63",
-  "/terminal.js?v=watchlist-strategy-source-20260531-63",
-  "/terminal-realtime-radar.css?v=watchlist-strategy-source-20260531-63",
-  "/terminal-intraday-radar.css?v=watchlist-strategy-source-20260531-63",
-  "/terminal-utility.css?v=watchlist-strategy-source-20260531-63",
+  "/styles.css?v=strategy4-data-date-20260601-01",
+  "/terminal-core.js?v=strategy4-data-date-20260601-01",
+  "/terminal-modules.js?v=strategy4-data-date-20260601-01",
+  "/terminal-sector-map.js?v=strategy4-data-date-20260601-01",
+  "/terminal-strategy-config.js?v=strategy4-data-date-20260601-01",
+  "/terminal-market-config.js?v=strategy4-data-date-20260601-01",
+  "/terminal-ui-config.js?v=strategy4-data-date-20260601-01",
+  "/terminal-runtime-config.js?v=strategy4-data-date-20260601-01",
+  "/terminal-tuning-config.js?v=strategy4-data-date-20260601-01",
+  "/terminal-worker.js?v=strategy4-data-date-20260601-01",
+  "/terminal.js?v=strategy4-data-date-20260601-01",
+  "/terminal-realtime-radar.css?v=strategy4-data-date-20260601-01",
+  "/terminal-intraday-radar.css?v=strategy4-data-date-20260601-01",
+  "/terminal-utility.css?v=strategy4-data-date-20260601-01",
   "/assets/logo.webp",
   "/assets/login-bg-fuman-lite.webp",
   "/favicon.ico",

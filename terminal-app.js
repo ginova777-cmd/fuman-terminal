@@ -73,7 +73,7 @@ function getFumanWorker() {
   if (!("Worker" in window)) return null;
   if (fumanWorker) return fumanWorker;
   try {
-    fumanWorker = new Worker("terminal-worker.js?v=watchlist-strategy-source-20260531-63");
+    fumanWorker = new Worker("terminal-worker.js?v=strategy4-data-date-20260601-01");
     fumanWorker.addEventListener("message", (event) => {
       const { id, ok, rows, result, error } = event.data || {};
       const pending = fumanWorkerPending.get(id);
@@ -301,7 +301,7 @@ function loadFumanStyle(href, id) {
   const link = document.createElement("link");
   link.id = id;
   link.rel = "stylesheet";
-  link.href = href.includes("?") ? href : `${href}?v=${window.FUMAN_TERMINAL_BOOT?.version || "watchlist-strategy-source-20260531-63"}`;
+  link.href = href.includes("?") ? href : `${href}?v=${window.FUMAN_TERMINAL_BOOT?.version || "strategy4-data-date-20260601-01"}`;
   document.head.appendChild(link);
 }
 
@@ -327,7 +327,7 @@ function makeFumanModuleScope(bindings) {
 function loadFumanFeatureModule(name, src, globalName) {
   if (window[globalName]) return Promise.resolve(window[globalName]);
   if (fumanFeatureModulePromises[name]) return fumanFeatureModulePromises[name];
-  const version = window.FUMAN_TERMINAL_BOOT?.version || "watchlist-strategy-source-20260531-63";
+  const version = window.FUMAN_TERMINAL_BOOT?.version || "strategy4-data-date-20260601-01";
   fumanFeatureModulePromises[name] = new Promise((resolve, reject) => {
     const attr = "data-fuman-feature-" + name;
     const existing = document.querySelector("script[" + attr + "]");
@@ -7271,12 +7271,16 @@ function taipeiDateKeyFromValue(value) {
   }).format(new Date(time)));
 }
 
+function strategy4DataDateKey() {
+  return normalizeMarketAiDateKey(strategy4Summary?.dataDate || strategy4Summary?.usedDate || strategy4Summary?.tradeDate || strategy4Summary?.date)
+    || marketAiDataDateKey(Object.values(strategy4ScanMatches));
+}
 function getStrategy4FreshnessMeta() {
   const today = taipeiDateKeyFromValue(Date.now()) || marketAiTodayKey();
-  const dataDate = normalizeMarketAiDateKey(strategy4ScanStamp || strategy4Summary?.scanStamp || strategy4Summary?.stamp)
+  const dataDate = strategy4DataDateKey()
+    || normalizeMarketAiDateKey(strategy4ScanStamp || strategy4Summary?.scanStamp || strategy4Summary?.stamp)
     || taipeiDateKeyFromValue(strategy4ScanLastAt)
     || taipeiDateKeyFromValue(strategy4Summary?.updatedAt)
-    || marketAiDataDateKey(Object.values(strategy4ScanMatches))
     || today;
   return {
     mode: "策略4｜14:30完整掃",
@@ -7331,6 +7335,8 @@ function getPanelFreshnessMeta(viewName) {
       ? normalizeMarketAiDateKey(strategy5UsedDateKey) || marketAiDataDateKey(strategy5Data) || dataDate
       : strategyView?.classList.contains("open-buy-only")
       ? openBuyDataDateKey || marketAiDataDateKey(Object.values(openBuyScanMatches)) || dataDate
+      : strategyView?.classList.contains("swing-only")
+      ? strategy4DataDateKey() || dataDate
       : dataDate;
     return { mode, dataDate: strategyDataDate, today, isToday: strategyDataDate === today };
   }

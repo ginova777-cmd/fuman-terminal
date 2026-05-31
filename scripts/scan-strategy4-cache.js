@@ -190,6 +190,7 @@ function mergeSourceCounts(sourceCounts, currentSourceCounts) {
 function buildOutput({ codes, scannedThisRun, scanned, noDataCodes, scanErrors, currentMatches, dataSourceCounts, complete, runMode, scanStamp }) {
   const matches = [...currentMatches.values()]
     .sort((a, b) => (b.swingScore || b.score || 0) - (a.swingScore || a.score || 0) || (b.percent || 0) - (a.percent || 0));
+  const dataDate = [...new Set(matches.map((item) => item.date).filter(Boolean))].sort().at(-1) || "";
   const noDataCount = noDataCodes.size;
   const errorCount = scanErrors.length;
   const pendingCount = codes.length - scanned.size + noDataCount;
@@ -209,6 +210,7 @@ function buildOutput({ codes, scannedThisRun, scanned, noDataCodes, scanErrors, 
     source: qualityStatus === "complete" ? "github-actions" : "github-actions-partial",
     priceSource: USE_MIS_QUOTES ? "official-daily-k-plus-mis" : "official-daily-k",
     updatedAt: new Date().toISOString(),
+    dataDate,
     scanStamp,
     fullScan: FULL_SCAN,
     runMode,
