@@ -1,5 +1,5 @@
 (function () {
-  const version = "chip-light-flow-colors-20260531-54";
+  const version = "warrant-reason-badges-20260531-38";
   window.FUMAN_TERMINAL_BOOT = {
     version,
     startedAt: Date.now(),
