@@ -1,22 +1,22 @@
-const CACHE_VERSION = "fuman-terminal-sw-20260531-51";
+const CACHE_VERSION = "fuman-terminal-sw-20260531-53";
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 const DATA_CACHE = `${CACHE_VERSION}-data`;
 
 const STATIC_ASSETS = [
-  "/styles.css?v=strategy4-light-zone-clean-20260531-51",
-  "/terminal-core.js?v=strategy4-light-zone-clean-20260531-51",
-  "/terminal-modules.js?v=strategy4-light-zone-clean-20260531-51",
-  "/terminal-sector-map.js?v=strategy4-light-zone-clean-20260531-51",
-  "/terminal-strategy-config.js?v=strategy4-light-zone-clean-20260531-51",
-  "/terminal-market-config.js?v=strategy4-light-zone-clean-20260531-51",
-  "/terminal-ui-config.js?v=strategy4-light-zone-clean-20260531-51",
-  "/terminal-runtime-config.js?v=strategy4-light-zone-clean-20260531-51",
-  "/terminal-tuning-config.js?v=strategy4-light-zone-clean-20260531-51",
-  "/terminal-worker.js?v=strategy4-light-zone-clean-20260531-51",
-  "/terminal.js?v=strategy4-light-zone-clean-20260531-51",
-  "/terminal-realtime-radar.css?v=strategy4-light-zone-clean-20260531-51",
-  "/terminal-intraday-radar.css?v=strategy4-light-zone-clean-20260531-51",
-  "/terminal-utility.css?v=strategy4-light-zone-clean-20260531-51",
+  "/styles.css?v=strategy4-remove-total-zone-20260531-53",
+  "/terminal-core.js?v=strategy4-remove-total-zone-20260531-53",
+  "/terminal-modules.js?v=strategy4-remove-total-zone-20260531-53",
+  "/terminal-sector-map.js?v=strategy4-remove-total-zone-20260531-53",
+  "/terminal-strategy-config.js?v=strategy4-remove-total-zone-20260531-53",
+  "/terminal-market-config.js?v=strategy4-remove-total-zone-20260531-53",
+  "/terminal-ui-config.js?v=strategy4-remove-total-zone-20260531-53",
+  "/terminal-runtime-config.js?v=strategy4-remove-total-zone-20260531-53",
+  "/terminal-tuning-config.js?v=strategy4-remove-total-zone-20260531-53",
+  "/terminal-worker.js?v=strategy4-remove-total-zone-20260531-53",
+  "/terminal.js?v=strategy4-remove-total-zone-20260531-53",
+  "/terminal-realtime-radar.css?v=strategy4-remove-total-zone-20260531-53",
+  "/terminal-intraday-radar.css?v=strategy4-remove-total-zone-20260531-53",
+  "/terminal-utility.css?v=strategy4-remove-total-zone-20260531-53",
   "/assets/logo.webp",
   "/assets/login-bg-fuman-lite.webp",
   "/favicon.ico",

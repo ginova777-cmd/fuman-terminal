@@ -1,5 +1,5 @@
 (function () {
-  const version = "strategy4-light-zone-clean-20260531-51";
+  const version = "strategy4-remove-total-zone-20260531-53";
   window.FUMAN_TERMINAL_BOOT = {
     version,
     startedAt: Date.now(),

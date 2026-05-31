@@ -73,7 +73,7 @@ function getFumanWorker() {
   if (!("Worker" in window)) return null;
   if (fumanWorker) return fumanWorker;
   try {
-    fumanWorker = new Worker("terminal-worker.js?v=strategy4-light-zone-clean-20260531-51");
+    fumanWorker = new Worker("terminal-worker.js?v=strategy4-remove-total-zone-20260531-53");
     fumanWorker.addEventListener("message", (event) => {
       const { id, ok, rows, result, error } = event.data || {};
       const pending = fumanWorkerPending.get(id);
@@ -301,7 +301,7 @@ function loadFumanStyle(href, id) {
   const link = document.createElement("link");
   link.id = id;
   link.rel = "stylesheet";
-  link.href = href.includes("?") ? href : `${href}?v=${window.FUMAN_TERMINAL_BOOT?.version || "strategy4-light-zone-clean-20260531-51"}`;
+  link.href = href.includes("?") ? href : `${href}?v=${window.FUMAN_TERMINAL_BOOT?.version || "strategy4-remove-total-zone-20260531-53"}`;
   document.head.appendChild(link);
 }
 
@@ -327,7 +327,7 @@ function makeFumanModuleScope(bindings) {
 function loadFumanFeatureModule(name, src, globalName) {
   if (window[globalName]) return Promise.resolve(window[globalName]);
   if (fumanFeatureModulePromises[name]) return fumanFeatureModulePromises[name];
-  const version = window.FUMAN_TERMINAL_BOOT?.version || "strategy4-light-zone-clean-20260531-51";
+  const version = window.FUMAN_TERMINAL_BOOT?.version || "strategy4-remove-total-zone-20260531-53";
   fumanFeatureModulePromises[name] = new Promise((resolve, reject) => {
     const attr = "data-fuman-feature-" + name;
     const existing = document.querySelector("script[" + attr + "]");
@@ -5780,7 +5780,6 @@ function renderSwingRadar(universe) {
     `;
   }).join("");
   const zoneCards = `
-    <div class="swing-zone-card zone-all ${swingZoneFilter === "all" ? "active" : ""}" data-swing-zone-filter="all"><span>總命中</span><strong>${allRows.length}</strong><small>A/B/C全部</small></div>
     <div class="swing-zone-card zone-a ${swingZoneFilter === "A" ? "active" : ""}" data-swing-zone-filter="A"><span>A區可進場</span><strong>${zoneRows.A.length}</strong><small>正式波段買點</small></div>
     <div class="swing-zone-card zone-b ${swingZoneFilter === "B" ? "active" : ""}" data-swing-zone-filter="B"><span>B區觀察</span><strong>${zoneRows.B.length}</strong><small>趨勢轉強等待買點</small></div>
     <div class="swing-zone-card zone-c ${swingZoneFilter === "C" ? "active" : ""}" data-swing-zone-filter="C"><span>C區準備</span><strong>${zoneRows.C.length}</strong><small>低中位階整理</small></div>
