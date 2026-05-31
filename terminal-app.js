@@ -2690,6 +2690,8 @@ let openBuyScannedCodes = new Set();
 let openBuyScanTotal = 0;
 let openBuyCacheLoading = false;
 let openBuyCacheCheckedAt = 0;
+let openBuyDataDateKey = "";
+let openBuyCacheSource = "";
 let openBuyPage = 1;
 let swingPage = 1;
 let strategy3Page = 1;
@@ -3797,6 +3799,17 @@ function saveOpenBuyLocalCache() {
   } catch (error) {}
 }
 
+function openBuyPayloadDateKey(payload = {}) {
+  return normalizeMarketAiDateKey(
+    payload.usedDate ||
+    payload.tradeDate ||
+    payload.dataDate ||
+    payload.date ||
+    marketAiDataDateKey(normalizeArray(payload.matches)) ||
+    payload.updatedAt
+  );
+}
+
 function loadOpenBuyLocalCache() {
   try {
     let payload = JSON.parse(localStorage.getItem(OPEN_BUY_LOCAL_CACHE_KEY) || "{}");
@@ -3805,6 +3818,8 @@ function loadOpenBuyLocalCache() {
     }
     if (!String(payload.source || "").includes("github-actions")) return false;
     if (!Array.isArray(payload.matches) || !payload.matches.length) return false;
+    openBuyDataDateKey = openBuyPayloadDateKey(payload);
+    openBuyCacheSource = payload.cacheSource || payload.source || "local";
     if (payload.total) openBuyScanTotal = cleanNumber(payload.total);
     openBuyScanMatches = {};
     openBuyScannedCodes = new Set();
@@ -3827,6 +3842,8 @@ function mergeOpenBuyCache(payload) {
   openBuyScanMatches = {};
   openBuyScannedCodes = new Set();
   openBuyPage = 1;
+  openBuyDataDateKey = openBuyPayloadDateKey(payload);
+  openBuyCacheSource = payload?.cacheSource || payload?.source || "";
   normalizeArray(payload?.scannedCodes).forEach((code) => {
     if (code) openBuyScannedCodes.add(code);
   });
@@ -5925,6 +5942,15 @@ function renderOpenBuyRadar(universe) {
   const scanText = openBuyScanLastAt
     ? `已掃描 ${scannedCount}/${totalCount}｜候選 ${scanCount}｜${new Date(openBuyScanLastAt).toLocaleTimeString("zh-TW", { hour12: false })}`
     : `等待後端掃描 0/${totalCount}`;
+  const openBuyFreshnessDate = openBuyDataDateKey || marketAiDataDateKey(Object.values(openBuyScanMatches));
+  const openBuyFreshnessToday = marketAiTodayKey();
+  const openBuyFreshnessIsToday = openBuyFreshnessDate === openBuyFreshnessToday;
+  const openBuyFreshnessClass = openBuyFreshnessIsToday ? "is-live" : "is-stale";
+  const openBuyFreshnessText = openBuyFreshnessIsToday ? "" : "｜非今日資料不採用";
+  const openBuyFreshness = `
+    <div class="data-freshness-bar open-buy-freshness-bar ${openBuyFreshnessClass}" data-open-buy-freshness-bar="1">
+      模式：<strong>策略1｜最新可用收盤資料</strong>｜資料日期：<strong>${escapeAttr(formatMarketAiDateKey(openBuyFreshnessDate))}</strong>｜今日：<strong>${escapeAttr(formatMarketAiDateKey(openBuyFreshnessToday))}</strong>${openBuyFreshnessText}
+    </div>`;
 
   if (strategySummary) strategySummary.textContent = `策略1-明日開盤入｜14:30後產生明日候選｜08:55後看最終名單｜${scanText}`;
   if (strategyMatchCount) strategyMatchCount.textContent = rows.length.toLocaleString("zh-TW");
@@ -5974,6 +6000,7 @@ function renderOpenBuyRadar(universe) {
           <label>市場：<select><option>排除ETF</option></select></label>
         </div>
       </div>
+      ${openBuyFreshness}
       <div class="swing-signal-grid">
         <button class="swing-card active selected" type="button">
           <div><strong>16:00 候選</strong><small>收盤後用日K篩明日名單</small></div><em>${scanCount}</em>
@@ -7193,7 +7220,7 @@ function getPanelFreshnessMeta(viewName) {
       : strategyView?.classList.contains("intraday-only")
       ? "策略2當沖｜盤中巡邏"
       : strategyView?.classList.contains("open-buy-only")
-      ? "策略1｜07:00/16:00完整掃"
+      ? "策略1｜最新可用收盤資料"
       : strategyView?.classList.contains("strategy3-only")
       ? "策略3｜13:00完整掃"
       : strategyView?.classList.contains("strategy5-only")
@@ -7205,6 +7232,8 @@ function getPanelFreshnessMeta(viewName) {
       ? normalizeMarketAiDateKey(strategy3UsedDateKey) || marketAiDataDateKey(strategy3Data) || dataDate
       : strategyView?.classList.contains("strategy5-only")
       ? normalizeMarketAiDateKey(strategy5UsedDateKey) || marketAiDataDateKey(strategy5Data) || dataDate
+      : strategyView?.classList.contains("open-buy-only")
+      ? openBuyDataDateKey || marketAiDataDateKey(Object.values(openBuyScanMatches)) || dataDate
       : dataDate;
     return { mode, dataDate: strategyDataDate, today, isToday: strategyDataDate === today };
   }
