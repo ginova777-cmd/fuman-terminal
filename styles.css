@@ -4300,3 +4300,93 @@ h1 {
     white-space: nowrap;
   }
 }
+
+/* Light theme redesign for market overview heatmap */
+body.fuman-light-theme #market-view .sector-section {
+  background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%) !important;
+  border: 1px solid #d8e4f0 !important;
+  box-shadow: 0 14px 34px rgba(37, 55, 86, 0.08) !important;
+  color: #172033 !important;
+}
+
+body.fuman-light-theme #market-view .sector-section .section-title {
+  border-bottom-color: #e2eaf3 !important;
+}
+
+body.fuman-light-theme #market-view .sector-section .section-title h2 {
+  color: #1c2a3d !important;
+}
+
+body.fuman-light-theme #market-view .sector-section .section-title p,
+body.fuman-light-theme #market-view .sector-section .section-title > span {
+  color: #5f7188 !important;
+}
+
+body.fuman-light-theme #market-view .sector-section .tabs {
+  border-bottom-color: #e6edf5 !important;
+}
+
+body.fuman-light-theme #market-view .sector-section .tabs button {
+  background: #f3f7fc !important;
+  border-color: #cdd9e7 !important;
+  color: #34445a !important;
+  box-shadow: 0 1px 2px rgba(37, 55, 86, 0.06) !important;
+}
+
+body.fuman-light-theme #market-view .sector-section .tabs button:hover {
+  background: #eaf1f9 !important;
+  border-color: #b8c8dc !important;
+}
+
+body.fuman-light-theme #market-view .sector-section .tabs button.active {
+  background: #fff3eb !important;
+  border-color: #f59e5f !important;
+  color: #c2410c !important;
+  box-shadow: 0 4px 14px rgba(249, 115, 22, 0.12) !important;
+}
+
+body.fuman-light-theme #market-view #heatmap .sector-card,
+body.fuman-light-theme #market-view .sector-card {
+  background: linear-gradient(180deg, #ffffff 0%, #fbfdff 100%) !important;
+  border: 1px solid #d8e3ef !important;
+  border-left: 4px solid #ef4444 !important;
+  box-shadow: 0 8px 18px rgba(37, 55, 86, 0.09) !important;
+  color: #172033 !important;
+}
+
+body.fuman-light-theme #market-view #heatmap .sector-card.hot,
+body.fuman-light-theme #market-view .sector-card.hot {
+  background: linear-gradient(180deg, #ffffff 0%, #fff8f8 100%) !important;
+  border-color: #f3c9cf !important;
+  border-left-color: #ef4444 !important;
+}
+
+body.fuman-light-theme #market-view #heatmap .sector-card.cold,
+body.fuman-light-theme #market-view .sector-card.cold {
+  background: linear-gradient(180deg, #ffffff 0%, #f4fffb 100%) !important;
+  border-color: #bfe8d7 !important;
+  border-left-color: #10b981 !important;
+}
+
+body.fuman-light-theme #market-view .sector-card .sector-name,
+body.fuman-light-theme #market-view .sector-card h3,
+body.fuman-light-theme #market-view .sector-card em {
+  color: #172033 !important;
+}
+
+body.fuman-light-theme #market-view .sector-card .sector-pct,
+body.fuman-light-theme #market-view .sector-card h3 span,
+body.fuman-light-theme #market-view .sector-card small span {
+  color: #dc2626 !important;
+}
+
+body.fuman-light-theme #market-view .sector-card.cold .sector-pct,
+body.fuman-light-theme #market-view .sector-card.cold h3 span,
+body.fuman-light-theme #market-view .sector-card b {
+  color: #059669 !important;
+}
+
+body.fuman-light-theme #market-view .sector-card p,
+body.fuman-light-theme #market-view .sector-card small {
+  color: #314258 !important;
+}
