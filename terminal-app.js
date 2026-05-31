@@ -73,7 +73,7 @@ function getFumanWorker() {
   if (!("Worker" in window)) return null;
   if (fumanWorker) return fumanWorker;
   try {
-    fumanWorker = new Worker("terminal-worker.js?v=watchlist-card-divider-20260531-59");
+    fumanWorker = new Worker("terminal-worker.js?v=watchlist-strategy-list-20260531-60");
     fumanWorker.addEventListener("message", (event) => {
       const { id, ok, rows, result, error } = event.data || {};
       const pending = fumanWorkerPending.get(id);
@@ -301,7 +301,7 @@ function loadFumanStyle(href, id) {
   const link = document.createElement("link");
   link.id = id;
   link.rel = "stylesheet";
-  link.href = href.includes("?") ? href : `${href}?v=${window.FUMAN_TERMINAL_BOOT?.version || "watchlist-card-divider-20260531-59"}`;
+  link.href = href.includes("?") ? href : `${href}?v=${window.FUMAN_TERMINAL_BOOT?.version || "watchlist-strategy-list-20260531-60"}`;
   document.head.appendChild(link);
 }
 
@@ -327,7 +327,7 @@ function makeFumanModuleScope(bindings) {
 function loadFumanFeatureModule(name, src, globalName) {
   if (window[globalName]) return Promise.resolve(window[globalName]);
   if (fumanFeatureModulePromises[name]) return fumanFeatureModulePromises[name];
-  const version = window.FUMAN_TERMINAL_BOOT?.version || "watchlist-card-divider-20260531-59";
+  const version = window.FUMAN_TERMINAL_BOOT?.version || "watchlist-strategy-list-20260531-60";
   fumanFeatureModulePromises[name] = new Promise((resolve, reject) => {
     const attr = "data-fuman-feature-" + name;
     const existing = document.querySelector("script[" + attr + "]");
@@ -2639,6 +2639,8 @@ let mobileOtherStrategyRenderFlushing = false;
 let mobileOtherStrategyCacheCheckedAt = {};
 let watchlistDashboardSignature = "";
 let watchlistRefreshLoading = false;
+let watchlistStrategyMatchPromise = null;
+let watchlistStrategyMatchCache = null;
 const intradayGoFirstSeenAt = new Map();
 const intradayFirstSeenAt = new Map();
 let strategy2IntradayEventByCode = new Map();
@@ -9507,10 +9509,109 @@ function dashboardScoreMarkup(stock, analysis) {
   `;
 }
 
+const watchlistStrategySources = [
+  { key: "openBuy", label: "策略1-明日開盤入", urls: () => [endpoints.openBuyCache, endpoints.openBuyBackup], fields: ["matches"] },
+  { key: "strategy2", label: "策略2-當沖雷達", urls: () => [endpoints.strategy2IntradayLiveTop, endpoints.strategy2IntradayTop, endpoints.strategy2IntradaySlim], fields: ["events", "records"] },
+  { key: "strategy3", label: "策略3-隔日沖", urls: () => [endpoints.strategy3Cache, endpoints.strategy3Backup], fields: ["matches"] },
+  { key: "strategy4", label: "策略4-波段", urls: () => [endpoints.strategy4Slim, endpoints.strategy4Cache, endpoints.strategy4Backup], fields: ["matches"] },
+  { key: "strategy5", label: "策略5-綜合策略", urls: () => [endpoints.strategy5Cache, endpoints.strategy5Backup], fields: ["matches"] },
+  { key: "realtime", label: "即時雷達", urls: () => [endpoints.realtimeRadarCache], fields: ["rows"] },
+];
+
+function watchlistRowsFromPayload(payload, fields = []) {
+  if (Array.isArray(payload)) return payload;
+  return fields.flatMap((field) => normalizeArray(payload?.[field]));
+}
+
+function watchlistSignalText(value) {
+  if (!value) return "";
+  if (typeof value === "string") return value;
+  return value.label || value.name || value.title || value.strategy || value.id || "";
+}
+
+function watchlistStrategyDetails(row) {
+  const labels = [
+    row.setup,
+    row.status,
+    row.strategy,
+    row.strategyLabel,
+    row.activeMatch?.label,
+    row.activeMatch?.name,
+    ...normalizeArray(row.strategies).map(watchlistSignalText),
+    ...normalizeArray(row.signalTags).map(watchlistSignalText),
+    ...normalizeArray(row.signals).map(watchlistSignalText),
+    ...normalizeArray(row.swingSignals).map(watchlistSignalText),
+    ...normalizeArray(row.strategy4Signals).map(watchlistSignalText),
+    ...normalizeArray(row.matches).map(watchlistSignalText),
+    ...normalizeArray(row.intradaySignals).map(watchlistSignalText),
+  ].map((item) => String(item || "").trim()).filter(Boolean);
+  return [...new Set(labels)].slice(0, 4);
+}
+
+async function loadWatchlistStrategyMatches(code) {
+  const targetCode = String(code || "");
+  if (!targetCode) return [];
+  if (!watchlistStrategyMatchPromise) {
+    watchlistStrategyMatchPromise = Promise.all(watchlistStrategySources.map(async (source) => {
+      const urls = source.urls().filter(Boolean);
+      for (const url of urls) {
+        try {
+          const payload = await fetchJson(`${url}?t=${Date.now()}`, 9000);
+          const rows = watchlistRowsFromPayload(payload, source.fields);
+          if (!rows.length) continue;
+          return {
+            ...source,
+            rows,
+            date: normalizeMarketAiDateKey(payload?.usedDate || payload?.date || payload?.tradeDate || payload?.updatedAt),
+          };
+        } catch (error) {
+        }
+      }
+      return { ...source, rows: [], date: "" };
+    })).then((sources) => {
+      watchlistStrategyMatchCache = sources;
+      return sources;
+    });
+  }
+  const sources = watchlistStrategyMatchCache || await watchlistStrategyMatchPromise;
+  return sources.flatMap((source) => {
+    const rows = normalizeArray(source.rows).filter((row) => String(row?.code || "") === targetCode);
+    if (!rows.length) return [];
+    const details = [...new Set(rows.flatMap(watchlistStrategyDetails))].slice(0, 5);
+    const score = Math.max(...rows.map((row) => cleanNumber(row.score || row.maxScore)).filter(Boolean), 0);
+    return [{
+      key: source.key,
+      label: source.label,
+      details,
+      score,
+      date: source.date,
+    }];
+  });
+}
+
+function watchlistStrategySummaryMarkup(matches) {
+  if (!matches.length) {
+    return `<strong>0</strong><em>未出現在策略終端</em>`;
+  }
+  const pills = matches.map((match) => {
+    const detail = match.details.length ? `：${match.details.join("、")}` : "";
+    const score = match.score ? ` · ${match.score}` : "";
+    return `<span>${escapeAttr(match.label)}${escapeAttr(detail)}${escapeAttr(score)}</span>`;
+  }).join("");
+  return `
+    <strong>${matches.length}</strong>
+    <div class="watch-strategy-list">${pills}</div>
+  `;
+}
+
 async function showTradingDashboard(code, name) {
   ensureWatchlistAnalysisStyles();
   const fallback = latestStocks.find(s => s.code === code) || { code, name, close: 0, change: 0, percent: 0 };
-  const stock = await fetchStockPrice(code) || fallback;
+  const [stockResult, strategyMatches] = await Promise.all([
+    fetchStockPrice(code),
+    loadWatchlistStrategyMatches(code),
+  ]);
+  const stock = stockResult || fallback;
   const activeTimeframe = getTechnicalTimeframe();
   watchlistDashboardSignature = `${code}:${stock.close}:${stock.change.toFixed(2)}:${stock.percent.toFixed(2)}:${activeTimeframe.key}`;
   const analysis = buildTechnicalSummary(stock, activeTimeframe.key);
@@ -9550,8 +9651,7 @@ async function showTradingDashboard(code, name) {
         </article>
         <article class="watch-metric">
           <span>符合策略</span>
-          <strong>${analysis.score >= 58 ? 1 : 0}</strong>
-          <em>${model.strategyLabel}</em>
+          ${watchlistStrategySummaryMarkup(strategyMatches)}
         </article>
       </section>
 

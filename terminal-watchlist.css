@@ -171,6 +171,25 @@
   color: #ffbf47;
   font-size: 13px;
 }
+.watch-strategy-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+.watch-strategy-list span {
+  display: inline-flex;
+  width: fit-content;
+  max-width: 100%;
+  margin: 0;
+  padding: 4px 7px;
+  border-radius: 7px;
+  background: rgba(255, 106, 61, 0.14);
+  color: #ffb18f;
+  font-size: 11px;
+  font-weight: 850;
+  line-height: 1.25;
+}
 .watch-note-row {
   display: grid;
   gap: 8px;
@@ -308,6 +327,10 @@ body.fuman-light-theme #watchlist-view .watch-ta-panel .ta-gauge-card small {
 body.fuman-light-theme #watchlist-view .watch-analysis-card b {
   color: #f59e0b !important;
   font-weight: 850 !important;
+}
+body.fuman-light-theme #watchlist-view .watch-strategy-list span {
+  background: #fff2e8 !important;
+  color: #c2410c !important;
 }
 body.fuman-light-theme #watchlist-view .watch-analysis-card.hot { border-top-color: #ef4444 !important; }
 body.fuman-light-theme #watchlist-view .watch-analysis-card.neutral { border-top-color: #cbd5e1 !important; }

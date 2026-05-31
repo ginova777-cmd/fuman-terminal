@@ -1,5 +1,5 @@
 (function () {
-  const VERSION = "watchlist-card-divider-20260531-59";
+  const VERSION = "watchlist-strategy-list-20260531-60";
   const modules = {
     sectorMap: { loaded: false, src: "terminal-sector-map.js" },
     strategyConfig: { loaded: false, src: "terminal-strategy-config.js" },

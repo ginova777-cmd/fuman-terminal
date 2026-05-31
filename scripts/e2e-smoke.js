@@ -1,7 +1,7 @@
 const https = require("https");
 
 const baseUrl = (process.env.FUMAN_SMOKE_BASE_URL || "https://fuman-terminal.vercel.app").replace(/\/+$/, "");
-const version = process.env.FUMAN_SMOKE_VERSION || "watchlist-card-divider-20260531-59";
+const version = process.env.FUMAN_SMOKE_VERSION || "watchlist-strategy-list-20260531-60";
 
 function fetchText(pathname, timeoutMs = 20000) {
   const url = `${baseUrl}${pathname}`;

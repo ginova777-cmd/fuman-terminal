@@ -1,5 +1,5 @@
 (function () {
-  const version = "watchlist-card-divider-20260531-59";
+  const version = "watchlist-strategy-list-20260531-60";
   window.FUMAN_TERMINAL_BOOT = {
     version,
     startedAt: Date.now(),
