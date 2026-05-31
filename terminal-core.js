@@ -1,5 +1,5 @@
 (function () {
-  const version = "strategy5-bollinger-kdj-20260531-45";
+  const version = "strategy5-confluence-badge-20260531-46";
   window.FUMAN_TERMINAL_BOOT = {
     version,
     startedAt: Date.now(),

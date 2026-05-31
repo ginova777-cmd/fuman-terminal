@@ -1,22 +1,22 @@
-const CACHE_VERSION = "fuman-terminal-sw-20260531-45";
+const CACHE_VERSION = "fuman-terminal-sw-20260531-46";
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 const DATA_CACHE = `${CACHE_VERSION}-data`;
 
 const STATIC_ASSETS = [
-  "/styles.css?v=strategy5-bollinger-kdj-20260531-45",
-  "/terminal-core.js?v=strategy5-bollinger-kdj-20260531-45",
-  "/terminal-modules.js?v=strategy5-bollinger-kdj-20260531-45",
-  "/terminal-sector-map.js?v=strategy5-bollinger-kdj-20260531-45",
-  "/terminal-strategy-config.js?v=strategy5-bollinger-kdj-20260531-45",
-  "/terminal-market-config.js?v=strategy5-bollinger-kdj-20260531-45",
-  "/terminal-ui-config.js?v=strategy5-bollinger-kdj-20260531-45",
-  "/terminal-runtime-config.js?v=strategy5-bollinger-kdj-20260531-45",
-  "/terminal-tuning-config.js?v=strategy5-bollinger-kdj-20260531-45",
-  "/terminal-worker.js?v=strategy5-bollinger-kdj-20260531-45",
-  "/terminal.js?v=strategy5-bollinger-kdj-20260531-45",
-  "/terminal-realtime-radar.css?v=strategy5-bollinger-kdj-20260531-45",
-  "/terminal-intraday-radar.css?v=strategy5-bollinger-kdj-20260531-45",
-  "/terminal-utility.css?v=strategy5-bollinger-kdj-20260531-45",
+  "/styles.css?v=strategy5-confluence-badge-20260531-46",
+  "/terminal-core.js?v=strategy5-confluence-badge-20260531-46",
+  "/terminal-modules.js?v=strategy5-confluence-badge-20260531-46",
+  "/terminal-sector-map.js?v=strategy5-confluence-badge-20260531-46",
+  "/terminal-strategy-config.js?v=strategy5-confluence-badge-20260531-46",
+  "/terminal-market-config.js?v=strategy5-confluence-badge-20260531-46",
+  "/terminal-ui-config.js?v=strategy5-confluence-badge-20260531-46",
+  "/terminal-runtime-config.js?v=strategy5-confluence-badge-20260531-46",
+  "/terminal-tuning-config.js?v=strategy5-confluence-badge-20260531-46",
+  "/terminal-worker.js?v=strategy5-confluence-badge-20260531-46",
+  "/terminal.js?v=strategy5-confluence-badge-20260531-46",
+  "/terminal-realtime-radar.css?v=strategy5-confluence-badge-20260531-46",
+  "/terminal-intraday-radar.css?v=strategy5-confluence-badge-20260531-46",
+  "/terminal-utility.css?v=strategy5-confluence-badge-20260531-46",
   "/assets/logo.webp",
   "/assets/login-bg-fuman-lite.webp",
   "/favicon.ico",

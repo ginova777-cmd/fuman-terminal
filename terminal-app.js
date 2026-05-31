@@ -5972,6 +5972,50 @@ function renderOpenBuyReasonBadges(stock) {
     </div>`;
 }
 
+function renderStrategy3ReasonBadges(stock) {
+  const reason = String(stock.activeMatch?.reason || "隔日沖籌碼與量價候選。");
+  const parts = reason.split("：");
+  const setup = parts.length > 1 && parts[0].trim().length <= 16 ? parts[0].trim() : "隔日沖候選";
+  const body = parts.length > 1 ? parts.slice(1).join("：").trim() : reason;
+  const percent = cleanNumber(stock.percent);
+  const tradeVolume = cleanNumber(stock.tradeVolume || stock.volumeLots || stock.volume);
+  const turnoverRate = cleanNumber(stock.turnoverRate);
+  const volumeRatio = cleanNumber(stock.volumeRatio || stock.projectedRatio);
+  const score = cleanNumber(stock.score || stock.overnightScore);
+  const metrics = [];
+  const tags = [];
+  const pushMetric = (label, tone = "") => {
+    if (label && !metrics.some((item) => item.label === label)) metrics.push({ label, tone });
+  };
+  const addTag = (label, tone = "") => {
+    if (label && !tags.some((item) => item.label === label)) tags.push({ label, tone });
+  };
+
+  if (Number.isFinite(percent)) pushMetric(`漲幅 ${percent >= 0 ? "+" : ""}${percent.toFixed(2)}%`, percent >= 4 ? "hot" : "warm");
+  if (Number.isFinite(tradeVolume) && tradeVolume > 0) pushMetric(`成交量 ${Math.round(tradeVolume).toLocaleString("zh-TW")}`, "warm");
+  if (Number.isFinite(turnoverRate) && turnoverRate > 0) pushMetric(`周轉率 ${formatNumber(turnoverRate, 2)}%`, turnoverRate >= 5 ? "hot" : "warm");
+  if (Number.isFinite(volumeRatio) && volumeRatio > 0) pushMetric(`量比 ${formatNumber(volumeRatio, 2)}`, volumeRatio >= 2 ? "hot" : "warm");
+  if (Number.isFinite(score) && score > 0) pushMetric(`分數 ${Math.round(score)}`, "neutral");
+
+  addTag(setup, "hot");
+  addTag("隔日沖", "hot");
+  if (Number.isFinite(tradeVolume) && tradeVolume > 0) addTag("量能達標", "warm");
+  if (Number.isFinite(turnoverRate) && turnoverRate > 0) addTag("周轉達標", "warm");
+  if (Number.isFinite(volumeRatio) && volumeRatio > 0) addTag("量比達標", "neutral");
+  addTag("停損致意", "cool");
+
+  const metricHtml = metrics.slice(0, 5).map((item) => `<span class="open-buy-reason-chip ${item.tone}">${escapeAttr(item.label)}</span>`).join("");
+  const tagHtml = tags.slice(0, 5).map((item) => `<span class="open-buy-reason-tag ${item.tone}">${escapeAttr(item.label)}</span>`).join("");
+
+  return `
+    <div class="strategy3-reason open-buy-reason-card strategy3-reason-card">
+      <strong class="open-buy-reason-title">${escapeAttr(setup)}</strong>
+      <div class="open-buy-reason-chips">${metricHtml}</div>
+      <p>${escapeAttr(body || reason)}</p>
+      <div class="open-buy-reason-tags">${tagHtml}</div>
+    </div>`;
+}
+
 function renderOpenBuyRadar(universe) {
   setStrategyChrome("openBuy");
   if (!openBuyCacheLoading && shouldLoadOpenBuyRemote()) {
@@ -6170,6 +6214,11 @@ function renderStrategy5Dashboard(evaluated) {
         { label: `量比${formatNumber(main.volumeRatio, 2)}`, tone: "blue" }
       );
     }
+    const strategyHitCount = stock.matches.filter((match) => STRATEGY5_PRESET_IDS.includes(match.id)).length;
+    if (strategyHitCount >= 2) {
+      priceChips.unshift({ label: `★共振${strategyHitCount}`, tone: "red" });
+      chipChips.unshift({ label: "多策略同命中", tone: "red" });
+    }
     if (/外資/.test(reason)) chipChips.push({ label: "外資同買", tone: "pink" });
     if (/投信/.test(reason)) chipChips.push({ label: "投信照顧", tone: "pink" });
     if (cleanNumber(stock.inst?.total) > 0) chipChips.push({ label: "法人偏買", tone: "red" });
@@ -6324,7 +6373,7 @@ function renderOvernightDashboard(evaluated) {
           <strong>${formatNumber(stock.close, stock.close >= 100 ? 0 : 2)}</strong>
           <small class="${stock.percent >= 0 ? "red" : "green"}">${sign}${stock.percent.toFixed(2)}%</small>
         </div>
-        <div class="strategy3-reason">${stock.activeMatch?.reason || "隔日沖籌碼與量價候選。"}</div>
+        <div class="strategy3-reason-cell">${renderStrategy3ReasonBadges(stock)}</div>
       </article>
     `;
   }).join("") : `<div class="empty-state">目前沒有符合隔日沖條件的股票。</div>`;
