@@ -1870,3 +1870,56 @@
       height: 32px;
     }
   }
+/* unified-light-title-cards-20260531 */
+body.fuman-light-theme .page-header,
+body.fuman-light-theme .strategy-header,
+body.fuman-light-theme .radar-topbar,
+body.fuman-light-theme .intraday-topbar,
+body.fuman-light-theme .swing-topbar,
+body.fuman-light-theme .strategy5-page-heading,
+body.fuman-light-theme #chip-trade-view .chip-page-header,
+body.fuman-light-theme #warrant-flow-view .page-header,
+body.fuman-light-theme #warrant-flow-view .swing-topbar,
+body.fuman-light-theme #watchlist-view .watchlist-entry-card {
+  background: linear-gradient(135deg, #ffffff 0%, #fff7ed 58%, #ffffff 100%) !important;
+  border: 1px solid #fed7aa !important;
+  border-top: 3px solid #f97316 !important;
+  border-radius: 10px !important;
+  color: #172033 !important;
+  box-shadow: 0 10px 24px rgba(194, 65, 12, 0.10) !important;
+}
+
+body.fuman-light-theme #watchlist-view .watchlist-entry-header {
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+}
+
+body.fuman-light-theme .page-header h1,
+body.fuman-light-theme .strategy-header h1,
+body.fuman-light-theme .radar-topbar h1,
+body.fuman-light-theme .radar-topbar h2,
+body.fuman-light-theme .intraday-topbar h2,
+body.fuman-light-theme .swing-topbar h2,
+body.fuman-light-theme .strategy5-page-heading h2,
+body.fuman-light-theme #watchlist-view .watchlist-entry-copy h1,
+body.fuman-light-theme #chip-trade-view .chip-page-header h1,
+body.fuman-light-theme #warrant-flow-view .page-header h1,
+body.fuman-light-theme #warrant-flow-view .swing-topbar h2 {
+  color: #0f172a !important;
+}
+
+body.fuman-light-theme .page-header p,
+body.fuman-light-theme .page-header span,
+body.fuman-light-theme .strategy-header p,
+body.fuman-light-theme .radar-topbar p,
+body.fuman-light-theme .intraday-topbar p,
+body.fuman-light-theme .swing-topbar p,
+body.fuman-light-theme .strategy5-page-heading p,
+body.fuman-light-theme #watchlist-view .watchlist-entry-copy p,
+body.fuman-light-theme #chip-trade-view .chip-page-header span,
+body.fuman-light-theme #warrant-flow-view .page-header p,
+body.fuman-light-theme #warrant-flow-view .swing-topbar p {
+  color: #475569 !important;
+}

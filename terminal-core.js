@@ -1,5 +1,5 @@
 (function () {
-  const version = "strategy1-freshness-20260531-39";
+  const version = "speed-modules-20260531-31";
   window.FUMAN_TERMINAL_BOOT = {
     version,
     startedAt: Date.now(),
