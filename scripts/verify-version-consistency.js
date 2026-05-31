@@ -2,7 +2,7 @@ const fs = require("fs");
 const path = require("path");
 
 const ROOT = path.resolve(__dirname, "..");
-const VERSION = process.env.FUMAN_EXPECTED_VERSION || "terminal-qa-icon-fix-20260531-57";
+const VERSION = process.env.FUMAN_EXPECTED_VERSION || "watchlist-card-divider-20260531-58";
 const files = [
   "index.html",
   "terminal-core.js",

@@ -1,5 +1,5 @@
 (function () {
-  const VERSION = "terminal-qa-icon-fix-20260531-57";
+  const VERSION = "watchlist-card-divider-20260531-58";
   const modules = {
     sectorMap: { loaded: false, src: "terminal-sector-map.js" },
     strategyConfig: { loaded: false, src: "terminal-strategy-config.js" },

@@ -8044,7 +8044,7 @@ async function renderWatchlist() {
     <div class="watchlist-card" id="wcard-${item.code}" data-code="${item.code}" data-name="${item.name || item.code}"
       style="background:#12151f; border:1px solid #2a2f45; border-radius:10px; padding:16px 20px; cursor:pointer; transition:border-color 0.2s;">
       <div style="display:flex; justify-content:space-between; align-items:flex-start;">
-        <div>
+        <div style="flex:1; min-width:0;">
           <div style="display:flex; align-items:center; gap:8px;">
             <span style="color:#7ec8e3; font-size:16px; font-weight:700;">${item.code}</span>
             <span style="color:#fff; font-size:15px; font-weight:600;">${item.name || ""}</span>
@@ -8054,7 +8054,7 @@ async function renderWatchlist() {
             <span id="wprice-${item.code}" style="font-size:24px; font-weight:700; color:#fff;">--</span>
             <span id="wchange-${item.code}" style="font-size:13px; margin-left:8px; color:#aaa;">載入中...</span>
           </div>
-          <div style="margin-top:6px; font-size:12px; color:#666;" id="winst-${item.code}">
+          <div style="margin-top:12px; padding-top:12px; border-top:1px solid #dbe3ee; font-size:12px; color:#666;" id="winst-${item.code}">
             外資 -- 　投信 --
           </div>
         </div>

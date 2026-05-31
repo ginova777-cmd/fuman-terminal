@@ -73,7 +73,7 @@ function getFumanWorker() {
   if (!("Worker" in window)) return null;
   if (fumanWorker) return fumanWorker;
   try {
-    fumanWorker = new Worker("terminal-worker.js?v=terminal-qa-icon-fix-20260531-57");
+    fumanWorker = new Worker("terminal-worker.js?v=watchlist-card-divider-20260531-58");
     fumanWorker.addEventListener("message", (event) => {
       const { id, ok, rows, result, error } = event.data || {};
       const pending = fumanWorkerPending.get(id);
@@ -301,7 +301,7 @@ function loadFumanStyle(href, id) {
   const link = document.createElement("link");
   link.id = id;
   link.rel = "stylesheet";
-  link.href = href.includes("?") ? href : `${href}?v=${window.FUMAN_TERMINAL_BOOT?.version || "terminal-qa-icon-fix-20260531-57"}`;
+  link.href = href.includes("?") ? href : `${href}?v=${window.FUMAN_TERMINAL_BOOT?.version || "watchlist-card-divider-20260531-58"}`;
   document.head.appendChild(link);
 }
 
@@ -327,7 +327,7 @@ function makeFumanModuleScope(bindings) {
 function loadFumanFeatureModule(name, src, globalName) {
   if (window[globalName]) return Promise.resolve(window[globalName]);
   if (fumanFeatureModulePromises[name]) return fumanFeatureModulePromises[name];
-  const version = window.FUMAN_TERMINAL_BOOT?.version || "terminal-qa-icon-fix-20260531-57";
+  const version = window.FUMAN_TERMINAL_BOOT?.version || "watchlist-card-divider-20260531-58";
   fumanFeatureModulePromises[name] = new Promise((resolve, reject) => {
     const attr = "data-fuman-feature-" + name;
     const existing = document.querySelector("script[" + attr + "]");
@@ -9722,7 +9722,7 @@ async function renderWatchlist() {
     <div class="watchlist-card" id="wcard-${item.code}" data-code="${item.code}" data-name="${item.name || item.code}"
       style="background:#12151f; border:1px solid #2a2f45; border-radius:10px; padding:16px 20px; cursor:pointer; transition:border-color 0.2s;">
       <div style="display:flex; justify-content:space-between; align-items:flex-start;">
-        <div>
+        <div style="flex:1; min-width:0;">
           <div style="display:flex; align-items:center; gap:8px;">
             <span style="color:#7ec8e3; font-size:16px; font-weight:700;">${item.code}</span>
             <span style="color:#fff; font-size:15px; font-weight:600;">${item.name || ""}</span>
@@ -9732,7 +9732,7 @@ async function renderWatchlist() {
             <span id="wprice-${item.code}" style="font-size:24px; font-weight:700; color:#fff;">--</span>
             <span id="wchange-${item.code}" style="font-size:13px; margin-left:8px; color:#aaa;">載入中...</span>
           </div>
-          <div style="margin-top:6px; font-size:12px; color:#666;" id="winst-${item.code}">
+          <div style="margin-top:12px; padding-top:12px; border-top:1px solid #dbe3ee; font-size:12px; color:#666;" id="winst-${item.code}">
             外資 -- 　投信 --
           </div>
         </div>

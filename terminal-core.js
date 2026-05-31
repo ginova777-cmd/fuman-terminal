@@ -1,5 +1,5 @@
 (function () {
-  const version = "terminal-qa-icon-fix-20260531-57";
+  const version = "watchlist-card-divider-20260531-58";
   window.FUMAN_TERMINAL_BOOT = {
     version,
     startedAt: Date.now(),
