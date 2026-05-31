@@ -2,7 +2,7 @@ const fs = require("fs");
 const path = require("path");
 
 const ROOT = path.resolve(__dirname, "..");
-const VERSION = process.env.FUMAN_EXPECTED_VERSION || "watchlist-strategy-list-20260531-60";
+const VERSION = process.env.FUMAN_EXPECTED_VERSION || "watchlist-strategy-cn-20260531-62";
 const files = [
   "index.html",
   "terminal-core.js",

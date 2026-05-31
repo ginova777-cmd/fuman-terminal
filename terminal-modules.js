@@ -1,5 +1,5 @@
 (function () {
-  const VERSION = "watchlist-strategy-list-20260531-60";
+  const VERSION = "watchlist-strategy-cn-20260531-62";
   const modules = {
     sectorMap: { loaded: false, src: "terminal-sector-map.js" },
     strategyConfig: { loaded: false, src: "terminal-strategy-config.js" },

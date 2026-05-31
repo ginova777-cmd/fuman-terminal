@@ -3,7 +3,7 @@ const { spawnSync } = require("child_process");
 const path = require("path");
 
 const baseUrl = (process.env.FUMAN_VERIFY_BASE_URL || "https://fuman-terminal.vercel.app").replace(/\/+$/, "");
-const version = process.env.FUMAN_VERIFY_VERSION || "watchlist-strategy-list-20260531-60";
+const version = process.env.FUMAN_VERIFY_VERSION || "watchlist-strategy-cn-20260531-62";
 
 function fetchText(pathname, timeoutMs = 20000) {
   const url = `${baseUrl}${pathname}`;

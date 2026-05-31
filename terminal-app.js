@@ -73,7 +73,7 @@ function getFumanWorker() {
   if (!("Worker" in window)) return null;
   if (fumanWorker) return fumanWorker;
   try {
-    fumanWorker = new Worker("terminal-worker.js?v=watchlist-strategy-list-20260531-60");
+    fumanWorker = new Worker("terminal-worker.js?v=watchlist-strategy-cn-20260531-62");
     fumanWorker.addEventListener("message", (event) => {
       const { id, ok, rows, result, error } = event.data || {};
       const pending = fumanWorkerPending.get(id);
@@ -301,7 +301,7 @@ function loadFumanStyle(href, id) {
   const link = document.createElement("link");
   link.id = id;
   link.rel = "stylesheet";
-  link.href = href.includes("?") ? href : `${href}?v=${window.FUMAN_TERMINAL_BOOT?.version || "watchlist-strategy-list-20260531-60"}`;
+  link.href = href.includes("?") ? href : `${href}?v=${window.FUMAN_TERMINAL_BOOT?.version || "watchlist-strategy-cn-20260531-62"}`;
   document.head.appendChild(link);
 }
 
@@ -327,7 +327,7 @@ function makeFumanModuleScope(bindings) {
 function loadFumanFeatureModule(name, src, globalName) {
   if (window[globalName]) return Promise.resolve(window[globalName]);
   if (fumanFeatureModulePromises[name]) return fumanFeatureModulePromises[name];
-  const version = window.FUMAN_TERMINAL_BOOT?.version || "watchlist-strategy-list-20260531-60";
+  const version = window.FUMAN_TERMINAL_BOOT?.version || "watchlist-strategy-cn-20260531-62";
   fumanFeatureModulePromises[name] = new Promise((resolve, reject) => {
     const attr = "data-fuman-feature-" + name;
     const existing = document.querySelector("script[" + attr + "]");
@@ -9523,10 +9523,25 @@ function watchlistRowsFromPayload(payload, fields = []) {
   return fields.flatMap((field) => normalizeArray(payload?.[field]));
 }
 
+function watchlistSignalLabelById(id) {
+  const key = String(id || "").trim();
+  if (!key) return "";
+  const defs = [
+    ...Object.values(STRATEGY_BY_ID || {}),
+    ...normalizeArray(FUMAN_STRATEGY_CONFIG.INTRADAY_SIGNAL_DEFS),
+    ...normalizeArray(FUMAN_STRATEGY_CONFIG.SWING_SIGNAL_DEFS),
+  ];
+  const match = defs.find((item) => item?.id === key);
+  return match?.label || match?.title || "";
+}
+
 function watchlistSignalText(value) {
   if (!value) return "";
-  if (typeof value === "string") return value;
-  return value.label || value.name || value.title || value.strategy || value.id || "";
+  if (typeof value === "string") {
+    return watchlistSignalLabelById(value) || value;
+  }
+  const id = value.id || value.strategy;
+  return value.label || value.name || value.title || watchlistSignalLabelById(id) || value.strategy || value.id || "";
 }
 
 function watchlistStrategyDetails(row) {
@@ -9595,8 +9610,7 @@ function watchlistStrategySummaryMarkup(matches) {
   }
   const pills = matches.map((match) => {
     const detail = match.details.length ? `：${match.details.join("、")}` : "";
-    const score = match.score ? ` · ${match.score}` : "";
-    return `<span>${escapeAttr(match.label)}${escapeAttr(detail)}${escapeAttr(score)}</span>`;
+    return `<span>${escapeAttr(match.label)}${escapeAttr(detail)}</span>`;
   }).join("");
   return `
     <strong>${matches.length}</strong>

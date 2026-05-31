@@ -1,22 +1,22 @@
-const CACHE_VERSION = "fuman-terminal-sw-20260531-43";
+const CACHE_VERSION = "fuman-terminal-sw-20260531-45";
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 const DATA_CACHE = `${CACHE_VERSION}-data`;
 
 const STATIC_ASSETS = [
-  "/styles.css?v=watchlist-strategy-list-20260531-60",
-  "/terminal-core.js?v=watchlist-strategy-list-20260531-60",
-  "/terminal-modules.js?v=watchlist-strategy-list-20260531-60",
-  "/terminal-sector-map.js?v=watchlist-strategy-list-20260531-60",
-  "/terminal-strategy-config.js?v=watchlist-strategy-list-20260531-60",
-  "/terminal-market-config.js?v=watchlist-strategy-list-20260531-60",
-  "/terminal-ui-config.js?v=watchlist-strategy-list-20260531-60",
-  "/terminal-runtime-config.js?v=watchlist-strategy-list-20260531-60",
-  "/terminal-tuning-config.js?v=watchlist-strategy-list-20260531-60",
-  "/terminal-worker.js?v=watchlist-strategy-list-20260531-60",
-  "/terminal.js?v=watchlist-strategy-list-20260531-60",
-  "/terminal-realtime-radar.css?v=watchlist-strategy-list-20260531-60",
-  "/terminal-intraday-radar.css?v=watchlist-strategy-list-20260531-60",
-  "/terminal-utility.css?v=watchlist-strategy-list-20260531-60",
+  "/styles.css?v=watchlist-strategy-cn-20260531-62",
+  "/terminal-core.js?v=watchlist-strategy-cn-20260531-62",
+  "/terminal-modules.js?v=watchlist-strategy-cn-20260531-62",
+  "/terminal-sector-map.js?v=watchlist-strategy-cn-20260531-62",
+  "/terminal-strategy-config.js?v=watchlist-strategy-cn-20260531-62",
+  "/terminal-market-config.js?v=watchlist-strategy-cn-20260531-62",
+  "/terminal-ui-config.js?v=watchlist-strategy-cn-20260531-62",
+  "/terminal-runtime-config.js?v=watchlist-strategy-cn-20260531-62",
+  "/terminal-tuning-config.js?v=watchlist-strategy-cn-20260531-62",
+  "/terminal-worker.js?v=watchlist-strategy-cn-20260531-62",
+  "/terminal.js?v=watchlist-strategy-cn-20260531-62",
+  "/terminal-realtime-radar.css?v=watchlist-strategy-cn-20260531-62",
+  "/terminal-intraday-radar.css?v=watchlist-strategy-cn-20260531-62",
+  "/terminal-utility.css?v=watchlist-strategy-cn-20260531-62",
   "/assets/logo.webp",
   "/assets/login-bg-fuman-lite.webp",
   "/favicon.ico",
