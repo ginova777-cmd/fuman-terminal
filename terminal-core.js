@@ -1,5 +1,5 @@
 (function () {
-  const version = "strategy1-reason-badges-20260531-40";
+  const version = "title-icons-orange-20260531-41";
   window.FUMAN_TERMINAL_BOOT = {
     version,
     startedAt: Date.now(),

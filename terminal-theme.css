@@ -1923,3 +1923,19 @@ body.fuman-light-theme #warrant-flow-view .page-header p,
 body.fuman-light-theme #warrant-flow-view .swing-topbar p {
   color: #475569 !important;
 }
+/* light-title-icons-orange-20260531 */
+body.fuman-light-theme .page-title-icon,
+body.fuman-light-theme .strategy5-page-icon,
+body.fuman-light-theme .strategy-header .page-title-icon,
+body.fuman-light-theme .page-header .page-title-icon,
+body.fuman-light-theme .radar-topbar .page-title-icon,
+body.fuman-light-theme .intraday-topbar .page-title-icon,
+body.fuman-light-theme .swing-topbar .page-title-icon,
+body.fuman-light-theme #warrant-flow-view .page-title-icon,
+body.fuman-light-theme #chip-trade-view .page-title-icon,
+body.fuman-light-theme #watchlist-view .page-title-icon {
+  color: #f97316 !important;
+  border-color: #f97316 !important;
+  text-shadow: none !important;
+  filter: none !important;
+}

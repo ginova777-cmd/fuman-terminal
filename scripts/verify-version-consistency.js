@@ -2,7 +2,7 @@ const fs = require("fs");
 const path = require("path");
 
 const ROOT = path.resolve(__dirname, "..");
-const VERSION = process.env.FUMAN_EXPECTED_VERSION || "speed-modules-20260531-32";
+const VERSION = process.env.FUMAN_EXPECTED_VERSION || "title-icons-orange-20260531-41";
 const files = [
   "index.html",
   "terminal-core.js",
