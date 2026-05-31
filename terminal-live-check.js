@@ -8054,7 +8054,7 @@ async function renderWatchlist() {
             <span id="wprice-${item.code}" style="font-size:24px; font-weight:700; color:#fff;">--</span>
             <span id="wchange-${item.code}" style="font-size:13px; margin-left:8px; color:#aaa;">載入中...</span>
           </div>
-          <div style="margin-top:12px; padding-top:12px; border-top:1px solid #dbe3ee; font-size:12px; color:#666;" id="winst-${item.code}">
+          <div style="margin-top:12px; padding-top:12px; border-top:2px solid #f97316; font-size:12px; color:#666;" id="winst-${item.code}">
             外資 -- 　投信 --
           </div>
         </div>
