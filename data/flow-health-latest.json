@@ -1,4 +1,5 @@
 {
+  "updatedAt": "2026-05-31T23:47:14.8385313Z",
   "warrant": {
     "scope": "warrant",
     "status": "ok",
@@ -10,16 +11,15 @@
       "expectedTime": ""
     }
   },
-  "updatedAt": "2026-05-29T15:31:25.1823099Z",
   "institution": {
     "scope": "institution",
-    "status": "ok",
-    "message": "Watchdog verified cache",
-    "updatedAt": "2026-05-29T15:31:25.1808656Z",
+    "status": "watchdog_rerun",
+    "message": "Watchdog rerun started",
+    "updatedAt": "2026-05-31T23:47:14.8364503Z",
     "detail": {
-      "log": "C:\\fuman-runtime\\logs\\flow-watchdog-institution-20260529-233125.log",
-      "expectedTime": "21:00",
-      "reason": "ok count=1619 usedDate=20260529"
+      "reason": "institution not updated after 06:00; updatedAt=05/29/2026 15:28:06",
+      "expectedTime": "06:00",
+      "log": "C:\\fuman-runtime\\logs\\flow-watchdog-institution-20260601-074714.log"
     }
   }
 }
