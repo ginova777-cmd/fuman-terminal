@@ -1,5 +1,5 @@
 (function () {
-  const version = "strategy4-remove-total-zone-20260531-53";
+  const version = "chip-light-flow-colors-20260531-54";
   window.FUMAN_TERMINAL_BOOT = {
     version,
     startedAt: Date.now(),

@@ -463,6 +463,14 @@
   body.fuman-light-theme #chip-trade-view .chip-table a {
     color: #3b82f6 !important;
   }
+  body.fuman-light-theme #chip-trade-view .chip-table td.red {
+    color: #dc2626 !important;
+    font-weight: 700;
+  }
+  body.fuman-light-theme #chip-trade-view .chip-table td.green {
+    color: #059669 !important;
+    font-weight: 700;
+  }
   body.fuman-light-theme #chip-trade-view .terminal-pagination {
     margin-top: 0 !important;
     padding: 14px 12px !important;

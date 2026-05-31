@@ -1,22 +1,22 @@
-const CACHE_VERSION = "fuman-terminal-sw-20260531-53";
+const CACHE_VERSION = "fuman-terminal-sw-20260531-54";
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 const DATA_CACHE = `${CACHE_VERSION}-data`;
 
 const STATIC_ASSETS = [
-  "/styles.css?v=strategy4-remove-total-zone-20260531-53",
-  "/terminal-core.js?v=strategy4-remove-total-zone-20260531-53",
-  "/terminal-modules.js?v=strategy4-remove-total-zone-20260531-53",
-  "/terminal-sector-map.js?v=strategy4-remove-total-zone-20260531-53",
-  "/terminal-strategy-config.js?v=strategy4-remove-total-zone-20260531-53",
-  "/terminal-market-config.js?v=strategy4-remove-total-zone-20260531-53",
-  "/terminal-ui-config.js?v=strategy4-remove-total-zone-20260531-53",
-  "/terminal-runtime-config.js?v=strategy4-remove-total-zone-20260531-53",
-  "/terminal-tuning-config.js?v=strategy4-remove-total-zone-20260531-53",
-  "/terminal-worker.js?v=strategy4-remove-total-zone-20260531-53",
-  "/terminal.js?v=strategy4-remove-total-zone-20260531-53",
-  "/terminal-realtime-radar.css?v=strategy4-remove-total-zone-20260531-53",
-  "/terminal-intraday-radar.css?v=strategy4-remove-total-zone-20260531-53",
-  "/terminal-utility.css?v=strategy4-remove-total-zone-20260531-53",
+  "/styles.css?v=chip-light-flow-colors-20260531-54",
+  "/terminal-core.js?v=chip-light-flow-colors-20260531-54",
+  "/terminal-modules.js?v=chip-light-flow-colors-20260531-54",
+  "/terminal-sector-map.js?v=chip-light-flow-colors-20260531-54",
+  "/terminal-strategy-config.js?v=chip-light-flow-colors-20260531-54",
+  "/terminal-market-config.js?v=chip-light-flow-colors-20260531-54",
+  "/terminal-ui-config.js?v=chip-light-flow-colors-20260531-54",
+  "/terminal-runtime-config.js?v=chip-light-flow-colors-20260531-54",
+  "/terminal-tuning-config.js?v=chip-light-flow-colors-20260531-54",
+  "/terminal-worker.js?v=chip-light-flow-colors-20260531-54",
+  "/terminal.js?v=chip-light-flow-colors-20260531-54",
+  "/terminal-realtime-radar.css?v=chip-light-flow-colors-20260531-54",
+  "/terminal-intraday-radar.css?v=chip-light-flow-colors-20260531-54",
+  "/terminal-utility.css?v=chip-light-flow-colors-20260531-54",
   "/assets/logo.webp",
   "/assets/login-bg-fuman-lite.webp",
   "/favicon.ico",

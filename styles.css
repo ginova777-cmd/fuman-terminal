@@ -4906,6 +4906,17 @@ body:not(.fuman-light-theme) .open-buy-reason-chip,
 body:not(.fuman-light-theme) .open-buy-reason-tag {
   background: rgba(255, 122, 48, 0.12);
 }
+
+/* chip-light-flow-colors-20260531 */
+html body.fuman-light-theme #chip-trade-view table.chip-table tbody tr td.red {
+  color: #dc2626 !important;
+  font-weight: 700;
+}
+
+html body.fuman-light-theme #chip-trade-view table.chip-table tbody tr td.green {
+  color: #059669 !important;
+  font-weight: 700;
+}
 /* light-title-icons-orange-20260531 */
 body.fuman-light-theme .page-title-icon,
 body.fuman-light-theme .strategy5-page-icon,
