@@ -7755,7 +7755,7 @@ function renderMarketAiPanel() {
     : marketStockDataState.isFallbackDate
     ? "最新可用收盤資料"
     : "收盤資料";
-  const dataDateNotice = `<div class="market-ai-sort-note">模式：${dateModeText}｜資料日期：${escapeAttr(formatMarketAiDateKey(data.dataDate))}｜最新基準：${escapeAttr(formatMarketAiDateKey(marketAiTargetDateKey()))}｜今日：${escapeAttr(formatMarketAiDateKey(marketAiTodayKey()))}</div>`;
+  const dataDateNotice = "";
   marketAiPanel.innerHTML = `
     ${dataDateNotice}
     ${staleNotice}
