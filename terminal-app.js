@@ -73,7 +73,7 @@ function getFumanWorker() {
   if (!("Worker" in window)) return null;
   if (fumanWorker) return fumanWorker;
   try {
-    fumanWorker = new Worker("terminal-worker.js?v=freshness-type-20260531-56");
+    fumanWorker = new Worker("terminal-worker.js?v=terminal-qa-icon-fix-20260531-57");
     fumanWorker.addEventListener("message", (event) => {
       const { id, ok, rows, result, error } = event.data || {};
       const pending = fumanWorkerPending.get(id);
@@ -301,7 +301,7 @@ function loadFumanStyle(href, id) {
   const link = document.createElement("link");
   link.id = id;
   link.rel = "stylesheet";
-  link.href = href.includes("?") ? href : `${href}?v=${window.FUMAN_TERMINAL_BOOT?.version || "freshness-type-20260531-56"}`;
+  link.href = href.includes("?") ? href : `${href}?v=${window.FUMAN_TERMINAL_BOOT?.version || "terminal-qa-icon-fix-20260531-57"}`;
   document.head.appendChild(link);
 }
 
@@ -327,7 +327,7 @@ function makeFumanModuleScope(bindings) {
 function loadFumanFeatureModule(name, src, globalName) {
   if (window[globalName]) return Promise.resolve(window[globalName]);
   if (fumanFeatureModulePromises[name]) return fumanFeatureModulePromises[name];
-  const version = window.FUMAN_TERMINAL_BOOT?.version || "freshness-type-20260531-56";
+  const version = window.FUMAN_TERMINAL_BOOT?.version || "terminal-qa-icon-fix-20260531-57";
   fumanFeatureModulePromises[name] = new Promise((resolve, reject) => {
     const attr = "data-fuman-feature-" + name;
     const existing = document.querySelector("script[" + attr + "]");
@@ -3860,24 +3860,7 @@ function mergeOpenBuyCache(payload) {
 }
 
 async function loadOpenBuySupabasePayload() {
-  const restPayload = await fetchSupabaseLatestPayload("strategy1_open_buy_latest", isMobileViewport() ? 3000 : 4500);
-  if (restPayload) return restPayload;
-  if (!supabaseClient) return null;
-  try {
-    const { data, error } = await supabaseClient
-      .from("strategy1_open_buy_latest")
-      .select("payload,updated_at")
-      .eq("id", "latest")
-      .maybeSingle();
-    if (!error && data?.payload) {
-      return {
-        ...data.payload,
-        updatedAt: data.payload.updatedAt || data.updated_at,
-        cacheSource: "supabase",
-      };
-    }
-  } catch (error) {
-  }
+  // Strategy1 currently publishes static JSON; skip the legacy Supabase REST probe to avoid harmless 400 noise.
   return null;
 }
 

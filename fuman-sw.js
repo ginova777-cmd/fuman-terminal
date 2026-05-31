@@ -1,22 +1,22 @@
-const CACHE_VERSION = "fuman-terminal-sw-20260531-40";
+const CACHE_VERSION = "fuman-terminal-sw-20260531-41";
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 const DATA_CACHE = `${CACHE_VERSION}-data`;
 
 const STATIC_ASSETS = [
-  "/styles.css?v=freshness-type-20260531-56",
-  "/terminal-core.js?v=freshness-type-20260531-56",
-  "/terminal-modules.js?v=freshness-type-20260531-56",
-  "/terminal-sector-map.js?v=freshness-type-20260531-56",
-  "/terminal-strategy-config.js?v=freshness-type-20260531-56",
-  "/terminal-market-config.js?v=freshness-type-20260531-56",
-  "/terminal-ui-config.js?v=freshness-type-20260531-56",
-  "/terminal-runtime-config.js?v=freshness-type-20260531-56",
-  "/terminal-tuning-config.js?v=freshness-type-20260531-56",
-  "/terminal-worker.js?v=freshness-type-20260531-56",
-  "/terminal.js?v=freshness-type-20260531-56",
-  "/terminal-realtime-radar.css?v=freshness-type-20260531-56",
-  "/terminal-intraday-radar.css?v=freshness-type-20260531-56",
-  "/terminal-utility.css?v=freshness-type-20260531-56",
+  "/styles.css?v=terminal-qa-icon-fix-20260531-57",
+  "/terminal-core.js?v=terminal-qa-icon-fix-20260531-57",
+  "/terminal-modules.js?v=terminal-qa-icon-fix-20260531-57",
+  "/terminal-sector-map.js?v=terminal-qa-icon-fix-20260531-57",
+  "/terminal-strategy-config.js?v=terminal-qa-icon-fix-20260531-57",
+  "/terminal-market-config.js?v=terminal-qa-icon-fix-20260531-57",
+  "/terminal-ui-config.js?v=terminal-qa-icon-fix-20260531-57",
+  "/terminal-runtime-config.js?v=terminal-qa-icon-fix-20260531-57",
+  "/terminal-tuning-config.js?v=terminal-qa-icon-fix-20260531-57",
+  "/terminal-worker.js?v=terminal-qa-icon-fix-20260531-57",
+  "/terminal.js?v=terminal-qa-icon-fix-20260531-57",
+  "/terminal-realtime-radar.css?v=terminal-qa-icon-fix-20260531-57",
+  "/terminal-intraday-radar.css?v=terminal-qa-icon-fix-20260531-57",
+  "/terminal-utility.css?v=terminal-qa-icon-fix-20260531-57",
   "/assets/logo.webp",
   "/assets/login-bg-fuman-lite.webp",
   "/favicon.ico",

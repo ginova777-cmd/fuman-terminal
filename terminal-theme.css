@@ -1992,3 +1992,19 @@ body.fuman-light-theme .data-freshness-bar b {
   line-height: inherit !important;
   letter-spacing: 0 !important;
 }
+/* light-title-icons-specific-20260531 */
+body.fuman-light-theme .page-header h1 .page-title-icon,
+body.fuman-light-theme .strategy-header h1 .page-title-icon,
+body.fuman-light-theme .radar-topbar h1 .page-title-icon,
+body.fuman-light-theme .radar-topbar h2 .page-title-icon,
+body.fuman-light-theme .intraday-topbar h2 .page-title-icon,
+body.fuman-light-theme .swing-topbar h2 .page-title-icon,
+body.fuman-light-theme #chip-trade-view .chip-page-header h1 .page-title-icon,
+body.fuman-light-theme #warrant-flow-view .page-header h1 .page-title-icon,
+body.fuman-light-theme #warrant-flow-view .swing-topbar h2 .page-title-icon,
+body.fuman-light-theme #watchlist-view .watchlist-entry-copy h1 .page-title-icon {
+  color: #f97316 !important;
+  border-color: #f97316 !important;
+  text-shadow: none !important;
+  filter: none !important;
+}

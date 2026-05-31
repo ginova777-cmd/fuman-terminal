@@ -1,5 +1,5 @@
 (function () {
-  const version = "freshness-type-20260531-56";
+  const version = "terminal-qa-icon-fix-20260531-57";
   window.FUMAN_TERMINAL_BOOT = {
     version,
     startedAt: Date.now(),
