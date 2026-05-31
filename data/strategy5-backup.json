@@ -1,7 +1,7 @@
 {
   "ok": true,
   "source": "github-actions-backup",
-  "updatedAt": "2026-05-31T23:02:41.265Z",
+  "updatedAt": "2026-05-31T11:31:22.094Z",
   "usedDate": "20260529",
   "schedule": "06:00/21:00",
   "fullScan": true,
@@ -1975,12 +1975,8 @@
   "sourceHealth": {
     "issuedSharesCount": 1976,
     "volumeAverageCount": 2212,
-    "warningCount": 3,
-    "warnings": [
-      "tpex volume fetch failed: 115/05/27 :: terminated",
-      "tpex volume fetch failed: 115/05/26 :: This operation was aborted",
-      "tpex volume fetch failed: 115/05/21 :: This operation was aborted"
-    ]
+    "warningCount": 0,
+    "warnings": []
   },
   "count": 80,
   "matches": [
