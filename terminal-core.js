@@ -1,5 +1,5 @@
 (function () {
-  const version = "strategy5-confluence-fire-20260531-48";
+  const version = "strategy4-light-zone-clean-20260531-51";
   window.FUMAN_TERMINAL_BOOT = {
     version,
     startedAt: Date.now(),

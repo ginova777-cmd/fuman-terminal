@@ -1,22 +1,22 @@
-const CACHE_VERSION = "fuman-terminal-sw-20260531-48";
+const CACHE_VERSION = "fuman-terminal-sw-20260531-51";
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 const DATA_CACHE = `${CACHE_VERSION}-data`;
 
 const STATIC_ASSETS = [
-  "/styles.css?v=strategy5-confluence-fire-20260531-48",
-  "/terminal-core.js?v=strategy5-confluence-fire-20260531-48",
-  "/terminal-modules.js?v=strategy5-confluence-fire-20260531-48",
-  "/terminal-sector-map.js?v=strategy5-confluence-fire-20260531-48",
-  "/terminal-strategy-config.js?v=strategy5-confluence-fire-20260531-48",
-  "/terminal-market-config.js?v=strategy5-confluence-fire-20260531-48",
-  "/terminal-ui-config.js?v=strategy5-confluence-fire-20260531-48",
-  "/terminal-runtime-config.js?v=strategy5-confluence-fire-20260531-48",
-  "/terminal-tuning-config.js?v=strategy5-confluence-fire-20260531-48",
-  "/terminal-worker.js?v=strategy5-confluence-fire-20260531-48",
-  "/terminal.js?v=strategy5-confluence-fire-20260531-48",
-  "/terminal-realtime-radar.css?v=strategy5-confluence-fire-20260531-48",
-  "/terminal-intraday-radar.css?v=strategy5-confluence-fire-20260531-48",
-  "/terminal-utility.css?v=strategy5-confluence-fire-20260531-48",
+  "/styles.css?v=strategy4-light-zone-clean-20260531-51",
+  "/terminal-core.js?v=strategy4-light-zone-clean-20260531-51",
+  "/terminal-modules.js?v=strategy4-light-zone-clean-20260531-51",
+  "/terminal-sector-map.js?v=strategy4-light-zone-clean-20260531-51",
+  "/terminal-strategy-config.js?v=strategy4-light-zone-clean-20260531-51",
+  "/terminal-market-config.js?v=strategy4-light-zone-clean-20260531-51",
+  "/terminal-ui-config.js?v=strategy4-light-zone-clean-20260531-51",
+  "/terminal-runtime-config.js?v=strategy4-light-zone-clean-20260531-51",
+  "/terminal-tuning-config.js?v=strategy4-light-zone-clean-20260531-51",
+  "/terminal-worker.js?v=strategy4-light-zone-clean-20260531-51",
+  "/terminal.js?v=strategy4-light-zone-clean-20260531-51",
+  "/terminal-realtime-radar.css?v=strategy4-light-zone-clean-20260531-51",
+  "/terminal-intraday-radar.css?v=strategy4-light-zone-clean-20260531-51",
+  "/terminal-utility.css?v=strategy4-light-zone-clean-20260531-51",
   "/assets/logo.webp",
   "/assets/login-bg-fuman-lite.webp",
   "/favicon.ico",

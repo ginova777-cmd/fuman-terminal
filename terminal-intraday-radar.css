@@ -2472,3 +2472,147 @@
   padding-top: 0 !important;
   margin-top: 0 !important;
 }
+
+/* strategy2-light-title-fit-20260531 */
+body.fuman-light-theme #strategy-view.intraday-only .intraday-topbar {
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) !important;
+  align-items: start !important;
+  justify-content: start !important;
+  width: min(540px, 100%) !important;
+  max-width: 540px !important;
+  height: auto !important;
+  min-height: 132px !important;
+  max-height: none !important;
+  overflow: visible !important;
+  padding: 22px 24px 24px !important;
+}
+
+body.fuman-light-theme #strategy-view.intraday-only .intraday-topbar > div:first-child {
+  min-width: 0 !important;
+  width: 100% !important;
+}
+
+body.fuman-light-theme #strategy-view.intraday-only .intraday-topbar h2 {
+  display: flex !important;
+  align-items: center !important;
+  flex-wrap: nowrap !important;
+  gap: 8px !important;
+  max-width: 100% !important;
+  margin: 0 !important;
+  color: #0f172a !important;
+  font-size: clamp(22px, 2vw, 26px) !important;
+  line-height: 1.28 !important;
+  letter-spacing: 0 !important;
+  white-space: nowrap !important;
+  overflow: visible !important;
+}
+
+body.fuman-light-theme #strategy-view.intraday-only .intraday-topbar .page-title-icon {
+  flex: 0 0 auto !important;
+  margin-right: 0 !important;
+}
+
+body.fuman-light-theme #strategy-view.intraday-only .intraday-controls {
+  display: none !important;
+}
+
+@media (max-width: 480px) {
+  body.fuman-light-theme #strategy-view.intraday-only .intraday-topbar h2 {
+    font-size: 20px !important;
+  }
+}
+
+/* strategy4-light-zone-clean-20260531 */
+body.fuman-light-theme #strategy-view.swing-only .swing-zone-summary,
+body.fuman-light-theme #strategy-view .swing-zone-summary {
+  background: #f8fafc !important;
+  border-bottom-color: #d8e4f0 !important;
+}
+
+body.fuman-light-theme #strategy-view.swing-only .swing-zone-card,
+body.fuman-light-theme #strategy-view .swing-zone-card {
+  background: linear-gradient(135deg, #ffffff 0%, #f8fbff 100%) !important;
+  border-color: #d8e4f0 !important;
+  color: #142033 !important;
+  box-shadow: 0 10px 22px rgba(15, 23, 42, 0.06) !important;
+  filter: none !important;
+}
+
+body.fuman-light-theme #strategy-view.swing-only .swing-zone-card.active,
+body.fuman-light-theme #strategy-view .swing-zone-card.active {
+  background: linear-gradient(135deg, #fff7ed 0%, #ffffff 64%, #f8fbff 100%) !important;
+  border-color: rgba(249, 115, 22, 0.62) !important;
+  box-shadow: inset 0 0 0 1px rgba(249, 115, 22, 0.18), 0 12px 24px rgba(249, 115, 22, 0.10) !important;
+}
+
+body.fuman-light-theme #strategy-view.swing-only .swing-zone-card span,
+body.fuman-light-theme #strategy-view .swing-zone-card span {
+  color: #0f172a !important;
+}
+
+body.fuman-light-theme #strategy-view.swing-only .swing-zone-card strong,
+body.fuman-light-theme #strategy-view .swing-zone-card strong {
+  color: #2563eb !important;
+}
+
+body.fuman-light-theme #strategy-view.swing-only .swing-zone-card small,
+body.fuman-light-theme #strategy-view .swing-zone-card small {
+  color: #64748b !important;
+}
+
+body.fuman-light-theme #strategy-view.swing-only .swing-zone-card.zone-all,
+body.fuman-light-theme #strategy-view .swing-zone-card.zone-all {
+  border-color: rgba(37, 99, 235, 0.34) !important;
+}
+
+body.fuman-light-theme #strategy-view.swing-only .swing-zone-card.zone-a,
+body.fuman-light-theme #strategy-view.swing-only .swing-zone-panel.zone-a,
+body.fuman-light-theme #strategy-view .swing-zone-card.zone-a,
+body.fuman-light-theme #strategy-view .swing-zone-panel.zone-a {
+  border-color: rgba(220, 38, 38, 0.42) !important;
+}
+
+body.fuman-light-theme #strategy-view.swing-only .swing-zone-card.zone-b,
+body.fuman-light-theme #strategy-view.swing-only .swing-zone-panel.zone-b,
+body.fuman-light-theme #strategy-view .swing-zone-card.zone-b,
+body.fuman-light-theme #strategy-view .swing-zone-panel.zone-b {
+  border-color: rgba(217, 119, 6, 0.40) !important;
+}
+
+body.fuman-light-theme #strategy-view.swing-only .swing-zone-card.zone-c,
+body.fuman-light-theme #strategy-view.swing-only .swing-zone-panel.zone-c,
+body.fuman-light-theme #strategy-view .swing-zone-card.zone-c,
+body.fuman-light-theme #strategy-view .swing-zone-panel.zone-c {
+  border-color: rgba(5, 150, 105, 0.38) !important;
+}
+
+body.fuman-light-theme #strategy-view.swing-only .swing-zone-panel,
+body.fuman-light-theme #strategy-view .swing-zone-panel {
+  background: #ffffff !important;
+  border-color: #d8e4f0 !important;
+  color: #142033 !important;
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.06) !important;
+}
+
+body.fuman-light-theme #strategy-view.swing-only .swing-zone-head,
+body.fuman-light-theme #strategy-view .swing-zone-head {
+  background: linear-gradient(135deg, #f8fbff 0%, #ffffff 72%, #fff7ed 100%) !important;
+  border-bottom-color: #d8e4f0 !important;
+  color: #142033 !important;
+}
+
+body.fuman-light-theme #strategy-view.swing-only .swing-zone-head h3,
+body.fuman-light-theme #strategy-view .swing-zone-head h3 {
+  color: #0f172a !important;
+}
+
+body.fuman-light-theme #strategy-view.swing-only .swing-zone-head small,
+body.fuman-light-theme #strategy-view .swing-zone-head small {
+  color: #64748b !important;
+}
+
+body.fuman-light-theme #strategy-view.swing-only .swing-zone-head strong,
+body.fuman-light-theme #strategy-view .swing-zone-head strong {
+  color: #1d4ed8 !important;
+}
