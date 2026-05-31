@@ -2659,6 +2659,7 @@ let strategy4ScanLastAt = 0;
 let strategy4ScanCount = 0;
 let strategy4ScannedCodes = new Set();
 let strategy4ScanTotal = 0;
+let strategy4ScanStamp = "";
 let strategy4CacheLoading = false;
 let strategy4SummaryLoading = false;
 let strategy4SummaryLoadedAt = 0;
@@ -3308,6 +3309,7 @@ function commitStrategy4Pending() {
 function mergeStrategy4Cache(payload) {
   strategy4ScanMatches = {};
   strategy4ScannedCodes = new Set();
+  strategy4ScanStamp = normalizeMarketAiDateKey(payload?.scanStamp || payload?.stamp || payload?.date || payload?.usedDate || payload?.tradeDate);
   const scannedCodes = normalizeArray(payload?.scannedCodes);
   scannedCodes.forEach((code) => {
     if (code) strategy4ScannedCodes.add(code);
@@ -3325,6 +3327,7 @@ function saveStrategy4LocalCache() {
     const payload = {
       source: "github-actions",
       updatedAt: strategy4ScanLastAt || Date.now(),
+      scanStamp: strategy4ScanStamp,
       total: strategy4ScanTotal,
       scannedCodes: [...strategy4ScannedCodes],
       matches,
@@ -3355,6 +3358,7 @@ function loadStrategy4LocalCache() {
       strategy4ScanMatches[item.code] = { ...item };
     });
     strategy4ScanCount = Object.keys(strategy4ScanMatches).length;
+    strategy4ScanStamp = normalizeMarketAiDateKey(payload.scanStamp || payload.stamp || payload.date || payload.usedDate || payload.tradeDate);
     strategy4ScanLastAt = cleanNumber(payload.updatedAt) || Date.now();
     return true;
   } catch (error) {
@@ -3380,6 +3384,7 @@ async function loadStrategy4Summary(force = false) {
     strategy4SummaryLoadedAt = Date.now();
     if (payload?.total) strategy4ScanTotal = cleanNumber(payload.total);
     if (payload?.count) strategy4ScanCount = cleanNumber(payload.count);
+    strategy4ScanStamp = normalizeMarketAiDateKey(payload?.scanStamp || payload?.stamp || payload?.date || payload?.usedDate || payload?.tradeDate) || strategy4ScanStamp;
     const updatedAt = Date.parse(payload?.updatedAt || "");
     if (!strategy4ScanLastAt && Number.isFinite(updatedAt)) strategy4ScanLastAt = updatedAt;
     return strategy4Summary;
@@ -5809,6 +5814,7 @@ function renderSwingRadar(universe) {
   const hadSearchFocus = document.activeElement === swingVisibleSearchInput;
   const searchSelectionStart = hadSearchFocus ? swingVisibleSearchInput.selectionStart : null;
   const searchSelectionEnd = hadSearchFocus ? swingVisibleSearchInput.selectionEnd : null;
+  const strategy4Freshness = renderStrategy4FreshnessBarHtml();
 
   strategyTable.innerHTML = `
     <section class="swing-dashboard">
@@ -5822,6 +5828,7 @@ function renderSwingRadar(universe) {
           <label>市場：<select><option>全市場</option></select></label>
         </div>
       </div>
+      ${strategy4Freshness}
       <div class="swing-signal-grid">${cards}</div>
       <section class="swing-panel">
         <div class="swing-tabs">
@@ -7124,6 +7131,42 @@ function marketAiTargetDateKey() {
 function formatMarketAiDateKey(value) {
   const key = normalizeMarketAiDateKey(value);
   return key && key.length === 8 ? `${key.slice(0, 4)}-${key.slice(4, 6)}-${key.slice(6, 8)}` : "未知";
+}
+
+function taipeiDateKeyFromValue(value) {
+  if (value === null || value === undefined || value === "" || value === 0) return "";
+  const normalized = normalizeMarketAiDateKey(value);
+  if (normalized) return normalized;
+  const time = typeof value === "number" ? value : Date.parse(String(value || ""));
+  if (!Number.isFinite(time)) return "";
+  return normalizeMarketAiDateKey(new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Taipei",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date(time)));
+}
+
+function getStrategy4FreshnessMeta() {
+  const today = taipeiDateKeyFromValue(Date.now()) || marketAiTodayKey();
+  const dataDate = normalizeMarketAiDateKey(strategy4ScanStamp || strategy4Summary?.scanStamp || strategy4Summary?.stamp)
+    || taipeiDateKeyFromValue(strategy4ScanLastAt)
+    || taipeiDateKeyFromValue(strategy4Summary?.updatedAt)
+    || marketAiDataDateKey(Object.values(strategy4ScanMatches))
+    || today;
+  return {
+    mode: "策略4｜14:30完整掃",
+    dataDate,
+    today,
+    isToday: dataDate === today,
+  };
+}
+
+function renderStrategy4FreshnessBarHtml() {
+  const meta = getStrategy4FreshnessMeta();
+  const staleText = meta.isToday ? "" : "｜非今日資料不採用";
+  const stateClass = meta.isToday ? "is-live" : "is-stale";
+  return `<div class="data-freshness-bar strategy4-freshness-bar ${stateClass}">模式：<strong>${escapeAttr(meta.mode)}</strong>｜資料日期：<strong>${escapeAttr(formatMarketAiDateKey(meta.dataDate))}</strong>｜今日：<strong>${escapeAttr(formatMarketAiDateKey(meta.today))}</strong>${staleText}</div>`;
 }
 
 function getPanelFreshnessMeta(viewName) {

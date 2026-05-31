@@ -1,5 +1,5 @@
 (function () {
-  const version = "warrant-freshness-layout-20260531-37";
+  const version = "strategy4-freshness-20260531-38";
   window.FUMAN_TERMINAL_BOOT = {
     version,
     startedAt: Date.now(),
