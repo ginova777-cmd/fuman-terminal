@@ -2426,3 +2426,42 @@
   #strategy-view .intraday-side-panel .intraday-signal-grid {
     align-items: stretch;
   }
+
+
+/* strategy-gap-hardfix-20260531 */
+#strategy-view.open-buy-only,
+#strategy-view.intraday-only,
+#strategy-view.strategy3-only,
+#strategy-view.swing-only,
+#strategy-view.strategy5-only {
+  padding-top: 0 !important;
+  margin-top: 0 !important;
+}
+
+#strategy-view.open-buy-only > .strategy-header,
+#strategy-view.intraday-only > .strategy-header,
+#strategy-view.strategy3-only > .strategy-header,
+#strategy-view.swing-only > .strategy-header,
+#strategy-view.strategy5-only > .strategy-header {
+  display: none !important;
+  visibility: hidden !important;
+  height: 0 !important;
+  min-height: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  overflow: hidden !important;
+}
+
+#strategy-view.open-buy-only .strategy-terminal,
+#strategy-view.intraday-only .strategy-terminal,
+#strategy-view.strategy3-only .strategy-terminal,
+#strategy-view.swing-only .strategy-terminal,
+#strategy-view.strategy5-only .strategy-terminal,
+#strategy-view.open-buy-only .strategy-results,
+#strategy-view.intraday-only .strategy-results,
+#strategy-view.strategy3-only .strategy-results,
+#strategy-view.swing-only .strategy-results,
+#strategy-view.strategy5-only .strategy-results {
+  padding-top: 0 !important;
+  margin-top: 0 !important;
+}

@@ -1,22 +1,22 @@
-const CACHE_VERSION = "fuman-terminal-sw-20260531-36";
+const CACHE_VERSION = "fuman-terminal-sw-20260531-43";
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 const DATA_CACHE = `${CACHE_VERSION}-data`;
 
 const STATIC_ASSETS = [
-  "/styles.css?v=title-icons-orange-20260531-41",
-  "/terminal-core.js?v=title-icons-orange-20260531-41",
-  "/terminal-modules.js?v=title-icons-orange-20260531-41",
-  "/terminal-sector-map.js?v=title-icons-orange-20260531-41",
-  "/terminal-strategy-config.js?v=title-icons-orange-20260531-41",
-  "/terminal-market-config.js?v=title-icons-orange-20260531-41",
-  "/terminal-ui-config.js?v=title-icons-orange-20260531-41",
-  "/terminal-runtime-config.js?v=title-icons-orange-20260531-41",
-  "/terminal-tuning-config.js?v=title-icons-orange-20260531-41",
-  "/terminal-worker.js?v=title-icons-orange-20260531-41",
-  "/terminal.js?v=title-icons-orange-20260531-41",
-  "/terminal-realtime-radar.css?v=title-icons-orange-20260531-41",
-  "/terminal-intraday-radar.css?v=title-icons-orange-20260531-41",
-  "/terminal-utility.css?v=title-icons-orange-20260531-41",
+  "/styles.css?v=strategy-gap-hardfix-20260531-43",
+  "/terminal-core.js?v=strategy-gap-hardfix-20260531-43",
+  "/terminal-modules.js?v=strategy-gap-hardfix-20260531-43",
+  "/terminal-sector-map.js?v=strategy-gap-hardfix-20260531-43",
+  "/terminal-strategy-config.js?v=strategy-gap-hardfix-20260531-43",
+  "/terminal-market-config.js?v=strategy-gap-hardfix-20260531-43",
+  "/terminal-ui-config.js?v=strategy-gap-hardfix-20260531-43",
+  "/terminal-runtime-config.js?v=strategy-gap-hardfix-20260531-43",
+  "/terminal-tuning-config.js?v=strategy-gap-hardfix-20260531-43",
+  "/terminal-worker.js?v=strategy-gap-hardfix-20260531-43",
+  "/terminal.js?v=strategy-gap-hardfix-20260531-43",
+  "/terminal-realtime-radar.css?v=strategy-gap-hardfix-20260531-43",
+  "/terminal-intraday-radar.css?v=strategy-gap-hardfix-20260531-43",
+  "/terminal-utility.css?v=strategy-gap-hardfix-20260531-43",
   "/assets/logo.webp",
   "/assets/login-bg-fuman-lite.webp",
   "/favicon.ico",

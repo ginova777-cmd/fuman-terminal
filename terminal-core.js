@@ -1,5 +1,5 @@
 (function () {
-  const version = "strategy-top-gap-20260531-42";
+  const version = "strategy-gap-hardfix-20260531-43";
   window.FUMAN_TERMINAL_BOOT = {
     version,
     startedAt: Date.now(),
