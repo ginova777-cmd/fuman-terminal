@@ -1,6 +1,6 @@
 {
   "ok": true,
-  "updatedAt": "2026-05-30T13:12:04.348Z",
+  "updatedAt": "2026-05-31T03:37:43.990Z",
   "generatedBy": "generate-performance-report",
   "assets": [
     {
@@ -27,42 +27,42 @@
     {
       "file": "strategy4-slim.json",
       "ok": true,
-      "bytes": 450319,
+      "bytes": 289803,
       "count": 675,
       "updatedAt": "2026-05-29T16:30:37.466Z"
     },
     {
       "file": "strategy4-zone-a.json",
       "ok": true,
-      "bytes": 68374,
+      "bytes": 43328,
       "count": 86,
       "updatedAt": "2026-05-29T16:30:37.466Z"
     },
     {
       "file": "institution-slim.json",
       "ok": true,
-      "bytes": 478606,
+      "bytes": 305341,
       "count": 1619,
       "updatedAt": "2026-05-29T15:28:06.824Z"
     },
     {
       "file": "institution-joint-top.json",
       "ok": true,
-      "bytes": 46912,
+      "bytes": 29920,
       "count": 160,
       "updatedAt": "2026-05-29T15:28:06.824Z"
     },
     {
       "file": "warrant-flow-slim.json",
       "ok": true,
-      "bytes": 61436,
+      "bytes": 46772,
       "count": 120,
       "updatedAt": "2026-05-30T10:18:05.285Z"
     },
     {
       "file": "warrant-priority-top.json",
       "ok": true,
-      "bytes": 61436,
+      "bytes": 46772,
       "count": 120,
       "updatedAt": "2026-05-30T10:18:05.285Z"
     },
@@ -78,30 +78,30 @@
       "ok": true,
       "bytes": 796,
       "count": 0,
-      "updatedAt": "2026-05-30T13:12:02.535Z"
+      "updatedAt": "2026-05-31T03:37:42.318Z"
     },
     {
       "file": "data-quality-report.json",
       "ok": true,
       "bytes": 2011,
       "count": 0,
-      "updatedAt": "2026-05-30T13:12:04.132Z"
+      "updatedAt": "2026-05-31T03:37:43.769Z"
     },
     {
       "file": "data-consistency-report.json",
       "ok": true,
       "bytes": 312,
       "count": 0,
-      "updatedAt": "2026-05-30T13:12:04.247Z"
+      "updatedAt": "2026-05-31T03:37:43.869Z"
     },
     {
       "file": "strategy-weight-report.json",
       "ok": true,
       "bytes": 418,
       "count": 0,
-      "updatedAt": "2026-05-30T13:12:04.298Z"
+      "updatedAt": "2026-05-31T03:37:43.930Z"
     }
   ],
-  "totalBytes": 1398086,
+  "totalBytes": 992939,
   "missing": []
 }

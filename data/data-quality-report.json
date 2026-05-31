@@ -1,6 +1,6 @@
 {
   "ok": true,
-  "updatedAt": "2026-05-30T13:12:04.132Z",
+  "updatedAt": "2026-05-31T03:37:43.769Z",
   "files": [
     {
       "file": "market-summary.json",
@@ -50,7 +50,7 @@
     {
       "file": "strategy4-slim.json",
       "ok": true,
-      "bytes": 450319,
+      "bytes": 289803,
       "count": 675,
       "updatedAt": "2026-05-29T16:30:37.466Z",
       "issues": [
