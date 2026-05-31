@@ -1,5 +1,5 @@
 (function () {
-  const VERSION = "chip-light-flow-colors-20260531-54";
+  const VERSION = "freshness-type-20260531-56";
   const modules = {
     sectorMap: { loaded: false, src: "terminal-sector-map.js" },
     strategyConfig: { loaded: false, src: "terminal-strategy-config.js" },

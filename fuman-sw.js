@@ -1,22 +1,22 @@
-const CACHE_VERSION = "fuman-terminal-sw-20260531-56";
+const CACHE_VERSION = "fuman-terminal-sw-20260531-40";
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 const DATA_CACHE = `${CACHE_VERSION}-data`;
 
 const STATIC_ASSETS = [
-  "/styles.css?v=strategy4-remove-bc-signal-cards-20260531-56",
-  "/terminal-core.js?v=strategy4-remove-bc-signal-cards-20260531-56",
-  "/terminal-modules.js?v=strategy4-remove-bc-signal-cards-20260531-56",
-  "/terminal-sector-map.js?v=strategy4-remove-bc-signal-cards-20260531-56",
-  "/terminal-strategy-config.js?v=strategy4-remove-bc-signal-cards-20260531-56",
-  "/terminal-market-config.js?v=strategy4-remove-bc-signal-cards-20260531-56",
-  "/terminal-ui-config.js?v=strategy4-remove-bc-signal-cards-20260531-56",
-  "/terminal-runtime-config.js?v=strategy4-remove-bc-signal-cards-20260531-56",
-  "/terminal-tuning-config.js?v=strategy4-remove-bc-signal-cards-20260531-56",
-  "/terminal-worker.js?v=strategy4-remove-bc-signal-cards-20260531-56",
-  "/terminal.js?v=strategy4-remove-bc-signal-cards-20260531-56",
-  "/terminal-realtime-radar.css?v=strategy4-remove-bc-signal-cards-20260531-56",
-  "/terminal-intraday-radar.css?v=strategy4-remove-bc-signal-cards-20260531-56",
-  "/terminal-utility.css?v=strategy4-remove-bc-signal-cards-20260531-56",
+  "/styles.css?v=freshness-type-20260531-56",
+  "/terminal-core.js?v=freshness-type-20260531-56",
+  "/terminal-modules.js?v=freshness-type-20260531-56",
+  "/terminal-sector-map.js?v=freshness-type-20260531-56",
+  "/terminal-strategy-config.js?v=freshness-type-20260531-56",
+  "/terminal-market-config.js?v=freshness-type-20260531-56",
+  "/terminal-ui-config.js?v=freshness-type-20260531-56",
+  "/terminal-runtime-config.js?v=freshness-type-20260531-56",
+  "/terminal-tuning-config.js?v=freshness-type-20260531-56",
+  "/terminal-worker.js?v=freshness-type-20260531-56",
+  "/terminal.js?v=freshness-type-20260531-56",
+  "/terminal-realtime-radar.css?v=freshness-type-20260531-56",
+  "/terminal-intraday-radar.css?v=freshness-type-20260531-56",
+  "/terminal-utility.css?v=freshness-type-20260531-56",
   "/assets/logo.webp",
   "/assets/login-bg-fuman-lite.webp",
   "/favicon.ico",

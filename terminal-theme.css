@@ -1976,3 +1976,19 @@ body.fuman-light-theme .swing-topbar .schedule-status-pill,
 body.fuman-light-theme .strategy5-page-heading .schedule-status-pill {
   display: none !important;
 }
+/* light-freshness-type-20260531 */
+body.fuman-light-theme .data-freshness-bar {
+  font-size: 15px !important;
+  font-weight: 850 !important;
+  line-height: 1.7 !important;
+  letter-spacing: 0 !important;
+}
+
+body.fuman-light-theme .data-freshness-bar strong,
+body.fuman-light-theme .data-freshness-bar span,
+body.fuman-light-theme .data-freshness-bar b {
+  font-size: inherit !important;
+  font-weight: 850 !important;
+  line-height: inherit !important;
+  letter-spacing: 0 !important;
+}

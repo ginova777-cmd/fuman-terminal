@@ -1,5 +1,5 @@
 (function () {
-  const version = "strategy4-remove-bc-signal-cards-20260531-56";
+  const version = "freshness-type-20260531-56";
   window.FUMAN_TERMINAL_BOOT = {
     version,
     startedAt: Date.now(),
