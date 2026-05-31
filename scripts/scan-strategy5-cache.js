@@ -14,7 +14,6 @@ const CAPITAL_URLS = [
   "https://mopsfin.twse.com.tw/opendata/t187ap03_O.csv",
 ];
 const USE_MIS_QUOTES = process.env.STRATEGY5_USE_MIS === "1";
-const HISTORY_LIMIT = Math.max(900, Number(process.env.STRATEGY5_HISTORY_LIMIT || 900));
 const HISTORY_CONCURRENCY = Math.max(1, Number(process.env.STRATEGY5_HISTORY_CONCURRENCY || 8));
 
 function readJson(file, fallback) {
@@ -451,24 +450,9 @@ async function buildMatches(stocks, institutionData, issuedSharesMap = new Map()
 
   const strategy4Candidates = readStrategy4Candidates();
   const strategy4ByCode = new Map(strategy4Candidates.map((stock) => [String(stock.code || ""), stock]));
-  const strategy4HistoryCandidates = strategy4Candidates
-    .map((item) => {
-      const base = baseRows.find((stock) => stock.code === String(item.code || ""));
-      if (!base) return null;
-      return {
-        ...base,
-        strategy4Score: cleanNumber(item.swingScore || item.score),
-        strategy4Reason: item.reason || "",
-        strategy4Signals: item.signals || item.swingSignals || [],
-      };
-    })
-    .filter(Boolean)
-    .sort((a, b) => cleanNumber(b.strategy4Score) - cleanNumber(a.strategy4Score) || b.valueRank - a.valueRank || b.volumeRank - a.volumeRank);
-  const fallbackHistoryCandidates = baseRows
-    .filter((stock) => cleanNumber(stock.close) >= 10 && stock.valueRank >= 20 && stock.volumeRank >= 20)
+  const historyCandidates = baseRows
+    .filter((stock) => cleanNumber(stock.close) >= 10 && stock.valueRank >= 35)
     .sort((a, b) => b.valueRank - a.valueRank || b.volumeRank - a.volumeRank || cleanNumber(b.percent) - cleanNumber(a.percent));
-  const historyCandidates = (strategy4HistoryCandidates.length ? strategy4HistoryCandidates : fallbackHistoryCandidates)
-    .slice(0, HISTORY_LIMIT);
   const historyByCode = new Map();
   await mapLimit(historyCandidates, HISTORY_CONCURRENCY, async (stock) => {
     const rows = await fetchDailyHistory(stock);
