@@ -1,6 +1,6 @@
 {
   "ok": true,
-  "updatedAt": "2026-05-31T07:45:06.939Z",
+  "updatedAt": "2026-05-31T07:45:37.843Z",
   "risk": "medium",
   "risks": [
     {
@@ -18,7 +18,7 @@
           "updatedAt": "2026-05-29T16:30:37.466Z",
           "bytes": 49554,
           "slaHours": 30,
-          "ageHours": 39.24151638888889
+          "ageHours": 39.25009416666666
         }
       ]
     }
@@ -84,35 +84,35 @@
         "file": "performance-report.json",
         "ok": true,
         "count": 0,
-        "updatedAt": "2026-05-31T06:45:10.503Z",
+        "updatedAt": "2026-05-31T07:45:28.828Z",
         "bytes": 2392
       },
       {
         "file": "signal-quality-report.json",
         "ok": true,
         "count": 0,
-        "updatedAt": "2026-05-31T06:45:07.761Z",
+        "updatedAt": "2026-05-31T07:45:19.109Z",
         "bytes": 796
       },
       {
         "file": "data-quality-report.json",
         "ok": true,
         "count": 0,
-        "updatedAt": "2026-05-31T06:45:10.263Z",
+        "updatedAt": "2026-05-31T07:45:27.330Z",
         "bytes": 2011
       },
       {
         "file": "data-consistency-report.json",
         "ok": true,
         "count": 0,
-        "updatedAt": "2026-05-31T06:45:10.370Z",
+        "updatedAt": "2026-05-31T07:45:27.571Z",
         "bytes": 312
       },
       {
         "file": "strategy-weight-report.json",
         "ok": true,
         "count": 0,
-        "updatedAt": "2026-05-31T06:45:10.444Z",
+        "updatedAt": "2026-05-31T07:45:27.732Z",
         "bytes": 418
       }
     ]
