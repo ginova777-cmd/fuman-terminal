@@ -1,6 +1,6 @@
 {
   "ok": true,
-  "updatedAt": "2026-05-31T23:47:26.577Z",
+  "updatedAt": "2026-05-31T23:48:18.186Z",
   "files": [
     {
       "file": "market-summary.json",
@@ -63,9 +63,9 @@
     {
       "file": "institution-latest.json",
       "ok": true,
-      "bytes": 703237,
-      "count": 1619,
-      "updatedAt": "2026-05-29T15:28:06.824Z",
+      "bytes": 815252,
+      "count": 1908,
+      "updatedAt": "2026-05-31T23:47:52.702Z",
       "issues": []
     },
     {
