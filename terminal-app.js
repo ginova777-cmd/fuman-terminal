@@ -6027,9 +6027,9 @@ function renderStrategy5Dashboard(evaluated) {
     const strategy = STRATEGY_BY_ID[id] || {};
     const count = (byId[id] || []).length;
     const activeClass = id === strategy5ActiveId ? "active" : "";
-    const tabLabel = id === "foreign_trust_breakout" ? "策略5-綜合策略" : strategy.label || id;
+    const tabLabel = strategy.label || id;
     const tabDesc = STRATEGY5_CARD_META[id]?.description || "符合策略5條件的股票。";
-    const icon = id === "foreign_trust_breakout" ? "↗" : strategy.icon || "十";
+    const icon = strategy.icon || "十";
     return `
       <button class="${activeClass}" type="button" data-strategy5-filter="${escapeAttr(id)}">
         <i class="strategy5-tab-icon" aria-hidden="true">${escapeAttr(icon)}</i>
@@ -6124,7 +6124,7 @@ function renderStrategy5Dashboard(evaluated) {
         <section class="strategy5-results">
           <div class="strategy5-results-head">
             <div>
-              <h3>${titleWithSchedule("▰", active.label || "策略5-綜合策略", "strategy5")}</h3>
+              <h3>${titleWithSchedule(active.icon || "▰", active.label || "策略5-綜合策略", "strategy5")}</h3>
               <p>${activeMeta.description || "符合策略5條件的股票。"}｜${scanText}，結果固定到下一次掃描。</p>
             </div>
           </div>
@@ -6148,7 +6148,7 @@ function renderStrategy5CacheLoading() {
         <section class="strategy5-results">
           <div class="strategy5-results-head">
             <div>
-              <h3>${titleWithSchedule("▰", "策略5-綜合策略", "strategy5")}</h3>
+              <h3>${titleWithSchedule(STRATEGY_BY_ID.foreign_trust_breakout?.icon || "▰", "外資投信連買準突破", "strategy5")}</h3>
               <p>正在讀取 06:00 / 21:00 完整掃結果，完成後固定顯示到下一次掃描。</p>
             </div>
           </div>
