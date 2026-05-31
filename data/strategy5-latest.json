@@ -1,7 +1,7 @@
 {
   "ok": true,
   "source": "github-actions-official-daily",
-  "updatedAt": "2026-05-31T07:24:06.779Z",
+  "updatedAt": "2026-05-31T07:33:39.707Z",
   "usedDate": "20260529",
   "schedule": "06:00/21:00",
   "fullScan": true,
@@ -1975,13 +1975,129 @@
   "sourceHealth": {
     "issuedSharesCount": 1976,
     "volumeAverageCount": 2212,
-    "warningCount": 1,
-    "warnings": [
-      "tpex volume fetch failed: 115/05/29 :: terminated"
-    ]
+    "warningCount": 0,
+    "warnings": []
   },
-  "count": 52,
+  "count": 54,
   "matches": [
+    {
+      "code": "5474",
+      "name": "聰泰",
+      "close": 180,
+      "open": 0,
+      "high": 0,
+      "low": 0,
+      "prevClose": 0,
+      "limitUp": 0,
+      "change": 16,
+      "percent": 9.76,
+      "value": 390550967,
+      "tradeVolume": 2184106,
+      "market": "TPEX",
+      "valueRank": 81,
+      "volumeRank": 74,
+      "inst": {
+        "foreign": 253651,
+        "trust": 0,
+        "dealer": 24849,
+        "total": 278500
+      },
+      "matches": [
+        {
+          "id": "limit_up_doji",
+          "short": "漲停十字",
+          "icon": "十",
+          "score": 100,
+          "reason": "近20日漲停後出十字星，橫盤 16 天、區間 12.26%，縮量後今日放量 3.96 倍突破。"
+        }
+      ],
+      "strategy4Score": 100,
+      "strategy4Reason": "突破40日整理頸線，量能放大，偏圓弧底突破。",
+      "strategy4Signals": [
+        {
+          "id": "saucer",
+          "short": "圓弧",
+          "icon": "◜",
+          "reason": "突破40日整理頸線，量能放大，偏圓弧底突破。"
+        },
+        {
+          "id": "breakaway_gap",
+          "short": "突破缺口",
+          "icon": "◆",
+          "reason": "跳空突破近20日整理高點，偏突破缺口。"
+        },
+        {
+          "id": "three_inside",
+          "short": "翻紅",
+          "icon": "↻",
+          "reason": "三內翻紅結構成立，站上MA20且趨勢確認。"
+        }
+      ],
+      "score": 100,
+      "activeMatch": {
+        "id": "limit_up_doji",
+        "short": "漲停十字",
+        "icon": "十",
+        "score": 100,
+        "reason": "近20日漲停後出十字星，橫盤 16 天、區間 12.26%，縮量後今日放量 3.96 倍突破。"
+      }
+    },
+    {
+      "code": "4543",
+      "name": "萬在",
+      "close": 41.5,
+      "open": 0,
+      "high": 0,
+      "low": 0,
+      "prevClose": 0,
+      "limitUp": 0,
+      "change": 2.8,
+      "percent": 7.24,
+      "value": 43464213,
+      "tradeVolume": 1070154,
+      "market": "TPEX",
+      "valueRank": 58,
+      "volumeRank": 62,
+      "inst": {
+        "foreign": 132215,
+        "trust": 0,
+        "dealer": -16000,
+        "total": 116215
+      },
+      "matches": [
+        {
+          "id": "limit_up_doji",
+          "short": "漲停十字",
+          "icon": "十",
+          "score": 100,
+          "reason": "近20日漲停後出十字星，橫盤 14 天、區間 12.36%，縮量後今日放量 2.52 倍突破。"
+        }
+      ],
+      "strategy4Score": 100,
+      "strategy4Reason": "突破40日整理頸線，量能放大，偏圓弧底突破。",
+      "strategy4Signals": [
+        {
+          "id": "saucer",
+          "short": "圓弧",
+          "icon": "◜",
+          "reason": "突破40日整理頸線，量能放大，偏圓弧底突破。"
+        },
+        {
+          "id": "breakaway_gap",
+          "short": "突破缺口",
+          "icon": "◆",
+          "reason": "跳空突破近20日整理高點，偏突破缺口。"
+        }
+      ],
+      "score": 100,
+      "activeMatch": {
+        "id": "limit_up_doji",
+        "short": "漲停十字",
+        "icon": "十",
+        "score": 100,
+        "reason": "近20日漲停後出十字星，橫盤 14 天、區間 12.36%，縮量後今日放量 2.52 倍突破。"
+      }
+    },
     {
       "code": "6456",
       "name": "GIS-KY",

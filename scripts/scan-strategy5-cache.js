@@ -14,7 +14,7 @@ const CAPITAL_URLS = [
   "https://mopsfin.twse.com.tw/opendata/t187ap03_O.csv",
 ];
 const USE_MIS_QUOTES = process.env.STRATEGY5_USE_MIS === "1";
-const HISTORY_LIMIT = Math.max(20, Number(process.env.STRATEGY5_HISTORY_LIMIT || 900));
+const HISTORY_LIMIT = Math.max(900, Number(process.env.STRATEGY5_HISTORY_LIMIT || 900));
 const HISTORY_CONCURRENCY = Math.max(1, Number(process.env.STRATEGY5_HISTORY_CONCURRENCY || 8));
 
 function readJson(file, fallback) {
