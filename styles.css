@@ -4755,3 +4755,26 @@ body.fuman-light-theme #market-view .market-ai-sort-note {
     box-shadow: 0 8px 18px rgba(37, 55, 86, 0.07) !important;
   }
 }
+
+/* strategy2-light-table-contrast-20260531 */
+body.fuman-light-theme #strategy-view .intraday-table {
+  border-color: #c7d8f4 !important;
+}
+
+body.fuman-light-theme #strategy-view .intraday-table thead,
+body.fuman-light-theme #strategy-view .intraday-table thead tr,
+body.fuman-light-theme #strategy-view .intraday-table th {
+  background: #eaf2ff !important;
+  color: #17315c !important;
+  border-color: #c7d8f4 !important;
+}
+
+body.fuman-light-theme #strategy-view .intraday-table th button,
+body.fuman-light-theme #strategy-view .intraday-table th .sort-btn {
+  color: #17315c !important;
+}
+
+body.fuman-light-theme #strategy-view .intraday-table th button:hover,
+body.fuman-light-theme #strategy-view .intraday-table th .sort-btn:hover {
+  color: #0f4fb3 !important;
+}
