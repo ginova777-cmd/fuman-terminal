@@ -4922,3 +4922,23 @@ body.fuman-light-theme #watchlist-view .page-title-icon {
   text-shadow: none !important;
   filter: none !important;
 }
+
+
+/* strategy-top-gap-20260531 */
+#strategy-view.open-buy-only > .strategy-header,
+#strategy-view.intraday-only > .strategy-header,
+#strategy-view.strategy3-only > .strategy-header,
+#strategy-view.swing-only > .strategy-header,
+#strategy-view.strategy5-only > .strategy-header {
+  display: none !important;
+  margin: 0 !important;
+  padding: 0 !important;
+}
+
+#strategy-view.open-buy-only .strategy-terminal,
+#strategy-view.intraday-only .strategy-terminal,
+#strategy-view.strategy3-only .strategy-terminal,
+#strategy-view.swing-only .strategy-terminal,
+#strategy-view.strategy5-only .strategy-terminal {
+  margin-top: 0 !important;
+}

@@ -1,5 +1,5 @@
 (function () {
-  const version = "title-icons-orange-20260531-41";
+  const version = "strategy-top-gap-20260531-42";
   window.FUMAN_TERMINAL_BOOT = {
     version,
     startedAt: Date.now(),
