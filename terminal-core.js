@@ -1,5 +1,5 @@
 (function () {
-  const version = "warrant-reason-badges-20260531-38";
+  const version = "strategy4-remove-bc-signal-cards-20260531-56";
   window.FUMAN_TERMINAL_BOOT = {
     version,
     startedAt: Date.now(),
