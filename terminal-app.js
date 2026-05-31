@@ -73,7 +73,7 @@ function getFumanWorker() {
   if (!("Worker" in window)) return null;
   if (fumanWorker) return fumanWorker;
   try {
-    fumanWorker = new Worker("terminal-worker.js?v=speed-modules-20260530-28");
+    fumanWorker = new Worker("terminal-worker.js?v=speed-modules-20260531-29");
     fumanWorker.addEventListener("message", (event) => {
       const { id, ok, rows, result, error } = event.data || {};
       const pending = fumanWorkerPending.get(id);
@@ -301,7 +301,7 @@ function loadFumanStyle(href, id) {
   const link = document.createElement("link");
   link.id = id;
   link.rel = "stylesheet";
-  link.href = href.includes("?") ? href : `${href}?v=${window.FUMAN_TERMINAL_BOOT?.version || "speed-modules-20260530-28"}`;
+  link.href = href.includes("?") ? href : `${href}?v=${window.FUMAN_TERMINAL_BOOT?.version || "speed-modules-20260531-29"}`;
   document.head.appendChild(link);
 }
 
@@ -327,7 +327,7 @@ function makeFumanModuleScope(bindings) {
 function loadFumanFeatureModule(name, src, globalName) {
   if (window[globalName]) return Promise.resolve(window[globalName]);
   if (fumanFeatureModulePromises[name]) return fumanFeatureModulePromises[name];
-  const version = window.FUMAN_TERMINAL_BOOT?.version || "speed-modules-20260530-28";
+  const version = window.FUMAN_TERMINAL_BOOT?.version || "speed-modules-20260531-29";
   fumanFeatureModulePromises[name] = new Promise((resolve, reject) => {
     const attr = "data-fuman-feature-" + name;
     const existing = document.querySelector("script[" + attr + "]");
@@ -2950,10 +2950,7 @@ function recordFumanPerformance(url, startedAt, ok, error = null) {
   const list = Array.isArray(boot.performanceLog) ? boot.performanceLog : [];
   list.push(item);
   boot.performanceLog = list.slice(-40);
-  if (document.querySelector("#fuman-health-performance")) {
-    clearTimeout(boot.performanceRenderTimer);
-    boot.performanceRenderTimer = setTimeout(renderHealthPerformancePanel, 250);
-  }
+  document.querySelector("#fuman-health-performance")?.remove();
 }
 
 function versionedDataUrl(url, version = "", force = false) {
@@ -3570,34 +3567,7 @@ function healthRiskLevel(summary = healthSummaryPayload) {
 }
 
 function renderHealthPerformancePanel() {
-  const dashboard = document.querySelector(".dashboard");
-  if (!dashboard) return;
-  let panel = document.querySelector("#fuman-health-performance");
-  if (!panel) {
-    panel = document.createElement("section");
-    panel.id = "fuman-health-performance";
-    panel.className = "fuman-health-performance";
-    dashboard.insertBefore(panel, dashboard.firstElementChild);
-  }
-  loadFumanStyle("terminal-utility.css", "fuman-health-performance-style");
-  const risk = healthRiskLevel();
-  const data = normalizeArray(healthSummaryPayload?.runtime?.data);
-  const badTasks = normalizeArray(healthSummaryPayload?.schedule?.badTasks).slice(0, 3);
-  const perf = normalizeArray(window.FUMAN_TERMINAL_BOOT?.performanceLog).slice(-8).reverse();
-  panel.innerHTML = `
-    <article class="fuman-health-card">
-      <h3>健康風險</h3>
-      <span class="fuman-risk-pill ${risk.tone}">${risk.label}</span>
-      <p>排程異常 ${cleanNumber(healthSummaryPayload?.schedule?.badCount)}｜同步待補 ${cleanNumber(healthSummaryPayload?.githubSync?.pendingCount)}｜資料檔 ${data.filter((item) => item.ok).length}/${data.length || 0}</p>
-      ${badTasks.length ? `<small>${badTasks.map((item) => escapeAttr(item.taskName || "")).join("、")}</small>` : `<small>目前未看到高風險排程異常。</small>`}
-    </article>
-    <article class="fuman-health-card">
-      <h3>前端效能</h3>
-      <div class="fuman-perf-list">
-        ${perf.length ? perf.map((item) => `<span><b>${escapeAttr(item.url.split("/").pop() || item.url)}</b><em>${item.ok ? item.ms : "ERR"}ms</em></span>`).join("") : `<span><b>等待資料</b><em>--</em></span>`}
-      </div>
-    </article>
-  `;
+  document.querySelector("#fuman-health-performance")?.remove();
 }
 
 function saveWarrantFlowLocalCache() {
