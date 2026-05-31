@@ -73,7 +73,7 @@ function getFumanWorker() {
   if (!("Worker" in window)) return null;
   if (fumanWorker) return fumanWorker;
   try {
-    fumanWorker = new Worker("terminal-worker.js?v=watchlist-strategy-cn-20260531-62");
+    fumanWorker = new Worker("terminal-worker.js?v=watchlist-strategy-source-20260531-63");
     fumanWorker.addEventListener("message", (event) => {
       const { id, ok, rows, result, error } = event.data || {};
       const pending = fumanWorkerPending.get(id);
@@ -301,7 +301,7 @@ function loadFumanStyle(href, id) {
   const link = document.createElement("link");
   link.id = id;
   link.rel = "stylesheet";
-  link.href = href.includes("?") ? href : `${href}?v=${window.FUMAN_TERMINAL_BOOT?.version || "watchlist-strategy-cn-20260531-62"}`;
+  link.href = href.includes("?") ? href : `${href}?v=${window.FUMAN_TERMINAL_BOOT?.version || "watchlist-strategy-source-20260531-63"}`;
   document.head.appendChild(link);
 }
 
@@ -327,7 +327,7 @@ function makeFumanModuleScope(bindings) {
 function loadFumanFeatureModule(name, src, globalName) {
   if (window[globalName]) return Promise.resolve(window[globalName]);
   if (fumanFeatureModulePromises[name]) return fumanFeatureModulePromises[name];
-  const version = window.FUMAN_TERMINAL_BOOT?.version || "watchlist-strategy-cn-20260531-62";
+  const version = window.FUMAN_TERMINAL_BOOT?.version || "watchlist-strategy-source-20260531-63";
   fumanFeatureModulePromises[name] = new Promise((resolve, reject) => {
     const attr = "data-fuman-feature-" + name;
     const existing = document.querySelector("script[" + attr + "]");
@@ -9544,22 +9544,37 @@ function watchlistSignalText(value) {
   return value.label || value.name || value.title || watchlistSignalLabelById(id) || value.strategy || value.id || "";
 }
 
-function watchlistStrategyDetails(row) {
-  const labels = [
-    row.setup,
-    row.status,
-    row.strategy,
-    row.strategyLabel,
-    row.activeMatch?.label,
-    row.activeMatch?.name,
-    ...normalizeArray(row.strategies).map(watchlistSignalText),
-    ...normalizeArray(row.signalTags).map(watchlistSignalText),
-    ...normalizeArray(row.signals).map(watchlistSignalText),
-    ...normalizeArray(row.swingSignals).map(watchlistSignalText),
-    ...normalizeArray(row.strategy4Signals).map(watchlistSignalText),
-    ...normalizeArray(row.matches).map(watchlistSignalText),
-    ...normalizeArray(row.intradaySignals).map(watchlistSignalText),
-  ].map((item) => String(item || "").trim()).filter(Boolean);
+function watchlistStrategyDetails(row, sourceKey = "") {
+  const detailSources = {
+    openBuy: [
+      row.setup,
+      row.status,
+    ],
+    strategy2: [
+      row.strategy,
+      row.stateLabel,
+      ...normalizeArray(row.strategies).map(watchlistSignalText),
+      ...normalizeArray(row.intradaySignals).map(watchlistSignalText),
+    ],
+    strategy3: [
+      row.setup,
+      row.status,
+      ...normalizeArray(row.matches).map(watchlistSignalText),
+    ],
+    strategy4: [
+      row.strategyLabel,
+      ...normalizeArray(row.signals).map(watchlistSignalText),
+      ...normalizeArray(row.swingSignals).map(watchlistSignalText),
+    ],
+    strategy5: [
+      row.activeMatch,
+      ...normalizeArray(row.matches).filter((match) => STRATEGY5_PRESET_IDS.includes(match?.id)).map(watchlistSignalText),
+    ],
+    realtime: [
+      ...normalizeArray(row.signalTags).map(watchlistSignalText),
+    ],
+  };
+  const labels = (detailSources[sourceKey] || []).map(watchlistSignalText).map((item) => String(item || "").trim()).filter(Boolean);
   return [...new Set(labels)].slice(0, 4);
 }
 
@@ -9592,7 +9607,7 @@ async function loadWatchlistStrategyMatches(code) {
   return sources.flatMap((source) => {
     const rows = normalizeArray(source.rows).filter((row) => String(row?.code || "") === targetCode);
     if (!rows.length) return [];
-    const details = [...new Set(rows.flatMap(watchlistStrategyDetails))].slice(0, 5);
+    const details = [...new Set(rows.flatMap((row) => watchlistStrategyDetails(row, source.key)))].slice(0, 5);
     const score = Math.max(...rows.map((row) => cleanNumber(row.score || row.maxScore)).filter(Boolean), 0);
     return [{
       key: source.key,
