@@ -1,5 +1,5 @@
 (function () {
-  const version = "strategy5-volume-rule-20260531-39";
+  const version = "strategy1-reason-badges-20260531-40";
   window.FUMAN_TERMINAL_BOOT = {
     version,
     startedAt: Date.now(),

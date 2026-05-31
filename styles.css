@@ -4831,3 +4831,78 @@ body.fuman-light-theme #warrant-flow-view .page-header p,
 body.fuman-light-theme #warrant-flow-view .swing-topbar p {
   color: #475569 !important;
 }
+
+
+.open-buy-reason-cell {
+  min-width: 420px;
+}
+
+.open-buy-reason-card {
+  display: grid;
+  gap: 7px;
+  color: #7b8daa;
+  font-size: 12px;
+  line-height: 1.65;
+}
+
+.open-buy-reason-title {
+  color: #ff4b4b;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.open-buy-reason-chips,
+.open-buy-reason-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.open-buy-reason-chip,
+.open-buy-reason-tag {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 2px 9px;
+  border: 1px solid rgba(255, 153, 67, 0.55);
+  border-radius: 8px;
+  background: rgba(255, 247, 237, 0.86);
+  color: #c75000;
+  font-size: 12px;
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+.open-buy-reason-chip.hot,
+.open-buy-reason-tag.hot {
+  border-color: rgba(255, 84, 84, 0.5);
+  background: rgba(255, 235, 235, 0.92);
+  color: #e02121;
+}
+
+.open-buy-reason-chip.neutral,
+.open-buy-reason-tag.neutral {
+  border-color: rgba(59, 130, 246, 0.28);
+  background: rgba(239, 246, 255, 0.92);
+  color: #2563eb;
+}
+
+.open-buy-reason-tag.cool {
+  border-color: rgba(14, 165, 233, 0.25);
+  background: rgba(240, 249, 255, 0.95);
+  color: #0369a1;
+}
+
+.open-buy-reason-card p {
+  max-width: 760px;
+  margin: 0;
+}
+
+body:not(.fuman-light-theme) .open-buy-reason-card {
+  color: #b8c7e3;
+}
+
+body:not(.fuman-light-theme) .open-buy-reason-chip,
+body:not(.fuman-light-theme) .open-buy-reason-tag {
+  background: rgba(255, 122, 48, 0.12);
+}

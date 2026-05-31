@@ -5921,6 +5921,57 @@ function mountSwingVisibleSearchInput(restoreFocus = false, selectionStart = nul
   }
 }
 
+
+function openBuyReasonMetric(reason, pattern, formatter) {
+  const match = String(reason || "").match(pattern);
+  if (!match) return null;
+  return formatter(match);
+}
+
+function renderOpenBuyReasonBadges(stock) {
+  const reason = String(stock.reason || "昨日強勢，列入開盤入候選。");
+  const parts = reason.split("：");
+  const setup = parts.length > 1 && parts[0].trim().length <= 12 ? parts[0].trim() : (stock.status || "通過");
+  const body = parts.length > 1 ? parts.slice(1).join("：").trim() : reason;
+  const percent = cleanNumber(stock.percent);
+  const volumeRatio = cleanNumber(stock.volumeRatio || stock.VolumeRatio || stock.volume_ratio) || null;
+  const metrics = [];
+
+  const pushMetric = (label, tone = "") => {
+    if (label && !metrics.some((item) => item.label === label)) metrics.push({ label, tone });
+  };
+
+  if (Number.isFinite(percent)) pushMetric(`漲幅 ${percent >= 0 ? "+" : ""}${percent.toFixed(2)}%`, percent >= 9 ? "hot" : "warm");
+  pushMetric(openBuyReasonMetric(reason, /成交量\s*([\d,]+)\s*張/, (match) => `成交量 ${match[1]}`), "warm");
+  if (volumeRatio) pushMetric(`量比 ${formatNumber(volumeRatio, 2)}`, volumeRatio >= 2 ? "hot" : "warm");
+  else pushMetric(openBuyReasonMetric(reason, /量比\s*([\d.]+)/, (match) => `量比 ${match[1]}`), "warm");
+  pushMetric(openBuyReasonMetric(reason, /收盤站上MA35\s*([\d.]+)/, (match) => `MA35 ${match[1]}`), "neutral");
+  if (stock.score) pushMetric(`分數 ${Math.round(cleanNumber(stock.score))}`, "neutral");
+
+  const tags = [];
+  const addTag = (label, tone = "") => {
+    if (!tags.some((item) => item.label === label)) tags.push({ label, tone });
+  };
+
+  addTag(setup || "通過", "hot");
+  if (/紅K|強攻|突破|站上/.test(reason)) addTag("紅K強攻", "hot");
+  if (/成交量|量比|量增/.test(reason)) addTag("量能達標", "warm");
+  if (/MA35|均線|月線/.test(reason)) addTag("均線站回", "neutral");
+  if (/法人|外資|投信/.test(reason)) addTag("法人偏多", "hot");
+  addTag("停損致意", "cool");
+
+  const metricHtml = metrics.slice(0, 5).map((item) => `<span class="open-buy-reason-chip ${item.tone}">${escapeAttr(item.label)}</span>`).join("");
+  const tagHtml = tags.slice(0, 5).map((item) => `<span class="open-buy-reason-tag ${item.tone}">${escapeAttr(item.label)}</span>`).join("");
+
+  return `
+    <div class="open-buy-reason-card">
+      <strong class="open-buy-reason-title">${escapeAttr(setup || "通過")}</strong>
+      <div class="open-buy-reason-chips">${metricHtml}</div>
+      <p>${escapeAttr(body || reason)}</p>
+      <div class="open-buy-reason-tags">${tagHtml}</div>
+    </div>`;
+}
+
 function renderOpenBuyRadar(universe) {
   setStrategyChrome("openBuy");
   if (!openBuyCacheLoading && shouldLoadOpenBuyRemote()) {
@@ -5980,7 +6031,7 @@ function renderOpenBuyRadar(universe) {
         <td class="price">${formatNumber(stock.takeProfit, stock.takeProfit >= 100 ? 1 : 2)}</td>
         <td class="price">${formatNumber(stock.stopLoss, stock.stopLoss >= 100 ? 1 : 2)}</td>
         <td><span class="swing-score">${stock.score}</span></td>
-        <td>${stock.reason || "昨日強勢，列入開盤入候選。"}</td>
+        <td class="open-buy-reason-cell">${renderOpenBuyReasonBadges(stock)}</td>
       </tr>
     `;
   }).join("") : `
