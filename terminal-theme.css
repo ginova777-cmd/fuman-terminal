@@ -1613,6 +1613,140 @@
     color: #c2410c !important;
     border-color: #fed7aa !important;
   }
+  body.fuman-light-theme #strategy-view .strategy5-shell,
+  body.fuman-light-theme #strategy-view .strategy5-clean,
+  body.fuman-light-theme #strategy-view .strategy5-dashboard,
+  body.fuman-light-theme #strategy-view .strategy5-topic-layout {
+    background: #ffffff !important;
+    color: #132033 !important;
+    border-color: #dbe7f3 !important;
+    box-shadow: none !important;
+  }
+  body.fuman-light-theme #strategy-view .strategy5-page-heading {
+    background: linear-gradient(135deg, #ffffff 0%, #f8fbff 72%, #fff7ed 100%) !important;
+    border-color: #dbe7f3 !important;
+  }
+  body.fuman-light-theme #strategy-view .strategy5-page-heading h2,
+  body.fuman-light-theme #strategy-view .strategy5-page-heading h2 * {
+    color: #0f172a !important;
+  }
+  body.fuman-light-theme #strategy-view .strategy5-page-heading p {
+    color: #475569 !important;
+  }
+  body.fuman-light-theme #strategy-view .strategy5-preset-tabs button {
+    background: linear-gradient(135deg, #ffffff 0%, #f8fbff 100%) !important;
+    color: #172033 !important;
+    border-color: #d8e4f0 !important;
+    box-shadow: 0 10px 24px rgba(15, 23, 42, 0.06) !important;
+  }
+  body.fuman-light-theme #strategy-view .strategy5-preset-tabs button.active {
+    background: linear-gradient(135deg, #fff7ed 0%, #ffffff 68%, #f8fbff 100%) !important;
+    color: #0f172a !important;
+    border-color: rgba(249, 115, 22, 0.68) !important;
+    box-shadow: inset 0 0 0 1px rgba(249, 115, 22, 0.16), 0 12px 24px rgba(249, 115, 22, 0.10) !important;
+  }
+  body.fuman-light-theme #strategy-view .strategy5-preset-tabs button.active::before {
+    background: #fb6d3a !important;
+  }
+  body.fuman-light-theme #strategy-view .strategy5-tab-icon {
+    background: #fff1f2 !important;
+    color: #e11d48 !important;
+  }
+  body.fuman-light-theme #strategy-view .strategy5-preset-tabs button[data-strategy5-filter="limit_up_doji"] .strategy5-tab-icon {
+    background: #fff7e6 !important;
+    color: #f59e0b !important;
+  }
+  body.fuman-light-theme #strategy-view .strategy5-tab-title {
+    color: #111827 !important;
+  }
+  body.fuman-light-theme #strategy-view .strategy5-tab-desc {
+    color: #64748b !important;
+  }
+  body.fuman-light-theme #strategy-view .strategy5-tab-count {
+    color: #334155 !important;
+  }
+  body.fuman-light-theme #strategy-view .strategy5-preset-tabs button.active .strategy5-tab-count {
+    color: #be123c !important;
+  }
+  body.fuman-light-theme #strategy-view .strategy5-results {
+    background: #ffffff !important;
+    color: #172033 !important;
+    border-color: #d8e4f0 !important;
+    box-shadow: 0 14px 30px rgba(15, 23, 42, 0.07) !important;
+  }
+  body.fuman-light-theme #strategy-view .strategy5-results-head {
+    background: linear-gradient(135deg, #f8fbff 0%, #ffffff 78%, #fff7ed 100%) !important;
+    color: #172033 !important;
+    border-color: #dbe7f3 !important;
+  }
+  body.fuman-light-theme #strategy-view .strategy5-results-head h3,
+  body.fuman-light-theme #strategy-view .strategy5-results-head h3 * {
+    color: #0f172a !important;
+  }
+  body.fuman-light-theme #strategy-view .strategy5-results-head p {
+    color: #475569 !important;
+  }
+  body.fuman-light-theme #strategy-view .strategy5-count {
+    background: #f8fafc !important;
+    color: #334155 !important;
+    border-color: #cbd5e1 !important;
+  }
+  body.fuman-light-theme #strategy-view .strategy5-detail-list {
+    background: #ffffff !important;
+  }
+  body.fuman-light-theme #strategy-view .strategy5-detail-card {
+    background: linear-gradient(135deg, #ffffff 0%, #f8fbff 100%) !important;
+    color: #172033 !important;
+    border-color: #d8e4f0 !important;
+    box-shadow: 0 10px 22px rgba(15, 23, 42, 0.06) !important;
+  }
+  body.fuman-light-theme #strategy-view .strategy5-detail-card:hover {
+    background: linear-gradient(135deg, #fff7ed 0%, #ffffff 55%, #f8fbff 100%) !important;
+    border-color: rgba(249, 115, 22, 0.36) !important;
+  }
+  body.fuman-light-theme #strategy-view .strategy5-detail-rank {
+    color: #64748b !important;
+  }
+  body.fuman-light-theme #strategy-view .strategy5-detail-main strong,
+  body.fuman-light-theme #strategy-view .strategy5-detail-main strong * {
+    color: #111827 !important;
+  }
+  body.fuman-light-theme #strategy-view .strategy5-detail-main strong span,
+  body.fuman-light-theme #strategy-view .strategy5-detail-main small,
+  body.fuman-light-theme #strategy-view .strategy5-detail-feature > small,
+  body.fuman-light-theme #strategy-view .strategy5-detail-price small {
+    color: #64748b !important;
+  }
+  body.fuman-light-theme #strategy-view .strategy5-detail-price strong,
+  body.fuman-light-theme #strategy-view .strategy5-detail-price span.red {
+    color: #e11d48 !important;
+  }
+  body.fuman-light-theme #strategy-view .strategy5-detail-price span.green {
+    color: #059669 !important;
+  }
+  body.fuman-light-theme #strategy-view .strategy5-detail-feature {
+    border-left-color: #d8e4f0 !important;
+  }
+  body.fuman-light-theme #strategy-view .strategy5-chip.red {
+    background: #fff1f2 !important;
+    color: #be123c !important;
+  }
+  body.fuman-light-theme #strategy-view .strategy5-chip.orange {
+    background: #fff7ed !important;
+    color: #c2410c !important;
+  }
+  body.fuman-light-theme #strategy-view .strategy5-chip.blue {
+    background: #eff6ff !important;
+    color: #1d4ed8 !important;
+  }
+  body.fuman-light-theme #strategy-view .strategy5-chip.pink {
+    background: #fdf2f8 !important;
+    color: #be185d !important;
+  }
+  body.fuman-light-theme #strategy-view .strategy5-chip.gray {
+    background: #f1f5f9 !important;
+    color: #475569 !important;
+  }
   html,
   body,
   .dashboard,

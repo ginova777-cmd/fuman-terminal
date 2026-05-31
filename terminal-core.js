@@ -1,5 +1,5 @@
 (function () {
-  const version = "strategy5-ui-20260531-30";
+  const version = "strategy5-light-20260531-31";
   window.FUMAN_TERMINAL_BOOT = {
     version,
     startedAt: Date.now(),
