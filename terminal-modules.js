@@ -1,5 +1,5 @@
 (function () {
-  const VERSION = "strategy5-confluence-badge-20260531-46";
+  const VERSION = "strategy5-confluence-fire-20260531-48";
   const modules = {
     sectorMap: { loaded: false, src: "terminal-sector-map.js" },
     strategyConfig: { loaded: false, src: "terminal-strategy-config.js" },

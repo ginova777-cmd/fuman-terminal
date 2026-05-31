@@ -6008,7 +6008,7 @@ function renderStrategy3ReasonBadges(stock) {
   const tagHtml = tags.slice(0, 5).map((item) => `<span class="open-buy-reason-tag ${item.tone}">${escapeAttr(item.label)}</span>`).join("");
 
   return `
-    <div class="strategy3-reason open-buy-reason-card strategy3-reason-card">
+    <div class="open-buy-reason-card strategy3-reason-card">
       <strong class="open-buy-reason-title">${escapeAttr(setup)}</strong>
       <div class="open-buy-reason-chips">${metricHtml}</div>
       <p>${escapeAttr(body || reason)}</p>
@@ -6232,6 +6232,7 @@ function renderStrategy5Dashboard(evaluated) {
     const direction = stock.percent >= 0 ? "▲" : "▼";
     const strategyMatches = stock.matches.filter((match) => STRATEGY5_PRESET_IDS.includes(match.id));
     const main = stock.activeMatch || strategyMatches[0] || stock.matches[0];
+    const isStrategy5Confluence = strategyMatches.length >= 2;
     const rank = (strategy5Page - 1) * TERMINAL_PAGE_SIZE + index + 1;
     const volumeText = cleanNumber(stock.tradeVolume) > 0
       ? `${Math.round(cleanNumber(stock.tradeVolume) / 1000).toLocaleString("zh-TW")} 張`
@@ -6242,7 +6243,7 @@ function renderStrategy5Dashboard(evaluated) {
       <article class="strategy5-detail-card">
         <div class="strategy5-detail-rank">#${rank}</div>
         <div class="strategy5-detail-main">
-          <strong>${escapeAttr(stock.name)} <span>${escapeAttr(stock.code)}</span></strong>
+          <strong>${isStrategy5Confluence ? '<span class="strategy5-confluence-fire" aria-label="多策略共振">🔥</span>' : ""}${escapeAttr(stock.name)} <span>${escapeAttr(stock.code)}</span></strong>
           <small>${escapeAttr(marketText)}</small>
         </div>
         <div class="strategy5-detail-price">
@@ -6373,7 +6374,7 @@ function renderOvernightDashboard(evaluated) {
           <strong>${formatNumber(stock.close, stock.close >= 100 ? 0 : 2)}</strong>
           <small class="${stock.percent >= 0 ? "red" : "green"}">${sign}${stock.percent.toFixed(2)}%</small>
         </div>
-        <div class="strategy3-reason-cell">${renderStrategy3ReasonBadges(stock)}</div>
+        <div class="strategy3-reason strategy3-reason-cell">${renderStrategy3ReasonBadges(stock)}</div>
       </article>
     `;
   }).join("") : `<div class="empty-state">目前沒有符合隔日沖條件的股票。</div>`;

@@ -1492,6 +1492,13 @@
     font-size: 14px;
     font-weight: 800;
   }
+  .strategy5-detail-main strong .strategy5-confluence-fire {
+    margin-left: 0;
+    margin-right: 6px;
+    color: #ff7a35;
+    font-size: 16px;
+    filter: drop-shadow(0 0 8px rgba(255, 122, 53, 0.35));
+  }
   .strategy5-detail-main small,
   .strategy5-detail-feature > small {
     display: block;

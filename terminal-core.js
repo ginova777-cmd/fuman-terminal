@@ -1,5 +1,5 @@
 (function () {
-  const version = "strategy5-confluence-badge-20260531-46";
+  const version = "strategy5-confluence-fire-20260531-48";
   window.FUMAN_TERMINAL_BOOT = {
     version,
     startedAt: Date.now(),
