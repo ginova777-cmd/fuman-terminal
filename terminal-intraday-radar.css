@@ -1076,6 +1076,44 @@
     font-size: 14px;
     line-height: 1.55;
   }
+  .strategy5-freshness-bar {
+    margin: -4px 0 2px;
+    border-color: rgba(251, 146, 60, 0.56);
+    background: rgba(124, 45, 18, 0.20);
+    color: #fed7aa;
+  }
+  .strategy5-freshness-bar strong {
+    color: #fff7ed;
+  }
+  .strategy5-freshness-bar.is-live {
+    border-color: rgba(45, 212, 191, 0.46);
+    background: rgba(13, 148, 136, 0.12);
+    color: #99f6e4;
+  }
+  .strategy5-freshness-bar.is-stale {
+    border-color: rgba(251, 146, 60, 0.72);
+    background: rgba(124, 45, 18, 0.24);
+    color: #fed7aa;
+  }
+  body.fuman-light-theme #strategy-view .strategy5-freshness-bar {
+    border-color: #fdba74 !important;
+    background: #fffaf5 !important;
+    color: #9a3412 !important;
+    box-shadow: none !important;
+  }
+  body.fuman-light-theme #strategy-view .strategy5-freshness-bar strong {
+    color: #111827 !important;
+  }
+  body.fuman-light-theme #strategy-view .strategy5-freshness-bar.is-live {
+    border-color: #5eead4 !important;
+    background: #ecfdf5 !important;
+    color: #115e59 !important;
+  }
+  body.fuman-light-theme #strategy-view .strategy5-freshness-bar.is-stale {
+    border-color: #fb923c !important;
+    background: #fffaf5 !important;
+    color: #c2410c !important;
+  }
   .strategy5-hero {
     min-height: 124px;
     border: 1px solid rgba(117, 133, 170, 0.22);

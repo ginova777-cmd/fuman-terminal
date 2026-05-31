@@ -1,22 +1,22 @@
-const CACHE_VERSION = "fuman-terminal-sw-20260531-33";
+const CACHE_VERSION = "fuman-terminal-sw-20260531-37";
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 const DATA_CACHE = `${CACHE_VERSION}-data`;
 
 const STATIC_ASSETS = [
-  "/styles.css?v=speed-modules-20260531-30",
-  "/terminal-core.js?v=speed-modules-20260531-30",
-  "/terminal-modules.js?v=speed-modules-20260531-30",
-  "/terminal-sector-map.js?v=speed-modules-20260531-30",
-  "/terminal-strategy-config.js?v=speed-modules-20260531-30",
-  "/terminal-market-config.js?v=speed-modules-20260531-30",
-  "/terminal-ui-config.js?v=speed-modules-20260531-30",
-  "/terminal-runtime-config.js?v=speed-modules-20260531-30",
-  "/terminal-tuning-config.js?v=speed-modules-20260531-30",
-  "/terminal-worker.js?v=speed-modules-20260531-30",
-  "/terminal.js?v=speed-modules-20260531-30",
-  "/terminal-realtime-radar.css?v=speed-modules-20260531-30",
-  "/terminal-intraday-radar.css?v=speed-modules-20260531-30",
-  "/terminal-utility.css?v=speed-modules-20260531-30",
+  "/styles.css?v=strategy5-freshness-20260531-37",
+  "/terminal-core.js?v=strategy5-freshness-20260531-37",
+  "/terminal-modules.js?v=strategy5-freshness-20260531-37",
+  "/terminal-sector-map.js?v=strategy5-freshness-20260531-37",
+  "/terminal-strategy-config.js?v=strategy5-freshness-20260531-37",
+  "/terminal-market-config.js?v=strategy5-freshness-20260531-37",
+  "/terminal-ui-config.js?v=strategy5-freshness-20260531-37",
+  "/terminal-runtime-config.js?v=strategy5-freshness-20260531-37",
+  "/terminal-tuning-config.js?v=strategy5-freshness-20260531-37",
+  "/terminal-worker.js?v=strategy5-freshness-20260531-37",
+  "/terminal.js?v=strategy5-freshness-20260531-37",
+  "/terminal-realtime-radar.css?v=strategy5-freshness-20260531-37",
+  "/terminal-intraday-radar.css?v=strategy5-freshness-20260531-37",
+  "/terminal-utility.css?v=strategy5-freshness-20260531-37",
   "/assets/logo.webp",
   "/assets/login-bg-fuman-lite.webp",
   "/favicon.ico",
