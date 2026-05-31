@@ -1,5 +1,5 @@
 (function () {
-  const version = "title-card-size-20260531-44";
+  const version = "strategy5-bollinger-kdj-20260531-45";
   window.FUMAN_TERMINAL_BOOT = {
     version,
     startedAt: Date.now(),

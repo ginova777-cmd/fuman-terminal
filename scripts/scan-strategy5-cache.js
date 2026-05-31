@@ -302,6 +302,14 @@ function avg(values) {
   return nums.length ? nums.reduce((sum, value) => sum + value, 0) / nums.length : 0;
 }
 
+function stddev(values) {
+  const nums = values.filter((value) => Number.isFinite(value) && value > 0);
+  if (nums.length < 2) return 0;
+  const mean = avg(nums);
+  const variance = nums.reduce((sum, value) => sum + ((value - mean) ** 2), 0) / nums.length;
+  return Math.sqrt(variance);
+}
+
 function yahooSuffix(stock) {
   const market = String(stock.market || "").toUpperCase();
   return market === "TPEX" || market === "OTC" || market === "TWO" ? "TWO" : "TW";
@@ -418,6 +426,131 @@ function buildLimitUpDojiMatch({ stock, valueRank, volumeRank, rows }) {
   return { id: "limit_up_doji", short: "漲停十字", icon: "十", score, reason };
 }
 
+function bollingerAt(rows, index) {
+  if (index < 19) return null;
+  const closes = rows.slice(index - 19, index + 1).map((row) => cleanNumber(row.close));
+  if (closes.length < 20 || closes.some((value) => value <= 0)) return null;
+  const middle = avg(closes);
+  const deviation = stddev(closes);
+  return {
+    upper: middle + deviation * 2,
+    middle,
+    lower: middle - deviation * 2,
+  };
+}
+
+function calculateKdj(rows, period = 9) {
+  let k = 50;
+  let d = 50;
+  return rows.map((row, index) => {
+    if (index < period - 1) return { k, d, j: 3 * k - 2 * d };
+    const window = rows.slice(index - period + 1, index + 1);
+    const high = Math.max(...window.map((item) => cleanNumber(item.high)).filter(Boolean));
+    const low = Math.min(...window.map((item) => cleanNumber(item.low)).filter(Boolean));
+    const close = cleanNumber(row.close);
+    const rsv = high > low ? ((close - low) / (high - low)) * 100 : 50;
+    k = (2 / 3) * k + (1 / 3) * rsv;
+    d = (2 / 3) * d + (1 / 3) * k;
+    return { k, d, j: 3 * k - 2 * d };
+  });
+}
+
+function bollingerSlopeMode(rows) {
+  const current = bollingerAt(rows, rows.length - 1);
+  const prev3 = bollingerAt(rows, rows.length - 4);
+  const prev5 = bollingerAt(rows, rows.length - 6);
+  if (!current || !prev3 || !prev5) return null;
+  const middleSlopePct = ((current.middle - prev5.middle) / prev5.middle) * 100;
+  const upperSlopePct = ((current.upper - prev5.upper) / prev5.upper) * 100;
+  const lowerSlopePct = ((current.lower - prev5.lower) / prev5.lower) * 100;
+  const widthPct = current.middle ? ((current.upper - current.lower) / current.middle) * 100 : 0;
+  const prevWidthPct = prev5.middle ? ((prev5.upper - prev5.lower) / prev5.middle) * 100 : 0;
+  const expanding = widthPct >= prevWidthPct * 0.96;
+  const rising = middleSlopePct >= 0.35 && upperSlopePct >= 0 && lowerSlopePct >= -0.35;
+  const flat = Math.abs(middleSlopePct) <= 1.0 && Math.abs(upperSlopePct) <= 1.4 && Math.abs(lowerSlopePct) <= 1.4;
+  return { current, prev3, prev5, middleSlopePct, upperSlopePct, lowerSlopePct, widthPct, expanding, rising, flat };
+}
+
+function bollingerKdjPatternFromRows(rows) {
+  if (!Array.isArray(rows) || rows.length < 35) return null;
+  const last = rows.at(-1);
+  const prev = rows.at(-2);
+  const lastClose = cleanNumber(last?.close);
+  const lastOpen = cleanNumber(last?.open);
+  const prevClose = cleanNumber(prev?.close);
+  const lastVolume = cleanNumber(last?.volume);
+  if (!lastClose || !prevClose) return null;
+
+  const kdj = calculateKdj(rows);
+  const lastKdj = kdj.at(-1);
+  const prevKdj = kdj.at(-2);
+  const crossed = prevKdj.k <= prevKdj.d && lastKdj.k > lastKdj.d;
+  const freshCross = crossed || (lastKdj.k > lastKdj.d && kdj.slice(-4, -1).some((item) => item.k <= item.d));
+  const kdjTurningUp = lastKdj.k > prevKdj.k && lastKdj.d >= prevKdj.d * 0.98 && lastKdj.k <= 88;
+  if (!freshCross || !kdjTurningUp) return null;
+
+  const slope = bollingerSlopeMode(rows);
+  if (!slope) return null;
+  const { current } = slope;
+  const pct = ((lastClose - prevClose) / prevClose) * 100;
+  const redK = lastClose >= lastOpen && pct >= -0.5;
+  const recentVolumes = rows.slice(-6, -1).map((row) => cleanNumber(row.volume));
+  const volumeRatio = avg(recentVolumes) ? lastVolume / avg(recentVolumes) : 0;
+
+  const midDistancePct = current.middle ? ((lastClose - current.middle) / current.middle) * 100 : 99;
+  const lowerDistancePct = current.lower ? ((lastClose - current.lower) / current.lower) * 100 : 99;
+  const fromLowerPct = current.lower ? ((lastClose - current.lower) / current.lower) * 100 : 99;
+  const belowUpper = current.upper && lastClose <= current.upper * 1.035;
+  const midBuy = slope.rising && belowUpper && lastClose >= current.middle * 0.985 && lastClose <= current.middle * 1.09;
+  const lowerBuy = slope.flat && lastClose >= current.lower * 0.985 && lastClose <= current.middle * 1.04;
+  if (!redK || volumeRatio < 0.75 || (!midBuy && !lowerBuy)) return null;
+
+  return {
+    mode: midBuy ? "三線向上中軌買點" : "三線走平下軌買點",
+    pct,
+    k: lastKdj.k,
+    d: lastKdj.d,
+    j: lastKdj.j,
+    middle: current.middle,
+    upper: current.upper,
+    lower: current.lower,
+    midDistancePct,
+    lowerDistancePct,
+    fromLowerPct,
+    middleSlopePct: slope.middleSlopePct,
+    volumeRatio,
+  };
+}
+
+function buildBollingerKdjMatch({ stock, valueRank, volumeRank, rows }) {
+  const pattern = bollingerKdjPatternFromRows(rows);
+  if (!pattern || cleanNumber(stock.close) < 10 || valueRank < 30) return null;
+  const score = clamp(Math.round(
+    42 +
+    valueRank * 0.18 +
+    volumeRank * 0.12 +
+    Math.min(Math.max(pattern.pct, 0) * 5, 18) +
+    Math.min(pattern.volumeRatio * 6, 16) +
+    (pattern.mode.includes("中軌") ? 8 : 5)
+  ), 0, 100);
+  const reason = `${pattern.mode}：20MA ${pattern.middle.toFixed(2)}、上軌 ${pattern.upper.toFixed(2)}、下軌 ${pattern.lower.toFixed(2)}；KDJ 黃金交叉 K ${pattern.k.toFixed(1)} / D ${pattern.d.toFixed(1)}，量比 ${pattern.volumeRatio.toFixed(2)}。`;
+  return {
+    id: "bollinger_kdj_buy",
+    short: "布林KDJ",
+    icon: "K",
+    score,
+    reason,
+    bollingerMode: pattern.mode,
+    bollingerMiddle: Number(pattern.middle.toFixed(2)),
+    bollingerUpper: Number(pattern.upper.toFixed(2)),
+    bollingerLower: Number(pattern.lower.toFixed(2)),
+    kdjK: Number(pattern.k.toFixed(1)),
+    kdjD: Number(pattern.d.toFixed(1)),
+    kdjJ: Number(pattern.j.toFixed(1)),
+    volumeRatio: Number(pattern.volumeRatio.toFixed(2)),
+  };
+}
+
 async function buildMatches(stocks, institutionData, issuedSharesMap = new Map(), volumeAverageMap = new Map()) {
   const valueRanks = rankMap(stocks, "value");
   const volumeRanks = rankMap(stocks, "tradeVolume");
@@ -473,7 +606,13 @@ async function buildMatches(stocks, institutionData, issuedSharesMap = new Map()
       volumeRank: stock.volumeRank,
       rows: historyByCode.get(stock.code) || [],
     });
-    const matches = [...stock.matches, limitUpDoji].filter(Boolean);
+    const bollingerKdj = buildBollingerKdjMatch({
+      stock: mergedStock,
+      valueRank: stock.valueRank,
+      volumeRank: stock.volumeRank,
+      rows: historyByCode.get(stock.code) || [],
+    });
+    const matches = [...stock.matches, limitUpDoji, bollingerKdj].filter(Boolean);
     const sortedMatches = matches.sort((a, b) => (b.score || 0) - (a.score || 0));
     const score = sortedMatches.length ? Math.max(...sortedMatches.map((match) => match.score || 0)) : 0;
     return { ...mergedStock, score, matches: sortedMatches, activeMatch: sortedMatches[0] || null };

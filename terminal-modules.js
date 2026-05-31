@@ -1,5 +1,5 @@
 (function () {
-  const VERSION = "title-card-size-20260531-44";
+  const VERSION = "strategy5-bollinger-kdj-20260531-45";
   const modules = {
     sectorMap: { loaded: false, src: "terminal-sector-map.js" },
     strategyConfig: { loaded: false, src: "terminal-strategy-config.js" },

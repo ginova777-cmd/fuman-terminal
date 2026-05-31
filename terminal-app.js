@@ -6158,6 +6158,18 @@ function renderStrategy5Dashboard(evaluated) {
         { label: `量比${formatNumber(stock.volumeRatio, 2)}`, tone: "blue" }
       );
     }
+    if (main?.id === "bollinger_kdj_buy") {
+      priceChips.push(
+        { label: main.bollingerMode?.includes("中軌") ? "中軌買點" : "下軌買點", tone: "blue" },
+        { label: "布林20MA", tone: "gray" },
+        { label: "KDJ金叉", tone: "orange" }
+      );
+      chipChips.push(
+        { label: `K${formatNumber(main.kdjK, 1)}`, tone: "pink" },
+        { label: `D${formatNumber(main.kdjD, 1)}`, tone: "pink" },
+        { label: `量比${formatNumber(main.volumeRatio, 2)}`, tone: "blue" }
+      );
+    }
     if (/外資/.test(reason)) chipChips.push({ label: "外資同買", tone: "pink" });
     if (/投信/.test(reason)) chipChips.push({ label: "投信照顧", tone: "pink" });
     if (cleanNumber(stock.inst?.total) > 0) chipChips.push({ label: "法人偏買", tone: "red" });
