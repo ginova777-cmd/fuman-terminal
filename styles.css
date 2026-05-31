@@ -2373,13 +2373,14 @@ body.fuman-light-theme .data-freshness-bar.is-live {
 }
 
 body.fuman-light-theme .data-freshness-bar.is-stale {
-  border-color: #fb923c;
-  color: #9a3412;
-  background: linear-gradient(135deg, #ffffff 0%, #fff7ed 100%);
+  border-color: #93c5fd;
+  color: #1d4ed8;
+  background: linear-gradient(135deg, #ffffff 0%, #eff6ff 100%);
 }
 
-body.fuman-light-theme .data-freshness-bar.is-stale strong {
-  color: #111827;
+body.fuman-light-theme .data-freshness-bar.is-stale strong,
+body.fuman-light-theme .data-freshness-bar.is-stale span {
+  color: #1e40af;
 }
 
 .gauge-label {

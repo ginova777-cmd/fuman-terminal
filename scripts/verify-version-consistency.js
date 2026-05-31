@@ -2,7 +2,7 @@ const fs = require("fs");
 const path = require("path");
 
 const ROOT = path.resolve(__dirname, "..");
-const VERSION = process.env.FUMAN_EXPECTED_VERSION || "speed-modules-20260531-29";
+const VERSION = process.env.FUMAN_EXPECTED_VERSION || "speed-modules-20260531-30";
 const files = [
   "index.html",
   "terminal-core.js",
@@ -47,10 +47,3 @@ if (issues.length) {
   process.exit(1);
 }
 console.log("[version] ok " + VERSION);
-
-
-
-
-
-
-
