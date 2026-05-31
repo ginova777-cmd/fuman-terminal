@@ -1,11 +1,31 @@
 {
   "ok": true,
-  "updatedAt": "2026-05-30T10:34:06.617Z",
-  "risk": "low",
-  "risks": [],
+  "updatedAt": "2026-05-31T07:45:06.939Z",
+  "risk": "medium",
+  "risks": [
+    {
+      "level": "medium",
+      "area": "freshness",
+      "message": "資料超過 SLA 1 個",
+      "files": [
+        "strategy4-summary.json"
+      ],
+      "stale": [
+        {
+          "file": "strategy4-summary.json",
+          "ok": true,
+          "count": 675,
+          "updatedAt": "2026-05-29T16:30:37.466Z",
+          "bytes": 49554,
+          "slaHours": 30,
+          "ageHours": 39.24151638888889
+        }
+      ]
+    }
+  ],
   "schedule": {
     "ok": true,
-    "total": 33,
+    "total": 0,
     "badCount": 0,
     "badTasks": [],
     "queryMethod": "schtasks",
@@ -35,9 +55,9 @@
       {
         "file": "strategy5-latest.json",
         "ok": true,
-        "count": 37,
-        "updatedAt": "2026-05-30T00:37:53.983Z",
-        "bytes": 67629
+        "count": 54,
+        "updatedAt": "2026-05-31T07:33:39.707Z",
+        "bytes": 92991
       },
       {
         "file": "institution-summary.json",
@@ -64,35 +84,35 @@
         "file": "performance-report.json",
         "ok": true,
         "count": 0,
-        "updatedAt": "2026-05-30T10:18:07.887Z",
-        "bytes": 2393
+        "updatedAt": "2026-05-31T06:45:10.503Z",
+        "bytes": 2392
       },
       {
         "file": "signal-quality-report.json",
         "ok": true,
         "count": 0,
-        "updatedAt": "2026-05-30T10:18:06.016Z",
+        "updatedAt": "2026-05-31T06:45:07.761Z",
         "bytes": 796
       },
       {
         "file": "data-quality-report.json",
         "ok": true,
         "count": 0,
-        "updatedAt": "2026-05-30T10:18:07.627Z",
+        "updatedAt": "2026-05-31T06:45:10.263Z",
         "bytes": 2011
       },
       {
         "file": "data-consistency-report.json",
         "ok": true,
         "count": 0,
-        "updatedAt": "2026-05-30T10:18:07.763Z",
+        "updatedAt": "2026-05-31T06:45:10.370Z",
         "bytes": 312
       },
       {
         "file": "strategy-weight-report.json",
         "ok": true,
         "count": 0,
-        "updatedAt": "2026-05-30T10:18:07.828Z",
+        "updatedAt": "2026-05-31T06:45:10.444Z",
         "bytes": 418
       }
     ]
