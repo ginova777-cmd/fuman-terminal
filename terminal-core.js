@@ -1,5 +1,5 @@
 (function () {
-  const version = "speed-modules-20260531-32";
+  const version = "strategy5-volume-rule-20260531-39";
   window.FUMAN_TERMINAL_BOOT = {
     version,
     startedAt: Date.now(),

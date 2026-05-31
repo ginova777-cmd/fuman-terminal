@@ -73,7 +73,7 @@ function getFumanWorker() {
   if (!("Worker" in window)) return null;
   if (fumanWorker) return fumanWorker;
   try {
-    fumanWorker = new Worker("terminal-worker.js?v=speed-modules-20260531-32");
+    fumanWorker = new Worker("terminal-worker.js?v=strategy5-volume-rule-20260531-39");
     fumanWorker.addEventListener("message", (event) => {
       const { id, ok, rows, result, error } = event.data || {};
       const pending = fumanWorkerPending.get(id);
@@ -301,7 +301,7 @@ function loadFumanStyle(href, id) {
   const link = document.createElement("link");
   link.id = id;
   link.rel = "stylesheet";
-  link.href = href.includes("?") ? href : `${href}?v=${window.FUMAN_TERMINAL_BOOT?.version || "speed-modules-20260531-32"}`;
+  link.href = href.includes("?") ? href : `${href}?v=${window.FUMAN_TERMINAL_BOOT?.version || "strategy5-volume-rule-20260531-39"}`;
   document.head.appendChild(link);
 }
 
@@ -327,7 +327,7 @@ function makeFumanModuleScope(bindings) {
 function loadFumanFeatureModule(name, src, globalName) {
   if (window[globalName]) return Promise.resolve(window[globalName]);
   if (fumanFeatureModulePromises[name]) return fumanFeatureModulePromises[name];
-  const version = window.FUMAN_TERMINAL_BOOT?.version || "speed-modules-20260531-32";
+  const version = window.FUMAN_TERMINAL_BOOT?.version || "strategy5-volume-rule-20260531-39";
   fumanFeatureModulePromises[name] = new Promise((resolve, reject) => {
     const attr = "data-fuman-feature-" + name;
     const existing = document.querySelector("script[" + attr + "]");
@@ -6101,7 +6101,7 @@ function renderStrategy5Dashboard(evaluated) {
       chipChips.push({ label: "十字星型態", tone: "gray" }, { label: "橫盤收斂", tone: "blue" });
     }
     if (main?.id === "volume_turnover_breakout") {
-      priceChips.push({ label: "漲幅3-7%", tone: "red" }, { label: "千張以上", tone: "orange" });
+      priceChips.push({ label: "漲幅3-8%", tone: "red" }, { label: "千張以上", tone: "orange" });
       chipChips.push(
         { label: `周轉${formatNumber(stock.turnoverRate, 2)}%`, tone: "pink" },
         { label: `量比${formatNumber(stock.volumeRatio, 2)}`, tone: "blue" }

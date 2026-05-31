@@ -276,7 +276,7 @@ function buildVolumeTurnoverMatch({ stock, issuedSharesMap, volumeAverageMap }) 
   const turnoverRate = issuedShares ? (cleanNumber(stock.tradeVolume) / issuedShares) * 100 : 0;
   const avgVolume = volumeAverageMap.get(stock.code) || 0;
   const volumeRatio = avgVolume ? cleanNumber(stock.tradeVolume) / avgVolume : 0;
-  if (!(pct >= 3 && pct <= 7 && volumeLots >= 1000 && turnoverRate > 5 && volumeRatio > 1)) return null;
+  if (!(pct >= 3 && pct <= 8 && volumeLots >= 1000 && turnoverRate > 5 && volumeRatio >= 1)) return null;
   const score = clamp(Math.round(
     48 +
     Math.min((pct - 3) * 8, 32) +

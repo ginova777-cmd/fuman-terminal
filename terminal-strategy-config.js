@@ -36,7 +36,7 @@ const STRATEGY5_CARD_META = {
     description: "漲停後十字星，橫盤震盪超過 7 天且量能縮，再等放量陽線突破。",
   },
   volume_turnover_breakout: {
-    description: "漲幅 3%-7%、成交量 1000 張以上、周轉率大於 5%、量比大於 1%。",
+    description: "漲幅 3%-8%、成交量 1000 張以上、周轉率大於 5%、量比大於等於 1%。",
   },
 };
 const INTRADAY_EXCLUDED_CODES = new Set([
