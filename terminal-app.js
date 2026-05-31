@@ -2665,9 +2665,11 @@ let strategy4SummaryLoadedAt = 0;
 let strategy4Summary = null;
 let strategy3Data = [];
 let strategy3UpdatedAt = 0;
+let strategy3UsedDateKey = "";
 let strategy3CacheLoading = false;
 let strategy5Data = [];
 let strategy5UpdatedAt = 0;
+let strategy5UsedDateKey = "";
 let strategy5CacheLoading = false;
 let strategyStocksPromise = null;
 const STRATEGY4_LOCAL_CACHE_KEY = FUMAN_TUNING_CONFIG.strategy4LocalCacheKey || "fuman_strategy4_scan_cache_v1";
@@ -3910,6 +3912,7 @@ async function loadStrategy3Cache(force = false) {
     strategy3Data = normalizeArray(payload?.matches);
     const updatedAt = Date.parse(payload?.updatedAt || "");
     strategy3UpdatedAt = Number.isFinite(updatedAt) ? updatedAt : Date.now();
+    strategy3UsedDateKey = normalizeMarketAiDateKey(payload?.usedDate || payload?.date || payload?.quoteDate) || marketAiDataDateKey(strategy3Data);
     renderStrategyScanner();
   } catch (error) {
   } finally {
@@ -3928,6 +3931,7 @@ async function loadStrategy3RadarVolumeCache() {
     strategy3Data = normalizeArray(payload?.matches);
     const updatedAt = Date.parse(payload?.updatedAt || "");
     strategy3UpdatedAt = Number.isFinite(updatedAt) ? updatedAt : Date.now();
+    strategy3UsedDateKey = normalizeMarketAiDateKey(payload?.usedDate || payload?.date || payload?.quoteDate) || marketAiDataDateKey(strategy3Data);
     if (isViewActive("realtime-radar")) renderRealtimeRadar();
   } catch (error) {
   } finally {
@@ -3952,6 +3956,7 @@ async function loadStrategy5Cache(force = false) {
     strategy5Data = normalizeArray(payload?.matches);
     const updatedAt = Date.parse(payload?.updatedAt || "");
     strategy5UpdatedAt = Number.isFinite(updatedAt) ? updatedAt : Date.now();
+    strategy5UsedDateKey = normalizeMarketAiDateKey(payload?.usedDate || payload?.date || payload?.quoteDate) || "";
     renderStrategyScanner();
   } catch (error) {
   } finally {
@@ -6120,12 +6125,22 @@ function renderStrategy5Dashboard(evaluated) {
   const scanText = strategy5UpdatedAt
     ? `06:00 / 21:00 完整掃｜${new Date(strategy5UpdatedAt).toLocaleDateString("zh-TW")}`
     : "06:00 / 21:00 完整掃結果讀取中";
+  const freshnessDate = normalizeMarketAiDateKey(strategy5UsedDateKey) || marketAiDataDateKey(strategy5Data);
+  const freshnessToday = marketAiTodayKey();
+  const freshnessIsToday = freshnessDate === freshnessToday;
+  const freshnessClass = freshnessIsToday ? "is-live" : "is-stale";
+  const freshnessText = freshnessIsToday ? "" : "｜非今日資料不採用";
+  const strategy5Freshness = `
+    <div class="data-freshness-bar strategy5-freshness-bar ${freshnessClass}">
+      模式：<strong>盤後籌碼｜法人資料</strong>｜資料日期：<strong>${escapeAttr(formatMarketAiDateKey(freshnessDate))}</strong>｜今日：<strong>${escapeAttr(formatMarketAiDateKey(freshnessToday))}</strong>${freshnessText}
+    </div>`;
   strategyTable.innerHTML = `
     <section class="strategy5-shell strategy5-clean">
       <header class="strategy5-page-heading">
         <h2><span class="strategy5-page-icon" aria-hidden="true"></span>策略5綜合策略</h2>
         <p>掃描時間 06:00 / 21:00｜完整掃描｜${strategy5UpdatedAt ? `最後更新 ${new Date(strategy5UpdatedAt).toLocaleTimeString("zh-TW", { hour12: false })}` : "讀取中"}｜結果固定到下一次掃描</p>
       </header>
+      ${strategy5Freshness}
       <section class="strategy5-dashboard strategy5-topic-layout">
         <nav class="strategy5-preset-tabs" aria-label="策略5主題分頁">${strategyTabs}</nav>
         <section class="strategy5-results">
@@ -6184,6 +6199,16 @@ function renderOvernightDashboard(evaluated) {
   const scanText = strategy3UpdatedAt
     ? `13:00 掃描｜${new Date(strategy3UpdatedAt).toLocaleDateString("zh-TW")}`
     : "13:00 掃描快取讀取中";
+  const freshnessDate = normalizeMarketAiDateKey(strategy3UsedDateKey) || marketAiDataDateKey(rows) || marketAiTodayKey();
+  const freshnessToday = marketAiTodayKey();
+  const freshnessIsToday = freshnessDate === freshnessToday;
+  const freshnessClass = freshnessIsToday ? "is-live" : "is-stale";
+  const freshnessText = freshnessIsToday ? "" : "｜非今日資料不採用";
+  const strategy3FreshnessBar = `
+    <div class="data-freshness-bar strategy3-freshness-bar ${freshnessClass}">
+      模式：<strong>策略3｜13:00完整掃</strong>｜資料日期：<strong>${escapeAttr(formatMarketAiDateKey(freshnessDate))}</strong>｜今日：<strong>${escapeAttr(formatMarketAiDateKey(freshnessToday))}</strong>${freshnessText}
+    </div>
+  `;
 
   if (strategySummary) strategySummary.textContent = `策略3-隔日沖｜${scanText}｜符合 ${rows.length} 檔`;
   if (strategyMatchCount) strategyMatchCount.textContent = rows.length.toLocaleString("zh-TW");
@@ -6230,6 +6255,7 @@ function renderOvernightDashboard(evaluated) {
               <p>以 13:00 固定條件完整掃描結果排序，開網頁不再臨時重算。</p>
             </div>
           </div>
+          ${strategy3FreshnessBar}
           ${table}
           ${pagination}
         </section>
@@ -7128,15 +7154,29 @@ function getPanelFreshnessMeta(viewName) {
       : strategyView?.classList.contains("strategy3-only")
       ? "策略3｜13:00完整掃"
       : strategyView?.classList.contains("strategy5-only")
-      ? "策略5｜MIS即時"
+      ? "盤後籌碼｜法人資料"
       : "策略中心｜即時重算";
     const strategyDataDate = strategyView?.classList.contains("intraday-only")
       ? normalizeMarketAiDateKey(strategy2IntradayCacheDate) || marketAiDataDateKey(latestStocks) || dataDate
+      : strategyView?.classList.contains("strategy3-only")
+      ? normalizeMarketAiDateKey(strategy3UsedDateKey) || marketAiDataDateKey(strategy3Data) || dataDate
+      : strategyView?.classList.contains("strategy5-only")
+      ? normalizeMarketAiDateKey(strategy5UsedDateKey) || marketAiDataDateKey(strategy5Data) || dataDate
       : dataDate;
     return { mode, dataDate: strategyDataDate, today, isToday: strategyDataDate === today };
   }
   if (viewName === "chip-trade") return { mode: "盤後籌碼｜法人資料", dataDate, today, isToday };
-  if (viewName === "warrant-flow") return { mode: "權證走向｜盤後資料", dataDate, today, isToday };
+  if (viewName === "warrant-flow") {
+    const warrantSummaryDate = normalizeMarketAiDateKey(warrantFlowSummary?.usedDate || warrantFlowSummary?.tradeDate || warrantFlowSummary?.date || warrantFlowSummary?.dataDate);
+    const warrantRowsDate = marketAiDataDateKey(warrantFlowData);
+    const summaryUpdatedAt = Date.parse(warrantFlowSummary?.updatedAt || "");
+    const warrantUpdatedAt = warrantFlowUpdatedAt || (Number.isFinite(summaryUpdatedAt) ? summaryUpdatedAt : 0);
+    const warrantUpdatedDate = warrantUpdatedAt > 0
+      ? `${new Date(warrantUpdatedAt).getFullYear()}${String(new Date(warrantUpdatedAt).getMonth() + 1).padStart(2, "0")}${String(new Date(warrantUpdatedAt).getDate()).padStart(2, "0")}`
+      : "";
+    const warrantDataDate = warrantSummaryDate || warrantRowsDate || warrantUpdatedDate || dataDate;
+    return { mode: "權證走向｜盤後資料", dataDate: warrantDataDate, today, isToday: warrantDataDate === today };
+  }
   if (viewName === "watchlist") return { mode: `自選股｜${marketModeText}`, dataDate, today, isToday };
   if (viewName === "realtime-radar") {
     const radarLive = shouldRunLivePolling();
