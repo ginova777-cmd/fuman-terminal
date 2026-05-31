@@ -73,7 +73,7 @@ function getFumanWorker() {
   if (!("Worker" in window)) return null;
   if (fumanWorker) return fumanWorker;
   try {
-    fumanWorker = new Worker("terminal-worker.js?v=strategy5-light-20260531-31");
+    fumanWorker = new Worker("terminal-worker.js?v=strategy5-volume-20260531-32");
     fumanWorker.addEventListener("message", (event) => {
       const { id, ok, rows, result, error } = event.data || {};
       const pending = fumanWorkerPending.get(id);
@@ -301,7 +301,7 @@ function loadFumanStyle(href, id) {
   const link = document.createElement("link");
   link.id = id;
   link.rel = "stylesheet";
-  link.href = href.includes("?") ? href : `${href}?v=${window.FUMAN_TERMINAL_BOOT?.version || "strategy5-light-20260531-31"}`;
+  link.href = href.includes("?") ? href : `${href}?v=${window.FUMAN_TERMINAL_BOOT?.version || "strategy5-volume-20260531-32"}`;
   document.head.appendChild(link);
 }
 
@@ -327,7 +327,7 @@ function makeFumanModuleScope(bindings) {
 function loadFumanFeatureModule(name, src, globalName) {
   if (window[globalName]) return Promise.resolve(window[globalName]);
   if (fumanFeatureModulePromises[name]) return fumanFeatureModulePromises[name];
-  const version = window.FUMAN_TERMINAL_BOOT?.version || "strategy5-light-20260531-31";
+  const version = window.FUMAN_TERMINAL_BOOT?.version || "strategy5-volume-20260531-32";
   fumanFeatureModulePromises[name] = new Promise((resolve, reject) => {
     const attr = "data-fuman-feature-" + name;
     const existing = document.querySelector("script[" + attr + "]");
@@ -6060,6 +6060,13 @@ function renderStrategy5Dashboard(evaluated) {
     if (main?.id === "limit_up_doji") {
       priceChips.push({ label: "近20日漲停", tone: "red" }, { label: "放量突破", tone: "orange" });
       chipChips.push({ label: "十字星型態", tone: "gray" }, { label: "橫盤收斂", tone: "blue" });
+    }
+    if (main?.id === "volume_turnover_breakout") {
+      priceChips.push({ label: "漲幅3-7%", tone: "red" }, { label: "千張以上", tone: "orange" });
+      chipChips.push(
+        { label: `周轉${formatNumber(stock.turnoverRate, 2)}%`, tone: "pink" },
+        { label: `量比${formatNumber(stock.volumeRatio, 2)}`, tone: "blue" }
+      );
     }
     if (/外資/.test(reason)) chipChips.push({ label: "外資同買", tone: "pink" });
     if (/投信/.test(reason)) chipChips.push({ label: "投信照顧", tone: "pink" });

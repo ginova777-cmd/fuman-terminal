@@ -9,6 +9,10 @@ const INSTITUTION_FILE = dataPath("institution-latest.json");
 const STRATEGY4_FILE = dataPath("strategy4-latest.json");
 const STRATEGY4_BACKUP_FILE = dataPath("strategy4-backup.json");
 const STOCK_URL = process.env.STOCK_UNIVERSE_URL || "https://fuman-terminal.vercel.app/api/stocks";
+const CAPITAL_URLS = [
+  "https://mopsfin.twse.com.tw/opendata/t187ap03_L.csv",
+  "https://mopsfin.twse.com.tw/opendata/t187ap03_O.csv",
+];
 const USE_MIS_QUOTES = process.env.STRATEGY5_USE_MIS === "1";
 const HISTORY_LIMIT = Math.max(20, Number(process.env.STRATEGY5_HISTORY_LIMIT || 900));
 const HISTORY_CONCURRENCY = Math.max(1, Number(process.env.STRATEGY5_HISTORY_CONCURRENCY || 8));
@@ -47,6 +51,64 @@ async function fetchJson(url, timeout = 30000) {
   }
 }
 
+async function fetchText(url, timeout = 30000) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeout);
+  try {
+    const response = await fetch(url, {
+      signal: controller.signal,
+      headers: {
+        "User-Agent": "Mozilla/5.0 (compatible; FumanTerminalBot/1.0)",
+        Accept: "text/csv,text/plain,*/*",
+      },
+    });
+    if (!response.ok) throw new Error(`${url} HTTP ${response.status}`);
+    return await response.text();
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function parseCsv(text) {
+  const rows = [];
+  let row = [];
+  let cell = "";
+  let quoted = false;
+  const input = String(text || "").replace(/^\uFEFF/, "");
+  for (let i = 0; i < input.length; i++) {
+    const char = input[i];
+    const next = input[i + 1];
+    if (char === '"' && quoted && next === '"') {
+      cell += '"';
+      i++;
+    } else if (char === '"') {
+      quoted = !quoted;
+    } else if (char === "," && !quoted) {
+      row.push(cell.trim());
+      cell = "";
+    } else if ((char === "\n" || char === "\r") && !quoted) {
+      if (char === "\r" && next === "\n") i++;
+      row.push(cell.trim());
+      if (row.some(Boolean)) rows.push(row);
+      row = [];
+      cell = "";
+    } else {
+      cell += char;
+    }
+  }
+  if (cell || row.length) {
+    row.push(cell.trim());
+    if (row.some(Boolean)) rows.push(row);
+  }
+  if (rows.length < 2) return [];
+  const headers = rows[0].map((item) => item.replace(/\s/g, ""));
+  return rows.slice(1).map((items) => {
+    const record = {};
+    headers.forEach((header, index) => { record[header] = items[index] || ""; });
+    return record;
+  });
+}
+
 function normalizeStock(row) {
   const code = normalizeCode(row.Code || row.code || row["證券代號"]);
   const name = String(row.Name || row.name || row["證券名稱"] || "").trim();
@@ -79,6 +141,86 @@ async function fetchUniverse() {
     const quote = quotes.get(stock.code);
     return quote ? { ...stock, ...quote, name: quote.name || stock.name } : stock;
   });
+}
+
+async function fetchIssuedShares() {
+  const map = new Map();
+  const warnings = [];
+  await Promise.all(CAPITAL_URLS.map(async (url) => {
+    try {
+      const rows = parseCsv(await fetchText(url));
+      rows.forEach((row) => {
+        const code = normalizeCode(row["公司代號"]);
+        const shares = cleanNumber(row["已發行普通股數或TDR原股發行股數"]);
+        if (/^\d{4}$/.test(code) && shares > 0) map.set(code, shares);
+      });
+    } catch (error) {
+      warnings.push(`issued shares fetch failed: ${url} :: ${error.message}`);
+    }
+  }));
+  return { map, warnings };
+}
+
+function formatTwseDate(date) {
+  return `${date.getFullYear()}${String(date.getMonth() + 1).padStart(2, "0")}${String(date.getDate()).padStart(2, "0")}`;
+}
+
+function formatTpexDate(date) {
+  return `${String(date.getFullYear() - 1911).padStart(3, "0")}/${String(date.getMonth() + 1).padStart(2, "0")}/${String(date.getDate()).padStart(2, "0")}`;
+}
+
+function recentTradingDates(limit = 8) {
+  const dates = [];
+  const date = new Date();
+  date.setDate(date.getDate() - 1);
+  for (let i = 0; dates.length < limit && i < 18; i++) {
+    const day = date.getDay();
+    if (day !== 0 && day !== 6) dates.push(new Date(date));
+    date.setDate(date.getDate() - 1);
+  }
+  return dates;
+}
+
+function collectVolume(bucket, code, volume) {
+  if (!/^\d{4}$/.test(code) || /^00/.test(code) || volume <= 0) return;
+  const list = bucket.get(code) || [];
+  list.push(volume);
+  bucket.set(code, list);
+}
+
+async function fetchHistoricalVolumes() {
+  const bucket = new Map();
+  const warnings = [];
+  for (const date of recentTradingDates()) {
+    try {
+      const payload = await fetchJson(`https://www.twse.com.tw/rwd/zh/afterTrading/MI_INDEX?date=${formatTwseDate(date)}&type=ALLBUT0999&response=json`, 25000);
+      const table = (payload.tables || []).find((item) => String(item.title || "").includes("每日收盤行情"));
+      const fields = table?.fields || [];
+      const data = table?.data || [];
+      const codeIndex = fields.findIndex((field) => String(field).includes("證券代號"));
+      const volumeIndex = fields.findIndex((field) => String(field).includes("成交股數"));
+      if (codeIndex >= 0 && volumeIndex >= 0) data.forEach((row) => collectVolume(bucket, normalizeCode(row[codeIndex]), cleanNumber(row[volumeIndex])));
+    } catch (error) {
+      warnings.push(`twse volume fetch failed: ${formatTwseDate(date)} :: ${error.message}`);
+    }
+    try {
+      const payload = await fetchJson(`https://www.tpex.org.tw/web/stock/aftertrading/daily_close_quotes/stk_quote_result.php?l=zh-tw&o=json&d=${encodeURIComponent(formatTpexDate(date))}&s=0,asc,0`, 25000);
+      const table = (payload.tables || []).find((item) => (item.data || []).length);
+      const fields = table?.fields || [];
+      const data = table?.data || [];
+      const codeIndex = fields.findIndex((field) => String(field).includes("代號"));
+      const volumeIndex = fields.findIndex((field) => String(field).includes("成交股數"));
+      if (codeIndex >= 0 && volumeIndex >= 0) data.forEach((row) => collectVolume(bucket, normalizeCode(row[codeIndex]), cleanNumber(row[volumeIndex])));
+    } catch (error) {
+      warnings.push(`tpex volume fetch failed: ${formatTpexDate(date)} :: ${error.message}`);
+    }
+  }
+  const averages = new Map();
+  bucket.forEach((values, code) => {
+    const usable = values.slice(0, 5);
+    if (usable.length) averages.set(code, usable.reduce((sum, value) => sum + value, 0) / usable.length);
+  });
+  return { map: averages, warnings };
 }
 
 function rankMap(stocks, key) {
@@ -126,6 +268,34 @@ function buildStrategy5Match({ stock, inst, valueRank, volumeRank }) {
   const score = clamp(scoreBase + 32, 0, 100);
   const reason = `外資 ${formatInstitution(foreign)}、投信 ${formatInstitution(trust)} 同買，法人合計 ${formatInstitution(total)}；漲幅 ${pct.toFixed(2)}%。`;
   return { id: "foreign_trust_breakout", short: "準突破", icon: "◆", score, reason };
+}
+
+function buildVolumeTurnoverMatch({ stock, issuedSharesMap, volumeAverageMap }) {
+  const pct = cleanNumber(stock.percent);
+  const volumeLots = cleanNumber(stock.tradeVolume) / 1000;
+  const issuedShares = issuedSharesMap.get(stock.code) || 0;
+  const turnoverRate = issuedShares ? (cleanNumber(stock.tradeVolume) / issuedShares) * 100 : 0;
+  const avgVolume = volumeAverageMap.get(stock.code) || 0;
+  const volumeRatio = avgVolume ? cleanNumber(stock.tradeVolume) / avgVolume : 0;
+  if (!(pct >= 3 && pct <= 7 && volumeLots >= 1000 && turnoverRate > 5 && volumeRatio > 1)) return null;
+  const score = clamp(Math.round(
+    48 +
+    Math.min((pct - 3) * 8, 32) +
+    Math.min(volumeLots / 120, 18) +
+    Math.min(turnoverRate * 4, 28) +
+    Math.min(volumeRatio * 10, 22)
+  ), 0, 100);
+  const reason = `符合固定條件：漲幅 ${pct.toFixed(2)}%、成交量 ${Math.round(volumeLots).toLocaleString("zh-TW")} 張、周轉率 ${turnoverRate.toFixed(2)}%、量比 ${volumeRatio.toFixed(2)}。`;
+  return {
+    id: "volume_turnover_breakout",
+    short: "量價周轉",
+    icon: "量",
+    score,
+    reason,
+    volumeLots: Math.round(volumeLots),
+    turnoverRate: Number(turnoverRate.toFixed(2)),
+    volumeRatio: Number(volumeRatio.toFixed(2)),
+  };
 }
 
 function avg(values) {
@@ -249,7 +419,7 @@ function buildLimitUpDojiMatch({ stock, valueRank, volumeRank, rows }) {
   return { id: "limit_up_doji", short: "漲停十字", icon: "十", score, reason };
 }
 
-async function buildMatches(stocks, institutionData) {
+async function buildMatches(stocks, institutionData, issuedSharesMap = new Map(), volumeAverageMap = new Map()) {
   const valueRanks = rankMap(stocks, "value");
   const volumeRanks = rankMap(stocks, "tradeVolume");
   const baseRows = stocks.map((stock) => {
@@ -264,11 +434,16 @@ async function buildMatches(stocks, institutionData) {
     const normalizedInst = { foreign, trust, dealer, total };
     const matches = [
       buildStrategy5Match({ stock, inst: normalizedInst, valueRank, volumeRank }),
+      buildVolumeTurnoverMatch({ stock, issuedSharesMap, volumeAverageMap }),
     ].filter(Boolean);
+    const volumeTurnover = matches.find((match) => match.id === "volume_turnover_breakout");
     return {
       ...stock,
       valueRank,
       volumeRank,
+      volumeLots: volumeTurnover?.volumeLots,
+      turnoverRate: volumeTurnover?.turnoverRate,
+      volumeRatio: volumeTurnover?.volumeRatio,
       inst: normalizedInst,
       matches,
     };
@@ -327,9 +502,18 @@ async function buildMatches(stocks, institutionData) {
 async function main() {
   const backup = readJson(BACKUP_FILE, { ok: true, matches: [] });
   const institution = readJson(INSTITUTION_FILE, { data: {} });
-  const stocks = await fetchUniverse();
+  const [stocks, issuedSharesResult, volumeAverageResult] = await Promise.all([
+    fetchUniverse(),
+    fetchIssuedShares(),
+    fetchHistoricalVolumes(),
+  ]);
   if (!stocks.length) throw new Error("No stock universe");
-  const matches = await buildMatches(stocks, institution.data || {});
+  const sourceWarnings = [
+    ...issuedSharesResult.warnings,
+    ...volumeAverageResult.warnings,
+  ];
+  sourceWarnings.forEach((warning) => console.warn(`strategy5 source warning: ${warning}`));
+  const matches = await buildMatches(stocks, institution.data || {}, issuedSharesResult.map, volumeAverageResult.map);
   const quoteDate = institution.usedDate || institution.date || stocks.find((stock) => stock.quoteDate)?.quoteDate || "";
   const output = {
     ok: true,
@@ -341,6 +525,12 @@ async function main() {
     total: stocks.length,
     scannedThisRun: stocks.length,
     scannedCodes: stocks.map((stock) => stock.code),
+    sourceHealth: {
+      issuedSharesCount: issuedSharesResult.map.size,
+      volumeAverageCount: volumeAverageResult.map.size,
+      warningCount: sourceWarnings.length,
+      warnings: sourceWarnings.slice(0, 8),
+    },
     count: matches.length,
     matches,
   };

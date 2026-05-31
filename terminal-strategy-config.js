@@ -1,6 +1,7 @@
 (function () {
 const STRATEGY_DEFS = [
   { id: "foreign_trust_breakout", label: "外資投信連買準突破", short: "準突破", icon: "◆" },
+  { id: "volume_turnover_breakout", label: "量價周轉強攻", short: "量價周轉", icon: "量" },
   { id: "momentum", label: "動能分數 75+", short: "動能", icon: "⚡" },
   { id: "main_force_chip", label: "主力籌碼盤整", short: "主力", icon: "♣" },
   { id: "limit_up_doji", label: "漲停十字星", short: "漲停十字", icon: "十" },
@@ -25,6 +26,7 @@ const STRATEGY5_IDS = ["short_fund_flow", "chip_health_strong", "one_day_rebound
 const STRATEGY5_PRESET_IDS = [
   "foreign_trust_breakout",
   "limit_up_doji",
+  "volume_turnover_breakout",
 ];
 const STRATEGY5_CARD_META = {
   foreign_trust_breakout: {
@@ -32,6 +34,9 @@ const STRATEGY5_CARD_META = {
   },
   limit_up_doji: {
     description: "漲停後十字星，橫盤震盪超過 7 天且量能縮，再等放量陽線突破。",
+  },
+  volume_turnover_breakout: {
+    description: "漲幅 3%-7%、成交量 1000 張以上、周轉率大於 5%、量比大於 1%。",
   },
 };
 const INTRADAY_EXCLUDED_CODES = new Set([

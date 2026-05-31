@@ -1,22 +1,22 @@
-const CACHE_VERSION = "fuman-terminal-sw-20260531-31";
+const CACHE_VERSION = "fuman-terminal-sw-20260531-32";
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 const DATA_CACHE = `${CACHE_VERSION}-data`;
 
 const STATIC_ASSETS = [
-  "/styles.css?v=strategy5-light-20260531-31",
-  "/terminal-core.js?v=strategy5-light-20260531-31",
-  "/terminal-modules.js?v=strategy5-light-20260531-31",
-  "/terminal-sector-map.js?v=strategy5-light-20260531-31",
-  "/terminal-strategy-config.js?v=strategy5-light-20260531-31",
-  "/terminal-market-config.js?v=strategy5-light-20260531-31",
-  "/terminal-ui-config.js?v=strategy5-light-20260531-31",
-  "/terminal-runtime-config.js?v=strategy5-light-20260531-31",
-  "/terminal-tuning-config.js?v=strategy5-light-20260531-31",
-  "/terminal-worker.js?v=strategy5-light-20260531-31",
-  "/terminal.js?v=strategy5-light-20260531-31",
-  "/terminal-realtime-radar.css?v=strategy5-light-20260531-31",
-  "/terminal-intraday-radar.css?v=strategy5-light-20260531-31",
-  "/terminal-utility.css?v=strategy5-light-20260531-31",
+  "/styles.css?v=strategy5-volume-20260531-32",
+  "/terminal-core.js?v=strategy5-volume-20260531-32",
+  "/terminal-modules.js?v=strategy5-volume-20260531-32",
+  "/terminal-sector-map.js?v=strategy5-volume-20260531-32",
+  "/terminal-strategy-config.js?v=strategy5-volume-20260531-32",
+  "/terminal-market-config.js?v=strategy5-volume-20260531-32",
+  "/terminal-ui-config.js?v=strategy5-volume-20260531-32",
+  "/terminal-runtime-config.js?v=strategy5-volume-20260531-32",
+  "/terminal-tuning-config.js?v=strategy5-volume-20260531-32",
+  "/terminal-worker.js?v=strategy5-volume-20260531-32",
+  "/terminal.js?v=strategy5-volume-20260531-32",
+  "/terminal-realtime-radar.css?v=strategy5-volume-20260531-32",
+  "/terminal-intraday-radar.css?v=strategy5-volume-20260531-32",
+  "/terminal-utility.css?v=strategy5-volume-20260531-32",
   "/assets/logo.webp",
   "/assets/login-bg-fuman-lite.webp",
   "/favicon.ico",
