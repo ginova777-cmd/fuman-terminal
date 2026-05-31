@@ -1,5 +1,5 @@
 (function () {
-  const version = "strategy-gap-hardfix-20260531-43";
+  const version = "title-card-size-20260531-44";
   window.FUMAN_TERMINAL_BOOT = {
     version,
     startedAt: Date.now(),

@@ -1,5 +1,5 @@
 (function () {
-  const VERSION = "title-icons-orange-20260531-41";
+  const VERSION = "title-card-size-20260531-44";
   const modules = {
     sectorMap: { loaded: false, src: "terminal-sector-map.js" },
     strategyConfig: { loaded: false, src: "terminal-strategy-config.js" },

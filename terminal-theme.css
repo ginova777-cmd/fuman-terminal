@@ -1939,3 +1939,32 @@ body.fuman-light-theme #watchlist-view .page-title-icon {
   text-shadow: none !important;
   filter: none !important;
 }
+/* unified-light-title-size-20260531 */
+body.fuman-light-theme .page-header,
+body.fuman-light-theme .strategy-header,
+body.fuman-light-theme .radar-topbar,
+body.fuman-light-theme .intraday-topbar,
+body.fuman-light-theme .swing-topbar,
+body.fuman-light-theme .strategy5-page-heading,
+body.fuman-light-theme #chip-trade-view .chip-page-header,
+body.fuman-light-theme #warrant-flow-view .page-header,
+body.fuman-light-theme #warrant-flow-view .swing-topbar,
+body.fuman-light-theme #watchlist-view .watchlist-entry-card {
+  width: min(540px, 100%) !important;
+  max-width: 540px !important;
+  height: 118px !important;
+  min-height: 118px !important;
+  max-height: 118px !important;
+  overflow: hidden !important;
+  box-sizing: border-box !important;
+  padding: 20px !important;
+  flex: 0 0 auto !important;
+}
+body.fuman-light-theme .page-header .schedule-status-pill,
+body.fuman-light-theme .strategy-header .schedule-status-pill,
+body.fuman-light-theme .radar-topbar .schedule-status-pill,
+body.fuman-light-theme .intraday-topbar .schedule-status-pill,
+body.fuman-light-theme .swing-topbar .schedule-status-pill,
+body.fuman-light-theme .strategy5-page-heading .schedule-status-pill {
+  display: none !important;
+}
