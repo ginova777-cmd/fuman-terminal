@@ -43,7 +43,7 @@
     warrantFlowSummary: "/data/warrant-flow-summary.json",
     warrantFlowMobileTop: "/data/warrant-flow-mobile-top.json",
     strategyStocks: "/api/stocks",
-    stocks: "https://openapi.twse.com.tw/v1/exchangeReport/STOCK_DAY_ALL",
+    stocks: "/api/stocks",
   };
 
   window.FUMAN_RUNTIME_CONFIG = {

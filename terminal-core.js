@@ -1,5 +1,5 @@
 (function () {
-  const version = "mobile-strategy3-flush-20260601-06";
+  const version = "mobile-qa-cors-fix-20260601-07";
   window.FUMAN_TERMINAL_BOOT = {
     version,
     startedAt: Date.now(),
