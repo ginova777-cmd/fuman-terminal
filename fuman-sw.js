@@ -1,22 +1,22 @@
-const CACHE_VERSION = "fuman-terminal-sw-20260601-05";
+const CACHE_VERSION = "fuman-terminal-sw-20260601-06";
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 const DATA_CACHE = `${CACHE_VERSION}-data`;
 
 const STATIC_ASSETS = [
-  "/styles.css?v=realtime-radar-date-20260601-02",
-  "/terminal-core.js?v=realtime-radar-date-20260601-02",
-  "/terminal-modules.js?v=realtime-radar-date-20260601-02",
-  "/terminal-sector-map.js?v=realtime-radar-date-20260601-02",
-  "/terminal-strategy-config.js?v=realtime-radar-date-20260601-02",
-  "/terminal-market-config.js?v=realtime-radar-date-20260601-02",
-  "/terminal-ui-config.js?v=realtime-radar-date-20260601-02",
-  "/terminal-runtime-config.js?v=realtime-radar-date-20260601-02",
-  "/terminal-tuning-config.js?v=realtime-radar-date-20260601-02",
-  "/terminal-worker.js?v=realtime-radar-date-20260601-02",
-  "/terminal.js?v=realtime-radar-date-20260601-02",
-  "/terminal-realtime-radar.css?v=realtime-radar-date-20260601-02",
-  "/terminal-intraday-radar.css?v=realtime-radar-date-20260601-02",
-  "/terminal-utility.css?v=realtime-radar-date-20260601-02",
+  "/styles.css?v=realtime-radar-after-close-20260601-03",
+  "/terminal-core.js?v=realtime-radar-after-close-20260601-03",
+  "/terminal-modules.js?v=realtime-radar-after-close-20260601-03",
+  "/terminal-sector-map.js?v=realtime-radar-after-close-20260601-03",
+  "/terminal-strategy-config.js?v=realtime-radar-after-close-20260601-03",
+  "/terminal-market-config.js?v=realtime-radar-after-close-20260601-03",
+  "/terminal-ui-config.js?v=realtime-radar-after-close-20260601-03",
+  "/terminal-runtime-config.js?v=realtime-radar-after-close-20260601-03",
+  "/terminal-tuning-config.js?v=realtime-radar-after-close-20260601-03",
+  "/terminal-worker.js?v=realtime-radar-after-close-20260601-03",
+  "/terminal.js?v=realtime-radar-after-close-20260601-03",
+  "/terminal-realtime-radar.css?v=realtime-radar-after-close-20260601-03",
+  "/terminal-intraday-radar.css?v=realtime-radar-after-close-20260601-03",
+  "/terminal-utility.css?v=realtime-radar-after-close-20260601-03",
   "/assets/logo.webp",
   "/assets/login-bg-fuman-lite.webp",
   "/favicon.ico",

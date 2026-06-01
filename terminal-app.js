@@ -1857,6 +1857,18 @@ function patchRealtimeRadarBoard(activeSide, boardMarkup, displayRows) {
   return true;
 }
 
+function shouldRefreshRealtimeRadarRemoteCache(radarOpen = shouldRunLivePolling()) {
+  if (radarOpen) return !realtimeRadarCacheLoadedAt || Date.now() - realtimeRadarCacheLoadedAt >= REALTIME_RADAR_REFRESH_MS;
+  if (isKnownNonTradingMarketDate()) return false;
+  if (!realtimeRadarLastRows.length) return true;
+  if (!realtimeRadarCacheLoadedAt) return true;
+  const rowDate = realtimeRadarDataDateKey(realtimeRadarLastRows);
+  if (rowDate && rowDate !== marketAiTodayKey()) return true;
+  const latest = latestRealtimeRadarSignalAt(realtimeRadarLastRows);
+  if (!latest || realtimeRadarDateKeyFromTimestamp(latest) !== marketAiTodayKey()) return true;
+  return Date.now() - realtimeRadarCacheLoadedAt >= Math.max(REALTIME_RADAR_REFRESH_MS * 12, 60000);
+}
+
 function loadRealtimeRadarLastRows() {
   try {
     localStorage.removeItem("fuman_realtime_radar_last_rows_v1");
@@ -1888,7 +1900,8 @@ function normalizeRealtimeRadarPayloadCandidate(candidate) {
   const payload = candidate?.payload;
   const payloadDate = normalizeMarketAiDateKey(payload?.date || payload?.updatedAt);
   const rows = normalizeArray(payload?.rows);
-  if ((payloadDate !== marketAiTodayKey() && shouldRunLivePolling()) || !rows.length) return null;
+  const requireToday = shouldRunLivePolling() || !isKnownNonTradingMarketDate();
+  if ((payloadDate !== marketAiTodayKey() && requireToday) || !rows.length) return null;
   return {
     ...candidate,
     payloadDate,
@@ -1904,7 +1917,7 @@ async function loadRealtimeRadarLatestCache(force = false) {
   try {
     const candidates = [];
     const errors = [];
-    const allowSupabase = shouldRunLivePolling();
+    const allowSupabase = shouldRunLivePolling() || !isKnownNonTradingMarketDate();
     const restPayload = allowSupabase ? await fetchSupabaseLatestPayload("fuman_realtime_radar_cache", isMobileViewport() ? 3000 : 4500) : null;
     if (restPayload) {
       candidates.push({
@@ -2124,13 +2137,11 @@ function renderRealtimeRadar() {
   }
   const radarOpen = shouldRunLivePolling();
   if (!realtimeRadarLastRows.length) loadRealtimeRadarLastRows();
-  if (radarOpen) {
-    const radarCacheDue = !realtimeRadarCacheLoadedAt || Date.now() - realtimeRadarCacheLoadedAt >= REALTIME_RADAR_REFRESH_MS;
-    if (radarCacheDue && !realtimeRadarCacheLoading) {
-      loadRealtimeRadarLatestCache(true).then((loaded) => {
-        if (loaded && isViewActive("realtime-radar")) renderRealtimeRadar();
-      });
-    }
+  const radarCacheDue = shouldRefreshRealtimeRadarRemoteCache(radarOpen);
+  if (radarCacheDue && !realtimeRadarCacheLoading) {
+    loadRealtimeRadarLatestCache(true).then((loaded) => {
+      if (loaded && isViewActive("realtime-radar")) renderRealtimeRadar();
+    });
   }
   if (!realtimeRadarLastRows.length) loadRealtimeRadarLastRows();
   if (!radarOpen && !realtimeRadarLastRows.length && !latestStocks.length) {
