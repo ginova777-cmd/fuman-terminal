@@ -42,20 +42,31 @@ function firstPositive(...values) {
 function parseQuote(item) {
   const code = String(item?.c || "").trim();
   if (!/^\d{4}$/.test(code)) return null;
-  const close = firstPositive(item.z, item.pz);
+  const close = firstPositive(item.z, item.pz, item.o, item.h, item.l, item.y);
   const prevClose = cleanNumber(item.y);
   if (!close || !prevClose) return null;
+  const closeSource = priceLevels(item.z)[0]
+    ? "z"
+    : priceLevels(item.pz)[0]
+      ? "pz"
+      : cleanNumber(item.o)
+        ? "open"
+        : cleanNumber(item.h)
+          ? "high"
+          : cleanNumber(item.l)
+            ? "low"
+            : "prevClose";
   const change = close - prevClose;
   return {
     code,
     name: item.n || code,
     close,
-    closeSource: priceLevels(item.z)[0] ? "z" : "pz",
+    closeSource,
     change,
     percent: prevClose ? (change / prevClose) * 100 : 0,
     open: cleanNumber(item.o),
-    high: firstPositive(item.h, item.z, item.pz),
-    low: firstPositive(item.l, item.z, item.pz),
+    high: firstPositive(item.h, item.z, item.pz, item.o, item.y),
+    low: firstPositive(item.l, item.z, item.pz, item.o, item.y),
     prevClose,
     limitUp: cleanNumber(item.u),
     limitDown: cleanNumber(item.w),

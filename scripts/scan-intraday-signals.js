@@ -23,6 +23,7 @@ const STRATEGY5_BACKUP_FILE = dataPath("strategy5-backup.json");
 const BASE_URL = process.env.FUMAN_BASE_URL || "https://fuman-terminal.vercel.app";
 const MANAGER_MIN_ENTRY_TIME = process.env.TRADE_MANAGER_MIN_ENTRY_TIME || "09:05:00";
 const MAX_QUOTE_AGE_SECONDS = Number(process.env.STRATEGY2_MAX_QUOTE_AGE_SECONDS || 150);
+const QUOTE_CACHE_MAX_AGE_SECONDS = Number(process.env.STRATEGY2_QUOTE_CACHE_MAX_AGE_SECONDS || 15 * 60);
 const MIN_REALTIME_COVERAGE = Number(process.env.STRATEGY2_MIN_REALTIME_COVERAGE || 0.5);
 const REALTIME_BATCH_SIZE = Number(process.env.STRATEGY2_REALTIME_BATCH_SIZE || 80);
 const REALTIME_RETRY_BATCH_SIZE = Number(process.env.STRATEGY2_REALTIME_RETRY_BATCH_SIZE || 20);
@@ -477,6 +478,19 @@ function quoteAgeSeconds(scanTimestamp, quoteTime) {
 function hasFreshQuote(stock, scanTimestamp) {
   const age = quoteAgeSeconds(scanTimestamp, stock.quoteTime || stock.time);
   return age != null && age <= MAX_QUOTE_AGE_SECONDS;
+}
+
+function secondsSinceIso(value) {
+  const timestamp = Date.parse(value || "");
+  if (!Number.isFinite(timestamp)) return Infinity;
+  return Math.max(0, (Date.now() - timestamp) / 1000);
+}
+
+function hasUsableQuote(stock, scanTimestamp) {
+  if (stock?.recoveredFromQuoteCache) {
+    return cleanNumber(stock.close) > 0 && secondsSinceIso(stock.quoteSeenAt) <= QUOTE_CACHE_MAX_AGE_SECONDS;
+  }
+  return hasFreshQuote(stock, scanTimestamp);
 }
 
 function isMarketTime(parts = taipeiParts()) {
@@ -1154,6 +1168,55 @@ function updateMinuteCloseCache(cache, stocks, scanTimestamp, key) {
   }
 }
 
+function updateRealtimeQuoteCache(cache, stocks, key) {
+  if (cache.quoteSnapshotsDate !== key || !cache.quoteSnapshots || typeof cache.quoteSnapshots !== "object") {
+    cache.quoteSnapshotsDate = key;
+    cache.quoteSnapshots = {};
+  }
+  const seenAt = new Date().toISOString();
+  for (const stock of stocks) {
+    const code = String(stock.code || "");
+    const close = cleanNumber(stock.close);
+    if (!code || close <= 0 || stock.isRealtime !== true) continue;
+    cache.quoteSnapshots[code] = {
+      code,
+      name: stock.name || code,
+      close,
+      change: cleanNumber(stock.change),
+      percent: cleanNumber(stock.percent),
+      open: cleanNumber(stock.open),
+      high: cleanNumber(stock.high),
+      low: cleanNumber(stock.low),
+      prevClose: cleanNumber(stock.prevClose),
+      limitUp: cleanNumber(stock.limitUp),
+      limitDown: cleanNumber(stock.limitDown),
+      tradeVolume: cleanNumber(stock.tradeVolume),
+      value: cleanNumber(stock.value),
+      market: stock.market || "",
+      time: stock.quoteTime || stock.time || "",
+      quoteTime: stock.quoteTime || stock.time || "",
+      closeSource: stock.closeSource || "",
+      quoteSeenAt: seenAt,
+    };
+  }
+}
+
+function mergeRealtimeQuoteCache(cache, stocks, key) {
+  if (cache.quoteSnapshotsDate !== key || !cache.quoteSnapshots || typeof cache.quoteSnapshots !== "object") return stocks;
+  return stocks.map((stock) => {
+    if (stock.isRealtime === true && cleanNumber(stock.close) > 0) return stock;
+    const snapshot = cache.quoteSnapshots[String(stock.code || "")];
+    if (!snapshot || cleanNumber(snapshot.close) <= 0 || secondsSinceIso(snapshot.quoteSeenAt) > QUOTE_CACHE_MAX_AGE_SECONDS) return stock;
+    return {
+      ...stock,
+      ...snapshot,
+      quoteTime: snapshot.quoteTime || snapshot.time || "",
+      isRealtime: true,
+      recoveredFromQuoteCache: true,
+    };
+  });
+}
+
 function fetchLocalIntradaySma35(cache, code, scanTimestamp) {
   const targetMinute = minuteKey(scanTimestamp);
   const rows = Array.isArray(cache?.minuteCloses?.[String(code)]) ? cache.minuteCloses[String(code)] : [];
@@ -1375,15 +1438,20 @@ async function main() {
   const realtimePayload = await fetchRealtime(realtimeSourceStocks);
   const timestamp = timestampKey();
   const realtimeStats = fetchRealtime.lastStats || { requested: rawStocks.length, received: 0, failed: 0 };
-  const realtimeStocks = realtimePayload
+  updateRealtimeQuoteCache(cache, realtimePayload, key);
+  const realtimeWithCache = mergeRealtimeQuoteCache(cache, realtimePayload, key);
+  const realtimeStocks = realtimeWithCache
     .filter((stock) => stock.isRealtime === true)
-    .filter((stock) => hasFreshQuote(stock, timestamp))
+    .filter((stock) => hasUsableQuote(stock, timestamp))
     .filter(isIntradayTradable);
   const coverage = realtimeSourceStocks.length ? realtimeStocks.length / realtimeSourceStocks.length : 0;
+  const cachedRecovered = realtimeStocks.filter((stock) => stock.recoveredFromQuoteCache).length;
   const realtimeSummaryBase = {
     ...realtimeStats,
     coverage: Number(coverage.toFixed(4)),
     usable: realtimeStocks.length,
+    cachedRecovered,
+    quoteCacheMaxAgeSeconds: QUOTE_CACHE_MAX_AGE_SECONDS,
     initialBatchSize: REALTIME_BATCH_SIZE,
     retryBatchSize: REALTIME_RETRY_BATCH_SIZE,
   };
