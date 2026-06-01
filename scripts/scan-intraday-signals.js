@@ -250,7 +250,6 @@ function buildStrategy2PublicReport(report) {
 
 function buildStrategy2ScorecardSource(report) {
   const records = (report.records || [])
-    .filter((record) => record?.stateId === "entry" || record?.stateId === "go")
     .sort((a, b) => strategy2RecordSortTime(a).localeCompare(strategy2RecordSortTime(b)) || String(a.code || "").localeCompare(String(b.code || "")))
     .map(pickStrategy2PublicRecord);
   return {
@@ -266,6 +265,7 @@ function buildStrategy2ScorecardSource(report) {
     summary: {
       sourceRecords: (report.records || []).length,
       records: records.length,
+      entryRecords: records.filter((record) => record?.stateId === "entry" || record?.stateId === "go").length,
       events: (report.events || []).length,
     },
   };
@@ -419,6 +419,14 @@ function normalizeVolumeLots(value) {
   const number = cleanNumber(value);
   if (!number) return 0;
   return number > 100000 ? Math.round(number / 1000) : number;
+}
+
+function normalizeRealtimeQuoteVolume(quote) {
+  const volume = cleanNumber(quote?.tradeVolume);
+  if (!volume) return 0;
+  const source = String(quote?.realtimeFallback || quote?.closeSource || quote?.quoteSource || "");
+  if (/yahoo|finmind/i.test(source)) return normalizeVolumeLots(volume);
+  return Math.round(volume);
 }
 
 function classifyStrategy2State(stock, signal) {
@@ -1299,7 +1307,7 @@ async function fetchRealtime(stocks) {
   return stocks.map((stock) => {
     const quote = quotes.get(stock.code);
     if (!quote?.close) return { ...stock, isRealtime: false };
-    const quoteVolume = normalizeVolumeLots(quote.tradeVolume);
+    const quoteVolume = normalizeRealtimeQuoteVolume(quote);
     const value = quoteVolume && cleanNumber(quote.close)
       ? quoteVolume * cleanNumber(quote.close)
       : stock.value;
