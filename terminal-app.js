@@ -73,7 +73,7 @@ function getFumanWorker() {
   if (!("Worker" in window)) return null;
   if (fumanWorker) return fumanWorker;
   try {
-    fumanWorker = new Worker("terminal-worker.js?v=strategy4-data-date-20260601-01");
+    fumanWorker = new Worker("terminal-worker.js?v=strategy4-data-date-20260601-02");
     fumanWorker.addEventListener("message", (event) => {
       const { id, ok, rows, result, error } = event.data || {};
       const pending = fumanWorkerPending.get(id);
@@ -301,7 +301,7 @@ function loadFumanStyle(href, id) {
   const link = document.createElement("link");
   link.id = id;
   link.rel = "stylesheet";
-  link.href = href.includes("?") ? href : `${href}?v=${window.FUMAN_TERMINAL_BOOT?.version || "strategy4-data-date-20260601-01"}`;
+  link.href = href.includes("?") ? href : `${href}?v=${window.FUMAN_TERMINAL_BOOT?.version || "strategy4-data-date-20260601-02"}`;
   document.head.appendChild(link);
 }
 
@@ -327,7 +327,7 @@ function makeFumanModuleScope(bindings) {
 function loadFumanFeatureModule(name, src, globalName) {
   if (window[globalName]) return Promise.resolve(window[globalName]);
   if (fumanFeatureModulePromises[name]) return fumanFeatureModulePromises[name];
-  const version = window.FUMAN_TERMINAL_BOOT?.version || "strategy4-data-date-20260601-01";
+  const version = window.FUMAN_TERMINAL_BOOT?.version || "strategy4-data-date-20260601-02";
   fumanFeatureModulePromises[name] = new Promise((resolve, reject) => {
     const attr = "data-fuman-feature-" + name;
     const existing = document.querySelector("script[" + attr + "]");
@@ -3310,10 +3310,17 @@ function commitStrategy4Pending() {
   saveStrategy4LocalCache();
 }
 
+function strategy4PayloadDataDateKey(payload) {
+  return normalizeMarketAiDateKey(payload?.dataDate || payload?.usedDate || payload?.tradeDate)
+    || marketAiDataDateKey(normalizeArray(payload?.matches))
+    || marketAiDataDateKey(normalizeArray(payload?.topMatches));
+}
+
 function mergeStrategy4Cache(payload) {
   strategy4ScanMatches = {};
   strategy4ScannedCodes = new Set();
-  strategy4ScanStamp = normalizeMarketAiDateKey(payload?.scanStamp || payload?.stamp || payload?.date || payload?.usedDate || payload?.tradeDate);
+  const payloadDataDate = strategy4PayloadDataDateKey(payload);
+  strategy4ScanStamp = normalizeMarketAiDateKey(payload?.scanStamp || payload?.stamp || payloadDataDate);
   const scannedCodes = normalizeArray(payload?.scannedCodes);
   scannedCodes.forEach((code) => {
     if (code) strategy4ScannedCodes.add(code);
@@ -3331,6 +3338,7 @@ function saveStrategy4LocalCache() {
     const payload = {
       source: "github-actions",
       updatedAt: strategy4ScanLastAt || Date.now(),
+      dataDate: strategy4PayloadDataDateKey({ matches }) || "",
       scanStamp: strategy4ScanStamp,
       total: strategy4ScanTotal,
       scannedCodes: [...strategy4ScannedCodes],
@@ -7272,13 +7280,12 @@ function taipeiDateKeyFromValue(value) {
 }
 
 function strategy4DataDateKey() {
-  return normalizeMarketAiDateKey(strategy4Summary?.dataDate || strategy4Summary?.usedDate || strategy4Summary?.tradeDate || strategy4Summary?.date)
+  return strategy4PayloadDataDateKey(strategy4Summary)
     || marketAiDataDateKey(Object.values(strategy4ScanMatches));
 }
 function getStrategy4FreshnessMeta() {
   const today = taipeiDateKeyFromValue(Date.now()) || marketAiTodayKey();
   const dataDate = strategy4DataDateKey()
-    || normalizeMarketAiDateKey(strategy4ScanStamp || strategy4Summary?.scanStamp || strategy4Summary?.stamp)
     || taipeiDateKeyFromValue(strategy4ScanLastAt)
     || taipeiDateKeyFromValue(strategy4Summary?.updatedAt)
     || today;
@@ -8895,7 +8902,7 @@ async function loadStrategy4Cache(force = false) {
   strategy4CacheLoading = true;
   try {
     let payload = await fetchVersionedJson(endpoints.strategy4Slim, 8000, strategy4Summary?.updatedAt || strategy4SummaryLoadedAt || "", force);
-    if (!normalizeArray(payload?.matches).length) {
+    if (!normalizeArray(payload?.matches).length || !strategy4PayloadDataDateKey(payload)) {
       payload = await fetchVersionedJson(endpoints.strategy4Cache, 10000, strategy4Summary?.updatedAt || strategy4SummaryLoadedAt || "", force);
     }
     if (!normalizeArray(payload?.matches).length) {
