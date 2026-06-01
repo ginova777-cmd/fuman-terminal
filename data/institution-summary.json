@@ -1,9 +1,9 @@
 {
   "ok": true,
   "source": "github-actions",
-  "updatedAt": "2026-05-31T23:47:52.702Z",
+  "updatedAt": "2026-06-01T00:19:08.161Z",
   "usedDate": "20260529",
-  "quoteUpdatedAt": "2026-05-31T23:44:11.547Z",
+  "quoteUpdatedAt": "2026-06-01T00:18:33.850Z",
   "count": 1908,
   "topJoint": [
     {
@@ -465,7 +465,7 @@
       "dealer": 0,
       "total": 1598639,
       "foreignStreak": 1,
-      "trustStreak": 2,
+      "trustStreak": 1,
       "jointStreak": 1
     },
     {
