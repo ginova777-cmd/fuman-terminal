@@ -1,5 +1,6 @@
 (function () {
 const STRATEGY_DEFS = [
+  { id: "multi_strategy_confluence", label: "🔥 多策略共振", short: "共振", icon: "🔥" },
   { id: "foreign_trust_breakout", label: "外資投信連買準突破", short: "準突破", icon: "◆" },
   { id: "volume_turnover_breakout", label: "量價周轉強攻", short: "量價周轉", icon: "量" },
   { id: "bollinger_kdj_buy", label: "布林KDJ買點", short: "布林KDJ", icon: "K" },
@@ -24,13 +25,20 @@ const STRATEGY_DEFS = [
 
 const STRATEGY_BY_ID = Object.fromEntries(STRATEGY_DEFS.map((item) => [item.id, item]));
 const STRATEGY5_IDS = ["short_fund_flow", "chip_health_strong", "one_day_rebound", "short_squeeze", "ultra_short"];
-const STRATEGY5_PRESET_IDS = [
+const STRATEGY5_BASE_PRESET_IDS = [
   "foreign_trust_breakout",
   "limit_up_doji",
   "volume_turnover_breakout",
   "bollinger_kdj_buy",
 ];
+const STRATEGY5_PRESET_IDS = [
+  "multi_strategy_confluence",
+  ...STRATEGY5_BASE_PRESET_IDS,
+];
 const STRATEGY5_CARD_META = {
+  multi_strategy_confluence: {
+    description: "同時命中 2 個以上策略5主題，每天自動標出多策略共振標的。",
+  },
   foreign_trust_breakout: {
     description: "外資與投信同步買超，漲幅未過熱，優先觀察準突破名單。",
   },
@@ -82,6 +90,7 @@ const SWING_SIGNAL_DEFS = [
     STRATEGY_DEFS,
     STRATEGY_BY_ID,
     STRATEGY5_IDS,
+    STRATEGY5_BASE_PRESET_IDS,
     STRATEGY5_PRESET_IDS,
     STRATEGY5_CARD_META,
     INTRADAY_EXCLUDED_CODES,

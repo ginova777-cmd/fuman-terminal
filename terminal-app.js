@@ -73,7 +73,7 @@ function getFumanWorker() {
   if (!("Worker" in window)) return null;
   if (fumanWorker) return fumanWorker;
   try {
-    fumanWorker = new Worker("terminal-worker.js?v=mobile-qa-cors-fix-20260601-07");
+    fumanWorker = new Worker("terminal-worker.js?v=strategy5-confluence-tab-20260601-08");
     fumanWorker.addEventListener("message", (event) => {
       const { id, ok, rows, result, error } = event.data || {};
       const pending = fumanWorkerPending.get(id);
@@ -301,7 +301,7 @@ function loadFumanStyle(href, id) {
   const link = document.createElement("link");
   link.id = id;
   link.rel = "stylesheet";
-  link.href = href.includes("?") ? href : `${href}?v=${window.FUMAN_TERMINAL_BOOT?.version || "mobile-qa-cors-fix-20260601-07"}`;
+  link.href = href.includes("?") ? href : `${href}?v=${window.FUMAN_TERMINAL_BOOT?.version || "strategy5-confluence-tab-20260601-08"}`;
   document.head.appendChild(link);
 }
 
@@ -327,7 +327,7 @@ function makeFumanModuleScope(bindings) {
 function loadFumanFeatureModule(name, src, globalName) {
   if (window[globalName]) return Promise.resolve(window[globalName]);
   if (fumanFeatureModulePromises[name]) return fumanFeatureModulePromises[name];
-  const version = window.FUMAN_TERMINAL_BOOT?.version || "mobile-qa-cors-fix-20260601-07";
+  const version = window.FUMAN_TERMINAL_BOOT?.version || "strategy5-confluence-tab-20260601-08";
   fumanFeatureModulePromises[name] = new Promise((resolve, reject) => {
     const attr = "data-fuman-feature-" + name;
     const existing = document.querySelector("script[" + attr + "]");
@@ -2773,7 +2773,7 @@ let intradaySortKey = "time";
 let intradaySortDir = "desc";
 let intradaySignalFilter = "all";
 let strategyPresetMode = "";
-let strategy5ActiveId = "foreign_trust_breakout";
+let strategy5ActiveId = "multi_strategy_confluence";
 const INTRADAY_HOT_SCAN_LIMIT = FUMAN_TUNING_CONFIG.intradayHotScanLimit ?? 900;
 const REALTIME_RADAR_POOL_LIMIT = FUMAN_TUNING_CONFIG.realtimeRadarPoolLimit ?? 650;
 const INTRADAY_BACKGROUND_BATCH = FUMAN_TUNING_CONFIG.intradayBackgroundBatch ?? 450;
@@ -4326,6 +4326,7 @@ const STRATEGY_DEFS = FUMAN_STRATEGY_CONFIG.STRATEGY_DEFS || [];
 const STRATEGY_BY_ID = FUMAN_STRATEGY_CONFIG.STRATEGY_BY_ID || Object.fromEntries(STRATEGY_DEFS.map((item) => [item.id, item]));
 const STRATEGY5_IDS = FUMAN_STRATEGY_CONFIG.STRATEGY5_IDS || [];
 const STRATEGY5_PRESET_IDS = FUMAN_STRATEGY_CONFIG.STRATEGY5_PRESET_IDS || [];
+const STRATEGY5_BASE_PRESET_IDS = FUMAN_STRATEGY_CONFIG.STRATEGY5_BASE_PRESET_IDS || STRATEGY5_PRESET_IDS.filter((id) => id !== "multi_strategy_confluence");
 const STRATEGY5_CARD_META = FUMAN_STRATEGY_CONFIG.STRATEGY5_CARD_META || {};
 const INTRADAY_EXCLUDED_CODES = FUMAN_STRATEGY_CONFIG.INTRADAY_EXCLUDED_CODES || new Set();
 const INTRADAY_SIGNAL_DEFS = FUMAN_STRATEGY_CONFIG.INTRADAY_SIGNAL_DEFS || [];
@@ -6233,11 +6234,31 @@ function renderStrategy5Dashboard(evaluated) {
   setStrategyChrome("strategy5");
   const byId = Object.fromEntries(STRATEGY5_PRESET_IDS.map((id) => [id, []]));
   evaluated.forEach((stock) => {
-    stock.matches.filter((match) => STRATEGY5_PRESET_IDS.includes(match.id)).forEach((match) => {
+    const strategyMatches = stock.matches.filter((match) => STRATEGY5_BASE_PRESET_IDS.includes(match.id));
+    strategyMatches.forEach((match) => {
       byId[match.id].push({ ...stock, activeMatch: match });
     });
+    if (strategyMatches.length >= 2 && byId.multi_strategy_confluence) {
+      const confluenceScore = Math.max(
+        cleanNumber(stock.score),
+        ...strategyMatches.map((match) => cleanNumber(match.score))
+      );
+      byId.multi_strategy_confluence.push({
+        ...stock,
+        score: confluenceScore,
+        strategy5ConfluenceMatches: strategyMatches,
+        activeMatch: {
+          id: "multi_strategy_confluence",
+          short: "共振",
+          label: "多策略共振",
+          icon: "🔥",
+          score: confluenceScore,
+          reason: strategyMatches.map((match) => match.short || STRATEGY_BY_ID[match.id]?.short || STRATEGY_BY_ID[match.id]?.label || match.id).join(" + "),
+        },
+      });
+    }
   });
-  if (!STRATEGY5_PRESET_IDS.includes(strategy5ActiveId)) strategy5ActiveId = "foreign_trust_breakout";
+  if (!STRATEGY5_PRESET_IDS.includes(strategy5ActiveId)) strategy5ActiveId = "multi_strategy_confluence";
 
   const list = (byId[strategy5ActiveId] || [])
     .sort((a, b) => b.score - a.score || b.percent - a.percent || b.value - a.value)
@@ -6248,13 +6269,13 @@ function renderStrategy5Dashboard(evaluated) {
   const active = STRATEGY_BY_ID[strategy5ActiveId] || STRATEGY_BY_ID.foreign_trust_breakout;
   const activeMeta = STRATEGY5_CARD_META[strategy5ActiveId] || {};
   const totalMatches = new Set(evaluated
-    .filter((stock) => stock.matches.some((match) => STRATEGY5_PRESET_IDS.includes(match.id)))
+    .filter((stock) => stock.matches.some((match) => STRATEGY5_BASE_PRESET_IDS.includes(match.id)))
     .map((stock) => stock.code)).size;
 
   if (strategySummary) strategySummary.textContent = `策略5：${active.label}｜符合 ${list.length} 檔`;
   if (strategyMatchCount) strategyMatchCount.textContent = totalMatches.toLocaleString("zh-TW");
   if (strategyAvgScore) strategyAvgScore.textContent = list.length ? Math.round(avg(list.map((stock) => stock.score))) : "--";
-  if (strategyTopHit) strategyTopHit.textContent = list.length ? `${Math.max(...list.map((stock) => stock.matches.filter((match) => STRATEGY5_PRESET_IDS.includes(match.id)).length))}/${STRATEGY5_PRESET_IDS.length}` : "--";
+  if (strategyTopHit) strategyTopHit.textContent = list.length ? `${Math.max(...list.map((stock) => stock.matches.filter((match) => STRATEGY5_BASE_PRESET_IDS.includes(match.id)).length))}/${STRATEGY5_BASE_PRESET_IDS.length}` : "--";
 
   const strategyTabs = STRATEGY5_PRESET_IDS.map((id) => {
     const strategy = STRATEGY_BY_ID[id] || {};
@@ -6313,7 +6334,7 @@ function renderStrategy5Dashboard(evaluated) {
         { label: `量比${formatNumber(main.volumeRatio, 2)}`, tone: "blue" }
       );
     }
-    const strategyHitCount = stock.matches.filter((match) => STRATEGY5_PRESET_IDS.includes(match.id)).length;
+    const strategyHitCount = (stock.strategy5ConfluenceMatches || stock.matches.filter((match) => STRATEGY5_BASE_PRESET_IDS.includes(match.id))).length;
     if (strategyHitCount >= 2) {
       priceChips.unshift({ label: `★共振${strategyHitCount}`, tone: "red" });
       chipChips.unshift({ label: "多策略同命中", tone: "red" });
@@ -6329,7 +6350,7 @@ function renderStrategy5Dashboard(evaluated) {
   const tableRows = pageList.length ? pageList.map((stock, index) => {
     const sign = stock.percent >= 0 ? "+" : "";
     const direction = stock.percent >= 0 ? "▲" : "▼";
-    const strategyMatches = stock.matches.filter((match) => STRATEGY5_PRESET_IDS.includes(match.id));
+    const strategyMatches = stock.strategy5ConfluenceMatches || stock.matches.filter((match) => STRATEGY5_BASE_PRESET_IDS.includes(match.id));
     const main = stock.activeMatch || strategyMatches[0] || stock.matches[0];
     const isStrategy5Confluence = strategyMatches.length >= 2;
     const rank = (strategy5Page - 1) * TERMINAL_PAGE_SIZE + index + 1;
@@ -8882,9 +8903,9 @@ function applyStrategyPresetFromLink(link) {
     : text.includes("策略3")
     ? new Set(["overnight_chip"])
     : text.includes("策略5")
-    ? new Set(["foreign_trust_breakout"])
+    ? new Set(["multi_strategy_confluence"])
     : new Set([text.includes("策略4") ? "swing_radar" : "intraday_2m"]);
-  if (text.includes("策略5")) strategy5ActiveId = "foreign_trust_breakout";
+  if (text.includes("策略5")) strategy5ActiveId = "multi_strategy_confluence";
   if (text.includes("策略3")) strategy5ActiveId = "overnight_chip";
   if (text.includes("策略4")) swingSignalFilter = "all";
   if (text.includes("策略2")) intradaySignalFilter = "all";
@@ -9882,7 +9903,7 @@ function watchlistStrategyDetails(row, sourceKey = "") {
     ],
     strategy5: [
       row.activeMatch,
-      ...normalizeArray(row.matches).filter((match) => STRATEGY5_PRESET_IDS.includes(match?.id)).map(watchlistSignalText),
+      ...normalizeArray(row.matches).filter((match) => STRATEGY5_BASE_PRESET_IDS.includes(match?.id)).map(watchlistSignalText),
     ],
     realtime: [
       ...normalizeArray(row.signalTags).map(watchlistSignalText),
@@ -10476,7 +10497,7 @@ document.addEventListener("click", (event) => {
 document.addEventListener("click", (event) => {
   const filterButton = event.target.closest("[data-strategy5-filter]");
   if (!filterButton) return;
-  strategy5ActiveId = filterButton.dataset.strategy5Filter || "foreign_trust_breakout";
+  strategy5ActiveId = filterButton.dataset.strategy5Filter || "multi_strategy_confluence";
   strategy5Page = 1;
   renderStrategyScanner();
 });

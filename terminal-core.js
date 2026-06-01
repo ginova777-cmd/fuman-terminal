@@ -1,5 +1,5 @@
 (function () {
-  const version = "mobile-qa-cors-fix-20260601-07";
+  const version = "strategy5-confluence-tab-20260601-08";
   window.FUMAN_TERMINAL_BOOT = {
     version,
     startedAt: Date.now(),
