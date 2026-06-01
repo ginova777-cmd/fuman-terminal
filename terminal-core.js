@@ -1,5 +1,5 @@
 (function () {
-  const version = "strategy2-cache-table-20260601-01";
+  const version = "realtime-radar-date-20260601-01";
   window.FUMAN_TERMINAL_BOOT = {
     version,
     startedAt: Date.now(),

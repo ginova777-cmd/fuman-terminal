@@ -1,5 +1,5 @@
 (function () {
-  const VERSION = "watchlist-strategy-source-20260531-63";
+  const VERSION = "realtime-radar-date-20260601-01";
   const modules = {
     sectorMap: { loaded: false, src: "terminal-sector-map.js" },
     strategyConfig: { loaded: false, src: "terminal-strategy-config.js" },

@@ -1,22 +1,22 @@
-const CACHE_VERSION = "fuman-terminal-sw-20260601-03";
+const CACHE_VERSION = "fuman-terminal-sw-20260601-04";
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 const DATA_CACHE = `${CACHE_VERSION}-data`;
 
 const STATIC_ASSETS = [
-  "/styles.css?v=strategy4-data-date-20260601-03",
-  "/terminal-core.js?v=strategy4-data-date-20260601-03",
-  "/terminal-modules.js?v=strategy4-data-date-20260601-03",
-  "/terminal-sector-map.js?v=strategy4-data-date-20260601-03",
-  "/terminal-strategy-config.js?v=strategy4-data-date-20260601-03",
-  "/terminal-market-config.js?v=strategy4-data-date-20260601-03",
-  "/terminal-ui-config.js?v=strategy4-data-date-20260601-03",
-  "/terminal-runtime-config.js?v=strategy4-data-date-20260601-03",
-  "/terminal-tuning-config.js?v=strategy4-data-date-20260601-03",
-  "/terminal-worker.js?v=strategy4-data-date-20260601-03",
-  "/terminal.js?v=strategy4-data-date-20260601-03",
-  "/terminal-realtime-radar.css?v=strategy4-data-date-20260601-03",
-  "/terminal-intraday-radar.css?v=strategy4-data-date-20260601-03",
-  "/terminal-utility.css?v=strategy4-data-date-20260601-03",
+  "/styles.css?v=realtime-radar-date-20260601-01",
+  "/terminal-core.js?v=realtime-radar-date-20260601-01",
+  "/terminal-modules.js?v=realtime-radar-date-20260601-01",
+  "/terminal-sector-map.js?v=realtime-radar-date-20260601-01",
+  "/terminal-strategy-config.js?v=realtime-radar-date-20260601-01",
+  "/terminal-market-config.js?v=realtime-radar-date-20260601-01",
+  "/terminal-ui-config.js?v=realtime-radar-date-20260601-01",
+  "/terminal-runtime-config.js?v=realtime-radar-date-20260601-01",
+  "/terminal-tuning-config.js?v=realtime-radar-date-20260601-01",
+  "/terminal-worker.js?v=realtime-radar-date-20260601-01",
+  "/terminal.js?v=realtime-radar-date-20260601-01",
+  "/terminal-realtime-radar.css?v=realtime-radar-date-20260601-01",
+  "/terminal-intraday-radar.css?v=realtime-radar-date-20260601-01",
+  "/terminal-utility.css?v=realtime-radar-date-20260601-01",
   "/assets/logo.webp",
   "/assets/login-bg-fuman-lite.webp",
   "/favicon.ico",
