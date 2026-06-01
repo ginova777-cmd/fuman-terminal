@@ -1432,6 +1432,8 @@ async function fetchTwelveDataIntradaySma35(code, scanTimestamp) {
       if (cleanNumber(info?.ma35) > 0) return info;
     } catch (error) {
       console.log(`sma35 1m failed ${request.label}: ${error.message}`);
+      noteMa35ProviderFailure("twelve", error.message);
+      if (twelveDataBlockedReason) return null;
     }
   }
   return null;
