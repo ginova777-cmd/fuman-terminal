@@ -1,5 +1,5 @@
 (function () {
-  const version = "strategy4-remove-zone-card-20260601-05";
+  const version = "strategy4-cn-labels-20260601-06";
   window.FUMAN_TERMINAL_BOOT = {
     version,
     startedAt: Date.now(),

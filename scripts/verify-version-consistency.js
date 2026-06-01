@@ -31,7 +31,7 @@ requireIncludes("fuman-sw.js", `?v=${VERSION}`);
 requireIncludes("scripts/verify-deployment.js", "detectVersion");
 requireIncludes("scripts/e2e-smoke.js", "detectVersion");
 
-const staleLiteral = "watchlist-strategy-source-20260531-63";
+const staleLiteral = "strategy4-remove-zone-card-20260601-05";
 for (const file of ["index.html", "terminal-core.js", "terminal-modules.js", "terminal.js", "terminal-app.js", "fuman-sw.js", "scripts/verify-deployment.js", "scripts/e2e-smoke.js"]) {
   if (read(file).includes(staleLiteral)) issues.push(`${file}: stale literal ${staleLiteral}`);
 }
