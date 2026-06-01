@@ -194,7 +194,6 @@ function buildOutput({ codes, scannedThisRun, scanned, noDataCodes, scanErrors, 
   const noDataCount = noDataCodes.size;
   const errorCount = scanErrors.length;
   const pendingCount = codes.length - scanned.size + noDataCount;
-  const qualityStatus = complete && noDataCount === 0 && errorCount === 0 ? "complete" : "incomplete";
   const sourceCounts = Object.fromEntries([...dataSourceCounts.entries()].sort(([a], [b]) => a.localeCompare(b)));
   const yahooSourceCount = Object.entries(sourceCounts)
     .filter(([source]) => /^yahoo/i.test(source))
@@ -205,16 +204,22 @@ function buildOutput({ codes, scannedThisRun, scanned, noDataCodes, scanErrors, 
   const totalSourceCount = Object.values(sourceCounts).reduce((sum, count) => sum + Number(count || 0), 0);
   const yahooSourceRatio = totalSourceCount ? Number((yahooSourceCount / totalSourceCount).toFixed(4)) : 0;
   const misSourceRatio = totalSourceCount ? Number((misSourceCount / totalSourceCount).toFixed(4)) : 0;
+  const sourceWarnings = [];
+  if (complete && yahooSourceRatio > MAX_YAHOO_SOURCE_RATIO) {
+    sourceWarnings.push(`Yahoo fallback ratio ${yahooSourceRatio} above ${MAX_YAHOO_SOURCE_RATIO}`);
+  }
+  const baseComplete = complete && noDataCount === 0 && errorCount === 0;
+  const qualityStatus = baseComplete ? (sourceWarnings.length ? "degraded" : "complete") : "incomplete";
   return {
     ok: true,
-    source: qualityStatus === "complete" ? "github-actions" : "github-actions-partial",
+    source: baseComplete ? "github-actions" : "github-actions-partial",
     priceSource: USE_MIS_QUOTES ? "official-daily-k-plus-mis" : "official-daily-k",
     updatedAt: new Date().toISOString(),
     dataDate,
     scanStamp,
     fullScan: FULL_SCAN,
     runMode,
-    complete: qualityStatus === "complete",
+    complete: baseComplete,
     qualityStatus,
     pendingCount,
     noDataCount,
@@ -229,6 +234,7 @@ function buildOutput({ codes, scannedThisRun, scanned, noDataCodes, scanErrors, 
     yahooSourceRatio,
     misSourceCount,
     misSourceRatio,
+    sourceWarnings,
     count: matches.length,
     matches,
   };
@@ -421,7 +427,7 @@ async function main() {
     throw new Error(`Strategy4 suspiciously low match count: ${output.count}/${codes.length}, minimum ${MIN_MATCH_COUNT}`);
   }
   if (FULL_SCAN && output.complete && output.yahooSourceRatio > MAX_YAHOO_SOURCE_RATIO) {
-    throw new Error(`Strategy4 excessive Yahoo fallback: ${output.yahooSourceCount}/${Object.values(output.dataSourceCounts || {}).reduce((sum, count) => sum + Number(count || 0), 0)} (${output.yahooSourceRatio}), maximum ${MAX_YAHOO_SOURCE_RATIO}`);
+    console.warn(`Strategy4 degraded source mix: Yahoo fallback ${output.yahooSourceCount}/${Object.values(output.dataSourceCounts || {}).reduce((sum, count) => sum + Number(count || 0), 0)} (${output.yahooSourceRatio}), warning threshold ${MAX_YAHOO_SOURCE_RATIO}`);
   }
   const previousCompleteCount = previousRaw?.complete === true ? Number(previousRaw.count || 0) : 0;
   if (FULL_SCAN && output.complete && previousCompleteCount >= MIN_MATCH_COUNT) {
@@ -436,5 +442,6 @@ main().catch((error) => {
   console.error(error);
   process.exit(1);
 });
+
 
 

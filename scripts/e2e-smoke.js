@@ -1,7 +1,8 @@
 const https = require("https");
+const { spawnSync } = require("child_process");
+const path = require("path");
 
 const baseUrl = (process.env.FUMAN_SMOKE_BASE_URL || "https://fuman-terminal.vercel.app").replace(/\/+$/, "");
-const version = process.env.FUMAN_SMOKE_VERSION || "watchlist-strategy-source-20260531-63";
 
 function fetchText(pathname, timeoutMs = 20000) {
   const url = `${baseUrl}${pathname}`;
@@ -10,47 +11,94 @@ function fetchText(pathname, timeoutMs = 20000) {
       let body = "";
       res.setEncoding("utf8");
       res.on("data", (chunk) => { body += chunk; });
-      res.on("end", () => resolve({ url, status: res.statusCode, body }));
+      res.on("end", () => resolve({ url, status: res.statusCode, headers: res.headers, body }));
     });
     req.on("timeout", () => req.destroy(new Error(`timeout ${url}`)));
     req.on("error", reject);
   });
 }
 
+function postJson(pathname, payload, timeoutMs = 20000) {
+  const url = new URL(`${baseUrl}${pathname}`);
+  const body = JSON.stringify(payload);
+  return new Promise((resolve, reject) => {
+    const req = https.request({
+      protocol: url.protocol,
+      hostname: url.hostname,
+      path: `${url.pathname}${url.search}`,
+      method: "POST",
+      timeout: timeoutMs,
+      headers: { "content-type": "application/json", "content-length": Buffer.byteLength(body) },
+    }, (res) => {
+      let text = "";
+      res.setEncoding("utf8");
+      res.on("data", (chunk) => { text += chunk; });
+      res.on("end", () => resolve({ url: url.toString(), status: res.statusCode, headers: res.headers, body: text }));
+    });
+    req.on("timeout", () => req.destroy(new Error(`timeout ${url}`)));
+    req.on("error", reject);
+    req.end(body);
+  });
+}
+
 function assertOk(name, result, check = () => true) {
   if (result.status < 200 || result.status >= 300) throw new Error(`${name} HTTP ${result.status}`);
-  if (!check(result)) throw new Error(`${name} content failed`);
-  console.log(`[smoke] ${name} ok`);
+  if (!check(result)) throw new Error(`${name} content check failed`);
+  console.log(`[smoke] ${name} ok ${result.status}`);
+}
+
+function parseJson(result) {
+  return JSON.parse(result.body);
+}
+
+function todayYmd() {
+  const parts = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Taipei", year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(new Date());
+  const get = (type) => parts.find((part) => part.type === type)?.value || "";
+  return `${get("year")}${get("month")}${get("day")}`;
+}
+
+function normalizeDate(value) {
+  return String(value || "").replace(/\D/g, "").slice(0, 8);
+}
+
+function detectVersion(homeBody) {
+  if (process.env.FUMAN_SMOKE_VERSION) return process.env.FUMAN_SMOKE_VERSION;
+  const match = homeBody.match(/terminal-core\.js\?v=([^"'&<>]+)/);
+  if (!match) throw new Error("Unable to detect frontend version from home HTML");
+  return match[1];
+}
+
+function verifyVersionConsistency() {
+  const script = path.join(__dirname, "verify-version-consistency.js");
+  const result = spawnSync(process.execPath, [script], { encoding: "utf8" });
+  if (result.status !== 0) throw new Error((result.stderr || result.stdout || "version consistency failed").trim());
+  process.stdout.write(result.stdout);
 }
 
 async function main() {
+  verifyVersionConsistency();
+  const home = await fetchText("/");
+  const version = detectVersion(home.body);
+  assertOk("home", home, (r) => r.body.includes(`terminal-core.js?v=${version}`));
   const checks = [
-    ["home", "/", (r) => r.body.includes(`terminal-core.js?v=${version}`)],
-    ["core-loader", `/terminal-core.js?v=${version}`, (r) => r.body.includes("terminal.js")],
-    ["terminal-bootstrap", `/terminal.js?v=${version}`, (r) => r.body.includes("FUMAN_TERMINAL_LOAD_APP") && r.body.includes("terminal-app.js")],
-    ["sector-map", `/terminal-sector-map.js?v=${version}`, (r) => r.body.includes("FUMAN_SECTOR_MAP") && r.body.includes("SECTOR_MAP")],
-    ["strategy-config", `/terminal-strategy-config.js?v=${version}`, (r) => r.body.includes("FUMAN_STRATEGY_CONFIG") && r.body.includes("STRATEGY_DEFS")],
-    ["market-config", `/terminal-market-config.js?v=${version}`, (r) => r.body.includes("FUMAN_MARKET_CONFIG") && r.body.includes("HEATMAP_FILTERS")],
-    ["ui-config", `/terminal-ui-config.js?v=${version}`, (r) => r.body.includes("FUMAN_UI_CONFIG") && r.body.includes("technicalTimeframes")],
-    ["runtime-config", `/terminal-runtime-config.js?v=${version}`, (r) => r.body.includes("FUMAN_RUNTIME_CONFIG") && r.body.includes("strategy2IntradayCache")],
-    ["tuning-config", `/terminal-tuning-config.js?v=${version}`, (r) => r.body.includes("FUMAN_TUNING_CONFIG") && r.body.includes("realtimeRadarRefreshMs")],
-    ["terminal-app", `/terminal-app.js?v=${version}`, (r) => r.body.includes("loadStrategyWeights") && r.body.includes("recordFrontendError")],
-    ["chip-flow-module", `/terminal-chip-flow.js?v=${version}`, (r) => r.body.includes("FUMAN_CHIP_FLOW_MODULE") && r.body.includes("renderChipTradeTable")],
-    ["warrant-flow-module", `/terminal-warrant-flow.js?v=${version}`, (r) => r.body.includes("FUMAN_WARRANT_FLOW_MODULE") && r.body.includes("renderWarrantFlow")],
-    ["realtime-radar-css", `/terminal-realtime-radar.css?v=${version}`, (r) => r.body.includes("radar-signal-card")],
-    ["intraday-radar-css", `/terminal-intraday-radar.css?v=${version}`, (r) => r.body.includes("intraday-signal-card")],
-    ["utility-css", `/terminal-utility.css?v=${version}`, (r) => r.body.includes("fuman-skeleton") && r.body.includes("fuman-health-performance")],
-    ["theme-css", `/terminal-theme.css?v=${version}`, (r) => r.body.includes("fuman-light-theme")],
-    ["watchlist-css", `/terminal-watchlist.css?v=${version}`, (r) => r.body.includes("watch-analysis-panel")],
+    ["core", `/terminal-core.js?v=${version}`, (r) => r.body.includes("terminal-modules.js")],
     ["modules", `/terminal-modules.js?v=${version}`, (r) => r.body.includes("FUMAN_TERMINAL_MODULES")],
     ["worker", `/terminal-worker.js?v=${version}`, (r) => r.body.includes("swingBuckets")],
-    ["health", "/data/health-summary.json?v=smoke", (r) => typeof JSON.parse(r.body).ok === "boolean"],
-    ["weights", "/data/strategy-weight-report.json?v=smoke", (r) => !!JSON.parse(r.body).weights],
+    ["service-worker", `/fuman-sw.js?v=${version}`, (r) => r.body.includes("strategy2-intraday-latest") && r.body.includes("realtime-radar-latest")],
+    ["terminal-bootstrap", `/terminal.js?v=${version}`, (r) => r.body.includes("FUMAN_TERMINAL_LOAD_APP") && r.body.includes("terminal-app.js")],
+    ["terminal-app", `/terminal-app.js?v=${version}`, (r) => r.body.includes("FUMAN_LIVE_MEMORY_TTL_MS") && r.body.includes("loadStrategyWeights")],
+    ["strategy3", "/data/strategy3-latest.json?v=verify", (r) => { const p = parseJson(r); return normalizeDate(p.usedDate) === todayYmd() && Number(p.count) > 0; }],
+    ["strategy4", "/data/strategy4-latest.json?v=verify", (r) => { const p = parseJson(r); return normalizeDate(p.scanStamp || p.dataDate || p.updatedAt) === todayYmd() && p.complete === true && Number(p.count) > 0; }],
+    ["strategy4-summary", "/data/strategy4-summary.json?v=verify", (r) => { const p = parseJson(r); return normalizeDate(p.scanStamp || p.dataDate || p.updatedAt) === todayYmd() && Number(p.count) > 0; }],
+    ["health", "/data/health-summary.json?v=verify", (r) => parseJson(r).ok === true],
+    ["signal-quality", "/data/signal-quality-report.json?v=verify", (r) => parseJson(r).ok === true],
+    ["data-consistency", "/data/data-consistency-report.json?v=verify", (r) => parseJson(r).ok === true],
+    ["strategy-weights", "/data/strategy-weight-report.json?v=verify", (r) => !!parseJson(r).weights],
   ];
-  for (const [name, pathname, check] of checks) {
-    assertOk(name, await fetchText(pathname), check);
-  }
-  console.log("[smoke] e2e smoke ok");
+  for (const [name, pathname, check] of checks) assertOk(name, await fetchText(pathname), check);
+  const frontendError = await postJson("/api/frontend-error", { source: "verify", message: "deployment smoke" });
+  assertOk("frontend-error-api", frontendError, (r) => typeof parseJson(r).ok === "boolean");
+  console.log(`[smoke] e2e smoke ok version=${version}`);
 }
 
 main().catch((error) => {

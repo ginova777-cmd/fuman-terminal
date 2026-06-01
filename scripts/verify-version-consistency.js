@@ -2,29 +2,41 @@ const fs = require("fs");
 const path = require("path");
 
 const ROOT = path.resolve(__dirname, "..");
-const VERSION = process.env.FUMAN_EXPECTED_VERSION || "watchlist-strategy-source-20260531-63";
-const files = [
-  "index.html",
-  "terminal-core.js",
-  "terminal-modules.js",
-  "terminal.js",
-  "terminal-app.js",
-  "fuman-sw.js",
-  "scripts/verify-deployment.js",
-  "scripts/e2e-smoke.js",
-];
 
-const oldVersionPattern = /speed-modules-20260530-(?!29\b)\d+/g;
-const issues = [];
-for (const file of files) {
-  const full = path.join(ROOT, file);
-  const text = fs.readFileSync(full, "utf8");
-  const old = [...new Set(text.match(oldVersionPattern) || [])];
-  if (old.length) issues.push(file + ": stale versions " + old.join(", "));
-  if (!text.includes(VERSION)) issues.push(file + ": missing " + VERSION);
+function read(file) {
+  return fs.readFileSync(path.join(ROOT, file), "utf8");
 }
 
-const sw = fs.readFileSync(path.join(ROOT, "fuman-sw.js"), "utf8");
+function detectVersion() {
+  if (process.env.FUMAN_EXPECTED_VERSION) return process.env.FUMAN_EXPECTED_VERSION;
+  const core = read("terminal-core.js");
+  const coreMatch = core.match(/const\s+version\s*=\s*["']([^"']+)["']/);
+  if (coreMatch) return coreMatch[1];
+  const index = read("index.html");
+  const indexMatch = index.match(/terminal-core\.js\?v=([^"'&<>]+)/);
+  if (indexMatch) return indexMatch[1];
+  throw new Error("Unable to detect frontend version from terminal-core.js or index.html");
+}
+
+const VERSION = detectVersion();
+const issues = [];
+function requireIncludes(file, needle) {
+  if (!read(file).includes(needle)) issues.push(`${file}: missing ${needle}`);
+}
+
+requireIncludes("index.html", `styles.css?v=${VERSION}`);
+requireIncludes("index.html", `terminal-core.js?v=${VERSION}`);
+requireIncludes("terminal-core.js", `const version = "${VERSION}"`);
+requireIncludes("fuman-sw.js", `?v=${VERSION}`);
+requireIncludes("scripts/verify-deployment.js", "detectVersion");
+requireIncludes("scripts/e2e-smoke.js", "detectVersion");
+
+const staleLiteral = "watchlist-strategy-source-20260531-63";
+for (const file of ["index.html", "terminal-core.js", "terminal-modules.js", "terminal.js", "terminal-app.js", "fuman-sw.js", "scripts/verify-deployment.js", "scripts/e2e-smoke.js"]) {
+  if (read(file).includes(staleLiteral)) issues.push(`${file}: stale literal ${staleLiteral}`);
+}
+
+const sw = read("fuman-sw.js");
 if (sw.includes('"/",') || sw.includes('"/index.html",')) {
   issues.push("fuman-sw.js: must not precache / or /index.html");
 }
@@ -32,13 +44,13 @@ if (!sw.includes('request.mode === "navigate"') || !sw.includes('fetch(request, 
   issues.push("fuman-sw.js: navigate requests must be network/no-store first");
 }
 
-const vercel = JSON.parse(fs.readFileSync(path.join(ROOT, "vercel.json"), "utf8"));
+const vercel = JSON.parse(read("vercel.json"));
 const headerFor = (source) => (vercel.headers || []).find((item) => item.source === source);
 for (const source of ["/", "/index.html", "/fuman-sw.js"]) {
   const item = headerFor(source);
   const cache = item && item.headers && item.headers.find((header) => String(header.key).toLowerCase() === "cache-control");
   const value = cache ? cache.value : "";
-  if (!/no-store/i.test(value)) issues.push("vercel.json: " + source + " must be no-store");
+  if (!/no-store/i.test(value)) issues.push(`vercel.json: ${source} must be no-store`);
 }
 
 if (issues.length) {
