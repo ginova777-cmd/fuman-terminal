@@ -1,14 +1,12 @@
 {
   "ok": true,
   "source": "github-actions-backup",
-  "updatedAt": "2026-06-01T06:21:12.988Z",
+  "updatedAt": "2026-06-01T06:31:35.212Z",
   "usedDate": "20260601",
   "total": 1082,
-  "count": 11,
+  "count": 8,
   "sourceWarnings": [
-    "tpex volume fetch failed: 115/05/29 :: terminated",
-    "tpex volume fetch failed: 115/05/26 :: terminated",
-    "tpex volume fetch failed: 115/05/25 :: terminated"
+    "tpex volume fetch failed: 115/05/29 :: terminated"
   ],
   "qualityStatus": "degraded",
   "sourceHealth": {
@@ -16,7 +14,7 @@
     "issuedSharesCount": 1976,
     "volumeAverageCount": 2212,
     "stockUniverseCount": 1082,
-    "warningCount": 3,
+    "warningCount": 1,
     "warningLimit": 3,
     "minIssuedSharesCount": 1000,
     "minVolumeAverageCount": 1000,
@@ -43,15 +41,15 @@
       "volumeRank": 95,
       "volumeLots": 38159,
       "turnoverRate": 5.7,
-      "volumeRatio": 2.12,
-      "projectedRatio": 2.12,
+      "volumeRatio": 2.17,
+      "projectedRatio": 2.17,
       "overnightScore": 97,
       "overnightState": "通過",
       "score": 97,
       "matches": [
         {
           "id": "overnight_chip",
-          "reason": "符合固定條件：漲幅 4.59%、成交量 38,159 張、周轉率 5.70%、量比 2.12。"
+          "reason": "符合固定條件：漲幅 4.59%、成交量 38,159 張、周轉率 5.70%、量比 2.17。"
         }
       ]
     },
@@ -75,111 +73,15 @@
       "volumeRank": 86,
       "volumeLots": 11758,
       "turnoverRate": 13.84,
-      "volumeRatio": 1.56,
-      "projectedRatio": 1.56,
+      "volumeRatio": 1.5,
+      "projectedRatio": 1.5,
       "overnightScore": 97,
       "overnightState": "通過",
       "score": 97,
       "matches": [
         {
           "id": "overnight_chip",
-          "reason": "符合固定條件：漲幅 4.71%、成交量 11,758 張、周轉率 13.84%、量比 1.56。"
-        }
-      ]
-    },
-    {
-      "code": "3715",
-      "name": "定穎投控",
-      "close": 182,
-      "change": 8.5,
-      "percent": 4.899135446685879,
-      "value": 2677766000,
-      "tradeVolume": 14713000,
-      "open": 176,
-      "high": 185.5,
-      "low": 173.5,
-      "prevClose": 173.5,
-      "volume": 14713,
-      "market": "TWSE",
-      "quoteDate": "20260601",
-      "quoteTime": "13:30:00",
-      "valueRank": 92,
-      "volumeRank": 89,
-      "volumeLots": 14713,
-      "turnoverRate": 5.19,
-      "volumeRatio": 1.11,
-      "projectedRatio": 1.11,
-      "overnightScore": 95,
-      "overnightState": "通過",
-      "score": 95,
-      "matches": [
-        {
-          "id": "overnight_chip",
-          "reason": "符合固定條件：漲幅 4.90%、成交量 14,713 張、周轉率 5.19%、量比 1.11。"
-        }
-      ]
-    },
-    {
-      "code": "2399",
-      "name": "映泰",
-      "close": 50.2,
-      "change": 2.3000000000000043,
-      "percent": 4.801670146137796,
-      "value": 668413000,
-      "tradeVolume": 13315000,
-      "open": 48.7,
-      "high": 52.4,
-      "low": 48.5,
-      "prevClose": 47.9,
-      "volume": 13315,
-      "market": "TWSE",
-      "quoteDate": "20260601",
-      "quoteTime": "13:30:00",
-      "valueRank": 79,
-      "volumeRank": 88,
-      "volumeLots": 13315,
-      "turnoverRate": 7.48,
-      "volumeRatio": 1.05,
-      "projectedRatio": 1.05,
-      "overnightScore": 93,
-      "overnightState": "通過",
-      "score": 93,
-      "matches": [
-        {
-          "id": "overnight_chip",
-          "reason": "符合固定條件：漲幅 4.80%、成交量 13,315 張、周轉率 7.48%、量比 1.05。"
-        }
-      ]
-    },
-    {
-      "code": "2406",
-      "name": "國碩",
-      "close": 35.9,
-      "change": 1.3500000000000014,
-      "percent": 3.907380607814766,
-      "value": 813888900,
-      "tradeVolume": 22671000,
-      "open": 34.55,
-      "high": 36.65,
-      "low": 34.2,
-      "prevClose": 34.55,
-      "volume": 22671,
-      "market": "TWSE",
-      "quoteDate": "20260601",
-      "quoteTime": "13:30:00",
-      "valueRank": 82,
-      "volumeRank": 93,
-      "volumeLots": 22671,
-      "turnoverRate": 6.46,
-      "volumeRatio": 1.75,
-      "projectedRatio": 1.75,
-      "overnightScore": 84,
-      "overnightState": "通過",
-      "score": 84,
-      "matches": [
-        {
-          "id": "overnight_chip",
-          "reason": "符合固定條件：漲幅 3.91%、成交量 22,671 張、周轉率 6.46%、量比 1.75。"
+          "reason": "符合固定條件：漲幅 4.71%、成交量 11,758 張、周轉率 13.84%、量比 1.50。"
         }
       ]
     },
@@ -203,79 +105,47 @@
       "volumeRank": 84,
       "volumeLots": 8992,
       "turnoverRate": 7.06,
-      "volumeRatio": 1.82,
-      "projectedRatio": 1.82,
+      "volumeRatio": 1.94,
+      "projectedRatio": 1.94,
       "overnightScore": 84,
       "overnightState": "通過",
       "score": 84,
       "matches": [
         {
           "id": "overnight_chip",
-          "reason": "符合固定條件：漲幅 3.91%、成交量 8,992 張、周轉率 7.06%、量比 1.82。"
+          "reason": "符合固定條件：漲幅 3.91%、成交量 8,992 張、周轉率 7.06%、量比 1.94。"
         }
       ]
     },
     {
-      "code": "1802",
-      "name": "台玻",
-      "close": 74.8,
-      "change": 2.8999999999999915,
-      "percent": 4.03337969401946,
-      "value": 13419269600,
-      "tradeVolume": 179402000,
-      "open": 72,
-      "high": 78.1,
-      "low": 71,
-      "prevClose": 71.9,
-      "volume": 179402,
+      "code": "2406",
+      "name": "國碩",
+      "close": 35.9,
+      "change": 1.3500000000000014,
+      "percent": 3.907380607814766,
+      "value": 813888900,
+      "tradeVolume": 22671000,
+      "open": 34.55,
+      "high": 36.65,
+      "low": 34.2,
+      "prevClose": 34.55,
+      "volume": 22671,
       "market": "TWSE",
       "quoteDate": "20260601",
       "quoteTime": "13:30:00",
-      "valueRank": 98,
-      "volumeRank": 99,
-      "volumeLots": 179402,
-      "turnoverRate": 6.17,
-      "volumeRatio": 1.29,
-      "projectedRatio": 1.29,
-      "overnightScore": 82,
-      "overnightState": "通過",
-      "score": 82,
-      "matches": [
-        {
-          "id": "overnight_chip",
-          "reason": "符合固定條件：漲幅 4.03%、成交量 179,402 張、周轉率 6.17%、量比 1.29。"
-        }
-      ]
-    },
-    {
-      "code": "2409",
-      "name": "友達",
-      "close": 23.8,
-      "change": 0.8000000000000007,
-      "percent": 3.4782608695652204,
-      "value": 13379574600,
-      "tradeVolume": 562167000,
-      "open": 23.8,
-      "high": 24.8,
-      "low": 23.1,
-      "prevClose": 23,
-      "volume": 562167,
-      "market": "TWSE",
-      "quoteDate": "20260601",
-      "quoteTime": "13:30:00",
-      "valueRank": 98,
-      "volumeRank": 100,
-      "volumeLots": 562167,
-      "turnoverRate": 7.45,
+      "valueRank": 82,
+      "volumeRank": 93,
+      "volumeLots": 22671,
+      "turnoverRate": 6.46,
       "volumeRatio": 1.36,
       "projectedRatio": 1.36,
-      "overnightScore": 73,
+      "overnightScore": 81,
       "overnightState": "通過",
-      "score": 73,
+      "score": 81,
       "matches": [
         {
           "id": "overnight_chip",
-          "reason": "符合固定條件：漲幅 3.48%、成交量 562,167 張、周轉率 7.45%、量比 1.36。"
+          "reason": "符合固定條件：漲幅 3.91%、成交量 22,671 張、周轉率 6.46%、量比 1.36。"
         }
       ]
     },
@@ -299,15 +169,15 @@
       "volumeRank": 96,
       "volumeLots": 47737,
       "turnoverRate": 11.74,
-      "volumeRatio": 1.05,
-      "projectedRatio": 1.05,
-      "overnightScore": 73,
+      "volumeRatio": 1.15,
+      "projectedRatio": 1.15,
+      "overnightScore": 75,
       "overnightState": "通過",
-      "score": 73,
+      "score": 75,
       "matches": [
         {
           "id": "overnight_chip",
-          "reason": "符合固定條件：漲幅 3.71%、成交量 47,737 張、周轉率 11.74%、量比 1.05。"
+          "reason": "符合固定條件：漲幅 3.71%、成交量 47,737 張、周轉率 11.74%、量比 1.15。"
         }
       ]
     },
@@ -344,34 +214,66 @@
       ]
     },
     {
-      "code": "6443",
-      "name": "元晶",
-      "close": 42.1,
-      "change": 1.3999999999999986,
-      "percent": 3.4398034398034363,
-      "value": 1083106700,
-      "tradeVolume": 25727000,
-      "open": 40.85,
-      "high": 43.2,
-      "low": 40.2,
-      "prevClose": 40.7,
-      "volume": 25727,
+      "code": "2409",
+      "name": "友達",
+      "close": 23.8,
+      "change": 0.8000000000000007,
+      "percent": 3.4782608695652204,
+      "value": 13379574600,
+      "tradeVolume": 562167000,
+      "open": 23.8,
+      "high": 24.8,
+      "low": 23.1,
+      "prevClose": 23,
+      "volume": 562167,
       "market": "TWSE",
       "quoteDate": "20260601",
       "quoteTime": "13:30:00",
-      "valueRank": 85,
-      "volumeRank": 93,
-      "volumeLots": 25727,
-      "turnoverRate": 5.02,
-      "volumeRatio": 1.18,
-      "projectedRatio": 1.18,
+      "valueRank": 98,
+      "volumeRank": 100,
+      "volumeLots": 562167,
+      "turnoverRate": 7.45,
+      "volumeRatio": 1.13,
+      "projectedRatio": 1.13,
       "overnightScore": 70,
       "overnightState": "通過",
       "score": 70,
       "matches": [
         {
           "id": "overnight_chip",
-          "reason": "符合固定條件：漲幅 3.44%、成交量 25,727 張、周轉率 5.02%、量比 1.18。"
+          "reason": "符合固定條件：漲幅 3.48%、成交量 562,167 張、周轉率 7.45%、量比 1.13。"
+        }
+      ]
+    },
+    {
+      "code": "6209",
+      "name": "今國光",
+      "close": 84.5,
+      "change": 2.799999999999997,
+      "percent": 3.427172582619335,
+      "value": 1390532000,
+      "tradeVolume": 16456000,
+      "open": 83.9,
+      "high": 86.4,
+      "low": 83.4,
+      "prevClose": 81.7,
+      "volume": 16456,
+      "market": "TWSE",
+      "quoteDate": "20260601",
+      "quoteTime": "13:30:00",
+      "valueRank": 86,
+      "volumeRank": 90,
+      "volumeLots": 16456,
+      "turnoverRate": 9.38,
+      "volumeRatio": 1.08,
+      "projectedRatio": 1.08,
+      "overnightScore": 69,
+      "overnightState": "通過",
+      "score": 69,
+      "matches": [
+        {
+          "id": "overnight_chip",
+          "reason": "符合固定條件：漲幅 3.43%、成交量 16,456 張、周轉率 9.38%、量比 1.08。"
         }
       ]
     }
