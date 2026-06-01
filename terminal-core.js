@@ -1,5 +1,5 @@
 (function () {
-  const version = "brand-yellow-lock-final-20260601-03";
+  const version = "brand-yellow-inline-20260601-04";
   window.FUMAN_TERMINAL_BOOT = {
     version,
     startedAt: Date.now(),

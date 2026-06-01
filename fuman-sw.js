@@ -1,22 +1,22 @@
-const CACHE_VERSION = "fuman-terminal-sw-20260601-12";
+const CACHE_VERSION = "fuman-terminal-sw-20260601-13";
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 const DATA_CACHE = `${CACHE_VERSION}-data`;
 
 const STATIC_ASSETS = [
-  "/styles.css?v=brand-yellow-lock-final-20260601-03",
-  "/terminal-core.js?v=brand-yellow-lock-final-20260601-03",
-  "/terminal-modules.js?v=brand-yellow-lock-final-20260601-03",
-  "/terminal-sector-map.js?v=brand-yellow-lock-final-20260601-03",
-  "/terminal-strategy-config.js?v=brand-yellow-lock-final-20260601-03",
-  "/terminal-market-config.js?v=brand-yellow-lock-final-20260601-03",
-  "/terminal-ui-config.js?v=brand-yellow-lock-final-20260601-03",
-  "/terminal-runtime-config.js?v=brand-yellow-lock-final-20260601-03",
-  "/terminal-tuning-config.js?v=brand-yellow-lock-final-20260601-03",
-  "/terminal-worker.js?v=brand-yellow-lock-final-20260601-03",
-  "/terminal.js?v=brand-yellow-lock-final-20260601-03",
-  "/terminal-realtime-radar.css?v=brand-yellow-lock-final-20260601-03",
-  "/terminal-intraday-radar.css?v=brand-yellow-lock-final-20260601-03",
-  "/terminal-utility.css?v=brand-yellow-lock-final-20260601-03",
+  "/styles.css?v=brand-yellow-inline-20260601-04",
+  "/terminal-core.js?v=brand-yellow-inline-20260601-04",
+  "/terminal-modules.js?v=brand-yellow-inline-20260601-04",
+  "/terminal-sector-map.js?v=brand-yellow-inline-20260601-04",
+  "/terminal-strategy-config.js?v=brand-yellow-inline-20260601-04",
+  "/terminal-market-config.js?v=brand-yellow-inline-20260601-04",
+  "/terminal-ui-config.js?v=brand-yellow-inline-20260601-04",
+  "/terminal-runtime-config.js?v=brand-yellow-inline-20260601-04",
+  "/terminal-tuning-config.js?v=brand-yellow-inline-20260601-04",
+  "/terminal-worker.js?v=brand-yellow-inline-20260601-04",
+  "/terminal.js?v=brand-yellow-inline-20260601-04",
+  "/terminal-realtime-radar.css?v=brand-yellow-inline-20260601-04",
+  "/terminal-intraday-radar.css?v=brand-yellow-inline-20260601-04",
+  "/terminal-utility.css?v=brand-yellow-inline-20260601-04",
   "/assets/logo.webp",
   "/assets/login-bg-fuman-lite.webp",
   "/favicon.ico",
