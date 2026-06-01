@@ -105,14 +105,6 @@ async function fetchQuotes(codes) {
     } catch (error) {
       errors.push({ range: label, size: chunk.length, error: error.message });
     }
-    for (const code of chunk) {
-      try {
-        const data = await fetchCodeChunk([code]);
-        for (const item of data?.msgArray || []) addQuote(byCode, item);
-      } catch (error) {
-        errors.push({ code, size: 1, error: error.message });
-      }
-    }
   }
   return { byCode, errors };
 }
