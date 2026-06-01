@@ -28,7 +28,9 @@ const MIN_REALTIME_COVERAGE = Number(process.env.STRATEGY2_MIN_REALTIME_COVERAGE
 const REALTIME_BATCH_SIZE = Number(process.env.STRATEGY2_REALTIME_BATCH_SIZE || 8);
 const REALTIME_RETRY_BATCH_SIZE = Number(process.env.STRATEGY2_REALTIME_RETRY_BATCH_SIZE || 4);
 const REALTIME_BATCH_CONCURRENCY = Math.max(1, Number(process.env.STRATEGY2_REALTIME_BATCH_CONCURRENCY || 4));
-const REALTIME_FALLBACK_CANDIDATE_LIMIT = Math.max(0, Number(process.env.STRATEGY2_REALTIME_FALLBACK_CANDIDATE_LIMIT || 60));
+const REALTIME_FALLBACK_CANDIDATE_LIMIT = Math.max(0, Number(process.env.STRATEGY2_REALTIME_FALLBACK_CANDIDATE_LIMIT || 180));
+const REALTIME_YAHOO_FALLBACK_CONCURRENCY = Math.max(1, Number(process.env.STRATEGY2_REALTIME_YAHOO_FALLBACK_CONCURRENCY || 6));
+const ENABLE_FINMIND_REALTIME = process.env.STRATEGY2_ENABLE_FINMIND_REALTIME === "1";
 const MA35_PROVIDER_FAILURE_LIMIT = Math.max(1, Number(process.env.STRATEGY2_MA35_PROVIDER_FAILURE_LIMIT || 8));
 
 function readSecretText(file) {
@@ -43,6 +45,10 @@ const TWELVE_DATA_API_KEY = process.env.TWELVE_DATA_API_KEY
   || process.env.TWELVEDATA_API_KEY
   || readSecretText(path.join(ROOT, "secrets", "twelve-data-api-key.txt"))
   || readSecretText(path.join(process.env.FUMAN_RUNTIME_DIR || "C:/fuman-runtime", "secrets", "twelve-data-api-key.txt"));
+const FINMIND_API_TOKEN = process.env.FINMIND_API_TOKEN
+  || process.env.FINMIND_TOKEN
+  || readSecretText(path.join(ROOT, "secrets", "finmind-api-token.txt"))
+  || readSecretText(path.join(process.env.FUMAN_RUNTIME_DIR || "C:/fuman-runtime", "secrets", "finmind-api-token.txt"));
 const SUPABASE_URL = process.env.SUPABASE_URL
   || readSecretText(path.join(ROOT, "secrets", "supabase-url.txt"))
   || readSecretText(path.join(process.env.FUMAN_RUNTIME_DIR || "C:/fuman-runtime", "secrets", "supabase-url.txt"));
@@ -66,6 +72,10 @@ function disableMa35Provider(provider, reason) {
     fugleMa35BlockedReason = reason;
     console.log(`sma35 1m fugle disabled for this scan: ${reason}`);
   }
+  if (provider === "twelve" && !twelveDataBlockedReason) {
+    twelveDataBlockedReason = reason;
+    console.log(`sma35 1m twelve disabled for this scan: ${reason}`);
+  }
 }
 
 function noteMa35ProviderFailure(provider, reason) {
@@ -77,6 +87,9 @@ function noteMa35ProviderFailure(provider, reason) {
     fugleMa35Failures += 1;
     if (/HTTP (?:401|403|429)/i.test(reason || "")) disableMa35Provider("fugle", reason);
     if (fugleMa35Failures >= MA35_PROVIDER_FAILURE_LIMIT) disableMa35Provider("fugle", `${reason || "failed"}-${fugleMa35Failures}`);
+  }
+  if (provider === "twelve") {
+    if (/HTTP (?:401|403|429)/i.test(reason || "")) disableMa35Provider("twelve", reason);
   }
 }
 
@@ -1099,7 +1112,8 @@ async function fetchRealtime(stocks) {
 
   async function fetchYahooFallback(codes, parentLabel) {
     const targetCodes = codes.filter((code) => fallbackCandidateCodes.has(String(code)) && !quotes.has(String(code)));
-    for (const code of targetCodes) {
+    let yahooCursor = 0;
+    async function fetchYahooCode(code) {
       for (const suffix of ["TW", "TWO"]) {
         try {
           const symbol = `${code}.${suffix}`;
@@ -1141,6 +1155,62 @@ async function fetchRealtime(stocks) {
         }
       }
     }
+    async function yahooWorker() {
+      while (yahooCursor < targetCodes.length) {
+        const code = targetCodes[yahooCursor++];
+        if (!quotes.has(String(code))) await fetchYahooCode(code);
+      }
+    }
+    await Promise.all(Array.from({ length: Math.min(REALTIME_YAHOO_FALLBACK_CONCURRENCY, targetCodes.length) }, () => yahooWorker()));
+  }
+
+  async function fetchFinMindFallback(codes, parentLabel) {
+    if (!ENABLE_FINMIND_REALTIME || !FINMIND_API_TOKEN) return;
+    for (let i = 0; i < codes.length; i += 20) {
+      const chunk = codes.slice(i, i + 20).filter((code) => !quotes.has(code));
+      if (!chunk.length) continue;
+      try {
+        const url = new URL("https://api.finmindtrade.com/api/v4/taiwan_stock_tick_snapshot");
+        chunk.forEach((code) => url.searchParams.append("data_id", code));
+        const response = await fetch(url.toString(), {
+          headers: {
+            "User-Agent": "FumanStrategy2Realtime/1.0",
+            Authorization: `Bearer ${FINMIND_API_TOKEN}`,
+          },
+          signal: AbortSignal.timeout ? AbortSignal.timeout(10000) : undefined,
+        });
+        if (!response.ok) throw new Error(`finmind quote HTTP ${response.status}`);
+        const payload = await response.json();
+        for (const item of payload?.data || []) {
+          const code = String(item.stock_id || "");
+          if (!/^\d{4}$/.test(code) || quotes.has(code)) continue;
+          const close = cleanNumber(item.close);
+          const change = cleanNumber(item.change_price);
+          const percent = cleanNumber(item.change_rate);
+          const prevClose = close && change ? close - change : close && percent ? close / (1 + percent / 100) : 0;
+          if (!close || !prevClose) continue;
+          quotes.set(code, {
+            code,
+            name: code,
+            close,
+            closeSource: "finmind",
+            change: close - prevClose,
+            percent: prevClose ? ((close - prevClose) / prevClose) * 100 : percent,
+            open: cleanNumber(item.open),
+            high: cleanNumber(item.high) || close,
+            low: cleanNumber(item.low) || close,
+            prevClose,
+            tradeVolume: cleanNumber(item.total_volume),
+            market: "",
+            time: item.date || "",
+            realtimeFallback: "finmind",
+          });
+          recoveredCodes.add(code);
+        }
+      } catch (error) {
+        console.log(`realtime finmind failed ${chunk[0]}-${chunk.at(-1)} from ${parentLabel}: ${error.message}`);
+      }
+    }
   }
 
   async function fetchSmallRetries(codes, parentLabel) {
@@ -1165,6 +1235,7 @@ async function fetchRealtime(stocks) {
 
   async function fetchSingleRetries(codes, parentLabel) {
     await fetchYahooFallback(codes, parentLabel);
+    await fetchFinMindFallback(codes, parentLabel);
     await fetchFugleFallback(codes, parentLabel);
     for (const code of codes) {
       if (!quotes.has(code) && /^\d{4}$/.test(String(code)) && !String(code).startsWith("00")) missedCodes.add(code);
@@ -1218,7 +1289,9 @@ async function fetchRealtime(stocks) {
     batchConcurrency: REALTIME_BATCH_CONCURRENCY,
     fallbackCandidateLimit: REALTIME_FALLBACK_CANDIDATE_LIMIT,
     fallbackCandidateCount: fallbackCandidateCodes.size,
+    yahooFallbackConcurrency: REALTIME_YAHOO_FALLBACK_CONCURRENCY,
     fugleRateLimited,
+    finmindRealtimeEnabled: ENABLE_FINMIND_REALTIME,
     recoveredCodes: [...recoveredCodes],
     missedCodes: [...missedCodes],
     missedCount: missedCodes.size,
