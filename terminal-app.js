@@ -1877,7 +1877,7 @@ function normalizeRealtimeRadarPayloadCandidate(candidate) {
   const payload = candidate?.payload;
   const payloadDate = normalizeMarketAiDateKey(payload?.date || payload?.updatedAt);
   const rows = normalizeArray(payload?.rows);
-  if (payload?.status !== "ok" || (payloadDate !== marketAiTodayKey() && shouldRunLivePolling()) || !rows.length) return null;
+  if ((payloadDate !== marketAiTodayKey() && shouldRunLivePolling()) || !rows.length) return null;
   return {
     ...candidate,
     payloadDate,
@@ -7477,7 +7477,7 @@ function getPanelFreshnessMeta(viewName) {
   if (viewName === "realtime-radar") {
     const radarLive = shouldRunLivePolling();
     const radarDataDate = radarLive
-      ? normalizeMarketAiDateKey(strategy2IntradayCacheDate) || marketAiDataDateKey(latestStocks) || dataDate
+      ? marketAiDataDateKey(realtimeRadarLastRows) || realtimeRadarClosedDataDateKey() || dataDate
       : realtimeRadarClosedDataDateKey() || dataDate;
     return { mode: radarLive ? "即時雷達｜盤中巡邏" : "即時雷達｜最新可用收盤資料", dataDate: radarDataDate, today, isToday: radarDataDate === today };
   }
