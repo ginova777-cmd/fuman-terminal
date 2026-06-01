@@ -107,6 +107,25 @@ function formatMinutes(minutes) {
   return `${String(Math.floor(minutes / 60)).padStart(2, "0")}:${String(minutes % 60).padStart(2, "0")}`;
 }
 
+function taipeiDateOnly(date = new Date()) {
+  const parts = taipeiParts(date);
+  return new Date(`${parts.dateKey}T00:00:00+08:00`);
+}
+
+function tradingDayGap(fromDate, toDate = new Date()) {
+  let cursor = taipeiDateOnly(fromDate);
+  const end = taipeiDateOnly(toDate);
+  if (!(cursor instanceof Date) || Number.isNaN(cursor.getTime())) return Infinity;
+  if (cursor > end) return 0;
+  let gap = 0;
+  while (cursor < end) {
+    cursor = new Date(cursor.getTime() + 86400000);
+    const weekday = taipeiParts(cursor).weekday;
+    if (weekday !== "Sat" && weekday !== "Sun") gap++;
+  }
+  return gap;
+}
+
 function cacheIssues() {
   const now = new Date();
   const today = taipeiParts(now);
@@ -135,9 +154,9 @@ function cacheIssues() {
       }
     }
 
-    const ageHours = (now.getTime() - updatedAt) / 3600000;
-    if (ageHours > 48) {
-      issues.push({ ...rule, message: `${rule.label}：快取超過 48 小時未更新，updatedAt=${payload.updatedAt}` });
+    const tradingGap = tradingDayGap(new Date(updatedAt), now);
+    if (tradingGap > 1) {
+      issues.push({ ...rule, message: `${rule.label}：快取超過 1 個交易日未更新，updatedAt=${payload.updatedAt}` });
       continue;
     }
 

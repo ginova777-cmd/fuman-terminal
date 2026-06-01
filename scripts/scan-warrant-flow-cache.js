@@ -33,11 +33,15 @@ function cleanNumber(value) {
   return Number(String(value ?? "").replace(/[,+%]/g, "").trim()) || 0;
 }
 
-function rocDateToDate(value) {
-  const text = String(value || "");
-  const match = text.match(/^(\d{3})(\d{2})(\d{2})$/);
-  if (!match) return null;
-  return new Date(`${1911 + Number(match[1])}-${match[2]}-${match[3]}T00:00:00+08:00`);
+function tradeDateToDate(value) {
+  const text = String(value || "").trim();
+  let match = text.match(/^(\d{3})(\d{2})(\d{2})$/);
+  if (match) return new Date(`${1911 + Number(match[1])}-${match[2]}-${match[3]}T00:00:00+08:00`);
+  match = text.match(/^(\d{4})(\d{2})(\d{2})$/);
+  if (match) return new Date(`${match[1]}-${match[2]}-${match[3]}T00:00:00+08:00`);
+  match = text.match(/^(\d{4})[-/](\d{2})[-/](\d{2})/);
+  if (match) return new Date(`${match[1]}-${match[2]}-${match[3]}T00:00:00+08:00`);
+  return null;
 }
 
 function taipeiDateOnly() {
@@ -50,8 +54,8 @@ function taipeiDateOnly() {
   return new Date(`${text}T00:00:00+08:00`);
 }
 
-function ageInDaysFromRoc(value) {
-  const date = rocDateToDate(value);
+function ageInDaysFromTradeDate(value) {
+  const date = tradeDateToDate(value);
   if (!date) return Infinity;
   return Math.floor((taipeiDateOnly() - date) / 86400000);
 }
@@ -95,7 +99,7 @@ async function main() {
   }
   const tradeDates = [...new Set(matches.map((item) => String(item.tradeDate || "")).filter(Boolean))];
   const newestTradeDate = tradeDates.sort().at(-1) || "";
-  const dataAge = ageInDaysFromRoc(newestTradeDate);
+  const dataAge = ageInDaysFromTradeDate(newestTradeDate);
   if (dataAge > 3) {
     console.error(`warrant-flow cache is stale: newest tradeDate ${newestTradeDate || "--"}, age ${dataAge} days; keeping existing cache files unchanged`);
     process.exit(2);
