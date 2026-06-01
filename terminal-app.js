@@ -73,7 +73,7 @@ function getFumanWorker() {
   if (!("Worker" in window)) return null;
   if (fumanWorker) return fumanWorker;
   try {
-    fumanWorker = new Worker("terminal-worker.js?v=realtime-radar-core-20260601-04");
+    fumanWorker = new Worker("terminal-worker.js?v=strategy4-remove-zone-card-20260601-05");
     fumanWorker.addEventListener("message", (event) => {
       const { id, ok, rows, result, error } = event.data || {};
       const pending = fumanWorkerPending.get(id);
@@ -301,7 +301,7 @@ function loadFumanStyle(href, id) {
   const link = document.createElement("link");
   link.id = id;
   link.rel = "stylesheet";
-  link.href = href.includes("?") ? href : `${href}?v=${window.FUMAN_TERMINAL_BOOT?.version || "realtime-radar-core-20260601-04"}`;
+  link.href = href.includes("?") ? href : `${href}?v=${window.FUMAN_TERMINAL_BOOT?.version || "strategy4-remove-zone-card-20260601-05"}`;
   document.head.appendChild(link);
 }
 
@@ -327,7 +327,7 @@ function makeFumanModuleScope(bindings) {
 function loadFumanFeatureModule(name, src, globalName) {
   if (window[globalName]) return Promise.resolve(window[globalName]);
   if (fumanFeatureModulePromises[name]) return fumanFeatureModulePromises[name];
-  const version = window.FUMAN_TERMINAL_BOOT?.version || "realtime-radar-core-20260601-04";
+  const version = window.FUMAN_TERMINAL_BOOT?.version || "strategy4-remove-zone-card-20260601-05";
   fumanFeatureModulePromises[name] = new Promise((resolve, reject) => {
     const attr = "data-fuman-feature-" + name;
     const existing = document.querySelector("script[" + attr + "]");
@@ -2607,6 +2607,8 @@ let marketAiStockLoading = false;
 let marketAiHotFilter = "all";
 let marketAiInstitutionLoading = false;
 let marketAiRealtimeScanRequestedAt = 0;
+let marketAiConfluenceLoading = false;
+let marketAiConfluenceLoadedAt = 0;
 let realtimeRadarLoading = false;
 let realtimeRadarDataPromise = null;
 let realtimeRadarSide = "auto";
@@ -5870,7 +5872,6 @@ function renderSwingRadar(universe) {
     `;
   }).join("");
   const zoneCards = `
-    <div class="swing-zone-card zone-all ${swingZoneFilter === "all" ? "active" : ""}" data-swing-zone-filter="all"><span>總命中</span><strong>${allRows.length}</strong><small>A/B/C全部</small></div>
     <div class="swing-zone-card zone-a ${swingZoneFilter === "A" ? "active" : ""}" data-swing-zone-filter="A"><span>A區可進場</span><strong>${zoneRows.A.length}</strong><small>正式波段買點</small></div>
     <div class="swing-zone-card zone-b ${swingZoneFilter === "B" ? "active" : ""}" data-swing-zone-filter="B"><span>B區觀察</span><strong>${zoneRows.B.length}</strong><small>趨勢轉強等待買點</small></div>
     <div class="swing-zone-card zone-c ${swingZoneFilter === "C" ? "active" : ""}" data-swing-zone-filter="C"><span>C區準備</span><strong>${zoneRows.C.length}</strong><small>低中位階整理</small></div>
@@ -7797,6 +7798,128 @@ function sortMarketAiPriorityStocks(stocks = []) {
   );
 }
 
+function marketAiRowCode(row) {
+  return String(row?.code || row?.Code || row?.stockCode || row?.symbol || "").trim();
+}
+
+async function fetchMarketAiConfluencePayload(urls = [], fields = []) {
+  for (const url of normalizeArray(urls).filter(Boolean)) {
+    try {
+      const payload = await fetchVersionedJson(url, 10000, "market-ai-confluence", false);
+      const rows = fields.flatMap((field) => normalizeArray(payload?.[field]));
+      if (rows.length) return payload;
+    } catch (error) {}
+  }
+  return null;
+}
+
+async function loadMarketAiConfluenceCaches(force = false) {
+  const now = Date.now();
+  if (marketAiConfluenceLoading) return;
+  if (!force && marketAiConfluenceLoadedAt && now - marketAiConfluenceLoadedAt < 5 * 60 * 1000) return;
+  marketAiConfluenceLoading = true;
+  try {
+    await Promise.allSettled([
+      (async () => {
+        if (!force && Object.keys(strategy4ScanMatches).length) return;
+        const payload = await fetchMarketAiConfluencePayload([endpoints.strategy4Slim, endpoints.strategy4Cache, endpoints.strategy4Backup], ["matches"]);
+        if (payload?.ok && Array.isArray(payload.matches)) mergeStrategy4Cache(payload);
+      })(),
+      (async () => {
+        if (!force && strategy5Data.length) return;
+        const payload = await fetchMarketAiConfluencePayload([endpoints.strategy5Cache, endpoints.strategy5Backup], ["matches"]);
+        if (!payload) return;
+        strategy5Data = normalizeArray(payload.matches);
+        const updatedAt = Date.parse(payload.updatedAt || "");
+        strategy5UpdatedAt = Number.isFinite(updatedAt) ? updatedAt : Date.now();
+        strategy5UsedDateKey = normalizeMarketAiDateKey(payload.usedDate || payload.date || payload.quoteDate) || strategy5UsedDateKey;
+      })(),
+      (async () => {
+        if (!force && strategy3Data.length) return;
+        const payload = await fetchMarketAiConfluencePayload([endpoints.strategy3Cache, endpoints.strategy3Backup], ["matches"]);
+        if (!payload) return;
+        strategy3Data = normalizeArray(payload.matches);
+        const updatedAt = Date.parse(payload.updatedAt || "");
+        strategy3UpdatedAt = Number.isFinite(updatedAt) ? updatedAt : Date.now();
+        strategy3UsedDateKey = normalizeMarketAiDateKey(payload.usedDate || payload.date || payload.quoteDate) || marketAiDataDateKey(strategy3Data);
+      })(),
+      (async () => {
+        if (!force && Object.keys(openBuyScanMatches).length) return;
+        const payload = await fetchMarketAiConfluencePayload([endpoints.openBuyCache, endpoints.openBuyBackup], ["matches"]);
+        if (!payload) return;
+        openBuyScanMatches = Object.fromEntries(normalizeArray(payload.matches).map((row) => [marketAiRowCode(row), row]).filter(([code]) => code));
+        openBuyDataDateKey = normalizeMarketAiDateKey(payload.usedDate || payload.date || payload.quoteDate) || openBuyDataDateKey;
+      })(),
+      (async () => {
+        if (!force && realtimeRadarLastRows.length) return;
+        const payload = await fetchMarketAiConfluencePayload([endpoints.realtimeRadarCache], ["rows"]);
+        if (!payload) return;
+        realtimeRadarLastRows = normalizeArray(payload.rows);
+        realtimeRadarLastUpdatedAt = cleanNumber(payload.updatedAt) || Date.now();
+      })(),
+    ]);
+    marketAiConfluenceLoadedAt = Date.now();
+    marketAiLastSignature = "";
+    if (marketMode === "ai") renderMarketAiPanel();
+  } catch (error) {
+  } finally {
+    marketAiConfluenceLoading = false;
+  }
+}
+
+function buildMarketAiConfluenceStocks(data = {}) {
+  const baseByCode = new Map();
+  normalizeArray(data.hotStocks).forEach((stock) => baseByCode.set(String(stock.code || ""), stock));
+  normalizeArray(latestStocks).forEach((stock) => {
+    const code = String(stock.code || stock.Code || "");
+    if (code && !baseByCode.has(code)) baseByCode.set(code, classifyMarketAiStock(applyStrategyQuote(stock), data.sectors || []));
+  });
+  const byCode = new Map();
+  const ensure = (row) => {
+    const code = marketAiRowCode(row);
+    if (!code) return null;
+    const base = baseByCode.get(code) || {};
+    if (!byCode.has(code)) {
+      byCode.set(code, {
+        ...base,
+        code,
+        name: base.name || row.name || row.Name || "",
+        confluenceStrategies: [],
+        confluenceDetails: [],
+      });
+    }
+    const item = byCode.get(code);
+    if (!item.name) item.name = row.name || row.Name || "";
+    return item;
+  };
+  const add = (row, key, label) => {
+    const item = ensure(row);
+    if (!item || item.confluenceStrategies.some((strategy) => strategy.key === key)) return;
+    item.confluenceStrategies.push({ key, label });
+    item.confluenceDetails.push(...watchlistStrategyDetails(row, key).map((detail) => `${label}:${detail}`));
+  };
+  Object.values(strategy4ScanMatches).forEach((row) => add(row, "strategy4", "策略4"));
+  normalizeArray(strategy5Data).forEach((row) => add(row, "strategy5", "策略5"));
+  normalizeArray(strategy3Data).forEach((row) => add(row, "strategy3", "策略3"));
+  Object.values(openBuyScanMatches).forEach((row) => add(row, "openBuy", "策略1"));
+  normalizeArray(realtimeRadarLastRows).forEach((row) => add(row, "realtime", "即時雷達"));
+  return [...byCode.values()]
+    .filter((stock) => stock.confluenceStrategies.length >= 2 && stock.name)
+    .map((stock) => ({
+      ...stock,
+      confluenceCount: stock.confluenceStrategies.length,
+      confluenceLabels: stock.confluenceStrategies.map((strategy) => strategy.label),
+    }))
+    .sort((a, b) =>
+      cleanNumber(b.confluenceCount) - cleanNumber(a.confluenceCount) ||
+      Number(b.confluenceLabels.includes("策略4") && b.confluenceLabels.includes("策略5")) - Number(a.confluenceLabels.includes("策略4") && a.confluenceLabels.includes("策略5")) ||
+      Number(b.confluenceLabels.includes("策略5")) - Number(a.confluenceLabels.includes("策略5")) ||
+      Number(b.confluenceLabels.includes("策略4")) - Number(a.confluenceLabels.includes("策略4")) ||
+      cleanNumber(b.score) - cleanNumber(a.score) ||
+      cleanNumber(b.value) - cleanNumber(a.value)
+    );
+}
+
 function getMarketAiFilterMeta(groups) {
   return [
     { key: "momentum", label: "動能強", count: 10 },
@@ -8066,7 +8189,10 @@ function renderMarketAiPanel() {
     return;
   }
   if (!Object.keys(institutionData).length) deferUiWork(ensureMarketAiInstitutionData, 100);
-  const priorityStocks = sortMarketAiPriorityStocks(data.hotStocks.filter((stock) => isMarketAiLongCandidate(stock, { priority: true, allowReference: data.isReferenceDate })));
+  if (!marketAiConfluenceLoadedAt && !marketAiConfluenceLoading) deferUiWork(() => loadMarketAiConfluenceCaches(false), 120);
+  const confluenceStocks = buildMarketAiConfluenceStocks(data);
+  const fallbackPriorityStocks = sortMarketAiPriorityStocks(data.hotStocks.filter((stock) => isMarketAiLongCandidate(stock, { priority: true, allowReference: data.isReferenceDate })));
+  const priorityStocks = confluenceStocks.length ? confluenceStocks : fallbackPriorityStocks;
   const topHot = priorityStocks[0] || data.hotStocks[0];
   const filterMeta = getMarketAiFilterMeta(data.hotGroups);
   const activeFilterLabel = filterMeta.find((item) => item.key === marketAiHotFilter)?.label || "全部";
@@ -8074,7 +8200,7 @@ function renderMarketAiPanel() {
     ? "法人買超只是入選條件，排序先看綜合分數，再交叉看 AI 訊號數、盤中資金流、動能與成交值。"
     : marketAiHotFilter === "intraday"
     ? "當沖熱只是入選條件，排序先看綜合分數，再交叉看當沖熱度、AI 訊號數、盤中資金流與動能。"
-    : "依綜合分數與入選策略排序，適合快速掌握今日熱門觀察股。";
+    : "依共振策略數優先排序，再看策略4/5、綜合分數與成交值。";
   const strongNames = data.strongSectors.map((sector) => sector.name).join("、") || "尚未形成明顯主流";
   const weakNames = data.weakSectors.filter((sector) => sector.pct < 0).map((sector) => sector.name).join("、") || "暫無明顯弱勢族群";
   const riskNames = data.riskStocks.map((stock) => `${stock.code} ${stock.name}`).join("、") || "暫無極端標的";
@@ -8088,7 +8214,7 @@ function renderMarketAiPanel() {
   const adviceMeta = ["進場紀律", "族群聚焦", "風險排除"];
   const adviceCopy = [
     `目前主流族群：${strongNames}。`,
-    "依綜合分數與成交量排序，適合快速掌握今日熱門觀察股。",
+    "依共振策略數排序，優先看同時命中策略4/5或多策略疊加的標的。",
     "漲幅過熱或弱勢族群，不納入第一優先。",
   ];
   const adviceHtml = operate.map((item, index) => {
@@ -8157,7 +8283,9 @@ function renderMarketAiPanel() {
       <article class="market-ai-card">
         <small>優先觀察</small>
         <strong>${topHot ? `${topHot.code} ${topHot.name}` : "--"}</strong>
-        <p>${topHot ? `${topHot.tags.length} 個訊號${topHotTags ? `：${escapeAttr(topHotTags)}` : ""}。綜合分數 ${topHot.score}，族群 ${topHot.industry}，成交值 ${(cleanNumber(topHot.value) / 100000000).toFixed(1)} 億。` : "等待資料。"}</p>
+        <p>${topHot ? topHot.confluenceCount
+          ? `${topHot.confluenceCount} 策略共振：${escapeAttr(topHot.confluenceLabels.join("、"))}。綜合分數 ${topHot.score || "--"}，族群 ${topHot.industry || "--"}，成交值 ${(cleanNumber(topHot.value) / 100000000).toFixed(1)} 億。`
+          : `${topHot.tags.length} 個訊號${topHotTags ? `：${escapeAttr(topHotTags)}` : ""}。綜合分數 ${topHot.score}，族群 ${topHot.industry}，成交值 ${(cleanNumber(topHot.value) / 100000000).toFixed(1)} 億。` : "等待資料。"}</p>
       </article>
     </section>
     <section class="market-ai-advice">
@@ -8171,7 +8299,7 @@ function renderMarketAiPanel() {
           ${[
             `市場廣度目前上漲家數占 ${data.upRatio.toFixed(1)}%，${data.bias === "空方壓制" ? "盤面偏弱，先看風險。" : "可追蹤強勢族群是否擴散。"}`,
             `族群焦點落在 ${strongNames}，弱勢端留意 ${weakNames}。`,
-            `熱門觀察優先看 ${priorityStocks.slice(0, 3).map((stock) => `${stock.code} ${stock.name}`).join("、") || "等待資料"}。`,
+            `${confluenceStocks.length ? "共振觀察" : "熱門觀察"}優先看 ${priorityStocks.slice(0, 3).map((stock) => `${stock.code} ${stock.name}${stock.confluenceCount ? `(${stock.confluenceLabels.join("+")})` : ""}`).join("、") || "等待資料"}。`,
             `盤中雷達目前偏向「${data.bias}」，分數高也要等量價延續確認。`,
           ].map((text, index) => `<div class="market-ai-point"><b>${index + 1}</b><span>${escapeAttr(text)}</span></div>`).join("")}
         </div>
