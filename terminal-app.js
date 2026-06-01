@@ -5054,9 +5054,12 @@ function strategy2SignalFromTrackedEvent(event) {
 function stockRowFromStrategy2Event(event, base) {
   if (!event?.code) return null;
   const record = event.latestRecord || {};
+  const latestEnhancement = normalizeArray(event.enhancements)
+    .filter(isStrategy2EnhancementVisible)
+    .at(-1) || {};
   const close = cleanNumber(base?.close) || cleanNumber(record.close) || cleanNumber(record.observedPrice) || cleanNumber(event.latestAPrice) || cleanNumber(event.firstAPrice);
   const percent = base?.percent !== undefined && base?.percent !== "" ? cleanNumber(base.percent) : cleanNumber(record.percent ?? event.percent);
-  const tradeVolume = cleanNumber(base?.tradeVolume) || cleanNumber(record.tradeVolume) || cleanNumber(record.volume) || cleanNumber(event.tradeVolume) || cleanNumber(event.volume);
+  const tradeVolume = cleanNumber(base?.tradeVolume) || cleanNumber(base?.volume) || cleanNumber(record.tradeVolume) || cleanNumber(record.volume) || cleanNumber(event.tradeVolume) || cleanNumber(event.volume) || cleanNumber(latestEnhancement.totalVolume);
   const open = cleanNumber(base?.open) || cleanNumber(record.open);
   const high = cleanNumber(base?.high) || cleanNumber(record.observedHigh) || close;
   const low = cleanNumber(base?.low) || cleanNumber(record.low) || close;
@@ -5087,7 +5090,7 @@ function getIntradaySortValue(stock, key) {
     code: Number(stock.code) || 0,
     price: cleanNumber(stock.close),
     percent: stock.percent || 0,
-    volume: stock.tradeVolume || 0,
+    volume: cleanNumber(stock.tradeVolume) || cleanNumber(stock.volume),
     score: stock.score || 0,
   };
   return values[key] ?? 0;
@@ -5474,6 +5477,8 @@ function renderIntradayRadar(evaluated) {
       }
       return {
         ...row,
+        tradeVolume: cleanNumber(row.tradeVolume) || cleanNumber(row.volume),
+        volume: cleanNumber(row.volume) || cleanNumber(row.tradeVolume),
         intradaySignals: mergedSignals,
         intradayState,
         strategy2Event: trackedEvent || null,
@@ -5628,6 +5633,7 @@ function renderIntradayRadar(evaluated) {
         ${quickRows.length ? quickRows.map((stock, index) => {
           const sign = stock.percent >= 0 ? "+" : "";
           const pctClass = pctToneClass(stock.percent);
+          const displayVolume = cleanNumber(stock.tradeVolume) || cleanNumber(stock.volume);
           const latestEnhancement = normalizeArray(stock.strategy2Event?.enhancements).filter(isStrategy2EnhancementVisible).at(-1);
           const mainSignal = latestEnhancement ? "持續放量" : stock.intradaySignals[0]?.short || "量價";
           const reason = latestEnhancement
@@ -5644,7 +5650,7 @@ function renderIntradayRadar(evaluated) {
               <div class="mobile-intraday-card-main">
                 <strong class="${pctClass}">${sign}${stock.percent.toFixed(2)}%</strong>
                 <span>進場 ${formatIntradayTrackedEntry(stock)}</span>
-                <span>量 ${Math.round(stock.tradeVolume || 0).toLocaleString("zh-TW")}</span>
+                <span>量 ${Math.round(displayVolume).toLocaleString("zh-TW")}</span>
               </div>
               <p>${mainSignal}｜${reason}</p>
             </article>
@@ -5659,6 +5665,7 @@ function renderIntradayRadar(evaluated) {
     ${rows.map((stock) => {
       const sign = stock.percent >= 0 ? "+" : "";
       const pctClass = pctToneClass(stock.percent);
+      const displayVolume = cleanNumber(stock.tradeVolume) || cleanNumber(stock.volume);
       const entryTime = getIntradayEntryTime(stock);
       const latestEnhancement = normalizeArray(stock.strategy2Event?.enhancements)
         .filter(isStrategy2EnhancementVisible)
@@ -5679,7 +5686,7 @@ function renderIntradayRadar(evaluated) {
           <td><span class="intraday-badges">${chips}</span></td>
           <td class="price">${formatIntradayTrackedEntry(stock)}</td>
           <td class="pct ${pctClass}">${sign}${stock.percent.toFixed(2)}%</td>
-          <td>${Math.round(stock.tradeVolume || 0).toLocaleString("zh-TW")}</td>
+          <td>${Math.round(displayVolume).toLocaleString("zh-TW")}</td>
           <td class="intraday-entry">${renderEntryPlan(stock.intradayEntry)}</td>
           <td>現價 ${formatTradePrice(stock.close)}｜${reason}</td>
         </tr>
@@ -10511,4 +10518,3 @@ if (isViewActive("watchlist")) renderWatchlist();
 setInterval(() => {
   if (!isDocumentHidden() && isTerminalUnlocked() && isViewActive("watchlist")) refreshSelectedWatchlistQuote();
 }, 10000);
-
