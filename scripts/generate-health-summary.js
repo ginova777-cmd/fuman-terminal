@@ -54,6 +54,12 @@ function isBadResult(code) {
   return !["0", "267009", "267011"].includes(String(code || ""));
 }
 
+function isIgnorableTaskResult(task) {
+  const name = String(task.TaskName || "");
+  const code = String(task["Last Result"] || "");
+  return name === "\\Fuman PC Wake 0430" && code === "-2147020576" && task.Status === "Ready";
+}
+
 function outboxStatus() {
   const root = path.join(process.env.FUMAN_RUNTIME_DIR || "C:\\fuman-runtime", "outbox", "cache-sync");
   let pending = 0;
@@ -112,11 +118,22 @@ function isWeekendTaipei(date = new Date()) {
   return day === "Sat" || day === "Sun";
 }
 
+function taipeiMinuteOfDay(date = new Date()) {
+  const parts = Object.fromEntries(new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Taipei",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).formatToParts(date).map((part) => [part.type, part.value]));
+  return Number(parts.hour) * 60 + Number(parts.minute);
+}
+
 function effectiveSlaHours(file) {
   if (isWeekendTaipei()) {
     if (file === "realtime-radar-latest.json") return 72;
     if (file === "market-summary.json") return 72;
   }
+  if (file === "strategy4-summary.json" && taipeiMinuteOfDay() < 15 * 60 + 30) return 96;
   return DATA_SLA_HOURS[file] || 36;
 }
 
@@ -153,7 +170,7 @@ function buildRisks({ badTasks, outbox, data }) {
 function main() {
   const tasks = getFumanTasks();
   const badTasks = tasks
-    .filter((task) => task["Scheduled Task State"] === "Enabled" && isBadResult(task["Last Result"]))
+    .filter((task) => task["Scheduled Task State"] === "Enabled" && isBadResult(task["Last Result"]) && !isIgnorableTaskResult(task))
     .map((task) => ({
       taskName: task.TaskName,
       lastRunTime: task["Last Run Time"],
