@@ -2523,6 +2523,111 @@ body.fuman-light-theme #strategy-view.intraday-only .intraday-controls {
   }
 }
 
+/* mobile-strategy-title-card-fix-20260601 */
+@media (max-width: 760px) {
+  #strategy-view.intraday-only .intraday-topbar,
+  body.fuman-light-theme #strategy-view.intraday-only .intraday-topbar {
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr) !important;
+    align-items: start !important;
+    gap: 14px !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    min-height: 0 !important;
+    height: auto !important;
+    max-height: none !important;
+    overflow: visible !important;
+    padding: 20px !important;
+  }
+
+  #strategy-view.intraday-only .intraday-topbar > div:first-child,
+  body.fuman-light-theme #strategy-view.intraday-only .intraday-topbar > div:first-child {
+    width: 100% !important;
+    min-width: 0 !important;
+  }
+
+  #strategy-view.intraday-only .intraday-topbar h2,
+  body.fuman-light-theme #strategy-view.intraday-only .intraday-topbar h2 {
+    display: flex !important;
+    align-items: center !important;
+    flex-wrap: nowrap !important;
+    gap: 8px !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+    font-size: clamp(24px, 7vw, 30px) !important;
+    line-height: 1.18 !important;
+    letter-spacing: 0 !important;
+    white-space: nowrap !important;
+    word-break: keep-all !important;
+    overflow-wrap: normal !important;
+  }
+
+  #strategy-view.intraday-only .intraday-topbar .page-title-icon,
+  body.fuman-light-theme #strategy-view.intraday-only .intraday-topbar .page-title-icon {
+    flex: 0 0 auto !important;
+    margin-right: 0 !important;
+  }
+
+  #strategy-view.intraday-only .intraday-topbar p,
+  body.fuman-light-theme #strategy-view.intraday-only .intraday-topbar p {
+    display: block !important;
+    max-width: 100% !important;
+    margin-top: 8px !important;
+    font-size: 14px !important;
+    line-height: 1.55 !important;
+    white-space: normal !important;
+    word-break: normal !important;
+    overflow-wrap: break-word !important;
+  }
+
+  #strategy-view.intraday-only .intraday-controls {
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) !important;
+    gap: 10px !important;
+    width: 100% !important;
+    min-width: 0 !important;
+  }
+
+  #strategy-view.intraday-only .intraday-controls label {
+    min-width: 0 !important;
+    white-space: nowrap !important;
+  }
+
+  #strategy-view.intraday-only .intraday-controls select {
+    max-width: 100% !important;
+  }
+
+  #strategy-view.strategy3-only .strategy3-table-row {
+    grid-template-columns: 42px minmax(0, 1fr) !important;
+    gap: 8px 10px !important;
+    padding: 14px 12px !important;
+  }
+
+  #strategy-view.strategy3-only .strategy3-table-row .strategy3-rank-cell {
+    grid-row: 1 / 5 !important;
+    width: 42px !important;
+  }
+
+  #strategy-view.strategy3-only .strategy3-rank {
+    width: 34px !important;
+    height: 34px !important;
+    font-size: 14px !important;
+  }
+}
+
+@media (max-width: 380px) {
+  #strategy-view.intraday-only .intraday-topbar,
+  body.fuman-light-theme #strategy-view.intraday-only .intraday-topbar {
+    padding: 18px 16px !important;
+  }
+
+  #strategy-view.intraday-only .intraday-topbar h2,
+  body.fuman-light-theme #strategy-view.intraday-only .intraday-topbar h2 {
+    font-size: 23px !important;
+  }
+}
+
 /* strategy4-light-zone-clean-20260531 */
 body.fuman-light-theme #strategy-view.swing-only .swing-zone-summary,
 body.fuman-light-theme #strategy-view .swing-zone-summary {
