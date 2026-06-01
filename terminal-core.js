@@ -1,5 +1,5 @@
 (function () {
-  const version = "realtime-radar-date-20260601-02";
+  const version = "realtime-radar-core-20260601-04";
   window.FUMAN_TERMINAL_BOOT = {
     version,
     startedAt: Date.now(),
