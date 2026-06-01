@@ -6,7 +6,8 @@ const { cleanNumber, isIntradayTradable } = require("./intraday-radar-rules");
 const { isTwseTradingDay } = require("./twse-trading-day");
 
 const ROOT = path.resolve(__dirname, "..");
-const OUT_FILE = path.join(ROOT, "data", "realtime-radar-latest.json");
+const DATA_DIR = process.env.FUMAN_DATA_DIR || path.join(ROOT, "data");
+const OUT_FILE = path.join(DATA_DIR, "realtime-radar-latest.json");
 const STATE_DIR = process.env.FUMAN_STATE_DIR || path.join(ROOT, "state");
 const FAILED_QUEUE_FILE = path.join(STATE_DIR, "realtime-radar-failed-batches.json");
 const ALERT_STATUS_FILE = path.join(STATE_DIR, "realtime-radar-alert-status.json");
@@ -578,6 +579,7 @@ async function main() {
   }
 
   const rawStocks = await fetchStocks();
+  const queuedBatches = hydrateQueuedBatches(readFailedBatchQueue(), rawStocks);
   const realtime = await fetchRealtime(rawStocks);
   const liveStocks = realtime.stocks;
   const freshStocks = liveStocks.filter((stock) => stock.isRealtime === true && hasFreshQuote(stock, timestamp));
@@ -638,8 +640,10 @@ async function main() {
   console.log(`realtime radar ${timestamp}: rows ${payload.rows.length} status ${payload.status} ${staleQuoteLogText(payload.staleQuoteDetails, payload.staleQuoteCount)} failed ${realtime.failedBatches.length}/${realtime.totalBatches}`);
 
   const deferredBatches = [...queuedBatches, ...realtime.failedBatches, ...chunkStocks(staleStocks).map((batch) => ({ ...batch, reason: "stale_quote" }))];
+  let deferredRetry = null;
   if (deferredBatches.length) {
     const retry = await rescanRealtimeBatches(deferredBatches);
+    deferredRetry = retry;
     if (retry.quotes.size) {
       const retryStocks = applyRealtimeQuotes(deferredBatches.flatMap((batch) => batch.stocks || []), retry.quotes)
         .filter((stock) => stock.isRealtime === true && hasFreshQuote(stock, timestamp));
@@ -673,6 +677,7 @@ async function main() {
       }
     }
   }
+  writeFailedBatchQueue(deferredRetry ? deferredRetry.failedBatches || [] : realtime.failedBatches || []);
 }
 
 main().catch((error) => {
