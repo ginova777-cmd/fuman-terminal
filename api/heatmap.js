@@ -31,6 +31,15 @@ function cleanNumber(value) {
   return Number(String(value).replace(/[,+%]/g, "").replace(/^X/i, "")) || 0;
 }
 
+function taipeiDateKey() {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Taipei",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date()).replace(/\D/g, "");
+}
+
 function isCommonStockCode(code) {
   return /^\d{4}$/.test(String(code || "").trim());
 }
@@ -2546,6 +2555,7 @@ async function fetchRealtimeQuotes(stocks) {
   const chunks = chunkArray(stocks, 120);
   const quotePromise = Promise.all(chunks.map(fetchBatchQuotes));
   const results = await withTimeout(quotePromise, 2200, []);
+  const quoteDate = taipeiDateKey();
 
   results.flat().forEach((item) => {
     const code = String(item.c || "").trim();
@@ -2562,6 +2572,9 @@ async function fetchRealtimeQuotes(stocks) {
       pct: prev ? (change / prev) * 100 : 0,
       volume: volumeLots || 0,
       value: volumeLots ? volumeLots * 1000 * close : 0,
+      quoteDate,
+      quoteTime: String(item.t || "").trim(),
+      updatedAt: Date.now(),
     });
   });
 
@@ -2588,6 +2601,10 @@ function mergeQuote(stock, quote) {
     volume: quote.volume || stock.volume,
     value: quote.value || stock.value,
     amountYi: (quote.value || stock.value) / 100000000,
+    quoteDate: quote.quoteDate,
+    quoteTime: quote.quoteTime,
+    quoteUpdatedAt: quote.updatedAt,
+    isRealtime: true,
   };
 }
 
@@ -2672,6 +2689,10 @@ module.exports = async function handler(request, response) {
             amountYi: Number(stock.amountYi.toFixed(2)),
             value: stock.value,
             volume: stock.volume,
+            quoteDate: stock.quoteDate || "",
+            quoteTime: stock.quoteTime || "",
+            quoteUpdatedAt: stock.quoteUpdatedAt || 0,
+            isRealtime: Boolean(stock.isRealtime),
             industry: stock.industry,
             primaryIndustry: stock.primaryIndustry,
             officialIndustry: stock.officialIndustry,

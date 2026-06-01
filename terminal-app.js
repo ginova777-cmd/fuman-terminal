@@ -7166,6 +7166,32 @@ function renderHeatmapSectors(sectors) {
   });
 }
 
+function syncLatestStocksFromHeatmapSectors(sectors) {
+  if (!isMarketAiActiveSession()) return false;
+  const today = marketAiTodayKey();
+  const rows = normalizeArray(sectors).flatMap((sector) =>
+    normalizeArray(sector?.stocks || sector?.rows).map((stock) => ({
+      code: String(stock.code || stock.Code || ""),
+      name: String(stock.name || stock.Name || ""),
+      close: cleanNumber(stock.close || stock.ClosingPrice),
+      change: cleanNumber(stock.change || stock.Change),
+      percent: cleanNumber(stock.pct || stock.percent || stock.Percent),
+      value: cleanNumber(stock.value || stock.TradeValue),
+      tradeVolume: cleanNumber(stock.tradeVolume || stock.volume || stock.TradeVolume),
+      quoteDate: stock.quoteDate || stock.tradeDate || stock.Date,
+      quoteTime: stock.quoteTime || "",
+      quoteUpdatedAt: cleanNumber(stock.quoteUpdatedAt),
+      isRealtime: stock.isRealtime === true,
+      market: stock.market || stock.Market || "",
+    }))
+  ).filter((stock) => stock.code && stock.name && stock.close && normalizeMarketAiDateKey(stock.quoteDate) === today);
+  if (rows.length < 500) return false;
+  const currentTodayRows = latestStocks.filter((stock) => normalizeMarketAiDateKey(stock.quoteDate) === today).length;
+  if (currentTodayRows >= rows.length) return false;
+  renderStocks(rows);
+  return true;
+}
+
 function renderHeatmapFromCache() {
   const sectors = Object.entries(sectorStocksCache).map(([name, stocks]) => {
     const rows = normalizeArray(stocks);
@@ -8277,8 +8303,11 @@ function parseStocksForLatest(stocks) {
     const tradeVolume = normalizeTradeVolumeLots(valueOf(stock, ["成交股數", "TradeVolume", "tradeVolume", "volume"]));
     const volumeRatio = cleanNumber(valueOf(stock, ["量比", "VolumeRatio", "volumeRatio", "volume_ratio"]));
     const quoteDate = valueOf(stock, ["quoteDate", "QuoteDate", "tradeDate", "TradeDate", "date", "Date", "資料日期", "交易日期"]);
+    const quoteTime = valueOf(stock, ["quoteTime", "QuoteTime", "time", "Time"]);
+    const quoteUpdatedAt = cleanNumber(valueOf(stock, ["quoteUpdatedAt", "updatedAtMs", "updatedAt"]));
+    const isRealtime = stock?.isRealtime === true;
     const market = valueOf(stock, ["market", "Market", "市場"]);
-    return { code, name, value, tradeVolume, volumeRatio, quoteDate, market, ...stockChange(stock) };
+    return { code, name, value, tradeVolume, volumeRatio, quoteDate, quoteTime, quoteUpdatedAt, isRealtime, market, ...stockChange(stock) };
   }).filter((s) => s.code && s.name && s.close);
 }
 
@@ -8294,9 +8323,13 @@ function buildSectorStocksCache(stocks, options = {}) {
     if (!code || !close) continue;
     const prev = close - change;
     const pct = cleanNumber(valueOf(stock, ["pct", "percent", "漲跌百分比"])) || (prev > 0 ? (change / prev) * 100 : 0);
+    const quoteDate = valueOf(stock, ["quoteDate", "QuoteDate", "tradeDate", "TradeDate", "date", "Date", "資料日期", "交易日期"]);
+    const quoteTime = valueOf(stock, ["quoteTime", "QuoteTime", "time", "Time"]);
+    const quoteUpdatedAt = cleanNumber(valueOf(stock, ["quoteUpdatedAt", "updatedAtMs", "updatedAt"]));
+    const isRealtime = stock?.isRealtime === true;
     const industry = SECTOR_MAP[code];
     if (!industry) continue;
-    const row = { code, name, close, change, pct, value, volume };
+    const row = { code, name, close, change, pct, value, volume, quoteDate, quoteTime, quoteUpdatedAt, isRealtime };
     upsertSectorStock(nextCache, industry, row);
   }
   sectorStocksCache = nextCache;
@@ -8594,6 +8627,7 @@ async function loadHeatmap(force = false) {
     const sectors = normalizeArray(data?.sectors);
     if (data?.ok && sectors.length) {
       renderHeatmapSectors(sectors);
+      syncLatestStocksFromHeatmapSectors(sectors);
       if (latestStocks.length) {
         buildSectorStocksCache(latestStocks, { merge: true });
       }
