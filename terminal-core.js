@@ -1,5 +1,5 @@
 (function () {
-  const version = "watchlist-freshness-20260601-07";
+  const version = "strategy4-remove-bc-signal-20260601-08";
   window.FUMAN_TERMINAL_BOOT = {
     version,
     startedAt: Date.now(),

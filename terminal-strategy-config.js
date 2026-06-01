@@ -77,10 +77,7 @@ const SWING_SIGNAL_DEFS = [
   { id: "runaway_gap", title: "逃逸缺口", icon: "🚀", hint: "多頭延續型缺口" },
   { id: "v_reversal", title: "V轉反彈", icon: "", hint: "跌深後快速翻紅" },
   { id: "three_inside", title: "三內翻紅", icon: "↻", hint: "弱轉強反轉型態" },
-  { id: "golden_cross", title: "多金釵", icon: "✦", hint: "短均線轉強候選" },
-  { id: "watch_trend", title: "B觀察", icon: "B", hint: "趨勢轉強觀察名單" },
-  { id: "base_setup", title: "C準備", icon: "C", hint: "低/中位階整理接近發動" },
-];
+  { id: "golden_cross", title: "多金釵", icon: "✦", hint: "短均線轉強候選" },];
   window.FUMAN_STRATEGY_CONFIG = {
     STRATEGY_DEFS,
     STRATEGY_BY_ID,
