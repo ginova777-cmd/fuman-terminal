@@ -1,5 +1,5 @@
 (function () {
-  const version = "strategy4-cn-labels-20260601-06";
+  const version = "watchlist-freshness-20260601-07";
   window.FUMAN_TERMINAL_BOOT = {
     version,
     startedAt: Date.now(),

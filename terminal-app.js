@@ -73,7 +73,7 @@ function getFumanWorker() {
   if (!("Worker" in window)) return null;
   if (fumanWorker) return fumanWorker;
   try {
-    fumanWorker = new Worker("terminal-worker.js?v=strategy4-cn-labels-20260601-06");
+    fumanWorker = new Worker("terminal-worker.js?v=watchlist-freshness-20260601-07");
     fumanWorker.addEventListener("message", (event) => {
       const { id, ok, rows, result, error } = event.data || {};
       const pending = fumanWorkerPending.get(id);
@@ -301,7 +301,7 @@ function loadFumanStyle(href, id) {
   const link = document.createElement("link");
   link.id = id;
   link.rel = "stylesheet";
-  link.href = href.includes("?") ? href : `${href}?v=${window.FUMAN_TERMINAL_BOOT?.version || "strategy4-cn-labels-20260601-06"}`;
+  link.href = href.includes("?") ? href : `${href}?v=${window.FUMAN_TERMINAL_BOOT?.version || "watchlist-freshness-20260601-07"}`;
   document.head.appendChild(link);
 }
 
@@ -327,7 +327,7 @@ function makeFumanModuleScope(bindings) {
 function loadFumanFeatureModule(name, src, globalName) {
   if (window[globalName]) return Promise.resolve(window[globalName]);
   if (fumanFeatureModulePromises[name]) return fumanFeatureModulePromises[name];
-  const version = window.FUMAN_TERMINAL_BOOT?.version || "strategy4-cn-labels-20260601-06";
+  const version = window.FUMAN_TERMINAL_BOOT?.version || "watchlist-freshness-20260601-07";
   fumanFeatureModulePromises[name] = new Promise((resolve, reject) => {
     const attr = "data-fuman-feature-" + name;
     const existing = document.querySelector("script[" + attr + "]");
@@ -2667,6 +2667,7 @@ let watchlistDashboardSignature = "";
 let watchlistRefreshLoading = false;
 let watchlistStrategyMatchPromise = null;
 let watchlistStrategyMatchCache = null;
+let watchlistQuoteDateKey = "";
 const intradayGoFirstSeenAt = new Map();
 const intradayFirstSeenAt = new Map();
 let strategy2IntradayEventByCode = new Map();
@@ -7510,7 +7511,14 @@ function getPanelFreshnessMeta(viewName) {
     const warrantDataDate = warrantSummaryDate || warrantRowsDate || warrantUpdatedDate || dataDate;
     return { mode: "權證走向｜盤後資料", dataDate: warrantDataDate, today, isToday: warrantDataDate === today };
   }
-  if (viewName === "watchlist") return { mode: `自選股｜${marketModeText}`, dataDate, today, isToday };
+  if (viewName === "watchlist") {
+    const watchlistDataDate = normalizeMarketAiDateKey(watchlistQuoteDateKey)
+      || normalizeMarketAiDateKey(institutionDate)
+      || (marketRealtimeState.trading === true || marketRealtimeState.marketStatus === "day" ? today : "")
+      || today;
+    const watchlistModeText = watchlistDataDate === today ? "即時/盤後資料" : "最新可用資料";
+    return { mode: `自選股｜${watchlistModeText}`, dataDate: watchlistDataDate, today, isToday: watchlistDataDate === today };
+  }
   if (viewName === "realtime-radar") {
     const radarLive = shouldRunLivePolling();
     const radarDataDate = radarLive
@@ -10125,6 +10133,15 @@ async function fetchHeatmapStockFallback(code) {
   return null;
 }
 
+function updateWatchlistQuoteDate(stock) {
+  const quoteDate = marketAiQuoteDateKey(stock) || (stock?.isRealtime ? marketAiTodayKey() : "");
+  if (!quoteDate) return;
+  if (!watchlistQuoteDateKey || quoteDate >= watchlistQuoteDateKey) {
+    watchlistQuoteDateKey = quoteDate;
+    refreshDataFreshnessBars();
+  }
+}
+
 async function fetchStockPrice(code) {
   const cached = latestStocks.find(s => s.code === code) || null;
   try {
@@ -10139,7 +10156,17 @@ async function fetchStockPrice(code) {
     if (!close || !prev) return await fetchHeatmapStockFallback(code) || await fetchDailyStockFallback(code) || cached;
     const change = close - prev;
     const percent = prev ? (change / prev) * 100 : 0;
-    return { code, name: item.n || code, close, change, percent, tradeVolume: parseQuoteNumber(item.v, item.tv) };
+    return {
+      code,
+      name: item.n || code,
+      close,
+      change,
+      percent,
+      tradeVolume: parseQuoteNumber(item.v, item.tv),
+      quoteDate: normalizeMarketAiDateKey(item.d || item.date || item.tlong) || marketAiTodayKey(),
+      quoteTime: item.t || item.ot || "",
+      isRealtime: true,
+    };
   } catch {
     return await fetchHeatmapStockFallback(code) || await fetchDailyStockFallback(code) || cached;
   }
@@ -10194,6 +10221,7 @@ async function renderWatchlist() {
   for (const item of list) {
     fetchStockPrice(item.code).then(stock => {
       if (!stock) return;
+      updateWatchlistQuoteDate(stock);
       const priceEl = document.querySelector(`#wprice-${item.code}`);
       const changeEl = document.querySelector(`#wchange-${item.code}`);
       const instEl = document.querySelector(`#winst-${item.code}`);
@@ -10496,6 +10524,7 @@ async function refreshSelectedWatchlistQuote() {
   try {
     const stock = await fetchStockPrice(card.dataset.code);
     if (!stock) return;
+    updateWatchlistQuoteDate(stock);
     const priceEl = document.querySelector(`#wprice-${card.dataset.code}`);
     const changeEl = document.querySelector(`#wchange-${card.dataset.code}`);
     if (priceEl) priceEl.textContent = stock.close ? stock.close.toLocaleString("zh-TW") : "--";

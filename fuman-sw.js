@@ -1,22 +1,22 @@
-const CACHE_VERSION = "fuman-terminal-sw-20260601-09";
+const CACHE_VERSION = "fuman-terminal-sw-20260601-10";
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 const DATA_CACHE = `${CACHE_VERSION}-data`;
 
 const STATIC_ASSETS = [
-  "/styles.css?v=strategy4-cn-labels-20260601-06",
-  "/terminal-core.js?v=strategy4-cn-labels-20260601-06",
-  "/terminal-modules.js?v=strategy4-cn-labels-20260601-06",
-  "/terminal-sector-map.js?v=strategy4-cn-labels-20260601-06",
-  "/terminal-strategy-config.js?v=strategy4-cn-labels-20260601-06",
-  "/terminal-market-config.js?v=strategy4-cn-labels-20260601-06",
-  "/terminal-ui-config.js?v=strategy4-cn-labels-20260601-06",
-  "/terminal-runtime-config.js?v=strategy4-cn-labels-20260601-06",
-  "/terminal-tuning-config.js?v=strategy4-cn-labels-20260601-06",
-  "/terminal-worker.js?v=strategy4-cn-labels-20260601-06",
-  "/terminal.js?v=strategy4-cn-labels-20260601-06",
-  "/terminal-realtime-radar.css?v=strategy4-cn-labels-20260601-06",
-  "/terminal-intraday-radar.css?v=strategy4-cn-labels-20260601-06",
-  "/terminal-utility.css?v=strategy4-cn-labels-20260601-06",
+  "/styles.css?v=watchlist-freshness-20260601-07",
+  "/terminal-core.js?v=watchlist-freshness-20260601-07",
+  "/terminal-modules.js?v=watchlist-freshness-20260601-07",
+  "/terminal-sector-map.js?v=watchlist-freshness-20260601-07",
+  "/terminal-strategy-config.js?v=watchlist-freshness-20260601-07",
+  "/terminal-market-config.js?v=watchlist-freshness-20260601-07",
+  "/terminal-ui-config.js?v=watchlist-freshness-20260601-07",
+  "/terminal-runtime-config.js?v=watchlist-freshness-20260601-07",
+  "/terminal-tuning-config.js?v=watchlist-freshness-20260601-07",
+  "/terminal-worker.js?v=watchlist-freshness-20260601-07",
+  "/terminal.js?v=watchlist-freshness-20260601-07",
+  "/terminal-realtime-radar.css?v=watchlist-freshness-20260601-07",
+  "/terminal-intraday-radar.css?v=watchlist-freshness-20260601-07",
+  "/terminal-utility.css?v=watchlist-freshness-20260601-07",
   "/assets/logo.webp",
   "/assets/login-bg-fuman-lite.webp",
   "/favicon.ico",
