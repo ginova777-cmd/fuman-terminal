@@ -1,31 +1,11 @@
 {
-  "ok": false,
-  "updatedAt": "2026-06-01T07:45:13.540Z",
-  "risk": "high",
-  "risks": [
-    {
-      "level": "high",
-      "area": "freshness",
-      "message": "資料超過 SLA 嚴重逾時 1 個",
-      "files": [
-        "strategy4-summary.json"
-      ],
-      "stale": [
-        {
-          "file": "strategy4-summary.json",
-          "ok": true,
-          "count": 675,
-          "updatedAt": "2026-05-29T16:30:37.466Z",
-          "bytes": 49554,
-          "slaHours": 30,
-          "ageHours": 63.243340555555555
-        }
-      ]
-    }
-  ],
+  "ok": true,
+  "updatedAt": "2026-06-01T08:01:03.687Z",
+  "risk": "low",
+  "risks": [],
   "schedule": {
     "ok": true,
-    "total": 0,
+    "total": 18,
     "badCount": 0,
     "badTasks": [],
     "queryMethod": "schtasks",
@@ -48,9 +28,9 @@
       {
         "file": "strategy4-summary.json",
         "ok": true,
-        "count": 675,
-        "updatedAt": "2026-05-29T16:30:37.466Z",
-        "bytes": 49554
+        "count": 1611,
+        "updatedAt": "2026-06-01T06:51:06.815Z",
+        "bytes": 45303
       },
       {
         "file": "strategy5-latest.json",
@@ -84,35 +64,35 @@
         "file": "performance-report.json",
         "ok": true,
         "count": 0,
-        "updatedAt": "2026-06-01T07:30:59.631Z",
-        "bytes": 2391
+        "updatedAt": "2026-06-01T08:00:40.891Z",
+        "bytes": 2395
       },
       {
         "file": "signal-quality-report.json",
         "ok": true,
         "count": 0,
-        "updatedAt": "2026-06-01T07:30:59.307Z",
-        "bytes": 817
+        "updatedAt": "2026-06-01T08:00:40.552Z",
+        "bytes": 819
       },
       {
         "file": "data-quality-report.json",
         "ok": true,
         "count": 0,
-        "updatedAt": "2026-06-01T07:30:59.431Z",
+        "updatedAt": "2026-06-01T08:00:40.675Z",
         "bytes": 2008
       },
       {
         "file": "data-consistency-report.json",
         "ok": true,
         "count": 0,
-        "updatedAt": "2026-06-01T07:30:59.507Z",
-        "bytes": 310
+        "updatedAt": "2026-06-01T08:00:40.764Z",
+        "bytes": 314
       },
       {
         "file": "strategy-weight-report.json",
         "ok": true,
         "count": 0,
-        "updatedAt": "2026-06-01T07:30:59.570Z",
+        "updatedAt": "2026-06-01T08:00:40.827Z",
         "bytes": 418
       }
     ]

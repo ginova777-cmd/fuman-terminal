@@ -1,6 +1,6 @@
 {
   "ok": true,
-  "updatedAt": "2026-06-01T07:45:15.404Z",
+  "updatedAt": "2026-06-01T08:01:04.531Z",
   "generatedBy": "generate-performance-report",
   "assets": [
     {
@@ -13,30 +13,30 @@
     {
       "file": "health-summary.json",
       "ok": true,
-      "bytes": 2805,
+      "bytes": 2346,
       "count": 0,
-      "updatedAt": "2026-06-01T07:45:13.540Z"
+      "updatedAt": "2026-06-01T08:01:03.687Z"
     },
     {
       "file": "strategy4-summary.json",
       "ok": true,
-      "bytes": 49554,
-      "count": 675,
-      "updatedAt": "2026-05-29T16:30:37.466Z"
+      "bytes": 45303,
+      "count": 1611,
+      "updatedAt": "2026-06-01T06:51:06.815Z"
     },
     {
       "file": "strategy4-slim.json",
       "ok": true,
-      "bytes": 289803,
-      "count": 675,
-      "updatedAt": "2026-05-29T16:30:37.466Z"
+      "bytes": 680721,
+      "count": 1611,
+      "updatedAt": "2026-06-01T06:51:06.815Z"
     },
     {
       "file": "strategy4-zone-a.json",
       "ok": true,
-      "bytes": 43328,
-      "count": 86,
-      "updatedAt": "2026-05-29T16:30:37.466Z"
+      "bytes": 151323,
+      "count": 344,
+      "updatedAt": "2026-06-01T06:51:06.815Z"
     },
     {
       "file": "institution-slim.json",
@@ -76,32 +76,32 @@
     {
       "file": "signal-quality-report.json",
       "ok": true,
-      "bytes": 817,
+      "bytes": 819,
       "count": 0,
-      "updatedAt": "2026-06-01T07:45:15.039Z"
+      "updatedAt": "2026-06-01T08:01:04.155Z"
     },
     {
       "file": "data-quality-report.json",
       "ok": true,
       "bytes": 2008,
       "count": 0,
-      "updatedAt": "2026-06-01T07:45:15.142Z"
+      "updatedAt": "2026-06-01T08:01:04.279Z"
     },
     {
       "file": "data-consistency-report.json",
       "ok": true,
-      "bytes": 310,
+      "bytes": 314,
       "count": 0,
-      "updatedAt": "2026-06-01T07:45:15.212Z"
+      "updatedAt": "2026-06-01T08:01:04.378Z"
     },
     {
       "file": "strategy-weight-report.json",
       "ok": true,
       "bytes": 418,
       "count": 0,
-      "updatedAt": "2026-06-01T07:45:15.334Z"
+      "updatedAt": "2026-06-01T08:01:04.444Z"
     }
   ],
-  "totalBytes": 1079276,
+  "totalBytes": 1573485,
   "missing": []
 }

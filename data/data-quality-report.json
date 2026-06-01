@@ -1,6 +1,6 @@
 {
   "ok": true,
-  "updatedAt": "2026-06-01T07:45:15.142Z",
+  "updatedAt": "2026-06-01T08:01:04.279Z",
   "files": [
     {
       "file": "market-summary.json",
@@ -29,34 +29,34 @@
     {
       "file": "strategy4-latest.json",
       "ok": true,
-      "bytes": 823405,
-      "count": 675,
-      "updatedAt": "2026-05-29T16:30:37.466Z",
+      "bytes": 2243440,
+      "count": 1611,
+      "updatedAt": "2026-06-01T06:51:06.815Z",
       "issues": [
         {
           "level": "medium",
-          "message": "extreme percent rows 44"
+          "message": "extreme percent rows 4"
         }
       ]
     },
     {
       "file": "strategy4-summary.json",
       "ok": true,
-      "bytes": 49554,
-      "count": 675,
-      "updatedAt": "2026-05-29T16:30:37.466Z",
+      "bytes": 45303,
+      "count": 1611,
+      "updatedAt": "2026-06-01T06:51:06.815Z",
       "issues": []
     },
     {
       "file": "strategy4-slim.json",
       "ok": true,
-      "bytes": 289803,
-      "count": 675,
-      "updatedAt": "2026-05-29T16:30:37.466Z",
+      "bytes": 680721,
+      "count": 1611,
+      "updatedAt": "2026-06-01T06:51:06.815Z",
       "issues": [
         {
           "level": "medium",
-          "message": "extreme percent rows 44"
+          "message": "extreme percent rows 4"
         }
       ]
     },
@@ -82,12 +82,12 @@
     {
       "file": "strategy4-latest.json",
       "level": "medium",
-      "message": "extreme percent rows 44"
+      "message": "extreme percent rows 4"
     },
     {
       "file": "strategy4-slim.json",
       "level": "medium",
-      "message": "extreme percent rows 44"
+      "message": "extreme percent rows 4"
     }
   ]
 }
