@@ -5085,6 +5085,43 @@ function sortIntradayZoneRows(rows) {
 }
 
 async function loadStrategy2IntradayPayload(force = false) {
+  const allowSupabase = shouldRunLivePolling();
+  if (allowSupabase && endpoints.strategy2IntradayLatestApi) {
+    try {
+      const apiPayload = await fetchLiveMemoryJson(
+        "strategy2:latest-api",
+        `${endpoints.strategy2IntradayLatestApi}?t=${Date.now()}`,
+        isMobileViewport() ? 2500 : 3500,
+        FUMAN_LIVE_MEMORY_TTL_MS.strategy2,
+        force
+      );
+      if (apiPayload?.records || apiPayload?.events) {
+        return { ...apiPayload, cacheSource: apiPayload.cacheSource || "supabase-api" };
+      }
+    } catch (error) {
+      recordFrontendError("strategy2-latest-api", error);
+    }
+  }
+  const restPayload = allowSupabase ? await fetchSupabaseLatestPayload("strategy2_latest", isMobileViewport() ? 3000 : 4500) : null;
+  if (restPayload) return restPayload;
+  if (allowSupabase && supabaseClient) {
+    try {
+      const { data, error } = await supabaseClient
+        .from("strategy2_latest")
+        .select("payload,updated_at")
+        .eq("id", "latest")
+        .maybeSingle();
+      if (!error && data?.payload) {
+        return {
+          ...data.payload,
+          updatedAt: data.payload.updatedAt || data.updated_at,
+          cacheSource: "supabase",
+        };
+      }
+    } catch (error) {
+      recordFrontendError("strategy2-supabase", error);
+    }
+  }
   const mobileFastPath = isMobileViewport() && !force && (endpoints.strategy2IntradayLiveTop || endpoints.strategy2IntradayTop || endpoints.strategy2IntradaySlim);
   if (mobileFastPath && strategy2IntradayEventByCode.size && endpoints.strategy2IntradayDelta) {
     try {
@@ -5107,26 +5144,6 @@ async function loadStrategy2IntradayPayload(force = false) {
         { url: endpoints.strategy2IntradaySlim, label: "strategy2-slim", kind: "strategy2" },
       ], 4000, "strategy2");
       return { ...slimPayload, cacheSource: slimPayload.source || "static-mobile-top" };
-    } catch (error) {
-    }
-  }
-  const allowSupabase = shouldRunLivePolling();
-  const restPayload = allowSupabase ? await fetchSupabaseLatestPayload("strategy2_latest", isMobileViewport() ? 3000 : 4500) : null;
-  if (restPayload) return restPayload;
-  if (allowSupabase && supabaseClient) {
-    try {
-      const { data, error } = await supabaseClient
-        .from("strategy2_latest")
-        .select("payload,updated_at")
-        .eq("id", "latest")
-        .maybeSingle();
-      if (!error && data?.payload) {
-        return {
-          ...data.payload,
-          updatedAt: data.payload.updatedAt || data.updated_at,
-          cacheSource: "supabase",
-        };
-      }
     } catch (error) {
     }
   }

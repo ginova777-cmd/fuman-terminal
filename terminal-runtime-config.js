@@ -26,6 +26,7 @@
     strategy5Cache: "/data/strategy5-latest.json",
     strategy5Backup: "/data/strategy5-backup.json",
     realtimeRadarCache: "/data/realtime-radar-latest.json",
+    strategy2IntradayLatestApi: "/api/strategy2-latest",
     strategy2IntradayCache: "/data/strategy2-intraday-latest.json",
     strategy2IntradaySlim: "/data/strategy2-intraday-slim.json",
     strategy2IntradayTop: "/data/strategy2-intraday-top.json",
