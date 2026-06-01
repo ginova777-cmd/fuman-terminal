@@ -7433,10 +7433,17 @@ function renderStrategy4FreshnessBarHtml() {
 
 function getPanelFreshnessMeta(viewName) {
   const today = marketAiTodayKey();
-  const marketAiLiveRows = viewName === "market" && marketMode === "ai" && isMarketAiActiveSession()
+  const liveMarketDate = marketRealtimeState.trading === true || marketRealtimeState.marketStatus === "day";
+  const activeMarketSession = viewName === "market" && (isMarketAiActiveSession() || liveMarketDate);
+  const marketAiLiveRows = activeMarketSession && marketMode === "ai"
     ? latestStocks.map((stock) => applyStrategyQuote(stock)).filter((stock) => !isMarketAiStaleStock(stock))
     : [];
+  const latestTodayRows = activeMarketSession
+    ? latestStocks.filter((stock) => marketAiQuoteDateKey(stock) === today)
+    : [];
   const dataDate = marketAiDataDateKey(marketAiLiveRows)
+    || marketAiDataDateKey(latestTodayRows)
+    || (activeMarketSession ? today : "")
     || marketAiDataDateKey(latestStocks)
     || normalizeMarketAiDateKey(marketStockDataState.resolvedTradeDate)
     || today;
@@ -7581,12 +7588,16 @@ async function loadMarketAiStocksFallback() {
 
 function updateMarketStockDataState(payload) {
   if (!payload || Array.isArray(payload)) return;
+  const today = marketAiTodayKey();
+  const incomingDate = normalizeMarketAiDateKey(payload.resolvedTradeDate || payload.tradeDate || payload.quoteDate);
+  const livePayloadDate = payload.trading === true || payload.marketStatus === "day" || marketRealtimeState.trading === true || marketRealtimeState.marketStatus === "day";
+  const shouldKeepLiveDate = livePayloadDate && payload.isFallbackDate === true;
   marketStockDataState = {
-    resolvedTradeDate: normalizeMarketAiDateKey(payload.resolvedTradeDate || payload.tradeDate || payload.quoteDate) || marketStockDataState.resolvedTradeDate || "",
-    today: normalizeMarketAiDateKey(payload.today) || marketAiTodayKey(),
+    resolvedTradeDate: shouldKeepLiveDate ? today : incomingDate || marketStockDataState.resolvedTradeDate || "",
+    today: normalizeMarketAiDateKey(payload.today) || today,
     source: payload.source || marketStockDataState.source || "",
     updatedAt: payload.updatedAt || marketStockDataState.updatedAt || "",
-    isFallbackDate: Boolean(payload.isFallbackDate),
+    isFallbackDate: shouldKeepLiveDate ? false : Boolean(payload.isFallbackDate),
     marketDates: payload.marketDates || marketStockDataState.marketDates || {},
   };
   refreshDataFreshnessBars();
