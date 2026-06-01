@@ -1,22 +1,22 @@
-const CACHE_VERSION = "fuman-terminal-sw-20260601-11";
+const CACHE_VERSION = "fuman-terminal-sw-20260601-12";
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 const DATA_CACHE = `${CACHE_VERSION}-data`;
 
 const STATIC_ASSETS = [
-  "/styles.css?v=strategy4-remove-bc-signal-20260601-08",
-  "/terminal-core.js?v=strategy4-remove-bc-signal-20260601-08",
-  "/terminal-modules.js?v=strategy4-remove-bc-signal-20260601-08",
-  "/terminal-sector-map.js?v=strategy4-remove-bc-signal-20260601-08",
-  "/terminal-strategy-config.js?v=strategy4-remove-bc-signal-20260601-08",
-  "/terminal-market-config.js?v=strategy4-remove-bc-signal-20260601-08",
-  "/terminal-ui-config.js?v=strategy4-remove-bc-signal-20260601-08",
-  "/terminal-runtime-config.js?v=strategy4-remove-bc-signal-20260601-08",
-  "/terminal-tuning-config.js?v=strategy4-remove-bc-signal-20260601-08",
-  "/terminal-worker.js?v=strategy4-remove-bc-signal-20260601-08",
-  "/terminal.js?v=strategy4-remove-bc-signal-20260601-08",
-  "/terminal-realtime-radar.css?v=strategy4-remove-bc-signal-20260601-08",
-  "/terminal-intraday-radar.css?v=strategy4-remove-bc-signal-20260601-08",
-  "/terminal-utility.css?v=strategy4-remove-bc-signal-20260601-08",
+  "/styles.css?v=brand-yellow-lock-final-20260601-03",
+  "/terminal-core.js?v=brand-yellow-lock-final-20260601-03",
+  "/terminal-modules.js?v=brand-yellow-lock-final-20260601-03",
+  "/terminal-sector-map.js?v=brand-yellow-lock-final-20260601-03",
+  "/terminal-strategy-config.js?v=brand-yellow-lock-final-20260601-03",
+  "/terminal-market-config.js?v=brand-yellow-lock-final-20260601-03",
+  "/terminal-ui-config.js?v=brand-yellow-lock-final-20260601-03",
+  "/terminal-runtime-config.js?v=brand-yellow-lock-final-20260601-03",
+  "/terminal-tuning-config.js?v=brand-yellow-lock-final-20260601-03",
+  "/terminal-worker.js?v=brand-yellow-lock-final-20260601-03",
+  "/terminal.js?v=brand-yellow-lock-final-20260601-03",
+  "/terminal-realtime-radar.css?v=brand-yellow-lock-final-20260601-03",
+  "/terminal-intraday-radar.css?v=brand-yellow-lock-final-20260601-03",
+  "/terminal-utility.css?v=brand-yellow-lock-final-20260601-03",
   "/assets/logo.webp",
   "/assets/login-bg-fuman-lite.webp",
   "/favicon.ico",

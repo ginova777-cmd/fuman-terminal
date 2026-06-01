@@ -5021,3 +5021,44 @@ body.fuman-light-theme .swing-topbar .schedule-status-pill,
 body.fuman-light-theme .strategy5-page-heading .schedule-status-pill {
   display: none !important;
 }
+
+/* brand-yellow-lock-final-20260601 */
+html body .auth-card .auth-badge,
+html body.fuman-light-theme .auth-card .auth-badge {
+  color: #ff8a3d !important;
+  -webkit-text-fill-color: #ff8a3d !important;
+}
+
+html body .auth-card h1,
+html body .auth-card h1 *,
+html body.fuman-light-theme .auth-card h1,
+html body.fuman-light-theme .auth-card h1 * {
+  color: #ffe7b7 !important;
+  -webkit-text-fill-color: #ffe7b7 !important;
+  text-shadow: 0 0 22px rgba(255, 199, 117, 0.2) !important;
+}
+
+html body .auth-card h2,
+html body .auth-card h2 *,
+html body.fuman-light-theme .auth-card h2,
+html body.fuman-light-theme .auth-card h2 * {
+  color: #ff9b45 !important;
+  -webkit-text-fill-color: #ff9b45 !important;
+  text-shadow: 0 0 18px rgba(255, 122, 69, 0.22) !important;
+}
+
+html body .brand strong,
+html body .brand strong *,
+html body.fuman-light-theme .brand strong,
+html body.fuman-light-theme .brand strong * {
+  color: #ffe7b7 !important;
+  -webkit-text-fill-color: #ffe7b7 !important;
+}
+
+html body .brand strong b,
+html body.fuman-light-theme .brand strong b,
+html body .brand span,
+html body.fuman-light-theme .brand span {
+  color: #ff9b45 !important;
+  -webkit-text-fill-color: #ff9b45 !important;
+}

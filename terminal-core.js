@@ -1,5 +1,5 @@
 (function () {
-  const version = "strategy4-remove-bc-signal-20260601-08";
+  const version = "brand-yellow-lock-final-20260601-03";
   window.FUMAN_TERMINAL_BOOT = {
     version,
     startedAt: Date.now(),
