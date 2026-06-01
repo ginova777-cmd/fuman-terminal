@@ -12,7 +12,8 @@ const SECRET_DIR = path.join(RUNTIME_DIR, "secrets");
 const OUT_FILE = path.join(DATA_DIR, "realtime-radar-health-report.json");
 const STATUS_FILE = path.join(STATE_DIR, "realtime-radar-health-status.json");
 const ALERT_COOLDOWN_MS = Number(process.env.REALTIME_RADAR_HEALTH_ALERT_COOLDOWN_MS || 15 * 60 * 1000);
-const FRONTEND_VERSION = process.env.FUMAN_EXPECTED_FRONTEND_VERSION || "realtime-radar-after-close-20260601-03";
+const FRONTEND_VERSION = process.env.FUMAN_EXPECTED_FRONTEND_VERSION || "realtime-radar-core-20260601-04";
+const FRONTEND_SW_CACHE = process.env.FUMAN_EXPECTED_SW_CACHE || "fuman-terminal-sw-20260601-07";
 
 function readJson(file, fallback = null) {
   try { return JSON.parse(fs.readFileSync(file, "utf8")); } catch { return fallback; }
@@ -80,22 +81,57 @@ function maxSeverity(issues) {
   return "ok";
 }
 
+function parseSchtasksOutput(output) {
+  const get = (label) => {
+    const line = output.split(/\r?\n/).find((item) => item.trim().startsWith(label + ":"));
+    return line ? line.split(":").slice(1).join(":").trim() : "";
+  };
+  return {
+    status: get("Status"),
+    nextRunTime: get("Next Run Time"),
+    lastRunTime: get("Last Run Time"),
+    lastResult: get("Last Result"),
+  };
+}
+
+function powershellTaskInfo(name) {
+  const taskName = String(name).replace(/^\\+/, "").replace(/'/g, "''");
+  const pwsh = fs.existsSync("C:/Program Files/PowerShell/7/pwsh.exe")
+    ? "C:/Program Files/PowerShell/7/pwsh.exe"
+    : "powershell.exe";
+  const script = [
+    "$ErrorActionPreference = 'Stop'",
+    "[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)",
+    "$OutputEncoding = [Console]::OutputEncoding",
+    "$task = Get-ScheduledTask | Where-Object { $_.TaskName -eq '" + taskName + "' } | Select-Object -First 1",
+    "if (-not $task) { throw 'scheduled task not found: " + taskName + "' }",
+    "$info = Get-ScheduledTaskInfo -TaskPath $task.TaskPath -TaskName $task.TaskName",
+    "[pscustomobject]@{",
+    "  exists = $true",
+    "  status = [string]$task.State",
+    "  nextRunTime = if ($info.NextRunTime) { $info.NextRunTime.ToString('yyyy/M/d tt hh:mm:ss') } else { '' }",
+    "  lastRunTime = if ($info.LastRunTime) { $info.LastRunTime.ToString('yyyy/M/d tt hh:mm:ss') } else { '' }",
+    "  lastResult = [string]$info.LastTaskResult",
+    "} | ConvertTo-Json -Compress",
+  ].join("\n");
+  const output = execFileSync(pwsh, ["-NoProfile", "-Command", script], { encoding: "utf8" }).trim();
+  return JSON.parse(output);
+}
+
 function taskInfo(name) {
   try {
     const output = execFileSync("schtasks", ["/Query", "/TN", name, "/V", "/FO", "LIST"], { encoding: "utf8" });
-    const get = (label) => {
-      const line = output.split(/\r?\n/).find((item) => item.trim().startsWith(`${label}:`));
-      return line ? line.split(":").slice(1).join(":").trim() : "";
-    };
-    return {
-      exists: true,
-      status: get("Status"),
-      nextRunTime: get("Next Run Time"),
-      lastRunTime: get("Last Run Time"),
-      lastResult: get("Last Result"),
-    };
+    const parsed = parseSchtasksOutput(output);
+    if (parsed.status || parsed.nextRunTime || parsed.lastRunTime || parsed.lastResult) {
+      return { exists: true, ...parsed };
+    }
+    return powershellTaskInfo(name);
   } catch (error) {
-    return { exists: false, error: String(error?.message || error) };
+    try {
+      return powershellTaskInfo(name);
+    } catch (fallbackError) {
+      return { exists: false, error: String(fallbackError?.message || error?.message || error) };
+    }
   }
 }
 
@@ -128,12 +164,27 @@ async function readStaticLatest() {
 
 async function readFrontendGuard() {
   const home = await fetch(`https://fuman-terminal.vercel.app/?t=${Date.now()}`, { cache: "no-store" }).then((r) => r.text());
+  const core = await fetch(`https://fuman-terminal.vercel.app/terminal-core.js?v=${FRONTEND_VERSION}&t=${Date.now()}`, { cache: "no-store" }).then((r) => r.text());
   const app = await fetch(`https://fuman-terminal.vercel.app/terminal-app.js?v=${FRONTEND_VERSION}&t=${Date.now()}`, { cache: "no-store" }).then((r) => r.text());
+  const sw = await fetch(`https://fuman-terminal.vercel.app/fuman-sw.js?t=${Date.now()}`, { cache: "no-store" }).then((r) => r.text());
+  const pageVersion = home.includes(`terminal-core.js?v=${FRONTEND_VERSION}`);
+  const coreVersion = core.includes(`const version = "${FRONTEND_VERSION}"`);
+  const oldCoreVersion = core.includes("realtime-radar-date-20260601-02");
+  const afterCloseGuard = app.includes("shouldRefreshRealtimeRadarRemoteCache");
+  const afterCloseSupabase = app.includes("shouldRunLivePolling() || !isKnownNonTradingMarketDate()");
+  const swVersion = sw.includes(FRONTEND_VERSION);
+  const swCache = sw.includes(FRONTEND_SW_CACHE);
   return {
-    ok: home.includes(FRONTEND_VERSION) && app.includes("shouldRefreshRealtimeRadarRemoteCache") && app.includes("shouldRunLivePolling() || !isKnownNonTradingMarketDate()"),
-    pageVersion: home.includes(FRONTEND_VERSION),
-    afterCloseGuard: app.includes("shouldRefreshRealtimeRadarRemoteCache"),
-    afterCloseSupabase: app.includes("shouldRunLivePolling() || !isKnownNonTradingMarketDate()"),
+    ok: pageVersion && coreVersion && !oldCoreVersion && afterCloseGuard && afterCloseSupabase && swVersion && swCache,
+    pageVersion,
+    coreVersion,
+    oldCoreVersion,
+    afterCloseGuard,
+    afterCloseSupabase,
+    swVersion,
+    swCache,
+    expectedVersion: FRONTEND_VERSION,
+    expectedSwCache: FRONTEND_SW_CACHE,
   };
 }
 
