@@ -34,6 +34,8 @@ const SUPABASE_TABLE = process.env.FUMAN_REALTIME_RADAR_TABLE || "fuman_realtime
 const STALE_AFTER_MS = Number(process.env.REALTIME_RADAR_STALE_MS || 20000);
 const MAX_QUOTE_AGE_SECONDS = Number(process.env.REALTIME_RADAR_MAX_QUOTE_AGE_SECONDS || 150);
 const REALTIME_RESCAN_BATCH_SIZE = Number(process.env.REALTIME_RADAR_RESCAN_BATCH_SIZE || 80);
+const REALTIME_BATCH_TIMEOUT_MS = Number(process.env.REALTIME_RADAR_BATCH_TIMEOUT_MS || 10000);
+const REALTIME_BATCH_CONCURRENCY = Math.max(1, Number(process.env.REALTIME_RADAR_BATCH_CONCURRENCY || 6));
 const REALTIME_RADAR_ALERT_COOLDOWN_MS = Math.max(0, Number(process.env.REALTIME_RADAR_ALERT_COOLDOWN_MS || 15 * 60 * 1000));
 
 function writeJson(file, value) {
@@ -313,15 +315,20 @@ async function fetchRealtime(stocks) {
   const quotes = new Map();
   const batchSize = 100;
   const failedBatches = [];
-  let totalBatches = 0;
+  const batches = [];
   for (let i = 0; i < stocks.length; i += batchSize) {
     const batchStocks = stocks.slice(i, i + batchSize);
     const codes = batchStocks.map((stock) => stock.code);
     if (!codes.length) continue;
-    const batchIndex = totalBatches + 1;
-    totalBatches += 1;
+    batches.push({
+      batchIndex: batches.length + 1,
+      batchStocks,
+      codes,
+    });
+  }
+  await runWithConcurrency(batches, REALTIME_BATCH_CONCURRENCY, async ({ batchStocks, codes, batchIndex }) => {
     try {
-      const payload = await fetchJson(`${BASE_URL}/api/realtime?codes=${encodeURIComponent(codes.join(","))}&t=${Date.now()}`, 20000);
+      const payload = await fetchJson(`${BASE_URL}/api/realtime?codes=${encodeURIComponent(codes.join(","))}&t=${Date.now()}`, REALTIME_BATCH_TIMEOUT_MS);
       (payload.quotes || []).forEach((quote) => quotes.set(quote.code, quote));
     } catch (error) {
       failedBatches.push({
@@ -335,20 +342,19 @@ async function fetchRealtime(stocks) {
       });
       console.log(`realtime batch deferred #${batchIndex} ${codes[0]}-${codes.at(-1)}: ${error.message}`);
     }
-  }
+  });
+  failedBatches.sort((a, b) => a.batchIndex - b.batchIndex);
   const batchByCode = new Map();
-  for (let i = 0; i < stocks.length; i += batchSize) {
-    const codes = stocks.slice(i, i + batchSize).map((stock) => stock.code).filter(Boolean);
-    const batchIndex = Math.floor(i / batchSize) + 1;
-    for (const code of codes) {
-      batchByCode.set(code, { batchIndex, startCode: codes[0], endCode: codes.at(-1) });
+  for (const batch of batches) {
+    for (const code of batch.codes) {
+      batchByCode.set(code, { batchIndex: batch.batchIndex, startCode: batch.codes[0], endCode: batch.codes.at(-1) });
     }
   }
   const liveStocks = applyRealtimeQuotes(stocks, quotes).map((stock) => ({
     ...stock,
     realtimeBatch: batchByCode.get(stock.code) || null,
   }));
-  return { stocks: liveStocks, failedBatches, totalBatches, quoteCount: quotes.size };
+  return { stocks: liveStocks, failedBatches, totalBatches: batches.length, quoteCount: quotes.size };
 }
 
 function applyRealtimeQuotes(stocks, quotes) {
