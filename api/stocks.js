@@ -36,6 +36,12 @@ function isCommonStockCode(code) {
   return /^\d{4}$/.test(code);
 }
 
+function chunkArray(items, size) {
+  const chunks = [];
+  for (let i = 0; i < items.length; i += size) chunks.push(items.slice(i, i + size));
+  return chunks;
+}
+
 function stockChange(close, change) {
   const previous = close - change;
   const percent = previous ? (change / previous) * 100 : 0;
@@ -73,6 +79,86 @@ function recentDateKeys(days = 10) {
     dates.push(formatDateKey(date));
   }
   return dates;
+}
+
+function taipeiParts(date = new Date()) {
+  return Object.fromEntries(new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Taipei",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).formatToParts(date).map((part) => [part.type, part.value]));
+}
+
+function isTaipeiMarketSession() {
+  const parts = taipeiParts();
+  const minute = Number(parts.hour) * 60 + Number(parts.minute);
+  return minute >= 9 * 60 && minute <= 13 * 60 + 30;
+}
+
+async function fetchMisBatch(stocks) {
+  const query = stocks.map((stock) => {
+    const market = String(stock.Market || "").toUpperCase() === "TPEX" ? "otc" : "tse";
+    return `${market}_${stock.Code}.tw`;
+  }).join("|");
+  const url = `https://mis.twse.com.tw/stock/api/getStockInfo.jsp?ex_ch=${encodeURIComponent(query)}&json=1&delay=0`;
+  try {
+    const payload = JSON.parse(await fetchText(url, { headers: { Referer: "https://mis.twse.com.tw/" } }, 2500));
+    return normalizeArray(payload.msgArray);
+  } catch {
+    return [];
+  }
+}
+
+async function fetchMisQuotes(stocks) {
+  const quoteMap = new Map();
+  const results = await Promise.allSettled(chunkArray(stocks, 120).map(fetchMisBatch));
+  results.forEach((result) => {
+    if (result.status !== "fulfilled") return;
+    result.value.forEach((item) => {
+      const code = String(item.c || "").trim();
+      const close = cleanNumber(item.z) || cleanNumber(item.y);
+      const prev = cleanNumber(item.y) || close;
+      if (!code || !close || !prev) return;
+      const volumeLots = cleanNumber(item.v);
+      const change = close - prev;
+      quoteMap.set(code, {
+        close,
+        change,
+        value: volumeLots ? volumeLots * 1000 * close : 0,
+        volume: volumeLots ? volumeLots * 1000 : 0,
+        percent: prev ? (change / prev) * 100 : 0,
+        quoteTime: String(item.t || "").trim(),
+      });
+    });
+  });
+  return quoteMap;
+}
+
+async function mergeRealtimeQuotes(stocks, todayKey) {
+  if (!isTaipeiMarketSession() || !stocks.length) return { stocks, realtimeCount: 0 };
+  const quoteMap = await fetchMisQuotes(stocks);
+  if (quoteMap.size < Math.min(500, Math.floor(stocks.length * 0.25))) return { stocks, realtimeCount: quoteMap.size };
+  const merged = stocks.map((stock) => {
+    const quote = quoteMap.get(stock.Code);
+    if (!quote) return stock;
+    return {
+      ...stock,
+      Date: todayKey,
+      TradeDate: todayKey,
+      quoteDate: todayKey,
+      tradeDate: todayKey,
+      ClosingPrice: String(quote.close),
+      Change: String(quote.change),
+      TradeValue: String(quote.value || cleanNumber(stock.TradeValue)),
+      TradeVolume: String(quote.volume || cleanNumber(stock.TradeVolume)),
+      Percent: quote.percent.toFixed(2),
+      quoteTime: quote.quoteTime,
+      quoteUpdatedAt: Date.now(),
+      isRealtime: true,
+    };
+  });
+  return { stocks: merged, realtimeCount: quoteMap.size };
 }
 
 function mostCommonDate(stocks) {
@@ -321,7 +407,12 @@ module.exports = async function handler(request, response) {
   [...twse, ...tpex]
     .filter((stock) => normalizeTradeDate(stock.tradeDate || stock.quoteDate || stock.TradeDate || stock.Date) === resolvedTradeDate)
     .forEach((stock) => byCode.set(stock.Code, stock));
-  const stocks = [...byCode.values()].sort((a, b) => a.Code.localeCompare(b.Code));
+  let stocks = [...byCode.values()].sort((a, b) => a.Code.localeCompare(b.Code));
+  const realtime = await mergeRealtimeQuotes(stocks, todayKey);
+  stocks = realtime.stocks;
+  const effectiveTradeDate = realtime.realtimeCount >= Math.min(500, Math.floor(stocks.length * 0.25))
+    ? todayKey
+    : resolvedTradeDate;
 
   response.setHeader("Cache-Control", "s-maxage=60, stale-while-revalidate=300");
   response.status(stocks.length ? 200 : 502).json({
@@ -329,8 +420,10 @@ module.exports = async function handler(request, response) {
     source: `${twsePayload.source} + ${tpexPayload.source}`,
     updatedAt: new Date().toISOString(),
     today: todayKey,
-    resolvedTradeDate,
-    isFallbackDate,
+    resolvedTradeDate: effectiveTradeDate,
+    sourceTradeDate: resolvedTradeDate,
+    isFallbackDate: Boolean(effectiveTradeDate && effectiveTradeDate !== todayKey),
+    realtimeCount: realtime.realtimeCount,
     marketDates: {
       twse: twsePayload.tradeDate || "",
       tpex: tpexPayload.tradeDate || "",

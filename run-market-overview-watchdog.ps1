@@ -24,10 +24,22 @@ function Get-TaipeiMinuteOfDay {
 $minute = Get-TaipeiMinuteOfDay
 $marketStart = 9 * 60
 $marketEnd = 13 * 60 + 30
+$heartbeatGraceSeconds = 45
 
 if ($minute -lt $marketStart -or $minute -gt $marketEnd) {
   Write-WatchdogLog "outside market window; no action"
   exit 0
+}
+
+$latestPatrolLog = Get-ChildItem -LiteralPath $logDir -Filter "market-overview-$(Get-Date -Format yyyyMMdd)-*.log" -ErrorAction SilentlyContinue |
+  Sort-Object LastWriteTime -Descending |
+  Select-Object -First 1
+if ($latestPatrolLog) {
+  $ageSeconds = ((Get-Date) - $latestPatrolLog.LastWriteTime).TotalSeconds
+  if ($ageSeconds -le $heartbeatGraceSeconds) {
+    Write-WatchdogLog ("market overview patrol heartbeat alive; log={0}; age={1:N0}s" -f $latestPatrolLog.Name, $ageSeconds)
+    exit 0
+  }
 }
 
 $existingPatrol = Get-CimInstance Win32_Process -Filter "Name = 'node.exe'" |

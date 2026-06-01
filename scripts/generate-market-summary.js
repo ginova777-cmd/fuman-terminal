@@ -62,11 +62,16 @@ async function main() {
   const marketPayload = market.status === "fulfilled" ? market.value : {};
   const heatmapPayload = heatmap.status === "fulfilled" ? heatmap.value : {};
   const stockPayload = stocksResult.status === "fulfilled" ? stocksResult.value : {};
-  const stocks = Array.isArray(marketPayload.stocks) && marketPayload.stocks.length
-    ? marketPayload.stocks
-    : Array.isArray(stockPayload.stocks)
-      ? stockPayload.stocks
-      : [];
+  const heatmapStocks = Array.isArray(heatmapPayload.sectors)
+    ? heatmapPayload.sectors.flatMap((sector) => Array.isArray(sector.stocks) ? sector.stocks : [])
+    : [];
+  const stocks = heatmapStocks.length
+    ? heatmapStocks
+    : Array.isArray(marketPayload.stocks) && marketPayload.stocks.length
+      ? marketPayload.stocks
+      : Array.isArray(stockPayload.stocks)
+        ? stockPayload.stocks
+        : [];
   const topStocks = [...stocks]
     .sort((a, b) => Number(b.percent || 0) - Number(a.percent || 0))
     .slice(0, 80)
@@ -84,9 +89,9 @@ async function main() {
     stockCount: stocks.length,
     stocks: topStocks,
     sectors: Array.isArray(heatmapPayload.sectors) ? heatmapPayload.sectors.slice(0, 60).map(slimSector) : [],
-    marketDates: marketPayload.marketDates || {},
-    resolvedTradeDate: marketPayload.resolvedTradeDate || "",
-    today: marketPayload.today || "",
+    marketDates: stockPayload.marketDates || marketPayload.marketDates || {},
+    resolvedTradeDate: stockPayload.resolvedTradeDate || marketPayload.resolvedTradeDate || "",
+    today: stockPayload.today || marketPayload.today || "",
   };
   writeJson(path.join(ROOT, "data", "market-summary.json"), summary);
   writeJson(dataPath("market-summary.json"), summary);
