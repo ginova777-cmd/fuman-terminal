@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-05-30T10:31:54.983Z",
+  "updatedAt": "2026-06-01T08:37:28.8935828Z",
   "tasks": [
     {
       "taskName": "\\Fuman PC Wake 0430",
@@ -145,21 +145,34 @@
       ]
     },
     {
+      "taskName": "\\Fuman Strategy3 Cache 1230",
+      "displayName": "Fuman Strategy3 Cache 1230",
+      "description": "策略3隔日沖，12:30 先跑主掃描",
+      "time": "12:30",
+      "aliases": [
+        "策略3 1230",
+        "strategy3 early"
+      ]
+    },
+    {
       "taskName": "\\Fuman Strategy3 Cache 1300",
       "displayName": "Fuman Strategy3 Cache 1300",
-      "description": "策略3隔日沖，下午 13:00 快取",
+      "description": "策略3隔日沖，13:00 第二次保險快取",
       "time": "13:00",
       "aliases": [
-        "策略3"
+        "策略3",
+        "策略3 1300",
+        "strategy3 fallback"
       ]
     },
     {
       "taskName": "\\Fuman Strategy3 Watchdog 1320",
       "displayName": "Fuman Strategy3 Watchdog 1320",
-      "description": "策略3 Watchdog，13:20 檢查並補跑",
+      "description": "策略3 Watchdog，13:20 最後檢查並補跑",
       "time": "13:20",
       "aliases": [
-        "strategy3 watchdog"
+        "strategy3 watchdog",
+        "策略3 watchdog"
       ]
     },
     {

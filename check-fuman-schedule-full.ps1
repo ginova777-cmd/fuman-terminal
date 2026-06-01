@@ -22,8 +22,9 @@ function Get-FumanTaskDescription($TaskName) {
     "Fuman Strategy2 Intraday Scan" { return "策略2 當沖雷達，08:58 啟動，09:00 後每 3 秒巡邏到 13:30" }
     "Fuman Strategy2 LINE Start 0900" { return "策略2 LINE 通知巡邏啟動" }
     "Fuman Strategy2 LINE Stop 1330" { return "策略2 LINE 通知停止" }
-    "Fuman Strategy3 Cache 1300" { return "策略3 隔日沖，下午 13:00 快取" }
-    "Fuman Strategy3 Watchdog 1320" { return "策略3 watchdog，下午 13:20 檢查並補跑" }
+    "Fuman Strategy3 Cache 1230" { return "策略3 隔日沖，12:30 先跑主掃描" }
+    "Fuman Strategy3 Cache 1300" { return "策略3 隔日沖，13:00 第二次保險快取" }
+    "Fuman Strategy3 Watchdog 1320" { return "策略3 watchdog，13:20 最後檢查並補跑" }
     "Fuman Strategy4 Cache 1430" { return "策略4 波段，下午 14:30 全台股掃描" }
     "Fuman Strategy5 Cache 0600" { return "策略5 綜合策略與漲停十字星，早上 06:00 固定快取" }
     "Fuman Strategy5 Cache 2100" { return "策略5 綜合策略與漲停十字星，晚上 21:00 固定快取" }
@@ -344,3 +345,5 @@ $outboxStatus | Write-RenderedObject -Renderer { param($items) $items | Format-L
 if ($outboxStatus.狀態 -ne "OK") {
   Write-Host "仍有 cache sync outbox 待補送；下一次網路正常同步會優先補送。" -ForegroundColor Yellow
 }
+
+
