@@ -1,1919 +1,149 @@
 {
   "ok": true,
   "source": "github-actions",
-  "updatedAt": "2026-05-29T16:30:37.466Z",
-  "scanStamp": "",
+  "updatedAt": "2026-06-01T06:51:06.815Z",
+  "scanStamp": "20260601",
   "total": 1963,
   "scannedCount": 1963,
-  "count": 675,
+  "count": 1611,
   "complete": true,
   "qualityStatus": "complete",
   "zoneCounts": {
-    "A": 86,
-    "B": 324,
-    "C": 265
+    "A": 344,
+    "B": 805,
+    "C": 462
   },
   "signalCounts": {
-    "bull_attack": 34,
-    "saucer": 32,
-    "breakaway_gap": 37,
-    "golden_cross": 14,
-    "n_base": 24,
-    "three_inside": 2,
-    "runaway_gap": 10,
-    "watch_trend": 324,
-    "base_setup": 265
+    "n_base": 163,
+    "breakaway_gap": 102,
+    "golden_cross": 18,
+    "saucer": 24,
+    "watch_trend": 805,
+    "runaway_gap": 110,
+    "bull_attack": 27,
+    "three_inside": 5,
+    "base_setup": 462,
+    "v_reversal": 2
   },
   "topMatches": [
     {
-      "code": "8040",
-      "name": "九暘",
-      "close": 111.5,
-      "percent": 133.50785340314135,
-      "tradeVolume": 2380.961,
-      "value": 265119334,
-      "swingScore": 100,
-      "swingZone": "A",
-      "swingStage": {
-        "label": "高基期",
-        "ratio": "0.96",
-        "tone": "high",
-        "value": 0.96274217585693
-      },
-      "swingSignals": [
-        {
-          "id": "bull_attack",
-          "title": "",
-          "short": "攻擊",
-          "icon": "🔥",
-          "reason": "站上MA20/EMA21，MACD多頭，量比 6.63，日K多頭攻擊。"
-        },
-        {
-          "id": "saucer",
-          "title": "",
-          "short": "圓弧",
-          "icon": "◜",
-          "reason": "突破40日整理頸線，量能放大，偏圓弧底突破。"
-        },
-        {
-          "id": "breakaway_gap",
-          "title": "",
-          "short": "突破缺口",
-          "icon": "◆",
-          "reason": "跳空突破近20日整理高點，偏突破缺口。"
-        }
-      ]
-    },
-    {
-      "code": "6432",
-      "name": "今展科",
-      "close": 70.6,
-      "percent": 114.58966565349544,
-      "tradeVolume": 4958.027,
-      "value": 345626958,
-      "swingScore": 100,
-      "swingZone": "A",
-      "swingStage": {
-        "label": "高基期",
-        "ratio": "0.96",
-        "tone": "high",
-        "value": 0.9573964497041417
-      },
-      "swingSignals": [
-        {
-          "id": "breakaway_gap",
-          "title": "",
-          "short": "突破缺口",
-          "icon": "◆",
-          "reason": "跳空突破近20日整理高點，偏突破缺口。"
-        },
-        {
-          "id": "golden_cross",
-          "title": "",
-          "short": "金釵",
-          "icon": "✦",
-          "reason": "MA5 > MA10 > MA20 且收紅，多金釵候選。"
-        }
-      ]
-    },
-    {
-      "code": "6435",
-      "name": "大中",
-      "close": 287.5,
-      "percent": 98.27586206896551,
-      "tradeVolume": 1425.737,
-      "value": 409913917,
-      "swingScore": 100,
-      "swingZone": "A",
-      "swingStage": {
-        "label": "高基期",
-        "ratio": "0.94",
-        "tone": "high",
-        "value": 0.9394812680115274
-      },
-      "swingSignals": [
-        {
-          "id": "breakaway_gap",
-          "title": "",
-          "short": "突破缺口",
-          "icon": "◆",
-          "reason": "跳空突破近20日整理高點，偏突破缺口。"
-        },
-        {
-          "id": "golden_cross",
-          "title": "",
-          "short": "金釵",
-          "icon": "✦",
-          "reason": "MA5 > MA10 > MA20 且收紅，多金釵候選。"
-        }
-      ]
-    },
-    {
-      "code": "5864",
-      "name": "致和證",
-      "close": 43.05,
-      "percent": 84.76394849785406,
-      "tradeVolume": 11429.398,
-      "value": 476637826,
-      "swingScore": 100,
-      "swingZone": "A",
-      "swingStage": {
-        "label": "過熱",
-        "ratio": "1.00+",
-        "tone": "hot",
-        "value": 1
-      },
-      "swingSignals": [
-        {
-          "id": "bull_attack",
-          "title": "",
-          "short": "攻擊",
-          "icon": "🔥",
-          "reason": "站上MA20/EMA21，MACD多頭，量比 2.63，日K多頭攻擊。"
-        },
-        {
-          "id": "saucer",
-          "title": "",
-          "short": "圓弧",
-          "icon": "◜",
-          "reason": "突破40日整理頸線，量能放大，偏圓弧底突破。"
-        },
-        {
-          "id": "breakaway_gap",
-          "title": "",
-          "short": "突破缺口",
-          "icon": "◆",
-          "reason": "跳空突破近20日整理高點，偏突破缺口。"
-        },
-        {
-          "id": "golden_cross",
-          "title": "",
-          "short": "金釵",
-          "icon": "✦",
-          "reason": "MA5 > MA10 > MA20 且收紅，多金釵候選。"
-        }
-      ]
-    },
-    {
-      "code": "3556",
-      "name": "禾瑞亞",
-      "close": 67.2,
-      "percent": 82.11382113821139,
-      "tradeVolume": 1964.066,
-      "value": 130190749,
-      "swingScore": 100,
-      "swingZone": "A",
-      "swingStage": {
-        "label": "過熱",
-        "ratio": "1.00+",
-        "tone": "hot",
-        "value": 1
-      },
-      "swingSignals": [
-        {
-          "id": "bull_attack",
-          "title": "",
-          "short": "攻擊",
-          "icon": "🔥",
-          "reason": "站上MA20/EMA21，MACD多頭，量比 14.93，日K多頭攻擊。"
-        },
-        {
-          "id": "saucer",
-          "title": "",
-          "short": "圓弧",
-          "icon": "◜",
-          "reason": "突破40日整理頸線，量能放大，偏圓弧底突破。"
-        },
-        {
-          "id": "breakaway_gap",
-          "title": "",
-          "short": "突破缺口",
-          "icon": "◆",
-          "reason": "跳空突破近20日整理高點，偏突破缺口。"
-        },
-        {
-          "id": "golden_cross",
-          "title": "",
-          "short": "金釵",
-          "icon": "✦",
-          "reason": "MA5 > MA10 > MA20 且收紅，多金釵候選。"
-        }
-      ]
-    },
-    {
-      "code": "6494",
-      "name": "九齊",
-      "close": 59.1,
-      "percent": 63.711911357340725,
-      "tradeVolume": 331.91,
-      "value": 19443136,
-      "swingScore": 100,
-      "swingZone": "A",
-      "swingStage": {
-        "label": "高基期",
-        "ratio": "0.97",
-        "tone": "high",
-        "value": 0.9720000000000002
-      },
-      "swingSignals": [
-        {
-          "id": "breakaway_gap",
-          "title": "",
-          "short": "突破缺口",
-          "icon": "◆",
-          "reason": "跳空突破近20日整理高點，偏突破缺口。"
-        }
-      ]
-    },
-    {
-      "code": "7712",
-      "name": "博盛半導體",
-      "close": 167,
-      "percent": 60.57692307692307,
-      "tradeVolume": 1095.724,
-      "value": 184899491,
-      "swingScore": 100,
-      "swingZone": "A",
-      "swingStage": {
-        "label": "高基期",
-        "ratio": "0.94",
-        "tone": "high",
-        "value": 0.9398249452954048
-      },
-      "swingSignals": [
-        {
-          "id": "breakaway_gap",
-          "title": "",
-          "short": "突破缺口",
-          "icon": "◆",
-          "reason": "跳空突破近20日整理高點，偏突破缺口。"
-        },
-        {
-          "id": "golden_cross",
-          "title": "",
-          "short": "金釵",
-          "icon": "✦",
-          "reason": "MA5 > MA10 > MA20 且收紅，多金釵候選。"
-        }
-      ]
-    },
-    {
-      "code": "5386",
-      "name": "青雲",
-      "close": 593,
-      "percent": 56.464379947229546,
-      "tradeVolume": 2467.744,
-      "value": 1448054383,
-      "swingScore": 100,
-      "swingZone": "A",
-      "swingStage": {
-        "label": "高基期",
-        "ratio": "0.99",
-        "tone": "high",
-        "value": 0.9889042995839112
-      },
-      "swingSignals": [
-        {
-          "id": "n_base",
-          "title": "",
-          "short": "N字",
-          "icon": "",
-          "reason": "爆量突破後回檔不破半分位，再突破前高 386.50，N字共振。"
-        },
-        {
-          "id": "breakaway_gap",
-          "title": "",
-          "short": "突破缺口",
-          "icon": "◆",
-          "reason": "跳空突破近20日整理高點，偏突破缺口。"
-        }
-      ]
-    },
-    {
-      "code": "7556",
-      "name": "意德士",
-      "close": 277.5,
-      "percent": 56.33802816901409,
-      "tradeVolume": 144.271,
-      "value": 39956812,
-      "swingScore": 100,
-      "swingZone": "A",
-      "swingStage": {
-        "label": "高基期",
-        "ratio": "0.95",
-        "tone": "high",
-        "value": 0.9482071713147411
-      },
-      "swingSignals": [
-        {
-          "id": "breakaway_gap",
-          "title": "",
-          "short": "突破缺口",
-          "icon": "◆",
-          "reason": "跳空突破近20日整理高點，偏突破缺口。"
-        }
-      ]
-    },
-    {
-      "code": "6016",
-      "name": "康和證",
-      "close": 29.6,
-      "percent": 52.18508997429308,
-      "tradeVolume": 20972.695,
-      "value": 601534773,
-      "swingScore": 100,
-      "swingZone": "A",
-      "swingStage": {
-        "label": "過熱",
-        "ratio": "1.00+",
-        "tone": "hot",
-        "value": 1
-      },
-      "swingSignals": [
-        {
-          "id": "bull_attack",
-          "title": "",
-          "short": "攻擊",
-          "icon": "🔥",
-          "reason": "站上MA20/EMA21，MACD多頭，量比 2.85，日K多頭攻擊。"
-        },
-        {
-          "id": "saucer",
-          "title": "",
-          "short": "圓弧",
-          "icon": "◜",
-          "reason": "突破40日整理頸線，量能放大，偏圓弧底突破。"
-        },
-        {
-          "id": "breakaway_gap",
-          "title": "",
-          "short": "突破缺口",
-          "icon": "◆",
-          "reason": "跳空突破近20日整理高點，偏突破缺口。"
-        }
-      ]
-    },
-    {
-      "code": "6015",
-      "name": "宏遠證",
-      "close": 19.3,
-      "percent": 47.328244274809165,
-      "tradeVolume": 10899.186,
-      "value": 203708023,
-      "swingScore": 100,
-      "swingZone": "A",
-      "swingStage": {
-        "label": "高基期",
-        "ratio": "0.98",
-        "tone": "high",
-        "value": 0.9754601226993866
-      },
-      "swingSignals": [
-        {
-          "id": "bull_attack",
-          "title": "",
-          "short": "攻擊",
-          "icon": "🔥",
-          "reason": "站上MA20/EMA21，MACD多頭，量比 4.53，日K多頭攻擊。"
-        },
-        {
-          "id": "saucer",
-          "title": "",
-          "short": "圓弧",
-          "icon": "◜",
-          "reason": "突破40日整理頸線，量能放大，偏圓弧底突破。"
-        },
-        {
-          "id": "breakaway_gap",
-          "title": "",
-          "short": "突破缺口",
-          "icon": "◆",
-          "reason": "跳空突破近20日整理高點，偏突破缺口。"
-        },
-        {
-          "id": "golden_cross",
-          "title": "",
-          "short": "金釵",
-          "icon": "✦",
-          "reason": "MA5 > MA10 > MA20 且收紅，多金釵候選。"
-        }
-      ]
-    },
-    {
-      "code": "4556",
-      "name": "旭然",
-      "close": 39.15,
-      "percent": 47.18045112781953,
-      "tradeVolume": 405.304,
-      "value": 15680939,
-      "swingScore": 100,
-      "swingZone": "A",
-      "swingStage": {
-        "label": "高基期",
-        "ratio": "0.94",
-        "tone": "high",
-        "value": 0.9388489208633093
-      },
-      "swingSignals": [
-        {
-          "id": "bull_attack",
-          "title": "",
-          "short": "攻擊",
-          "icon": "🔥",
-          "reason": "站上MA20/EMA21，MACD多頭，量比 3.23，日K多頭攻擊。"
-        },
-        {
-          "id": "saucer",
-          "title": "",
-          "short": "圓弧",
-          "icon": "◜",
-          "reason": "突破40日整理頸線，量能放大，偏圓弧底突破。"
-        },
-        {
-          "id": "breakaway_gap",
-          "title": "",
-          "short": "突破缺口",
-          "icon": "◆",
-          "reason": "跳空突破近20日整理高點，偏突破缺口。"
-        },
-        {
-          "id": "golden_cross",
-          "title": "",
-          "short": "金釵",
-          "icon": "✦",
-          "reason": "MA5 > MA10 > MA20 且收紅，多金釵候選。"
-        }
-      ]
-    },
-    {
-      "code": "6548",
-      "name": "長科*",
-      "close": 68.2,
-      "percent": 37.223340040241446,
-      "tradeVolume": 27293.174,
-      "value": 1820907603,
-      "swingScore": 100,
-      "swingZone": "A",
-      "swingStage": {
-        "label": "高基期",
-        "ratio": "0.99",
-        "tone": "high",
-        "value": 0.9931972789115645
-      },
-      "swingSignals": [
-        {
-          "id": "bull_attack",
-          "title": "",
-          "short": "攻擊",
-          "icon": "🔥",
-          "reason": "站上MA20/EMA21，MACD多頭，量比 3.16，日K多頭攻擊。"
-        },
-        {
-          "id": "saucer",
-          "title": "",
-          "short": "圓弧",
-          "icon": "◜",
-          "reason": "突破40日整理頸線，量能放大，偏圓弧底突破。"
-        },
-        {
-          "id": "breakaway_gap",
-          "title": "",
-          "short": "突破缺口",
-          "icon": "◆",
-          "reason": "跳空突破近20日整理高點，偏突破缺口。"
-        },
-        {
-          "id": "golden_cross",
-          "title": "",
-          "short": "金釵",
-          "icon": "✦",
-          "reason": "MA5 > MA10 > MA20 且收紅，多金釵候選。"
-        }
-      ]
-    },
-    {
-      "code": "4543",
-      "name": "萬在",
-      "close": 41.5,
-      "percent": 33.2263242375602,
-      "tradeVolume": 1070.154,
-      "value": 43464213,
-      "swingScore": 100,
-      "swingZone": "A",
-      "swingStage": {
-        "label": "高基期",
-        "ratio": "0.98",
-        "tone": "high",
-        "value": 0.9820971867007672
-      },
-      "swingSignals": [
-        {
-          "id": "saucer",
-          "title": "",
-          "short": "圓弧",
-          "icon": "◜",
-          "reason": "突破40日整理頸線，量能放大，偏圓弧底突破。"
-        },
-        {
-          "id": "breakaway_gap",
-          "title": "",
-          "short": "突破缺口",
-          "icon": "◆",
-          "reason": "跳空突破近20日整理高點，偏突破缺口。"
-        }
-      ]
-    },
-    {
-      "code": "6204",
-      "name": "艾華",
-      "close": 93,
-      "percent": 30.069930069930066,
-      "tradeVolume": 869.399,
-      "value": 80174571,
-      "swingScore": 100,
-      "swingZone": "A",
-      "swingStage": {
-        "label": "高基期",
-        "ratio": "0.95",
-        "tone": "high",
-        "value": 0.9510869565217392
-      },
-      "swingSignals": [
-        {
-          "id": "breakaway_gap",
-          "title": "",
-          "short": "突破缺口",
-          "icon": "◆",
-          "reason": "跳空突破近20日整理高點，偏突破缺口。"
-        }
-      ]
-    },
-    {
-      "code": "4729",
-      "name": "熒茂",
-      "close": 25.1,
-      "percent": 27.411167512690366,
-      "tradeVolume": 1201.256,
-      "value": 29854530,
-      "swingScore": 100,
-      "swingZone": "A",
-      "swingStage": {
-        "label": "高基期",
-        "ratio": "0.88",
-        "tone": "high",
-        "value": 0.882352941176471
-      },
-      "swingSignals": [
-        {
-          "id": "breakaway_gap",
-          "title": "",
-          "short": "突破缺口",
-          "icon": "◆",
-          "reason": "跳空突破近20日整理高點，偏突破缺口。"
-        },
-        {
-          "id": "golden_cross",
-          "title": "",
-          "short": "金釵",
-          "icon": "✦",
-          "reason": "MA5 > MA10 > MA20 且收紅，多金釵候選。"
-        }
-      ]
-    },
-    {
-      "code": "5443",
-      "name": "均豪",
-      "close": 126.5,
-      "percent": 27.008032128514063,
-      "tradeVolume": 4883.969,
-      "value": 618219886,
-      "swingScore": 100,
-      "swingZone": "A",
-      "swingStage": {
-        "label": "高基期",
-        "ratio": "0.95",
-        "tone": "high",
-        "value": 0.9540229885057471
-      },
-      "swingSignals": [
-        {
-          "id": "n_base",
-          "title": "",
-          "short": "N字",
-          "icon": "",
-          "reason": "爆量突破後回檔不破半分位，再突破前高 106.00，N字共振。"
-        },
-        {
-          "id": "breakaway_gap",
-          "title": "",
-          "short": "突破缺口",
-          "icon": "◆",
-          "reason": "跳空突破近20日整理高點，偏突破缺口。"
-        }
-      ]
-    },
-    {
-      "code": "6020",
-      "name": "大展證",
-      "close": 24.1,
-      "percent": 23.907455012853482,
-      "tradeVolume": 180.476,
-      "value": 4313733,
-      "swingScore": 100,
-      "swingZone": "A",
-      "swingStage": {
-        "label": "過熱",
-        "ratio": "1.00+",
-        "tone": "hot",
-        "value": 1
-      },
-      "swingSignals": [
-        {
-          "id": "bull_attack",
-          "title": "",
-          "short": "攻擊",
-          "icon": "🔥",
-          "reason": "站上MA20/EMA21，MACD多頭，量比 5.96，日K多頭攻擊。"
-        },
-        {
-          "id": "saucer",
-          "title": "",
-          "short": "圓弧",
-          "icon": "◜",
-          "reason": "突破40日整理頸線，量能放大，偏圓弧底突破。"
-        },
-        {
-          "id": "breakaway_gap",
-          "title": "",
-          "short": "突破缺口",
-          "icon": "◆",
-          "reason": "跳空突破近20日整理高點，偏突破缺口。"
-        }
-      ]
-    },
-    {
-      "code": "5474",
-      "name": "聰泰",
-      "close": 180,
-      "percent": 18.81188118811881,
-      "tradeVolume": 2184.106,
-      "value": 390550967,
-      "swingScore": 100,
-      "swingZone": "A",
-      "swingStage": {
-        "label": "過熱",
-        "ratio": "1.00+",
-        "tone": "hot",
-        "value": 1
-      },
-      "swingSignals": [
-        {
-          "id": "saucer",
-          "title": "",
-          "short": "圓弧",
-          "icon": "◜",
-          "reason": "突破40日整理頸線，量能放大，偏圓弧底突破。"
-        },
-        {
-          "id": "breakaway_gap",
-          "title": "",
-          "short": "突破缺口",
-          "icon": "◆",
-          "reason": "跳空突破近20日整理高點，偏突破缺口。"
-        },
-        {
-          "id": "three_inside",
-          "title": "",
-          "short": "翻紅",
-          "icon": "↻",
-          "reason": "三內翻紅結構成立，站上MA20且趨勢確認。"
-        }
-      ]
-    },
-    {
-      "code": "6220",
-      "name": "岳豐",
-      "close": 33.5,
-      "percent": 13.367174280879862,
-      "tradeVolume": 967.419,
-      "value": 32061557,
-      "swingScore": 100,
-      "swingZone": "A",
-      "swingStage": {
-        "label": "高基期",
-        "ratio": "0.67",
-        "tone": "high",
-        "value": 0.6651376146788992
-      },
-      "swingSignals": [
-        {
-          "id": "runaway_gap",
-          "title": "",
-          "short": "逃逸缺口",
-          "icon": "🚀",
-          "reason": "跳空且站上MA20，多頭段延續，偏逃逸缺口。"
-        }
-      ]
-    },
-    {
-      "code": "4721",
-      "name": "美琪瑪",
-      "close": 92.7,
-      "percent": 11.01796407185629,
-      "tradeVolume": 2601.378,
-      "value": 240216373,
-      "swingScore": 100,
-      "swingZone": "A",
-      "swingStage": {
-        "label": "高基期",
-        "ratio": "0.88",
-        "tone": "high",
-        "value": 0.8823529411764707
-      },
-      "swingSignals": [
-        {
-          "id": "n_base",
-          "title": "",
-          "short": "N字",
-          "icon": "",
-          "reason": "爆量突破後回檔不破半分位，再突破前高 91.60，N字共振。"
-        },
-        {
-          "id": "runaway_gap",
-          "title": "",
-          "short": "逃逸缺口",
-          "icon": "🚀",
-          "reason": "跳空且站上MA20，多頭段延續，偏逃逸缺口。"
-        }
-      ]
-    },
-    {
-      "code": "5392",
-      "name": "能率",
-      "close": 44.55,
-      "percent": 10.958904109589037,
-      "tradeVolume": 12410.143,
-      "value": 549145954,
-      "swingScore": 100,
-      "swingZone": "A",
-      "swingStage": {
-        "label": "中位階",
-        "ratio": "0.52",
-        "tone": "mid",
-        "value": 0.5190217391304347
-      },
-      "swingSignals": [
-        {
-          "id": "golden_cross",
-          "title": "",
-          "short": "金釵",
-          "icon": "✦",
-          "reason": "MA5 > MA10 > MA20 且收紅，多金釵候選。"
-        }
-      ]
-    },
-    {
-      "code": "6195",
-      "name": "詩肯",
-      "close": 26.2,
-      "percent": 10.548523206751055,
-      "tradeVolume": 20.335,
-      "value": 532245,
-      "swingScore": 100,
-      "swingZone": "A",
-      "swingStage": {
-        "label": "高基期",
-        "ratio": "0.98",
-        "tone": "high",
-        "value": 0.9818181818181816
-      },
-      "swingSignals": [
-        {
-          "id": "n_base",
-          "title": "",
-          "short": "N字",
-          "icon": "",
-          "reason": "爆量突破後回檔不破半分位，再突破前高 24.80，N字共振。"
-        },
-        {
-          "id": "breakaway_gap",
-          "title": "",
-          "short": "突破缺口",
-          "icon": "◆",
-          "reason": "跳空突破近20日整理高點，偏突破缺口。"
-        }
-      ]
-    },
-    {
-      "code": "6160",
-      "name": "欣技",
-      "close": 17.35,
-      "percent": 10.509554140127403,
-      "tradeVolume": 757.035,
-      "value": 13103960,
-      "swingScore": 100,
-      "swingZone": "A",
-      "swingStage": {
-        "label": "中位階",
-        "ratio": "0.51",
-        "tone": "mid",
-        "value": 0.5064935064935068
-      },
-      "swingSignals": [
-        {
-          "id": "bull_attack",
-          "title": "",
-          "short": "攻擊",
-          "icon": "🔥",
-          "reason": "站上MA20/EMA21，MACD多頭，量比 5.91，日K多頭攻擊。"
-        },
-        {
-          "id": "runaway_gap",
-          "title": "",
-          "short": "逃逸缺口",
-          "icon": "🚀",
-          "reason": "跳空且站上MA20，多頭段延續，偏逃逸缺口。"
-        }
-      ]
-    },
-    {
-      "code": "4561",
-      "name": "健椿",
-      "close": 51.7,
-      "percent": 10.000000000000005,
-      "tradeVolume": 1901.678,
-      "value": 97102723,
-      "swingScore": 100,
-      "swingZone": "A",
-      "swingStage": {
-        "label": "高基期",
-        "ratio": "0.91",
-        "tone": "high",
-        "value": 0.9064587973273944
-      },
-      "swingSignals": [
-        {
-          "id": "saucer",
-          "title": "",
-          "short": "圓弧",
-          "icon": "◜",
-          "reason": "突破40日整理頸線，量能放大，偏圓弧底突破。"
-        }
-      ]
-    },
-    {
-      "code": "5328",
-      "name": "華容",
-      "close": 39.6,
-      "percent": 10.000000000000004,
-      "tradeVolume": 29947.83,
-      "value": 1136791678,
-      "swingScore": 100,
-      "swingZone": "A",
-      "swingStage": {
-        "label": "過熱",
-        "ratio": "1.00+",
-        "tone": "hot",
-        "value": 1
-      },
-      "swingSignals": [
-        {
-          "id": "bull_attack",
-          "title": "",
-          "short": "攻擊",
-          "icon": "🔥",
-          "reason": "站上MA20/EMA21，MACD多頭，量比 1.30，日K多頭攻擊。"
-        },
-        {
-          "id": "n_base",
-          "title": "",
-          "short": "N字",
-          "icon": "",
-          "reason": "爆量突破後回檔不破半分位，再突破前高 36.85，N字共振。"
-        },
-        {
-          "id": "saucer",
-          "title": "",
-          "short": "圓弧",
-          "icon": "◜",
-          "reason": "突破40日整理頸線，量能放大，偏圓弧底突破。"
-        }
-      ]
-    },
-    {
-      "code": "8277",
-      "name": "商丞",
-      "close": 8.61,
-      "percent": 9.961685823754781,
-      "tradeVolume": 1717.767,
-      "value": 14707366,
-      "swingScore": 100,
-      "swingZone": "A",
-      "swingStage": {
-        "label": "高基期",
-        "ratio": "0.77",
-        "tone": "high",
-        "value": 0.767361111111111
-      },
-      "swingSignals": [
-        {
-          "id": "breakaway_gap",
-          "title": "",
-          "short": "突破缺口",
-          "icon": "◆",
-          "reason": "跳空突破近20日整理高點，偏突破缺口。"
-        }
-      ]
-    },
-    {
-      "code": "8358",
-      "name": "金居",
-      "close": 608,
-      "percent": 9.945750452079565,
-      "tradeVolume": 20728.92,
-      "value": 12363666680,
-      "swingScore": 100,
-      "swingZone": "A",
-      "swingStage": {
-        "label": "過熱",
-        "ratio": "1.00+",
-        "tone": "hot",
-        "value": 1
-      },
-      "swingSignals": [
-        {
-          "id": "bull_attack",
-          "title": "",
-          "short": "攻擊",
-          "icon": "🔥",
-          "reason": "站上MA20/EMA21，MACD多頭，量比 1.58，日K多頭攻擊。"
-        },
-        {
-          "id": "saucer",
-          "title": "",
-          "short": "圓弧",
-          "icon": "◜",
-          "reason": "突破40日整理頸線，量能放大，偏圓弧底突破。"
-        },
-        {
-          "id": "breakaway_gap",
-          "title": "",
-          "short": "突破缺口",
-          "icon": "◆",
-          "reason": "跳空突破近20日整理高點，偏突破缺口。"
-        }
-      ]
-    },
-    {
-      "code": "4534",
-      "name": "慶騰",
-      "close": 28.2,
-      "percent": 9.941520467836261,
-      "tradeVolume": 4334.322,
-      "value": 120749285,
-      "swingScore": 100,
-      "swingZone": "A",
-      "swingStage": {
-        "label": "高基期",
-        "ratio": "0.84",
-        "tone": "high",
-        "value": 0.8441558441558442
-      },
-      "swingSignals": [
-        {
-          "id": "bull_attack",
-          "title": "",
-          "short": "攻擊",
-          "icon": "🔥",
-          "reason": "站上MA20/EMA21，MACD多頭，量比 3.94，日K多頭攻擊。"
-        }
-      ]
-    },
-    {
-      "code": "6129",
-      "name": "普誠",
-      "close": 16.6,
-      "percent": 9.933774834437099,
-      "tradeVolume": 1341.09,
-      "value": 21200159,
-      "swingScore": 100,
-      "swingZone": "B",
-      "swingStage": {
-        "label": "中位階",
-        "ratio": "0.54",
-        "tone": "mid",
-        "value": 0.5416666666666669
-      },
-      "swingSignals": [
-        {
-          "id": "watch_trend",
-          "title": "",
-          "short": "B觀察",
-          "icon": "B",
-          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 7/8，量比 1.44，位階 中位階。"
-        }
-      ]
-    },
-    {
-      "code": "6121",
-      "name": "新普",
-      "close": 393,
-      "percent": 9.93006993006993,
-      "tradeVolume": 1145.811,
-      "value": 447743026,
-      "swingScore": 100,
-      "swingZone": "A",
-      "swingStage": {
-        "label": "高基期",
-        "ratio": "0.94",
-        "tone": "high",
-        "value": 0.9375
-      },
-      "swingSignals": [
-        {
-          "id": "breakaway_gap",
-          "title": "",
-          "short": "突破缺口",
-          "icon": "◆",
-          "reason": "跳空突破近20日整理高點，偏突破缺口。"
-        }
-      ]
-    },
-    {
-      "code": "4939",
-      "name": "亞電",
-      "close": 50.5,
-      "percent": 9.902067464635467,
-      "tradeVolume": 31208.033,
-      "value": 1541438876,
-      "swingScore": 100,
-      "swingZone": "A",
-      "swingStage": {
-        "label": "過熱",
-        "ratio": "1.00+",
-        "tone": "hot",
-        "value": 1
-      },
-      "swingSignals": [
-        {
-          "id": "bull_attack",
-          "title": "",
-          "short": "攻擊",
-          "icon": "🔥",
-          "reason": "站上MA20/EMA21，MACD多頭，量比 4.94，日K多頭攻擊。"
-        },
-        {
-          "id": "saucer",
-          "title": "",
-          "short": "圓弧",
-          "icon": "◜",
-          "reason": "突破40日整理頸線，量能放大，偏圓弧底突破。"
-        },
-        {
-          "id": "breakaway_gap",
-          "title": "",
-          "short": "突破缺口",
-          "icon": "◆",
-          "reason": "跳空突破近20日整理高點，偏突破缺口。"
-        }
-      ]
-    },
-    {
-      "code": "6134",
-      "name": "萬旭",
-      "close": 36.2,
-      "percent": 9.863429438543246,
-      "tradeVolume": 7845.767,
-      "value": 281312973,
-      "swingScore": 100,
-      "swingZone": "A",
-      "swingStage": {
-        "label": "過熱",
-        "ratio": "1.00+",
-        "tone": "hot",
-        "value": 1
-      },
-      "swingSignals": [
-        {
-          "id": "bull_attack",
-          "title": "",
-          "short": "攻擊",
-          "icon": "🔥",
-          "reason": "站上MA20/EMA21，MACD多頭，量比 5.29，日K多頭攻擊。"
-        },
-        {
-          "id": "saucer",
-          "title": "",
-          "short": "圓弧",
-          "icon": "◜",
-          "reason": "突破40日整理頸線，量能放大，偏圓弧底突破。"
-        }
-      ]
-    },
-    {
-      "code": "3114",
-      "name": "好德",
-      "close": 31.25,
-      "percent": 9.841827768014062,
-      "tradeVolume": 1463.67,
-      "value": 45484651,
-      "swingScore": 100,
-      "swingZone": "A",
-      "swingStage": {
-        "label": "過熱",
-        "ratio": "1.00+",
-        "tone": "hot",
-        "value": 1
-      },
-      "swingSignals": [
-        {
-          "id": "bull_attack",
-          "title": "",
-          "short": "攻擊",
-          "icon": "🔥",
-          "reason": "站上MA20/EMA21，MACD多頭，量比 4.24，日K多頭攻擊。"
-        },
-        {
-          "id": "saucer",
-          "title": "",
-          "short": "圓弧",
-          "icon": "◜",
-          "reason": "突破40日整理頸線，量能放大，偏圓弧底突破。"
-        }
-      ]
-    },
-    {
-      "code": "5353",
-      "name": "台林",
-      "close": 29.6,
-      "percent": 9.833024118738413,
-      "tradeVolume": 867.69,
-      "value": 24858015,
-      "swingScore": 100,
-      "swingZone": "A",
-      "swingStage": {
-        "label": "過熱",
-        "ratio": "1.00+",
-        "tone": "hot",
-        "value": 1
-      },
-      "swingSignals": [
-        {
-          "id": "bull_attack",
-          "title": "",
-          "short": "攻擊",
-          "icon": "🔥",
-          "reason": "站上MA20/EMA21，MACD多頭，量比 5.80，日K多頭攻擊。"
-        },
-        {
-          "id": "saucer",
-          "title": "",
-          "short": "圓弧",
-          "icon": "◜",
-          "reason": "突破40日整理頸線，量能放大，偏圓弧底突破。"
-        }
-      ]
-    },
-    {
-      "code": "5345",
-      "name": "馥鴻",
-      "close": 22.45,
-      "percent": 9.7799511002445,
-      "tradeVolume": 83.922,
-      "value": 1883981,
-      "swingScore": 100,
-      "swingZone": "B",
-      "swingStage": {
-        "label": "高基期",
-        "ratio": "0.78",
-        "tone": "high",
-        "value": 0.7777777777777779
-      },
-      "swingSignals": [
-        {
-          "id": "watch_trend",
-          "title": "",
-          "short": "B觀察",
-          "icon": "B",
-          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 7/8，量比 3.10，位階 高基期。"
-        }
-      ]
-    },
-    {
-      "code": "6274",
-      "name": "台燿",
-      "close": 1690,
-      "percent": 9.740259740259742,
-      "tradeVolume": 9687.712,
-      "value": 16242255295,
-      "swingScore": 100,
-      "swingZone": "B",
-      "swingStage": {
-        "label": "高基期",
-        "ratio": "0.96",
-        "tone": "high",
-        "value": 0.9605609114811569
-      },
-      "swingSignals": [
-        {
-          "id": "watch_trend",
-          "title": "",
-          "short": "B觀察",
-          "icon": "B",
-          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 7/8，量比 1.72，位階 高基期。"
-        }
-      ]
-    },
-    {
-      "code": "3234",
-      "name": "光環",
-      "close": 108,
-      "percent": 9.533468559837734,
-      "tradeVolume": 5114.762,
-      "value": 548568911,
-      "swingScore": 100,
-      "swingZone": "B",
-      "swingStage": {
-        "label": "中位階",
-        "ratio": "0.59",
-        "tone": "mid",
-        "value": 0.5872641509433962
-      },
-      "swingSignals": [
-        {
-          "id": "watch_trend",
-          "title": "",
-          "short": "B觀察",
-          "icon": "B",
-          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 7/8，量比 2.05，位階 中位階。"
-        }
-      ]
-    },
-    {
-      "code": "8104",
-      "name": "錸寶",
-      "close": 42,
-      "percent": 8.38709677419355,
-      "tradeVolume": 20981673,
-      "value": 873102390,
-      "swingScore": 100,
-      "swingZone": "A",
-      "swingStage": {
-        "label": "高基期",
-        "ratio": "0.95",
-        "tone": "high",
-        "value": 0.9533073929961089
-      },
-      "swingSignals": [
-        {
-          "id": "bull_attack",
-          "title": "",
-          "short": "攻擊",
-          "icon": "🔥",
-          "reason": "站上MA20/EMA21，MACD多頭，量比 4.37，日K多頭攻擊。"
-        },
-        {
-          "id": "saucer",
-          "title": "",
-          "short": "圓弧",
-          "icon": "◜",
-          "reason": "突破40日整理頸線，量能放大，偏圓弧底突破。"
-        },
-        {
-          "id": "breakaway_gap",
-          "title": "",
-          "short": "突破缺口",
-          "icon": "◆",
-          "reason": "跳空突破近20日整理高點，偏突破缺口。"
-        }
-      ]
-    },
-    {
-      "code": "6584",
-      "name": "南俊國際",
-      "close": 744,
-      "percent": 7.82608695652174,
-      "tradeVolume": 1727.642,
-      "value": 1262692838,
-      "swingScore": 100,
-      "swingZone": "A",
-      "swingStage": {
-        "label": "高基期",
-        "ratio": "0.98",
-        "tone": "high",
-        "value": 0.9829968119022316
-      },
-      "swingSignals": [
-        {
-          "id": "n_base",
-          "title": "",
-          "short": "N字",
-          "icon": "",
-          "reason": "爆量突破後回檔不破半分位，再突破前高 690.00，N字共振。"
-        },
-        {
-          "id": "saucer",
-          "title": "",
-          "short": "圓弧",
-          "icon": "◜",
-          "reason": "突破40日整理頸線，量能放大，偏圓弧底突破。"
-        }
-      ]
-    },
-    {
-      "code": "3441",
-      "name": "聯一光",
-      "close": 53.9,
-      "percent": 7.370517928286843,
-      "tradeVolume": 3119.617,
-      "value": 162981638,
-      "swingScore": 100,
-      "swingZone": "A",
-      "swingStage": {
-        "label": "高基期",
-        "ratio": "0.83",
-        "tone": "high",
-        "value": 0.8316151202749141
-      },
-      "swingSignals": [
-        {
-          "id": "n_base",
-          "title": "",
-          "short": "N字",
-          "icon": "",
-          "reason": "爆量突破後回檔不破半分位，再突破前高 52.90，N字共振。"
-        }
-      ]
-    },
-    {
-      "code": "3691",
-      "name": "碩禾",
-      "close": 162,
-      "percent": 7.28476821192053,
-      "tradeVolume": 3639.903,
-      "value": 567653145,
-      "swingScore": 100,
-      "swingZone": "A",
-      "swingStage": {
-        "label": "高基期",
-        "ratio": "0.91",
-        "tone": "high",
-        "value": 0.9069767441860465
-      },
-      "swingSignals": [
-        {
-          "id": "n_base",
-          "title": "",
-          "short": "N字",
-          "icon": "",
-          "reason": "爆量突破後回檔不破半分位，再突破前高 158.50，N字共振。"
-        }
-      ]
-    },
-    {
-      "code": "5483",
-      "name": "中美晶",
-      "close": 172,
-      "percent": 7.165109034267912,
-      "tradeVolume": 27576.122,
-      "value": 4722839227,
-      "swingScore": 100,
-      "swingZone": "A",
-      "swingStage": {
-        "label": "高基期",
-        "ratio": "0.96",
-        "tone": "high",
-        "value": 0.9568345323741008
-      },
-      "swingSignals": [
-        {
-          "id": "n_base",
-          "title": "",
-          "short": "N字",
-          "icon": "",
-          "reason": "爆量突破後回檔不破半分位，再突破前高 168.00，N字共振。"
-        },
-        {
-          "id": "saucer",
-          "title": "",
-          "short": "圓弧",
-          "icon": "◜",
-          "reason": "突破40日整理頸線，量能放大，偏圓弧底突破。"
-        }
-      ]
-    },
-    {
-      "code": "6190",
-      "name": "萬泰科",
-      "close": 92,
-      "percent": 7.101280558789283,
-      "tradeVolume": 17728.791,
-      "value": 1565604585,
-      "swingScore": 100,
-      "swingZone": "A",
-      "swingStage": {
-        "label": "高基期",
-        "ratio": "1.00",
-        "tone": "high",
-        "value": 0.9974683544303798
-      },
-      "swingSignals": [
-        {
-          "id": "saucer",
-          "title": "",
-          "short": "圓弧",
-          "icon": "◜",
-          "reason": "突破40日整理頸線，量能放大，偏圓弧底突破。"
-        }
-      ]
-    },
-    {
-      "code": "6667",
-      "name": "信紘科",
-      "close": 287,
-      "percent": 7.08955223880597,
-      "tradeVolume": 3562.663,
-      "value": 1014617055,
-      "swingScore": 100,
-      "swingZone": "A",
-      "swingStage": {
-        "label": "高基期",
-        "ratio": "0.77",
-        "tone": "high",
-        "value": 0.7737226277372263
-      },
-      "swingSignals": [
-        {
-          "id": "bull_attack",
-          "title": "",
-          "short": "攻擊",
-          "icon": "🔥",
-          "reason": "站上MA20/EMA21，MACD多頭，量比 4.44，日K多頭攻擊。"
-        },
-        {
-          "id": "breakaway_gap",
-          "title": "",
-          "short": "突破缺口",
-          "icon": "◆",
-          "reason": "跳空突破近20日整理高點，偏突破缺口。"
-        },
-        {
-          "id": "three_inside",
-          "title": "",
-          "short": "翻紅",
-          "icon": "↻",
-          "reason": "三內翻紅結構成立，站上MA20且趨勢確認。"
-        }
-      ]
-    },
-    {
-      "code": "3046",
-      "name": "建碁",
-      "close": 58.2,
-      "percent": 6.985294117647067,
-      "tradeVolume": 3453533,
-      "value": 202240137,
-      "swingScore": 100,
-      "swingZone": "A",
-      "swingStage": {
-        "label": "高基期",
-        "ratio": "0.88",
-        "tone": "high",
-        "value": 0.883636363636364
-      },
-      "swingSignals": [
-        {
-          "id": "bull_attack",
-          "title": "",
-          "short": "攻擊",
-          "icon": "🔥",
-          "reason": "站上MA20/EMA21，MACD多頭，量比 6.50，日K多頭攻擊。"
-        },
-        {
-          "id": "saucer",
-          "title": "",
-          "short": "圓弧",
-          "icon": "◜",
-          "reason": "突破40日整理頸線，量能放大，偏圓弧底突破。"
-        }
-      ]
-    },
-    {
-      "code": "5488",
-      "name": "松普",
-      "close": 12.2,
-      "percent": 6.086956521739125,
-      "tradeVolume": 1020.248,
-      "value": 12344946,
-      "swingScore": 100,
-      "swingZone": "A",
-      "swingStage": {
-        "label": "高基期",
-        "ratio": "0.93",
-        "tone": "high",
-        "value": 0.9315068493150681
-      },
-      "swingSignals": [
-        {
-          "id": "n_base",
-          "title": "",
-          "short": "N字",
-          "icon": "",
-          "reason": "爆量突破後回檔不破半分位，再突破前高 12.10，N字共振。"
-        }
-      ]
-    },
-    {
-      "code": "8935",
-      "name": "邦泰",
-      "close": 21,
-      "percent": 5.793450881612083,
-      "tradeVolume": 929.634,
-      "value": 19199984,
-      "swingScore": 100,
-      "swingZone": "A",
-      "swingStage": {
-        "label": "高基期",
-        "ratio": "0.93",
-        "tone": "high",
-        "value": 0.9315068493150684
-      },
-      "swingSignals": [
-        {
-          "id": "bull_attack",
-          "title": "",
-          "short": "攻擊",
-          "icon": "🔥",
-          "reason": "站上MA20/EMA21，MACD多頭，量比 1.34，日K多頭攻擊。"
-        },
-        {
-          "id": "n_base",
-          "title": "",
-          "short": "N字",
-          "icon": "",
-          "reason": "爆量突破後回檔不破半分位，再突破前高 20.95，N字共振。"
-        },
-        {
-          "id": "saucer",
-          "title": "",
-          "short": "圓弧",
-          "icon": "◜",
-          "reason": "突破40日整理頸線，量能放大，偏圓弧底突破。"
-        },
-        {
-          "id": "golden_cross",
-          "title": "",
-          "short": "金釵",
-          "icon": "✦",
-          "reason": "MA5 > MA10 > MA20 且收紅，多金釵候選。"
-        }
-      ]
-    },
-    {
-      "code": "3218",
-      "name": "大學光",
-      "close": 138,
-      "percent": 5.747126436781609,
-      "tradeVolume": 1040.903,
-      "value": 141839271,
-      "swingScore": 100,
-      "swingZone": "B",
-      "swingStage": {
-        "label": "高基期",
-        "ratio": "0.74",
-        "tone": "high",
-        "value": 0.7441860465116279
-      },
-      "swingSignals": [
-        {
-          "id": "watch_trend",
-          "title": "",
-          "short": "B觀察",
-          "icon": "B",
-          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 7/8，量比 3.02，位階 高基期。"
-        }
-      ]
-    },
-    {
-      "code": "6194",
-      "name": "育富",
-      "close": 34.55,
-      "percent": 5.657492354740043,
-      "tradeVolume": 166.164,
-      "value": 5745128,
-      "swingScore": 100,
-      "swingZone": "B",
-      "swingStage": {
-        "label": "高基期",
-        "ratio": "0.66",
-        "tone": "high",
-        "value": 0.6565656565656559
-      },
-      "swingSignals": [
-        {
-          "id": "watch_trend",
-          "title": "",
-          "short": "B觀察",
-          "icon": "B",
-          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 7/8，量比 1.72，位階 高基期。"
-        }
-      ]
-    },
-    {
-      "code": "6146",
-      "name": "耕興",
-      "close": 233,
-      "percent": 5.429864253393665,
-      "tradeVolume": 1801.366,
-      "value": 412827518,
-      "swingScore": 100,
-      "swingZone": "A",
-      "swingStage": {
-        "label": "高基期",
-        "ratio": "0.97",
-        "tone": "high",
-        "value": 0.968421052631579
-      },
-      "swingSignals": [
-        {
-          "id": "bull_attack",
-          "title": "",
-          "short": "攻擊",
-          "icon": "🔥",
-          "reason": "站上MA20/EMA21，MACD多頭，量比 2.81，日K多頭攻擊。"
-        },
-        {
-          "id": "saucer",
-          "title": "",
-          "short": "圓弧",
-          "icon": "◜",
-          "reason": "突破40日整理頸線，量能放大，偏圓弧底突破。"
-        },
-        {
-          "id": "golden_cross",
-          "title": "",
-          "short": "金釵",
-          "icon": "✦",
-          "reason": "MA5 > MA10 > MA20 且收紅，多金釵候選。"
-        }
-      ]
-    },
-    {
-      "code": "4909",
-      "name": "新復興",
-      "close": 54.9,
-      "percent": 5.37428023032629,
-      "tradeVolume": 1433.833,
-      "value": 77965047,
-      "swingScore": 100,
-      "swingZone": "B",
-      "swingStage": {
-        "label": "低基期",
-        "ratio": "0.34",
-        "tone": "low",
-        "value": 0.33985330073349607
-      },
-      "swingSignals": [
-        {
-          "id": "watch_trend",
-          "title": "",
-          "short": "B觀察",
-          "icon": "B",
-          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 7/8，量比 1.12，位階 低基期。"
-        }
-      ]
-    },
-    {
-      "code": "7738",
-      "name": "東聯互動",
-      "close": 178,
-      "percent": 5.325443786982249,
-      "tradeVolume": 112.15,
-      "value": 19445145,
-      "swingScore": 100,
-      "swingZone": "B",
-      "swingStage": {
-        "label": "中位階",
-        "ratio": "0.50",
-        "tone": "mid",
-        "value": 0.5
-      },
-      "swingSignals": [
-        {
-          "id": "watch_trend",
-          "title": "",
-          "short": "B觀察",
-          "icon": "B",
-          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 7/8，量比 1.99，位階 中位階。"
-        }
-      ]
-    },
-    {
-      "code": "3379",
-      "name": "彬台",
-      "close": 40.8,
-      "percent": 5.154639175257732,
-      "tradeVolume": 321.883,
-      "value": 13090668,
-      "swingScore": 100,
-      "swingZone": "A",
-      "swingStage": {
-        "label": "高基期",
-        "ratio": "0.89",
-        "tone": "high",
-        "value": 0.8941798941798942
-      },
-      "swingSignals": [
-        {
-          "id": "n_base",
-          "title": "",
-          "short": "N字",
-          "icon": "",
-          "reason": "爆量突破後回檔不破半分位，再突破前高 39.75，N字共振。"
-        },
-        {
-          "id": "golden_cross",
-          "title": "",
-          "short": "金釵",
-          "icon": "✦",
-          "reason": "MA5 > MA10 > MA20 且收紅，多金釵候選。"
-        }
-      ]
-    },
-    {
-      "code": "4584",
-      "name": "君帆",
-      "close": 43.85,
-      "percent": 5.029940119760482,
-      "tradeVolume": 11.478,
-      "value": 500783,
-      "swingScore": 100,
-      "swingZone": "B",
-      "swingStage": {
-        "label": "低基期",
-        "ratio": "0.20",
-        "tone": "low",
-        "value": 0.2023809523809527
-      },
-      "swingSignals": [
-        {
-          "id": "watch_trend",
-          "title": "",
-          "short": "B觀察",
-          "icon": "B",
-          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 5/8，量比 2.06，位階 低基期。"
-        }
-      ]
-    },
-    {
-      "code": "5243",
-      "name": "乙盛-KY",
-      "close": 126.5,
-      "percent": 4.979253112033195,
-      "tradeVolume": 8560150,
-      "value": 1073382755,
-      "swingScore": 100,
-      "swingZone": "A",
-      "swingStage": {
-        "label": "高基期",
-        "ratio": "0.71",
-        "tone": "high",
-        "value": 0.7053726169844021
-      },
-      "swingSignals": [
-        {
-          "id": "n_base",
-          "title": "",
-          "short": "N字",
-          "icon": "",
-          "reason": "爆量突破後回檔不破半分位，再突破前高 124.50，N字共振。"
-        }
-      ]
-    },
-    {
-      "code": "4432",
-      "name": "銘旺實",
-      "close": 17.05,
-      "percent": 4.923076923076927,
-      "tradeVolume": 81.73,
-      "value": 1368891,
-      "swingScore": 100,
-      "swingZone": "A",
-      "swingStage": {
-        "label": "高基期",
-        "ratio": "0.79",
-        "tone": "high",
-        "value": 0.7931034482758618
-      },
-      "swingSignals": [
-        {
-          "id": "saucer",
-          "title": "",
-          "short": "圓弧",
-          "icon": "◜",
-          "reason": "突破40日整理頸線，量能放大，偏圓弧底突破。"
-        }
-      ]
-    },
-    {
-      "code": "3226",
-      "name": "龍鋒",
-      "close": 44.55,
-      "percent": 4.823529411764699,
-      "tradeVolume": 20.252,
-      "value": 884962,
-      "swingScore": 100,
-      "swingZone": "A",
-      "swingStage": {
-        "label": "高基期",
-        "ratio": "0.80",
-        "tone": "high",
-        "value": 0.7954545454545451
-      },
-      "swingSignals": [
-        {
-          "id": "bull_attack",
-          "title": "",
-          "short": "攻擊",
-          "icon": "🔥",
-          "reason": "站上MA20/EMA21，MACD多頭，量比 2.21，日K多頭攻擊。"
-        }
-      ]
-    },
-    {
-      "code": "3206",
-      "name": "志豐",
-      "close": 42,
-      "percent": 4.738154613466331,
-      "tradeVolume": 1897.029,
-      "value": 79190929,
+      "code": "4807",
+      "name": "日成-KY",
+      "close": 28.7,
+      "percent": 100,
+      "tradeVolume": 742,
+      "value": 21295400,
       "swingScore": 100,
       "swingZone": "A",
       "swingStage": {
         "label": "高基期",
         "ratio": "0.92",
         "tone": "high",
-        "value": 0.9202127659574468
+        "value": 0.9206349206349206
       },
       "swingSignals": [
         {
-          "id": "bull_attack",
+          "id": "n_base",
           "title": "",
-          "short": "攻擊",
-          "icon": "🔥",
-          "reason": "站上MA20/EMA21，MACD多頭，量比 5.05，日K多頭攻擊。"
+          "short": "N字",
+          "icon": "",
+          "reason": "爆量突破後回檔不破半分位，再突破前高 19.35，N字共振。"
         },
+        {
+          "id": "breakaway_gap",
+          "title": "",
+          "short": "突破缺口",
+          "icon": "◆",
+          "reason": "跳空突破近20日整理高點，偏突破缺口。"
+        },
+        {
+          "id": "golden_cross",
+          "title": "",
+          "short": "金釵",
+          "icon": "✦",
+          "reason": "MA5 > MA10 > MA20 且收紅，多金釵候選。"
+        }
+      ]
+    },
+    {
+      "code": "5474",
+      "name": "聰泰",
+      "close": 198,
+      "percent": 10,
+      "tradeVolume": 5288,
+      "value": 1047024000,
+      "swingScore": 100,
+      "swingZone": "A",
+      "swingStage": {
+        "label": "過熱",
+        "ratio": "1.00+",
+        "tone": "hot",
+        "value": 1
+      },
+      "swingSignals": [
         {
           "id": "saucer",
           "title": "",
           "short": "圓弧",
           "icon": "◜",
           "reason": "突破40日整理頸線，量能放大，偏圓弧底突破。"
+        },
+        {
+          "id": "breakaway_gap",
+          "title": "",
+          "short": "突破缺口",
+          "icon": "◆",
+          "reason": "跳空突破近20日整理高點，偏突破缺口。"
         }
       ]
     },
     {
-      "code": "3021",
-      "name": "鴻名",
-      "close": 17.2,
-      "percent": 4.5592705167173255,
-      "tradeVolume": 459563,
-      "value": 7856584,
+      "code": "6925",
+      "name": "意藍",
+      "close": 62.8,
+      "percent": 9.982486865148854,
+      "tradeVolume": 464,
+      "value": 29139200,
       "swingScore": 100,
-      "swingZone": "A",
+      "swingZone": "B",
       "swingStage": {
-        "label": "高基期",
-        "ratio": "0.83",
-        "tone": "high",
-        "value": 0.8292682926829262
+        "label": "低基期",
+        "ratio": "0.35",
+        "tone": "low",
+        "value": 0.3475935828877005
       },
       "swingSignals": [
         {
-          "id": "bull_attack",
+          "id": "watch_trend",
           "title": "",
-          "short": "攻擊",
-          "icon": "🔥",
-          "reason": "站上MA20/EMA21，MACD多頭，量比 3.05，日K多頭攻擊。"
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 7/8，量比 5.40，位階 低基期。"
+        }
+      ]
+    },
+    {
+      "code": "6548",
+      "name": "長科*",
+      "close": 75,
+      "percent": 9.970674486803514,
+      "tradeVolume": 12100,
+      "value": 907500000,
+      "swingScore": 100,
+      "swingZone": "A",
+      "swingStage": {
+        "label": "過熱",
+        "ratio": "1.00+",
+        "tone": "hot",
+        "value": 1
+      },
+      "swingSignals": [
+        {
+          "id": "n_base",
+          "title": "",
+          "short": "N字",
+          "icon": "",
+          "reason": "爆量突破後回檔不破半分位，再突破前高 68.40，N字共振。"
         },
         {
           "id": "saucer",
@@ -1928,6 +158,1637 @@
           "short": "突破缺口",
           "icon": "◆",
           "reason": "跳空突破近20日整理高點，偏突破缺口。"
+        }
+      ]
+    },
+    {
+      "code": "1718",
+      "name": "中纖",
+      "close": 7.28,
+      "percent": 9.969788519637463,
+      "tradeVolume": 17894,
+      "value": 130268320,
+      "swingScore": 100,
+      "swingZone": "A",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.80",
+        "tone": "high",
+        "value": 0.8046875
+      },
+      "swingSignals": [
+        {
+          "id": "n_base",
+          "title": "",
+          "short": "N字",
+          "icon": "",
+          "reason": "爆量突破後回檔不破半分位，再突破前高 6.63，N字共振。"
+        },
+        {
+          "id": "breakaway_gap",
+          "title": "",
+          "short": "突破缺口",
+          "icon": "◆",
+          "reason": "跳空突破近20日整理高點，偏突破缺口。"
+        },
+        {
+          "id": "golden_cross",
+          "title": "",
+          "short": "金釵",
+          "icon": "✦",
+          "reason": "MA5 > MA10 > MA20 且收紅，多金釵候選。"
+        }
+      ]
+    },
+    {
+      "code": "8085",
+      "name": "福華",
+      "close": 12.15,
+      "percent": 9.954751131221716,
+      "tradeVolume": 640,
+      "value": 7776000,
+      "swingScore": 100,
+      "swingZone": "A",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.25",
+        "tone": "low",
+        "value": 0.24752475247524758
+      },
+      "swingSignals": [
+        {
+          "id": "runaway_gap",
+          "title": "",
+          "short": "逃逸缺口",
+          "icon": "🚀",
+          "reason": "跳空且站上MA20，多頭段延續，偏逃逸缺口。"
+        }
+      ]
+    },
+    {
+      "code": "6125",
+      "name": "廣運",
+      "close": 73.3,
+      "percent": 9.895052473763108,
+      "tradeVolume": 8260,
+      "value": 605458000,
+      "swingScore": 100,
+      "swingZone": "A",
+      "swingStage": {
+        "label": "過熱",
+        "ratio": "1.00+",
+        "tone": "hot",
+        "value": 1
+      },
+      "swingSignals": [
+        {
+          "id": "bull_attack",
+          "title": "",
+          "short": "攻擊",
+          "icon": "🔥",
+          "reason": "站上MA20/EMA21，MACD多頭，量比 2.20，日K多頭攻擊。"
+        },
+        {
+          "id": "saucer",
+          "title": "",
+          "short": "圓弧",
+          "icon": "◜",
+          "reason": "突破40日整理頸線，量能放大，偏圓弧底突破。"
+        },
+        {
+          "id": "breakaway_gap",
+          "title": "",
+          "short": "突破缺口",
+          "icon": "◆",
+          "reason": "跳空突破近20日整理高點，偏突破缺口。"
+        }
+      ]
+    },
+    {
+      "code": "4561",
+      "name": "健椿",
+      "close": 56.8,
+      "percent": 9.864603481624746,
+      "tradeVolume": 2784,
+      "value": 158131200,
+      "swingScore": 100,
+      "swingZone": "A",
+      "swingStage": {
+        "label": "過熱",
+        "ratio": "1.00+",
+        "tone": "hot",
+        "value": 1
+      },
+      "swingSignals": [
+        {
+          "id": "saucer",
+          "title": "",
+          "short": "圓弧",
+          "icon": "◜",
+          "reason": "突破40日整理頸線，量能放大，偏圓弧底突破。"
+        },
+        {
+          "id": "breakaway_gap",
+          "title": "",
+          "short": "突破缺口",
+          "icon": "◆",
+          "reason": "跳空突破近20日整理高點，偏突破缺口。"
+        }
+      ]
+    },
+    {
+      "code": "3147",
+      "name": "大綜",
+      "close": 200.5,
+      "percent": 9.863013698630137,
+      "tradeVolume": 2433,
+      "value": 487816500,
+      "swingScore": 100,
+      "swingZone": "A",
+      "swingStage": {
+        "label": "過熱",
+        "ratio": "1.00+",
+        "tone": "hot",
+        "value": 1
+      },
+      "swingSignals": [
+        {
+          "id": "bull_attack",
+          "title": "",
+          "short": "攻擊",
+          "icon": "🔥",
+          "reason": "站上MA20/EMA21，MACD多頭，量比 5.22，日K多頭攻擊。"
+        },
+        {
+          "id": "saucer",
+          "title": "",
+          "short": "圓弧",
+          "icon": "◜",
+          "reason": "突破40日整理頸線，量能放大，偏圓弧底突破。"
+        },
+        {
+          "id": "three_inside",
+          "title": "",
+          "short": "翻紅",
+          "icon": "↻",
+          "reason": "三內翻紅結構成立，站上MA20且趨勢確認。"
+        }
+      ]
+    },
+    {
+      "code": "8071",
+      "name": "能率網通",
+      "close": 23.4,
+      "percent": 9.859154929577455,
+      "tradeVolume": 5242,
+      "value": 122662800,
+      "swingScore": 100,
+      "swingZone": "A",
+      "swingStage": {
+        "label": "過熱",
+        "ratio": "1.00+",
+        "tone": "hot",
+        "value": 1
+      },
+      "swingSignals": [
+        {
+          "id": "bull_attack",
+          "title": "",
+          "short": "攻擊",
+          "icon": "🔥",
+          "reason": "站上MA20/EMA21，MACD多頭，量比 2.24，日K多頭攻擊。"
+        },
+        {
+          "id": "saucer",
+          "title": "",
+          "short": "圓弧",
+          "icon": "◜",
+          "reason": "突破40日整理頸線，量能放大，偏圓弧底突破。"
+        },
+        {
+          "id": "breakaway_gap",
+          "title": "",
+          "short": "突破缺口",
+          "icon": "◆",
+          "reason": "跳空突破近20日整理高點，偏突破缺口。"
+        }
+      ]
+    },
+    {
+      "code": "6933",
+      "name": "AMAX-KY",
+      "close": 189.5,
+      "percent": 9.855072463768117,
+      "tradeVolume": 634,
+      "value": 120143000,
+      "swingScore": 100,
+      "swingZone": "A",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.78",
+        "tone": "high",
+        "value": 0.78125
+      },
+      "swingSignals": [
+        {
+          "id": "n_base",
+          "title": "",
+          "short": "N字",
+          "icon": "",
+          "reason": "爆量突破後回檔不破半分位，再突破前高 172.50，N字共振。"
+        },
+        {
+          "id": "runaway_gap",
+          "title": "",
+          "short": "逃逸缺口",
+          "icon": "🚀",
+          "reason": "跳空且站上MA20，多頭段延續，偏逃逸缺口。"
+        }
+      ]
+    },
+    {
+      "code": "3564",
+      "name": "其陽",
+      "close": 52.4,
+      "percent": 9.853249475890975,
+      "tradeVolume": 1334,
+      "value": 69901600,
+      "swingScore": 100,
+      "swingZone": "A",
+      "swingStage": {
+        "label": "過熱",
+        "ratio": "1.00+",
+        "tone": "hot",
+        "value": 1
+      },
+      "swingSignals": [
+        {
+          "id": "bull_attack",
+          "title": "",
+          "short": "攻擊",
+          "icon": "🔥",
+          "reason": "站上MA20/EMA21，MACD多頭，量比 3.91，日K多頭攻擊。"
+        },
+        {
+          "id": "saucer",
+          "title": "",
+          "short": "圓弧",
+          "icon": "◜",
+          "reason": "突破40日整理頸線，量能放大，偏圓弧底突破。"
+        }
+      ]
+    },
+    {
+      "code": "6829",
+      "name": "千附精密",
+      "close": 245.5,
+      "percent": 9.843400447427292,
+      "tradeVolume": 2026,
+      "value": 497383000,
+      "swingScore": 100,
+      "swingZone": "A",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.76",
+        "tone": "high",
+        "value": 0.7565217391304347
+      },
+      "swingSignals": [
+        {
+          "id": "runaway_gap",
+          "title": "",
+          "short": "逃逸缺口",
+          "icon": "🚀",
+          "reason": "跳空且站上MA20，多頭段延續，偏逃逸缺口。"
+        }
+      ]
+    },
+    {
+      "code": "5488",
+      "name": "松普",
+      "close": 13.4,
+      "percent": 9.836065573770501,
+      "tradeVolume": 4548,
+      "value": 60943200,
+      "swingScore": 100,
+      "swingZone": "A",
+      "swingStage": {
+        "label": "過熱",
+        "ratio": "1.00+",
+        "tone": "hot",
+        "value": 1
+      },
+      "swingSignals": [
+        {
+          "id": "bull_attack",
+          "title": "",
+          "short": "攻擊",
+          "icon": "🔥",
+          "reason": "站上MA20/EMA21，MACD多頭，量比 3.98，日K多頭攻擊。"
+        },
+        {
+          "id": "saucer",
+          "title": "",
+          "short": "圓弧",
+          "icon": "◜",
+          "reason": "突破40日整理頸線，量能放大，偏圓弧底突破。"
+        },
+        {
+          "id": "breakaway_gap",
+          "title": "",
+          "short": "突破缺口",
+          "icon": "◆",
+          "reason": "跳空突破近20日整理高點，偏突破缺口。"
+        }
+      ]
+    },
+    {
+      "code": "6855",
+      "name": "數泓科",
+      "close": 117.5,
+      "percent": 9.813084112149532,
+      "tradeVolume": 31,
+      "value": 3642500,
+      "swingScore": 100,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.89",
+        "tone": "high",
+        "value": 0.8918918918918919
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 7/8，量比 2.24，位階 高基期。"
+        }
+      ]
+    },
+    {
+      "code": "3535",
+      "name": "晶彩科",
+      "close": 134.5,
+      "percent": 9.795918367346939,
+      "tradeVolume": 6844,
+      "value": 920518000,
+      "swingScore": 100,
+      "swingZone": "A",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.65",
+        "tone": "high",
+        "value": 0.6526315789473685
+      },
+      "swingSignals": [
+        {
+          "id": "n_base",
+          "title": "",
+          "short": "N字",
+          "icon": "",
+          "reason": "爆量突破後回檔不破半分位，再突破前高 132.00，N字共振。"
+        },
+        {
+          "id": "runaway_gap",
+          "title": "",
+          "short": "逃逸缺口",
+          "icon": "🚀",
+          "reason": "跳空且站上MA20，多頭段延續，偏逃逸缺口。"
+        }
+      ]
+    },
+    {
+      "code": "2064",
+      "name": "晉椿",
+      "close": 15.15,
+      "percent": 9.78260869565217,
+      "tradeVolume": 88,
+      "value": 1333200,
+      "swingScore": 100,
+      "swingZone": "A",
+      "swingStage": {
+        "label": "過熱",
+        "ratio": "1.00+",
+        "tone": "hot",
+        "value": 1
+      },
+      "swingSignals": [
+        {
+          "id": "bull_attack",
+          "title": "",
+          "short": "攻擊",
+          "icon": "🔥",
+          "reason": "站上MA20/EMA21，MACD多頭，量比 1.61，日K多頭攻擊。"
+        },
+        {
+          "id": "saucer",
+          "title": "",
+          "short": "圓弧",
+          "icon": "◜",
+          "reason": "突破40日整理頸線，量能放大，偏圓弧底突破。"
+        },
+        {
+          "id": "breakaway_gap",
+          "title": "",
+          "short": "突破缺口",
+          "icon": "◆",
+          "reason": "跳空突破近20日整理高點，偏突破缺口。"
+        }
+      ]
+    },
+    {
+      "code": "6811",
+      "name": "宏碁資訊",
+      "close": 236,
+      "percent": 9.767441860465116,
+      "tradeVolume": 649,
+      "value": 153164000,
+      "swingScore": 100,
+      "swingZone": "A",
+      "swingStage": {
+        "label": "過熱",
+        "ratio": "1.00+",
+        "tone": "hot",
+        "value": 1
+      },
+      "swingSignals": [
+        {
+          "id": "saucer",
+          "title": "",
+          "short": "圓弧",
+          "icon": "◜",
+          "reason": "突破40日整理頸線，量能放大，偏圓弧底突破。"
+        },
+        {
+          "id": "breakaway_gap",
+          "title": "",
+          "short": "突破缺口",
+          "icon": "◆",
+          "reason": "跳空突破近20日整理高點，偏突破缺口。"
+        }
+      ]
+    },
+    {
+      "code": "1449",
+      "name": "佳和",
+      "close": 14.05,
+      "percent": 9.765623364364759,
+      "tradeVolume": 4103,
+      "value": 57647150,
+      "swingScore": 100,
+      "swingZone": "A",
+      "swingStage": {
+        "label": "中位階",
+        "ratio": "0.40",
+        "tone": "mid",
+        "value": 0.4000000381469801
+      },
+      "swingSignals": [
+        {
+          "id": "n_base",
+          "title": "",
+          "short": "N字",
+          "icon": "",
+          "reason": "爆量突破後回檔不破半分位，再突破前高 13.15，N字共振。"
+        },
+        {
+          "id": "runaway_gap",
+          "title": "",
+          "short": "逃逸缺口",
+          "icon": "🚀",
+          "reason": "跳空且站上MA20，多頭段延續，偏逃逸缺口。"
+        }
+      ]
+    },
+    {
+      "code": "6791",
+      "name": "虎門科技",
+      "close": 125,
+      "percent": 9.649122807017543,
+      "tradeVolume": 245,
+      "value": 30625000,
+      "swingScore": 100,
+      "swingZone": "A",
+      "swingStage": {
+        "label": "中位階",
+        "ratio": "0.59",
+        "tone": "mid",
+        "value": 0.5893223819301848
+      },
+      "swingSignals": [
+        {
+          "id": "runaway_gap",
+          "title": "",
+          "short": "逃逸缺口",
+          "icon": "🚀",
+          "reason": "跳空且站上MA20，多頭段延續，偏逃逸缺口。"
+        }
+      ]
+    },
+    {
+      "code": "4549",
+      "name": "桓達",
+      "close": 136.5,
+      "percent": 9.63855421686747,
+      "tradeVolume": 2883,
+      "value": 393529500,
+      "swingScore": 100,
+      "swingZone": "A",
+      "swingStage": {
+        "label": "過熱",
+        "ratio": "1.00+",
+        "tone": "hot",
+        "value": 1
+      },
+      "swingSignals": [
+        {
+          "id": "bull_attack",
+          "title": "",
+          "short": "攻擊",
+          "icon": "🔥",
+          "reason": "站上MA20/EMA21，MACD多頭，量比 5.02，日K多頭攻擊。"
+        },
+        {
+          "id": "saucer",
+          "title": "",
+          "short": "圓弧",
+          "icon": "◜",
+          "reason": "突破40日整理頸線，量能放大，偏圓弧底突破。"
+        },
+        {
+          "id": "breakaway_gap",
+          "title": "",
+          "short": "突破缺口",
+          "icon": "◆",
+          "reason": "跳空突破近20日整理高點，偏突破缺口。"
+        }
+      ]
+    },
+    {
+      "code": "3092",
+      "name": "鴻碩",
+      "close": 31.95,
+      "percent": 9.605490285117542,
+      "tradeVolume": 1578,
+      "value": 50417100,
+      "swingScore": 100,
+      "swingZone": "A",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.37",
+        "tone": "low",
+        "value": 0.3708919656397908
+      },
+      "swingSignals": [
+        {
+          "id": "n_base",
+          "title": "",
+          "short": "N字",
+          "icon": "",
+          "reason": "爆量突破後回檔不破半分位，再突破前高 31.90，N字共振。"
+        }
+      ]
+    },
+    {
+      "code": "4905",
+      "name": "台聯電",
+      "close": 87.8,
+      "percent": 9.476309226932662,
+      "tradeVolume": 102,
+      "value": 8955600,
+      "swingScore": 100,
+      "swingZone": "A",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.99",
+        "tone": "high",
+        "value": 0.9895833333333335
+      },
+      "swingSignals": [
+        {
+          "id": "bull_attack",
+          "title": "",
+          "short": "攻擊",
+          "icon": "🔥",
+          "reason": "站上MA20/EMA21，MACD多頭，量比 6.73，日K多頭攻擊。"
+        },
+        {
+          "id": "saucer",
+          "title": "",
+          "short": "圓弧",
+          "icon": "◜",
+          "reason": "突破40日整理頸線，量能放大，偏圓弧底突破。"
+        }
+      ]
+    },
+    {
+      "code": "8102",
+      "name": "傑霖科技",
+      "close": 73.4,
+      "percent": 9.388971684053669,
+      "tradeVolume": 230,
+      "value": 16882000,
+      "swingScore": 100,
+      "swingZone": "A",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.70",
+        "tone": "high",
+        "value": 0.6953405017921147
+      },
+      "swingSignals": [
+        {
+          "id": "breakaway_gap",
+          "title": "",
+          "short": "突破缺口",
+          "icon": "◆",
+          "reason": "跳空突破近20日整理高點，偏突破缺口。"
+        }
+      ]
+    },
+    {
+      "code": "2641",
+      "name": "正德",
+      "close": 19.35,
+      "percent": 9.322033898305097,
+      "tradeVolume": 15311,
+      "value": 296267850,
+      "swingScore": 100,
+      "swingZone": "A",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.98",
+        "tone": "high",
+        "value": 0.9807692307692318
+      },
+      "swingSignals": [
+        {
+          "id": "bull_attack",
+          "title": "",
+          "short": "攻擊",
+          "icon": "🔥",
+          "reason": "站上MA20/EMA21，MACD多頭，量比 6.01，日K多頭攻擊。"
+        },
+        {
+          "id": "saucer",
+          "title": "",
+          "short": "圓弧",
+          "icon": "◜",
+          "reason": "突破40日整理頸線，量能放大，偏圓弧底突破。"
+        }
+      ]
+    },
+    {
+      "code": "3693",
+      "name": "營邦",
+      "close": 632,
+      "percent": 8.777969018932874,
+      "tradeVolume": 2393,
+      "value": 1512376000,
+      "swingScore": 100,
+      "swingZone": "A",
+      "swingStage": {
+        "label": "中位階",
+        "ratio": "0.57",
+        "tone": "mid",
+        "value": 0.5661375661375662
+      },
+      "swingSignals": [
+        {
+          "id": "runaway_gap",
+          "title": "",
+          "short": "逃逸缺口",
+          "icon": "🚀",
+          "reason": "跳空且站上MA20，多頭段延續，偏逃逸缺口。"
+        },
+        {
+          "id": "three_inside",
+          "title": "",
+          "short": "翻紅",
+          "icon": "↻",
+          "reason": "三內翻紅結構成立，站上MA20且趨勢確認。"
+        }
+      ]
+    },
+    {
+      "code": "4510",
+      "name": "高鋒",
+      "close": 54.3,
+      "percent": 7.7380952380952355,
+      "tradeVolume": 11765,
+      "value": 638839500,
+      "swingScore": 100,
+      "swingZone": "A",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.96",
+        "tone": "high",
+        "value": 0.9572953736654803
+      },
+      "swingSignals": [
+        {
+          "id": "bull_attack",
+          "title": "",
+          "short": "攻擊",
+          "icon": "🔥",
+          "reason": "站上MA20/EMA21，MACD多頭，量比 2.42，日K多頭攻擊。"
+        },
+        {
+          "id": "saucer",
+          "title": "",
+          "short": "圓弧",
+          "icon": "◜",
+          "reason": "突破40日整理頸線，量能放大，偏圓弧底突破。"
+        }
+      ]
+    },
+    {
+      "code": "5493",
+      "name": "三聯",
+      "close": 95.3,
+      "percent": 7.078651685393256,
+      "tradeVolume": 771,
+      "value": 73476300,
+      "swingScore": 100,
+      "swingZone": "A",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.89",
+        "tone": "high",
+        "value": 0.8909952606635072
+      },
+      "swingSignals": [
+        {
+          "id": "saucer",
+          "title": "",
+          "short": "圓弧",
+          "icon": "◜",
+          "reason": "突破40日整理頸線，量能放大，偏圓弧底突破。"
+        }
+      ]
+    },
+    {
+      "code": "3625",
+      "name": "西勝",
+      "close": 15.5,
+      "percent": 6.896551724137931,
+      "tradeVolume": 1152,
+      "value": 17856000,
+      "swingScore": 100,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.38",
+        "tone": "low",
+        "value": 0.3809523809523811
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 7/8，量比 1.72，位階 低基期。"
+        }
+      ]
+    },
+    {
+      "code": "2392",
+      "name": "正崴",
+      "close": 41.85,
+      "percent": 6.624203821656055,
+      "tradeVolume": 5690,
+      "value": 238126500,
+      "swingScore": 100,
+      "swingZone": "A",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.96",
+        "tone": "high",
+        "value": 0.9646464646464645
+      },
+      "swingSignals": [
+        {
+          "id": "n_base",
+          "title": "",
+          "short": "N字",
+          "icon": "",
+          "reason": "爆量突破後回檔不破半分位，再突破前高 40.00，N字共振。"
+        },
+        {
+          "id": "breakaway_gap",
+          "title": "",
+          "short": "突破缺口",
+          "icon": "◆",
+          "reason": "跳空突破近20日整理高點，偏突破缺口。"
+        }
+      ]
+    },
+    {
+      "code": "1304",
+      "name": "台聚",
+      "close": 13,
+      "percent": 6.557377049180333,
+      "tradeVolume": 10366,
+      "value": 134758000,
+      "swingScore": 100,
+      "swingZone": "A",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.17",
+        "tone": "low",
+        "value": 0.1678832116788322
+      },
+      "swingSignals": [
+        {
+          "id": "n_base",
+          "title": "",
+          "short": "N字",
+          "icon": "",
+          "reason": "爆量突破後回檔不破半分位，再突破前高 12.50，N字共振。"
+        },
+        {
+          "id": "runaway_gap",
+          "title": "",
+          "short": "逃逸缺口",
+          "icon": "🚀",
+          "reason": "跳空且站上MA20，多頭段延續，偏逃逸缺口。"
+        }
+      ]
+    },
+    {
+      "code": "6922",
+      "name": "宸曜",
+      "close": 212,
+      "percent": 6.532663316582915,
+      "tradeVolume": 1450,
+      "value": 307400000,
+      "swingScore": 100,
+      "swingZone": "A",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.91",
+        "tone": "high",
+        "value": 0.9111111111111111
+      },
+      "swingSignals": [
+        {
+          "id": "breakaway_gap",
+          "title": "",
+          "short": "突破缺口",
+          "icon": "◆",
+          "reason": "跳空突破近20日整理高點，偏突破缺口。"
+        }
+      ]
+    },
+    {
+      "code": "8272",
+      "name": "全景軟體",
+      "close": 73.9,
+      "percent": 6.33093525179857,
+      "tradeVolume": 71,
+      "value": 5246900,
+      "swingScore": 100,
+      "swingZone": "A",
+      "swingStage": {
+        "label": "中位階",
+        "ratio": "0.45",
+        "tone": "mid",
+        "value": 0.45370370370370433
+      },
+      "swingSignals": [
+        {
+          "id": "runaway_gap",
+          "title": "",
+          "short": "逃逸缺口",
+          "icon": "🚀",
+          "reason": "跳空且站上MA20，多頭段延續，偏逃逸缺口。"
+        }
+      ]
+    },
+    {
+      "code": "1312",
+      "name": "國喬",
+      "close": 12.05,
+      "percent": 6.1674008810572785,
+      "tradeVolume": 23697,
+      "value": 285548850,
+      "swingScore": 100,
+      "swingZone": "A",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.38",
+        "tone": "low",
+        "value": 0.3784277879341866
+      },
+      "swingSignals": [
+        {
+          "id": "n_base",
+          "title": "",
+          "short": "N字",
+          "icon": "",
+          "reason": "爆量突破後回檔不破半分位，再突破前高 11.70，N字共振。"
+        }
+      ]
+    },
+    {
+      "code": "4744",
+      "name": "皇將",
+      "close": 36.7,
+      "percent": 6.069364161849715,
+      "tradeVolume": 870,
+      "value": 31929000,
+      "swingScore": 100,
+      "swingZone": "A",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.64",
+        "tone": "high",
+        "value": 0.6363636363636366
+      },
+      "swingSignals": [
+        {
+          "id": "bull_attack",
+          "title": "",
+          "short": "攻擊",
+          "icon": "🔥",
+          "reason": "站上MA20/EMA21，MACD多頭，量比 2.76，日K多頭攻擊。"
+        }
+      ]
+    },
+    {
+      "code": "4585",
+      "name": "達明",
+      "close": 371.5,
+      "percent": 5.991440798858773,
+      "tradeVolume": 1369,
+      "value": 508583500,
+      "swingScore": 100,
+      "swingZone": "A",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.95",
+        "tone": "high",
+        "value": 0.9505494505494505
+      },
+      "swingSignals": [
+        {
+          "id": "n_base",
+          "title": "",
+          "short": "N字",
+          "icon": "",
+          "reason": "爆量突破後回檔不破半分位，再突破前高 366.50，N字共振。"
+        },
+        {
+          "id": "runaway_gap",
+          "title": "",
+          "short": "逃逸缺口",
+          "icon": "🚀",
+          "reason": "跳空且站上MA20，多頭段延續，偏逃逸缺口。"
+        }
+      ]
+    },
+    {
+      "code": "6130",
+      "name": "上亞科技",
+      "close": 23.25,
+      "percent": 5.922551252847383,
+      "tradeVolume": 548,
+      "value": 12741000,
+      "swingScore": 100,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.31",
+        "tone": "low",
+        "value": 0.30538922155688625
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 7/8，量比 3.01，位階 低基期。"
+        }
+      ]
+    },
+    {
+      "code": "3114",
+      "name": "好德",
+      "close": 33.1,
+      "percent": 5.920000000000004,
+      "tradeVolume": 4126,
+      "value": 136570600,
+      "swingScore": 100,
+      "swingZone": "A",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.86",
+        "tone": "high",
+        "value": 0.8587570621468926
+      },
+      "swingSignals": [
+        {
+          "id": "breakaway_gap",
+          "title": "",
+          "short": "突破缺口",
+          "icon": "◆",
+          "reason": "跳空突破近20日整理高點，偏突破缺口。"
+        }
+      ]
+    },
+    {
+      "code": "5468",
+      "name": "凱鈺",
+      "close": 18.25,
+      "percent": 5.797101449275362,
+      "tradeVolume": 170,
+      "value": 3102500,
+      "swingScore": 100,
+      "swingZone": "A",
+      "swingStage": {
+        "label": "中位階",
+        "ratio": "0.39",
+        "tone": "mid",
+        "value": 0.38888888888888873
+      },
+      "swingSignals": [
+        {
+          "id": "runaway_gap",
+          "title": "",
+          "short": "逃逸缺口",
+          "icon": "🚀",
+          "reason": "跳空且站上MA20，多頭段延續，偏逃逸缺口。"
+        }
+      ]
+    },
+    {
+      "code": "3297",
+      "name": "杭特",
+      "close": 31.1,
+      "percent": 5.7823129251700776,
+      "tradeVolume": 203,
+      "value": 6313300,
+      "swingScore": 100,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.19",
+        "tone": "low",
+        "value": 0.19459459459459474
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 6/8，量比 1.97，位階 低基期。"
+        }
+      ]
+    },
+    {
+      "code": "5530",
+      "name": "龍巖",
+      "close": 49,
+      "percent": 5.603448275862073,
+      "tradeVolume": 1895,
+      "value": 92855000,
+      "swingScore": 100,
+      "swingZone": "A",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.62",
+        "tone": "high",
+        "value": 0.6222222222222223
+      },
+      "swingSignals": [
+        {
+          "id": "saucer",
+          "title": "",
+          "short": "圓弧",
+          "icon": "◜",
+          "reason": "突破40日整理頸線，量能放大，偏圓弧底突破。"
+        }
+      ]
+    },
+    {
+      "code": "8234",
+      "name": "新漢",
+      "close": 75.9,
+      "percent": 5.563282336578581,
+      "tradeVolume": 3900,
+      "value": 296010000,
+      "swingScore": 100,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.88",
+        "tone": "high",
+        "value": 0.8762376237623762
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 7/8，量比 2.09，位階 高基期。"
+        }
+      ]
+    },
+    {
+      "code": "6568",
+      "name": "宏觀",
+      "close": 238.5,
+      "percent": 5.530973451327434,
+      "tradeVolume": 737,
+      "value": 175774500,
+      "swingScore": 100,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "中位階",
+        "ratio": "0.47",
+        "tone": "mid",
+        "value": 0.47337278106508873
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 7/8，量比 0.93，位階 中位階。"
+        }
+      ]
+    },
+    {
+      "code": "6496",
+      "name": "科懋",
+      "close": 24.1,
+      "percent": 5.470459518599562,
+      "tradeVolume": 58,
+      "value": 1397800,
+      "swingScore": 100,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.31",
+        "tone": "low",
+        "value": 0.307692307692308
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 6/8，量比 2.19，位階 低基期。"
+        }
+      ]
+    },
+    {
+      "code": "6907",
+      "name": "雅特力-KY",
+      "close": 128,
+      "percent": 5.349794238683128,
+      "tradeVolume": 1935,
+      "value": 247680000,
+      "swingScore": 100,
+      "swingZone": "A",
+      "swingStage": {
+        "label": "中位階",
+        "ratio": "0.54",
+        "tone": "mid",
+        "value": 0.5397111913357401
+      },
+      "swingSignals": [
+        {
+          "id": "runaway_gap",
+          "title": "",
+          "short": "逃逸缺口",
+          "icon": "🚀",
+          "reason": "跳空且站上MA20，多頭段延續，偏逃逸缺口。"
+        }
+      ]
+    },
+    {
+      "code": "5512",
+      "name": "力麒",
+      "close": 7.38,
+      "percent": 5.278174037089873,
+      "tradeVolume": 3222,
+      "value": 23778360,
+      "swingScore": 100,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "中位階",
+        "ratio": "0.56",
+        "tone": "mid",
+        "value": 0.5555555555555554
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 6/8，量比 2.14，位階 中位階。"
+        }
+      ]
+    },
+    {
+      "code": "3609",
+      "name": "三一東林",
+      "close": 29.5,
+      "percent": 5.169340463458108,
+      "tradeVolume": 725,
+      "value": 21387500,
+      "swingScore": 100,
+      "swingZone": "A",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.84",
+        "tone": "high",
+        "value": 0.8382352941176472
+      },
+      "swingSignals": [
+        {
+          "id": "bull_attack",
+          "title": "",
+          "short": "攻擊",
+          "icon": "🔥",
+          "reason": "站上MA20/EMA21，MACD多頭，量比 2.13，日K多頭攻擊。"
+        }
+      ]
+    },
+    {
+      "code": "2603",
+      "name": "長榮",
+      "close": 224,
+      "percent": 5.164319248826291,
+      "tradeVolume": 34215,
+      "value": 7664160000,
+      "swingScore": 100,
+      "swingZone": "A",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.97",
+        "tone": "high",
+        "value": 0.9661016949152542
+      },
+      "swingSignals": [
+        {
+          "id": "n_base",
+          "title": "",
+          "short": "N字",
+          "icon": "",
+          "reason": "爆量突破後回檔不破半分位，再突破前高 219.00，N字共振。"
+        },
+        {
+          "id": "breakaway_gap",
+          "title": "",
+          "short": "突破缺口",
+          "icon": "◆",
+          "reason": "跳空突破近20日整理高點，偏突破缺口。"
+        }
+      ]
+    },
+    {
+      "code": "6894",
+      "name": "衛司特",
+      "close": 409,
+      "percent": 5.006418485237484,
+      "tradeVolume": 280,
+      "value": 114520000,
+      "swingScore": 100,
+      "swingZone": "A",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.91",
+        "tone": "high",
+        "value": 0.9146919431279621
+      },
+      "swingSignals": [
+        {
+          "id": "bull_attack",
+          "title": "",
+          "short": "攻擊",
+          "icon": "🔥",
+          "reason": "站上MA20/EMA21，MACD多頭，量比 1.45，日K多頭攻擊。"
+        },
+        {
+          "id": "n_base",
+          "title": "",
+          "short": "N字",
+          "icon": "",
+          "reason": "爆量突破後回檔不破半分位，再突破前高 393.50，N字共振。"
+        },
+        {
+          "id": "breakaway_gap",
+          "title": "",
+          "short": "突破缺口",
+          "icon": "◆",
+          "reason": "跳空突破近20日整理高點，偏突破缺口。"
+        }
+      ]
+    },
+    {
+      "code": "6101",
+      "name": "寬魚國際",
+      "close": 40.25,
+      "percent": 4.954367666232069,
+      "tradeVolume": 1407,
+      "value": 56631750,
+      "swingScore": 100,
+      "swingZone": "A",
+      "swingStage": {
+        "label": "中位階",
+        "ratio": "0.60",
+        "tone": "mid",
+        "value": 0.6000000000000003
+      },
+      "swingSignals": [
+        {
+          "id": "runaway_gap",
+          "title": "",
+          "short": "逃逸缺口",
+          "icon": "🚀",
+          "reason": "跳空且站上MA20，多頭段延續，偏逃逸缺口。"
+        }
+      ]
+    },
+    {
+      "code": "6126",
+      "name": "信音",
+      "close": 37.25,
+      "percent": 4.929577464788732,
+      "tradeVolume": 3811,
+      "value": 141959750,
+      "swingScore": 100,
+      "swingZone": "A",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.93",
+        "tone": "high",
+        "value": 0.9333333333333331
+      },
+      "swingSignals": [
+        {
+          "id": "breakaway_gap",
+          "title": "",
+          "short": "突破缺口",
+          "icon": "◆",
+          "reason": "跳空突破近20日整理高點，偏突破缺口。"
+        },
+        {
+          "id": "golden_cross",
+          "title": "",
+          "short": "金釵",
+          "icon": "✦",
+          "reason": "MA5 > MA10 > MA20 且收紅，多金釵候選。"
+        }
+      ]
+    },
+    {
+      "code": "5202",
+      "name": "力新",
+      "close": 12.8,
+      "percent": 4.918032786885258,
+      "tradeVolume": 591,
+      "value": 7564800,
+      "swingScore": 100,
+      "swingZone": "A",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.38",
+        "tone": "low",
+        "value": 0.3815789235926025
+      },
+      "swingSignals": [
+        {
+          "id": "n_base",
+          "title": "",
+          "short": "N字",
+          "icon": "",
+          "reason": "爆量突破後回檔不破半分位，再突破前高 12.45，N字共振。"
+        }
+      ]
+    },
+    {
+      "code": "3691",
+      "name": "碩禾",
+      "close": 169.5,
+      "percent": 4.62962962962963,
+      "tradeVolume": 6054,
+      "value": 1026153000,
+      "swingScore": 100,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.95",
+        "tone": "high",
+        "value": 0.9507042253521126
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 7/8，量比 1.67，位階 高基期。"
+        }
+      ]
+    },
+    {
+      "code": "1442",
+      "name": "名軒",
+      "close": 26.8,
+      "percent": 4.483430799220281,
+      "tradeVolume": 785,
+      "value": 21038000,
+      "swingScore": 100,
+      "swingZone": "A",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.26",
+        "tone": "low",
+        "value": 0.26213592233009725
+      },
+      "swingSignals": [
+        {
+          "id": "runaway_gap",
+          "title": "",
+          "short": "逃逸缺口",
+          "icon": "🚀",
+          "reason": "跳空且站上MA20，多頭段延續，偏逃逸缺口。"
+        }
+      ]
+    },
+    {
+      "code": "8171",
+      "name": "天宇",
+      "close": 24.7,
+      "percent": 4.43974630021142,
+      "tradeVolume": 529,
+      "value": 13066300,
+      "swingScore": 100,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.77",
+        "tone": "high",
+        "value": 0.7721518987341769
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 7/8，量比 1.89，位階 高基期。"
+        }
+      ]
+    },
+    {
+      "code": "2385",
+      "name": "群光",
+      "close": 141.5,
+      "percent": 4.428044280442804,
+      "tradeVolume": 6537,
+      "value": 924985500,
+      "swingScore": 100,
+      "swingZone": "A",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.96",
+        "tone": "high",
+        "value": 0.9555555555555556
+      },
+      "swingSignals": [
+        {
+          "id": "n_base",
+          "title": "",
+          "short": "N字",
+          "icon": "",
+          "reason": "爆量突破後回檔不破半分位，再突破前高 138.00，N字共振。"
+        },
+        {
+          "id": "breakaway_gap",
+          "title": "",
+          "short": "突破缺口",
+          "icon": "◆",
+          "reason": "跳空突破近20日整理高點，偏突破缺口。"
+        }
+      ]
+    },
+    {
+      "code": "6589",
+      "name": "台康生技",
+      "close": 44,
+      "percent": 4.38908281648637,
+      "tradeVolume": 1557,
+      "value": 68508000,
+      "swingScore": 100,
+      "swingZone": "A",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.21",
+        "tone": "low",
+        "value": 0.21095882049978595
+      },
+      "swingSignals": [
+        {
+          "id": "n_base",
+          "title": "",
+          "short": "N字",
+          "icon": "",
+          "reason": "爆量突破後回檔不破半分位，再突破前高 42.45，N字共振。"
+        }
+      ]
+    },
+    {
+      "code": "3207",
+      "name": "耀勝",
+      "close": 67.9,
+      "percent": 4.301075268817222,
+      "tradeVolume": 745,
+      "value": 50585500,
+      "swingScore": 100,
+      "swingZone": "A",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.84",
+        "tone": "high",
+        "value": 0.836477987421384
+      },
+      "swingSignals": [
+        {
+          "id": "bull_attack",
+          "title": "",
+          "short": "攻擊",
+          "icon": "🔥",
+          "reason": "站上MA20/EMA21，MACD多頭，量比 1.22，日K多頭攻擊。"
+        }
+      ]
+    },
+    {
+      "code": "1308",
+      "name": "亞聚",
+      "close": 13.65,
+      "percent": 4.1984732824427535,
+      "tradeVolume": 4007,
+      "value": 54695550,
+      "swingScore": 100,
+      "swingZone": "A",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.13",
+        "tone": "low",
+        "value": 0.1333333333333334
+      },
+      "swingSignals": [
+        {
+          "id": "n_base",
+          "title": "",
+          "short": "N字",
+          "icon": "",
+          "reason": "爆量突破後回檔不破半分位，再突破前高 13.35，N字共振。"
+        }
+      ]
+    },
+    {
+      "code": "6122",
+      "name": "擎邦",
+      "close": 48.65,
+      "percent": 4.17558886509635,
+      "tradeVolume": 609,
+      "value": 29627850,
+      "swingScore": 100,
+      "swingZone": "A",
+      "swingStage": {
+        "label": "中位階",
+        "ratio": "0.45",
+        "tone": "mid",
+        "value": 0.44545454545454466
+      },
+      "swingSignals": [
+        {
+          "id": "runaway_gap",
+          "title": "",
+          "short": "逃逸缺口",
+          "icon": "🚀",
+          "reason": "跳空且站上MA20，多頭段延續，偏逃逸缺口。"
+        },
+        {
+          "id": "three_inside",
+          "title": "",
+          "short": "翻紅",
+          "icon": "↻",
+          "reason": "三內翻紅結構成立，站上MA20且趨勢確認。"
         }
       ]
     }
