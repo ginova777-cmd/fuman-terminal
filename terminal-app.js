@@ -2572,6 +2572,7 @@ let marketStockDataState = { resolvedTradeDate: "", today: "", source: "", updat
 let heatmapLoading = false;
 let heatmapLastStartedAt = 0;
 let marketAiHeatmapSyncRequestedAt = 0;
+let marketAiHeatmapSyncPromise = null;
 let heatmapMode = "all";
 let lastViewName = "";
 let lastViewShownAt = 0;
@@ -7193,6 +7194,23 @@ function syncLatestStocksFromHeatmapSectors(sectors) {
   return true;
 }
 
+async function refreshMarketAiFromHeatmap() {
+  if (marketAiHeatmapSyncPromise) return marketAiHeatmapSyncPromise;
+  marketAiHeatmapSyncPromise = (async () => {
+    const data = await fetchVersionedJson(endpoints.heatmap, 15000, `market-ai-${Date.now()}`, true);
+    mergeIndustryMaster(data?.industryMaster);
+    const sectors = normalizeArray(data?.sectors);
+    if (data?.ok && sectors.length && syncLatestStocksFromHeatmapSectors(sectors)) {
+      marketAiLastSignature = "";
+      refreshDataFreshnessBars();
+      renderMarketAiPanel();
+    }
+  })().catch(() => undefined).finally(() => {
+    marketAiHeatmapSyncPromise = null;
+  });
+  return marketAiHeatmapSyncPromise;
+}
+
 function renderHeatmapFromCache() {
   const sectors = Object.entries(sectorStocksCache).map(([name, stocks]) => {
     const rows = normalizeArray(stocks);
@@ -8001,7 +8019,7 @@ function renderMarketAiPanel() {
   const data = buildMarketAiData();
   if (data.isDateFallback && isMarketAiActiveSession() && Date.now() - marketAiHeatmapSyncRequestedAt > 10000) {
     marketAiHeatmapSyncRequestedAt = Date.now();
-    deferUiWork(() => loadHeatmap(true), 80);
+    deferUiWork(() => refreshMarketAiFromHeatmap(), 80);
   }
   if (data.isReferenceDate && isMarketAiActiveSession()) {
     requestMarketAiRealtimeScan("hot");
