@@ -7,7 +7,7 @@ const PUBLISH_INTERVAL_MS = Math.max(0, Number(process.env.STRATEGY2_PUBLISH_INT
 const MARKET_START_MINUTES = 9 * 60;
 const MARKET_END_MINUTES = 13 * 60 + 30;
 const PUBLISH_SCRIPT = path.resolve(__dirname, "..", "run-cache-sync.ps1");
-const POWERSHELL_EXE = process.env.FUMAN_POWERSHELL_EXE || "powershell.exe";
+const POWERSHELL_EXE = process.env.FUMAN_POWERSHELL_EXE || "C:\\Program Files\\PowerShell\\7\\pwsh.exe";
 let lastPublishAt = 0;
 let publishRunning = false;
 
