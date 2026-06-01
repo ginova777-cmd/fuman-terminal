@@ -73,7 +73,7 @@ function getFumanWorker() {
   if (!("Worker" in window)) return null;
   if (fumanWorker) return fumanWorker;
   try {
-    fumanWorker = new Worker("terminal-worker.js?v=strategy4-data-date-20260601-03");
+    fumanWorker = new Worker("terminal-worker.js?v=watchlist-strategy-source-20260531-63");
     fumanWorker.addEventListener("message", (event) => {
       const { id, ok, rows, result, error } = event.data || {};
       const pending = fumanWorkerPending.get(id);
@@ -301,7 +301,7 @@ function loadFumanStyle(href, id) {
   const link = document.createElement("link");
   link.id = id;
   link.rel = "stylesheet";
-  link.href = href.includes("?") ? href : `${href}?v=${window.FUMAN_TERMINAL_BOOT?.version || "strategy4-data-date-20260601-03"}`;
+  link.href = href.includes("?") ? href : `${href}?v=${window.FUMAN_TERMINAL_BOOT?.version || "watchlist-strategy-source-20260531-63"}`;
   document.head.appendChild(link);
 }
 
@@ -327,7 +327,7 @@ function makeFumanModuleScope(bindings) {
 function loadFumanFeatureModule(name, src, globalName) {
   if (window[globalName]) return Promise.resolve(window[globalName]);
   if (fumanFeatureModulePromises[name]) return fumanFeatureModulePromises[name];
-  const version = window.FUMAN_TERMINAL_BOOT?.version || "strategy4-data-date-20260601-03";
+  const version = window.FUMAN_TERMINAL_BOOT?.version || "watchlist-strategy-source-20260531-63";
   fumanFeatureModulePromises[name] = new Promise((resolve, reject) => {
     const attr = "data-fuman-feature-" + name;
     const existing = document.querySelector("script[" + attr + "]");
@@ -2677,14 +2677,6 @@ let strategy5CacheLoading = false;
 let strategyStocksPromise = null;
 const STRATEGY4_LOCAL_CACHE_KEY = FUMAN_TUNING_CONFIG.strategy4LocalCacheKey || "fuman_strategy4_scan_cache_v1";
 const STRATEGY4_BACKUP_CACHE_KEY = FUMAN_TUNING_CONFIG.strategy4BackupCacheKey || "fuman_strategy4_nonempty_backup_v1";
-const STRATEGY4_DATA_DATE_FIX_KEY = "fuman_strategy4_data_date_fix_20260601_03";
-try {
-  if (localStorage.getItem(STRATEGY4_DATA_DATE_FIX_KEY) !== "1") {
-    localStorage.removeItem(STRATEGY4_LOCAL_CACHE_KEY);
-    localStorage.removeItem(STRATEGY4_BACKUP_CACHE_KEY);
-    localStorage.setItem(STRATEGY4_DATA_DATE_FIX_KEY, "1");
-  }
-} catch (error) {}
 const OPEN_BUY_LOCAL_CACHE_KEY = FUMAN_TUNING_CONFIG.openBuyLocalCacheKey || "fuman_open_buy_scan_cache_v1";
 const OPEN_BUY_BACKUP_CACHE_KEY = FUMAN_TUNING_CONFIG.openBuyBackupCacheKey || "fuman_open_buy_nonempty_backup_v1";
 const EXPORT_UNLOCK_KEY = FUMAN_TUNING_CONFIG.exportUnlockKey || "fuman_export_unlock_until_v1";
@@ -3318,17 +3310,10 @@ function commitStrategy4Pending() {
   saveStrategy4LocalCache();
 }
 
-function strategy4PayloadDataDateKey(payload) {
-  return normalizeMarketAiDateKey(payload?.dataDate || payload?.usedDate || payload?.tradeDate)
-    || marketAiDataDateKey(normalizeArray(payload?.matches))
-    || marketAiDataDateKey(normalizeArray(payload?.topMatches));
-}
-
 function mergeStrategy4Cache(payload) {
   strategy4ScanMatches = {};
   strategy4ScannedCodes = new Set();
-  const payloadDataDate = strategy4PayloadDataDateKey(payload);
-  strategy4ScanStamp = normalizeMarketAiDateKey(payload?.scanStamp || payload?.stamp || payloadDataDate);
+  strategy4ScanStamp = normalizeMarketAiDateKey(payload?.scanStamp || payload?.stamp || payload?.date || payload?.usedDate || payload?.tradeDate);
   const scannedCodes = normalizeArray(payload?.scannedCodes);
   scannedCodes.forEach((code) => {
     if (code) strategy4ScannedCodes.add(code);
@@ -3346,7 +3331,6 @@ function saveStrategy4LocalCache() {
     const payload = {
       source: "github-actions",
       updatedAt: strategy4ScanLastAt || Date.now(),
-      dataDate: strategy4PayloadDataDateKey({ matches }) || "",
       scanStamp: strategy4ScanStamp,
       total: strategy4ScanTotal,
       scannedCodes: [...strategy4ScannedCodes],
@@ -5020,6 +5004,56 @@ function isStrategy2EnhancementVisible(enhancement) {
     );
 }
 
+function strategy2SignalFromTrackedEvent(event) {
+  const strategies = normalizeArray(event?.strategies).map((item) => String(item));
+  const text = [event?.stateReason, event?.reason, event?.latestRecord?.reason, ...strategies].join(" ");
+  const matched = INTRADAY_SIGNAL_DEFS.find((signal) => text.includes(signal.title) || text.includes(signal.id));
+  if (matched) {
+    return {
+      id: matched.id,
+      short: matched.title,
+      icon: matched.icon,
+      reason: event?.stateReason || event?.latestRecord?.reason || matched.hint || "策略2正式進場事件",
+    };
+  }
+  if (text.includes("鑽石") || text.includes("0.618")) {
+    return { id: "diamond", short: "鑽石", icon: "💎", reason: event?.stateReason || event?.latestRecord?.reason || "策略2正式進場事件" };
+  }
+  if (text.includes("MA35")) {
+    return { id: "ma35_macd", short: "MA35", icon: "🟢", reason: event?.stateReason || event?.latestRecord?.reason || "策略2正式進場事件" };
+  }
+  return { id: "early_strength", short: "早盤強", icon: "⚡", reason: event?.stateReason || event?.latestRecord?.reason || "策略2正式進場事件" };
+}
+
+function stockRowFromStrategy2Event(event, base) {
+  if (!event?.code) return null;
+  const record = event.latestRecord || {};
+  const close = cleanNumber(base?.close) || cleanNumber(record.close) || cleanNumber(record.observedPrice) || cleanNumber(event.latestAPrice) || cleanNumber(event.firstAPrice);
+  const percent = base?.percent !== undefined && base?.percent !== "" ? cleanNumber(base.percent) : cleanNumber(record.percent ?? event.percent);
+  const tradeVolume = cleanNumber(base?.tradeVolume) || cleanNumber(record.tradeVolume) || cleanNumber(record.volume) || cleanNumber(event.tradeVolume) || cleanNumber(event.volume);
+  const open = cleanNumber(base?.open) || cleanNumber(record.open);
+  const high = cleanNumber(base?.high) || cleanNumber(record.observedHigh) || close;
+  const low = cleanNumber(base?.low) || cleanNumber(record.low) || close;
+  const signal = strategy2SignalFromTrackedEvent(event);
+  return {
+    ...(base || {}),
+    code: String(event.code),
+    name: base?.name || event.name || record.name || String(event.code),
+    close,
+    percent,
+    tradeVolume,
+    volume: tradeVolume,
+    value: cleanNumber(base?.value) || (close && tradeVolume ? close * tradeVolume * 1000 : 0),
+    open,
+    high,
+    low,
+    intradaySignals: [signal],
+    intradayState: { id: event.firstAAt || event.latestAAt ? "go" : "watch", label: event.firstAAt || event.latestAAt ? "進場區" : "待確認", cls: event.firstAAt || event.latestAAt ? "go" : "watch" },
+    strategy2Event: event,
+    intradayEntryTime: event.latestAAt || event.firstAAt || event.latestSeenAt || event.firstSeenAt || record.timestamp || record.entryAt || "",
+  };
+}
+
 function getIntradaySortValue(stock, key) {
   const seenAt = cleanNumber(stock.intradayFirstSeenAt) || cleanNumber(intradayFirstSeenAt.get(stock.code));
   const values = {
@@ -5139,6 +5173,7 @@ async function loadStrategy2IntradayCache(force = false) {
       if (!current.latestSeenAt || seenValue >= currentLatestValue) {
         current.latestSeenAt = seenTime;
         current.latestSeenPrice = cleanNumber(record.entryPrice) || cleanNumber(record.observedPrice) || cleanNumber(record.close);
+        current.latestRecord = record;
       }
       if (isEntryState && !current.firstAAt) current.firstAAt = seenTime;
       if (isEntryState && (!current.latestAAt || seenValue >= intradayTimeToValue(current.latestAAt))) {
@@ -5374,16 +5409,20 @@ function renderIntradayRadar(evaluated) {
     .filter(isStrategy2TodayIntradayStock)
     .filter((stock) => !isRealtimeRadarLimitUp(stock))
     .filter((stock) => matchesStrategyKeyword(stock, keyword));
-  const allRows = baseRows
-    .filter((stock) => (stock.intradaySignals || []).length)
+  const baseByCode = new Map(baseRows.map((stock) => [String(stock.code || ""), stock]));
+  const realtimeRows = baseRows
+    .filter((stock) => (stock.intradaySignals || []).length || strategy2IntradayEventByCode.has(String(stock.code || "")))
     .map((stock) => {
       const signals = stock.intradaySignals || [];
       const row = { ...stock, intradaySignals: signals };
-      const intradayState = getIntradayState(row);
       const trackedEvent = strategy2IntradayEventByCode.get(String(row.code || ""));
+      const intradayState = trackedEvent?.firstAAt || trackedEvent?.latestAAt
+        ? { id: "go", label: "進場區", cls: "go" }
+        : getIntradayState(row);
       const trackedTime = intradayState.id === "go"
         ? trackedEvent?.latestAAt || trackedEvent?.firstAAt || trackedEvent?.latestSeenAt || trackedEvent?.firstSeenAt || ""
         : trackedEvent?.latestBAt || trackedEvent?.latestSeenAt || trackedEvent?.firstBAt || trackedEvent?.firstAAt || "";
+      const mergedSignals = signals.length ? signals : (trackedEvent ? [strategy2SignalFromTrackedEvent(trackedEvent)] : []);
       if (!intradayFirstSeenAt.has(row.code)) {
         intradayFirstSeenAt.set(row.code, now);
       }
@@ -5392,6 +5431,7 @@ function renderIntradayRadar(evaluated) {
       }
       return {
         ...row,
+        intradaySignals: mergedSignals,
         intradayState,
         strategy2Event: trackedEvent || null,
         intradayEntryTime: trackedTime,
@@ -5399,6 +5439,14 @@ function renderIntradayRadar(evaluated) {
         intradayGoFirstSeenAt: intradayGoFirstSeenAt.get(row.code) || null,
       };
     });
+  const realtimeCodes = new Set(realtimeRows.map((stock) => String(stock.code || "")));
+  const cachedRows = Array.from(strategy2IntradayEventByCode.values())
+    .filter((event) => !realtimeCodes.has(String(event.code || "")))
+    .map((event) => stockRowFromStrategy2Event(event, baseByCode.get(String(event.code || ""))))
+    .filter(Boolean)
+    .filter((stock) => isIntradayTradable(stock))
+    .filter((stock) => matchesStrategyKeyword(stock, keyword));
+  const allRows = [...realtimeRows, ...cachedRows];
   const sessionRows = allRows.filter(isIntradayVisibleSessionRow);
   const tradableRows = scanClosed
     ? sessionRows.filter((stock) => stock.strategy2Event && getIntradayEntryTime(stock) !== "--:--")
@@ -5781,6 +5829,7 @@ function renderSwingRadar(universe) {
     `;
   }).join("");
   const zoneCards = `
+    <div class="swing-zone-card zone-all ${swingZoneFilter === "all" ? "active" : ""}" data-swing-zone-filter="all"><span>總命中</span><strong>${allRows.length}</strong><small>A/B/C全部</small></div>
     <div class="swing-zone-card zone-a ${swingZoneFilter === "A" ? "active" : ""}" data-swing-zone-filter="A"><span>A區可進場</span><strong>${zoneRows.A.length}</strong><small>正式波段買點</small></div>
     <div class="swing-zone-card zone-b ${swingZoneFilter === "B" ? "active" : ""}" data-swing-zone-filter="B"><span>B區觀察</span><strong>${zoneRows.B.length}</strong><small>趨勢轉強等待買點</small></div>
     <div class="swing-zone-card zone-c ${swingZoneFilter === "C" ? "active" : ""}" data-swing-zone-filter="C"><span>C區準備</span><strong>${zoneRows.C.length}</strong><small>低中位階整理</small></div>
@@ -7287,15 +7336,12 @@ function taipeiDateKeyFromValue(value) {
   }).format(new Date(time)));
 }
 
-function strategy4DataDateKey() {
-  return strategy4PayloadDataDateKey(strategy4Summary)
-    || marketAiDataDateKey(Object.values(strategy4ScanMatches));
-}
 function getStrategy4FreshnessMeta() {
   const today = taipeiDateKeyFromValue(Date.now()) || marketAiTodayKey();
-  const dataDate = strategy4DataDateKey()
+  const dataDate = normalizeMarketAiDateKey(strategy4ScanStamp || strategy4Summary?.scanStamp || strategy4Summary?.stamp)
     || taipeiDateKeyFromValue(strategy4ScanLastAt)
     || taipeiDateKeyFromValue(strategy4Summary?.updatedAt)
+    || marketAiDataDateKey(Object.values(strategy4ScanMatches))
     || today;
   return {
     mode: "策略4｜14:30完整掃",
@@ -7350,8 +7396,6 @@ function getPanelFreshnessMeta(viewName) {
       ? normalizeMarketAiDateKey(strategy5UsedDateKey) || marketAiDataDateKey(strategy5Data) || dataDate
       : strategyView?.classList.contains("open-buy-only")
       ? openBuyDataDateKey || marketAiDataDateKey(Object.values(openBuyScanMatches)) || dataDate
-      : strategyView?.classList.contains("swing-only")
-      ? strategy4DataDateKey() || dataDate
       : dataDate;
     return { mode, dataDate: strategyDataDate, today, isToday: strategyDataDate === today };
   }
@@ -8902,7 +8946,7 @@ async function refreshOpenBuyScan(force = false) {
 async function loadStrategy4Cache(force = false) {
   if (!isStrategyCacheActive("strategy4")) return;
   if (strategy4CacheLoading) return;
-  if (!force && strategy4ScanLastAt && Object.keys(strategy4ScanMatches).length && strategy4DataDateKey()) return;
+  if (!force && strategy4ScanLastAt && Object.keys(strategy4ScanMatches).length) return;
   if (shouldSkipMobileOtherStrategyCacheRefresh("strategy4", Boolean(strategy4ScanLastAt), force)) {
     renderStrategyScanner();
     return;
@@ -8910,7 +8954,7 @@ async function loadStrategy4Cache(force = false) {
   strategy4CacheLoading = true;
   try {
     let payload = await fetchVersionedJson(endpoints.strategy4Slim, 8000, strategy4Summary?.updatedAt || strategy4SummaryLoadedAt || "", force);
-    if (!normalizeArray(payload?.matches).length || !strategy4PayloadDataDateKey(payload)) {
+    if (!normalizeArray(payload?.matches).length) {
       payload = await fetchVersionedJson(endpoints.strategy4Cache, 10000, strategy4Summary?.updatedAt || strategy4SummaryLoadedAt || "", force);
     }
     if (!normalizeArray(payload?.matches).length) {
