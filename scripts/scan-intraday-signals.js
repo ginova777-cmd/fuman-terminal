@@ -1060,9 +1060,22 @@ async function fetchRealtime(stocks) {
   for (let i = 0; i < stocks.length; i += REALTIME_BATCH_SIZE) {
     const codes = stocks.slice(i, i + REALTIME_BATCH_SIZE).map((stock) => stock.code);
     if (!codes.length) continue;
-    requests.push({ codes, promise: fetchRealtimeBatch(codes) });
+    requests.push({ codes });
   }
-  const results = await Promise.allSettled(requests.map((request) => request.promise));
+  const results = new Array(requests.length);
+  let cursor = 0;
+  async function worker() {
+    while (cursor < requests.length) {
+      const index = cursor++;
+      try {
+        await fetchRealtimeBatch(requests[index].codes);
+        results[index] = { status: "fulfilled" };
+      } catch (error) {
+        results[index] = { status: "rejected", reason: error };
+      }
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(REALTIME_BATCH_CONCURRENCY, requests.length) }, () => worker()));
   const failed = results
     .map((result, index) => ({ result, codes: requests[index].codes }))
     .filter((item) => item.result.status === "rejected");
@@ -1087,6 +1100,7 @@ async function fetchRealtime(stocks) {
     failed: failed.length,
     failedBatches,
     retryBatches,
+    batchConcurrency: REALTIME_BATCH_CONCURRENCY,
     recoveredCodes: [...recoveredCodes],
     missedCodes: [...missedCodes],
     missedCount: missedCodes.size,
