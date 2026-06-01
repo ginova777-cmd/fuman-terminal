@@ -8196,15 +8196,14 @@ function renderMarketAiPanel() {
   const topHot = priorityStocks[0] || data.hotStocks[0];
   const filterMeta = getMarketAiFilterMeta(data.hotGroups);
   const activeFilterLabel = filterMeta.find((item) => item.key === marketAiHotFilter)?.label || "全部";
-  const sortNote = marketAiHotFilter === "legal"
-    ? "法人買超只是入選條件，排序先看綜合分數，再交叉看 AI 訊號數、盤中資金流、動能與成交值。"
-    : marketAiHotFilter === "intraday"
-    ? "當沖熱只是入選條件，排序先看綜合分數，再交叉看當沖熱度、AI 訊號數、盤中資金流與動能。"
-    : "依共振策略數優先排序，再看策略4/5、綜合分數與成交值。";
   const strongNames = data.strongSectors.map((sector) => sector.name).join("、") || "尚未形成明顯主流";
   const weakNames = data.weakSectors.filter((sector) => sector.pct < 0).map((sector) => sector.name).join("、") || "暫無明顯弱勢族群";
   const riskNames = data.riskStocks.map((stock) => `${stock.code} ${stock.name}`).join("、") || "暫無極端標的";
   const topHotTags = topHot?.tags?.length ? topHot.tags.join("、") : "";
+  const displayHotStocks = data.visibleHotStocks.length
+    ? data.visibleHotStocks
+    : normalizeArray(data.hotGroups?.momentum || data.hotStocks).filter((stock) => isMarketAiLongCandidate(stock, { allowReference: data.isReferenceDate })).slice(0, 10);
+  const displayFilterLabel = data.visibleHotStocks.length ? activeFilterLabel : "AI 綜合";
   const operate = data.bias === "多方偏強"
     ? ["順勢追蹤", "只看強族群前 3 名", "跌破量價支撐先降槓桿"]
     : data.bias === "空方壓制"
@@ -8322,7 +8321,7 @@ function renderMarketAiPanel() {
     </section>
     <section class="market-ai-block">
       <h3>熱門觀察股</h3>
-      <small>依綜合分數與成交量排序</small>
+      <small>依 AI 盤面判讀排序</small>
       <div class="market-ai-filterbar">
         ${filterMeta.map((item) => `
           <button type="button" class="${item.key === marketAiHotFilter ? "active" : ""}" data-ai-hot-filter="${item.key}">
@@ -8330,9 +8329,9 @@ function renderMarketAiPanel() {
           </button>
         `).join("")}
       </div>
-      <div class="market-ai-sort-note">目前排序 <b>${escapeAttr(activeFilterLabel)}</b>，${escapeAttr(sortNote)}</div>
+      <div class="market-ai-sort-note">目前排序 <b>${escapeAttr(displayFilterLabel)}</b>，AI 依盤面強弱、資金流、族群、法人與風險分數綜合判讀。</div>
       <div class="market-ai-hot">
-        ${data.visibleHotStocks.map((stock, index) => `
+        ${displayHotStocks.map((stock, index) => `
           <article class="market-ai-stock-row">
             <div class="market-ai-rank">#${index + 1}</div>
             <div>
@@ -8354,7 +8353,7 @@ function renderMarketAiPanel() {
               <button type="button" data-ai-watch-code="${escapeAttr(stock.code)}" data-ai-watch-name="${escapeAttr(stock.name)}">加入自選</button>
             </div>
           </article>
-        `).join("") || `<div class="empty-state">目前沒有符合「${escapeAttr(activeFilterLabel)}」的股票。</div>`}
+        `).join("") || `<div class="empty-state">目前 AI 尚未篩出足夠觀察股。</div>`}
       </div>
     </section>
   `;
