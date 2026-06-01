@@ -26,9 +26,68 @@ function rowsOf(payload) {
   if (!payload) return [];
   if (Array.isArray(payload.stocks)) return payload.stocks;
   if (Array.isArray(payload.matches)) return payload.matches;
+  if (Array.isArray(payload.records)) return payload.records;
   if (Array.isArray(payload.rows)) return payload.rows;
   if (payload.data && typeof payload.data === "object") return Object.values(payload.data);
   return [];
+}
+
+function strategy2Issues(rows) {
+  const issues = [];
+  const highPctLowVolume = rows.filter((row) =>
+    /^\d{4}$/.test(String(row.code || ""))
+    && cleanNumber(row.percent ?? row.pct) >= 8
+    && cleanNumber(row.volume ?? row.tradeVolume) > 0
+    && cleanNumber(row.volume ?? row.tradeVolume) < 1000
+  );
+  if (highPctLowVolume.length) {
+    issues.push({
+      level: "high",
+      message: `strategy2 suspicious high-pct low-volume rows ${highPctLowVolume.length}`,
+      samples: highPctLowVolume.slice(0, 8).map((row) => ({
+        code: String(row.code || ""),
+        name: row.name || "",
+        timestamp: row.timestamp || row.entryAt || "",
+        percent: cleanNumber(row.percent ?? row.pct),
+        volume: cleanNumber(row.volume ?? row.tradeVolume),
+      })),
+    });
+  }
+
+  const byCode = new Map();
+  for (const row of rows) {
+    const code = String(row.code || "");
+    const volume = cleanNumber(row.volume ?? row.tradeVolume);
+    if (!/^\d{4}$/.test(code) || volume <= 0) continue;
+    if (!byCode.has(code)) byCode.set(code, []);
+    byCode.get(code).push({ row, volume });
+  }
+  const suddenShrinks = [];
+  for (const [code, items] of byCode) {
+    const sorted = items.sort((a, b) => String(a.row.timestamp || a.row.entryAt || "").localeCompare(String(b.row.timestamp || b.row.entryAt || "")));
+    let maxSeen = 0;
+    for (const item of sorted) {
+      if (maxSeen >= 10000 && item.volume > 0 && item.volume <= maxSeen / 100) {
+        suddenShrinks.push({
+          code,
+          name: item.row.name || "",
+          timestamp: item.row.timestamp || item.row.entryAt || "",
+          previousMaxVolume: Math.round(maxSeen),
+          volume: Math.round(item.volume),
+        });
+        break;
+      }
+      maxSeen = Math.max(maxSeen, item.volume);
+    }
+  }
+  if (suddenShrinks.length) {
+    issues.push({
+      level: "high",
+      message: `strategy2 suspicious volume unit shrink rows ${suddenShrinks.length}`,
+      samples: suddenShrinks.slice(0, 8),
+    });
+  }
+  return issues;
 }
 
 function inspect(file) {
@@ -52,6 +111,7 @@ function inspect(file) {
   if (rows.length && zeroClose / rows.length > 0.15) issues.push({ level: "medium", message: `zero close ratio high ${zeroClose}/${rows.length}` });
   if (extremePct) issues.push({ level: "medium", message: `extreme percent rows ${extremePct}` });
   if (missingCode) issues.push({ level: "high", message: `missing code rows ${missingCode}` });
+  if (file === "strategy2-intraday-latest.json") issues.push(...strategy2Issues(rows));
   return {
     file,
     ok: !issues.some((item) => item.level === "high"),

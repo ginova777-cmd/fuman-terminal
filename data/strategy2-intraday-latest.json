@@ -44436,7 +44436,7 @@
       "kdUp": false,
       "intradayVolumeBurst": true,
       "recoveredFromRealtimeFallback": true,
-      "currentVolume": 102,
+      "currentVolume": 102017,
       "currentPercent": 9.849749582637727,
       "isSnapshot": true
     },
@@ -61325,7 +61325,7 @@
       "dayHighAt": "2026-06-01 13:25:52",
       "dayLow": 61.1,
       "dayLowAt": "2026-06-01 13:25:52",
-      "volume": 102,
+      "volume": 102017,
       "percent": 9.849749582637727,
       "reason": "回測 0.618 後收紅轉強",
       "signalId": "diamond",
@@ -61347,7 +61347,7 @@
       "kdUp": false,
       "intradayVolumeBurst": true,
       "recoveredFromRealtimeFallback": true,
-      "currentVolume": 102,
+      "currentVolume": 102017,
       "currentPercent": 9.849749582637727,
       "isSnapshot": true
     },
