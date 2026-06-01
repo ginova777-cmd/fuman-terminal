@@ -1,9 +1,9 @@
 {
   "ok": true,
   "source": "github-actions",
-  "updatedAt": "2026-06-01T13:00:48.807Z",
+  "updatedAt": "2026-06-01T13:20:30.446Z",
   "usedDate": "20260601",
-  "quoteUpdatedAt": "",
+  "quoteUpdatedAt": "2026-06-01T13:20:09.718Z",
   "count": 1908,
   "topJoint": [
     {
@@ -135,9 +135,9 @@
     {
       "code": "0056",
       "name": "元大高股息",
-      "close": 0,
-      "percent": 0,
-      "value": 0,
+      "close": 51.9,
+      "percent": 3.39,
+      "value": 3033987774,
       "foreign": 6462117,
       "trust": 130000,
       "dealer": 0,
@@ -1187,9 +1187,9 @@
     {
       "code": "0050",
       "name": "元大台灣50",
-      "close": 0,
-      "percent": 0,
-      "value": 0,
+      "close": 105.5,
+      "percent": 0.09,
+      "value": 14329024058,
       "foreign": -22685351,
       "trust": 2124000,
       "dealer": 0,
@@ -2085,9 +2085,9 @@
     {
       "code": "0056",
       "name": "元大高股息",
-      "close": 0,
-      "percent": 0,
-      "value": 0,
+      "close": 51.9,
+      "percent": 3.39,
+      "value": 3033987774,
       "foreign": 6462117,
       "trust": 130000,
       "dealer": 0,
