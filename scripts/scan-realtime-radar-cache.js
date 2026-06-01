@@ -326,6 +326,8 @@ async function fetchRealtime(stocks) {
   const quotes = new Map();
   const batchSize = 100;
   const failedBatches = [];
+  const apiErrors = [];
+  const fallbackRecovered = { fugle: 0, yahoo: 0 };
   const batches = [];
   for (let i = 0; i < stocks.length; i += batchSize) {
     const batchStocks = stocks.slice(i, i + batchSize);
@@ -341,6 +343,9 @@ async function fetchRealtime(stocks) {
     try {
       const payload = await fetchJson(`${BASE_URL}/api/realtime?codes=${encodeURIComponent(codes.join(","))}&t=${Date.now()}`, REALTIME_BATCH_TIMEOUT_MS);
       (payload.quotes || []).forEach((quote) => quotes.set(quote.code, quote));
+      (payload.errors || []).forEach((error) => apiErrors.push({ ...error, parentBatch: batchIndex }));
+      fallbackRecovered.fugle += Number(payload.fallbackRecovered?.fugle || 0);
+      fallbackRecovered.yahoo += Number(payload.fallbackRecovered?.yahoo || 0);
     } catch (error) {
       failedBatches.push({
         batchIndex,
@@ -365,7 +370,13 @@ async function fetchRealtime(stocks) {
     ...stock,
     realtimeBatch: batchByCode.get(stock.code) || null,
   }));
-  return { stocks: liveStocks, failedBatches, totalBatches: batches.length, quoteCount: quotes.size };
+  const quoteSourceCounts = {};
+  for (const stock of liveStocks) {
+    if (!stock.isRealtime) continue;
+    const source = stock.quoteSource || "unknown";
+    quoteSourceCounts[source] = (quoteSourceCounts[source] || 0) + 1;
+  }
+  return { stocks: liveStocks, failedBatches, apiErrors, fallbackRecovered, quoteSourceCounts, totalBatches: batches.length, quoteCount: quotes.size };
 }
 
 function applyRealtimeQuotes(stocks, quotes) {
@@ -379,7 +390,7 @@ function applyRealtimeQuotes(stocks, quotes) {
       ...quote,
       close,
       quoteTime: quote.time || "",
-      quoteSource: "api/realtime",
+      quoteSource: quote.quoteSource || quote.realtimeFallback || "api/realtime",
       tradeVolume: volume,
       value: volume && close ? volume * close * 1000 : cleanNumber(stock.value),
       isRealtime: true,
@@ -619,6 +630,9 @@ async function main() {
     failedBatchCount: realtime.failedBatches.length,
     totalBatchCount: realtime.totalBatches,
     quoteCount: realtime.quoteCount,
+    quoteSourceCounts: realtime.quoteSourceCounts,
+    fallbackRecovered: realtime.fallbackRecovered,
+    apiErrorDetails: realtime.apiErrors,
     staleQuoteDetails,
     failedBatchDetails,
     externalSourceIssues,
@@ -701,6 +715,7 @@ main().catch((error) => {
   console.error(error);
   process.exit(1);
 });
+
 
 
 
