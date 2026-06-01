@@ -1333,8 +1333,19 @@ function isRealtimeRadarLimitUp(stock) {
   return pct >= 9.7;
 }
 
+function realtimeRadarDataDateKey(rows = realtimeRadarLastRows) {
+  const counts = new Map();
+  normalizeArray(rows).forEach((row) => {
+    const key = normalizeMarketAiDateKey(row?.radarDate)
+      || realtimeRadarDateKeyFromTimestamp(cleanNumber(row?.radarUpdatedAt || row?.detectedAt || row?.updatedAt))
+      || normalizeMarketAiDateKey(row?.signalDate);
+    if (key) counts.set(key, (counts.get(key) || 0) + 1);
+  });
+  return [...counts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] || "";
+}
+
 function realtimeRadarClosedDataDateKey() {
-  return marketAiDataDateKey(realtimeRadarLastRows)
+  return realtimeRadarDataDateKey(realtimeRadarLastRows)
     || normalizeMarketAiDateKey(marketStockDataState.resolvedTradeDate)
     || marketAiDataDateKey(latestStocks)
     || marketAiTodayKey();
@@ -7477,7 +7488,7 @@ function getPanelFreshnessMeta(viewName) {
   if (viewName === "realtime-radar") {
     const radarLive = shouldRunLivePolling();
     const radarDataDate = radarLive
-      ? marketAiDataDateKey(realtimeRadarLastRows) || realtimeRadarClosedDataDateKey() || dataDate
+      ? realtimeRadarDataDateKey(realtimeRadarLastRows) || realtimeRadarClosedDataDateKey() || dataDate
       : realtimeRadarClosedDataDateKey() || dataDate;
     return { mode: radarLive ? "即時雷達｜盤中巡邏" : "即時雷達｜最新可用收盤資料", dataDate: radarDataDate, today, isToday: radarDataDate === today };
   }
