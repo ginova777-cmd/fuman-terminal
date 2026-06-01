@@ -25,8 +25,8 @@ const MANAGER_MIN_ENTRY_TIME = process.env.TRADE_MANAGER_MIN_ENTRY_TIME || "09:0
 const MAX_QUOTE_AGE_SECONDS = Number(process.env.STRATEGY2_MAX_QUOTE_AGE_SECONDS || 150);
 const QUOTE_CACHE_MAX_AGE_SECONDS = Number(process.env.STRATEGY2_QUOTE_CACHE_MAX_AGE_SECONDS || 15 * 60);
 const MIN_REALTIME_COVERAGE = Number(process.env.STRATEGY2_MIN_REALTIME_COVERAGE || 0.5);
-const REALTIME_BATCH_SIZE = Number(process.env.STRATEGY2_REALTIME_BATCH_SIZE || 40);
-const REALTIME_RETRY_BATCH_SIZE = Number(process.env.STRATEGY2_REALTIME_RETRY_BATCH_SIZE || 10);
+const REALTIME_BATCH_SIZE = Number(process.env.STRATEGY2_REALTIME_BATCH_SIZE || 8);
+const REALTIME_RETRY_BATCH_SIZE = Number(process.env.STRATEGY2_REALTIME_RETRY_BATCH_SIZE || 4);
 const MA35_PROVIDER_FAILURE_LIMIT = Math.max(1, Number(process.env.STRATEGY2_MA35_PROVIDER_FAILURE_LIMIT || 8));
 
 function readSecretText(file) {
@@ -1022,6 +1022,58 @@ async function fetchRealtime(stocks) {
     if (!codes.length) return;
     const payload = await fetchJson(`${BASE_URL}/api/realtime?codes=${encodeURIComponent(codes.join(","))}&t=${Date.now()}`, 12000);
     (payload.quotes || []).forEach((quote) => quotes.set(quote.code, quote));
+    if (codes.length > 1 && (payload.quotes || []).length === 0) throw new Error("api/realtime returned no quotes");
+  }
+
+  async function fetchFugleRealtimeQuote(code) {
+    if (!FUGLE_API_KEY || !/^\d{4}$/.test(String(code))) return null;
+    const url = `https://api.fugle.tw/marketdata/v1.0/stock/intraday/quote/${code}`;
+    const timer = setTimeout(() => {}, 0);
+    clearTimeout(timer);
+    const response = await fetch(url, {
+      headers: {
+        "User-Agent": "FumanStrategy2Realtime/1.0",
+        "X-API-KEY": FUGLE_API_KEY,
+      },
+      signal: AbortSignal.timeout ? AbortSignal.timeout(8000) : undefined,
+    });
+    if (!response.ok) throw new Error(`fugle quote HTTP ${response.status}`);
+    const payload = await response.json();
+    const close = cleanNumber(payload.closePrice || payload.close || payload.lastPrice || payload.price);
+    const prevClose = cleanNumber(payload.referencePrice || payload.previousClose || payload.prevClose || payload.previousPrice);
+    if (!close || !prevClose) return null;
+    const change = cleanNumber(payload.change) || (close - prevClose);
+    return {
+      code: String(payload.symbol || code),
+      name: payload.name || String(code),
+      close,
+      closeSource: "fugle",
+      change,
+      percent: cleanNumber(payload.changePercent) || (prevClose ? (change / prevClose) * 100 : 0),
+      open: cleanNumber(payload.openPrice || payload.open),
+      high: cleanNumber(payload.highPrice || payload.high || close),
+      low: cleanNumber(payload.lowPrice || payload.low || close),
+      prevClose,
+      tradeVolume: cleanNumber(payload.total?.tradeVolume || payload.tradeVolume || payload.volume),
+      market: payload.exchange || payload.market || "",
+      time: payload.lastUpdated || payload.lastTradeTime || payload.time || "",
+      realtimeFallback: "fugle",
+    };
+  }
+
+  async function fetchFugleFallback(codes, parentLabel) {
+    for (const code of codes) {
+      if (quotes.has(code)) continue;
+      try {
+        const quote = await fetchFugleRealtimeQuote(code);
+        if (quote?.close) {
+          quotes.set(String(code), quote);
+          recoveredCodes.add(String(code));
+        }
+      } catch (error) {
+        console.log(`realtime fugle failed ${code} from ${parentLabel}: ${error.message}`);
+      }
+    }
   }
 
   async function fetchSmallRetries(codes, parentLabel) {
@@ -1050,9 +1102,12 @@ async function fetchRealtime(stocks) {
         await fetchRealtimeBatch([code]);
         if (quotes.has(code)) recoveredCodes.add(code);
       } catch (error) {
-        if (/^\d{4}$/.test(String(code)) && !String(code).startsWith("00")) missedCodes.add(code);
         console.log(`realtime single failed ${code} from ${parentLabel}: ${error.message}`);
       }
+    }
+    await fetchFugleFallback(codes, parentLabel);
+    for (const code of codes) {
+      if (!quotes.has(code) && /^\d{4}$/.test(String(code)) && !String(code).startsWith("00")) missedCodes.add(code);
     }
   }
 
