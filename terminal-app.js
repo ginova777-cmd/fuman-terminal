@@ -2571,6 +2571,7 @@ let marketRealtimeState = { trading: false, marketStatus: "", updatedAt: "", sou
 let marketStockDataState = { resolvedTradeDate: "", today: "", source: "", updatedAt: "", isFallbackDate: false, marketDates: {} };
 let heatmapLoading = false;
 let heatmapLastStartedAt = 0;
+let marketAiHeatmapSyncRequestedAt = 0;
 let heatmapMode = "all";
 let lastViewName = "";
 let lastViewShownAt = 0;
@@ -7998,6 +7999,10 @@ function renderMarketAiPanel() {
   installMarketTabs();
   if (!marketAiPanel) return;
   const data = buildMarketAiData();
+  if (data.isDateFallback && isMarketAiActiveSession() && Date.now() - marketAiHeatmapSyncRequestedAt > 10000) {
+    marketAiHeatmapSyncRequestedAt = Date.now();
+    deferUiWork(() => loadHeatmap(true), 80);
+  }
   if (data.isReferenceDate && isMarketAiActiveSession()) {
     requestMarketAiRealtimeScan("hot");
   }
