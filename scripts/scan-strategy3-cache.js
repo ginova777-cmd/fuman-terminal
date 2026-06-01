@@ -3,9 +3,10 @@ const path = require("path");
 const { fetchMisQuotes } = require("../lib/mis-quotes");
 
 const ROOT = path.resolve(__dirname, "..");
-const OUT_FILE = path.join(ROOT, "data", "strategy3-latest.json");
-const BACKUP_FILE = path.join(ROOT, "data", "strategy3-backup.json");
-const SCORECARD_SOURCE_FILE = path.join(ROOT, "data", "strategy3-scorecard-source.json");
+const DATA_DIR = process.env.FUMAN_DATA_DIR || path.join(ROOT, "data");
+const OUT_FILE = path.join(DATA_DIR, "strategy3-latest.json");
+const BACKUP_FILE = path.join(DATA_DIR, "strategy3-backup.json");
+const SCORECARD_SOURCE_FILE = path.join(DATA_DIR, "strategy3-scorecard-source.json");
 const STOCK_URL = process.env.STOCK_UNIVERSE_URL || "https://fuman-terminal.vercel.app/api/stocks";
 const CAPITAL_URLS = [
   "https://mopsfin.twse.com.tw/opendata/t187ap03_L.csv",
@@ -383,3 +384,4 @@ main().catch((error) => {
   console.error(error);
   process.exit(1);
 });
+
