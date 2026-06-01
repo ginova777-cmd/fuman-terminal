@@ -27,6 +27,8 @@ const QUOTE_CACHE_MAX_AGE_SECONDS = Number(process.env.STRATEGY2_QUOTE_CACHE_MAX
 const MIN_REALTIME_COVERAGE = Number(process.env.STRATEGY2_MIN_REALTIME_COVERAGE || 0.5);
 const REALTIME_BATCH_SIZE = Number(process.env.STRATEGY2_REALTIME_BATCH_SIZE || 8);
 const REALTIME_RETRY_BATCH_SIZE = Number(process.env.STRATEGY2_REALTIME_RETRY_BATCH_SIZE || 4);
+const REALTIME_BATCH_CONCURRENCY = Math.max(1, Number(process.env.STRATEGY2_REALTIME_BATCH_CONCURRENCY || 4));
+const REALTIME_FALLBACK_CANDIDATE_LIMIT = Math.max(0, Number(process.env.STRATEGY2_REALTIME_FALLBACK_CANDIDATE_LIMIT || 60));
 const MA35_PROVIDER_FAILURE_LIMIT = Math.max(1, Number(process.env.STRATEGY2_MA35_PROVIDER_FAILURE_LIMIT || 8));
 
 function readSecretText(file) {
@@ -1017,6 +1019,18 @@ async function fetchRealtime(stocks) {
   const failedBatches = [];
   const retryBatches = [];
   const missedCodes = new Set();
+  const fallbackCandidateCodes = new Set(
+    [...stocks]
+      .filter((stock) => /^\d{4}$/.test(String(stock.code || "")) && !String(stock.code).startsWith("00"))
+      .sort((a, b) =>
+        (cleanNumber(b.percent) - cleanNumber(a.percent))
+        || (cleanNumber(b.tradeVolume) - cleanNumber(a.tradeVolume))
+        || String(a.code).localeCompare(String(b.code))
+      )
+      .slice(0, REALTIME_FALLBACK_CANDIDATE_LIMIT)
+      .map((stock) => String(stock.code))
+  );
+  let fugleRateLimited = false;
 
   async function fetchRealtimeBatch(codes) {
     if (!codes.length) return;
@@ -1062,7 +1076,9 @@ async function fetchRealtime(stocks) {
   }
 
   async function fetchFugleFallback(codes, parentLabel) {
-    for (const code of codes) {
+    const targetCodes = codes.filter((code) => fallbackCandidateCodes.has(String(code)));
+    for (const code of targetCodes) {
+      if (fugleRateLimited) break;
       if (quotes.has(code)) continue;
       try {
         const quote = await fetchFugleRealtimeQuote(code);
@@ -1071,7 +1087,58 @@ async function fetchRealtime(stocks) {
           recoveredCodes.add(String(code));
         }
       } catch (error) {
+        if (String(error.message || "").includes("HTTP 429")) {
+          fugleRateLimited = true;
+          console.log(`realtime fugle rate limited at ${code} from ${parentLabel}; fallback paused this round`);
+          break;
+        }
         console.log(`realtime fugle failed ${code} from ${parentLabel}: ${error.message}`);
+      }
+    }
+  }
+
+  async function fetchYahooFallback(codes, parentLabel) {
+    const targetCodes = codes.filter((code) => fallbackCandidateCodes.has(String(code)) && !quotes.has(String(code)));
+    for (const code of targetCodes) {
+      for (const suffix of ["TW", "TWO"]) {
+        try {
+          const symbol = `${code}.${suffix}`;
+          const url = `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}?interval=1m&range=1d`;
+          const payload = await fetchJson(url, 9000);
+          const result = payload?.chart?.result?.[0];
+          const timestamps = result?.timestamp || [];
+          const quote = result?.indicators?.quote?.[0] || {};
+          const closes = quote.close || [];
+          const lastIndex = closes.findLastIndex((value) => cleanNumber(value) > 0);
+          if (lastIndex < 0) continue;
+          const close = cleanNumber(closes[lastIndex]);
+          const prevClose = cleanNumber(result?.meta?.previousClose || result?.meta?.chartPreviousClose);
+          if (!close || !prevClose) continue;
+          const volumes = quote.volume || [];
+          const highs = (quote.high || []).map(cleanNumber).filter((value) => value > 0);
+          const lows = (quote.low || []).map(cleanNumber).filter((value) => value > 0);
+          const change = close - prevClose;
+          quotes.set(String(code), {
+            code: String(code),
+            name: String(code),
+            close,
+            closeSource: "yahoo-chart",
+            change,
+            percent: prevClose ? (change / prevClose) * 100 : 0,
+            open: cleanNumber((quote.open || []).find((value) => cleanNumber(value) > 0)),
+            high: highs.length ? Math.max(...highs) : close,
+            low: lows.length ? Math.min(...lows) : close,
+            prevClose,
+            tradeVolume: volumes.reduce((sum, value) => sum + cleanNumber(value), 0),
+            market: suffix === "TWO" ? "otc" : "tse",
+            time: timestamps[lastIndex] ? new Date(Number(timestamps[lastIndex]) * 1000).toLocaleTimeString("en-GB", { timeZone: "Asia/Taipei", hour12: false }) : "",
+            realtimeFallback: "yahoo-chart",
+          });
+          recoveredCodes.add(String(code));
+          break;
+        } catch (error) {
+          if (suffix === "TWO") console.log(`realtime yahoo failed ${code} from ${parentLabel}: ${error.message}`);
+        }
       }
     }
   }
@@ -1097,14 +1164,7 @@ async function fetchRealtime(stocks) {
   }
 
   async function fetchSingleRetries(codes, parentLabel) {
-    for (const code of codes) {
-      try {
-        await fetchRealtimeBatch([code]);
-        if (quotes.has(code)) recoveredCodes.add(code);
-      } catch (error) {
-        console.log(`realtime single failed ${code} from ${parentLabel}: ${error.message}`);
-      }
-    }
+    await fetchYahooFallback(codes, parentLabel);
     await fetchFugleFallback(codes, parentLabel);
     for (const code of codes) {
       if (!quotes.has(code) && /^\d{4}$/.test(String(code)) && !String(code).startsWith("00")) missedCodes.add(code);
@@ -1156,6 +1216,9 @@ async function fetchRealtime(stocks) {
     failedBatches,
     retryBatches,
     batchConcurrency: REALTIME_BATCH_CONCURRENCY,
+    fallbackCandidateLimit: REALTIME_FALLBACK_CANDIDATE_LIMIT,
+    fallbackCandidateCount: fallbackCandidateCodes.size,
+    fugleRateLimited,
     recoveredCodes: [...recoveredCodes],
     missedCodes: [...missedCodes],
     missedCount: missedCodes.size,
