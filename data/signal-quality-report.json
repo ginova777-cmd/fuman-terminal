@@ -1,8 +1,8 @@
 {
   "ok": true,
-  "updatedAt": "2026-05-31T23:48:16.587Z",
+  "updatedAt": "2026-06-01T05:32:19.167Z",
   "strategy2": {
-    "latestSignals": 179,
+    "latestSignals": 95,
     "latestGo": 0,
     "backtest": {
       "count": 0,
@@ -14,9 +14,9 @@
     "reports": []
   },
   "realtimeRadar": {
-    "latestSignals": 32,
-    "longSignals": 25,
-    "shortSignals": 7,
+    "latestSignals": 80,
+    "longSignals": 66,
+    "shortSignals": 14,
     "scorecard": {
       "count": 179,
       "avg": 2.083648085919581,
@@ -24,7 +24,7 @@
       "best": 7.3493975903614395,
       "worst": 0
     },
-    "updatedAt": "2026-05-29T05:30:46.467Z"
+    "updatedAt": "2026-06-01T05:30:54.816Z"
   },
   "strategy4": {
     "total": 1963,

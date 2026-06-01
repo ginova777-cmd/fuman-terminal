@@ -1,29 +1,29 @@
 {
   "ok": true,
-  "updatedAt": "2026-05-31T23:48:18.186Z",
+  "updatedAt": "2026-06-01T05:32:19.278Z",
   "files": [
     {
       "file": "market-summary.json",
       "ok": true,
-      "bytes": 150771,
+      "bytes": 147978,
       "count": 80,
-      "updatedAt": "2026-05-30T02:57:38.651Z",
+      "updatedAt": "2026-06-01T05:31:04.882Z",
       "issues": []
     },
     {
       "file": "strategy2-intraday-latest.json",
       "ok": true,
-      "bytes": 156538826,
+      "bytes": 2315579,
       "count": 0,
-      "updatedAt": "2026-05-29T05:30:52.095Z",
+      "updatedAt": "2026-06-01T05:31:40.723Z",
       "issues": []
     },
     {
       "file": "realtime-radar-latest.json",
       "ok": true,
-      "bytes": 24796,
-      "count": 32,
-      "updatedAt": "2026-05-29T05:30:46.467Z",
+      "bytes": 80612,
+      "count": 80,
+      "updatedAt": "2026-06-01T05:30:54.816Z",
       "issues": []
     },
     {
@@ -63,17 +63,17 @@
     {
       "file": "institution-latest.json",
       "ok": true,
-      "bytes": 815252,
+      "bytes": 815260,
       "count": 1908,
-      "updatedAt": "2026-05-31T23:47:52.702Z",
+      "updatedAt": "2026-06-01T00:19:08.161Z",
       "issues": []
     },
     {
       "file": "warrant-flow-latest.json",
       "ok": true,
-      "bytes": 388904,
-      "count": 120,
-      "updatedAt": "2026-05-30T10:18:05.285Z",
+      "bytes": 291004,
+      "count": 89,
+      "updatedAt": "2026-06-01T00:23:51.662Z",
       "issues": []
     }
   ],
