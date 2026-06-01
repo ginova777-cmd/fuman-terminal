@@ -1,6 +1,6 @@
 {
   "ok": true,
-  "updatedAt": "2026-06-01T08:38:47.375Z",
+  "updatedAt": "2026-06-01T13:12:02.962Z",
   "files": [
     {
       "file": "market-summary.json",
@@ -13,8 +13,8 @@
     {
       "file": "strategy2-intraday-latest.json",
       "ok": true,
-      "bytes": 2244610,
-      "count": 0,
+      "bytes": 2244619,
+      "count": 1259,
       "updatedAt": "2026-06-01T05:32:26.604Z",
       "issues": []
     },
@@ -63,17 +63,17 @@
     {
       "file": "institution-latest.json",
       "ok": true,
-      "bytes": 815260,
+      "bytes": 832721,
       "count": 1908,
-      "updatedAt": "2026-06-01T00:19:08.161Z",
+      "updatedAt": "2026-06-01T13:00:48.807Z",
       "issues": []
     },
     {
       "file": "warrant-flow-latest.json",
       "ok": true,
-      "bytes": 291004,
-      "count": 89,
-      "updatedAt": "2026-06-01T00:23:51.662Z",
+      "bytes": 388360,
+      "count": 120,
+      "updatedAt": "2026-06-01T12:50:24.641Z",
       "issues": []
     }
   ],
