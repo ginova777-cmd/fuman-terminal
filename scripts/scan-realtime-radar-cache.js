@@ -311,6 +311,17 @@ async function fetchStocks() {
   }).filter((stock) => stock.code && stock.name && stock.close);
 }
 
+async function runWithConcurrency(items, limit, worker) {
+  let index = 0;
+  const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
+    while (index < items.length) {
+      const item = items[index];
+      index += 1;
+      await worker(item);
+    }
+  });
+  await Promise.all(workers);
+}
 async function fetchRealtime(stocks) {
   const quotes = new Map();
   const batchSize = 100;
