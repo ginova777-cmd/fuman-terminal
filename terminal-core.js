@@ -1,5 +1,5 @@
 (function () {
-  const version = "realtime-radar-core-20260601-04";
+  const version = "strategy4-remove-zone-card-20260601-05";
   window.FUMAN_TERMINAL_BOOT = {
     version,
     startedAt: Date.now(),
