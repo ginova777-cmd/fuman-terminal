@@ -19,7 +19,7 @@ module.exports = async function handler(request, response) {
       response.status(500).json({ ok: false, error: "supabase_not_configured" });
       return;
     }
-    const url = `${base}/rest/v1/strategy2_latest?id=eq.latest&select=payload,updated_at&limit=1&t=${Date.now()}`;
+    const url = `${base}/rest/v1/strategy2_latest?id=eq.latest&select=payload,updated_at&limit=1`;
     const upstream = await fetch(url, {
       headers: {
         apikey: SUPABASE_KEY,

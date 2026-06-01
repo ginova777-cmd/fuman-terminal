@@ -3031,7 +3031,7 @@ async function fetchSupabaseLatestPayload(table, timeout = 3500) {
   if (!FUMAN_SUPABASE_URL || !FUMAN_SUPABASE_KEY || !table) return null;
   try {
     const base = FUMAN_SUPABASE_URL.replace(/\/+$/, "");
-    const url = `${base}/rest/v1/${encodeURIComponent(table)}?id=eq.latest&select=payload,updated_at&limit=1&t=${Date.now()}`;
+    const url = `${base}/rest/v1/${encodeURIComponent(table)}?id=eq.latest&select=payload,updated_at&limit=1`;
     const rows = await fetchJson(url, timeout, {
       headers: {
         apikey: FUMAN_SUPABASE_KEY,
