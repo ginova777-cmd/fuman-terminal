@@ -81,6 +81,10 @@ function readJson(file, fallback) {
   try { return JSON.parse(fs.readFileSync(file, "utf8")); } catch { return fallback; }
 }
 
+function pickDefined(value) {
+  return Object.fromEntries(Object.entries(value || {}).filter(([, item]) => item !== undefined && item !== null && item !== ""));
+}
+
 function avg(values) {
   const rows = values.map(cleanNumber).filter((value) => value > 0);
   return rows.length ? rows.reduce((sum, value) => sum + value, 0) / rows.length : 0;
@@ -347,6 +351,8 @@ function shouldWriteStrategy2History(file) {
 
 function publishStaticDataJson(name, value) {
   const payload = name === "strategy2-intraday-latest.json" ? buildStrategy2PublicReport(value) : value;
+  const slimPayload = name === "strategy2-intraday-latest.json" ? buildStrategy2FastSlimReport(value) : null;
+  const topPayload = name === "strategy2-intraday-latest.json" ? buildStrategy2MobileTopReport(value) : null;
   const targets = [repoPath("data", name)];
   const syncRoot = process.env.FUMAN_SYNC_DIR || "C:\\fuman-terminal-sync";
   if (fs.existsSync(syncRoot)) targets.push(path.join(syncRoot, "data", name));
@@ -1238,22 +1244,6 @@ async function fetchTwelveDataIntradaySma35(code, scanTimestamp) {
 
 async function fetchIntradaySma35WithFallback(code, scanTimestamp, cache) {
   const attempts = [];
-  if (yahooMa35BlockedReason) {
-    attempts.push({ source: "yahoo-1m", ok: false, skipped: true, error: yahooMa35BlockedReason });
-  } else {
-    try {
-      const yahoo = await fetchYahooIntradaySma35(code, scanTimestamp);
-      attempts.push({ source: "yahoo-1m", ok: Boolean(yahoo) });
-      if (yahoo) {
-        yahooMa35Failures = 0;
-        return { ...yahoo, ma35Attempts: attempts };
-      }
-      noteMa35ProviderFailure("yahoo", "empty");
-    } catch (error) {
-      attempts.push({ source: "yahoo-1m", ok: false, error: error.message });
-      noteMa35ProviderFailure("yahoo", error.message);
-    }
-  }
   if (fugleMa35BlockedReason) {
     attempts.push({ source: "fugle-1m", ok: false, configured: Boolean(FUGLE_API_KEY), skipped: true, error: fugleMa35BlockedReason });
   } else {
@@ -1268,6 +1258,22 @@ async function fetchIntradaySma35WithFallback(code, scanTimestamp, cache) {
     } catch (error) {
       attempts.push({ source: "fugle-1m", ok: false, configured: Boolean(FUGLE_API_KEY), error: error.message });
       noteMa35ProviderFailure("fugle", error.message);
+    }
+  }
+  if (yahooMa35BlockedReason) {
+    attempts.push({ source: "yahoo-1m", ok: false, skipped: true, error: yahooMa35BlockedReason });
+  } else {
+    try {
+      const yahoo = await fetchYahooIntradaySma35(code, scanTimestamp);
+      attempts.push({ source: "yahoo-1m", ok: Boolean(yahoo) });
+      if (yahoo) {
+        yahooMa35Failures = 0;
+        return { ...yahoo, ma35Attempts: attempts };
+      }
+      noteMa35ProviderFailure("yahoo", "empty");
+    } catch (error) {
+      attempts.push({ source: "yahoo-1m", ok: false, error: error.message });
+      noteMa35ProviderFailure("yahoo", error.message);
     }
   }
   try {
