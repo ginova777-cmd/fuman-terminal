@@ -1,10 +1,15 @@
-const { spawnSync } = require("child_process");
+const { spawn, spawnSync } = require("child_process");
 const path = require("path");
 
 const SCAN_SCRIPT = path.join(__dirname, "scan-intraday-signals.js");
 const INTERVAL_MS = Number(process.env.INTRADAY_PATROL_INTERVAL_MS || 3000);
+const PUBLISH_INTERVAL_MS = Math.max(0, Number(process.env.STRATEGY2_PUBLISH_INTERVAL_MS || 60 * 1000));
 const MARKET_START_MINUTES = 9 * 60;
 const MARKET_END_MINUTES = 13 * 60 + 30;
+const PUBLISH_SCRIPT = path.resolve(__dirname, "..", "run-cache-sync.ps1");
+const POWERSHELL_EXE = process.env.FUMAN_POWERSHELL_EXE || "powershell.exe";
+let lastPublishAt = 0;
+let publishRunning = false;
 
 function taipeiParts(date = new Date()) {
   const parts = new Intl.DateTimeFormat("en-CA", {
@@ -52,6 +57,41 @@ function runScan() {
   return result.status === 0;
 }
 
+function publishStrategy2Cache(force = false) {
+  if (!PUBLISH_INTERVAL_MS) return;
+  const now = Date.now();
+  if (!force && now - lastPublishAt < PUBLISH_INTERVAL_MS) return;
+  if (publishRunning) return;
+  lastPublishAt = now;
+  publishRunning = true;
+  const child = spawn(POWERSHELL_EXE, [
+    "-NoProfile",
+    "-ExecutionPolicy",
+    "Bypass",
+    "-File",
+    PUBLISH_SCRIPT,
+    "-Scope",
+    "strategy2",
+  ], {
+    cwd: path.resolve(__dirname, ".."),
+    env: {
+      ...process.env,
+      CACHE_SYNC_WRITE_CODE_REPO: "1",
+      SYNC_STRATEGY2_FULL_LATEST: "1",
+    },
+    stdio: "inherit",
+    windowsHide: true,
+  });
+  child.on("exit", (code) => {
+    publishRunning = false;
+    if (code) console.log(`strategy2 cache publish exited with code ${code}`);
+  });
+  child.on("error", (error) => {
+    publishRunning = false;
+    console.log(`strategy2 cache publish failed: ${error.message}`);
+  });
+}
+
 async function main() {
   let successCount = 0;
   let failureCount = 0;
@@ -72,8 +112,11 @@ async function main() {
   while (isMarketPatrolTime()) {
     if (runScan()) successCount += 1;
     else failureCount += 1;
+    publishStrategy2Cache(false);
     await sleep(INTERVAL_MS);
   }
+
+  publishStrategy2Cache(true);
 
   console.log(`intraday 3s patrol finished: success ${successCount}, failure ${failureCount}`);
   if (!successCount) process.exit(1);

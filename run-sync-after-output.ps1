@@ -1,7 +1,7 @@
 param(
   [string]$Label = "Fuman output",
   [string]$LogPath = "",
-  [ValidateSet("all", "flow", "institution", "warrant", "openBuy", "strategy3", "strategy4", "strategy5")]
+  [ValidateSet("all", "flow", "institution", "warrant", "openBuy", "strategy2", "strategy3", "strategy4", "strategy5")]
   [string]$Scope = "all"
 )
 

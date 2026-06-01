@@ -1,5 +1,5 @@
 param(
-  [ValidateSet("all", "flow", "institution", "warrant", "openBuy", "strategy3", "strategy4", "strategy5")]
+  [ValidateSet("all", "flow", "institution", "warrant", "openBuy", "strategy2", "strategy3", "strategy4", "strategy5")]
   [string]$Scope = "all"
 )
 
@@ -510,6 +510,21 @@ try {
       "data\strategy3-backup.json",
       "data\strategy3-scorecard-source.json"
     )
+  } elseif ($Scope -eq "strategy2") {
+    $criticalLatestFiles = @(
+      "data\strategy2-intraday-latest.json",
+      "data\strategy2-intraday-top.json",
+      "data\strategy2-intraday-live-top.json"
+    )
+
+    $dataFiles = @(
+      "data\strategy2-intraday-latest.json",
+      "data\strategy2-intraday-slim.json",
+      "data\strategy2-intraday-top.json",
+      "data\strategy2-intraday-live-top.json",
+      "data\strategy2-intraday-delta.json",
+      "data\strategy2-scorecard-source.json"
+    )
   } elseif ($Scope -eq "strategy4") {
     $criticalLatestFiles = @(
       "data\strategy4-latest.json"
@@ -730,6 +745,11 @@ try {
 
   if ($Scope -eq "strategy3" -or $Scope -eq "all") {
     Test-VercelCacheVisibility "data\strategy3-latest.json"
+  }
+
+  if ($Scope -eq "strategy2") {
+    Test-VercelCacheVisibility "data\strategy2-intraday-top.json"
+    Test-VercelCacheVisibility "data\strategy2-intraday-live-top.json"
   }
 
   Write-Log "=== Cache sync end $(Get-Date) ==="
