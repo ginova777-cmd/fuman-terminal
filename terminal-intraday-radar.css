@@ -2628,6 +2628,54 @@ body.fuman-light-theme #strategy-view.intraday-only .intraday-controls {
   }
 }
 
+/* mobile-strategy3-flush-layout-20260601 */
+@media (max-width: 760px) {
+  #strategy-view.strategy3-only,
+  #strategy-view.strategy3-only .strategy-terminal,
+  #strategy-view.strategy3-only .strategy-results,
+  #strategy-view.strategy3-only #strategy-table,
+  #strategy-view.strategy3-only .strategy5-shell,
+  #strategy-view.strategy3-only .strategy5-dashboard,
+  #strategy-view.strategy3-only .strategy5-results {
+    left: 0 !important;
+    right: auto !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+    transform: none !important;
+    box-sizing: border-box !important;
+    overflow-x: hidden !important;
+  }
+
+  #strategy-view.strategy3-only .strategy5-results-head,
+  #strategy-view.strategy3-only .strategy3-freshness-bar,
+  #strategy-view.strategy3-only .strategy3-table {
+    width: 100% !important;
+    max-width: 100% !important;
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+    box-sizing: border-box !important;
+  }
+
+  #strategy-view.strategy3-only .strategy5-results-head {
+    padding: 18px 18px 20px !important;
+  }
+
+  #strategy-view.strategy3-only .strategy3-freshness-bar {
+    padding: 16px 18px !important;
+  }
+
+  #strategy-view.strategy3-only .strategy3-table-row {
+    width: 100% !important;
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+  }
+}
+
 /* strategy4-light-zone-clean-20260531 */
 body.fuman-light-theme #strategy-view.swing-only .swing-zone-summary,
 body.fuman-light-theme #strategy-view .swing-zone-summary {
