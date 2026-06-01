@@ -73,7 +73,7 @@ function getFumanWorker() {
   if (!("Worker" in window)) return null;
   if (fumanWorker) return fumanWorker;
   try {
-    fumanWorker = new Worker("terminal-worker.js?v=strategy4-data-date-20260601-02");
+    fumanWorker = new Worker("terminal-worker.js?v=strategy4-data-date-20260601-03");
     fumanWorker.addEventListener("message", (event) => {
       const { id, ok, rows, result, error } = event.data || {};
       const pending = fumanWorkerPending.get(id);
@@ -301,7 +301,7 @@ function loadFumanStyle(href, id) {
   const link = document.createElement("link");
   link.id = id;
   link.rel = "stylesheet";
-  link.href = href.includes("?") ? href : `${href}?v=${window.FUMAN_TERMINAL_BOOT?.version || "strategy4-data-date-20260601-02"}`;
+  link.href = href.includes("?") ? href : `${href}?v=${window.FUMAN_TERMINAL_BOOT?.version || "strategy4-data-date-20260601-03"}`;
   document.head.appendChild(link);
 }
 
@@ -327,7 +327,7 @@ function makeFumanModuleScope(bindings) {
 function loadFumanFeatureModule(name, src, globalName) {
   if (window[globalName]) return Promise.resolve(window[globalName]);
   if (fumanFeatureModulePromises[name]) return fumanFeatureModulePromises[name];
-  const version = window.FUMAN_TERMINAL_BOOT?.version || "strategy4-data-date-20260601-02";
+  const version = window.FUMAN_TERMINAL_BOOT?.version || "strategy4-data-date-20260601-03";
   fumanFeatureModulePromises[name] = new Promise((resolve, reject) => {
     const attr = "data-fuman-feature-" + name;
     const existing = document.querySelector("script[" + attr + "]");
@@ -2677,6 +2677,14 @@ let strategy5CacheLoading = false;
 let strategyStocksPromise = null;
 const STRATEGY4_LOCAL_CACHE_KEY = FUMAN_TUNING_CONFIG.strategy4LocalCacheKey || "fuman_strategy4_scan_cache_v1";
 const STRATEGY4_BACKUP_CACHE_KEY = FUMAN_TUNING_CONFIG.strategy4BackupCacheKey || "fuman_strategy4_nonempty_backup_v1";
+const STRATEGY4_DATA_DATE_FIX_KEY = "fuman_strategy4_data_date_fix_20260601_03";
+try {
+  if (localStorage.getItem(STRATEGY4_DATA_DATE_FIX_KEY) !== "1") {
+    localStorage.removeItem(STRATEGY4_LOCAL_CACHE_KEY);
+    localStorage.removeItem(STRATEGY4_BACKUP_CACHE_KEY);
+    localStorage.setItem(STRATEGY4_DATA_DATE_FIX_KEY, "1");
+  }
+} catch (error) {}
 const OPEN_BUY_LOCAL_CACHE_KEY = FUMAN_TUNING_CONFIG.openBuyLocalCacheKey || "fuman_open_buy_scan_cache_v1";
 const OPEN_BUY_BACKUP_CACHE_KEY = FUMAN_TUNING_CONFIG.openBuyBackupCacheKey || "fuman_open_buy_nonempty_backup_v1";
 const EXPORT_UNLOCK_KEY = FUMAN_TUNING_CONFIG.exportUnlockKey || "fuman_export_unlock_until_v1";
@@ -8894,7 +8902,7 @@ async function refreshOpenBuyScan(force = false) {
 async function loadStrategy4Cache(force = false) {
   if (!isStrategyCacheActive("strategy4")) return;
   if (strategy4CacheLoading) return;
-  if (!force && strategy4ScanLastAt && Object.keys(strategy4ScanMatches).length) return;
+  if (!force && strategy4ScanLastAt && Object.keys(strategy4ScanMatches).length && strategy4DataDateKey()) return;
   if (shouldSkipMobileOtherStrategyCacheRefresh("strategy4", Boolean(strategy4ScanLastAt), force)) {
     renderStrategyScanner();
     return;
