@@ -8,16 +8,14 @@
       "log": "C:\\fuman-runtime\\logs\\warrant-flow-20260602-074342.log"
     }
   },
-  "updatedAt": "2026-06-01T23:49:57.5140863Z",
   "institution": {
     "scope": "institution",
     "status": "ok",
-    "message": "Watchdog rerun completed",
-    "updatedAt": "2026-06-01T23:49:57.5137066Z",
+    "message": "Institution scan and publish completed",
+    "updatedAt": "2026-06-01T23:51:04.9500914Z",
     "detail": {
-      "reason": "institution not updated after 06:00; updatedAt=06/01/2026 13:20:30",
-      "expectedTime": "06:00",
-      "log": "C:\\fuman-runtime\\logs\\flow-watchdog-institution-20260602-074342.log"
+      "log": "C:\\fuman-runtime\\logs\\institution-20260602-074342.log"
     }
-  }
+  },
+  "updatedAt": "2026-06-01T23:51:04.9542218Z"
 }
