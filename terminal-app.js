@@ -73,7 +73,7 @@ function getFumanWorker() {
   if (!("Worker" in window)) return null;
   if (fumanWorker) return fumanWorker;
   try {
-    fumanWorker = new Worker("terminal-worker.js?v=mobile-fixed-tools-20260602");
+    fumanWorker = new Worker("terminal-worker.js?v=mobile-runtime-pinned-tools-20260602");
     fumanWorker.addEventListener("message", (event) => {
       const { id, ok, rows, result, error } = event.data || {};
       const pending = fumanWorkerPending.get(id);
@@ -305,7 +305,7 @@ function loadFumanStyle(href, id) {
   const link = document.createElement("link");
   link.id = id;
   link.rel = "stylesheet";
-  link.href = href.includes("?") ? href : `${href}?v=${window.FUMAN_TERMINAL_BOOT?.version || "mobile-fixed-tools-20260602"}`;
+  link.href = href.includes("?") ? href : `${href}?v=${window.FUMAN_TERMINAL_BOOT?.version || "mobile-runtime-pinned-tools-20260602"}`;
   document.head.appendChild(link);
 }
 
@@ -331,7 +331,7 @@ function makeFumanModuleScope(bindings) {
 function loadFumanFeatureModule(name, src, globalName) {
   if (window[globalName]) return Promise.resolve(window[globalName]);
   if (fumanFeatureModulePromises[name]) return fumanFeatureModulePromises[name];
-  const version = window.FUMAN_TERMINAL_BOOT?.version || "mobile-fixed-tools-20260602";
+  const version = window.FUMAN_TERMINAL_BOOT?.version || "mobile-runtime-pinned-tools-20260602";
   fumanFeatureModulePromises[name] = new Promise((resolve, reject) => {
     const attr = "data-fuman-feature-" + name;
     const existing = document.querySelector("script[" + attr + "]");
@@ -376,6 +376,7 @@ function installThemeToggle() {
     applyTheme(next);
   });
   document.body.appendChild(button);
+  pinMobileToolButtons();
 }
 
 function installGlobalRefreshWidget() {
@@ -2492,6 +2493,68 @@ function ensureMobileAutoOrganizeButton() {
   button.textContent = "↻";
   button.addEventListener("click", runMobileAutoOrganize);
   document.body.appendChild(button);
+  pinMobileToolButtons();
+}
+
+function getMobileToolLayout() {
+  const width = window.innerWidth || document.documentElement.clientWidth || 0;
+  const height = window.innerHeight || document.documentElement.clientHeight || 0;
+  const landscapePhone = width <= 920 && height <= 430 && width > height;
+  const portraitPhone = width <= 760;
+  if (!landscapePhone && !portraitPhone) return null;
+  const viewportOffsetTop = Math.max(0, window.visualViewport?.offsetTop || 0);
+  return {
+    top: viewportOffsetTop + (landscapePhone ? 18 : 12),
+    organizeRight: landscapePhone ? 72 : 62,
+    themeRight: landscapePhone ? 18 : 12,
+    size: landscapePhone ? 46 : 42,
+  };
+}
+
+function pinOneMobileToolButton(button, top, right, size) {
+  if (!button) return;
+  button.style.setProperty("position", "fixed", "important");
+  button.style.setProperty("top", `${top}px`, "important");
+  button.style.setProperty("right", `${right}px`, "important");
+  button.style.setProperty("left", "auto", "important");
+  button.style.setProperty("width", `${size}px`, "important");
+  button.style.setProperty("height", `${size}px`, "important");
+  button.style.setProperty("display", "inline-grid", "important");
+  button.style.setProperty("z-index", button.id === "fuman-theme-toggle" ? "10001" : "10000", "important");
+  requestAnimationFrame(() => {
+    const rect = button.getBoundingClientRect();
+    if (Math.abs(rect.top - top) <= 3) return;
+    button.style.setProperty("position", "absolute", "important");
+    button.style.setProperty("top", `${(window.scrollY || 0) + top}px`, "important");
+  });
+}
+
+function pinMobileToolButtons() {
+  const layout = getMobileToolLayout();
+  if (!layout) return;
+  pinOneMobileToolButton(document.querySelector(".mobile-auto-organize"), layout.top, layout.organizeRight, layout.size);
+  pinOneMobileToolButton(document.querySelector("#fuman-theme-toggle"), layout.top, layout.themeRight, layout.size);
+}
+
+let mobileToolPinningInstalled = false;
+function installMobileToolPinning() {
+  if (mobileToolPinningInstalled) return;
+  mobileToolPinningInstalled = true;
+  let pending = false;
+  const schedule = () => {
+    if (pending) return;
+    pending = true;
+    requestAnimationFrame(() => {
+      pending = false;
+      pinMobileToolButtons();
+    });
+  };
+  window.addEventListener("scroll", schedule, { passive: true, capture: true });
+  window.addEventListener("resize", schedule, { passive: true });
+  window.addEventListener("orientationchange", schedule, { passive: true });
+  window.visualViewport?.addEventListener("scroll", schedule, { passive: true });
+  window.visualViewport?.addEventListener("resize", schedule, { passive: true });
+  schedule();
 }
 
 function normalizeMobileHorizontalPosition() {
@@ -9310,6 +9373,7 @@ async function refreshStrategyHistoryScan(force = false) {
 tickClock();
 labelChipTradeMode();
 installMobileWatchlistNavOrder();
+installMobileToolPinning();
 installRealtimeRadarView();
 applyStaticTitleIcons();
 installMarketTabs();

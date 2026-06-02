@@ -1,5 +1,5 @@
 (function () {
-  const version = "mobile-fixed-tools-20260602";
+  const version = "mobile-runtime-pinned-tools-20260602";
   window.FUMAN_TERMINAL_BOOT = {
     version,
     startedAt: Date.now(),
