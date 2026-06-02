@@ -8,12 +8,12 @@
       "log": "C:\\fuman-runtime\\logs\\institution-20260602-074342.log"
     }
   },
-  "updatedAt": "2026-06-02T12:50:02.4768453Z",
+  "updatedAt": "2026-06-02T12:50:35.1123134Z",
   "warrant": {
     "scope": "warrant",
-    "status": "watchdog_rerun",
-    "message": "Watchdog rerun started",
-    "updatedAt": "2026-06-02T12:50:02.4754233Z",
+    "status": "ok",
+    "message": "Watchdog rerun completed",
+    "updatedAt": "2026-06-02T12:50:35.1120698Z",
     "detail": {
       "expectedTime": "20:30",
       "reason": "warrant not updated after 20:30; updatedAt=06/02/2026 12:30:56",
