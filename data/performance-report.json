@@ -1,6 +1,6 @@
 {
   "ok": true,
-  "updatedAt": "2026-06-02T06:45:03.078Z",
+  "updatedAt": "2026-06-02T07:30:35.844Z",
   "generatedBy": "generate-performance-report",
   "assets": [
     {
@@ -20,23 +20,23 @@
     {
       "file": "strategy4-summary.json",
       "ok": true,
-      "bytes": 45303,
-      "count": 1611,
-      "updatedAt": "2026-06-01T06:51:06.815Z"
+      "bytes": 42704,
+      "count": 1492,
+      "updatedAt": "2026-06-02T06:50:35.737Z"
     },
     {
       "file": "strategy4-slim.json",
       "ok": true,
-      "bytes": 680721,
-      "count": 1611,
-      "updatedAt": "2026-06-01T06:51:06.815Z"
+      "bytes": 628087,
+      "count": 1492,
+      "updatedAt": "2026-06-02T06:50:35.737Z"
     },
     {
       "file": "strategy4-zone-a.json",
       "ok": true,
-      "bytes": 151323,
-      "count": 344,
-      "updatedAt": "2026-06-01T06:51:06.815Z"
+      "bytes": 92934,
+      "count": 214,
+      "updatedAt": "2026-06-02T06:50:35.737Z"
     },
     {
       "file": "institution-slim.json",
@@ -76,32 +76,32 @@
     {
       "file": "signal-quality-report.json",
       "ok": true,
-      "bytes": 819,
+      "bytes": 820,
       "count": 0,
-      "updatedAt": "2026-06-02T06:45:02.760Z"
+      "updatedAt": "2026-06-02T07:30:35.543Z"
     },
     {
       "file": "data-quality-report.json",
       "ok": true,
       "bytes": 2311,
       "count": 0,
-      "updatedAt": "2026-06-02T06:45:02.887Z"
+      "updatedAt": "2026-06-02T07:30:35.654Z"
     },
     {
       "file": "data-consistency-report.json",
       "ok": true,
       "bytes": 316,
       "count": 0,
-      "updatedAt": "2026-06-02T06:45:02.966Z"
+      "updatedAt": "2026-06-02T07:30:35.733Z"
     },
     {
       "file": "strategy-weight-report.json",
       "ok": true,
       "bytes": 418,
       "count": 0,
-      "updatedAt": "2026-06-02T06:45:03.030Z"
+      "updatedAt": "2026-06-02T07:30:35.780Z"
     }
   ],
-  "totalBytes": 1635956,
+  "totalBytes": 1522335,
   "missing": []
 }
