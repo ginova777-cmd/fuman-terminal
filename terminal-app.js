@@ -73,7 +73,7 @@ function getFumanWorker() {
   if (!("Worker" in window)) return null;
   if (fumanWorker) return fumanWorker;
   try {
-    fumanWorker = new Worker("terminal-worker.js?v=mobile-radar-compact-20260602");
+    fumanWorker = new Worker("terminal-worker.js?v=mobile-fast-tabs-20260602");
     fumanWorker.addEventListener("message", (event) => {
       const { id, ok, rows, result, error } = event.data || {};
       const pending = fumanWorkerPending.get(id);
@@ -305,7 +305,7 @@ function loadFumanStyle(href, id) {
   const link = document.createElement("link");
   link.id = id;
   link.rel = "stylesheet";
-  link.href = href.includes("?") ? href : `${href}?v=${window.FUMAN_TERMINAL_BOOT?.version || "mobile-radar-compact-20260602"}`;
+  link.href = href.includes("?") ? href : `${href}?v=${window.FUMAN_TERMINAL_BOOT?.version || "mobile-fast-tabs-20260602"}`;
   document.head.appendChild(link);
 }
 
@@ -331,7 +331,7 @@ function makeFumanModuleScope(bindings) {
 function loadFumanFeatureModule(name, src, globalName) {
   if (window[globalName]) return Promise.resolve(window[globalName]);
   if (fumanFeatureModulePromises[name]) return fumanFeatureModulePromises[name];
-  const version = window.FUMAN_TERMINAL_BOOT?.version || "mobile-radar-compact-20260602";
+  const version = window.FUMAN_TERMINAL_BOOT?.version || "mobile-fast-tabs-20260602";
   fumanFeatureModulePromises[name] = new Promise((resolve, reject) => {
     const attr = "data-fuman-feature-" + name;
     const existing = document.querySelector("script[" + attr + "]");
@@ -2141,17 +2141,19 @@ function renderRealtimeRadar() {
   installRealtimeRadarView();
   const panel = viewPanels["realtime-radar"];
   if (!panel) return;
+  const mobileFastRadar = isMobileViewport() && realtimeRadarLastRows.length > 0;
   requestAnimationFrame(refreshDataFreshnessBars);
   const isManualSideSwitch = realtimeRadarManualSideSwitch;
   realtimeRadarManualSideSwitch = false;
   deferUiWork(ensureMobileAutoOrganizeButton);
   if (!strategy3Data.length && !strategy3CacheLoading) {
-    loadStrategy3RadarVolumeCache();
+    if (mobileFastRadar) deferIdleWork(loadStrategy3RadarVolumeCache, 1600);
+    else loadStrategy3RadarVolumeCache();
   }
   const radarOpen = shouldRunLivePolling();
   if (!realtimeRadarLastRows.length) loadRealtimeRadarLastRows();
   const radarCacheDue = shouldRefreshRealtimeRadarRemoteCache(radarOpen);
-  if (radarCacheDue && !realtimeRadarCacheLoading) {
+  if (radarCacheDue && !realtimeRadarCacheLoading && !mobileFastRadar) {
     loadRealtimeRadarLatestCache(true).then((loaded) => {
       if (loaded && isViewActive("realtime-radar")) renderRealtimeRadar();
     });
@@ -2190,11 +2192,14 @@ function renderRealtimeRadar() {
     return;
   }
 
-  if (!Object.keys(strategyHistoryData).length && !strategy4CacheLoading) loadStrategy4Cache(true);
+  if (!Object.keys(strategyHistoryData).length && !strategy4CacheLoading) {
+    if (mobileFastRadar) deferIdleWork(() => loadStrategy4Cache(true), 1800);
+    else loadStrategy4Cache(true);
+  }
   const historyTargets = radarOpen ? getRealtimeRadarHistoryTargets() : [];
   const snapshotHistoryTargets = radarOpen && historyTargets.length ? [] : (radarOpen ? getRealtimeRadarSnapshotHistoryTargets(realtimeRadarLastRows) : []);
   const pendingHistoryTargets = historyTargets.length ? historyTargets : snapshotHistoryTargets;
-  if (radarOpen && pendingHistoryTargets.length && !realtimeRadarHistoryPromise && Date.now() - realtimeRadarHistoryLastAt >= REALTIME_RADAR_HISTORY_REFRESH_MS) {
+  if (!mobileFastRadar && radarOpen && pendingHistoryTargets.length && !realtimeRadarHistoryPromise && Date.now() - realtimeRadarHistoryLastAt >= REALTIME_RADAR_HISTORY_REFRESH_MS) {
     loadRealtimeRadarHistory(pendingHistoryTargets).then((loaded) => {
       if (loaded) {
         enrichRealtimeRadarSnapshotRows(realtimeRadarLastRows);
@@ -2204,7 +2209,7 @@ function renderRealtimeRadar() {
   }
   const shouldReuseRadarRows = isManualSideSwitch && realtimeRadarLastRows.length;
   const cacheRows = [];
-  const liveRows = shouldReuseRadarRows ? [] : buildRealtimeRadarRows({ mode: radarOpen ? "intraday" : "closed" });
+  const liveRows = (shouldReuseRadarRows || mobileFastRadar) ? [] : buildRealtimeRadarRows({ mode: radarOpen ? "intraday" : "closed" });
   const rows = radarOpen ? mergeRealtimeRadarRows([...liveRows, ...cacheRows], []) : liveRows;
   if (!shouldReuseRadarRows && radarOpen && rows.length) {
     realtimeRadarLastRows = mergeRealtimeRadarRows(rows, realtimeRadarLastRows);
@@ -2214,7 +2219,7 @@ function renderRealtimeRadar() {
     saveRealtimeRadarLastRows(realtimeRadarLastRows);
   }
   const radarSignalStale = radarOpen && isRealtimeRadarSignalStale(realtimeRadarLastRows);
-  const radarNeedsUpdate = radarOpen && (realtimeRadarNeedsFreshScan || !isRealtimeRadarFresh() || radarSignalStale);
+  const radarNeedsUpdate = radarOpen && !mobileFastRadar && (realtimeRadarNeedsFreshScan || !isRealtimeRadarFresh() || radarSignalStale);
   if (radarNeedsUpdate && realtimeRadarLastRows.length) {
     if (!realtimeRadarRefreshLoading && !strategyRealtimeLoading) {
       realtimeRadarRefreshLoading = true;
@@ -8709,6 +8714,7 @@ function tickClock() {
 function showView(viewName, activeLink) {
   const now = Date.now();
   const sameViewQuick = lastViewName === viewName && now - lastViewShownAt < 2500;
+  const mobileFastSwitch = isMobileViewport();
   lastViewName = viewName;
   lastViewShownAt = now;
   Object.entries(viewPanels).forEach(([name, panel])=>{
@@ -8724,35 +8730,44 @@ function showView(viewName, activeLink) {
   if (viewName === "market") {
     installMarketSkeleton();
     if (Object.keys(sectorStocksCache).length) renderHeatmapFromCache();
-    if (!sameViewQuick) deferUiWork(loadMarketData);
-    deferIdleWork(() => loadHeatmap(), 1000);
+    if (!sameViewQuick) {
+      if (mobileFastSwitch && latestStocks.length) deferIdleWork(loadMarketData, 1400);
+      else deferUiWork(loadMarketData, mobileFastSwitch ? 120 : 0);
+    }
+    deferIdleWork(() => loadHeatmap(), mobileFastSwitch ? 2400 : 1000);
   }
   if (viewName === "realtime-radar") {
     markLazyModuleForView(viewName);
-    realtimeRadarNeedsFreshScan = true;
-    deferUiWork(renderRealtimeRadar);
+    realtimeRadarNeedsFreshScan = !mobileFastSwitch || !realtimeRadarLastRows.length;
+    deferUiWork(renderRealtimeRadar, mobileFastSwitch ? 80 : 0);
+    if (mobileFastSwitch && realtimeRadarLastRows.length) {
+      deferIdleWork(() => {
+        if (!isViewActive("realtime-radar") || realtimeRadarRefreshLoading || strategyRealtimeLoading) return;
+        realtimeRadarNeedsFreshScan = true;
+      }, 1800);
+    }
   }
   if (viewName === "strategy") {
     markLazyModuleForView(viewName);
-    deferUiWork(renderStrategyScanner);
+    deferUiWork(renderStrategyScanner, mobileFastSwitch ? 90 : 0);
     if (!selectedStrategyIds.has("swing_radar") && !selectedStrategyIds.has("intraday_2m")) {
-      deferUiWork(loadInstitution, 600);
+      deferUiWork(loadInstitution, mobileFastSwitch ? 1300 : 600);
     } else {
-      deferUiWork(() => loadInstitutionSummary(false), 900);
+      deferUiWork(() => loadInstitutionSummary(false), mobileFastSwitch ? 1600 : 900);
     }
   }
   if (viewName === "chip-trade") {
     markLazyModuleForView(viewName);
-    deferUiWork(() => loadChipTradeData(false));
+    deferUiWork(() => loadChipTradeData(false), mobileFastSwitch ? 70 : 0);
     if (!isMobileViewport()) deferIdleWork(() => preloadChipTradeFullData("after-top"), 1200);
   }
   if (viewName === "warrant-flow") {
     markLazyModuleForView(viewName);
-    deferUiWork(() => loadWarrantFlow(false));
+    deferUiWork(() => loadWarrantFlow(false), mobileFastSwitch ? 70 : 0);
     if (!isMobileViewport()) deferIdleWork(() => preloadWarrantFlowFullData("after-top"), 1200);
   }
   if (viewName === "watchlist") {
-    deferUiWork(renderWatchlist);
+    deferUiWork(renderWatchlist, mobileFastSwitch ? 70 : 0);
   }
   deferUiWork(ensureMobileAutoOrganizeButton);
   deferUiWork(normalizeMobileHorizontalPosition, 60);
