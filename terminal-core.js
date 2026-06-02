@@ -1,5 +1,5 @@
 (function () {
-  const version = "mobile-fast-tabs-20260602";
+  const version = "mobile-organize-top-20260602";
   window.FUMAN_TERMINAL_BOOT = {
     version,
     startedAt: Date.now(),
