@@ -5419,8 +5419,10 @@ html body.fuman-light-theme .brand span {
   body:not(.fuman-light-theme) #chip-trade-view .chip-page-header > div:first-child,
   body:not(.fuman-light-theme) #warrant-flow-view .page-header > div:first-child {
     width: 100% !important;
-    min-height: 104px !important;
+    height: 126px !important;
+    min-height: 126px !important;
     padding: 22px 24px !important;
+    box-sizing: border-box !important;
     border: 1px solid rgba(249, 115, 22, 0.42) !important;
     border-radius: 12px !important;
     background: linear-gradient(135deg, rgba(48, 31, 38, 0.92) 0%, rgba(28, 27, 42, 0.92) 58%, rgba(20, 22, 35, 0.94) 100%) !important;
@@ -5460,5 +5462,14 @@ html body.fuman-light-theme .brand span {
     line-height: 1.14 !important;
     font-weight: 950 !important;
     letter-spacing: 0 !important;
+  }
+
+  body.fuman-light-theme .page-header > div:first-child,
+  body.fuman-light-theme #watchlist-view .watchlist-entry-card,
+  body.fuman-light-theme #chip-trade-view .chip-page-header > div:first-child,
+  body.fuman-light-theme #warrant-flow-view .page-header > div:first-child {
+    height: 126px !important;
+    min-height: 126px !important;
+    box-sizing: border-box !important;
   }
 }
