@@ -17,6 +17,7 @@ const STATIC_ASSETS = [
   "/terminal-realtime-radar.css?v=mobile-title-card-fixed-20260602",
   "/terminal-intraday-radar.css?v=mobile-title-card-fixed-20260602",
   "/terminal-utility.css?v=mobile-title-card-fixed-20260602",
+  "/refresh.html?v=mobile-title-card-fixed-20260602",
   "/assets/logo.webp",
   "/assets/login-bg-fuman-lite.webp",
   "/favicon.ico",

@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>重新整理輔滿終端</title>
+    <style>
+      body {
+        display: grid;
+        min-height: 100vh;
+        margin: 0;
+        place-items: center;
+        background: #090b16;
+        color: #f8fafc;
+        font-family: "Noto Sans TC", "Microsoft JhengHei", system-ui, sans-serif;
+      }
+      main {
+        width: min(360px, calc(100vw - 40px));
+        padding: 24px;
+        border: 1px solid rgba(249, 115, 22, 0.42);
+        border-radius: 12px;
+        background: linear-gradient(135deg, rgba(48, 31, 38, 0.92), rgba(20, 22, 35, 0.94));
+      }
+      h1 {
+        margin: 0 0 10px;
+        color: #ffbd91;
+        font-size: 24px;
+      }
+      p {
+        margin: 0;
+        color: #dbe5ff;
+        line-height: 1.6;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>正在載入新版</h1>
+      <p>正在清除舊版快取，稍後會自動進入輔滿股票終端。</p>
+    </main>
+    <script>
+      (async () => {
+        try {
+          if ("serviceWorker" in navigator) {
+            const registrations = await navigator.serviceWorker.getRegistrations();
+            await Promise.all(registrations.map((registration) => registration.unregister()));
+          }
+          if ("caches" in window) {
+            const keys = await caches.keys();
+            await Promise.all(keys.map((key) => caches.delete(key)));
+          }
+        } catch {}
+        location.replace("/?v=mobile-title-card-fixed-20260602&fresh=" + Date.now());
+      })();
+    </script>
+  </body>
+</html>
