@@ -35,6 +35,7 @@ const ENABLE_FINMIND_RESCUE = process.env.STRATEGY2_ENABLE_FINMIND_RESCUE !== "0
 const REALTIME_RESCUE_COVERAGE = Number(process.env.STRATEGY2_REALTIME_RESCUE_COVERAGE || 0.7);
 const REALTIME_RESCUE_LIMIT = Math.max(0, Number(process.env.STRATEGY2_REALTIME_RESCUE_LIMIT || 60));
 const REALTIME_RESCUE_COOLDOWN_MS = Math.max(0, Number(process.env.STRATEGY2_REALTIME_RESCUE_COOLDOWN_MS || 30 * 1000));
+const MIN_ENTRY_SOURCE_COVERAGE = Number(process.env.STRATEGY2_MIN_ENTRY_SOURCE_COVERAGE || 0.5);
 const MA35_PROVIDER_FAILURE_LIMIT = Math.max(1, Number(process.env.STRATEGY2_MA35_PROVIDER_FAILURE_LIMIT || 8));
 let lastRealtimeCoverageRescueAt = 0;
 
@@ -203,6 +204,8 @@ function pickStrategy2PublicRecord(record) {
     "reason",
     "stateReason",
     "supportPrice",
+    "sourceCoverage",
+    "sourceCoverageHealthy",
     "ma35",
     "ma35Prev",
     "aboveMa35",
@@ -355,6 +358,14 @@ function buildStrategy2FastSlimReport(report) {
       requested: publicReport.realtime?.requested || 0,
       received: publicReport.realtime?.received || 0,
       failed: publicReport.realtime?.failed || 0,
+      usable: publicReport.realtime?.usable || 0,
+      coverage: publicReport.realtime?.coverage || 0,
+      coverageBeforeRescue: publicReport.realtime?.coverageBeforeRescue || 0,
+      coverageAfterRescue: publicReport.realtime?.coverageAfterRescue || 0,
+      cachedRecovered: publicReport.realtime?.cachedRecovered || 0,
+      entrySourceHealthy: publicReport.realtime?.entrySourceHealthy === true,
+      entrySourceCoverageThreshold: publicReport.realtime?.entrySourceCoverageThreshold || 0,
+      skippedPartialCoverage: publicReport.realtime?.skippedPartialCoverage === true,
     },
     events: (publicReport.events || []).map(compactStrategy2Event),
     slim: {
@@ -500,30 +511,37 @@ function isTrustedStrategy2Ma35Source(source) {
   return new Set(["fugle-1m", "yahoo-1m", "local-1m", "twelve-1m"]).has(String(source || ""));
 }
 
-function classifyStrategy2State(stock, signal) {
+function classifyStrategy2State(stock, signal, options = {}) {
   const pct = cleanNumber(stock.percent);
   const volume = cleanNumber(stock.tradeVolume);
   const close = cleanNumber(stock.close);
   const high = cleanNumber(stock.high) || close;
   const open = cleanNumber(stock.open);
   const hasIntradaySma35 = isTrustedStrategy2Ma35Source(signal.ma35Source) && cleanNumber(signal.ma35) > 0;
-  const strictMa35Entry = signal.id === "ma35_buy"
+  const strictMa35Evidence = signal.id === "ma35_buy"
     && signal.aboveMa35 === true
     && hasIntradaySma35
     && signal.macdUp === true
     && signal.kdUp === true
     && signal.intradayVolumeBurst === true;
+  const sourceHealthyForEntry = options.entrySourceHealthy !== false;
+  const strictMa35Entry = strictMa35Evidence && sourceHealthyForEntry;
   const earlyEntrySignal = new Set(["volume_burst", "limit_lock", "gap", "breakout", "diamond"]).has(String(signal.id || ""));
   const nearHigh = high > 0 && close > 0 ? close >= high * 0.985 : true;
   const aboveOpen = !open || close >= open;
-  const fallbackWatch = earlyEntrySignal
-    && pct >= 2
-    && pct <= 8.8
-    && volume >= 2000
-    && nearHigh
-    && aboveOpen;
-  if (!strictMa35Entry && !fallbackWatch) return null;
+  const baseWatch = pct >= 2 && pct <= 8.8 && volume >= 2000 && nearHigh && aboveOpen;
+  const fallbackWatch = earlyEntrySignal && baseWatch;
+  const sourceUnhealthyMa35Watch = strictMa35Evidence && !sourceHealthyForEntry;
+  if (!strictMa35Entry && !fallbackWatch && !sourceUnhealthyMa35Watch) return null;
   const score = Math.min(100, Math.round(pct * 8 + (volume >= 10000 ? 56 : 42) + (earlyEntrySignal ? 6 : 0)));
+  if (sourceUnhealthyMa35Watch) {
+    return {
+      stateId: "wait",
+      stateLabel: "待確認",
+      stateReason: `已通過MA35/MACD/KD/爆量，但本輪市場來源可用率 ${Number(options.sourceCoverage || 0).toFixed(2)} 未達 ${MIN_ENTRY_SOURCE_COVERAGE.toFixed(2)}，禁止升級進場區。`,
+      score,
+    };
+  }
   if (!strictMa35Entry) {
     return {
       stateId: "wait",
@@ -2013,6 +2031,7 @@ async function main() {
     .filter((stock) => hasUsableQuote(stock, timestamp))
     .filter(isIntradayTradable);
   const coverage = realtimeSourceStocks.length ? realtimeStocks.length / realtimeSourceStocks.length : 0;
+  const entrySourceHealthy = coverage >= MIN_ENTRY_SOURCE_COVERAGE;
   const cachedRecovered = realtimeStocks.filter((stock) => stock.recoveredFromQuoteCache).length;
   const realtimeSummaryBase = {
     ...realtimeStats,
@@ -2020,6 +2039,8 @@ async function main() {
     usable: realtimeStocks.length,
     cachedRecovered,
     quoteCacheMaxAgeSeconds: QUOTE_CACHE_MAX_AGE_SECONDS,
+    entrySourceCoverageThreshold: MIN_ENTRY_SOURCE_COVERAGE,
+    entrySourceHealthy,
     initialBatchSize: REALTIME_BATCH_SIZE,
     retryBatchSize: REALTIME_RETRY_BATCH_SIZE,
   };
@@ -2086,7 +2107,7 @@ async function main() {
       percent: stock.percent,
     };
     signals.forEach((signal) => {
-      const state = classifyStrategy2State(stock, signal);
+      const state = classifyStrategy2State(stock, signal, { entrySourceHealthy, sourceCoverage: coverage });
       if (!state) return;
       const duplicate = cache.records.some((record) => (
         record.code === stock.code &&
@@ -2114,6 +2135,8 @@ async function main() {
         observedPrice: stock.close,
         quoteTime: stock.quoteTime || stock.time || "",
         quoteSource: "api/realtime",
+        sourceCoverage: Number(coverage.toFixed(4)),
+        sourceCoverageHealthy: entrySourceHealthy,
         observedHigh: stock.close,
         observedHighAt: timestamp,
         observedLow: stock.close,

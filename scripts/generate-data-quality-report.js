@@ -15,6 +15,7 @@ const FILES = [
 const TRUSTED_STRATEGY2_MA35_SOURCES = new Set(["fugle-1m", "yahoo-1m", "local-1m", "twelve-1m"]);
 const STRATEGY2_HEALTH_MIN_REALTIME_COVERAGE = Number(process.env.STRATEGY2_HEALTH_MIN_REALTIME_COVERAGE || 0.25);
 const STRATEGY2_HEALTH_WARN_REALTIME_COVERAGE = Number(process.env.STRATEGY2_HEALTH_WARN_REALTIME_COVERAGE || 0.5);
+const STRATEGY2_HEALTH_MIN_ENTRY_SOURCE_COVERAGE = Number(process.env.STRATEGY2_MIN_ENTRY_SOURCE_COVERAGE || 0.5);
 
 function readJson(file) {
   if (!fs.existsSync(file)) return null;
@@ -66,6 +67,23 @@ function strategy2Issues(rows, payload) {
     issues.push({
       level: "high",
       message: "strategy2 scan skipped because realtime coverage was below hard minimum",
+    });
+  }
+  const unhealthyEntryRows = rows.filter((row) =>
+    (row?.stateId === "entry" || row?.stateId === "go")
+    && cleanNumber(row?.sourceCoverage) > 0
+    && cleanNumber(row?.sourceCoverage) < STRATEGY2_HEALTH_MIN_ENTRY_SOURCE_COVERAGE
+  );
+  if (unhealthyEntryRows.length) {
+    issues.push({
+      level: "high",
+      message: `strategy2 entry rows created under unhealthy source coverage ${unhealthyEntryRows.length}`,
+      samples: unhealthyEntryRows.slice(0, 8).map((row) => ({
+        code: String(row.code || ""),
+        name: row.name || "",
+        timestamp: row.timestamp || row.entryAt || "",
+        sourceCoverage: cleanNumber(row.sourceCoverage),
+      })),
     });
   }
   const invalidEntryRows = rows.filter((row) =>
