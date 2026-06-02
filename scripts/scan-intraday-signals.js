@@ -707,7 +707,7 @@ function updateTrackedExtremes(cache, stock, timestamp, key) {
   }
 }
 
-function appendTrackedSnapshot(cache, stock, timestamp, key) {
+function appendTrackedSnapshot(cache, stock, timestamp, key, options = {}) {
   const rows = cache.records
     .filter((record) => record.date === key && record.code === stock.code)
     .sort((a, b) => String(a.timestamp || a.entryAt || "").localeCompare(String(b.timestamp || b.entryAt || "")));
@@ -721,11 +721,19 @@ function appendTrackedSnapshot(cache, stock, timestamp, key) {
   const volume = cleanNumber(stock.tradeVolume) || cleanNumber(latest.currentVolume || latest.volume);
   const previousVolume = cleanNumber(latest.currentVolume || latest.volume);
   const percent = cleanNumber(stock.percent) || cleanNumber(latest.currentPercent || latest.percent);
+  const sourceCoverage = cleanNumber(options.sourceCoverage);
+  const sourceCoverageHealthy = options.entrySourceHealthy !== false;
+  const downgradeEntrySnapshot = isEntryState(latest) && !sourceCoverageHealthy;
 
   cache.records.push({
     ...latest,
     timestamp,
     entryAt: timestamp,
+    stateId: downgradeEntrySnapshot ? "wait" : latest.stateId,
+    stateLabel: downgradeEntrySnapshot ? "待確認" : latest.stateLabel,
+    stateReason: downgradeEntrySnapshot
+      ? `既有進場追蹤保留，但本輪市場來源可用率 ${sourceCoverage.toFixed(2)} 未達 ${MIN_ENTRY_SOURCE_COVERAGE.toFixed(2)}，暫停升級進場區。`
+      : latest.stateReason,
     entryPrice: close || cleanNumber(latest.entryPrice),
     observedPrice: close,
     observedHigh: close,
@@ -741,6 +749,8 @@ function appendTrackedSnapshot(cache, stock, timestamp, key) {
     volume,
     percent,
     deltaVolume: Math.max(0, volume - previousVolume),
+    sourceCoverage,
+    sourceCoverageHealthy,
     isSnapshot: true,
   });
   return true;
@@ -1733,20 +1743,29 @@ function mergeRealtimeQuoteCache(cache, stocks, key, scanTimestamp) {
 function enforceStrategy2EntryGuards(report) {
   let downgradedRecords = 0;
   let downgradedEvents = 0;
+  const sourceBlocksEntry = report?.realtime?.entrySourceHealthy === false;
+  const sourceCoverage = cleanNumber(report?.realtime?.coverage);
+  const sourceThreshold = cleanNumber(report?.realtime?.entrySourceCoverageThreshold) || MIN_ENTRY_SOURCE_COVERAGE;
   const records = (report.records || []).map((record) => {
-    if ((record.stateId === "entry" || record.stateId === "go") && !isStrictStrategy2Ma35Record(record)) {
+    const recordSourceCoverage = cleanNumber(record?.sourceCoverage);
+    const createdUnderUnhealthySource = recordSourceCoverage > 0 && recordSourceCoverage < sourceThreshold;
+    if ((record.stateId === "entry" || record.stateId === "go") && (!isStrictStrategy2Ma35Record(record) || createdUnderUnhealthySource)) {
       downgradedRecords += 1;
       return {
         ...record,
         stateId: "wait",
         stateLabel: "待確認",
-        stateReason: `${record.strategy || "盤中轉強"}，未通過進場區硬條件，降級為待確認。`,
+        stateReason: createdUnderUnhealthySource
+          ? `${record.strategy || "盤中轉強"}，產生時市場來源可用率 ${recordSourceCoverage.toFixed(2)} 未達 ${sourceThreshold.toFixed(2)}，降級為待確認。`
+          : `${record.strategy || "盤中轉強"}，未通過進場區硬條件，降級為待確認。`,
       };
     }
     return record;
   });
   const events = (report.events || []).map((event) => {
-    const entryRecord = records.find((record) => String(record.code || "") === String(event.code || "") && isStrictStrategy2Ma35Record(record));
+    const entryRecord = sourceBlocksEntry
+      ? null
+      : records.find((record) => String(record.code || "") === String(event.code || "") && isStrictStrategy2Ma35Record(record));
     if (!entryRecord) {
       if (event.firstAAt || event.latestAAt) downgradedEvents += 1;
       return {
@@ -1760,7 +1779,9 @@ function enforceStrategy2EntryGuards(report) {
         latestState: "wait",
         stateId: "wait",
         stateLabel: "待確認",
-        stateReason: event.stateReason && /^1分K站上MA35/.test(String(event.stateReason))
+        stateReason: sourceBlocksEntry
+          ? `市場來源可用率 ${sourceCoverage.toFixed(2)} 未達 ${sourceThreshold.toFixed(2)}，暫停進場區顯示。`
+          : event.stateReason && /^1分K站上MA35/.test(String(event.stateReason))
           ? "未通過進場區硬條件，降級為待確認。"
           : event.stateReason,
       };
@@ -2171,7 +2192,7 @@ async function main() {
       });
       added += 1;
     });
-    if (appendTrackedSnapshot(cache, stock, timestamp, key)) {
+    if (appendTrackedSnapshot(cache, stock, timestamp, key, { entrySourceHealthy, sourceCoverage: coverage })) {
       added += 1;
     }
   }
