@@ -1,9 +1,9 @@
 {
   "ok": true,
   "source": "github-actions",
-  "updatedAt": "2026-06-02T13:00:20.955Z",
+  "updatedAt": "2026-06-02T13:20:23.359Z",
   "usedDate": "20260602",
-  "quoteUpdatedAt": "2026-06-02T13:00:10.629Z",
+  "quoteUpdatedAt": "2026-06-02T13:20:10.350Z",
   "count": 1897,
   "topJoint": [
     {
@@ -17,8 +17,8 @@
       "dealer": 0,
       "total": 3463324,
       "foreignStreak": 8,
-      "trustStreak": 8,
-      "jointStreak": 8
+      "trustStreak": 7,
+      "jointStreak": 7
     },
     {
       "code": "3231",
@@ -114,7 +114,7 @@
       "trust": 2099000,
       "dealer": 0,
       "total": 12064119,
-      "foreignStreak": 6,
+      "foreignStreak": 5,
       "trustStreak": 2,
       "jointStreak": 2
     },
@@ -198,7 +198,7 @@
       "trust": 60000,
       "dealer": 0,
       "total": 329813,
-      "foreignStreak": 5,
+      "foreignStreak": 8,
       "trustStreak": 2,
       "jointStreak": 2
     },
@@ -213,7 +213,7 @@
       "dealer": 0,
       "total": 231887,
       "foreignStreak": 2,
-      "trustStreak": 5,
+      "trustStreak": 8,
       "jointStreak": 2
     },
     {
@@ -283,7 +283,7 @@
       "dealer": 0,
       "total": 25833459,
       "foreignStreak": 1,
-      "trustStreak": 7,
+      "trustStreak": 8,
       "jointStreak": 1
     },
     {
@@ -339,7 +339,7 @@
       "dealer": 0,
       "total": 11864741,
       "foreignStreak": 1,
-      "trustStreak": 5,
+      "trustStreak": 7,
       "jointStreak": 1
     },
     {
@@ -352,7 +352,7 @@
       "trust": 3477632,
       "dealer": 0,
       "total": 9201411,
-      "foreignStreak": 5,
+      "foreignStreak": 7,
       "trustStreak": 1,
       "jointStreak": 1
     },
@@ -367,7 +367,7 @@
       "dealer": 0,
       "total": 8661503,
       "foreignStreak": 1,
-      "trustStreak": 5,
+      "trustStreak": 7,
       "jointStreak": 1
     },
     {
@@ -381,7 +381,7 @@
       "dealer": 0,
       "total": 12035731,
       "foreignStreak": 1,
-      "trustStreak": 5,
+      "trustStreak": 8,
       "jointStreak": 1
     },
     {
@@ -424,20 +424,6 @@
       "total": 4173386,
       "foreignStreak": 1,
       "trustStreak": 3,
-      "jointStreak": 1
-    },
-    {
-      "code": "2912",
-      "name": "統一超",
-      "close": 233,
-      "percent": 2.42,
-      "value": 3145267000,
-      "foreign": 2814756,
-      "trust": 49000,
-      "dealer": 7748300,
-      "total": 2803251,
-      "foreignStreak": 1,
-      "trustStreak": 5,
       "jointStreak": 1
     },
     {
@@ -494,20 +480,6 @@
       "total": 1035227,
       "foreignStreak": 1,
       "trustStreak": 2,
-      "jointStreak": 1
-    },
-    {
-      "code": "2379",
-      "name": "瑞昱",
-      "close": 653,
-      "percent": 7.22,
-      "value": 7250912000,
-      "foreign": 1236346,
-      "trust": 25482,
-      "dealer": 3790193,
-      "total": 1306131,
-      "foreignStreak": 1,
-      "trustStreak": 5,
       "jointStreak": 1
     },
     {
@@ -591,7 +563,7 @@
       "dealer": 0,
       "total": 466343,
       "foreignStreak": 1,
-      "trustStreak": 5,
+      "trustStreak": 6,
       "jointStreak": 1
     },
     {
@@ -730,21 +702,7 @@
       "trust": 3081,
       "dealer": 0,
       "total": 13689,
-      "foreignStreak": 5,
-      "trustStreak": 1,
-      "jointStreak": 1
-    },
-    {
-      "code": "2250",
-      "name": "IKKA-KY",
-      "close": 63.6,
-      "percent": -1.09,
-      "value": 5787600,
-      "foreign": 1000,
-      "trust": 3050,
-      "dealer": 0,
-      "total": -1050,
-      "foreignStreak": 4,
+      "foreignStreak": 6,
       "trustStreak": 1,
       "jointStreak": 1
     },
@@ -759,7 +717,7 @@
       "dealer": 0,
       "total": 74543941,
       "foreignStreak": 0,
-      "trustStreak": 5,
+      "trustStreak": 7,
       "jointStreak": 0
     },
     {
@@ -772,7 +730,7 @@
       "trust": -5226000,
       "dealer": 0,
       "total": 46259647,
-      "foreignStreak": 6,
+      "foreignStreak": 5,
       "trustStreak": 0,
       "jointStreak": 0
     },
@@ -801,7 +759,7 @@
       "dealer": 0,
       "total": 21893967,
       "foreignStreak": 0,
-      "trustStreak": 5,
+      "trustStreak": 7,
       "jointStreak": 0
     },
     {
@@ -843,7 +801,49 @@
       "dealer": 0,
       "total": 18493687,
       "foreignStreak": 0,
-      "trustStreak": 5,
+      "trustStreak": 7,
+      "jointStreak": 0
+    },
+    {
+      "code": "6116",
+      "name": "彩晶",
+      "close": 20.65,
+      "percent": 9.84,
+      "value": 4083227750,
+      "foreign": 13971173,
+      "trust": 0,
+      "dealer": 0,
+      "total": 14551105,
+      "foreignStreak": 1,
+      "trustStreak": 0,
+      "jointStreak": 0
+    },
+    {
+      "code": "2834",
+      "name": "臺企銀",
+      "close": 16.3,
+      "percent": 0.62,
+      "value": 481746500,
+      "foreign": 10942846,
+      "trust": -31926,
+      "dealer": 0,
+      "total": 10801920,
+      "foreignStreak": 3,
+      "trustStreak": 0,
+      "jointStreak": 0
+    },
+    {
+      "code": "2880",
+      "name": "華南金",
+      "close": 34.05,
+      "percent": 3.65,
+      "value": 3925522350,
+      "foreign": -47652591,
+      "trust": 57949000,
+      "dealer": 0,
+      "total": 10171387,
+      "foreignStreak": 0,
+      "trustStreak": 7,
       "jointStreak": 0
     }
   ],
@@ -859,7 +859,7 @@
       "dealer": 0,
       "total": 74543941,
       "foreignStreak": 0,
-      "trustStreak": 5,
+      "trustStreak": 7,
       "jointStreak": 0
     },
     {
@@ -887,7 +887,7 @@
       "dealer": 0,
       "total": 10171387,
       "foreignStreak": 0,
-      "trustStreak": 5,
+      "trustStreak": 7,
       "jointStreak": 0
     },
     {
@@ -901,7 +901,7 @@
       "dealer": 0,
       "total": 3007807,
       "foreignStreak": 0,
-      "trustStreak": 5,
+      "trustStreak": 7,
       "jointStreak": 0
     },
     {
@@ -915,7 +915,7 @@
       "dealer": 0,
       "total": 21893967,
       "foreignStreak": 0,
-      "trustStreak": 5,
+      "trustStreak": 7,
       "jointStreak": 0
     },
     {
@@ -929,7 +929,7 @@
       "dealer": 0,
       "total": 18493687,
       "foreignStreak": 0,
-      "trustStreak": 5,
+      "trustStreak": 7,
       "jointStreak": 0
     },
     {
@@ -971,7 +971,7 @@
       "dealer": 0,
       "total": 10656378,
       "foreignStreak": 0,
-      "trustStreak": 5,
+      "trustStreak": 6,
       "jointStreak": 0
     },
     {
@@ -1013,7 +1013,7 @@
       "dealer": 0,
       "total": 7951915,
       "foreignStreak": 0,
-      "trustStreak": 8,
+      "trustStreak": 7,
       "jointStreak": 0
     },
     {
@@ -1055,7 +1055,7 @@
       "dealer": 0,
       "total": 25833459,
       "foreignStreak": 1,
-      "trustStreak": 7,
+      "trustStreak": 8,
       "jointStreak": 1
     },
     {
@@ -1069,7 +1069,7 @@
       "dealer": 0,
       "total": 8541163,
       "foreignStreak": 0,
-      "trustStreak": 5,
+      "trustStreak": 7,
       "jointStreak": 0
     },
     {
@@ -1083,7 +1083,7 @@
       "dealer": 0,
       "total": -9387,
       "foreignStreak": 0,
-      "trustStreak": 8,
+      "trustStreak": 7,
       "jointStreak": 0
     },
     {
@@ -1157,6 +1157,20 @@
       "jointStreak": 0
     },
     {
+      "code": "2912",
+      "name": "統一超",
+      "close": 233,
+      "percent": 2.42,
+      "value": 3145267000,
+      "foreign": -4933544,
+      "trust": 7748300,
+      "dealer": 0,
+      "total": 2803251,
+      "foreignStreak": 0,
+      "trustStreak": 7,
+      "jointStreak": 0
+    },
+    {
       "code": "2412",
       "name": "中華電",
       "close": 142,
@@ -1167,7 +1181,7 @@
       "dealer": 0,
       "total": 2747829,
       "foreignStreak": 0,
-      "trustStreak": 5,
+      "trustStreak": 8,
       "jointStreak": 0
     },
     {
@@ -1181,7 +1195,7 @@
       "dealer": 0,
       "total": 3416979,
       "foreignStreak": 0,
-      "trustStreak": 5,
+      "trustStreak": 7,
       "jointStreak": 0
     },
     {
@@ -1223,7 +1237,7 @@
       "dealer": 0,
       "total": 11864741,
       "foreignStreak": 1,
-      "trustStreak": 5,
+      "trustStreak": 7,
       "jointStreak": 1
     },
     {
@@ -1237,7 +1251,7 @@
       "dealer": 0,
       "total": 3342657,
       "foreignStreak": 0,
-      "trustStreak": 5,
+      "trustStreak": 7,
       "jointStreak": 0
     },
     {
@@ -1283,6 +1297,20 @@
       "jointStreak": 0
     },
     {
+      "code": "2379",
+      "name": "瑞昱",
+      "close": 653,
+      "percent": 7.22,
+      "value": 7250912000,
+      "foreign": -2553847,
+      "trust": 3790193,
+      "dealer": 0,
+      "total": 1306131,
+      "foreignStreak": 0,
+      "trustStreak": 7,
+      "jointStreak": 0
+    },
+    {
       "code": "9910",
       "name": "豐泰",
       "close": 79,
@@ -1306,7 +1334,7 @@
       "trust": 3477632,
       "dealer": 0,
       "total": 9201411,
-      "foreignStreak": 5,
+      "foreignStreak": 7,
       "trustStreak": 1,
       "jointStreak": 1
     },
@@ -1390,7 +1418,7 @@
       "trust": 2099000,
       "dealer": 0,
       "total": 12064119,
-      "foreignStreak": 6,
+      "foreignStreak": 5,
       "trustStreak": 2,
       "jointStreak": 2
     },
@@ -1433,7 +1461,7 @@
       "dealer": 0,
       "total": 1424645,
       "foreignStreak": 0,
-      "trustStreak": 5,
+      "trustStreak": 8,
       "jointStreak": 0
     },
     {
@@ -1559,8 +1587,8 @@
       "dealer": 0,
       "total": 3463324,
       "foreignStreak": 8,
-      "trustStreak": 8,
-      "jointStreak": 8
+      "trustStreak": 7,
+      "jointStreak": 7
     },
     {
       "code": "2357",
@@ -1629,7 +1657,7 @@
       "dealer": 0,
       "total": 8661503,
       "foreignStreak": 1,
-      "trustStreak": 5,
+      "trustStreak": 7,
       "jointStreak": 1
     },
     {
@@ -1658,34 +1686,6 @@
       "total": 337473,
       "foreignStreak": 0,
       "trustStreak": 3,
-      "jointStreak": 0
-    },
-    {
-      "code": "4979",
-      "name": "華星光",
-      "close": 630,
-      "percent": -3.08,
-      "value": 9911790000,
-      "foreign": -1308964,
-      "trust": 490000,
-      "dealer": 4064,
-      "total": -814900,
-      "foreignStreak": 0,
-      "trustStreak": 2,
-      "jointStreak": 0
-    },
-    {
-      "code": "3450",
-      "name": "聯鈞",
-      "close": 548,
-      "percent": 1.67,
-      "value": 15779112000,
-      "foreign": -1535745,
-      "trust": 485000,
-      "dealer": 0,
-      "total": -1212295,
-      "foreignStreak": 0,
-      "trustStreak": 2,
       "jointStreak": 0
     }
   ],
@@ -1728,7 +1728,7 @@
       "trust": -5226000,
       "dealer": 0,
       "total": 46259647,
-      "foreignStreak": 6,
+      "foreignStreak": 5,
       "trustStreak": 0,
       "jointStreak": 0
     },
@@ -1896,7 +1896,7 @@
       "trust": -17296000,
       "dealer": 0,
       "total": -1458367,
-      "foreignStreak": 8,
+      "foreignStreak": 5,
       "trustStreak": 0,
       "jointStreak": 0
     },
@@ -1925,7 +1925,7 @@
       "dealer": 0,
       "total": 25833459,
       "foreignStreak": 1,
-      "trustStreak": 7,
+      "trustStreak": 8,
       "jointStreak": 1
     },
     {
@@ -1980,7 +1980,7 @@
       "trust": 2099000,
       "dealer": 0,
       "total": 12064119,
-      "foreignStreak": 6,
+      "foreignStreak": 5,
       "trustStreak": 2,
       "jointStreak": 2
     },
@@ -1994,7 +1994,7 @@
       "trust": -11502000,
       "dealer": 0,
       "total": -1795997,
-      "foreignStreak": 5,
+      "foreignStreak": 8,
       "trustStreak": 0,
       "jointStreak": 0
     },
@@ -2051,7 +2051,7 @@
       "dealer": 0,
       "total": 8661503,
       "foreignStreak": 1,
-      "trustStreak": 5,
+      "trustStreak": 7,
       "jointStreak": 1
     },
     {
@@ -2121,7 +2121,7 @@
       "dealer": 0,
       "total": 12035731,
       "foreignStreak": 1,
-      "trustStreak": 5,
+      "trustStreak": 8,
       "jointStreak": 1
     },
     {
@@ -2135,7 +2135,7 @@
       "dealer": 0,
       "total": 11864741,
       "foreignStreak": 1,
-      "trustStreak": 5,
+      "trustStreak": 7,
       "jointStreak": 1
     },
     {
@@ -2218,7 +2218,7 @@
       "trust": 3477632,
       "dealer": 0,
       "total": 9201411,
-      "foreignStreak": 5,
+      "foreignStreak": 7,
       "trustStreak": 1,
       "jointStreak": 1
     },
@@ -2246,6 +2246,20 @@
       "trust": 0,
       "dealer": -78859,
       "total": 5544161,
+      "foreignStreak": 4,
+      "trustStreak": 0,
+      "jointStreak": 0
+    },
+    {
+      "code": "6176",
+      "name": "瑞儀",
+      "close": 103.5,
+      "percent": -1.43,
+      "value": 1260216000,
+      "foreign": 5034389,
+      "trust": -5884000,
+      "dealer": 0,
+      "total": -559072,
       "foreignStreak": 4,
       "trustStreak": 0,
       "jointStreak": 0
@@ -2428,7 +2442,7 @@
       "trust": -4142728,
       "dealer": 0,
       "total": -636735,
-      "foreignStreak": 5,
+      "foreignStreak": 7,
       "trustStreak": 0,
       "jointStreak": 0
     },
@@ -2515,20 +2529,6 @@
       "foreignStreak": 3,
       "trustStreak": 0,
       "jointStreak": 0
-    },
-    {
-      "code": "2912",
-      "name": "統一超",
-      "close": 233,
-      "percent": 2.42,
-      "value": 3145267000,
-      "foreign": 2814756,
-      "trust": 49000,
-      "dealer": 7748300,
-      "total": 2803251,
-      "foreignStreak": 1,
-      "trustStreak": 5,
-      "jointStreak": 1
     }
   ]
 }
