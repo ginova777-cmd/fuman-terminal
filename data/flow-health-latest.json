@@ -1,13 +1,4 @@
 {
-  "warrant": {
-    "scope": "warrant",
-    "status": "ok",
-    "message": "Warrant flow scan and publish completed",
-    "updatedAt": "2026-06-01T23:45:02.5374382Z",
-    "detail": {
-      "log": "C:\\fuman-runtime\\logs\\warrant-flow-20260602-074342.log"
-    }
-  },
   "institution": {
     "scope": "institution",
     "status": "ok",
@@ -17,5 +8,16 @@
       "log": "C:\\fuman-runtime\\logs\\institution-20260602-074342.log"
     }
   },
-  "updatedAt": "2026-06-01T23:51:04.9542218Z"
+  "updatedAt": "2026-06-02T12:50:02.4768453Z",
+  "warrant": {
+    "scope": "warrant",
+    "status": "watchdog_rerun",
+    "message": "Watchdog rerun started",
+    "updatedAt": "2026-06-02T12:50:02.4754233Z",
+    "detail": {
+      "expectedTime": "20:30",
+      "reason": "warrant not updated after 20:30; updatedAt=06/02/2026 12:30:56",
+      "log": "C:\\fuman-runtime\\logs\\flow-watchdog-warrant-20260602-205002.log"
+    }
+  }
 }
