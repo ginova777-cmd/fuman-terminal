@@ -1,5 +1,5 @@
 (function () {
-  const version = "mobile-header-card-match-20260602";
+  const version = "mobile-title-card-final-20260602";
   window.FUMAN_TERMINAL_BOOT = {
     version,
     startedAt: Date.now(),
