@@ -1,11 +1,11 @@
 {
   "ok": true,
-  "updatedAt": "2026-06-01T08:01:03.687Z",
+  "updatedAt": "2026-06-02T07:45:06.340Z",
   "risk": "low",
   "risks": [],
   "schedule": {
     "ok": true,
-    "total": 18,
+    "total": 0,
     "badCount": 0,
     "badTasks": [],
     "queryMethod": "schtasks",
@@ -22,77 +22,77 @@
         "file": "market-summary.json",
         "ok": true,
         "count": 0,
-        "updatedAt": "2026-06-01T05:31:04.882Z",
-        "bytes": 147978
+        "updatedAt": "2026-06-02T05:31:10.619Z",
+        "bytes": 152864
       },
       {
         "file": "strategy4-summary.json",
         "ok": true,
-        "count": 1611,
-        "updatedAt": "2026-06-01T06:51:06.815Z",
-        "bytes": 45303
+        "count": 1492,
+        "updatedAt": "2026-06-02T06:50:35.737Z",
+        "bytes": 42704
       },
       {
         "file": "strategy5-latest.json",
         "ok": true,
         "count": 80,
-        "updatedAt": "2026-06-01T00:19:59.650Z",
-        "bytes": 140546
+        "updatedAt": "2026-06-01T23:44:45.415Z",
+        "bytes": 153182
       },
       {
         "file": "institution-summary.json",
         "ok": true,
         "count": 1908,
-        "updatedAt": "2026-06-01T00:19:08.161Z",
-        "bytes": 53703
+        "updatedAt": "2026-06-01T23:45:37.402Z",
+        "bytes": 53649
       },
       {
         "file": "warrant-flow-summary.json",
         "ok": true,
-        "count": 89,
-        "updatedAt": "2026-06-01T00:23:51.662Z",
-        "bytes": 34825
+        "count": 120,
+        "updatedAt": "2026-06-01T23:43:57.366Z",
+        "bytes": 34855
       },
       {
         "file": "realtime-radar-latest.json",
         "ok": true,
         "count": 0,
-        "updatedAt": "2026-06-01T05:30:54.816Z",
-        "bytes": 80612
+        "updatedAt": "2026-06-02T05:29:35.423Z",
+        "bytes": 113345
       },
       {
         "file": "performance-report.json",
         "ok": true,
         "count": 0,
-        "updatedAt": "2026-06-01T08:00:40.891Z",
-        "bytes": 2395
+        "updatedAt": "2026-06-02T07:30:35.844Z",
+        "bytes": 2397
       },
       {
         "file": "signal-quality-report.json",
         "ok": true,
         "count": 0,
-        "updatedAt": "2026-06-01T08:00:40.552Z",
-        "bytes": 819
+        "updatedAt": "2026-06-02T07:30:35.543Z",
+        "bytes": 820
       },
       {
         "file": "data-quality-report.json",
         "ok": true,
         "count": 0,
-        "updatedAt": "2026-06-01T08:00:40.675Z",
-        "bytes": 2008
+        "updatedAt": "2026-06-02T07:30:35.654Z",
+        "bytes": 2311
       },
       {
         "file": "data-consistency-report.json",
         "ok": true,
         "count": 0,
-        "updatedAt": "2026-06-01T08:00:40.764Z",
-        "bytes": 314
+        "updatedAt": "2026-06-02T07:30:35.733Z",
+        "bytes": 316
       },
       {
         "file": "strategy-weight-report.json",
         "ok": true,
         "count": 0,
-        "updatedAt": "2026-06-01T08:00:40.827Z",
+        "updatedAt": "2026-06-02T07:30:35.780Z",
         "bytes": 418
       }
     ]
