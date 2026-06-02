@@ -3376,13 +3376,13 @@ body.fuman-light-theme .data-freshness-bar.is-stale span {
   }
 
   .mobile-auto-organize {
-    position: fixed;
-    top: 12px;
-    right: 62px;
-    z-index: 10000;
-    display: inline-grid;
-    width: 42px;
-    height: 42px;
+    position: fixed !important;
+    top: calc(env(safe-area-inset-top, 0px) + 12px) !important;
+    right: 62px !important;
+    z-index: 10000 !important;
+    display: inline-grid !important;
+    width: 42px !important;
+    height: 42px !important;
     place-items: center;
     border: 1px solid rgba(134, 151, 190, 0.18);
     border-radius: 12px;
@@ -3725,13 +3725,13 @@ body.fuman-light-theme .data-freshness-bar.is-stale span {
 
 @media (orientation: landscape) and (max-height: 430px) and (max-width: 920px) {
   .mobile-auto-organize {
-    position: fixed;
-    top: 18px;
-    right: 72px;
-    z-index: 10000;
-    display: inline-grid;
-    width: 46px;
-    height: 46px;
+    position: fixed !important;
+    top: calc(env(safe-area-inset-top, 0px) + 18px) !important;
+    right: 72px !important;
+    z-index: 10000 !important;
+    display: inline-grid !important;
+    width: 46px !important;
+    height: 46px !important;
     place-items: center;
     border: 1px solid rgba(134, 151, 190, 0.18);
     border-radius: 12px;

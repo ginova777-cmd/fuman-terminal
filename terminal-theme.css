@@ -1,9 +1,9 @@
 
   .fuman-theme-toggle {
-    position: fixed;
-    top: 18px;
-    right: 18px;
-    z-index: 10001;
+    position: fixed !important;
+    top: calc(env(safe-area-inset-top, 0px) + 18px) !important;
+    right: 18px !important;
+    z-index: 10001 !important;
     width: 46px;
     height: 46px;
     display: grid;
@@ -1855,8 +1855,8 @@
   }
   @media (max-width: 720px) {
     .fuman-theme-toggle {
-      top: 12px;
-      right: 12px;
+      top: calc(env(safe-area-inset-top, 0px) + 12px) !important;
+      right: 12px !important;
       width: 42px;
       height: 42px;
     }
