@@ -607,9 +607,6 @@ try {
 
   $copiedFiles = New-Object System.Collections.Generic.List[string]
   $localPublishedFiles = @()
-  if ($env:SYNC_STRATEGY2_FULL_LATEST -eq "1") {
-    $localPublishedFiles += "data\strategy2-intraday-latest.json"
-  }
   if (-not (Test-Path (Join-Path $syncRepo ".git"))) {
     if (Test-Path $syncRepo) {
       throw "$syncRepo exists but is not a git repository. Rename or remove it before cache sync can initialize."

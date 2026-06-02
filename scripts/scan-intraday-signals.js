@@ -311,6 +311,14 @@ function compactStrategy2Event(event) {
     latestState: event?.latestState,
     maxScore: event?.maxScore,
     strategies: Array.isArray(event?.strategies) ? event.strategies.slice(0, 8) : [],
+    ma35: event?.ma35,
+    ma35Prev: event?.ma35Prev,
+    aboveMa35: event?.aboveMa35,
+    ma35TrendUp: event?.ma35TrendUp,
+    ma35Source: event?.ma35Source,
+    ma35At: event?.ma35At,
+    ma35Symbol: event?.ma35Symbol,
+    latestRecord: event?.latestRecord ? pickStrategy2PublicRecord(event.latestRecord) : undefined,
     enhancements: Array.isArray(event?.enhancements) ? event.enhancements.slice(-8).map(compactStrategy2Enhancement) : [],
     stateReason: event?.stateReason,
     supportPrice: event?.supportPrice,
@@ -336,23 +344,51 @@ function buildStrategy2FastSlimReport(report) {
   };
 }
 
-function buildStrategy2MobileTopReport(report) {
+function buildStrategy2TopReport(report, options = {}) {
   const slim = buildStrategy2FastSlimReport(report);
+  const eventLimit = options.eventLimit || 50;
+  const recordLimit = options.recordLimit || 70;
+  const source = options.source || "strategy2-mobile-top";
   const events = (slim.events || [])
     .sort((a, b) => (Number(b.maxScore) || 0) - (Number(a.maxScore) || 0) || String(b.latestSeenAt || b.latestAAt || "").localeCompare(String(a.latestSeenAt || a.latestAAt || "")))
-    .slice(0, 50);
+    .slice(0, eventLimit);
   const eventCodes = new Set(events.map((event) => String(event.code || "")));
   const records = [
     ...(slim.records || []).filter((record) => eventCodes.has(String(record.code || ""))),
-    ...(slim.records || []).filter((record) => !eventCodes.has(String(record.code || ""))).slice(0, 20),
-  ].slice(0, 70);
+    ...(slim.records || []).filter((record) => !eventCodes.has(String(record.code || ""))).slice(0, Math.max(0, recordLimit - eventCodes.size)),
+  ].slice(0, recordLimit);
   return {
     ...slim,
-    source: "strategy2-mobile-top",
-    profile: "strategy2-mobile-top",
+    source,
+    profile: source,
     events,
     records,
     count: events.length,
+  };
+}
+
+function buildStrategy2MobileTopReport(report) {
+  return buildStrategy2TopReport(report, { source: "strategy2-mobile-top", eventLimit: 50, recordLimit: 70 });
+}
+
+function buildStrategy2LiveTopReport(report) {
+  return buildStrategy2TopReport(report, { source: "strategy2-mobile-live-top", eventLimit: 28, recordLimit: 40 });
+}
+
+function buildStrategy2DeltaReport(report) {
+  const slim = buildStrategy2FastSlimReport(report);
+  const events = [...(slim.events || [])]
+    .sort((a, b) => String(b.latestSeenAt || b.latestAAt || "").localeCompare(String(a.latestSeenAt || a.latestAAt || "")) || (Number(b.maxScore) || 0) - (Number(a.maxScore) || 0))
+    .slice(0, 24);
+  const codes = new Set(events.map((event) => String(event.code || "")));
+  return {
+    ok: true,
+    source: "strategy2-intraday-delta",
+    updatedAt: slim.updatedAt,
+    since: slim.updatedAt,
+    count: events.length,
+    events,
+    records: (slim.records || []).filter((record) => codes.has(String(record.code || ""))).slice(0, 32),
   };
 }
 function shouldWriteStrategy2History(file) {
@@ -365,22 +401,32 @@ function shouldWriteStrategy2History(file) {
   }
 }
 
-function publishStaticDataJson(name, value) {
-  const payload = name === "strategy2-intraday-latest.json" ? buildStrategy2PublicReport(value) : value;
-  const slimPayload = name === "strategy2-intraday-latest.json" ? buildStrategy2FastSlimReport(value) : null;
-  const topPayload = name === "strategy2-intraday-latest.json" ? buildStrategy2MobileTopReport(value) : null;
-  const targets = [repoPath("data", name)];
+function writeStaticDataTargets(name, payload, options = {}) {
+  const targets = [];
+  if (!options.skipRuntime) targets.push(dataPath(name));
+  targets.push(repoPath("data", name));
   const syncRoot = process.env.FUMAN_SYNC_DIR || "C:\\fuman-terminal-sync";
   if (fs.existsSync(syncRoot)) targets.push(path.join(syncRoot, "data", name));
   [...new Set(targets.map((file) => path.resolve(file)))].forEach((file) => {
-    if (file === path.resolve(dataPath(name))) return;
     writeJson(file, payload);
   });
 }
 
+function publishStaticDataJson(name, value) {
+  const payload = value;
+  const slimPayload = name === "strategy2-intraday-latest.json" ? buildStrategy2FastSlimReport(value) : null;
+  const topPayload = name === "strategy2-intraday-latest.json" ? buildStrategy2MobileTopReport(value) : null;
+  writeStaticDataTargets(name, payload, { skipRuntime: name === "strategy2-intraday-latest.json" });
+  if (name !== "strategy2-intraday-latest.json") return;
+  writeStaticDataTargets("strategy2-intraday-slim.json", slimPayload);
+  writeStaticDataTargets("strategy2-intraday-top.json", topPayload);
+  writeStaticDataTargets("strategy2-intraday-live-top.json", buildStrategy2LiveTopReport(value));
+  writeStaticDataTargets("strategy2-intraday-delta.json", buildStrategy2DeltaReport(value));
+}
+
 async function upsertStrategy2LatestToSupabase(report) {
   if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) return false;
-  const payload = buildStrategy2PublicReport(report);
+  const payload = report;
   const baseUrl = SUPABASE_URL.replace(/\/+$/, "");
   const body = {
     id: "latest",
@@ -429,13 +475,17 @@ function normalizeRealtimeQuoteVolume(quote) {
   return Math.round(volume);
 }
 
+function isTrustedStrategy2Ma35Source(source) {
+  return new Set(["fugle-1m", "yahoo-1m", "local-1m", "twelve-1m"]).has(String(source || ""));
+}
+
 function classifyStrategy2State(stock, signal) {
   const pct = cleanNumber(stock.percent);
   const volume = cleanNumber(stock.tradeVolume);
   const close = cleanNumber(stock.close);
   const high = cleanNumber(stock.high) || close;
   const open = cleanNumber(stock.open);
-  const hasIntradaySma35 = /(?:yahoo|fugle|twelve|local)-1m/.test(String(signal.ma35Source || "")) && cleanNumber(signal.ma35) > 0;
+  const hasIntradaySma35 = isTrustedStrategy2Ma35Source(signal.ma35Source) && cleanNumber(signal.ma35) > 0;
   const strictMa35Entry = signal.id === "ma35_buy"
     && signal.aboveMa35 === true
     && hasIntradaySma35
@@ -445,20 +495,26 @@ function classifyStrategy2State(stock, signal) {
   const earlyEntrySignal = new Set(["volume_burst", "limit_lock", "gap", "breakout", "diamond"]).has(String(signal.id || ""));
   const nearHigh = high > 0 && close > 0 ? close >= high * 0.985 : true;
   const aboveOpen = !open || close >= open;
-  const fallbackEntry = earlyEntrySignal
+  const fallbackWatch = earlyEntrySignal
     && pct >= 2
     && pct <= 8.8
     && volume >= 2000
     && nearHigh
     && aboveOpen;
-  if (!strictMa35Entry && !fallbackEntry) return null;
+  if (!strictMa35Entry && !fallbackWatch) return null;
   const score = Math.min(100, Math.round(pct * 8 + (volume >= 10000 ? 56 : 42) + (earlyEntrySignal ? 6 : 0)));
+  if (!strictMa35Entry) {
+    return {
+      stateId: "wait",
+      stateLabel: "待確認",
+      stateReason: `${signal.label || "盤中轉強"}，量價轉強但尚未通過1分K站上MA35完整進場條件。`,
+      score,
+    };
+  }
   return {
     stateId: "entry",
     stateLabel: "進場區",
-    stateReason: strictMa35Entry
-      ? `1分K站上MA35，MACD/KD同步向上且爆量，偏進場區。MA35來源：${ma35SourceLabel(signal.ma35Source)}。`
-      : `${signal.label || "盤中轉強"}，量價符合當沖進場區。`,
+    stateReason: `1分K站上MA35，MACD/KD同步向上且爆量，偏進場區。MA35來源：${ma35SourceLabel(signal.ma35Source)}。`,
     score,
   };
 }
@@ -840,11 +896,21 @@ function mergeStrategy2Events(records, key) {
         highestPrice: 0,
         highestAt: "",
         latestState: "",
+        stateId: "wait",
+        stateLabel: "待確認",
         maxScore: 0,
         strategies: [],
         enhancements: [],
         stateReason: "",
         supportPrice: 0,
+        ma35: 0,
+        ma35Prev: 0,
+        aboveMa35: false,
+        ma35TrendUp: false,
+        ma35Source: "",
+        ma35At: "",
+        ma35Symbol: "",
+        latestRecord: null,
       };
       const price = cleanNumber(record.entryPrice) || cleanNumber(record.observedPrice);
       const observedHigh = cleanNumber(record.observedHigh) || cleanNumber(record.observedPrice) || price;
@@ -873,6 +939,7 @@ function mergeStrategy2Events(records, key) {
         current.firstAPrice = price;
         current.highAfterA = observedHigh || price;
         current.highAfterAAt = highTime || eventTime;
+        current.stateReason = record.stateReason || current.stateReason;
       }
       if (isEntryState(record) && eventTime) {
         current.latestAAt = eventTime;
@@ -892,6 +959,21 @@ function mergeStrategy2Events(records, key) {
       }
       if (record.strategy && !current.strategies.includes(record.strategy)) {
         current.strategies.push(record.strategy);
+      }
+      const recordMa35 = cleanNumber(record.ma35);
+      const recordAboveMa35 = record.aboveMa35 === true && recordMa35 > 0;
+      const recordHasTrustedMa35 = recordAboveMa35 && isTrustedStrategy2Ma35Source(record.ma35Source);
+      if (eventTime) {
+        current.latestRecord = record;
+      }
+      if (recordHasTrustedMa35 && (isEntryState(record) || !current.ma35)) {
+        current.ma35 = recordMa35;
+        current.ma35Prev = cleanNumber(record.ma35Prev);
+        current.aboveMa35 = true;
+        current.ma35TrendUp = record.ma35TrendUp === true;
+        current.ma35Source = record.ma35Source || "";
+        current.ma35At = record.ma35At || "";
+        current.ma35Symbol = record.ma35Symbol || "";
       }
       const previousMaxScore = cleanNumber(current.maxScore);
       const recordScore = cleanNumber(record.score);
@@ -933,8 +1015,12 @@ function mergeStrategy2Events(records, key) {
         });
       }
       current.latestState = isEntryState(record) ? "entry" : "wait";
+      current.stateId = current.firstAAt ? "entry" : "wait";
+      current.stateLabel = current.firstAAt ? "進場區" : "待確認";
       current.maxScore = Math.max(previousMaxScore, recordScore);
-      current.stateReason = record.stateReason || current.stateReason;
+      if (isEntryState(record) || !current.firstAAt) {
+        current.stateReason = record.stateReason || current.stateReason;
+      }
       current.supportPrice = cleanNumber(current.supportPrice) || cleanNumber(record.supportPrice);
       events[code] = current;
     });
@@ -946,42 +1032,39 @@ function mergeStrategy2Events(records, key) {
 
 function inferLegacyRecordState(record) {
   const pct = cleanNumber(record.percent);
-  const volume = cleanNumber(record.volume);
-  const observedPrice = cleanNumber(record.observedPrice);
-  const observedHigh = cleanNumber(record.observedHigh) || observedPrice;
   const strategy = String(record.strategy || "");
-  const reason = String(record.reason || "");
-  const nearHigh = observedHigh && observedPrice ? observedPrice >= observedHigh * 0.985 : true;
-  const hasTrigger = /轉強|突破|跳空|鑽石|MA35|買點|爆量|放大/.test(strategy + reason);
-  const liquid = volume >= 2000;
-
-  if (liquid && hasTrigger && nearHigh && pct >= 2 && pct <= 8.8) {
-    return {
-      stateId: "entry",
-      stateLabel: "進場區",
-      stateReason: "量勢、價位與觸發訊號同步，偏進場區。",
-      score: cleanNumber(record.score) || Math.min(100, Math.round(pct * 8 + 56)),
-    };
-  }
-  if ((volume >= 1000 || hasTrigger) && pct >= 2) {
-    return {
-      stateId: "entry",
-      stateLabel: "進場區",
-      stateReason: "已有訊號，納入進場區追蹤。",
-      score: cleanNumber(record.score) || Math.min(88, Math.round(pct * 8 + 42)),
-    };
-  }
   return {
-    stateId: "entry",
-    stateLabel: "進場區",
-    stateReason: "已有訊號，納入進場區追蹤。",
+    stateId: "wait",
+    stateLabel: "待確認",
+    stateReason: `${strategy || "盤中轉強"}，舊紀錄未附完整1分K站上MA35證據，降級為待確認。`,
     score: cleanNumber(record.score) || Math.min(88, Math.round(Math.max(pct, 0) * 8 + 42)),
   };
 }
 
+function isStrictStrategy2Ma35Record(record) {
+  const ma35 = cleanNumber(record?.ma35);
+  const hasIntradaySma35 = isTrustedStrategy2Ma35Source(record?.ma35Source) && ma35 > 0;
+  return String(record?.signalId || record?.signal?.id || "") === "ma35_buy"
+    && record?.aboveMa35 === true
+    && hasIntradaySma35
+    && record?.macdUp === true
+    && record?.kdUp === true
+    && record?.intradayVolumeBurst === true;
+}
+
 function normalizeStrategy2Records(records) {
   return (records || []).map((record) => {
-    if (record.stateId && record.stateLabel) return record;
+    if (record.stateId && record.stateLabel) {
+      if ((record.stateId === "entry" || record.stateId === "go") && !isStrictStrategy2Ma35Record(record)) {
+        return {
+          ...record,
+          stateId: "wait",
+          stateLabel: "待確認",
+          stateReason: `${record.strategy || "盤中轉強"}，量價轉強但尚未通過1分K站上MA35完整進場條件。`,
+        };
+      }
+      return record;
+    }
     return {
       ...record,
       ...inferLegacyRecordState(record),
@@ -1052,6 +1135,11 @@ async function fetchRealtime(stocks) {
       .map((stock) => String(stock.code))
   );
   let fugleRateLimited = false;
+  const fallbackStats = {
+    fugle: { configured: Boolean(FUGLE_API_KEY), requested: 0, recovered: 0, empty: 0, failed: 0, skippedNoKey: 0, rateLimited: false },
+    finmind: { configured: Boolean(FINMIND_API_TOKEN), enabled: ENABLE_FINMIND_REALTIME, requested: 0, recovered: 0, failed: 0 },
+    yahoo: { requested: 0, recovered: 0, failed: 0 },
+  };
 
   async function fetchRealtimeBatch(codes) {
     if (!codes.length) return;
@@ -1098,6 +1186,11 @@ async function fetchRealtime(stocks) {
 
   async function fetchFugleFallback(codes, parentLabel) {
     const targetCodes = codes.filter((code) => fallbackCandidateCodes.has(String(code)));
+    fallbackStats.fugle.requested += targetCodes.length;
+    if (!FUGLE_API_KEY) {
+      fallbackStats.fugle.skippedNoKey += targetCodes.length;
+      return;
+    }
     for (const code of targetCodes) {
       if (fugleRateLimited) break;
       if (quotes.has(code)) continue;
@@ -1106,13 +1199,18 @@ async function fetchRealtime(stocks) {
         if (quote?.close) {
           quotes.set(String(code), quote);
           recoveredCodes.add(String(code));
+          fallbackStats.fugle.recovered += 1;
+        } else {
+          fallbackStats.fugle.empty += 1;
         }
       } catch (error) {
         if (String(error.message || "").includes("HTTP 429")) {
           fugleRateLimited = true;
+          fallbackStats.fugle.rateLimited = true;
           console.log(`realtime fugle rate limited at ${code} from ${parentLabel}; fallback paused this round`);
           break;
         }
+        fallbackStats.fugle.failed += 1;
         console.log(`realtime fugle failed ${code} from ${parentLabel}: ${error.message}`);
       }
     }
@@ -1120,6 +1218,7 @@ async function fetchRealtime(stocks) {
 
   async function fetchYahooFallback(codes, parentLabel) {
     const targetCodes = codes.filter((code) => fallbackCandidateCodes.has(String(code)) && !quotes.has(String(code)));
+    fallbackStats.yahoo.requested += targetCodes.length;
     let yahooCursor = 0;
     async function fetchYahooCode(code) {
       for (const suffix of ["TW", "TWO"]) {
@@ -1157,9 +1256,13 @@ async function fetchRealtime(stocks) {
             realtimeFallback: "yahoo-chart",
           });
           recoveredCodes.add(String(code));
+          fallbackStats.yahoo.recovered += 1;
           break;
         } catch (error) {
-          if (suffix === "TWO") console.log(`realtime yahoo failed ${code} from ${parentLabel}: ${error.message}`);
+          if (suffix === "TWO") {
+            fallbackStats.yahoo.failed += 1;
+            console.log(`realtime yahoo failed ${code} from ${parentLabel}: ${error.message}`);
+          }
         }
       }
     }
@@ -1177,6 +1280,7 @@ async function fetchRealtime(stocks) {
     for (let i = 0; i < codes.length; i += 20) {
       const chunk = codes.slice(i, i + 20).filter((code) => !quotes.has(code));
       if (!chunk.length) continue;
+      fallbackStats.finmind.requested += chunk.length;
       try {
         const url = new URL("https://api.finmindtrade.com/api/v4/taiwan_stock_tick_snapshot");
         chunk.forEach((code) => url.searchParams.append("data_id", code));
@@ -1214,8 +1318,10 @@ async function fetchRealtime(stocks) {
             realtimeFallback: "finmind",
           });
           recoveredCodes.add(code);
+          fallbackStats.finmind.recovered += 1;
         }
       } catch (error) {
+        fallbackStats.finmind.failed += chunk.length;
         console.log(`realtime finmind failed ${chunk[0]}-${chunk.at(-1)} from ${parentLabel}: ${error.message}`);
       }
     }
@@ -1242,9 +1348,9 @@ async function fetchRealtime(stocks) {
   }
 
   async function fetchSingleRetries(codes, parentLabel) {
-    await fetchYahooFallback(codes, parentLabel);
-    await fetchFinMindFallback(codes, parentLabel);
     await fetchFugleFallback(codes, parentLabel);
+    await fetchFinMindFallback(codes, parentLabel);
+    await fetchYahooFallback(codes, parentLabel);
     for (const code of codes) {
       if (!quotes.has(code) && /^\d{4}$/.test(String(code)) && !String(code).startsWith("00")) missedCodes.add(code);
     }
@@ -1299,11 +1405,17 @@ async function fetchRealtime(stocks) {
     fallbackCandidateCount: fallbackCandidateCodes.size,
     yahooFallbackConcurrency: REALTIME_YAHOO_FALLBACK_CONCURRENCY,
     fugleRateLimited,
+    fallbackStats,
     finmindRealtimeEnabled: ENABLE_FINMIND_REALTIME,
     recoveredCodes: [...recoveredCodes],
     missedCodes: [...missedCodes],
     missedCount: missedCodes.size,
   };
+  console.log(
+    `realtime fallback stats: fugle configured=${fallbackStats.fugle.configured} requested=${fallbackStats.fugle.requested} recovered=${fallbackStats.fugle.recovered} empty=${fallbackStats.fugle.empty} failed=${fallbackStats.fugle.failed} noKey=${fallbackStats.fugle.skippedNoKey} rateLimited=${fallbackStats.fugle.rateLimited}; `
+    + `finmind enabled=${fallbackStats.finmind.enabled} configured=${fallbackStats.finmind.configured} requested=${fallbackStats.finmind.requested} recovered=${fallbackStats.finmind.recovered} failed=${fallbackStats.finmind.failed}; `
+    + `yahoo requested=${fallbackStats.yahoo.requested} recovered=${fallbackStats.yahoo.recovered} failed=${fallbackStats.yahoo.failed}`
+  );
   return stocks.map((stock) => {
     const quote = quotes.get(stock.code);
     if (!quote?.close) return { ...stock, isRealtime: false };
@@ -1430,10 +1542,79 @@ function mergeRealtimeQuoteCache(cache, stocks, key) {
   });
 }
 
+function enforceStrategy2EntryGuards(report) {
+  let downgradedRecords = 0;
+  let downgradedEvents = 0;
+  const records = (report.records || []).map((record) => {
+    if ((record.stateId === "entry" || record.stateId === "go") && !isStrictStrategy2Ma35Record(record)) {
+      downgradedRecords += 1;
+      return {
+        ...record,
+        stateId: "wait",
+        stateLabel: "待確認",
+        stateReason: `${record.strategy || "盤中轉強"}，未通過進場區硬條件，降級為待確認。`,
+      };
+    }
+    return record;
+  });
+  const events = (report.events || []).map((event) => {
+    const entryRecord = records.find((record) => String(record.code || "") === String(event.code || "") && isStrictStrategy2Ma35Record(record));
+    if (!entryRecord) {
+      if (event.firstAAt || event.latestAAt) downgradedEvents += 1;
+      return {
+        ...event,
+        firstAAt: "",
+        firstAPrice: 0,
+        firstTradableAAt: "",
+        firstTradableAPrice: 0,
+        latestAAt: "",
+        latestAPrice: 0,
+        latestState: "wait",
+        stateId: "wait",
+        stateLabel: "待確認",
+        stateReason: event.stateReason && /^1分K站上MA35/.test(String(event.stateReason))
+          ? "未通過進場區硬條件，降級為待確認。"
+          : event.stateReason,
+      };
+    }
+    return {
+      ...event,
+      firstAAt: event.firstAAt || recordTimeLabel(entryRecord),
+      firstAPrice: event.firstAPrice || cleanNumber(entryRecord.entryPrice) || cleanNumber(entryRecord.observedPrice),
+      latestAAt: event.latestAAt || recordTimeLabel(entryRecord),
+      latestAPrice: event.latestAPrice || cleanNumber(entryRecord.entryPrice) || cleanNumber(entryRecord.observedPrice),
+      latestState: "entry",
+      stateId: "entry",
+      stateLabel: "進場區",
+      stateReason: entryRecord.stateReason || event.stateReason,
+      ma35: cleanNumber(entryRecord.ma35),
+      ma35Prev: cleanNumber(entryRecord.ma35Prev),
+      aboveMa35: entryRecord.aboveMa35 === true,
+      ma35TrendUp: entryRecord.ma35TrendUp === true,
+      ma35Source: entryRecord.ma35Source || "",
+      ma35At: entryRecord.ma35At || "",
+      ma35Symbol: entryRecord.ma35Symbol || "",
+      latestRecord: entryRecord,
+    };
+  });
+  const guarded = {
+    ...report,
+    records,
+    events,
+    entryCount: events.filter((event) => event.stateId === "entry" || event.stateId === "go").length,
+    aCount: events.filter((event) => event.stateId === "entry" || event.stateId === "go").length,
+    bOnlyCount: events.filter((event) => !(event.stateId === "entry" || event.stateId === "go") && event.firstBAt).length,
+  };
+  if (downgradedRecords || downgradedEvents) {
+    console.warn(`strategy2 entry guard downgraded records=${downgradedRecords}, events=${downgradedEvents}`);
+  }
+  return guarded;
+}
+
 function fetchLocalIntradaySma35(cache, code, scanTimestamp) {
   const targetMinute = minuteKey(scanTimestamp);
   const rows = Array.isArray(cache?.minuteCloses?.[String(code)]) ? cache.minuteCloses[String(code)] : [];
-  return buildSma35Info(rows, targetMinute, "local-1m-cache", { ma35Symbol: String(code) });
+  return buildSma35Info(rows, targetMinute, "local-1m", { ma35Symbol: String(code) });
 }
 
 async function fetchFugleIntradaySma35(code, scanTimestamp) {
@@ -1562,7 +1743,7 @@ async function fetchIntradaySma35WithFallback(code, scanTimestamp, cache) {
     attempts.push({ source: "twelve-1m", ok: false, configured: Boolean(TWELVE_DATA_API_KEY), error: error.message });
   }
   const local = fetchLocalIntradaySma35(cache, code, scanTimestamp);
-  attempts.push({ source: "local-1m-cache", ok: Boolean(local) });
+  attempts.push({ source: "local-1m", ok: Boolean(local) });
   return local ? { ...local, ma35Attempts: attempts } : { ma35Attempts: attempts };
 }
 
@@ -1791,8 +1972,7 @@ async function main() {
     ...realtimeSummaryBase,
     tradable: liveStocks.length,
   };
-  writeJson(SIGNAL_FILE, cache);
-  const strategy2Report = {
+  const strategy2Report = enforceStrategy2EntryGuards({
     source: "strategy2-09-to-1330-patrol",
     date: key,
     updatedAt: cache.updatedAt,
@@ -1802,7 +1982,9 @@ async function main() {
     entryCount: strategy2Events.filter((event) => event.firstAAt).length,
     aCount: strategy2Events.filter((event) => event.firstAAt).length,
     bOnlyCount: 0,
-  };
+  });
+  cache.records = strategy2Report.records;
+  writeJson(SIGNAL_FILE, cache);
   writeJson(STRATEGY2_REPORT_FILE, strategy2Report);
   publishStaticDataJson("strategy2-intraday-latest.json", strategy2Report);
   await upsertStrategy2LatestToSupabase(strategy2Report);

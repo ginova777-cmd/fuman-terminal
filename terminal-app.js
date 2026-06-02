@@ -5032,25 +5032,50 @@ function isStrategy2EnhancementVisible(enhancement) {
     );
 }
 
+function isTrustedStrategy2Ma35Source(source) {
+  return new Set(["fugle-1m", "yahoo-1m", "local-1m", "twelve-1m"]).has(String(source || ""));
+}
+
+function isBackendStrategy2Entry(event) {
+  const stateId = String(event?.stateId || "");
+  return stateId === "entry" || stateId === "go";
+}
+
+function hasVerifiedStrategy2Ma35(event) {
+  const record = event?.latestRecord || {};
+  const ma35 = cleanNumber(event?.ma35) || cleanNumber(record.ma35);
+  const source = String(event?.ma35Source || record.ma35Source || "");
+  const aboveMa35 = event?.aboveMa35 === true || record.aboveMa35 === true;
+  return ma35 > 0 && aboveMa35 && isTrustedStrategy2Ma35Source(source);
+}
+
 function strategy2SignalFromTrackedEvent(event) {
-  const strategies = normalizeArray(event?.strategies).map((item) => String(item));
+  const verifiedMa35 = hasVerifiedStrategy2Ma35(event);
+  const strategies = normalizeArray(event?.strategies)
+    .map((item) => String(item))
+    .filter((item) => verifiedMa35 || !/MA35/i.test(item));
   const text = [event?.stateReason, event?.reason, event?.latestRecord?.reason, ...strategies].join(" ");
   const matched = INTRADAY_SIGNAL_DEFS.find((signal) => text.includes(signal.title) || text.includes(signal.id));
-  if (matched) {
+  if (matched && (matched.id !== "ma35_macd" || verifiedMa35)) {
     return {
       id: matched.id,
       short: matched.title,
       icon: matched.icon,
-      reason: event?.stateReason || event?.latestRecord?.reason || matched.hint || "策略2正式進場事件",
+      reason: event?.stateReason || event?.latestRecord?.reason || matched.hint || "策略2後端事件",
     };
   }
   if (text.includes("鑽石") || text.includes("0.618")) {
-    return { id: "diamond", short: "鑽石", icon: "💎", reason: event?.stateReason || event?.latestRecord?.reason || "策略2正式進場事件" };
+    return { id: "diamond", short: "鑽石", icon: "💎", reason: event?.stateReason || event?.latestRecord?.reason || "策略2後端事件" };
   }
-  if (text.includes("MA35")) {
-    return { id: "ma35_macd", short: "MA35", icon: "🟢", reason: event?.stateReason || event?.latestRecord?.reason || "策略2正式進場事件" };
+  if (verifiedMa35 && text.includes("MA35")) {
+    return { id: "ma35_macd", short: "MA35", icon: "🟢", reason: event?.stateReason || event?.latestRecord?.reason || "策略2後端事件" };
   }
-  return { id: "early_strength", short: "早盤強", icon: "⚡", reason: event?.stateReason || event?.latestRecord?.reason || "策略2正式進場事件" };
+  return { id: "early_strength", short: "早盤強", icon: "⚡", reason: event?.stateReason || event?.latestRecord?.reason || "策略2後端事件" };
+}
+
+function strategy2DisplaySignals(signals, trackedEvent) {
+  if (trackedEvent) return [strategy2SignalFromTrackedEvent(trackedEvent)];
+  return normalizeArray(signals).filter((signal) => !/^ma35/i.test(String(signal?.id || "")));
 }
 
 function stockRowFromStrategy2Event(event, base) {
@@ -5079,7 +5104,9 @@ function stockRowFromStrategy2Event(event, base) {
     high,
     low,
     intradaySignals: [signal],
-    intradayState: { id: event.firstAAt || event.latestAAt ? "go" : "watch", label: event.firstAAt || event.latestAAt ? "進場區" : "待確認", cls: event.firstAAt || event.latestAAt ? "go" : "watch" },
+    intradayState: isBackendStrategy2Entry(event)
+      ? { id: "go", label: event.stateLabel || "進場區", cls: "go" }
+      : { id: "watch", label: event.stateLabel || "待確認", cls: "watch" },
     strategy2Event: event,
     intradayEntryTime: event.latestAAt || event.firstAAt || event.latestSeenAt || event.firstSeenAt || record.timestamp || record.entryAt || "",
   };
@@ -5210,7 +5237,11 @@ async function loadStrategy2IntradayCache(force = false) {
       const seenTime = intradayOnlyTime(record.timestamp || record.entryAt || record.firstAAt || record.firstBAt);
       if (!seenTime) return;
       if (!isIntradayVisibleTimeText(seenTime)) return;
-      const current = byCode.get(code) || { code, name: record.name || "" };
+      const current = byCode.get(code) || { code, name: record.name || "", stateId: "wait", stateLabel: "待確認" };
+      if (!current.stateId) {
+        current.stateId = "wait";
+        current.stateLabel = "待確認";
+      }
       const currentSeen = current.firstSeenAt || current.firstBAt || current.firstAAt || "";
       if (!currentSeen || intradayTimeToValue(seenTime) < intradayTimeToValue(currentSeen)) {
         current.firstSeenAt = seenTime;
@@ -5227,6 +5258,10 @@ async function loadStrategy2IntradayCache(force = false) {
       if (isEntryState && (!current.latestAAt || seenValue >= intradayTimeToValue(current.latestAAt))) {
         current.latestAAt = seenTime;
         current.latestAPrice = cleanNumber(record.entryPrice) || cleanNumber(record.observedPrice) || cleanNumber(record.close);
+      }
+      if (isEntryState) {
+        current.stateId = record.stateId === "go" ? "go" : "entry";
+        current.stateLabel = record.stateLabel || "進場區";
       }
       if (!isEntryState && !current.firstBAt) current.firstBAt = seenTime;
       if (!isEntryState && (!current.latestBAt || seenValue >= intradayTimeToValue(current.latestBAt))) {
@@ -5464,13 +5499,13 @@ function renderIntradayRadar(evaluated) {
       const signals = stock.intradaySignals || [];
       const row = { ...stock, intradaySignals: signals };
       const trackedEvent = strategy2IntradayEventByCode.get(String(row.code || ""));
-      const intradayState = trackedEvent?.firstAAt || trackedEvent?.latestAAt
-        ? { id: "go", label: "進場區", cls: "go" }
-        : getIntradayState(row);
+      const intradayState = isBackendStrategy2Entry(trackedEvent)
+        ? { id: "go", label: trackedEvent.stateLabel || "進場區", cls: "go" }
+        : { id: "watch", label: trackedEvent?.stateLabel || "待確認", cls: "watch" };
       const trackedTime = intradayState.id === "go"
         ? trackedEvent?.latestAAt || trackedEvent?.firstAAt || trackedEvent?.latestSeenAt || trackedEvent?.firstSeenAt || ""
         : trackedEvent?.latestBAt || trackedEvent?.latestSeenAt || trackedEvent?.firstBAt || trackedEvent?.firstAAt || "";
-      const mergedSignals = signals.length ? signals : (trackedEvent ? [strategy2SignalFromTrackedEvent(trackedEvent)] : []);
+      const mergedSignals = strategy2DisplaySignals(signals, trackedEvent);
       if (!intradayFirstSeenAt.has(row.code)) {
         intradayFirstSeenAt.set(row.code, now);
       }
