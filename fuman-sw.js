@@ -1,22 +1,22 @@
-const CACHE_VERSION = "fuman-terminal-sw-20260602-link-state-before-member";
+const CACHE_VERSION = "fuman-terminal-sw-20260602-mobile-header-card-match";
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 const DATA_CACHE = `${CACHE_VERSION}-data`;
 
 const STATIC_ASSETS = [
-  "/styles.css?v=mobile-link-state-before-member-20260602",
-  "/terminal-core.js?v=mobile-link-state-before-member-20260602",
-  "/terminal-modules.js?v=mobile-link-state-before-member-20260602",
-  "/terminal-sector-map.js?v=mobile-link-state-before-member-20260602",
-  "/terminal-strategy-config.js?v=mobile-link-state-before-member-20260602",
-  "/terminal-market-config.js?v=mobile-link-state-before-member-20260602",
-  "/terminal-ui-config.js?v=mobile-link-state-before-member-20260602",
-  "/terminal-runtime-config.js?v=mobile-link-state-before-member-20260602",
-  "/terminal-tuning-config.js?v=mobile-link-state-before-member-20260602",
-  "/terminal-worker.js?v=mobile-link-state-before-member-20260602",
-  "/terminal.js?v=mobile-link-state-before-member-20260602",
-  "/terminal-realtime-radar.css?v=mobile-link-state-before-member-20260602",
-  "/terminal-intraday-radar.css?v=mobile-link-state-before-member-20260602",
-  "/terminal-utility.css?v=mobile-link-state-before-member-20260602",
+  "/styles.css?v=mobile-header-card-match-20260602",
+  "/terminal-core.js?v=mobile-header-card-match-20260602",
+  "/terminal-modules.js?v=mobile-header-card-match-20260602",
+  "/terminal-sector-map.js?v=mobile-header-card-match-20260602",
+  "/terminal-strategy-config.js?v=mobile-header-card-match-20260602",
+  "/terminal-market-config.js?v=mobile-header-card-match-20260602",
+  "/terminal-ui-config.js?v=mobile-header-card-match-20260602",
+  "/terminal-runtime-config.js?v=mobile-header-card-match-20260602",
+  "/terminal-tuning-config.js?v=mobile-header-card-match-20260602",
+  "/terminal-worker.js?v=mobile-header-card-match-20260602",
+  "/terminal.js?v=mobile-header-card-match-20260602",
+  "/terminal-realtime-radar.css?v=mobile-header-card-match-20260602",
+  "/terminal-intraday-radar.css?v=mobile-header-card-match-20260602",
+  "/terminal-utility.css?v=mobile-header-card-match-20260602",
   "/assets/logo.webp",
   "/assets/login-bg-fuman-lite.webp",
   "/favicon.ico",

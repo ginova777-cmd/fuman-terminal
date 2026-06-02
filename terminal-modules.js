@@ -1,5 +1,5 @@
 (function () {
-  const VERSION = "mobile-link-state-before-member-20260602";
+  const VERSION = "mobile-header-card-match-20260602";
   const modules = {
     sectorMap: { loaded: false, src: "terminal-sector-map.js" },
     strategyConfig: { loaded: false, src: "terminal-strategy-config.js" },
