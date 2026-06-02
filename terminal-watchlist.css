@@ -399,4 +399,44 @@ body.fuman-light-theme #watchlist-view .ta-dashboard-tab {
     scroll-snap-align: start;
   }
 }
+
+@media (max-width: 760px), (orientation: landscape) and (max-height: 430px) and (max-width: 900px) {
+  #watchlist-view .watchlist-layout {
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr) !important;
+    gap: 12px !important;
+  }
+  #watchlist-view .watchlist-analysis-pane {
+    order: 1 !important;
+    width: 100% !important;
+    max-height: none !important;
+    overflow: visible !important;
+  }
+  #watchlist-view .watchlist-list-pane {
+    order: 2 !important;
+    width: 100% !important;
+    max-width: none !important;
+  }
+  #watchlist-view .watch-analysis-panel {
+    grid-auto-flow: row;
+  }
+  #watchlist-view .ta-period-panel {
+    order: 1 !important;
+  }
+  #watchlist-view .watch-action-row {
+    order: 2 !important;
+  }
+  #watchlist-view .watch-summary-grid {
+    order: 3 !important;
+  }
+  #watchlist-view .watch-card-carousel {
+    order: 4 !important;
+  }
+  #watchlist-view .watch-note-row {
+    order: 5 !important;
+  }
+  #watchlist-view .watch-ta-panel {
+    padding-top: 12px;
+  }
+}
   
