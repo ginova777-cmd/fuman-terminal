@@ -1,29 +1,34 @@
 {
   "ok": true,
-  "updatedAt": "2026-06-01T23:44:45.042Z",
+  "updatedAt": "2026-06-02T05:31:38.763Z",
   "files": [
     {
       "file": "market-summary.json",
       "ok": true,
-      "bytes": 147978,
+      "bytes": 152864,
       "count": 80,
-      "updatedAt": "2026-06-01T05:31:04.882Z",
+      "updatedAt": "2026-06-02T05:31:10.619Z",
       "issues": []
     },
     {
       "file": "strategy2-intraday-latest.json",
       "ok": true,
-      "bytes": 2244619,
-      "count": 1259,
-      "updatedAt": "2026-06-01T05:32:26.604Z",
-      "issues": []
+      "bytes": 2797707,
+      "count": 1429,
+      "updatedAt": "2026-06-02T05:30:58.276Z",
+      "issues": [
+        {
+          "level": "medium",
+          "message": "strategy2 realtime usable coverage low 363/1011 (0.3591)"
+        }
+      ]
     },
     {
       "file": "realtime-radar-latest.json",
       "ok": true,
-      "bytes": 80612,
+      "bytes": 113345,
       "count": 80,
-      "updatedAt": "2026-06-01T05:30:54.816Z",
+      "updatedAt": "2026-06-02T05:29:35.423Z",
       "issues": []
     },
     {
@@ -65,7 +70,7 @@
       "ok": true,
       "bytes": 815941,
       "count": 1908,
-      "updatedAt": "2026-06-01T23:44:00.059Z",
+      "updatedAt": "2026-06-01T23:45:37.402Z",
       "issues": []
     },
     {
@@ -79,6 +84,11 @@
   ],
   "highIssues": [],
   "mediumIssues": [
+    {
+      "file": "strategy2-intraday-latest.json",
+      "level": "medium",
+      "message": "strategy2 realtime usable coverage low 363/1011 (0.3591)"
+    },
     {
       "file": "strategy4-latest.json",
       "level": "medium",

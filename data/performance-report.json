@@ -1,14 +1,14 @@
 {
   "ok": true,
-  "updatedAt": "2026-06-01T23:44:45.891Z",
+  "updatedAt": "2026-06-02T05:31:38.938Z",
   "generatedBy": "generate-performance-report",
   "assets": [
     {
       "file": "market-summary.json",
       "ok": true,
-      "bytes": 147978,
+      "bytes": 152864,
       "count": 0,
-      "updatedAt": "2026-06-01T05:31:04.882Z"
+      "updatedAt": "2026-06-02T05:31:10.619Z"
     },
     {
       "file": "health-summary.json",
@@ -43,14 +43,14 @@
       "ok": true,
       "bytes": 362423,
       "count": 1908,
-      "updatedAt": "2026-06-01T23:44:00.059Z"
+      "updatedAt": "2026-06-01T23:45:37.402Z"
     },
     {
       "file": "institution-joint-top.json",
       "ok": true,
       "bytes": 30321,
       "count": 160,
-      "updatedAt": "2026-06-01T23:44:00.059Z"
+      "updatedAt": "2026-06-01T23:45:37.402Z"
     },
     {
       "file": "warrant-flow-slim.json",
@@ -69,39 +69,39 @@
     {
       "file": "realtime-radar-latest.json",
       "ok": true,
-      "bytes": 80612,
+      "bytes": 113345,
       "count": 80,
-      "updatedAt": "2026-06-01T05:30:54.816Z"
+      "updatedAt": "2026-06-02T05:29:35.423Z"
     },
     {
       "file": "signal-quality-report.json",
       "ok": true,
       "bytes": 819,
       "count": 0,
-      "updatedAt": "2026-06-01T23:44:44.848Z"
+      "updatedAt": "2026-06-02T05:31:38.636Z"
     },
     {
       "file": "data-quality-report.json",
       "ok": true,
-      "bytes": 2012,
+      "bytes": 2311,
       "count": 0,
-      "updatedAt": "2026-06-01T23:44:45.042Z"
+      "updatedAt": "2026-06-02T05:31:38.763Z"
     },
     {
       "file": "data-consistency-report.json",
       "ok": true,
       "bytes": 316,
       "count": 0,
-      "updatedAt": "2026-06-01T23:44:45.233Z"
+      "updatedAt": "2026-06-02T05:31:38.827Z"
     },
     {
       "file": "strategy-weight-report.json",
       "ok": true,
       "bytes": 418,
       "count": 0,
-      "updatedAt": "2026-06-01T23:44:45.391Z"
+      "updatedAt": "2026-06-02T05:31:38.890Z"
     }
   ],
-  "totalBytes": 1598038,
+  "totalBytes": 1635956,
   "missing": []
 }
