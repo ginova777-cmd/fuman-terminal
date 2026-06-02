@@ -1068,8 +1068,16 @@ function isStrictStrategy2Ma35Record(record) {
     && record?.intradayVolumeBurst === true;
 }
 
+function isStrategy2RecordWithinBaseGate(record) {
+  if (isStrictStrategy2Ma35Record(record)) return true;
+  const pct = cleanNumber(record?.percent);
+  const volume = cleanNumber(record?.volume) || cleanNumber(record?.tradeVolume);
+  return pct >= 2 && volume >= 2000;
+}
+
 function normalizeStrategy2Records(records) {
-  return (records || []).map((record) => {
+  let dropped = 0;
+  const normalized = (records || []).map((record) => {
     if (record.stateId && record.stateLabel) {
       if ((record.stateId === "entry" || record.stateId === "go") && !isStrictStrategy2Ma35Record(record)) {
         return {
@@ -1085,7 +1093,15 @@ function normalizeStrategy2Records(records) {
       ...record,
       ...inferLegacyRecordState(record),
     };
+  }).filter((record) => {
+    const keep = isStrategy2RecordWithinBaseGate(record);
+    if (!keep) dropped += 1;
+    return keep;
   });
+  if (dropped) {
+    console.warn(`strategy2 base gate dropped stale records=${dropped}`);
+  }
+  return normalized;
 }
 
 async function fetchJson(url, timeout = 30000) {
@@ -1844,6 +1860,7 @@ async function main() {
     cache.records = [];
     cache.previous = {};
   }
+  cache.records = normalizeStrategy2Records(cache.records || []);
 
   const rawStocks = await fetchStocks();
   const realtimeSourceStocks = rawStocks.filter(isIntradayTradable);
@@ -1870,7 +1887,23 @@ async function main() {
   if (realtimeSourceStocks.length && coverage < MIN_REALTIME_COVERAGE) {
     cache.updatedAt = new Date().toISOString();
     cache.realtime = { ...realtimeSummaryBase, skippedPartialCoverage: true };
+    const strategy2Events = mergeStrategy2Events(cache.records || [], key);
+    const strategy2Report = enforceStrategy2EntryGuards({
+      source: "strategy2-09-to-1330-patrol",
+      date: key,
+      updatedAt: cache.updatedAt,
+      realtime: cache.realtime,
+      records: cache.records,
+      events: strategy2Events,
+      entryCount: strategy2Events.filter((event) => event.stateId === "entry" || event.stateId === "go").length,
+      aCount: strategy2Events.filter((event) => event.stateId === "entry" || event.stateId === "go").length,
+      bOnlyCount: 0,
+    });
+    cache.records = strategy2Report.records;
     writeJson(SIGNAL_FILE, cache);
+    writeJson(STRATEGY2_REPORT_FILE, strategy2Report);
+    publishStaticDataJson("strategy2-intraday-latest.json", strategy2Report);
+    await upsertStrategy2LatestToSupabase(strategy2Report);
     console.log(`intraday signals ${key}: skipped partial realtime coverage ${realtimeStocks.length}/${realtimeSourceStocks.length} (received ${realtimeStats.received}, failed ${realtimeStats.failed}, missed ${realtimeStats.missedCount || 0})`);
     return;
   }
