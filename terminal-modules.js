@@ -1,5 +1,5 @@
 (function () {
-  const VERSION = "realtime-radar-date-20260601-02";
+  const VERSION = "mobile-light-warrant-speed-20260602";
   const modules = {
     sectorMap: { loaded: false, src: "terminal-sector-map.js" },
     strategyConfig: { loaded: false, src: "terminal-strategy-config.js" },

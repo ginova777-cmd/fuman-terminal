@@ -1,22 +1,22 @@
-const CACHE_VERSION = "fuman-terminal-sw-20260601-16";
+const CACHE_VERSION = "fuman-terminal-sw-20260602-mobile-nav";
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 const DATA_CACHE = `${CACHE_VERSION}-data`;
 
 const STATIC_ASSETS = [
-  "/styles.css?v=strategy5-confluence-tab-20260601-08",
-  "/terminal-core.js?v=strategy5-confluence-tab-20260601-08",
-  "/terminal-modules.js?v=strategy5-confluence-tab-20260601-08",
-  "/terminal-sector-map.js?v=strategy5-confluence-tab-20260601-08",
-  "/terminal-strategy-config.js?v=strategy5-confluence-tab-20260601-08",
-  "/terminal-market-config.js?v=strategy5-confluence-tab-20260601-08",
-  "/terminal-ui-config.js?v=strategy5-confluence-tab-20260601-08",
-  "/terminal-runtime-config.js?v=strategy5-confluence-tab-20260601-08",
-  "/terminal-tuning-config.js?v=strategy5-confluence-tab-20260601-08",
-  "/terminal-worker.js?v=strategy5-confluence-tab-20260601-08",
-  "/terminal.js?v=strategy5-confluence-tab-20260601-08",
-  "/terminal-realtime-radar.css?v=strategy5-confluence-tab-20260601-08",
-  "/terminal-intraday-radar.css?v=strategy5-confluence-tab-20260601-08",
-  "/terminal-utility.css?v=strategy5-confluence-tab-20260601-08",
+  "/styles.css?v=mobile-light-warrant-speed-20260602",
+  "/terminal-core.js?v=mobile-light-warrant-speed-20260602",
+  "/terminal-modules.js?v=mobile-light-warrant-speed-20260602",
+  "/terminal-sector-map.js?v=mobile-light-warrant-speed-20260602",
+  "/terminal-strategy-config.js?v=mobile-light-warrant-speed-20260602",
+  "/terminal-market-config.js?v=mobile-light-warrant-speed-20260602",
+  "/terminal-ui-config.js?v=mobile-light-warrant-speed-20260602",
+  "/terminal-runtime-config.js?v=mobile-light-warrant-speed-20260602",
+  "/terminal-tuning-config.js?v=mobile-light-warrant-speed-20260602",
+  "/terminal-worker.js?v=mobile-light-warrant-speed-20260602",
+  "/terminal.js?v=mobile-light-warrant-speed-20260602",
+  "/terminal-realtime-radar.css?v=mobile-light-warrant-speed-20260602",
+  "/terminal-intraday-radar.css?v=mobile-light-warrant-speed-20260602",
+  "/terminal-utility.css?v=mobile-light-warrant-speed-20260602",
   "/assets/logo.webp",
   "/assets/login-bg-fuman-lite.webp",
   "/favicon.ico",

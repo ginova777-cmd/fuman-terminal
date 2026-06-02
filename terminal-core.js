@@ -1,5 +1,5 @@
 (function () {
-  const version = "strategy5-confluence-tab-20260601-08";
+  const version = "mobile-light-warrant-speed-20260602";
   window.FUMAN_TERMINAL_BOOT = {
     version,
     startedAt: Date.now(),

@@ -73,7 +73,7 @@ function getFumanWorker() {
   if (!("Worker" in window)) return null;
   if (fumanWorker) return fumanWorker;
   try {
-    fumanWorker = new Worker("terminal-worker.js?v=strategy5-confluence-tab-20260601-08");
+    fumanWorker = new Worker("terminal-worker.js?v=mobile-light-warrant-speed-20260602");
     fumanWorker.addEventListener("message", (event) => {
       const { id, ok, rows, result, error } = event.data || {};
       const pending = fumanWorkerPending.get(id);
@@ -205,11 +205,15 @@ function warmCommonTabs() {
     if (key === "chip") {
       markLazyModuleForView("chip-trade");
       ensureChipFlowModule().catch(() => undefined);
-      preloadChipTradeFullData("login-warmup");
+      if (!isMobileViewport()) preloadChipTradeFullData("login-warmup");
     } else if (key === "warrant") {
       markLazyModuleForView("warrant-flow");
       ensureWarrantFlowModule().catch(() => undefined);
-      preloadWarrantFlowFullData("login-warmup");
+      if (isMobileViewport() && endpoints.warrantFlowMobileTop) {
+        fetchVersionedJson(endpoints.warrantFlowMobileTop, 3500, "mobile-top", false).catch(() => undefined);
+      } else {
+        preloadWarrantFlowFullData("login-warmup");
+      }
     } else if (key === "strategy2") {
       markLazyModuleForView("strategy");
       fetchVersionedJsonFallback([
@@ -301,7 +305,7 @@ function loadFumanStyle(href, id) {
   const link = document.createElement("link");
   link.id = id;
   link.rel = "stylesheet";
-  link.href = href.includes("?") ? href : `${href}?v=${window.FUMAN_TERMINAL_BOOT?.version || "strategy5-confluence-tab-20260601-08"}`;
+  link.href = href.includes("?") ? href : `${href}?v=${window.FUMAN_TERMINAL_BOOT?.version || "mobile-light-warrant-speed-20260602"}`;
   document.head.appendChild(link);
 }
 
@@ -327,7 +331,7 @@ function makeFumanModuleScope(bindings) {
 function loadFumanFeatureModule(name, src, globalName) {
   if (window[globalName]) return Promise.resolve(window[globalName]);
   if (fumanFeatureModulePromises[name]) return fumanFeatureModulePromises[name];
-  const version = window.FUMAN_TERMINAL_BOOT?.version || "strategy5-confluence-tab-20260601-08";
+  const version = window.FUMAN_TERMINAL_BOOT?.version || "mobile-light-warrant-speed-20260602";
   fumanFeatureModulePromises[name] = new Promise((resolve, reject) => {
     const attr = "data-fuman-feature-" + name;
     const existing = document.querySelector("script[" + attr + "]");
@@ -6731,7 +6735,7 @@ function getWarrantFlowContext() {
       set warrantFlowSummary(value) { warrantFlowSummary = value; },
       viewPanels, endpoints, CACHE_FRESH_MS,
       cleanNumber, formatNumber, normalizeArray, fetchVersionedJson,
-      isViewActive, loadWarrantFlowLocalCache, loadWarrantFlowSummary,
+      isViewActive, isMobileViewport, loadWarrantFlowLocalCache, loadWarrantFlowSummary,
       loadStrategyStocks, saveWarrantFlowLocalCache, applyStaticTitleIcons,
       titleWithSchedule, escapeAttr, buildTerminalPagination,
     }),
@@ -8731,12 +8735,12 @@ function showView(viewName, activeLink) {
   if (viewName === "chip-trade") {
     markLazyModuleForView(viewName);
     deferUiWork(() => loadChipTradeData(false));
-    deferIdleWork(() => preloadChipTradeFullData("after-top"), 1200);
+    if (!isMobileViewport()) deferIdleWork(() => preloadChipTradeFullData("after-top"), 1200);
   }
   if (viewName === "warrant-flow") {
     markLazyModuleForView(viewName);
     deferUiWork(() => loadWarrantFlow(false));
-    deferIdleWork(() => preloadWarrantFlowFullData("after-top"), 1200);
+    if (!isMobileViewport()) deferIdleWork(() => preloadWarrantFlowFullData("after-top"), 1200);
   }
   if (viewName === "watchlist") {
     deferUiWork(renderWatchlist);
