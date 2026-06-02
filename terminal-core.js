@@ -1,5 +1,5 @@
 (function () {
-  const version = "mobile-light-warrant-speed-20260602";
+  const version = "mobile-auth-login-button-20260602";
   window.FUMAN_TERMINAL_BOOT = {
     version,
     startedAt: Date.now(),

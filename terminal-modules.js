@@ -1,5 +1,5 @@
 (function () {
-  const VERSION = "mobile-light-warrant-speed-20260602";
+  const VERSION = "mobile-auth-login-button-20260602";
   const modules = {
     sectorMap: { loaded: false, src: "terminal-sector-map.js" },
     strategyConfig: { loaded: false, src: "terminal-strategy-config.js" },

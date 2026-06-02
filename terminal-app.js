@@ -73,7 +73,7 @@ function getFumanWorker() {
   if (!("Worker" in window)) return null;
   if (fumanWorker) return fumanWorker;
   try {
-    fumanWorker = new Worker("terminal-worker.js?v=mobile-light-warrant-speed-20260602");
+    fumanWorker = new Worker("terminal-worker.js?v=mobile-auth-login-button-20260602");
     fumanWorker.addEventListener("message", (event) => {
       const { id, ok, rows, result, error } = event.data || {};
       const pending = fumanWorkerPending.get(id);
@@ -305,7 +305,7 @@ function loadFumanStyle(href, id) {
   const link = document.createElement("link");
   link.id = id;
   link.rel = "stylesheet";
-  link.href = href.includes("?") ? href : `${href}?v=${window.FUMAN_TERMINAL_BOOT?.version || "mobile-light-warrant-speed-20260602"}`;
+  link.href = href.includes("?") ? href : `${href}?v=${window.FUMAN_TERMINAL_BOOT?.version || "mobile-auth-login-button-20260602"}`;
   document.head.appendChild(link);
 }
 
@@ -331,7 +331,7 @@ function makeFumanModuleScope(bindings) {
 function loadFumanFeatureModule(name, src, globalName) {
   if (window[globalName]) return Promise.resolve(window[globalName]);
   if (fumanFeatureModulePromises[name]) return fumanFeatureModulePromises[name];
-  const version = window.FUMAN_TERMINAL_BOOT?.version || "mobile-light-warrant-speed-20260602";
+  const version = window.FUMAN_TERMINAL_BOOT?.version || "mobile-auth-login-button-20260602";
   fumanFeatureModulePromises[name] = new Promise((resolve, reject) => {
     const attr = "data-fuman-feature-" + name;
     const existing = document.querySelector("script[" + attr + "]");
@@ -683,6 +683,11 @@ function setTerminalAuthState(session, access = { allowed: false, status: "signe
     memberState.textContent = `會員狀態：${label}`;
     memberState.dataset.status = String(access.status || "signed_out").toLowerCase();
   }
+  if (authLogoutButton) {
+    authLogoutButton.textContent = signedIn ? "登出" : "登入";
+    authLogoutButton.setAttribute("aria-label", signedIn ? "登出" : "登入");
+    authLogoutButton.dataset.authAction = signedIn ? "logout" : "login";
+  }
   if (allowed) scheduleCommonTabWarmup();
   document.body.classList.remove("auth-cache-warm");
   writeFumanAuthCache(session, access);
@@ -758,6 +763,10 @@ async function initTerminalAuth() {
   });
 
   authLogoutButton?.addEventListener("click", async () => {
+    if (!authLogoutButton.dataset.authAction || authLogoutButton.dataset.authAction === "login") {
+      openAuthGate("login");
+      return;
+    }
     writeFumanAuthCache(null, null);
     await supabaseClient.auth.signOut();
     setTerminalAuthState(null);

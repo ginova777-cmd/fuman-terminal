@@ -1,22 +1,22 @@
-const CACHE_VERSION = "fuman-terminal-sw-20260602-mobile-nav";
+const CACHE_VERSION = "fuman-terminal-sw-20260602-auth-login-button";
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 const DATA_CACHE = `${CACHE_VERSION}-data`;
 
 const STATIC_ASSETS = [
-  "/styles.css?v=mobile-light-warrant-speed-20260602",
-  "/terminal-core.js?v=mobile-light-warrant-speed-20260602",
-  "/terminal-modules.js?v=mobile-light-warrant-speed-20260602",
-  "/terminal-sector-map.js?v=mobile-light-warrant-speed-20260602",
-  "/terminal-strategy-config.js?v=mobile-light-warrant-speed-20260602",
-  "/terminal-market-config.js?v=mobile-light-warrant-speed-20260602",
-  "/terminal-ui-config.js?v=mobile-light-warrant-speed-20260602",
-  "/terminal-runtime-config.js?v=mobile-light-warrant-speed-20260602",
-  "/terminal-tuning-config.js?v=mobile-light-warrant-speed-20260602",
-  "/terminal-worker.js?v=mobile-light-warrant-speed-20260602",
-  "/terminal.js?v=mobile-light-warrant-speed-20260602",
-  "/terminal-realtime-radar.css?v=mobile-light-warrant-speed-20260602",
-  "/terminal-intraday-radar.css?v=mobile-light-warrant-speed-20260602",
-  "/terminal-utility.css?v=mobile-light-warrant-speed-20260602",
+  "/styles.css?v=mobile-auth-login-button-20260602",
+  "/terminal-core.js?v=mobile-auth-login-button-20260602",
+  "/terminal-modules.js?v=mobile-auth-login-button-20260602",
+  "/terminal-sector-map.js?v=mobile-auth-login-button-20260602",
+  "/terminal-strategy-config.js?v=mobile-auth-login-button-20260602",
+  "/terminal-market-config.js?v=mobile-auth-login-button-20260602",
+  "/terminal-ui-config.js?v=mobile-auth-login-button-20260602",
+  "/terminal-runtime-config.js?v=mobile-auth-login-button-20260602",
+  "/terminal-tuning-config.js?v=mobile-auth-login-button-20260602",
+  "/terminal-worker.js?v=mobile-auth-login-button-20260602",
+  "/terminal.js?v=mobile-auth-login-button-20260602",
+  "/terminal-realtime-radar.css?v=mobile-auth-login-button-20260602",
+  "/terminal-intraday-radar.css?v=mobile-auth-login-button-20260602",
+  "/terminal-utility.css?v=mobile-auth-login-button-20260602",
   "/assets/logo.webp",
   "/assets/login-bg-fuman-lite.webp",
   "/favicon.ico",
