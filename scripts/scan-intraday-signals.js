@@ -31,7 +31,12 @@ const REALTIME_BATCH_CONCURRENCY = Math.max(1, Number(process.env.STRATEGY2_REAL
 const REALTIME_FALLBACK_CANDIDATE_LIMIT = Math.max(0, Number(process.env.STRATEGY2_REALTIME_FALLBACK_CANDIDATE_LIMIT || 180));
 const REALTIME_YAHOO_FALLBACK_CONCURRENCY = Math.max(1, Number(process.env.STRATEGY2_REALTIME_YAHOO_FALLBACK_CONCURRENCY || 6));
 const ENABLE_FINMIND_REALTIME = process.env.STRATEGY2_ENABLE_FINMIND_REALTIME === "1";
+const ENABLE_FINMIND_RESCUE = process.env.STRATEGY2_ENABLE_FINMIND_RESCUE !== "0";
+const REALTIME_RESCUE_COVERAGE = Number(process.env.STRATEGY2_REALTIME_RESCUE_COVERAGE || 0.7);
+const REALTIME_RESCUE_LIMIT = Math.max(0, Number(process.env.STRATEGY2_REALTIME_RESCUE_LIMIT || 60));
+const REALTIME_RESCUE_COOLDOWN_MS = Math.max(0, Number(process.env.STRATEGY2_REALTIME_RESCUE_COOLDOWN_MS || 30 * 1000));
 const MA35_PROVIDER_FAILURE_LIMIT = Math.max(1, Number(process.env.STRATEGY2_MA35_PROVIDER_FAILURE_LIMIT || 8));
+let lastRealtimeCoverageRescueAt = 0;
 
 function readSecretText(file) {
   try { return fs.readFileSync(file, "utf8").trim(); } catch { return ""; }
@@ -583,7 +588,9 @@ function secondsSinceIso(value) {
 
 function hasUsableQuote(stock, scanTimestamp) {
   if (stock?.recoveredFromQuoteCache) {
-    return cleanNumber(stock.close) > 0 && secondsSinceIso(stock.quoteSeenAt) <= QUOTE_CACHE_MAX_AGE_SECONDS;
+    return cleanNumber(stock.close) > 0
+      && secondsSinceIso(stock.quoteSeenAt) <= QUOTE_CACHE_MAX_AGE_SECONDS
+      && hasFreshQuote(stock, scanTimestamp);
   }
   return hasFreshQuote(stock, scanTimestamp);
 }
@@ -1149,7 +1156,7 @@ async function fetchStocks() {
   }).filter((stock) => stock.code && stock.name && stock.close);
 }
 
-async function fetchRealtime(stocks) {
+async function fetchRealtime(stocks, scanTimestamp = timestampKey()) {
   const quotes = new Map();
   const recoveredCodes = new Set();
   const failedBatches = [];
@@ -1169,8 +1176,9 @@ async function fetchRealtime(stocks) {
   let fugleRateLimited = false;
   const fallbackStats = {
     fugle: { configured: Boolean(FUGLE_API_KEY), requested: 0, recovered: 0, empty: 0, failed: 0, skippedNoKey: 0, rateLimited: false },
-    finmind: { configured: Boolean(FINMIND_API_TOKEN), enabled: ENABLE_FINMIND_REALTIME, requested: 0, recovered: 0, failed: 0 },
+    finmind: { configured: Boolean(FINMIND_API_TOKEN), enabled: ENABLE_FINMIND_REALTIME, rescueEnabled: ENABLE_FINMIND_RESCUE, requested: 0, recovered: 0, failed: 0 },
     yahoo: { requested: 0, recovered: 0, failed: 0 },
+    rescue: { threshold: REALTIME_RESCUE_COVERAGE, limit: REALTIME_RESCUE_LIMIT, cooldownMs: REALTIME_RESCUE_COOLDOWN_MS, requested: 0, recovered: 0 },
   };
 
   async function fetchRealtimeBatch(codes) {
@@ -1178,6 +1186,69 @@ async function fetchRealtime(stocks) {
     const payload = await fetchJson(`${BASE_URL}/api/realtime?codes=${encodeURIComponent(codes.join(","))}&t=${Date.now()}`, 12000);
     (payload.quotes || []).forEach((quote) => quotes.set(quote.code, quote));
     if (codes.length > 1 && (payload.quotes || []).length === 0) throw new Error("api/realtime returned no quotes");
+  }
+
+  function quoteDiagnostics() {
+    const usableCodes = new Set();
+    const staleCodes = new Set();
+    const noTimeCodes = new Set();
+    const noCloseCodes = new Set();
+    const missingCodes = new Set();
+    const sourceHealth = {};
+    function sourceKey(quote) {
+      return String(quote?.realtimeFallback || quote?.closeSource || quote?.quoteSource || "api/realtime");
+    }
+    function noteSource(quote, bucket) {
+      const key = sourceKey(quote);
+      sourceHealth[key] = sourceHealth[key] || { received: 0, usable: 0, stale: 0, noTime: 0, noClose: 0 };
+      if (bucket !== "missing") sourceHealth[key].received += 1;
+      sourceHealth[key][bucket] = (sourceHealth[key][bucket] || 0) + 1;
+    }
+    stocks.forEach((stock) => {
+      const code = String(stock.code || "");
+      if (!code) return;
+      const quote = quotes.get(code);
+      if (!quote) {
+        missingCodes.add(code);
+        return;
+      }
+      if (cleanNumber(quote.close) <= 0) {
+        noCloseCodes.add(code);
+        noteSource(quote, "noClose");
+        return;
+      }
+      const age = quoteAgeSeconds(scanTimestamp, quote.quoteTime || quote.time);
+      if (age == null) {
+        noTimeCodes.add(code);
+        noteSource(quote, "noTime");
+        return;
+      }
+      if (age > MAX_QUOTE_AGE_SECONDS) {
+        staleCodes.add(code);
+        noteSource(quote, "stale");
+        return;
+      }
+      usableCodes.add(code);
+      noteSource(quote, "usable");
+    });
+    const usableCoverage = stocks.length ? usableCodes.size / stocks.length : 1;
+    return {
+      usableCodes,
+      staleCodes,
+      noTimeCodes,
+      noCloseCodes,
+      missingCodes,
+      usableCount: usableCodes.size,
+      usableCoverage,
+      breakdown: {
+        usable: usableCodes.size,
+        stale: staleCodes.size,
+        noTime: noTimeCodes.size,
+        noClose: noCloseCodes.size,
+        missing: missingCodes.size,
+      },
+      sourceHealth,
+    };
   }
 
   async function fetchFugleRealtimeQuote(code) {
@@ -1216,8 +1287,9 @@ async function fetchRealtime(stocks) {
     };
   }
 
-  async function fetchFugleFallback(codes, parentLabel) {
-    const targetCodes = codes.filter((code) => fallbackCandidateCodes.has(String(code)));
+  async function fetchFugleFallback(codes, parentLabel, options = {}) {
+    const replaceExisting = options.replaceExisting === true;
+    const targetCodes = codes.filter((code) => fallbackCandidateCodes.has(String(code)) && (replaceExisting || !quotes.has(String(code))));
     fallbackStats.fugle.requested += targetCodes.length;
     if (!FUGLE_API_KEY) {
       fallbackStats.fugle.skippedNoKey += targetCodes.length;
@@ -1225,7 +1297,7 @@ async function fetchRealtime(stocks) {
     }
     for (const code of targetCodes) {
       if (fugleRateLimited) break;
-      if (quotes.has(code)) continue;
+      if (!replaceExisting && quotes.has(code)) continue;
       try {
         const quote = await fetchFugleRealtimeQuote(code);
         if (quote?.close) {
@@ -1248,8 +1320,9 @@ async function fetchRealtime(stocks) {
     }
   }
 
-  async function fetchYahooFallback(codes, parentLabel) {
-    const targetCodes = codes.filter((code) => fallbackCandidateCodes.has(String(code)) && !quotes.has(String(code)));
+  async function fetchYahooFallback(codes, parentLabel, options = {}) {
+    const replaceExisting = options.replaceExisting === true;
+    const targetCodes = codes.filter((code) => fallbackCandidateCodes.has(String(code)) && (replaceExisting || !quotes.has(String(code))));
     fallbackStats.yahoo.requested += targetCodes.length;
     let yahooCursor = 0;
     async function fetchYahooCode(code) {
@@ -1301,16 +1374,18 @@ async function fetchRealtime(stocks) {
     async function yahooWorker() {
       while (yahooCursor < targetCodes.length) {
         const code = targetCodes[yahooCursor++];
-        if (!quotes.has(String(code))) await fetchYahooCode(code);
+        if (replaceExisting || !quotes.has(String(code))) await fetchYahooCode(code);
       }
     }
     await Promise.all(Array.from({ length: Math.min(REALTIME_YAHOO_FALLBACK_CONCURRENCY, targetCodes.length) }, () => yahooWorker()));
   }
 
-  async function fetchFinMindFallback(codes, parentLabel) {
-    if (!ENABLE_FINMIND_REALTIME || !FINMIND_API_TOKEN) return;
+  async function fetchFinMindFallback(codes, parentLabel, options = {}) {
+    const replaceExisting = options.replaceExisting === true;
+    const enabled = ENABLE_FINMIND_REALTIME || (options.rescue === true && ENABLE_FINMIND_RESCUE);
+    if (!enabled || !FINMIND_API_TOKEN) return;
     for (let i = 0; i < codes.length; i += 20) {
-      const chunk = codes.slice(i, i + 20).filter((code) => !quotes.has(code));
+      const chunk = codes.slice(i, i + 20).filter((code) => replaceExisting || !quotes.has(code));
       if (!chunk.length) continue;
       fallbackStats.finmind.requested += chunk.length;
       try {
@@ -1325,9 +1400,12 @@ async function fetchRealtime(stocks) {
         });
         if (!response.ok) throw new Error(`finmind quote HTTP ${response.status}`);
         const payload = await response.json();
+        const scanDate = compactDateKey(scanTimestamp, "").slice(0, 10);
         for (const item of payload?.data || []) {
           const code = String(item.stock_id || "");
-          if (!/^\d{4}$/.test(code) || quotes.has(code)) continue;
+          if (!/^\d{4}$/.test(code) || (!replaceExisting && quotes.has(code))) continue;
+          const itemDate = compactDateKey(item.date || item.datetime || item.date_time, "");
+          if (scanDate && itemDate && itemDate !== scanDate) continue;
           const close = cleanNumber(item.close);
           const change = cleanNumber(item.change_price);
           const percent = cleanNumber(item.change_rate);
@@ -1346,7 +1424,7 @@ async function fetchRealtime(stocks) {
             prevClose,
             tradeVolume: cleanNumber(item.total_volume),
             market: "",
-            time: item.date || "",
+            time: item.time || item.last_updated || item.date_time || scanTimestamp,
             realtimeFallback: "finmind",
           });
           recoveredCodes.add(code);
@@ -1422,13 +1500,62 @@ async function fetchRealtime(stocks) {
     const stillFailed = await fetchSmallRetries(item.codes, label);
     await fetchSingleRetries(stillFailed, label);
   }
+  const diagnosticsBeforeRescue = quoteDiagnostics();
+  let diagnosticsAfterRescue = diagnosticsBeforeRescue;
+  if (
+    REALTIME_RESCUE_LIMIT > 0
+    && stocks.length
+    && diagnosticsBeforeRescue.usableCoverage < REALTIME_RESCUE_COVERAGE
+  ) {
+    const now = Date.now();
+    const cooldownRemainingMs = Math.max(0, lastRealtimeCoverageRescueAt + REALTIME_RESCUE_COOLDOWN_MS - now);
+    const unusableCodes = new Set([
+      ...diagnosticsBeforeRescue.staleCodes,
+      ...diagnosticsBeforeRescue.noTimeCodes,
+      ...diagnosticsBeforeRescue.noCloseCodes,
+      ...diagnosticsBeforeRescue.missingCodes,
+    ]);
+    const rescueCodes = [...fallbackCandidateCodes]
+      .filter((code) => unusableCodes.has(String(code)))
+      .slice(0, REALTIME_RESCUE_LIMIT);
+    fallbackStats.rescue.coverageBefore = Number(diagnosticsBeforeRescue.usableCoverage.toFixed(4));
+    fallbackStats.rescue.usableBefore = diagnosticsBeforeRescue.usableCount;
+    fallbackStats.rescue.requested = rescueCodes.length;
+    fallbackStats.rescue.skippedCooldown = cooldownRemainingMs > 0;
+    fallbackStats.rescue.cooldownRemainingMs = cooldownRemainingMs;
+    if (rescueCodes.length && cooldownRemainingMs <= 0) {
+      lastRealtimeCoverageRescueAt = now;
+      await fetchYahooFallback(rescueCodes, "low-usable-coverage", { replaceExisting: true, rescue: true });
+      diagnosticsAfterRescue = quoteDiagnostics();
+      const remainingUnusable = new Set([
+        ...diagnosticsAfterRescue.staleCodes,
+        ...diagnosticsAfterRescue.noTimeCodes,
+        ...diagnosticsAfterRescue.noCloseCodes,
+        ...diagnosticsAfterRescue.missingCodes,
+      ]);
+      const finmindRescueCodes = rescueCodes.filter((code) => remainingUnusable.has(String(code)));
+      await fetchFinMindFallback(finmindRescueCodes, "low-usable-coverage", { replaceExisting: true, rescue: true });
+      diagnosticsAfterRescue = quoteDiagnostics();
+      fallbackStats.rescue.finmindRequested = finmindRescueCodes.length;
+      fallbackStats.rescue.recovered = Math.max(0, diagnosticsAfterRescue.usableCount - diagnosticsBeforeRescue.usableCount);
+    }
+    fallbackStats.rescue.coverageAfter = Number(diagnosticsAfterRescue.usableCoverage.toFixed(4));
+    fallbackStats.rescue.usableAfter = diagnosticsAfterRescue.usableCount;
+  }
   stocks.forEach((stock) => {
     const code = String(stock.code || "");
     if (!quotes.has(code) && /^\d{4}$/.test(code) && !code.startsWith("00")) missedCodes.add(code);
   });
+  const finalDiagnostics = quoteDiagnostics();
   fetchRealtime.lastStats = {
     requested: stocks.length,
     received: quotes.size,
+    usableBeforeRescue: diagnosticsBeforeRescue.usableCount,
+    coverageBeforeRescue: Number(diagnosticsBeforeRescue.usableCoverage.toFixed(4)),
+    usableAfterRescue: finalDiagnostics.usableCount,
+    coverageAfterRescue: Number(finalDiagnostics.usableCoverage.toFixed(4)),
+    unusableBreakdown: finalDiagnostics.breakdown,
+    sourceHealth: finalDiagnostics.sourceHealth,
     failed: failed.length,
     failedBatches,
     retryBatches,
@@ -1439,14 +1566,19 @@ async function fetchRealtime(stocks) {
     fugleRateLimited,
     fallbackStats,
     finmindRealtimeEnabled: ENABLE_FINMIND_REALTIME,
+    finmindRescueEnabled: ENABLE_FINMIND_RESCUE,
     recoveredCodes: [...recoveredCodes],
     missedCodes: [...missedCodes],
+    staleCodes: [...finalDiagnostics.staleCodes].slice(0, 80),
+    noTimeCodes: [...finalDiagnostics.noTimeCodes].slice(0, 80),
+    noCloseCodes: [...finalDiagnostics.noCloseCodes].slice(0, 80),
     missedCount: missedCodes.size,
   };
   console.log(
     `realtime fallback stats: fugle configured=${fallbackStats.fugle.configured} requested=${fallbackStats.fugle.requested} recovered=${fallbackStats.fugle.recovered} empty=${fallbackStats.fugle.empty} failed=${fallbackStats.fugle.failed} noKey=${fallbackStats.fugle.skippedNoKey} rateLimited=${fallbackStats.fugle.rateLimited}; `
-    + `finmind enabled=${fallbackStats.finmind.enabled} configured=${fallbackStats.finmind.configured} requested=${fallbackStats.finmind.requested} recovered=${fallbackStats.finmind.recovered} failed=${fallbackStats.finmind.failed}; `
-    + `yahoo requested=${fallbackStats.yahoo.requested} recovered=${fallbackStats.yahoo.recovered} failed=${fallbackStats.yahoo.failed}`
+    + `finmind enabled=${fallbackStats.finmind.enabled} rescue=${fallbackStats.finmind.rescueEnabled} configured=${fallbackStats.finmind.configured} requested=${fallbackStats.finmind.requested} recovered=${fallbackStats.finmind.recovered} failed=${fallbackStats.finmind.failed}; `
+    + `yahoo requested=${fallbackStats.yahoo.requested} recovered=${fallbackStats.yahoo.recovered} failed=${fallbackStats.yahoo.failed}; `
+    + `rescue usable=${diagnosticsBeforeRescue.usableCount}/${stocks.length}->${finalDiagnostics.usableCount}/${stocks.length} coverage=${Number(diagnosticsBeforeRescue.usableCoverage.toFixed(4))}->${Number(finalDiagnostics.usableCoverage.toFixed(4))} requested=${fallbackStats.rescue.requested || 0} recovered=${fallbackStats.rescue.recovered || 0}`
   );
   return stocks.map((stock) => {
     const quote = quotes.get(stock.code);
@@ -1525,7 +1657,7 @@ function updateMinuteCloseCache(cache, stocks, scanTimestamp, key) {
   }
 }
 
-function updateRealtimeQuoteCache(cache, stocks, key) {
+function updateRealtimeQuoteCache(cache, stocks, key, scanTimestamp) {
   if (cache.quoteSnapshotsDate !== key || !cache.quoteSnapshots || typeof cache.quoteSnapshots !== "object") {
     cache.quoteSnapshotsDate = key;
     cache.quoteSnapshots = {};
@@ -1535,6 +1667,7 @@ function updateRealtimeQuoteCache(cache, stocks, key) {
     const code = String(stock.code || "");
     const close = cleanNumber(stock.close);
     if (!code || close <= 0 || stock.isRealtime !== true) continue;
+    if (!hasFreshQuote(stock, scanTimestamp)) continue;
     cache.quoteSnapshots[code] = {
       code,
       name: stock.name || code,
@@ -1558,12 +1691,17 @@ function updateRealtimeQuoteCache(cache, stocks, key) {
   }
 }
 
-function mergeRealtimeQuoteCache(cache, stocks, key) {
+function mergeRealtimeQuoteCache(cache, stocks, key, scanTimestamp) {
   if (cache.quoteSnapshotsDate !== key || !cache.quoteSnapshots || typeof cache.quoteSnapshots !== "object") return stocks;
   return stocks.map((stock) => {
     if (stock.isRealtime === true && cleanNumber(stock.close) > 0) return stock;
     const snapshot = cache.quoteSnapshots[String(stock.code || "")];
-    if (!snapshot || cleanNumber(snapshot.close) <= 0 || secondsSinceIso(snapshot.quoteSeenAt) > QUOTE_CACHE_MAX_AGE_SECONDS) return stock;
+    if (
+      !snapshot
+      || cleanNumber(snapshot.close) <= 0
+      || secondsSinceIso(snapshot.quoteSeenAt) > QUOTE_CACHE_MAX_AGE_SECONDS
+      || !hasFreshQuote(snapshot, scanTimestamp)
+    ) return stock;
     return {
       ...stock,
       ...snapshot,
@@ -1767,6 +1905,9 @@ async function fetchIntradaySma35WithFallback(code, scanTimestamp, cache) {
       noteMa35ProviderFailure("yahoo", error.message);
     }
   }
+  const local = fetchLocalIntradaySma35(cache, code, scanTimestamp);
+  attempts.push({ source: "local-1m", ok: Boolean(local) });
+  if (local) return { ...local, ma35Attempts: attempts };
   try {
     const twelve = await fetchTwelveDataIntradaySma35(code, scanTimestamp);
     attempts.push({ source: "twelve-1m", ok: Boolean(twelve), configured: Boolean(TWELVE_DATA_API_KEY), skipped: Boolean(twelveDataBlockedReason), error: twelveDataBlockedReason || undefined });
@@ -1774,9 +1915,7 @@ async function fetchIntradaySma35WithFallback(code, scanTimestamp, cache) {
   } catch (error) {
     attempts.push({ source: "twelve-1m", ok: false, configured: Boolean(TWELVE_DATA_API_KEY), error: error.message });
   }
-  const local = fetchLocalIntradaySma35(cache, code, scanTimestamp);
-  attempts.push({ source: "local-1m", ok: Boolean(local) });
-  return local ? { ...local, ma35Attempts: attempts } : { ma35Attempts: attempts };
+  return { ma35Attempts: attempts };
 }
 
 async function fetchYahooIntradaySma35(code, scanTimestamp) {
@@ -1864,11 +2003,11 @@ async function main() {
 
   const rawStocks = await fetchStocks();
   const realtimeSourceStocks = rawStocks.filter(isIntradayTradable);
-  const realtimePayload = await fetchRealtime(realtimeSourceStocks);
   const timestamp = timestampKey();
+  const realtimePayload = await fetchRealtime(realtimeSourceStocks, timestamp);
   const realtimeStats = fetchRealtime.lastStats || { requested: rawStocks.length, received: 0, failed: 0 };
-  updateRealtimeQuoteCache(cache, realtimePayload, key);
-  const realtimeWithCache = mergeRealtimeQuoteCache(cache, realtimePayload, key);
+  updateRealtimeQuoteCache(cache, realtimePayload, key, timestamp);
+  const realtimeWithCache = mergeRealtimeQuoteCache(cache, realtimePayload, key, timestamp);
   const realtimeStocks = realtimeWithCache
     .filter((stock) => stock.isRealtime === true)
     .filter((stock) => hasUsableQuote(stock, timestamp))

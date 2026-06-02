@@ -12,6 +12,9 @@ const FILES = [
   "institution-latest.json",
   "warrant-flow-latest.json",
 ];
+const TRUSTED_STRATEGY2_MA35_SOURCES = new Set(["fugle-1m", "yahoo-1m", "local-1m", "twelve-1m"]);
+const STRATEGY2_HEALTH_MIN_REALTIME_COVERAGE = Number(process.env.STRATEGY2_HEALTH_MIN_REALTIME_COVERAGE || 0.25);
+const STRATEGY2_HEALTH_WARN_REALTIME_COVERAGE = Number(process.env.STRATEGY2_HEALTH_WARN_REALTIME_COVERAGE || 0.5);
 
 function readJson(file) {
   if (!fs.existsSync(file)) return null;
@@ -32,8 +35,60 @@ function rowsOf(payload) {
   return [];
 }
 
-function strategy2Issues(rows) {
+function isStrictStrategy2Entry(row) {
+  return String(row?.signalId || row?.signal?.id || "") === "ma35_buy"
+    && row?.aboveMa35 === true
+    && cleanNumber(row?.ma35) > 0
+    && TRUSTED_STRATEGY2_MA35_SOURCES.has(String(row?.ma35Source || ""))
+    && row?.macdUp === true
+    && row?.kdUp === true
+    && row?.intradayVolumeBurst === true;
+}
+
+function strategy2Issues(rows, payload) {
   const issues = [];
+  const realtime = payload?.realtime || {};
+  const requested = cleanNumber(realtime.requested);
+  const usable = cleanNumber(realtime.usable);
+  const coverage = cleanNumber(realtime.coverage);
+  if (requested >= 100 && coverage > 0 && coverage < STRATEGY2_HEALTH_MIN_REALTIME_COVERAGE) {
+    issues.push({
+      level: "high",
+      message: `strategy2 realtime usable coverage critically low ${usable}/${requested} (${coverage.toFixed(4)})`,
+    });
+  } else if (requested >= 100 && coverage > 0 && coverage < STRATEGY2_HEALTH_WARN_REALTIME_COVERAGE) {
+    issues.push({
+      level: "medium",
+      message: `strategy2 realtime usable coverage low ${usable}/${requested} (${coverage.toFixed(4)})`,
+    });
+  }
+  if (realtime.skippedPartialCoverage) {
+    issues.push({
+      level: "high",
+      message: "strategy2 scan skipped because realtime coverage was below hard minimum",
+    });
+  }
+  const invalidEntryRows = rows.filter((row) =>
+    (row?.stateId === "entry" || row?.stateId === "go") && !isStrictStrategy2Entry(row)
+  );
+  if (invalidEntryRows.length) {
+    issues.push({
+      level: "high",
+      message: `strategy2 invalid entry rows ${invalidEntryRows.length}`,
+      samples: invalidEntryRows.slice(0, 8).map((row) => ({
+        code: String(row.code || ""),
+        name: row.name || "",
+        timestamp: row.timestamp || row.entryAt || "",
+        signalId: row.signalId || "",
+        ma35: cleanNumber(row.ma35),
+        ma35Source: row.ma35Source || "",
+        aboveMa35: row.aboveMa35 === true,
+        macdUp: row.macdUp === true,
+        kdUp: row.kdUp === true,
+        intradayVolumeBurst: row.intradayVolumeBurst === true,
+      })),
+    });
+  }
   const highPctLowVolume = rows.filter((row) =>
     /^\d{4}$/.test(String(row.code || ""))
     && cleanNumber(row.percent ?? row.pct) >= 8
@@ -111,7 +166,7 @@ function inspect(file) {
   if (rows.length && zeroClose / rows.length > 0.15) issues.push({ level: "medium", message: `zero close ratio high ${zeroClose}/${rows.length}` });
   if (extremePct) issues.push({ level: "medium", message: `extreme percent rows ${extremePct}` });
   if (missingCode) issues.push({ level: "high", message: `missing code rows ${missingCode}` });
-  if (file === "strategy2-intraday-latest.json") issues.push(...strategy2Issues(rows));
+  if (file === "strategy2-intraday-latest.json") issues.push(...strategy2Issues(rows, payload));
   return {
     file,
     ok: !issues.some((item) => item.level === "high"),
