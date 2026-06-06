@@ -263,6 +263,17 @@ function Copy-CodeRepoCacheFile($file, $source, $label) {
 }
 
 function Update-SlimCacheFiles {
+  $stocksScript = Join-Path $codeRepo "scripts\generate-stocks-slim.js"
+  if ((Test-Path -LiteralPath $nodeExe) -and (Test-Path -LiteralPath $stocksScript)) {
+    Write-Log "=== Generate full stocks slim file $(Get-Date) ==="
+    $stocksOutput = & $nodeExe $stocksScript 2>&1
+    foreach ($line in $stocksOutput) {
+      if (-not [string]::IsNullOrWhiteSpace([string]$line)) { Write-Log $line }
+    }
+    if ($LASTEXITCODE -ne 0) {
+      Write-Log "Full stocks slim generation exited with code $LASTEXITCODE; continuing with existing stocks-slim if available"
+    }
+  }
   $scriptPath = Join-Path $codeRepo "scripts\generate-slim-cache.js"
   if (-not (Test-Path -LiteralPath $nodeExe) -or -not (Test-Path -LiteralPath $scriptPath)) {
     Write-Log "Slim cache generation skipped: node or script missing"

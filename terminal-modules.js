@@ -1,5 +1,5 @@
 (function () {
-  const VERSION = "mobile-runtime-pinned-tools-20260602";
+  const VERSION = "deep-speed-20260606";
   const modules = {
     sectorMap: { loaded: false, src: "terminal-sector-map.js" },
     strategyConfig: { loaded: false, src: "terminal-strategy-config.js" },
@@ -38,3 +38,4 @@
     },
   };
 })();
+

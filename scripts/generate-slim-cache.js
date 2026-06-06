@@ -474,6 +474,10 @@ function mobileHomeSummary() {
 }
 
 function slimStocks() {
+  const existing = readOptional("data/stocks-slim.json", null);
+  if (cleanNumber(existing?.count) >= 500 && normalizeArray(existing?.stocks).length >= 500) {
+    return existing;
+  }
   const market = readOptional("data/market-summary.json", {});
   const rows = normalizeArray(market?.stocks).map((stock) => {
     const close = cleanNumber(stock.close || stock.ClosingPrice);
@@ -726,6 +730,5 @@ if (wrote) {
   console.log(`[slim] wrote data/terminal-home-bundle.json stocks=${homeBundle.stocks.count || 0}`);
 }
 if (!wrote) process.exitCode = 1;
-
 
 

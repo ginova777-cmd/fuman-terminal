@@ -73,7 +73,7 @@ function getFumanWorker() {
   if (!("Worker" in window)) return null;
   if (fumanWorker) return fumanWorker;
   try {
-    fumanWorker = new Worker("terminal-worker.js?v=mobile-runtime-pinned-tools-20260602");
+    fumanWorker = new Worker("terminal-worker.js?v=deep-speed-20260606");
     fumanWorker.addEventListener("message", (event) => {
       const { id, ok, rows, result, error } = event.data || {};
       const pending = fumanWorkerPending.get(id);
@@ -305,7 +305,7 @@ function loadFumanStyle(href, id) {
   const link = document.createElement("link");
   link.id = id;
   link.rel = "stylesheet";
-  link.href = href.includes("?") ? href : `${href}?v=${window.FUMAN_TERMINAL_BOOT?.version || "mobile-runtime-pinned-tools-20260602"}`;
+  link.href = href.includes("?") ? href : `${href}?v=${window.FUMAN_TERMINAL_BOOT?.version || "deep-speed-20260606"}`;
   document.head.appendChild(link);
 }
 
@@ -331,7 +331,7 @@ function makeFumanModuleScope(bindings) {
 function loadFumanFeatureModule(name, src, globalName) {
   if (window[globalName]) return Promise.resolve(window[globalName]);
   if (fumanFeatureModulePromises[name]) return fumanFeatureModulePromises[name];
-  const version = window.FUMAN_TERMINAL_BOOT?.version || "mobile-runtime-pinned-tools-20260602";
+  const version = window.FUMAN_TERMINAL_BOOT?.version || "deep-speed-20260606";
   fumanFeatureModulePromises[name] = new Promise((resolve, reject) => {
     const attr = "data-fuman-feature-" + name;
     const existing = document.querySelector("script[" + attr + "]");
@@ -2764,6 +2764,8 @@ let strategy4ScannedCodes = new Set();
 let strategy4ScanTotal = 0;
 let strategy4ScanStamp = "";
 let strategy4CacheLoading = false;
+let strategy4ZoneLoading = {};
+let strategy4LoadedZones = new Set();
 let strategy4SummaryLoading = false;
 let strategy4SummaryLoadedAt = 0;
 let strategy4Summary = null;
@@ -3418,6 +3420,7 @@ function commitStrategy4Pending() {
 function mergeStrategy4Cache(payload) {
   strategy4ScanMatches = {};
   strategy4ScannedCodes = new Set();
+  strategy4LoadedZones = new Set();
   strategy4ScanStamp = normalizeMarketAiDateKey(payload?.scanStamp || payload?.stamp || payload?.date || payload?.usedDate || payload?.tradeDate);
   const scannedCodes = normalizeArray(payload?.scannedCodes);
   scannedCodes.forEach((code) => {
@@ -3425,9 +3428,25 @@ function mergeStrategy4Cache(payload) {
   });
   if (payload?.total) strategy4ScanTotal = cleanNumber(payload.total);
   updateStrategy4Scan({ matches: normalizeArray(payload?.matches), scannedCodes: [] });
+  const zone = String(payload?.zone || "").toUpperCase();
+  if (/^[ABC]$/.test(zone)) strategy4LoadedZones.add(zone);
+  else if (payload?.complete !== false && !payload?.partial) ["A", "B", "C"].forEach((item) => strategy4LoadedZones.add(item));
   const updatedAt = Date.parse(payload?.updatedAt || "");
   strategy4ScanLastAt = Number.isFinite(updatedAt) ? updatedAt : Date.now();
   saveStrategy4LocalCache();
+}
+
+function mergeStrategy4ZoneCache(payload, zone) {
+  const normalizedZone = String(zone || payload?.zone || "").toUpperCase();
+  if (!/^[ABC]$/.test(normalizedZone)) return false;
+  strategy4ScanStamp = normalizeMarketAiDateKey(payload?.scanStamp || payload?.stamp || payload?.date || payload?.usedDate || payload?.tradeDate) || strategy4ScanStamp;
+  if (payload?.total) strategy4ScanTotal = cleanNumber(payload.total);
+  updateStrategy4Scan({ matches: normalizeArray(payload?.matches), scannedCodes: normalizeArray(payload?.scannedCodes) }, { retainUnmatched: true });
+  const updatedAt = Date.parse(payload?.updatedAt || "");
+  strategy4ScanLastAt = Number.isFinite(updatedAt) ? updatedAt : Date.now();
+  strategy4LoadedZones.add(normalizedZone);
+  saveStrategy4LocalCache();
+  return true;
 }
 
 function saveStrategy4LocalCache() {
@@ -9407,6 +9426,34 @@ async function loadStrategy4Cache(force = false) {
   }
 }
 
+async function loadStrategy4Zone(zone, force = false) {
+  const normalizedZone = String(zone || "").toUpperCase();
+  if (!/^[ABC]$/.test(normalizedZone)) return false;
+  if (!force && strategy4LoadedZones.has(normalizedZone)) return true;
+  if (strategy4ZoneLoading[normalizedZone]) return strategy4ZoneLoading[normalizedZone];
+  const endpointByZone = {
+    A: endpoints.strategy4ZoneA,
+    B: endpoints.strategy4ZoneB,
+    C: endpoints.strategy4ZoneC,
+  };
+  const endpoint = endpointByZone[normalizedZone];
+  if (!endpoint) return false;
+  strategy4ZoneLoading[normalizedZone] = (async () => {
+    try {
+      const payload = await fetchVersionedJson(endpoint, 8000, strategy4Summary?.updatedAt || strategy4SummaryLoadedAt || "", force);
+      if (!payload?.ok || !Array.isArray(payload.matches)) return false;
+      const merged = mergeStrategy4ZoneCache(payload, normalizedZone);
+      if (merged) renderStrategyScanner();
+      return merged;
+    } catch (error) {
+      return false;
+    } finally {
+      delete strategy4ZoneLoading[normalizedZone];
+    }
+  })();
+  return strategy4ZoneLoading[normalizedZone];
+}
+
 async function refreshStrategyHistoryScan(force = false) {
   await loadStrategy4Cache(force);
 }
@@ -10590,6 +10637,9 @@ document.addEventListener("click", (event) => {
     swingZoneFilter = zoneButton.dataset.swingZoneFilter || "all";
     swingPage = 1;
     renderStrategyScanner();
+    if (/^[ABC]$/.test(swingZoneFilter)) {
+      loadStrategy4Zone(swingZoneFilter).catch(() => {});
+    }
     return;
   }
   const filterButton = event.target.closest("[data-swing-filter]");
@@ -10764,3 +10814,4 @@ if (isViewActive("watchlist")) renderWatchlist();
 setInterval(() => {
   if (!isDocumentHidden() && isTerminalUnlocked() && isViewActive("watchlist")) refreshSelectedWatchlistQuote();
 }, 10000);
+

@@ -1,5 +1,5 @@
 (function () {
-  const version = "mobile-runtime-pinned-tools-20260602";
+  const version = "deep-speed-20260606";
   window.FUMAN_TERMINAL_BOOT = {
     version,
     startedAt: Date.now(),
@@ -15,6 +15,8 @@
     navigator.serviceWorker.register(`/fuman-sw.js?v=${version}`)
       .then((registration) => {
         window.FUMAN_TERMINAL_BOOT.serviceWorker = registration.active ? "active" : "registered"; if (registration.waiting) registration.waiting.postMessage({ type: "SKIP_WAITING" }); if (registration.update) registration.update().catch(() => undefined);
+        const worker = registration.active || navigator.serviceWorker.controller;
+        if (worker) worker.postMessage({ type: "PREFETCH_DATA" });
       })
       .catch((error) => {
         window.FUMAN_TERMINAL_BOOT.serviceWorker = "disabled";
@@ -63,3 +65,4 @@
     setTimeout(loadMain, 0);
   }
 })();
+

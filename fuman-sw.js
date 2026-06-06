@@ -1,23 +1,23 @@
-const CACHE_VERSION = "fuman-terminal-sw-20260606-speed-bundle";
+const CACHE_VERSION = "fuman-terminal-sw-20260606-background-prefetch";
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 const DATA_CACHE = `${CACHE_VERSION}-data`;
 
 const STATIC_ASSETS = [
-  "/styles.css?v=mobile-runtime-pinned-tools-20260602",
-  "/terminal-core.js?v=mobile-runtime-pinned-tools-20260602",
-  "/terminal-modules.js?v=mobile-runtime-pinned-tools-20260602",
-  "/terminal-sector-map.js?v=mobile-runtime-pinned-tools-20260602",
-  "/terminal-strategy-config.js?v=mobile-runtime-pinned-tools-20260602",
-  "/terminal-market-config.js?v=mobile-runtime-pinned-tools-20260602",
-  "/terminal-ui-config.js?v=mobile-runtime-pinned-tools-20260602",
-  "/terminal-runtime-config.js?v=mobile-runtime-pinned-tools-20260602",
-  "/terminal-tuning-config.js?v=mobile-runtime-pinned-tools-20260602",
-  "/terminal-worker.js?v=mobile-runtime-pinned-tools-20260602",
-  "/terminal.js?v=mobile-runtime-pinned-tools-20260602",
-  "/terminal-realtime-radar.css?v=mobile-runtime-pinned-tools-20260602",
-  "/terminal-intraday-radar.css?v=mobile-runtime-pinned-tools-20260602",
-  "/terminal-utility.css?v=mobile-runtime-pinned-tools-20260602",
-  "/refresh.html?v=mobile-runtime-pinned-tools-20260602",
+  "/styles.css?v=deep-speed-20260606",
+  "/terminal-core.js?v=deep-speed-20260606",
+  "/terminal-modules.js?v=deep-speed-20260606",
+  "/terminal-sector-map.js?v=deep-speed-20260606",
+  "/terminal-strategy-config.js?v=deep-speed-20260606",
+  "/terminal-market-config.js?v=deep-speed-20260606",
+  "/terminal-ui-config.js?v=deep-speed-20260606",
+  "/terminal-runtime-config.js?v=deep-speed-20260606",
+  "/terminal-tuning-config.js?v=deep-speed-20260606",
+  "/terminal-worker.js?v=deep-speed-20260606",
+  "/terminal.js?v=deep-speed-20260606",
+  "/terminal-realtime-radar.css?v=deep-speed-20260606",
+  "/terminal-intraday-radar.css?v=deep-speed-20260606",
+  "/terminal-utility.css?v=deep-speed-20260606",
+  "/refresh.html?v=deep-speed-20260606",
   "/assets/logo.webp",
   "/assets/login-bg-fuman-lite.webp",
   "/favicon.ico",
@@ -36,6 +36,14 @@ const DATA_PATTERNS = [
   /\/data\/health-summary\.json/i,
 ];
 
+const PREFETCH_DATA_ASSETS = [
+  "/data/terminal-home-bundle.json",
+  "/data/strategy4-score-top.json",
+  "/data/strategy-match-index.json",
+  "/data/data-status-index.json",
+  "/data/stocks-slim.json",
+];
+
 const LIVE_PATTERNS = [
   /\/api\/realtime/i,
   /\/api\/scan-/i,
@@ -48,6 +56,7 @@ self.addEventListener("install", (event) => {
     caches.open(STATIC_CACHE)
       .then((cache) => cache.addAll(STATIC_ASSETS))
       .catch(() => undefined)
+      .then(() => prefetchDataAssets())
       .then(() => self.skipWaiting())
   );
 });
@@ -58,6 +67,7 @@ self.addEventListener("activate", (event) => {
       .then((keys) => Promise.all(keys
         .filter((key) => key.startsWith("fuman-terminal-sw-") && !key.startsWith(CACHE_VERSION))
         .map((key) => caches.delete(key))))
+      .then(() => prefetchDataAssets())
       .then(() => self.clients.claim())
   );
 });
@@ -87,6 +97,15 @@ async function networkFirst(request) {
   }
 }
 
+async function prefetchDataAssets() {
+  const cache = await caches.open(DATA_CACHE);
+  await Promise.allSettled(PREFETCH_DATA_ASSETS.map(async (pathname) => {
+    const request = new Request(pathname, { cache: "reload" });
+    const response = await fetch(request);
+    if (response.ok) await cache.put(request, response.clone());
+  }));
+}
+
 async function staleWhileRevalidate(request) {
   const cache = await caches.open(STATIC_CACHE);
   const cached = await cache.match(request, { ignoreSearch: false });
@@ -102,6 +121,7 @@ async function staleWhileRevalidate(request) {
 
 self.addEventListener("message", (event) => {
   if (event.data && event.data.type === "SKIP_WAITING") self.skipWaiting();
+  if (event.data && event.data.type === "PREFETCH_DATA") event.waitUntil(prefetchDataAssets());
 });
 self.addEventListener("fetch", (event) => {
   const request = event.request;
@@ -124,3 +144,4 @@ self.addEventListener("fetch", (event) => {
     event.respondWith(staleWhileRevalidate(request));
   }
 });
+
