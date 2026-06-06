@@ -58,7 +58,7 @@ function payloadDate(payload) {
 }
 
 function previousSnapshot(payload) {
-  if (payload?.status === "no_latest_intraday_snapshot" && payload?.previousSnapshot) {
+  if ((payload?.status === "no_latest_intraday_snapshot" || payload?.status === "retired_intraday_snapshot") && payload?.previousSnapshot) {
     return payload.previousSnapshot;
   }
   return {
@@ -74,13 +74,13 @@ function previousSnapshot(payload) {
 function refreshStrategy2(latestDate) {
   const current = readJson(dataPath("strategy2-intraday-latest.json"), readJson(path.join(ROOT, "data", "strategy2-intraday-latest.json"), {}));
   const currentDate = payloadDate(current);
-  if (currentDate >= latestDate && !(current.status === "no_latest_intraday_snapshot" && current.count === undefined)) return false;
+  if (currentDate >= latestDate && current.status === "retired_intraday_snapshot" && current.count === 0) return false;
   const updatedAt = new Date().toISOString();
   const payload = {
     ok: true,
     source: "strategy2-intraday-latest",
-    status: "no_latest_intraday_snapshot",
-    reason: "latest trading day has no completed strategy2 intraday patrol snapshot; stale signals retired",
+    status: "retired_intraday_snapshot",
+    reason: "latest trading day has no completed strategy2 intraday patrol snapshot; stale signals retired and empty snapshot archived",
     date: latestDate,
     updatedAt,
     realtime: {
@@ -90,7 +90,7 @@ function refreshStrategy2(latestDate) {
       usable: 0,
       coverage: 0,
       entrySourceHealthy: false,
-      skippedMissingLatestTradingDay: true,
+      staleSignalsRetired: true,
     },
     records: [],
     events: [],
@@ -108,13 +108,13 @@ function refreshStrategy2(latestDate) {
 function refreshRealtimeRadar(latestDate) {
   const current = readJson(dataPath("realtime-radar-latest.json"), readJson(path.join(ROOT, "data", "realtime-radar-latest.json"), {}));
   const currentDate = payloadDate(current);
-  if (currentDate >= latestDate && !(current.status === "no_latest_intraday_snapshot" && current.count === undefined)) return false;
+  if (currentDate >= latestDate && current.status === "retired_intraday_snapshot" && current.count === 0) return false;
   const updatedAt = new Date().toISOString();
   const payload = {
     ok: true,
     source: "mini-pc-realtime-radar",
-    status: "no_latest_intraday_snapshot",
-    reason: "latest trading day has no completed realtime radar snapshot; stale signals retired",
+    status: "retired_intraday_snapshot",
+    reason: "latest trading day has no completed realtime radar snapshot; stale signals retired and empty snapshot archived",
     date: latestDate,
     timestamp: "closed",
     updatedAt,

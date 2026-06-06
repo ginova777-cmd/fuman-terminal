@@ -1,18 +1,8 @@
 {
   "ok": true,
-  "updatedAt": "2026-06-06T13:40:56.927Z",
-  "risk": "medium",
-  "risks": [
-    {
-      "level": "medium",
-      "area": "intraday",
-      "message": "最新交易日盤中快照未完成 2 個",
-      "files": [
-        "strategy2-intraday-latest.json",
-        "realtime-radar-latest.json"
-      ]
-    }
-  ],
+  "updatedAt": "2026-06-06T13:44:10.277Z",
+  "risk": "low",
+  "risks": [],
   "schedule": {
     "ok": true,
     "total": 22,
@@ -76,20 +66,20 @@
       {
         "file": "strategy2-intraday-latest.json",
         "ok": true,
-        "status": "no_latest_intraday_snapshot",
+        "status": "retired_intraday_snapshot",
         "date": "2026-06-05",
         "count": 0,
-        "updatedAt": "2026-06-06T13:31:22.147Z",
-        "bytes": 764
+        "updatedAt": "2026-06-06T13:44:07.482Z",
+        "bytes": 779
       },
       {
         "file": "realtime-radar-latest.json",
         "ok": true,
-        "status": "no_latest_intraday_snapshot",
+        "status": "retired_intraday_snapshot",
         "date": "2026-06-05",
         "count": 0,
-        "updatedAt": "2026-06-06T13:31:22.153Z",
-        "bytes": 664
+        "updatedAt": "2026-06-06T13:44:07.486Z",
+        "bytes": 690
       },
       {
         "file": "performance-report.json",
