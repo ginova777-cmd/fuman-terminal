@@ -1,27 +1,8 @@
 {
-  "ok": false,
-  "updatedAt": "2026-06-06T12:36:22.825Z",
-  "risk": "high",
+  "ok": true,
+  "updatedAt": "2026-06-06T13:21:54.119Z",
+  "risk": "medium",
   "risks": [
-    {
-      "level": "high",
-      "area": "schedule",
-      "message": "排程異常 2 個",
-      "items": [
-        {
-          "taskName": "\\Fuman Daily Health Summary 1545",
-          "lastRunTime": "2026/6/6 下午 07:55:52",
-          "lastResult": "-2147020576",
-          "status": "Ready"
-        },
-        {
-          "taskName": "\\Fuman 即時雷達健檢 0910",
-          "lastRunTime": "2026/6/6 下午 08:25:52",
-          "lastResult": "-2147020576",
-          "status": "Ready"
-        }
-      ]
-    },
     {
       "level": "medium",
       "area": "freshness",
@@ -37,29 +18,16 @@
           "updatedAt": "2026-06-02T05:29:35.423Z",
           "bytes": 113345,
           "slaHours": 72,
-          "ageHours": 103.1131636111111
+          "ageHours": 103.87185638888889
         }
       ]
     }
   ],
   "schedule": {
-    "ok": false,
-    "total": 25,
-    "badCount": 2,
-    "badTasks": [
-      {
-        "taskName": "\\Fuman Daily Health Summary 1545",
-        "lastRunTime": "2026/6/6 下午 07:55:52",
-        "lastResult": "-2147020576",
-        "status": "Ready"
-      },
-      {
-        "taskName": "\\Fuman 即時雷達健檢 0910",
-        "lastRunTime": "2026/6/6 下午 08:25:52",
-        "lastResult": "-2147020576",
-        "status": "Ready"
-      }
-    ],
+    "ok": true,
+    "total": 22,
+    "badCount": 0,
+    "badTasks": [],
     "queryMethod": "schtasks",
     "note": "Uses schtasks fallback-friendly query to avoid Get-ScheduledTask low-permission false alarms."
   },
@@ -116,35 +84,35 @@
         "file": "performance-report.json",
         "ok": true,
         "count": 0,
-        "updatedAt": "2026-06-06T12:36:15.124Z",
+        "updatedAt": "2026-06-06T13:12:02.631Z",
         "bytes": 2397
       },
       {
         "file": "signal-quality-report.json",
         "ok": true,
         "count": 0,
-        "updatedAt": "2026-06-06T12:36:14.798Z",
+        "updatedAt": "2026-06-06T13:12:02.314Z",
         "bytes": 821
       },
       {
         "file": "data-quality-report.json",
         "ok": true,
         "count": 0,
-        "updatedAt": "2026-06-06T12:36:14.930Z",
+        "updatedAt": "2026-06-06T13:12:02.444Z",
         "bytes": 2315
       },
       {
         "file": "data-consistency-report.json",
         "ok": true,
         "count": 0,
-        "updatedAt": "2026-06-06T12:36:15.009Z",
+        "updatedAt": "2026-06-06T13:12:02.518Z",
         "bytes": 316
       },
       {
         "file": "strategy-weight-report.json",
         "ok": true,
         "count": 0,
-        "updatedAt": "2026-06-06T12:36:15.065Z",
+        "updatedAt": "2026-06-06T13:12:02.580Z",
         "bytes": 418
       }
     ]

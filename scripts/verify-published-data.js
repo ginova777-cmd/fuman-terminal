@@ -2,6 +2,7 @@ const fs = require("fs");
 const https = require("https");
 const path = require("path");
 const crypto = require("crypto");
+const { isTwseTradingDay } = require("./twse-trading-day");
 
 const runtimeDir = process.env.FUMAN_DATA_DIR || "C:\\fuman-runtime\\data";
 const syncDir = process.env.FUMAN_SYNC_DATA_DIR || "C:\\fuman-terminal-sync\\data";
@@ -41,6 +42,24 @@ function todayYmd() {
   return `${get("year")}${get("month")}${get("day")}`;
 }
 
+function taipeiDateFromOffset(offsetDays = 0) {
+  const now = new Date();
+  const utcMs = now.getTime() + now.getTimezoneOffset() * 60000;
+  const taipeiMs = utcMs + 8 * 60 * 60000;
+  const date = new Date(taipeiMs);
+  date.setDate(date.getDate() + offsetDays);
+  return date;
+}
+
+async function latestTradingYmd() {
+  for (let offset = 0; offset >= -14; offset -= 1) {
+    const probe = taipeiDateFromOffset(offset);
+    const tradingDay = await isTwseTradingDay(probe, { stateDir: process.env.FUMAN_STATE_DIR || "C:\\fuman-runtime\\state" });
+    if (tradingDay.isTradingDay) return normalizeDate(tradingDay.date);
+  }
+  return todayYmd();
+}
+
 function normalizeDate(value) {
   return String(value || "").replace(/\D/g, "").slice(0, 8);
 }
@@ -66,10 +85,11 @@ function assert(condition, message) {
   if (!condition) throw new Error(message);
 }
 
-function validatePayload(name, payload) {
-  const today = todayYmd();
+function validatePayload(name, payload, context) {
+  const today = context.today;
+  const latestTradeDate = context.latestTradeDate;
   if (name === "strategy3-latest.json") {
-    assert(normalizeDate(payload.usedDate) === today, `${name} stale usedDate=${payload.usedDate} today=${today}`);
+    assert(normalizeDate(payload.usedDate) === latestTradeDate, `${name} stale usedDate=${payload.usedDate} latestTradeDate=${latestTradeDate} today=${today}`);
     assert(count(payload) > 0, `${name} empty`);
   }
   if (name === "strategy4-latest.json") {
@@ -89,6 +109,7 @@ function validatePayload(name, payload) {
 
 async function main() {
   const issues = [];
+  const context = { today: todayYmd(), latestTradeDate: await latestTradingYmd() };
   for (const name of criticalFiles) {
     const runtimeFile = path.join(runtimeDir, name);
     const syncFile = path.join(syncDir, name);
@@ -99,9 +120,9 @@ async function main() {
       const syncHash = sha(syncFile);
       assert(runtimeHash === syncHash, `${name} runtime/sync hash mismatch runtime=${runtimeHash.slice(0, 12)} sync=${syncHash.slice(0, 12)}`);
       const localPayload = readJson(syncFile);
-      validatePayload(name, localPayload);
+      validatePayload(name, localPayload, context);
       const remotePayload = await fetchJson(`/data/${name}?verify-published=${Date.now()}`);
-      validatePayload(name, remotePayload);
+      validatePayload(name, remotePayload, context);
       assert(count(remotePayload) === count(localPayload), `${name} remote/local count mismatch remote=${count(remotePayload)} local=${count(localPayload)}`);
       console.log(`[published] ${name} ok count=${count(localPayload)} hash=${syncHash.slice(0, 12)}`);
     } catch (error) {

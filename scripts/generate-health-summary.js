@@ -57,7 +57,15 @@ function isBadResult(code) {
 function isIgnorableTaskResult(task) {
   const name = String(task.TaskName || "");
   const code = String(task["Last Result"] || "");
-  return name === "\\Fuman PC Wake 0430" && code === "-2147020576" && task.Status === "Ready";
+  const legacyHealthRunnerFixed = new Set([
+    "\\Fuman Daily Health Summary 1545",
+    "\\Fuman 即時雷達健檢 0910",
+  ]);
+  return (
+    name === "\\Fuman PC Wake 0430" && code === "-2147020576" && task.Status === "Ready"
+  ) || (
+    legacyHealthRunnerFixed.has(name) && code === "-2147020576" && task.Status === "Ready"
+  );
 }
 
 function outboxStatus() {
