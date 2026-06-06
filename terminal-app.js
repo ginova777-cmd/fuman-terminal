@@ -1960,7 +1960,7 @@ async function loadRealtimeRadarLatestCache(force = false) {
       }
     }
     try {
-      const staticPayload = await fetchLiveMemoryJson("realtimeRadar:static", `${endpoints.realtimeRadarCache}?t=${Date.now()}`, 8000, FUMAN_LIVE_MEMORY_TTL_MS.realtimeRadar, force);
+      const staticPayload = await fetchLiveMemoryJson("realtimeRadar:static", versionedDataUrl(endpoints.realtimeRadarCache, "latest", force), 8000, FUMAN_LIVE_MEMORY_TTL_MS.realtimeRadar, force);
       if (staticPayload) candidates.push({ source: "static", payload: staticPayload });
     } catch (error) {
       errors.push("靜態備援讀取失敗");
@@ -2037,18 +2037,9 @@ async function ensureRealtimeRadarClosingData() {
     try {
       loadRealtimeRadarLastRows();
       if (realtimeRadarLastRows.length) return realtimeRadarLastRows;
-      const stocksPayload = await fetchJson(`${endpoints.strategyStocks}?t=${Date.now()}`, 15000);
-      const stocks = normalizeArray(stocksPayload?.stocks || stocksPayload);
+      const stocks = await loadStrategyStocks();
       if (stocks.length) {
-        updateMarketStockDataState(stocksPayload);
         renderStocks(stocks);
-        return latestStocks;
-      }
-      const fallback = await fetchJson(`${endpoints.stocks}?t=${Date.now()}`, 15000);
-      const fallbackStocks = normalizeArray(Array.isArray(fallback) ? fallback : fallback?.stocks || fallback);
-      if (fallbackStocks.length) {
-        updateMarketStockDataState(fallback);
-        renderStocks(fallbackStocks);
         return latestStocks;
       }
       return [];
@@ -3071,7 +3062,11 @@ function recordFumanPerformance(url, startedAt, ok, error = null) {
 }
 
 function versionedDataUrl(url, version = "", force = false) {
-  if (force) return `${url}${url.includes("?") ? "&" : "?"}t=${Date.now()}`;
+  if (force) {
+    const windowMs = Math.max(5000, Number(FUMAN_TUNING_CONFIG.cacheBustWindowMs || 30000));
+    const bucket = Math.floor(Date.now() / windowMs);
+    return `${url}${url.includes("?") ? "&" : "?"}t=${bucket}`;
+  }
   const cleanVersion = String(version || "").replace(/[^\w.-]/g, "");
   if (!cleanVersion) return url;
   return `${url}${url.includes("?") ? "&" : "?"}v=${encodeURIComponent(cleanVersion)}`;
@@ -3977,9 +3972,9 @@ async function loadOpenBuySupabasePayload() {
 }
 
 async function loadOpenBuyStaticPayload() {
-  let payload = await fetchJson(`${endpoints.openBuyCache}?t=${Date.now()}`, 10000);
+  let payload = await fetchVersionedJson(endpoints.openBuyCache, 10000, "latest", false);
   if (!normalizeArray(payload?.matches).length) {
-    payload = await fetchJson(`${endpoints.openBuyBackup}?t=${Date.now()}`, 10000);
+    payload = await fetchVersionedJson(endpoints.openBuyBackup, 10000, "latest", false);
   }
   return {
     ...payload,
@@ -4022,9 +4017,9 @@ async function loadStrategy3Cache(force = false) {
   }
   strategy3CacheLoading = true;
   try {
-    let payload = await fetchJson(`${endpoints.strategy3Cache}?t=${Date.now()}`, 10000);
+    let payload = await fetchVersionedJson(endpoints.strategy3Cache, 10000, "latest", force);
     if (!normalizeArray(payload?.matches).length) {
-      payload = await fetchJson(`${endpoints.strategy3Backup}?t=${Date.now()}`, 10000);
+      payload = await fetchVersionedJson(endpoints.strategy3Backup, 10000, "latest", force);
     }
     strategy3Data = normalizeArray(payload?.matches);
     const updatedAt = Date.parse(payload?.updatedAt || "");
@@ -4041,9 +4036,9 @@ async function loadStrategy3RadarVolumeCache() {
   if (strategy3Data.length || strategy3CacheLoading) return;
   strategy3CacheLoading = true;
   try {
-    let payload = await fetchJson(`${endpoints.strategy3Cache}?t=${Date.now()}`, 10000);
+    let payload = await fetchVersionedJson(endpoints.strategy3Cache, 10000, "latest", false);
     if (!normalizeArray(payload?.matches).length) {
-      payload = await fetchJson(`${endpoints.strategy3Backup}?t=${Date.now()}`, 10000);
+      payload = await fetchVersionedJson(endpoints.strategy3Backup, 10000, "latest", false);
     }
     strategy3Data = normalizeArray(payload?.matches);
     const updatedAt = Date.parse(payload?.updatedAt || "");
@@ -4066,9 +4061,9 @@ async function loadStrategy5Cache(force = false) {
   }
   strategy5CacheLoading = true;
   try {
-    let payload = await fetchJson(`${endpoints.strategy5Cache}?t=${Date.now()}`, 10000);
+    let payload = await fetchVersionedJson(endpoints.strategy5Cache, 10000, "latest", force);
     if (!normalizeArray(payload?.matches).length) {
-      payload = await fetchJson(`${endpoints.strategy5Backup}?t=${Date.now()}`, 10000);
+      payload = await fetchVersionedJson(endpoints.strategy5Backup, 10000, "latest", force);
     }
     strategy5Data = normalizeArray(payload?.matches);
     const updatedAt = Date.parse(payload?.updatedAt || "");
@@ -5231,7 +5226,7 @@ async function loadStrategy2IntradayPayload(force = false) {
     try {
       const apiPayload = await fetchLiveMemoryJson(
         "strategy2:latest-api",
-        `${endpoints.strategy2IntradayLatestApi}?t=${Date.now()}`,
+        versionedDataUrl(endpoints.strategy2IntradayLatestApi, "latest", force),
         isMobileViewport() ? 2500 : 3500,
         FUMAN_LIVE_MEMORY_TTL_MS.strategy2,
         force
@@ -5288,7 +5283,7 @@ async function loadStrategy2IntradayPayload(force = false) {
     } catch (error) {
     }
   }
-  const payload = await fetchJson(`${endpoints.strategy2IntradayCache}?t=${Date.now()}`, 10000);
+  const payload = await fetchVersionedJson(endpoints.strategy2IntradayCache, 10000, "latest", force);
   return {
     ...payload,
     cacheSource: "static",
@@ -6845,7 +6840,7 @@ function preloadWarrantFlowFullData(reason = "idle") {
       { url: endpoints.warrantFlowCache, label: "warrant-cache-preload", kind: "warrant" },
       { url: endpoints.warrantFlowBackup, label: "warrant-backup-preload", kind: "warrant" },
     ], 9000, "warrant"),
-    fetchVersionedJson(endpoints.strategyStocks, 12000, "latest", false),
+    loadStrategyStocks(),
   ]).finally(() => {
     recordFumanPerformance("preload:warrant:" + reason, performance?.now ? performance.now() : Date.now(), true);
   });
@@ -6859,14 +6854,17 @@ async function loadStrategyStocks() {
   strategyStocksPromise = (async () => {
     let stocks = [];
     try {
-      const payload = await fetchJson(endpoints.strategyStocks, 20000);
+      const payload = await fetchVersionedJson(endpoints.strategyStocks, 20000, marketSummaryPayload?.updatedAt || "latest", false);
       stocks = normalizeArray(payload.stocks);
     } catch (error) {
       stocks = [];
     }
 
     try {
-      if (!stocks.length) stocks = normalizeArray(await fetchJson(endpoints.stocks, 12000));
+      if (!stocks.length) {
+        const fallback = await fetchVersionedJson(endpoints.stocks, 12000, marketSummaryPayload?.updatedAt || "latest", false);
+        stocks = normalizeArray(fallback?.stocks || fallback);
+      }
     } catch (error) {
       if (!stocks.length) stocks = [];
     }
@@ -7367,7 +7365,7 @@ function syncLatestStocksFromHeatmapSectors(sectors) {
 async function refreshMarketAiFromHeatmap() {
   if (marketAiHeatmapSyncPromise) return marketAiHeatmapSyncPromise;
   marketAiHeatmapSyncPromise = (async () => {
-    const data = await fetchVersionedJson(endpoints.heatmap, 15000, `market-ai-${Date.now()}`, true);
+    const data = await fetchVersionedJson(endpoints.heatmap, 15000, "market-ai", true);
     mergeIndustryMaster(data?.industryMaster);
     const sectors = normalizeArray(data?.sectors);
     if (data?.ok && sectors.length && syncLatestStocksFromHeatmapSectors(sectors)) {
@@ -7732,16 +7730,11 @@ async function loadMarketAiStocksFallback() {
   if (marketAiStockLoading || latestStocks.length) return;
   marketAiStockLoading = true;
   try {
-    const payload = await fetchJson(`${endpoints.strategyStocks}?t=${Date.now()}`, 15000);
-    const rows = normalizeArray(payload?.stocks || payload);
+    const rows = await loadStrategyStocks();
     if (rows.length) {
-      updateMarketStockDataState(payload);
       renderStocks(rows);
       return;
     }
-    const fallback = await fetchJson(`${endpoints.stocks}?t=${Date.now()}`, 15000);
-    updateMarketStockDataState(fallback);
-    renderStocks(Array.isArray(fallback) ? fallback : normalizeArray(fallback?.stocks || fallback));
   } catch (error) {
   } finally {
     marketAiStockLoading = false;
@@ -7976,7 +7969,7 @@ async function loadMarketAiConfluenceCaches(force = false) {
     await Promise.allSettled([
       (async () => {
         if (!force && Object.keys(strategy4ScanMatches).length) return;
-        const payload = await fetchMarketAiConfluencePayload([endpoints.strategy4Slim, endpoints.strategy4Cache, endpoints.strategy4Backup], ["matches"]);
+        const payload = await fetchMarketAiConfluencePayload([endpoints.strategy4Slim], ["matches"]);
         if (payload?.ok && Array.isArray(payload.matches)) mergeStrategy4Cache(payload);
       })(),
       (async () => {
@@ -10080,7 +10073,7 @@ async function loadWatchlistStrategyMatches(code) {
       const urls = source.urls().filter(Boolean);
       for (const url of urls) {
         try {
-          const payload = await fetchJson(`${url}?t=${Date.now()}`, 9000);
+          const payload = await fetchVersionedJson(url, 9000, "latest", false);
           const rows = watchlistRowsFromPayload(payload, source.fields);
           if (!rows.length) continue;
           return {
@@ -10275,15 +10268,14 @@ function parseRealtimeQuotePrice(item) {
 
 async function fetchDailyStockFallback(code) {
   try {
-    const payload = await fetchJson(endpoints.stocks, 8000);
-    const rows = normalizeArray(payload?.stocks || payload);
-    const item = normalizeArray(rows).find((row) => String(row.Code || "") === code);
+    const rows = await loadStrategyStocks();
+    const item = normalizeArray(rows).find((row) => String(row.code || row.Code || "") === code);
     if (!item) return null;
-    const close = cleanNumber(item.ClosingPrice);
-    const change = cleanNumber(item.Change);
+    const close = cleanNumber(item.close || item.ClosingPrice);
+    const change = cleanNumber(item.change || item.Change);
     const previous = close - change;
     const percent = previous ? (change / previous) * 100 : 0;
-    return { code, name: item.Name || code, close, change, percent, tradeVolume: normalizeTradeVolumeLots(item.TradeVolume) };
+    return { code, name: item.name || item.Name || code, close, change, percent, tradeVolume: cleanNumber(item.tradeVolume) || normalizeTradeVolumeLots(item.TradeVolume) };
   } catch {
     return null;
   }

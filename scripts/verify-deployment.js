@@ -1,6 +1,7 @@
 const https = require("https");
 const { spawnSync } = require("child_process");
 const path = require("path");
+const { isTwseTradingDay } = require("./twse-trading-day");
 
 const baseUrl = (process.env.FUMAN_VERIFY_BASE_URL || "https://fuman-terminal.vercel.app").replace(/\/+$/, "");
 
@@ -57,6 +58,23 @@ function todayYmd() {
   return `${get("year")}${get("month")}${get("day")}`;
 }
 
+function taipeiDateFromOffset(offsetDays = 0) {
+  const now = new Date();
+  const utcMs = now.getTime() + now.getTimezoneOffset() * 60000;
+  const taipeiMs = utcMs + 8 * 60 * 60000;
+  const date = new Date(taipeiMs);
+  date.setDate(date.getDate() + offsetDays);
+  return date;
+}
+
+async function latestTradingYmd() {
+  for (let offset = 0; offset >= -14; offset -= 1) {
+    const tradingDay = await isTwseTradingDay(taipeiDateFromOffset(offset), { stateDir: process.env.FUMAN_STATE_DIR || "C:\\fuman-runtime\\state" });
+    if (tradingDay.isTradingDay) return normalizeDate(tradingDay.date);
+  }
+  return todayYmd();
+}
+
 function normalizeDate(value) {
   return String(value || "").replace(/\D/g, "").slice(0, 8);
 }
@@ -79,6 +97,7 @@ async function main() {
   verifyVersionConsistency();
   const home = await fetchText("/");
   const version = detectVersion(home.body);
+  const latestTradeDate = await latestTradingYmd();
   assertOk("home", home, (r) => r.body.includes(`terminal-core.js?v=${version}`));
   const checks = [
     ["core", `/terminal-core.js?v=${version}`, (r) => r.body.includes("terminal-modules.js")],
@@ -87,7 +106,7 @@ async function main() {
     ["service-worker", `/fuman-sw.js?v=${version}`, (r) => r.body.includes("strategy2-intraday-latest") && r.body.includes("realtime-radar-latest")],
     ["terminal-bootstrap", `/terminal.js?v=${version}`, (r) => r.body.includes("FUMAN_TERMINAL_LOAD_APP") && r.body.includes("terminal-app.js")],
     ["terminal-app", `/terminal-app.js?v=${version}`, (r) => r.body.includes("FUMAN_LIVE_MEMORY_TTL_MS") && r.body.includes("loadStrategyWeights")],
-    ["strategy3", "/data/strategy3-latest.json?v=verify", (r) => { const p = parseJson(r); return normalizeDate(p.usedDate) === todayYmd() && Number(p.count) > 0; }],
+    ["strategy3", "/data/strategy3-latest.json?v=verify", (r) => { const p = parseJson(r); return normalizeDate(p.usedDate) === latestTradeDate && Number(p.count) > 0; }],
     ["strategy4", "/data/strategy4-latest.json?v=verify", (r) => { const p = parseJson(r); return normalizeDate(p.scanStamp || p.dataDate || p.updatedAt) === todayYmd() && p.complete === true && Number(p.count) > 0; }],
     ["strategy4-summary", "/data/strategy4-summary.json?v=verify", (r) => { const p = parseJson(r); return normalizeDate(p.scanStamp || p.dataDate || p.updatedAt) === todayYmd() && Number(p.count) > 0; }],
     ["health", "/data/health-summary.json?v=verify", (r) => parseJson(r).ok === true],
