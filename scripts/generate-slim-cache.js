@@ -24,6 +24,18 @@ function writeToBoth(output, payload) {
   }
 }
 
+function readOptional(rel, fallback = null) {
+  for (const root of [runtimeRoot, repoRoot, syncRoot]) {
+    const file = path.join(root, rel);
+    if (fs.existsSync(file)) return readJson(file);
+  }
+  return fallback;
+}
+
+function normalizeArray(value) {
+  return Array.isArray(value) ? value : [];
+}
+
 function slimSignal(signal) {
   return {
     id: String(signal?.id || ""),
@@ -411,13 +423,6 @@ function mobileWarrantTop(payload) {
 }
 
 function mobileHomeSummary() {
-  const readOptional = (rel, fallback = null) => {
-    for (const root of [runtimeRoot, repoRoot, syncRoot]) {
-      const file = path.join(root, rel);
-      if (fs.existsSync(file)) return readJson(file);
-    }
-    return fallback;
-  };
   const market = readOptional("data/market-summary.json", {});
   const health = readOptional("data/health-summary.json", {});
   const strategy2 = readOptional("data/strategy2-intraday-live-top.json", readOptional("data/strategy2-intraday-top.json", {}));
@@ -466,6 +471,92 @@ function mobileHomeSummary() {
     },
   };
 }
+
+function signalText(value) {
+  if (!value) return "";
+  if (typeof value === "string") return value;
+  return String(value.short || value.label || value.title || value.name || value.reason || value.strategy || value.id || "").trim();
+}
+
+function indexDetails(row, key) {
+  const sources = {
+    openBuy: [row.setup, row.status, row.reason],
+    strategy2: [
+      row.strategy,
+      row.stateLabel,
+      row.stateReason,
+      ...normalizeArray(row.strategies).map(signalText),
+      ...normalizeArray(row.intradaySignals).map(signalText),
+    ],
+    strategy3: [row.setup, row.status, row.reason, ...normalizeArray(row.matches).map(signalText)],
+    strategy4: [
+      row.strategyLabel,
+      row.swingZone ? `分區${row.swingZone}` : "",
+      ...normalizeArray(row.signals).map(signalText),
+      ...normalizeArray(row.swingSignals).map(signalText),
+    ],
+    strategy5: [
+      signalText(row.activeMatch),
+      ...normalizeArray(row.matches).map(signalText),
+    ],
+    realtime: [
+      row.signal,
+      row.reason,
+      ...normalizeArray(row.signalTags).map(signalText),
+    ],
+  };
+  return [...new Set((sources[key] || []).map(signalText).map((item) => String(item || "").trim()).filter(Boolean))].slice(0, 5);
+}
+
+function buildStrategyMatchIndex() {
+  const definitions = [
+    { key: "openBuy", label: "策略1-明日開盤入", file: "data/open-buy-latest.json", fields: ["matches"] },
+    { key: "strategy2", label: "策略2-當沖雷達", file: "data/strategy2-intraday-slim.json", fallbackFile: "data/strategy2-intraday-top.json", fields: ["events", "records"] },
+    { key: "strategy3", label: "策略3-隔日沖", file: "data/strategy3-latest.json", fields: ["matches"] },
+    { key: "strategy4", label: "策略4-波段", file: "data/strategy4-slim.json", fields: ["matches"] },
+    { key: "strategy5", label: "策略5-綜合策略", file: "data/strategy5-latest.json", fields: ["matches"] },
+    { key: "realtime", label: "即時雷達", file: "data/realtime-radar-latest.json", fields: ["rows"] },
+  ];
+  const byCode = {};
+  const strategies = {};
+  for (const def of definitions) {
+    const payload = readOptional(def.file, def.fallbackFile ? readOptional(def.fallbackFile, {}) : {});
+    const rows = def.fields.flatMap((field) => normalizeArray(payload?.[field])).filter((row) => row?.code);
+    const date = payload?.usedDate || payload?.date || payload?.tradeDate || payload?.scanStamp || payload?.updatedAt || "";
+    strategies[def.key] = {
+      label: def.label,
+      file: def.file,
+      date,
+      updatedAt: payload?.updatedAt || payload?.scanStamp || "",
+      count: rows.length,
+    };
+    for (const row of rows) {
+      const code = String(row.code || "").trim();
+      if (!code) continue;
+      const entry = {
+        key: def.key,
+        label: def.label,
+        score: cleanNumber(row.score || row.maxScore || row.swingScore),
+        date,
+        updatedAt: payload?.updatedAt || payload?.scanStamp || row.updatedAt || "",
+        details: indexDetails(row, def.key),
+      };
+      if (!byCode[code]) byCode[code] = [];
+      byCode[code].push(entry);
+    }
+  }
+  for (const entries of Object.values(byCode)) {
+    entries.sort((a, b) => cleanNumber(b.score) - cleanNumber(a.score) || a.key.localeCompare(b.key));
+  }
+  return {
+    ok: true,
+    source: "strategy-match-index",
+    updatedAt: new Date().toISOString(),
+    count: Object.keys(byCode).length,
+    strategies,
+    byCode,
+  };
+}
 const jobs = [
   ["strategy2", "data/strategy2-intraday-latest.json", "data/strategy2-intraday-slim.json", slimStrategy2, (payload) => [
     ["data/strategy2-intraday-top.json", topStrategy2(payload)],
@@ -502,6 +593,9 @@ if (wrote) {
   const mobileSummary = mobileHomeSummary();
   writeToBoth("data/mobile-home-summary.json", mobileSummary);
   console.log(`[slim] wrote data/mobile-home-summary.json strategy2=${mobileSummary.strategy2.count || 0} chip=${mobileSummary.chip.count || 0} warrant=${mobileSummary.warrant.count || 0}`);
+  const strategyMatchIndex = buildStrategyMatchIndex();
+  writeToBoth("data/strategy-match-index.json", strategyMatchIndex);
+  console.log(`[slim] wrote data/strategy-match-index.json codes=${strategyMatchIndex.count || 0}`);
 }
 if (!wrote) process.exitCode = 1;
 

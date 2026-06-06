@@ -13,7 +13,11 @@ $syncScript = "C:\fuman-terminal\run-cache-sync.ps1"
 function Write-SyncLog($message) {
   $line = "[$(Get-Date)] $message"
   if ($LogPath) {
-    Add-Content -LiteralPath $LogPath -Value $line -Encoding utf8
+    try {
+      Add-Content -LiteralPath $LogPath -Value $line -Encoding utf8 -ErrorAction Stop
+    } catch {
+      Write-Host "$line (log write skipped: $($_.Exception.Message))"
+    }
   } else {
     Write-Host $line
   }

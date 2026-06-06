@@ -2748,6 +2748,8 @@ let watchlistDashboardSignature = "";
 let watchlistRefreshLoading = false;
 let watchlistStrategyMatchPromise = null;
 let watchlistStrategyMatchCache = null;
+let watchlistStrategyIndexPromise = null;
+let watchlistStrategyIndexCache = null;
 let watchlistQuoteDateKey = "";
 const intradayGoFirstSeenAt = new Map();
 const intradayFirstSeenAt = new Map();
@@ -9350,6 +9352,9 @@ async function loadStrategy4Cache(force = false) {
   strategy4CacheLoading = true;
   try {
     let payload = await fetchVersionedJson(endpoints.strategy4Slim, 8000, strategy4Summary?.updatedAt || strategy4SummaryLoadedAt || "", force);
+    if (!normalizeArray(payload?.matches).length && isMobileViewport() && !force) {
+      return;
+    }
     if (!normalizeArray(payload?.matches).length) {
       payload = await fetchVersionedJson(endpoints.strategy4Cache, 10000, strategy4Summary?.updatedAt || strategy4SummaryLoadedAt || "", force);
     }
@@ -9975,7 +9980,7 @@ const watchlistStrategySources = [
   { key: "openBuy", label: "策略1-明日開盤入", urls: () => [endpoints.openBuyCache, endpoints.openBuyBackup], fields: ["matches"] },
   { key: "strategy2", label: "策略2-當沖雷達", urls: () => [endpoints.strategy2IntradayLiveTop, endpoints.strategy2IntradayTop, endpoints.strategy2IntradaySlim], fields: ["events", "records"] },
   { key: "strategy3", label: "策略3-隔日沖", urls: () => [endpoints.strategy3Cache, endpoints.strategy3Backup], fields: ["matches"] },
-  { key: "strategy4", label: "策略4-波段", urls: () => [endpoints.strategy4Slim, endpoints.strategy4Cache, endpoints.strategy4Backup], fields: ["matches"] },
+  { key: "strategy4", label: "策略4-波段", urls: () => [endpoints.strategy4Slim], fields: ["matches"] },
   { key: "strategy5", label: "策略5-綜合策略", urls: () => [endpoints.strategy5Cache, endpoints.strategy5Backup], fields: ["matches"] },
   { key: "realtime", label: "即時雷達", urls: () => [endpoints.realtimeRadarCache], fields: ["rows"] },
 ];
@@ -10040,9 +10045,36 @@ function watchlistStrategyDetails(row, sourceKey = "") {
   return [...new Set(labels)].slice(0, 4);
 }
 
+async function loadWatchlistStrategyIndex() {
+  if (!endpoints.strategyMatchIndex) return null;
+  if (!watchlistStrategyIndexPromise) {
+    watchlistStrategyIndexPromise = fetchVersionedJson(endpoints.strategyMatchIndex, 4500, "latest", false)
+      .then((payload) => {
+        watchlistStrategyIndexCache = payload?.byCode && typeof payload.byCode === "object" ? payload : null;
+        return watchlistStrategyIndexCache;
+      })
+      .catch(() => {
+        watchlistStrategyIndexCache = null;
+        return null;
+      });
+  }
+  return watchlistStrategyIndexCache || await watchlistStrategyIndexPromise;
+}
+
 async function loadWatchlistStrategyMatches(code) {
   const targetCode = String(code || "");
   if (!targetCode) return [];
+  const indexPayload = await loadWatchlistStrategyIndex();
+  const indexed = normalizeArray(indexPayload?.byCode?.[targetCode]);
+  if (indexed.length) {
+    return indexed.map((match) => ({
+      key: match.key || "",
+      label: match.label || match.key || "",
+      details: normalizeArray(match.details).slice(0, 5),
+      score: cleanNumber(match.score),
+      date: normalizeMarketAiDateKey(match.date || match.updatedAt),
+    }));
+  }
   if (!watchlistStrategyMatchPromise) {
     watchlistStrategyMatchPromise = Promise.all(watchlistStrategySources.map(async (source) => {
       const urls = source.urls().filter(Boolean);

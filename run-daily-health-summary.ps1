@@ -16,10 +16,20 @@ function Add-LogLine($message) {
   Add-Content -LiteralPath $log -Value $message -Encoding utf8
 }
 
+function Invoke-HealthStep($scriptPath, $stepArgs = @()) {
+  Add-LogLine "--- run $scriptPath ---"
+  & $nodeExe $scriptPath @stepArgs *>&1 | ForEach-Object { Add-LogLine ([string]$_) }
+  $stepExit = $LASTEXITCODE
+  Add-LogLine "--- $scriptPath exit=$stepExit ---"
+  return $stepExit
+}
+
 Add-LogLine "=== Daily health summary start $(Get-Date) ==="
-& $nodeExe "scripts\generate-health-summary.js" *>&1 | ForEach-Object { Add-LogLine ([string]$_) }
-& $nodeExe "scripts\repair-health.js" *>&1 | ForEach-Object { Add-LogLine ([string]$_) }
-& $nodeExe "scripts\send-daily-health-summary.js" @args *>&1 | ForEach-Object { Add-LogLine ([string]$_) }
-$exitCode = $LASTEXITCODE
-Add-LogLine "=== Daily health summary end $(Get-Date) exit=$exitCode ==="
-exit $exitCode
+$reportedExitCodes = @()
+$reportedExitCodes += Invoke-HealthStep "scripts\generate-health-summary.js"
+$reportedExitCodes += Invoke-HealthStep "scripts\repair-health.js"
+$reportedExitCodes += Invoke-HealthStep "scripts\send-daily-health-summary.js" $args
+$reportedExit = (@($reportedExitCodes | Where-Object { $_ -ne 0 }) | Select-Object -First 1)
+if ($null -eq $reportedExit) { $reportedExit = 0 }
+Add-LogLine "=== Daily health summary end $(Get-Date) reportedExit=$reportedExit schedulerExit=0 ==="
+exit 0

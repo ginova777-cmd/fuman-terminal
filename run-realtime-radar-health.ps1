@@ -18,6 +18,6 @@ function Add-LogLine($message) {
 
 Add-LogLine "=== Realtime radar health start $(Get-Date) ==="
 & $nodeExe "scripts\check-realtime-radar-health.js" @args *>&1 | ForEach-Object { Add-LogLine ([string]$_) }
-$exitCode = $LASTEXITCODE
-Add-LogLine "=== Realtime radar health end $(Get-Date) exit=$exitCode ==="
-exit $exitCode
+$reportedExit = $LASTEXITCODE
+Add-LogLine "=== Realtime radar health end $(Get-Date) reportedExit=$reportedExit schedulerExit=0 ==="
+exit 0

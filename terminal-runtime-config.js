@@ -14,6 +14,7 @@
     exportAuth: "/api/export-auth",
     frontendError: "/api/frontend-error",
     strategyWeights: "/data/strategy-weight-report.json",
+    strategyMatchIndex: "/data/strategy-match-index.json",
     openBuyCache: "/data/open-buy-latest.json",
     openBuyBackup: "/data/open-buy-backup.json",
     openBuySummary: "/data/open-buy-summary.json",
