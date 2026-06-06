@@ -5,7 +5,10 @@ const { fetchMisQuotes } = require("../lib/mis-quotes");
 const RUNTIME_DIR = process.env.FUMAN_RUNTIME_DIR || "C:\\fuman-runtime";
 const FUGLE_API_KEY_FILE = process.env.FUGLE_API_KEY_FILE || path.join(RUNTIME_DIR, "secrets", "fugle-api-key.txt");
 const FUGLE_API_KEY = process.env.FUGLE_API_KEY || process.env.FUGLE_MARKETDATA_API_KEY || readSecret(FUGLE_API_KEY_FILE);
+const FINMIND_API_TOKEN_FILE = process.env.FINMIND_API_TOKEN_FILE || path.join(RUNTIME_DIR, "secrets", "finmind-api-token.txt");
+const FINMIND_API_TOKEN = process.env.FINMIND_API_TOKEN || process.env.FINMIND_TOKEN || readSecret(FINMIND_API_TOKEN_FILE);
 const REQUIRE_FUGLE = process.env.STRATEGY4_REQUIRE_FUGLE === "1";
+const REQUIRE_FINMIND = process.env.STRATEGY4_REQUIRE_FINMIND === "1";
 const REQUIRE_YAHOO = process.env.STRATEGY4_REQUIRE_YAHOO === "1";
 const REQUIRE_MIS = process.env.STRATEGY4_REQUIRE_MIS === "1";
 const MIN_HEALTHY_HISTORY_SOURCES = Number(process.env.STRATEGY4_MIN_HEALTHY_HISTORY_SOURCES || 2);
@@ -66,6 +69,11 @@ async function fetchJson(url, options = {}, timeoutMs = 20000) {
 function countFugleRows(payload) {
   const rows = payload?.data || payload?.candles || payload?.items || payload;
   return Array.isArray(rows) ? rows.length : 0;
+}
+
+function countFinMindRows(payload) {
+  const rows = Array.isArray(payload?.data) ? payload.data : [];
+  return rows.filter((row) => Number.isFinite(Number(row.close)) && String(row.date || "")).length;
 }
 
 function countYahooRows(payload) {
@@ -133,6 +141,27 @@ async function checkFugle() {
   return { ok: rows >= MIN_ROWS, source: "fugle", rows, history: true, error: rows >= MIN_ROWS ? "" : `too few rows: ${rows}/${MIN_ROWS}` };
 }
 
+async function checkFinMind() {
+  if (!FINMIND_API_TOKEN) {
+    return { ok: false, source: "finmind", rows: 0, error: `missing API token: ${FINMIND_API_TOKEN_FILE}` };
+  }
+  const params = new URLSearchParams({
+    dataset: "TaiwanStockPrice",
+    data_id: TEST_CODE,
+    start_date: isoDateDaysAgo(280),
+    end_date: isoDateDaysAgo(0),
+  });
+  const url = `https://api.finmindtrade.com/api/v4/data?${params.toString()}`;
+  const payload = await fetchJson(url, {
+    headers: {
+      Referer: "https://finmindtrade.com/",
+      Authorization: `Bearer ${FINMIND_API_TOKEN}`,
+    },
+  });
+  const rows = countFinMindRows(payload);
+  return { ok: rows >= MIN_ROWS, source: "finmind", rows, history: true, error: rows >= MIN_ROWS ? "" : `too few rows: ${rows}/${MIN_ROWS}` };
+}
+
 async function checkYahoo() {
   const url = `https://query1.finance.yahoo.com/v8/finance/chart/${TEST_CODE}.TW?range=9mo&interval=1d&events=history&includeAdjustedClose=true`;
   const payload = await fetchJson(url, { headers: { Referer: "https://finance.yahoo.com/" } });
@@ -148,13 +177,14 @@ async function checkMis() {
 
 (async () => {
   const checks = [];
-  for (const fn of [checkTwseOfficial, checkTpexOfficial, checkFugle, checkYahoo, checkMis]) {
+  for (const fn of [checkTwseOfficial, checkTpexOfficial, checkFugle, checkFinMind, checkYahoo, checkMis]) {
     try {
       checks.push(await fn());
     } catch (error) {
       const source = fn === checkTwseOfficial ? "twse-official"
         : fn === checkTpexOfficial ? "tpex-official"
         : fn === checkFugle ? "fugle"
+        : fn === checkFinMind ? "finmind"
         : fn === checkYahoo ? "yahoo-tw"
         : "mis";
       checks.push({ ok: false, source, rows: 0, history: fn !== checkMis, error: error.message || String(error) });
@@ -167,6 +197,7 @@ async function checkMis() {
   });
 
   const fugle = checks.find((check) => check.source === "fugle");
+  const finmind = checks.find((check) => check.source === "finmind");
   const yahoo = checks.find((check) => check.source === "yahoo-tw");
   const mis = checks.find((check) => check.source === "mis");
   const healthyHistorySources = checks.filter((check) => check.history && check.ok).length;
@@ -174,8 +205,10 @@ async function checkMis() {
     throw new Error(`Strategy4 healthy history sources too few: ${healthyHistorySources}/${MIN_HEALTHY_HISTORY_SOURCES}`);
   }
   if (REQUIRE_FUGLE && !fugle?.ok) throw new Error(`Strategy4 Fugle health check failed: ${fugle?.error || "unknown error"}`);
+  if (REQUIRE_FINMIND && !finmind?.ok) throw new Error(`Strategy4 FinMind health check failed: ${finmind?.error || "unknown error"}`);
   if (REQUIRE_YAHOO && !yahoo?.ok) throw new Error(`Strategy4 Yahoo health check failed: ${yahoo?.error || "unknown error"}`);
   if (REQUIRE_MIS && !mis?.ok) throw new Error(`Strategy4 MIS health check failed: ${mis?.error || "unknown error"}`);
+  if (!finmind?.ok) console.log("Strategy4 FinMind health check is warning-only because Yahoo remains the final fallback.");
   if (!yahoo?.ok) console.log("Strategy4 Yahoo health check is warning-only because Yahoo is the informal last fallback.");
   if (!mis?.ok) console.log("Strategy4 MIS health check is warning-only because historical sources can still complete the scan.");
 })().catch((error) => {

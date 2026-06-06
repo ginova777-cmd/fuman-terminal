@@ -7,6 +7,7 @@ const { fetchMisQuotes, mergeMisQuoteIntoHistory } = require("../lib/mis-quotes"
 const USE_MIS_QUOTES = process.env.STRATEGY4_USE_MIS === "1";
 const RUNTIME_DIR = process.env.FUMAN_RUNTIME_DIR || "C:\\fuman-runtime";
 const FUGLE_API_KEY_FILE = process.env.FUGLE_API_KEY_FILE || path.join(RUNTIME_DIR, "secrets", "fugle-api-key.txt");
+const FINMIND_API_TOKEN_FILE = process.env.FINMIND_API_TOKEN_FILE || path.join(RUNTIME_DIR, "secrets", "finmind-api-token.txt");
 
 function readSecret(file) {
   try {
@@ -17,6 +18,7 @@ function readSecret(file) {
 }
 
 const FUGLE_API_KEY = process.env.FUGLE_API_KEY || process.env.FUGLE_MARKETDATA_API_KEY || readSecret(FUGLE_API_KEY_FILE);
+const FINMIND_API_TOKEN = process.env.FINMIND_API_TOKEN || process.env.FINMIND_TOKEN || readSecret(FINMIND_API_TOKEN_FILE);
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -150,6 +152,20 @@ function normalizeFugleRows(payload) {
   })).filter((row) => row.date && row.close);
 }
 
+function normalizeFinMindRows(payload) {
+  const rows = Array.isArray(payload?.data) ? payload.data : [];
+  return rows.map((row) => ({
+    date: String(row.date || "").slice(0, 10),
+    volume: cleanNumber(row.Trading_Volume),
+    value: cleanNumber(row.Trading_money),
+    open: cleanNumber(row.open),
+    high: cleanNumber(row.max),
+    low: cleanNumber(row.min),
+    close: cleanNumber(row.close),
+    change: cleanNumber(row.spread),
+  })).filter((row) => row.date && row.close);
+}
+
 function normalizeYahooRows(payload) {
   const result = payload?.chart?.result?.[0];
   const timestamps = Array.isArray(result?.timestamp) ? result.timestamp : [];
@@ -229,6 +245,25 @@ async function fetchFugleHistory(code) {
   return { rows: normalizeFugleRows(payload), source: "fugle" };
 }
 
+async function fetchFinMindHistory(code) {
+  if (!FINMIND_API_TOKEN) return { rows: [], source: "" };
+  const params = new URLSearchParams({
+    dataset: "TaiwanStockPrice",
+    data_id: code,
+    start_date: isoDateDaysAgo(270),
+    end_date: new Date().toISOString().slice(0, 10),
+  });
+  const url = `https://api.finmindtrade.com/api/v4/data?${params.toString()}`;
+  const payload = JSON.parse(await fetchText(url, {
+    headers: {
+      Referer: "https://finmindtrade.com/",
+      Authorization: `Bearer ${FINMIND_API_TOKEN}`,
+    },
+  }, 20000));
+  const rows = normalizeFinMindRows(payload);
+  return { rows, source: "finmind" };
+}
+
 async function fetchYahooHistory(code, marketHint = "") {
   const suffixes = marketHint === "TPEX" ? ["TWO", "TW"] : marketHint === "TWSE" ? ["TW", "TWO"] : ["TW", "TWO"];
   for (const suffix of suffixes) {
@@ -302,10 +337,21 @@ async function fetchHistory(code, preferredMarket = "") {
   }
 
   if (rows.length < 60) {
-    const fallback = await fetchYahooHistory(code, marketHint || market);
-    if (fallback.rows.length >= rows.length) {
-      rows = fallback.rows;
-      historySource = fallback.source || historySource;
+    try {
+      const finmind = await fetchFinMindHistory(code);
+      if (finmind.rows.length >= rows.length) {
+        rows = finmind.rows;
+        historySource = finmind.source || historySource;
+      }
+    } catch {
+    }
+  }
+
+  if (rows.length < 60) {
+    const yahoo = await fetchYahooHistory(code, marketHint || market);
+    if (yahoo.rows.length >= rows.length) {
+      rows = yahoo.rows;
+      historySource = yahoo.source || historySource;
     }
   }
 
