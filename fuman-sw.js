@@ -1,23 +1,23 @@
-const CACHE_VERSION = "fuman-terminal-sw-20260606-background-prefetch";
+const CACHE_VERSION = "fuman-terminal-sw-20260606-efficiency";
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 const DATA_CACHE = `${CACHE_VERSION}-data`;
 
 const STATIC_ASSETS = [
-  "/styles.css?v=deep-speed-20260606",
-  "/terminal-core.js?v=deep-speed-20260606",
-  "/terminal-modules.js?v=deep-speed-20260606",
-  "/terminal-sector-map.js?v=deep-speed-20260606",
-  "/terminal-strategy-config.js?v=deep-speed-20260606",
-  "/terminal-market-config.js?v=deep-speed-20260606",
-  "/terminal-ui-config.js?v=deep-speed-20260606",
-  "/terminal-runtime-config.js?v=deep-speed-20260606",
-  "/terminal-tuning-config.js?v=deep-speed-20260606",
-  "/terminal-worker.js?v=deep-speed-20260606",
-  "/terminal.js?v=deep-speed-20260606",
-  "/terminal-realtime-radar.css?v=deep-speed-20260606",
-  "/terminal-intraday-radar.css?v=deep-speed-20260606",
-  "/terminal-utility.css?v=deep-speed-20260606",
-  "/refresh.html?v=deep-speed-20260606",
+  "/styles.css?v=efficiency-20260606",
+  "/terminal-core.js?v=efficiency-20260606",
+  "/terminal-modules.js?v=efficiency-20260606",
+  "/terminal-sector-map.js?v=efficiency-20260606",
+  "/terminal-strategy-config.js?v=efficiency-20260606",
+  "/terminal-market-config.js?v=efficiency-20260606",
+  "/terminal-ui-config.js?v=efficiency-20260606",
+  "/terminal-runtime-config.js?v=efficiency-20260606",
+  "/terminal-tuning-config.js?v=efficiency-20260606",
+  "/terminal-worker.js?v=efficiency-20260606",
+  "/terminal.js?v=efficiency-20260606",
+  "/terminal-realtime-radar.css?v=efficiency-20260606",
+  "/terminal-intraday-radar.css?v=efficiency-20260606",
+  "/terminal-utility.css?v=efficiency-20260606",
+  "/refresh.html?v=efficiency-20260606",
   "/assets/logo.webp",
   "/assets/login-bg-fuman-lite.webp",
   "/favicon.ico",
@@ -31,16 +31,23 @@ const DATA_PATTERNS = [
   /\/data\/mobile-home-summary\.json/i,
   /\/data\/terminal-home-bundle\.json/i,
   /\/data\/data-status-index\.json/i,
+  /\/data\/data-manifest\.json/i,
   /\/data\/stocks-slim\.json/i,
+  /\/data\/stocks-index\.json/i,
   /\/data\/strategy-match-index\.json/i,
+  /\/data\/strategy4-zone-b-page-\d+\.json/i,
   /\/data\/health-summary\.json/i,
 ];
 
 const PREFETCH_DATA_ASSETS = [
+  "/data/data-manifest.json",
   "/data/terminal-home-bundle.json",
   "/data/strategy4-score-top.json",
+  "/data/strategy4-zone-b-page-1.json",
   "/data/strategy-match-index.json",
   "/data/data-status-index.json",
+  "/data/stocks-index.json",
+  "/data/stocks-quotes-slim.json",
   "/data/stocks-slim.json",
 ];
 
@@ -144,4 +151,5 @@ self.addEventListener("fetch", (event) => {
     event.respondWith(staleWhileRevalidate(request));
   }
 });
+
 

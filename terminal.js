@@ -1,6 +1,6 @@
 (function () {
   const boot = window.FUMAN_TERMINAL_BOOT || (window.FUMAN_TERMINAL_BOOT = {});
-  const version = boot.version || "deep-speed-20260606";
+  const version = boot.version || "efficiency-20260606";
   const appSrc = `/terminal-app.js?v=${version}`;
   const dependencyScripts = [
     { src: `/terminal-sector-map.js?v=${version}`, attr: "data-fuman-sector-map" },
@@ -108,4 +108,5 @@
     }
   }
 })();
+
 

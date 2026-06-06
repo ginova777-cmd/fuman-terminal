@@ -68,12 +68,14 @@ const fumanLiveMemoryCache = new Map();
 let fumanWorker = null;
 let fumanWorkerSeq = 0;
 const fumanWorkerPending = new Map();
+let fumanDataManifest = null;
+let fumanDataManifestPromise = null;
 
 function getFumanWorker() {
   if (!("Worker" in window)) return null;
   if (fumanWorker) return fumanWorker;
   try {
-    fumanWorker = new Worker("terminal-worker.js?v=deep-speed-20260606");
+    fumanWorker = new Worker("terminal-worker.js?v=efficiency-20260606");
     fumanWorker.addEventListener("message", (event) => {
       const { id, ok, rows, result, error } = event.data || {};
       const pending = fumanWorkerPending.get(id);
@@ -305,7 +307,7 @@ function loadFumanStyle(href, id) {
   const link = document.createElement("link");
   link.id = id;
   link.rel = "stylesheet";
-  link.href = href.includes("?") ? href : `${href}?v=${window.FUMAN_TERMINAL_BOOT?.version || "deep-speed-20260606"}`;
+  link.href = href.includes("?") ? href : `${href}?v=${window.FUMAN_TERMINAL_BOOT?.version || "efficiency-20260606"}`;
   document.head.appendChild(link);
 }
 
@@ -331,7 +333,7 @@ function makeFumanModuleScope(bindings) {
 function loadFumanFeatureModule(name, src, globalName) {
   if (window[globalName]) return Promise.resolve(window[globalName]);
   if (fumanFeatureModulePromises[name]) return fumanFeatureModulePromises[name];
-  const version = window.FUMAN_TERMINAL_BOOT?.version || "deep-speed-20260606";
+  const version = window.FUMAN_TERMINAL_BOOT?.version || "efficiency-20260606";
   fumanFeatureModulePromises[name] = new Promise((resolve, reject) => {
     const attr = "data-fuman-feature-" + name;
     const existing = document.querySelector("script[" + attr + "]");
@@ -2766,6 +2768,9 @@ let strategy4ScanStamp = "";
 let strategy4CacheLoading = false;
 let strategy4ZoneLoading = {};
 let strategy4LoadedZones = new Set();
+let strategy4LoadedZoneBPages = new Set();
+let strategy4ZoneBTotalPages = 0;
+let strategy4ZoneBTotalCount = 0;
 let strategy4SummaryLoading = false;
 let strategy4SummaryLoadedAt = 0;
 let strategy4Summary = null;
@@ -3069,9 +3074,39 @@ function versionedDataUrl(url, version = "", force = false) {
     const bucket = Math.floor(Date.now() / windowMs);
     return `${url}${url.includes("?") ? "&" : "?"}t=${bucket}`;
   }
-  const cleanVersion = String(version || "").replace(/[^\w.-]/g, "");
+  const manifestVersion = getDataManifestHash(url);
+  const cleanVersion = String(manifestVersion || version || "").replace(/[^\w.-]/g, "");
   if (!cleanVersion) return url;
   return `${url}${url.includes("?") ? "&" : "?"}v=${encodeURIComponent(cleanVersion)}`;
+}
+
+function manifestKeyFromUrl(url) {
+  try {
+    const parsed = new URL(url, location.origin);
+    return parsed.pathname.replace(/^\/data\//, "");
+  } catch (error) {
+    return String(url || "").replace(/^\/?data\//, "").split("?")[0];
+  }
+}
+
+function getDataManifestHash(url) {
+  const key = manifestKeyFromUrl(url);
+  return fumanDataManifest?.entries?.[key]?.hash || "";
+}
+
+async function loadDataManifest(force = false) {
+  if (!endpoints.dataManifest) return null;
+  if (!force && fumanDataManifest) return fumanDataManifest;
+  if (!force && fumanDataManifestPromise) return fumanDataManifestPromise;
+  const url = `${endpoints.dataManifest}${force ? `?t=${Math.floor(Date.now() / 30000)}` : ""}`;
+  fumanDataManifestPromise = fetchJson(url, 3500, { cache: force ? "no-store" : "default" })
+    .then((payload) => {
+      if (payload?.ok && payload?.entries) fumanDataManifest = payload;
+      return fumanDataManifest;
+    })
+    .catch(() => fumanDataManifest)
+    .finally(() => { fumanDataManifestPromise = null; });
+  return fumanDataManifestPromise;
 }
 
 async function fetchVersionedJson(url, timeout = 8000, version = "", force = false, options = {}) {
@@ -3421,6 +3456,9 @@ function mergeStrategy4Cache(payload) {
   strategy4ScanMatches = {};
   strategy4ScannedCodes = new Set();
   strategy4LoadedZones = new Set();
+  strategy4LoadedZoneBPages = new Set();
+  strategy4ZoneBTotalPages = 0;
+  strategy4ZoneBTotalCount = 0;
   strategy4ScanStamp = normalizeMarketAiDateKey(payload?.scanStamp || payload?.stamp || payload?.date || payload?.usedDate || payload?.tradeDate);
   const scannedCodes = normalizeArray(payload?.scannedCodes);
   scannedCodes.forEach((code) => {
@@ -3445,6 +3483,11 @@ function mergeStrategy4ZoneCache(payload, zone) {
   const updatedAt = Date.parse(payload?.updatedAt || "");
   strategy4ScanLastAt = Number.isFinite(updatedAt) ? updatedAt : Date.now();
   strategy4LoadedZones.add(normalizedZone);
+  if (normalizedZone === "B") {
+    if (payload?.page) strategy4LoadedZoneBPages.add(cleanNumber(payload.page));
+    if (payload?.totalPages) strategy4ZoneBTotalPages = cleanNumber(payload.totalPages);
+    if (payload?.totalCount) strategy4ZoneBTotalCount = cleanNumber(payload.totalCount);
+  }
   saveStrategy4LocalCache();
   return true;
 }
@@ -5493,10 +5536,11 @@ function getTerminalPageSize(scope) {
   return TERMINAL_PAGE_SIZE_OPTIONS.includes(configured) ? configured : TERMINAL_PAGE_SIZE;
 }
 
-function paginateTerminalRows(rows, currentPage, scope = "") {
+function paginateTerminalRows(rows, currentPage, scope = "", totalRowsOverride = null) {
   const list = Array.isArray(rows) ? rows : [];
   const pageSize = getTerminalPageSize(scope);
-  const totalPages = Math.max(1, Math.ceil(list.length / pageSize));
+  const totalRows = Math.max(list.length, cleanNumber(totalRowsOverride));
+  const totalPages = Math.max(1, Math.ceil(totalRows / pageSize));
   const page = Math.min(Math.max(Number(currentPage) || 1, 1), totalPages);
   const start = (page - 1) * pageSize;
   return {
@@ -5976,9 +6020,16 @@ function renderSwingRadar(universe) {
       sortDir: swingSortDir,
     });
   }
-  const swingPaged = paginateTerminalRows(rows, swingPage, "swing");
+  const swingRemoteTotalRows = swingZoneFilter === "B" ? strategy4ZoneBTotalCount : null;
+  const swingPaged = paginateTerminalRows(rows, swingPage, "swing", swingRemoteTotalRows);
   swingPage = swingPaged.page;
   const pageRows = swingPaged.rows;
+  if (swingZoneFilter === "B") {
+    const neededRemotePage = strategy4ZoneBRemotePageForUiPage(swingPage);
+    if (neededRemotePage && !strategy4LoadedZoneBPages.has(neededRemotePage)) {
+      loadStrategy4ZoneBPage(neededRemotePage).catch(() => {});
+    }
+  }
   const scanTime = strategyLastScanAt
     ? new Date(strategyLastScanAt).toLocaleTimeString("zh-TW", { hour12: false })
     : new Date().toLocaleTimeString("zh-TW", { hour12: false });
@@ -6044,8 +6095,9 @@ function renderSwingRadar(universe) {
     <div class="swing-zone-card zone-b ${swingZoneFilter === "B" ? "active" : ""}" data-swing-zone-filter="B"><span>B區觀察</span><strong>${zoneRows.B.length}</strong><small>趨勢轉強等待買點</small></div>
     <div class="swing-zone-card zone-c ${swingZoneFilter === "C" ? "active" : ""}" data-swing-zone-filter="C"><span>C區準備</span><strong>${zoneRows.C.length}</strong><small>低中位階整理</small></div>
   `;
+  const waitingBPage = swingZoneFilter === "B" && !pageRows.length && strategy4ZoneBTotalCount;
   const tableRows = pageRows.length ? renderSwingRows(pageRows) : `
-    <tr><td colspan="9">${strategy4Summary ? `策略4摘要已載入：命中 ${strategy4Summary.count || 0} 檔。正在背景載入完整名單...` : "後端策略4掃描 API 已啟動。正在完整掃描全台股官方日K並計算符合股票；命中後會自動顯示在這裡。"}</td></tr>
+    <tr><td colspan="9">${waitingBPage ? "正在載入 B 區分頁資料..." : strategy4Summary ? `策略4摘要已載入：命中 ${strategy4Summary.count || 0} 檔。正在背景載入完整名單...` : "後端策略4掃描 API 已啟動。正在完整掃描全台股官方日K並計算符合股票；命中後會自動顯示在這裡。"}</td></tr>
   `;
   const swingTableHead = `
     <thead>
@@ -9429,6 +9481,7 @@ async function loadStrategy4Cache(force = false) {
 async function loadStrategy4Zone(zone, force = false) {
   const normalizedZone = String(zone || "").toUpperCase();
   if (!/^[ABC]$/.test(normalizedZone)) return false;
+  if (normalizedZone === "B") return loadStrategy4ZoneBPage(1, force);
   if (!force && strategy4LoadedZones.has(normalizedZone)) return true;
   if (strategy4ZoneLoading[normalizedZone]) return strategy4ZoneLoading[normalizedZone];
   const endpointByZone = {
@@ -9454,6 +9507,40 @@ async function loadStrategy4Zone(zone, force = false) {
   return strategy4ZoneLoading[normalizedZone];
 }
 
+function strategy4ZoneBPageEndpoint(page) {
+  const base = endpoints.strategy4ZoneBPage1 || "/data/strategy4-zone-b-page-1.json";
+  return String(base).replace(/page-1\.json$/i, `page-${page}.json`);
+}
+
+function strategy4ZoneBRemotePageForUiPage(uiPage = swingPage) {
+  const pageSize = getTerminalPageSize("swing");
+  const start = (Math.max(1, cleanNumber(uiPage) || 1) - 1) * pageSize;
+  const remotePageSize = 220;
+  return Math.floor(start / remotePageSize) + 1;
+}
+
+async function loadStrategy4ZoneBPage(page = 1, force = false) {
+  const safePage = Math.max(1, cleanNumber(page) || 1);
+  const key = `B:${safePage}`;
+  if (!force && strategy4LoadedZoneBPages.has(safePage)) return true;
+  if (strategy4ZoneLoading[key]) return strategy4ZoneLoading[key];
+  strategy4ZoneLoading[key] = (async () => {
+    try {
+      const payload = await fetchVersionedJson(strategy4ZoneBPageEndpoint(safePage), 7000, strategy4Summary?.updatedAt || strategy4SummaryLoadedAt || "", force);
+      if (!payload?.ok || !Array.isArray(payload.matches)) return false;
+      const merged = mergeStrategy4ZoneCache(payload, "B");
+      if (merged) renderStrategyScanner();
+      return merged;
+    } catch (error) {
+      if (safePage === 1) return false;
+      return false;
+    } finally {
+      delete strategy4ZoneLoading[key];
+    }
+  })();
+  return strategy4ZoneLoading[key];
+}
+
 async function refreshStrategyHistoryScan(force = false) {
   await loadStrategy4Cache(force);
 }
@@ -9471,6 +9558,7 @@ deferUiWork(() => loadStrategyWeights(false), 450);
 ensureMobileAutoOrganizeButton();
 if (isViewActive("market")) {
   installMarketSkeleton();
+  deferUiWork(() => loadDataManifest(false), 10);
   deferUiWork(() => loadTerminalHomeBundle(false), 20);
   deferUiWork(() => loadHealthSummary(false), 300);
   deferUiWork(() => loadMarketSummary(false), 80);
@@ -10716,7 +10804,10 @@ document.addEventListener("click", (event) => {
   if (scope === "chip") chipTradePage = applyPage(chipTradePage);
   if (scope === "warrant") renderWarrantFlow();
   else if (scope === "chip") renderChipTradeTable();
-  else renderStrategyScanner();
+  else {
+    renderStrategyScanner();
+    if (scope === "swing" && swingZoneFilter === "B") loadStrategy4ZoneBPage(strategy4ZoneBRemotePageForUiPage(swingPage)).catch(() => {});
+  }
 });
 
 document.addEventListener("click", (event) => {
@@ -10814,4 +10905,5 @@ if (isViewActive("watchlist")) renderWatchlist();
 setInterval(() => {
   if (!isDocumentHidden() && isTerminalUnlocked() && isViewActive("watchlist")) refreshSelectedWatchlistQuote();
 }, 10000);
+
 

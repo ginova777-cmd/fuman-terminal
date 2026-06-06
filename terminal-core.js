@@ -1,5 +1,5 @@
 (function () {
-  const version = "deep-speed-20260606";
+  const version = "efficiency-20260606";
   window.FUMAN_TERMINAL_BOOT = {
     version,
     startedAt: Date.now(),
@@ -65,4 +65,5 @@
     setTimeout(loadMain, 0);
   }
 })();
+
 

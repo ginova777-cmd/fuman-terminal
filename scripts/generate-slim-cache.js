@@ -1,5 +1,6 @@
 const fs = require("fs");
 const path = require("path");
+const crypto = require("crypto");
 
 const repoRoot = path.resolve(__dirname, "..");
 const runtimeRoot = process.env.FUMAN_RUNTIME_ROOT || "C:\\fuman-runtime";
@@ -22,6 +23,10 @@ function writeToBoth(output, payload) {
   for (const root of [...new Set([repoRoot, runtimeRoot, syncRoot])]) {
     writeJson(path.join(root, output), payload);
   }
+}
+
+function hashPayload(payload) {
+  return crypto.createHash("sha1").update(JSON.stringify(payload)).digest("hex").slice(0, 12);
 }
 
 function readOptional(rel, fallback = null) {
@@ -87,11 +92,28 @@ function strategy4PresetFiles(payload) {
     complete: slim.complete,
   };
   const byScore = [...matches].sort((a, b) => cleanNumber(b.swingScore || b.score) - cleanNumber(a.swingScore || a.score));
+  const zoneB = byScore.filter((item) => item.swingZone === "B");
+  const zoneBPages = [];
+  const pageSize = 220;
+  for (let index = 0; index < zoneB.length; index += pageSize) {
+    const page = Math.floor(index / pageSize) + 1;
+    zoneBPages.push([`data/strategy4-zone-b-page-${page}.json`, {
+      ...base,
+      zone: "B",
+      page,
+      pageSize,
+      totalPages: Math.ceil(zoneB.length / pageSize),
+      totalCount: zoneB.length,
+      count: Math.min(pageSize, zoneB.length - index),
+      matches: zoneB.slice(index, index + pageSize),
+    }]);
+  }
   return [
     ["data/strategy4-zone-a.json", { ...base, zone: "A", count: matches.filter((item) => (item.swingZone || "A") === "A").length, matches: byScore.filter((item) => (item.swingZone || "A") === "A") }],
     ["data/strategy4-zone-b.json", { ...base, zone: "B", count: matches.filter((item) => item.swingZone === "B").length, matches: byScore.filter((item) => item.swingZone === "B") }],
     ["data/strategy4-zone-c.json", { ...base, zone: "C", count: matches.filter((item) => item.swingZone === "C").length, matches: byScore.filter((item) => item.swingZone === "C") }],
     ["data/strategy4-score-top.json", { ...base, count: Math.min(120, byScore.length), matches: byScore.slice(0, 120) }],
+    ...zoneBPages,
   ];
 }
 
@@ -505,12 +527,43 @@ function slimStocks() {
   };
 }
 
+function stocksIndexFiles(payload = slimStocks()) {
+  const stocks = normalizeArray(payload?.stocks);
+  const index = stocks.map((stock) => ({
+    code: String(stock.code || stock.Code || ""),
+    name: String(stock.name || stock.Name || stock.code || stock.Code || ""),
+    market: String(stock.market || stock.Market || ""),
+  })).filter((stock) => stock.code && stock.name);
+  const quotes = stocks.map((stock) => ({
+    code: String(stock.code || stock.Code || ""),
+    close: cleanNumber(stock.close || stock.ClosingPrice),
+    change: cleanNumber(stock.change || stock.Change),
+    percent: cleanNumber(stock.percent || stock.Percent),
+    tradeVolume: cleanNumber(stock.tradeVolume || stock.TradeVolume || stock.volume),
+    value: cleanNumber(stock.value || stock.TradeValue),
+    quoteDate: stock.quoteDate || stock.tradeDate || stock.TradeDate || "",
+  })).filter((stock) => stock.code && stock.close);
+  const base = {
+    ok: Boolean(payload?.ok ?? true),
+    updatedAt: payload?.updatedAt || new Date().toISOString(),
+    today: payload?.today || "",
+    resolvedTradeDate: payload?.resolvedTradeDate || "",
+    sourceTradeDate: payload?.sourceTradeDate || "",
+  };
+  return [
+    ["data/stocks-index.json", { ...base, source: "stocks-index", count: index.length, stocks: index }],
+    ["data/stocks-quotes-slim.json", { ...base, source: "stocks-quotes-slim", count: quotes.length, quotes }],
+  ];
+}
+
 function dataStatusIndex() {
   const files = [
     "market-summary.json",
     "health-summary.json",
     "mobile-home-summary.json",
     "stocks-slim.json",
+    "stocks-index.json",
+    "stocks-quotes-slim.json",
     "strategy-match-index.json",
     "open-buy-latest.json",
     "strategy2-intraday-latest.json",
@@ -518,6 +571,7 @@ function dataStatusIndex() {
     "strategy4-summary.json",
     "strategy4-slim.json",
     "strategy4-score-top.json",
+    "strategy4-zone-b-page-1.json",
     "strategy5-latest.json",
     "institution-slim.json",
     "institution-mobile-top.json",
@@ -542,6 +596,60 @@ function dataStatusIndex() {
     ok: true,
     source: "data-status-index",
     updatedAt: new Date().toISOString(),
+    entries,
+  };
+}
+
+function dataManifest() {
+  const files = [
+    "market-summary.json",
+    "mobile-home-summary.json",
+    "terminal-home-bundle.json",
+    "data-status-index.json",
+    "stocks-slim.json",
+    "stocks-index.json",
+    "stocks-quotes-slim.json",
+    "strategy-match-index.json",
+    "open-buy-latest.json",
+    "strategy2-intraday-slim.json",
+    "strategy2-intraday-top.json",
+    "strategy2-intraday-live-top.json",
+    "strategy3-latest.json",
+    "strategy4-summary.json",
+    "strategy4-score-top.json",
+    "strategy4-zone-a.json",
+    "strategy4-zone-b.json",
+    "strategy4-zone-c.json",
+    "strategy5-latest.json",
+    "institution-slim.json",
+    "institution-mobile-top.json",
+    "warrant-flow-slim.json",
+    "warrant-flow-mobile-top.json",
+    "health-summary.json",
+    "signal-quality-report.json",
+    "data-quality-report.json",
+    "data-consistency-report.json",
+    "strategy-weight-report.json",
+  ];
+  for (let page = 1; page <= 8; page += 1) files.push(`strategy4-zone-b-page-${page}.json`);
+  const entries = {};
+  for (const file of files) {
+    const payload = readOptional(`data/${file}`, null);
+    if (!payload) continue;
+    const json = JSON.stringify(payload);
+    entries[file] = {
+      hash: crypto.createHash("sha1").update(json).digest("hex").slice(0, 12),
+      bytes: Buffer.byteLength(json),
+      updatedAt: payload?.updatedAt || payload?.scanStamp || "",
+      date: payload?.usedDate || payload?.date || payload?.tradeDate || payload?.resolvedTradeDate || payload?.scanStamp || "",
+      count: cleanNumber(payload?.count || normalizeArray(payload?.matches).length || normalizeArray(payload?.rows).length || normalizeArray(payload?.stocks).length || normalizeArray(payload?.quotes).length),
+    };
+  }
+  return {
+    ok: true,
+    source: "data-manifest",
+    updatedAt: new Date().toISOString(),
+    count: Object.keys(entries).length,
     entries,
   };
 }
@@ -719,6 +827,10 @@ if (wrote) {
   const stocksSlim = slimStocks();
   writeToBoth("data/stocks-slim.json", stocksSlim);
   console.log(`[slim] wrote data/stocks-slim.json count=${stocksSlim.count || 0}`);
+  for (const [stockOutput, stockPayload] of stocksIndexFiles(stocksSlim)) {
+    writeToBoth(stockOutput, stockPayload);
+    console.log(`[slim] wrote ${stockOutput} count=${stockPayload.count || 0}`);
+  }
   const strategyMatchIndex = buildStrategyMatchIndex();
   writeToBoth("data/strategy-match-index.json", strategyMatchIndex);
   console.log(`[slim] wrote data/strategy-match-index.json codes=${strategyMatchIndex.count || 0}`);
@@ -728,7 +840,8 @@ if (wrote) {
   const homeBundle = terminalHomeBundle();
   writeToBoth("data/terminal-home-bundle.json", homeBundle);
   console.log(`[slim] wrote data/terminal-home-bundle.json stocks=${homeBundle.stocks.count || 0}`);
+  const manifest = dataManifest();
+  writeToBoth("data/data-manifest.json", manifest);
+  console.log(`[slim] wrote data/data-manifest.json files=${manifest.count || 0}`);
 }
 if (!wrote) process.exitCode = 1;
-
-

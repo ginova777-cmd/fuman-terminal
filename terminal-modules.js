@@ -1,5 +1,5 @@
 (function () {
-  const VERSION = "deep-speed-20260606";
+  const VERSION = "efficiency-20260606";
   const modules = {
     sectorMap: { loaded: false, src: "terminal-sector-map.js" },
     strategyConfig: { loaded: false, src: "terminal-strategy-config.js" },
@@ -38,4 +38,5 @@
     },
   };
 })();
+
 

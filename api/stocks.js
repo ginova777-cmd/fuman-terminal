@@ -1,3 +1,5 @@
+const crypto = require("crypto");
+
 async function fetchText(url, options = {}, timeout = 12000) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeout);
@@ -414,8 +416,7 @@ module.exports = async function handler(request, response) {
     ? todayKey
     : resolvedTradeDate;
 
-  response.setHeader("Cache-Control", "s-maxage=60, stale-while-revalidate=300");
-  response.status(stocks.length ? 200 : 502).json({
+  const payload = {
     ok: stocks.length > 0,
     source: `${twsePayload.source} + ${tpexPayload.source}`,
     updatedAt: new Date().toISOString(),
@@ -436,5 +437,19 @@ module.exports = async function handler(request, response) {
       tpex: tpexResult.status === "rejected" ? tpexResult.reason.message : null,
     },
     stocks,
-  });
+  };
+  const etag = `"${crypto.createHash("sha1").update(JSON.stringify({
+    date: payload.resolvedTradeDate,
+    count: payload.count,
+    realtimeCount: payload.realtimeCount,
+    stocks: payload.stocks,
+  })).digest("hex").slice(0, 16)}"`;
+  response.setHeader("Cache-Control", "s-maxage=60, stale-while-revalidate=300");
+  response.setHeader("ETag", etag);
+  response.setHeader("Last-Modified", new Date(payload.updatedAt).toUTCString());
+  if (request.headers?.["if-none-match"] === etag) {
+    response.status(304).end();
+    return;
+  }
+  response.status(stocks.length ? 200 : 502).json(payload);
 };
