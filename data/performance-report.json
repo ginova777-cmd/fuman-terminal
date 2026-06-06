@@ -1,6 +1,6 @@
 {
   "ok": true,
-  "updatedAt": "2026-06-06T13:12:02.631Z",
+  "updatedAt": "2026-06-06T22:12:04.757Z",
   "generatedBy": "generate-performance-report",
   "assets": [
     {
@@ -13,9 +13,9 @@
     {
       "file": "health-summary.json",
       "ok": true,
-      "bytes": 3706,
+      "bytes": 3112,
       "count": 0,
-      "updatedAt": "2026-06-06T12:36:22.825Z"
+      "updatedAt": "2026-06-06T13:44:10.277Z"
     },
     {
       "file": "strategy4-summary.json",
@@ -69,39 +69,39 @@
     {
       "file": "realtime-radar-latest.json",
       "ok": true,
-      "bytes": 113345,
-      "count": 80,
-      "updatedAt": "2026-06-02T05:29:35.423Z"
+      "bytes": 690,
+      "count": 0,
+      "updatedAt": "2026-06-06T13:44:07.486Z"
     },
     {
       "file": "signal-quality-report.json",
       "ok": true,
-      "bytes": 821,
+      "bytes": 817,
       "count": 0,
-      "updatedAt": "2026-06-06T13:12:02.314Z"
+      "updatedAt": "2026-06-06T22:12:04.464Z"
     },
     {
       "file": "data-quality-report.json",
       "ok": true,
-      "bytes": 2315,
+      "bytes": 2006,
       "count": 0,
-      "updatedAt": "2026-06-06T13:12:02.444Z"
+      "updatedAt": "2026-06-06T22:12:04.559Z"
     },
     {
       "file": "data-consistency-report.json",
       "ok": true,
       "bytes": 316,
       "count": 0,
-      "updatedAt": "2026-06-06T13:12:02.518Z"
+      "updatedAt": "2026-06-06T22:12:04.637Z"
     },
     {
       "file": "strategy-weight-report.json",
       "ok": true,
       "bytes": 418,
       "count": 0,
-      "updatedAt": "2026-06-06T13:12:02.580Z"
+      "updatedAt": "2026-06-06T22:12:04.698Z"
     }
   ],
-  "totalBytes": 1503022,
+  "totalBytes": 1389460,
   "missing": []
 }
