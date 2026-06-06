@@ -1,6 +1,6 @@
 {
   "ok": true,
-  "updatedAt": "2026-06-02T13:12:02.814Z",
+  "updatedAt": "2026-06-06T12:35:36.265Z",
   "files": [
     {
       "file": "market-summary.json",
@@ -34,51 +34,51 @@
     {
       "file": "strategy4-latest.json",
       "ok": true,
-      "bytes": 2072669,
-      "count": 1492,
-      "updatedAt": "2026-06-02T06:50:35.737Z",
+      "bytes": 2103842,
+      "count": 1504,
+      "updatedAt": "2026-06-06T12:34:51.971Z",
       "issues": [
         {
           "level": "medium",
-          "message": "extreme percent rows 7"
+          "message": "extreme percent rows 16"
         }
       ]
     },
     {
       "file": "strategy4-summary.json",
       "ok": true,
-      "bytes": 42704,
-      "count": 1492,
-      "updatedAt": "2026-06-02T06:50:35.737Z",
+      "bytes": 46707,
+      "count": 1504,
+      "updatedAt": "2026-06-06T12:34:51.971Z",
       "issues": []
     },
     {
       "file": "strategy4-slim.json",
       "ok": true,
-      "bytes": 628087,
-      "count": 1492,
-      "updatedAt": "2026-06-02T06:50:35.737Z",
+      "bytes": 637263,
+      "count": 1504,
+      "updatedAt": "2026-06-06T12:34:51.971Z",
       "issues": [
         {
           "level": "medium",
-          "message": "extreme percent rows 7"
+          "message": "extreme percent rows 16"
         }
       ]
     },
     {
       "file": "institution-latest.json",
       "ok": true,
-      "bytes": 828381,
-      "count": 1897,
-      "updatedAt": "2026-06-02T13:00:20.955Z",
+      "bytes": 824052,
+      "count": 1886,
+      "updatedAt": "2026-06-06T11:58:22.989Z",
       "issues": []
     },
     {
       "file": "warrant-flow-latest.json",
       "ok": true,
-      "bytes": 256735,
-      "count": 79,
-      "updatedAt": "2026-06-02T12:50:28.209Z",
+      "bytes": 473517,
+      "count": 120,
+      "updatedAt": "2026-06-06T11:58:42.693Z",
       "issues": []
     }
   ],
@@ -92,12 +92,12 @@
     {
       "file": "strategy4-latest.json",
       "level": "medium",
-      "message": "extreme percent rows 7"
+      "message": "extreme percent rows 16"
     },
     {
       "file": "strategy4-slim.json",
       "level": "medium",
-      "message": "extreme percent rows 7"
+      "message": "extreme percent rows 16"
     }
   ]
 }
