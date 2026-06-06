@@ -94,6 +94,8 @@ function dataFileStatus(name) {
     return {
       file: name,
       ok: true,
+      status: payload.status || "",
+      date: payload.date || payload.usedDate || payload.tradeDate || "",
       count: Number(payload.count || (Array.isArray(payload.matches) ? payload.matches.length : 0) || 0),
       updatedAt: payload.updatedAt || "",
       bytes: fs.statSync(file).size,
@@ -113,6 +115,7 @@ const DATA_SLA_HOURS = {
   "strategy5-latest.json": 30,
   "institution-summary.json": 42,
   "warrant-flow-summary.json": 42,
+  "strategy2-intraday-latest.json": 6,
   "realtime-radar-latest.json": 6,
   "performance-report.json": 36,
   "signal-quality-report.json": 36,
@@ -159,6 +162,10 @@ function buildRisks({ badTasks, outbox, data }) {
   if (missing.length) {
     risks.push(riskItem("high", "runtime", `資料檔缺失或不可解析 ${missing.length} 個`, { files: missing.map((item) => item.file) }));
   }
+  const missingIntradaySnapshots = data.filter((item) => item.status === "no_latest_intraday_snapshot");
+  if (missingIntradaySnapshots.length) {
+    risks.push(riskItem("medium", "intraday", `最新交易日盤中快照未完成 ${missingIntradaySnapshots.length} 個`, { files: missingIntradaySnapshots.map((item) => item.file) }));
+  }
   const now = Date.now();
   const stale = data.map((item) => {
     const at = Date.parse(item.updatedAt || "");
@@ -191,6 +198,7 @@ function main() {
     "strategy5-latest.json",
     "institution-summary.json",
     "warrant-flow-summary.json",
+    "strategy2-intraday-latest.json",
     "realtime-radar-latest.json",
     "performance-report.json",
     "signal-quality-report.json",

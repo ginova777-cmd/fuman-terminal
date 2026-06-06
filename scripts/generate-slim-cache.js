@@ -386,6 +386,7 @@ function deltaStrategy2(payload) {
   return {
     ok: true,
     source: "strategy2-intraday-delta",
+    date: slim.date,
     updatedAt: slim.updatedAt,
     since: slim.updatedAt,
     count: events.length,

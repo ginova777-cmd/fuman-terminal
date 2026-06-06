@@ -26,6 +26,7 @@ function Invoke-HealthStep($scriptPath, $stepArgs = @()) {
 
 Add-LogLine "=== Daily health summary start $(Get-Date) ==="
 $reportedExitCodes = @()
+$reportedExitCodes += Invoke-HealthStep "scripts\refresh-intraday-latest-dates.js"
 $reportedExitCodes += Invoke-HealthStep "scripts\generate-health-summary.js"
 $reportedExitCodes += Invoke-HealthStep "scripts\repair-health.js"
 $reportedExitCodes += Invoke-HealthStep "scripts\send-daily-health-summary.js" $args

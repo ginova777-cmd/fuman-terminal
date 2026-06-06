@@ -30,6 +30,7 @@ function readHealth() {
 }
 
 function main() {
+  run("refresh intraday latest trading dates", nodeExe, ["scripts/refresh-intraday-latest-dates.js"]);
   run("refresh health summary", nodeExe, ["scripts/generate-health-summary.js"]);
   run("refresh slim/preset files", nodeExe, ["scripts/generate-slim-cache.js"]);
   run("refresh signal quality report", nodeExe, ["scripts/generate-signal-quality-report.js"]);
