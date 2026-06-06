@@ -473,6 +473,124 @@ function mobileHomeSummary() {
   };
 }
 
+function slimStocks() {
+  const market = readOptional("data/market-summary.json", {});
+  const rows = normalizeArray(market?.stocks).map((stock) => {
+    const close = cleanNumber(stock.close || stock.ClosingPrice);
+    const change = cleanNumber(stock.change || stock.Change);
+    const previous = close - change;
+    return {
+      code: String(stock.code || stock.Code || ""),
+      name: String(stock.name || stock.Name || stock.code || stock.Code || ""),
+      close,
+      change,
+      percent: cleanNumber(stock.percent) || (previous ? (change / previous) * 100 : 0),
+      value: cleanNumber(stock.value || stock.TradeValue),
+      tradeVolume: cleanNumber(stock.tradeVolume || stock.TradeVolume),
+      quoteDate: market?.resolvedTradeDate || stock.quoteDate || "",
+    };
+  }).filter((stock) => stock.code && stock.name && stock.close);
+  return {
+    ok: rows.length > 0,
+    source: "stocks-slim",
+    updatedAt: market?.updatedAt || new Date().toISOString(),
+    resolvedTradeDate: market?.resolvedTradeDate || market?.marketDates?.twse || "",
+    today: market?.today || "",
+    count: rows.length,
+    stocks: rows,
+  };
+}
+
+function dataStatusIndex() {
+  const files = [
+    "market-summary.json",
+    "health-summary.json",
+    "mobile-home-summary.json",
+    "stocks-slim.json",
+    "strategy-match-index.json",
+    "open-buy-latest.json",
+    "strategy2-intraday-latest.json",
+    "strategy3-latest.json",
+    "strategy4-summary.json",
+    "strategy4-slim.json",
+    "strategy4-score-top.json",
+    "strategy5-latest.json",
+    "institution-slim.json",
+    "institution-mobile-top.json",
+    "warrant-flow-slim.json",
+    "warrant-flow-mobile-top.json",
+    "realtime-radar-latest.json",
+  ];
+  const entries = {};
+  for (const file of files) {
+    const payload = readOptional(`data/${file}`, {});
+    const rows = normalizeArray(payload?.matches).length || normalizeArray(payload?.rows).length || normalizeArray(payload?.stocks).length || cleanNumber(payload?.count);
+    entries[file] = {
+      ok: payload?.ok !== false,
+      status: payload?.status || "",
+      source: payload?.source || "",
+      date: payload?.usedDate || payload?.date || payload?.tradeDate || payload?.resolvedTradeDate || payload?.scanStamp || "",
+      updatedAt: payload?.updatedAt || payload?.scanStamp || "",
+      count: rows,
+    };
+  }
+  return {
+    ok: true,
+    source: "data-status-index",
+    updatedAt: new Date().toISOString(),
+    entries,
+  };
+}
+
+function terminalHomeBundle() {
+  const mobile = readOptional("data/mobile-home-summary.json", mobileHomeSummary());
+  const status = readOptional("data/data-status-index.json", dataStatusIndex());
+  const stocks = readOptional("data/stocks-slim.json", slimStocks());
+  const strategy4Top = readOptional("data/strategy4-score-top.json", {});
+  const openBuy = readOptional("data/open-buy-latest.json", {});
+  const strategy3 = readOptional("data/strategy3-latest.json", {});
+  const strategy5 = readOptional("data/strategy5-latest.json", {});
+  return {
+    ok: true,
+    source: "terminal-home-bundle",
+    updatedAt: new Date().toISOString(),
+    mobile,
+    status,
+    stocks: {
+      updatedAt: stocks.updatedAt || "",
+      resolvedTradeDate: stocks.resolvedTradeDate || "",
+      count: cleanNumber(stocks.count),
+      top: normalizeArray(stocks.stocks).slice(0, 80),
+    },
+    strategies: {
+      openBuy: {
+        updatedAt: openBuy?.updatedAt || "",
+        date: openBuy?.usedDate || openBuy?.date || "",
+        count: cleanNumber(openBuy?.count || normalizeArray(openBuy?.matches).length),
+        top: normalizeArray(openBuy?.matches).slice(0, 12),
+      },
+      strategy3: {
+        updatedAt: strategy3?.updatedAt || "",
+        date: strategy3?.usedDate || strategy3?.date || "",
+        count: cleanNumber(strategy3?.count || normalizeArray(strategy3?.matches).length),
+        top: normalizeArray(strategy3?.matches).slice(0, 12),
+      },
+      strategy4: {
+        updatedAt: strategy4Top?.updatedAt || "",
+        date: strategy4Top?.scanStamp || strategy4Top?.date || "",
+        count: cleanNumber(strategy4Top?.count || normalizeArray(strategy4Top?.matches).length),
+        top: normalizeArray(strategy4Top?.matches).slice(0, 24),
+      },
+      strategy5: {
+        updatedAt: strategy5?.updatedAt || "",
+        date: strategy5?.usedDate || strategy5?.date || "",
+        count: cleanNumber(strategy5?.count || normalizeArray(strategy5?.matches).length),
+        top: normalizeArray(strategy5?.matches).slice(0, 12),
+      },
+    },
+  };
+}
+
 function signalText(value) {
   if (!value) return "";
   if (typeof value === "string") return value;
@@ -594,9 +712,18 @@ if (wrote) {
   const mobileSummary = mobileHomeSummary();
   writeToBoth("data/mobile-home-summary.json", mobileSummary);
   console.log(`[slim] wrote data/mobile-home-summary.json strategy2=${mobileSummary.strategy2.count || 0} chip=${mobileSummary.chip.count || 0} warrant=${mobileSummary.warrant.count || 0}`);
+  const stocksSlim = slimStocks();
+  writeToBoth("data/stocks-slim.json", stocksSlim);
+  console.log(`[slim] wrote data/stocks-slim.json count=${stocksSlim.count || 0}`);
   const strategyMatchIndex = buildStrategyMatchIndex();
   writeToBoth("data/strategy-match-index.json", strategyMatchIndex);
   console.log(`[slim] wrote data/strategy-match-index.json codes=${strategyMatchIndex.count || 0}`);
+  const statusIndex = dataStatusIndex();
+  writeToBoth("data/data-status-index.json", statusIndex);
+  console.log(`[slim] wrote data/data-status-index.json files=${Object.keys(statusIndex.entries || {}).length}`);
+  const homeBundle = terminalHomeBundle();
+  writeToBoth("data/terminal-home-bundle.json", homeBundle);
+  console.log(`[slim] wrote data/terminal-home-bundle.json stocks=${homeBundle.stocks.count || 0}`);
 }
 if (!wrote) process.exitCode = 1;
 

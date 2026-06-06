@@ -1,4 +1,4 @@
-const CACHE_VERSION = "fuman-terminal-sw-20260602-mobile-runtime-pinned-tools";
+const CACHE_VERSION = "fuman-terminal-sw-20260606-speed-bundle";
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 const DATA_CACHE = `${CACHE_VERSION}-data`;
 
@@ -29,6 +29,10 @@ const DATA_PATTERNS = [
   /\/data\/.*-top\.json/i,
   /\/data\/market-summary\.json/i,
   /\/data\/mobile-home-summary\.json/i,
+  /\/data\/terminal-home-bundle\.json/i,
+  /\/data\/data-status-index\.json/i,
+  /\/data\/stocks-slim\.json/i,
+  /\/data\/strategy-match-index\.json/i,
   /\/data\/health-summary\.json/i,
 ];
 

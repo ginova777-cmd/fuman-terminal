@@ -3655,6 +3655,33 @@ async function loadMarketSummary(force = false) {
   }
 }
 
+async function loadTerminalHomeBundle(force = false) {
+  if (!endpoints.terminalHomeBundle) return null;
+  try {
+    const bundle = await fetchVersionedJson(endpoints.terminalHomeBundle, 4500, "latest", force);
+    if (bundle?.mobile) {
+      renderMobileHomeMode(bundle.mobile);
+    }
+    if (bundle?.stocks?.top?.length && !latestStocks.length) {
+      latestStocks = parseStocksForLatest(bundle.stocks.top);
+      if (latestStocks.length) renderStocks(latestStocks);
+    }
+    if (bundle?.mobile?.health) {
+      healthSummaryPayload = {
+        ok: true,
+        risk: bundle.mobile.health.risk || "low",
+        updatedAt: bundle.mobile.health.updatedAt || bundle.updatedAt || "",
+        schedule: { badCount: 0 },
+        githubSync: { pendingCount: 0 },
+      };
+      renderHealthPerformancePanel();
+    }
+    return bundle;
+  } catch (error) {
+    return null;
+  }
+}
+
 async function loadHealthSummary(force = false) {
   try {
     healthSummaryPayload = await fetchVersionedJson(endpoints.healthSummary, 5000, "latest", force);
@@ -6854,8 +6881,20 @@ async function loadStrategyStocks() {
   strategyStocksPromise = (async () => {
     let stocks = [];
     try {
-      const payload = await fetchVersionedJson(endpoints.strategyStocks, 20000, marketSummaryPayload?.updatedAt || "latest", false);
-      stocks = normalizeArray(payload.stocks);
+      const slimPayload = await fetchVersionedJson(endpoints.stocksSlim, 7000, marketSummaryPayload?.updatedAt || "latest", false);
+      stocks = normalizeArray(slimPayload?.stocks || slimPayload);
+      if (cleanNumber(slimPayload?.count) < 500) stocks = [];
+      if (stocks.length) updateMarketStockDataState(slimPayload);
+    } catch (error) {
+      stocks = [];
+    }
+
+    try {
+      if (!stocks.length) {
+        const payload = await fetchVersionedJson(endpoints.strategyStocks, 20000, marketSummaryPayload?.updatedAt || "latest", false);
+        stocks = normalizeArray(payload.stocks);
+        if (stocks.length) updateMarketStockDataState(payload);
+      }
     } catch (error) {
       stocks = [];
     }
@@ -6864,6 +6903,7 @@ async function loadStrategyStocks() {
       if (!stocks.length) {
         const fallback = await fetchVersionedJson(endpoints.stocks, 12000, marketSummaryPayload?.updatedAt || "latest", false);
         stocks = normalizeArray(fallback?.stocks || fallback);
+        if (stocks.length) updateMarketStockDataState(fallback);
       }
     } catch (error) {
       if (!stocks.length) stocks = [];
@@ -9344,14 +9384,17 @@ async function loadStrategy4Cache(force = false) {
   }
   strategy4CacheLoading = true;
   try {
-    let payload = await fetchVersionedJson(endpoints.strategy4Slim, 8000, strategy4Summary?.updatedAt || strategy4SummaryLoadedAt || "", force);
+    let payload = await fetchVersionedJson(force ? endpoints.strategy4Slim : (endpoints.strategy4ScoreTop || endpoints.strategy4Slim), 8000, strategy4Summary?.updatedAt || strategy4SummaryLoadedAt || "", force);
+    if (!force && normalizeArray(payload?.matches).length) {
+      payload = { ...payload, partial: true, complete: false };
+    }
     if (!normalizeArray(payload?.matches).length && isMobileViewport() && !force) {
       return;
     }
-    if (!normalizeArray(payload?.matches).length) {
+    if (force && !normalizeArray(payload?.matches).length) {
       payload = await fetchVersionedJson(endpoints.strategy4Cache, 10000, strategy4Summary?.updatedAt || strategy4SummaryLoadedAt || "", force);
     }
-    if (!normalizeArray(payload?.matches).length) {
+    if (force && !normalizeArray(payload?.matches).length) {
       payload = await fetchVersionedJson(endpoints.strategy4Backup, 10000, strategy4Summary?.updatedAt || strategy4SummaryLoadedAt || "", force);
     }
     if (payload?.ok && Array.isArray(payload.matches)) {
@@ -9381,6 +9424,7 @@ deferUiWork(() => loadStrategyWeights(false), 450);
 ensureMobileAutoOrganizeButton();
 if (isViewActive("market")) {
   installMarketSkeleton();
+  deferUiWork(() => loadTerminalHomeBundle(false), 20);
   deferUiWork(() => loadHealthSummary(false), 300);
   deferUiWork(() => loadMarketSummary(false), 80);
   loadMarketData();
