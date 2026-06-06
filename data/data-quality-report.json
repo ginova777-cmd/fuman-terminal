@@ -1,13 +1,13 @@
 {
   "ok": true,
-  "updatedAt": "2026-06-06T12:36:14.930Z",
+  "updatedAt": "2026-06-06T12:36:40.395Z",
   "files": [
     {
       "file": "market-summary.json",
       "ok": true,
-      "bytes": 152864,
+      "bytes": 152749,
       "count": 80,
-      "updatedAt": "2026-06-02T05:31:10.619Z",
+      "updatedAt": "2026-06-06T12:36:20.136Z",
       "issues": []
     },
     {

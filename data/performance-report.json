@@ -1,21 +1,21 @@
 {
   "ok": true,
-  "updatedAt": "2026-06-06T12:36:15.124Z",
+  "updatedAt": "2026-06-06T12:36:40.608Z",
   "generatedBy": "generate-performance-report",
   "assets": [
     {
       "file": "market-summary.json",
       "ok": true,
-      "bytes": 152864,
+      "bytes": 152749,
       "count": 0,
-      "updatedAt": "2026-06-02T05:31:10.619Z"
+      "updatedAt": "2026-06-06T12:36:20.136Z"
     },
     {
       "file": "health-summary.json",
       "ok": true,
-      "bytes": 3989,
+      "bytes": 3706,
       "count": 0,
-      "updatedAt": "2026-06-06T12:36:13.487Z"
+      "updatedAt": "2026-06-06T12:36:22.825Z"
     },
     {
       "file": "strategy4-summary.json",
@@ -78,30 +78,30 @@
       "ok": true,
       "bytes": 821,
       "count": 0,
-      "updatedAt": "2026-06-06T12:36:14.798Z"
+      "updatedAt": "2026-06-06T12:36:40.246Z"
     },
     {
       "file": "data-quality-report.json",
       "ok": true,
       "bytes": 2315,
       "count": 0,
-      "updatedAt": "2026-06-06T12:36:14.930Z"
+      "updatedAt": "2026-06-06T12:36:40.395Z"
     },
     {
       "file": "data-consistency-report.json",
       "ok": true,
       "bytes": 316,
       "count": 0,
-      "updatedAt": "2026-06-06T12:36:15.009Z"
+      "updatedAt": "2026-06-06T12:36:40.485Z"
     },
     {
       "file": "strategy-weight-report.json",
       "ok": true,
       "bytes": 418,
       "count": 0,
-      "updatedAt": "2026-06-06T12:36:15.065Z"
+      "updatedAt": "2026-06-06T12:36:40.549Z"
     }
   ],
-  "totalBytes": 1503420,
+  "totalBytes": 1503022,
   "missing": []
 }
