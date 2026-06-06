@@ -1,13 +1,75 @@
 {
-  "ok": true,
-  "updatedAt": "2026-06-02T07:45:06.340Z",
-  "risk": "low",
-  "risks": [],
+  "ok": false,
+  "updatedAt": "2026-06-06T12:36:13.487Z",
+  "risk": "high",
+  "risks": [
+    {
+      "level": "high",
+      "area": "schedule",
+      "message": "排程異常 2 個",
+      "items": [
+        {
+          "taskName": "\\Fuman Daily Health Summary 1545",
+          "lastRunTime": "2026/6/6 下午 07:55:52",
+          "lastResult": "-2147020576",
+          "status": "Ready"
+        },
+        {
+          "taskName": "\\Fuman 即時雷達健檢 0910",
+          "lastRunTime": "2026/6/6 下午 08:25:52",
+          "lastResult": "-2147020576",
+          "status": "Ready"
+        }
+      ]
+    },
+    {
+      "level": "medium",
+      "area": "freshness",
+      "message": "資料超過 SLA 2 個",
+      "files": [
+        "market-summary.json",
+        "realtime-radar-latest.json"
+      ],
+      "stale": [
+        {
+          "file": "market-summary.json",
+          "ok": true,
+          "count": 0,
+          "updatedAt": "2026-06-02T05:31:10.619Z",
+          "bytes": 152864,
+          "slaHours": 72,
+          "ageHours": 103.08412694444445
+        },
+        {
+          "file": "realtime-radar-latest.json",
+          "ok": true,
+          "count": 0,
+          "updatedAt": "2026-06-02T05:29:35.423Z",
+          "bytes": 113345,
+          "slaHours": 72,
+          "ageHours": 103.11057027777778
+        }
+      ]
+    }
+  ],
   "schedule": {
-    "ok": true,
-    "total": 0,
-    "badCount": 0,
-    "badTasks": [],
+    "ok": false,
+    "total": 25,
+    "badCount": 2,
+    "badTasks": [
+      {
+        "taskName": "\\Fuman Daily Health Summary 1545",
+        "lastRunTime": "2026/6/6 下午 07:55:52",
+        "lastResult": "-2147020576",
+        "status": "Ready"
+      },
+      {
+        "taskName": "\\Fuman 即時雷達健檢 0910",
+        "lastRunTime": "2026/6/6 下午 08:25:52",
+        "lastResult": "-2147020576",
+        "status": "Ready"
+      }
+    ],
     "queryMethod": "schtasks",
     "note": "Uses schtasks fallback-friendly query to avoid Get-ScheduledTask low-permission false alarms."
   },
@@ -28,30 +90,30 @@
       {
         "file": "strategy4-summary.json",
         "ok": true,
-        "count": 1492,
-        "updatedAt": "2026-06-02T06:50:35.737Z",
-        "bytes": 42704
+        "count": 1504,
+        "updatedAt": "2026-06-06T12:34:51.971Z",
+        "bytes": 46707
       },
       {
         "file": "strategy5-latest.json",
         "ok": true,
-        "count": 80,
-        "updatedAt": "2026-06-01T23:44:45.415Z",
-        "bytes": 153182
+        "count": 59,
+        "updatedAt": "2026-06-06T12:14:26.850Z",
+        "bytes": 114424
       },
       {
         "file": "institution-summary.json",
         "ok": true,
-        "count": 1908,
-        "updatedAt": "2026-06-01T23:45:37.402Z",
-        "bytes": 53649
+        "count": 1886,
+        "updatedAt": "2026-06-06T11:58:22.989Z",
+        "bytes": 53631
       },
       {
         "file": "warrant-flow-summary.json",
         "ok": true,
         "count": 120,
-        "updatedAt": "2026-06-01T23:43:57.366Z",
-        "bytes": 34855
+        "updatedAt": "2026-06-06T11:58:42.693Z",
+        "bytes": 34857
       },
       {
         "file": "realtime-radar-latest.json",
@@ -64,35 +126,35 @@
         "file": "performance-report.json",
         "ok": true,
         "count": 0,
-        "updatedAt": "2026-06-02T07:30:35.844Z",
+        "updatedAt": "2026-06-06T12:35:36.471Z",
         "bytes": 2397
       },
       {
         "file": "signal-quality-report.json",
         "ok": true,
         "count": 0,
-        "updatedAt": "2026-06-02T07:30:35.543Z",
-        "bytes": 820
+        "updatedAt": "2026-06-06T12:35:36.131Z",
+        "bytes": 821
       },
       {
         "file": "data-quality-report.json",
         "ok": true,
         "count": 0,
-        "updatedAt": "2026-06-02T07:30:35.654Z",
-        "bytes": 2311
+        "updatedAt": "2026-06-06T12:35:36.265Z",
+        "bytes": 2315
       },
       {
         "file": "data-consistency-report.json",
         "ok": true,
         "count": 0,
-        "updatedAt": "2026-06-02T07:30:35.733Z",
+        "updatedAt": "2026-06-06T12:35:36.354Z",
         "bytes": 316
       },
       {
         "file": "strategy-weight-report.json",
         "ok": true,
         "count": 0,
-        "updatedAt": "2026-06-02T07:30:35.780Z",
+        "updatedAt": "2026-06-06T12:35:36.421Z",
         "bytes": 418
       }
     ]
