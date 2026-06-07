@@ -1,23 +1,23 @@
-const CACHE_VERSION = "fuman-terminal-sw-20260607-watchlist-detail-fixed";
+const CACHE_VERSION = "fuman-terminal-sw-20260607-watchlist-detail-sections";
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 const DATA_CACHE = `${CACHE_VERSION}-data`;
 
 const STATIC_ASSETS = [
-  "/styles.css?v=watchlist-detail-fixed-20260607",
-  "/terminal-core.js?v=watchlist-detail-fixed-20260607",
-  "/terminal-modules.js?v=watchlist-detail-fixed-20260607",
-  "/terminal-sector-map.js?v=watchlist-detail-fixed-20260607",
-  "/terminal-strategy-config.js?v=watchlist-detail-fixed-20260607",
-  "/terminal-market-config.js?v=watchlist-detail-fixed-20260607",
-  "/terminal-ui-config.js?v=watchlist-detail-fixed-20260607",
-  "/terminal-runtime-config.js?v=watchlist-detail-fixed-20260607",
-  "/terminal-tuning-config.js?v=watchlist-detail-fixed-20260607",
-  "/terminal-worker.js?v=watchlist-detail-fixed-20260607",
-  "/terminal.js?v=watchlist-detail-fixed-20260607",
-  "/terminal-realtime-radar.css?v=watchlist-detail-fixed-20260607",
-  "/terminal-intraday-radar.css?v=watchlist-detail-fixed-20260607",
-  "/terminal-utility.css?v=watchlist-detail-fixed-20260607",
-  "/refresh.html?v=watchlist-detail-fixed-20260607",
+  "/styles.css?v=watchlist-detail-sections-20260607",
+  "/terminal-core.js?v=watchlist-detail-sections-20260607",
+  "/terminal-modules.js?v=watchlist-detail-sections-20260607",
+  "/terminal-sector-map.js?v=watchlist-detail-sections-20260607",
+  "/terminal-strategy-config.js?v=watchlist-detail-sections-20260607",
+  "/terminal-market-config.js?v=watchlist-detail-sections-20260607",
+  "/terminal-ui-config.js?v=watchlist-detail-sections-20260607",
+  "/terminal-runtime-config.js?v=watchlist-detail-sections-20260607",
+  "/terminal-tuning-config.js?v=watchlist-detail-sections-20260607",
+  "/terminal-worker.js?v=watchlist-detail-sections-20260607",
+  "/terminal.js?v=watchlist-detail-sections-20260607",
+  "/terminal-realtime-radar.css?v=watchlist-detail-sections-20260607",
+  "/terminal-intraday-radar.css?v=watchlist-detail-sections-20260607",
+  "/terminal-utility.css?v=watchlist-detail-sections-20260607",
+  "/refresh.html?v=watchlist-detail-sections-20260607",
   "/assets/logo.webp",
   "/favicon.ico",
 ];

@@ -657,11 +657,37 @@
             </article>
           </section>
     
-          <section class="watch-detail-trend-card ${trendTone}">
-            <span>趨勢</span>
-            <strong>${model.trendLabel}</strong>
-            <b>${pctText(stock.percent)}</b>
-            <em>收盤位於日內區間 ${model.rangePosition}%。</em>
+          <section class="watch-detail-sections">
+            <article class="watch-detail-section-card trend ${trendTone}">
+              <span>趨勢</span>
+              <strong>${model.trendLabel}</strong>
+              <b>${pctText(stock.percent)}</b>
+              <em>收盤位於日內區間 ${model.rangePosition}%。</em>
+            </article>
+            <article class="watch-detail-section-card price">
+              <span>價位</span>
+              <strong>現價 ${formatStockPrice(model.close)}</strong>
+              <b>${formatStockPrice(model.supportA)} / ${formatStockPrice(model.pressureA)}</b>
+              <em>支撐觀察：${formatStockPrice(model.supportA)}、${formatStockPrice(model.supportB)}、${formatStockPrice(model.supportC)}；壓力觀察：${formatStockPrice(model.pressureA)}、${formatStockPrice(model.pressureB)}、${formatStockPrice(model.pressureC)}。</em>
+            </article>
+            <article class="watch-detail-section-card chip">
+              <span>籌碼</span>
+              <strong>${analysis.hasInstitution ? "籌碼待確認" : "法人盤後"}</strong>
+              <b>籌碼 ${model.chipScore || "--"} / 主力 ${analysis.hasInstitution ? Math.round((model.chipScore + analysis.score) / 2) : "--"}</b>
+              <em>外資 ${formatInstitution(model.inst.foreign)}，投信 ${formatInstitution(model.inst.trust)}。</em>
+            </article>
+            <article class="watch-detail-section-card risk ${riskTone}">
+              <span>風險</span>
+              <strong>${model.riskLabel === "風險可控" ? "風險可控" : "先控風險"}</strong>
+              <b>${analysis.volumeRank || 0} 則</b>
+              <em>${model.riskLabel === "風險可控" ? "目前沒有明顯過熱風險，仍需搭配成交量確認。" : "盤中振幅偏大，追價風險較高。"}</em>
+            </article>
+            <article class="watch-detail-section-card action">
+              <span>操作提醒</span>
+              <strong>${model.actionTitle}</strong>
+              <b>支撐 ${formatStockPrice(model.supportA)}</b>
+              <em>${model.actionHint}</em>
+            </article>
           </section>
     
           <section class="watch-note-row">
