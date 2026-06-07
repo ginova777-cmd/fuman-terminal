@@ -1,5 +1,5 @@
 (function () {
-  const version = "warrant-kline-20260607";
+  const version = "no-warrant-kline-20260607";
   window.FUMAN_TERMINAL_BOOT = {
     version,
     startedAt: Date.now(),
