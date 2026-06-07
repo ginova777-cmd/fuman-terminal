@@ -538,6 +538,73 @@ function scoreUnderlyingMove(percent) {
   return -10;
 }
 
+function scoreStockSetup(percent) {
+  if (!Number.isFinite(Number(percent))) {
+    return { score: 48, label: "股價待確認", risk: "unknown" };
+  }
+  const pct = Number(percent);
+  if (pct >= 0 && pct <= 1.5) return { score: 88, label: "股票未噴，權證先熱", risk: "good" };
+  if (pct > 1.5 && pct <= 3) return { score: 76, label: "漲幅可控", risk: "good" };
+  if (pct > 3 && pct <= 4.5) return { score: 58, label: "短線偏熱", risk: "watch" };
+  if (pct > 4.5 && pct <= 6) return { score: 36, label: "追價風險高", risk: "hot" };
+  if (pct > 6) return { score: 18, label: "已明顯過熱", risk: "hot" };
+  if (pct >= -1.5) return { score: 62, label: "回檔觀察", risk: "watch" };
+  return { score: 28, label: "股價偏弱", risk: "weak" };
+}
+
+function normalizeBranchSupport(branchFlow) {
+  if (!branchFlow || typeof branchFlow !== "object") {
+    return {
+      available: false,
+      score: 0,
+      status: "待接分點",
+      label: "分點主力待確認",
+      topBuyer: "",
+      topSeller: "",
+      concentration: 0,
+      streakDays: 0,
+      source: "",
+    };
+  }
+  const concentration = cleanNumber(branchFlow.concentration);
+  const streakDays = cleanNumber(branchFlow.streakDays);
+  const netBuy = cleanNumber(branchFlow.netBuy);
+  const topBuyer = String(branchFlow.topBuyer || "").trim();
+  const topSeller = String(branchFlow.topSeller || "").trim();
+  const score = clampScore(
+    cleanNumber(branchFlow.score) ||
+    Math.min(concentration * 1.6, 34) +
+    Math.min(streakDays * 9, 30) +
+    (netBuy > 0 ? 18 : netBuy < 0 ? -18 : 0) +
+    (topBuyer ? 10 : 0)
+  );
+  const status = score >= 78 ? "主力集中" : score >= 56 ? "分點偏多" : score >= 35 ? "分點觀察" : "分點偏弱";
+  return {
+    available: true,
+    score,
+    status,
+    label: branchFlow.label || status,
+    topBuyer,
+    topSeller,
+    concentration,
+    streakDays,
+    source: branchFlow.source || "",
+  };
+}
+
+function classifyWarrantSignal({ warrantHeatScore, stockSetupScore, branchSupport, finalScore }) {
+  if (branchSupport.available && branchSupport.score >= 70 && warrantHeatScore >= 75 && stockSetupScore >= 65) {
+    return { grade: "A+", action: "權證熱 + 分點確認" };
+  }
+  if (warrantHeatScore >= 76 && stockSetupScore >= 62 && finalScore >= 72) {
+    return { grade: "A", action: branchSupport.available ? "高機率觀察" : "權證強，待分點確認" };
+  }
+  if (warrantHeatScore >= 62 && stockSetupScore >= 45) {
+    return { grade: "B", action: "候選觀察" };
+  }
+  return { grade: "C", action: "只列熱度，不追價" };
+}
+
 function aggregate(rows, keyword = "") {
   const byName = new Map();
   for (const row of rows) {
@@ -612,27 +679,43 @@ function aggregate(rows, keyword = "") {
     const underlyingMoveScore = scoreUnderlyingMove(item.underlyingPercent);
     const expiryScore = item.minDaysToExpiry >= 10 ? 8 : -30;
     const biasScore = callBias >= 0.78 ? 8 : callBias >= 0.65 ? 4 : 0;
-    const score = clampScore(
+    const warrantHeatScore = clampScore(
       10 +
       callValueScore +
       breadthScore +
       ratioScore +
       moneynessScore +
-      underlyingMoveScore +
       expiryScore +
       biasScore
     );
+    const stockSetup = scoreStockSetup(item.underlyingPercent);
+    const branchSupport = normalizeBranchSupport(item.branchFlow);
+    const finalScore = clampScore(
+      (warrantHeatScore * 0.58) +
+      (stockSetup.score * 0.28) +
+      (branchSupport.score * 0.14) +
+      (branchSupport.available ? 0 : -4)
+    );
+    const signal = classifyWarrantSignal({
+      warrantHeatScore,
+      stockSetupScore: stockSetup.score,
+      branchSupport,
+      finalScore,
+    });
+    const score = clampScore(finalScore + Math.max(-8, Math.min(8, underlyingMoveScore / 2)));
     const level = (
       item.callValue >= 20000000 &&
       item.callCount >= 5 &&
       item.atMoneyCallCount >= 2 &&
       item.minDaysToExpiry >= 10 &&
-      ratio >= 2.5
+      ratio >= 2.5 &&
+      stockSetup.score >= 45
     ) ? "A" : (
       item.callValue >= 8000000 &&
       item.callCount >= 3 &&
       item.minDaysToExpiry >= 10 &&
-      ratio >= 1.8
+      ratio >= 1.8 &&
+      stockSetup.score >= 35
     ) ? "B" : "C";
     return {
       underlyingName: item.underlyingName,
@@ -656,9 +739,24 @@ function aggregate(rows, keyword = "") {
       breadth,
       callPutRatio: Number(ratio.toFixed(2)),
       score,
+      finalScore,
+      warrantHeatScore,
+      stockSetupScore: stockSetup.score,
+      stockSetupLabel: stockSetup.label,
+      stockRisk: stockSetup.risk,
+      branchPowerScore: branchSupport.score,
+      branchStatus: branchSupport.status,
+      branchLabel: branchSupport.label,
+      branchAvailable: branchSupport.available,
+      branchTopBuyer: branchSupport.topBuyer,
+      branchTopSeller: branchSupport.topSeller,
+      branchConcentration: branchSupport.concentration,
+      branchStreakDays: branchSupport.streakDays,
+      signalGrade: signal.grade,
+      actionLabel: signal.action,
       level,
       topWarrants: item.topWarrants,
-      reason: `${level}級：認購 ${item.callCount} 檔、價平/價內 ${item.atMoneyCallCount} 檔、認購金額 ${(item.callValue / 100000000).toFixed(2)} 億，認購/認售比 ${ratio >= 99 ? "99+" : ratio.toFixed(2)}，最近到期 ${item.minDaysToExpiry} 天。`,
+      reason: `${signal.grade}：${signal.action}。權證熱度 ${warrantHeatScore}、股票型態 ${stockSetup.score}（${stockSetup.label}）、分點 ${branchSupport.status}；認購 ${item.callCount} 檔、價平/價內 ${item.atMoneyCallCount} 檔、認購金額 ${(item.callValue / 100000000).toFixed(2)} 億，認購/認售比 ${ratio >= 99 ? "99+" : ratio.toFixed(2)}，最近到期 ${item.minDaysToExpiry} 天。`,
     };
   });
 
@@ -675,6 +773,7 @@ function aggregate(rows, keyword = "") {
   return scoredItems
     .filter(baseFilter)
     .sort((a, b) =>
+      b.finalScore - a.finalScore ||
       b.score - a.score ||
       b.callValue - a.callValue ||
       b.callCount - a.callCount ||
