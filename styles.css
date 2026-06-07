@@ -20,6 +20,8 @@
 html,
 body {
   min-height: 100%;
+  max-width: 100%;
+  overflow-x: hidden;
 }
 
 body {
@@ -347,8 +349,18 @@ body.auth-locked:not(.auth-login-open) .auth-gate {
   .auth-card {
     width: min(100%, calc(100vw - 32px));
     max-width: 430px;
+    min-width: 0;
     padding: 28px;
     border-radius: 18px;
+  }
+
+  .auth-card,
+  .auth-card * {
+    overflow-wrap: anywhere;
+  }
+
+  .auth-card p {
+    max-width: 100%;
   }
 
   .auth-tabs,
@@ -375,9 +387,15 @@ body.auth-locked:not(.auth-login-open) .auth-gate {
     align-items: flex-start;
     flex-direction: column;
     justify-content: center;
+    overflow: hidden;
     padding: 10px 18px;
     font-size: 10px;
     letter-spacing: 1.6px;
+  }
+
+  .auth-footer > div,
+  .auth-footer nav {
+    max-width: 100%;
   }
 
   .auth-footer nav {
@@ -392,7 +410,7 @@ body.auth-locked:not(.auth-login-open) .auth-gate {
 
   .auth-card {
     width: min(100%, calc(100vw - 24px));
-    padding: 24px;
+    padding: 24px 20px;
   }
 
   .auth-card h1 {

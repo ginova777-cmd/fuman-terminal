@@ -1,5 +1,5 @@
 (function () {
-  const version = "mobile-fast8-20260607";
+  const version = "mobile-fast9-20260607";
   window.FUMAN_TERMINAL_BOOT = {
     version,
     startedAt: Date.now(),
