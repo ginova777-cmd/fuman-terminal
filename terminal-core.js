@@ -1,5 +1,5 @@
 (function () {
-  const version = "watchlist-detail-sections-20260607";
+  const version = "watchlist-risk-chip-fixed-20260607";
   window.FUMAN_TERMINAL_BOOT = {
     version,
     startedAt: Date.now(),

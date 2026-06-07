@@ -620,6 +620,19 @@
       const trendTone = analysis.score >= 58 ? "good" : analysis.score >= 43 ? "neutral" : "warn";
       const riskTone = model.riskLabel === "風險可控" ? "good" : "warn";
       const changeTone = stock.percent >= 0 ? "watch-up" : "watch-down";
+      const riskCount = model.riskLabel === "風險可控" ? 0 : 1;
+      const riskHint = riskCount
+        ? (model.riskLabel === "追高風險" ? "盤中位置偏高，追價風險較高。" : "短線波動偏大，先控制風險。")
+        : "目前沒有明顯過熱風險，仍需搭配成交量確認。";
+      const chipTitle = analysis.hasInstitution
+        ? (model.chipScore >= 60 ? "籌碼偏強" : model.chipScore <= 40 ? "籌碼偏弱" : "籌碼待確認")
+        : "法人盤後";
+      const mainScore = analysis.hasInstitution ? clamp(Math.round(analysis.score * 0.58 + model.chipScore * 0.42), 0, 100) : null;
+      const chipScoreText = analysis.hasInstitution ? model.chipScore : "--";
+      const mainScoreText = mainScore === null ? "--" : mainScore;
+      const chipDetailText = analysis.hasInstitution
+        ? `外資 ${formatInstitution(model.inst.foreign)}，投信 ${formatInstitution(model.inst.trust)}，法人合計 ${formatInstitution(model.inst.total)}。`
+        : "法人資料尚未完整，外資與投信以盤後更新後再判讀。";
     
       watchlistAnalysis.innerHTML = `
         <div class="watch-analysis-panel ta-dashboard blackbean-stock-detail">
@@ -672,15 +685,15 @@
             </article>
             <article class="watch-detail-section-card chip">
               <span>籌碼</span>
-              <strong>${analysis.hasInstitution ? "籌碼待確認" : "法人盤後"}</strong>
-              <b>籌碼 ${model.chipScore || "--"} / 主力 ${analysis.hasInstitution ? Math.round((model.chipScore + analysis.score) / 2) : "--"}</b>
-              <em>外資 ${formatInstitution(model.inst.foreign)}，投信 ${formatInstitution(model.inst.trust)}。</em>
+              <strong>${chipTitle}</strong>
+              <b>籌碼 ${chipScoreText} / 主力 ${mainScoreText}</b>
+              <em>${chipDetailText}</em>
             </article>
             <article class="watch-detail-section-card risk ${riskTone}">
               <span>風險</span>
               <strong>${model.riskLabel === "風險可控" ? "風險可控" : "先控風險"}</strong>
-              <b>${analysis.volumeRank || 0} 則</b>
-              <em>${model.riskLabel === "風險可控" ? "目前沒有明顯過熱風險，仍需搭配成交量確認。" : "盤中振幅偏大，追價風險較高。"}</em>
+              <b>${riskCount} 則</b>
+              <em>${riskHint}</em>
             </article>
             <article class="watch-detail-section-card action">
               <span>操作提醒</span>
