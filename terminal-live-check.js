@@ -6391,6 +6391,14 @@ function isTwseTradingTime(date = new Date()) {
   return minutes >= 9 * 60 && minutes <= 13 * 60 + 30;
 }
 
+function formatChipSignedLots(value) {
+  const n = cleanNumber(value);
+  if (!Number.isFinite(n)) return "--";
+  const lots = Math.trunc(n / 1000);
+  const sign = lots >= 0 ? "+" : "";
+  return `${sign}${lots.toLocaleString("zh-TW")}`;
+}
+
 function renderChipTradeTable() {
   const body = document.querySelector("#chip-trade-body");
   const dateEl = document.querySelector("#chip-trade-date");
@@ -6422,7 +6430,7 @@ function renderChipTradeTable() {
         price: cleanNumber(inst.close) || cleanNumber(stock.close),
         change: Number.isFinite(Number(inst.change)) ? Number(inst.change) : cleanNumber(stock.change),
         percent: Number.isFinite(Number(inst.percent)) ? Number(inst.percent) : cleanNumber(stock.percent),
-        volume: cleanNumber(inst.tradeVolume) || cleanNumber(stock.tradeVolume),
+        volume: normalizeTradeVolumeLots(inst.tradeVolume) || cleanNumber(stock.tradeVolume),
         value: cleanNumber(inst.value) || cleanNumber(stock.value),
         foreign,
         trust,
@@ -6449,7 +6457,7 @@ function renderChipTradeTable() {
         price: cleanNumber(inst.close),
         change: Number.isFinite(Number(inst.change)) ? Number(inst.change) : 0,
         percent: Number.isFinite(Number(inst.percent)) ? Number(inst.percent) : 0,
-        volume: cleanNumber(inst.tradeVolume),
+        volume: normalizeTradeVolumeLots(inst.tradeVolume),
         value: cleanNumber(inst.value),
         foreign,
         trust,
@@ -6507,12 +6515,12 @@ function renderChipTradeTable() {
         <td data-chip-change class="chip-cell-number ${up ? "red" : "green"}">${hasQuote ? `${up ? "+" : ""}${formatNumber(row.change, 2)}` : "--"}</td>
         <td data-chip-percent class="chip-cell-number ${row.percent >= 0 ? "red" : "green"}">${hasQuote ? formatNumber(row.percent, 2) : "--"}</td>
         <td class="chip-cell-number" data-chip-volume>${hasQuote ? Math.round(row.volume).toLocaleString("zh-TW") : "--"}</td>
-        <td class="chip-cell-flow ${row.foreign >= 0 ? "red" : "green"}">${formatInstitution(row.foreign)}</td>
-        <td class="chip-cell-flow ${row.trust >= 0 ? "red" : "green"}">${formatInstitution(row.trust)}</td>
+        <td class="chip-cell-flow ${row.foreign >= 0 ? "red" : "green"}">${formatChipSignedLots(row.foreign)}</td>
+        <td class="chip-cell-flow ${row.trust >= 0 ? "red" : "green"}">${formatChipSignedLots(row.trust)}</td>
         <td class="chip-cell-streak">${row.foreignStreak} 日</td>
         <td class="chip-cell-streak">${row.trustStreak} 日</td>
         <td class="chip-cell-streak">${row.jointStreak} 日</td>
-        <td class="chip-cell-flow ${row.total >= 0 ? "red" : "green"}">${formatInstitution(row.total)}</td>
+        <td class="chip-cell-flow ${row.total >= 0 ? "red" : "green"}">${formatChipSignedLots(row.total)}</td>
       </tr>
     `;
   }).join("");
@@ -6535,7 +6543,7 @@ async function hydrateChipRealtimeQuotes(rows) {
         if (!price || !prev) return;
         const change = price - prev;
         const percent = prev ? (change / prev) * 100 : 0;
-        const volume = parseQuoteNumber(item.v, item.tv);
+        const volume = normalizeTradeVolumeLots(parseQuoteNumber(item.v, item.tv));
         const tr = document.querySelector(`[data-chip-row="${row.code}"]`);
         if (!tr) return;
         const up = change >= 0;

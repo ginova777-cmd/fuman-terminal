@@ -4459,13 +4459,15 @@ body.fuman-light-theme .data-freshness-bar.is-stale span {
   .chip-table td:nth-child(5)::before { content: "漲幅"; }
   .intraday-table td:nth-child(6)::before,
   .swing-table td:nth-child(6)::before,
-  .chip-table td:nth-child(6)::before { content: "成交量"; }
+  .chip-table td:nth-child(6)::before { content: "成交量(張)"; }
   .intraday-table td:nth-child(7)::before,
   .swing-table td:nth-child(7)::before,
   .chip-table td:nth-child(7)::before { content: "條件"; }
   .intraday-table td:nth-child(8)::before,
   .swing-table td:nth-child(8)::before,
   .chip-table td:nth-child(8)::before { content: "分數"; }
+  .chip-table td:nth-child(7)::before { content: "外資買賣超(張)"; }
+  .chip-table td:nth-child(8)::before { content: "投信買賣超(張)"; }
   .intraday-table td:nth-child(9)::before,
   .swing-table td:nth-child(9)::before,
   .chip-table td:nth-child(9)::before { content: "原因"; }
@@ -4987,13 +4989,13 @@ body.fuman-light-theme .data-freshness-bar.is-stale span {
   .chip-table td:nth-child(3)::before { content: "現價"; }
   .chip-table td:nth-child(4)::before { content: "漲跌"; }
   .chip-table td:nth-child(5)::before { content: "漲幅"; }
-  .chip-table td:nth-child(6)::before { content: "成交量"; }
-  .chip-table td:nth-child(7)::before { content: "外資"; }
-  .chip-table td:nth-child(8)::before { content: "投信"; }
+  .chip-table td:nth-child(6)::before { content: "成交量(張)"; }
+  .chip-table td:nth-child(7)::before { content: "外資買賣超(張)"; }
+  .chip-table td:nth-child(8)::before { content: "投信買賣超(張)"; }
   .chip-table td:nth-child(9)::before { content: "外資連"; }
   .chip-table td:nth-child(10)::before { content: "投信連"; }
   .chip-table td:nth-child(11)::before { content: "同買"; }
-  .chip-table td:nth-child(12)::before { content: "法人合計"; }
+  .chip-table td:nth-child(12)::before { content: "法人合計(張)"; }
 
   .warrant-flow-panel .swing-table td:nth-child(1)::before { content: "排名"; }
   .warrant-flow-panel .swing-table td:nth-child(2)::before { content: "代號"; }

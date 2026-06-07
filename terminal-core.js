@@ -1,5 +1,5 @@
 (function () {
-  const version = "chip-table-audit-20260607";
+  const version = "chip-volume-lots-20260607";
   window.FUMAN_TERMINAL_BOOT = {
     version,
     startedAt: Date.now(),
