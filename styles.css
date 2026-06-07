@@ -690,6 +690,7 @@ body::after {
 }
 
 .chip-tool {
+  position: relative;
   max-width: none;
   margin-bottom: 12px;
   border: 1px solid var(--line);
@@ -701,8 +702,22 @@ body::after {
 .chip-tool::before {
   display: block;
   padding: 10px 14px;
-  content: "買賣超 / CB";
+  content: "買賣超";
   background: rgba(255, 122, 69, 0.22);
+  color: #fff;
+  font-size: 20px;
+  font-weight: 900;
+}
+
+.chip-tool::after {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: calc((100% - 14px) * 0.41);
+  min-width: 360px;
+  box-sizing: border-box;
+  padding: 10px 14px;
+  content: "CB 偵測結果";
   color: #fff;
   font-size: 20px;
   font-weight: 900;
@@ -835,7 +850,12 @@ body::after {
 }
 
 .cb-detect-head h2 {
-  margin: 3px 0 0;
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
   color: #f7fbff;
   font-size: 18px;
 }
@@ -1110,6 +1130,15 @@ body::after {
 }
 
 @media (max-width: 1180px) {
+  .chip-tool::after {
+    position: static;
+    display: block;
+    width: auto;
+    min-width: 0;
+    border-top: 1px solid rgba(134, 151, 190, 0.12);
+    background: rgba(255, 122, 69, 0.16);
+  }
+
   .chip-cb-layout {
     grid-template-columns: 1fr;
   }

@@ -9121,9 +9121,9 @@ function getChipFlowContext() {
       get chipQuoteHydrating() { return chipQuoteHydrating; },
       set chipQuoteHydrating(value) { chipQuoteHydrating = value; },
       endpoints, CHIP_TRADE_CACHE_MS,
-      isViewActive, canRunViewWork, cleanNumber, formatNumber, formatInstitution,
+      isViewActive, canRunViewWork, isMobileViewport, cleanNumber, formatNumber, formatInstitution,
       paginateTerminalRows, buildTerminalPagination, loadInstitutionSummary,
-      fetchVersionedJson, normalizeArray, parseStocksForLatest, applyStaticTitleIcons,
+      fetchVersionedJson, normalizeArray, parseStocksForLatest, valueOf, normalizeTradeVolumeLots, stockChange, applyStaticTitleIcons,
       fetchJson, parseQuoteNumber,
     }),
   };
