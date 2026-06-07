@@ -76,7 +76,7 @@ function getFumanWorker() {
   if (!("Worker" in window)) return null;
   if (fumanWorker) return fumanWorker;
   try {
-    fumanWorker = new Worker("terminal-worker.js?v=mobile-fast3-20260607");
+    fumanWorker = new Worker("terminal-worker.js?v=mobile-fast4-20260607");
     fumanWorker.addEventListener("message", (event) => {
       const { id, ok, rows, result, error } = event.data || {};
       const pending = fumanWorkerPending.get(id);
@@ -339,7 +339,7 @@ function loadFumanStyle(href, id) {
   const link = document.createElement("link");
   link.id = id;
   link.rel = "stylesheet";
-  link.href = href.includes("?") ? href : `${href}?v=${window.FUMAN_TERMINAL_BOOT?.version || "mobile-fast3-20260607"}`;
+  link.href = href.includes("?") ? href : `${href}?v=${window.FUMAN_TERMINAL_BOOT?.version || "mobile-fast4-20260607"}`;
   document.head.appendChild(link);
 }
 
@@ -365,7 +365,7 @@ function makeFumanModuleScope(bindings) {
 function loadFumanFeatureModule(name, src, globalName) {
   if (window[globalName]) return Promise.resolve(window[globalName]);
   if (fumanFeatureModulePromises[name]) return fumanFeatureModulePromises[name];
-  const version = window.FUMAN_TERMINAL_BOOT?.version || "mobile-fast3-20260607";
+  const version = window.FUMAN_TERMINAL_BOOT?.version || "mobile-fast4-20260607";
   fumanFeatureModulePromises[name] = new Promise((resolve, reject) => {
     const attr = "data-fuman-feature-" + name;
     const existing = document.querySelector("script[" + attr + "]");
@@ -2791,6 +2791,7 @@ let strategy2IntradayEventByCode = new Map();
 let strategy2IntradayCacheDate = "";
 let strategy2IntradayCacheLoading = false;
 let strategy2IntradayCacheLoadedAt = 0;
+const STRATEGY2_INTRADAY_LOCAL_CACHE_KEY = "fuman_strategy2_intraday_last_payload_v1";
 let intradayCandidateSeenAt = {};
 let strategyHistoryLoading = false;
 let strategyHistoryCursor = 0;
@@ -3148,52 +3149,17 @@ function markViewPerformance(viewName, startedAt, label = "view") {
 }
 
 window.FUMAN_GET_PERFORMANCE_REPORT = () => summarizeFumanPerformanceReport();
-
-async function runFumanMobileSelfCheck() {
-  const steps = [
-    { key: "market", label: "首頁" },
-    { key: "strategy", label: "策略4", preset: "策略4" },
-    { key: "chip-trade", label: "買賣超" },
-    { key: "warrant-flow", label: "權證" },
-    { key: "watchlist", label: "自選股" },
-  ];
-  const results = [];
-  for (const step of steps) {
-    const link = viewLinks.find((item) => item.dataset.view === step.key && (!step.preset || item.textContent.includes(step.preset)));
-    const startedAt = performance?.now ? performance.now() : Date.now();
-    try {
-      if (link) {
-        if (step.preset) applyStrategyPresetFromLink(link);
-        showView(step.key, link);
-      }
-      else if (step.key === "strategy") {
-        const strategyLink = viewLinks.find((item) => item.dataset.view === "strategy");
-        if (strategyLink) {
-          applyStrategyPresetFromLink(strategyLink);
-          showView("strategy", strategyLink);
-        }
-      }
-      await new Promise((resolve) => setTimeout(resolve, isMobileViewport() ? 900 : 500));
-      const ms = Math.round((performance?.now ? performance.now() : Date.now()) - startedAt);
-      results.push({ label: step.label, view: step.key, ms, ok: true });
-      recordFumanPerformance(`mobile-self-check:${step.key}`, startedAt, true);
-    } catch (error) {
-      const ms = Math.round((performance?.now ? performance.now() : Date.now()) - startedAt);
-      results.push({ label: step.label, view: step.key, ms, ok: false, error: error?.message || String(error) });
-      recordFumanPerformance(`mobile-self-check:${step.key}`, startedAt, false, error);
-    }
-  }
-  window.FUMAN_TERMINAL_BOOT = window.FUMAN_TERMINAL_BOOT || {};
-  window.FUMAN_TERMINAL_BOOT.mobileSelfCheck = {
-    at: new Date().toISOString(),
-    viewport: `${window.innerWidth || 0}x${window.innerHeight || 0}`,
-    results,
-    slowest: [...results].sort((a, b) => b.ms - a.ms)[0] || null,
-  };
-  return window.FUMAN_TERMINAL_BOOT.mobileSelfCheck;
-}
-
-window.FUMAN_RUN_MOBILE_SELF_CHECK = runFumanMobileSelfCheck;
+window.FUMAN_MOBILE_DIAGNOSTIC_CONTEXT = {
+  get viewLinks() { return viewLinks; },
+  isMobileViewport,
+  showView,
+  applyStrategyPresetFromLink,
+  recordFumanPerformance,
+};
+window.FUMAN_RUN_MOBILE_SELF_CHECK = async () => {
+  await loadFumanFeatureModule("mobileDiagnostics", "terminal-mobile-diagnostics.js", "FUMAN_MOBILE_DIAGNOSTICS");
+  return window.FUMAN_MOBILE_DIAGNOSTICS.runSelfCheck(window.FUMAN_MOBILE_DIAGNOSTIC_CONTEXT);
+};
 
 function versionedDataUrl(url, version = "", force = false) {
   if (force) {
@@ -5506,13 +5472,43 @@ async function loadStrategy2IntradayPayload(force = false) {
   };
 }
 
+function saveStrategy2IntradayLocalPayload(payload) {
+  try {
+    if (!payload || (!normalizeArray(payload.events).length && !normalizeArray(payload.records).length)) return;
+    localStorage.setItem(STRATEGY2_INTRADAY_LOCAL_CACHE_KEY, JSON.stringify({
+      ...payload,
+      cachedAt: Date.now(),
+      cacheSource: payload.cacheSource || payload.fallbackSource || "local-success",
+    }));
+  } catch (error) {}
+}
+
+function loadStrategy2IntradayLocalPayload() {
+  try {
+    const payload = JSON.parse(localStorage.getItem(STRATEGY2_INTRADAY_LOCAL_CACHE_KEY) || "{}");
+    const payloadDate = normalizeMarketAiDateKey(payload?.date || payload?.updatedAt);
+    if (!payloadDate || payloadDate !== marketAiTodayKey()) return null;
+    if (!normalizeArray(payload.events).length && !normalizeArray(payload.records).length) return null;
+    return { ...payload, cacheSource: "localStorage" };
+  } catch (error) {
+    return null;
+  }
+}
+
 async function loadStrategy2IntradayCache(force = false) {
   ensureStrategy2IntradayTodayCache();
   if (strategy2IntradayCacheLoading) return;
   if (!force && strategy2IntradayEventByCode.size) return;
   strategy2IntradayCacheLoading = true;
   try {
-    const payload = await loadStrategy2IntradayPayload(force);
+    let payload = null;
+    try {
+      payload = await loadStrategy2IntradayPayload(force);
+      saveStrategy2IntradayLocalPayload(payload);
+    } catch (error) {
+      payload = isMobileViewport() ? loadStrategy2IntradayLocalPayload() : null;
+      if (!payload) throw error;
+    }
     const payloadDate = normalizeMarketAiDateKey(payload?.date || payload?.updatedAt);
     if (payloadDate && payloadDate !== marketAiTodayKey()) {
       resetStrategy2IntradaySessionCache();
@@ -7080,18 +7076,11 @@ function preloadWarrantFlowFullData(reason = "idle") {
   return warrantFlowFullPreloadPromise;
 }
 
-async function loadStocksIndexQuotes(force = false) {
-  if (!endpoints.stocksIndex || !endpoints.stocksQuotesSlim) return null;
-  const versionKey = marketSummaryPayload?.updatedAt || marketSummaryPayload?.resolvedTradeDate || "latest";
-  const [indexPayload, quotesPayload] = await Promise.all([
-    fetchVersionedJson(endpoints.stocksIndex, 6000, versionKey, force),
-    fetchVersionedJson(endpoints.stocksQuotesSlim, 6000, versionKey, force),
-  ]);
+function mergeStockIndexAndQuoteRows(indexPayload, quotesPayload) {
   const indexRows = normalizeArray(indexPayload?.stocks || indexPayload);
   const quoteRows = normalizeArray(quotesPayload?.quotes || quotesPayload?.stocks || quotesPayload);
-  if (indexRows.length < 500 || cleanNumber(indexPayload?.count) < 500) return null;
   const quoteByCode = new Map(quoteRows.map((row) => [String(row?.code || row?.Code || row?.證券代號 || "").trim(), row]).filter(([code]) => code));
-  const stocks = indexRows.map((stock) => {
+  return indexRows.map((stock) => {
     const code = String(stock?.code || stock?.Code || stock?.證券代號 || "").trim();
     const quote = quoteByCode.get(code) || {};
     return {
@@ -7110,15 +7099,32 @@ async function loadStocksIndexQuotes(force = false) {
       quoteUpdatedAt: cleanNumber(quote?.quoteUpdatedAt ?? quote?.updatedAtMs ?? stock?.quoteUpdatedAt),
       isRealtime: quote?.isRealtime === true || stock?.isRealtime === true,
     };
-  }).filter((stock) => stock.code && stock.name && stock.close);
+  }).filter((stock) => stock.code && stock.name);
+}
+
+async function loadStocksIndexQuotes(force = false, options = {}) {
+  if (!endpoints.stocksIndex || !endpoints.stocksQuotesSlim) return null;
+  const versionKey = marketSummaryPayload?.updatedAt || marketSummaryPayload?.resolvedTradeDate || "latest";
+  const mobileTopOnly = options.mobileTopOnly === true && endpoints.stocksQuotesMobileTop;
+  const [indexPayload, quotesPayload] = await Promise.all([
+    fetchVersionedJson(endpoints.stocksIndex, 6000, versionKey, force),
+    fetchVersionedJson(mobileTopOnly ? endpoints.stocksQuotesMobileTop : endpoints.stocksQuotesSlim, mobileTopOnly ? 3500 : 6000, versionKey, force),
+  ]);
+  const indexRows = normalizeArray(indexPayload?.stocks || indexPayload);
+  if (indexRows.length < 500 || cleanNumber(indexPayload?.count) < 500) return null;
+  const stocks = mergeStockIndexAndQuoteRows(indexPayload, quotesPayload);
   if (stocks.length < 500) return null;
+  const completeQuotes = stocks.filter((stock) => cleanNumber(stock.close) > 0).length;
+  if (!mobileTopOnly && completeQuotes < 500) return null;
   return {
     ok: true,
-    source: `${indexPayload?.source || "stocks-index"} + ${quotesPayload?.source || "stocks-quotes-slim"}`,
+    source: `${indexPayload?.source || "stocks-index"} + ${quotesPayload?.source || (mobileTopOnly ? "stocks-quotes-mobile-top" : "stocks-quotes-slim")}`,
     updatedAt: quotesPayload?.updatedAt || indexPayload?.updatedAt || new Date().toISOString(),
     today: quotesPayload?.today || indexPayload?.today || "",
     resolvedTradeDate: quotesPayload?.resolvedTradeDate || indexPayload?.resolvedTradeDate || "",
     count: stocks.length,
+    completeQuotes,
+    partialQuotes: mobileTopOnly,
     stocks,
   };
 }
