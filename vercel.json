@@ -120,7 +120,7 @@
       ]
     },
     {
-      "source": "/data/strategy4-zone-b-page-(.*).json",
+      "source": "/data/strategy4-zone-(b|c)-page-(.*).json",
       "headers": [
         {
           "key": "Cache-Control",
