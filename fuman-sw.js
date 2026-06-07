@@ -1,23 +1,23 @@
-const CACHE_VERSION = "fuman-terminal-sw-20260607-chip-main-fallback-cbfill";
+const CACHE_VERSION = "fuman-terminal-sw-20260607-member-center-fix";
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 const DATA_CACHE = `${CACHE_VERSION}-data`;
 
 const STATIC_ASSETS = [
-  "/styles.css?v=chip-main-fallback-cbfill-20260607",
-  "/terminal-core.js?v=chip-main-fallback-cbfill-20260607",
-  "/terminal-modules.js?v=chip-main-fallback-cbfill-20260607",
-  "/terminal-sector-map.js?v=chip-main-fallback-cbfill-20260607",
-  "/terminal-strategy-config.js?v=chip-main-fallback-cbfill-20260607",
-  "/terminal-market-config.js?v=chip-main-fallback-cbfill-20260607",
-  "/terminal-ui-config.js?v=chip-main-fallback-cbfill-20260607",
-  "/terminal-runtime-config.js?v=chip-main-fallback-cbfill-20260607",
-  "/terminal-tuning-config.js?v=chip-main-fallback-cbfill-20260607",
-  "/terminal-worker.js?v=chip-main-fallback-cbfill-20260607",
-  "/terminal.js?v=chip-main-fallback-cbfill-20260607",
-  "/terminal-realtime-radar.css?v=chip-main-fallback-cbfill-20260607",
-  "/terminal-intraday-radar.css?v=chip-main-fallback-cbfill-20260607",
-  "/terminal-utility.css?v=chip-main-fallback-cbfill-20260607",
-  "/refresh.html?v=chip-main-fallback-cbfill-20260607",
+  "/styles.css?v=member-center-fix-20260607",
+  "/terminal-core.js?v=member-center-fix-20260607",
+  "/terminal-modules.js?v=member-center-fix-20260607",
+  "/terminal-sector-map.js?v=member-center-fix-20260607",
+  "/terminal-strategy-config.js?v=member-center-fix-20260607",
+  "/terminal-market-config.js?v=member-center-fix-20260607",
+  "/terminal-ui-config.js?v=member-center-fix-20260607",
+  "/terminal-runtime-config.js?v=member-center-fix-20260607",
+  "/terminal-tuning-config.js?v=member-center-fix-20260607",
+  "/terminal-worker.js?v=member-center-fix-20260607",
+  "/terminal.js?v=member-center-fix-20260607",
+  "/terminal-realtime-radar.css?v=member-center-fix-20260607",
+  "/terminal-intraday-radar.css?v=member-center-fix-20260607",
+  "/terminal-utility.css?v=member-center-fix-20260607",
+  "/refresh.html?v=member-center-fix-20260607",
   "/assets/logo.webp",
   "/favicon.ico",
 ];

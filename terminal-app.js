@@ -15,6 +15,7 @@ const viewPanels = {
   strategy: document.querySelector("#strategy-view"),
   "chip-trade": document.querySelector("#chip-trade-view"),
   "warrant-flow": document.querySelector("#warrant-flow-view"),
+  member: document.querySelector("#member-view"),
 };
 let strategyCards = [...document.querySelectorAll(".strategy-card[data-strategy]")];
 const strategyTable = document.querySelector("#strategy-table");
@@ -56,8 +57,15 @@ const authMessage = document.querySelector("#auth-message");
 const authModeButtons = [...document.querySelectorAll("[data-auth-mode]")];
 const authLogoutButton = document.querySelector(".sidebar-foot .logout");
 const memberState = document.querySelector("#member-state");
+const memberTabButtons = [...document.querySelectorAll("[data-member-tab]")];
+const memberTabPanels = [...document.querySelectorAll("[data-member-panel]")];
+const memberEmail = document.querySelector("#member-email");
+const memberAvatar = document.querySelector("#member-avatar");
+const memberPlanLabel = document.querySelector("#member-plan-label");
+const billingPlanLabel = document.querySelector("#billing-plan-label");
+const billingEmail = document.querySelector("#billing-email");
 const supabaseClient = window.supabase?.createClient?.(FUMAN_SUPABASE_URL, FUMAN_SUPABASE_KEY);
-const PUBLIC_VIEWS = new Set(["market"]);
+const PUBLIC_VIEWS = new Set(["market", "member"]);
 const FUMAN_THEME_KEY = FUMAN_RUNTIME_CONFIG.themeKey || "fuman-terminal-theme";
 const FUMAN_AUTH_CACHE_KEY = FUMAN_RUNTIME_CONFIG.authCacheKey || "fuman-terminal-auth-cache-v1";
 const FUMAN_AUTH_CACHE_TTL_MS = FUMAN_RUNTIME_CONFIG.authCacheTtlMs || (5 * 60 * 1000);
@@ -67,6 +75,8 @@ const FUMAN_PERFORMANCE_REPORT_KEY = FUMAN_RUNTIME_CONFIG.performanceReportKey |
 const FUMAN_PERFORMANCE_QUEUE_KEY = FUMAN_RUNTIME_CONFIG.performanceQueueKey || "fuman-terminal-performance-queue-v1";
 const FUMAN_PERFORMANCE_BEACON_ENDPOINT = FUMAN_RUNTIME_CONFIG.endpoints?.performanceReport || "/api/performance-report";
 let authMode = "login";
+let currentFumanSession = null;
+let currentFumanAccess = { allowed: false, status: "signed_out" };
 let terminalLastRouteRestoredAt = 0;
 const FUMAN_LIVE_MEMORY_TTL_MS = FUMAN_RUNTIME_CONFIG.liveMemoryTtlMs || { strategy2: 3000, realtimeRadar: 5000 };
 const fumanLiveMemoryCache = new Map();
@@ -640,6 +650,8 @@ function warmFumanAuthFromCache() {
 function restoreTerminalAuthShellFromCache() {
   const cached = readFumanAuthCache();
   if (!cached || !["approved", "active", "trial", "admin"].includes(String(cached.status || "").toLowerCase())) return null;
+  currentFumanSession = { user: { email: cached.email || "" } };
+  currentFumanAccess = { allowed: true, status: cached.status || "approved" };
   document.body.classList.add("auth-ready", "auth-cache-warm");
   document.body.classList.remove("auth-pending", "auth-locked", "auth-login-open");
   if (authGate) authGate.setAttribute("aria-hidden", "true");
@@ -652,6 +664,7 @@ function restoreTerminalAuthShellFromCache() {
     authLogoutButton.setAttribute("aria-label", "登出");
     authLogoutButton.dataset.authAction = "logout";
   }
+  syncMemberCenter();
   scheduleCommonTabWarmup();
   applyMemberLocks();
   deferUiWork(() => restoreTerminalLastRoute(), 80);
@@ -846,7 +859,34 @@ function getMemberStatusLabel(status) {
   return "未登入";
 }
 
+function syncMemberCenter() {
+  const email = normalizeAuthEmail(currentFumanSession?.user?.email) || "登入後顯示 Email";
+  const status = currentFumanAccess?.status || "signed_out";
+  const planLabel = getMemberStatusLabel(status);
+  if (memberEmail) memberEmail.textContent = email;
+  if (billingEmail) billingEmail.textContent = email;
+  if (memberAvatar) memberAvatar.textContent = (email[0] || "F").toUpperCase();
+  if (memberPlanLabel) memberPlanLabel.textContent = planLabel;
+  if (billingPlanLabel) billingPlanLabel.textContent = planLabel === "試用會員" ? "專業版試用" : planLabel;
+}
+
+function showMemberTab(tabName = "account") {
+  const activeTab = ["account", "plans", "billing", "notifications"].includes(tabName) ? tabName : "account";
+  memberTabButtons.forEach((button) => {
+    const active = button.dataset.memberTab === activeTab;
+    button.classList.toggle("active", active);
+    button.setAttribute("aria-current", active ? "page" : "false");
+  });
+  memberTabPanels.forEach((panel) => {
+    const active = panel.dataset.memberPanel === activeTab;
+    panel.hidden = !active;
+    panel.classList.toggle("active", active);
+  });
+}
+
 function setTerminalAuthState(session, access = { allowed: false, status: "signed_out" }) {
+  currentFumanSession = session || null;
+  currentFumanAccess = access || { allowed: false, status: "signed_out" };
   const signedIn = Boolean(session?.user);
   const allowed = signedIn && access.allowed;
   document.body.classList.toggle("auth-ready", allowed);
@@ -859,7 +899,9 @@ function setTerminalAuthState(session, access = { allowed: false, status: "signe
     const label = getMemberStatusLabel(access.status);
     memberState.textContent = `會員狀態：${label}`;
     memberState.dataset.status = String(access.status || "signed_out").toLowerCase();
+    memberState.title = "開啟會員中心";
   }
+  syncMemberCenter();
   if (authLogoutButton) {
     authLogoutButton.textContent = signedIn ? "登出" : "登入";
     authLogoutButton.setAttribute("aria-label", signedIn ? "登出" : "登入");
@@ -9614,6 +9656,7 @@ function showView(viewName, activeLink) {
   lastViewName = viewName;
   lastViewShownAt = now;
   Object.entries(viewPanels).forEach(([name, panel])=>{
+    if (!panel) return;
     panel.hidden = name !== viewName;
     panel.classList.toggle("active", name === viewName);
   });
@@ -9669,6 +9712,10 @@ function showView(viewName, activeLink) {
   if (viewName === "watchlist") {
     deferUiWork(renderWatchlist, mobileFastSwitch ? 70 : 0);
   }
+  if (viewName === "member") {
+    showMemberTab("account");
+    syncMemberCenter();
+  }
   deferUiWork(ensureMobileAutoOrganizeButton);
   deferUiWork(normalizeMobileHorizontalPosition, 60);
   const focusTarget = activeLink?.dataset.focus ? document.querySelector(`#${activeLink.dataset.focus}`) : null;
@@ -9677,6 +9724,24 @@ function showView(viewName, activeLink) {
     setTimeout(() => markViewPerformance(viewName, viewStartedAt, "view:ready"), 0);
   });
 }
+
+window.FUMAN_OPEN_MEMBER_CENTER = function openFumanMemberCenter(tabName = "account") {
+  const memberLink = document.querySelector("#member-state");
+  showView("member", memberLink);
+  showMemberTab(tabName);
+};
+
+window.FUMAN_HANDLE_AUTH_BUTTON = async function handleFumanAuthButton() {
+  if (!authLogoutButton?.dataset.authAction || authLogoutButton.dataset.authAction === "login") {
+    openAuthGate("login");
+    return;
+  }
+  writeFumanAuthCache(null, null);
+  await supabaseClient.auth.signOut();
+  setTerminalAuthState(null);
+  const marketLink = viewLinks.find((link) => link.dataset.view === "market");
+  showView("market", marketLink);
+};
 
 // ★ 前端直接抓台指期
 async function fetchFuturesDirect() {
@@ -10425,6 +10490,9 @@ viewLinks.forEach((link)=>{
     if (!isProtectedView(link.dataset.view) || isTerminalUnlocked()) applyStrategyPresetFromLink(link);
     showView(link.dataset.view, link);
   });
+});
+memberTabButtons.forEach((button) => {
+  button.addEventListener("click", () => showMemberTab(button.dataset.memberTab));
 });
 document.querySelectorAll("[data-chip-mode]").forEach((button) => {
   button.addEventListener("click", () => {

@@ -6,7 +6,7 @@
     <title>輔滿 股票終端</title>
     <link rel="icon" href="/favicon.ico" sizes="any">
     <link rel="preload" as="image" href="/assets/logo.webp" fetchpriority="high">
-    <link rel="stylesheet" href="styles.css?v=chip-main-fallback-cbfill-20260607">
+    <link rel="stylesheet" href="styles.css?v=member-center-fix-20260607">
   </head>
   <body class="auth-pending">
     <section class="auth-gate" id="auth-gate" aria-label="會員登入">
@@ -81,7 +81,7 @@
 
         <div class="sidebar-foot">
           <div class="link-state"><span></span>TWSE / TPEX</div>
-          <div class="member-state" id="member-state">會員狀態：檢查中</div>
+          <button class="member-state" id="member-state" type="button" data-view="member" data-mobile-label="會員">會員狀態：檢查中</button>
           <button class="logout" type="button">登出</button>
         </div>
       </aside>
@@ -348,10 +348,148 @@
           </section>
         </section>
 
+        <!-- 會員中心 -->
+        <section class="view-panel" id="member-view" hidden>
+          <header class="page-header member-page-header">
+            <div>
+              <p class="eyebrow">FUMAN MEMBER</p>
+              <h1>會員中心</h1>
+              <span class="refresh-line">帳號資料、訂閱方案、帳務明細與通知設定</span>
+            </div>
+            <button class="ghost-btn member-back-button" type="button" data-view="market">返回終端</button>
+          </header>
+
+          <div class="member-center-layout">
+            <aside class="member-center-nav" aria-label="會員中心導覽">
+              <button class="active" type="button" data-member-tab="account">帳號資料</button>
+              <button type="button" data-member-tab="plans">訂閱方案</button>
+              <button type="button" data-member-tab="billing">帳務明細</button>
+              <button type="button" data-member-tab="notifications">通知設定</button>
+            </aside>
+
+            <section class="member-center-content">
+              <article class="member-tab-panel active" data-member-panel="account">
+                <div class="member-section-grid">
+                  <section class="member-card member-profile-card">
+                    <h2>帳號摘要</h2>
+                    <p>快速確認目前帳號、方案與基本聯絡狀態。</p>
+                    <div class="member-profile-row">
+                      <span class="member-avatar" id="member-avatar">F</span>
+                      <strong id="member-email">登入後顯示 Email</strong>
+                    </div>
+                    <dl class="member-data-list">
+                      <div><dt>方案</dt><dd id="member-plan-label">檢查中</dd></div>
+                      <div><dt>信箱</dt><dd>已完成驗證</dd></div>
+                      <div><dt>電話</dt><dd>尚未設定</dd></div>
+                      <div><dt>加入日期</dt><dd>2026/04/22</dd></div>
+                    </dl>
+                  </section>
+                  <section class="member-card">
+                    <h2>帳號安全</h2>
+                    <p>查看信箱驗證、密碼重設與最近安全活動。</p>
+                    <dl class="member-data-list compact">
+                      <div><dt>信箱驗證</dt><dd><span class="status-pill good">已完成驗證</span></dd></div>
+                      <div><dt>密碼</dt><dd><span class="status-pill good">已設定</span></dd></div>
+                      <div><dt>手機</dt><dd><span class="status-pill warn">未綁定</span></dd></div>
+                      <div><dt>二階段驗證</dt><dd>未啟用</dd></div>
+                    </dl>
+                  </section>
+                  <section class="member-card">
+                    <h2>通知連線</h2>
+                    <p>目前先保留 TG 通知狀態，之後可接入即時提醒。</p>
+                    <span class="member-card-badge warn">未連接</span>
+                    <dl class="member-data-list compact">
+                      <div><dt>Telegram</dt><dd>尚未連線</dd></div>
+                    </dl>
+                  </section>
+                </div>
+              </article>
+
+              <article class="member-tab-panel" data-member-panel="plans" hidden>
+                <div class="plan-grid">
+                  <section class="plan-card">
+                    <span class="plan-icon">◎</span>
+                    <p>免費方案</p>
+                    <h2>免費版</h2>
+                    <ul>
+                      <li>每日開放 2 檔完整案例</li>
+                      <li>觀察中標的</li>
+                      <li>個股頁面</li>
+                      <li>1 日分點排行</li>
+                      <li>1 日主力排行</li>
+                    </ul>
+                  </section>
+                  <section class="plan-card featured">
+                    <span class="plan-icon">◇</span>
+                    <p>升級專業版 <b>目前使用中</b></p>
+                    <h2>專業版</h2>
+                    <ul>
+                      <li>查看全部盤中標的</li>
+                      <li>多週期分點排行</li>
+                      <li>多週期主力排行</li>
+                      <li>主力生命週期分析</li>
+                      <li>歷史布局紀錄查詢</li>
+                      <li>優先使用新功能</li>
+                    </ul>
+                    <div class="plan-price">NT$790 <span>/ 月</span></div>
+                    <button type="button">專業版試用</button>
+                  </section>
+                </div>
+                <div class="member-info-band">採用藍新金流安全付款，扣款成功、失敗與續訂結果都會自動寄送 Email 通知。</div>
+              </article>
+
+              <article class="member-tab-panel" data-member-panel="billing" hidden>
+                <section class="member-card wide">
+                  <span class="member-card-kicker">BILLING OVERVIEW</span>
+                  <h2>帳務摘要</h2>
+                  <p>付款狀態以藍新金流與 Supabase 對帳結果為準。</p>
+                  <div class="billing-overview-grid">
+                    <article><span>目前方案</span><strong id="billing-plan-label">專業版試用</strong><small>試用期間免費</small></article>
+                    <article class="highlight"><span>下次付款時間</span><strong>無自動扣款</strong><small>未啟用自動續訂</small></article>
+                    <article><span>付款信箱</span><strong id="billing-email">登入後顯示</strong><small>收據與付款通知寄送信箱</small></article>
+                    <article><span>幣別 / 地區</span><strong>Taiwan / TWD</strong><small>實際金額以付款頁為準</small></article>
+                  </div>
+                </section>
+                <section class="member-card wide">
+                  <span class="member-card-kicker">PAYMENT METHOD</span>
+                  <h2>付款方式</h2>
+                  <div class="member-list-box"><span>最近使用方式</span><strong>試用期間無需付款</strong><small>付款成功後會依藍新回傳結果更新。</small></div>
+                </section>
+                <section class="member-card wide">
+                  <span class="member-card-kicker">PAYMENT HISTORY</span>
+                  <h2>付款紀錄</h2>
+                  <p>包含訂閱付款、斗內與尚待確認的訂單。</p>
+                  <strong class="member-empty-line">目前還沒有付款紀錄。</strong>
+                </section>
+              </article>
+
+              <article class="member-tab-panel" data-member-panel="notifications" hidden>
+                <div class="notification-grid">
+                  <section class="member-card">
+                    <h2>TG 即時通知</h2>
+                    <p>連線後可接收策略訊號與帳號提醒，目前尚未連線。</p>
+                    <span class="member-card-badge warn">未連接</span>
+                  </section>
+                  <section class="member-card">
+                    <h2>Email 摘要</h2>
+                    <p>保留盤後摘要與重要帳號通知，可在正式通知系統上線後啟用。</p>
+                    <label class="member-switch"><input type="checkbox"><span></span></label>
+                  </section>
+                  <section class="member-card">
+                    <h2>帳號安全通知</h2>
+                    <p>密碼重設、登入與付款狀態異動時保留通知。</p>
+                    <label class="member-switch"><input type="checkbox" checked><span></span></label>
+                  </section>
+                </div>
+              </article>
+            </section>
+          </div>
+        </section>
+
       </main>
     </div>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="terminal-core.js?v=chip-main-fallback-cbfill-20260607"></script>
+    <script src="terminal-core.js?v=member-center-fix-20260607"></script>
   </body>
 </html>
 

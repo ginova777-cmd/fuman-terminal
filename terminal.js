@@ -88,6 +88,30 @@
   window.FUMAN_TERMINAL_LOAD_APP = loadApp;
   window.FUMAN_TERMINAL_PREFETCH_APP = prefetchApp;
 
+  document.addEventListener("click", (event) => {
+    const memberButton = event.target.closest("#member-state");
+    if (!memberButton) return;
+    event.preventDefault();
+    event.stopPropagation();
+    loadApp("member-state").then(() => {
+      if (typeof window.FUMAN_OPEN_MEMBER_CENTER === "function") {
+        window.FUMAN_OPEN_MEMBER_CENTER();
+      }
+    }).catch(() => undefined);
+  }, true);
+
+  document.addEventListener("click", (event) => {
+    const authButton = event.target.closest(".sidebar-foot .logout");
+    if (!authButton) return;
+    event.preventDefault();
+    event.stopPropagation();
+    loadApp("auth-button").then(() => {
+      if (typeof window.FUMAN_HANDLE_AUTH_BUTTON === "function") {
+        window.FUMAN_HANDLE_AUTH_BUTTON();
+      }
+    }).catch(() => undefined);
+  }, true);
+
   ["pointerdown", "keydown", "touchstart"].forEach((eventName) => {
     window.addEventListener(eventName, () => loadApp(eventName), { once: true, passive: true });
   });
