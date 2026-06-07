@@ -79,7 +79,7 @@ function getFumanWorker() {
   if (!("Worker" in window)) return null;
   if (fumanWorker) return fumanWorker;
   try {
-    fumanWorker = new Worker("terminal-worker.js?v=mobile-refresh16-20260607");
+    fumanWorker = new Worker("terminal-worker.js?v=mobile-refresh17-20260607");
     fumanWorker.addEventListener("message", (event) => {
       const { id, ok, rows, result, error } = event.data || {};
       const pending = fumanWorkerPending.get(id);
@@ -343,7 +343,7 @@ function loadFumanStyle(href, id) {
   const link = document.createElement("link");
   link.id = id;
   link.rel = "stylesheet";
-  link.href = href.includes("?") ? href : `${href}?v=${window.FUMAN_TERMINAL_BOOT?.version || "mobile-refresh16-20260607"}`;
+  link.href = href.includes("?") ? href : `${href}?v=${window.FUMAN_TERMINAL_BOOT?.version || "mobile-refresh17-20260607"}`;
   document.head.appendChild(link);
 }
 
@@ -369,7 +369,7 @@ function makeFumanModuleScope(bindings) {
 function loadFumanFeatureModule(name, src, globalName) {
   if (window[globalName]) return Promise.resolve(window[globalName]);
   if (fumanFeatureModulePromises[name]) return fumanFeatureModulePromises[name];
-  const version = window.FUMAN_TERMINAL_BOOT?.version || "mobile-refresh16-20260607";
+  const version = window.FUMAN_TERMINAL_BOOT?.version || "mobile-refresh17-20260607";
   fumanFeatureModulePromises[name] = new Promise((resolve, reject) => {
     const attr = "data-fuman-feature-" + name;
     const existing = document.querySelector("script[" + attr + "]");
@@ -565,6 +565,26 @@ function warmFumanAuthFromCache() {
   }
 }
 
+function restoreTerminalAuthShellFromCache() {
+  const cached = readFumanAuthCache();
+  if (!cached || !["approved", "active", "trial", "admin"].includes(String(cached.status || "").toLowerCase())) return null;
+  document.body.classList.add("auth-ready", "auth-cache-warm");
+  document.body.classList.remove("auth-pending", "auth-locked", "auth-login-open");
+  if (authGate) authGate.setAttribute("aria-hidden", "true");
+  if (memberState) {
+    memberState.textContent = `會員狀態：${getMemberStatusLabel(cached.status)}（恢復中）`;
+    memberState.dataset.status = String(cached.status || "approved").toLowerCase();
+  }
+  if (authLogoutButton) {
+    authLogoutButton.textContent = "登出";
+    authLogoutButton.setAttribute("aria-label", "登出");
+    authLogoutButton.dataset.authAction = "logout";
+  }
+  scheduleCommonTabWarmup();
+  applyMemberLocks();
+  return cached;
+}
+
 function setAuthMode(mode) {
   authMode = mode === "signup" ? "signup" : "login";
   authModeButtons.forEach((button) => {
@@ -731,6 +751,18 @@ async function refreshTerminalAuthState(session) {
   setTerminalAuthState(session, access);
 }
 
+async function getSupabaseSessionWithRetry(maxWaitMs = 2500) {
+  const startedAt = Date.now();
+  let lastSession = null;
+  while (Date.now() - startedAt <= maxWaitMs) {
+    const { data } = await supabaseClient.auth.getSession();
+    lastSession = data?.session || null;
+    if (lastSession?.user) return lastSession;
+    await new Promise((resolve) => setTimeout(resolve, 250));
+  }
+  return lastSession;
+}
+
 function getMemberStatusLabel(status) {
   const normalized = String(status || "signed_out").toLowerCase();
   if (normalized === "admin") return "管理者";
@@ -779,6 +811,7 @@ function setTerminalAuthState(session, access = { allowed: false, status: "signe
 
 async function initTerminalAuth() {
   warmFumanAuthFromCache();
+  const cachedAccess = restoreTerminalAuthShellFromCache();
   if (!authGate || !authForm) {
     document.body.classList.remove("auth-pending");
     document.body.classList.add("auth-ready");
@@ -853,8 +886,12 @@ async function initTerminalAuth() {
     setTerminalAuthState(null);
   });
 
-  const { data } = await supabaseClient.auth.getSession();
-  await refreshTerminalAuthState(data?.session);
+  const session = await getSupabaseSessionWithRetry(cachedAccess ? 3500 : 1200);
+  if (session?.user) {
+    await refreshTerminalAuthState(session);
+  } else if (!cachedAccess) {
+    await refreshTerminalAuthState(null);
+  }
   supabaseClient.auth.onAuthStateChange((_event, session) => {
     refreshTerminalAuthState(session);
   });
