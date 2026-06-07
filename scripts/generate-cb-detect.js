@@ -381,8 +381,10 @@ async function main() {
     normalizedRows.push(...data.map((row) => normalize(row, source, stockMap, technicalMap)));
   }
 
-  const candidates = normalizedRows
-    .filter((row) => row.code || row.cbCode)
+  const allCandidates = normalizedRows
+    .filter((row) => row.code || row.cbCode);
+  const candidates = allCandidates
+    .filter((row) => !row.veto)
     .sort((a, b) => b.score - a.score || num(a.issueAmount) - num(b.issueAmount));
 
   const payload = {
@@ -390,7 +392,10 @@ async function main() {
     source: "CBAS",
     updatedAt: new Date().toISOString(),
     sourceCounts,
-    scoringNote: "CBAS supplies CB source/issuance terms; stock price comes from stocks-slim; MA200/MA5/MA35/MACD are calculated from official daily history when 200+ rows are available.",
+    excludedCounts: {
+      veto: allCandidates.length - candidates.length,
+    },
+    scoringNote: "CBAS supplies CB source/issuance terms; stock price comes from stocks-slim; MA200/MA5/MA35/MACD are calculated from official/Yahoo daily history. Rows failing MA200 veto are excluded from display.",
     rows: candidates,
   };
 
