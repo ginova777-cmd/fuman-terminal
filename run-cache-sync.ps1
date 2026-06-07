@@ -1,5 +1,5 @@
 param(
-  [ValidateSet("all", "flow", "institution", "warrant", "openBuy", "strategy2", "strategy3", "strategy4", "strategy5")]
+  [ValidateSet("all", "flow", "institution", "warrant", "openBuy", "strategy2", "strategy3", "strategy4", "strategy5", "cb")]
   [string]$Scope = "all"
 )
 
@@ -565,6 +565,14 @@ try {
       "data\strategy5-latest.json",
       "data\strategy5-backup.json"
     )
+  } elseif ($Scope -eq "cb") {
+    $criticalLatestFiles = @(
+      "data\cb-detect-latest.json"
+    )
+
+    $dataFiles = @(
+      "data\cb-detect-latest.json"
+    )
   } else {
     $criticalLatestFiles = @(
       "data\institution-latest.json",
@@ -629,6 +637,7 @@ try {
       "data\strategy4-backup.json",
       "data\strategy5-latest.json",
       "data\strategy5-backup.json",
+      "data\cb-detect-latest.json",
       "data\realtime-radar-latest.json"
     )
   }
@@ -774,6 +783,9 @@ try {
 
   if ($Scope -eq "strategy3" -or $Scope -eq "all") {
     Test-VercelCacheVisibility "data\strategy3-latest.json"
+  }
+  if ($Scope -eq "cb" -or $Scope -eq "all") {
+    Test-VercelCacheVisibility "data\cb-detect-latest.json"
   }
 
   if ($Scope -eq "strategy2") {

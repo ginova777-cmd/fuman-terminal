@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-06-01T08:37:28.8935828Z",
+  "updatedAt": "2026-06-07T23:49:44.625Z",
   "tasks": [
     {
       "taskName": "\\Fuman PC Wake 0430",
@@ -321,6 +321,18 @@
       "time": "21:20",
       "aliases": [
         "買賣超 2120"
+      ]
+    },
+    {
+      "taskName": "\\Fuman CB Complete Scan 2125",
+      "displayName": "Fuman CB Complete Scan 2125",
+      "description": "CB可轉債完整掃描，晚上 21:25 讀取 CBAS 三層來源、60分K門檻與評分，並發布終端。",
+      "time": "21:25",
+      "aliases": [
+        "CB",
+        "可轉債",
+        "CB 2125",
+        "CB完整掃"
       ]
     }
   ]
