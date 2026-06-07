@@ -35,6 +35,16 @@
     function saveWatchlist(list) {
       localStorage.setItem("fuman_watchlist", JSON.stringify(list));
     }
+
+    function isMobileWatchlistViewport() {
+      const width = window.innerWidth || document.documentElement.clientWidth || 0;
+      const height = window.innerHeight || document.documentElement.clientHeight || 0;
+      return width <= 760 || (width <= 920 && height <= 430 && width > height);
+    }
+
+    function setWatchlistDetailOpen(open) {
+      watchlistView?.classList.toggle("watchlist-detail-open", Boolean(open));
+    }
     
     function ensureWatchlistAnalysisStyles() {
       loadFumanStyle("terminal-watchlist.css", "watchlist-analysis-styles");
@@ -594,13 +604,19 @@
       const changeTone = stock.percent >= 0 ? "watch-up" : "watch-down";
     
       watchlistAnalysis.innerHTML = `
-        <div class="watch-analysis-panel ta-dashboard">
+        <div class="watch-analysis-panel ta-dashboard blackbean-stock-detail">
+          <section class="watch-detail-hero">
+            <button class="watch-detail-close" type="button" data-watch-back aria-label="返回個股清單">×</button>
+            <span>AI 個股判讀</span>
+            <h2>${code} 技術分析</h2>
+            <p>已帶入 ${code}，可載入資料後查看 AI 個股判讀。</p>
+          </section>
           <section class="watch-action-row">
             <label>
               股票代碼
               <input value="${code}" readonly>
             </label>
-            <button class="primary" type="button" data-watch-load>載入資料</button>
+            <button class="primary" type="button" data-watch-load>⌁ 載入資料</button>
           </section>
     
           <section class="watch-summary-grid">
@@ -686,6 +702,10 @@
     
       watchlistAnalysis.querySelector("[data-watch-load]")?.addEventListener("click", () => {
         showTradingDashboard(code, stock.name || name);
+      });
+      watchlistAnalysis.querySelector("[data-watch-back]")?.addEventListener("click", () => {
+        setWatchlistDetailOpen(false);
+        watchlistAnalysis.innerHTML = `<div class="watch-mobile-empty">點選股票查看 AI 個股判讀</div>`;
       });
       watchlistAnalysis.querySelectorAll("[data-watch-scroll]").forEach((button) => {
         button.addEventListener("click", () => {
@@ -824,48 +844,67 @@
     
     async function renderWatchlist() {
       if (!isViewActive("watchlist") || !isTerminalUnlocked()) return;
+      setWatchlistDetailOpen(false);
       const list = getWatchlist();
       if (!list.length) {
-        watchlistStocks.innerHTML = `<div style="text-align:center; padding:40px; color:#555;">尚未新增自選股，請輸入股票代號後點新增</div>`;
-        return;
-      }
-    
-      watchlistStocks.innerHTML = list.map(item => `
-        <div class="watchlist-card" id="wcard-${item.code}" data-code="${item.code}" data-name="${item.name || item.code}"
-          style="background:#12151f; border:1px solid #2a2f45; border-radius:10px; padding:16px 20px; cursor:pointer; transition:border-color 0.2s;">
-          <div style="display:flex; justify-content:space-between; align-items:flex-start;">
-            <div style="flex:1; min-width:0;">
-              <div style="display:flex; align-items:center; gap:8px;">
-                <span style="color:#7ec8e3; font-size:16px; font-weight:700;">${item.code}</span>
-                <span style="color:#fff; font-size:15px; font-weight:600;">${item.name || ""}</span>
+        const candidates = latestStocks.slice(0, 80);
+        if (!candidates.length) {
+          watchlistStocks.innerHTML = `<div class="watch-mobile-empty">尚未新增自選股，請輸入股票代號後點新增</div>`;
+          return;
+        }
+        watchlistStocks.innerHTML = candidates.map((stock) => `
+          <div class="watchlist-card watchlist-card-candidate" id="wcard-${stock.code}" data-code="${stock.code}" data-name="${stock.name || stock.code}">
+            <div class="watch-card-main">
+              <div class="watch-card-title">
+                <span class="watch-code">${stock.code}</span>
+                <span class="watch-name">${stock.name || ""}</span>
                 <span class="watch-market-badge">上市</span>
               </div>
-              <div style="margin-top:6px;">
-                <span id="wprice-${item.code}" style="font-size:24px; font-weight:700; color:#fff;">--</span>
-                <span id="wchange-${item.code}" style="font-size:13px; margin-left:8px; color:#aaa;">載入中...</span>
+              <div class="watch-card-price">
+                <span id="wprice-${stock.code}">${stock.close ? stock.close.toLocaleString("zh-TW") : "--"}</span>
+                <small id="wchange-${stock.code}" class="${stock.percent >= 0 ? "watch-up" : "watch-down"}">${pctText(stock.percent || 0)}</small>
               </div>
-              <div style="margin-top:12px; padding-top:12px; border-top:2px solid #f97316; font-size:12px; color:#666;" id="winst-${item.code}">
+              <div class="watch-card-flow" id="winst-${stock.code}">點選查看 AI 個股判讀</div>
+            </div>
+          </div>
+        `).join("");
+      } else {
+        watchlistStocks.innerHTML = list.map(item => `
+          <div class="watchlist-card" id="wcard-${item.code}" data-code="${item.code}" data-name="${item.name || item.code}">
+            <div class="watch-card-main">
+              <div class="watch-card-title">
+                <span class="watch-code">${item.code}</span>
+                <span class="watch-name">${item.name || ""}</span>
+                <span class="watch-market-badge">上市</span>
+              </div>
+              <div class="watch-card-price">
+                <span id="wprice-${item.code}">--</span>
+                <small id="wchange-${item.code}">載入中...</small>
+              </div>
+              <div class="watch-card-flow" id="winst-${item.code}">
                 外資 -- 　投信 --
               </div>
             </div>
-            <button onclick="removeFromWatchlist('${item.code}')"
-              style="background:none; border:none; color:#555; font-size:18px; cursor:pointer; padding:4px; line-height:1;">×</button>
+            <button class="watch-remove" type="button" onclick="removeFromWatchlist('${item.code}')" aria-label="移除 ${item.code}">×</button>
           </div>
-        </div>
-      `).join("");
+        `).join("");
+      }
     
       document.querySelectorAll(".watchlist-card").forEach(card => {
         card.addEventListener("click", (e) => {
           if (e.target.tagName === "BUTTON") return;
           document.querySelectorAll(".watchlist-card").forEach(c => c.classList.remove("selected"));
           card.classList.add("selected");
+          setWatchlistDetailOpen(true);
           showTradingDashboard(card.dataset.code, card.dataset.name);
         });
       });
     
       const selectedCard = document.querySelector(".watchlist-card.selected") || document.querySelector(".watchlist-card");
-      if (selectedCard && !watchlistAnalysis.querySelector(".ta-dashboard")) {
+      if (selectedCard && !watchlistAnalysis.querySelector(".ta-dashboard") && !isMobileWatchlistViewport()) {
         selectedCard.click();
+      } else if (!watchlistAnalysis.querySelector(".ta-dashboard")) {
+        watchlistAnalysis.innerHTML = `<div class="watch-mobile-empty">點選股票查看 AI 個股判讀</div>`;
       }
     
       for (const item of list) {
