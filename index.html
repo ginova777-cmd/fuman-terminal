@@ -6,7 +6,7 @@
     <title>輔滿 股票終端</title>
     <link rel="icon" href="/favicon.ico" sizes="any">
     <link rel="preload" as="image" href="/assets/logo.webp" fetchpriority="high">
-    <link rel="stylesheet" href="styles.css?v=watchlist-blackbean-20260607">
+    <link rel="stylesheet" href="styles.css?v=cb-independent-20260607">
   </head>
   <body class="auth-pending">
     <section class="auth-gate" id="auth-gate" aria-label="會員登入">
@@ -238,7 +238,7 @@
         <section class="view-panel" id="chip-trade-view" hidden>
           <header class="page-header chip-page-header">
             <div>
-              <h1>外資 + 投信連買</h1>
+              <h1>買賣超 / CB</h1>
               <span class="refresh-line" id="chip-trade-date">等待盤後資料</span>
             </div>
           </header>
@@ -300,9 +300,9 @@
                 </div>
                 <strong id="cb-detect-count">--</strong>
               </div>
-              <div class="cb-detect-summary" id="cb-detect-summary">等待買賣超資料載入後自動評估。</div>
+              <div class="cb-detect-summary" id="cb-detect-summary">等待 CB 掃描資料。</div>
               <div class="cb-detect-list" id="cb-detect-list">
-                <div class="cb-detect-empty">尚未產生 CB 偵測結果</div>
+                <div class="cb-detect-empty">尚未接入 CB 掃描資料</div>
               </div>
             </aside>
           </section>
@@ -325,8 +325,9 @@
       </main>
     </div>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="terminal-core.js?v=watchlist-blackbean-20260607"></script>
+    <script src="terminal-core.js?v=cb-independent-20260607"></script>
   </body>
 </html>
+
 
 

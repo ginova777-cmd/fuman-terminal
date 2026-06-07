@@ -57,6 +57,7 @@
     warrantFlowBackup: "/data/warrant-flow-backup.json",
     warrantFlowSummary: "/data/warrant-flow-summary.json",
     warrantFlowMobileTop: "/data/warrant-flow-mobile-top.json",
+    cbDetectCache: "/data/cb-detect-latest.json",
     strategyStocks: "/api/stocks",
     stocks: "/api/stocks",
   };

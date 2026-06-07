@@ -1,5 +1,5 @@
 (function () {
-  const version = "watchlist-blackbean-20260607";
+  const version = "cb-independent-20260607";
   window.FUMAN_TERMINAL_BOOT = {
     version,
     startedAt: Date.now(),
@@ -87,5 +87,6 @@
     setTimeout(loadMain, 0);
   }
 })();
+
 
 

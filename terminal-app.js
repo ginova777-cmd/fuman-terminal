@@ -81,7 +81,7 @@ function getFumanWorker() {
   if (!("Worker" in window)) return null;
   if (fumanWorker) return fumanWorker;
   try {
-    fumanWorker = new Worker("terminal-worker.js?v=watchlist-blackbean-20260607");
+    fumanWorker = new Worker("terminal-worker.js?v=cb-independent-20260607");
     fumanWorker.addEventListener("message", (event) => {
       const { id, ok, rows, result, error } = event.data || {};
       const pending = fumanWorkerPending.get(id);
@@ -410,7 +410,7 @@ function loadFumanStyle(href, id) {
   const link = document.createElement("link");
   link.id = id;
   link.rel = "stylesheet";
-  link.href = href.includes("?") ? href : `${href}?v=${window.FUMAN_TERMINAL_BOOT?.version || "watchlist-blackbean-20260607"}`;
+  link.href = href.includes("?") ? href : `${href}?v=${window.FUMAN_TERMINAL_BOOT?.version || "cb-independent-20260607"}`;
   document.head.appendChild(link);
 }
 
@@ -436,7 +436,7 @@ function makeFumanModuleScope(bindings) {
 function loadFumanFeatureModule(name, src, globalName) {
   if (window[globalName]) return Promise.resolve(window[globalName]);
   if (fumanFeatureModulePromises[name]) return fumanFeatureModulePromises[name];
-  const version = window.FUMAN_TERMINAL_BOOT?.version || "watchlist-blackbean-20260607";
+  const version = window.FUMAN_TERMINAL_BOOT?.version || "cb-independent-20260607";
   fumanFeatureModulePromises[name] = new Promise((resolve, reject) => {
     const attr = "data-fuman-feature-" + name;
     const existing = document.querySelector("script[" + attr + "]");
@@ -9136,91 +9136,110 @@ async function ensureChipFlowModule() {
   return chipFlowModuleApi;
 }
 
-function buildCbDetectionRows() {
-  const stockByCode = new Map(latestStocks.map((stock) => [String(stock.code || stock.Code || ""), stock]));
-  const rows = [];
-  Object.entries(institutionData || {}).forEach(([code, inst]) => {
-    const stock = stockByCode.get(String(code)) || {};
-    const name = inst?.name || stock.name || code;
-    const price = cleanNumber(inst?.close) || cleanNumber(stock.close);
-    const percent = Number.isFinite(Number(inst?.percent)) ? Number(inst.percent) : cleanNumber(stock.percent);
-    const volume = cleanNumber(inst?.tradeVolume) || cleanNumber(stock.tradeVolume);
-    const foreign = Number(inst?.foreign) || 0;
-    const trust = Number(inst?.trust) || 0;
-    const dealer = Number(inst?.dealer) || 0;
-    const total = Number(inst?.total) || foreign + trust + dealer;
-    const foreignStreak = Number(inst?.foreignStreak) || 0;
-    const trustStreak = Number(inst?.trustStreak) || 0;
-    const jointStreak = Number(inst?.jointStreak) || 0;
+let cbDetectRows = [];
+let cbDetectUpdatedAt = 0;
+let cbDetectLoading = false;
+let cbDetectLoadedAt = 0;
 
-    let score = 0;
-    const tags = [];
-    if (foreign > 0 && trust > 0) { score += 25; tags.push("外資+投信同買"); }
-    if (jointStreak >= 2) { score += Math.min(15, jointStreak * 5); tags.push(`${jointStreak}日同買`); }
-    if (foreignStreak >= 3) { score += 8; tags.push("外資連買"); }
-    if (trustStreak >= 2) { score += 10; tags.push("投信連買"); }
-    if (total > 0) score += Math.min(15, Math.log10(Math.abs(total) + 1) * 4);
-    if (volume >= 500) { score += 10; tags.push("量能足"); }
-    if (price >= 100 && price <= 500) { score += 10; tags.push("CB友善股價"); }
-    if (percent > 0 && percent <= 8) { score += 8; tags.push("未過熱"); }
-    if (percent > 8) score -= 8;
-    if (price && price < 100) score -= 4;
-
-    if (score < 42) return;
-    rows.push({ code: String(code), name, price, percent, volume, foreign, trust, total, jointStreak, score: Math.max(0, Math.round(score)), tags });
-  });
-  return rows.sort((a, b) => (b.score - a.score) || (b.total - a.total)).slice(0, 12);
+function normalizeCbDetectRows(payload) {
+  const rows = normalizeArray(payload?.rows || payload?.matches || payload?.data || payload?.items || payload);
+  return rows.map((row) => {
+    const code = String(row.code || row.stockCode || row.股票代號 || row.代號 || "").trim();
+    const name = row.name || row.stockName || row.股票名稱 || row.名稱 || code;
+    const cbName = row.cbName || row.bondName || row.CB名稱 || row.可轉債名稱 || "";
+    const issueAmount = row.issueAmount || row.amount || row.發行總額 || "";
+    const auctionType = row.auctionType || row.underwriting || row.承銷方式 || "";
+    const convertPrice = cleanNumber(row.convertPrice || row.conversionPrice || row.轉換價格 || row.轉換價);
+    const stockPrice = cleanNumber(row.stockPrice || row.close || row.現股價 || row.收盤價);
+    const premium = row.premium !== undefined ? cleanNumber(row.premium) : row.溢價 !== undefined ? cleanNumber(row.溢價) : (convertPrice && stockPrice ? ((convertPrice - stockPrice) / stockPrice) * 100 : 0);
+    const stage = row.stage || row.status || row.階段 || row.狀態 || "待確認";
+    const date = row.date || row.公告日 || row.生效日 || row.listingDate || row.掛牌日 || "";
+    const score = cleanNumber(row.score || row.分數);
+    const tags = normalizeArray(row.tags || row.條件 || row.reasons || row.原因).filter(Boolean);
+    if (!code && !cbName) return null;
+    return { code, name, cbName, issueAmount, auctionType, convertPrice, stockPrice, premium, stage, date, score, tags };
+  }).filter(Boolean);
 }
 
-function renderCbDetectionPanel() {
+function renderCbDetectionPanel(errorText = "") {
   const countEl = document.querySelector("#cb-detect-count");
   const summaryEl = document.querySelector("#cb-detect-summary");
   const listEl = document.querySelector("#cb-detect-list");
   if (!countEl || !summaryEl || !listEl) return;
-  if (!Object.keys(institutionData || {}).length) {
+  if (cbDetectLoading && !cbDetectRows.length) {
     countEl.textContent = "--";
-    summaryEl.textContent = "等待買賣超資料載入後自動評估。";
-    listEl.innerHTML = `<div class="cb-detect-empty">尚未產生 CB 偵測結果</div>`;
+    summaryEl.textContent = "正在讀取 CB 掃描資料。";
+    listEl.innerHTML = `<div class="cb-detect-empty">CB 掃描載入中</div>`;
     return;
   }
-  const rows = buildCbDetectionRows();
+  if (errorText) {
+    countEl.textContent = "--";
+    summaryEl.textContent = "CB 掃描資料讀取失敗。";
+    listEl.innerHTML = `<div class="cb-detect-empty">${escapeAttr(errorText)}</div>`;
+    return;
+  }
+  const rows = cbDetectRows;
   countEl.textContent = String(rows.length);
-  const time = institutionUpdatedAt ? new Date(institutionUpdatedAt).toLocaleTimeString("zh-TW", { hour12: false }) : "更新中";
-  summaryEl.textContent = rows.length ? `依法人買超、連買、量能、股價區間推估 CB 短線追蹤名單。更新 ${time}` : "目前沒有符合 CB 短線偵測門檻的標的。";
+  const time = cbDetectUpdatedAt ? new Date(cbDetectUpdatedAt).toLocaleTimeString("zh-TW", { hour12: false }) : "尚未更新";
+  summaryEl.textContent = rows.length ? `CB 發行、競拍、轉換價與溢價偵測結果。更新 ${time}` : "尚未接入 CB 掃描資料。";
   if (!rows.length) {
-    listEl.innerHTML = `<div class="cb-detect-empty">沒有符合門檻的 CB 追蹤標的</div>`;
+    listEl.innerHTML = `<div class="cb-detect-empty">請先產生 /data/cb-detect-latest.json，CB 結果會顯示在這裡</div>`;
     return;
   }
   listEl.innerHTML = rows.map((row) => `
     <article class="cb-detect-card ${row.score >= 70 ? "hot" : ""}">
       <div class="cb-detect-card-head">
-        <h3><a href="#" data-chip-code="${escapeAttr(row.code)}">${escapeAttr(row.code)}</a> ${escapeAttr(row.name)}</h3>
-        <div class="cb-score">${row.score}</div>
+        <h3>${row.code ? `<a href="#" data-chip-code="${escapeAttr(row.code)}">${escapeAttr(row.code)}</a> ` : ""}${escapeAttr(row.name)}${row.cbName ? `<small>${escapeAttr(row.cbName)}</small>` : ""}</h3>
+        <div class="cb-score">${row.score || "--"}</div>
       </div>
       <div class="cb-detect-metrics">
-        <span>現價<b>${row.price ? formatNumber(row.price, row.price >= 100 ? 0 : 2) : "--"}</b></span>
-        <span>漲幅<b class="${row.percent >= 0 ? "red" : "green"}">${formatNumber(row.percent, 2)}%</b></span>
-        <span>成交量<b>${row.volume ? Math.round(row.volume).toLocaleString("zh-TW") : "--"}</b></span>
-        <span>外資<b class="${row.foreign >= 0 ? "red" : "green"}">${formatInstitution(row.foreign)}</b></span>
-        <span>投信<b class="${row.trust >= 0 ? "red" : "green"}">${formatInstitution(row.trust)}</b></span>
-        <span>法人合計<b class="${row.total >= 0 ? "red" : "green"}">${formatInstitution(row.total)}</b></span>
+        <span>承銷方式<b>${escapeAttr(row.auctionType || "--")}</b></span>
+        <span>轉換價<b>${row.convertPrice ? formatNumber(row.convertPrice, row.convertPrice >= 100 ? 0 : 2) : "--"}</b></span>
+        <span>現股價<b>${row.stockPrice ? formatNumber(row.stockPrice, row.stockPrice >= 100 ? 0 : 2) : "--"}</b></span>
+        <span>溢價<b class="${row.premium > 30 ? "green" : "red"}">${row.premium ? `${formatNumber(row.premium, 2)}%` : "--"}</b></span>
+        <span>發行總額<b>${escapeAttr(row.issueAmount || "--")}</b></span>
+        <span>階段/日期<b>${escapeAttr(row.stage)}${row.date ? ` ${escapeAttr(row.date)}` : ""}</b></span>
       </div>
       <div class="cb-detect-tags">${row.tags.slice(0, 5).map((tag) => `<span>${escapeAttr(tag)}</span>`).join("")}</div>
     </article>
   `).join("");
 }
 
+async function loadCbDetectionData(force = false) {
+  if (!isViewActive("chip-trade")) return;
+  if (!force && cbDetectLoadedAt && Date.now() - cbDetectLoadedAt < CACHE_FRESH_MS) {
+    renderCbDetectionPanel();
+    return;
+  }
+  cbDetectLoading = true;
+  renderCbDetectionPanel();
+  try {
+    const payload = await fetchVersionedJson(endpoints.cbDetectCache || "/data/cb-detect-latest.json", 6000, "latest", force);
+    cbDetectRows = normalizeCbDetectRows(payload);
+    const updatedAt = Date.parse(payload?.updatedAt || payload?.generatedAt || "");
+    cbDetectUpdatedAt = Number.isFinite(updatedAt) ? updatedAt : Date.now();
+    cbDetectLoadedAt = Date.now();
+    renderCbDetectionPanel();
+  } catch (error) {
+    cbDetectRows = [];
+    cbDetectLoadedAt = Date.now();
+    renderCbDetectionPanel("尚未找到 CB 掃描資料來源。");
+  } finally {
+    cbDetectLoading = false;
+  }
+}
+
 function renderChipTradeTable() {
   ensureChipFlowModule().then((api) => {
     api.renderChipTradeTable();
-    renderCbDetectionPanel();
   }).catch(() => undefined);
+  loadCbDetectionData(false);
 }
 
 async function loadChipTradeData(force = false) {
   const api = await ensureChipFlowModule();
   const result = await api.loadChipTradeData(force);
-  renderCbDetectionPanel();
+  loadCbDetectionData(force);
   return result;
 }
 
@@ -10575,5 +10594,6 @@ if (isViewActive("watchlist")) renderWatchlist();
 setInterval(() => {
   if (!isDocumentHidden() && isTerminalUnlocked() && isViewActive("watchlist")) refreshSelectedWatchlistQuote();
 }, 10000);
+
 
 

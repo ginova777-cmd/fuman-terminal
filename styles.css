@@ -895,6 +895,14 @@ body::after {
   font-size: 16px;
 }
 
+.cb-detect-card h3 small {
+  display: block;
+  margin-top: 3px;
+  color: #9faecb;
+  font-size: 12px;
+  font-weight: 700;
+}
+
 .cb-detect-card h3 a {
   color: #9fc8ff;
   text-decoration: none;
