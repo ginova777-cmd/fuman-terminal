@@ -1,11 +1,11 @@
 {
   "ok": true,
-  "updatedAt": "2026-06-06T23:15:04.600Z",
+  "updatedAt": "2026-06-07T00:58:05.207Z",
   "generatedBy": "generate-strategy-weight-report",
   "basis": {
-    "signalUpdatedAt": "2026-06-06T23:15:04.385Z",
-    "consistencyUpdatedAt": "2026-06-06T23:15:04.547Z",
-    "dataQualityUpdatedAt": "2026-06-06T23:15:04.475Z",
+    "signalUpdatedAt": "2026-06-07T00:58:04.972Z",
+    "consistencyUpdatedAt": "2026-06-07T00:58:05.149Z",
+    "dataQualityUpdatedAt": "2026-06-07T00:58:05.068Z",
     "highIssues": 0
   },
   "weights": {
