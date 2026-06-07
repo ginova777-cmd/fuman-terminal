@@ -1,23 +1,23 @@
-const CACHE_VERSION = "fuman-terminal-sw-20260607-chip-volume-lots";
+const CACHE_VERSION = "fuman-terminal-sw-20260607-chip-volume-lots-fallback";
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 const DATA_CACHE = `${CACHE_VERSION}-data`;
 
 const STATIC_ASSETS = [
-  "/styles.css?v=chip-volume-lots-20260607",
-  "/terminal-core.js?v=chip-volume-lots-20260607",
-  "/terminal-modules.js?v=chip-volume-lots-20260607",
-  "/terminal-sector-map.js?v=chip-volume-lots-20260607",
-  "/terminal-strategy-config.js?v=chip-volume-lots-20260607",
-  "/terminal-market-config.js?v=chip-volume-lots-20260607",
-  "/terminal-ui-config.js?v=chip-volume-lots-20260607",
-  "/terminal-runtime-config.js?v=chip-volume-lots-20260607",
-  "/terminal-tuning-config.js?v=chip-volume-lots-20260607",
-  "/terminal-worker.js?v=chip-volume-lots-20260607",
-  "/terminal.js?v=chip-volume-lots-20260607",
-  "/terminal-realtime-radar.css?v=chip-volume-lots-20260607",
-  "/terminal-intraday-radar.css?v=chip-volume-lots-20260607",
-  "/terminal-utility.css?v=chip-volume-lots-20260607",
-  "/refresh.html?v=chip-volume-lots-20260607",
+  "/styles.css?v=chip-volume-lots-fallback-20260607",
+  "/terminal-core.js?v=chip-volume-lots-fallback-20260607",
+  "/terminal-modules.js?v=chip-volume-lots-fallback-20260607",
+  "/terminal-sector-map.js?v=chip-volume-lots-fallback-20260607",
+  "/terminal-strategy-config.js?v=chip-volume-lots-fallback-20260607",
+  "/terminal-market-config.js?v=chip-volume-lots-fallback-20260607",
+  "/terminal-ui-config.js?v=chip-volume-lots-fallback-20260607",
+  "/terminal-runtime-config.js?v=chip-volume-lots-fallback-20260607",
+  "/terminal-tuning-config.js?v=chip-volume-lots-fallback-20260607",
+  "/terminal-worker.js?v=chip-volume-lots-fallback-20260607",
+  "/terminal.js?v=chip-volume-lots-fallback-20260607",
+  "/terminal-realtime-radar.css?v=chip-volume-lots-fallback-20260607",
+  "/terminal-intraday-radar.css?v=chip-volume-lots-fallback-20260607",
+  "/terminal-utility.css?v=chip-volume-lots-fallback-20260607",
+  "/refresh.html?v=chip-volume-lots-fallback-20260607",
   "/assets/logo.webp",
   "/favicon.ico",
 ];

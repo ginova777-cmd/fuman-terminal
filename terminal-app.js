@@ -9337,7 +9337,7 @@ function buildChipTradeFallbackRows() {
       price: cleanNumber(inst.close),
       change: Number.isFinite(Number(inst.change)) ? Number(inst.change) : 0,
       percent: Number.isFinite(Number(inst.percent)) ? Number(inst.percent) : 0,
-      volume: cleanNumber(inst.tradeVolume),
+      volume: normalizeTradeVolumeLots(inst.tradeVolume),
       value: cleanNumber(inst.value),
       foreign,
       trust,
@@ -9359,6 +9359,14 @@ function buildChipTradeFallbackRows() {
     return (b.jointStreak - a.jointStreak) || ((b.foreign + b.trust) - (a.foreign + a.trust));
   });
   return rows;
+}
+
+function formatChipSignedLots(value) {
+  const n = cleanNumber(value);
+  if (!Number.isFinite(n)) return "--";
+  const lots = Math.trunc(n / 1000);
+  const sign = lots >= 0 ? "+" : "";
+  return `${sign}${lots.toLocaleString("zh-TW")}`;
 }
 
 function renderChipTradeFallbackTable(message = "") {
@@ -9411,12 +9419,12 @@ function renderChipTradeFallbackTable(message = "") {
         <td data-chip-change class="${up ? "red" : "green"}">${hasQuote ? `${up ? "+" : ""}${formatNumber(row.change, 2)}` : "--"}</td>
         <td data-chip-percent class="${row.percent >= 0 ? "red" : "green"}">${hasQuote ? formatNumber(row.percent, 2) : "--"}</td>
         <td data-chip-volume>${row.volume ? Math.round(row.volume).toLocaleString("zh-TW") : "--"}</td>
-        <td class="${row.foreign >= 0 ? "red" : "green"}">${formatInstitution(row.foreign)}</td>
-        <td class="${row.trust >= 0 ? "red" : "green"}">${formatInstitution(row.trust)}</td>
+        <td class="${row.foreign >= 0 ? "red" : "green"}">${formatChipSignedLots(row.foreign)}</td>
+        <td class="${row.trust >= 0 ? "red" : "green"}">${formatChipSignedLots(row.trust)}</td>
         <td>${row.foreignStreak} 日</td>
         <td>${row.trustStreak} 日</td>
         <td>${row.jointStreak} 日</td>
-        <td class="${row.total >= 0 ? "red" : "green"}">${formatInstitution(row.total)}</td>
+        <td class="${row.total >= 0 ? "red" : "green"}">${formatChipSignedLots(row.total)}</td>
       </tr>
     `;
   }).join("");
