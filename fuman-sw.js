@@ -1,23 +1,23 @@
-const CACHE_VERSION = "fuman-terminal-sw-20260607-fast-path";
+const CACHE_VERSION = "fuman-terminal-sw-20260607-fast-path2";
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 const DATA_CACHE = `${CACHE_VERSION}-data`;
 
 const STATIC_ASSETS = [
-  "/styles.css?v=fast-path-20260607",
-  "/terminal-core.js?v=fast-path-20260607",
-  "/terminal-modules.js?v=fast-path-20260607",
-  "/terminal-sector-map.js?v=fast-path-20260607",
-  "/terminal-strategy-config.js?v=fast-path-20260607",
-  "/terminal-market-config.js?v=fast-path-20260607",
-  "/terminal-ui-config.js?v=fast-path-20260607",
-  "/terminal-runtime-config.js?v=fast-path-20260607",
-  "/terminal-tuning-config.js?v=fast-path-20260607",
-  "/terminal-worker.js?v=fast-path-20260607",
-  "/terminal.js?v=fast-path-20260607",
-  "/terminal-realtime-radar.css?v=fast-path-20260607",
-  "/terminal-intraday-radar.css?v=fast-path-20260607",
-  "/terminal-utility.css?v=fast-path-20260607",
-  "/refresh.html?v=fast-path-20260607",
+  "/styles.css?v=fast-path2-20260607",
+  "/terminal-core.js?v=fast-path2-20260607",
+  "/terminal-modules.js?v=fast-path2-20260607",
+  "/terminal-sector-map.js?v=fast-path2-20260607",
+  "/terminal-strategy-config.js?v=fast-path2-20260607",
+  "/terminal-market-config.js?v=fast-path2-20260607",
+  "/terminal-ui-config.js?v=fast-path2-20260607",
+  "/terminal-runtime-config.js?v=fast-path2-20260607",
+  "/terminal-tuning-config.js?v=fast-path2-20260607",
+  "/terminal-worker.js?v=fast-path2-20260607",
+  "/terminal.js?v=fast-path2-20260607",
+  "/terminal-realtime-radar.css?v=fast-path2-20260607",
+  "/terminal-intraday-radar.css?v=fast-path2-20260607",
+  "/terminal-utility.css?v=fast-path2-20260607",
+  "/refresh.html?v=fast-path2-20260607",
   "/assets/logo.webp",
   "/assets/login-bg-fuman-lite.webp",
   "/favicon.ico",
@@ -27,6 +27,9 @@ const DATA_PATTERNS = [
   /\/data\/.*summary\.json/i,
   /\/data\/.*-slim\.json/i,
   /\/data\/.*-top\.json/i,
+  /\/data\/.*-index\.json/i,
+  /\/data\/.*-latest\.json/i,
+  /\/data\/.*-page-\d+\.json/i,
   /\/data\/market-summary\.json/i,
   /\/data\/mobile-home-summary\.json/i,
   /\/data\/terminal-home-bundle\.json/i,
@@ -42,13 +45,24 @@ const DATA_PATTERNS = [
 const PREFETCH_DATA_ASSETS = [
   "/data/data-manifest.json",
   "/data/terminal-home-bundle.json",
+  "/data/mobile-home-summary.json",
+  "/data/market-summary.json",
+  "/data/health-summary.json",
   "/data/strategy4-score-top.json",
+  "/data/strategy4-zone-a.json",
   "/data/strategy4-zone-b-page-1.json",
+  "/data/strategy4-zone-c.json",
   "/data/strategy-match-index.json",
   "/data/data-status-index.json",
   "/data/stocks-index.json",
   "/data/stocks-quotes-slim.json",
   "/data/stocks-slim.json",
+  "/data/institution-summary.json",
+  "/data/institution-slim.json",
+  "/data/warrant-flow-summary.json",
+  "/data/warrant-flow-slim.json",
+  "/data/warrant-flow-mobile-top.json",
+  "/data/strategy5-latest.json",
 ];
 
 const LIVE_PATTERNS = [
@@ -113,6 +127,22 @@ async function prefetchDataAssets() {
   }));
 }
 
+async function dataStaleWhileRevalidate(request) {
+  const cache = await caches.open(DATA_CACHE);
+  const cached = await cache.match(request, { ignoreSearch: true });
+  const refresh = fetch(request)
+    .then(async (response) => {
+      if (response.ok) {
+        await cache.put(request, response.clone());
+        const url = new URL(request.url);
+        await cache.put(new Request(url.pathname), response.clone());
+      }
+      return response;
+    })
+    .catch(() => undefined);
+  return cached || refresh;
+}
+
 async function staleWhileRevalidate(request) {
   const cache = await caches.open(STATIC_CACHE);
   const cached = await cache.match(request, { ignoreSearch: false });
@@ -144,7 +174,7 @@ self.addEventListener("fetch", (event) => {
     return;
   }
   if (isDataRequest(url)) {
-    event.respondWith(networkFirst(request));
+    event.respondWith(url.searchParams.has("t") ? networkFirst(request) : dataStaleWhileRevalidate(request));
     return;
   }
   if (["script", "style", "image", "font"].includes(request.destination)) {

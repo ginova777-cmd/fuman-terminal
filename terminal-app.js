@@ -75,7 +75,7 @@ function getFumanWorker() {
   if (!("Worker" in window)) return null;
   if (fumanWorker) return fumanWorker;
   try {
-    fumanWorker = new Worker("terminal-worker.js?v=fast-path-20260607");
+    fumanWorker = new Worker("terminal-worker.js?v=fast-path2-20260607");
     fumanWorker.addEventListener("message", (event) => {
       const { id, ok, rows, result, error } = event.data || {};
       const pending = fumanWorkerPending.get(id);
@@ -198,6 +198,7 @@ function rankedCommonTabs() {
 function scheduleCommonTabWarmup() {
   if (window.__fumanCommonWarmupScheduled) return;
   window.__fumanCommonWarmupScheduled = true;
+  deferIdleWork(() => warmFastPathData("auth-ready"), 900);
   deferIdleWork(() => warmCommonTabs(), 1600);
 }
 
@@ -230,6 +231,31 @@ function warmCommonTabs() {
       fetchVersionedJson(endpoints.realtimeRadarCache, 4500, "latest", false).catch(() => undefined);
     }
   }
+}
+
+function warmFastPathData(reason = "idle") {
+  if (window.__fumanFastPathWarmupAt && Date.now() - window.__fumanFastPathWarmupAt < 5 * 60 * 1000) return;
+  window.__fumanFastPathWarmupAt = Date.now();
+  const versionKey = marketSummaryPayload?.updatedAt || marketSummaryPayload?.resolvedTradeDate || "latest";
+  const warmJson = (url, timeout = 4500, version = "latest") => url ? fetchVersionedJson(url, timeout, version, false) : null;
+  const tasks = [
+    loadDataManifest(false),
+    loadMarketSummary(false),
+    warmJson(endpoints.terminalHomeBundle),
+    warmJson(endpoints.stocksIndex, 4500, versionKey),
+    warmJson(endpoints.stocksQuotesSlim, 4500, versionKey),
+    warmJson(endpoints.strategyMatchIndex),
+    warmJson(endpoints.strategy4ScoreTop, 4500, strategy4Summary?.updatedAt || "latest"),
+    warmJson(endpoints.strategy4ZoneA, 4500, strategy4Summary?.updatedAt || "latest"),
+    warmJson(endpoints.strategy4ZoneBPage1, 4500, strategy4Summary?.updatedAt || "latest"),
+    warmJson(endpoints.strategy4ZoneC, 4500, strategy4Summary?.updatedAt || "latest"),
+    warmJson(endpoints.institutionSummary),
+    warmJson(endpoints.warrantFlowSummary),
+    warmJson(endpoints.warrantFlowMobileTop),
+  ].filter(Boolean).map((task) => Promise.resolve(task).catch(() => undefined));
+  Promise.allSettled(tasks).finally(() => {
+    recordFumanPerformance("warmup:fast-path:" + reason, performance?.now ? performance.now() : Date.now(), true);
+  });
 }
 
 function recordFrontendError(kind, error) {
@@ -307,7 +333,7 @@ function loadFumanStyle(href, id) {
   const link = document.createElement("link");
   link.id = id;
   link.rel = "stylesheet";
-  link.href = href.includes("?") ? href : `${href}?v=${window.FUMAN_TERMINAL_BOOT?.version || "fast-path-20260607"}`;
+  link.href = href.includes("?") ? href : `${href}?v=${window.FUMAN_TERMINAL_BOOT?.version || "fast-path2-20260607"}`;
   document.head.appendChild(link);
 }
 
@@ -333,7 +359,7 @@ function makeFumanModuleScope(bindings) {
 function loadFumanFeatureModule(name, src, globalName) {
   if (window[globalName]) return Promise.resolve(window[globalName]);
   if (fumanFeatureModulePromises[name]) return fumanFeatureModulePromises[name];
-  const version = window.FUMAN_TERMINAL_BOOT?.version || "fast-path-20260607";
+  const version = window.FUMAN_TERMINAL_BOOT?.version || "fast-path2-20260607";
   fumanFeatureModulePromises[name] = new Promise((resolve, reject) => {
     const attr = "data-fuman-feature-" + name;
     const existing = document.querySelector("script[" + attr + "]");
@@ -9626,6 +9652,7 @@ if (isViewActive("market")) {
   deferUiWork(() => loadTerminalHomeBundle(false), 20);
   deferUiWork(() => loadHealthSummary(false), 300);
   deferUiWork(() => loadMarketSummary(false), 80);
+  deferIdleWork(() => warmFastPathData("market-start"), 2200);
   loadMarketData();
   if (isMobileViewport()) deferUiWork(loadHeatmap, 1600);
   else loadHeatmap();
