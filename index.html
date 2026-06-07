@@ -6,7 +6,7 @@
     <title>輔滿 股票終端</title>
     <link rel="icon" href="/favicon.ico" sizes="any">
     <link rel="preload" as="image" href="/assets/logo.webp" fetchpriority="high">
-    <link rel="stylesheet" href="styles.css?v=cb-panel-up-20260607">
+    <link rel="stylesheet" href="styles.css?v=split-cb-view-20260607">
   </head>
   <body class="auth-pending">
     <section class="auth-gate" id="auth-gate" aria-label="會員登入">
@@ -73,8 +73,9 @@
           <a class="strategy-nav" href="#" data-view="strategy" data-mobile-label="策略"><span class="s5">▰</span>策略5-綜合策略</a>
           <section class="chip-menu" aria-label="盤後籌碼">
             <h2>盤後籌碼</h2>
-            <a href="#" class="chip-menu-link" data-view="chip-trade" data-mobile-label="買賣/CB"><span>◆</span>1.買賣超/CB</a>
-            <a href="#" class="chip-menu-link" data-view="warrant-flow" data-mobile-label="權證"><span>◒</span>2.權證走向</a>
+            <a href="#" class="chip-menu-link" data-view="chip-trade" data-mobile-label="買賣"><span>◆</span>1.買賣超</a>
+            <a href="#" class="chip-menu-link" data-view="cb-detect" data-mobile-label="CB"><span>◇</span>2.CB可轉債</a>
+            <a href="#" class="chip-menu-link" data-view="warrant-flow" data-mobile-label="權證"><span>◒</span>3.權證走向</a>
             <a class="chip-menu-link watchlist-chip-link" href="#" data-view="watchlist" data-mobile-label="個股"><span>☆</span>自選股</a>
           </section>
         </nav>
@@ -238,7 +239,7 @@
         <section class="view-panel" id="chip-trade-view" hidden>
           <header class="page-header chip-page-header">
             <div>
-              <h1>買賣超 / CB</h1>
+              <h1>買賣超</h1>
               <span class="refresh-line" id="chip-trade-date">等待盤後資料</span>
             </div>
           </header>
@@ -291,7 +292,19 @@
                 </tbody>
               </table>
             </section>
+          </section>
+        </section>
 
+        <!-- CB可轉債 -->
+        <section class="view-panel" id="cb-detect-view" hidden>
+          <header class="page-header chip-page-header">
+            <div>
+              <h1>CB可轉債</h1>
+              <span class="refresh-line">60分K門檻｜富果現股價｜CBAS三層來源</span>
+            </div>
+          </header>
+
+          <section class="cb-detect-page">
             <aside class="cb-detect-panel" aria-label="CB偵測結果">
               <div class="cb-detect-head">
                 <div>
@@ -489,7 +502,7 @@
       </main>
     </div>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="terminal-core.js?v=cb-60m-gate-20260607"></script>
+    <script src="terminal-core.js?v=split-cb-view-20260607"></script>
   </body>
 </html>
 

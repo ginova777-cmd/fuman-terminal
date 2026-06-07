@@ -1,5 +1,5 @@
 (function () {
-  const version = "cb-60m-gate-20260607";
+  const version = "split-cb-view-20260607";
   window.FUMAN_TERMINAL_BOOT = {
     version,
     startedAt: Date.now(),

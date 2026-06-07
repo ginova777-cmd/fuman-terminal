@@ -14,6 +14,7 @@ const viewPanels = {
   market: document.querySelector("#market-view"),
   strategy: document.querySelector("#strategy-view"),
   "chip-trade": document.querySelector("#chip-trade-view"),
+  "cb-detect": document.querySelector("#cb-detect-view"),
   "warrant-flow": document.querySelector("#warrant-flow-view"),
   member: document.querySelector("#member-view"),
 };
@@ -2801,7 +2802,8 @@ function applyStaticTitleIcons() {
     marketTitle.innerHTML = `${titleWithIcon("●", marketText)}${marketMode === "overview" && settlementBadge ? ` <small class="update-mode-badge settlement-title-badge">${escapeAttr(settlementBadge)}</small>` : ""} ${scheduleBadgeHtml("market")}`;
   }
   setTitleWithSchedule(document.querySelector("#watchlist-view .page-header h1"), "☆", "自選股", "watchlist");
-  setTitleWithSchedule(document.querySelector("#chip-trade-view .page-header h1"), "◆", "買賣超 / CB", "chip");
+  setTitleWithSchedule(document.querySelector("#chip-trade-view .page-header h1"), "◆", "買賣超", "chip");
+  setTitleWithSchedule(document.querySelector("#cb-detect-view .page-header h1"), "◇", "CB可轉債", "chip");
   setTitleWithSchedule(document.querySelector("#warrant-flow-view .page-header h1"), "◒", "權證走向", "warrant");
 }
 
@@ -4000,9 +4002,9 @@ function mobileHomeQuickTargets() {
       { label: "AI 判讀", detail: "市場熱區快看", view: "market", mode: "ai" },
     ]
     : [
-      { label: "買賣超/CB", detail: "籌碼與CB偵測", view: "chip-trade" },
+      { label: "買賣超", detail: "法人籌碼排行", view: "chip-trade" },
+      { label: "CB可轉債", detail: "60分K可轉債偵測", view: "cb-detect" },
       { label: "權證", detail: "優先區熱度", view: "warrant-flow" },
-      { label: "策略5", detail: "綜合策略結果", view: "strategy", preset: "策略5" },
     ];
 }
 
@@ -9281,7 +9283,7 @@ function renderCbDetectionPanel(errorText = "") {
 }
 
 async function loadCbDetectionData(force = false) {
-  if (!isViewActive("chip-trade")) return;
+  if (!isViewActive("cb-detect")) return;
   if (!force && cbDetectLoadedAt && Date.now() - cbDetectLoadedAt < CACHE_FRESH_MS) {
     renderCbDetectionPanel();
     return;
@@ -9461,7 +9463,6 @@ function renderChipTradeTable() {
     console.warn("[FUMAN] chip flow render fallback", error);
     renderChipTradeFallbackTable("買賣超模組載入失敗，已切換主程式備援表格。");
   });
-  loadCbDetectionData(false);
 }
 
 async function loadChipTradeData(force = false) {
@@ -9472,12 +9473,10 @@ async function loadChipTradeData(force = false) {
   try {
     const api = await withTimeout(ensureChipFlowModule(), 4000, "chip module");
     const result = await withTimeout(api.loadChipTradeData(force), 12000, "chip data");
-    loadCbDetectionData(force);
     return result;
   } catch (error) {
     console.warn("[FUMAN] chip flow data fallback", error);
     await loadChipTradeDataFallback(force, "買賣超模組載入失敗，已切換主程式備援表格。");
-    loadCbDetectionData(force);
     return null;
   }
 }
@@ -9706,6 +9705,9 @@ function showView(viewName, activeLink) {
     markLazyModuleForView(viewName);
     deferUiWork(() => loadChipTradeData(false), mobileFastSwitch ? 70 : 0);
     if (!isMobileViewport()) deferIdleWork(() => preloadChipTradeFullData("after-top"), 1200);
+  }
+  if (viewName === "cb-detect") {
+    deferUiWork(() => loadCbDetectionData(false), mobileFastSwitch ? 70 : 0);
   }
   if (viewName === "warrant-flow") {
     markLazyModuleForView(viewName);
@@ -10577,6 +10579,10 @@ function refreshActiveChipWarrantView(force = true) {
   if (isDocumentHidden() || !isTerminalUnlocked()) return;
   if (isViewActive("chip-trade")) {
     loadChipTradeData(force);
+    return;
+  }
+  if (isViewActive("cb-detect")) {
+    loadCbDetectionData(force);
     return;
   }
   if (isViewActive("warrant-flow")) {

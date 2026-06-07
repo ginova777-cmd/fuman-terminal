@@ -758,11 +758,12 @@ body::after {
 }
 
 .chip-cb-layout {
-  display: grid;
-  grid-template-columns: minmax(620px, 1.18fr) minmax(360px, 0.82fr);
-  gap: 14px;
-  align-items: start;
+  display: block;
   min-height: calc(100vh - 245px);
+}
+
+.cb-detect-page {
+  min-height: calc(100vh - 170px);
 }
 
 .chip-table-wrap {
@@ -775,7 +776,8 @@ body::after {
 }
 
 .chip-table {
-  width: 100%;
+  width: max-content;
+  min-width: 1240px;
   border-collapse: collapse;
   font-size: 14px;
   white-space: nowrap;
@@ -827,8 +829,8 @@ body::after {
   display: flex;
   flex-direction: column;
   position: relative;
-  margin-top: -116px;
-  min-height: calc(100vh - 129px);
+  margin-top: 0;
+  min-height: calc(100vh - 170px);
   border: 1px solid rgba(255, 77, 67, 0.78);
   border-radius: 6px;
   background: rgba(6, 11, 20, 0.82);
