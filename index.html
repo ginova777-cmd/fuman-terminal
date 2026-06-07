@@ -6,7 +6,7 @@
     <title>輔滿 股票終端</title>
     <link rel="icon" href="/favicon.ico" sizes="any">
     <link rel="preload" as="image" href="/assets/logo.webp" fetchpriority="high">
-    <link rel="stylesheet" href="styles.css?v=mobile-refresh19-20260607">
+    <link rel="stylesheet" href="styles.css?v=cb-chip-20260607">
   </head>
   <body class="auth-pending">
     <section class="auth-gate" id="auth-gate" aria-label="會員登入">
@@ -73,7 +73,7 @@
           <a class="strategy-nav" href="#" data-view="strategy" data-mobile-label="策略"><span class="s5">▰</span>策略5-綜合策略</a>
           <section class="chip-menu" aria-label="盤後籌碼">
             <h2>盤後籌碼</h2>
-            <a href="#" class="chip-menu-link" data-view="chip-trade" data-mobile-label="買賣"><span>◆</span>1.買賣超</a>
+            <a href="#" class="chip-menu-link" data-view="chip-trade" data-mobile-label="買賣/CB"><span>◆</span>1.買賣超/CB</a>
             <a href="#" class="chip-menu-link" data-view="warrant-flow" data-mobile-label="權證"><span>◒</span>2.權證走向</a>
             <a class="chip-menu-link watchlist-chip-link" href="#" data-view="watchlist" data-mobile-label="個股"><span>☆</span>自選股</a>
           </section>
@@ -267,28 +267,44 @@
             </div>
           </section>
 
-          <section class="chip-table-wrap">
-            <table class="chip-table">
-              <thead>
-                <tr>
-                  <th>股票代號</th>
-                  <th>股票名稱</th>
-                  <th>現價/收盤</th>
-                  <th>漲跌</th>
-                  <th>漲幅(%)</th>
-                  <th>成交量</th>
-                  <th>外資買賣超</th>
-                  <th>投信買賣超</th>
-                  <th>外資連買</th>
-                  <th>投信連買</th>
-                  <th>同買</th>
-                  <th>法人合計</th>
-                </tr>
-              </thead>
-              <tbody id="chip-trade-body">
-                <tr><td colspan="12">等待資料載入...</td></tr>
-              </tbody>
-            </table>
+          <section class="chip-cb-layout">
+            <section class="chip-table-wrap">
+              <table class="chip-table">
+                <thead>
+                  <tr>
+                    <th>股票代號</th>
+                    <th>股票名稱</th>
+                    <th>現價/收盤</th>
+                    <th>漲跌</th>
+                    <th>漲幅(%)</th>
+                    <th>成交量</th>
+                    <th>外資買賣超</th>
+                    <th>投信買賣超</th>
+                    <th>外資連買</th>
+                    <th>投信連買</th>
+                    <th>同買</th>
+                    <th>法人合計</th>
+                  </tr>
+                </thead>
+                <tbody id="chip-trade-body">
+                  <tr><td colspan="12">等待資料載入...</td></tr>
+                </tbody>
+              </table>
+            </section>
+
+            <aside class="cb-detect-panel" aria-label="CB偵測結果">
+              <div class="cb-detect-head">
+                <div>
+                  <span>CB DETECTOR</span>
+                  <h2>CB 偵測結果</h2>
+                </div>
+                <strong id="cb-detect-count">--</strong>
+              </div>
+              <div class="cb-detect-summary" id="cb-detect-summary">等待買賣超資料載入後自動評估。</div>
+              <div class="cb-detect-list" id="cb-detect-list">
+                <div class="cb-detect-empty">尚未產生 CB 偵測結果</div>
+              </div>
+            </aside>
           </section>
         </section>
 
@@ -309,7 +325,7 @@
       </main>
     </div>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="terminal-core.js?v=mobile-refresh19-20260607"></script>
+    <script src="terminal-core.js?v=cb-chip-20260607"></script>
   </body>
 </html>
 

@@ -81,7 +81,7 @@ function getFumanWorker() {
   if (!("Worker" in window)) return null;
   if (fumanWorker) return fumanWorker;
   try {
-    fumanWorker = new Worker("terminal-worker.js?v=mobile-refresh19-20260607");
+    fumanWorker = new Worker("terminal-worker.js?v=cb-chip-20260607");
     fumanWorker.addEventListener("message", (event) => {
       const { id, ok, rows, result, error } = event.data || {};
       const pending = fumanWorkerPending.get(id);
@@ -410,7 +410,7 @@ function loadFumanStyle(href, id) {
   const link = document.createElement("link");
   link.id = id;
   link.rel = "stylesheet";
-  link.href = href.includes("?") ? href : `${href}?v=${window.FUMAN_TERMINAL_BOOT?.version || "mobile-refresh19-20260607"}`;
+  link.href = href.includes("?") ? href : `${href}?v=${window.FUMAN_TERMINAL_BOOT?.version || "cb-chip-20260607"}`;
   document.head.appendChild(link);
 }
 
@@ -436,7 +436,7 @@ function makeFumanModuleScope(bindings) {
 function loadFumanFeatureModule(name, src, globalName) {
   if (window[globalName]) return Promise.resolve(window[globalName]);
   if (fumanFeatureModulePromises[name]) return fumanFeatureModulePromises[name];
-  const version = window.FUMAN_TERMINAL_BOOT?.version || "mobile-refresh19-20260607";
+  const version = window.FUMAN_TERMINAL_BOOT?.version || "cb-chip-20260607";
   fumanFeatureModulePromises[name] = new Promise((resolve, reject) => {
     const attr = "data-fuman-feature-" + name;
     const existing = document.querySelector("script[" + attr + "]");
@@ -2759,7 +2759,7 @@ function applyStaticTitleIcons() {
     marketTitle.innerHTML = `${titleWithIcon("●", marketText)}${marketMode === "overview" && settlementBadge ? ` <small class="update-mode-badge settlement-title-badge">${escapeAttr(settlementBadge)}</small>` : ""} ${scheduleBadgeHtml("market")}`;
   }
   setTitleWithSchedule(document.querySelector("#watchlist-view .page-header h1"), "☆", "自選股", "watchlist");
-  setTitleWithSchedule(document.querySelector("#chip-trade-view .page-header h1"), "◆", "外資 + 投信連買", "chip");
+  setTitleWithSchedule(document.querySelector("#chip-trade-view .page-header h1"), "◆", "買賣超 / CB", "chip");
   setTitleWithSchedule(document.querySelector("#warrant-flow-view .page-header h1"), "◒", "權證走向", "warrant");
 }
 
@@ -3958,7 +3958,7 @@ function mobileHomeQuickTargets() {
       { label: "AI 判讀", detail: "市場熱區快看", view: "market", mode: "ai" },
     ]
     : [
-      { label: "買賣超", detail: "外資投信同買", view: "chip-trade" },
+      { label: "買賣超/CB", detail: "籌碼與CB偵測", view: "chip-trade" },
       { label: "權證", detail: "優先區熱度", view: "warrant-flow" },
       { label: "策略5", detail: "綜合策略結果", view: "strategy", preset: "策略5" },
     ];
@@ -9136,13 +9136,92 @@ async function ensureChipFlowModule() {
   return chipFlowModuleApi;
 }
 
+function buildCbDetectionRows() {
+  const stockByCode = new Map(latestStocks.map((stock) => [String(stock.code || stock.Code || ""), stock]));
+  const rows = [];
+  Object.entries(institutionData || {}).forEach(([code, inst]) => {
+    const stock = stockByCode.get(String(code)) || {};
+    const name = inst?.name || stock.name || code;
+    const price = cleanNumber(inst?.close) || cleanNumber(stock.close);
+    const percent = Number.isFinite(Number(inst?.percent)) ? Number(inst.percent) : cleanNumber(stock.percent);
+    const volume = cleanNumber(inst?.tradeVolume) || cleanNumber(stock.tradeVolume);
+    const foreign = Number(inst?.foreign) || 0;
+    const trust = Number(inst?.trust) || 0;
+    const dealer = Number(inst?.dealer) || 0;
+    const total = Number(inst?.total) || foreign + trust + dealer;
+    const foreignStreak = Number(inst?.foreignStreak) || 0;
+    const trustStreak = Number(inst?.trustStreak) || 0;
+    const jointStreak = Number(inst?.jointStreak) || 0;
+
+    let score = 0;
+    const tags = [];
+    if (foreign > 0 && trust > 0) { score += 25; tags.push("外資+投信同買"); }
+    if (jointStreak >= 2) { score += Math.min(15, jointStreak * 5); tags.push(`${jointStreak}日同買`); }
+    if (foreignStreak >= 3) { score += 8; tags.push("外資連買"); }
+    if (trustStreak >= 2) { score += 10; tags.push("投信連買"); }
+    if (total > 0) score += Math.min(15, Math.log10(Math.abs(total) + 1) * 4);
+    if (volume >= 500) { score += 10; tags.push("量能足"); }
+    if (price >= 100 && price <= 500) { score += 10; tags.push("CB友善股價"); }
+    if (percent > 0 && percent <= 8) { score += 8; tags.push("未過熱"); }
+    if (percent > 8) score -= 8;
+    if (price && price < 100) score -= 4;
+
+    if (score < 42) return;
+    rows.push({ code: String(code), name, price, percent, volume, foreign, trust, total, jointStreak, score: Math.max(0, Math.round(score)), tags });
+  });
+  return rows.sort((a, b) => (b.score - a.score) || (b.total - a.total)).slice(0, 12);
+}
+
+function renderCbDetectionPanel() {
+  const countEl = document.querySelector("#cb-detect-count");
+  const summaryEl = document.querySelector("#cb-detect-summary");
+  const listEl = document.querySelector("#cb-detect-list");
+  if (!countEl || !summaryEl || !listEl) return;
+  if (!Object.keys(institutionData || {}).length) {
+    countEl.textContent = "--";
+    summaryEl.textContent = "等待買賣超資料載入後自動評估。";
+    listEl.innerHTML = `<div class="cb-detect-empty">尚未產生 CB 偵測結果</div>`;
+    return;
+  }
+  const rows = buildCbDetectionRows();
+  countEl.textContent = String(rows.length);
+  const time = institutionUpdatedAt ? new Date(institutionUpdatedAt).toLocaleTimeString("zh-TW", { hour12: false }) : "更新中";
+  summaryEl.textContent = rows.length ? `依法人買超、連買、量能、股價區間推估 CB 短線追蹤名單。更新 ${time}` : "目前沒有符合 CB 短線偵測門檻的標的。";
+  if (!rows.length) {
+    listEl.innerHTML = `<div class="cb-detect-empty">沒有符合門檻的 CB 追蹤標的</div>`;
+    return;
+  }
+  listEl.innerHTML = rows.map((row) => `
+    <article class="cb-detect-card ${row.score >= 70 ? "hot" : ""}">
+      <div class="cb-detect-card-head">
+        <h3><a href="#" data-chip-code="${escapeAttr(row.code)}">${escapeAttr(row.code)}</a> ${escapeAttr(row.name)}</h3>
+        <div class="cb-score">${row.score}</div>
+      </div>
+      <div class="cb-detect-metrics">
+        <span>現價<b>${row.price ? formatNumber(row.price, row.price >= 100 ? 0 : 2) : "--"}</b></span>
+        <span>漲幅<b class="${row.percent >= 0 ? "red" : "green"}">${formatNumber(row.percent, 2)}%</b></span>
+        <span>成交量<b>${row.volume ? Math.round(row.volume).toLocaleString("zh-TW") : "--"}</b></span>
+        <span>外資<b class="${row.foreign >= 0 ? "red" : "green"}">${formatInstitution(row.foreign)}</b></span>
+        <span>投信<b class="${row.trust >= 0 ? "red" : "green"}">${formatInstitution(row.trust)}</b></span>
+        <span>法人合計<b class="${row.total >= 0 ? "red" : "green"}">${formatInstitution(row.total)}</b></span>
+      </div>
+      <div class="cb-detect-tags">${row.tags.slice(0, 5).map((tag) => `<span>${escapeAttr(tag)}</span>`).join("")}</div>
+    </article>
+  `).join("");
+}
+
 function renderChipTradeTable() {
-  ensureChipFlowModule().then((api) => api.renderChipTradeTable()).catch(() => undefined);
+  ensureChipFlowModule().then((api) => {
+    api.renderChipTradeTable();
+    renderCbDetectionPanel();
+  }).catch(() => undefined);
 }
 
 async function loadChipTradeData(force = false) {
   const api = await ensureChipFlowModule();
-  return api.loadChipTradeData(force);
+  const result = await api.loadChipTradeData(force);
+  renderCbDetectionPanel();
+  return result;
 }
 
 function preloadChipTradeFullData(reason = "idle") {

@@ -1,5 +1,5 @@
 (function () {
-  const version = "mobile-refresh19-20260607";
+  const version = "cb-chip-20260607";
   window.FUMAN_TERMINAL_BOOT = {
     version,
     startedAt: Date.now(),
