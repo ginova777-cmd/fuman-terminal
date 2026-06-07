@@ -1,8 +1,22 @@
 (function () {
-  const version = "mobile-refresh18-20260607";
+  const version = "mobile-refresh19-20260607";
   window.FUMAN_TERMINAL_BOOT = {
     version,
     startedAt: Date.now(),
+  };
+
+  const warmAuthShell = () => {
+    try {
+      const key = window.FUMAN_RUNTIME_CONFIG?.authCacheKey || "fuman-terminal-auth-cache-v1";
+      const ttl = window.FUMAN_RUNTIME_CONFIG?.authCacheTtlMs || (5 * 60 * 1000);
+      const cached = JSON.parse(localStorage.getItem(key) || "null");
+      const status = String(cached?.status || "").toLowerCase();
+      if (!cached?.at || Date.now() - Number(cached.at) > ttl) return;
+      if (!["approved", "active", "trial", "admin"].includes(status)) return;
+      document.body.classList.add("auth-ready", "auth-cache-warm");
+      document.body.classList.remove("auth-pending", "auth-locked", "auth-login-open");
+      document.querySelector("#auth-gate")?.setAttribute("aria-hidden", "true");
+    } catch (error) {}
   };
 
   const mark = (name) => {
@@ -41,6 +55,7 @@
   };
 
   mark("core-start");
+  warmAuthShell();
   preconnect("https://openapi.twse.com.tw");
 
   const loadMain = () => {
