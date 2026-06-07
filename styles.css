@@ -886,8 +886,10 @@ body::after {
   .app-shell {
     display: block;
     width: 100%;
+    max-width: 100vw;
     min-height: 100vh;
     padding: 0;
+    overflow-x: hidden;
   }
   .sidebar {
     position: static;
@@ -3080,10 +3082,27 @@ body.fuman-light-theme .data-freshness-bar.is-stale span {
 
   .dashboard {
     width: 100%;
+    max-width: 100vw;
     min-height: 100vh;
-    overflow: visible;
+    overflow-x: hidden;
     padding: 16px 12px calc(92px + env(safe-area-inset-bottom));
     background: rgba(7, 9, 17, 0.38);
+  }
+
+  .sidebar-foot {
+    max-width: 100vw;
+    overflow-x: hidden;
+    padding-inline: 12px;
+  }
+
+  .sidebar-foot .member-state {
+    max-width: min(46vw, 170px);
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .sidebar-foot .logout {
+    flex: 0 0 auto;
   }
 
   .page-header,
