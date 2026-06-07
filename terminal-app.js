@@ -2997,6 +2997,7 @@ let warrantFlowPriorityCache = [];
 let warrantFlowPrioritySignature = "";
 let warrantFlowLastRenderSignature = "";
 let warrantFlowKeyword = "";
+let warrantFlowMode = "priority";
 let warrantFlowSearchTimer = null;
 let warrantFlowPage = 1;
 let warrantFlowHasOpened = false;
@@ -7260,6 +7261,8 @@ function getWarrantFlowContext() {
       set warrantFlowLastRenderSignature(value) { warrantFlowLastRenderSignature = value; },
       get warrantFlowKeyword() { return warrantFlowKeyword; },
       set warrantFlowKeyword(value) { warrantFlowKeyword = value; },
+      get warrantFlowMode() { return warrantFlowMode; },
+      set warrantFlowMode(value) { warrantFlowMode = value; },
       get warrantFlowPage() { return warrantFlowPage; },
       set warrantFlowPage(value) { warrantFlowPage = value; },
       get warrantFlowHasOpened() { return warrantFlowHasOpened; },
@@ -7271,6 +7274,7 @@ function getWarrantFlowContext() {
       get warrantFlowSummary() { return warrantFlowSummary; },
       set warrantFlowSummary(value) { warrantFlowSummary = value; },
       viewPanels, endpoints, CACHE_FRESH_MS,
+      strategyHistoryData, loadRealtimeRadarHistory,
       cleanNumber, formatNumber, normalizeArray, fetchVersionedJson,
       isViewActive, isMobileViewport, loadWarrantFlowLocalCache, loadWarrantFlowSummary,
       loadStrategyStocks, saveWarrantFlowLocalCache, applyStaticTitleIcons,
@@ -10516,6 +10520,16 @@ document.addEventListener("input", (event) => {
   warrantFlowKeyword = input.value || "";
   warrantFlowPage = 1;
   applyWarrantInlineDomFilter();
+});
+
+document.addEventListener("click", (event) => {
+  const modeButton = event.target.closest("[data-warrant-flow-mode]");
+  if (!modeButton) return;
+  const mode = modeButton.dataset.warrantFlowMode || "priority";
+  warrantFlowMode = mode === "history" ? "history" : "priority";
+  warrantFlowPage = 1;
+  warrantFlowLastRenderSignature = "";
+  renderWarrantFlow();
 });
 
 document.addEventListener("click", (event) => {
