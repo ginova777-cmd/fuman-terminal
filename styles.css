@@ -761,7 +761,7 @@ body::after {
   display: grid;
   grid-template-columns: minmax(620px, 1.18fr) minmax(360px, 0.82fr);
   gap: 14px;
-  align-items: stretch;
+  align-items: start;
   min-height: calc(100vh - 245px);
 }
 
@@ -826,7 +826,9 @@ body::after {
 .cb-detect-panel {
   display: flex;
   flex-direction: column;
-  min-height: calc(100vh - 245px);
+  position: relative;
+  margin-top: -116px;
+  min-height: calc(100vh - 129px);
   border: 1px solid rgba(255, 77, 67, 0.78);
   border-radius: 6px;
   background: rgba(6, 11, 20, 0.82);
@@ -1556,6 +1558,7 @@ body::after {
   }
 
   .cb-detect-panel {
+    margin-top: 0;
     min-height: 360px;
   }
 
