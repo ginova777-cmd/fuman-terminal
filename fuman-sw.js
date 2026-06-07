@@ -1,23 +1,23 @@
-const CACHE_VERSION = "fuman-terminal-sw-20260607-mobile-refresh15";
+const CACHE_VERSION = "fuman-terminal-sw-20260607-mobile-refresh16";
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 const DATA_CACHE = `${CACHE_VERSION}-data`;
 
 const STATIC_ASSETS = [
-  "/styles.css?v=mobile-refresh15-20260607",
-  "/terminal-core.js?v=mobile-refresh15-20260607",
-  "/terminal-modules.js?v=mobile-refresh15-20260607",
-  "/terminal-sector-map.js?v=mobile-refresh15-20260607",
-  "/terminal-strategy-config.js?v=mobile-refresh15-20260607",
-  "/terminal-market-config.js?v=mobile-refresh15-20260607",
-  "/terminal-ui-config.js?v=mobile-refresh15-20260607",
-  "/terminal-runtime-config.js?v=mobile-refresh15-20260607",
-  "/terminal-tuning-config.js?v=mobile-refresh15-20260607",
-  "/terminal-worker.js?v=mobile-refresh15-20260607",
-  "/terminal.js?v=mobile-refresh15-20260607",
-  "/terminal-realtime-radar.css?v=mobile-refresh15-20260607",
-  "/terminal-intraday-radar.css?v=mobile-refresh15-20260607",
-  "/terminal-utility.css?v=mobile-refresh15-20260607",
-  "/refresh.html?v=mobile-refresh15-20260607",
+  "/styles.css?v=mobile-refresh16-20260607",
+  "/terminal-core.js?v=mobile-refresh16-20260607",
+  "/terminal-modules.js?v=mobile-refresh16-20260607",
+  "/terminal-sector-map.js?v=mobile-refresh16-20260607",
+  "/terminal-strategy-config.js?v=mobile-refresh16-20260607",
+  "/terminal-market-config.js?v=mobile-refresh16-20260607",
+  "/terminal-ui-config.js?v=mobile-refresh16-20260607",
+  "/terminal-runtime-config.js?v=mobile-refresh16-20260607",
+  "/terminal-tuning-config.js?v=mobile-refresh16-20260607",
+  "/terminal-worker.js?v=mobile-refresh16-20260607",
+  "/terminal.js?v=mobile-refresh16-20260607",
+  "/terminal-realtime-radar.css?v=mobile-refresh16-20260607",
+  "/terminal-intraday-radar.css?v=mobile-refresh16-20260607",
+  "/terminal-utility.css?v=mobile-refresh16-20260607",
+  "/refresh.html?v=mobile-refresh16-20260607",
   "/assets/logo.webp",
   "/favicon.ico",
 ];
