@@ -109,17 +109,42 @@ function renderWarrantKline(item) {
 }
 
 function ensureWarrantKlineHistory(rows) {
-  if (typeof loadRealtimeRadarHistory !== "function") return;
+  const loading = window.FUMAN_WARRANT_KLINE_LOADING || (window.FUMAN_WARRANT_KLINE_LOADING = new Set());
   const missing = normalizeArray(rows)
-    .filter((item) => item?.code && !normalizeArray(strategyHistoryData?.[item.code]?.rows).length)
-    .slice(0, 10);
-  if (!missing.length) return;
-  Promise.resolve(loadRealtimeRadarHistory(missing, { force: false }))
+    .map((item) => String(item?.code || "").replace(/\D/g, "").slice(0, 4))
+    .filter((code) => /^\d{4}$/.test(code) && !normalizeArray(strategyHistoryData?.[code]?.rows).length && !loading.has(code))
+    .slice(0, 12);
+  if (!missing.length || !endpoints?.history) return;
+  missing.forEach((code) => loading.add(code));
+  fetch(endpoints.history + "?codes=" + encodeURIComponent(missing.join(",")) + "&t=" + Date.now(), { cache: "no-store" })
+    .then((response) => response.ok ? response.json() : null)
+    .then((payload) => {
+      normalizeArray(payload?.histories || payload?.results || payload?.data).forEach((item) => {
+        if (!item?.code || !Array.isArray(item.rows)) return;
+        strategyHistoryData[item.code] = {
+          ...item,
+          rows: item.rows
+            .map((row) => ({
+              date: row.date || row.tradeDate || row.Date || "",
+              open: cleanNumber(row.open ?? row.Open),
+              high: cleanNumber(row.high ?? row.High),
+              low: cleanNumber(row.low ?? row.Low),
+              close: cleanNumber(row.close ?? row.Close),
+              volume: cleanNumber(row.volume ?? row.tradeVolume ?? row.Volume),
+              value: cleanNumber(row.value ?? row.Value),
+            }))
+            .filter((row) => row.date && row.close)
+            .sort((a, b) => a.date.localeCompare(b.date)),
+          updatedAt: Date.now(),
+        };
+      });
+    })
     .then(() => {
       warrantFlowLastRenderSignature = "";
       if (isViewActive("warrant-flow")) renderWarrantFlow();
     })
-    .catch(() => {});
+    .catch(() => {})
+    .finally(() => missing.forEach((code) => loading.delete(code)));
 }
 
 function renderWarrantReasonBadges(item) {`);
