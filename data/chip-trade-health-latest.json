@@ -1,0 +1,207 @@
+{
+  "ok": true,
+  "source": "chip-trade-health",
+  "updatedAt": "2026-06-07T10:03:09.440Z",
+  "latestTradeDate": "20260605",
+  "counts": {
+    "total": 1886,
+    "joint": 43,
+    "trust": 117,
+    "foreign": 907,
+    "legal": 873,
+    "defaultVisible": 43
+  },
+  "files": {
+    "institution-latest.json": {
+      "name": "institution-latest.json",
+      "ok": true,
+      "exists": true,
+      "bytes": 824052,
+      "mtime": "2026-06-06T11:58:23.001Z",
+      "updatedAt": "2026-06-06T11:58:22.989Z",
+      "usedDate": "20260605",
+      "count": 1886,
+      "error": ""
+    },
+    "institution-backup.json": {
+      "name": "institution-backup.json",
+      "ok": true,
+      "exists": true,
+      "bytes": 824059,
+      "mtime": "2026-06-06T11:58:23.010Z",
+      "updatedAt": "2026-06-06T11:58:22.989Z",
+      "usedDate": "20260605",
+      "count": 1886,
+      "error": ""
+    },
+    "institution-summary.json": {
+      "name": "institution-summary.json",
+      "ok": true,
+      "exists": true,
+      "bytes": 53631,
+      "mtime": "2026-06-06T11:58:23.007Z",
+      "updatedAt": "2026-06-06T11:58:22.989Z",
+      "usedDate": "20260605",
+      "count": 1886,
+      "error": ""
+    },
+    "institution-slim.json": {
+      "name": "institution-slim.json",
+      "ok": true,
+      "exists": true,
+      "bytes": 358858,
+      "mtime": "2026-06-07T07:45:13.971Z",
+      "updatedAt": "2026-06-06T11:58:22.989Z",
+      "usedDate": "20260605",
+      "count": 1886,
+      "error": ""
+    },
+    "institution-mobile-top.json": {
+      "name": "institution-mobile-top.json",
+      "ok": true,
+      "exists": true,
+      "bytes": 9626,
+      "mtime": "2026-06-07T07:45:15.523Z",
+      "updatedAt": "2026-06-06T11:58:22.989Z",
+      "usedDate": "20260605",
+      "count": 50,
+      "error": ""
+    },
+    "institution-joint-top.json": {
+      "name": "institution-joint-top.json",
+      "ok": true,
+      "exists": true,
+      "bytes": 30134,
+      "mtime": "2026-06-07T07:45:13.984Z",
+      "updatedAt": "2026-06-06T11:58:22.989Z",
+      "usedDate": "20260605",
+      "count": 160,
+      "error": ""
+    },
+    "institution-foreign-top.json": {
+      "name": "institution-foreign-top.json",
+      "ok": true,
+      "exists": true,
+      "bytes": 30198,
+      "mtime": "2026-06-07T07:45:13.985Z",
+      "updatedAt": "2026-06-06T11:58:22.989Z",
+      "usedDate": "20260605",
+      "count": 160,
+      "error": ""
+    },
+    "institution-trust-top.json": {
+      "name": "institution-trust-top.json",
+      "ok": true,
+      "exists": true,
+      "bytes": 30218,
+      "mtime": "2026-06-07T07:45:13.987Z",
+      "updatedAt": "2026-06-06T11:58:22.989Z",
+      "usedDate": "20260605",
+      "count": 160,
+      "error": ""
+    }
+  },
+  "remoteFiles": {
+    "institution-latest.json": {
+      "name": "institution-latest.json",
+      "ok": true,
+      "updatedAt": "2026-06-06T11:58:22.989Z",
+      "usedDate": "20260605",
+      "count": 1886
+    },
+    "institution-slim.json": {
+      "name": "institution-slim.json",
+      "ok": true,
+      "updatedAt": "2026-06-06T11:58:22.989Z",
+      "usedDate": "20260605",
+      "count": 1886
+    },
+    "institution-mobile-top.json": {
+      "name": "institution-mobile-top.json",
+      "ok": true,
+      "updatedAt": "2026-06-06T11:58:22.989Z",
+      "usedDate": "20260605",
+      "count": 50
+    },
+    "institution-summary.json": {
+      "name": "institution-summary.json",
+      "ok": true,
+      "updatedAt": "2026-06-06T11:58:22.989Z",
+      "usedDate": "20260605",
+      "count": 1886
+    }
+  },
+  "tasks": [
+    {
+      "taskName": "\\Fuman 買賣超 Cache 0600",
+      "ok": true,
+      "status": "�N��",
+      "nextRunTime": "2026/6/8 �W�� 06:00:00",
+      "lastRunTime": "2026/6/7 �W�� 06:00:01",
+      "lastResult": "0",
+      "enabled": ""
+    },
+    {
+      "taskName": "\\Fuman 買賣超 Watchdog 0620",
+      "ok": true,
+      "status": "�N��",
+      "nextRunTime": "2026/6/8 �W�� 06:20:00",
+      "lastRunTime": "2026/6/7 �W�� 06:20:01",
+      "lastResult": "0",
+      "enabled": ""
+    },
+    {
+      "taskName": "\\Fuman 買賣超 Cache 2100",
+      "ok": true,
+      "status": "�N��",
+      "nextRunTime": "2026/6/7 �U�� 09:00:00",
+      "lastRunTime": "2026/6/6 �U�� 09:00:01",
+      "lastResult": "0",
+      "enabled": ""
+    },
+    {
+      "taskName": "\\Fuman 買賣超 Watchdog 2120",
+      "ok": true,
+      "status": "�N��",
+      "nextRunTime": "2026/6/7 �U�� 09:20:00",
+      "lastRunTime": "2026/6/6 �U�� 09:20:01",
+      "lastResult": "0",
+      "enabled": ""
+    },
+    {
+      "taskName": "\\Fuman GitHub 統一同步 0612",
+      "ok": true,
+      "status": "�N��",
+      "nextRunTime": "2026/6/8 �W�� 06:12:00",
+      "lastRunTime": "2026/6/7 �W�� 06:12:01",
+      "lastResult": "0",
+      "enabled": ""
+    },
+    {
+      "taskName": "\\Fuman GitHub 統一同步 2112",
+      "ok": true,
+      "status": "�N��",
+      "nextRunTime": "2026/6/7 �U�� 09:12:00",
+      "lastRunTime": "2026/6/6 �U�� 09:12:01",
+      "lastResult": "0",
+      "enabled": ""
+    }
+  ],
+  "frontend": {
+    "endpoints": {
+      "institutionCache": true,
+      "institutionSlim": true,
+      "institutionBackup": true,
+      "institutionSummary": true,
+      "institutionMobileTop": true
+    },
+    "helperInjection": {
+      "isMobileViewport": true,
+      "valueOf": true,
+      "normalizeTradeVolumeLots": true,
+      "stockChange": true
+    },
+    "moduleGuard": true
+  },
+  "issues": []
+}
