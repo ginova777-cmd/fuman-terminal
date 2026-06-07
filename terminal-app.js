@@ -10362,7 +10362,7 @@ function getWatchlistContext() {
     document, window, localStorage, FUMAN_UI_CONFIG, viewPanels, endpoints,
     isViewActive, isTerminalUnlocked, isDocumentHidden, loadFumanStyle, deferUiWork, syncMobileStrategyVisibility, arrangeWatchlistSearch,
     cleanNumber, normalizeArray, normalizeTradeVolumeLots, normalizeMarketAiDateKey, marketAiTodayKey, marketAiQuoteDateKey,
-    refreshDataFreshnessBars, fetchJson, fetchVersionedJson, loadStrategyStocks, getInstitutionTotal, formatInstitution,
+    refreshDataFreshnessBars, fetchJson, fetchVersionedJson, loadStrategyStocks, loadInstitution, getInstitutionTotal, formatInstitution,
     latestStocksRef: { get: () => latestStocks },
     institutionDataRef: { get: () => institutionData },
     valueOf, rankValue, clamp, formatStockPrice, roundTradePrice, estimateTradeValue, radarMoney,

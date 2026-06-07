@@ -6,7 +6,7 @@
       document, window, localStorage, FUMAN_UI_CONFIG, viewPanels, endpoints,
       isViewActive, isTerminalUnlocked, isDocumentHidden, loadFumanStyle, deferUiWork, syncMobileStrategyVisibility, arrangeWatchlistSearch,
       cleanNumber, normalizeArray, normalizeTradeVolumeLots, normalizeMarketAiDateKey, marketAiTodayKey, marketAiQuoteDateKey,
-      refreshDataFreshnessBars, fetchJson, fetchVersionedJson, loadStrategyStocks, getInstitutionTotal, formatInstitution,
+      refreshDataFreshnessBars, fetchJson, fetchVersionedJson, loadStrategyStocks, loadInstitution, getInstitutionTotal, formatInstitution,
       latestStocksRef, institutionDataRef, valueOf, rankValue, clamp, formatStockPrice, roundTradePrice, estimateTradeValue, radarMoney,
       showView, applyStrategyPresetFromLink, recordFumanPerformance, loadFumanFeatureModule
     } = context;
@@ -248,8 +248,14 @@
       const pressureC = close ? close * 1.04 : 0;
       const volumeLots = normalizeTradeVolumeLots(stock.tradeVolume || stock.volume);
       const turnoverValue = cleanNumber(stock.value) || estimateTradeValue(close, volumeLots);
+      const instRow = institutionData[stock.code] || {};
+      const instVolume = cleanNumber(stock.tradeVolume || instRow.tradeVolume || instRow.volume);
+      const instFlowRatio = instVolume ? (inst.total / instVolume) * 100 : 0;
+      const instFlowAbs = Math.abs(instFlowRatio);
+      const streakBonus = Math.min(cleanNumber(instRow.foreignStreak) * 2 + cleanNumber(instRow.trustStreak) * 3 + cleanNumber(instRow.jointStreak) * 4, 18);
+      const flowBonus = Math.min(instFlowAbs * 8, 24);
       const chipScore = analysis.hasInstitution
-        ? clamp(Math.round(50 + Math.sign(inst.foreign) * 18 + Math.sign(inst.trust) * 22 + Math.sign(inst.total) * 10), 0, 100)
+        ? clamp(Math.round(50 + Math.sign(inst.total) * 10 + Math.sign(inst.trust) * 8 + Math.sign(inst.total) * flowBonus + (inst.total > 0 ? streakBonus : -streakBonus)), 0, 100)
         : 0;
       const trendLabel = analysis.score >= 70
         ? "強勢整理"
@@ -334,6 +340,7 @@
         pressureB,
         pressureC,
         chipScore,
+        instFlowRatio,
         inst,
         volumeLots,
         turnoverValue,
@@ -605,6 +612,7 @@
       const [stockSettled, strategySettled] = await Promise.allSettled([
         fetchStockPrice(code),
         loadWatchlistStrategyMatches(code),
+        typeof loadInstitution === "function" ? loadInstitution() : Promise.resolve(null),
       ]);
       const stock = stockSettled.status === "fulfilled" && stockSettled.value ? stockSettled.value : fallback;
       const strategyMatches = strategySettled.status === "fulfilled" ? normalizeArray(strategySettled.value) : [];
@@ -631,7 +639,7 @@
       const chipScoreText = analysis.hasInstitution ? model.chipScore : "--";
       const mainScoreText = mainScore === null ? "--" : mainScore;
       const chipDetailText = analysis.hasInstitution
-        ? `外資 ${formatInstitution(model.inst.foreign)}，投信 ${formatInstitution(model.inst.trust)}，法人合計 ${formatInstitution(model.inst.total)}。`
+        ? `外資 ${formatInstitution(model.inst.foreign)}，投信 ${formatInstitution(model.inst.trust)}，法人合計 ${formatInstitution(model.inst.total)}；法人淨流向約成交量 ${model.instFlowRatio.toFixed(2)}%。`
         : "法人資料尚未完整，外資與投信以盤後更新後再判讀。";
     
       watchlistAnalysis.innerHTML = `

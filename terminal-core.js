@@ -1,5 +1,5 @@
 (function () {
-  const version = "chip-cb-layout-data-20260607";
+  const version = "watchlist-inst-backed-20260607";
   window.FUMAN_TERMINAL_BOOT = {
     version,
     startedAt: Date.now(),
@@ -87,6 +87,7 @@
     setTimeout(loadMain, 0);
   }
 })();
+
 
 
 

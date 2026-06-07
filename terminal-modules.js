@@ -1,5 +1,5 @@
 (function () {
-  const VERSION = "chip-cb-layout-data-20260607";
+  const VERSION = "watchlist-inst-backed-20260607";
   const modules = {
     sectorMap: { loaded: false, src: "terminal-sector-map.js" },
     strategyConfig: { loaded: false, src: "terminal-strategy-config.js" },
@@ -38,6 +38,7 @@
     },
   };
 })();
+
 
 
 
