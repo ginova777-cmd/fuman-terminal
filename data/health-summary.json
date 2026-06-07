@@ -1,33 +1,11 @@
 {
-  "ok": false,
-  "updatedAt": "2026-06-07T07:45:24.379Z",
-  "risk": "high",
-  "risks": [
-    {
-      "level": "high",
-      "area": "freshness",
-      "message": "資料超過 SLA 嚴重逾時 1 個",
-      "files": [
-        "strategy2-intraday-latest.json"
-      ],
-      "stale": [
-        {
-          "file": "strategy2-intraday-latest.json",
-          "ok": true,
-          "status": "retired_intraday_snapshot",
-          "date": "2026-06-05",
-          "count": 0,
-          "updatedAt": "2026-06-06T13:44:07.482Z",
-          "bytes": 779,
-          "slaHours": 6,
-          "ageHours": 18.021353333333334
-        }
-      ]
-    }
-  ],
+  "ok": true,
+  "updatedAt": "2026-06-07T14:22:39.243Z",
+  "risk": "low",
+  "risks": [],
   "schedule": {
     "ok": true,
-    "total": 0,
+    "total": 22,
     "badCount": 0,
     "badTasks": [],
     "queryMethod": "schtasks",
@@ -82,8 +60,8 @@
         "status": "",
         "date": "",
         "count": 120,
-        "updatedAt": "2026-06-06T11:58:42.693Z",
-        "bytes": 34857
+        "updatedAt": "2026-06-07T13:28:49.092Z",
+        "bytes": 42438
       },
       {
         "file": "strategy2-intraday-latest.json",
@@ -109,7 +87,7 @@
         "status": "",
         "date": "",
         "count": 0,
-        "updatedAt": "2026-06-07T07:45:14.593Z",
+        "updatedAt": "2026-06-07T13:12:06.955Z",
         "bytes": 2393
       },
       {
@@ -118,7 +96,7 @@
         "status": "",
         "date": "",
         "count": 0,
-        "updatedAt": "2026-06-07T07:45:14.288Z",
+        "updatedAt": "2026-06-07T13:12:06.562Z",
         "bytes": 817
       },
       {
@@ -127,7 +105,7 @@
         "status": "",
         "date": "",
         "count": 0,
-        "updatedAt": "2026-06-07T07:45:14.402Z",
+        "updatedAt": "2026-06-07T13:12:06.681Z",
         "bytes": 2006
       },
       {
@@ -136,7 +114,7 @@
         "status": "",
         "date": "",
         "count": 0,
-        "updatedAt": "2026-06-07T07:45:14.482Z",
+        "updatedAt": "2026-06-07T13:12:06.785Z",
         "bytes": 316
       },
       {
@@ -145,7 +123,7 @@
         "status": "",
         "date": "",
         "count": 0,
-        "updatedAt": "2026-06-07T07:45:14.538Z",
+        "updatedAt": "2026-06-07T13:12:06.873Z",
         "bytes": 418
       }
     ]

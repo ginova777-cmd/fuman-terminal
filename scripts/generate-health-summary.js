@@ -142,6 +142,7 @@ function taipeiMinuteOfDay(date = new Date()) {
 function effectiveSlaHours(file) {
   if (isWeekendTaipei()) {
     if (file === "realtime-radar-latest.json") return 72;
+    if (file === "strategy2-intraday-latest.json") return 72;
     if (file === "market-summary.json") return 72;
   }
   if (file === "strategy4-summary.json" && taipeiMinuteOfDay() < 15 * 60 + 30) return 96;
