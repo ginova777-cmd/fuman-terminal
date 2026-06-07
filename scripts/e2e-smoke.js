@@ -125,6 +125,8 @@ async function main() {
   for (const [name, pathname, check] of checks) assertOk(name, await fetchText(pathname), check);
   const frontendError = await postJson("/api/frontend-error", { source: "verify", message: "deployment smoke" });
   assertOk("frontend-error-api", frontendError, (r) => typeof parseJson(r).ok === "boolean");
+  const performanceReport = await postJson("/api/performance-report", { url: "verify:smoke", ms: 1, ok: true, at: Date.now() });
+  assertOk("performance-report-api", performanceReport, (r) => typeof parseJson(r).ok === "boolean");
   console.log(`[smoke] e2e smoke ok version=${version}`);
 }
 

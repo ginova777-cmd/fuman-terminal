@@ -20,6 +20,7 @@
     scanWarrantFlow: "/api/scan-warrant-flow",
     exportAuth: "/api/export-auth",
     frontendError: "/api/frontend-error",
+    performanceReport: "/api/performance-report",
     strategyWeights: "/data/strategy-weight-report.json",
     strategyMatchIndex: "/data/strategy-match-index.json",
     openBuyCache: "/data/open-buy-latest.json",

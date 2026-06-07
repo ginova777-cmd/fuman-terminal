@@ -63,6 +63,8 @@ const FUMAN_AUTH_CACHE_KEY = FUMAN_RUNTIME_CONFIG.authCacheKey || "fuman-termina
 const FUMAN_AUTH_CACHE_TTL_MS = FUMAN_RUNTIME_CONFIG.authCacheTtlMs || (5 * 60 * 1000);
 const FUMAN_COMMON_TABS_KEY = FUMAN_RUNTIME_CONFIG.commonTabsKey || "fuman-terminal-common-tabs-v1";
 const FUMAN_PERFORMANCE_REPORT_KEY = FUMAN_RUNTIME_CONFIG.performanceReportKey || "fuman-terminal-performance-report-v1";
+const FUMAN_PERFORMANCE_QUEUE_KEY = FUMAN_RUNTIME_CONFIG.performanceQueueKey || "fuman-terminal-performance-queue-v1";
+const FUMAN_PERFORMANCE_BEACON_ENDPOINT = FUMAN_RUNTIME_CONFIG.endpoints?.performanceReport || "/api/performance-report";
 let authMode = "login";
 const FUMAN_LIVE_MEMORY_TTL_MS = FUMAN_RUNTIME_CONFIG.liveMemoryTtlMs || { strategy2: 3000, realtimeRadar: 5000 };
 const fumanLiveMemoryCache = new Map();
@@ -71,12 +73,13 @@ let fumanWorkerSeq = 0;
 const fumanWorkerPending = new Map();
 let fumanDataManifest = null;
 let fumanDataManifestPromise = null;
+let fumanPerformanceFlushTimer = 0;
 
 function getFumanWorker() {
   if (!("Worker" in window)) return null;
   if (fumanWorker) return fumanWorker;
   try {
-    fumanWorker = new Worker("terminal-worker.js?v=mobile-fast11-20260607");
+    fumanWorker = new Worker("terminal-worker.js?v=mobile-fast12-20260607");
     fumanWorker.addEventListener("message", (event) => {
       const { id, ok, rows, result, error } = event.data || {};
       const pending = fumanWorkerPending.get(id);
@@ -340,7 +343,7 @@ function loadFumanStyle(href, id) {
   const link = document.createElement("link");
   link.id = id;
   link.rel = "stylesheet";
-  link.href = href.includes("?") ? href : `${href}?v=${window.FUMAN_TERMINAL_BOOT?.version || "mobile-fast11-20260607"}`;
+  link.href = href.includes("?") ? href : `${href}?v=${window.FUMAN_TERMINAL_BOOT?.version || "mobile-fast12-20260607"}`;
   document.head.appendChild(link);
 }
 
@@ -366,7 +369,7 @@ function makeFumanModuleScope(bindings) {
 function loadFumanFeatureModule(name, src, globalName) {
   if (window[globalName]) return Promise.resolve(window[globalName]);
   if (fumanFeatureModulePromises[name]) return fumanFeatureModulePromises[name];
-  const version = window.FUMAN_TERMINAL_BOOT?.version || "mobile-fast11-20260607";
+  const version = window.FUMAN_TERMINAL_BOOT?.version || "mobile-fast12-20260607";
   fumanFeatureModulePromises[name] = new Promise((resolve, reject) => {
     const attr = "data-fuman-feature-" + name;
     const existing = document.querySelector("script[" + attr + "]");
@@ -3117,6 +3120,7 @@ function recordFumanPerformance(url, startedAt, ok, error = null) {
   list.push(item);
   boot.performanceLog = list.slice(-40);
   appendFumanPerformanceReport(item);
+  queueFumanPerformanceBeacon(item);
   document.querySelector("#fuman-health-performance")?.remove();
 }
 
@@ -3128,6 +3132,61 @@ function appendFumanPerformanceReport(item) {
     window.FUMAN_TERMINAL_BOOT = window.FUMAN_TERMINAL_BOOT || {};
     window.FUMAN_TERMINAL_BOOT.performanceReport = summarizeFumanPerformanceReport(rows.slice(-240));
   } catch (error) {}
+}
+
+function queueFumanPerformanceBeacon(item) {
+  if (!FUMAN_PERFORMANCE_BEACON_ENDPOINT) return;
+  try {
+    const rows = JSON.parse(localStorage.getItem(FUMAN_PERFORMANCE_QUEUE_KEY) || "[]");
+    rows.push(item);
+    localStorage.setItem(FUMAN_PERFORMANCE_QUEUE_KEY, JSON.stringify(rows.slice(-80)));
+  } catch (error) {
+    return;
+  }
+  scheduleFumanPerformanceFlush();
+}
+
+function readFumanPerformanceQueue() {
+  try {
+    return JSON.parse(localStorage.getItem(FUMAN_PERFORMANCE_QUEUE_KEY) || "[]");
+  } catch (error) {
+    return [];
+  }
+}
+
+function writeFumanPerformanceQueue(rows) {
+  try {
+    localStorage.setItem(FUMAN_PERFORMANCE_QUEUE_KEY, JSON.stringify(normalizeArray(rows).slice(-80)));
+  } catch (error) {}
+}
+
+function scheduleFumanPerformanceFlush(delay = 3500) {
+  if (fumanPerformanceFlushTimer) return;
+  fumanPerformanceFlushTimer = setTimeout(() => {
+    fumanPerformanceFlushTimer = 0;
+    flushFumanPerformanceQueue(false);
+  }, delay);
+}
+
+function flushFumanPerformanceQueue(sync = false) {
+  const rows = readFumanPerformanceQueue();
+  if (!rows.length || !FUMAN_PERFORMANCE_BEACON_ENDPOINT) return;
+  const batch = rows.slice(0, 30);
+  const remaining = rows.slice(batch.length);
+  const body = JSON.stringify({ rows: batch });
+  if (sync && navigator.sendBeacon) {
+    const ok = navigator.sendBeacon(FUMAN_PERFORMANCE_BEACON_ENDPOINT, new Blob([body], { type: "application/json" }));
+    if (ok) writeFumanPerformanceQueue(remaining);
+    return;
+  }
+  fetch(FUMAN_PERFORMANCE_BEACON_ENDPOINT, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body,
+    keepalive: true,
+  }).then((response) => {
+    if (response.ok) writeFumanPerformanceQueue(remaining);
+  }).catch(() => undefined);
 }
 
 function summarizeFumanPerformanceReport(rows = null) {
@@ -3158,6 +3217,11 @@ function markViewPerformance(viewName, startedAt, label = "view") {
 }
 
 window.FUMAN_GET_PERFORMANCE_REPORT = () => summarizeFumanPerformanceReport();
+window.FUMAN_FLUSH_PERFORMANCE_REPORT = () => flushFumanPerformanceQueue(false);
+window.addEventListener("pagehide", () => flushFumanPerformanceQueue(true));
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "hidden") flushFumanPerformanceQueue(true);
+});
 window.FUMAN_MOBILE_DIAGNOSTIC_CONTEXT = {
   get viewLinks() { return viewLinks; },
   isMobileViewport,
@@ -9105,6 +9169,7 @@ function tickClock() {
 
 function showView(viewName, activeLink) {
   const viewStartedAt = performance?.now ? performance.now() : Date.now();
+  markViewPerformance(viewName, viewStartedAt, "view:start");
   const now = Date.now();
   const sameViewQuick = lastViewName === viewName && now - lastViewShownAt < 2500;
   const mobileFastSwitch = isMobileViewport();
@@ -9119,7 +9184,10 @@ function showView(viewName, activeLink) {
   viewLinks.forEach((link)=>link.classList.toggle("active", link===activeLink));
   refreshDataFreshnessBars();
   const locked = applyMemberLocks(viewName, activeLink);
-  if (locked) return;
+  if (locked) {
+    markViewPerformance(viewName, viewStartedAt, "view:locked");
+    return;
+  }
   if (viewName === "market") {
     installMarketSkeleton();
     if (Object.keys(sectorStocksCache).length) renderHeatmapFromCache();
@@ -9167,7 +9235,7 @@ function showView(viewName, activeLink) {
   const focusTarget = activeLink?.dataset.focus ? document.querySelector(`#${activeLink.dataset.focus}`) : null;
   if (focusTarget) setTimeout(()=>focusTarget.focus(),0);
   requestAnimationFrame(() => {
-    setTimeout(() => markViewPerformance(viewName, viewStartedAt), 0);
+    setTimeout(() => markViewPerformance(viewName, viewStartedAt, "view:ready"), 0);
   });
 }
 
