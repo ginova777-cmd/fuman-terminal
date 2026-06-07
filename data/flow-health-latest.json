@@ -1,5 +1,4 @@
 {
-  "updatedAt": "2026-06-07T21:50:02.3554442Z",
   "institution": {
     "scope": "institution",
     "status": "ok",
@@ -9,11 +8,12 @@
       "log": "C:\\fuman-runtime\\logs\\institution-20260606-195813.log"
     }
   },
+  "updatedAt": "2026-06-07T21:50:54.0925469Z",
   "warrant": {
     "scope": "warrant",
-    "status": "watchdog_rerun",
-    "message": "Watchdog rerun started",
-    "updatedAt": "2026-06-07T21:50:02.3542814Z",
+    "status": "ok",
+    "message": "Watchdog rerun completed",
+    "updatedAt": "2026-06-07T21:50:54.0924119Z",
     "detail": {
       "expectedTime": "05:30",
       "reason": "warrant not updated after 05:30; updatedAt=06/07/2026 21:30:44",

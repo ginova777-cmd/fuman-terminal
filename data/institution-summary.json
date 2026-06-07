@@ -1,9 +1,9 @@
 {
   "ok": true,
   "source": "github-actions",
-  "updatedAt": "2026-06-06T11:58:22.989Z",
+  "updatedAt": "2026-06-07T22:00:16.088Z",
   "usedDate": "20260605",
-  "quoteUpdatedAt": "2026-06-06T11:58:27.493Z",
+  "quoteUpdatedAt": "2026-06-07T22:00:12.180Z",
   "count": 1886,
   "topJoint": [
     {
@@ -17,7 +17,7 @@
       "dealer": 0,
       "total": 9117664,
       "foreignStreak": 6,
-      "trustStreak": 8,
+      "trustStreak": 7,
       "jointStreak": 6
     },
     {
@@ -129,7 +129,7 @@
       "dealer": 0,
       "total": 2197548,
       "foreignStreak": 2,
-      "trustStreak": 8,
+      "trustStreak": 7,
       "jointStreak": 2
     },
     {
@@ -171,7 +171,7 @@
       "dealer": 0,
       "total": 344893,
       "foreignStreak": 2,
-      "trustStreak": 8,
+      "trustStreak": 7,
       "jointStreak": 2
     },
     {
@@ -241,7 +241,7 @@
       "dealer": 0,
       "total": 33165995,
       "foreignStreak": 1,
-      "trustStreak": 8,
+      "trustStreak": 7,
       "jointStreak": 1
     },
     {
@@ -297,7 +297,7 @@
       "dealer": 0,
       "total": 3707759,
       "foreignStreak": 1,
-      "trustStreak": 8,
+      "trustStreak": 7,
       "jointStreak": 1
     },
     {
@@ -311,7 +311,7 @@
       "dealer": 0,
       "total": 3169371,
       "foreignStreak": 1,
-      "trustStreak": 8,
+      "trustStreak": 7,
       "jointStreak": 1
     },
     {
@@ -632,7 +632,7 @@
       "trust": -28971280,
       "dealer": 0,
       "total": 11908960,
-      "foreignStreak": 8,
+      "foreignStreak": 7,
       "trustStreak": 0,
       "jointStreak": 0
     },
@@ -646,7 +646,7 @@
       "trust": -278827,
       "dealer": 0,
       "total": 10630653,
-      "foreignStreak": 8,
+      "foreignStreak": 7,
       "trustStreak": 0,
       "jointStreak": 0
     },
@@ -887,7 +887,7 @@
       "dealer": 0,
       "total": -1495921,
       "foreignStreak": 0,
-      "trustStreak": 8,
+      "trustStreak": 7,
       "jointStreak": 0
     },
     {
@@ -901,7 +901,7 @@
       "dealer": 0,
       "total": 33165995,
       "foreignStreak": 1,
-      "trustStreak": 8,
+      "trustStreak": 7,
       "jointStreak": 1
     },
     {
@@ -971,7 +971,7 @@
       "dealer": 0,
       "total": 1408434,
       "foreignStreak": 0,
-      "trustStreak": 8,
+      "trustStreak": 7,
       "jointStreak": 0
     },
     {
@@ -1097,7 +1097,7 @@
       "dealer": 0,
       "total": -5516,
       "foreignStreak": 0,
-      "trustStreak": 8,
+      "trustStreak": 7,
       "jointStreak": 0
     },
     {
@@ -1167,7 +1167,7 @@
       "dealer": -142327,
       "total": 47001,
       "foreignStreak": 0,
-      "trustStreak": 8,
+      "trustStreak": 7,
       "jointStreak": 0
     },
     {
@@ -1181,7 +1181,7 @@
       "dealer": 0,
       "total": 3169371,
       "foreignStreak": 1,
-      "trustStreak": 8,
+      "trustStreak": 7,
       "jointStreak": 1
     },
     {
@@ -1209,7 +1209,7 @@
       "dealer": 0,
       "total": 2197548,
       "foreignStreak": 2,
-      "trustStreak": 8,
+      "trustStreak": 7,
       "jointStreak": 2
     },
     {
@@ -1265,7 +1265,7 @@
       "dealer": 0,
       "total": 9117664,
       "foreignStreak": 6,
-      "trustStreak": 8,
+      "trustStreak": 7,
       "jointStreak": 6
     },
     {
@@ -1377,7 +1377,7 @@
       "dealer": -322050,
       "total": -418517,
       "foreignStreak": 0,
-      "trustStreak": 8,
+      "trustStreak": 7,
       "jointStreak": 0
     },
     {
@@ -1419,7 +1419,7 @@
       "dealer": 0,
       "total": -5378954,
       "foreignStreak": 0,
-      "trustStreak": 8,
+      "trustStreak": 7,
       "jointStreak": 0
     },
     {
@@ -1503,7 +1503,7 @@
       "dealer": 0,
       "total": -3970562,
       "foreignStreak": 0,
-      "trustStreak": 8,
+      "trustStreak": 7,
       "jointStreak": 0
     },
     {
@@ -1559,7 +1559,7 @@
       "dealer": 0,
       "total": -8222025,
       "foreignStreak": 0,
-      "trustStreak": 8,
+      "trustStreak": 7,
       "jointStreak": 0
     },
     {
@@ -1601,7 +1601,7 @@
       "dealer": 0,
       "total": 3707759,
       "foreignStreak": 1,
-      "trustStreak": 8,
+      "trustStreak": 7,
       "jointStreak": 1
     },
     {
@@ -1714,7 +1714,7 @@
       "trust": -28971280,
       "dealer": 0,
       "total": 11908960,
-      "foreignStreak": 8,
+      "foreignStreak": 7,
       "trustStreak": 0,
       "jointStreak": 0
     },
@@ -1729,7 +1729,7 @@
       "dealer": 0,
       "total": 33165995,
       "foreignStreak": 1,
-      "trustStreak": 8,
+      "trustStreak": 7,
       "jointStreak": 1
     },
     {
@@ -1784,7 +1784,7 @@
       "trust": -278827,
       "dealer": 0,
       "total": 10630653,
-      "foreignStreak": 8,
+      "foreignStreak": 7,
       "trustStreak": 0,
       "jointStreak": 0
     },
@@ -1798,7 +1798,7 @@
       "trust": -8964000,
       "dealer": 0,
       "total": 1014712,
-      "foreignStreak": 8,
+      "foreignStreak": 7,
       "trustStreak": 0,
       "jointStreak": 0
     },
@@ -1855,7 +1855,7 @@
       "dealer": 0,
       "total": 9117664,
       "foreignStreak": 6,
-      "trustStreak": 8,
+      "trustStreak": 7,
       "jointStreak": 6
     },
     {
@@ -1910,7 +1910,7 @@
       "trust": -4892250,
       "dealer": 0,
       "total": 2783588,
-      "foreignStreak": 8,
+      "foreignStreak": 7,
       "trustStreak": 0,
       "jointStreak": 0
     },
@@ -2093,7 +2093,7 @@
       "dealer": 0,
       "total": 3707759,
       "foreignStreak": 1,
-      "trustStreak": 8,
+      "trustStreak": 7,
       "jointStreak": 1
     },
     {
@@ -2177,7 +2177,7 @@
       "dealer": 0,
       "total": 3169371,
       "foreignStreak": 1,
-      "trustStreak": 8,
+      "trustStreak": 7,
       "jointStreak": 1
     },
     {
@@ -2316,7 +2316,7 @@
       "trust": -3370000,
       "dealer": 0,
       "total": -931887,
-      "foreignStreak": 8,
+      "foreignStreak": 7,
       "trustStreak": 0,
       "jointStreak": 0
     },
