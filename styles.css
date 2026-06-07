@@ -776,18 +776,32 @@ body::after {
 }
 
 .chip-table {
-  width: max-content;
-  min-width: 1240px;
+  width: 100%;
+  min-width: 1180px;
+  table-layout: fixed;
   border-collapse: collapse;
   font-size: 14px;
   white-space: nowrap;
 }
+
+.chip-table .chip-col-code { width: 98px; }
+.chip-table .chip-col-name { width: 120px; }
+.chip-table .chip-col-price { width: 106px; }
+.chip-table .chip-col-change { width: 84px; }
+.chip-table .chip-col-percent { width: 92px; }
+.chip-table .chip-col-volume { width: 92px; }
+.chip-table .chip-col-flow { width: 136px; }
+.chip-table .chip-col-streak { width: 78px; }
+.chip-table .chip-col-total { width: 140px; }
 
 .chip-table th,
 .chip-table td {
   padding: 8px 10px;
   border: 1px solid rgba(134, 151, 190, 0.11);
   text-align: right;
+  vertical-align: middle;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .chip-table th:nth-child(1),
@@ -795,6 +809,30 @@ body::after {
 .chip-table td:nth-child(1),
 .chip-table td:nth-child(2) {
   text-align: left;
+}
+
+.chip-table th:nth-child(9),
+.chip-table th:nth-child(10),
+.chip-table th:nth-child(11),
+.chip-table td.chip-cell-streak {
+  text-align: center;
+}
+
+.chip-table td.chip-cell-code,
+.chip-table td.chip-cell-name {
+  text-align: left;
+}
+
+.chip-table td.chip-cell-number,
+.chip-table td.chip-cell-flow {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
+}
+
+.chip-table td.chip-cell-flow,
+.chip-table td.chip-cell-streak {
+  letter-spacing: 0;
 }
 
 .chip-table th {

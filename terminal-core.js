@@ -1,5 +1,5 @@
 (function () {
-  const version = "warrant-display-fix-20260607";
+  const version = "chip-table-audit-20260607";
   window.FUMAN_TERMINAL_BOOT = {
     version,
     startedAt: Date.now(),
@@ -87,6 +87,8 @@
     setTimeout(loadMain, 0);
   }
 })();
+
+
 
 
 

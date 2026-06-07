@@ -6501,18 +6501,18 @@ function renderChipTradeTable() {
     const hasQuote = row.price > 0;
     return `
       <tr class="${index === 0 ? "highlight" : ""}" data-chip-row="${row.code}">
-        <td><a href="#" data-chip-code="${row.code}">${row.code}</a></td>
-        <td>${row.name}</td>
-        <td data-chip-price>${hasQuote ? formatNumber(row.price, row.price >= 100 ? 0 : 2) : "載入..."}</td>
-        <td data-chip-change class="${up ? "red" : "green"}">${hasQuote ? `${up ? "+" : ""}${formatNumber(row.change, 2)}` : "--"}</td>
-        <td data-chip-percent class="${row.percent >= 0 ? "red" : "green"}">${hasQuote ? formatNumber(row.percent, 2) : "--"}</td>
-        <td data-chip-volume>${hasQuote ? Math.round(row.volume).toLocaleString("zh-TW") : "--"}</td>
-        <td class="${row.foreign >= 0 ? "red" : "green"}">${formatInstitution(row.foreign)}</td>
-        <td class="${row.trust >= 0 ? "red" : "green"}">${formatInstitution(row.trust)}</td>
-        <td>${row.foreignStreak} 日</td>
-        <td>${row.trustStreak} 日</td>
-        <td>${row.jointStreak} 日</td>
-        <td class="${row.total >= 0 ? "red" : "green"}">${formatInstitution(row.total)}</td>
+        <td class="chip-cell-code"><a href="#" data-chip-code="${row.code}">${row.code}</a></td>
+        <td class="chip-cell-name">${row.name}</td>
+        <td class="chip-cell-number" data-chip-price>${hasQuote ? formatNumber(row.price, row.price >= 100 ? 0 : 2) : "載入..."}</td>
+        <td data-chip-change class="chip-cell-number ${up ? "red" : "green"}">${hasQuote ? `${up ? "+" : ""}${formatNumber(row.change, 2)}` : "--"}</td>
+        <td data-chip-percent class="chip-cell-number ${row.percent >= 0 ? "red" : "green"}">${hasQuote ? formatNumber(row.percent, 2) : "--"}</td>
+        <td class="chip-cell-number" data-chip-volume>${hasQuote ? Math.round(row.volume).toLocaleString("zh-TW") : "--"}</td>
+        <td class="chip-cell-flow ${row.foreign >= 0 ? "red" : "green"}">${formatInstitution(row.foreign)}</td>
+        <td class="chip-cell-flow ${row.trust >= 0 ? "red" : "green"}">${formatInstitution(row.trust)}</td>
+        <td class="chip-cell-streak">${row.foreignStreak} 日</td>
+        <td class="chip-cell-streak">${row.trustStreak} 日</td>
+        <td class="chip-cell-streak">${row.jointStreak} 日</td>
+        <td class="chip-cell-flow ${row.total >= 0 ? "red" : "green"}">${formatInstitution(row.total)}</td>
       </tr>
     `;
   }).join("");

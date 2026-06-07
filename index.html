@@ -6,7 +6,7 @@
     <title>輔滿 股票終端</title>
     <link rel="icon" href="/favicon.ico" sizes="any">
     <link rel="preload" as="image" href="/assets/logo.webp" fetchpriority="high">
-    <link rel="stylesheet" href="styles.css?v=warrant-display-fix-20260607">
+    <link rel="stylesheet" href="styles.css?v=chip-table-audit-20260607">
   </head>
   <body class="auth-pending">
     <section class="auth-gate" id="auth-gate" aria-label="會員登入">
@@ -271,6 +271,20 @@
           <section class="chip-cb-layout">
             <section class="chip-table-wrap">
               <table class="chip-table">
+                <colgroup>
+                  <col class="chip-col-code">
+                  <col class="chip-col-name">
+                  <col class="chip-col-price">
+                  <col class="chip-col-change">
+                  <col class="chip-col-percent">
+                  <col class="chip-col-volume">
+                  <col class="chip-col-flow">
+                  <col class="chip-col-flow">
+                  <col class="chip-col-streak">
+                  <col class="chip-col-streak">
+                  <col class="chip-col-streak">
+                  <col class="chip-col-total">
+                </colgroup>
                 <thead>
                   <tr>
                     <th>股票代號</th>
@@ -502,9 +516,11 @@
       </main>
     </div>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="terminal-core.js?v=warrant-display-fix-20260607"></script>
+    <script src="terminal-core.js?v=chip-table-audit-20260607"></script>
   </body>
 </html>
+
+
 
 
 
