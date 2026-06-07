@@ -1,5 +1,5 @@
 (function () {
-  const VERSION = "watchlist-inst-backed-20260607";
+  const VERSION = "chip-flow-guard-20260607";
   const modules = {
     sectorMap: { loaded: false, src: "terminal-sector-map.js" },
     strategyConfig: { loaded: false, src: "terminal-strategy-config.js" },
@@ -38,6 +38,7 @@
     },
   };
 })();
+
 
 
 

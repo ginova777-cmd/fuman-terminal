@@ -1,23 +1,23 @@
-const CACHE_VERSION = "fuman-terminal-sw-20260607-watchlist-inst-backed";
+const CACHE_VERSION = "fuman-terminal-sw-20260607-chip-flow-guard";
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 const DATA_CACHE = `${CACHE_VERSION}-data`;
 
 const STATIC_ASSETS = [
-  "/styles.css?v=watchlist-inst-backed-20260607",
-  "/terminal-core.js?v=watchlist-inst-backed-20260607",
-  "/terminal-modules.js?v=watchlist-inst-backed-20260607",
-  "/terminal-sector-map.js?v=watchlist-inst-backed-20260607",
-  "/terminal-strategy-config.js?v=watchlist-inst-backed-20260607",
-  "/terminal-market-config.js?v=watchlist-inst-backed-20260607",
-  "/terminal-ui-config.js?v=watchlist-inst-backed-20260607",
-  "/terminal-runtime-config.js?v=watchlist-inst-backed-20260607",
-  "/terminal-tuning-config.js?v=watchlist-inst-backed-20260607",
-  "/terminal-worker.js?v=watchlist-inst-backed-20260607",
-  "/terminal.js?v=watchlist-inst-backed-20260607",
-  "/terminal-realtime-radar.css?v=watchlist-inst-backed-20260607",
-  "/terminal-intraday-radar.css?v=watchlist-inst-backed-20260607",
-  "/terminal-utility.css?v=watchlist-inst-backed-20260607",
-  "/refresh.html?v=watchlist-inst-backed-20260607",
+  "/styles.css?v=chip-flow-guard-20260607",
+  "/terminal-core.js?v=chip-flow-guard-20260607",
+  "/terminal-modules.js?v=chip-flow-guard-20260607",
+  "/terminal-sector-map.js?v=chip-flow-guard-20260607",
+  "/terminal-strategy-config.js?v=chip-flow-guard-20260607",
+  "/terminal-market-config.js?v=chip-flow-guard-20260607",
+  "/terminal-ui-config.js?v=chip-flow-guard-20260607",
+  "/terminal-runtime-config.js?v=chip-flow-guard-20260607",
+  "/terminal-tuning-config.js?v=chip-flow-guard-20260607",
+  "/terminal-worker.js?v=chip-flow-guard-20260607",
+  "/terminal.js?v=chip-flow-guard-20260607",
+  "/terminal-realtime-radar.css?v=chip-flow-guard-20260607",
+  "/terminal-intraday-radar.css?v=chip-flow-guard-20260607",
+  "/terminal-utility.css?v=chip-flow-guard-20260607",
+  "/refresh.html?v=chip-flow-guard-20260607",
   "/assets/logo.webp",
   "/favicon.ico",
 ];
@@ -168,6 +168,7 @@ self.addEventListener("fetch", (event) => {
     event.respondWith(staleWhileRevalidate(request));
   }
 });
+
 
 
 
