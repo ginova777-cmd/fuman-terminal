@@ -337,6 +337,11 @@ body.auth-locked:not(.auth-login-open) .auth-gate {
     justify-content: center;
     padding: 18px 16px 72px;
     overflow-x: hidden;
+    background:
+      linear-gradient(145deg, rgba(5, 9, 18, 0.96), rgba(9, 16, 30, 0.92)),
+      radial-gradient(circle at 20% 18%, rgba(255, 177, 97, 0.18), transparent 30%),
+      radial-gradient(circle at 80% 12%, rgba(143, 191, 255, 0.12), transparent 26%),
+      #050812;
   }
 
   .auth-card {

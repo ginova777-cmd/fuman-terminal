@@ -1,25 +1,24 @@
-const CACHE_VERSION = "fuman-terminal-sw-20260607-mobile-fast7";
+const CACHE_VERSION = "fuman-terminal-sw-20260607-mobile-fast8";
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 const DATA_CACHE = `${CACHE_VERSION}-data`;
 
 const STATIC_ASSETS = [
-  "/styles.css?v=mobile-fast7-20260607",
-  "/terminal-core.js?v=mobile-fast7-20260607",
-  "/terminal-modules.js?v=mobile-fast7-20260607",
-  "/terminal-sector-map.js?v=mobile-fast7-20260607",
-  "/terminal-strategy-config.js?v=mobile-fast7-20260607",
-  "/terminal-market-config.js?v=mobile-fast7-20260607",
-  "/terminal-ui-config.js?v=mobile-fast7-20260607",
-  "/terminal-runtime-config.js?v=mobile-fast7-20260607",
-  "/terminal-tuning-config.js?v=mobile-fast7-20260607",
-  "/terminal-worker.js?v=mobile-fast7-20260607",
-  "/terminal.js?v=mobile-fast7-20260607",
-  "/terminal-realtime-radar.css?v=mobile-fast7-20260607",
-  "/terminal-intraday-radar.css?v=mobile-fast7-20260607",
-  "/terminal-utility.css?v=mobile-fast7-20260607",
-  "/refresh.html?v=mobile-fast7-20260607",
+  "/styles.css?v=mobile-fast8-20260607",
+  "/terminal-core.js?v=mobile-fast8-20260607",
+  "/terminal-modules.js?v=mobile-fast8-20260607",
+  "/terminal-sector-map.js?v=mobile-fast8-20260607",
+  "/terminal-strategy-config.js?v=mobile-fast8-20260607",
+  "/terminal-market-config.js?v=mobile-fast8-20260607",
+  "/terminal-ui-config.js?v=mobile-fast8-20260607",
+  "/terminal-runtime-config.js?v=mobile-fast8-20260607",
+  "/terminal-tuning-config.js?v=mobile-fast8-20260607",
+  "/terminal-worker.js?v=mobile-fast8-20260607",
+  "/terminal.js?v=mobile-fast8-20260607",
+  "/terminal-realtime-radar.css?v=mobile-fast8-20260607",
+  "/terminal-intraday-radar.css?v=mobile-fast8-20260607",
+  "/terminal-utility.css?v=mobile-fast8-20260607",
+  "/refresh.html?v=mobile-fast8-20260607",
   "/assets/logo.webp",
-  "/assets/login-bg-fuman-lite.webp",
   "/favicon.ico",
 ];
 
@@ -49,20 +48,8 @@ const PREFETCH_DATA_ASSETS = [
   "/data/market-summary.json",
   "/data/health-summary.json",
   "/data/strategy4-score-top.json",
-  "/data/strategy4-zone-a.json",
-  "/data/strategy4-zone-b-page-1.json",
-  "/data/strategy4-zone-c.json",
-  "/data/strategy-match-index.json",
   "/data/data-status-index.json",
-  "/data/stocks-index.json",
   "/data/stocks-quotes-mobile-top.json",
-  "/data/stocks-slim.json",
-  "/data/institution-summary.json",
-  "/data/institution-slim.json",
-  "/data/warrant-flow-summary.json",
-  "/data/warrant-flow-slim.json",
-  "/data/warrant-flow-mobile-top.json",
-  "/data/strategy5-latest.json",
 ];
 
 const LIVE_PATTERNS = [

@@ -52,12 +52,12 @@
       chip: 20,
     },
     mobileTerminalPageSizes: {
-      swing: 12,
-      openBuy: 10,
-      strategy3: 10,
-      strategy5: 10,
-      warrant: 10,
-      chip: 10,
+      swing: 8,
+      openBuy: 8,
+      strategy3: 8,
+      strategy5: 8,
+      warrant: 8,
+      chip: 8,
     },
   });
 })();

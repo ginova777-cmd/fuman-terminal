@@ -14,7 +14,7 @@ const MAX_BYTES = {
   "/data/warrant-flow-mobile-top.json": 8000,
   "/data/strategy4-score-top.json": 12000,
   "/data/strategy4-zone-a.json": 14000,
-  "/data/strategy4-zone-b-page-1.json": 18000,
+  "/data/strategy4-zone-b-page-1.json": 9000,
   "/data/stocks-index.json": 26000,
   "/data/stocks-quotes-mobile-top.json": 18000,
   "/data/stocks-quotes-slim.json": 52000,

@@ -94,7 +94,7 @@ function strategy4PresetFiles(payload) {
   const byScore = [...matches].sort((a, b) => cleanNumber(b.swingScore || b.score) - cleanNumber(a.swingScore || a.score));
   const zoneB = byScore.filter((item) => item.swingZone === "B");
   const zoneBPages = [];
-  const pageSize = 50;
+  const pageSize = 25;
   for (let index = 0; index < zoneB.length; index += pageSize) {
     const page = Math.floor(index / pageSize) + 1;
     zoneBPages.push([`data/strategy4-zone-b-page-${page}.json`, {
@@ -637,7 +637,7 @@ function dataManifest() {
     "data-consistency-report.json",
     "strategy-weight-report.json",
   ];
-  for (let page = 1; page <= 24; page += 1) files.push(`strategy4-zone-b-page-${page}.json`);
+  for (let page = 1; page <= 48; page += 1) files.push(`strategy4-zone-b-page-${page}.json`);
   const entries = {};
   for (const file of files) {
     const payload = readOptional(`data/${file}`, null);

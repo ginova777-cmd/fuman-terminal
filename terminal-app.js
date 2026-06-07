@@ -76,7 +76,7 @@ function getFumanWorker() {
   if (!("Worker" in window)) return null;
   if (fumanWorker) return fumanWorker;
   try {
-    fumanWorker = new Worker("terminal-worker.js?v=mobile-fast7-20260607");
+    fumanWorker = new Worker("terminal-worker.js?v=mobile-fast8-20260607");
     fumanWorker.addEventListener("message", (event) => {
       const { id, ok, rows, result, error } = event.data || {};
       const pending = fumanWorkerPending.get(id);
@@ -206,7 +206,8 @@ function scheduleCommonTabWarmup() {
 
 function warmCommonTabs() {
   if (!isTerminalUnlocked()) return;
-  const warmKeys = rankedCommonTabs().slice(0, isMobileViewport() ? 3 : 5);
+  if (isMobileViewport()) return;
+  const warmKeys = rankedCommonTabs().slice(0, 5);
   for (const key of warmKeys) {
     if (key === "chip") {
       markLazyModuleForView("chip-trade");
@@ -248,16 +249,16 @@ function warmFastPathData(reason = "idle") {
   const tasks = [
     loadDataManifest(false),
     loadMarketSummary(false),
-    warmJson(endpoints.terminalHomeBundle),
+    mobile ? warmJson(endpoints.mobileHomeSummary, 3000, versionKey) : warmJson(endpoints.terminalHomeBundle),
     mobile ? null : warmJson(endpoints.stocksIndex, 4500, versionKey),
     mobile ? warmJson(endpoints.stocksQuotesMobileTop, 3500, versionKey) : warmJson(endpoints.stocksQuotesSlim, 4500, versionKey),
-    warmJson(endpoints.strategyMatchIndex),
-    warmJson(endpoints.strategy4ScoreTop, 4500, strategy4Summary?.updatedAt || "latest"),
+    mobile ? null : warmJson(endpoints.strategyMatchIndex),
+    mobile ? null : warmJson(endpoints.strategy4ScoreTop, 4500, strategy4Summary?.updatedAt || "latest"),
     mobile ? null : warmJson(endpoints.strategy4ZoneA, 4500, strategy4Summary?.updatedAt || "latest"),
     mobile ? null : warmJson(endpoints.strategy4ZoneBPage1, 4500, strategy4Summary?.updatedAt || "latest"),
-    warmJson(endpoints.institutionSummary),
-    warmJson(endpoints.warrantFlowSummary),
-    warmJson(endpoints.warrantFlowMobileTop),
+    mobile ? null : warmJson(endpoints.institutionSummary),
+    mobile ? null : warmJson(endpoints.warrantFlowSummary),
+    mobile ? null : warmJson(endpoints.warrantFlowMobileTop),
   ].filter(Boolean).map((task) => Promise.resolve(task).catch(() => undefined));
   Promise.allSettled(tasks).finally(() => {
     recordFumanPerformance("warmup:fast-path:" + reason, performance?.now ? performance.now() : Date.now(), true);
@@ -339,7 +340,7 @@ function loadFumanStyle(href, id) {
   const link = document.createElement("link");
   link.id = id;
   link.rel = "stylesheet";
-  link.href = href.includes("?") ? href : `${href}?v=${window.FUMAN_TERMINAL_BOOT?.version || "mobile-fast7-20260607"}`;
+  link.href = href.includes("?") ? href : `${href}?v=${window.FUMAN_TERMINAL_BOOT?.version || "mobile-fast8-20260607"}`;
   document.head.appendChild(link);
 }
 
@@ -365,7 +366,7 @@ function makeFumanModuleScope(bindings) {
 function loadFumanFeatureModule(name, src, globalName) {
   if (window[globalName]) return Promise.resolve(window[globalName]);
   if (fumanFeatureModulePromises[name]) return fumanFeatureModulePromises[name];
-  const version = window.FUMAN_TERMINAL_BOOT?.version || "mobile-fast7-20260607";
+  const version = window.FUMAN_TERMINAL_BOOT?.version || "mobile-fast8-20260607";
   fumanFeatureModulePromises[name] = new Promise((resolve, reject) => {
     const attr = "data-fuman-feature-" + name;
     const existing = document.querySelector("script[" + attr + "]");
@@ -9749,7 +9750,7 @@ function strategy4ZoneBPageEndpoint(page) {
 function strategy4ZoneBRemotePageForUiPage(uiPage = swingPage) {
   const pageSize = getTerminalPageSize("swing");
   const start = (Math.max(1, cleanNumber(uiPage) || 1) - 1) * pageSize;
-  const remotePageSize = 50;
+  const remotePageSize = 25;
   return Math.floor(start / remotePageSize) + 1;
 }
 
