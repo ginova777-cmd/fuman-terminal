@@ -1,5 +1,5 @@
 (function () {
-  const version = "efficiency-20260606";
+  const version = "fast-path-20260607";
   window.FUMAN_TERMINAL_BOOT = {
     version,
     startedAt: Date.now(),

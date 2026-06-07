@@ -75,7 +75,7 @@ function getFumanWorker() {
   if (!("Worker" in window)) return null;
   if (fumanWorker) return fumanWorker;
   try {
-    fumanWorker = new Worker("terminal-worker.js?v=efficiency-20260606");
+    fumanWorker = new Worker("terminal-worker.js?v=fast-path-20260607");
     fumanWorker.addEventListener("message", (event) => {
       const { id, ok, rows, result, error } = event.data || {};
       const pending = fumanWorkerPending.get(id);
@@ -307,7 +307,7 @@ function loadFumanStyle(href, id) {
   const link = document.createElement("link");
   link.id = id;
   link.rel = "stylesheet";
-  link.href = href.includes("?") ? href : `${href}?v=${window.FUMAN_TERMINAL_BOOT?.version || "efficiency-20260606"}`;
+  link.href = href.includes("?") ? href : `${href}?v=${window.FUMAN_TERMINAL_BOOT?.version || "fast-path-20260607"}`;
   document.head.appendChild(link);
 }
 
@@ -333,7 +333,7 @@ function makeFumanModuleScope(bindings) {
 function loadFumanFeatureModule(name, src, globalName) {
   if (window[globalName]) return Promise.resolve(window[globalName]);
   if (fumanFeatureModulePromises[name]) return fumanFeatureModulePromises[name];
-  const version = window.FUMAN_TERMINAL_BOOT?.version || "efficiency-20260606";
+  const version = window.FUMAN_TERMINAL_BOOT?.version || "fast-path-20260607";
   fumanFeatureModulePromises[name] = new Promise((resolve, reject) => {
     const attr = "data-fuman-feature-" + name;
     const existing = document.querySelector("script[" + attr + "]");
@@ -6945,6 +6945,49 @@ function preloadWarrantFlowFullData(reason = "idle") {
   return warrantFlowFullPreloadPromise;
 }
 
+async function loadStocksIndexQuotes(force = false) {
+  if (!endpoints.stocksIndex || !endpoints.stocksQuotesSlim) return null;
+  const versionKey = marketSummaryPayload?.updatedAt || marketSummaryPayload?.resolvedTradeDate || "latest";
+  const [indexPayload, quotesPayload] = await Promise.all([
+    fetchVersionedJson(endpoints.stocksIndex, 6000, versionKey, force),
+    fetchVersionedJson(endpoints.stocksQuotesSlim, 6000, versionKey, force),
+  ]);
+  const indexRows = normalizeArray(indexPayload?.stocks || indexPayload);
+  const quoteRows = normalizeArray(quotesPayload?.quotes || quotesPayload?.stocks || quotesPayload);
+  if (indexRows.length < 500 || cleanNumber(indexPayload?.count) < 500) return null;
+  const quoteByCode = new Map(quoteRows.map((row) => [String(row?.code || row?.Code || row?.證券代號 || "").trim(), row]).filter(([code]) => code));
+  const stocks = indexRows.map((stock) => {
+    const code = String(stock?.code || stock?.Code || stock?.證券代號 || "").trim();
+    const quote = quoteByCode.get(code) || {};
+    return {
+      ...quote,
+      ...stock,
+      code,
+      name: stock?.name || stock?.Name || stock?.證券名稱 || quote?.name || quote?.Name || quote?.證券名稱 || code,
+      market: stock?.market || stock?.Market || quote?.market || quote?.Market || "",
+      close: cleanNumber(quote?.close ?? quote?.ClosingPrice ?? stock?.close ?? stock?.ClosingPrice),
+      change: cleanNumber(quote?.change ?? quote?.Change ?? stock?.change ?? stock?.Change),
+      percent: cleanNumber(quote?.percent ?? quote?.pct ?? stock?.percent ?? stock?.pct),
+      tradeVolume: cleanNumber(quote?.tradeVolume ?? quote?.TradeVolume ?? quote?.volume ?? stock?.tradeVolume ?? stock?.TradeVolume),
+      value: cleanNumber(quote?.value ?? quote?.TradeValue ?? stock?.value ?? stock?.TradeValue),
+      quoteDate: quote?.quoteDate || quote?.TradeDate || stock?.quoteDate || stock?.TradeDate || "",
+      quoteTime: quote?.quoteTime || quote?.time || stock?.quoteTime || "",
+      quoteUpdatedAt: cleanNumber(quote?.quoteUpdatedAt ?? quote?.updatedAtMs ?? stock?.quoteUpdatedAt),
+      isRealtime: quote?.isRealtime === true || stock?.isRealtime === true,
+    };
+  }).filter((stock) => stock.code && stock.name && stock.close);
+  if (stocks.length < 500) return null;
+  return {
+    ok: true,
+    source: `${indexPayload?.source || "stocks-index"} + ${quotesPayload?.source || "stocks-quotes-slim"}`,
+    updatedAt: quotesPayload?.updatedAt || indexPayload?.updatedAt || new Date().toISOString(),
+    today: quotesPayload?.today || indexPayload?.today || "",
+    resolvedTradeDate: quotesPayload?.resolvedTradeDate || indexPayload?.resolvedTradeDate || "",
+    count: stocks.length,
+    stocks,
+  };
+}
+
 async function loadStrategyStocks() {
   if (latestStocks.length) return latestStocks;
   if (strategyStocksPromise) return strategyStocksPromise;
@@ -6952,10 +6995,20 @@ async function loadStrategyStocks() {
   strategyStocksPromise = (async () => {
     let stocks = [];
     try {
-      const slimPayload = await fetchVersionedJson(endpoints.stocksSlim, 7000, marketSummaryPayload?.updatedAt || "latest", false);
-      stocks = normalizeArray(slimPayload?.stocks || slimPayload);
-      if (cleanNumber(slimPayload?.count) < 500) stocks = [];
-      if (stocks.length) updateMarketStockDataState(slimPayload);
+      const indexPayload = await loadStocksIndexQuotes(false);
+      stocks = normalizeArray(indexPayload?.stocks);
+      if (stocks.length) updateMarketStockDataState(indexPayload);
+    } catch (error) {
+      stocks = [];
+    }
+
+    try {
+      if (!stocks.length) {
+        const slimPayload = await fetchVersionedJson(endpoints.stocksSlim, 7000, marketSummaryPayload?.updatedAt || "latest", false);
+        stocks = normalizeArray(slimPayload?.stocks || slimPayload);
+        if (cleanNumber(slimPayload?.count) < 500) stocks = [];
+        if (stocks.length) updateMarketStockDataState(slimPayload);
+      }
     } catch (error) {
       stocks = [];
     }
@@ -8080,7 +8133,12 @@ async function loadMarketAiConfluenceCaches(force = false) {
     await Promise.allSettled([
       (async () => {
         if (!force && Object.keys(strategy4ScanMatches).length) return;
-        const payload = await fetchMarketAiConfluencePayload([endpoints.strategy4Slim], ["matches"]);
+        const payload = await fetchMarketAiConfluencePayload([
+          endpoints.strategy4ScoreTop,
+          endpoints.strategy4ZoneA,
+          endpoints.strategy4ZoneBPage1,
+          endpoints.strategy4ZoneC,
+        ], ["matches"]);
         if (payload?.ok && Array.isArray(payload.matches)) mergeStrategy4Cache(payload);
       })(),
       (async () => {
@@ -8720,7 +8778,7 @@ function preloadChipTradeFullData(reason = "idle") {
       { url: endpoints.institutionCache, label: "institution-cache-preload", kind: "institution" },
       { url: endpoints.institutionBackup, label: "institution-backup-preload", kind: "institution" },
     ], 9000, "institution"),
-    fetchVersionedJson(endpoints.strategyStocks, 12000, "latest", false),
+    loadStrategyStocks(),
   ]).finally(() => {
     recordFumanPerformance("preload:chip:" + reason, performance?.now ? performance.now() : Date.now(), true);
   });
@@ -9033,7 +9091,7 @@ async function loadMarketData(force = false) {
     if (backendStocks.length) {
       renderStocks(backendStocks);
     } else {
-      const stocks = await fetchVersionedJson(endpoints.strategyStocks, 15000, "", force);
+      const stocks = await loadStocksIndexQuotes(force) || await fetchVersionedJson(endpoints.stocksSlim, 8000, "", force);
       const rows = normalizeArray(stocks?.stocks || stocks);
       if (rows.length) {
         updateMarketStockDataState(stocks);
@@ -9046,7 +9104,7 @@ async function loadMarketData(force = false) {
     }
   } catch (e) {
     try {
-      const stocks = await fetchVersionedJson(endpoints.strategyStocks, 15000, "", force);
+      const stocks = await loadStocksIndexQuotes(force) || await fetchVersionedJson(endpoints.stocksSlim, 8000, "", force);
       updateMarketStockDataState(stocks);
       renderStocks(normalizeArray(stocks?.stocks || stocks));
     } catch (e2) {
@@ -9445,7 +9503,7 @@ async function refreshOpenBuyScan(force = false) {
   await loadOpenBuyCache(force);
 }
 
-async function loadStrategy4Cache(force = false) {
+async function loadStrategy4Cache(force = false, allowFullFallback = false) {
   if (!isStrategyCacheActive("strategy4")) return;
   if (strategy4CacheLoading) return;
   if (!force && strategy4ScanLastAt && Object.keys(strategy4ScanMatches).length) return;
@@ -9455,17 +9513,23 @@ async function loadStrategy4Cache(force = false) {
   }
   strategy4CacheLoading = true;
   try {
-    let payload = await fetchVersionedJson(force ? endpoints.strategy4Slim : (endpoints.strategy4ScoreTop || endpoints.strategy4Slim), 8000, strategy4Summary?.updatedAt || strategy4SummaryLoadedAt || "", force);
+    let payload = await fetchVersionedJson(endpoints.strategy4ScoreTop || endpoints.strategy4ZoneA || endpoints.strategy4Slim, 8000, strategy4Summary?.updatedAt || strategy4SummaryLoadedAt || "", force);
     if (!force && normalizeArray(payload?.matches).length) {
       payload = { ...payload, partial: true, complete: false };
     }
     if (!normalizeArray(payload?.matches).length && isMobileViewport() && !force) {
       return;
     }
-    if (force && !normalizeArray(payload?.matches).length) {
+    if (force && !normalizeArray(payload?.matches).length && endpoints.strategy4ZoneA) {
+      payload = await fetchVersionedJson(endpoints.strategy4ZoneA, 8000, strategy4Summary?.updatedAt || strategy4SummaryLoadedAt || "", force);
+    }
+    if (force && !normalizeArray(payload?.matches).length && endpoints.strategy4ZoneBPage1) {
+      payload = await fetchVersionedJson(endpoints.strategy4ZoneBPage1, 8000, strategy4Summary?.updatedAt || strategy4SummaryLoadedAt || "", force);
+    }
+    if (allowFullFallback && force && !normalizeArray(payload?.matches).length) {
       payload = await fetchVersionedJson(endpoints.strategy4Cache, 10000, strategy4Summary?.updatedAt || strategy4SummaryLoadedAt || "", force);
     }
-    if (force && !normalizeArray(payload?.matches).length) {
+    if (allowFullFallback && force && !normalizeArray(payload?.matches).length) {
       payload = await fetchVersionedJson(endpoints.strategy4Backup, 10000, strategy4Summary?.updatedAt || strategy4SummaryLoadedAt || "", force);
     }
     if (payload?.ok && Array.isArray(payload.matches)) {
@@ -10152,7 +10216,7 @@ const watchlistStrategySources = [
   { key: "openBuy", label: "策略1-明日開盤入", urls: () => [endpoints.openBuyCache, endpoints.openBuyBackup], fields: ["matches"] },
   { key: "strategy2", label: "策略2-當沖雷達", urls: () => [endpoints.strategy2IntradayLiveTop, endpoints.strategy2IntradayTop, endpoints.strategy2IntradaySlim], fields: ["events", "records"] },
   { key: "strategy3", label: "策略3-隔日沖", urls: () => [endpoints.strategy3Cache, endpoints.strategy3Backup], fields: ["matches"] },
-  { key: "strategy4", label: "策略4-波段", urls: () => [endpoints.strategy4Slim], fields: ["matches"] },
+  { key: "strategy4", label: "策略4-波段", urls: () => [endpoints.strategy4ScoreTop, endpoints.strategy4ZoneA, endpoints.strategy4ZoneBPage1, endpoints.strategy4ZoneC], fields: ["matches"] },
   { key: "strategy5", label: "策略5-綜合策略", urls: () => [endpoints.strategy5Cache, endpoints.strategy5Backup], fields: ["matches"] },
   { key: "realtime", label: "即時雷達", urls: () => [endpoints.realtimeRadarCache], fields: ["rows"] },
 ];
