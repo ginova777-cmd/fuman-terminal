@@ -9259,18 +9259,182 @@ async function loadCbDetectionData(force = false) {
   }
 }
 
+function chipTradePassFilter(row, filter = chipFilter) {
+  const foreign = cleanNumber(row.foreign);
+  const trust = cleanNumber(row.trust);
+  const total = cleanNumber(row.total) || foreign + trust + cleanNumber(row.dealer);
+  if (filter === "joint") return foreign > 0 && trust > 0;
+  if (filter === "trust") return trust > 0;
+  if (filter === "foreign") return foreign > 0;
+  if (filter === "legal") return total > 0;
+  return true;
+}
+
+function normalizeChipTradeInstitutionPayload(payload) {
+  if (!payload || typeof payload !== "object") return {};
+  if (payload.data && typeof payload.data === "object" && !Array.isArray(payload.data)) return payload.data;
+  const rows = normalizeArray(payload.rows || payload.data || payload.items);
+  return Object.fromEntries(rows.map((row) => [String(row.code || row.Code || "").trim(), row]).filter(([code]) => code));
+}
+
+function buildChipTradeFallbackRows() {
+  const rows = [];
+  Object.entries(institutionData || {}).forEach(([code, inst]) => {
+    const foreign = cleanNumber(inst.foreign);
+    const trust = cleanNumber(inst.trust);
+    const dealer = cleanNumber(inst.dealer);
+    const total = cleanNumber(inst.total) || foreign + trust + dealer;
+    const row = {
+      code,
+      name: inst.name || code,
+      price: cleanNumber(inst.close),
+      change: Number.isFinite(Number(inst.change)) ? Number(inst.change) : 0,
+      percent: Number.isFinite(Number(inst.percent)) ? Number(inst.percent) : 0,
+      volume: cleanNumber(inst.tradeVolume),
+      value: cleanNumber(inst.value),
+      foreign,
+      trust,
+      total,
+      dealer,
+      foreignStreak: cleanNumber(inst.foreignStreak),
+      trustStreak: cleanNumber(inst.trustStreak),
+      jointStreak: cleanNumber(inst.jointStreak),
+    };
+    if (chipTradePassFilter(row)) rows.push(row);
+  });
+  const sortEl = document.querySelector("#chip-sort");
+  const sortBy = sortEl?.value || "trustForeign";
+  rows.sort((a, b) => {
+    if (sortBy === "trust") return b.trust - a.trust;
+    if (sortBy === "foreign") return b.foreign - a.foreign;
+    if (sortBy === "pct") return b.percent - a.percent;
+    if (sortBy === "value") return b.value - a.value;
+    return (b.jointStreak - a.jointStreak) || ((b.foreign + b.trust) - (a.foreign + a.trust));
+  });
+  return rows;
+}
+
+function renderChipTradeFallbackTable(message = "") {
+  if (!isViewActive("chip-trade")) return;
+  const body = document.querySelector("#chip-trade-body");
+  const dateEl = document.querySelector("#chip-trade-date");
+  if (!body) return;
+  if (dateEl) {
+    const now = new Date().toLocaleTimeString("zh-TW", { hour12: false });
+    const dateText = institutionDate && /^\d{8}$/.test(institutionDate)
+      ? `法人資料: ${institutionDate.slice(0, 4)}/${institutionDate.slice(4, 6)}/${institutionDate.slice(6, 8)}`
+      : "等待盤後資料";
+    dateEl.textContent = `${dateText}｜盤後收盤　更新 ${now}`;
+  }
+  const sourceCount = Object.keys(institutionData || {}).length;
+  if (!sourceCount) {
+    body.innerHTML = `<tr><td colspan="12">${escapeAttr(message || "正在載入盤後法人資料...")}</td></tr>`;
+    return;
+  }
+  const rows = buildChipTradeFallbackRows();
+  const table = body.closest("table");
+  let pagination = document.querySelector("#chip-trade-pagination");
+  if (!pagination && table) {
+    pagination = document.createElement("div");
+    pagination.id = "chip-trade-pagination";
+    table.insertAdjacentElement("afterend", pagination);
+  }
+  const paged = paginateTerminalRows(rows.slice(0, 80), chipTradePage, "chip");
+  chipTradePage = paged.page;
+  if (pagination) pagination.innerHTML = buildTerminalPagination("chip", chipTradePage, paged.totalPages, rows.slice(0, 80).length);
+  if (!paged.rows.length) {
+    const emptyText = {
+      joint: "目前沒有符合「外資 + 投信同買」的資料，請切換投信/外資/法人同買查看。",
+      trust: "目前沒有符合「投信買超」的資料。",
+      foreign: "目前沒有符合「外資買超」的資料。",
+      legal: "目前沒有符合「法人同買」的資料。",
+    }[chipFilter] || "目前沒有符合條件的資料。";
+    body.innerHTML = `<tr><td colspan="12">${escapeAttr(emptyText)} 本次法人資料 ${sourceCount.toLocaleString("zh-TW")} 檔。</td></tr>`;
+    if (pagination) pagination.innerHTML = "";
+    return;
+  }
+  body.innerHTML = paged.rows.map((row, index) => {
+    const up = row.change >= 0;
+    const hasQuote = row.price > 0;
+    return `
+      <tr class="${index === 0 ? "highlight" : ""}" data-chip-row="${escapeAttr(row.code)}">
+        <td><a href="#" data-chip-code="${escapeAttr(row.code)}">${escapeAttr(row.code)}</a></td>
+        <td>${escapeAttr(row.name)}</td>
+        <td data-chip-price>${hasQuote ? formatNumber(row.price, row.price >= 100 ? 0 : 2) : "--"}</td>
+        <td data-chip-change class="${up ? "red" : "green"}">${hasQuote ? `${up ? "+" : ""}${formatNumber(row.change, 2)}` : "--"}</td>
+        <td data-chip-percent class="${row.percent >= 0 ? "red" : "green"}">${hasQuote ? formatNumber(row.percent, 2) : "--"}</td>
+        <td data-chip-volume>${row.volume ? Math.round(row.volume).toLocaleString("zh-TW") : "--"}</td>
+        <td class="${row.foreign >= 0 ? "red" : "green"}">${formatInstitution(row.foreign)}</td>
+        <td class="${row.trust >= 0 ? "red" : "green"}">${formatInstitution(row.trust)}</td>
+        <td>${row.foreignStreak} 日</td>
+        <td>${row.trustStreak} 日</td>
+        <td>${row.jointStreak} 日</td>
+        <td class="${row.total >= 0 ? "red" : "green"}">${formatInstitution(row.total)}</td>
+      </tr>
+    `;
+  }).join("");
+}
+
+async function loadChipTradeDataFallback(force = false, reason = "") {
+  const body = document.querySelector("#chip-trade-body");
+  if (body && !Object.keys(institutionData || {}).length) {
+    body.innerHTML = `<tr><td colspan="12">正在載入盤後法人資料...</td></tr>`;
+  }
+  try {
+    if (force || !Object.keys(institutionData || {}).length) {
+      const payload = await fetchVersionedJsonFallback([
+        { url: endpoints.institutionSlim, label: "institution-slim-fallback", kind: "institution" },
+        { url: endpoints.institutionCache, label: "institution-cache-fallback", kind: "institution" },
+        { url: endpoints.institutionBackup, label: "institution-backup-fallback", kind: "institution" },
+      ], 10000, "institution");
+      const data = normalizeChipTradeInstitutionPayload(payload);
+      if (Object.keys(data).length) {
+        institutionData = data;
+        institutionDate = payload.usedDate || "";
+        const updatedAt = Date.parse(payload.updatedAt || "");
+        institutionUpdatedAt = Number.isFinite(updatedAt) ? updatedAt : Date.now();
+      }
+    }
+    chipTradeLoadedAt = Date.now();
+    renderChipTradeFallbackTable(reason);
+  } catch (error) {
+    if (body) body.innerHTML = `<tr><td colspan="12">買賣超資料載入失敗：${escapeAttr(error?.message || "unknown")}</td></tr>`;
+  }
+}
+
+function withTimeout(promise, ms, label) {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => setTimeout(() => reject(new Error(`${label} timeout`)), ms)),
+  ]);
+}
+
 function renderChipTradeTable() {
   ensureChipFlowModule().then((api) => {
     api.renderChipTradeTable();
-  }).catch(() => undefined);
+  }).catch((error) => {
+    console.warn("[FUMAN] chip flow render fallback", error);
+    renderChipTradeFallbackTable("買賣超模組載入失敗，已切換主程式備援表格。");
+  });
   loadCbDetectionData(false);
 }
 
 async function loadChipTradeData(force = false) {
-  const api = await ensureChipFlowModule();
-  const result = await api.loadChipTradeData(force);
-  loadCbDetectionData(force);
-  return result;
+  const body = document.querySelector("#chip-trade-body");
+  if (body && !Object.keys(institutionData || {}).length) {
+    body.innerHTML = `<tr><td colspan="12">正在載入盤後法人資料...</td></tr>`;
+  }
+  try {
+    const api = await withTimeout(ensureChipFlowModule(), 4000, "chip module");
+    const result = await withTimeout(api.loadChipTradeData(force), 12000, "chip data");
+    loadCbDetectionData(force);
+    return result;
+  } catch (error) {
+    console.warn("[FUMAN] chip flow data fallback", error);
+    await loadChipTradeDataFallback(force, "買賣超模組載入失敗，已切換主程式備援表格。");
+    loadCbDetectionData(force);
+    return null;
+  }
 }
 
 function preloadChipTradeFullData(reason = "idle") {

@@ -761,7 +761,8 @@ body::after {
   display: grid;
   grid-template-columns: minmax(620px, 1.18fr) minmax(360px, 0.82fr);
   gap: 14px;
-  align-items: start;
+  align-items: stretch;
+  min-height: calc(100vh - 245px);
 }
 
 .chip-table-wrap {
@@ -823,7 +824,9 @@ body::after {
 .cb-detect-panel .green { color: var(--green); }
 
 .cb-detect-panel {
-  min-height: 590px;
+  display: flex;
+  flex-direction: column;
+  min-height: calc(100vh - 245px);
   border: 1px solid rgba(255, 77, 67, 0.78);
   border-radius: 6px;
   background: rgba(6, 11, 20, 0.82);
@@ -920,8 +923,10 @@ body::after {
 
 .cb-detect-list {
   display: grid;
+  align-content: start;
   gap: 10px;
-  max-height: 520px;
+  flex: 1;
+  max-height: none;
   overflow: auto;
   padding: 12px;
 }
