@@ -2,12 +2,13 @@ const https = require("https");
 
 const BASE_URL = process.env.FUMAN_TERMINAL_URL || "https://fuman-terminal.vercel.app";
 const TARGETS = [
-  "/terminal-app.js?v=mobile-fast-20260607",
+  "/terminal-app.js?v=mobile-fast2-20260607",
   "/data/data-manifest.json",
   "/data/strategy4-slim.json",
   "/data/strategy4-score-top.json",
   "/data/strategy4-zone-b-page-1.json",
   "/data/stocks-index.json",
+  "/data/stocks-quotes-mobile-top.json",
   "/data/stocks-quotes-slim.json",
   "/data/stocks-slim.json",
   "/data/terminal-home-bundle.json",

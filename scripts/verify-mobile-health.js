@@ -14,6 +14,7 @@ const MAX_BYTES = {
   "/data/strategy4-zone-a.json": 14000,
   "/data/strategy4-zone-b-page-1.json": 18000,
   "/data/stocks-index.json": 26000,
+  "/data/stocks-quotes-mobile-top.json": 18000,
   "/data/stocks-quotes-slim.json": 52000,
 };
 
@@ -30,6 +31,7 @@ const TARGETS = [
   { path: "/data/strategy4-zone-a.json", kind: "json", maxBytes: MAX_BYTES["/data/strategy4-zone-a.json"], cache: /stale-while-revalidate/i },
   { path: "/data/strategy4-zone-b-page-1.json", kind: "json", maxBytes: MAX_BYTES["/data/strategy4-zone-b-page-1.json"], cache: /stale-while-revalidate/i },
   { path: "/data/stocks-index.json", kind: "json", maxBytes: MAX_BYTES["/data/stocks-index.json"], cache: /stale-while-revalidate/i },
+  { path: "/data/stocks-quotes-mobile-top.json", kind: "json", maxBytes: MAX_BYTES["/data/stocks-quotes-mobile-top.json"], cache: /stale-while-revalidate/i },
   { path: "/data/stocks-quotes-slim.json", kind: "json", maxBytes: MAX_BYTES["/data/stocks-quotes-slim.json"], cache: /stale-while-revalidate/i },
 ];
 

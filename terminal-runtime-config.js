@@ -9,6 +9,7 @@
     stocksSlim: "/data/stocks-slim.json",
     stocksIndex: "/data/stocks-index.json",
     stocksQuotesSlim: "/data/stocks-quotes-slim.json",
+    stocksQuotesMobileTop: "/data/stocks-quotes-mobile-top.json",
     healthSummary: "/data/health-summary.json",
     heatmap: "/api/heatmap",
     institution: "/api/institution",

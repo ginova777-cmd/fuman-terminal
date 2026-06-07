@@ -94,7 +94,7 @@ function strategy4PresetFiles(payload) {
   const byScore = [...matches].sort((a, b) => cleanNumber(b.swingScore || b.score) - cleanNumber(a.swingScore || a.score));
   const zoneB = byScore.filter((item) => item.swingZone === "B");
   const zoneBPages = [];
-  const pageSize = 220;
+  const pageSize = 100;
   for (let index = 0; index < zoneB.length; index += pageSize) {
     const page = Math.floor(index / pageSize) + 1;
     zoneBPages.push([`data/strategy4-zone-b-page-${page}.json`, {
@@ -543,6 +543,9 @@ function stocksIndexFiles(payload = slimStocks()) {
     value: cleanNumber(stock.value || stock.TradeValue),
     quoteDate: stock.quoteDate || stock.tradeDate || stock.TradeDate || "",
   })).filter((stock) => stock.code && stock.close);
+  const mobileQuotes = [...quotes]
+    .sort((a, b) => cleanNumber(b.value) - cleanNumber(a.value))
+    .slice(0, 360);
   const base = {
     ok: Boolean(payload?.ok ?? true),
     updatedAt: payload?.updatedAt || new Date().toISOString(),
@@ -553,6 +556,7 @@ function stocksIndexFiles(payload = slimStocks()) {
   return [
     ["data/stocks-index.json", { ...base, source: "stocks-index", count: index.length, stocks: index }],
     ["data/stocks-quotes-slim.json", { ...base, source: "stocks-quotes-slim", count: quotes.length, quotes }],
+    ["data/stocks-quotes-mobile-top.json", { ...base, source: "stocks-quotes-mobile-top", count: mobileQuotes.length, quotes: mobileQuotes }],
   ];
 }
 
@@ -564,6 +568,7 @@ function dataStatusIndex() {
     "stocks-slim.json",
     "stocks-index.json",
     "stocks-quotes-slim.json",
+    "stocks-quotes-mobile-top.json",
     "strategy-match-index.json",
     "open-buy-latest.json",
     "strategy2-intraday-latest.json",
@@ -609,6 +614,7 @@ function dataManifest() {
     "stocks-slim.json",
     "stocks-index.json",
     "stocks-quotes-slim.json",
+    "stocks-quotes-mobile-top.json",
     "strategy-match-index.json",
     "open-buy-latest.json",
     "strategy2-intraday-slim.json",
@@ -631,7 +637,7 @@ function dataManifest() {
     "data-consistency-report.json",
     "strategy-weight-report.json",
   ];
-  for (let page = 1; page <= 8; page += 1) files.push(`strategy4-zone-b-page-${page}.json`);
+  for (let page = 1; page <= 12; page += 1) files.push(`strategy4-zone-b-page-${page}.json`);
   const entries = {};
   for (const file of files) {
     const payload = readOptional(`data/${file}`, null);

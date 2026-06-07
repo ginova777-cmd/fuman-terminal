@@ -76,7 +76,7 @@ function getFumanWorker() {
   if (!("Worker" in window)) return null;
   if (fumanWorker) return fumanWorker;
   try {
-    fumanWorker = new Worker("terminal-worker.js?v=mobile-fast-20260607");
+    fumanWorker = new Worker("terminal-worker.js?v=mobile-fast2-20260607");
     fumanWorker.addEventListener("message", (event) => {
       const { id, ok, rows, result, error } = event.data || {};
       const pending = fumanWorkerPending.get(id);
@@ -250,7 +250,7 @@ function warmFastPathData(reason = "idle") {
     loadMarketSummary(false),
     warmJson(endpoints.terminalHomeBundle),
     mobile ? null : warmJson(endpoints.stocksIndex, 4500, versionKey),
-    mobile ? null : warmJson(endpoints.stocksQuotesSlim, 4500, versionKey),
+    mobile ? warmJson(endpoints.stocksQuotesMobileTop, 3500, versionKey) : warmJson(endpoints.stocksQuotesSlim, 4500, versionKey),
     warmJson(endpoints.strategyMatchIndex),
     warmJson(endpoints.strategy4ScoreTop, 4500, strategy4Summary?.updatedAt || "latest"),
     mobile ? null : warmJson(endpoints.strategy4ZoneA, 4500, strategy4Summary?.updatedAt || "latest"),
@@ -339,7 +339,7 @@ function loadFumanStyle(href, id) {
   const link = document.createElement("link");
   link.id = id;
   link.rel = "stylesheet";
-  link.href = href.includes("?") ? href : `${href}?v=${window.FUMAN_TERMINAL_BOOT?.version || "mobile-fast-20260607"}`;
+  link.href = href.includes("?") ? href : `${href}?v=${window.FUMAN_TERMINAL_BOOT?.version || "mobile-fast2-20260607"}`;
   document.head.appendChild(link);
 }
 
@@ -365,7 +365,7 @@ function makeFumanModuleScope(bindings) {
 function loadFumanFeatureModule(name, src, globalName) {
   if (window[globalName]) return Promise.resolve(window[globalName]);
   if (fumanFeatureModulePromises[name]) return fumanFeatureModulePromises[name];
-  const version = window.FUMAN_TERMINAL_BOOT?.version || "mobile-fast-20260607";
+  const version = window.FUMAN_TERMINAL_BOOT?.version || "mobile-fast2-20260607";
   fumanFeatureModulePromises[name] = new Promise((resolve, reject) => {
     const attr = "data-fuman-feature-" + name;
     const existing = document.querySelector("script[" + attr + "]");
@@ -3139,6 +3139,52 @@ function markViewPerformance(viewName, startedAt, label = "view") {
 }
 
 window.FUMAN_GET_PERFORMANCE_REPORT = () => summarizeFumanPerformanceReport();
+
+async function runFumanMobileSelfCheck() {
+  const steps = [
+    { key: "market", label: "首頁" },
+    { key: "strategy", label: "策略4", preset: "策略4" },
+    { key: "chip-trade", label: "買賣超" },
+    { key: "warrant-flow", label: "權證" },
+    { key: "watchlist", label: "自選股" },
+  ];
+  const results = [];
+  for (const step of steps) {
+    const link = viewLinks.find((item) => item.dataset.view === step.key && (!step.preset || item.textContent.includes(step.preset)));
+    const startedAt = performance?.now ? performance.now() : Date.now();
+    try {
+      if (link) {
+        if (step.preset) applyStrategyPresetFromLink(link);
+        showView(step.key, link);
+      }
+      else if (step.key === "strategy") {
+        const strategyLink = viewLinks.find((item) => item.dataset.view === "strategy");
+        if (strategyLink) {
+          applyStrategyPresetFromLink(strategyLink);
+          showView("strategy", strategyLink);
+        }
+      }
+      await new Promise((resolve) => setTimeout(resolve, isMobileViewport() ? 900 : 500));
+      const ms = Math.round((performance?.now ? performance.now() : Date.now()) - startedAt);
+      results.push({ label: step.label, view: step.key, ms, ok: true });
+      recordFumanPerformance(`mobile-self-check:${step.key}`, startedAt, true);
+    } catch (error) {
+      const ms = Math.round((performance?.now ? performance.now() : Date.now()) - startedAt);
+      results.push({ label: step.label, view: step.key, ms, ok: false, error: error?.message || String(error) });
+      recordFumanPerformance(`mobile-self-check:${step.key}`, startedAt, false, error);
+    }
+  }
+  window.FUMAN_TERMINAL_BOOT = window.FUMAN_TERMINAL_BOOT || {};
+  window.FUMAN_TERMINAL_BOOT.mobileSelfCheck = {
+    at: new Date().toISOString(),
+    viewport: `${window.innerWidth || 0}x${window.innerHeight || 0}`,
+    results,
+    slowest: [...results].sort((a, b) => b.ms - a.ms)[0] || null,
+  };
+  return window.FUMAN_TERMINAL_BOOT.mobileSelfCheck;
+}
+
+window.FUMAN_RUN_MOBILE_SELF_CHECK = runFumanMobileSelfCheck;
 
 function versionedDataUrl(url, version = "", force = false) {
   if (force) {
@@ -9662,7 +9708,7 @@ function strategy4ZoneBPageEndpoint(page) {
 function strategy4ZoneBRemotePageForUiPage(uiPage = swingPage) {
   const pageSize = getTerminalPageSize("swing");
   const start = (Math.max(1, cleanNumber(uiPage) || 1) - 1) * pageSize;
-  const remotePageSize = 220;
+  const remotePageSize = 100;
   return Math.floor(start / remotePageSize) + 1;
 }
 
