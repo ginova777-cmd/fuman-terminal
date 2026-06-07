@@ -963,6 +963,41 @@
       }
     }
 
+    async function runSelfCheck() {
+      const startedAt = performance?.now ? performance.now() : Date.now();
+      const originalList = getWatchlist();
+      const testCode = "2330";
+      const result = { ok: false, steps: [], at: new Date().toISOString() };
+      try {
+        saveWatchlist([{ code: testCode, name: "台積電" }]);
+        result.steps.push("save");
+        await renderWatchlist();
+        result.steps.push("render");
+        const card = document.querySelector(`#wcard-${testCode}`);
+        if (!card) throw new Error("watchlist card missing");
+        card.click();
+        result.steps.push("select");
+        await new Promise((resolve) => setTimeout(resolve, 500));
+        const timeframe = watchlistAnalysis.querySelector(".ta-timeframe[data-timeframe]");
+        if (timeframe) {
+          timeframe.click();
+          result.steps.push("timeframe");
+        }
+        removeFromWatchlist(testCode);
+        result.steps.push("remove");
+        result.ok = true;
+      } catch (error) {
+        result.error = error?.message || String(error);
+      } finally {
+        saveWatchlist(originalList);
+        await renderWatchlist();
+        result.ms = Math.round((performance?.now ? performance.now() : Date.now()) - startedAt);
+        window.FUMAN_TERMINAL_BOOT = window.FUMAN_TERMINAL_BOOT || {};
+        window.FUMAN_TERMINAL_BOOT.watchlistSelfCheck = result;
+      }
+      return result;
+    }
+
     viewPanels.watchlist = document.querySelector("#watchlist-view");
     syncMobileStrategyVisibility();
     arrangeWatchlistSearch();
@@ -975,7 +1010,7 @@
     
     
 
-    return { renderWatchlist, refreshSelectedWatchlistQuote, addToWatchlist, removeFromWatchlist };
+    return { renderWatchlist, refreshSelectedWatchlistQuote, addToWatchlist, removeFromWatchlist, runSelfCheck };
   }
 
   window.FUMAN_WATCHLIST_MODULE = { install };

@@ -76,7 +76,7 @@ function getFumanWorker() {
   if (!("Worker" in window)) return null;
   if (fumanWorker) return fumanWorker;
   try {
-    fumanWorker = new Worker("terminal-worker.js?v=mobile-fast5-20260607");
+    fumanWorker = new Worker("terminal-worker.js?v=mobile-fast6-20260607");
     fumanWorker.addEventListener("message", (event) => {
       const { id, ok, rows, result, error } = event.data || {};
       const pending = fumanWorkerPending.get(id);
@@ -339,7 +339,7 @@ function loadFumanStyle(href, id) {
   const link = document.createElement("link");
   link.id = id;
   link.rel = "stylesheet";
-  link.href = href.includes("?") ? href : `${href}?v=${window.FUMAN_TERMINAL_BOOT?.version || "mobile-fast5-20260607"}`;
+  link.href = href.includes("?") ? href : `${href}?v=${window.FUMAN_TERMINAL_BOOT?.version || "mobile-fast6-20260607"}`;
   document.head.appendChild(link);
 }
 
@@ -365,7 +365,7 @@ function makeFumanModuleScope(bindings) {
 function loadFumanFeatureModule(name, src, globalName) {
   if (window[globalName]) return Promise.resolve(window[globalName]);
   if (fumanFeatureModulePromises[name]) return fumanFeatureModulePromises[name];
-  const version = window.FUMAN_TERMINAL_BOOT?.version || "mobile-fast5-20260607";
+  const version = window.FUMAN_TERMINAL_BOOT?.version || "mobile-fast6-20260607";
   fumanFeatureModulePromises[name] = new Promise((resolve, reject) => {
     const attr = "data-fuman-feature-" + name;
     const existing = document.querySelector("script[" + attr + "]");
@@ -3168,6 +3168,10 @@ window.FUMAN_RUN_MOBILE_SELF_CHECK = async () => {
   await loadFumanFeatureModule("mobileDiagnostics", "terminal-mobile-diagnostics.js", "FUMAN_MOBILE_DIAGNOSTICS");
   return window.FUMAN_MOBILE_DIAGNOSTICS.runSelfCheck(window.FUMAN_MOBILE_DIAGNOSTIC_CONTEXT);
 };
+window.FUMAN_RUN_WATCHLIST_SELF_CHECK = async () => {
+  const api = await ensureWatchlistModule();
+  return api.runSelfCheck?.();
+};
 
 function versionedDataUrl(url, version = "", force = false) {
   if (force) {
@@ -3211,6 +3215,17 @@ async function loadDataManifest(force = false) {
 }
 
 async function fetchVersionedJson(url, timeout = 8000, version = "", force = false, options = {}) {
+  const pathname = (() => {
+    try { return new URL(url, location.origin).pathname; } catch { return String(url || "").split("?")[0]; }
+  })();
+  const mobileLargeBlocked = isMobileViewport()
+    && !options.allowMobileLarge
+    && (
+      /\/data\/strategy4-(latest|backup|slim)\.json$/i.test(pathname)
+      || /\/data\/stocks-quotes-slim\.json$/i.test(pathname)
+      || /\/data\/stocks-slim\.json$/i.test(pathname)
+    );
+  if (mobileLargeBlocked) throw new Error(`mobile large payload blocked: ${pathname}`);
   return fetchJson(versionedDataUrl(url, version, force), timeout, {
     ...options,
     cache: force ? "no-store" : "default",
@@ -7116,7 +7131,7 @@ async function loadStocksIndexQuotes(force = false, options = {}) {
   const mobileTopOnly = options.mobileTopOnly === true && endpoints.stocksQuotesMobileTop;
   const [indexPayload, quotesPayload] = await Promise.all([
     fetchVersionedJson(endpoints.stocksIndex, 6000, versionKey, force),
-    fetchVersionedJson(mobileTopOnly ? endpoints.stocksQuotesMobileTop : endpoints.stocksQuotesSlim, mobileTopOnly ? 3500 : 6000, versionKey, force),
+    fetchVersionedJson(mobileTopOnly ? endpoints.stocksQuotesMobileTop : endpoints.stocksQuotesSlim, mobileTopOnly ? 3500 : 6000, versionKey, force, { allowMobileLarge: !mobileTopOnly }),
   ]);
   const indexRows = normalizeArray(indexPayload?.stocks || indexPayload);
   if (indexRows.length < 500 || cleanNumber(indexPayload?.count) < 500) return null;
@@ -7153,7 +7168,7 @@ async function loadStrategyStocks() {
 
     try {
       if (!stocks.length) {
-        const slimPayload = await fetchVersionedJson(endpoints.stocksSlim, 7000, marketSummaryPayload?.updatedAt || "latest", false);
+        const slimPayload = await fetchVersionedJson(endpoints.stocksSlim, 7000, marketSummaryPayload?.updatedAt || "latest", false, { allowMobileLarge: true });
         stocks = normalizeArray(slimPayload?.stocks || slimPayload);
         if (cleanNumber(slimPayload?.count) < 500) stocks = [];
         if (stocks.length) updateMarketStockDataState(slimPayload);

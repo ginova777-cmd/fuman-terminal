@@ -3,7 +3,9 @@ const zlib = require("zlib");
 
 const BASE_URL = (process.env.FUMAN_TERMINAL_URL || "https://fuman-terminal.vercel.app").replace(/\/+$/, "");
 const MAX_BYTES = {
-  "/terminal-app.js": 140000,
+  "/terminal-app.js": 120000,
+  "/terminal-watchlist-module.js": 18000,
+  "/terminal-mobile-diagnostics.js": 4000,
   "/data/mobile-home-summary.json": 12000,
   "/data/terminal-home-bundle.json": 20000,
   "/data/strategy2-intraday-live-top.json": 12000,
@@ -21,6 +23,8 @@ const MAX_BYTES = {
 const TARGETS = [
   { path: "/", kind: "html", maxBytes: 50000, cache: /no-store/i },
   { path: "/terminal-app.js", kind: "script", versioned: true, maxBytes: MAX_BYTES["/terminal-app.js"], cache: /immutable/i },
+  { path: "/terminal-watchlist-module.js", kind: "script", versioned: true, maxBytes: MAX_BYTES["/terminal-watchlist-module.js"], cache: /immutable/i },
+  { path: "/terminal-mobile-diagnostics.js", kind: "script", versioned: true, maxBytes: MAX_BYTES["/terminal-mobile-diagnostics.js"], cache: /immutable/i },
   { path: "/data/mobile-home-summary.json", kind: "json", maxBytes: MAX_BYTES["/data/mobile-home-summary.json"], cache: /stale-while-revalidate/i },
   { path: "/data/terminal-home-bundle.json", kind: "json", maxBytes: MAX_BYTES["/data/terminal-home-bundle.json"], cache: /stale-while-revalidate/i },
   { path: "/data/strategy2-intraday-live-top.json", kind: "json", maxBytes: MAX_BYTES["/data/strategy2-intraday-live-top.json"], cache: /stale-while-revalidate|no-store/i },

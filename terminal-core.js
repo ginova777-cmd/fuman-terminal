@@ -1,5 +1,5 @@
 (function () {
-  const version = "mobile-fast5-20260607";
+  const version = "mobile-fast6-20260607";
   window.FUMAN_TERMINAL_BOOT = {
     version,
     startedAt: Date.now(),
@@ -12,6 +12,13 @@
 
   const registerServiceWorker = () => {
     if (!("serviceWorker" in navigator)) return;
+    navigator.serviceWorker.addEventListener("controllerchange", () => {
+      const key = `fuman-sw-reloaded:${version}`;
+      if (sessionStorage.getItem(key) === "1") return;
+      sessionStorage.setItem(key, "1");
+      window.FUMAN_TERMINAL_BOOT.serviceWorkerReloaded = true;
+      window.location.reload();
+    });
     navigator.serviceWorker.register(`/fuman-sw.js?v=${version}`)
       .then((registration) => {
         window.FUMAN_TERMINAL_BOOT.serviceWorker = registration.active ? "active" : "registered"; if (registration.waiting) registration.waiting.postMessage({ type: "SKIP_WAITING" }); if (registration.update) registration.update().catch(() => undefined);
