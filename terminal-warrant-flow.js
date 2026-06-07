@@ -110,16 +110,21 @@ function renderWarrantKline(item) {
 
 function ensureWarrantKlineHistory(rows) {
   const loading = window.FUMAN_WARRANT_KLINE_LOADING || (window.FUMAN_WARRANT_KLINE_LOADING = new Set());
+  const failed = window.FUMAN_WARRANT_KLINE_FAILED || (window.FUMAN_WARRANT_KLINE_FAILED = new Set());
   const missing = normalizeArray(rows)
     .map((item) => String(item?.code || "").replace(/\D/g, "").slice(0, 4))
-    .filter((code) => /^\d{4}$/.test(code) && !normalizeArray(strategyHistoryData?.[code]?.rows).length && !loading.has(code))
-    .slice(0, 12);
+    .filter((code) => /^\d{4}$/.test(code) && !normalizeArray(strategyHistoryData?.[code]?.rows).length && !loading.has(code) && !failed.has(code))
+    .slice(0, 3);
   if (!missing.length || !endpoints?.history) return;
   missing.forEach((code) => loading.add(code));
-  fetch(endpoints.history + "?codes=" + encodeURIComponent(missing.join(",")) + "&t=" + Date.now(), { cache: "no-store" })
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 5000);
+  fetch(endpoints.history + "?codes=" + encodeURIComponent(missing.join(",")) + "&t=" + Date.now(), { cache: "no-store", signal: controller.signal })
     .then((response) => response.ok ? response.json() : null)
     .then((payload) => {
-      normalizeArray(payload?.histories || payload?.results || payload?.data).forEach((item) => {
+      const histories = normalizeArray(payload?.histories || payload?.results || payload?.data);
+      const loaded = new Set(histories.map((item) => String(item?.code || "")));
+      histories.forEach((item) => {
         if (!item?.code || !Array.isArray(item.rows)) return;
         strategyHistoryData[item.code] = {
           ...item,
@@ -138,13 +143,17 @@ function ensureWarrantKlineHistory(rows) {
           updatedAt: Date.now(),
         };
       });
+      missing.filter((code) => !loaded.has(code)).forEach((code) => failed.add(code));
     })
     .then(() => {
       warrantFlowLastRenderSignature = "";
       if (isViewActive("warrant-flow")) renderWarrantFlow();
     })
-    .catch(() => {})
-    .finally(() => missing.forEach((code) => loading.delete(code)));
+    .catch(() => missing.forEach((code) => failed.add(code)))
+    .finally(() => {
+      clearTimeout(timer);
+      missing.forEach((code) => loading.delete(code));
+    });
 }
 
 function renderWarrantReasonBadges(item) {`);
