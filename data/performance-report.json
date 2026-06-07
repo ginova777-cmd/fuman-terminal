@@ -1,6 +1,6 @@
 {
   "ok": true,
-  "updatedAt": "2026-06-07T06:45:04.756Z",
+  "updatedAt": "2026-06-07T07:45:14.593Z",
   "generatedBy": "generate-performance-report",
   "assets": [
     {
@@ -13,9 +13,9 @@
     {
       "file": "health-summary.json",
       "ok": true,
-      "bytes": 3112,
+      "bytes": 3663,
       "count": 0,
-      "updatedAt": "2026-06-06T13:44:10.277Z"
+      "updatedAt": "2026-06-07T07:45:09.374Z"
     },
     {
       "file": "strategy4-summary.json",
@@ -78,30 +78,30 @@
       "ok": true,
       "bytes": 817,
       "count": 0,
-      "updatedAt": "2026-06-07T06:45:04.470Z"
+      "updatedAt": "2026-06-07T07:45:14.288Z"
     },
     {
       "file": "data-quality-report.json",
       "ok": true,
       "bytes": 2006,
       "count": 0,
-      "updatedAt": "2026-06-07T06:45:04.558Z"
+      "updatedAt": "2026-06-07T07:45:14.402Z"
     },
     {
       "file": "data-consistency-report.json",
       "ok": true,
       "bytes": 316,
       "count": 0,
-      "updatedAt": "2026-06-07T06:45:04.638Z"
+      "updatedAt": "2026-06-07T07:45:14.482Z"
     },
     {
       "file": "strategy-weight-report.json",
       "ok": true,
       "bytes": 418,
       "count": 0,
-      "updatedAt": "2026-06-07T06:45:04.699Z"
+      "updatedAt": "2026-06-07T07:45:14.538Z"
     }
   ],
-  "totalBytes": 1389460,
+  "totalBytes": 1390011,
   "missing": []
 }
