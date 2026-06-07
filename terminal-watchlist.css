@@ -639,8 +639,20 @@ body.fuman-light-theme #watchlist-view .ta-dashboard-tab {
     font-size: 28px;
   }
   #watchlist-view .watch-card-grid {
-    display: flex !important;
-    overflow-x: auto !important;
+    display: grid !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 14px !important;
+    overflow: visible !important;
+    padding: 0 !important;
+  }
+  #watchlist-view .watch-analysis-card {
+    width: auto !important;
+    min-width: 0 !important;
+    flex: none !important;
+    min-height: 132px;
+  }
+  #watchlist-view .watch-scroll-btn {
+    display: none !important;
   }
   #watchlist-view .watch-analysis-panel {
     grid-auto-flow: row;

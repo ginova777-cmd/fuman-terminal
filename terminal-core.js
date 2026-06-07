@@ -1,5 +1,5 @@
 (function () {
-  const version = "cb-independent-20260607";
+  const version = "watchlist-grid-20260607";
   window.FUMAN_TERMINAL_BOOT = {
     version,
     startedAt: Date.now(),
