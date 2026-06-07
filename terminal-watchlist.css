@@ -171,6 +171,41 @@
   color: #ffbf47;
   font-size: 13px;
 }
+.watch-detail-trend-card {
+  border: 1px solid rgba(127, 166, 255, 0.16);
+  border-top: 5px solid #ff4f72;
+  border-radius: 8px;
+  background: rgba(18, 21, 34, 0.92);
+  padding: 24px;
+  min-height: 150px;
+}
+.watch-detail-trend-card span {
+  display: block;
+  color: #7e8dae;
+  font-size: 13px;
+  font-weight: 900;
+  margin-bottom: 12px;
+}
+.watch-detail-trend-card strong {
+  display: block;
+  color: #ffffff;
+  font-size: 28px;
+  font-weight: 950;
+  line-height: 1.1;
+}
+.watch-detail-trend-card b {
+  display: block;
+  color: #ffbf47;
+  font-size: 18px;
+  margin-top: 14px;
+}
+.watch-detail-trend-card em {
+  display: block;
+  color: #90a5cc;
+  font-size: 14px;
+  font-style: normal;
+  margin-top: 18px;
+}
 
 #watchlist-view .watchlist-card {
   position: relative;
@@ -628,31 +663,32 @@ body.fuman-light-theme #watchlist-view .ta-dashboard-tab {
   }
   #watchlist-view .watch-summary-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 16px !important;
   }
   #watchlist-view .watch-metric {
-    min-height: 132px;
-    padding: 18px;
+    min-height: 150px;
+    padding: 22px 18px;
     border-radius: 12px;
     background: linear-gradient(135deg, rgba(37, 29, 38, 0.9), rgba(9, 21, 38, 0.92));
   }
+  #watchlist-view .watch-metric span {
+    font-size: 14px;
+    margin-bottom: 14px;
+  }
   #watchlist-view .watch-metric strong {
-    font-size: 28px;
+    font-size: 30px;
   }
-  #watchlist-view .watch-card-grid {
-    display: grid !important;
-    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
-    gap: 14px !important;
-    overflow: visible !important;
-    padding: 0 !important;
+  #watchlist-view .watch-detail-trend-card {
+    min-height: 172px;
+    padding: 26px 22px;
+    border-radius: 12px;
+    background: #121827;
   }
-  #watchlist-view .watch-analysis-card {
-    width: auto !important;
-    min-width: 0 !important;
-    flex: none !important;
-    min-height: 132px;
+  #watchlist-view .watch-detail-trend-card strong {
+    font-size: 34px;
   }
-  #watchlist-view .watch-scroll-btn {
-    display: none !important;
+  #watchlist-view .watch-detail-trend-card b {
+    font-size: 22px;
   }
   #watchlist-view .watch-analysis-panel {
     grid-auto-flow: row;
@@ -666,7 +702,7 @@ body.fuman-light-theme #watchlist-view .ta-dashboard-tab {
   #watchlist-view .watch-summary-grid {
     order: 3 !important;
   }
-  #watchlist-view .watch-card-carousel {
+  #watchlist-view .watch-detail-trend-card {
     order: 4 !important;
   }
   #watchlist-view .watch-note-row {

@@ -639,41 +639,11 @@
             </article>
           </section>
     
-          <section class="watch-card-carousel">
-            <button class="watch-scroll-btn prev" type="button" data-watch-scroll="left" aria-label="上一張">‹</button>
-            <div class="watch-card-grid" data-watch-carousel>
-              <article class="watch-analysis-card ${trendTone}">
-                <span>趨勢</span>
-                <strong>${model.trendLabel}</strong>
-                <b>${pctText(stock.percent)}</b>
-                <em>收盤位於日內區間 ${model.rangePosition}%。</em>
-              </article>
-              <article class="watch-analysis-card neutral">
-                <span>價位</span>
-                <strong>現價 ${formatStockPrice(model.close)}</strong>
-                <b>${formatStockPrice(model.supportA)} / ${formatStockPrice(model.pressureA)}</b>
-                <em>支撐觀察與壓力觀察。</em>
-              </article>
-              <article class="watch-analysis-card warn">
-                <span>籌碼</span>
-                <strong>${analysis.hasInstitution ? "籌碼待確認" : "法人盤後"}</strong>
-                <b>籌碼 ${model.chipScore || "--"} / 主力 ${analysis.hasInstitution ? Math.round((model.chipScore + analysis.score) / 2) : "--"}</b>
-                <em>外資 ${formatInstitution(model.inst.foreign)}，投信 ${formatInstitution(model.inst.trust)}。</em>
-              </article>
-              <article class="watch-analysis-card ${riskTone}">
-                <span>風險</span>
-                <strong>${model.riskLabel}</strong>
-                <b>${analysis.volumeRank ?? 0} 則</b>
-                <em>${model.riskLabel === "風險可控" ? "目前沒有明顯過熱風險。" : "需等待量價確認。"}</em>
-              </article>
-              <article class="watch-analysis-card good">
-                <span>操作提醒</span>
-                <strong>${model.actionTitle}</strong>
-                <b>支撐 ${formatStockPrice(model.supportA)}</b>
-                <em>${model.actionHint}</em>
-              </article>
-            </div>
-            <button class="watch-scroll-btn next" type="button" data-watch-scroll="right" aria-label="下一張">›</button>
+          <section class="watch-detail-trend-card ${trendTone}">
+            <span>趨勢</span>
+            <strong>${model.trendLabel}</strong>
+            <b>${pctText(stock.percent)}</b>
+            <em>收盤位於日內區間 ${model.rangePosition}%。</em>
           </section>
     
           <section class="watch-note-row">
@@ -706,16 +676,6 @@
       watchlistAnalysis.querySelector("[data-watch-back]")?.addEventListener("click", () => {
         setWatchlistDetailOpen(false);
         watchlistAnalysis.innerHTML = `<div class="watch-mobile-empty">點選股票查看 AI 個股判讀</div>`;
-      });
-      watchlistAnalysis.querySelectorAll("[data-watch-scroll]").forEach((button) => {
-        button.addEventListener("click", () => {
-          const carousel = watchlistAnalysis.querySelector("[data-watch-carousel]");
-          if (!carousel) return;
-          const direction = button.dataset.watchScroll === "left" ? -1 : 1;
-          const card = carousel.querySelector(".watch-analysis-card");
-          const distance = card ? card.getBoundingClientRect().width + 12 : 260;
-          carousel.scrollBy({ left: direction * distance, behavior: "smooth" });
-        });
       });
     }
     

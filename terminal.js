@@ -1,6 +1,6 @@
 (function () {
   const boot = window.FUMAN_TERMINAL_BOOT || (window.FUMAN_TERMINAL_BOOT = {});
-  const version = boot.version || "cb-source105-20260607";
+  const version = boot.version || "watchlist-detail-clean-20260607";
   const appSrc = `/terminal-app.js?v=${version}`;
   const dependencyScripts = [
     { src: `/terminal-sector-map.js?v=${version}`, attr: "data-fuman-sector-map" },

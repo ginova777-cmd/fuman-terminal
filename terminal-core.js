@@ -1,5 +1,5 @@
 (function () {
-  const version = "cb-source105-20260607";
+  const version = "watchlist-detail-clean-20260607";
   window.FUMAN_TERMINAL_BOOT = {
     version,
     startedAt: Date.now(),
