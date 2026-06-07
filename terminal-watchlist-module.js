@@ -44,6 +44,7 @@
 
     function setWatchlistDetailOpen(open) {
       watchlistView?.classList.toggle("watchlist-detail-open", Boolean(open));
+      document.body.classList.toggle("watchlist-detail-open", Boolean(open));
     }
     
     function ensureWatchlistAnalysisStyles() {
@@ -584,12 +585,29 @@
     
     async function showTradingDashboard(code, name) {
       ensureWatchlistAnalysisStyles();
+      setWatchlistDetailOpen(true);
+      watchlistAnalysis.innerHTML = `
+        <div class="watch-analysis-panel ta-dashboard blackbean-stock-detail">
+          <section class="watch-detail-hero">
+            <button class="watch-detail-close" type="button" data-watch-back aria-label="返回個股清單">×</button>
+            <span>AI 個股判讀</span>
+            <h2>${code} 技術分析</h2>
+            <p>正在載入 ${code} 的個股資料。</p>
+          </section>
+          <div class="watch-mobile-empty">載入資料中...</div>
+        </div>
+      `;
+      watchlistAnalysis.querySelector("[data-watch-back]")?.addEventListener("click", () => {
+        setWatchlistDetailOpen(false);
+        watchlistAnalysis.innerHTML = `<div class="watch-mobile-empty">點選股票查看 AI 個股判讀</div>`;
+      });
       const fallback = latestStocks.find(s => s.code === code) || { code, name, close: 0, change: 0, percent: 0 };
-      const [stockResult, strategyMatches] = await Promise.all([
+      const [stockSettled, strategySettled] = await Promise.allSettled([
         fetchStockPrice(code),
         loadWatchlistStrategyMatches(code),
       ]);
-      const stock = stockResult || fallback;
+      const stock = stockSettled.status === "fulfilled" && stockSettled.value ? stockSettled.value : fallback;
+      const strategyMatches = strategySettled.status === "fulfilled" ? normalizeArray(strategySettled.value) : [];
       const activeTimeframe = getTechnicalTimeframe();
       watchlistDashboardSignature = `${code}:${stock.close}:${stock.change.toFixed(2)}:${stock.percent.toFixed(2)}:${activeTimeframe.key}`;
       const analysis = buildTechnicalSummary(stock, activeTimeframe.key);
