@@ -9,6 +9,7 @@
     "verify:deploy": "node --use-system-ca scripts/verify-deployment.js",
     "verify:deployment": "node --use-system-ca scripts/verify-deployment.js",
     "verify:contracts": "node scripts/verify-data-contracts.js",
+    "verify:mobile": "node --use-system-ca scripts/verify-mobile-health.js",
     "e2e:smoke": "node --use-system-ca scripts/e2e-smoke.js"
   },
   "engines": {

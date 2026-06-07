@@ -1,5 +1,5 @@
 (function () {
-  const VERSION = "fast-path3-20260607";
+  const VERSION = "mobile-fast-20260607";
   const modules = {
     sectorMap: { loaded: false, src: "terminal-sector-map.js" },
     strategyConfig: { loaded: false, src: "terminal-strategy-config.js" },

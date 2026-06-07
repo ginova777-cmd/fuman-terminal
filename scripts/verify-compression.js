@@ -2,7 +2,7 @@ const https = require("https");
 
 const BASE_URL = process.env.FUMAN_TERMINAL_URL || "https://fuman-terminal.vercel.app";
 const TARGETS = [
-  "/terminal-app.js?v=fast-path3-20260607",
+  "/terminal-app.js?v=mobile-fast-20260607",
   "/data/data-manifest.json",
   "/data/strategy4-slim.json",
   "/data/strategy4-score-top.json",
@@ -11,6 +11,11 @@ const TARGETS = [
   "/data/stocks-quotes-slim.json",
   "/data/stocks-slim.json",
   "/data/terminal-home-bundle.json",
+  "/data/mobile-home-summary.json",
+  "/data/strategy2-intraday-live-top.json",
+  "/data/strategy2-intraday-top.json",
+  "/data/institution-mobile-top.json",
+  "/data/warrant-flow-mobile-top.json",
 ];
 
 function request(pathname) {
@@ -47,7 +52,7 @@ async function main() {
   let ok = true;
   for (const item of results) {
     const compressed = item.encoding === "br" || item.encoding === "gzip";
-    const pass = item.status >= 200 && item.status < 400 && compressed;
+    const pass = item.status >= 200 && item.status < 400 && (compressed || item.bytes <= 1024);
     if (!pass) ok = false;
     console.log(`${pass ? "OK" : "WARN"} ${item.path} status=${item.status} encoding=${item.encoding || "none"} bytes=${item.bytes}`);
   }

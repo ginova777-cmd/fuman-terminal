@@ -51,5 +51,13 @@
       warrant: 20,
       chip: 20,
     },
+    mobileTerminalPageSizes: {
+      swing: 12,
+      openBuy: 10,
+      strategy3: 10,
+      strategy5: 10,
+      warrant: 10,
+      chip: 10,
+    },
   });
 })();
