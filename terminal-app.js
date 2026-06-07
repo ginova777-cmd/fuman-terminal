@@ -79,7 +79,7 @@ function getFumanWorker() {
   if (!("Worker" in window)) return null;
   if (fumanWorker) return fumanWorker;
   try {
-    fumanWorker = new Worker("terminal-worker.js?v=mobile-fast13-20260607");
+    fumanWorker = new Worker("terminal-worker.js?v=mobile-refresh15-20260607");
     fumanWorker.addEventListener("message", (event) => {
       const { id, ok, rows, result, error } = event.data || {};
       const pending = fumanWorkerPending.get(id);
@@ -343,7 +343,7 @@ function loadFumanStyle(href, id) {
   const link = document.createElement("link");
   link.id = id;
   link.rel = "stylesheet";
-  link.href = href.includes("?") ? href : `${href}?v=${window.FUMAN_TERMINAL_BOOT?.version || "mobile-fast13-20260607"}`;
+  link.href = href.includes("?") ? href : `${href}?v=${window.FUMAN_TERMINAL_BOOT?.version || "mobile-refresh15-20260607"}`;
   document.head.appendChild(link);
 }
 
@@ -369,7 +369,7 @@ function makeFumanModuleScope(bindings) {
 function loadFumanFeatureModule(name, src, globalName) {
   if (window[globalName]) return Promise.resolve(window[globalName]);
   if (fumanFeatureModulePromises[name]) return fumanFeatureModulePromises[name];
-  const version = window.FUMAN_TERMINAL_BOOT?.version || "mobile-fast13-20260607";
+  const version = window.FUMAN_TERMINAL_BOOT?.version || "mobile-refresh15-20260607";
   fumanFeatureModulePromises[name] = new Promise((resolve, reject) => {
     const attr = "data-fuman-feature-" + name;
     const existing = document.querySelector("script[" + attr + "]");
@@ -419,6 +419,31 @@ function installThemeToggle() {
 
 function installGlobalRefreshWidget() {
   document.querySelector("#global-refresh-widget")?.remove();
+  const widget = document.createElement("aside");
+  widget.id = "global-refresh-widget";
+  widget.className = "global-refresh-widget";
+  const button = document.createElement("button");
+  button.type = "button";
+  button.textContent = "⟳";
+  button.title = "重新整理頁面";
+  button.setAttribute("aria-label", "重新整理頁面");
+  let handledAt = 0;
+  const refresh = (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    const now = Date.now();
+    if (now - handledAt < 500) return;
+    handledAt = now;
+    button.disabled = true;
+    button.textContent = "...";
+    window.location.reload();
+  };
+  button.addEventListener("pointerup", refresh);
+  button.addEventListener("touchend", refresh, { passive: false });
+  button.addEventListener("click", refresh);
+  widget.appendChild(button);
+  document.body.appendChild(widget);
+  pinMobileToolButtons();
 }
 
 function arrangeWatchlistSearch() {
