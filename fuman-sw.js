@@ -1,23 +1,23 @@
-const CACHE_VERSION = "fuman-terminal-sw-20260607-warrant-true-signal";
+const CACHE_VERSION = "fuman-terminal-sw-20260607-cb-60m-gate";
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 const DATA_CACHE = `${CACHE_VERSION}-data`;
 
 const STATIC_ASSETS = [
-  "/styles.css?v=warrant-true-signal-20260607",
-  "/terminal-core.js?v=warrant-true-signal-20260607",
-  "/terminal-modules.js?v=warrant-true-signal-20260607",
-  "/terminal-sector-map.js?v=warrant-true-signal-20260607",
-  "/terminal-strategy-config.js?v=warrant-true-signal-20260607",
-  "/terminal-market-config.js?v=warrant-true-signal-20260607",
-  "/terminal-ui-config.js?v=warrant-true-signal-20260607",
-  "/terminal-runtime-config.js?v=warrant-true-signal-20260607",
-  "/terminal-tuning-config.js?v=warrant-true-signal-20260607",
-  "/terminal-worker.js?v=warrant-true-signal-20260607",
-  "/terminal.js?v=warrant-true-signal-20260607",
-  "/terminal-realtime-radar.css?v=warrant-true-signal-20260607",
-  "/terminal-intraday-radar.css?v=warrant-true-signal-20260607",
-  "/terminal-utility.css?v=warrant-true-signal-20260607",
-  "/refresh.html?v=warrant-true-signal-20260607",
+  "/styles.css?v=cb-60m-gate-20260607",
+  "/terminal-core.js?v=cb-60m-gate-20260607",
+  "/terminal-modules.js?v=cb-60m-gate-20260607",
+  "/terminal-sector-map.js?v=cb-60m-gate-20260607",
+  "/terminal-strategy-config.js?v=cb-60m-gate-20260607",
+  "/terminal-market-config.js?v=cb-60m-gate-20260607",
+  "/terminal-ui-config.js?v=cb-60m-gate-20260607",
+  "/terminal-runtime-config.js?v=cb-60m-gate-20260607",
+  "/terminal-tuning-config.js?v=cb-60m-gate-20260607",
+  "/terminal-worker.js?v=cb-60m-gate-20260607",
+  "/terminal.js?v=cb-60m-gate-20260607",
+  "/terminal-realtime-radar.css?v=cb-60m-gate-20260607",
+  "/terminal-intraday-radar.css?v=cb-60m-gate-20260607",
+  "/terminal-utility.css?v=cb-60m-gate-20260607",
+  "/refresh.html?v=cb-60m-gate-20260607",
   "/assets/logo.webp",
   "/favicon.ico",
 ];

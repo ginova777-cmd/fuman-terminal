@@ -9213,19 +9213,22 @@ function normalizeCbDetectRows(payload) {
     const sourceLayer = row.sourceLayer || row.source || row.來源層 || row.來源 || "";
     const aboveMa200 = readCbBool(row, ["aboveMa200", "ma200", "站上MA200", "MA200"]);
     const maAlignedUp = readCbBool(row, ["maAlignedUp", "maBullish", "三線同向上", "多頭排列"]);
+    const ma200Rising = readCbBool(row, ["ma200Rising", "MA200向上"]);
+    const allMaRising = readCbBool(row, ["allMaRising", "三線同向上", "均線同時向上"]);
+    const technicalPass = readCbBool(row, ["technicalPass", "60分K門檻", "技術門檻"]);
     const macdBullish = readCbBool(row, ["macdBullish", "macdGoldenCross", "MACD黃金交叉", "MACD"]);
-    const vetoed = row.veto === true || row.淘汰 === true || aboveMa200 === false;
-    const technicalScore = (aboveMa200 === true ? 10 : 0) + (maAlignedUp === true ? 5 : 0) + (macdBullish === true ? 5 : 0);
+    const vetoed = row.veto === true || row.淘汰 === true || technicalPass === false;
+    const technicalScore = (aboveMa200 === true && ma200Rising === true ? 10 : 0) + (allMaRising === true ? 10 : maAlignedUp === true ? 5 : 0) + (macdBullish === true ? 5 : 0);
     const rawScore = cleanNumber(row.score || row.分數);
     const baseScore = cleanNumber(row.baseScore || row.基本分);
     const score = rawScore || Math.min(105, baseScore + technicalScore);
     const tags = normalizeArray(row.tags || row.條件 || row.reasons || row.原因).filter(Boolean);
-    if (aboveMa200 === true) tags.push("60分K站上MA200 +10");
-    if (aboveMa200 === false) tags.push("MA200未站上，一票否決");
-    if (maAlignedUp === true) tags.push("MA5/MA35/MA200多頭排列 +5");
+    if (aboveMa200 === true && ma200Rising === true) tags.push("60分K站上MA200且MA200向上 +10");
+    if (allMaRising === true) tags.push("60分MA5/MA35/MA200均線同時向上 +10");
+    if (technicalPass === false) tags.push("60分K未符合CB技術門檻，一票否決");
     if (macdBullish === true) tags.push("MACD黃金交叉 +5");
     if (!code && !cbName) return null;
-    return { code, name, cbName, issueAmount, auctionType, convertPrice, stockPrice, premium, stage, date, sourceLayer, aboveMa200, maAlignedUp, macdBullish, vetoed, score, tags };
+    return { code, name, cbName, issueAmount, auctionType, convertPrice, stockPrice, premium, stage, date, sourceLayer, aboveMa200, maAlignedUp, ma200Rising, allMaRising, technicalPass, macdBullish, vetoed, score, tags };
   }).filter(Boolean);
 }
 

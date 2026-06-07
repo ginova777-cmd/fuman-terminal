@@ -6,6 +6,7 @@ const OUT_FILE = path.join(__dirname, "..", "data", "cb-detect-latest.json");
 const STOCKS_FILE = path.join(__dirname, "..", "data", "stocks-slim.json");
 const HISTORY_MONTHS = 14;
 const HISTORY_CONCURRENCY = 4;
+const INTRADAY_60M_RANGE = "6mo";
 
 const SOURCES = [
   { layer: "第一層：MOPS董事會決議", stage: "董事會決議", url: `${CBAS_BASE}/GetBoardAnnouncement` },
@@ -151,7 +152,22 @@ async function fetchYahooHistory(code, suffix) {
   return normalizeYahooRows(payload);
 }
 
+async function fetchYahoo60mHistory(code, suffix) {
+  const symbol = `${code}.${suffix}`;
+  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}?range=${INTRADAY_60M_RANGE}&interval=60m&includePrePost=false&events=history`;
+  const payload = await fetchOfficialJson(url, 15000);
+  return normalizeYahooRows(payload);
+}
+
 async function fetchHistory(code) {
+  const yahoo60Results = await Promise.allSettled(["TW", "TWO"].map((suffix) => fetchYahoo60mHistory(code, suffix)));
+  const yahoo60Rows = yahoo60Results
+    .filter((result) => result.status === "fulfilled" && result.value.length)
+    .sort((a, b) => b.value.length - a.value.length)[0]?.value || [];
+  if (yahoo60Rows.length) {
+    return { code, market: "YAHOO_60M", timeframe: "60m", rows: yahoo60Rows };
+  }
+
   const months = monthStarts();
   const twseResults = await Promise.allSettled(months.map((item) => fetchTwseMonth(code, item.twse)));
   let market = "TWSE";
@@ -173,7 +189,7 @@ async function fetchHistory(code) {
   }
   const byDate = new Map();
   rows.forEach((row) => byDate.set(row.date, row));
-  return { code, market, rows: [...byDate.values()].sort((a, b) => a.date.localeCompare(b.date)) };
+  return { code, market, timeframe: "1d", rows: [...byDate.values()].sort((a, b) => a.date.localeCompare(b.date)) };
 }
 
 async function mapLimit(items, limit, worker) {
@@ -202,18 +218,41 @@ async function loadStockMap() {
 function technicalFromHistory(history) {
   const closes = (history?.rows || []).map((row) => num(row.close)).filter(Boolean);
   const latestClose = closes.at(-1) || 0;
+  const timeframe = history?.timeframe || "";
+  if (timeframe !== "60m") {
+    return {
+      stockPrice: latestClose,
+      aboveMa200: null,
+      maAlignedUp: null,
+      ma200Rising: null,
+      allMaRising: null,
+      macdBullish: null,
+      technicalPass: false,
+      technicalScore: 0,
+      tags: ["缺少60分K資料，CB技術門檻不通過"],
+      ma5: 0,
+      ma35: 0,
+      ma200: 0,
+      historyCount: closes.length,
+      timeframe,
+    };
+  }
   if (closes.length < 200) {
     return {
       stockPrice: latestClose,
       aboveMa200: null,
       maAlignedUp: null,
+      ma200Rising: null,
+      allMaRising: null,
       macdBullish: null,
+      technicalPass: false,
       technicalScore: 0,
-      tags: [`技術面歷史不足 ${closes.length}/200`],
+      tags: [`60分K歷史不足 ${closes.length}/200，CB技術門檻不通過`],
       ma5: sma(closes, 5),
       ma35: sma(closes, 35),
       ma200: 0,
       historyCount: closes.length,
+      timeframe,
     };
   }
   const ma5 = sma(closes, 5);
@@ -223,18 +262,29 @@ function technicalFromHistory(history) {
   const ma35Prev = sma(closes, 35, 1);
   const ma200Prev = sma(closes, 200, 1);
   const aboveMa200 = latestClose > ma200;
-  const maAlignedUp = ma5 > ma35 && ma35 > ma200 && ma5 > ma5Prev && ma35 > ma35Prev && ma200 >= ma200Prev;
+  const ma5Rising = ma5 > ma5Prev;
+  const ma35Rising = ma35 > ma35Prev;
+  const ma200Rising = ma200 > ma200Prev;
+  const allMaRising = ma5Rising && ma35Rising && ma200Rising;
+  const maAlignedUp = ma5 > ma35 && ma35 > ma200 && allMaRising;
+  const technicalPass = (aboveMa200 && ma200Rising) || allMaRising;
   const macd = macdSnapshot(closes);
   const macdBullish = macd.rising || macd.goldenCross;
-  const technicalScore = (aboveMa200 ? 10 : 0) + (maAlignedUp ? 5 : 0) + (macdBullish ? 5 : 0);
+  const technicalScore = (aboveMa200 && ma200Rising ? 10 : 0) + (allMaRising ? 10 : 0) + (macdBullish ? 5 : 0);
   const tags = [];
-  tags.push(aboveMa200 ? "60分K站上MA200 +10" : "MA200未站上，一票否決");
-  if (maAlignedUp) tags.push("MA5/MA35/MA200多頭排列 +5");
+  if (aboveMa200 && ma200Rising) tags.push("60分K站上MA200且MA200向上 +10");
+  if (allMaRising) tags.push("60分MA5/MA35/MA200均線同時向上 +10");
+  if (!technicalPass) tags.push("60分K未符合CB技術門檻，一票否決");
   if (macdBullish) tags.push(macd.goldenCross ? "MACD黃金交叉 +5" : "MACD柱狀向上 +5");
   return {
     stockPrice: latestClose,
     aboveMa200,
     maAlignedUp,
+    ma5Rising,
+    ma35Rising,
+    ma200Rising,
+    allMaRising,
+    technicalPass,
     macdBullish,
     technicalScore,
     tags,
@@ -244,6 +294,7 @@ function technicalFromHistory(history) {
     macdHistogram: macd.histogram,
     macdPrevHistogram: macd.prevHistogram,
     historyCount: closes.length,
+    timeframe,
   };
 }
 
@@ -294,7 +345,7 @@ function scoreRow(row, source, technical = {}) {
     tags.push("溢價偏高");
   }
 
-  if (technical.aboveMa200 === false) tags.push("MA200未站上，一票否決");
+  if (technical.technicalPass === false) tags.push("60分K未符合CB技術門檻，一票否決");
   else tags.push(...(technical.tags || ["技術面待確認"]));
 
   return {
@@ -331,14 +382,20 @@ function normalize(row, source, stockMap, technicalMap) {
     score: scored.score,
     aboveMa200: technical.aboveMa200 ?? null,
     maAlignedUp: technical.maAlignedUp ?? null,
+    ma5Rising: technical.ma5Rising ?? null,
+    ma35Rising: technical.ma35Rising ?? null,
+    ma200Rising: technical.ma200Rising ?? null,
+    allMaRising: technical.allMaRising ?? null,
+    technicalPass: technical.technicalPass ?? null,
     macdBullish: technical.macdBullish ?? null,
     ma5: technical.ma5 || 0,
     ma35: technical.ma35 || 0,
     ma200: technical.ma200 || 0,
     macdHistogram: technical.macdHistogram || 0,
     historyCount: technical.historyCount || 0,
+    technicalTimeframe: technical.timeframe || "",
     quoteDate: stock.quoteDate || "",
-    veto: technical.aboveMa200 === false,
+    veto: technical.technicalPass !== true,
     tags: scored.tags,
     raw: row,
   };
@@ -395,7 +452,7 @@ async function main() {
     excludedCounts: {
       veto: allCandidates.length - candidates.length,
     },
-    scoringNote: "CBAS supplies CB source/issuance terms; stock price comes from stocks-slim; MA200/MA5/MA35/MACD are calculated from official/Yahoo daily history. Rows failing MA200 veto are excluded from display.",
+    scoringNote: "CBAS supplies CB source/issuance terms. CB technical gate uses Yahoo 60-minute K data: pass only when 60m close is above MA200 and MA200 is rising, or when 60m MA5/MA35/MA200 are all rising. Rows failing this 60m gate are excluded from display.",
     rows: candidates,
   };
 

@@ -1,5 +1,5 @@
 (function () {
-  const VERSION = "warrant-true-signal-20260607";
+  const VERSION = "cb-60m-gate-20260607";
   const modules = {
     sectorMap: { loaded: false, src: "terminal-sector-map.js" },
     strategyConfig: { loaded: false, src: "terminal-strategy-config.js" },

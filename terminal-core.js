@@ -1,5 +1,5 @@
 (function () {
-  const version = "warrant-true-signal-20260607";
+  const version = "cb-60m-gate-20260607";
   window.FUMAN_TERMINAL_BOOT = {
     version,
     startedAt: Date.now(),
