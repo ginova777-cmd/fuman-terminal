@@ -3,6 +3,9 @@ const path = require("path");
 
 const CBAS_BASE = "https://cbas16889.pscnet.com.tw/api/CbasQuote";
 const OUT_FILE = path.join(__dirname, "..", "data", "cb-detect-latest.json");
+const STOCKS_FILE = path.join(__dirname, "..", "data", "stocks-slim.json");
+const HISTORY_MONTHS = 14;
+const HISTORY_CONCURRENCY = 4;
 
 const SOURCES = [
   { layer: "第一層：MOPS董事會決議", stage: "董事會決議", url: `${CBAS_BASE}/GetBoardAnnouncement` },
@@ -15,8 +18,233 @@ function num(value) {
   return Number(String(value).replace(/[,%]/g, "").trim()) || 0;
 }
 
+function cleanCode(value) {
+  return String(value || "").replace(/\D/g, "").slice(0, 4);
+}
+
 function isAuction(text) {
   return String(text || "").includes("競拍");
+}
+
+function rocToIso(value) {
+  const parts = String(value || "").split("/");
+  if (parts.length !== 3) return "";
+  const year = Number(parts[0]) + 1911;
+  return `${year}-${parts[1].padStart(2, "0")}-${parts[2].padStart(2, "0")}`;
+}
+
+function monthStarts(count = HISTORY_MONTHS) {
+  const dates = [];
+  const now = new Date();
+  for (let i = count - 1; i >= 0; i--) {
+    const date = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    dates.push({
+      twse: `${date.getFullYear()}${String(date.getMonth() + 1).padStart(2, "0")}01`,
+      tpex: `${date.getFullYear()}/${String(date.getMonth() + 1).padStart(2, "0")}/01`,
+    });
+  }
+  return dates;
+}
+
+function normalizeTwseRows(payload) {
+  if (!Array.isArray(payload?.data)) return [];
+  return payload.data.map((row) => ({
+    date: rocToIso(row[0]),
+    close: num(row[6]),
+  })).filter((row) => row.date && row.close);
+}
+
+function normalizeTpexRows(payload) {
+  const table = Array.isArray(payload?.tables) ? payload.tables[0] : null;
+  if (!Array.isArray(table?.data)) return [];
+  return table.data.map((row) => ({
+    date: rocToIso(row[0]),
+    close: num(row[6]),
+  })).filter((row) => row.date && row.close);
+}
+
+function sma(values, length, offset = 0) {
+  const end = values.length - offset;
+  const start = end - length;
+  if (start < 0 || end <= 0) return 0;
+  const slice = values.slice(start, end);
+  return slice.reduce((sum, value) => sum + value, 0) / slice.length;
+}
+
+function emaSeries(values, length) {
+  if (!values.length) return [];
+  const multiplier = 2 / (length + 1);
+  const result = [];
+  values.forEach((value, index) => {
+    result[index] = index === 0 ? value : value * multiplier + result[index - 1] * (1 - multiplier);
+  });
+  return result;
+}
+
+function macdSnapshot(values) {
+  if (values.length < 35) return { histogram: 0, prevHistogram: 0, goldenCross: false, rising: false };
+  const ema12 = emaSeries(values, 12);
+  const ema26 = emaSeries(values, 26);
+  const macdLine = values.map((_, index) => (ema12[index] || 0) - (ema26[index] || 0));
+  const signalLine = emaSeries(macdLine, 9);
+  const histogram = (macdLine.at(-1) || 0) - (signalLine.at(-1) || 0);
+  const prevHistogram = (macdLine.at(-2) || 0) - (signalLine.at(-2) || 0);
+  return {
+    histogram,
+    prevHistogram,
+    goldenCross: prevHistogram <= 0 && histogram > 0,
+    rising: histogram > prevHistogram,
+  };
+}
+
+async function fetchOfficialJson(url, timeout = 12000) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeout);
+  try {
+    const response = await fetch(url, {
+      signal: controller.signal,
+      headers: {
+        "User-Agent": "Mozilla/5.0 (compatible; FumanTerminalBot/1.0)",
+        Accept: "application/json,text/plain,*/*",
+        Referer: url.includes("tpex.org.tw") ? "https://www.tpex.org.tw/" : "https://www.twse.com.tw/",
+      },
+    });
+    if (!response.ok) throw new Error(`${url} HTTP ${response.status}`);
+    return response.json();
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function fetchTwseMonth(code, date) {
+  const url = `https://www.twse.com.tw/rwd/zh/afterTrading/STOCK_DAY?response=json&date=${date}&stockNo=${code}`;
+  const payload = await fetchOfficialJson(url);
+  if (payload?.stat && payload.stat !== "OK") return [];
+  return normalizeTwseRows(payload);
+}
+
+async function fetchTpexMonth(code, date) {
+  const url = `https://www.tpex.org.tw/www/zh-tw/afterTrading/tradingStock?code=${code}&date=${encodeURIComponent(date)}&id=&response=json`;
+  const payload = await fetchOfficialJson(url);
+  return normalizeTpexRows(payload);
+}
+
+function normalizeYahooRows(payload) {
+  const result = payload?.chart?.result?.[0];
+  const timestamps = Array.isArray(result?.timestamp) ? result.timestamp : [];
+  const closes = result?.indicators?.quote?.[0]?.close || [];
+  return timestamps.map((timestamp, index) => {
+    const close = num(closes[index]);
+    if (!timestamp || !close) return null;
+    const date = new Date(timestamp * 1000);
+    return {
+      date: date.toISOString().slice(0, 10),
+      close,
+    };
+  }).filter(Boolean);
+}
+
+async function fetchYahooHistory(code, suffix) {
+  const symbol = `${code}.${suffix}`;
+  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}?range=18mo&interval=1d&events=history&includeAdjustedClose=true`;
+  const payload = await fetchOfficialJson(url, 15000);
+  return normalizeYahooRows(payload);
+}
+
+async function fetchHistory(code) {
+  const months = monthStarts();
+  const twseResults = await Promise.allSettled(months.map((item) => fetchTwseMonth(code, item.twse)));
+  let market = "TWSE";
+  let rows = twseResults.flatMap((result) => result.status === "fulfilled" ? result.value : []);
+  if (rows.length < 80) {
+    market = "TPEX";
+    const tpexResults = await Promise.allSettled(months.map((item) => fetchTpexMonth(code, item.tpex)));
+    rows = tpexResults.flatMap((result) => result.status === "fulfilled" ? result.value : []);
+  }
+  if (rows.length < 200) {
+    const yahooResults = await Promise.allSettled(["TW", "TWO"].map((suffix) => fetchYahooHistory(code, suffix)));
+    const yahooRows = yahooResults
+      .filter((result) => result.status === "fulfilled" && result.value.length > rows.length)
+      .sort((a, b) => b.value.length - a.value.length)[0]?.value || [];
+    if (yahooRows.length > rows.length) {
+      market = "YAHOO";
+      rows = yahooRows;
+    }
+  }
+  const byDate = new Map();
+  rows.forEach((row) => byDate.set(row.date, row));
+  return { code, market, rows: [...byDate.values()].sort((a, b) => a.date.localeCompare(b.date)) };
+}
+
+async function mapLimit(items, limit, worker) {
+  const results = [];
+  let cursor = 0;
+  const runners = Array.from({ length: Math.min(limit, items.length) }, async () => {
+    while (cursor < items.length) {
+      const index = cursor++;
+      results[index] = await worker(items[index], index);
+    }
+  });
+  await Promise.all(runners);
+  return results;
+}
+
+async function loadStockMap() {
+  try {
+    const payload = JSON.parse(await fs.readFile(STOCKS_FILE, "utf8"));
+    const rows = Array.isArray(payload?.stocks) ? payload.stocks : [];
+    return new Map(rows.map((stock) => [cleanCode(stock.code), stock]).filter(([code]) => code));
+  } catch {
+    return new Map();
+  }
+}
+
+function technicalFromHistory(history) {
+  const closes = (history?.rows || []).map((row) => num(row.close)).filter(Boolean);
+  const latestClose = closes.at(-1) || 0;
+  if (closes.length < 200) {
+    return {
+      stockPrice: latestClose,
+      aboveMa200: null,
+      maAlignedUp: null,
+      macdBullish: null,
+      technicalScore: 0,
+      tags: [`技術面歷史不足 ${closes.length}/200`],
+      ma5: sma(closes, 5),
+      ma35: sma(closes, 35),
+      ma200: 0,
+      historyCount: closes.length,
+    };
+  }
+  const ma5 = sma(closes, 5);
+  const ma35 = sma(closes, 35);
+  const ma200 = sma(closes, 200);
+  const ma5Prev = sma(closes, 5, 1);
+  const ma35Prev = sma(closes, 35, 1);
+  const ma200Prev = sma(closes, 200, 1);
+  const aboveMa200 = latestClose > ma200;
+  const maAlignedUp = ma5 > ma35 && ma35 > ma200 && ma5 > ma5Prev && ma35 > ma35Prev && ma200 >= ma200Prev;
+  const macd = macdSnapshot(closes);
+  const macdBullish = macd.rising || macd.goldenCross;
+  const technicalScore = (aboveMa200 ? 10 : 0) + (maAlignedUp ? 5 : 0) + (macdBullish ? 5 : 0);
+  const tags = [];
+  tags.push(aboveMa200 ? "60分K站上MA200 +10" : "MA200未站上，一票否決");
+  if (maAlignedUp) tags.push("MA5/MA35/MA200多頭排列 +5");
+  if (macdBullish) tags.push(macd.goldenCross ? "MACD黃金交叉 +5" : "MACD柱狀向上 +5");
+  return {
+    stockPrice: latestClose,
+    aboveMa200,
+    maAlignedUp,
+    macdBullish,
+    technicalScore,
+    tags,
+    ma5,
+    ma35,
+    ma200,
+    macdHistogram: macd.histogram,
+    macdPrevHistogram: macd.prevHistogram,
+    historyCount: closes.length,
+  };
 }
 
 function premiumValue(row) {
@@ -27,7 +255,7 @@ function premiumValue(row) {
   return raw > 100 ? raw - 100 : raw;
 }
 
-function scoreRow(row, source) {
+function scoreRow(row, source, technical = {}) {
   let score = 0;
   const tags = [];
   const circulation = num(row.circulation);
@@ -66,18 +294,25 @@ function scoreRow(row, source) {
     tags.push("溢價偏高");
   }
 
-  tags.push("技術面待確認");
-  tags.push("MA200未確認，不能積極進場");
+  if (technical.aboveMa200 === false) tags.push("MA200未站上，一票否決");
+  else tags.push(...(technical.tags || ["技術面待確認"]));
 
-  return { score: Math.min(105, score), tags };
+  return {
+    baseScore: Math.min(85, score),
+    score: Math.min(105, score + num(technical.technicalScore)),
+    tags: [...new Set(tags)],
+  };
 }
 
-function normalize(row, source) {
+function normalize(row, source, stockMap, technicalMap) {
   const code = String(row.code || row.convert_target_code || "").trim();
   const cbCode = String(row.cb_code || row.bond_code || "").trim();
   const cbName = String(row.cb_name || row.underlying_bond || "").trim();
   const premium = premiumValue(row);
-  const scored = scoreRow(row, source);
+  const stock = stockMap.get(cleanCode(code)) || {};
+  const technical = technicalMap.get(cleanCode(code)) || {};
+  const stockPrice = num(row.underlying_stock_market_price) || num(stock.close) || num(technical.stockPrice);
+  const scored = scoreRow(row, source, technical);
   return {
     sourceLayer: source.layer,
     stage: source.stage,
@@ -88,16 +323,22 @@ function normalize(row, source) {
     issueAmount: row.circulation || "",
     auctionType: row.inquiry_auction || "",
     convertPrice: num(row.conversion_price),
-    stockPrice: num(row.underlying_stock_market_price),
+    stockPrice,
     premium,
     date: row.announcement_day || row.expected_effective_date || row.listing_day || row.issue_date || "",
     tcri: row.tcri || row.guarantee_situation || "",
-    baseScore: scored.score,
+    baseScore: scored.baseScore,
     score: scored.score,
-    aboveMa200: null,
-    maAlignedUp: null,
-    macdBullish: null,
-    veto: false,
+    aboveMa200: technical.aboveMa200 ?? null,
+    maAlignedUp: technical.maAlignedUp ?? null,
+    macdBullish: technical.macdBullish ?? null,
+    ma5: technical.ma5 || 0,
+    ma35: technical.ma35 || 0,
+    ma200: technical.ma200 || 0,
+    macdHistogram: technical.macdHistogram || 0,
+    historyCount: technical.historyCount || 0,
+    quoteDate: stock.quoteDate || "",
+    veto: technical.aboveMa200 === false,
     tags: scored.tags,
     raw: row,
   };
@@ -116,13 +357,31 @@ async function fetchJson(url) {
 async function main() {
   const rows = [];
   const sourceCounts = {};
+  const stockMap = await loadStockMap();
   for (const source of SOURCES) {
     const data = await fetchJson(source.url);
     sourceCounts[source.layer] = data.length;
-    rows.push(...data.map((row) => normalize(row, source)));
+    rows.push(...data);
   }
 
-  const candidates = rows
+  const codes = [...new Set(rows.map((row) => cleanCode(row.code || row.convert_target_code)).filter(Boolean))];
+  const histories = await mapLimit(codes, HISTORY_CONCURRENCY, async (code) => {
+    try {
+      const history = await fetchHistory(code);
+      return [code, technicalFromHistory(history)];
+    } catch (error) {
+      return [code, { technicalScore: 0, tags: [`技術面讀取失敗: ${error.message}`] }];
+    }
+  });
+  const technicalMap = new Map(histories);
+
+  const normalizedRows = [];
+  for (const source of SOURCES) {
+    const data = await fetchJson(source.url);
+    normalizedRows.push(...data.map((row) => normalize(row, source, stockMap, technicalMap)));
+  }
+
+  const candidates = normalizedRows
     .filter((row) => row.code || row.cbCode)
     .sort((a, b) => b.score - a.score || num(a.issueAmount) - num(b.issueAmount));
 
@@ -131,7 +390,7 @@ async function main() {
     source: "CBAS",
     updatedAt: new Date().toISOString(),
     sourceCounts,
-    scoringNote: "CBAS only supplies CB source/issuance terms. Technical indicators are marked pending until MA200/MA/MACD data is connected.",
+    scoringNote: "CBAS supplies CB source/issuance terms; stock price comes from stocks-slim; MA200/MA5/MA35/MACD are calculated from official daily history when 200+ rows are available.",
     rows: candidates,
   };
 
