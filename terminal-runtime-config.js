@@ -33,6 +33,7 @@
     strategy4ZoneB: "/data/strategy4-zone-b.json",
     strategy4ZoneC: "/data/strategy4-zone-c.json",
     strategy4ZoneBPage1: "/data/strategy4-zone-b-page-1.json",
+    strategy4ZoneCPage1: "/data/strategy4-zone-c-page-1.json",
     strategy4Backup: "/data/strategy4-backup.json",
     strategy4Summary: "/data/strategy4-summary.json",
     strategy3Cache: "/data/strategy3-latest.json",

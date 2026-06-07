@@ -117,6 +117,7 @@ async function main() {
     ["data-manifest", "/data/data-manifest.json?v=verify", (r) => { const p = parseJson(r); return p.ok === true && Number(p.count) >= 25 && p.entries?.["stocks-index.json"]?.count > 1000; }],
     ["stocks-index", "/data/stocks-index.json?v=verify", (r) => { const p = parseJson(r); return p.ok === true && Number(p.count) > 1000; }],
     ["strategy4-zone-b-page-1", "/data/strategy4-zone-b-page-1.json?v=verify", (r) => { const p = parseJson(r); return p.ok === true && p.zone === "B" && Number(p.count) > 0; }],
+    ["strategy4-zone-c-page-1", "/data/strategy4-zone-c-page-1.json?v=verify", (r) => { const p = parseJson(r); return p.ok === true && p.zone === "C" && Number(p.count) > 0; }],
     ["health", "/data/health-summary.json?v=verify", (r) => parseJson(r).ok === true],
     ["signal-quality", "/data/signal-quality-report.json?v=verify", (r) => parseJson(r).ok === true],
     ["data-consistency", "/data/data-consistency-report.json?v=verify", (r) => parseJson(r).ok === true],

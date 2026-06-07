@@ -93,7 +93,9 @@ function strategy4PresetFiles(payload) {
   };
   const byScore = [...matches].sort((a, b) => cleanNumber(b.swingScore || b.score) - cleanNumber(a.swingScore || a.score));
   const zoneB = byScore.filter((item) => item.swingZone === "B");
+  const zoneC = byScore.filter((item) => item.swingZone === "C");
   const zoneBPages = [];
+  const zoneCPages = [];
   const pageSize = 25;
   for (let index = 0; index < zoneB.length; index += pageSize) {
     const page = Math.floor(index / pageSize) + 1;
@@ -108,12 +110,26 @@ function strategy4PresetFiles(payload) {
       matches: zoneB.slice(index, index + pageSize),
     }]);
   }
+  for (let index = 0; index < zoneC.length; index += pageSize) {
+    const page = Math.floor(index / pageSize) + 1;
+    zoneCPages.push([`data/strategy4-zone-c-page-${page}.json`, {
+      ...base,
+      zone: "C",
+      page,
+      pageSize,
+      totalPages: Math.ceil(zoneC.length / pageSize),
+      totalCount: zoneC.length,
+      count: Math.min(pageSize, zoneC.length - index),
+      matches: zoneC.slice(index, index + pageSize),
+    }]);
+  }
   return [
     ["data/strategy4-zone-a.json", { ...base, zone: "A", count: matches.filter((item) => (item.swingZone || "A") === "A").length, matches: byScore.filter((item) => (item.swingZone || "A") === "A") }],
     ["data/strategy4-zone-b.json", { ...base, zone: "B", count: matches.filter((item) => item.swingZone === "B").length, matches: byScore.filter((item) => item.swingZone === "B") }],
     ["data/strategy4-zone-c.json", { ...base, zone: "C", count: matches.filter((item) => item.swingZone === "C").length, matches: byScore.filter((item) => item.swingZone === "C") }],
     ["data/strategy4-score-top.json", { ...base, count: Math.min(120, byScore.length), matches: byScore.slice(0, 120) }],
     ...zoneBPages,
+    ...zoneCPages,
   ];
 }
 
@@ -623,9 +639,9 @@ function dataManifest() {
     "strategy3-latest.json",
     "strategy4-summary.json",
     "strategy4-score-top.json",
-    "strategy4-zone-a.json",
-    "strategy4-zone-b.json",
-    "strategy4-zone-c.json",
+  "strategy4-zone-a.json",
+  "strategy4-zone-b.json",
+  "strategy4-zone-c.json",
     "strategy5-latest.json",
     "institution-slim.json",
     "institution-mobile-top.json",
@@ -638,6 +654,7 @@ function dataManifest() {
     "strategy-weight-report.json",
   ];
   for (let page = 1; page <= 48; page += 1) files.push(`strategy4-zone-b-page-${page}.json`);
+  for (let page = 1; page <= 48; page += 1) files.push(`strategy4-zone-c-page-${page}.json`);
   const entries = {};
   for (const file of files) {
     const payload = readOptional(`data/${file}`, null);

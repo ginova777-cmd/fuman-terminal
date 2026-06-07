@@ -1,5 +1,5 @@
 (function () {
-  const VERSION = "mobile-fast12-20260607";
+  const VERSION = "mobile-fast13-20260607";
   const modules = {
     sectorMap: { loaded: false, src: "terminal-sector-map.js" },
     strategyConfig: { loaded: false, src: "terminal-strategy-config.js" },
