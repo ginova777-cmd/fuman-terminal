@@ -183,23 +183,6 @@ function renderWarrantReasonBadges(item) {`);
     `<tr><td colspan="9">\${warrantFlowMode === "history" ? "歷史頁目前沒有可回看的權證候選。" : keyword ? "優先區名單內找不到這檔股票；代表目前 A 級權證尚未進優先觀察區。" : "權證資金走向讀取中。只顯示優先區權證候選。"}</td></tr>`
   );
 
-  source = source.replace(
-    `  const rows = filteredRows.slice(pageStart, pageStart + pageSize);`,
-    `  const rows = filteredRows.slice(pageStart, pageStart + pageSize);\r\n  ensureWarrantKlineHistory(rows);`
-  );
-
-  source = source.replace(
-    `<td class="price">\${formatNumber(item.stockClose, item.stockClose >= 100 ? 0 : 2)}</td>`,
-    `<td class="price">\${formatNumber(item.stockClose, item.stockClose >= 100 ? 0 : 2)}</td>\r\n        <td class="warrant-kline-cell">\${renderWarrantKline(item)}</td>`
-  );
-
-  source = source.replace(
-    `<th>排名</th><th>股票代號</th><th>標的名稱</th><th>收盤價</th><th>認購金額</th><th>認售金額</th><th>購/售比</th><th>購/售檔數</th><th>原因</th>`,
-    `<th>排名</th><th>股票代號</th><th>標的名稱</th><th>收盤價</th><th>K 線</th><th>認購金額</th><th>認售金額</th><th>購/售比</th><th>購/售檔數</th><th>原因</th>`
-  );
-
-  source = source.replaceAll(`colspan="9"`, `colspan="10"`);
-
   window.FUMAN_WARRANT_FLOW_MODULE = {
     install(context) {
       return Function("scope", "with (scope) {\n" + source + "\nreturn { renderWarrantFlow, loadWarrantFlow };\n}")(context.scope);
