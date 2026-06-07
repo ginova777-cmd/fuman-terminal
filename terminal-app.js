@@ -76,7 +76,7 @@ function getFumanWorker() {
   if (!("Worker" in window)) return null;
   if (fumanWorker) return fumanWorker;
   try {
-    fumanWorker = new Worker("terminal-worker.js?v=mobile-fast2-20260607");
+    fumanWorker = new Worker("terminal-worker.js?v=mobile-fast3-20260607");
     fumanWorker.addEventListener("message", (event) => {
       const { id, ok, rows, result, error } = event.data || {};
       const pending = fumanWorkerPending.get(id);
@@ -339,7 +339,7 @@ function loadFumanStyle(href, id) {
   const link = document.createElement("link");
   link.id = id;
   link.rel = "stylesheet";
-  link.href = href.includes("?") ? href : `${href}?v=${window.FUMAN_TERMINAL_BOOT?.version || "mobile-fast2-20260607"}`;
+  link.href = href.includes("?") ? href : `${href}?v=${window.FUMAN_TERMINAL_BOOT?.version || "mobile-fast3-20260607"}`;
   document.head.appendChild(link);
 }
 
@@ -365,7 +365,7 @@ function makeFumanModuleScope(bindings) {
 function loadFumanFeatureModule(name, src, globalName) {
   if (window[globalName]) return Promise.resolve(window[globalName]);
   if (fumanFeatureModulePromises[name]) return fumanFeatureModulePromises[name];
-  const version = window.FUMAN_TERMINAL_BOOT?.version || "mobile-fast2-20260607";
+  const version = window.FUMAN_TERMINAL_BOOT?.version || "mobile-fast3-20260607";
   fumanFeatureModulePromises[name] = new Promise((resolve, reject) => {
     const attr = "data-fuman-feature-" + name;
     const existing = document.querySelector("script[" + attr + "]");
@@ -1966,7 +1966,16 @@ async function loadRealtimeRadarLatestCache(force = false) {
     const candidates = [];
     const errors = [];
     const allowSupabase = shouldRunLivePolling() || !isKnownNonTradingMarketDate();
-    const restPayload = allowSupabase ? await fetchSupabaseLatestPayload("fuman_realtime_radar_cache", isMobileViewport() ? 3000 : 4500) : null;
+    const mobileStaticFirst = isMobileViewport();
+    if (mobileStaticFirst) {
+      try {
+        const staticPayload = await fetchLiveMemoryJson("realtimeRadar:static", versionedDataUrl(endpoints.realtimeRadarCache, "latest", force), 3500, FUMAN_LIVE_MEMORY_TTL_MS.realtimeRadar, force);
+        if (staticPayload) candidates.push({ source: "static", payload: staticPayload });
+      } catch (error) {
+        errors.push("靜態備援讀取失敗");
+      }
+    }
+    const restPayload = allowSupabase ? await fetchSupabaseLatestPayload("fuman_realtime_radar_cache", isMobileViewport() ? 2200 : 4500) : null;
     if (restPayload) {
       candidates.push({
         source: "supabase",
@@ -1993,7 +2002,7 @@ async function loadRealtimeRadarLatestCache(force = false) {
         errors.push("Supabase 讀取失敗");
       }
     }
-    try {
+    if (!mobileStaticFirst) try {
       const staticPayload = await fetchLiveMemoryJson("realtimeRadar:static", versionedDataUrl(endpoints.realtimeRadarCache, "latest", force), 8000, FUMAN_LIVE_MEMORY_TTL_MS.realtimeRadar, force);
       if (staticPayload) candidates.push({ source: "static", payload: staticPayload });
     } catch (error) {
@@ -5429,6 +5438,31 @@ function sortIntradayZoneRows(rows) {
 
 async function loadStrategy2IntradayPayload(force = false) {
   const allowSupabase = shouldRunLivePolling();
+  const mobileFastPath = isMobileViewport() && !force && (endpoints.strategy2IntradayLiveTop || endpoints.strategy2IntradayTop || endpoints.strategy2IntradaySlim);
+  if (mobileFastPath && strategy2IntradayEventByCode.size && endpoints.strategy2IntradayDelta) {
+    try {
+      const deltaPayload = await fetchVersionedJsonFallback([
+        { url: endpoints.strategy2IntradayDelta, label: "strategy2-delta", kind: "strategy2" },
+        { url: endpoints.strategy2IntradayLiveTop, label: "strategy2-live-top", kind: "strategy2" },
+      ], 2200, "strategy2");
+      return { ...deltaPayload, cacheSource: deltaPayload.source || "static-delta" };
+    } catch (error) {
+    }
+  }
+  if (mobileFastPath) {
+    try {
+      const preferredTop = isIntradayScanWindow()
+        ? (endpoints.strategy2IntradayLiveTop || endpoints.strategy2IntradayTop || endpoints.strategy2IntradaySlim)
+        : (endpoints.strategy2IntradayTop || endpoints.strategy2IntradayLiveTop || endpoints.strategy2IntradaySlim);
+      const slimPayload = await fetchVersionedJsonFallback([
+        { url: preferredTop, label: "strategy2-preferred-top", kind: "strategy2" },
+        { url: endpoints.strategy2IntradayTop, label: "strategy2-top", kind: "strategy2" },
+        { url: endpoints.strategy2IntradaySlim, label: "strategy2-slim", kind: "strategy2" },
+      ], 2800, "strategy2");
+      return { ...slimPayload, cacheSource: slimPayload.source || "static-mobile-top" };
+    } catch (error) {
+    }
+  }
   if (allowSupabase && endpoints.strategy2IntradayLatestApi) {
     try {
       const apiPayload = await fetchLiveMemoryJson(
@@ -5463,31 +5497,6 @@ async function loadStrategy2IntradayPayload(force = false) {
       }
     } catch (error) {
       recordFrontendError("strategy2-supabase", error);
-    }
-  }
-  const mobileFastPath = isMobileViewport() && !force && (endpoints.strategy2IntradayLiveTop || endpoints.strategy2IntradayTop || endpoints.strategy2IntradaySlim);
-  if (mobileFastPath && strategy2IntradayEventByCode.size && endpoints.strategy2IntradayDelta) {
-    try {
-      const deltaPayload = await fetchVersionedJsonFallback([
-        { url: endpoints.strategy2IntradayDelta, label: "strategy2-delta", kind: "strategy2" },
-        { url: endpoints.strategy2IntradayLiveTop, label: "strategy2-live-top", kind: "strategy2" },
-      ], 3000, "strategy2");
-      return { ...deltaPayload, cacheSource: deltaPayload.source || "static-delta" };
-    } catch (error) {
-    }
-  }
-  if (mobileFastPath) {
-    try {
-      const preferredTop = isIntradayScanWindow()
-        ? (endpoints.strategy2IntradayLiveTop || endpoints.strategy2IntradayTop || endpoints.strategy2IntradaySlim)
-        : (endpoints.strategy2IntradayTop || endpoints.strategy2IntradayLiveTop || endpoints.strategy2IntradaySlim);
-      const slimPayload = await fetchVersionedJsonFallback([
-        { url: preferredTop, label: "strategy2-preferred-top", kind: "strategy2" },
-        { url: endpoints.strategy2IntradayTop, label: "strategy2-top", kind: "strategy2" },
-        { url: endpoints.strategy2IntradaySlim, label: "strategy2-slim", kind: "strategy2" },
-      ], 4000, "strategy2");
-      return { ...slimPayload, cacheSource: slimPayload.source || "static-mobile-top" };
-    } catch (error) {
     }
   }
   const payload = await fetchVersionedJson(endpoints.strategy2IntradayCache, 10000, "latest", force);
@@ -8629,8 +8638,9 @@ function renderMarketAiPanel() {
     deferUiWork(loadMarketAiStocksFallback, 100);
     return;
   }
-  if (!Object.keys(institutionData).length) deferUiWork(ensureMarketAiInstitutionData, 100);
-  if (!marketAiConfluenceLoadedAt && !marketAiConfluenceLoading) deferUiWork(() => loadMarketAiConfluenceCaches(false), 120);
+  const mobileMarketAiDelay = isMobileViewport() ? 520 : 120;
+  if (!Object.keys(institutionData).length) deferUiWork(ensureMarketAiInstitutionData, isMobileViewport() ? 360 : 100);
+  if (!marketAiConfluenceLoadedAt && !marketAiConfluenceLoading) deferUiWork(() => loadMarketAiConfluenceCaches(false), mobileMarketAiDelay);
   const confluenceStocks = buildMarketAiConfluenceStocks(data);
   const fallbackPriorityStocks = sortMarketAiPriorityStocks(data.hotStocks.filter((stock) => isMarketAiLongCandidate(stock, { priority: true, allowReference: data.isReferenceDate })));
   const priorityStocks = confluenceStocks.length ? confluenceStocks : fallbackPriorityStocks;
@@ -9642,7 +9652,9 @@ async function loadStrategy4Cache(force = false, allowFullFallback = false) {
   }
   strategy4CacheLoading = true;
   try {
-    let payload = await fetchVersionedJson(endpoints.strategy4ScoreTop || endpoints.strategy4ZoneA || endpoints.strategy4Slim, 8000, strategy4Summary?.updatedAt || strategy4SummaryLoadedAt || "", force);
+    const primaryStrategy4Endpoint = endpoints.strategy4ScoreTop || endpoints.strategy4ZoneA || (isMobileViewport() ? "" : endpoints.strategy4Slim);
+    if (!primaryStrategy4Endpoint) return;
+    let payload = await fetchVersionedJson(primaryStrategy4Endpoint, 8000, strategy4Summary?.updatedAt || strategy4SummaryLoadedAt || "", force);
     if (!force && normalizeArray(payload?.matches).length) {
       payload = { ...payload, partial: true, complete: false };
     }
@@ -9655,10 +9667,10 @@ async function loadStrategy4Cache(force = false, allowFullFallback = false) {
     if (force && !normalizeArray(payload?.matches).length && endpoints.strategy4ZoneBPage1) {
       payload = await fetchVersionedJson(endpoints.strategy4ZoneBPage1, 8000, strategy4Summary?.updatedAt || strategy4SummaryLoadedAt || "", force);
     }
-    if (allowFullFallback && force && !normalizeArray(payload?.matches).length) {
+    if (!isMobileViewport() && allowFullFallback && force && !normalizeArray(payload?.matches).length) {
       payload = await fetchVersionedJson(endpoints.strategy4Cache, 10000, strategy4Summary?.updatedAt || strategy4SummaryLoadedAt || "", force);
     }
-    if (allowFullFallback && force && !normalizeArray(payload?.matches).length) {
+    if (!isMobileViewport() && allowFullFallback && force && !normalizeArray(payload?.matches).length) {
       payload = await fetchVersionedJson(endpoints.strategy4Backup, 10000, strategy4Summary?.updatedAt || strategy4SummaryLoadedAt || "", force);
     }
     if (payload?.ok && Array.isArray(payload.matches)) {
@@ -9708,7 +9720,7 @@ function strategy4ZoneBPageEndpoint(page) {
 function strategy4ZoneBRemotePageForUiPage(uiPage = swingPage) {
   const pageSize = getTerminalPageSize("swing");
   const start = (Math.max(1, cleanNumber(uiPage) || 1) - 1) * pageSize;
-  const remotePageSize = 100;
+  const remotePageSize = 50;
   return Math.floor(start / remotePageSize) + 1;
 }
 
