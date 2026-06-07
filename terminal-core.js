@@ -1,5 +1,5 @@
 (function () {
-  const version = "split-cb-view-20260607";
+  const version = "warrant-display-fix-20260607";
   window.FUMAN_TERMINAL_BOOT = {
     version,
     startedAt: Date.now(),
