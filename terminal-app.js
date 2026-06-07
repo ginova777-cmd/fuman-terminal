@@ -62,6 +62,7 @@ const FUMAN_THEME_KEY = FUMAN_RUNTIME_CONFIG.themeKey || "fuman-terminal-theme";
 const FUMAN_AUTH_CACHE_KEY = FUMAN_RUNTIME_CONFIG.authCacheKey || "fuman-terminal-auth-cache-v1";
 const FUMAN_AUTH_CACHE_TTL_MS = FUMAN_RUNTIME_CONFIG.authCacheTtlMs || (5 * 60 * 1000);
 const FUMAN_COMMON_TABS_KEY = FUMAN_RUNTIME_CONFIG.commonTabsKey || "fuman-terminal-common-tabs-v1";
+const FUMAN_PERFORMANCE_REPORT_KEY = FUMAN_RUNTIME_CONFIG.performanceReportKey || "fuman-terminal-performance-report-v1";
 let authMode = "login";
 const FUMAN_LIVE_MEMORY_TTL_MS = FUMAN_RUNTIME_CONFIG.liveMemoryTtlMs || { strategy2: 3000, realtimeRadar: 5000 };
 const fumanLiveMemoryCache = new Map();
@@ -75,7 +76,7 @@ function getFumanWorker() {
   if (!("Worker" in window)) return null;
   if (fumanWorker) return fumanWorker;
   try {
-    fumanWorker = new Worker("terminal-worker.js?v=fast-path2-20260607");
+    fumanWorker = new Worker("terminal-worker.js?v=fast-path3-20260607");
     fumanWorker.addEventListener("message", (event) => {
       const { id, ok, rows, result, error } = event.data || {};
       const pending = fumanWorkerPending.get(id);
@@ -165,6 +166,7 @@ function normalizeCommonTab(viewName, text = "") {
   if (viewName === "chip-trade" || label.includes("買賣")) return "chip";
   if (viewName === "warrant-flow" || label.includes("權證")) return "warrant";
   if (viewName === "realtime-radar" || label.includes("即時")) return "realtime";
+  if (label.includes("策略4") || label.includes("波段")) return "strategy4";
   if (label.includes("策略2") || label.includes("當沖")) return "strategy2";
   if (label.includes("策略5")) return "strategy5";
   return viewName || "";
@@ -208,15 +210,18 @@ function warmCommonTabs() {
     if (key === "chip") {
       markLazyModuleForView("chip-trade");
       ensureChipFlowModule().catch(() => undefined);
-      if (!isMobileViewport()) preloadChipTradeFullData("login-warmup");
+      fetchVersionedJson(endpoints.institutionSummary, 3500, "latest", false).catch(() => undefined);
+      fetchVersionedJson(endpoints.institutionSlim, 4500, "latest", false).catch(() => undefined);
     } else if (key === "warrant") {
       markLazyModuleForView("warrant-flow");
       ensureWarrantFlowModule().catch(() => undefined);
-      if (isMobileViewport() && endpoints.warrantFlowMobileTop) {
-        fetchVersionedJson(endpoints.warrantFlowMobileTop, 3500, "mobile-top", false).catch(() => undefined);
-      } else {
-        preloadWarrantFlowFullData("login-warmup");
-      }
+      fetchVersionedJson(endpoints.warrantFlowSummary, 3500, "latest", false).catch(() => undefined);
+      fetchVersionedJson(endpoints.warrantFlowMobileTop || endpoints.warrantFlowSlim, 4500, "mobile-top", false).catch(() => undefined);
+    } else if (key === "strategy4") {
+      markLazyModuleForView("strategy");
+      fetchVersionedJson(endpoints.strategy4ScoreTop, 3500, "latest", false).catch(() => undefined);
+      fetchVersionedJson(endpoints.strategy4ZoneA, 4500, "latest", false).catch(() => undefined);
+      fetchVersionedJson(endpoints.strategy4ZoneBPage1, 4500, "latest", false).catch(() => undefined);
     } else if (key === "strategy2") {
       markLazyModuleForView("strategy");
       fetchVersionedJsonFallback([
@@ -248,7 +253,6 @@ function warmFastPathData(reason = "idle") {
     warmJson(endpoints.strategy4ScoreTop, 4500, strategy4Summary?.updatedAt || "latest"),
     warmJson(endpoints.strategy4ZoneA, 4500, strategy4Summary?.updatedAt || "latest"),
     warmJson(endpoints.strategy4ZoneBPage1, 4500, strategy4Summary?.updatedAt || "latest"),
-    warmJson(endpoints.strategy4ZoneC, 4500, strategy4Summary?.updatedAt || "latest"),
     warmJson(endpoints.institutionSummary),
     warmJson(endpoints.warrantFlowSummary),
     warmJson(endpoints.warrantFlowMobileTop),
@@ -333,7 +337,7 @@ function loadFumanStyle(href, id) {
   const link = document.createElement("link");
   link.id = id;
   link.rel = "stylesheet";
-  link.href = href.includes("?") ? href : `${href}?v=${window.FUMAN_TERMINAL_BOOT?.version || "fast-path2-20260607"}`;
+  link.href = href.includes("?") ? href : `${href}?v=${window.FUMAN_TERMINAL_BOOT?.version || "fast-path3-20260607"}`;
   document.head.appendChild(link);
 }
 
@@ -359,7 +363,7 @@ function makeFumanModuleScope(bindings) {
 function loadFumanFeatureModule(name, src, globalName) {
   if (window[globalName]) return Promise.resolve(window[globalName]);
   if (fumanFeatureModulePromises[name]) return fumanFeatureModulePromises[name];
-  const version = window.FUMAN_TERMINAL_BOOT?.version || "fast-path2-20260607";
+  const version = window.FUMAN_TERMINAL_BOOT?.version || "fast-path3-20260607";
   fumanFeatureModulePromises[name] = new Promise((resolve, reject) => {
     const attr = "data-fuman-feature-" + name;
     const existing = document.querySelector("script[" + attr + "]");
@@ -3091,8 +3095,48 @@ function recordFumanPerformance(url, startedAt, ok, error = null) {
   const list = Array.isArray(boot.performanceLog) ? boot.performanceLog : [];
   list.push(item);
   boot.performanceLog = list.slice(-40);
+  appendFumanPerformanceReport(item);
   document.querySelector("#fuman-health-performance")?.remove();
 }
+
+function appendFumanPerformanceReport(item) {
+  try {
+    const rows = JSON.parse(localStorage.getItem(FUMAN_PERFORMANCE_REPORT_KEY) || "[]");
+    rows.push(item);
+    localStorage.setItem(FUMAN_PERFORMANCE_REPORT_KEY, JSON.stringify(rows.slice(-240)));
+    window.FUMAN_TERMINAL_BOOT = window.FUMAN_TERMINAL_BOOT || {};
+    window.FUMAN_TERMINAL_BOOT.performanceReport = summarizeFumanPerformanceReport(rows.slice(-240));
+  } catch (error) {}
+}
+
+function summarizeFumanPerformanceReport(rows = null) {
+  let list = rows;
+  if (!Array.isArray(list)) {
+    try { list = JSON.parse(localStorage.getItem(FUMAN_PERFORMANCE_REPORT_KEY) || "[]"); }
+    catch (error) { list = []; }
+  }
+  const groups = {};
+  for (const row of normalizeArray(list)) {
+    const key = String(row.url || row.view || "unknown").replace(/\?.*$/, "").slice(0, 80);
+    if (!groups[key]) groups[key] = { key, count: 0, errors: 0, totalMs: 0, maxMs: 0, lastMs: 0, lastAt: 0 };
+    groups[key].count += 1;
+    groups[key].errors += row.ok === false ? 1 : 0;
+    groups[key].totalMs += cleanNumber(row.ms);
+    groups[key].maxMs = Math.max(groups[key].maxMs, cleanNumber(row.ms));
+    groups[key].lastMs = cleanNumber(row.ms);
+    groups[key].lastAt = cleanNumber(row.at);
+  }
+  return Object.values(groups)
+    .map((group) => ({ ...group, avgMs: group.count ? Math.round(group.totalMs / group.count) : 0 }))
+    .sort((a, b) => b.avgMs - a.avgMs || b.maxMs - a.maxMs)
+    .slice(0, 20);
+}
+
+function markViewPerformance(viewName, startedAt, label = "view") {
+  recordFumanPerformance(`${label}:${viewName}`, startedAt, true);
+}
+
+window.FUMAN_GET_PERFORMANCE_REPORT = () => summarizeFumanPerformanceReport();
 
 function versionedDataUrl(url, version = "", force = false) {
   if (force) {
@@ -6055,6 +6099,8 @@ function renderSwingRadar(universe) {
     if (neededRemotePage && !strategy4LoadedZoneBPages.has(neededRemotePage)) {
       loadStrategy4ZoneBPage(neededRemotePage).catch(() => {});
     }
+  } else if (swingZoneFilter === "C" && !strategy4LoadedZones.has("C")) {
+    loadStrategy4Zone("C").catch(() => {});
   }
   const scanTime = strategyLastScanAt
     ? new Date(strategyLastScanAt).toLocaleTimeString("zh-TW", { hour12: false })
@@ -6122,8 +6168,9 @@ function renderSwingRadar(universe) {
     <div class="swing-zone-card zone-c ${swingZoneFilter === "C" ? "active" : ""}" data-swing-zone-filter="C"><span>C區準備</span><strong>${zoneRows.C.length}</strong><small>低中位階整理</small></div>
   `;
   const waitingBPage = swingZoneFilter === "B" && !pageRows.length && strategy4ZoneBTotalCount;
+  const waitingCZone = swingZoneFilter === "C" && !strategy4LoadedZones.has("C");
   const tableRows = pageRows.length ? renderSwingRows(pageRows) : `
-    <tr><td colspan="9">${waitingBPage ? "正在載入 B 區分頁資料..." : strategy4Summary ? `策略4摘要已載入：命中 ${strategy4Summary.count || 0} 檔。正在背景載入完整名單...` : "後端策略4掃描 API 已啟動。正在完整掃描全台股官方日K並計算符合股票；命中後會自動顯示在這裡。"}</td></tr>
+    <tr><td colspan="9">${waitingBPage ? "正在載入 B 區分頁資料..." : waitingCZone ? "正在載入 C 區準備名單..." : strategy4Summary ? `策略4摘要已載入：命中 ${strategy4Summary.count || 0} 檔。正在背景載入完整名單...` : "後端策略4掃描 API 已啟動。正在完整掃描全台股官方日K並計算符合股票；命中後會自動顯示在這裡。"}</td></tr>
   `;
   const swingTableHead = `
     <thead>
@@ -6143,7 +6190,7 @@ function renderSwingRadar(universe) {
       </div>
       <table class="swing-table swing-zone-table">
         ${swingTableHead}
-        <tbody>${items.length ? renderSwingRows(items) : `<tr><td colspan="9">目前沒有符合 ${title} 的股票。</td></tr>`}</tbody>
+        <tbody>${items.length ? renderSwingRows(items) : `<tr><td colspan="9">${zone === "C" && !strategy4LoadedZones.has("C") ? "正在載入 C 區準備名單..." : `目前沒有符合 ${title} 的股票。`}</td></tr>`}</tbody>
       </table>
     </section>
   `;
@@ -8163,7 +8210,6 @@ async function loadMarketAiConfluenceCaches(force = false) {
           endpoints.strategy4ScoreTop,
           endpoints.strategy4ZoneA,
           endpoints.strategy4ZoneBPage1,
-          endpoints.strategy4ZoneC,
         ], ["matches"]);
         if (payload?.ok && Array.isArray(payload.matches)) mergeStrategy4Cache(payload);
       })(),
@@ -8965,6 +9011,7 @@ function tickClock() {
 }
 
 function showView(viewName, activeLink) {
+  const viewStartedAt = performance?.now ? performance.now() : Date.now();
   const now = Date.now();
   const sameViewQuick = lastViewName === viewName && now - lastViewShownAt < 2500;
   const mobileFastSwitch = isMobileViewport();
@@ -9026,6 +9073,9 @@ function showView(viewName, activeLink) {
   deferUiWork(normalizeMobileHorizontalPosition, 60);
   const focusTarget = activeLink?.dataset.focus ? document.querySelector(`#${activeLink.dataset.focus}`) : null;
   if (focusTarget) setTimeout(()=>focusTarget.focus(),0);
+  requestAnimationFrame(() => {
+    setTimeout(() => markViewPerformance(viewName, viewStartedAt), 0);
+  });
 }
 
 // ★ 前端直接抓台指期
@@ -10243,7 +10293,7 @@ const watchlistStrategySources = [
   { key: "openBuy", label: "策略1-明日開盤入", urls: () => [endpoints.openBuyCache, endpoints.openBuyBackup], fields: ["matches"] },
   { key: "strategy2", label: "策略2-當沖雷達", urls: () => [endpoints.strategy2IntradayLiveTop, endpoints.strategy2IntradayTop, endpoints.strategy2IntradaySlim], fields: ["events", "records"] },
   { key: "strategy3", label: "策略3-隔日沖", urls: () => [endpoints.strategy3Cache, endpoints.strategy3Backup], fields: ["matches"] },
-  { key: "strategy4", label: "策略4-波段", urls: () => [endpoints.strategy4ScoreTop, endpoints.strategy4ZoneA, endpoints.strategy4ZoneBPage1, endpoints.strategy4ZoneC], fields: ["matches"] },
+  { key: "strategy4", label: "策略4-波段", urls: () => [endpoints.strategy4ScoreTop, endpoints.strategy4ZoneA, endpoints.strategy4ZoneBPage1], fields: ["matches"] },
   { key: "strategy5", label: "策略5-綜合策略", urls: () => [endpoints.strategy5Cache, endpoints.strategy5Backup], fields: ["matches"] },
   { key: "realtime", label: "即時雷達", urls: () => [endpoints.realtimeRadarCache], fields: ["rows"] },
 ];

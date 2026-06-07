@@ -42,9 +42,9 @@
     intradayMinVolume: 2000,
     strategy2IntradayMinDisplayPct: 2,
     terminalPageSize: 10,
-    terminalPageSizeOptions: [10, 20, 50],
+    terminalPageSizeOptions: [10, 20, 30],
     terminalPageSizes: {
-      swing: 50,
+      swing: 30,
       openBuy: 20,
       strategy3: 20,
       strategy5: 20,
