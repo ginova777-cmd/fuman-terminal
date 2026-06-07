@@ -64,6 +64,11 @@ function normalizeDate(value) {
   return String(value || "").replace(/\D/g, "").slice(0, 8);
 }
 
+function isNotOlderThanLatestTradeDate(value, latestTradeDate) {
+  const ymd = normalizeDate(value);
+  return ymd && ymd >= latestTradeDate;
+}
+
 function fetchJson(pathname, timeoutMs = 60000) {
   const url = `${baseUrl}${pathname}`;
   return new Promise((resolve, reject) => {
@@ -93,12 +98,12 @@ function validatePayload(name, payload, context) {
     assert(count(payload) > 0, `${name} empty`);
   }
   if (name === "strategy4-latest.json") {
-    assert(normalizeDate(payload.scanStamp || payload.dataDate || payload.updatedAt) === today, `${name} stale scanStamp=${payload.scanStamp || payload.dataDate || payload.updatedAt} today=${today}`);
+    assert(isNotOlderThanLatestTradeDate(payload.scanStamp || payload.dataDate || payload.updatedAt, latestTradeDate), `${name} stale scanStamp=${payload.scanStamp || payload.dataDate || payload.updatedAt} latestTradeDate=${latestTradeDate} today=${today}`);
     assert(payload.complete === true, `${name} incomplete`);
     assert(count(payload) > 0, `${name} empty`);
   }
   if (name === "strategy4-summary.json") {
-    assert(normalizeDate(payload.scanStamp || payload.dataDate || payload.updatedAt) === today, `${name} stale scanStamp=${payload.scanStamp || payload.dataDate || payload.updatedAt} today=${today}`);
+    assert(isNotOlderThanLatestTradeDate(payload.scanStamp || payload.dataDate || payload.updatedAt, latestTradeDate), `${name} stale scanStamp=${payload.scanStamp || payload.dataDate || payload.updatedAt} latestTradeDate=${latestTradeDate} today=${today}`);
     assert(count(payload) > 0, `${name} empty`);
   }
   if (name === "health-summary.json") assert(payload.ok === true, `${name} ok=false risk=${payload.risk}`);

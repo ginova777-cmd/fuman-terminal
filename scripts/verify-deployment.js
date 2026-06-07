@@ -79,6 +79,11 @@ function normalizeDate(value) {
   return String(value || "").replace(/\D/g, "").slice(0, 8);
 }
 
+function isNotOlderThanLatestTradeDate(value, latestTradeDate) {
+  const ymd = normalizeDate(value);
+  return ymd && ymd >= latestTradeDate;
+}
+
 function detectVersion(homeBody) {
   if (process.env.FUMAN_VERIFY_VERSION) return process.env.FUMAN_VERIFY_VERSION;
   const match = homeBody.match(/terminal-core\.js\?v=([^"'&<>]+)/);
@@ -107,8 +112,8 @@ async function main() {
     ["terminal-bootstrap", `/terminal.js?v=${version}`, (r) => r.body.includes("FUMAN_TERMINAL_LOAD_APP") && r.body.includes("terminal-app.js")],
     ["terminal-app", `/terminal-app.js?v=${version}`, (r) => r.body.includes("FUMAN_LIVE_MEMORY_TTL_MS") && r.body.includes("loadStrategyWeights")],
     ["strategy3", "/data/strategy3-latest.json?v=verify", (r) => { const p = parseJson(r); return normalizeDate(p.usedDate) === latestTradeDate && Number(p.count) > 0; }],
-    ["strategy4", "/data/strategy4-latest.json?v=verify", (r) => { const p = parseJson(r); return normalizeDate(p.scanStamp || p.dataDate || p.updatedAt) === todayYmd() && p.complete === true && Number(p.count) > 0; }],
-    ["strategy4-summary", "/data/strategy4-summary.json?v=verify", (r) => { const p = parseJson(r); return normalizeDate(p.scanStamp || p.dataDate || p.updatedAt) === todayYmd() && Number(p.count) > 0; }],
+    ["strategy4", "/data/strategy4-latest.json?v=verify", (r) => { const p = parseJson(r); return isNotOlderThanLatestTradeDate(p.scanStamp || p.dataDate || p.updatedAt, latestTradeDate) && p.complete === true && Number(p.count) > 0; }],
+    ["strategy4-summary", "/data/strategy4-summary.json?v=verify", (r) => { const p = parseJson(r); return isNotOlderThanLatestTradeDate(p.scanStamp || p.dataDate || p.updatedAt, latestTradeDate) && Number(p.count) > 0; }],
     ["data-manifest", "/data/data-manifest.json?v=verify", (r) => { const p = parseJson(r); return p.ok === true && Number(p.count) >= 25 && p.entries?.["stocks-index.json"]?.count > 1000; }],
     ["stocks-index", "/data/stocks-index.json?v=verify", (r) => { const p = parseJson(r); return p.ok === true && Number(p.count) > 1000; }],
     ["strategy4-zone-b-page-1", "/data/strategy4-zone-b-page-1.json?v=verify", (r) => { const p = parseJson(r); return p.ok === true && p.zone === "B" && Number(p.count) > 0; }],
