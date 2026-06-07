@@ -1,23 +1,23 @@
-const CACHE_VERSION = "fuman-terminal-sw-20260607-watchlist-grid";
+const CACHE_VERSION = "fuman-terminal-sw-20260607-cb-source105";
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 const DATA_CACHE = `${CACHE_VERSION}-data`;
 
 const STATIC_ASSETS = [
-  "/styles.css?v=watchlist-grid-20260607",
-  "/terminal-core.js?v=watchlist-grid-20260607",
-  "/terminal-modules.js?v=watchlist-grid-20260607",
-  "/terminal-sector-map.js?v=watchlist-grid-20260607",
-  "/terminal-strategy-config.js?v=watchlist-grid-20260607",
-  "/terminal-market-config.js?v=watchlist-grid-20260607",
-  "/terminal-ui-config.js?v=watchlist-grid-20260607",
-  "/terminal-runtime-config.js?v=watchlist-grid-20260607",
-  "/terminal-tuning-config.js?v=watchlist-grid-20260607",
-  "/terminal-worker.js?v=watchlist-grid-20260607",
-  "/terminal.js?v=watchlist-grid-20260607",
-  "/terminal-realtime-radar.css?v=watchlist-grid-20260607",
-  "/terminal-intraday-radar.css?v=watchlist-grid-20260607",
-  "/terminal-utility.css?v=watchlist-grid-20260607",
-  "/refresh.html?v=watchlist-grid-20260607",
+  "/styles.css?v=cb-source105-20260607",
+  "/terminal-core.js?v=cb-source105-20260607",
+  "/terminal-modules.js?v=cb-source105-20260607",
+  "/terminal-sector-map.js?v=cb-source105-20260607",
+  "/terminal-strategy-config.js?v=cb-source105-20260607",
+  "/terminal-market-config.js?v=cb-source105-20260607",
+  "/terminal-ui-config.js?v=cb-source105-20260607",
+  "/terminal-runtime-config.js?v=cb-source105-20260607",
+  "/terminal-tuning-config.js?v=cb-source105-20260607",
+  "/terminal-worker.js?v=cb-source105-20260607",
+  "/terminal.js?v=cb-source105-20260607",
+  "/terminal-realtime-radar.css?v=cb-source105-20260607",
+  "/terminal-intraday-radar.css?v=cb-source105-20260607",
+  "/terminal-utility.css?v=cb-source105-20260607",
+  "/refresh.html?v=cb-source105-20260607",
   "/assets/logo.webp",
   "/favicon.ico",
 ];
@@ -168,6 +168,8 @@ self.addEventListener("fetch", (event) => {
     event.respondWith(staleWhileRevalidate(request));
   }
 });
+
+
 
 
 

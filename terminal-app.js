@@ -81,7 +81,7 @@ function getFumanWorker() {
   if (!("Worker" in window)) return null;
   if (fumanWorker) return fumanWorker;
   try {
-    fumanWorker = new Worker("terminal-worker.js?v=watchlist-grid-20260607");
+    fumanWorker = new Worker("terminal-worker.js?v=cb-source105-20260607");
     fumanWorker.addEventListener("message", (event) => {
       const { id, ok, rows, result, error } = event.data || {};
       const pending = fumanWorkerPending.get(id);
@@ -410,7 +410,7 @@ function loadFumanStyle(href, id) {
   const link = document.createElement("link");
   link.id = id;
   link.rel = "stylesheet";
-  link.href = href.includes("?") ? href : `${href}?v=${window.FUMAN_TERMINAL_BOOT?.version || "watchlist-grid-20260607"}`;
+  link.href = href.includes("?") ? href : `${href}?v=${window.FUMAN_TERMINAL_BOOT?.version || "cb-source105-20260607"}`;
   document.head.appendChild(link);
 }
 
@@ -436,7 +436,7 @@ function makeFumanModuleScope(bindings) {
 function loadFumanFeatureModule(name, src, globalName) {
   if (window[globalName]) return Promise.resolve(window[globalName]);
   if (fumanFeatureModulePromises[name]) return fumanFeatureModulePromises[name];
-  const version = window.FUMAN_TERMINAL_BOOT?.version || "watchlist-grid-20260607";
+  const version = window.FUMAN_TERMINAL_BOOT?.version || "cb-source105-20260607";
   fumanFeatureModulePromises[name] = new Promise((resolve, reject) => {
     const attr = "data-fuman-feature-" + name;
     const existing = document.querySelector("script[" + attr + "]");
@@ -9141,9 +9141,23 @@ let cbDetectUpdatedAt = 0;
 let cbDetectLoading = false;
 let cbDetectLoadedAt = 0;
 
+function readCbBool(row, keys) {
+  for (const key of keys) {
+    if (!(key in row)) continue;
+    const value = row[key];
+    if (value === true || value === 1) return true;
+    if (value === false || value === 0) return false;
+    const text = String(value).trim().toLowerCase();
+    if (["y", "yes", "true", "通過", "站上", "向上", "黃金交叉"].includes(text)) return true;
+    if (["n", "no", "false", "未通過", "未站上", "向下", "死叉"].includes(text)) return false;
+  }
+  return null;
+}
+
 function normalizeCbDetectRows(payload) {
   const rows = normalizeArray(payload?.rows || payload?.matches || payload?.data || payload?.items || payload);
   return rows.map((row) => {
+    if (!row || typeof row !== "object") return null;
     const code = String(row.code || row.stockCode || row.股票代號 || row.代號 || "").trim();
     const name = row.name || row.stockName || row.股票名稱 || row.名稱 || code;
     const cbName = row.cbName || row.bondName || row.CB名稱 || row.可轉債名稱 || "";
@@ -9154,10 +9168,22 @@ function normalizeCbDetectRows(payload) {
     const premium = row.premium !== undefined ? cleanNumber(row.premium) : row.溢價 !== undefined ? cleanNumber(row.溢價) : (convertPrice && stockPrice ? ((convertPrice - stockPrice) / stockPrice) * 100 : 0);
     const stage = row.stage || row.status || row.階段 || row.狀態 || "待確認";
     const date = row.date || row.公告日 || row.生效日 || row.listingDate || row.掛牌日 || "";
-    const score = cleanNumber(row.score || row.分數);
+    const sourceLayer = row.sourceLayer || row.source || row.來源層 || row.來源 || "";
+    const aboveMa200 = readCbBool(row, ["aboveMa200", "ma200", "站上MA200", "MA200"]);
+    const maAlignedUp = readCbBool(row, ["maAlignedUp", "maBullish", "三線同向上", "多頭排列"]);
+    const macdBullish = readCbBool(row, ["macdBullish", "macdGoldenCross", "MACD黃金交叉", "MACD"]);
+    const vetoed = row.veto === true || row.淘汰 === true || aboveMa200 === false;
+    const technicalScore = (aboveMa200 === true ? 10 : 0) + (maAlignedUp === true ? 5 : 0) + (macdBullish === true ? 5 : 0);
+    const rawScore = cleanNumber(row.score || row.分數);
+    const baseScore = cleanNumber(row.baseScore || row.基本分);
+    const score = rawScore || Math.min(105, baseScore + technicalScore);
     const tags = normalizeArray(row.tags || row.條件 || row.reasons || row.原因).filter(Boolean);
+    if (aboveMa200 === true) tags.push("60分K站上MA200 +10");
+    if (aboveMa200 === false) tags.push("MA200未站上，一票否決");
+    if (maAlignedUp === true) tags.push("MA5/MA35/MA200多頭排列 +5");
+    if (macdBullish === true) tags.push("MACD黃金交叉 +5");
     if (!code && !cbName) return null;
-    return { code, name, cbName, issueAmount, auctionType, convertPrice, stockPrice, premium, stage, date, score, tags };
+    return { code, name, cbName, issueAmount, auctionType, convertPrice, stockPrice, premium, stage, date, sourceLayer, aboveMa200, maAlignedUp, macdBullish, vetoed, score, tags };
   }).filter(Boolean);
 }
 
@@ -9181,22 +9207,26 @@ function renderCbDetectionPanel(errorText = "") {
   const rows = cbDetectRows;
   countEl.textContent = String(rows.length);
   const time = cbDetectUpdatedAt ? new Date(cbDetectUpdatedAt).toLocaleTimeString("zh-TW", { hour12: false }) : "尚未更新";
-  summaryEl.textContent = rows.length ? `CB 發行、競拍、轉換價與溢價偵測結果。更新 ${time}` : "尚未接入 CB 掃描資料。";
+  summaryEl.textContent = rows.length ? `CB 三層來源、否決關卡、105分評分與進出場偵測。更新 ${time}` : "尚未接入 CB 掃描資料。";
   if (!rows.length) {
     listEl.innerHTML = `<div class="cb-detect-empty">請先產生 /data/cb-detect-latest.json，CB 結果會顯示在這裡</div>`;
     return;
   }
   listEl.innerHTML = rows.map((row) => `
-    <article class="cb-detect-card ${row.score >= 70 ? "hot" : ""}">
+    <article class="cb-detect-card ${row.score >= 70 && !row.vetoed ? "hot" : ""} ${row.vetoed ? "rejected" : ""}">
       <div class="cb-detect-card-head">
         <h3>${row.code ? `<a href="#" data-chip-code="${escapeAttr(row.code)}">${escapeAttr(row.code)}</a> ` : ""}${escapeAttr(row.name)}${row.cbName ? `<small>${escapeAttr(row.cbName)}</small>` : ""}</h3>
-        <div class="cb-score">${row.score || "--"}</div>
+        <div class="cb-score">${row.vetoed ? "淘汰" : row.score ? `${row.score}/105` : "--"}</div>
       </div>
       <div class="cb-detect-metrics">
+        <span>來源層<b>${escapeAttr(row.sourceLayer || "--")}</b></span>
         <span>承銷方式<b>${escapeAttr(row.auctionType || "--")}</b></span>
         <span>轉換價<b>${row.convertPrice ? formatNumber(row.convertPrice, row.convertPrice >= 100 ? 0 : 2) : "--"}</b></span>
         <span>現股價<b>${row.stockPrice ? formatNumber(row.stockPrice, row.stockPrice >= 100 ? 0 : 2) : "--"}</b></span>
         <span>溢價<b class="${row.premium > 30 ? "green" : "red"}">${row.premium ? `${formatNumber(row.premium, 2)}%` : "--"}</b></span>
+        <span>MA200<b>${row.aboveMa200 === true ? "通過" : row.aboveMa200 === false ? "否決" : "--"}</b></span>
+        <span>多頭排列<b>${row.maAlignedUp === true ? "+5" : "--"}</b></span>
+        <span>MACD<b>${row.macdBullish === true ? "+5" : "--"}</b></span>
         <span>發行總額<b>${escapeAttr(row.issueAmount || "--")}</b></span>
         <span>階段/日期<b>${escapeAttr(row.stage)}${row.date ? ` ${escapeAttr(row.date)}` : ""}</b></span>
       </div>
@@ -10594,6 +10624,8 @@ if (isViewActive("watchlist")) renderWatchlist();
 setInterval(() => {
   if (!isDocumentHidden() && isTerminalUnlocked() && isViewActive("watchlist")) refreshSelectedWatchlistQuote();
 }, 10000);
+
+
 
 
 

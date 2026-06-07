@@ -855,6 +855,49 @@ body::after {
   font-size: 13px;
 }
 
+.cb-score-guide {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  padding: 10px 12px;
+  border-bottom: 1px solid rgba(134, 151, 190, 0.11);
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.cb-score-guide section {
+  min-width: 0;
+  border: 1px solid rgba(134, 151, 190, 0.12);
+  border-radius: 6px;
+  background: rgba(12, 18, 30, 0.72);
+  padding: 9px;
+}
+
+.cb-score-guide h3 {
+  margin: 0 0 7px;
+  color: #ffb077;
+  font-size: 13px;
+}
+
+.cb-score-guide ol {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.cb-score-guide li {
+  color: #f2f5ff;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.cb-score-guide li span {
+  display: block;
+  margin-top: 1px;
+  color: #8fa0bd;
+}
+
 .cb-detect-list {
   display: grid;
   gap: 10px;
@@ -880,6 +923,11 @@ body::after {
 .cb-detect-card.hot {
   border-color: rgba(255, 122, 69, 0.52);
   background: rgba(39, 28, 34, 0.95);
+}
+
+.cb-detect-card.rejected {
+  border-color: rgba(88, 101, 124, 0.28);
+  opacity: 0.72;
 }
 
 .cb-detect-card-head {
@@ -1063,6 +1111,10 @@ body::after {
 
 @media (max-width: 1180px) {
   .chip-cb-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .cb-score-guide {
     grid-template-columns: 1fr;
   }
 

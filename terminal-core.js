@@ -1,5 +1,5 @@
 (function () {
-  const version = "watchlist-grid-20260607";
+  const version = "cb-source105-20260607";
   window.FUMAN_TERMINAL_BOOT = {
     version,
     startedAt: Date.now(),
@@ -87,6 +87,8 @@
     setTimeout(loadMain, 0);
   }
 })();
+
+
 
 
 
