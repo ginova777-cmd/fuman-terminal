@@ -1,12 +1,27 @@
 const fs = require("fs/promises");
+const fsSync = require("fs");
 const path = require("path");
 
 const CBAS_BASE = "https://cbas16889.pscnet.com.tw/api/CbasQuote";
 const OUT_FILE = path.join(__dirname, "..", "data", "cb-detect-latest.json");
 const STOCKS_FILE = path.join(__dirname, "..", "data", "stocks-slim.json");
+const RUNTIME_DIR = process.env.FUMAN_RUNTIME_DIR || "C:\\fuman-runtime";
+const FUGLE_API_KEY_FILE = process.env.FUGLE_API_KEY_FILE || path.join(RUNTIME_DIR, "secrets", "fugle-api-key.txt");
+const FINMIND_API_TOKEN_FILE = process.env.FINMIND_API_TOKEN_FILE || path.join(RUNTIME_DIR, "secrets", "finmind-api-token.txt");
 const HISTORY_MONTHS = 14;
 const HISTORY_CONCURRENCY = 4;
 const INTRADAY_60M_RANGE = "6mo";
+
+function readSecret(file) {
+  try {
+    return fsSync.readFileSync(file, "utf8").trim();
+  } catch {
+    return "";
+  }
+}
+
+const FUGLE_API_KEY = process.env.FUGLE_API_KEY || process.env.FUGLE_MARKETDATA_API_KEY || readSecret(FUGLE_API_KEY_FILE);
+const FINMIND_API_TOKEN = process.env.FINMIND_API_TOKEN || process.env.FINMIND_TOKEN || readSecret(FINMIND_API_TOKEN_FILE);
 
 const SOURCES = [
   { layer: "第一層：MOPS董事會決議", stage: "董事會決議", url: `${CBAS_BASE}/GetBoardAnnouncement` },
@@ -98,7 +113,7 @@ function macdSnapshot(values) {
   };
 }
 
-async function fetchOfficialJson(url, timeout = 12000) {
+async function fetchOfficialJson(url, timeout = 12000, extraHeaders = {}) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeout);
   try {
@@ -108,6 +123,7 @@ async function fetchOfficialJson(url, timeout = 12000) {
         "User-Agent": "Mozilla/5.0 (compatible; FumanTerminalBot/1.0)",
         Accept: "application/json,text/plain,*/*",
         Referer: url.includes("tpex.org.tw") ? "https://www.tpex.org.tw/" : "https://www.twse.com.tw/",
+        ...extraHeaders,
       },
     });
     if (!response.ok) throw new Error(`${url} HTTP ${response.status}`);
@@ -157,6 +173,40 @@ async function fetchYahoo60mHistory(code, suffix) {
   const url = `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}?range=${INTRADAY_60M_RANGE}&interval=60m&includePrePost=false&events=history`;
   const payload = await fetchOfficialJson(url, 15000);
   return normalizeYahooRows(payload);
+}
+
+async function fetchFugleQuote(code) {
+  if (!FUGLE_API_KEY) return null;
+  const url = `https://api.fugle.tw/marketdata/v1.0/stock/intraday/quote/${encodeURIComponent(code)}`;
+  const payload = await fetchOfficialJson(url, 15000, {
+    "X-API-KEY": FUGLE_API_KEY,
+    Referer: "https://developer.fugle.tw/",
+  });
+  const price = num(payload?.lastPrice) || num(payload?.closePrice) || num(payload?.previousClose);
+  if (!price) return null;
+  return {
+    price,
+    source: "fugle",
+    quoteDate: String(payload?.date || payload?.time || "").slice(0, 10).replaceAll("-", "") || "",
+  };
+}
+
+async function fetchFinMindSnapshot(code) {
+  if (!FINMIND_API_TOKEN) return null;
+  const url = new URL("https://api.finmindtrade.com/api/v4/taiwan_stock_tick_snapshot");
+  url.searchParams.set("data_id", code);
+  const payload = await fetchOfficialJson(url.toString(), 15000, {
+    Authorization: `Bearer ${FINMIND_API_TOKEN}`,
+    Referer: "https://finmindtrade.com/",
+  });
+  const row = Array.isArray(payload?.data) ? payload.data[0] : null;
+  const price = num(row?.close) || num(row?.last_price) || num(row?.lastPrice);
+  if (!price) return null;
+  return {
+    price,
+    source: "finmind",
+    quoteDate: String(row?.date || row?.time || "").slice(0, 10).replaceAll("-", "") || "",
+  };
 }
 
 async function fetchHistory(code) {
@@ -213,6 +263,23 @@ async function loadStockMap() {
   } catch {
     return new Map();
   }
+}
+
+async function loadQuoteMap(codes) {
+  const entries = await mapLimit(codes, HISTORY_CONCURRENCY, async (code) => {
+    try {
+      const fugle = await fetchFugleQuote(code);
+      if (fugle) return [code, fugle];
+    } catch {
+    }
+    try {
+      const finmind = await fetchFinMindSnapshot(code);
+      if (finmind) return [code, finmind];
+    } catch {
+    }
+    return [code, null];
+  });
+  return new Map(entries.filter(([, quote]) => quote));
 }
 
 function technicalFromHistory(history) {
@@ -355,14 +422,17 @@ function scoreRow(row, source, technical = {}) {
   };
 }
 
-function normalize(row, source, stockMap, technicalMap) {
+function normalize(row, source, stockMap, technicalMap, quoteMap) {
   const code = String(row.code || row.convert_target_code || "").trim();
   const cbCode = String(row.cb_code || row.bond_code || "").trim();
   const cbName = String(row.cb_name || row.underlying_bond || "").trim();
   const premium = premiumValue(row);
   const stock = stockMap.get(cleanCode(code)) || {};
   const technical = technicalMap.get(cleanCode(code)) || {};
-  const stockPrice = num(row.underlying_stock_market_price) || num(stock.close) || num(technical.stockPrice);
+  const quote = quoteMap.get(cleanCode(code)) || {};
+  const stockPrice = num(row.underlying_stock_market_price) || num(quote.price) || num(stock.close) || num(technical.stockPrice);
+  const stockPriceSource = num(row.underlying_stock_market_price) ? "cbas"
+    : quote.source || (num(stock.close) ? "stocks-slim" : (num(technical.stockPrice) ? "yahoo-60m" : ""));
   const scored = scoreRow(row, source, technical);
   return {
     sourceLayer: source.layer,
@@ -394,7 +464,8 @@ function normalize(row, source, stockMap, technicalMap) {
     macdHistogram: technical.macdHistogram || 0,
     historyCount: technical.historyCount || 0,
     technicalTimeframe: technical.timeframe || "",
-    quoteDate: stock.quoteDate || "",
+    stockPriceSource,
+    quoteDate: quote.quoteDate || stock.quoteDate || "",
     veto: technical.technicalPass !== true,
     tags: scored.tags,
     raw: row,
@@ -422,6 +493,7 @@ async function main() {
   }
 
   const codes = [...new Set(rows.map((row) => cleanCode(row.code || row.convert_target_code)).filter(Boolean))];
+  const quoteMap = await loadQuoteMap(codes);
   const histories = await mapLimit(codes, HISTORY_CONCURRENCY, async (code) => {
     try {
       const history = await fetchHistory(code);
@@ -435,7 +507,7 @@ async function main() {
   const normalizedRows = [];
   for (const source of SOURCES) {
     const data = await fetchJson(source.url);
-    normalizedRows.push(...data.map((row) => normalize(row, source, stockMap, technicalMap)));
+    normalizedRows.push(...data.map((row) => normalize(row, source, stockMap, technicalMap, quoteMap)));
   }
 
   const allCandidates = normalizedRows
@@ -452,7 +524,13 @@ async function main() {
     excludedCounts: {
       veto: allCandidates.length - candidates.length,
     },
-    scoringNote: "CBAS supplies CB source/issuance terms. CB technical gate uses Yahoo 60-minute K data: pass only when 60m close is above MA200 and MA200 is rising, or when 60m MA5/MA35/MA200 are all rising. Rows failing this 60m gate are excluded from display.",
+    quoteSources: {
+      fugleConfigured: Boolean(FUGLE_API_KEY),
+      finmindConfigured: Boolean(FINMIND_API_TOKEN),
+      fugleRows: [...quoteMap.values()].filter((quote) => quote.source === "fugle").length,
+      finmindRows: [...quoteMap.values()].filter((quote) => quote.source === "finmind").length,
+    },
+    scoringNote: "CBAS supplies CB source/issuance terms. Stock price prefers CBAS/Fugle/FinMind/stocks-slim. CB technical gate uses 60-minute K data: pass only when 60m close is above MA200 and MA200 is rising, or when 60m MA5/MA35/MA200 are all rising. Rows failing this 60m gate are excluded from display.",
     rows: candidates,
   };
 

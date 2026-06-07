@@ -9269,8 +9269,8 @@ function renderCbDetectionPanel(errorText = "") {
         <span>轉換價<b>${row.convertPrice ? formatNumber(row.convertPrice, row.convertPrice >= 100 ? 0 : 2) : "--"}</b></span>
         <span>現股價<b>${row.stockPrice ? formatNumber(row.stockPrice, row.stockPrice >= 100 ? 0 : 2) : "--"}</b></span>
         <span>溢價<b class="${row.premium > 30 ? "green" : "red"}">${row.premium ? `${formatNumber(row.premium, 2)}%` : "--"}</b></span>
-        <span>MA200<b>${row.aboveMa200 === true ? "通過" : row.aboveMa200 === false ? "否決" : "--"}</b></span>
-        <span>多頭排列<b>${row.maAlignedUp === true ? "+5" : "--"}</b></span>
+        <span>60分MA200<b>${row.aboveMa200 === true && row.ma200Rising === true ? "+10" : row.aboveMa200 === false ? "否決" : "--"}</b></span>
+        <span>60分均線向上<b>${row.allMaRising === true ? "+10" : "--"}</b></span>
         <span>MACD<b>${row.macdBullish === true ? "+5" : "--"}</b></span>
         <span>發行總額<b>${escapeAttr(row.issueAmount || "--")}</b></span>
         <span>階段/日期<b>${escapeAttr(row.stage)}${row.date ? ` ${escapeAttr(row.date)}` : ""}</b></span>
