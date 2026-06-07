@@ -1,5 +1,5 @@
 (function () {
-  const version = "chip-volume-lots-fallback-20260607";
+  const version = "terminal-preflight-20260607";
   window.FUMAN_TERMINAL_BOOT = {
     version,
     startedAt: Date.now(),

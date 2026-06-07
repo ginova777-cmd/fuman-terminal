@@ -92,7 +92,8 @@ function getFumanWorker() {
   if (!("Worker" in window)) return null;
   if (fumanWorker) return fumanWorker;
   try {
-    fumanWorker = new Worker("terminal-worker.js?v=watchlist-detail-sections-20260607");
+    const workerVersion = window.FUMAN_TERMINAL_BOOT?.version || "terminal-preflight-20260607";
+    fumanWorker = new Worker(`terminal-worker.js?v=${encodeURIComponent(workerVersion)}`);
     fumanWorker.addEventListener("message", (event) => {
       const { id, ok, rows, result, error } = event.data || {};
       const pending = fumanWorkerPending.get(id);
