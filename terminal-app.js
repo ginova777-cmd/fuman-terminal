@@ -62,10 +62,12 @@ const FUMAN_THEME_KEY = FUMAN_RUNTIME_CONFIG.themeKey || "fuman-terminal-theme";
 const FUMAN_AUTH_CACHE_KEY = FUMAN_RUNTIME_CONFIG.authCacheKey || "fuman-terminal-auth-cache-v1";
 const FUMAN_AUTH_CACHE_TTL_MS = FUMAN_RUNTIME_CONFIG.authCacheTtlMs || (5 * 60 * 1000);
 const FUMAN_COMMON_TABS_KEY = FUMAN_RUNTIME_CONFIG.commonTabsKey || "fuman-terminal-common-tabs-v1";
+const FUMAN_LAST_ROUTE_KEY = FUMAN_RUNTIME_CONFIG.lastRouteKey || "fuman-terminal-last-route-v1";
 const FUMAN_PERFORMANCE_REPORT_KEY = FUMAN_RUNTIME_CONFIG.performanceReportKey || "fuman-terminal-performance-report-v1";
 const FUMAN_PERFORMANCE_QUEUE_KEY = FUMAN_RUNTIME_CONFIG.performanceQueueKey || "fuman-terminal-performance-queue-v1";
 const FUMAN_PERFORMANCE_BEACON_ENDPOINT = FUMAN_RUNTIME_CONFIG.endpoints?.performanceReport || "/api/performance-report";
 let authMode = "login";
+let terminalLastRouteRestoredAt = 0;
 const FUMAN_LIVE_MEMORY_TTL_MS = FUMAN_RUNTIME_CONFIG.liveMemoryTtlMs || { strategy2: 3000, realtimeRadar: 5000 };
 const fumanLiveMemoryCache = new Map();
 let fumanWorker = null;
@@ -79,7 +81,7 @@ function getFumanWorker() {
   if (!("Worker" in window)) return null;
   if (fumanWorker) return fumanWorker;
   try {
-    fumanWorker = new Worker("terminal-worker.js?v=mobile-refresh17-20260607");
+    fumanWorker = new Worker("terminal-worker.js?v=mobile-refresh18-20260607");
     fumanWorker.addEventListener("message", (event) => {
       const { id, ok, rows, result, error } = event.data || {};
       const pending = fumanWorkerPending.get(id);
@@ -198,6 +200,71 @@ function rankedCommonTabs() {
   } catch (error) {
     return defaults;
   }
+}
+
+function getCurrentStrategyRouteKey(activeLink = null) {
+  const text = activeLink?.textContent || "";
+  if (text.includes("策略1")) return "open_buy";
+  if (text.includes("策略2") || text.includes("當沖")) return "intraday_2m";
+  if (text.includes("策略3")) return "strategy3";
+  if (text.includes("策略4") || text.includes("波段")) return "swing_radar";
+  if (text.includes("策略5")) return "strategy5";
+  if (strategyPresetMode === "strategy3") return "strategy3";
+  if (strategyPresetMode === "strategy5") return "strategy5";
+  if (selectedStrategyIds.has("open_buy")) return "open_buy";
+  if (selectedStrategyIds.has("swing_radar")) return "swing_radar";
+  if (selectedStrategyIds.has("intraday_2m")) return "intraday_2m";
+  return "";
+}
+
+function findLinkForSavedRoute(route) {
+  const viewName = route?.viewName || "market";
+  const strategyRoute = route?.strategyRoute || "";
+  if (viewName === "strategy" && strategyRoute) {
+    const needle = {
+      open_buy: "策略1",
+      intraday_2m: "策略2",
+      strategy3: "策略3",
+      swing_radar: "策略4",
+      strategy5: "策略5",
+    }[strategyRoute];
+    const strategyLink = viewLinks.find((link) => link.dataset.view === "strategy" && (!needle || (link.textContent || "").includes(needle)));
+    if (strategyLink) return strategyLink;
+  }
+  return viewLinks.find((link) => link.dataset.view === viewName) || null;
+}
+
+function saveTerminalLastRoute(viewName = getActiveViewName(), activeLink = null) {
+  try {
+    localStorage.setItem(FUMAN_LAST_ROUTE_KEY, JSON.stringify({
+      viewName,
+      strategyRoute: viewName === "strategy" ? getCurrentStrategyRouteKey(activeLink) : "",
+      at: Date.now(),
+    }));
+  } catch (error) {}
+}
+
+function readTerminalLastRoute() {
+  try {
+    const route = JSON.parse(localStorage.getItem(FUMAN_LAST_ROUTE_KEY) || "null");
+    if (!route?.viewName || Date.now() - cleanNumber(route.at) > 7 * 24 * 60 * 60 * 1000) return null;
+    return route;
+  } catch (error) {
+    return null;
+  }
+}
+
+function restoreTerminalLastRoute() {
+  if (!isTerminalUnlocked()) return false;
+  if (Date.now() - terminalLastRouteRestoredAt < 900) return false;
+  const route = readTerminalLastRoute();
+  if (!route) return false;
+  terminalLastRouteRestoredAt = Date.now();
+  const link = findLinkForSavedRoute(route);
+  const viewName = route.viewName || link?.dataset.view || "market";
+  if (link && viewName === "strategy") applyStrategyPresetFromLink(link);
+  showView(viewName, link);
+  return true;
 }
 
 function scheduleCommonTabWarmup() {
@@ -343,7 +410,7 @@ function loadFumanStyle(href, id) {
   const link = document.createElement("link");
   link.id = id;
   link.rel = "stylesheet";
-  link.href = href.includes("?") ? href : `${href}?v=${window.FUMAN_TERMINAL_BOOT?.version || "mobile-refresh17-20260607"}`;
+  link.href = href.includes("?") ? href : `${href}?v=${window.FUMAN_TERMINAL_BOOT?.version || "mobile-refresh18-20260607"}`;
   document.head.appendChild(link);
 }
 
@@ -369,7 +436,7 @@ function makeFumanModuleScope(bindings) {
 function loadFumanFeatureModule(name, src, globalName) {
   if (window[globalName]) return Promise.resolve(window[globalName]);
   if (fumanFeatureModulePromises[name]) return fumanFeatureModulePromises[name];
-  const version = window.FUMAN_TERMINAL_BOOT?.version || "mobile-refresh17-20260607";
+  const version = window.FUMAN_TERMINAL_BOOT?.version || "mobile-refresh18-20260607";
   fumanFeatureModulePromises[name] = new Promise((resolve, reject) => {
     const attr = "data-fuman-feature-" + name;
     const existing = document.querySelector("script[" + attr + "]");
@@ -582,6 +649,7 @@ function restoreTerminalAuthShellFromCache() {
   }
   scheduleCommonTabWarmup();
   applyMemberLocks();
+  deferUiWork(() => restoreTerminalLastRoute(), 80);
   return cached;
 }
 
@@ -792,7 +860,10 @@ function setTerminalAuthState(session, access = { allowed: false, status: "signe
     authLogoutButton.setAttribute("aria-label", signedIn ? "登出" : "登入");
     authLogoutButton.dataset.authAction = signedIn ? "logout" : "login";
   }
-  if (allowed) scheduleCommonTabWarmup();
+  if (allowed) {
+    scheduleCommonTabWarmup();
+    deferUiWork(() => restoreTerminalLastRoute(), 80);
+  }
   document.body.classList.remove("auth-cache-warm");
   writeFumanAuthCache(session, access);
   if (allowed) {
@@ -9254,6 +9325,7 @@ function showView(viewName, activeLink) {
   viewLinks.forEach((link)=>link.classList.toggle("active", link===activeLink));
   refreshDataFreshnessBars();
   const locked = applyMemberLocks(viewName, activeLink);
+  saveTerminalLastRoute(viewName, activeLink);
   if (locked) {
     markViewPerformance(viewName, viewStartedAt, "view:locked");
     return;
