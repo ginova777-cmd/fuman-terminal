@@ -7,9 +7,53 @@ const STRATEGY2_REPORT_FILE = dataPath("strategy2-intraday-latest.json");
 const INTERVAL_MS = Math.max(1000, Number(process.env.STRATEGY2_LIVE_INTERVAL_MS || 1000));
 const NOTIFIER = path.join(__dirname, "send-strategy2-live-alert.js");
 const MAX_LOOPS = Number(process.env.STRATEGY2_LIVE_MAX_LOOPS || 0);
+const LIVE_LOCK_FILE = statePath("strategy2-live-alert-patrol.lock");
 
 function readJson(file, fallback) {
   try { return JSON.parse(fs.readFileSync(file, "utf8")); } catch { return fallback; }
+}
+
+function writeJson(file, payload) {
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.writeFileSync(file, `${JSON.stringify(payload, null, 2)}\n`, "utf8");
+}
+
+function isProcessAlive(pid) {
+  if (!pid) return false;
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function acquireLock(lockFile, label) {
+  fs.mkdirSync(path.dirname(lockFile), { recursive: true });
+  const lock = readJson(lockFile, {});
+  if (isProcessAlive(Number(lock.pid))) {
+    console.log(`${label} already running pid=${lock.pid}; skip duplicate`);
+    return null;
+  }
+  try {
+    fs.writeFileSync(lockFile, JSON.stringify({ pid: process.pid, createdAt: new Date().toISOString(), label }, null, 2), { flag: "wx" });
+  } catch {
+    const retryLock = readJson(lockFile, {});
+    if (isProcessAlive(Number(retryLock.pid))) {
+      console.log(`${label} already running pid=${retryLock.pid}; skip duplicate`);
+      return null;
+    }
+    writeJson(lockFile, { pid: process.pid, createdAt: new Date().toISOString(), label });
+  }
+  let released = false;
+  return () => {
+    if (released) return;
+    released = true;
+    const current = readJson(lockFile, {});
+    if (Number(current.pid) === process.pid) {
+      try { fs.unlinkSync(lockFile); } catch {}
+    }
+  };
 }
 
 function taipeiTimeText(date = new Date()) {
@@ -72,6 +116,14 @@ function notifyOnce() {
 let lastSignature = "";
 
 async function loop() {
+  const releaseLock = acquireLock(LIVE_LOCK_FILE, "strategy2 live alert patrol");
+  if (!releaseLock) return;
+  const releaseAndExit = () => {
+    releaseLock();
+    process.exit(0);
+  };
+  process.once("SIGINT", releaseAndExit);
+  process.once("SIGTERM", releaseAndExit);
   if (!process.env.STRATEGY2_LIVE_STARTED_AT) {
     process.env.STRATEGY2_LIVE_STARTED_AT = taipeiTimeText();
   }
@@ -95,6 +147,7 @@ async function loop() {
     }
     await new Promise((resolve) => setTimeout(resolve, INTERVAL_MS));
   }
+  releaseLock();
 }
 
 loop();
