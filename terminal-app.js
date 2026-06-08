@@ -2978,6 +2978,7 @@ let watchlistQuoteDateKey = "";
 const intradayGoFirstSeenAt = new Map();
 const intradayFirstSeenAt = new Map();
 let strategy2IntradayEventByCode = new Map();
+let strategy2IntradayRecordRows = [];
 let strategy2IntradayCacheDate = "";
 let strategy2IntradayCacheLoading = false;
 let strategy2IntradayCacheLoadedAt = 0;
@@ -5538,6 +5539,7 @@ function getIntradayEntryTime(stock) {
 
 function resetStrategy2IntradaySessionCache() {
   strategy2IntradayEventByCode = new Map();
+  strategy2IntradayRecordRows = [];
   strategy2IntradayCacheDate = "";
   strategy2IntradayCacheLoadedAt = 0;
   intradayFirstSeenAt.clear();
@@ -5695,6 +5697,86 @@ function stockRowFromStrategy2Event(event, base) {
   };
 }
 
+function strategy2RecordKey(record) {
+  return [
+    record?.timestamp || record?.entryAt || "",
+    record?.code || "",
+    record?.stateId || "",
+    record?.signalId || record?.strategy || "",
+    record?.entryPrice || record?.observedPrice || record?.close || "",
+    record?.volume || record?.tradeVolume || "",
+  ].join("|");
+}
+
+function strategy2EventFromRecord(record) {
+  const seenTime = intradayOnlyTime(record?.timestamp || record?.entryAt || record?.firstAAt || record?.firstBAt);
+  const isEntry = record?.stateId === "entry" || record?.stateId === "go";
+  return {
+    code: String(record?.code || ""),
+    name: record?.name || "",
+    stateId: isEntry ? "go" : "wait",
+    stateLabel: isEntry ? (record?.stateLabel || "進場區") : (record?.stateLabel || "待確認"),
+    stateReason: record?.stateReason || record?.reason || "",
+    reason: record?.reason || "",
+    latestRecord: record,
+    latestSeenAt: seenTime,
+    latestAAt: isEntry ? seenTime : "",
+    latestBAt: isEntry ? "" : seenTime,
+    firstSeenAt: seenTime,
+    firstAAt: isEntry ? seenTime : "",
+    firstBAt: isEntry ? "" : seenTime,
+    strategies: [record?.strategy].filter(Boolean),
+    ma35: record?.ma35,
+    ma35Source: record?.ma35Source,
+    aboveMa35: record?.aboveMa35,
+    enhancements: [],
+  };
+}
+
+function stockRowFromStrategy2Record(record, base) {
+  const code = String(record?.code || "");
+  const seenTime = intradayOnlyTime(record?.timestamp || record?.entryAt || record?.firstAAt || record?.firstBAt);
+  if (!code || !seenTime || !isIntradayVisibleTimeText(seenTime)) return null;
+  const event = strategy2EventFromRecord(record);
+  const close = cleanNumber(record?.entryPrice) || cleanNumber(record?.observedPrice) || cleanNumber(record?.close) || cleanNumber(base?.close);
+  const percent = cleanNumber(record?.percent ?? base?.percent);
+  const tradeVolume = cleanNumber(record?.tradeVolume) || cleanNumber(record?.volume) || cleanNumber(base?.tradeVolume) || cleanNumber(base?.volume);
+  const signal = strategy2SignalFromTrackedEvent(event);
+  const isEntry = isBackendStrategy2Entry(event);
+  return {
+    ...(base || {}),
+    code,
+    name: record?.name || base?.name || code,
+    close,
+    percent,
+    tradeVolume,
+    volume: tradeVolume,
+    value: cleanNumber(record?.value) || cleanNumber(base?.value) || (close && tradeVolume ? close * tradeVolume * 1000 : 0),
+    high: cleanNumber(record?.observedHigh) || cleanNumber(record?.dayHigh) || cleanNumber(base?.high) || close,
+    low: cleanNumber(record?.observedLow) || cleanNumber(record?.dayLow) || cleanNumber(base?.low) || close,
+    intradaySignals: [signal],
+    intradayState: isEntry
+      ? { id: "go", label: event.stateLabel || "進場區", cls: "go" }
+      : { id: "watch", label: event.stateLabel || "待確認", cls: "watch" },
+    strategy2Event: event,
+    strategy2LogRecord: record,
+    strategy2RecordKey: strategy2RecordKey(record),
+    intradayEntryTime: seenTime,
+  };
+}
+
+function mergeStrategy2IntradayRecordRows(previousRows, nextRecords, baseByCode = new Map()) {
+  const merged = new Map();
+  normalizeArray(previousRows).forEach((row) => {
+    if (row?.strategy2RecordKey) merged.set(row.strategy2RecordKey, row);
+  });
+  normalizeArray(nextRecords).forEach((record) => {
+    const row = stockRowFromStrategy2Record(record, baseByCode.get(String(record?.code || "")));
+    if (row) merged.set(row.strategy2RecordKey, row);
+  });
+  return [...merged.values()].sort((a, b) => getIntradaySortValue(b, "time") - getIntradaySortValue(a, "time"));
+}
+
 function getIntradaySortValue(stock, key) {
   const seenAt = cleanNumber(stock.intradayFirstSeenAt) || cleanNumber(intradayFirstSeenAt.get(stock.code));
   const values = {
@@ -5838,7 +5920,8 @@ async function loadStrategy2IntradayCache(force = false) {
       return;
     }
     const previousByCode = strategy2IntradayEventByCode;
-    if (!normalizeArray(payload?.events).length && !normalizeArray(payload?.records).length && previousByCode.size) {
+    const previousRecordRows = strategy2IntradayRecordRows;
+    if (!normalizeArray(payload?.events).length && !normalizeArray(payload?.records).length && (previousByCode.size || previousRecordRows.length)) {
       strategy2IntradayCacheLoadedAt = Date.now();
       return;
     }
@@ -5890,6 +5973,7 @@ async function loadStrategy2IntradayCache(force = false) {
     });
     strategy2IntradayCacheDate = payload?.date || strategy2IntradayCacheDate || "";
     strategy2IntradayEventByCode = mergeStrategy2IntradayEventMaps(previousByCode, byCode);
+    strategy2IntradayRecordRows = mergeStrategy2IntradayRecordRows(previousRecordRows, payload?.records);
     strategy2IntradayCacheLoadedAt = Date.now();
     if (isViewActive("strategy") && selectedStrategyIds.has("intraday_2m")) {
       renderStrategyScanner();
@@ -6105,7 +6189,7 @@ function renderIntradayRadar(evaluated) {
   ensureStrategy2IntradayTodayCache();
   const cacheRefreshDue = isIntradayScanWindow()
     && (!strategy2IntradayCacheLoadedAt || Date.now() - strategy2IntradayCacheLoadedAt > Math.max(REALTIME_RADAR_REFRESH_MS, 3000));
-  if ((!strategy2IntradayEventByCode.size || cacheRefreshDue) && !strategy2IntradayCacheLoading) {
+  if (((!strategy2IntradayEventByCode.size && !strategy2IntradayRecordRows.length) || cacheRefreshDue) && !strategy2IntradayCacheLoading) {
     loadStrategy2IntradayCache(cacheRefreshDue);
   }
   const keyword = strategyKeyword.trim().toLowerCase();
@@ -6155,10 +6239,14 @@ function renderIntradayRadar(evaluated) {
     .filter(Boolean)
     .filter((stock) => isIntradayTradable(stock))
     .filter((stock) => matchesStrategyKeyword(stock, keyword));
-  const allRows = [...realtimeRows, ...cachedRows];
+  const logRows = strategy2IntradayRecordRows
+    .map((row) => ({ ...row, ...(row.name ? {} : { name: baseByCode.get(String(row.code || ""))?.name || row.code }) }))
+    .filter((stock) => isIntradayTradable(stock))
+    .filter((stock) => matchesStrategyKeyword(stock, keyword));
+  const allRows = logRows.length ? logRows : [...realtimeRows, ...cachedRows];
   const sessionRows = allRows.filter(isIntradayVisibleSessionRow);
   const tradableRows = scanClosed
-    ? sessionRows.filter((stock) => stock.strategy2Event && getIntradayEntryTime(stock) !== "--:--")
+    ? sessionRows.filter((stock) => (stock.strategy2Event || stock.strategy2LogRecord) && getIntradayEntryTime(stock) !== "--:--")
     : sessionRows;
   const signalScopeRows = tradableRows.filter((stock) => cleanNumber(stock.percent) >= STRATEGY2_INTRADAY_MIN_DISPLAY_PCT);
   const displayPoolRows = signalScopeRows;
@@ -6179,7 +6267,7 @@ function renderIntradayRadar(evaluated) {
   });
   const sortedAllRows = sortIntradayZoneRows(signalScopeRows);
   const zoneRows = {
-    go: sortedAllRows.filter((stock) => stock.intradayState.id === "go").slice(0, 3),
+    go: sortedAllRows.filter((stock) => stock.intradayState.id === "go").slice(0, 8),
     watch: sortedAllRows.filter((stock) => stock.intradayState.id === "watch").slice(0, 3),
   };
   const scanTime = strategyLastScanAt
@@ -6192,8 +6280,8 @@ function renderIntradayRadar(evaluated) {
     : "";
 
   if (strategySummary) strategySummary.textContent = scanClosed
-    ? `偵測時間 09:00-13:30｜收盤後停止偵測｜最後更新 ${scanTime}${scanStatus}`
-    : `09:00-13:30 即時巡邏｜不顯示目前時間之後的舊快取｜最後更新 ${scanTime}${scanStatus}`;
+    ? `09:00-13:30 紀錄檔｜收盤後停止新增｜最新紀錄在上｜最後更新 ${scanTime}${scanStatus}`
+    : `09:00-13:30 逐筆紀錄｜最新紀錄在上｜A區只列進場條件｜最後更新 ${scanTime}${scanStatus}`;
   if (strategyMatchCount) strategyMatchCount.textContent = signalScopeRows.length.toLocaleString("zh-TW");
   if (strategyAvgScore) strategyAvgScore.textContent = stateCounts.go.toLocaleString("zh-TW");
   if (strategyTopHit) strategyTopHit.textContent = rows.length ? `${Math.max(...rows.map((stock) => stock.intradaySignals.length))}/6` : "0/6";
@@ -6270,18 +6358,18 @@ function renderIntradayRadar(evaluated) {
   const zones = `
     <section class="intraday-zones">
       <article class="intraday-zone go">
-        <header><div><h3>進場區</h3><small>1分K站上MA35，MACD/KD向上且爆量</small></div><strong>${stateCounts.go}</strong></header>
+        <header><div><h3>A區 進場區</h3><small>符合進場條件的逐筆紀錄，最新在上</small></div><strong>${stateCounts.go}</strong></header>
         <div class="intraday-picks">${renderZonePicks(zoneRows.go, "go")}</div>
       </article>
     </section>
   `;
 
   const emptyText = scanClosed
-    ? "策略2偵測時間為 09:00-13:30；收盤後停止新增訊號，顯示盤中最後資料。"
-    : "策略2正在 3 秒巡邏；目前本輪尚未出現漲幅 +2% 以上且符合右側訊號的股票。";
+    ? "策略2紀錄時間為 09:00-13:30；收盤後停止新增，保留盤中逐筆紀錄。"
+    : "策略2正在 3 秒巡邏；目前紀錄檔尚未出現漲幅 +2% 以上且符合右側訊號的股票。";
   const headerText = scanClosed
-    ? `偵測時間 09:00-13:30，收盤後停止偵測。最後更新 ${scanTime}${scanStatus}`
-    : `09:00-13:30 即時偵測漲幅 +2% 以上強勢訊號，3秒巡邏熱門池，不顯示目前時間之後的快取資料。最後更新 ${scanTime}${scanStatus}`;
+    ? `09:00-13:30 逐筆紀錄，收盤後停止新增。最新紀錄在上。最後更新 ${scanTime}${scanStatus}`
+    : `09:00-13:30 逐筆紀錄漲幅 +2% 以上強勢訊號，最新紀錄在上；符合進場條件列入 A區。最後更新 ${scanTime}${scanStatus}`;
 
   const quickRows = rows.slice(0, 6);
   const mobileQuickCards = `
@@ -6386,7 +6474,7 @@ function renderIntradayRadar(evaluated) {
             <table class="intraday-table">
               <thead>
                 <tr>
-                  <th>${intradaySortHeader("time", "進場時間")}</th><th>${intradaySortHeader("code", "股票代號")}</th><th>股票名稱</th><th>狀態</th><th>訊號</th><th>${intradaySortHeader("price", "進場價")}</th><th>${intradaySortHeader("percent", "漲幅")}</th><th>${intradaySortHeader("volume", "成交量")}</th><th>風控</th><th>原因</th>
+                  <th>${intradaySortHeader("time", "紀錄時間")}</th><th>${intradaySortHeader("code", "股票代號")}</th><th>股票名稱</th><th>狀態</th><th>訊號</th><th>${intradaySortHeader("price", "進場價")}</th><th>${intradaySortHeader("percent", "漲幅")}</th><th>${intradaySortHeader("volume", "成交量")}</th><th>風控</th><th>原因</th>
                 </tr>
               </thead>
               <tbody>${tableRows}</tbody>
