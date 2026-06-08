@@ -6,7 +6,7 @@
     <title>輔滿 股票終端</title>
     <link rel="icon" href="/favicon.ico" sizes="any">
     <link rel="preload" as="image" href="/assets/logo.webp" fetchpriority="high">
-    <link rel="stylesheet" href="styles.css?v=terminal-preflight-20260607">
+    <link rel="stylesheet" href="styles.css?v=chip-5day-20260608">
   </head>
   <body class="auth-pending">
     <section class="auth-gate" id="auth-gate" aria-label="會員登入">
@@ -278,6 +278,8 @@
                   <col class="chip-col-change">
                   <col class="chip-col-percent">
                   <col class="chip-col-volume">
+                  <col class="chip-col-percent">
+                  <col class="chip-col-volume">
                   <col class="chip-col-flow">
                   <col class="chip-col-flow">
                   <col class="chip-col-streak">
@@ -293,6 +295,8 @@
                     <th>漲跌</th>
                     <th>漲幅(%)</th>
                     <th>成交量(張)</th>
+                    <th>近5日漲幅累計</th>
+                    <th>近5日累計均量</th>
                     <th>外資買賣超(張)</th>
                     <th>投信買賣超(張)</th>
                     <th>外資連買</th>
@@ -302,7 +306,7 @@
                   </tr>
                 </thead>
                 <tbody id="chip-trade-body">
-                  <tr><td colspan="12">等待資料載入...</td></tr>
+                  <tr><td colspan="14">等待資料載入...</td></tr>
                 </tbody>
               </table>
             </section>
@@ -516,7 +520,7 @@
       </main>
     </div>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="terminal-core.js?v=terminal-preflight-20260607"></script>
+    <script src="terminal-core.js?v=chip-5day-20260608"></script>
   </body>
 </html>
 

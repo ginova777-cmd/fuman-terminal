@@ -1,23 +1,23 @@
-const CACHE_VERSION = "fuman-terminal-sw-20260607-terminal-preflight";
+const CACHE_VERSION = "fuman-terminal-sw-20260608-chip-5day";
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 const DATA_CACHE = `${CACHE_VERSION}-data`;
 
 const STATIC_ASSETS = [
-  "/styles.css?v=terminal-preflight-20260607",
-  "/terminal-core.js?v=terminal-preflight-20260607",
-  "/terminal-modules.js?v=terminal-preflight-20260607",
-  "/terminal-sector-map.js?v=terminal-preflight-20260607",
-  "/terminal-strategy-config.js?v=terminal-preflight-20260607",
-  "/terminal-market-config.js?v=terminal-preflight-20260607",
-  "/terminal-ui-config.js?v=terminal-preflight-20260607",
-  "/terminal-runtime-config.js?v=terminal-preflight-20260607",
-  "/terminal-tuning-config.js?v=terminal-preflight-20260607",
-  "/terminal-worker.js?v=terminal-preflight-20260607",
-  "/terminal.js?v=terminal-preflight-20260607",
-  "/terminal-realtime-radar.css?v=terminal-preflight-20260607",
-  "/terminal-intraday-radar.css?v=terminal-preflight-20260607",
-  "/terminal-utility.css?v=terminal-preflight-20260607",
-  "/refresh.html?v=terminal-preflight-20260607",
+  "/styles.css?v=chip-5day-20260608",
+  "/terminal-core.js?v=chip-5day-20260608",
+  "/terminal-modules.js?v=chip-5day-20260608",
+  "/terminal-sector-map.js?v=chip-5day-20260608",
+  "/terminal-strategy-config.js?v=chip-5day-20260608",
+  "/terminal-market-config.js?v=chip-5day-20260608",
+  "/terminal-ui-config.js?v=chip-5day-20260608",
+  "/terminal-runtime-config.js?v=chip-5day-20260608",
+  "/terminal-tuning-config.js?v=chip-5day-20260608",
+  "/terminal-worker.js?v=chip-5day-20260608",
+  "/terminal.js?v=chip-5day-20260608",
+  "/terminal-realtime-radar.css?v=chip-5day-20260608",
+  "/terminal-intraday-radar.css?v=chip-5day-20260608",
+  "/terminal-utility.css?v=chip-5day-20260608",
+  "/refresh.html?v=chip-5day-20260608",
   "/assets/logo.webp",
   "/favicon.ico",
 ];

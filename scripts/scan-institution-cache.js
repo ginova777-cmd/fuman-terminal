@@ -85,6 +85,107 @@ function cleanNumber(value) {
   return Number(String(value ?? "").replace(/[,+%]/g, "").trim()) || 0;
 }
 
+function formatTwseDate(date) {
+  return `${date.getFullYear()}${String(date.getMonth() + 1).padStart(2, "0")}${String(date.getDate()).padStart(2, "0")}`;
+}
+
+function formatTpexDate(date) {
+  return `${String(date.getFullYear() - 1911).padStart(3, "0")}/${String(date.getMonth() + 1).padStart(2, "0")}/${String(date.getDate()).padStart(2, "0")}`;
+}
+
+function recentTradingDates(limit = 8) {
+  const dates = [];
+  const date = new Date();
+  date.setDate(date.getDate() - 1);
+  for (let i = 0; dates.length < limit && i < 18; i++) {
+    const day = date.getDay();
+    if (day !== 0 && day !== 6) dates.push(new Date(date));
+    date.setDate(date.getDate() - 1);
+  }
+  return dates;
+}
+
+function signedChange(sign, value) {
+  const amount = cleanNumber(value);
+  const text = String(sign || "");
+  if (text.includes("-") || text.includes("color:green")) return -Math.abs(amount);
+  if (text.includes("+") || text.includes("color:red")) return Math.abs(amount);
+  return amount;
+}
+
+function collectTradingMetric(bucket, code, close, change, volume) {
+  if (!/^\d{4}$/.test(code) || close <= 0 || volume <= 0) return;
+  const prevClose = close - change;
+  const pct = prevClose > 0 ? (change / prevClose) * 100 : 0;
+  const list = bucket.get(code) || [];
+  list.push({ pct, volume });
+  bucket.set(code, list);
+}
+
+async function fetchHistoricalTradingMetrics() {
+  const bucket = new Map();
+  const warnings = [];
+  for (const date of recentTradingDates()) {
+    try {
+      const tradeDate = formatTwseDate(date);
+      const payload = await fetchJson(`https://www.twse.com.tw/rwd/zh/afterTrading/MI_INDEX?date=${tradeDate}&type=ALLBUT0999&response=json`, 25000);
+      const table = (payload.tables || []).find((item) => String(item.title || "").includes("每日收盤行情"));
+      const fields = table?.fields || [];
+      const data = table?.data || [];
+      const codeIndex = fields.findIndex((field) => String(field).includes("證券代號"));
+      const closeIndex = fields.findIndex((field) => String(field).includes("收盤價"));
+      const signIndex = fields.findIndex((field) => String(field).includes("漲跌(+/-)"));
+      const changeIndex = fields.findIndex((field) => String(field).includes("漲跌價差"));
+      const volumeIndex = fields.findIndex((field) => String(field).includes("成交股數"));
+      if (codeIndex >= 0 && closeIndex >= 0 && changeIndex >= 0 && volumeIndex >= 0) {
+        data.forEach((row) => collectTradingMetric(
+          bucket,
+          String(row[codeIndex] || "").trim(),
+          cleanNumber(row[closeIndex]),
+          signedChange(signIndex >= 0 ? row[signIndex] : "", row[changeIndex]),
+          cleanNumber(row[volumeIndex])
+        ));
+      }
+    } catch (error) {
+      warnings.push(`twse 5-day metrics failed: ${formatTwseDate(date)} :: ${error.message}`);
+    }
+    try {
+      const tradeDate = formatTpexDate(date);
+      const payload = await fetchJson(`https://www.tpex.org.tw/web/stock/aftertrading/daily_close_quotes/stk_quote_result.php?l=zh-tw&o=json&d=${encodeURIComponent(tradeDate)}&s=0,asc,0`, 25000);
+      const table = (payload.tables || []).find((item) => (item.data || []).length);
+      const fields = table?.fields || [];
+      const data = table?.data || [];
+      const codeIndex = fields.findIndex((field) => String(field).includes("代號"));
+      const closeIndex = fields.findIndex((field) => String(field).includes("收盤"));
+      const changeIndex = fields.findIndex((field) => String(field).includes("漲跌"));
+      const volumeIndex = fields.findIndex((field) => String(field).includes("成交股數"));
+      if (codeIndex >= 0 && closeIndex >= 0 && changeIndex >= 0 && volumeIndex >= 0) {
+        data.forEach((row) => collectTradingMetric(
+          bucket,
+          String(row[codeIndex] || "").trim(),
+          cleanNumber(row[closeIndex]),
+          cleanNumber(row[changeIndex]),
+          cleanNumber(row[volumeIndex])
+        ));
+      }
+    } catch (error) {
+      warnings.push(`tpex 5-day metrics failed: ${formatTpexDate(date)} :: ${error.message}`);
+    }
+  }
+  const map = new Map();
+  bucket.forEach((values, code) => {
+    const usable = values.slice(0, 5);
+    if (!usable.length) return;
+    const fiveDayPctSum = usable.reduce((sum, item) => sum + item.pct, 0);
+    const fiveDayAvgVolume = usable.reduce((sum, item) => sum + item.volume, 0) / usable.length;
+    map.set(code, {
+      fiveDayPctSum: Number(fiveDayPctSum.toFixed(2)),
+      fiveDayAvgVolume: Math.round(fiveDayAvgVolume),
+    });
+  });
+  return { map, warnings };
+}
+
 function buildQuoteMap(payload) {
   const rows = Array.isArray(payload?.stocks) ? payload.stocks : [];
   const map = new Map();
@@ -111,10 +212,11 @@ function buildQuoteMap(payload) {
   return map;
 }
 
-function enrichInstitutionData(data, quoteMap) {
+function enrichInstitutionData(data, quoteMap, tradingMetricMap = new Map()) {
   const output = {};
   for (const [code, row] of Object.entries(data || {})) {
     const quote = quoteMap.get(code) || {};
+    const metrics = tradingMetricMap.get(code) || {};
     output[code] = {
       ...row,
       code,
@@ -125,6 +227,8 @@ function enrichInstitutionData(data, quoteMap) {
       tradeVolume: cleanNumber(row.tradeVolume) || quote.tradeVolume || 0,
       value: cleanNumber(row.value) || quote.value || 0,
       quoteMarket: row.quoteMarket || quote.market || "",
+      fiveDayPctSum: Number.isFinite(Number(row.fiveDayPctSum)) ? Number(row.fiveDayPctSum) : (metrics.fiveDayPctSum || 0),
+      fiveDayAvgVolume: cleanNumber(row.fiveDayAvgVolume) || metrics.fiveDayAvgVolume || 0,
     };
   }
   return output;
@@ -132,7 +236,7 @@ function enrichInstitutionData(data, quoteMap) {
 
 async function main() {
   const backup = readJson(BACKUP_FILE, { ok: true, data: {} });
-  const [payload, stockPayload] = await Promise.all([runHandler(), runStocksHandler()]);
+  const [payload, stockPayload, tradingMetricResult] = await Promise.all([runHandler(), runStocksHandler(), fetchHistoricalTradingMetrics()]);
   if ((payload.errors || []).length) {
     console.warn(`institution source warnings: ${(payload.errors || []).join(" | ")}`);
   }
@@ -155,7 +259,8 @@ async function main() {
     value: quote.value,
     market: quote.market,
   }));
-  const data = enrichInstitutionData(payload.data || {}, quoteMap);
+  tradingMetricResult.warnings.forEach((warning) => console.warn(`institution metric warning: ${warning}`));
+  const data = enrichInstitutionData(payload.data || {}, quoteMap, tradingMetricResult.map);
   const count = Object.keys(data).length;
   const output = {
     ...payload,
@@ -163,6 +268,11 @@ async function main() {
     source: "github-actions",
     updatedAt: new Date().toISOString(),
     quoteUpdatedAt: stockPayload?.updatedAt || "",
+    sourceHealth: {
+      fiveDayMetricCount: tradingMetricResult.map.size,
+      warningCount: tradingMetricResult.warnings.length,
+      warnings: tradingMetricResult.warnings.slice(0, 8),
+    },
     count,
     data,
   };

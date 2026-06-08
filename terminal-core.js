@@ -1,5 +1,5 @@
 (function () {
-  const version = "terminal-preflight-20260607";
+  const version = "chip-5day-20260608";
   window.FUMAN_TERMINAL_BOOT = {
     version,
     startedAt: Date.now(),
