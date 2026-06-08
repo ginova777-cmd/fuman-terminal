@@ -75,8 +75,23 @@ function taipeiDateFromOffset(offsetDays = 0) {
   return date;
 }
 
+function taipeiClock() {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "Asia/Taipei",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).formatToParts(new Date());
+  const get = (type) => Number(parts.find((part) => part.type === type)?.value || 0);
+  return { hour: get("hour"), minute: get("minute") };
+}
+
 async function latestTradingYmd() {
-  for (let offset = 0; offset >= -14; offset -= 1) {
+  const todayTrading = await isTwseTradingDay(taipeiDateFromOffset(0), { stateDir: process.env.FUMAN_STATE_DIR || "C:\\fuman-runtime\\state" });
+  const clock = taipeiClock();
+  const afterMarketDataReady = clock.hour > 14 || (clock.hour === 14 && clock.minute >= 30);
+  const startOffset = todayTrading.isTradingDay && !afterMarketDataReady ? -1 : 0;
+  for (let offset = startOffset; offset >= -14; offset -= 1) {
     const probe = taipeiDateFromOffset(offset);
     const tradingDay = await isTwseTradingDay(probe, { stateDir: process.env.FUMAN_STATE_DIR || "C:\\fuman-runtime\\state" });
     if (tradingDay.isTradingDay) return normalizeDate(tradingDay.date);
