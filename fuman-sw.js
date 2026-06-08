@@ -1,23 +1,23 @@
-const CACHE_VERSION = "fuman-terminal-sw-20260608-ai-observation-05";
+const CACHE_VERSION = "fuman-terminal-sw-sector-modal-cache-fresh-20260608-02";
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 const DATA_CACHE = `${CACHE_VERSION}-data`;
 
 const STATIC_ASSETS = [
-  "/styles.css?v=ai-observation-20260608-05",
-  "/terminal-core.js?v=ai-observation-20260608-05",
-  "/terminal-modules.js?v=ai-observation-20260608-05",
-  "/terminal-sector-map.js?v=ai-observation-20260608-05",
-  "/terminal-strategy-config.js?v=ai-observation-20260608-05",
-  "/terminal-market-config.js?v=ai-observation-20260608-05",
-  "/terminal-ui-config.js?v=ai-observation-20260608-05",
-  "/terminal-runtime-config.js?v=ai-observation-20260608-05",
-  "/terminal-tuning-config.js?v=ai-observation-20260608-05",
-  "/terminal-worker.js?v=ai-observation-20260608-05",
-  "/terminal.js?v=ai-observation-20260608-05",
-  "/terminal-realtime-radar.css?v=ai-observation-20260608-05",
-  "/terminal-intraday-radar.css?v=ai-observation-20260608-05",
-  "/terminal-utility.css?v=ai-observation-20260608-05",
-  "/refresh.html?v=ai-observation-20260608-05",
+  "/styles.css?v=sector-modal-cache-fresh-20260608-02",
+  "/terminal-core.js?v=sector-modal-cache-fresh-20260608-02",
+  "/terminal-modules.js?v=sector-modal-cache-fresh-20260608-02",
+  "/terminal-sector-map.js?v=sector-modal-cache-fresh-20260608-02",
+  "/terminal-strategy-config.js?v=sector-modal-cache-fresh-20260608-02",
+  "/terminal-market-config.js?v=sector-modal-cache-fresh-20260608-02",
+  "/terminal-ui-config.js?v=sector-modal-cache-fresh-20260608-02",
+  "/terminal-runtime-config.js?v=sector-modal-cache-fresh-20260608-02",
+  "/terminal-tuning-config.js?v=sector-modal-cache-fresh-20260608-02",
+  "/terminal-worker.js?v=sector-modal-cache-fresh-20260608-02",
+  "/terminal.js?v=sector-modal-cache-fresh-20260608-02",
+  "/terminal-realtime-radar.css?v=sector-modal-cache-fresh-20260608-02",
+  "/terminal-intraday-radar.css?v=sector-modal-cache-fresh-20260608-02",
+  "/terminal-utility.css?v=sector-modal-cache-fresh-20260608-02",
+  "/refresh.html?v=sector-modal-cache-fresh-20260608-02",
   "/assets/logo.webp",
   "/favicon.ico",
 ];
@@ -39,6 +39,13 @@ const DATA_PATTERNS = [
   /\/data\/strategy-match-index\.json/i,
   /\/data\/strategy4-zone-b-page-\d+\.json/i,
   /\/data\/health-summary\.json/i,
+];
+
+const NETWORK_FIRST_DATA_PATTERNS = [
+  /\/data\/data-manifest\.json/i,
+  /\/data\/data-status-index\.json/i,
+  /\/data\/open-buy-latest\.json/i,
+  /\/data\/strategy4-summary\.json/i,
 ];
 
 const PREFETCH_DATA_ASSETS = [
@@ -73,7 +80,7 @@ self.addEventListener("activate", (event) => {
   event.waitUntil(
     caches.keys()
       .then((keys) => Promise.all(keys
-        .filter((key) => key.startsWith("fuman-terminal-sw-") && !key.startsWith(CACHE_VERSION))
+        .filter((key) => key.startsWith("fuman-terminal-sw-") && (!key.startsWith(CACHE_VERSION) || key.endsWith("-data")))
         .map((key) => caches.delete(key))))
       .then(() => prefetchDataAssets())
       .then(() => self.clients.claim())
@@ -90,6 +97,10 @@ function isDataRequest(url) {
 
 function isLiveRequest(url) {
   return LIVE_PATTERNS.some((pattern) => pattern.test(url.pathname));
+}
+
+function isNetworkFirstDataRequest(url) {
+  return NETWORK_FIRST_DATA_PATTERNS.some((pattern) => pattern.test(url.pathname));
 }
 
 async function networkFirst(request) {
@@ -146,6 +157,7 @@ async function staleWhileRevalidate(request) {
 self.addEventListener("message", (event) => {
   if (event.data && event.data.type === "SKIP_WAITING") self.skipWaiting();
   if (event.data && event.data.type === "PREFETCH_DATA") event.waitUntil(prefetchDataAssets());
+  if (event.data && event.data.type === "CLEAR_DATA_CACHE") event.waitUntil(caches.delete(DATA_CACHE).then(() => prefetchDataAssets()));
 });
 self.addEventListener("fetch", (event) => {
   const request = event.request;
@@ -161,16 +173,13 @@ self.addEventListener("fetch", (event) => {
     return;
   }
   if (isDataRequest(url)) {
-    event.respondWith(url.searchParams.has("t") ? networkFirst(request) : dataStaleWhileRevalidate(request));
+    event.respondWith((url.searchParams.has("t") || isNetworkFirstDataRequest(url)) ? networkFirst(request) : dataStaleWhileRevalidate(request));
     return;
   }
   if (["script", "style", "image", "font"].includes(request.destination)) {
     event.respondWith(staleWhileRevalidate(request));
   }
 });
-
-
-
 
 
 

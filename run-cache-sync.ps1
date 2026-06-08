@@ -26,6 +26,29 @@ function Write-Log($message) {
   Add-Content -LiteralPath $log -Value $message -Encoding utf8
 }
 
+function Invoke-PublishedDataVerification {
+  if ($Scope -ne "all") { return }
+  $script = Join-Path $codeRepo "scripts\verify-published-data.js"
+  if (-not (Test-Path -LiteralPath $script)) {
+    throw "Published data verification script missing: $script"
+  }
+  $env:FUMAN_DATA_DIR = Join-Path $sourceRepo "data"
+  $env:FUMAN_SYNC_DATA_DIR = Join-Path $syncRepo "data"
+  $env:FUMAN_SYNC_REPO = $syncRepo
+  $env:FUMAN_GIT_EXE = $gitExe
+  for ($attempt = 1; $attempt -le 3; $attempt++) {
+    Write-Log "=== Verify published data attempt $attempt/3 $(Get-Date) ==="
+    & $nodeExe "--use-system-ca" $script 2>&1 | ForEach-Object { Write-Log $_ }
+    $verifyExit = $LASTEXITCODE
+    if ($verifyExit -eq 0) { return }
+    if ($attempt -lt 3) {
+      Write-Log "Published data verification failed with exit code $verifyExit; retrying in 20 seconds."
+      Start-Sleep -Seconds 20
+    }
+  }
+  throw "Published data verification failed after 3 attempts"
+}
+
 function Invoke-GitRaw($description, $arguments, $cwd = $syncRepo) {
   Write-Log "=== $description $(Get-Date) ==="
   $psi = [System.Diagnostics.ProcessStartInfo]::new()
@@ -465,11 +488,13 @@ try {
       "data\institution-joint-top.json",
       "data\institution-foreign-top.json",
       "data\institution-trust-top.json",
+      "data\institution-mobile-top.json",
       "data\institution-backup.json",
       "data\warrant-flow-latest.json",
       "data\warrant-flow-summary.json",
       "data\warrant-flow-slim.json",
       "data\warrant-priority-top.json",
+      "data\warrant-flow-mobile-top.json",
       "data\warrant-flow-backup.json",
       "data\flow-health-latest.json"
     )
@@ -485,6 +510,7 @@ try {
       "data\institution-joint-top.json",
       "data\institution-foreign-top.json",
       "data\institution-trust-top.json",
+      "data\institution-mobile-top.json",
       "data\institution-backup.json",
       "data\flow-health-latest.json"
     )
@@ -498,6 +524,7 @@ try {
       "data\warrant-flow-summary.json",
       "data\warrant-flow-slim.json",
       "data\warrant-priority-top.json",
+      "data\warrant-flow-mobile-top.json",
       "data\warrant-flow-backup.json",
       "data\flow-health-latest.json"
     )
@@ -590,11 +617,13 @@ try {
       "data\institution-joint-top.json",
       "data\institution-foreign-top.json",
       "data\institution-trust-top.json",
+      "data\institution-mobile-top.json",
       "data\institution-backup.json",
       "data\warrant-flow-latest.json",
       "data\warrant-flow-summary.json",
       "data\warrant-flow-slim.json",
       "data\warrant-priority-top.json",
+      "data\warrant-flow-mobile-top.json",
       "data\warrant-flow-backup.json",
       "data\flow-health-latest.json",
       "data\market-summary.json",
@@ -605,6 +634,7 @@ try {
       "data\stocks-slim.json",
       "data\stocks-index.json",
       "data\stocks-quotes-slim.json",
+      "data\stocks-quotes-mobile-top.json",
       "data\performance-report.json",
       "data\signal-quality-report.json",
       "data\data-quality-report.json",
@@ -712,6 +742,7 @@ try {
   $changed = & $gitExe -C $syncRepo diff --cached --name-only -- $stageFiles
   if (-not $changed) {
     Write-Log "No cache changes to sync."
+    Invoke-PublishedDataVerification
     exit 0
   }
 
@@ -771,6 +802,7 @@ try {
       }
     } else {
       Write-Log "No cache changes after retry reset."
+      Invoke-PublishedDataVerification
     }
   }
 
@@ -792,6 +824,8 @@ try {
     Test-VercelCacheVisibility "data\strategy2-intraday-top.json"
     Test-VercelCacheVisibility "data\strategy2-intraday-live-top.json"
   }
+
+  Invoke-PublishedDataVerification
 
   Write-Log "=== Cache sync end $(Get-Date) ==="
 } finally {

@@ -1,5 +1,5 @@
 (function () {
-  const VERSION = "ai-observation-20260608-05";
+  const VERSION = "sector-modal-20260608-01";
   const modules = {
     sectorMap: { loaded: false, src: "terminal-sector-map.js" },
     strategyConfig: { loaded: false, src: "terminal-strategy-config.js" },
@@ -38,8 +38,6 @@
     },
   };
 })();
-
-
 
 
 

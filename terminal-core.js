@@ -1,5 +1,5 @@
 (function () {
-  const version = "ai-observation-20260608-05";
+  const version = "sector-modal-20260608-01";
   window.FUMAN_TERMINAL_BOOT = {
     version,
     startedAt: Date.now(),
@@ -87,9 +87,6 @@
     setTimeout(loadMain, 0);
   }
 })();
-
-
-
 
 
 

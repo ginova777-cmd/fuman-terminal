@@ -1,6 +1,7 @@
 const fs = require("fs");
 const path = require("path");
 const { fetchMisQuotes } = require("../lib/mis-quotes");
+const { overlayFugleWebSocketQuotes } = require("../lib/fugle-quote-overlay");
 
 const { ROOT, dataPath } = require("./runtime-paths");
 const OUT_FILE = dataPath("strategy5-latest.json");
@@ -134,10 +135,14 @@ async function fetchUniverse() {
   const payload = await fetchJson(STOCK_URL);
   const rows = Array.isArray(payload) ? payload : (payload.stocks || []);
   const base = rows.map(normalizeStock).filter(Boolean);
-  if (!USE_MIS_QUOTES) return base;
+  const fugle = overlayFugleWebSocketQuotes(base, { source: "strategy5-universe" });
+  const baseWithFugle = fugle.rows;
+  if (fugle.used) console.log(`strategy5 fugle websocket overlay used ${fugle.used}/${base.length}`);
+  if (!USE_MIS_QUOTES) return baseWithFugle;
   const quotes = await fetchMisQuotes(base.map((stock) => stock.code));
-  return base.map((stock) => {
+  return baseWithFugle.map((stock) => {
     const quote = quotes.get(stock.code);
+    if (stock.quoteSource === "fugle-ws") return stock;
     return quote ? { ...stock, ...quote, name: quote.name || stock.name } : stock;
   });
 }
@@ -168,10 +173,25 @@ function formatTpexDate(date) {
   return `${String(date.getFullYear() - 1911).padStart(3, "0")}/${String(date.getMonth() + 1).padStart(2, "0")}/${String(date.getDate()).padStart(2, "0")}`;
 }
 
+function taipeiParts(date = new Date()) {
+  return Object.fromEntries(new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Taipei",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).formatToParts(date).map((part) => [part.type, part.value]));
+}
+
+function shouldIncludeTodayVolume() {
+  const parts = taipeiParts();
+  const minutes = Number(parts.hour) * 60 + Number(parts.minute);
+  return minutes >= 14 * 60 + 30;
+}
+
 function recentTradingDates(limit = 8) {
   const dates = [];
   const date = new Date();
-  date.setDate(date.getDate() - 1);
+  if (!shouldIncludeTodayVolume()) date.setDate(date.getDate() - 1);
   for (let i = 0; dates.length < limit && i < 18; i++) {
     const day = date.getDay();
     if (day !== 0 && day !== 6) dates.push(new Date(date));

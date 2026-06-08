@@ -53,6 +53,34 @@ function slimSector(sector) {
   };
 }
 
+function taipeiDateKey() {
+  const now = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Taipei" }));
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const day = String(now.getDate()).padStart(2, "0");
+  return `${year}${month}${day}`;
+}
+
+function hasMisRealtimeIndexes(indexes) {
+  return Array.isArray(indexes) && indexes.some((item) => String(item?._source || "").includes("MIS"));
+}
+
+function assertTodayMarketSummary(summary) {
+  const today = String(summary.today || "");
+  const resolved = String(summary.resolvedTradeDate || "");
+  const twse = String(summary.marketDates?.twse || "");
+  const tpex = String(summary.marketDates?.tpex || "");
+  const issues = [];
+  if (!today) issues.push("today is empty");
+  if (resolved !== today) issues.push(`resolvedTradeDate=${resolved || "(empty)"} today=${today || "(empty)"}`);
+  if (summary.isFallbackDate !== false) issues.push(`isFallbackDate=${summary.isFallbackDate}`);
+  if (twse !== today) issues.push(`marketDates.twse=${twse || "(empty)"} today=${today || "(empty)"}`);
+  if (tpex !== today) issues.push(`marketDates.tpex=${tpex || "(empty)"} today=${today || "(empty)"}`);
+  if (issues.length) {
+    throw new Error(`market-summary freshness guard failed: ${issues.join("; ")}`);
+  }
+}
+
 async function main() {
   const [market, heatmap, stocksResult] = await Promise.allSettled([
     callHandler(marketHandler),
@@ -76,6 +104,11 @@ async function main() {
     .sort((a, b) => Number(b.percent || 0) - Number(a.percent || 0))
     .slice(0, 80)
     .map(slimStock);
+  const todayKey = stockPayload.today || marketPayload.today || taipeiDateKey();
+  const sourceTradeDate = stockPayload.sourceTradeDate || stockPayload.resolvedTradeDate || marketPayload.resolvedTradeDate || "";
+  const resolvedTradeDate = marketPayload.trading === true && hasMisRealtimeIndexes(marketPayload.indexes)
+    ? todayKey
+    : (stockPayload.resolvedTradeDate || marketPayload.resolvedTradeDate || "");
   const summary = {
     ok: Boolean(marketPayload.ok || heatmapPayload.ok),
     source: "market-summary",
@@ -90,9 +123,13 @@ async function main() {
     stocks: topStocks,
     sectors: Array.isArray(heatmapPayload.sectors) ? heatmapPayload.sectors.slice(0, 60).map(slimSector) : [],
     marketDates: stockPayload.marketDates || marketPayload.marketDates || {},
-    resolvedTradeDate: stockPayload.resolvedTradeDate || marketPayload.resolvedTradeDate || "",
-    today: stockPayload.today || marketPayload.today || "",
+    resolvedTradeDate,
+    sourceTradeDate,
+    isFallbackDate: Boolean(resolvedTradeDate && todayKey && resolvedTradeDate !== todayKey),
+    realtimeIndex: hasMisRealtimeIndexes(marketPayload.indexes),
+    today: todayKey,
   };
+  assertTodayMarketSummary(summary);
   writeJson(path.join(ROOT, "data", "market-summary.json"), summary);
   writeJson(dataPath("market-summary.json"), summary);
   console.log(`market summary wrote stocks=${summary.stockCount} sectors=${summary.sectors.length}`);

@@ -7645,20 +7645,20 @@ function renderSectorModalRows(sector, stocks) {
     );
     const market = /otc|tpex|上櫃/i.test(String(s.exchange || s.market || "")) ? "上櫃" : "上市";
     return `
-      <tr style="border-bottom:1px solid #161925; ${i % 2 === 0 ? "" : "background:#0c0f1a"}">
-        <td style="padding:10px 16px;">
-          <div style="color:#7ec8e3; font-weight:600; font-size:13px;">${s.code} ${s.name}</div>
-          <div style="color:#555; font-size:11px; margin-top:2px;">${sector.name}</div>
+      <tr class="sector-modal-row ${i % 2 === 0 ? "" : "is-alt"}">
+        <td class="sector-modal-stock-cell" data-label="股票">
+          <div class="sector-modal-stock-title">${escapeAttr(s.code)} <span>${escapeAttr(s.name)}</span></div>
+          <div class="sector-modal-stock-sub">${escapeAttr(sector.name)}</div>
         </td>
-        <td style="padding:10px 8px; text-align:center; color:#888; font-size:12px;">${market}</td>
-        <td style="padding:10px 12px; text-align:right; color:#fff; font-weight:600;">${s.close ? s.close.toLocaleString("zh-TW") : "--"}</td>
-        <td class="${pctClass}" style="padding:10px 12px; text-align:right;">${pctSign}${formatNumber(s.pct || 0, 2)}%</td>
-        <td style="padding:10px 12px; text-align:right; color:#aaa;">${s.value ? (s.value/100000000).toFixed(1) : "0.0"} 億</td>
-        <td style="padding:10px 12px; text-align:right; color:#aaa;">${s.volume ? s.volume.toLocaleString("zh-TW", { maximumFractionDigits: 0 }) : "0"} 張</td>
-        <td class="${getSectorValueToneClass(rawForeign, "sector-inst")}" style="padding:10px 12px; text-align:right;">${formatInstitutionLots(rawForeign)}</td>
-        <td class="${getSectorValueToneClass(rawTrust, "sector-inst")}" style="padding:10px 12px; text-align:right;">${formatInstitutionLots(rawTrust)}</td>
-        <td class="${getSectorValueToneClass(rawDealer, "sector-inst")}" style="padding:10px 12px; text-align:right;">${formatInstitutionLots(rawDealer)}</td>
-        <td class="${getSectorValueToneClass(rawTotal, "sector-inst")}" style="padding:10px 16px; text-align:right;">${formatInstitutionLots(rawTotal)}</td>
+        <td class="sector-modal-market-cell" data-label="市場">${market}</td>
+        <td class="sector-modal-number-cell" data-label="現價">${s.close ? s.close.toLocaleString("zh-TW") : "--"}</td>
+        <td class="sector-modal-number-cell ${pctClass}" data-label="漲跌">${pctSign}${formatNumber(s.pct || 0, 2)}%</td>
+        <td class="sector-modal-number-cell" data-label="成交額">${s.value ? (s.value/100000000).toFixed(1) : "0.0"} 億</td>
+        <td class="sector-modal-number-cell" data-label="成交量">${s.volume ? s.volume.toLocaleString("zh-TW", { maximumFractionDigits: 0 }) : "0"} 張</td>
+        <td class="sector-modal-number-cell ${getSectorValueToneClass(rawForeign, "sector-inst")}" data-label="外資">${formatInstitutionLots(rawForeign)}</td>
+        <td class="sector-modal-number-cell ${getSectorValueToneClass(rawTrust, "sector-inst")}" data-label="投信">${formatInstitutionLots(rawTrust)}</td>
+        <td class="sector-modal-number-cell ${getSectorValueToneClass(rawDealer, "sector-inst")}" data-label="自營商">${formatInstitutionLots(rawDealer)}</td>
+        <td class="sector-modal-number-cell ${getSectorValueToneClass(rawTotal, "sector-inst")}" data-label="合計">${formatInstitutionLots(rawTotal)}</td>
       </tr>
     `;
   }).join("");
@@ -7710,86 +7710,85 @@ async function openSectorModal(sector) {
 
   if (!Object.keys(institutionData).length) await loadInstitution();
 
-  const sortedStocks = [...stocks].sort((a, b) => b.pct - a.pct);
+  const sortedStocks = [...stocks].sort((a, b) => cleanNumber(b.value) - cleanNumber(a.value) || cleanNumber(b.pct) - cleanNumber(a.pct));
   const today = new Date();
   const dateStr = `${String(today.getMonth()+1).padStart(2,"0")}/${String(today.getDate()).padStart(2,"0")}`;
+  const totalValueYi = cleanNumber(sector.totalValue || sector.amountYi).toLocaleString("zh-TW", { maximumFractionDigits: 1 });
+  const leaderParts = String(sector.leader || "").split(/\s+/).filter(Boolean);
+  const leaderLabel = leaderParts.length ? `${leaderParts[0]} ${leaderParts.slice(1).join(" ")}` : "--";
 
   const modal = document.createElement("div");
   modal.id = "sector-modal";
+  modal.className = "sector-modal-overlay";
 
   const sign = sector.pct >= 0 ? "+" : "";
 
   modal.innerHTML = `
-    <div style="
-      background:#12151f; border:1px solid #2a2f45; border-radius:12px;
-      width:100%; max-width:1000px; max-height:88vh; overflow:hidden;
-      display:flex; flex-direction:column;
-    ">
-      <div style="padding:16px 24px 12px; border-bottom:1px solid #2a2f45;">
-        <div style="color:#aaa; font-size:11px; margin-bottom:4px;">產業即時動態</div>
-        <div style="display:flex; align-items:center; justify-content:space-between;">
-          <div>
-            <div style="font-size:20px; font-weight:700; color:#fff;">${sector.name}</div>
-            <div style="color:#888; font-size:12px; margin-top:2px;">${dateStr} · 全部 · ${sector.count} 檔 · 成交額排序</div>
-          </div>
-          <div style="display:flex; gap:12px; align-items:center;">
-            <div style="background:#1a1e2e; border-radius:8px; padding:10px 16px; text-align:center;">
-              <div style="color:#888; font-size:11px;">平均漲跌幅</div>
-              <div style="font-size:22px; font-weight:700; color:${sector.pct >= 0 ? "#e74c3c" : "#27ae60"}">${sign}${sector.pct.toFixed(2)}%</div>
-            </div>
-            <div style="background:#1a1e2e; border-radius:8px; padding:10px 16px; text-align:center;">
-              <div style="color:#888; font-size:11px;">成交金額</div>
-              <div data-sector-modal-value style="font-size:18px; font-weight:600; color:#fff">${sector.totalValue} 億</div>
-            </div>
-            <div style="background:#1a1e2e; border-radius:8px; padding:10px 16px; text-align:center;">
-              <div style="color:#888; font-size:11px;">上漲 / 下跌</div>
-              <div style="font-size:18px; font-weight:600;">
-                <span style="color:#e74c3c">▲${sector.up}</span>
-                <span style="color:#555; margin:0 4px;">/</span>
-                <span style="color:#27ae60">▼${sector.down}</span>
-              </div>
-            </div>
-            <div style="background:#1a1e2e; border-radius:8px; padding:10px 16px; text-align:center;">
-              <div style="color:#888; font-size:11px;">成交張數排名</div>
-              <div style="font-size:14px; font-weight:600; color:#7ec8e3">${sector.leader?.split(" ")[0] || "--"} ${sector.leader?.split(" ").slice(1).join(" ") || ""}</div>
-            </div>
-            <button id="modal-close" style="
-              background:none; border:1px solid #333; color:#aaa;
-              width:30px; height:30px; border-radius:6px; cursor:pointer;
-              font-size:18px; line-height:1;
-            ">×</button>
-          </div>
+    <section class="sector-modal-shell" role="dialog" aria-modal="true" aria-label="${escapeAttr(sector.name)}">
+      <header class="sector-modal-header">
+        <div class="sector-modal-title-block">
+          <small>產業即時動態</small>
+          <h2>${escapeAttr(sector.name)}</h2>
+          <p>${dateStr} · 全部 · ${cleanNumber(sector.count).toLocaleString("zh-TW")} 檔 · 成交額排序</p>
         </div>
+        <button id="modal-close" type="button" class="sector-modal-close" aria-label="關閉">×</button>
+      </header>
+
+      <div class="sector-modal-summary">
+        <article>
+          <span>平均漲跌幅</span>
+          <strong class="${sector.pct >= 0 ? "sector-pct-up" : "sector-pct-down"}">${sign}${sector.pct.toFixed(2)}%</strong>
+        </article>
+        <article>
+          <span>成交額</span>
+          <strong data-sector-modal-value>${totalValueYi} 億</strong>
+        </article>
+        <article>
+          <span>上漲 / 下跌</span>
+          <strong><b class="sector-pct-up">▲${cleanNumber(sector.up).toLocaleString("zh-TW")}</b><em>/</em><b class="sector-pct-down">▼${cleanNumber(sector.down).toLocaleString("zh-TW")}</b></strong>
+        </article>
+        <article>
+          <span>成交額龍頭</span>
+          <strong class="sector-modal-leader">${escapeAttr(leaderLabel)}</strong>
+        </article>
       </div>
 
-      <div style="overflow-y:auto; flex:1;">
-        <table style="width:100%; border-collapse:collapse; font-size:13px;">
+      <div class="sector-modal-scroll">
+        <table class="sector-modal-table">
           <thead>
-            <tr style="background:#0c0f1a; color:#666; text-align:right; position:sticky; top:0; z-index:1;">
-              <th style="text-align:left; padding:10px 16px; font-weight:500; color:#888;">股票</th>
-              <th style="padding:10px 8px; font-weight:500;">市場</th>
-              <th style="padding:10px 12px; font-weight:500;">現價</th>
-              <th style="padding:10px 12px; font-weight:500;">漲跌</th>
-              <th style="padding:10px 12px; font-weight:500;">成交額</th>
-              <th style="padding:10px 12px; font-weight:500;">成交量</th>
-              <th style="padding:10px 12px; font-weight:500;">外資</th>
-              <th style="padding:10px 12px; font-weight:500;">投信</th>
-              <th style="padding:10px 12px; font-weight:500;">自營商</th>
-              <th style="padding:10px 16px; font-weight:500;">法人</th>
+            <tr>
+              <th>股票</th>
+              <th>市場</th>
+              <th>現價</th>
+              <th>漲跌</th>
+              <th>成交額</th>
+              <th>成交量</th>
+              <th>外資</th>
+              <th>投信</th>
+              <th>自營商</th>
+              <th>法人</th>
             </tr>
           </thead>
           <tbody id="sector-modal-body">
             ${renderSectorModalRows(sector, sortedStocks)}
           </tbody>
         </table>
-        ${sortedStocks.length === 0 ? `<div style="text-align:center; padding:40px; color:#666;">載入個股資料中...</div>` : ""}
+        ${sortedStocks.length === 0 ? `<div class="sector-modal-empty">載入個股資料中...</div>` : ""}
       </div>
-    </div>
+    </section>
   `;
 
   document.body.appendChild(modal);
-  modal.querySelector("#modal-close").addEventListener("click", () => modal.remove());
-  modal.addEventListener("click", (e) => { if (e.target === modal) modal.remove(); });
+  const closeModal = () => {
+    modal.remove();
+    document.removeEventListener("keydown", closeOnEscape);
+  };
+  const closeOnEscape = (event) => {
+    if (event.key === "Escape") closeModal();
+  };
+  modal.querySelector("#modal-close").addEventListener("click", closeModal);
+  modal.addEventListener("click", (e) => { if (e.target === modal) closeModal(); });
+  document.addEventListener("keydown", closeOnEscape);
   refreshSectorModalRealtime(sector, sortedStocks);
 }
 

@@ -6,7 +6,7 @@
     <title>輔滿 股票終端</title>
     <link rel="icon" href="/favicon.ico" sizes="any">
     <link rel="preload" as="image" href="/assets/logo.webp" fetchpriority="high">
-    <link rel="stylesheet" href="styles.css?v=ai-observation-20260608-05">
+    <link rel="stylesheet" href="styles.css?v=sector-modal-20260608-01">
   </head>
   <body class="auth-pending">
     <section class="auth-gate" id="auth-gate" aria-label="會員登入">
@@ -73,9 +73,8 @@
           <a class="strategy-nav" href="#" data-view="strategy" data-mobile-label="策略"><span class="s5">▰</span>策略5-綜合策略</a>
           <section class="chip-menu" aria-label="盤後籌碼">
             <h2>盤後籌碼</h2>
-            <a href="#" class="chip-menu-link" data-view="chip-trade" data-mobile-label="買賣"><span>◆</span>1.買賣超</a>
-            <a href="#" class="chip-menu-link" data-view="cb-detect" data-mobile-label="CB"><span>◇</span>2.CB可轉債</a>
-            <a href="#" class="chip-menu-link" data-view="warrant-flow" data-mobile-label="權證"><span>◒</span>3.權證走向</a>
+            <a href="#" class="chip-menu-link" data-view="chip-trade" data-mobile-label="買賣/CB"><span>◆</span>1.買賣超/CB</a>
+            <a href="#" class="chip-menu-link" data-view="warrant-flow" data-mobile-label="權證"><span>◒</span>2.權證走向</a>
             <a class="chip-menu-link watchlist-chip-link" href="#" data-view="watchlist" data-mobile-label="個股"><span>☆</span>自選股</a>
           </section>
         </nav>
@@ -239,7 +238,7 @@
         <section class="view-panel" id="chip-trade-view" hidden>
           <header class="page-header chip-page-header">
             <div>
-              <h1>買賣超</h1>
+              <h1>外資 + 投信連買</h1>
               <span class="refresh-line" id="chip-trade-date">等待盤後資料</span>
             </div>
           </header>
@@ -310,19 +309,7 @@
                 </tbody>
               </table>
             </section>
-          </section>
-        </section>
 
-        <!-- CB可轉債 -->
-        <section class="view-panel" id="cb-detect-view" hidden>
-          <header class="page-header chip-page-header">
-            <div>
-              <h1>CB可轉債</h1>
-              <span class="refresh-line">60分K門檻｜富果現股價｜CBAS三層來源</span>
-            </div>
-          </header>
-
-          <section class="cb-detect-page">
             <aside class="cb-detect-panel" aria-label="CB偵測結果">
               <div class="cb-detect-head">
                 <div>
@@ -331,35 +318,9 @@
                 </div>
                 <strong id="cb-detect-count">--</strong>
               </div>
-              <div class="cb-detect-summary" id="cb-detect-summary">等待 CB 掃描資料。</div>
-              <div class="cb-score-guide" aria-label="CB偵測規則">
-                <section>
-                  <h3>來源三層</h3>
-                  <ol>
-                    <li><b>MOPS董事會決議</b><span>最早期，約提早4~8週</span></li>
-                    <li><b>CBAS預計發行</b><span>生效後追蹤競拍與條件</span></li>
-                    <li><b>CBAS已發行</b><span>掛牌後檢查出場與溢價</span></li>
-                  </ol>
-                </section>
-                <section>
-                  <h3>評分升級</h3>
-                  <ol>
-                    <li><b>60分K門檻</b><span>站上MA200且MA200向上</span></li>
-                    <li><b>均線同向</b><span>MA5/MA35/MA200同時向上</span></li>
-                    <li><b>MACD +5</b><span>柱狀向上或黃金交叉</span></li>
-                  </ol>
-                </section>
-                <section>
-                  <h3>進出場</h3>
-                  <ol>
-                    <li><b>四個進場時機</b><span>董事會、申報、生效、競拍前</span></li>
-                    <li><b>70分以上積極</b><span>總分105分，先過否決關</span></li>
-                    <li><b>資金控管</b><span>最多3檔同時持有</span></li>
-                  </ol>
-                </section>
-              </div>
+              <div class="cb-detect-summary" id="cb-detect-summary">等待買賣超資料載入後自動評估。</div>
               <div class="cb-detect-list" id="cb-detect-list">
-                <div class="cb-detect-empty">尚未接入 CB 掃描資料</div>
+                <div class="cb-detect-empty">尚未產生 CB 偵測結果</div>
               </div>
             </aside>
           </section>
@@ -520,17 +481,9 @@
       </main>
     </div>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="terminal-core.js?v=ai-observation-20260608-05"></script>
+    <script src="terminal-core.js?v=sector-modal-20260608-01"></script>
   </body>
 </html>
-
-
-
-
-
-
-
-
 
 
 

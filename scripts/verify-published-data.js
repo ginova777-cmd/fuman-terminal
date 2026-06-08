@@ -2,19 +2,43 @@ const fs = require("fs");
 const https = require("https");
 const path = require("path");
 const crypto = require("crypto");
+const { spawnSync } = require("child_process");
 const { isTwseTradingDay } = require("./twse-trading-day");
 
 const runtimeDir = process.env.FUMAN_DATA_DIR || "C:\\fuman-runtime\\data";
 const syncDir = process.env.FUMAN_SYNC_DATA_DIR || "C:\\fuman-terminal-sync\\data";
+const syncRepo = process.env.FUMAN_SYNC_REPO || path.dirname(syncDir);
+const gitExe = process.env.FUMAN_GIT_EXE || "C:\\Program Files\\Git\\cmd\\git.exe";
 const baseUrl = (process.env.FUMAN_VERIFY_BASE_URL || "https://fuman-terminal.vercel.app").replace(/\/+$/, "");
 
 const criticalFiles = [
+  "market-summary.json",
+  "data-status-index.json",
+  "terminal-home-bundle.json",
+  "stocks-index.json",
+  "stocks-slim.json",
+  "stocks-quotes-slim.json",
+  "stocks-quotes-mobile-top.json",
+  "open-buy-latest.json",
+  "strategy2-intraday-latest.json",
   "strategy3-latest.json",
   "strategy4-latest.json",
   "strategy4-summary.json",
   "strategy4-slim.json",
+  "strategy4-score-top.json",
+  "strategy4-zone-a.json",
+  "strategy4-zone-b-page-1.json",
+  "strategy5-latest.json",
+  "institution-latest.json",
+  "institution-slim.json",
+  "institution-mobile-top.json",
+  "warrant-flow-latest.json",
+  "warrant-flow-slim.json",
+  "warrant-flow-mobile-top.json",
+  "realtime-radar-latest.json",
   "health-summary.json",
   "signal-quality-report.json",
+  "data-quality-report.json",
   "data-consistency-report.json",
   "strategy-weight-report.json",
 ];
@@ -70,7 +94,8 @@ function isNotOlderThanLatestTradeDate(value, latestTradeDate) {
 }
 
 function fetchJson(pathname, timeoutMs = 60000) {
-  const url = `${baseUrl}${pathname}`;
+  const sep = pathname.includes("?") ? "&" : "?";
+  const url = `${baseUrl}${pathname}${sep}verify-published=${Date.now()}`;
   return new Promise((resolve, reject) => {
     const req = https.get(url, { timeout: timeoutMs }, (res) => {
       let body = "";
@@ -90,9 +115,89 @@ function assert(condition, message) {
   if (!condition) throw new Error(message);
 }
 
+function git(args) {
+  return spawnSync(gitExe, args, { cwd: syncRepo, encoding: "utf8" });
+}
+
+function verifyGitState() {
+  const lockPath = path.join(syncRepo, ".git", "index.lock");
+  assert(!fs.existsSync(lockPath), `sync repo has stale git index.lock: ${lockPath}`);
+
+  const status = git(["status", "-sb"]);
+  assert(status.status === 0, `git status failed: ${(status.stderr || status.stdout).trim()}`);
+  const lines = String(status.stdout || "").trim().split(/\r?\n/).filter(Boolean);
+  assert(lines.length === 1 && lines[0] === "## main...origin/main", `sync repo not clean/even with origin: ${lines.join(" | ") || "(empty status)"}`);
+
+  const head = git(["rev-parse", "HEAD"]);
+  const origin = git(["rev-parse", "origin/main"]);
+  assert(head.status === 0, `git rev-parse HEAD failed: ${(head.stderr || head.stdout).trim()}`);
+  assert(origin.status === 0, `git rev-parse origin/main failed: ${(origin.stderr || origin.stdout).trim()}`);
+  const headSha = String(head.stdout || "").trim();
+  const originSha = String(origin.stdout || "").trim();
+  assert(headSha && originSha && headSha === originSha, `sync repo HEAD != origin/main head=${headSha} origin=${originSha}`);
+  console.log(`[published] git ok ${headSha.slice(0, 12)}`);
+}
+
+function assertDateIsLatest(name, label, value, context) {
+  const ymd = normalizeDate(value);
+  if (!ymd) return;
+  assert(ymd === context.latestTradeDate, `${name} stale ${label}=${value} latestTradeDate=${context.latestTradeDate} today=${context.today}`);
+}
+
+function validateMarketSummary(name, payload, context) {
+  assert(payload.ok === true, `${name} ok=false`);
+  assert(normalizeDate(payload.today) === context.today, `${name} today=${payload.today} expected=${context.today}`);
+  assert(normalizeDate(payload.resolvedTradeDate) === context.today, `${name} resolvedTradeDate=${payload.resolvedTradeDate} today=${context.today}`);
+  assert(payload.isFallbackDate === false, `${name} isFallbackDate=${payload.isFallbackDate}`);
+  assert(normalizeDate(payload.marketDates?.twse) === context.today, `${name} marketDates.twse=${payload.marketDates?.twse} today=${context.today}`);
+  assert(normalizeDate(payload.marketDates?.tpex) === context.today, `${name} marketDates.tpex=${payload.marketDates?.tpex} today=${context.today}`);
+  assert(count(payload) > 0, `${name} empty stocks`);
+}
+
+function validateDataStatusIndex(name, payload, context) {
+  assert(payload.ok === true, `${name} ok=false`);
+  const entries = payload.entries || {};
+  for (const required of ["market-summary.json", "stocks-index.json", "strategy4-summary.json", "institution-slim.json"]) {
+    assert(entries[required], `${name} missing ${required}`);
+  }
+  validateMarketSummaryEntry(name, entries["market-summary.json"], context);
+  Object.entries(entries).forEach(([file, entry]) => {
+    assert(entry.ok !== false, `${name} ${file} ok=false`);
+    if (entry.status === "retired_intraday_snapshot") return;
+    if (entry.date) assertDateIsLatest(name, `${file}.date`, entry.date, context);
+  });
+}
+
+function validateMarketSummaryEntry(name, entry, context) {
+  assert(entry, `${name} missing market-summary entry`);
+  assert(normalizeDate(entry.date) === context.today, `${name} market-summary date=${entry.date} today=${context.today}`);
+  assert(entry.ok !== false, `${name} market-summary ok=false`);
+}
+
+function validateTerminalHomeBundle(name, payload, context) {
+  assert(payload.ok === true, `${name} ok=false`);
+  validateDataStatusIndex(`${name}.status`, payload.status || {}, context);
+  assert(normalizeDate(payload.stocks?.resolvedTradeDate) === context.today, `${name} stocks.resolvedTradeDate=${payload.stocks?.resolvedTradeDate} today=${context.today}`);
+  assert(Number(payload.stocks?.count || 0) > 1000, `${name} stocks count too low`);
+}
+
 function validatePayload(name, payload, context) {
   const today = context.today;
   const latestTradeDate = context.latestTradeDate;
+  if (name === "market-summary.json") validateMarketSummary(name, payload, context);
+  if (name === "data-status-index.json") validateDataStatusIndex(name, payload, context);
+  if (name === "terminal-home-bundle.json") validateTerminalHomeBundle(name, payload, context);
+  if (name === "stocks-index.json" || name === "stocks-slim.json" || name === "stocks-quotes-slim.json" || name === "stocks-quotes-mobile-top.json") {
+    assert(normalizeDate(payload.resolvedTradeDate || payload.date) === latestTradeDate, `${name} stale resolvedTradeDate=${payload.resolvedTradeDate || payload.date} latestTradeDate=${latestTradeDate}`);
+    assert(count(payload) > 0, `${name} empty`);
+  }
+  if (name === "open-buy-latest.json") {
+    assertDateIsLatest(name, "date", payload.usedDate || payload.date, context);
+    assert(count(payload) > 0, `${name} empty`);
+  }
+  if (name === "strategy2-intraday-latest.json") {
+    assert(normalizeDate(payload.date || payload.updatedAt) === latestTradeDate || payload.status === "retired_intraday_snapshot", `${name} stale date=${payload.date} latestTradeDate=${latestTradeDate}`);
+  }
   if (name === "strategy3-latest.json") {
     assert(normalizeDate(payload.usedDate) === latestTradeDate, `${name} stale usedDate=${payload.usedDate} latestTradeDate=${latestTradeDate} today=${today}`);
     assert(count(payload) > 0, `${name} empty`);
@@ -106,8 +211,29 @@ function validatePayload(name, payload, context) {
     assert(isNotOlderThanLatestTradeDate(payload.scanStamp || payload.dataDate || payload.updatedAt, latestTradeDate), `${name} stale scanStamp=${payload.scanStamp || payload.dataDate || payload.updatedAt} latestTradeDate=${latestTradeDate} today=${today}`);
     assert(count(payload) > 0, `${name} empty`);
   }
+  if (name.startsWith("strategy4-") && name !== "strategy4-latest.json" && name !== "strategy4-summary.json") {
+    assert(isNotOlderThanLatestTradeDate(payload.scanStamp || payload.dataDate || payload.updatedAt, latestTradeDate), `${name} stale scanStamp=${payload.scanStamp || payload.dataDate || payload.updatedAt} latestTradeDate=${latestTradeDate}`);
+    assert(count(payload) > 0, `${name} empty`);
+  }
+  if (name === "strategy5-latest.json") {
+    assertDateIsLatest(name, "date", payload.usedDate || payload.date || payload.dataDate, context);
+    assert(count(payload) > 0, `${name} empty`);
+  }
+  if (name === "institution-latest.json" || name === "institution-slim.json" || name === "institution-mobile-top.json") {
+    assertDateIsLatest(name, "date", payload.usedDate || payload.date || payload.dataDate, context);
+    assert(count(payload) > 0, `${name} empty`);
+  }
+  if (name === "warrant-flow-latest.json" || name === "warrant-flow-slim.json" || name === "warrant-flow-mobile-top.json") {
+    assert(payload.ok !== false, `${name} ok=false`);
+    assert(count(payload) > 0, `${name} empty`);
+  }
+  if (name === "realtime-radar-latest.json") {
+    assert(payload.ok !== false, `${name} ok=false`);
+    assert(normalizeDate(payload.date || payload.updatedAt) === latestTradeDate || payload.status === "retired_intraday_snapshot", `${name} stale date=${payload.date} latestTradeDate=${latestTradeDate}`);
+  }
   if (name === "health-summary.json") assert(payload.ok === true, `${name} ok=false risk=${payload.risk}`);
   if (name === "signal-quality-report.json") assert(payload.ok === true, `${name} ok=false`);
+  if (name === "data-quality-report.json") assert(payload.ok === true, `${name} ok=false`);
   if (name === "data-consistency-report.json") assert(payload.ok === true, `${name} ok=false`);
   if (name === "strategy-weight-report.json") assert(payload.weights && Number.isFinite(Number(payload.weights.strategy2Multiplier)), `${name} missing weights`);
 }
@@ -115,6 +241,11 @@ function validatePayload(name, payload, context) {
 async function main() {
   const issues = [];
   const context = { today: todayYmd(), latestTradeDate: await latestTradingYmd() };
+  try {
+    verifyGitState();
+  } catch (error) {
+    issues.push(error.message);
+  }
   for (const name of criticalFiles) {
     const runtimeFile = path.join(runtimeDir, name);
     const syncFile = path.join(syncDir, name);
@@ -126,7 +257,7 @@ async function main() {
       assert(runtimeHash === syncHash, `${name} runtime/sync hash mismatch runtime=${runtimeHash.slice(0, 12)} sync=${syncHash.slice(0, 12)}`);
       const localPayload = readJson(syncFile);
       validatePayload(name, localPayload, context);
-      const remotePayload = await fetchJson(`/data/${name}?verify-published=${Date.now()}`);
+      const remotePayload = await fetchJson(`/data/${name}`);
       validatePayload(name, remotePayload, context);
       assert(count(remotePayload) === count(localPayload), `${name} remote/local count mismatch remote=${count(remotePayload)} local=${count(localPayload)}`);
       console.log(`[published] ${name} ok count=${count(localPayload)} hash=${syncHash.slice(0, 12)}`);
