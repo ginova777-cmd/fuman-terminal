@@ -5544,6 +5544,53 @@ function resetStrategy2IntradaySessionCache() {
   intradayGoFirstSeenAt.clear();
 }
 
+function strategy2EventLatestTimeValue(event) {
+  return Math.max(
+    intradayTimeToValue(event?.latestAAt || ""),
+    intradayTimeToValue(event?.latestBAt || ""),
+    intradayTimeToValue(event?.latestSeenAt || ""),
+    intradayTimeToValue(event?.firstAAt || ""),
+    intradayTimeToValue(event?.firstBAt || ""),
+    intradayTimeToValue(event?.firstSeenAt || ""),
+    intradayTimeToValue(event?.latestRecord?.timestamp || event?.latestRecord?.entryAt || "")
+  );
+}
+
+function mergeStrategy2IntradayEventMaps(previousMap, nextMap) {
+  if (!previousMap?.size) return nextMap;
+  if (!nextMap?.size) return previousMap;
+  const merged = new Map(previousMap);
+  nextMap.forEach((next, code) => {
+    const previous = merged.get(code);
+    if (!previous) {
+      merged.set(code, next);
+      return;
+    }
+    const nextLatest = strategy2EventLatestTimeValue(next);
+    const previousLatest = strategy2EventLatestTimeValue(previous);
+    const primary = nextLatest >= previousLatest ? next : previous;
+    const secondary = nextLatest >= previousLatest ? previous : next;
+    const latestRecord = nextLatest >= previousLatest
+      ? (next.latestRecord || previous.latestRecord)
+      : (previous.latestRecord || next.latestRecord);
+    merged.set(code, {
+      ...secondary,
+      ...primary,
+      firstSeenAt: [previous.firstSeenAt, next.firstSeenAt].filter(Boolean).sort((a, b) => intradayTimeToValue(a) - intradayTimeToValue(b))[0] || "",
+      firstAAt: [previous.firstAAt, next.firstAAt].filter(Boolean).sort((a, b) => intradayTimeToValue(a) - intradayTimeToValue(b))[0] || "",
+      firstBAt: [previous.firstBAt, next.firstBAt].filter(Boolean).sort((a, b) => intradayTimeToValue(a) - intradayTimeToValue(b))[0] || "",
+      latestSeenAt: nextLatest >= previousLatest ? (next.latestSeenAt || previous.latestSeenAt || "") : (previous.latestSeenAt || next.latestSeenAt || ""),
+      latestAAt: intradayTimeToValue(next.latestAAt || "") >= intradayTimeToValue(previous.latestAAt || "") ? (next.latestAAt || previous.latestAAt || "") : (previous.latestAAt || next.latestAAt || ""),
+      latestBAt: intradayTimeToValue(next.latestBAt || "") >= intradayTimeToValue(previous.latestBAt || "") ? (next.latestBAt || previous.latestBAt || "") : (previous.latestBAt || next.latestBAt || ""),
+      latestRecord,
+      enhancements: [...normalizeArray(previous.enhancements), ...normalizeArray(next.enhancements)]
+        .filter(isStrategy2EnhancementVisible)
+        .slice(-8),
+    });
+  });
+  return merged;
+}
+
 function ensureStrategy2IntradayTodayCache() {
   const cacheDate = normalizeMarketAiDateKey(strategy2IntradayCacheDate);
   if (!cacheDate || cacheDate === marketAiTodayKey()) return;
@@ -5782,12 +5829,17 @@ async function loadStrategy2IntradayCache(force = false) {
       payload = await loadStrategy2IntradayPayload(force);
       saveStrategy2IntradayLocalPayload(payload);
     } catch (error) {
-      payload = isMobileViewport() ? loadStrategy2IntradayLocalPayload() : null;
+      payload = loadStrategy2IntradayLocalPayload();
       if (!payload) throw error;
     }
     const payloadDate = normalizeMarketAiDateKey(payload?.date || payload?.updatedAt);
     if (payloadDate && payloadDate !== marketAiTodayKey()) {
       resetStrategy2IntradaySessionCache();
+      return;
+    }
+    const previousByCode = strategy2IntradayEventByCode;
+    if (!normalizeArray(payload?.events).length && !normalizeArray(payload?.records).length && previousByCode.size) {
+      strategy2IntradayCacheLoadedAt = Date.now();
       return;
     }
     const events = normalizeArray(payload?.events).map(sanitizeStrategy2IntradayEvent).filter(Boolean);
@@ -5836,8 +5888,8 @@ async function loadStrategy2IntradayCache(force = false) {
       }
       byCode.set(code, current);
     });
-    strategy2IntradayCacheDate = payload?.date || "";
-    strategy2IntradayEventByCode = byCode;
+    strategy2IntradayCacheDate = payload?.date || strategy2IntradayCacheDate || "";
+    strategy2IntradayEventByCode = mergeStrategy2IntradayEventMaps(previousByCode, byCode);
     strategy2IntradayCacheLoadedAt = Date.now();
     if (isViewActive("strategy") && selectedStrategyIds.has("intraday_2m")) {
       renderStrategyScanner();
