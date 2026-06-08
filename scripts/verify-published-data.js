@@ -83,7 +83,8 @@ function taipeiClock() {
     hour12: false,
   }).formatToParts(new Date());
   const get = (type) => Number(parts.find((part) => part.type === type)?.value || 0);
-  return { hour: get("hour"), minute: get("minute") };
+  const hour = get("hour");
+  return { hour: hour === 24 ? 0 : hour, minute: get("minute") };
 }
 
 async function latestTradingYmd() {
