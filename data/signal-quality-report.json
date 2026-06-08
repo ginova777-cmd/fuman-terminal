@@ -1,8 +1,8 @@
 {
   "ok": true,
-  "updatedAt": "2026-06-08T05:32:13.332Z",
+  "updatedAt": "2026-06-08T15:24:23.191Z",
   "strategy2": {
-    "latestSignals": 26,
+    "latestSignals": 0,
     "latestGo": 0,
     "backtest": {
       "count": 0,
@@ -14,28 +14,28 @@
     "reports": []
   },
   "realtimeRadar": {
-    "latestSignals": 80,
-    "longSignals": 5,
-    "shortSignals": 75,
+    "latestSignals": 0,
+    "longSignals": 0,
+    "shortSignals": 0,
     "scorecard": {
-      "count": 89,
-      "avg": 1.7890683535408136,
-      "winRate": 88.76404494382022,
-      "best": 7.355021216407359,
-      "worst": -1.7162868013528987e-14
+      "count": 26,
+      "avg": 2.6584734403618238,
+      "winRate": 96.15384615384616,
+      "best": 6.67903525046381,
+      "worst": 0
     },
-    "updatedAt": "2026-06-08T05:30:09.635Z"
+    "updatedAt": "2026-06-08T07:45:01.975Z"
   },
   "strategy4": {
     "total": 1957,
-    "count": 1504,
+    "count": 1445,
     "complete": true,
     "zoneCounts": {
-      "A": 136,
-      "B": 1020,
-      "C": 348
+      "A": 64,
+      "B": 705,
+      "C": 676
     },
-    "avgScore": 82.74734042553192,
-    "updatedAt": "2026-06-06T12:34:51.971Z"
+    "avgScore": 79.8795847750865,
+    "updatedAt": "2026-06-08T06:42:51.239Z"
   }
 }

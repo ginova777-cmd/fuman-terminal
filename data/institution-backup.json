@@ -39767,13 +39767,11 @@
     "TPEx 3itrade_hedge_result"
   ],
   "source": "github-actions-backup",
-  "updatedAt": "2026-06-08T13:11:45.733Z",
-  "quoteUpdatedAt": "2026-06-08T13:10:50.611Z",
+  "updatedAt": "2026-06-08T13:20:55.257Z",
+  "quoteUpdatedAt": "2026-06-08T13:20:09.491Z",
   "sourceHealth": {
     "fiveDayMetricCount": 1963,
-    "warningCount": 1,
-    "warnings": [
-      "tpex 5-day metrics failed: 115/06/05 :: https://www.tpex.org.tw/web/stock/aftertrading/daily_close_quotes/stk_quote_result.php?l=zh-tw&o=json&d=115%2F06%2F05&s=0,asc,0 HTTP 520"
-    ]
+    "warningCount": 0,
+    "warnings": []
   }
 }

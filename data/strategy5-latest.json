@@ -1,7 +1,7 @@
 {
   "ok": true,
   "source": "github-actions-official-daily",
-  "updatedAt": "2026-06-08T13:01:49.671Z",
+  "updatedAt": "2026-06-08T13:01:10.297Z",
   "usedDate": "20260605",
   "schedule": "06:00/21:00",
   "fullScan": true,
@@ -1963,16 +1963,605 @@
     "9962"
   ],
   "sourceHealth": {
-    "issuedSharesCount": 0,
+    "issuedSharesCount": 1976,
     "volumeAverageCount": 2202,
-    "warningCount": 2,
+    "warningCount": 1,
     "warnings": [
-      "issued shares fetch failed: https://mopsfin.twse.com.tw/opendata/t187ap03_L.csv :: This operation was aborted",
-      "issued shares fetch failed: https://mopsfin.twse.com.tw/opendata/t187ap03_O.csv :: This operation was aborted"
+      "tpex volume fetch failed: 115/06/03 :: terminated"
     ]
   },
-  "count": 10,
+  "count": 20,
   "matches": [
+    {
+      "code": "1342",
+      "name": "八貫",
+      "close": 112,
+      "open": 0,
+      "high": 0,
+      "low": 0,
+      "prevClose": 0,
+      "limitUp": 0,
+      "change": 8,
+      "percent": 7.69,
+      "value": 642059263,
+      "tradeVolume": 5868615,
+      "market": "TWSE",
+      "valueRank": 87,
+      "volumeRank": 87,
+      "volumeLots": 5869,
+      "turnoverRate": 7.52,
+      "volumeRatio": 6.99,
+      "inst": {
+        "foreign": 272283,
+        "trust": 0,
+        "dealer": 0,
+        "total": 269283
+      },
+      "matches": [
+        {
+          "id": "volume_turnover_breakout",
+          "short": "量價周轉",
+          "icon": "量",
+          "score": 100,
+          "reason": "符合固定條件：漲幅 7.69%、成交量 5,869 張、周轉率 7.52%、量比 6.99。",
+          "volumeLots": 5869,
+          "turnoverRate": 7.52,
+          "volumeRatio": 6.99
+        }
+      ],
+      "strategy4Score": 88,
+      "strategy4Reason": "爆量突破後回檔不破半分位，再突破前高 104.00，N字共振。",
+      "strategy4Signals": [
+        {
+          "id": "n_base",
+          "short": "N字",
+          "icon": "",
+          "reason": "爆量突破後回檔不破半分位，再突破前高 104.00，N字共振。"
+        }
+      ],
+      "score": 100,
+      "activeMatch": {
+        "id": "volume_turnover_breakout",
+        "short": "量價周轉",
+        "icon": "量",
+        "score": 100,
+        "reason": "符合固定條件：漲幅 7.69%、成交量 5,869 張、周轉率 7.52%、量比 6.99。",
+        "volumeLots": 5869,
+        "turnoverRate": 7.52,
+        "volumeRatio": 6.99
+      }
+    },
+    {
+      "code": "8996",
+      "name": "高力",
+      "close": 1210,
+      "open": 0,
+      "high": 0,
+      "low": 0,
+      "prevClose": 0,
+      "limitUp": 0,
+      "change": 85,
+      "percent": 7.56,
+      "value": 6541513175,
+      "tradeVolume": 5831697,
+      "market": "TWSE",
+      "valueRank": 98,
+      "volumeRank": 87,
+      "volumeLots": 5832,
+      "turnoverRate": 6.24,
+      "volumeRatio": 2.07,
+      "inst": {
+        "foreign": -335095,
+        "trust": 374000,
+        "dealer": 0,
+        "total": 116108
+      },
+      "matches": [
+        {
+          "id": "volume_turnover_breakout",
+          "short": "量價周轉",
+          "icon": "量",
+          "score": 100,
+          "reason": "符合固定條件：漲幅 7.56%、成交量 5,832 張、周轉率 6.24%、量比 2.07。",
+          "volumeLots": 5832,
+          "turnoverRate": 6.24,
+          "volumeRatio": 2.07
+        }
+      ],
+      "strategy4Score": 83,
+      "strategy4Reason": "趨勢轉強但尚未觸發突破買點；趨勢分 6/8，量比 0.00，位階 高基期。",
+      "strategy4Signals": [
+        {
+          "id": "watch_trend",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 6/8，量比 0.00，位階 高基期。"
+        }
+      ],
+      "score": 100,
+      "activeMatch": {
+        "id": "volume_turnover_breakout",
+        "short": "量價周轉",
+        "icon": "量",
+        "score": 100,
+        "reason": "符合固定條件：漲幅 7.56%、成交量 5,832 張、周轉率 6.24%、量比 2.07。",
+        "volumeLots": 5832,
+        "turnoverRate": 6.24,
+        "volumeRatio": 2.07
+      }
+    },
+    {
+      "code": "6922",
+      "name": "宸曜",
+      "close": 197.5,
+      "open": 0,
+      "high": 0,
+      "low": 0,
+      "prevClose": 0,
+      "limitUp": 0,
+      "change": 13,
+      "percent": 7.05,
+      "value": 276751702,
+      "tradeVolume": 1404646,
+      "market": "TPEX",
+      "valueRank": 79,
+      "volumeRank": 67,
+      "volumeLots": 1405,
+      "turnoverRate": 5.17,
+      "volumeRatio": 1,
+      "inst": {
+        "foreign": -29422,
+        "trust": 0,
+        "dealer": -2875,
+        "total": -32297
+      },
+      "matches": [
+        {
+          "id": "volume_turnover_breakout",
+          "short": "量價周轉",
+          "icon": "量",
+          "score": 100,
+          "reason": "符合固定條件：漲幅 7.05%、成交量 1,405 張、周轉率 5.17%、量比 1.00。",
+          "volumeLots": 1405,
+          "turnoverRate": 5.17,
+          "volumeRatio": 1
+        }
+      ],
+      "strategy4Score": 100,
+      "strategy4Reason": "趨勢轉強但尚未觸發突破買點；趨勢分 7/8，量比 4.48，位階 高基期。",
+      "strategy4Signals": [
+        {
+          "id": "watch_trend",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 7/8，量比 4.48，位階 高基期。"
+        }
+      ],
+      "score": 100,
+      "activeMatch": {
+        "id": "volume_turnover_breakout",
+        "short": "量價周轉",
+        "icon": "量",
+        "score": 100,
+        "reason": "符合固定條件：漲幅 7.05%、成交量 1,405 張、周轉率 5.17%、量比 1.00。",
+        "volumeLots": 1405,
+        "turnoverRate": 5.17,
+        "volumeRatio": 1
+      }
+    },
+    {
+      "code": "2484",
+      "name": "希華",
+      "close": 55.3,
+      "open": 0,
+      "high": 0,
+      "low": 0,
+      "prevClose": 0,
+      "limitUp": 0,
+      "change": 2.5,
+      "percent": 4.73,
+      "value": 1909827329,
+      "tradeVolume": 35467340,
+      "market": "TWSE",
+      "valueRank": 94,
+      "volumeRank": 98,
+      "volumeLots": 35467,
+      "turnoverRate": 22.25,
+      "volumeRatio": 1.8,
+      "inst": {
+        "foreign": 1149075,
+        "trust": 0,
+        "dealer": 0,
+        "total": 1079899
+      },
+      "matches": [
+        {
+          "id": "volume_turnover_breakout",
+          "short": "量價周轉",
+          "icon": "量",
+          "score": 100,
+          "reason": "符合固定條件：漲幅 4.73%、成交量 35,467 張、周轉率 22.25%、量比 1.80。",
+          "volumeLots": 35467,
+          "turnoverRate": 22.25,
+          "volumeRatio": 1.8
+        }
+      ],
+      "strategy4Score": 81,
+      "strategy4Reason": "趨勢轉強但尚未觸發突破買點；趨勢分 6/8，量比 0.00，位階 高基期。",
+      "strategy4Signals": [
+        {
+          "id": "watch_trend",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 6/8，量比 0.00，位階 高基期。"
+        }
+      ],
+      "score": 100,
+      "activeMatch": {
+        "id": "volume_turnover_breakout",
+        "short": "量價周轉",
+        "icon": "量",
+        "score": 100,
+        "reason": "符合固定條件：漲幅 4.73%、成交量 35,467 張、周轉率 22.25%、量比 1.80。",
+        "volumeLots": 35467,
+        "turnoverRate": 22.25,
+        "volumeRatio": 1.8
+      }
+    },
+    {
+      "code": "5228",
+      "name": "鈺鎧",
+      "close": 72.6,
+      "open": 0,
+      "high": 0,
+      "low": 0,
+      "prevClose": 0,
+      "limitUp": 0,
+      "change": 3.2,
+      "percent": 4.61,
+      "value": 246265190,
+      "tradeVolume": 3636642,
+      "market": "TPEX",
+      "valueRank": 78,
+      "volumeRank": 82,
+      "volumeLots": 3637,
+      "turnoverRate": 9.56,
+      "volumeRatio": 1,
+      "inst": {
+        "foreign": 813000,
+        "trust": 0,
+        "dealer": -8809,
+        "total": 804191
+      },
+      "matches": [
+        {
+          "id": "volume_turnover_breakout",
+          "short": "量價周轉",
+          "icon": "量",
+          "score": 100,
+          "reason": "符合固定條件：漲幅 4.61%、成交量 3,637 張、周轉率 9.56%、量比 1.00。",
+          "volumeLots": 3637,
+          "turnoverRate": 9.56,
+          "volumeRatio": 1
+        }
+      ],
+      "strategy4Score": 78,
+      "strategy4Reason": "趨勢轉強但尚未觸發突破買點；趨勢分 5/8，量比 0.00，位階 高基期。",
+      "strategy4Signals": [
+        {
+          "id": "watch_trend",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 5/8，量比 0.00，位階 高基期。"
+        }
+      ],
+      "score": 100,
+      "activeMatch": {
+        "id": "volume_turnover_breakout",
+        "short": "量價周轉",
+        "icon": "量",
+        "score": 100,
+        "reason": "符合固定條件：漲幅 4.61%、成交量 3,637 張、周轉率 9.56%、量比 1.00。",
+        "volumeLots": 3637,
+        "turnoverRate": 9.56,
+        "volumeRatio": 1
+      }
+    },
+    {
+      "code": "6693",
+      "name": "廣閎科",
+      "close": 165,
+      "open": 0,
+      "high": 0,
+      "low": 0,
+      "prevClose": 0,
+      "limitUp": 0,
+      "change": 7,
+      "percent": 4.43,
+      "value": 476503715,
+      "tradeVolume": 3001405,
+      "market": "TPEX",
+      "valueRank": 84,
+      "volumeRank": 79,
+      "volumeLots": 3001,
+      "turnoverRate": 6.56,
+      "volumeRatio": 1,
+      "inst": {
+        "foreign": -176468,
+        "trust": 0,
+        "dealer": 25484,
+        "total": -150984
+      },
+      "matches": [
+        {
+          "id": "volume_turnover_breakout",
+          "short": "量價周轉",
+          "icon": "量",
+          "score": 100,
+          "reason": "符合固定條件：漲幅 4.43%、成交量 3,001 張、周轉率 6.56%、量比 1.00。",
+          "volumeLots": 3001,
+          "turnoverRate": 6.56,
+          "volumeRatio": 1
+        }
+      ],
+      "strategy4Score": 100,
+      "strategy4Reason": "站上MA20/EMA21，MACD多頭，量比 2.27，日K多頭攻擊。",
+      "strategy4Signals": [
+        {
+          "id": "bull_attack",
+          "short": "攻擊",
+          "icon": "🔥",
+          "reason": "站上MA20/EMA21，MACD多頭，量比 2.27，日K多頭攻擊。"
+        }
+      ],
+      "score": 100,
+      "activeMatch": {
+        "id": "volume_turnover_breakout",
+        "short": "量價周轉",
+        "icon": "量",
+        "score": 100,
+        "reason": "符合固定條件：漲幅 4.43%、成交量 3,001 張、周轉率 6.56%、量比 1.00。",
+        "volumeLots": 3001,
+        "turnoverRate": 6.56,
+        "volumeRatio": 1
+      }
+    },
+    {
+      "code": "6925",
+      "name": "意藍",
+      "close": 79.5,
+      "open": 0,
+      "high": 0,
+      "low": 0,
+      "prevClose": 0,
+      "limitUp": 0,
+      "change": 3.3,
+      "percent": 4.33,
+      "value": 171408785,
+      "tradeVolume": 2136895,
+      "market": "TPEX",
+      "valueRank": 74,
+      "volumeRank": 74,
+      "volumeLots": 2137,
+      "turnoverRate": 10.68,
+      "volumeRatio": 1,
+      "inst": {
+        "foreign": 74000,
+        "trust": 0,
+        "dealer": 5769,
+        "total": 79769
+      },
+      "matches": [
+        {
+          "id": "volume_turnover_breakout",
+          "short": "量價周轉",
+          "icon": "量",
+          "score": 100,
+          "reason": "符合固定條件：漲幅 4.33%、成交量 2,137 張、周轉率 10.68%、量比 1.00。",
+          "volumeLots": 2137,
+          "turnoverRate": 10.68,
+          "volumeRatio": 1
+        }
+      ],
+      "strategy4Score": 93,
+      "strategy4Reason": "3日急跌後放量翻紅，RSI 34.0，偏V型快殺反彈。",
+      "strategy4Signals": [
+        {
+          "id": "v_reversal",
+          "short": "V轉",
+          "icon": "V",
+          "reason": "3日急跌後放量翻紅，RSI 34.0，偏V型快殺反彈。"
+        }
+      ],
+      "score": 100,
+      "activeMatch": {
+        "id": "volume_turnover_breakout",
+        "short": "量價周轉",
+        "icon": "量",
+        "score": 100,
+        "reason": "符合固定條件：漲幅 4.33%、成交量 2,137 張、周轉率 10.68%、量比 1.00。",
+        "volumeLots": 2137,
+        "turnoverRate": 10.68,
+        "volumeRatio": 1
+      }
+    },
+    {
+      "code": "6175",
+      "name": "立敦",
+      "close": 100.5,
+      "open": 0,
+      "high": 0,
+      "low": 0,
+      "prevClose": 0,
+      "limitUp": 0,
+      "change": 3.9,
+      "percent": 4.04,
+      "value": 2507796426,
+      "tradeVolume": 25778530,
+      "market": "TPEX",
+      "valueRank": 95,
+      "volumeRank": 97,
+      "volumeLots": 25779,
+      "turnoverRate": 17.17,
+      "volumeRatio": 1,
+      "inst": {
+        "foreign": 959257,
+        "trust": 0,
+        "dealer": 154099,
+        "total": 1113356
+      },
+      "matches": [
+        {
+          "id": "volume_turnover_breakout",
+          "short": "量價周轉",
+          "icon": "量",
+          "score": 100,
+          "reason": "符合固定條件：漲幅 4.04%、成交量 25,779 張、周轉率 17.17%、量比 1.00。",
+          "volumeLots": 25779,
+          "turnoverRate": 17.17,
+          "volumeRatio": 1
+        }
+      ],
+      "strategy4Score": 73,
+      "strategy4Reason": "趨勢轉強但尚未觸發突破買點；趨勢分 6/8，量比 0.00，位階 高基期。",
+      "strategy4Signals": [
+        {
+          "id": "watch_trend",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 6/8，量比 0.00，位階 高基期。"
+        }
+      ],
+      "score": 100,
+      "activeMatch": {
+        "id": "volume_turnover_breakout",
+        "short": "量價周轉",
+        "icon": "量",
+        "score": 100,
+        "reason": "符合固定條件：漲幅 4.04%、成交量 25,779 張、周轉率 17.17%、量比 1.00。",
+        "volumeLots": 25779,
+        "turnoverRate": 17.17,
+        "volumeRatio": 1
+      }
+    },
+    {
+      "code": "3093",
+      "name": "港建*",
+      "close": 66,
+      "open": 0,
+      "high": 0,
+      "low": 0,
+      "prevClose": 0,
+      "limitUp": 0,
+      "change": 2,
+      "percent": 3.13,
+      "value": 669395816,
+      "tradeVolume": 10055481,
+      "market": "TPEX",
+      "valueRank": 88,
+      "volumeRank": 92,
+      "volumeLots": 10055,
+      "turnoverRate": 6.93,
+      "volumeRatio": 1,
+      "inst": {
+        "foreign": 262750,
+        "trust": 0,
+        "dealer": 9606,
+        "total": 272356
+      },
+      "matches": [
+        {
+          "id": "volume_turnover_breakout",
+          "short": "量價周轉",
+          "icon": "量",
+          "score": 100,
+          "reason": "符合固定條件：漲幅 3.13%、成交量 10,055 張、周轉率 6.93%、量比 1.00。",
+          "volumeLots": 10055,
+          "turnoverRate": 6.93,
+          "volumeRatio": 1
+        }
+      ],
+      "strategy4Score": 100,
+      "strategy4Reason": "站上MA20/EMA21，MACD多頭，量比 3.75，日K多頭攻擊。",
+      "strategy4Signals": [
+        {
+          "id": "bull_attack",
+          "short": "攻擊",
+          "icon": "🔥",
+          "reason": "站上MA20/EMA21，MACD多頭，量比 3.75，日K多頭攻擊。"
+        }
+      ],
+      "score": 100,
+      "activeMatch": {
+        "id": "volume_turnover_breakout",
+        "short": "量價周轉",
+        "icon": "量",
+        "score": 100,
+        "reason": "符合固定條件：漲幅 3.13%、成交量 10,055 張、周轉率 6.93%、量比 1.00。",
+        "volumeLots": 10055,
+        "turnoverRate": 6.93,
+        "volumeRatio": 1
+      }
+    },
+    {
+      "code": "2461",
+      "name": "光群雷",
+      "close": 20.1,
+      "open": 0,
+      "high": 0,
+      "low": 0,
+      "prevClose": 0,
+      "limitUp": 0,
+      "change": 0.6,
+      "percent": 3.08,
+      "value": 224298946,
+      "tradeVolume": 11609515,
+      "market": "TWSE",
+      "valueRank": 77,
+      "volumeRank": 93,
+      "volumeLots": 11610,
+      "turnoverRate": 6.05,
+      "volumeRatio": 3.52,
+      "inst": {
+        "foreign": 1802138,
+        "trust": 0,
+        "dealer": 0,
+        "total": 1812831
+      },
+      "matches": [
+        {
+          "id": "volume_turnover_breakout",
+          "short": "量價周轉",
+          "icon": "量",
+          "score": 100,
+          "reason": "符合固定條件：漲幅 3.08%、成交量 11,610 張、周轉率 6.05%、量比 3.52。",
+          "volumeLots": 11610,
+          "turnoverRate": 6.05,
+          "volumeRatio": 3.52
+        }
+      ],
+      "strategy4Score": 88,
+      "strategy4Reason": "爆量突破後回檔不破半分位，再突破前高 19.50，N字共振。",
+      "strategy4Signals": [
+        {
+          "id": "n_base",
+          "short": "N字",
+          "icon": "",
+          "reason": "爆量突破後回檔不破半分位，再突破前高 19.50，N字共振。"
+        }
+      ],
+      "score": 100,
+      "activeMatch": {
+        "id": "volume_turnover_breakout",
+        "short": "量價周轉",
+        "icon": "量",
+        "score": 100,
+        "reason": "符合固定條件：漲幅 3.08%、成交量 11,610 張、周轉率 6.05%、量比 3.52。",
+        "volumeLots": 11610,
+        "turnoverRate": 6.05,
+        "volumeRatio": 3.52
+      }
+    },
     {
       "code": "3042",
       "name": "晶技",
