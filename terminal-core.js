@@ -1,5 +1,5 @@
 (function () {
-  const version = "sector-modal-20260608-01";
+  const version = "sector-modal-cache-fresh-20260608-02";
   window.FUMAN_TERMINAL_BOOT = {
     version,
     startedAt: Date.now(),

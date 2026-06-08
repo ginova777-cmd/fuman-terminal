@@ -4850,22 +4850,20 @@ body.fuman-light-theme .data-freshness-bar.is-stale span {
     font-size: 14px;
   }
 
-  .sector-modal-market-cell,
   .sector-modal-number-cell {
     font-size: 15px;
   }
 
   .sector-modal-row td:nth-child(2),
   .sector-modal-row td:nth-child(3),
-  .sector-modal-row td:nth-child(4),
-  .sector-modal-row td:nth-child(5) {
+  .sector-modal-row td:nth-child(4) {
     font-size: 17px;
     font-weight: 900;
   }
 
+  .sector-modal-row td:nth-child(5),
   .sector-modal-row td:nth-child(6),
-  .sector-modal-row td:nth-child(7),
-  .sector-modal-row td:nth-child(8) {
+  .sector-modal-row td:nth-child(7) {
     grid-column: 1 / -1;
   }
 }

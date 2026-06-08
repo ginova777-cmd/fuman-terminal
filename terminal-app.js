@@ -544,6 +544,7 @@ function arrangeWatchlistSearch() {
 }
 
 function handleGlobalRefresh() {
+  notifyServiceWorkerDataRefresh();
   const active = getActiveViewName();
   if (active === "market") {
     loadMarketData(true);
@@ -579,6 +580,15 @@ function handleGlobalRefresh() {
     return;
   }
   window.location.reload();
+}
+
+function notifyServiceWorkerDataRefresh() {
+  try {
+    const worker = navigator.serviceWorker?.controller;
+    if (!worker) return;
+    worker.postMessage({ type: "CLEAR_DATA_CACHE" });
+    worker.postMessage({ type: "PREFETCH_DATA" });
+  } catch (error) {}
 }
 
 async function addStockToWatchlistAndOpen(code, name = code) {
@@ -3473,6 +3483,43 @@ async function fetchVersionedJson(url, timeout = 8000, version = "", force = fal
     ...options,
     cache: force ? "no-store" : "default",
   });
+}
+
+function payloadDateKeyForTodayGuard(payload, kind = "generic") {
+  if (!payload) return "";
+  if (kind === "openBuy") return openBuyPayloadDateKey(payload);
+  if (kind === "strategy4") {
+    return normalizeMarketAiDateKey(
+      payload.scanStamp ||
+      payload.stamp ||
+      payload.usedDate ||
+      payload.tradeDate ||
+      payload.dataDate ||
+      payload.date ||
+      marketAiDataDateKey(normalizeArray(payload.matches)) ||
+      payload.updatedAt
+    );
+  }
+  return normalizeMarketAiDateKey(
+    payload.usedDate ||
+    payload.tradeDate ||
+    payload.dataDate ||
+    payload.date ||
+    payload.scanStamp ||
+    payload.updatedAt
+  );
+}
+
+function isPayloadOlderThanToday(payload, kind = "generic") {
+  const payloadDate = payloadDateKeyForTodayGuard(payload, kind);
+  const today = marketAiTodayKey();
+  return Boolean(payloadDate && today && payloadDate !== today);
+}
+
+async function refetchIfPayloadOlderThanToday(url, payload, kind, timeout = 8000, version = "latest", force = false, options = {}) {
+  if (force || !isPayloadOlderThanToday(payload, kind)) return payload;
+  recordFrontendError("stale-data-retry", new Error(`${kind}:${payloadDateKeyForTodayGuard(payload, kind)}->${marketAiTodayKey()}`));
+  return fetchVersionedJson(url, timeout, version, true, options);
 }
 
 function healthyJsonPayload(payload, kind = "generic") {
@@ -7643,14 +7690,12 @@ function renderSectorModalRows(sector, stocks) {
         ? cleanNumber(rawForeign) + cleanNumber(rawTrust) + cleanNumber(rawDealer)
         : null
     );
-    const market = /otc|tpex|上櫃/i.test(String(s.exchange || s.market || "")) ? "上櫃" : "上市";
     return `
       <tr class="sector-modal-row ${i % 2 === 0 ? "" : "is-alt"}">
         <td class="sector-modal-stock-cell" data-label="股票">
           <div class="sector-modal-stock-title">${escapeAttr(s.code)} <span>${escapeAttr(s.name)}</span></div>
           <div class="sector-modal-stock-sub">${escapeAttr(sector.name)}</div>
         </td>
-        <td class="sector-modal-market-cell" data-label="市場">${market}</td>
         <td class="sector-modal-number-cell" data-label="現價">${s.close ? s.close.toLocaleString("zh-TW") : "--"}</td>
         <td class="sector-modal-number-cell ${pctClass}" data-label="漲跌">${pctSign}${formatNumber(s.pct || 0, 2)}%</td>
         <td class="sector-modal-number-cell" data-label="成交額">${s.value ? (s.value/100000000).toFixed(1) : "0.0"} 億</td>
@@ -7755,7 +7800,6 @@ async function openSectorModal(sector) {
           <thead>
             <tr>
               <th>股票</th>
-              <th>市場</th>
               <th>現價</th>
               <th>漲跌</th>
               <th>成交額</th>
