@@ -5,7 +5,7 @@ const path = require("path");
 const SCAN_SCRIPT = path.join(__dirname, "scan-intraday-signals.js");
 const INTERVAL_MS = Number(process.env.INTRADAY_PATROL_INTERVAL_MS || 3000);
 const PUBLISH_INTERVAL_MS = Math.max(0, Number(process.env.STRATEGY2_PUBLISH_INTERVAL_MS || 60 * 1000));
-const MARKET_START_MINUTES = 9 * 60;
+const MARKET_START_MINUTES = Number(process.env.STRATEGY2_SCAN_START_MINUTES || 8 * 60);
 const MARKET_END_MINUTES = 13 * 60 + 30;
 const PUBLISH_SCRIPT = path.resolve(__dirname, "..", "run-cache-sync.ps1");
 const POWERSHELL_EXE = process.env.FUMAN_POWERSHELL_EXE || "C:\\Program Files\\PowerShell\\7\\pwsh.exe";
@@ -169,7 +169,7 @@ async function main() {
   let failureCount = 0;
 
   if (isBeforeMarket()) {
-    console.log("intraday patrol waiting for 09:00 market open");
+    console.log("intraday patrol waiting for 08:00 strategy2 1m warmup");
     await sleep(msUntilMarketOpen() + 1000);
   }
 
