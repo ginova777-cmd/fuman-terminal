@@ -39,8 +39,6 @@ const REALTIME_RESCUE_COOLDOWN_MS = Math.max(0, Number(process.env.STRATEGY2_REA
 const MIN_ENTRY_SOURCE_COVERAGE = Number(process.env.STRATEGY2_MIN_ENTRY_SOURCE_COVERAGE || 0.5);
 const STRATEGY2_SCAN_START_MINUTES = Number(process.env.STRATEGY2_SCAN_START_MINUTES || 8 * 60);
 const STRATEGY2_ENTRY_START_MINUTES = Number(process.env.STRATEGY2_ENTRY_START_MINUTES || 9 * 60);
-const STRATEGY2_OPEN_BURST_MIN_PERCENT = Number(process.env.STRATEGY2_OPEN_BURST_MIN_PERCENT || 5);
-const STRATEGY2_OPEN_BURST_MIN_VOLUME = Number(process.env.STRATEGY2_OPEN_BURST_MIN_VOLUME || 500);
 const STRATEGY2_1M_WARMUP_LIMIT = Math.max(1, Number(process.env.STRATEGY2_1M_WARMUP_LIMIT || 120));
 const STRATEGY2_1M_SUPABASE_SYNC = process.env.STRATEGY2_1M_SUPABASE_SYNC === "1";
 const MA35_PROVIDER_FAILURE_LIMIT = Math.max(1, Number(process.env.STRATEGY2_MA35_PROVIDER_FAILURE_LIMIT || 8));
@@ -530,22 +528,17 @@ function isTrustedStrategy2Ma35Source(source) {
 function classifyStrategy2State(stock, signal, options = {}) {
   if (signal.id !== "open_burst_entry") return null;
   const sourceHealthyForEntry = options.entrySourceHealthy !== false;
-  const score = Math.min(100, Math.round(cleanNumber(signal.openToNowPercent) * 10 + Math.min(cleanNumber(signal.volume) / 100, 30) + 20));
+  const score = Math.min(100, Math.round(70 + (signal.macdDifUp ? 8 : 0) + (signal.macdHistUp ? 8 : 0) + (signal.kdUp ? 10 : 0)));
   if (!sourceHealthyForEntry) {
     return { stateId: "wait", stateLabel: "待確認", stateReason: `開彈條件已符合，但本輪市場來源可用率 ${Number(options.sourceCoverage || 0).toFixed(2)} 未達 ${MIN_ENTRY_SOURCE_COVERAGE.toFixed(2)}，禁止升級進場區。`, score };
   }
-  return { stateId: "entry", stateLabel: "進場區", stateReason: `開彈進場：開到現 ${cleanNumber(signal.openToNowPercent).toFixed(2)}%，量 ${Math.round(cleanNumber(signal.volume))} 張，1分K close > MA35，MACD/DIF/K/D/J 全部向上。`, score };
+  return { stateId: "entry", stateLabel: "進場區", stateReason: "開彈進場：1分K close > MA35，MACD/DIF/K/D/J 全部向上。", score };
 }
 
 function detectOpenBurstEntrySignal(stock) {
-  const open = cleanNumber(stock.open);
   const latestClose = cleanNumber(stock.latest1mClose || stock.close);
-  const volume = cleanNumber(stock.tradeVolume);
   const ma35 = cleanNumber(stock.ma35);
-  const openToNowPercent = open > 0 ? ((latestClose - open) / open) * 100 : 0;
   const checks = {
-    openToNow: openToNowPercent >= STRATEGY2_OPEN_BURST_MIN_PERCENT,
-    volume: volume >= STRATEGY2_OPEN_BURST_MIN_VOLUME,
     aboveMa35: latestClose > ma35 && ma35 > 0,
     macdUp: stock.macdHistUp === true,
     difUp: stock.macdDifUp === true,
@@ -557,13 +550,13 @@ function detectOpenBurstEntrySignal(stock) {
   return {
     id: "open_burst_entry",
     label: "開彈",
-    reason: `開到現 ${openToNowPercent.toFixed(2)}%，1分K close ${latestClose.toFixed(2)} > MA35 ${ma35.toFixed(2)}，MACD/DIF/K/D/J 向上`,
+    reason: `1分K close ${latestClose.toFixed(2)} > MA35 ${ma35.toFixed(2)}，MACD/DIF/K/D/J 向上`,
     entryPrice: latestClose,
     entryLow: latestClose,
     entryHigh: latestClose,
     stopLoss: latestClose * 0.985,
     chaseLimit: latestClose * 1.01,
-    volumeMilestone: STRATEGY2_OPEN_BURST_MIN_VOLUME,
+    volumeMilestone: 0,
     deltaVolume: cleanNumber(stock.deltaVolume),
     ma35,
     ma35Prev: cleanNumber(stock.ma35Prev),
@@ -592,10 +585,8 @@ function detectOpenBurstEntrySignal(stock) {
     kdDUp: stock.kdDUp === true,
     kdJUp: stock.kdJUp === true,
     intradayVolumeBurst: true,
-    openToNowPercent,
     latest1mClose: latestClose,
     latest1mAt: stock.latest1mAt || stock.ma35At || "",
-    volume,
     checks,
   };
 }
@@ -2112,7 +2103,6 @@ async function fetchYahooIntradaySma35(code, scanTimestamp) {
 async function fetchMa35Map(stocks, scanTimestamp, cache) {
   const candidates = stocks
     .filter(isIntradayTradable)
-    .filter((stock) => cleanNumber(stock.percent) >= STRATEGY2_OPEN_BURST_MIN_PERCENT - 1 && cleanNumber(stock.tradeVolume) >= STRATEGY2_OPEN_BURST_MIN_VOLUME)
     .map((stock) => stock.code);
   const map = new Map();
   const concurrency = 8;
