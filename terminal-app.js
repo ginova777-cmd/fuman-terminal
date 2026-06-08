@@ -14,7 +14,6 @@ const viewPanels = {
   market: document.querySelector("#market-view"),
   strategy: document.querySelector("#strategy-view"),
   "chip-trade": document.querySelector("#chip-trade-view"),
-  "cb-detect": document.querySelector("#cb-detect-view"),
   "warrant-flow": document.querySelector("#warrant-flow-view"),
   member: document.querySelector("#member-view"),
 };
@@ -469,12 +468,6 @@ function loadFumanFeatureModule(name, src, globalName) {
     document.head.appendChild(script);
   });
   return fumanFeatureModulePromises[name];
-}
-
-function clearFumanFeatureModule(name, globalName) {
-  delete fumanFeatureModulePromises[name];
-  try { delete window[globalName]; } catch (error) { window[globalName] = undefined; }
-  document.querySelectorAll(`[data-fuman-feature-${name}]`).forEach((script) => script.remove());
 }
 
 function installThemeToggle() {
@@ -2809,8 +2802,7 @@ function applyStaticTitleIcons() {
     marketTitle.innerHTML = `${titleWithIcon("●", marketText)}${marketMode === "overview" && settlementBadge ? ` <small class="update-mode-badge settlement-title-badge">${escapeAttr(settlementBadge)}</small>` : ""} ${scheduleBadgeHtml("market")}`;
   }
   setTitleWithSchedule(document.querySelector("#watchlist-view .page-header h1"), "☆", "自選股", "watchlist");
-  setTitleWithSchedule(document.querySelector("#chip-trade-view .page-header h1"), "◆", "買賣超", "chip");
-  setTitleWithSchedule(document.querySelector("#cb-detect-view .page-header h1"), "◇", "CB可轉債", "chip");
+  setTitleWithSchedule(document.querySelector("#chip-trade-view .page-header h1"), "◆", "買賣超 / CB", "chip");
   setTitleWithSchedule(document.querySelector("#warrant-flow-view .page-header h1"), "◒", "權證走向", "warrant");
 }
 
@@ -2983,7 +2975,6 @@ let watchlistQuoteDateKey = "";
 const intradayGoFirstSeenAt = new Map();
 const intradayFirstSeenAt = new Map();
 let strategy2IntradayEventByCode = new Map();
-let strategy2IntradayRecordRows = [];
 let strategy2IntradayCacheDate = "";
 let strategy2IntradayCacheLoading = false;
 let strategy2IntradayCacheLoadedAt = 0;
@@ -4015,9 +4006,9 @@ function mobileHomeQuickTargets() {
       { label: "AI 判讀", detail: "市場熱區快看", view: "market", mode: "ai" },
     ]
     : [
-      { label: "買賣超", detail: "法人籌碼排行", view: "chip-trade" },
-      { label: "CB可轉債", detail: "60分K可轉債偵測", view: "cb-detect" },
+      { label: "買賣超/CB", detail: "籌碼與CB偵測", view: "chip-trade" },
       { label: "權證", detail: "優先區熱度", view: "warrant-flow" },
+      { label: "策略5", detail: "綜合策略結果", view: "strategy", preset: "策略5" },
     ];
 }
 
@@ -4054,6 +4045,7 @@ function applyMarketSummaryPayload(payload) {
   marketSummaryPayload = payload;
   marketSummaryLoadedAt = Date.now();
   updateMarketStockDataState(payload);
+  updateMarketOverviewBias(payload);
   marketRealtimeState = {
     trading: payload.trading === true,
     marketStatus: payload.marketStatus || "",
@@ -4071,6 +4063,10 @@ function applyMarketSummaryPayload(payload) {
   if (stocks.length) renderStocks(stocks);
   if (normalizeArray(payload.sectors).length) renderHeatmapSectors(payload.sectors);
   renderMobileHomeMode(payload);
+  if (marketMode === "ai") {
+    marketAiLastSignature = "";
+    renderMarketAiPanel();
+  }
   return true;
 }
 
@@ -5544,7 +5540,6 @@ function getIntradayEntryTime(stock) {
 
 function resetStrategy2IntradaySessionCache() {
   strategy2IntradayEventByCode = new Map();
-  strategy2IntradayRecordRows = [];
   strategy2IntradayCacheDate = "";
   strategy2IntradayCacheLoadedAt = 0;
   intradayFirstSeenAt.clear();
@@ -5702,86 +5697,6 @@ function stockRowFromStrategy2Event(event, base) {
   };
 }
 
-function strategy2RecordKey(record) {
-  return [
-    record?.timestamp || record?.entryAt || "",
-    record?.code || "",
-    record?.stateId || "",
-    record?.signalId || record?.strategy || "",
-    record?.entryPrice || record?.observedPrice || record?.close || "",
-    record?.volume || record?.tradeVolume || "",
-  ].join("|");
-}
-
-function strategy2EventFromRecord(record) {
-  const seenTime = intradayOnlyTime(record?.timestamp || record?.entryAt || record?.firstAAt || record?.firstBAt);
-  const isEntry = record?.stateId === "entry" || record?.stateId === "go";
-  return {
-    code: String(record?.code || ""),
-    name: record?.name || "",
-    stateId: isEntry ? "go" : "wait",
-    stateLabel: isEntry ? (record?.stateLabel || "進場區") : (record?.stateLabel || "待確認"),
-    stateReason: record?.stateReason || record?.reason || "",
-    reason: record?.reason || "",
-    latestRecord: record,
-    latestSeenAt: seenTime,
-    latestAAt: isEntry ? seenTime : "",
-    latestBAt: isEntry ? "" : seenTime,
-    firstSeenAt: seenTime,
-    firstAAt: isEntry ? seenTime : "",
-    firstBAt: isEntry ? "" : seenTime,
-    strategies: [record?.strategy].filter(Boolean),
-    ma35: record?.ma35,
-    ma35Source: record?.ma35Source,
-    aboveMa35: record?.aboveMa35,
-    enhancements: [],
-  };
-}
-
-function stockRowFromStrategy2Record(record, base) {
-  const code = String(record?.code || "");
-  const seenTime = intradayOnlyTime(record?.timestamp || record?.entryAt || record?.firstAAt || record?.firstBAt);
-  if (!code || !seenTime || !isIntradayVisibleTimeText(seenTime)) return null;
-  const event = strategy2EventFromRecord(record);
-  const close = cleanNumber(record?.entryPrice) || cleanNumber(record?.observedPrice) || cleanNumber(record?.close) || cleanNumber(base?.close);
-  const percent = cleanNumber(record?.percent ?? base?.percent);
-  const tradeVolume = cleanNumber(record?.tradeVolume) || cleanNumber(record?.volume) || cleanNumber(base?.tradeVolume) || cleanNumber(base?.volume);
-  const signal = strategy2SignalFromTrackedEvent(event);
-  const isEntry = isBackendStrategy2Entry(event);
-  return {
-    ...(base || {}),
-    code,
-    name: record?.name || base?.name || code,
-    close,
-    percent,
-    tradeVolume,
-    volume: tradeVolume,
-    value: cleanNumber(record?.value) || cleanNumber(base?.value) || (close && tradeVolume ? close * tradeVolume * 1000 : 0),
-    high: cleanNumber(record?.observedHigh) || cleanNumber(record?.dayHigh) || cleanNumber(base?.high) || close,
-    low: cleanNumber(record?.observedLow) || cleanNumber(record?.dayLow) || cleanNumber(base?.low) || close,
-    intradaySignals: [signal],
-    intradayState: isEntry
-      ? { id: "go", label: event.stateLabel || "進場區", cls: "go" }
-      : { id: "watch", label: event.stateLabel || "待確認", cls: "watch" },
-    strategy2Event: event,
-    strategy2LogRecord: record,
-    strategy2RecordKey: strategy2RecordKey(record),
-    intradayEntryTime: seenTime,
-  };
-}
-
-function mergeStrategy2IntradayRecordRows(previousRows, nextRecords, baseByCode = new Map()) {
-  const merged = new Map();
-  normalizeArray(previousRows).forEach((row) => {
-    if (row?.strategy2RecordKey) merged.set(row.strategy2RecordKey, row);
-  });
-  normalizeArray(nextRecords).forEach((record) => {
-    const row = stockRowFromStrategy2Record(record, baseByCode.get(String(record?.code || "")));
-    if (row) merged.set(row.strategy2RecordKey, row);
-  });
-  return [...merged.values()].sort((a, b) => getIntradaySortValue(b, "time") - getIntradaySortValue(a, "time"));
-}
-
 function getIntradaySortValue(stock, key) {
   const seenAt = cleanNumber(stock.intradayFirstSeenAt) || cleanNumber(intradayFirstSeenAt.get(stock.code));
   const values = {
@@ -5925,8 +5840,7 @@ async function loadStrategy2IntradayCache(force = false) {
       return;
     }
     const previousByCode = strategy2IntradayEventByCode;
-    const previousRecordRows = strategy2IntradayRecordRows;
-    if (!normalizeArray(payload?.events).length && !normalizeArray(payload?.records).length && (previousByCode.size || previousRecordRows.length)) {
+    if (!normalizeArray(payload?.events).length && !normalizeArray(payload?.records).length && previousByCode.size) {
       strategy2IntradayCacheLoadedAt = Date.now();
       return;
     }
@@ -5978,7 +5892,6 @@ async function loadStrategy2IntradayCache(force = false) {
     });
     strategy2IntradayCacheDate = payload?.date || strategy2IntradayCacheDate || "";
     strategy2IntradayEventByCode = mergeStrategy2IntradayEventMaps(previousByCode, byCode);
-    strategy2IntradayRecordRows = mergeStrategy2IntradayRecordRows(previousRecordRows, payload?.records);
     strategy2IntradayCacheLoadedAt = Date.now();
     if (isViewActive("strategy") && selectedStrategyIds.has("intraday_2m")) {
       renderStrategyScanner();
@@ -6194,7 +6107,7 @@ function renderIntradayRadar(evaluated) {
   ensureStrategy2IntradayTodayCache();
   const cacheRefreshDue = isIntradayScanWindow()
     && (!strategy2IntradayCacheLoadedAt || Date.now() - strategy2IntradayCacheLoadedAt > Math.max(REALTIME_RADAR_REFRESH_MS, 3000));
-  if (((!strategy2IntradayEventByCode.size && !strategy2IntradayRecordRows.length) || cacheRefreshDue) && !strategy2IntradayCacheLoading) {
+  if ((!strategy2IntradayEventByCode.size || cacheRefreshDue) && !strategy2IntradayCacheLoading) {
     loadStrategy2IntradayCache(cacheRefreshDue);
   }
   const keyword = strategyKeyword.trim().toLowerCase();
@@ -6244,14 +6157,10 @@ function renderIntradayRadar(evaluated) {
     .filter(Boolean)
     .filter((stock) => isIntradayTradable(stock))
     .filter((stock) => matchesStrategyKeyword(stock, keyword));
-  const logRows = strategy2IntradayRecordRows
-    .map((row) => ({ ...row, ...(row.name ? {} : { name: baseByCode.get(String(row.code || ""))?.name || row.code }) }))
-    .filter((stock) => isIntradayTradable(stock))
-    .filter((stock) => matchesStrategyKeyword(stock, keyword));
-  const allRows = logRows.length ? logRows : [...realtimeRows, ...cachedRows];
+  const allRows = [...realtimeRows, ...cachedRows];
   const sessionRows = allRows.filter(isIntradayVisibleSessionRow);
   const tradableRows = scanClosed
-    ? sessionRows.filter((stock) => (stock.strategy2Event || stock.strategy2LogRecord) && getIntradayEntryTime(stock) !== "--:--")
+    ? sessionRows.filter((stock) => stock.strategy2Event && getIntradayEntryTime(stock) !== "--:--")
     : sessionRows;
   const signalScopeRows = tradableRows.filter((stock) => cleanNumber(stock.percent) >= STRATEGY2_INTRADAY_MIN_DISPLAY_PCT);
   const displayPoolRows = signalScopeRows;
@@ -6272,7 +6181,7 @@ function renderIntradayRadar(evaluated) {
   });
   const sortedAllRows = sortIntradayZoneRows(signalScopeRows);
   const zoneRows = {
-    go: sortedAllRows.filter((stock) => stock.intradayState.id === "go").slice(0, 8),
+    go: sortedAllRows.filter((stock) => stock.intradayState.id === "go").slice(0, 3),
     watch: sortedAllRows.filter((stock) => stock.intradayState.id === "watch").slice(0, 3),
   };
   const scanTime = strategyLastScanAt
@@ -6285,8 +6194,8 @@ function renderIntradayRadar(evaluated) {
     : "";
 
   if (strategySummary) strategySummary.textContent = scanClosed
-    ? `09:00-13:30 紀錄檔｜收盤後停止新增｜最新紀錄在上｜最後更新 ${scanTime}${scanStatus}`
-    : `09:00-13:30 逐筆紀錄｜最新紀錄在上｜A區只列進場條件｜最後更新 ${scanTime}${scanStatus}`;
+    ? `偵測時間 09:00-13:30｜收盤後停止偵測｜最後更新 ${scanTime}${scanStatus}`
+    : `09:00-13:30 即時巡邏｜不顯示目前時間之後的舊快取｜最後更新 ${scanTime}${scanStatus}`;
   if (strategyMatchCount) strategyMatchCount.textContent = signalScopeRows.length.toLocaleString("zh-TW");
   if (strategyAvgScore) strategyAvgScore.textContent = stateCounts.go.toLocaleString("zh-TW");
   if (strategyTopHit) strategyTopHit.textContent = rows.length ? `${Math.max(...rows.map((stock) => stock.intradaySignals.length))}/6` : "0/6";
@@ -6363,18 +6272,18 @@ function renderIntradayRadar(evaluated) {
   const zones = `
     <section class="intraday-zones">
       <article class="intraday-zone go">
-        <header><div><h3>A區 進場區</h3><small>符合進場條件的逐筆紀錄，最新在上</small></div><strong>${stateCounts.go}</strong></header>
+        <header><div><h3>進場區</h3><small>1分K站上MA35，MACD/KD向上且爆量</small></div><strong>${stateCounts.go}</strong></header>
         <div class="intraday-picks">${renderZonePicks(zoneRows.go, "go")}</div>
       </article>
     </section>
   `;
 
   const emptyText = scanClosed
-    ? "策略2紀錄時間為 09:00-13:30；收盤後停止新增，保留盤中逐筆紀錄。"
-    : "策略2正在 3 秒巡邏；目前紀錄檔尚未出現漲幅 +2% 以上且符合右側訊號的股票。";
+    ? "策略2偵測時間為 09:00-13:30；收盤後停止新增訊號，顯示盤中最後資料。"
+    : "策略2正在 3 秒巡邏；目前本輪尚未出現漲幅 +2% 以上且符合右側訊號的股票。";
   const headerText = scanClosed
-    ? `09:00-13:30 逐筆紀錄，收盤後停止新增。最新紀錄在上。最後更新 ${scanTime}${scanStatus}`
-    : `09:00-13:30 逐筆紀錄漲幅 +2% 以上強勢訊號，最新紀錄在上；符合進場條件列入 A區。最後更新 ${scanTime}${scanStatus}`;
+    ? `偵測時間 09:00-13:30，收盤後停止偵測。最後更新 ${scanTime}${scanStatus}`
+    : `09:00-13:30 即時偵測漲幅 +2% 以上強勢訊號，3秒巡邏熱門池，不顯示目前時間之後的快取資料。最後更新 ${scanTime}${scanStatus}`;
 
   const quickRows = rows.slice(0, 6);
   const mobileQuickCards = `
@@ -6479,7 +6388,7 @@ function renderIntradayRadar(evaluated) {
             <table class="intraday-table">
               <thead>
                 <tr>
-                  <th>${intradaySortHeader("time", "紀錄時間")}</th><th>${intradaySortHeader("code", "股票代號")}</th><th>股票名稱</th><th>狀態</th><th>訊號</th><th>${intradaySortHeader("price", "進場價")}</th><th>${intradaySortHeader("percent", "漲幅")}</th><th>${intradaySortHeader("volume", "成交量")}</th><th>風控</th><th>原因</th>
+                  <th>${intradaySortHeader("time", "進場時間")}</th><th>${intradaySortHeader("code", "股票代號")}</th><th>股票名稱</th><th>狀態</th><th>訊號</th><th>${intradaySortHeader("price", "進場價")}</th><th>${intradaySortHeader("percent", "漲幅")}</th><th>${intradaySortHeader("volume", "成交量")}</th><th>風控</th><th>原因</th>
                 </tr>
               </thead>
               <tbody>${tableRows}</tbody>
@@ -8208,6 +8117,7 @@ async function refreshMarketAiPanelOnOpen() {
     if (marketMode === "ai") {
       marketAiLastSignature = "";
       renderMarketAiPanel();
+      loadMarketAiOpenReboundCache(true);
       requestMarketAiRealtimeScan("hot");
     }
   }
@@ -8690,34 +8600,56 @@ function classifyMarketAiStock(stock, sectors) {
 function getMarketAiHotGroups(hotStocks) {
   const groups = {
     all: hotStocks,
-    momentum: hotStocks.filter((stock) => stock.buckets.momentum).sort((a, b) => b.score - a.score || b.capitalFlowScore - a.capitalFlowScore || b.momentumScore - a.momentumScore),
+    momentum: sortMarketAiMomentumStocks(hotStocks.filter((stock) => stock.buckets.momentum)),
     legal: sortMarketAiLegalStocks(hotStocks.filter((stock) => stock.buckets.legal && cleanNumber(stock.percent) > 0)),
     intraday: sortMarketAiIntradayStocks(hotStocks.filter((stock) => stock.buckets.intraday)),
+    risk: sortMarketAiRiskStocks(hotStocks.filter((stock) => stock.buckets.risk)),
   };
   return groups;
 }
 
+function sortMarketAiMomentumStocks(stocks = []) {
+  return [...stocks].sort((a, b) =>
+    cleanNumber(b.momentumScore) - cleanNumber(a.momentumScore) ||
+    cleanNumber(b.percent) - cleanNumber(a.percent) ||
+    cleanNumber(b.capitalFlowScore) - cleanNumber(a.capitalFlowScore) ||
+    cleanNumber(b.score) - cleanNumber(a.score) ||
+    cleanNumber(b.value) - cleanNumber(a.value)
+  );
+}
+
 function sortMarketAiIntradayStocks(stocks = []) {
   return [...stocks].sort((a, b) =>
-    cleanNumber(b.score) - cleanNumber(a.score) ||
     cleanNumber(b.dayTradeHeatScore) - cleanNumber(a.dayTradeHeatScore) ||
     cleanNumber(b.intradayScore) - cleanNumber(a.intradayScore) ||
-    (b.tags?.length || 0) - (a.tags?.length || 0) ||
+    cleanNumber(b.value) - cleanNumber(a.value) ||
+    cleanNumber(b.score) - cleanNumber(a.score) ||
     cleanNumber(b.capitalFlowScore) - cleanNumber(a.capitalFlowScore) ||
     cleanNumber(b.momentumScore) - cleanNumber(a.momentumScore) ||
-    cleanNumber(b.value) - cleanNumber(a.value)
+    (b.tags?.length || 0) - (a.tags?.length || 0)
   );
 }
 
 function sortMarketAiLegalStocks(stocks = []) {
   return [...stocks].sort((a, b) =>
-    cleanNumber(b.score) - cleanNumber(a.score) ||
-    (b.tags?.length || 0) - (a.tags?.length || 0) ||
+    cleanNumber(b.legal) - cleanNumber(a.legal) ||
+    cleanNumber(b.legalScore) - cleanNumber(a.legalScore) ||
     cleanNumber(b.capitalFlowScore) - cleanNumber(a.capitalFlowScore) ||
+    cleanNumber(b.score) - cleanNumber(a.score) ||
     cleanNumber(b.intradayScore) - cleanNumber(a.intradayScore) ||
     cleanNumber(b.momentumScore) - cleanNumber(a.momentumScore) ||
     cleanNumber(b.value) - cleanNumber(a.value) ||
-    cleanNumber(b.percent) - cleanNumber(a.percent)
+    cleanNumber(b.percent) - cleanNumber(a.percent) ||
+    (b.tags?.length || 0) - (a.tags?.length || 0)
+  );
+}
+
+function sortMarketAiRiskStocks(stocks = []) {
+  return [...stocks].sort((a, b) =>
+    cleanNumber(b.riskScore) - cleanNumber(a.riskScore) ||
+    Math.abs(cleanNumber(b.percent)) - Math.abs(cleanNumber(a.percent)) ||
+    cleanNumber(b.score) - cleanNumber(a.score) ||
+    cleanNumber(b.value) - cleanNumber(a.value)
   );
 }
 
@@ -9057,6 +8989,103 @@ function classifyMarketAiRealtimeRadarStock(stock, sectors) {
   };
 }
 
+function marketAiStrategy2ObservationScore(event) {
+  const record = event?.latestRecord || {};
+  return Math.round(clamp(
+    cleanNumber(event?.maxScore) ||
+    cleanNumber(event?.score) ||
+    cleanNumber(record?.score) ||
+    cleanNumber(record?.totalScore) ||
+    cleanNumber(record?.intradayScore) ||
+    0,
+    0,
+    100
+  ));
+}
+
+function classifyMarketAiObservationStock(row, sectors, sourceLabel) {
+  const code = marketAiRowCode(row);
+  const latest = latestStocks.find((item) => String(item.code || item.Code || "") === code) || {};
+  const record = row?.latestRecord || {};
+  const close = cleanNumber(row?.close ?? row?.Last ?? row?.latestSeenPrice ?? row?.latestAPrice ?? row?.latestBPrice ?? record?.entryPrice ?? record?.observedPrice ?? record?.close ?? latest.close);
+  const percent = cleanNumber(row?.percent ?? row?.pct ?? record?.percent ?? record?.changePercent ?? latest.percent);
+  const value = cleanNumber(row?.value ?? row?.flow ?? record?.value ?? record?.tradeValue ?? latest.value);
+  const tradeVolume = cleanNumber(row?.tradeVolume ?? row?.volume ?? record?.tradeVolume ?? record?.volume ?? latest.tradeVolume);
+  const score = sourceLabel === "策略2"
+    ? marketAiStrategy2ObservationScore(row)
+    : Math.round(clamp(cleanNumber(row?.score ?? row?.radarScore), 0, 100));
+  const normalized = {
+    ...latest,
+    ...row,
+    code,
+    name: row?.name || record?.name || latest.name || code,
+    close,
+    percent,
+    change: cleanNumber(row?.change ?? record?.change ?? latest.change),
+    value,
+    tradeVolume,
+    quoteDate: normalizeMarketAiDateKey(row?.radarDate || row?.quoteDate || row?.tradeDate || row?.date || strategy2IntradayCacheDate || latest.quoteDate) || marketAiTodayKey(),
+    isRealtime: true,
+  };
+  const base = classifyMarketAiStock(normalized, sectors);
+  const sourceTags = sourceLabel === "策略2"
+    ? [row?.stateLabel || record?.stateLabel || "策略2偵測", record?.strategy || row?.strategy].filter(Boolean)
+    : normalizeArray(row?.signalTags || row?.tags).slice(0, 3);
+  return {
+    ...base,
+    observationScore: score || base.score,
+    observationSource: sourceLabel,
+    observationTime: row?.latestSeenAt || row?.latestAAt || row?.latestBAt || record?.timestamp || record?.entryAt || row?.time || "",
+    signalTags: sourceTags,
+    tags: [sourceLabel, ...sourceTags, ...normalizeArray(base.tags).filter((tag) => tag !== "優先觀察")].slice(0, 5),
+  };
+}
+
+function buildMarketAiObservationStocks(sectors) {
+  let liveRadarRows = [];
+  try {
+    liveRadarRows = isMarketAiActiveSession() && latestStocks.length ? buildRealtimeRadarRows({ mode: "intraday" }) : [];
+  } catch (error) {
+    liveRadarRows = [];
+  }
+  const byCode = new Map();
+  const add = (stock) => {
+    if (!stock?.code || !stock.observationScore) return;
+    const previous = byCode.get(stock.code);
+    if (!previous || cleanNumber(stock.observationScore) > cleanNumber(previous.observationScore)) {
+      byCode.set(stock.code, stock);
+      return;
+    }
+    if (previous && stock.observationSource && !String(previous.observationSource || "").includes(stock.observationSource)) {
+      previous.observationSource = `${previous.observationSource}+${stock.observationSource}`;
+      previous.tags = [...new Set([previous.observationSource, ...normalizeArray(previous.tags), ...normalizeArray(stock.tags)])].slice(0, 5);
+    }
+  };
+  [...normalizeArray(realtimeRadarLastRows), ...normalizeArray(liveRadarRows)].forEach((row) => {
+    const code = marketAiRowCode(row);
+    if (!/^\d{4}$/.test(code)) return;
+    const radarDate = normalizeMarketAiDateKey(row?.radarDate || row?.quoteDate || row?.tradeDate);
+    if (radarDate && radarDate !== marketAiTodayKey()) return;
+    const score = cleanNumber(row?.score ?? row?.radarScore);
+    if (score <= 0) return;
+    add(classifyMarketAiObservationStock(row, sectors, "即時雷達"));
+  });
+  [...strategy2IntradayEventByCode.values()].forEach((event) => {
+    const code = marketAiRowCode(event);
+    if (!/^\d{4}$/.test(code)) return;
+    const score = marketAiStrategy2ObservationScore(event);
+    if (score <= 0) return;
+    add(classifyMarketAiObservationStock(event, sectors, "策略2"));
+  });
+  return [...byCode.values()]
+    .sort((a, b) =>
+      cleanNumber(b.observationScore) - cleanNumber(a.observationScore) ||
+      cleanNumber(b.percent) - cleanNumber(a.percent) ||
+      cleanNumber(b.value) - cleanNumber(a.value)
+    )
+    .slice(0, 40);
+}
+
 function getMarketAiBias(data = {}) {
   const sample = cleanNumber(data.sample);
   const upRatio = cleanNumber(data.upRatio);
@@ -9131,6 +9160,7 @@ function buildMarketAiData() {
     .map((stock) => classifyMarketAiRealtimeRadarStock(stock, sectors))
     .sort((a, b) => cleanNumber(b.radarScore) - cleanNumber(a.radarScore) || cleanNumber(b.percent) - cleanNumber(a.percent) || cleanNumber(b.value) - cleanNumber(a.value))
     .slice(0, 40);
+  const observationStocks = buildMarketAiObservationStocks(sectors);
   const hotStocks = classifiedStocks
     .sort((a, b) => b.score - a.score || cleanNumber(b.percent) - cleanNumber(a.percent) || cleanNumber(b.value) - cleanNumber(a.value))
     .slice(0, 40);
@@ -9145,7 +9175,7 @@ function buildMarketAiData() {
   const bias = getMarketAiBias({ sample, upRatio, isDateFallback, isRealtimeFallback, freshRealtimeCount: freshRealtimeRows.length });
   const confidence = sample >= 1000 ? (Math.min(92, 58 + Math.abs(upRatio - 50) * 1.4)).toFixed(0) : "中";
   const dataDate = marketAiDataDateKey(stocks);
-  return { stocks, allStocks, staleRows, dataDate, targetDate, isReferenceDate, isDateFallback, isRealtimeFallback, allowReferenceLongs, freshRealtimeCount: freshRealtimeRows.length, sample, upRows, downRows, flatRows, upRatio, totalValue, sectors, strongSectors, weakSectors, hotStocks, hotGroups, visibleHotStocks, reboundStocks, radarFallbackStocks, riskStocks, bias, confidence, marketOverviewBias };
+  return { stocks, allStocks, staleRows, dataDate, targetDate, isReferenceDate, isDateFallback, isRealtimeFallback, allowReferenceLongs, freshRealtimeCount: freshRealtimeRows.length, sample, upRows, downRows, flatRows, upRatio, totalValue, sectors, strongSectors, weakSectors, hotStocks, hotGroups, visibleHotStocks, reboundStocks, radarFallbackStocks, observationStocks, riskStocks, bias, confidence, marketOverviewBias };
 }
 
 function requestMarketAiRealtimeScan(reason = "hot") {
@@ -9332,6 +9362,33 @@ function openMarketAiAdviceModal(kind) {
   document.body.appendChild(overlay);
 }
 
+function setMarketAiHotFilter(filter) {
+  const nextFilter = ["all", "momentum", "legal", "intraday", "risk"].includes(filter) ? filter : "all";
+  marketAiHotFilter = nextFilter;
+  if (window.location.hash !== `#market-ai-hot-${nextFilter}`) {
+    history.replaceState(null, "", `#market-ai-hot-${nextFilter}`);
+  }
+  marketAiLastSignature = "";
+  renderMarketAiPanel();
+}
+
+function bindMarketAiHotFilterButtons() {
+  if (!marketAiPanel) return;
+  marketAiPanel.querySelectorAll("[data-ai-hot-filter]").forEach((control) => {
+    if (control.dataset.aiHotFilterBound === "1") return;
+    control.dataset.aiHotFilterBound = "1";
+    control.addEventListener("click", () => {
+      setMarketAiHotFilter(control.dataset.aiHotFilter);
+    });
+  });
+}
+
+window.FUMAN_SET_MARKET_AI_HOT_FILTER = setMarketAiHotFilter;
+window.addEventListener("hashchange", () => {
+  const match = String(window.location.hash || "").match(/^#market-ai-hot-(all|momentum|legal|intraday|risk)$/);
+  if (match) setMarketAiHotFilter(match[1]);
+});
+
 function renderMarketAiPanel() {
   installMarketTabs();
   if (!marketAiPanel) return;
@@ -9352,7 +9409,13 @@ function renderMarketAiPanel() {
     deferUiWork(() => loadRealtimeRadarLatestCache(false), 120);
     requestMarketAiRealtimeScan("force");
   }
-  const signature = `${marketAiHotFilter}:${data.dataDate}:${data.targetDate}:${data.isReferenceDate ? 1 : 0}:${data.marketOverviewBias?.bias || ""}:${data.marketOverviewBias?.updatedAt || ""}:${marketAiOpenReboundUpdatedAt}:${marketAiOpenReboundRows.length}:${realtimeRadarLastUpdatedAt}:${realtimeRadarLastRows.length}:${strategyRealtimeStats.received}:${data.sample}:${data.staleRows.length}:${data.upRows.length}:${data.downRows.length}:${data.hotStocks.map((stock) => `${stock.code}:${stock.score}:${cleanNumber(stock.percent).toFixed(2)}`).join("|")}:${data.reboundStocks.map((stock) => `${stock.code}:${stock.reboundScore}:${cleanNumber(stock.openToLastPct).toFixed(2)}`).join("|")}:${data.radarFallbackStocks.map((stock) => `${stock.code}:${stock.radarScore}:${cleanNumber(stock.percent).toFixed(2)}`).join("|")}`;
+  if (isMarketAiActiveSession() && !strategy2IntradayEventByCode.size && !strategy2IntradayCacheLoading) {
+    deferUiWork(() => loadStrategy2IntradayCache(false), 120);
+  }
+  if (isMarketAiActiveSession() && !realtimeRadarLastRows.length && !realtimeRadarCacheLoading) {
+    deferUiWork(() => loadRealtimeRadarLatestCache(false), 140);
+  }
+  const signature = `${marketAiHotFilter}:${data.dataDate}:${data.targetDate}:${data.isReferenceDate ? 1 : 0}:${data.marketOverviewBias?.bias || ""}:${data.marketOverviewBias?.updatedAt || ""}:${marketAiOpenReboundUpdatedAt}:${marketAiOpenReboundRows.length}:${realtimeRadarLastUpdatedAt}:${realtimeRadarLastRows.length}:${strategy2IntradayEventByCode.size}:${strategyRealtimeStats.received}:${data.sample}:${data.staleRows.length}:${data.upRows.length}:${data.downRows.length}:${data.hotStocks.map((stock) => `${stock.code}:${stock.score}:${cleanNumber(stock.percent).toFixed(2)}`).join("|")}:${data.reboundStocks.map((stock) => `${stock.code}:${stock.reboundScore}:${cleanNumber(stock.openToLastPct).toFixed(2)}`).join("|")}:${data.radarFallbackStocks.map((stock) => `${stock.code}:${stock.radarScore}:${cleanNumber(stock.percent).toFixed(2)}`).join("|")}:${data.observationStocks.map((stock) => `${stock.code}:${stock.observationScore}:${stock.observationSource}:${cleanNumber(stock.percent).toFixed(2)}`).join("|")}`;
   if (signature === marketAiLastSignature && marketAiPanel.innerHTML) return;
   marketAiLastSignature = signature;
   if (!data.sample) {
@@ -9468,6 +9531,30 @@ function renderMarketAiPanel() {
       </div>
     </article>
   `).join("") || `<div class="empty-state">等待即時雷達偵測反彈/逆勢強股。</div>`;
+  const observationPriorityStocks = data.observationStocks.slice(0, 10);
+  const marketAiObservationRowsHtml = observationPriorityStocks.map((stock, index) => `
+    <article class="market-ai-stock-row">
+      <div class="market-ai-rank">#${index + 1}</div>
+      <div>
+        <h4><span class="market-ai-code">${escapeAttr(stock.code)}</span><span class="market-ai-name">${escapeAttr(stock.name)}</span></h4>
+        <p>${escapeAttr(stock.observationSource || "即時偵測")}分數 ${stock.observationScore || stock.score}，漲幅 ${cleanNumber(stock.percent).toFixed(2)}%，成交值 ${(cleanNumber(stock.value) / 100000000).toFixed(1)} 億</p>
+        <p>排序來源只採用即時雷達與策略2偵測；依偵測分數由高到低取前 10 名。</p>
+      </div>
+      <div>
+        <span class="market-ai-chip">${escapeAttr(stock.industry)}</span>
+        <span class="market-ai-chip">${escapeAttr(stock.observationSource || "即時偵測")}</span>
+      </div>
+      <div class="market-ai-score">
+        <small>觀察分數</small>
+        <strong>${stock.observationScore || stock.score}</strong>
+      </div>
+      <div class="market-ai-tags">${normalizeArray(stock.tags).map((tag) => `<span>${escapeAttr(tag)}</span>`).join("")}</div>
+      <div class="market-ai-actions">
+        <button type="button" data-ai-stock-code="${escapeAttr(stock.code)}" data-ai-stock-name="${escapeAttr(stock.name)}">看分析</button>
+        <button type="button" data-ai-watch-code="${escapeAttr(stock.code)}" data-ai-watch-name="${escapeAttr(stock.name)}">加入自選</button>
+      </div>
+    </article>
+  `).join("") || `<div class="empty-state">等待即時雷達與策略2偵測資料。</div>`;
   const operate = data.bias === "多方偏強"
     ? ["順勢追蹤", "只看強族群前 3 名", "跌破量價支撐先降槓桿"]
     : data.bias === "空方壓制"
@@ -9518,47 +9605,12 @@ function renderMarketAiPanel() {
     ? "最新可用收盤資料"
     : "收盤資料";
   const dataDateNotice = "";
-  const hotObserveBlockHtml = canShowLongPriority
-    ? `
+  const hotObserveBlockHtml = `
     <section class="market-ai-block">
-      <h3>熱門觀察股</h3>
-      <small>精選前 10 檔</small>
-      <div class="market-ai-radio-tabs">
-        ${filterMeta.map((item) => `
-          <input type="radio" id="market-ai-radio-${item.key}" name="market-ai-hot-radio" ${item.key === marketAiHotFilter ? "checked" : ""}>
-          <label for="market-ai-radio-${item.key}" class="market-ai-radio-tab market-ai-radio-tab-${item.key}">
-            ${item.label}<em>${item.count}</em>
-          </label>
-        `).join("")}
-        <div class="market-ai-tab-panels">
-          ${marketAiHotSectionsHtml}
-        </div>
-      </div>
-    </section>
-  `
-    : canShowReboundPriority
-    ? `
-    <section class="market-ai-block">
-      <h3>反彈觀察股</h3>
-      <small>依開低強彈條件排序</small>
-      <div class="market-ai-sort-note">目前盤面偏空，只採用 scanner 條件：開到現達標、量能達標、站 MA35、MACD 向上、KDJ 向上。</div>
-      <div class="market-ai-hot">${marketAiReboundRowsHtml}</div>
-    </section>
-  `
-    : canShowRadarFallbackPriority
-    ? `
-    <section class="market-ai-block">
-      <h3>反彈觀察股</h3>
-      <small>即時雷達 fallback</small>
-      <div class="market-ai-sort-note">scanner 暫無開低強彈標的，改用即時雷達偵測 long/逆勢相對強訊號；不回退舊熱門股。</div>
-      <div class="market-ai-hot">${marketAiRadarFallbackRowsHtml}</div>
-    </section>
-  `
-    : `
-    <section class="market-ai-block">
-      <h3>反彈觀察股</h3>
-      <small>等待即時偵測</small>
-      <div class="empty-state">目前 scanner 與即時雷達都尚未偵測到符合條件的反彈/逆勢強股。</div>
+      <h3>即時觀察池</h3>
+      <small>即時雷達 + 策略2 前 10 名</small>
+      <div class="market-ai-sort-note">下方只使用即時雷達與策略2偵測資料，依觀察分數由高到低排序；盤勢偏空時仍需等量價確認，不回退舊熱門股。</div>
+      <div class="market-ai-hot">${marketAiObservationRowsHtml}</div>
     </section>
   `;
   marketAiPanel.innerHTML = `
@@ -9685,7 +9737,6 @@ function renderIndexes(indexes, futuresNear, futuresNext, marketStatus, otcSigna
 }
 
 let chipFlowModuleApi = null;
-let chipFlowReloadedForColumnMismatch = false;
 
 function getChipFlowContext() {
   return {
@@ -9765,22 +9816,19 @@ function normalizeCbDetectRows(payload) {
     const sourceLayer = row.sourceLayer || row.source || row.來源層 || row.來源 || "";
     const aboveMa200 = readCbBool(row, ["aboveMa200", "ma200", "站上MA200", "MA200"]);
     const maAlignedUp = readCbBool(row, ["maAlignedUp", "maBullish", "三線同向上", "多頭排列"]);
-    const ma200Rising = readCbBool(row, ["ma200Rising", "MA200向上"]);
-    const allMaRising = readCbBool(row, ["allMaRising", "三線同向上", "均線同時向上"]);
-    const technicalPass = readCbBool(row, ["technicalPass", "60分K門檻", "技術門檻"]);
     const macdBullish = readCbBool(row, ["macdBullish", "macdGoldenCross", "MACD黃金交叉", "MACD"]);
-    const vetoed = row.veto === true || row.淘汰 === true || technicalPass === false;
-    const technicalScore = (aboveMa200 === true && ma200Rising === true ? 10 : 0) + (allMaRising === true ? 10 : maAlignedUp === true ? 5 : 0) + (macdBullish === true ? 5 : 0);
+    const vetoed = row.veto === true || row.淘汰 === true || aboveMa200 === false;
+    const technicalScore = (aboveMa200 === true ? 10 : 0) + (maAlignedUp === true ? 5 : 0) + (macdBullish === true ? 5 : 0);
     const rawScore = cleanNumber(row.score || row.分數);
     const baseScore = cleanNumber(row.baseScore || row.基本分);
     const score = rawScore || Math.min(105, baseScore + technicalScore);
     const tags = normalizeArray(row.tags || row.條件 || row.reasons || row.原因).filter(Boolean);
-    if (aboveMa200 === true && ma200Rising === true) tags.push("60分K站上MA200且MA200向上 +10");
-    if (allMaRising === true) tags.push("60分MA5/MA35/MA200均線同時向上 +10");
-    if (technicalPass === false) tags.push("60分K未符合CB技術門檻，一票否決");
+    if (aboveMa200 === true) tags.push("60分K站上MA200 +10");
+    if (aboveMa200 === false) tags.push("MA200未站上，一票否決");
+    if (maAlignedUp === true) tags.push("MA5/MA35/MA200多頭排列 +5");
     if (macdBullish === true) tags.push("MACD黃金交叉 +5");
     if (!code && !cbName) return null;
-    return { code, name, cbName, issueAmount, auctionType, convertPrice, stockPrice, premium, stage, date, sourceLayer, aboveMa200, maAlignedUp, ma200Rising, allMaRising, technicalPass, macdBullish, vetoed, score, tags };
+    return { code, name, cbName, issueAmount, auctionType, convertPrice, stockPrice, premium, stage, date, sourceLayer, aboveMa200, maAlignedUp, macdBullish, vetoed, score, tags };
   }).filter(Boolean);
 }
 
@@ -9821,8 +9869,8 @@ function renderCbDetectionPanel(errorText = "") {
         <span>轉換價<b>${row.convertPrice ? formatNumber(row.convertPrice, row.convertPrice >= 100 ? 0 : 2) : "--"}</b></span>
         <span>現股價<b>${row.stockPrice ? formatNumber(row.stockPrice, row.stockPrice >= 100 ? 0 : 2) : "--"}</b></span>
         <span>溢價<b class="${row.premium > 30 ? "green" : "red"}">${row.premium ? `${formatNumber(row.premium, 2)}%` : "--"}</b></span>
-        <span>60分MA200<b>${row.aboveMa200 === true && row.ma200Rising === true ? "+10" : row.aboveMa200 === false ? "否決" : "--"}</b></span>
-        <span>60分均線向上<b>${row.allMaRising === true ? "+10" : "--"}</b></span>
+        <span>MA200<b>${row.aboveMa200 === true ? "通過" : row.aboveMa200 === false ? "否決" : "--"}</b></span>
+        <span>多頭排列<b>${row.maAlignedUp === true ? "+5" : "--"}</b></span>
         <span>MACD<b>${row.macdBullish === true ? "+5" : "--"}</b></span>
         <span>發行總額<b>${escapeAttr(row.issueAmount || "--")}</b></span>
         <span>階段/日期<b>${escapeAttr(row.stage)}${row.date ? ` ${escapeAttr(row.date)}` : ""}</b></span>
@@ -9833,7 +9881,7 @@ function renderCbDetectionPanel(errorText = "") {
 }
 
 async function loadCbDetectionData(force = false) {
-  if (!isViewActive("cb-detect")) return;
+  if (!isViewActive("chip-trade")) return;
   if (!force && cbDetectLoadedAt && Date.now() - cbDetectLoadedAt < CACHE_FRESH_MS) {
     renderCbDetectionPanel();
     return;
@@ -9856,216 +9904,18 @@ async function loadCbDetectionData(force = false) {
   }
 }
 
-function chipTradePassFilter(row, filter = chipFilter) {
-  const foreign = cleanNumber(row.foreign);
-  const trust = cleanNumber(row.trust);
-  const total = cleanNumber(row.total) || foreign + trust + cleanNumber(row.dealer);
-  if (filter === "joint") return foreign > 0 && trust > 0;
-  if (filter === "trust") return trust > 0;
-  if (filter === "foreign") return foreign > 0;
-  if (filter === "legal") return total > 0;
-  return true;
-}
-
-function normalizeChipTradeInstitutionPayload(payload) {
-  if (!payload || typeof payload !== "object") return {};
-  if (payload.data && typeof payload.data === "object" && !Array.isArray(payload.data)) return payload.data;
-  const rows = normalizeArray(payload.rows || payload.data || payload.items);
-  return Object.fromEntries(rows.map((row) => [String(row.code || row.Code || "").trim(), row]).filter(([code]) => code));
-}
-
-function buildChipTradeFallbackRows() {
-  const rows = [];
-  Object.entries(institutionData || {}).forEach(([code, inst]) => {
-    const foreign = cleanNumber(inst.foreign);
-    const trust = cleanNumber(inst.trust);
-    const dealer = cleanNumber(inst.dealer);
-    const total = cleanNumber(inst.total) || foreign + trust + dealer;
-    const row = {
-      code,
-      name: inst.name || code,
-      price: cleanNumber(inst.close),
-      change: Number.isFinite(Number(inst.change)) ? Number(inst.change) : 0,
-      percent: Number.isFinite(Number(inst.percent)) ? Number(inst.percent) : 0,
-      volume: normalizeTradeVolumeLots(inst.tradeVolume),
-      value: cleanNumber(inst.value),
-      fiveDayPctSum: cleanNumber(inst.fiveDayPctSum),
-      fiveDayAvgVolume: cleanNumber(inst.fiveDayAvgVolume),
-      foreign,
-      trust,
-      total,
-      dealer,
-      foreignStreak: cleanNumber(inst.foreignStreak),
-      trustStreak: cleanNumber(inst.trustStreak),
-      jointStreak: cleanNumber(inst.jointStreak),
-    };
-    if (chipTradePassFilter(row)) rows.push(row);
-  });
-  const sortEl = document.querySelector("#chip-sort");
-  const sortBy = sortEl?.value || "trustForeign";
-  rows.sort((a, b) => {
-    if (sortBy === "trust") return b.trust - a.trust;
-    if (sortBy === "foreign") return b.foreign - a.foreign;
-    if (sortBy === "pct") return b.percent - a.percent;
-    if (sortBy === "value") return b.value - a.value;
-    return (b.jointStreak - a.jointStreak) || ((b.foreign + b.trust) - (a.foreign + a.trust));
-  });
-  return rows;
-}
-
-function formatChipSignedLots(value) {
-  const n = cleanNumber(value);
-  if (!Number.isFinite(n)) return "--";
-  const lots = Math.trunc(n / 1000);
-  const sign = lots >= 0 ? "+" : "";
-  return `${sign}${lots.toLocaleString("zh-TW")}`;
-}
-
-function formatChipSignedPercent(value) {
-  const n = cleanNumber(value);
-  if (!Number.isFinite(n)) return "--";
-  const sign = n > 0 ? "+" : "";
-  return `${sign}${formatNumber(n, 2)}`;
-}
-
-function formatChipLots(value) {
-  const n = cleanNumber(value);
-  if (!Number.isFinite(n) || n <= 0) return "--";
-  return Math.round(normalizeTradeVolumeLots(n)).toLocaleString("zh-TW");
-}
-
-function renderChipTradeFallbackTable(message = "") {
-  if (!isViewActive("chip-trade")) return;
-  const body = document.querySelector("#chip-trade-body");
-  const dateEl = document.querySelector("#chip-trade-date");
-  if (!body) return;
-  if (dateEl) {
-    const now = new Date().toLocaleTimeString("zh-TW", { hour12: false });
-    const dateText = institutionDate && /^\d{8}$/.test(institutionDate)
-      ? `法人資料: ${institutionDate.slice(0, 4)}/${institutionDate.slice(4, 6)}/${institutionDate.slice(6, 8)}`
-      : "等待盤後資料";
-    dateEl.textContent = `${dateText}｜盤後收盤　更新 ${now}`;
-  }
-  const sourceCount = Object.keys(institutionData || {}).length;
-  if (!sourceCount) {
-    body.innerHTML = `<tr><td colspan="14">${escapeAttr(message || "正在載入盤後法人資料...")}</td></tr>`;
-    return;
-  }
-  const rows = buildChipTradeFallbackRows();
-  const table = body.closest("table");
-  let pagination = document.querySelector("#chip-trade-pagination");
-  if (!pagination && table) {
-    pagination = document.createElement("div");
-    pagination.id = "chip-trade-pagination";
-    table.insertAdjacentElement("afterend", pagination);
-  }
-  const paged = paginateTerminalRows(rows.slice(0, 80), chipTradePage, "chip");
-  chipTradePage = paged.page;
-  if (pagination) pagination.innerHTML = buildTerminalPagination("chip", chipTradePage, paged.totalPages, rows.slice(0, 80).length);
-  if (!paged.rows.length) {
-    const emptyText = {
-      joint: "目前沒有符合「外資 + 投信同買」的資料，請切換投信/外資/法人同買查看。",
-      trust: "目前沒有符合「投信買超」的資料。",
-      foreign: "目前沒有符合「外資買超」的資料。",
-      legal: "目前沒有符合「法人同買」的資料。",
-    }[chipFilter] || "目前沒有符合條件的資料。";
-    body.innerHTML = `<tr><td colspan="14">${escapeAttr(emptyText)} 本次法人資料 ${sourceCount.toLocaleString("zh-TW")} 檔。</td></tr>`;
-    if (pagination) pagination.innerHTML = "";
-    return;
-  }
-  body.innerHTML = paged.rows.map((row, index) => {
-    const up = row.change >= 0;
-    const hasQuote = row.price > 0;
-    return `
-      <tr class="${index === 0 ? "highlight" : ""}" data-chip-row="${escapeAttr(row.code)}">
-        <td><a href="#" data-chip-code="${escapeAttr(row.code)}">${escapeAttr(row.code)}</a></td>
-        <td>${escapeAttr(row.name)}</td>
-        <td data-chip-price>${hasQuote ? formatNumber(row.price, row.price >= 100 ? 0 : 2) : "--"}</td>
-        <td data-chip-change class="${up ? "red" : "green"}">${hasQuote ? `${up ? "+" : ""}${formatNumber(row.change, 2)}` : "--"}</td>
-        <td data-chip-percent class="${row.percent >= 0 ? "red" : "green"}">${hasQuote ? formatNumber(row.percent, 2) : "--"}</td>
-        <td data-chip-volume>${row.volume ? Math.round(row.volume).toLocaleString("zh-TW") : "--"}</td>
-        <td class="${row.fiveDayPctSum >= 0 ? "red" : "green"}">${formatChipSignedPercent(row.fiveDayPctSum)}</td>
-        <td>${formatChipLots(row.fiveDayAvgVolume)}</td>
-        <td class="${row.foreign >= 0 ? "red" : "green"}">${formatChipSignedLots(row.foreign)}</td>
-        <td class="${row.trust >= 0 ? "red" : "green"}">${formatChipSignedLots(row.trust)}</td>
-        <td>${row.foreignStreak} 日</td>
-        <td>${row.trustStreak} 日</td>
-        <td>${row.jointStreak} 日</td>
-        <td class="${row.total >= 0 ? "red" : "green"}">${formatChipSignedLots(row.total)}</td>
-      </tr>
-    `;
-  }).join("");
-}
-
-async function loadChipTradeDataFallback(force = false, reason = "") {
-  const body = document.querySelector("#chip-trade-body");
-  if (body && !Object.keys(institutionData || {}).length) {
-    body.innerHTML = `<tr><td colspan="14">正在載入盤後法人資料...</td></tr>`;
-  }
-  try {
-    if (force || !Object.keys(institutionData || {}).length) {
-      const payload = await fetchVersionedJsonFallback([
-        { url: endpoints.institutionSlim, label: "institution-slim-fallback", kind: "institution" },
-        { url: endpoints.institutionCache, label: "institution-cache-fallback", kind: "institution" },
-        { url: endpoints.institutionBackup, label: "institution-backup-fallback", kind: "institution" },
-      ], 10000, "institution");
-      const data = normalizeChipTradeInstitutionPayload(payload);
-      if (Object.keys(data).length) {
-        institutionData = data;
-        institutionDate = payload.usedDate || "";
-        const updatedAt = Date.parse(payload.updatedAt || "");
-        institutionUpdatedAt = Number.isFinite(updatedAt) ? updatedAt : Date.now();
-      }
-    }
-    chipTradeLoadedAt = Date.now();
-    renderChipTradeFallbackTable(reason);
-  } catch (error) {
-    if (body) body.innerHTML = `<tr><td colspan="14">買賣超資料載入失敗：${escapeAttr(error?.message || "unknown")}</td></tr>`;
-  }
-}
-
-function withTimeout(promise, ms, label) {
-  return Promise.race([
-    promise,
-    new Promise((_, reject) => setTimeout(() => reject(new Error(`${label} timeout`)), ms)),
-  ]);
-}
-
 function renderChipTradeTable() {
   ensureChipFlowModule().then((api) => {
     api.renderChipTradeTable();
-    const headerCount = document.querySelectorAll(".chip-table thead th").length;
-    const firstDataRow = [...document.querySelectorAll("#chip-trade-body tr")]
-      .find((row) => !row.querySelector("td[colspan]"));
-    const rowCount = firstDataRow?.children?.length || 0;
-    if (!chipFlowReloadedForColumnMismatch && headerCount === 14 && rowCount > 0 && rowCount !== 14) {
-      chipFlowReloadedForColumnMismatch = true;
-      chipFlowModuleApi = null;
-      clearFumanFeatureModule("chipFlow", "FUMAN_CHIP_FLOW_MODULE");
-      ensureChipFlowModule()
-        .then((freshApi) => freshApi.renderChipTradeTable())
-        .catch(() => renderChipTradeFallbackTable("買賣超模組欄位更新中，已切換備援表格。"));
-    }
-  }).catch((error) => {
-    console.warn("[FUMAN] chip flow render fallback", error);
-    renderChipTradeFallbackTable("買賣超模組載入失敗，已切換主程式備援表格。");
-  });
+  }).catch(() => undefined);
+  loadCbDetectionData(false);
 }
 
 async function loadChipTradeData(force = false) {
-  const body = document.querySelector("#chip-trade-body");
-  if (body && !Object.keys(institutionData || {}).length) {
-    body.innerHTML = `<tr><td colspan="14">正在載入盤後法人資料...</td></tr>`;
-  }
-  try {
-    const api = await withTimeout(ensureChipFlowModule(), 4000, "chip module");
-    const result = await withTimeout(api.loadChipTradeData(force), 12000, "chip data");
-    return result;
-  } catch (error) {
-    console.warn("[FUMAN] chip flow data fallback", error);
-    await loadChipTradeDataFallback(force, "買賣超模組載入失敗，已切換主程式備援表格。");
-    return null;
-  }
+  const api = await ensureChipFlowModule();
+  const result = await api.loadChipTradeData(force);
+  loadCbDetectionData(force);
+  return result;
 }
 
 function preloadChipTradeFullData(reason = "idle") {
@@ -10293,9 +10143,6 @@ function showView(viewName, activeLink) {
     deferUiWork(() => loadChipTradeData(false), mobileFastSwitch ? 70 : 0);
     if (!isMobileViewport()) deferIdleWork(() => preloadChipTradeFullData("after-top"), 1200);
   }
-  if (viewName === "cb-detect") {
-    deferUiWork(() => loadCbDetectionData(false), mobileFastSwitch ? 70 : 0);
-  }
   if (viewName === "warrant-flow") {
     markLazyModuleForView(viewName);
     deferUiWork(() => loadWarrantFlow(false), mobileFastSwitch ? 70 : 0);
@@ -10403,6 +10250,7 @@ async function loadMarketData(force = false) {
 
     if (!payload.ok) throw new Error("Backend failed");
     updateMarketStockDataState(payload);
+    updateMarketOverviewBias(payload);
     marketRealtimeState = {
       trading: payload.trading === true,
       marketStatus: payload.marketStatus || "",
@@ -11028,6 +10876,12 @@ if (brandRefresh) {
 }
 stockSearch?.addEventListener("input", (e)=>searchStocks(e.target.value));
 document.addEventListener("click", (event) => {
+  const hotFilterButton = event.target.closest?.("[data-ai-hot-filter]");
+  if (hotFilterButton) {
+    setMarketAiHotFilter(hotFilterButton.dataset.aiHotFilter);
+  }
+}, true);
+document.addEventListener("click", (event) => {
   const modeButton = event.target.closest("[data-market-mode]");
   if (modeButton) {
     applyMarketMode(modeButton.dataset.marketMode);
@@ -11042,9 +10896,7 @@ document.addEventListener("click", (event) => {
   }
   const hotFilterButton = event.target.closest("[data-ai-hot-filter]");
   if (hotFilterButton) {
-    marketAiHotFilter = hotFilterButton.dataset.aiHotFilter || "all";
-    marketAiLastSignature = "";
-    renderMarketAiPanel();
+    setMarketAiHotFilter(hotFilterButton.dataset.aiHotFilter);
     return;
   }
   const analyzeButton = event.target.closest("[data-ai-stock-code]");
@@ -11166,10 +11018,6 @@ function refreshActiveChipWarrantView(force = true) {
   if (isDocumentHidden() || !isTerminalUnlocked()) return;
   if (isViewActive("chip-trade")) {
     loadChipTradeData(force);
-    return;
-  }
-  if (isViewActive("cb-detect")) {
-    loadCbDetectionData(force);
     return;
   }
   if (isViewActive("warrant-flow")) {

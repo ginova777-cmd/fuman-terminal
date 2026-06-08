@@ -1,5 +1,5 @@
 (function () {
-  const VERSION = "ai-rebound-20260608-04";
+  const VERSION = "ai-observation-20260608-05";
   const modules = {
     sectorMap: { loaded: false, src: "terminal-sector-map.js" },
     strategyConfig: { loaded: false, src: "terminal-strategy-config.js" },
@@ -38,6 +38,7 @@
     },
   };
 })();
+
 
 
 

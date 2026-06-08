@@ -1,5 +1,5 @@
 (function () {
-  const version = "ai-rebound-20260608-04";
+  const version = "ai-observation-20260608-05";
   window.FUMAN_TERMINAL_BOOT = {
     version,
     startedAt: Date.now(),
@@ -87,6 +87,7 @@
     setTimeout(loadMain, 0);
   }
 })();
+
 
 
 
