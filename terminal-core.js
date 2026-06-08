@@ -1,5 +1,5 @@
 (function () {
-  const version = "chip-5day-20260608";
+  const version = "chip-5day-fix-20260608";
   window.FUMAN_TERMINAL_BOOT = {
     version,
     startedAt: Date.now(),

@@ -471,6 +471,12 @@ function loadFumanFeatureModule(name, src, globalName) {
   return fumanFeatureModulePromises[name];
 }
 
+function clearFumanFeatureModule(name, globalName) {
+  delete fumanFeatureModulePromises[name];
+  try { delete window[globalName]; } catch (error) { window[globalName] = undefined; }
+  document.querySelectorAll(`[data-fuman-feature-${name}]`).forEach((script) => script.remove());
+}
+
 function installThemeToggle() {
   if (document.querySelector("#fuman-theme-toggle")) return;
   loadFumanStyle("terminal-theme.css", "fuman-theme-toggle-styles");
@@ -9137,6 +9143,7 @@ function renderIndexes(indexes, futuresNear, futuresNext, marketStatus, otcSigna
 }
 
 let chipFlowModuleApi = null;
+let chipFlowReloadedForColumnMismatch = false;
 
 function getChipFlowContext() {
   return {
@@ -9340,6 +9347,8 @@ function buildChipTradeFallbackRows() {
       percent: Number.isFinite(Number(inst.percent)) ? Number(inst.percent) : 0,
       volume: normalizeTradeVolumeLots(inst.tradeVolume),
       value: cleanNumber(inst.value),
+      fiveDayPctSum: cleanNumber(inst.fiveDayPctSum),
+      fiveDayAvgVolume: cleanNumber(inst.fiveDayAvgVolume),
       foreign,
       trust,
       total,
@@ -9370,6 +9379,19 @@ function formatChipSignedLots(value) {
   return `${sign}${lots.toLocaleString("zh-TW")}`;
 }
 
+function formatChipSignedPercent(value) {
+  const n = cleanNumber(value);
+  if (!Number.isFinite(n)) return "--";
+  const sign = n > 0 ? "+" : "";
+  return `${sign}${formatNumber(n, 2)}`;
+}
+
+function formatChipLots(value) {
+  const n = cleanNumber(value);
+  if (!Number.isFinite(n) || n <= 0) return "--";
+  return Math.round(normalizeTradeVolumeLots(n)).toLocaleString("zh-TW");
+}
+
 function renderChipTradeFallbackTable(message = "") {
   if (!isViewActive("chip-trade")) return;
   const body = document.querySelector("#chip-trade-body");
@@ -9384,7 +9406,7 @@ function renderChipTradeFallbackTable(message = "") {
   }
   const sourceCount = Object.keys(institutionData || {}).length;
   if (!sourceCount) {
-    body.innerHTML = `<tr><td colspan="12">${escapeAttr(message || "正在載入盤後法人資料...")}</td></tr>`;
+    body.innerHTML = `<tr><td colspan="14">${escapeAttr(message || "正在載入盤後法人資料...")}</td></tr>`;
     return;
   }
   const rows = buildChipTradeFallbackRows();
@@ -9405,7 +9427,7 @@ function renderChipTradeFallbackTable(message = "") {
       foreign: "目前沒有符合「外資買超」的資料。",
       legal: "目前沒有符合「法人同買」的資料。",
     }[chipFilter] || "目前沒有符合條件的資料。";
-    body.innerHTML = `<tr><td colspan="12">${escapeAttr(emptyText)} 本次法人資料 ${sourceCount.toLocaleString("zh-TW")} 檔。</td></tr>`;
+    body.innerHTML = `<tr><td colspan="14">${escapeAttr(emptyText)} 本次法人資料 ${sourceCount.toLocaleString("zh-TW")} 檔。</td></tr>`;
     if (pagination) pagination.innerHTML = "";
     return;
   }
@@ -9420,6 +9442,8 @@ function renderChipTradeFallbackTable(message = "") {
         <td data-chip-change class="${up ? "red" : "green"}">${hasQuote ? `${up ? "+" : ""}${formatNumber(row.change, 2)}` : "--"}</td>
         <td data-chip-percent class="${row.percent >= 0 ? "red" : "green"}">${hasQuote ? formatNumber(row.percent, 2) : "--"}</td>
         <td data-chip-volume>${row.volume ? Math.round(row.volume).toLocaleString("zh-TW") : "--"}</td>
+        <td class="${row.fiveDayPctSum >= 0 ? "red" : "green"}">${formatChipSignedPercent(row.fiveDayPctSum)}</td>
+        <td>${formatChipLots(row.fiveDayAvgVolume)}</td>
         <td class="${row.foreign >= 0 ? "red" : "green"}">${formatChipSignedLots(row.foreign)}</td>
         <td class="${row.trust >= 0 ? "red" : "green"}">${formatChipSignedLots(row.trust)}</td>
         <td>${row.foreignStreak} 日</td>
@@ -9434,7 +9458,7 @@ function renderChipTradeFallbackTable(message = "") {
 async function loadChipTradeDataFallback(force = false, reason = "") {
   const body = document.querySelector("#chip-trade-body");
   if (body && !Object.keys(institutionData || {}).length) {
-    body.innerHTML = `<tr><td colspan="12">正在載入盤後法人資料...</td></tr>`;
+    body.innerHTML = `<tr><td colspan="14">正在載入盤後法人資料...</td></tr>`;
   }
   try {
     if (force || !Object.keys(institutionData || {}).length) {
@@ -9454,7 +9478,7 @@ async function loadChipTradeDataFallback(force = false, reason = "") {
     chipTradeLoadedAt = Date.now();
     renderChipTradeFallbackTable(reason);
   } catch (error) {
-    if (body) body.innerHTML = `<tr><td colspan="12">買賣超資料載入失敗：${escapeAttr(error?.message || "unknown")}</td></tr>`;
+    if (body) body.innerHTML = `<tr><td colspan="14">買賣超資料載入失敗：${escapeAttr(error?.message || "unknown")}</td></tr>`;
   }
 }
 
@@ -9468,6 +9492,18 @@ function withTimeout(promise, ms, label) {
 function renderChipTradeTable() {
   ensureChipFlowModule().then((api) => {
     api.renderChipTradeTable();
+    const headerCount = document.querySelectorAll(".chip-table thead th").length;
+    const firstDataRow = [...document.querySelectorAll("#chip-trade-body tr")]
+      .find((row) => !row.querySelector("td[colspan]"));
+    const rowCount = firstDataRow?.children?.length || 0;
+    if (!chipFlowReloadedForColumnMismatch && headerCount === 14 && rowCount > 0 && rowCount !== 14) {
+      chipFlowReloadedForColumnMismatch = true;
+      chipFlowModuleApi = null;
+      clearFumanFeatureModule("chipFlow", "FUMAN_CHIP_FLOW_MODULE");
+      ensureChipFlowModule()
+        .then((freshApi) => freshApi.renderChipTradeTable())
+        .catch(() => renderChipTradeFallbackTable("買賣超模組欄位更新中，已切換備援表格。"));
+    }
   }).catch((error) => {
     console.warn("[FUMAN] chip flow render fallback", error);
     renderChipTradeFallbackTable("買賣超模組載入失敗，已切換主程式備援表格。");
@@ -9477,7 +9513,7 @@ function renderChipTradeTable() {
 async function loadChipTradeData(force = false) {
   const body = document.querySelector("#chip-trade-body");
   if (body && !Object.keys(institutionData || {}).length) {
-    body.innerHTML = `<tr><td colspan="12">正在載入盤後法人資料...</td></tr>`;
+    body.innerHTML = `<tr><td colspan="14">正在載入盤後法人資料...</td></tr>`;
   }
   try {
     const api = await withTimeout(ensureChipFlowModule(), 4000, "chip module");
