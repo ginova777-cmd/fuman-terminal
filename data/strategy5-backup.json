@@ -1,12 +1,12 @@
 {
   "ok": true,
   "source": "github-actions-backup",
-  "updatedAt": "2026-06-07T22:00:33.375Z",
+  "updatedAt": "2026-06-08T13:01:49.671Z",
   "usedDate": "20260605",
   "schedule": "06:00/21:00",
   "fullScan": true,
-  "total": 1957,
-  "scannedThisRun": 1957,
+  "total": 1953,
+  "scannedThisRun": 1953,
   "scannedCodes": [
     "1101",
     "1102",
@@ -274,7 +274,6 @@
     "2069",
     "2070",
     "2072",
-    "2073",
     "2101",
     "2102",
     "2103",
@@ -318,7 +317,6 @@
     "2314",
     "2316",
     "2317",
-    "2321",
     "2323",
     "2324",
     "2327",
@@ -577,9 +575,9 @@
     "2929",
     "2937",
     "2939",
-    "2941",
     "2945",
     "2947",
+    "2948",
     "2949",
     "3002",
     "3003",
@@ -940,7 +938,6 @@
     "4190",
     "4192",
     "4195",
-    "4198",
     "4205",
     "4207",
     "4303",
@@ -950,7 +947,6 @@
     "4401",
     "4402",
     "4406",
-    "4413",
     "4414",
     "4416",
     "4417",
@@ -975,7 +971,6 @@
     "4527",
     "4528",
     "4529",
-    "4530",
     "4532",
     "4533",
     "4534",
@@ -1009,6 +1004,7 @@
     "4576",
     "4577",
     "4580",
+    "4581",
     "4582",
     "4583",
     "4584",
@@ -1017,6 +1013,7 @@
     "4590",
     "4609",
     "4702",
+    "4706",
     "4707",
     "4711",
     "4714",
@@ -1103,6 +1100,7 @@
     "5007",
     "5009",
     "5011",
+    "5013",
     "5014",
     "5015",
     "5016",
@@ -1227,14 +1225,12 @@
     "5546",
     "5547",
     "5548",
-    "5601",
     "5603",
     "5604",
     "5607",
     "5608",
     "5609",
     "5701",
-    "5703",
     "5704",
     "5706",
     "5864",
@@ -1246,7 +1242,6 @@
     "5903",
     "5904",
     "5905",
-    "5906",
     "5907",
     "6005",
     "6015",
@@ -1335,7 +1330,6 @@
     "6195",
     "6196",
     "6197",
-    "6198",
     "6199",
     "6201",
     "6202",
@@ -1372,7 +1366,6 @@
     "6235",
     "6237",
     "6239",
-    "6240",
     "6241",
     "6242",
     "6243",
@@ -1580,6 +1573,7 @@
     "6756",
     "6757",
     "6761",
+    "6762",
     "6763",
     "6767",
     "6768",
@@ -1618,6 +1612,7 @@
     "6846",
     "6854",
     "6855",
+    "6856",
     "6859",
     "6861",
     "6862",
@@ -1641,7 +1636,6 @@
     "6901",
     "6902",
     "6903",
-    "6904",
     "6906",
     "6907",
     "6908",
@@ -1703,7 +1697,6 @@
     "7713",
     "7714",
     "7715",
-    "7716",
     "7717",
     "7718",
     "7721",
@@ -1892,6 +1885,7 @@
     "8477",
     "8478",
     "8481",
+    "8482",
     "8487",
     "8488",
     "8489",
@@ -1901,6 +1895,8 @@
     "8908",
     "8916",
     "8917",
+    "8921",
+    "8923",
     "8924",
     "8926",
     "8927",
@@ -1967,1674 +1963,32 @@
     "9962"
   ],
   "sourceHealth": {
-    "issuedSharesCount": 1977,
-    "volumeAverageCount": 2198,
-    "warningCount": 0,
-    "warnings": []
+    "issuedSharesCount": 0,
+    "volumeAverageCount": 2202,
+    "warningCount": 2,
+    "warnings": [
+      "issued shares fetch failed: https://mopsfin.twse.com.tw/opendata/t187ap03_L.csv :: This operation was aborted",
+      "issued shares fetch failed: https://mopsfin.twse.com.tw/opendata/t187ap03_O.csv :: This operation was aborted"
+    ]
   },
-  "count": 59,
+  "count": 10,
   "matches": [
-    {
-      "code": "2221",
-      "name": "大甲",
-      "close": 46.8,
-      "open": 0,
-      "high": 0,
-      "low": 0,
-      "prevClose": 0,
-      "limitUp": 0,
-      "change": 4.25,
-      "percent": 9.99,
-      "value": 152990264,
-      "tradeVolume": 3323371,
-      "market": "TPEX",
-      "valueRank": 71,
-      "volumeRank": 78,
-      "inst": {
-        "foreign": 40447,
-        "trust": 0,
-        "dealer": 8648,
-        "total": 49095
-      },
-      "matches": [
-        {
-          "id": "limit_up_doji",
-          "short": "漲停十字",
-          "icon": "十",
-          "score": 100,
-          "reason": "近20日漲停後出十字星，橫盤 13 天、區間 12.61%，縮量後今日放量 5.65 倍突破。"
-        }
-      ],
-      "strategy4Score": 100,
-      "strategy4Reason": "突破40日整理頸線，量能放大，偏圓弧底突破。",
-      "strategy4Signals": [
-        {
-          "id": "saucer",
-          "short": "圓弧",
-          "icon": "◜",
-          "reason": "突破40日整理頸線，量能放大，偏圓弧底突破。"
-        },
-        {
-          "id": "runaway_gap",
-          "short": "逃逸缺口",
-          "icon": "🚀",
-          "reason": "跳空且站上MA20，多頭段延續，偏逃逸缺口。"
-        },
-        {
-          "id": "golden_cross",
-          "short": "金釵",
-          "icon": "✦",
-          "reason": "MA5 > MA10 > MA20 且收紅，多金釵候選。"
-        }
-      ],
-      "score": 100,
-      "activeMatch": {
-        "id": "limit_up_doji",
-        "short": "漲停十字",
-        "icon": "十",
-        "score": 100,
-        "reason": "近20日漲停後出十字星，橫盤 13 天、區間 12.61%，縮量後今日放量 5.65 倍突破。"
-      }
-    },
-    {
-      "code": "3441",
-      "name": "聯一光",
-      "close": 60.2,
-      "open": 0,
-      "high": 0,
-      "low": 0,
-      "prevClose": 0,
-      "limitUp": 0,
-      "change": 5.4,
-      "percent": 9.85,
-      "value": 528987948,
-      "tradeVolume": 8974221,
-      "market": "TPEX",
-      "valueRank": 83,
-      "volumeRank": 89,
-      "inst": {
-        "foreign": 794900,
-        "trust": 0,
-        "dealer": 16481,
-        "total": 811381
-      },
-      "matches": [
-        {
-          "id": "limit_up_doji",
-          "short": "漲停十字",
-          "icon": "十",
-          "score": 100,
-          "reason": "近20日漲停後出十字星，橫盤 7 天、區間 19.02%，縮量後今日放量 3.47 倍突破。"
-        }
-      ],
-      "strategy4Score": 100,
-      "strategy4Reason": "站上MA20/EMA21，MACD多頭，量比 2.20，日K多頭攻擊。",
-      "strategy4Signals": [
-        {
-          "id": "bull_attack",
-          "short": "攻擊",
-          "icon": "🔥",
-          "reason": "站上MA20/EMA21，MACD多頭，量比 2.20，日K多頭攻擊。"
-        },
-        {
-          "id": "saucer",
-          "short": "圓弧",
-          "icon": "◜",
-          "reason": "突破40日整理頸線，量能放大，偏圓弧底突破。"
-        },
-        {
-          "id": "breakaway_gap",
-          "short": "突破缺口",
-          "icon": "◆",
-          "reason": "跳空突破近20日整理高點，偏突破缺口。"
-        }
-      ],
-      "score": 100,
-      "activeMatch": {
-        "id": "limit_up_doji",
-        "short": "漲停十字",
-        "icon": "十",
-        "score": 100,
-        "reason": "近20日漲停後出十字星，橫盤 7 天、區間 19.02%，縮量後今日放量 3.47 倍突破。"
-      }
-    },
-    {
-      "code": "3363",
-      "name": "上詮",
-      "close": 908,
-      "open": 0,
-      "high": 0,
-      "low": 0,
-      "prevClose": 0,
-      "limitUp": 0,
-      "change": 68,
-      "percent": 8.1,
-      "value": 6462777527,
-      "tradeVolume": 7307331,
-      "market": "TPEX",
-      "valueRank": 97,
-      "volumeRank": 87,
-      "inst": {
-        "foreign": 1417745,
-        "trust": 0,
-        "dealer": -16567,
-        "total": 1401178
-      },
-      "matches": [
-        {
-          "id": "bollinger_kdj_buy",
-          "short": "布林KDJ",
-          "icon": "K",
-          "score": 100,
-          "reason": "三線向上中軌買點：20MA 841.50、上軌 924.03、下軌 758.97；KDJ 黃金交叉 K 61.3 / D 48.5，量比 2.10。",
-          "bollingerMode": "三線向上中軌買點",
-          "bollingerMiddle": 841.5,
-          "bollingerUpper": 924.03,
-          "bollingerLower": 758.97,
-          "kdjK": 61.3,
-          "kdjD": 48.5,
-          "kdjJ": 86.7,
-          "volumeRatio": 2.1
-        }
-      ],
-      "strategy4Score": 100,
-      "strategy4Reason": "MA5 > MA10 > MA20 且收紅，多金釵候選。",
-      "strategy4Signals": [
-        {
-          "id": "golden_cross",
-          "short": "金釵",
-          "icon": "✦",
-          "reason": "MA5 > MA10 > MA20 且收紅，多金釵候選。"
-        }
-      ],
-      "score": 100,
-      "activeMatch": {
-        "id": "bollinger_kdj_buy",
-        "short": "布林KDJ",
-        "icon": "K",
-        "score": 100,
-        "reason": "三線向上中軌買點：20MA 841.50、上軌 924.03、下軌 758.97；KDJ 黃金交叉 K 61.3 / D 48.5，量比 2.10。",
-        "bollingerMode": "三線向上中軌買點",
-        "bollingerMiddle": 841.5,
-        "bollingerUpper": 924.03,
-        "bollingerLower": 758.97,
-        "kdjK": 61.3,
-        "kdjD": 48.5,
-        "kdjJ": 86.7,
-        "volumeRatio": 2.1
-      }
-    },
-    {
-      "code": "2543",
-      "name": "皇昌",
-      "close": 49.3,
-      "open": 0,
-      "high": 0,
-      "low": 0,
-      "prevClose": 0,
-      "limitUp": 0,
-      "change": 3.2,
-      "percent": 6.94,
-      "value": 315846526,
-      "tradeVolume": 6513299,
-      "market": "TWSE",
-      "valueRank": 78,
-      "volumeRank": 86,
-      "inst": {
-        "foreign": 2003084,
-        "trust": -1000,
-        "dealer": 0,
-        "total": 2035738
-      },
-      "matches": [
-        {
-          "id": "limit_up_doji",
-          "short": "漲停十字",
-          "icon": "十",
-          "score": 100,
-          "reason": "近20日漲停後出十字星，橫盤 10 天、區間 23.40%，縮量後今日放量 1.89 倍突破。"
-        }
-      ],
-      "strategy4Score": 100,
-      "strategy4Reason": "爆量突破後回檔不破半分位，再突破前高 46.60，N字共振。",
-      "strategy4Signals": [
-        {
-          "id": "n_base",
-          "short": "N字",
-          "icon": "",
-          "reason": "爆量突破後回檔不破半分位，再突破前高 46.60，N字共振。"
-        },
-        {
-          "id": "breakaway_gap",
-          "short": "突破缺口",
-          "icon": "◆",
-          "reason": "跳空突破近20日整理高點，偏突破缺口。"
-        }
-      ],
-      "score": 100,
-      "activeMatch": {
-        "id": "limit_up_doji",
-        "short": "漲停十字",
-        "icon": "十",
-        "score": 100,
-        "reason": "近20日漲停後出十字星，橫盤 10 天、區間 23.40%，縮量後今日放量 1.89 倍突破。"
-      }
-    },
-    {
-      "code": "5202",
-      "name": "力新",
-      "close": 15.75,
-      "open": 0,
-      "high": 0,
-      "low": 0,
-      "prevClose": 0,
-      "limitUp": 0,
-      "change": 1,
-      "percent": 6.78,
-      "value": 86448381,
-      "tradeVolume": 5408024,
-      "market": "TPEX",
-      "valueRank": 65,
-      "volumeRank": 84,
-      "volumeLots": 5408,
-      "turnoverRate": 6.07,
-      "volumeRatio": 1,
-      "inst": {
-        "foreign": -141860,
-        "trust": 0,
-        "dealer": -2082,
-        "total": -143942
-      },
-      "matches": [
-        {
-          "id": "volume_turnover_breakout",
-          "short": "量價周轉",
-          "icon": "量",
-          "score": 100,
-          "reason": "符合固定條件：漲幅 6.78%、成交量 5,408 張、周轉率 6.07%、量比 1.00。",
-          "volumeLots": 5408,
-          "turnoverRate": 6.07,
-          "volumeRatio": 1
-        }
-      ],
-      "strategy4Score": 78,
-      "strategy4Reason": "趨勢轉強但尚未觸發突破買點；趨勢分 5/8，量比 0.01，位階 高基期。",
-      "strategy4Signals": [
-        {
-          "id": "watch_trend",
-          "short": "B觀察",
-          "icon": "B",
-          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 5/8，量比 0.01，位階 高基期。"
-        }
-      ],
-      "score": 100,
-      "activeMatch": {
-        "id": "volume_turnover_breakout",
-        "short": "量價周轉",
-        "icon": "量",
-        "score": 100,
-        "reason": "符合固定條件：漲幅 6.78%、成交量 5,408 張、周轉率 6.07%、量比 1.00。",
-        "volumeLots": 5408,
-        "turnoverRate": 6.07,
-        "volumeRatio": 1
-      }
-    },
-    {
-      "code": "3147",
-      "name": "大綜",
-      "close": 284.5,
-      "open": 0,
-      "high": 0,
-      "low": 0,
-      "prevClose": 0,
-      "limitUp": 0,
-      "change": 18,
-      "percent": 6.75,
-      "value": 1499315786,
-      "tradeVolume": 5386087,
-      "market": "TPEX",
-      "valueRank": 90,
-      "volumeRank": 84,
-      "volumeLots": 5386,
-      "turnoverRate": 12.33,
-      "volumeRatio": 1,
-      "inst": {
-        "foreign": 851227,
-        "trust": 0,
-        "dealer": -27695,
-        "total": 823532
-      },
-      "matches": [
-        {
-          "id": "volume_turnover_breakout",
-          "short": "量價周轉",
-          "icon": "量",
-          "score": 100,
-          "reason": "符合固定條件：漲幅 6.75%、成交量 5,386 張、周轉率 12.33%、量比 1.00。",
-          "volumeLots": 5386,
-          "turnoverRate": 12.33,
-          "volumeRatio": 1
-        }
-      ],
-      "strategy4Score": 88,
-      "strategy4Reason": "爆量突破後回檔不破半分位，再突破前高 266.50，N字共振。",
-      "strategy4Signals": [
-        {
-          "id": "n_base",
-          "short": "N字",
-          "icon": "",
-          "reason": "爆量突破後回檔不破半分位，再突破前高 266.50，N字共振。"
-        }
-      ],
-      "score": 100,
-      "activeMatch": {
-        "id": "volume_turnover_breakout",
-        "short": "量價周轉",
-        "icon": "量",
-        "score": 100,
-        "reason": "符合固定條件：漲幅 6.75%、成交量 5,386 張、周轉率 12.33%、量比 1.00。",
-        "volumeLots": 5386,
-        "turnoverRate": 12.33,
-        "volumeRatio": 1
-      }
-    },
-    {
-      "code": "2492",
-      "name": "華新科",
-      "close": 416,
-      "open": 0,
-      "high": 0,
-      "low": 0,
-      "prevClose": 0,
-      "limitUp": 0,
-      "change": 24,
-      "percent": 6.12,
-      "value": 1785712578,
-      "tradeVolume": 4462116,
-      "market": "TWSE",
-      "valueRank": 92,
-      "volumeRank": 82,
-      "inst": {
-        "foreign": 1255350,
-        "trust": 678000,
-        "dealer": 0,
-        "total": 2197548
-      },
-      "matches": [
-        {
-          "id": "foreign_trust_breakout",
-          "short": "準突破",
-          "icon": "◆",
-          "score": 100,
-          "reason": "外資 +1,255,350、投信 +678,000 同買，法人合計 +2,197,548；漲幅 6.12%。"
-        }
-      ],
-      "strategy4Score": 78,
-      "strategy4Reason": "趨勢轉強但尚未觸發突破買點；趨勢分 5/8，量比 0.00，位階 高基期。",
-      "strategy4Signals": [
-        {
-          "id": "watch_trend",
-          "short": "B觀察",
-          "icon": "B",
-          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 5/8，量比 0.00，位階 高基期。"
-        }
-      ],
-      "score": 100,
-      "activeMatch": {
-        "id": "foreign_trust_breakout",
-        "short": "準突破",
-        "icon": "◆",
-        "score": 100,
-        "reason": "外資 +1,255,350、投信 +678,000 同買，法人合計 +2,197,548；漲幅 6.12%。"
-      }
-    },
-    {
-      "code": "3023",
-      "name": "信邦",
-      "close": 329,
-      "open": 0,
-      "high": 0,
-      "low": 0,
-      "prevClose": 0,
-      "limitUp": 0,
-      "change": 16.5,
-      "percent": 5.28,
-      "value": 1395253143,
-      "tradeVolume": 4294930,
-      "market": "TWSE",
-      "valueRank": 90,
-      "volumeRank": 81,
-      "inst": {
-        "foreign": 1359189,
-        "trust": 228000,
-        "dealer": 0,
-        "total": 1704126
-      },
-      "matches": [
-        {
-          "id": "foreign_trust_breakout",
-          "short": "準突破",
-          "icon": "◆",
-          "score": 100,
-          "reason": "外資 +1,359,189、投信 +228,000 同買，法人合計 +1,704,126；漲幅 5.28%。"
-        },
-        {
-          "id": "bollinger_kdj_buy",
-          "short": "布林KDJ",
-          "icon": "K",
-          "score": 100,
-          "reason": "三線向上中軌買點：20MA 308.02、上軌 329.39、下軌 286.66；KDJ 黃金交叉 K 73.9 / D 70.7，量比 2.31。",
-          "bollingerMode": "三線向上中軌買點",
-          "bollingerMiddle": 308.02,
-          "bollingerUpper": 329.39,
-          "bollingerLower": 286.66,
-          "kdjK": 73.9,
-          "kdjD": 70.7,
-          "kdjJ": 80.5,
-          "volumeRatio": 2.31
-        }
-      ],
-      "strategy4Score": 91,
-      "strategy4Reason": "爆量突破後回檔不破半分位，再突破前高 314.00，N字共振。",
-      "strategy4Signals": [
-        {
-          "id": "n_base",
-          "short": "N字",
-          "icon": "",
-          "reason": "爆量突破後回檔不破半分位，再突破前高 314.00，N字共振。"
-        }
-      ],
-      "score": 100,
-      "activeMatch": {
-        "id": "foreign_trust_breakout",
-        "short": "準突破",
-        "icon": "◆",
-        "score": 100,
-        "reason": "外資 +1,359,189、投信 +228,000 同買，法人合計 +1,704,126；漲幅 5.28%。"
-      }
-    },
-    {
-      "code": "4534",
-      "name": "慶騰",
-      "close": 33.15,
-      "open": 0,
-      "high": 0,
-      "low": 0,
-      "prevClose": 0,
-      "limitUp": 0,
-      "change": 1.5,
-      "percent": 4.74,
-      "value": 275595037,
-      "tradeVolume": 8292460,
-      "market": "TPEX",
-      "valueRank": 77,
-      "volumeRank": 88,
-      "volumeLots": 8292,
-      "turnoverRate": 9.55,
-      "volumeRatio": 1,
-      "inst": {
-        "foreign": -303574,
-        "trust": 0,
-        "dealer": -3767,
-        "total": -307341
-      },
-      "matches": [
-        {
-          "id": "volume_turnover_breakout",
-          "short": "量價周轉",
-          "icon": "量",
-          "score": 100,
-          "reason": "符合固定條件：漲幅 4.74%、成交量 8,292 張、周轉率 9.55%、量比 1.00。",
-          "volumeLots": 8292,
-          "turnoverRate": 9.55,
-          "volumeRatio": 1
-        }
-      ],
-      "strategy4Score": 78,
-      "strategy4Reason": "趨勢轉強但尚未觸發突破買點；趨勢分 5/8，量比 0.01，位階 高基期。",
-      "strategy4Signals": [
-        {
-          "id": "watch_trend",
-          "short": "B觀察",
-          "icon": "B",
-          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 5/8，量比 0.01，位階 高基期。"
-        }
-      ],
-      "score": 100,
-      "activeMatch": {
-        "id": "volume_turnover_breakout",
-        "short": "量價周轉",
-        "icon": "量",
-        "score": 100,
-        "reason": "符合固定條件：漲幅 4.74%、成交量 8,292 張、周轉率 9.55%、量比 1.00。",
-        "volumeLots": 8292,
-        "turnoverRate": 9.55,
-        "volumeRatio": 1
-      }
-    },
-    {
-      "code": "8936",
-      "name": "國統",
-      "close": 62.8,
-      "open": 0,
-      "high": 0,
-      "low": 0,
-      "prevClose": 0,
-      "limitUp": 0,
-      "change": 2.7,
-      "percent": 4.49,
-      "value": 3069809659,
-      "tradeVolume": 50625166,
-      "market": "TPEX",
-      "valueRank": 95,
-      "volumeRank": 98,
-      "volumeLots": 50625,
-      "turnoverRate": 20.41,
-      "volumeRatio": 1,
-      "inst": {
-        "foreign": -750702,
-        "trust": -15563,
-        "dealer": -94612,
-        "total": -860877
-      },
-      "matches": [
-        {
-          "id": "volume_turnover_breakout",
-          "short": "量價周轉",
-          "icon": "量",
-          "score": 100,
-          "reason": "符合固定條件：漲幅 4.49%、成交量 50,625 張、周轉率 20.41%、量比 1.00。",
-          "volumeLots": 50625,
-          "turnoverRate": 20.41,
-          "volumeRatio": 1
-        }
-      ],
-      "strategy4Score": 78,
-      "strategy4Reason": "趨勢轉強但尚未觸發突破買點；趨勢分 5/8，量比 0.01，位階 高基期。",
-      "strategy4Signals": [
-        {
-          "id": "watch_trend",
-          "short": "B觀察",
-          "icon": "B",
-          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 5/8，量比 0.01，位階 高基期。"
-        }
-      ],
-      "score": 100,
-      "activeMatch": {
-        "id": "volume_turnover_breakout",
-        "short": "量價周轉",
-        "icon": "量",
-        "score": 100,
-        "reason": "符合固定條件：漲幅 4.49%、成交量 50,625 張、周轉率 20.41%、量比 1.00。",
-        "volumeLots": 50625,
-        "turnoverRate": 20.41,
-        "volumeRatio": 1
-      }
-    },
-    {
-      "code": "2316",
-      "name": "楠梓電",
-      "close": 167,
-      "open": 0,
-      "high": 0,
-      "low": 0,
-      "prevClose": 0,
-      "limitUp": 0,
-      "change": 7,
-      "percent": 4.38,
-      "value": 1764684164,
-      "tradeVolume": 10573085,
-      "market": "TWSE",
-      "valueRank": 92,
-      "volumeRank": 90,
-      "volumeLots": 10573,
-      "turnoverRate": 5.79,
-      "volumeRatio": 1.82,
-      "inst": {
-        "foreign": 862969,
-        "trust": 0,
-        "dealer": 0,
-        "total": 902344
-      },
-      "matches": [
-        {
-          "id": "volume_turnover_breakout",
-          "short": "量價周轉",
-          "icon": "量",
-          "score": 100,
-          "reason": "符合固定條件：漲幅 4.38%、成交量 10,573 張、周轉率 5.79%、量比 1.82。",
-          "volumeLots": 10573,
-          "turnoverRate": 5.79,
-          "volumeRatio": 1.82
-        }
-      ],
-      "strategy4Score": 72,
-      "strategy4Reason": "爆量突破後回檔不破半分位，再突破前高 163.50，N字共振。",
-      "strategy4Signals": [
-        {
-          "id": "n_base",
-          "short": "N字",
-          "icon": "",
-          "reason": "爆量突破後回檔不破半分位，再突破前高 163.50，N字共振。"
-        }
-      ],
-      "score": 100,
-      "activeMatch": {
-        "id": "volume_turnover_breakout",
-        "short": "量價周轉",
-        "icon": "量",
-        "score": 100,
-        "reason": "符合固定條件：漲幅 4.38%、成交量 10,573 張、周轉率 5.79%、量比 1.82。",
-        "volumeLots": 10573,
-        "turnoverRate": 5.79,
-        "volumeRatio": 1.82
-      }
-    },
-    {
-      "code": "3624",
-      "name": "光頡",
-      "close": 108,
-      "open": 0,
-      "high": 0,
-      "low": 0,
-      "prevClose": 0,
-      "limitUp": 0,
-      "change": 4.5,
-      "percent": 4.35,
-      "value": 2575151973,
-      "tradeVolume": 24605952,
-      "market": "TPEX",
-      "valueRank": 94,
-      "volumeRank": 95,
-      "volumeLots": 24606,
-      "turnoverRate": 20.97,
-      "volumeRatio": 1,
-      "inst": {
-        "foreign": 460375,
-        "trust": -1333000,
-        "dealer": 66384,
-        "total": -806241
-      },
-      "matches": [
-        {
-          "id": "volume_turnover_breakout",
-          "short": "量價周轉",
-          "icon": "量",
-          "score": 100,
-          "reason": "符合固定條件：漲幅 4.35%、成交量 24,606 張、周轉率 20.97%、量比 1.00。",
-          "volumeLots": 24606,
-          "turnoverRate": 20.97,
-          "volumeRatio": 1
-        }
-      ],
-      "strategy4Score": 78,
-      "strategy4Reason": "趨勢轉強但尚未觸發突破買點；趨勢分 5/8，量比 0.00，位階 高基期。",
-      "strategy4Signals": [
-        {
-          "id": "watch_trend",
-          "short": "B觀察",
-          "icon": "B",
-          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 5/8，量比 0.00，位階 高基期。"
-        }
-      ],
-      "score": 100,
-      "activeMatch": {
-        "id": "volume_turnover_breakout",
-        "short": "量價周轉",
-        "icon": "量",
-        "score": 100,
-        "reason": "符合固定條件：漲幅 4.35%、成交量 24,606 張、周轉率 20.97%、量比 1.00。",
-        "volumeLots": 24606,
-        "turnoverRate": 20.97,
-        "volumeRatio": 1
-      }
-    },
-    {
-      "code": "5534",
-      "name": "長虹",
-      "close": 77.4,
-      "open": 0,
-      "high": 0,
-      "low": 0,
-      "prevClose": 0,
-      "limitUp": 0,
-      "change": 3.2,
-      "percent": 4.31,
-      "value": 313508821,
-      "tradeVolume": 4073265,
-      "market": "TWSE",
-      "valueRank": 78,
-      "volumeRank": 80,
-      "inst": {
-        "foreign": 1209035,
-        "trust": 315000,
-        "dealer": 0,
-        "total": 1497185
-      },
-      "matches": [
-        {
-          "id": "foreign_trust_breakout",
-          "short": "準突破",
-          "icon": "◆",
-          "score": 100,
-          "reason": "外資 +1,209,035、投信 +315,000 同買，法人合計 +1,497,185；漲幅 4.31%。"
-        }
-      ],
-      "strategy4Score": 100,
-      "strategy4Reason": "爆量突破後回檔不破半分位，再突破前高 74.60，N字共振。",
-      "strategy4Signals": [
-        {
-          "id": "n_base",
-          "short": "N字",
-          "icon": "",
-          "reason": "爆量突破後回檔不破半分位，再突破前高 74.60，N字共振。"
-        },
-        {
-          "id": "runaway_gap",
-          "short": "逃逸缺口",
-          "icon": "🚀",
-          "reason": "跳空且站上MA20，多頭段延續，偏逃逸缺口。"
-        }
-      ],
-      "score": 100,
-      "activeMatch": {
-        "id": "foreign_trust_breakout",
-        "short": "準突破",
-        "icon": "◆",
-        "score": 100,
-        "reason": "外資 +1,209,035、投信 +315,000 同買，法人合計 +1,497,185；漲幅 4.31%。"
-      }
-    },
-    {
-      "code": "2535",
-      "name": "達欣工",
-      "close": 83.4,
-      "open": 0,
-      "high": 0,
-      "low": 0,
-      "prevClose": 0,
-      "limitUp": 0,
-      "change": 3.2,
-      "percent": 3.99,
-      "value": 80514173,
-      "tradeVolume": 972284,
-      "market": "TWSE",
-      "valueRank": 63,
-      "volumeRank": 60,
-      "inst": {
-        "foreign": 73927,
-        "trust": 0,
-        "dealer": 0,
-        "total": 46690
-      },
-      "matches": [
-        {
-          "id": "bollinger_kdj_buy",
-          "short": "布林KDJ",
-          "icon": "K",
-          "score": 100,
-          "reason": "三線向上中軌買點：20MA 77.35、上軌 83.54、下軌 71.16；KDJ 黃金交叉 K 80.3 / D 78.8，量比 2.39。",
-          "bollingerMode": "三線向上中軌買點",
-          "bollingerMiddle": 77.35,
-          "bollingerUpper": 83.54,
-          "bollingerLower": 71.16,
-          "kdjK": 80.3,
-          "kdjD": 78.8,
-          "kdjJ": 83.2,
-          "volumeRatio": 2.39
-        }
-      ],
-      "strategy4Score": 78,
-      "strategy4Reason": "趨勢轉強但尚未觸發突破買點；趨勢分 5/8，量比 0.00，位階 高基期。",
-      "strategy4Signals": [
-        {
-          "id": "watch_trend",
-          "short": "B觀察",
-          "icon": "B",
-          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 5/8，量比 0.00，位階 高基期。"
-        }
-      ],
-      "score": 100,
-      "activeMatch": {
-        "id": "bollinger_kdj_buy",
-        "short": "布林KDJ",
-        "icon": "K",
-        "score": 100,
-        "reason": "三線向上中軌買點：20MA 77.35、上軌 83.54、下軌 71.16；KDJ 黃金交叉 K 80.3 / D 78.8，量比 2.39。",
-        "bollingerMode": "三線向上中軌買點",
-        "bollingerMiddle": 77.35,
-        "bollingerUpper": 83.54,
-        "bollingerLower": 71.16,
-        "kdjK": 80.3,
-        "kdjD": 78.8,
-        "kdjJ": 83.2,
-        "volumeRatio": 2.39
-      }
-    },
-    {
-      "code": "3615",
-      "name": "安可",
-      "close": 60.2,
-      "open": 0,
-      "high": 0,
-      "low": 0,
-      "prevClose": 0,
-      "limitUp": 0,
-      "change": 2.3,
-      "percent": 3.97,
-      "value": 1804598092,
-      "tradeVolume": 30067794,
-      "market": "TPEX",
-      "valueRank": 92,
-      "volumeRank": 96,
-      "volumeLots": 30068,
-      "turnoverRate": 43.92,
-      "volumeRatio": 1,
-      "inst": {
-        "foreign": -821770,
-        "trust": 0,
-        "dealer": 19092,
-        "total": -802678
-      },
-      "matches": [
-        {
-          "id": "volume_turnover_breakout",
-          "short": "量價周轉",
-          "icon": "量",
-          "score": 100,
-          "reason": "符合固定條件：漲幅 3.97%、成交量 30,068 張、周轉率 43.92%、量比 1.00。",
-          "volumeLots": 30068,
-          "turnoverRate": 43.92,
-          "volumeRatio": 1
-        }
-      ],
-      "strategy4Score": 88,
-      "strategy4Reason": "爆量突破後回檔不破半分位，再突破前高 59.70，N字共振。",
-      "strategy4Signals": [
-        {
-          "id": "n_base",
-          "short": "N字",
-          "icon": "",
-          "reason": "爆量突破後回檔不破半分位，再突破前高 59.70，N字共振。"
-        }
-      ],
-      "score": 100,
-      "activeMatch": {
-        "id": "volume_turnover_breakout",
-        "short": "量價周轉",
-        "icon": "量",
-        "score": 100,
-        "reason": "符合固定條件：漲幅 3.97%、成交量 30,068 張、周轉率 43.92%、量比 1.00。",
-        "volumeLots": 30068,
-        "turnoverRate": 43.92,
-        "volumeRatio": 1
-      }
-    },
-    {
-      "code": "1762",
-      "name": "中化生",
-      "close": 42.3,
-      "open": 0,
-      "high": 0,
-      "low": 0,
-      "prevClose": 0,
-      "limitUp": 0,
-      "change": 1.6,
-      "percent": 3.93,
-      "value": 168238237,
-      "tradeVolume": 3849011,
-      "market": "TWSE",
-      "valueRank": 72,
-      "volumeRank": 80,
-      "volumeLots": 3849,
-      "turnoverRate": 5,
-      "volumeRatio": 3.32,
-      "inst": {
-        "foreign": -13000,
-        "trust": 0,
-        "dealer": 0,
-        "total": -1444
-      },
-      "matches": [
-        {
-          "id": "volume_turnover_breakout",
-          "short": "量價周轉",
-          "icon": "量",
-          "score": 100,
-          "reason": "符合固定條件：漲幅 3.93%、成交量 3,849 張、周轉率 5.00%、量比 3.32。",
-          "volumeLots": 3849,
-          "turnoverRate": 5,
-          "volumeRatio": 3.32
-        },
-        {
-          "id": "limit_up_doji",
-          "short": "漲停十字",
-          "icon": "十",
-          "score": 100,
-          "reason": "近20日漲停後出十字星，橫盤 12 天、區間 10.75%，縮量後今日放量 6.49 倍突破。"
-        }
-      ],
-      "strategy4Score": 87,
-      "strategy4Reason": "跳空突破近20日整理高點，偏突破缺口。",
-      "strategy4Signals": [
-        {
-          "id": "breakaway_gap",
-          "short": "突破缺口",
-          "icon": "◆",
-          "reason": "跳空突破近20日整理高點，偏突破缺口。"
-        },
-        {
-          "id": "golden_cross",
-          "short": "金釵",
-          "icon": "✦",
-          "reason": "MA5 > MA10 > MA20 且收紅，多金釵候選。"
-        }
-      ],
-      "score": 100,
-      "activeMatch": {
-        "id": "volume_turnover_breakout",
-        "short": "量價周轉",
-        "icon": "量",
-        "score": 100,
-        "reason": "符合固定條件：漲幅 3.93%、成交量 3,849 張、周轉率 5.00%、量比 3.32。",
-        "volumeLots": 3849,
-        "turnoverRate": 5,
-        "volumeRatio": 3.32
-      }
-    },
-    {
-      "code": "6209",
-      "name": "今國光",
-      "close": 87.9,
-      "open": 0,
-      "high": 0,
-      "low": 0,
-      "prevClose": 0,
-      "limitUp": 0,
-      "change": 3.2,
-      "percent": 3.78,
-      "value": 3323156408,
-      "tradeVolume": 38454348,
-      "market": "TWSE",
-      "valueRank": 95,
-      "volumeRank": 97,
-      "volumeLots": 38454,
-      "turnoverRate": 21.92,
-      "volumeRatio": 2.1,
-      "inst": {
-        "foreign": -635542,
-        "trust": 0,
-        "dealer": 0,
-        "total": -485094
-      },
-      "matches": [
-        {
-          "id": "volume_turnover_breakout",
-          "short": "量價周轉",
-          "icon": "量",
-          "score": 100,
-          "reason": "符合固定條件：漲幅 3.78%、成交量 38,454 張、周轉率 21.92%、量比 2.10。",
-          "volumeLots": 38454,
-          "turnoverRate": 21.92,
-          "volumeRatio": 2.1
-        },
-        {
-          "id": "limit_up_doji",
-          "short": "漲停十字",
-          "icon": "十",
-          "score": 100,
-          "reason": "近20日漲停後出十字星，橫盤 8 天、區間 12.76%，縮量後今日放量 2.95 倍突破。"
-        }
-      ],
-      "strategy4Score": 95,
-      "strategy4Reason": "爆量突破後回檔不破半分位，再突破前高 86.70，N字共振。",
-      "strategy4Signals": [
-        {
-          "id": "n_base",
-          "short": "N字",
-          "icon": "",
-          "reason": "爆量突破後回檔不破半分位，再突破前高 86.70，N字共振。"
-        },
-        {
-          "id": "golden_cross",
-          "short": "金釵",
-          "icon": "✦",
-          "reason": "MA5 > MA10 > MA20 且收紅，多金釵候選。"
-        }
-      ],
-      "score": 100,
-      "activeMatch": {
-        "id": "volume_turnover_breakout",
-        "short": "量價周轉",
-        "icon": "量",
-        "score": 100,
-        "reason": "符合固定條件：漲幅 3.78%、成交量 38,454 張、周轉率 21.92%、量比 2.10。",
-        "volumeLots": 38454,
-        "turnoverRate": 21.92,
-        "volumeRatio": 2.1
-      }
-    },
-    {
-      "code": "2548",
-      "name": "華固",
-      "close": 103.5,
-      "open": 0,
-      "high": 0,
-      "low": 0,
-      "prevClose": 0,
-      "limitUp": 0,
-      "change": 3.7,
-      "percent": 3.71,
-      "value": 539652623,
-      "tradeVolume": 5322864,
-      "market": "TWSE",
-      "valueRank": 83,
-      "volumeRank": 83,
-      "inst": {
-        "foreign": 1599298,
-        "trust": 54000,
-        "dealer": 0,
-        "total": 1802959
-      },
-      "matches": [
-        {
-          "id": "foreign_trust_breakout",
-          "short": "準突破",
-          "icon": "◆",
-          "score": 100,
-          "reason": "外資 +1,599,298、投信 +54,000 同買，法人合計 +1,802,959；漲幅 3.71%。"
-        }
-      ],
-      "strategy4Score": 0,
-      "strategy4Reason": "",
-      "strategy4Signals": [],
-      "score": 100,
-      "activeMatch": {
-        "id": "foreign_trust_breakout",
-        "short": "準突破",
-        "icon": "◆",
-        "score": 100,
-        "reason": "外資 +1,599,298、投信 +54,000 同買，法人合計 +1,802,959；漲幅 3.71%。"
-      }
-    },
-    {
-      "code": "3033",
-      "name": "威健",
-      "close": 51.8,
-      "open": 0,
-      "high": 0,
-      "low": 0,
-      "prevClose": 0,
-      "limitUp": 0,
-      "change": 1.8,
-      "percent": 3.6,
-      "value": 1643777558,
-      "tradeVolume": 31939950,
-      "market": "TWSE",
-      "valueRank": 91,
-      "volumeRank": 97,
-      "volumeLots": 31940,
-      "turnoverRate": 6.64,
-      "volumeRatio": 2.1,
-      "inst": {
-        "foreign": -3976000,
-        "trust": -24879,
-        "dealer": 0,
-        "total": -3865821
-      },
-      "matches": [
-        {
-          "id": "volume_turnover_breakout",
-          "short": "量價周轉",
-          "icon": "量",
-          "score": 100,
-          "reason": "符合固定條件：漲幅 3.60%、成交量 31,940 張、周轉率 6.64%、量比 2.10。",
-          "volumeLots": 31940,
-          "turnoverRate": 6.64,
-          "volumeRatio": 2.1
-        }
-      ],
-      "strategy4Score": 75,
-      "strategy4Reason": "趨勢轉強但尚未觸發突破買點；趨勢分 6/8，量比 0.00，位階 高基期。",
-      "strategy4Signals": [
-        {
-          "id": "watch_trend",
-          "short": "B觀察",
-          "icon": "B",
-          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 6/8，量比 0.00，位階 高基期。"
-        }
-      ],
-      "score": 100,
-      "activeMatch": {
-        "id": "volume_turnover_breakout",
-        "short": "量價周轉",
-        "icon": "量",
-        "score": 100,
-        "reason": "符合固定條件：漲幅 3.60%、成交量 31,940 張、周轉率 6.64%、量比 2.10。",
-        "volumeLots": 31940,
-        "turnoverRate": 6.64,
-        "volumeRatio": 2.1
-      }
-    },
-    {
-      "code": "3406",
-      "name": "玉晶光",
-      "close": 682,
-      "open": 0,
-      "high": 0,
-      "low": 0,
-      "prevClose": 0,
-      "limitUp": 0,
-      "change": 23,
-      "percent": 3.49,
-      "value": 4722971599,
-      "tradeVolume": 7004622,
-      "market": "TWSE",
-      "valueRank": 96,
-      "volumeRank": 86,
-      "volumeLots": 7005,
-      "turnoverRate": 6.21,
-      "volumeRatio": 1.91,
-      "inst": {
-        "foreign": -585600,
-        "trust": 403000,
-        "dealer": 0,
-        "total": -164798
-      },
-      "matches": [
-        {
-          "id": "volume_turnover_breakout",
-          "short": "量價周轉",
-          "icon": "量",
-          "score": 100,
-          "reason": "符合固定條件：漲幅 3.49%、成交量 7,005 張、周轉率 6.21%、量比 1.91。",
-          "volumeLots": 7005,
-          "turnoverRate": 6.21,
-          "volumeRatio": 1.91
-        }
-      ],
-      "strategy4Score": 88,
-      "strategy4Reason": "爆量突破後回檔不破半分位，再突破前高 665.00，N字共振。",
-      "strategy4Signals": [
-        {
-          "id": "n_base",
-          "short": "N字",
-          "icon": "",
-          "reason": "爆量突破後回檔不破半分位，再突破前高 665.00，N字共振。"
-        }
-      ],
-      "score": 100,
-      "activeMatch": {
-        "id": "volume_turnover_breakout",
-        "short": "量價周轉",
-        "icon": "量",
-        "score": 100,
-        "reason": "符合固定條件：漲幅 3.49%、成交量 7,005 張、周轉率 6.21%、量比 1.91。",
-        "volumeLots": 7005,
-        "turnoverRate": 6.21,
-        "volumeRatio": 1.91
-      }
-    },
-    {
-      "code": "2481",
-      "name": "強茂",
-      "close": 165,
-      "open": 0,
-      "high": 0,
-      "low": 0,
-      "prevClose": 0,
-      "limitUp": 0,
-      "change": 5.5,
-      "percent": 3.45,
-      "value": 12309816619,
-      "tradeVolume": 74311377,
-      "market": "TWSE",
-      "valueRank": 99,
-      "volumeRank": 99,
-      "volumeLots": 74311,
-      "turnoverRate": 19.45,
-      "volumeRatio": 1.4,
-      "inst": {
-        "foreign": 8380315,
-        "trust": -3807000,
-        "dealer": 0,
-        "total": 5361382
-      },
-      "matches": [
-        {
-          "id": "volume_turnover_breakout",
-          "short": "量價周轉",
-          "icon": "量",
-          "score": 100,
-          "reason": "符合固定條件：漲幅 3.45%、成交量 74,311 張、周轉率 19.45%、量比 1.40。",
-          "volumeLots": 74311,
-          "turnoverRate": 19.45,
-          "volumeRatio": 1.4
-        }
-      ],
-      "strategy4Score": 88,
-      "strategy4Reason": "爆量突破後回檔不破半分位，再突破前高 163.50，N字共振。",
-      "strategy4Signals": [
-        {
-          "id": "n_base",
-          "short": "N字",
-          "icon": "",
-          "reason": "爆量突破後回檔不破半分位，再突破前高 163.50，N字共振。"
-        }
-      ],
-      "score": 100,
-      "activeMatch": {
-        "id": "volume_turnover_breakout",
-        "short": "量價周轉",
-        "icon": "量",
-        "score": 100,
-        "reason": "符合固定條件：漲幅 3.45%、成交量 74,311 張、周轉率 19.45%、量比 1.40。",
-        "volumeLots": 74311,
-        "turnoverRate": 19.45,
-        "volumeRatio": 1.4
-      }
-    },
-    {
-      "code": "3221",
-      "name": "台嘉碩",
-      "close": 57.1,
-      "open": 0,
-      "high": 0,
-      "low": 0,
-      "prevClose": 0,
-      "limitUp": 0,
-      "change": 1.8,
-      "percent": 3.25,
-      "value": 398906362,
-      "tradeVolume": 7204859,
-      "market": "TPEX",
-      "valueRank": 81,
-      "volumeRank": 86,
-      "volumeLots": 7205,
-      "turnoverRate": 6.86,
-      "volumeRatio": 1,
-      "inst": {
-        "foreign": 296271,
-        "trust": 0,
-        "dealer": 22132,
-        "total": 318403
-      },
-      "matches": [
-        {
-          "id": "volume_turnover_breakout",
-          "short": "量價周轉",
-          "icon": "量",
-          "score": 100,
-          "reason": "符合固定條件：漲幅 3.25%、成交量 7,205 張、周轉率 6.86%、量比 1.00。",
-          "volumeLots": 7205,
-          "turnoverRate": 6.86,
-          "volumeRatio": 1
-        }
-      ],
-      "strategy4Score": 0,
-      "strategy4Reason": "",
-      "strategy4Signals": [],
-      "score": 100,
-      "activeMatch": {
-        "id": "volume_turnover_breakout",
-        "short": "量價周轉",
-        "icon": "量",
-        "score": 100,
-        "reason": "符合固定條件：漲幅 3.25%、成交量 7,205 張、周轉率 6.86%、量比 1.00。",
-        "volumeLots": 7205,
-        "turnoverRate": 6.86,
-        "volumeRatio": 1
-      }
-    },
-    {
-      "code": "2637",
-      "name": "慧洋-KY",
-      "close": 80.6,
-      "open": 0,
-      "high": 0,
-      "low": 0,
-      "prevClose": 0,
-      "limitUp": 0,
-      "change": 2.5,
-      "percent": 3.2,
-      "value": 1270219639,
-      "tradeVolume": 15502381,
-      "market": "TWSE",
-      "valueRank": 90,
-      "volumeRank": 93,
-      "inst": {
-        "foreign": 5605901,
-        "trust": 149940,
-        "dealer": 0,
-        "total": 5810063
-      },
-      "matches": [
-        {
-          "id": "foreign_trust_breakout",
-          "short": "準突破",
-          "icon": "◆",
-          "score": 100,
-          "reason": "外資 +5,605,901、投信 +149,940 同買，法人合計 +5,810,063；漲幅 3.20%。"
-        }
-      ],
-      "strategy4Score": 91,
-      "strategy4Reason": "爆量突破後回檔不破半分位，再突破前高 79.80，N字共振。",
-      "strategy4Signals": [
-        {
-          "id": "n_base",
-          "short": "N字",
-          "icon": "",
-          "reason": "爆量突破後回檔不破半分位，再突破前高 79.80，N字共振。"
-        }
-      ],
-      "score": 100,
-      "activeMatch": {
-        "id": "foreign_trust_breakout",
-        "short": "準突破",
-        "icon": "◆",
-        "score": 100,
-        "reason": "外資 +5,605,901、投信 +149,940 同買，法人合計 +5,810,063；漲幅 3.20%。"
-      }
-    },
-    {
-      "code": "9933",
-      "name": "中鼎",
-      "close": 43.45,
-      "open": 0,
-      "high": 0,
-      "low": 0,
-      "prevClose": 0,
-      "limitUp": 0,
-      "change": 1.3,
-      "percent": 3.08,
-      "value": 371126201,
-      "tradeVolume": 8685086,
-      "market": "TWSE",
-      "valueRank": 80,
-      "volumeRank": 88,
-      "inst": {
-        "foreign": 3080486,
-        "trust": 56000,
-        "dealer": 0,
-        "total": 3085476
-      },
-      "matches": [
-        {
-          "id": "foreign_trust_breakout",
-          "short": "準突破",
-          "icon": "◆",
-          "score": 100,
-          "reason": "外資 +3,080,486、投信 +56,000 同買，法人合計 +3,085,476；漲幅 3.08%。"
-        }
-      ],
-      "strategy4Score": 0,
-      "strategy4Reason": "",
-      "strategy4Signals": [],
-      "score": 100,
-      "activeMatch": {
-        "id": "foreign_trust_breakout",
-        "short": "準突破",
-        "icon": "◆",
-        "score": 100,
-        "reason": "外資 +3,080,486、投信 +56,000 同買，法人合計 +3,085,476；漲幅 3.08%。"
-      }
-    },
-    {
-      "code": "1708",
-      "name": "東鹼",
-      "close": 49.1,
-      "open": 0,
-      "high": 0,
-      "low": 0,
-      "prevClose": 0,
-      "limitUp": 0,
-      "change": 1.45,
-      "percent": 3.04,
-      "value": 2082770991,
-      "tradeVolume": 42986218,
-      "market": "TWSE",
-      "valueRank": 93,
-      "volumeRank": 98,
-      "volumeLots": 42986,
-      "turnoverRate": 17.26,
-      "volumeRatio": 2.08,
-      "inst": {
-        "foreign": 3108674,
-        "trust": 0,
-        "dealer": 0,
-        "total": 3179942
-      },
-      "matches": [
-        {
-          "id": "volume_turnover_breakout",
-          "short": "量價周轉",
-          "icon": "量",
-          "score": 100,
-          "reason": "符合固定條件：漲幅 3.04%、成交量 42,986 張、周轉率 17.26%、量比 2.08。",
-          "volumeLots": 42986,
-          "turnoverRate": 17.26,
-          "volumeRatio": 2.08
-        }
-      ],
-      "strategy4Score": 88,
-      "strategy4Reason": "爆量突破後回檔不破半分位，再突破前高 47.65，N字共振。",
-      "strategy4Signals": [
-        {
-          "id": "n_base",
-          "short": "N字",
-          "icon": "",
-          "reason": "爆量突破後回檔不破半分位，再突破前高 47.65，N字共振。"
-        }
-      ],
-      "score": 100,
-      "activeMatch": {
-        "id": "volume_turnover_breakout",
-        "short": "量價周轉",
-        "icon": "量",
-        "score": 100,
-        "reason": "符合固定條件：漲幅 3.04%、成交量 42,986 張、周轉率 17.26%、量比 2.08。",
-        "volumeLots": 42986,
-        "turnoverRate": 17.26,
-        "volumeRatio": 2.08
-      }
-    },
-    {
-      "code": "3163",
-      "name": "波若威",
-      "close": 1020,
-      "open": 0,
-      "high": 0,
-      "low": 0,
-      "prevClose": 0,
-      "limitUp": 0,
-      "change": 30,
-      "percent": 3.03,
-      "value": 4915457060,
-      "tradeVolume": 4865301,
-      "market": "TPEX",
-      "valueRank": 96,
-      "volumeRank": 83,
-      "volumeLots": 4865,
-      "turnoverRate": 6.04,
-      "volumeRatio": 1,
-      "inst": {
-        "foreign": -67937,
-        "trust": 219000,
-        "dealer": 3129,
-        "total": 154192
-      },
-      "matches": [
-        {
-          "id": "volume_turnover_breakout",
-          "short": "量價周轉",
-          "icon": "量",
-          "score": 100,
-          "reason": "符合固定條件：漲幅 3.03%、成交量 4,865 張、周轉率 6.04%、量比 1.00。",
-          "volumeLots": 4865,
-          "turnoverRate": 6.04,
-          "volumeRatio": 1
-        }
-      ],
-      "strategy4Score": 63,
-      "strategy4Reason": "低/中位階整理接近發動；準備分 5/7，RSI 57.2，量比 0.00。",
-      "strategy4Signals": [
-        {
-          "id": "base_setup",
-          "short": "C準備",
-          "icon": "C",
-          "reason": "低/中位階整理接近發動；準備分 5/7，RSI 57.2，量比 0.00。"
-        }
-      ],
-      "score": 100,
-      "activeMatch": {
-        "id": "volume_turnover_breakout",
-        "short": "量價周轉",
-        "icon": "量",
-        "score": 100,
-        "reason": "符合固定條件：漲幅 3.03%、成交量 4,865 張、周轉率 6.04%、量比 1.00。",
-        "volumeLots": 4865,
-        "turnoverRate": 6.04,
-        "volumeRatio": 1
-      }
-    },
-    {
-      "code": "2615",
-      "name": "萬海",
-      "close": 86.1,
-      "open": 0,
-      "high": 0,
-      "low": 0,
-      "prevClose": 0,
-      "limitUp": 0,
-      "change": 2.4,
-      "percent": 2.87,
-      "value": 2254863427,
-      "tradeVolume": 26268026,
-      "market": "TWSE",
-      "valueRank": 93,
-      "volumeRank": 96,
-      "inst": {
-        "foreign": 9605790,
-        "trust": -17994,
-        "dealer": 0,
-        "total": 10021362
-      },
-      "matches": [
-        {
-          "id": "bollinger_kdj_buy",
-          "short": "布林KDJ",
-          "icon": "K",
-          "score": 100,
-          "reason": "三線向上中軌買點：20MA 80.71、上軌 87.78、下軌 73.64；KDJ 黃金交叉 K 73.2 / D 70.3，量比 2.23。",
-          "bollingerMode": "三線向上中軌買點",
-          "bollingerMiddle": 80.71,
-          "bollingerUpper": 87.78,
-          "bollingerLower": 73.64,
-          "kdjK": 73.2,
-          "kdjD": 70.3,
-          "kdjJ": 79.1,
-          "volumeRatio": 2.23
-        }
-      ],
-      "strategy4Score": 95,
-      "strategy4Reason": "爆量突破後回檔不破半分位，再突破前高 85.20，N字共振。",
-      "strategy4Signals": [
-        {
-          "id": "n_base",
-          "short": "N字",
-          "icon": "",
-          "reason": "爆量突破後回檔不破半分位，再突破前高 85.20，N字共振。"
-        },
-        {
-          "id": "breakaway_gap",
-          "short": "突破缺口",
-          "icon": "◆",
-          "reason": "跳空突破近20日整理高點，偏突破缺口。"
-        }
-      ],
-      "score": 100,
-      "activeMatch": {
-        "id": "bollinger_kdj_buy",
-        "short": "布林KDJ",
-        "icon": "K",
-        "score": 100,
-        "reason": "三線向上中軌買點：20MA 80.71、上軌 87.78、下軌 73.64；KDJ 黃金交叉 K 73.2 / D 70.3，量比 2.23。",
-        "bollingerMode": "三線向上中軌買點",
-        "bollingerMiddle": 80.71,
-        "bollingerUpper": 87.78,
-        "bollingerLower": 73.64,
-        "kdjK": 73.2,
-        "kdjD": 70.3,
-        "kdjJ": 79.1,
-        "volumeRatio": 2.23
-      }
-    },
-    {
-      "code": "3665",
-      "name": "貿聯-KY",
-      "close": 2200,
-      "open": 0,
-      "high": 0,
-      "low": 0,
-      "prevClose": 0,
-      "limitUp": 0,
-      "change": 45,
-      "percent": 2.09,
-      "value": 6041807465,
-      "tradeVolume": 2745937,
-      "market": "TWSE",
-      "valueRank": 97,
-      "volumeRank": 76,
-      "inst": {
-        "foreign": 140538,
-        "trust": 187989,
-        "dealer": 0,
-        "total": 311319
-      },
-      "matches": [
-        {
-          "id": "foreign_trust_breakout",
-          "short": "準突破",
-          "icon": "◆",
-          "score": 100,
-          "reason": "外資 +140,538、投信 +187,989 同買，法人合計 +311,319；漲幅 2.09%。"
-        }
-      ],
-      "strategy4Score": 71,
-      "strategy4Reason": "低/中位階整理接近發動；準備分 6/7，RSI 57.3，量比 0.00。",
-      "strategy4Signals": [
-        {
-          "id": "base_setup",
-          "short": "C準備",
-          "icon": "C",
-          "reason": "低/中位階整理接近發動；準備分 6/7，RSI 57.3，量比 0.00。"
-        }
-      ],
-      "score": 100,
-      "activeMatch": {
-        "id": "foreign_trust_breakout",
-        "short": "準突破",
-        "icon": "◆",
-        "score": 100,
-        "reason": "外資 +140,538、投信 +187,989 同買，法人合計 +311,319；漲幅 2.09%。"
-      }
-    },
     {
       "code": "3042",
       "name": "晶技",
-      "close": 212,
+      "close": 210.5,
       "open": 0,
       "high": 0,
       "low": 0,
       "prevClose": 0,
       "limitUp": 0,
-      "change": 4,
-      "percent": 1.92,
-      "value": 3278442452,
-      "tradeVolume": 15946082,
+      "change": -1.5,
+      "percent": -0.71,
+      "value": 4539806694,
+      "tradeVolume": 22132239,
       "market": "TWSE",
-      "valueRank": 95,
-      "volumeRank": 93,
+      "valueRank": 97,
+      "volumeRank": 96,
       "inst": {
         "foreign": 735936,
         "trust": 24000,
@@ -3647,336 +2001,7 @@
           "short": "準突破",
           "icon": "◆",
           "score": 100,
-          "reason": "外資 +735,936、投信 +24,000 同買，法人合計 +514,426；漲幅 1.92%。"
-        }
-      ],
-      "strategy4Score": 0,
-      "strategy4Reason": "",
-      "strategy4Signals": [],
-      "score": 100,
-      "activeMatch": {
-        "id": "foreign_trust_breakout",
-        "short": "準突破",
-        "icon": "◆",
-        "score": 100,
-        "reason": "外資 +735,936、投信 +24,000 同買，法人合計 +514,426；漲幅 1.92%。"
-      }
-    },
-    {
-      "code": "2606",
-      "name": "裕民",
-      "close": 70.8,
-      "open": 0,
-      "high": 0,
-      "low": 0,
-      "prevClose": 0,
-      "limitUp": 0,
-      "change": 0.9,
-      "percent": 1.29,
-      "value": 570559150,
-      "tradeVolume": 8020529,
-      "market": "TWSE",
-      "valueRank": 84,
-      "volumeRank": 88,
-      "inst": {
-        "foreign": 1127676,
-        "trust": 357000,
-        "dealer": 0,
-        "total": 1322493
-      },
-      "matches": [
-        {
-          "id": "foreign_trust_breakout",
-          "short": "準突破",
-          "icon": "◆",
-          "score": 100,
-          "reason": "外資 +1,127,676、投信 +357,000 同買，法人合計 +1,322,493；漲幅 1.29%。"
-        }
-      ],
-      "strategy4Score": 81,
-      "strategy4Reason": "趨勢轉強但尚未觸發突破買點；趨勢分 6/8，量比 0.00，位階 高基期。",
-      "strategy4Signals": [
-        {
-          "id": "watch_trend",
-          "short": "B觀察",
-          "icon": "B",
-          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 6/8，量比 0.00，位階 高基期。"
-        }
-      ],
-      "score": 100,
-      "activeMatch": {
-        "id": "foreign_trust_breakout",
-        "short": "準突破",
-        "icon": "◆",
-        "score": 100,
-        "reason": "外資 +1,127,676、投信 +357,000 同買，法人合計 +1,322,493；漲幅 1.29%。"
-      }
-    },
-    {
-      "code": "2383",
-      "name": "台光電",
-      "close": 4885,
-      "open": 0,
-      "high": 0,
-      "low": 0,
-      "prevClose": 0,
-      "limitUp": 0,
-      "change": 55,
-      "percent": 1.14,
-      "value": 14022518030,
-      "tradeVolume": 2909896,
-      "market": "TWSE",
-      "valueRank": 99,
-      "volumeRank": 77,
-      "inst": {
-        "foreign": 18225,
-        "trust": 105254,
-        "dealer": 0,
-        "total": 105169
-      },
-      "matches": [
-        {
-          "id": "foreign_trust_breakout",
-          "short": "準突破",
-          "icon": "◆",
-          "score": 100,
-          "reason": "外資 +18,225、投信 +105,254 同買，法人合計 +105,169；漲幅 1.14%。"
-        }
-      ],
-      "strategy4Score": 0,
-      "strategy4Reason": "",
-      "strategy4Signals": [],
-      "score": 100,
-      "activeMatch": {
-        "id": "foreign_trust_breakout",
-        "short": "準突破",
-        "icon": "◆",
-        "score": 100,
-        "reason": "外資 +18,225、投信 +105,254 同買，法人合計 +105,169；漲幅 1.14%。"
-      }
-    },
-    {
-      "code": "5536",
-      "name": "聖暉*",
-      "close": 1130,
-      "open": 0,
-      "high": 0,
-      "low": 0,
-      "prevClose": 0,
-      "limitUp": 0,
-      "change": 10,
-      "percent": 0.89,
-      "value": 3121453535,
-      "tradeVolume": 2690744,
-      "market": "TPEX",
-      "valueRank": 95,
-      "volumeRank": 76,
-      "inst": {
-        "foreign": 752644,
-        "trust": 3063,
-        "dealer": -26976,
-        "total": 728731
-      },
-      "matches": [
-        {
-          "id": "foreign_trust_breakout",
-          "short": "準突破",
-          "icon": "◆",
-          "score": 100,
-          "reason": "外資 +752,644、投信 +3,063 同買，法人合計 +728,731；漲幅 0.89%。"
-        }
-      ],
-      "strategy4Score": 95,
-      "strategy4Reason": "趨勢轉強但尚未觸發突破買點；趨勢分 7/8，量比 1.15，位階 高基期。",
-      "strategy4Signals": [
-        {
-          "id": "watch_trend",
-          "short": "B觀察",
-          "icon": "B",
-          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 7/8，量比 1.15，位階 高基期。"
-        }
-      ],
-      "score": 100,
-      "activeMatch": {
-        "id": "foreign_trust_breakout",
-        "short": "準突破",
-        "icon": "◆",
-        "score": 100,
-        "reason": "外資 +752,644、投信 +3,063 同買，法人合計 +728,731；漲幅 0.89%。"
-      }
-    },
-    {
-      "code": "3026",
-      "name": "禾伸堂",
-      "close": 626,
-      "open": 0,
-      "high": 0,
-      "low": 0,
-      "prevClose": 0,
-      "limitUp": 0,
-      "change": 4,
-      "percent": 0.64,
-      "value": 983421440,
-      "tradeVolume": 1633575,
-      "market": "TWSE",
-      "valueRank": 88,
-      "volumeRank": 69,
-      "inst": {
-        "foreign": 293993,
-        "trust": 10000,
-        "dealer": 0,
-        "total": 144446
-      },
-      "matches": [
-        {
-          "id": "foreign_trust_breakout",
-          "short": "準突破",
-          "icon": "◆",
-          "score": 100,
-          "reason": "外資 +293,993、投信 +10,000 同買，法人合計 +144,446；漲幅 0.64%。"
-        }
-      ],
-      "strategy4Score": 0,
-      "strategy4Reason": "",
-      "strategy4Signals": [],
-      "score": 100,
-      "activeMatch": {
-        "id": "foreign_trust_breakout",
-        "short": "準突破",
-        "icon": "◆",
-        "score": 100,
-        "reason": "外資 +293,993、投信 +10,000 同買，法人合計 +144,446；漲幅 0.64%。"
-      }
-    },
-    {
-      "code": "6187",
-      "name": "萬潤",
-      "close": 1120,
-      "open": 0,
-      "high": 0,
-      "low": 0,
-      "prevClose": 0,
-      "limitUp": 0,
-      "change": 5,
-      "percent": 0.45,
-      "value": 4872061380,
-      "tradeVolume": 4265437,
-      "market": "TPEX",
-      "valueRank": 96,
-      "volumeRank": 81,
-      "inst": {
-        "foreign": 86773,
-        "trust": 450000,
-        "dealer": -7793,
-        "total": 528980
-      },
-      "matches": [
-        {
-          "id": "foreign_trust_breakout",
-          "short": "準突破",
-          "icon": "◆",
-          "score": 100,
-          "reason": "外資 +86,773、投信 +450,000 同買，法人合計 +528,980；漲幅 0.45%。"
-        }
-      ],
-      "strategy4Score": 83,
-      "strategy4Reason": "低/中位階整理接近發動；準備分 7/7，RSI 48.9，量比 1.22。",
-      "strategy4Signals": [
-        {
-          "id": "base_setup",
-          "short": "C準備",
-          "icon": "C",
-          "reason": "低/中位階整理接近發動；準備分 7/7，RSI 48.9，量比 1.22。"
-        }
-      ],
-      "score": 100,
-      "activeMatch": {
-        "id": "foreign_trust_breakout",
-        "short": "準突破",
-        "icon": "◆",
-        "score": 100,
-        "reason": "外資 +86,773、投信 +450,000 同買，法人合計 +528,980；漲幅 0.45%。"
-      }
-    },
-    {
-      "code": "4961",
-      "name": "天鈺",
-      "close": 168.5,
-      "open": 0,
-      "high": 0,
-      "low": 0,
-      "prevClose": 0,
-      "limitUp": 0,
-      "change": 0.5,
-      "percent": 0.3,
-      "value": 132293907,
-      "tradeVolume": 794586,
-      "market": "TWSE",
-      "valueRank": 69,
-      "volumeRank": 57,
-      "inst": {
-        "foreign": 56285,
-        "trust": 21000,
-        "dealer": 0,
-        "total": 60350
-      },
-      "matches": [
-        {
-          "id": "foreign_trust_breakout",
-          "short": "準突破",
-          "icon": "◆",
-          "score": 100,
-          "reason": "外資 +56,285、投信 +21,000 同買，法人合計 +60,350；漲幅 0.30%。"
-        }
-      ],
-      "strategy4Score": 60,
-      "strategy4Reason": "低/中位階整理接近發動；準備分 5/7，RSI 46.7，量比 0.00。",
-      "strategy4Signals": [
-        {
-          "id": "base_setup",
-          "short": "C準備",
-          "icon": "C",
-          "reason": "低/中位階整理接近發動；準備分 5/7，RSI 46.7，量比 0.00。"
-        }
-      ],
-      "score": 100,
-      "activeMatch": {
-        "id": "foreign_trust_breakout",
-        "short": "準突破",
-        "icon": "◆",
-        "score": 100,
-        "reason": "外資 +56,285、投信 +21,000 同買，法人合計 +60,350；漲幅 0.30%。"
-      }
-    },
-    {
-      "code": "2493",
-      "name": "揚博",
-      "close": 178,
-      "open": 0,
-      "high": 0,
-      "low": 0,
-      "prevClose": 0,
-      "limitUp": 0,
-      "change": 0.5,
-      "percent": 0.28,
-      "value": 3419317883,
-      "tradeVolume": 18953612,
-      "market": "TWSE",
-      "valueRank": 95,
-      "volumeRank": 94,
-      "inst": {
-        "foreign": 758511,
-        "trust": 25000,
-        "dealer": 0,
-        "total": 696593
-      },
-      "matches": [
-        {
-          "id": "foreign_trust_breakout",
-          "short": "準突破",
-          "icon": "◆",
-          "score": 100,
-          "reason": "外資 +758,511、投信 +25,000 同買，法人合計 +696,593；漲幅 0.28%。"
+          "reason": "外資 +735,936、投信 +24,000 同買，法人合計 +514,426；漲幅 -0.71%。"
         }
       ],
       "strategy4Score": 78,
@@ -3995,30 +2020,30 @@
         "short": "準突破",
         "icon": "◆",
         "score": 100,
-        "reason": "外資 +758,511、投信 +25,000 同買，法人合計 +696,593；漲幅 0.28%。"
+        "reason": "外資 +735,936、投信 +24,000 同買，法人合計 +514,426；漲幅 -0.71%。"
       }
     },
     {
-      "code": "1216",
-      "name": "統一",
-      "close": 73.8,
+      "code": "5534",
+      "name": "長虹",
+      "close": 76.8,
       "open": 0,
       "high": 0,
       "low": 0,
       "prevClose": 0,
       "limitUp": 0,
-      "change": 0.2,
-      "percent": 0.27,
-      "value": 698674489,
-      "tradeVolume": 9454025,
+      "change": -0.6,
+      "percent": -0.78,
+      "value": 176810353,
+      "tradeVolume": 2283956,
       "market": "TWSE",
-      "valueRank": 86,
-      "volumeRank": 89,
+      "valueRank": 74,
+      "volumeRank": 75,
       "inst": {
-        "foreign": 285026,
-        "trust": 41492,
+        "foreign": 1209035,
+        "trust": 315000,
         "dealer": 0,
-        "total": 344893
+        "total": 1497185
       },
       "matches": [
         {
@@ -4026,17 +2051,17 @@
           "short": "準突破",
           "icon": "◆",
           "score": 100,
-          "reason": "外資 +285,026、投信 +41,492 同買，法人合計 +344,893；漲幅 0.27%。"
+          "reason": "外資 +1,209,035、投信 +315,000 同買，法人合計 +1,497,185；漲幅 -0.78%。"
         }
       ],
-      "strategy4Score": 83,
-      "strategy4Reason": "趨勢轉強但尚未觸發突破買點；趨勢分 6/8，量比 0.00，位階 高基期。",
+      "strategy4Score": 91,
+      "strategy4Reason": "趨勢轉強但尚未觸發突破買點；趨勢分 6/8，量比 0.00，位階 低基期。",
       "strategy4Signals": [
         {
           "id": "watch_trend",
           "short": "B觀察",
           "icon": "B",
-          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 6/8，量比 0.00，位階 高基期。"
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 6/8，量比 0.00，位階 低基期。"
         }
       ],
       "score": 100,
@@ -4045,168 +2070,25 @@
         "short": "準突破",
         "icon": "◆",
         "score": 100,
-        "reason": "外資 +285,026、投信 +41,492 同買，法人合計 +344,893；漲幅 0.27%。"
-      }
-    },
-    {
-      "code": "2002",
-      "name": "中鋼",
-      "close": 19.3,
-      "open": 0,
-      "high": 0,
-      "low": 0,
-      "prevClose": 0,
-      "limitUp": 0,
-      "change": 0.05,
-      "percent": 0.26,
-      "value": 1010141001,
-      "tradeVolume": 52447615,
-      "market": "TWSE",
-      "valueRank": 88,
-      "volumeRank": 98,
-      "inst": {
-        "foreign": 5924112,
-        "trust": 282000,
-        "dealer": 0,
-        "total": 6601015
-      },
-      "matches": [
-        {
-          "id": "foreign_trust_breakout",
-          "short": "準突破",
-          "icon": "◆",
-          "score": 100,
-          "reason": "外資 +5,924,112、投信 +282,000 同買，法人合計 +6,601,015；漲幅 0.26%。"
-        }
-      ],
-      "strategy4Score": 86,
-      "strategy4Reason": "趨勢轉強但尚未觸發突破買點；趨勢分 6/8，量比 0.00，位階 中位階。",
-      "strategy4Signals": [
-        {
-          "id": "watch_trend",
-          "short": "B觀察",
-          "icon": "B",
-          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 6/8，量比 0.00，位階 中位階。"
-        }
-      ],
-      "score": 100,
-      "activeMatch": {
-        "id": "foreign_trust_breakout",
-        "short": "準突破",
-        "icon": "◆",
-        "score": 100,
-        "reason": "外資 +5,924,112、投信 +282,000 同買，法人合計 +6,601,015；漲幅 0.26%。"
-      }
-    },
-    {
-      "code": "2887",
-      "name": "台新新光金",
-      "close": 28.6,
-      "open": 0,
-      "high": 0,
-      "low": 0,
-      "prevClose": 0,
-      "limitUp": 0,
-      "change": 0.05,
-      "percent": 0.18,
-      "value": 4076648872,
-      "tradeVolume": 143711010,
-      "market": "TWSE",
-      "valueRank": 96,
-      "volumeRank": 100,
-      "inst": {
-        "foreign": 15793236,
-        "trust": 15675964,
-        "dealer": 0,
-        "total": 33165995
-      },
-      "matches": [
-        {
-          "id": "foreign_trust_breakout",
-          "short": "準突破",
-          "icon": "◆",
-          "score": 100,
-          "reason": "外資 +15,793,236、投信 +15,675,964 同買，法人合計 +33,165,995；漲幅 0.18%。"
-        }
-      ],
-      "strategy4Score": 78,
-      "strategy4Reason": "趨勢轉強但尚未觸發突破買點；趨勢分 5/8，量比 0.00，位階 高基期。",
-      "strategy4Signals": [
-        {
-          "id": "watch_trend",
-          "short": "B觀察",
-          "icon": "B",
-          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 5/8，量比 0.00，位階 高基期。"
-        }
-      ],
-      "score": 100,
-      "activeMatch": {
-        "id": "foreign_trust_breakout",
-        "short": "準突破",
-        "icon": "◆",
-        "score": 100,
-        "reason": "外資 +15,793,236、投信 +15,675,964 同買，法人合計 +33,165,995；漲幅 0.18%。"
-      }
-    },
-    {
-      "code": "6196",
-      "name": "帆宣",
-      "close": 504,
-      "open": 0,
-      "high": 0,
-      "low": 0,
-      "prevClose": 0,
-      "limitUp": 0,
-      "change": 0,
-      "percent": 0,
-      "value": 1075418221,
-      "tradeVolume": 2147682,
-      "market": "TWSE",
-      "valueRank": 89,
-      "volumeRank": 73,
-      "inst": {
-        "foreign": 244729,
-        "trust": 19000,
-        "dealer": 0,
-        "total": 226584
-      },
-      "matches": [
-        {
-          "id": "foreign_trust_breakout",
-          "short": "準突破",
-          "icon": "◆",
-          "score": 100,
-          "reason": "外資 +244,729、投信 +19,000 同買，法人合計 +226,584；漲幅 0.00%。"
-        }
-      ],
-      "strategy4Score": 0,
-      "strategy4Reason": "",
-      "strategy4Signals": [],
-      "score": 100,
-      "activeMatch": {
-        "id": "foreign_trust_breakout",
-        "short": "準突破",
-        "icon": "◆",
-        "score": 100,
-        "reason": "外資 +244,729、投信 +19,000 同買，法人合計 +226,584；漲幅 0.00%。"
+        "reason": "外資 +1,209,035、投信 +315,000 同買，法人合計 +1,497,185；漲幅 -0.78%。"
       }
     },
     {
       "code": "3045",
       "name": "台灣大",
-      "close": 116,
+      "close": 115,
       "open": 0,
       "high": 0,
       "low": 0,
       "prevClose": 0,
       "limitUp": 0,
-      "change": 0,
-      "percent": 0,
-      "value": 815623964,
-      "tradeVolume": 7035808,
+      "change": -1,
+      "percent": -0.86,
+      "value": 2040454820,
+      "tradeVolume": 17754292,
       "market": "TWSE",
-      "valueRank": 87,
-      "volumeRank": 86,
+      "valueRank": 94,
+      "volumeRank": 95,
       "inst": {
         "foreign": 1216865,
         "trust": 285119,
@@ -4219,7 +2101,107 @@
           "short": "準突破",
           "icon": "◆",
           "score": 100,
-          "reason": "外資 +1,216,865、投信 +285,119 同買，法人合計 +1,455,587；漲幅 0.00%。"
+          "reason": "外資 +1,216,865、投信 +285,119 同買，法人合計 +1,455,587；漲幅 -0.86%。"
+        }
+      ],
+      "strategy4Score": 80,
+      "strategy4Reason": "趨勢轉強但尚未觸發突破買點；趨勢分 5/8，量比 0.00，位階 高基期。",
+      "strategy4Signals": [
+        {
+          "id": "watch_trend",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 5/8，量比 0.00，位階 高基期。"
+        }
+      ],
+      "score": 100,
+      "activeMatch": {
+        "id": "foreign_trust_breakout",
+        "short": "準突破",
+        "icon": "◆",
+        "score": 100,
+        "reason": "外資 +1,216,865、投信 +285,119 同買，法人合計 +1,455,587；漲幅 -0.86%。"
+      }
+    },
+    {
+      "code": "1216",
+      "name": "統一",
+      "close": 72.9,
+      "open": 0,
+      "high": 0,
+      "low": 0,
+      "prevClose": 0,
+      "limitUp": 0,
+      "change": -0.9,
+      "percent": -1.22,
+      "value": 936855718,
+      "tradeVolume": 12796465,
+      "market": "TWSE",
+      "valueRank": 90,
+      "volumeRank": 94,
+      "inst": {
+        "foreign": 285026,
+        "trust": 41492,
+        "dealer": 0,
+        "total": 344893
+      },
+      "matches": [
+        {
+          "id": "foreign_trust_breakout",
+          "short": "準突破",
+          "icon": "◆",
+          "score": 100,
+          "reason": "外資 +285,026、投信 +41,492 同買，法人合計 +344,893；漲幅 -1.22%。"
+        }
+      ],
+      "strategy4Score": 71,
+      "strategy4Reason": "低/中位階整理接近發動；準備分 5/7，RSI 41.3，量比 0.00。",
+      "strategy4Signals": [
+        {
+          "id": "base_setup",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 5/7，RSI 41.3，量比 0.00。"
+        }
+      ],
+      "score": 100,
+      "activeMatch": {
+        "id": "foreign_trust_breakout",
+        "short": "準突破",
+        "icon": "◆",
+        "score": 100,
+        "reason": "外資 +285,026、投信 +41,492 同買，法人合計 +344,893；漲幅 -1.22%。"
+      }
+    },
+    {
+      "code": "2884",
+      "name": "玉山金",
+      "close": 32.9,
+      "open": 0,
+      "high": 0,
+      "low": 0,
+      "prevClose": 0,
+      "limitUp": 0,
+      "change": -0.45,
+      "percent": -1.35,
+      "value": 1959284260,
+      "tradeVolume": 60140936,
+      "market": "TWSE",
+      "valueRank": 94,
+      "volumeRank": 99,
+      "inst": {
+        "foreign": 2543959,
+        "trust": 475451,
+        "dealer": 0,
+        "total": 2960687
+      },
+      "matches": [
+        {
+          "id": "foreign_trust_breakout",
+          "short": "準突破",
+          "icon": "◆",
+          "score": 100,
+          "reason": "外資 +2,543,959、投信 +475,451 同買，法人合計 +2,960,687；漲幅 -1.35%。"
         }
       ],
       "strategy4Score": 83,
@@ -4238,386 +2220,25 @@
         "short": "準突破",
         "icon": "◆",
         "score": 100,
-        "reason": "外資 +1,216,865、投信 +285,119 同買，法人合計 +1,455,587；漲幅 0.00%。"
-      }
-    },
-    {
-      "code": "8016",
-      "name": "矽創",
-      "close": 303.5,
-      "open": 0,
-      "high": 0,
-      "low": 0,
-      "prevClose": 0,
-      "limitUp": 0,
-      "change": 0,
-      "percent": 0,
-      "value": 644353471,
-      "tradeVolume": 2132066,
-      "market": "TWSE",
-      "valueRank": 85,
-      "volumeRank": 73,
-      "inst": {
-        "foreign": 608572,
-        "trust": 24131,
-        "dealer": 0,
-        "total": 624133
-      },
-      "matches": [
-        {
-          "id": "foreign_trust_breakout",
-          "short": "準突破",
-          "icon": "◆",
-          "score": 100,
-          "reason": "外資 +608,572、投信 +24,131 同買，法人合計 +624,133；漲幅 0.00%。"
-        }
-      ],
-      "strategy4Score": 0,
-      "strategy4Reason": "",
-      "strategy4Signals": [],
-      "score": 100,
-      "activeMatch": {
-        "id": "foreign_trust_breakout",
-        "short": "準突破",
-        "icon": "◆",
-        "score": 100,
-        "reason": "外資 +608,572、投信 +24,131 同買，法人合計 +624,133；漲幅 0.00%。"
-      }
-    },
-    {
-      "code": "2633",
-      "name": "台灣高鐵",
-      "close": 25.5,
-      "open": 0,
-      "high": 0,
-      "low": 0,
-      "prevClose": 0,
-      "limitUp": 0,
-      "change": -0.05,
-      "percent": -0.2,
-      "value": 221865755,
-      "tradeVolume": 8673849,
-      "market": "TWSE",
-      "valueRank": 75,
-      "volumeRank": 88,
-      "inst": {
-        "foreign": 1051851,
-        "trust": 179000,
-        "dealer": 0,
-        "total": 1184851
-      },
-      "matches": [
-        {
-          "id": "foreign_trust_breakout",
-          "short": "準突破",
-          "icon": "◆",
-          "score": 100,
-          "reason": "外資 +1,051,851、投信 +179,000 同買，法人合計 +1,184,851；漲幅 -0.20%。"
-        }
-      ],
-      "strategy4Score": 79,
-      "strategy4Reason": "低/中位階整理接近發動；準備分 6/7，RSI 48.5，量比 0.00。",
-      "strategy4Signals": [
-        {
-          "id": "base_setup",
-          "short": "C準備",
-          "icon": "C",
-          "reason": "低/中位階整理接近發動；準備分 6/7，RSI 48.5，量比 0.00。"
-        }
-      ],
-      "score": 100,
-      "activeMatch": {
-        "id": "foreign_trust_breakout",
-        "short": "準突破",
-        "icon": "◆",
-        "score": 100,
-        "reason": "外資 +1,051,851、投信 +179,000 同買，法人合計 +1,184,851；漲幅 -0.20%。"
-      }
-    },
-    {
-      "code": "2884",
-      "name": "玉山金",
-      "close": 33.35,
-      "open": 0,
-      "high": 0,
-      "low": 0,
-      "prevClose": 0,
-      "limitUp": 0,
-      "change": -0.1,
-      "percent": -0.3,
-      "value": 1644751053,
-      "tradeVolume": 49409021,
-      "market": "TWSE",
-      "valueRank": 91,
-      "volumeRank": 98,
-      "inst": {
-        "foreign": 2543959,
-        "trust": 475451,
-        "dealer": 0,
-        "total": 2960687
-      },
-      "matches": [
-        {
-          "id": "foreign_trust_breakout",
-          "short": "準突破",
-          "icon": "◆",
-          "score": 100,
-          "reason": "外資 +2,543,959、投信 +475,451 同買，法人合計 +2,960,687；漲幅 -0.30%。"
-        }
-      ],
-      "strategy4Score": 81,
-      "strategy4Reason": "趨勢轉強但尚未觸發突破買點；趨勢分 6/8，量比 0.00，位階 高基期。",
-      "strategy4Signals": [
-        {
-          "id": "watch_trend",
-          "short": "B觀察",
-          "icon": "B",
-          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 6/8，量比 0.00，位階 高基期。"
-        }
-      ],
-      "score": 100,
-      "activeMatch": {
-        "id": "foreign_trust_breakout",
-        "short": "準突破",
-        "icon": "◆",
-        "score": 100,
-        "reason": "外資 +2,543,959、投信 +475,451 同買，法人合計 +2,960,687；漲幅 -0.30%。"
-      }
-    },
-    {
-      "code": "6285",
-      "name": "啟碁",
-      "close": 292,
-      "open": 0,
-      "high": 0,
-      "low": 0,
-      "prevClose": 0,
-      "limitUp": 0,
-      "change": -4,
-      "percent": -1.35,
-      "value": 3622577479,
-      "tradeVolume": 12424943,
-      "market": "TWSE",
-      "valueRank": 95,
-      "volumeRank": 91,
-      "inst": {
-        "foreign": 518474,
-        "trust": 51000,
-        "dealer": 0,
-        "total": 447096
-      },
-      "matches": [
-        {
-          "id": "foreign_trust_breakout",
-          "short": "準突破",
-          "icon": "◆",
-          "score": 100,
-          "reason": "外資 +518,474、投信 +51,000 同買，法人合計 +447,096；漲幅 -1.35%。"
-        }
-      ],
-      "strategy4Score": 0,
-      "strategy4Reason": "",
-      "strategy4Signals": [],
-      "score": 100,
-      "activeMatch": {
-        "id": "foreign_trust_breakout",
-        "short": "準突破",
-        "icon": "◆",
-        "score": 100,
-        "reason": "外資 +518,474、投信 +51,000 同買，法人合計 +447,096；漲幅 -1.35%。"
-      }
-    },
-    {
-      "code": "2890",
-      "name": "永豐金",
-      "close": 32.7,
-      "open": 0,
-      "high": 0,
-      "low": 0,
-      "prevClose": 0,
-      "limitUp": 0,
-      "change": -0.45,
-      "percent": -1.36,
-      "value": 1442349908,
-      "tradeVolume": 43990630,
-      "market": "TWSE",
-      "valueRank": 90,
-      "volumeRank": 98,
-      "inst": {
-        "foreign": 9106873,
-        "trust": 399091,
-        "dealer": 0,
-        "total": 9117664
-      },
-      "matches": [
-        {
-          "id": "foreign_trust_breakout",
-          "short": "準突破",
-          "icon": "◆",
-          "score": 100,
-          "reason": "外資 +9,106,873、投信 +399,091 同買，法人合計 +9,117,664；漲幅 -1.36%。"
-        }
-      ],
-      "strategy4Score": 81,
-      "strategy4Reason": "趨勢轉強但尚未觸發突破買點；趨勢分 6/8，量比 0.00，位階 高基期。",
-      "strategy4Signals": [
-        {
-          "id": "watch_trend",
-          "short": "B觀察",
-          "icon": "B",
-          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 6/8，量比 0.00，位階 高基期。"
-        }
-      ],
-      "score": 100,
-      "activeMatch": {
-        "id": "foreign_trust_breakout",
-        "short": "準突破",
-        "icon": "◆",
-        "score": 100,
-        "reason": "外資 +9,106,873、投信 +399,091 同買，法人合計 +9,117,664；漲幅 -1.36%。"
-      }
-    },
-    {
-      "code": "6204",
-      "name": "艾華",
-      "close": 110.5,
-      "open": 0,
-      "high": 0,
-      "low": 0,
-      "prevClose": 0,
-      "limitUp": 0,
-      "change": 4.5,
-      "percent": 4.25,
-      "value": 133791589,
-      "tradeVolume": 1219855,
-      "market": "TPEX",
-      "valueRank": 70,
-      "volumeRank": 64,
-      "volumeLots": 1220,
-      "turnoverRate": 5.28,
-      "volumeRatio": 1,
-      "inst": {
-        "foreign": -131777,
-        "trust": 0,
-        "dealer": -94,
-        "total": -131871
-      },
-      "matches": [
-        {
-          "id": "volume_turnover_breakout",
-          "short": "量價周轉",
-          "icon": "量",
-          "score": 99,
-          "reason": "符合固定條件：漲幅 4.25%、成交量 1,220 張、周轉率 5.28%、量比 1.00。",
-          "volumeLots": 1220,
-          "turnoverRate": 5.28,
-          "volumeRatio": 1
-        }
-      ],
-      "strategy4Score": 100,
-      "strategy4Reason": "跳空且站上MA20，多頭段延續，偏逃逸缺口。",
-      "strategy4Signals": [
-        {
-          "id": "runaway_gap",
-          "short": "逃逸缺口",
-          "icon": "🚀",
-          "reason": "跳空且站上MA20，多頭段延續，偏逃逸缺口。"
-        }
-      ],
-      "score": 99,
-      "activeMatch": {
-        "id": "volume_turnover_breakout",
-        "short": "量價周轉",
-        "icon": "量",
-        "score": 99,
-        "reason": "符合固定條件：漲幅 4.25%、成交量 1,220 張、周轉率 5.28%、量比 1.00。",
-        "volumeLots": 1220,
-        "turnoverRate": 5.28,
-        "volumeRatio": 1
-      }
-    },
-    {
-      "code": "5493",
-      "name": "三聯",
-      "close": 93.1,
-      "open": 0,
-      "high": 0,
-      "low": 0,
-      "prevClose": 0,
-      "limitUp": 0,
-      "change": 3.9,
-      "percent": 4.37,
-      "value": 52006045,
-      "tradeVolume": 569176,
-      "market": "TPEX",
-      "valueRank": 58,
-      "volumeRank": 50,
-      "inst": {
-        "foreign": 96000,
-        "trust": 0,
-        "dealer": -7549,
-        "total": 88451
-      },
-      "matches": [
-        {
-          "id": "bollinger_kdj_buy",
-          "short": "布林KDJ",
-          "icon": "K",
-          "score": 91,
-          "reason": "三線向上中軌買點：20MA 91.78、上軌 96.49、下軌 87.07；KDJ 黃金交叉 K 42.3 / D 41.3，量比 1.18。",
-          "bollingerMode": "三線向上中軌買點",
-          "bollingerMiddle": 91.78,
-          "bollingerUpper": 96.49,
-          "bollingerLower": 87.07,
-          "kdjK": 42.3,
-          "kdjD": 41.3,
-          "kdjJ": 44.3,
-          "volumeRatio": 1.18
-        }
-      ],
-      "strategy4Score": 75,
-      "strategy4Reason": "趨勢轉強但尚未觸發突破買點；趨勢分 6/8，量比 0.00，位階 高基期。",
-      "strategy4Signals": [
-        {
-          "id": "watch_trend",
-          "short": "B觀察",
-          "icon": "B",
-          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 6/8，量比 0.00，位階 高基期。"
-        }
-      ],
-      "score": 91,
-      "activeMatch": {
-        "id": "bollinger_kdj_buy",
-        "short": "布林KDJ",
-        "icon": "K",
-        "score": 91,
-        "reason": "三線向上中軌買點：20MA 91.78、上軌 96.49、下軌 87.07；KDJ 黃金交叉 K 42.3 / D 41.3，量比 1.18。",
-        "bollingerMode": "三線向上中軌買點",
-        "bollingerMiddle": 91.78,
-        "bollingerUpper": 96.49,
-        "bollingerLower": 87.07,
-        "kdjK": 42.3,
-        "kdjD": 41.3,
-        "kdjJ": 44.3,
-        "volumeRatio": 1.18
+        "reason": "外資 +2,543,959、投信 +475,451 同買，法人合計 +2,960,687；漲幅 -1.35%。"
       }
     },
     {
       "code": "1723",
       "name": "中碳",
-      "close": 85.3,
+      "close": 84.3,
       "open": 0,
       "high": 0,
       "low": 0,
       "prevClose": 0,
       "limitUp": 0,
-      "change": -1.2,
-      "percent": -1.39,
-      "value": 79502432,
-      "tradeVolume": 928665,
+      "change": -1,
+      "percent": -1.17,
+      "value": 89269939,
+      "tradeVolume": 1074278,
       "market": "TWSE",
-      "valueRank": 63,
-      "volumeRank": 59,
+      "valueRank": 66,
+      "volumeRank": 63,
       "inst": {
         "foreign": 67000,
         "trust": 17000,
@@ -4629,8 +2250,8 @@
           "id": "foreign_trust_breakout",
           "short": "準突破",
           "icon": "◆",
-          "score": 91,
-          "reason": "外資 +67,000、投信 +17,000 同買，法人合計 +78,184；漲幅 -1.39%。"
+          "score": 94,
+          "reason": "外資 +67,000、投信 +17,000 同買，法人合計 +78,184；漲幅 -1.17%。"
         }
       ],
       "strategy4Score": 81,
@@ -4643,504 +2264,168 @@
           "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 6/8，量比 0.00，位階 高基期。"
         }
       ],
-      "score": 91,
+      "score": 94,
       "activeMatch": {
         "id": "foreign_trust_breakout",
         "short": "準突破",
         "icon": "◆",
-        "score": 91,
-        "reason": "外資 +67,000、投信 +17,000 同買，法人合計 +78,184；漲幅 -1.39%。"
+        "score": 94,
+        "reason": "外資 +67,000、投信 +17,000 同買，法人合計 +78,184；漲幅 -1.17%。"
       }
     },
     {
-      "code": "4155",
-      "name": "訊映",
-      "close": 15.45,
+      "code": "4744",
+      "name": "皇將",
+      "close": 36.5,
       "open": 0,
       "high": 0,
       "low": 0,
       "prevClose": 0,
       "limitUp": 0,
-      "change": 0.35,
-      "percent": 2.32,
-      "value": 19310978,
-      "tradeVolume": 1262099,
-      "market": "TWSE",
-      "valueRank": 45,
-      "volumeRank": 65,
-      "inst": {
-        "foreign": -68247,
-        "trust": 0,
-        "dealer": 0,
-        "total": -81247
-      },
-      "matches": [
-        {
-          "id": "bollinger_kdj_buy",
-          "short": "布林KDJ",
-          "icon": "K",
-          "score": 90,
-          "reason": "三線向上中軌買點：20MA 14.55、上軌 15.83、下軌 13.26；KDJ 黃金交叉 K 57.9 / D 47.6，量比 2.07。",
-          "bollingerMode": "三線向上中軌買點",
-          "bollingerMiddle": 14.55,
-          "bollingerUpper": 15.83,
-          "bollingerLower": 13.26,
-          "kdjK": 57.9,
-          "kdjD": 47.6,
-          "kdjJ": 78.6,
-          "volumeRatio": 2.07
-        }
-      ],
-      "strategy4Score": 91,
-      "strategy4Reason": "跳空且站上MA20，多頭段延續，偏逃逸缺口。",
-      "strategy4Signals": [
-        {
-          "id": "runaway_gap",
-          "short": "逃逸缺口",
-          "icon": "🚀",
-          "reason": "跳空且站上MA20，多頭段延續，偏逃逸缺口。"
-        }
-      ],
-      "score": 90,
-      "activeMatch": {
-        "id": "bollinger_kdj_buy",
-        "short": "布林KDJ",
-        "icon": "K",
-        "score": 90,
-        "reason": "三線向上中軌買點：20MA 14.55、上軌 15.83、下軌 13.26；KDJ 黃金交叉 K 57.9 / D 47.6，量比 2.07。",
-        "bollingerMode": "三線向上中軌買點",
-        "bollingerMiddle": 14.55,
-        "bollingerUpper": 15.83,
-        "bollingerLower": 13.26,
-        "kdjK": 57.9,
-        "kdjD": 47.6,
-        "kdjJ": 78.6,
-        "volumeRatio": 2.07
-      }
-    },
-    {
-      "code": "6693",
-      "name": "廣閎科",
-      "close": 158,
-      "open": 0,
-      "high": 0,
-      "low": 0,
-      "prevClose": 0,
-      "limitUp": 0,
-      "change": 1,
-      "percent": 0.64,
-      "value": 347126470,
-      "tradeVolume": 2241559,
+      "change": 1.45,
+      "percent": 4.14,
+      "value": 14788282,
+      "tradeVolume": 415120,
       "market": "TPEX",
-      "valueRank": 79,
-      "volumeRank": 74,
+      "valueRank": 42,
+      "volumeRank": 45,
       "inst": {
-        "foreign": -176468,
+        "foreign": 13130,
         "trust": 0,
-        "dealer": 25484,
-        "total": -150984
+        "dealer": -1,
+        "total": 13129
       },
       "matches": [
         {
           "id": "bollinger_kdj_buy",
           "short": "布林KDJ",
           "icon": "K",
-          "score": 90,
-          "reason": "三線向上中軌買點：20MA 149.13、上軌 163.09、下軌 135.16；KDJ 黃金交叉 K 62.5 / D 59.0，量比 2.35。",
+          "score": 87,
+          "reason": "三線向上中軌買點：20MA 34.48、上軌 36.61、下軌 32.36；KDJ 黃金交叉 K 60.0 / D 59.5，量比 1.03。",
           "bollingerMode": "三線向上中軌買點",
-          "bollingerMiddle": 149.13,
-          "bollingerUpper": 163.09,
-          "bollingerLower": 135.16,
-          "kdjK": 62.5,
-          "kdjD": 59,
-          "kdjJ": 69.6,
-          "volumeRatio": 2.35
-        }
-      ],
-      "strategy4Score": 81,
-      "strategy4Reason": "趨勢轉強但尚未觸發突破買點；趨勢分 6/8，量比 0.00，位階 高基期。",
-      "strategy4Signals": [
-        {
-          "id": "watch_trend",
-          "short": "B觀察",
-          "icon": "B",
-          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 6/8，量比 0.00，位階 高基期。"
-        }
-      ],
-      "score": 90,
-      "activeMatch": {
-        "id": "bollinger_kdj_buy",
-        "short": "布林KDJ",
-        "icon": "K",
-        "score": 90,
-        "reason": "三線向上中軌買點：20MA 149.13、上軌 163.09、下軌 135.16；KDJ 黃金交叉 K 62.5 / D 59.0，量比 2.35。",
-        "bollingerMode": "三線向上中軌買點",
-        "bollingerMiddle": 149.13,
-        "bollingerUpper": 163.09,
-        "bollingerLower": 135.16,
-        "kdjK": 62.5,
-        "kdjD": 59,
-        "kdjJ": 69.6,
-        "volumeRatio": 2.35
-      }
-    },
-    {
-      "code": "7721",
-      "name": "微程式",
-      "close": 78.3,
-      "open": 0,
-      "high": 0,
-      "low": 0,
-      "prevClose": 0,
-      "limitUp": 0,
-      "change": 2.1,
-      "percent": 2.76,
-      "value": 72329004,
-      "tradeVolume": 927657,
-      "market": "TWSE",
-      "valueRank": 62,
-      "volumeRank": 59,
-      "inst": {
-        "foreign": -47986,
-        "trust": 0,
-        "dealer": 0,
-        "total": -44986
-      },
-      "matches": [
-        {
-          "id": "bollinger_kdj_buy",
-          "short": "布林KDJ",
-          "icon": "K",
-          "score": 88,
-          "reason": "三線向上中軌買點：20MA 76.43、上軌 82.78、下軌 70.07；KDJ 黃金交叉 K 47.5 / D 42.6，量比 0.99。",
-          "bollingerMode": "三線向上中軌買點",
-          "bollingerMiddle": 76.43,
-          "bollingerUpper": 82.78,
-          "bollingerLower": 70.07,
-          "kdjK": 47.5,
-          "kdjD": 42.6,
-          "kdjJ": 57.3,
-          "volumeRatio": 0.99
+          "bollingerMiddle": 34.48,
+          "bollingerUpper": 36.61,
+          "bollingerLower": 32.36,
+          "kdjK": 60,
+          "kdjD": 59.5,
+          "kdjJ": 60.9,
+          "volumeRatio": 1.03
         }
       ],
       "strategy4Score": 100,
-      "strategy4Reason": "跳空且站上MA20，多頭段延續，偏逃逸缺口。",
+      "strategy4Reason": "站上MA20/EMA21，MACD多頭，量比 1.28，日K多頭攻擊。",
       "strategy4Signals": [
         {
-          "id": "runaway_gap",
-          "short": "逃逸缺口",
-          "icon": "🚀",
-          "reason": "跳空且站上MA20，多頭段延續，偏逃逸缺口。"
-        },
-        {
-          "id": "golden_cross",
-          "short": "金釵",
-          "icon": "✦",
-          "reason": "MA5 > MA10 > MA20 且收紅，多金釵候選。"
+          "id": "bull_attack",
+          "short": "攻擊",
+          "icon": "🔥",
+          "reason": "站上MA20/EMA21，MACD多頭，量比 1.28，日K多頭攻擊。"
         }
       ],
-      "score": 88,
+      "score": 87,
       "activeMatch": {
         "id": "bollinger_kdj_buy",
         "short": "布林KDJ",
         "icon": "K",
-        "score": 88,
-        "reason": "三線向上中軌買點：20MA 76.43、上軌 82.78、下軌 70.07；KDJ 黃金交叉 K 47.5 / D 42.6，量比 0.99。",
+        "score": 87,
+        "reason": "三線向上中軌買點：20MA 34.48、上軌 36.61、下軌 32.36；KDJ 黃金交叉 K 60.0 / D 59.5，量比 1.03。",
         "bollingerMode": "三線向上中軌買點",
-        "bollingerMiddle": 76.43,
-        "bollingerUpper": 82.78,
-        "bollingerLower": 70.07,
-        "kdjK": 47.5,
-        "kdjD": 42.6,
-        "kdjJ": 57.3,
-        "volumeRatio": 0.99
+        "bollingerMiddle": 34.48,
+        "bollingerUpper": 36.61,
+        "bollingerLower": 32.36,
+        "kdjK": 60,
+        "kdjD": 59.5,
+        "kdjJ": 60.9,
+        "volumeRatio": 1.03
       }
     },
     {
-      "code": "3004",
-      "name": "豐達科",
-      "close": 130,
-      "open": 0,
-      "high": 0,
-      "low": 0,
-      "prevClose": 0,
-      "limitUp": 0,
-      "change": 3,
-      "percent": 2.36,
-      "value": 124168884,
-      "tradeVolume": 976547,
-      "market": "TWSE",
-      "valueRank": 69,
-      "volumeRank": 60,
-      "inst": {
-        "foreign": 106186,
-        "trust": 0,
-        "dealer": 0,
-        "total": 111314
-      },
-      "matches": [
-        {
-          "id": "bollinger_kdj_buy",
-          "short": "布林KDJ",
-          "icon": "K",
-          "score": 88,
-          "reason": "三線向上中軌買點：20MA 124.35、上軌 138.74、下軌 109.96；KDJ 黃金交叉 K 37.4 / D 34.1，量比 1.17。",
-          "bollingerMode": "三線向上中軌買點",
-          "bollingerMiddle": 124.35,
-          "bollingerUpper": 138.74,
-          "bollingerLower": 109.96,
-          "kdjK": 37.4,
-          "kdjD": 34.1,
-          "kdjJ": 44.1,
-          "volumeRatio": 1.17
-        }
-      ],
-      "strategy4Score": 75,
-      "strategy4Reason": "趨勢轉強但尚未觸發突破買點；趨勢分 6/8，量比 0.00，位階 高基期。",
-      "strategy4Signals": [
-        {
-          "id": "watch_trend",
-          "short": "B觀察",
-          "icon": "B",
-          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 6/8，量比 0.00，位階 高基期。"
-        }
-      ],
-      "score": 88,
-      "activeMatch": {
-        "id": "bollinger_kdj_buy",
-        "short": "布林KDJ",
-        "icon": "K",
-        "score": 88,
-        "reason": "三線向上中軌買點：20MA 124.35、上軌 138.74、下軌 109.96；KDJ 黃金交叉 K 37.4 / D 34.1，量比 1.17。",
-        "bollingerMode": "三線向上中軌買點",
-        "bollingerMiddle": 124.35,
-        "bollingerUpper": 138.74,
-        "bollingerLower": 109.96,
-        "kdjK": 37.4,
-        "kdjD": 34.1,
-        "kdjJ": 44.1,
-        "volumeRatio": 1.17
-      }
-    },
-    {
-      "code": "3527",
-      "name": "聚積",
-      "close": 61.3,
+      "code": "8021",
+      "name": "尖點",
+      "close": 460,
       "open": 0,
       "high": 0,
       "low": 0,
       "prevClose": 0,
       "limitUp": 0,
       "change": 2,
-      "percent": 3.37,
-      "value": 21713723,
-      "tradeVolume": 352988,
-      "market": "TPEX",
-      "valueRank": 47,
-      "volumeRank": 43,
-      "inst": {
-        "foreign": 78668,
-        "trust": 0,
-        "dealer": 0,
-        "total": 78668
-      },
-      "matches": [
-        {
-          "id": "bollinger_kdj_buy",
-          "short": "布林KDJ",
-          "icon": "K",
-          "score": 84,
-          "reason": "三線走平下軌買點：20MA 59.44、上軌 63.67、下軌 55.21；KDJ 黃金交叉 K 56.5 / D 49.2，量比 1.13。",
-          "bollingerMode": "三線走平下軌買點",
-          "bollingerMiddle": 59.44,
-          "bollingerUpper": 63.67,
-          "bollingerLower": 55.21,
-          "kdjK": 56.5,
-          "kdjD": 49.2,
-          "kdjJ": 71.1,
-          "volumeRatio": 1.13
-        }
-      ],
-      "strategy4Score": 100,
-      "strategy4Reason": "趨勢轉強但尚未觸發突破買點；趨勢分 7/8，量比 1.18，位階 中位階。",
-      "strategy4Signals": [
-        {
-          "id": "watch_trend",
-          "short": "B觀察",
-          "icon": "B",
-          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 7/8，量比 1.18，位階 中位階。"
-        }
-      ],
-      "score": 84,
-      "activeMatch": {
-        "id": "bollinger_kdj_buy",
-        "short": "布林KDJ",
-        "icon": "K",
-        "score": 84,
-        "reason": "三線走平下軌買點：20MA 59.44、上軌 63.67、下軌 55.21；KDJ 黃金交叉 K 56.5 / D 49.2，量比 1.13。",
-        "bollingerMode": "三線走平下軌買點",
-        "bollingerMiddle": 59.44,
-        "bollingerUpper": 63.67,
-        "bollingerLower": 55.21,
-        "kdjK": 56.5,
-        "kdjD": 49.2,
-        "kdjJ": 71.1,
-        "volumeRatio": 1.13
-      }
-    },
-    {
-      "code": "6835",
-      "name": "圓裕",
-      "close": 38.55,
-      "open": 0,
-      "high": 0,
-      "low": 0,
-      "prevClose": 0,
-      "limitUp": 0,
-      "change": 1.05,
-      "percent": 2.8,
-      "value": 23423647,
-      "tradeVolume": 608550,
+      "percent": 0.44,
+      "value": 848404246,
+      "tradeVolume": 1941008,
       "market": "TWSE",
-      "valueRank": 49,
-      "volumeRank": 52,
+      "valueRank": 89,
+      "volumeRank": 73,
       "inst": {
-        "foreign": -105000,
+        "foreign": 379239,
         "trust": 0,
         "dealer": 0,
-        "total": -105000
+        "total": 340230
       },
       "matches": [
         {
           "id": "bollinger_kdj_buy",
           "short": "布林KDJ",
           "icon": "K",
-          "score": 83,
-          "reason": "三線走平下軌買點：20MA 38.34、上軌 39.44、下軌 37.24；KDJ 黃金交叉 K 40.9 / D 40.9，量比 1.20。",
-          "bollingerMode": "三線走平下軌買點",
-          "bollingerMiddle": 38.34,
-          "bollingerUpper": 39.44,
-          "bollingerLower": 37.24,
-          "kdjK": 40.9,
-          "kdjD": 40.9,
-          "kdjJ": 40.9,
-          "volumeRatio": 1.2
+          "score": 87,
+          "reason": "三線向上中軌買點：20MA 438.98、上軌 503.98、下軌 373.97；KDJ 黃金交叉 K 69.8 / D 69.3，量比 1.69。",
+          "bollingerMode": "三線向上中軌買點",
+          "bollingerMiddle": 438.98,
+          "bollingerUpper": 503.98,
+          "bollingerLower": 373.97,
+          "kdjK": 69.8,
+          "kdjD": 69.3,
+          "kdjJ": 70.6,
+          "volumeRatio": 1.69
         }
       ],
-      "strategy4Score": 77,
-      "strategy4Reason": "趨勢轉強但尚未觸發突破買點；趨勢分 5/8，量比 0.00，位階 中位階。",
+      "strategy4Score": 72,
+      "strategy4Reason": "趨勢轉強但尚未觸發突破買點；趨勢分 5/8，量比 0.00，位階 高基期。",
       "strategy4Signals": [
         {
           "id": "watch_trend",
           "short": "B觀察",
           "icon": "B",
-          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 5/8，量比 0.00，位階 中位階。"
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 5/8，量比 0.00，位階 高基期。"
         }
       ],
-      "score": 83,
+      "score": 87,
       "activeMatch": {
         "id": "bollinger_kdj_buy",
         "short": "布林KDJ",
         "icon": "K",
-        "score": 83,
-        "reason": "三線走平下軌買點：20MA 38.34、上軌 39.44、下軌 37.24；KDJ 黃金交叉 K 40.9 / D 40.9，量比 1.20。",
-        "bollingerMode": "三線走平下軌買點",
-        "bollingerMiddle": 38.34,
-        "bollingerUpper": 39.44,
-        "bollingerLower": 37.24,
-        "kdjK": 40.9,
-        "kdjD": 40.9,
-        "kdjJ": 40.9,
-        "volumeRatio": 1.2
+        "score": 87,
+        "reason": "三線向上中軌買點：20MA 438.98、上軌 503.98、下軌 373.97；KDJ 黃金交叉 K 69.8 / D 69.3，量比 1.69。",
+        "bollingerMode": "三線向上中軌買點",
+        "bollingerMiddle": 438.98,
+        "bollingerUpper": 503.98,
+        "bollingerLower": 373.97,
+        "kdjK": 69.8,
+        "kdjD": 69.3,
+        "kdjJ": 70.6,
+        "volumeRatio": 1.69
       }
     },
     {
-      "code": "6593",
-      "name": "台灣銘板",
-      "close": 35.45,
+      "code": "6574",
+      "name": "霈方",
+      "close": 115,
       "open": 0,
       "high": 0,
       "low": 0,
       "prevClose": 0,
       "limitUp": 0,
-      "change": 0.55,
-      "percent": 1.58,
-      "value": 11359329,
-      "tradeVolume": 319811,
+      "change": 2.5,
+      "percent": 2.22,
+      "value": 12419470,
+      "tradeVolume": 109817,
       "market": "TPEX",
-      "valueRank": 38,
-      "volumeRank": 41,
+      "valueRank": 40,
+      "volumeRank": 24,
       "inst": {
-        "foreign": 51000,
+        "foreign": 6050,
         "trust": 0,
-        "dealer": -344,
-        "total": 50656
-      },
-      "matches": [
-        {
-          "id": "bollinger_kdj_buy",
-          "short": "布林KDJ",
-          "icon": "K",
-          "score": 83,
-          "reason": "三線走平下軌買點：20MA 35.12、上軌 35.46、下軌 34.78；KDJ 黃金交叉 K 34.8 / D 34.1，量比 5.49。",
-          "bollingerMode": "三線走平下軌買點",
-          "bollingerMiddle": 35.12,
-          "bollingerUpper": 35.46,
-          "bollingerLower": 34.78,
-          "kdjK": 34.8,
-          "kdjD": 34.1,
-          "kdjJ": 36,
-          "volumeRatio": 5.49
-        }
-      ],
-      "strategy4Score": 100,
-      "strategy4Reason": "趨勢轉強但尚未觸發突破買點；趨勢分 7/8，量比 3.30，位階 低基期。",
-      "strategy4Signals": [
-        {
-          "id": "watch_trend",
-          "short": "B觀察",
-          "icon": "B",
-          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 7/8，量比 3.30，位階 低基期。"
-        }
-      ],
-      "score": 83,
-      "activeMatch": {
-        "id": "bollinger_kdj_buy",
-        "short": "布林KDJ",
-        "icon": "K",
-        "score": 83,
-        "reason": "三線走平下軌買點：20MA 35.12、上軌 35.46、下軌 34.78；KDJ 黃金交叉 K 34.8 / D 34.1，量比 5.49。",
-        "bollingerMode": "三線走平下軌買點",
-        "bollingerMiddle": 35.12,
-        "bollingerUpper": 35.46,
-        "bollingerLower": 34.78,
-        "kdjK": 34.8,
-        "kdjD": 34.1,
-        "kdjJ": 36,
-        "volumeRatio": 5.49
-      }
-    },
-    {
-      "code": "5489",
-      "name": "彩富",
-      "close": 40.45,
-      "open": 0,
-      "high": 0,
-      "low": 0,
-      "prevClose": 0,
-      "limitUp": 0,
-      "change": 0.3,
-      "percent": 0.75,
-      "value": 16872854,
-      "tradeVolume": 410355,
-      "market": "TPEX",
-      "valueRank": 43,
-      "volumeRank": 45,
-      "inst": {
-        "foreign": -28000,
-        "trust": 0,
-        "dealer": 8000,
-        "total": -20000
+        "dealer": -3743,
+        "total": 2307
       },
       "matches": [
         {
@@ -5148,25 +2433,25 @@
           "short": "布林KDJ",
           "icon": "K",
           "score": 80,
-          "reason": "三線走平下軌買點：20MA 39.70、上軌 40.75、下軌 38.65；KDJ 黃金交叉 K 37.4 / D 28.9，量比 3.87。",
+          "reason": "三線走平下軌買點：20MA 115.65、上軌 125.63、下軌 105.67；KDJ 黃金交叉 K 42.3 / D 38.2，量比 2.02。",
           "bollingerMode": "三線走平下軌買點",
-          "bollingerMiddle": 39.7,
-          "bollingerUpper": 40.75,
-          "bollingerLower": 38.65,
-          "kdjK": 37.4,
-          "kdjD": 28.9,
-          "kdjJ": 54.4,
-          "volumeRatio": 3.87
+          "bollingerMiddle": 115.65,
+          "bollingerUpper": 125.63,
+          "bollingerLower": 105.67,
+          "kdjK": 42.3,
+          "kdjD": 38.2,
+          "kdjJ": 50.6,
+          "volumeRatio": 2.02
         }
       ],
-      "strategy4Score": 100,
-      "strategy4Reason": "跳空且站上MA20，多頭段延續，偏逃逸缺口。",
+      "strategy4Score": 68,
+      "strategy4Reason": "低/中位階整理接近發動；準備分 6/7，RSI 58.5，量比 0.00。",
       "strategy4Signals": [
         {
-          "id": "runaway_gap",
-          "short": "逃逸缺口",
-          "icon": "🚀",
-          "reason": "跳空且站上MA20，多頭段延續，偏逃逸缺口。"
+          "id": "base_setup",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 6/7，RSI 58.5，量比 0.00。"
         }
       ],
       "score": 80,
@@ -5175,147 +2460,81 @@
         "short": "布林KDJ",
         "icon": "K",
         "score": 80,
-        "reason": "三線走平下軌買點：20MA 39.70、上軌 40.75、下軌 38.65；KDJ 黃金交叉 K 37.4 / D 28.9，量比 3.87。",
+        "reason": "三線走平下軌買點：20MA 115.65、上軌 125.63、下軌 105.67；KDJ 黃金交叉 K 42.3 / D 38.2，量比 2.02。",
         "bollingerMode": "三線走平下軌買點",
-        "bollingerMiddle": 39.7,
-        "bollingerUpper": 40.75,
-        "bollingerLower": 38.65,
-        "kdjK": 37.4,
-        "kdjD": 28.9,
-        "kdjJ": 54.4,
-        "volumeRatio": 3.87
+        "bollingerMiddle": 115.65,
+        "bollingerUpper": 125.63,
+        "bollingerLower": 105.67,
+        "kdjK": 42.3,
+        "kdjD": 38.2,
+        "kdjJ": 50.6,
+        "volumeRatio": 2.02
       }
     },
     {
-      "code": "1321",
-      "name": "大洋",
-      "close": 29.7,
+      "code": "7556",
+      "name": "意德士",
+      "close": 282.5,
       "open": 0,
       "high": 0,
       "low": 0,
       "prevClose": 0,
       "limitUp": 0,
-      "change": 0.75,
-      "percent": 2.59,
-      "value": 10438120,
-      "tradeVolume": 356583,
-      "market": "TWSE",
-      "valueRank": 37,
-      "volumeRank": 43,
+      "change": 1,
+      "percent": 0.36,
+      "value": 57065653,
+      "tradeVolume": 210067,
+      "market": "TPEX",
+      "valueRank": 61,
+      "volumeRank": 33,
       "inst": {
-        "foreign": 110000,
+        "foreign": -5810,
         "trust": 0,
-        "dealer": 0,
-        "total": 82000
+        "dealer": -1602,
+        "total": -7412
       },
       "matches": [
         {
           "id": "bollinger_kdj_buy",
           "short": "布林KDJ",
           "icon": "K",
-          "score": 79,
-          "reason": "三線走平下軌買點：20MA 29.21、上軌 29.95、下軌 28.48；KDJ 黃金交叉 K 66.6 / D 48.0，量比 1.22。",
+          "score": 75,
+          "reason": "三線走平下軌買點：20MA 275.30、上軌 295.74、下軌 254.86；KDJ 黃金交叉 K 48.2 / D 45.3，量比 1.83。",
           "bollingerMode": "三線走平下軌買點",
-          "bollingerMiddle": 29.21,
-          "bollingerUpper": 29.95,
-          "bollingerLower": 28.48,
-          "kdjK": 66.6,
-          "kdjD": 48,
-          "kdjJ": 104,
-          "volumeRatio": 1.22
+          "bollingerMiddle": 275.3,
+          "bollingerUpper": 295.74,
+          "bollingerLower": 254.86,
+          "kdjK": 48.2,
+          "kdjD": 45.3,
+          "kdjJ": 54.1,
+          "volumeRatio": 1.83
         }
       ],
-      "strategy4Score": 100,
-      "strategy4Reason": "爆量突破後回檔不破半分位，再突破前高 29.20，N字共振。",
+      "strategy4Score": 80,
+      "strategy4Reason": "趨勢轉強但尚未觸發突破買點；趨勢分 6/8，量比 0.00，位階 中位階。",
       "strategy4Signals": [
         {
-          "id": "n_base",
-          "short": "N字",
-          "icon": "",
-          "reason": "爆量突破後回檔不破半分位，再突破前高 29.20，N字共振。"
+          "id": "watch_trend",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 6/8，量比 0.00，位階 中位階。"
         }
       ],
-      "score": 79,
+      "score": 75,
       "activeMatch": {
         "id": "bollinger_kdj_buy",
         "short": "布林KDJ",
         "icon": "K",
-        "score": 79,
-        "reason": "三線走平下軌買點：20MA 29.21、上軌 29.95、下軌 28.48；KDJ 黃金交叉 K 66.6 / D 48.0，量比 1.22。",
+        "score": 75,
+        "reason": "三線走平下軌買點：20MA 275.30、上軌 295.74、下軌 254.86；KDJ 黃金交叉 K 48.2 / D 45.3，量比 1.83。",
         "bollingerMode": "三線走平下軌買點",
-        "bollingerMiddle": 29.21,
-        "bollingerUpper": 29.95,
-        "bollingerLower": 28.48,
-        "kdjK": 66.6,
-        "kdjD": 48,
-        "kdjJ": 104,
-        "volumeRatio": 1.22
-      }
-    },
-    {
-      "code": "5519",
-      "name": "隆大",
-      "close": 32.7,
-      "open": 0,
-      "high": 0,
-      "low": 0,
-      "prevClose": 0,
-      "limitUp": 0,
-      "change": 0.4,
-      "percent": 1.24,
-      "value": 20678004,
-      "tradeVolume": 635937,
-      "market": "TWSE",
-      "valueRank": 46,
-      "volumeRank": 53,
-      "inst": {
-        "foreign": 182000,
-        "trust": 0,
-        "dealer": 0,
-        "total": 185940
-      },
-      "matches": [
-        {
-          "id": "bollinger_kdj_buy",
-          "short": "布林KDJ",
-          "icon": "K",
-          "score": 73,
-          "reason": "三線走平下軌買點：20MA 32.31、上軌 32.94、下軌 31.69；KDJ 黃金交叉 K 53.8 / D 36.7，量比 0.93。",
-          "bollingerMode": "三線走平下軌買點",
-          "bollingerMiddle": 32.31,
-          "bollingerUpper": 32.94,
-          "bollingerLower": 31.69,
-          "kdjK": 53.8,
-          "kdjD": 36.7,
-          "kdjJ": 88.1,
-          "volumeRatio": 0.93
-        }
-      ],
-      "strategy4Score": 98,
-      "strategy4Reason": "爆量突破後回檔不破半分位，再突破前高 32.30，N字共振。",
-      "strategy4Signals": [
-        {
-          "id": "n_base",
-          "short": "N字",
-          "icon": "",
-          "reason": "爆量突破後回檔不破半分位，再突破前高 32.30，N字共振。"
-        }
-      ],
-      "score": 73,
-      "activeMatch": {
-        "id": "bollinger_kdj_buy",
-        "short": "布林KDJ",
-        "icon": "K",
-        "score": 73,
-        "reason": "三線走平下軌買點：20MA 32.31、上軌 32.94、下軌 31.69；KDJ 黃金交叉 K 53.8 / D 36.7，量比 0.93。",
-        "bollingerMode": "三線走平下軌買點",
-        "bollingerMiddle": 32.31,
-        "bollingerUpper": 32.94,
-        "bollingerLower": 31.69,
-        "kdjK": 53.8,
-        "kdjD": 36.7,
-        "kdjJ": 88.1,
-        "volumeRatio": 0.93
+        "bollingerMiddle": 275.3,
+        "bollingerUpper": 295.74,
+        "bollingerLower": 254.86,
+        "kdjK": 48.2,
+        "kdjD": 45.3,
+        "kdjJ": 54.1,
+        "volumeRatio": 1.83
       }
     }
   ]
