@@ -1,31 +1,2688 @@
 {
-  "ok": true,
-  "source": "strategy2-intraday-latest",
-  "status": "retired_intraday_snapshot",
-  "reason": "latest trading day has no completed strategy2 intraday patrol snapshot; stale signals retired and empty snapshot archived",
-  "date": "2026-06-05",
-  "updatedAt": "2026-06-06T13:44:07.482Z",
+  "source": "strategy2-09-to-1330-patrol",
+  "date": "2026-06-08",
+  "updatedAt": "2026-06-08T01:04:43.220Z",
   "realtime": {
-    "requested": 0,
-    "received": 0,
-    "failed": 0,
-    "usable": 0,
-    "coverage": 0,
-    "entrySourceHealthy": false,
-    "staleSignalsRetired": true
+    "requested": 1007,
+    "received": 618,
+    "usableBeforeRescue": 515,
+    "coverageBeforeRescue": 0.5114,
+    "usableAfterRescue": 515,
+    "coverageAfterRescue": 0.5114,
+    "unusableBreakdown": {
+      "usable": 515,
+      "stale": 22,
+      "noTime": 81,
+      "noClose": 0,
+      "missing": 389
+    },
+    "sourceHealth": {
+      "pz": {
+        "received": 162,
+        "usable": 154,
+        "stale": 8,
+        "noTime": 0,
+        "noClose": 0
+      },
+      "z": {
+        "received": 95,
+        "usable": 95,
+        "stale": 0,
+        "noTime": 0,
+        "noClose": 0
+      },
+      "prevClose": {
+        "received": 33,
+        "usable": 25,
+        "stale": 8,
+        "noTime": 0,
+        "noClose": 0
+      },
+      "fugle-ws": {
+        "received": 12,
+        "usable": 12,
+        "stale": 0,
+        "noTime": 0,
+        "noClose": 0
+      },
+      "open": {
+        "received": 235,
+        "usable": 229,
+        "stale": 6,
+        "noTime": 0,
+        "noClose": 0
+      },
+      "fugle": {
+        "received": 81,
+        "usable": 0,
+        "stale": 0,
+        "noTime": 81,
+        "noClose": 0
+      }
+    },
+    "failed": 66,
+    "failedBatches": [
+      {
+        "range": "3011-3021",
+        "size": 8,
+        "codes": [
+          "3011",
+          "3013",
+          "3014",
+          "3015",
+          "3016",
+          "3018",
+          "3019",
+          "3021"
+        ],
+        "error": "api/realtime returned no quotes"
+      },
+      {
+        "range": "3022-3029",
+        "size": 8,
+        "codes": [
+          "3022",
+          "3023",
+          "3024",
+          "3025",
+          "3026",
+          "3027",
+          "3028",
+          "3029"
+        ],
+        "error": "api/realtime returned no quotes"
+      },
+      {
+        "range": "3030-3038",
+        "size": 8,
+        "codes": [
+          "3030",
+          "3031",
+          "3032",
+          "3033",
+          "3034",
+          "3035",
+          "3036",
+          "3038"
+        ],
+        "error": "api/realtime returned no quotes"
+      },
+      {
+        "range": "3040-3048",
+        "size": 8,
+        "codes": [
+          "3040",
+          "3041",
+          "3042",
+          "3043",
+          "3044",
+          "3046",
+          "3047",
+          "3048"
+        ],
+        "error": "api/realtime returned no quotes"
+      },
+      {
+        "range": "3049-3057",
+        "size": 8,
+        "codes": [
+          "3049",
+          "3050",
+          "3051",
+          "3052",
+          "3054",
+          "3055",
+          "3056",
+          "3057"
+        ],
+        "error": "api/realtime returned no quotes"
+      },
+      {
+        "range": "3058-3130",
+        "size": 8,
+        "codes": [
+          "3058",
+          "3059",
+          "3060",
+          "3062",
+          "3090",
+          "3092",
+          "3094",
+          "3130"
+        ],
+        "error": "api/realtime returned no quotes"
+      },
+      {
+        "range": "3135-3209",
+        "size": 8,
+        "codes": [
+          "3135",
+          "3138",
+          "3149",
+          "3150",
+          "3164",
+          "3168",
+          "3189",
+          "3209"
+        ],
+        "error": "api/realtime returned no quotes"
+      },
+      {
+        "range": "3229-3312",
+        "size": 8,
+        "codes": [
+          "3229",
+          "3231",
+          "3257",
+          "3296",
+          "3305",
+          "3308",
+          "3311",
+          "3312"
+        ],
+        "error": "api/realtime returned no quotes"
+      },
+      {
+        "range": "3321-3416",
+        "size": 8,
+        "codes": [
+          "3321",
+          "3338",
+          "3346",
+          "3356",
+          "3376",
+          "3380",
+          "3413",
+          "3416"
+        ],
+        "error": "api/realtime returned no quotes"
+      },
+      {
+        "range": "3419-3504",
+        "size": 8,
+        "codes": [
+          "3419",
+          "3432",
+          "3437",
+          "3450",
+          "3481",
+          "3494",
+          "3501",
+          "3504"
+        ],
+        "error": "api/realtime returned no quotes"
+      },
+      {
+        "range": "3515-3545",
+        "size": 8,
+        "codes": [
+          "3515",
+          "3518",
+          "3528",
+          "3530",
+          "3532",
+          "3535",
+          "3543",
+          "3545"
+        ],
+        "error": "api/realtime returned no quotes"
+      },
+      {
+        "range": "3550-3592",
+        "size": 8,
+        "codes": [
+          "3550",
+          "3557",
+          "3563",
+          "3576",
+          "3583",
+          "3588",
+          "3591",
+          "3592"
+        ],
+        "error": "api/realtime returned no quotes"
+      },
+      {
+        "range": "3593-3652",
+        "size": 8,
+        "codes": [
+          "3593",
+          "3596",
+          "3605",
+          "3607",
+          "3617",
+          "3622",
+          "3645",
+          "3652"
+        ],
+        "error": "api/realtime returned no quotes"
+      },
+      {
+        "range": "3669-3703",
+        "size": 8,
+        "codes": [
+          "3669",
+          "3673",
+          "3679",
+          "3686",
+          "3694",
+          "3701",
+          "3702",
+          "3703"
+        ],
+        "error": "api/realtime returned no quotes"
+      },
+      {
+        "range": "3704-3715",
+        "size": 8,
+        "codes": [
+          "3704",
+          "3705",
+          "3706",
+          "3708",
+          "3711",
+          "3712",
+          "3714",
+          "3715"
+        ],
+        "error": "api/realtime returned no quotes"
+      },
+      {
+        "range": "3716-4137",
+        "size": 8,
+        "codes": [
+          "3716",
+          "3717",
+          "4104",
+          "4106",
+          "4108",
+          "4119",
+          "4133",
+          "4137"
+        ],
+        "error": "api/realtime returned no quotes"
+      },
+      {
+        "range": "4142-4195",
+        "size": 8,
+        "codes": [
+          "4142",
+          "4148",
+          "4155",
+          "4164",
+          "4169",
+          "4178",
+          "4190",
+          "4195"
+        ],
+        "error": "api/realtime returned no quotes"
+      },
+      {
+        "range": "4306-4526",
+        "size": 8,
+        "codes": [
+          "4306",
+          "4414",
+          "4426",
+          "4438",
+          "4439",
+          "4440",
+          "4441",
+          "4526"
+        ],
+        "error": "api/realtime returned no quotes"
+      },
+      {
+        "range": "4532-4557",
+        "size": 8,
+        "codes": [
+          "4532",
+          "4536",
+          "4540",
+          "4545",
+          "4551",
+          "4552",
+          "4555",
+          "4557"
+        ],
+        "error": "api/realtime returned no quotes"
+      },
+      {
+        "range": "4560-4576",
+        "size": 8,
+        "codes": [
+          "4560",
+          "4562",
+          "4564",
+          "4566",
+          "4569",
+          "4571",
+          "4572",
+          "4576"
+        ],
+        "error": "api/realtime returned no quotes"
+      },
+      {
+        "range": "4582-4736",
+        "size": 8,
+        "codes": [
+          "4582",
+          "4583",
+          "4585",
+          "4588",
+          "4590",
+          "4720",
+          "4722",
+          "4736"
+        ],
+        "error": "api/realtime returned no quotes"
+      },
+      {
+        "range": "4737-4770",
+        "size": 8,
+        "codes": [
+          "4737",
+          "4739",
+          "4746",
+          "4755",
+          "4763",
+          "4764",
+          "4766",
+          "4770"
+        ],
+        "error": "api/realtime returned no quotes"
+      },
+      {
+        "range": "4771-4919",
+        "size": 8,
+        "codes": [
+          "4771",
+          "4807",
+          "4904",
+          "4906",
+          "4912",
+          "4915",
+          "4916",
+          "4919"
+        ],
+        "error": "api/realtime returned no quotes"
+      },
+      {
+        "range": "4927-4949",
+        "size": 8,
+        "codes": [
+          "4927",
+          "4930",
+          "4934",
+          "4935",
+          "4938",
+          "4942",
+          "4943",
+          "4949"
+        ],
+        "error": "api/realtime returned no quotes"
+      },
+      {
+        "range": "4952-4976",
+        "size": 8,
+        "codes": [
+          "4952",
+          "4956",
+          "4958",
+          "4960",
+          "4961",
+          "4967",
+          "4968",
+          "4976"
+        ],
+        "error": "api/realtime returned no quotes"
+      },
+      {
+        "range": "4977-5222",
+        "size": 8,
+        "codes": [
+          "4977",
+          "4989",
+          "4994",
+          "4999",
+          "5007",
+          "5203",
+          "5215",
+          "5222"
+        ],
+        "error": "api/realtime returned no quotes"
+      },
+      {
+        "range": "5225-5285",
+        "size": 8,
+        "codes": [
+          "5225",
+          "5234",
+          "5243",
+          "5244",
+          "5258",
+          "5283",
+          "5284",
+          "5285"
+        ],
+        "error": "api/realtime returned no quotes"
+      },
+      {
+        "range": "5288-5484",
+        "size": 8,
+        "codes": [
+          "5288",
+          "5292",
+          "5306",
+          "5388",
+          "5434",
+          "5469",
+          "5471",
+          "5484"
+        ],
+        "error": "api/realtime returned no quotes"
+      },
+      {
+        "range": "5515-5534",
+        "size": 8,
+        "codes": [
+          "5515",
+          "5519",
+          "5521",
+          "5522",
+          "5525",
+          "5531",
+          "5533",
+          "5534"
+        ],
+        "error": "api/realtime returned no quotes"
+      },
+      {
+        "range": "5538-6005",
+        "size": 8,
+        "codes": [
+          "5538",
+          "5546",
+          "5607",
+          "5608",
+          "5706",
+          "5906",
+          "5907",
+          "6005"
+        ],
+        "error": "api/realtime returned no quotes"
+      },
+      {
+        "range": "6024-6128",
+        "size": 8,
+        "codes": [
+          "6024",
+          "6108",
+          "6112",
+          "6115",
+          "6116",
+          "6117",
+          "6120",
+          "6128"
+        ],
+        "error": "api/realtime returned no quotes"
+      },
+      {
+        "range": "6133-6155",
+        "size": 8,
+        "codes": [
+          "6133",
+          "6136",
+          "6139",
+          "6141",
+          "6142",
+          "6152",
+          "6153",
+          "6155"
+        ],
+        "error": "api/realtime returned no quotes"
+      },
+      {
+        "range": "6164-6184",
+        "size": 8,
+        "codes": [
+          "6164",
+          "6165",
+          "6166",
+          "6168",
+          "6176",
+          "6177",
+          "6183",
+          "6184"
+        ],
+        "error": "api/realtime returned no quotes"
+      },
+      {
+        "range": "6189-6205",
+        "size": 8,
+        "codes": [
+          "6189",
+          "6191",
+          "6192",
+          "6196",
+          "6197",
+          "6201",
+          "6202",
+          "6205"
+        ],
+        "error": "api/realtime returned no quotes"
+      },
+      {
+        "range": "6206-6225",
+        "size": 8,
+        "codes": [
+          "6206",
+          "6209",
+          "6213",
+          "6214",
+          "6215",
+          "6216",
+          "6224",
+          "6225"
+        ],
+        "error": "api/realtime returned no quotes"
+      },
+      {
+        "range": "6226-6271",
+        "size": 8,
+        "codes": [
+          "6226",
+          "6230",
+          "6235",
+          "6239",
+          "6243",
+          "6257",
+          "6269",
+          "6271"
+        ],
+        "error": "api/realtime returned no quotes"
+      },
+      {
+        "range": "6272-6405",
+        "size": 8,
+        "codes": [
+          "6272",
+          "6277",
+          "6278",
+          "6281",
+          "6282",
+          "6283",
+          "6285",
+          "6405"
+        ],
+        "error": "api/realtime returned no quotes"
+      },
+      {
+        "range": "6412-6443",
+        "size": 8,
+        "codes": [
+          "6412",
+          "6414",
+          "6415",
+          "6416",
+          "6426",
+          "6431",
+          "6438",
+          "6443"
+        ],
+        "error": "api/realtime returned no quotes"
+      },
+      {
+        "range": "6449-6504",
+        "size": 8,
+        "codes": [
+          "6449",
+          "6451",
+          "6456",
+          "6464",
+          "6472",
+          "6477",
+          "6491",
+          "6504"
+        ],
+        "error": "api/realtime returned no quotes"
+      },
+      {
+        "range": "6505-6552",
+        "size": 8,
+        "codes": [
+          "6505",
+          "6525",
+          "6526",
+          "6533",
+          "6534",
+          "6541",
+          "6550",
+          "6552"
+        ],
+        "error": "api/realtime returned no quotes"
+      },
+      {
+        "range": "6558-6591",
+        "size": 8,
+        "codes": [
+          "6558",
+          "6573",
+          "6579",
+          "6581",
+          "6582",
+          "6585",
+          "6589",
+          "6591"
+        ],
+        "error": "api/realtime returned no quotes"
+      },
+      {
+        "range": "6592-6645",
+        "size": 8,
+        "codes": [
+          "6592",
+          "6598",
+          "6605",
+          "6606",
+          "6614",
+          "6625",
+          "6641",
+          "6645"
+        ],
+        "error": "api/realtime returned no quotes"
+      },
+      {
+        "range": "6655-6672",
+        "size": 8,
+        "codes": [
+          "6655",
+          "6657",
+          "6658",
+          "6666",
+          "6668",
+          "6670",
+          "6671",
+          "6672"
+        ],
+        "error": "api/realtime returned no quotes"
+      },
+      {
+        "range": "6674-6719",
+        "size": 8,
+        "codes": [
+          "6674",
+          "6689",
+          "6691",
+          "6695",
+          "6698",
+          "6706",
+          "6715",
+          "6719"
+        ],
+        "error": "api/realtime returned no quotes"
+      },
+      {
+        "range": "6722-6768",
+        "size": 8,
+        "codes": [
+          "6722",
+          "6742",
+          "6743",
+          "6753",
+          "6754",
+          "6756",
+          "6757",
+          "6768"
+        ],
+        "error": "api/realtime returned no quotes"
+      },
+      {
+        "range": "6770-6794",
+        "size": 8,
+        "codes": [
+          "6770",
+          "6771",
+          "6776",
+          "6782",
+          "6789",
+          "6790",
+          "6792",
+          "6794"
+        ],
+        "error": "api/realtime returned no quotes"
+      },
+      {
+        "range": "6796-6835",
+        "size": 8,
+        "codes": [
+          "6796",
+          "6799",
+          "6806",
+          "6807",
+          "6830",
+          "6831",
+          "6834",
+          "6835"
+        ],
+        "error": "api/realtime returned no quotes"
+      },
+      {
+        "range": "6838-6885",
+        "size": 8,
+        "codes": [
+          "6838",
+          "6854",
+          "6861",
+          "6862",
+          "6863",
+          "6869",
+          "6873",
+          "6885"
+        ],
+        "error": "api/realtime returned no quotes"
+      },
+      {
+        "range": "6887-6914",
+        "size": 8,
+        "codes": [
+          "6887",
+          "6890",
+          "6901",
+          "6902",
+          "6906",
+          "6908",
+          "6909",
+          "6914"
+        ],
+        "error": "api/realtime returned no quotes"
+      },
+      {
+        "range": "6916-6931",
+        "size": 8,
+        "codes": [
+          "6916",
+          "6918",
+          "6919",
+          "6921",
+          "6923",
+          "6924",
+          "6928",
+          "6931"
+        ],
+        "error": "api/realtime returned no quotes"
+      },
+      {
+        "range": "6933-6955",
+        "size": 8,
+        "codes": [
+          "6933",
+          "6934",
+          "6936",
+          "6937",
+          "6949",
+          "6951",
+          "6952",
+          "6955"
+        ],
+        "error": "api/realtime returned no quotes"
+      },
+      {
+        "range": "6957-7631",
+        "size": 8,
+        "codes": [
+          "6957",
+          "6958",
+          "6962",
+          "6965",
+          "6969",
+          "6988",
+          "6994",
+          "7631"
+        ],
+        "error": "api/realtime returned no quotes"
+      },
+      {
+        "range": "7705-7740",
+        "size": 8,
+        "codes": [
+          "7705",
+          "7711",
+          "7721",
+          "7722",
+          "7730",
+          "7732",
+          "7736",
+          "7740"
+        ],
+        "error": "api/realtime returned no quotes"
+      },
+      {
+        "range": "7749-7791",
+        "size": 8,
+        "codes": [
+          "7749",
+          "7760",
+          "7765",
+          "7768",
+          "7780",
+          "7786",
+          "7788",
+          "7791"
+        ],
+        "error": "api/realtime returned no quotes"
+      },
+      {
+        "range": "7795-8011",
+        "size": 8,
+        "codes": [
+          "7795",
+          "7799",
+          "7803",
+          "7818",
+          "7821",
+          "7823",
+          "7827",
+          "8011"
+        ],
+        "error": "api/realtime returned no quotes"
+      },
+      {
+        "range": "8016-8070",
+        "size": 8,
+        "codes": [
+          "8016",
+          "8021",
+          "8028",
+          "8033",
+          "8039",
+          "8045",
+          "8046",
+          "8070"
+        ],
+        "error": "api/realtime returned no quotes"
+      },
+      {
+        "range": "8072-8112",
+        "size": 8,
+        "codes": [
+          "8072",
+          "8081",
+          "8101",
+          "8103",
+          "8104",
+          "8105",
+          "8110",
+          "8112"
+        ],
+        "error": "api/realtime returned no quotes"
+      },
+      {
+        "range": "8114-8215",
+        "size": 8,
+        "codes": [
+          "8114",
+          "8131",
+          "8150",
+          "8162",
+          "8163",
+          "8201",
+          "8213",
+          "8215"
+        ],
+        "error": "api/realtime returned no quotes"
+      },
+      {
+        "range": "8222-8404",
+        "size": 8,
+        "codes": [
+          "8222",
+          "8249",
+          "8261",
+          "8271",
+          "8341",
+          "8367",
+          "8374",
+          "8404"
+        ],
+        "error": "api/realtime returned no quotes"
+      },
+      {
+        "range": "8411-8462",
+        "size": 8,
+        "codes": [
+          "8411",
+          "8422",
+          "8429",
+          "8438",
+          "8442",
+          "8443",
+          "8454",
+          "8462"
+        ],
+        "error": "api/realtime returned no quotes"
+      },
+      {
+        "range": "8463-8481",
+        "size": 8,
+        "codes": [
+          "8463",
+          "8464",
+          "8466",
+          "8467",
+          "8473",
+          "8476",
+          "8478",
+          "8481"
+        ],
+        "error": "api/realtime returned no quotes"
+      },
+      {
+        "range": "8487-9904",
+        "size": 8,
+        "codes": [
+          "8487",
+          "8488",
+          "8499",
+          "8926",
+          "8940",
+          "9802",
+          "9902",
+          "9904"
+        ],
+        "error": "api/realtime returned no quotes"
+      },
+      {
+        "range": "9905-9914",
+        "size": 8,
+        "codes": [
+          "9905",
+          "9906",
+          "9907",
+          "9908",
+          "9910",
+          "9911",
+          "9912",
+          "9914"
+        ],
+        "error": "api/realtime returned no quotes"
+      },
+      {
+        "range": "9917-9927",
+        "size": 8,
+        "codes": [
+          "9917",
+          "9918",
+          "9919",
+          "9921",
+          "9924",
+          "9925",
+          "9926",
+          "9927"
+        ],
+        "error": "api/realtime returned no quotes"
+      },
+      {
+        "range": "9928-9937",
+        "size": 8,
+        "codes": [
+          "9928",
+          "9929",
+          "9930",
+          "9931",
+          "9933",
+          "9934",
+          "9935",
+          "9937"
+        ],
+        "error": "api/realtime returned no quotes"
+      },
+      {
+        "range": "9938-9945",
+        "size": 8,
+        "codes": [
+          "9938",
+          "9939",
+          "9940",
+          "9941",
+          "9942",
+          "9943",
+          "9944",
+          "9945"
+        ],
+        "error": "api/realtime returned no quotes"
+      }
+    ],
+    "retryBatches": [
+      {
+        "range": "3011-3015",
+        "size": 4,
+        "parent": "3011-3021",
+        "ok": true
+      },
+      {
+        "range": "3016-3021",
+        "size": 4,
+        "parent": "3011-3021",
+        "ok": true
+      },
+      {
+        "range": "3022-3025",
+        "size": 4,
+        "parent": "3022-3029",
+        "ok": true
+      },
+      {
+        "range": "3026-3029",
+        "size": 4,
+        "parent": "3022-3029",
+        "ok": true
+      },
+      {
+        "range": "3030-3033",
+        "size": 4,
+        "parent": "3030-3038",
+        "ok": true
+      },
+      {
+        "range": "3034-3038",
+        "size": 4,
+        "parent": "3030-3038",
+        "ok": true
+      },
+      {
+        "range": "3040-3043",
+        "size": 4,
+        "parent": "3040-3048",
+        "ok": true
+      },
+      {
+        "range": "3044-3048",
+        "size": 4,
+        "parent": "3040-3048",
+        "ok": true
+      },
+      {
+        "range": "3049-3052",
+        "size": 4,
+        "parent": "3049-3057",
+        "ok": true
+      },
+      {
+        "range": "3054-3057",
+        "size": 4,
+        "parent": "3049-3057",
+        "ok": true
+      },
+      {
+        "range": "3058-3062",
+        "size": 4,
+        "parent": "3058-3130",
+        "ok": true
+      },
+      {
+        "range": "3090-3130",
+        "size": 4,
+        "parent": "3058-3130",
+        "ok": true
+      },
+      {
+        "range": "3135-3150",
+        "size": 4,
+        "parent": "3135-3209",
+        "ok": false,
+        "error": "api/realtime returned no quotes"
+      },
+      {
+        "range": "3164-3209",
+        "size": 4,
+        "parent": "3135-3209",
+        "ok": false,
+        "error": "api/realtime returned no quotes"
+      },
+      {
+        "range": "3229-3296",
+        "size": 4,
+        "parent": "3229-3312",
+        "ok": false,
+        "error": "api/realtime returned no quotes"
+      },
+      {
+        "range": "3305-3312",
+        "size": 4,
+        "parent": "3229-3312",
+        "ok": false,
+        "error": "api/realtime returned no quotes"
+      },
+      {
+        "range": "3321-3356",
+        "size": 4,
+        "parent": "3321-3416",
+        "ok": false,
+        "error": "api/realtime returned no quotes"
+      },
+      {
+        "range": "3376-3416",
+        "size": 4,
+        "parent": "3321-3416",
+        "ok": false,
+        "error": "api/realtime returned no quotes"
+      },
+      {
+        "range": "3419-3450",
+        "size": 4,
+        "parent": "3419-3504",
+        "ok": false,
+        "error": "api/realtime returned no quotes"
+      },
+      {
+        "range": "3481-3504",
+        "size": 4,
+        "parent": "3419-3504",
+        "ok": false,
+        "error": "api/realtime returned no quotes"
+      },
+      {
+        "range": "3515-3530",
+        "size": 4,
+        "parent": "3515-3545",
+        "ok": false,
+        "error": "api/realtime returned no quotes"
+      },
+      {
+        "range": "3532-3545",
+        "size": 4,
+        "parent": "3515-3545",
+        "ok": false,
+        "error": "api/realtime returned no quotes"
+      },
+      {
+        "range": "3550-3576",
+        "size": 4,
+        "parent": "3550-3592",
+        "ok": false,
+        "error": "api/realtime returned no quotes"
+      },
+      {
+        "range": "3583-3592",
+        "size": 4,
+        "parent": "3550-3592",
+        "ok": false,
+        "error": "api/realtime returned no quotes"
+      },
+      {
+        "range": "3593-3607",
+        "size": 4,
+        "parent": "3593-3652",
+        "ok": false,
+        "error": "api/realtime returned no quotes"
+      },
+      {
+        "range": "3617-3652",
+        "size": 4,
+        "parent": "3593-3652",
+        "ok": false,
+        "error": "api/realtime returned no quotes"
+      },
+      {
+        "range": "3669-3686",
+        "size": 4,
+        "parent": "3669-3703",
+        "ok": false,
+        "error": "api/realtime returned no quotes"
+      },
+      {
+        "range": "3694-3703",
+        "size": 4,
+        "parent": "3669-3703",
+        "ok": false,
+        "error": "api/realtime returned no quotes"
+      },
+      {
+        "range": "3704-3708",
+        "size": 4,
+        "parent": "3704-3715",
+        "ok": false,
+        "error": "api/realtime returned no quotes"
+      },
+      {
+        "range": "3711-3715",
+        "size": 4,
+        "parent": "3704-3715",
+        "ok": false,
+        "error": "api/realtime returned no quotes"
+      },
+      {
+        "range": "3716-4106",
+        "size": 4,
+        "parent": "3716-4137",
+        "ok": false,
+        "error": "api/realtime returned no quotes"
+      },
+      {
+        "range": "4108-4137",
+        "size": 4,
+        "parent": "3716-4137",
+        "ok": false,
+        "error": "api/realtime returned no quotes"
+      },
+      {
+        "range": "4142-4164",
+        "size": 4,
+        "parent": "4142-4195",
+        "ok": false,
+        "error": "api/realtime returned no quotes"
+      },
+      {
+        "range": "4169-4195",
+        "size": 4,
+        "parent": "4142-4195",
+        "ok": false,
+        "error": "api/realtime returned no quotes"
+      },
+      {
+        "range": "4306-4438",
+        "size": 4,
+        "parent": "4306-4526",
+        "ok": false,
+        "error": "api/realtime returned no quotes"
+      },
+      {
+        "range": "4439-4526",
+        "size": 4,
+        "parent": "4306-4526",
+        "ok": false,
+        "error": "api/realtime returned no quotes"
+      },
+      {
+        "range": "4532-4545",
+        "size": 4,
+        "parent": "4532-4557",
+        "ok": false,
+        "error": "api/realtime returned no quotes"
+      },
+      {
+        "range": "4551-4557",
+        "size": 4,
+        "parent": "4532-4557",
+        "ok": false,
+        "error": "api/realtime returned no quotes"
+      },
+      {
+        "range": "4560-4566",
+        "size": 4,
+        "parent": "4560-4576",
+        "ok": false,
+        "error": "api/realtime returned no quotes"
+      },
+      {
+        "range": "4569-4576",
+        "size": 4,
+        "parent": "4560-4576",
+        "ok": false,
+        "error": "api/realtime returned no quotes"
+      },
+      {
+        "range": "4582-4588",
+        "size": 4,
+        "parent": "4582-4736",
+        "ok": false,
+        "error": "api/realtime returned no quotes"
+      },
+      {
+        "range": "4590-4736",
+        "size": 4,
+        "parent": "4582-4736",
+        "ok": false,
+        "error": "api/realtime returned no quotes"
+      },
+      {
+        "range": "4737-4755",
+        "size": 4,
+        "parent": "4737-4770",
+        "ok": false,
+        "error": "api/realtime returned no quotes"
+      },
+      {
+        "range": "4763-4770",
+        "size": 4,
+        "parent": "4737-4770",
+        "ok": false,
+        "error": "api/realtime returned no quotes"
+      },
+      {
+        "range": "4771-4906",
+        "size": 4,
+        "parent": "4771-4919",
+        "ok": false,
+        "error": "api/realtime returned no quotes"
+      },
+      {
+        "range": "4912-4919",
+        "size": 4,
+        "parent": "4771-4919",
+        "ok": false,
+        "error": "api/realtime returned no quotes"
+      },
+      {
+        "range": "4927-4935",
+        "size": 4,
+        "parent": "4927-4949",
+        "ok": false,
+        "error": "api/realtime returned no quotes"
+      },
+      {
+        "range": "4938-4949",
+        "size": 4,
+        "parent": "4927-4949",
+        "ok": false,
+        "error": "api/realtime returned no quotes"
+      },
+      {
+        "range": "4952-4960",
+        "size": 4,
+        "parent": "4952-4976",
+        "ok": true
+      },
+      {
+        "range": "4961-4976",
+        "size": 4,
+        "parent": "4952-4976",
+        "ok": false,
+        "error": "api/realtime returned no quotes"
+      },
+      {
+        "range": "4977-4999",
+        "size": 4,
+        "parent": "4977-5222",
+        "ok": false,
+        "error": "api/realtime returned no quotes"
+      },
+      {
+        "range": "5007-5222",
+        "size": 4,
+        "parent": "4977-5222",
+        "ok": false,
+        "error": "api/realtime returned no quotes"
+      },
+      {
+        "range": "5225-5244",
+        "size": 4,
+        "parent": "5225-5285",
+        "ok": false,
+        "error": "api/realtime returned no quotes"
+      },
+      {
+        "range": "5258-5285",
+        "size": 4,
+        "parent": "5225-5285",
+        "ok": false,
+        "error": "api/realtime returned no quotes"
+      },
+      {
+        "range": "5288-5388",
+        "size": 4,
+        "parent": "5288-5484",
+        "ok": false,
+        "error": "api/realtime returned no quotes"
+      },
+      {
+        "range": "5434-5484",
+        "size": 4,
+        "parent": "5288-5484",
+        "ok": false,
+        "error": "api/realtime returned no quotes"
+      },
+      {
+        "range": "5515-5522",
+        "size": 4,
+        "parent": "5515-5534",
+        "ok": false,
+        "error": "api/realtime returned no quotes"
+      },
+      {
+        "range": "5525-5534",
+        "size": 4,
+        "parent": "5515-5534",
+        "ok": false,
+        "error": "api/realtime returned no quotes"
+      },
+      {
+        "range": "5538-5608",
+        "size": 4,
+        "parent": "5538-6005",
+        "ok": false,
+        "error": "api/realtime returned no quotes"
+      },
+      {
+        "range": "5706-6005",
+        "size": 4,
+        "parent": "5538-6005",
+        "ok": false,
+        "error": "api/realtime returned no quotes"
+      },
+      {
+        "range": "6024-6115",
+        "size": 4,
+        "parent": "6024-6128",
+        "ok": false,
+        "error": "api/realtime returned no quotes"
+      },
+      {
+        "range": "6116-6128",
+        "size": 4,
+        "parent": "6024-6128",
+        "ok": false,
+        "error": "api/realtime returned no quotes"
+      },
+      {
+        "range": "6133-6141",
+        "size": 4,
+        "parent": "6133-6155",
+        "ok": false,
+        "error": "api/realtime returned no quotes"
+      },
+      {
+        "range": "6142-6155",
+        "size": 4,
+        "parent": "6133-6155",
+        "ok": false,
+        "error": "api/realtime returned no quotes"
+      },
+      {
+        "range": "6164-6168",
+        "size": 4,
+        "parent": "6164-6184",
+        "ok": false,
+        "error": "api/realtime returned no quotes"
+      },
+      {
+        "range": "6176-6184",
+        "size": 4,
+        "parent": "6164-6184",
+        "ok": false,
+        "error": "api/realtime returned no quotes"
+      },
+      {
+        "range": "6189-6196",
+        "size": 4,
+        "parent": "6189-6205",
+        "ok": false,
+        "error": "api/realtime returned no quotes"
+      },
+      {
+        "range": "6197-6205",
+        "size": 4,
+        "parent": "6189-6205",
+        "ok": false,
+        "error": "api/realtime returned no quotes"
+      },
+      {
+        "range": "6206-6214",
+        "size": 4,
+        "parent": "6206-6225",
+        "ok": false,
+        "error": "api/realtime returned no quotes"
+      },
+      {
+        "range": "6215-6225",
+        "size": 4,
+        "parent": "6206-6225",
+        "ok": false,
+        "error": "api/realtime returned no quotes"
+      },
+      {
+        "range": "6226-6239",
+        "size": 4,
+        "parent": "6226-6271",
+        "ok": false,
+        "error": "api/realtime returned no quotes"
+      },
+      {
+        "range": "6243-6271",
+        "size": 4,
+        "parent": "6226-6271",
+        "ok": false,
+        "error": "api/realtime returned no quotes"
+      },
+      {
+        "range": "6272-6281",
+        "size": 4,
+        "parent": "6272-6405",
+        "ok": false,
+        "error": "api/realtime returned no quotes"
+      },
+      {
+        "range": "6282-6405",
+        "size": 4,
+        "parent": "6272-6405",
+        "ok": false,
+        "error": "api/realtime returned no quotes"
+      },
+      {
+        "range": "6412-6416",
+        "size": 4,
+        "parent": "6412-6443",
+        "ok": false,
+        "error": "api/realtime returned no quotes"
+      },
+      {
+        "range": "6426-6443",
+        "size": 4,
+        "parent": "6412-6443",
+        "ok": false,
+        "error": "api/realtime returned no quotes"
+      },
+      {
+        "range": "6449-6464",
+        "size": 4,
+        "parent": "6449-6504",
+        "ok": false,
+        "error": "api/realtime returned no quotes"
+      },
+      {
+        "range": "6472-6504",
+        "size": 4,
+        "parent": "6449-6504",
+        "ok": false,
+        "error": "api/realtime returned no quotes"
+      },
+      {
+        "range": "6505-6533",
+        "size": 4,
+        "parent": "6505-6552",
+        "ok": false,
+        "error": "api/realtime returned no quotes"
+      },
+      {
+        "range": "6534-6552",
+        "size": 4,
+        "parent": "6505-6552",
+        "ok": false,
+        "error": "api/realtime returned no quotes"
+      },
+      {
+        "range": "6558-6581",
+        "size": 4,
+        "parent": "6558-6591",
+        "ok": false,
+        "error": "api/realtime returned no quotes"
+      },
+      {
+        "range": "6582-6591",
+        "size": 4,
+        "parent": "6558-6591",
+        "ok": false,
+        "error": "api/realtime returned no quotes"
+      },
+      {
+        "range": "6592-6606",
+        "size": 4,
+        "parent": "6592-6645",
+        "ok": false,
+        "error": "api/realtime returned no quotes"
+      },
+      {
+        "range": "6614-6645",
+        "size": 4,
+        "parent": "6592-6645",
+        "ok": true
+      },
+      {
+        "range": "6655-6666",
+        "size": 4,
+        "parent": "6655-6672",
+        "ok": false,
+        "error": "api/realtime returned no quotes"
+      },
+      {
+        "range": "6668-6672",
+        "size": 4,
+        "parent": "6655-6672",
+        "ok": true
+      },
+      {
+        "range": "6674-6695",
+        "size": 4,
+        "parent": "6674-6719",
+        "ok": false,
+        "error": "api/realtime returned no quotes"
+      },
+      {
+        "range": "6698-6719",
+        "size": 4,
+        "parent": "6674-6719",
+        "ok": false,
+        "error": "api/realtime returned no quotes"
+      },
+      {
+        "range": "6722-6753",
+        "size": 4,
+        "parent": "6722-6768",
+        "ok": false,
+        "error": "api/realtime returned no quotes"
+      },
+      {
+        "range": "6754-6768",
+        "size": 4,
+        "parent": "6722-6768",
+        "ok": false,
+        "error": "api/realtime returned no quotes"
+      },
+      {
+        "range": "6770-6782",
+        "size": 4,
+        "parent": "6770-6794",
+        "ok": false,
+        "error": "api/realtime returned no quotes"
+      },
+      {
+        "range": "6789-6794",
+        "size": 4,
+        "parent": "6770-6794",
+        "ok": false,
+        "error": "api/realtime returned no quotes"
+      },
+      {
+        "range": "6796-6807",
+        "size": 4,
+        "parent": "6796-6835",
+        "ok": false,
+        "error": "api/realtime returned no quotes"
+      },
+      {
+        "range": "6830-6835",
+        "size": 4,
+        "parent": "6796-6835",
+        "ok": true
+      },
+      {
+        "range": "6838-6862",
+        "size": 4,
+        "parent": "6838-6885",
+        "ok": false,
+        "error": "api/realtime returned no quotes"
+      },
+      {
+        "range": "6863-6885",
+        "size": 4,
+        "parent": "6838-6885",
+        "ok": false,
+        "error": "api/realtime returned no quotes"
+      },
+      {
+        "range": "6887-6902",
+        "size": 4,
+        "parent": "6887-6914",
+        "ok": false,
+        "error": "api/realtime returned no quotes"
+      },
+      {
+        "range": "6906-6914",
+        "size": 4,
+        "parent": "6887-6914",
+        "ok": false,
+        "error": "api/realtime returned no quotes"
+      },
+      {
+        "range": "6916-6921",
+        "size": 4,
+        "parent": "6916-6931",
+        "ok": false,
+        "error": "api/realtime returned no quotes"
+      },
+      {
+        "range": "6923-6931",
+        "size": 4,
+        "parent": "6916-6931",
+        "ok": false,
+        "error": "api/realtime returned no quotes"
+      },
+      {
+        "range": "6933-6937",
+        "size": 4,
+        "parent": "6933-6955",
+        "ok": false,
+        "error": "api/realtime returned no quotes"
+      },
+      {
+        "range": "6949-6955",
+        "size": 4,
+        "parent": "6933-6955",
+        "ok": false,
+        "error": "api/realtime returned no quotes"
+      },
+      {
+        "range": "6957-6965",
+        "size": 4,
+        "parent": "6957-7631",
+        "ok": false,
+        "error": "api/realtime returned no quotes"
+      },
+      {
+        "range": "6969-7631",
+        "size": 4,
+        "parent": "6957-7631",
+        "ok": false,
+        "error": "api/realtime returned no quotes"
+      },
+      {
+        "range": "7705-7722",
+        "size": 4,
+        "parent": "7705-7740",
+        "ok": false,
+        "error": "api/realtime returned no quotes"
+      },
+      {
+        "range": "7730-7740",
+        "size": 4,
+        "parent": "7705-7740",
+        "ok": false,
+        "error": "api/realtime returned no quotes"
+      },
+      {
+        "range": "7749-7768",
+        "size": 4,
+        "parent": "7749-7791",
+        "ok": false,
+        "error": "api/realtime returned no quotes"
+      },
+      {
+        "range": "7780-7791",
+        "size": 4,
+        "parent": "7749-7791",
+        "ok": false,
+        "error": "api/realtime returned no quotes"
+      },
+      {
+        "range": "7795-7818",
+        "size": 4,
+        "parent": "7795-8011",
+        "ok": false,
+        "error": "api/realtime returned no quotes"
+      },
+      {
+        "range": "7821-8011",
+        "size": 4,
+        "parent": "7795-8011",
+        "ok": false,
+        "error": "api/realtime returned no quotes"
+      },
+      {
+        "range": "8016-8033",
+        "size": 4,
+        "parent": "8016-8070",
+        "ok": false,
+        "error": "api/realtime returned no quotes"
+      },
+      {
+        "range": "8039-8070",
+        "size": 4,
+        "parent": "8016-8070",
+        "ok": false,
+        "error": "api/realtime returned no quotes"
+      },
+      {
+        "range": "8072-8103",
+        "size": 4,
+        "parent": "8072-8112",
+        "ok": false,
+        "error": "api/realtime returned no quotes"
+      },
+      {
+        "range": "8104-8112",
+        "size": 4,
+        "parent": "8072-8112",
+        "ok": false,
+        "error": "api/realtime returned no quotes"
+      },
+      {
+        "range": "8114-8162",
+        "size": 4,
+        "parent": "8114-8215",
+        "ok": false,
+        "error": "api/realtime returned no quotes"
+      },
+      {
+        "range": "8163-8215",
+        "size": 4,
+        "parent": "8114-8215",
+        "ok": false,
+        "error": "api/realtime returned no quotes"
+      },
+      {
+        "range": "8222-8271",
+        "size": 4,
+        "parent": "8222-8404",
+        "ok": false,
+        "error": "api/realtime returned no quotes"
+      },
+      {
+        "range": "8341-8404",
+        "size": 4,
+        "parent": "8222-8404",
+        "ok": false,
+        "error": "api/realtime returned no quotes"
+      },
+      {
+        "range": "8411-8438",
+        "size": 4,
+        "parent": "8411-8462",
+        "ok": false,
+        "error": "api/realtime returned no quotes"
+      },
+      {
+        "range": "8442-8462",
+        "size": 4,
+        "parent": "8411-8462",
+        "ok": false,
+        "error": "api/realtime returned no quotes"
+      },
+      {
+        "range": "8463-8467",
+        "size": 4,
+        "parent": "8463-8481",
+        "ok": false,
+        "error": "api/realtime returned no quotes"
+      },
+      {
+        "range": "8473-8481",
+        "size": 4,
+        "parent": "8463-8481",
+        "ok": false,
+        "error": "api/realtime returned no quotes"
+      },
+      {
+        "range": "8487-8926",
+        "size": 4,
+        "parent": "8487-9904",
+        "ok": false,
+        "error": "api/realtime returned no quotes"
+      },
+      {
+        "range": "8940-9904",
+        "size": 4,
+        "parent": "8487-9904",
+        "ok": false,
+        "error": "api/realtime returned no quotes"
+      },
+      {
+        "range": "9905-9908",
+        "size": 4,
+        "parent": "9905-9914",
+        "ok": false,
+        "error": "api/realtime returned no quotes"
+      },
+      {
+        "range": "9910-9914",
+        "size": 4,
+        "parent": "9905-9914",
+        "ok": false,
+        "error": "api/realtime returned no quotes"
+      },
+      {
+        "range": "9917-9921",
+        "size": 4,
+        "parent": "9917-9927",
+        "ok": false,
+        "error": "api/realtime returned no quotes"
+      },
+      {
+        "range": "9924-9927",
+        "size": 4,
+        "parent": "9917-9927",
+        "ok": false,
+        "error": "api/realtime returned no quotes"
+      },
+      {
+        "range": "9928-9931",
+        "size": 4,
+        "parent": "9928-9937",
+        "ok": false,
+        "error": "api/realtime returned no quotes"
+      },
+      {
+        "range": "9933-9937",
+        "size": 4,
+        "parent": "9928-9937",
+        "ok": false,
+        "error": "api/realtime returned no quotes"
+      },
+      {
+        "range": "9938-9941",
+        "size": 4,
+        "parent": "9938-9945",
+        "ok": false,
+        "error": "api/realtime returned no quotes"
+      },
+      {
+        "range": "9942-9945",
+        "size": 4,
+        "parent": "9938-9945",
+        "ok": false,
+        "error": "api/realtime returned no quotes"
+      }
+    ],
+    "batchConcurrency": 2,
+    "fallbackCandidateLimit": 180,
+    "fallbackCandidateCount": 180,
+    "yahooFallbackConcurrency": 6,
+    "fugleWebSocket": {
+      "configured": true,
+      "requested": 180,
+      "received": 96,
+      "used": 12,
+      "staleOrMissing": 168
+    },
+    "fugleRateLimited": false,
+    "fallbackStats": {
+      "fugle": {
+        "configured": true,
+        "requested": 162,
+        "recovered": 155,
+        "empty": 7,
+        "failed": 0,
+        "skippedNoKey": 0,
+        "rateLimited": false
+      },
+      "finmind": {
+        "configured": true,
+        "enabled": false,
+        "rescueEnabled": false,
+        "requested": 0,
+        "recovered": 0,
+        "failed": 0
+      },
+      "yahoo": {
+        "requested": 88,
+        "recovered": 0,
+        "failed": 66
+      },
+      "rescue": {
+        "threshold": 0.7,
+        "limit": 180,
+        "cooldownMs": 30000,
+        "requested": 85,
+        "recovered": 0,
+        "coverageBefore": 0.5114,
+        "usableBefore": 515,
+        "skippedCooldown": false,
+        "cooldownRemainingMs": 0,
+        "finmindRequested": 85,
+        "coverageAfter": 0.5114,
+        "usableAfter": 515
+      }
+    },
+    "finmindRealtimeEnabled": false,
+    "finmindRescueEnabled": false,
+    "recoveredCodes": [
+      "1810",
+      "2025",
+      "2543",
+      "2428",
+      "2303",
+      "1414",
+      "3406",
+      "2481",
+      "1231",
+      "3266",
+      "2486",
+      "3447",
+      "3011",
+      "3013",
+      "3014",
+      "3015",
+      "3016",
+      "3018",
+      "3019",
+      "3021",
+      "3022",
+      "3023",
+      "3024",
+      "3025",
+      "3026",
+      "3027",
+      "3028",
+      "3029",
+      "3030",
+      "3031",
+      "3032",
+      "3033",
+      "3034",
+      "3035",
+      "3036",
+      "3038",
+      "3040",
+      "3041",
+      "3042",
+      "3043",
+      "3044",
+      "3046",
+      "3047",
+      "3048",
+      "3049",
+      "3050",
+      "3051",
+      "3052",
+      "3054",
+      "3055",
+      "3056",
+      "3057",
+      "3058",
+      "3059",
+      "3060",
+      "3062",
+      "3090",
+      "3092",
+      "3094",
+      "3130",
+      "3189",
+      "3346",
+      "3356",
+      "3376",
+      "3501",
+      "3596",
+      "3607",
+      "3645",
+      "3714",
+      "4108",
+      "4137",
+      "4155",
+      "4190",
+      "4571",
+      "4585",
+      "4590",
+      "4737",
+      "4807",
+      "4952",
+      "4956",
+      "4958",
+      "4960",
+      "5234",
+      "5484",
+      "5519",
+      "5522",
+      "5534",
+      "6005",
+      "6112",
+      "6152",
+      "6155",
+      "6166",
+      "6177",
+      "6189",
+      "6191",
+      "6197",
+      "6209",
+      "6224",
+      "6281",
+      "6415",
+      "6472",
+      "6541",
+      "6550",
+      "6585",
+      "6614",
+      "6625",
+      "6641",
+      "6645",
+      "6605",
+      "6668",
+      "6670",
+      "6671",
+      "6672",
+      "6666",
+      "6691",
+      "6698",
+      "6719",
+      "6771",
+      "6776",
+      "6792",
+      "6830",
+      "6831",
+      "6834",
+      "6835",
+      "6862",
+      "6885",
+      "6890",
+      "6916",
+      "6936",
+      "6949",
+      "7705",
+      "7711",
+      "7721",
+      "7722",
+      "7765",
+      "7780",
+      "7786",
+      "7788",
+      "7791",
+      "7799",
+      "8021",
+      "8033",
+      "8101",
+      "8105",
+      "8442",
+      "8454",
+      "8478",
+      "9906",
+      "9933",
+      "9939",
+      "1515",
+      "6225",
+      "1809"
+    ],
+    "missedCodes": [
+      "3135",
+      "3138",
+      "3149",
+      "3150",
+      "3164",
+      "3168",
+      "3209",
+      "3229",
+      "3231",
+      "3257",
+      "3296",
+      "3305",
+      "3308",
+      "3311",
+      "3312",
+      "3321",
+      "3338",
+      "3380",
+      "3413",
+      "3416",
+      "3419",
+      "3432",
+      "3437",
+      "3450",
+      "3481",
+      "3494",
+      "3504",
+      "3515",
+      "3518",
+      "3528",
+      "3530",
+      "3532",
+      "3535",
+      "3543",
+      "3545",
+      "3550",
+      "3557",
+      "3563",
+      "3576",
+      "3583",
+      "3588",
+      "3591",
+      "3592",
+      "3593",
+      "3605",
+      "3617",
+      "3622",
+      "3652",
+      "3669",
+      "3673",
+      "3679",
+      "3686",
+      "3694",
+      "3701",
+      "3702",
+      "3703",
+      "3704",
+      "3705",
+      "3706",
+      "3708",
+      "3711",
+      "3712",
+      "3715",
+      "3716",
+      "3717",
+      "4104",
+      "4106",
+      "4119",
+      "4133",
+      "4142",
+      "4148",
+      "4164",
+      "4169",
+      "4178",
+      "4195",
+      "4306",
+      "4414",
+      "4426",
+      "4438",
+      "4439",
+      "4440",
+      "4441",
+      "4526",
+      "4532",
+      "4536",
+      "4540",
+      "4545",
+      "4551",
+      "4552",
+      "4555",
+      "4557",
+      "4560",
+      "4562",
+      "4564",
+      "4566",
+      "4569",
+      "4572",
+      "4576",
+      "4582",
+      "4583",
+      "4588",
+      "4720",
+      "4722",
+      "4736",
+      "4739",
+      "4746",
+      "4755",
+      "4763",
+      "4764",
+      "4766",
+      "4770",
+      "4771",
+      "4904",
+      "4906",
+      "4912",
+      "4915",
+      "4916",
+      "4919",
+      "4927",
+      "4930",
+      "4934",
+      "4935",
+      "4938",
+      "4942",
+      "4943",
+      "4949",
+      "4961",
+      "4967",
+      "4968",
+      "4976",
+      "4977",
+      "4989",
+      "4994",
+      "4999",
+      "5007",
+      "5203",
+      "5215",
+      "5222",
+      "5225",
+      "5243",
+      "5244",
+      "5258",
+      "5283",
+      "5284",
+      "5285",
+      "5288",
+      "5292",
+      "5306",
+      "5388",
+      "5434",
+      "5469",
+      "5471",
+      "5515",
+      "5521",
+      "5525",
+      "5531",
+      "5533",
+      "5538",
+      "5546",
+      "5607",
+      "5608",
+      "5706",
+      "5906",
+      "5907",
+      "6024",
+      "6108",
+      "6115",
+      "6116",
+      "6117",
+      "6120",
+      "6128",
+      "6133",
+      "6136",
+      "6139",
+      "6141",
+      "6142",
+      "6153",
+      "6164",
+      "6165",
+      "6168",
+      "6176",
+      "6183",
+      "6184",
+      "6192",
+      "6196",
+      "6201",
+      "6202",
+      "6205",
+      "6206",
+      "6213",
+      "6214",
+      "6215",
+      "6216",
+      "6225",
+      "6226",
+      "6230",
+      "6235",
+      "6239",
+      "6243",
+      "6257",
+      "6269",
+      "6271",
+      "6272",
+      "6277",
+      "6278",
+      "6282",
+      "6283",
+      "6285",
+      "6405",
+      "6412",
+      "6414",
+      "6416",
+      "6426",
+      "6431",
+      "6438",
+      "6443",
+      "6449",
+      "6451",
+      "6456",
+      "6464",
+      "6477",
+      "6491",
+      "6504",
+      "6505",
+      "6525",
+      "6526",
+      "6533",
+      "6534",
+      "6552",
+      "6558",
+      "6573",
+      "6579",
+      "6581",
+      "6582",
+      "6589",
+      "6591",
+      "6592",
+      "6598",
+      "6606",
+      "6655",
+      "6657",
+      "6658",
+      "6674",
+      "6689",
+      "6695",
+      "6706",
+      "6715",
+      "6722",
+      "6742",
+      "6743",
+      "6753",
+      "6754",
+      "6756",
+      "6757",
+      "6768",
+      "6770",
+      "6782",
+      "6789",
+      "6790",
+      "6794",
+      "6796",
+      "6799",
+      "6806",
+      "6807",
+      "6838",
+      "6854",
+      "6861",
+      "6863",
+      "6869",
+      "6873",
+      "6887",
+      "6901",
+      "6902",
+      "6906",
+      "6908",
+      "6909",
+      "6914",
+      "6918",
+      "6919",
+      "6921",
+      "6923",
+      "6924",
+      "6928",
+      "6931",
+      "6933",
+      "6934",
+      "6937",
+      "6951",
+      "6952",
+      "6955",
+      "6957",
+      "6958",
+      "6962",
+      "6965",
+      "6969",
+      "6988",
+      "6994",
+      "7631",
+      "7730",
+      "7732",
+      "7736",
+      "7740",
+      "7749",
+      "7760",
+      "7768",
+      "7795",
+      "7803",
+      "7818",
+      "7821",
+      "7823",
+      "7827",
+      "8011",
+      "8016",
+      "8028",
+      "8039",
+      "8045",
+      "8046",
+      "8070",
+      "8072",
+      "8081",
+      "8103",
+      "8104",
+      "8110",
+      "8112",
+      "8114",
+      "8131",
+      "8150",
+      "8162",
+      "8163",
+      "8201",
+      "8213",
+      "8215",
+      "8222",
+      "8249",
+      "8261",
+      "8271",
+      "8341",
+      "8367",
+      "8374",
+      "8404",
+      "8411",
+      "8422",
+      "8429",
+      "8438",
+      "8443",
+      "8462",
+      "8463",
+      "8464",
+      "8466",
+      "8467",
+      "8473",
+      "8476",
+      "8481",
+      "8487",
+      "8488",
+      "8499",
+      "8926",
+      "8940",
+      "9802",
+      "9902",
+      "9904",
+      "9905",
+      "9907",
+      "9908",
+      "9910",
+      "9911",
+      "9912",
+      "9914",
+      "9917",
+      "9918",
+      "9919",
+      "9921",
+      "9924",
+      "9925",
+      "9926",
+      "9927",
+      "9928",
+      "9929",
+      "9930",
+      "9931",
+      "9934",
+      "9935",
+      "9937",
+      "9938",
+      "9940",
+      "9941",
+      "9942",
+      "9943",
+      "9944",
+      "9945"
+    ],
+    "staleCodes": [
+      "1304",
+      "1438",
+      "1439",
+      "1441",
+      "1452",
+      "1468",
+      "1470",
+      "1538",
+      "1733",
+      "2115",
+      "2239",
+      "2321",
+      "2399",
+      "2467",
+      "2506",
+      "6614",
+      "6625",
+      "6641",
+      "6670",
+      "6672",
+      "6830",
+      "6834"
+    ],
+    "noTimeCodes": [
+      "1515",
+      "1809",
+      "3189",
+      "3346",
+      "3356",
+      "3376",
+      "3501",
+      "3596",
+      "3607",
+      "3645",
+      "3714",
+      "4108",
+      "4137",
+      "4155",
+      "4190",
+      "4571",
+      "4585",
+      "4590",
+      "4737",
+      "4807",
+      "5234",
+      "5484",
+      "5519",
+      "5522",
+      "5534",
+      "6005",
+      "6112",
+      "6152",
+      "6155",
+      "6166",
+      "6177",
+      "6189",
+      "6191",
+      "6197",
+      "6209",
+      "6224",
+      "6225",
+      "6281",
+      "6415",
+      "6472",
+      "6541",
+      "6550",
+      "6585",
+      "6605",
+      "6645",
+      "6666",
+      "6668",
+      "6691",
+      "6698",
+      "6719",
+      "6771",
+      "6776",
+      "6792",
+      "6831",
+      "6835",
+      "6862",
+      "6885",
+      "6890",
+      "6916",
+      "6936",
+      "6949",
+      "7705",
+      "7711",
+      "7721",
+      "7722",
+      "7765",
+      "7780",
+      "7786",
+      "7788",
+      "7791",
+      "7799",
+      "8021",
+      "8033",
+      "8101",
+      "8105",
+      "8442",
+      "8454",
+      "8478",
+      "9906",
+      "9933"
+    ],
+    "noCloseCodes": [],
+    "missedCount": 390,
+    "coverage": 0.5114,
+    "usable": 515,
+    "cachedRecovered": 0,
+    "quoteCacheMaxAgeSeconds": 900,
+    "entrySourceCoverageThreshold": 0.5,
+    "entrySourceHealthy": true,
+    "initialBatchSize": 8,
+    "retryBatchSize": 4,
+    "tradable": 515
   },
   "records": [],
   "events": [],
-  "count": 0,
   "entryCount": 0,
   "aCount": 0,
-  "bOnlyCount": 0,
-  "previousSnapshot": {
-    "date": "2026-06-02",
-    "updatedAt": "2026-06-02T05:30:58.276Z",
-    "status": "strategy2-09-to-1330-patrol",
-    "records": 1429,
-    "events": 89,
-    "rows": 0
-  }
+  "bOnlyCount": 0
 }
