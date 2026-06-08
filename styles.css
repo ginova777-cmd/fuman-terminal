@@ -4865,9 +4865,7 @@ body.fuman-light-theme .data-freshness-bar.is-stale span {
 
   .sector-modal-row td:nth-child(6),
   .sector-modal-row td:nth-child(7),
-  .sector-modal-row td:nth-child(8),
-  .sector-modal-row td:nth-child(9),
-  .sector-modal-row td:nth-child(10) {
+  .sector-modal-row td:nth-child(8) {
     grid-column: 1 / -1;
   }
 }

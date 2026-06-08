@@ -7654,10 +7654,8 @@ function renderSectorModalRows(sector, stocks) {
         <td class="sector-modal-number-cell" data-label="現價">${s.close ? s.close.toLocaleString("zh-TW") : "--"}</td>
         <td class="sector-modal-number-cell ${pctClass}" data-label="漲跌">${pctSign}${formatNumber(s.pct || 0, 2)}%</td>
         <td class="sector-modal-number-cell" data-label="成交額">${s.value ? (s.value/100000000).toFixed(1) : "0.0"} 億</td>
-        <td class="sector-modal-number-cell" data-label="成交量">${s.volume ? s.volume.toLocaleString("zh-TW", { maximumFractionDigits: 0 }) : "0"} 張</td>
         <td class="sector-modal-number-cell ${getSectorValueToneClass(rawForeign, "sector-inst")}" data-label="外資">${formatInstitutionLots(rawForeign)}</td>
         <td class="sector-modal-number-cell ${getSectorValueToneClass(rawTrust, "sector-inst")}" data-label="投信">${formatInstitutionLots(rawTrust)}</td>
-        <td class="sector-modal-number-cell ${getSectorValueToneClass(rawDealer, "sector-inst")}" data-label="自營商">${formatInstitutionLots(rawDealer)}</td>
         <td class="sector-modal-number-cell ${getSectorValueToneClass(rawTotal, "sector-inst")}" data-label="合計">${formatInstitutionLots(rawTotal)}</td>
       </tr>
     `;
@@ -7699,7 +7697,6 @@ function getSectorModalStocks(sector) {
     close: cleanNumber(stock?.close),
     pct: cleanNumber(stock?.pct ?? stock?.percent),
     value: cleanNumber(stock?.value) || cleanNumber(stock?.amountYi || stock?.valueYi) * 100000000,
-    volume: cleanNumber(stock?.volume ?? stock?.tradeVolume),
   })).filter((stock) => stock.code);
 }
 
@@ -7762,10 +7759,8 @@ async function openSectorModal(sector) {
               <th>現價</th>
               <th>漲跌</th>
               <th>成交額</th>
-              <th>成交量</th>
               <th>外資</th>
               <th>投信</th>
-              <th>自營商</th>
               <th>法人</th>
             </tr>
           </thead>
