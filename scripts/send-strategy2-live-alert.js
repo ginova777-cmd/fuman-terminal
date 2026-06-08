@@ -188,6 +188,35 @@ function buildEnhancementMessage(items) {
     .join("\n");
 }
 
+function intradayTimeText(value) {
+  const match = String(value || "").match(/(\d{2}:\d{2}(?::\d{2})?)/);
+  return match ? match[1] : "";
+}
+
+function entryEventFromRecord(record) {
+  const stateId = String(record?.stateId || "");
+  if (stateId !== "entry" && stateId !== "go") return null;
+  const firstAAt = intradayTimeText(record.timestamp || record.entryAt || record.firstAAt);
+  if (!firstAAt) return null;
+  return {
+    code: String(record.code || ""),
+    name: record.name || "",
+    date: record.date || "",
+    stateId: "go",
+    stateLabel: record.stateLabel || "進場區",
+    stateReason: record.stateReason || record.reason || "",
+    reason: record.reason || "",
+    firstAAt,
+    latestAAt: firstAAt,
+    firstAPrice: cleanNumber(record.entryPrice) || cleanNumber(record.observedPrice) || cleanNumber(record.close),
+    percent: cleanNumber(record.percent),
+    tradeVolume: cleanNumber(record.tradeVolume) || cleanNumber(record.volume),
+    ma35Source: record.ma35Source || "",
+    latestRecord: record,
+    source: "record",
+  };
+}
+
 function attachLatestRecords(events, records) {
   const latestRecordByCode = new Map();
   (records || []).forEach((record) => {
@@ -200,6 +229,20 @@ function attachLatestRecords(events, records) {
   }));
 }
 
+function entryEventsFromPayload(payload) {
+  const byKey = new Map();
+  attachLatestRecords(payload.events, payload.records)
+    .filter((event) => event.firstAAt)
+    .forEach((event) => byKey.set(eventKey(event), event));
+  (payload.records || [])
+    .map(entryEventFromRecord)
+    .filter(Boolean)
+    .forEach((event) => byKey.set(eventKey(event), event));
+  return [...byKey.values()]
+    .filter(isStrategy2LiveDisplayEvent)
+    .sort((a, b) => String(a.firstAAt).localeCompare(String(b.firstAAt)));
+}
+
 async function main() {
   const today = taipeiDateKey();
   const payload = readJson(STRATEGY2_REPORT_FILE, { date: "", events: [] });
@@ -207,10 +250,7 @@ async function main() {
     console.log(`strategy2 live alert skipped: stale date ${payload.date || "--"}`);
     return;
   }
-  const aEvents = attachLatestRecords(payload.events, payload.records)
-    .filter((event) => event.firstAAt)
-    .filter(isStrategy2LiveDisplayEvent)
-    .sort((a, b) => String(a.firstAAt).localeCompare(String(b.firstAAt)));
+  const aEvents = entryEventsFromPayload(payload);
   if (!aEvents.length) {
     console.log("strategy2 live alert skipped: no entry-zone events");
     return;

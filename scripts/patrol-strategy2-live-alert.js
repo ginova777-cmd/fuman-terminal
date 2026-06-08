@@ -24,10 +24,23 @@ function taipeiTimeText(date = new Date()) {
   return `${byType.hour}:${byType.minute}:${byType.second}`;
 }
 
+function intradayTimeText(value) {
+  const match = String(value || "").match(/(\d{2}:\d{2}(?::\d{2})?)/);
+  return match ? match[1] : "";
+}
+
+function entryRecordSignature(record) {
+  const stateId = String(record?.stateId || "");
+  if (stateId !== "entry" && stateId !== "go") return "";
+  const at = intradayTimeText(record.timestamp || record.entryAt || record.firstAAt);
+  if (!at) return "";
+  return `${record.code || ""}:${at}:${record.entryPrice || record.observedPrice || record.close || ""}:${record.percent || ""}:${record.tradeVolume || record.volume || ""}`;
+}
+
 function latestSignature() {
   const payload = readJson(STRATEGY2_REPORT_FILE, { date: "", events: [] });
   const limit = Math.max(1, Number(process.env.STRATEGY2_LIVE_LIMIT || 3));
-  const rows = (payload.events || [])
+  const eventRows = (payload.events || [])
     .filter((event) => event.firstAAt)
     .sort((a, b) => String(a.firstAAt).localeCompare(String(b.firstAAt)))
     .slice(-limit)
@@ -38,6 +51,11 @@ function latestSignature() {
         : "";
       return `${event.code}:${event.firstAAt}:${event.firstAPrice}:${enhancementPart}`;
     });
+  const recordRows = (payload.records || [])
+    .map(entryRecordSignature)
+    .filter(Boolean)
+    .slice(-limit);
+  const rows = [...eventRows, ...recordRows];
   return `${payload.date || ""}:${payload.updatedAt || ""}:${rows.join("|")}`;
 }
 

@@ -1,4 +1,4 @@
-const CACHE_VERSION = "fuman-terminal-sw-20260608-chip-5day-fix";
+const CACHE_VERSION = "fuman-terminal-sw-20260608-strategy2-record-log";
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 const DATA_CACHE = `${CACHE_VERSION}-data`;
 
