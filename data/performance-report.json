@@ -1,6 +1,6 @@
 {
   "ok": true,
-  "updatedAt": "2026-06-08T15:45:20.479Z",
+  "updatedAt": "2026-06-08T15:47:14.567Z",
   "generatedBy": "generate-performance-report",
   "assets": [
     {
@@ -78,28 +78,28 @@
       "ok": true,
       "bytes": 791,
       "count": 0,
-      "updatedAt": "2026-06-08T15:45:20.031Z"
+      "updatedAt": "2026-06-08T15:47:14.231Z"
     },
     {
       "file": "data-quality-report.json",
       "ok": true,
       "bytes": 2001,
       "count": 0,
-      "updatedAt": "2026-06-08T15:45:20.248Z"
+      "updatedAt": "2026-06-08T15:47:14.345Z"
     },
     {
       "file": "data-consistency-report.json",
       "ok": true,
       "bytes": 314,
       "count": 0,
-      "updatedAt": "2026-06-08T15:45:20.344Z"
+      "updatedAt": "2026-06-08T15:47:14.436Z"
     },
     {
       "file": "strategy-weight-report.json",
       "ok": true,
       "bytes": 418,
       "count": 0,
-      "updatedAt": "2026-06-08T15:45:20.406Z"
+      "updatedAt": "2026-06-08T15:47:14.504Z"
     }
   ],
   "totalBytes": 1452102,
