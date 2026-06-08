@@ -1,23 +1,23 @@
-const CACHE_VERSION = "fuman-terminal-sw-20260608-strategy2-record-log";
+const CACHE_VERSION = "fuman-terminal-sw-20260608-ai-rebound-04";
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 const DATA_CACHE = `${CACHE_VERSION}-data`;
 
 const STATIC_ASSETS = [
-  "/styles.css?v=strategy2-record-log-20260608",
-  "/terminal-core.js?v=strategy2-record-log-20260608",
-  "/terminal-modules.js?v=strategy2-record-log-20260608",
-  "/terminal-sector-map.js?v=strategy2-record-log-20260608",
-  "/terminal-strategy-config.js?v=strategy2-record-log-20260608",
-  "/terminal-market-config.js?v=strategy2-record-log-20260608",
-  "/terminal-ui-config.js?v=strategy2-record-log-20260608",
-  "/terminal-runtime-config.js?v=strategy2-record-log-20260608",
-  "/terminal-tuning-config.js?v=strategy2-record-log-20260608",
-  "/terminal-worker.js?v=strategy2-record-log-20260608",
-  "/terminal.js?v=strategy2-record-log-20260608",
-  "/terminal-realtime-radar.css?v=strategy2-record-log-20260608",
-  "/terminal-intraday-radar.css?v=strategy2-record-log-20260608",
-  "/terminal-utility.css?v=strategy2-record-log-20260608",
-  "/refresh.html?v=strategy2-record-log-20260608",
+  "/styles.css?v=ai-rebound-20260608-04",
+  "/terminal-core.js?v=ai-rebound-20260608-04",
+  "/terminal-modules.js?v=ai-rebound-20260608-04",
+  "/terminal-sector-map.js?v=ai-rebound-20260608-04",
+  "/terminal-strategy-config.js?v=ai-rebound-20260608-04",
+  "/terminal-market-config.js?v=ai-rebound-20260608-04",
+  "/terminal-ui-config.js?v=ai-rebound-20260608-04",
+  "/terminal-runtime-config.js?v=ai-rebound-20260608-04",
+  "/terminal-tuning-config.js?v=ai-rebound-20260608-04",
+  "/terminal-worker.js?v=ai-rebound-20260608-04",
+  "/terminal.js?v=ai-rebound-20260608-04",
+  "/terminal-realtime-radar.css?v=ai-rebound-20260608-04",
+  "/terminal-intraday-radar.css?v=ai-rebound-20260608-04",
+  "/terminal-utility.css?v=ai-rebound-20260608-04",
+  "/refresh.html?v=ai-rebound-20260608-04",
   "/assets/logo.webp",
   "/favicon.ico",
 ];
@@ -168,6 +168,7 @@ self.addEventListener("fetch", (event) => {
     event.respondWith(staleWhileRevalidate(request));
   }
 });
+
 
 
 

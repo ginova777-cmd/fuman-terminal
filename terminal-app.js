@@ -2896,6 +2896,7 @@ let strategyWeightPayload = {
 };
 let marketRealtimeState = { trading: false, marketStatus: "", updatedAt: "", source: "" };
 let marketStockDataState = { resolvedTradeDate: "", today: "", source: "", updatedAt: "", isFallbackDate: false, marketDates: {} };
+let marketOverviewBias = { bias: "", reason: "", updatedAt: "" };
 let heatmapLoading = false;
 let heatmapLastStartedAt = 0;
 let marketAiHeatmapSyncRequestedAt = 0;
@@ -2914,6 +2915,10 @@ let marketAiInstitutionLoading = false;
 let marketAiRealtimeScanRequestedAt = 0;
 let marketAiConfluenceLoading = false;
 let marketAiConfluenceLoadedAt = 0;
+let marketAiOpenReboundRows = [];
+let marketAiOpenReboundLoading = false;
+let marketAiOpenReboundLoadedAt = 0;
+let marketAiOpenReboundUpdatedAt = "";
 let realtimeRadarLoading = false;
 let realtimeRadarDataPromise = null;
 let realtimeRadarSide = "auto";
@@ -8492,6 +8497,56 @@ function updateMarketStockDataState(payload) {
   refreshDataFreshnessBars();
 }
 
+function marketOverviewSignedPct(record, percentKeys = ["漲跌百分比", "percent", "pct"]) {
+  const pct = cleanNumber(valueOf(record || {}, percentKeys));
+  const sign = String(valueOf(record || {}, ["漲跌", "漲跌(+/-)", "sign"])).trim();
+  const change = cleanNumber(valueOf(record || {}, ["漲跌點數", "change", "Change"]));
+  if (sign === "-") return -Math.abs(pct || change);
+  if (sign === "+") return Math.abs(pct || change);
+  if (pct) return pct;
+  return change;
+}
+
+function updateMarketOverviewBias(payload) {
+  if (!payload || Array.isArray(payload)) return;
+  const indexes = normalizeArray(payload.indexes);
+  const weighted = indexes.find((item) => String(valueOf(item, ["指數", "指數/報酬指數", "name"])).includes("加權"));
+  const otc = indexes.find((item) => String(valueOf(item, ["指數", "指數/報酬指數", "name"])).includes("櫃買"));
+  const futures = payload.futuresNear || payload.futures || null;
+  const weightedPct = marketOverviewSignedPct(weighted);
+  const otcPct = marketOverviewSignedPct(otc);
+  const futuresPct = marketOverviewSignedPct(futures, ["pct", "percent", "漲跌百分比"]);
+  const futuresSide = String(futures?.basisSide || futures?.basisLabel || "");
+  const bearSignals = [
+    weightedPct <= -1,
+    otcPct <= -1,
+    futuresPct <= -1.5,
+    futuresSide.includes("short") || futuresSide.includes("空"),
+  ].filter(Boolean).length;
+  const bullSignals = [
+    weightedPct >= 1,
+    otcPct >= 1,
+    futuresPct >= 1.5,
+    futuresSide.includes("long") || futuresSide.includes("多"),
+  ].filter(Boolean).length;
+  const bias = bearSignals >= 2 || weightedPct <= -1.5 || futuresPct <= -3
+    ? "空方壓制"
+    : bearSignals >= 1
+    ? "盤中保守"
+    : bullSignals >= 2
+    ? "多方偏強"
+    : "";
+  marketOverviewBias = {
+    bias,
+    reason: [
+      weighted ? `加權 ${weightedPct.toFixed(2)}%` : "",
+      otc ? `櫃買 ${otcPct.toFixed(2)}%` : "",
+      futures ? `台指期 ${futuresPct.toFixed(2)}%` : "",
+    ].filter(Boolean).join("、"),
+    updatedAt: payload.updatedAt || marketOverviewBias.updatedAt || "",
+  };
+}
+
 async function ensureMarketAiInstitutionData() {
   if (marketAiInstitutionLoading || Object.keys(institutionData).length) return;
   marketAiInstitutionLoading = true;
@@ -8676,7 +8731,94 @@ function sortMarketAiPriorityStocks(stocks = []) {
 }
 
 function marketAiRowCode(row) {
-  return String(row?.code || row?.Code || row?.stockCode || row?.symbol || "").trim();
+  return String(row?.code || row?.Code || row?.stockCode || row?.StockSymbol || row?.symbol || "").trim();
+}
+
+function normalizeMarketAiOpenReboundRow(row, payloadDate = "") {
+  const code = marketAiRowCode(row);
+  const name = String(row?.name || row?.Name || row?.StockName || row?.stockName || code || "").trim();
+  const close = cleanNumber(row?.close ?? row?.Last ?? row?.last);
+  const open = cleanNumber(row?.open ?? row?.Open);
+  const percent = cleanNumber(row?.percent ?? row?.SpotChangePct ?? row?.changePercent);
+  const tradeVolume = cleanNumber(row?.tradeVolume ?? row?.SpotVolume ?? row?.spotVolume ?? row?.volume);
+  const quoteDate = normalizeMarketAiDateKey(row?.quoteDate || row?.TradeDate || row?.tradeDate || row?.date || payloadDate)
+    || marketAiTodayKey();
+  return {
+    ...row,
+    code,
+    name,
+    close,
+    open,
+    percent,
+    tradeVolume,
+    quoteDate,
+    value: cleanNumber(row?.value ?? row?.tradeValue ?? row?.成交值),
+    SpotVolume: tradeVolume,
+    OpenToLastPct: cleanNumber(row?.OpenToLastPct ?? row?.openToLastPct),
+    DetectCondition: row?.DetectCondition || row?.detectCondition || "開到現達標 + 量能達標 + 站 MA35 + MACD 向上 + KDJ 向上",
+  };
+}
+
+function extractMarketAiOpenReboundRows(payload) {
+  return normalizeArray(
+    payload?.openReboundRows ||
+    payload?.openRebound ||
+    payload?.reboundRows ||
+    payload?.matches ||
+    payload?.rows ||
+    payload?.data ||
+    payload
+  );
+}
+
+async function loadMarketAiOpenReboundCache(force = false) {
+  const now = Date.now();
+  if (marketAiOpenReboundLoading) return;
+  if (!force && marketAiOpenReboundLoadedAt && now - marketAiOpenReboundLoadedAt < 60 * 1000) return;
+  marketAiOpenReboundLoading = true;
+  const urls = [
+    endpoints.marketAiOpenReboundCache,
+    endpoints.fugleOpenReboundLatest,
+    endpoints.openReboundLatest,
+    "/data/fugle-open-rebound-latest.json",
+    "/data/open-rebound-latest.json",
+  ].filter((url, index, array) => url && array.indexOf(url) === index);
+  try {
+    let emptyFallback = null;
+    for (const url of urls) {
+      try {
+        const payload = await fetchVersionedJson(url, 4500, "latest", force);
+        if (payload?.ok === false) continue;
+        const payloadDate = normalizeMarketAiDateKey(payload?.tradeDate || payload?.usedDate || payload?.date || payload?.dataDate);
+        const rows = extractMarketAiOpenReboundRows(payload)
+          .map((row) => normalizeMarketAiOpenReboundRow(row, payloadDate))
+          .filter((row) => row.code);
+        const loaded = {
+          rows,
+          updatedAt: payload?.updatedAt || payload?.generatedAt || payload?.time || "",
+        };
+        if (!rows.length) {
+          emptyFallback ||= loaded;
+          continue;
+        }
+        marketAiOpenReboundRows = loaded.rows;
+        marketAiOpenReboundUpdatedAt = loaded.updatedAt;
+        marketAiOpenReboundLoadedAt = Date.now();
+        marketAiLastSignature = "";
+        if (marketMode === "ai") renderMarketAiPanel();
+        return;
+      } catch (error) {}
+    }
+    if (emptyFallback) {
+      marketAiOpenReboundRows = emptyFallback.rows;
+      marketAiOpenReboundUpdatedAt = emptyFallback.updatedAt;
+      marketAiLastSignature = "";
+      if (marketMode === "ai") renderMarketAiPanel();
+    }
+    marketAiOpenReboundLoadedAt = Date.now();
+  } finally {
+    marketAiOpenReboundLoading = false;
+  }
 }
 
 async function fetchMarketAiConfluencePayload(urls = [], fields = []) {
@@ -8803,9 +8945,11 @@ function buildMarketAiConfluenceStocks(data = {}) {
 
 function getMarketAiFilterMeta(groups) {
   return [
-    { key: "momentum", label: "動能強", count: 10 },
-    { key: "legal", label: "法人買超", count: 10 },
-    { key: "intraday", label: "當沖熱", count: 10 },
+    { key: "all", label: "全部", count: Math.min(normalizeArray(groups?.all).length, 10) },
+    { key: "momentum", label: "動能強", count: Math.min(normalizeArray(groups?.momentum).length, 10) },
+    { key: "legal", label: "法人買超", count: Math.min(normalizeArray(groups?.legal).length, 10) },
+    { key: "intraday", label: "當沖熱", count: Math.min(normalizeArray(groups?.intraday).length, 10) },
+    { key: "risk", label: "風險高", count: Math.min(normalizeArray(groups?.risk).length, 10) },
   ];
 }
 
@@ -8820,6 +8964,112 @@ function isMarketAiLongCandidate(stock, options = {}) {
   if (!close || !value) return false;
   if (pct <= 2 || change < 0) return false;
   return true;
+}
+
+function marketAiOpenToLastPct(stock) {
+  const direct = cleanNumber(stock?.OpenToLastPct ?? stock?.openToLastPct);
+  if (direct) return direct;
+  const close = cleanNumber(stock?.close ?? stock?.Last);
+  const open = cleanNumber(stock?.open ?? stock?.Open);
+  return close && open ? ((close - open) / open) * 100 : 0;
+}
+
+function marketAiTruthy(value) {
+  if (value === true) return true;
+  const text = String(value || "").trim().toLowerCase();
+  return text === "true" || text === "1" || text === "yes" || text === "y";
+}
+
+function isMarketAiReboundCandidate(stock, options = {}) {
+  const allowReference = options.allowReference === true;
+  if (!allowReference && isMarketAiStaleStock(stock)) return false;
+  if (!allowReference && !isMarketAiFreshRealtimeStock(stock)) return false;
+  const minOpenReboundPct = cleanNumber(FUMAN_TUNING_CONFIG.marketAiMinOpenReboundPercent ?? FUMAN_TUNING_CONFIG.minOpenReboundPercent ?? 0.8);
+  const minSpotVolume = cleanNumber(FUMAN_TUNING_CONFIG.marketAiMinSpotVolume ?? FUMAN_TUNING_CONFIG.minSpotVolume ?? 500);
+  const close = cleanNumber(stock.close ?? stock.Last);
+  const open = cleanNumber(stock.open ?? stock.Open);
+  const volume = cleanNumber(stock.SpotVolume ?? stock.spotVolume ?? stock.tradeVolume ?? stock.volume);
+  const openToLastPct = marketAiOpenToLastPct(stock);
+  const aboveMa35 = marketAiTruthy(stock.AboveMA35 ?? stock.aboveMA35);
+  const macdUp = marketAiTruthy(stock.MACDUp ?? stock.macdUp);
+  const kdjUp = marketAiTruthy(stock.KDJUp ?? stock.kdjUp);
+  if (!close || !open) return false;
+  if (openToLastPct < minOpenReboundPct) return false;
+  if (volume < minSpotVolume) return false;
+  if (!aboveMa35 || !macdUp || !kdjUp) return false;
+  return true;
+}
+
+function classifyMarketAiReboundStock(stock, sectors) {
+  const base = classifyMarketAiStock(stock, sectors);
+  const openToLastPct = marketAiOpenToLastPct(stock);
+  const volume = cleanNumber(stock.SpotVolume ?? stock.spotVolume ?? stock.tradeVolume ?? stock.volume);
+  const scannerScore = cleanNumber(stock.Score ?? stock.score);
+  const reboundScore = scannerScore || Math.round(clamp(65 + openToLastPct * 3 + Math.min(15, volume / 1000), 1, 100));
+  return {
+    ...base,
+    reboundScore,
+    openToLastPct,
+    score: Math.max(base.score, reboundScore),
+    tags: ["反彈觀察", "站回開盤", ...normalizeArray(base.tags).filter((tag) => tag !== "優先觀察")].slice(0, 4),
+  };
+}
+
+function isMarketAiRealtimeRadarCandidate(stock) {
+  const code = String(stock?.code || stock?.Code || "");
+  if (!/^\d{4}$/.test(code)) return false;
+  if (String(stock?.side || "").toLowerCase() !== "long") return false;
+  const close = cleanNumber(stock?.close ?? stock?.Last);
+  const pct = cleanNumber(stock?.percent ?? stock?.pct);
+  const score = cleanNumber(stock?.score ?? stock?.radarScore);
+  const radarDate = normalizeMarketAiDateKey(stock?.radarDate || stock?.quoteDate || stock?.tradeDate);
+  if (!close || score <= 0) return false;
+  if (radarDate && radarDate !== marketAiTodayKey()) return false;
+  return pct >= 0 || score >= 70;
+}
+
+function classifyMarketAiRealtimeRadarStock(stock, sectors) {
+  const code = String(stock.code || stock.Code || "");
+  const latest = latestStocks.find((item) => String(item.code || item.Code || "") === code) || {};
+  const normalized = {
+    ...latest,
+    ...stock,
+    code,
+    name: stock.name || latest.name || code,
+    close: cleanNumber(stock.close ?? latest.close),
+    percent: cleanNumber(stock.percent ?? stock.pct ?? latest.percent),
+    change: cleanNumber(stock.change ?? latest.change),
+    value: cleanNumber(stock.value ?? stock.flow ?? latest.value),
+    tradeVolume: cleanNumber(stock.tradeVolume ?? stock.volume ?? latest.tradeVolume),
+    quoteDate: normalizeMarketAiDateKey(stock.radarDate || stock.quoteDate || latest.quoteDate) || marketAiTodayKey(),
+    isRealtime: true,
+  };
+  const base = classifyMarketAiStock(normalized, sectors);
+  const radarScore = cleanNumber(stock.score ?? stock.radarScore) || base.score;
+  const radarTags = normalizeArray(stock.signalTags || stock.tags).slice(0, 2);
+  return {
+    ...base,
+    radarScore,
+    score: Math.max(base.score, radarScore),
+    side: "long",
+    signalTags: normalizeArray(stock.signalTags || stock.tags),
+    tags: ["即時雷達", "逆勢觀察", ...radarTags, ...normalizeArray(base.tags).filter((tag) => tag !== "優先觀察")].slice(0, 4),
+  };
+}
+
+function getMarketAiBias(data = {}) {
+  const sample = cleanNumber(data.sample);
+  const upRatio = cleanNumber(data.upRatio);
+  if (!sample) return "資料不足";
+  if (marketOverviewBias.bias === "空方壓制") return "空方壓制";
+  if (data.isDateFallback) return "等待今日資料";
+  if (marketOverviewBias.bias === "盤中保守" && upRatio >= 50) return "盤中保守";
+  if (data.isRealtimeFallback) {
+    if (upRatio <= 45) return "空方壓制";
+    if (upRatio >= 60 && cleanNumber(data.freshRealtimeCount) >= Math.min(200, sample)) return "多方偏強";
+    return "盤中保守";
+  }
+  return upRatio >= 55 ? "多方偏強" : upRatio <= 45 ? "空方壓制" : "震盪分歧";
 }
 
 function buildMarketAiData() {
@@ -8846,24 +9096,56 @@ function buildMarketAiData() {
   const sectors = getMarketAiSectors(stocks);
   const strongSectors = [...sectors].sort((a, b) => b.pct - a.pct).slice(0, 4);
   const weakSectors = [...sectors].sort((a, b) => a.pct - b.pct).slice(0, 4);
+  const allowReferenceLongs = isRealtimeFallback && !isDateFallback;
   const classifiedStocks = stocks
-    .filter((stock) => isMarketAiLongCandidate(stock, { allowReference: isReferenceDate }))
+    .filter((stock) => isMarketAiLongCandidate(stock, { allowReference: allowReferenceLongs }))
     .map((stock) => classifyMarketAiStock(stock, sectors));
+  const scannerReboundStocks = marketAiOpenReboundRows
+    .filter((stock) => isMarketAiReboundCandidate(stock, { allowReference: true }))
+    .map((stock) => classifyMarketAiReboundStock(stock, sectors));
+  const fallbackReboundStocks = stocks
+    .filter((stock) => isMarketAiReboundCandidate(stock))
+    .map((stock) => classifyMarketAiReboundStock(stock, sectors));
+  const reboundByCode = new Map();
+  [...scannerReboundStocks, ...fallbackReboundStocks].forEach((stock) => {
+    const code = String(stock.code || "");
+    if (code && !reboundByCode.has(code)) reboundByCode.set(code, stock);
+  });
+  const reboundStocks = [...reboundByCode.values()]
+    .sort((a, b) => cleanNumber(b.reboundScore) - cleanNumber(a.reboundScore) || cleanNumber(b.openToLastPct) - cleanNumber(a.openToLastPct) || cleanNumber(b.value) - cleanNumber(a.value))
+    .slice(0, 40);
+  let liveRadarRows = [];
+  try {
+    liveRadarRows = isMarketAiActiveSession() && latestStocks.length ? buildRealtimeRadarRows({ mode: "intraday" }) : [];
+  } catch (error) {
+    liveRadarRows = [];
+  }
+  const radarByCode = new Map();
+  [...normalizeArray(realtimeRadarLastRows), ...normalizeArray(liveRadarRows)].forEach((row) => {
+    const code = String(row?.code || row?.Code || "");
+    if (!code || radarByCode.has(code)) return;
+    radarByCode.set(code, row);
+  });
+  const radarFallbackStocks = [...radarByCode.values()]
+    .filter((stock) => isMarketAiRealtimeRadarCandidate(stock))
+    .map((stock) => classifyMarketAiRealtimeRadarStock(stock, sectors))
+    .sort((a, b) => cleanNumber(b.radarScore) - cleanNumber(a.radarScore) || cleanNumber(b.percent) - cleanNumber(a.percent) || cleanNumber(b.value) - cleanNumber(a.value))
+    .slice(0, 40);
   const hotStocks = classifiedStocks
     .sort((a, b) => b.score - a.score || cleanNumber(b.percent) - cleanNumber(a.percent) || cleanNumber(b.value) - cleanNumber(a.value))
     .slice(0, 40);
   const hotGroups = getMarketAiHotGroups(hotStocks);
   hotGroups.intraday = sortMarketAiIntradayStocks(classifiedStocks.filter((stock) => stock.buckets.intraday)).slice(0, 40);
-  if (!hotGroups[marketAiHotFilter] || marketAiHotFilter === "all") marketAiHotFilter = "momentum";
-  const visibleHotStocks = hotGroups[marketAiHotFilter].filter((stock) => isMarketAiLongCandidate(stock, { allowReference: isReferenceDate })).slice(0, 10);
+  if (!hotGroups[marketAiHotFilter]) marketAiHotFilter = "all";
+  const visibleHotStocks = hotGroups[marketAiHotFilter].filter((stock) => isMarketAiLongCandidate(stock, { allowReference: allowReferenceLongs })).slice(0, 10);
   const riskStocks = stocks
     .filter((stock) => cleanNumber(stock.percent) <= -3 || cleanNumber(stock.percent) >= 8.5)
     .sort((a, b) => Math.abs(cleanNumber(b.percent)) - Math.abs(cleanNumber(a.percent)))
     .slice(0, 5);
-  const bias = upRatio >= 55 ? "多方偏強" : upRatio <= 45 ? "空方壓制" : "震盪分歧";
+  const bias = getMarketAiBias({ sample, upRatio, isDateFallback, isRealtimeFallback, freshRealtimeCount: freshRealtimeRows.length });
   const confidence = sample >= 1000 ? (Math.min(92, 58 + Math.abs(upRatio - 50) * 1.4)).toFixed(0) : "中";
   const dataDate = marketAiDataDateKey(stocks);
-  return { stocks, allStocks, staleRows, dataDate, targetDate, isReferenceDate, isDateFallback, isRealtimeFallback, freshRealtimeCount: freshRealtimeRows.length, sample, upRows, downRows, flatRows, upRatio, totalValue, sectors, strongSectors, weakSectors, hotStocks, hotGroups, visibleHotStocks, riskStocks, bias, confidence };
+  return { stocks, allStocks, staleRows, dataDate, targetDate, isReferenceDate, isDateFallback, isRealtimeFallback, allowReferenceLongs, freshRealtimeCount: freshRealtimeRows.length, sample, upRows, downRows, flatRows, upRatio, totalValue, sectors, strongSectors, weakSectors, hotStocks, hotGroups, visibleHotStocks, reboundStocks, radarFallbackStocks, riskStocks, bias, confidence, marketOverviewBias };
 }
 
 function requestMarketAiRealtimeScan(reason = "hot") {
@@ -9053,6 +9335,11 @@ function openMarketAiAdviceModal(kind) {
 function renderMarketAiPanel() {
   installMarketTabs();
   if (!marketAiPanel) return;
+  const hashFilter = String(window.location.hash || "").match(/^#market-ai-hot-(all|momentum|legal|intraday|risk)$/)?.[1];
+  if (hashFilter && hashFilter !== marketAiHotFilter) marketAiHotFilter = hashFilter;
+  if (isMarketAiActiveSession() && !marketAiOpenReboundLoadedAt && !marketAiOpenReboundLoading) {
+    deferUiWork(() => loadMarketAiOpenReboundCache(false), 80);
+  }
   const data = buildMarketAiData();
   if (data.isDateFallback && isMarketAiActiveSession() && Date.now() - marketAiHeatmapSyncRequestedAt > 10000) {
     marketAiHeatmapSyncRequestedAt = Date.now();
@@ -9061,7 +9348,11 @@ function renderMarketAiPanel() {
   if (data.isReferenceDate && isMarketAiActiveSession()) {
     requestMarketAiRealtimeScan("hot");
   }
-  const signature = `${marketAiHotFilter}:${data.dataDate}:${data.targetDate}:${data.isReferenceDate ? 1 : 0}:${strategyRealtimeStats.received}:${data.sample}:${data.staleRows.length}:${data.upRows.length}:${data.downRows.length}:${data.hotStocks.map((stock) => `${stock.code}:${stock.score}:${cleanNumber(stock.percent).toFixed(2)}`).join("|")}`;
+  if (isMarketAiActiveSession() && ["空方壓制", "盤中保守"].includes(data.bias) && !data.reboundStocks.length && !data.radarFallbackStocks.length) {
+    deferUiWork(() => loadRealtimeRadarLatestCache(false), 120);
+    requestMarketAiRealtimeScan("force");
+  }
+  const signature = `${marketAiHotFilter}:${data.dataDate}:${data.targetDate}:${data.isReferenceDate ? 1 : 0}:${data.marketOverviewBias?.bias || ""}:${data.marketOverviewBias?.updatedAt || ""}:${marketAiOpenReboundUpdatedAt}:${marketAiOpenReboundRows.length}:${realtimeRadarLastUpdatedAt}:${realtimeRadarLastRows.length}:${strategyRealtimeStats.received}:${data.sample}:${data.staleRows.length}:${data.upRows.length}:${data.downRows.length}:${data.hotStocks.map((stock) => `${stock.code}:${stock.score}:${cleanNumber(stock.percent).toFixed(2)}`).join("|")}:${data.reboundStocks.map((stock) => `${stock.code}:${stock.reboundScore}:${cleanNumber(stock.openToLastPct).toFixed(2)}`).join("|")}:${data.radarFallbackStocks.map((stock) => `${stock.code}:${stock.radarScore}:${cleanNumber(stock.percent).toFixed(2)}`).join("|")}`;
   if (signature === marketAiLastSignature && marketAiPanel.innerHTML) return;
   marketAiLastSignature = signature;
   if (!data.sample) {
@@ -9072,20 +9363,111 @@ function renderMarketAiPanel() {
   const mobileMarketAiDelay = isMobileViewport() ? 520 : 120;
   if (!Object.keys(institutionData).length) deferUiWork(ensureMarketAiInstitutionData, isMobileViewport() ? 360 : 100);
   if (!marketAiConfluenceLoadedAt && !marketAiConfluenceLoading) deferUiWork(() => loadMarketAiConfluenceCaches(false), mobileMarketAiDelay);
-  const confluenceStocks = buildMarketAiConfluenceStocks(data);
-  const fallbackPriorityStocks = sortMarketAiPriorityStocks(data.hotStocks.filter((stock) => isMarketAiLongCandidate(stock, { priority: true, allowReference: data.isReferenceDate })));
+  const canShowLongPriority = data.bias === "多方偏強" && !data.isDateFallback;
+  const canShowReboundPriority = ["空方壓制", "盤中保守"].includes(data.bias) && !data.isDateFallback && data.reboundStocks.length > 0;
+  const canShowRadarFallbackPriority = ["空方壓制", "盤中保守"].includes(data.bias) && !data.isDateFallback && !data.reboundStocks.length && data.radarFallbackStocks.length > 0;
+  const confluenceStocks = canShowLongPriority
+    ? buildMarketAiConfluenceStocks(data).filter((stock) => isMarketAiLongCandidate(stock, { priority: true, allowReference: data.allowReferenceLongs }))
+    : [];
+  const fallbackPriorityStocks = canShowLongPriority
+    ? sortMarketAiPriorityStocks(data.hotStocks.filter((stock) => isMarketAiLongCandidate(stock, { priority: true, allowReference: data.allowReferenceLongs })))
+    : [];
   const priorityStocks = confluenceStocks.length ? confluenceStocks : fallbackPriorityStocks;
-  const topHot = priorityStocks[0] || data.hotStocks[0];
+  const reboundPriorityStocks = canShowReboundPriority ? data.reboundStocks.slice(0, 10) : [];
+  const radarFallbackPriorityStocks = canShowRadarFallbackPriority ? data.radarFallbackStocks.slice(0, 10) : [];
+  const topHot = canShowLongPriority ? priorityStocks[0] || null : canShowReboundPriority ? reboundPriorityStocks[0] || null : canShowRadarFallbackPriority ? radarFallbackPriorityStocks[0] || null : null;
   const filterMeta = getMarketAiFilterMeta(data.hotGroups);
   const activeFilterLabel = filterMeta.find((item) => item.key === marketAiHotFilter)?.label || "全部";
   const strongNames = data.strongSectors.map((sector) => sector.name).join("、") || "尚未形成明顯主流";
   const weakNames = data.weakSectors.filter((sector) => sector.pct < 0).map((sector) => sector.name).join("、") || "暫無明顯弱勢族群";
   const riskNames = data.riskStocks.map((stock) => `${stock.code} ${stock.name}`).join("、") || "暫無極端標的";
   const topHotTags = topHot?.tags?.length ? topHot.tags.join("、") : "";
-  const displayHotStocks = data.visibleHotStocks.length
-    ? data.visibleHotStocks
-    : normalizeArray(data.hotGroups?.momentum || data.hotStocks).filter((stock) => isMarketAiLongCandidate(stock, { allowReference: data.isReferenceDate })).slice(0, 10);
-  const displayFilterLabel = data.visibleHotStocks.length ? activeFilterLabel : "AI 綜合";
+  const marketAiHotRowsHtml = (stocks, filterKey) => stocks.map((stock, index) => `
+    <article class="market-ai-stock-row">
+      <div class="market-ai-rank">#${index + 1}</div>
+      <div>
+        <h4><span class="market-ai-code">${escapeAttr(stock.code)}</span><span class="market-ai-name">${escapeAttr(stock.name)}</span></h4>
+        <p>${filterKey === "intraday" ? `當沖熱度 ${stock.dayTradeHeatScore || stock.intradayScore}` : filterKey === "legal" ? `法人買超 ${Math.round(cleanNumber(stock.legal)).toLocaleString("zh-TW")}` : filterKey === "risk" ? `風險分數 ${stock.riskScore || stock.score}` : filterKey === "all" ? `綜合分數 ${stock.score}` : `動能分數 ${stock.momentumScore || stock.score}`}，綜合分數 ${stock.score}</p>
+        <p>排序主因：${filterKey === "intraday" ? `當沖熱 ${Math.round(clamp(stock.dayTradeHeatScore || stock.intradayScore, 1, 100))}` : filterKey === "legal" ? `法人買超 ${Math.round(cleanNumber(stock.legal)).toLocaleString("zh-TW")}` : filterKey === "risk" ? `風險 ${Math.round(clamp(stock.riskScore || stock.score, 1, 100))}` : filterKey === "all" ? `綜合分數 ${stock.score}` : `動能 ${Math.round(clamp(stock.momentumScore || stock.score, 1, 100))}`}，再交叉看盤中資金流、族群與風險。</p>
+      </div>
+      <div>
+        <span class="market-ai-chip">${escapeAttr(stock.industry)}</span>
+        <span class="market-ai-chip">${(cleanNumber(stock.value) / 100000000).toFixed(1)} 億</span>
+      </div>
+      <div class="market-ai-score">
+        <small>綜合分數</small>
+        <strong>${stock.score}</strong>
+      </div>
+      <div class="market-ai-tags">${stock.tags.map((tag) => `<span>${escapeAttr(tag)}</span>`).join("")}</div>
+      <div class="market-ai-actions">
+        <button type="button" data-ai-stock-code="${escapeAttr(stock.code)}" data-ai-stock-name="${escapeAttr(stock.name)}">看分析</button>
+        <button type="button" data-ai-watch-code="${escapeAttr(stock.code)}" data-ai-watch-name="${escapeAttr(stock.name)}">加入自選</button>
+      </div>
+    </article>
+  `).join("") || `<div class="empty-state">目前 AI 尚未篩出足夠觀察股。</div>`;
+  const marketAiHotSectionsHtml = filterMeta.map((item) => {
+    const stocks = normalizeArray(data.hotGroups?.[item.key] || [])
+      .filter((stock) => isMarketAiLongCandidate(stock, { allowReference: data.allowReferenceLongs }))
+      .slice(0, 10);
+    return `
+      <section class="market-ai-tab-panel market-ai-hot-section" id="market-ai-hot-${item.key}" data-market-ai-hot-panel="${item.key}">
+        <header>
+          <div>
+            <h4>${escapeAttr(item.label)}</h4>
+            <p>${item.key === "all" ? "依綜合分數排序，先看整體最值得追蹤的前 10 檔。" : item.key === "momentum" ? "依動能分數排序，優先觀察價量是否延續。" : item.key === "legal" ? "依籌碼、法人與資金流排序，用來觀察資金集中中方向。" : item.key === "intraday" ? "依當沖熱度與策略排序，適合觀察短線波動。" : "依風險分數排序，先列需要控管追價風險的標的。"}</p>
+          </div>
+          <span>${stocks.length} 檔</span>
+        </header>
+        <div class="market-ai-hot">${marketAiHotRowsHtml(stocks, item.key)}</div>
+      </section>
+    `;
+  }).join("");
+  const marketAiReboundRowsHtml = reboundPriorityStocks.map((stock, index) => `
+    <article class="market-ai-stock-row">
+      <div class="market-ai-rank">#${index + 1}</div>
+      <div>
+        <h4><span class="market-ai-code">${escapeAttr(stock.code)}</span><span class="market-ai-name">${escapeAttr(stock.name)}</span></h4>
+        <p>開到現 ${cleanNumber(stock.openToLastPct).toFixed(2)}%，量 ${Math.round(cleanNumber(stock.SpotVolume ?? stock.spotVolume ?? stock.tradeVolume)).toLocaleString("zh-TW")}，綜合分數 ${stock.reboundScore || stock.score}</p>
+        <p>判斷條件：開到現達標 + 量能達標 + 站 MA35 + MACD 向上 + KDJ 向上。</p>
+      </div>
+      <div>
+        <span class="market-ai-chip">${escapeAttr(stock.industry)}</span>
+        <span class="market-ai-chip">${escapeAttr(stock.DetectCondition || "開低強彈")}</span>
+      </div>
+      <div class="market-ai-score">
+        <small>反彈分數</small>
+        <strong>${stock.reboundScore || stock.score}</strong>
+      </div>
+      <div class="market-ai-tags">${stock.tags.map((tag) => `<span>${escapeAttr(tag)}</span>`).join("")}</div>
+      <div class="market-ai-actions">
+        <button type="button" data-ai-stock-code="${escapeAttr(stock.code)}" data-ai-stock-name="${escapeAttr(stock.name)}">看分析</button>
+        <button type="button" data-ai-watch-code="${escapeAttr(stock.code)}" data-ai-watch-name="${escapeAttr(stock.name)}">加入自選</button>
+      </div>
+    </article>
+  `).join("") || `<div class="empty-state">目前尚無符合開低強彈條件的標的。</div>`;
+  const marketAiRadarFallbackRowsHtml = radarFallbackPriorityStocks.map((stock, index) => `
+    <article class="market-ai-stock-row">
+      <div class="market-ai-rank">#${index + 1}</div>
+      <div>
+        <h4><span class="market-ai-code">${escapeAttr(stock.code)}</span><span class="market-ai-name">${escapeAttr(stock.name)}</span></h4>
+        <p>即時雷達分數 ${stock.radarScore || stock.score}，漲幅 ${cleanNumber(stock.percent).toFixed(2)}%，成交值 ${(cleanNumber(stock.value) / 100000000).toFixed(1)} 億</p>
+        <p>來源：scanner 無開低強彈時，改抓即時雷達 long/逆勢相對強訊號。</p>
+      </div>
+      <div>
+        <span class="market-ai-chip">${escapeAttr(stock.industry)}</span>
+        <span class="market-ai-chip">即時雷達</span>
+      </div>
+      <div class="market-ai-score">
+        <small>雷達分數</small>
+        <strong>${stock.radarScore || stock.score}</strong>
+      </div>
+      <div class="market-ai-tags">${stock.tags.map((tag) => `<span>${escapeAttr(tag)}</span>`).join("")}</div>
+      <div class="market-ai-actions">
+        <button type="button" data-ai-stock-code="${escapeAttr(stock.code)}" data-ai-stock-name="${escapeAttr(stock.name)}">看分析</button>
+        <button type="button" data-ai-watch-code="${escapeAttr(stock.code)}" data-ai-watch-name="${escapeAttr(stock.name)}">加入自選</button>
+      </div>
+    </article>
+  `).join("") || `<div class="empty-state">等待即時雷達偵測反彈/逆勢強股。</div>`;
   const operate = data.bias === "多方偏強"
     ? ["順勢追蹤", "只看強族群前 3 名", "跌破量價支撐先降槓桿"]
     : data.bias === "空方壓制"
@@ -9120,7 +9502,7 @@ function renderMarketAiPanel() {
       `;
   }).join("");
   const staleNotice = data.isDateFallback
-    ? `<div class="market-ai-sort-note">今日即時資料尚未完成更新，以下先用 ${escapeAttr(formatMarketAiDateKey(data.dataDate))} 最新可用資料做參考判讀。</div>`
+    ? `<div class="market-ai-sort-note">今日即時資料尚未完成更新，${escapeAttr(formatMarketAiDateKey(data.dataDate))} 僅作歷史參考；暫不產生多方結論與追蹤清單。</div>`
     : data.isRealtimeFallback
     ? `<div class="market-ai-sort-note">即時報價仍在補齊，先用目前可用行情做盤中參考；已取得即時 ${data.freshRealtimeCount.toLocaleString("zh-TW")} / ${data.sample.toLocaleString("zh-TW")} 檔。</div>`
     : data.staleRows.length
@@ -9136,6 +9518,49 @@ function renderMarketAiPanel() {
     ? "最新可用收盤資料"
     : "收盤資料";
   const dataDateNotice = "";
+  const hotObserveBlockHtml = canShowLongPriority
+    ? `
+    <section class="market-ai-block">
+      <h3>熱門觀察股</h3>
+      <small>精選前 10 檔</small>
+      <div class="market-ai-radio-tabs">
+        ${filterMeta.map((item) => `
+          <input type="radio" id="market-ai-radio-${item.key}" name="market-ai-hot-radio" ${item.key === marketAiHotFilter ? "checked" : ""}>
+          <label for="market-ai-radio-${item.key}" class="market-ai-radio-tab market-ai-radio-tab-${item.key}">
+            ${item.label}<em>${item.count}</em>
+          </label>
+        `).join("")}
+        <div class="market-ai-tab-panels">
+          ${marketAiHotSectionsHtml}
+        </div>
+      </div>
+    </section>
+  `
+    : canShowReboundPriority
+    ? `
+    <section class="market-ai-block">
+      <h3>反彈觀察股</h3>
+      <small>依開低強彈條件排序</small>
+      <div class="market-ai-sort-note">目前盤面偏空，只採用 scanner 條件：開到現達標、量能達標、站 MA35、MACD 向上、KDJ 向上。</div>
+      <div class="market-ai-hot">${marketAiReboundRowsHtml}</div>
+    </section>
+  `
+    : canShowRadarFallbackPriority
+    ? `
+    <section class="market-ai-block">
+      <h3>反彈觀察股</h3>
+      <small>即時雷達 fallback</small>
+      <div class="market-ai-sort-note">scanner 暫無開低強彈標的，改用即時雷達偵測 long/逆勢相對強訊號；不回退舊熱門股。</div>
+      <div class="market-ai-hot">${marketAiRadarFallbackRowsHtml}</div>
+    </section>
+  `
+    : `
+    <section class="market-ai-block">
+      <h3>反彈觀察股</h3>
+      <small>等待即時偵測</small>
+      <div class="empty-state">目前 scanner 與即時雷達都尚未偵測到符合條件的反彈/逆勢強股。</div>
+    </section>
+  `;
   marketAiPanel.innerHTML = `
     ${dataDateNotice}
     ${staleNotice}
@@ -9143,7 +9568,7 @@ function renderMarketAiPanel() {
       <article class="market-ai-card hero">
         <small>盤中決策節奏</small>
         <strong>${data.bias}</strong>
-        <p>${data.upRatio >= 50 ? "上漲家數仍占優勢" : "下跌家數較多"}，盤面以${data.bias === "空方壓制" ? "風險控管" : "族群輪動"}為主，避免追高與流動性不足標的。</p>
+        <p>${data.isDateFallback ? "今日資料尚未完成，先停止多方判讀" : data.upRatio >= 50 ? "上漲家數仍占優勢" : "下跌家數較多"}，盤面以${data.bias === "多方偏強" ? "族群輪動" : "風險控管"}為主，避免追高與流動性不足標的。</p>
         <div class="market-ai-metrics">
           <span>樣本<b>${data.sample.toLocaleString("zh-TW")}</b></span>
           <span>多方<b>${data.upRows.length.toLocaleString("zh-TW")}</b></span>
@@ -9162,9 +9587,13 @@ function renderMarketAiPanel() {
         <p>${weakNames} 需要留意；極端波動標的：${riskNames}。</p>
       </article>
       <article class="market-ai-card">
-        <small>優先觀察</small>
+        <small>${canShowReboundPriority ? "反彈觀察" : canShowRadarFallbackPriority ? "雷達觀察" : "優先觀察"}</small>
         <strong>${topHot ? `${topHot.code} ${topHot.name}` : "--"}</strong>
-        <p>${topHot ? topHot.confluenceCount
+        <p>${topHot && canShowReboundPriority
+          ? `符合開低強彈：開到現 ${cleanNumber(topHot.openToLastPct).toFixed(2)}%，站 MA35，MACD/KDJ 向上，分數 ${topHot.reboundScore || topHot.score}。`
+          : topHot && canShowRadarFallbackPriority
+          ? `scanner 暫無開低強彈，改抓即時雷達：分數 ${topHot.radarScore || topHot.score}，漲幅 ${cleanNumber(topHot.percent).toFixed(2)}%，訊號 ${normalizeArray(topHot.signalTags).slice(0, 2).join("、") || "long"}。`
+          : topHot ? topHot.confluenceCount
           ? `${topHot.confluenceCount} 策略共振：${escapeAttr(topHot.confluenceLabels.join("、"))}。綜合分數 ${topHot.score || "--"}，族群 ${topHot.industry || "--"}，成交值 ${(cleanNumber(topHot.value) / 100000000).toFixed(1)} 億。`
           : `${topHot.tags.length} 個訊號${topHotTags ? `：${escapeAttr(topHotTags)}` : ""}。綜合分數 ${topHot.score}，族群 ${topHot.industry}，成交值 ${(cleanNumber(topHot.value) / 100000000).toFixed(1)} 億。` : "等待資料。"}</p>
       </article>
@@ -9178,9 +9607,17 @@ function renderMarketAiPanel() {
         <small>${marketAiUpdatedLabel()}</small>
         <div class="market-ai-list">
           ${[
-            `市場廣度目前上漲家數占 ${data.upRatio.toFixed(1)}%，${data.bias === "空方壓制" ? "盤面偏弱，先看風險。" : "可追蹤強勢族群是否擴散。"}`,
-            `族群焦點落在 ${strongNames}，弱勢端留意 ${weakNames}。`,
-            `${confluenceStocks.length ? "共振觀察" : "熱門觀察"}優先看 ${priorityStocks.slice(0, 3).map((stock) => `${stock.code} ${stock.name}${stock.confluenceCount ? `(${stock.confluenceLabels.join("+")})` : ""}`).join("、") || "等待資料"}。`,
+            data.isDateFallback
+              ? `今日資料尚未完成，${formatMarketAiDateKey(data.dataDate)} 僅作歷史參考，不產生多方判讀。`
+              : `市場廣度目前上漲家數占 ${data.upRatio.toFixed(1)}%，${data.bias === "多方偏強" ? "可追蹤強勢族群是否擴散。" : "盤面偏弱或資料不足，先看風險。"}`,
+            data.marketOverviewBias?.reason ? `市場總覽覆核：${data.marketOverviewBias.reason}，AI 判讀同步壓到「${data.bias}」。` : `族群焦點落在 ${strongNames}，弱勢端留意 ${weakNames}。`,
+            canShowLongPriority
+              ? `${confluenceStocks.length ? "共振觀察" : "熱門觀察"}優先看 ${priorityStocks.slice(0, 3).map((stock) => `${stock.code} ${stock.name}${stock.confluenceCount ? `(${stock.confluenceLabels.join("+")})` : ""}`).join("、") || "等待資料"}。`
+              : canShowReboundPriority
+              ? `空方盤只看開低強彈：${reboundPriorityStocks.slice(0, 3).map((stock) => `${stock.code} ${stock.name}`).join("、")}。`
+              : canShowRadarFallbackPriority
+              ? `scanner 無開低強彈，改用即時雷達找逆勢強股：${radarFallbackPriorityStocks.slice(0, 3).map((stock) => `${stock.code} ${stock.name}`).join("、")}。`
+              : "目前非多方盤，scanner 與即時雷達都尚未偵測到反彈標的；先等待即時訊號。",
             `盤中雷達目前偏向「${data.bias}」，分數高也要等量價延續確認。`,
           ].map((text, index) => `<div class="market-ai-point"><b>${index + 1}</b><span>${escapeAttr(text)}</span></div>`).join("")}
         </div>
@@ -9201,44 +9638,9 @@ function renderMarketAiPanel() {
         </div>
       </aside>
     </section>
-    <section class="market-ai-block">
-      <h3>熱門觀察股</h3>
-      <small>依 AI 盤面判讀排序</small>
-      <div class="market-ai-filterbar">
-        ${filterMeta.map((item) => `
-          <button type="button" class="${item.key === marketAiHotFilter ? "active" : ""}" data-ai-hot-filter="${item.key}">
-            ${item.label}<em>${item.count}</em>
-          </button>
-        `).join("")}
-      </div>
-      <div class="market-ai-sort-note">目前排序 <b>${escapeAttr(displayFilterLabel)}</b>，AI 依盤面強弱、資金流、族群、法人與風險分數綜合判讀。</div>
-      <div class="market-ai-hot">
-        ${displayHotStocks.map((stock, index) => `
-          <article class="market-ai-stock-row">
-            <div class="market-ai-rank">#${index + 1}</div>
-            <div>
-              <h4><span class="market-ai-code">${escapeAttr(stock.code)}</span><span class="market-ai-name">${escapeAttr(stock.name)}</span></h4>
-              <p>${marketAiHotFilter === "intraday" ? `當沖熱度 ${stock.dayTradeHeatScore || stock.intradayScore}` : "主力籌碼入選"}，綜合分數 ${stock.score}</p>
-              <p>排序主因：綜合分數 ${stock.score}，再交叉看${marketAiHotFilter === "intraday" ? `當沖熱 ${Math.round(clamp(stock.dayTradeHeatScore || stock.intradayScore, 1, 100))}` : `盤中資金流 ${Math.round(clamp(stock.capitalFlowScore || stock.score, 1, 100))}`}與族群強弱。</p>
-            </div>
-            <div>
-              <span class="market-ai-chip">${escapeAttr(stock.industry)}</span>
-              <span class="market-ai-chip">${(cleanNumber(stock.value) / 100000000).toFixed(1)} 億</span>
-            </div>
-            <div class="market-ai-score">
-              <small>綜合分數</small>
-              <strong>${stock.score}</strong>
-            </div>
-            <div class="market-ai-tags">${stock.tags.map((tag) => `<span>${escapeAttr(tag)}</span>`).join("")}</div>
-            <div class="market-ai-actions">
-              <button type="button" data-ai-stock-code="${escapeAttr(stock.code)}" data-ai-stock-name="${escapeAttr(stock.name)}">看分析</button>
-              <button type="button" data-ai-watch-code="${escapeAttr(stock.code)}" data-ai-watch-name="${escapeAttr(stock.name)}">加入自選</button>
-            </div>
-          </article>
-        `).join("") || `<div class="empty-state">目前 AI 尚未篩出足夠觀察股。</div>`}
-      </div>
-    </section>
+    ${hotObserveBlockHtml}
   `;
+  bindMarketAiHotFilterButtons();
 }
 
 function renderIndexes(indexes, futuresNear, futuresNext, marketStatus, otcSignal) {

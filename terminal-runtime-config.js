@@ -41,6 +41,8 @@
     strategy5Cache: "/data/strategy5-latest.json",
     strategy5Backup: "/data/strategy5-backup.json",
     realtimeRadarCache: "/data/realtime-radar-latest.json",
+    marketAiOpenReboundCache: "/data/fugle-open-rebound-latest.json",
+    openReboundLatest: "/data/open-rebound-latest.json",
     strategy2IntradayLatestApi: "/api/strategy2-latest",
     strategy2IntradayCache: "/data/strategy2-intraday-latest.json",
     strategy2IntradaySlim: "/data/strategy2-intraday-slim.json",
@@ -78,5 +80,6 @@
     endpoints,
   };
 })();
+
 
 

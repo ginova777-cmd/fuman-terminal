@@ -1,5 +1,5 @@
 (function () {
-  const version = "strategy2-record-log-20260608";
+  const version = "ai-rebound-20260608-04";
   window.FUMAN_TERMINAL_BOOT = {
     version,
     startedAt: Date.now(),
@@ -87,6 +87,7 @@
     setTimeout(loadMain, 0);
   }
 })();
+
 
 
 

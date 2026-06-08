@@ -1,5 +1,5 @@
 (function () {
-  const VERSION = "chip-5day-fix-20260608";
+  const VERSION = "ai-rebound-20260608-04";
   const modules = {
     sectorMap: { loaded: false, src: "terminal-sector-map.js" },
     strategyConfig: { loaded: false, src: "terminal-strategy-config.js" },
@@ -38,6 +38,7 @@
     },
   };
 })();
+
 
 
 
