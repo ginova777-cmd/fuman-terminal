@@ -1,6 +1,6 @@
 {
-  "ok": false,
-  "updatedAt": "2026-06-08T05:31:10.943Z",
+  "ok": true,
+  "updatedAt": "2026-06-08T05:31:36.975Z",
   "files": [
     {
       "file": "market-summary.json",
@@ -12,20 +12,11 @@
     },
     {
       "file": "strategy2-intraday-latest.json",
-      "ok": false,
-      "bytes": 3371728,
-      "count": 1890,
-      "updatedAt": "2026-06-08T05:29:03.176Z",
-      "issues": [
-        {
-          "level": "high",
-          "message": "strategy2 realtime usable coverage critically low 89/1007 (0.0884)"
-        },
-        {
-          "level": "high",
-          "message": "strategy2 scan skipped because realtime coverage was below hard minimum"
-        }
-      ]
+      "ok": true,
+      "bytes": 3386360,
+      "count": 1898,
+      "updatedAt": "2026-06-08T05:31:11.159Z",
+      "issues": []
     },
     {
       "file": "realtime-radar-latest.json",
@@ -86,18 +77,7 @@
       "issues": []
     }
   ],
-  "highIssues": [
-    {
-      "file": "strategy2-intraday-latest.json",
-      "level": "high",
-      "message": "strategy2 realtime usable coverage critically low 89/1007 (0.0884)"
-    },
-    {
-      "file": "strategy2-intraday-latest.json",
-      "level": "high",
-      "message": "strategy2 scan skipped because realtime coverage was below hard minimum"
-    }
-  ],
+  "highIssues": [],
   "mediumIssues": [
     {
       "file": "strategy4-latest.json",
