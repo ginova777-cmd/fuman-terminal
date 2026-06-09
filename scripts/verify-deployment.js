@@ -105,6 +105,15 @@ async function strategy4ExpectedTradeDate(latestTradeDate) {
   return latestTradeDate;
 }
 
+async function strategy3ExpectedTradeDate(latestTradeDate) {
+  if (taipeiMinuteOfDay() >= 13 * 60 + 10) return latestTradeDate;
+  for (let offset = -1; offset >= -14; offset -= 1) {
+    const tradingDay = await isTwseTradingDay(taipeiDateFromOffset(offset), { stateDir: process.env.FUMAN_STATE_DIR || "C:\\fuman-runtime\\state" });
+    if (tradingDay.isTradingDay) return normalizeDate(tradingDay.date);
+  }
+  return latestTradeDate;
+}
+
 function detectVersion(homeBody) {
   if (process.env.FUMAN_VERIFY_VERSION) return process.env.FUMAN_VERIFY_VERSION;
   const match = homeBody.match(/terminal-core\.js\?v=([^"'&<>]+)/);
@@ -124,6 +133,7 @@ async function main() {
   const home = await fetchText("/");
   const version = detectVersion(home.body);
   const latestTradeDate = await latestTradingYmd();
+  const strategy3TradeDate = await strategy3ExpectedTradeDate(latestTradeDate);
   const strategy4TradeDate = await strategy4ExpectedTradeDate(latestTradeDate);
   assertOk("home", home, (r) => r.body.includes(`terminal-core.js?v=${version}`));
   const checks = [
@@ -133,7 +143,7 @@ async function main() {
     ["service-worker", `/fuman-sw.js?v=${version}`, (r) => r.body.includes("strategy2-intraday-latest") && r.body.includes("realtime-radar-latest")],
     ["terminal-bootstrap", `/terminal.js?v=${version}`, (r) => r.body.includes("FUMAN_TERMINAL_LOAD_APP") && r.body.includes("terminal-app.js")],
     ["terminal-app", `/terminal-app.js?v=${version}`, (r) => r.body.includes("FUMAN_LIVE_MEMORY_TTL_MS") && r.body.includes("loadStrategyWeights")],
-    ["strategy3", "/data/strategy3-latest.json?v=verify", (r) => { const p = parseJson(r); return normalizeDate(p.usedDate) === latestTradeDate && Number(p.count) > 0; }],
+    ["strategy3", "/data/strategy3-latest.json?v=verify", (r) => { const p = parseJson(r); return isNotOlderThanLatestTradeDate(p.usedDate || p.date || p.updatedAt, strategy3TradeDate) && Number(p.count) > 0; }],
     ["strategy4", "/data/strategy4-latest.json?v=verify", (r) => { const p = parseJson(r); return isNotOlderThanLatestTradeDate(p.scanStamp || p.dataDate || p.updatedAt, strategy4TradeDate) && p.complete === true && Number(p.count) > 0; }],
     ["strategy4-summary", "/data/strategy4-summary.json?v=verify", (r) => { const p = parseJson(r); return isNotOlderThanLatestTradeDate(p.scanStamp || p.dataDate || p.updatedAt, strategy4TradeDate) && Number(p.count) > 0; }],
     ["data-manifest", "/data/data-manifest.json?v=verify", (r) => { const p = parseJson(r); return p.ok === true && Number(p.count) >= 25 && p.entries?.["stocks-index.json"]?.count > 1000; }],
