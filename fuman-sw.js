@@ -1,23 +1,23 @@
-const CACHE_VERSION = "fuman-terminal-sw-open-buy-strip-20260609-01";
+const CACHE_VERSION = "fuman-terminal-sw-strategy-center-mobile-20260609-01";
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 const DATA_CACHE = `${CACHE_VERSION}-data`;
 
 const STATIC_ASSETS = [
-  "/styles.css?v=open-buy-strip-20260609-01",
-  "/terminal-core.js?v=open-buy-strip-20260609-01",
-  "/terminal-modules.js?v=open-buy-strip-20260609-01",
-  "/terminal-sector-map.js?v=open-buy-strip-20260609-01",
-  "/terminal-strategy-config.js?v=open-buy-strip-20260609-01",
-  "/terminal-market-config.js?v=open-buy-strip-20260609-01",
-  "/terminal-ui-config.js?v=open-buy-strip-20260609-01",
-  "/terminal-runtime-config.js?v=open-buy-strip-20260609-01",
-  "/terminal-tuning-config.js?v=open-buy-strip-20260609-01",
-  "/terminal-worker.js?v=open-buy-strip-20260609-01",
-  "/terminal.js?v=open-buy-strip-20260609-01",
-  "/terminal-realtime-radar.css?v=open-buy-strip-20260609-01",
-  "/terminal-intraday-radar.css?v=open-buy-strip-20260609-01",
-  "/terminal-utility.css?v=open-buy-strip-20260609-01",
-  "/refresh.html?v=open-buy-strip-20260609-01",
+  "/styles.css?v=strategy-center-mobile-20260609-01",
+  "/terminal-core.js?v=strategy-center-mobile-20260609-01",
+  "/terminal-modules.js?v=strategy-center-mobile-20260609-01",
+  "/terminal-sector-map.js?v=strategy-center-mobile-20260609-01",
+  "/terminal-strategy-config.js?v=strategy-center-mobile-20260609-01",
+  "/terminal-market-config.js?v=strategy-center-mobile-20260609-01",
+  "/terminal-ui-config.js?v=strategy-center-mobile-20260609-01",
+  "/terminal-runtime-config.js?v=strategy-center-mobile-20260609-01",
+  "/terminal-tuning-config.js?v=strategy-center-mobile-20260609-01",
+  "/terminal-worker.js?v=strategy-center-mobile-20260609-01",
+  "/terminal.js?v=strategy-center-mobile-20260609-01",
+  "/terminal-realtime-radar.css?v=strategy-center-mobile-20260609-01",
+  "/terminal-intraday-radar.css?v=strategy-center-mobile-20260609-01",
+  "/terminal-utility.css?v=strategy-center-mobile-20260609-01",
+  "/refresh.html?v=strategy-center-mobile-20260609-01",
   "/assets/logo.webp",
   "/favicon.ico",
 ];

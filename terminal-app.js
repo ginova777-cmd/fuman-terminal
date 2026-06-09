@@ -7161,12 +7161,30 @@ function renderStrategy5Dashboard(evaluated) {
     <div class="data-freshness-bar strategy5-freshness-bar ${freshnessClass}">
       模式：<strong>盤後籌碼｜法人資料</strong>｜資料日期：<strong>${escapeAttr(formatMarketAiDateKey(freshnessDate))}</strong>｜今日：<strong>${escapeAttr(formatMarketAiDateKey(freshnessToday))}</strong>${freshnessText}
     </div>`;
+  const strategy5DataDateLabel = formatMarketAiDateKey(freshnessDate).replace(/^\d{4}-?/, "").replace("-", "/") || "--/--";
+  const strategy5HeadingTitle = isMobileViewport() ? "策略中心" : "策略5綜合策略";
+  const strategy5HeadingCopy = isMobileViewport()
+    ? "把盤後籌碼、價量型態與多策略共振整理成可橫滑切換的策略模組。"
+    : `掃描時間 06:00 / 21:00｜完整掃描｜${strategy5UpdatedAt ? `最後更新 ${new Date(strategy5UpdatedAt).toLocaleTimeString("zh-TW", { hour12: false })}` : "讀取中"}｜結果固定到下一次掃描`;
+  const mobileStrategyCenterHero = `
+    <section class="mobile-strategy-center-hero" aria-label="策略中心總覽">
+      <div class="mobile-strategy-center-copy">
+        <span>策略控制台</span>
+        <h2>策略中心</h2>
+      </div>
+      <aside class="mobile-strategy-center-date">
+        <span>資料日</span>
+        <strong>${escapeAttr(strategy5DataDateLabel)}</strong>
+        <small>${totalMatches.toLocaleString("zh-TW")} 檔策略標的</small>
+      </aside>
+    </section>`;
   strategyTable.innerHTML = `
     <section class="strategy5-shell strategy5-clean">
       <header class="strategy5-page-heading">
-        <h2><span class="strategy5-page-icon" aria-hidden="true"></span>策略5綜合策略</h2>
-        <p>掃描時間 06:00 / 21:00｜完整掃描｜${strategy5UpdatedAt ? `最後更新 ${new Date(strategy5UpdatedAt).toLocaleTimeString("zh-TW", { hour12: false })}` : "讀取中"}｜結果固定到下一次掃描</p>
+        <h2><span class="strategy5-page-icon" aria-hidden="true"></span>${strategy5HeadingTitle}</h2>
+        <p>${strategy5HeadingCopy}</p>
       </header>
+      ${mobileStrategyCenterHero}
       ${strategy5Freshness}
       <section class="strategy5-dashboard strategy5-topic-layout">
         <nav class="strategy5-preset-tabs" aria-label="策略5主題分頁">${strategyTabs}</nav>
