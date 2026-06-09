@@ -1,23 +1,23 @@
-const CACHE_VERSION = "fuman-terminal-sw-sector-modal-cache-fresh-20260608-02";
+const CACHE_VERSION = "fuman-terminal-sw-mobile-quick-links-20260609-01";
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 const DATA_CACHE = `${CACHE_VERSION}-data`;
 
 const STATIC_ASSETS = [
-  "/styles.css?v=sector-modal-cache-fresh-20260608-02",
-  "/terminal-core.js?v=sector-modal-cache-fresh-20260608-02",
-  "/terminal-modules.js?v=sector-modal-cache-fresh-20260608-02",
-  "/terminal-sector-map.js?v=sector-modal-cache-fresh-20260608-02",
-  "/terminal-strategy-config.js?v=sector-modal-cache-fresh-20260608-02",
-  "/terminal-market-config.js?v=sector-modal-cache-fresh-20260608-02",
-  "/terminal-ui-config.js?v=sector-modal-cache-fresh-20260608-02",
-  "/terminal-runtime-config.js?v=sector-modal-cache-fresh-20260608-02",
-  "/terminal-tuning-config.js?v=sector-modal-cache-fresh-20260608-02",
-  "/terminal-worker.js?v=sector-modal-cache-fresh-20260608-02",
-  "/terminal.js?v=sector-modal-cache-fresh-20260608-02",
-  "/terminal-realtime-radar.css?v=sector-modal-cache-fresh-20260608-02",
-  "/terminal-intraday-radar.css?v=sector-modal-cache-fresh-20260608-02",
-  "/terminal-utility.css?v=sector-modal-cache-fresh-20260608-02",
-  "/refresh.html?v=sector-modal-cache-fresh-20260608-02",
+  "/styles.css?v=mobile-quick-links-20260609-01",
+  "/terminal-core.js?v=mobile-quick-links-20260609-01",
+  "/terminal-modules.js?v=mobile-quick-links-20260609-01",
+  "/terminal-sector-map.js?v=mobile-quick-links-20260609-01",
+  "/terminal-strategy-config.js?v=mobile-quick-links-20260609-01",
+  "/terminal-market-config.js?v=mobile-quick-links-20260609-01",
+  "/terminal-ui-config.js?v=mobile-quick-links-20260609-01",
+  "/terminal-runtime-config.js?v=mobile-quick-links-20260609-01",
+  "/terminal-tuning-config.js?v=mobile-quick-links-20260609-01",
+  "/terminal-worker.js?v=mobile-quick-links-20260609-01",
+  "/terminal.js?v=mobile-quick-links-20260609-01",
+  "/terminal-realtime-radar.css?v=mobile-quick-links-20260609-01",
+  "/terminal-intraday-radar.css?v=mobile-quick-links-20260609-01",
+  "/terminal-utility.css?v=mobile-quick-links-20260609-01",
+  "/refresh.html?v=mobile-quick-links-20260609-01",
   "/assets/logo.webp",
   "/favicon.ico",
 ];
