@@ -3099,6 +3099,9 @@ let strategyPresetMode = "";
 let strategy5ActiveId = "multi_strategy_confluence";
 let strategy5TabScrollLeft = 0;
 let strategy5ShouldFocusActiveTab = false;
+let strategy5LastFilterTapAt = 0;
+let strategy5LastFilterTapId = "";
+let strategy5FilterPointerStart = null;
 const INTRADAY_HOT_SCAN_LIMIT = FUMAN_TUNING_CONFIG.intradayHotScanLimit ?? 900;
 const REALTIME_RADAR_POOL_LIMIT = FUMAN_TUNING_CONFIG.realtimeRadarPoolLimit ?? 650;
 const INTRADAY_BACKGROUND_BATCH = FUMAN_TUNING_CONFIG.intradayBackgroundBatch ?? 450;
@@ -11376,15 +11379,50 @@ document.addEventListener("click", (event) => {
   renderStrategyScanner();
 });
 
-document.addEventListener("click", (event) => {
-  const filterButton = event.target.closest("[data-strategy5-filter]");
-  if (!filterButton) return;
+function switchStrategy5Filter(filterButton) {
+  const nextId = filterButton?.dataset?.strategy5Filter || "multi_strategy_confluence";
+  const now = Date.now();
+  if (nextId === strategy5LastFilterTapId && now - strategy5LastFilterTapAt < 320) return;
+  strategy5LastFilterTapAt = now;
+  strategy5LastFilterTapId = nextId;
   strategy5TabScrollLeft = filterButton.closest(".strategy5-preset-tabs")?.scrollLeft || 0;
   strategy5ShouldFocusActiveTab = true;
-  strategy5ActiveId = filterButton.dataset.strategy5Filter || "multi_strategy_confluence";
+  strategy5ActiveId = nextId;
   strategy5Page = 1;
   renderStrategyScanner();
-});
+}
+
+document.addEventListener("pointerdown", (event) => {
+  const filterButton = event.target.closest?.("[data-strategy5-filter]");
+  if (!filterButton) return;
+  strategy5FilterPointerStart = {
+    id: filterButton.dataset.strategy5Filter || "multi_strategy_confluence",
+    x: event.clientX || 0,
+    y: event.clientY || 0,
+  };
+}, true);
+
+document.addEventListener("pointerup", (event) => {
+  const filterButton = event.target.closest?.("[data-strategy5-filter]");
+  if (!filterButton) return;
+  const start = strategy5FilterPointerStart;
+  strategy5FilterPointerStart = null;
+  const moved = start
+    ? Math.abs((event.clientX || 0) - start.x) > 14 || Math.abs((event.clientY || 0) - start.y) > 14
+    : false;
+  if (moved) return;
+  event.preventDefault();
+  event.stopImmediatePropagation();
+  switchStrategy5Filter(filterButton);
+}, true);
+
+document.addEventListener("click", (event) => {
+  const filterButton = event.target.closest?.("[data-strategy5-filter]");
+  if (!filterButton) return;
+  event.preventDefault();
+  event.stopImmediatePropagation();
+  switchStrategy5Filter(filterButton);
+}, true);
 
 document.addEventListener("click", (event) => {
   const refreshTarget = event.target.closest("[data-warrant-refresh]");
