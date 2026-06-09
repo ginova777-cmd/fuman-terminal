@@ -3016,3 +3016,18 @@ body.fuman-light-theme #strategy-view .swing-zone-head strong {
   #strategy-view.strategy5-only .mobile-strategy-center-copy h2 { font-size: 29px !important; }
   #strategy-view.strategy5-only .mobile-strategy-center-date strong { font-size: 23px !important; }
 }
+
+
+/* strategy5-mobile-page-sync-20260609 */
+@media (max-width: 760px) {
+  #strategy-view.strategy5-only .strategy5-preset-tabs {
+    width: 100% !important;
+    max-width: 100% !important;
+    margin-inline: 0 !important;
+    scroll-padding-left: 0 !important;
+  }
+  #strategy-view.strategy5-only .strategy5-preset-tabs button {
+    touch-action: pan-x !important;
+    scroll-snap-align: start !important;
+  }
+}
