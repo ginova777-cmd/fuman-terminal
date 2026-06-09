@@ -124,7 +124,10 @@ function strategy4PresetFiles(payload) {
     }]);
   }
   return [
-    ["data/strategy4-zone-a.json", { ...base, zone: "A", count: matches.filter((item) => (item.swingZone || "A") === "A").length, matches: byScore.filter((item) => (item.swingZone || "A") === "A") }],
+    ["data/strategy4-zone-a.json", (() => {
+      const zoneA = byScore.filter((item) => (item.swingZone || "A") === "A");
+      return { ...base, zone: "A", count: Math.min(180, zoneA.length), totalCount: zoneA.length, matches: zoneA.slice(0, 180) };
+    })()],
     ["data/strategy4-zone-b.json", { ...base, zone: "B", count: matches.filter((item) => item.swingZone === "B").length, matches: byScore.filter((item) => item.swingZone === "B") }],
     ["data/strategy4-zone-c.json", { ...base, zone: "C", count: matches.filter((item) => item.swingZone === "C").length, matches: byScore.filter((item) => item.swingZone === "C") }],
     ["data/strategy4-score-top.json", { ...base, count: Math.min(120, byScore.length), matches: byScore.slice(0, 120) }],
