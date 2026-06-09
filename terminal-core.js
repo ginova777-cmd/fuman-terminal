@@ -1,5 +1,5 @@
 (function () {
-  const version = "sector-modal-cache-fresh-20260608-02";
+  const version = "strategy2-api-first-20260609-01";
   window.FUMAN_TERMINAL_BOOT = {
     version,
     startedAt: Date.now(),

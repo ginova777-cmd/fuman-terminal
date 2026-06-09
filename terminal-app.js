@@ -3963,7 +3963,8 @@ async function loadStrategy4Summary(force = false) {
   if (!force && strategy4SummaryLoadedAt && Date.now() - strategy4SummaryLoadedAt < CACHE_FRESH_MS) return strategy4Summary;
   strategy4SummaryLoading = true;
   try {
-    const payload = await fetchVersionedJson(endpoints.strategy4Summary, 5000, "latest", force);
+    const firstPayload = await fetchVersionedJson(endpoints.strategy4Summary, 5000, "latest", force);
+    const payload = await refetchIfPayloadOlderThanToday(endpoints.strategy4Summary, firstPayload, "strategy4", 5000, "latest", force);
     strategy4Summary = payload || null;
     strategy4SummaryLoadedAt = Date.now();
     if (payload?.total) strategy4ScanTotal = cleanNumber(payload.total);
@@ -4478,10 +4479,12 @@ async function loadOpenBuySupabasePayload() {
   return null;
 }
 
-async function loadOpenBuyStaticPayload() {
-  let payload = await fetchVersionedJson(endpoints.openBuyCache, 10000, "latest", false);
+async function loadOpenBuyStaticPayload(force = false) {
+  let payload = await fetchVersionedJson(endpoints.openBuyCache, 10000, "latest", force);
+  payload = await refetchIfPayloadOlderThanToday(endpoints.openBuyCache, payload, "openBuy", 10000, "latest", force);
   if (!normalizeArray(payload?.matches).length) {
-    payload = await fetchVersionedJson(endpoints.openBuyBackup, 10000, "latest", false);
+    payload = await fetchVersionedJson(endpoints.openBuyBackup, 10000, "latest", force);
+    payload = await refetchIfPayloadOlderThanToday(endpoints.openBuyBackup, payload, "openBuy", 10000, "latest", force);
   }
   return {
     ...payload,
@@ -4500,7 +4503,7 @@ async function loadOpenBuyCache(force = false) {
   openBuyCacheLoading = true;
   openBuyCacheCheckedAt = Date.now();
   try {
-    const payload = await loadOpenBuySupabasePayload() || await loadOpenBuyStaticPayload();
+    const payload = await loadOpenBuySupabasePayload() || await loadOpenBuyStaticPayload(force);
     const incomingMatches = normalizeArray(payload?.matches);
     const hasCurrentMatches = Object.keys(openBuyScanMatches).length > 0;
     const hasCompleteScan = payload?.fullScan && normalizeArray(payload?.scannedCodes).length;
@@ -5776,6 +5779,22 @@ function sortIntradayZoneRows(rows) {
 
 async function loadStrategy2IntradayPayload(force = false) {
   const allowSupabase = shouldRunLivePolling();
+  if (endpoints.strategy2IntradayLatestApi) {
+    try {
+      const apiPayload = await fetchLiveMemoryJson(
+        "strategy2:latest-api",
+        versionedDataUrl(endpoints.strategy2IntradayLatestApi, "latest", force),
+        isMobileViewport() ? 2500 : 3500,
+        FUMAN_LIVE_MEMORY_TTL_MS.strategy2,
+        force
+      );
+      if (normalizeArray(apiPayload?.records).length || normalizeArray(apiPayload?.events).length) {
+        return { ...apiPayload, cacheSource: apiPayload.cacheSource || "supabase-api" };
+      }
+    } catch (error) {
+      recordFrontendError("strategy2-latest-api", error);
+    }
+  }
   const mobileFastPath = isMobileViewport() && !force && (endpoints.strategy2IntradayLiveTop || endpoints.strategy2IntradayTop || endpoints.strategy2IntradaySlim);
   if (mobileFastPath && strategy2IntradayEventByCode.size && endpoints.strategy2IntradayDelta) {
     try {
@@ -10735,6 +10754,7 @@ async function loadStrategy4Cache(force = false, allowFullFallback = false) {
     const primaryStrategy4Endpoint = endpoints.strategy4ScoreTop || endpoints.strategy4ZoneA || (isMobileViewport() ? "" : endpoints.strategy4Slim);
     if (!primaryStrategy4Endpoint) return;
     let payload = await fetchVersionedJson(primaryStrategy4Endpoint, 8000, strategy4Summary?.updatedAt || strategy4SummaryLoadedAt || "", force);
+    payload = await refetchIfPayloadOlderThanToday(primaryStrategy4Endpoint, payload, "strategy4", 8000, strategy4Summary?.updatedAt || strategy4SummaryLoadedAt || "", force);
     if (!force && normalizeArray(payload?.matches).length) {
       payload = { ...payload, partial: true, complete: false };
     }
@@ -10743,15 +10763,19 @@ async function loadStrategy4Cache(force = false, allowFullFallback = false) {
     }
     if (force && !normalizeArray(payload?.matches).length && endpoints.strategy4ZoneA) {
       payload = await fetchVersionedJson(endpoints.strategy4ZoneA, 8000, strategy4Summary?.updatedAt || strategy4SummaryLoadedAt || "", force);
+      payload = await refetchIfPayloadOlderThanToday(endpoints.strategy4ZoneA, payload, "strategy4", 8000, strategy4Summary?.updatedAt || strategy4SummaryLoadedAt || "", force);
     }
     if (force && !normalizeArray(payload?.matches).length && endpoints.strategy4ZoneBPage1) {
       payload = await fetchVersionedJson(endpoints.strategy4ZoneBPage1, 8000, strategy4Summary?.updatedAt || strategy4SummaryLoadedAt || "", force);
+      payload = await refetchIfPayloadOlderThanToday(endpoints.strategy4ZoneBPage1, payload, "strategy4", 8000, strategy4Summary?.updatedAt || strategy4SummaryLoadedAt || "", force);
     }
     if (!isMobileViewport() && allowFullFallback && force && !normalizeArray(payload?.matches).length) {
       payload = await fetchVersionedJson(endpoints.strategy4Cache, 10000, strategy4Summary?.updatedAt || strategy4SummaryLoadedAt || "", force);
+      payload = await refetchIfPayloadOlderThanToday(endpoints.strategy4Cache, payload, "strategy4", 10000, strategy4Summary?.updatedAt || strategy4SummaryLoadedAt || "", force);
     }
     if (!isMobileViewport() && allowFullFallback && force && !normalizeArray(payload?.matches).length) {
       payload = await fetchVersionedJson(endpoints.strategy4Backup, 10000, strategy4Summary?.updatedAt || strategy4SummaryLoadedAt || "", force);
+      payload = await refetchIfPayloadOlderThanToday(endpoints.strategy4Backup, payload, "strategy4", 10000, strategy4Summary?.updatedAt || strategy4SummaryLoadedAt || "", force);
     }
     if (payload?.ok && Array.isArray(payload.matches)) {
       mergeStrategy4Cache(payload);

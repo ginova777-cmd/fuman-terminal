@@ -2,6 +2,7 @@ const fs = require("fs");
 const path = require("path");
 const { buildRanks, cleanNumber, detectSignals, isIntradayTradable, ma35SourceLabel } = require("./intraday-radar-rules");
 const { rotateStrategy2IntradayCache } = require("./strategy2-cache-rotation");
+const { overlayFugleWebSocketQuoteMap } = require("../lib/fugle-quote-overlay");
 
 const { ROOT, dataPath, cachePath, repoPath } = require("./runtime-paths");
 const CACHE_DIR = cachePath("intraday");
@@ -39,6 +40,8 @@ const REALTIME_RESCUE_COOLDOWN_MS = Math.max(0, Number(process.env.STRATEGY2_REA
 const MIN_ENTRY_SOURCE_COVERAGE = Number(process.env.STRATEGY2_MIN_ENTRY_SOURCE_COVERAGE || 0.5);
 const STRATEGY2_SCAN_START_MINUTES = Number(process.env.STRATEGY2_SCAN_START_MINUTES || 8 * 60);
 const STRATEGY2_ENTRY_START_MINUTES = Number(process.env.STRATEGY2_ENTRY_START_MINUTES || 9 * 60);
+const STRATEGY2_ENTRY_END_MINUTES = Number(process.env.STRATEGY2_ENTRY_END_MINUTES || 12 * 60);
+const STRATEGY2_SCAN_END_MINUTES = Number(process.env.STRATEGY2_SCAN_END_MINUTES || STRATEGY2_ENTRY_END_MINUTES);
 const STRATEGY2_1M_WARMUP_LIMIT = Math.max(1, Number(process.env.STRATEGY2_1M_WARMUP_LIMIT || 120));
 const STRATEGY2_1M_SUPABASE_SYNC = process.env.STRATEGY2_1M_SUPABASE_SYNC === "1";
 const MA35_PROVIDER_FAILURE_LIMIT = Math.max(1, Number(process.env.STRATEGY2_MA35_PROVIDER_FAILURE_LIMIT || 8));
@@ -183,6 +186,49 @@ function kdInfo(rows) {
     kdDUp: d > prevD,
     kdJUp: j > prevJ,
     kdUp: k > prevK && d > prevD && j > prevJ,
+  };
+}
+
+function rsiSeries(values, period = 5) {
+  const closes = values.map(cleanNumber).filter((value) => value > 0);
+  if (closes.length <= period) return [];
+  const out = Array(closes.length).fill(0);
+  let gain = 0;
+  let loss = 0;
+  for (let index = 1; index <= period; index += 1) {
+    const diff = closes[index] - closes[index - 1];
+    if (diff >= 0) gain += diff;
+    else loss -= diff;
+  }
+  let avgGain = gain / period;
+  let avgLoss = loss / period;
+  out[period] = avgLoss === 0 ? 100 : 100 - (100 / (1 + avgGain / avgLoss));
+  for (let index = period + 1; index < closes.length; index += 1) {
+    const diff = closes[index] - closes[index - 1];
+    avgGain = (avgGain * (period - 1) + Math.max(diff, 0)) / period;
+    avgLoss = (avgLoss * (period - 1) + Math.max(-diff, 0)) / period;
+    out[index] = avgLoss === 0 ? 100 : 100 - (100 / (1 + avgGain / avgLoss));
+  }
+  return out;
+}
+
+function rsiInfo(values) {
+  const closes = values.map(cleanNumber).filter((value) => value > 0);
+  if (closes.length < 12) return {};
+  const rsi5Series = rsiSeries(closes, 5);
+  const rsi10Series = rsiSeries(closes, 10);
+  const last = closes.length - 1;
+  const prev = closes.length - 2;
+  const rsi5 = cleanNumber(rsi5Series[last]);
+  const rsi5Prev = cleanNumber(rsi5Series[prev]);
+  const rsi10 = cleanNumber(rsi10Series[last]);
+  const rsi10Prev = cleanNumber(rsi10Series[prev]);
+  return {
+    rsi5,
+    rsi5Prev,
+    rsi10,
+    rsi10Prev,
+    rsiUp: (rsi5 > rsi5Prev && rsi5 > 0) || (rsi10 > rsi10Prev && rsi10 > 0),
   };
 }
 
@@ -526,11 +572,21 @@ function isTrustedStrategy2Ma35Source(source) {
 }
 
 function classifyStrategy2State(stock, signal, options = {}) {
-  if (signal.id !== "open_burst_entry") return null;
+  if (signal.id !== "open_burst_entry" && signal.id !== "rebound") return null;
   const sourceHealthyForEntry = options.entrySourceHealthy !== false;
-  const score = Math.min(100, Math.round(70 + (signal.macdDifUp ? 8 : 0) + (signal.macdHistUp ? 8 : 0) + (signal.kdUp ? 10 : 0)));
+  const actionableRebound = signal.id === "rebound" && isActionableStrategy2Rebound(signal);
+  const score = signal.id === "rebound"
+    ? Math.min(100, Math.round(62 + (signal.macdHistUp ? 8 : 0) + (signal.kdUp ? 8 : 0) + (signal.rsiUp ? 8 : 0)))
+    : Math.min(100, Math.round(70 + (signal.macdDifUp ? 8 : 0) + (signal.macdHistUp ? 8 : 0) + (signal.kdUp ? 10 : 0)));
   if (!sourceHealthyForEntry) {
-    return { stateId: "wait", stateLabel: "待確認", stateReason: `開彈條件已符合，但本輪市場來源可用率 ${Number(options.sourceCoverage || 0).toFixed(2)} 未達 ${MIN_ENTRY_SOURCE_COVERAGE.toFixed(2)}，禁止升級進場區。`, score };
+    const label = signal.id === "rebound" ? "反彈" : "開彈";
+    return { stateId: "wait", stateLabel: "待確認", stateReason: `${label}條件已符合，但本輪市場來源可用率 ${Number(options.sourceCoverage || 0).toFixed(2)} 未達 ${MIN_ENTRY_SOURCE_COVERAGE.toFixed(2)}，暫不升級。`, score };
+  }
+  if (signal.id === "rebound") {
+    if (actionableRebound) {
+      return { stateId: "entry", stateLabel: "進場區", stateReason: "反彈進場：1分K回踩MA35後重新站上，且量能放大、MACD/KD/RSI 任一轉強。", score };
+    }
+    return { stateId: "rebound", stateLabel: "反彈", stateReason: "反彈：1分K回踩MA35後重新站上，MACD/KD/RSI 任一轉強。", score };
   }
   return { stateId: "entry", stateLabel: "進場區", stateReason: "開彈進場：1分K close > MA35，MACD/DIF/K/D/J 全部向上。", score };
 }
@@ -538,7 +594,10 @@ function classifyStrategy2State(stock, signal, options = {}) {
 function detectOpenBurstEntrySignal(stock) {
   const latestClose = cleanNumber(stock.latest1mClose || stock.close);
   const ma35 = cleanNumber(stock.ma35);
+  const volume = cleanNumber(stock.tradeVolume);
   const checks = {
+    volume: volume >= 500,
+    trustedMa35: ma35 > 0 && isTrustedStrategy2Ma35Source(stock.ma35Source),
     aboveMa35: latestClose > ma35 && ma35 > 0,
     macdUp: stock.macdHistUp === true,
     difUp: stock.macdDifUp === true,
@@ -556,7 +615,7 @@ function detectOpenBurstEntrySignal(stock) {
     entryHigh: latestClose,
     stopLoss: latestClose * 0.985,
     chaseLimit: latestClose * 1.01,
-    volumeMilestone: 0,
+    volumeMilestone: 500,
     deltaVolume: cleanNumber(stock.deltaVolume),
     ma35,
     ma35Prev: cleanNumber(stock.ma35Prev),
@@ -591,6 +650,75 @@ function detectOpenBurstEntrySignal(stock) {
   };
 }
 
+function detectReboundEntrySignal(stock) {
+  const latestClose = cleanNumber(stock.latest1mClose || stock.close);
+  const latestOpen = cleanNumber(stock.latest1mOpen || stock.open || latestClose);
+  const latestLow = cleanNumber(stock.latest1mLow || stock.low || latestClose);
+  const previousClose = cleanNumber(stock.latest1mPrevClose);
+  const ma35 = cleanNumber(stock.ma35);
+  const ma35Prev = cleanNumber(stock.ma35Prev);
+  const volume = cleanNumber(stock.tradeVolume);
+  const touchedMa35 = latestLow <= ma35 * 1.003 || (previousClose > 0 && previousClose <= ma35Prev);
+  const reclaimedMa35 = latestClose > ma35 && latestClose >= latestOpen;
+  const momentumUp = stock.macdHistUp === true || stock.kdUp === true || stock.rsiUp === true;
+  const checks = {
+    volume: volume >= 500,
+    touchedMa35,
+    reclaimedMa35,
+    ma35Ready: ma35 > 0 && isTrustedStrategy2Ma35Source(stock.ma35Source),
+    momentumUp,
+  };
+  if (!Object.values(checks).every(Boolean)) return null;
+  return {
+    id: "rebound",
+    label: "反彈",
+    reason: `1分K回踩MA35 ${ma35.toFixed(2)} 後重新站上，MACD/KD/RSI任一轉強`,
+    entryPrice: latestClose,
+    entryLow: latestClose,
+    entryHigh: latestClose,
+    stopLoss: Math.min(latestLow || latestClose, ma35 || latestClose) * 0.985,
+    chaseLimit: latestClose * 1.008,
+    supportPrice: ma35,
+    volumeMilestone: 500,
+    deltaVolume: cleanNumber(stock.deltaVolume),
+    ma35,
+    ma35Prev,
+    aboveMa35: true,
+    ma35TrendUp: ma35Prev > 0 && ma35 >= ma35Prev,
+    ma35Source: stock.ma35Source || "",
+    ma35Symbol: stock.ma35Symbol || "",
+    ma35At: stock.latest1mAt || stock.ma35At || "",
+    ma35Attempts: stock.ma35Attempts || [],
+    macdDif: cleanNumber(stock.macdDif),
+    macdDifPrev: cleanNumber(stock.macdDifPrev),
+    macdSignal: cleanNumber(stock.macdSignal),
+    macdHist: cleanNumber(stock.macdHist),
+    macdHistPrev: cleanNumber(stock.macdHistPrev),
+    macdUp: stock.macdHistUp === true,
+    macdDifUp: stock.macdDifUp === true,
+    macdHistUp: stock.macdHistUp === true,
+    kdK: cleanNumber(stock.kdK),
+    kdKPrev: cleanNumber(stock.kdKPrev),
+    kdD: cleanNumber(stock.kdD),
+    kdDPrev: cleanNumber(stock.kdDPrev),
+    kdJ: cleanNumber(stock.kdJ),
+    kdJPrev: cleanNumber(stock.kdJPrev),
+    kdUp: stock.kdUp === true,
+    kdKUp: stock.kdKUp === true,
+    kdDUp: stock.kdDUp === true,
+    kdJUp: stock.kdJUp === true,
+    rsi5: cleanNumber(stock.rsi5),
+    rsi5Prev: cleanNumber(stock.rsi5Prev),
+    rsi10: cleanNumber(stock.rsi10),
+    rsi10Prev: cleanNumber(stock.rsi10Prev),
+    rsiUp: stock.rsiUp === true,
+    intradayVolumeBurst: cleanNumber(stock.deltaVolume) >= 50 || volume >= 10000,
+    latest1mClose: latestClose,
+    latest1mAt: stock.latest1mAt || stock.ma35At || "",
+    checks,
+  };
+}
+
 function taipeiParts(date = new Date()) {
   const parts = new Intl.DateTimeFormat("en-CA", {
     timeZone: "Asia/Taipei",
@@ -619,6 +747,22 @@ function secondsOfDay(value) {
   return Number(match[1]) * 3600 + Number(match[2]) * 60 + Number(match[3] || 0);
 }
 
+function normalizeQuoteTime(value) {
+  if (value == null || value === "") return "";
+  if (typeof value === "number" && Number.isFinite(value)) {
+    const milliseconds = value > 100000000000 ? value : value * 1000;
+    return timestampKey(taipeiParts(new Date(milliseconds))).slice(11);
+  }
+  const text = String(value).trim();
+  const timeOnly = text.match(/\b(\d{1,2}:\d{2}(?::\d{2})?)\b/);
+  if (timeOnly && !/[zZ]|[+-]\d{2}:?\d{2}/.test(text)) {
+    return timeOnly[1].length === 5 ? `${timeOnly[1]}:00` : timeOnly[1];
+  }
+  const parsed = Date.parse(text);
+  if (Number.isFinite(parsed)) return timestampKey(taipeiParts(new Date(parsed))).slice(11);
+  return "";
+}
+
 function quoteAgeSeconds(scanTimestamp, quoteTime) {
   const scanSeconds = secondsOfDay(scanTimestamp);
   const quoteSeconds = secondsOfDay(quoteTime);
@@ -627,6 +771,7 @@ function quoteAgeSeconds(scanTimestamp, quoteTime) {
 }
 
 function hasFreshQuote(stock, scanTimestamp) {
+  if (secondsSinceIso(stock?.quoteSeenAt) <= MAX_QUOTE_AGE_SECONDS) return true;
   const age = quoteAgeSeconds(scanTimestamp, stock.quoteTime || stock.time);
   return age != null && age <= MAX_QUOTE_AGE_SECONDS;
 }
@@ -652,12 +797,12 @@ function marketMinutes(parts = taipeiParts()) {
 
 function isMarketTime(parts = taipeiParts()) {
   const minutes = marketMinutes(parts);
-  return minutes >= STRATEGY2_SCAN_START_MINUTES && minutes <= 13 * 60 + 45;
+  return minutes >= STRATEGY2_SCAN_START_MINUTES && minutes <= STRATEGY2_SCAN_END_MINUTES;
 }
 
 function isStrategy2EntryTime(parts = taipeiParts()) {
   const minutes = marketMinutes(parts);
-  return minutes >= STRATEGY2_ENTRY_START_MINUTES && minutes <= 13 * 60 + 30;
+  return minutes >= STRATEGY2_ENTRY_START_MINUTES && minutes <= STRATEGY2_ENTRY_END_MINUTES;
 }
 
 function compactDateKey(value, fallback) {
@@ -1134,10 +1279,27 @@ function inferLegacyRecordState(record) {
   };
 }
 
+function isActionableStrategy2Rebound(record) {
+  const ma35 = cleanNumber(record?.ma35);
+  const hasTrustedMa35 = isTrustedStrategy2Ma35Source(record?.ma35Source) && ma35 > 0;
+  const hasMomentum = record?.macdUp === true || record?.macdHistUp === true || record?.kdUp === true || record?.rsiUp === true;
+  return String(record?.signalId || record?.signal?.id || record?.id || "") === "rebound"
+    && record?.aboveMa35 === true
+    && hasTrustedMa35
+    && hasMomentum
+    && record?.intradayVolumeBurst === true;
+}
+
 function isStrictStrategy2Ma35Record(record) {
   const ma35 = cleanNumber(record?.ma35);
   const hasIntradaySma35 = isTrustedStrategy2Ma35Source(record?.ma35Source) && ma35 > 0;
-  return String(record?.signalId || record?.signal?.id || "") === "ma35_buy"
+  const recordSourceCoverage = cleanNumber(record?.sourceCoverage);
+  const createdUnderUnhealthySource = recordSourceCoverage > 0 && recordSourceCoverage < MIN_ENTRY_SOURCE_COVERAGE;
+  const signalId = String(record?.signalId || record?.signal?.id || record?.id || "");
+  const isOpenBurstEntry = signalId === "ma35_buy" || signalId === "open_burst_entry";
+  if (createdUnderUnhealthySource) return false;
+  if (isActionableStrategy2Rebound(record)) return true;
+  return isOpenBurstEntry
     && record?.aboveMa35 === true
     && hasIntradaySma35
     && record?.macdUp === true
@@ -1245,16 +1407,38 @@ async function fetchRealtime(stocks, scanTimestamp = timestampKey()) {
   );
   let fugleRateLimited = false;
   const fallbackStats = {
+    fugleWs: { available: 0, used: 0 },
     fugle: { configured: Boolean(FUGLE_API_KEY), requested: 0, recovered: 0, empty: 0, failed: 0, skippedNoKey: 0, rateLimited: false },
     finmind: { configured: Boolean(FINMIND_API_TOKEN), enabled: ENABLE_FINMIND_REALTIME, rescueEnabled: ENABLE_FINMIND_RESCUE, requested: 0, recovered: 0, failed: 0 },
     yahoo: { requested: 0, recovered: 0, failed: 0 },
     rescue: { threshold: REALTIME_RESCUE_COVERAGE, limit: REALTIME_RESCUE_LIMIT, cooldownMs: REALTIME_RESCUE_COOLDOWN_MS, requested: 0, recovered: 0 },
   };
 
+  const wsCodes = stocks
+    .map((stock) => String(stock.code || ""))
+    .filter((code) => /^\d{4}$/.test(code) && !code.startsWith("00"));
+  if (wsCodes.length) {
+    const fugleWs = overlayFugleWebSocketQuoteMap(wsCodes, {
+      source: "strategy2-intraday",
+      scanTimestamp,
+      maxAgeMs: MAX_QUOTE_AGE_SECONDS * 1000,
+    });
+    fallbackStats.fugleWs.available = fugleWs.available;
+    fallbackStats.fugleWs.used = fugleWs.used;
+    for (const [code, quote] of fugleWs.map) quotes.set(code, quote);
+  }
+
   async function fetchRealtimeBatch(codes) {
     if (!codes.length) return;
+    const requestedCodes = new Set(codes.map((code) => String(code)));
     const payload = await fetchJson(`${BASE_URL}/api/realtime?codes=${encodeURIComponent(codes.join(","))}&t=${Date.now()}`, 12000);
-    (payload.quotes || []).forEach((quote) => quotes.set(quote.code, quote));
+    (payload.quotes || []).forEach((quote) => {
+      const code = String(quote.code || "");
+      if (!requestedCodes.has(code)) return;
+      const current = quotes.get(code);
+      if (current && hasFreshQuote(current, scanTimestamp) && !hasFreshQuote(quote, scanTimestamp)) return;
+      quotes.set(code, quote);
+    });
     if (codes.length > 1 && (payload.quotes || []).length === 0) throw new Error("api/realtime returned no quotes");
   }
 
@@ -1339,6 +1523,7 @@ async function fetchRealtime(stocks, scanTimestamp = timestampKey()) {
     const prevClose = cleanNumber(payload.referencePrice || payload.previousClose || payload.prevClose || payload.previousPrice);
     if (!close || !prevClose) return null;
     const change = cleanNumber(payload.change) || (close - prevClose);
+    const quoteTime = normalizeQuoteTime(payload.lastUpdated || payload.lastTradeTime || payload.time || payload.lastUpdatedAt || payload.updatedAt || payload.timestamp);
     return {
       code: String(payload.symbol || code),
       name: payload.name || String(code),
@@ -1352,7 +1537,8 @@ async function fetchRealtime(stocks, scanTimestamp = timestampKey()) {
       prevClose,
       tradeVolume: cleanNumber(payload.total?.tradeVolume || payload.tradeVolume || payload.volume),
       market: payload.exchange || payload.market || "",
-      time: payload.lastUpdated || payload.lastTradeTime || payload.time || "",
+      quoteTime,
+      time: quoteTime || payload.lastUpdated || payload.lastTradeTime || payload.time || "",
       realtimeFallback: "fugle",
     };
   }
@@ -1509,8 +1695,9 @@ async function fetchRealtime(stocks, scanTimestamp = timestampKey()) {
 
   async function fetchSmallRetries(codes, parentLabel) {
     const stillFailed = [];
-    for (let i = 0; i < codes.length; i += REALTIME_RETRY_BATCH_SIZE) {
-      const retryCodes = codes.slice(i, i + REALTIME_RETRY_BATCH_SIZE);
+    const missingCodes = codes.filter((code) => !quotes.has(String(code)));
+    for (let i = 0; i < missingCodes.length; i += REALTIME_RETRY_BATCH_SIZE) {
+      const retryCodes = missingCodes.slice(i, i + REALTIME_RETRY_BATCH_SIZE);
       const label = `${retryCodes[0]}-${retryCodes.at(-1)}`;
       try {
         await fetchRealtimeBatch(retryCodes);
@@ -1541,7 +1728,7 @@ async function fetchRealtime(stocks, scanTimestamp = timestampKey()) {
   if (REALTIME_FUGLE_ONLY) await fetchFugleFallback([...fallbackCandidateCodes], "fugle-only-initial", { replaceExisting: true });
   const requests = [];
   if (!REALTIME_FUGLE_ONLY) for (let i = 0; i < stocks.length; i += REALTIME_BATCH_SIZE) {
-    const codes = stocks.slice(i, i + REALTIME_BATCH_SIZE).map((stock) => stock.code);
+    const codes = stocks.slice(i, i + REALTIME_BATCH_SIZE).map((stock) => stock.code).filter((code) => !quotes.has(String(code)));
     if (!codes.length) continue;
     requests.push({ codes });
   }
@@ -1696,8 +1883,10 @@ function buildSma35Info(rows, targetMinute, source, extra = {}) {
   const ma35 = avg(window);
   const ma35Prev = previousWindow.length >= 35 ? avg(previousWindow) : 0;
   if (ma35 <= 0) return null;
-  const macd = macdInfo(indicatorRows.map((row) => row.close));
+  const closes = indicatorRows.map((row) => row.close);
+  const macd = macdInfo(closes);
   const kd = kdInfo(indicatorRows);
+  const rsi = rsiInfo(closes);
   return {
     ma35,
     ma35Prev,
@@ -1705,10 +1894,15 @@ function buildSma35Info(rows, targetMinute, source, extra = {}) {
     ma35Source: source,
     ma35At: `${sorted[index].minute}:00`,
     latest1mAt: `${sorted[index].minute}:00`,
+    latest1mOpen: cleanNumber(sorted[index].open),
+    latest1mHigh: cleanNumber(sorted[index].high),
+    latest1mLow: cleanNumber(sorted[index].low),
     latest1mClose: cleanNumber(sorted[index].close),
+    latest1mPrevClose: index > 0 ? cleanNumber(sorted[index - 1].close) : 0,
     latest1mVolume: cleanNumber(sorted[index].volume),
     ...macd,
     ...kd,
+    ...rsi,
     ...extra,
   };
 }
@@ -2174,11 +2368,15 @@ async function main() {
     .filter((stock) => hasUsableQuote(stock, timestamp))
     .filter(isIntradayTradable);
   const coverage = realtimeSourceStocks.length ? realtimeStocks.length / realtimeSourceStocks.length : 0;
-  const entrySourceHealthy = coverage >= MIN_ENTRY_SOURCE_COVERAGE;
+  const fugleWsCoverage = realtimeSourceStocks.length ? cleanNumber(realtimeStats?.fallbackStats?.fugleWs?.used) / realtimeSourceStocks.length : 0;
+  const entrySourceCoverage = Math.max(coverage, fugleWsCoverage);
+  const entrySourceHealthy = entrySourceCoverage >= MIN_ENTRY_SOURCE_COVERAGE;
   const cachedRecovered = realtimeStocks.filter((stock) => stock.recoveredFromQuoteCache).length;
   const realtimeSummaryBase = {
     ...realtimeStats,
-    coverage: Number(coverage.toFixed(4)),
+    coverage: Number(entrySourceCoverage.toFixed(4)),
+    quoteCoverage: Number(coverage.toFixed(4)),
+    fugleWsCoverage: Number(fugleWsCoverage.toFixed(4)),
     usable: realtimeStocks.length,
     cachedRecovered,
     quoteCacheMaxAgeSeconds: QUOTE_CACHE_MAX_AGE_SECONDS,
@@ -2187,7 +2385,7 @@ async function main() {
     initialBatchSize: REALTIME_BATCH_SIZE,
     retryBatchSize: REALTIME_RETRY_BATCH_SIZE,
   };
-  if (realtimeSourceStocks.length && coverage < MIN_REALTIME_COVERAGE) {
+  if (realtimeSourceStocks.length && entrySourceCoverage < MIN_REALTIME_COVERAGE) {
     cache.updatedAt = new Date().toISOString();
     cache.realtime = { ...realtimeSummaryBase, skippedPartialCoverage: true };
     const strategy2Events = mergeStrategy2Events(cache.records || [], key);
@@ -2208,7 +2406,7 @@ async function main() {
     publishStaticDataJson("strategy2-intraday-latest.json", strategy2Report);
     await upsertStrategy2MinuteCandlesToSupabase(cache, key);
   await upsertStrategy2LatestToSupabase(strategy2Report);
-    console.log(`intraday signals ${key}: skipped partial realtime coverage ${realtimeStocks.length}/${realtimeSourceStocks.length} (received ${realtimeStats.received}, failed ${realtimeStats.failed}, missed ${realtimeStats.missedCount || 0})`);
+    console.log(`intraday signals ${key}: skipped partial realtime coverage ${realtimeStocks.length}/${realtimeSourceStocks.length} (entry coverage ${entrySourceCoverage.toFixed(4)}, received ${realtimeStats.received}, failed ${realtimeStats.failed}, missed ${realtimeStats.missedCount || 0})`);
     return;
   }
   updateMinuteCloseCache(cache, realtimeStocks, timestamp, key);
@@ -2224,6 +2422,12 @@ async function main() {
       ma35Symbol: ma35Info.ma35Symbol || "",
       ma35At: ma35Info.ma35At || "",
       ma35Attempts: ma35Info.ma35Attempts || [],
+      latest1mOpen: ma35Info.latest1mOpen || 0,
+      latest1mHigh: ma35Info.latest1mHigh || 0,
+      latest1mLow: ma35Info.latest1mLow || 0,
+      latest1mClose: ma35Info.latest1mClose || 0,
+      latest1mPrevClose: ma35Info.latest1mPrevClose || 0,
+      latest1mVolume: ma35Info.latest1mVolume || 0,
       macdDif: ma35Info.macdDif || 0,
       macdSignal: ma35Info.macdSignal || 0,
       macdHist: ma35Info.macdHist || 0,
@@ -2231,6 +2435,11 @@ async function main() {
       kdK: ma35Info.kdK || 0,
       kdD: ma35Info.kdD || 0,
       kdUp: Boolean(ma35Info.kdUp),
+      rsi5: ma35Info.rsi5 || 0,
+      rsi5Prev: ma35Info.rsi5Prev || 0,
+      rsi10: ma35Info.rsi10 || 0,
+      rsi10Prev: ma35Info.rsi10Prev || 0,
+      rsiUp: Boolean(ma35Info.rsiUp),
     };
   });
   const ranks = buildRanks(liveStocks);
@@ -2241,7 +2450,7 @@ async function main() {
   for (const stock of liveStocks) {
     updateTrackedExtremes(cache, stock, timestamp, key);
     const previous = cache.previous[stock.code] || null;
-    const signals = [detectOpenBurstEntrySignal(stock)].filter(Boolean);
+    const signals = [detectOpenBurstEntrySignal(stock), detectReboundEntrySignal(stock)].filter(Boolean);
     cache.previous[stock.code] = {
       close: stock.close,
       high: stock.high,
@@ -2251,7 +2460,7 @@ async function main() {
       percent: stock.percent,
     };
     signals.forEach((signal) => {
-      const state = classifyStrategy2State(stock, signal, { entrySourceHealthy, sourceCoverage: coverage });
+      const state = classifyStrategy2State(stock, signal, { entrySourceHealthy, sourceCoverage: entrySourceCoverage });
       if (!state) return;
       const duplicate = cache.records.some((record) => (
         record.code === stock.code &&
@@ -2279,7 +2488,7 @@ async function main() {
         observedPrice: stock.close,
         quoteTime: stock.quoteTime || stock.time || "",
         quoteSource: "api/realtime",
-        sourceCoverage: Number(coverage.toFixed(4)),
+        sourceCoverage: Number(entrySourceCoverage.toFixed(4)),
         sourceCoverageHealthy: entrySourceHealthy,
         observedHigh: stock.close,
         observedHighAt: timestamp,
@@ -2310,12 +2519,17 @@ async function main() {
         kdK: signal.kdK,
         kdD: signal.kdD,
         kdUp: signal.kdUp,
+        rsi5: signal.rsi5,
+        rsi5Prev: signal.rsi5Prev,
+        rsi10: signal.rsi10,
+        rsi10Prev: signal.rsi10Prev,
+        rsiUp: signal.rsiUp,
         intradayVolumeBurst: signal.intradayVolumeBurst,
         recoveredFromRealtimeFallback: Boolean(stock.recoveredFromRealtimeFallback),
       });
       added += 1;
     });
-    if (appendTrackedSnapshot(cache, stock, timestamp, key, { entrySourceHealthy, sourceCoverage: coverage })) {
+    if (appendTrackedSnapshot(cache, stock, timestamp, key, { entrySourceHealthy, sourceCoverage: entrySourceCoverage })) {
       added += 1;
     }
   }
@@ -2358,6 +2572,3 @@ main().catch((error) => {
   console.error(error);
   process.exit(1);
 });
-
-
-
