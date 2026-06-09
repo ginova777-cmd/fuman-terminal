@@ -6228,7 +6228,10 @@ function renderIntradayRadar(evaluated) {
   const tradableRows = scanClosed
     ? sessionRows.filter((stock) => stock.strategy2Event && getIntradayEntryTime(stock) !== "--:--")
     : sessionRows;
-  const signalScopeRows = tradableRows.filter((stock) => cleanNumber(stock.percent) >= STRATEGY2_INTRADAY_MIN_DISPLAY_PCT);
+  const signalScopeRows = tradableRows.filter((stock) => (
+    isBackendStrategy2Entry(stock.strategy2Event)
+    || cleanNumber(stock.percent) >= STRATEGY2_INTRADAY_MIN_DISPLAY_PCT
+  ));
   const displayPoolRows = signalScopeRows;
   const stateFilters = new Set(["go", "watch"]);
   const filteredRows = intradaySignalFilter === "all"
