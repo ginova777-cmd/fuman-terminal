@@ -1,5 +1,5 @@
 (function () {
-  const version = "strategy-center-mobile-20260609-09";
+  const version = "strategy-center-mobile-20260609-10";
   window.FUMAN_TERMINAL_BOOT = {
     version,
     startedAt: Date.now(),
