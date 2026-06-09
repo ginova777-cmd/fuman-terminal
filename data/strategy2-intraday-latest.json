@@ -1,10 +1,10 @@
 {
   "source": "strategy2-09-to-1330-patrol",
   "date": "2026-06-09",
-  "updatedAt": "2026-06-09T01:50:12.022Z",
+  "updatedAt": "2026-06-09T01:52:09.713Z",
   "realtime": {
     "requested": 985,
-    "received": 982,
+    "received": 983,
     "usableBeforeRescue": 0,
     "coverageBeforeRescue": 0,
     "usableAfterRescue": 0,
@@ -12,16 +12,16 @@
     "unusableBreakdown": {
       "usable": 0,
       "stale": 0,
-      "noTime": 982,
+      "noTime": 983,
       "noClose": 0,
-      "missing": 3
+      "missing": 2
     },
     "sourceHealth": {
       "fugle": {
-        "received": 982,
+        "received": 983,
         "usable": 0,
         "stale": 0,
-        "noTime": 982,
+        "noTime": 983,
         "noClose": 0
       }
     },
@@ -37,8 +37,8 @@
       "fugle": {
         "configured": true,
         "requested": 1285,
-        "recovered": 1066,
-        "empty": 4,
+        "recovered": 1130,
+        "empty": 3,
         "failed": 0,
         "skippedNoKey": 0,
         "rateLimited": true
@@ -1054,11 +1054,11 @@
       "2481",
       "2464",
       "4807",
-      "3532"
+      "3532",
+      "3018"
     ],
     "missedCodes": [
       "1538",
-      "3018",
       "8101"
     ],
     "staleCodes": [],
@@ -1145,7 +1145,7 @@
       "1453"
     ],
     "noCloseCodes": [],
-    "missedCount": 3,
+    "missedCount": 2,
     "coverage": 0,
     "usable": 0,
     "cachedRecovered": 0,
