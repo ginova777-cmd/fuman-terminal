@@ -6976,14 +6976,6 @@ function renderOpenBuyRadar(universe) {
         </button>
       </div>
       <section class="swing-panel">
-        <div class="swing-tabs">
-          <button class="active" type="button">全部(${rows.length})</button>
-          <div class="swing-actions">
-            <input type="search" placeholder="搜尋代號/名稱" value="${escapeAttr(strategyKeyword)}" autocomplete="off" spellcheck="false" inputmode="search" data-strategy-inline-search>
-            <button type="button" data-export-action>匯出</button>
-            <button type="button" data-export-settings>設定</button>
-          </div>
-        </div>
         <table class="swing-table">
           <thead>
             <tr>

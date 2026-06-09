@@ -1,5 +1,5 @@
 (function () {
-  const version = "mobile-quick-links-20260609-01";
+  const version = "open-buy-strip-20260609-01";
   window.FUMAN_TERMINAL_BOOT = {
     version,
     startedAt: Date.now(),
