@@ -1,7 +1,7 @@
 {
   "ok": true,
   "source": "github-actions-backup",
-  "updatedAt": "2026-06-09T22:00:30.532Z",
+  "updatedAt": "2026-06-09T23:56:03.539Z",
   "usedDate": "20260609",
   "schedule": "06:00/21:00",
   "fullScan": true,
@@ -1964,7 +1964,7 @@
   ],
   "sourceHealth": {
     "issuedSharesCount": 1976,
-    "volumeAverageCount": 2211,
+    "volumeAverageCount": 2264,
     "historyCandidateCount": 1261,
     "historySourceCounts": {
       "fugle-cache": 532,
@@ -1974,7 +1974,7 @@
     "warningCount": 0,
     "warnings": []
   },
-  "count": 75,
+  "count": 78,
   "matches": [
     {
       "code": "8182",
@@ -2353,7 +2353,7 @@
       "volumeRank": 96,
       "volumeLots": 24827,
       "turnoverRate": 9.2,
-      "volumeRatio": 1.52,
+      "volumeRatio": 2.29,
       "inst": {
         "foreign": -1755893,
         "trust": 0,
@@ -2366,10 +2366,10 @@
           "short": "量價周轉",
           "icon": "量",
           "score": 100,
-          "reason": "符合固定條件：漲幅 7.51%、成交量 24,827 張、周轉率 9.20%、量比 1.52。",
+          "reason": "符合固定條件：漲幅 7.51%、成交量 24,827 張、周轉率 9.20%、量比 2.29。",
           "volumeLots": 24827,
           "turnoverRate": 9.2,
-          "volumeRatio": 1.52
+          "volumeRatio": 2.29
         }
       ],
       "strategy4Score": 72,
@@ -2388,10 +2388,10 @@
         "short": "量價周轉",
         "icon": "量",
         "score": 100,
-        "reason": "符合固定條件：漲幅 7.51%、成交量 24,827 張、周轉率 9.20%、量比 1.52。",
+        "reason": "符合固定條件：漲幅 7.51%、成交量 24,827 張、周轉率 9.20%、量比 2.29。",
         "volumeLots": 24827,
         "turnoverRate": 9.2,
-        "volumeRatio": 1.52
+        "volumeRatio": 2.29
       }
     },
     {
@@ -2412,7 +2412,7 @@
       "volumeRank": 93,
       "volumeLots": 13716,
       "turnoverRate": 5.18,
-      "volumeRatio": 1.51,
+      "volumeRatio": 1.76,
       "inst": {
         "foreign": -2173905,
         "trust": 0,
@@ -2425,10 +2425,10 @@
           "short": "量價周轉",
           "icon": "量",
           "score": 100,
-          "reason": "符合固定條件：漲幅 7.48%、成交量 13,716 張、周轉率 5.18%、量比 1.51。",
+          "reason": "符合固定條件：漲幅 7.48%、成交量 13,716 張、周轉率 5.18%、量比 1.76。",
           "volumeLots": 13716,
           "turnoverRate": 5.18,
-          "volumeRatio": 1.51
+          "volumeRatio": 1.76
         }
       ],
       "strategy4Score": 90,
@@ -2447,10 +2447,10 @@
         "short": "量價周轉",
         "icon": "量",
         "score": 100,
-        "reason": "符合固定條件：漲幅 7.48%、成交量 13,716 張、周轉率 5.18%、量比 1.51。",
+        "reason": "符合固定條件：漲幅 7.48%、成交量 13,716 張、周轉率 5.18%、量比 1.76。",
         "volumeLots": 13716,
         "turnoverRate": 5.18,
-        "volumeRatio": 1.51
+        "volumeRatio": 1.76
       }
     },
     {
@@ -3201,7 +3201,7 @@
       "volumeRank": 80,
       "volumeLots": 3042,
       "turnoverRate": 6.08,
-      "volumeRatio": 1.72,
+      "volumeRatio": 1.5,
       "inst": {
         "foreign": -277623,
         "trust": 0,
@@ -3214,10 +3214,10 @@
           "short": "量價周轉",
           "icon": "量",
           "score": 100,
-          "reason": "符合固定條件：漲幅 6.27%、成交量 3,042 張、周轉率 6.08%、量比 1.72。",
+          "reason": "符合固定條件：漲幅 6.27%、成交量 3,042 張、周轉率 6.08%、量比 1.50。",
           "volumeLots": 3042,
           "turnoverRate": 6.08,
-          "volumeRatio": 1.72
+          "volumeRatio": 1.5
         }
       ],
       "strategy4Score": 96,
@@ -3236,10 +3236,10 @@
         "short": "量價周轉",
         "icon": "量",
         "score": 100,
-        "reason": "符合固定條件：漲幅 6.27%、成交量 3,042 張、周轉率 6.08%、量比 1.72。",
+        "reason": "符合固定條件：漲幅 6.27%、成交量 3,042 張、周轉率 6.08%、量比 1.50。",
         "volumeLots": 3042,
         "turnoverRate": 6.08,
-        "volumeRatio": 1.72
+        "volumeRatio": 1.5
       }
     },
     {
@@ -3378,7 +3378,7 @@
       "volumeRank": 86,
       "volumeLots": 6116,
       "turnoverRate": 8.56,
-      "volumeRatio": 1.3,
+      "volumeRatio": 1.24,
       "inst": {
         "foreign": 1469949,
         "trust": -1000,
@@ -3391,10 +3391,10 @@
           "short": "量價周轉",
           "icon": "量",
           "score": 100,
-          "reason": "符合固定條件：漲幅 5.99%、成交量 6,116 張、周轉率 8.56%、量比 1.30。",
+          "reason": "符合固定條件：漲幅 5.99%、成交量 6,116 張、周轉率 8.56%、量比 1.24。",
           "volumeLots": 6116,
           "turnoverRate": 8.56,
-          "volumeRatio": 1.3
+          "volumeRatio": 1.24
         }
       ],
       "strategy4Score": 88,
@@ -3413,10 +3413,10 @@
         "short": "量價周轉",
         "icon": "量",
         "score": 100,
-        "reason": "符合固定條件：漲幅 5.99%、成交量 6,116 張、周轉率 8.56%、量比 1.30。",
+        "reason": "符合固定條件：漲幅 5.99%、成交量 6,116 張、周轉率 8.56%、量比 1.24。",
         "volumeLots": 6116,
         "turnoverRate": 8.56,
-        "volumeRatio": 1.3
+        "volumeRatio": 1.24
       }
     },
     {
@@ -3768,7 +3768,7 @@
       "volumeRank": 94,
       "volumeLots": 16072,
       "turnoverRate": 5.67,
-      "volumeRatio": 1.77,
+      "volumeRatio": 1.55,
       "inst": {
         "foreign": 4837529,
         "trust": -3000,
@@ -3781,10 +3781,10 @@
           "short": "量價周轉",
           "icon": "量",
           "score": 100,
-          "reason": "符合固定條件：漲幅 5.12%、成交量 16,072 張、周轉率 5.67%、量比 1.77。",
+          "reason": "符合固定條件：漲幅 5.12%、成交量 16,072 張、周轉率 5.67%、量比 1.55。",
           "volumeLots": 16072,
           "turnoverRate": 5.67,
-          "volumeRatio": 1.77
+          "volumeRatio": 1.55
         }
       ],
       "strategy4Score": 90,
@@ -3803,10 +3803,10 @@
         "short": "量價周轉",
         "icon": "量",
         "score": 100,
-        "reason": "符合固定條件：漲幅 5.12%、成交量 16,072 張、周轉率 5.67%、量比 1.77。",
+        "reason": "符合固定條件：漲幅 5.12%、成交量 16,072 張、周轉率 5.67%、量比 1.55。",
         "volumeLots": 16072,
         "turnoverRate": 5.67,
-        "volumeRatio": 1.77
+        "volumeRatio": 1.55
       }
     },
     {
@@ -3866,6 +3866,58 @@
         "volumeLots": 13884,
         "turnoverRate": 9.32,
         "volumeRatio": 1
+      }
+    },
+    {
+      "code": "2312",
+      "name": "金寶",
+      "close": 37.2,
+      "open": 0,
+      "high": 0,
+      "low": 0,
+      "prevClose": 0,
+      "limitUp": 0,
+      "change": 1.8,
+      "percent": 5.08,
+      "value": 2829256063,
+      "tradeVolume": 79212567,
+      "market": "TWSE",
+      "valueRank": 95,
+      "volumeRank": 99,
+      "volumeLots": 79213,
+      "turnoverRate": 5.26,
+      "volumeRatio": 1.33,
+      "inst": {
+        "foreign": -9301138,
+        "trust": 25000,
+        "dealer": 0,
+        "total": -8966288
+      },
+      "matches": [
+        {
+          "id": "volume_turnover_breakout",
+          "short": "量價周轉",
+          "icon": "量",
+          "score": 100,
+          "reason": "符合固定條件：漲幅 5.08%、成交量 79,213 張、周轉率 5.26%、量比 1.33。",
+          "volumeLots": 79213,
+          "turnoverRate": 5.26,
+          "volumeRatio": 1.33
+        }
+      ],
+      "strategy4Score": 0,
+      "strategy4Reason": "",
+      "strategy4Signals": [],
+      "score": 100,
+      "activeMatch": {
+        "id": "volume_turnover_breakout",
+        "short": "量價周轉",
+        "icon": "量",
+        "score": 100,
+        "reason": "符合固定條件：漲幅 5.08%、成交量 79,213 張、周轉率 5.26%、量比 1.33。",
+        "volumeLots": 79213,
+        "turnoverRate": 5.26,
+        "volumeRatio": 1.33
       }
     },
     {
@@ -3975,6 +4027,58 @@
         "volumeLots": 14220,
         "turnoverRate": 9.52,
         "volumeRatio": 1
+      }
+    },
+    {
+      "code": "3673",
+      "name": "TPK-KY",
+      "close": 86.9,
+      "open": 0,
+      "high": 0,
+      "low": 0,
+      "prevClose": 0,
+      "limitUp": 0,
+      "change": 4.1,
+      "percent": 4.95,
+      "value": 1977057069,
+      "tradeVolume": 23487173,
+      "market": "TWSE",
+      "valueRank": 93,
+      "volumeRank": 96,
+      "volumeLots": 23487,
+      "turnoverRate": 5.78,
+      "volumeRatio": 1.1,
+      "inst": {
+        "foreign": 1116293,
+        "trust": 0,
+        "dealer": 0,
+        "total": 1323166
+      },
+      "matches": [
+        {
+          "id": "volume_turnover_breakout",
+          "short": "量價周轉",
+          "icon": "量",
+          "score": 100,
+          "reason": "符合固定條件：漲幅 4.95%、成交量 23,487 張、周轉率 5.78%、量比 1.10。",
+          "volumeLots": 23487,
+          "turnoverRate": 5.78,
+          "volumeRatio": 1.1
+        }
+      ],
+      "strategy4Score": 0,
+      "strategy4Reason": "",
+      "strategy4Signals": [],
+      "score": 100,
+      "activeMatch": {
+        "id": "volume_turnover_breakout",
+        "short": "量價周轉",
+        "icon": "量",
+        "score": 100,
+        "reason": "符合固定條件：漲幅 4.95%、成交量 23,487 張、周轉率 5.78%、量比 1.10。",
+        "volumeLots": 23487,
+        "turnoverRate": 5.78,
+        "volumeRatio": 1.1
       }
     },
     {
@@ -4104,7 +4208,7 @@
       "volumeRank": 91,
       "volumeLots": 9634,
       "turnoverRate": 7.89,
-      "volumeRatio": 1.36,
+      "volumeRatio": 1.63,
       "inst": {
         "foreign": -1128170,
         "trust": 0,
@@ -4117,10 +4221,10 @@
           "short": "量價周轉",
           "icon": "量",
           "score": 100,
-          "reason": "符合固定條件：漲幅 4.89%、成交量 9,634 張、周轉率 7.89%、量比 1.36。",
+          "reason": "符合固定條件：漲幅 4.89%、成交量 9,634 張、周轉率 7.89%、量比 1.63。",
           "volumeLots": 9634,
           "turnoverRate": 7.89,
-          "volumeRatio": 1.36
+          "volumeRatio": 1.63
         }
       ],
       "strategy4Score": 88,
@@ -4139,10 +4243,10 @@
         "short": "量價周轉",
         "icon": "量",
         "score": 100,
-        "reason": "符合固定條件：漲幅 4.89%、成交量 9,634 張、周轉率 7.89%、量比 1.36。",
+        "reason": "符合固定條件：漲幅 4.89%、成交量 9,634 張、周轉率 7.89%、量比 1.63。",
         "volumeLots": 9634,
         "turnoverRate": 7.89,
-        "volumeRatio": 1.36
+        "volumeRatio": 1.63
       }
     },
     {
@@ -4202,6 +4306,65 @@
         "volumeLots": 40653,
         "turnoverRate": 62,
         "volumeRatio": 1
+      }
+    },
+    {
+      "code": "1809",
+      "name": "中釉",
+      "close": 56.3,
+      "open": 0,
+      "high": 0,
+      "low": 0,
+      "prevClose": 0,
+      "limitUp": 0,
+      "change": 2.6,
+      "percent": 4.84,
+      "value": 1390767512,
+      "tradeVolume": 24586840,
+      "market": "TWSE",
+      "valueRank": 91,
+      "volumeRank": 96,
+      "volumeLots": 24587,
+      "turnoverRate": 14.72,
+      "volumeRatio": 1.29,
+      "inst": {
+        "foreign": -1601339,
+        "trust": 0,
+        "dealer": 0,
+        "total": -1599161
+      },
+      "matches": [
+        {
+          "id": "volume_turnover_breakout",
+          "short": "量價周轉",
+          "icon": "量",
+          "score": 100,
+          "reason": "符合固定條件：漲幅 4.84%、成交量 24,587 張、周轉率 14.72%、量比 1.29。",
+          "volumeLots": 24587,
+          "turnoverRate": 14.72,
+          "volumeRatio": 1.29
+        }
+      ],
+      "strategy4Score": 81,
+      "strategy4Reason": "趨勢轉強但尚未觸發突破買點；趨勢分 6/8，量比 0.00，位階 高基期。",
+      "strategy4Signals": [
+        {
+          "id": "watch_trend",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 6/8，量比 0.00，位階 高基期。"
+        }
+      ],
+      "score": 100,
+      "activeMatch": {
+        "id": "volume_turnover_breakout",
+        "short": "量價周轉",
+        "icon": "量",
+        "score": 100,
+        "reason": "符合固定條件：漲幅 4.84%、成交量 24,587 張、周轉率 14.72%、量比 1.29。",
+        "volumeLots": 24587,
+        "turnoverRate": 14.72,
+        "volumeRatio": 1.29
       }
     },
     {
@@ -4365,7 +4528,7 @@
       "volumeRank": 98,
       "volumeLots": 40930,
       "turnoverRate": 46.5,
-      "volumeRatio": 1.42,
+      "volumeRatio": 1.57,
       "inst": {
         "foreign": -2596126,
         "trust": 0,
@@ -4378,10 +4541,10 @@
           "short": "量價周轉",
           "icon": "量",
           "score": 100,
-          "reason": "符合固定條件：漲幅 4.40%、成交量 40,930 張、周轉率 46.50%、量比 1.42。",
+          "reason": "符合固定條件：漲幅 4.40%、成交量 40,930 張、周轉率 46.50%、量比 1.57。",
           "volumeLots": 40930,
           "turnoverRate": 46.5,
-          "volumeRatio": 1.42
+          "volumeRatio": 1.57
         }
       ],
       "strategy4Score": 78,
@@ -4400,10 +4563,10 @@
         "short": "量價周轉",
         "icon": "量",
         "score": 100,
-        "reason": "符合固定條件：漲幅 4.40%、成交量 40,930 張、周轉率 46.50%、量比 1.42。",
+        "reason": "符合固定條件：漲幅 4.40%、成交量 40,930 張、周轉率 46.50%、量比 1.57。",
         "volumeLots": 40930,
         "turnoverRate": 46.5,
-        "volumeRatio": 1.42
+        "volumeRatio": 1.57
       }
     },
     {
@@ -5066,7 +5229,7 @@
       "volumeRank": 93,
       "volumeLots": 13605,
       "turnoverRate": 11.03,
-      "volumeRatio": 2.5,
+      "volumeRatio": 2.78,
       "inst": {
         "foreign": -1521991,
         "trust": 0,
@@ -5079,10 +5242,10 @@
           "short": "量價周轉",
           "icon": "量",
           "score": 100,
-          "reason": "符合固定條件：漲幅 3.02%、成交量 13,605 張、周轉率 11.03%、量比 2.50。",
+          "reason": "符合固定條件：漲幅 3.02%、成交量 13,605 張、周轉率 11.03%、量比 2.78。",
           "volumeLots": 13605,
           "turnoverRate": 11.03,
-          "volumeRatio": 2.5
+          "volumeRatio": 2.78
         }
       ],
       "strategy4Score": 78,
@@ -5101,10 +5264,10 @@
         "short": "量價周轉",
         "icon": "量",
         "score": 100,
-        "reason": "符合固定條件：漲幅 3.02%、成交量 13,605 張、周轉率 11.03%、量比 2.50。",
+        "reason": "符合固定條件：漲幅 3.02%、成交量 13,605 張、周轉率 11.03%、量比 2.78。",
         "volumeLots": 13605,
         "turnoverRate": 11.03,
-        "volumeRatio": 2.5
+        "volumeRatio": 2.78
       }
     },
     {
