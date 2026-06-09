@@ -250,6 +250,7 @@ function saveTerminalLastRoute(viewName = getActiveViewName(), activeLink = null
     localStorage.setItem(FUMAN_LAST_ROUTE_KEY, JSON.stringify({
       viewName,
       strategyRoute: viewName === "strategy" ? getCurrentStrategyRouteKey(activeLink) : "",
+      strategy5ActiveId: viewName === "strategy" && strategyPresetMode === "strategy5" ? strategy5ActiveId : "",
       at: Date.now(),
     }));
   } catch (error) {}
@@ -273,7 +274,14 @@ function restoreTerminalLastRoute() {
   terminalLastRouteRestoredAt = Date.now();
   const link = findLinkForSavedRoute(route);
   const viewName = route.viewName || link?.dataset.view || "market";
-  if (link && viewName === "strategy") applyStrategyPresetFromLink(link);
+  if (link && viewName === "strategy") {
+    applyStrategyPresetFromLink(link);
+    if (route.strategyRoute === "strategy5" && STRATEGY5_PRESET_IDS.includes(route.strategy5ActiveId)) {
+      strategyPresetMode = "strategy5";
+      strategy5ActiveId = route.strategy5ActiveId;
+      selectedStrategyIds = new Set([strategy5ActiveId]);
+    }
+  }
   showView(viewName, link);
   return true;
 }
@@ -10484,7 +10492,10 @@ function applyStrategyPresetFromLink(link) {
     : text.includes("策略5")
     ? new Set(["multi_strategy_confluence"])
     : new Set([text.includes("策略4") ? "swing_radar" : "intraday_2m"]);
-  if (text.includes("策略5")) strategy5ActiveId = "multi_strategy_confluence";
+  if (text.includes("策略5")) {
+    strategy5ActiveId = "multi_strategy_confluence";
+    selectedStrategyIds = new Set([strategy5ActiveId]);
+  }
   if (text.includes("策略3")) strategy5ActiveId = "overnight_chip";
   if (text.includes("策略4")) swingSignalFilter = "all";
   if (text.includes("策略2")) intradaySignalFilter = "all";
@@ -11387,8 +11398,11 @@ function switchStrategy5Filter(filterButton) {
   strategy5LastFilterTapId = nextId;
   strategy5TabScrollLeft = filterButton.closest(".strategy5-preset-tabs")?.scrollLeft || 0;
   strategy5ShouldFocusActiveTab = true;
+  strategyPresetMode = "strategy5";
   strategy5ActiveId = nextId;
+  selectedStrategyIds = new Set([nextId]);
   strategy5Page = 1;
+  saveTerminalLastRoute("strategy", viewLinks.find((link) => link.dataset.view === "strategy" && (link.textContent || "").includes("策略5")) || null);
   renderStrategyScanner();
 }
 
