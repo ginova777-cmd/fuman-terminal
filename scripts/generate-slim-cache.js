@@ -393,9 +393,11 @@ function buildStrategy2Top(payload, options = {}) {
   const eventLimit = options.eventLimit || 50;
   const recordLimit = options.recordLimit || 70;
   const source = options.source || "strategy2-mobile-top";
-  const events = [...slim.events]
-    .sort((a, b) => cleanNumber(b.maxScore) - cleanNumber(a.maxScore) || rankTime(b).localeCompare(rankTime(a)))
-    .slice(0, eventLimit);
+  const rankEvents = (items) => [...items]
+    .sort((a, b) => cleanNumber(b.maxScore) - cleanNumber(a.maxScore) || rankTime(b).localeCompare(rankTime(a)));
+  const entryEvents = rankEvents(slim.events.filter((event) => event.stateId === "entry" || event.stateId === "go"));
+  const watchEvents = rankEvents(slim.events.filter((event) => !(event.stateId === "entry" || event.stateId === "go")));
+  const events = [...entryEvents, ...watchEvents].slice(0, Math.max(eventLimit, entryEvents.length));
   const eventCodes = new Set(events.map((event) => event.code));
   const records = [
     ...slim.records.filter((record) => eventCodes.has(record.code)),

@@ -441,9 +441,11 @@ function buildStrategy2TopReport(report, options = {}) {
   const eventLimit = options.eventLimit || 50;
   const recordLimit = options.recordLimit || 70;
   const source = options.source || "strategy2-mobile-top";
-  const events = (slim.events || [])
-    .sort((a, b) => (Number(b.maxScore) || 0) - (Number(a.maxScore) || 0) || String(b.latestSeenAt || b.latestAAt || "").localeCompare(String(a.latestSeenAt || a.latestAAt || "")))
-    .slice(0, eventLimit);
+  const rankEvents = (items) => [...items]
+    .sort((a, b) => (Number(b.maxScore) || 0) - (Number(a.maxScore) || 0) || String(b.latestSeenAt || b.latestAAt || "").localeCompare(String(a.latestSeenAt || a.latestAAt || "")));
+  const entryEvents = rankEvents((slim.events || []).filter((event) => event.stateId === "entry" || event.stateId === "go"));
+  const watchEvents = rankEvents((slim.events || []).filter((event) => !(event.stateId === "entry" || event.stateId === "go")));
+  const events = [...entryEvents, ...watchEvents].slice(0, Math.max(eventLimit, entryEvents.length));
   const eventCodes = new Set(events.map((event) => String(event.code || "")));
   const records = [
     ...(slim.records || []).filter((record) => eventCodes.has(String(record.code || ""))),
