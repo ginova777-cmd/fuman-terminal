@@ -3046,3 +3046,12 @@ body.fuman-light-theme #strategy-view .swing-zone-head strong {
 #strategy-view.strategy5-only .strategy5-preset-tabs button.active .strategy5-tab-title {
   color: #ffd6bd !important;
 }
+
+
+/* strategy5-active-pane-only-20260609 */
+#strategy-view.strategy5-only .strategy5-results[data-strategy5-pane] {
+  display: none !important;
+}
+#strategy-view.strategy5-only .strategy5-results[data-strategy5-pane].is-active {
+  display: block !important;
+}
