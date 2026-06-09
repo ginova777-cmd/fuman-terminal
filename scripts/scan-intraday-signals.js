@@ -1317,6 +1317,17 @@ function isStrategy2RecordWithinBaseGate(record) {
 function normalizeStrategy2Records(records) {
   let dropped = 0;
   const normalized = (records || []).map((record) => {
+    if (!isEntryState(record) && isStrictStrategy2Ma35Record(record)) {
+      const signalId = String(record.signalId || record?.signal?.id || "");
+      return {
+        ...record,
+        stateId: "entry",
+        stateLabel: "進場區",
+        stateReason: signalId === "rebound"
+          ? "反彈進場：1分K回踩MA35後重新站上，且量能放大、MACD/KD/RSI 任一轉強。"
+          : "開彈進場：1分K close > MA35，MACD/DIF/K/D/J 全部向上。",
+      };
+    }
     if (record.stateId && record.stateLabel) {
       if ((record.stateId === "entry" || record.stateId === "go") && !isStrictStrategy2Ma35Record(record)) {
         return {
@@ -2051,10 +2062,31 @@ function enforceStrategy2EntryGuards(report) {
     return record;
   });
   const events = (report.events || []).map((event) => {
-    const entryRecord = sourceBlocksEntry
+    const entryRecords = sourceBlocksEntry
+      ? []
+      : records.filter((record) => String(record.code || "") === String(event.code || "") && isStrictStrategy2Ma35Record(record));
+    const entryRecord = entryRecords[0] || null;
+    const latestEntryRecord = entryRecords.length
+      ? entryRecords.reduce((latest, record) => (String(record.timestamp || record.entryAt || "") > String(latest.timestamp || latest.entryAt || "") ? record : latest), entryRecords[0])
+      : null;
+    const firstTradableEntryRecord = entryRecords.find((record) => timeValue(recordTimeLabel(record)) >= timeValue(MANAGER_MIN_ENTRY_TIME)) || null;
+    const entryPrice = cleanNumber(entryRecord?.entryPrice) || cleanNumber(entryRecord?.observedPrice);
+    const latestEntryPrice = cleanNumber(latestEntryRecord?.entryPrice) || cleanNumber(latestEntryRecord?.observedPrice) || entryPrice;
+    const tradableEntryPrice = cleanNumber(firstTradableEntryRecord?.entryPrice) || cleanNumber(firstTradableEntryRecord?.observedPrice) || 0;
+    const entryTime = entryRecord ? recordTimeLabel(entryRecord) : "";
+    const latestEntryTime = latestEntryRecord ? recordTimeLabel(latestEntryRecord) : "";
+    const tradableEntryTime = firstTradableEntryRecord ? recordTimeLabel(firstTradableEntryRecord) : "";
+    const highAfterA = entryRecords.reduce((max, record) => Math.max(max, cleanNumber(record.observedHigh) || cleanNumber(record.observedPrice) || cleanNumber(record.entryPrice)), 0);
+    const highAfterARecord = entryRecords.reduce((best, record) => {
+      const bestHigh = cleanNumber(best?.observedHigh) || cleanNumber(best?.observedPrice) || cleanNumber(best?.entryPrice);
+      const high = cleanNumber(record.observedHigh) || cleanNumber(record.observedPrice) || cleanNumber(record.entryPrice);
+      return high > bestHigh ? record : best;
+    }, entryRecord);
+    const entryRecordForFields = latestEntryRecord || entryRecord;
+    const legacyEntryRecord = sourceBlocksEntry
       ? null
       : records.find((record) => String(record.code || "") === String(event.code || "") && isStrictStrategy2Ma35Record(record));
-    if (!entryRecord) {
+    if (!legacyEntryRecord) {
       if (event.firstAAt || event.latestAAt) downgradedEvents += 1;
       return {
         ...event,
@@ -2076,22 +2108,26 @@ function enforceStrategy2EntryGuards(report) {
     }
     return {
       ...event,
-      firstAAt: event.firstAAt || recordTimeLabel(entryRecord),
-      firstAPrice: event.firstAPrice || cleanNumber(entryRecord.entryPrice) || cleanNumber(entryRecord.observedPrice),
-      latestAAt: event.latestAAt || recordTimeLabel(entryRecord),
-      latestAPrice: event.latestAPrice || cleanNumber(entryRecord.entryPrice) || cleanNumber(entryRecord.observedPrice),
+      firstAAt: entryTime,
+      firstAPrice: entryPrice,
+      firstTradableAAt: tradableEntryTime,
+      firstTradableAPrice: tradableEntryPrice,
+      latestAAt: latestEntryTime,
+      latestAPrice: latestEntryPrice,
+      highAfterA: highAfterA || cleanNumber(event.highAfterA),
+      highAfterAAt: timeLabel(highAfterARecord?.observedHighAt || highAfterARecord?.timestamp) || event.highAfterAAt,
       latestState: "entry",
       stateId: "entry",
       stateLabel: "進場區",
-      stateReason: entryRecord.stateReason || event.stateReason,
-      ma35: cleanNumber(entryRecord.ma35),
-      ma35Prev: cleanNumber(entryRecord.ma35Prev),
-      aboveMa35: entryRecord.aboveMa35 === true,
-      ma35TrendUp: entryRecord.ma35TrendUp === true,
-      ma35Source: entryRecord.ma35Source || "",
-      ma35At: entryRecord.ma35At || "",
-      ma35Symbol: entryRecord.ma35Symbol || "",
-      latestRecord: entryRecord,
+      stateReason: entryRecordForFields.stateReason || event.stateReason,
+      ma35: cleanNumber(entryRecordForFields.ma35),
+      ma35Prev: cleanNumber(entryRecordForFields.ma35Prev),
+      aboveMa35: entryRecordForFields.aboveMa35 === true,
+      ma35TrendUp: entryRecordForFields.ma35TrendUp === true,
+      ma35Source: entryRecordForFields.ma35Source || "",
+      ma35At: entryRecordForFields.ma35At || "",
+      ma35Symbol: entryRecordForFields.ma35Symbol || "",
+      latestRecord: entryRecordForFields,
     };
   });
   const guarded = {
