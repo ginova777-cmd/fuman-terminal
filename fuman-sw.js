@@ -1,23 +1,23 @@
-const CACHE_VERSION = "fuman-terminal-sw-strategy-center-mobile-20260609-21";
+const CACHE_VERSION = "fuman-terminal-sw-split-cb-view-20260609-23";
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 const DATA_CACHE = `${CACHE_VERSION}-data`;
 
 const STATIC_ASSETS = [
-  "/styles.css?v=strategy-center-mobile-20260609-21",
-  "/terminal-core.js?v=strategy-center-mobile-20260609-21",
-  "/terminal-modules.js?v=strategy-center-mobile-20260609-21",
-  "/terminal-sector-map.js?v=strategy-center-mobile-20260609-21",
-  "/terminal-strategy-config.js?v=strategy-center-mobile-20260609-21",
-  "/terminal-market-config.js?v=strategy-center-mobile-20260609-21",
-  "/terminal-ui-config.js?v=strategy-center-mobile-20260609-21",
-  "/terminal-runtime-config.js?v=strategy-center-mobile-20260609-21",
-  "/terminal-tuning-config.js?v=strategy-center-mobile-20260609-21",
-  "/terminal-worker.js?v=strategy-center-mobile-20260609-21",
-  "/terminal.js?v=strategy-center-mobile-20260609-21",
-  "/terminal-realtime-radar.css?v=strategy-center-mobile-20260609-21",
-  "/terminal-intraday-radar.css?v=strategy-center-mobile-20260609-21",
-  "/terminal-utility.css?v=strategy-center-mobile-20260609-21",
-  "/refresh.html?v=strategy-center-mobile-20260609-21",
+  "/styles.css?v=split-cb-view-20260609-23",
+  "/terminal-core.js?v=split-cb-view-20260609-23",
+  "/terminal-modules.js?v=split-cb-view-20260609-23",
+  "/terminal-sector-map.js?v=split-cb-view-20260609-23",
+  "/terminal-strategy-config.js?v=split-cb-view-20260609-23",
+  "/terminal-market-config.js?v=split-cb-view-20260609-23",
+  "/terminal-ui-config.js?v=split-cb-view-20260609-23",
+  "/terminal-runtime-config.js?v=split-cb-view-20260609-23",
+  "/terminal-tuning-config.js?v=split-cb-view-20260609-23",
+  "/terminal-worker.js?v=split-cb-view-20260609-23",
+  "/terminal.js?v=split-cb-view-20260609-23",
+  "/terminal-realtime-radar.css?v=split-cb-view-20260609-23",
+  "/terminal-intraday-radar.css?v=split-cb-view-20260609-23",
+  "/terminal-utility.css?v=split-cb-view-20260609-23",
+  "/refresh.html?v=split-cb-view-20260609-23",
   "/assets/logo.webp",
   "/favicon.ico",
 ];
@@ -180,6 +180,7 @@ self.addEventListener("fetch", (event) => {
     event.respondWith(staleWhileRevalidate(request));
   }
 });
+
 
 
 
