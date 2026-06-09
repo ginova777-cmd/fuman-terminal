@@ -1,27 +1,27 @@
 {
   "source": "strategy2-09-to-1330-patrol",
   "date": "2026-06-09",
-  "updatedAt": "2026-06-09T02:15:25.169Z",
+  "updatedAt": "2026-06-09T02:16:32.571Z",
   "realtime": {
     "requested": 985,
     "received": 983,
-    "usableBeforeRescue": 0,
-    "coverageBeforeRescue": 0,
-    "usableAfterRescue": 0,
-    "coverageAfterRescue": 0,
+    "usableBeforeRescue": 2,
+    "coverageBeforeRescue": 0.002,
+    "usableAfterRescue": 2,
+    "coverageAfterRescue": 0.002,
     "unusableBreakdown": {
-      "usable": 0,
-      "stale": 0,
-      "noTime": 983,
+      "usable": 2,
+      "stale": 981,
+      "noTime": 0,
       "noClose": 0,
       "missing": 2
     },
     "sourceHealth": {
       "fugle": {
         "received": 983,
-        "usable": 0,
-        "stale": 0,
-        "noTime": 983,
+        "usable": 2,
+        "stale": 981,
+        "noTime": 0,
         "noClose": 0
       }
     },
@@ -32,16 +32,16 @@
     "fallbackCandidateLimit": 1200,
     "fallbackCandidateCount": 985,
     "yahooFallbackConcurrency": 6,
-    "fugleRateLimited": true,
+    "fugleRateLimited": false,
     "fallbackStats": {
       "fugle": {
         "configured": true,
         "requested": 1285,
-        "recovered": 1033,
+        "recovered": 1283,
         "empty": 2,
         "failed": 0,
         "skippedNoKey": 0,
-        "rateLimited": true
+        "rateLimited": false
       },
       "finmind": {
         "configured": true,
@@ -62,12 +62,12 @@
         "cooldownMs": 30000,
         "requested": 300,
         "recovered": 0,
-        "coverageBefore": 0,
-        "usableBefore": 0,
+        "coverageBefore": 0.002,
+        "usableBefore": 2,
         "skippedCooldown": false,
         "cooldownRemainingMs": 0,
-        "coverageAfter": 0,
-        "usableAfter": 0
+        "coverageAfter": 0.002,
+        "usableAfter": 2
       }
     },
     "finmindRealtimeEnabled": false,
@@ -1061,8 +1061,7 @@
       "1538",
       "8101"
     ],
-    "staleCodes": [],
-    "noTimeCodes": [
+    "staleCodes": [
       "1101",
       "1102",
       "1103",
@@ -1085,7 +1084,6 @@
       "1229",
       "1231",
       "1232",
-      "1233",
       "1234",
       "1235",
       "1236",
@@ -1142,12 +1140,14 @@
       "1449",
       "1451",
       "1452",
-      "1453"
+      "1453",
+      "1454"
     ],
+    "noTimeCodes": [],
     "noCloseCodes": [],
     "missedCount": 2,
-    "coverage": 0,
-    "usable": 0,
+    "coverage": 0.002,
+    "usable": 2,
     "cachedRecovered": 0,
     "quoteCacheMaxAgeSeconds": 900,
     "entrySourceCoverageThreshold": 0.5,
