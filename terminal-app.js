@@ -3320,98 +3320,14 @@ function recordFumanPerformance(url, startedAt, ok, error = null) {
   const list = Array.isArray(boot.performanceLog) ? boot.performanceLog : [];
   list.push(item);
   boot.performanceLog = list.slice(-40);
-  appendFumanPerformanceReport(item);
-  queueFumanPerformanceBeacon(item);
-  document.querySelector("#fuman-health-performance")?.remove();
-}
-
-function appendFumanPerformanceReport(item) {
-  try {
-    const rows = JSON.parse(localStorage.getItem(FUMAN_PERFORMANCE_REPORT_KEY) || "[]");
-    rows.push(item);
-    localStorage.setItem(FUMAN_PERFORMANCE_REPORT_KEY, JSON.stringify(rows.slice(-240)));
-    window.FUMAN_TERMINAL_BOOT = window.FUMAN_TERMINAL_BOOT || {};
-    window.FUMAN_TERMINAL_BOOT.performanceReport = summarizeFumanPerformanceReport(rows.slice(-240));
-  } catch (error) {}
-}
-
-function queueFumanPerformanceBeacon(item) {
-  if (!FUMAN_PERFORMANCE_BEACON_ENDPOINT) return;
-  try {
-    const rows = JSON.parse(localStorage.getItem(FUMAN_PERFORMANCE_QUEUE_KEY) || "[]");
-    rows.push(item);
-    localStorage.setItem(FUMAN_PERFORMANCE_QUEUE_KEY, JSON.stringify(rows.slice(-80)));
-  } catch (error) {
-    return;
-  }
-  scheduleFumanPerformanceFlush();
-}
-
-function readFumanPerformanceQueue() {
-  try {
-    return JSON.parse(localStorage.getItem(FUMAN_PERFORMANCE_QUEUE_KEY) || "[]");
-  } catch (error) {
-    return [];
-  }
-}
-
-function writeFumanPerformanceQueue(rows) {
-  try {
-    localStorage.setItem(FUMAN_PERFORMANCE_QUEUE_KEY, JSON.stringify(normalizeArray(rows).slice(-80)));
-  } catch (error) {}
-}
-
-function scheduleFumanPerformanceFlush(delay = 3500) {
-  if (fumanPerformanceFlushTimer) return;
-  fumanPerformanceFlushTimer = setTimeout(() => {
-    fumanPerformanceFlushTimer = 0;
-    flushFumanPerformanceQueue(false);
-  }, delay);
-}
-
-function flushFumanPerformanceQueue(sync = false) {
-  const rows = readFumanPerformanceQueue();
-  if (!rows.length || !FUMAN_PERFORMANCE_BEACON_ENDPOINT) return;
-  const batch = rows.slice(0, 30);
-  const remaining = rows.slice(batch.length);
-  const body = JSON.stringify({ rows: batch });
-  if (sync && navigator.sendBeacon) {
-    const ok = navigator.sendBeacon(FUMAN_PERFORMANCE_BEACON_ENDPOINT, new Blob([body], { type: "application/json" }));
-    if (ok) writeFumanPerformanceQueue(remaining);
-    return;
-  }
-  fetch(FUMAN_PERFORMANCE_BEACON_ENDPOINT, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body,
-    keepalive: true,
-  }).then((response) => {
-    if (response.ok) writeFumanPerformanceQueue(remaining);
-  }).catch(() => undefined);
 }
 
 function summarizeFumanPerformanceReport(rows = null) {
-  let list = rows;
-  if (!Array.isArray(list)) {
-    try { list = JSON.parse(localStorage.getItem(FUMAN_PERFORMANCE_REPORT_KEY) || "[]"); }
-    catch (error) { list = []; }
-  }
-  const groups = {};
-  for (const row of normalizeArray(list)) {
-    const key = String(row.url || row.view || "unknown").replace(/\?.*$/, "").slice(0, 80);
-    if (!groups[key]) groups[key] = { key, count: 0, errors: 0, totalMs: 0, maxMs: 0, lastMs: 0, lastAt: 0 };
-    groups[key].count += 1;
-    groups[key].errors += row.ok === false ? 1 : 0;
-    groups[key].totalMs += cleanNumber(row.ms);
-    groups[key].maxMs = Math.max(groups[key].maxMs, cleanNumber(row.ms));
-    groups[key].lastMs = cleanNumber(row.ms);
-    groups[key].lastAt = cleanNumber(row.at);
-  }
-  return Object.values(groups)
-    .map((group) => ({ ...group, avgMs: group.count ? Math.round(group.totalMs / group.count) : 0 }))
-    .sort((a, b) => b.avgMs - a.avgMs || b.maxMs - a.maxMs)
-    .slice(0, 20);
+  const source = Array.isArray(rows) ? rows : (window.FUMAN_TERMINAL_BOOT?.performanceLog || []);
+  return normalizeArray(source).slice(-40);
 }
+
+function flushFumanPerformanceQueue() {}
 
 function markViewPerformance(viewName, startedAt, label = "view") {
   recordFumanPerformance(`${label}:${viewName}`, startedAt, true);
@@ -3419,10 +3335,6 @@ function markViewPerformance(viewName, startedAt, label = "view") {
 
 window.FUMAN_GET_PERFORMANCE_REPORT = () => summarizeFumanPerformanceReport();
 window.FUMAN_FLUSH_PERFORMANCE_REPORT = () => flushFumanPerformanceQueue(false);
-window.addEventListener("pagehide", () => flushFumanPerformanceQueue(true));
-document.addEventListener("visibilitychange", () => {
-  if (document.visibilityState === "hidden") flushFumanPerformanceQueue(true);
-});
 window.FUMAN_MOBILE_DIAGNOSTIC_CONTEXT = {
   get viewLinks() { return viewLinks; },
   isMobileViewport,
