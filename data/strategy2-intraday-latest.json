@@ -1,7 +1,7 @@
 {
   "source": "strategy2-09-to-1330-patrol",
   "date": "2026-06-09",
-  "updatedAt": "2026-06-09T02:14:21.457Z",
+  "updatedAt": "2026-06-09T02:15:25.169Z",
   "realtime": {
     "requested": 985,
     "received": 983,
@@ -37,7 +37,7 @@
       "fugle": {
         "configured": true,
         "requested": 1285,
-        "recovered": 1072,
+        "recovered": 1033,
         "empty": 2,
         "failed": 0,
         "skippedNoKey": 0,
