@@ -1,10 +1,10 @@
 {
   "source": "strategy2-09-to-1330-patrol",
   "date": "2026-06-09",
-  "updatedAt": "2026-06-09T01:14:15.457Z",
+  "updatedAt": "2026-06-09T01:16:16.156Z",
   "realtime": {
     "requested": 985,
-    "received": 975,
+    "received": 978,
     "usableBeforeRescue": 0,
     "coverageBeforeRescue": 0,
     "usableAfterRescue": 0,
@@ -12,16 +12,16 @@
     "unusableBreakdown": {
       "usable": 0,
       "stale": 0,
-      "noTime": 975,
+      "noTime": 978,
       "noClose": 0,
-      "missing": 10
+      "missing": 7
     },
     "sourceHealth": {
       "fugle": {
-        "received": 975,
+        "received": 978,
         "usable": 0,
         "stale": 0,
-        "noTime": 975,
+        "noTime": 978,
         "noClose": 0
       }
     },
@@ -37,8 +37,8 @@
       "fugle": {
         "configured": true,
         "requested": 1285,
-        "recovered": 1270,
-        "empty": 15,
+        "recovered": 1274,
+        "empty": 11,
         "failed": 0,
         "skippedNoKey": 0,
         "rateLimited": false
@@ -326,6 +326,7 @@
       "1506",
       "1323",
       "2748",
+      "8487",
       "5706",
       "1795",
       "2247",
@@ -770,6 +771,7 @@
       "4583",
       "2385",
       "3209",
+      "2239",
       "2344",
       "6206",
       "2527",
@@ -1047,18 +1049,16 @@
       "2481",
       "2464",
       "4807",
-      "3532"
+      "3532",
+      "1410"
     ],
     "missedCodes": [
       "1213",
-      "1410",
       "1538",
-      "2239",
       "3018",
       "3168",
       "3593",
       "8101",
-      "8487",
       "9912"
     ],
     "staleCodes": [],
@@ -1116,6 +1116,7 @@
       "1342",
       "1402",
       "1409",
+      "1410",
       "1413",
       "1414",
       "1416",
@@ -1141,11 +1142,10 @@
       "1451",
       "1452",
       "1453",
-      "1454",
-      "1455"
+      "1454"
     ],
     "noCloseCodes": [],
-    "missedCount": 10,
+    "missedCount": 7,
     "coverage": 0,
     "usable": 0,
     "cachedRecovered": 0,
