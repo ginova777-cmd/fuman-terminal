@@ -3055,3 +3055,25 @@ body.fuman-light-theme #strategy-view .swing-zone-head strong {
 #strategy-view.strategy5-only .strategy5-results[data-strategy5-pane].is-active {
   display: block !important;
 }
+
+
+/* strategy5-fastest-wheel-20260609 */
+@media (max-width: 760px) {
+  #strategy-view.strategy5-only .strategy5-preset-tabs {
+    scroll-behavior: auto !important;
+    scroll-snap-type: none !important;
+    contain: layout style paint !important;
+  }
+  #strategy-view.strategy5-only .strategy5-preset-tabs button {
+    scroll-snap-align: none !important;
+    transition: none !important;
+    will-change: transform, border-color, background-color !important;
+  }
+  #strategy-view.strategy5-only .strategy5-results[data-strategy5-pane] {
+    content-visibility: hidden !important;
+    contain: layout style paint !important;
+  }
+  #strategy-view.strategy5-only .strategy5-results[data-strategy5-pane].is-active {
+    content-visibility: visible !important;
+  }
+}
