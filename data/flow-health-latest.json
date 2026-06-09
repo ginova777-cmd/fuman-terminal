@@ -1,5 +1,4 @@
 {
-  "updatedAt": "2026-06-09T12:50:43.4972855Z",
   "warrant": {
     "scope": "warrant",
     "status": "ok",
@@ -13,14 +12,14 @@
   },
   "institution": {
     "scope": "institution",
-    "status": "watchdog_failed",
-    "message": "Watchdog rerun failed",
-    "updatedAt": "2026-06-08T22:22:03.3253102Z",
+    "status": "ok",
+    "message": "Watchdog rerun completed",
+    "updatedAt": "2026-06-09T13:40:47.0245900Z",
     "detail": {
-      "exitCode": 2,
-      "expectedTime": "06:00",
-      "reason": "institution not updated after 06:00; updatedAt=06/08/2026 13:20:55",
-      "log": "C:\\fuman-runtime\\logs\\flow-watchdog-institution-20260609-062002.log"
+      "log": "C:\\fuman-runtime\\logs\\flow-watchdog-institution-20260609-212001.log",
+      "expectedTime": "21:00",
+      "reason": "institution not updated after 21:00; updatedAt=06/09/2026 13:01:32"
     }
-  }
+  },
+  "updatedAt": "2026-06-09T13:40:47.0255593Z"
 }
