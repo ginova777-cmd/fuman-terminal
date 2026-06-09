@@ -6494,3 +6494,22 @@ html body.fuman-light-theme .brand span {
     box-sizing: border-box !important;
   }
 }
+
+
+/* mobile-terminal-cached-pane-speed-20260609 */
+@media (max-width: 760px) {
+  .view-panel {
+    contain: layout style paint !important;
+  }
+  .view-panel[hidden] {
+    content-visibility: hidden !important;
+  }
+  .view-panel.active {
+    content-visibility: visible !important;
+  }
+  .bottom-nav .nav-item,
+  .strategy-nav,
+  .chip-menu-link {
+    transition: none !important;
+  }
+}
