@@ -62,6 +62,34 @@ function isProcessAlive(pid) {
   }
 }
 
+function processCommandLine(pid) {
+  if (!pid) return "";
+  if (Number(pid) === process.pid) return process.argv.join(" ");
+  try {
+    const result = spawnSync("powershell.exe", [
+      "-NoProfile",
+      "-Command",
+      `(Get-CimInstance Win32_Process -Filter "ProcessId = ${Number(pid)}").CommandLine`,
+    ], {
+      encoding: "utf8",
+      windowsHide: true,
+      timeout: 5000,
+    });
+    return String(result.stdout || "").trim();
+  } catch {
+    return "";
+  }
+}
+
+function isStrategy2LockOwnerAlive(pid, lock = {}) {
+  if (!isProcessAlive(pid)) return false;
+  const commandLine = (processCommandLine(pid) || lock.commandLine || lock.argv || "").toLowerCase();
+  if (!commandLine) return false;
+  return commandLine.includes("patrol-intraday-signals.js")
+    || commandLine.includes("scan-intraday-signals.js")
+    || commandLine.includes("run-strategy2-intraday.ps1");
+}
+
 function readLock(lockFile) {
   try {
     return JSON.parse(fs.readFileSync(lockFile, "utf8"));
@@ -75,7 +103,7 @@ function acquireLock(lockFile, label) {
   const now = Date.now();
   if (fs.existsSync(lockFile)) {
     const lock = readLock(lockFile);
-    if (isProcessAlive(Number(lock.pid))) {
+    if (isStrategy2LockOwnerAlive(Number(lock.pid), lock)) {
       console.log(`${label} already running pid=${lock.pid}; skip duplicate`);
       return null;
     }
@@ -87,7 +115,12 @@ function acquireLock(lockFile, label) {
     }
   }
   const handle = fs.openSync(lockFile, "wx");
-  fs.writeFileSync(handle, JSON.stringify({ pid: process.pid, createdAt: now, label }, null, 2));
+  fs.writeFileSync(handle, JSON.stringify({
+    pid: process.pid,
+    createdAt: now,
+    label,
+    commandLine: [process.execPath, ...process.argv.slice(1)].join(" "),
+  }, null, 2));
   fs.closeSync(handle);
   let released = false;
   return () => {
