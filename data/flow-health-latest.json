@@ -1,15 +1,14 @@
 {
-  "updatedAt": "2026-06-08T22:22:03.3254613Z",
+  "updatedAt": "2026-06-09T12:50:02.0298586Z",
   "warrant": {
     "scope": "warrant",
-    "status": "watchdog_failed",
-    "message": "Watchdog rerun failed",
-    "updatedAt": "2026-06-08T21:52:03.3353564Z",
+    "status": "watchdog_rerun",
+    "message": "Watchdog rerun started",
+    "updatedAt": "2026-06-09T12:50:02.0281458Z",
     "detail": {
-      "log": "C:\\fuman-runtime\\logs\\flow-watchdog-warrant-20260609-055002.log",
-      "reason": "warrant not updated after 05:30; updatedAt=06/08/2026 12:50:23",
-      "expectedTime": "05:30",
-      "exitCode": 2
+      "reason": "warrant not updated after 20:30; updatedAt=06/09/2026 12:30:51",
+      "log": "C:\\fuman-runtime\\logs\\flow-watchdog-warrant-20260609-205001.log",
+      "expectedTime": "20:30"
     }
   },
   "institution": {
