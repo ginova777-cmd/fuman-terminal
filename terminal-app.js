@@ -4088,6 +4088,24 @@ function renderMobileHomeMode(payload = marketSummaryPayload) {
   `;
 }
 
+function openMobileHomeTarget(button) {
+  const target = button?.dataset?.mobileHomeTarget || "";
+  if (!target) return false;
+  const activeLink = viewLinks.find((link) => link.dataset.view === target);
+  const preset = button.dataset.mobileHomePreset || "";
+  const mode = button.dataset.mobileHomeMode || "";
+  const unlocked = !isProtectedView(target) || isTerminalUnlocked();
+  if (target === "strategy" && preset && unlocked) {
+    applyStrategyPresetFromLink({ textContent: preset });
+  }
+  rememberCommonTab(target, preset || button.textContent || activeLink?.textContent || "");
+  showView(target, activeLink);
+  if (target === "market" && mode) {
+    applyMarketMode(mode);
+  }
+  return true;
+}
+
 function applyMarketSummaryPayload(payload) {
   if (!payload?.ok) return false;
   marketSummaryPayload = payload;
@@ -10992,6 +11010,20 @@ document.addEventListener("keydown", (event) => {
   adviceCard.setAttribute("aria-expanded", isOpen ? "true" : "false");
   adviceCard.querySelector(".market-ai-advice-detail")?.setAttribute("aria-hidden", isOpen ? "false" : "true");
 });
+document.addEventListener("pointerdown", (event) => {
+  const mobileHomeTarget = event.target.closest?.("[data-mobile-home-target]");
+  if (!mobileHomeTarget) return;
+  event.preventDefault();
+  event.stopImmediatePropagation();
+  openMobileHomeTarget(mobileHomeTarget);
+}, true);
+document.addEventListener("click", (event) => {
+  const mobileHomeTarget = event.target.closest?.("[data-mobile-home-target]");
+  if (!mobileHomeTarget) return;
+  event.preventDefault();
+  event.stopImmediatePropagation();
+  openMobileHomeTarget(mobileHomeTarget);
+}, true);
 viewLinks.forEach((link)=>{
   link.addEventListener("click",(e)=>{
     e.preventDefault();

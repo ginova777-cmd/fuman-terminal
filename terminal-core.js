@@ -1,5 +1,5 @@
 (function () {
-  const version = "strategy2-display-consistency-20260609-01";
+  const version = "mobile-quick-links-20260609-01";
   window.FUMAN_TERMINAL_BOOT = {
     version,
     startedAt: Date.now(),
