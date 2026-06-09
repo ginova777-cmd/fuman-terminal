@@ -1,7 +1,7 @@
 {
   "source": "strategy2-09-to-1330-patrol",
   "date": "2026-06-09",
-  "updatedAt": "2026-06-09T03:51:55.949Z",
+  "updatedAt": "2026-06-09T03:53:16.271Z",
   "realtime": {
     "requested": 985,
     "received": 984,
@@ -35,8 +35,8 @@
     "fugleRateLimited": false,
     "fallbackStats": {
       "fugleWs": {
-        "available": 812,
-        "used": 812
+        "available": 780,
+        "used": 780
       },
       "fugle": {
         "configured": true,
@@ -1150,9 +1150,9 @@
     "noTimeCodes": [],
     "noCloseCodes": [],
     "missedCount": 1,
-    "coverage": 0.8244,
+    "coverage": 0.7919,
     "quoteCoverage": 0.002,
-    "fugleWsCoverage": 0.8244,
+    "fugleWsCoverage": 0.7919,
     "usable": 2,
     "cachedRecovered": 0,
     "quoteCacheMaxAgeSeconds": 900,
