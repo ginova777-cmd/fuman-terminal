@@ -1,7 +1,7 @@
 {
   "source": "strategy2-09-to-1330-patrol",
   "date": "2026-06-09",
-  "updatedAt": "2026-06-09T01:23:50.924Z",
+  "updatedAt": "2026-06-09T01:26:08.895Z",
   "realtime": {
     "requested": 985,
     "received": 980,
@@ -32,16 +32,16 @@
     "fallbackCandidateLimit": 1200,
     "fallbackCandidateCount": 985,
     "yahooFallbackConcurrency": 6,
-    "fugleRateLimited": true,
+    "fugleRateLimited": false,
     "fallbackStats": {
       "fugle": {
         "configured": true,
         "requested": 1285,
-        "recovered": 1097,
+        "recovered": 1278,
         "empty": 7,
         "failed": 0,
         "skippedNoKey": 0,
-        "rateLimited": true
+        "rateLimited": false
       },
       "finmind": {
         "configured": true,
