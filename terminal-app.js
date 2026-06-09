@@ -3097,6 +3097,8 @@ let intradaySortDir = "desc";
 let intradaySignalFilter = "all";
 let strategyPresetMode = "";
 let strategy5ActiveId = "multi_strategy_confluence";
+let strategy5TabScrollLeft = 0;
+let strategy5ShouldFocusActiveTab = false;
 const INTRADAY_HOT_SCAN_LIMIT = FUMAN_TUNING_CONFIG.intradayHotScanLimit ?? 900;
 const REALTIME_RADAR_POOL_LIMIT = FUMAN_TUNING_CONFIG.realtimeRadarPoolLimit ?? 650;
 const INTRADAY_BACKGROUND_BATCH = FUMAN_TUNING_CONFIG.intradayBackgroundBatch ?? 450;
@@ -7201,6 +7203,21 @@ function renderStrategy5Dashboard(evaluated) {
       </section>
     </section>
   `;
+  restoreStrategy5TabPosition();
+}
+
+function restoreStrategy5TabPosition() {
+  if (!isMobileViewport()) return;
+  requestAnimationFrame(() => {
+    const tabs = document.querySelector("#strategy-view.strategy5-only .strategy5-preset-tabs");
+    if (!tabs) return;
+    tabs.scrollLeft = strategy5TabScrollLeft || 0;
+    const active = tabs.querySelector("[data-strategy5-filter].active");
+    if (strategy5ShouldFocusActiveTab && active?.scrollIntoView) {
+      active.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "nearest" });
+    }
+    strategy5ShouldFocusActiveTab = false;
+  });
 }
 
 function renderStrategy5CacheLoading() {
@@ -11362,6 +11379,8 @@ document.addEventListener("click", (event) => {
 document.addEventListener("click", (event) => {
   const filterButton = event.target.closest("[data-strategy5-filter]");
   if (!filterButton) return;
+  strategy5TabScrollLeft = filterButton.closest(".strategy5-preset-tabs")?.scrollLeft || 0;
+  strategy5ShouldFocusActiveTab = true;
   strategy5ActiveId = filterButton.dataset.strategy5Filter || "multi_strategy_confluence";
   strategy5Page = 1;
   renderStrategyScanner();

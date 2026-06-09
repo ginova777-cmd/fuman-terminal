@@ -2955,3 +2955,64 @@ body.fuman-light-theme #strategy-view.swing-only .swing-zone-head strong,
 body.fuman-light-theme #strategy-view .swing-zone-head strong {
   color: #1d4ed8 !important;
 }
+
+
+/* mobile-strategy-center-clip-smooth-20260609 */
+@media (max-width: 760px) {
+  #strategy-view.strategy5-only .mobile-strategy-center-hero {
+    grid-template-columns: minmax(0, 1fr) 96px !important;
+    gap: 12px !important;
+    min-height: 132px !important;
+    height: auto !important;
+    margin-top: 58px !important;
+    padding: 18px 14px !important;
+    overflow: visible !important;
+  }
+  #strategy-view.strategy5-only .mobile-strategy-center-copy h2 {
+    font-size: 32px !important;
+    line-height: 1.08 !important;
+    white-space: normal !important;
+  }
+  #strategy-view.strategy5-only .mobile-strategy-center-date {
+    min-height: 96px !important;
+    padding: 12px 6px !important;
+  }
+  #strategy-view.strategy5-only .mobile-strategy-center-date strong { font-size: 25px !important; }
+  #strategy-view.strategy5-only .strategy5-preset-tabs {
+    overflow-x: auto !important;
+    scroll-behavior: smooth !important;
+    scroll-snap-type: x proximity !important;
+    overscroll-behavior-x: contain !important;
+    scrollbar-width: none !important;
+    padding-bottom: 10px !important;
+  }
+  #strategy-view.strategy5-only .strategy5-preset-tabs::-webkit-scrollbar { display: none !important; }
+  #strategy-view.strategy5-only .strategy5-preset-tabs button {
+    position: relative !important;
+    flex: 0 0 min(78vw, 304px) !important;
+    grid-template-columns: 48px minmax(0, 1fr) !important;
+    min-height: 126px !important;
+    padding: 16px 16px 42px !important;
+    overflow: hidden !important;
+  }
+  #strategy-view.strategy5-only .strategy5-tab-icon { width: 48px !important; height: 48px !important; }
+  #strategy-view.strategy5-only .strategy5-tab-title,
+  #strategy-view.strategy5-only .strategy5-tab-desc { overflow-wrap: anywhere !important; white-space: normal !important; }
+  #strategy-view.strategy5-only .strategy5-tab-count {
+    position: absolute !important;
+    right: 16px !important;
+    bottom: 14px !important;
+    justify-self: auto !important;
+    white-space: nowrap !important;
+  }
+}
+@media (max-width: 380px) {
+  #strategy-view.strategy5-only .mobile-strategy-center-hero {
+    grid-template-columns: minmax(0, 1fr) 88px !important;
+    min-height: 126px !important;
+    margin-top: 54px !important;
+    padding: 16px 12px !important;
+  }
+  #strategy-view.strategy5-only .mobile-strategy-center-copy h2 { font-size: 29px !important; }
+  #strategy-view.strategy5-only .mobile-strategy-center-date strong { font-size: 23px !important; }
+}
