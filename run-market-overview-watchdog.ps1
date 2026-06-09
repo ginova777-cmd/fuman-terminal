@@ -24,7 +24,7 @@ function Get-TaipeiMinuteOfDay {
 $minute = Get-TaipeiMinuteOfDay
 $marketStart = 9 * 60
 $marketEnd = 13 * 60 + 30
-$heartbeatGraceSeconds = 45
+$heartbeatGraceSeconds = if ($env:MARKET_OVERVIEW_WATCHDOG_GRACE_SECONDS -match '^\d+$') { [int]$env:MARKET_OVERVIEW_WATCHDOG_GRACE_SECONDS } else { 180 }
 
 if ($minute -lt $marketStart -or $minute -gt $marketEnd) {
   Write-WatchdogLog "outside market window; no action"
@@ -47,7 +47,7 @@ $existingPatrol = Get-CimInstance Win32_Process -Filter "Name = 'node.exe'" |
 
 $existingLauncher = Get-CimInstance Win32_Process |
   Where-Object {
-    $_.Name -match "powershell(\.exe)?$" -and
+    $_.Name -match "^(powershell|pwsh)(\.exe)?$" -and
     $_.CommandLine -match "run-market-overview\.ps1" -and
     $_.CommandLine -notmatch "run-market-overview-watchdog\.ps1"
   }

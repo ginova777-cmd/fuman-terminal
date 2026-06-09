@@ -1,6 +1,6 @@
 const BASE_URL = process.env.FUMAN_BASE_URL || "https://fuman-terminal.vercel.app";
 const INTERVAL_MS = Math.max(1000, Number(process.env.MARKET_OVERVIEW_PATROL_INTERVAL_MS || 10000));
-const TARGET_TIMEOUT_MS = Math.max(1000, Number(process.env.MARKET_OVERVIEW_TARGET_TIMEOUT_MS || 8000));
+const TARGET_TIMEOUT_MS = Math.max(1000, Number(process.env.MARKET_OVERVIEW_TARGET_TIMEOUT_MS || 15000));
 const MARKET_START_MINUTES = 9 * 60;
 const MARKET_END_MINUTES = 13 * 60 + 30;
 

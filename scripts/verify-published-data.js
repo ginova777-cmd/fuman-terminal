@@ -32,6 +32,7 @@ const criticalFiles = [
   "institution-latest.json",
   "institution-slim.json",
   "institution-mobile-top.json",
+  "cb-detect-latest.json",
   "warrant-flow-latest.json",
   "warrant-flow-slim.json",
   "warrant-flow-mobile-top.json",
@@ -237,6 +238,11 @@ function validatePayload(name, payload, context) {
   }
   if (name === "institution-latest.json" || name === "institution-slim.json" || name === "institution-mobile-top.json") {
     assertDateIsLatest(name, "date", payload.usedDate || payload.date || payload.dataDate, context);
+    assert(count(payload) > 0, `${name} empty`);
+  }
+  if (name === "cb-detect-latest.json") {
+    assert(payload.ok !== false, `${name} ok=false`);
+    assert(isNotOlderThanLatestTradeDate(payload.updatedAt, latestTradeDate), `${name} stale updatedAt=${payload.updatedAt} latestTradeDate=${latestTradeDate}`);
     assert(count(payload) > 0, `${name} empty`);
   }
   if (name === "warrant-flow-latest.json" || name === "warrant-flow-slim.json" || name === "warrant-flow-mobile-top.json") {

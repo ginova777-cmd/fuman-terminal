@@ -29,10 +29,19 @@ if ($exitCode -ne 0) {
   exit $exitCode
 }
 
-& $nodeExe "scripts\generate-market-summary.js" >> $log 2>&1
-$summaryExit = $LASTEXITCODE
+$summaryAttempts = if ($env:MARKET_OVERVIEW_SUMMARY_ATTEMPTS -match '^\d+$') { [int]$env:MARKET_OVERVIEW_SUMMARY_ATTEMPTS } else { 8 }
+$summaryDelaySeconds = if ($env:MARKET_OVERVIEW_SUMMARY_RETRY_SECONDS -match '^\d+$') { [int]$env:MARKET_OVERVIEW_SUMMARY_RETRY_SECONDS } else { 300 }
+$summaryExit = 1
+for ($summaryAttempt = 1; $summaryAttempt -le $summaryAttempts; $summaryAttempt++) {
+  "=== Market overview summary attempt $summaryAttempt/$summaryAttempts $(Get-Date) ===" >> $log
+  & $nodeExe "scripts\generate-market-summary.js" >> $log 2>&1
+  $summaryExit = $LASTEXITCODE
+  if ($summaryExit -eq 0) { break }
+  "Market overview summary failed with exit code $summaryExit on attempt $summaryAttempt/$summaryAttempts" >> $log
+  if ($summaryAttempt -lt $summaryAttempts) { Start-Sleep -Seconds $summaryDelaySeconds }
+}
 if ($summaryExit -ne 0) {
-  "Market overview summary failed with exit code $summaryExit" >> $log
+  "Market overview summary failed after $summaryAttempts attempts with exit code $summaryExit" >> $log
   exit $summaryExit
 }
 

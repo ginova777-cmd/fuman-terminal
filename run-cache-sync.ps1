@@ -26,6 +26,22 @@ function Write-Log($message) {
   Add-Content -LiteralPath $log -Value $message -Encoding utf8
 }
 
+function Clear-StaleSyncGitIndexLock($label) {
+  $indexLock = Join-Path $syncRepo ".git\index.lock"
+  if (-not (Test-Path -LiteralPath $indexLock)) { return }
+  $gitProcesses = @(Get-Process -Name git -ErrorAction SilentlyContinue)
+  if ($gitProcesses.Count -gt 0) {
+    $ids = ($gitProcesses | Select-Object -ExpandProperty Id) -join ","
+    throw "Refusing to remove $indexLock during $label because git process(es) are still running: $ids"
+  }
+  $age = (Get-Date) - (Get-Item -LiteralPath $indexLock).LastWriteTime
+  if ($age.TotalMinutes -lt 2) {
+    throw "Refusing to remove fresh git index lock during $label; age $([math]::Round($age.TotalSeconds, 1)) seconds"
+  }
+  Write-Log "Removing stale git index lock before $label; age $([math]::Round($age.TotalMinutes, 1)) minutes."
+  Remove-Item -LiteralPath $indexLock -Force
+}
+
 function Invoke-PublishedDataVerification {
   if ($Scope -ne "all") { return }
   $script = Join-Path $codeRepo "scripts\verify-published-data.js"
@@ -115,6 +131,31 @@ function Get-OutboxScopeDir {
   Join-Path $outboxRoot $Scope
 }
 
+function Get-OutboxMaxAgeMinutes {
+  if ($env:CACHE_SYNC_OUTBOX_MAX_AGE_MINUTES -match '^\d+$') { return [int]$env:CACHE_SYNC_OUTBOX_MAX_AGE_MINUTES }
+  return 180
+}
+
+function Test-OutboxDisabledFile($file) {
+  return $file -in @(
+    "data\market-summary.json",
+    "data\mobile-home-summary.json",
+    "data\terminal-home-bundle.json",
+    "data\data-status-index.json",
+    "data\data-manifest.json"
+  )
+}
+
+function Test-OutboxSnapshotExpired($snapshot) {
+  $maxAgeMinutes = Get-OutboxMaxAgeMinutes
+  if ($maxAgeMinutes -le 0) { return $false }
+  $age = (Get-Date) - $snapshot.LastWriteTime
+  if ($age.TotalMinutes -le $maxAgeMinutes) { return $false }
+  Write-Log "OUTBOX_EXPIRED scope=$Scope path=$($snapshot.FullName) age=$([math]::Round($age.TotalMinutes, 1))m max=${maxAgeMinutes}m; removing without replay"
+  Remove-Item -LiteralPath $snapshot.FullName -Recurse -Force
+  return $true
+}
+
 function Save-OutboxSnapshot($reason, $dataFiles, $localPublishedFiles) {
   $stamp = Get-Date -Format "yyyyMMdd-HHmmss"
   $snapshotDir = Join-Path (Get-OutboxScopeDir) $stamp
@@ -122,6 +163,10 @@ function Save-OutboxSnapshot($reason, $dataFiles, $localPublishedFiles) {
   $savedFiles = New-Object System.Collections.Generic.List[string]
 
   foreach ($file in $dataFiles) {
+    if (Test-OutboxDisabledFile $file) {
+      Write-Log "OUTBOX_SAVE_SKIP disabled file: $file"
+      continue
+    }
     $source = Join-Path $sourceRepo $file
     if (Test-Path -LiteralPath $source) {
       $target = Join-Path $snapshotDir $file
@@ -132,6 +177,10 @@ function Save-OutboxSnapshot($reason, $dataFiles, $localPublishedFiles) {
   }
 
   foreach ($file in $localPublishedFiles) {
+    if (Test-OutboxDisabledFile $file) {
+      Write-Log "OUTBOX_SAVE_SKIP disabled local published file: $file"
+      continue
+    }
     $source = Join-Path $codeRepo $file
     if (Test-Path -LiteralPath $source) {
       $target = Join-Path $snapshotDir $file
@@ -158,6 +207,7 @@ function Replay-OutboxSnapshots {
   if (-not $snapshots.Count) { return }
 
   foreach ($snapshot in $snapshots) {
+    if (Test-OutboxSnapshotExpired $snapshot) { continue }
     $manifestPath = Join-Path $snapshot.FullName "manifest.json"
     if (-not (Test-Path -LiteralPath $manifestPath)) {
       Write-Log "Outbox snapshot missing manifest, skipped: $($snapshot.FullName)"
@@ -176,6 +226,13 @@ function Replay-OutboxSnapshots {
       $source = Join-Path $snapshot.FullName $file
       if (-not (Test-Path -LiteralPath $source)) {
         Write-Log "Outbox file missing, skipped: $source"
+        continue
+      }
+      if (Test-OutboxDisabledFile $file) {
+        Write-Log "OUTBOX_REPLAY_SKIP disabled file: $file"
+        continue
+      }
+      if (Should-SkipCacheFile $file $source) {
         continue
       }
       Copy-CacheFile $file $source $syncRepo "outbox"
@@ -295,6 +352,17 @@ function Update-SlimCacheFiles {
     }
     if ($LASTEXITCODE -ne 0) {
       Write-Log "Full stocks slim generation exited with code $LASTEXITCODE; continuing with existing stocks-slim if available"
+    }
+  }
+  $marketSummaryScript = Join-Path $codeRepo "scripts\generate-market-summary.js"
+  if ((Test-Path -LiteralPath $nodeExe) -and (Test-Path -LiteralPath $marketSummaryScript)) {
+    Write-Log "=== Generate market summary file $(Get-Date) ==="
+    $marketSummaryOutput = & $nodeExe $marketSummaryScript 2>&1
+    foreach ($line in $marketSummaryOutput) {
+      if (-not [string]::IsNullOrWhiteSpace([string]$line)) { Write-Log $line }
+    }
+    if ($LASTEXITCODE -ne 0) {
+      Write-Log "Market summary generation exited with code $LASTEXITCODE; stale market-summary will be skipped by freshness guard if encountered"
     }
   }
   $scriptPath = Join-Path $codeRepo "scripts\generate-slim-cache.js"
@@ -426,6 +494,16 @@ function Should-SkipCacheFile($file, $source) {
     return $true
   }
 
+  if ($file -eq "data\market-summary.json") {
+    $json = Assert-ReadableJsonFile $file $source
+    $today = Get-Date -Format "yyyyMMdd"
+    $summaryDate = [string]$json.resolvedTradeDate
+    if (-not $summaryDate -and $json.stocks -and $json.stocks.Count -gt 0) { $summaryDate = [string]$json.stocks[0].quoteDate }
+    if ($summaryDate -ne $today -or $json.isFallbackDate -eq $true) {
+      Write-Log "$file is stale: resolvedTradeDate $summaryDate, today $today, isFallbackDate $($json.isFallbackDate); skipped."
+      return $true
+    }
+  }
   if ($file -eq "data\institution-latest.json") {
     $json = Assert-ReadableJsonFile $file $source
     $age = Get-YmdAgeDays $json.usedDate
@@ -691,6 +769,7 @@ try {
     Save-OutboxSnapshot "fetch failed: $($_.Exception.Message)" $dataFiles $localPublishedFiles
     throw
   }
+  Clear-StaleSyncGitIndexLock 'reset clean sync repository'
   Run-Git "Reset clean sync repository" @("reset", "--hard", "origin/main")
   Run-Git "Clean generated sync repository files" @("clean", "-fd")
 

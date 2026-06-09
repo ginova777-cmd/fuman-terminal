@@ -74,8 +74,9 @@ function assertTodayMarketSummary(summary) {
   if (!today) issues.push("today is empty");
   if (resolved !== today) issues.push(`resolvedTradeDate=${resolved || "(empty)"} today=${today || "(empty)"}`);
   if (summary.isFallbackDate !== false) issues.push(`isFallbackDate=${summary.isFallbackDate}`);
-  if (twse !== today) issues.push(`marketDates.twse=${twse || "(empty)"} today=${today || "(empty)"}`);
-  if (tpex !== today) issues.push(`marketDates.tpex=${tpex || "(empty)"} today=${today || "(empty)"}`);
+  const allowsRealtimeDate = summary.trading === true && summary.realtimeIndex === true && resolved === today;
+  if (!allowsRealtimeDate && twse !== today) issues.push(`marketDates.twse=${twse || "(empty)"} today=${today || "(empty)"}`);
+  if (!allowsRealtimeDate && tpex !== today) issues.push(`marketDates.tpex=${tpex || "(empty)"} today=${today || "(empty)"}`);
   if (issues.length) {
     throw new Error(`market-summary freshness guard failed: ${issues.join("; ")}`);
   }
@@ -139,3 +140,4 @@ main().catch((error) => {
   console.error(error);
   process.exit(1);
 });
+
