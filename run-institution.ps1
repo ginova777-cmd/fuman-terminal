@@ -54,10 +54,12 @@ if (Test-Path $syncScript) {
   } else {
     "Cache sync failed with exit code $syncExit; scheduled sync remains as fallback" >> $log
     Write-FumanFlowHealth -Scope institution -Status publish_delayed -Message "Institution scan succeeded but Git publish failed" -Detail @{ exitCode = $syncExit; log = $log }
+    exit $syncExit
   }
 } else {
   "Institution cache files written locally; Git sync script not found" >> $log
   Write-FumanFlowHealth -Scope institution -Status publish_delayed -Message "Institution scan succeeded but Git sync script was not found" -Detail @{ log = $log }
+  exit 1
 }
 
 if ($publishOk) {

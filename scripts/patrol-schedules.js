@@ -19,6 +19,7 @@ const CACHE_RULES = [
   { label: "策略3", file: "data/strategy3-latest.json", slots: ["13:00"], graceMinutes: 10, workflow: "strategy3-background-scan.yml" },
   { label: "策略4", file: "data/strategy4-latest.json", slots: ["14:30"], graceMinutes: 10, workflow: "strategy4-background-scan.yml", inputs: { full_scan: "true" }, requireComplete: true, minTotal: 1700 },
   { label: "盤後籌碼", file: "data/institution-latest.json", slots: ["06:00", "21:00"], graceMinutes: 10, workflow: "flow-cache.yml" },
+  { label: "CB可轉債", file: "data/cb-detect-latest.json", slots: ["21:25"], graceMinutes: 20, minCount: 1 },
   { label: "權證走向", file: "data/warrant-flow-latest.json", slots: ["06:00", "21:00"], graceMinutes: 10, workflow: "flow-cache.yml" },
   { label: "策略5", file: "data/strategy5-latest.json", slots: ["06:00", "21:00"], graceMinutes: 10, workflow: "strategy5-background-scan.yml" },
 ];
@@ -126,6 +127,15 @@ function tradingDayGap(fromDate, toDate = new Date()) {
   return gap;
 }
 
+function count(payload) {
+  if (Array.isArray(payload?.rows)) return payload.rows.length;
+  if (Array.isArray(payload?.matches)) return payload.matches.length;
+  if (Array.isArray(payload?.stocks)) return payload.stocks.length;
+  if (Array.isArray(payload?.data)) return payload.data.length;
+  if (payload?.data && typeof payload.data === "object") return Object.keys(payload.data).length;
+  return Number(payload?.count || 0);
+}
+
 function cacheIssues() {
   const now = new Date();
   const today = taipeiParts(now);
@@ -138,6 +148,10 @@ function cacheIssues() {
     if (!Number.isFinite(updatedAt)) {
       issues.push({ ...rule, message: `${rule.label}：${rule.file} 沒有可解析的 updatedAt` });
       continue;
+    }
+    const payloadCount = count(payload);
+    if (rule.minCount && payloadCount < rule.minCount) {
+      issues.push({ ...rule, message: `${rule.label}：資料筆數過低，count=${payloadCount}/${rule.minCount}` });
     }
 
     if (rule.requireComplete) {
@@ -260,6 +274,13 @@ async function workflowHasActiveRun(workflow) {
 
 async function dispatchRecoveryRuns(cacheIssueObjects) {
   if (process.env.AUTO_DISPATCH_STALE === "0") return [];
+  const repo = process.env.GITHUB_REPOSITORY;
+  if (!repo || !GITHUB_TOKEN) {
+    const reason = !repo ? "缺少 GITHUB_REPOSITORY" : "缺少 GITHUB_TOKEN";
+    return cacheIssueObjects
+      .filter((issue) => issue.workflow)
+      .map((issue) => `${issue.label}：${reason}，略過自動派發 ${issue.workflow}`);
+  }
   const dispatched = [];
   const seen = new Set();
   for (const issue of cacheIssueObjects) {
@@ -389,5 +410,3 @@ main().catch((error) => {
   console.error(error);
   process.exit(1);
 });
-
-

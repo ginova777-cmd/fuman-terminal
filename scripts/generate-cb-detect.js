@@ -3,9 +3,13 @@ const fsSync = require("fs");
 const path = require("path");
 
 const CBAS_BASE = "https://cbas16889.pscnet.com.tw/api/CbasQuote";
-const OUT_FILE = path.join(__dirname, "..", "data", "cb-detect-latest.json");
-const STOCKS_FILE = path.join(__dirname, "..", "data", "stocks-slim.json");
 const RUNTIME_DIR = process.env.FUMAN_RUNTIME_DIR || "C:\\fuman-runtime";
+const DATA_DIR = process.env.FUMAN_DATA_DIR || path.join(RUNTIME_DIR, "data");
+const OUT_FILE = path.join(DATA_DIR, "cb-detect-latest.json");
+const CODE_OUT_FILE = path.join(__dirname, "..", "data", "cb-detect-latest.json");
+const STOCKS_FILE = fsSync.existsSync(path.join(DATA_DIR, "stocks-slim.json"))
+  ? path.join(DATA_DIR, "stocks-slim.json")
+  : path.join(__dirname, "..", "data", "stocks-slim.json");
 const FUGLE_API_KEY_FILE = process.env.FUGLE_API_KEY_FILE || path.join(RUNTIME_DIR, "secrets", "fugle-api-key.txt");
 const FINMIND_API_TOKEN_FILE = process.env.FINMIND_API_TOKEN_FILE || path.join(RUNTIME_DIR, "secrets", "finmind-api-token.txt");
 const HISTORY_MONTHS = 14;
@@ -536,6 +540,10 @@ async function main() {
 
   await fs.mkdir(path.dirname(OUT_FILE), { recursive: true });
   await fs.writeFile(OUT_FILE, `${JSON.stringify(payload, null, 2)}\n`, "utf8");
+  if (path.resolve(CODE_OUT_FILE).toLowerCase() !== path.resolve(OUT_FILE).toLowerCase()) {
+    await fs.mkdir(path.dirname(CODE_OUT_FILE), { recursive: true });
+    await fs.writeFile(CODE_OUT_FILE, `${JSON.stringify(payload, null, 2)}\n`, "utf8");
+  }
   console.log(`wrote ${OUT_FILE} (${candidates.length} rows)`);
   console.log(candidates.slice(0, 12).map((row) => `${row.score} ${row.sourceLayer} ${row.code} ${row.cbName} ${row.tags.join(" / ")}`).join("\n"));
 }

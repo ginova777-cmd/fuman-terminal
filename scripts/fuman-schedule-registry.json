@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-06-07T23:49:44.625Z",
+  "updatedAt": "2026-06-09T23:50:00.000Z",
   "tasks": [
     {
       "taskName": "\\Fuman PC Wake 0430",
@@ -333,6 +333,17 @@
         "可轉債",
         "CB 2125",
         "CB完整掃"
+      ]
+    },
+    {
+      "taskName": "\\Fuman CB Watchdog 2145",
+      "displayName": "Fuman CB Watchdog 2145",
+      "description": "晚上 21:45 檢查 CB 21:25 是否成功；失敗會重跑並發布終端。",
+      "time": "21:45",
+      "aliases": [
+        "CB watchdog",
+        "CB 2145",
+        "可轉債 watchdog"
       ]
     }
   ]

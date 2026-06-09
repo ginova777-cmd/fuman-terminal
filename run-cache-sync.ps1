@@ -676,7 +676,9 @@ try {
     )
 
     $dataFiles = @(
-      "data\cb-detect-latest.json"
+      "data\cb-detect-latest.json",
+      "data\data-status-index.json",
+      "data\data-manifest.json"
     )
   } else {
     $criticalLatestFiles = @(
