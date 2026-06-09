@@ -2406,8 +2406,11 @@ async function main() {
     .filter((stock) => hasUsableQuote(stock, timestamp))
     .filter(isIntradayTradable);
   const coverage = realtimeSourceStocks.length ? realtimeStocks.length / realtimeSourceStocks.length : 0;
+  const quoteUsable = realtimeStocks.length;
+  const fugleWsUsable = cleanNumber(realtimeStats?.fallbackStats?.fugleWs?.used);
   const fugleWsCoverage = realtimeSourceStocks.length ? cleanNumber(realtimeStats?.fallbackStats?.fugleWs?.used) / realtimeSourceStocks.length : 0;
   const entrySourceCoverage = Math.max(coverage, fugleWsCoverage);
+  const entrySourceUsable = Math.max(quoteUsable, fugleWsUsable);
   const entrySourceHealthy = entrySourceCoverage >= MIN_ENTRY_SOURCE_COVERAGE;
   const cachedRecovered = realtimeStocks.filter((stock) => stock.recoveredFromQuoteCache).length;
   const realtimeSummaryBase = {
@@ -2415,7 +2418,9 @@ async function main() {
     coverage: Number(entrySourceCoverage.toFixed(4)),
     quoteCoverage: Number(coverage.toFixed(4)),
     fugleWsCoverage: Number(fugleWsCoverage.toFixed(4)),
-    usable: realtimeStocks.length,
+    usable: entrySourceUsable,
+    quoteUsable,
+    entrySourceUsable,
     cachedRecovered,
     quoteCacheMaxAgeSeconds: QUOTE_CACHE_MAX_AGE_SECONDS,
     entrySourceCoverageThreshold: MIN_ENTRY_SOURCE_COVERAGE,
@@ -2577,7 +2582,8 @@ async function main() {
   const strategy2Events = mergeStrategy2Events(cache.records || [], key);
   const realtimeSummary = {
     ...realtimeSummaryBase,
-    tradable: liveStocks.length,
+    tradable: Math.max(liveStocks.length, realtimeSummaryBase.entrySourceUsable || 0),
+    tradableByQuote: liveStocks.length,
   };
   const strategy2Report = enforceStrategy2EntryGuards({
     source: "strategy2-09-to-1330-patrol",
