@@ -1,25 +1,25 @@
 {
-  "warrant": {
-    "scope": "warrant",
-    "status": "ok",
-    "message": "Watchdog rerun completed",
-    "updatedAt": "2026-06-09T12:50:43.4970851Z",
-    "detail": {
-      "reason": "warrant not updated after 20:30; updatedAt=06/09/2026 12:30:51",
-      "log": "C:\\fuman-runtime\\logs\\flow-watchdog-warrant-20260609-205001.log",
-      "expectedTime": "20:30"
-    }
-  },
   "institution": {
     "scope": "institution",
     "status": "ok",
     "message": "Watchdog rerun completed",
-    "updatedAt": "2026-06-09T13:40:47.0245900Z",
+    "updatedAt": "2026-06-09T13:40:47.02459Z",
     "detail": {
       "log": "C:\\fuman-runtime\\logs\\flow-watchdog-institution-20260609-212001.log",
       "expectedTime": "21:00",
       "reason": "institution not updated after 21:00; updatedAt=06/09/2026 13:01:32"
     }
   },
-  "updatedAt": "2026-06-09T13:40:47.0255593Z"
+  "updatedAt": "2026-06-09T21:50:02.3031966Z",
+  "warrant": {
+    "scope": "warrant",
+    "status": "watchdog_rerun",
+    "message": "Watchdog rerun started",
+    "updatedAt": "2026-06-09T21:50:02.3020133Z",
+    "detail": {
+      "expectedTime": "05:30",
+      "reason": "warrant not updated after 05:30; updatedAt=06/09/2026 21:30:07",
+      "log": "C:\\fuman-runtime\\logs\\flow-watchdog-warrant-20260610-055002.log"
+    }
+  }
 }
