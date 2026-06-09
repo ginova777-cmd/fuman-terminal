@@ -6513,3 +6513,22 @@ html body.fuman-light-theme .brand span {
     transition: none !important;
   }
 }
+
+
+/* desktop-terminal-cached-pane-speed-20260609 */
+@media (min-width: 761px) {
+  .view-panel {
+    contain: layout style paint !important;
+  }
+  .view-panel[hidden] {
+    content-visibility: hidden !important;
+  }
+  .view-panel.active {
+    content-visibility: visible !important;
+  }
+  .nav-item,
+  .strategy-nav,
+  .chip-menu-link {
+    transition: none !important;
+  }
+}

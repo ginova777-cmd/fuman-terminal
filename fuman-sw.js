@@ -1,23 +1,23 @@
-const CACHE_VERSION = "fuman-terminal-sw-strategy-center-mobile-20260609-20";
+const CACHE_VERSION = "fuman-terminal-sw-strategy-center-mobile-20260609-21";
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 const DATA_CACHE = `${CACHE_VERSION}-data`;
 
 const STATIC_ASSETS = [
-  "/styles.css?v=strategy-center-mobile-20260609-20",
-  "/terminal-core.js?v=strategy-center-mobile-20260609-20",
-  "/terminal-modules.js?v=strategy-center-mobile-20260609-20",
-  "/terminal-sector-map.js?v=strategy-center-mobile-20260609-20",
-  "/terminal-strategy-config.js?v=strategy-center-mobile-20260609-20",
-  "/terminal-market-config.js?v=strategy-center-mobile-20260609-20",
-  "/terminal-ui-config.js?v=strategy-center-mobile-20260609-20",
-  "/terminal-runtime-config.js?v=strategy-center-mobile-20260609-20",
-  "/terminal-tuning-config.js?v=strategy-center-mobile-20260609-20",
-  "/terminal-worker.js?v=strategy-center-mobile-20260609-20",
-  "/terminal.js?v=strategy-center-mobile-20260609-20",
-  "/terminal-realtime-radar.css?v=strategy-center-mobile-20260609-20",
-  "/terminal-intraday-radar.css?v=strategy-center-mobile-20260609-20",
-  "/terminal-utility.css?v=strategy-center-mobile-20260609-20",
-  "/refresh.html?v=strategy-center-mobile-20260609-20",
+  "/styles.css?v=strategy-center-mobile-20260609-21",
+  "/terminal-core.js?v=strategy-center-mobile-20260609-21",
+  "/terminal-modules.js?v=strategy-center-mobile-20260609-21",
+  "/terminal-sector-map.js?v=strategy-center-mobile-20260609-21",
+  "/terminal-strategy-config.js?v=strategy-center-mobile-20260609-21",
+  "/terminal-market-config.js?v=strategy-center-mobile-20260609-21",
+  "/terminal-ui-config.js?v=strategy-center-mobile-20260609-21",
+  "/terminal-runtime-config.js?v=strategy-center-mobile-20260609-21",
+  "/terminal-tuning-config.js?v=strategy-center-mobile-20260609-21",
+  "/terminal-worker.js?v=strategy-center-mobile-20260609-21",
+  "/terminal.js?v=strategy-center-mobile-20260609-21",
+  "/terminal-realtime-radar.css?v=strategy-center-mobile-20260609-21",
+  "/terminal-intraday-radar.css?v=strategy-center-mobile-20260609-21",
+  "/terminal-utility.css?v=strategy-center-mobile-20260609-21",
+  "/refresh.html?v=strategy-center-mobile-20260609-21",
   "/assets/logo.webp",
   "/favicon.ico",
 ];
