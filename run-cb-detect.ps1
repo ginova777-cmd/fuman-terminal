@@ -14,7 +14,8 @@ New-Item -ItemType Directory -Force -Path $logDir | Out-Null
 $log = Join-Path $logDir ("cb-detect-{0}.log" -f (Get-Date -Format "yyyyMMdd-HHmmss"))
 
 "=== CB detect full scan start $(Get-Date) ===" | Out-File $log -Encoding utf8
-Push-Location "C:\fuman-terminal"
+$codeRepo = "${PSScriptRoot}"
+Push-Location $codeRepo
 try {
   & $nodeExe "scripts\generate-cb-detect.js" 2>&1 | ForEach-Object { $_ | Out-File -LiteralPath $log -Append -Encoding utf8 }
   $exitCode = $LASTEXITCODE
@@ -26,7 +27,7 @@ try {
   Pop-Location
 }
 
-$syncScript = "C:\fuman-terminal\run-cache-sync.ps1"
+$syncScript = Join-Path $codeRepo "run-cache-sync.ps1"
 if (Test-Path -LiteralPath $syncScript) {
   "CB detect full scan completed; starting Git sync" >> $log
   $cacheSyncLock = Join-Path $runtime "locks\cache-sync.lock"

@@ -5,6 +5,7 @@ Use this folder for official edits, commits, pushes, and deploys:
 `C:\fuman-terminal-sync`
 
 Do not use old Codex work copies as the source of truth.
+Do not edit or deploy from `C:\fuman-terminal` unless it has been intentionally cleaned and re-approved.
 
 Automation publish/sync jobs use a separate disposable repository:
 
@@ -15,5 +16,6 @@ Run these before deploy:
 
 ```
 npm run guard:source
-npm run verify:version
+npm run verify:all
+npm run verify:local-ops
 ```

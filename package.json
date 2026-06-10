@@ -22,6 +22,7 @@
     "verify:sw": "node scripts/verify-service-worker-smoke.js",
     "verify:data-freshness": "node --use-system-ca scripts/verify-data-freshness.js",
     "verify:data-freshness:live": "node --use-system-ca scripts/verify-data-freshness.js --live",
+    "verify:local-ops": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/verify-local-ops.ps1",
     "verify:all": "node scripts/verify-all.js",
     "verify:data-freshness:write": "node --use-system-ca scripts/verify-data-freshness.js --write"
   },
