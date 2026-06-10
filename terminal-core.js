@@ -1,9 +1,28 @@
 (function () {
-  const version = "split-cb-view-20260609-42";
+  const version = "split-cb-view-20260609-43";
   window.FUMAN_TERMINAL_VERSION = version;
   window.FUMAN_TERMINAL_BOOT = {
     version,
     startedAt: Date.now(),
+  };
+
+  const enforceFreshVersion = () => {
+    try {
+      const key = "fuman-terminal-active-version";
+      const previous = localStorage.getItem(key);
+      if (!previous || previous === version) {
+        localStorage.setItem(key, version);
+        return;
+      }
+      localStorage.setItem(key, version);
+      const reloadKey = "fuman-terminal-version-reload:" + version;
+      if (sessionStorage.getItem(reloadKey) === "1") return;
+      sessionStorage.setItem(reloadKey, "1");
+      const clearCaches = "caches" in window
+        ? caches.keys().then(keys => Promise.all(keys.filter(name => name.includes("fuman-terminal")).map(name => caches.delete(name))))
+        : Promise.resolve();
+      clearCaches.finally(() => window.location.replace((location.pathname || "/") + (location.search || "")));
+    } catch (error) {}
   };
 
   const warmAuthShell = () => {
@@ -56,6 +75,7 @@
   };
 
   mark("core-start");
+  enforceFreshVersion();
   warmAuthShell();
   preconnect("https://openapi.twse.com.tw");
 

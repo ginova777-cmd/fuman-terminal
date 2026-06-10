@@ -1,6 +1,6 @@
 (function () {
   const boot = window.FUMAN_TERMINAL_BOOT || (window.FUMAN_TERMINAL_BOOT = {});
-  const version = boot.version || "split-cb-view-20260609-42";
+  const version = boot.version || "split-cb-view-20260609-43";
   const appSrc = `/terminal-app.js?v=${version}`;
   const dependencyScripts = [
     { src: `/terminal-sector-map.js?v=${version}`, attr: "data-fuman-sector-map" },
