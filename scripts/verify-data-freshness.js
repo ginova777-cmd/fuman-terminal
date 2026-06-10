@@ -18,6 +18,13 @@ const TARGETS = [
   { name: "strategy4-summary", file: "data/strategy4-summary.json", minCount: 1 },
   { name: "strategy5-latest", file: "data/strategy5-latest.json" },
   { name: "warrant-flow-latest", file: "data/warrant-flow-latest.json" },
+  { name: "stocks-quotes-slim", file: "data/stocks-quotes-slim.json", minCount: 1000 },
+  { name: "institution-latest", file: "data/institution-latest.json", minCount: 1000 },
+  { name: "institution-slim", file: "data/institution-slim.json", minCount: 1000 },
+  { name: "institution-mobile-top", file: "data/institution-mobile-top.json", minCount: 1 },
+  { name: "cb-detect-latest", file: "data/cb-detect-latest.json", minCount: 1 },
+  { name: "warrant-flow-slim", file: "data/warrant-flow-slim.json", minCount: 1 },
+  { name: "warrant-flow-mobile-top", file: "data/warrant-flow-mobile-top.json", minCount: 1 },
 ];
 
 function fetchText(pathname, timeoutMs = 20000) {
@@ -50,10 +57,108 @@ function extractCount(payload) {
   if (Number.isFinite(Number(payload.count))) return Number(payload.count);
   if (Number.isFinite(Number(payload.total))) return Number(payload.total);
   if (Array.isArray(payload.items)) return payload.items.length;
+  if (Array.isArray(payload.matches)) return payload.matches.length;
+  if (Array.isArray(payload.rows)) return payload.rows.length;
   if (Array.isArray(payload.data)) return payload.data.length;
+  if (Array.isArray(payload.stocks)) return payload.stocks.length;
+  if (Array.isArray(payload.quotes)) return payload.quotes.length;
   if (payload.entries && typeof payload.entries === "object") return Object.keys(payload.entries).length;
   return 0;
 }
+
+function rows(payload) {
+  if (Array.isArray(payload)) return payload;
+  if (Array.isArray(payload.matches)) return payload.matches;
+  if (Array.isArray(payload.rows)) return payload.rows;
+  if (Array.isArray(payload.data)) return payload.data;
+  if (Array.isArray(payload.stocks)) return payload.stocks;
+  if (Array.isArray(payload.quotes)) return payload.quotes;
+  return [];
+}
+
+function rowClose(row) {
+  return Number(row?.displayClose ?? row?.underlyingClose ?? row?.close ?? 0);
+}
+
+function rowPercent(row) {
+  return Number(row?.displayPercent ?? row?.underlyingPercent ?? row?.percent ?? row?.changePercent ?? 0);
+}
+
+function quoteClose(row) {
+  return Number(row?.close ?? row?.z ?? row?.price ?? row?.lastPrice ?? 0);
+}
+
+function assertFresh(condition, message, issues) {
+  if (!condition) issues.push(message);
+}
+
+function sameNumber(actual, expected, tolerance = 0.01) {
+  const a = Number(actual);
+  const e = Number(expected);
+  return Number.isFinite(a) && Number.isFinite(e) && Math.abs(a - e) <= tolerance;
+}
+
+function validateCrossPayloads(payloads, issues) {
+  const manifest = payloads["data-manifest"];
+  const home = payloads["terminal-home-bundle"];
+  const quotes = payloads["stocks-quotes-slim"];
+  const institutionLatest = payloads["institution-latest"];
+  const institutionSlim = payloads["institution-slim"];
+  const institutionMobile = payloads["institution-mobile-top"];
+  const cb = payloads["cb-detect-latest"];
+  const warrantLatest = payloads["warrant-flow-latest"];
+  const warrantSlim = payloads["warrant-flow-slim"];
+  const warrantMobile = payloads["warrant-flow-mobile-top"];
+  const quoteDate = normalizeDate(quotes?.resolvedTradeDate || quotes?.today || quotes?.date);
+  for (const [name, payload] of [
+    ["institution-latest.json", institutionLatest],
+    ["institution-slim.json", institutionSlim],
+    ["institution-mobile-top.json", institutionMobile],
+    ["cb-detect-latest.json", cb],
+    ["warrant-flow-slim.json", warrantSlim],
+    ["warrant-flow-mobile-top.json", warrantMobile],
+    ["stocks-quotes-slim.json", quotes],
+    ["terminal-home-bundle.json", home],
+  ]) {
+    const entry = manifest?.entries?.[name];
+    assertFresh(entry, `data-manifest missing ${name}`, issues);
+    if (entry) assertFresh(Number(entry.count || 0) === extractCount(payload), `data-manifest ${name} count mismatch entry=${entry.count} actual=${extractCount(payload)}`, issues);
+  }
+  assertFresh(normalizeDate(institutionLatest?.usedDate || institutionLatest?.date) === quoteDate, `institution-latest date mismatch quoteDate=${quoteDate}`, issues);
+  assertFresh(normalizeDate(institutionSlim?.usedDate || institutionSlim?.date) === quoteDate, `institution-slim date mismatch quoteDate=${quoteDate}`, issues);
+  assertFresh(extractCount(institutionMobile) <= extractCount(institutionSlim), "institution-mobile-top larger than institution-slim", issues);
+  assertFresh(extractCount(cb) > 0, "cb-detect-latest empty", issues);
+
+  const latestFirst = rows(warrantLatest)[0];
+  const slimFirst = rows(warrantSlim)[0];
+  const mobileFirst = rows(warrantMobile)[0];
+  const homeFirst = home?.mobile?.warrant?.top?.[0];
+  assertFresh(latestFirst && slimFirst && mobileFirst && homeFirst, "missing warrant first rows across latest/slim/mobile/home", issues);
+  if (latestFirst && slimFirst && mobileFirst && homeFirst) {
+    for (const [label, row] of [["slim", slimFirst], ["mobile", mobileFirst], ["home", homeFirst]]) {
+      assertFresh(String(row.code || "") === String(latestFirst.code || ""), `warrant ${label} first code mismatch`, issues);
+      assertFresh(sameNumber(rowClose(row), rowClose(latestFirst)), `warrant ${label} first close mismatch`, issues);
+      assertFresh(sameNumber(row.finalScore, latestFirst.finalScore, 0), `warrant ${label} first finalScore mismatch`, issues);
+      assertFresh(normalizeDate(row.quoteDate) === quoteDate, `warrant ${label} first quoteDate mismatch quoteDate=${quoteDate}`, issues);
+    }
+  }
+  assertFresh(extractCount(warrantSlim) === extractCount(warrantLatest), "warrant-flow-slim count mismatch latest", issues);
+  assertFresh(extractCount(warrantMobile) <= extractCount(warrantSlim), "warrant-flow-mobile-top larger than slim", issues);
+  assertFresh(Number(home?.mobile?.warrant?.count || 0) === extractCount(warrantMobile), "terminal-home-bundle warrant count mismatch mobile", issues);
+
+  const quoteMap = new Map(rows(quotes).map((row) => [String(row.code || row.symbol || "").trim(), row]));
+  for (const row of rows(warrantSlim).slice(0, 20)) {
+    const code = String(row.code || row.underlyingCode || "").trim();
+    const quote = quoteMap.get(code);
+    assertFresh(quote, `missing stock quote for warrant code=${code}`, issues);
+    if (quote) {
+      assertFresh(sameNumber(rowClose(row), quoteClose(quote)), `warrant ${code} close mismatch quote`, issues);
+      if (Number.isFinite(Number(quote.percent))) assertFresh(sameNumber(rowPercent(row), quote.percent, 0.05), `warrant ${code} percent mismatch quote`, issues);
+      assertFresh(normalizeDate(row.quoteDate) === quoteDate, `warrant ${code} quoteDate mismatch quoteDate=${quoteDate}`, issues);
+    }
+  }
+}
+
 
 async function loadTarget(target) {
   if (!LIVE) return JSON.parse(readLocal(target.file));
@@ -70,9 +175,11 @@ async function main() {
     entries: {},
   };
   const issues = [];
+  const payloads = {};
   for (const target of TARGETS) {
     try {
       const payload = await loadTarget(target);
+      payloads[target.name] = payload;
       const count = extractCount(payload);
       const date = extractDate(payload);
       const ok = target.minCount ? count >= target.minCount : true;
@@ -83,6 +190,7 @@ async function main() {
       issues.push(`${target.name}: ${error.message}`);
     }
   }
+  validateCrossPayloads(payloads, issues);
   report.ok = issues.length === 0;
   const outPath = path.join(ROOT, "data", "data-freshness-report.json");
   if (WRITE_REPORT) fs.writeFileSync(outPath, JSON.stringify(report, null, 2) + "\n", "utf8");

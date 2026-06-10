@@ -260,8 +260,107 @@ function validatePayload(name, payload, context) {
   if (name === "strategy-weight-report.json") assert(payload.weights && Number.isFinite(Number(payload.weights.strategy2Multiplier)), `${name} missing weights`);
 }
 
+function rows(payload) {
+  if (Array.isArray(payload)) return payload;
+  if (Array.isArray(payload.matches)) return payload.matches;
+  if (Array.isArray(payload.rows)) return payload.rows;
+  if (Array.isArray(payload.data)) return payload.data;
+  if (Array.isArray(payload.stocks)) return payload.stocks;
+  if (Array.isArray(payload.quotes)) return payload.quotes;
+  return [];
+}
+
+function quoteClose(row) {
+  return Number(row?.close ?? row?.z ?? row?.price ?? row?.lastPrice ?? 0);
+}
+
+function rowClose(row) {
+  return Number(row?.displayClose ?? row?.underlyingClose ?? row?.close ?? 0);
+}
+
+function rowPercent(row) {
+  return Number(row?.displayPercent ?? row?.underlyingPercent ?? row?.percent ?? row?.changePercent ?? 0);
+}
+
+function assertSameValue(label, actual, expected) {
+  assert(String(actual ?? "") === String(expected ?? ""), `${label} mismatch actual=${actual} expected=${expected}`);
+}
+
+function assertSameNumber(label, actual, expected, tolerance = 0.01) {
+  const a = Number(actual);
+  const e = Number(expected);
+  assert(Number.isFinite(a) && Number.isFinite(e) && Math.abs(a - e) <= tolerance, `${label} mismatch actual=${actual} expected=${expected}`);
+}
+
+function assertManifestEntry(manifest, file, payload) {
+  const entry = manifest?.entries?.[file];
+  assert(entry, `data-manifest missing ${file}`);
+  assert(Number(entry.count || 0) === count(payload), `data-manifest ${file} count mismatch entry=${entry.count} actual=${count(payload)}`);
+}
+
+function assertWarrantQuoteConsistency(scope, warrantPayload, quotePayload, context) {
+  const quoteMap = new Map(rows(quotePayload).map((row) => [String(row.code || row.symbol || "").trim(), row]));
+  const sample = rows(warrantPayload).slice(0, 20);
+  assert(sample.length > 0, `${scope} warrant sample empty`);
+  for (const row of sample) {
+    const code = String(row.code || row.underlyingCode || "").trim();
+    const quote = quoteMap.get(code);
+    assert(quote, `${scope} missing quote for warrant code=${code}`);
+    assertSameNumber(`${scope} ${code} warrant close`, rowClose(row), quoteClose(quote));
+    if (Number.isFinite(Number(quote.percent))) assertSameNumber(`${scope} ${code} warrant percent`, rowPercent(row), quote.percent, 0.05);
+    assertSameValue(`${scope} ${code} warrant quoteDate`, normalizeDate(row.quoteDate), context.latestTradeDate);
+  }
+}
+
+function assertWarrantSurfaceConsistency(scope, payloads, context) {
+  const latest = payloads["warrant-flow-latest.json"];
+  const slim = payloads["warrant-flow-slim.json"];
+  const mobile = payloads["warrant-flow-mobile-top.json"];
+  const home = payloads["terminal-home-bundle.json"];
+  const quotes = payloads["stocks-quotes-slim.json"];
+  const latestFirst = rows(latest)[0];
+  const slimFirst = rows(slim)[0];
+  const mobileFirst = rows(mobile)[0];
+  const homeFirst = home?.mobile?.warrant?.top?.[0];
+  assert(latestFirst && slimFirst && mobileFirst && homeFirst, `${scope} missing warrant first rows`);
+  for (const [label, row] of [["slim", slimFirst], ["mobile", mobileFirst], ["home", homeFirst]]) {
+    assertSameValue(`${scope} warrant ${label} first code`, row.code, latestFirst.code);
+    assertSameNumber(`${scope} warrant ${label} first close`, rowClose(row), rowClose(latestFirst));
+    assertSameNumber(`${scope} warrant ${label} first finalScore`, row.finalScore, latestFirst.finalScore, 0);
+    assertSameValue(`${scope} warrant ${label} first quoteDate`, normalizeDate(row.quoteDate), context.latestTradeDate);
+  }
+  assert(Number(home.mobile?.warrant?.count || 0) === count(mobile), `${scope} home mobile warrant count mismatch`);
+  assertWarrantQuoteConsistency(scope, latest, quotes, context);
+  assertWarrantQuoteConsistency(`${scope} slim`, slim, quotes, context);
+  assertWarrantQuoteConsistency(`${scope} mobile`, mobile, quotes, context);
+}
+
+function validateCrossPayloads(scope, payloads, context) {
+  const manifest = payloads["data-manifest.json"];
+  for (const file of [
+    "institution-latest.json",
+    "institution-slim.json",
+    "institution-mobile-top.json",
+    "cb-detect-latest.json",
+    "warrant-flow-latest.json",
+    "warrant-flow-slim.json",
+    "warrant-flow-mobile-top.json",
+    "stocks-quotes-slim.json",
+    "terminal-home-bundle.json",
+  ]) {
+    assertManifestEntry(manifest, file, payloads[file]);
+  }
+  assert(Number(payloads["institution-latest.json"]?.count || 0) === 1892, `${scope} institution-latest count expected 1892`);
+  assert(Number(payloads["warrant-flow-latest.json"]?.count || 0) === 120, `${scope} warrant-flow-latest count expected 120`);
+  assert(Number(payloads["cb-detect-latest.json"]?.count || rows(payloads["cb-detect-latest.json"]).length || 0) > 0, `${scope} cb empty`);
+  assertWarrantSurfaceConsistency(scope, payloads, context);
+}
+
+
 async function main() {
   const issues = [];
+  const localPayloads = {};
+  const remotePayloads = {};
   const context = { today: todayYmd(), latestTradeDate: await latestTradingYmd() };
   try {
     verifyGitState();
@@ -278,11 +377,21 @@ async function main() {
       const syncHash = sha(syncFile);
       assert(runtimeHash === syncHash, `${name} runtime/sync hash mismatch runtime=${runtimeHash.slice(0, 12)} sync=${syncHash.slice(0, 12)}`);
       const localPayload = readJson(syncFile);
+      localPayloads[name] = localPayload;
       validatePayload(name, localPayload, context);
       const remotePayload = await fetchJson(`/data/${name}`);
+      remotePayloads[name] = remotePayload;
       validatePayload(name, remotePayload, context);
       assert(count(remotePayload) === count(localPayload), `${name} remote/local count mismatch remote=${count(remotePayload)} local=${count(localPayload)}`);
       console.log(`[published] ${name} ok count=${count(localPayload)} hash=${syncHash.slice(0, 12)}`);
+    } catch (error) {
+      issues.push(error.message);
+    }
+  }
+  for (const [scope, payloads] of [["local", localPayloads], ["remote", remotePayloads]]) {
+    try {
+      validateCrossPayloads(scope, payloads, context);
+      console.log(`[published] ${scope} cross-data ok`);
     } catch (error) {
       issues.push(error.message);
     }
