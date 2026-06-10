@@ -2,11 +2,14 @@ const { spawnSync } = require("child_process");
 
 function run(label, command, options = {}) {
   console.log(`[release] ${label}`);
-  const executable = process.platform === "win32" && command[0] === "npm" ? "npm.cmd" : command[0];
-  const result = spawnSync(executable, command.slice(1), {
+  const result = spawnSync(command[0], command.slice(1), {
     stdio: options.capture ? "pipe" : "inherit",
     encoding: "utf8",
   });
+  if (result.error) {
+    console.error(result.error.message);
+    process.exit(1);
+  }
   if (result.status !== 0) {
     if (options.capture) {
       process.stdout.write(result.stdout || "");
@@ -18,8 +21,8 @@ function run(label, command, options = {}) {
   return result.stdout || "";
 }
 
-run("verify:all", ["npm", "run", "verify:all"]);
-run("verify:local-ops", ["npm", "run", "verify:local-ops"]);
+run("verify:all", [process.execPath, "scripts/verify-all.js"]);
+run("verify:local-ops", ["powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "scripts/verify-local-ops.ps1"]);
 
 const status = run("git status", ["git", "status", "--porcelain"], { capture: true }).trim();
 if (status) {
@@ -30,6 +33,6 @@ if (status) {
 }
 
 run("push origin main", ["git", "push", "origin", "main"]);
-run("verify:live-version", ["npm", "run", "verify:live-version"]);
+run("verify:live-version", [process.execPath, "--use-system-ca", "scripts/verify-live-version.js"]);
 
 console.log("[release] ok");
