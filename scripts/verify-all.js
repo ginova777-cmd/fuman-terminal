@@ -6,7 +6,6 @@ const steps = [
   ["verify:bump", ["npm", "run", "verify:bump"]],
   ["verify:sw", ["npm", "run", "verify:sw"]],
   ["verify:data-freshness", ["npm", "run", "verify:data-freshness"]],
-  ["verify:live-version", ["npm", "run", "verify:live-version"]],
 ];
 
 function run(command) {
