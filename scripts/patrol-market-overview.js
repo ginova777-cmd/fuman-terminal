@@ -81,7 +81,7 @@ function validateHeatmap(payload) {
 }
 
 function validateHeatmapFrontendContract(source) {
-  const required = ["heatmap-health-bar", "isHeatmapPollingWindow", "renderHeatmapClosedState", "loadHeatmap"];
+  const required = ["heatmap-health-bar", "isHeatmapPollingWindow", "renderHeatmapClosedState", "heatmapClosedSnapshotDate", "熱力圖今日收盤", "loadHeatmap"];
   const forbidden = [
     "renderHeatmapFromCache",
     "buildHeatmapFallbackFromLatestStocks",
