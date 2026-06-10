@@ -1453,6 +1453,8 @@ let marketDataLoading = false;
 let marketDataLastStartedAt = 0;
 let marketDataLastRenderedAt = 0;
 let marketInitialLoadingShown = false;
+let heatmapRealtimeHydrating = false;
+let heatmapRealtimeLastAt = 0;
 let lastMarketRenderSignature = "";
 let lastHeatmapRenderSignature = "";
 let realtimeRadarLoading = false;
@@ -6339,6 +6341,117 @@ function renderHeatmapFromCache() {
   return sectors.length > 0;
 }
 
+function applyRealtimeQuoteToHeatmapStock(stock, quote) {
+  const close = cleanNumber(quote?.close);
+  const prev = cleanNumber(quote?.prevClose) || cleanNumber(quote?.prev) || (close - cleanNumber(quote?.change));
+  if (!close || !prev) return stock;
+  const change = Number.isFinite(Number(quote.change)) ? cleanNumber(quote.change) : close - prev;
+  const percent = Number.isFinite(Number(quote.percent)) ? cleanNumber(quote.percent) : (prev ? (change / prev) * 100 : cleanNumber(stock.pct));
+  const volume = cleanNumber(quote.tradeVolume) || cleanNumber(stock.volume);
+  const value = volume ? volume * 1000 * close : cleanNumber(stock.value);
+  return {
+    ...stock,
+    close,
+    prev,
+    change,
+    pct: percent,
+    volume,
+    value,
+    amountYi: value / 100000000,
+    quoteTime: quote.time || stock.quoteTime || "",
+    quoteUpdatedAt: Date.now(),
+    isRealtime: true,
+  };
+}
+
+function rebuildRealtimeHeatmapSector(sector, stocks) {
+  const rows = normalizeArray(stocks);
+  const totalValue = rows.reduce((sum, stock) => sum + cleanNumber(stock.value), 0);
+  const up = rows.filter((stock) => cleanNumber(stock.change) > 0 || cleanNumber(stock.pct) > 0).length;
+  const down = rows.filter((stock) => cleanNumber(stock.change) < 0 || cleanNumber(stock.pct) < 0).length;
+  const pct = rows.length ? rows.reduce((sum, stock) => sum + cleanNumber(stock.pct), 0) / rows.length : cleanNumber(sector.pct);
+  const sortedStocks = [...rows].sort((a, b) => cleanNumber(b.value) - cleanNumber(a.value));
+  const leader = sortedStocks[0];
+  const amountYi = Number((totalValue / 100000000).toFixed(1));
+  return {
+    ...sector,
+    pct: Number(pct.toFixed(2)),
+    totalValue: amountYi,
+    amountYi,
+    up,
+    down,
+    flat: rows.length - up - down,
+    leader: leader ? `${leader.name} ${cleanNumber(leader.pct) >= 0 ? "+" : ""}${cleanNumber(leader.pct).toFixed(2)}%` : sector.leader,
+    leaderCode: leader?.code || sector.leaderCode || "",
+    stocks: sortedStocks,
+  };
+}
+
+async function hydrateHeatmapRealtime(sectors) {
+  const now = Date.now();
+  if (heatmapRealtimeHydrating || now - heatmapRealtimeLastAt < 15000) return;
+  const sectorRows = normalizeArray(sectors);
+  const codes = [...new Set(sectorRows
+    .flatMap((sector) => normalizeArray(sector.stocks).map((stock) => String(stock.code || "")))
+    .filter((code) => /^\d{4}$/.test(code)))]
+    .slice(0, 100);
+  if (!codes.length) return;
+  heatmapRealtimeHydrating = true;
+  heatmapRealtimeLastAt = now;
+  try {
+    const payload = await fetchJson(`${endpoints.realtime}?codes=${encodeURIComponent(codes.join(","))}&t=${Date.now()}`, 12000);
+    const quotes = new Map(normalizeArray(payload?.quotes).map((quote) => [String(quote.code || ""), quote]));
+    if (quotes.size < Math.min(12, Math.ceil(codes.length * 0.35))) {
+      const proxyQuotes = await fetchHeatmapProxyQuotes(codes.filter((code) => !quotes.has(code)).slice(0, 80));
+      proxyQuotes.forEach((quote, code) => quotes.set(code, quote));
+    }
+    if (!quotes.size) return;
+    const realtimeSectors = sectorRows.map((sector) => {
+      const stocks = normalizeArray(sector.stocks).map((stock) => applyRealtimeQuoteToHeatmapStock(stock, quotes.get(String(stock.code || ""))));
+      return rebuildRealtimeHeatmapSector(sector, stocks);
+    });
+    renderHeatmapSectors(realtimeSectors);
+  } catch (error) {
+  } finally {
+    heatmapRealtimeHydrating = false;
+  }
+}
+
+function heatmapProxyQuoteFromItem(item) {
+  const code = String(item?.c || "").trim();
+  if (!/^\d{4}$/.test(code)) return null;
+  const close = parseQuoteNumber(item.z, item.pz, item.o, item.h, item.l, item.y);
+  const prevClose = parseQuoteNumber(item.y, item.z, item.pz, item.o, item.h, item.l);
+  if (!close || !prevClose) return null;
+  const change = close - prevClose;
+  return {
+    code,
+    name: item.n || code,
+    close,
+    prevClose,
+    change,
+    percent: prevClose ? (change / prevClose) * 100 : 0,
+    tradeVolume: parseQuoteNumber(item.v, item.tv),
+    time: item.t || "",
+    quoteSource: "twse-proxy",
+  };
+}
+
+async function fetchHeatmapProxyQuotes(codes) {
+  const quotes = new Map();
+  const chunks = [];
+  for (let i = 0; i < codes.length; i += 16) chunks.push(codes.slice(i, i + 16));
+  for (const chunk of chunks) {
+    const results = await Promise.allSettled(chunk.map(async (code) => {
+      const payload = await fetchJson(`/api/proxy?code=${encodeURIComponent(code)}&t=${Date.now()}`, 6500);
+      const quote = heatmapProxyQuoteFromItem(payload?.msgArray?.[0]);
+      if (quote) quotes.set(code, quote);
+    }));
+    void results;
+  }
+  return quotes;
+}
+
 function renderIndexes(indexes, futuresNear, futuresNext, marketStatus, otcSignal) {
   const targets = [["發行量加權", "加權指數"], ["櫃買", "櫃買指數"]];
   targets.forEach(([keyword, label], index) => {
@@ -6880,6 +6993,7 @@ async function loadHeatmap() {
     const sectors = normalizeArray(data?.sectors);
     if (data?.ok && sectors.length) {
       renderHeatmapSectors(sectors);
+      hydrateHeatmapRealtime(sectors);
       return;
     }
     throw new Error("heatmap empty");

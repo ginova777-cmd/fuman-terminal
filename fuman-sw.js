@@ -1,23 +1,23 @@
-const CACHE_VERSION = "fuman-terminal-sw-market-loading-20260610-01";
+const CACHE_VERSION = "fuman-terminal-sw-heatmap-realtime-20260610-01";
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 const DATA_CACHE = `${CACHE_VERSION}-data`;
 
 const STATIC_ASSETS = [
-  "/styles.css?v=market-loading-20260610-01",
-  "/terminal-core.js?v=market-loading-20260610-01",
-  "/terminal-modules.js?v=market-loading-20260610-01",
-  "/terminal-sector-map.js?v=market-loading-20260610-01",
-  "/terminal-strategy-config.js?v=market-loading-20260610-01",
-  "/terminal-market-config.js?v=market-loading-20260610-01",
-  "/terminal-ui-config.js?v=market-loading-20260610-01",
-  "/terminal-runtime-config.js?v=market-loading-20260610-01",
-  "/terminal-tuning-config.js?v=market-loading-20260610-01",
-  "/terminal-worker.js?v=market-loading-20260610-01",
-  "/terminal.js?v=market-loading-20260610-01",
-  "/terminal-realtime-radar.css?v=market-loading-20260610-01",
-  "/terminal-intraday-radar.css?v=market-loading-20260610-01",
-  "/terminal-utility.css?v=market-loading-20260610-01",
-  "/refresh.html?v=market-loading-20260610-01",
+  "/styles.css?v=heatmap-realtime-20260610-01",
+  "/terminal-core.js?v=heatmap-realtime-20260610-01",
+  "/terminal-modules.js?v=heatmap-realtime-20260610-01",
+  "/terminal-sector-map.js?v=heatmap-realtime-20260610-01",
+  "/terminal-strategy-config.js?v=heatmap-realtime-20260610-01",
+  "/terminal-market-config.js?v=heatmap-realtime-20260610-01",
+  "/terminal-ui-config.js?v=heatmap-realtime-20260610-01",
+  "/terminal-runtime-config.js?v=heatmap-realtime-20260610-01",
+  "/terminal-tuning-config.js?v=heatmap-realtime-20260610-01",
+  "/terminal-worker.js?v=heatmap-realtime-20260610-01",
+  "/terminal.js?v=heatmap-realtime-20260610-01",
+  "/terminal-realtime-radar.css?v=heatmap-realtime-20260610-01",
+  "/terminal-intraday-radar.css?v=heatmap-realtime-20260610-01",
+  "/terminal-utility.css?v=heatmap-realtime-20260610-01",
+  "/refresh.html?v=heatmap-realtime-20260610-01",
   "/assets/logo.webp",
   "/favicon.ico",
 ];
