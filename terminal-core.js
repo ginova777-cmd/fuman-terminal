@@ -1,22 +1,9 @@
 (function () {
-  const version = "heatmap-realtime-20260610-04";
+  const version = "split-cb-view-20260609-25";
   window.FUMAN_TERMINAL_BOOT = {
     version,
     startedAt: Date.now(),
-    assets: {
-      core: `terminal-core.js?v=${version}`,
-      main: `terminal.js?v=${version}`,
-      app: `terminal-app.js?v=${version}`,
-      serviceWorker: `fuman-sw.js?v=${version}`,
-    },
   };
-  window.FUMAN_TERMINAL_VERSION = version;
-  try {
-    document.documentElement.dataset.fumanTerminalVersion = version;
-    console.info(`[FUMAN] terminal version ${version}`);
-    const versionBadge = document.querySelector("#frontend-version-badge");
-    if (versionBadge) versionBadge.textContent = `v ${version}`;
-  } catch (error) {}
 
   const warmAuthShell = () => {
     try {

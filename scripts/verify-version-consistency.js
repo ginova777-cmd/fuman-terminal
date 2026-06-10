@@ -4,7 +4,7 @@ const path = require("path");
 const ROOT = path.resolve(__dirname, "..");
 
 function read(file) {
-  return fs.readFileSync(path.join(ROOT, file), "utf8");
+  return fs.readFileSync(path.join(ROOT, file), "utf8").replace(/\r\n/g, "\n");
 }
 
 function detectVersion() {

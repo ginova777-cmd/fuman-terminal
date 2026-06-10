@@ -1,24 +1,24 @@
-const CACHE_VERSION = "fuman-terminal-sw-heatmap-realtime-20260610-04";
+const CACHE_VERSION = "fuman-terminal-sw-split-cb-view-20260609-25";
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 const DATA_CACHE = `${CACHE_VERSION}-data`;
 
 const STATIC_ASSETS = [
-  "/styles.css?v=heatmap-realtime-20260610-04",
-  "/terminal-core.js?v=heatmap-realtime-20260610-04",
-  "/terminal-modules.js?v=heatmap-realtime-20260610-04",
-  "/terminal-sector-map.js?v=heatmap-realtime-20260610-04",
-  "/terminal-strategy-config.js?v=heatmap-realtime-20260610-04",
-  "/terminal-market-config.js?v=heatmap-realtime-20260610-04",
-  "/terminal-ui-config.js?v=heatmap-realtime-20260610-04",
-  "/terminal-runtime-config.js?v=heatmap-realtime-20260610-04",
-  "/terminal-tuning-config.js?v=heatmap-realtime-20260610-04",
-  "/terminal-worker.js?v=heatmap-realtime-20260610-04",
-  "/terminal.js?v=heatmap-realtime-20260610-04",
-  "/terminal-app.js?v=heatmap-realtime-20260610-04",
-  "/terminal-realtime-radar.css?v=heatmap-realtime-20260610-04",
-  "/terminal-intraday-radar.css?v=heatmap-realtime-20260610-04",
-  "/terminal-utility.css?v=heatmap-realtime-20260610-04",
-  "/refresh.html?v=heatmap-realtime-20260610-04",
+  "/styles.css?v=split-cb-view-20260609-25",
+  "/terminal-core.js?v=split-cb-view-20260609-25",
+  "/terminal-modules.js?v=split-cb-view-20260609-25",
+  "/terminal-sector-map.js?v=split-cb-view-20260609-25",
+  "/terminal-strategy-config.js?v=split-cb-view-20260609-25",
+  "/terminal-market-config.js?v=split-cb-view-20260609-25",
+  "/terminal-ui-config.js?v=split-cb-view-20260609-25",
+  "/terminal-runtime-config.js?v=split-cb-view-20260609-25",
+  "/terminal-tuning-config.js?v=split-cb-view-20260609-25",
+  "/terminal-worker.js?v=split-cb-view-20260609-25",
+  "/terminal.js?v=split-cb-view-20260609-25",
+  "/terminal-app.js?v=split-cb-view-20260609-25",
+  "/terminal-realtime-radar.css?v=split-cb-view-20260609-25",
+  "/terminal-intraday-radar.css?v=split-cb-view-20260609-25",
+  "/terminal-utility.css?v=split-cb-view-20260609-25",
+  "/refresh.html?v=split-cb-view-20260609-25",
   "/assets/logo.webp",
   "/favicon.ico",
 ];
