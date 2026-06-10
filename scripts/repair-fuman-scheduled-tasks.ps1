@@ -39,7 +39,8 @@ foreach ($task in $tasks) {
     $newScript = $oldScript -replace "^C:\\fuman-terminal-sync-sync", $officialRoot
     $newScript = $newScript -replace "^C:\\fuman-terminal(?!-sync)", $officialRoot
 
-    if ($newScript -ne $oldScript) {
+    $usesOldWrapper = $actionText -like "*Documents\Codex*"
+    if ($newScript -ne $oldScript -or $usesOldWrapper) {
       if (Test-Path -LiteralPath $newScript) {
         $newAction = New-FumanPowerShellAction -ScriptPath $newScript -Tail $tail
         Set-ScheduledTask -TaskName $task.TaskName -TaskPath $task.TaskPath -Action $newAction | Out-Null

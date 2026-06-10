@@ -19,3 +19,16 @@ npm run guard:source
 npm run verify:all
 npm run verify:local-ops
 ```
+
+Normal release:
+
+```
+npm run release
+```
+
+Data-only snapshot:
+
+```
+npm run snapshot:data
+npm run release
+```

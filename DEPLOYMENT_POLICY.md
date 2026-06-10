@@ -4,10 +4,19 @@ Primary deployment path:
 
 1. Edit only in `C:\fuman-terminal-sync`.
 2. For frontend asset changes, run `npm run bump:version`.
-3. Run `npm run verify:all`.
-4. Commit and push to `origin/main`.
-5. Let GitHub -> Vercel automatic deployment publish the site.
-6. Run `npm run verify:live-version` after the deployment.
+3. Commit your changes.
+4. Run `npm run release`.
+
+`npm run release` runs `verify:all`, `verify:local-ops`, checks that the working tree is clean, pushes `origin/main`, and verifies the live version.
+
+For data-only updates, run:
+
+```powershell
+npm run snapshot:data
+npm run release
+```
+
+Frontend code changes and data snapshots should be committed separately.
 
 Manual Vercel CLI deployment is backup only.
 

@@ -6,6 +6,9 @@
   "scripts": {
     "dev": "vercel dev",
     "deploy": "vercel --prod",
+    "release": "node scripts/release.js",
+    "snapshot:data": "node scripts/commit-data-snapshot.js",
+    "archive:old-source": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/archive-old-source.ps1",
     "verify:deploy": "node --use-system-ca scripts/verify-deployment.js",
     "verify:deployment": "node --use-system-ca scripts/verify-deployment.js",
     "verify:chip": "node scripts/verify-chip-trade-contract.js",
