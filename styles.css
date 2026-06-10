@@ -6534,3 +6534,33 @@ html body.fuman-light-theme .brand span {
     transition: none !important;
   }
 }
+.data-freshness-bar.is-loading {
+  border-color: transparent;
+  color: #eaf1ff;
+  background: transparent;
+}
+
+.data-loading-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.data-loading-spinner {
+  width: 18px;
+  height: 18px;
+  border: 1px solid rgba(96, 165, 250, 0.42);
+  border-top-color: #60a5fa;
+  border-radius: 50%;
+  animation: data-loading-spin 0.9s linear infinite;
+}
+
+@keyframes data-loading-spin {
+  to { transform: rotate(360deg); }
+}
+
+body.fuman-light-theme .data-freshness-bar.is-loading {
+  border-color: transparent;
+  color: #1d4ed8;
+  background: transparent;
+}
