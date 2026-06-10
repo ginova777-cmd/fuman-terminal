@@ -1,7 +1,7 @@
 $ErrorActionPreference = "Stop"
 $PSNativeCommandUseErrorActionPreference = $false
 
-Set-Location "C:\fuman-terminal"
+Set-Location "${PSScriptRoot}"
 $env:FUMAN_RUNTIME_DIR = "C:\fuman-runtime"
 $env:FUMAN_DATA_DIR = "C:\fuman-runtime\data"
 $env:FUMAN_CACHE_DIR = "C:\fuman-runtime\cache"
@@ -31,7 +31,7 @@ function Invoke-NodeScan($scriptPath, $label) {
 }
 
 "=== Strategy5 scan start $(Get-Date) ===" | Out-File $log -Encoding utf8
-. "C:\fuman-terminal\schedule-guard.ps1"
+. "${PSScriptRoot}\schedule-guard.ps1"
 Invoke-FumanWeekdayGuard -Label "Strategy5 scan" -LogPath $log
 
 $scanExit = Invoke-NodeScan "scripts\scan-strategy5-cache.js" "Strategy5 scan"
@@ -41,7 +41,7 @@ if ($scanExit -ne 0) {
 }
 
 Remove-Item Env:STRATEGY5_USE_MIS -ErrorAction SilentlyContinue
-$syncAfterOutput = "C:\fuman-terminal\run-sync-after-output.ps1"
+$syncAfterOutput = "${PSScriptRoot}\run-sync-after-output.ps1"
 if (Test-Path -LiteralPath $syncAfterOutput) {
   & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $syncAfterOutput -Label "Strategy5 cache" -LogPath $log -Scope strategy5
   if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

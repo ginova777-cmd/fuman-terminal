@@ -1,7 +1,7 @@
 $ErrorActionPreference = "Stop"
 $PSNativeCommandUseErrorActionPreference = $false
 
-Set-Location "C:\fuman-terminal"
+Set-Location "${PSScriptRoot}"
 $env:FUMAN_RUNTIME_DIR = "C:\fuman-runtime"
 $env:FUMAN_DATA_DIR = "C:\fuman-runtime\data"
 $env:FUMAN_CACHE_DIR = "C:\fuman-runtime\cache"
@@ -22,7 +22,7 @@ $log = "C:\fuman-runtime\logs\trade-manager-report-$(Get-Date -Format yyyyMMdd-H
 
 "=== Trade manager settlement report start $(Get-Date) ===" | Out-File $log -Encoding utf8
 "Trade manager notifications disabled; Google Sheet upload only." >> $log
-. "C:\fuman-terminal\schedule-guard.ps1"
+. "${PSScriptRoot}\schedule-guard.ps1"
 Invoke-FumanWeekdayGuard -Label "Trade manager settlement report" -LogPath $log
 & $nodeExe "scripts\send-trade-manager-report.js" >> $log 2>&1
 $exitCode = $LASTEXITCODE
@@ -57,7 +57,7 @@ if (Test-Path -LiteralPath $sheetScript) {
   "=== Trade manager Google Sheet upload end $(Get-Date) ===" >> $log
 }
 
-$syncAfterOutput = "C:\fuman-terminal\run-sync-after-output.ps1"
+$syncAfterOutput = "${PSScriptRoot}\run-sync-after-output.ps1"
 if (Test-Path -LiteralPath $syncAfterOutput) {
   & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $syncAfterOutput -Label "Trade manager settlement" -LogPath $log >> $log 2>&1
   if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

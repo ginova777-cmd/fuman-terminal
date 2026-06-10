@@ -15,7 +15,7 @@ $logDir = Join-Path $runtime "logs"
 New-Item -ItemType Directory -Force -Path $logDir | Out-Null
 $log = Join-Path $logDir ("cb-watchdog-{0}.log" -f (Get-Date -Format "yyyyMMdd-HHmmss"))
 
-. "C:\fuman-terminal\schedule-guard.ps1"
+. "${PSScriptRoot}\schedule-guard.ps1"
 
 function Write-WatchdogLog($message) {
   Write-Host $message
@@ -72,7 +72,7 @@ if ($result.ok) {
 }
 
 Write-WatchdogLog "Watchdog stale: $($result.reason); starting rerun"
-& powershell.exe -NoProfile -ExecutionPolicy Bypass -File "C:\fuman-terminal\run-cb-detect.ps1" >> $log 2>&1
+& powershell.exe -NoProfile -ExecutionPolicy Bypass -File "${PSScriptRoot}\run-cb-detect.ps1" >> $log 2>&1
 $exit = $LASTEXITCODE
 if ($exit -ne 0) {
   Write-WatchdogLog "Watchdog rerun failed exit=$exit"

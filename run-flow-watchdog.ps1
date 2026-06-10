@@ -15,8 +15,8 @@ $logDir = Join-Path $runtime "logs"
 New-Item -ItemType Directory -Force -Path $logDir | Out-Null
 $log = Join-Path $logDir ("flow-watchdog-{0}-{1}.log" -f $Scope, (Get-Date -Format "yyyyMMdd-HHmmss"))
 
-. "C:\fuman-terminal\schedule-guard.ps1"
-. "C:\fuman-terminal\flow-health.ps1"
+. "${PSScriptRoot}\schedule-guard.ps1"
+. "${PSScriptRoot}\flow-health.ps1"
 
 function Write-WatchdogLog($message) {
   Write-Host $message
@@ -101,7 +101,7 @@ if ($result.ok) {
 
 Write-WatchdogLog "Watchdog stale: $($result.reason); starting rerun"
 Write-FumanFlowHealth -Scope $Scope -Status watchdog_rerun -Message "Watchdog rerun started" -Detail @{ expectedTime = $ExpectedTime; reason = $result.reason; log = $log }
-$script = if ($Scope -eq "institution") { "C:\fuman-terminal\run-institution.ps1" } else { "C:\fuman-terminal\run-warrant-flow.ps1" }
+$script = if ($Scope -eq "institution") { "${PSScriptRoot}\run-institution.ps1" } else { "${PSScriptRoot}\run-warrant-flow.ps1" }
 & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $script >> $log 2>&1
 $exit = $LASTEXITCODE
 if ($exit -ne 0) {

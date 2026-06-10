@@ -1,7 +1,7 @@
 $ErrorActionPreference = "Stop"
 
 $taskName = "Fuman Mini PC 3s Patrol"
-$scriptPath = "C:\fuman-terminal\run-mini-pc-3s-patrol.ps1"
+$scriptPath = "${PSScriptRoot}\run-mini-pc-3s-patrol.ps1"
 $pwsh = "C:\Users\ginov\AppData\Local\Microsoft\WindowsApps\pwsh.exe"
 if (-not (Test-Path $pwsh)) {
   $pwsh = "C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe"
@@ -10,7 +10,7 @@ if (-not (Test-Path $pwsh)) {
 $action = New-ScheduledTaskAction `
   -Execute $pwsh `
   -Argument "-NoProfile -ExecutionPolicy Bypass -File `"$scriptPath`"" `
-  -WorkingDirectory "C:\fuman-terminal"
+  -WorkingDirectory "${PSScriptRoot}"
 
 $trigger = New-ScheduledTaskTrigger -AtLogOn
 $settings = New-ScheduledTaskSettingsSet `

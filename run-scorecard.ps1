@@ -1,7 +1,7 @@
 $ErrorActionPreference = "Stop"
 $PSNativeCommandUseErrorActionPreference = $false
 
-Set-Location "C:\fuman-terminal"
+Set-Location "${PSScriptRoot}"
 $env:FUMAN_RUNTIME_DIR = "C:\fuman-runtime"
 $env:FUMAN_DATA_DIR = "C:\fuman-runtime\data"
 $env:FUMAN_CACHE_DIR = "C:\fuman-runtime\cache"
@@ -20,7 +20,7 @@ $log = "C:\fuman-runtime\logs\scorecard-$(Get-Date -Format yyyyMMdd-HHmmss).log"
 "=== Scorecard start $(Get-Date) ===" | Out-File $log -Encoding utf8
 "REPORT_SLOT=$env:REPORT_SLOT" | Add-Content -LiteralPath $log -Encoding utf8
 "Scorecard notifications disabled; Google Sheet upload only." | Add-Content -LiteralPath $log -Encoding utf8
-. "C:\fuman-terminal\schedule-guard.ps1"
+. "${PSScriptRoot}\schedule-guard.ps1"
 Invoke-FumanWeekdayGuard -Label "Scorecard $env:REPORT_SLOT" -LogPath $log
 
 function Invoke-Utf8LoggedCommand([scriptblock]$Command) {
@@ -37,14 +37,14 @@ if ($exitCode -ne 0) {
 }
 
 "=== Google Sheet upload start $(Get-Date) ===" | Add-Content -LiteralPath $log -Encoding utf8
-$sheetExitCode = Invoke-Utf8LoggedCommand { & "C:\fuman-terminal\run-upload-backtest-google-sheet.ps1" $(Get-Date -Format yyyyMMdd) }
+$sheetExitCode = Invoke-Utf8LoggedCommand { & "${PSScriptRoot}\run-upload-backtest-google-sheet.ps1" $(Get-Date -Format yyyyMMdd) }
 if ($sheetExitCode -ne 0) {
   "Google Sheet upload failed with exit code $sheetExitCode" | Add-Content -LiteralPath $log -Encoding utf8
   exit $sheetExitCode
 }
 "=== Google Sheet upload end $(Get-Date) ===" | Add-Content -LiteralPath $log -Encoding utf8
 
-$syncAfterOutput = "C:\fuman-terminal\run-sync-after-output.ps1"
+$syncAfterOutput = "${PSScriptRoot}\run-sync-after-output.ps1"
 if (Test-Path -LiteralPath $syncAfterOutput) {
   $syncExitCode = Invoke-Utf8LoggedCommand { & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $syncAfterOutput -Label "Scorecard output" -LogPath $log }
   if ($syncExitCode -ne 0) { exit $syncExitCode }

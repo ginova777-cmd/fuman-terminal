@@ -1,7 +1,7 @@
 $ErrorActionPreference = "Stop"
 $PSNativeCommandUseErrorActionPreference = $false
 
-$root = "C:\fuman-terminal"
+$root = "${PSScriptRoot}"
 $logDir = "C:\fuman-runtime\logs"
 $launcherLog = Join-Path $logDir "mini-pc-3s-patrol.log"
 $pwsh = "C:\Users\ginov\AppData\Local\Microsoft\WindowsApps\pwsh.exe"
@@ -60,7 +60,7 @@ $env:REALTIME_RADAR_PATROL_INTERVAL_MS = "3000"
 $env:NODE_OPTIONS = "--use-system-ca"
 
 Write-PatrolLog "Mini PC 3s patrol launcher start"
-. "C:\fuman-terminal\schedule-guard.ps1"
+. "${PSScriptRoot}\schedule-guard.ps1"
 Invoke-FumanWeekdayGuard -Label "Mini PC 3s patrol launcher" -LogPath $launcherLog
 
 Start-FumanPatrol -Name "strategy2-intraday-3s" -Script "run-strategy2-intraday.ps1"

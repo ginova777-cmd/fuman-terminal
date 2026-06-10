@@ -1,7 +1,7 @@
 $ErrorActionPreference = "Stop"
 $PSNativeCommandUseErrorActionPreference = $false
 
-Set-Location "C:\fuman-terminal"
+Set-Location "${PSScriptRoot}"
 
 $runtimeDir = "C:\fuman-runtime"
 $dataDir = Join-Path $runtimeDir "data"
@@ -12,7 +12,7 @@ New-Item -ItemType Directory -Force -Path $logDir, $stateDir | Out-Null
 $log = Join-Path $logDir ("strategy3-watchdog-{0}.log" -f (Get-Date -Format yyyyMMdd-HHmmss))
 $statusFile = Join-Path $stateDir "strategy3-watchdog-status.json"
 $strategy3File = Join-Path $dataDir "strategy3-latest.json"
-$runner = "C:\fuman-terminal\run-strategy3.ps1"
+$runner = "${PSScriptRoot}\run-strategy3.ps1"
 
 function Write-WatchdogLog {
   param([string]$Message)
@@ -36,7 +36,7 @@ function Write-WatchdogStatus {
   } | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $statusFile -Encoding utf8
 }
 
-. "C:\fuman-terminal\schedule-guard.ps1"
+. "${PSScriptRoot}\schedule-guard.ps1"
 Invoke-FumanWeekdayGuard -Label "Strategy3 watchdog" -LogPath $log
 
 function Get-TaipeiTodayYmd {

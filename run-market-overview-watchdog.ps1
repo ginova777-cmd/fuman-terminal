@@ -1,7 +1,7 @@
 $ErrorActionPreference = "Stop"
 $PSNativeCommandUseErrorActionPreference = $false
 
-Set-Location "C:\fuman-terminal"
+Set-Location "${PSScriptRoot}"
 
 $runtimeDir = "C:\fuman-runtime"
 $logDir = Join-Path $runtimeDir "logs"
@@ -13,7 +13,7 @@ function Write-WatchdogLog {
   "[{0}] {1}" -f (Get-Date -Format "yyyy-MM-dd HH:mm:ss"), $Message | Out-File -FilePath $log -Encoding utf8 -Append
 }
 
-. "C:\fuman-terminal\schedule-guard.ps1"
+. "${PSScriptRoot}\schedule-guard.ps1"
 Invoke-FumanWeekdayGuard -Label "Market overview watchdog" -LogPath $log
 
 function Get-TaipeiMinuteOfDay {
@@ -62,7 +62,7 @@ if ($existingPatrol -or $existingLauncher) {
 }
 
 Write-WatchdogLog "market overview patrol missing; restarting"
-$runner = "C:\fuman-terminal\run-hidden.vbs"
-$script = "C:\fuman-terminal\run-market-overview.ps1"
-Start-Process -FilePath "wscript.exe" -ArgumentList @("//B", "//Nologo", $runner, "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $script) -WorkingDirectory "C:\fuman-terminal" -WindowStyle Hidden
+$runner = "${PSScriptRoot}\run-hidden.vbs"
+$script = "${PSScriptRoot}\run-market-overview.ps1"
+Start-Process -FilePath "wscript.exe" -ArgumentList @("//B", "//Nologo", $runner, "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $script) -WorkingDirectory "${PSScriptRoot}" -WindowStyle Hidden
 Write-WatchdogLog "restart requested"

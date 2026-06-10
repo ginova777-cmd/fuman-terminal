@@ -8,7 +8,7 @@ param(
 $ErrorActionPreference = "Stop"
 $PSNativeCommandUseErrorActionPreference = $false
 
-$syncScript = "C:\fuman-terminal\run-cache-sync.ps1"
+$syncScript = "${PSScriptRoot}\run-cache-sync.ps1"
 
 function Write-SyncLog($message) {
   $line = "[$(Get-Date)] $message"

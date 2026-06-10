@@ -1,7 +1,7 @@
 $ErrorActionPreference = "Stop"
 $PSNativeCommandUseErrorActionPreference = $false
 
-Set-Location "C:\fuman-terminal"
+Set-Location "${PSScriptRoot}"
 $env:FUMAN_RUNTIME_DIR = "C:\fuman-runtime"
 $env:FUMAN_DATA_DIR = "C:\fuman-runtime\data"
 $env:FUMAN_CACHE_DIR = "C:\fuman-runtime\cache"
@@ -11,12 +11,12 @@ $env:NODE_OPTIONS = "--use-system-ca"
 New-Item -ItemType Directory -Force -Path "C:\fuman-runtime\logs","C:\fuman-runtime\state" | Out-Null
 $log = "C:\fuman-runtime\logs\open-buy-sync-retry-$(Get-Date -Format yyyyMMdd-HHmmss).log"
 "=== Open buy sync retry start $(Get-Date) ===" | Out-File $log -Encoding utf8
-. "C:\fuman-terminal\schedule-guard.ps1"
+. "${PSScriptRoot}\schedule-guard.ps1"
 Invoke-FumanWeekdayGuard -Label "Open buy sync retry" -LogPath $log
 
 $statusFile = "C:\fuman-runtime\state\open-buy-sync-status.json"
 $latestFile = "C:\fuman-runtime\data\open-buy-latest.json"
-$syncScript = "C:\fuman-terminal\run-cache-sync.ps1"
+$syncScript = "${PSScriptRoot}\run-cache-sync.ps1"
 
 function Read-JsonOrNull($path) {
   try {

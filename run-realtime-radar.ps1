@@ -1,7 +1,7 @@
 $ErrorActionPreference = "Stop"
 $PSNativeCommandUseErrorActionPreference = $false
 
-Set-Location "C:\fuman-terminal"
+Set-Location "${PSScriptRoot}"
 $env:FUMAN_RUNTIME_DIR = "C:\fuman-runtime"
 $env:FUMAN_DATA_DIR = "C:\fuman-runtime\data"
 $env:FUMAN_CACHE_DIR = "C:\fuman-runtime\cache"
@@ -29,7 +29,7 @@ if ($exitCode -ne 0) {
   exit $exitCode
 }
 
-$syncAfterOutput = "C:\fuman-terminal\run-sync-after-output.ps1"
+$syncAfterOutput = "${PSScriptRoot}\run-sync-after-output.ps1"
 if (Test-Path -LiteralPath $syncAfterOutput) {
   $syncExit = Invoke-LoggedCommand { & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $syncAfterOutput -Label "Realtime radar cache" -LogPath $log }
   if ($syncExit -ne 0) { exit $syncExit }

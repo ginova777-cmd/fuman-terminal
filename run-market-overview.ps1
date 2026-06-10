@@ -1,7 +1,7 @@
 $ErrorActionPreference = "Stop"
 $PSNativeCommandUseErrorActionPreference = $false
 
-Set-Location "C:\fuman-terminal"
+Set-Location "${PSScriptRoot}"
 $env:FUMAN_RUNTIME_DIR = "C:\fuman-runtime"
 $env:FUMAN_DATA_DIR = "C:\fuman-runtime\data"
 $env:FUMAN_CACHE_DIR = "C:\fuman-runtime\cache"
@@ -19,7 +19,7 @@ foreach ($name in @("LINE_CHANNEL_ACCESS_TOKEN", "LINE_TO", "LINE_USER_ID")) {
 New-Item -ItemType Directory -Force -Path "C:\fuman-runtime\logs" | Out-Null
 $log = "C:\fuman-runtime\logs\market-overview-$(Get-Date -Format yyyyMMdd-HHmmss).log"
 "=== Market overview patrol start $(Get-Date) ===" | Out-File $log -Encoding utf8
-. "C:\fuman-terminal\schedule-guard.ps1"
+. "${PSScriptRoot}\schedule-guard.ps1"
 Invoke-FumanWeekdayGuard -Label "Market overview patrol" -LogPath $log
 
 & $nodeExe "scripts\patrol-market-overview.js" >> $log 2>&1
@@ -45,7 +45,7 @@ if ($summaryExit -ne 0) {
   exit $summaryExit
 }
 
-$syncAfterOutput = "C:\fuman-terminal\run-sync-after-output.ps1"
+$syncAfterOutput = "${PSScriptRoot}\run-sync-after-output.ps1"
 if (Test-Path -LiteralPath $syncAfterOutput) {
   & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $syncAfterOutput -Label "Market overview patrol" -LogPath $log >> $log 2>&1
   if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

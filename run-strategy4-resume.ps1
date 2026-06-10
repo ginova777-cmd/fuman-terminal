@@ -1,7 +1,7 @@
 $ErrorActionPreference = "Stop"
 $PSNativeCommandUseErrorActionPreference = $false
 
-$repo = "C:\fuman-terminal"
+$repo = "${PSScriptRoot}"
 $runtime = "C:\fuman-runtime"
 $nodeExe = "C:\Program Files\nodejs\node.exe"
 $gitPath = "C:\Program Files\Git\cmd"
@@ -23,7 +23,7 @@ function Write-Log($message) {
 }
 
 Write-Log "=== Strategy4 resume scan start $(Get-Date) ==="
-. "C:\fuman-terminal\schedule-guard.ps1"
+. "${PSScriptRoot}\schedule-guard.ps1"
 Invoke-FumanWeekdayGuard -Label "Strategy4 resume scan" -LogPath $log
 
 $latestPath = Join-Path $repo "data\strategy4-latest.json"

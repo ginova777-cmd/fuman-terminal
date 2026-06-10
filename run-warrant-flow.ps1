@@ -13,7 +13,7 @@ New-Item -ItemType Directory -Force -Path $logDir | Out-Null
 $log = Join-Path $logDir ("warrant-flow-{0}.log" -f (Get-Date -Format "yyyyMMdd-HHmmss"))
 
 function Invoke-NodeScan($scriptPath, $label) {
-  Push-Location "C:\fuman-terminal"
+  Push-Location "${PSScriptRoot}"
   try {
     for ($attempt = 1; $attempt -le 3; $attempt++) {
       "=== $label attempt $attempt $(Get-Date) ===" >> $log
@@ -33,8 +33,8 @@ function Invoke-NodeScan($scriptPath, $label) {
 }
 
 "=== Warrant flow scan start $(Get-Date) ===" | Out-File $log -Encoding utf8
-. "C:\fuman-terminal\schedule-guard.ps1"
-. "C:\fuman-terminal\flow-health.ps1"
+. "${PSScriptRoot}\schedule-guard.ps1"
+. "${PSScriptRoot}\flow-health.ps1"
 Invoke-FumanWeekdayGuard -Label "Warrant flow scan" -LogPath $log
 $scanExit = Invoke-NodeScan "scripts\scan-warrant-flow-cache.js" "Warrant flow scan"
 if ($scanExit -ne 0) {
@@ -44,7 +44,7 @@ if ($scanExit -ne 0) {
 }
 
 $publishOk = $false
-$syncScript = "C:\fuman-terminal\run-cache-sync.ps1"
+$syncScript = "${PSScriptRoot}\run-cache-sync.ps1"
 if (Test-Path $syncScript) {
   "Warrant flow cache files written locally; starting Git sync now" >> $log
   & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $syncScript -Scope warrant >> $log 2>&1

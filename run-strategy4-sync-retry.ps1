@@ -1,7 +1,7 @@
 $ErrorActionPreference = "Continue"
 
-$script = "C:\fuman-terminal\run-strategy4-partial-sync.ps1"
-$logDir = "C:\fuman-terminal\logs"
+$script = "${PSScriptRoot}\run-strategy4-partial-sync.ps1"
+$logDir = "${PSScriptRoot}\logs"
 $log = Join-Path $logDir ("strategy4-sync-retry-{0}.log" -f (Get-Date -Format "yyyyMMdd-HHmmss"))
 $maxAttempts = if ($env:STRATEGY4_SYNC_RETRY_ATTEMPTS) { [int]$env:STRATEGY4_SYNC_RETRY_ATTEMPTS } else { 30 }
 $sleepSeconds = if ($env:STRATEGY4_SYNC_RETRY_SECONDS) { [int]$env:STRATEGY4_SYNC_RETRY_SECONDS } else { 60 }

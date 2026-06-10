@@ -1,7 +1,7 @@
 $ErrorActionPreference = "Stop"
 $PSNativeCommandUseErrorActionPreference = $false
 
-Set-Location "C:\fuman-terminal"
+Set-Location "${PSScriptRoot}"
 [Console]::InputEncoding = [System.Text.UTF8Encoding]::new($false)
 [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)
 $OutputEncoding = [System.Text.UTF8Encoding]::new($false)
@@ -39,7 +39,7 @@ New-Item -ItemType Directory -Force -Path "C:\fuman-runtime\logs" | Out-Null
 $log = "C:\fuman-runtime\logs\trade-manager-patrol-$(Get-Date -Format yyyyMMdd-HHmmss).log"
 
 "=== Trade manager patrol start $(Get-Date) ===" | Out-File $log -Encoding utf8
-. "C:\fuman-terminal\schedule-guard.ps1"
+. "${PSScriptRoot}\schedule-guard.ps1"
 Invoke-FumanWeekdayGuard -Label "Trade manager patrol" -LogPath $log
 & $nodeExe "scripts\patrol-trade-manager.js" *>&1 | ForEach-Object { Add-Content -LiteralPath $log -Value ([string]$_) -Encoding utf8 }
 $exitCode = $LASTEXITCODE

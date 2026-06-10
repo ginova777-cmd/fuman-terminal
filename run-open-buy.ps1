@@ -1,7 +1,7 @@
 $ErrorActionPreference = "Stop"
 $PSNativeCommandUseErrorActionPreference = $false
 
-Set-Location "C:\fuman-terminal"
+Set-Location "${PSScriptRoot}"
 $env:FUMAN_RUNTIME_DIR = "C:\fuman-runtime"
 $env:FUMAN_DATA_DIR = "C:\fuman-runtime\data"
 $env:FUMAN_CACHE_DIR = "C:\fuman-runtime\cache"
@@ -12,7 +12,7 @@ $env:NODE_OPTIONS = "--use-system-ca"
 New-Item -ItemType Directory -Force -Path "C:\fuman-runtime\logs" | Out-Null
 $log = "C:\fuman-runtime\logs\open-buy-$(Get-Date -Format yyyyMMdd-HHmmss).log"
 "=== Open buy full scan start $(Get-Date) ===" | Out-File $log -Encoding utf8
-. "C:\fuman-terminal\schedule-guard.ps1"
+. "${PSScriptRoot}\schedule-guard.ps1"
 Invoke-FumanWeekdayGuard -Label "Open buy full scan" -LogPath $log
 
 $env:FULL_SCAN = "1"
@@ -33,7 +33,7 @@ if ($exitCode -ne 0) {
   exit $exitCode
 }
 
-$syncScript = "C:\fuman-terminal\run-cache-sync.ps1"
+$syncScript = "${PSScriptRoot}\run-cache-sync.ps1"
 $syncStatusFile = "C:\fuman-runtime\state\open-buy-sync-status.json"
 New-Item -ItemType Directory -Force -Path (Split-Path $syncStatusFile -Parent) | Out-Null
 

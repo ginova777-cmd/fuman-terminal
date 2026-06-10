@@ -7,7 +7,7 @@ $ErrorActionPreference = "Continue"
 $PSNativeCommandUseErrorActionPreference = $false
 
 $sourceRepo = "C:\fuman-runtime"
-$codeRepo = "C:\fuman-terminal"
+$codeRepo = "${PSScriptRoot}"
 $syncRepo = "C:\fuman-terminal-sync"
 $publishToCodeRepo = $env:CACHE_SYNC_WRITE_CODE_REPO -eq "1"
 $repoUrl = "https://github.com/ginova777-cmd/fuman-terminal.git"

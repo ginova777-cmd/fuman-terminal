@@ -1,4 +1,4 @@
-Set-Location "C:\fuman-terminal"
+Set-Location "${PSScriptRoot}"
 $env:FUMAN_RUNTIME_DIR = "C:\fuman-runtime"
 $env:FUMAN_DATA_DIR = "C:\fuman-runtime\data"
 $env:FUMAN_CACHE_DIR = "C:\fuman-runtime\cache"
@@ -14,7 +14,7 @@ foreach ($name in @("LINE_CHANNEL_ACCESS_TOKEN", "LINE_TO", "LINE_USER_ID", "TEL
 New-Item -ItemType Directory -Force -Path "C:\fuman-runtime\logs" | Out-Null
 $log = "C:\fuman-runtime\logs\strategy2-line-$(Get-Date -Format yyyyMMdd-HHmmss).log"
 "=== Strategy2 LINE patrol start $(Get-Date) ===" | Out-File $log -Encoding utf8
-. "C:\fuman-terminal\schedule-guard.ps1"
+. "${PSScriptRoot}\schedule-guard.ps1"
 Invoke-FumanWeekdayGuard -Label "Strategy2 LINE patrol" -LogPath $log
 
 & "C:\Program Files\nodejs\node.exe" "scripts\patrol-strategy2-live-alert.js" >> $log 2>&1

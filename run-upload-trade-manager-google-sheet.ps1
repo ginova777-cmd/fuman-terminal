@@ -1,5 +1,5 @@
 $ErrorActionPreference = "Stop"
-Set-Location "C:\fuman-terminal"
+Set-Location "${PSScriptRoot}"
 $env:FUMAN_RUNTIME_DIR = "C:\fuman-runtime"
 $env:GOOGLE_SHEET_ID = "1UCpEBXmOWNA57eLXH62WffnPrflly6OwmDm242JYhp8"
 $env:NODE_OPTIONS = "--use-system-ca"

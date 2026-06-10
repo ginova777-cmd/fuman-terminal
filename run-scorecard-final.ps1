@@ -1,1 +1,1 @@
-$env:REPORT_SLOT="final"; & "C:\fuman-terminal\run-scorecard.ps1"
+$env:REPORT_SLOT="final"; & "${PSScriptRoot}\run-scorecard.ps1"

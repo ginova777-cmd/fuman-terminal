@@ -1,7 +1,7 @@
 $ErrorActionPreference = "Stop"
 $PSNativeCommandUseErrorActionPreference = $false
 
-Set-Location "C:\fuman-terminal"
+Set-Location "${PSScriptRoot}"
 $env:FUMAN_RUNTIME_DIR = "C:\fuman-runtime"
 $env:FUMAN_DATA_DIR = "C:\fuman-runtime\data"
 $env:FUMAN_CACHE_DIR = "C:\fuman-runtime\cache"
@@ -12,7 +12,7 @@ $env:NODE_OPTIONS = "--use-system-ca"
 New-Item -ItemType Directory -Force -Path "C:\fuman-runtime\logs" | Out-Null
 $log = "C:\fuman-runtime\logs\strategy3-$(Get-Date -Format yyyyMMdd-HHmmss).log"
 "=== Strategy3 scan start $(Get-Date) ===" | Out-File $log -Encoding utf8
-. "C:\fuman-terminal\schedule-guard.ps1"
+. "${PSScriptRoot}\schedule-guard.ps1"
 Invoke-FumanWeekdayGuard -Label "Strategy3 scan" -LogPath $log
 
 function Write-Strategy3Log($message) {
@@ -85,7 +85,7 @@ if (-not (Test-Path -LiteralPath $runtimeStrategy3)) {
 Assert-Strategy3FreshPayload -Path $runtimeStrategy3 -Label "runtime"
 
 Invoke-WithRetry "Strategy3 cache sync" {
-  & "C:\fuman-terminal\run-cache-sync.ps1" -Scope strategy3 >> $log 2>&1
+  & "${PSScriptRoot}\run-cache-sync.ps1" -Scope strategy3 >> $log 2>&1
   if ($LASTEXITCODE -ne 0) { throw "cache sync exited with code $LASTEXITCODE" }
   if (-not (Test-Path -LiteralPath $syncStrategy3)) {
     throw "Strategy3 sync file missing after cache sync: $syncStrategy3"

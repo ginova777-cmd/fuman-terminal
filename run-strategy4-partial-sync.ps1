@@ -1,7 +1,7 @@
 $ErrorActionPreference = "Continue"
 $PSNativeCommandUseErrorActionPreference = $false
 
-$codeRepo = "C:\fuman-terminal"
+$codeRepo = "${PSScriptRoot}"
 $syncRepo = "C:\fuman-terminal-sync"
 $gitExe = "C:\Program Files\Git\cmd\git.exe"
 $logDir = Join-Path $codeRepo "logs"

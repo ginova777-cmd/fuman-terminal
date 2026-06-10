@@ -1,7 +1,7 @@
 $ErrorActionPreference = "Stop"
 $PSNativeCommandUseErrorActionPreference = $false
 
-Set-Location "C:\fuman-terminal"
+Set-Location "${PSScriptRoot}"
 $env:FUMAN_RUNTIME_DIR = "C:\fuman-runtime"
 $env:FUMAN_DATA_DIR = "C:\fuman-runtime\data"
 $env:FUMAN_CACHE_DIR = "C:\fuman-runtime\cache"
@@ -41,7 +41,7 @@ function Read-Json($path) {
 }
 
 Write-FlowLog "=== Flow and warrant scan start $(Get-Date) ==="
-. "C:\fuman-terminal\schedule-guard.ps1"
+. "${PSScriptRoot}\schedule-guard.ps1"
 Invoke-FumanWeekdayGuard -Label "Flow and warrant scan" -LogPath $log
 
 $institutionExit = Invoke-NodeScan "scripts\scan-institution-cache.js" "Institution scan" 3 60
@@ -56,7 +56,7 @@ if ($warrantExit -ne 0) {
   exit $warrantExit
 }
 
-$syncScript = "C:\fuman-terminal\run-cache-sync.ps1"
+$syncScript = "${PSScriptRoot}\run-cache-sync.ps1"
 if (-not (Test-Path -LiteralPath $syncScript)) {
   Write-FlowLog "Cache sync script not found: $syncScript"
   exit 1
