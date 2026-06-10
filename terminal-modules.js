@@ -1,5 +1,5 @@
 (function () {
-  const VERSION = "split-cb-view-20260609-31";
+  const VERSION = "split-cb-view-20260609-32";
   const modules = {
     sectorMap: { loaded: false, src: "terminal-sector-map.js" },
     strategyConfig: { loaded: false, src: "terminal-strategy-config.js" },

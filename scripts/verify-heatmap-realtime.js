@@ -14,6 +14,12 @@ function callHeatmap() {
   });
 }
 
+async function fetchLiveHeatmap() {
+  const url = `https://fuman-terminal.vercel.app/api/heatmap?limit=999&stocks=999&source=release-guard-live&t=${Date.now()}`;
+  const response = await fetch(url, { cache: "no-store" });
+  return { code: response.status, payload: await response.json(), live: true };
+}
+
 function taipeiToday() {
   return new Intl.DateTimeFormat("en-CA", {
     timeZone: "Asia/Taipei",
@@ -31,7 +37,12 @@ function fail(message, detail) {
 
 (async () => {
   const startedAt = Date.now();
-  const { code, payload } = await callHeatmap();
+  let { code, payload, live = false } = await callHeatmap();
+  if (code !== 200 || !payload?.ok) {
+    const errors = payload?.errors || {};
+    const fetchFailed = Object.values(errors).some((message) => String(message || "").includes("fetch failed"));
+    if (fetchFailed) ({ code, payload, live } = await fetchLiveHeatmap());
+  }
   if (code !== 200 || !payload?.ok) fail("API did not return a healthy payload", { code, ok: payload?.ok, health: payload?.health, errors: payload?.errors });
 
   const sectors = Array.isArray(payload.sectors) ? payload.sectors : [];
@@ -61,5 +72,5 @@ function fail(message, detail) {
     });
   }
 
-  console.log(`[heatmap-realtime] ok stocks=${rows.length} realtime=${payload.realtimeStockCount} quoteTime=${payload.health?.quoteTime || ""} ms=${Date.now() - startedAt}`);
+  console.log(`[heatmap-realtime] ok source=${live ? "live" : "local"} stocks=${rows.length} realtime=${payload.realtimeStockCount} quoteTime=${payload.health?.quoteTime || ""} ms=${Date.now() - startedAt}`);
 })();
