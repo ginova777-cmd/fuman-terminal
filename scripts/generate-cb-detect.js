@@ -199,17 +199,47 @@ async function fetchFinMindSnapshot(code) {
   if (!FINMIND_API_TOKEN) return null;
   const url = new URL("https://api.finmindtrade.com/api/v4/taiwan_stock_tick_snapshot");
   url.searchParams.set("data_id", code);
-  const payload = await fetchOfficialJson(url.toString(), 15000, {
-    Authorization: `Bearer ${FINMIND_API_TOKEN}`,
-    Referer: "https://finmindtrade.com/",
-  });
+  url.searchParams.set("token", FINMIND_API_TOKEN);
+  let payload = null;
+  try {
+    payload = await fetchOfficialJson(url.toString(), 15000, {
+      Referer: "https://finmindtrade.com/",
+    });
+  } catch {
+    return fetchFinMindDailyQuote(code);
+  }
   const row = Array.isArray(payload?.data) ? payload.data[0] : null;
   const price = num(row?.close) || num(row?.last_price) || num(row?.lastPrice);
-  if (!price) return null;
+  if (!price) return fetchFinMindDailyQuote(code);
   return {
     price,
     source: "finmind",
     quoteDate: String(row?.date || row?.time || "").slice(0, 10).replaceAll("-", "") || "",
+  };
+}
+
+async function fetchFinMindDailyQuote(code) {
+  if (!FINMIND_API_TOKEN) return null;
+  const start = new Date(Date.now() - 21 * 86400000).toISOString().slice(0, 10);
+  const url = new URL("https://api.finmindtrade.com/api/v4/data");
+  url.searchParams.set("dataset", "TaiwanStockPrice");
+  url.searchParams.set("data_id", code);
+  url.searchParams.set("start_date", start);
+  url.searchParams.set("token", FINMIND_API_TOKEN);
+  const payload = await fetchOfficialJson(url.toString(), 15000, {
+    Referer: "https://finmindtrade.com/",
+  });
+  const rows = Array.isArray(payload?.data) ? payload.data : [];
+  const row = rows
+    .filter((item) => num(item?.close))
+    .sort((a, b) => String(a.date || "").localeCompare(String(b.date || "")))
+    .at(-1);
+  const price = num(row?.close);
+  if (!price) return null;
+  return {
+    price,
+    source: "finmind-daily",
+    quoteDate: String(row?.date || "").slice(0, 10).replaceAll("-", "") || "",
   };
 }
 
@@ -284,6 +314,30 @@ async function loadQuoteMap(codes) {
     return [code, null];
   });
   return new Map(entries.filter(([, quote]) => quote));
+}
+
+async function probeFinMindQuotes(codes) {
+  if (!FINMIND_API_TOKEN) {
+    return { checked: 0, rows: 0, ok: false, reason: "not configured" };
+  }
+  const sample = [...new Set(codes)].slice(0, 8);
+  let rows = 0;
+  let failures = 0;
+  await mapLimit(sample, 2, async (code) => {
+    try {
+      const quote = await fetchFinMindSnapshot(code);
+      if (quote) rows += 1;
+    } catch {
+      failures += 1;
+    }
+  });
+  return {
+    checked: sample.length,
+    rows,
+    failures,
+    ok: rows > 0,
+    reason: rows > 0 ? "available" : "no snapshot rows from sampled codes",
+  };
 }
 
 function technicalFromHistory(history) {
@@ -498,6 +552,7 @@ async function main() {
 
   const codes = [...new Set(rows.map((row) => cleanCode(row.code || row.convert_target_code)).filter(Boolean))];
   const quoteMap = await loadQuoteMap(codes);
+  const finmindProbe = await probeFinMindQuotes(codes);
   const histories = await mapLimit(codes, HISTORY_CONCURRENCY, async (code) => {
     try {
       const history = await fetchHistory(code);
@@ -532,7 +587,8 @@ async function main() {
       fugleConfigured: Boolean(FUGLE_API_KEY),
       finmindConfigured: Boolean(FINMIND_API_TOKEN),
       fugleRows: [...quoteMap.values()].filter((quote) => quote.source === "fugle").length,
-      finmindRows: [...quoteMap.values()].filter((quote) => quote.source === "finmind").length,
+      finmindRows: [...quoteMap.values()].filter((quote) => String(quote.source || "").startsWith("finmind")).length,
+      finmindProbe,
     },
     scoringNote: "CBAS supplies CB source/issuance terms. Stock price prefers CBAS/Fugle/FinMind/stocks-slim. CB technical gate uses 60-minute K data: pass only when 60m close is above MA200 and MA200 is rising, or when 60m MA5/MA35/MA200 are all rising. Rows failing this 60m gate are excluded from display.",
     rows: candidates,

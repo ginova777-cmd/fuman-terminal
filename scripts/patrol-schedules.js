@@ -73,6 +73,7 @@ function readText(file) {
 
 const GITHUB_TOKEN = process.env.GITHUB_TOKEN || readText(runtimePath("secrets", "github-token.txt"));
 const GITHUB_REPOSITORY = process.env.GITHUB_REPOSITORY || "ginova777-cmd/fuman-terminal";
+const ALERT_OUTBOX = runtimePath("outbox", "schedule-patrol-alerts");
 
 function taipeiParts(date = new Date()) {
   const parts = new Intl.DateTimeFormat("en-CA", {
@@ -200,22 +201,29 @@ async function fetchJson(url) {
   return response.json();
 }
 
-async function fetchApiJson(url, timeout = 20000) {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeout);
-  try {
-    const response = await fetch(url, {
-      signal: controller.signal,
-      headers: {
-        "Accept": "application/json,text/plain,*/*",
-        "User-Agent": "fuman-terminal-schedule-patrol",
-      },
-    });
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
-    return await response.json();
-  } finally {
-    clearTimeout(timer);
+async function fetchApiJson(url, timeout = 45000) {
+  let lastError = null;
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeout);
+    try {
+      const response = await fetch(url, {
+        signal: controller.signal,
+        headers: {
+          "Accept": "application/json,text/plain,*/*",
+          "User-Agent": "fuman-terminal-schedule-patrol",
+        },
+      });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      return await response.json();
+    } catch (error) {
+      lastError = error;
+      if (attempt < 3) await new Promise((resolve) => setTimeout(resolve, 5000 * attempt));
+    } finally {
+      clearTimeout(timer);
+    }
   }
+  throw lastError || new Error("unknown API fetch failure");
 }
 
 async function workflowIssues() {
@@ -389,6 +397,20 @@ async function alert(issues) {
   });
 }
 
+function saveAlertOutbox(issues, error) {
+  fs.mkdirSync(ALERT_OUTBOX, { recursive: true });
+  const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+  const file = path.join(ALERT_OUTBOX, `${stamp}.json`);
+  fs.writeFileSync(file, JSON.stringify({
+    ok: false,
+    source: "schedule-patrol",
+    updatedAt: new Date().toISOString(),
+    alertDelivery: error ? { ok: false, message: error.message } : { ok: true },
+    issues,
+  }, null, 2) + "\n", "utf8");
+  return file;
+}
+
 async function main() {
   const staleCacheIssues = cacheIssues();
   const recoveryMessages = await dispatchRecoveryRuns(staleCacheIssues);
@@ -403,7 +425,12 @@ async function main() {
     return;
   }
   console.error(issues.join("\n"));
-  await alert(issues);
+  try {
+    await alert(issues);
+  } catch (error) {
+    const file = saveAlertOutbox(issues, error);
+    console.error(`Schedule Patrol：email alert failed; alert saved to ${file}`);
+  }
   process.exit(1);
 }
 
