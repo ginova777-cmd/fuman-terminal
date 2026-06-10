@@ -9,7 +9,9 @@ const FRONTEND_FILES = [
   "terminal-core.js",
   "terminal.js",
   "terminal-app.js",
+  "terminal-chip-flow.js",
   "terminal-modules.js",
+  "terminal-warrant-flow.js",
   "terminal-sector-map.js",
   "terminal-strategy-config.js",
   "terminal-market-config.js",
@@ -33,7 +35,9 @@ function git(args) {
 }
 
 function detectVersionFromText(text) {
-  return text.match(/heatmap-realtime-\d{8}-\d{2}/)?.[0] || "";
+  return text.match(/const\s+version\s*=\s*["']([^"']+)["']/)?.[1]
+    || text.match(/heatmap-realtime-\d{8}-\d{2}/)?.[0]
+    || "";
 }
 
 function read(file) {
