@@ -1,11 +1,11 @@
 {
   "ok": true,
-  "updatedAt": "2026-06-08T07:45:06.473Z",
+  "updatedAt": "2026-06-10T02:17:04.786Z",
   "risk": "low",
   "risks": [],
   "schedule": {
     "ok": true,
-    "total": 0,
+    "total": 17,
     "badCount": 0,
     "badTasks": [],
     "queryMethod": "schtasks",
@@ -24,35 +24,35 @@
         "status": "",
         "date": "",
         "count": 0,
-        "updatedAt": "2026-06-08T05:31:08.170Z",
-        "bytes": 153053
+        "updatedAt": "2026-06-10T02:01:20.345Z",
+        "bytes": 150208
       },
       {
         "file": "strategy4-summary.json",
         "ok": true,
         "status": "",
         "date": "",
-        "count": 1445,
-        "updatedAt": "2026-06-08T06:42:51.239Z",
-        "bytes": 40863
+        "count": 1556,
+        "updatedAt": "2026-06-09T06:53:44.896Z",
+        "bytes": 45263
       },
       {
         "file": "strategy5-latest.json",
         "ok": true,
         "status": "",
-        "date": "20260605",
-        "count": 59,
-        "updatedAt": "2026-06-07T22:00:33.375Z",
-        "bytes": 118937
+        "date": "20260609",
+        "count": 80,
+        "updatedAt": "2026-06-10T00:01:03.919Z",
+        "bytes": 153795
       },
       {
         "file": "institution-summary.json",
         "ok": true,
         "status": "",
-        "date": "20260605",
-        "count": 1886,
-        "updatedAt": "2026-06-08T00:16:13.272Z",
-        "bytes": 65338
+        "date": "20260609",
+        "count": 1881,
+        "updatedAt": "2026-06-10T00:05:50.530Z",
+        "bytes": 65336
       },
       {
         "file": "warrant-flow-summary.json",
@@ -60,26 +60,26 @@
         "status": "",
         "date": "",
         "count": 120,
-        "updatedAt": "2026-06-07T21:50:45.914Z",
-        "bytes": 34941
+        "updatedAt": "2026-06-09T21:50:08.047Z",
+        "bytes": 34949
       },
       {
         "file": "strategy2-intraday-latest.json",
         "ok": true,
         "status": "retired_intraday_snapshot",
-        "date": "2026-06-08",
+        "date": "2026-06-10",
         "count": 0,
-        "updatedAt": "2026-06-08T07:45:01.970Z",
-        "bytes": 779
+        "updatedAt": "2026-06-10T02:13:46.984Z",
+        "bytes": 775
       },
       {
         "file": "realtime-radar-latest.json",
         "ok": true,
         "status": "retired_intraday_snapshot",
-        "date": "2026-06-08",
+        "date": "2026-06-10",
         "count": 0,
-        "updatedAt": "2026-06-08T07:45:01.975Z",
-        "bytes": 690
+        "updatedAt": "2026-06-10T02:16:58.692Z",
+        "bytes": 706
       },
       {
         "file": "performance-report.json",
@@ -87,8 +87,8 @@
         "status": "",
         "date": "",
         "count": 0,
-        "updatedAt": "2026-06-08T06:46:35.271Z",
-        "bytes": 2395
+        "updatedAt": "2026-06-10T02:13:55.306Z",
+        "bytes": 2394
       },
       {
         "file": "signal-quality-report.json",
@@ -96,8 +96,8 @@
         "status": "",
         "date": "",
         "count": 0,
-        "updatedAt": "2026-06-08T06:46:34.867Z",
-        "bytes": 794
+        "updatedAt": "2026-06-10T02:13:55.004Z",
+        "bytes": 795
       },
       {
         "file": "data-quality-report.json",
@@ -105,8 +105,8 @@
         "status": "",
         "date": "",
         "count": 0,
-        "updatedAt": "2026-06-08T06:46:35.020Z",
-        "bytes": 2012
+        "updatedAt": "2026-06-10T02:13:55.118Z",
+        "bytes": 2002
       },
       {
         "file": "data-consistency-report.json",
@@ -114,7 +114,7 @@
         "status": "",
         "date": "",
         "count": 0,
-        "updatedAt": "2026-06-08T06:46:35.124Z",
+        "updatedAt": "2026-06-10T02:13:55.202Z",
         "bytes": 316
       },
       {
@@ -123,7 +123,7 @@
         "status": "",
         "date": "",
         "count": 0,
-        "updatedAt": "2026-06-08T06:46:35.201Z",
+        "updatedAt": "2026-06-10T02:13:55.252Z",
         "bytes": 418
       }
     ]
