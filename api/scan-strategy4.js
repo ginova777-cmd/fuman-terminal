@@ -10,6 +10,7 @@ const FUGLE_API_KEY_FILE = process.env.FUGLE_API_KEY_FILE || path.join(RUNTIME_D
 const FINMIND_API_TOKEN_FILE = process.env.FINMIND_API_TOKEN_FILE || path.join(RUNTIME_DIR, "secrets", "finmind-api-token.txt");
 const FUGLE_HISTORY_CACHE_DIR = process.env.FUGLE_HISTORY_CACHE_DIR || path.join(RUNTIME_DIR, "cache", "fugle", "historical");
 const STRATEGY4_MIN_AVG_VOLUME_5 = 3000;
+const ALLOW_YAHOO_FALLBACK = process.env.STRATEGY4_ALLOW_YAHOO_FALLBACK !== "0";
 
 function readSecret(file) {
   try {
@@ -355,6 +356,17 @@ async function fetchHistory(code, preferredMarket = "") {
   }
 
   if (rows.length < 60) {
+    try {
+      const finmind = await fetchFinMindHistory(code);
+      if (finmind.rows.length >= rows.length) {
+        rows = finmind.rows;
+        historySource = finmind.source || historySource;
+      }
+    } catch {
+    }
+  }
+
+  if (rows.length < 60) {
     const officialRows = [];
     if (market !== "TPEX") {
       for (const item of months) {
@@ -390,18 +402,7 @@ async function fetchHistory(code, preferredMarket = "") {
     }
   }
 
-  if (rows.length < 60) {
-    try {
-      const finmind = await fetchFinMindHistory(code);
-      if (finmind.rows.length >= rows.length) {
-        rows = finmind.rows;
-        historySource = finmind.source || historySource;
-      }
-    } catch {
-    }
-  }
-
-  if (rows.length < 60) {
+  if (rows.length < 60 && ALLOW_YAHOO_FALLBACK) {
     const yahoo = await fetchYahooHistory(code, marketHint || market);
     if (yahoo.rows.length >= rows.length) {
       rows = yahoo.rows;

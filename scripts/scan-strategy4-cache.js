@@ -17,6 +17,7 @@ const BATCHES_PER_RUN = Number(process.env.STRATEGY4_BATCHES_PER_RUN || 999);
 const FULL_SCAN = process.env.FULL_SCAN !== "0";
 const SYNC_PARTIAL = process.env.STRATEGY4_SYNC_PARTIAL === "1";
 const SYNC_SCRIPT = path.join(ROOT, "run-strategy4-partial-sync.ps1");
+const PARTIAL_SYNC_EVERY_CHUNKS = Math.max(1, Number(process.env.STRATEGY4_PARTIAL_SYNC_EVERY_CHUNKS || 1));
 const STOCK_URL = process.env.STOCK_UNIVERSE_URL || "https://fuman-terminal.vercel.app/api/stocks";
 const MIN_UNIVERSE_SIZE = Number(process.env.STRATEGY4_MIN_UNIVERSE_SIZE || 1700);
 const MIN_MATCH_COUNT = Number(process.env.STRATEGY4_MIN_MATCH_COUNT || 10);
@@ -329,12 +330,32 @@ function writeStrategy4Output(output, writeBackup = false) {
   }
 }
 
+function refreshSlimCache(label) {
+  const script = path.join(ROOT, "scripts", "generate-slim-cache.js");
+  if (!fs.existsSync(script)) return;
+  const result = spawnSync(process.execPath, [script], {
+    cwd: ROOT,
+    encoding: "utf8",
+    timeout: 120000,
+  });
+  const output = `${result.stdout || ""}${result.stderr || ""}`.trim();
+  if (output) {
+    output.split(/\r?\n/).filter(Boolean).slice(-10).forEach((line) => console.log(`strategy4 slim (${label}): ${line}`));
+  }
+  if (result.error) {
+    console.log(`strategy4 slim failed (${label}): ${result.error.message}`);
+  } else if (result.status !== 0) {
+    console.log(`strategy4 slim failed (${label}): exit ${result.status}`);
+  }
+}
+
 function syncStrategy4Output(label) {
   if (!SYNC_PARTIAL) return;
   if (!fs.existsSync(SYNC_SCRIPT)) {
     console.log(`strategy4 sync skipped (${label}): missing ${SYNC_SCRIPT}`);
     return;
   }
+  refreshSlimCache(label);
   console.log(`strategy4 sync start (${label})`);
   const result = spawnSync("powershell.exe", [
     "-NoProfile",
@@ -432,6 +453,23 @@ async function main() {
       chunkCodes.forEach((code) => noDataCodes.add(code));
       scanErrors.push(`${label}: ${error.message || error}`);
       console.log(`${label} failed; ${chunkCodes.length} codes queued for resume`);
+    }
+    if (SYNC_PARTIAL && ((chunk + 1) % PARTIAL_SYNC_EVERY_CHUNKS === 0 || chunk + 1 === chunksToRun)) {
+      const chunkOutput = buildOutput({
+        codes,
+        scannedThisRun,
+        scanned,
+        noDataCodes,
+        scanErrors,
+        currentMatches,
+        dataSourceCounts,
+        complete: false,
+        runMode,
+        scanStamp,
+        volumeFilter,
+      });
+      writeStrategy4Output(chunkOutput, false);
+      syncStrategy4Output(`chunk-${chunk + 1}-of-${chunksToRun}`);
     }
   }
 
