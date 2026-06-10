@@ -1452,6 +1452,7 @@ let latestStocks = [];
 let marketDataLoading = false;
 let marketDataLastStartedAt = 0;
 let marketDataLastRenderedAt = 0;
+let marketInitialLoadingShown = false;
 let lastMarketRenderSignature = "";
 let lastHeatmapRenderSignature = "";
 let realtimeRadarLoading = false;
@@ -6706,6 +6707,28 @@ function renderStocks(stocks) {
   terminalMessage.textContent = `掃描完成：${parsed.length.toLocaleString("zh-TW")} 檔，強勢股 ${topStocks.length} 檔`;
 }
 
+function showMarketInitialLoading() {
+  if (marketDataLastRenderedAt || marketInitialLoadingShown) return;
+  marketInitialLoadingShown = true;
+  if (refreshLine) refreshLine.textContent = "資料讀取中...";
+  metricCards.slice(0, 3).forEach((card) => {
+    if (!card) return;
+    const label = card.querySelector("span")?.textContent || "市場資料";
+    card.innerHTML = `<span>${label}</span><strong>--</strong><em>資料讀取中</em>`;
+  });
+  if (tickerStrip) tickerStrip.innerHTML = `<span>資料讀取中...</span>`;
+  if (strengthPanel) {
+    const note = strengthPanel.querySelector(".strength-head p");
+    const score = strengthPanel.querySelector(".strength-head > strong");
+    if (note) note.textContent = "資料讀取中";
+    if (score) score.innerHTML = `--<span>上漲比例</span>`;
+    strengthPanel.querySelectorAll(".stats-row strong").forEach((node) => { node.textContent = "--"; });
+  }
+  if (terminalMessage) terminalMessage.textContent = "市場資料讀取中...";
+  if (stockTable) stockTable.innerHTML = `<div class="empty-state">資料讀取中...</div>`;
+  if (heatmap) heatmap.innerHTML = `<div class="empty-state">資料讀取中...</div>`;
+}
+
 function renderStockTable(stocks) {
   const rows = stocks.slice(0, 10);
   watchCount.textContent = `TOP ${rows.length}`;
@@ -6815,6 +6838,7 @@ async function loadMarketData() {
   const now = Date.now();
   const minInterval = isDocumentHidden() ? MARKET_REFRESH_HIDDEN_MS : MARKET_REFRESH_MS;
   if (marketDataLoading || (marketDataLastStartedAt && now - marketDataLastStartedAt < minInterval)) return;
+  showMarketInitialLoading();
   marketDataLoading = true;
   marketDataLastStartedAt = now;
   try {

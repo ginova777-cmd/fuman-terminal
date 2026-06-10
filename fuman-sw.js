@@ -1,23 +1,23 @@
-const CACHE_VERSION = "fuman-terminal-sw-split-cb-view-20260609-23";
+const CACHE_VERSION = "fuman-terminal-sw-market-loading-20260610-01";
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 const DATA_CACHE = `${CACHE_VERSION}-data`;
 
 const STATIC_ASSETS = [
-  "/styles.css?v=split-cb-view-20260609-23",
-  "/terminal-core.js?v=split-cb-view-20260609-23",
-  "/terminal-modules.js?v=split-cb-view-20260609-23",
-  "/terminal-sector-map.js?v=split-cb-view-20260609-23",
-  "/terminal-strategy-config.js?v=split-cb-view-20260609-23",
-  "/terminal-market-config.js?v=split-cb-view-20260609-23",
-  "/terminal-ui-config.js?v=split-cb-view-20260609-23",
-  "/terminal-runtime-config.js?v=split-cb-view-20260609-23",
-  "/terminal-tuning-config.js?v=split-cb-view-20260609-23",
-  "/terminal-worker.js?v=split-cb-view-20260609-23",
-  "/terminal.js?v=split-cb-view-20260609-23",
-  "/terminal-realtime-radar.css?v=split-cb-view-20260609-23",
-  "/terminal-intraday-radar.css?v=split-cb-view-20260609-23",
-  "/terminal-utility.css?v=split-cb-view-20260609-23",
-  "/refresh.html?v=split-cb-view-20260609-23",
+  "/styles.css?v=market-loading-20260610-01",
+  "/terminal-core.js?v=market-loading-20260610-01",
+  "/terminal-modules.js?v=market-loading-20260610-01",
+  "/terminal-sector-map.js?v=market-loading-20260610-01",
+  "/terminal-strategy-config.js?v=market-loading-20260610-01",
+  "/terminal-market-config.js?v=market-loading-20260610-01",
+  "/terminal-ui-config.js?v=market-loading-20260610-01",
+  "/terminal-runtime-config.js?v=market-loading-20260610-01",
+  "/terminal-tuning-config.js?v=market-loading-20260610-01",
+  "/terminal-worker.js?v=market-loading-20260610-01",
+  "/terminal.js?v=market-loading-20260610-01",
+  "/terminal-realtime-radar.css?v=market-loading-20260610-01",
+  "/terminal-intraday-radar.css?v=market-loading-20260610-01",
+  "/terminal-utility.css?v=market-loading-20260610-01",
+  "/refresh.html?v=market-loading-20260610-01",
   "/assets/logo.webp",
   "/favicon.ico",
 ];

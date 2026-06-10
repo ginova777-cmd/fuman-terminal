@@ -1,5 +1,5 @@
 (function () {
-  const version = "split-cb-view-20260609-23";
+  const version = "market-loading-20260610-01";
   window.FUMAN_TERMINAL_BOOT = {
     version,
     startedAt: Date.now(),
