@@ -1,5 +1,5 @@
 (function () {
-  const version = "heatmap-realtime-20260610-03";
+  const version = "heatmap-realtime-20260610-04";
   window.FUMAN_TERMINAL_BOOT = {
     version,
     startedAt: Date.now(),
