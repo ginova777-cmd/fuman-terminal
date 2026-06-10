@@ -5,7 +5,7 @@ param(
 $ErrorActionPreference = "Continue"
 
 $terminalRoot = "${PSScriptRoot}"
-$syncRoot = "C:\fuman-terminal-sync"
+$syncRoot = if ($env:FUMAN_PUBLISH_SYNC_REPO) { $env:FUMAN_PUBLISH_SYNC_REPO } else { "C:\fuman-terminal-publish-sync" }
 $runtimeRoot = "C:\fuman-runtime"
 $terminalJs = Join-Path $terminalRoot "terminal.js"
 $syncTerminalJs = Join-Path $syncRoot "terminal.js"
@@ -193,7 +193,7 @@ function Show-DataSourceNote {
   Write-Host "盤中即時雷達/策略巡邏的準確來源：" -ForegroundColor Yellow
   Write-Host "  1. C:\fuman-runtime\data\realtime-radar-latest.json：Mini PC 巡邏寫入的本機即時快取"
   Write-Host "  2. Supabase fuman_realtime_radar_cache：前端線上即時雷達優先讀取的 live cache"
-  Write-Host "  3. ${PSScriptRoot}\data 與 C:\fuman-terminal-sync\data：Git/repo 同步備份，不是 3 秒巡邏來源"
+  Write-Host "  3. ${PSScriptRoot}\data 與 C:\fuman-terminal-publish-sync\data：Git/repo 同步備份，不是 3 秒巡邏來源"
   Write-Host "判讀原則：若 repo /data 較舊，但 runtime/Supabase 正常更新，不代表即時雷達停住。" -ForegroundColor Yellow
   Write-Host "除錯順序：先看 runtime data 與最新 realtime-radar log，再看 Supabase；repo /data 只用來確認同步備份。"
 }

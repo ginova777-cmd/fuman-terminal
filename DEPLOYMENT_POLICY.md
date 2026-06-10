@@ -29,3 +29,5 @@ vercel --prod --token $env:VERCEL_TOKEN
 ```
 
 Do not deploy or push from `C:\fuman-terminal` unless it has been intentionally cleaned and re-approved.
+
+Scheduled cache/data publishing must use `C:\fuman-terminal-publish-sync`, not `C:\fuman-terminal-sync`. The publish sync repo is disposable and may be reset to `origin/main` by automation.

@@ -78,7 +78,8 @@ Invoke-WithRetry "Strategy3 scan" {
 } 3 20
 
 $runtimeStrategy3 = "C:\fuman-runtime\data\strategy3-latest.json"
-$syncStrategy3 = "C:\fuman-terminal-sync\data\strategy3-latest.json"
+$publishSyncRepo = if ($env:FUMAN_PUBLISH_SYNC_REPO) { $env:FUMAN_PUBLISH_SYNC_REPO } else { "C:\fuman-terminal-publish-sync" }
+$syncStrategy3 = Join-Path $publishSyncRepo "data\strategy3-latest.json"
 if (-not (Test-Path -LiteralPath $runtimeStrategy3)) {
   throw "Strategy3 runtime file missing after scan: $runtimeStrategy3"
 }
