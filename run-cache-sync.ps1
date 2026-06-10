@@ -9,6 +9,7 @@ $PSNativeCommandUseErrorActionPreference = $false
 $sourceRepo = "C:\fuman-runtime"
 $codeRepo = "${PSScriptRoot}"
 $syncRepo = if ($env:FUMAN_PUBLISH_SYNC_REPO) { $env:FUMAN_PUBLISH_SYNC_REPO } else { "C:\fuman-terminal-publish-sync" }
+$mainDeployRepo = if ($env:FUMAN_MAIN_DEPLOY_REPO) { $env:FUMAN_MAIN_DEPLOY_REPO } else { "C:\fuman-terminal" }
 $publishToCodeRepo = $env:CACHE_SYNC_WRITE_CODE_REPO -eq "1"
 $repoUrl = "https://github.com/ginova777-cmd/fuman-terminal.git"
 $logDir = Join-Path $sourceRepo "logs"
@@ -371,6 +372,21 @@ function Copy-CodeRepoCacheFile($file, $source, $label) {
     return
   }
   Write-Log "Skipping code repo cache copy ($label): $file"
+}
+
+function Copy-MainDeployCacheFile($file, $source, $label) {
+  if (-not $mainDeployRepo) { return }
+  if (-not (Test-Path -LiteralPath $mainDeployRepo)) {
+    Write-Log "Skipping main deploy cache copy ($label): missing $mainDeployRepo"
+    return
+  }
+  $sourceRoot = [System.IO.Path]::GetFullPath($codeRepo).TrimEnd('\')
+  $targetRoot = [System.IO.Path]::GetFullPath($mainDeployRepo).TrimEnd('\')
+  if ($sourceRoot -ieq $targetRoot) {
+    Write-Log "Skipping main deploy cache copy ($label): same as code repo"
+    return
+  }
+  Copy-CacheFile $file $source $mainDeployRepo "main-deploy $label"
 }
 
 function Update-SlimCacheFiles {
@@ -841,6 +857,7 @@ try {
     }
     Copy-CacheFile $file $source $syncRepo "sync"
     Copy-CodeRepoCacheFile $file $source "local"
+    Copy-MainDeployCacheFile $file $source "local"
     $copiedFiles.Add($file) | Out-Null
   }
 
@@ -899,6 +916,7 @@ try {
         }
         Copy-CacheFile $file $source $syncRepo "sync retry"
         Copy-CodeRepoCacheFile $file $source "local retry"
+        Copy-MainDeployCacheFile $file $source "local retry"
         $retryStageFiles.Add($file) | Out-Null
       }
     }

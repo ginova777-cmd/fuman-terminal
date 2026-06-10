@@ -95,6 +95,35 @@ Copy-Item -LiteralPath (Join-Path $repo "data\strategy4-backup.json") -Destinati
 Write-Log "Strategy4 cache copied to runtime data for clean sync."
 
 $strategy4Output = Get-Content -LiteralPath (Join-Path $repo "data\strategy4-latest.json") -Raw | ConvertFrom-Json
+$sheetUploaded = $false
+
+if ($env:STRATEGY4_UPLOAD_SHEET_AFTER_SCAN -ne "0" -and $strategy4Output.complete -eq $true) {
+  $uploadScript = Join-Path $repo "run-upload-backtest-google-sheet.ps1"
+  if (Test-Path -LiteralPath $uploadScript) {
+    Write-Log "=== Strategy4 Google Sheet upload start $(Get-Date) ==="
+    $previousOnly = $env:GOOGLE_SHEET_ONLY
+    $env:GOOGLE_SHEET_ONLY = "策略4成績單"
+    try {
+      & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $uploadScript $strategy4Stamp *>&1 | Tee-Object -FilePath $log -Append | Out-Null
+      $sheetExit = $LASTEXITCODE
+    } finally {
+      if ($null -ne $previousOnly) {
+        $env:GOOGLE_SHEET_ONLY = $previousOnly
+      } else {
+        Remove-Item Env:GOOGLE_SHEET_ONLY -ErrorAction SilentlyContinue
+      }
+    }
+    if ($sheetExit -ne 0) {
+      Write-Log "Strategy4 Google Sheet upload failed with exit code $sheetExit"
+      exit $sheetExit
+    }
+    $sheetUploaded = $true
+    Write-Log "=== Strategy4 Google Sheet upload end $(Get-Date) ==="
+  } else {
+    Write-Log "Strategy4 Google Sheet upload script not found: $uploadScript"
+    exit 1
+  }
+}
 
 $syncScript = Join-Path $repo "run-cache-sync.ps1"
 if (Test-Path -LiteralPath $syncScript) {
@@ -102,14 +131,36 @@ if (Test-Path -LiteralPath $syncScript) {
   $syncExit = Invoke-CacheSyncWithRetry $syncScript 3
   if ($syncExit -ne 0) {
     Write-Log "Strategy4 clean cache sync failed with exit code $syncExit"
-    exit $syncExit
+    $retryScript = Join-Path $repo "run-strategy4-sync-retry.ps1"
+    if (Test-Path -LiteralPath $retryScript) {
+      Write-Log "Strategy4 sync retry background scan started because cache sync failed."
+      Start-Process -FilePath "C:\Program Files\PowerShell\7\pwsh.exe" -ArgumentList @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $retryScript) -WindowStyle Hidden | Out-Null
+    } else {
+      Write-Log "Strategy4 sync retry script not found: $retryScript"
+    }
   }
-  Write-Log "=== Strategy4 clean cache sync end $(Get-Date) ==="
+  else {
+    Write-Log "=== Strategy4 clean cache sync end $(Get-Date) ==="
+  }
 } else {
   Write-Log "run-cache-sync.ps1 not found; strategy4 files updated locally only."
 }
 
-if ($env:STRATEGY4_UPLOAD_SHEET_AFTER_SCAN -ne "0" -and $strategy4Output.complete -eq $true) {
+$postflightScript = Join-Path $repo "run-strategy4-postflight.ps1"
+if (Test-Path -LiteralPath $postflightScript) {
+  Write-Log "=== Strategy4 postflight start $(Get-Date) ==="
+  & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $postflightScript *>&1 | Tee-Object -FilePath $log -Append | Out-Null
+  $postflightExit = $LASTEXITCODE
+  if ($postflightExit -ne 0) {
+    Write-Log "Strategy4 postflight failed with exit code $postflightExit"
+    exit $postflightExit
+  }
+  Write-Log "=== Strategy4 postflight end $(Get-Date) ==="
+} else {
+  Write-Log "Strategy4 postflight script not found: $postflightScript"
+}
+
+if ($env:STRATEGY4_UPLOAD_SHEET_AFTER_SCAN -ne "0" -and $strategy4Output.complete -eq $true -and -not $sheetUploaded) {
   $uploadScript = Join-Path $repo "run-upload-backtest-google-sheet.ps1"
   if (Test-Path -LiteralPath $uploadScript) {
     Write-Log "=== Strategy4 Google Sheet upload start $(Get-Date) ==="

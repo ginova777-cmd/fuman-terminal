@@ -22,6 +22,9 @@ const MIN_UNIVERSE_SIZE = Number(process.env.STRATEGY4_MIN_UNIVERSE_SIZE || 1700
 const MIN_MATCH_COUNT = Number(process.env.STRATEGY4_MIN_MATCH_COUNT || 10);
 const MIN_MATCH_RATIO_TO_PREVIOUS = Number(process.env.STRATEGY4_MIN_MATCH_RATIO_TO_PREVIOUS || 0.5);
 const MAX_YAHOO_SOURCE_RATIO = Number(process.env.STRATEGY4_MAX_YAHOO_SOURCE_RATIO || 0.2);
+const MIN_AVG_VOLUME_5 = Number(process.env.STRATEGY4_MIN_AVG_VOLUME_5 || 3000);
+const ALLOW_FILTER_RULE_DROP = process.env.STRATEGY4_ALLOW_FILTER_RULE_DROP !== "0";
+const FUGLE_HISTORY_CACHE_DIR = process.env.FUGLE_HISTORY_CACHE_DIR || path.join(process.env.FUMAN_RUNTIME_DIR || "C:\\fuman-runtime", "cache", "fugle", "historical");
 const USE_MIS_QUOTES = process.env.STRATEGY4_USE_MIS === "1";
 const FAIL_ON_INCOMPLETE = process.env.STRATEGY4_FAIL_ON_INCOMPLETE !== "0";
 const ALLOW_PARTIAL_PUBLISH = process.env.STRATEGY4_ALLOW_PARTIAL_PUBLISH === "1";
@@ -41,6 +44,69 @@ function normalizeCode(value) {
 
 function cleanNumber(value) {
   return Number(String(value ?? "").replace(/[,+%]/g, "").trim()) || 0;
+}
+
+function normalizeVolumeLots(value) {
+  const volume = cleanNumber(value);
+  if (!volume) return 0;
+  return volume >= 100000 ? volume / 1000 : volume;
+}
+
+function avg(values) {
+  const nums = values.filter((value) => Number.isFinite(value) && value > 0);
+  return nums.length ? nums.reduce((sum, value) => sum + value, 0) / nums.length : 0;
+}
+
+function cachedAvgVolume5(code) {
+  const file = path.join(FUGLE_HISTORY_CACHE_DIR, `${normalizeCode(code)}.json`);
+  const payload = readJson(file, null);
+  const rows = Array.isArray(payload?.rows) ? payload.rows : [];
+  if (rows.length < 5) return null;
+  const volumes = rows
+    .slice()
+    .sort((a, b) => String(a.date || "").localeCompare(String(b.date || "")))
+    .slice(-5)
+    .map((row) => normalizeVolumeLots(row.volume));
+  const value = avg(volumes);
+  return value ? Number(value.toFixed(2)) : null;
+}
+
+function buildVolumePrefilter(stocks) {
+  const filtered = [];
+  let cacheHit = 0;
+  let cacheMiss = 0;
+  stocks.forEach((stock) => {
+    const avgVolume5 = cachedAvgVolume5(stock.code);
+    if (avgVolume5 == null) {
+      cacheMiss += 1;
+      return;
+    }
+    cacheHit += 1;
+    if (avgVolume5 < MIN_AVG_VOLUME_5) {
+      filtered.push({ code: stock.code, name: stock.name || stock.code, avgVolume5 });
+    }
+  });
+  return {
+    enabled: true,
+    rule: "avgVolume5-gte",
+    minAvgVolume5: MIN_AVG_VOLUME_5,
+    filtered,
+    cacheHit,
+    cacheMiss,
+  };
+}
+
+function volumeFilterRuleChanged(previous, current) {
+  const previousFilter = previous?.volumeFilter || null;
+  const currentFilter = current?.volumeFilter || null;
+  const previousThreshold = Number(previousFilter?.minAvgVolume5 || previousFilter?.threshold || 0);
+  const currentThreshold = Number(currentFilter?.minAvgVolume5 || currentFilter?.threshold || 0);
+  const previousFiltered = Number(previous?.volumeFilteredCount || previousFilter?.filtered?.length || 0);
+  const currentFiltered = Number(current?.volumeFilteredCount || currentFilter?.filtered?.length || 0);
+  if (!currentFilter || currentFiltered <= 0) return false;
+  if (!previousFilter && currentFiltered > 0) return true;
+  if (previousThreshold !== currentThreshold) return true;
+  return previousFiltered === 0 && currentFiltered > 0;
 }
 
 async function fetchJson(url, timeout = 20000) {
@@ -180,6 +246,19 @@ function mergeMatches(matches, universe, currentMatches) {
   });
 }
 
+function removeScannedMisses(scannedCodes, payload, currentMatches) {
+  const matchedCodes = new Set((payload.matches || []).map((item) => item.code));
+  const noDataCodes = new Set(payload.noDataCodes || []);
+  const errorCodes = new Set((payload.errors || [])
+    .map((error) => String(error || "").match(/^(\d{4})\b/)?.[1])
+    .filter(Boolean));
+  scannedCodes.forEach((code) => {
+    if (!matchedCodes.has(code) && !noDataCodes.has(code) && !errorCodes.has(code)) {
+      currentMatches.delete(code);
+    }
+  });
+}
+
 function mergeSourceCounts(sourceCounts, currentSourceCounts) {
   Object.entries(sourceCounts || {}).forEach(([source, count]) => {
     const key = source || "unknown";
@@ -187,10 +266,9 @@ function mergeSourceCounts(sourceCounts, currentSourceCounts) {
   });
 }
 
-function buildOutput({ codes, scannedThisRun, scanned, noDataCodes, scanErrors, currentMatches, dataSourceCounts, complete, runMode, scanStamp }) {
+function buildOutput({ codes, scannedThisRun, scanned, noDataCodes, scanErrors, currentMatches, dataSourceCounts, complete, runMode, scanStamp, volumeFilter }) {
   const matches = [...currentMatches.values()]
     .sort((a, b) => (b.swingScore || b.score || 0) - (a.swingScore || a.score || 0) || (b.percent || 0) - (a.percent || 0));
-  const dataDate = [...new Set(matches.map((item) => item.date).filter(Boolean))].sort().at(-1) || "";
   const noDataCount = noDataCodes.size;
   const errorCount = scanErrors.length;
   const pendingCount = codes.length - scanned.size + noDataCount;
@@ -215,7 +293,6 @@ function buildOutput({ codes, scannedThisRun, scanned, noDataCodes, scanErrors, 
     source: baseComplete ? "github-actions" : "github-actions-partial",
     priceSource: USE_MIS_QUOTES ? "official-daily-k-plus-mis" : "official-daily-k",
     updatedAt: new Date().toISOString(),
-    dataDate,
     scanStamp,
     fullScan: FULL_SCAN,
     runMode,
@@ -235,6 +312,9 @@ function buildOutput({ codes, scannedThisRun, scanned, noDataCodes, scanErrors, 
     misSourceCount,
     misSourceRatio,
     sourceWarnings,
+    volumeFilter: volumeFilter || null,
+    volumeFilteredCount: volumeFilter?.filtered?.length || 0,
+    volumeFilteredCodes: (volumeFilter?.filtered || []).map((item) => item.code),
     count: matches.length,
     matches,
   };
@@ -310,8 +390,15 @@ async function main() {
     });
   }
 
+  const volumeFilter = buildVolumePrefilter(universe);
+  volumeFilter.filtered.forEach((item) => {
+    currentMatches.delete(item.code);
+    noDataCodes.delete(item.code);
+    scanned.add(item.code);
+  });
+
   const pendingCodes = FULL_SCAN
-    ? codes
+    ? codes.filter((code) => !scanned.has(code))
     : [...new Set([
       ...codes.filter((code) => !scanned.has(code)),
       ...noDataCodes,
@@ -319,6 +406,7 @@ async function main() {
   const chunksToRun = Math.min(Math.ceil(pendingCodes.length / CHUNK_SIZE), BATCHES_PER_RUN);
   const runMode = FULL_SCAN ? "full" : "resume";
 
+  console.log(`strategy4 volume prefilter: cacheHit ${volumeFilter.cacheHit}, cacheMiss ${volumeFilter.cacheMiss}, filtered ${volumeFilter.filtered.length} below avg5 ${MIN_AVG_VOLUME_5}`);
   console.log(`strategy4 cache start: ${runMode} scan, ${codes.length} total codes, ${pendingCodes.length} pending codes, ${chunksToRun} chunks in this run`);
   for (let chunk = 0; chunk < chunksToRun; chunk++) {
     const start = chunk * CHUNK_SIZE;
@@ -336,6 +424,7 @@ async function main() {
       (payload.noDataCodes || []).forEach((code) => noDataCodes.add(code));
       (payload.errors || []).forEach((error) => scanErrors.push(`${label}: ${error}`));
       mergeSourceCounts(payload.sourceCounts, dataSourceCounts);
+      removeScannedMisses(chunkCodes, payload, currentMatches);
       mergeMatches(payload.matches, universe, currentMatches);
       scannedThisRun += chunkCodes.length;
       console.log(`${label} done: matches ${(payload.matches || []).length}`);
@@ -346,7 +435,7 @@ async function main() {
     }
   }
 
-  if (FULL_SCAN && !ALLOW_PARTIAL_PUBLISH && (scanned.size !== codes.length || scannedThisRun !== codes.length)) {
+  if (FULL_SCAN && !ALLOW_PARTIAL_PUBLISH && scanned.size !== codes.length) {
     throw new Error(`Strategy4 full scan incomplete: scanned ${scanned.size}/${codes.length}`);
   }
 
@@ -361,6 +450,7 @@ async function main() {
     complete: scanned.size === codes.length && !scanErrors.length && !noDataCodes.size,
     runMode,
     scanStamp,
+    volumeFilter,
   });
   console.log(`strategy4 first pass done: ${runMode} scannedThisRun ${scannedThisRun}, scannedTotal ${scanned.size}/${codes.length}, matches ${firstPassOutput.count}, noData ${noDataCodes.size}`);
   if (SYNC_PARTIAL) {
@@ -383,6 +473,7 @@ async function main() {
       (payload.noDataCodes || []).forEach((code) => noDataCodes.add(code));
       (payload.errors || []).forEach((error) => scanErrors.push(`${label}: ${error}`));
       mergeSourceCounts(payload.sourceCounts, dataSourceCounts);
+      removeScannedMisses(retryChunkCodes, payload, currentMatches);
       mergeMatches(payload.matches, universe, currentMatches);
       const retryOutput = buildOutput({
         codes,
@@ -395,6 +486,7 @@ async function main() {
         complete: false,
         runMode,
         scanStamp,
+        volumeFilter,
       });
       if (SYNC_PARTIAL) {
         writeStrategy4Output(retryOutput, false);
@@ -415,6 +507,7 @@ async function main() {
     complete: scanned.size === codes.length && !scanErrors.length && !noDataCodes.size,
     runMode,
     scanStamp,
+    volumeFilter,
   });
 
   writeStrategy4Output(output, true);
@@ -433,6 +526,10 @@ async function main() {
   if (FULL_SCAN && output.complete && previousCompleteCount >= MIN_MATCH_COUNT) {
     const minByHistory = Math.max(MIN_MATCH_COUNT, Math.floor(previousCompleteCount * MIN_MATCH_RATIO_TO_PREVIOUS));
     if (output.count < minByHistory) {
+      if (ALLOW_FILTER_RULE_DROP && volumeFilterRuleChanged(previousRaw, output)) {
+        console.warn(`Strategy4 match drop allowed after filter rule change: ${output.count} vs previous ${previousCompleteCount}, filtered ${output.volumeFilteredCount}, minimum ${minByHistory}`);
+        return;
+      }
       throw new Error(`Strategy4 suspicious match drop: ${output.count} vs previous ${previousCompleteCount}, minimum ${minByHistory}`);
     }
   }
@@ -442,6 +539,8 @@ main().catch((error) => {
   console.error(error);
   process.exit(1);
 });
+
+
 
 
 

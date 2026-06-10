@@ -1,6 +1,6 @@
 $ErrorActionPreference = "Continue"
 
-$script = "${PSScriptRoot}\run-strategy4-partial-sync.ps1"
+$script = "${PSScriptRoot}\run-cache-sync.ps1"
 $logDir = "${PSScriptRoot}\logs"
 $log = Join-Path $logDir ("strategy4-sync-retry-{0}.log" -f (Get-Date -Format "yyyyMMdd-HHmmss"))
 $maxAttempts = if ($env:STRATEGY4_SYNC_RETRY_ATTEMPTS) { [int]$env:STRATEGY4_SYNC_RETRY_ATTEMPTS } else { 30 }
@@ -14,7 +14,7 @@ function Write-Log($message) {
 
 for ($attempt = 1; $attempt -le $maxAttempts; $attempt++) {
   Write-Log "=== Strategy4 sync retry attempt $attempt/$maxAttempts $(Get-Date) ==="
-  & $script *>&1 | Tee-Object -FilePath $log -Append
+  & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $script -Scope strategy4 *>&1 | Tee-Object -FilePath $log -Append
   $exit = $LASTEXITCODE
   if ($exit -eq 0) {
     Write-Log "Strategy4 sync retry succeeded."

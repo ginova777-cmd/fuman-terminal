@@ -5,6 +5,7 @@ const crypto = require("crypto");
 const repoRoot = path.resolve(__dirname, "..");
 const runtimeRoot = process.env.FUMAN_RUNTIME_ROOT || "C:\\fuman-runtime";
 const syncRoot = process.env.FUMAN_SYNC_DIR || "C:\\fuman-terminal-sync";
+const STRATEGY4_MIN_AVG_VOLUME_5 = 3000;
 
 function cleanNumber(value) {
   return Number(String(value ?? "").replace(/[,+%]/g, "").trim()) || 0;
@@ -52,14 +53,16 @@ function slimSignal(signal) {
 }
 
 function slimStrategy4(payload) {
-  const matches = Array.isArray(payload?.matches) ? payload.matches : [];
+  const matches = Array.isArray(payload?.matches)
+    ? payload.matches.filter((item) => !cleanNumber(item.avgVolume5) || cleanNumber(item.avgVolume5) >= STRATEGY4_MIN_AVG_VOLUME_5)
+    : [];
   return {
     ok: Boolean(payload?.ok ?? true),
     source: payload?.source || "strategy4-slim",
     updatedAt: payload?.updatedAt || "",
     scanStamp: payload?.scanStamp || "",
     total: cleanNumber(payload?.total),
-    count: cleanNumber(payload?.count || matches.length),
+    count: matches.length,
     complete: Boolean(payload?.complete),
     scannedCount: Array.isArray(payload?.scannedCodes) ? payload.scannedCodes.length : cleanNumber(payload?.scannedCount),
     matches: matches.map((item) => ({
@@ -68,6 +71,7 @@ function slimStrategy4(payload) {
       close: cleanNumber(item.close),
       percent: cleanNumber(item.percent),
       tradeVolume: cleanNumber(item.tradeVolume),
+      avgVolume5: cleanNumber(item.avgVolume5),
       value: cleanNumber(item.value),
       swingScore: cleanNumber(item.swingScore || item.score),
       score: cleanNumber(item.swingScore || item.score),
@@ -694,7 +698,8 @@ function dataManifest() {
       hash: crypto.createHash("sha1").update(json).digest("hex").slice(0, 12),
       bytes: Buffer.byteLength(json),
       updatedAt: payload?.updatedAt || payload?.scanStamp || "",
-      date: payload?.usedDate || payload?.date || payload?.tradeDate || payload?.resolvedTradeDate || payload?.scanStamp || "",
+      date: statusDateForFile(file, payload),
+      sourceDate: payload?.sourceDate || payload?.usedDate || "",
       count: cleanNumber(payload?.count || normalizeArray(payload?.matches).length || normalizeArray(payload?.rows).length || normalizeArray(payload?.stocks).length || normalizeArray(payload?.quotes).length),
     };
   }

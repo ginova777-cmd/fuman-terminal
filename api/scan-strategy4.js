@@ -8,12 +8,32 @@ const USE_MIS_QUOTES = process.env.STRATEGY4_USE_MIS === "1";
 const RUNTIME_DIR = process.env.FUMAN_RUNTIME_DIR || "C:\\fuman-runtime";
 const FUGLE_API_KEY_FILE = process.env.FUGLE_API_KEY_FILE || path.join(RUNTIME_DIR, "secrets", "fugle-api-key.txt");
 const FINMIND_API_TOKEN_FILE = process.env.FINMIND_API_TOKEN_FILE || path.join(RUNTIME_DIR, "secrets", "finmind-api-token.txt");
+const FUGLE_HISTORY_CACHE_DIR = process.env.FUGLE_HISTORY_CACHE_DIR || path.join(RUNTIME_DIR, "cache", "fugle", "historical");
+const STRATEGY4_MIN_AVG_VOLUME_5 = 3000;
 
 function readSecret(file) {
   try {
     return fs.readFileSync(file, "utf8").trim();
   } catch {
     return "";
+  }
+}
+
+function readJson(file, fallback = null) {
+  try {
+    return JSON.parse(fs.readFileSync(file, "utf8"));
+  } catch {
+    return fallback;
+  }
+}
+
+function writeJson(file, value) {
+  try {
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, `${JSON.stringify(value, null, 2)}\n`);
+    return true;
+  } catch {
+    return false;
   }
 }
 
@@ -91,6 +111,34 @@ function isoDateDaysAgo(days) {
   const date = new Date();
   date.setDate(date.getDate() - days);
   return date.toISOString().slice(0, 10);
+}
+
+function fugleHistoryCacheFile(code) {
+  return path.join(FUGLE_HISTORY_CACHE_DIR, `${normalizeCode(code)}.json`);
+}
+
+function readFugleHistoryCache(code, from, to) {
+  const payload = readJson(fugleHistoryCacheFile(code), null);
+  if (
+    payload?.code !== normalizeCode(code)
+    || payload?.from !== from
+    || payload?.to !== to
+    || !Array.isArray(payload?.rows)
+    || payload.rows.length < 60
+  ) return null;
+  return { rows: payload.rows, source: "fugle-cache" };
+}
+
+function writeFugleHistoryCache(code, from, to, rows) {
+  if (!Array.isArray(rows) || rows.length < 60) return false;
+  return writeJson(fugleHistoryCacheFile(code), {
+    code: normalizeCode(code),
+    from,
+    to,
+    source: "fugle",
+    updatedAt: new Date().toISOString(),
+    rows,
+  });
 }
 
 function normalizeTwseRows(payload) {
@@ -230,10 +278,14 @@ async function fetchTpexMonth(code, date) {
 
 async function fetchFugleHistory(code) {
   if (!FUGLE_API_KEY) return { rows: [], source: "" };
+  const from = isoDateDaysAgo(270);
+  const to = new Date().toISOString().slice(0, 10);
+  const cached = readFugleHistoryCache(code, from, to);
+  if (cached) return cached;
   const params = new URLSearchParams({
     symbol: code,
-    from: isoDateDaysAgo(270),
-    to: new Date().toISOString().slice(0, 10),
+    from,
+    to,
   });
   const url = `https://api.fugle.tw/marketdata/v1.0/stock/historical/candles/${code}?${params.toString()}`;
   const payload = JSON.parse(await fetchText(url, {
@@ -242,7 +294,9 @@ async function fetchFugleHistory(code) {
       "X-API-KEY": FUGLE_API_KEY,
     },
   }, 20000));
-  return { rows: normalizeFugleRows(payload), source: "fugle" };
+  const rows = normalizeFugleRows(payload);
+  writeFugleHistoryCache(code, from, to, rows);
+  return { rows, source: "fugle" };
 }
 
 async function fetchFinMindHistory(code) {
@@ -372,6 +426,12 @@ function avg(values) {
   return nums.length ? nums.reduce((sum, value) => sum + value, 0) / nums.length : 0;
 }
 
+function normalizeVolumeLots(value) {
+  const volume = cleanNumber(value);
+  if (!volume) return 0;
+  return volume >= 100000 ? volume / 1000 : volume;
+}
+
 function sma(values, length, offset = 0) {
   const end = values.length - offset;
   const start = end - length;
@@ -432,10 +492,11 @@ function atr(rows, length = 14) {
 
 function analyzeRows(rows) {
   if (rows.length < 60) return null;
-  const closes = rows.map((row) => row.close);
-  const volumes = rows.map((row) => row.volume);
-  const last = rows.at(-1);
-  const prev = rows.at(-2);
+  const normalizedRows = rows.map((row) => ({ ...row, volume: normalizeVolumeLots(row.volume) }));
+  const closes = normalizedRows.map((row) => row.close);
+  const volumes = normalizedRows.map((row) => row.volume);
+  const last = normalizedRows.at(-1);
+  const prev = normalizedRows.at(-2);
   const ma5 = sma(closes, 5);
   const ma10 = sma(closes, 10);
   const ma20 = sma(closes, 20);
@@ -446,11 +507,12 @@ function analyzeRows(rows) {
   const ema21All = emaSeries(closes, 21);
   const ema21 = ema21All.at(-1) || 0;
   const ema21Prev = ema21All.at(-2) || ema21;
+  const volMa5 = sma(volumes, 5);
   const volMa20 = sma(volumes, 20);
   const macd = macdSnapshot(closes);
   const rsi14 = rsi(closes, 14);
   const atr14 = atr(rows, 14);
-  const lookback = rows.slice(-40);
+  const lookback = normalizedRows.slice(-40);
   const swHigh = Math.max(...lookback.map((row) => row.high));
   const swLow = Math.min(...lookback.map((row) => row.low));
   const swDiff = Math.max(swHigh - swLow, 0);
@@ -459,11 +521,11 @@ function analyzeRows(rows) {
     : position >= 0.618 ? { label: "高基期", ratio: position.toFixed(2), tone: "high", value: position }
     : position >= 0.382 ? { label: "中位階", ratio: position.toFixed(2), tone: "mid", value: position }
     : { label: "低基期", ratio: position.toFixed(2), tone: "low", value: position };
-  const highest20Prev = Math.max(...rows.slice(-21, -1).map((row) => row.high));
-  const highest10Prev = Math.max(...rows.slice(-11, -1).map((row) => row.high));
-  const highest2Prev = Math.max(...rows.slice(-3, -1).map((row) => row.high));
+  const highest20Prev = Math.max(...normalizedRows.slice(-21, -1).map((row) => row.high));
+  const highest10Prev = Math.max(...normalizedRows.slice(-11, -1).map((row) => row.high));
+  const highest2Prev = Math.max(...normalizedRows.slice(-3, -1).map((row) => row.high));
   const neckline = Math.max(...lookback.slice(0, Math.max(8, Math.floor(lookback.length * 0.6))).map((row) => row.high));
-  const prevLookback = rows.slice(-41, -1);
+  const prevLookback = normalizedRows.slice(-41, -1);
   const prevSwHigh = Math.max(...prevLookback.map((row) => row.high));
   const prevSwLow = Math.min(...prevLookback.map((row) => row.low));
   const prevSwDiff = Math.max(prevSwHigh - prevSwLow, 0);
@@ -481,7 +543,7 @@ function analyzeRows(rows) {
   const deepFall = ma20 ? ((last.close - ma20) / ma20) * 100 < -1.5 : false;
   const bias20 = ma20 ? ((last.close - ma20) / ma20) * 100 : 0;
   return {
-    rows,
+    rows: normalizedRows,
     last,
     prev,
     closes,
@@ -492,6 +554,7 @@ function analyzeRows(rows) {
     ma10Prev,
     ma20Offset,
     ema21,
+    volMa5,
     volMa20,
     volumeRatio,
     macd,
@@ -563,6 +626,7 @@ function calcBuyStreak(rows, ma20, volMa20) {
 function scanStrategy4(code, market, rows, priceSource = "") {
   const daily = analyzeRows(rows);
   if (!daily) return null;
+  if (daily.volMa5 < STRATEGY4_MIN_AVG_VOLUME_5) return null;
 
   const last = daily.last;
   const prev = daily.prev;
@@ -690,6 +754,7 @@ function scanStrategy4(code, market, rows, priceSource = "") {
     volume: last.volume,
     tradeVolume: last.volume,
     value: last.value,
+    avgVolume5: Number(daily.volMa5.toFixed(2)),
     volumeRatio: Number(daily.volumeRatio.toFixed(2)),
     swingStage: daily.stage,
     swingZone,
