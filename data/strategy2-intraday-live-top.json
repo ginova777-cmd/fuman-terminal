@@ -1,1 +1,32 @@
-{"source":"strategy2-mobile-live-top","profile":"strategy2-mobile-live-top","date":"2026-06-10","updatedAt":"2026-06-10T02:10:29.740Z","realtime":{"requested":1008,"received":0,"failed":0,"usable":23,"coverage":0.0228,"coverageBeforeRescue":0,"coverageAfterRescue":0,"cachedRecovered":23,"entrySourceHealthy":false,"entrySourceCoverageThreshold":0.5,"skippedPartialCoverage":true},"records":[],"events":[],"entryCount":0,"aCount":0,"bOnlyCount":0,"slim":{"generatedAt":"2026-06-10T02:10:35.708Z","sourceRecords":0,"records":0,"events":0,"enhancementLimit":8},"count":0}
+{
+  "source": "strategy2-mobile-live-top",
+  "profile": "strategy2-mobile-live-top",
+  "date": "2026-06-10",
+  "updatedAt": "2026-06-10T02:12:22.231Z",
+  "realtime": {
+    "requested": 1008,
+    "received": 0,
+    "failed": 0,
+    "usable": 17,
+    "coverage": 0.0169,
+    "coverageBeforeRescue": 0,
+    "coverageAfterRescue": 0,
+    "cachedRecovered": 17,
+    "entrySourceHealthy": false,
+    "entrySourceCoverageThreshold": 0.5,
+    "skippedPartialCoverage": true
+  },
+  "records": [],
+  "events": [],
+  "entryCount": 0,
+  "aCount": 0,
+  "bOnlyCount": 0,
+  "slim": {
+    "generatedAt": "2026-06-10T02:12:22.245Z",
+    "sourceRecords": 0,
+    "records": 0,
+    "events": 0,
+    "enhancementLimit": 8
+  },
+  "count": 0
+}
