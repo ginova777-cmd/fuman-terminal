@@ -1,5 +1,5 @@
 (function () {
-  const version = "split-cb-view-20260609-40";
+  const version = "split-cb-view-20260609-41";
   window.FUMAN_TERMINAL_VERSION = version;
   window.FUMAN_TERMINAL_BOOT = {
     version,

@@ -1,24 +1,24 @@
-const CACHE_VERSION = "fuman-terminal-sw-split-cb-view-20260609-40";
+const CACHE_VERSION = "fuman-terminal-sw-split-cb-view-20260609-41";
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 const DATA_CACHE = `${CACHE_VERSION}-data`;
 
 const STATIC_ASSETS = [
-  "/styles.css?v=split-cb-view-20260609-40",
-  "/terminal-core.js?v=split-cb-view-20260609-40",
-  "/terminal-modules.js?v=split-cb-view-20260609-40",
-  "/terminal-sector-map.js?v=split-cb-view-20260609-40",
-  "/terminal-strategy-config.js?v=split-cb-view-20260609-40",
-  "/terminal-market-config.js?v=split-cb-view-20260609-40",
-  "/terminal-ui-config.js?v=split-cb-view-20260609-40",
-  "/terminal-runtime-config.js?v=split-cb-view-20260609-40",
-  "/terminal-tuning-config.js?v=split-cb-view-20260609-40",
-  "/terminal-worker.js?v=split-cb-view-20260609-40",
-  "/terminal.js?v=split-cb-view-20260609-40",
-  "/terminal-app.js?v=split-cb-view-20260609-40",
-  "/terminal-realtime-radar.css?v=split-cb-view-20260609-40",
-  "/terminal-intraday-radar.css?v=split-cb-view-20260609-40",
-  "/terminal-utility.css?v=split-cb-view-20260609-40",
-  "/refresh.html?v=split-cb-view-20260609-40",
+  "/styles.css?v=split-cb-view-20260609-41",
+  "/terminal-core.js?v=split-cb-view-20260609-41",
+  "/terminal-modules.js?v=split-cb-view-20260609-41",
+  "/terminal-sector-map.js?v=split-cb-view-20260609-41",
+  "/terminal-strategy-config.js?v=split-cb-view-20260609-41",
+  "/terminal-market-config.js?v=split-cb-view-20260609-41",
+  "/terminal-ui-config.js?v=split-cb-view-20260609-41",
+  "/terminal-runtime-config.js?v=split-cb-view-20260609-41",
+  "/terminal-tuning-config.js?v=split-cb-view-20260609-41",
+  "/terminal-worker.js?v=split-cb-view-20260609-41",
+  "/terminal.js?v=split-cb-view-20260609-41",
+  "/terminal-app.js?v=split-cb-view-20260609-41",
+  "/terminal-realtime-radar.css?v=split-cb-view-20260609-41",
+  "/terminal-intraday-radar.css?v=split-cb-view-20260609-41",
+  "/terminal-utility.css?v=split-cb-view-20260609-41",
+  "/refresh.html?v=split-cb-view-20260609-41",
   "/assets/logo.webp",
   "/favicon.ico",
 ];
