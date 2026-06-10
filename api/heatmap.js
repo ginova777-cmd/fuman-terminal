@@ -31,6 +31,23 @@ function cleanNumber(value) {
   return Number(String(value).replace(/[,+%]/g, "").replace(/^X/i, "")) || 0;
 }
 
+function firstBookPrice(value) {
+  return cleanNumber(String(value || "").split("_")[0]);
+}
+
+function resolveRealtimePrice(item) {
+  const last = cleanNumber(item.z);
+  if (last) return { price: last, source: "last" };
+
+  const bid = firstBookPrice(item.b);
+  const ask = firstBookPrice(item.a);
+  if (bid && ask) return { price: (bid + ask) / 2, source: "bidAskMid" };
+  if (bid) return { price: bid, source: "bid" };
+  if (ask) return { price: ask, source: "ask" };
+
+  return { price: 0, source: "" };
+}
+
 function taipeiDateKey() {
   return new Intl.DateTimeFormat("en-CA", {
     timeZone: "Asia/Taipei",
@@ -2543,7 +2560,7 @@ async function fetchBatchQuotes(stocks) {
   const query = stocks.map((stock) => `${stock.market}_${stock.code}.tw`).join("|");
   const url = `https://mis.twse.com.tw/stock/api/getStockInfo.jsp?ex_ch=${encodeURIComponent(query)}&json=1&delay=0`;
   try {
-    const payload = JSON.parse(await fetchText(url, { headers: { Referer: "https://mis.twse.com.tw/" } }, 1800));
+    const payload = JSON.parse(await fetchText(url, { headers: { Referer: "https://mis.twse.com.tw/" } }, 3500));
     return payload.msgArray || [];
   } catch {
     return [];
@@ -2554,13 +2571,13 @@ async function fetchRealtimeQuotes(stocks) {
   const quoteMap = new Map();
   const chunks = chunkArray(stocks, 120);
   const quotePromise = Promise.all(chunks.map(fetchBatchQuotes));
-  const results = await withTimeout(quotePromise, 2200, []);
+  const results = await withTimeout(quotePromise, 5200, []);
   const quoteDate = taipeiDateKey();
 
   results.flat().forEach((item) => {
     const code = String(item.c || "").trim();
     if (!code) return;
-    const close = cleanNumber(item.z) || cleanNumber(item.y);
+    const { price: close, source: priceSource } = resolveRealtimePrice(item);
     const prev = cleanNumber(item.y) || close;
     if (!close || !prev) return;
     const volumeLots = cleanNumber(item.v);
@@ -2575,6 +2592,7 @@ async function fetchRealtimeQuotes(stocks) {
       quoteDate,
       quoteTime: String(item.t || "").trim(),
       updatedAt: Date.now(),
+      priceSource,
     });
   });
 
@@ -2583,13 +2601,7 @@ async function fetchRealtimeQuotes(stocks) {
 
 function mergeQuote(stock, quote) {
   if (!quote) {
-    const prev = stock.close - stock.change;
-    return {
-      ...stock,
-      prev,
-      pct: prev ? (stock.change / prev) * 100 : 0,
-      amountYi: stock.value / 100000000,
-    };
+    return null;
   }
 
   return {
@@ -2604,6 +2616,7 @@ function mergeQuote(stock, quote) {
     quoteDate: quote.quoteDate,
     quoteTime: quote.quoteTime,
     quoteUpdatedAt: quote.updatedAt,
+    quotePriceSource: quote.priceSource,
     isRealtime: true,
   };
 }
@@ -2616,16 +2629,17 @@ module.exports = async function handler(request, response) {
   if (request.method !== "GET") { response.status(405).json({ ok: false, error: "Method not allowed" }); return; }
 
   try {
-    const [twseResult, tpexResult] = await Promise.allSettled([
+    const [twseResult, tpexResult, profileResult] = await Promise.allSettled([
       fetchTwseStocks(),
       fetchTpexStocks(),
+      fetchCompanyProfiles(),
     ]);
 
     const stocks = [
       ...(twseResult.status === "fulfilled" ? twseResult.value : []),
       ...(tpexResult.status === "fulfilled" ? tpexResult.value : []),
     ];
-    const profileMap = {};
+    const profileMap = profileResult.status === "fulfilled" ? profileResult.value : {};
     const byCode = new Map();
     stocks.forEach((stock) => byCode.set(stock.code, stock));
     const uniqueStocks = [...byCode.values()];
@@ -2638,7 +2652,7 @@ module.exports = async function handler(request, response) {
       const officialIndustry = profileMap[baseStock.code] || "";
       const sector = resolveHeatmapGroup(baseStock, officialIndustry);
       const stock = mergeQuote(baseStock, quoteMap.get(baseStock.code));
-      if (!stock.close) return;
+      if (!stock || !stock.close) return;
       const industryProfile = buildIndustryProfile(baseStock, officialIndustry, sector);
       const profiledStock = {
         ...stock,
@@ -2692,6 +2706,7 @@ module.exports = async function handler(request, response) {
             quoteDate: stock.quoteDate || "",
             quoteTime: stock.quoteTime || "",
             quoteUpdatedAt: stock.quoteUpdatedAt || 0,
+            quotePriceSource: stock.quotePriceSource || "",
             isRealtime: Boolean(stock.isRealtime),
             industry: stock.industry,
             primaryIndustry: stock.primaryIndustry,
@@ -2718,12 +2733,13 @@ module.exports = async function handler(request, response) {
       }))
     );
 
-    response.setHeader("Cache-Control", "s-maxage=60, stale-while-revalidate=120");
+    response.setHeader("Cache-Control", "no-store, max-age=0");
     response.status(200).json({
       ok: sectors.length > 0,
       source: "TWSE/TPEx full stock list + MOPS industry profiles + MIS quotes",
       updatedAt: new Date().toISOString(),
       stockCount: uniqueStocks.length,
+      realtimeStockCount: quoteMap.size,
       sectorCount: sectors.length,
       industryMasterCount: industryMaster.length,
       industryMaster,
@@ -2731,7 +2747,7 @@ module.exports = async function handler(request, response) {
       errors: {
         twse: twseResult.status === "rejected" ? twseResult.reason.message : null,
         tpex: tpexResult.status === "rejected" ? tpexResult.reason.message : null,
-        profiles: null,
+        profiles: profileResult.status === "rejected" ? profileResult.reason.message : null,
       },
     });
   } catch (error) {
