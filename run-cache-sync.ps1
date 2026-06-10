@@ -20,6 +20,9 @@ New-Item -ItemType Directory -Force -Path $logDir | Out-Null
 $log = Join-Path $logDir ("cache-sync-{0}.log" -f (Get-Date -Format "yyyyMMdd-HHmmss"))
 $gitRetryCount = if ($env:CACHE_SYNC_GIT_RETRY_COUNT -match '^\d+$') { [int]$env:CACHE_SYNC_GIT_RETRY_COUNT } else { 5 }
 $gitRetryDelaySeconds = if ($env:CACHE_SYNC_GIT_RETRY_DELAY_SECONDS -match '^\d+$') { [int]$env:CACHE_SYNC_GIT_RETRY_DELAY_SECONDS } else { 45 }
+$cacheLockMaxWaitSeconds = if ($env:CACHE_SYNC_LOCK_MAX_WAIT_SECONDS -match '^\d+$') { [int]$env:CACHE_SYNC_LOCK_MAX_WAIT_SECONDS } else { 1800 }
+$cacheLockStaleMinutes = if ($env:CACHE_SYNC_LOCK_STALE_MINUTES -match '^\d+$') { [int]$env:CACHE_SYNC_LOCK_STALE_MINUTES } else { 25 }
+$cacheLockPollSeconds = if ($env:CACHE_SYNC_LOCK_POLL_SECONDS -match '^\d+$') { [int]$env:CACHE_SYNC_LOCK_POLL_SECONDS } else { 20 }
 
 function Write-Log($message) {
   Write-Host $message
@@ -40,6 +43,34 @@ function Clear-StaleSyncGitIndexLock($label) {
   }
   Write-Log "Removing stale git index lock before $label; age $([math]::Round($age.TotalMinutes, 1)) minutes."
   Remove-Item -LiteralPath $indexLock -Force
+}
+
+function Read-CacheSyncLockInfo {
+  if (-not (Test-Path -LiteralPath $lockFile)) { return $null }
+  try {
+    $raw = Get-Content -LiteralPath $lockFile -Raw -ErrorAction Stop
+    if ($raw.Trim().StartsWith("{")) { return $raw | ConvertFrom-Json }
+  } catch {}
+  return $null
+}
+
+function Test-CacheSyncLockOwnerAlive($lockInfo) {
+  $pidValue = 0
+  if ($lockInfo -and $lockInfo.pid) { [void][int]::TryParse([string]$lockInfo.pid, [ref]$pidValue) }
+  if ($pidValue -le 0) { return $true }
+  return [bool](Get-Process -Id $pidValue -ErrorAction SilentlyContinue)
+}
+
+function New-CacheSyncLock {
+  New-Item -ItemType Directory -Force -Path (Split-Path -Parent $lockFile) | Out-Null
+  $payload = [ordered]@{
+    pid = $PID
+    scope = $Scope
+    startedAt = (Get-Date).ToString("o")
+    host = $env:COMPUTERNAME
+    log = $log
+  }
+  $payload | ConvertTo-Json -Compress | Set-Content -LiteralPath $lockFile -Encoding utf8
 }
 
 function Invoke-PublishedDataVerification {
@@ -532,22 +563,33 @@ function Should-SkipCacheFile($file, $source) {
   return $false
 }
 
-for ($lockAttempt = 1; $lockAttempt -le 40; $lockAttempt++) {
-  if (-not (Test-Path $lockFile)) { break }
-  $age = (Get-Date) - (Get-Item $lockFile).LastWriteTime
-  if ($age.TotalMinutes -ge 30) {
-    Write-Log "Removing stale cache sync lock; lock age $([math]::Round($age.TotalMinutes, 1)) minutes."
+$lockStartedAt = Get-Date
+$lockAttempt = 1
+while (Test-Path -LiteralPath $lockFile) {
+  $waitAge = (Get-Date) - $lockStartedAt
+  if ($waitAge.TotalSeconds -ge $cacheLockMaxWaitSeconds) { break }
+  $lockInfo = Read-CacheSyncLockInfo
+  $age = (Get-Date) - (Get-Item -LiteralPath $lockFile).LastWriteTime
+  $ownerAlive = Test-CacheSyncLockOwnerAlive $lockInfo
+  if (-not $ownerAlive) {
+    Write-Log "Removing orphaned cache sync lock; pid=$($lockInfo.pid) scope=$($lockInfo.scope) age=$([math]::Round($age.TotalMinutes, 1)) minutes."
     Remove-Item -LiteralPath $lockFile -Force
     break
   }
-  Write-Log "Another cache sync is running; waiting for lock release attempt $lockAttempt/40, age $([math]::Round($age.TotalMinutes, 1)) minutes."
-  Start-Sleep -Seconds 30
+  if ($age.TotalMinutes -ge $cacheLockStaleMinutes) {
+    Write-Log "Removing stale cache sync lock; lock age $([math]::Round($age.TotalMinutes, 1)) minutes, pid=$($lockInfo.pid), scope=$($lockInfo.scope)."
+    Remove-Item -LiteralPath $lockFile -Force
+    break
+  }
+  Write-Log "Another cache sync is running; waiting for lock release attempt $lockAttempt, pid=$($lockInfo.pid), scope=$($lockInfo.scope), age=$([math]::Round($age.TotalMinutes, 1)) minutes."
+  Start-Sleep -Seconds $cacheLockPollSeconds
+  $lockAttempt++
 }
-if (Test-Path $lockFile) {
-  throw "Cache sync lock did not clear after waiting; refusing to skip publish silently."
+if (Test-Path -LiteralPath $lockFile) {
+  throw "Cache sync lock did not clear after $cacheLockMaxWaitSeconds seconds; refusing to skip publish silently."
 }
 
-New-Item -ItemType File -Force -Path $lockFile | Out-Null
+New-CacheSyncLock
 
 try {
   Write-Log "=== Cache sync start $(Get-Date) scope=$Scope ==="
@@ -574,7 +616,9 @@ try {
       "data\warrant-priority-top.json",
       "data\warrant-flow-mobile-top.json",
       "data\warrant-flow-backup.json",
-      "data\flow-health-latest.json"
+      "data\flow-health-latest.json",
+      "data\data-status-index.json",
+      "data\data-manifest.json"
     )
   } elseif ($Scope -eq "institution") {
     $criticalLatestFiles = @(
@@ -590,7 +634,9 @@ try {
       "data\institution-trust-top.json",
       "data\institution-mobile-top.json",
       "data\institution-backup.json",
-      "data\flow-health-latest.json"
+      "data\flow-health-latest.json",
+      "data\data-status-index.json",
+      "data\data-manifest.json"
     )
   } elseif ($Scope -eq "warrant") {
     $criticalLatestFiles = @(
@@ -604,7 +650,9 @@ try {
       "data\warrant-priority-top.json",
       "data\warrant-flow-mobile-top.json",
       "data\warrant-flow-backup.json",
-      "data\flow-health-latest.json"
+      "data\flow-health-latest.json",
+      "data\data-status-index.json",
+      "data\data-manifest.json"
     )
   } elseif ($Scope -eq "openBuy") {
     $criticalLatestFiles = @(

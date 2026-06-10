@@ -43,14 +43,30 @@ function Get-RocDateKey($value) {
   return Get-YmdDateKey $value
 }
 
-function Test-UpdatedAfterSlot($updatedAt, $slot) {
-  if (-not $slot) { return $true }
-  if (-not $updatedAt) { return $false }
-  try { $dt = [datetime]$updatedAt } catch { return $false }
+function Get-TaipeiTimeFromValue($value) {
+  if (-not $value) { return $null }
+  try {
+    $tz = [TimeZoneInfo]::FindSystemTimeZoneById("Taipei Standard Time")
+    $dto = [DateTimeOffset]::Parse([string]$value, [Globalization.CultureInfo]::InvariantCulture)
+    return [TimeZoneInfo]::ConvertTime($dto, $tz).DateTime
+  } catch {
+    try { return [datetime]$value } catch { return $null }
+  }
+}
+
+function Get-ExpectedSlotTime($slot) {
   $now = Get-FumanTaipeiNow
   $parts = $slot.Split(':')
   $slotTime = [datetime]::new($now.Year, $now.Month, $now.Day, [int]$parts[0], [int]$parts[1], 0)
-  return $dt -ge $slotTime
+  if ($now -lt $slotTime) { $slotTime = $slotTime.AddDays(-1) }
+  return $slotTime
+}
+
+function Test-UpdatedAfterSlot($updatedAt, $slot) {
+  if (-not $slot) { return $true }
+  $dt = Get-TaipeiTimeFromValue $updatedAt
+  if (-not $dt) { return $false }
+  return $dt -ge (Get-ExpectedSlotTime $slot)
 }
 
 function Test-InstitutionFresh {

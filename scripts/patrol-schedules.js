@@ -72,6 +72,7 @@ function readText(file) {
 }
 
 const GITHUB_TOKEN = process.env.GITHUB_TOKEN || readText(runtimePath("secrets", "github-token.txt"));
+const GITHUB_REPOSITORY = process.env.GITHUB_REPOSITORY || "ginova777-cmd/fuman-terminal";
 
 function taipeiParts(date = new Date()) {
   const parts = new Intl.DateTimeFormat("en-CA", {
@@ -218,7 +219,7 @@ async function fetchApiJson(url, timeout = 20000) {
 }
 
 async function workflowIssues() {
-  const repo = process.env.GITHUB_REPOSITORY;
+  const repo = GITHUB_REPOSITORY;
   if (!GITHUB_TOKEN) {
     console.log("Schedule Patrol：未設定 GITHUB_TOKEN，略過 GitHub workflow 最新狀態檢查");
     return [];
@@ -242,7 +243,7 @@ async function workflowIssues() {
 }
 
 async function dispatchWorkflow(workflow, inputs = {}) {
-  const repo = process.env.GITHUB_REPOSITORY;
+  const repo = GITHUB_REPOSITORY;
   if (!repo) throw new Error("缺少 GITHUB_REPOSITORY，無法派發補跑 workflow");
   if (!GITHUB_TOKEN) throw new Error("缺少 GITHUB_TOKEN，無法派發補跑 workflow");
   const response = await fetch(`https://api.github.com/repos/${repo}/actions/workflows/${workflow}/dispatches`, {
@@ -265,7 +266,7 @@ async function dispatchWorkflow(workflow, inputs = {}) {
 }
 
 async function workflowHasActiveRun(workflow) {
-  const repo = process.env.GITHUB_REPOSITORY;
+  const repo = GITHUB_REPOSITORY;
   if (!repo || !GITHUB_TOKEN) return false;
   const data = await fetchJson(`https://api.github.com/repos/${repo}/actions/workflows/${workflow}/runs?per_page=1`);
   const run = data.workflow_runs?.[0];
@@ -274,7 +275,7 @@ async function workflowHasActiveRun(workflow) {
 
 async function dispatchRecoveryRuns(cacheIssueObjects) {
   if (process.env.AUTO_DISPATCH_STALE === "0") return [];
-  const repo = process.env.GITHUB_REPOSITORY;
+  const repo = GITHUB_REPOSITORY;
   if (!repo || !GITHUB_TOKEN) {
     const reason = !repo ? "缺少 GITHUB_REPOSITORY" : "缺少 GITHUB_TOKEN";
     return cacheIssueObjects
