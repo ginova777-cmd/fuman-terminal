@@ -5,7 +5,6 @@ const metricCards = [...document.querySelectorAll(".metric-card")];
 metricCards[3]?.remove();
 const tickerStrip = document.querySelector(".ticker-strip");
 const strengthPanel = document.querySelector(".strength-panel");
-const marketAiPanel = document.querySelector("#market-ai-panel");
 const terminalMessage = document.querySelector("#terminal-message");
 const stockSearch = document.querySelector("#stock-search");
 const stockTable = document.querySelector("#stock-table");
@@ -6073,7 +6072,7 @@ async function loadStrategyStocks() {
     let parsed = parseStocksForLatest(stocks);
 
     if (!parsed.length) {
-      const heatmapPayload = await fetchJson(`${endpoints.heatmap}?t=${Date.now()}`, 30000);
+      const heatmapPayload = await fetchJson(endpoints.heatmap, 15000);
       parsed = normalizeArray(heatmapPayload.sectors).flatMap((sector) => {
         return normalizeArray(sector.stocks).map((stock) => {
           const close = cleanNumber(stock.close);
@@ -6492,47 +6491,6 @@ function renderIndexes(indexes, futuresNear, futuresNext, marketStatus, otcSigna
   }
 
   if (metricCards[3]) metricCards[3].remove();
-  renderMarketAi(indexes, futuresNear, otcSignal);
-}
-
-function signedIndexPct(record) {
-  if (!record) return 0;
-  const sign = valueOf(record, ["漲跌", "漲跌(+/-)"]);
-  const pct = cleanNumber(valueOf(record, ["漲跌百分比", "漲跌百分比(%)"]));
-  return sign === "-" ? -Math.abs(pct) : Math.abs(pct);
-}
-
-function signedTextPct(value) {
-  const text = String(value || "");
-  const pct = cleanNumber(text);
-  return text.trim().startsWith("-") ? -Math.abs(pct) : Math.abs(pct);
-}
-
-function renderMarketAi(indexes = [], futuresNear = null, otcSignal = null) {
-  if (!marketAiPanel) return;
-  const taiex = indexes.find((item) => String(valueOf(item, ["指數", "指數/報酬指數"])).includes("發行量加權"));
-  const otc = indexes.find((item) => String(valueOf(item, ["指數", "指數/報酬指數"])).includes("櫃買"));
-  const taiexPct = signedIndexPct(taiex);
-  const otcPct = signedIndexPct(otc);
-  const futuresPct = signedTextPct(futuresNear?.pct);
-  const pressure = taiexPct * 0.45 + otcPct * 0.35 + futuresPct * 0.2;
-  const side = pressure <= -0.8 ? "空方壓制" : pressure >= 0.8 ? "多方控盤" : "震盪觀望";
-  const tone = pressure <= -0.8 ? "short" : pressure >= 0.8 ? "long" : "flat";
-  const confidence = Math.max(55, Math.min(92, Math.round(Math.abs(pressure) * 12 + 58)));
-  const notes = [
-    `加權 ${taiexPct >= 0 ? "+" : ""}${taiexPct.toFixed(2)}%`,
-    `櫃買 ${otcPct >= 0 ? "+" : ""}${otcPct.toFixed(2)}%`,
-    futuresNear?.pct ? `台指 ${futuresNear.pct}` : "台指等待資料",
-    otcSignal?.label || "",
-  ].filter(Boolean);
-  const color = tone === "short" ? "#23d59a" : tone === "long" ? "#ff5d6c" : "#ffd166";
-  marketAiPanel.innerHTML = `
-    <article class="market-ai-card hero" style="border-color:${tone === "flat" ? "rgba(255,209,102,.28)" : tone === "short" ? "rgba(35,213,154,.28)" : "rgba(255,93,108,.28)"}">
-      <small>AI 判讀 · 信心 ${confidence}%</small>
-      <h3 style="color:${color}">${side}</h3>
-      <p>${notes.join("｜")}</p>
-    </article>
-  `;
 }
 
 function formatChipDate(dateStr) {
@@ -7031,7 +6989,7 @@ async function loadHeatmap() {
     renderHeatmapFromCache();
   }
   try {
-    const data = await fetchJson(`${endpoints.heatmap}?t=${Date.now()}`, 30000);
+    const data = await fetchJson(endpoints.heatmap, 15000);
     const sectors = normalizeArray(data?.sectors);
     if (data?.ok && sectors.length) {
       renderHeatmapSectors(sectors);
@@ -7414,7 +7372,7 @@ setInterval(() => refreshStrategyRealtimeScan("hot"), INTRADAY_FAST_SCAN_MS);
 setInterval(() => refreshStrategyRealtimeScan("background"), INTRADAY_BACKGROUND_SCAN_MS);
 setInterval(() => {
   if (!isDocumentHidden() && isViewActive("market")) loadHeatmap();
-}, MARKET_REFRESH_MS);
+}, 15*60*1000);
 
 // ===== 自選股功能 =====
 const watchlistView = document.querySelector("#watchlist-view");
@@ -8178,7 +8136,7 @@ async function fetchDailyStockFallback(code) {
 
 async function fetchHeatmapStockFallback(code) {
   try {
-    const payload = await fetchJson(`${endpoints.heatmap}?t=${Date.now()}`, 30000);
+    const payload = await fetchJson(endpoints.heatmap, 12000);
     const sectors = normalizeArray(payload.sectors);
     for (const sector of sectors) {
       const item = normalizeArray(sector.stocks).find((row) => String(row.code || "") === code);

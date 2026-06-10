@@ -2632,7 +2632,7 @@ module.exports = async function handler(request, response) {
     const [twseResult, tpexResult, profileResult] = await Promise.allSettled([
       fetchTwseStocks(),
       fetchTpexStocks(),
-      withTimeout(fetchCompanyProfiles(), 2500, {}),
+      fetchCompanyProfiles(),
     ]);
 
     const stocks = [
