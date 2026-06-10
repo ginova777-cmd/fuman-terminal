@@ -1,13 +1,13 @@
 {
   "ok": true,
-  "updatedAt": "2026-06-10T02:17:37.270Z",
+  "updatedAt": "2026-06-10T05:45:08.780Z",
   "files": [
     {
       "file": "market-summary.json",
       "ok": true,
-      "bytes": 150208,
+      "bytes": 152390,
       "count": 80,
-      "updatedAt": "2026-06-10T02:01:20.345Z",
+      "updatedAt": "2026-06-10T05:45:07.788Z",
       "issues": []
     },
     {
@@ -21,9 +21,9 @@
     {
       "file": "realtime-radar-latest.json",
       "ok": true,
-      "bytes": 111552,
-      "count": 80,
-      "updatedAt": "2026-06-10T02:16:47.637Z",
+      "bytes": 34703,
+      "count": 33,
+      "updatedAt": "2026-06-10T05:30:06.651Z",
       "issues": []
     },
     {
