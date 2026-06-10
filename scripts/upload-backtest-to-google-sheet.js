@@ -1503,6 +1503,16 @@ async function setSheetNavLinks(token, spreadsheet, sheetName, navTitles) {
 function todayStamp() {
   const arg = process.argv.find((v) => /^\d{8}$/.test(v) || /^\d{4}-\d{2}-\d{2}$/.test(v));
   if (arg) return arg.replace(/-/g, "");
+  if (process.env.ALLOW_SCORECARD_ONLY_WITHOUT_BACKTEST === "1" && process.env.GOOGLE_SHEET_ONLY) {
+    const now = new Date();
+    const taipei = new Intl.DateTimeFormat("en-CA", {
+      timeZone: "Asia/Taipei",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).format(now);
+    return taipei.replace(/-/g, "");
+  }
   const files = fs.readdirSync(REPORT_DIR).filter((name) => /^backtest-trades-\d{8}\.csv$/.test(name)).sort();
   if (!files.length) throw new Error(`No backtest-trades-YYYYMMDD.csv in ${REPORT_DIR}`);
   return files.at(-1).match(/(\d{8})/)[1];
@@ -1618,8 +1628,12 @@ function loadBacktestRows(stamp) {
 }
 
 async function buildUploadPlan(stamp = todayStamp()) {
-  const { trades, radar, report, summary, historyRows } = loadBacktestRows(stamp);
   const onlySheet = process.env.GOOGLE_SHEET_ONLY || "";
+  const scorecardOnlyWithoutBacktest = process.env.ALLOW_SCORECARD_ONLY_WITHOUT_BACKTEST === "1" && onlySheet;
+  const rows = scorecardOnlyWithoutBacktest
+    ? { trades: [], radar: [], report: {}, summary: [], historyRows: [] }
+    : loadBacktestRows(stamp);
+  const { radar, report, summary, historyRows } = rows;
   const scorecardSheets = await loadScorecardSheets(stamp, radar, report, onlySheet);
   return {
     stamp,
