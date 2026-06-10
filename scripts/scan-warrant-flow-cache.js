@@ -7,6 +7,7 @@ const { ROOT, dataPath } = require("./runtime-paths");
 const OUT_FILE = dataPath("warrant-flow-latest.json");
 const BACKUP_FILE = dataPath("warrant-flow-backup.json");
 const SUMMARY_FILE = dataPath("warrant-flow-summary.json");
+const STOCK_QUOTES_FILE = dataPath("stocks-quotes-slim.json");
 
 function readJson(file, fallback) {
   try { return JSON.parse(fs.readFileSync(file, "utf8")); } catch { return fallback; }
@@ -31,6 +32,20 @@ function runHandler() {
 
 function cleanNumber(value) {
   return Number(String(value ?? "").replace(/[,+%]/g, "").trim()) || 0;
+}
+
+function stockCodeOf(item) {
+  return String(item?.code || item?.Code || item?.["證券代號"] || "").trim();
+}
+
+function loadStockQuoteMap() {
+  const payload = readJson(STOCK_QUOTES_FILE, {});
+  const rows = [
+    ...(Array.isArray(payload?.quotes) ? payload.quotes : []),
+    ...(Array.isArray(payload?.stocks) ? payload.stocks : []),
+    ...(Array.isArray(payload?.rows) ? payload.rows : []),
+  ];
+  return new Map(rows.map((item) => [stockCodeOf(item), item]).filter(([code]) => code));
 }
 
 function tradeDateToDate(value) {
@@ -59,18 +74,24 @@ function ageInDaysFromTradeDate(value) {
   if (!date) return Infinity;
   return Math.floor((taipeiDateOnly() - date) / 86400000);
 }
-function normalizeMatch(item) {
+function normalizeMatch(item, quoteMap = new Map()) {
   const code = String(item.underlyingCode || item.code || "").trim();
   const name = String(item.underlyingName || item.name || "").trim();
-  const close = cleanNumber(item.underlyingClose ?? item.close ?? item.stockClose);
+  const quote = quoteMap.get(code) || {};
+  const quoteClose = cleanNumber(quote.close ?? quote.ClosingPrice ?? quote.z);
+  const quotePercent = Number(quote.percent ?? quote.pct ?? quote.Percent ?? NaN);
+  const close = quoteClose || cleanNumber(item.underlyingClose ?? item.close ?? item.stockClose);
   const percentRaw = item.underlyingPercent ?? item.percent ?? item.stockPercent;
-  const percent = Number.isFinite(Number(percentRaw)) ? Number(percentRaw) : 0;
+  const percent = Number.isFinite(quotePercent)
+    ? quotePercent
+    : Number.isFinite(Number(percentRaw)) ? Number(percentRaw) : 0;
   return {
     ...item,
     code,
     name,
     close,
     percent,
+    quoteDate: quote.quoteDate || quote.tradeDate || quote.TradeDate || item.quoteDate || "",
     displayClose: close,
     displayPercent: percent,
     underlyingCode: code,
@@ -83,7 +104,8 @@ function normalizeMatch(item) {
 async function main() {
   const backup = readJson(BACKUP_FILE, { ok: true, matches: [] });
   const payload = await runHandler();
-  const matches = Array.isArray(payload.matches) ? payload.matches.map(normalizeMatch) : [];
+  const stockQuoteMap = loadStockQuoteMap();
+  const matches = Array.isArray(payload.matches) ? payload.matches.map((item) => normalizeMatch(item, stockQuoteMap)) : [];
   const output = {
     ...payload,
     ok: true,
@@ -116,4 +138,3 @@ main().catch((error) => {
   console.error(error);
   process.exit(1);
 });
-
