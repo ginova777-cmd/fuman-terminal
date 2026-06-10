@@ -173,6 +173,16 @@ function formatTpexDate(date) {
   return `${String(date.getFullYear() - 1911).padStart(3, "0")}/${String(date.getMonth() + 1).padStart(2, "0")}/${String(date.getDate()).padStart(2, "0")}`;
 }
 
+function taipeiDateKey(date = new Date()) {
+  const parts = Object.fromEntries(new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Taipei",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(date).map((part) => [part.type, part.value]));
+  return `${parts.year}${parts.month}${parts.day}`;
+}
+
 function taipeiParts(date = new Date()) {
   return Object.fromEntries(new Intl.DateTimeFormat("en-CA", {
     timeZone: "Asia/Taipei",
@@ -658,11 +668,14 @@ async function main() {
   sourceWarnings.forEach((warning) => console.warn(`strategy5 source warning: ${warning}`));
   const matches = await buildMatches(stocks, institution.data || {}, issuedSharesResult.map, volumeAverageResult.map);
   const quoteDate = institution.usedDate || institution.date || stocks.find((stock) => stock.quoteDate)?.quoteDate || "";
+  const now = new Date();
   const output = {
     ok: true,
     source: USE_MIS_QUOTES ? "github-actions-mis-realtime" : "github-actions-official-daily",
-    updatedAt: new Date().toISOString(),
+    updatedAt: now.toISOString(),
+    generatedDate: taipeiDateKey(now),
     usedDate: quoteDate,
+    sourceDate: quoteDate,
     schedule: "06:00/21:00",
     fullScan: true,
     total: stocks.length,

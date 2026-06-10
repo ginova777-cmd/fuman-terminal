@@ -582,6 +582,25 @@ function stocksIndexFiles(payload = slimStocks()) {
   ];
 }
 
+function taipeiDateFromIso(value) {
+  const date = new Date(value || "");
+  if (Number.isNaN(date.getTime())) return "";
+  const parts = Object.fromEntries(new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Taipei",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(date).map((part) => [part.type, part.value]));
+  return `${parts.year}${parts.month}${parts.day}`;
+}
+
+function statusDateForFile(file, payload) {
+  if (file === "strategy5-latest.json") {
+    return payload?.generatedDate || taipeiDateFromIso(payload?.updatedAt || payload?.scanStamp) || payload?.usedDate || payload?.date || "";
+  }
+  return payload?.usedDate || payload?.date || payload?.tradeDate || payload?.resolvedTradeDate || payload?.scanStamp || "";
+}
+
 function dataStatusIndex() {
   const files = [
     "market-summary.json",
@@ -616,7 +635,8 @@ function dataStatusIndex() {
       ok: payload?.ok !== false,
       status: payload?.status || "",
       source: payload?.source || "",
-      date: payload?.usedDate || payload?.date || payload?.tradeDate || payload?.resolvedTradeDate || payload?.scanStamp || "",
+      date: statusDateForFile(file, payload),
+      sourceDate: payload?.sourceDate || payload?.usedDate || "",
       updatedAt: payload?.updatedAt || payload?.scanStamp || "",
       count: rows,
     };
@@ -728,7 +748,8 @@ function terminalHomeBundle() {
       },
       strategy5: {
         updatedAt: strategy5?.updatedAt || "",
-        date: strategy5?.usedDate || strategy5?.date || "",
+        date: strategy5?.generatedDate || taipeiDateFromIso(strategy5?.updatedAt) || strategy5?.usedDate || strategy5?.date || "",
+        sourceDate: strategy5?.sourceDate || strategy5?.usedDate || "",
         count: cleanNumber(strategy5?.count || normalizeArray(strategy5?.matches).length),
         top: normalizeArray(strategy5?.matches).slice(0, 12),
       },
