@@ -23,6 +23,7 @@
     "verify:live-version": "node --use-system-ca scripts/verify-live-version.js",
     "verify:bump": "node scripts/verify-version-bump-needed.js",
     "verify:sw": "node scripts/verify-service-worker-smoke.js",
+    "verify:heatmap": "node --use-system-ca scripts/verify-heatmap-realtime.js",
     "verify:data-freshness": "node --use-system-ca scripts/verify-data-freshness.js",
     "verify:data-freshness:live": "node --use-system-ca scripts/verify-data-freshness.js --live",
     "verify:local-ops": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/verify-local-ops.ps1",

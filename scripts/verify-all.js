@@ -5,6 +5,7 @@ const steps = [
   ["verify:version", ["npm", "run", "verify:version"]],
   ["verify:bump", ["npm", "run", "verify:bump"]],
   ["verify:sw", ["npm", "run", "verify:sw"]],
+  ["verify:heatmap", ["npm", "run", "verify:heatmap"]],
   ["verify:data-freshness", ["npm", "run", "verify:data-freshness"]],
 ];
 

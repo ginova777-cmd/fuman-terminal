@@ -18,12 +18,41 @@ async function fetchText(url, options = {}, timeout = 15000) {
   }
 }
 
+let heatmapCache = null;
+const HEATMAP_CACHE_MS = 15000;
+
 function withTimeout(promise, timeout, fallback) {
   let timer;
   const timeoutPromise = new Promise((resolve) => {
     timer = setTimeout(() => resolve(fallback), timeout);
   });
   return Promise.race([promise, timeoutPromise]).finally(() => clearTimeout(timer));
+}
+
+function isFreshHeatmapCache() {
+  return heatmapCache && Date.now() - heatmapCache.cachedAt < HEATMAP_CACHE_MS;
+}
+
+function buildHeatmapHealth(sectors, quoteMap) {
+  const today = taipeiDateKey();
+  const stocks = sectors.flatMap((sector) => sector.stocks || []);
+  const badDate = stocks.filter((stock) => String(stock.quoteDate || "") !== today).length;
+  const notRealtime = stocks.filter((stock) => stock.isRealtime !== true).length;
+  const noPrice = stocks.filter((stock) => !cleanNumber(stock.close)).length;
+  const zeroVolume = stocks.filter((stock) => !cleanNumber(stock.volume)).length;
+  const quoteTimes = stocks.map((stock) => String(stock.quoteTime || "")).filter(Boolean).sort();
+  return {
+    today,
+    stockCount: stocks.length,
+    realtimeStockCount: quoteMap.size,
+    badDate,
+    notRealtime,
+    noPrice,
+    zeroVolume,
+    quoteTime: quoteTimes[quoteTimes.length - 1] || "",
+    isHealthy: stocks.length >= 500 && badDate === 0 && notRealtime === 0 && noPrice === 0,
+    cacheTtlMs: HEATMAP_CACHE_MS,
+  };
 }
 
 function cleanNumber(value) {
@@ -2628,6 +2657,15 @@ module.exports = async function handler(request, response) {
   if (request.method === "OPTIONS") { response.status(204).end(); return; }
   if (request.method !== "GET") { response.status(405).json({ ok: false, error: "Method not allowed" }); return; }
 
+  if (isFreshHeatmapCache()) {
+    response.setHeader("Cache-Control", "no-store, max-age=0");
+    response.status(200).json({
+      ...heatmapCache.payload,
+      cache: { hit: true, ageMs: Date.now() - heatmapCache.cachedAt, ttlMs: HEATMAP_CACHE_MS },
+    });
+    return;
+  }
+
   try {
     const [twseResult, tpexResult, profileResult] = await Promise.allSettled([
       fetchTwseStocks(),
@@ -2679,12 +2717,20 @@ module.exports = async function handler(request, response) {
       .filter((group) => group.stocks.length)
       .map((group) => {
         const avgPct = group.stocks.reduce((sum, stock) => sum + stock.pct, 0) / group.stocks.length;
+        const weightedPct = group.totalValue
+          ? group.stocks.reduce((sum, stock) => sum + stock.pct * stock.amountYi, 0) / group.totalValue
+          : avgPct;
+        const breadthPct = group.stocks.length
+          ? ((group.up - group.down) / group.stocks.length) * 100
+          : 0;
         const sortedStocks = [...group.stocks].sort((a, b) => b.amountYi - a.amountYi);
         const leader = sortedStocks[0];
         const totalValue = Number(group.totalValue.toFixed(1));
         return {
           name: group.name,
-          pct: Number(avgPct.toFixed(2)),
+          pct: Number(weightedPct.toFixed(2)),
+          avgPct: Number(avgPct.toFixed(2)),
+          breadthPct: Number(breadthPct.toFixed(2)),
           totalValue,
           amountYi: totalValue,
           count: group.stocks.length,
@@ -2733,15 +2779,16 @@ module.exports = async function handler(request, response) {
       }))
     );
 
-    response.setHeader("Cache-Control", "no-store, max-age=0");
-    response.status(200).json({
-      ok: sectors.length > 0,
+    const health = buildHeatmapHealth(sectors, quoteMap);
+    const payload = {
+      ok: sectors.length > 0 && health.isHealthy,
       source: "TWSE/TPEx full stock list + MOPS industry profiles + MIS quotes",
       updatedAt: new Date().toISOString(),
       stockCount: uniqueStocks.length,
       realtimeStockCount: quoteMap.size,
       sectorCount: sectors.length,
       industryMasterCount: industryMaster.length,
+      health,
       industryMaster,
       sectors,
       errors: {
@@ -2749,7 +2796,11 @@ module.exports = async function handler(request, response) {
         tpex: tpexResult.status === "rejected" ? tpexResult.reason.message : null,
         profiles: profileResult.status === "rejected" ? profileResult.reason.message : null,
       },
-    });
+    };
+    heatmapCache = { cachedAt: Date.now(), payload };
+
+    response.setHeader("Cache-Control", "no-store, max-age=0");
+    response.status(200).json({ ...payload, cache: { hit: false, ageMs: 0, ttlMs: HEATMAP_CACHE_MS } });
   } catch (error) {
     response.status(502).json({ ok: false, error: error.message });
   }
