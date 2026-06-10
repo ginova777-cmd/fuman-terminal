@@ -19,11 +19,14 @@ function git(args, options = {}) {
 
 function run(label, command) {
   console.log(`[snapshot:data] ${label}`);
-  const executable = process.platform === "win32" && command[0] === "npm" ? "npm.cmd" : command[0];
-  const result = spawnSync(executable, command.slice(1), {
+  const result = spawnSync(command[0], command.slice(1), {
     cwd: ROOT,
     stdio: "inherit",
   });
+  if (result.error) {
+    console.error(result.error.message);
+    process.exit(1);
+  }
   if (result.status !== 0) {
     console.error(`[snapshot:data] failed at ${label}`);
     process.exit(result.status || 1);
@@ -56,7 +59,7 @@ for (const file of files) {
   }
 }
 
-run("verify:data-freshness", ["npm", "run", "verify:data-freshness"]);
+run("verify:data-freshness", [process.execPath, "--use-system-ca", path.join(ROOT, "scripts", "verify-data-freshness.js")]);
 git(["add", "data"], { stdio: "inherit" });
 git(["commit", "-m", "Publish data snapshot"], { stdio: "inherit" });
 console.log(`[snapshot:data] ok files=${files.length}`);
