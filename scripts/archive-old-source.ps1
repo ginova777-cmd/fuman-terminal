@@ -3,10 +3,10 @@ $ErrorActionPreference = "Stop"
 $oldPath = "C:\fuman-terminal"
 $archivePath = "C:\fuman-terminal-OLD-DO-NOT-EDIT"
 
+$oldPathPattern = [regex]::Escape($oldPath) + "(?!-sync|-publish-sync)"
 $activeRefs = Get-ScheduledTask | Where-Object {
-  $_.State -ne "Disabled" -and (
-    ($_.Actions | ForEach-Object { "$($_.Execute) $($_.Arguments) $($_.WorkingDirectory)" }) -join " "
-  ) -like "*$oldPath*"
+  $actionText = ($_.Actions | ForEach-Object { "$($_.Execute) $($_.Arguments) $($_.WorkingDirectory)" }) -join " "
+  $_.State -ne "Disabled" -and $actionText -match $oldPathPattern
 }
 
 if ($activeRefs.Count -gt 0) {
