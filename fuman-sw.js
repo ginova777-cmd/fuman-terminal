@@ -1,24 +1,24 @@
-const CACHE_VERSION = "fuman-terminal-sw-heatmap-realtime-20260610-02";
+const CACHE_VERSION = "fuman-terminal-sw-heatmap-realtime-20260610-03";
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 const DATA_CACHE = `${CACHE_VERSION}-data`;
 
 const STATIC_ASSETS = [
-  "/styles.css?v=heatmap-realtime-20260610-02",
-  "/terminal-core.js?v=heatmap-realtime-20260610-02",
-  "/terminal-modules.js?v=heatmap-realtime-20260610-02",
-  "/terminal-sector-map.js?v=heatmap-realtime-20260610-02",
-  "/terminal-strategy-config.js?v=heatmap-realtime-20260610-02",
-  "/terminal-market-config.js?v=heatmap-realtime-20260610-02",
-  "/terminal-ui-config.js?v=heatmap-realtime-20260610-02",
-  "/terminal-runtime-config.js?v=heatmap-realtime-20260610-02",
-  "/terminal-tuning-config.js?v=heatmap-realtime-20260610-02",
-  "/terminal-worker.js?v=heatmap-realtime-20260610-02",
-  "/terminal.js?v=heatmap-realtime-20260610-02",
-  "/terminal-app.js?v=heatmap-realtime-20260610-02",
-  "/terminal-realtime-radar.css?v=heatmap-realtime-20260610-02",
-  "/terminal-intraday-radar.css?v=heatmap-realtime-20260610-02",
-  "/terminal-utility.css?v=heatmap-realtime-20260610-02",
-  "/refresh.html?v=heatmap-realtime-20260610-02",
+  "/styles.css?v=heatmap-realtime-20260610-03",
+  "/terminal-core.js?v=heatmap-realtime-20260610-03",
+  "/terminal-modules.js?v=heatmap-realtime-20260610-03",
+  "/terminal-sector-map.js?v=heatmap-realtime-20260610-03",
+  "/terminal-strategy-config.js?v=heatmap-realtime-20260610-03",
+  "/terminal-market-config.js?v=heatmap-realtime-20260610-03",
+  "/terminal-ui-config.js?v=heatmap-realtime-20260610-03",
+  "/terminal-runtime-config.js?v=heatmap-realtime-20260610-03",
+  "/terminal-tuning-config.js?v=heatmap-realtime-20260610-03",
+  "/terminal-worker.js?v=heatmap-realtime-20260610-03",
+  "/terminal.js?v=heatmap-realtime-20260610-03",
+  "/terminal-app.js?v=heatmap-realtime-20260610-03",
+  "/terminal-realtime-radar.css?v=heatmap-realtime-20260610-03",
+  "/terminal-intraday-radar.css?v=heatmap-realtime-20260610-03",
+  "/terminal-utility.css?v=heatmap-realtime-20260610-03",
+  "/refresh.html?v=heatmap-realtime-20260610-03",
   "/assets/logo.webp",
   "/favicon.ico",
 ];

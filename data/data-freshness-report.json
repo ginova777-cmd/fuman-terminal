@@ -1,0 +1,57 @@
+{
+  "ok": true,
+  "mode": "local",
+  "checkedAt": "2026-06-10T05:25:18.470Z",
+  "entries": {
+    "data-manifest": {
+      "ok": true,
+      "count": 100,
+      "date": "20260610"
+    },
+    "terminal-home-bundle": {
+      "ok": true,
+      "count": 0,
+      "date": "20260610"
+    },
+    "market-summary": {
+      "ok": true,
+      "count": 0,
+      "date": "20260610"
+    },
+    "health-summary": {
+      "ok": true,
+      "count": 0,
+      "date": "20260610"
+    },
+    "stocks-index": {
+      "ok": true,
+      "count": 1961,
+      "date": "20260610"
+    },
+    "strategy3-latest": {
+      "ok": true,
+      "count": 6,
+      "date": "20260610"
+    },
+    "strategy4-latest": {
+      "ok": true,
+      "count": 1667,
+      "date": "20260610"
+    },
+    "strategy4-summary": {
+      "ok": true,
+      "count": 1556,
+      "date": "20260609"
+    },
+    "strategy5-latest": {
+      "ok": true,
+      "count": 80,
+      "date": "20260609"
+    },
+    "warrant-flow-latest": {
+      "ok": true,
+      "count": 75,
+      "date": "20260610"
+    }
+  }
+}

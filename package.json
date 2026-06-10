@@ -15,9 +15,14 @@
     "e2e:smoke": "node --use-system-ca scripts/e2e-smoke.js",
     "bump:version": "node scripts/bump-version.js",
     "verify:version": "node scripts/verify-version-consistency.js",
-    "predeploy": "npm run guard:source && npm run verify:version",
+    "predeploy": "npm run guard:source && npm run verify:version && npm run verify:bump && npm run verify:sw && npm run verify:data-freshness",
     "guard:source": "node scripts/guard-source-tree.js",
-    "verify:live-version": "node --use-system-ca scripts/verify-live-version.js"
+    "verify:live-version": "node --use-system-ca scripts/verify-live-version.js",
+    "verify:bump": "node scripts/verify-version-bump-needed.js",
+    "verify:sw": "node scripts/verify-service-worker-smoke.js",
+    "verify:data-freshness": "node --use-system-ca scripts/verify-data-freshness.js",
+    "verify:data-freshness:live": "node --use-system-ca scripts/verify-data-freshness.js --live",
+    "verify:all": "node scripts/verify-all.js"
   },
   "engines": {
     "node": "20.x"

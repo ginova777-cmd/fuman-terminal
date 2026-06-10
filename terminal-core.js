@@ -1,5 +1,5 @@
 (function () {
-  const version = "heatmap-realtime-20260610-02";
+  const version = "heatmap-realtime-20260610-03";
   window.FUMAN_TERMINAL_BOOT = {
     version,
     startedAt: Date.now(),
@@ -14,6 +14,8 @@
   try {
     document.documentElement.dataset.fumanTerminalVersion = version;
     console.info(`[FUMAN] terminal version ${version}`);
+    const versionBadge = document.querySelector("#frontend-version-badge");
+    if (versionBadge) versionBadge.textContent = `v ${version}`;
   } catch (error) {}
 
   const warmAuthShell = () => {
