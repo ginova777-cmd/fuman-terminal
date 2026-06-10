@@ -53,6 +53,15 @@ function Assert-MarketSummaryFresh($path) {
 }
 
 Write-RepairLog "market summary repair start"
+
+$repairWindowStart = if ($env:MARKET_SUMMARY_REPAIR_START_MINUTES -match '^\d+$') { [int]$env:MARKET_SUMMARY_REPAIR_START_MINUTES } else { 14 * 60 }
+$now = Get-Date
+$minuteOfDay = ($now.Hour * 60) + $now.Minute
+if ($env:MARKET_SUMMARY_REPAIR_ALLOW_EARLY -ne "1" -and $minuteOfDay -lt $repairWindowStart) {
+  Write-RepairLog "market summary repair skipped before repair window: now=$($now.ToString('HH:mm')) startMinute=$repairWindowStart"
+  exit 0
+}
+
 Invoke-NodeStep "Generate full stocks slim" "scripts\generate-stocks-slim.js" -Required | Out-Null
 
 $attempts = if ($env:MARKET_SUMMARY_REPAIR_ATTEMPTS -match '^\d+$') { [int]$env:MARKET_SUMMARY_REPAIR_ATTEMPTS } else { 10 }
