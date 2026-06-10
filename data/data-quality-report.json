@@ -1,13 +1,13 @@
 {
   "ok": true,
-  "updatedAt": "2026-06-10T06:53:15.229Z",
+  "updatedAt": "2026-06-10T15:32:23.772Z",
   "files": [
     {
       "file": "market-summary.json",
       "ok": true,
-      "bytes": 152390,
+      "bytes": 153307,
       "count": 80,
-      "updatedAt": "2026-06-10T05:45:07.788Z",
+      "updatedAt": "2026-06-10T15:32:23.124Z",
       "issues": []
     },
     {
@@ -21,59 +21,59 @@
     {
       "file": "realtime-radar-latest.json",
       "ok": true,
-      "bytes": 34703,
-      "count": 33,
-      "updatedAt": "2026-06-10T05:30:06.651Z",
+      "bytes": 690,
+      "count": 0,
+      "updatedAt": "2026-06-10T07:45:02.613Z",
       "issues": []
     },
     {
       "file": "strategy4-latest.json",
       "ok": true,
-      "bytes": 2141765,
-      "count": 1556,
-      "updatedAt": "2026-06-09T06:53:44.896Z",
+      "bytes": 822162,
+      "count": 542,
+      "updatedAt": "2026-06-10T13:47:03.350Z",
       "issues": [
         {
           "level": "medium",
-          "message": "extreme percent rows 1"
+          "message": "extreme percent rows 4"
         }
       ]
     },
     {
       "file": "strategy4-summary.json",
       "ok": true,
-      "bytes": 45263,
-      "count": 1556,
-      "updatedAt": "2026-06-09T06:53:44.896Z",
+      "bytes": 42628,
+      "count": 542,
+      "updatedAt": "2026-06-10T13:47:03.350Z",
       "issues": []
     },
     {
       "file": "strategy4-slim.json",
       "ok": true,
-      "bytes": 648101,
-      "count": 1556,
-      "updatedAt": "2026-06-09T06:53:44.896Z",
+      "bytes": 228360,
+      "count": 542,
+      "updatedAt": "2026-06-10T13:47:03.350Z",
       "issues": [
         {
           "level": "medium",
-          "message": "extreme percent rows 1"
+          "message": "extreme percent rows 4"
         }
       ]
     },
     {
       "file": "institution-latest.json",
       "ok": true,
-      "bytes": 924165,
-      "count": 1881,
-      "updatedAt": "2026-06-10T00:05:50.530Z",
+      "bytes": 948567,
+      "count": 1892,
+      "updatedAt": "2026-06-10T13:20:25.468Z",
       "issues": []
     },
     {
       "file": "warrant-flow-latest.json",
       "ok": true,
-      "bytes": 473568,
+      "bytes": 457708,
       "count": 120,
-      "updatedAt": "2026-06-09T21:50:08.047Z",
+      "updatedAt": "2026-06-10T12:50:26.848Z",
       "issues": []
     }
   ],
@@ -82,12 +82,12 @@
     {
       "file": "strategy4-latest.json",
       "level": "medium",
-      "message": "extreme percent rows 1"
+      "message": "extreme percent rows 4"
     },
     {
       "file": "strategy4-slim.json",
       "level": "medium",
-      "message": "extreme percent rows 1"
+      "message": "extreme percent rows 4"
     }
   ]
 }
