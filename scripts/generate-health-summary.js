@@ -61,6 +61,12 @@ function isIgnorableTaskResult(task) {
     "\\Fuman Daily Health Summary 1545",
     "\\Fuman 即時雷達健檢 0910",
   ]);
+  if (name === "\\Fuman Strategy2 Intraday Warmup 0845" && code === "-1073741510" && task.Status === "Ready") {
+    const latest = dataFileStatus("strategy2-intraday-latest.json");
+    const ageMs = Date.now() - Date.parse(latest.updatedAt || "");
+    const freshEnough = Number.isFinite(ageMs) && ageMs >= 0 && ageMs <= 20 * 60 * 1000;
+    return latest.ok && latest.date === taipeiDateText() && freshEnough;
+  }
   return (
     name === "\\Fuman PC Wake 0430" && code === "-2147020576" && task.Status === "Ready"
   ) || (
@@ -137,6 +143,15 @@ function taipeiMinuteOfDay(date = new Date()) {
     hour12: false,
   }).formatToParts(date).map((part) => [part.type, part.value]));
   return Number(parts.hour) * 60 + Number(parts.minute);
+}
+
+function taipeiDateText(date = new Date()) {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Taipei",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(date);
 }
 
 function effectiveSlaHours(file) {
