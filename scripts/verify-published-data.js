@@ -13,6 +13,7 @@ const baseUrl = (process.env.FUMAN_VERIFY_BASE_URL || "https://fuman-terminal.ve
 
 const criticalFiles = [
   "market-summary.json",
+  "data-manifest.json",
   "data-status-index.json",
   "terminal-home-bundle.json",
   "stocks-index.json",
@@ -158,16 +159,16 @@ function verifyGitState() {
 function assertDateIsLatest(name, label, value, context) {
   const ymd = normalizeDate(value);
   if (!ymd) return;
-  assert(ymd === context.latestTradeDate, `${name} stale ${label}=${value} latestTradeDate=${context.latestTradeDate} today=${context.today}`);
+  assert(ymd === context.latestTradeDate, `${name} stale ${label}=${value} latestTradeDate=${context.latestTradeDate} today=${context.latestTradeDate}`);
 }
 
 function validateMarketSummary(name, payload, context) {
   assert(payload.ok === true, `${name} ok=false`);
-  assert(normalizeDate(payload.today) === context.today, `${name} today=${payload.today} expected=${context.today}`);
-  assert(normalizeDate(payload.resolvedTradeDate) === context.today, `${name} resolvedTradeDate=${payload.resolvedTradeDate} today=${context.today}`);
+  assert(normalizeDate(payload.today) === context.latestTradeDate, `${name} today=${payload.today} expected=${context.latestTradeDate}`);
+  assert(normalizeDate(payload.resolvedTradeDate) === context.latestTradeDate, `${name} resolvedTradeDate=${payload.resolvedTradeDate} today=${context.latestTradeDate}`);
   assert(payload.isFallbackDate === false, `${name} isFallbackDate=${payload.isFallbackDate}`);
-  assert(normalizeDate(payload.marketDates?.twse) === context.today, `${name} marketDates.twse=${payload.marketDates?.twse} today=${context.today}`);
-  assert(normalizeDate(payload.marketDates?.tpex) === context.today, `${name} marketDates.tpex=${payload.marketDates?.tpex} today=${context.today}`);
+  assert(normalizeDate(payload.marketDates?.twse) === context.latestTradeDate, `${name} marketDates.twse=${payload.marketDates?.twse} today=${context.latestTradeDate}`);
+  assert(normalizeDate(payload.marketDates?.tpex) === context.latestTradeDate, `${name} marketDates.tpex=${payload.marketDates?.tpex} today=${context.latestTradeDate}`);
   assert(count(payload) > 0, `${name} empty stocks`);
 }
 
@@ -187,19 +188,19 @@ function validateDataStatusIndex(name, payload, context) {
 
 function validateMarketSummaryEntry(name, entry, context) {
   assert(entry, `${name} missing market-summary entry`);
-  assert(normalizeDate(entry.date) === context.today, `${name} market-summary date=${entry.date} today=${context.today}`);
+  assert(normalizeDate(entry.date) === context.latestTradeDate, `${name} market-summary date=${entry.date} latestTradeDate=${context.latestTradeDate}`);
   assert(entry.ok !== false, `${name} market-summary ok=false`);
 }
 
 function validateTerminalHomeBundle(name, payload, context) {
   assert(payload.ok === true, `${name} ok=false`);
   validateDataStatusIndex(`${name}.status`, payload.status || {}, context);
-  assert(normalizeDate(payload.stocks?.resolvedTradeDate) === context.today, `${name} stocks.resolvedTradeDate=${payload.stocks?.resolvedTradeDate} today=${context.today}`);
+  assert(normalizeDate(payload.stocks?.resolvedTradeDate) === context.latestTradeDate, `${name} stocks.resolvedTradeDate=${payload.stocks?.resolvedTradeDate} today=${context.latestTradeDate}`);
   assert(Number(payload.stocks?.count || 0) > 1000, `${name} stocks count too low`);
 }
 
 function validatePayload(name, payload, context) {
-  const today = context.today;
+  const today = context.latestTradeDate;
   const latestTradeDate = context.latestTradeDate;
   if (name === "market-summary.json") validateMarketSummary(name, payload, context);
   if (name === "data-status-index.json") validateDataStatusIndex(name, payload, context);
