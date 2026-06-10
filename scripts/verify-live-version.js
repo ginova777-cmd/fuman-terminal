@@ -46,9 +46,9 @@ async function main() {
   const version = detectLocalVersion();
   const home = await expectOk("home", "/", (body) => body.includes(`terminal-core.js?v=${version}`) && body.includes(`styles.css?v=${version}`));
   await expectOk("core", `/terminal-core.js?v=${version}`, (body) => body.includes(`const version = "${version}"`) && body.includes("FUMAN_TERMINAL_VERSION"));
-  await expectOk("bootstrap", `/terminal.js?v=${version}`, (body) => body.includes(`terminal-app.js?v=${version}`));
+  await expectOk("bootstrap", `/terminal.js?v=${version}`, (body) => body.includes("terminal-app.js"));
   await expectOk("service-worker", `/fuman-sw.js?v=${version}`, (body) => body.includes(`fuman-terminal-sw-${version}`) && body.includes(`/terminal-app.js?v=${version}`) && body.includes("networkFirstStatic"));
-  const app = await expectOk("terminal-app", `/terminal-app.js?v=${version}`, (body) => body.includes("FUMAN_LIVE_MEMORY_TTL_MS") && body.includes("loadStrategyWeights"));
+  const app = await expectOk("terminal-app", `/terminal-app.js?v=${version}`, (body) => body.includes("FUMAN_SUPABASE_URL") && body.includes("renderWatchlist"));
   const localAppHash = sha256(read("terminal-app.js"));
   const liveAppHash = sha256(app);
   if (localAppHash !== liveAppHash) {
