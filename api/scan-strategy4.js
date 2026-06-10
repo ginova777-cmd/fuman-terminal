@@ -366,6 +366,14 @@ async function fetchHistory(code, preferredMarket = "") {
     }
   }
 
+  if (rows.length < 60 && ALLOW_YAHOO_FALLBACK) {
+    const yahoo = await fetchYahooHistory(code, marketHint || market);
+    if (yahoo.rows.length >= rows.length) {
+      rows = yahoo.rows;
+      historySource = yahoo.source || historySource;
+    }
+  }
+
   if (rows.length < 60) {
     const officialRows = [];
     if (market !== "TPEX") {
@@ -399,14 +407,6 @@ async function fetchHistory(code, preferredMarket = "") {
     if (officialRows.length >= rows.length) {
       rows = officialRows;
       historySource = market === "TPEX" ? "tpex-official" : "twse-official";
-    }
-  }
-
-  if (rows.length < 60 && ALLOW_YAHOO_FALLBACK) {
-    const yahoo = await fetchYahooHistory(code, marketHint || market);
-    if (yahoo.rows.length >= rows.length) {
-      rows = yahoo.rows;
-      historySource = yahoo.source || historySource;
     }
   }
 
