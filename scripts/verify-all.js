@@ -9,9 +9,16 @@ const steps = [
   ["verify:live-version", ["npm", "run", "verify:live-version"]],
 ];
 
+function run(command) {
+  if (process.platform === "win32") {
+    return spawnSync("cmd.exe", ["/d", "/s", "/c", command.join(" ")], { stdio: "inherit" });
+  }
+  return spawnSync(command[0], command.slice(1), { stdio: "inherit" });
+}
+
 for (const [name, command] of steps) {
   console.log(`[verify:all] ${name}`);
-  const result = spawnSync(command[0], command.slice(1), { stdio: "inherit", shell: process.platform === "win32" });
+  const result = run(command);
   if (result.status !== 0) {
     console.error(`[verify:all] failed at ${name}`);
     process.exit(result.status || 1);

@@ -5,6 +5,7 @@ const path = require("path");
 const ROOT = path.resolve(__dirname, "..");
 const BASE_URL = (process.env.FUMAN_VERIFY_BASE_URL || "https://fuman-terminal.vercel.app").replace(/\/+$/, "");
 const LIVE = process.argv.includes("--live") || process.env.FUMAN_DATA_FRESHNESS_LIVE === "1";
+const WRITE_REPORT = process.argv.includes("--write") || process.env.FUMAN_WRITE_FRESHNESS_REPORT === "1";
 
 const TARGETS = [
   { name: "data-manifest", file: "data/data-manifest.json", minCount: 25 },
@@ -84,7 +85,7 @@ async function main() {
   }
   report.ok = issues.length === 0;
   const outPath = path.join(ROOT, "data", "data-freshness-report.json");
-  if (!LIVE) fs.writeFileSync(outPath, JSON.stringify(report, null, 2) + "\n", "utf8");
+  if (WRITE_REPORT) fs.writeFileSync(outPath, JSON.stringify(report, null, 2) + "\n", "utf8");
   if (issues.length) {
     console.error("[data-freshness] failed");
     for (const issue of issues) console.error("- " + issue);

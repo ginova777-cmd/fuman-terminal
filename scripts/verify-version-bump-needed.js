@@ -27,7 +27,7 @@ const FRONTEND_FILES = [
 const VERSION_FILES = new Set(["index.html", "terminal-core.js", "terminal.js", "terminal-modules.js", "fuman-sw.js"]);
 
 function git(args) {
-  const result = spawnSync("git", args, { cwd: ROOT, encoding: "utf8" });
+  const result = spawnSync("git", args, { cwd: ROOT, encoding: "utf8", env: { ...process.env, GIT_OPTIONAL_LOCKS: "0" } });
   if (result.status !== 0) return "";
   return result.stdout.trim();
 }
