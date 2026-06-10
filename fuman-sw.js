@@ -1,23 +1,24 @@
-const CACHE_VERSION = "fuman-terminal-sw-heatmap-realtime-20260610-01";
+const CACHE_VERSION = "fuman-terminal-sw-heatmap-realtime-20260610-02";
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 const DATA_CACHE = `${CACHE_VERSION}-data`;
 
 const STATIC_ASSETS = [
-  "/styles.css?v=heatmap-realtime-20260610-01",
-  "/terminal-core.js?v=heatmap-realtime-20260610-01",
-  "/terminal-modules.js?v=heatmap-realtime-20260610-01",
-  "/terminal-sector-map.js?v=heatmap-realtime-20260610-01",
-  "/terminal-strategy-config.js?v=heatmap-realtime-20260610-01",
-  "/terminal-market-config.js?v=heatmap-realtime-20260610-01",
-  "/terminal-ui-config.js?v=heatmap-realtime-20260610-01",
-  "/terminal-runtime-config.js?v=heatmap-realtime-20260610-01",
-  "/terminal-tuning-config.js?v=heatmap-realtime-20260610-01",
-  "/terminal-worker.js?v=heatmap-realtime-20260610-01",
-  "/terminal.js?v=heatmap-realtime-20260610-01",
-  "/terminal-realtime-radar.css?v=heatmap-realtime-20260610-01",
-  "/terminal-intraday-radar.css?v=heatmap-realtime-20260610-01",
-  "/terminal-utility.css?v=heatmap-realtime-20260610-01",
-  "/refresh.html?v=heatmap-realtime-20260610-01",
+  "/styles.css?v=heatmap-realtime-20260610-02",
+  "/terminal-core.js?v=heatmap-realtime-20260610-02",
+  "/terminal-modules.js?v=heatmap-realtime-20260610-02",
+  "/terminal-sector-map.js?v=heatmap-realtime-20260610-02",
+  "/terminal-strategy-config.js?v=heatmap-realtime-20260610-02",
+  "/terminal-market-config.js?v=heatmap-realtime-20260610-02",
+  "/terminal-ui-config.js?v=heatmap-realtime-20260610-02",
+  "/terminal-runtime-config.js?v=heatmap-realtime-20260610-02",
+  "/terminal-tuning-config.js?v=heatmap-realtime-20260610-02",
+  "/terminal-worker.js?v=heatmap-realtime-20260610-02",
+  "/terminal.js?v=heatmap-realtime-20260610-02",
+  "/terminal-app.js?v=heatmap-realtime-20260610-02",
+  "/terminal-realtime-radar.css?v=heatmap-realtime-20260610-02",
+  "/terminal-intraday-radar.css?v=heatmap-realtime-20260610-02",
+  "/terminal-utility.css?v=heatmap-realtime-20260610-02",
+  "/refresh.html?v=heatmap-realtime-20260610-02",
   "/assets/logo.webp",
   "/favicon.ico",
 ];
@@ -154,6 +155,20 @@ async function staleWhileRevalidate(request) {
 }
 
 
+async function networkFirstStatic(request) {
+  const cache = await caches.open(STATIC_CACHE);
+  try {
+    const response = await fetch(request, { cache: "no-store" });
+    if (response.ok) cache.put(request, response.clone());
+    return response;
+  } catch (error) {
+    const cached = await cache.match(request, { ignoreSearch: false });
+    if (cached) return cached;
+    throw error;
+  }
+}
+
+
 self.addEventListener("message", (event) => {
   if (event.data && event.data.type === "SKIP_WAITING") self.skipWaiting();
   if (event.data && event.data.type === "PREFETCH_DATA") event.waitUntil(prefetchDataAssets());
@@ -173,12 +188,21 @@ self.addEventListener("fetch", (event) => {
     return;
   }
   if (isDataRequest(url)) {
-    event.respondWith((url.searchParams.has("t") || isNetworkFirstDataRequest(url)) ? networkFirst(request) : dataStaleWhileRevalidate(request));
+    event.respondWith(networkFirst(request));
     return;
   }
-  if (["script", "style", "image", "font"].includes(request.destination)) {
+  if (url.pathname === "/terminal-app.js") {
+    event.respondWith(networkFirstStatic(request));
+    return;
+  }
+  if (["script", "style"].includes(request.destination)) {
+    event.respondWith(networkFirstStatic(request));
+    return;
+  }
+  if (["image", "font"].includes(request.destination)) {
     event.respondWith(staleWhileRevalidate(request));
   }
+
 });
 
 

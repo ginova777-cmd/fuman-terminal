@@ -1,5 +1,5 @@
 (function () {
-  const VERSION = "sector-modal-20260608-01";
+  const VERSION = "heatmap-realtime-20260610-02";
   const modules = {
     sectorMap: { loaded: false, src: "terminal-sector-map.js" },
     strategyConfig: { loaded: false, src: "terminal-strategy-config.js" },

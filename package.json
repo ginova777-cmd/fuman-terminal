@@ -12,7 +12,12 @@
     "health:chip": "node scripts/health-check-chip-trade.js",
     "verify:contracts": "node scripts/verify-data-contracts.js",
     "verify:mobile": "node --use-system-ca scripts/verify-mobile-health.js",
-    "e2e:smoke": "node --use-system-ca scripts/e2e-smoke.js"
+    "e2e:smoke": "node --use-system-ca scripts/e2e-smoke.js",
+    "bump:version": "node scripts/bump-version.js",
+    "verify:version": "node scripts/verify-version-consistency.js",
+    "predeploy": "npm run guard:source && npm run verify:version",
+    "guard:source": "node scripts/guard-source-tree.js",
+    "verify:live-version": "node --use-system-ca scripts/verify-live-version.js"
   },
   "engines": {
     "node": "20.x"

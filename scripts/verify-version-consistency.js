@@ -27,7 +27,9 @@ function requireIncludes(file, needle) {
 requireIncludes("index.html", `styles.css?v=${VERSION}`);
 requireIncludes("index.html", `terminal-core.js?v=${VERSION}`);
 requireIncludes("terminal-core.js", `const version = "${VERSION}"`);
+requireIncludes("terminal-modules.js", `const VERSION = "${VERSION}"`);
 requireIncludes("fuman-sw.js", `?v=${VERSION}`);
+requireIncludes("fuman-sw.js", `/terminal-app.js?v=${VERSION}`);
 requireIncludes("scripts/verify-deployment.js", "detectVersion");
 requireIncludes("scripts/e2e-smoke.js", "detectVersion");
 
@@ -42,6 +44,15 @@ if (sw.includes('"/",') || sw.includes('"/index.html",')) {
 }
 if (!sw.includes('request.mode === "navigate"') || !sw.includes('fetch(request, { cache: "no-store" })')) {
   issues.push("fuman-sw.js: navigate requests must be network/no-store first");
+}
+if (!sw.includes("async function networkFirstStatic") || !sw.includes('["script", "style"].includes(request.destination)')) {
+  issues.push("fuman-sw.js: script/style assets must be network-first");
+}
+if (!sw.includes('url.pathname === "/terminal-app.js"')) {
+  issues.push("fuman-sw.js: terminal-app.js must be explicitly network-first");
+}
+if (!sw.includes("if (isDataRequest(url)) {\n    event.respondWith(networkFirst(request));")) {
+  issues.push("fuman-sw.js: data requests must be network-first");
 }
 
 const vercel = JSON.parse(read("vercel.json"));

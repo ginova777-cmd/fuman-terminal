@@ -1,9 +1,20 @@
 (function () {
-  const version = "heatmap-realtime-20260610-01";
+  const version = "heatmap-realtime-20260610-02";
   window.FUMAN_TERMINAL_BOOT = {
     version,
     startedAt: Date.now(),
+    assets: {
+      core: `terminal-core.js?v=${version}`,
+      main: `terminal.js?v=${version}`,
+      app: `terminal-app.js?v=${version}`,
+      serviceWorker: `fuman-sw.js?v=${version}`,
+    },
   };
+  window.FUMAN_TERMINAL_VERSION = version;
+  try {
+    document.documentElement.dataset.fumanTerminalVersion = version;
+    console.info(`[FUMAN] terminal version ${version}`);
+  } catch (error) {}
 
   const warmAuthShell = () => {
     try {
