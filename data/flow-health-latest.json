@@ -1,26 +1,26 @@
 {
-  "updatedAt": "2026-06-10T13:20:38.6249862Z",
   "institution": {
     "scope": "institution",
     "status": "watchdog_failed",
     "message": "Watchdog rerun failed",
-    "updatedAt": "2026-06-10T13:20:38.6247778Z",
+    "updatedAt": "2026-06-10T22:37:09.4682826Z",
     "detail": {
-      "reason": "institution not updated after 21:00; updatedAt=06/10/2026 13:01:10",
+      "log": "C:\\fuman-runtime\\logs\\flow-watchdog-institution-20260611-062001.log",
       "exitCode": 1,
-      "expectedTime": "21:00",
-      "log": "C:\\fuman-runtime\\logs\\flow-watchdog-institution-20260610-212001.log"
+      "reason": "institution not updated after 06:00; updatedAt=06/10/2026 22:00:28",
+      "expectedTime": "06:00"
     }
   },
+  "updatedAt": "2026-06-10T22:37:09.4683969Z",
   "warrant": {
     "scope": "warrant",
     "status": "ok",
     "message": "Watchdog rerun completed",
-    "updatedAt": "2026-06-10T12:50:37.7438791Z",
+    "updatedAt": "2026-06-10T21:50:19.4624459Z",
     "detail": {
-      "log": "C:\\fuman-runtime\\logs\\flow-watchdog-warrant-20260610-205002.log",
-      "expectedTime": "20:30",
-      "reason": "warrant not updated after 20:30; updatedAt=06/10/2026 12:30:51"
+      "reason": "warrant not updated after 05:30; updatedAt=06/10/2026 21:30:42",
+      "log": "C:\\fuman-runtime\\logs\\flow-watchdog-warrant-20260611-055002.log",
+      "expectedTime": "05:30"
     }
   }
 }
