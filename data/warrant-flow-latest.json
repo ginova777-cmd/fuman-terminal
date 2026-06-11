@@ -1,8 +1,8 @@
 {
   "ok": true,
-  "updatedAt": "2026-06-11T21:30:40.754Z",
+  "updatedAt": "2026-06-11T21:50:09.299Z",
   "query": "",
-  "scanned": 15982,
+  "scanned": 15937,
   "count": 120,
   "matches": [
     {
@@ -14887,8 +14887,8 @@
     }
   ],
   "errors": [
-    "上市權證基本資料 20260612: This operation was aborted",
-    "已剔除 350 筆找不到官方標的收盤價的權證。"
+    "已剔除 47 筆無權證基本資料對照的權證。",
+    "已剔除 348 筆找不到官方標的收盤價的權證。"
   ],
   "sources": [
     "mopsfin.twse.com.tw/opendata/t187ap42_L.csv",
