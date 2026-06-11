@@ -1,21 +1,18 @@
 {
   "ok": true,
   "source": "github-actions-backup",
-  "updatedAt": "2026-06-11T08:41:30.801Z",
+  "updatedAt": "2026-06-11T12:32:02.245Z",
   "usedDate": "20260611",
   "total": 1959,
   "count": 6,
-  "sourceWarnings": [
-    "tpex volume fetch failed: 115/06/05 :: terminated",
-    "tpex volume fetch failed: 115/06/02 :: terminated"
-  ],
-  "qualityStatus": "degraded",
+  "sourceWarnings": [],
+  "qualityStatus": "ok",
   "sourceHealth": {
-    "status": "degraded",
+    "status": "ok",
     "issuedSharesCount": 1976,
-    "volumeAverageCount": 2240,
+    "volumeAverageCount": 2187,
     "stockUniverseCount": 1959,
-    "warningCount": 2,
+    "warningCount": 0,
     "warningLimit": 3,
     "minIssuedSharesCount": 1000,
     "minVolumeAverageCount": 1000,
@@ -42,15 +39,15 @@
       "volumeRank": 89,
       "volumeLots": 7173,
       "turnoverRate": 8.99,
-      "volumeRatio": 1.53,
-      "projectedRatio": 1.53,
-      "overnightScore": 99,
+      "volumeRatio": 1.44,
+      "projectedRatio": 1.44,
+      "overnightScore": 98,
       "overnightState": "通過",
-      "score": 99,
+      "score": 98,
       "matches": [
         {
           "id": "overnight_chip",
-          "reason": "符合固定條件：漲幅 4.84%、成交量 7,173 張、周轉率 8.99%、量比 1.53。"
+          "reason": "符合固定條件：漲幅 4.84%、成交量 7,173 張、周轉率 8.99%、量比 1.44。"
         }
       ]
     },
@@ -74,47 +71,15 @@
       "volumeRank": 99,
       "volumeLots": 81768,
       "turnoverRate": 51.29,
-      "volumeRatio": 2.97,
-      "projectedRatio": 2.97,
+      "volumeRatio": 1.76,
+      "projectedRatio": 1.76,
       "overnightScore": 95,
       "overnightState": "通過",
       "score": 95,
       "matches": [
         {
           "id": "overnight_chip",
-          "reason": "符合固定條件：漲幅 4.48%、成交量 81,768 張、周轉率 51.29%、量比 2.97。"
-        }
-      ]
-    },
-    {
-      "code": "2493",
-      "name": "揚博",
-      "close": 188.5,
-      "change": 8,
-      "percent": 4.43213296398892,
-      "value": 2670668000,
-      "tradeVolume": 14168000,
-      "open": 186.5,
-      "high": 192,
-      "low": 168,
-      "prevClose": 180.5,
-      "volume": 14168,
-      "market": "TWSE",
-      "quoteDate": "20260611",
-      "quoteTime": "13:30:00",
-      "valueRank": 95,
-      "volumeRank": 93,
-      "volumeLots": 14168,
-      "turnoverRate": 11.17,
-      "volumeRatio": 1.69,
-      "projectedRatio": 1.69,
-      "overnightScore": 94,
-      "overnightState": "通過",
-      "score": 94,
-      "matches": [
-        {
-          "id": "overnight_chip",
-          "reason": "符合固定條件：漲幅 4.43%、成交量 14,168 張、周轉率 11.17%、量比 1.69。"
+          "reason": "符合固定條件：漲幅 4.48%、成交量 81,768 張、周轉率 51.29%、量比 1.76。"
         }
       ]
     },
@@ -138,15 +103,47 @@
       "volumeRank": 98,
       "volumeLots": 36628,
       "turnoverRate": 25.31,
-      "volumeRatio": 5.47,
-      "projectedRatio": 5.47,
+      "volumeRatio": 3.02,
+      "projectedRatio": 3.02,
       "overnightScore": 93,
       "overnightState": "通過",
       "score": 93,
       "matches": [
         {
           "id": "overnight_chip",
-          "reason": "符合固定條件：漲幅 4.41%、成交量 36,628 張、周轉率 25.31%、量比 5.47。"
+          "reason": "符合固定條件：漲幅 4.41%、成交量 36,628 張、周轉率 25.31%、量比 3.02。"
+        }
+      ]
+    },
+    {
+      "code": "2493",
+      "name": "揚博",
+      "close": 188.5,
+      "change": 8,
+      "percent": 4.43213296398892,
+      "value": 2670668000,
+      "tradeVolume": 14168000,
+      "open": 186.5,
+      "high": 192,
+      "low": 168,
+      "prevClose": 180.5,
+      "volume": 14168,
+      "market": "TWSE",
+      "quoteDate": "20260611",
+      "quoteTime": "13:30:00",
+      "valueRank": 95,
+      "volumeRank": 93,
+      "volumeLots": 14168,
+      "turnoverRate": 11.17,
+      "volumeRatio": 1.28,
+      "projectedRatio": 1.28,
+      "overnightScore": 89,
+      "overnightState": "通過",
+      "score": 89,
+      "matches": [
+        {
+          "id": "overnight_chip",
+          "reason": "符合固定條件：漲幅 4.43%、成交量 14,168 張、周轉率 11.17%、量比 1.28。"
         }
       ]
     },
@@ -170,15 +167,15 @@
       "volumeRank": 99,
       "volumeLots": 54377,
       "turnoverRate": 10.35,
-      "volumeRatio": 5.25,
-      "projectedRatio": 5.25,
+      "volumeRatio": 2.5,
+      "projectedRatio": 2.5,
       "overnightScore": 70,
       "overnightState": "通過",
       "score": 70,
       "matches": [
         {
           "id": "overnight_chip",
-          "reason": "符合固定條件：漲幅 3.13%、成交量 54,377 張、周轉率 10.35%、量比 5.25。"
+          "reason": "符合固定條件：漲幅 3.13%、成交量 54,377 張、周轉率 10.35%、量比 2.50。"
         }
       ]
     },
@@ -202,15 +199,15 @@
       "volumeRank": 79,
       "volumeLots": 2938,
       "turnoverRate": 5.5,
-      "volumeRatio": 1.49,
-      "projectedRatio": 1.49,
-      "overnightScore": 68,
+      "volumeRatio": 1.29,
+      "projectedRatio": 1.29,
+      "overnightScore": 65,
       "overnightState": "通過",
-      "score": 68,
+      "score": 65,
       "matches": [
         {
           "id": "overnight_chip",
-          "reason": "符合固定條件：漲幅 3.10%、成交量 2,938 張、周轉率 5.50%、量比 1.49。"
+          "reason": "符合固定條件：漲幅 3.10%、成交量 2,938 張、周轉率 5.50%、量比 1.29。"
         }
       ]
     }
