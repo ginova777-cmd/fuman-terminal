@@ -1,7 +1,7 @@
 {
   "source": "strategy2-09-to-1330-patrol",
   "date": "2026-06-11",
-  "updatedAt": "2026-06-11T03:55:55.104Z",
+  "updatedAt": "2026-06-11T04:00:43.625Z",
   "realtime": {
     "requested": 1013,
     "received": 1005,
@@ -35,8 +35,8 @@
     "fugleRateLimited": false,
     "fallbackStats": {
       "fugleWs": {
-        "available": 781,
-        "used": 781
+        "available": 736,
+        "used": 736
       },
       "fugle": {
         "configured": true,
@@ -1158,6 +1158,7 @@
       "1423",
       "1432",
       "1434",
+      "1436",
       "1437",
       "1438",
       "1439",
@@ -1172,25 +1173,24 @@
       "1449",
       "1451",
       "1452",
-      "1453",
-      "1454"
+      "1453"
     ],
     "noTimeCodes": [],
     "noCloseCodes": [],
     "missedCount": 8,
-    "coverage": 0.771,
+    "coverage": 0.7266,
     "quoteCoverage": 0.003,
-    "fugleWsCoverage": 0.771,
-    "usable": 781,
+    "fugleWsCoverage": 0.7266,
+    "usable": 736,
     "quoteUsable": 3,
-    "entrySourceUsable": 781,
+    "entrySourceUsable": 736,
     "cachedRecovered": 0,
     "quoteCacheMaxAgeSeconds": 900,
     "entrySourceCoverageThreshold": 0.5,
     "entrySourceHealthy": true,
     "initialBatchSize": 12,
     "retryBatchSize": 4,
-    "tradable": 781,
+    "tradable": 736,
     "tradableByQuote": 3
   },
   "records": [
