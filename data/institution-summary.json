@@ -1,9 +1,9 @@
 {
   "ok": true,
   "source": "github-actions",
-  "updatedAt": "2026-06-11T13:20:43.874Z",
+  "updatedAt": "2026-06-11T22:00:22.613Z",
   "usedDate": "20260611",
-  "quoteUpdatedAt": "2026-06-11T13:20:14.716Z",
+  "quoteUpdatedAt": "2026-06-11T22:00:09.762Z",
   "count": 1880,
   "topJoint": [
     {
@@ -17,10 +17,10 @@
       "dealer": 0,
       "total": 210624,
       "foreignStreak": 7,
-      "trustStreak": 8,
+      "trustStreak": 7,
       "jointStreak": 7,
-      "fiveDayPctSum": -5.62,
-      "fiveDayAvgVolume": 1514220
+      "fiveDayPctSum": -5.46,
+      "fiveDayAvgVolume": 1546530
     },
     {
       "code": "3045",
@@ -35,8 +35,24 @@
       "foreignStreak": 7,
       "trustStreak": 5,
       "jointStreak": 5,
-      "fiveDayPctSum": 1.73,
-      "fiveDayAvgVolume": 12699562
+      "fiveDayPctSum": 2.58,
+      "fiveDayAvgVolume": 14837708
+    },
+    {
+      "code": "5536",
+      "name": "聖暉*",
+      "close": 1075,
+      "percent": -1.38,
+      "value": 949225000,
+      "foreign": 130689,
+      "trust": 10063,
+      "dealer": -12918,
+      "total": 127834,
+      "foreignStreak": 6,
+      "trustStreak": 5,
+      "jointStreak": 5,
+      "fiveDayPctSum": -6.88,
+      "fiveDayAvgVolume": 928933
     },
     {
       "code": "2892",
@@ -49,10 +65,10 @@
       "dealer": 0,
       "total": 21533327,
       "foreignStreak": 4,
-      "trustStreak": 8,
+      "trustStreak": 7,
       "jointStreak": 4,
-      "fiveDayPctSum": 5.34,
-      "fiveDayAvgVolume": 73027148
+      "fiveDayPctSum": 3.77,
+      "fiveDayAvgVolume": 64485886
     },
     {
       "code": "2377",
@@ -65,10 +81,10 @@
       "dealer": 0,
       "total": 1288501,
       "foreignStreak": 4,
-      "trustStreak": 8,
+      "trustStreak": 7,
       "jointStreak": 4,
-      "fiveDayPctSum": -9.77,
-      "fiveDayAvgVolume": 26525234
+      "fiveDayPctSum": -4.2,
+      "fiveDayAvgVolume": 24066563
     },
     {
       "code": "5434",
@@ -83,8 +99,8 @@
       "foreignStreak": 4,
       "trustStreak": 6,
       "jointStreak": 4,
-      "fiveDayPctSum": -4.87,
-      "fiveDayAvgVolume": 962153
+      "fiveDayPctSum": -2.29,
+      "fiveDayAvgVolume": 979532
     },
     {
       "code": "2412",
@@ -97,10 +113,10 @@
       "dealer": 0,
       "total": 6838148,
       "foreignStreak": 3,
-      "trustStreak": 8,
+      "trustStreak": 7,
       "jointStreak": 3,
-      "fiveDayPctSum": 2.16,
-      "fiveDayAvgVolume": 15192787
+      "fiveDayPctSum": 2.5,
+      "fiveDayAvgVolume": 15897824
     },
     {
       "code": "2492",
@@ -115,8 +131,8 @@
       "foreignStreak": 6,
       "trustStreak": 3,
       "jointStreak": 3,
-      "fiveDayPctSum": -2.44,
-      "fiveDayAvgVolume": 4041276
+      "fiveDayPctSum": 7.34,
+      "fiveDayAvgVolume": 4269177
     },
     {
       "code": "4904",
@@ -131,8 +147,8 @@
       "foreignStreak": 4,
       "trustStreak": 3,
       "jointStreak": 3,
-      "fiveDayPctSum": 5.91,
-      "fiveDayAvgVolume": 9563974
+      "fiveDayPctSum": 6.77,
+      "fiveDayAvgVolume": 9563661
     },
     {
       "code": "2351",
@@ -147,8 +163,8 @@
       "foreignStreak": 4,
       "trustStreak": 3,
       "jointStreak": 3,
-      "fiveDayPctSum": -15.92,
-      "fiveDayAvgVolume": 6819761
+      "fiveDayPctSum": -14.75,
+      "fiveDayAvgVolume": 6077779
     },
     {
       "code": "5285",
@@ -163,24 +179,8 @@
       "foreignStreak": 4,
       "trustStreak": 3,
       "jointStreak": 3,
-      "fiveDayPctSum": -6.08,
-      "fiveDayAvgVolume": 5317469
-    },
-    {
-      "code": "5904",
-      "name": "寶雅",
-      "close": 625,
-      "percent": 3.82,
-      "value": 421875000,
-      "foreign": 52867,
-      "trust": 32000,
-      "dealer": 68573,
-      "total": 153440,
-      "foreignStreak": 6,
-      "trustStreak": 3,
-      "jointStreak": 3,
-      "fiveDayPctSum": 19.1,
-      "fiveDayAvgVolume": 741585
+      "fiveDayPctSum": -12.96,
+      "fiveDayAvgVolume": 3613239
     },
     {
       "code": "2059",
@@ -195,8 +195,8 @@
       "foreignStreak": 3,
       "trustStreak": 4,
       "jointStreak": 3,
-      "fiveDayPctSum": 18.71,
-      "fiveDayAvgVolume": 1080326
+      "fiveDayPctSum": 19.18,
+      "fiveDayAvgVolume": 1115137
     },
     {
       "code": "2344",
@@ -211,8 +211,8 @@
       "foreignStreak": 2,
       "trustStreak": 3,
       "jointStreak": 2,
-      "fiveDayPctSum": -16.73,
-      "fiveDayAvgVolume": 204792859
+      "fiveDayPctSum": -12.82,
+      "fiveDayAvgVolume": 206847598
     },
     {
       "code": "3042",
@@ -227,8 +227,8 @@
       "foreignStreak": 2,
       "trustStreak": 6,
       "jointStreak": 2,
-      "fiveDayPctSum": -0.95,
-      "fiveDayAvgVolume": 41861430
+      "fiveDayPctSum": 13.23,
+      "fiveDayAvgVolume": 48349250
     },
     {
       "code": "9933",
@@ -241,10 +241,10 @@
       "dealer": 0,
       "total": 1709017,
       "foreignStreak": 2,
-      "trustStreak": 8,
+      "trustStreak": 7,
       "jointStreak": 2,
-      "fiveDayPctSum": -5.13,
-      "fiveDayAvgVolume": 8792801
+      "fiveDayPctSum": -1.99,
+      "fiveDayAvgVolume": 8091116
     },
     {
       "code": "3026",
@@ -259,8 +259,8 @@
       "foreignStreak": 7,
       "trustStreak": 2,
       "jointStreak": 2,
-      "fiveDayPctSum": 0.95,
-      "fiveDayAvgVolume": 1827986
+      "fiveDayPctSum": 12.01,
+      "fiveDayAvgVolume": 2312737
     },
     {
       "code": "2352",
@@ -275,8 +275,8 @@
       "foreignStreak": 2,
       "trustStreak": 6,
       "jointStreak": 2,
-      "fiveDayPctSum": -13.53,
-      "fiveDayAvgVolume": 24813131
+      "fiveDayPctSum": -12.55,
+      "fiveDayAvgVolume": 13223674
     },
     {
       "code": "3015",
@@ -289,26 +289,10 @@
       "dealer": 0,
       "total": 485360,
       "foreignStreak": 2,
-      "trustStreak": 8,
+      "trustStreak": 7,
       "jointStreak": 2,
-      "fiveDayPctSum": 6.13,
-      "fiveDayAvgVolume": 9208303
-    },
-    {
-      "code": "3006",
-      "name": "晶豪科",
-      "close": 204.5,
-      "percent": 1.24,
-      "value": 2128436000,
-      "foreign": 245510,
-      "trust": 15000,
-      "dealer": 0,
-      "total": 192606,
-      "foreignStreak": 2,
-      "trustStreak": 3,
-      "jointStreak": 2,
-      "fiveDayPctSum": -23.94,
-      "fiveDayAvgVolume": 14924739
+      "fiveDayPctSum": -5.88,
+      "fiveDayAvgVolume": 7249870
     },
     {
       "code": "7828",
@@ -320,27 +304,11 @@
       "trust": 127000,
       "dealer": -9000,
       "total": 216971,
-      "foreignStreak": 2,
+      "foreignStreak": 4,
       "trustStreak": 2,
       "jointStreak": 2,
       "fiveDayPctSum": 49.08,
       "fiveDayAvgVolume": 687872
-    },
-    {
-      "code": "5536",
-      "name": "聖暉*",
-      "close": 1075,
-      "percent": -1.38,
-      "value": 949225000,
-      "foreign": 130689,
-      "trust": 10063,
-      "dealer": -12918,
-      "total": 127834,
-      "foreignStreak": 2,
-      "trustStreak": 6,
-      "jointStreak": 2,
-      "fiveDayPctSum": -6.88,
-      "fiveDayAvgVolume": 928933
     },
     {
       "code": "1723",
@@ -353,10 +321,26 @@
       "dealer": 0,
       "total": 127718,
       "foreignStreak": 2,
-      "trustStreak": 8,
+      "trustStreak": 7,
       "jointStreak": 2,
-      "fiveDayPctSum": -0.18,
-      "fiveDayAvgVolume": 996167
+      "fiveDayPctSum": -0.65,
+      "fiveDayAvgVolume": 847982
+    },
+    {
+      "code": "5904",
+      "name": "寶雅",
+      "close": 625,
+      "percent": 3.82,
+      "value": 421875000,
+      "foreign": 52867,
+      "trust": 32000,
+      "dealer": 68573,
+      "total": 153440,
+      "foreignStreak": 5,
+      "trustStreak": 2,
+      "jointStreak": 2,
+      "fiveDayPctSum": 19.1,
+      "fiveDayAvgVolume": 741585
     },
     {
       "code": "1736",
@@ -371,8 +355,8 @@
       "foreignStreak": 2,
       "trustStreak": 4,
       "jointStreak": 2,
-      "fiveDayPctSum": -3.34,
-      "fiveDayAvgVolume": 911652
+      "fiveDayPctSum": 1.43,
+      "fiveDayAvgVolume": 841173
     },
     {
       "code": "3481",
@@ -387,8 +371,8 @@
       "foreignStreak": 2,
       "trustStreak": 1,
       "jointStreak": 1,
-      "fiveDayPctSum": -28.01,
-      "fiveDayAvgVolume": 138194337
+      "fiveDayPctSum": -21.95,
+      "fiveDayAvgVolume": 139057704
     },
     {
       "code": "2890",
@@ -401,10 +385,10 @@
       "dealer": 0,
       "total": 16333393,
       "foreignStreak": 1,
-      "trustStreak": 8,
+      "trustStreak": 7,
       "jointStreak": 1,
-      "fiveDayPctSum": 0.37,
-      "fiveDayAvgVolume": 55531677
+      "fiveDayPctSum": 0.67,
+      "fiveDayAvgVolume": 53743700
     },
     {
       "code": "2801",
@@ -419,8 +403,8 @@
       "foreignStreak": 3,
       "trustStreak": 1,
       "jointStreak": 1,
-      "fiveDayPctSum": 5.97,
-      "fiveDayAvgVolume": 54700776
+      "fiveDayPctSum": 4.55,
+      "fiveDayAvgVolume": 52584792
     },
     {
       "code": "2313",
@@ -435,8 +419,8 @@
       "foreignStreak": 1,
       "trustStreak": 1,
       "jointStreak": 1,
-      "fiveDayPctSum": -2.16,
-      "fiveDayAvgVolume": 62291567
+      "fiveDayPctSum": 4.39,
+      "fiveDayAvgVolume": 72802909
     },
     {
       "code": "8150",
@@ -451,8 +435,8 @@
       "foreignStreak": 1,
       "trustStreak": 3,
       "jointStreak": 1,
-      "fiveDayPctSum": -6.74,
-      "fiveDayAvgVolume": 51593781
+      "fiveDayPctSum": -0.22,
+      "fiveDayAvgVolume": 48731628
     },
     {
       "code": "2356",
@@ -467,8 +451,8 @@
       "foreignStreak": 2,
       "trustStreak": 1,
       "jointStreak": 1,
-      "fiveDayPctSum": -24.29,
-      "fiveDayAvgVolume": 86286804
+      "fiveDayPctSum": -16.6,
+      "fiveDayAvgVolume": 67797353
     },
     {
       "code": "1216",
@@ -483,8 +467,8 @@
       "foreignStreak": 6,
       "trustStreak": 1,
       "jointStreak": 1,
-      "fiveDayPctSum": 1.51,
-      "fiveDayAvgVolume": 13717361
+      "fiveDayPctSum": 2.72,
+      "fiveDayAvgVolume": 13667800
     },
     {
       "code": "2884",
@@ -499,8 +483,8 @@
       "foreignStreak": 1,
       "trustStreak": 2,
       "jointStreak": 1,
-      "fiveDayPctSum": 2.06,
-      "fiveDayAvgVolume": 65889984
+      "fiveDayPctSum": 1.29,
+      "fiveDayAvgVolume": 60661200
     },
     {
       "code": "4958",
@@ -515,8 +499,8 @@
       "foreignStreak": 1,
       "trustStreak": 1,
       "jointStreak": 1,
-      "fiveDayPctSum": -2.54,
-      "fiveDayAvgVolume": 10657381
+      "fiveDayPctSum": 6.27,
+      "fiveDayAvgVolume": 17733095
     },
     {
       "code": "2312",
@@ -531,8 +515,8 @@
       "foreignStreak": 1,
       "trustStreak": 1,
       "jointStreak": 1,
-      "fiveDayPctSum": -20.83,
-      "fiveDayAvgVolume": 73117372
+      "fiveDayPctSum": -15.28,
+      "fiveDayAvgVolume": 58405027
     },
     {
       "code": "2489",
@@ -547,8 +531,8 @@
       "foreignStreak": 2,
       "trustStreak": 1,
       "jointStreak": 1,
-      "fiveDayPctSum": -19.64,
-      "fiveDayAvgVolume": 22409459
+      "fiveDayPctSum": -17.06,
+      "fiveDayAvgVolume": 21902998
     },
     {
       "code": "2426",
@@ -563,8 +547,8 @@
       "foreignStreak": 1,
       "trustStreak": 1,
       "jointStreak": 1,
-      "fiveDayPctSum": -17.39,
-      "fiveDayAvgVolume": 12164246
+      "fiveDayPctSum": -6.45,
+      "fiveDayAvgVolume": 13812823
     },
     {
       "code": "2464",
@@ -579,8 +563,8 @@
       "foreignStreak": 2,
       "trustStreak": 1,
       "jointStreak": 1,
-      "fiveDayPctSum": -17.73,
-      "fiveDayAvgVolume": 12296677
+      "fiveDayPctSum": -17.34,
+      "fiveDayAvgVolume": 12404279
     },
     {
       "code": "6451",
@@ -593,10 +577,10 @@
       "dealer": 0,
       "total": 1438403,
       "foreignStreak": 1,
-      "trustStreak": 2,
+      "trustStreak": 1,
       "jointStreak": 1,
-      "fiveDayPctSum": -25.28,
-      "fiveDayAvgVolume": 7306245
+      "fiveDayPctSum": -29.2,
+      "fiveDayAvgVolume": 6569638
     },
     {
       "code": "6789",
@@ -611,8 +595,8 @@
       "foreignStreak": 2,
       "trustStreak": 1,
       "jointStreak": 1,
-      "fiveDayPctSum": -15.55,
-      "fiveDayAvgVolume": 2540865
+      "fiveDayPctSum": -13.67,
+      "fiveDayAvgVolume": 2865606
     },
     {
       "code": "3005",
@@ -627,8 +611,8 @@
       "foreignStreak": 3,
       "trustStreak": 1,
       "jointStreak": 1,
-      "fiveDayPctSum": -5.95,
-      "fiveDayAvgVolume": 5580214
+      "fiveDayPctSum": -5.02,
+      "fiveDayAvgVolume": 5287855
     },
     {
       "code": "5876",
@@ -643,8 +627,8 @@
       "foreignStreak": 1,
       "trustStreak": 2,
       "jointStreak": 1,
-      "fiveDayPctSum": 3.22,
-      "fiveDayAvgVolume": 15447544
+      "fiveDayPctSum": 3.23,
+      "fiveDayAvgVolume": 15576580
     },
     {
       "code": "2401",
@@ -659,8 +643,8 @@
       "foreignStreak": 3,
       "trustStreak": 1,
       "jointStreak": 1,
-      "fiveDayPctSum": -13.98,
-      "fiveDayAvgVolume": 6180365
+      "fiveDayPctSum": -1.04,
+      "fiveDayAvgVolume": 6641635
     },
     {
       "code": "8039",
@@ -668,15 +652,31 @@
       "close": 136,
       "percent": 5.43,
       "value": 1054952000,
-      "foreign": 777765,
-      "trust": 5000,
-      "dealer": 0,
+      "foreign": 782765,
+      "trust": 6750,
+      "dealer": 5000,
       "total": 957298,
       "foreignStreak": 1,
       "trustStreak": 1,
       "jointStreak": 1,
-      "fiveDayPctSum": -14.83,
-      "fiveDayAvgVolume": 8574226
+      "fiveDayPctSum": -2.76,
+      "fiveDayAvgVolume": 7786514
+    },
+    {
+      "code": "2103",
+      "name": "台橡",
+      "close": 22.15,
+      "percent": 5.23,
+      "value": 165216850,
+      "foreign": 713592,
+      "trust": 26000,
+      "dealer": 0,
+      "total": 918155,
+      "foreignStreak": 2,
+      "trustStreak": 1,
+      "jointStreak": 1,
+      "fiveDayPctSum": -0.25,
+      "fiveDayAvgVolume": 5610648
     },
     {
       "code": "6548",
@@ -688,7 +688,7 @@
       "trust": 15000,
       "dealer": -190000,
       "total": 498437,
-      "foreignStreak": 2,
+      "foreignStreak": 3,
       "trustStreak": 1,
       "jointStreak": 1,
       "fiveDayPctSum": 13.45,
@@ -707,8 +707,8 @@
       "foreignStreak": 3,
       "trustStreak": 1,
       "jointStreak": 1,
-      "fiveDayPctSum": -13.62,
-      "fiveDayAvgVolume": 2945450
+      "fiveDayPctSum": -17.47,
+      "fiveDayAvgVolume": 3071801
     },
     {
       "code": "3034",
@@ -723,8 +723,8 @@
       "foreignStreak": 2,
       "trustStreak": 1,
       "jointStreak": 1,
-      "fiveDayPctSum": -4.86,
-      "fiveDayAvgVolume": 5205313
+      "fiveDayPctSum": -0.09,
+      "fiveDayAvgVolume": 5146431
     },
     {
       "code": "4722",
@@ -739,8 +739,8 @@
       "foreignStreak": 1,
       "trustStreak": 3,
       "jointStreak": 1,
-      "fiveDayPctSum": -22.09,
-      "fiveDayAvgVolume": 1595940
+      "fiveDayPctSum": -28.67,
+      "fiveDayAvgVolume": 2094248
     },
     {
       "code": "3376",
@@ -755,8 +755,8 @@
       "foreignStreak": 1,
       "trustStreak": 1,
       "jointStreak": 1,
-      "fiveDayPctSum": -5.72,
-      "fiveDayAvgVolume": 22101685
+      "fiveDayPctSum": -4.65,
+      "fiveDayAvgVolume": 22637506
     },
     {
       "code": "3583",
@@ -771,8 +771,8 @@
       "foreignStreak": 1,
       "trustStreak": 2,
       "jointStreak": 1,
-      "fiveDayPctSum": -6.22,
-      "fiveDayAvgVolume": 2094732
+      "fiveDayPctSum": -8.78,
+      "fiveDayAvgVolume": 2098457
     },
     {
       "code": "5309",
@@ -785,7 +785,7 @@
       "dealer": -258532,
       "total": 196482,
       "foreignStreak": 1,
-      "trustStreak": 8,
+      "trustStreak": 6,
       "jointStreak": 1,
       "fiveDayPctSum": -7.4,
       "fiveDayAvgVolume": 7020276
@@ -803,8 +803,8 @@
       "foreignStreak": 1,
       "trustStreak": 6,
       "jointStreak": 1,
-      "fiveDayPctSum": 11.93,
-      "fiveDayAvgVolume": 4950033
+      "fiveDayPctSum": 3.09,
+      "fiveDayAvgVolume": 5023462
     },
     {
       "code": "1560",
@@ -819,8 +819,8 @@
       "foreignStreak": 2,
       "trustStreak": 1,
       "jointStreak": 1,
-      "fiveDayPctSum": -17,
-      "fiveDayAvgVolume": 1430357
+      "fiveDayPctSum": -12.37,
+      "fiveDayAvgVolume": 1541999
     },
     {
       "code": "3017",
@@ -835,8 +835,8 @@
       "foreignStreak": 1,
       "trustStreak": 1,
       "jointStreak": 1,
-      "fiveDayPctSum": -18.53,
-      "fiveDayAvgVolume": 5188892
+      "fiveDayPctSum": -14.51,
+      "fiveDayAvgVolume": 5205865
     },
     {
       "code": "1477",
@@ -851,8 +851,24 @@
       "foreignStreak": 2,
       "trustStreak": 1,
       "jointStreak": 1,
-      "fiveDayPctSum": -3.73,
-      "fiveDayAvgVolume": 2489130
+      "fiveDayPctSum": -2.16,
+      "fiveDayAvgVolume": 2231961
+    },
+    {
+      "code": "2025",
+      "name": "千興",
+      "close": 13.9,
+      "percent": -3.81,
+      "value": 33846500,
+      "foreign": 366000,
+      "trust": 13000,
+      "dealer": 0,
+      "total": 367000,
+      "foreignStreak": 4,
+      "trustStreak": 1,
+      "jointStreak": 1,
+      "fiveDayPctSum": 14.26,
+      "fiveDayAvgVolume": 2516571
     },
     {
       "code": "6919",
@@ -867,8 +883,8 @@
       "foreignStreak": 1,
       "trustStreak": 2,
       "jointStreak": 1,
-      "fiveDayPctSum": -8.6,
-      "fiveDayAvgVolume": 4646952
+      "fiveDayPctSum": -8.72,
+      "fiveDayAvgVolume": 4144310
     },
     {
       "code": "3577",
@@ -896,7 +912,7 @@
       "trust": 42567,
       "dealer": -43858,
       "total": 254074,
-      "foreignStreak": 2,
+      "foreignStreak": 5,
       "trustStreak": 1,
       "jointStreak": 1,
       "fiveDayPctSum": 10.44,
@@ -912,11 +928,27 @@
       "trust": 5000,
       "dealer": -18497,
       "total": 268914,
-      "foreignStreak": 2,
+      "foreignStreak": 3,
       "trustStreak": 1,
       "jointStreak": 1,
       "fiveDayPctSum": -19.86,
       "fiveDayAvgVolume": 12690054
+    },
+    {
+      "code": "3006",
+      "name": "晶豪科",
+      "close": 204.5,
+      "percent": 1.24,
+      "value": 2128436000,
+      "foreign": 245510,
+      "trust": 15000,
+      "dealer": 0,
+      "total": 192606,
+      "foreignStreak": 2,
+      "trustStreak": 1,
+      "jointStreak": 1,
+      "fiveDayPctSum": -17.12,
+      "fiveDayAvgVolume": 12399662
     },
     {
       "code": "6202",
@@ -931,40 +963,8 @@
       "foreignStreak": 1,
       "trustStreak": 1,
       "jointStreak": 1,
-      "fiveDayPctSum": -14.11,
-      "fiveDayAvgVolume": 2108303
-    },
-    {
-      "code": "2385",
-      "name": "群光",
-      "close": 139,
-      "percent": 0,
-      "value": 406853000,
-      "foreign": 176409,
-      "trust": 27000,
-      "dealer": 0,
-      "total": 165064,
-      "foreignStreak": 1,
-      "trustStreak": 1,
-      "jointStreak": 1,
-      "fiveDayPctSum": -4.38,
-      "fiveDayAvgVolume": 4656957
-    },
-    {
-      "code": "3592",
-      "name": "瑞鼎",
-      "close": 268,
-      "percent": 4.48,
-      "value": 249240000,
-      "foreign": 197527,
-      "trust": 3000,
-      "dealer": 0,
-      "total": 205447,
-      "foreignStreak": 1,
-      "trustStreak": 1,
-      "jointStreak": 1,
-      "fiveDayPctSum": -8.42,
-      "fiveDayAvgVolume": 598374
+      "fiveDayPctSum": -5.47,
+      "fiveDayAvgVolume": 2563286
     }
   ],
   "topTrust": [
@@ -979,10 +979,10 @@
       "dealer": 0,
       "total": 2869498,
       "foreignStreak": 0,
-      "trustStreak": 8,
+      "trustStreak": 7,
       "jointStreak": 0,
-      "fiveDayPctSum": 9.94,
-      "fiveDayAvgVolume": 317681153
+      "fiveDayPctSum": 1.73,
+      "fiveDayAvgVolume": 247115462
     },
     {
       "code": "1402",
@@ -997,8 +997,8 @@
       "foreignStreak": 0,
       "trustStreak": 7,
       "jointStreak": 0,
-      "fiveDayPctSum": 1.38,
-      "fiveDayAvgVolume": 62509132
+      "fiveDayPctSum": -0.44,
+      "fiveDayAvgVolume": 57338189
     },
     {
       "code": "2881",
@@ -1013,8 +1013,8 @@
       "foreignStreak": 0,
       "trustStreak": 5,
       "jointStreak": 0,
-      "fiveDayPctSum": 8.46,
-      "fiveDayAvgVolume": 75714678
+      "fiveDayPctSum": 10.02,
+      "fiveDayAvgVolume": 77070401
     },
     {
       "code": "2382",
@@ -1027,10 +1027,10 @@
       "dealer": 0,
       "total": 5354322,
       "foreignStreak": 0,
-      "trustStreak": 8,
+      "trustStreak": 7,
       "jointStreak": 0,
-      "fiveDayPctSum": -8.98,
-      "fiveDayAvgVolume": 60703269
+      "fiveDayPctSum": -8.62,
+      "fiveDayAvgVolume": 55643787
     },
     {
       "code": "2105",
@@ -1043,10 +1043,10 @@
       "dealer": 0,
       "total": -238686,
       "foreignStreak": 0,
-      "trustStreak": 8,
+      "trustStreak": 7,
       "jointStreak": 0,
-      "fiveDayPctSum": 0.05,
-      "fiveDayAvgVolume": 33533155
+      "fiveDayPctSum": 1.35,
+      "fiveDayAvgVolume": 31253946
     },
     {
       "code": "4938",
@@ -1059,10 +1059,10 @@
       "dealer": 0,
       "total": 2867058,
       "foreignStreak": 0,
-      "trustStreak": 8,
+      "trustStreak": 7,
       "jointStreak": 0,
-      "fiveDayPctSum": -3.64,
-      "fiveDayAvgVolume": 39068329
+      "fiveDayPctSum": -1.48,
+      "fiveDayAvgVolume": 36186960
     },
     {
       "code": "2542",
@@ -1075,10 +1075,10 @@
       "dealer": 0,
       "total": 7591409,
       "foreignStreak": 0,
-      "trustStreak": 8,
+      "trustStreak": 7,
       "jointStreak": 0,
-      "fiveDayPctSum": 5.75,
-      "fiveDayAvgVolume": 27713496
+      "fiveDayPctSum": 5.3,
+      "fiveDayAvgVolume": 31954147
     },
     {
       "code": "2855",
@@ -1091,10 +1091,10 @@
       "dealer": 0,
       "total": 764776,
       "foreignStreak": 0,
-      "trustStreak": 8,
+      "trustStreak": 7,
       "jointStreak": 0,
-      "fiveDayPctSum": -4.78,
-      "fiveDayAvgVolume": 35340692
+      "fiveDayPctSum": -7.77,
+      "fiveDayAvgVolume": 29615694
     },
     {
       "code": "5871",
@@ -1107,10 +1107,10 @@
       "dealer": 0,
       "total": 5357495,
       "foreignStreak": 0,
-      "trustStreak": 8,
+      "trustStreak": 7,
       "jointStreak": 0,
-      "fiveDayPctSum": 1.78,
-      "fiveDayAvgVolume": 20462408
+      "fiveDayPctSum": 3.43,
+      "fiveDayAvgVolume": 19644853
     },
     {
       "code": "2347",
@@ -1123,10 +1123,10 @@
       "dealer": 0,
       "total": -1668023,
       "foreignStreak": 0,
-      "trustStreak": 8,
+      "trustStreak": 7,
       "jointStreak": 0,
-      "fiveDayPctSum": 1.51,
-      "fiveDayAvgVolume": 16438721
+      "fiveDayPctSum": 1.31,
+      "fiveDayAvgVolume": 16284748
     },
     {
       "code": "2887",
@@ -1139,10 +1139,10 @@
       "dealer": 0,
       "total": 8078828,
       "foreignStreak": 0,
-      "trustStreak": 8,
+      "trustStreak": 7,
       "jointStreak": 0,
-      "fiveDayPctSum": 2.37,
-      "fiveDayAvgVolume": 151043782
+      "fiveDayPctSum": 0.97,
+      "fiveDayAvgVolume": 114794981
     },
     {
       "code": "2327",
@@ -1157,8 +1157,8 @@
       "foreignStreak": 0,
       "trustStreak": 6,
       "jointStreak": 0,
-      "fiveDayPctSum": 0.91,
-      "fiveDayAvgVolume": 46484576
+      "fiveDayPctSum": 13.11,
+      "fiveDayAvgVolume": 65874892
     },
     {
       "code": "2880",
@@ -1173,8 +1173,8 @@
       "foreignStreak": 0,
       "trustStreak": 4,
       "jointStreak": 0,
-      "fiveDayPctSum": -2.32,
-      "fiveDayAvgVolume": 48042652
+      "fiveDayPctSum": -5.04,
+      "fiveDayAvgVolume": 35189404
     },
     {
       "code": "9910",
@@ -1187,10 +1187,10 @@
       "dealer": 0,
       "total": 2050912,
       "foreignStreak": 0,
-      "trustStreak": 8,
+      "trustStreak": 7,
       "jointStreak": 0,
-      "fiveDayPctSum": 14.04,
-      "fiveDayAvgVolume": 11549024
+      "fiveDayPctSum": 19.66,
+      "fiveDayAvgVolume": 12349343
     },
     {
       "code": "1210",
@@ -1203,10 +1203,10 @@
       "dealer": 0,
       "total": 639947,
       "foreignStreak": 0,
-      "trustStreak": 8,
+      "trustStreak": 7,
       "jointStreak": 0,
-      "fiveDayPctSum": 3.14,
-      "fiveDayAvgVolume": 9844995
+      "fiveDayPctSum": 2.75,
+      "fiveDayAvgVolume": 9223790
     },
     {
       "code": "2344",
@@ -1221,8 +1221,8 @@
       "foreignStreak": 2,
       "trustStreak": 3,
       "jointStreak": 2,
-      "fiveDayPctSum": -16.73,
-      "fiveDayAvgVolume": 204792859
+      "fiveDayPctSum": -12.82,
+      "fiveDayAvgVolume": 206847598
     },
     {
       "code": "9941",
@@ -1235,10 +1235,10 @@
       "dealer": 0,
       "total": 930114,
       "foreignStreak": 0,
-      "trustStreak": 8,
+      "trustStreak": 7,
       "jointStreak": 0,
-      "fiveDayPctSum": 4.43,
-      "fiveDayAvgVolume": 8094596
+      "fiveDayPctSum": 6.79,
+      "fiveDayAvgVolume": 7506930
     },
     {
       "code": "0050",
@@ -1253,8 +1253,8 @@
       "foreignStreak": 0,
       "trustStreak": 7,
       "jointStreak": 0,
-      "fiveDayPctSum": -6.92,
-      "fiveDayAvgVolume": 307544366
+      "fiveDayPctSum": -5.92,
+      "fiveDayAvgVolume": 319995990
     },
     {
       "code": "3090",
@@ -1269,8 +1269,8 @@
       "foreignStreak": 0,
       "trustStreak": 2,
       "jointStreak": 0,
-      "fiveDayPctSum": 0.03,
-      "fiveDayAvgVolume": 6113700
+      "fiveDayPctSum": 6.66,
+      "fiveDayAvgVolume": 10938130
     },
     {
       "code": "1319",
@@ -1283,10 +1283,10 @@
       "dealer": 0,
       "total": 1872502,
       "foreignStreak": 0,
-      "trustStreak": 8,
+      "trustStreak": 7,
       "jointStreak": 0,
-      "fiveDayPctSum": 12.95,
-      "fiveDayAvgVolume": 9518360
+      "fiveDayPctSum": 5.94,
+      "fiveDayAvgVolume": 9783296
     },
     {
       "code": "2379",
@@ -1299,10 +1299,10 @@
       "dealer": 0,
       "total": 24177,
       "foreignStreak": 0,
-      "trustStreak": 8,
+      "trustStreak": 7,
       "jointStreak": 0,
-      "fiveDayPctSum": 0.64,
-      "fiveDayAvgVolume": 7705831
+      "fiveDayPctSum": 5.59,
+      "fiveDayAvgVolume": 7678008
     },
     {
       "code": "1303",
@@ -1315,10 +1315,10 @@
       "dealer": 0,
       "total": -1031332,
       "foreignStreak": 0,
-      "trustStreak": 8,
+      "trustStreak": 7,
       "jointStreak": 0,
-      "fiveDayPctSum": -17.02,
-      "fiveDayAvgVolume": 55363422
+      "fiveDayPctSum": -13.03,
+      "fiveDayAvgVolume": 55593747
     },
     {
       "code": "8150",
@@ -1333,8 +1333,8 @@
       "foreignStreak": 1,
       "trustStreak": 3,
       "jointStreak": 1,
-      "fiveDayPctSum": -6.74,
-      "fiveDayAvgVolume": 51593781
+      "fiveDayPctSum": -0.22,
+      "fiveDayAvgVolume": 48731628
     },
     {
       "code": "2603",
@@ -1349,8 +1349,8 @@
       "foreignStreak": 0,
       "trustStreak": 1,
       "jointStreak": 0,
-      "fiveDayPctSum": -6.01,
-      "fiveDayAvgVolume": 23504032
+      "fiveDayPctSum": -4.24,
+      "fiveDayAvgVolume": 22534635
     },
     {
       "code": "2884",
@@ -1365,8 +1365,8 @@
       "foreignStreak": 1,
       "trustStreak": 2,
       "jointStreak": 1,
-      "fiveDayPctSum": 2.06,
-      "fiveDayAvgVolume": 65889984
+      "fiveDayPctSum": 1.29,
+      "fiveDayAvgVolume": 60661200
     },
     {
       "code": "2597",
@@ -1379,10 +1379,10 @@
       "dealer": 0,
       "total": 1002857,
       "foreignStreak": 0,
-      "trustStreak": 8,
+      "trustStreak": 7,
       "jointStreak": 0,
-      "fiveDayPctSum": 10.39,
-      "fiveDayAvgVolume": 3791209
+      "fiveDayPctSum": 13.02,
+      "fiveDayAvgVolume": 3894188
     },
     {
       "code": "4958",
@@ -1397,8 +1397,8 @@
       "foreignStreak": 1,
       "trustStreak": 1,
       "jointStreak": 1,
-      "fiveDayPctSum": -2.54,
-      "fiveDayAvgVolume": 10657381
+      "fiveDayPctSum": 6.27,
+      "fiveDayAvgVolume": 17733095
     },
     {
       "code": "8454",
@@ -1411,10 +1411,10 @@
       "dealer": 0,
       "total": 1219306,
       "foreignStreak": 0,
-      "trustStreak": 8,
+      "trustStreak": 7,
       "jointStreak": 0,
-      "fiveDayPctSum": 45.13,
-      "fiveDayAvgVolume": 4667765
+      "fiveDayPctSum": 35.2,
+      "fiveDayAvgVolume": 3526379
     },
     {
       "code": "6890",
@@ -1427,10 +1427,10 @@
       "dealer": 0,
       "total": 1260151,
       "foreignStreak": 0,
-      "trustStreak": 8,
+      "trustStreak": 7,
       "jointStreak": 0,
-      "fiveDayPctSum": 29.62,
-      "fiveDayAvgVolume": 5350713
+      "fiveDayPctSum": 21.08,
+      "fiveDayAvgVolume": 4562172
     },
     {
       "code": "3293",
@@ -1443,7 +1443,7 @@
       "dealer": -182685,
       "total": -222934,
       "foreignStreak": 0,
-      "trustStreak": 8,
+      "trustStreak": 6,
       "jointStreak": 0,
       "fiveDayPctSum": -23.15,
       "fiveDayAvgVolume": 5589266
@@ -1459,10 +1459,10 @@
       "dealer": 0,
       "total": 16333393,
       "foreignStreak": 1,
-      "trustStreak": 8,
+      "trustStreak": 7,
       "jointStreak": 1,
-      "fiveDayPctSum": 0.37,
-      "fiveDayAvgVolume": 55531677
+      "fiveDayPctSum": 0.67,
+      "fiveDayAvgVolume": 53743700
     },
     {
       "code": "3665",
@@ -1477,8 +1477,8 @@
       "foreignStreak": 0,
       "trustStreak": 1,
       "jointStreak": 0,
-      "fiveDayPctSum": -1.32,
-      "fiveDayAvgVolume": 3385069
+      "fiveDayPctSum": -6.33,
+      "fiveDayAvgVolume": 3597116
     },
     {
       "code": "8028",
@@ -1493,8 +1493,8 @@
       "foreignStreak": 0,
       "trustStreak": 3,
       "jointStreak": 0,
-      "fiveDayPctSum": -8.38,
-      "fiveDayAvgVolume": 6539240
+      "fiveDayPctSum": -10.86,
+      "fiveDayAvgVolume": 7146560
     },
     {
       "code": "2317",
@@ -1509,8 +1509,8 @@
       "foreignStreak": 0,
       "trustStreak": 1,
       "jointStreak": 0,
-      "fiveDayPctSum": -15.61,
-      "fiveDayAvgVolume": 97960328
+      "fiveDayPctSum": -12.14,
+      "fiveDayAvgVolume": 95318274
     },
     {
       "code": "8021",
@@ -1525,8 +1525,8 @@
       "foreignStreak": 0,
       "trustStreak": 4,
       "jointStreak": 0,
-      "fiveDayPctSum": 18,
-      "fiveDayAvgVolume": 6352773
+      "fiveDayPctSum": 26.69,
+      "fiveDayAvgVolume": 11850937
     },
     {
       "code": "6173",
@@ -1557,8 +1557,8 @@
       "foreignStreak": 0,
       "trustStreak": 1,
       "jointStreak": 0,
-      "fiveDayPctSum": -7.18,
-      "fiveDayAvgVolume": 44252453
+      "fiveDayPctSum": -5.53,
+      "fiveDayAvgVolume": 47027368
     },
     {
       "code": "2886",
@@ -1571,10 +1571,10 @@
       "dealer": 0,
       "total": -2522437,
       "foreignStreak": 0,
-      "trustStreak": 8,
+      "trustStreak": 7,
       "jointStreak": 0,
-      "fiveDayPctSum": 4.3,
-      "fiveDayAvgVolume": 41310852
+      "fiveDayPctSum": 3.22,
+      "fiveDayAvgVolume": 37860361
     },
     {
       "code": "6285",
@@ -1589,8 +1589,8 @@
       "foreignStreak": 0,
       "trustStreak": 5,
       "jointStreak": 0,
-      "fiveDayPctSum": -11.96,
-      "fiveDayAvgVolume": 13207423
+      "fiveDayPctSum": -7.77,
+      "fiveDayAvgVolume": 14453041
     },
     {
       "code": "3406",
@@ -1605,8 +1605,8 @@
       "foreignStreak": 0,
       "trustStreak": 3,
       "jointStreak": 0,
-      "fiveDayPctSum": 16.33,
-      "fiveDayAvgVolume": 6451004
+      "fiveDayPctSum": 9.95,
+      "fiveDayAvgVolume": 6884591
     },
     {
       "code": "2912",
@@ -1621,8 +1621,8 @@
       "foreignStreak": 0,
       "trustStreak": 2,
       "jointStreak": 0,
-      "fiveDayPctSum": -4.61,
-      "fiveDayAvgVolume": 6464615
+      "fiveDayPctSum": -6.88,
+      "fiveDayAvgVolume": 4426292
     },
     {
       "code": "2892",
@@ -1635,10 +1635,10 @@
       "dealer": 0,
       "total": 21533327,
       "foreignStreak": 4,
-      "trustStreak": 8,
+      "trustStreak": 7,
       "jointStreak": 4,
-      "fiveDayPctSum": 5.34,
-      "fiveDayAvgVolume": 73027148
+      "fiveDayPctSum": 3.77,
+      "fiveDayAvgVolume": 64485886
     },
     {
       "code": "3042",
@@ -1653,8 +1653,8 @@
       "foreignStreak": 2,
       "trustStreak": 6,
       "jointStreak": 2,
-      "fiveDayPctSum": -0.95,
-      "fiveDayAvgVolume": 41861430
+      "fiveDayPctSum": 13.23,
+      "fiveDayAvgVolume": 48349250
     },
     {
       "code": "2449",
@@ -1669,8 +1669,8 @@
       "foreignStreak": 0,
       "trustStreak": 1,
       "jointStreak": 0,
-      "fiveDayPctSum": -16.48,
-      "fiveDayAvgVolume": 32004580
+      "fiveDayPctSum": -16.33,
+      "fiveDayAvgVolume": 28123900
     },
     {
       "code": "1560",
@@ -1685,8 +1685,8 @@
       "foreignStreak": 2,
       "trustStreak": 1,
       "jointStreak": 1,
-      "fiveDayPctSum": -17,
-      "fiveDayAvgVolume": 1430357
+      "fiveDayPctSum": -12.37,
+      "fiveDayAvgVolume": 1541999
     },
     {
       "code": "3017",
@@ -1701,8 +1701,24 @@
       "foreignStreak": 1,
       "trustStreak": 1,
       "jointStreak": 1,
-      "fiveDayPctSum": -18.53,
-      "fiveDayAvgVolume": 5188892
+      "fiveDayPctSum": -14.51,
+      "fiveDayAvgVolume": 5205865
+    },
+    {
+      "code": "2486",
+      "name": "一詮",
+      "close": 245,
+      "percent": -0.41,
+      "value": 2594795000,
+      "foreign": -479529,
+      "trust": 298433,
+      "dealer": 5000,
+      "total": -656373,
+      "foreignStreak": 0,
+      "trustStreak": 1,
+      "jointStreak": 0,
+      "fiveDayPctSum": -10.79,
+      "fiveDayAvgVolume": 10165074
     },
     {
       "code": "1216",
@@ -1717,8 +1733,8 @@
       "foreignStreak": 6,
       "trustStreak": 1,
       "jointStreak": 1,
-      "fiveDayPctSum": 1.51,
-      "fiveDayAvgVolume": 13717361
+      "fiveDayPctSum": 2.72,
+      "fiveDayAvgVolume": 13667800
     },
     {
       "code": "2351",
@@ -1733,8 +1749,8 @@
       "foreignStreak": 4,
       "trustStreak": 3,
       "jointStreak": 3,
-      "fiveDayPctSum": -15.92,
-      "fiveDayAvgVolume": 6819761
+      "fiveDayPctSum": -14.75,
+      "fiveDayAvgVolume": 6077779
     },
     {
       "code": "3711",
@@ -1749,8 +1765,8 @@
       "foreignStreak": 0,
       "trustStreak": 2,
       "jointStreak": 0,
-      "fiveDayPctSum": -13.06,
-      "fiveDayAvgVolume": 21476109
+      "fiveDayPctSum": -8.09,
+      "fiveDayAvgVolume": 20895346
     },
     {
       "code": "2412",
@@ -1763,10 +1779,10 @@
       "dealer": 0,
       "total": 6838148,
       "foreignStreak": 3,
-      "trustStreak": 8,
+      "trustStreak": 7,
       "jointStreak": 3,
-      "fiveDayPctSum": 2.16,
-      "fiveDayAvgVolume": 15192787
+      "fiveDayPctSum": 2.5,
+      "fiveDayAvgVolume": 15897824
     },
     {
       "code": "8210",
@@ -1781,8 +1797,8 @@
       "foreignStreak": 0,
       "trustStreak": 6,
       "jointStreak": 0,
-      "fiveDayPctSum": -0.05,
-      "fiveDayAvgVolume": 2582432
+      "fiveDayPctSum": 2.01,
+      "fiveDayAvgVolume": 2418782
     },
     {
       "code": "3105",
@@ -1813,8 +1829,8 @@
       "foreignStreak": 0,
       "trustStreak": 4,
       "jointStreak": 0,
-      "fiveDayPctSum": -17.52,
-      "fiveDayAvgVolume": 108294789
+      "fiveDayPctSum": -13.8,
+      "fiveDayAvgVolume": 105448665
     },
     {
       "code": "2801",
@@ -1829,8 +1845,8 @@
       "foreignStreak": 3,
       "trustStreak": 1,
       "jointStreak": 1,
-      "fiveDayPctSum": 5.97,
-      "fiveDayAvgVolume": 54700776
+      "fiveDayPctSum": 4.55,
+      "fiveDayAvgVolume": 52584792
     },
     {
       "code": "3045",
@@ -1845,8 +1861,8 @@
       "foreignStreak": 7,
       "trustStreak": 5,
       "jointStreak": 5,
-      "fiveDayPctSum": 1.73,
-      "fiveDayAvgVolume": 12699562
+      "fiveDayPctSum": 2.58,
+      "fiveDayAvgVolume": 14837708
     },
     {
       "code": "2368",
@@ -1861,8 +1877,8 @@
       "foreignStreak": 0,
       "trustStreak": 4,
       "jointStreak": 0,
-      "fiveDayPctSum": 3.21,
-      "fiveDayAvgVolume": 7446890
+      "fiveDayPctSum": 0.46,
+      "fiveDayAvgVolume": 8191315
     },
     {
       "code": "3264",
@@ -1875,7 +1891,7 @@
       "dealer": -57832,
       "total": -1454,
       "foreignStreak": 0,
-      "trustStreak": 2,
+      "trustStreak": 3,
       "jointStreak": 0,
       "fiveDayPctSum": 8.27,
       "fiveDayAvgVolume": 5114848
@@ -1893,8 +1909,8 @@
       "foreignStreak": 0,
       "trustStreak": 4,
       "jointStreak": 0,
-      "fiveDayPctSum": -8.01,
-      "fiveDayAvgVolume": 14648566
+      "fiveDayPctSum": -7.17,
+      "fiveDayAvgVolume": 15919054
     },
     {
       "code": "4919",
@@ -1909,24 +1925,8 @@
       "foreignStreak": 0,
       "trustStreak": 1,
       "jointStreak": 0,
-      "fiveDayPctSum": -22.67,
-      "fiveDayAvgVolume": 3538940
-    },
-    {
-      "code": "2606",
-      "name": "裕民",
-      "close": 67.7,
-      "percent": -1.31,
-      "value": 399971600,
-      "foreign": -1078023,
-      "trust": 199000,
-      "dealer": 0,
-      "total": -1121165,
-      "foreignStreak": 0,
-      "trustStreak": 6,
-      "jointStreak": 0,
-      "fiveDayPctSum": -3.48,
-      "fiveDayAvgVolume": 5147744
+      "fiveDayPctSum": -9.75,
+      "fiveDayAvgVolume": 9888957
     }
   ],
   "topForeign": [
@@ -1940,11 +1940,11 @@
       "trust": -69007860,
       "dealer": 0,
       "total": -11996196,
-      "foreignStreak": 8,
+      "foreignStreak": 7,
       "trustStreak": 0,
       "jointStreak": 0,
-      "fiveDayPctSum": -8.69,
-      "fiveDayAvgVolume": 359725493
+      "fiveDayPctSum": 1.01,
+      "fiveDayAvgVolume": 356059015
     },
     {
       "code": "3481",
@@ -1959,8 +1959,8 @@
       "foreignStreak": 2,
       "trustStreak": 1,
       "jointStreak": 1,
-      "fiveDayPctSum": -28.01,
-      "fiveDayAvgVolume": 138194337
+      "fiveDayPctSum": -21.95,
+      "fiveDayAvgVolume": 139057704
     },
     {
       "code": "2609",
@@ -1972,11 +1972,11 @@
       "trust": -29087000,
       "dealer": 0,
       "total": -4582397,
-      "foreignStreak": 8,
+      "foreignStreak": 7,
       "trustStreak": 0,
       "jointStreak": 0,
-      "fiveDayPctSum": -5.76,
-      "fiveDayAvgVolume": 63814586
+      "fiveDayPctSum": -3.84,
+      "fiveDayAvgVolume": 63336710
     },
     {
       "code": "2892",
@@ -1989,10 +1989,10 @@
       "dealer": 0,
       "total": 21533327,
       "foreignStreak": 4,
-      "trustStreak": 8,
+      "trustStreak": 7,
       "jointStreak": 4,
-      "fiveDayPctSum": 5.34,
-      "fiveDayAvgVolume": 73027148
+      "fiveDayPctSum": 3.77,
+      "fiveDayAvgVolume": 64485886
     },
     {
       "code": "2890",
@@ -2005,10 +2005,10 @@
       "dealer": 0,
       "total": 16333393,
       "foreignStreak": 1,
-      "trustStreak": 8,
+      "trustStreak": 7,
       "jointStreak": 1,
-      "fiveDayPctSum": 0.37,
-      "fiveDayAvgVolume": 55531677
+      "fiveDayPctSum": 0.67,
+      "fiveDayAvgVolume": 53743700
     },
     {
       "code": "5347",
@@ -2020,7 +2020,7 @@
       "trust": -2359446,
       "dealer": -416117,
       "total": 9259712,
-      "foreignStreak": 8,
+      "foreignStreak": 6,
       "trustStreak": 0,
       "jointStreak": 0,
       "fiveDayPctSum": 29.51,
@@ -2039,8 +2039,8 @@
       "foreignStreak": 7,
       "trustStreak": 5,
       "jointStreak": 5,
-      "fiveDayPctSum": 1.73,
-      "fiveDayAvgVolume": 12699562
+      "fiveDayPctSum": 2.58,
+      "fiveDayAvgVolume": 14837708
     },
     {
       "code": "2801",
@@ -2055,8 +2055,8 @@
       "foreignStreak": 3,
       "trustStreak": 1,
       "jointStreak": 1,
-      "fiveDayPctSum": 5.97,
-      "fiveDayAvgVolume": 54700776
+      "fiveDayPctSum": 4.55,
+      "fiveDayAvgVolume": 52584792
     },
     {
       "code": "6147",
@@ -2068,7 +2068,7 @@
       "trust": -3573799,
       "dealer": -764278,
       "total": 6331484,
-      "foreignStreak": 2,
+      "foreignStreak": 5,
       "trustStreak": 0,
       "jointStreak": 0,
       "fiveDayPctSum": -7.74,
@@ -2087,8 +2087,8 @@
       "foreignStreak": 1,
       "trustStreak": 1,
       "jointStreak": 1,
-      "fiveDayPctSum": -2.16,
-      "fiveDayAvgVolume": 62291567
+      "fiveDayPctSum": 4.39,
+      "fiveDayAvgVolume": 72802909
     },
     {
       "code": "2027",
@@ -2100,11 +2100,11 @@
       "trust": -8894000,
       "dealer": 0,
       "total": 1458619,
-      "foreignStreak": 8,
+      "foreignStreak": 7,
       "trustStreak": 0,
       "jointStreak": 0,
-      "fiveDayPctSum": -2.98,
-      "fiveDayAvgVolume": 26514945
+      "fiveDayPctSum": -3.43,
+      "fiveDayAvgVolume": 25629676
     },
     {
       "code": "3036",
@@ -2116,11 +2116,11 @@
       "trust": -7850003,
       "dealer": 0,
       "total": 1067831,
-      "foreignStreak": 8,
+      "foreignStreak": 7,
       "trustStreak": 0,
       "jointStreak": 0,
-      "fiveDayPctSum": -8.14,
-      "fiveDayAvgVolume": 18698075
+      "fiveDayPctSum": -7.48,
+      "fiveDayAvgVolume": 20861507
     },
     {
       "code": "3702",
@@ -2132,11 +2132,11 @@
       "trust": -5544000,
       "dealer": 0,
       "total": 2357786,
-      "foreignStreak": 8,
+      "foreignStreak": 7,
       "trustStreak": 0,
       "jointStreak": 0,
-      "fiveDayPctSum": -7.71,
-      "fiveDayAvgVolume": 17517995
+      "fiveDayPctSum": -6.89,
+      "fiveDayAvgVolume": 17895292
     },
     {
       "code": "6116",
@@ -2151,8 +2151,8 @@
       "foreignStreak": 6,
       "trustStreak": 0,
       "jointStreak": 0,
-      "fiveDayPctSum": -43.45,
-      "fiveDayAvgVolume": 36103456
+      "fiveDayPctSum": -34.92,
+      "fiveDayAvgVolume": 34103360
     },
     {
       "code": "2337",
@@ -2167,8 +2167,8 @@
       "foreignStreak": 1,
       "trustStreak": 0,
       "jointStreak": 0,
-      "fiveDayPctSum": -17.7,
-      "fiveDayAvgVolume": 32837709
+      "fiveDayPctSum": -10.61,
+      "fiveDayAvgVolume": 31776590
     },
     {
       "code": "2356",
@@ -2183,8 +2183,8 @@
       "foreignStreak": 2,
       "trustStreak": 1,
       "jointStreak": 1,
-      "fiveDayPctSum": -24.29,
-      "fiveDayAvgVolume": 86286804
+      "fiveDayPctSum": -16.6,
+      "fiveDayAvgVolume": 67797353
     },
     {
       "code": "1216",
@@ -2199,8 +2199,8 @@
       "foreignStreak": 6,
       "trustStreak": 1,
       "jointStreak": 1,
-      "fiveDayPctSum": 1.51,
-      "fiveDayAvgVolume": 13717361
+      "fiveDayPctSum": 2.72,
+      "fiveDayAvgVolume": 13667800
     },
     {
       "code": "2344",
@@ -2215,8 +2215,8 @@
       "foreignStreak": 2,
       "trustStreak": 3,
       "jointStreak": 2,
-      "fiveDayPctSum": -16.73,
-      "fiveDayAvgVolume": 204792859
+      "fiveDayPctSum": -12.82,
+      "fiveDayAvgVolume": 206847598
     },
     {
       "code": "6244",
@@ -2228,7 +2228,7 @@
       "trust": 0,
       "dealer": 147311,
       "total": 6390861,
-      "foreignStreak": 3,
+      "foreignStreak": 2,
       "trustStreak": 0,
       "jointStreak": 0,
       "fiveDayPctSum": 0.8,
@@ -2247,8 +2247,8 @@
       "foreignStreak": 1,
       "trustStreak": 0,
       "jointStreak": 0,
-      "fiveDayPctSum": -3.04,
-      "fiveDayAvgVolume": 64937706
+      "fiveDayPctSum": -0.52,
+      "fiveDayAvgVolume": 58279642
     },
     {
       "code": "8150",
@@ -2263,8 +2263,8 @@
       "foreignStreak": 1,
       "trustStreak": 3,
       "jointStreak": 1,
-      "fiveDayPctSum": -6.74,
-      "fiveDayAvgVolume": 51593781
+      "fiveDayPctSum": -0.22,
+      "fiveDayAvgVolume": 48731628
     },
     {
       "code": "2412",
@@ -2277,10 +2277,10 @@
       "dealer": 0,
       "total": 6838148,
       "foreignStreak": 3,
-      "trustStreak": 8,
+      "trustStreak": 7,
       "jointStreak": 3,
-      "fiveDayPctSum": 2.16,
-      "fiveDayAvgVolume": 15192787
+      "fiveDayPctSum": 2.5,
+      "fiveDayAvgVolume": 15897824
     },
     {
       "code": "2618",
@@ -2295,8 +2295,8 @@
       "foreignStreak": 3,
       "trustStreak": 0,
       "jointStreak": 0,
-      "fiveDayPctSum": -1.12,
-      "fiveDayAvgVolume": 46156818
+      "fiveDayPctSum": -0.44,
+      "fiveDayAvgVolume": 42709262
     },
     {
       "code": "6005",
@@ -2311,8 +2311,8 @@
       "foreignStreak": 1,
       "trustStreak": 0,
       "jointStreak": 0,
-      "fiveDayPctSum": -14.56,
-      "fiveDayAvgVolume": 37033359
+      "fiveDayPctSum": -9.39,
+      "fiveDayAvgVolume": 32279372
     },
     {
       "code": "2355",
@@ -2327,8 +2327,8 @@
       "foreignStreak": 2,
       "trustStreak": 0,
       "jointStreak": 0,
-      "fiveDayPctSum": -10.11,
-      "fiveDayAvgVolume": 13127393
+      "fiveDayPctSum": 4.71,
+      "fiveDayAvgVolume": 15468426
     },
     {
       "code": "8070",
@@ -2343,8 +2343,8 @@
       "foreignStreak": 6,
       "trustStreak": 0,
       "jointStreak": 0,
-      "fiveDayPctSum": -3.43,
-      "fiveDayAvgVolume": 26656371
+      "fiveDayPctSum": -10.18,
+      "fiveDayAvgVolume": 18492772
     },
     {
       "code": "3042",
@@ -2359,8 +2359,8 @@
       "foreignStreak": 2,
       "trustStreak": 6,
       "jointStreak": 2,
-      "fiveDayPctSum": -0.95,
-      "fiveDayAvgVolume": 41861430
+      "fiveDayPctSum": 13.23,
+      "fiveDayAvgVolume": 48349250
     },
     {
       "code": "6176",
@@ -2372,11 +2372,11 @@
       "trust": -5378000,
       "dealer": 0,
       "total": -199536,
-      "foreignStreak": 8,
+      "foreignStreak": 7,
       "trustStreak": 0,
       "jointStreak": 0,
-      "fiveDayPctSum": -13.69,
-      "fiveDayAvgVolume": 14339473
+      "fiveDayPctSum": -9.79,
+      "fiveDayAvgVolume": 14139690
     },
     {
       "code": "2637",
@@ -2391,8 +2391,8 @@
       "foreignStreak": 3,
       "trustStreak": 0,
       "jointStreak": 0,
-      "fiveDayPctSum": 5.08,
-      "fiveDayAvgVolume": 11209438
+      "fiveDayPctSum": 6.68,
+      "fiveDayAvgVolume": 10981929
     },
     {
       "code": "2406",
@@ -2407,8 +2407,8 @@
       "foreignStreak": 3,
       "trustStreak": 0,
       "jointStreak": 0,
-      "fiveDayPctSum": -4.53,
-      "fiveDayAvgVolume": 37438875
+      "fiveDayPctSum": 4.06,
+      "fiveDayAvgVolume": 32946700
     },
     {
       "code": "3550",
@@ -2423,8 +2423,8 @@
       "foreignStreak": 4,
       "trustStreak": 0,
       "jointStreak": 0,
-      "fiveDayPctSum": 28.03,
-      "fiveDayAvgVolume": 11614237
+      "fiveDayPctSum": 18.69,
+      "fiveDayAvgVolume": 13878881
     },
     {
       "code": "6757",
@@ -2436,11 +2436,11 @@
       "trust": -3329000,
       "dealer": 0,
       "total": 110456,
-      "foreignStreak": 8,
+      "foreignStreak": 7,
       "trustStreak": 0,
       "jointStreak": 0,
-      "fiveDayPctSum": -3.7,
-      "fiveDayAvgVolume": 5774183
+      "fiveDayPctSum": 2.72,
+      "fiveDayAvgVolume": 6068886
     },
     {
       "code": "9105",
@@ -2455,8 +2455,8 @@
       "foreignStreak": 4,
       "trustStreak": 0,
       "jointStreak": 0,
-      "fiveDayPctSum": -20.62,
-      "fiveDayAvgVolume": 126104197
+      "fiveDayPctSum": -30.47,
+      "fiveDayAvgVolume": 128060801
     },
     {
       "code": "6239",
@@ -2468,11 +2468,11 @@
       "trust": -4659797,
       "dealer": 0,
       "total": -186871,
-      "foreignStreak": 8,
+      "foreignStreak": 7,
       "trustStreak": 0,
       "jointStreak": 0,
-      "fiveDayPctSum": -11.62,
-      "fiveDayAvgVolume": 14522053
+      "fiveDayPctSum": -4.92,
+      "fiveDayAvgVolume": 14810095
     },
     {
       "code": "2312",
@@ -2487,8 +2487,8 @@
       "foreignStreak": 1,
       "trustStreak": 1,
       "jointStreak": 1,
-      "fiveDayPctSum": -20.83,
-      "fiveDayAvgVolume": 73117372
+      "fiveDayPctSum": -15.28,
+      "fiveDayAvgVolume": 58405027
     },
     {
       "code": "3576",
@@ -2503,8 +2503,8 @@
       "foreignStreak": 2,
       "trustStreak": 0,
       "jointStreak": 0,
-      "fiveDayPctSum": -0.73,
-      "fiveDayAvgVolume": 24293983
+      "fiveDayPctSum": 0.86,
+      "fiveDayAvgVolume": 27414520
     },
     {
       "code": "2897",
@@ -2516,11 +2516,11 @@
       "trust": 0,
       "dealer": 0,
       "total": 2996609,
-      "foreignStreak": 8,
+      "foreignStreak": 7,
       "trustStreak": 0,
       "jointStreak": 0,
-      "fiveDayPctSum": 2.05,
-      "fiveDayAvgVolume": 7765081
+      "fiveDayPctSum": 1.54,
+      "fiveDayAvgVolume": 7657053
     },
     {
       "code": "6278",
@@ -2532,11 +2532,11 @@
       "trust": -2946000,
       "dealer": 0,
       "total": 179765,
-      "foreignStreak": 8,
+      "foreignStreak": 7,
       "trustStreak": 0,
       "jointStreak": 0,
-      "fiveDayPctSum": -10.3,
-      "fiveDayAvgVolume": 11061158
+      "fiveDayPctSum": -9.61,
+      "fiveDayAvgVolume": 12420612
     },
     {
       "code": "2884",
@@ -2551,8 +2551,8 @@
       "foreignStreak": 1,
       "trustStreak": 2,
       "jointStreak": 1,
-      "fiveDayPctSum": 2.06,
-      "fiveDayAvgVolume": 65889984
+      "fiveDayPctSum": 1.29,
+      "fiveDayAvgVolume": 60661200
     },
     {
       "code": "4991",
@@ -2564,7 +2564,7 @@
       "trust": -21000,
       "dealer": 10975,
       "total": 2813327,
-      "foreignStreak": 2,
+      "foreignStreak": 4,
       "trustStreak": 0,
       "jointStreak": 0,
       "fiveDayPctSum": -8.35,
@@ -2583,8 +2583,8 @@
       "foreignStreak": 1,
       "trustStreak": 0,
       "jointStreak": 0,
-      "fiveDayPctSum": -8.61,
-      "fiveDayAvgVolume": 44962189
+      "fiveDayPctSum": -6.73,
+      "fiveDayAvgVolume": 45720770
     },
     {
       "code": "3081",
@@ -2615,8 +2615,8 @@
       "foreignStreak": 7,
       "trustStreak": 0,
       "jointStreak": 0,
-      "fiveDayPctSum": 14.4,
-      "fiveDayAvgVolume": 8318420
+      "fiveDayPctSum": 9.7,
+      "fiveDayAvgVolume": 12330463
     },
     {
       "code": "1711",
@@ -2631,8 +2631,8 @@
       "foreignStreak": 1,
       "trustStreak": 0,
       "jointStreak": 0,
-      "fiveDayPctSum": -11.02,
-      "fiveDayAvgVolume": 13752713
+      "fiveDayPctSum": -12.63,
+      "fiveDayAvgVolume": 10962463
     },
     {
       "code": "6412",
@@ -2644,11 +2644,11 @@
       "trust": -2249000,
       "dealer": 0,
       "total": 227517,
-      "foreignStreak": 8,
+      "foreignStreak": 7,
       "trustStreak": 0,
       "jointStreak": 0,
-      "fiveDayPctSum": -12.51,
-      "fiveDayAvgVolume": 5730633
+      "fiveDayPctSum": -6.01,
+      "fiveDayAvgVolume": 5657781
     },
     {
       "code": "2489",
@@ -2663,8 +2663,8 @@
       "foreignStreak": 2,
       "trustStreak": 1,
       "jointStreak": 1,
-      "fiveDayPctSum": -19.64,
-      "fiveDayAvgVolume": 22409459
+      "fiveDayPctSum": -17.06,
+      "fiveDayAvgVolume": 21902998
     },
     {
       "code": "6155",
@@ -2679,8 +2679,8 @@
       "foreignStreak": 2,
       "trustStreak": 0,
       "jointStreak": 0,
-      "fiveDayPctSum": 7.64,
-      "fiveDayAvgVolume": 32911857
+      "fiveDayPctSum": 16.59,
+      "fiveDayAvgVolume": 36685829
     },
     {
       "code": "4989",
@@ -2695,8 +2695,8 @@
       "foreignStreak": 2,
       "trustStreak": 0,
       "jointStreak": 0,
-      "fiveDayPctSum": -15.36,
-      "fiveDayAvgVolume": 5756518
+      "fiveDayPctSum": -15.37,
+      "fiveDayAvgVolume": 6080154
     },
     {
       "code": "3714",
@@ -2711,8 +2711,8 @@
       "foreignStreak": 3,
       "trustStreak": 0,
       "jointStreak": 0,
-      "fiveDayPctSum": -10.5,
-      "fiveDayAvgVolume": 16804052
+      "fiveDayPctSum": -7.08,
+      "fiveDayAvgVolume": 17441094
     },
     {
       "code": "2481",
@@ -2727,8 +2727,8 @@
       "foreignStreak": 2,
       "trustStreak": 0,
       "jointStreak": 0,
-      "fiveDayPctSum": -15.11,
-      "fiveDayAvgVolume": 44718009
+      "fiveDayPctSum": -14.32,
+      "fiveDayAvgVolume": 38017291
     },
     {
       "code": "6182",
@@ -2740,7 +2740,7 @@
       "trust": 0,
       "dealer": 473838,
       "total": 2529762,
-      "foreignStreak": 4,
+      "foreignStreak": 3,
       "trustStreak": 0,
       "jointStreak": 0,
       "fiveDayPctSum": 15.29,
@@ -2759,8 +2759,8 @@
       "foreignStreak": 1,
       "trustStreak": 0,
       "jointStreak": 0,
-      "fiveDayPctSum": -11.58,
-      "fiveDayAvgVolume": 22982864
+      "fiveDayPctSum": -12.07,
+      "fiveDayAvgVolume": 25642893
     },
     {
       "code": "6174",
@@ -2772,7 +2772,7 @@
       "trust": 0,
       "dealer": 12444,
       "total": 1891444,
-      "foreignStreak": 6,
+      "foreignStreak": 5,
       "trustStreak": 0,
       "jointStreak": 0,
       "fiveDayPctSum": 50,
@@ -2791,8 +2791,8 @@
       "foreignStreak": 2,
       "trustStreak": 0,
       "jointStreak": 0,
-      "fiveDayPctSum": -8.95,
-      "fiveDayAvgVolume": 4314853
+      "fiveDayPctSum": -2.98,
+      "fiveDayAvgVolume": 4177677
     },
     {
       "code": "8289",
@@ -2804,7 +2804,7 @@
       "trust": 0,
       "dealer": 5741,
       "total": 1809943,
-      "foreignStreak": 2,
+      "foreignStreak": 4,
       "trustStreak": 0,
       "jointStreak": 0,
       "fiveDayPctSum": 32.26,
@@ -2818,13 +2818,13 @@
       "value": 2451632000,
       "foreign": 1799154,
       "trust": -2592000,
-      "dealer": 0,
+      "dealer": 16440,
       "total": -800857,
       "foreignStreak": 4,
       "trustStreak": 0,
       "jointStreak": 0,
-      "fiveDayPctSum": -18.96,
-      "fiveDayAvgVolume": 10197555
+      "fiveDayPctSum": -19.03,
+      "fiveDayAvgVolume": 9088711
     },
     {
       "code": "1717",
@@ -2839,8 +2839,8 @@
       "foreignStreak": 1,
       "trustStreak": 0,
       "jointStreak": 0,
-      "fiveDayPctSum": -13.57,
-      "fiveDayAvgVolume": 17538179
+      "fiveDayPctSum": -11.39,
+      "fiveDayAvgVolume": 17057907
     },
     {
       "code": "4958",
@@ -2855,8 +2855,8 @@
       "foreignStreak": 1,
       "trustStreak": 1,
       "jointStreak": 1,
-      "fiveDayPctSum": -2.54,
-      "fiveDayAvgVolume": 10657381
+      "fiveDayPctSum": 6.27,
+      "fiveDayAvgVolume": 17733095
     },
     {
       "code": "1597",
@@ -2871,8 +2871,8 @@
       "foreignStreak": 5,
       "trustStreak": 0,
       "jointStreak": 0,
-      "fiveDayPctSum": -11.38,
-      "fiveDayAvgVolume": 2563366
+      "fiveDayPctSum": -17.69,
+      "fiveDayAvgVolume": 2741590
     },
     {
       "code": "6415",
@@ -2887,8 +2887,8 @@
       "foreignStreak": 2,
       "trustStreak": 0,
       "jointStreak": 0,
-      "fiveDayPctSum": -18.66,
-      "fiveDayAvgVolume": 4744865
+      "fiveDayPctSum": -16.16,
+      "fiveDayAvgVolume": 5704296
     }
   ]
 }

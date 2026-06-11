@@ -1,10 +1,10 @@
 {
-  "updatedAt": "2026-06-11T21:50:02.4546339Z",
+  "updatedAt": "2026-06-11T21:50:17.7530332Z",
   "warrant": {
     "scope": "warrant",
-    "status": "watchdog_rerun",
-    "message": "Watchdog rerun started",
-    "updatedAt": "2026-06-11T21:50:02.4533501Z",
+    "status": "ok",
+    "message": "Watchdog rerun completed",
+    "updatedAt": "2026-06-11T21:50:17.7529623Z",
     "detail": {
       "log": "C:\\fuman-runtime\\logs\\flow-watchdog-warrant-20260612-055002.log",
       "reason": "warrant not updated after 05:30; updatedAt=06/11/2026 21:30:40",
