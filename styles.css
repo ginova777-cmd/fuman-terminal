@@ -3042,26 +3042,6 @@ h1 {
   transform: translateY(-1px);
 }
 
-body:not(.fuman-light-theme) .watchlist-entry-card {
-  border-color: rgba(249, 115, 22, 0.36);
-  background: linear-gradient(135deg, rgba(63, 42, 34, 0.98) 0%, rgba(31, 28, 35, 0.98) 55%, rgba(20, 22, 33, 0.98) 100%);
-  box-shadow: 0 14px 30px rgba(0, 0, 0, 0.28);
-}
-
-body:not(.fuman-light-theme) .watchlist-entry-copy h1 {
-  color: #ffb180;
-}
-
-body:not(.fuman-light-theme) .watchlist-entry-copy p {
-  color: #d3d9e6;
-}
-
-body:not(.fuman-light-theme) .watchlist-entry-form #watchlist-search-input {
-  border-color: rgba(134, 151, 190, 0.35);
-  background: #171b2a;
-  color: #f7f9ff;
-}
-
 .watchlist-layout {
   display: grid;
   grid-template-columns: minmax(340px, 430px) minmax(0, 1fr);
@@ -3896,8 +3876,7 @@ body.fuman-light-theme .data-freshness-bar.is-stale span {
     gap: 12px;
   }
 
-  .page-header > div:first-child,
-  .watchlist-entry-card {
+  .view-panel:not(#watchlist-view) .page-header > div:first-child {
     width: 100%;
     min-height: 104px;
     padding: 22px 24px;
@@ -3914,19 +3893,16 @@ body.fuman-light-theme .data-freshness-bar.is-stale span {
     font-weight: 950;
   }
 
-  .page-header h1,
-  .watchlist-entry-copy h1 {
+  .page-header h1 {
     color: #ffbd91;
   }
 
-  .page-header h1::first-letter,
-  .watchlist-entry-copy h1::first-letter {
+  .page-header h1::first-letter {
     color: #8fb0ff;
   }
 
   .page-header .refresh-line,
-  .page-header p,
-  .watchlist-entry-copy p {
+  .page-header p {
     margin-top: 8px;
     color: #dbe5ff;
     font-size: 15px;
@@ -5544,8 +5520,7 @@ body.fuman-light-theme .data-freshness-bar.is-stale span {
     border-bottom: 0 !important;
     padding: 0 58px 0 0 !important;
   }
-  .page-header > div:first-child,
-  .watchlist-entry-card {
+  .view-panel:not(#watchlist-view) .page-header > div:first-child {
     width: 100% !important;
     min-height: 104px !important;
     padding: 22px 24px !important;
@@ -5562,8 +5537,7 @@ body.fuman-light-theme .data-freshness-bar.is-stale span {
     font-weight: 950 !important;
   }
   .page-header .refresh-line,
-  .page-header p,
-  .watchlist-entry-copy p {
+  .page-header p {
     margin-top: 8px !important;
     color: #dbe5ff !important;
     font-size: 15px !important;
@@ -6690,7 +6664,6 @@ html body.fuman-light-theme .brand span {
 /* mobile-title-card-final-unify-20260602 */
 @media (max-width: 760px), (orientation: landscape) and (max-height: 430px) and (max-width: 900px) {
   body:not(.fuman-light-theme) .page-header > div:first-child,
-  body:not(.fuman-light-theme) #watchlist-view .watchlist-entry-card,
   body:not(.fuman-light-theme) #chip-trade-view .chip-page-header > div:first-child,
   body:not(.fuman-light-theme) #warrant-flow-view .page-header > div:first-child {
     width: 100% !important;
@@ -6706,7 +6679,6 @@ html body.fuman-light-theme .brand span {
 
   body:not(.fuman-light-theme) .page-header h1,
   body:not(.fuman-light-theme) .strategy-header h1,
-  body:not(.fuman-light-theme) #watchlist-view .watchlist-entry-copy h1,
   body:not(.fuman-light-theme) #chip-trade-view .chip-page-header h1,
   body:not(.fuman-light-theme) #warrant-flow-view .page-header h1 {
     color: #ffbd91 !important;
@@ -6718,7 +6690,6 @@ html body.fuman-light-theme .brand span {
 
   body:not(.fuman-light-theme) .page-header p,
   body:not(.fuman-light-theme) .page-header .refresh-line,
-  body:not(.fuman-light-theme) #watchlist-view .watchlist-entry-copy p,
   body:not(.fuman-light-theme) #chip-trade-view .chip-page-header span,
   body:not(.fuman-light-theme) #warrant-flow-view .page-header p,
   body:not(.fuman-light-theme) #warrant-flow-view .page-header span {
@@ -6730,7 +6701,6 @@ html body.fuman-light-theme .brand span {
 
   body.fuman-light-theme .page-header h1,
   body.fuman-light-theme .strategy-header h1,
-  body.fuman-light-theme #watchlist-view .watchlist-entry-copy h1,
   body.fuman-light-theme #chip-trade-view .chip-page-header h1,
   body.fuman-light-theme #warrant-flow-view .page-header h1 {
     font-size: 32px !important;
@@ -6740,7 +6710,6 @@ html body.fuman-light-theme .brand span {
   }
 
   body.fuman-light-theme .page-header > div:first-child,
-  body.fuman-light-theme #watchlist-view .watchlist-entry-card,
   body.fuman-light-theme #chip-trade-view .chip-page-header > div:first-child,
   body.fuman-light-theme #warrant-flow-view .page-header > div:first-child {
     height: 126px !important;
@@ -6898,10 +6867,10 @@ body.fuman-light-theme .data-freshness-bar.is-stale::after {
   }
 
   body #watchlist-view .watchlist-entry-card,
-  body.fuman-light-theme #watchlist-view .watchlist-entry-card,
   body:not(.fuman-light-theme) #watchlist-view .watchlist-entry-card {
     display: block !important;
     width: calc(100vw - 28px) !important;
+    height: auto !important;
     min-height: 0 !important;
     margin: 0 auto !important;
     padding: 18px 16px !important;
@@ -6922,7 +6891,6 @@ body.fuman-light-theme .data-freshness-bar.is-stale::after {
   }
 
   body #watchlist-view .watchlist-entry-copy h1,
-  body.fuman-light-theme #watchlist-view .watchlist-entry-copy h1,
   body:not(.fuman-light-theme) #watchlist-view .watchlist-entry-copy h1 {
     margin: 0 0 8px !important;
     color: #111827 !important;
