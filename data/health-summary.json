@@ -1,8 +1,14 @@
 {
-  "ok": true,
-  "updatedAt": "2026-06-10T07:45:12.938Z",
-  "risk": "low",
-  "risks": [],
+  "ok": false,
+  "updatedAt": "2026-06-11T07:55:59.407Z",
+  "risk": "high",
+  "risks": [
+    {
+      "level": "high",
+      "area": "github",
+      "message": "GitHub outbox 待補 3 筆"
+    }
+  ],
   "schedule": {
     "ok": true,
     "total": 0,
@@ -12,8 +18,8 @@
     "note": "Uses schtasks fallback-friendly query to avoid Get-ScheduledTask low-permission false alarms."
   },
   "githubSync": {
-    "pendingCount": 0,
-    "ok": true
+    "pendingCount": 3,
+    "ok": false
   },
   "runtime": {
     "ok": true,
@@ -24,35 +30,35 @@
         "status": "",
         "date": "",
         "count": 0,
-        "updatedAt": "2026-06-10T07:31:11.393Z",
-        "bytes": 148953
+        "updatedAt": "2026-06-11T07:55:55.190Z",
+        "bytes": 153026
       },
       {
         "file": "strategy4-summary.json",
         "ok": true,
         "status": "",
         "date": "",
-        "count": 1556,
-        "updatedAt": "2026-06-09T06:53:44.896Z",
-        "bytes": 45263
+        "count": 542,
+        "updatedAt": "2026-06-10T13:47:03.350Z",
+        "bytes": 42628
       },
       {
         "file": "strategy5-latest.json",
         "ok": true,
         "status": "",
-        "date": "20260609",
-        "count": 80,
-        "updatedAt": "2026-06-10T00:01:03.919Z",
-        "bytes": 153795
+        "date": "20260610",
+        "count": 47,
+        "updatedAt": "2026-06-10T22:00:46.539Z",
+        "bytes": 93712
       },
       {
         "file": "institution-summary.json",
         "ok": true,
         "status": "",
-        "date": "20260609",
-        "count": 1881,
-        "updatedAt": "2026-06-10T00:05:50.530Z",
-        "bytes": 65336
+        "date": "20260610",
+        "count": 1892,
+        "updatedAt": "2026-06-10T22:20:20.385Z",
+        "bytes": 65367
       },
       {
         "file": "warrant-flow-summary.json",
@@ -60,26 +66,26 @@
         "status": "",
         "date": "",
         "count": 120,
-        "updatedAt": "2026-06-09T21:50:08.047Z",
-        "bytes": 34949
+        "updatedAt": "2026-06-10T21:50:10.668Z",
+        "bytes": 41737
       },
       {
         "file": "strategy2-intraday-latest.json",
         "ok": true,
         "status": "retired_intraday_snapshot",
-        "date": "2026-06-10",
+        "date": "2026-06-11",
         "count": 0,
-        "updatedAt": "2026-06-10T02:13:46.984Z",
+        "updatedAt": "2026-06-11T07:45:02.497Z",
         "bytes": 775
       },
       {
         "file": "realtime-radar-latest.json",
         "ok": true,
         "status": "retired_intraday_snapshot",
-        "date": "2026-06-10",
+        "date": "2026-06-11",
         "count": 0,
-        "updatedAt": "2026-06-10T07:45:02.613Z",
-        "bytes": 690
+        "updatedAt": "2026-06-11T07:45:02.501Z",
+        "bytes": 684
       },
       {
         "file": "performance-report.json",
@@ -87,8 +93,8 @@
         "status": "",
         "date": "",
         "count": 0,
-        "updatedAt": "2026-06-10T07:31:16.702Z",
-        "bytes": 2397
+        "updatedAt": "2026-06-11T07:55:55.879Z",
+        "bytes": 2390
       },
       {
         "file": "signal-quality-report.json",
@@ -96,8 +102,8 @@
         "status": "",
         "date": "",
         "count": 0,
-        "updatedAt": "2026-06-10T07:31:16.303Z",
-        "bytes": 798
+        "updatedAt": "2026-06-11T07:55:55.612Z",
+        "bytes": 795
       },
       {
         "file": "data-quality-report.json",
@@ -105,8 +111,8 @@
         "status": "",
         "date": "",
         "count": 0,
-        "updatedAt": "2026-06-10T07:31:16.427Z",
-        "bytes": 2005
+        "updatedAt": "2026-06-11T07:55:55.688Z",
+        "bytes": 1998
       },
       {
         "file": "data-consistency-report.json",
@@ -114,8 +120,8 @@
         "status": "",
         "date": "",
         "count": 0,
-        "updatedAt": "2026-06-10T07:31:16.524Z",
-        "bytes": 316
+        "updatedAt": "2026-06-11T07:55:55.754Z",
+        "bytes": 312
       },
       {
         "file": "strategy-weight-report.json",
@@ -123,7 +129,7 @@
         "status": "",
         "date": "",
         "count": 0,
-        "updatedAt": "2026-06-10T07:31:16.617Z",
+        "updatedAt": "2026-06-11T07:55:55.816Z",
         "bytes": 418
       }
     ]

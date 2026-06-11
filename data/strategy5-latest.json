@@ -1,7 +1,7 @@
 {
   "ok": true,
   "source": "github-actions-official-daily",
-  "updatedAt": "2026-06-11T13:06:24.967Z",
+  "updatedAt": "2026-06-11T13:00:57.351Z",
   "generatedDate": "20260611",
   "usedDate": "20260611",
   "sourceDate": "20260611",
@@ -1973,8 +1973,10 @@
   "sourceHealth": {
     "issuedSharesCount": 1976,
     "volumeAverageCount": 2187,
-    "warningCount": 0,
-    "warnings": []
+    "warningCount": 1,
+    "warnings": [
+      "tpex volume fetch failed: 115/06/11 :: terminated"
+    ]
   },
   "count": 80,
   "matches": [
