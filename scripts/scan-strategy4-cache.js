@@ -27,6 +27,7 @@ const MIN_AVG_VOLUME_5 = Number(process.env.STRATEGY4_MIN_AVG_VOLUME_5 || 3000);
 const ALLOW_FILTER_RULE_DROP = process.env.STRATEGY4_ALLOW_FILTER_RULE_DROP !== "0";
 const FUGLE_HISTORY_CACHE_DIR = process.env.FUGLE_HISTORY_CACHE_DIR || path.join(process.env.FUMAN_RUNTIME_DIR || "C:\\fuman-runtime", "cache", "fugle", "historical");
 const STRATEGY4_VOLUME_CACHE_FILE = path.join(process.env.FUMAN_RUNTIME_DIR || "C:\\fuman-runtime", "cache", "strategy4-volume-avg5.json");
+const STRATEGY4_VOLUME_REFRESH_DAYS = Number(process.env.STRATEGY4_VOLUME_REFRESH_DAYS || 20);
 const RUNTIME_DIR = process.env.FUMAN_RUNTIME_DIR || "C:\\fuman-runtime";
 const SECRET_DIR = path.join(RUNTIME_DIR, "secrets");
 const CONFIG_DIR = path.join(RUNTIME_DIR, "config");
@@ -75,6 +76,81 @@ function normalizeVolumeLots(value) {
 function avg(values) {
   const nums = values.filter((value) => Number.isFinite(value) && value > 0);
   return nums.length ? nums.reduce((sum, value) => sum + value, 0) / nums.length : 0;
+}
+
+function isoDateDaysAgo(days) {
+  const date = new Date();
+  date.setDate(date.getDate() - days);
+  return date.toISOString().slice(0, 10);
+}
+
+async function fetchSupabaseDailyVolumeRows(from, to) {
+  if (!SUPABASE_URL || !SUPABASE_KEY) return [];
+  const rows = [];
+  const pageSize = 1000;
+  for (let offset = 0; offset < 100000; offset += pageSize) {
+    const url = new URL(`${SUPABASE_URL}/rest/v1/fugle_daily_volume`);
+    url.searchParams.set("select", "symbol,trade_date,volume");
+    url.searchParams.append("trade_date", `gte.${from}`);
+    url.searchParams.append("trade_date", `lte.${to}`);
+    url.searchParams.set("order", "trade_date.asc");
+    const response = await fetch(url, {
+      headers: {
+        apikey: SUPABASE_KEY,
+        Authorization: `Bearer ${SUPABASE_KEY}`,
+        Accept: "application/json",
+        Range: `${offset}-${offset + pageSize - 1}`,
+      },
+    });
+    if (!response.ok) {
+      console.log(`strategy4 supabase daily volume refresh skipped: HTTP ${response.status}`);
+      break;
+    }
+    const page = await response.json();
+    if (!Array.isArray(page) || !page.length) break;
+    rows.push(...page);
+    if (page.length < pageSize) break;
+  }
+  return rows;
+}
+
+function refreshVolumeAvg5Cache(rows) {
+  if (!rows.length) return 0;
+  const cache = readJson(STRATEGY4_VOLUME_CACHE_FILE, { source: "supabase:fugle_daily_volume", byCode: {} });
+  const byCode = cache.byCode && typeof cache.byCode === "object" ? cache.byCode : {};
+  let updated = 0;
+  rows.forEach((row) => {
+    const code = normalizeCode(row.symbol || row.code || row.stock_id || row.data_id);
+    const date = String(row.trade_date || row.date || row.trading_date || "").slice(0, 10);
+    const volume = normalizeVolumeLots(row.volume || row.trade_volume || row.trading_volume);
+    if (!/^\d{4}$/.test(code) || !date || !volume) return;
+    const current = Array.isArray(byCode[code]) ? byCode[code] : [];
+    const map = new Map(current.map((item) => [item.date, item]));
+    map.set(date, { date, volume });
+    byCode[code] = [...map.values()].sort((a, b) => a.date.localeCompare(b.date)).slice(-20);
+    updated += 1;
+  });
+  fs.mkdirSync(path.dirname(STRATEGY4_VOLUME_CACHE_FILE), { recursive: true });
+  fs.writeFileSync(STRATEGY4_VOLUME_CACHE_FILE, `${JSON.stringify({
+    source: "supabase:fugle_daily_volume",
+    updatedAt: new Date().toISOString(),
+    refreshDays: STRATEGY4_VOLUME_REFRESH_DAYS,
+    byCode,
+  }, null, 2)}\n`);
+  strategy4VolumeCache = null;
+  return updated;
+}
+
+async function refreshStrategy4VolumeCacheFromSupabase() {
+  const to = new Date().toISOString().slice(0, 10);
+  const from = isoDateDaysAgo(STRATEGY4_VOLUME_REFRESH_DAYS);
+  try {
+    const rows = await fetchSupabaseDailyVolumeRows(from, to);
+    const updated = refreshVolumeAvg5Cache(rows);
+    console.log(`strategy4 supabase volume avg5 refresh: rows ${rows.length}, writes ${updated}`);
+  } catch (error) {
+    console.log(`strategy4 supabase volume avg5 refresh failed: ${error.message || error}`);
+  }
 }
 
 function cachedAvgVolume5(code) {
@@ -484,6 +560,7 @@ async function main() {
   const universe = await fetchUniverse();
   const codes = universe.map((stock) => stock.code);
   if (!codes.length) throw new Error("No stock universe");
+  await refreshStrategy4VolumeCacheFromSupabase();
 
   const previousRaw = readJson(OUT_FILE, {
     ok: true,

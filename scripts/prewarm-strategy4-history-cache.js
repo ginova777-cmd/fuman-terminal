@@ -181,7 +181,7 @@ async function fetchSupabaseDailyVolumeRows(from, to) {
   if (!SUPABASE_URL || !SUPABASE_KEY) return [];
   const rows = [];
   const pageSize = 1000;
-  for (let offset = 0; offset < 10000; offset += pageSize) {
+  for (let offset = 0; offset < 100000; offset += pageSize) {
     const url = new URL(`${SUPABASE_URL}/rest/v1/fugle_daily_volume`);
     url.searchParams.set("select", "symbol,trade_date,volume");
     url.searchParams.append("trade_date", `gte.${from}`);

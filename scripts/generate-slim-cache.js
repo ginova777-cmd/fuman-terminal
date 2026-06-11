@@ -17,7 +17,12 @@ function readJson(file) {
 
 function writeJson(file, payload) {
   fs.mkdirSync(path.dirname(file), { recursive: true });
-  fs.writeFileSync(file, `${JSON.stringify(payload)}\n`, "utf8");
+  const tempFile = path.join(
+    path.dirname(file),
+    `.${path.basename(file)}.${process.pid}.${Date.now()}.tmp`
+  );
+  fs.writeFileSync(tempFile, `${JSON.stringify(payload)}\n`, "utf8");
+  fs.renameSync(tempFile, file);
 }
 
 function writeToBoth(output, payload) {
