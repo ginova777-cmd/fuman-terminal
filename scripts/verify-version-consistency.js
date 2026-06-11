@@ -30,6 +30,10 @@ requireIncludes("terminal-core.js", `const version = "${VERSION}"`);
 requireIncludes("terminal-modules.js", `const VERSION = "${VERSION}"`);
 requireIncludes("fuman-sw.js", `?v=${VERSION}`);
 requireIncludes("fuman-sw.js", `/terminal-app.js?v=${VERSION}`);
+requireIncludes("refresh.html", `/?v=${VERSION}`);
+requireIncludes("version.json", `"version": "${VERSION}"`);
+requireIncludes("terminal-core.js", "/version.json?fresh=");
+requireIncludes("terminal-core.js", "fuman-terminal-remote-version-reload");
 requireIncludes("scripts/verify-deployment.js", "detectVersion");
 requireIncludes("scripts/e2e-smoke.js", "detectVersion");
 

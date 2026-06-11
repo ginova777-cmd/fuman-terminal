@@ -1,5 +1,5 @@
 (function () {
-  const version = "chip-flow-hardening-20260611-14";
+  const version = "chip-flow-hardening-20260611-15";
   window.FUMAN_TERMINAL_VERSION = version;
   window.FUMAN_TERMINAL_BOOT = {
     version,
@@ -22,6 +22,29 @@
         ? caches.keys().then(keys => Promise.all(keys.filter(name => name.includes("fuman-terminal")).map(name => caches.delete(name))))
         : Promise.resolve();
       clearCaches.finally(() => window.location.replace((location.pathname || "/") + (location.search || "")));
+    } catch (error) {}
+  };
+
+  const reloadToFreshVersion = (targetVersion) => {
+    try {
+      if (!targetVersion || targetVersion === version) return;
+      const reloadKey = "fuman-terminal-remote-version-reload:" + targetVersion;
+      if (sessionStorage.getItem(reloadKey) === "1") return;
+      sessionStorage.setItem(reloadKey, "1");
+      localStorage.setItem("fuman-terminal-active-version", targetVersion);
+      const clearCaches = "caches" in window
+        ? caches.keys().then(keys => Promise.all(keys.filter(name => name.includes("fuman-terminal")).map(name => caches.delete(name))))
+        : Promise.resolve();
+      clearCaches.finally(() => window.location.replace(`/?v=${encodeURIComponent(targetVersion)}&fresh=${Date.now()}`));
+    } catch (error) {}
+  };
+
+  const checkRemoteVersion = () => {
+    try {
+      fetch(`/version.json?fresh=${Date.now()}`, { cache: "no-store" })
+        .then((response) => response.ok ? response.json() : null)
+        .then((payload) => reloadToFreshVersion(String(payload?.version || "").trim()))
+        .catch(() => undefined);
     } catch (error) {}
   };
 
@@ -76,6 +99,7 @@
 
   mark("core-start");
   enforceFreshVersion();
+  checkRemoteVersion();
   warmAuthShell();
   preconnect("https://openapi.twse.com.tw");
 

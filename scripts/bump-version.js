@@ -9,6 +9,8 @@ const FILES = [
   "terminal.js",
   "terminal-modules.js",
   "fuman-sw.js",
+  "refresh.html",
+  "version.json",
 ];
 
 function read(file) {
