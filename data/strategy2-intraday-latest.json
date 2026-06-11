@@ -1,26 +1,26 @@
 {
   "source": "strategy2-09-to-1330-patrol",
   "date": "2026-06-11",
-  "updatedAt": "2026-06-11T02:31:55.549Z",
+  "updatedAt": "2026-06-11T02:34:23.758Z",
   "realtime": {
     "requested": 1013,
-    "received": 995,
-    "usableBeforeRescue": 1,
-    "coverageBeforeRescue": 0.001,
-    "usableAfterRescue": 2,
-    "coverageAfterRescue": 0.002,
+    "received": 996,
+    "usableBeforeRescue": 0,
+    "coverageBeforeRescue": 0,
+    "usableAfterRescue": 5,
+    "coverageAfterRescue": 0.0049,
     "unusableBreakdown": {
-      "usable": 2,
-      "stale": 993,
+      "usable": 5,
+      "stale": 991,
       "noTime": 0,
       "noClose": 0,
-      "missing": 18
+      "missing": 17
     },
     "sourceHealth": {
       "fugle": {
-        "received": 995,
-        "usable": 2,
-        "stale": 993,
+        "received": 996,
+        "usable": 5,
+        "stale": 991,
         "noTime": 0,
         "noClose": 0
       }
@@ -35,14 +35,14 @@
     "fugleRateLimited": false,
     "fallbackStats": {
       "fugleWs": {
-        "available": 918,
-        "used": 918
+        "available": 931,
+        "used": 931
       },
       "fugle": {
         "configured": true,
         "requested": 1313,
-        "recovered": 1288,
-        "empty": 25,
+        "recovered": 1289,
+        "empty": 24,
         "failed": 0,
         "skippedNoKey": 0,
         "rateLimited": false
@@ -65,13 +65,13 @@
         "limit": 300,
         "cooldownMs": 30000,
         "requested": 300,
-        "recovered": 1,
-        "coverageBefore": 0.001,
-        "usableBefore": 1,
+        "recovered": 5,
+        "coverageBefore": 0,
+        "usableBefore": 0,
         "skippedCooldown": false,
         "cooldownRemainingMs": 0,
-        "coverageAfter": 0.002,
-        "usableAfter": 2
+        "coverageAfter": 0.0049,
+        "usableAfter": 5
       }
     },
     "finmindRealtimeEnabled": false,
@@ -392,6 +392,7 @@
       "1903",
       "6201",
       "1231",
+      "1213",
       "6142",
       "8442",
       "9802",
@@ -1074,7 +1075,6 @@
       "4722"
     ],
     "missedCodes": [
-      "1213",
       "1315",
       "1439",
       "1470",
@@ -1104,6 +1104,7 @@
       "1201",
       "1203",
       "1210",
+      "1213",
       "1215",
       "1216",
       "1217",
@@ -1132,7 +1133,6 @@
       "1313",
       "1314",
       "1316",
-      "1319",
       "1321",
       "1323",
       "1324",
@@ -1177,21 +1177,21 @@
     ],
     "noTimeCodes": [],
     "noCloseCodes": [],
-    "missedCount": 18,
-    "coverage": 0.9062,
-    "quoteCoverage": 0.002,
-    "fugleWsCoverage": 0.9062,
-    "usable": 918,
-    "quoteUsable": 2,
-    "entrySourceUsable": 918,
+    "missedCount": 17,
+    "coverage": 0.9191,
+    "quoteCoverage": 0.0049,
+    "fugleWsCoverage": 0.9191,
+    "usable": 931,
+    "quoteUsable": 5,
+    "entrySourceUsable": 931,
     "cachedRecovered": 0,
     "quoteCacheMaxAgeSeconds": 900,
     "entrySourceCoverageThreshold": 0.5,
     "entrySourceHealthy": true,
     "initialBatchSize": 12,
     "retryBatchSize": 4,
-    "tradable": 918,
-    "tradableByQuote": 2
+    "tradable": 931,
+    "tradableByQuote": 5
   },
   "records": [],
   "events": [],
