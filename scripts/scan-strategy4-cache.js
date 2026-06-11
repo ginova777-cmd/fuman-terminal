@@ -26,10 +26,12 @@ const MAX_YAHOO_SOURCE_RATIO = Number(process.env.STRATEGY4_MAX_YAHOO_SOURCE_RAT
 const MIN_AVG_VOLUME_5 = Number(process.env.STRATEGY4_MIN_AVG_VOLUME_5 || 3000);
 const ALLOW_FILTER_RULE_DROP = process.env.STRATEGY4_ALLOW_FILTER_RULE_DROP !== "0";
 const FUGLE_HISTORY_CACHE_DIR = process.env.FUGLE_HISTORY_CACHE_DIR || path.join(process.env.FUMAN_RUNTIME_DIR || "C:\\fuman-runtime", "cache", "fugle", "historical");
+const STRATEGY4_VOLUME_CACHE_FILE = path.join(process.env.FUMAN_RUNTIME_DIR || "C:\\fuman-runtime", "cache", "strategy4-volume-avg5.json");
 const USE_MIS_QUOTES = process.env.STRATEGY4_USE_MIS === "1";
 const FAIL_ON_INCOMPLETE = process.env.STRATEGY4_FAIL_ON_INCOMPLETE !== "0";
 const ALLOW_PARTIAL_PUBLISH = process.env.STRATEGY4_ALLOW_PARTIAL_PUBLISH === "1";
 const RUN_STAMP = process.env.STRATEGY4_SCAN_STAMP || new Date().toISOString().slice(0, 10).replace(/-/g, "");
+let strategy4VolumeCache = null;
 
 function readJson(file, fallback) {
   try {
@@ -59,6 +61,19 @@ function avg(values) {
 }
 
 function cachedAvgVolume5(code) {
+  if (strategy4VolumeCache === null) {
+    strategy4VolumeCache = readJson(STRATEGY4_VOLUME_CACHE_FILE, {});
+  }
+  const volumeRows = Array.isArray(strategy4VolumeCache?.byCode?.[normalizeCode(code)]) ? strategy4VolumeCache.byCode[normalizeCode(code)] : [];
+  if (volumeRows.length >= 5) {
+    const volumes = volumeRows
+      .slice()
+      .sort((a, b) => String(a.date || "").localeCompare(String(b.date || "")))
+      .slice(-5)
+      .map((row) => normalizeVolumeLots(row.volume));
+    const cachedValue = avg(volumes);
+    if (cachedValue) return Number(cachedValue.toFixed(2));
+  }
   const file = path.join(FUGLE_HISTORY_CACHE_DIR, `${normalizeCode(code)}.json`);
   const payload = readJson(file, null);
   const rows = Array.isArray(payload?.rows) ? payload.rows : [];

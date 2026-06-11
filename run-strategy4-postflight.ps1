@@ -8,6 +8,7 @@ $baseUrl = if ($env:FUMAN_VERIFY_BASE_URL) { $env:FUMAN_VERIFY_BASE_URL.TrimEnd(
 $statusFile = Join-Path $stateDir "strategy4-postflight-status.json"
 $logDir = Join-Path $runtime "logs"
 $log = Join-Path $logDir ("strategy4-postflight-{0}.log" -f (Get-Date -Format "yyyyMMdd-HHmmss"))
+$maxVolumeCacheMiss = if ($env:STRATEGY4_MAX_VOLUME_CACHE_MISS) { [int]$env:STRATEGY4_MAX_VOLUME_CACHE_MISS } else { 100 }
 
 New-Item -ItemType Directory -Force -Path $stateDir | Out-Null
 New-Item -ItemType Directory -Force -Path $logDir | Out-Null
@@ -89,6 +90,8 @@ foreach ($file in $files) {
     updatedAt = $payload.updatedAt
     complete = $payload.complete
     volumeFilteredCount = $payload.volumeFilteredCount
+    volumeCacheHit = $payload.volumeFilter.cacheHit
+    volumeCacheMiss = $payload.volumeFilter.cacheMiss
   }
   if ($payload -eq $null) { $issues.Add("missing or invalid local $file") | Out-Null }
 }
@@ -100,6 +103,10 @@ if ($latest -eq $null) {
   if ($latest.complete -ne $true) { $issues.Add("strategy4-latest incomplete") | Out-Null }
   if ((Count-Rows $latest) -lt 10) { $issues.Add("strategy4-latest too few matches") | Out-Null }
   if ((Number-OrZero $latest.volumeFilteredCount) -le 0) { $warnings.Add("strategy4 volume prefilter metadata missing or zero") | Out-Null }
+  $volumeCacheMiss = Number-OrZero $latest.volumeFilter.cacheMiss
+  if ($volumeCacheMiss -gt $maxVolumeCacheMiss) {
+    $warnings.Add("strategy4 volume prefilter cache miss high: $volumeCacheMiss > $maxVolumeCacheMiss") | Out-Null
+  }
 }
 
 $remoteLatest = Fetch-Json "$baseUrl/data/strategy4-latest.json"
