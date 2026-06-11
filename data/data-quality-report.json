@@ -1,13 +1,13 @@
 {
   "ok": true,
-  "updatedAt": "2026-06-11T12:50:42.395Z",
+  "updatedAt": "2026-06-11T13:01:07.967Z",
   "files": [
     {
       "file": "market-summary.json",
       "ok": true,
-      "bytes": 153023,
+      "bytes": 153022,
       "count": 80,
-      "updatedAt": "2026-06-11T12:50:40.303Z",
+      "updatedAt": "2026-06-11T13:01:06.231Z",
       "issues": []
     },
     {
@@ -53,9 +53,9 @@
     {
       "file": "institution-latest.json",
       "ok": true,
-      "bytes": 940950,
+      "bytes": 940983,
       "count": 1880,
-      "updatedAt": "2026-06-11T12:01:39.356Z",
+      "updatedAt": "2026-06-11T13:00:34.546Z",
       "issues": []
     },
     {
