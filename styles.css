@@ -1298,6 +1298,243 @@ body::after {
   user-select: none;
 }
 
+/* mobile-watchlist-card-match-20260611 */
+@media (max-width: 760px), (orientation: landscape) and (max-height: 430px) and (max-width: 900px) {
+  body #watchlist-view,
+  body.fuman-light-theme #watchlist-view,
+  body #watchlist-view .watchlist-layout,
+  body.fuman-light-theme #watchlist-view .watchlist-layout {
+    background: #f6f8fb !important;
+    color: #111827 !important;
+  }
+
+  body #watchlist-view {
+    padding: 12px 0 86px !important;
+    overflow-x: hidden !important;
+  }
+
+  body #watchlist-view .page-header {
+    padding: 0 14px 10px !important;
+    background: transparent !important;
+    border: 0 !important;
+  }
+
+  body #watchlist-view .watchlist-entry-card,
+  body.fuman-light-theme #watchlist-view .watchlist-entry-card {
+    display: block !important;
+    width: calc(100vw - 28px) !important;
+    height: auto !important;
+    min-height: 0 !important;
+    padding: 18px 16px !important;
+    border: 1px solid #dfe5ee !important;
+    border-radius: 12px !important;
+    background: #ffffff !important;
+    box-shadow: 0 2px 8px rgba(15, 23, 42, 0.06) !important;
+  }
+
+  body #watchlist-view .watchlist-entry-card::before {
+    content: none !important;
+    display: none !important;
+  }
+
+  body #watchlist-view .watchlist-entry-copy {
+    display: block !important;
+  }
+
+  body #watchlist-view .watchlist-entry-copy h1,
+  body.fuman-light-theme #watchlist-view .watchlist-entry-copy h1 {
+    margin: 0 0 8px !important;
+    color: #111827 !important;
+    font-size: 18px !important;
+    font-weight: 950 !important;
+    line-height: 1.2 !important;
+  }
+
+  body #watchlist-view .watchlist-entry-copy p,
+  body.fuman-light-theme #watchlist-view .watchlist-entry-copy p {
+    margin: 0 0 18px !important;
+    color: #5f6b7a !important;
+    font-size: 13px !important;
+    font-weight: 850 !important;
+    line-height: 1.45 !important;
+  }
+
+  body #watchlist-view .watchlist-entry-form,
+  body.fuman-light-theme #watchlist-view .watchlist-entry-form {
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr) 56px !important;
+    gap: 12px !important;
+    margin: 0 !important;
+    padding: 18px !important;
+    border: 1px solid rgba(249, 115, 22, 0.36) !important;
+    border-radius: 12px !important;
+    background: linear-gradient(135deg, #fff1e8 0%, #ffffff 58%, #fffaf6 100%) !important;
+    box-shadow: 0 4px 12px rgba(249, 115, 22, 0.08) !important;
+  }
+
+  body #watchlist-view .watchlist-entry-form::before {
+    content: "自選股\A點選股票後同步載入右側分析";
+    grid-column: 1 / -1;
+    white-space: pre-line;
+    color: #b23a22;
+    font-size: 18px;
+    font-weight: 950;
+    line-height: 1.65;
+  }
+
+  body #watchlist-view .watchlist-entry-input,
+  body #watchlist-view .watchlist-entry-form #watchlist-search-input,
+  body.fuman-light-theme #watchlist-view .watchlist-entry-form #watchlist-search-input {
+    width: 100% !important;
+    height: 54px !important;
+    min-height: 54px !important;
+    padding: 0 18px !important;
+    border: 1px solid #dfe5ee !important;
+    border-radius: 10px !important;
+    background: #ffffff !important;
+    color: #111827 !important;
+    font-size: 18px !important;
+    font-weight: 850 !important;
+    box-shadow: inset 0 1px 2px rgba(15, 23, 42, 0.04) !important;
+  }
+
+  body #watchlist-view .watchlist-entry-input::placeholder {
+    color: #8a95a5 !important;
+  }
+
+  body #watchlist-view .watchlist-entry-add,
+  body.fuman-light-theme #watchlist-view .watchlist-entry-add {
+    width: 56px !important;
+    height: 56px !important;
+    min-height: 56px !important;
+    border: 0 !important;
+    border-radius: 10px !important;
+    background: #df3f00 !important;
+    color: #53606f !important;
+    font-size: 28px !important;
+    font-weight: 800 !important;
+    line-height: 1 !important;
+    box-shadow: none !important;
+  }
+
+  body #watchlist-view .watchlist-stock-list {
+    display: grid !important;
+    gap: 12px !important;
+    padding: 0 14px 20px !important;
+  }
+
+  body #watchlist-view .watchlist-stock-list::after {
+    content: none !important;
+    display: none !important;
+  }
+
+  body #watchlist-view .watchlist-card,
+  body.fuman-light-theme #watchlist-view .watchlist-card {
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr) auto !important;
+    gap: 12px !important;
+    min-height: 118px !important;
+    margin: 0 !important;
+    padding: 18px 18px 16px !important;
+    border: 1px solid #dfe5ee !important;
+    border-radius: 14px !important;
+    background: #ffffff !important;
+    box-shadow: 0 1px 4px rgba(15, 23, 42, 0.04) !important;
+    color: #111827 !important;
+  }
+
+  body #watchlist-view .watch-card-title {
+    display: flex !important;
+    gap: 8px !important;
+    align-items: center !important;
+    white-space: nowrap !important;
+  }
+
+  body #watchlist-view .watch-code,
+  body.fuman-light-theme #watchlist-view .watch-code {
+    color: #111827 !important;
+    font-size: 23px !important;
+    font-weight: 950 !important;
+    line-height: 1.15 !important;
+  }
+
+  body #watchlist-view .watch-name,
+  body.fuman-light-theme #watchlist-view .watch-name {
+    color: #6b7280 !important;
+    font-size: 14px !important;
+    font-weight: 850 !important;
+    line-height: 1.15 !important;
+  }
+
+  body #watchlist-view .watch-market-badge,
+  body.fuman-light-theme #watchlist-view .watch-market-badge {
+    min-height: 22px !important;
+    padding: 2px 6px !important;
+    border: 0 !important;
+    border-radius: 5px !important;
+    background: #fff0e9 !important;
+    color: #e55b2b !important;
+    font-size: 12px !important;
+    font-weight: 900 !important;
+    line-height: 1 !important;
+    box-shadow: none !important;
+  }
+
+  body #watchlist-view .watch-card-price {
+    gap: 8px !important;
+    margin-top: 10px !important;
+  }
+
+  body #watchlist-view .watch-card-price > span,
+  body.fuman-light-theme #watchlist-view .watch-card-price > span {
+    font-size: 30px !important;
+    font-weight: 950 !important;
+    line-height: 1 !important;
+  }
+
+  body #watchlist-view .watch-card-price small {
+    font-size: 15px !important;
+    font-weight: 900 !important;
+    line-height: 1 !important;
+  }
+
+  body #watchlist-view .watch-card-flow {
+    display: flex !important;
+    gap: 24px !important;
+    margin-top: 14px !important;
+    padding-top: 12px !important;
+    border-top: 1px solid #e5e7eb !important;
+    color: #6b7280 !important;
+    font-size: 15px !important;
+    font-weight: 900 !important;
+    line-height: 1.35 !important;
+  }
+
+  body #watchlist-view .watch-card-flow span {
+    color: #6b7280 !important;
+    white-space: nowrap !important;
+  }
+
+  body #watchlist-view .watch-card-flow b {
+    font: inherit !important;
+  }
+
+  body #watchlist-view .watch-remove,
+  body.fuman-light-theme #watchlist-view .watch-remove {
+    width: 32px !important;
+    height: 32px !important;
+    margin: -4px -4px 0 0 !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    background: transparent !important;
+    color: #6b7280 !important;
+    font-size: 30px !important;
+    font-weight: 400 !important;
+    line-height: 1 !important;
+    box-shadow: none !important;
+  }
+}
+
 #watchlist-view .member-lock-host > :not(.member-lock-overlay),
 #watchlist-view.member-lock-host > :not(.member-lock-overlay),
 #watchlist-view.member-locked-view > :not(.member-lock-overlay) {
@@ -1309,6 +1546,225 @@ body::after {
 
 #watchlist-view .member-lock-overlay {
   display: none !important;
+}
+
+/* mobile-watchlist-terminal-critical-20260611 */
+@media (max-width: 760px), (orientation: landscape) and (max-height: 430px) and (max-width: 900px) {
+  body #watchlist-view,
+  body.fuman-light-theme #watchlist-view,
+  body #watchlist-view .watchlist-layout,
+  body.fuman-light-theme #watchlist-view .watchlist-layout {
+    background:
+      linear-gradient(rgba(18, 31, 52, 0.34) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(18, 31, 52, 0.34) 1px, transparent 1px),
+      #080b14 !important;
+    background-size: 74px 74px, 74px 74px, auto !important;
+    color: #f4f7ff !important;
+  }
+
+  body #watchlist-view {
+    padding-bottom: 78px !important;
+    overflow-x: hidden !important;
+  }
+
+  body #watchlist-view .page-header {
+    padding: 0 14px 16px !important;
+    background: transparent !important;
+    border: 0 !important;
+  }
+
+  body #watchlist-view .watchlist-entry-card,
+  body.fuman-light-theme #watchlist-view .watchlist-entry-card {
+    display: grid !important;
+    gap: 48px !important;
+    width: calc(100vw - 28px) !important;
+    height: auto !important;
+    min-height: 174px !important;
+    padding: 28px 0 0 !important;
+    border: 1px solid rgba(15, 180, 185, 0.42) !important;
+    border-radius: 8px !important;
+    background: rgba(4, 19, 28, 0.74) !important;
+    box-shadow: inset 0 0 0 1px rgba(9, 95, 111, 0.24) !important;
+  }
+
+  body #watchlist-view .watchlist-entry-card::before {
+    content: attr(data-watch-status);
+    display: block;
+    padding: 0 42px;
+    color: #d9e6ff;
+    font-size: 28px;
+    font-weight: 900;
+    line-height: 1.6;
+  }
+
+  body #watchlist-view .watchlist-entry-copy {
+    display: none !important;
+  }
+
+  body #watchlist-view .watchlist-entry-form,
+  body.fuman-light-theme #watchlist-view .watchlist-entry-form {
+    display: grid !important;
+    grid-template-columns: 1fr !important;
+    gap: 4px !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    background: transparent !important;
+    box-shadow: none !important;
+  }
+
+  body #watchlist-view .watchlist-entry-form::before {
+    content: "股票代碼";
+    color: #d7d9e6;
+    font-size: 18px;
+    font-weight: 600;
+    line-height: 1.1;
+  }
+
+  body #watchlist-view .watchlist-entry-input,
+  body #watchlist-view .watchlist-entry-form #watchlist-search-input,
+  body.fuman-light-theme #watchlist-view .watchlist-entry-form #watchlist-search-input {
+    width: 100% !important;
+    height: 38px !important;
+    min-height: 38px !important;
+    padding: 0 12px !important;
+    border: 1px solid rgba(85, 99, 132, 0.78) !important;
+    border-radius: 0 !important;
+    background: #02030a !important;
+    color: #f4f7ff !important;
+    font-size: 18px !important;
+    font-weight: 500 !important;
+    box-shadow: none !important;
+  }
+
+  body #watchlist-view .watchlist-entry-add,
+  body.fuman-light-theme #watchlist-view .watchlist-entry-add {
+    width: 124px !important;
+    height: 124px !important;
+    min-height: 124px !important;
+    border: 0 !important;
+    border-radius: 20px !important;
+    background: #f45108 !important;
+    color: #2c4355 !important;
+    font-size: 58px !important;
+    font-weight: 950 !important;
+    line-height: 1 !important;
+    box-shadow: 0 14px 28px rgba(244, 81, 8, 0.18) !important;
+  }
+
+  body #watchlist-view .watchlist-stock-list {
+    display: grid !important;
+    gap: 0 !important;
+    padding: 0 14px 18px !important;
+  }
+
+  body #watchlist-view .watchlist-stock-list::after {
+    content: "點選股票查看 AI 個股判讀";
+    display: block;
+    margin: 26px 0 0;
+    padding: 14px 0 68px;
+    border-top: 1px solid rgba(100, 111, 142, 0.38);
+    border-bottom: 1px solid rgba(100, 111, 142, 0.26);
+    color: #f4f7ff;
+    font-size: 29px;
+    font-weight: 500;
+    line-height: 1.25;
+  }
+
+  body #watchlist-view .watchlist-card,
+  body.fuman-light-theme #watchlist-view .watchlist-card {
+    display: block !important;
+    min-height: 0 !important;
+    margin: 0 0 28px !important;
+    padding: 0 !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    color: #f4f7ff !important;
+  }
+
+  body #watchlist-view .watch-card-title {
+    gap: 8px !important;
+    align-items: baseline !important;
+    white-space: nowrap !important;
+  }
+
+  body #watchlist-view .watch-code,
+  body #watchlist-view .watch-name,
+  body #watchlist-view .watch-market-badge,
+  body.fuman-light-theme #watchlist-view .watch-code,
+  body.fuman-light-theme #watchlist-view .watch-name,
+  body.fuman-light-theme #watchlist-view .watch-market-badge {
+    min-height: 0 !important;
+    padding: 0 !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    color: #f4f7ff !important;
+    font-size: 34px !important;
+    font-weight: 500 !important;
+    line-height: 1.25 !important;
+  }
+
+  body #watchlist-view .watch-card-price {
+    gap: 10px !important;
+    margin-top: 4px !important;
+  }
+
+  body #watchlist-view .watch-card-price > span,
+  body.fuman-light-theme #watchlist-view .watch-card-price > span {
+    color: #f4f7ff !important;
+    font-size: 34px !important;
+    font-weight: 500 !important;
+    line-height: 1.25 !important;
+  }
+
+  body #watchlist-view .watch-card-price small {
+    font-size: 26px !important;
+    font-weight: 500 !important;
+    line-height: 1.25 !important;
+  }
+
+  body #watchlist-view .watch-card-flow {
+    display: flex !important;
+    gap: 30px !important;
+    align-items: baseline !important;
+    margin-top: 4px !important;
+    padding-top: 0 !important;
+    border-top: 0 !important;
+    color: #f4f7ff !important;
+    font-size: 33px !important;
+    font-weight: 500 !important;
+    line-height: 1.35 !important;
+  }
+
+  body #watchlist-view .watch-card-flow span {
+    color: #f4f7ff !important;
+    white-space: nowrap !important;
+  }
+
+  body #watchlist-view .watch-card-flow b {
+    font: inherit !important;
+  }
+
+  body #watchlist-view .watch-remove,
+  body.fuman-light-theme #watchlist-view .watch-remove {
+    display: grid !important;
+    place-items: center !important;
+    width: 70px !important;
+    height: 42px !important;
+    margin: 14px 0 0 !important;
+    border: 2px solid #000000 !important;
+    border-radius: 20px !important;
+    background: #2a2a31 !important;
+    color: #ffffff !important;
+    font-size: 28px !important;
+    font-weight: 900 !important;
+    line-height: 1 !important;
+  }
 }
 
 .member-lock-overlay {
