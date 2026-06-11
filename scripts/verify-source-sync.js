@@ -14,6 +14,7 @@ const KEY_FILES = [
   "terminal-chip-flow.js",
   "terminal-warrant-flow.js",
   "terminal-watchlist-module.js",
+  "terminal-watchlist.css",
   "data/data-manifest.json",
   "data/terminal-home-bundle.json",
   "data/institution-latest.json",

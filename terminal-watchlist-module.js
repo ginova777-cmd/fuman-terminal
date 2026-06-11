@@ -46,6 +46,15 @@
       watchlistView?.classList.toggle("watchlist-detail-open", Boolean(open));
       document.body.classList.toggle("watchlist-detail-open", Boolean(open));
     }
+
+    function updateWatchlistEntryStatus() {
+      const card = document.querySelector("#watchlist-view .watchlist-entry-card");
+      if (!card) return;
+      const now = new Date();
+      const dateText = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}-${String(now.getDate()).padStart(2,"0")}`;
+      const timeText = now.toLocaleTimeString("zh-TW", {hour12:false});
+      card.dataset.watchStatus = `模式：自選股｜即時/盤後資料｜資料日期：${dateText}｜今日：${dateText}｜更新：${timeText}`;
+    }
     
     function ensureWatchlistAnalysisStyles() {
       loadFumanStyle("terminal-watchlist.css", "watchlist-analysis-styles");
@@ -870,6 +879,7 @@
     async function renderWatchlist() {
       if (!isViewActive("watchlist") || !isTerminalUnlocked()) return;
       setWatchlistDetailOpen(false);
+      updateWatchlistEntryStatus();
       const list = getWatchlist();
       if (!list.length) {
         const candidates = latestStocks.slice(0, 80);
@@ -889,7 +899,9 @@
                 <span id="wprice-${stock.code}">${stock.close ? stock.close.toLocaleString("zh-TW") : "--"}</span>
                 <small id="wchange-${stock.code}" class="${stock.percent >= 0 ? "watch-up" : "watch-down"}">${pctText(stock.percent || 0)}</small>
               </div>
-              <div class="watch-card-flow" id="winst-${stock.code}">點選查看 AI 個股判讀</div>
+              <div class="watch-card-flow" id="winst-${stock.code}">
+                <span>點選股票查看 AI 個股判讀</span>
+              </div>
             </div>
           </div>
         `).join("");
@@ -907,7 +919,8 @@
                 <small id="wchange-${item.code}">載入中...</small>
               </div>
               <div class="watch-card-flow" id="winst-${item.code}">
-                外資 -- 　投信 --
+                <span>外資 <b>--</b></span>
+                <span>投信 <b>--</b></span>
               </div>
             </div>
             <button class="watch-remove" type="button" onclick="removeFromWatchlist('${item.code}')" aria-label="移除 ${item.code}">×</button>
@@ -957,9 +970,9 @@
             if (inst) {
               const fColor = inst.foreign > 0 ? "#e74c3c" : inst.foreign < 0 ? "#27ae60" : "#aaa";
               const tColor = inst.trust > 0 ? "#e74c3c" : inst.trust < 0 ? "#27ae60" : "#aaa";
-              instEl.innerHTML = `外資 <span style="color:${fColor}">${inst.foreign > 0 ? "+" : ""}${(inst.foreign/1000).toFixed(0)}k</span>　投信 <span style="color:${tColor}">${inst.trust > 0 ? "+" : ""}${(inst.trust/1000).toFixed(0)}k</span>`;
+              instEl.innerHTML = `<span>外資 <b style="color:${fColor}">${inst.foreign > 0 ? "+" : ""}${(inst.foreign/1000).toFixed(0)}k</b></span><span>投信 <b style="color:${tColor}">${inst.trust > 0 ? "+" : ""}${(inst.trust/1000).toFixed(0)}k</b></span>`;
             } else {
-              instEl.innerHTML = `外資 <span>盤後</span>　投信 <span>盤後</span>`;
+              instEl.innerHTML = `<span>外資 <b>盤後</b></span><span>投信 <b>盤後</b></span>`;
             }
           }
         });
@@ -969,6 +982,7 @@
         const now = new Date();
         watchlistRefresh.textContent = `${String(now.getMonth()+1).padStart(2,"0")}/${String(now.getDate()).padStart(2,"0")}  更新 ${now.toLocaleTimeString("zh-TW", {hour12:false})}`;
       }
+      updateWatchlistEntryStatus();
     }
     
     async function addToWatchlist() {
