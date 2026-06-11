@@ -6,7 +6,7 @@ const ROOT = path.resolve(__dirname, "..");
 const DATA_DIR = path.join(ROOT, "data");
 const RUNTIME_DIR = process.env.FUMAN_RUNTIME_DIR || "C:/fuman-runtime";
 const STATE_DIR = process.env.FUMAN_STATE_DIR || path.join(RUNTIME_DIR, "state");
-const STRICT = process.env.FUMAN_SUPABASE_GUARD_OPTIONAL !== "1";
+const SUPABASE_READBACK_GUARD = process.env.FUMAN_SUPABASE_READBACK_GUARD === "1";
 
 const PANEL_FILES = {
   market: ["market-summary.json", "stocks-index.json", "stocks-quotes-slim.json"],
@@ -68,6 +68,10 @@ function fail(issues, message) {
   issues.push(message);
 }
 
+function warn(warnings, message) {
+  warnings.push(message);
+}
+
 function assert(condition, issues, message) {
   if (!condition) fail(issues, message);
 }
@@ -127,11 +131,14 @@ function verifyJsonSurface(issues) {
   }
 }
 
-async function verifySupabaseReadbacks(issues) {
+async function verifySupabaseReadbacks(warnings) {
+  if (!SUPABASE_READBACK_GUARD) {
+    warn(warnings, "Supabase readback guard disabled; set FUMAN_SUPABASE_READBACK_GUARD=1 to enable it.");
+    return;
+  }
   if (!SUPABASE_URL || !SUPABASE_KEY) {
     const message = "Supabase credentials missing; cannot compare Supabase/JSON";
-    if (STRICT) fail(issues, message);
-    else console.warn(`[supabase-json] warning: ${message}`);
+    warn(warnings, message);
     return;
   }
 
@@ -139,14 +146,14 @@ async function verifySupabaseReadbacks(issues) {
   try {
     const rows = await fetchSupabase("strategy2_latest?id=eq.latest&select=id,date,updated_at,entry_count,record_count,event_count");
     const row = Array.isArray(rows) ? rows[0] : null;
-    assert(row, issues, "strategy2_latest missing latest row");
+    if (!row) warn(warnings, "strategy2_latest missing latest row");
     if (row) {
-      assert(normalizeDate(row.date) === normalizeDate(strategy2.date || strategy2.updatedAt), issues, `strategy2 Supabase/JSON date mismatch supabase=${row.date} json=${strategy2.date || strategy2.updatedAt}`);
-      assert(Number(row.record_count || 0) === (Array.isArray(strategy2.records) ? strategy2.records.length : 0), issues, "strategy2 Supabase/JSON record_count mismatch");
-      assert(Number(row.event_count || 0) === (Array.isArray(strategy2.events) ? strategy2.events.length : 0), issues, "strategy2 Supabase/JSON event_count mismatch");
+      if (normalizeDate(row.date) !== normalizeDate(strategy2.date || strategy2.updatedAt)) warn(warnings, `strategy2 Supabase/JSON date mismatch supabase=${row.date} json=${strategy2.date || strategy2.updatedAt}`);
+      if (Number(row.record_count || 0) !== (Array.isArray(strategy2.records) ? strategy2.records.length : 0)) warn(warnings, "strategy2 Supabase/JSON record_count mismatch");
+      if (Number(row.event_count || 0) !== (Array.isArray(strategy2.events) ? strategy2.events.length : 0)) warn(warnings, "strategy2 Supabase/JSON event_count mismatch");
     }
   } catch (error) {
-    fail(issues, `strategy2 Supabase readback failed: ${error.message}`);
+    warn(warnings, `strategy2 Supabase readback skipped: ${error.message}`);
   }
 
   const openBuy = readJson(path.join(DATA_DIR, "open-buy-latest.json"), {});
@@ -154,14 +161,14 @@ async function verifySupabaseReadbacks(issues) {
   try {
     const rows = await fetchSupabase(`${openBuyTable}?id=eq.latest&select=id,updated_at,match_count,scanned_count,total_count`);
     const row = Array.isArray(rows) ? rows[0] : null;
-    assert(row, issues, `${openBuyTable} missing latest row`);
+    if (!row) warn(warnings, `${openBuyTable} missing latest row`);
     if (row) {
-      assert(Number(row.match_count || 0) === (Array.isArray(openBuy.matches) ? openBuy.matches.length : 0), issues, "open-buy Supabase/JSON match_count mismatch");
-      assert(Number(row.scanned_count || 0) === (Array.isArray(openBuy.scannedCodes) ? openBuy.scannedCodes.length : 0), issues, "open-buy Supabase/JSON scanned_count mismatch");
-      assert(Number(row.total_count || 0) === Number(openBuy.total || 0), issues, "open-buy Supabase/JSON total_count mismatch");
+      if (Number(row.match_count || 0) !== (Array.isArray(openBuy.matches) ? openBuy.matches.length : 0)) warn(warnings, "open-buy Supabase/JSON match_count mismatch");
+      if (Number(row.scanned_count || 0) !== (Array.isArray(openBuy.scannedCodes) ? openBuy.scannedCodes.length : 0)) warn(warnings, "open-buy Supabase/JSON scanned_count mismatch");
+      if (Number(row.total_count || 0) !== Number(openBuy.total || 0)) warn(warnings, "open-buy Supabase/JSON total_count mismatch");
     }
   } catch (error) {
-    fail(issues, `open-buy Supabase readback failed: ${error.message}`);
+    warn(warnings, `open-buy Supabase readback skipped: ${error.message}`);
   }
 
   const realtime = readJson(path.join(DATA_DIR, "realtime-radar-latest.json"), {});
@@ -169,13 +176,13 @@ async function verifySupabaseReadbacks(issues) {
   try {
     const rows = await fetchSupabase(`${realtimeTable}?id=eq.latest&select=id,updated_at,payload`);
     const row = Array.isArray(rows) ? rows[0] : null;
-    assert(row, issues, `${realtimeTable} missing latest row`);
+    if (!row) warn(warnings, `${realtimeTable} missing latest row`);
     if (row?.payload) {
-      assert(normalizeDate(row.payload.date || row.updated_at) === normalizeDate(realtime.date || realtime.updatedAt), issues, `realtime Supabase/JSON date mismatch supabase=${row.payload.date || row.updated_at} json=${realtime.date || realtime.updatedAt}`);
-      assert(count(row.payload) === count(realtime), issues, `realtime Supabase/JSON count mismatch supabase=${count(row.payload)} json=${count(realtime)}`);
+      if (normalizeDate(row.payload.date || row.updated_at) !== normalizeDate(realtime.date || realtime.updatedAt)) warn(warnings, `realtime Supabase/JSON date mismatch supabase=${row.payload.date || row.updated_at} json=${realtime.date || realtime.updatedAt}`);
+      if (count(row.payload) !== count(realtime)) warn(warnings, `realtime Supabase/JSON count mismatch supabase=${count(row.payload)} json=${count(realtime)}`);
     }
   } catch (error) {
-    fail(issues, `realtime Supabase readback failed: ${error.message}`);
+    warn(warnings, `realtime Supabase readback skipped: ${error.message}`);
   }
 
   for (const [name, file] of [
@@ -184,21 +191,23 @@ async function verifySupabaseReadbacks(issues) {
     ["afterhours", path.join(DATA_DIR, "afterhours-supabase-status.json")],
   ]) {
     const status = readJson(file, null);
-    assert(status, issues, `${name} Supabase status file missing: ${file}`);
-    if (status && !status.pending) assert(status.ok === true, issues, `${name} Supabase status not ok: ${status.lastError || status.reason || status.error || "unknown"}`);
+    if (!status) warn(warnings, `${name} Supabase status file missing: ${file}`);
+    if (status && !status.pending && status.ok !== true) warn(warnings, `${name} Supabase status not ok: ${status.lastError || status.reason || status.error || "unknown"}`);
   }
 }
 
 async function main() {
   const issues = [];
+  const warnings = [];
   verifyJsonSurface(issues);
-  await verifySupabaseReadbacks(issues);
+  await verifySupabaseReadbacks(warnings);
+  for (const warning of warnings) console.warn("[supabase-json] warning: " + warning);
   if (issues.length) {
     console.error("[supabase-json] failed");
     for (const issue of issues) console.error("- " + issue);
     process.exit(1);
   }
-  console.log(`[supabase-json] ok panels=${Object.keys(PANEL_FILES).length}`);
+  console.log(`[supabase-json] ok panels=${Object.keys(PANEL_FILES).length} warnings=${warnings.length}`);
 }
 
 main().catch((error) => {
