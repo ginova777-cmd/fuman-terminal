@@ -91,17 +91,6 @@ if (-not (Test-Path -LiteralPath $syncScript)) {
   exit 1
 }
 
-Write-FlowLog "Flow cache files written locally; publishing to terminal now"
-& powershell.exe -NoProfile -ExecutionPolicy Bypass -File $syncScript -Scope flow >> $log 2>&1
-$syncExit = $LASTEXITCODE
-if ($syncExit -ne 0) {
-  Write-FlowLog "Flow cache publish failed with exit code $syncExit"
-  Write-FlowHealth "publish" "failed" "Flow cache publish failed" @{ exitCode = $syncExit; log = $log }
-  Write-FlowHealth "flow" "failed" "Flow stopped at publish" @{ stage = "publish"; exitCode = $syncExit; log = $log }
-  exit $syncExit
-}
-Write-FlowHealth "publish" "ok" "Flow cache published to terminal source" @{ exitCode = 0; log = $log }
-
 $freshnessExit = Invoke-FlowFreshnessVerification
 if ($freshnessExit -ne 0) {
   Write-FlowLog "Data freshness verification failed with exit code $freshnessExit"
@@ -119,6 +108,17 @@ if ($supabaseExit -ne 0) {
   exit $supabaseExit
 }
 Write-FlowHealth "supabase" "ok" "Afterhours Supabase verification passed" @{ exitCode = 0; log = $log }
+Write-FlowLog "Flow cache files written locally; publishing to terminal now"
+& powershell.exe -NoProfile -ExecutionPolicy Bypass -File $syncScript -Scope flow >> $log 2>&1
+$syncExit = $LASTEXITCODE
+if ($syncExit -ne 0) {
+  Write-FlowLog "Flow cache publish failed with exit code $syncExit"
+  Write-FlowHealth "publish" "failed" "Flow cache publish failed" @{ exitCode = $syncExit; log = $log }
+  Write-FlowHealth "flow" "failed" "Flow stopped at publish" @{ stage = "publish"; exitCode = $syncExit; log = $log }
+  exit $syncExit
+}
+Write-FlowHealth "publish" "ok" "Flow cache published to terminal source" @{ exitCode = 0; log = $log }
+
 
 $institution = Read-Json "C:\fuman-runtime\data\institution-latest.json"
 $warrant = Read-Json "C:\fuman-runtime\data\warrant-flow-latest.json"

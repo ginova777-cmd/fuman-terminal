@@ -20,6 +20,7 @@
     "sync:source": "node scripts/sync-main-deploy-source.js",
     "verify:version": "node scripts/verify-version-consistency.js",
     "predeploy": "node scripts/prepare-deploy.js",
+    "postdeploy": "node --use-system-ca scripts/verify-live-version.js --retry",
     "guard:source": "node scripts/guard-source-tree.js",
     "verify:live-version": "node --use-system-ca scripts/verify-live-version.js",
     "verify:bump": "node scripts/verify-version-bump-needed.js",

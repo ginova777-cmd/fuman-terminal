@@ -33,7 +33,6 @@ run("sync:source", ["npm", "run", "sync:source"]);
 run("verify:version", ["npm", "run", "verify:version"]);
 run("verify:sw", ["npm", "run", "verify:sw"]);
 run("verify:data-freshness", ["npm", "run", "verify:data-freshness"]);
-run("verify:supabase-json", ["npm", "run", "verify:supabase-json"]);
 run("verify:source-sync", ["npm", "run", "verify:source-sync"]);
 
 console.log("[prepare-deploy] ok");

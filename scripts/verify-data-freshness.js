@@ -6,6 +6,7 @@ const ROOT = path.resolve(__dirname, "..");
 const BASE_URL = (process.env.FUMAN_VERIFY_BASE_URL || "https://fuman-terminal.vercel.app").replace(/\/+$/, "");
 const LIVE = process.argv.includes("--live") || process.env.FUMAN_DATA_FRESHNESS_LIVE === "1";
 const WRITE_REPORT = process.argv.includes("--write") || process.env.FUMAN_WRITE_FRESHNESS_REPORT === "1";
+const LOCAL_DATA_DIR = process.env.FUMAN_DATA_DIR || path.join(ROOT, "data");
 
 const TARGETS = [
   { name: "data-manifest", file: "data/data-manifest.json", minCount: 25 },
@@ -43,6 +44,11 @@ function fetchText(pathname, timeoutMs = 20000) {
 }
 
 function readLocal(file) {
+  const normalized = String(file || "").replace(/\\/g, "/");
+  const dataPrefix = "data/";
+  if (normalized.startsWith(dataPrefix)) {
+    return fs.readFileSync(path.join(LOCAL_DATA_DIR, normalized.slice(dataPrefix.length)), "utf8");
+  }
   return fs.readFileSync(path.join(ROOT, file), "utf8");
 }
 

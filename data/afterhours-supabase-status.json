@@ -1,7 +1,55 @@
 {
-  "ok": false,
+  "ok": true,
   "sourceName": "fuman_afterhours_flow",
-  "checkedAt": "",
-  "pending": true,
-  "message": "afterhours Supabase verification has not run yet"
+  "checkedAt": "2026-06-11T16:23:52.216Z",
+  "required": [
+    "institution",
+    "warrant"
+  ],
+  "optional": [
+    "cb"
+  ],
+  "sources": {
+    "institution": {
+      "ok": true,
+      "required": true,
+      "name": "institution",
+      "label": "買賣超",
+      "file": "institution-latest.json",
+      "count": 1880,
+      "tradeDate": "20260611",
+      "updatedAt": "2026-06-11T13:20:43.874Z",
+      "hash": "eb246e3f75477f7fc00883fede206984bef831186b070ab156c14be16d401a09",
+      "error": ""
+    },
+    "warrant": {
+      "ok": true,
+      "required": true,
+      "name": "warrant",
+      "label": "權證走向",
+      "file": "warrant-flow-latest.json",
+      "count": 120,
+      "tradeDate": "20260611",
+      "updatedAt": "2026-06-11T12:50:30.296Z",
+      "hash": "a0e24e9ceb5e1e5345241f50ecd972e0f9ec3c24004ae9b5b177fd31e749eff1",
+      "error": ""
+    },
+    "cb": {
+      "ok": true,
+      "required": false,
+      "name": "cb",
+      "label": "CB",
+      "file": "cb-detect-latest.json",
+      "count": 25,
+      "tradeDate": "20260611",
+      "updatedAt": "2026-06-11T13:45:14.354Z",
+      "hash": "3db59e0a01307c31f5b823f2c421b385923c8c45150755c2a96c7965215ac46a",
+      "error": ""
+    }
+  },
+  "supabase": {
+    "ok": true,
+    "table": "source_status",
+    "readbackUpdatedAt": "2026-06-11T16:23:52.217+00:00"
+  }
 }

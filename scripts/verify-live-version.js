@@ -5,6 +5,9 @@ const crypto = require("crypto");
 
 const ROOT = path.resolve(__dirname, "..");
 const BASE_URL = (process.env.FUMAN_VERIFY_BASE_URL || "https://fuman-terminal.vercel.app").replace(/\/+$/, "");
+const RETRY = process.argv.includes("--retry");
+const ATTEMPTS = Number(process.env.FUMAN_VERIFY_LIVE_ATTEMPTS || (RETRY ? 12 : 1));
+const DELAY_MS = Number(process.env.FUMAN_VERIFY_LIVE_DELAY_MS || 10000);
 
 function read(file) {
   return fs.readFileSync(path.join(ROOT, file), "utf8");
@@ -35,15 +38,27 @@ function detectLocalVersion() {
 }
 
 async function expectOk(name, pathname, check) {
-  const result = await fetchText(pathname);
+  const fresh = pathname.includes("?") ? `&fresh=${Date.now()}` : `?fresh=${Date.now()}`;
+  const result = await fetchText(`${pathname}${fresh}`);
   if (result.status < 200 || result.status >= 300) throw new Error(`${name} HTTP ${result.status}`);
   if (!check(result.body)) throw new Error(`${name} check failed`);
   console.log(`[live-version] ${name} ok`);
   return result.body;
 }
 
-async function main() {
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function verifyOnce() {
   const version = detectLocalVersion();
+  await expectOk("version-json", "/version.json", (body) => {
+    try {
+      return JSON.parse(body)?.version === version;
+    } catch {
+      return false;
+    }
+  });
   const home = await expectOk("home", "/", (body) => body.includes(`terminal-core.js?v=${version}`) && body.includes(`styles.css?v=${version}`));
   await expectOk("core", `/terminal-core.js?v=${version}`, (body) => body.includes(`const version = "${version}"`) && body.includes("FUMAN_TERMINAL_VERSION"));
   await expectOk("bootstrap", `/terminal.js?v=${version}`, (body) => body.includes("terminal-app.js"));
@@ -55,6 +70,24 @@ async function main() {
     throw new Error(`terminal-app hash mismatch local=${localAppHash} live=${liveAppHash}`);
   }
   console.log(`[live-version] ok version=${version} terminal-app=${liveAppHash}`);
+}
+
+async function main() {
+  let lastError = null;
+  const attempts = Math.max(1, ATTEMPTS);
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    try {
+      if (attempt > 1) console.log(`[live-version] retry ${attempt}/${attempts}`);
+      await verifyOnce();
+      return;
+    } catch (error) {
+      lastError = error;
+      if (attempt >= attempts) break;
+      console.warn(`[live-version] waiting for alias/version propagation: ${error.message}`);
+      await sleep(DELAY_MS);
+    }
+  }
+  throw lastError || new Error("live version verification failed");
 }
 
 main().catch((error) => {

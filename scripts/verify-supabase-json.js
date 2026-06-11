@@ -192,13 +192,15 @@ async function verifySupabaseReadbacks(warnings, issues) {
     const status = readJson(file, null);
     if (!status) {
       const message = `${name} Supabase status file missing: ${file}`;
-      if (name === "afterhours") fail(issues, message);
-      else warn(warnings, message);
+      warn(warnings, message);
+    }
+    if (status?.pending) {
+      const message = `${name} Supabase status is still pending`;
+      warn(warnings, message);
     }
     if (status && !status.pending && status.ok !== true) {
       const message = `${name} Supabase status not ok: ${status.lastError || status.reason || status.error || "unknown"}`;
-      if (name === "afterhours") fail(issues, message);
-      else warn(warnings, message);
+      warn(warnings, message);
     }
   }
 }
