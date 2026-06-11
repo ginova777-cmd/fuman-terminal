@@ -17,6 +17,36 @@ fugle_preopen_snapshot
 
 Strategies should show source errors when `source_status.updated_at` is older than 45-90 seconds or `status != ok`.
 
+Health fields must use one consistent source of truth:
+
+```text
+payload.last_quote_at
+payload.quote_age_seconds
+source_status.stale_seconds
+message quote_age_seconds
+```
+
+`quote_age_seconds` is calculated from `last_quote_at`, not from the quote cache file write time. The file age may be exposed only as `quote_cache_file_age_seconds` for debugging.
+
+Do not assume `symbols >= 1000` means healthy. Blacklist filtering can legitimately reduce active symbols. Use:
+
+```text
+raw_symbols
+active_symbols
+blacklist_count
+quotes
+quote_count
+```
+
+Recommended quote health:
+
+```text
+status = ok
+quotes >= 800
+quote_age_seconds <= 120
+active_symbols >= 500 or quotes >= 800
+```
+
 ## Fallback Rule
 
 Strategies should not continuously fallback to Fugle API.
@@ -76,6 +106,15 @@ v_fugle_intraday_1m_latest_200
 ```
 
 instead of pulling the whole `fugle_intraday_1m` table.
+
+`source_status.payload` should expose 1m coverage:
+
+```text
+intraday_1m_symbols_today
+intraday_1m_latest_candle_time
+intraday_1m_rows_today
+intraday_1m_stale_seconds
+```
 
 ## Time Rule
 

@@ -144,6 +144,16 @@ function Get-LatestIsoUtc {
   return $latest.ToString("o")
 }
 
+function Get-IsoAgeSeconds {
+  param([string]$IsoTime, [int]$FallbackSeconds = 999999)
+  try {
+    if ([string]::IsNullOrWhiteSpace($IsoTime)) { return $FallbackSeconds }
+    return [int]([math]::Max(0, ((Get-Date).ToUniversalTime() - ([datetimeoffset]::Parse($IsoTime).ToUniversalTime()).UtcDateTime).TotalSeconds))
+  } catch {
+    return $FallbackSeconds
+  }
+}
+
 function Get-PublicSlotSession {
   $now = Get-Date
   $tod = $now.TimeOfDay
@@ -151,6 +161,57 @@ function Get-PublicSlotSession {
   if ($tod -lt [TimeSpan]::Parse("09:00")) { return "preopen" }
   if ($tod -le [TimeSpan]::Parse("13:35")) { return "regular" }
   return "afterhours"
+}
+
+function Invoke-PublicSlotRestGet {
+  param([string]$PathAndQuery)
+  try {
+    $headers = @{
+      apikey = $serviceRoleKey
+      Authorization = "Bearer $serviceRoleKey"
+    }
+    $uri = "$($ProjectUrl.TrimEnd('/'))/rest/v1/$PathAndQuery"
+    return Invoke-RestMethod -Uri $uri -Method Get -Headers $headers -TimeoutSec 20 -ErrorAction Stop
+  } catch {
+    return @()
+  }
+}
+
+function Get-Intraday1mCoverageStats {
+  param([object[]]$FallbackRows = @())
+
+  $stats = @{
+    intraday_1m_symbols_today = 0
+    intraday_1m_latest_candle_time = $null
+    intraday_1m_rows_today = 0
+    intraday_1m_stale_seconds = 999999
+    intraday_1m_stats_source = "fallback_current_batch"
+  }
+
+  try {
+    $viewRows = @(Invoke-PublicSlotRestGet -PathAndQuery "v_fugle_intraday_1m_status?select=symbol,latest_candle_time,candle_count,rows_today,has_today_data&has_today_data=eq.true&limit=5000")
+    if ($viewRows.Count -gt 0) {
+      $latest = Get-LatestIsoUtc -Rows $viewRows -PropertyName "latest_candle_time"
+      $rowsToday = 0
+      foreach ($row in $viewRows) {
+        if ($null -ne $row.rows_today) { $rowsToday += [int]$row.rows_today }
+      }
+      $stats.intraday_1m_symbols_today = $viewRows.Count
+      $stats.intraday_1m_latest_candle_time = $latest
+      $stats.intraday_1m_rows_today = $rowsToday
+      $stats.intraday_1m_stale_seconds = Get-IsoAgeSeconds -IsoTime $latest
+      $stats.intraday_1m_stats_source = "v_fugle_intraday_1m_status"
+      return $stats
+    }
+  } catch {}
+
+  $latestFallback = Get-LatestIsoUtc -Rows $FallbackRows -PropertyName "candle_time"
+  $symbols = @($FallbackRows | ForEach-Object { [string]$_.symbol } | Where-Object { $_ } | Select-Object -Unique)
+  $stats.intraday_1m_symbols_today = $symbols.Count
+  $stats.intraday_1m_latest_candle_time = $latestFallback
+  $stats.intraday_1m_rows_today = @($FallbackRows).Count
+  $stats.intraday_1m_stale_seconds = Get-IsoAgeSeconds -IsoTime $latestFallback
+  return $stats
 }
 
 function Convert-VolumeToLots {
@@ -828,18 +889,28 @@ do {
     $lastQuoteAt = Get-LatestIsoUtc -Rows $quoteRows -PropertyName "updated_at"
     $combined1mRows = @($minutePayload.minuteRows) + @($direct1mPayload.rows)
     $last1mAt = Get-LatestIsoUtc -Rows $combined1mRows -PropertyName "candle_time"
+    $quoteAgeSeconds = Get-IsoAgeSeconds -IsoTime $lastQuoteAt -FallbackSeconds $age
+    $intradayStats = Get-Intraday1mCoverageStats -FallbackRows $combined1mRows
     $session = Get-PublicSlotSession
-    $status = if (($quoteRows.Count -gt 0 -and $age -le $StaleSeconds) -or $direct1mPayload.rows.Count -gt 0) { "ok" } else { "stale" }
+    $status = if ($quoteRows.Count -gt 0 -and $quoteAgeSeconds -le $StaleSeconds) { "ok" } else { "stale" }
     $blacklistCount = if ($null -ne $script:SymbolBlacklist) { $script:SymbolBlacklist.Count } else { 0 }
-    $message = "collector=$collectorState; eligible_symbols=$seeded; blacklist_symbols=$blacklistCount; quote_count=$($quoteRows.Count); quote_age_seconds=$age; preopen=$($preopenRows.Count); futopt=$($txfPayload.quotes.Count); direct_1m_attempted=$($direct1mPayload.attempted); direct_1m_rows=$($direct1mPayload.rows.Count)"
-    Write-PublicSlotSourceStatus -SourceName $StatusSourceName -Status $status -Message $message -StaleSeconds $age -Payload @{
+    $rawSymbols = $seeded + $blacklistCount
+    $message = "collector=$collectorState; raw_symbols=$rawSymbols; active_symbols=$seeded; blacklist_count=$blacklistCount; quotes=$($quoteRows.Count); quote_age_seconds=$quoteAgeSeconds; last_quote_at=$lastQuoteAt; preopen=$($preopenRows.Count); futopt=$($txfPayload.quotes.Count); intraday_1m_symbols_today=$($intradayStats.intraday_1m_symbols_today); intraday_1m_rows_today=$($intradayStats.intraday_1m_rows_today); intraday_1m_stale_seconds=$($intradayStats.intraday_1m_stale_seconds); direct_1m_attempted=$($direct1mPayload.attempted); direct_1m_rows=$($direct1mPayload.rows.Count)"
+    Write-PublicSlotSourceStatus -SourceName $StatusSourceName -Status $status -Message $message -StaleSeconds $quoteAgeSeconds -Payload @{
+      raw_symbols = $rawSymbols
+      active_symbols = $seeded
+      blacklist_count = $blacklistCount
+      quotes = $quoteRows.Count
       eligible_symbols = $seeded
       blacklist_symbols = $blacklistCount
       quote_count = $quoteRows.Count
       symbols = $seeded
-      blacklist_count = $blacklistCount
-      quotes = $quoteRows.Count
       intraday_1m_rows = $combined1mRows.Count
+      intraday_1m_symbols_today = $intradayStats.intraday_1m_symbols_today
+      intraday_1m_latest_candle_time = $intradayStats.intraday_1m_latest_candle_time
+      intraday_1m_rows_today = $intradayStats.intraday_1m_rows_today
+      intraday_1m_stale_seconds = $intradayStats.intraday_1m_stale_seconds
+      intraday_1m_stats_source = $intradayStats.intraday_1m_stats_source
       daily_volume_rows = $minutePayload.dailyRows.Count
       preopen_rows = $preopenRows.Count
       futopt_quotes = $txfPayload.quotes.Count
@@ -847,7 +918,8 @@ do {
       last_quote_at = $lastQuoteAt
       last_1m_at = $last1mAt
       last_daily_volume_date = (Get-Date).ToString("yyyy-MM-dd")
-      quote_age_seconds = $age
+      quote_age_seconds = $quoteAgeSeconds
+      quote_cache_file_age_seconds = $age
       rate_limit_count = 0
       last_429_at = $null
       session = $session

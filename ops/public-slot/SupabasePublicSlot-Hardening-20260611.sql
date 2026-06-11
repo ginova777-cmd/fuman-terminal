@@ -53,6 +53,7 @@ select
   market,
   max(candle_time) as latest_candle_time,
   count(*) as candle_count,
+  count(*) filter (where trade_date = current_date) as rows_today,
   (count(*) >= 35) as ready_ge_35,
   (count(*) >= 80) as ready_ge_80,
   (count(*) >= 200) as ready_ge_200,
