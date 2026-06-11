@@ -1,7 +1,7 @@
 {
   "ok": true,
   "source": "github-actions-official-daily",
-  "updatedAt": "2026-06-10T23:01:54.739Z",
+  "updatedAt": "2026-06-10T22:00:46.539Z",
   "generatedDate": "20260611",
   "usedDate": "20260610",
   "sourceDate": "20260610",
@@ -1972,7 +1972,7 @@
     "warningCount": 0,
     "warnings": []
   },
-  "count": 48,
+  "count": 47,
   "matches": [
     {
       "code": "3152",
@@ -2078,7 +2078,7 @@
       "volumeRank": 76,
       "volumeLots": 2895,
       "turnoverRate": 6.23,
-      "volumeRatio": 6.08,
+      "volumeRatio": 3.03,
       "inst": {
         "foreign": 977603,
         "trust": 0,
@@ -2091,10 +2091,10 @@
           "short": "量價周轉",
           "icon": "量",
           "score": 100,
-          "reason": "符合固定條件：漲幅 7.28%、成交量 2,895 張、周轉率 6.23%、量比 6.08。",
+          "reason": "符合固定條件：漲幅 7.28%、成交量 2,895 張、周轉率 6.23%、量比 3.03。",
           "volumeLots": 2895,
           "turnoverRate": 6.23,
-          "volumeRatio": 6.08
+          "volumeRatio": 3.03
         }
       ],
       "strategy4Score": 0,
@@ -2106,10 +2106,10 @@
         "short": "量價周轉",
         "icon": "量",
         "score": 100,
-        "reason": "符合固定條件：漲幅 7.28%、成交量 2,895 張、周轉率 6.23%、量比 6.08。",
+        "reason": "符合固定條件：漲幅 7.28%、成交量 2,895 張、周轉率 6.23%、量比 3.03。",
         "volumeLots": 2895,
         "turnoverRate": 6.23,
-        "volumeRatio": 6.08
+        "volumeRatio": 3.03
       }
     },
     {
@@ -2201,7 +2201,7 @@
       "volumeRank": 92,
       "volumeLots": 13304,
       "turnoverRate": 10.49,
-      "volumeRatio": 1.39,
+      "volumeRatio": 1.2,
       "inst": {
         "foreign": 2477774,
         "trust": -2000,
@@ -2214,10 +2214,10 @@
           "short": "量價周轉",
           "icon": "量",
           "score": 100,
-          "reason": "符合固定條件：漲幅 6.80%、成交量 13,304 張、周轉率 10.49%、量比 1.39。",
+          "reason": "符合固定條件：漲幅 6.80%、成交量 13,304 張、周轉率 10.49%、量比 1.20。",
           "volumeLots": 13304,
           "turnoverRate": 10.49,
-          "volumeRatio": 1.39
+          "volumeRatio": 1.2
         }
       ],
       "strategy4Score": 100,
@@ -2236,10 +2236,10 @@
         "short": "量價周轉",
         "icon": "量",
         "score": 100,
-        "reason": "符合固定條件：漲幅 6.80%、成交量 13,304 張、周轉率 10.49%、量比 1.39。",
+        "reason": "符合固定條件：漲幅 6.80%、成交量 13,304 張、周轉率 10.49%、量比 1.20。",
         "volumeLots": 13304,
         "turnoverRate": 10.49,
-        "volumeRatio": 1.39
+        "volumeRatio": 1.2
       }
     },
     {
@@ -2667,65 +2667,6 @@
         "volumeLots": 70101,
         "turnoverRate": 40.59,
         "volumeRatio": 1
-      }
-    },
-    {
-      "code": "2241",
-      "name": "艾姆勒",
-      "close": 41.55,
-      "open": 0,
-      "high": 0,
-      "low": 0,
-      "prevClose": 0,
-      "limitUp": 0,
-      "change": 1.85,
-      "percent": 4.66,
-      "value": 253665814,
-      "tradeVolume": 6079338,
-      "market": "TWSE",
-      "valueRank": 76,
-      "volumeRank": 85,
-      "volumeLots": 6079,
-      "turnoverRate": 5.81,
-      "volumeRatio": 1.11,
-      "inst": {
-        "foreign": 1155194,
-        "trust": 0,
-        "dealer": 0,
-        "total": 1148865
-      },
-      "matches": [
-        {
-          "id": "volume_turnover_breakout",
-          "short": "量價周轉",
-          "icon": "量",
-          "score": 100,
-          "reason": "符合固定條件：漲幅 4.66%、成交量 6,079 張、周轉率 5.81%、量比 1.11。",
-          "volumeLots": 6079,
-          "turnoverRate": 5.81,
-          "volumeRatio": 1.11
-        }
-      ],
-      "strategy4Score": 100,
-      "strategy4Reason": "趨勢轉強但尚未觸發突破買點；趨勢分 7/8，量比 1.50，位階 高基期。",
-      "strategy4Signals": [
-        {
-          "id": "watch_trend",
-          "short": "B觀察",
-          "icon": "B",
-          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 7/8，量比 1.50，位階 高基期。"
-        }
-      ],
-      "score": 100,
-      "activeMatch": {
-        "id": "volume_turnover_breakout",
-        "short": "量價周轉",
-        "icon": "量",
-        "score": 100,
-        "reason": "符合固定條件：漲幅 4.66%、成交量 6,079 張、周轉率 5.81%、量比 1.11。",
-        "volumeLots": 6079,
-        "turnoverRate": 5.81,
-        "volumeRatio": 1.11
       }
     },
     {

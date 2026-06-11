@@ -1,11 +1,11 @@
 {
   "ok": true,
-  "updatedAt": "2026-06-10T02:17:04.786Z",
+  "updatedAt": "2026-06-10T07:45:12.938Z",
   "risk": "low",
   "risks": [],
   "schedule": {
     "ok": true,
-    "total": 17,
+    "total": 0,
     "badCount": 0,
     "badTasks": [],
     "queryMethod": "schtasks",
@@ -24,8 +24,8 @@
         "status": "",
         "date": "",
         "count": 0,
-        "updatedAt": "2026-06-10T02:01:20.345Z",
-        "bytes": 150208
+        "updatedAt": "2026-06-10T07:31:11.393Z",
+        "bytes": 148953
       },
       {
         "file": "strategy4-summary.json",
@@ -78,8 +78,8 @@
         "status": "retired_intraday_snapshot",
         "date": "2026-06-10",
         "count": 0,
-        "updatedAt": "2026-06-10T02:16:58.692Z",
-        "bytes": 706
+        "updatedAt": "2026-06-10T07:45:02.613Z",
+        "bytes": 690
       },
       {
         "file": "performance-report.json",
@@ -87,8 +87,8 @@
         "status": "",
         "date": "",
         "count": 0,
-        "updatedAt": "2026-06-10T02:13:55.306Z",
-        "bytes": 2394
+        "updatedAt": "2026-06-10T07:31:16.702Z",
+        "bytes": 2397
       },
       {
         "file": "signal-quality-report.json",
@@ -96,8 +96,8 @@
         "status": "",
         "date": "",
         "count": 0,
-        "updatedAt": "2026-06-10T02:13:55.004Z",
-        "bytes": 795
+        "updatedAt": "2026-06-10T07:31:16.303Z",
+        "bytes": 798
       },
       {
         "file": "data-quality-report.json",
@@ -105,8 +105,8 @@
         "status": "",
         "date": "",
         "count": 0,
-        "updatedAt": "2026-06-10T02:13:55.118Z",
-        "bytes": 2002
+        "updatedAt": "2026-06-10T07:31:16.427Z",
+        "bytes": 2005
       },
       {
         "file": "data-consistency-report.json",
@@ -114,7 +114,7 @@
         "status": "",
         "date": "",
         "count": 0,
-        "updatedAt": "2026-06-10T02:13:55.202Z",
+        "updatedAt": "2026-06-10T07:31:16.524Z",
         "bytes": 316
       },
       {
@@ -123,7 +123,7 @@
         "status": "",
         "date": "",
         "count": 0,
-        "updatedAt": "2026-06-10T02:13:55.252Z",
+        "updatedAt": "2026-06-10T07:31:16.617Z",
         "bytes": 418
       }
     ]
