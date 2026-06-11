@@ -1,17 +1,17 @@
 {
   "source": "strategy2-09-to-1330-patrol",
   "date": "2026-06-11",
-  "updatedAt": "2026-06-11T03:23:08.705Z",
+  "updatedAt": "2026-06-11T03:25:44.738Z",
   "realtime": {
     "requested": 1013,
     "received": 1003,
-    "usableBeforeRescue": 1,
-    "coverageBeforeRescue": 0.001,
-    "usableAfterRescue": 1,
-    "coverageAfterRescue": 0.001,
+    "usableBeforeRescue": 3,
+    "coverageBeforeRescue": 0.003,
+    "usableAfterRescue": 3,
+    "coverageAfterRescue": 0.003,
     "unusableBreakdown": {
-      "usable": 1,
-      "stale": 1002,
+      "usable": 3,
+      "stale": 1000,
       "noTime": 0,
       "noClose": 0,
       "missing": 10
@@ -19,8 +19,8 @@
     "sourceHealth": {
       "fugle": {
         "received": 1003,
-        "usable": 1,
-        "stale": 1002,
+        "usable": 3,
+        "stale": 1000,
         "noTime": 0,
         "noClose": 0
       }
@@ -35,8 +35,8 @@
     "fugleRateLimited": false,
     "fallbackStats": {
       "fugleWs": {
-        "available": 783,
-        "used": 783
+        "available": 836,
+        "used": 836
       },
       "fugle": {
         "configured": true,
@@ -66,12 +66,12 @@
         "cooldownMs": 30000,
         "requested": 300,
         "recovered": 0,
-        "coverageBefore": 0.001,
-        "usableBefore": 1,
+        "coverageBefore": 0.003,
+        "usableBefore": 3,
         "skippedCooldown": false,
         "cooldownRemainingMs": 0,
-        "coverageAfter": 0.001,
-        "usableAfter": 1
+        "coverageAfter": 0.003,
+        "usableAfter": 3
       }
     },
     "finmindRealtimeEnabled": false,
@@ -1178,20 +1178,20 @@
     "noTimeCodes": [],
     "noCloseCodes": [],
     "missedCount": 10,
-    "coverage": 0.773,
-    "quoteCoverage": 0.001,
-    "fugleWsCoverage": 0.773,
-    "usable": 783,
-    "quoteUsable": 1,
-    "entrySourceUsable": 783,
+    "coverage": 0.8253,
+    "quoteCoverage": 0.003,
+    "fugleWsCoverage": 0.8253,
+    "usable": 836,
+    "quoteUsable": 3,
+    "entrySourceUsable": 836,
     "cachedRecovered": 0,
     "quoteCacheMaxAgeSeconds": 900,
     "entrySourceCoverageThreshold": 0.5,
     "entrySourceHealthy": true,
     "initialBatchSize": 12,
     "retryBatchSize": 4,
-    "tradable": 783,
-    "tradableByQuote": 1
+    "tradable": 836,
+    "tradableByQuote": 3
   },
   "records": [
     {
