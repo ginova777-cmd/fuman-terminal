@@ -228,6 +228,39 @@ function Get-PublicSlotPreopenSnapshot {
   Invoke-PublicSlotRead -PathAndQuery "fugle_preopen_snapshot?select=*&order=updated_at.desc&limit=$Limit"
 }
 
+function Get-PublicSlotPreopenSnapshotHistory {
+  param(
+    [string[]]$Symbols = @(),
+    [string]$TradeDate = (Get-Date).ToString("yyyy-MM-dd"),
+    [string]$Session = $null,
+    [int]$Limit = 5000
+  )
+
+  $tableOrView = "v_fugle_preopen_snapshot_history"
+  $filters = New-Object System.Collections.Generic.List[string]
+  if ($TradeDate) { $filters.Add("trade_date=eq.$TradeDate") }
+  if ($Session) { $filters.Add("session=eq.$Session") }
+  if ($Symbols.Count -gt 0) {
+    $symbolList = ($Symbols | ForEach-Object { '"' + $_ + '"' }) -join ","
+    $filters.Add("symbol=in.($symbolList)")
+  }
+
+  $query = "$tableOrView?select=*&order=symbol.asc,updated_at.desc&limit=$Limit"
+  if ($filters.Count -gt 0) {
+    $query = "$tableOrView?select=*&$($filters -join '&')&order=symbol.asc,updated_at.desc&limit=$Limit"
+  }
+
+  try {
+    return Invoke-PublicSlotRead -PathAndQuery $query
+  } catch {
+    $fallback = "fugle_preopen_snapshot_history?select=*&order=symbol.asc,observed_at.desc&limit=$Limit"
+    if ($filters.Count -gt 0) {
+      $fallback = "fugle_preopen_snapshot_history?select=*&$($filters -join '&')&order=symbol.asc,observed_at.desc&limit=$Limit"
+    }
+    return Invoke-PublicSlotRead -PathAndQuery $fallback
+  }
+}
+
 function Get-PublicSlotStockTickers {
   param([string[]]$Symbols = @(), [string]$Market = $null, [string]$StockType = $null, [int]$Limit = 5000)
 
