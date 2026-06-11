@@ -6,7 +6,7 @@ const ROOT = path.resolve(__dirname, "..");
 const DATA_DIR = path.join(ROOT, "data");
 const RUNTIME_DIR = process.env.FUMAN_RUNTIME_DIR || "C:/fuman-runtime";
 const STATE_DIR = process.env.FUMAN_STATE_DIR || path.join(RUNTIME_DIR, "state");
-const SUPABASE_READBACK_GUARD = process.env.FUMAN_SUPABASE_READBACK_GUARD === "1";
+const SUPABASE_READBACK_GUARD = process.env.FUMAN_SUPABASE_READBACK_GUARD !== "0";
 
 const PANEL_FILES = {
   market: ["market-summary.json", "stocks-index.json", "stocks-quotes-slim.json"],
@@ -37,10 +37,9 @@ function secret(name) {
 const SUPABASE_URL = (process.env.SUPABASE_URL || process.env.FUMAN_SUPABASE_URL || secret("supabase-url.txt")).replace(/\/+$/, "");
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY
   || process.env.SUPABASE_SERVICE_KEY
+  || secret("supabase-service-role-key.txt")
   || process.env.FUMAN_SUPABASE_SERVICE_KEY
   || process.env.SUPABASE_ANON_KEY
-  || process.env.FUMAN_SUPABASE_ANON_KEY
-  || secret("supabase-service-role-key.txt")
   || secret("supabase-anon-key.txt");
 
 function normalizeDate(value) {
@@ -131,9 +130,9 @@ function verifyJsonSurface(issues) {
   }
 }
 
-async function verifySupabaseReadbacks(warnings) {
+async function verifySupabaseReadbacks(warnings, issues) {
   if (!SUPABASE_READBACK_GUARD) {
-    warn(warnings, "Supabase readback guard disabled; set FUMAN_SUPABASE_READBACK_GUARD=1 to enable it.");
+    warn(warnings, "Supabase readback guard disabled by FUMAN_SUPABASE_READBACK_GUARD=0.");
     return;
   }
   if (!SUPABASE_URL || !SUPABASE_KEY) {
@@ -191,8 +190,16 @@ async function verifySupabaseReadbacks(warnings) {
     ["afterhours", path.join(DATA_DIR, "afterhours-supabase-status.json")],
   ]) {
     const status = readJson(file, null);
-    if (!status) warn(warnings, `${name} Supabase status file missing: ${file}`);
-    if (status && !status.pending && status.ok !== true) warn(warnings, `${name} Supabase status not ok: ${status.lastError || status.reason || status.error || "unknown"}`);
+    if (!status) {
+      const message = `${name} Supabase status file missing: ${file}`;
+      if (name === "afterhours") fail(issues, message);
+      else warn(warnings, message);
+    }
+    if (status && !status.pending && status.ok !== true) {
+      const message = `${name} Supabase status not ok: ${status.lastError || status.reason || status.error || "unknown"}`;
+      if (name === "afterhours") fail(issues, message);
+      else warn(warnings, message);
+    }
   }
 }
 
@@ -200,7 +207,7 @@ async function main() {
   const issues = [];
   const warnings = [];
   verifyJsonSurface(issues);
-  await verifySupabaseReadbacks(warnings);
+  await verifySupabaseReadbacks(warnings, issues);
   for (const warning of warnings) console.warn("[supabase-json] warning: " + warning);
   if (issues.length) {
     console.error("[supabase-json] failed");

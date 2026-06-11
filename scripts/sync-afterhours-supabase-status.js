@@ -41,8 +41,8 @@ const SUPABASE_URL = (
 const SUPABASE_SERVICE_ROLE_KEY = (
   process.env.SUPABASE_SERVICE_ROLE_KEY ||
   process.env.SUPABASE_SERVICE_KEY ||
-  process.env.FUMAN_SUPABASE_SERVICE_KEY ||
-  readSecret("supabase-service-role-key.txt")
+  readSecret("supabase-service-role-key.txt") ||
+  process.env.FUMAN_SUPABASE_SERVICE_KEY
 );
 const SUPABASE_READ_KEY = (
   process.env.SUPABASE_ANON_KEY ||
