@@ -76,6 +76,36 @@ function Invoke-PublicSlotUpsert {
   }
 }
 
+function Test-PublicSlotColumnAvailable {
+  param(
+    [Parameter(Mandatory = $true)][string]$Table,
+    [Parameter(Mandatory = $true)][string]$Column
+  )
+
+  $cacheKey = "$Table.$Column"
+  if ($null -eq $script:PublicSlotColumnCache) { $script:PublicSlotColumnCache = @{} }
+  if ($script:PublicSlotColumnCache.ContainsKey($cacheKey)) {
+    return [bool]$script:PublicSlotColumnCache[$cacheKey]
+  }
+
+  try {
+    $headers = Get-PublicSlotWriteHeaders
+    $uri = "$script:SupabaseUrl/rest/v1/$Table`?select=$Column&limit=0"
+    Invoke-RestMethod -Uri $uri -Method Get -Headers $headers -TimeoutSec 10 -ErrorAction Stop | Out-Null
+    $script:PublicSlotColumnCache[$cacheKey] = $true
+    return $true
+  } catch {
+    $script:PublicSlotColumnCache[$cacheKey] = $false
+    return $false
+  }
+}
+
+function Get-PublicSlotNullableLots {
+  param([object]$Value)
+  if ($null -eq $Value -or [string]::IsNullOrWhiteSpace([string]$Value)) { return $null }
+  return ConvertTo-PublicSlotLots $Value
+}
+
 function Write-PublicSlotSourceStatus {
   param(
     [Parameter(Mandatory = $true)][string]$SourceName,
@@ -126,10 +156,16 @@ function Write-PublicSlotQuotesLive {
   param([Parameter(Mandatory = $true)][object[]]$Rows)
 
   $now = ConvertTo-IsoUtc
+  $hasCumulativeBidAskColumns = (Test-PublicSlotColumnAvailable -Table "fugle_quotes_live" -Column "cumulative_bid_volume") -and
+    (Test-PublicSlotColumnAvailable -Table "fugle_quotes_live" -Column "cumulative_ask_volume") -and
+    (Test-PublicSlotColumnAvailable -Table "fugle_quotes_live" -Column "cumulative_bid_ask_volume")
   $normalized = foreach ($row in $Rows) {
     $ask = if ($null -ne $row.ask_volume) { ConvertTo-PublicSlotLots $row.ask_volume } elseif ($null -ne $row.askVolume) { ConvertTo-PublicSlotLots $row.askVolume } else { 0 }
     $bid = if ($null -ne $row.bid_volume) { ConvertTo-PublicSlotLots $row.bid_volume } elseif ($null -ne $row.bidVolume) { ConvertTo-PublicSlotLots $row.bidVolume } else { 0 }
-    @{
+    $cumBid = if ($null -ne $row.cumulative_bid_volume) { Get-PublicSlotNullableLots $row.cumulative_bid_volume } elseif ($null -ne $row.cumulativeBidVolume) { Get-PublicSlotNullableLots $row.cumulativeBidVolume } else { $null }
+    $cumAsk = if ($null -ne $row.cumulative_ask_volume) { Get-PublicSlotNullableLots $row.cumulative_ask_volume } elseif ($null -ne $row.cumulativeAskVolume) { Get-PublicSlotNullableLots $row.cumulativeAskVolume } else { $null }
+    $cumTotal = if ($null -ne $row.cumulative_bid_ask_volume) { Get-PublicSlotNullableLots $row.cumulative_bid_ask_volume } elseif ($null -ne $row.cumulativeBidAskVolume) { Get-PublicSlotNullableLots $row.cumulativeBidAskVolume } elseif ($null -ne $cumBid -and $null -ne $cumAsk) { $cumBid + $cumAsk } else { $null }
+    $out = @{
       symbol = [string]$row.symbol
       name = $row.name
       market = $row.market
@@ -155,6 +191,12 @@ function Write-PublicSlotQuotesLive {
       is_trial = if ($null -ne $row.is_trial) { $row.is_trial } else { $row.isTrial }
       payload = if ($row.payload) { $row.payload } else { @{ volume_unit = "lots"; time_standard = "UTC" } }
     }
+    if ($hasCumulativeBidAskColumns) {
+      $out.cumulative_bid_volume = $cumBid
+      $out.cumulative_ask_volume = $cumAsk
+      $out.cumulative_bid_ask_volume = $cumTotal
+    }
+    $out
   }
 
   Invoke-PublicSlotUpsert -Table "fugle_quotes_live" -OnConflict "symbol" -Rows @($normalized)

@@ -83,6 +83,16 @@ function Get-Number {
   return 0
 }
 
+function Get-NullableNumber {
+  param([object[]]$Values)
+  foreach ($value in @($Values)) {
+    if ($null -eq $value -or [string]::IsNullOrWhiteSpace([string]$value)) { continue }
+    $number = Get-Number $value
+    if ($number -ne 0) { return $number }
+  }
+  return $null
+}
+
 function Get-StopTimeToday {
   param([string]$HHmm)
   try {
@@ -557,6 +567,30 @@ function Convert-QuotesToRows {
     $updatedAt = Get-QuoteTimestamp -Quote $quote -Payload $Payload
     $bidVolume = [int](Convert-VolumeToLots $quote.bidSize)
     $askVolume = [int](Convert-VolumeToLots $quote.askSize)
+    $cumulativeBidVolume = Get-NullableNumber @(
+      $quote.cumulativeBidVolume,
+      $quote.cumulative_bid_volume,
+      $quote.bidTradeVolume,
+      $quote.bid_trade_volume,
+      $quote.innerVolume,
+      $quote.inner_volume,
+      $quote.totalBidVolume,
+      $quote.total_bid_volume
+    )
+    $cumulativeAskVolume = Get-NullableNumber @(
+      $quote.cumulativeAskVolume,
+      $quote.cumulative_ask_volume,
+      $quote.askTradeVolume,
+      $quote.ask_trade_volume,
+      $quote.outerVolume,
+      $quote.outer_volume,
+      $quote.totalAskVolume,
+      $quote.total_ask_volume
+    )
+    $cumulativeBidAskVolume = $null
+    if ($null -ne $cumulativeBidVolume -and $null -ne $cumulativeAskVolume) {
+      $cumulativeBidAskVolume = $cumulativeBidVolume + $cumulativeAskVolume
+    }
     $denom = $bidVolume + $askVolume
     $askBidRatio = $null
     if ($bidVolume -gt 0) { $askBidRatio = [math]::Round(([double]$askVolume / [double]$bidVolume), 6) }
@@ -581,12 +615,23 @@ function Convert-QuotesToRows {
       ask_volume = $askVolume
       ask_bid_ratio = $askBidRatio
       ask_ratio = $askRatio
+      cumulative_bid_volume = $cumulativeBidVolume
+      cumulative_ask_volume = $cumulativeAskVolume
+      cumulative_bid_ask_volume = $cumulativeBidAskVolume
       stock_type = "COMMONSTOCK"
       session = "regular"
       last_trade_time = $updatedAt
       is_halted = $false
       is_trial = $false
-      payload = @{ raw = $quote; volume_unit = "lots"; time_standard = "UTC" }
+      payload = @{
+        raw = $quote
+        volume_unit = "lots"
+        time_standard = "UTC"
+        bid_volume_source = "fugle_ws_best_bid_level_size"
+        ask_volume_source = "fugle_ws_best_ask_level_size"
+        cumulative_bid_ask_available = ($null -ne $cumulativeBidAskVolume)
+        cumulative_bid_ask_source = if ($null -ne $cumulativeBidAskVolume) { "fugle_quote_fields" } else { "unavailable_from_current_websocket_cache" }
+      }
     })
   }
   return $rows.ToArray()
@@ -895,7 +940,8 @@ do {
     $status = if ($quoteRows.Count -gt 0 -and $quoteAgeSeconds -le $StaleSeconds) { "ok" } else { "stale" }
     $blacklistCount = if ($null -ne $script:SymbolBlacklist) { $script:SymbolBlacklist.Count } else { 0 }
     $rawSymbols = $seeded + $blacklistCount
-    $message = "collector=$collectorState; raw_symbols=$rawSymbols; active_symbols=$seeded; blacklist_count=$blacklistCount; quotes=$($quoteRows.Count); quote_age_seconds=$quoteAgeSeconds; last_quote_at=$lastQuoteAt; preopen=$($preopenRows.Count); futopt=$($txfPayload.quotes.Count); intraday_1m_symbols_today=$($intradayStats.intraday_1m_symbols_today); intraday_1m_rows_today=$($intradayStats.intraday_1m_rows_today); intraday_1m_stale_seconds=$($intradayStats.intraday_1m_stale_seconds); direct_1m_attempted=$($direct1mPayload.attempted); direct_1m_rows=$($direct1mPayload.rows.Count)"
+    $cumulativeBidAskRows = @($quoteRows | Where-Object { $null -ne $_.cumulative_bid_ask_volume }).Count
+    $message = "writer=running; collector=$collectorState; raw_symbols=$rawSymbols; active_symbols=$seeded; blacklist_count=$blacklistCount; quotes=$($quoteRows.Count); quote_age_seconds=$quoteAgeSeconds; last_quote_at=$lastQuoteAt; preopen=$($preopenRows.Count); futopt=$($txfPayload.quotes.Count); intraday_1m_symbols_today=$($intradayStats.intraday_1m_symbols_today); intraday_1m_rows_today=$($intradayStats.intraday_1m_rows_today); intraday_1m_stale_seconds=$($intradayStats.intraday_1m_stale_seconds); latest_candle_time=$($intradayStats.intraday_1m_latest_candle_time); cumulative_bid_ask_rows=$cumulativeBidAskRows; direct_1m_attempted=$($direct1mPayload.attempted); direct_1m_rows=$($direct1mPayload.rows.Count)"
     Write-PublicSlotSourceStatus -SourceName $StatusSourceName -Status $status -Message $message -StaleSeconds $quoteAgeSeconds -Payload @{
       raw_symbols = $rawSymbols
       active_symbols = $seeded
@@ -908,6 +954,7 @@ do {
       intraday_1m_rows = $combined1mRows.Count
       intraday_1m_symbols_today = $intradayStats.intraday_1m_symbols_today
       intraday_1m_latest_candle_time = $intradayStats.intraday_1m_latest_candle_time
+      latest_candle_time = $intradayStats.intraday_1m_latest_candle_time
       intraday_1m_rows_today = $intradayStats.intraday_1m_rows_today
       intraday_1m_stale_seconds = $intradayStats.intraday_1m_stale_seconds
       intraday_1m_stats_source = $intradayStats.intraday_1m_stats_source
@@ -920,6 +967,10 @@ do {
       last_daily_volume_date = (Get-Date).ToString("yyyy-MM-dd")
       quote_age_seconds = $quoteAgeSeconds
       quote_cache_file_age_seconds = $age
+      cumulative_bid_ask_available = ($cumulativeBidAskRows -gt 0)
+      cumulative_bid_ask_rows = $cumulativeBidAskRows
+      bid_volume_definition = "best bid level size from Fugle websocket, not confirmed cumulative intraday bid-side traded volume"
+      ask_volume_definition = "best ask level size from Fugle websocket, not confirmed cumulative intraday ask-side traded volume"
       rate_limit_count = 0
       last_429_at = $null
       session = $session

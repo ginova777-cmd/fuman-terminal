@@ -27,8 +27,20 @@ comment on table public.source_status is
   'Shared source health. payload should include symbols, blacklist_count, last_quote_at, last_1m_at, volume_unit, time_standard, session.';
 
 comment on column public.fugle_quotes_live.total_volume is 'Unit: lots.';
-comment on column public.fugle_quotes_live.bid_volume is 'Unit: lots.';
-comment on column public.fugle_quotes_live.ask_volume is 'Unit: lots.';
+alter table public.fugle_quotes_live add column if not exists cumulative_bid_volume numeric;
+alter table public.fugle_quotes_live add column if not exists cumulative_ask_volume numeric;
+alter table public.fugle_quotes_live add column if not exists cumulative_bid_ask_volume numeric;
+
+comment on column public.fugle_quotes_live.bid_volume is
+  'Unit: lots. Current shared source maps this from Fugle websocket best bid level size, not confirmed cumulative intraday bid-side traded volume.';
+comment on column public.fugle_quotes_live.ask_volume is
+  'Unit: lots. Current shared source maps this from Fugle websocket best ask level size, not confirmed cumulative intraday ask-side traded volume.';
+comment on column public.fugle_quotes_live.cumulative_bid_volume is
+  'Unit: lots. Confirmed cumulative intraday bid-side traded volume when source provides it; null when unavailable.';
+comment on column public.fugle_quotes_live.cumulative_ask_volume is
+  'Unit: lots. Confirmed cumulative intraday ask-side traded volume when source provides it; null when unavailable.';
+comment on column public.fugle_quotes_live.cumulative_bid_ask_volume is
+  'Unit: lots. cumulative_bid_volume + cumulative_ask_volume. Strategy liquidity filter should use this only when not null.';
 comment on column public.fugle_intraday_1m.volume is 'Unit: lots.';
 comment on column public.fugle_daily_volume.volume is 'Unit: lots.';
 comment on column public.futopt_quotes_live.total_volume is 'Unit: lots.';

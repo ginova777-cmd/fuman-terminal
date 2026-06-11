@@ -22,6 +22,9 @@ select
   ask_volume,
   ask_bid_ratio,
   ask_ratio,
+  cumulative_bid_volume,
+  cumulative_ask_volume,
+  cumulative_bid_ask_volume,
   is_halted,
   is_trial,
   payload
@@ -30,6 +33,9 @@ where coalesce(stock_type, 'COMMONSTOCK') = 'COMMONSTOCK'
   and coalesce(is_halted, false) = false
   and coalesce(is_trial, false) = false
   and market in ('TSE', 'OTC')
+  and symbol ~ '^[0-9]{4}$'
+  and symbol not like '00%'
+  and upper(symbol) <> 'TEST'
   and price between 10 and 1000;
 
 create or replace view public.v_fugle_intraday_1m_status as
