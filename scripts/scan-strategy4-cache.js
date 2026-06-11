@@ -36,10 +36,16 @@ const USE_MIS_QUOTES = process.env.STRATEGY4_USE_MIS === "1";
 const FAIL_ON_INCOMPLETE = process.env.STRATEGY4_FAIL_ON_INCOMPLETE !== "0";
 const ALLOW_PARTIAL_PUBLISH = process.env.STRATEGY4_ALLOW_PARTIAL_PUBLISH === "1";
 const RUN_STAMP = process.env.STRATEGY4_SCAN_STAMP || new Date().toISOString().slice(0, 10).replace(/-/g, "");
-const SUPABASE_URL = (process.env.SUPABASE_URL || readText(path.join(SECRET_DIR, "supabase-url.txt"))).replace(/\/$/, "");
-const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY
+const SUPABASE_URL = (
+  process.env.STRATEGY4_SUPABASE_URL
+  || process.env.SUPABASE_URL
+  || readText(path.join(SECRET_DIR, "strategy4-supabase-url.txt"))
+  || readText(path.join(SECRET_DIR, "supabase-url.txt"))
+  || "https://cpmpfhbzutkiecccekfr.supabase.co"
+).replace(/\/$/, "");
+const SUPABASE_KEY = process.env.STRATEGY4_SUPABASE_ANON_KEY
   || process.env.SUPABASE_ANON_KEY
-  || readText(path.join(SECRET_DIR, "supabase-service-role-key.txt"))
+  || readText(path.join(SECRET_DIR, "strategy4-supabase-anon-key.txt"))
   || readText(path.join(SECRET_DIR, "supabase-anon-key.txt"));
 let strategy4VolumeCache = null;
 
@@ -300,37 +306,54 @@ async function fetchSupabaseUniverse() {
   if (!SUPABASE_URL || !SUPABASE_KEY) return [];
   const rows = [];
   const pageSize = 1000;
-  for (let offset = 0; offset < 5000; offset += pageSize) {
-    const url = new URL(`${SUPABASE_URL}/rest/v1/stock_tickers`);
-    url.searchParams.set("select", "symbol,name,market,stock_type,industry,is_etf,is_suspended");
-    url.searchParams.set("stock_type", "eq.COMMONSTOCK");
-    url.searchParams.set("is_etf", "eq.false");
-    url.searchParams.set("is_suspended", "eq.false");
-    url.searchParams.set("order", "symbol.asc");
-    const response = await fetch(url, {
-      headers: {
-        apikey: SUPABASE_KEY,
-        Authorization: `Bearer ${SUPABASE_KEY}`,
-        Accept: "application/json",
-        Range: `${offset}-${offset + pageSize - 1}`,
-      },
-    });
-    if (!response.ok) return [];
-    const page = await response.json();
-    if (!Array.isArray(page) || !page.length) break;
-    rows.push(...page);
-    if (page.length < pageSize) break;
+  for (const table of ["stock_universe", "stock_tickers"]) {
+    rows.length = 0;
+    for (let offset = 0; offset < 5000; offset += pageSize) {
+      const url = new URL(`${SUPABASE_URL}/rest/v1/${table}`);
+      url.searchParams.set("select", table === "stock_universe"
+        ? "symbol,name,market,industry,is_etf,is_warrant,is_cb,is_blacklisted,is_daytrade_unsuitable,is_active"
+        : "symbol,name,market,stock_type,industry,is_etf,is_suspended");
+      if (table === "stock_universe") {
+        url.searchParams.set("is_active", "eq.true");
+        url.searchParams.set("is_etf", "eq.false");
+        url.searchParams.set("is_warrant", "eq.false");
+        url.searchParams.set("is_cb", "eq.false");
+        url.searchParams.set("is_blacklisted", "eq.false");
+        url.searchParams.set("is_daytrade_unsuitable", "eq.false");
+      } else {
+        url.searchParams.set("stock_type", "eq.COMMONSTOCK");
+        url.searchParams.set("is_etf", "eq.false");
+        url.searchParams.set("is_suspended", "eq.false");
+      }
+      url.searchParams.set("order", "symbol.asc");
+      const response = await fetch(url, {
+        headers: {
+          apikey: SUPABASE_KEY,
+          Authorization: `Bearer ${SUPABASE_KEY}`,
+          Accept: "application/json",
+          Range: `${offset}-${offset + pageSize - 1}`,
+        },
+      });
+      if (!response.ok) break;
+      const page = await response.json();
+      if (!Array.isArray(page) || !page.length) break;
+      rows.push(...page);
+      if (page.length < pageSize) break;
+    }
+    if (rows.length) {
+      console.log(`strategy4 supabase ${table} universe: ${rows.length}`);
+      return rows.map(normalizeStock).filter(Boolean);
+    }
   }
-  return rows.map(normalizeStock).filter(Boolean);
+  return [];
 }
 
 async function fetchUniverse() {
   let parsed = [];
   try {
     parsed = await fetchSupabaseUniverse();
-    if (parsed.length) console.log(`strategy4 supabase stock_tickers universe: ${parsed.length}`);
   } catch (error) {
-    console.log(`strategy4 supabase stock_tickers fallback: ${error.message}`);
+    console.log(`strategy4 supabase universe fallback: ${error.message}`);
   }
   if (!parsed.length) {
     const payload = await fetchJson(STOCK_URL, 30000);
