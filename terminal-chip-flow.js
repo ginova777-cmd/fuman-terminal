@@ -33,7 +33,19 @@
         };
         return { renderChipTradeTable: renderError, loadChipTradeData: renderError };
       }
-      return Function("scope", "with (scope) {\n" + source + "\nreturn { renderChipTradeTable, loadChipTradeData };\n}")(context.scope);
+      try {
+        return Function("scope", "with (scope) {\n" + source + "\nreturn { renderChipTradeTable, loadChipTradeData };\n}")(context.scope);
+      } catch (error) {
+        const renderError = () => {
+          const body = document.querySelector("#chip-trade-body");
+          const message = String(error?.message || error || "unknown").replace(/[<>&]/g, "").slice(0, 160);
+          if (body) {
+            body.innerHTML = `<tr><td colspan="14">買賣超模組初始化失敗：${message}。請重新整理或清除舊快取。</td></tr>`;
+          }
+          console.error("[FUMAN] chip flow module init failed", error);
+        };
+        return { renderChipTradeTable: renderError, loadChipTradeData: renderError };
+      }
     },
   };
 })();

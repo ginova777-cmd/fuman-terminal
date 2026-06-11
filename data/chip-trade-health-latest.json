@@ -1,69 +1,69 @@
 {
   "ok": true,
   "source": "chip-trade-health",
-  "updatedAt": "2026-06-07T10:49:38.882Z",
-  "latestTradeDate": "20260605",
+  "updatedAt": "2026-06-11T13:56:43.787Z",
+  "latestTradeDate": "20260611",
   "counts": {
-    "total": 1886,
-    "joint": 43,
-    "trust": 117,
-    "foreign": 907,
-    "legal": 873,
-    "defaultVisible": 43
+    "total": 1880,
+    "joint": 79,
+    "trust": 202,
+    "foreign": 831,
+    "legal": 844,
+    "defaultVisible": 79
   },
   "files": {
     "institution-latest.json": {
       "name": "institution-latest.json",
       "ok": true,
       "exists": true,
-      "bytes": 824052,
-      "mtime": "2026-06-06T11:58:23.001Z",
-      "updatedAt": "2026-06-06T11:58:22.989Z",
-      "usedDate": "20260605",
-      "count": 1886,
+      "bytes": 980581,
+      "mtime": "2026-06-11T13:41:58.878Z",
+      "updatedAt": "2026-06-11T13:41:37.955Z",
+      "usedDate": "20260611",
+      "count": 1880,
       "error": ""
     },
     "institution-backup.json": {
       "name": "institution-backup.json",
       "ok": true,
       "exists": true,
-      "bytes": 824059,
-      "mtime": "2026-06-06T11:58:23.010Z",
-      "updatedAt": "2026-06-06T11:58:22.989Z",
-      "usedDate": "20260605",
-      "count": 1886,
+      "bytes": 980588,
+      "mtime": "2026-06-11T13:41:58.872Z",
+      "updatedAt": "2026-06-11T13:41:37.955Z",
+      "usedDate": "20260611",
+      "count": 1880,
       "error": ""
     },
     "institution-summary.json": {
       "name": "institution-summary.json",
       "ok": true,
       "exists": true,
-      "bytes": 53631,
-      "mtime": "2026-06-06T11:58:23.007Z",
-      "updatedAt": "2026-06-06T11:58:22.989Z",
-      "usedDate": "20260605",
-      "count": 1886,
+      "bytes": 68267,
+      "mtime": "2026-06-11T13:41:58.882Z",
+      "updatedAt": "2026-06-11T13:20:43.874Z",
+      "usedDate": "20260611",
+      "count": 1880,
       "error": ""
     },
     "institution-slim.json": {
       "name": "institution-slim.json",
       "ok": true,
       "exists": true,
-      "bytes": 358858,
-      "mtime": "2026-06-07T07:45:13.971Z",
-      "updatedAt": "2026-06-06T11:58:22.989Z",
-      "usedDate": "20260605",
-      "count": 1886,
+      "bytes": 528948,
+      "mtime": "2026-06-11T13:45:28.069Z",
+      "updatedAt": "2026-06-11T13:20:43.874Z",
+      "usedDate": "20260611",
+      "count": 1880,
       "error": ""
     },
     "institution-mobile-top.json": {
       "name": "institution-mobile-top.json",
       "ok": true,
       "exists": true,
-      "bytes": 9626,
-      "mtime": "2026-06-07T07:45:15.523Z",
-      "updatedAt": "2026-06-06T11:58:22.989Z",
-      "usedDate": "20260605",
+      "bytes": 14061,
+      "mtime": "2026-06-11T13:45:28.094Z",
+      "updatedAt": "2026-06-11T13:20:43.874Z",
+      "usedDate": "20260611",
       "count": 50,
       "error": ""
     },
@@ -71,10 +71,10 @@
       "name": "institution-joint-top.json",
       "ok": true,
       "exists": true,
-      "bytes": 30134,
-      "mtime": "2026-06-07T07:45:13.984Z",
-      "updatedAt": "2026-06-06T11:58:22.989Z",
-      "usedDate": "20260605",
+      "bytes": 44784,
+      "mtime": "2026-06-11T13:45:28.088Z",
+      "updatedAt": "2026-06-11T13:20:43.874Z",
+      "usedDate": "20260611",
       "count": 160,
       "error": ""
     },
@@ -82,10 +82,10 @@
       "name": "institution-foreign-top.json",
       "ok": true,
       "exists": true,
-      "bytes": 30198,
-      "mtime": "2026-06-07T07:45:13.985Z",
-      "updatedAt": "2026-06-06T11:58:22.989Z",
-      "usedDate": "20260605",
+      "bytes": 44876,
+      "mtime": "2026-06-11T13:45:28.091Z",
+      "updatedAt": "2026-06-11T13:20:43.874Z",
+      "usedDate": "20260611",
       "count": 160,
       "error": ""
     },
@@ -93,10 +93,10 @@
       "name": "institution-trust-top.json",
       "ok": true,
       "exists": true,
-      "bytes": 30218,
-      "mtime": "2026-06-07T07:45:13.987Z",
-      "updatedAt": "2026-06-06T11:58:22.989Z",
-      "usedDate": "20260605",
+      "bytes": 44897,
+      "mtime": "2026-06-11T13:45:28.093Z",
+      "updatedAt": "2026-06-11T13:20:43.874Z",
+      "usedDate": "20260611",
       "count": 160,
       "error": ""
     }
@@ -105,30 +105,30 @@
     "institution-latest.json": {
       "name": "institution-latest.json",
       "ok": true,
-      "updatedAt": "2026-06-06T11:58:22.989Z",
-      "usedDate": "20260605",
-      "count": 1886
+      "updatedAt": "2026-06-11T13:41:37.955Z",
+      "usedDate": "20260611",
+      "count": 1880
     },
     "institution-slim.json": {
       "name": "institution-slim.json",
       "ok": true,
-      "updatedAt": "2026-06-06T11:58:22.989Z",
-      "usedDate": "20260605",
-      "count": 1886
+      "updatedAt": "2026-06-11T13:20:43.874Z",
+      "usedDate": "20260611",
+      "count": 1880
     },
     "institution-mobile-top.json": {
       "name": "institution-mobile-top.json",
       "ok": true,
-      "updatedAt": "2026-06-06T11:58:22.989Z",
-      "usedDate": "20260605",
+      "updatedAt": "2026-06-11T13:20:43.874Z",
+      "usedDate": "20260611",
       "count": 50
     },
     "institution-summary.json": {
       "name": "institution-summary.json",
       "ok": true,
-      "updatedAt": "2026-06-06T11:58:22.989Z",
-      "usedDate": "20260605",
-      "count": 1886
+      "updatedAt": "2026-06-11T13:20:43.874Z",
+      "usedDate": "20260611",
+      "count": 1880
     }
   },
   "tasks": [
@@ -136,26 +136,26 @@
       "taskName": "\\Fuman 買賣超 Cache 0600",
       "ok": true,
       "status": "�N��",
-      "nextRunTime": "2026/6/8 �W�� 06:00:00",
-      "lastRunTime": "2026/6/7 �W�� 06:00:01",
-      "lastResult": "0",
+      "nextRunTime": "2026/6/12 �W�� 06:00:00",
+      "lastRunTime": "2026/6/11 �W�� 06:00:01",
+      "lastResult": "1",
       "enabled": ""
     },
     {
       "taskName": "\\Fuman 買賣超 Watchdog 0620",
       "ok": true,
       "status": "�N��",
-      "nextRunTime": "2026/6/8 �W�� 06:20:00",
-      "lastRunTime": "2026/6/7 �W�� 06:20:01",
-      "lastResult": "0",
+      "nextRunTime": "2026/6/12 �W�� 06:20:00",
+      "lastRunTime": "2026/6/11 �W�� 06:20:01",
+      "lastResult": "1",
       "enabled": ""
     },
     {
       "taskName": "\\Fuman 買賣超 Cache 2100",
       "ok": true,
       "status": "�N��",
-      "nextRunTime": "2026/6/7 �U�� 09:00:00",
-      "lastRunTime": "2026/6/6 �U�� 09:00:01",
+      "nextRunTime": "2026/6/12 �U�� 09:00:00",
+      "lastRunTime": "2026/6/11 �U�� 09:00:01",
       "lastResult": "0",
       "enabled": ""
     },
@@ -163,8 +163,8 @@
       "taskName": "\\Fuman 買賣超 Watchdog 2120",
       "ok": true,
       "status": "�N��",
-      "nextRunTime": "2026/6/7 �U�� 09:20:00",
-      "lastRunTime": "2026/6/6 �U�� 09:20:01",
+      "nextRunTime": "2026/6/12 �U�� 09:20:00",
+      "lastRunTime": "2026/6/11 �U�� 09:20:01",
       "lastResult": "0",
       "enabled": ""
     },
@@ -172,18 +172,18 @@
       "taskName": "\\Fuman GitHub 統一同步 0612",
       "ok": true,
       "status": "�N��",
-      "nextRunTime": "2026/6/8 �W�� 06:12:00",
-      "lastRunTime": "2026/6/7 �W�� 06:12:01",
-      "lastResult": "0",
+      "nextRunTime": "2026/6/12 �W�� 06:12:00",
+      "lastRunTime": "2026/6/11 �W�� 06:12:01",
+      "lastResult": "1",
       "enabled": ""
     },
     {
       "taskName": "\\Fuman GitHub 統一同步 2112",
       "ok": true,
       "status": "�N��",
-      "nextRunTime": "2026/6/7 �U�� 09:12:00",
-      "lastRunTime": "2026/6/6 �U�� 09:12:01",
-      "lastResult": "0",
+      "nextRunTime": "2026/6/12 �U�� 09:12:00",
+      "lastRunTime": "2026/6/11 �U�� 09:12:01",
+      "lastResult": "1",
       "enabled": ""
     }
   ],
@@ -203,5 +203,34 @@
     },
     "moduleGuard": true
   },
-  "issues": []
+  "issues": [
+    {
+      "severity": "warning",
+      "message": "排程上次結果非 0：\\Fuman 買賣超 Cache 0600",
+      "detail": {
+        "lastResult": "1"
+      }
+    },
+    {
+      "severity": "warning",
+      "message": "排程上次結果非 0：\\Fuman 買賣超 Watchdog 0620",
+      "detail": {
+        "lastResult": "1"
+      }
+    },
+    {
+      "severity": "warning",
+      "message": "排程上次結果非 0：\\Fuman GitHub 統一同步 0612",
+      "detail": {
+        "lastResult": "1"
+      }
+    },
+    {
+      "severity": "warning",
+      "message": "排程上次結果非 0：\\Fuman GitHub 統一同步 2112",
+      "detail": {
+        "lastResult": "1"
+      }
+    }
+  ]
 }
