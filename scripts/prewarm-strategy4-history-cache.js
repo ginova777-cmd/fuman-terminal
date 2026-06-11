@@ -14,7 +14,8 @@ const BATCH_SIZE = Number(process.env.STRATEGY4_PREWARM_BATCH_SIZE || 40);
 const BATCHES_PER_RUN = Number(process.env.STRATEGY4_PREWARM_BATCHES_PER_RUN || 0);
 const SLEEP_MS = Number(process.env.STRATEGY4_PREWARM_SLEEP_MS || 800);
 const MAX_REMAINING_MISS = Number(process.env.STRATEGY4_PREWARM_MAX_REMAINING_MISS || 2000);
-const SUPABASE_TABLES = String(process.env.STRATEGY4_SUPABASE_HISTORY_TABLES || "fugle_daily_volume,fugle_daily_candles,fugle_historical_candles,stock_historical_candles,taiwan_stock_price")
+const SUPABASE_ONLY = process.env.STRATEGY4_PREWARM_SUPABASE_ONLY !== "0";
+const SUPABASE_TABLES = String(process.env.STRATEGY4_SUPABASE_HISTORY_TABLES || "fugle_daily_ohlcv,fugle_daily_candles,fugle_historical_candles,stock_historical_candles,taiwan_stock_price,fugle_daily_volume")
   .split(",")
   .map((item) => item.trim())
   .filter(Boolean);
@@ -35,10 +36,16 @@ function readText(file) {
   }
 }
 
-const SUPABASE_URL = (process.env.SUPABASE_URL || readText(path.join(SECRET_DIR, "supabase-url.txt"))).replace(/\/$/, "");
-const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY
+const SUPABASE_URL = (
+  process.env.STRATEGY4_SUPABASE_URL
+  || process.env.SUPABASE_URL
+  || readText(path.join(SECRET_DIR, "strategy4-supabase-url.txt"))
+  || readText(path.join(SECRET_DIR, "supabase-url.txt"))
+  || "https://cpmpfhbzutkiecccekfr.supabase.co"
+).replace(/\/$/, "");
+const SUPABASE_KEY = process.env.STRATEGY4_SUPABASE_ANON_KEY
   || process.env.SUPABASE_ANON_KEY
-  || readText(path.join(SECRET_DIR, "supabase-service-role-key.txt"))
+  || readText(path.join(SECRET_DIR, "strategy4-supabase-anon-key.txt"))
   || readText(path.join(SECRET_DIR, "supabase-anon-key.txt"));
 
 function sleep(ms) {
@@ -204,15 +211,14 @@ async function fetchSupabaseDailyVolumeRows(from, to) {
   return rows;
 }
 
-async function fetchSupabaseRows(table, codeField, dateField, codes, from, to) {
-  if (!SUPABASE_URL || !SUPABASE_KEY || !table || !codeField || !dateField || !codes.length) return null;
-  const url = new URL(`${SUPABASE_URL}/rest/v1/${encodeURIComponent(table)}`);
-  url.searchParams.set("select", "*");
-  url.searchParams.set(codeField, `in.(${codes.join(",")})`);
-  url.searchParams.append(dateField, `gte.${from}`);
-  url.searchParams.append(dateField, `lte.${to}`);
-  url.searchParams.set("order", `${dateField}.asc`);
-  url.searchParams.set("limit", String(Math.max(1000, codes.length * 220)));
+async function readSupabaseSyncStatus(to) {
+  if (!SUPABASE_URL || !SUPABASE_KEY) return null;
+  const url = new URL(`${SUPABASE_URL}/rest/v1/fugle_daily_sync_status`);
+  url.searchParams.set("select", "trade_date,source,status,finished_at,symbols_expected,symbols_loaded,missing_symbols_count,error_message,updated_at");
+  url.searchParams.set("trade_date", `eq.${to}`);
+  url.searchParams.set("source", "eq.fugle");
+  url.searchParams.set("order", "updated_at.desc");
+  url.searchParams.set("limit", "1");
   const response = await fetch(url, {
     headers: {
       apikey: SUPABASE_KEY,
@@ -222,7 +228,35 @@ async function fetchSupabaseRows(table, codeField, dateField, codes, from, to) {
   });
   if (!response.ok) return null;
   const rows = await response.json();
-  return Array.isArray(rows) ? rows : null;
+  return Array.isArray(rows) && rows.length ? rows[0] : null;
+}
+
+async function fetchSupabaseRows(table, codeField, dateField, codes, from, to) {
+  if (!SUPABASE_URL || !SUPABASE_KEY || !table || !codeField || !dateField || !codes.length) return null;
+  const rows = [];
+  const pageSize = 1000;
+  for (let offset = 0; offset < 100000; offset += pageSize) {
+    const url = new URL(`${SUPABASE_URL}/rest/v1/${encodeURIComponent(table)}`);
+    url.searchParams.set("select", "*");
+    url.searchParams.set(codeField, `in.(${codes.join(",")})`);
+    url.searchParams.append(dateField, `gte.${from}`);
+    url.searchParams.append(dateField, `lte.${to}`);
+    url.searchParams.set("order", `${dateField}.asc`);
+    const response = await fetch(url, {
+      headers: {
+        apikey: SUPABASE_KEY,
+        Authorization: `Bearer ${SUPABASE_KEY}`,
+        Accept: "application/json",
+        Range: `${offset}-${offset + pageSize - 1}`,
+      },
+    });
+    if (!response.ok) return rows.length ? rows : null;
+    const page = await response.json();
+    if (!Array.isArray(page) || !page.length) break;
+    rows.push(...page);
+    if (page.length < pageSize) break;
+  }
+  return rows;
 }
 
 async function warmFromSupabase(stocks, from, to) {
@@ -303,25 +337,78 @@ function callStrategy4Handler(stocks) {
 }
 
 function normalizeStock(row) {
-  const code = normalizeCode(row.Code || row.code || row["證券代號"]);
+  const code = normalizeCode(row.Code || row.code || row.symbol || row["證券代號"]);
   const name = String(row.Name || row.name || row["證券名稱"] || "").trim();
   if (!/^\d{4}$/.test(code) || /^00/.test(code) || !name) return null;
+  if (row.is_active === false || row.is_etf === true || row.is_warrant === true || row.is_cb === true || row.is_blacklisted === true || row.is_daytrade_unsuitable === true) return null;
+  const industry = String(row.industry || row.officialIndustry || row.primaryIndustry || "").trim();
+  if (/水泥|軍工|國防|航太/.test(`${name} ${industry}`)) return null;
   return {
     code,
     name,
     market: String(row.Market || row.market || row["市場"] || "").trim().toUpperCase(),
     close: cleanNumber(row.ClosingPrice || row.close),
     percent: cleanNumber(row.Percent || row.percent),
+    industry,
   };
+}
+
+async function fetchSupabaseUniverse() {
+  if (!SUPABASE_URL || !SUPABASE_KEY) return [];
+  const rows = [];
+  const pageSize = 1000;
+  for (const table of ["stock_universe", "stock_tickers"]) {
+    rows.length = 0;
+    for (let offset = 0; offset < 5000; offset += pageSize) {
+      const url = new URL(`${SUPABASE_URL}/rest/v1/${table}`);
+      url.searchParams.set("select", table === "stock_universe"
+        ? "symbol,name,market,industry,is_etf,is_warrant,is_cb,is_blacklisted,is_daytrade_unsuitable,is_active"
+        : "symbol,name,market,stock_type,industry,is_etf,is_suspended");
+      if (table === "stock_universe") {
+        url.searchParams.set("is_active", "eq.true");
+        url.searchParams.set("is_etf", "eq.false");
+        url.searchParams.set("is_warrant", "eq.false");
+        url.searchParams.set("is_cb", "eq.false");
+        url.searchParams.set("is_blacklisted", "eq.false");
+        url.searchParams.set("is_daytrade_unsuitable", "eq.false");
+      } else {
+        url.searchParams.set("stock_type", "eq.COMMONSTOCK");
+        url.searchParams.set("is_etf", "eq.false");
+        url.searchParams.set("is_suspended", "eq.false");
+      }
+      url.searchParams.set("order", "symbol.asc");
+      const response = await fetch(url, {
+        headers: {
+          apikey: SUPABASE_KEY,
+          Authorization: `Bearer ${SUPABASE_KEY}`,
+          Accept: "application/json",
+          Range: `${offset}-${offset + pageSize - 1}`,
+        },
+      });
+      if (!response.ok) break;
+      const page = await response.json();
+      if (!Array.isArray(page) || !page.length) break;
+      rows.push(...page);
+      if (page.length < pageSize) break;
+    }
+    if (rows.length) {
+      console.log(`strategy4 supabase ${table} prewarm universe: ${rows.length}`);
+      return rows.map(normalizeStock).filter(Boolean);
+    }
+  }
+  return [];
 }
 
 async function main() {
   const from = isoDateDaysAgo(270);
   const to = new Date().toISOString().slice(0, 10);
-  const payload = await callStocksHandler();
-  const rows = Array.isArray(payload) ? payload : (payload.stocks || []);
-  const universe = rows.map(normalizeStock).filter(Boolean)
-    .sort((a, b) => a.code.localeCompare(b.code));
+  let universe = await fetchSupabaseUniverse();
+  if (!universe.length) {
+    const payload = await callStocksHandler();
+    const rows = Array.isArray(payload) ? payload : (payload.stocks || []);
+    universe = rows.map(normalizeStock).filter(Boolean);
+  }
+  universe = universe.sort((a, b) => a.code.localeCompare(b.code));
   const missing = universe.filter((stock) => !hasFreshHistoryCache(stock.code, from, to));
   const batchesToRun = Math.min(Math.ceil(missing.length / BATCH_SIZE), BATCHES_PER_RUN);
   const sourceCounts = {};
@@ -331,6 +418,20 @@ async function main() {
   const supabaseSources = {};
   let supabaseVolumeRows = 0;
   let supabaseVolumeUpdated = 0;
+
+  try {
+    const syncStatus = await readSupabaseSyncStatus(to);
+    if (syncStatus) {
+      console.log(`strategy4 supabase sync status: ${syncStatus.status} ${syncStatus.symbols_loaded || 0}/${syncStatus.symbols_expected || 0}, missing ${syncStatus.missing_symbols_count || 0}`);
+      if (!["complete", "partial"].includes(String(syncStatus.status || "").toLowerCase())) {
+        errors.push(`supabase sync status ${syncStatus.status || "unknown"} for ${to}`);
+      }
+    } else {
+      console.log("strategy4 supabase sync status unavailable");
+    }
+  } catch (error) {
+    errors.push(`supabase sync status: ${error.message || error}`);
+  }
 
   try {
     const volumeRows = await fetchSupabaseDailyVolumeRows(isoDateDaysAgo(14), to);
@@ -368,6 +469,12 @@ async function main() {
     const stillMissing = chunk.filter((stock) => !hasFreshHistoryCache(stock.code, from, to));
     if (!stillMissing.length) {
       scanned += chunk.length;
+      if (SLEEP_MS > 0) await sleep(SLEEP_MS);
+      continue;
+    }
+    if (SUPABASE_ONLY) {
+      scanned += chunk.length;
+      console.log(`${label} supabase-only: skip strategy API fallback for ${stillMissing.length} missing history caches`);
       if (SLEEP_MS > 0) await sleep(SLEEP_MS);
       continue;
     }
