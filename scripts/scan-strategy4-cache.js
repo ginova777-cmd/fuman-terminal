@@ -19,7 +19,7 @@ const SYNC_PARTIAL = process.env.STRATEGY4_SYNC_PARTIAL === "1";
 const SYNC_SCRIPT = path.join(ROOT, "run-strategy4-partial-sync.ps1");
 const PARTIAL_SYNC_EVERY_CHUNKS = Math.max(1, Number(process.env.STRATEGY4_PARTIAL_SYNC_EVERY_CHUNKS || 1));
 const STOCK_URL = process.env.STOCK_UNIVERSE_URL || "https://fuman-terminal.vercel.app/api/stocks";
-const MIN_UNIVERSE_SIZE = Number(process.env.STRATEGY4_MIN_UNIVERSE_SIZE || 1700);
+const MIN_UNIVERSE_SIZE = Number(process.env.STRATEGY4_MIN_UNIVERSE_SIZE || 1500);
 const MIN_MATCH_COUNT = Number(process.env.STRATEGY4_MIN_MATCH_COUNT || 10);
 const MIN_MATCH_RATIO_TO_PREVIOUS = Number(process.env.STRATEGY4_MIN_MATCH_RATIO_TO_PREVIOUS || 0.5);
 const MAX_YAHOO_SOURCE_RATIO = Number(process.env.STRATEGY4_MAX_YAHOO_SOURCE_RATIO || 0.2);
@@ -27,11 +27,28 @@ const MIN_AVG_VOLUME_5 = Number(process.env.STRATEGY4_MIN_AVG_VOLUME_5 || 3000);
 const ALLOW_FILTER_RULE_DROP = process.env.STRATEGY4_ALLOW_FILTER_RULE_DROP !== "0";
 const FUGLE_HISTORY_CACHE_DIR = process.env.FUGLE_HISTORY_CACHE_DIR || path.join(process.env.FUMAN_RUNTIME_DIR || "C:\\fuman-runtime", "cache", "fugle", "historical");
 const STRATEGY4_VOLUME_CACHE_FILE = path.join(process.env.FUMAN_RUNTIME_DIR || "C:\\fuman-runtime", "cache", "strategy4-volume-avg5.json");
+const RUNTIME_DIR = process.env.FUMAN_RUNTIME_DIR || "C:\\fuman-runtime";
+const SECRET_DIR = path.join(RUNTIME_DIR, "secrets");
+const CONFIG_DIR = path.join(RUNTIME_DIR, "config");
+const BLACKLIST_FILE = process.env.STRATEGY4_BLACKLIST_FILE || path.join(CONFIG_DIR, "fugle-api-blacklist-symbols.txt");
 const USE_MIS_QUOTES = process.env.STRATEGY4_USE_MIS === "1";
 const FAIL_ON_INCOMPLETE = process.env.STRATEGY4_FAIL_ON_INCOMPLETE !== "0";
 const ALLOW_PARTIAL_PUBLISH = process.env.STRATEGY4_ALLOW_PARTIAL_PUBLISH === "1";
 const RUN_STAMP = process.env.STRATEGY4_SCAN_STAMP || new Date().toISOString().slice(0, 10).replace(/-/g, "");
+const SUPABASE_URL = (process.env.SUPABASE_URL || readText(path.join(SECRET_DIR, "supabase-url.txt"))).replace(/\/$/, "");
+const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY
+  || process.env.SUPABASE_ANON_KEY
+  || readText(path.join(SECRET_DIR, "supabase-service-role-key.txt"))
+  || readText(path.join(SECRET_DIR, "supabase-anon-key.txt"));
 let strategy4VolumeCache = null;
+
+function readText(file) {
+  try {
+    return fs.readFileSync(file, "utf8").trim();
+  } catch {
+    return "";
+  }
+}
 
 function readJson(file, fallback) {
   try {
@@ -163,23 +180,83 @@ function callLocalStocksHandler() {
 }
 
 function normalizeStock(row) {
-  const code = normalizeCode(row.Code || row.code || row["證券代號"]);
+  const code = normalizeCode(row.Code || row.code || row.symbol || row["證券代號"]);
   const name = String(row.Name || row.name || row["證券名稱"] || "").trim();
   if (!/^\d{4}$/.test(code) || /^00/.test(code) || !name) return null;
+  if (row.is_etf === true || /ETF|ETN|指數|台灣50|高股息|正2|反1|期貨|債/i.test(name)) return null;
   return {
     code,
     name,
-    market: String(row.Market || row.market || row["市場"] || "").trim().toUpperCase(),
+    market: String(row.Market || row.market || row["市場"] || "").trim().toUpperCase().replace(/^TSE$/, "TWSE").replace(/^OTC$/, "TPEX"),
     close: cleanNumber(row.ClosingPrice || row.close),
     percent: cleanNumber(row.Percent || row.percent),
     value: cleanNumber(row.TradeValue || row.value),
     tradeVolume: cleanNumber(row.TradeVolume || row.tradeVolume),
+    industry: String(row.industry || row.officialIndustry || row.primaryIndustry || "").trim(),
   };
+}
+
+function loadExcludedCodes() {
+  const codes = new Set();
+  const files = [
+    BLACKLIST_FILE,
+    path.join(CONFIG_DIR, "strategy4-excluded-symbols.txt"),
+  ];
+  files.forEach((file) => {
+    const text = readText(file);
+    text.split(/\r?\n|,/)
+      .map((item) => normalizeCode(item))
+      .filter((code) => /^\d{4}$/.test(code))
+      .forEach((code) => codes.add(code));
+  });
+  return codes;
+}
+
+function isExcludedStock(stock, excludedCodes) {
+  if (!stock) return true;
+  if (excludedCodes.has(stock.code)) return true;
+  const text = `${stock.name || ""} ${stock.industry || ""}`;
+  if (/水泥|軍工|國防|航太/.test(text)) return true;
+  return false;
+}
+
+async function fetchSupabaseUniverse() {
+  if (!SUPABASE_URL || !SUPABASE_KEY) return [];
+  const rows = [];
+  const pageSize = 1000;
+  for (let offset = 0; offset < 5000; offset += pageSize) {
+    const url = new URL(`${SUPABASE_URL}/rest/v1/stock_tickers`);
+    url.searchParams.set("select", "symbol,name,market,stock_type,industry,is_etf,is_suspended");
+    url.searchParams.set("stock_type", "eq.COMMONSTOCK");
+    url.searchParams.set("is_etf", "eq.false");
+    url.searchParams.set("is_suspended", "eq.false");
+    url.searchParams.set("order", "symbol.asc");
+    const response = await fetch(url, {
+      headers: {
+        apikey: SUPABASE_KEY,
+        Authorization: `Bearer ${SUPABASE_KEY}`,
+        Accept: "application/json",
+        Range: `${offset}-${offset + pageSize - 1}`,
+      },
+    });
+    if (!response.ok) return [];
+    const page = await response.json();
+    if (!Array.isArray(page) || !page.length) break;
+    rows.push(...page);
+    if (page.length < pageSize) break;
+  }
+  return rows.map(normalizeStock).filter(Boolean);
 }
 
 async function fetchUniverse() {
   let parsed = [];
   try {
+    parsed = await fetchSupabaseUniverse();
+    if (parsed.length) console.log(`strategy4 supabase stock_tickers universe: ${parsed.length}`);
+  } catch (error) {
+    console.log(`strategy4 supabase stock_tickers fallback: ${error.message}`);
+  }
+  if (!parsed.length) {
     const payload = await fetchJson(STOCK_URL, 30000);
     const rows = Array.isArray(payload) ? payload : (payload.stocks || []);
     parsed = rows.map(normalizeStock).filter(Boolean);
@@ -187,8 +264,6 @@ async function fetchUniverse() {
       console.log(`stock endpoint partial universe: ${parsed.length}, fallback to local TWSE+TPEX fetch`);
       parsed = [];
     }
-  } catch (error) {
-    console.log(`stock endpoint fallback: ${error.message}`);
   }
 
   if (!parsed.length) {
@@ -197,8 +272,17 @@ async function fetchUniverse() {
     parsed = rows.map(normalizeStock).filter(Boolean);
   }
   const byCode = new Map();
-  parsed.forEach((stock) => byCode.set(stock.code, stock));
+  const excludedCodes = loadExcludedCodes();
+  let excludedCount = 0;
+  parsed.forEach((stock) => {
+    if (isExcludedStock(stock, excludedCodes)) {
+      excludedCount += 1;
+      return;
+    }
+    byCode.set(stock.code, stock);
+  });
   parsed = [...byCode.values()].sort((a, b) => a.code.localeCompare(b.code));
+  console.log(`strategy4 universe after exclusions: ${parsed.length}, excluded ${excludedCount}, blacklist ${excludedCodes.size}`);
   if (parsed.length < MIN_UNIVERSE_SIZE) {
     throw new Error(`Strategy4 stock universe too small: ${parsed.length}/${MIN_UNIVERSE_SIZE}`);
   }

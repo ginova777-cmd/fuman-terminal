@@ -47,6 +47,19 @@ function Invoke-CacheSyncWithRetry($scriptPath, $maxAttempts = 3) {
 Write-Log "=== Strategy4 full scan start $(Get-Date) ==="
 . "${PSScriptRoot}\schedule-guard.ps1"
 Invoke-FumanWeekdayGuard -Label "Strategy4 full scan" -LogPath $log
+if ($env:STRATEGY4_ALLOW_BEFORE_1600 -ne "1") {
+  try {
+    $tz = [TimeZoneInfo]::FindSystemTimeZoneById("Taipei Standard Time")
+    $taipeiNow = [TimeZoneInfo]::ConvertTimeFromUtc([DateTime]::UtcNow, $tz)
+  } catch {
+    $taipeiNow = Get-Date
+  }
+  $startAt = [TimeSpan]::Parse("16:00:00")
+  if ($taipeiNow.TimeOfDay -lt $startAt) {
+    Write-Log "Strategy4 full scan skipped before 16:00 Taipei: $($taipeiNow.ToString('yyyy/MM/dd HH:mm:ss'))"
+    exit 0
+  }
+}
 
 $env:FULL_SCAN = "1"
 $env:STRATEGY4_BATCH_SIZE = "80"
@@ -71,6 +84,32 @@ try {
     Write-Log "Strategy4 contract verification failed with exit code $contractExit"
     exit $contractExit
   }
+  Write-Log "=== Strategy4 Supabase daily volume cache prewarm start $(Get-Date) ==="
+  $previousPrewarmBatchSize = $env:STRATEGY4_PREWARM_BATCH_SIZE
+  $previousPrewarmBatches = $env:STRATEGY4_PREWARM_BATCHES_PER_RUN
+  $previousPrewarmSleep = $env:STRATEGY4_PREWARM_SLEEP_MS
+  $previousPrewarmMaxMiss = $env:STRATEGY4_PREWARM_MAX_REMAINING_MISS
+  $previousPrewarmUseMis = $env:STRATEGY4_USE_MIS
+  try {
+    $env:STRATEGY4_USE_MIS = "0"
+    $env:STRATEGY4_PREWARM_BATCH_SIZE = "80"
+    $env:STRATEGY4_PREWARM_BATCHES_PER_RUN = "0"
+    $env:STRATEGY4_PREWARM_SLEEP_MS = "0"
+    $env:STRATEGY4_PREWARM_MAX_REMAINING_MISS = "2000"
+    & $nodeExe "scripts\prewarm-strategy4-history-cache.js" *>&1 | Tee-Object -FilePath $log -Append
+    $prewarmExit = $LASTEXITCODE
+  } finally {
+    if ($null -ne $previousPrewarmBatchSize) { $env:STRATEGY4_PREWARM_BATCH_SIZE = $previousPrewarmBatchSize } else { Remove-Item Env:STRATEGY4_PREWARM_BATCH_SIZE -ErrorAction SilentlyContinue }
+    if ($null -ne $previousPrewarmBatches) { $env:STRATEGY4_PREWARM_BATCHES_PER_RUN = $previousPrewarmBatches } else { Remove-Item Env:STRATEGY4_PREWARM_BATCHES_PER_RUN -ErrorAction SilentlyContinue }
+    if ($null -ne $previousPrewarmSleep) { $env:STRATEGY4_PREWARM_SLEEP_MS = $previousPrewarmSleep } else { Remove-Item Env:STRATEGY4_PREWARM_SLEEP_MS -ErrorAction SilentlyContinue }
+    if ($null -ne $previousPrewarmMaxMiss) { $env:STRATEGY4_PREWARM_MAX_REMAINING_MISS = $previousPrewarmMaxMiss } else { Remove-Item Env:STRATEGY4_PREWARM_MAX_REMAINING_MISS -ErrorAction SilentlyContinue }
+    if ($null -ne $previousPrewarmUseMis) { $env:STRATEGY4_USE_MIS = $previousPrewarmUseMis } else { Remove-Item Env:STRATEGY4_USE_MIS -ErrorAction SilentlyContinue }
+  }
+  if ($prewarmExit -ne 0) {
+    Write-Log "Strategy4 Supabase daily volume cache prewarm failed with exit code $prewarmExit"
+    exit $prewarmExit
+  }
+  Write-Log "=== Strategy4 Supabase daily volume cache prewarm end $(Get-Date) ==="
   & $nodeExe "scripts\scan-strategy4-cache.js" *>&1 | Tee-Object -FilePath $log -Append
   $scanExit = $LASTEXITCODE
 } finally {
