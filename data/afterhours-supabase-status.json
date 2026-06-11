@@ -1,7 +1,7 @@
 {
   "ok": true,
   "sourceName": "fuman_afterhours_flow",
-  "checkedAt": "2026-06-11T16:23:52.216Z",
+  "checkedAt": "2026-06-11T16:44:17.353Z",
   "required": [
     "institution",
     "warrant"
@@ -50,6 +50,6 @@
   "supabase": {
     "ok": true,
     "table": "source_status",
-    "readbackUpdatedAt": "2026-06-11T16:23:52.217+00:00"
+    "readbackUpdatedAt": "2026-06-11T16:44:17.354+00:00"
   }
 }
