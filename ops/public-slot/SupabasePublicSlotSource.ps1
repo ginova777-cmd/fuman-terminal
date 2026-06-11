@@ -339,6 +339,61 @@ function Write-PublicSlotPreopenSnapshot {
   Invoke-PublicSlotUpsert -Table "fugle_preopen_snapshot" -OnConflict "symbol" -Rows @($normalized)
 }
 
+function Write-PublicSlotPreopenSnapshotHistory {
+  param([Parameter(Mandatory = $true)][object[]]$Rows)
+
+  if (-not (Test-PublicSlotColumnAvailable -Table "fugle_preopen_snapshot_history" -Column "symbol")) {
+    return
+  }
+
+  $now = ConvertTo-IsoUtc
+  $tradeDate = (Get-Date).ToString("yyyy-MM-dd")
+  $normalized = foreach ($row in $Rows) {
+    $observedAt = if ($row.updated_at) { ConvertTo-IsoUtc $row.updated_at } elseif ($row.timestamp) { ConvertTo-IsoUtc $row.timestamp } else { $now }
+    @{
+      symbol = [string]$row.symbol
+      observed_at = $observedAt
+      name = $row.name
+      market = $row.market
+      session = $row.session
+      trade_date = $tradeDate
+      reference_price = $row.reference_price
+      trial_price = $row.trial_price
+      is_trial = if ($null -ne $row.is_trial) { $row.is_trial } else { $row.isTrial }
+      is_limit_up_bid = if ($null -ne $row.is_limit_up_bid) { $row.is_limit_up_bid } else { $row.isLimitUpBid }
+      best_bid_price = $row.best_bid_price
+      best_ask_price = $row.best_ask_price
+      bid_volume = ConvertTo-PublicSlotLots $row.bid_volume
+      ask_volume = ConvertTo-PublicSlotLots $row.ask_volume
+      bid1_price = $row.bid1_price
+      bid1_volume = ConvertTo-PublicSlotLots $row.bid1_volume
+      bid2_price = $row.bid2_price
+      bid2_volume = ConvertTo-PublicSlotLots $row.bid2_volume
+      bid3_price = $row.bid3_price
+      bid3_volume = ConvertTo-PublicSlotLots $row.bid3_volume
+      bid4_price = $row.bid4_price
+      bid4_volume = ConvertTo-PublicSlotLots $row.bid4_volume
+      bid5_price = $row.bid5_price
+      bid5_volume = ConvertTo-PublicSlotLots $row.bid5_volume
+      ask1_price = $row.ask1_price
+      ask1_volume = ConvertTo-PublicSlotLots $row.ask1_volume
+      ask2_price = $row.ask2_price
+      ask2_volume = ConvertTo-PublicSlotLots $row.ask2_volume
+      ask3_price = $row.ask3_price
+      ask3_volume = ConvertTo-PublicSlotLots $row.ask3_volume
+      ask4_price = $row.ask4_price
+      ask4_volume = ConvertTo-PublicSlotLots $row.ask4_volume
+      ask5_price = $row.ask5_price
+      ask5_volume = ConvertTo-PublicSlotLots $row.ask5_volume
+      bid_levels_json = if ($row.bid_levels_json) { $row.bid_levels_json } else { @() }
+      ask_levels_json = if ($row.ask_levels_json) { $row.ask_levels_json } else { @() }
+      payload = if ($row.payload) { $row.payload } else { @{ volume_unit = "lots"; time_standard = "UTC" } }
+    }
+  }
+
+  Invoke-PublicSlotUpsert -Table "fugle_preopen_snapshot_history" -OnConflict "symbol,observed_at" -Rows @($normalized)
+}
+
 function Write-PublicSlotStockTickers {
   param([Parameter(Mandatory = $true)][object[]]$Rows)
 

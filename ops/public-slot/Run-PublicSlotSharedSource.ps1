@@ -915,6 +915,7 @@ do {
     if ($direct1mPayload.rows.Count -gt 0) { Write-PublicSlotIntraday1m -Rows $direct1mPayload.rows }
     if ($minutePayload.dailyRows.Count -gt 0) { Write-PublicSlotDailyVolume -Rows $minutePayload.dailyRows }
     if ($preopenRows.Count -gt 0) { Write-PublicSlotPreopenSnapshot -Rows $preopenRows }
+    if ($preopenRows.Count -gt 0) { Write-PublicSlotPreopenSnapshotHistory -Rows $preopenRows }
     if ($txfPayload.quotes.Count -gt 0) { Write-PublicSlotFutoptQuotesLive -Rows $txfPayload.quotes }
     if ($txfPayload.tickers.Count -gt 0) { Write-PublicSlotFutoptTickers -Rows $txfPayload.tickers }
     if (((Get-Date) - $lastMaintenanceAt).TotalMinutes -ge 30) {
@@ -941,7 +942,7 @@ do {
     $blacklistCount = if ($null -ne $script:SymbolBlacklist) { $script:SymbolBlacklist.Count } else { 0 }
     $rawSymbols = $seeded + $blacklistCount
     $cumulativeBidAskRows = @($quoteRows | Where-Object { $null -ne $_.cumulative_bid_ask_volume }).Count
-    $message = "writer=running; collector=$collectorState; raw_symbols=$rawSymbols; active_symbols=$seeded; blacklist_count=$blacklistCount; quotes=$($quoteRows.Count); quote_age_seconds=$quoteAgeSeconds; last_quote_at=$lastQuoteAt; preopen=$($preopenRows.Count); futopt=$($txfPayload.quotes.Count); intraday_1m_symbols_today=$($intradayStats.intraday_1m_symbols_today); intraday_1m_rows_today=$($intradayStats.intraday_1m_rows_today); intraday_1m_stale_seconds=$($intradayStats.intraday_1m_stale_seconds); latest_candle_time=$($intradayStats.intraday_1m_latest_candle_time); cumulative_bid_ask_rows=$cumulativeBidAskRows; direct_1m_attempted=$($direct1mPayload.attempted); direct_1m_rows=$($direct1mPayload.rows.Count)"
+    $message = "writer=running; collector=$collectorState; raw_symbols=$rawSymbols; active_symbols=$seeded; blacklist_count=$blacklistCount; quotes=$($quoteRows.Count); quote_age_seconds=$quoteAgeSeconds; last_quote_at=$lastQuoteAt; preopen=$($preopenRows.Count); preopen_history_attempted=$($preopenRows.Count); futopt=$($txfPayload.quotes.Count); intraday_1m_symbols_today=$($intradayStats.intraday_1m_symbols_today); intraday_1m_rows_today=$($intradayStats.intraday_1m_rows_today); intraday_1m_stale_seconds=$($intradayStats.intraday_1m_stale_seconds); latest_candle_time=$($intradayStats.intraday_1m_latest_candle_time); cumulative_bid_ask_rows=$cumulativeBidAskRows; direct_1m_attempted=$($direct1mPayload.attempted); direct_1m_rows=$($direct1mPayload.rows.Count)"
     Write-PublicSlotSourceStatus -SourceName $StatusSourceName -Status $status -Message $message -StaleSeconds $quoteAgeSeconds -Payload @{
       raw_symbols = $rawSymbols
       active_symbols = $seeded
@@ -960,6 +961,7 @@ do {
       intraday_1m_stats_source = $intradayStats.intraday_1m_stats_source
       daily_volume_rows = $minutePayload.dailyRows.Count
       preopen_rows = $preopenRows.Count
+      preopen_history_attempted = $preopenRows.Count
       futopt_quotes = $txfPayload.quotes.Count
       futopt_tickers = $txfPayload.tickers.Count
       last_quote_at = $lastQuoteAt

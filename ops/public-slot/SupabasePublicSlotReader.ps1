@@ -38,6 +38,21 @@ function Invoke-PublicSlotRead {
   Invoke-RestMethod -Uri "$script:SupabaseUrl/rest/v1/$path" -Method Get -Headers (Get-PublicSlotReadHeaders)
 }
 
+function Invoke-PublicSlotReadRpc {
+  param(
+    [Parameter(Mandatory = $true)][string]$FunctionName,
+    [Parameter(Mandatory = $true)][string]$Body
+  )
+
+  if ([string]::IsNullOrWhiteSpace($script:SupabaseUrl)) {
+    throw "Call Initialize-SupabasePublicSlotReader first."
+  }
+
+  $headers = Get-PublicSlotReadHeaders
+  $headers["Content-Type"] = "application/json"
+  Invoke-RestMethod -Uri "$script:SupabaseUrl/rest/v1/rpc/$FunctionName" -Method Post -Headers $headers -Body $Body
+}
+
 function Get-PublicSlotSourceStatus {
   param([string]$SourceName = $null)
 
@@ -152,6 +167,24 @@ function Get-PublicSlotIntraday1mLatest200 {
   }
 
   Invoke-PublicSlotRead -PathAndQuery "v_fugle_intraday_1m_latest_200?select=*&order=symbol.asc,candle_time.desc&limit=$Limit"
+}
+
+function Get-PublicSlotIntraday1mLatestN {
+  param(
+    [string[]]$Symbols,
+    [int]$BarsPerSymbol = 200
+  )
+
+  if (-not $Symbols -or $Symbols.Count -eq 0) { return @() }
+  $symbolArray = @($Symbols | ForEach-Object { [string]$_ } | Where-Object { $_ -match '^\d{4}$' } | Select-Object -Unique)
+  if ($symbolArray.Count -eq 0) { return @() }
+
+  $body = @{
+    symbols = $symbolArray
+    bars_per_symbol = $BarsPerSymbol
+  } | ConvertTo-Json -Depth 10 -Compress
+
+  Invoke-PublicSlotReadRpc -FunctionName "get_fugle_intraday_1m_latest_n" -Body $body
 }
 
 function Get-PublicSlotDailyVolume {
