@@ -2,6 +2,8 @@ const fs = require("fs");
 const path = require("path");
 
 const DATA_FILE = path.join(__dirname, "..", "data", "institution-latest.json");
+const APP_FILE = path.join(__dirname, "..", "terminal-app.js");
+const CHIP_MODULE_FILE = path.join(__dirname, "..", "terminal-chip-flow.js");
 
 function num(value) {
   if (value === undefined || value === null || value === "") return 0;
@@ -47,11 +49,23 @@ function assertMin(label, value, min) {
 
 const payload = readPayload(DATA_FILE);
 const counts = countRows(payload.data);
+const app = fs.readFileSync(APP_FILE, "utf8");
+const chipModule = fs.readFileSync(CHIP_MODULE_FILE, "utf8");
 
 assertMin("institution total", counts.total, 1000);
 assertMin("joint buying", counts.joint, 1);
 assertMin("trust buying", counts.trust, 1);
 assertMin("foreign buying", counts.foreign, 1);
+
+if (!app.includes("function parseQuoteNumber(")) {
+  throw new Error("terminal-app.js missing parseQuoteNumber helper");
+}
+if (!app.includes("parseQuoteNumber:parseQuoteNumber")) {
+  throw new Error("terminal-app.js does not inject parseQuoteNumber into chip flow context");
+}
+if (!chipModule.includes('"parseQuoteNumber"')) {
+  throw new Error("terminal-chip-flow.js missing parseQuoteNumber dependency guard");
+}
 
 console.log(JSON.stringify({
   ok: true,
