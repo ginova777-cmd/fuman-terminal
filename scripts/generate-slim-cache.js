@@ -650,6 +650,7 @@ function dataStatusIndex() {
     "institution-mobile-top.json",
     "cb-detect-latest.json",
     "warrant-flow-slim.json",
+    "warrant-priority-top.json",
     "warrant-flow-mobile-top.json",
     "realtime-radar-latest.json",
   ];
@@ -702,6 +703,7 @@ function dataManifest() {
     "institution-mobile-top.json",
     "cb-detect-latest.json",
     "warrant-flow-slim.json",
+    "warrant-priority-top.json",
     "warrant-flow-mobile-top.json",
     "health-summary.json",
     "signal-quality-report.json",

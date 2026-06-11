@@ -1,6 +1,6 @@
 {
   "ok": true,
-  "updatedAt": "2026-06-10T15:32:23.660Z",
+  "updatedAt": "2026-06-11T12:50:42.282Z",
   "strategy2": {
     "latestSignals": 0,
     "latestGo": 0,
@@ -18,24 +18,24 @@
     "longSignals": 0,
     "shortSignals": 0,
     "scorecard": {
-      "count": 74,
-      "avg": 1.7708468367212076,
-      "winRate": 98.64864864864865,
-      "best": 5.5737704918032875,
-      "worst": 0
+      "count": 1,
+      "avg": 0.9541984732824428,
+      "winRate": 100,
+      "best": 0.9541984732824428,
+      "worst": 0.9541984732824428
     },
-    "updatedAt": "2026-06-10T07:45:02.613Z"
+    "updatedAt": "2026-06-11T07:45:02.501Z"
   },
   "strategy4": {
-    "total": 1955,
-    "count": 542,
+    "total": 1607,
+    "count": 666,
     "complete": true,
     "zoneCounts": {
-      "A": 54,
-      "B": 262,
-      "C": 226
+      "A": 51,
+      "B": 315,
+      "C": 300
     },
-    "avgScore": 83.09040590405904,
-    "updatedAt": "2026-06-10T13:47:03.350Z"
+    "avgScore": 80.50750750750751,
+    "updatedAt": "2026-06-11T08:03:09.921Z"
   }
 }

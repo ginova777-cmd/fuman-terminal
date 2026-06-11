@@ -1,7 +1,7 @@
 {
   "ok": true,
   "source": "market-summary",
-  "updatedAt": "2026-06-11T07:30:58.495Z",
+  "updatedAt": "2026-06-11T12:50:40.303Z",
   "marketStatus": "night",
   "trading": false,
   "indexes": [
@@ -25,20 +25,20 @@
   "futuresNear": {
     "name": "臺指期066",
     "month": "TXFF6-M",
-    "price": "43436",
-    "change": "+217",
-    "pct": "+0.50%",
-    "volume": "4090",
+    "price": "43330",
+    "change": "+111",
+    "pct": "+0.26%",
+    "volume": "25833",
     "basisLabel": "多方勢（高於結算）",
     "basisSide": "long"
   },
   "futuresNext": {
     "name": "臺指期076",
     "month": "TXFG6-M",
-    "price": "43492",
-    "change": "+202",
-    "pct": "+0.47%",
-    "volume": "79",
+    "price": "43384",
+    "change": "+94",
+    "pct": "+0.22%",
+    "volume": "708",
     "basisLabel": "多方勢（高於結算）",
     "basisSide": "long"
   },
@@ -1317,7 +1317,7 @@
     {
       "name": "其他電子",
       "up": 25,
-      "down": 53,
+      "down": 52,
       "stocks": [
         {
           "Code": "2404",
@@ -2541,7 +2541,7 @@
     {
       "name": "食品",
       "up": 12,
-      "down": 17,
+      "down": 16,
       "stocks": [
         {
           "Code": "1216",
@@ -2731,7 +2731,7 @@
     {
       "name": "觀光餐旅",
       "up": 24,
-      "down": 25,
+      "down": 24,
       "stocks": [
         {
           "Code": "2731",
@@ -3149,6 +3149,101 @@
       ]
     },
     {
+      "name": "綠能環保",
+      "up": 6,
+      "down": 12,
+      "stocks": [
+        {
+          "Code": "8422",
+          "Name": "可寧衛*",
+          "Market": "",
+          "ClosingPrice": 29.25,
+          "Change": -1,
+          "TradeValue": 916841250,
+          "TradeVolume": "",
+          "percent": "",
+          "quoteDate": "20260611"
+        },
+        {
+          "Code": "6944",
+          "Name": "兆聯實業",
+          "Market": "",
+          "ClosingPrice": 937,
+          "Change": 29,
+          "TradeValue": 899520000,
+          "TradeVolume": "",
+          "percent": "",
+          "quoteDate": "20260611"
+        },
+        {
+          "Code": "8473",
+          "Name": "山林水",
+          "Market": "",
+          "ClosingPrice": 52,
+          "Change": 1.7,
+          "TradeValue": 218972000,
+          "TradeVolume": "",
+          "percent": "",
+          "quoteDate": "20260611"
+        },
+        {
+          "Code": "7786",
+          "Name": "東方風能",
+          "Market": "",
+          "ClosingPrice": 130,
+          "Change": 9.5,
+          "TradeValue": 121680000,
+          "TradeVolume": "",
+          "percent": "",
+          "quoteDate": "20260611"
+        },
+        {
+          "Code": "6873",
+          "Name": "泓德能源",
+          "Market": "",
+          "ClosingPrice": 81.7,
+          "Change": -4.3,
+          "TradeValue": 93873300,
+          "TradeVolume": "",
+          "percent": "",
+          "quoteDate": "20260611"
+        },
+        {
+          "Code": "6869",
+          "Name": "雲豹能源",
+          "Market": "",
+          "ClosingPrice": 78.5,
+          "Change": -3.5,
+          "TradeValue": 80227000,
+          "TradeVolume": "",
+          "percent": "",
+          "quoteDate": "20260611"
+        },
+        {
+          "Code": "3708",
+          "Name": "上緯投控",
+          "Market": "",
+          "ClosingPrice": 118.5,
+          "Change": -0.5,
+          "TradeValue": 78091500,
+          "TradeVolume": "",
+          "percent": "",
+          "quoteDate": "20260611"
+        },
+        {
+          "Code": "2072",
+          "Name": "世紀風電",
+          "Market": "",
+          "ClosingPrice": 182,
+          "Change": 0,
+          "TradeValue": 74256000,
+          "TradeVolume": "",
+          "percent": "",
+          "quoteDate": "20260611"
+        }
+      ]
+    },
+    {
       "name": "金融保險",
       "up": 14,
       "down": 14,
@@ -3246,7 +3341,7 @@
     {
       "name": "資訊服務",
       "up": 16,
-      "down": 24,
+      "down": 23,
       "stocks": [
         {
           "Code": "3147",
@@ -3339,104 +3434,9 @@
       ]
     },
     {
-      "name": "綠能環保",
-      "up": 6,
-      "down": 15,
-      "stocks": [
-        {
-          "Code": "8422",
-          "Name": "可寧衛*",
-          "Market": "",
-          "ClosingPrice": 29.25,
-          "Change": -1,
-          "TradeValue": 916841250,
-          "TradeVolume": "",
-          "percent": "",
-          "quoteDate": "20260611"
-        },
-        {
-          "Code": "6944",
-          "Name": "兆聯實業",
-          "Market": "",
-          "ClosingPrice": 937,
-          "Change": 29,
-          "TradeValue": 899520000,
-          "TradeVolume": "",
-          "percent": "",
-          "quoteDate": "20260611"
-        },
-        {
-          "Code": "8473",
-          "Name": "山林水",
-          "Market": "",
-          "ClosingPrice": 52,
-          "Change": 1.7,
-          "TradeValue": 218972000,
-          "TradeVolume": "",
-          "percent": "",
-          "quoteDate": "20260611"
-        },
-        {
-          "Code": "7786",
-          "Name": "東方風能",
-          "Market": "",
-          "ClosingPrice": 130,
-          "Change": 9.5,
-          "TradeValue": 121680000,
-          "TradeVolume": "",
-          "percent": "",
-          "quoteDate": "20260611"
-        },
-        {
-          "Code": "6873",
-          "Name": "泓德能源",
-          "Market": "",
-          "ClosingPrice": 81.7,
-          "Change": -4.3,
-          "TradeValue": 93873300,
-          "TradeVolume": "",
-          "percent": "",
-          "quoteDate": "20260611"
-        },
-        {
-          "Code": "6869",
-          "Name": "雲豹能源",
-          "Market": "",
-          "ClosingPrice": 78.5,
-          "Change": -3.5,
-          "TradeValue": 80227000,
-          "TradeVolume": "",
-          "percent": "",
-          "quoteDate": "20260611"
-        },
-        {
-          "Code": "3708",
-          "Name": "上緯投控",
-          "Market": "",
-          "ClosingPrice": 118.5,
-          "Change": -0.5,
-          "TradeValue": 78091500,
-          "TradeVolume": "",
-          "percent": "",
-          "quoteDate": "20260611"
-        },
-        {
-          "Code": "2072",
-          "Name": "世紀風電",
-          "Market": "",
-          "ClosingPrice": 182,
-          "Change": 0,
-          "TradeValue": 74256000,
-          "TradeVolume": "",
-          "percent": "",
-          "quoteDate": "20260611"
-        }
-      ]
-    },
-    {
       "name": "居家生活",
-      "up": 5,
-      "down": 8,
+      "up": 4,
+      "down": 7,
       "stocks": [
         {
           "Code": "8464",
@@ -3625,8 +3625,8 @@
     },
     {
       "name": "其他",
-      "up": 25,
-      "down": 30,
+      "up": 29,
+      "down": 44,
       "stocks": [
         {
           "Code": "0050",
@@ -3911,7 +3911,7 @@
     {
       "name": "電子通路",
       "up": 12,
-      "down": 21,
+      "down": 20,
       "stocks": [
         {
           "Code": "3036",
@@ -4371,7 +4371,7 @@
     {
       "name": "電機機械",
       "up": 35,
-      "down": 55,
+      "down": 54,
       "stocks": [
         {
           "Code": "3167",
@@ -4835,7 +4835,7 @@
     {
       "name": "建材營造",
       "up": 23,
-      "down": 61,
+      "down": 60,
       "stocks": [
         {
           "Code": "2542",
@@ -5930,8 +5930,8 @@
     },
     {
       "name": "生技醫療",
-      "up": 35,
-      "down": 63,
+      "up": 32,
+      "down": 60,
       "stocks": [
         {
           "Code": "6446",
@@ -6011,12 +6011,12 @@
           "quoteDate": "20260611"
         },
         {
-          "Code": "7827",
-          "Name": "漢康-KY創",
+          "Code": "4123",
+          "Name": "晟德",
           "Market": "",
-          "ClosingPrice": 157,
-          "Change": 1.5,
-          "TradeValue": 89804000,
+          "ClosingPrice": 37.35,
+          "Change": -0.6,
+          "TradeValue": 82319400,
           "TradeVolume": "",
           "percent": "",
           "quoteDate": "20260611"

@@ -7,7 +7,7 @@ function Get-FumanRuntimeDir {
 
 function Write-FumanFlowHealth {
   param(
-    [Parameter(Mandatory = $true)][ValidateSet("institution", "warrant")][string]$Scope,
+    [Parameter(Mandatory = $true)][ValidateSet("institution", "warrant", "publish", "freshness", "flow")][string]$Scope,
     [Parameter(Mandatory = $true)][string]$Status,
     [string]$Message = "",
     [hashtable]$Detail = @{}
@@ -38,6 +38,10 @@ function Write-FumanFlowHealth {
   $payload[$Scope] = $record
   $payload["updatedAt"] = (Get-Date).ToUniversalTime().ToString("o")
   $jsonText = $payload | ConvertTo-Json -Depth 8
-  $jsonText | Set-Content -LiteralPath $path -Encoding utf8
-  $jsonText | Set-Content -LiteralPath $dataPath -Encoding utf8
+  $stateTemp = "$path.tmp"
+  $dataTemp = "$dataPath.tmp"
+  $jsonText | Set-Content -LiteralPath $stateTemp -Encoding utf8
+  $jsonText | Set-Content -LiteralPath $dataTemp -Encoding utf8
+  Move-Item -LiteralPath $stateTemp -Destination $path -Force
+  Move-Item -LiteralPath $dataTemp -Destination $dataPath -Force
 }

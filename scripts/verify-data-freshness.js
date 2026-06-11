@@ -24,6 +24,7 @@ const TARGETS = [
   { name: "institution-mobile-top", file: "data/institution-mobile-top.json", minCount: 1 },
   { name: "cb-detect-latest", file: "data/cb-detect-latest.json", minCount: 1 },
   { name: "warrant-flow-slim", file: "data/warrant-flow-slim.json", minCount: 1 },
+  { name: "warrant-priority-top", file: "data/warrant-priority-top.json", minCount: 1 },
   { name: "warrant-flow-mobile-top", file: "data/warrant-flow-mobile-top.json", minCount: 1 },
 ];
 
@@ -108,6 +109,7 @@ function validateCrossPayloads(payloads, issues) {
   const cb = payloads["cb-detect-latest"];
   const warrantLatest = payloads["warrant-flow-latest"];
   const warrantSlim = payloads["warrant-flow-slim"];
+  const warrantPriority = payloads["warrant-priority-top"];
   const warrantMobile = payloads["warrant-flow-mobile-top"];
   const quoteDate = normalizeDate(quotes?.resolvedTradeDate || quotes?.today || quotes?.date);
   for (const [name, payload] of [
@@ -116,6 +118,7 @@ function validateCrossPayloads(payloads, issues) {
     ["institution-mobile-top.json", institutionMobile],
     ["cb-detect-latest.json", cb],
     ["warrant-flow-slim.json", warrantSlim],
+    ["warrant-priority-top.json", warrantPriority],
     ["warrant-flow-mobile-top.json", warrantMobile],
     ["stocks-quotes-slim.json", quotes],
     ["terminal-home-bundle.json", home],
@@ -131,18 +134,29 @@ function validateCrossPayloads(payloads, issues) {
 
   const latestFirst = rows(warrantLatest)[0];
   const slimFirst = rows(warrantSlim)[0];
+  const priorityFirst = rows(warrantPriority)[0];
   const mobileFirst = rows(warrantMobile)[0];
   const homeFirst = home?.mobile?.warrant?.top?.[0];
-  assertFresh(latestFirst && slimFirst && mobileFirst && homeFirst, "missing warrant first rows across latest/slim/mobile/home", issues);
-  if (latestFirst && slimFirst && mobileFirst && homeFirst) {
-    for (const [label, row] of [["slim", slimFirst], ["mobile", mobileFirst], ["home", homeFirst]]) {
+  assertFresh(latestFirst && slimFirst, "missing warrant first rows across latest/slim", issues);
+  if (latestFirst && slimFirst) {
+    for (const [label, row] of [["slim", slimFirst]]) {
       assertFresh(String(row.code || "") === String(latestFirst.code || ""), `warrant ${label} first code mismatch`, issues);
       assertFresh(sameNumber(rowClose(row), rowClose(latestFirst)), `warrant ${label} first close mismatch`, issues);
       assertFresh(sameNumber(row.finalScore, latestFirst.finalScore, 0), `warrant ${label} first finalScore mismatch`, issues);
       assertFresh(normalizeDate(row.quoteDate) === quoteDate, `warrant ${label} first quoteDate mismatch quoteDate=${quoteDate}`, issues);
     }
   }
+  assertFresh(priorityFirst && mobileFirst && homeFirst, "missing warrant first rows across priority/mobile/home", issues);
+  if (priorityFirst && mobileFirst && homeFirst) {
+    for (const [label, row] of [["mobile", mobileFirst], ["home", homeFirst]]) {
+      assertFresh(String(row.code || "") === String(priorityFirst.code || ""), `warrant ${label} first code mismatch`, issues);
+      assertFresh(sameNumber(rowClose(row), rowClose(priorityFirst)), `warrant ${label} first close mismatch`, issues);
+      assertFresh(sameNumber(row.finalScore, priorityFirst.finalScore, 0), `warrant ${label} first finalScore mismatch`, issues);
+      assertFresh(normalizeDate(row.quoteDate) === quoteDate, `warrant ${label} first quoteDate mismatch quoteDate=${quoteDate}`, issues);
+    }
+  }
   assertFresh(extractCount(warrantSlim) === extractCount(warrantLatest), "warrant-flow-slim count mismatch latest", issues);
+  assertFresh(extractCount(warrantPriority) <= extractCount(warrantSlim), "warrant-priority-top larger than slim", issues);
   assertFresh(extractCount(warrantMobile) <= extractCount(warrantSlim), "warrant-flow-mobile-top larger than slim", issues);
   assertFresh(Number(home?.mobile?.warrant?.count || 0) === extractCount(warrantMobile), "terminal-home-bundle warrant count mismatch mobile", issues);
 

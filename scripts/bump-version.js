@@ -4,6 +4,7 @@ const path = require("path");
 const ROOT = path.resolve(__dirname, "..");
 const FILES = [
   "index.html",
+  "index.github.html",
   "terminal-core.js",
   "terminal.js",
   "terminal-modules.js",
