@@ -356,6 +356,9 @@ $fugleApiKey = Read-SecretText (Join-Path $RuntimeDir "secrets\fugle-api-key.txt
 if ([string]::IsNullOrWhiteSpace($serviceRoleKey)) { throw "Missing Supabase service_role key" }
 if ([string]::IsNullOrWhiteSpace($anonKey)) { $anonKey = $serviceRoleKey }
 if ([string]::IsNullOrWhiteSpace($fugleApiKey)) { throw "Missing Fugle API key" }
+if ($serviceRoleKey -notmatch '^eyJ') {
+  throw "Supabase service_role key must be the legacy JWT key that starts with eyJ. The current key looks like a new sb_secret key, and Supabase REST rejects it for upsert writes."
+}
 
 $startedAt = ConvertTo-IsoUtc
 $toDate = (Get-Date).ToString("yyyy-MM-dd")
