@@ -11,16 +11,16 @@
       "expectedTime": "06:00"
     }
   },
-  "updatedAt": "2026-06-10T22:37:09.4683969Z",
+  "updatedAt": "2026-06-11T12:50:02.4725673Z",
   "warrant": {
     "scope": "warrant",
-    "status": "ok",
-    "message": "Watchdog rerun completed",
-    "updatedAt": "2026-06-10T21:50:19.4624459Z",
+    "status": "watchdog_rerun",
+    "message": "Watchdog rerun started",
+    "updatedAt": "2026-06-11T12:50:02.4696993Z",
     "detail": {
-      "reason": "warrant not updated after 05:30; updatedAt=06/10/2026 21:30:42",
-      "log": "C:\\fuman-runtime\\logs\\flow-watchdog-warrant-20260611-055002.log",
-      "expectedTime": "05:30"
+      "log": "C:\\fuman-runtime\\logs\\flow-watchdog-warrant-20260611-205002.log",
+      "reason": "warrant not updated after 20:30; updatedAt=06/11/2026 12:31:01",
+      "expectedTime": "20:30"
     }
   }
 }

@@ -1,7 +1,7 @@
 {
   "ok": true,
   "source": "github-actions",
-  "updatedAt": "2026-06-11T12:31:01.139Z",
+  "updatedAt": "2026-06-11T12:50:30.296Z",
   "newestTradeDate": "1150611",
   "count": 120,
   "topMatches": [
@@ -598,14 +598,14 @@
       "name": "瑞昱",
       "stockClose": 655,
       "stockPercent": 1.55,
-      "callValue": 3774690,
+      "callValue": 3790490,
       "putValue": 0,
-      "callCount": 35,
+      "callCount": 36,
       "putCount": 0,
       "callPutRatio": 99,
       "score": 62,
       "tradeDate": "1150611",
-      "reason": "B：候選觀察。權證熱度 77、股票型態 62（回檔觀察）、分點 待接分點；認購 35 檔、價平/價內 15 檔、認購金額 0.04 億，認購/認售比 99+，最近到期 25 天。"
+      "reason": "B：候選觀察。權證熱度 77、股票型態 62（回檔觀察）、分點 待接分點；認購 36 檔、價平/價內 15 檔、認購金額 0.04 億，認購/認售比 99+，最近到期 25 天。"
     },
     {
       "code": "6190",
@@ -892,14 +892,14 @@
       "name": "鴻海",
       "stockClose": 258.5,
       "stockPercent": -1.71,
-      "callValue": 63733380,
+      "callValue": 63739630,
       "putValue": 2076410,
-      "callCount": 252,
+      "callCount": 253,
       "putCount": 29,
-      "callPutRatio": 30.69,
+      "callPutRatio": 30.7,
       "score": 50,
       "tradeDate": "1150611",
-      "reason": "C：只列熱度，不追價。權證熱度 89、股票型態 28（股價偏弱）、分點 待接分點；認購 252 檔、價平/價內 62 檔、認購金額 0.64 億，認購/認售比 30.69，最近到期 11 天。"
+      "reason": "C：只列熱度，不追價。權證熱度 89、股票型態 28（股價偏弱）、分點 待接分點；認購 253 檔、價平/價內 62 檔、認購金額 0.64 億，認購/認售比 30.70，最近到期 11 天。"
     },
     {
       "code": "2408",
@@ -976,14 +976,14 @@
       "name": "聯電",
       "stockClose": 125,
       "stockPercent": 5.49,
-      "callValue": 39359080,
+      "callValue": 39744650,
       "putValue": 3510020,
-      "callCount": 122,
+      "callCount": 123,
       "putCount": 13,
-      "callPutRatio": 11.21,
+      "callPutRatio": 11.32,
       "score": 48,
       "tradeDate": "1150611",
-      "reason": "C：只列熱度，不追價。權證熱度 84、股票型態 28（股價偏弱）、分點 待接分點；認購 122 檔、價平/價內 16 檔、認購金額 0.39 億，認購/認售比 11.21，最近到期 32 天。"
+      "reason": "C：只列熱度，不追價。權證熱度 84、股票型態 28（股價偏弱）、分點 待接分點；認購 123 檔、價平/價內 16 檔、認購金額 0.40 億，認購/認售比 11.32，最近到期 32 天。"
     },
     {
       "code": "6669",
@@ -1046,14 +1046,14 @@
       "name": "漢唐",
       "stockClose": 1195,
       "stockPercent": 3.91,
-      "callValue": 32462260,
+      "callValue": 32599170,
       "putValue": 40300,
-      "callCount": 132,
+      "callCount": 133,
       "putCount": 4,
-      "callPutRatio": 805.52,
-      "score": 46,
+      "callPutRatio": 808.91,
+      "score": 47,
       "tradeDate": "1150611",
-      "reason": "C：只列熱度，不追價。權證熱度 82、股票型態 28（股價偏弱）、分點 待接分點；認購 132 檔、價平/價內 45 檔、認購金額 0.32 億，認購/認售比 99+，最近到期 11 天。"
+      "reason": "C：只列熱度，不追價。權證熱度 83、股票型態 28（股價偏弱）、分點 待接分點；認購 133 檔、價平/價內 45 檔、認購金額 0.33 億，認購/認售比 99+，最近到期 11 天。"
     },
     {
       "code": "2454",
@@ -1074,14 +1074,14 @@
       "name": "玉晶光",
       "stockClose": 693,
       "stockPercent": 2.36,
-      "callValue": 26191020,
+      "callValue": 26386940,
       "putValue": 60350,
-      "callCount": 50,
+      "callCount": 51,
       "putCount": 2,
-      "callPutRatio": 433.99,
+      "callPutRatio": 437.23,
       "score": 46,
       "tradeDate": "1150611",
-      "reason": "C：只列熱度，不追價。權證熱度 81、股票型態 28（股價偏弱）、分點 待接分點；認購 50 檔、價平/價內 21 檔、認購金額 0.26 億，認購/認售比 99+，最近到期 32 天。"
+      "reason": "C：只列熱度，不追價。權證熱度 81、股票型態 28（股價偏弱）、分點 待接分點；認購 51 檔、價平/價內 21 檔、認購金額 0.26 億，認購/認售比 99+，最近到期 32 天。"
     },
     {
       "code": "3357",
