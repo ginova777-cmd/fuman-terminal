@@ -885,6 +885,41 @@ function Convert-IntradayRowsToDailyVolumeRows {
   return @($groups.Values)
 }
 
+function Convert-IntradayRowsToDailyOhlcvRows {
+  param([object[]]$Rows)
+
+  $groups = @{}
+  foreach ($row in @($Rows | Sort-Object symbol, trade_date, candle_time)) {
+    $symbol = [string]$row.symbol
+    $tradeDate = [string]$row.trade_date
+    $close = Get-Number $row.close
+    if ($symbol -notmatch '^\d{4}$' -or [string]::IsNullOrWhiteSpace($tradeDate) -or $close -le 0) { continue }
+    $key = "$symbol|$tradeDate"
+    if (-not $groups.ContainsKey($key)) {
+      $groups[$key] = [ordered]@{
+        symbol = $symbol
+        market = [string]$row.market
+        trade_date = $tradeDate
+        open = Get-Number $row.open
+        high = Get-Number $row.high
+        low = Get-Number $row.low
+        close = $close
+        volume = 0
+        source = "fugle-rest-1m-aggregate"
+        updated_at = (Get-Date).ToUniversalTime().ToString("o")
+        payload = @{ source = "fugle-rest-1m-aggregate"; volume_unit = "lots"; time_standard = "UTC" }
+      }
+    } else {
+      $groups[$key].high = [math]::Max([double]$groups[$key].high, [double](Get-Number $row.high))
+      $groups[$key].low = [math]::Min([double]$groups[$key].low, [double](Get-Number $row.low))
+      $groups[$key].close = $close
+    }
+    $groups[$key].volume = [double]$groups[$key].volume + [double](Convert-VolumeToLots $row.volume)
+  }
+
+  return @($groups.Values)
+}
+
 if (-not (Test-Path -LiteralPath $SourceHelper)) {
   throw "Missing helper: $SourceHelper"
 }
@@ -938,9 +973,11 @@ do {
     if ($quoteRows.Count -gt 0) { Write-PublicSlotQuotesLive -Rows $quoteRows }
     if ($minutePayload.minuteRows.Count -gt 0) { Write-PublicSlotIntraday1m -Rows $minutePayload.minuteRows }
     $direct1mDailyRows = @(Convert-IntradayRowsToDailyVolumeRows -Rows $direct1mPayload.rows)
+    $direct1mOhlcvRows = @(Convert-IntradayRowsToDailyOhlcvRows -Rows $direct1mPayload.rows)
     if ($direct1mPayload.rows.Count -gt 0) { Write-PublicSlotIntraday1m -Rows $direct1mPayload.rows }
     if ($minutePayload.dailyRows.Count -gt 0) { Write-PublicSlotDailyVolume -Rows $minutePayload.dailyRows }
     if ($direct1mDailyRows.Count -gt 0) { Write-PublicSlotDailyVolume -Rows $direct1mDailyRows }
+    if ($direct1mOhlcvRows.Count -gt 0) { Write-PublicSlotDailyOhlcv -Rows $direct1mOhlcvRows }
     if ($preopenRows.Count -gt 0) { Write-PublicSlotPreopenSnapshot -Rows $preopenRows }
     if ($preopenRows.Count -gt 0) { Write-PublicSlotPreopenSnapshotHistory -Rows $preopenRows }
     if ($txfPayload.quotes.Count -gt 0) { Write-PublicSlotFutoptQuotesLive -Rows $txfPayload.quotes }
@@ -969,7 +1006,7 @@ do {
     $blacklistCount = if ($null -ne $script:SymbolBlacklist) { $script:SymbolBlacklist.Count } else { 0 }
     $rawSymbols = $seeded + $blacklistCount
     $cumulativeBidAskRows = @($quoteRows | Where-Object { $null -ne $_.cumulative_bid_ask_volume }).Count
-    $message = "writer=running; collector=$collectorState; raw_symbols=$rawSymbols; active_symbols=$seeded; blacklist_count=$blacklistCount; quotes=$($quoteRows.Count); quote_age_seconds=$quoteAgeSeconds; last_quote_at=$lastQuoteAt; preopen=$($preopenRows.Count); preopen_history_attempted=$($preopenRows.Count); futopt=$($txfPayload.quotes.Count); intraday_1m_symbols_today=$($intradayStats.intraday_1m_symbols_today); intraday_1m_rows_today=$($intradayStats.intraday_1m_rows_today); intraday_1m_stale_seconds=$($intradayStats.intraday_1m_stale_seconds); latest_candle_time=$($intradayStats.intraday_1m_latest_candle_time); daily_volume_rows=$($minutePayload.dailyRows.Count + $direct1mDailyRows.Count); direct_1m_daily_rows=$($direct1mDailyRows.Count); cumulative_bid_ask_rows=$cumulativeBidAskRows; direct_1m_attempted=$($direct1mPayload.attempted); direct_1m_rows=$($direct1mPayload.rows.Count)"
+    $message = "writer=running; collector=$collectorState; raw_symbols=$rawSymbols; active_symbols=$seeded; blacklist_count=$blacklistCount; quotes=$($quoteRows.Count); quote_age_seconds=$quoteAgeSeconds; last_quote_at=$lastQuoteAt; preopen=$($preopenRows.Count); preopen_history_attempted=$($preopenRows.Count); futopt=$($txfPayload.quotes.Count); intraday_1m_symbols_today=$($intradayStats.intraday_1m_symbols_today); intraday_1m_rows_today=$($intradayStats.intraday_1m_rows_today); intraday_1m_stale_seconds=$($intradayStats.intraday_1m_stale_seconds); latest_candle_time=$($intradayStats.intraday_1m_latest_candle_time); daily_volume_rows=$($minutePayload.dailyRows.Count + $direct1mDailyRows.Count); direct_1m_daily_rows=$($direct1mDailyRows.Count); daily_ohlcv_rows=$($direct1mOhlcvRows.Count); cumulative_bid_ask_rows=$cumulativeBidAskRows; direct_1m_attempted=$($direct1mPayload.attempted); direct_1m_rows=$($direct1mPayload.rows.Count)"
     Write-PublicSlotSourceStatus -SourceName $StatusSourceName -Status $status -Message $message -StaleSeconds $quoteAgeSeconds -Payload @{
       raw_symbols = $rawSymbols
       active_symbols = $seeded
@@ -988,6 +1025,7 @@ do {
       intraday_1m_stats_source = $intradayStats.intraday_1m_stats_source
       daily_volume_rows = ($minutePayload.dailyRows.Count + $direct1mDailyRows.Count)
       direct_1m_daily_rows = $direct1mDailyRows.Count
+      daily_ohlcv_rows = $direct1mOhlcvRows.Count
       preopen_rows = $preopenRows.Count
       preopen_history_attempted = $preopenRows.Count
       futopt_quotes = $txfPayload.quotes.Count
@@ -1025,6 +1063,17 @@ do {
       daily_volume_retain_trade_days = $DailyVolumeRetainTradeDays
       preopen_stale_after_session = $true
       futopt_scope = "TXF live quotes; futopt_tickers keeps mapping when available"
+    }
+    $loadedDailySymbols = @($direct1mOhlcvRows | Select-Object -ExpandProperty symbol -Unique).Count
+    $syncStatus = if ($session -eq "closed" -and $loadedDailySymbols -ge [math]::Max(1, [int]($seeded * 0.9))) { "complete" } elseif ($direct1mOhlcvRows.Count -gt 0) { "partial" } else { "running" }
+    Write-PublicSlotDailySyncStatus -TradeDate (Get-Date).ToString("yyyy-MM-dd") -Source "fugle_shared_source" -Status $syncStatus -SymbolsExpected $seeded -SymbolsLoaded $loadedDailySymbols -MissingSymbolsCount ([math]::Max(0, $seeded - $loadedDailySymbols)) -Payload @{
+      daily_ohlcv_rows_written_this_loop = $direct1mOhlcvRows.Count
+      daily_volume_rows_written_this_loop = $direct1mDailyRows.Count
+      direct_1m_attempted = $direct1mPayload.attempted
+      direct_1m_fetched_symbols = $direct1mPayload.fetched
+      direct_1m_rows = $direct1mPayload.rows.Count
+      session = $session
+      note = "complete requires accumulated coverage across loops; this row is a per-loop progress heartbeat"
     }
     Write-PublicSlotMarketCalendar -Rows @([ordered]@{
       trade_date = (Get-Date).ToString("yyyy-MM-dd")

@@ -244,6 +244,65 @@ function Write-PublicSlotDailyVolume {
   Invoke-PublicSlotUpsert -Table "fugle_daily_volume" -OnConflict "symbol,trade_date" -Rows @($normalized)
 }
 
+function Write-PublicSlotDailyOhlcv {
+  param([Parameter(Mandatory = $true)][object[]]$Rows)
+
+  if (-not (Test-PublicSlotColumnAvailable -Table "fugle_daily_ohlcv" -Column "symbol")) { return }
+
+  $now = ConvertTo-IsoUtc
+  $normalized = foreach ($row in $Rows) {
+    @{
+      symbol = [string]$row.symbol
+      market = $row.market
+      trade_date = $row.trade_date
+      open = $row.open
+      high = $row.high
+      low = $row.low
+      close = $row.close
+      volume = ConvertTo-PublicSlotLots $row.volume
+      source = if ($row.source) { $row.source } else { "fugle" }
+      name = $row.name
+      industry = $row.industry
+      updated_at = if ($row.updated_at) { ConvertTo-IsoUtc $row.updated_at } else { $now }
+      payload = if ($row.payload) { $row.payload } else { @{ volume_unit = "lots"; time_standard = "UTC" } }
+    }
+  }
+
+  Invoke-PublicSlotUpsert -Table "fugle_daily_ohlcv" -OnConflict "symbol,trade_date" -Rows @($normalized)
+}
+
+function Write-PublicSlotDailySyncStatus {
+  param(
+    [string]$TradeDate = (Get-Date).ToString("yyyy-MM-dd"),
+    [string]$Source = "fugle_shared_source",
+    [string]$Status = "running",
+    [int]$SymbolsExpected = 0,
+    [int]$SymbolsLoaded = 0,
+    [int]$MissingSymbolsCount = 0,
+    [string]$ErrorMessage = $null,
+    [hashtable]$Payload = @{}
+  )
+
+  if (-not (Test-PublicSlotColumnAvailable -Table "fugle_daily_sync_status" -Column "trade_date")) { return }
+
+  $now = ConvertTo-IsoUtc
+  $row = @{
+    trade_date = $TradeDate
+    source = $Source
+    started_at = if ($Payload.started_at) { ConvertTo-IsoUtc $Payload.started_at } else { $now }
+    finished_at = if ($Status -in @("complete", "partial", "failed", "skipped", "no_trade_day")) { $now } else { $null }
+    symbols_expected = $SymbolsExpected
+    symbols_loaded = $SymbolsLoaded
+    missing_symbols_count = $MissingSymbolsCount
+    status = $Status
+    error_message = $ErrorMessage
+    updated_at = $now
+    payload = $Payload
+  }
+
+  Invoke-PublicSlotUpsert -Table "fugle_daily_sync_status" -OnConflict "trade_date,source" -Rows @($row)
+}
+
 function Write-PublicSlotFutoptTickers {
   param([Parameter(Mandatory = $true)][object[]]$Rows)
 
