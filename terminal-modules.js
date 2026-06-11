@@ -1,5 +1,5 @@
 (function () {
-  const VERSION = "chip-flow-hardening-20260611-15";
+  const VERSION = "chip-flow-hardening-20260611-17";
   const modules = {
     sectorMap: { loaded: false, src: "terminal-sector-map.js" },
     strategyConfig: { loaded: false, src: "terminal-strategy-config.js" },

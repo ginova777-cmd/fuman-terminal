@@ -1,5 +1,5 @@
 (function () {
-  const version = "chip-flow-hardening-20260611-15";
+  const version = "chip-flow-hardening-20260611-17";
   window.FUMAN_TERMINAL_VERSION = version;
   window.FUMAN_TERMINAL_BOOT = {
     version,
@@ -41,8 +41,9 @@
 
   const checkRemoteVersion = () => {
     try {
-      fetch(`/version.json?fresh=${Date.now()}`, { cache: "no-store" })
-        .then((response) => response.ok ? response.json() : null)
+      const fresh = Date.now();
+      fetch(`/version.json?fresh=${fresh}`, { cache: "no-store" })
+        .then((response) => response.ok ? response.json() : fetch(`/api/version?fresh=${fresh}`, { cache: "no-store" }).then((apiResponse) => apiResponse.ok ? apiResponse.json() : null))
         .then((payload) => reloadToFreshVersion(String(payload?.version || "").trim()))
         .catch(() => undefined);
     } catch (error) {}
