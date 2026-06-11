@@ -1,9 +1,9 @@
 {
   "ok": true,
   "source": "github-actions",
-  "updatedAt": "2026-06-11T13:00:34.546Z",
+  "updatedAt": "2026-06-11T13:20:43.874Z",
   "usedDate": "20260611",
-  "quoteUpdatedAt": "2026-06-11T13:00:14.180Z",
+  "quoteUpdatedAt": "2026-06-11T13:20:14.716Z",
   "count": 1880,
   "topJoint": [
     {
@@ -295,6 +295,22 @@
       "fiveDayAvgVolume": 9208303
     },
     {
+      "code": "3006",
+      "name": "晶豪科",
+      "close": 204.5,
+      "percent": 1.24,
+      "value": 2128436000,
+      "foreign": 245510,
+      "trust": 15000,
+      "dealer": 0,
+      "total": 192606,
+      "foreignStreak": 2,
+      "trustStreak": 3,
+      "jointStreak": 2,
+      "fiveDayPctSum": -23.94,
+      "fiveDayAvgVolume": 14924739
+    },
+    {
       "code": "7828",
       "name": "創新服務",
       "close": 1790,
@@ -577,7 +593,7 @@
       "dealer": 0,
       "total": 1438403,
       "foreignStreak": 1,
-      "trustStreak": 1,
+      "trustStreak": 2,
       "jointStreak": 1,
       "fiveDayPctSum": -25.28,
       "fiveDayAvgVolume": 7306245
@@ -901,22 +917,6 @@
       "jointStreak": 1,
       "fiveDayPctSum": -19.86,
       "fiveDayAvgVolume": 12690054
-    },
-    {
-      "code": "3006",
-      "name": "晶豪科",
-      "close": 204.5,
-      "percent": 1.24,
-      "value": 2128436000,
-      "foreign": 245510,
-      "trust": 15000,
-      "dealer": 0,
-      "total": 192606,
-      "foreignStreak": 2,
-      "trustStreak": 1,
-      "jointStreak": 1,
-      "fiveDayPctSum": -23.94,
-      "fiveDayAvgVolume": 14924739
     },
     {
       "code": "6202",

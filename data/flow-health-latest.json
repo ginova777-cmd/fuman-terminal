@@ -1,13 +1,5 @@
 {
-  "institution": {
-    "scope": "institution",
-    "status": "ok",
-    "message": "Institution scan and publish completed",
-    "updatedAt": "2026-06-11T13:00:51.1979164Z",
-    "detail": {
-      "log": "C:\\fuman-runtime\\logs\\institution-20260611-210002.log"
-    }
-  },
+  "updatedAt": "2026-06-11T13:20:02.7000562Z",
   "warrant": {
     "scope": "warrant",
     "status": "ok",
@@ -19,5 +11,15 @@
       "expectedTime": "20:30"
     }
   },
-  "updatedAt": "2026-06-11T13:00:51.2030989Z"
+  "institution": {
+    "scope": "institution",
+    "status": "watchdog_rerun",
+    "message": "Watchdog rerun started",
+    "updatedAt": "2026-06-11T13:20:02.6972493Z",
+    "detail": {
+      "log": "C:\\fuman-runtime\\logs\\flow-watchdog-institution-20260611-212002.log",
+      "expectedTime": "21:00",
+      "reason": "institution not updated after 21:00; updatedAt=06/11/2026 13:00:34"
+    }
+  }
 }
