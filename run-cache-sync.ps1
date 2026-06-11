@@ -717,14 +717,13 @@ try {
       "data\strategy4-zone-a.json",
       "data\strategy4-zone-b.json",
       "data\strategy4-zone-c.json",
-      "data\strategy4-zone-b-page-1.json",
-      "data\strategy4-zone-b-page-2.json",
-      "data\strategy4-zone-b-page-3.json",
-      "data\strategy4-zone-b-page-4.json",
-      "data\strategy4-zone-b-page-5.json",
       "data\strategy4-score-top.json",
       "data\strategy4-backup.json"
     )
+    for ($page = 1; $page -le 48; $page++) {
+      $dataFiles += "data\strategy4-zone-b-page-$page.json"
+      $dataFiles += "data\strategy4-zone-c-page-$page.json"
+    }
   } elseif ($Scope -eq "strategy5") {
     $criticalLatestFiles = @(
       "data\strategy5-latest.json"
@@ -883,9 +882,14 @@ try {
     exit 0
   }
 
-  Run-Git "Stage cache files" (@("add", "-f") + $stageFiles)
+  $stageChunkSize = 20
+  for ($offset = 0; $offset -lt $stageFiles.Count; $offset += $stageChunkSize) {
+    $end = [Math]::Min($offset + $stageChunkSize - 1, $stageFiles.Count - 1)
+    $stageChunk = @($stageFiles[$offset..$end])
+    Run-Git "Stage cache files $($offset + 1)-$($end + 1)/$($stageFiles.Count)" (@("add", "-f") + $stageChunk)
+  }
 
-  $changed = & $gitExe -C $syncRepo diff --cached --name-only -- $stageFiles
+  $changed = & $gitExe -C $syncRepo diff --cached --name-only
   if (-not $changed) {
     Write-Log "No cache changes to sync."
     Invoke-PublishedDataVerification
@@ -932,8 +936,13 @@ try {
       Write-Log "No copied cache files to stage after retry reset."
       return
     }
-    Run-Git "Stage cache files after retry reset" (@("add", "-f") + $retryStageFiles)
-    $retryChanged = & $gitExe -C $syncRepo diff --cached --name-only -- $retryStageFiles
+    $retryStageChunkSize = 20
+    for ($offset = 0; $offset -lt $retryStageFiles.Count; $offset += $retryStageChunkSize) {
+      $end = [Math]::Min($offset + $retryStageChunkSize - 1, $retryStageFiles.Count - 1)
+      $retryStageChunk = @($retryStageFiles[$offset..$end])
+      Run-Git "Stage cache files after retry reset $($offset + 1)-$($end + 1)/$($retryStageFiles.Count)" (@("add", "-f") + $retryStageChunk)
+    }
+    $retryChanged = & $gitExe -C $syncRepo diff --cached --name-only
     if ($retryChanged) {
       Run-Git "Commit cache files after retry reset" @("commit", "-m", "Update scheduled cache $stamp retry")
       Run-GitWithRetry "Retry push cache commit" @("push", "origin", "main")
