@@ -11797,9 +11797,9 @@
       "total": 192606,
       "market": "上市",
       "foreignStreak": 2,
-      "trustStreak": 3,
+      "trustStreak": 1,
       "dealerStreak": 0,
-      "jointStreak": 2,
+      "jointStreak": 1,
       "close": 204.5,
       "change": 2.5,
       "percent": 1.24,
@@ -28702,7 +28702,7 @@
       "total": 1438403,
       "market": "上市",
       "foreignStreak": 1,
-      "trustStreak": 2,
+      "trustStreak": 1,
       "dealerStreak": 0,
       "jointStreak": 1,
       "close": 499.5,
@@ -39494,11 +39494,14 @@
     "TPEx 3itrade_hedge_result"
   ],
   "source": "github-actions-backup",
-  "updatedAt": "2026-06-11T13:20:43.874Z",
-  "quoteUpdatedAt": "2026-06-11T13:20:14.716Z",
+  "updatedAt": "2026-06-11T13:41:37.955Z",
+  "quoteUpdatedAt": "2026-06-11T13:40:59.948Z",
   "sourceHealth": {
     "fiveDayMetricCount": 1968,
-    "warningCount": 0,
-    "warnings": []
+    "warningCount": 2,
+    "warnings": [
+      "tpex 5-day metrics failed: 115/06/10 :: terminated",
+      "tpex 5-day metrics failed: 115/06/09 :: terminated"
+    ]
   }
 }
