@@ -34,6 +34,13 @@ function Count-Rows($payload) {
   return $null
 }
 
+function Get-BatchId($payload) {
+  if ($payload -eq $null) { return "" }
+  if ($payload.scanStamp) { return [string]$payload.scanStamp }
+  if ($payload.updatedAt) { return [string]$payload.updatedAt }
+  return ""
+}
+
 function Number-OrZero($value) {
   if ($null -eq $value) { return 0 }
   try { return [int]$value } catch { return 0 }
@@ -68,21 +75,114 @@ function Get-ExpectedFrontendVersion {
   return ""
 }
 
+function Test-Strategy4SplitSet($label, $payloads) {
+  $setIssues = New-Object System.Collections.Generic.List[string]
+  $latestPayload = $payloads["strategy4-latest.json"]
+  if ($latestPayload -eq $null) {
+    $setIssues.Add("$label split check missing strategy4-latest.json") | Out-Null
+    return $setIssues
+  }
+
+  $latestCount = Count-Rows $latestPayload
+  $latestBatch = Get-BatchId $latestPayload
+  foreach ($name in @("strategy4-summary.json", "strategy4-slim.json", "strategy4-zone-a.json", "strategy4-zone-b.json", "strategy4-zone-c.json", "strategy4-score-top.json")) {
+    $payload = $payloads[$name]
+    if ($payload -eq $null) {
+      $setIssues.Add("$label missing $name") | Out-Null
+      continue
+    }
+    $batch = Get-BatchId $payload
+    if ($latestBatch -and $batch -and $batch -ne $latestBatch) {
+      $setIssues.Add("$label $name batch $batch differs latest $latestBatch") | Out-Null
+    }
+  }
+
+  foreach ($name in @("strategy4-summary.json", "strategy4-slim.json")) {
+    $payload = $payloads[$name]
+    $count = Count-Rows $payload
+    if ($payload -and $count -ne $latestCount) {
+      $setIssues.Add("$label $name count $count differs latest $latestCount") | Out-Null
+    }
+  }
+
+  $zoneA = $payloads["strategy4-zone-a.json"]
+  $zoneB = $payloads["strategy4-zone-b.json"]
+  $zoneC = $payloads["strategy4-zone-c.json"]
+  $zoneACount = Count-Rows $zoneA
+  $zoneBCount = Count-Rows $zoneB
+  $zoneCCount = Count-Rows $zoneC
+  if ($zoneA -and $zoneA.zone -ne "A") { $setIssues.Add("$label strategy4-zone-a.json zone=$($zoneA.zone)") | Out-Null }
+  if ($zoneB -and $zoneB.zone -ne "B") { $setIssues.Add("$label strategy4-zone-b.json zone=$($zoneB.zone)") | Out-Null }
+  if ($zoneC -and $zoneC.zone -ne "C") { $setIssues.Add("$label strategy4-zone-c.json zone=$($zoneC.zone)") | Out-Null }
+  if (($zoneACount + $zoneBCount + $zoneCCount) -ne $latestCount) {
+    $setIssues.Add("$label zone total A/B/C=$zoneACount/$zoneBCount/$zoneCCount differs latest $latestCount") | Out-Null
+  }
+
+  $scoreTop = $payloads["strategy4-score-top.json"]
+  $scoreTopCount = Count-Rows $scoreTop
+  $expectedScoreTop = [Math]::Min(120, [int]$latestCount)
+  if ($scoreTop -and $scoreTopCount -ne $expectedScoreTop) {
+    $setIssues.Add("$label strategy4-score-top count $scoreTopCount differs expected $expectedScoreTop") | Out-Null
+  }
+
+  foreach ($zoneName in @("B", "C")) {
+    $zoneCount = if ($zoneName -eq "B") { [int]$zoneBCount } else { [int]$zoneCCount }
+    $expectedPages = [Math]::Max(1, [Math]::Ceiling($zoneCount / 25))
+    $pageTotal = 0
+    for ($page = 1; $page -le 48; $page++) {
+      $file = "strategy4-zone-$($zoneName.ToLower())-page-$page.json"
+      $payload = $payloads[$file]
+      if ($payload -eq $null) {
+        $setIssues.Add("$label missing $file") | Out-Null
+        continue
+      }
+      $batch = Get-BatchId $payload
+      if ($latestBatch -and $batch -and $batch -ne $latestBatch) {
+        $setIssues.Add("$label $file batch $batch differs latest $latestBatch") | Out-Null
+      }
+      if ($payload.zone -ne $zoneName) { $setIssues.Add("$label $file zone=$($payload.zone)") | Out-Null }
+      if ([int]$payload.page -ne $page) { $setIssues.Add("$label $file page=$($payload.page)") | Out-Null }
+      if ([int]$payload.totalCount -ne $zoneCount) { $setIssues.Add("$label $file totalCount=$($payload.totalCount) differs zone $zoneCount") | Out-Null }
+      if ([int]$payload.totalPages -ne [int]$expectedPages) { $setIssues.Add("$label $file totalPages=$($payload.totalPages) differs expected $expectedPages") | Out-Null }
+      $count = Count-Rows $payload
+      if ([int]$payload.count -ne [int]$count) { $setIssues.Add("$label $file count field $($payload.count) differs rows $count") | Out-Null }
+      if ($page -le $expectedPages) {
+        $pageTotal += [int]$count
+      } elseif ([int]$count -ne 0) {
+        $setIssues.Add("$label $file should be empty after page $expectedPages but count=$count") | Out-Null
+      }
+    }
+    if ($pageTotal -ne $zoneCount) {
+      $setIssues.Add("$label zone $zoneName page total $pageTotal differs zone count $zoneCount") | Out-Null
+    }
+  }
+
+  return $setIssues
+}
+
 $issues = New-Object System.Collections.Generic.List[string]
 $warnings = New-Object System.Collections.Generic.List[string]
 $expectedVersion = Get-ExpectedFrontendVersion
 $files = @(
   "strategy4-latest.json",
+  "strategy4-summary.json",
   "strategy4-slim.json",
   "strategy4-zone-a.json",
   "strategy4-zone-b.json",
-  "strategy4-zone-c.json"
+  "strategy4-zone-c.json",
+  "strategy4-score-top.json"
 )
+for ($page = 1; $page -le 48; $page++) {
+  $files += "strategy4-zone-b-page-$page.json"
+  $files += "strategy4-zone-c-page-$page.json"
+}
 
 $local = @{}
+$localPayloads = @{}
 foreach ($file in $files) {
   $path = Join-Path $dataDir $file
   $payload = Read-Json $path
+  $localPayloads[$file] = $payload
   $count = Count-Rows $payload
   $local[$file] = [ordered]@{
     count = $count
@@ -109,6 +209,10 @@ if ($latest -eq $null) {
   }
 }
 
+foreach ($issue in (Test-Strategy4SplitSet "local" $localPayloads)) {
+  $issues.Add($issue) | Out-Null
+}
+
 $remoteLatest = Fetch-Json "$baseUrl/data/strategy4-latest.json"
 $remoteSlim = Fetch-Json "$baseUrl/data/strategy4-slim.json"
 if ($remoteLatest) {
@@ -122,6 +226,14 @@ if ($remoteSlim) {
   if ($latest -and $remoteSlimCount -ne (Count-Rows $latest)) {
     $warnings.Add("remote slim count $remoteSlimCount differs local $(Count-Rows $latest)") | Out-Null
   }
+}
+
+$remotePayloads = @{}
+foreach ($file in $files) {
+  $remotePayloads[$file] = Fetch-Json "$baseUrl/data/$file"
+}
+foreach ($issue in (Test-Strategy4SplitSet "remote" $remotePayloads)) {
+  $issues.Add($issue) | Out-Null
 }
 
 $terminalCore = Fetch-Text "$baseUrl/terminal-core.js"

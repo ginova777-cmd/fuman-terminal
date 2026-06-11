@@ -101,30 +101,35 @@ function strategy4PresetFiles(payload) {
   const zoneBPages = [];
   const zoneCPages = [];
   const pageSize = 25;
-  for (let index = 0; index < zoneB.length; index += pageSize) {
-    const page = Math.floor(index / pageSize) + 1;
+  const maxStrategy4ZonePages = 48;
+  const zoneBTotalPages = Math.max(1, Math.ceil(zoneB.length / pageSize));
+  const zoneCTotalPages = Math.max(1, Math.ceil(zoneC.length / pageSize));
+  for (let page = 1; page <= maxStrategy4ZonePages; page += 1) {
+    const index = (page - 1) * pageSize;
+    const rows = zoneB.slice(index, index + pageSize);
     zoneBPages.push([`data/strategy4-zone-b-page-${page}.json`, {
       ...base,
       zone: "B",
       page,
       pageSize,
-      totalPages: Math.ceil(zoneB.length / pageSize),
+      totalPages: zoneBTotalPages,
       totalCount: zoneB.length,
-      count: Math.min(pageSize, zoneB.length - index),
-      matches: zoneB.slice(index, index + pageSize),
+      count: rows.length,
+      matches: rows,
     }]);
   }
-  for (let index = 0; index < zoneC.length; index += pageSize) {
-    const page = Math.floor(index / pageSize) + 1;
+  for (let page = 1; page <= maxStrategy4ZonePages; page += 1) {
+    const index = (page - 1) * pageSize;
+    const rows = zoneC.slice(index, index + pageSize);
     zoneCPages.push([`data/strategy4-zone-c-page-${page}.json`, {
       ...base,
       zone: "C",
       page,
       pageSize,
-      totalPages: Math.ceil(zoneC.length / pageSize),
+      totalPages: zoneCTotalPages,
       totalCount: zoneC.length,
-      count: Math.min(pageSize, zoneC.length - index),
-      matches: zoneC.slice(index, index + pageSize),
+      count: rows.length,
+      matches: rows,
     }]);
   }
   return [
