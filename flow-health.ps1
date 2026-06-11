@@ -7,7 +7,7 @@ function Get-FumanRuntimeDir {
 
 function Write-FumanFlowHealth {
   param(
-    [Parameter(Mandatory = $true)][ValidateSet("institution", "warrant", "publish", "freshness", "flow")][string]$Scope,
+    [Parameter(Mandatory = $true)][ValidateSet("institution", "warrant", "publish", "freshness", "supabase", "flow")][string]$Scope,
     [Parameter(Mandatory = $true)][string]$Status,
     [string]$Message = "",
     [hashtable]$Detail = @{}

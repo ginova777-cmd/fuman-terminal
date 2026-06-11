@@ -15,11 +15,17 @@ const KEY_FILES = [
   "terminal-modules.js",
   "terminal-live-check.js",
   "fuman-sw.js",
+  "api/version.js",
   "terminal-chip-flow.js",
   "terminal-warrant-flow.js",
   "terminal-watchlist-module.js",
   "terminal-watchlist.css",
   "version.json",
+  "scripts/bump-version.js",
+  "scripts/prepare-deploy.js",
+  "scripts/sync-afterhours-supabase-status.js",
+  "scripts/sync-main-deploy-source.js",
+  "scripts/verify-supabase-json.js",
   "data/data-manifest.json",
   "data/terminal-home-bundle.json",
   "data/institution-latest.json",
@@ -29,6 +35,7 @@ const KEY_FILES = [
   "data/warrant-flow-slim.json",
   "data/warrant-flow-mobile-top.json",
   "data/flow-health-latest.json",
+  "data/afterhours-supabase-status.json",
 ];
 
 function sha256(file) {

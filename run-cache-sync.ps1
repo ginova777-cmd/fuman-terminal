@@ -360,6 +360,7 @@ function Test-IntradayFlowProtectedFile($file) {
     "data\warrant-flow-slim.json",
     "data\warrant-priority-top.json",
     "data\warrant-flow-backup.json",
+    "data\afterhours-supabase-status.json",
     "data\flow-health-latest.json"
   )) { return $false }
   $now = Get-Date
@@ -632,6 +633,7 @@ try {
       "data\warrant-priority-top.json",
       "data\warrant-flow-mobile-top.json",
       "data\warrant-flow-backup.json",
+      "data\afterhours-supabase-status.json",
       "data\flow-health-latest.json",
       "data\data-status-index.json",
       "data\data-manifest.json"
@@ -650,6 +652,7 @@ try {
       "data\institution-trust-top.json",
       "data\institution-mobile-top.json",
       "data\institution-backup.json",
+      "data\afterhours-supabase-status.json",
       "data\flow-health-latest.json",
       "data\data-status-index.json",
       "data\data-manifest.json"
@@ -666,6 +669,7 @@ try {
       "data\warrant-priority-top.json",
       "data\warrant-flow-mobile-top.json",
       "data\warrant-flow-backup.json",
+      "data\afterhours-supabase-status.json",
       "data\flow-health-latest.json",
       "data\data-status-index.json",
       "data\data-manifest.json"
@@ -740,6 +744,7 @@ try {
 
     $dataFiles = @(
       "data\cb-detect-latest.json",
+      "data\afterhours-supabase-status.json",
       "data\data-status-index.json",
       "data\data-manifest.json"
     )
@@ -768,6 +773,7 @@ try {
       "data\warrant-priority-top.json",
       "data\warrant-flow-mobile-top.json",
       "data\warrant-flow-backup.json",
+      "data\afterhours-supabase-status.json",
       "data\flow-health-latest.json",
       "data\market-summary.json",
       "data\health-summary.json",

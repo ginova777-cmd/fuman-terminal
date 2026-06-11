@@ -23,6 +23,12 @@ try {
     "CB detect full scan failed with exit code $exitCode" >> $log
     exit $exitCode
   }
+  & $nodeExe "scripts\sync-afterhours-supabase-status.js" "--source=fuman_afterhours_cb" "--require=cb" "--optional=institution,warrant" 2>&1 | ForEach-Object { $_ | Out-File -LiteralPath $log -Append -Encoding utf8 }
+  $supabaseExit = $LASTEXITCODE
+  if ($supabaseExit -ne 0) {
+    "CB detect Supabase verification failed with exit code $supabaseExit" >> $log
+    exit $supabaseExit
+  }
 } finally {
   Pop-Location
 }

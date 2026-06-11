@@ -54,6 +54,12 @@ function Invoke-FlowFreshnessVerification {
   return $LASTEXITCODE
 }
 
+function Invoke-AfterhoursSupabaseVerification {
+  Write-FlowLog "Running afterhours Supabase JSON/readback verification"
+  & $nodeExe "scripts\sync-afterhours-supabase-status.js" "--source=fuman_afterhours_flow" "--require=institution,warrant" "--optional=cb" >> $log 2>&1
+  return $LASTEXITCODE
+}
+
 Write-FlowLog "=== Flow and warrant scan start $(Get-Date) ==="
 . "${PSScriptRoot}\schedule-guard.ps1"
 . "${PSScriptRoot}\flow-health.ps1"
@@ -104,6 +110,15 @@ if ($freshnessExit -ne 0) {
   exit $freshnessExit
 }
 Write-FlowHealth "freshness" "ok" "Data freshness verification passed" @{ exitCode = 0; log = $log }
+
+$supabaseExit = Invoke-AfterhoursSupabaseVerification
+if ($supabaseExit -ne 0) {
+  Write-FlowLog "Afterhours Supabase verification failed with exit code $supabaseExit"
+  Write-FlowHealth "supabase" "failed" "Afterhours Supabase verification failed" @{ exitCode = $supabaseExit; log = $log }
+  Write-FlowHealth "flow" "failed" "Flow stopped at Supabase verification" @{ stage = "supabase"; exitCode = $supabaseExit; log = $log }
+  exit $supabaseExit
+}
+Write-FlowHealth "supabase" "ok" "Afterhours Supabase verification passed" @{ exitCode = 0; log = $log }
 
 $institution = Read-Json "C:\fuman-runtime\data\institution-latest.json"
 $warrant = Read-Json "C:\fuman-runtime\data\warrant-flow-latest.json"

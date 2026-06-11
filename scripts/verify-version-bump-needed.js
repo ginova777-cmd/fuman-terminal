@@ -26,7 +26,7 @@ const FRONTEND_FILES = [
   "terminal-watchlist-module.js",
   "fuman-sw.js",
 ];
-const VERSION_FILES = new Set(["index.html", "terminal-core.js", "terminal.js", "terminal-modules.js", "fuman-sw.js"]);
+const VERSION_FILES = new Set(["index.html", "terminal-core.js", "terminal.js", "terminal-modules.js", "fuman-sw.js", "refresh.html", "version.json"]);
 
 function git(args) {
   const result = spawnSync("git", args, { cwd: ROOT, encoding: "utf8", env: { ...process.env, GIT_OPTIONAL_LOCKS: "0" } });

@@ -33,7 +33,9 @@ requireIncludes("fuman-sw.js", `/terminal-app.js?v=${VERSION}`);
 requireIncludes("refresh.html", `/?v=${VERSION}`);
 requireIncludes("version.json", `"version": "${VERSION}"`);
 requireIncludes("terminal-core.js", "/version.json?fresh=");
+requireIncludes("terminal-core.js", "/api/version?fresh=");
 requireIncludes("terminal-core.js", "fuman-terminal-remote-version-reload");
+requireIncludes("api/version.js", "../version.json");
 requireIncludes("scripts/verify-deployment.js", "detectVersion");
 requireIncludes("scripts/e2e-smoke.js", "detectVersion");
 
