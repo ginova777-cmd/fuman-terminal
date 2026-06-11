@@ -1298,6 +1298,19 @@ body::after {
   user-select: none;
 }
 
+#watchlist-view .member-lock-host > :not(.member-lock-overlay),
+#watchlist-view.member-lock-host > :not(.member-lock-overlay),
+#watchlist-view.member-locked-view > :not(.member-lock-overlay) {
+  filter: none !important;
+  opacity: 1 !important;
+  pointer-events: auto !important;
+  user-select: auto !important;
+}
+
+#watchlist-view .member-lock-overlay {
+  display: none !important;
+}
+
 .member-lock-overlay {
   position: absolute;
   inset: 0;

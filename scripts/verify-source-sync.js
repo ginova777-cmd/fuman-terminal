@@ -8,8 +8,12 @@ const DEPLOY_ROOT = process.env.FUMAN_DEPLOY_SOURCE_DIR || "C:\\fuman-terminal";
 const KEY_FILES = [
   "index.html",
   "index.github.html",
+  "styles.css",
+  "terminal.js",
+  "terminal-app.js",
   "terminal-core.js",
   "terminal-modules.js",
+  "terminal-live-check.js",
   "fuman-sw.js",
   "terminal-chip-flow.js",
   "terminal-warrant-flow.js",

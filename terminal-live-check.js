@@ -55,7 +55,7 @@ const authModeButtons = [...document.querySelectorAll("[data-auth-mode]")];
 const authLogoutButton = document.querySelector(".sidebar-foot .logout");
 const memberState = document.querySelector("#member-state");
 const supabaseClient = window.supabase?.createClient?.(FUMAN_SUPABASE_URL, FUMAN_SUPABASE_KEY);
-const PUBLIC_VIEWS = new Set(["market"]);
+const PUBLIC_VIEWS = new Set(["market", "member", "chip-trade", "watchlist"]);
 let authMode = "login";
 
 function setAuthMessage(text, type = "") {
