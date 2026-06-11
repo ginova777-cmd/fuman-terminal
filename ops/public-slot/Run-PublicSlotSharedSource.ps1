@@ -801,6 +801,7 @@ function Update-MinuteRows {
 
   $state = Read-JsonFile -Path $StateFile -Default ([pscustomobject]@{ buckets = @{} })
   if (-not $state.buckets) { $state | Add-Member -NotePropertyName buckets -NotePropertyValue ([pscustomobject]@{}) -Force }
+  if (-not $state.last_total_volume) { $state | Add-Member -NotePropertyName last_total_volume -NotePropertyValue ([pscustomobject]@{}) -Force }
   $rows = New-Object System.Collections.Generic.List[object]
   $daily = New-Object System.Collections.Generic.List[object]
   $today = (Get-Date).ToString("yyyy-MM-dd")
@@ -813,6 +814,11 @@ function Update-MinuteRows {
     if ($price -le 0 -or $symbol -notmatch '^\d{4}$') { continue }
 
     $bucket = $state.buckets.$symbol
+    $previousTotalVolume = $state.last_total_volume.$symbol
+    if ($null -eq $previousTotalVolume) { $previousTotalVolume = $totalVolume }
+    $startVolume = [int64]$previousTotalVolume
+    if ($startVolume -gt $totalVolume) { $startVolume = $totalVolume }
+
     if ($null -eq $bucket -or [string]$bucket.minute -ne $minute) {
       $bucket = [pscustomobject]@{
         minute = $minute
@@ -820,7 +826,7 @@ function Update-MinuteRows {
         high = $price
         low = $price
         close = $price
-        start_volume = $totalVolume
+        start_volume = $startVolume
         last_volume = $totalVolume
         market = [string]$quote.market
       }
@@ -831,6 +837,9 @@ function Update-MinuteRows {
       $bucket.close = $price
       $bucket.last_volume = [math]::Max([int64]$bucket.last_volume, $totalVolume)
     }
+
+    $state.last_total_volume | Add-Member -NotePropertyName $symbol -NotePropertyValue ([int64]$bucket.last_volume) -Force
+    $taipeiMinute = ([datetimeoffset]::Parse([string]$minute)).ToOffset([timespan]::FromHours(8)).ToString("yyyy-MM-dd HH:mm:ss")
 
     $rows.Add([ordered]@{
       symbol = $symbol
@@ -843,7 +852,16 @@ function Update-MinuteRows {
       close = Get-Number $bucket.close
       volume = [int64]([math]::Max(0, [int64]$bucket.last_volume - [int64]$bucket.start_volume))
       updated_at = (Get-Date).ToUniversalTime().ToString("o")
-      payload = @{ source = "fugle-ws-aggregate"; total_volume = $totalVolume; volume_unit = "lots"; time_standard = "UTC" }
+      payload = @{
+        source = "fugle-ws-aggregate"
+        total_volume = $totalVolume
+        start_total_volume = [int64]$bucket.start_volume
+        last_total_volume = [int64]$bucket.last_volume
+        volume_unit = "lots"
+        time_standard = "UTC"
+        taipei_candle_time = $taipeiMinute
+        session = Get-PublicSlotSession
+      }
     })
 
     $daily.Add([ordered]@{
@@ -1006,7 +1024,7 @@ do {
     $blacklistCount = if ($null -ne $script:SymbolBlacklist) { $script:SymbolBlacklist.Count } else { 0 }
     $rawSymbols = $seeded + $blacklistCount
     $cumulativeBidAskRows = @($quoteRows | Where-Object { $null -ne $_.cumulative_bid_ask_volume }).Count
-    $message = "writer=running; collector=$collectorState; raw_symbols=$rawSymbols; active_symbols=$seeded; blacklist_count=$blacklistCount; quotes=$($quoteRows.Count); quote_age_seconds=$quoteAgeSeconds; last_quote_at=$lastQuoteAt; preopen=$($preopenRows.Count); preopen_history_attempted=$($preopenRows.Count); futopt=$($txfPayload.quotes.Count); intraday_1m_symbols_today=$($intradayStats.intraday_1m_symbols_today); intraday_1m_rows_today=$($intradayStats.intraday_1m_rows_today); intraday_1m_stale_seconds=$($intradayStats.intraday_1m_stale_seconds); latest_candle_time=$($intradayStats.intraday_1m_latest_candle_time); daily_volume_rows=$($minutePayload.dailyRows.Count + $direct1mDailyRows.Count); direct_1m_daily_rows=$($direct1mDailyRows.Count); daily_ohlcv_rows=$($direct1mOhlcvRows.Count); cumulative_bid_ask_rows=$cumulativeBidAskRows; direct_1m_attempted=$($direct1mPayload.attempted); direct_1m_rows=$($direct1mPayload.rows.Count)"
+    $message = "writer=running; collector=$collectorState; raw_symbols=$rawSymbols; active_symbols=$seeded; blacklist_count=$blacklistCount; quotes=$($quoteRows.Count); quote_age_seconds=$quoteAgeSeconds; last_quote_at=$lastQuoteAt; preopen=$($preopenRows.Count); preopen_history_attempted=$($preopenRows.Count); futopt=$($txfPayload.quotes.Count); futopt_scope=TXF_only_stock_futures_not_yet_available; intraday_1m_symbols_today=$($intradayStats.intraday_1m_symbols_today); intraday_1m_rows_today=$($intradayStats.intraday_1m_rows_today); intraday_1m_stale_seconds=$($intradayStats.intraday_1m_stale_seconds); latest_candle_time=$($intradayStats.intraday_1m_latest_candle_time); daily_volume_rows=$($minutePayload.dailyRows.Count + $direct1mDailyRows.Count); direct_1m_daily_rows=$($direct1mDailyRows.Count); daily_ohlcv_rows=$($direct1mOhlcvRows.Count); cumulative_bid_ask_rows=$cumulativeBidAskRows; direct_1m_attempted=$($direct1mPayload.attempted); direct_1m_rows=$($direct1mPayload.rows.Count)"
     Write-PublicSlotSourceStatus -SourceName $StatusSourceName -Status $status -Message $message -StaleSeconds $quoteAgeSeconds -Payload @{
       raw_symbols = $rawSymbols
       active_symbols = $seeded
@@ -1030,6 +1048,9 @@ do {
       preopen_history_attempted = $preopenRows.Count
       futopt_quotes = $txfPayload.quotes.Count
       futopt_tickers = $txfPayload.tickers.Count
+      futopt_scope = "TXF_only"
+      futopt_stock_futures_supported = $false
+      futopt_stock_futures_message = "Stock futures mapping and per-stock futures quotes are not yet populated; STAR/preopen logic should not assume individual stock futures coverage."
       last_quote_at = $lastQuoteAt
       last_1m_at = $last1mAt
       last_daily_volume_date = (Get-Date).ToString("yyyy-MM-dd")
@@ -1062,7 +1083,7 @@ do {
       universe_source = "filtered_stocks_slim_and_blacklist"
       daily_volume_retain_trade_days = $DailyVolumeRetainTradeDays
       preopen_stale_after_session = $true
-      futopt_scope = "TXF live quotes; futopt_tickers keeps mapping when available"
+      futopt_scope_note = "TXF live quotes only; futopt_tickers keeps stock futures mapping when available"
     }
     $loadedDailySymbols = @($direct1mOhlcvRows | Select-Object -ExpandProperty symbol -Unique).Count
     $syncStatus = if ($session -eq "closed" -and $loadedDailySymbols -ge [math]::Max(1, [int]($seeded * 0.9))) { "complete" } elseif ($direct1mOhlcvRows.Count -gt 0) { "partial" } else { "running" }
