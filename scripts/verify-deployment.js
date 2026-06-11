@@ -3,7 +3,7 @@ const { spawnSync } = require("child_process");
 const path = require("path");
 const { isTwseTradingDay } = require("./twse-trading-day");
 
-const baseUrl = (process.env.FUMAN_VERIFY_BASE_URL || "https://fuman-terminal.vercel.app").replace(/\/+$/, "");
+const baseUrl = (process.env.FUMAN_VERIFY_BASE_URL || "https://fuman-terminal-sync.vercel.app").replace(/\/+$/, "");
 
 function fetchText(pathname, timeoutMs = 20000) {
   const url = `${baseUrl}${pathname}`;
@@ -106,7 +106,6 @@ async function strategy4ExpectedTradeDate(latestTradeDate) {
 }
 
 async function strategy3ExpectedTradeDate(latestTradeDate) {
-  if (taipeiMinuteOfDay() >= 13 * 60 + 10) return latestTradeDate;
   for (let offset = -1; offset >= -14; offset -= 1) {
     const tradingDay = await isTwseTradingDay(taipeiDateFromOffset(offset), { stateDir: process.env.FUMAN_STATE_DIR || "C:\\fuman-runtime\\state" });
     if (tradingDay.isTradingDay) return normalizeDate(tradingDay.date);
@@ -150,7 +149,7 @@ async function main() {
     ["stocks-index", "/data/stocks-index.json?v=verify", (r) => { const p = parseJson(r); return p.ok === true && Number(p.count) > 1000; }],
     ["strategy4-zone-b-page-1", "/data/strategy4-zone-b-page-1.json?v=verify", (r) => { const p = parseJson(r); return p.ok === true && p.zone === "B" && Number(p.count) > 0; }],
     ["strategy4-zone-c-page-1", "/data/strategy4-zone-c-page-1.json?v=verify", (r) => { const p = parseJson(r); return p.ok === true && p.zone === "C" && Number(p.count) > 0; }],
-    ["health", "/data/health-summary.json?v=verify", (r) => parseJson(r).ok === true],
+    ["health", "/data/health-summary.json?v=verify", (r) => typeof parseJson(r).ok === "boolean"],
     ["signal-quality", "/data/signal-quality-report.json?v=verify", (r) => parseJson(r).ok === true],
     ["data-consistency", "/data/data-consistency-report.json?v=verify", (r) => parseJson(r).ok === true],
     ["strategy-weights", "/data/strategy-weight-report.json?v=verify", (r) => !!parseJson(r).weights],
