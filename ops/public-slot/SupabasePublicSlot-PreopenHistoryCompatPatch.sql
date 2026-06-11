@@ -6,6 +6,13 @@
 
 alter table public.fugle_preopen_snapshot_history enable row level security;
 
+alter table public.fugle_preopen_snapshot_history
+  add column if not exists updated_at timestamptz;
+
+update public.fugle_preopen_snapshot_history
+set updated_at = observed_at
+where updated_at is null;
+
 grant select on public.fugle_preopen_snapshot_history to anon;
 grant select, insert, update, delete on public.fugle_preopen_snapshot_history to service_role;
 
@@ -19,6 +26,9 @@ using (true);
 create index if not exists idx_fugle_preopen_snapshot_history_symbol_time
   on public.fugle_preopen_snapshot_history (symbol, observed_at desc);
 
+create index if not exists idx_fugle_preopen_snapshot_history_symbol_updated
+  on public.fugle_preopen_snapshot_history (symbol, updated_at desc);
+
 create index if not exists idx_fugle_preopen_snapshot_history_trade_session
   on public.fugle_preopen_snapshot_history (trade_date, session, observed_at desc);
 
@@ -28,7 +38,7 @@ create or replace view public.v_fugle_preopen_snapshot_history as
 select
   symbol,
   observed_at,
-  observed_at as updated_at,
+  coalesce(updated_at, observed_at) as updated_at,
   name,
   market,
   session,

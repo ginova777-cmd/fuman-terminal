@@ -407,9 +407,10 @@ function Write-PublicSlotPreopenSnapshotHistory {
 
   $now = ConvertTo-IsoUtc
   $tradeDate = (Get-Date).ToString("yyyy-MM-dd")
+  $hasUpdatedAtColumn = Test-PublicSlotColumnAvailable -Table "fugle_preopen_snapshot_history" -Column "updated_at"
   $normalized = foreach ($row in $Rows) {
     $observedAt = if ($row.updated_at) { ConvertTo-IsoUtc $row.updated_at } elseif ($row.timestamp) { ConvertTo-IsoUtc $row.timestamp } else { $now }
-    @{
+    $out = @{
       symbol = [string]$row.symbol
       observed_at = $observedAt
       name = $row.name
@@ -448,6 +449,8 @@ function Write-PublicSlotPreopenSnapshotHistory {
       ask_levels_json = if ($row.ask_levels_json) { $row.ask_levels_json } else { @() }
       payload = if ($row.payload) { $row.payload } else { @{ volume_unit = "lots"; time_standard = "UTC" } }
     }
+    if ($hasUpdatedAtColumn) { $out.updated_at = $observedAt }
+    $out
   }
 
   Invoke-PublicSlotUpsert -Table "fugle_preopen_snapshot_history" -OnConflict "symbol,observed_at" -Rows @($normalized)
