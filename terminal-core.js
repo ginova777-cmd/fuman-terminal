@@ -1,5 +1,5 @@
 (function () {
-  const version = "chip-flow-cache-20260611-01";
+  const version = "strategy4-cache-20260611-02";
   window.FUMAN_TERMINAL_VERSION = version;
   window.FUMAN_TERMINAL_BOOT = {
     version,
