@@ -35,7 +35,9 @@ jobs:
 
       - name: Decide retry need
         id: retry
-        run: echo "mode=$(node scripts/should-run-scheduled-cache.js strategy4)" >> "$GITHUB_OUTPUT"
+        run: |
+          echo "Strategy4 publishing is Windows-only at 16:00 Taipei. GitHub workflow is disabled to avoid overwriting Supabase-first cache data."
+          echo "mode=skip" >> "$GITHUB_OUTPUT"
         env:
           GITHUB_EVENT_NAME: ${{ github.event_name }}
 
