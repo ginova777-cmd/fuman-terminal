@@ -1,5 +1,7 @@
 # Codex Operating Rule
 
+Mobile-readable summary: `FRESHNESS-GATE-MOBILE.md`
+
 The only approved data publish entrypoint is:
 
 ```powershell
