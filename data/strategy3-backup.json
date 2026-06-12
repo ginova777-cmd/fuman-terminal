@@ -1,12 +1,12 @@
 {
   "ok": true,
   "source": "github-actions-backup",
-  "updatedAt": "2026-06-12T06:01:31.223Z",
+  "updatedAt": "2026-06-12T06:11:36.805Z",
   "usedDate": "20260612",
   "total": 1079,
   "count": 5,
   "sourceWarnings": [
-    "tpex volume fetch failed: 115/06/11 :: terminated"
+    "tpex volume fetch failed: 115/06/11 :: This operation was aborted"
   ],
   "qualityStatus": "degraded",
   "sourceHealth": {
