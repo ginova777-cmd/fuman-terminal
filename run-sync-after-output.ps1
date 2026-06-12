@@ -8,8 +8,6 @@ param(
 $ErrorActionPreference = "Stop"
 $PSNativeCommandUseErrorActionPreference = $false
 
-$syncScript = "${PSScriptRoot}\run-cache-sync.ps1"
-
 function Write-SyncLog($message) {
   $line = "[$(Get-Date)] $message"
   if ($LogPath) {
@@ -23,16 +21,7 @@ function Write-SyncLog($message) {
   }
 }
 
-if (-not (Test-Path -LiteralPath $syncScript)) {
-  Write-SyncLog "$Label sync skipped; run-cache-sync.ps1 not found."
-  exit 0
-}
-
-Write-SyncLog "$Label sync start."
-& powershell.exe -NoProfile -ExecutionPolicy Bypass -File $syncScript -Scope $Scope
-$syncExit = $LASTEXITCODE
-if ($syncExit -ne 0) {
-  Write-SyncLog "$Label sync failed with exit code $syncExit."
-  exit $syncExit
-}
-Write-SyncLog "$Label sync completed."
+Write-SyncLog "$Label sync redirected to npm run freshness:gate. requestedScope=$Scope"
+Set-Location -LiteralPath $PSScriptRoot
+npm run freshness:gate
+exit $LASTEXITCODE

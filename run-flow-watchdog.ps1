@@ -5,6 +5,7 @@ param(
 
 $ErrorActionPreference = "Stop"
 $PSNativeCommandUseErrorActionPreference = $false
+. "${PSScriptRoot}\legacy-entrypoint-guard.ps1" -Label "run-flow-watchdog.ps1"
 
 $runtime = "C:\fuman-runtime"
 $env:FUMAN_RUNTIME_DIR = $runtime

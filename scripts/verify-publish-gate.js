@@ -31,6 +31,15 @@ if (!fs.existsSync(path.join(ROOT, "run-freshness-gate-task.ps1"))) {
   }
 }
 
+if (!fs.existsSync(path.join(ROOT, "legacy-entrypoint-guard.ps1"))) {
+  issues.push("legacy-entrypoint-guard.ps1 missing legacy script redirect guard");
+} else {
+  const legacyGuard = read("legacy-entrypoint-guard.ps1");
+  if (!/npm run freshness:gate/.test(legacyGuard)) {
+    issues.push("legacy-entrypoint-guard.ps1 must redirect legacy data scripts to npm run freshness:gate");
+  }
+}
+
 const cacheSync = read("run-cache-sync.ps1");
 if (!/if \(\$Scope -ne "all"\)/.test(cacheSync)) {
   issues.push("run-cache-sync.ps1 must block every non-all scope");
@@ -68,6 +77,28 @@ for (const marker of [
   "live-freshness-ok.json",
 ]) {
   if (!gate.includes(marker)) issues.push(`run-live-freshness-gate.ps1 missing ${marker}`);
+}
+if (!/overlapping run/.test(gate)) {
+  issues.push("run-live-freshness-gate.ps1 must skip overlapping scheduled runs cleanly");
+}
+
+for (const legacyScript of [
+  "run-warrant-flow.ps1",
+  "run-institution.ps1",
+  "run-open-buy.ps1",
+  "run-open-buy-sync-retry.ps1",
+  "run-strategy2-intraday.ps1",
+  "run-strategy3.ps1",
+  "run-strategy3-watchdog.ps1",
+  "run-strategy5.ps1",
+  "run-realtime-radar.ps1",
+  "run-market-overview.ps1",
+  "run-flow-watchdog.ps1",
+]) {
+  const scriptText = read(legacyScript);
+  if (!/legacy-entrypoint-guard\.ps1/.test(scriptText)) {
+    issues.push(`${legacyScript} must redirect to legacy-entrypoint-guard.ps1`);
+  }
 }
 
 if (!fs.existsSync(path.join(ROOT, "AGENTS.md"))) {

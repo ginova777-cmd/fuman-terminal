@@ -1,5 +1,6 @@
 $ErrorActionPreference = "Stop"
 $PSNativeCommandUseErrorActionPreference = $false
+. "${PSScriptRoot}\legacy-entrypoint-guard.ps1" -Label "run-institution.ps1"
 
 $runtime = "C:\fuman-runtime"
 $env:FUMAN_RUNTIME_DIR = $runtime

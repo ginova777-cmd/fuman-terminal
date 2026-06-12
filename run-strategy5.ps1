@@ -1,5 +1,6 @@
 $ErrorActionPreference = "Stop"
 $PSNativeCommandUseErrorActionPreference = $false
+. "${PSScriptRoot}\legacy-entrypoint-guard.ps1" -Label "run-strategy5.ps1"
 
 Set-Location "${PSScriptRoot}"
 $env:FUMAN_RUNTIME_DIR = "C:\fuman-runtime"
@@ -38,6 +39,32 @@ $scanExit = Invoke-NodeScan "scripts\scan-strategy5-cache.js" "Strategy5 scan"
 if ($scanExit -ne 0) {
   Add-Content -LiteralPath $log -Encoding utf8 -Value "Strategy5 scan failed with exit code $scanExit"
   exit $scanExit
+}
+
+$strategy5File = "C:\fuman-runtime\data\strategy5-latest.json"
+if (Test-Path -LiteralPath $strategy5File) {
+  try {
+    $payload = Get-Content -LiteralPath $strategy5File -Raw -Encoding utf8 | ConvertFrom-Json
+    $warningCount = [int]($payload.sourceHealth.warningCount ?? 0)
+    if ($warningCount -gt 0 -and $env:STRATEGY5_ALLOW_SOURCE_WARNINGS -ne "1") {
+      Add-Content -LiteralPath $log -Encoding utf8 -Value "Strategy5 scan blocked: sourceHealth.warningCount=$warningCount. Set STRATEGY5_ALLOW_SOURCE_WARNINGS=1 only for manual degraded publish."
+      exit 2
+    }
+  } catch {
+    Add-Content -LiteralPath $log -Encoding utf8 -Value "Strategy5 scan blocked: unable to validate source health: $($_.Exception.Message)"
+    exit 2
+  }
+}
+
+$slimScript = "scripts\generate-slim-cache.js"
+if (Test-Path -LiteralPath $slimScript) {
+  Add-Content -LiteralPath $log -Encoding utf8 -Value "=== Strategy5 index regeneration start $(Get-Date) ==="
+  & $nodeExe $slimScript 2>&1 | Out-File -LiteralPath $log -Encoding utf8 -Append
+  if ($LASTEXITCODE -ne 0) {
+    Add-Content -LiteralPath $log -Encoding utf8 -Value "Strategy5 index regeneration failed with exit code $LASTEXITCODE"
+    exit $LASTEXITCODE
+  }
+  Add-Content -LiteralPath $log -Encoding utf8 -Value "=== Strategy5 index regeneration end $(Get-Date) ==="
 }
 
 Remove-Item Env:STRATEGY5_USE_MIS -ErrorAction SilentlyContinue

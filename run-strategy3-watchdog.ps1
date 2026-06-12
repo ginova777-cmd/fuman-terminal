@@ -1,5 +1,6 @@
 $ErrorActionPreference = "Stop"
 $PSNativeCommandUseErrorActionPreference = $false
+. "${PSScriptRoot}\legacy-entrypoint-guard.ps1" -Label "run-strategy3-watchdog.ps1"
 
 Set-Location "${PSScriptRoot}"
 

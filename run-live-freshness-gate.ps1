@@ -54,7 +54,8 @@ function Enter-GateLock {
       Write-GateLog "Removing stale live freshness gate lock age=$([math]::Round($age.TotalMinutes, 1))m"
       Remove-Item -LiteralPath $lockFile -Force
     } else {
-      throw "Another live freshness gate is already running; lock=$lockFile pid=$($lockInfo.pid) log=$($lockInfo.log)"
+      Write-GateLog "Another live freshness gate is already running; skipping this overlapping run. lock=$lockFile pid=$($lockInfo.pid) log=$($lockInfo.log)"
+      exit 0
     }
   }
   [ordered]@{
