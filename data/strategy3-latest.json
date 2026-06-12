@@ -1,12 +1,12 @@
 {
   "ok": true,
   "source": "github-actions-mis-realtime",
-  "updatedAt": "2026-06-12T06:11:36.805Z",
+  "updatedAt": "2026-06-12T06:31:16.459Z",
   "usedDate": "20260612",
   "total": 1079,
   "count": 5,
   "sourceWarnings": [
-    "tpex volume fetch failed: 115/06/11 :: This operation was aborted"
+    "tpex volume fetch failed: 115/06/09 :: terminated"
   ],
   "qualityStatus": "degraded",
   "sourceHealth": {
