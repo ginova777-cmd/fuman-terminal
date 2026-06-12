@@ -65,6 +65,22 @@ TWSE、Supabase、行情 API 或其他外部來源 timeout / 403 / 404 / fetch f
 
 外部來源 warning 不能直接製造半套發布；最後仍以 `verify:data-freshness:live` 是否通過為準。
 
+## 手機快取
+
+手機資料請求必須 network-first / no-store。資料已發布但手機短暫顯示舊畫面時，先重新整理；成功標準仍以 live freshness verifier 為準。
+
+## 執行時間與重疊
+
+full gate 可以比較久。執行期間手機端顯示上一版已驗證資料，不能做半套發布。
+
+如果排程重疊，後跑的任務會被 lock 擋住，不得繞過 gate。
+
+## 人工改資料與網路
+
+不要手動改 publish data 或 terminal data。漂移時要重新跑 gate / verifier。
+
+GitHub 或網路不可用時，repo sync preflight 會失敗；這代表延後更新，不代表可以跳過 gate。
+
 ## 暫停事項
 
 目前先不要修改 Supabase 相關程式、table、upload、readback、timeout 或 retry 行為。

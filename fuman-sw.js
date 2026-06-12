@@ -1,4 +1,4 @@
-const CACHE_VERSION = "fuman-terminal-sw-chip-flow-hardening-20260611-21";
+const CACHE_VERSION = "fuman-terminal-sw-freshness-mobile-20260612-01";
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 const DATA_CACHE = `${CACHE_VERSION}-data`;
 
@@ -38,6 +38,7 @@ const DATA_PATTERNS = [
   /\/data\/terminal-home-bundle\.json/i,
   /\/data\/data-status-index\.json/i,
   /\/data\/data-manifest\.json/i,
+  /\/data\/live-freshness-ok\.json/i,
   /\/data\/stocks-slim\.json/i,
   /\/data\/stocks-index\.json/i,
   /\/data\/strategy-match-index\.json/i,
@@ -54,6 +55,7 @@ const NETWORK_FIRST_DATA_PATTERNS = [
 
 const PREFETCH_DATA_ASSETS = [
   "/data/data-manifest.json",
+  "/data/live-freshness-ok.json",
   "/data/terminal-home-bundle.json",
   "/data/mobile-home-summary.json",
   "/data/market-summary.json",
@@ -110,7 +112,7 @@ function isNetworkFirstDataRequest(url) {
 async function networkFirst(request) {
   const cache = await caches.open(DATA_CACHE);
   try {
-    const response = await fetch(request);
+    const response = await fetch(request, { cache: "no-store" });
     if (response.ok) cache.put(request, response.clone());
     return response;
   } catch (error) {

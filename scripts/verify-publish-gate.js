@@ -145,6 +145,11 @@ for (const marker of [
 if (!/overlapping run/.test(gate)) {
   issues.push("run-live-freshness-gate.ps1 must skip overlapping scheduled runs cleanly");
 }
+
+const serviceWorker = read("fuman-sw.js");
+if (!/networkFirst\(request\)/.test(serviceWorker) || !/cache: "no-store"/.test(serviceWorker) || !/live-freshness-ok\.json/.test(serviceWorker)) {
+  issues.push("fuman-sw.js must keep mobile data requests network-first/no-store and include live-freshness-ok.json");
+}
 if (!/ETIMEDOUT|ECONNRESET|fetch failed/.test(gate)) {
   issues.push("run-live-freshness-gate.ps1 must capture external source timeout warnings");
 }
@@ -198,6 +203,10 @@ if (!fs.existsSync(path.join(ROOT, "FRESHNESS-GATE-MOBILE.md"))) {
     "git pull --ff-only origin main",
     "repo sync preflight",
     "外部來源 timeout",
+    "手機資料請求必須 network-first / no-store",
+    "排程重疊",
+    "不要手動改 publish data",
+    "GitHub 或網路不可用",
     "目前先不要修改 Supabase",
     "Fuman Terminal Freshness Gate",
   ]) {
