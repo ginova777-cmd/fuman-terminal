@@ -10,12 +10,13 @@
   },
   "warrant": {
     "scope": "warrant",
-    "status": "ok",
-    "message": "Warrant flow scan and publish completed",
-    "updatedAt": "2026-06-12T03:01:37.2066587Z",
+    "status": "publish_delayed",
+    "message": "Warrant flow scan succeeded but Git publish failed",
+    "updatedAt": "2026-06-12T09:35:51.8835723Z",
     "detail": {
-      "log": "C:\\fuman-runtime\\logs\\warrant-flow-20260612-110052.log"
+      "log": "C:\\fuman-runtime\\logs\\warrant-flow-20260612-173531.log",
+      "exitCode": 1
     }
   },
-  "updatedAt": "2026-06-12T03:01:37.2080487Z"
+  "updatedAt": "2026-06-12T09:35:51.8861383Z"
 }
