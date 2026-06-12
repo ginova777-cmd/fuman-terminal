@@ -24,9 +24,19 @@ function Write-Log($message) {
 }
 
 function Invoke-CacheSyncWithRetry($scriptPath, $maxAttempts = 3) {
+  $previousScopedPublish = $env:FUMAN_STRATEGY4_SCOPED_PUBLISH
   for ($attempt = 1; $attempt -le $maxAttempts; $attempt++) {
     Write-Log "=== Strategy4 clean cache sync attempt $attempt/$maxAttempts start $(Get-Date) ==="
-    & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $scriptPath -Scope strategy4 *>&1 | Tee-Object -FilePath $log -Append | Out-Null
+    try {
+      $env:FUMAN_STRATEGY4_SCOPED_PUBLISH = "1"
+      & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $scriptPath -Scope strategy4 *>&1 | Tee-Object -FilePath $log -Append | Out-Null
+    } finally {
+      if ($null -ne $previousScopedPublish) {
+        $env:FUMAN_STRATEGY4_SCOPED_PUBLISH = $previousScopedPublish
+      } else {
+        Remove-Item Env:FUMAN_STRATEGY4_SCOPED_PUBLISH -ErrorAction SilentlyContinue
+      }
+    }
     $syncExit = $LASTEXITCODE
     if ($syncExit -eq 0) {
       Write-Log "=== Strategy4 clean cache sync attempt $attempt/$maxAttempts succeeded $(Get-Date) ==="

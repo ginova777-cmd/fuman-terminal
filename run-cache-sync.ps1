@@ -30,9 +30,13 @@ function Write-Log($message) {
   Add-Content -LiteralPath $log -Value $message -Encoding utf8
 }
 
-if ($Scope -ne "all" -and $env:FUMAN_ALLOW_SCOPED_PUBLISH -ne "1") {
-  Write-Log "Scoped publish blocked: scope=$Scope. Use npm run freshness:gate for the single verified publish path."
-  exit 2
+if ($Scope -ne "all") {
+  if ($Scope -eq "strategy4" -and $env:FUMAN_STRATEGY4_SCOPED_PUBLISH -eq "1") {
+    Write-Log "Strategy4 scoped publish allowed by FUMAN_STRATEGY4_SCOPED_PUBLISH=1."
+  } else {
+    Write-Log "Scoped publish blocked: scope=$Scope. Use npm run freshness:gate for the single verified publish path."
+    exit 2
+  }
 }
 
 function Clear-StaleSyncGitIndexLock($label) {

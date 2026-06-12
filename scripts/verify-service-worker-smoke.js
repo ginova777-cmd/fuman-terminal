@@ -5,9 +5,11 @@ const vm = require("vm");
 const ROOT = path.resolve(__dirname, "..");
 const swPath = path.join(ROOT, "fuman-sw.js");
 const corePath = path.join(ROOT, "terminal-core.js");
+const indexPath = path.join(ROOT, "index.html");
 const modulesPath = path.join(ROOT, "terminal-modules.js");
 const sw = fs.readFileSync(swPath, "utf8");
 const core = fs.readFileSync(corePath, "utf8");
+const index = fs.readFileSync(indexPath, "utf8");
 const modules = fs.readFileSync(modulesPath, "utf8");
 const issues = [];
 const lazyStaticAssets = [
@@ -39,6 +41,15 @@ const version = core.match(/const\s+version\s*=\s*"([^"]+)"/)?.[1] || "";
 if (!version) {
   issues.push("terminal-core.js version was not detected");
 }
+const swCacheVersion = sw.match(/CACHE_VERSION\s*=\s*"fuman-terminal-sw-([^"]+)"/)?.[1] || "";
+if (version && swCacheVersion !== version) {
+  issues.push(`fuman-sw.js CACHE_VERSION ${swCacheVersion || "(missing)"} must match terminal-core.js version ${version}`);
+}
+for (const asset of ["styles.css", "terminal-core.js"]) {
+  if (version && !index.includes(`${asset}?v=${version}`)) {
+    issues.push(`index.html must load ${asset} with ?v=${version}`);
+  }
+}
 
 for (const asset of moduleMapAssets) {
   if (!modules.includes(`src: "${asset}"`)) {
@@ -47,6 +58,11 @@ for (const asset of moduleMapAssets) {
 }
 
 for (const asset of lazyStaticAssets) {
+  if (version && !sw.includes(`/${asset}?v=${version}`)) {
+    issues.push(`${asset} must be listed in STATIC_ASSETS with the current version`);
+  }
+}
+for (const asset of ["styles.css", "terminal-core.js", "terminal.js", "terminal-app.js"]) {
   if (version && !sw.includes(`/${asset}?v=${version}`)) {
     issues.push(`${asset} must be listed in STATIC_ASSETS with the current version`);
   }
