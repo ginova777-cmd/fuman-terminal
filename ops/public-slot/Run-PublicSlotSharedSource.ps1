@@ -542,7 +542,21 @@ function Start-FugleWebSocketCollector {
 
   $statusFile = Join-Path $RuntimeDir "state\fugle-websocket-status.json"
   $status = Read-JsonFile -Path $statusFile -Default ([pscustomobject]@{})
-  if (Test-ProcessAlive $status.pid) { return "already-running pid=$($status.pid)" }
+  if (Test-ProcessAlive $status.pid) {
+    $existingPid = [int]$status.pid
+    $existingProcess = Get-Process -Id $existingPid -ErrorAction SilentlyContinue
+    if ($null -ne $existingProcess -and $existingProcess.StartTime.Date -lt (Get-Date).Date) {
+      try {
+        Stop-Process -Id $existingPid -Force -ErrorAction Stop
+        Write-Log "WARN restarted stale websocket collector from previous day pid=$existingPid"
+      } catch {
+        Write-Log "WARN unable to stop stale websocket collector pid=$existingPid`: $($_.Exception.Message)"
+        return "stale-collector-stop-failed pid=$existingPid"
+      }
+    } else {
+      return "already-running pid=$existingPid"
+    }
+  }
 
   $nodeExe = "C:\Program Files\nodejs\node.exe"
   $collector = Join-Path $FumanRoot "scripts\fugle-websocket-collector.js"
@@ -1351,7 +1365,9 @@ do {
       preopen_stale_after_session = $true
       futopt_scope_note = "TXF plus Fugle stock futures. Stock futures quotes rotate in small batches, so full quote coverage accumulates over multiple loops."
     }
-    $loadedDailySymbols = @($direct1mOhlcvRows | Select-Object -ExpandProperty symbol -Unique).Count
+    $loadedDailySymbols = @($direct1mOhlcvRows | ForEach-Object {
+      if ($_ -is [System.Collections.IDictionary]) { $_["symbol"] } else { $_.symbol }
+    } | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) } | Select-Object -Unique).Count
     $syncStatus = if ($session -eq "closed" -and $loadedDailySymbols -ge [math]::Max(1, [int]($seeded * 0.9))) { "complete" } elseif ($direct1mOhlcvRows.Count -gt 0) { "partial" } else { "running" }
     Write-PublicSlotDailySyncStatus -TradeDate (Get-Date).ToString("yyyy-MM-dd") -Source "fugle_shared_source" -Status $syncStatus -SymbolsExpected $seeded -SymbolsLoaded $loadedDailySymbols -MissingSymbolsCount ([math]::Max(0, $seeded - $loadedDailySymbols)) -Payload @{
       daily_ohlcv_rows_written_this_loop = $direct1mOhlcvRows.Count
