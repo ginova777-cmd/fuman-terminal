@@ -21,7 +21,8 @@ function Write-SyncLog($message) {
   }
 }
 
-Write-SyncLog "$Label sync redirected to npm run freshness:gate. requestedScope=$Scope"
+$gateScript = if ($env:FUMAN_LEGACY_GATE_SCRIPT) { $env:FUMAN_LEGACY_GATE_SCRIPT } else { "freshness:gate:fast" }
+Write-SyncLog "$Label sync redirected to npm run $gateScript. requestedScope=$Scope"
 Set-Location -LiteralPath $PSScriptRoot
-npm run freshness:gate
+npm run $gateScript
 exit $LASTEXITCODE

@@ -68,11 +68,15 @@ function Enter-GateLock {
 function Invoke-GateCommand($label, [scriptblock]$command, [switch]$AllowFailure) {
   Write-GateLog "START $label"
   $exitCode = 0
+  $warningLines = New-Object System.Collections.Generic.List[string]
   try {
     & $command *>&1 | ForEach-Object {
       $text = [string]$_
       Write-Host $text
       Add-Content -LiteralPath $log -Value $text -Encoding utf8
+      if ($text -match "(?i)\b(warn|warning|failed|HTTP 403|HTTP 404|skipped outside market time|supabase upload failed|source warnings)\b") {
+        $warningLines.Add($text) | Out-Null
+      }
     }
     $exitCode = $LASTEXITCODE
   } catch {
@@ -92,6 +96,8 @@ function Invoke-GateCommand($label, [scriptblock]$command, [switch]$AllowFailure
       ok = ($exitCode -eq 0)
       exitCode = $exitCode
       checkedAt = (Get-Date).ToString("o")
+      warningCount = $warningLines.Count
+      warnings = @($warningLines.ToArray() | Select-Object -First 12)
     }) | Out-Null
   }
   if ($exitCode -ne 0 -and -not $AllowFailure) {

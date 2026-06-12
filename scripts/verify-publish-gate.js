@@ -1,5 +1,6 @@
 const fs = require("fs");
 const path = require("path");
+const { spawnSync } = require("child_process");
 
 const ROOT = path.resolve(__dirname, "..");
 
@@ -8,6 +9,23 @@ function read(file) {
 }
 
 const issues = [];
+
+function queryScheduledTask(taskName) {
+  const escaped = taskName.replace(/'/g, "''");
+  const result = spawnSync("powershell.exe", [
+    "-NoProfile",
+    "-ExecutionPolicy",
+    "Bypass",
+    "-Command",
+    `Get-ScheduledTask -TaskName '${escaped}' -ErrorAction SilentlyContinue | Select-Object TaskName,@{n='Execute';e={$_.Actions.Execute}},@{n='Arguments';e={$_.Actions.Arguments}},@{n='WorkingDirectory';e={$_.Actions.WorkingDirectory}},@{n='TriggerCount';e={$_.Triggers.Count}} | ConvertTo-Json -Compress -Depth 4`,
+  ], { encoding: "utf8" });
+  if (result.status !== 0 || !result.stdout.trim()) return null;
+  try {
+    return JSON.parse(result.stdout);
+  } catch {
+    return null;
+  }
+}
 
 const packageJson = JSON.parse(read("package.json"));
 const gateScript = packageJson.scripts && packageJson.scripts["freshness:gate"];
@@ -20,6 +38,34 @@ if (!gateScript) {
 const fastGateScript = packageJson.scripts && packageJson.scripts["freshness:gate:fast"];
 if (!fastGateScript) {
   issues.push("package.json missing scripts.freshness:gate:fast");
+}
+
+if (process.platform === "win32") {
+  for (const expected of [
+    ["Fuman Freshness Gate Fast 0845-1645", "run freshness:gate:fast", "C:\\fuman-terminal-sync", 8],
+    ["Fuman Freshness Gate Full 0610 2010", "run freshness:gate", "C:\\fuman-terminal-sync", 2],
+    ["Fuman Terminal Local Freshness Verify 0830-2230", "run verify:data-freshness", "C:\\fuman-terminal", 8],
+    ["Fuman Publish Gate Verify 0820", "run verify:publish-gate", "C:\\fuman-terminal-sync", 1],
+  ]) {
+    const [name, args, workingDirectory, minTriggers] = expected;
+    const task = queryScheduledTask(name);
+    if (!task) {
+      issues.push(`scheduled task missing: ${name}`);
+      continue;
+    }
+    if (!String(task.Execute || "").toLowerCase().endsWith("npm.cmd")) {
+      issues.push(`${name} must execute npm.cmd`);
+    }
+    if (String(task.Arguments || "") !== args) {
+      issues.push(`${name} arguments must be "${args}"`);
+    }
+    if (String(task.WorkingDirectory || "") !== workingDirectory) {
+      issues.push(`${name} working directory must be ${workingDirectory}`);
+    }
+    if (Number(task.TriggerCount || 0) < minTriggers) {
+      issues.push(`${name} trigger count too low: ${task.TriggerCount}`);
+    }
+  }
 }
 
 if (!fs.existsSync(path.join(ROOT, "run-freshness-gate-task.ps1"))) {
@@ -35,8 +81,8 @@ if (!fs.existsSync(path.join(ROOT, "legacy-entrypoint-guard.ps1"))) {
   issues.push("legacy-entrypoint-guard.ps1 missing legacy script redirect guard");
 } else {
   const legacyGuard = read("legacy-entrypoint-guard.ps1");
-  if (!/npm run freshness:gate/.test(legacyGuard)) {
-    issues.push("legacy-entrypoint-guard.ps1 must redirect legacy data scripts to npm run freshness:gate");
+  if (!/freshness:gate:fast/.test(legacyGuard) || !/npm run \$gateScript/.test(legacyGuard)) {
+    issues.push("legacy-entrypoint-guard.ps1 must redirect legacy data scripts to npm run freshness:gate:fast by default");
   }
 }
 
@@ -50,8 +96,8 @@ if (/FUMAN_ALLOW_SCOPED_PUBLISH/.test(cacheSync)) {
 if (/FUMAN_STRATEGY4_SCOPED_PUBLISH/.test(cacheSync)) {
   issues.push("run-cache-sync.ps1 must not expose strategy4 scoped publish bypass");
 }
-if (!/FUMAN_INSIDE_FRESHNESS_GATE/.test(cacheSync) || !/npm run freshness:gate/.test(cacheSync)) {
-  issues.push("run-cache-sync.ps1 direct calls must redirect to npm run freshness:gate");
+if (!/FUMAN_INSIDE_FRESHNESS_GATE/.test(cacheSync) || !/freshness:gate:fast/.test(cacheSync)) {
+  issues.push("run-cache-sync.ps1 direct calls must redirect to npm run freshness:gate:fast by default");
 }
 if (!/Verify live data freshness/.test(cacheSync) || !/--live/.test(cacheSync)) {
   issues.push("run-cache-sync.ps1 post-publish verifier must use live data freshness");

@@ -7,6 +7,7 @@ if ($env:FUMAN_LEGACY_SCAN_ONLY -eq "1") {
 }
 
 Set-Location -LiteralPath $PSScriptRoot
-Write-Host "$Label redirected to npm run freshness:gate"
-npm run freshness:gate
+$gateScript = if ($env:FUMAN_LEGACY_GATE_SCRIPT) { $env:FUMAN_LEGACY_GATE_SCRIPT } else { "freshness:gate:fast" }
+Write-Host "$Label redirected to npm run $gateScript"
+npm run $gateScript
 exit $LASTEXITCODE

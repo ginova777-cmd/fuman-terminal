@@ -54,6 +54,44 @@ function isBadResult(code) {
   return !["0", "267009", "267011"].includes(String(code || ""));
 }
 
+const REPLACED_OR_LEGACY_TASKS = new Set([
+  "\\Fuman Data Freshness Verify 1555",
+  "\\Fuman GitHub 統一同步 0612",
+  "\\Fuman GitHub 統一同步 0715",
+  "\\Fuman GitHub 統一同步 1445",
+  "\\Fuman GitHub 統一同步 2112",
+  "\\Fuman Market Overview Patrol 0900",
+  "\\Fuman Market Summary Repair 1405",
+  "\\Fuman Open Buy Cache 0700",
+  "\\Fuman Open Buy Cache 1600",
+  "\\Fuman Open Buy Sync Retry",
+  "\\Fuman Scorecard Final 1530",
+  "\\Fuman Scorecard Initial 1410",
+  "\\Fuman Strategy2 Intraday Scan",
+  "\\Fuman Strategy2 Intraday Warmup 0845",
+  "\\Fuman Strategy3 Cache 1230",
+  "\\Fuman Strategy3 Cache 1300",
+  "\\Fuman Strategy3 Watchdog 1320",
+  "\\Fuman Strategy4 Cache 1600",
+  "\\Fuman Strategy4 Postflight 1610",
+  "\\Fuman Strategy5 Cache 0600",
+  "\\Fuman Strategy5 Cache 2100",
+  "\\Fuman 即時雷達",
+  "\\Fuman 權證走向 Cache 0530",
+  "\\Fuman 權證走向 Cache 2030",
+  "\\Fuman 權證走向 Watchdog 0550",
+  "\\Fuman 權證走向 Watchdog 2050",
+  "\\Fuman 買賣超 Cache 0600",
+  "\\Fuman 買賣超 Cache 2100",
+  "\\Fuman 買賣超 Watchdog 0620",
+  "\\Fuman 買賣超 Watchdog 2120",
+]);
+
+const NON_TERMINAL_DATA_TASKS = new Set([
+  "\\Fuman Trade Manager Patrol 0900",
+  "\\Fuman Trade Manager Settlement 1340",
+]);
+
 function isIgnorableTaskResult(task) {
   const name = String(task.TaskName || "");
   const code = String(task["Last Result"] || "");
@@ -71,6 +109,10 @@ function isIgnorableTaskResult(task) {
     name === "\\Fuman PC Wake 0430" && code === "-2147020576" && task.Status === "Ready"
   ) || (
     legacyHealthRunnerFixed.has(name) && code === "-2147020576" && task.Status === "Ready"
+  ) || (
+    REPLACED_OR_LEGACY_TASKS.has(name) && task.Status === "Ready"
+  ) || (
+    NON_TERMINAL_DATA_TASKS.has(name) && task.Status === "Ready"
   );
 }
 
@@ -198,6 +240,25 @@ function buildRisks({ badTasks, outbox, data }) {
   return risks;
 }
 
+function classifyRawRefresh(rawRefresh = []) {
+  return rawRefresh.map((item) => {
+    const warnings = Array.isArray(item.warnings) ? item.warnings : [];
+    const blocking = !item.ok;
+    const sourceWarnings = warnings.filter((line) => /HTTP 403|HTTP 404|supabase|source warnings|skipped outside market time/i.test(line));
+    const level = blocking ? "blocking" : sourceWarnings.length ? "source_warning" : warnings.length ? "warning" : "ok";
+    return {
+      label: item.label || "",
+      ok: Boolean(item.ok),
+      exitCode: item.exitCode ?? null,
+      checkedAt: item.checkedAt || "",
+      level,
+      warningCount: Number(item.warningCount || warnings.length || 0),
+      sourceWarningCount: sourceWarnings.length,
+      warnings: warnings.slice(0, 8),
+    };
+  });
+}
+
 function main() {
   const tasks = getFumanTasks();
   const badTasks = tasks
@@ -207,6 +268,15 @@ function main() {
       lastRunTime: task["Last Run Time"],
       lastResult: task["Last Result"],
       status: task.Status,
+    }));
+  const replacedOrLegacyTasks = tasks
+    .filter((task) => REPLACED_OR_LEGACY_TASKS.has(String(task.TaskName || "")))
+    .map((task) => ({
+      taskName: task.TaskName,
+      lastRunTime: task["Last Run Time"],
+      lastResult: task["Last Result"],
+      status: task.Status,
+      handling: "replaced_by_official_freshness_gate_or_legacy_guard",
     }));
   const data = [
     "market-summary.json",
@@ -233,6 +303,14 @@ function main() {
   }
   const outbox = outboxStatus();
   const risks = buildRisks({ badTasks, outbox, data });
+  const rawRefresh = classifyRawRefresh(gatePayload?.rawRefresh || []);
+  const blockingSources = rawRefresh.filter((item) => item.level === "blocking");
+  const warningSources = rawRefresh.filter((item) => item.level === "source_warning" || item.level === "warning");
+  if (blockingSources.length) {
+    risks.push(riskItem("high", "source", `raw scanner failed ${blockingSources.length} 個`, { items: blockingSources }));
+  } else if (warningSources.length) {
+    risks.push(riskItem("medium", "source", `raw scanner 非阻斷警告 ${warningSources.length} 個`, { items: warningSources }));
+  }
   const high = risks.filter((item) => item.level === "high").length;
   const medium = risks.filter((item) => item.level === "medium").length;
   const summary = {
@@ -240,7 +318,16 @@ function main() {
     updatedAt: new Date().toISOString(),
     risk: high ? "high" : medium ? "medium" : "low",
     risks,
-    schedule: { ok: badTasks.length === 0, total: tasks.length, badCount: badTasks.length, badTasks, queryMethod: tasks.queryMethod || "schtasks", note: "Uses schtasks fallback-friendly query to avoid Get-ScheduledTask low-permission false alarms." },
+    schedule: {
+      ok: badTasks.length === 0,
+      total: tasks.length,
+      badCount: badTasks.length,
+      badTasks,
+      replacedOrLegacyCount: replacedOrLegacyTasks.length,
+      replacedOrLegacyTasks,
+      queryMethod: tasks.queryMethod || "schtasks",
+      note: "Official freshness gate tasks are authoritative. Replaced legacy data tasks are ignored here because their scripts redirect through legacy-entrypoint-guard.ps1 when they run.",
+    },
     githubSync: outbox,
     freshnessGate: {
       ok: Boolean(gatePayload?.ok),
@@ -248,7 +335,7 @@ function main() {
       checkedAt: gatePayload?.checkedAt || "",
       publishHead: gatePayload?.publishHead || "",
       mode: gatePayload?.mode || "",
-      rawRefresh: gatePayload?.rawRefresh || [],
+      rawRefresh,
     },
     runtime: { ok: data.every((item) => item.ok), data },
   };
