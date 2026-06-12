@@ -1,6 +1,6 @@
 {
   "ok": true,
-  "updatedAt": "2026-06-12T02:57:52.061Z",
+  "updatedAt": "2026-06-12T03:01:17.926Z",
   "query": "",
   "scanned": 15937,
   "count": 120,
@@ -125,7 +125,7 @@
       "name": "台積電",
       "close": 2250,
       "percent": 0,
-      "quoteDate": "20260612",
+      "quoteDate": "20260611",
       "displayClose": 2250,
       "displayPercent": 0
     },
@@ -134,8 +134,8 @@
       "underlyingCode": "2327",
       "market": "上市",
       "tradeDate": "1150611",
-      "underlyingClose": 836,
-      "underlyingPercent": 0,
+      "underlyingClose": 842,
+      "underlyingPercent": 2.81,
       "priceVerified": true,
       "basicVerified": true,
       "quoteSource": "TWSE STOCK_DAY_ALL",
@@ -247,11 +247,11 @@
       "reason": "A：權證強，待分點確認。權證熱度 100、股票型態 76（漲幅可控）、分點 待接分點；認購 134 檔、價平/價內 11 檔、認購金額 1.84 億，認購/認售比 99+，最近到期 11 天。",
       "code": "2327",
       "name": "國巨*",
-      "close": 836,
-      "percent": 0,
-      "quoteDate": "20260612",
-      "displayClose": 836,
-      "displayPercent": 0
+      "close": 842,
+      "percent": 2.81,
+      "quoteDate": "20260611",
+      "displayClose": 842,
+      "displayPercent": 2.81
     },
     {
       "underlyingName": "大立光",
@@ -259,7 +259,7 @@
       "market": "上市",
       "tradeDate": "1150611",
       "underlyingClose": 4165,
-      "underlyingPercent": 0,
+      "underlyingPercent": 0.85,
       "priceVerified": true,
       "basicVerified": true,
       "quoteSource": "TWSE STOCK_DAY_ALL",
@@ -372,10 +372,10 @@
       "code": "3008",
       "name": "大立光",
       "close": 4165,
-      "percent": 0,
-      "quoteDate": "20260612",
+      "percent": 0.85,
+      "quoteDate": "20260611",
       "displayClose": 4165,
-      "displayPercent": 0
+      "displayPercent": 0.85
     },
     {
       "underlyingName": "啟碁",
@@ -383,7 +383,7 @@
       "market": "上市",
       "tradeDate": "1150611",
       "underlyingClose": 272.5,
-      "underlyingPercent": 0,
+      "underlyingPercent": 0.93,
       "priceVerified": true,
       "basicVerified": true,
       "quoteSource": "TWSE STOCK_DAY_ALL",
@@ -496,10 +496,10 @@
       "code": "6285",
       "name": "啟碁",
       "close": 272.5,
-      "percent": 0,
-      "quoteDate": "20260612",
+      "percent": 0.93,
+      "quoteDate": "20260611",
       "displayClose": 272.5,
-      "displayPercent": 0
+      "displayPercent": 0.93
     },
     {
       "underlyingName": "世芯-KY",
@@ -507,7 +507,7 @@
       "market": "上市",
       "tradeDate": "1150611",
       "underlyingClose": 4060,
-      "underlyingPercent": 0,
+      "underlyingPercent": 0.5,
       "priceVerified": true,
       "basicVerified": true,
       "quoteSource": "TWSE STOCK_DAY_ALL",
@@ -620,10 +620,10 @@
       "code": "3661",
       "name": "世芯-KY",
       "close": 4060,
-      "percent": 0,
-      "quoteDate": "20260612",
+      "percent": 0.5,
+      "quoteDate": "20260611",
       "displayClose": 4060,
-      "displayPercent": 0
+      "displayPercent": 0.5
     },
     {
       "underlyingName": "群聯",
@@ -631,7 +631,7 @@
       "market": "上櫃",
       "tradeDate": "1150611",
       "underlyingClose": 2200,
-      "underlyingPercent": 0,
+      "underlyingPercent": 2.09,
       "priceVerified": true,
       "basicVerified": true,
       "quoteSource": "TPEX daily_close_quotes",
@@ -744,10 +744,10 @@
       "code": "8299",
       "name": "群聯",
       "close": 2200,
-      "percent": 0,
-      "quoteDate": "20260612",
+      "percent": 2.09,
+      "quoteDate": "20260611",
       "displayClose": 2200,
-      "displayPercent": 0
+      "displayPercent": 2.09
     },
     {
       "underlyingName": "南亞科",
@@ -755,7 +755,7 @@
       "market": "上市",
       "tradeDate": "1150611",
       "underlyingClose": 340,
-      "underlyingPercent": 0,
+      "underlyingPercent": 2.1,
       "priceVerified": true,
       "basicVerified": true,
       "quoteSource": "TWSE STOCK_DAY_ALL",
@@ -868,18 +868,18 @@
       "code": "2408",
       "name": "南亞科",
       "close": 340,
-      "percent": 0,
-      "quoteDate": "20260612",
+      "percent": 2.1,
+      "quoteDate": "20260611",
       "displayClose": 340,
-      "displayPercent": 0
+      "displayPercent": 2.1
     },
     {
       "underlyingName": "群創",
       "underlyingCode": "3481",
       "market": "上市",
       "tradeDate": "1150611",
-      "underlyingClose": 49.1,
-      "underlyingPercent": 4.58,
+      "underlyingClose": 46.95,
+      "underlyingPercent": 0,
       "priceVerified": true,
       "basicVerified": true,
       "quoteSource": "TWSE STOCK_DAY_ALL",
@@ -991,11 +991,11 @@
       "reason": "B：候選觀察。權證熱度 81、股票型態 88（股票未噴，權證先熱）、分點 待接分點；認購 61 檔、價平/價內 14 檔、認購金額 0.23 億，認購/認售比 13.34，最近到期 18 天。",
       "code": "3481",
       "name": "群創",
-      "close": 49.1,
-      "percent": 4.58,
-      "quoteDate": "20260612",
-      "displayClose": 49.1,
-      "displayPercent": 4.58
+      "close": 46.95,
+      "percent": 0,
+      "quoteDate": "20260611",
+      "displayClose": 46.95,
+      "displayPercent": 0
     },
     {
       "underlyingName": "川湖",
@@ -1003,7 +1003,7 @@
       "market": "上市",
       "tradeDate": "1150611",
       "underlyingClose": 6400,
-      "underlyingPercent": 0,
+      "underlyingPercent": 0.47,
       "priceVerified": true,
       "basicVerified": true,
       "quoteSource": "TWSE STOCK_DAY_ALL",
@@ -1116,10 +1116,10 @@
       "code": "2059",
       "name": "川湖",
       "close": 6400,
-      "percent": 0,
-      "quoteDate": "20260612",
+      "percent": 0.47,
+      "quoteDate": "20260611",
       "displayClose": 6400,
-      "displayPercent": 0
+      "displayPercent": 0.47
     },
     {
       "underlyingName": "友達",
@@ -1127,7 +1127,7 @@
       "market": "上市",
       "tradeDate": "1150611",
       "underlyingClose": 23.15,
-      "underlyingPercent": 0,
+      "underlyingPercent": 0.87,
       "priceVerified": true,
       "basicVerified": true,
       "quoteSource": "TWSE STOCK_DAY_ALL",
@@ -1240,10 +1240,10 @@
       "code": "2409",
       "name": "友達",
       "close": 23.15,
-      "percent": 0,
-      "quoteDate": "20260612",
+      "percent": 0.87,
+      "quoteDate": "20260611",
       "displayClose": 23.15,
-      "displayPercent": 0
+      "displayPercent": 0.87
     },
     {
       "underlyingName": "貿聯-KY",
@@ -1365,7 +1365,7 @@
       "name": "貿聯-KY",
       "close": 2160,
       "percent": 0,
-      "quoteDate": "20260612",
+      "quoteDate": "20260611",
       "displayClose": 2160,
       "displayPercent": 0
     },
@@ -1375,7 +1375,7 @@
       "market": "上市",
       "tradeDate": "1150611",
       "underlyingClose": 1330,
-      "underlyingPercent": 0,
+      "underlyingPercent": 0.38,
       "priceVerified": true,
       "basicVerified": true,
       "quoteSource": "TWSE STOCK_DAY_ALL",
@@ -1488,10 +1488,10 @@
       "code": "5269",
       "name": "祥碩",
       "close": 1330,
-      "percent": 0,
-      "quoteDate": "20260612",
+      "percent": 0.38,
+      "quoteDate": "20260611",
       "displayClose": 1330,
-      "displayPercent": 0
+      "displayPercent": 0.38
     },
     {
       "underlyingName": "威剛",
@@ -1499,7 +1499,7 @@
       "market": "上櫃",
       "tradeDate": "1150611",
       "underlyingClose": 394.5,
-      "underlyingPercent": 0,
+      "underlyingPercent": 1.15,
       "priceVerified": true,
       "basicVerified": true,
       "quoteSource": "TPEX daily_close_quotes",
@@ -1612,10 +1612,10 @@
       "code": "3260",
       "name": "威剛",
       "close": 394.5,
-      "percent": 0,
-      "quoteDate": "20260612",
+      "percent": 1.15,
+      "quoteDate": "20260611",
       "displayClose": 394.5,
-      "displayPercent": 0
+      "displayPercent": 1.15
     },
     {
       "underlyingName": "日月光投控",
@@ -1623,7 +1623,7 @@
       "market": "上市",
       "tradeDate": "1150611",
       "underlyingClose": 544,
-      "underlyingPercent": 0,
+      "underlyingPercent": 0.93,
       "priceVerified": true,
       "basicVerified": true,
       "quoteSource": "TWSE STOCK_DAY_ALL",
@@ -1736,10 +1736,10 @@
       "code": "3711",
       "name": "日月光投控",
       "close": 544,
-      "percent": 0,
-      "quoteDate": "20260612",
+      "percent": 0.93,
+      "quoteDate": "20260611",
       "displayClose": 544,
-      "displayPercent": 0
+      "displayPercent": 0.93
     },
     {
       "underlyingName": "京元電子",
@@ -1861,7 +1861,7 @@
       "name": "京元電子",
       "close": 272,
       "percent": 0,
-      "quoteDate": "20260612",
+      "quoteDate": "20260611",
       "displayClose": 272,
       "displayPercent": 0
     },
@@ -1871,7 +1871,7 @@
       "market": "上市",
       "tradeDate": "1150611",
       "underlyingClose": 137,
-      "underlyingPercent": 0,
+      "underlyingPercent": 1.11,
       "priceVerified": true,
       "basicVerified": true,
       "quoteSource": "TWSE STOCK_DAY_ALL",
@@ -1984,10 +1984,10 @@
       "code": "2481",
       "name": "強茂",
       "close": 137,
-      "percent": 0,
-      "quoteDate": "20260612",
+      "percent": 1.11,
+      "quoteDate": "20260611",
       "displayClose": 137,
-      "displayPercent": 0
+      "displayPercent": 1.11
     },
     {
       "underlyingName": "長榮",
@@ -1995,7 +1995,7 @@
       "market": "上市",
       "tradeDate": "1150611",
       "underlyingClose": 226,
-      "underlyingPercent": 0,
+      "underlyingPercent": 1.35,
       "priceVerified": true,
       "basicVerified": true,
       "quoteSource": "TWSE STOCK_DAY_ALL",
@@ -2108,10 +2108,10 @@
       "code": "2603",
       "name": "長榮",
       "close": 226,
-      "percent": 0,
-      "quoteDate": "20260612",
+      "percent": 1.35,
+      "quoteDate": "20260611",
       "displayClose": 226,
-      "displayPercent": 0
+      "displayPercent": 1.35
     },
     {
       "underlyingName": "中美晶",
@@ -2119,7 +2119,7 @@
       "market": "上櫃",
       "tradeDate": "1150611",
       "underlyingClose": 145,
-      "underlyingPercent": 0,
+      "underlyingPercent": 1.05,
       "priceVerified": true,
       "basicVerified": true,
       "quoteSource": "TPEX daily_close_quotes",
@@ -2232,18 +2232,18 @@
       "code": "5483",
       "name": "中美晶",
       "close": 145,
-      "percent": 0,
-      "quoteDate": "20260612",
+      "percent": 1.05,
+      "quoteDate": "20260611",
       "displayClose": 145,
-      "displayPercent": 0
+      "displayPercent": 1.05
     },
     {
       "underlyingName": "長興",
       "underlyingCode": "1717",
       "market": "上市",
       "tradeDate": "1150611",
-      "underlyingClose": 70.9,
-      "underlyingPercent": 4.57,
+      "underlyingClose": 67.8,
+      "underlyingPercent": 0,
       "priceVerified": true,
       "basicVerified": true,
       "quoteSource": "TWSE STOCK_DAY_ALL",
@@ -2355,19 +2355,19 @@
       "reason": "B：候選觀察。權證熱度 78、股票型態 88（股票未噴，權證先熱）、分點 待接分點；認購 65 檔、價平/價內 4 檔、認購金額 0.11 億，認購/認售比 26.06，最近到期 25 天。",
       "code": "1717",
       "name": "長興",
-      "close": 70.9,
-      "percent": 4.57,
-      "quoteDate": "20260612",
-      "displayClose": 70.9,
-      "displayPercent": 4.57
+      "close": 67.8,
+      "percent": 0,
+      "quoteDate": "20260611",
+      "displayClose": 67.8,
+      "displayPercent": 0
     },
     {
       "underlyingName": "微星",
       "underlyingCode": "2377",
       "market": "上市",
       "tradeDate": "1150611",
-      "underlyingClose": 139.5,
-      "underlyingPercent": 4.49,
+      "underlyingClose": 133.5,
+      "underlyingPercent": 1.14,
       "priceVerified": true,
       "basicVerified": true,
       "quoteSource": "TWSE STOCK_DAY_ALL",
@@ -2479,11 +2479,11 @@
       "reason": "B：候選觀察。權證熱度 78、股票型態 88（股票未噴，權證先熱）、分點 待接分點；認購 51 檔、價平/價內 14 檔、認購金額 0.09 億，認購/認售比 99+，最近到期 11 天。",
       "code": "2377",
       "name": "微星",
-      "close": 139.5,
-      "percent": 4.49,
-      "quoteDate": "20260612",
-      "displayClose": 139.5,
-      "displayPercent": 4.49
+      "close": 133.5,
+      "percent": 1.14,
+      "quoteDate": "20260611",
+      "displayClose": 133.5,
+      "displayPercent": 1.14
     },
     {
       "underlyingName": "德律",
@@ -2605,7 +2605,7 @@
       "name": "德律",
       "close": 313,
       "percent": 0,
-      "quoteDate": "20260612",
+      "quoteDate": "20260611",
       "displayClose": 313,
       "displayPercent": 0
     },
@@ -2615,7 +2615,7 @@
       "market": "上市",
       "tradeDate": "1150611",
       "underlyingClose": 100.5,
-      "underlyingPercent": 0,
+      "underlyingPercent": 0.6,
       "priceVerified": true,
       "basicVerified": true,
       "quoteSource": "TWSE STOCK_DAY_ALL",
@@ -2728,10 +2728,10 @@
       "code": "2882",
       "name": "國泰金",
       "close": 100.5,
-      "percent": 0,
-      "quoteDate": "20260612",
+      "percent": 0.6,
+      "quoteDate": "20260611",
       "displayClose": 100.5,
-      "displayPercent": 0
+      "displayPercent": 0.6
     },
     {
       "underlyingName": "茂迪",
@@ -2739,7 +2739,7 @@
       "market": "上櫃",
       "tradeDate": "1150611",
       "underlyingClose": 31.25,
-      "underlyingPercent": 0,
+      "underlyingPercent": 0.16,
       "priceVerified": true,
       "basicVerified": true,
       "quoteSource": "TPEX daily_close_quotes",
@@ -2852,18 +2852,18 @@
       "code": "6244",
       "name": "茂迪",
       "close": 31.25,
-      "percent": 0,
-      "quoteDate": "20260612",
+      "percent": 0.16,
+      "quoteDate": "20260611",
       "displayClose": 31.25,
-      "displayPercent": 0
+      "displayPercent": 0.16
     },
     {
       "underlyingName": "力積電",
       "underlyingCode": "6770",
       "market": "上市",
       "tradeDate": "1150611",
-      "underlyingClose": 67.7,
-      "underlyingPercent": 5.12,
+      "underlyingClose": 64.4,
+      "underlyingPercent": 0,
       "priceVerified": true,
       "basicVerified": true,
       "quoteSource": "TWSE STOCK_DAY_ALL",
@@ -2975,11 +2975,11 @@
       "reason": "B：候選觀察。權證熱度 78、股票型態 88（股票未噴，權證先熱）、分點 待接分點；認購 82 檔、價平/價內 16 檔、認購金額 0.08 億，認購/認售比 14.27，最近到期 13 天。",
       "code": "6770",
       "name": "力積電",
-      "close": 67.7,
-      "percent": 5.12,
-      "quoteDate": "20260612",
-      "displayClose": 67.7,
-      "displayPercent": 5.12
+      "close": 64.4,
+      "percent": 0,
+      "quoteDate": "20260611",
+      "displayClose": 64.4,
+      "displayPercent": 0
     },
     {
       "underlyingName": "華新",
@@ -3101,7 +3101,7 @@
       "name": "華新",
       "close": 34.3,
       "percent": 0,
-      "quoteDate": "20260612",
+      "quoteDate": "20260611",
       "displayClose": 34.3,
       "displayPercent": 0
     },
@@ -3111,7 +3111,7 @@
       "market": "上櫃",
       "tradeDate": "1150611",
       "underlyingClose": 300,
-      "underlyingPercent": 0,
+      "underlyingPercent": 1.35,
       "priceVerified": true,
       "basicVerified": true,
       "quoteSource": "TPEX daily_close_quotes",
@@ -3224,10 +3224,10 @@
       "code": "3675",
       "name": "德微",
       "close": 300,
-      "percent": 0,
-      "quoteDate": "20260612",
+      "percent": 1.35,
+      "quoteDate": "20260611",
       "displayClose": 300,
-      "displayPercent": 0
+      "displayPercent": 1.35
     },
     {
       "underlyingName": "晶豪科",
@@ -3235,7 +3235,7 @@
       "market": "上市",
       "tradeDate": "1150611",
       "underlyingClose": 204.5,
-      "underlyingPercent": 0,
+      "underlyingPercent": 1.24,
       "priceVerified": true,
       "basicVerified": true,
       "quoteSource": "TWSE STOCK_DAY_ALL",
@@ -3348,10 +3348,10 @@
       "code": "3006",
       "name": "晶豪科",
       "close": 204.5,
-      "percent": 0,
-      "quoteDate": "20260612",
+      "percent": 1.24,
+      "quoteDate": "20260611",
       "displayClose": 204.5,
-      "displayPercent": 0
+      "displayPercent": 1.24
     },
     {
       "underlyingName": "帆宣",
@@ -3359,7 +3359,7 @@
       "market": "上市",
       "tradeDate": "1150611",
       "underlyingClose": 504,
-      "underlyingPercent": 0,
+      "underlyingPercent": 0.8,
       "priceVerified": true,
       "basicVerified": true,
       "quoteSource": "TWSE STOCK_DAY_ALL",
@@ -3472,10 +3472,10 @@
       "code": "6196",
       "name": "帆宣",
       "close": 504,
-      "percent": 0,
-      "quoteDate": "20260612",
+      "percent": 0.8,
+      "quoteDate": "20260611",
       "displayClose": 504,
-      "displayPercent": 0
+      "displayPercent": 0.8
     },
     {
       "underlyingName": "辛耘",
@@ -3483,7 +3483,7 @@
       "market": "上市",
       "tradeDate": "1150611",
       "underlyingClose": 791,
-      "underlyingPercent": 0,
+      "underlyingPercent": 0.64,
       "priceVerified": true,
       "basicVerified": true,
       "quoteSource": "TWSE STOCK_DAY_ALL",
@@ -3596,10 +3596,10 @@
       "code": "3583",
       "name": "辛耘",
       "close": 791,
-      "percent": 0,
-      "quoteDate": "20260612",
+      "percent": 0.64,
+      "quoteDate": "20260611",
       "displayClose": 791,
-      "displayPercent": 0
+      "displayPercent": 0.64
     },
     {
       "underlyingName": "良維",
@@ -3607,7 +3607,7 @@
       "market": "上櫃",
       "tradeDate": "1150611",
       "underlyingClose": 296.5,
-      "underlyingPercent": 0,
+      "underlyingPercent": 1.19,
       "priceVerified": true,
       "basicVerified": true,
       "quoteSource": "TPEX daily_close_quotes",
@@ -3720,10 +3720,10 @@
       "code": "6290",
       "name": "良維",
       "close": 296.5,
-      "percent": 0,
-      "quoteDate": "20260612",
+      "percent": 1.19,
+      "quoteDate": "20260611",
       "displayClose": 296.5,
-      "displayPercent": 0
+      "displayPercent": 1.19
     },
     {
       "underlyingName": "金寶",
@@ -3731,7 +3731,7 @@
       "market": "上市",
       "tradeDate": "1150611",
       "underlyingClose": 34.9,
-      "underlyingPercent": 0,
+      "underlyingPercent": 0.14,
       "priceVerified": true,
       "basicVerified": true,
       "quoteSource": "TWSE STOCK_DAY_ALL",
@@ -3844,10 +3844,10 @@
       "code": "2312",
       "name": "金寶",
       "close": 34.9,
-      "percent": 0,
-      "quoteDate": "20260612",
+      "percent": 0.14,
+      "quoteDate": "20260611",
       "displayClose": 34.9,
-      "displayPercent": 0
+      "displayPercent": 0.14
     },
     {
       "underlyingName": "神達",
@@ -3855,7 +3855,7 @@
       "market": "上市",
       "tradeDate": "1150611",
       "underlyingClose": 86.5,
-      "underlyingPercent": 0,
+      "underlyingPercent": 0.46,
       "priceVerified": true,
       "basicVerified": true,
       "quoteSource": "TWSE STOCK_DAY_ALL",
@@ -3968,10 +3968,10 @@
       "code": "3706",
       "name": "神達",
       "close": 86.5,
-      "percent": 0,
-      "quoteDate": "20260612",
+      "percent": 0.46,
+      "quoteDate": "20260611",
       "displayClose": 86.5,
-      "displayPercent": 0
+      "displayPercent": 0.46
     },
     {
       "underlyingName": "富鼎",
@@ -3979,7 +3979,7 @@
       "market": "上市",
       "tradeDate": "1150611",
       "underlyingClose": 158,
-      "underlyingPercent": 0,
+      "underlyingPercent": 0.96,
       "priceVerified": true,
       "basicVerified": true,
       "quoteSource": "TWSE STOCK_DAY_ALL",
@@ -4092,10 +4092,10 @@
       "code": "8261",
       "name": "富鼎",
       "close": 158,
-      "percent": 0,
-      "quoteDate": "20260612",
+      "percent": 0.96,
+      "quoteDate": "20260611",
       "displayClose": 158,
-      "displayPercent": 0
+      "displayPercent": 0.96
     },
     {
       "underlyingName": "新應材",
@@ -4217,7 +4217,7 @@
       "name": "新應材",
       "close": 908,
       "percent": 0,
-      "quoteDate": "20260612",
+      "quoteDate": "20260611",
       "displayClose": 908,
       "displayPercent": 0
     },
@@ -4341,7 +4341,7 @@
       "name": "穩懋",
       "close": 481.5,
       "percent": 0,
-      "quoteDate": "20260612",
+      "quoteDate": "20260611",
       "displayClose": 481.5,
       "displayPercent": 0
     },
@@ -4351,7 +4351,7 @@
       "market": "上市",
       "tradeDate": "1150611",
       "underlyingClose": 42.55,
-      "underlyingPercent": 0,
+      "underlyingPercent": 0.12,
       "priceVerified": true,
       "basicVerified": true,
       "quoteSource": "TWSE STOCK_DAY_ALL",
@@ -4464,10 +4464,10 @@
       "code": "2027",
       "name": "大成鋼",
       "close": 42.55,
-      "percent": 0,
-      "quoteDate": "20260612",
+      "percent": 0.12,
+      "quoteDate": "20260611",
       "displayClose": 42.55,
-      "displayPercent": 0
+      "displayPercent": 0.12
     },
     {
       "underlyingName": "矽格",
@@ -4475,7 +4475,7 @@
       "market": "上市",
       "tradeDate": "1150611",
       "underlyingClose": 205.5,
-      "underlyingPercent": 0,
+      "underlyingPercent": 0.98,
       "priceVerified": true,
       "basicVerified": true,
       "quoteSource": "TWSE STOCK_DAY_ALL",
@@ -4588,10 +4588,10 @@
       "code": "6257",
       "name": "矽格",
       "close": 205.5,
-      "percent": 0,
-      "quoteDate": "20260612",
+      "percent": 0.98,
+      "quoteDate": "20260611",
       "displayClose": 205.5,
-      "displayPercent": 0
+      "displayPercent": 0.98
     },
     {
       "underlyingName": "超豐",
@@ -4599,7 +4599,7 @@
       "market": "上市",
       "tradeDate": "1150611",
       "underlyingClose": 121.5,
-      "underlyingPercent": 0,
+      "underlyingPercent": 0.83,
       "priceVerified": true,
       "basicVerified": true,
       "quoteSource": "TWSE STOCK_DAY_ALL",
@@ -4712,18 +4712,18 @@
       "code": "2441",
       "name": "超豐",
       "close": 121.5,
-      "percent": 0,
-      "quoteDate": "20260612",
+      "percent": 0.83,
+      "quoteDate": "20260611",
       "displayClose": 121.5,
-      "displayPercent": 0
+      "displayPercent": 0.83
     },
     {
       "underlyingName": "亞電",
       "underlyingCode": "4939",
       "market": "上櫃",
       "tradeDate": "1150611",
-      "underlyingClose": 66.2,
-      "underlyingPercent": 9.97,
+      "underlyingClose": 60.2,
+      "underlyingPercent": 0.17,
       "priceVerified": true,
       "basicVerified": true,
       "quoteSource": "TPEX daily_close_quotes",
@@ -4835,11 +4835,11 @@
       "reason": "B：候選觀察。權證熱度 77、股票型態 88（股票未噴，權證先熱）、分點 待接分點；認購 15 檔、價平/價內 6 檔、認購金額 0.04 億，認購/認售比 99+，最近到期 24 天。",
       "code": "4939",
       "name": "亞電",
-      "close": 66.2,
-      "percent": 9.97,
-      "quoteDate": "20260612",
-      "displayClose": 66.2,
-      "displayPercent": 9.97
+      "close": 60.2,
+      "percent": 0.17,
+      "quoteDate": "20260611",
+      "displayClose": 60.2,
+      "displayPercent": 0.17
     },
     {
       "underlyingName": "萬海",
@@ -4847,7 +4847,7 @@
       "market": "上市",
       "tradeDate": "1150611",
       "underlyingClose": 83.8,
-      "underlyingPercent": 0,
+      "underlyingPercent": 0.84,
       "priceVerified": true,
       "basicVerified": true,
       "quoteSource": "TWSE STOCK_DAY_ALL",
@@ -4960,18 +4960,18 @@
       "code": "2615",
       "name": "萬海",
       "close": 83.8,
-      "percent": 0,
-      "quoteDate": "20260612",
+      "percent": 0.84,
+      "quoteDate": "20260611",
       "displayClose": 83.8,
-      "displayPercent": 0
+      "displayPercent": 0.84
     },
     {
       "underlyingName": "和碩",
       "underlyingCode": "4938",
       "market": "上市",
       "tradeDate": "1150611",
-      "underlyingClose": 96.6,
-      "underlyingPercent": 1.26,
+      "underlyingClose": 95.4,
+      "underlyingPercent": 0.63,
       "priceVerified": true,
       "basicVerified": true,
       "quoteSource": "TWSE STOCK_DAY_ALL",
@@ -5083,11 +5083,11 @@
       "reason": "B：候選觀察。權證熱度 77、股票型態 88（股票未噴，權證先熱）、分點 待接分點；認購 20 檔、價平/價內 10 檔、認購金額 0.04 億，認購/認售比 99+，最近到期 45 天。",
       "code": "4938",
       "name": "和碩",
-      "close": 96.6,
-      "percent": 1.26,
-      "quoteDate": "20260612",
-      "displayClose": 96.6,
-      "displayPercent": 1.26
+      "close": 95.4,
+      "percent": 0.63,
+      "quoteDate": "20260611",
+      "displayClose": 95.4,
+      "displayPercent": 0.63
     },
     {
       "underlyingName": "華泰",
@@ -5209,7 +5209,7 @@
       "name": "華泰",
       "close": 52.3,
       "percent": 0,
-      "quoteDate": "20260612",
+      "quoteDate": "20260611",
       "displayClose": 52.3,
       "displayPercent": 0
     },
@@ -5219,7 +5219,7 @@
       "market": "上櫃",
       "tradeDate": "1150611",
       "underlyingClose": 3015,
-      "underlyingPercent": 0,
+      "underlyingPercent": 1.17,
       "priceVerified": true,
       "basicVerified": true,
       "quoteSource": "TPEX daily_close_quotes",
@@ -5332,10 +5332,10 @@
       "code": "3529",
       "name": "力旺",
       "close": 3015,
-      "percent": 0,
-      "quoteDate": "20260612",
+      "percent": 1.17,
+      "quoteDate": "20260611",
       "displayClose": 3015,
-      "displayPercent": 0
+      "displayPercent": 1.17
     },
     {
       "underlyingName": "宇隆",
@@ -5343,7 +5343,7 @@
       "market": "上市",
       "tradeDate": "1150611",
       "underlyingClose": 293,
-      "underlyingPercent": 0,
+      "underlyingPercent": 1.03,
       "priceVerified": true,
       "basicVerified": true,
       "quoteSource": "TWSE STOCK_DAY_ALL",
@@ -5456,10 +5456,10 @@
       "code": "2233",
       "name": "宇隆",
       "close": 293,
-      "percent": 0,
-      "quoteDate": "20260612",
+      "percent": 1.03,
+      "quoteDate": "20260611",
       "displayClose": 293,
-      "displayPercent": 0
+      "displayPercent": 1.03
     },
     {
       "underlyingName": "玉晶光",
@@ -5467,7 +5467,7 @@
       "market": "上市",
       "tradeDate": "1150611",
       "underlyingClose": 693,
-      "underlyingPercent": 0,
+      "underlyingPercent": 2.36,
       "priceVerified": true,
       "basicVerified": true,
       "quoteSource": "TWSE STOCK_DAY_ALL",
@@ -5580,10 +5580,10 @@
       "code": "3406",
       "name": "玉晶光",
       "close": 693,
-      "percent": 0,
-      "quoteDate": "20260612",
+      "percent": 2.36,
+      "quoteDate": "20260611",
       "displayClose": 693,
-      "displayPercent": 0
+      "displayPercent": 2.36
     },
     {
       "underlyingName": "鉅祥",
@@ -5591,7 +5591,7 @@
       "market": "上市",
       "tradeDate": "1150611",
       "underlyingClose": 119,
-      "underlyingPercent": 0,
+      "underlyingPercent": 0.42,
       "priceVerified": true,
       "basicVerified": true,
       "quoteSource": "TWSE STOCK_DAY_ALL",
@@ -5704,10 +5704,10 @@
       "code": "2476",
       "name": "鉅祥",
       "close": 119,
-      "percent": 0,
-      "quoteDate": "20260612",
+      "percent": 0.42,
+      "quoteDate": "20260611",
       "displayClose": 119,
-      "displayPercent": 0
+      "displayPercent": 0.42
     },
     {
       "underlyingName": "昇貿",
@@ -5715,7 +5715,7 @@
       "market": "上市",
       "tradeDate": "1150611",
       "underlyingClose": 140,
-      "underlyingPercent": 0,
+      "underlyingPercent": 2.56,
       "priceVerified": true,
       "basicVerified": true,
       "quoteSource": "TWSE STOCK_DAY_ALL",
@@ -5828,10 +5828,10 @@
       "code": "3305",
       "name": "昇貿",
       "close": 140,
-      "percent": 0,
-      "quoteDate": "20260612",
+      "percent": 2.56,
+      "quoteDate": "20260611",
       "displayClose": 140,
-      "displayPercent": 0
+      "displayPercent": 2.56
     },
     {
       "underlyingName": "燿華",
@@ -5839,7 +5839,7 @@
       "market": "上市",
       "tradeDate": "1150611",
       "underlyingClose": 64.6,
-      "underlyingPercent": 0,
+      "underlyingPercent": 2.05,
       "priceVerified": true,
       "basicVerified": true,
       "quoteSource": "TWSE STOCK_DAY_ALL",
@@ -5952,10 +5952,10 @@
       "code": "2367",
       "name": "燿華",
       "close": 64.6,
-      "percent": 0,
-      "quoteDate": "20260612",
+      "percent": 2.05,
+      "quoteDate": "20260611",
       "displayClose": 64.6,
-      "displayPercent": 0
+      "displayPercent": 2.05
     },
     {
       "underlyingName": "定穎投控",
@@ -5963,7 +5963,7 @@
       "market": "上市",
       "tradeDate": "1150611",
       "underlyingClose": 166,
-      "underlyingPercent": 0,
+      "underlyingPercent": 2.15,
       "priceVerified": true,
       "basicVerified": true,
       "quoteSource": "TWSE STOCK_DAY_ALL",
@@ -6076,10 +6076,10 @@
       "code": "3715",
       "name": "定穎投控",
       "close": 166,
-      "percent": 0,
-      "quoteDate": "20260612",
+      "percent": 2.15,
+      "quoteDate": "20260611",
       "displayClose": 166,
-      "displayPercent": 0
+      "displayPercent": 2.15
     },
     {
       "underlyingName": "南亞",
@@ -6087,7 +6087,7 @@
       "market": "上市",
       "tradeDate": "1150611",
       "underlyingClose": 96.9,
-      "underlyingPercent": 0,
+      "underlyingPercent": 2.22,
       "priceVerified": true,
       "basicVerified": true,
       "quoteSource": "TWSE STOCK_DAY_ALL",
@@ -6200,10 +6200,10 @@
       "code": "1303",
       "name": "南亞",
       "close": 96.9,
-      "percent": 0,
-      "quoteDate": "20260612",
+      "percent": 2.22,
+      "quoteDate": "20260611",
       "displayClose": 96.9,
-      "displayPercent": 0
+      "displayPercent": 2.22
     },
     {
       "underlyingName": "聯詠",
@@ -6211,7 +6211,7 @@
       "market": "上市",
       "tradeDate": "1150611",
       "underlyingClose": 488,
-      "underlyingPercent": 0,
+      "underlyingPercent": 1.99,
       "priceVerified": true,
       "basicVerified": true,
       "quoteSource": "TWSE STOCK_DAY_ALL",
@@ -6324,10 +6324,10 @@
       "code": "3034",
       "name": "聯詠",
       "close": 488,
-      "percent": 0,
-      "quoteDate": "20260612",
+      "percent": 1.99,
+      "quoteDate": "20260611",
       "displayClose": 488,
-      "displayPercent": 0
+      "displayPercent": 1.99
     },
     {
       "underlyingName": "擎亞",
@@ -6335,7 +6335,7 @@
       "market": "上櫃",
       "tradeDate": "1150611",
       "underlyingClose": 121,
-      "underlyingPercent": 0,
+      "underlyingPercent": 2.54,
       "priceVerified": true,
       "basicVerified": true,
       "quoteSource": "TPEX daily_close_quotes",
@@ -6448,10 +6448,10 @@
       "code": "8096",
       "name": "擎亞",
       "close": 121,
-      "percent": 0,
-      "quoteDate": "20260612",
+      "percent": 2.54,
+      "quoteDate": "20260611",
       "displayClose": 121,
-      "displayPercent": 0
+      "displayPercent": 2.54
     },
     {
       "underlyingName": "九豪",
@@ -6459,7 +6459,7 @@
       "market": "上櫃",
       "tradeDate": "1150611",
       "underlyingClose": 79,
-      "underlyingPercent": 0,
+      "underlyingPercent": 2.6,
       "priceVerified": true,
       "basicVerified": true,
       "quoteSource": "TPEX daily_close_quotes",
@@ -6572,10 +6572,10 @@
       "code": "6127",
       "name": "九豪",
       "close": 79,
-      "percent": 0,
-      "quoteDate": "20260612",
+      "percent": 2.6,
+      "quoteDate": "20260611",
       "displayClose": 79,
-      "displayPercent": 0
+      "displayPercent": 2.6
     },
     {
       "underlyingName": "富邦金",
@@ -6583,7 +6583,7 @@
       "market": "上市",
       "tradeDate": "1150611",
       "underlyingClose": 125.5,
-      "underlyingPercent": 0,
+      "underlyingPercent": 2.45,
       "priceVerified": true,
       "basicVerified": true,
       "quoteSource": "TWSE STOCK_DAY_ALL",
@@ -6696,10 +6696,10 @@
       "code": "2881",
       "name": "富邦金",
       "close": 125.5,
-      "percent": 0,
-      "quoteDate": "20260612",
+      "percent": 2.45,
+      "quoteDate": "20260611",
       "displayClose": 125.5,
-      "displayPercent": 0
+      "displayPercent": 2.45
     },
     {
       "underlyingName": "智原",
@@ -6707,7 +6707,7 @@
       "market": "上市",
       "tradeDate": "1150611",
       "underlyingClose": 178,
-      "underlyingPercent": 0,
+      "underlyingPercent": 2.01,
       "priceVerified": true,
       "basicVerified": true,
       "quoteSource": "TWSE STOCK_DAY_ALL",
@@ -6820,10 +6820,10 @@
       "code": "3035",
       "name": "智原",
       "close": 178,
-      "percent": 0,
-      "quoteDate": "20260612",
+      "percent": 2.01,
+      "quoteDate": "20260611",
       "displayClose": 178,
-      "displayPercent": 0
+      "displayPercent": 2.01
     },
     {
       "underlyingName": "益登",
@@ -6831,7 +6831,7 @@
       "market": "上市",
       "tradeDate": "1150611",
       "underlyingClose": 75,
-      "underlyingPercent": 0,
+      "underlyingPercent": 2.32,
       "priceVerified": true,
       "basicVerified": true,
       "quoteSource": "TWSE STOCK_DAY_ALL",
@@ -6944,10 +6944,10 @@
       "code": "3048",
       "name": "益登",
       "close": 75,
-      "percent": 0,
-      "quoteDate": "20260612",
+      "percent": 2.32,
+      "quoteDate": "20260611",
       "displayClose": 75,
-      "displayPercent": 0
+      "displayPercent": 2.32
     },
     {
       "underlyingName": "宏碁",
@@ -6955,7 +6955,7 @@
       "market": "上市",
       "tradeDate": "1150611",
       "underlyingClose": 36.9,
-      "underlyingPercent": 0,
+      "underlyingPercent": 1.93,
       "priceVerified": true,
       "basicVerified": true,
       "quoteSource": "TWSE STOCK_DAY_ALL",
@@ -7068,10 +7068,10 @@
       "code": "2353",
       "name": "宏碁",
       "close": 36.9,
-      "percent": 0,
-      "quoteDate": "20260612",
+      "percent": 1.93,
+      "quoteDate": "20260611",
       "displayClose": 36.9,
-      "displayPercent": 0
+      "displayPercent": 1.93
     },
     {
       "underlyingName": "樺漢",
@@ -7079,7 +7079,7 @@
       "market": "上市",
       "tradeDate": "1150611",
       "underlyingClose": 395,
-      "underlyingPercent": 0,
+      "underlyingPercent": 1.8,
       "priceVerified": true,
       "basicVerified": true,
       "quoteSource": "TWSE STOCK_DAY_ALL",
@@ -7192,10 +7192,10 @@
       "code": "6414",
       "name": "樺漢",
       "close": 395,
-      "percent": 0,
-      "quoteDate": "20260612",
+      "percent": 1.8,
+      "quoteDate": "20260611",
       "displayClose": 395,
-      "displayPercent": 0
+      "displayPercent": 1.8
     },
     {
       "underlyingName": "欣銓",
@@ -7203,7 +7203,7 @@
       "market": "上櫃",
       "tradeDate": "1150611",
       "underlyingClose": 215,
-      "underlyingPercent": 0,
+      "underlyingPercent": 1.65,
       "priceVerified": true,
       "basicVerified": true,
       "quoteSource": "TPEX daily_close_quotes",
@@ -7316,10 +7316,10 @@
       "code": "3264",
       "name": "欣銓",
       "close": 215,
-      "percent": 0,
-      "quoteDate": "20260612",
+      "percent": 1.65,
+      "quoteDate": "20260611",
       "displayClose": 215,
-      "displayPercent": 0
+      "displayPercent": 1.65
     },
     {
       "underlyingName": "瑞昱",
@@ -7327,7 +7327,7 @@
       "market": "上市",
       "tradeDate": "1150611",
       "underlyingClose": 655,
-      "underlyingPercent": 0,
+      "underlyingPercent": 1.55,
       "priceVerified": true,
       "basicVerified": true,
       "quoteSource": "TWSE STOCK_DAY_ALL",
@@ -7440,10 +7440,10 @@
       "code": "2379",
       "name": "瑞昱",
       "close": 655,
-      "percent": 0,
-      "quoteDate": "20260612",
+      "percent": 1.55,
+      "quoteDate": "20260611",
       "displayClose": 655,
-      "displayPercent": 0
+      "displayPercent": 1.55
     },
     {
       "underlyingName": "毅嘉",
@@ -7451,7 +7451,7 @@
       "market": "上市",
       "tradeDate": "1150611",
       "underlyingClose": 60.6,
-      "underlyingPercent": 0,
+      "underlyingPercent": 1.51,
       "priceVerified": true,
       "basicVerified": true,
       "quoteSource": "TWSE STOCK_DAY_ALL",
@@ -7564,10 +7564,10 @@
       "code": "2402",
       "name": "毅嘉",
       "close": 60.6,
-      "percent": 0,
-      "quoteDate": "20260612",
+      "percent": 1.51,
+      "quoteDate": "20260611",
       "displayClose": 60.6,
-      "displayPercent": 0
+      "displayPercent": 1.51
     },
     {
       "underlyingName": "順德",
@@ -7575,7 +7575,7 @@
       "market": "上市",
       "tradeDate": "1150611",
       "underlyingClose": 180,
-      "underlyingPercent": 0,
+      "underlyingPercent": 2.86,
       "priceVerified": true,
       "basicVerified": true,
       "quoteSource": "TWSE STOCK_DAY_ALL",
@@ -7688,10 +7688,10 @@
       "code": "2351",
       "name": "順德",
       "close": 180,
-      "percent": 0,
-      "quoteDate": "20260612",
+      "percent": 2.86,
+      "quoteDate": "20260611",
       "displayClose": 180,
-      "displayPercent": 0
+      "displayPercent": 2.86
     },
     {
       "underlyingName": "奇鋐",
@@ -7699,7 +7699,7 @@
       "market": "上市",
       "tradeDate": "1150611",
       "underlyingClose": 2335,
-      "underlyingPercent": 0,
+      "underlyingPercent": -1.06,
       "priceVerified": true,
       "basicVerified": true,
       "quoteSource": "TWSE STOCK_DAY_ALL",
@@ -7812,10 +7812,10 @@
       "code": "3017",
       "name": "奇鋐",
       "close": 2335,
-      "percent": 0,
-      "quoteDate": "20260612",
+      "percent": -1.06,
+      "quoteDate": "20260611",
       "displayClose": 2335,
-      "displayPercent": 0
+      "displayPercent": -1.06
     },
     {
       "underlyingName": "偉詮電",
@@ -7823,7 +7823,7 @@
       "market": "上市",
       "tradeDate": "1150611",
       "underlyingClose": 65,
-      "underlyingPercent": 0,
+      "underlyingPercent": 1.09,
       "priceVerified": true,
       "basicVerified": true,
       "quoteSource": "TWSE STOCK_DAY_ALL",
@@ -7936,10 +7936,10 @@
       "code": "2436",
       "name": "偉詮電",
       "close": 65,
-      "percent": 0,
-      "quoteDate": "20260612",
+      "percent": 1.09,
+      "quoteDate": "20260611",
       "displayClose": 65,
-      "displayPercent": 0
+      "displayPercent": 1.09
     },
     {
       "underlyingName": "矽統",
@@ -7947,7 +7947,7 @@
       "market": "上市",
       "tradeDate": "1150611",
       "underlyingClose": 56.4,
-      "underlyingPercent": 0,
+      "underlyingPercent": 2.36,
       "priceVerified": true,
       "basicVerified": true,
       "quoteSource": "TWSE STOCK_DAY_ALL",
@@ -8060,18 +8060,18 @@
       "code": "2363",
       "name": "矽統",
       "close": 56.4,
-      "percent": 0,
-      "quoteDate": "20260612",
+      "percent": 2.36,
+      "quoteDate": "20260611",
       "displayClose": 56.4,
-      "displayPercent": 0
+      "displayPercent": 2.36
     },
     {
       "underlyingName": "至上",
       "underlyingCode": "8112",
       "market": "上市",
       "tradeDate": "1150611",
-      "underlyingClose": 100.5,
-      "underlyingPercent": 5.24,
+      "underlyingClose": 95.5,
+      "underlyingPercent": 3.13,
       "priceVerified": true,
       "basicVerified": true,
       "quoteSource": "TWSE STOCK_DAY_ALL",
@@ -8183,19 +8183,19 @@
       "reason": "B：候選觀察。權證熱度 83、股票型態 58（短線偏熱）、分點 待接分點；認購 112 檔、價平/價內 46 檔、認購金額 0.36 億，認購/認售比 99+，最近到期 10 天。",
       "code": "8112",
       "name": "至上",
-      "close": 100.5,
-      "percent": 5.24,
-      "quoteDate": "20260612",
-      "displayClose": 100.5,
-      "displayPercent": 5.24
+      "close": 95.5,
+      "percent": 3.13,
+      "quoteDate": "20260611",
+      "displayClose": 95.5,
+      "displayPercent": 3.13
     },
     {
       "underlyingName": "漢唐",
       "underlyingCode": "2404",
       "market": "上市",
       "tradeDate": "1150611",
-      "underlyingClose": 1310,
-      "underlyingPercent": 9.62,
+      "underlyingClose": 1195,
+      "underlyingPercent": 3.91,
       "priceVerified": true,
       "basicVerified": true,
       "quoteSource": "TWSE STOCK_DAY_ALL",
@@ -8307,11 +8307,11 @@
       "reason": "B：候選觀察。權證熱度 83、股票型態 58（短線偏熱）、分點 待接分點；認購 133 檔、價平/價內 49 檔、認購金額 0.33 億，認購/認售比 99+，最近到期 10 天。",
       "code": "2404",
       "name": "漢唐",
-      "close": 1310,
-      "percent": 9.62,
-      "quoteDate": "20260612",
-      "displayClose": 1310,
-      "displayPercent": 9.62
+      "close": 1195,
+      "percent": 3.91,
+      "quoteDate": "20260611",
+      "displayClose": 1195,
+      "displayPercent": 3.91
     },
     {
       "underlyingName": "亞翔",
@@ -8319,7 +8319,7 @@
       "market": "上市",
       "tradeDate": "1150611",
       "underlyingClose": 732,
-      "underlyingPercent": 0,
+      "underlyingPercent": -0.68,
       "priceVerified": true,
       "basicVerified": true,
       "quoteSource": "TWSE STOCK_DAY_ALL",
@@ -8432,10 +8432,10 @@
       "code": "6139",
       "name": "亞翔",
       "close": 732,
-      "percent": 0,
-      "quoteDate": "20260612",
+      "percent": -0.68,
+      "quoteDate": "20260611",
       "displayClose": 732,
-      "displayPercent": 0
+      "displayPercent": -0.68
     },
     {
       "underlyingName": "技嘉",
@@ -8443,7 +8443,7 @@
       "market": "上市",
       "tradeDate": "1150611",
       "underlyingClose": 340,
-      "underlyingPercent": 0,
+      "underlyingPercent": -1.31,
       "priceVerified": true,
       "basicVerified": true,
       "quoteSource": "TWSE STOCK_DAY_ALL",
@@ -8556,10 +8556,10 @@
       "code": "2376",
       "name": "技嘉",
       "close": 340,
-      "percent": 0,
-      "quoteDate": "20260612",
+      "percent": -1.31,
+      "quoteDate": "20260611",
       "displayClose": 340,
-      "displayPercent": 0
+      "displayPercent": -1.31
     },
     {
       "underlyingName": "雙鴻",
@@ -8567,7 +8567,7 @@
       "market": "上櫃",
       "tradeDate": "1150611",
       "underlyingClose": 998,
-      "underlyingPercent": 0,
+      "underlyingPercent": -1.19,
       "priceVerified": true,
       "basicVerified": true,
       "quoteSource": "TPEX daily_close_quotes",
@@ -8680,10 +8680,10 @@
       "code": "3324",
       "name": "雙鴻",
       "close": 998,
-      "percent": 0,
-      "quoteDate": "20260612",
+      "percent": -1.19,
+      "quoteDate": "20260611",
       "displayClose": 998,
-      "displayPercent": 0
+      "displayPercent": -1.19
     },
     {
       "underlyingName": "佳能",
@@ -8691,7 +8691,7 @@
       "market": "上市",
       "tradeDate": "1150611",
       "underlyingClose": 71.7,
-      "underlyingPercent": 0,
+      "underlyingPercent": 0.14,
       "priceVerified": true,
       "basicVerified": true,
       "quoteSource": "TWSE STOCK_DAY_ALL",
@@ -8804,18 +8804,18 @@
       "code": "2374",
       "name": "佳能",
       "close": 71.7,
-      "percent": 0,
-      "quoteDate": "20260612",
+      "percent": 0.14,
+      "quoteDate": "20260611",
       "displayClose": 71.7,
-      "displayPercent": 0
+      "displayPercent": 0.14
     },
     {
       "underlyingName": "可成",
       "underlyingCode": "2474",
       "market": "上市",
       "tradeDate": "1150611",
-      "underlyingClose": 207.5,
-      "underlyingPercent": 0.97,
+      "underlyingClose": 205.5,
+      "underlyingPercent": 0.49,
       "priceVerified": true,
       "basicVerified": true,
       "quoteSource": "TWSE STOCK_DAY_ALL",
@@ -8927,11 +8927,11 @@
       "reason": "B：候選觀察。權證熱度 66、股票型態 88（股票未噴，權證先熱）、分點 待接分點；認購 31 檔、價平/價內 1 檔、認購金額 0.08 億，認購/認售比 99+，最近到期 12 天。",
       "code": "2474",
       "name": "可成",
-      "close": 207.5,
-      "percent": 0.97,
-      "quoteDate": "20260612",
-      "displayClose": 207.5,
-      "displayPercent": 0.97
+      "close": 205.5,
+      "percent": 0.49,
+      "quoteDate": "20260611",
+      "displayClose": 205.5,
+      "displayPercent": 0.49
     },
     {
       "underlyingName": "十銓",
@@ -8939,7 +8939,7 @@
       "market": "上市",
       "tradeDate": "1150611",
       "underlyingClose": 277.5,
-      "underlyingPercent": 0,
+      "underlyingPercent": 3.16,
       "priceVerified": true,
       "basicVerified": true,
       "quoteSource": "TWSE STOCK_DAY_ALL",
@@ -9052,10 +9052,10 @@
       "code": "4967",
       "name": "十銓",
       "close": 277.5,
-      "percent": 0,
-      "quoteDate": "20260612",
+      "percent": 3.16,
+      "quoteDate": "20260611",
       "displayClose": 277.5,
-      "displayPercent": 0
+      "displayPercent": 3.16
     },
     {
       "underlyingName": "台玻",
@@ -9063,7 +9063,7 @@
       "market": "上市",
       "tradeDate": "1150611",
       "underlyingClose": 59.3,
-      "underlyingPercent": 0,
+      "underlyingPercent": -1.33,
       "priceVerified": true,
       "basicVerified": true,
       "quoteSource": "TWSE STOCK_DAY_ALL",
@@ -9176,10 +9176,10 @@
       "code": "1802",
       "name": "台玻",
       "close": 59.3,
-      "percent": 0,
-      "quoteDate": "20260612",
+      "percent": -1.33,
+      "quoteDate": "20260611",
       "displayClose": 59.3,
-      "displayPercent": 0
+      "displayPercent": -1.33
     },
     {
       "underlyingName": "亞光",
@@ -9187,7 +9187,7 @@
       "market": "上市",
       "tradeDate": "1150611",
       "underlyingClose": 145.5,
-      "underlyingPercent": 0,
+      "underlyingPercent": -0.68,
       "priceVerified": true,
       "basicVerified": true,
       "quoteSource": "TWSE STOCK_DAY_ALL",
@@ -9300,10 +9300,10 @@
       "code": "3019",
       "name": "亞光",
       "close": 145.5,
-      "percent": 0,
-      "quoteDate": "20260612",
+      "percent": -0.68,
+      "quoteDate": "20260611",
       "displayClose": 145.5,
-      "displayPercent": 0
+      "displayPercent": -0.68
     },
     {
       "underlyingName": "勤誠",
@@ -9311,7 +9311,7 @@
       "market": "上市",
       "tradeDate": "1150611",
       "underlyingClose": 1440,
-      "underlyingPercent": 0,
+      "underlyingPercent": -0.35,
       "priceVerified": true,
       "basicVerified": true,
       "quoteSource": "TWSE STOCK_DAY_ALL",
@@ -9424,10 +9424,10 @@
       "code": "8210",
       "name": "勤誠",
       "close": 1440,
-      "percent": 0,
-      "quoteDate": "20260612",
+      "percent": -0.35,
+      "quoteDate": "20260611",
       "displayClose": 1440,
-      "displayPercent": 0
+      "displayPercent": -0.35
     },
     {
       "underlyingName": "嘉澤",
@@ -9435,7 +9435,7 @@
       "market": "上市",
       "tradeDate": "1150611",
       "underlyingClose": 2145,
-      "underlyingPercent": 0,
+      "underlyingPercent": -1.38,
       "priceVerified": true,
       "basicVerified": true,
       "quoteSource": "TWSE STOCK_DAY_ALL",
@@ -9548,10 +9548,10 @@
       "code": "3533",
       "name": "嘉澤",
       "close": 2145,
-      "percent": 0,
-      "quoteDate": "20260612",
+      "percent": -1.38,
+      "quoteDate": "20260611",
       "displayClose": 2145,
-      "displayPercent": 0
+      "displayPercent": -1.38
     },
     {
       "underlyingName": "聖暉*",
@@ -9559,7 +9559,7 @@
       "market": "上櫃",
       "tradeDate": "1150611",
       "underlyingClose": 1075,
-      "underlyingPercent": 0,
+      "underlyingPercent": -1.38,
       "priceVerified": true,
       "basicVerified": true,
       "quoteSource": "TPEX daily_close_quotes",
@@ -9672,10 +9672,10 @@
       "code": "5536",
       "name": "聖暉*",
       "close": 1075,
-      "percent": 0,
-      "quoteDate": "20260612",
+      "percent": -1.38,
+      "quoteDate": "20260611",
       "displayClose": 1075,
-      "displayPercent": 0
+      "displayPercent": -1.38
     },
     {
       "underlyingName": "系統電",
@@ -9683,7 +9683,7 @@
       "market": "上櫃",
       "tradeDate": "1150611",
       "underlyingClose": 66.6,
-      "underlyingPercent": 0,
+      "underlyingPercent": -1.48,
       "priceVerified": true,
       "basicVerified": true,
       "quoteSource": "TPEX daily_close_quotes",
@@ -9796,10 +9796,10 @@
       "code": "5309",
       "name": "系統電",
       "close": 66.6,
-      "percent": 0,
-      "quoteDate": "20260612",
+      "percent": -1.48,
+      "quoteDate": "20260611",
       "displayClose": 66.6,
-      "displayPercent": 0
+      "displayPercent": -1.48
     },
     {
       "underlyingName": "中興電",
@@ -9807,7 +9807,7 @@
       "market": "上市",
       "tradeDate": "1150611",
       "underlyingClose": 164,
-      "underlyingPercent": 0,
+      "underlyingPercent": -0.3,
       "priceVerified": true,
       "basicVerified": true,
       "quoteSource": "TWSE STOCK_DAY_ALL",
@@ -9920,10 +9920,10 @@
       "code": "1513",
       "name": "中興電",
       "close": 164,
-      "percent": 0,
-      "quoteDate": "20260612",
+      "percent": -0.3,
+      "quoteDate": "20260611",
       "displayClose": 164,
-      "displayPercent": 0
+      "displayPercent": -0.3
     },
     {
       "underlyingName": "譜瑞-KY",
@@ -9931,7 +9931,7 @@
       "market": "上櫃",
       "tradeDate": "1150611",
       "underlyingClose": 657,
-      "underlyingPercent": 0,
+      "underlyingPercent": -0.76,
       "priceVerified": true,
       "basicVerified": true,
       "quoteSource": "TPEX daily_close_quotes",
@@ -10044,10 +10044,10 @@
       "code": "4966",
       "name": "譜瑞-KY",
       "close": 657,
-      "percent": 0,
-      "quoteDate": "20260612",
+      "percent": -0.76,
+      "quoteDate": "20260611",
       "displayClose": 657,
-      "displayPercent": 0
+      "displayPercent": -0.76
     },
     {
       "underlyingName": "采鈺",
@@ -10055,7 +10055,7 @@
       "market": "上市",
       "tradeDate": "1150611",
       "underlyingClose": 455,
-      "underlyingPercent": 0,
+      "underlyingPercent": -1.09,
       "priceVerified": true,
       "basicVerified": true,
       "quoteSource": "TWSE STOCK_DAY_ALL",
@@ -10168,10 +10168,10 @@
       "code": "6789",
       "name": "采鈺",
       "close": 455,
-      "percent": 0,
-      "quoteDate": "20260612",
+      "percent": -1.09,
+      "quoteDate": "20260611",
       "displayClose": 455,
-      "displayPercent": 0
+      "displayPercent": -1.09
     },
     {
       "underlyingName": "均豪",
@@ -10293,7 +10293,7 @@
       "name": "均豪",
       "close": 100.5,
       "percent": 0,
-      "quoteDate": "20260612",
+      "quoteDate": "20260611",
       "displayClose": 100.5,
       "displayPercent": 0
     },
@@ -10303,7 +10303,7 @@
       "market": "上櫃",
       "tradeDate": "1150611",
       "underlyingClose": 213,
-      "underlyingPercent": 0,
+      "underlyingPercent": 0.47,
       "priceVerified": true,
       "basicVerified": true,
       "quoteSource": "TPEX daily_close_quotes",
@@ -10416,10 +10416,10 @@
       "code": "3227",
       "name": "原相",
       "close": 213,
-      "percent": 0,
-      "quoteDate": "20260612",
+      "percent": 0.47,
+      "quoteDate": "20260611",
       "displayClose": 213,
-      "displayPercent": 0
+      "displayPercent": 0.47
     },
     {
       "underlyingName": "力智",
@@ -10427,7 +10427,7 @@
       "market": "上市",
       "tradeDate": "1150611",
       "underlyingClose": 214,
-      "underlyingPercent": 0,
+      "underlyingPercent": 0.47,
       "priceVerified": true,
       "basicVerified": true,
       "quoteSource": "TWSE STOCK_DAY_ALL",
@@ -10540,10 +10540,10 @@
       "code": "6719",
       "name": "力智",
       "close": 214,
-      "percent": 0,
-      "quoteDate": "20260612",
+      "percent": 0.47,
+      "quoteDate": "20260611",
       "displayClose": 214,
-      "displayPercent": 0
+      "displayPercent": 0.47
     },
     {
       "underlyingName": "立敦",
@@ -10551,7 +10551,7 @@
       "market": "上櫃",
       "tradeDate": "1150611",
       "underlyingClose": 103,
-      "underlyingPercent": 0,
+      "underlyingPercent": 3.1,
       "priceVerified": true,
       "basicVerified": true,
       "quoteSource": "TPEX daily_close_quotes",
@@ -10664,10 +10664,10 @@
       "code": "6175",
       "name": "立敦",
       "close": 103,
-      "percent": 0,
-      "quoteDate": "20260612",
+      "percent": 3.1,
+      "quoteDate": "20260611",
       "displayClose": 103,
-      "displayPercent": 0
+      "displayPercent": 3.1
     },
     {
       "underlyingName": "事欣科",
@@ -10675,7 +10675,7 @@
       "market": "上市",
       "tradeDate": "1150611",
       "underlyingClose": 114.5,
-      "underlyingPercent": 0,
+      "underlyingPercent": 2.69,
       "priceVerified": true,
       "basicVerified": true,
       "quoteSource": "TWSE STOCK_DAY_ALL",
@@ -10788,10 +10788,10 @@
       "code": "4916",
       "name": "事欣科",
       "close": 114.5,
-      "percent": 0,
-      "quoteDate": "20260612",
+      "percent": 2.69,
+      "quoteDate": "20260611",
       "displayClose": 114.5,
-      "displayPercent": 0
+      "displayPercent": 2.69
     },
     {
       "underlyingName": "研華",
@@ -10799,7 +10799,7 @@
       "market": "上市",
       "tradeDate": "1150611",
       "underlyingClose": 464,
-      "underlyingPercent": 0,
+      "underlyingPercent": -0.32,
       "priceVerified": true,
       "basicVerified": true,
       "quoteSource": "TWSE STOCK_DAY_ALL",
@@ -10912,10 +10912,10 @@
       "code": "2395",
       "name": "研華",
       "close": 464,
-      "percent": 0,
-      "quoteDate": "20260612",
+      "percent": -0.32,
+      "quoteDate": "20260611",
       "displayClose": 464,
-      "displayPercent": 0
+      "displayPercent": -0.32
     },
     {
       "underlyingName": "富世達",
@@ -10923,7 +10923,7 @@
       "market": "上市",
       "tradeDate": "1150611",
       "underlyingClose": 1750,
-      "underlyingPercent": 0,
+      "underlyingPercent": -0.28,
       "priceVerified": true,
       "basicVerified": true,
       "quoteSource": "TWSE STOCK_DAY_ALL",
@@ -11036,10 +11036,10 @@
       "code": "6805",
       "name": "富世達",
       "close": 1750,
-      "percent": 0,
-      "quoteDate": "20260612",
+      "percent": -0.28,
+      "quoteDate": "20260611",
       "displayClose": 1750,
-      "displayPercent": 0
+      "displayPercent": -0.28
     },
     {
       "underlyingName": "久元",
@@ -11047,7 +11047,7 @@
       "market": "上櫃",
       "tradeDate": "1150611",
       "underlyingClose": 94.5,
-      "underlyingPercent": 0,
+      "underlyingPercent": -0.32,
       "priceVerified": true,
       "basicVerified": true,
       "quoteSource": "TPEX daily_close_quotes",
@@ -11160,10 +11160,10 @@
       "code": "6261",
       "name": "久元",
       "close": 94.5,
-      "percent": 0,
-      "quoteDate": "20260612",
+      "percent": -0.32,
+      "quoteDate": "20260611",
       "displayClose": 94.5,
-      "displayPercent": 0
+      "displayPercent": -0.32
     },
     {
       "underlyingName": "康普",
@@ -11171,7 +11171,7 @@
       "market": "上市",
       "tradeDate": "1150611",
       "underlyingClose": 123.5,
-      "underlyingPercent": 0,
+      "underlyingPercent": -1.2,
       "priceVerified": true,
       "basicVerified": true,
       "quoteSource": "TWSE STOCK_DAY_ALL",
@@ -11284,10 +11284,10 @@
       "code": "4739",
       "name": "康普",
       "close": 123.5,
-      "percent": 0,
-      "quoteDate": "20260612",
+      "percent": -1.2,
+      "quoteDate": "20260611",
       "displayClose": 123.5,
-      "displayPercent": 0
+      "displayPercent": -1.2
     },
     {
       "underlyingName": "宏捷科",
@@ -11295,7 +11295,7 @@
       "market": "上櫃",
       "tradeDate": "1150611",
       "underlyingClose": 145.5,
-      "underlyingPercent": 0,
+      "underlyingPercent": -1.02,
       "priceVerified": true,
       "basicVerified": true,
       "quoteSource": "TPEX daily_close_quotes",
@@ -11408,10 +11408,10 @@
       "code": "8086",
       "name": "宏捷科",
       "close": 145.5,
-      "percent": 0,
-      "quoteDate": "20260612",
+      "percent": -1.02,
+      "quoteDate": "20260611",
       "displayClose": 145.5,
-      "displayPercent": 0
+      "displayPercent": -1.02
     },
     {
       "underlyingName": "台星科",
@@ -11419,7 +11419,7 @@
       "market": "上櫃",
       "tradeDate": "1150611",
       "underlyingClose": 169.5,
-      "underlyingPercent": 0,
+      "underlyingPercent": -1.17,
       "priceVerified": true,
       "basicVerified": true,
       "quoteSource": "TPEX daily_close_quotes",
@@ -11532,10 +11532,10 @@
       "code": "3265",
       "name": "台星科",
       "close": 169.5,
-      "percent": 0,
-      "quoteDate": "20260612",
+      "percent": -1.17,
+      "quoteDate": "20260611",
       "displayClose": 169.5,
-      "displayPercent": 0
+      "displayPercent": -1.17
     },
     {
       "underlyingName": "英業達",
@@ -11543,7 +11543,7 @@
       "market": "上市",
       "tradeDate": "1150611",
       "underlyingClose": 65.4,
-      "underlyingPercent": 0,
+      "underlyingPercent": -1.21,
       "priceVerified": true,
       "basicVerified": true,
       "quoteSource": "TWSE STOCK_DAY_ALL",
@@ -11656,10 +11656,10 @@
       "code": "2356",
       "name": "英業達",
       "close": 65.4,
-      "percent": 0,
-      "quoteDate": "20260612",
+      "percent": -1.21,
+      "quoteDate": "20260611",
       "displayClose": 65.4,
-      "displayPercent": 0
+      "displayPercent": -1.21
     },
     {
       "underlyingName": "創見",
@@ -11667,7 +11667,7 @@
       "market": "上市",
       "tradeDate": "1150611",
       "underlyingClose": 292,
-      "underlyingPercent": 0,
+      "underlyingPercent": -0.34,
       "priceVerified": true,
       "basicVerified": true,
       "quoteSource": "TWSE STOCK_DAY_ALL",
@@ -11780,18 +11780,18 @@
       "code": "2451",
       "name": "創見",
       "close": 292,
-      "percent": 0,
-      "quoteDate": "20260612",
+      "percent": -0.34,
+      "quoteDate": "20260611",
       "displayClose": 292,
-      "displayPercent": 0
+      "displayPercent": -0.34
     },
     {
       "underlyingName": "愛普*",
       "underlyingCode": "6531",
       "market": "上市",
       "tradeDate": "1150611",
-      "underlyingClose": 932,
-      "underlyingPercent": 4.72,
+      "underlyingClose": 890,
+      "underlyingPercent": -0.45,
       "priceVerified": true,
       "basicVerified": true,
       "quoteSource": "TWSE STOCK_DAY_ALL",
@@ -11903,11 +11903,11 @@
       "reason": "B：候選觀察。權證熱度 77、股票型態 62（回檔觀察）、分點 待接分點；認購 21 檔、價平/價內 8 檔、認購金額 0.04 億，認購/認售比 99+，最近到期 31 天。",
       "code": "6531",
       "name": "愛普*",
-      "close": 932,
-      "percent": 4.72,
-      "quoteDate": "20260612",
-      "displayClose": 932,
-      "displayPercent": 4.72
+      "close": 890,
+      "percent": -0.45,
+      "quoteDate": "20260611",
+      "displayClose": 890,
+      "displayPercent": -0.45
     },
     {
       "underlyingName": "惠特",
@@ -11915,7 +11915,7 @@
       "market": "上市",
       "tradeDate": "1150611",
       "underlyingClose": 161,
-      "underlyingPercent": 0,
+      "underlyingPercent": -1.23,
       "priceVerified": true,
       "basicVerified": true,
       "quoteSource": "TWSE STOCK_DAY_ALL",
@@ -12028,10 +12028,10 @@
       "code": "6706",
       "name": "惠特",
       "close": 161,
-      "percent": 0,
-      "quoteDate": "20260612",
+      "percent": -1.23,
+      "quoteDate": "20260611",
       "displayClose": 161,
-      "displayPercent": 0
+      "displayPercent": -1.23
     },
     {
       "underlyingName": "精材",
@@ -12039,7 +12039,7 @@
       "market": "上櫃",
       "tradeDate": "1150611",
       "underlyingClose": 223,
-      "underlyingPercent": 0,
+      "underlyingPercent": -0.67,
       "priceVerified": true,
       "basicVerified": true,
       "quoteSource": "TPEX daily_close_quotes",
@@ -12152,18 +12152,18 @@
       "code": "3374",
       "name": "精材",
       "close": 223,
-      "percent": 0,
-      "quoteDate": "20260612",
+      "percent": -0.67,
+      "quoteDate": "20260611",
       "displayClose": 223,
-      "displayPercent": 0
+      "displayPercent": -0.67
     },
     {
       "underlyingName": "旭隼",
       "underlyingCode": "6409",
       "market": "上市",
       "tradeDate": "1150611",
-      "underlyingClose": 930,
-      "underlyingPercent": 9.93,
+      "underlyingClose": 846,
+      "underlyingPercent": -1.05,
       "priceVerified": true,
       "basicVerified": true,
       "quoteSource": "TWSE STOCK_DAY_ALL",
@@ -12275,11 +12275,11 @@
       "reason": "B：候選觀察。權證熱度 77、股票型態 62（回檔觀察）、分點 待接分點；認購 30 檔、價平/價內 5 檔、認購金額 0.04 億，認購/認售比 98.20，最近到期 53 天。",
       "code": "6409",
       "name": "旭隼",
-      "close": 930,
-      "percent": 9.93,
-      "quoteDate": "20260612",
-      "displayClose": 930,
-      "displayPercent": 9.93
+      "close": 846,
+      "percent": -1.05,
+      "quoteDate": "20260611",
+      "displayClose": 846,
+      "displayPercent": -1.05
     },
     {
       "underlyingName": "萬泰科",
@@ -12287,7 +12287,7 @@
       "market": "上櫃",
       "tradeDate": "1150611",
       "underlyingClose": 79,
-      "underlyingPercent": 0,
+      "underlyingPercent": -1.25,
       "priceVerified": true,
       "basicVerified": true,
       "quoteSource": "TPEX daily_close_quotes",
@@ -12400,10 +12400,10 @@
       "code": "6190",
       "name": "萬泰科",
       "close": 79,
-      "percent": 0,
-      "quoteDate": "20260612",
+      "percent": -1.25,
+      "quoteDate": "20260611",
       "displayClose": 79,
-      "displayPercent": 0
+      "displayPercent": -1.25
     },
     {
       "underlyingName": "元太",
@@ -12411,7 +12411,7 @@
       "market": "上櫃",
       "tradeDate": "1150611",
       "underlyingClose": 190.5,
-      "underlyingPercent": 0,
+      "underlyingPercent": -0.26,
       "priceVerified": true,
       "basicVerified": true,
       "quoteSource": "TPEX daily_close_quotes",
@@ -12524,10 +12524,10 @@
       "code": "8069",
       "name": "元太",
       "close": 190.5,
-      "percent": 0,
-      "quoteDate": "20260612",
+      "percent": -0.26,
+      "quoteDate": "20260611",
       "displayClose": 190.5,
-      "displayPercent": 0
+      "displayPercent": -0.26
     },
     {
       "underlyingName": "士電",
@@ -12535,7 +12535,7 @@
       "market": "上市",
       "tradeDate": "1150611",
       "underlyingClose": 215,
-      "underlyingPercent": 0,
+      "underlyingPercent": -0.92,
       "priceVerified": true,
       "basicVerified": true,
       "quoteSource": "TWSE STOCK_DAY_ALL",
@@ -12648,10 +12648,10 @@
       "code": "1503",
       "name": "士電",
       "close": 215,
-      "percent": 0,
-      "quoteDate": "20260612",
+      "percent": -0.92,
+      "quoteDate": "20260611",
       "displayClose": 215,
-      "displayPercent": 0
+      "displayPercent": -0.92
     },
     {
       "underlyingName": "威健",
@@ -12659,7 +12659,7 @@
       "market": "上市",
       "tradeDate": "1150611",
       "underlyingClose": 49.7,
-      "underlyingPercent": 0,
+      "underlyingPercent": -1,
       "priceVerified": true,
       "basicVerified": true,
       "quoteSource": "TWSE STOCK_DAY_ALL",
@@ -12772,10 +12772,10 @@
       "code": "3033",
       "name": "威健",
       "close": 49.7,
-      "percent": 0,
-      "quoteDate": "20260612",
+      "percent": -1,
+      "quoteDate": "20260611",
       "displayClose": 49.7,
-      "displayPercent": 0
+      "displayPercent": -1
     },
     {
       "underlyingName": "乙盛-KY",
@@ -12783,7 +12783,7 @@
       "market": "上市",
       "tradeDate": "1150611",
       "underlyingClose": 109.5,
-      "underlyingPercent": 0,
+      "underlyingPercent": -0.45,
       "priceVerified": true,
       "basicVerified": true,
       "quoteSource": "TWSE STOCK_DAY_ALL",
@@ -12896,10 +12896,10 @@
       "code": "5243",
       "name": "乙盛-KY",
       "close": 109.5,
-      "percent": 0,
-      "quoteDate": "20260612",
+      "percent": -0.45,
+      "quoteDate": "20260611",
       "displayClose": 109.5,
-      "displayPercent": 0
+      "displayPercent": -0.45
     },
     {
       "underlyingName": "大毅",
@@ -12907,7 +12907,7 @@
       "market": "上市",
       "tradeDate": "1150611",
       "underlyingClose": 177.5,
-      "underlyingPercent": 0,
+      "underlyingPercent": 4.41,
       "priceVerified": true,
       "basicVerified": true,
       "quoteSource": "TWSE STOCK_DAY_ALL",
@@ -13020,10 +13020,10 @@
       "code": "2478",
       "name": "大毅",
       "close": 177.5,
-      "percent": 0,
-      "quoteDate": "20260612",
+      "percent": 4.41,
+      "quoteDate": "20260611",
       "displayClose": 177.5,
-      "displayPercent": 0
+      "displayPercent": 4.41
     },
     {
       "underlyingName": "揚博",
@@ -13031,7 +13031,7 @@
       "market": "上市",
       "tradeDate": "1150611",
       "underlyingClose": 188.5,
-      "underlyingPercent": 0,
+      "underlyingPercent": 4.43,
       "priceVerified": true,
       "basicVerified": true,
       "quoteSource": "TWSE STOCK_DAY_ALL",
@@ -13144,10 +13144,10 @@
       "code": "2493",
       "name": "揚博",
       "close": 188.5,
-      "percent": 0,
-      "quoteDate": "20260612",
+      "percent": 4.43,
+      "quoteDate": "20260611",
       "displayClose": 188.5,
-      "displayPercent": 0
+      "displayPercent": 4.43
     },
     {
       "underlyingName": "兆聯實業",
@@ -13155,7 +13155,7 @@
       "market": "上市",
       "tradeDate": "1150611",
       "underlyingClose": 937,
-      "underlyingPercent": 0,
+      "underlyingPercent": 3.19,
       "priceVerified": true,
       "basicVerified": true,
       "quoteSource": "TWSE STOCK_DAY_ALL",
@@ -13268,10 +13268,10 @@
       "code": "6944",
       "name": "兆聯實業",
       "close": 937,
-      "percent": 0,
-      "quoteDate": "20260612",
+      "percent": 3.19,
+      "quoteDate": "20260611",
       "displayClose": 937,
-      "displayPercent": 0
+      "displayPercent": 3.19
     },
     {
       "underlyingName": "中砂",
@@ -13279,7 +13279,7 @@
       "market": "上市",
       "tradeDate": "1150611",
       "underlyingClose": 628,
-      "underlyingPercent": 0,
+      "underlyingPercent": 3.12,
       "priceVerified": true,
       "basicVerified": true,
       "quoteSource": "TWSE STOCK_DAY_ALL",
@@ -13392,10 +13392,10 @@
       "code": "1560",
       "name": "中砂",
       "close": 628,
-      "percent": 0,
-      "quoteDate": "20260612",
+      "percent": 3.12,
+      "quoteDate": "20260611",
       "displayClose": 628,
-      "displayPercent": 0
+      "displayPercent": 3.12
     },
     {
       "underlyingName": "福懋科",
@@ -13403,7 +13403,7 @@
       "market": "上市",
       "tradeDate": "1150611",
       "underlyingClose": 68.7,
-      "underlyingPercent": 0,
+      "underlyingPercent": 2.69,
       "priceVerified": true,
       "basicVerified": true,
       "quoteSource": "TWSE STOCK_DAY_ALL",
@@ -13516,10 +13516,10 @@
       "code": "8131",
       "name": "福懋科",
       "close": 68.7,
-      "percent": 0,
-      "quoteDate": "20260612",
+      "percent": 2.69,
+      "quoteDate": "20260611",
       "displayClose": 68.7,
-      "displayPercent": 0
+      "displayPercent": 2.69
     },
     {
       "underlyingName": "鴻勁",
@@ -13527,7 +13527,7 @@
       "market": "上市",
       "tradeDate": "1150611",
       "underlyingClose": 7055,
-      "underlyingPercent": 0,
+      "underlyingPercent": 3.14,
       "priceVerified": true,
       "basicVerified": true,
       "quoteSource": "TWSE STOCK_DAY_ALL",
@@ -13640,18 +13640,18 @@
       "code": "7769",
       "name": "鴻勁",
       "close": 7055,
-      "percent": 0,
-      "quoteDate": "20260612",
+      "percent": 3.14,
+      "quoteDate": "20260611",
       "displayClose": 7055,
-      "displayPercent": 0
+      "displayPercent": 3.14
     },
     {
       "underlyingName": "立隆電",
       "underlyingCode": "2472",
       "market": "上市",
       "tradeDate": "1150611",
-      "underlyingClose": 372,
-      "underlyingPercent": 6.29,
+      "underlyingClose": 350,
+      "underlyingPercent": 4.32,
       "priceVerified": true,
       "basicVerified": true,
       "quoteSource": "TWSE STOCK_DAY_ALL",
@@ -13763,11 +13763,11 @@
       "reason": "B：候選觀察。權證熱度 77、股票型態 58（短線偏熱）、分點 待接分點；認購 35 檔、價平/價內 12 檔、認購金額 0.04 億，認購/認售比 41.98，最近到期 110 天。",
       "code": "2472",
       "name": "立隆電",
-      "close": 372,
-      "percent": 6.29,
-      "quoteDate": "20260612",
-      "displayClose": 372,
-      "displayPercent": 6.29
+      "close": 350,
+      "percent": 4.32,
+      "quoteDate": "20260611",
+      "displayClose": 350,
+      "displayPercent": 4.32
     },
     {
       "underlyingName": "牧德",
@@ -13775,7 +13775,7 @@
       "market": "上市",
       "tradeDate": "1150611",
       "underlyingClose": 682,
-      "underlyingPercent": 0,
+      "underlyingPercent": -1.45,
       "priceVerified": true,
       "basicVerified": true,
       "quoteSource": "TWSE STOCK_DAY_ALL",
@@ -13888,10 +13888,10 @@
       "code": "3563",
       "name": "牧德",
       "close": 682,
-      "percent": 0,
-      "quoteDate": "20260612",
+      "percent": -1.45,
+      "quoteDate": "20260611",
       "displayClose": 682,
-      "displayPercent": 0
+      "displayPercent": -1.45
     },
     {
       "underlyingName": "致茂",
@@ -13899,7 +13899,7 @@
       "market": "上市",
       "tradeDate": "1150611",
       "underlyingClose": 2190,
-      "underlyingPercent": 0,
+      "underlyingPercent": -0.9,
       "priceVerified": true,
       "basicVerified": true,
       "quoteSource": "TWSE STOCK_DAY_ALL",
@@ -14012,18 +14012,18 @@
       "code": "2360",
       "name": "致茂",
       "close": 2190,
-      "percent": 0,
-      "quoteDate": "20260612",
+      "percent": -0.9,
+      "quoteDate": "20260611",
       "displayClose": 2190,
-      "displayPercent": 0
+      "displayPercent": -0.9
     },
     {
       "underlyingName": "達邁",
       "underlyingCode": "3645",
       "market": "上市",
       "tradeDate": "1150611",
-      "underlyingClose": 91.9,
-      "underlyingPercent": 2.68,
+      "underlyingClose": 89.5,
+      "underlyingPercent": -0.56,
       "priceVerified": true,
       "basicVerified": true,
       "quoteSource": "TWSE STOCK_DAY_ALL",
@@ -14135,11 +14135,11 @@
       "reason": "B：候選觀察。權證熱度 73、股票型態 62（回檔觀察）、分點 待接分點；認購 16 檔、價平/價內 3 檔、認購金額 0.03 億，認購/認售比 99+，最近到期 66 天。",
       "code": "3645",
       "name": "達邁",
-      "close": 91.9,
-      "percent": 2.68,
-      "quoteDate": "20260612",
-      "displayClose": 91.9,
-      "displayPercent": 2.68
+      "close": 89.5,
+      "percent": -0.56,
+      "quoteDate": "20260611",
+      "displayClose": 89.5,
+      "displayPercent": -0.56
     },
     {
       "underlyingName": "臻鼎-KY",
@@ -14147,7 +14147,7 @@
       "market": "上市",
       "tradeDate": "1150611",
       "underlyingClose": 529,
-      "underlyingPercent": 0,
+      "underlyingPercent": 5.38,
       "priceVerified": true,
       "basicVerified": true,
       "quoteSource": "TWSE STOCK_DAY_ALL",
@@ -14260,10 +14260,10 @@
       "code": "4958",
       "name": "臻鼎-KY",
       "close": 529,
-      "percent": 0,
-      "quoteDate": "20260612",
+      "percent": 5.38,
+      "quoteDate": "20260611",
       "displayClose": 529,
-      "displayPercent": 0
+      "displayPercent": 5.38
     },
     {
       "underlyingName": "華邦電",
@@ -14271,7 +14271,7 @@
       "market": "上市",
       "tradeDate": "1150611",
       "underlyingClose": 156.5,
-      "underlyingPercent": 0,
+      "underlyingPercent": 5.03,
       "priceVerified": true,
       "basicVerified": true,
       "quoteSource": "TWSE STOCK_DAY_ALL",
@@ -14384,10 +14384,10 @@
       "code": "2344",
       "name": "華邦電",
       "close": 156.5,
-      "percent": 0,
-      "quoteDate": "20260612",
+      "percent": 5.03,
+      "quoteDate": "20260611",
       "displayClose": 156.5,
-      "displayPercent": 0
+      "displayPercent": 5.03
     },
     {
       "underlyingName": "創意",
@@ -14395,7 +14395,7 @@
       "market": "上市",
       "tradeDate": "1150611",
       "underlyingClose": 4105,
-      "underlyingPercent": 0,
+      "underlyingPercent": 1.99,
       "priceVerified": true,
       "basicVerified": true,
       "quoteSource": "TWSE STOCK_DAY_ALL",
@@ -14508,10 +14508,10 @@
       "code": "3443",
       "name": "創意",
       "close": 4105,
-      "percent": 0,
-      "quoteDate": "20260612",
+      "percent": 1.99,
+      "quoteDate": "20260611",
       "displayClose": 4105,
-      "displayPercent": 0
+      "displayPercent": 1.99
     },
     {
       "underlyingName": "艾訊",
@@ -14519,7 +14519,7 @@
       "market": "上櫃",
       "tradeDate": "1150611",
       "underlyingClose": 145,
-      "underlyingPercent": 0,
+      "underlyingPercent": 3.94,
       "priceVerified": true,
       "basicVerified": true,
       "quoteSource": "TPEX daily_close_quotes",
@@ -14632,10 +14632,10 @@
       "code": "3088",
       "name": "艾訊",
       "close": 145,
-      "percent": 0,
-      "quoteDate": "20260612",
+      "percent": 3.94,
+      "quoteDate": "20260611",
       "displayClose": 145,
-      "displayPercent": 0
+      "displayPercent": 3.94
     },
     {
       "underlyingName": "寶雅",
@@ -14643,7 +14643,7 @@
       "market": "上櫃",
       "tradeDate": "1150611",
       "underlyingClose": 625,
-      "underlyingPercent": 0,
+      "underlyingPercent": 3.82,
       "priceVerified": true,
       "basicVerified": true,
       "quoteSource": "TPEX daily_close_quotes",
@@ -14756,10 +14756,10 @@
       "code": "5904",
       "name": "寶雅",
       "close": 625,
-      "percent": 0,
-      "quoteDate": "20260612",
+      "percent": 3.82,
+      "quoteDate": "20260611",
       "displayClose": 625,
-      "displayPercent": 0
+      "displayPercent": 3.82
     },
     {
       "underlyingName": "鴻海",
@@ -14767,7 +14767,7 @@
       "market": "上市",
       "tradeDate": "1150611",
       "underlyingClose": 258.5,
-      "underlyingPercent": 0,
+      "underlyingPercent": -1.71,
       "priceVerified": true,
       "basicVerified": true,
       "quoteSource": "TWSE STOCK_DAY_ALL",
@@ -14880,10 +14880,10 @@
       "code": "2317",
       "name": "鴻海",
       "close": 258.5,
-      "percent": 0,
-      "quoteDate": "20260612",
+      "percent": -1.71,
+      "quoteDate": "20260611",
       "displayClose": 258.5,
-      "displayPercent": 0
+      "displayPercent": -1.71
     }
   ],
   "errors": [

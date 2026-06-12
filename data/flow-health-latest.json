@@ -1,4 +1,5 @@
 {
+  "updatedAt": "2026-06-12T02:58:24.5893853Z",
   "institution": {
     "scope": "institution",
     "status": "ok",
@@ -8,14 +9,13 @@
       "log": "C:\\fuman-runtime\\logs\\institution-20260612-105210.log"
     }
   },
-  "updatedAt": "2026-06-12T02:53:51.5411775Z",
   "warrant": {
     "scope": "warrant",
     "status": "ok",
     "message": "Warrant flow scan and publish completed",
-    "updatedAt": "2026-06-12T02:53:51.5397868Z",
+    "updatedAt": "2026-06-12T02:58:24.5878048Z",
     "detail": {
-      "log": "C:\\fuman-runtime\\logs\\warrant-flow-20260612-105300.log"
+      "log": "C:\\fuman-runtime\\logs\\warrant-flow-20260612-105737.log"
     }
   }
 }
