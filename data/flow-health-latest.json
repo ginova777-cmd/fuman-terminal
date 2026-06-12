@@ -1,5 +1,4 @@
 {
-  "updatedAt": "2026-06-12T02:58:24.5893853Z",
   "institution": {
     "scope": "institution",
     "status": "ok",
@@ -13,9 +12,10 @@
     "scope": "warrant",
     "status": "ok",
     "message": "Warrant flow scan and publish completed",
-    "updatedAt": "2026-06-12T02:58:24.5878048Z",
+    "updatedAt": "2026-06-12T03:01:37.2066587Z",
     "detail": {
-      "log": "C:\\fuman-runtime\\logs\\warrant-flow-20260612-105737.log"
+      "log": "C:\\fuman-runtime\\logs\\warrant-flow-20260612-110052.log"
     }
-  }
+  },
+  "updatedAt": "2026-06-12T03:01:37.2080487Z"
 }

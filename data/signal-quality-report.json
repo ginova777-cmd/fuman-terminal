@@ -1,6 +1,6 @@
 {
   "ok": true,
-  "updatedAt": "2026-06-12T05:40:16.398Z",
+  "updatedAt": "2026-06-12T06:45:05.998Z",
   "strategy2": {
     "latestSignals": 7,
     "latestGo": 0,
@@ -18,11 +18,11 @@
     "longSignals": 61,
     "shortSignals": 19,
     "scorecard": {
-      "count": 1,
-      "avg": 0.9541984732824428,
+      "count": 7,
+      "avg": 1.1678325858236707,
       "winRate": 100,
-      "best": 0.9541984732824428,
-      "worst": 0.9541984732824428
+      "best": 2.1505376344086073,
+      "worst": 0.4243281471004203
     },
     "updatedAt": "2026-06-12T05:30:36.321Z"
   },
