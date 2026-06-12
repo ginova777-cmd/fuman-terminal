@@ -30,6 +30,11 @@ function Write-Log($message) {
   Add-Content -LiteralPath $log -Value $message -Encoding utf8
 }
 
+if ($Scope -ne "all" -and $env:FUMAN_ALLOW_SCOPED_PUBLISH -ne "1") {
+  Write-Log "Scoped publish blocked: scope=$Scope. Use npm run freshness:gate for the single verified publish path."
+  exit 2
+}
+
 function Clear-StaleSyncGitIndexLock($label) {
   $indexLock = Join-Path $syncRepo ".git\index.lock"
   if (-not (Test-Path -LiteralPath $indexLock)) { return }
@@ -76,25 +81,44 @@ function New-CacheSyncLock {
 
 function Invoke-PublishedDataVerification {
   if ($Scope -ne "all") { return }
-  $script = Join-Path $codeRepo "scripts\verify-published-data.js"
+  $script = Join-Path $codeRepo "scripts\verify-data-freshness.js"
   if (-not (Test-Path -LiteralPath $script)) {
-    throw "Published data verification script missing: $script"
+    throw "Live data freshness verification script missing: $script"
   }
-  $env:FUMAN_DATA_DIR = Join-Path $sourceRepo "data"
-  $env:FUMAN_SYNC_DATA_DIR = Join-Path $syncRepo "data"
-  $env:FUMAN_SYNC_REPO = $syncRepo
-  $env:FUMAN_GIT_EXE = $gitExe
   for ($attempt = 1; $attempt -le 3; $attempt++) {
-    Write-Log "=== Verify published data attempt $attempt/3 $(Get-Date) ==="
-    & $nodeExe "--use-system-ca" $script 2>&1 | ForEach-Object { Write-Log $_ }
+    Write-Log "=== Verify live data freshness attempt $attempt/3 $(Get-Date) ==="
+    & $nodeExe "--use-system-ca" $script "--live" 2>&1 | ForEach-Object { Write-Log $_ }
     $verifyExit = $LASTEXITCODE
     if ($verifyExit -eq 0) { return }
     if ($attempt -lt 3) {
-      Write-Log "Published data verification failed with exit code $verifyExit; retrying in 20 seconds."
+      Write-Log "Live data freshness verification failed with exit code $verifyExit; retrying in 20 seconds."
       Start-Sleep -Seconds 20
     }
   }
-  throw "Published data verification failed after 3 attempts"
+  throw "Live data freshness verification failed after 3 attempts"
+}
+
+function Invoke-PrePublishDataFreshnessGate {
+  $script = Join-Path $codeRepo "scripts\verify-data-freshness.js"
+  if (-not (Test-Path -LiteralPath $script)) {
+    throw "Data freshness verification script missing: $script"
+  }
+  $previousDataDir = $env:FUMAN_DATA_DIR
+  try {
+    $env:FUMAN_DATA_DIR = Join-Path $syncRepo "data"
+    Write-Log "=== Pre-publish data freshness gate $(Get-Date) ==="
+    & $nodeExe "--use-system-ca" $script 2>&1 | ForEach-Object { Write-Log $_ }
+    $verifyExit = $LASTEXITCODE
+    if ($verifyExit -ne 0) {
+      throw "Pre-publish data freshness gate failed with exit code $verifyExit; refusing to commit or push cache files"
+    }
+  } finally {
+    if ($null -eq $previousDataDir) {
+      Remove-Item Env:FUMAN_DATA_DIR -ErrorAction SilentlyContinue
+    } else {
+      $env:FUMAN_DATA_DIR = $previousDataDir
+    }
+  }
 }
 
 function Invoke-GitRaw($description, $arguments, $cwd = $syncRepo) {
@@ -807,11 +831,6 @@ try {
       "data\strategy4-zone-a.json",
       "data\strategy4-zone-b.json",
       "data\strategy4-zone-c.json",
-      "data\strategy4-zone-b-page-1.json",
-      "data\strategy4-zone-b-page-2.json",
-      "data\strategy4-zone-b-page-3.json",
-      "data\strategy4-zone-b-page-4.json",
-      "data\strategy4-zone-b-page-5.json",
       "data\strategy4-score-top.json",
       "data\strategy4-backup.json",
       "data\strategy5-latest.json",
@@ -819,6 +838,10 @@ try {
       "data\cb-detect-latest.json",
       "data\realtime-radar-latest.json"
     )
+    foreach ($page in 1..48) {
+      $dataFiles += "data\strategy4-zone-b-page-$page.json"
+      $dataFiles += "data\strategy4-zone-c-page-$page.json"
+    }
   }
 
   if ($Scope -eq "all") {
@@ -902,6 +925,8 @@ try {
     exit 0
   }
 
+  Invoke-PrePublishDataFreshnessGate
+
   $stamp = Get-Date -Format "yyyy-MM-dd HH:mm"
   Run-Git "Commit cache files" @("commit", "-m", "Update scheduled cache $stamp")
 
@@ -950,6 +975,7 @@ try {
     }
     $retryChanged = & $gitExe -C $syncRepo diff --cached --name-only
     if ($retryChanged) {
+      Invoke-PrePublishDataFreshnessGate
       Run-Git "Commit cache files after retry reset" @("commit", "-m", "Update scheduled cache $stamp retry")
       Run-GitWithRetry "Retry push cache commit" @("push", "origin", "main")
       $scopeDir = Get-OutboxScopeDir
