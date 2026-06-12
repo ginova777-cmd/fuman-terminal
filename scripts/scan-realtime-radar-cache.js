@@ -31,6 +31,7 @@ const SUPABASE_KEY = process.env.FUMAN_SUPABASE_SERVICE_KEY
   || readSecretText(path.join(ROOT, "secrets", "supabase-service-role-key.txt"))
   || readSecretText(path.join(RUNTIME_DIR, "secrets", "supabase-service-role-key.txt"));
 const SUPABASE_TABLE = process.env.FUMAN_REALTIME_RADAR_TABLE || "fuman_realtime_radar_cache";
+const SUPABASE_UPLOAD_OPTIONAL = process.env.FUMAN_SUPABASE_UPLOAD_OPTIONAL !== "0";
 const STALE_AFTER_MS = Number(process.env.REALTIME_RADAR_STALE_MS || 20000);
 const MAX_QUOTE_AGE_SECONDS = Number(process.env.REALTIME_RADAR_MAX_QUOTE_AGE_SECONDS || 150);
 const REALTIME_RESCAN_BATCH_SIZE = Number(process.env.REALTIME_RADAR_RESCAN_BATCH_SIZE || 80);
@@ -137,7 +138,7 @@ function hydrateQueuedBatches(queuedBatches = [], stocks = []) {
   }).filter((batch) => batch.codes.length && batch.stocks.length);
 }
 
-function updateSupabaseUploadStatus(ok, error = "") {
+function updateSupabaseUploadStatus(ok, error = "", details = {}) {
   const previous = readJson(SUPABASE_STATUS_FILE, { consecutiveFailures: 0 });
   const payload = {
     ok,
@@ -146,12 +147,22 @@ function updateSupabaseUploadStatus(ok, error = "") {
     lastSuccessAt: ok ? new Date().toISOString() : previous.lastSuccessAt || "",
     lastErrorAt: ok ? previous.lastErrorAt || "" : new Date().toISOString(),
     lastError: ok ? "" : String(error || "").slice(0, 500),
+    ...details,
   };
   writeJson(SUPABASE_STATUS_FILE, payload);
   return payload;
 }
 
 async function safeUploadRealtimeRadarPayload(payload) {
+  if (SUPABASE_UPLOAD_OPTIONAL && process.env.FUMAN_ENABLE_SUPABASE_UPLOAD !== "1") {
+    console.log("realtime radar supabase upload skipped: optional upload disabled");
+    return updateSupabaseUploadStatus(true, "", {
+      skipped: true,
+      optional: true,
+      table: SUPABASE_TABLE,
+      reason: "Supabase upload optional; set FUMAN_ENABLE_SUPABASE_UPLOAD=1 to enable.",
+    });
+  }
   try {
     const uploaded = await uploadRealtimeRadarPayload(payload);
     return updateSupabaseUploadStatus(uploaded !== false, uploaded === false ? "Supabase credentials missing; upload skipped." : "");

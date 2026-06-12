@@ -144,6 +144,16 @@ if (!/overlapping run/.test(gate)) {
   issues.push("run-live-freshness-gate.ps1 must skip overlapping scheduled runs cleanly");
 }
 
+const openBuyCache = read("scripts/scan-open-buy-cache.js");
+if (!/FUMAN_SUPABASE_UPLOAD_OPTIONAL/.test(openBuyCache) || !/FUMAN_ENABLE_SUPABASE_UPLOAD/.test(openBuyCache)) {
+  issues.push("scan-open-buy-cache.js must keep Supabase upload optional by default");
+}
+
+const realtimeRadarCache = read("scripts/scan-realtime-radar-cache.js");
+if (!/FUMAN_SUPABASE_UPLOAD_OPTIONAL/.test(realtimeRadarCache) || !/FUMAN_ENABLE_SUPABASE_UPLOAD/.test(realtimeRadarCache)) {
+  issues.push("scan-realtime-radar-cache.js must keep Supabase upload optional by default");
+}
+
 for (const legacyScript of [
   "run-warrant-flow.ps1",
   "run-institution.ps1",
