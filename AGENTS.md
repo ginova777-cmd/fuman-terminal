@@ -11,6 +11,10 @@ npm run verify:publish-gate
 
 Read `AGENTS.md` and `FRESHNESS-GATE-MOBILE.md` before changing data flow, scheduled tasks, publish scripts, or freshness rules.
 
+`freshness:gate` also performs a repo sync preflight. If this checkout is behind `origin/main` or has unexpected dirty files, the gate must fail before publishing.
+
+External data-source timeouts, HTTP 403/404, and fetch failures must remain observable in logs and health summary. They are source warnings unless the final live freshness verifier fails.
+
 Do not modify Supabase-related code, tables, upload, readback, timeout, or retry behavior unless the user explicitly asks for Supabase work.
 
 The only approved data publish entrypoint is:

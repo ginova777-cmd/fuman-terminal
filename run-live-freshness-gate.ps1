@@ -74,7 +74,7 @@ function Invoke-GateCommand($label, [scriptblock]$command, [switch]$AllowFailure
       $text = [string]$_
       Write-Host $text
       Add-Content -LiteralPath $log -Value $text -Encoding utf8
-      if ($text -match "(?i)\b(warn|warning|failed|HTTP 403|HTTP 404|skipped outside market time|supabase upload failed|source warnings)\b") {
+      if ($text -match "(?i)\b(warn|warning|failed|timeout|timed out|ETIMEDOUT|ECONNRESET|fetch failed|HTTP 403|HTTP 404|skipped outside market time|supabase upload failed|source warnings)\b") {
         $warningLines.Add($text) | Out-Null
       }
     }
@@ -110,6 +110,36 @@ function Invoke-NpmAt($root, $scriptName) {
   Push-Location $root
   try {
     Invoke-GateCommand "npm run $scriptName ($root)" { npm run $scriptName }
+  } finally {
+    Pop-Location
+  }
+}
+
+function Invoke-RepoSyncPreflight {
+  Push-Location $syncRoot
+  try {
+    Write-GateLog "Preflight repo sync check: git fetch origin main"
+    & $gitExe fetch --quiet origin main
+    if ($LASTEXITCODE -ne 0) {
+      throw "Repo sync preflight failed: cannot fetch origin main"
+    }
+
+    $aheadBehind = (& $gitExe rev-list --left-right --count HEAD...origin/main).Trim()
+    if ($LASTEXITCODE -ne 0 -or -not $aheadBehind) {
+      throw "Repo sync preflight failed: cannot compare HEAD with origin/main"
+    }
+    $parts = $aheadBehind -split "\s+"
+    $ahead = [int]$parts[0]
+    $behind = [int]$parts[1]
+    Write-GateLog "Repo sync preflight: ahead=$ahead behind=$behind"
+    if ($behind -gt 0) {
+      throw "Repo sync preflight blocked: local repo is behind origin/main by $behind commit(s). Run git pull --ff-only origin main first."
+    }
+
+    $dirty = & $gitExe status --porcelain=v1
+    if ($dirty) {
+      throw "Repo sync preflight blocked: source repo has uncommitted or conflicted files. Clean C:\fuman-terminal-sync before running freshness gate."
+    }
   } finally {
     Pop-Location
   }
@@ -161,6 +191,7 @@ Enter-GateLock
 try {
   Write-GateLog "Live freshness gate started"
   Write-GateLog "syncRoot=$syncRoot publishRoot=$publishRoot terminalRoot=$terminalRoot"
+  Invoke-RepoSyncPreflight
   Set-FumanRuntimeEnv
 
   if (-not $SkipRealtime) {

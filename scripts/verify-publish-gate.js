@@ -123,6 +123,8 @@ if (!/FAST_DEBOUNCE_SKIP/.test(cacheSync) || !/FUMAN_FAST_GATE_COMMIT_DEBOUNCE_M
 
 const gate = read("run-live-freshness-gate.ps1");
 for (const marker of [
+  "Invoke-RepoSyncPreflight",
+  "git fetch origin main",
   "realtime radar raw refresh",
   "strategy2 intraday raw refresh",
   "institution raw refresh",
@@ -142,6 +144,14 @@ for (const marker of [
 }
 if (!/overlapping run/.test(gate)) {
   issues.push("run-live-freshness-gate.ps1 must skip overlapping scheduled runs cleanly");
+}
+if (!/ETIMEDOUT|ECONNRESET|fetch failed/.test(gate)) {
+  issues.push("run-live-freshness-gate.ps1 must capture external source timeout warnings");
+}
+
+const healthSummary = read("scripts/generate-health-summary.js");
+if (!/ETIMEDOUT|ECONNRESET|fetch failed|AbortError/.test(healthSummary)) {
+  issues.push("generate-health-summary.js must classify external source timeout warnings");
 }
 
 for (const legacyScript of [
@@ -170,6 +180,8 @@ if (!fs.existsSync(path.join(ROOT, "AGENTS.md"))) {
   if (!agents.includes("npm run freshness:gate")) issues.push("AGENTS.md must name npm run freshness:gate as the only publish entrypoint");
   if (!agents.includes("FRESHNESS-GATE-MOBILE.md")) issues.push("AGENTS.md must point Codex to FRESHNESS-GATE-MOBILE.md");
   if (!agents.includes("git pull --ff-only origin main")) issues.push("AGENTS.md must require Codex to sync before touching the project");
+  if (!agents.includes("repo sync preflight")) issues.push("AGENTS.md must explain that freshness:gate blocks stale repos");
+  if (!agents.includes("External data-source timeouts")) issues.push("AGENTS.md must explain external source warning handling");
   if (!agents.includes("Do not modify Supabase-related code")) issues.push("AGENTS.md must preserve the current Supabase pause rule");
 }
 
@@ -184,10 +196,56 @@ if (!fs.existsSync(path.join(ROOT, "FRESHNESS-GATE-MOBILE.md"))) {
     "npm run verify:data-freshness:live",
     "npm run verify:publish-gate",
     "git pull --ff-only origin main",
+    "repo sync preflight",
+    "外部來源 timeout",
     "目前先不要修改 Supabase",
     "Fuman Terminal Freshness Gate",
   ]) {
     if (!mobile.includes(marker)) issues.push(`FRESHNESS-GATE-MOBILE.md missing ${marker}`);
+  }
+}
+
+function runGit(args) {
+  return spawnSync("git", args, {
+    cwd: ROOT,
+    encoding: "utf8",
+    windowsHide: true,
+  });
+}
+
+const fetchResult = runGit(["fetch", "--quiet", "origin", "main"]);
+if (fetchResult.status !== 0) {
+  issues.push(`repo sync check failed: cannot fetch origin main: ${(fetchResult.stderr || fetchResult.stdout || "").trim()}`);
+} else {
+  const compare = runGit(["rev-list", "--left-right", "--count", "HEAD...origin/main"]);
+  if (compare.status !== 0 || !compare.stdout.trim()) {
+    issues.push("repo sync check failed: cannot compare HEAD with origin/main");
+  } else {
+    const [, behindText] = compare.stdout.trim().split(/\s+/);
+    const behind = Number(behindText || 0);
+    if (behind > 0) {
+      issues.push(`repo sync check failed: local repo is behind origin/main by ${behind} commit(s); run git pull --ff-only origin main`);
+    }
+  }
+
+  const status = runGit(["status", "--porcelain=v1"]);
+  if (status.status !== 0) {
+    issues.push("repo sync check failed: cannot inspect working tree");
+  } else {
+    const allowedDirty = new Set([
+      "AGENTS.md",
+      "FRESHNESS-GATE-MOBILE.md",
+      "scripts/verify-publish-gate.js",
+      "run-live-freshness-gate.ps1",
+      "scripts/generate-health-summary.js",
+    ]);
+    const dirty = status.stdout
+      .split(/\r?\n/)
+      .filter((line) => line.trim())
+      .filter((line) => !allowedDirty.has(line.slice(3).trim()));
+    if (dirty.length) {
+      issues.push(`repo sync check failed: unexpected dirty files: ${dirty.slice(0, 8).join(", ")}`);
+    }
   }
 }
 

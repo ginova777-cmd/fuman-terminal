@@ -244,7 +244,7 @@ function classifyRawRefresh(rawRefresh = []) {
   return rawRefresh.map((item) => {
     const warnings = Array.isArray(item.warnings) ? item.warnings : [];
     const blocking = !item.ok;
-    const sourceWarnings = warnings.filter((line) => /HTTP 403|HTTP 404|supabase|source warnings|skipped outside market time/i.test(line));
+    const sourceWarnings = warnings.filter((line) => /HTTP 403|HTTP 404|supabase|source warnings|skipped outside market time|timeout|timed out|ETIMEDOUT|ECONNRESET|fetch failed|AbortError/i.test(line));
     const level = blocking ? "blocking" : sourceWarnings.length ? "source_warning" : warnings.length ? "warning" : "ok";
     return {
       label: item.label || "",
@@ -309,7 +309,7 @@ function main() {
   if (blockingSources.length) {
     risks.push(riskItem("high", "source", `raw scanner failed ${blockingSources.length} 個`, { items: blockingSources }));
   } else if (warningSources.length) {
-    risks.push(riskItem("medium", "source", `raw scanner 非阻斷警告 ${warningSources.length} 個`, { items: warningSources }));
+    risks.push(riskItem("medium", "source", `raw scanner 非阻斷來源警告/timeout ${warningSources.length} 個`, { items: warningSources }));
   }
   const high = risks.filter((item) => item.level === "high").length;
   const medium = risks.filter((item) => item.level === "medium").length;

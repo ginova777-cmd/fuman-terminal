@@ -53,6 +53,18 @@ FRESHNESS-GATE-MOBILE.md
 5. log、health summary、raw source warning、成功狀態都要留下。
 6. 防別的 Codex 弄壞，不靠口頭提醒，而靠腳本、verifier、AGENTS.md、硬擋規則。
 
+## 防舊 repo
+
+`freshness:gate` 會先做 repo sync preflight。
+
+如果本機 `C:\fuman-terminal-sync` 落後 `origin/main`，或有不該存在的 dirty/conflict 檔案，gate 必須先失敗，不能發布。
+
+## 外部來源卡住
+
+TWSE、Supabase、行情 API 或其他外部來源 timeout / 403 / 404 / fetch failed 時，要記進 log 和 health summary。
+
+外部來源 warning 不能直接製造半套發布；最後仍以 `verify:data-freshness:live` 是否通過為準。
+
 ## 暫停事項
 
 目前先不要修改 Supabase 相關程式、table、upload、readback、timeout 或 retry 行為。
