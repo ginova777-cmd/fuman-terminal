@@ -10,6 +10,9 @@ param(
   [int]$DailyVolumeRetainTradeDays = 20,
   [int]$Direct1mBatchSize = 3,
   [int]$Direct1mEverySeconds = 300,
+  [int]$FutoptQuoteBatchSize = 20,
+  [int]$FutoptQuoteEverySeconds = 60,
+  [int]$FutoptTickersEverySeconds = 1800,
   [string]$BlacklistCsvUrl = "https://docs.google.com/spreadsheets/d/1NHFgGryPyktbf1YLlUaXtIId_e5aF9LPE_glQrcN2V0/export?format=csv&gid=32050833",
   [string]$BlacklistFile = "C:\fuman-runtime\config\fugle-api-blacklist-symbols.txt",
   [string]$StopAt = "14:05",
@@ -24,6 +27,8 @@ $SourceHelper = Join-Path $ScriptDir "SupabasePublicSlotSource.ps1"
 $LogDir = Join-Path $ScriptDir "runtime"
 $StateFile = Join-Path $LogDir "public-slot-minute-state.json"
 $Direct1mStateFile = Join-Path $LogDir "public-slot-direct-1m-state.json"
+$FutoptQuoteStateFile = Join-Path $LogDir "public-slot-futopt-quote-state.json"
+$FutoptTickersCacheFile = Join-Path $LogDir "public-slot-futopt-tickers-cache.json"
 $BlacklistCacheFile = Join-Path $LogDir "fugle-api-blacklist-symbols-cache.txt"
 $LogFile = Join-Path $LogDir ("public-slot-shared-source-{0}.log" -f (Get-Date -Format "yyyyMMdd"))
 
@@ -762,6 +767,244 @@ function Convert-TaifexToFutoptRows {
   return @{ quotes = $quoteRows.ToArray(); tickers = $tickerRows.ToArray() }
 }
 
+function Normalize-StockFutureName {
+  param([string]$Name)
+  $text = ([string]$Name).Trim()
+  $text = $text -replace "期貨\d*$", ""
+  $text = $text -replace "\s+", ""
+  return $text
+}
+
+function Get-StockNameLookup {
+  $lookup = @{}
+  foreach ($row in @(Convert-StocksSlimToTickerRows)) {
+    $key = Normalize-StockFutureName ([string]$row.name)
+    if (-not [string]::IsNullOrWhiteSpace($key) -and -not $lookup.ContainsKey($key)) {
+      $lookup[$key] = $row
+    }
+  }
+  return $lookup
+}
+
+function Invoke-FugleFutoptTickers {
+  param([string]$ApiKey)
+  if ([string]::IsNullOrWhiteSpace($ApiKey)) { return $null }
+
+  try {
+    if (Test-Path -LiteralPath $FutoptTickersCacheFile) {
+      $age = ((Get-Date) - (Get-Item -LiteralPath $FutoptTickersCacheFile).LastWriteTime).TotalSeconds
+      if ($age -lt $FutoptTickersEverySeconds) {
+        $cached = Read-JsonFile -Path $FutoptTickersCacheFile -Default $null
+        if ($null -ne $cached) {
+          $cached | Add-Member -NotePropertyName public_slot_from_cache -NotePropertyValue $true -Force
+        }
+        return $cached
+      }
+    }
+  } catch {}
+
+  $headers = @{
+    "X-API-KEY" = $ApiKey
+    "User-Agent" = "FumanPublicSlotSharedSource/1.0"
+  }
+  try {
+    $uri = "https://api.fugle.tw/marketdata/v1.0/futopt/intraday/tickers?type=FUTURE"
+    $payload = Invoke-RestMethod -Uri $uri -Headers $headers -TimeoutSec 25 -ErrorAction Stop
+    $payload | Add-Member -NotePropertyName public_slot_from_cache -NotePropertyValue $false -Force
+    Write-JsonFile -Path $FutoptTickersCacheFile -Value $payload
+    return $payload
+  } catch {
+    Write-Log "WARN fugle futopt tickers failed: $($_.Exception.Message)"
+    if (Test-Path -LiteralPath $FutoptTickersCacheFile) {
+      $cached = Read-JsonFile -Path $FutoptTickersCacheFile -Default $null
+      if ($null -ne $cached) {
+        $cached | Add-Member -NotePropertyName public_slot_from_cache -NotePropertyValue $true -Force
+      }
+      return $cached
+    }
+    return $null
+  }
+}
+
+function Convert-FugleFutoptTickersToRows {
+  param([object]$Payload)
+  $rows = New-Object System.Collections.Generic.List[object]
+  $stockLookup = Get-StockNameLookup
+  $updatedAt = (Get-Date).ToUniversalTime().ToString("o")
+  foreach ($item in @($Payload.data)) {
+    $futureSymbol = [string]$item.symbol
+    if ([string]::IsNullOrWhiteSpace($futureSymbol)) { continue }
+    $contractType = [string]$item.contractType
+    $name = [string]$item.name
+    $product = if ($contractType -eq "S") { "STOCK_FUTURE" } elseif ($futureSymbol -match "^TXF") { "TXF" } else { "FUTURE" }
+    $underlyingName = $null
+    $underlyingSymbol = $null
+    $contractLabel = if ($contractType -eq "S") { "stock_future" } elseif ($contractType -eq "I") { "index_future" } else { "future" }
+
+    if ($contractType -eq "S") {
+      $underlyingName = Normalize-StockFutureName $name
+      $key = Normalize-StockFutureName $underlyingName
+      if ($stockLookup.ContainsKey($key)) {
+        $underlyingSymbol = [string]$stockLookup[$key].symbol
+        $underlyingName = [string]$stockLookup[$key].name
+      }
+    } elseif ($futureSymbol -match "^TXF") {
+      $underlyingName = "TAIEX"
+      $underlyingSymbol = "TXF"
+    }
+
+    $rows.Add([ordered]@{
+      future_symbol = $futureSymbol
+      name = $name
+      product = $product
+      contract_type = $contractLabel
+      end_date = if ($item.endDate) { [string]$item.endDate } else { $null }
+      exchange = if ($item.exchange) { [string]$item.exchange } else { "TAIFEX" }
+      underlying_name = $underlyingName
+      underlying_symbol = $underlyingSymbol
+      session = (Get-PublicSlotSession)
+      updated_at = $updatedAt
+      payload = @{
+        raw = $item
+        source = "fugle-futopt-intraday-tickers"
+        time_standard = "UTC"
+        underlying_mapping_source = if ($contractType -eq "S" -and $underlyingSymbol) { "stock_tickers_name_match" } elseif ($contractType -eq "S") { "name_unmatched" } else { "index_future" }
+      }
+    })
+  }
+  return $rows.ToArray()
+}
+
+function Get-NearMonthStockFutureSymbols {
+  param([object[]]$TickerRows)
+  $today = (Get-Date).Date
+  $selected = New-Object System.Collections.Generic.List[string]
+  $groups = @($TickerRows | Where-Object {
+    $_["product"] -eq "STOCK_FUTURE" -and
+    -not [string]::IsNullOrWhiteSpace([string]$_["underlying_symbol"]) -and
+    -not [string]::IsNullOrWhiteSpace([string]$_["future_symbol"])
+  } | Group-Object -Property { [string]$_["underlying_symbol"] })
+
+  foreach ($group in $groups) {
+    $near = @($group.Group | Sort-Object {
+      try {
+        $d = [datetime]::Parse([string]$_["end_date"])
+        if ($d.Date -lt $today) { [datetime]::MaxValue } else { $d }
+      } catch { [datetime]::MaxValue }
+    }, { [string]$_["future_symbol"] } | Select-Object -First 1)
+    if ($near.Count -gt 0) { $selected.Add([string]$near[0]["future_symbol"]) }
+  }
+  return $selected.ToArray()
+}
+
+function Invoke-FugleFutoptQuote {
+  param([string]$FutureSymbol, [string]$ApiKey)
+  if ([string]::IsNullOrWhiteSpace($FutureSymbol) -or [string]::IsNullOrWhiteSpace($ApiKey)) { return $null }
+  $headers = @{
+    "X-API-KEY" = $ApiKey
+    "User-Agent" = "FumanPublicSlotSharedSource/1.0"
+  }
+  try {
+    $uri = "https://api.fugle.tw/marketdata/v1.0/futopt/intraday/quote/$FutureSymbol"
+    return Invoke-RestMethod -Uri $uri -Headers $headers -TimeoutSec 12 -ErrorAction Stop
+  } catch {
+    Write-Log "WARN fugle futopt quote $FutureSymbol failed: $($_.Exception.Message)"
+    if ($_.Exception.Message -match '429|Too Many') { $script:FutoptRateLimited = $true }
+    return $null
+  }
+}
+
+function Convert-FugleFutoptQuoteToRow {
+  param([object]$Quote, [hashtable]$TickerBySymbol)
+  if ($null -eq $Quote) { return $null }
+  $futureSymbol = [string]$Quote.symbol
+  if ([string]::IsNullOrWhiteSpace($futureSymbol)) { return $null }
+  $ticker = $null
+  if ($TickerBySymbol.ContainsKey($futureSymbol)) { $ticker = $TickerBySymbol[$futureSymbol] }
+  $previous = Get-Number $Quote.previousClose
+  $change = Get-Number $Quote.change
+  $last = Get-Number $Quote.lastPrice
+  if ($last -le 0) { $last = Get-Number $Quote.close }
+  if ($last -le 0) { $last = Get-Number $Quote.price }
+  if ($last -le 0 -and $previous -gt 0) { $last = $previous + $change }
+  $changePercent = Get-Number $Quote.changePercent
+  $updatedAt = (Get-Date).ToUniversalTime().ToString("o")
+  return [ordered]@{
+    future_symbol = $futureSymbol
+    updated_at = $updatedAt
+    last_price = $last
+    open_price = Get-Number $Quote.openPrice
+    high_price = Get-Number $Quote.highPrice
+    low_price = Get-Number $Quote.lowPrice
+    previous_close = $previous
+    change_percent = $changePercent
+    total_volume = [int64](Convert-VolumeToLots $Quote.total.tradeVolume)
+    product = if ($ticker -and $ticker["product"]) { [string]$ticker["product"] } elseif ($futureSymbol -match "^TXF") { "TXF" } else { "STOCK_FUTURE" }
+    session = (Get-PublicSlotSession)
+    payload = @{
+      raw = $Quote
+      source = "fugle-futopt-intraday-quote"
+      volume_unit = "lots"
+      time_standard = "UTC"
+      underlying_symbol = if ($ticker) { $ticker["underlying_symbol"] } else { $null }
+      underlying_name = if ($ticker) { $ticker["underlying_name"] } else { $null }
+    }
+  }
+}
+
+function Invoke-FugleFutoptQuoteBatch {
+  param([string[]]$FutureSymbols, [object[]]$TickerRows, [string]$ApiKey)
+  $state = Read-JsonFile -Path $FutoptQuoteStateFile -Default ([pscustomobject]@{ cursor = 0; last_run_at = $null })
+  $script:FutoptRateLimited = $false
+  $lastRun = $null
+  try { if ($state.last_run_at) { $lastRun = [datetimeoffset]::Parse([string]$state.last_run_at).LocalDateTime } } catch {}
+  if ($null -ne $lastRun -and ((Get-Date) - $lastRun).TotalSeconds -lt $FutoptQuoteEverySeconds) {
+    return @{ rows = @(); attempted = 0; fetched = 0; skipped = $true; rate_limited = $false }
+  }
+  if ($FutureSymbols.Count -eq 0 -or [string]::IsNullOrWhiteSpace($ApiKey)) {
+    return @{ rows = @(); attempted = 0; fetched = 0; skipped = $false; rate_limited = $false }
+  }
+
+  $tickerBySymbol = @{}
+  foreach ($ticker in @($TickerRows)) {
+    $fs = [string]$ticker["future_symbol"]
+    if ($fs -and -not $tickerBySymbol.ContainsKey($fs)) { $tickerBySymbol[$fs] = $ticker }
+  }
+  $cursor = [int]($state.cursor)
+  if ($cursor -lt 0 -or $cursor -ge $FutureSymbols.Count) { $cursor = 0 }
+  $batch = New-Object System.Collections.Generic.List[string]
+  for ($i = 0; $i -lt [math]::Min($FutoptQuoteBatchSize, $FutureSymbols.Count); $i++) {
+    $batch.Add([string]$FutureSymbols[($cursor + $i) % $FutureSymbols.Count])
+  }
+
+  $rows = New-Object System.Collections.Generic.List[object]
+  $fetched = 0
+  foreach ($futureSymbol in $batch) {
+    $quote = Invoke-FugleFutoptQuote -FutureSymbol $futureSymbol -ApiKey $ApiKey
+    $row = Convert-FugleFutoptQuoteToRow -Quote $quote -TickerBySymbol $tickerBySymbol
+    if ($null -ne $row) {
+      $fetched += 1
+      $rows.Add($row)
+    }
+    if ($script:FutoptRateLimited) {
+      Write-Log "WARN futopt quote rate limited; stopping current batch and cooling down."
+      break
+    }
+    Start-Sleep -Milliseconds 600
+  }
+  $nextCursor = ($cursor + [math]::Max(1, $batch.Count)) % $FutureSymbols.Count
+  Write-JsonFile -Path $FutoptQuoteStateFile -Value ([ordered]@{
+    cursor = $nextCursor
+    last_run_at = (Get-Date).ToString("o")
+    last_attempted = $batch.Count
+    last_fetched_symbols = $fetched
+    last_rows = $rows.Count
+    universe = $FutureSymbols.Count
+    rate_limited = [bool]$script:FutoptRateLimited
+  })
+  return @{ rows = $rows.ToArray(); attempted = $batch.Count; fetched = $fetched; skipped = $false; rate_limited = [bool]$script:FutoptRateLimited }
+}
+
 function Convert-StocksSlimToTickerRows {
   $stocksFile = Join-Path $RuntimeDir "data\stocks-slim.json"
   $rows = New-Object System.Collections.Generic.List[object]
@@ -987,6 +1230,19 @@ do {
     $minutePayload = Update-MinuteRows -QuoteRows $quoteRows
     $direct1mPayload = Invoke-Direct1mWarmupBatch -Symbols (Get-WarmupSymbols) -ApiKey $fugleApiKey
     $txfPayload = Convert-TaifexToFutoptRows -Payload (Invoke-TaifexFuturesQuote -Cid "TXF") -Product "TXF"
+    $fugleFutoptTickerPayload = Invoke-FugleFutoptTickers -ApiKey $fugleApiKey
+    $fugleFutoptTickerRows = @(Convert-FugleFutoptTickersToRows -Payload $fugleFutoptTickerPayload)
+    $nearStockFutureSymbols = @(Get-NearMonthStockFutureSymbols -TickerRows $fugleFutoptTickerRows)
+    $fugleFutoptQuotePayload = Invoke-FugleFutoptQuoteBatch -FutureSymbols $nearStockFutureSymbols -TickerRows $fugleFutoptTickerRows -ApiKey $fugleApiKey
+    $combinedFutoptTickerRows = @($txfPayload.tickers) + @($fugleFutoptTickerRows)
+    $combinedFutoptQuoteRows = @($txfPayload.quotes) + @($fugleFutoptQuotePayload.rows)
+    $stockFutureTickerCount = @($fugleFutoptTickerRows | Where-Object { $_.product -eq "STOCK_FUTURE" }).Count
+    $stockFutureMappedCount = @($fugleFutoptTickerRows | Where-Object { $_.product -eq "STOCK_FUTURE" -and -not [string]::IsNullOrWhiteSpace([string]$_.underlying_symbol) }).Count
+    $shouldWriteFutoptTickers = $false
+    if ($combinedFutoptTickerRows.Count -gt 0) {
+      $shouldWriteFutoptTickers = ($null -eq $fugleFutoptTickerPayload -or -not [bool]$fugleFutoptTickerPayload.public_slot_from_cache)
+      if ($txfPayload.tickers.Count -gt 0) { $shouldWriteFutoptTickers = $true }
+    }
 
     if ($quoteRows.Count -gt 0) { Write-PublicSlotQuotesLive -Rows $quoteRows }
     if ($minutePayload.minuteRows.Count -gt 0) { Write-PublicSlotIntraday1m -Rows $minutePayload.minuteRows }
@@ -998,8 +1254,8 @@ do {
     if ($direct1mOhlcvRows.Count -gt 0) { Write-PublicSlotDailyOhlcv -Rows $direct1mOhlcvRows }
     if ($preopenRows.Count -gt 0) { Write-PublicSlotPreopenSnapshot -Rows $preopenRows }
     if ($preopenRows.Count -gt 0) { Write-PublicSlotPreopenSnapshotHistory -Rows $preopenRows }
-    if ($txfPayload.quotes.Count -gt 0) { Write-PublicSlotFutoptQuotesLive -Rows $txfPayload.quotes }
-    if ($txfPayload.tickers.Count -gt 0) { Write-PublicSlotFutoptTickers -Rows $txfPayload.tickers }
+    if ($combinedFutoptQuoteRows.Count -gt 0) { Write-PublicSlotFutoptQuotesLive -Rows $combinedFutoptQuoteRows }
+    if ($shouldWriteFutoptTickers) { Write-PublicSlotFutoptTickers -Rows $combinedFutoptTickerRows }
     if (((Get-Date) - $lastMaintenanceAt).TotalMinutes -ge 30) {
       $deletedDaily = Invoke-PublicSlotRpc -FunctionName "cleanup_fugle_daily_volume" -Body @{ retain_trade_days = $DailyVolumeRetainTradeDays }
       $deleted1m = Invoke-PublicSlotRpc -FunctionName "cleanup_fugle_intraday_1m" -Body @{ retain_trade_days = 5 }
@@ -1024,7 +1280,7 @@ do {
     $blacklistCount = if ($null -ne $script:SymbolBlacklist) { $script:SymbolBlacklist.Count } else { 0 }
     $rawSymbols = $seeded + $blacklistCount
     $cumulativeBidAskRows = @($quoteRows | Where-Object { $null -ne $_.cumulative_bid_ask_volume }).Count
-    $message = "writer=running; collector=$collectorState; raw_symbols=$rawSymbols; active_symbols=$seeded; blacklist_count=$blacklistCount; quotes=$($quoteRows.Count); quote_age_seconds=$quoteAgeSeconds; last_quote_at=$lastQuoteAt; preopen=$($preopenRows.Count); preopen_history_attempted=$($preopenRows.Count); futopt=$($txfPayload.quotes.Count); futopt_scope=TXF_only_stock_futures_not_yet_available; intraday_1m_symbols_today=$($intradayStats.intraday_1m_symbols_today); intraday_1m_rows_today=$($intradayStats.intraday_1m_rows_today); intraday_1m_stale_seconds=$($intradayStats.intraday_1m_stale_seconds); latest_candle_time=$($intradayStats.intraday_1m_latest_candle_time); daily_volume_rows=$($minutePayload.dailyRows.Count + $direct1mDailyRows.Count); direct_1m_daily_rows=$($direct1mDailyRows.Count); daily_ohlcv_rows=$($direct1mOhlcvRows.Count); cumulative_bid_ask_rows=$cumulativeBidAskRows; direct_1m_attempted=$($direct1mPayload.attempted); direct_1m_rows=$($direct1mPayload.rows.Count)"
+    $message = "writer=running; collector=$collectorState; raw_symbols=$rawSymbols; active_symbols=$seeded; blacklist_count=$blacklistCount; quotes=$($quoteRows.Count); quote_age_seconds=$quoteAgeSeconds; last_quote_at=$lastQuoteAt; preopen=$($preopenRows.Count); preopen_history_attempted=$($preopenRows.Count); futopt=$($combinedFutoptQuoteRows.Count); futopt_tickers=$($combinedFutoptTickerRows.Count); futopt_stock_tickers=$stockFutureTickerCount; futopt_stock_mapped=$stockFutureMappedCount; futopt_stock_quote_universe=$($nearStockFutureSymbols.Count); futopt_stock_quotes_this_loop=$($fugleFutoptQuotePayload.rows.Count); futopt_scope=TXF_and_low_rate_stock_futures; intraday_1m_symbols_today=$($intradayStats.intraday_1m_symbols_today); intraday_1m_rows_today=$($intradayStats.intraday_1m_rows_today); intraday_1m_stale_seconds=$($intradayStats.intraday_1m_stale_seconds); latest_candle_time=$($intradayStats.intraday_1m_latest_candle_time); daily_volume_rows=$($minutePayload.dailyRows.Count + $direct1mDailyRows.Count); direct_1m_daily_rows=$($direct1mDailyRows.Count); daily_ohlcv_rows=$($direct1mOhlcvRows.Count); cumulative_bid_ask_rows=$cumulativeBidAskRows; direct_1m_attempted=$($direct1mPayload.attempted); direct_1m_rows=$($direct1mPayload.rows.Count)"
     Write-PublicSlotSourceStatus -SourceName $StatusSourceName -Status $status -Message $message -StaleSeconds $quoteAgeSeconds -Payload @{
       raw_symbols = $rawSymbols
       active_symbols = $seeded
@@ -1046,11 +1302,21 @@ do {
       daily_ohlcv_rows = $direct1mOhlcvRows.Count
       preopen_rows = $preopenRows.Count
       preopen_history_attempted = $preopenRows.Count
-      futopt_quotes = $txfPayload.quotes.Count
-      futopt_tickers = $txfPayload.tickers.Count
-      futopt_scope = "TXF_only"
-      futopt_stock_futures_supported = $false
-      futopt_stock_futures_message = "Stock futures mapping and per-stock futures quotes are not yet populated; STAR/preopen logic should not assume individual stock futures coverage."
+      futopt_quotes = $combinedFutoptQuoteRows.Count
+      futopt_tickers = $combinedFutoptTickerRows.Count
+      futopt_scope = "TXF_and_low_rate_stock_futures"
+      futopt_stock_futures_supported = ($stockFutureMappedCount -gt 0)
+      futopt_stock_futures_message = "Stock futures tickers are loaded from Fugle futopt; near-month stock futures quotes are filled by low-rate rotating batches to avoid 429."
+      futopt_stock_tickers = $stockFutureTickerCount
+      futopt_stock_mapped = $stockFutureMappedCount
+      futopt_stock_quote_universe = $nearStockFutureSymbols.Count
+      futopt_stock_quotes_this_loop = $fugleFutoptQuotePayload.rows.Count
+      futopt_stock_quote_attempted_this_loop = $fugleFutoptQuotePayload.attempted
+      futopt_stock_quote_fetched_this_loop = $fugleFutoptQuotePayload.fetched
+      futopt_quote_batch_size = $FutoptQuoteBatchSize
+      futopt_quote_every_seconds = $FutoptQuoteEverySeconds
+      futopt_tickers_every_seconds = $FutoptTickersEverySeconds
+      futopt_quote_rate_limited = [bool]$fugleFutoptQuotePayload.rate_limited
       last_quote_at = $lastQuoteAt
       last_1m_at = $last1mAt
       last_daily_volume_date = (Get-Date).ToString("yyyy-MM-dd")
@@ -1067,7 +1333,7 @@ do {
       websocket_status = $wsStatus
       quotes_file = $quotesFile
       preopen_count = $preopenRows.Count
-      futopt_quote_count = $txfPayload.quotes.Count
+      futopt_quote_count = $combinedFutoptQuoteRows.Count
       seeded_symbols = $seeded
       direct_1m_attempted = $direct1mPayload.attempted
       direct_1m_fetched_symbols = $direct1mPayload.fetched
@@ -1083,7 +1349,7 @@ do {
       universe_source = "filtered_stocks_slim_and_blacklist"
       daily_volume_retain_trade_days = $DailyVolumeRetainTradeDays
       preopen_stale_after_session = $true
-      futopt_scope_note = "TXF live quotes only; futopt_tickers keeps stock futures mapping when available"
+      futopt_scope_note = "TXF plus Fugle stock futures. Stock futures quotes rotate in small batches, so full quote coverage accumulates over multiple loops."
     }
     $loadedDailySymbols = @($direct1mOhlcvRows | Select-Object -ExpandProperty symbol -Unique).Count
     $syncStatus = if ($session -eq "closed" -and $loadedDailySymbols -ge [math]::Max(1, [int]($seeded * 0.9))) { "complete" } elseif ($direct1mOhlcvRows.Count -gt 0) { "partial" } else { "running" }
