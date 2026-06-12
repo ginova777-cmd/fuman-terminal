@@ -10,6 +10,8 @@ param(
   [int]$DailyVolumeRetainTradeDays = 20,
   [int]$Direct1mBatchSize = 3,
   [int]$Direct1mEverySeconds = 300,
+  [int]$RestQuoteBatchSize = 20,
+  [int]$RestQuoteEverySeconds = 10,
   [int]$FutoptQuoteBatchSize = 20,
   [int]$FutoptQuoteEverySeconds = 60,
   [int]$FutoptTickersEverySeconds = 1800,
@@ -27,6 +29,7 @@ $SourceHelper = Join-Path $ScriptDir "SupabasePublicSlotSource.ps1"
 $LogDir = Join-Path $ScriptDir "runtime"
 $StateFile = Join-Path $LogDir "public-slot-minute-state.json"
 $Direct1mStateFile = Join-Path $LogDir "public-slot-direct-1m-state.json"
+$RestQuoteStateFile = Join-Path $LogDir "public-slot-rest-quote-state.json"
 $FutoptQuoteStateFile = Join-Path $LogDir "public-slot-futopt-quote-state.json"
 $FutoptTickersCacheFile = Join-Path $LogDir "public-slot-futopt-tickers-cache.json"
 $BlacklistCacheFile = Join-Path $LogDir "fugle-api-blacklist-symbols-cache.txt"
@@ -462,6 +465,145 @@ function Invoke-Direct1mWarmupBatch {
   return @{ rows = $rows.ToArray(); attempted = $batch.Count; fetched = $fetched; skipped = $false; rate_limited = [bool]$script:Direct1mRateLimited }
 }
 
+function Invoke-FugleStockQuote {
+  param([string]$Symbol, [string]$ApiKey)
+  if ([string]::IsNullOrWhiteSpace($Symbol) -or [string]::IsNullOrWhiteSpace($ApiKey)) { return $null }
+  $headers = @{
+    "X-API-KEY" = $ApiKey
+    "User-Agent" = "FumanPublicSlotSharedSource/1.0"
+  }
+  try {
+    $uri = "https://api.fugle.tw/marketdata/v1.0/stock/intraday/quote/$Symbol"
+    return Invoke-RestMethod -Uri $uri -Headers $headers -TimeoutSec 12 -ErrorAction Stop
+  } catch {
+    Write-Log "WARN rest_quote $Symbol failed: $($_.Exception.Message)"
+    if ($_.Exception.Message -match '429|Too Many') { $script:RestQuoteRateLimited = $true }
+    return $null
+  }
+}
+
+function Convert-FugleStockQuoteToWsLikeQuote {
+  param([object]$Quote)
+  if ($null -eq $Quote) { return $null }
+  $symbol = [string]$Quote.symbol
+  if ([string]::IsNullOrWhiteSpace($symbol)) { return $null }
+  if (Test-BuiltInBlacklistedStock -Symbol $symbol -Name ([string]$Quote.name)) { return $null }
+
+  $bestBid = $null
+  $bestAsk = $null
+  try { $bestBid = @($Quote.bids)[0] } catch {}
+  try { $bestAsk = @($Quote.asks)[0] } catch {}
+
+  $lastPrice = Get-Number $Quote.lastPrice
+  if ($lastPrice -le 0) { $lastPrice = Get-Number $Quote.lastTrial.price }
+  if ($lastPrice -le 0) { $lastPrice = Get-Number $Quote.closePrice }
+  if ($lastPrice -le 0) { return $null }
+
+  $previousClose = Get-Number $Quote.previousClose
+  if ($previousClose -le 0) { $previousClose = Get-Number $Quote.referencePrice }
+  $updatedAt = Convert-ToIsoUtc -Value $Quote.lastUpdated -AssumeUtc
+  if ([string]::IsNullOrWhiteSpace($updatedAt)) { $updatedAt = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ss.fff'Z'") }
+  $isTrial = [bool]$Quote.isTrial
+  $session = if ($isTrial -or (Get-PublicSlotSession) -eq "preopen") { "preopen" } else { Get-PublicSlotSession }
+
+  return [pscustomobject][ordered]@{
+    code = $symbol
+    name = [string]$Quote.name
+    market = Convert-Market ([string]$Quote.market)
+    close = $lastPrice
+    open = Get-Number $Quote.openPrice
+    high = Get-Number $Quote.highPrice
+    low = Get-Number $Quote.lowPrice
+    prevClose = $previousClose
+    percent = Get-Number $Quote.changePercent
+    tradeVolume = Convert-VolumeToLots $Quote.total.tradeVolume
+    tradeValue = [int64](Get-Number $Quote.total.tradeValue)
+    bidPrice = Get-Number $bestBid.price
+    bidSize = Convert-VolumeToLots $bestBid.size
+    askPrice = Get-Number $bestAsk.price
+    askSize = Convert-VolumeToLots $bestAsk.size
+    cumulativeBidVolume = Convert-VolumeToLots $Quote.total.tradeVolumeAtBid
+    cumulativeAskVolume = Convert-VolumeToLots $Quote.total.tradeVolumeAtAsk
+    quoteSeenAt = $updatedAt
+    updatedAt = $updatedAt
+    isTrial = $isTrial
+    session = $session
+    referencePrice = Get-Number $Quote.referencePrice
+    trialPrice = Get-Number $Quote.lastTrial.price
+    source = "fugle-rest-intraday-quote"
+    raw = $Quote
+  }
+}
+
+function Merge-QuoteObjectsByCode {
+  param([object[]]$PrimaryQuotes = @(), [object[]]$FallbackQuotes = @())
+  $byCode = [ordered]@{}
+  foreach ($quote in @($PrimaryQuotes)) {
+    $digits = [string]$quote.code -replace "\D", ""
+    if ($digits.Length -lt 4) { continue }
+    $symbol = $digits.Substring(0, 4)
+    $byCode[$symbol] = $quote
+  }
+  foreach ($quote in @($FallbackQuotes)) {
+    $digits = [string]$quote.code -replace "\D", ""
+    if ($digits.Length -lt 4) { continue }
+    $symbol = $digits.Substring(0, 4)
+    if (-not $byCode.Contains($symbol)) {
+      $byCode[$symbol] = $quote
+    }
+  }
+  return @($byCode.Values)
+}
+
+function Invoke-FugleStockQuoteBatch {
+  param([string[]]$Symbols, [string]$ApiKey, [bool]$Force = $false)
+  $state = Read-JsonFile -Path $RestQuoteStateFile -Default ([pscustomobject]@{ cursor = 0; last_run_at = $null })
+  $script:RestQuoteRateLimited = $false
+  $lastRun = $null
+  try { if ($state.last_run_at) { $lastRun = [datetimeoffset]::Parse([string]$state.last_run_at).LocalDateTime } } catch {}
+  if (-not $Force -and $null -ne $lastRun -and ((Get-Date) - $lastRun).TotalSeconds -lt $RestQuoteEverySeconds) {
+    return @{ quotes = @(); attempted = 0; fetched = 0; skipped = $true; rate_limited = $false }
+  }
+  if ($Symbols.Count -eq 0 -or [string]::IsNullOrWhiteSpace($ApiKey)) {
+    return @{ quotes = @(); attempted = 0; fetched = 0; skipped = $false; rate_limited = $false }
+  }
+
+  $cursor = [int]($state.cursor)
+  if ($cursor -lt 0 -or $cursor -ge $Symbols.Count) { $cursor = 0 }
+  $batch = New-Object System.Collections.Generic.List[string]
+  for ($i = 0; $i -lt [math]::Min($RestQuoteBatchSize, $Symbols.Count); $i++) {
+    $batch.Add([string]$Symbols[($cursor + $i) % $Symbols.Count])
+  }
+
+  $quotes = New-Object System.Collections.Generic.List[object]
+  $fetched = 0
+  foreach ($symbol in $batch) {
+    $quote = Invoke-FugleStockQuote -Symbol $symbol -ApiKey $ApiKey
+    $converted = Convert-FugleStockQuoteToWsLikeQuote -Quote $quote
+    if ($null -ne $converted) {
+      $fetched += 1
+      $quotes.Add($converted)
+    }
+    if ($script:RestQuoteRateLimited) {
+      Write-Log "WARN stock rest quote rate limited; stopping current batch and cooling down."
+      break
+    }
+    Start-Sleep -Milliseconds 250
+  }
+
+  $nextCursor = ($cursor + [math]::Max(1, $batch.Count)) % $Symbols.Count
+  Write-JsonFile -Path $RestQuoteStateFile -Value ([ordered]@{
+    cursor = $nextCursor
+    last_run_at = (Get-Date).ToString("o")
+    last_attempted = $batch.Count
+    last_fetched_symbols = $fetched
+    last_rows = $quotes.Count
+    universe = $Symbols.Count
+    rate_limited = [bool]$script:RestQuoteRateLimited
+  })
+  return @{ quotes = $quotes.ToArray(); attempted = $batch.Count; fetched = $fetched; skipped = $false; rate_limited = [bool]$script:RestQuoteRateLimited }
+}
+
 function Test-ProcessAlive {
   param([object]$PidValue)
   $pidInt = 0
@@ -617,6 +759,10 @@ function Convert-QuotesToRows {
     if ($denom -gt 0) { $askRatio = [math]::Round(([double]$askVolume / [double]$denom), 6) }
     $quoteName = [string]$quote.name
     if ([string]::IsNullOrWhiteSpace($quoteName)) { $quoteName = $symbol }
+    $quoteSession = [string]$quote.session
+    if ([string]::IsNullOrWhiteSpace($quoteSession)) { $quoteSession = Get-PublicSlotSession }
+    $isTrial = $false
+    try { $isTrial = [bool]$quote.isTrial } catch {}
     $rows.Add([ordered]@{
       symbol = $symbol
       name = $quoteName
@@ -638,10 +784,10 @@ function Convert-QuotesToRows {
       cumulative_ask_volume = $cumulativeAskVolume
       cumulative_bid_ask_volume = $cumulativeBidAskVolume
       stock_type = "COMMONSTOCK"
-      session = "regular"
+      session = $quoteSession
       last_trade_time = $updatedAt
       is_halted = $false
-      is_trial = $false
+      is_trial = $isTrial
       payload = @{
         raw = $quote
         volume_unit = "lots"
@@ -665,8 +811,10 @@ function Convert-QuotesToPreopenRows {
     if (Test-BuiltInBlacklistedStock -Symbol $symbol -Name ([string]$quote.name)) { continue }
 
     $updatedAt = Get-QuoteTimestamp -Quote $quote -Payload $Payload
-    $referencePrice = Get-Number $quote.prevClose
-    $trialPrice = Get-Number $quote.close
+    $referencePrice = Get-Number $quote.referencePrice
+    if ($referencePrice -le 0) { $referencePrice = Get-Number $quote.prevClose }
+    $trialPrice = Get-Number $quote.trialPrice
+    if ($trialPrice -le 0) { $trialPrice = Get-Number $quote.close }
     $bidPrice = Get-Number $quote.bidPrice
     $askPrice = Get-Number $quote.askPrice
     $bidVolume = [int](Convert-VolumeToLots $quote.bidSize)
@@ -689,7 +837,7 @@ function Convert-QuotesToPreopenRows {
       updated_at = $updatedAt
       reference_price = $referencePrice
       trial_price = $trialPrice
-      is_trial = ((Get-PublicSlotSession) -eq "preopen")
+      is_trial = ([bool]$quote.isTrial -or (Get-PublicSlotSession) -eq "preopen")
       is_limit_up_bid = $isLimitUpBid
       best_bid_price = $bidPrice
       best_ask_price = $askPrice
@@ -1065,7 +1213,14 @@ function Update-MinuteRows {
 
   foreach ($quote in $QuoteRows) {
     $symbol = [string]$quote.symbol
-    $minute = ([datetimeoffset]::Parse([string]$quote.updated_at)).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:00Z")
+    $quoteSession = [string]$quote.session
+    $quoteIsTrial = $false
+    try { $quoteIsTrial = [bool]$quote.is_trial } catch {}
+    if ($quoteSession -ne "regular" -or $quoteIsTrial) { continue }
+    $quoteTime = [datetimeoffset]::Parse([string]$quote.updated_at)
+    $taipeiTimeOfDay = $quoteTime.ToOffset([timespan]::FromHours(8)).TimeOfDay
+    if ($taipeiTimeOfDay -lt [TimeSpan]::Parse("09:00") -or $taipeiTimeOfDay -gt [TimeSpan]::Parse("13:35")) { continue }
+    $minute = $quoteTime.ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:00Z")
     $price = Get-Number $quote.price
     $totalVolume = [int64](Convert-VolumeToLots $quote.total_volume)
     if ($price -le 0 -or $symbol -notmatch '^\d{4}$') { continue }
@@ -1239,6 +1394,13 @@ do {
       $age = [int](((Get-Date) - (Get-Item -LiteralPath $quotesFile).LastWriteTime).TotalSeconds)
     }
 
+    $session = Get-PublicSlotSession
+    $restQuotePayload = @{ quotes = @(); attempted = 0; fetched = 0; skipped = $true; rate_limited = $false }
+    if ($quotes.Count -eq 0 -or $session -eq "preopen") {
+      $restQuotePayload = Invoke-FugleStockQuoteBatch -Symbols (Get-WarmupSymbols) -ApiKey $fugleApiKey
+      $quotes = Merge-QuoteObjectsByCode -PrimaryQuotes $quotes -FallbackQuotes @($restQuotePayload.quotes)
+    }
+
     $quoteRows = Convert-QuotesToRows -Quotes $quotes -Payload $payload
     $preopenRows = Convert-QuotesToPreopenRows -Quotes $quotes -Payload $payload
     $minutePayload = Update-MinuteRows -QuoteRows $quoteRows
@@ -1289,12 +1451,11 @@ do {
     $last1mAt = Get-LatestIsoUtc -Rows $combined1mRows -PropertyName "candle_time"
     $quoteAgeSeconds = Get-IsoAgeSeconds -IsoTime $lastQuoteAt -FallbackSeconds $age
     $intradayStats = Get-Intraday1mCoverageStats -FallbackRows $combined1mRows
-    $session = Get-PublicSlotSession
     $status = if ($quoteRows.Count -gt 0 -and $quoteAgeSeconds -le $StaleSeconds) { "ok" } else { "stale" }
     $blacklistCount = if ($null -ne $script:SymbolBlacklist) { $script:SymbolBlacklist.Count } else { 0 }
     $rawSymbols = $seeded + $blacklistCount
     $cumulativeBidAskRows = @($quoteRows | Where-Object { $null -ne $_.cumulative_bid_ask_volume }).Count
-    $message = "writer=running; collector=$collectorState; raw_symbols=$rawSymbols; active_symbols=$seeded; blacklist_count=$blacklistCount; quotes=$($quoteRows.Count); quote_age_seconds=$quoteAgeSeconds; last_quote_at=$lastQuoteAt; preopen=$($preopenRows.Count); preopen_history_attempted=$($preopenRows.Count); futopt=$($combinedFutoptQuoteRows.Count); futopt_tickers=$($combinedFutoptTickerRows.Count); futopt_stock_tickers=$stockFutureTickerCount; futopt_stock_mapped=$stockFutureMappedCount; futopt_stock_quote_universe=$($nearStockFutureSymbols.Count); futopt_stock_quotes_this_loop=$($fugleFutoptQuotePayload.rows.Count); futopt_scope=TXF_and_low_rate_stock_futures; intraday_1m_symbols_today=$($intradayStats.intraday_1m_symbols_today); intraday_1m_rows_today=$($intradayStats.intraday_1m_rows_today); intraday_1m_stale_seconds=$($intradayStats.intraday_1m_stale_seconds); latest_candle_time=$($intradayStats.intraday_1m_latest_candle_time); daily_volume_rows=$($minutePayload.dailyRows.Count + $direct1mDailyRows.Count); direct_1m_daily_rows=$($direct1mDailyRows.Count); daily_ohlcv_rows=$($direct1mOhlcvRows.Count); cumulative_bid_ask_rows=$cumulativeBidAskRows; direct_1m_attempted=$($direct1mPayload.attempted); direct_1m_rows=$($direct1mPayload.rows.Count)"
+    $message = "writer=running; collector=$collectorState; raw_symbols=$rawSymbols; active_symbols=$seeded; blacklist_count=$blacklistCount; quotes=$($quoteRows.Count); quote_age_seconds=$quoteAgeSeconds; last_quote_at=$lastQuoteAt; rest_quote_attempted=$($restQuotePayload.attempted); rest_quote_rows=$($restQuotePayload.quotes.Count); rest_quote_fetched_symbols=$($restQuotePayload.fetched); preopen=$($preopenRows.Count); preopen_history_attempted=$($preopenRows.Count); futopt=$($combinedFutoptQuoteRows.Count); futopt_tickers=$($combinedFutoptTickerRows.Count); futopt_stock_tickers=$stockFutureTickerCount; futopt_stock_mapped=$stockFutureMappedCount; futopt_stock_quote_universe=$($nearStockFutureSymbols.Count); futopt_stock_quotes_this_loop=$($fugleFutoptQuotePayload.rows.Count); futopt_scope=TXF_and_low_rate_stock_futures; intraday_1m_symbols_today=$($intradayStats.intraday_1m_symbols_today); intraday_1m_rows_today=$($intradayStats.intraday_1m_rows_today); intraday_1m_stale_seconds=$($intradayStats.intraday_1m_stale_seconds); latest_candle_time=$($intradayStats.intraday_1m_latest_candle_time); daily_volume_rows=$($minutePayload.dailyRows.Count + $direct1mDailyRows.Count); direct_1m_daily_rows=$($direct1mDailyRows.Count); daily_ohlcv_rows=$($direct1mOhlcvRows.Count); cumulative_bid_ask_rows=$cumulativeBidAskRows; direct_1m_attempted=$($direct1mPayload.attempted); direct_1m_rows=$($direct1mPayload.rows.Count)"
     Write-PublicSlotSourceStatus -SourceName $StatusSourceName -Status $status -Message $message -StaleSeconds $quoteAgeSeconds -Payload @{
       raw_symbols = $rawSymbols
       active_symbols = $seeded
@@ -1336,6 +1497,13 @@ do {
       last_daily_volume_date = (Get-Date).ToString("yyyy-MM-dd")
       quote_age_seconds = $quoteAgeSeconds
       quote_cache_file_age_seconds = $age
+      rest_quote_attempted = $restQuotePayload.attempted
+      rest_quote_rows = $restQuotePayload.quotes.Count
+      rest_quote_fetched_symbols = $restQuotePayload.fetched
+      rest_quote_batch_size = $RestQuoteBatchSize
+      rest_quote_every_seconds = $RestQuoteEverySeconds
+      rest_quote_rate_limited = [bool]$restQuotePayload.rate_limited
+      rest_quote_source = "fugle_stock_intraday_quote_when_websocket_empty_or_preopen"
       cumulative_bid_ask_available = ($cumulativeBidAskRows -gt 0)
       cumulative_bid_ask_rows = $cumulativeBidAskRows
       bid_volume_definition = "best bid level size from Fugle websocket, not confirmed cumulative intraday bid-side traded volume"
