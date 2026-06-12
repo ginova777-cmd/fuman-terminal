@@ -1,17 +1,17 @@
 {
   "source": "strategy2-09-to-1330-patrol",
   "date": "2026-06-12",
-  "updatedAt": "2026-06-12T03:42:13.324Z",
+  "updatedAt": "2026-06-12T03:45:43.355Z",
   "realtime": {
     "requested": 1013,
     "received": 1008,
     "usableBeforeRescue": 2,
     "coverageBeforeRescue": 0.002,
-    "usableAfterRescue": 3,
-    "coverageAfterRescue": 0.003,
+    "usableAfterRescue": 2,
+    "coverageAfterRescue": 0.002,
     "unusableBreakdown": {
-      "usable": 3,
-      "stale": 1005,
+      "usable": 2,
+      "stale": 1006,
       "noTime": 0,
       "noClose": 0,
       "missing": 5
@@ -19,8 +19,8 @@
     "sourceHealth": {
       "fugle": {
         "received": 1008,
-        "usable": 3,
-        "stale": 1005,
+        "usable": 2,
+        "stale": 1006,
         "noTime": 0,
         "noClose": 0
       }
@@ -35,8 +35,8 @@
     "fugleRateLimited": false,
     "fallbackStats": {
       "fugleWs": {
-        "available": 799,
-        "used": 799
+        "available": 771,
+        "used": 771
       },
       "fugle": {
         "configured": true,
@@ -65,13 +65,13 @@
         "limit": 300,
         "cooldownMs": 30000,
         "requested": 300,
-        "recovered": 1,
+        "recovered": 0,
         "coverageBefore": 0.002,
         "usableBefore": 2,
         "skippedCooldown": false,
         "cooldownRemainingMs": 0,
-        "coverageAfter": 0.003,
-        "usableAfter": 3
+        "coverageAfter": 0.002,
+        "usableAfter": 2
       }
     },
     "finmindRealtimeEnabled": false,
@@ -1178,20 +1178,20 @@
     "noTimeCodes": [],
     "noCloseCodes": [],
     "missedCount": 5,
-    "coverage": 0.7887,
-    "quoteCoverage": 0.003,
-    "fugleWsCoverage": 0.7887,
-    "usable": 799,
-    "quoteUsable": 3,
-    "entrySourceUsable": 799,
+    "coverage": 0.7611,
+    "quoteCoverage": 0.002,
+    "fugleWsCoverage": 0.7611,
+    "usable": 771,
+    "quoteUsable": 2,
+    "entrySourceUsable": 771,
     "cachedRecovered": 0,
     "quoteCacheMaxAgeSeconds": 900,
     "entrySourceCoverageThreshold": 0.5,
     "entrySourceHealthy": true,
     "initialBatchSize": 12,
     "retryBatchSize": 4,
-    "tradable": 799,
-    "tradableByQuote": 3
+    "tradable": 771,
+    "tradableByQuote": 2
   },
   "records": [
     {
