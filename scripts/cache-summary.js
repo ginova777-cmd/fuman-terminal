@@ -121,12 +121,50 @@ function slimWarrantMatch(item) {
   };
 }
 
+function slimSingleWarrantSignal(item) {
+  const code = String(item.underlyingCode || item.code || "");
+  return {
+    code,
+    name: String(item.underlyingName || item.name || code),
+    warrantCode: String(item.warrantCode || ""),
+    warrantName: String(item.warrantName || ""),
+    stockClose: cleanNumber(item.underlyingClose ?? item.close ?? item.stockClose),
+    stockPercent: cleanNumber(item.underlyingPercent ?? item.percent ?? item.stockPercent),
+    value: cleanNumber(item.value),
+    volume: cleanNumber(item.volume),
+    strike: cleanNumber(item.strike),
+    daysToExpiry: cleanNumber(item.daysToExpiry),
+    moneynessPct: cleanNumber(item.moneynessPct),
+    signalCount: cleanNumber(item.signalCount),
+    largeSignalCount: cleanNumber(item.largeSignalCount),
+    estimatedLargeSignalCount: cleanNumber(item.estimatedLargeSignalCount),
+    maxSignalValue: cleanNumber(item.maxSignalValue),
+    totalSignalValue: cleanNumber(item.totalSignalValue),
+    hasRepeatLargeSignal: Boolean(item.hasRepeatLargeSignal),
+    score: cleanNumber(item.score),
+    signalGrade: item.signalGrade || "",
+    actionLabel: item.actionLabel || "",
+    tradeDate: item.tradeDate || "",
+    reason: item.reason || "",
+  };
+}
+
 function buildWarrantFlowSummary(payload) {
   const matches = Array.isArray(payload?.matches) ? payload.matches : [];
+  const singleSignals = Array.isArray(payload?.singleSignals) ? payload.singleSignals : [];
   const topMatches = [...matches]
     .sort((a, b) => cleanNumber(b.score) - cleanNumber(a.score) || cleanNumber(b.callValue) - cleanNumber(a.callValue))
     .slice(0, 80)
     .map(slimWarrantMatch);
+  const topSingleSignals = [...singleSignals]
+    .sort((a, b) =>
+      Number(b.hasRepeatLargeSignal) - Number(a.hasRepeatLargeSignal) ||
+      cleanNumber(b.estimatedLargeSignalCount) - cleanNumber(a.estimatedLargeSignalCount) ||
+      cleanNumber(b.score) - cleanNumber(a.score) ||
+      cleanNumber(b.value) - cleanNumber(a.value)
+    )
+    .slice(0, 40)
+    .map(slimSingleWarrantSignal);
   const tradeDates = [...new Set(matches.map((item) => String(item.tradeDate || "")).filter(Boolean))].sort();
   return {
     ok: Boolean(payload?.ok ?? true),
@@ -134,7 +172,9 @@ function buildWarrantFlowSummary(payload) {
     updatedAt: payload?.updatedAt || "",
     newestTradeDate: tradeDates.at(-1) || "",
     count: cleanNumber(payload?.count || matches.length),
+    singleSignalCount: cleanNumber(payload?.singleSignalCount || singleSignals.length),
     topMatches,
+    topSingleSignals,
   };
 }
 

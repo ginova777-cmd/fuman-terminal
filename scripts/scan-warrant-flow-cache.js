@@ -101,11 +101,57 @@ function normalizeMatch(item, quoteMap = new Map()) {
   };
 }
 
+function normalizeSingleSignal(item, quoteMap = new Map()) {
+  const code = String(item.underlyingCode || item.code || "").trim();
+  const quote = quoteMap.get(code) || {};
+  const quoteClose = cleanNumber(quote.close ?? quote.ClosingPrice ?? quote.z);
+  const quotePercent = Number(quote.percent ?? quote.pct ?? quote.Percent ?? NaN);
+  const close = quoteClose || cleanNumber(item.underlyingClose ?? item.close ?? item.stockClose);
+  const percentRaw = item.underlyingPercent ?? item.percent ?? item.stockPercent;
+  const percent = Number.isFinite(quotePercent)
+    ? quotePercent
+    : Number.isFinite(Number(percentRaw)) ? Number(percentRaw) : 0;
+  const isNearMoney = Boolean(item.isNearMoney);
+  const value = cleanNumber(item.value);
+  const hasRepeatLargeSignal = Boolean(item.hasRepeatLargeSignal);
+  const estimatedLargeSignalCount = cleanNumber(item.estimatedLargeSignalCount);
+  const scoreBoost =
+    (hasRepeatLargeSignal ? 10 : 0) +
+    (estimatedLargeSignalCount >= 2 ? 4 : 0) +
+    (isNearMoney ? 3 : 0) +
+    (percent >= 0 && percent <= 4.5 ? 4 : percent > -3 && percent < 0 ? 2 : 0) +
+    (value >= 6000000 ? 2 : 0);
+  const score = Math.min(100, cleanNumber(item.score) + scoreBoost);
+  return {
+    ...item,
+    code,
+    name: String(item.underlyingName || item.name || "").trim(),
+    close,
+    percent,
+    quoteDate: quote.quoteDate || quote.tradeDate || quote.TradeDate || item.quoteDate || "",
+    displayClose: close,
+    displayPercent: percent,
+    underlyingCode: code,
+    underlyingName: String(item.underlyingName || item.name || "").trim(),
+    underlyingClose: close,
+    underlyingPercent: percent,
+    score,
+  };
+}
+
+function isControlledSingleSignal(item) {
+  const percent = Number(item?.underlyingPercent ?? item?.percent);
+  return !Number.isFinite(percent) || (percent > -3 && percent <= 6);
+}
+
 async function main() {
   const backup = readJson(BACKUP_FILE, { ok: true, matches: [] });
   const payload = await runHandler();
   const stockQuoteMap = loadStockQuoteMap();
   const matches = Array.isArray(payload.matches) ? payload.matches.map((item) => normalizeMatch(item, stockQuoteMap)) : [];
+  const singleSignals = Array.isArray(payload.singleSignals)
+    ? payload.singleSignals.map((item) => normalizeSingleSignal(item, stockQuoteMap)).filter(isControlledSingleSignal)
+    : [];
   const output = {
     ...payload,
     ok: true,
@@ -113,6 +159,8 @@ async function main() {
     updatedAt: new Date().toISOString(),
     count: matches.length,
     matches,
+    singleSignalCount: singleSignals.length,
+    singleSignals,
   };
 
   if (!matches.length) {

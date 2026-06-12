@@ -203,11 +203,13 @@ function institutionPresetFiles(payload) {
 
 function slimWarrant(payload) {
   const matches = Array.isArray(payload?.matches) ? payload.matches : [];
+  const singleSignals = Array.isArray(payload?.singleSignals) ? payload.singleSignals : [];
   return {
     ok: Boolean(payload?.ok ?? true),
     source: payload?.source || "warrant-flow-slim",
     updatedAt: payload?.updatedAt || "",
     count: cleanNumber(payload?.count || matches.length),
+    singleSignalCount: cleanNumber(payload?.singleSignalCount || singleSignals.length),
     matches: matches.map((item) => ({
       code: String(item.underlyingCode || item.code || ""),
       name: String(item.underlyingName || item.name || item.underlyingCode || item.code || ""),
@@ -236,12 +238,58 @@ function slimWarrant(payload) {
       quoteDate: item.quoteDate || "",
       reason: item.reason || "",
     })),
+    singleSignals: singleSignals.map(slimSingleWarrantSignal),
+  };
+}
+
+function slimSingleWarrantSignal(item) {
+  return {
+    code: String(item.underlyingCode || item.code || ""),
+    name: String(item.underlyingName || item.name || item.underlyingCode || item.code || ""),
+    underlyingCode: String(item.underlyingCode || item.code || ""),
+    underlyingName: String(item.underlyingName || item.name || ""),
+    warrantCode: String(item.warrantCode || ""),
+    warrantName: String(item.warrantName || ""),
+    underlyingClose: cleanNumber(item.underlyingClose ?? item.close ?? item.stockClose),
+    underlyingPercent: cleanNumber(item.underlyingPercent ?? item.percent ?? item.stockPercent),
+    value: cleanNumber(item.value),
+    volume: cleanNumber(item.volume),
+    strike: cleanNumber(item.strike),
+    daysToExpiry: cleanNumber(item.daysToExpiry),
+    moneynessPct: cleanNumber(item.moneynessPct),
+    isNearMoney: Boolean(item.isNearMoney),
+    stockSetupScore: cleanNumber(item.stockSetupScore),
+    stockSetupLabel: item.stockSetupLabel || "",
+    groupCallValue: cleanNumber(item.groupCallValue),
+    groupCallCount: cleanNumber(item.groupCallCount),
+    groupPutValue: cleanNumber(item.groupPutValue),
+    signalCount: cleanNumber(item.signalCount),
+    largeSignalCount: cleanNumber(item.largeSignalCount),
+    estimatedLargeSignalCount: cleanNumber(item.estimatedLargeSignalCount),
+    maxSignalValue: cleanNumber(item.maxSignalValue),
+    totalSignalValue: cleanNumber(item.totalSignalValue),
+    hasRepeatLargeSignal: Boolean(item.hasRepeatLargeSignal),
+    score: cleanNumber(item.score),
+    signalGrade: item.signalGrade || "",
+    actionLabel: item.actionLabel || "",
+    displayClose: cleanNumber(item.displayClose ?? item.underlyingClose ?? item.close),
+    displayPercent: cleanNumber(item.displayPercent ?? item.underlyingPercent ?? item.percent),
+    tradeDate: item.tradeDate || "",
+    quoteDate: item.quoteDate || "",
+    reason: item.reason || "",
   };
 }
 
 function warrantPresetFiles(payload) {
   const slim = slimWarrant(payload);
   const rows = [...slim.matches].sort((a, b) => cleanNumber(b.score) - cleanNumber(a.score) || cleanNumber(b.callValue) - cleanNumber(a.callValue)).slice(0, 160);
+  const singleRows = [...slim.singleSignals].sort((a, b) =>
+    Number(b.hasRepeatLargeSignal) - Number(a.hasRepeatLargeSignal) ||
+    cleanNumber(b.estimatedLargeSignalCount) - cleanNumber(a.estimatedLargeSignalCount) ||
+    cleanNumber(b.score) - cleanNumber(a.score) ||
+    Number(b.isNearMoney) - Number(a.isNearMoney) ||
+    cleanNumber(b.value) - cleanNumber(a.value)
+  ).slice(0, 12);
   return [
     ["data/warrant-priority-top.json", {
       ok: slim.ok,
@@ -249,6 +297,13 @@ function warrantPresetFiles(payload) {
       updatedAt: slim.updatedAt,
       count: rows.length,
       matches: rows,
+    }],
+    ["data/warrant-single-signal-top.json", {
+      ok: slim.ok,
+      source: "warrant-single-signal-top",
+      updatedAt: slim.updatedAt,
+      count: singleRows.length,
+      matches: singleRows,
     }],
   ];
 }
@@ -482,14 +537,19 @@ function mobileInstitutionTop(payload) {
 }
 
 function mobileWarrantTop(payload) {
-  const preset = warrantPresetFiles(payload)[0]?.[1] || { matches: [] };
+  const presetFiles = warrantPresetFiles(payload);
+  const preset = presetFiles.find(([file]) => file === "data/warrant-priority-top.json")?.[1] || { matches: [] };
+  const singlePreset = presetFiles.find(([file]) => file === "data/warrant-single-signal-top.json")?.[1] || { matches: [] };
   const rows = (preset.matches || []).slice(0, 50);
+  const singleSignals = (singlePreset.matches || []).slice(0, 12);
   return {
     ok: Boolean(payload?.ok ?? true),
     source: "warrant-flow-mobile-top",
     updatedAt: payload?.updatedAt || "",
     count: rows.length,
     matches: rows,
+    singleSignalCount: singleSignals.length,
+    singleSignals,
   };
 }
 
@@ -652,6 +712,7 @@ function dataStatusIndex() {
     "warrant-flow-latest.json",
     "warrant-flow-slim.json",
     "warrant-priority-top.json",
+    "warrant-single-signal-top.json",
     "warrant-flow-mobile-top.json",
     "realtime-radar-latest.json",
   ];
@@ -707,6 +768,7 @@ function dataManifest() {
     "warrant-flow-latest.json",
     "warrant-flow-slim.json",
     "warrant-priority-top.json",
+    "warrant-single-signal-top.json",
     "warrant-flow-mobile-top.json",
     "realtime-radar-latest.json",
     "afterhours-supabase-status.json",

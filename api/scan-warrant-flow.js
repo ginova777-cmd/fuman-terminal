@@ -17,6 +17,10 @@ const ETF_UNDERLYING_PATTERNS = [
   /美債/, /公債/, /投資級債/, /非投等債/, /債\d*/, /原油/, /黃金/,
 ];
 
+const EXCLUDED_SINGLE_SIGNAL_UNDERLYINGS = new Set([
+  "2330",
+]);
+
 async function fetchText(url, timeout = 15000) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeout);
@@ -605,6 +609,115 @@ function classifyWarrantSignal({ warrantHeatScore, stockSetupScore, branchSuppor
   return { grade: "C", action: "只列熱度，不追價" };
 }
 
+function buildSingleWarrantBursts(rows) {
+  const byCode = new Map();
+  for (const row of rows) {
+    if (!row || row.type !== "call") continue;
+    const code = String(row.code || "");
+    if (!code) continue;
+    const value = cleanNumber(row.value);
+    const days = cleanNumber(row.daysToExpiry);
+    const pct = Number(row.underlyingPercent);
+    if (!value || !Number.isFinite(days) || days < 10) continue;
+    if (Number.isFinite(pct) && (pct <= -3 || pct > 6)) continue;
+    const item = byCode.get(code) || {
+      signalCount: 0,
+      largeSignalCount: 0,
+      maxSignalValue: 0,
+      totalSignalValue: 0,
+    };
+    item.signalCount += 1;
+    item.largeSignalCount += value >= 4000000 ? 1 : 0;
+    item.maxSignalValue = Math.max(item.maxSignalValue, value);
+    item.totalSignalValue += value;
+    byCode.set(code, item);
+  }
+  for (const item of byCode.values()) {
+    item.estimatedLargeSignalCount = Math.max(
+      item.largeSignalCount,
+      item.totalSignalValue >= 6000000 ? 2 : item.totalSignalValue >= 4000000 ? 1 : 0
+    );
+  }
+  return byCode;
+}
+
+function scoreSingleWarrantSignal(row, aggregateItem, burstItem) {
+  if (!row || row.type !== "call") return null;
+  const underlyingCode = String(row.underlyingCode || "");
+  if (EXCLUDED_SINGLE_SIGNAL_UNDERLYINGS.has(underlyingCode)) return null;
+  if (/^00/.test(underlyingCode) || isEtfUnderlying(row.underlyingName, row.name)) return null;
+  const value = cleanNumber(row.value);
+  const days = cleanNumber(row.daysToExpiry);
+  const pct = Number(row.underlyingPercent);
+  if (!value || !Number.isFinite(days) || days < 10) return null;
+  if (Number.isFinite(pct) && (pct <= -3 || pct > 6)) return null;
+
+  const moneynessPct = Number(row.moneynessPct);
+  const isNearMoney = Number.isFinite(moneynessPct) && moneynessPct >= -8 && moneynessPct <= 25;
+  const stockSetup = scoreStockSetup(row.underlyingPercent);
+  const groupCallValue = cleanNumber(aggregateItem?.callValue);
+  const groupCallCount = cleanNumber(aggregateItem?.callCount);
+  const groupPutValue = cleanNumber(aggregateItem?.putValue);
+  const signalCount = cleanNumber(burstItem?.signalCount) || 1;
+  const largeSignalCount = cleanNumber(burstItem?.largeSignalCount) || (value >= 4000000 ? 1 : 0);
+  const estimatedLargeSignalCount = cleanNumber(burstItem?.estimatedLargeSignalCount) || largeSignalCount;
+  const maxSignalValue = Math.max(cleanNumber(burstItem?.maxSignalValue), value);
+  const totalSignalValue = Math.max(cleanNumber(burstItem?.totalSignalValue), value);
+  const hasRepeatLargeSignal = estimatedLargeSignalCount >= 2;
+  const singleValueScore = Math.min(value / 1000000 * 4.5, 32);
+  const moneynessScore = isNearMoney ? 20 : Number.isFinite(moneynessPct) && moneynessPct > 40 ? 0 : 8;
+  const repeatScore = hasRepeatLargeSignal ? 18 : largeSignalCount >= 1 ? 6 : 0;
+  const groupScore = aggregateItem
+    ? Math.min(groupCallValue / 8000000 * 6, 14) + Math.min(groupCallCount * 1.2, 8)
+    : 0;
+  const stockMoveBonus = Number.isFinite(pct)
+    ? pct >= 0 && pct <= 2.8 ? 16 : pct > 2.8 && pct <= 4.5 ? 8 : pct >= -1.5 ? 7 : 2
+    : 6;
+  const setupScore = Math.min(stockSetup.score * 0.22, 18);
+  const expiryScore = days >= 45 ? 6 : days >= 20 ? 3 : 0;
+  const putDrag = groupPutValue > groupCallValue * 0.35 ? -8 : 0;
+  const score = clampScore(10 + singleValueScore + moneynessScore + repeatScore + groupScore + stockMoveBonus + setupScore + expiryScore + putDrag);
+  const isBurst = value >= 4000000 && score >= 68;
+  const isRepeatBurst = hasRepeatLargeSignal && score >= 72 && stockSetup.score >= 45;
+  const isEarly = value >= 3000000 && score >= 76 && stockSetup.score >= 58 && isNearMoney;
+  if (!isBurst && !isEarly && !isRepeatBurst) return null;
+
+  const grade = hasRepeatLargeSignal || score >= 82 ? "A" : score >= 70 ? "B" : "C";
+  return {
+    warrantCode: row.code,
+    warrantName: row.name,
+    code: row.underlyingCode || "",
+    name: row.underlyingName || "",
+    underlyingCode: row.underlyingCode || "",
+    underlyingName: row.underlyingName || "",
+    underlyingClose: row.underlyingClose || 0,
+    underlyingPercent: Number.isFinite(Number(row.underlyingPercent)) ? Number(row.underlyingPercent) : null,
+    value,
+    volume: cleanNumber(row.volume),
+    strike: cleanNumber(row.strike),
+    daysToExpiry: days,
+    moneynessPct: Number.isFinite(moneynessPct) ? Number(moneynessPct.toFixed(2)) : null,
+    isNearMoney,
+    stockSetupScore: stockSetup.score,
+    stockSetupLabel: stockSetup.label,
+    groupCallValue,
+    groupCallCount,
+    groupPutValue,
+    signalCount,
+    largeSignalCount,
+    estimatedLargeSignalCount,
+    maxSignalValue,
+    totalSignalValue,
+    hasRepeatLargeSignal,
+    score,
+    signalGrade: grade,
+    actionLabel: hasRepeatLargeSignal ? "單券連續大額" : grade === "A" ? "單券強訊號" : "單券異動觀察",
+    tradeDate: row.tradeDate || "",
+    quoteSource: row.quoteSource || "",
+    reason: `${grade}：${hasRepeatLargeSignal ? "單券連續大額" : grade === "A" ? "單券強訊號" : "單券異動觀察"}。${row.code} ${row.name} 單券成交 ${(value / 10000).toFixed(0)} 萬，${hasRepeatLargeSignal ? `同券大額訊號 ${estimatedLargeSignalCount} 筆、合計 ${(totalSignalValue / 10000).toFixed(0)} 萬，` : ""}標的 ${row.underlyingName} ${Number.isFinite(pct) ? pct.toFixed(2) : "--"}%，${isNearMoney ? "接近價平" : "價外/價內待確認"}，最近到期 ${days} 天。`,
+  };
+}
+
 function aggregate(rows, keyword = "") {
   const byName = new Map();
   for (const row of rows) {
@@ -783,6 +896,38 @@ function aggregate(rows, keyword = "") {
     );
 }
 
+function detectSingleWarrantSignals(rows, aggregateItems = [], keyword = "") {
+  const aggregateByCode = new Map();
+  for (const item of aggregateItems) {
+    const code = String(item.underlyingCode || item.code || "");
+    if (code) aggregateByCode.set(code, item);
+  }
+  const burstsByWarrant = buildSingleWarrantBursts(rows);
+  const signals = rows
+    .map((row) => scoreSingleWarrantSignal(
+      row,
+      aggregateByCode.get(String(row.underlyingCode || "")),
+      burstsByWarrant.get(String(row.code || ""))
+    ))
+    .filter(Boolean)
+    .filter((item) => !keyword || matchesUnderlyingKeyword(item, keyword) || String(item.warrantCode || "").toLowerCase().includes(keyword))
+    .sort((a, b) =>
+      Number(b.hasRepeatLargeSignal) - Number(a.hasRepeatLargeSignal) ||
+      cleanNumber(b.estimatedLargeSignalCount) - cleanNumber(a.estimatedLargeSignalCount) ||
+      cleanNumber(b.score) - cleanNumber(a.score) ||
+      Number(b.isNearMoney) - Number(a.isNearMoney) ||
+      cleanNumber(b.value) - cleanNumber(a.value) ||
+      Math.abs(cleanNumber(a.underlyingPercent) - 1.2) - Math.abs(cleanNumber(b.underlyingPercent) - 1.2)
+    );
+  if (keyword) return signals;
+  const byUnderlying = new Map();
+  for (const signal of signals) {
+    const code = String(signal.underlyingCode || signal.code || "");
+    if (code && !byUnderlying.has(code)) byUnderlying.set(code, signal);
+  }
+  return [...byUnderlying.values()].slice(0, 20);
+}
+
 module.exports = async function handler(request, response) {
   response.setHeader("Access-Control-Allow-Origin", "*");
   response.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
@@ -802,7 +947,9 @@ module.exports = async function handler(request, response) {
 
   try {
     const { rows, errors } = await fetchWarrants();
-    const matches = aggregate(rows, keyword).slice(0, keyword ? 30 : 120);
+    const aggregated = aggregate(rows, keyword);
+    const matches = aggregated.slice(0, keyword ? 30 : 120);
+    const singleSignals = detectSingleWarrantSignals(rows, aggregated, keyword).slice(0, keyword ? 20 : 20);
     const payload = {
       ok: true,
       updatedAt: new Date().toISOString(),
@@ -810,6 +957,8 @@ module.exports = async function handler(request, response) {
       scanned: rows.length,
       count: matches.length,
       matches,
+      singleSignalCount: singleSignals.length,
+      singleSignals,
       errors,
       sources: [
         "mopsfin.twse.com.tw/opendata/t187ap42_L.csv",
