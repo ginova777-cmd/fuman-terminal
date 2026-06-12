@@ -133,6 +133,36 @@ function Invoke-PrePublishDataFreshnessGate {
   }
 }
 
+function Test-FastGateCommitDebounce($changedFiles, $criticalFiles) {
+  if ($env:FUMAN_FAST_GATE -ne "1") { return $false }
+  $debounceMinutes = 20
+  $parsedDebounceMinutes = 0
+  if ([int]::TryParse($env:FUMAN_FAST_GATE_COMMIT_DEBOUNCE_MINUTES, [ref]$parsedDebounceMinutes) -and $parsedDebounceMinutes -ge 0) {
+    $debounceMinutes = $parsedDebounceMinutes
+  }
+  if ($debounceMinutes -le 0) { return $false }
+  $changed = @($changedFiles | ForEach-Object { [string]$_ } | Where-Object { $_ })
+  $critical = @($criticalFiles | ForEach-Object { [string]$_ } | Where-Object { $_ })
+  $criticalChanged = @($changed | Where-Object { $critical -contains $_ })
+  if ($criticalChanged.Count -gt 0) {
+    Write-Log "FAST_DEBOUNCE_BYPASS critical files changed: $($criticalChanged -join ', ')"
+    return $false
+  }
+  $lastIso = & $gitExe -C $syncRepo log -1 --format=%cI -- 2>$null
+  if (-not $lastIso) { return $false }
+  try {
+    $lastCommitTime = [datetimeoffset]::Parse([string]$lastIso)
+    $ageMinutes = ([datetimeoffset]::Now - $lastCommitTime).TotalMinutes
+    if ($ageMinutes -lt $debounceMinutes) {
+      Write-Log "FAST_DEBOUNCE_SKIP changed=$($changed.Count) age=$([math]::Round($ageMinutes, 1))m threshold=${debounceMinutes}m"
+      return $true
+    }
+  } catch {
+    Write-Log "FAST_DEBOUNCE_PARSE_WARN $($_.Exception.Message)"
+  }
+  return $false
+}
+
 function Invoke-GitRaw($description, $arguments, $cwd = $syncRepo) {
   Write-Log "=== $description $(Get-Date) ==="
   $psi = [System.Diagnostics.ProcessStartInfo]::new()
@@ -933,6 +963,12 @@ try {
   $changed = & $gitExe -C $syncRepo diff --cached --name-only
   if (-not $changed) {
     Write-Log "No cache changes to sync."
+    Invoke-PublishedDataVerification
+    exit 0
+  }
+
+  if (Test-FastGateCommitDebounce @($changed) $criticalLatestFiles) {
+    Run-Git "Reset debounced fast gate staged files" @("reset", "--hard", "HEAD")
     Invoke-PublishedDataVerification
     exit 0
   }

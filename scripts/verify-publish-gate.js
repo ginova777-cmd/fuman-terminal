@@ -39,12 +39,15 @@ const fastGateScript = packageJson.scripts && packageJson.scripts["freshness:gat
 if (!fastGateScript) {
   issues.push("package.json missing scripts.freshness:gate:fast");
 }
+if (!packageJson.scripts?.["freshness:local-repair"]) {
+  issues.push("package.json missing scripts.freshness:local-repair");
+}
 
 if (process.platform === "win32") {
   for (const expected of [
     ["Fuman Freshness Gate Fast 0845-1645", "run freshness:gate:fast", "C:\\fuman-terminal-sync", 8],
     ["Fuman Freshness Gate Full 0610 2010", "run freshness:gate", "C:\\fuman-terminal-sync", 2],
-    ["Fuman Terminal Local Freshness Verify 0830-2230", "run verify:data-freshness", "C:\\fuman-terminal", 8],
+    ["Fuman Terminal Local Freshness Verify 0830-2230", "run freshness:local-repair", "C:\\fuman-terminal-sync", 8],
     ["Fuman Publish Gate Verify 0820", "run verify:publish-gate", "C:\\fuman-terminal-sync", 1],
   ]) {
     const [name, args, workingDirectory, minTriggers] = expected;
@@ -77,6 +80,15 @@ if (!fs.existsSync(path.join(ROOT, "run-freshness-gate-task.ps1"))) {
   }
 }
 
+if (!fs.existsSync(path.join(ROOT, "run-local-freshness-repair.ps1"))) {
+  issues.push("run-local-freshness-repair.ps1 missing local data repair script");
+} else {
+  const repairScript = read("run-local-freshness-repair.ps1");
+  if (!/verify:data-freshness/.test(repairScript) || !/freshness:gate:fast/.test(repairScript)) {
+    issues.push("run-local-freshness-repair.ps1 must verify local data and repair with freshness:gate:fast");
+  }
+}
+
 if (!fs.existsSync(path.join(ROOT, "legacy-entrypoint-guard.ps1"))) {
   issues.push("legacy-entrypoint-guard.ps1 missing legacy script redirect guard");
 } else {
@@ -105,6 +117,9 @@ if (!/Verify live data freshness/.test(cacheSync) || !/--live/.test(cacheSync)) 
 if (!/Pre-publish data freshness gate/.test(cacheSync)) {
   issues.push("run-cache-sync.ps1 missing pre-publish freshness gate");
 }
+if (!/FAST_DEBOUNCE_SKIP/.test(cacheSync) || !/FUMAN_FAST_GATE_COMMIT_DEBOUNCE_MINUTES/.test(cacheSync)) {
+  issues.push("run-cache-sync.ps1 missing fast gate commit debounce");
+}
 
 const gate = read("run-live-freshness-gate.ps1");
 for (const marker of [
@@ -119,6 +134,7 @@ for (const marker of [
   "cb detect raw refresh",
   "verify:data-freshness:live",
   "FUMAN_INSIDE_FRESHNESS_GATE",
+  "FUMAN_FAST_GATE",
   "Fast gate selected",
   "live-freshness-ok.json",
 ]) {

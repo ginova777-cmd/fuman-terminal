@@ -39,6 +39,14 @@ Windows Task Scheduler should use these official tasks:
 
 Old data scripts are legacy shims only; they must redirect to `legacy-entrypoint-guard.ps1`.
 
+Local terminal data repair is automated by:
+
+```powershell
+npm run freshness:local-repair
+```
+
+It verifies `C:\fuman-terminal\data`; if local data is stale, it runs `npm run freshness:gate:fast` and verifies again.
+
 Before claiming the terminal is current, run:
 
 ```powershell

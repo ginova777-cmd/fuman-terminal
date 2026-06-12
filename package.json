@@ -35,6 +35,7 @@
     "verify:data-freshness:write": "node --use-system-ca scripts/verify-data-freshness.js --write",
     "freshness:gate": "pwsh.exe -NoProfile -ExecutionPolicy Bypass -File run-live-freshness-gate.ps1",
     "freshness:gate:fast": "pwsh.exe -NoProfile -ExecutionPolicy Bypass -File run-live-freshness-gate.ps1 -Fast",
+    "freshness:local-repair": "pwsh.exe -NoProfile -ExecutionPolicy Bypass -File run-local-freshness-repair.ps1",
     "verify:publish-gate": "node scripts/verify-publish-gate.js"
   },
   "engines": {

@@ -227,14 +227,25 @@ try {
   }
 
   $previousInsideGate = $env:FUMAN_INSIDE_FRESHNESS_GATE
+  $previousFastGate = $env:FUMAN_FAST_GATE
   try {
     $env:FUMAN_INSIDE_FRESHNESS_GATE = "1"
+    if ($Fast) {
+      $env:FUMAN_FAST_GATE = "1"
+    } else {
+      Remove-Item Env:FUMAN_FAST_GATE -ErrorAction SilentlyContinue
+    }
     $syncExit = Invoke-GateCommand "cache sync all" { & (Join-Path $syncRoot "run-cache-sync.ps1") -Scope all } -AllowFailure
   } finally {
     if ($null -eq $previousInsideGate) {
       Remove-Item Env:FUMAN_INSIDE_FRESHNESS_GATE -ErrorAction SilentlyContinue
     } else {
       $env:FUMAN_INSIDE_FRESHNESS_GATE = $previousInsideGate
+    }
+    if ($null -eq $previousFastGate) {
+      Remove-Item Env:FUMAN_FAST_GATE -ErrorAction SilentlyContinue
+    } else {
+      $env:FUMAN_FAST_GATE = $previousFastGate
     }
   }
   if ($syncExit -ne 0) {
