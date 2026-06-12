@@ -244,6 +244,7 @@ try {
   Invoke-NpmAt $publishRoot "verify:live-version"
 
   $head = & $gitExe -C $publishRoot log -1 --oneline --decorate
+  $gateMode = if ($Fast) { "fast" } else { "full" }
   $statusPath = Join-Path $publishRoot "data\live-freshness-ok.json"
   $status = [ordered]@{
     ok = $true
@@ -251,8 +252,8 @@ try {
     publishHead = [string]$head
     verifier = "npm run verify:data-freshness:live"
     log = $log
-    mode = if ($Fast) { "fast" } else { "full" }
-    rawRefresh = @($rawRefreshResults)
+    mode = $gateMode
+    rawRefresh = @($rawRefreshResults.ToArray())
   }
   $status | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $statusPath -Encoding utf8
 
