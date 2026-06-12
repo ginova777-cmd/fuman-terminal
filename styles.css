@@ -3748,7 +3748,14 @@ body.fuman-light-theme .data-freshness-bar.is-stale span {
     box-shadow: 0 -14px 28px rgba(0, 0, 0, 0.34);
     backdrop-filter: blur(16px);
     scrollbar-width: none;
+    scroll-padding-inline: 10px max(46px, calc(18px + env(safe-area-inset-right)));
     scroll-snap-type: x mandatory;
+  }
+
+  .nav-list::after {
+    content: "";
+    flex: 0 0 max(36px, calc(16px + env(safe-area-inset-right)));
+    height: 1px;
   }
 
   .nav-list::-webkit-scrollbar {

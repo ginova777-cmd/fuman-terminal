@@ -1,4 +1,4 @@
-const CACHE_VERSION = "fuman-terminal-sw-freshness-mobile-20260612-01";
+const CACHE_VERSION = "fuman-terminal-sw-chip-flow-hardening-20260611-21";
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 const DATA_CACHE = `${CACHE_VERSION}-data`;
 
