@@ -1,19 +1,246 @@
 {
   "ok": true,
-  "updatedAt": "2026-06-12T07:45:07.951Z",
+  "updatedAt": "2026-06-12T12:34:12.797Z",
   "risk": "low",
   "risks": [],
   "schedule": {
     "ok": true,
-    "total": 0,
+    "total": 93,
     "badCount": 0,
     "badTasks": [],
+    "replacedOrLegacyCount": 30,
+    "replacedOrLegacyTasks": [
+      {
+        "taskName": "\\Fuman Data Freshness Verify 1555",
+        "lastRunTime": "2026/6/12 下午 03:55:01",
+        "lastResult": "1",
+        "status": "Ready",
+        "handling": "replaced_by_official_freshness_gate_or_legacy_guard"
+      },
+      {
+        "taskName": "\\Fuman GitHub 統一同步 0612",
+        "lastRunTime": "2026/6/12 上午 06:12:01",
+        "lastResult": "1",
+        "status": "Ready",
+        "handling": "replaced_by_official_freshness_gate_or_legacy_guard"
+      },
+      {
+        "taskName": "\\Fuman GitHub 統一同步 0715",
+        "lastRunTime": "2026/6/12 上午 07:15:01",
+        "lastResult": "1",
+        "status": "Ready",
+        "handling": "replaced_by_official_freshness_gate_or_legacy_guard"
+      },
+      {
+        "taskName": "\\Fuman GitHub 統一同步 1445",
+        "lastRunTime": "2026/6/12 下午 02:45:01",
+        "lastResult": "1",
+        "status": "Ready",
+        "handling": "replaced_by_official_freshness_gate_or_legacy_guard"
+      },
+      {
+        "taskName": "\\Fuman GitHub 統一同步 2112",
+        "lastRunTime": "2026/6/11 下午 09:12:01",
+        "lastResult": "1",
+        "status": "Ready",
+        "handling": "replaced_by_official_freshness_gate_or_legacy_guard"
+      },
+      {
+        "taskName": "\\Fuman Market Overview Patrol 0900",
+        "lastRunTime": "2026/6/12 上午 09:00:01",
+        "lastResult": "267014",
+        "status": "Ready",
+        "handling": "replaced_by_official_freshness_gate_or_legacy_guard"
+      },
+      {
+        "taskName": "\\Fuman Market Summary Repair 1405",
+        "lastRunTime": "2026/6/12 下午 02:05:01",
+        "lastResult": "1",
+        "status": "Ready",
+        "handling": "replaced_by_official_freshness_gate_or_legacy_guard"
+      },
+      {
+        "taskName": "\\Fuman Open Buy Cache 0700",
+        "lastRunTime": "2026/6/12 上午 07:00:01",
+        "lastResult": "0",
+        "status": "Ready",
+        "handling": "replaced_by_official_freshness_gate_or_legacy_guard"
+      },
+      {
+        "taskName": "\\Fuman Open Buy Cache 1600",
+        "lastRunTime": "2026/6/12 下午 04:00:01",
+        "lastResult": "0",
+        "status": "Ready",
+        "handling": "replaced_by_official_freshness_gate_or_legacy_guard"
+      },
+      {
+        "taskName": "\\Fuman Open Buy Sync Retry",
+        "lastRunTime": "2026/6/12 下午 04:20:01",
+        "lastResult": "0",
+        "status": "Ready",
+        "handling": "replaced_by_official_freshness_gate_or_legacy_guard"
+      },
+      {
+        "taskName": "\\Fuman Scorecard Final 1530",
+        "lastRunTime": "2026/6/12 下午 03:30:01",
+        "lastResult": "0",
+        "status": "Ready",
+        "handling": "replaced_by_official_freshness_gate_or_legacy_guard"
+      },
+      {
+        "taskName": "\\Fuman Scorecard Initial 1410",
+        "lastRunTime": "2026/6/12 下午 02:10:01",
+        "lastResult": "0",
+        "status": "Ready",
+        "handling": "replaced_by_official_freshness_gate_or_legacy_guard"
+      },
+      {
+        "taskName": "\\Fuman Strategy2 Intraday Scan",
+        "lastRunTime": "2026/6/12 上午 08:58:01",
+        "lastResult": "1",
+        "status": "Ready",
+        "handling": "replaced_by_official_freshness_gate_or_legacy_guard"
+      },
+      {
+        "taskName": "\\Fuman Strategy2 Intraday Warmup 0845",
+        "lastRunTime": "2026/6/12 上午 08:30:01",
+        "lastResult": "1",
+        "status": "Ready",
+        "handling": "replaced_by_official_freshness_gate_or_legacy_guard"
+      },
+      {
+        "taskName": "\\Fuman Strategy3 Cache 1230",
+        "lastRunTime": "2026/6/12 下午 12:30:01",
+        "lastResult": "1",
+        "status": "Ready",
+        "handling": "replaced_by_official_freshness_gate_or_legacy_guard"
+      },
+      {
+        "taskName": "\\Fuman Strategy3 Cache 1300",
+        "lastRunTime": "2026/6/12 下午 01:00:01",
+        "lastResult": "1",
+        "status": "Ready",
+        "handling": "replaced_by_official_freshness_gate_or_legacy_guard"
+      },
+      {
+        "taskName": "\\Fuman Strategy3 Watchdog 1320",
+        "lastRunTime": "2026/6/12 下午 01:20:01",
+        "lastResult": "1",
+        "status": "Ready",
+        "handling": "replaced_by_official_freshness_gate_or_legacy_guard"
+      },
+      {
+        "taskName": "\\Fuman Strategy4 Cache 1600",
+        "lastRunTime": "2026/6/12 下午 04:00:01",
+        "lastResult": "1",
+        "status": "Ready",
+        "handling": "replaced_by_official_freshness_gate_or_legacy_guard"
+      },
+      {
+        "taskName": "\\Fuman Strategy4 Postflight 1610",
+        "lastRunTime": "2026/6/12 下午 04:10:01",
+        "lastResult": "1",
+        "status": "Ready",
+        "handling": "replaced_by_official_freshness_gate_or_legacy_guard"
+      },
+      {
+        "taskName": "\\Fuman Strategy5 Cache 0600",
+        "lastRunTime": "2026/6/12 上午 06:00:00",
+        "lastResult": "0",
+        "status": "Ready",
+        "handling": "replaced_by_official_freshness_gate_or_legacy_guard"
+      },
+      {
+        "taskName": "\\Fuman Strategy5 Cache 2100",
+        "lastRunTime": "2026/6/11 下午 09:00:00",
+        "lastResult": "0",
+        "status": "Ready",
+        "handling": "replaced_by_official_freshness_gate_or_legacy_guard"
+      },
+      {
+        "taskName": "\\Fuman 即時雷達",
+        "lastRunTime": "2026/6/12 上午 08:58:01",
+        "lastResult": "1",
+        "status": "Ready",
+        "handling": "replaced_by_official_freshness_gate_or_legacy_guard"
+      },
+      {
+        "taskName": "\\Fuman 權證走向 Cache 0530",
+        "lastRunTime": "2026/6/12 上午 05:30:01",
+        "lastResult": "0",
+        "status": "Ready",
+        "handling": "replaced_by_official_freshness_gate_or_legacy_guard"
+      },
+      {
+        "taskName": "\\Fuman 權證走向 Cache 2030",
+        "lastRunTime": "2026/6/12 下午 08:30:01",
+        "lastResult": "267009",
+        "status": "Running",
+        "handling": "replaced_by_official_freshness_gate_or_legacy_guard"
+      },
+      {
+        "taskName": "\\Fuman 權證走向 Watchdog 0550",
+        "lastRunTime": "2026/6/12 上午 05:50:01",
+        "lastResult": "0",
+        "status": "Ready",
+        "handling": "replaced_by_official_freshness_gate_or_legacy_guard"
+      },
+      {
+        "taskName": "\\Fuman 權證走向 Watchdog 2050",
+        "lastRunTime": "2026/6/11 下午 08:50:01",
+        "lastResult": "0",
+        "status": "Ready",
+        "handling": "replaced_by_official_freshness_gate_or_legacy_guard"
+      },
+      {
+        "taskName": "\\Fuman 買賣超 Cache 0600",
+        "lastRunTime": "2026/6/12 上午 06:00:01",
+        "lastResult": "0",
+        "status": "Ready",
+        "handling": "replaced_by_official_freshness_gate_or_legacy_guard"
+      },
+      {
+        "taskName": "\\Fuman 買賣超 Cache 2100",
+        "lastRunTime": "2026/6/11 下午 09:00:01",
+        "lastResult": "0",
+        "status": "Ready",
+        "handling": "replaced_by_official_freshness_gate_or_legacy_guard"
+      },
+      {
+        "taskName": "\\Fuman 買賣超 Watchdog 0620",
+        "lastRunTime": "2026/6/12 上午 06:20:01",
+        "lastResult": "0",
+        "status": "Ready",
+        "handling": "replaced_by_official_freshness_gate_or_legacy_guard"
+      },
+      {
+        "taskName": "\\Fuman 買賣超 Watchdog 2120",
+        "lastRunTime": "2026/6/11 下午 09:20:01",
+        "lastResult": "0",
+        "status": "Ready",
+        "handling": "replaced_by_official_freshness_gate_or_legacy_guard"
+      }
+    ],
     "queryMethod": "schtasks",
-    "note": "Uses schtasks fallback-friendly query to avoid Get-ScheduledTask low-permission false alarms."
+    "note": "Official freshness gate tasks are authoritative. Replaced legacy data tasks are ignored here because their scripts redirect through legacy-entrypoint-guard.ps1 when they run."
   },
   "githubSync": {
     "pendingCount": 0,
     "ok": true
+  },
+  "freshnessGate": {
+    "ok": false,
+    "statusFile": {
+      "file": "live-freshness-ok.json",
+      "ok": false,
+      "count": 0,
+      "updatedAt": "",
+      "bytes": 0
+    },
+    "checkedAt": "",
+    "publishHead": "",
+    "mode": "",
+    "rawRefresh": []
   },
   "runtime": {
     "ok": true,
@@ -24,35 +251,35 @@
         "status": "",
         "date": "",
         "count": 0,
-        "updatedAt": "2026-06-12T05:14:21.612Z",
-        "bytes": 21831
+        "updatedAt": "2026-06-12T12:32:10.502Z",
+        "bytes": 152997
       },
       {
         "file": "strategy4-summary.json",
         "ok": true,
         "status": "",
         "date": "",
-        "count": 666,
-        "updatedAt": "2026-06-11T08:03:09.921Z",
-        "bytes": 41459
+        "count": 405,
+        "updatedAt": "2026-06-12T08:03:21.079Z",
+        "bytes": 44075
       },
       {
         "file": "strategy5-latest.json",
         "ok": true,
         "status": "",
-        "date": "20260611",
+        "date": "20260612",
         "count": 80,
-        "updatedAt": "2026-06-11T22:00:44.789Z",
-        "bytes": 134809
+        "updatedAt": "2026-06-12T12:13:02.654Z",
+        "bytes": 145987
       },
       {
         "file": "institution-summary.json",
         "ok": true,
         "status": "",
-        "date": "20260611",
-        "count": 1880,
-        "updatedAt": "2026-06-12T02:52:36.897Z",
-        "bytes": 65349
+        "date": "20260612",
+        "count": 1621,
+        "updatedAt": "2026-06-12T12:33:58.162Z",
+        "bytes": 64875
       },
       {
         "file": "warrant-flow-summary.json",
@@ -60,8 +287,8 @@
         "status": "",
         "date": "",
         "count": 120,
-        "updatedAt": "2026-06-12T03:01:17.926Z",
-        "bytes": 41689
+        "updatedAt": "2026-06-12T12:34:10.266Z",
+        "bytes": 41691
       },
       {
         "file": "strategy2-intraday-latest.json",
@@ -75,11 +302,11 @@
       {
         "file": "realtime-radar-latest.json",
         "ok": true,
-        "status": "retired_intraday_snapshot",
+        "status": "outside_market_time",
         "date": "2026-06-12",
         "count": 0,
-        "updatedAt": "2026-06-12T07:45:02.439Z",
-        "bytes": 684
+        "updatedAt": "2026-06-12T12:32:49.933Z",
+        "bytes": 342
       },
       {
         "file": "performance-report.json",
@@ -87,8 +314,8 @@
         "status": "",
         "date": "",
         "count": 0,
-        "updatedAt": "2026-06-12T06:45:06.248Z",
-        "bytes": 2393
+        "updatedAt": "2026-06-12T12:32:12.112Z",
+        "bytes": 2390
       },
       {
         "file": "signal-quality-report.json",
@@ -96,8 +323,8 @@
         "status": "",
         "date": "",
         "count": 0,
-        "updatedAt": "2026-06-12T06:45:05.998Z",
-        "bytes": 798
+        "updatedAt": "2026-06-12T12:32:11.791Z",
+        "bytes": 795
       },
       {
         "file": "data-quality-report.json",
@@ -105,8 +332,8 @@
         "status": "",
         "date": "",
         "count": 0,
-        "updatedAt": "2026-06-12T06:45:06.077Z",
-        "bytes": 1561
+        "updatedAt": "2026-06-12T12:32:11.885Z",
+        "bytes": 1556
       },
       {
         "file": "data-consistency-report.json",
@@ -114,7 +341,7 @@
         "status": "",
         "date": "",
         "count": 0,
-        "updatedAt": "2026-06-12T06:45:06.146Z",
+        "updatedAt": "2026-06-12T12:32:11.967Z",
         "bytes": 312
       },
       {
@@ -123,7 +350,7 @@
         "status": "",
         "date": "",
         "count": 0,
-        "updatedAt": "2026-06-12T06:45:06.198Z",
+        "updatedAt": "2026-06-12T12:32:12.037Z",
         "bytes": 418
       }
     ]
