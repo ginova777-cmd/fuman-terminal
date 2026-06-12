@@ -168,6 +168,27 @@ if (!fs.existsSync(path.join(ROOT, "AGENTS.md"))) {
 } else {
   const agents = read("AGENTS.md");
   if (!agents.includes("npm run freshness:gate")) issues.push("AGENTS.md must name npm run freshness:gate as the only publish entrypoint");
+  if (!agents.includes("FRESHNESS-GATE-MOBILE.md")) issues.push("AGENTS.md must point Codex to FRESHNESS-GATE-MOBILE.md");
+  if (!agents.includes("git pull --ff-only origin main")) issues.push("AGENTS.md must require Codex to sync before touching the project");
+  if (!agents.includes("Do not modify Supabase-related code")) issues.push("AGENTS.md must preserve the current Supabase pause rule");
+}
+
+if (!fs.existsSync(path.join(ROOT, "FRESHNESS-GATE-MOBILE.md"))) {
+  issues.push("FRESHNESS-GATE-MOBILE.md missing mobile governance summary");
+} else {
+  const mobile = read("FRESHNESS-GATE-MOBILE.md");
+  for (const marker of [
+    "資料新鮮度治理",
+    "Verified Data Publish Gate",
+    "npm run freshness:gate",
+    "npm run verify:data-freshness:live",
+    "npm run verify:publish-gate",
+    "git pull --ff-only origin main",
+    "目前先不要修改 Supabase",
+    "Fuman Terminal Freshness Gate",
+  ]) {
+    if (!mobile.includes(marker)) issues.push(`FRESHNESS-GATE-MOBILE.md missing ${marker}`);
+  }
 }
 
 if (issues.length) {

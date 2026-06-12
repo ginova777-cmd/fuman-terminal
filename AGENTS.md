@@ -2,6 +2,17 @@
 
 Mobile-readable summary: `FRESHNESS-GATE-MOBILE.md`
 
+Every Codex touching this project must first sync and read the operating rules:
+
+```powershell
+git pull --ff-only origin main
+npm run verify:publish-gate
+```
+
+Read `AGENTS.md` and `FRESHNESS-GATE-MOBILE.md` before changing data flow, scheduled tasks, publish scripts, or freshness rules.
+
+Do not modify Supabase-related code, tables, upload, readback, timeout, or retry behavior unless the user explicitly asks for Supabase work.
+
 The only approved data publish entrypoint is:
 
 ```powershell
