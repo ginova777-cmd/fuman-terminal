@@ -1,28 +1,28 @@
 {
   "ok": true,
   "source": "github-actions-partial",
-  "updatedAt": "2026-06-12T08:02:50.364Z",
+  "updatedAt": "2026-06-12T08:03:07.908Z",
   "scanStamp": "20260612",
   "total": 1607,
-  "scannedCount": 1594,
-  "count": 394,
+  "scannedCount": 1607,
+  "count": 405,
   "complete": false,
   "qualityStatus": "incomplete",
   "zoneCounts": {
-    "A": 79,
-    "B": 182,
-    "C": 133
+    "A": 81,
+    "B": 189,
+    "C": 135
   },
   "signalCounts": {
-    "saucer": 12,
+    "saucer": 13,
     "runaway_gap": 53,
-    "bull_attack": 15,
-    "n_base": 12,
+    "bull_attack": 16,
+    "n_base": 14,
     "golden_cross": 6,
     "breakaway_gap": 10,
-    "watch_trend": 182,
+    "watch_trend": 189,
     "v_reversal": 2,
-    "base_setup": 133
+    "base_setup": 135
   },
   "topMatches": [
     {
@@ -909,6 +909,45 @@
       ]
     },
     {
+      "code": "9945",
+      "name": "潤泰新",
+      "close": 26.8,
+      "percent": 2.8790786948176583,
+      "tradeVolume": 14866,
+      "value": 398408800,
+      "swingScore": 100,
+      "swingZone": "A",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.92",
+        "tone": "high",
+        "value": 0.9176470588235299
+      },
+      "swingSignals": [
+        {
+          "id": "bull_attack",
+          "title": "",
+          "short": "攻擊",
+          "icon": "🔥",
+          "reason": "站上MA20/EMA21，MACD多頭，量比 1.38，日K多頭攻擊。"
+        },
+        {
+          "id": "n_base",
+          "title": "",
+          "short": "N字",
+          "icon": "",
+          "reason": "爆量突破後回檔不破半分位，再突破前高 26.55，N字共振。"
+        },
+        {
+          "id": "saucer",
+          "title": "",
+          "short": "圓弧",
+          "icon": "◜",
+          "reason": "突破40日整理頸線，量能放大，偏圓弧底突破。"
+        }
+      ]
+    },
+    {
       "code": "2890",
       "name": "永豐金",
       "close": 34.15,
@@ -1647,6 +1686,31 @@
       ]
     },
     {
+      "code": "9949",
+      "name": "琉園",
+      "close": 23.9,
+      "percent": 0.4201680672268818,
+      "tradeVolume": 17,
+      "value": 406300,
+      "swingScore": 99,
+      "swingZone": "A",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.11",
+        "tone": "low",
+        "value": 0.10819672131147531
+      },
+      "swingSignals": [
+        {
+          "id": "n_base",
+          "title": "",
+          "short": "N字",
+          "icon": "",
+          "reason": "爆量突破後回檔不破半分位，再突破前高 23.80，N字共振。"
+        }
+      ]
+    },
+    {
       "code": "2542",
       "name": "興富發",
       "close": 44.95,
@@ -1668,56 +1732,6 @@
           "short": "B觀察",
           "icon": "B",
           "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 7/8，量比 1.63，位階 高基期。"
-        }
-      ]
-    },
-    {
-      "code": "2362",
-      "name": "藍天",
-      "close": 48,
-      "percent": -1.0309278350515463,
-      "tradeVolume": 5337,
-      "value": 256176000,
-      "swingScore": 99,
-      "swingZone": "B",
-      "swingStage": {
-        "label": "高基期",
-        "ratio": "0.72",
-        "tone": "high",
-        "value": 0.7172413793103447
-      },
-      "swingSignals": [
-        {
-          "id": "watch_trend",
-          "title": "",
-          "short": "B觀察",
-          "icon": "B",
-          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 7/8，量比 1.38，位階 高基期。"
-        }
-      ]
-    },
-    {
-      "code": "3362",
-      "name": "先進光",
-      "close": 160.5,
-      "percent": -2.1341463414634148,
-      "tradeVolume": 11797,
-      "value": 1893418500,
-      "swingScore": 99,
-      "swingZone": "B",
-      "swingStage": {
-        "label": "高基期",
-        "ratio": "0.80",
-        "tone": "high",
-        "value": 0.8013245033112583
-      },
-      "swingSignals": [
-        {
-          "id": "watch_trend",
-          "title": "",
-          "short": "B觀察",
-          "icon": "B",
-          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 6/8，量比 2.43，位階 高基期。"
         }
       ]
     }

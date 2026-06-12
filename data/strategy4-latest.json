@@ -2,17 +2,17 @@
   "ok": true,
   "source": "github-actions-partial",
   "priceSource": "official-daily-k-plus-mis",
-  "updatedAt": "2026-06-12T08:02:50.364Z",
+  "updatedAt": "2026-06-12T08:03:07.908Z",
   "scanStamp": "20260612",
   "fullScan": true,
   "runMode": "full",
   "complete": false,
   "qualityStatus": "incomplete",
-  "pendingCount": 13,
+  "pendingCount": 0,
   "noDataCount": 0,
   "errorCount": 0,
   "total": 1607,
-  "scannedThisRun": 720,
+  "scannedThisRun": 733,
   "scannedCodes": [
     "1203",
     "1213",
@@ -1607,7 +1607,20 @@
     "9927",
     "9928",
     "9929",
-    "9930"
+    "9930",
+    "9931",
+    "9933",
+    "9937",
+    "9941",
+    "9942",
+    "9944",
+    "9945",
+    "9949",
+    "9950",
+    "9951",
+    "9958",
+    "9960",
+    "9962"
   ],
   "noDataCodes": [],
   "errors": [],
@@ -1616,13 +1629,13 @@
     "finmind+mis": 541,
     "fugle": 3,
     "fugle-cache+mis": 7,
-    "fugle+mis": 167,
+    "fugle+mis": 180,
     "yahoo-two": 1
   },
   "yahooSourceCount": 1,
   "yahooSourceRatio": 0.0014,
-  "misSourceCount": 715,
-  "misSourceRatio": 0.9931,
+  "misSourceCount": 728,
+  "misSourceRatio": 0.9932,
   "sourceWarnings": [],
   "volumeFilter": {
     "enabled": true,
@@ -6880,7 +6893,7 @@
     "9946",
     "9955"
   ],
-  "count": 394,
+  "count": 405,
   "matches": [
     {
       "code": "3576",
@@ -8641,6 +8654,81 @@
       "reason": "站上MA20/EMA21，MACD多頭，量比 2.13，日K多頭攻擊。"
     },
     {
+      "code": "9945",
+      "name": "潤泰新",
+      "market": "TWSE",
+      "close": 26.8,
+      "percent": 2.8790786948176583,
+      "value": 398408800,
+      "tradeVolume": 14866,
+      "industry": "",
+      "change": 0.75,
+      "open": 26.2,
+      "high": 27.15,
+      "low": 26.2,
+      "prevClose": 26.05,
+      "volume": 14866,
+      "quoteDate": "20260612",
+      "quoteTime": "13:30:00",
+      "priceSource": "fugle+mis",
+      "date": "2026-06-12",
+      "avgVolume5": 14173.94,
+      "volumeRatio": 1.38,
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.92",
+        "tone": "high",
+        "value": 0.9176470588235299
+      },
+      "swingZone": "A",
+      "swingZoneLabel": "A區可進場",
+      "trendScore": 6,
+      "prepScore": 5,
+      "swingScore": 100,
+      "score": 100,
+      "swingSignals": [
+        {
+          "id": "bull_attack",
+          "short": "攻擊",
+          "icon": "🔥",
+          "reason": "站上MA20/EMA21，MACD多頭，量比 1.38，日K多頭攻擊。"
+        },
+        {
+          "id": "n_base",
+          "short": "N字",
+          "icon": "",
+          "reason": "爆量突破後回檔不破半分位，再突破前高 26.55，N字共振。"
+        },
+        {
+          "id": "saucer",
+          "short": "圓弧",
+          "icon": "◜",
+          "reason": "突破40日整理頸線，量能放大，偏圓弧底突破。"
+        }
+      ],
+      "signals": [
+        {
+          "id": "bull_attack",
+          "short": "攻擊",
+          "icon": "🔥",
+          "reason": "站上MA20/EMA21，MACD多頭，量比 1.38，日K多頭攻擊。"
+        },
+        {
+          "id": "n_base",
+          "short": "N字",
+          "icon": "",
+          "reason": "爆量突破後回檔不破半分位，再突破前高 26.55，N字共振。"
+        },
+        {
+          "id": "saucer",
+          "short": "圓弧",
+          "icon": "◜",
+          "reason": "突破40日整理頸線，量能放大，偏圓弧底突破。"
+        }
+      ],
+      "reason": "站上MA20/EMA21，MACD多頭，量比 1.38，日K多頭攻擊。"
+    },
+    {
       "code": "2890",
       "name": "永豐金",
       "market": "TWSE",
@@ -10117,6 +10205,57 @@
         }
       ],
       "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 7/8，量比 0.95，位階 中位階。"
+    },
+    {
+      "code": "9949",
+      "name": "琉園",
+      "market": "TPEX",
+      "close": 23.9,
+      "percent": 0.4201680672268818,
+      "value": 406300,
+      "tradeVolume": 17,
+      "industry": "",
+      "change": 0.09999999999999787,
+      "open": 23.8,
+      "high": 24,
+      "low": 23.8,
+      "prevClose": 23.8,
+      "volume": 17,
+      "quoteDate": "20260612",
+      "quoteTime": "13:30:00",
+      "priceSource": "fugle+mis",
+      "date": "2026-06-12",
+      "avgVolume5": 15447,
+      "volumeRatio": 0,
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.11",
+        "tone": "low",
+        "value": 0.10819672131147531
+      },
+      "swingZone": "A",
+      "swingZoneLabel": "A區可進場",
+      "trendScore": 6,
+      "prepScore": 5,
+      "swingScore": 99,
+      "score": 99,
+      "swingSignals": [
+        {
+          "id": "n_base",
+          "short": "N字",
+          "icon": "",
+          "reason": "爆量突破後回檔不破半分位，再突破前高 23.80，N字共振。"
+        }
+      ],
+      "signals": [
+        {
+          "id": "n_base",
+          "short": "N字",
+          "icon": "",
+          "reason": "爆量突破後回檔不破半分位，再突破前高 23.80，N字共振。"
+        }
+      ],
+      "reason": "爆量突破後回檔不破半分位，再突破前高 23.80，N字共振。"
     },
     {
       "code": "2542",
@@ -15612,6 +15751,57 @@
       "reason": "爆量突破後回檔不破半分位，再突破前高 69.10，N字共振。"
     },
     {
+      "code": "9951",
+      "name": "皇田",
+      "market": "TPEX",
+      "close": 52.9,
+      "percent": 0.5703422053231885,
+      "value": 2750800,
+      "tradeVolume": 52,
+      "industry": "",
+      "change": 0.29999999999999716,
+      "open": 52.8,
+      "high": 53.1,
+      "low": 52.8,
+      "prevClose": 52.6,
+      "volume": 52,
+      "quoteDate": "20260612",
+      "quoteTime": "13:30:00",
+      "priceSource": "fugle+mis",
+      "date": "2026-06-12",
+      "avgVolume5": 53077.69,
+      "volumeRatio": 0,
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.36",
+        "tone": "low",
+        "value": 0.35714285714285693
+      },
+      "swingZone": "B",
+      "swingZoneLabel": "B區觀察",
+      "trendScore": 5,
+      "prepScore": 6,
+      "swingScore": 88,
+      "score": 88,
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 5/8，量比 0.00，位階 低基期。"
+        }
+      ],
+      "signals": [
+        {
+          "id": "watch_trend",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 5/8，量比 0.00，位階 低基期。"
+        }
+      ],
+      "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 5/8，量比 0.00，位階 低基期。"
+    },
+    {
       "code": "3521",
       "name": "台鋼建設",
       "market": "TPEX",
@@ -16120,6 +16310,57 @@
         }
       ],
       "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 5/8，量比 0.59，位階 低基期。"
+    },
+    {
+      "code": "9958",
+      "name": "世紀鋼",
+      "market": "TWSE",
+      "close": 112.5,
+      "percent": 0.8968609865470852,
+      "value": 190575000,
+      "tradeVolume": 1694,
+      "industry": "",
+      "change": 1,
+      "open": 112.5,
+      "high": 114.5,
+      "low": 111.5,
+      "prevClose": 111.5,
+      "volume": 1694,
+      "quoteDate": "20260612",
+      "quoteTime": "13:30:00",
+      "priceSource": "fugle+mis",
+      "date": "2026-06-12",
+      "avgVolume5": 3728.52,
+      "volumeRatio": 0.45,
+      "swingStage": {
+        "label": "中位階",
+        "ratio": "0.50",
+        "tone": "mid",
+        "value": 0.5
+      },
+      "swingZone": "B",
+      "swingZoneLabel": "B區觀察",
+      "trendScore": 5,
+      "prepScore": 5,
+      "swingScore": 87,
+      "score": 87,
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 5/8，量比 0.45，位階 中位階。"
+        }
+      ],
+      "signals": [
+        {
+          "id": "watch_trend",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 5/8，量比 0.45，位階 中位階。"
+        }
+      ],
+      "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 5/8，量比 0.45，位階 中位階。"
     },
     {
       "code": "2912",
@@ -16836,6 +17077,57 @@
       "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 5/8，量比 0.00，位階 低基期。"
     },
     {
+      "code": "9941",
+      "name": "裕融",
+      "market": "TWSE",
+      "close": 84.3,
+      "percent": -3.876852907639687,
+      "value": 253490100,
+      "tradeVolume": 3007,
+      "industry": "",
+      "change": -3.4000000000000057,
+      "open": 87.1,
+      "high": 87.2,
+      "low": 84.3,
+      "prevClose": 87.7,
+      "volume": 3007,
+      "quoteDate": "20260612",
+      "quoteTime": "13:30:00",
+      "priceSource": "fugle+mis",
+      "date": "2026-06-12",
+      "avgVolume5": 6439.59,
+      "volumeRatio": 0.71,
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.72",
+        "tone": "high",
+        "value": 0.7235294117647058
+      },
+      "swingZone": "B",
+      "swingZoneLabel": "B區觀察",
+      "trendScore": 5,
+      "prepScore": 5,
+      "swingScore": 86,
+      "score": 86,
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 5/8，量比 0.71，位階 高基期。"
+        }
+      ],
+      "signals": [
+        {
+          "id": "watch_trend",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 5/8，量比 0.71，位階 高基期。"
+        }
+      ],
+      "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 5/8，量比 0.71，位階 高基期。"
+    },
+    {
       "code": "4806",
       "name": "桂田文創",
       "market": "TPEX",
@@ -17371,6 +17663,57 @@
         "ratio": "0.51",
         "tone": "mid",
         "value": 0.5142857142857135
+      },
+      "swingZone": "B",
+      "swingZoneLabel": "B區觀察",
+      "trendScore": 5,
+      "prepScore": 6,
+      "swingScore": 85,
+      "score": 85,
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 5/8，量比 0.00，位階 中位階。"
+        }
+      ],
+      "signals": [
+        {
+          "id": "watch_trend",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 5/8，量比 0.00，位階 中位階。"
+        }
+      ],
+      "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 5/8，量比 0.00，位階 中位階。"
+    },
+    {
+      "code": "9962",
+      "name": "有益",
+      "market": "TPEX",
+      "close": 9.85,
+      "percent": -0.4044489383215462,
+      "value": 788000,
+      "tradeVolume": 80,
+      "industry": "",
+      "change": -0.040000000000000924,
+      "open": 9.84,
+      "high": 9.97,
+      "low": 9.8,
+      "prevClose": 9.89,
+      "volume": 80,
+      "quoteDate": "20260612",
+      "quoteTime": "13:30:00",
+      "priceSource": "fugle+mis",
+      "date": "2026-06-12",
+      "avgVolume5": 30746.28,
+      "volumeRatio": 0,
+      "swingStage": {
+        "label": "中位階",
+        "ratio": "0.56",
+        "tone": "mid",
+        "value": 0.5588235294117643
       },
       "swingZone": "B",
       "swingZoneLabel": "B區觀察",
@@ -18262,6 +18605,57 @@
         }
       ],
       "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 6/8，量比 1.02，位階 高基期。"
+    },
+    {
+      "code": "9944",
+      "name": "新麗",
+      "market": "TWSE",
+      "close": 17.4,
+      "percent": 1.1627906976744147,
+      "value": 556800,
+      "tradeVolume": 32,
+      "industry": "",
+      "change": 0.1999999999999993,
+      "open": 17.2,
+      "high": 17.4,
+      "low": 17.15,
+      "prevClose": 17.2,
+      "volume": 32,
+      "quoteDate": "20260612",
+      "quoteTime": "13:30:00",
+      "priceSource": "fugle+mis",
+      "date": "2026-06-12",
+      "avgVolume5": 42449.4,
+      "volumeRatio": 0,
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.76",
+        "tone": "high",
+        "value": 0.7647058823529398
+      },
+      "swingZone": "B",
+      "swingZoneLabel": "B區觀察",
+      "trendScore": 6,
+      "prepScore": 5,
+      "swingScore": 83,
+      "score": 83,
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 6/8，量比 0.00，位階 高基期。"
+        }
+      ],
+      "signals": [
+        {
+          "id": "watch_trend",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 6/8，量比 0.00，位階 高基期。"
+        }
+      ],
+      "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 6/8，量比 0.00，位階 高基期。"
     },
     {
       "code": "1314",
@@ -19173,6 +19567,57 @@
         }
       ],
       "reason": "低/中位階整理接近發動；準備分 6/7，RSI 52.0，量比 0.20。"
+    },
+    {
+      "code": "9931",
+      "name": "欣高",
+      "market": "TWSE",
+      "close": 34.85,
+      "percent": 0.28776978417266597,
+      "value": 1847050,
+      "tradeVolume": 53,
+      "industry": "",
+      "change": 0.10000000000000142,
+      "open": 35,
+      "high": 35,
+      "low": 34.4,
+      "prevClose": 34.75,
+      "volume": 53,
+      "quoteDate": "20260612",
+      "quoteTime": "13:30:00",
+      "priceSource": "fugle+mis",
+      "date": "2026-06-12",
+      "avgVolume5": 49470,
+      "volumeRatio": 0,
+      "swingStage": {
+        "label": "中位階",
+        "ratio": "0.40",
+        "tone": "mid",
+        "value": 0.396825396825397
+      },
+      "swingZone": "B",
+      "swingZoneLabel": "B區觀察",
+      "trendScore": 5,
+      "prepScore": 4,
+      "swingScore": 81,
+      "score": 81,
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 5/8，量比 0.00，位階 中位階。"
+        }
+      ],
+      "signals": [
+        {
+          "id": "watch_trend",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 5/8，量比 0.00，位階 中位階。"
+        }
+      ],
+      "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 5/8，量比 0.00，位階 中位階。"
     },
     {
       "code": "6884",
@@ -21419,6 +21864,57 @@
       "reason": "低/中位階整理接近發動；準備分 6/7，RSI 45.8，量比 0.00。"
     },
     {
+      "code": "9937",
+      "name": "全國",
+      "market": "TWSE",
+      "close": 55.6,
+      "percent": 0.18018018018018275,
+      "value": 1612400,
+      "tradeVolume": 29,
+      "industry": "",
+      "change": 0.10000000000000142,
+      "open": 55.1,
+      "high": 55.6,
+      "low": 54.9,
+      "prevClose": 55.5,
+      "volume": 29,
+      "quoteDate": "20260612",
+      "quoteTime": "13:30:00",
+      "priceSource": "fugle+mis",
+      "date": "2026-06-12",
+      "avgVolume5": 58973.6,
+      "volumeRatio": 0,
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.32",
+        "tone": "low",
+        "value": 0.32352941176470645
+      },
+      "swingZone": "C",
+      "swingZoneLabel": "C區準備",
+      "trendScore": 3,
+      "prepScore": 6,
+      "swingScore": 76,
+      "score": 76,
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 6/7，RSI 51.3，量比 0.00。"
+        }
+      ],
+      "signals": [
+        {
+          "id": "base_setup",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 6/7，RSI 51.3，量比 0.00。"
+        }
+      ],
+      "reason": "低/中位階整理接近發動；準備分 6/7，RSI 51.3，量比 0.00。"
+    },
+    {
       "code": "2496",
       "name": "卓越",
       "market": "TWSE",
@@ -21495,6 +21991,57 @@
         "ratio": "0.42",
         "tone": "mid",
         "value": 0.41818181818181893
+      },
+      "swingZone": "B",
+      "swingZoneLabel": "B區觀察",
+      "trendScore": 5,
+      "prepScore": 5,
+      "swingScore": 75,
+      "score": 75,
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 5/8，量比 0.00，位階 中位階。"
+        }
+      ],
+      "signals": [
+        {
+          "id": "watch_trend",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 5/8，量比 0.00，位階 中位階。"
+        }
+      ],
+      "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 5/8，量比 0.00，位階 中位階。"
+    },
+    {
+      "code": "9960",
+      "name": "邁達康",
+      "market": "TPEX",
+      "close": 31.55,
+      "percent": 0.158730158730161,
+      "value": 599450,
+      "tradeVolume": 19,
+      "industry": "",
+      "change": 0.05000000000000071,
+      "open": 31.5,
+      "high": 32,
+      "low": 31.5,
+      "prevClose": 31.5,
+      "volume": 19,
+      "quoteDate": "20260612",
+      "quoteTime": "13:30:00",
+      "priceSource": "fugle+mis",
+      "date": "2026-06-12",
+      "avgVolume5": 25583.6,
+      "volumeRatio": 0,
+      "swingStage": {
+        "label": "中位階",
+        "ratio": "0.55",
+        "tone": "mid",
+        "value": 0.5482233502538072
       },
       "swingZone": "B",
       "swingZoneLabel": "B區觀察",
@@ -24528,6 +25075,57 @@
         }
       ],
       "reason": "低/中位階整理接近發動；準備分 6/7，RSI 44.9，量比 0.74。"
+    },
+    {
+      "code": "9950",
+      "name": "萬國通",
+      "market": "TPEX",
+      "close": 10.75,
+      "percent": 0.9389671361502313,
+      "value": 720250,
+      "tradeVolume": 67,
+      "industry": "",
+      "change": 0.09999999999999964,
+      "open": 10.7,
+      "high": 10.75,
+      "low": 10.55,
+      "prevClose": 10.65,
+      "volume": 67,
+      "quoteDate": "20260612",
+      "quoteTime": "13:30:00",
+      "priceSource": "fugle+mis",
+      "date": "2026-06-12",
+      "avgVolume5": 34409.65,
+      "volumeRatio": 0,
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.27",
+        "tone": "low",
+        "value": 0.27118644067796627
+      },
+      "swingZone": "C",
+      "swingZoneLabel": "C區準備",
+      "trendScore": 3,
+      "prepScore": 6,
+      "swingScore": 68,
+      "score": 68,
+      "swingSignals": [
+        {
+          "id": "base_setup",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 6/7，RSI 47.4，量比 0.00。"
+        }
+      ],
+      "signals": [
+        {
+          "id": "base_setup",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 6/7，RSI 47.4，量比 0.00。"
+        }
+      ],
+      "reason": "低/中位階整理接近發動；準備分 6/7，RSI 47.4，量比 0.00。"
     },
     {
       "code": "2066",
