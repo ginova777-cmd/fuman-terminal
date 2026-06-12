@@ -11,7 +11,7 @@ param(
   [int]$Direct1mBatchSize = 3,
   [int]$Direct1mEverySeconds = 300,
   [int]$RestQuoteBatchSize = 20,
-  [int]$RestQuoteEverySeconds = 10,
+  [int]$RestQuoteEverySeconds = 30,
   [int]$FutoptQuoteBatchSize = 20,
   [int]$FutoptQuoteEverySeconds = 60,
   [int]$FutoptTickersEverySeconds = 1800,
@@ -548,9 +548,7 @@ function Merge-QuoteObjectsByCode {
     $digits = [string]$quote.code -replace "\D", ""
     if ($digits.Length -lt 4) { continue }
     $symbol = $digits.Substring(0, 4)
-    if (-not $byCode.Contains($symbol)) {
-      $byCode[$symbol] = $quote
-    }
+    $byCode[$symbol] = $quote
   }
   return @($byCode.Values)
 }
@@ -1396,7 +1394,7 @@ do {
 
     $session = Get-PublicSlotSession
     $restQuotePayload = @{ quotes = @(); attempted = 0; fetched = 0; skipped = $true; rate_limited = $false }
-    if ($quotes.Count -eq 0 -or $session -eq "preopen") {
+    if ($session -in @("preopen", "regular") -or $quotes.Count -eq 0) {
       $restQuotePayload = Invoke-FugleStockQuoteBatch -Symbols (Get-WarmupSymbols) -ApiKey $fugleApiKey
       $quotes = Merge-QuoteObjectsByCode -PrimaryQuotes $quotes -FallbackQuotes @($restQuotePayload.quotes)
     }

@@ -39,19 +39,40 @@ where coalesce(stock_type, 'COMMONSTOCK') = 'COMMONSTOCK'
   and price between 10 and 1000;
 
 create or replace view public.v_fugle_intraday_1m_status as
+with base as (
+  select
+    symbol,
+    market,
+    candle_time,
+    trade_date,
+    updated_at,
+    ((now() at time zone 'Asia/Taipei')::date) as taipei_today
+  from public.fugle_intraday_1m
+),
+grouped as (
+  select
+    symbol,
+    market,
+    max(candle_time) as latest_candle_time,
+    count(*) as candle_count,
+    count(*) filter (where trade_date = taipei_today) as rows_today,
+    bool_or(trade_date = taipei_today) as has_today_data,
+    max(updated_at) as updated_at
+  from base
+  group by symbol, market
+)
 select
   symbol,
   market,
-  max(candle_time) as latest_candle_time,
-  count(*) as candle_count,
-  count(*) filter (where trade_date = current_date) as rows_today,
-  (count(*) >= 35) as ready_ge_35,
-  (count(*) >= 80) as ready_ge_80,
-  (count(*) >= 200) as ready_ge_200,
-  bool_or(trade_date = current_date) as has_today_data,
-  max(updated_at) as updated_at
-from public.fugle_intraday_1m
-group by symbol, market;
+  latest_candle_time,
+  candle_count,
+  rows_today,
+  (rows_today >= 35) as ready_ge_35,
+  (rows_today >= 80) as ready_ge_80,
+  (rows_today >= 200) as ready_ge_200,
+  has_today_data,
+  updated_at
+from grouped;
 
 create or replace view public.v_fugle_intraday_1m_latest_200 as
 select
