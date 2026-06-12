@@ -56,6 +56,7 @@
     institutionMobileTop: "/data/institution-mobile-top.json",
     warrantFlowCache: "/data/warrant-flow-latest.json",
     warrantFlowSlim: "/data/warrant-flow-slim.json",
+    warrantFlowSingleSignal: "/data/warrant-single-signal-top.json",
     warrantFlowBackup: "/data/warrant-flow-backup.json",
     warrantFlowSummary: "/data/warrant-flow-summary.json",
     warrantFlowMobileTop: "/data/warrant-flow-mobile-top.json",

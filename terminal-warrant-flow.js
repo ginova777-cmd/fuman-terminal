@@ -1,5 +1,256 @@
 (function () {
-  const source = "function hydrateWarrantFlowItem(item) {\r\n  const name = String(item.underlyingName || \"\").trim();\r\n  const exact = latestStocks.find((stock) => stock.name === name);\r\n  const partial = exact || latestStocks.find((stock) => name && (stock.name.includes(name) || name.includes(stock.name)));\r\n  const code = String(item.underlyingCode || item.code || partial?.code || \"\").trim();\r\n  const stockPercent = Number.isFinite(Number(item.underlyingPercent))\r\n    ? Number(item.underlyingPercent)\r\n    : Number.isFinite(Number(item.percent))\r\n      ? Number(item.percent)\r\n      : partial?.percent || 0;\r\n  const stockClose = cleanNumber(item.underlyingClose) || cleanNumber(item.close) || cleanNumber(item.displayClose) || partial?.close || 0;\r\n  const fallbackSetup = getFallbackStockSetup(stockPercent);\r\n  const stockSetupScore = cleanNumber(item.stockSetupScore) || fallbackSetup.score;\r\n  const stockSetupLabel = item.stockSetupLabel || fallbackSetup.label;\r\n  const warrantHeatScore = cleanNumber(item.warrantHeatScore || item.score);\r\n  const branchPowerScore = cleanNumber(item.branchPowerScore);\r\n  const finalScore = cleanNumber(item.finalScore) || Math.round((warrantHeatScore * 0.68) + (stockSetupScore * 0.32) - (item.branchAvailable ? 0 : 4));\r\n  return {\r\n    ...item,\r\n    code,\r\n    name: name || partial?.name || \"--\",\r\n    stockPercent,\r\n    stockClose,\r\n    stockValue: partial?.value || 0,\r\n    stockSetupScore,\r\n    stockSetupLabel,\r\n    warrantHeatScore,\r\n    branchPowerScore,\r\n    finalScore,\r\n    branchStatus: item.branchStatus || \"待接分點\",\r\n    actionLabel: item.actionLabel || (stockSetupScore >= 70 ? \"權證先熱，股票未噴\" : \"候選觀察\"),\r\n    signalGrade: item.signalGrade || item.level || \"B\",\r\n  };\r\n}\r\n\r\nfunction normalizeWarrantDateKey(value) {\n  return String(value || \"\").replace(/\\D/g, \"\").slice(0, 8);\n}\n\nfunction formatWarrantDateKey(value) {\n  const key = normalizeWarrantDateKey(value);\n  return key ? `${key.slice(0, 4)}/${key.slice(4, 6)}/${key.slice(6, 8)}` : \"待確認\";\n}\n\nfunction getWarrantQuoteDate() {\n  const row = warrantFlowData.find((item) => item.quoteDate || item.tradeDate || item.date);\n  return normalizeWarrantDateKey(row?.quoteDate || row?.tradeDate || row?.date || \"\");\n}\n\nfunction getWarrantStockQuoteDate() {\n  const row = latestStocks.find((stock) => stock.quoteDate || stock.tradeDate || stock.date);\n  return normalizeWarrantDateKey(row?.quoteDate || row?.tradeDate || row?.date || \"\");\n}\n\nfunction reportWarrantFlowError(stage, error) {\n  try {\n    const payload = JSON.stringify({\n      kind: \"warrant-flow:\" + stage,\n      message: String(error?.message || error || \"unknown\").slice(0, 240),\n      view: \"warrant-flow\",\n      at: Date.now(),\n    });\n    if (navigator.sendBeacon) {\n      navigator.sendBeacon(\"/api/frontend-error\", new Blob([payload], { type: \"application/json\" }));\n    } else {\n      fetch(\"/api/frontend-error\", { method: \"POST\", headers: { \"content-type\": \"application/json\" }, body: payload, keepalive: true }).catch(() => {});\n    }\n  } catch {}\n}\n\nfunction warrantErrorText(error) {\n  return String(error?.message || error || \"未知錯誤\").replace(/[<>&]/g, \"\").slice(0, 120);\n}\n\nfunction formatWarrantMoney(value) {\r\n  const number = cleanNumber(value);\r\n  if (number >= 100000000) return `${(number / 100000000).toFixed(2)} 億`;\r\n  if (number >= 10000) return `${Math.round(number / 10000).toLocaleString(\"zh-TW\")} 萬`;\r\n  return Math.round(number).toLocaleString(\"zh-TW\");\r\n}\r\n\r\nfunction parseWarrantReasonNumber(reason, label) {\n  const text = String(reason || \"\");\n  const index = text.indexOf(label);\n  if (index < 0) return 0;\n  const tail = text.slice(index + label.length);\n  const match = tail.match(/[0-9,]+/);\n  return match ? cleanNumber(String(match[0]).replace(/,/g, \"\")) : 0;\n}\n\nfunction getFallbackStockSetup(percent) {\n  const pct = Number(percent);\n  if (!Number.isFinite(pct)) return { score: 48, label: \"股價待確認\" };\n  if (pct >= 0 && pct <= 1.5) return { score: 88, label: \"股票未噴，權證先熱\" };\n  if (pct > 1.5 && pct <= 3) return { score: 76, label: \"漲幅可控\" };\n  if (pct > 3 && pct <= 4.5) return { score: 58, label: \"短線偏熱\" };\n  if (pct > 4.5 && pct <= 6) return { score: 36, label: \"追價風險高\" };\n  if (pct > 6) return { score: 18, label: \"已明顯過熱\" };\n  if (pct >= -1.5) return { score: 62, label: \"回檔觀察\" };\n  return { score: 28, label: \"股價偏弱\" };\n}\n\nfunction getWarrantPriority(item) {\n  const reason = String(item.reason || \"\");\n  const levelText = String(item.signalGrade || item.level || item.grade || reason || \"\").toUpperCase();\n  const callValue = cleanNumber(item.callValue);\n  const putValue = cleanNumber(item.putValue);\n  const ratio = cleanNumber(item.callPutRatio);\n  const callCount = cleanNumber(item.callCount);\n  const atMoneyCount = cleanNumber(item.atMoneyCallCount) || parseWarrantReasonNumber(reason, \"價平/價內\");\n  const days = cleanNumber(item.minDaysToExpiry) || parseWarrantReasonNumber(reason, \"最近到期\");\n  const pct = Number(item.stockPercent);\n  const finalScore = cleanNumber(item.finalScore || item.score);\n  const heatScore = cleanNumber(item.warrantHeatScore || item.score);\n  const stockSetupScore = cleanNumber(item.stockSetupScore);\n  const branchScore = cleanNumber(item.branchPowerScore);\n  const stockControlled = !Number.isFinite(pct) || (pct > -3 && pct <= 6);\n  const hasTrueSignal = finalScore >= 52 || heatScore >= 62 || levelText.includes(\"A\") || levelText.includes(\"B\");\n  const isPriority = (\n    hasTrueSignal &&\n    heatScore >= 52 &&\n    stockSetupScore >= 28 &&\n    callValue >= 3000000 &&\n    callCount >= 2 &&\n    days >= 10 &&\n    ratio >= 1.2 &&\n    callValue > putValue &&\n    stockControlled\n  );\n  const label = item.actionLabel || (branchScore >= 70 ? \"權證熱 + 分點確認\" : stockSetupScore >= 70 ? \"權證先熱，股票未噴\" : \"候選觀察\");\n  return {\n    isPriority,\n    score: Math.round(finalScore + Math.min(heatScore / 10, 10) + Math.min(branchScore / 10, 8)),\n    label: isPriority ? label : \"不在真漲候選區\",\n  };\n}\n\nfunction getWarrantPriorityRows() {\r\n  const signature = `${warrantFlowUpdatedAt || 0}:${warrantFlowData.length}:${latestStocks.length}`;\r\n  if (signature === warrantFlowPrioritySignature && warrantFlowPriorityCache.length) {\r\n    return warrantFlowPriorityCache;\r\n  }\r\n  warrantFlowPrioritySignature = signature;\r\n  warrantFlowPriorityCache = warrantFlowData\r\n    .map(hydrateWarrantFlowItem)\r\n    .map((item) => ({\r\n      ...item,\r\n      priority: getWarrantPriority(item),\r\n    }))\r\n    .filter((item) => item.priority.isPriority)\r\n    .sort((a, b) => b.priority.score - a.priority.score || cleanNumber(b.finalScore) - cleanNumber(a.finalScore) || b.score - a.score || b.callValue - a.callValue)\r\n    .map((item, index) => ({ ...item, rank: index + 1 }));\r\n  return warrantFlowPriorityCache;\r\n}\r\n\r\n\nfunction renderWarrantReasonBadges(item) {\n  const rawReason = String(item.reason || \"\");\n  const setup = item.signalGrade ? \"真漲候選 \" + item.signalGrade : (String(item.level || item.grade || \"\").toUpperCase().includes(\"A\") ? \"符合固定條件\" : \"權證候選\");\n  const atMoneyCount = cleanNumber(item.atMoneyCallCount) || parseWarrantReasonNumber(rawReason, \"價平/價內\");\n  const days = cleanNumber(item.minDaysToExpiry) || parseWarrantReasonNumber(rawReason, \"最近到期\");\n  const metrics = [];\n  const tags = [];\n  const pushMetric = (label, tone = \"\") => {\n    if (label && !metrics.some((entry) => entry.label === label)) metrics.push({ label, tone });\n  };\n  const pushTag = (label, tone = \"\") => {\n    if (label && !tags.some((entry) => entry.label === label)) tags.push({ label, tone });\n  };\n  pushMetric(\"真漲分 \" + formatNumber(item.finalScore || item.score, 0), \"hot\");\n  pushMetric(\"權證熱度 \" + formatNumber(item.warrantHeatScore || item.score, 0), \"warm\");\n  pushMetric(\"股票型態 \" + formatNumber(item.stockSetupScore, 0), \"neutral\");\n  pushMetric((item.branchStatus || \"待接分點\") + \" \" + formatNumber(item.branchPowerScore, 0), item.branchAvailable ? \"cool\" : \"neutral\");\n  if (days > 0) pushMetric(\"最近到期 \" + formatNumber(days, 0) + \" 天\", \"neutral\");\n  pushTag(setup, \"hot\");\n  pushTag(item.actionLabel || item.priority?.label || \"候選觀察\", \"cool\");\n  pushTag(\"認購 \" + formatNumber(item.callCount, 0) + \" 檔\", \"warm\");\n  if (atMoneyCount >= 1) pushTag(\"價平/價內 \" + formatNumber(atMoneyCount, 0) + \" 檔\", \"neutral\");\n  pushTag(item.stockSetupLabel || \"股票型態待確認\", \"cool\");\n  pushTag(item.branchAvailable ? (item.branchTopBuyer || item.branchStatus || \"分點確認\") : \"待接分點資料\", \"neutral\");\n  const metricHtml = metrics.slice(0, 5).map((entry) => '<span class=\"open-buy-reason-chip ' + entry.tone + '\">' + escapeAttr(entry.label) + '</span>').join(\"\");\n  const tagHtml = tags.slice(0, 6).map((entry) => '<span class=\"open-buy-reason-tag ' + entry.tone + '\">' + escapeAttr(entry.label) + '</span>').join(\"\");\n  return '<div class=\"open-buy-reason-card strategy3-reason-card warrant-reason-card\">' +\n    '<strong class=\"open-buy-reason-title\">' + escapeAttr(setup) + '</strong>' +\n    '<div class=\"open-buy-reason-chips\">' + metricHtml + '</div>' +\n    '<p>' + escapeAttr(rawReason) + '</p>' +\n    '<div class=\"open-buy-reason-tags\">' + tagHtml + '</div>' +\n    '</div>';\n}\n\n\nfunction renderWarrantFlow() {\r\n  const panel = viewPanels[\"warrant-flow\"];\r\n  if (!panel) return;\r\n  const keyword = warrantFlowKeyword.trim().toLowerCase();\r\n  const allRows = getWarrantPriorityRows();\r\n  const filteredRows = keyword\r\n    ? allRows.filter((item) =>\r\n      item.code.includes(keyword) ||\r\n      item.name.toLowerCase().includes(keyword) ||\r\n      item.underlyingName.toLowerCase().includes(keyword))\r\n    : allRows;\r\n  const pageSize = 10;\r\n  const pageCount = Math.max(1, Math.ceil(filteredRows.length / pageSize));\r\n  warrantFlowPage = Math.min(Math.max(1, warrantFlowPage), pageCount);\r\n  const pageStart = (warrantFlowPage - 1) * pageSize;\r\n  const rows = filteredRows.slice(pageStart, pageStart + pageSize);\r\n  const listLabel = keyword\r\n    ? `搜尋結果 ${filteredRows.length} 筆｜第 ${warrantFlowPage}/${pageCount} 頁`\r\n    : `權證候選 ${allRows.length} 筆｜第 ${warrantFlowPage}/${pageCount} 頁`;\r\n  const helperText = keyword\n    ? \"搜尋權證候選；依真漲分、權證熱度與股票型態排序。\"\n    : \"顯示權證候選：權證熱度、股票型態與分點主力三層評分；分點來源未接上前會標示待確認。\";\n  const warrantQuoteDate = getWarrantQuoteDate();\n  const stockQuoteDate = getWarrantStockQuoteDate();\n  const scanTime = warrantFlowUpdatedAt ? new Date(warrantFlowUpdatedAt).toLocaleString(\"zh-TW\", { hour12: false }) : \"待確認\";\n  const dateWarning = warrantQuoteDate && stockQuoteDate && warrantQuoteDate !== stockQuoteDate ? `｜日期不同步：權證 ${formatWarrantDateKey(warrantQuoteDate)} / 報價 ${formatWarrantDateKey(stockQuoteDate)}` : \"\";\n  const freshnessText = `權證掃描 ${scanTime}｜權證日期 ${formatWarrantDateKey(warrantQuoteDate)}｜報價日期 ${formatWarrantDateKey(stockQuoteDate)}${dateWarning}`;\n  const pagination = buildTerminalPagination(\"warrant\", warrantFlowPage, pageCount, filteredRows.length);\r\n  const renderSignature = `${warrantFlowUpdatedAt || 0}:${keyword}:${warrantFlowPage}:${filteredRows.length}:${rows.map((item) => `${item.code}:${item.rank}:${item.priority.score}:${item.finalScore}:${item.branchStatus}`).join(\"|\")}`;\r\n  if (renderSignature === warrantFlowLastRenderSignature) return;\r\n  warrantFlowLastRenderSignature = renderSignature;\r\n\r\n  const body = rows.length ? rows.map((item) => {\r\n    const sign = item.stockPercent >= 0 ? \"+\" : \"\";\r\n    const hot = item.score >= 82 ? \"hot\" : item.score >= 68 ? \"mid\" : \"low\";\r\n    return `\r\n      <tr>\r\n        <td><span class=\"swing-score\">${item.rank || \"--\"}</span></td>\r\n        <td><span class=\"code\">${item.code || \"--\"}</span></td>\r\n        <td>${item.name}</td>\r\n        <td class=\"price\">${formatNumber(item.stockClose, item.stockClose >= 100 ? 0 : 2)}</td>\r\n        <td><b class=\"swing-stage ${hot}\">${formatNumber(item.finalScore || item.score, 0)}</b></td>\r\n        <td>${escapeAttr(item.stockSetupLabel || \"--\")}<br><small>${formatNumber(item.stockSetupScore, 0)}</small></td>\r\n        <td>${escapeAttr(item.branchStatus || \"待接分點\")}<br><small>${item.branchAvailable ? escapeAttr(item.branchTopBuyer || \"分點已接\") : \"來源待接\"}</small></td>\r\n        <td><b class=\"swing-stage ${hot}\">${item.callPutRatio >= 99 ? \"99+\" : item.callPutRatio}</b><br><small>${item.callCount} / ${item.putCount}</small></td>\r\n        <td class=\"warrant-reason-cell\">${renderWarrantReasonBadges(item)}</td>\r\n      </tr>\r\n    `;\r\n  }).join(\"\") : `\r\n    <tr><td colspan=\"9\">${keyword ? \"權證候選內找不到這檔股票；代表目前權證熱度或股票型態不足。\" : \"權證資金走向讀取中。\"}</td></tr>\r\n  `;\r\n\r\n  panel.innerHTML = `\n    <section class=\"swing-dashboard warrant-flow-dashboard\">\n      <div class=\"swing-topbar\">\n        <div>\n          <h2 data-warrant-refresh title=\"重新整理權證資金走向\">${titleWithSchedule(\"◒\", \"策略6：權證資金走向\", \"warrant\")}</h2>\n          <p>${helperText}<br><small>${escapeAttr(freshnessText)}</small></p>\n        </div>\n      </div>\n      ${renderDataFreshnessBarHtml(\"warrant-flow\")}\n      <section class=\"swing-panel warrant-flow-panel\">\n        <div class=\"swing-tabs\">\r\n          <button class=\"active\" type=\"button\" data-warrant-refresh>${listLabel}</button>\r\n          <div class=\"swing-actions warrant-search-box\">\r\n            <small class=\"warrant-search-hint\">🔥 搜尋權證候選</small>\r\n            <div class=\"warrant-search-row\">\r\n              <input id=\"warrant-flow-search\" type=\"search\" placeholder=\"搜尋股票代號/名稱\" value=\"${escapeAttr(warrantFlowKeyword)}\" data-warrant-flow-search>\r\n              <button id=\"warrant-flow-refresh\" type=\"button\" data-warrant-refresh data-mobile-full-load=\"warrant\">完整列表</button>\r\n            </div>\r\n          </div>\r\n        </div>\r\n        <table class=\"swing-table\">\r\n          <thead>\r\n            <tr>\r\n              <th>排名</th><th>股票代號</th><th>標的名稱</th><th>收盤價</th><th>真漲分</th><th>股票型態</th><th>分點狀態</th><th>購/售比</th><th>原因</th>\r\n            </tr>\r\n          </thead>\r\n          <tbody>${body}</tbody>\r\n        </table>\r\n        ${pagination}\r\n      </section>\r\n    </section>\r\n  `;\r\n}\r\n\r\nasync function loadWarrantFlow(force = false) {\r\n  if (!isViewActive(\"warrant-flow\")) return;\r\n  warrantFlowHasOpened = true;\r\n  if (warrantFlowLoading) return;\n  const hadLocalWarrantFlowData = warrantFlowData.length > 0;\r\n  if (!force) {\r\n    renderWarrantFlow();\r\n  }\r\n  warrantFlowLoading = true;\r\n  const panel = viewPanels[\"warrant-flow\"];\r\n  try {\r\n    if (!latestStocks.length) loadStrategyStocks();\r\n    let payload = await fetchVersionedJson(endpoints.warrantFlowSlim, 7000, warrantFlowSummary?.updatedAt || \"\", true);\n    if (!normalizeArray(payload?.matches).length) {\n      payload = await fetchVersionedJson(endpoints.warrantFlowCache, 10000, warrantFlowSummary?.updatedAt || \"\", force);\n    }\n    if (!normalizeArray(payload?.matches).length) {\n      payload = await fetchVersionedJson(endpoints.warrantFlowBackup, 10000, warrantFlowSummary?.updatedAt || \"\", force);\n    }\n    warrantFlowData = normalizeArray(payload.matches);\r\n    warrantFlowPrioritySignature = \"\";\r\n    warrantFlowLastRenderSignature = \"\";\r\n    warrantFlowPage = 1;\r\n    const updatedAt = Date.parse(payload?.updatedAt || \"\");\r\n    warrantFlowUpdatedAt = Number.isFinite(updatedAt) ? updatedAt : Date.now();\r\n    saveWarrantFlowLocalCache();\r\n    applyStaticTitleIcons();\r\n    renderWarrantFlow();\r\n  } catch (error) {\n    reportWarrantFlowError(\"load\", error);\n    if (panel && !warrantFlowData.length) {\n      panel.innerHTML = `<div class=\"empty-state\">權證資料檔讀取失敗：${warrantErrorText(error)}。已回報 frontend-error，請重新整理或稍後再試。</div>`;\n    }\n  } finally {\r\n    warrantFlowLoading = false;\r\n  }\r\n}\r\n\r\n";
+  const source = `
+function normalizeSingleWarrantRows(payload) {
+  const matches = normalizeArray(payload && payload.matches);
+  if (matches.length) return matches;
+  return normalizeArray(payload && payload.singleSignals);
+}
+
+function normalizeWarrantDateKey(value) {
+  return String(value || "").replace(/\\D/g, "").slice(0, 8);
+}
+
+function formatWarrantDateKey(value) {
+  const key = normalizeWarrantDateKey(value);
+  return key ? key.slice(0, 4) + "/" + key.slice(4, 6) + "/" + key.slice(6, 8) : "待確認";
+}
+
+function getWarrantQuoteDate() {
+  const row = warrantFlowData.find((item) => item.quoteDate || item.tradeDate || item.date);
+  return normalizeWarrantDateKey((row && (row.quoteDate || row.tradeDate || row.date)) || "");
+}
+
+function getWarrantStockQuoteDate() {
+  const row = latestStocks.find((stock) => stock.quoteDate || stock.tradeDate || stock.date);
+  return normalizeWarrantDateKey((row && (row.quoteDate || row.tradeDate || row.date)) || "");
+}
+
+function reportWarrantFlowError(stage, error) {
+  try {
+    const payload = JSON.stringify({
+      kind: "warrant-flow:" + stage,
+      message: String((error && error.message) || error || "unknown").slice(0, 240),
+      view: "warrant-flow",
+      at: Date.now(),
+    });
+    if (navigator.sendBeacon) {
+      navigator.sendBeacon("/api/frontend-error", new Blob([payload], { type: "application/json" }));
+    } else {
+      fetch("/api/frontend-error", { method: "POST", headers: { "content-type": "application/json" }, body: payload, keepalive: true }).catch(() => {});
+    }
+  } catch {}
+}
+
+function warrantErrorText(error) {
+  return String((error && error.message) || error || "未知錯誤").replace(/[<>&]/g, "").slice(0, 120);
+}
+
+function formatWarrantMoney(value) {
+  const number = cleanNumber(value);
+  if (number >= 100000000) return (number / 100000000).toFixed(2) + " 億";
+  if (number >= 10000) return Math.round(number / 10000).toLocaleString("zh-TW") + " 萬";
+  return Math.round(number).toLocaleString("zh-TW");
+}
+
+function hydrateWarrantFlowItem(item) {
+  const rawName = String(item.underlyingName || item.name || "").trim();
+  const exact = latestStocks.find((stock) => stock.code === String(item.underlyingCode || item.code || "").trim() || stock.name === rawName);
+  const partial = exact || latestStocks.find((stock) => rawName && (stock.name.includes(rawName) || rawName.includes(stock.name)));
+  const code = String(item.underlyingCode || item.code || (partial && partial.code) || "").trim();
+  const stockPercent = Number.isFinite(Number(item.underlyingPercent))
+    ? Number(item.underlyingPercent)
+    : Number.isFinite(Number(item.percent))
+      ? Number(item.percent)
+      : ((partial && partial.percent) || 0);
+  const stockClose = cleanNumber(item.underlyingClose) || cleanNumber(item.close) || cleanNumber(item.displayClose) || ((partial && partial.close) || 0);
+  const value = cleanNumber(item.value || item.totalSignalValue || item.callValue);
+  const signalCount = cleanNumber(item.estimatedLargeSignalCount || item.largeSignalCount || item.signalCount);
+  const score = cleanNumber(item.score || item.finalScore || item.warrantHeatScore);
+  const days = cleanNumber(item.minDaysToExpiry || item.daysToExpiry);
+  const moneyness = Math.abs(cleanNumber(item.moneynessPercent));
+  const repeatLarge = !!item.hasRepeatLargeSignal || signalCount >= 2;
+  return {
+    ...item,
+    code,
+    name: rawName || ((partial && partial.name) || "--"),
+    stockPercent,
+    stockClose,
+    value,
+    signalCount,
+    score,
+    days,
+    moneyness,
+    repeatLarge,
+    actionLabel: item.actionLabel || (repeatLarge ? "單券連續大額" : "單券大額"),
+    warrantCode: String(item.warrantCode || item.symbol || "").trim(),
+    warrantName: String(item.warrantName || item.name || "").trim(),
+    priority: { isPriority: true, score, label: item.actionLabel || (repeatLarge ? "單券連續大額" : "單券大額") },
+  };
+}
+
+function getWarrantPriorityRows() {
+  const signature = String(warrantFlowUpdatedAt || 0) + ":" + warrantFlowData.length + ":" + latestStocks.length;
+  if (signature === warrantFlowPrioritySignature && warrantFlowPriorityCache.length) return warrantFlowPriorityCache;
+  warrantFlowPrioritySignature = signature;
+  warrantFlowPriorityCache = warrantFlowData
+    .map(hydrateWarrantFlowItem)
+    .sort((a, b) =>
+      Number(b.repeatLarge) - Number(a.repeatLarge) ||
+      cleanNumber(b.signalCount) - cleanNumber(a.signalCount) ||
+      cleanNumber(b.score) - cleanNumber(a.score) ||
+      cleanNumber(b.value) - cleanNumber(a.value)
+    )
+    .map((item, index) => ({ ...item, rank: index + 1 }));
+  return warrantFlowPriorityCache;
+}
+
+function renderWarrantSignalBadges(item) {
+  const metrics = [];
+  const tags = [];
+  const pushMetric = (label, tone) => {
+    if (label && !metrics.some((entry) => entry.label === label)) metrics.push({ label, tone: tone || "" });
+  };
+  const pushTag = (label, tone) => {
+    if (label && !tags.some((entry) => entry.label === label)) tags.push({ label, tone: tone || "" });
+  };
+  pushMetric("偵測分 " + formatNumber(item.score, 0), "hot");
+  pushMetric("同券大額 " + formatNumber(item.signalCount, 0) + " 筆", item.repeatLarge ? "warm" : "neutral");
+  if (item.value) pushMetric("合計 " + formatWarrantMoney(item.value), "warm");
+  if (item.days) pushMetric("最近到期 " + formatNumber(item.days, 0) + " 天", "neutral");
+  if (Number.isFinite(item.moneyness) && item.moneyness > 0) pushMetric("價平差 " + formatNumber(item.moneyness, 1) + "%", "neutral");
+  pushTag(item.actionLabel || "單券大額", "hot");
+  pushTag(item.warrantName || item.warrantCode || "權證未命名", "cool");
+  if (item.stockPercent <= 6 && item.stockPercent > -3) pushTag("標的漲幅可控", "neutral");
+  if (item.repeatLarge) pushTag("連續大額優先", "warm");
+  const metricHtml = metrics.slice(0, 5).map((entry) => '<span class="open-buy-reason-chip ' + entry.tone + '">' + escapeAttr(entry.label) + '</span>').join("");
+  const tagHtml = tags.slice(0, 5).map((entry) => '<span class="open-buy-reason-tag ' + entry.tone + '">' + escapeAttr(entry.label) + '</span>').join("");
+  return '<div class="open-buy-reason-card strategy3-reason-card warrant-reason-card">' +
+    '<strong class="open-buy-reason-title">' + escapeAttr(item.actionLabel || "單券大額") + '</strong>' +
+    '<div class="open-buy-reason-chips">' + metricHtml + '</div>' +
+    '<p>' + escapeAttr(item.reason || "盤後單一權證出現大額認購訊號，優先觀察標的是否正在醞釀發動。") + '</p>' +
+    '<div class="open-buy-reason-tags">' + tagHtml + '</div>' +
+    '</div>';
+}
+
+function renderWarrantFlow() {
+  const panel = viewPanels["warrant-flow"];
+  if (!panel) return;
+  const keyword = warrantFlowKeyword.trim().toLowerCase();
+  const allRows = getWarrantPriorityRows();
+  const filteredRows = keyword
+    ? allRows.filter((item) =>
+      item.code.includes(keyword) ||
+      item.name.toLowerCase().includes(keyword) ||
+      item.warrantCode.toLowerCase().includes(keyword) ||
+      item.warrantName.toLowerCase().includes(keyword))
+    : allRows;
+  const pageSize = 10;
+  const pageCount = Math.max(1, Math.ceil(filteredRows.length / pageSize));
+  warrantFlowPage = Math.min(Math.max(1, warrantFlowPage), pageCount);
+  const pageStart = (warrantFlowPage - 1) * pageSize;
+  const rows = filteredRows.slice(pageStart, pageStart + pageSize);
+  const listLabel = keyword
+    ? "搜尋結果 " + filteredRows.length + " 檔｜第 " + warrantFlowPage + "/" + pageCount + " 頁"
+    : "單券精選 " + allRows.length + " 檔｜第 " + warrantFlowPage + "/" + pageCount + " 頁";
+  const helperText = keyword
+    ? "搜尋盤後單券大額精選；可用股票代號、名稱或權證代號查詢。"
+    : "顯示盤後單券大額權證精選：同券連續大額、價平附近與標的漲幅可控；ETF 與 2330 已排除。";
+  const warrantQuoteDate = getWarrantQuoteDate();
+  const stockQuoteDate = getWarrantStockQuoteDate();
+  const scanTime = warrantFlowUpdatedAt ? new Date(warrantFlowUpdatedAt).toLocaleString("zh-TW", { hour12: false }) : "待確認";
+  const dateWarning = warrantQuoteDate && stockQuoteDate && warrantQuoteDate !== stockQuoteDate
+    ? "｜日期不同步：權證 " + formatWarrantDateKey(warrantQuoteDate) + " / 報價 " + formatWarrantDateKey(stockQuoteDate)
+    : "";
+  const freshnessText = "權證掃描 " + scanTime + "｜權證日期 " + formatWarrantDateKey(warrantQuoteDate) + "｜報價日期 " + formatWarrantDateKey(stockQuoteDate) + dateWarning;
+  const pagination = buildTerminalPagination("warrant", warrantFlowPage, pageCount, filteredRows.length);
+  const renderSignature = String(warrantFlowUpdatedAt || 0) + ":" + keyword + ":" + warrantFlowPage + ":" + filteredRows.length + ":" + rows.map((item) => item.code + ":" + item.rank + ":" + item.score + ":" + item.value).join("|");
+  if (renderSignature === warrantFlowLastRenderSignature) return;
+  warrantFlowLastRenderSignature = renderSignature;
+
+  const body = rows.length ? rows.map((item) => {
+    const sign = item.stockPercent >= 0 ? "+" : "";
+    const hot = item.repeatLarge ? "hot" : item.score >= 70 ? "mid" : "low";
+    const pct = Number.isFinite(Number(item.stockPercent)) ? sign + formatNumber(item.stockPercent, 2) + "%" : "--";
+    return '<tr>' +
+      '<td><span class="swing-score">' + (item.rank || "--") + '</span></td>' +
+      '<td><span class="code">' + escapeAttr(item.code || "--") + '</span></td>' +
+      '<td>' + escapeAttr(item.name) + '</td>' +
+      '<td class="price">' + formatNumber(item.stockClose, item.stockClose >= 100 ? 0 : 2) + '</td>' +
+      '<td><span class="code">' + escapeAttr(item.warrantCode || "--") + '</span><br><small>' + escapeAttr(item.warrantName || "--") + '</small></td>' +
+      '<td><b class="swing-stage ' + hot + '">' + formatWarrantMoney(item.value) + '</b></td>' +
+      '<td><b class="swing-stage ' + hot + '">' + escapeAttr(item.actionLabel) + '</b><br><small>' + formatNumber(item.signalCount, 0) + ' 筆</small></td>' +
+      '<td class="price">' + pct + '</td>' +
+      '<td class="warrant-reason-cell">' + renderWarrantSignalBadges(item) + '</td>' +
+      '</tr>';
+  }).join("") : '<tr><td colspan="9">' + (keyword ? "單券精選內找不到這檔股票或權證。" : "權證單券精選讀取中。") + '</td></tr>';
+
+  panel.innerHTML = [
+    '<section class="swing-dashboard warrant-flow-dashboard">',
+    '<div class="swing-topbar"><div>',
+    '<h2 data-warrant-refresh title="重新整理權證單券精選">' + titleWithSchedule("◒", "策略6：權證資金走向", "warrant") + '</h2>',
+    '<p>' + helperText + '<br><small>' + escapeAttr(freshnessText) + '</small></p>',
+    '</div></div>',
+    renderDataFreshnessBarHtml("warrant-flow"),
+    '<section class="swing-panel warrant-flow-panel">',
+    '<div class="swing-tabs">',
+    '<button class="active" type="button" data-warrant-refresh>' + listLabel + '</button>',
+    '<div class="swing-actions warrant-search-box">',
+    '<small class="warrant-search-hint">🔥 搜尋單券精選</small>',
+    '<div class="warrant-search-row">',
+    '<input id="warrant-flow-search" type="search" placeholder="搜尋股票/權證代號或名稱" value="' + escapeAttr(warrantFlowKeyword) + '" data-warrant-flow-search>',
+    '<button id="warrant-flow-refresh" type="button" data-warrant-refresh data-mobile-full-load="warrant">重新整理</button>',
+    '</div></div></div>',
+    '<table class="swing-table"><thead><tr>',
+    '<th>排名</th><th>股票代號</th><th>標的名稱</th><th>收盤價</th><th>權證代號</th><th>單券金額</th><th>訊號</th><th>標的漲幅</th><th>原因</th>',
+    '</tr></thead><tbody>' + body + '</tbody></table>',
+    pagination,
+    '</section></section>',
+  ].join("");
+}
+
+async function loadWarrantFlow(force = false) {
+  if (!isViewActive("warrant-flow")) return;
+  warrantFlowHasOpened = true;
+  if (warrantFlowLoading) return;
+  if (!force) renderWarrantFlow();
+  warrantFlowLoading = true;
+  const panel = viewPanels["warrant-flow"];
+  try {
+    if (!latestStocks.length) loadStrategyStocks();
+    let payload = await fetchVersionedJson(endpoints.warrantFlowSingleSignal || "/data/warrant-single-signal-top.json", 7000, (warrantFlowSummary && warrantFlowSummary.updatedAt) || "", true);
+    let rows = normalizeSingleWarrantRows(payload);
+    if (!rows.length) {
+      payload = await fetchVersionedJson(endpoints.warrantFlowMobileTop || endpoints.warrantFlowSlim, 8000, (warrantFlowSummary && warrantFlowSummary.updatedAt) || "", force);
+      rows = normalizeArray(payload && payload.singleSignals);
+    }
+    if (!rows.length) {
+      payload = await fetchVersionedJson(endpoints.warrantFlowSlim, 9000, (warrantFlowSummary && warrantFlowSummary.updatedAt) || "", force);
+      rows = normalizeArray(payload && payload.singleSignals);
+    }
+    if (!rows.length) {
+      payload = await fetchVersionedJson(endpoints.warrantFlowCache, 10000, (warrantFlowSummary && warrantFlowSummary.updatedAt) || "", force);
+      rows = normalizeArray(payload && payload.singleSignals);
+    }
+    warrantFlowData = rows;
+    warrantFlowPrioritySignature = "";
+    warrantFlowLastRenderSignature = "";
+    warrantFlowPage = 1;
+    const updatedAt = Date.parse((payload && payload.updatedAt) || "");
+    warrantFlowUpdatedAt = Number.isFinite(updatedAt) ? updatedAt : Date.now();
+    saveWarrantFlowLocalCache();
+    applyStaticTitleIcons();
+    renderWarrantFlow();
+  } catch (error) {
+    reportWarrantFlowError("load", error);
+    if (panel && !warrantFlowData.length) {
+      panel.innerHTML = '<div class="empty-state">權證資料檔讀取失敗：' + warrantErrorText(error) + '。已回報 frontend-error，請重新整理或稍後再試。</div>';
+    }
+  } finally {
+    warrantFlowLoading = false;
+  }
+}
+`;
+
   window.FUMAN_WARRANT_FLOW_MODULE = {
     install(context) {
       return Function("scope", "with (scope) {\n" + source + "\nreturn { renderWarrantFlow, loadWarrantFlow };\n}")(context.scope);
