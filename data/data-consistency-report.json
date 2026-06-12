@@ -1,15 +1,15 @@
 {
   "ok": true,
-  "updatedAt": "2026-06-12T12:13:17.114Z",
+  "updatedAt": "2026-06-12T12:16:05.429Z",
   "issues": [],
   "counts": {
     "strategy4Full": 405,
     "strategy4Summary": 405,
     "strategy4Slim": 405,
     "strategy4ZoneSum": 405,
-    "institutionSlim": 1883,
+    "institutionSlim": 1891,
     "institutionJointTop": 160,
-    "warrantSlim": 120,
-    "warrantTop": 120
+    "warrantSlim": 67,
+    "warrantTop": 67
   }
 }
