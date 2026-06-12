@@ -1,21 +1,20 @@
 {
   "ok": true,
   "source": "github-actions-backup",
-  "updatedAt": "2026-06-12T05:42:18.719Z",
+  "updatedAt": "2026-06-12T05:51:29.186Z",
   "usedDate": "20260612",
-  "total": 1959,
-  "count": 8,
+  "total": 1079,
+  "count": 5,
   "sourceWarnings": [
-    "tpex volume fetch failed: 115/06/03 :: terminated",
-    "tpex volume fetch failed: 115/06/02 :: This operation was aborted"
+    "tpex volume fetch failed: 115/06/03 :: terminated"
   ],
   "qualityStatus": "degraded",
   "sourceHealth": {
     "status": "degraded",
     "issuedSharesCount": 1976,
     "volumeAverageCount": 2187,
-    "stockUniverseCount": 1959,
-    "warningCount": 2,
+    "stockUniverseCount": 1079,
+    "warningCount": 1,
     "warningLimit": 3,
     "minIssuedSharesCount": 1000,
     "minVolumeAverageCount": 1000,
@@ -38,8 +37,8 @@
       "market": "TWSE",
       "quoteDate": "20260612",
       "quoteTime": "13:30:00",
-      "valueRank": 95,
-      "volumeRank": 98,
+      "valueRank": 93,
+      "volumeRank": 97,
       "volumeLots": 44062,
       "turnoverRate": 11.08,
       "volumeRatio": 2.85,
@@ -70,8 +69,8 @@
       "market": "TWSE",
       "quoteDate": "20260612",
       "quoteTime": "13:30:00",
-      "valueRank": 100,
-      "volumeRank": 100,
+      "valueRank": 99,
+      "volumeRank": 99,
       "volumeLots": 92120,
       "turnoverRate": 12.13,
       "volumeRatio": 6.22,
@@ -102,8 +101,8 @@
       "market": "TWSE",
       "quoteDate": "20260612",
       "quoteTime": "13:30:00",
-      "valueRank": 94,
-      "volumeRank": 98,
+      "valueRank": 91,
+      "volumeRank": 97,
       "volumeLots": 44372,
       "turnoverRate": 8.65,
       "volumeRatio": 1.33,
@@ -115,38 +114,6 @@
         {
           "id": "overnight_chip",
           "reason": "符合固定條件：漲幅 4.38%、成交量 44,372 張、周轉率 8.65%、量比 1.33。"
-        }
-      ]
-    },
-    {
-      "code": "5498",
-      "name": "凱崴",
-      "close": 69.4,
-      "change": 2.700000000000003,
-      "percent": 4.047976011994007,
-      "value": 2025300200,
-      "tradeVolume": 29183000,
-      "open": 68,
-      "high": 70.8,
-      "low": 67.3,
-      "prevClose": 66.7,
-      "volume": 29183,
-      "market": "TPEX",
-      "quoteDate": "20260612",
-      "quoteTime": "13:30:00",
-      "valueRank": 94,
-      "volumeRank": 97,
-      "volumeLots": 29183,
-      "turnoverRate": 15.08,
-      "volumeRatio": 2.48,
-      "projectedRatio": 2.48,
-      "overnightScore": 87,
-      "overnightState": "通過",
-      "score": 87,
-      "matches": [
-        {
-          "id": "overnight_chip",
-          "reason": "符合固定條件：漲幅 4.05%、成交量 29,183 張、周轉率 15.08%、量比 2.48。"
         }
       ]
     },
@@ -166,8 +133,8 @@
       "market": "TWSE",
       "quoteDate": "20260612",
       "quoteTime": "13:30:00",
-      "valueRank": 92,
-      "volumeRank": 91,
+      "valueRank": 89,
+      "volumeRank": 87,
       "volumeLots": 8886,
       "turnoverRate": 11.31,
       "volumeRatio": 2.47,
@@ -198,8 +165,8 @@
       "market": "TWSE",
       "quoteDate": "20260612",
       "quoteTime": "13:30:00",
-      "valueRank": 98,
-      "volumeRank": 99,
+      "valueRank": 97,
+      "volumeRank": 98,
       "volumeLots": 67356,
       "turnoverRate": 12.82,
       "volumeRatio": 2.37,
@@ -211,70 +178,6 @@
         {
           "id": "overnight_chip",
           "reason": "符合固定條件：漲幅 3.46%、成交量 67,356 張、周轉率 12.82%、量比 2.37。"
-        }
-      ]
-    },
-    {
-      "code": "6419",
-      "name": "京晨科",
-      "close": 145,
-      "change": 5,
-      "percent": 3.571428571428571,
-      "value": 179655000,
-      "tradeVolume": 1239000,
-      "open": 154,
-      "high": 154,
-      "low": 142.5,
-      "prevClose": 140,
-      "volume": 1239,
-      "market": "TPEX",
-      "quoteDate": "20260612",
-      "quoteTime": "13:30:00",
-      "valueRank": 76,
-      "volumeRank": 69,
-      "volumeLots": 1239,
-      "turnoverRate": 9.42,
-      "volumeRatio": 6.87,
-      "projectedRatio": 6.87,
-      "overnightScore": 76,
-      "overnightState": "通過",
-      "score": 76,
-      "matches": [
-        {
-          "id": "overnight_chip",
-          "reason": "符合固定條件：漲幅 3.57%、成交量 1,239 張、周轉率 9.42%、量比 6.87。"
-        }
-      ]
-    },
-    {
-      "code": "5410",
-      "name": "國眾",
-      "close": 45.65,
-      "change": 1.5,
-      "percent": 3.3975084937712348,
-      "value": 315943650,
-      "tradeVolume": 6921000,
-      "open": 45.25,
-      "high": 47.8,
-      "low": 44.1,
-      "prevClose": 44.15,
-      "volume": 6921,
-      "market": "TPEX",
-      "quoteDate": "20260612",
-      "quoteTime": "13:30:00",
-      "valueRank": 82,
-      "volumeRank": 90,
-      "volumeLots": 6921,
-      "turnoverRate": 7.5,
-      "volumeRatio": 1.06,
-      "projectedRatio": 1.06,
-      "overnightScore": 68,
-      "overnightState": "通過",
-      "score": 68,
-      "matches": [
-        {
-          "id": "overnight_chip",
-          "reason": "符合固定條件：漲幅 3.40%、成交量 6,921 張、周轉率 7.50%、量比 1.06。"
         }
       ]
     }
