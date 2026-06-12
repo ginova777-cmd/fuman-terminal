@@ -43,8 +43,29 @@ function readOptional(rel, fallback = null) {
   return fallback;
 }
 
+function readRepoOptional(rel, fallback = null) {
+  for (const root of [repoRoot, syncRoot, runtimeRoot]) {
+    const file = path.join(root, rel);
+    if (fs.existsSync(file)) return readJson(file);
+  }
+  return fallback;
+}
+
 function normalizeArray(value) {
   return Array.isArray(value) ? value : [];
+}
+
+function payloadCount(payload) {
+  if (Array.isArray(payload)) return payload.length;
+  if (Array.isArray(payload?.matches)) return payload.matches.length;
+  if (Array.isArray(payload?.events)) return payload.events.length;
+  if (Array.isArray(payload?.records)) return payload.records.length;
+  if (Array.isArray(payload?.rows)) return payload.rows.length;
+  if (Array.isArray(payload?.data)) return payload.data.length;
+  if (Array.isArray(payload?.stocks)) return payload.stocks.length;
+  if (Array.isArray(payload?.quotes)) return payload.quotes.length;
+  if (payload?.entries && typeof payload.entries === "object") return Object.keys(payload.entries).length;
+  return cleanNumber(payload?.count || payload?.total || payload?.matchCount);
 }
 
 function slimSignal(signal) {
@@ -718,8 +739,7 @@ function dataStatusIndex() {
   ];
   const entries = {};
   for (const file of files) {
-    const payload = readOptional(`data/${file}`, {});
-    const rows = normalizeArray(payload?.matches).length || normalizeArray(payload?.rows).length || normalizeArray(payload?.stocks).length || cleanNumber(payload?.count);
+    const payload = readRepoOptional(`data/${file}`, {});
     entries[file] = {
       ok: payload?.ok !== false,
       status: payload?.status || "",
@@ -727,7 +747,7 @@ function dataStatusIndex() {
       date: statusDateForFile(file, payload),
       sourceDate: payload?.sourceDate || payload?.usedDate || "",
       updatedAt: payload?.updatedAt || payload?.scanStamp || "",
-      count: rows,
+      count: payloadCount(payload),
     };
   }
   return {
@@ -757,8 +777,8 @@ function dataManifest() {
     "strategy3-latest.json",
     "strategy4-summary.json",
     "strategy4-score-top.json",
-  "strategy4-zone-a.json",
-  "strategy4-zone-b.json",
+    "strategy4-zone-a.json",
+    "strategy4-zone-b.json",
     "strategy4-zone-c.json",
     "strategy5-latest.json",
     "institution-latest.json",
@@ -782,7 +802,7 @@ function dataManifest() {
   for (let page = 1; page <= 48; page += 1) files.push(`strategy4-zone-c-page-${page}.json`);
   const entries = {};
   for (const file of files) {
-    const payload = readOptional(`data/${file}`, null);
+    const payload = readRepoOptional(`data/${file}`, null);
     if (!payload) continue;
     const json = JSON.stringify(payload);
     entries[file] = {
@@ -791,7 +811,7 @@ function dataManifest() {
       updatedAt: payload?.updatedAt || payload?.scanStamp || "",
       date: statusDateForFile(file, payload),
       sourceDate: payload?.sourceDate || payload?.usedDate || "",
-      count: cleanNumber(payload?.count || normalizeArray(payload?.matches).length || normalizeArray(payload?.rows).length || normalizeArray(payload?.stocks).length || normalizeArray(payload?.quotes).length),
+      count: payloadCount(payload),
     };
   }
   return {
