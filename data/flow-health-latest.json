@@ -13,13 +13,11 @@
   "institution": {
     "scope": "institution",
     "status": "ok",
-    "message": "Watchdog rerun completed",
-    "updatedAt": "2026-06-11T22:20:23.0997496Z",
+    "message": "Institution scan and publish completed",
+    "updatedAt": "2026-06-12T02:52:57.1568796Z",
     "detail": {
-      "reason": "institution not updated after 06:00; updatedAt=06/11/2026 22:00:22",
-      "log": "C:\\fuman-runtime\\logs\\flow-watchdog-institution-20260612-062002.log",
-      "expectedTime": "06:00"
+      "log": "C:\\fuman-runtime\\logs\\institution-20260612-105210.log"
     }
   },
-  "updatedAt": "2026-06-11T22:20:23.0998181Z"
+  "updatedAt": "2026-06-12T02:52:57.1583925Z"
 }
