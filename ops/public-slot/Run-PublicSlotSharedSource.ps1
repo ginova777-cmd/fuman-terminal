@@ -4,7 +4,7 @@ param(
   [string]$RuntimeDir = "C:\fuman-runtime",
   [string]$SourceName = "fugle_shared_source",
   [int]$LoopSeconds = 10,
-  [int]$StaleSeconds = 45,
+  [int]$StaleSeconds = 120,
   [int]$SeedSymbolCount = 2000,
   [int]$QuoteKeepMinutes = 480,
   [int]$DailyVolumeRetainTradeDays = 20,
