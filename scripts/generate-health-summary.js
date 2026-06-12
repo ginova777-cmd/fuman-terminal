@@ -222,6 +222,15 @@ function main() {
     "data-consistency-report.json",
     "strategy-weight-report.json",
   ].map(dataFileStatus);
+  const gateStatus = dataFileStatus("live-freshness-ok.json");
+  let gatePayload = null;
+  if (gateStatus.ok) {
+    try {
+      gatePayload = JSON.parse(fs.readFileSync(dataPath("live-freshness-ok.json"), "utf8"));
+    } catch {
+      try { gatePayload = JSON.parse(fs.readFileSync(path.join(ROOT, "data", "live-freshness-ok.json"), "utf8")); } catch {}
+    }
+  }
   const outbox = outboxStatus();
   const risks = buildRisks({ badTasks, outbox, data });
   const high = risks.filter((item) => item.level === "high").length;
@@ -233,6 +242,14 @@ function main() {
     risks,
     schedule: { ok: badTasks.length === 0, total: tasks.length, badCount: badTasks.length, badTasks, queryMethod: tasks.queryMethod || "schtasks", note: "Uses schtasks fallback-friendly query to avoid Get-ScheduledTask low-permission false alarms." },
     githubSync: outbox,
+    freshnessGate: {
+      ok: Boolean(gatePayload?.ok),
+      statusFile: gateStatus,
+      checkedAt: gatePayload?.checkedAt || "",
+      publishHead: gatePayload?.publishHead || "",
+      mode: gatePayload?.mode || "",
+      rawRefresh: gatePayload?.rawRefresh || [],
+    },
     runtime: { ok: data.every((item) => item.ok), data },
   };
   writeJson(path.join(ROOT, "data", "health-summary.json"), summary);

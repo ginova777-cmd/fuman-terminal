@@ -30,13 +30,20 @@ function Write-Log($message) {
   Add-Content -LiteralPath $log -Value $message -Encoding utf8
 }
 
-if ($Scope -ne "all") {
-  if ($Scope -eq "strategy4" -and $env:FUMAN_STRATEGY4_SCOPED_PUBLISH -eq "1") {
-    Write-Log "Strategy4 scoped publish allowed by FUMAN_STRATEGY4_SCOPED_PUBLISH=1."
-  } else {
-    Write-Log "Scoped publish blocked: scope=$Scope. Use npm run freshness:gate for the single verified publish path."
-    exit 2
+if ($env:FUMAN_INSIDE_FRESHNESS_GATE -ne "1") {
+  Write-Log "Direct cache sync redirected to npm run freshness:gate. scope=$Scope"
+  Push-Location $PSScriptRoot
+  try {
+    npm run freshness:gate
+    exit $LASTEXITCODE
+  } finally {
+    Pop-Location
   }
+}
+
+if ($Scope -ne "all") {
+  Write-Log "Scoped publish blocked: scope=$Scope. Use npm run freshness:gate for the single verified publish path."
+  exit 2
 }
 
 function Clear-StaleSyncGitIndexLock($label) {
