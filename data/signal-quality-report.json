@@ -1,8 +1,8 @@
 {
   "ok": true,
-  "updatedAt": "2026-06-12T02:50:54.148Z",
+  "updatedAt": "2026-06-12T02:59:07.385Z",
   "strategy2": {
-    "latestSignals": 3,
+    "latestSignals": 4,
     "latestGo": 0,
     "backtest": {
       "count": 0,
@@ -24,7 +24,7 @@
       "best": 0.9541984732824428,
       "worst": 0.9541984732824428
     },
-    "updatedAt": "2026-06-12T02:49:59.095Z"
+    "updatedAt": "2026-06-12T02:58:16.808Z"
   },
   "strategy4": {
     "total": 1607,
