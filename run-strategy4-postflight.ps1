@@ -250,7 +250,7 @@ $sheetStatus = Read-Json $sheetStatusPath
 if ($sheetStatus -eq $null) {
   $warnings.Add("google sheet status missing") | Out-Null
 } elseif ($sheetStatus.ok -ne $true -or (Number-OrZero $sheetStatus.pendingCount) -gt 0) {
-  $issues.Add("google sheet not healthy: ok=$($sheetStatus.ok), pending=$($sheetStatus.pendingCount)") | Out-Null
+  $warnings.Add("google sheet not healthy: ok=$($sheetStatus.ok), pending=$($sheetStatus.pendingCount)") | Out-Null
 }
 
 $status = [ordered]@{

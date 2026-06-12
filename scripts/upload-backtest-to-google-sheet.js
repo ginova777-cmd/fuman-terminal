@@ -1629,7 +1629,16 @@ function loadBacktestRows(stamp) {
 
 async function buildUploadPlan(stamp = todayStamp()) {
   const onlySheet = process.env.GOOGLE_SHEET_ONLY || "";
-  const scorecardOnlyWithoutBacktest = process.env.ALLOW_SCORECARD_ONLY_WITHOUT_BACKTEST === "1" && onlySheet;
+  const backtestDependentSheets = new Set([
+    "交易管家成績單",
+    "交易管家事件明細",
+    "即時雷達成績單",
+    "策略2成績單",
+    "歷史與區間損益",
+    "回測摘要",
+  ]);
+  const scorecardOnlyWithoutBacktest = onlySheet
+    && (process.env.ALLOW_SCORECARD_ONLY_WITHOUT_BACKTEST === "1" || !backtestDependentSheets.has(onlySheet));
   const rows = scorecardOnlyWithoutBacktest
     ? { trades: [], radar: [], report: {}, summary: [], historyRows: [] }
     : loadBacktestRows(stamp);

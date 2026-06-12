@@ -157,14 +157,13 @@ if ($env:STRATEGY4_UPLOAD_SHEET_AFTER_SCAN -ne "0" -and $strategy4Output.complet
       }
     }
     if ($sheetExit -ne 0) {
-      Write-Log "Strategy4 Google Sheet upload failed with exit code $sheetExit"
-      exit $sheetExit
+      Write-Log "Strategy4 Google Sheet upload failed with exit code $sheetExit; continuing because Strategy4 JSON publish is complete."
+    } else {
+      $sheetUploaded = $true
+      Write-Log "=== Strategy4 Google Sheet upload end $(Get-Date) ==="
     }
-    $sheetUploaded = $true
-    Write-Log "=== Strategy4 Google Sheet upload end $(Get-Date) ==="
   } else {
     Write-Log "Strategy4 Google Sheet upload script not found: $uploadScript"
-    exit 1
   }
 }
 
@@ -220,13 +219,12 @@ if ($env:STRATEGY4_UPLOAD_SHEET_AFTER_SCAN -ne "0" -and $strategy4Output.complet
       }
     }
     if ($sheetExit -ne 0) {
-      Write-Log "Strategy4 Google Sheet upload failed with exit code $sheetExit"
-      exit $sheetExit
+      Write-Log "Strategy4 Google Sheet upload failed with exit code $sheetExit; continuing because Strategy4 JSON publish is complete."
+    } else {
+      Write-Log "=== Strategy4 Google Sheet upload end $(Get-Date) ==="
     }
-    Write-Log "=== Strategy4 Google Sheet upload end $(Get-Date) ==="
   } else {
     Write-Log "Strategy4 Google Sheet upload script not found: $uploadScript"
-    exit 1
   }
 } else {
   if ($strategy4Output.complete -ne $true) {
