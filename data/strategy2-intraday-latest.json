@@ -1,26 +1,26 @@
 {
   "source": "strategy2-09-to-1330-patrol",
   "date": "2026-06-12",
-  "updatedAt": "2026-06-12T02:17:56.950Z",
+  "updatedAt": "2026-06-12T02:21:55.497Z",
   "realtime": {
     "requested": 1013,
-    "received": 997,
-    "usableBeforeRescue": 3,
-    "coverageBeforeRescue": 0.003,
-    "usableAfterRescue": 3,
-    "coverageAfterRescue": 0.003,
+    "received": 999,
+    "usableBeforeRescue": 4,
+    "coverageBeforeRescue": 0.0039,
+    "usableAfterRescue": 4,
+    "coverageAfterRescue": 0.0039,
     "unusableBreakdown": {
-      "usable": 3,
-      "stale": 994,
+      "usable": 4,
+      "stale": 995,
       "noTime": 0,
       "noClose": 0,
-      "missing": 16
+      "missing": 14
     },
     "sourceHealth": {
       "fugle": {
-        "received": 997,
-        "usable": 3,
-        "stale": 994,
+        "received": 999,
+        "usable": 4,
+        "stale": 995,
         "noTime": 0,
         "noClose": 0
       }
@@ -35,14 +35,14 @@
     "fugleRateLimited": false,
     "fallbackStats": {
       "fugleWs": {
-        "available": 859,
-        "used": 859
+        "available": 821,
+        "used": 821
       },
       "fugle": {
         "configured": true,
         "requested": 1313,
-        "recovered": 1292,
-        "empty": 21,
+        "recovered": 1294,
+        "empty": 19,
         "failed": 0,
         "skippedNoKey": 0,
         "rateLimited": false
@@ -66,12 +66,12 @@
         "cooldownMs": 30000,
         "requested": 300,
         "recovered": 0,
-        "coverageBefore": 0.003,
-        "usableBefore": 3,
+        "coverageBefore": 0.0039,
+        "usableBefore": 4,
         "skippedCooldown": false,
         "cooldownRemainingMs": 0,
-        "coverageAfter": 0.003,
-        "usableAfter": 3
+        "coverageAfter": 0.0039,
+        "usableAfter": 4
       }
     },
     "finmindRealtimeEnabled": false,
@@ -621,6 +621,7 @@
       "3046",
       "2514",
       "2616",
+      "1475",
       "8341",
       "6206",
       "9945",
@@ -990,6 +991,7 @@
       "1436",
       "2501",
       "6695",
+      "6887",
       "1525",
       "1735",
       "1225",
@@ -1079,7 +1081,6 @@
       "1213",
       "1470",
       "1472",
-      "1475",
       "1538",
       "2024",
       "2712",
@@ -1088,7 +1089,6 @@
       "2939",
       "6225",
       "6655",
-      "6887",
       "6908",
       "6918",
       "8467"
@@ -1177,21 +1177,21 @@
     ],
     "noTimeCodes": [],
     "noCloseCodes": [],
-    "missedCount": 16,
-    "coverage": 0.848,
-    "quoteCoverage": 0.003,
-    "fugleWsCoverage": 0.848,
-    "usable": 859,
-    "quoteUsable": 3,
-    "entrySourceUsable": 859,
+    "missedCount": 14,
+    "coverage": 0.8105,
+    "quoteCoverage": 0.0039,
+    "fugleWsCoverage": 0.8105,
+    "usable": 821,
+    "quoteUsable": 4,
+    "entrySourceUsable": 821,
     "cachedRecovered": 0,
     "quoteCacheMaxAgeSeconds": 900,
     "entrySourceCoverageThreshold": 0.5,
     "entrySourceHealthy": true,
     "initialBatchSize": 12,
     "retryBatchSize": 4,
-    "tradable": 859,
-    "tradableByQuote": 3
+    "tradable": 821,
+    "tradableByQuote": 4
   },
   "records": [
     {
