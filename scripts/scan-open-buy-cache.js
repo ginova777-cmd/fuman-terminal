@@ -35,7 +35,6 @@ const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY
   || readSecretText(path.join(process.env.FUMAN_RUNTIME_DIR || "C:/fuman-runtime", "secrets", "supabase-anon-key.txt"));
 const SUPABASE_READBACK_KEY = SUPABASE_ANON_KEY || SUPABASE_SERVICE_ROLE_KEY;
 const SUPABASE_OPEN_BUY_TABLE = process.env.SUPABASE_OPEN_BUY_TABLE || "strategy1_open_buy_latest";
-const SUPABASE_UPLOAD_OPTIONAL = process.env.FUMAN_SUPABASE_UPLOAD_OPTIONAL !== "0";
 
 function readJson(file, fallback) {
   try { return JSON.parse(fs.readFileSync(file, "utf8")); } catch { return fallback; }
@@ -86,16 +85,6 @@ async function upsertOpenBuyLatestToSupabase(payload) {
   if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
     writeSupabaseStatus(false, { skipped: true, reason: "missing Supabase credentials" });
     return false;
-  }
-  if (SUPABASE_UPLOAD_OPTIONAL && process.env.FUMAN_ENABLE_SUPABASE_UPLOAD !== "1") {
-    writeSupabaseStatus(true, {
-      skipped: true,
-      optional: true,
-      table: SUPABASE_OPEN_BUY_TABLE,
-      reason: "Supabase upload optional; set FUMAN_ENABLE_SUPABASE_UPLOAD=1 to enable.",
-    });
-    console.log("open-buy supabase upload skipped: optional upload disabled");
-    return true;
   }
   const baseUrl = SUPABASE_URL.replace(/\/+$/, "");
   const body = {
@@ -150,7 +139,6 @@ async function upsertOpenBuyLatestToSupabase(payload) {
   }
   writeSupabaseStatus(false, {
     table: SUPABASE_OPEN_BUY_TABLE,
-    optional: SUPABASE_UPLOAD_OPTIONAL,
     error: lastMessage || "unknown error",
     attempts,
   });
