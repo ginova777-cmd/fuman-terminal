@@ -4,6 +4,8 @@ Mobile-readable summary: `FRESHNESS-GATE-MOBILE.md`
 
 Strategy2 data governance: `STRATEGY2-FRESHNESS-GOVERNANCE.md`
 
+Realtime radar data governance: `REALTIME-RADAR-FRESHNESS-GOVERNANCE.md`
+
 Every Codex touching this project must first sync and read the operating rules:
 
 ```powershell
@@ -11,7 +13,7 @@ git pull --ff-only origin main
 npm run verify:publish-gate
 ```
 
-Read `AGENTS.md`, `FRESHNESS-GATE-MOBILE.md`, and `STRATEGY2-FRESHNESS-GOVERNANCE.md` before changing data flow, scheduled tasks, publish scripts, strategy2 A-zone output, or freshness rules.
+Read `AGENTS.md`, `FRESHNESS-GATE-MOBILE.md`, `STRATEGY2-FRESHNESS-GOVERNANCE.md`, and `REALTIME-RADAR-FRESHNESS-GOVERNANCE.md` before changing data flow, scheduled tasks, publish scripts, strategy2 A-zone output, realtime radar output, or freshness rules.
 
 `freshness:gate` also performs a repo sync preflight. If this checkout is behind `origin/main` or has unexpected dirty files, the gate must fail before publishing.
 
@@ -58,6 +60,8 @@ Those commands are intentionally blocked by `run-cache-sync.ps1`.
 Raw scanners may refresh runtime data, but publishing must be centralized through `npm run freshness:gate` so `verify:data-freshness:live` is the final success condition.
 
 Strategy2 data is governed separately as well: strategy2 A-zone JSON, LINE alerts, intraday patrol output, and `strategy2-intraday-*.json` must not be published by scoped sync or manual copy. They must pass through the freshness gate and final live verifier.
+
+Realtime radar data is governed separately as well: `realtime-radar-latest.json`, realtime radar scanner output, failed batch details, stale quote details, and radar filter rules must not be published by scoped sync or manual copy. They must pass through the freshness gate and final live verifier.
 
 Windows Task Scheduler should use these official tasks:
 

@@ -56,6 +56,7 @@ npm run verify:publish-gate
 AGENTS.md
 FRESHNESS-GATE-MOBILE.md
 STRATEGY2-FRESHNESS-GOVERNANCE.md
+REALTIME-RADAR-FRESHNESS-GOVERNANCE.md
 ```
 
 ## 核心規則
@@ -78,6 +79,32 @@ STRATEGY2-FRESHNESS-GOVERNANCE.md
 策略2 A進場區、LINE 通知、`strategy2-intraday-*.json` 都不能用舊腳本或手動 cache sync 繞過 gate。
 
 策略2資料只有通過：
+
+```powershell
+npm run verify:data-freshness:live
+```
+
+才算可以給客人看。
+
+## 即時雷達專屬規則
+
+即時雷達資料治理細則在：
+
+```text
+REALTIME-RADAR-FRESHNESS-GOVERNANCE.md
+```
+
+即時雷達目前正式資料流是：
+
+```text
+/api/market + /api/realtime
+```
+
+不需要 Supabase 才能運作。
+
+`realtime-radar-latest.json`、即時雷達 scanner output、failed batch details、stale quote details、外部來源 warning、名單收斂規則，都不能用舊腳本或手動 cache sync 繞過 gate。
+
+即時雷達資料只有通過：
 
 ```powershell
 npm run verify:data-freshness:live

@@ -244,6 +244,8 @@ if (!fs.existsSync(path.join(ROOT, "AGENTS.md"))) {
   if (!agents.includes("Do not modify Supabase-related code")) issues.push("AGENTS.md must preserve the current Supabase pause rule");
   if (!agents.includes("STRATEGY2-FRESHNESS-GOVERNANCE.md")) issues.push("AGENTS.md must point Codex to STRATEGY2-FRESHNESS-GOVERNANCE.md");
   if (!agents.includes("strategy2-intraday-*.json")) issues.push("AGENTS.md must mention strategy2 JSON cannot bypass freshness gate");
+  if (!agents.includes("REALTIME-RADAR-FRESHNESS-GOVERNANCE.md")) issues.push("AGENTS.md must point Codex to REALTIME-RADAR-FRESHNESS-GOVERNANCE.md");
+  if (!agents.includes("realtime-radar-latest.json")) issues.push("AGENTS.md must mention realtime radar JSON cannot bypass freshness gate");
 }
 
 if (!fs.existsSync(path.join(ROOT, "FRESHNESS-GATE-MOBILE.md"))) {
@@ -267,6 +269,9 @@ if (!fs.existsSync(path.join(ROOT, "FRESHNESS-GATE-MOBILE.md"))) {
     "Fuman Terminal Freshness Gate",
     "STRATEGY2-FRESHNESS-GOVERNANCE.md",
     "策略2 A進場區",
+    "REALTIME-RADAR-FRESHNESS-GOVERNANCE.md",
+    "/api/market + /api/realtime",
+    "realtime-radar-latest.json",
   ]) {
     if (!mobile.includes(marker)) issues.push(`FRESHNESS-GATE-MOBILE.md missing ${marker}`);
   }
@@ -295,6 +300,32 @@ if (!fs.existsSync(path.join(ROOT, "STRATEGY2-FRESHNESS-GOVERNANCE.md"))) {
     "legacy-entrypoint-guard.ps1",
   ]) {
     if (!strategy2Governance.includes(marker)) issues.push(`STRATEGY2-FRESHNESS-GOVERNANCE.md missing ${marker}`);
+  }
+}
+
+if (!fs.existsSync(path.join(ROOT, "REALTIME-RADAR-FRESHNESS-GOVERNANCE.md"))) {
+  issues.push("REALTIME-RADAR-FRESHNESS-GOVERNANCE.md missing realtime radar data governance");
+} else {
+  const realtimeRadarGovernance = read("REALTIME-RADAR-FRESHNESS-GOVERNANCE.md");
+  for (const marker of [
+    "即時雷達資料新鮮度治理",
+    "Verified Data Publish Gate",
+    "npm run freshness:gate",
+    "npm run verify:data-freshness:live",
+    "/api/market + /api/realtime",
+    "realtime-radar-latest.json",
+    "ETF / ETN / DR / 指數 / 權證 / CB / 非普通股",
+    "2330、2412、3045",
+    "水泥 / 軍工 / 國防 / 航太",
+    "avg_volume_5 < 3000",
+    "cumulative_bid_ask_volume < 3000",
+    "score 高到低 -> 成交值高到低 -> 取前 80 檔",
+    "failed batch details",
+    "stale quote details",
+    "Supabase 不是即時雷達必要條件",
+    "legacy-entrypoint-guard.ps1",
+  ]) {
+    if (!realtimeRadarGovernance.includes(marker)) issues.push(`REALTIME-RADAR-FRESHNESS-GOVERNANCE.md missing ${marker}`);
   }
 }
 
@@ -333,6 +364,7 @@ if (fetchResult.status !== 0) {
       "run-main-release-pipeline.ps1",
       "package.json",
       "scripts/generate-health-summary.js",
+      "REALTIME-RADAR-FRESHNESS-GOVERNANCE.md",
     ]);
     const dirty = status.stdout
       .split(/\r?\n/)
