@@ -1,6 +1,6 @@
 {
   "ok": true,
-  "updatedAt": "2026-06-13T14:29:05.670Z",
+  "updatedAt": "2026-06-13T14:36:45.255Z",
   "generatedBy": "generate-performance-report",
   "assets": [
     {
@@ -41,30 +41,30 @@
     {
       "file": "institution-slim.json",
       "ok": true,
-      "bytes": 528627,
+      "bytes": 528637,
       "count": 1883,
-      "updatedAt": "2026-06-13T14:28:34.328Z"
+      "updatedAt": "2026-06-13T14:36:14.240Z"
     },
     {
       "file": "institution-joint-top.json",
       "ok": true,
       "bytes": 45055,
       "count": 160,
-      "updatedAt": "2026-06-13T14:28:34.328Z"
+      "updatedAt": "2026-06-13T14:36:14.240Z"
     },
     {
       "file": "warrant-flow-slim.json",
       "ok": true,
       "bytes": 108702,
       "count": 120,
-      "updatedAt": "2026-06-13T14:29:00.884Z"
+      "updatedAt": "2026-06-13T14:36:39.353Z"
     },
     {
       "file": "warrant-priority-top.json",
       "ok": true,
       "bytes": 90781,
       "count": 120,
-      "updatedAt": "2026-06-13T14:29:00.884Z"
+      "updatedAt": "2026-06-13T14:36:39.353Z"
     },
     {
       "file": "realtime-radar-latest.json",
@@ -78,30 +78,30 @@
       "ok": true,
       "bytes": 795,
       "count": 0,
-      "updatedAt": "2026-06-13T14:29:05.414Z"
+      "updatedAt": "2026-06-13T14:36:44.953Z"
     },
     {
       "file": "data-quality-report.json",
       "ok": true,
       "bytes": 1556,
       "count": 0,
-      "updatedAt": "2026-06-13T14:29:05.496Z"
+      "updatedAt": "2026-06-13T14:36:45.030Z"
     },
     {
       "file": "data-consistency-report.json",
       "ok": true,
       "bytes": 312,
       "count": 0,
-      "updatedAt": "2026-06-13T14:29:05.566Z"
+      "updatedAt": "2026-06-13T14:36:45.120Z"
     },
     {
       "file": "strategy-weight-report.json",
       "ok": true,
       "bytes": 418,
       "count": 0,
-      "updatedAt": "2026-06-13T14:29:05.623Z"
+      "updatedAt": "2026-06-13T14:36:45.190Z"
     }
   ],
-  "totalBytes": 1204335,
+  "totalBytes": 1204345,
   "missing": []
 }
