@@ -1,7 +1,7 @@
 {
   "ok": true,
   "source": "github-actions-mis-realtime",
-  "updatedAt": "2026-06-12T09:40:51.393Z",
+  "updatedAt": "2026-06-12T14:05:09.529Z",
   "usedDate": "20260612",
   "total": 1953,
   "count": 5,
@@ -35,7 +35,6 @@
       "market": "TWSE",
       "quoteDate": "20260612",
       "quoteTime": "13:30:00",
-      "quoteSource": "mis-realtime",
       "valueRank": 95,
       "volumeRank": 98,
       "volumeLots": 44062,
@@ -68,7 +67,6 @@
       "market": "TWSE",
       "quoteDate": "20260612",
       "quoteTime": "13:30:00",
-      "quoteSource": "mis-realtime",
       "valueRank": 100,
       "volumeRank": 100,
       "volumeLots": 92120,
@@ -101,7 +99,6 @@
       "market": "TWSE",
       "quoteDate": "20260612",
       "quoteTime": "13:30:00",
-      "quoteSource": "mis-realtime",
       "valueRank": 94,
       "volumeRank": 98,
       "volumeLots": 44372,
@@ -134,7 +131,6 @@
       "market": "TWSE",
       "quoteDate": "20260612",
       "quoteTime": "13:30:00",
-      "quoteSource": "mis-realtime",
       "valueRank": 92,
       "volumeRank": 91,
       "volumeLots": 8886,
@@ -167,7 +163,6 @@
       "market": "TWSE",
       "quoteDate": "20260612",
       "quoteTime": "13:30:00",
-      "quoteSource": "mis-realtime",
       "valueRank": 98,
       "volumeRank": 99,
       "volumeLots": 67356,
@@ -184,7 +179,5 @@
         }
       ]
     }
-  ],
-  "preservedAt": "2026-06-12T10:13:47.798Z",
-  "preservedReason": "strategy3 current scan produced zero matches"
+  ]
 }

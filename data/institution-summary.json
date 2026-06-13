@@ -1,9 +1,9 @@
 {
   "ok": true,
   "source": "github-actions",
-  "updatedAt": "2026-06-12T13:33:53.363Z",
+  "updatedAt": "2026-06-13T09:19:13.124Z",
   "usedDate": "20260612",
-  "quoteUpdatedAt": "2026-06-12T13:30:42.752Z",
+  "quoteUpdatedAt": "2026-06-13T09:19:06.114Z",
   "count": 1883,
   "topJoint": [
     {
@@ -16,18 +16,18 @@
       "trust": 13592,
       "dealer": 0,
       "total": 1210510,
-      "foreignStreak": 5,
-      "trustStreak": 8,
-      "jointStreak": 5,
-      "fiveDayPctSum": -4.2,
-      "fiveDayAvgVolume": 24066563
+      "foreignStreak": 4,
+      "trustStreak": 4,
+      "jointStreak": 4,
+      "fiveDayPctSum": -3.02,
+      "fiveDayAvgVolume": 22600902
     },
     {
       "code": "5904",
       "name": "寶雅",
       "close": 647,
       "percent": 3.52,
-      "value": 737580000,
+      "value": 782634873,
       "foreign": 140111,
       "trust": 10000,
       "dealer": 79954,
@@ -51,8 +51,8 @@
       "foreignStreak": 3,
       "trustStreak": 4,
       "jointStreak": 3,
-      "fiveDayPctSum": -12.82,
-      "fiveDayAvgVolume": 206847598
+      "fiveDayPctSum": 6.83,
+      "fiveDayAvgVolume": 203858706
     },
     {
       "code": "2352",
@@ -67,15 +67,15 @@
       "foreignStreak": 3,
       "trustStreak": 7,
       "jointStreak": 3,
-      "fiveDayPctSum": -12.55,
-      "fiveDayAvgVolume": 13223674
+      "fiveDayPctSum": -0.19,
+      "fiveDayAvgVolume": 9571792
     },
     {
       "code": "5536",
       "name": "聖暉*",
       "close": 1180,
       "percent": 9.77,
-      "value": 1299180000,
+      "value": 1372687470,
       "foreign": 562753,
       "trust": 3000,
       "dealer": 9738,
@@ -91,32 +91,32 @@
       "name": "中碳",
       "close": 87,
       "percent": 1.28,
-      "value": 120756000,
+      "value": 123380933,
       "foreign": 396440,
       "trust": 11000,
       "dealer": 0,
       "total": 412046,
       "foreignStreak": 3,
-      "trustStreak": 8,
+      "trustStreak": 4,
       "jointStreak": 3,
-      "fiveDayPctSum": -0.65,
-      "fiveDayAvgVolume": 847982
+      "fiveDayPctSum": 2.02,
+      "fiveDayAvgVolume": 945165
     },
     {
       "code": "2006",
       "name": "東和鋼鐵",
       "close": 68.5,
       "percent": 2.09,
-      "value": 297221500,
+      "value": 299596421,
       "foreign": 153394,
       "trust": 1623093,
       "dealer": 0,
       "total": 1703793,
-      "foreignStreak": 5,
+      "foreignStreak": 4,
       "trustStreak": 2,
       "jointStreak": 2,
-      "fiveDayPctSum": -0.39,
-      "fiveDayAvgVolume": 2447036
+      "fiveDayPctSum": 2.29,
+      "fiveDayAvgVolume": 3002089
     },
     {
       "code": "3005",
@@ -128,11 +128,11 @@
       "trust": 11415,
       "dealer": 0,
       "total": 1677827,
-      "foreignStreak": 4,
+      "foreignStreak": 7,
       "trustStreak": 2,
       "jointStreak": 2,
-      "fiveDayPctSum": -5.02,
-      "fiveDayAvgVolume": 5287855
+      "fiveDayPctSum": -3.16,
+      "fiveDayAvgVolume": 5337132
     },
     {
       "code": "5309",
@@ -163,8 +163,8 @@
       "foreignStreak": 3,
       "trustStreak": 2,
       "jointStreak": 2,
-      "fiveDayPctSum": -0.09,
-      "fiveDayAvgVolume": 5146431
+      "fiveDayPctSum": -0.6,
+      "fiveDayAvgVolume": 5003541
     },
     {
       "code": "2887",
@@ -177,10 +177,10 @@
       "dealer": 0,
       "total": 91934686,
       "foreignStreak": 1,
-      "trustStreak": 8,
+      "trustStreak": 4,
       "jointStreak": 1,
-      "fiveDayPctSum": 0.97,
-      "fiveDayAvgVolume": 114794981
+      "fiveDayPctSum": 5.84,
+      "fiveDayAvgVolume": 117636220
     },
     {
       "code": "2610",
@@ -195,8 +195,8 @@
       "foreignStreak": 1,
       "trustStreak": 1,
       "jointStreak": 1,
-      "fiveDayPctSum": -2.15,
-      "fiveDayAvgVolume": 50646638
+      "fiveDayPctSum": 2.48,
+      "fiveDayAvgVolume": 56638081
     },
     {
       "code": "2303",
@@ -208,27 +208,27 @@
       "trust": 17459251,
       "dealer": 0,
       "total": 37955298,
-      "foreignStreak": 8,
+      "foreignStreak": 4,
       "trustStreak": 1,
       "jointStreak": 1,
-      "fiveDayPctSum": 1.01,
-      "fiveDayAvgVolume": 356059015
+      "fiveDayPctSum": 2.61,
+      "fiveDayAvgVolume": 359199227
     },
     {
       "code": "2002",
       "name": "中鋼",
       "close": 18.9,
       "percent": 1.89,
-      "value": 1084916700,
+      "value": 1086907332,
       "foreign": 28337937,
       "trust": 94665,
       "dealer": 0,
       "total": 29250148,
       "foreignStreak": 1,
-      "trustStreak": 8,
+      "trustStreak": 4,
       "jointStreak": 1,
-      "fiveDayPctSum": -3.64,
-      "fiveDayAvgVolume": 63911773
+      "fiveDayPctSum": -2.01,
+      "fiveDayAvgVolume": 64955865
     },
     {
       "code": "1605",
@@ -241,10 +241,10 @@
       "dealer": 0,
       "total": 29225254,
       "foreignStreak": 1,
-      "trustStreak": 8,
+      "trustStreak": 4,
       "jointStreak": 1,
-      "fiveDayPctSum": -17.11,
-      "fiveDayAvgVolume": 57021356
+      "fiveDayPctSum": -2.27,
+      "fiveDayAvgVolume": 54225446
     },
     {
       "code": "2408",
@@ -257,17 +257,17 @@
       "dealer": 0,
       "total": 27789134,
       "foreignStreak": 1,
-      "trustStreak": 5,
+      "trustStreak": 4,
       "jointStreak": 1,
-      "fiveDayPctSum": -13.8,
-      "fiveDayAvgVolume": 105448665
+      "fiveDayPctSum": 5.07,
+      "fiveDayAvgVolume": 100043229
     },
     {
       "code": "1303",
       "name": "南亞",
       "close": 106.5,
       "percent": 9.91,
-      "value": 5683159500,
+      "value": 5692023707,
       "foreign": 20882058,
       "trust": 401667,
       "dealer": 0,
@@ -275,8 +275,8 @@
       "foreignStreak": 1,
       "trustStreak": 8,
       "jointStreak": 1,
-      "fiveDayPctSum": -13.03,
-      "fiveDayAvgVolume": 55593747
+      "fiveDayPctSum": 2.73,
+      "fiveDayAvgVolume": 55693997
     },
     {
       "code": "0056",
@@ -291,8 +291,8 @@
       "foreignStreak": 1,
       "trustStreak": 2,
       "jointStreak": 1,
-      "fiveDayPctSum": -5.75,
-      "fiveDayAvgVolume": 79690985
+      "fiveDayPctSum": -2.1,
+      "fiveDayAvgVolume": 74018480
     },
     {
       "code": "0050",
@@ -305,10 +305,10 @@
       "dealer": 0,
       "total": 16141301,
       "foreignStreak": 1,
-      "trustStreak": 8,
+      "trustStreak": 4,
       "jointStreak": 1,
-      "fiveDayPctSum": -5.92,
-      "fiveDayAvgVolume": 319995990
+      "fiveDayPctSum": -1.98,
+      "fiveDayAvgVolume": 267902439
     },
     {
       "code": "5347",
@@ -331,7 +331,7 @@
       "name": "中美晶",
       "close": 159,
       "percent": 9.66,
-      "value": 3200988000,
+      "value": 3231601613,
       "foreign": 7383283,
       "trust": 674879,
       "dealer": 108418,
@@ -347,7 +347,7 @@
       "name": "台泥",
       "close": 24.55,
       "percent": 1.24,
-      "value": 737138300,
+      "value": 742893054,
       "foreign": 6211054,
       "trust": 61000,
       "dealer": 0,
@@ -355,15 +355,31 @@
       "foreignStreak": 1,
       "trustStreak": 8,
       "jointStreak": 1,
-      "fiveDayPctSum": -0.78,
-      "fiveDayAvgVolume": 34890297
+      "fiveDayPctSum": 0.66,
+      "fiveDayAvgVolume": 34670958
+    },
+    {
+      "code": "1301",
+      "name": "台塑",
+      "close": 45.25,
+      "percent": 3.31,
+      "value": 970029113,
+      "foreign": 5911075,
+      "trust": 27000,
+      "dealer": -35877,
+      "total": 6435911,
+      "foreignStreak": 1,
+      "trustStreak": 3,
+      "jointStreak": 1,
+      "fiveDayPctSum": -7.46,
+      "fiveDayAvgVolume": 28415851
     },
     {
       "code": "5425",
       "name": "台半",
       "close": 101,
       "percent": 9.9,
-      "value": 2491670000,
+      "value": 2471465937,
       "foreign": 4281320,
       "trust": 1197580,
       "dealer": 129412,
@@ -379,7 +395,7 @@
       "name": "欣銓",
       "close": 227.5,
       "percent": 5.81,
-      "value": 2069795000,
+      "value": 2146476108,
       "foreign": 3493396,
       "trust": 518000,
       "dealer": 140066,
@@ -419,15 +435,15 @@
       "foreignStreak": 3,
       "trustStreak": 1,
       "jointStreak": 1,
-      "fiveDayPctSum": -14.32,
-      "fiveDayAvgVolume": 38017291
+      "fiveDayPctSum": -11.93,
+      "fiveDayAvgVolume": 28905945
     },
     {
       "code": "6257",
       "name": "矽格",
       "close": 221.5,
       "percent": 7.79,
-      "value": 1986855000,
+      "value": 2022295782,
       "foreign": 3081832,
       "trust": 33000,
       "dealer": 0,
@@ -435,8 +451,8 @@
       "foreignStreak": 1,
       "trustStreak": 2,
       "jointStreak": 1,
-      "fiveDayPctSum": -9.74,
-      "fiveDayAvgVolume": 8482995
+      "fiveDayPctSum": 0.24,
+      "fiveDayAvgVolume": 8566989
     },
     {
       "code": "6139",
@@ -451,8 +467,8 @@
       "foreignStreak": 1,
       "trustStreak": 1,
       "jointStreak": 1,
-      "fiveDayPctSum": -11.36,
-      "fiveDayAvgVolume": 5927972
+      "fiveDayPctSum": 0.68,
+      "fiveDayAvgVolume": 5212329
     },
     {
       "code": "2542",
@@ -467,8 +483,8 @@
       "foreignStreak": 1,
       "trustStreak": 8,
       "jointStreak": 1,
-      "fiveDayPctSum": 5.3,
-      "fiveDayAvgVolume": 31954147
+      "fiveDayPctSum": 4.65,
+      "fiveDayAvgVolume": 33936886
     },
     {
       "code": "6173",
@@ -496,18 +512,18 @@
       "trust": 1400000,
       "dealer": 0,
       "total": 2603158,
-      "foreignStreak": 4,
+      "foreignStreak": 8,
       "trustStreak": 1,
       "jointStreak": 1,
-      "fiveDayPctSum": 1.37,
-      "fiveDayAvgVolume": 3830614
+      "fiveDayPctSum": 1.56,
+      "fiveDayAvgVolume": 3383980
     },
     {
       "code": "6278",
       "name": "台表科",
       "close": 211,
       "percent": 9.9,
-      "value": 2570824000,
+      "value": 2587069498,
       "foreign": 1887500,
       "trust": 479606,
       "dealer": 0,
@@ -515,8 +531,8 @@
       "foreignStreak": 8,
       "trustStreak": 1,
       "jointStreak": 1,
-      "fiveDayPctSum": -9.61,
-      "fiveDayAvgVolume": 12420612
+      "fiveDayPctSum": 2.88,
+      "fiveDayAvgVolume": 13407953
     },
     {
       "code": "2371",
@@ -529,10 +545,10 @@
       "dealer": 0,
       "total": 2345237,
       "foreignStreak": 1,
-      "trustStreak": 8,
+      "trustStreak": 4,
       "jointStreak": 1,
-      "fiveDayPctSum": -13.56,
-      "fiveDayAvgVolume": 20631537
+      "fiveDayPctSum": -6.31,
+      "fiveDayAvgVolume": 16820819
     },
     {
       "code": "2317",
@@ -547,8 +563,8 @@
       "foreignStreak": 1,
       "trustStreak": 2,
       "jointStreak": 1,
-      "fiveDayPctSum": -12.14,
-      "fiveDayAvgVolume": 95318274
+      "fiveDayPctSum": -8.47,
+      "fiveDayAvgVolume": 88738692
     },
     {
       "code": "2404",
@@ -560,34 +576,34 @@
       "trust": 292000,
       "dealer": 0,
       "total": 2302800,
-      "foreignStreak": 8,
+      "foreignStreak": 4,
       "trustStreak": 1,
       "jointStreak": 1,
-      "fiveDayPctSum": -2.16,
-      "fiveDayAvgVolume": 4844012
+      "fiveDayPctSum": 9.5,
+      "fiveDayAvgVolume": 4830521
     },
     {
       "code": "6282",
       "name": "康舒",
       "close": 58.1,
       "percent": 1.57,
-      "value": 1844675000,
+      "value": 1903699856,
       "foreign": 1969613,
       "trust": 31000,
       "dealer": 0,
       "total": 991866,
       "foreignStreak": 1,
-      "trustStreak": 6,
+      "trustStreak": 4,
       "jointStreak": 1,
-      "fiveDayPctSum": -19.9,
-      "fiveDayAvgVolume": 73405602
+      "fiveDayPctSum": -8.44,
+      "fiveDayAvgVolume": 57163101
     },
     {
       "code": "4915",
       "name": "致伸",
       "close": 76.5,
       "percent": 1.73,
-      "value": 429165000,
+      "value": 435076204,
       "foreign": 5200,
       "trust": 1644878,
       "dealer": 0,
@@ -595,8 +611,8 @@
       "foreignStreak": 1,
       "trustStreak": 2,
       "jointStreak": 1,
-      "fiveDayPctSum": -2.37,
-      "fiveDayAvgVolume": 4974861
+      "fiveDayPctSum": -1.03,
+      "fiveDayAvgVolume": 5119762
     },
     {
       "code": "1504",
@@ -609,10 +625,10 @@
       "dealer": 0,
       "total": 2012308,
       "foreignStreak": 1,
-      "trustStreak": 7,
+      "trustStreak": 4,
       "jointStreak": 1,
-      "fiveDayPctSum": -22.97,
-      "fiveDayAvgVolume": 40910826
+      "fiveDayPctSum": -9.28,
+      "fiveDayAvgVolume": 22903205
     },
     {
       "code": "2376",
@@ -627,8 +643,8 @@
       "foreignStreak": 1,
       "trustStreak": 1,
       "jointStreak": 1,
-      "fiveDayPctSum": -9.13,
-      "fiveDayAvgVolume": 14664818
+      "fiveDayPctSum": -7.2,
+      "fiveDayAvgVolume": 12816168
     },
     {
       "code": "2548",
@@ -640,11 +656,11 @@
       "trust": 174000,
       "dealer": 0,
       "total": 1057248,
-      "foreignStreak": 6,
+      "foreignStreak": 4,
       "trustStreak": 1,
       "jointStreak": 1,
-      "fiveDayPctSum": 4.29,
-      "fiveDayAvgVolume": 5550052
+      "fiveDayPctSum": 2.51,
+      "fiveDayAvgVolume": 5152053
     },
     {
       "code": "6196",
@@ -657,10 +673,10 @@
       "dealer": 0,
       "total": 1049998,
       "foreignStreak": 1,
-      "trustStreak": 8,
+      "trustStreak": 4,
       "jointStreak": 1,
-      "fiveDayPctSum": 0.35,
-      "fiveDayAvgVolume": 2335698
+      "fiveDayPctSum": 9.08,
+      "fiveDayAvgVolume": 2726706
     },
     {
       "code": "3413",
@@ -675,8 +691,24 @@
       "foreignStreak": 1,
       "trustStreak": 4,
       "jointStreak": 1,
-      "fiveDayPctSum": -9.16,
-      "fiveDayAvgVolume": 1980081
+      "fiveDayPctSum": -2.48,
+      "fiveDayAvgVolume": 1916957
+    },
+    {
+      "code": "2342",
+      "name": "茂矽",
+      "close": 40.9,
+      "percent": 3.02,
+      "value": 245931700,
+      "foreign": 802262,
+      "trust": 3113,
+      "dealer": 0,
+      "total": 803149,
+      "foreignStreak": 1,
+      "trustStreak": 1,
+      "jointStreak": 1,
+      "fiveDayPctSum": -0.58,
+      "fiveDayAvgVolume": 5601876
     },
     {
       "code": "2606",
@@ -689,17 +721,17 @@
       "dealer": 0,
       "total": 843502,
       "foreignStreak": 1,
-      "trustStreak": 7,
+      "trustStreak": 4,
       "jointStreak": 1,
-      "fiveDayPctSum": -3.1,
-      "fiveDayAvgVolume": 5616826
+      "fiveDayPctSum": -3.5,
+      "fiveDayAvgVolume": 4808871
     },
     {
       "code": "3357",
       "name": "臺慶科",
       "close": 293,
       "percent": 2.09,
-      "value": 3258746000,
+      "value": 3398667826,
       "foreign": 535203,
       "trust": 10000,
       "dealer": -23350,
@@ -715,23 +747,23 @@
       "name": "豐興",
       "close": 63.3,
       "percent": 1.77,
-      "value": 41334900,
+      "value": 41901151,
       "foreign": 149122,
       "trust": 215000,
       "dealer": 0,
       "total": 365996,
-      "foreignStreak": 5,
+      "foreignStreak": 4,
       "trustStreak": 1,
       "jointStreak": 1,
-      "fiveDayPctSum": -1.23,
-      "fiveDayAvgVolume": 399685
+      "fiveDayPctSum": 2.12,
+      "fiveDayAvgVolume": 469455
     },
     {
       "code": "8358",
       "name": "金居",
       "close": 574,
       "percent": 6.3,
-      "value": 1072806000,
+      "value": 1142610628,
       "foreign": 344045,
       "trust": 6000,
       "dealer": 14670,
@@ -755,8 +787,8 @@
       "foreignStreak": 3,
       "trustStreak": 1,
       "jointStreak": 1,
-      "fiveDayPctSum": -1.47,
-      "fiveDayAvgVolume": 701317
+      "fiveDayPctSum": 0.66,
+      "fiveDayAvgVolume": 700221
     },
     {
       "code": "6509",
@@ -779,7 +811,7 @@
       "name": "大學光",
       "close": 135,
       "percent": 3.05,
-      "value": 57105000,
+      "value": 60517229,
       "foreign": 46283,
       "trust": 176794,
       "dealer": 173,
@@ -801,10 +833,10 @@
       "dealer": 0,
       "total": 192021,
       "foreignStreak": 1,
-      "trustStreak": 8,
+      "trustStreak": 4,
       "jointStreak": 1,
-      "fiveDayPctSum": -6.31,
-      "fiveDayAvgVolume": 3420506
+      "fiveDayPctSum": -3.18,
+      "fiveDayAvgVolume": 3313470
     },
     {
       "code": "6197",
@@ -819,8 +851,8 @@
       "foreignStreak": 1,
       "trustStreak": 2,
       "jointStreak": 1,
-      "fiveDayPctSum": 0.63,
-      "fiveDayAvgVolume": 7878690
+      "fiveDayPctSum": 1.1,
+      "fiveDayAvgVolume": 7405603
     },
     {
       "code": "3023",
@@ -833,10 +865,10 @@
       "dealer": 0,
       "total": 161360,
       "foreignStreak": 1,
-      "trustStreak": 7,
+      "trustStreak": 4,
       "jointStreak": 1,
-      "fiveDayPctSum": -1.03,
-      "fiveDayAvgVolume": 3345977
+      "fiveDayPctSum": -4.36,
+      "fiveDayAvgVolume": 2629390
     },
     {
       "code": "6515",
@@ -849,10 +881,10 @@
       "dealer": 0,
       "total": 157510,
       "foreignStreak": 1,
-      "trustStreak": 5,
+      "trustStreak": 4,
       "jointStreak": 1,
-      "fiveDayPctSum": 1.3,
-      "fiveDayAvgVolume": 389877
+      "fiveDayPctSum": 13.88,
+      "fiveDayAvgVolume": 465054
     },
     {
       "code": "5274",
@@ -871,6 +903,22 @@
       "fiveDayAvgVolume": 297505
     },
     {
+      "code": "1522",
+      "name": "堤維西",
+      "close": 31.05,
+      "percent": 0.49,
+      "value": 22480200,
+      "foreign": 85763,
+      "trust": 4000,
+      "dealer": -1336,
+      "total": 77763,
+      "foreignStreak": 1,
+      "trustStreak": 1,
+      "jointStreak": 1,
+      "fiveDayPctSum": -3.14,
+      "fiveDayAvgVolume": 964069
+    },
+    {
       "code": "2395",
       "name": "研華",
       "close": 473,
@@ -883,8 +931,8 @@
       "foreignStreak": 5,
       "trustStreak": 1,
       "jointStreak": 1,
-      "fiveDayPctSum": -11.32,
-      "fiveDayAvgVolume": 4207872
+      "fiveDayPctSum": -4.4,
+      "fiveDayAvgVolume": 3393431
     },
     {
       "code": "2472",
@@ -896,75 +944,27 @@
       "trust": 70000,
       "dealer": 0,
       "total": 105095,
+      "foreignStreak": 5,
+      "trustStreak": 1,
+      "jointStreak": 1,
+      "fiveDayPctSum": 3.67,
+      "fiveDayAvgVolume": 3166045
+    },
+    {
+      "code": "6491",
+      "name": "晶碩",
+      "close": 317.5,
+      "percent": -1.85,
+      "value": 145097500,
+      "foreign": 79474,
+      "trust": 1000,
+      "dealer": 0,
+      "total": 75507,
       "foreignStreak": 4,
       "trustStreak": 1,
       "jointStreak": 1,
-      "fiveDayPctSum": 1.39,
-      "fiveDayAvgVolume": 3148825
-    },
-    {
-      "code": "5234",
-      "name": "達興材料",
-      "close": 390.5,
-      "percent": 2.49,
-      "value": 88643500,
-      "foreign": 58000,
-      "trust": 1000,
-      "dealer": 0,
-      "total": 80133,
-      "foreignStreak": 1,
-      "trustStreak": 5,
-      "jointStreak": 1,
-      "fiveDayPctSum": -2.45,
-      "fiveDayAvgVolume": 648257
-    },
-    {
-      "code": "8109",
-      "name": "博大",
-      "close": 119.5,
-      "percent": 0.84,
-      "value": 12069500,
-      "foreign": 20000,
-      "trust": 7000,
-      "dealer": -1464,
-      "total": 25536,
-      "foreignStreak": 1,
-      "trustStreak": 8,
-      "jointStreak": 1,
-      "fiveDayPctSum": 4.22,
-      "fiveDayAvgVolume": 104094
-    },
-    {
-      "code": "3708",
-      "name": "上緯投控",
-      "close": 117,
-      "percent": -1.27,
-      "value": 69966000,
-      "foreign": 10300,
-      "trust": 7000,
-      "dealer": 0,
-      "total": -10459,
-      "foreignStreak": 1,
-      "trustStreak": 8,
-      "jointStreak": 1,
-      "fiveDayPctSum": -4.39,
-      "fiveDayAvgVolume": 768549
-    },
-    {
-      "code": "2618",
-      "name": "長榮航",
-      "close": 38.7,
-      "percent": 2.65,
-      "value": 2913955200,
-      "foreign": 37749153,
-      "trust": -5395942,
-      "dealer": 0,
-      "total": 35216356,
-      "foreignStreak": 4,
-      "trustStreak": 0,
-      "jointStreak": 0,
-      "fiveDayPctSum": -0.44,
-      "fiveDayAvgVolume": 42709262
+      "fiveDayPctSum": -2.11,
+      "fiveDayAvgVolume": 508607
     }
   ],
   "topTrust": [
@@ -978,11 +978,11 @@
       "trust": 17459251,
       "dealer": 0,
       "total": 37955298,
-      "foreignStreak": 8,
+      "foreignStreak": 4,
       "trustStreak": 1,
       "jointStreak": 1,
-      "fiveDayPctSum": 1.01,
-      "fiveDayAvgVolume": 356059015
+      "fiveDayPctSum": 2.61,
+      "fiveDayAvgVolume": 359199227
     },
     {
       "code": "2887",
@@ -995,10 +995,10 @@
       "dealer": 0,
       "total": 91934686,
       "foreignStreak": 1,
-      "trustStreak": 8,
+      "trustStreak": 4,
       "jointStreak": 1,
-      "fiveDayPctSum": 0.97,
-      "fiveDayAvgVolume": 114794981
+      "fiveDayPctSum": 5.84,
+      "fiveDayAvgVolume": 117636220
     },
     {
       "code": "2382",
@@ -1013,8 +1013,8 @@
       "foreignStreak": 0,
       "trustStreak": 8,
       "jointStreak": 0,
-      "fiveDayPctSum": -8.62,
-      "fiveDayAvgVolume": 55643787
+      "fiveDayPctSum": -4.74,
+      "fiveDayAvgVolume": 46649702
     },
     {
       "code": "5347",
@@ -1037,7 +1037,7 @@
       "name": "臻鼎-KY",
       "close": 552,
       "percent": 4.35,
-      "value": 26759304000,
+      "value": 28034662225,
       "foreign": -2703075,
       "trust": 5134000,
       "dealer": 0,
@@ -1045,8 +1045,8 @@
       "foreignStreak": 0,
       "trustStreak": 2,
       "jointStreak": 0,
-      "fiveDayPctSum": 6.27,
-      "fiveDayAvgVolume": 17733095
+      "fiveDayPctSum": 8.28,
+      "fiveDayAvgVolume": 26139585
     },
     {
       "code": "2327",
@@ -1061,8 +1061,8 @@
       "foreignStreak": 0,
       "trustStreak": 7,
       "jointStreak": 0,
-      "fiveDayPctSum": 13.11,
-      "fiveDayAvgVolume": 65874892
+      "fiveDayPctSum": 9.61,
+      "fiveDayAvgVolume": 78160863
     },
     {
       "code": "0050",
@@ -1075,10 +1075,10 @@
       "dealer": 0,
       "total": 16141301,
       "foreignStreak": 1,
-      "trustStreak": 8,
+      "trustStreak": 4,
       "jointStreak": 1,
-      "fiveDayPctSum": -5.92,
-      "fiveDayAvgVolume": 319995990
+      "fiveDayPctSum": -1.98,
+      "fiveDayAvgVolume": 267902439
     },
     {
       "code": "3090",
@@ -1093,8 +1093,8 @@
       "foreignStreak": 0,
       "trustStreak": 3,
       "jointStreak": 0,
-      "fiveDayPctSum": 6.66,
-      "fiveDayAvgVolume": 10938130
+      "fiveDayPctSum": 16.53,
+      "fiveDayAvgVolume": 18349495
     },
     {
       "code": "2344",
@@ -1109,15 +1109,15 @@
       "foreignStreak": 3,
       "trustStreak": 4,
       "jointStreak": 3,
-      "fiveDayPctSum": -12.82,
-      "fiveDayAvgVolume": 206847598
+      "fiveDayPctSum": 6.83,
+      "fiveDayAvgVolume": 203858706
     },
     {
       "code": "6239",
       "name": "力成",
       "close": 347.5,
       "percent": 4.35,
-      "value": 32011700000,
+      "value": 32285122142,
       "foreign": -10975507,
       "trust": 2974000,
       "dealer": 0,
@@ -1125,8 +1125,8 @@
       "foreignStreak": 0,
       "trustStreak": 1,
       "jointStreak": 0,
-      "fiveDayPctSum": -4.92,
-      "fiveDayAvgVolume": 14810095
+      "fiveDayPctSum": 3.95,
+      "fiveDayAvgVolume": 30196118
     },
     {
       "code": "2881",
@@ -1139,10 +1139,10 @@
       "dealer": 0,
       "total": -10869979,
       "foreignStreak": 0,
-      "trustStreak": 6,
+      "trustStreak": 4,
       "jointStreak": 0,
-      "fiveDayPctSum": 10.02,
-      "fiveDayAvgVolume": 77070401
+      "fiveDayPctSum": 3.72,
+      "fiveDayAvgVolume": 73256865
     },
     {
       "code": "8150",
@@ -1157,31 +1157,31 @@
       "foreignStreak": 0,
       "trustStreak": 4,
       "jointStreak": 0,
-      "fiveDayPctSum": -0.22,
-      "fiveDayAvgVolume": 48731628
+      "fiveDayPctSum": 2,
+      "fiveDayAvgVolume": 58512073
     },
     {
       "code": "1210",
       "name": "大成",
       "close": 55.3,
       "percent": -0.72,
-      "value": 254988300,
+      "value": 256982650,
       "foreign": -2043670,
       "trust": 1692000,
       "dealer": 0,
       "total": -338306,
       "foreignStreak": 0,
-      "trustStreak": 8,
+      "trustStreak": 4,
       "jointStreak": 0,
-      "fiveDayPctSum": 2.75,
-      "fiveDayAvgVolume": 9223790
+      "fiveDayPctSum": 1.67,
+      "fiveDayAvgVolume": 7970626
     },
     {
       "code": "4915",
       "name": "致伸",
       "close": 76.5,
       "percent": 1.73,
-      "value": 429165000,
+      "value": 435076204,
       "foreign": 5200,
       "trust": 1644878,
       "dealer": 0,
@@ -1189,24 +1189,24 @@
       "foreignStreak": 1,
       "trustStreak": 2,
       "jointStreak": 1,
-      "fiveDayPctSum": -2.37,
-      "fiveDayAvgVolume": 4974861
+      "fiveDayPctSum": -1.03,
+      "fiveDayAvgVolume": 5119762
     },
     {
       "code": "2006",
       "name": "東和鋼鐵",
       "close": 68.5,
       "percent": 2.09,
-      "value": 297221500,
+      "value": 299596421,
       "foreign": 153394,
       "trust": 1623093,
       "dealer": 0,
       "total": 1703793,
-      "foreignStreak": 5,
+      "foreignStreak": 4,
       "trustStreak": 2,
       "jointStreak": 2,
-      "fiveDayPctSum": -0.39,
-      "fiveDayAvgVolume": 2447036
+      "fiveDayPctSum": 2.29,
+      "fiveDayAvgVolume": 3002089
     },
     {
       "code": "2903",
@@ -1218,11 +1218,11 @@
       "trust": 1400000,
       "dealer": 0,
       "total": 2603158,
-      "foreignStreak": 4,
+      "foreignStreak": 8,
       "trustStreak": 1,
       "jointStreak": 1,
-      "fiveDayPctSum": 1.37,
-      "fiveDayAvgVolume": 3830614
+      "fiveDayPctSum": 1.56,
+      "fiveDayAvgVolume": 3383980
     },
     {
       "code": "2610",
@@ -1237,8 +1237,8 @@
       "foreignStreak": 1,
       "trustStreak": 1,
       "jointStreak": 1,
-      "fiveDayPctSum": -2.15,
-      "fiveDayAvgVolume": 50646638
+      "fiveDayPctSum": 2.48,
+      "fiveDayAvgVolume": 56638081
     },
     {
       "code": "2206",
@@ -1253,15 +1253,15 @@
       "foreignStreak": 0,
       "trustStreak": 1,
       "jointStreak": 0,
-      "fiveDayPctSum": -2.68,
-      "fiveDayAvgVolume": 1805643
+      "fiveDayPctSum": -0.37,
+      "fiveDayAvgVolume": 1906419
     },
     {
       "code": "5425",
       "name": "台半",
       "close": 101,
       "percent": 9.9,
-      "value": 2491670000,
+      "value": 2471465937,
       "foreign": 4281320,
       "trust": 1197580,
       "dealer": 129412,
@@ -1277,7 +1277,7 @@
       "name": "同欣電",
       "close": 238.5,
       "percent": 9.91,
-      "value": 1358973000,
+      "value": 1379683577,
       "foreign": -1004000,
       "trust": 1057000,
       "dealer": 0,
@@ -1285,15 +1285,15 @@
       "foreignStreak": 0,
       "trustStreak": 1,
       "jointStreak": 0,
-      "fiveDayPctSum": -4.2,
-      "fiveDayAvgVolume": 3525443
+      "fiveDayPctSum": 8.58,
+      "fiveDayAvgVolume": 4260167
     },
     {
       "code": "3211",
       "name": "順達",
       "close": 418,
       "percent": 4.89,
-      "value": 2064920000,
+      "value": 2113922733,
       "foreign": -210141,
       "trust": 966000,
       "dealer": -4333,
@@ -1315,10 +1315,10 @@
       "dealer": 0,
       "total": 27789134,
       "foreignStreak": 1,
-      "trustStreak": 5,
+      "trustStreak": 4,
       "jointStreak": 1,
-      "fiveDayPctSum": -13.8,
-      "fiveDayAvgVolume": 105448665
+      "fiveDayPctSum": 5.07,
+      "fiveDayAvgVolume": 100043229
     },
     {
       "code": "9917",
@@ -1333,15 +1333,15 @@
       "foreignStreak": 0,
       "trustStreak": 1,
       "jointStreak": 0,
-      "fiveDayPctSum": 2.55,
-      "fiveDayAvgVolume": 724497
+      "fiveDayPctSum": 4.64,
+      "fiveDayAvgVolume": 960675
     },
     {
       "code": "3231",
       "name": "緯創",
       "close": 156,
       "percent": 2.3,
-      "value": 5802108000,
+      "value": 5982124639,
       "foreign": -5771994,
       "trust": 804361,
       "dealer": 0,
@@ -1349,8 +1349,8 @@
       "foreignStreak": 0,
       "trustStreak": 1,
       "jointStreak": 0,
-      "fiveDayPctSum": -14.02,
-      "fiveDayAvgVolume": 61878030
+      "fiveDayPctSum": -8.88,
+      "fiveDayAvgVolume": 54336402
     },
     {
       "code": "3042",
@@ -1363,10 +1363,10 @@
       "dealer": 0,
       "total": -12658111,
       "foreignStreak": 0,
-      "trustStreak": 7,
+      "trustStreak": 4,
       "jointStreak": 0,
-      "fiveDayPctSum": 13.23,
-      "fiveDayAvgVolume": 48349250
+      "fiveDayPctSum": 6.84,
+      "fiveDayAvgVolume": 59852388
     },
     {
       "code": "6805",
@@ -1381,31 +1381,31 @@
       "foreignStreak": 0,
       "trustStreak": 2,
       "jointStreak": 0,
-      "fiveDayPctSum": -11.97,
-      "fiveDayAvgVolume": 1599088
+      "fiveDayPctSum": -5.92,
+      "fiveDayAvgVolume": 1663329
     },
     {
       "code": "8021",
       "name": "尖點",
       "close": 522,
       "percent": -8.42,
-      "value": 13569390000,
+      "value": 15142202544,
       "foreign": -6288368,
       "trust": 707000,
       "dealer": 0,
       "total": -5504730,
       "foreignStreak": 0,
-      "trustStreak": 5,
+      "trustStreak": 4,
       "jointStreak": 0,
-      "fiveDayPctSum": 26.69,
-      "fiveDayAvgVolume": 11850937
+      "fiveDayPctSum": 14.42,
+      "fiveDayAvgVolume": 17048935
     },
     {
       "code": "5483",
       "name": "中美晶",
       "close": 159,
       "percent": 9.66,
-      "value": 3200988000,
+      "value": 3231601613,
       "foreign": 7383283,
       "trust": 674879,
       "dealer": 108418,
@@ -1429,8 +1429,8 @@
       "foreignStreak": 3,
       "trustStreak": 1,
       "jointStreak": 1,
-      "fiveDayPctSum": -14.32,
-      "fiveDayAvgVolume": 38017291
+      "fiveDayPctSum": -11.93,
+      "fiveDayAvgVolume": 28905945
     },
     {
       "code": "6173",
@@ -1459,17 +1459,17 @@
       "dealer": 0,
       "total": 1049998,
       "foreignStreak": 1,
-      "trustStreak": 8,
+      "trustStreak": 4,
       "jointStreak": 1,
-      "fiveDayPctSum": 0.35,
-      "fiveDayAvgVolume": 2335698
+      "fiveDayPctSum": 9.08,
+      "fiveDayAvgVolume": 2726706
     },
     {
       "code": "3264",
       "name": "欣銓",
       "close": 227.5,
       "percent": 5.81,
-      "value": 2069795000,
+      "value": 2146476108,
       "foreign": 3493396,
       "trust": 518000,
       "dealer": 140066,
@@ -1491,10 +1491,10 @@
       "dealer": 0,
       "total": 980,
       "foreignStreak": 0,
-      "trustStreak": 7,
+      "trustStreak": 4,
       "jointStreak": 0,
-      "fiveDayPctSum": 2.01,
-      "fiveDayAvgVolume": 2418782
+      "fiveDayPctSum": 7.96,
+      "fiveDayAvgVolume": 2474808
     },
     {
       "code": "5243",
@@ -1509,15 +1509,15 @@
       "foreignStreak": 0,
       "trustStreak": 1,
       "jointStreak": 0,
-      "fiveDayPctSum": -7.68,
-      "fiveDayAvgVolume": 4009072
+      "fiveDayPctSum": -0.85,
+      "fiveDayAvgVolume": 3726421
     },
     {
       "code": "6278",
       "name": "台表科",
       "close": 211,
       "percent": 9.9,
-      "value": 2570824000,
+      "value": 2587069498,
       "foreign": 1887500,
       "trust": 479606,
       "dealer": 0,
@@ -1525,15 +1525,15 @@
       "foreignStreak": 8,
       "trustStreak": 1,
       "jointStreak": 1,
-      "fiveDayPctSum": -9.61,
-      "fiveDayAvgVolume": 12420612
+      "fiveDayPctSum": 2.88,
+      "fiveDayAvgVolume": 13407953
     },
     {
       "code": "6274",
       "name": "台燿",
       "close": 1430,
       "percent": -3.05,
-      "value": 12555400000,
+      "value": 14102811545,
       "foreign": -1724211,
       "trust": 443000,
       "dealer": -556477,
@@ -1549,7 +1549,7 @@
       "name": "旺矽",
       "close": 6485,
       "percent": 6.49,
-      "value": 10181450000,
+      "value": 10988782290,
       "foreign": -313206,
       "trust": 436301,
       "dealer": 13085,
@@ -1565,7 +1565,7 @@
       "name": "南亞",
       "close": 106.5,
       "percent": 9.91,
-      "value": 5683159500,
+      "value": 5692023707,
       "foreign": 20882058,
       "trust": 401667,
       "dealer": 0,
@@ -1573,8 +1573,8 @@
       "foreignStreak": 1,
       "trustStreak": 8,
       "jointStreak": 1,
-      "fiveDayPctSum": -13.03,
-      "fiveDayAvgVolume": 55593747
+      "fiveDayPctSum": 2.73,
+      "fiveDayAvgVolume": 55693997
     },
     {
       "code": "2912",
@@ -1589,8 +1589,8 @@
       "foreignStreak": 0,
       "trustStreak": 3,
       "jointStreak": 0,
-      "fiveDayPctSum": -6.88,
-      "fiveDayAvgVolume": 4426292
+      "fiveDayPctSum": -0.75,
+      "fiveDayAvgVolume": 3655788
     },
     {
       "code": "3443",
@@ -1603,10 +1603,10 @@
       "dealer": 0,
       "total": -352116,
       "foreignStreak": 0,
-      "trustStreak": 5,
+      "trustStreak": 4,
       "jointStreak": 0,
-      "fiveDayPctSum": -3.11,
-      "fiveDayAvgVolume": 2161898
+      "fiveDayPctSum": 3.37,
+      "fiveDayAvgVolume": 2122125
     },
     {
       "code": "2404",
@@ -1618,11 +1618,11 @@
       "trust": 292000,
       "dealer": 0,
       "total": 2302800,
-      "foreignStreak": 8,
+      "foreignStreak": 4,
       "trustStreak": 1,
       "jointStreak": 1,
-      "fiveDayPctSum": -2.16,
-      "fiveDayAvgVolume": 4844012
+      "fiveDayPctSum": 9.5,
+      "fiveDayAvgVolume": 4830521
     },
     {
       "code": "1560",
@@ -1637,8 +1637,8 @@
       "foreignStreak": 0,
       "trustStreak": 2,
       "jointStreak": 0,
-      "fiveDayPctSum": -12.37,
-      "fiveDayAvgVolume": 1541999
+      "fiveDayPctSum": -6.03,
+      "fiveDayAvgVolume": 1570928
     },
     {
       "code": "2207",
@@ -1653,15 +1653,15 @@
       "foreignStreak": 0,
       "trustStreak": 3,
       "jointStreak": 0,
-      "fiveDayPctSum": 0.97,
-      "fiveDayAvgVolume": 1519813
+      "fiveDayPctSum": -0.99,
+      "fiveDayAvgVolume": 1809045
     },
     {
       "code": "3167",
       "name": "大量",
       "close": 806,
       "percent": -4.84,
-      "value": 4430582000,
+      "value": 4745890776,
       "foreign": -717704,
       "trust": 253000,
       "dealer": 0,
@@ -1669,8 +1669,8 @@
       "foreignStreak": 0,
       "trustStreak": 1,
       "jointStreak": 0,
-      "fiveDayPctSum": -4.63,
-      "fiveDayAvgVolume": 3711961
+      "fiveDayPctSum": -14.91,
+      "fiveDayAvgVolume": 4706481
     },
     {
       "code": "2454",
@@ -1683,17 +1683,17 @@
       "dealer": 0,
       "total": 23926,
       "foreignStreak": 0,
-      "trustStreak": 5,
+      "trustStreak": 4,
       "jointStreak": 0,
-      "fiveDayPctSum": -7.17,
-      "fiveDayAvgVolume": 15919054
+      "fiveDayPctSum": -1.91,
+      "fiveDayAvgVolume": 15288249
     },
     {
       "code": "8028",
       "name": "昇陽半導體",
       "close": 315,
-      "percent": 4.48,
-      "value": 1594530000,
+      "percent": 0,
+      "value": 1646247012,
       "foreign": -194452,
       "trust": 238000,
       "dealer": 0,
@@ -1701,15 +1701,15 @@
       "foreignStreak": 0,
       "trustStreak": 4,
       "jointStreak": 0,
-      "fiveDayPctSum": -10.86,
-      "fiveDayAvgVolume": 7146560
+      "fiveDayPctSum": -9.83,
+      "fiveDayAvgVolume": 6801632
     },
     {
       "code": "1215",
       "name": "卜蜂",
       "close": 118,
       "percent": 0.43,
-      "value": 123782000,
+      "value": 127182661,
       "foreign": -368010,
       "trust": 224000,
       "dealer": 0,
@@ -1717,8 +1717,8 @@
       "foreignStreak": 0,
       "trustStreak": 1,
       "jointStreak": 0,
-      "fiveDayPctSum": 1.41,
-      "fiveDayAvgVolume": 3848376
+      "fiveDayPctSum": -0.75,
+      "fiveDayAvgVolume": 3153204
     },
     {
       "code": "3008",
@@ -1733,31 +1733,31 @@
       "foreignStreak": 0,
       "trustStreak": 4,
       "jointStreak": 0,
-      "fiveDayPctSum": 9.32,
-      "fiveDayAvgVolume": 3494466
+      "fiveDayPctSum": 9.63,
+      "fiveDayAvgVolume": 3746801
     },
     {
       "code": "2015",
       "name": "豐興",
       "close": 63.3,
       "percent": 1.77,
-      "value": 41334900,
+      "value": 41901151,
       "foreign": 149122,
       "trust": 215000,
       "dealer": 0,
       "total": 365996,
-      "foreignStreak": 5,
+      "foreignStreak": 4,
       "trustStreak": 1,
       "jointStreak": 1,
-      "fiveDayPctSum": -1.23,
-      "fiveDayAvgVolume": 399685
+      "fiveDayPctSum": 2.12,
+      "fiveDayAvgVolume": 469455
     },
     {
       "code": "3665",
       "name": "貿聯-KY",
       "close": 2310,
       "percent": 6.94,
-      "value": 9011310000,
+      "value": 9603984145,
       "foreign": -507240,
       "trust": 211000,
       "dealer": 0,
@@ -1765,8 +1765,8 @@
       "foreignStreak": 0,
       "trustStreak": 2,
       "jointStreak": 0,
-      "fiveDayPctSum": -6.33,
-      "fiveDayAvgVolume": 3597116
+      "fiveDayPctSum": 7.12,
+      "fiveDayAvgVolume": 3757986
     },
     {
       "code": "6138",
@@ -1789,7 +1789,7 @@
       "name": "大學光",
       "close": 135,
       "percent": 3.05,
-      "value": 57105000,
+      "value": 60517229,
       "foreign": 46283,
       "trust": 176794,
       "dealer": 173,
@@ -1810,11 +1810,11 @@
       "trust": 174000,
       "dealer": 0,
       "total": 1057248,
-      "foreignStreak": 6,
+      "foreignStreak": 4,
       "trustStreak": 1,
       "jointStreak": 1,
-      "fiveDayPctSum": 4.29,
-      "fiveDayAvgVolume": 5550052
+      "fiveDayPctSum": 2.51,
+      "fiveDayAvgVolume": 5152053
     },
     {
       "code": "3034",
@@ -1829,8 +1829,8 @@
       "foreignStreak": 3,
       "trustStreak": 2,
       "jointStreak": 2,
-      "fiveDayPctSum": -0.09,
-      "fiveDayAvgVolume": 5146431
+      "fiveDayPctSum": -0.6,
+      "fiveDayAvgVolume": 5003541
     },
     {
       "code": "1605",
@@ -1843,10 +1843,10 @@
       "dealer": 0,
       "total": 29225254,
       "foreignStreak": 1,
-      "trustStreak": 8,
+      "trustStreak": 4,
       "jointStreak": 1,
-      "fiveDayPctSum": -17.11,
-      "fiveDayAvgVolume": 57021356
+      "fiveDayPctSum": -2.27,
+      "fiveDayAvgVolume": 54225446
     },
     {
       "code": "6510",
@@ -1877,8 +1877,8 @@
       "foreignStreak": 1,
       "trustStreak": 8,
       "jointStreak": 1,
-      "fiveDayPctSum": 5.3,
-      "fiveDayAvgVolume": 31954147
+      "fiveDayPctSum": 4.65,
+      "fiveDayAvgVolume": 33936886
     },
     {
       "code": "6831",
@@ -1893,8 +1893,8 @@
       "foreignStreak": 0,
       "trustStreak": 2,
       "jointStreak": 0,
-      "fiveDayPctSum": 0.34,
-      "fiveDayAvgVolume": 1351013
+      "fiveDayPctSum": -1.04,
+      "fiveDayAvgVolume": 1171244
     },
     {
       "code": "2211",
@@ -1909,8 +1909,8 @@
       "foreignStreak": 3,
       "trustStreak": 1,
       "jointStreak": 1,
-      "fiveDayPctSum": -1.47,
-      "fiveDayAvgVolume": 701317
+      "fiveDayPctSum": 0.66,
+      "fiveDayAvgVolume": 700221
     },
     {
       "code": "2317",
@@ -1925,8 +1925,8 @@
       "foreignStreak": 1,
       "trustStreak": 2,
       "jointStreak": 1,
-      "fiveDayPctSum": -12.14,
-      "fiveDayAvgVolume": 95318274
+      "fiveDayPctSum": -8.47,
+      "fiveDayAvgVolume": 88738692
     }
   ],
   "topForeign": [
@@ -1941,10 +1941,10 @@
       "dealer": 0,
       "total": 91934686,
       "foreignStreak": 1,
-      "trustStreak": 8,
+      "trustStreak": 4,
       "jointStreak": 1,
-      "fiveDayPctSum": 0.97,
-      "fiveDayAvgVolume": 114794981
+      "fiveDayPctSum": 5.84,
+      "fiveDayAvgVolume": 117636220
     },
     {
       "code": "2610",
@@ -1959,8 +1959,8 @@
       "foreignStreak": 1,
       "trustStreak": 1,
       "jointStreak": 1,
-      "fiveDayPctSum": -2.15,
-      "fiveDayAvgVolume": 50646638
+      "fiveDayPctSum": 2.48,
+      "fiveDayAvgVolume": 56638081
     },
     {
       "code": "2891",
@@ -1975,8 +1975,8 @@
       "foreignStreak": 2,
       "trustStreak": 0,
       "jointStreak": 0,
-      "fiveDayPctSum": -0.52,
-      "fiveDayAvgVolume": 58279642
+      "fiveDayPctSum": 1.69,
+      "fiveDayAvgVolume": 62188637
     },
     {
       "code": "2618",
@@ -1988,11 +1988,11 @@
       "trust": -5395942,
       "dealer": 0,
       "total": 35216356,
-      "foreignStreak": 4,
+      "foreignStreak": 5,
       "trustStreak": 0,
       "jointStreak": 0,
-      "fiveDayPctSum": -0.44,
-      "fiveDayAvgVolume": 42709262
+      "fiveDayPctSum": 2.74,
+      "fiveDayAvgVolume": 49968529
     },
     {
       "code": "2344",
@@ -2007,8 +2007,8 @@
       "foreignStreak": 3,
       "trustStreak": 4,
       "jointStreak": 3,
-      "fiveDayPctSum": -12.82,
-      "fiveDayAvgVolume": 206847598
+      "fiveDayPctSum": 6.83,
+      "fiveDayAvgVolume": 203858706
     },
     {
       "code": "3576",
@@ -2023,8 +2023,8 @@
       "foreignStreak": 3,
       "trustStreak": 0,
       "jointStreak": 0,
-      "fiveDayPctSum": 0.86,
-      "fiveDayAvgVolume": 27414520
+      "fiveDayPctSum": 15.85,
+      "fiveDayAvgVolume": 38721481
     },
     {
       "code": "2890",
@@ -2039,8 +2039,8 @@
       "foreignStreak": 2,
       "trustStreak": 0,
       "jointStreak": 0,
-      "fiveDayPctSum": 0.67,
-      "fiveDayAvgVolume": 53743700
+      "fiveDayPctSum": 4.73,
+      "fiveDayAvgVolume": 57996952
     },
     {
       "code": "2834",
@@ -2055,8 +2055,8 @@
       "foreignStreak": 1,
       "trustStreak": 0,
       "jointStreak": 0,
-      "fiveDayPctSum": -0.46,
-      "fiveDayAvgVolume": 52162097
+      "fiveDayPctSum": 2.47,
+      "fiveDayAvgVolume": 51205472
     },
     {
       "code": "2892",
@@ -2071,24 +2071,24 @@
       "foreignStreak": 5,
       "trustStreak": 0,
       "jointStreak": 0,
-      "fiveDayPctSum": 3.77,
-      "fiveDayAvgVolume": 64485886
+      "fiveDayPctSum": 5.76,
+      "fiveDayAvgVolume": 62788928
     },
     {
       "code": "2002",
       "name": "中鋼",
       "close": 18.9,
       "percent": 1.89,
-      "value": 1084916700,
+      "value": 1086907332,
       "foreign": 28337937,
       "trust": 94665,
       "dealer": 0,
       "total": 29250148,
       "foreignStreak": 1,
-      "trustStreak": 8,
+      "trustStreak": 4,
       "jointStreak": 1,
-      "fiveDayPctSum": -3.64,
-      "fiveDayAvgVolume": 63911773
+      "fiveDayPctSum": -2.01,
+      "fiveDayAvgVolume": 64955865
     },
     {
       "code": "1605",
@@ -2101,10 +2101,10 @@
       "dealer": 0,
       "total": 29225254,
       "foreignStreak": 1,
-      "trustStreak": 8,
+      "trustStreak": 4,
       "jointStreak": 1,
-      "fiveDayPctSum": -17.11,
-      "fiveDayAvgVolume": 57021356
+      "fiveDayPctSum": -2.27,
+      "fiveDayAvgVolume": 54225446
     },
     {
       "code": "2408",
@@ -2117,10 +2117,10 @@
       "dealer": 0,
       "total": 27789134,
       "foreignStreak": 1,
-      "trustStreak": 5,
+      "trustStreak": 4,
       "jointStreak": 1,
-      "fiveDayPctSum": -13.8,
-      "fiveDayAvgVolume": 105448665
+      "fiveDayPctSum": 5.07,
+      "fiveDayAvgVolume": 100043229
     },
     {
       "code": "2884",
@@ -2135,8 +2135,8 @@
       "foreignStreak": 2,
       "trustStreak": 0,
       "jointStreak": 0,
-      "fiveDayPctSum": 1.29,
-      "fiveDayAvgVolume": 60661200
+      "fiveDayPctSum": 3.07,
+      "fiveDayAvgVolume": 60795586
     },
     {
       "code": "2801",
@@ -2151,15 +2151,15 @@
       "foreignStreak": 4,
       "trustStreak": 0,
       "jointStreak": 0,
-      "fiveDayPctSum": 4.55,
-      "fiveDayAvgVolume": 52584792
+      "fiveDayPctSum": 5.44,
+      "fiveDayAvgVolume": 53775494
     },
     {
       "code": "1303",
       "name": "南亞",
       "close": 106.5,
       "percent": 9.91,
-      "value": 5683159500,
+      "value": 5692023707,
       "foreign": 20882058,
       "trust": 401667,
       "dealer": 0,
@@ -2167,8 +2167,8 @@
       "foreignStreak": 1,
       "trustStreak": 8,
       "jointStreak": 1,
-      "fiveDayPctSum": -13.03,
-      "fiveDayAvgVolume": 55593747
+      "fiveDayPctSum": 2.73,
+      "fiveDayAvgVolume": 55693997
     },
     {
       "code": "8112",
@@ -2183,8 +2183,8 @@
       "foreignStreak": 1,
       "trustStreak": 0,
       "jointStreak": 0,
-      "fiveDayPctSum": 0.67,
-      "fiveDayAvgVolume": 41483890
+      "fiveDayPctSum": 7.27,
+      "fiveDayAvgVolume": 46347071
     },
     {
       "code": "2406",
@@ -2196,11 +2196,11 @@
       "trust": 0,
       "dealer": 0,
       "total": 15996498,
-      "foreignStreak": 4,
+      "foreignStreak": 5,
       "trustStreak": 0,
       "jointStreak": 0,
-      "fiveDayPctSum": 4.06,
-      "fiveDayAvgVolume": 32946700
+      "fiveDayPctSum": 13.04,
+      "fiveDayAvgVolume": 50112980
     },
     {
       "code": "2303",
@@ -2212,11 +2212,11 @@
       "trust": 17459251,
       "dealer": 0,
       "total": 37955298,
-      "foreignStreak": 8,
+      "foreignStreak": 4,
       "trustStreak": 1,
       "jointStreak": 1,
-      "fiveDayPctSum": 1.01,
-      "fiveDayAvgVolume": 356059015
+      "fiveDayPctSum": 2.61,
+      "fiveDayAvgVolume": 359199227
     },
     {
       "code": "2880",
@@ -2231,8 +2231,8 @@
       "foreignStreak": 1,
       "trustStreak": 0,
       "jointStreak": 0,
-      "fiveDayPctSum": -5.04,
-      "fiveDayAvgVolume": 35189404
+      "fiveDayPctSum": 3.63,
+      "fiveDayAvgVolume": 34740913
     },
     {
       "code": "6443",
@@ -2247,8 +2247,8 @@
       "foreignStreak": 1,
       "trustStreak": 0,
       "jointStreak": 0,
-      "fiveDayPctSum": -2.68,
-      "fiveDayAvgVolume": 33262583
+      "fiveDayPctSum": 5.55,
+      "fiveDayAvgVolume": 39722319
     },
     {
       "code": "2845",
@@ -2263,8 +2263,8 @@
       "foreignStreak": 1,
       "trustStreak": 0,
       "jointStreak": 0,
-      "fiveDayPctSum": 2.48,
-      "fiveDayAvgVolume": 21206931
+      "fiveDayPctSum": 4.45,
+      "fiveDayAvgVolume": 22524409
     },
     {
       "code": "0056",
@@ -2279,8 +2279,8 @@
       "foreignStreak": 1,
       "trustStreak": 2,
       "jointStreak": 1,
-      "fiveDayPctSum": -5.75,
-      "fiveDayAvgVolume": 79690985
+      "fiveDayPctSum": -2.1,
+      "fiveDayAvgVolume": 74018480
     },
     {
       "code": "2882",
@@ -2295,8 +2295,8 @@
       "foreignStreak": 1,
       "trustStreak": 0,
       "jointStreak": 0,
-      "fiveDayPctSum": 7.06,
-      "fiveDayAvgVolume": 52080616
+      "fiveDayPctSum": 1.13,
+      "fiveDayAvgVolume": 44653064
     },
     {
       "code": "2867",
@@ -2308,18 +2308,18 @@
       "trust": 0,
       "dealer": 0,
       "total": 13102930,
-      "foreignStreak": 8,
+      "foreignStreak": 4,
       "trustStreak": 0,
       "jointStreak": 0,
-      "fiveDayPctSum": 0.95,
-      "fiveDayAvgVolume": 19879072
+      "fiveDayPctSum": 2.05,
+      "fiveDayAvgVolume": 22663147
     },
     {
       "code": "5880",
       "name": "合庫金",
       "close": 24.05,
       "percent": 0.84,
-      "value": 630518850,
+      "value": 638355322,
       "foreign": 9098345,
       "trust": -59243,
       "dealer": 0,
@@ -2327,8 +2327,8 @@
       "foreignStreak": 1,
       "trustStreak": 0,
       "jointStreak": 0,
-      "fiveDayPctSum": 0.71,
-      "fiveDayAvgVolume": 30260431
+      "fiveDayPctSum": 2.6,
+      "fiveDayAvgVolume": 29811554
     },
     {
       "code": "2609",
@@ -2340,11 +2340,11 @@
       "trust": -29804,
       "dealer": 0,
       "total": 9888207,
-      "foreignStreak": 8,
+      "foreignStreak": 4,
       "trustStreak": 0,
       "jointStreak": 0,
-      "fiveDayPctSum": -3.84,
-      "fiveDayAvgVolume": 63336710
+      "fiveDayPctSum": -3.74,
+      "fiveDayAvgVolume": 53763765
     },
     {
       "code": "8039",
@@ -2359,8 +2359,8 @@
       "foreignStreak": 2,
       "trustStreak": 0,
       "jointStreak": 0,
-      "fiveDayPctSum": -2.76,
-      "fiveDayAvgVolume": 7786514
+      "fiveDayPctSum": 7.16,
+      "fiveDayAvgVolume": 9601726
     },
     {
       "code": "5351",
@@ -2383,7 +2383,7 @@
       "name": "中美晶",
       "close": 159,
       "percent": 9.66,
-      "value": 3200988000,
+      "value": 3231601613,
       "foreign": 7383283,
       "trust": 674879,
       "dealer": 108418,
@@ -2407,8 +2407,8 @@
       "foreignStreak": 1,
       "trustStreak": 0,
       "jointStreak": 0,
-      "fiveDayPctSum": 2.62,
-      "fiveDayAvgVolume": 24997730
+      "fiveDayPctSum": 10.65,
+      "fiveDayAvgVolume": 29049885
     },
     {
       "code": "2355",
@@ -2423,8 +2423,8 @@
       "foreignStreak": 3,
       "trustStreak": 0,
       "jointStreak": 0,
-      "fiveDayPctSum": 4.71,
-      "fiveDayAvgVolume": 15468426
+      "fiveDayPctSum": 11.42,
+      "fiveDayAvgVolume": 21627374
     },
     {
       "code": "6153",
@@ -2439,15 +2439,15 @@
       "foreignStreak": 1,
       "trustStreak": 0,
       "jointStreak": 0,
-      "fiveDayPctSum": 10.06,
-      "fiveDayAvgVolume": 25558077
+      "fiveDayPctSum": 19.39,
+      "fiveDayAvgVolume": 30374465
     },
     {
       "code": "1314",
       "name": "中石化",
       "close": 7.84,
       "percent": 1.03,
-      "value": 173412960,
+      "value": 175109499,
       "foreign": 6787469,
       "trust": 0,
       "dealer": 0,
@@ -2455,15 +2455,15 @@
       "foreignStreak": 3,
       "trustStreak": 0,
       "jointStreak": 0,
-      "fiveDayPctSum": -6.06,
-      "fiveDayAvgVolume": 33694852
+      "fiveDayPctSum": -3.09,
+      "fiveDayAvgVolume": 28163992
     },
     {
       "code": "1326",
       "name": "台化",
       "close": 48.8,
       "percent": 5.51,
-      "value": 1054177600,
+      "value": 1053023764,
       "foreign": 6566175,
       "trust": -25000,
       "dealer": 0,
@@ -2471,31 +2471,31 @@
       "foreignStreak": 1,
       "trustStreak": 0,
       "jointStreak": 0,
-      "fiveDayPctSum": -17.18,
-      "fiveDayAvgVolume": 25616238
+      "fiveDayPctSum": -7.32,
+      "fiveDayAvgVolume": 23419894
     },
     {
       "code": "1216",
       "name": "統一",
       "close": 76.5,
       "percent": 1.19,
-      "value": 1061437500,
+      "value": 1072906317,
       "foreign": 6307069,
       "trust": -70540,
       "dealer": 0,
       "total": 6320470,
-      "foreignStreak": 7,
+      "foreignStreak": 4,
       "trustStreak": 0,
       "jointStreak": 0,
-      "fiveDayPctSum": 2.72,
-      "fiveDayAvgVolume": 13667800
+      "fiveDayPctSum": 3.63,
+      "fiveDayAvgVolume": 14587494
     },
     {
       "code": "1101",
       "name": "台泥",
       "close": 24.55,
       "percent": 1.24,
-      "value": 737138300,
+      "value": 742893054,
       "foreign": 6211054,
       "trust": 61000,
       "dealer": 0,
@@ -2503,31 +2503,15 @@
       "foreignStreak": 1,
       "trustStreak": 8,
       "jointStreak": 1,
-      "fiveDayPctSum": -0.78,
-      "fiveDayAvgVolume": 34890297
-    },
-    {
-      "code": "1301",
-      "name": "台塑",
-      "close": 45.25,
-      "percent": 3.31,
-      "value": 967807000,
-      "foreign": 5946952,
-      "trust": -35877,
-      "dealer": 0,
-      "total": 6435911,
-      "foreignStreak": 1,
-      "trustStreak": 0,
-      "jointStreak": 0,
-      "fiveDayPctSum": -14.51,
-      "fiveDayAvgVolume": 29577815
+      "fiveDayPctSum": 0.66,
+      "fiveDayAvgVolume": 34670958
     },
     {
       "code": "2027",
       "name": "大成鋼",
       "close": 43.55,
       "percent": 2.35,
-      "value": 651856400,
+      "value": 657365949,
       "foreign": 5945583,
       "trust": -14000,
       "dealer": 0,
@@ -2535,15 +2519,31 @@
       "foreignStreak": 8,
       "trustStreak": 0,
       "jointStreak": 0,
-      "fiveDayPctSum": -3.43,
-      "fiveDayAvgVolume": 25629676
+      "fiveDayPctSum": -0.4,
+      "fiveDayAvgVolume": 24064595
+    },
+    {
+      "code": "1301",
+      "name": "台塑",
+      "close": 45.25,
+      "percent": 3.31,
+      "value": 970029113,
+      "foreign": 5911075,
+      "trust": 27000,
+      "dealer": -35877,
+      "total": 6435911,
+      "foreignStreak": 1,
+      "trustStreak": 3,
+      "jointStreak": 1,
+      "fiveDayPctSum": -7.46,
+      "fiveDayAvgVolume": 28415851
     },
     {
       "code": "1714",
       "name": "和桐",
       "close": 15.2,
       "percent": 5.56,
-      "value": 2004408800,
+      "value": 2000156125,
       "foreign": 5811300,
       "trust": 0,
       "dealer": 0,
@@ -2551,8 +2551,8 @@
       "foreignStreak": 3,
       "trustStreak": 0,
       "jointStreak": 0,
-      "fiveDayPctSum": 19.09,
-      "fiveDayAvgVolume": 61560105
+      "fiveDayPctSum": 29.61,
+      "fiveDayAvgVolume": 75116593
     },
     {
       "code": "0050",
@@ -2565,17 +2565,17 @@
       "dealer": 0,
       "total": 16141301,
       "foreignStreak": 1,
-      "trustStreak": 8,
+      "trustStreak": 4,
       "jointStreak": 1,
-      "fiveDayPctSum": -5.92,
-      "fiveDayAvgVolume": 319995990
+      "fiveDayPctSum": -1.98,
+      "fiveDayAvgVolume": 267902439
     },
     {
       "code": "2014",
       "name": "中鴻",
       "close": 18,
       "percent": 3.15,
-      "value": 160416000,
+      "value": 160611719,
       "foreign": 5576124,
       "trust": 0,
       "dealer": 0,
@@ -2583,8 +2583,8 @@
       "foreignStreak": 1,
       "trustStreak": 0,
       "jointStreak": 0,
-      "fiveDayPctSum": -6.73,
-      "fiveDayAvgVolume": 6823422
+      "fiveDayPctSum": -3.85,
+      "fiveDayAvgVolume": 7340579
     },
     {
       "code": "2615",
@@ -2599,15 +2599,15 @@
       "foreignStreak": 1,
       "trustStreak": 0,
       "jointStreak": 0,
-      "fiveDayPctSum": 0.2,
-      "fiveDayAvgVolume": 14427386
+      "fiveDayPctSum": -1.24,
+      "fiveDayAvgVolume": 11757392
     },
     {
       "code": "9904",
       "name": "寶成",
       "close": 26.65,
       "percent": 1.33,
-      "value": 474316700,
+      "value": 476069669,
       "foreign": 4974000,
       "trust": -106746,
       "dealer": 0,
@@ -2615,8 +2615,8 @@
       "foreignStreak": 1,
       "trustStreak": 0,
       "jointStreak": 0,
-      "fiveDayPctSum": -0.33,
-      "fiveDayAvgVolume": 22411445
+      "fiveDayPctSum": 0.81,
+      "fiveDayAvgVolume": 21772587
     },
     {
       "code": "5347",
@@ -2647,8 +2647,8 @@
       "foreignStreak": 1,
       "trustStreak": 0,
       "jointStreak": 0,
-      "fiveDayPctSum": -4.2,
-      "fiveDayAvgVolume": 10967938
+      "fiveDayPctSum": -2.26,
+      "fiveDayAvgVolume": 11459636
     },
     {
       "code": "2323",
@@ -2663,15 +2663,15 @@
       "foreignStreak": 1,
       "trustStreak": 0,
       "jointStreak": 0,
-      "fiveDayPctSum": -10.84,
-      "fiveDayAvgVolume": 15196348
+      "fiveDayPctSum": -5.56,
+      "fiveDayAvgVolume": 12962510
     },
     {
       "code": "5425",
       "name": "台半",
       "close": 101,
       "percent": 9.9,
-      "value": 2491670000,
+      "value": 2471465937,
       "foreign": 4281320,
       "trust": 1197580,
       "dealer": 129412,
@@ -2687,7 +2687,7 @@
       "name": "台玻",
       "close": 64.1,
       "percent": 8.09,
-      "value": 2801875100,
+      "value": 2799659901,
       "foreign": 4127478,
       "trust": -10000,
       "dealer": 0,
@@ -2695,8 +2695,8 @@
       "foreignStreak": 1,
       "trustStreak": 0,
       "jointStreak": 0,
-      "fiveDayPctSum": -14.49,
-      "fiveDayAvgVolume": 46807950
+      "fiveDayPctSum": -4.51,
+      "fiveDayAvgVolume": 44703729
     },
     {
       "code": "2330",
@@ -2711,8 +2711,8 @@
       "foreignStreak": 1,
       "trustStreak": 0,
       "jointStreak": 0,
-      "fiveDayPctSum": -5.53,
-      "fiveDayAvgVolume": 47027368
+      "fiveDayPctSum": -2.03,
+      "fiveDayAvgVolume": 43607966
     },
     {
       "code": "3105",
@@ -2740,11 +2740,11 @@
       "trust": -2255215,
       "dealer": 0,
       "total": 1564703,
-      "foreignStreak": 4,
+      "foreignStreak": 8,
       "trustStreak": 0,
       "jointStreak": 0,
-      "fiveDayPctSum": 6.68,
-      "fiveDayAvgVolume": 10981929
+      "fiveDayPctSum": 3.73,
+      "fiveDayAvgVolume": 9209380
     },
     {
       "code": "2301",
@@ -2759,15 +2759,15 @@
       "foreignStreak": 2,
       "trustStreak": 0,
       "jointStreak": 0,
-      "fiveDayPctSum": -16.95,
-      "fiveDayAvgVolume": 32413029
+      "fiveDayPctSum": -5.43,
+      "fiveDayAvgVolume": 26658170
     },
     {
       "code": "3264",
       "name": "欣銓",
       "close": 227.5,
       "percent": 5.81,
-      "value": 2069795000,
+      "value": 2146476108,
       "foreign": 3493396,
       "trust": 518000,
       "dealer": 140066,
@@ -2791,15 +2791,15 @@
       "foreignStreak": 1,
       "trustStreak": 0,
       "jointStreak": 0,
-      "fiveDayPctSum": -16.33,
-      "fiveDayAvgVolume": 28123900
+      "fiveDayPctSum": -8.77,
+      "fiveDayAvgVolume": 25646874
     },
     {
       "code": "4904",
       "name": "遠傳",
       "close": 109,
       "percent": 0,
-      "value": 1038443000,
+      "value": 1113501345,
       "foreign": 3320492,
       "trust": -76371,
       "dealer": 0,
@@ -2807,15 +2807,15 @@
       "foreignStreak": 5,
       "trustStreak": 0,
       "jointStreak": 0,
-      "fiveDayPctSum": 6.77,
-      "fiveDayAvgVolume": 9563661
+      "fiveDayPctSum": 7.26,
+      "fiveDayAvgVolume": 9872770
     },
     {
       "code": "3624",
       "name": "光頡",
       "close": 118,
       "percent": 7.27,
-      "value": 2585734000,
+      "value": 2651475835,
       "foreign": 3235096,
       "trust": 0,
       "dealer": 59120,
@@ -2831,7 +2831,7 @@
       "name": "富喬",
       "close": 96.2,
       "percent": 6.77,
-      "value": 1654736200,
+      "value": 1671645094,
       "foreign": 3185081,
       "trust": 0,
       "dealer": 513586,
@@ -2855,31 +2855,31 @@
       "foreignStreak": 1,
       "trustStreak": 0,
       "jointStreak": 0,
-      "fiveDayPctSum": -13,
-      "fiveDayAvgVolume": 5600529
+      "fiveDayPctSum": 1.23,
+      "fiveDayAvgVolume": 6031557
     },
     {
       "code": "3702",
       "name": "大聯大",
       "close": 105,
       "percent": -3.23,
-      "value": 2146410000,
+      "value": 2193290783,
       "foreign": 3119102,
       "trust": -5263136,
       "dealer": 0,
       "total": -3278377,
-      "foreignStreak": 8,
+      "foreignStreak": 4,
       "trustStreak": 0,
       "jointStreak": 0,
-      "fiveDayPctSum": -6.89,
-      "fiveDayAvgVolume": 17895292
+      "fiveDayPctSum": -8.4,
+      "fiveDayAvgVolume": 18723524
     },
     {
       "code": "6257",
       "name": "矽格",
       "close": 221.5,
       "percent": 7.79,
-      "value": 1986855000,
+      "value": 2022295782,
       "foreign": 3081832,
       "trust": 33000,
       "dealer": 0,
@@ -2887,8 +2887,8 @@
       "foreignStreak": 1,
       "trustStreak": 2,
       "jointStreak": 1,
-      "fiveDayPctSum": -9.74,
-      "fiveDayAvgVolume": 8482995
+      "fiveDayPctSum": 0.24,
+      "fiveDayAvgVolume": 8566989
     }
   ]
 }

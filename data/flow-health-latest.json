@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-06-12T13:24:54.1387976Z",
+  "updatedAt": "2026-06-12T13:36:32.8805447Z",
   "warrant": {
     "scope": "warrant",
     "status": "ok",
@@ -13,9 +13,9 @@
   },
   "institution": {
     "scope": "institution",
-    "status": "watchdog_rerun",
-    "message": "Watchdog rerun started",
-    "updatedAt": "2026-06-12T13:24:54.1344614Z",
+    "status": "ok",
+    "message": "Watchdog rerun completed",
+    "updatedAt": "2026-06-12T13:36:32.8802474Z",
     "detail": {
       "reason": "institution not updated after 21:00; updatedAt=06/12/2026 13:22:25",
       "expectedTime": "21:00",

@@ -1,13 +1,13 @@
 {
   "ok": true,
-  "updatedAt": "2026-06-12T13:34:37.178Z",
+  "updatedAt": "2026-06-13T09:19:37.551Z",
   "files": [
     {
       "file": "market-summary.json",
       "ok": true,
-      "bytes": 152997,
+      "bytes": 152998,
       "count": 80,
-      "updatedAt": "2026-06-12T13:34:32.429Z",
+      "updatedAt": "2026-06-12T14:31:07.149Z",
       "issues": []
     },
     {
@@ -23,7 +23,7 @@
       "ok": true,
       "bytes": 342,
       "count": 0,
-      "updatedAt": "2026-06-12T13:31:07.890Z",
+      "updatedAt": "2026-06-12T14:30:02.268Z",
       "issues": []
     },
     {
@@ -53,17 +53,17 @@
     {
       "file": "institution-latest.json",
       "ok": true,
-      "bytes": 941554,
+      "bytes": 935045,
       "count": 1883,
-      "updatedAt": "2026-06-12T13:33:53.363Z",
+      "updatedAt": "2026-06-13T09:19:13.132Z",
       "issues": []
     },
     {
       "file": "warrant-flow-latest.json",
       "ok": true,
-      "bytes": 256829,
-      "count": 67,
-      "updatedAt": "2026-06-12T13:34:25.060Z",
+      "bytes": 482060,
+      "count": 120,
+      "updatedAt": "2026-06-13T09:19:22.595Z",
       "issues": []
     }
   ],
