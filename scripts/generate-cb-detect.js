@@ -10,6 +10,9 @@ const CODE_OUT_FILE = path.join(__dirname, "..", "data", "cb-detect-latest.json"
 const STOCKS_FILE = fsSync.existsSync(path.join(DATA_DIR, "stocks-slim.json"))
   ? path.join(DATA_DIR, "stocks-slim.json")
   : path.join(__dirname, "..", "data", "stocks-slim.json");
+const INSTITUTION_FILE = fsSync.existsSync(path.join(DATA_DIR, "institution-slim.json"))
+  ? path.join(DATA_DIR, "institution-slim.json")
+  : path.join(__dirname, "..", "data", "institution-slim.json");
 const FUGLE_API_KEY_FILE = process.env.FUGLE_API_KEY_FILE || path.join(RUNTIME_DIR, "secrets", "fugle-api-key.txt");
 const FINMIND_API_TOKEN_FILE = process.env.FINMIND_API_TOKEN_FILE || path.join(RUNTIME_DIR, "secrets", "finmind-api-token.txt");
 const HISTORY_MONTHS = 14;
@@ -91,6 +94,11 @@ function sma(values, length, offset = 0) {
   return slice.reduce((sum, value) => sum + value, 0) / slice.length;
 }
 
+function avg(values) {
+  const rows = values.map(num).filter((value) => value > 0);
+  return rows.length ? rows.reduce((sum, value) => sum + value, 0) / rows.length : 0;
+}
+
 function emaSeries(values, length) {
   if (!values.length) return [];
   const multiplier = 2 / (length + 1);
@@ -153,7 +161,9 @@ async function fetchTpexMonth(code, date) {
 function normalizeYahooRows(payload) {
   const result = payload?.chart?.result?.[0];
   const timestamps = Array.isArray(result?.timestamp) ? result.timestamp : [];
-  const closes = result?.indicators?.quote?.[0]?.close || [];
+  const quote = result?.indicators?.quote?.[0] || {};
+  const closes = quote.close || [];
+  const volumes = quote.volume || [];
   return timestamps.map((timestamp, index) => {
     const close = num(closes[index]);
     if (!timestamp || !close) return null;
@@ -161,6 +171,7 @@ function normalizeYahooRows(payload) {
     return {
       date: date.toISOString().slice(0, 10),
       close,
+      volume: num(volumes[index]),
     };
   }).filter(Boolean);
 }
@@ -249,7 +260,11 @@ async function fetchHistory(code) {
     .filter((result) => result.status === "fulfilled" && result.value.length)
     .sort((a, b) => b.value.length - a.value.length)[0]?.value || [];
   if (yahoo60Rows.length) {
-    return { code, market: "YAHOO_60M", timeframe: "60m", rows: yahoo60Rows };
+    const yahooDailyResults = await Promise.allSettled(["TW", "TWO"].map((suffix) => fetchYahooHistory(code, suffix)));
+    const dailyRows = yahooDailyResults
+      .filter((result) => result.status === "fulfilled" && result.value.length)
+      .sort((a, b) => b.value.length - a.value.length)[0]?.value || [];
+    return { code, market: "YAHOO_60M", timeframe: "60m", rows: yahoo60Rows, dailyRows };
   }
 
   const months = monthStarts();
@@ -293,7 +308,20 @@ async function loadStockMap() {
   try {
     const payload = JSON.parse(await fs.readFile(STOCKS_FILE, "utf8"));
     const rows = Array.isArray(payload?.stocks) ? payload.stocks : [];
-    return new Map(rows.map((stock) => [cleanCode(stock.code), stock]).filter(([code]) => code));
+    const map = new Map(rows.map((stock) => [cleanCode(stock.code), stock]).filter(([code]) => code));
+    try {
+      const institutionPayload = JSON.parse(await fs.readFile(INSTITUTION_FILE, "utf8"));
+      const institutionRows = Array.isArray(institutionPayload?.rows)
+        ? institutionPayload.rows
+        : Object.values(institutionPayload?.data || {});
+      institutionRows.forEach((row) => {
+        const code = cleanCode(row?.code);
+        if (!code) return;
+        map.set(code, { ...(map.get(code) || {}), ...row });
+      });
+    } catch {
+    }
+    return map;
   } catch {
     return new Map();
   }
@@ -341,8 +369,23 @@ async function probeFinMindQuotes(codes) {
 }
 
 function technicalFromHistory(history) {
-  const closes = (history?.rows || []).map((row) => num(row.close)).filter(Boolean);
+  const rows = history?.rows || [];
+  const dailyRows = history?.dailyRows || [];
+  const closes = rows.map((row) => num(row.close)).filter(Boolean);
+  const dailyCloses = dailyRows.map((row) => num(row.close)).filter(Boolean);
+  const volumes = rows.map((row) => num(row.volume)).filter((value) => value > 0);
   const latestClose = closes.at(-1) || 0;
+  const dailyMa5 = sma(dailyCloses, 5);
+  const dailyMa10 = sma(dailyCloses, 10);
+  const dailyMa5Prev = sma(dailyCloses, 5, 1);
+  const dailyMa10Prev = sma(dailyCloses, 10, 1);
+  const dailyShortSupport = Boolean(latestClose && ((dailyMa5 && latestClose >= dailyMa5 * 0.99) || (dailyMa10 && latestClose >= dailyMa10 * 0.99)));
+  const dailyShortRising = Boolean((dailyMa5 && dailyMa5 >= dailyMa5Prev) || (dailyMa10 && dailyMa10 >= dailyMa10Prev));
+  const latestVolume = volumes.at(-1) || 0;
+  const avg20Volume = volumes.length >= 20 ? avg(volumes.slice(-20)) : 0;
+  const previousAvg20Volume = volumes.length >= 21 ? avg(volumes.slice(-21, -1)) : avg20Volume;
+  const volumeRatio20 = latestVolume && avg20Volume ? latestVolume / avg20Volume : 0;
+  const volumeExpanding = Boolean(latestVolume && avg20Volume && (volumeRatio20 >= 1.2 || avg20Volume > previousAvg20Volume));
   const timeframe = history?.timeframe || "";
   if (timeframe !== "60m") {
     return {
@@ -358,6 +401,14 @@ function technicalFromHistory(history) {
       ma5: 0,
       ma35: 0,
       ma200: 0,
+      dailyMa5,
+      dailyMa10,
+      dailyShortSupport,
+      dailyShortRising,
+      latestVolume,
+      avg20Volume,
+      volumeRatio20,
+      volumeExpanding,
       historyCount: closes.length,
       timeframe,
     };
@@ -376,6 +427,14 @@ function technicalFromHistory(history) {
       ma5: sma(closes, 5),
       ma35: sma(closes, 35),
       ma200: 0,
+      dailyMa5,
+      dailyMa10,
+      dailyShortSupport,
+      dailyShortRising,
+      latestVolume,
+      avg20Volume,
+      volumeRatio20,
+      volumeExpanding,
       historyCount: closes.length,
       timeframe,
     };
@@ -399,6 +458,8 @@ function technicalFromHistory(history) {
   const tags = [];
   if (aboveMa200 && ma200Rising) tags.push("60分K站上MA200且MA200向上 +10");
   if (allMaRising) tags.push("60分MA5/MA35/MA200均線同時向上 +10");
+  if (dailyShortSupport) tags.push("日K MA5/MA10支撐");
+  if (volumeExpanding) tags.push("60分量能放大");
   if (!technicalPass) tags.push("60分K未符合CB技術門檻，一票否決");
   if (macdBullish) tags.push(macd.goldenCross ? "MACD黃金交叉 +5" : "MACD柱狀向上 +5");
   return {
@@ -416,6 +477,14 @@ function technicalFromHistory(history) {
     ma5,
     ma35,
     ma200,
+    dailyMa5,
+    dailyMa10,
+    dailyShortSupport,
+    dailyShortRising,
+    latestVolume,
+    avg20Volume,
+    volumeRatio20: Number(volumeRatio20.toFixed(2)),
+    volumeExpanding,
     macdHistogram: macd.histogram,
     macdPrevHistogram: macd.prevHistogram,
     historyCount: closes.length,
@@ -431,53 +500,381 @@ function premiumValue(row) {
   return raw > 100 ? raw - 100 : raw;
 }
 
-function scoreRow(row, source, technical = {}) {
-  let score = 0;
+function roundPrice(value) {
+  const price = num(value);
+  if (!price) return 0;
+  if (price < 10) return Number(price.toFixed(2));
+  if (price < 50) return Number(price.toFixed(2));
+  if (price < 100) return Number(price.toFixed(1));
+  return Number(price.toFixed(0));
+}
+
+function pct(value) {
+  if (!Number.isFinite(value)) return 0;
+  return Number((value * 100).toFixed(2));
+}
+
+function truthyFlag(value) {
+  if (value === true || value === 1) return true;
+  const text = String(value || "").trim().toLowerCase();
+  return ["true", "1", "yes", "y", "黑名單", "不適合"].includes(text);
+}
+
+function volumeShares(value) {
+  const raw = num(value);
+  if (!raw) return 0;
+  return raw < 100000 ? raw * 1000 : raw;
+}
+
+function buildExclusion({ code, stock, technical }) {
+  const reasons = [];
+  const stockCode = cleanCode(code);
+  const name = String(stock?.name || "");
+  const statusText = String(stock?.status || stock?.tradingStatus || stock?.tradeStatus || stock?.note || "");
+  const joinedText = `${stockCode} ${name} ${statusText}`;
+  const avgVolume5 = volumeShares(stock?.avg_volume_5 || stock?.avgVolume5 || stock?.fiveDayAvgVolume);
+  const tradeVolume = volumeShares(stock?.tradeVolume || technical?.latestVolume);
+  const innerOuterVolume = volumeShares(stock?.innerOuterVolume || stock?.insideOutsideVolume || stock?.accumulatedBidAskVolume);
+  const lowAvgVolume = avgVolume5 > 0 && avgVolume5 < 3000000;
+  const lowRealtimeVolume = tradeVolume > 0 && tradeVolume < 3000000;
+  const lowInnerOuterVolume = innerOuterVolume > 0 && innerOuterVolume < 3000000;
+
+  if (stockCode.startsWith("00")) reasons.push("00開頭/ETF");
+  if (/(ETF|ETN|DR|指數|權證|認購|認售|牛證|熊證|CB)/i.test(joinedText)) {
+    reasons.push("ETF/ETN/DR/指數/權證/CB/非普通股");
+  }
+  if (truthyFlag(stock?.is_blacklisted || stock?.blacklisted)) reasons.push("黑名單");
+  if (truthyFlag(stock?.is_daytrade_unsuitable || stock?.daytradeUnsuitable)) reasons.push("當沖不適合");
+  if (/(停牌|暫停交易|停止交易|試撮|試搓|suspend|halt)/i.test(statusText)) reasons.push("停牌/試撮");
+  if (/^11\d{2}$/.test(stockCode)) reasons.push("水泥族群");
+  if (/(軍工|國防|航太|漢翔|雷虎|龍德|駐龍|晟田|寶一|亞航|千附)/i.test(joinedText)) {
+    reasons.push("軍工/國防/航太");
+  }
+  if (lowAvgVolume) reasons.push("量能不足：avg_volume_5 < 3000張");
+  if (lowInnerOuterVolume) reasons.push("量能不足：累計內外盤量不足");
+  if (!lowAvgVolume && !lowInnerOuterVolume && lowRealtimeVolume) reasons.push("量能不足：即時成交量不足");
+
+  return {
+    excluded: reasons.length > 0,
+    reasons: [...new Set(reasons)],
+    avgVolume5,
+    tradeVolume,
+    innerOuterVolume,
+  };
+}
+
+function buildEntryPlan({ stockPrice, convertPrice, technical }) {
+  const price = num(stockPrice);
+  const conversion = num(convertPrice);
+  const ma5 = num(technical?.ma5);
+  const ma35 = num(technical?.ma35);
+  const ma200 = num(technical?.ma200);
+  const dailyMa5 = num(technical?.dailyMa5);
+  const dailyMa10 = num(technical?.dailyMa10);
+  const technicalPass = technical?.technicalPass === true;
+  const ma200Rising = technical?.ma200Rising === true;
+  const ma35Rising = technical?.ma35Rising === true;
+  const allMaRising = technical?.allMaRising === true;
+  const dailyShortSupport = technical?.dailyShortSupport === true;
+  const dailyShortRising = technical?.dailyShortRising === true;
+  const volumeRatio20 = num(technical?.volumeRatio20);
+  const volumeExpanding = technical?.volumeExpanding === true || volumeRatio20 >= 1.2;
+  const distance = price && conversion ? (price / conversion) - 1 : 0;
+  const idealLow = conversion ? conversion * 0.92 : 0;
+  const idealHigh = conversion ? conversion * 0.97 : 0;
+  const breakout = conversion ? conversion * 1.01 : 0;
+  const lowRiskEntry = ma35 || dailyMa5 || dailyMa10 || ma5 || idealHigh || price;
+  const supportStop = Math.max(
+    0,
+    ma35 ? ma35 * 0.985 : 0,
+    ma200 && price > ma200 ? ma200 * 0.985 : 0
+  );
+  const target1 = conversion || (price ? price * 1.08 : 0);
+  const target2 = conversion ? conversion * 1.12 : (price ? price * 1.15 : 0);
+  const preferredEntry = price && conversion && distance >= -0.1 && distance <= 0.03
+    ? price
+    : (idealHigh || price);
+  const fallbackStop = preferredEntry ? preferredEntry * 0.93 : (price ? price * 0.93 : 0);
+  const stopLoss = preferredEntry
+    ? Math.min(supportStop || fallbackStop, preferredEntry * 0.96)
+    : (supportStop || fallbackStop);
+  const risk = preferredEntry && stopLoss ? preferredEntry - stopLoss : 0;
+  const reward = preferredEntry && target2 ? target2 - preferredEntry : 0;
+  const riskReward = price && conversion && risk > 0 && reward > 0 ? Number((reward / risk).toFixed(2)) : 0;
+  let signal = "wait";
+  let label = "等待";
+  const tags = [];
+  const nearMa35Pullback = Boolean(price && ma35 && price >= ma35 * 0.985 && price <= ma35 * 1.035);
+  const nearDailyShortPullback = Boolean(price && ((dailyMa5 && price >= dailyMa5 * 0.99 && price <= dailyMa5 * 1.035) || (dailyMa10 && price >= dailyMa10 * 0.99 && price <= dailyMa10 * 1.035)));
+  const aboveShortSupport = Boolean(price && ((ma5 && price >= ma5 * 0.99) || (ma35 && price >= ma35 * 0.99) || dailyShortSupport));
+  const lowRiskPass = Boolean(price && conversion && technicalPass && (nearMa35Pullback || nearDailyShortPullback) && aboveShortSupport && (ma35Rising || ma200Rising || allMaRising || dailyShortRising));
+  const stealthPass = Boolean(price && conversion && technicalPass && distance >= -0.08 && distance <= -0.03 && ma200Rising && volumeExpanding);
+  const breakoutPass = Boolean(price && conversion && price >= breakout && volumeRatio20 >= 1.5);
+  const lowRiskStop = lowRiskEntry ? Math.min(lowRiskEntry * 0.96, (ma35 || lowRiskEntry) * 0.985) : 0;
+  const models = [
+    {
+      id: "stealth-below-conversion",
+      label: "潛伏型",
+      pass: stealthPass,
+      entry: roundPrice(price || idealHigh),
+      stopLoss: roundPrice(stopLoss),
+      target1: roundPrice(target1),
+      target2: roundPrice(target2),
+      reason: stealthPass
+        ? "轉換價下方3%~8%，60分K站上MA200且MA200上彎，量能開始放大"
+        : "等待股價落在轉換價下方3%~8%，且60分量能放大",
+    },
+    {
+      id: "low-risk-pullback",
+      label: "低風險回測支撐",
+      pass: lowRiskPass,
+      entry: roundPrice(lowRiskEntry),
+      stopLoss: roundPrice(lowRiskStop),
+      target1: roundPrice(target1),
+      target2: roundPrice(target2),
+      reason: lowRiskPass
+        ? "股價轉強後回測60分K MA35或日K MA5/MA10支撐不破"
+        : "等待股價回測60分K MA35、日K MA5/MA10或前高支撐不破",
+    },
+    {
+      id: "conversion-breakout",
+      label: "突破型",
+      pass: breakoutPass,
+      entry: roundPrice(breakout),
+      stopLoss: roundPrice(conversion * 0.97 || stopLoss),
+      target1: roundPrice(conversion * 1.08 || target1),
+      target2: roundPrice(conversion * 1.15 || target2),
+      reason: breakoutPass
+        ? "股價站上轉換價且60分量能大於20均量1.5倍"
+        : "等待站上轉換價且60分量能大於20均量1.5倍",
+    },
+  ];
+  const selectedModel = models.find((model) => model.pass) || null;
+
+  if (!price || !conversion) {
+    tags.push("缺現股價或轉換價");
+  } else if (!technicalPass) {
+    tags.push("60分K門檻未通過");
+  } else if (selectedModel?.id === "low-risk-pullback") {
+    signal = "low-risk-pullback";
+    label = "低風險回測";
+    tags.push("回測支撐不破");
+  } else if (selectedModel?.id === "stealth-below-conversion") {
+    signal = "early-entry";
+    label = "潛伏進場";
+    tags.push("轉換價下方3%~8%且量能放大");
+  } else if (selectedModel?.id === "conversion-breakout") {
+    signal = "breakout";
+    label = "突破進場";
+    tags.push("站上轉換價且量能>20均量1.5倍");
+  } else if (distance > -0.03 && distance <= 0.03) {
+    signal = "near-conversion";
+    label = "貼近轉換價";
+    tags.push("股價貼近轉換價");
+  } else if (distance > 0.03 && distance <= 0.12) {
+    signal = "breakout";
+    label = "突破追蹤";
+    tags.push("已突破轉換價，等回測或放量續強");
+  } else if (distance < -0.1) {
+    tags.push("距轉換價仍遠");
+  } else {
+    tags.push("已離轉換價較遠");
+  }
+
+  if (price && conversion && riskReward >= 2) tags.push("風報比>=2");
+  if (price && preferredEntry && price > preferredEntry * 1.08) tags.push("現價高於理想進場區");
+
+  return {
+    signal,
+    label,
+    conversionDistancePct: pct(distance),
+    volumeRatio20: Number(volumeRatio20.toFixed(2)),
+    volumeExpanding,
+    selectedModel: selectedModel?.id || "",
+    entryModels: models,
+    idealEntryLow: roundPrice(idealLow),
+    idealEntryHigh: roundPrice(idealHigh),
+    breakoutEntry: roundPrice(breakout),
+    preferredEntry: roundPrice(preferredEntry),
+    stopLoss: roundPrice(stopLoss),
+    target1: roundPrice(target1),
+    target2: roundPrice(target2),
+    riskReward,
+    tags,
+  };
+}
+
+function scoreRow(row, source, technical = {}, entryPlan = {}) {
+  const breakdown = {
+    cbEvent: 0,
+    technical: 0,
+    entryModel: 0,
+    volume: 0,
+    riskReward: 0,
+  };
   const tags = [];
   const circulation = num(row.circulation);
   const premium = premiumValue(row);
   const auction = isAuction(row.inquiry_auction);
+  const selectedModel = String(entryPlan.selectedModel || "");
+  const distance = num(entryPlan.conversionDistancePct);
+  const volumeRatio20 = num(entryPlan.volumeRatio20);
+  const riskReward = num(entryPlan.riskReward);
+  const hasEntryPrices = !Array.isArray(entryPlan.tags)
+    || !entryPlan.tags.includes("缺現股價或轉換價");
 
   if (source.stage === "董事會決議") {
-    score += 15;
-    tags.push("最早期4~8週");
+    breakdown.cbEvent += 5;
+    tags.push("董事會決議 +5");
   } else if (source.stage === "生效後") {
-    score += 20;
-    tags.push("生效後確定性較高");
+    breakdown.cbEvent += 10;
+    tags.push("近期生效 +10");
   } else {
-    score += 10;
-    tags.push("掛牌後追蹤");
+    breakdown.cbEvent += 8;
+    tags.push("近期掛牌 +8");
   }
 
   if (auction) {
-    score += 25;
-    tags.push("競價拍賣 +25");
+    breakdown.cbEvent += 8;
+    tags.push("競價拍賣 +8");
   } else if (row.inquiry_auction) {
     tags.push("詢價圈購");
   }
 
   if (circulation > 0 && circulation <= 10) {
-    score += 15;
-    tags.push("發行規模10億以下 +15");
+    breakdown.cbEvent += 5;
+    tags.push("發行規模10億以下 +5");
   } else if (circulation > 20) {
     tags.push("發行規模偏大");
   }
 
   if (premium > 0 && premium <= 20) {
-    score += 15;
-    tags.push("轉換溢價20%以下 +15");
+    breakdown.cbEvent += 4;
+    tags.push("轉換溢價20%以下 +4");
   } else if (premium > 30) {
     tags.push("溢價偏高");
   }
 
-  if (technical.technicalPass === false) tags.push("60分K未符合CB技術門檻，一票否決");
-  else tags.push(...(technical.tags || ["技術面待確認"]));
+  breakdown.cbEvent = Math.min(25, breakdown.cbEvent);
+
+  if (technical.technicalPass === false) {
+    tags.push("60分K未符合CB技術門檻，一票否決");
+  } else {
+    tags.push(...(technical.tags || ["技術面待確認"]));
+    if (technical.aboveMa200 && technical.ma200Rising) {
+      breakdown.technical += 12;
+      tags.push("60分K站上MA200且MA200上彎 +12");
+    }
+    if (technical.allMaRising) {
+      breakdown.technical += 8;
+      tags.push("MA5/MA35/MA200同步上彎 +8");
+    }
+    if (technical.dailyShortSupport) {
+      breakdown.technical += 5;
+      tags.push("日K MA5/MA10支撐 +5");
+    }
+    if (technical.macdBullish) {
+      breakdown.technical += 5;
+      tags.push("MACD轉強 +5");
+    }
+  }
+  breakdown.technical = Math.min(30, breakdown.technical);
+
+  if (selectedModel === "stealth-below-conversion") {
+    breakdown.entryModel += 25;
+    tags.push("潛伏型通過 +25");
+  } else if (selectedModel === "low-risk-pullback") {
+    breakdown.entryModel += 20;
+    tags.push("低風險回測通過 +20");
+  } else if (selectedModel === "conversion-breakout") {
+    breakdown.entryModel += 18;
+    tags.push("突破型通過 +18");
+  } else if (hasEntryPrices && distance >= -8 && distance <= 3) {
+    breakdown.entryModel += 8;
+    tags.push("貼近轉換價觀察 +8");
+  }
+
+  if (volumeRatio20 >= 1.5) {
+    breakdown.volume += 10;
+    tags.push("60分量比20>=1.5 +10");
+  } else if (volumeRatio20 >= 1.2) {
+    breakdown.volume += 6;
+    tags.push("60分量比20>=1.2 +6");
+  } else if (entryPlan.volumeExpanding) {
+    breakdown.volume += 4;
+    tags.push("量能開始放大 +4");
+  }
+
+  if (riskReward >= 3) {
+    breakdown.riskReward += 10;
+    tags.push("風報比>=3 +10");
+  } else if (riskReward >= 2) {
+    breakdown.riskReward += 7;
+    tags.push("風報比>=2 +7");
+  } else if (riskReward >= 1.5) {
+    breakdown.riskReward += 4;
+    tags.push("風報比>=1.5 +4");
+  }
+
+  const baseScore = breakdown.cbEvent + breakdown.technical;
+  const score = Object.values(breakdown).reduce((sum, value) => sum + value, 0);
 
   return {
-    baseScore: Math.min(85, score),
-    score: Math.min(105, score + num(technical.technicalScore)),
+    baseScore: Math.min(55, baseScore),
+    score: Math.min(100, score),
+    scoreBreakdown: breakdown,
     tags: [...new Set(tags)],
   };
+}
+
+function entryModelRank(row) {
+  const model = String(row.selectedEntryModel || "");
+  if (model === "stealth-below-conversion") return 0;
+  if (model === "low-risk-pullback") return 1;
+  if (model === "conversion-breakout") return 2;
+  if (row.entrySignal === "near-conversion") return 3;
+  return 9;
+}
+
+function compareCandidates(a, b) {
+  return (
+    entryModelRank(a) - entryModelRank(b)
+    || b.score - a.score
+    || b.riskReward - a.riskReward
+    || Math.abs(num(a.conversionDistancePct)) - Math.abs(num(b.conversionDistancePct))
+    || num(a.issueAmount) - num(b.issueAmount)
+  );
+}
+
+function compactByUnderlyingStock(rows) {
+  const groups = new Map();
+  rows.forEach((row) => {
+    const key = cleanCode(row.code || row.cbCode);
+    if (!key) return;
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(row);
+  });
+  return [...groups.values()].map((group) => {
+    const sorted = [...group].sort(compareCandidates);
+    const best = sorted[0];
+    const related = sorted.slice(1).map((row) => ({
+      code: row.code,
+      cbCode: row.cbCode,
+      cbName: row.cbName,
+      stage: row.stage,
+      auctionType: row.auctionType,
+      issueAmount: row.issueAmount,
+      date: row.date,
+      score: row.score,
+      entryLabel: row.entryLabel,
+      selectedEntryModel: row.selectedEntryModel,
+    }));
+    return {
+      ...best,
+      relatedCbCount: sorted.length - 1,
+      relatedCbRows: related,
+    };
+  });
 }
 
 function normalize(row, source, stockMap, technicalMap, quoteMap) {
@@ -489,9 +886,12 @@ function normalize(row, source, stockMap, technicalMap, quoteMap) {
   const technical = technicalMap.get(cleanCode(code)) || {};
   const quote = quoteMap.get(cleanCode(code)) || {};
   const stockPrice = num(row.underlying_stock_market_price) || num(quote.price) || num(stock.close) || num(technical.stockPrice);
+  const convertPrice = num(row.conversion_price);
   const stockPriceSource = num(row.underlying_stock_market_price) ? "cbas"
     : quote.source || (num(stock.close) ? "stocks-slim" : (num(technical.stockPrice) ? "yahoo-60m" : ""));
-  const scored = scoreRow(row, source, technical);
+  const entryPlan = buildEntryPlan({ stockPrice, convertPrice, technical });
+  const scored = scoreRow(row, source, technical, entryPlan);
+  const exclusion = buildExclusion({ code, stock, technical });
   return {
     sourceLayer: source.layer,
     stage: source.stage,
@@ -501,13 +901,30 @@ function normalize(row, source, stockMap, technicalMap, quoteMap) {
     cbName,
     issueAmount: row.circulation || "",
     auctionType: row.inquiry_auction || "",
-    convertPrice: num(row.conversion_price),
+    convertPrice,
     stockPrice,
     premium,
+    conversionDistancePct: entryPlan.conversionDistancePct,
+    entrySignal: entryPlan.signal,
+    entryLabel: entryPlan.label,
+    selectedEntryModel: entryPlan.selectedModel,
+    entryModels: entryPlan.entryModels,
+    volumeRatio20: entryPlan.volumeRatio20,
+    volumeExpanding: entryPlan.volumeExpanding,
+    idealEntryLow: entryPlan.idealEntryLow,
+    idealEntryHigh: entryPlan.idealEntryHigh,
+    breakoutEntry: entryPlan.breakoutEntry,
+    preferredEntry: entryPlan.preferredEntry,
+    stopLoss: entryPlan.stopLoss,
+    target1: entryPlan.target1,
+    target2: entryPlan.target2,
+    riskReward: entryPlan.riskReward,
+    entryPlan,
     date: row.announcement_day || row.expected_effective_date || row.listing_day || row.issue_date || "",
     tcri: row.tcri || row.guarantee_situation || "",
     baseScore: scored.baseScore,
     score: scored.score,
+    scoreBreakdown: scored.scoreBreakdown,
     aboveMa200: technical.aboveMa200 ?? null,
     maAlignedUp: technical.maAlignedUp ?? null,
     ma5Rising: technical.ma5Rising ?? null,
@@ -519,13 +936,22 @@ function normalize(row, source, stockMap, technicalMap, quoteMap) {
     ma5: technical.ma5 || 0,
     ma35: technical.ma35 || 0,
     ma200: technical.ma200 || 0,
+    dailyMa5: technical.dailyMa5 || 0,
+    dailyMa10: technical.dailyMa10 || 0,
+    dailyShortSupport: technical.dailyShortSupport ?? null,
+    dailyShortRising: technical.dailyShortRising ?? null,
+    avgVolume5: exclusion.avgVolume5,
+    tradeVolume: exclusion.tradeVolume,
+    innerOuterVolume: exclusion.innerOuterVolume,
     macdHistogram: technical.macdHistogram || 0,
     historyCount: technical.historyCount || 0,
     technicalTimeframe: technical.timeframe || "",
     stockPriceSource,
     quoteDate: quote.quoteDate || stock.quoteDate || "",
-    veto: technical.technicalPass !== true,
-    tags: scored.tags,
+    excluded: exclusion.excluded,
+    exclusionReasons: exclusion.reasons,
+    veto: technical.technicalPass !== true || exclusion.excluded,
+    tags: [...new Set([...scored.tags, ...entryPlan.tags, ...exclusion.reasons])],
     raw: row,
   };
 }
@@ -571,9 +997,17 @@ async function main() {
 
   const allCandidates = normalizedRows
     .filter((row) => row.code || row.cbCode);
+  const exclusionReasonCounts = {};
+  allCandidates.forEach((row) => {
+    (row.exclusionReasons || []).forEach((reason) => {
+      exclusionReasonCounts[reason] = (exclusionReasonCounts[reason] || 0) + 1;
+    });
+  });
   const candidates = allCandidates
     .filter((row) => !row.veto)
-    .sort((a, b) => b.score - a.score || num(a.issueAmount) - num(b.issueAmount));
+    .sort(compareCandidates);
+  const compactCandidates = compactByUnderlyingStock(candidates)
+    .sort(compareCandidates);
 
   const payload = {
     ok: true,
@@ -582,6 +1016,8 @@ async function main() {
     sourceCounts,
     excludedCounts: {
       veto: allCandidates.length - candidates.length,
+      duplicateUnderlying: candidates.length - compactCandidates.length,
+      byReason: exclusionReasonCounts,
     },
     quoteSources: {
       fugleConfigured: Boolean(FUGLE_API_KEY),
@@ -590,8 +1026,8 @@ async function main() {
       finmindRows: [...quoteMap.values()].filter((quote) => String(quote.source || "").startsWith("finmind")).length,
       finmindProbe,
     },
-    scoringNote: "CBAS supplies CB source/issuance terms. Stock price prefers CBAS/Fugle/FinMind/stocks-slim. CB technical gate uses 60-minute K data: pass only when 60m close is above MA200 and MA200 is rising, or when 60m MA5/MA35/MA200 are all rising. Rows failing this 60m gate are excluded from display.",
-    rows: candidates,
+    scoringNote: "CBAS supplies CB source/issuance terms. Stock price prefers CBAS/Fugle/FinMind/stocks-slim. CB technical gate uses 60-minute K data: pass only when 60m close is above MA200 and MA200 is rising, or when 60m MA5/MA35/MA200 are all rising. Rows failing this 60m gate are excluded from display. Score is now 100 points: CB event 25, technical strength 30, entry model 25, volume 10, risk/reward 10. Sorting prioritizes stealth entry, then low-risk pullback, then conversion breakout, then near-conversion watchlist. Exclusions remove 00-prefix products, ETF/ETN/DR/index/warrant/CB/non-common stocks, blacklisted/daytrade-unsuitable/suspended/trial-match rows, cement/defense/aerospace names, and low-liquidity rows under 3000 lots by 5-day average, inner/outer volume, or realtime volume when available. Multiple CBs for the same underlying stock are compacted to the best-ranked CB row, with the other CBs kept under relatedCbRows.",
+    rows: compactCandidates,
   };
 
   await fs.mkdir(path.dirname(OUT_FILE), { recursive: true });
@@ -600,8 +1036,8 @@ async function main() {
     await fs.mkdir(path.dirname(CODE_OUT_FILE), { recursive: true });
     await fs.writeFile(CODE_OUT_FILE, `${JSON.stringify(payload, null, 2)}\n`, "utf8");
   }
-  console.log(`wrote ${OUT_FILE} (${candidates.length} rows)`);
-  console.log(candidates.slice(0, 12).map((row) => `${row.score} ${row.sourceLayer} ${row.code} ${row.cbName} ${row.tags.join(" / ")}`).join("\n"));
+  console.log(`wrote ${OUT_FILE} (${compactCandidates.length} rows, compacted ${candidates.length - compactCandidates.length} same-stock CB rows)`);
+  console.log(compactCandidates.slice(0, 12).map((row) => `${row.score} ${row.sourceLayer} ${row.code} ${row.cbName} ${row.tags.join(" / ")}`).join("\n"));
 }
 
 main().catch((error) => {

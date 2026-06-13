@@ -4934,8 +4934,16 @@ body.fuman-light-theme .data-freshness-bar.is-stale span {
   }
 
   #market-view #heatmap {
-    grid-template-columns: 1fr !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 12px !important;
     overflow-x: hidden !important;
+  }
+
+  #market-view #heatmap .sector-card {
+    width: auto !important;
+    max-width: none !important;
+    min-height: 194px !important;
+    padding: 16px 12px 14px !important;
   }
 
   #market-view .sector-section .tabs {
@@ -7305,3 +7313,353 @@ body.fuman-light-theme .data-freshness-bar.is-stale::after {
   }
 }
 
+
+/* Fuman CB card visual layout gate */
+.cb-detect-list {
+  counter-reset: cb-rank;
+}
+
+.cb-detect-card {
+  counter-increment: cb-rank;
+  position: relative;
+  border: 1px solid rgba(134, 151, 190, 0.18);
+  border-radius: 8px;
+  background: rgba(21, 28, 43, 0.92);
+  padding: 18px 12px 14px 66px;
+}
+
+.cb-detect-card.hot {
+  border-color: rgba(255, 122, 69, 0.52);
+  background: linear-gradient(135deg, rgba(67, 31, 37, 0.96), rgba(21, 28, 43, 0.92));
+}
+
+.cb-detect-card::before {
+  content: "#" counter(cb-rank);
+  position: absolute;
+  top: 17px;
+  left: 12px;
+  width: 42px;
+  height: 42px;
+  border-radius: 14px;
+  display: grid;
+  place-items: center;
+  background: rgba(255, 122, 69, 0.13);
+  color: #ffb077;
+  font-size: 20px;
+  font-weight: 900;
+}
+
+.cb-detect-card h3 {
+  margin: 0;
+  color: #f7fbff;
+  font-size: 22px;
+  line-height: 1.15;
+}
+
+.cb-detect-card h3 a {
+  display: block;
+  margin-top: 5px;
+  color: #b8c4dc;
+  font-size: 16px;
+  text-decoration: none;
+}
+
+.cb-detect-card h3 small {
+  display: block;
+  margin-top: 5px;
+  color: #b8c4dc;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.cb-score {
+  flex: 0 0 auto;
+  min-width: 54px;
+  border: 1px solid rgba(255, 122, 69, 0.52);
+  border-radius: 999px;
+  background: rgba(255, 122, 69, 0.12);
+  color: #ffb077;
+  padding: 8px 12px;
+  text-align: center;
+  font-size: 15px;
+  font-weight: 900;
+}
+
+.cb-detect-metrics {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(118px, 1fr));
+  gap: 12px;
+  margin-top: 18px;
+}
+
+.cb-detect-metrics span {
+  display: block;
+  min-height: 58px;
+  border: 1px solid rgba(134, 151, 190, 0.16);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.055);
+  color: #9faecb;
+  padding: 10px 12px;
+  font-size: 12px;
+}
+
+.cb-detect-metrics b {
+  display: block;
+  margin-top: 5px;
+  color: #f2f5ff;
+  font-size: 20px;
+  line-height: 1.15;
+}
+
+.cb-detect-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid rgba(134, 151, 190, 0.16);
+}
+
+.cb-detect-tags::before {
+  content: "AI分析\A 通過";
+  flex: 0 0 100%;
+  white-space: pre-line;
+  color: #b8c4dc;
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.cb-detect-tags span {
+  border: 1px solid rgba(255, 176, 119, 0.45);
+  border-radius: 999px;
+  color: #ffb077;
+  background: rgba(255, 122, 69, 0.08);
+  padding: 5px 8px;
+  font-size: 12px;
+}
+
+@media (max-width: 760px) {
+  .cb-detect-list {
+    padding: 10px;
+  }
+
+  .cb-detect-card {
+    padding: 16px 10px 14px 58px;
+  }
+
+  .cb-detect-card::before {
+    left: 10px;
+    width: 38px;
+    height: 38px;
+    border-radius: 12px;
+    font-size: 18px;
+  }
+
+  .cb-detect-card h3 {
+    font-size: 20px;
+  }
+
+  .cb-detect-metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+/* Fuman CB light theme visual tuning */
+body.fuman-light-theme .cb-detect-panel {
+  border-color: #d8e0ec;
+  background: #ffffff;
+  box-shadow: none;
+}
+
+body.fuman-light-theme .cb-detect-head {
+  border-bottom-color: #dce3ee;
+  background: #ffffff;
+}
+
+body.fuman-light-theme .cb-detect-head span,
+body.fuman-light-theme .cb-detect-summary,
+body.fuman-light-theme .cb-detect-tags::before {
+  color: #64748b;
+}
+
+body.fuman-light-theme .cb-detect-head h2,
+body.fuman-light-theme .cb-detect-card h3,
+body.fuman-light-theme .cb-detect-metrics b {
+  color: #0f172a;
+}
+
+body.fuman-light-theme .cb-detect-head strong {
+  color: #c2410c;
+}
+
+body.fuman-light-theme .cb-detect-list {
+  background: #ffffff;
+}
+
+body.fuman-light-theme .cb-detect-card,
+body.fuman-light-theme .cb-detect-card.hot {
+  border-color: #d9e1ec;
+  background: #ffffff;
+  box-shadow: 0 1px 0 rgba(15, 23, 42, 0.04);
+}
+
+body.fuman-light-theme .cb-detect-card::before {
+  background: #fff4e8;
+  color: #c2410c;
+}
+
+body.fuman-light-theme .cb-detect-card h3 a,
+body.fuman-light-theme .cb-detect-card h3 small {
+  color: #475569;
+}
+
+body.fuman-light-theme .cb-score {
+  border-color: #fecaca;
+  background: #fff1f2;
+  color: #dc2626;
+}
+
+body.fuman-light-theme .cb-detect-metrics span {
+  border-color: #d9e1ec;
+  background: #f3f6fa;
+  color: #64748b;
+}
+
+body.fuman-light-theme .cb-detect-tags {
+  border-top-color: #d9e1ec;
+}
+
+body.fuman-light-theme .cb-detect-tags span {
+  border-color: #fed7aa;
+  background: #fff7ed;
+  color: #c2410c;
+}
+
+body.fuman-light-theme .cb-detect-panel .red {
+  color: #dc2626;
+}
+
+body.fuman-light-theme .cb-detect-panel .green {
+  color: #059669;
+}
+
+/* Fuman CB light page title contrast */
+body.fuman-light-theme #cb-detect-view .page-header h1,
+body.fuman-light-theme #cb-detect-view .page-header h1 *,
+body.fuman-light-theme #cb-detect-view .page-header .page-title-icon {
+  color: #fff7ed !important;
+  text-shadow: 0 1px 8px rgba(0, 0, 0, 0.32);
+}
+
+body.fuman-light-theme #cb-detect-view .page-header .refresh-line,
+body.fuman-light-theme #cb-detect-view .page-header span.refresh-line {
+  color: #fed7aa !important;
+  text-shadow: 0 1px 6px rgba(0, 0, 0, 0.24);
+}
+
+/* Fuman CB light page title white card */
+body.fuman-light-theme #cb-detect-view .page-header {
+  border-color: #fed7aa !important;
+  background: linear-gradient(135deg, #ffffff 0%, #fff7ed 100%) !important;
+  box-shadow: inset 0 4px 0 #f97316, 0 1px 0 rgba(15, 23, 42, 0.04) !important;
+}
+
+body.fuman-light-theme #cb-detect-view .page-header > div:first-child {
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+body.fuman-light-theme #cb-detect-view .page-header h1,
+body.fuman-light-theme #cb-detect-view .page-header h1 *,
+body.fuman-light-theme #cb-detect-view .page-header .page-title-icon {
+  color: #0f172a !important;
+  text-shadow: none !important;
+}
+
+body.fuman-light-theme #cb-detect-view .page-header .refresh-line,
+body.fuman-light-theme #cb-detect-view .page-header span.refresh-line {
+  color: #c2410c !important;
+  text-shadow: none !important;
+}
+
+/* Fuman mobile light page title cards */
+@media (max-width: 760px) {
+  body.fuman-light-theme .page-header,
+  body.fuman-light-theme .strategy-header,
+  body.fuman-light-theme .radar-topbar,
+  body.fuman-light-theme .intraday-topbar,
+  body.fuman-light-theme .swing-topbar,
+  body.fuman-light-theme .strategy5-page-heading,
+  body.fuman-light-theme #chip-trade-view .chip-page-header,
+  body.fuman-light-theme #warrant-flow-view .page-header,
+  body.fuman-light-theme #warrant-flow-view .swing-topbar,
+  body.fuman-light-theme #watchlist-view .watchlist-entry-card {
+    border-color: #fed7aa !important;
+    background: linear-gradient(135deg, #ffffff 0%, #fff7ed 100%) !important;
+    box-shadow: inset 0 4px 0 #f97316, 0 1px 0 rgba(15, 23, 42, 0.04) !important;
+  }
+
+  body.fuman-light-theme .page-header > div:first-child,
+  body.fuman-light-theme .strategy-header > div:first-child,
+  body.fuman-light-theme .radar-topbar > div:first-child,
+  body.fuman-light-theme .intraday-topbar > div:first-child,
+  body.fuman-light-theme .swing-topbar > div:first-child,
+  body.fuman-light-theme .strategy5-page-heading > div:first-child,
+  body.fuman-light-theme #chip-trade-view .chip-page-header > div:first-child,
+  body.fuman-light-theme #warrant-flow-view .page-header > div:first-child,
+  body.fuman-light-theme #warrant-flow-view .swing-topbar > div:first-child {
+    background: transparent !important;
+    box-shadow: none !important;
+  }
+
+  body.fuman-light-theme .page-header h1,
+  body.fuman-light-theme .page-header h1 *,
+  body.fuman-light-theme .strategy-header h1,
+  body.fuman-light-theme .strategy-header h1 *,
+  body.fuman-light-theme .radar-topbar h1,
+  body.fuman-light-theme .radar-topbar h1 *,
+  body.fuman-light-theme .radar-topbar h2,
+  body.fuman-light-theme .radar-topbar h2 *,
+  body.fuman-light-theme .intraday-topbar h2,
+  body.fuman-light-theme .intraday-topbar h2 *,
+  body.fuman-light-theme .swing-topbar h2,
+  body.fuman-light-theme .swing-topbar h2 *,
+  body.fuman-light-theme .strategy5-page-heading h2,
+  body.fuman-light-theme .strategy5-page-heading h2 *,
+  body.fuman-light-theme #chip-trade-view .chip-page-header h1,
+  body.fuman-light-theme #chip-trade-view .chip-page-header h1 *,
+  body.fuman-light-theme #warrant-flow-view .page-header h1,
+  body.fuman-light-theme #warrant-flow-view .page-header h1 *,
+  body.fuman-light-theme #warrant-flow-view .swing-topbar h2,
+  body.fuman-light-theme #warrant-flow-view .swing-topbar h2 *,
+  body.fuman-light-theme #watchlist-view .watchlist-entry-copy h1,
+  body.fuman-light-theme #watchlist-view .watchlist-entry-copy h1 *,
+  body.fuman-light-theme .page-title-icon,
+  body.fuman-light-theme .strategy5-page-icon {
+    color: #0f172a !important;
+    text-shadow: none !important;
+  }
+
+  body.fuman-light-theme .page-header p,
+  body.fuman-light-theme .page-header span,
+  body.fuman-light-theme .page-header .refresh-line,
+  body.fuman-light-theme .strategy-header p,
+  body.fuman-light-theme .strategy-header span,
+  body.fuman-light-theme .radar-topbar p,
+  body.fuman-light-theme .radar-topbar span,
+  body.fuman-light-theme .intraday-topbar p,
+  body.fuman-light-theme .intraday-topbar span,
+  body.fuman-light-theme .swing-topbar p,
+  body.fuman-light-theme .swing-topbar span,
+  body.fuman-light-theme .strategy5-page-heading p,
+  body.fuman-light-theme .strategy5-page-heading span,
+  body.fuman-light-theme #chip-trade-view .chip-page-header span,
+  body.fuman-light-theme #warrant-flow-view .page-header p,
+  body.fuman-light-theme #warrant-flow-view .page-header span,
+  body.fuman-light-theme #warrant-flow-view .swing-topbar p,
+  body.fuman-light-theme #warrant-flow-view .swing-topbar span,
+  body.fuman-light-theme #watchlist-view .watchlist-entry-copy p {
+    color: #c2410c !important;
+    text-shadow: none !important;
+  }
+}

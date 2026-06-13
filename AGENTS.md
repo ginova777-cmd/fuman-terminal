@@ -35,6 +35,21 @@ npm run freshness:gate:fast
 
 Both gates must end with `verify:data-freshness:live` before the terminal is considered current.
 
+Mobile UI is part of the release gate. The market heatmap on mobile must remain a two-column grid:
+
+```css
+#market-view #heatmap {
+  grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+}
+```
+
+Do not reintroduce a mobile one-column heatmap override. Any change touching mobile market overview, `styles.css`, `index.html`, service worker versioning, or release scripts must pass:
+
+```powershell
+npm run verify:mobile-layout
+npm run verify:mobile-layout:live
+```
+
 Main release/deploy must use the guarded release chain:
 
 ```powershell

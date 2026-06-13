@@ -60,7 +60,7 @@ function count(payload) {
 }
 
 function payloadDate(payload) {
-  return normalizeDate(payload?.resolvedTradeDate || payload?.usedDate || payload?.tradeDate || payload?.dataDate || payload?.date || payload?.scanStamp || payload?.updatedAt);
+  return normalizeDate(payload?.generatedDate || payload?.resolvedTradeDate || payload?.usedDate || payload?.tradeDate || payload?.dataDate || payload?.date || payload?.scanStamp || payload?.updatedAt);
 }
 
 function fail(issues, message) {

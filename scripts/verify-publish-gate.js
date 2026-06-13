@@ -28,6 +28,14 @@ function queryScheduledTask(taskName) {
 }
 
 const packageJson = JSON.parse(read("package.json"));
+for (const scriptName of ["verify:mobile-layout", "verify:mobile-layout:live"]) {
+  if (!packageJson.scripts?.[scriptName]) {
+    issues.push(`package.json missing scripts.${scriptName}`);
+  }
+}
+if (!String(packageJson.scripts?.postdeploy || "").includes("verify-mobile-layout.js --live")) {
+  issues.push("postdeploy must run live mobile layout verification");
+}
 const gateScript = packageJson.scripts && packageJson.scripts["freshness:gate"];
 if (!gateScript) {
   issues.push("package.json missing scripts.freshness:gate");
@@ -169,6 +177,15 @@ for (const marker of [
   "live-freshness-ok.json",
 ]) {
   if (!gate.includes(marker)) issues.push(`run-live-freshness-gate.ps1 missing ${marker}`);
+}
+
+const mobileLayoutVerifier = read("scripts/verify-mobile-layout.js");
+for (const marker of [
+  "repeat(2, minmax(0, 1fr))",
+  "forbidden mobile #market-view #heatmap one-column override found",
+  "--live",
+]) {
+  if (!mobileLayoutVerifier.includes(marker)) issues.push(`verify-mobile-layout.js missing ${marker}`);
 }
 for (const marker of [
   "Set-Strategy2IntradayEnv",

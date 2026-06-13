@@ -32,6 +32,7 @@ if (bumpStatus !== 0) {
 run("sync:source", ["npm", "run", "sync:source"]);
 run("verify:version", ["npm", "run", "verify:version"]);
 run("verify:sw", ["npm", "run", "verify:sw"]);
+run("verify:mobile-layout", ["npm", "run", "verify:mobile-layout"]);
 run("verify:data-freshness", ["npm", "run", "verify:data-freshness"]);
 run("verify:source-sync", ["npm", "run", "verify:source-sync"]);
 
