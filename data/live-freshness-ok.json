@@ -1,21 +1,21 @@
 {
   "ok": true,
-  "checkedAt": "2026-06-13T22:25:43.4550575+08:00",
+  "checkedAt": "2026-06-13T22:29:36.0538060+08:00",
   "version": "chip-flow-hardening-20260611-34",
-  "publishHead": "0ab3c2c (HEAD -> main, origin/main, origin/HEAD) Fix freshness gate artifact ordering",
+  "publishHead": "833ca1f (HEAD -> main, origin/main, origin/HEAD) Fix freshness gate CB row count",
   "verifier": "npm run verify:data-freshness:live",
-  "log": "C:\\fuman-runtime\\logs\\live-freshness-gate-20260613-222410.log",
+  "log": "C:\\fuman-runtime\\logs\\live-freshness-gate-20260613-222809.log",
   "mode": "fast",
   "manifestCount": 133,
   "manifestCbCount": 10,
-  "cbCount": 1,
+  "cbCount": 10,
   "cbUpdatedAt": "06/13/2026 13:59:46",
   "rawRefresh": [
     {
       "label": "realtime radar raw refresh",
       "ok": true,
       "exitCode": 0,
-      "checkedAt": "2026-06-13T22:24:11.6540284+08:00",
+      "checkedAt": "2026-06-13T22:28:11.2688273+08:00",
       "warningCount": 0,
       "warnings": []
     },
@@ -23,7 +23,7 @@
       "label": "strategy2 intraday raw refresh",
       "ok": false,
       "exitCode": 1,
-      "checkedAt": "2026-06-13T22:24:11.8202940+08:00",
+      "checkedAt": "2026-06-13T22:28:11.4248548+08:00",
       "warningCount": 0,
       "warnings": []
     },
@@ -31,7 +31,7 @@
       "label": "institution raw refresh",
       "ok": true,
       "exitCode": 0,
-      "checkedAt": "2026-06-13T22:24:41.3029442+08:00",
+      "checkedAt": "2026-06-13T22:28:34.3629180+08:00",
       "warningCount": 0,
       "warnings": []
     },
@@ -39,7 +39,7 @@
       "label": "warrant flow raw refresh",
       "ok": true,
       "exitCode": 0,
-      "checkedAt": "2026-06-13T22:25:08.0624587+08:00",
+      "checkedAt": "2026-06-13T22:29:00.9293810+08:00",
       "warningCount": 0,
       "warnings": []
     }
