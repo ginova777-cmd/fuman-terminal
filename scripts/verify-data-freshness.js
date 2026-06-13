@@ -6,6 +6,7 @@ const ROOT = path.resolve(__dirname, "..");
 const BASE_URL = (process.env.FUMAN_VERIFY_BASE_URL || "https://fuman-terminal.vercel.app").replace(/\/+$/, "");
 const LIVE = process.argv.includes("--live") || process.env.FUMAN_DATA_FRESHNESS_LIVE === "1";
 const WRITE_REPORT = process.argv.includes("--write") || process.env.FUMAN_WRITE_FRESHNESS_REPORT === "1";
+const SKIP_TERMINAL_GATE = process.env.FUMAN_SKIP_TERMINAL_GATE_ARTIFACT === "1";
 const LOCAL_DATA_DIR = process.env.FUMAN_DATA_DIR || path.join(ROOT, "data");
 
 const TARGETS = [
@@ -81,6 +82,12 @@ function rows(payload) {
   if (Array.isArray(payload.stocks)) return payload.stocks;
   if (Array.isArray(payload.quotes)) return payload.quotes;
   return [];
+}
+
+async function fetchJsonFile(pathname) {
+  const result = await fetchText(pathname);
+  if (result.status < 200 || result.status >= 300) throw new Error(`${pathname} HTTP ${result.status}`);
+  return JSON.parse(result.body);
 }
 
 function rowClose(row) {
@@ -179,6 +186,37 @@ function validateCrossPayloads(payloads, issues) {
   }
 }
 
+async function validateTerminalFreshnessGate(payloads, issues) {
+  if (!LIVE || SKIP_TERMINAL_GATE) return;
+  let version = null;
+  let gate = null;
+  try {
+    version = await fetchJsonFile("version.json");
+  } catch (error) {
+    issues.push(`terminal freshness gate missing version.json: ${error.message}`);
+    return;
+  }
+  try {
+    gate = await fetchJsonFile("data/live-freshness-ok.json");
+  } catch (error) {
+    issues.push(`terminal freshness gate missing live-freshness-ok.json: ${error.message}`);
+    return;
+  }
+
+  const manifest = payloads["data-manifest"];
+  const cb = payloads["cb-detect-latest"];
+  const gateCheckedAt = Date.parse(gate.checkedAt || "");
+  const ageMinutes = Number.isFinite(gateCheckedAt) ? (Date.now() - gateCheckedAt) / 60000 : Infinity;
+  assertFresh(gate.ok === true, "terminal freshness gate ok=false", issues);
+  assertFresh(String(gate.version || "") === String(version.version || ""), `terminal freshness gate version mismatch gate=${gate.version} live=${version.version}`, issues);
+  assertFresh(String(gate.verifier || "").includes("verify:data-freshness:live"), "terminal freshness gate verifier missing live data freshness", issues);
+  assertFresh(ageMinutes <= 1440, `terminal freshness gate stale ageMinutes=${Math.round(ageMinutes)}`, issues);
+  assertFresh(Number(gate.manifestCount || 0) === extractCount(manifest), `terminal freshness gate manifest count mismatch gate=${gate.manifestCount} actual=${extractCount(manifest)}`, issues);
+  assertFresh(Number(gate.cbCount || 0) === extractCount(cb), `terminal freshness gate CB count mismatch gate=${gate.cbCount} actual=${extractCount(cb)}`, issues);
+  assertFresh(Number(gate.manifestCbCount || 0) === Number(manifest?.entries?.["cb-detect-latest.json"]?.count || 0), `terminal freshness gate manifest CB count mismatch gate=${gate.manifestCbCount} actual=${manifest?.entries?.["cb-detect-latest.json"]?.count}`, issues);
+  assertFresh(Number(gate.cbCount || 0) === Number(manifest?.entries?.["cb-detect-latest.json"]?.count || 0), `terminal freshness gate CB rows not aligned with manifest gate=${gate.cbCount} manifest=${manifest?.entries?.["cb-detect-latest.json"]?.count}`, issues);
+}
+
 
 async function loadTarget(target) {
   if (!LIVE) return JSON.parse(readLocal(target.file));
@@ -211,6 +249,7 @@ async function main() {
     }
   }
   validateCrossPayloads(payloads, issues);
+  await validateTerminalFreshnessGate(payloads, issues);
   report.ok = issues.length === 0;
   const outPath = path.join(ROOT, "data", "data-freshness-report.json");
   if (WRITE_REPORT) fs.writeFileSync(outPath, JSON.stringify(report, null, 2) + "\n", "utf8");

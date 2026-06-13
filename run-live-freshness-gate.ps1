@@ -115,6 +115,106 @@ function Invoke-NpmAt($root, $scriptName) {
   }
 }
 
+function Read-GateJson($path) {
+  return Get-Content -LiteralPath $path -Raw | ConvertFrom-Json -ErrorAction Stop
+}
+
+function Get-GateCount($payload) {
+  if ($null -ne $payload.count) { return [int]$payload.count }
+  if ($null -ne $payload.total) { return [int]$payload.total }
+  if ($payload.rows) { return @($payload.rows).Count }
+  if ($payload.data) { return @($payload.data).Count }
+  if ($payload.stocks) { return @($payload.stocks).Count }
+  if ($payload.entries) { return @($payload.entries.PSObject.Properties).Count }
+  return 0
+}
+
+function Invoke-LiveDataFreshnessVerify([switch]$SkipTerminalGate) {
+  Push-Location $publishRoot
+  try {
+    if ($SkipTerminalGate) {
+      $previous = $env:FUMAN_SKIP_TERMINAL_GATE_ARTIFACT
+      try {
+        $env:FUMAN_SKIP_TERMINAL_GATE_ARTIFACT = "1"
+        Invoke-GateCommand "npm run verify:data-freshness:live skip terminal gate ($publishRoot)" { npm run verify:data-freshness:live }
+      } finally {
+        if ($null -eq $previous) {
+          Remove-Item Env:FUMAN_SKIP_TERMINAL_GATE_ARTIFACT -ErrorAction SilentlyContinue
+        } else {
+          $env:FUMAN_SKIP_TERMINAL_GATE_ARTIFACT = $previous
+        }
+      }
+    } else {
+      Invoke-GateCommand "npm run verify:data-freshness:live ($publishRoot)" { npm run verify:data-freshness:live }
+    }
+  } finally {
+    Pop-Location
+  }
+}
+
+function Publish-TerminalFreshnessGate($mode, $rawResults) {
+  $versionPath = Join-Path $publishRoot "version.json"
+  $manifestPath = Join-Path $publishRoot "data\data-manifest.json"
+  $cbPath = Join-Path $publishRoot "data\cb-detect-latest.json"
+  $versionPayload = Read-GateJson $versionPath
+  $manifestPayload = Read-GateJson $manifestPath
+  $cbPayload = Read-GateJson $cbPath
+  $head = & $gitExe -C $publishRoot log -1 --oneline --decorate
+  $statusPath = Join-Path $publishRoot "data\live-freshness-ok.json"
+  $status = [ordered]@{
+    ok = $true
+    checkedAt = (Get-Date).ToString("o")
+    version = [string]$versionPayload.version
+    publishHead = [string]$head
+    verifier = "npm run verify:data-freshness:live"
+    log = $log
+    mode = $mode
+    manifestCount = Get-GateCount $manifestPayload
+    manifestCbCount = [int]$manifestPayload.entries."cb-detect-latest.json".count
+    cbCount = Get-GateCount $cbPayload
+    cbUpdatedAt = [string]$cbPayload.updatedAt
+    rawRefresh = @($rawResults)
+  }
+  $status | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $statusPath -Encoding utf8
+
+  Write-GateLog "Publishing terminal freshness gate artifact version=$($status.version) cbCount=$($status.cbCount) manifestCbCount=$($status.manifestCbCount)"
+  & $gitExe -C $publishRoot add -f "data/live-freshness-ok.json"
+  if ($LASTEXITCODE -ne 0) { throw "Stage terminal freshness gate artifact failed" }
+  & $gitExe -C $publishRoot diff --cached --quiet -- "data/live-freshness-ok.json"
+  if ($LASTEXITCODE -eq 0) {
+    Write-GateLog "Terminal freshness gate artifact unchanged; no gate commit needed."
+  } else {
+    & $gitExe -C $publishRoot commit -m "Update terminal freshness gate"
+    if ($LASTEXITCODE -ne 0) { throw "Commit terminal freshness gate artifact failed" }
+    & $gitExe -C $publishRoot push origin main
+    if ($LASTEXITCODE -ne 0) { throw "Push terminal freshness gate artifact failed" }
+  }
+
+  if (-not $SkipTerminalCopy) {
+    New-Item -ItemType Directory -Force -Path (Join-Path $terminalRoot "data") | Out-Null
+    Copy-Item -LiteralPath $statusPath -Destination (Join-Path $terminalRoot "data\live-freshness-ok.json") -Force
+  }
+}
+
+function Wait-TerminalFreshnessGateVisible {
+  $url = "https://fuman-terminal.vercel.app/data/live-freshness-ok.json?v=$(Get-Date -Format yyyyMMddHHmmss)"
+  for ($attempt = 1; $attempt -le 6; $attempt++) {
+    try {
+      Write-GateLog "Checking terminal freshness gate visibility attempt $attempt/6"
+      $response = Invoke-WebRequest -Uri $url -UseBasicParsing -TimeoutSec 30
+      $payload = $response.Content | ConvertFrom-Json -ErrorAction Stop
+      if ($payload.ok -eq $true -and $payload.verifier -match "verify:data-freshness:live") {
+        Write-GateLog "Terminal freshness gate visible version=$($payload.version) cbCount=$($payload.cbCount)"
+        return
+      }
+    } catch {
+      Write-GateLog "Terminal freshness gate not visible yet: $($_.Exception.Message)"
+    }
+    Start-Sleep -Seconds 20
+  }
+  throw "Terminal freshness gate artifact was not visible on live site after retries"
+}
+
 function Invoke-RepoSyncPreflight {
   Push-Location $syncRoot
   try {
@@ -287,23 +387,13 @@ try {
     Write-GateLog "cache sync returned non-zero after publish; final live freshness check is now authoritative"
   }
 
-  Invoke-NpmAt $publishRoot "verify:data-freshness"
-  Invoke-NpmAt $publishRoot "verify:data-freshness:live"
-  Invoke-NpmAt $publishRoot "verify:live-version"
-
-  $head = & $gitExe -C $publishRoot log -1 --oneline --decorate
   $gateMode = if ($Fast) { "fast" } else { "full" }
-  $statusPath = Join-Path $publishRoot "data\live-freshness-ok.json"
-  $status = [ordered]@{
-    ok = $true
-    checkedAt = (Get-Date).ToString("o")
-    publishHead = [string]$head
-    verifier = "npm run verify:data-freshness:live"
-    log = $log
-    mode = $gateMode
-    rawRefresh = @($rawRefreshResults.ToArray())
-  }
-  $status | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $statusPath -Encoding utf8
+  Invoke-NpmAt $publishRoot "verify:data-freshness"
+  Invoke-LiveDataFreshnessVerify -SkipTerminalGate
+  Invoke-NpmAt $publishRoot "verify:live-version"
+  Publish-TerminalFreshnessGate $gateMode @($rawRefreshResults.ToArray())
+  Wait-TerminalFreshnessGateVisible
+  Invoke-LiveDataFreshnessVerify
 
   if (-not $SkipTerminalCopy) {
     Write-GateLog "Copying verified publish data back to terminal root"
@@ -311,6 +401,7 @@ try {
     Invoke-NpmAt $terminalRoot "verify:data-freshness"
   }
 
+  $head = & $gitExe -C $publishRoot log -1 --oneline --decorate
   Write-GateLog "SUCCESS live freshness gate passed; publishHead=$head"
   Write-GateLog "Log: $log"
   exit 0

@@ -175,8 +175,22 @@ for (const marker of [
   "FUMAN_FAST_GATE",
   "Fast gate selected",
   "live-freshness-ok.json",
+  "Publish-TerminalFreshnessGate",
+  "Wait-TerminalFreshnessGateVisible",
+  "FUMAN_SKIP_TERMINAL_GATE_ARTIFACT",
 ]) {
   if (!gate.includes(marker)) issues.push(`run-live-freshness-gate.ps1 missing ${marker}`);
+}
+
+const dataFreshnessVerifier = read("scripts/verify-data-freshness.js");
+for (const marker of [
+  "validateTerminalFreshnessGate",
+  "data/live-freshness-ok.json",
+  "terminal freshness gate version mismatch",
+  "terminal freshness gate CB rows not aligned with manifest",
+  "FUMAN_SKIP_TERMINAL_GATE_ARTIFACT",
+]) {
+  if (!dataFreshnessVerifier.includes(marker)) issues.push(`verify-data-freshness.js missing ${marker}`);
 }
 
 const mobileLayoutVerifier = read("scripts/verify-mobile-layout.js");
@@ -254,6 +268,7 @@ if (!fs.existsSync(path.join(ROOT, "AGENTS.md"))) {
 } else {
   const agents = read("AGENTS.md");
   if (!agents.includes("npm run freshness:gate")) issues.push("AGENTS.md must name npm run freshness:gate as the only publish entrypoint");
+  if (!agents.includes("data/live-freshness-ok.json")) issues.push("AGENTS.md must explain the live terminal freshness gate artifact");
   if (!agents.includes("FRESHNESS-GATE-MOBILE.md")) issues.push("AGENTS.md must point Codex to FRESHNESS-GATE-MOBILE.md");
   if (!agents.includes("git pull --ff-only origin main")) issues.push("AGENTS.md must require Codex to sync before touching the project");
   if (!agents.includes("repo sync preflight")) issues.push("AGENTS.md must explain that freshness:gate blocks stale repos");
@@ -284,6 +299,8 @@ if (!fs.existsSync(path.join(ROOT, "FRESHNESS-GATE-MOBILE.md"))) {
     "GitHub 或網路不可用",
     "目前先不要修改 Supabase",
     "Fuman Terminal Freshness Gate",
+    "live-freshness-ok.json",
+    "manifestCbCount",
     "STRATEGY2-FRESHNESS-GOVERNANCE.md",
     "策略2 A進場區",
     "REALTIME-RADAR-FRESHNESS-GOVERNANCE.md",
@@ -377,6 +394,7 @@ if (fetchResult.status !== 0) {
       "AGENTS.md",
       "FRESHNESS-GATE-MOBILE.md",
       "scripts/verify-publish-gate.js",
+      "scripts/verify-data-freshness.js",
       "run-live-freshness-gate.ps1",
       "run-main-release-pipeline.ps1",
       "package.json",

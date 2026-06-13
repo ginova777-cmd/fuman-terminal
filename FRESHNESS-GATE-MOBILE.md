@@ -42,6 +42,27 @@ npm run verify:data-freshness:live
 
 才算成功。
 
+## 終端可讀憑證
+
+正式站必須有：
+
+```text
+data/live-freshness-ok.json
+```
+
+這個檔案是 Fuman Terminal Freshness Gate 的通行證。它必須跟目前正式站版本、`data-manifest.json`、`cb-detect-latest.json` 對齊，至少包含：
+
+```text
+version
+checkedAt
+verifier = npm run verify:data-freshness:live
+manifestCount
+cbCount
+manifestCbCount
+```
+
+如果 `live-freshness-ok.json` 不存在、版本不一致、CB rows 和 manifest count 不一致，終端資料不能宣稱是最新。
+
 ## 每個 Codex 接手先做
 
 ```powershell
@@ -127,6 +148,8 @@ TWSE、Supabase、行情 API 或其他外部來源 timeout / 403 / 404 / fetch f
 ## 手機快取
 
 手機資料請求必須 network-first / no-store。資料已發布但手機短暫顯示舊畫面時，先重新整理；成功標準仍以 live freshness verifier 為準。
+
+`live-freshness-ok.json` 也必須走 network-first / no-store，不能吃舊快取。
 
 ## 執行時間與重疊
 

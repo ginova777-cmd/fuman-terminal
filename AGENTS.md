@@ -35,6 +35,14 @@ npm run freshness:gate:fast
 
 Both gates must end with `verify:data-freshness:live` before the terminal is considered current.
 
+`verify:data-freshness:live` must validate the terminal freshness gate artifact:
+
+```text
+data/live-freshness-ok.json
+```
+
+This artifact is the live, terminal-readable proof that the published data passed the gate. It must include the current terminal version, manifest count, CB row count, manifest CB count, verifier name, and checked time. Do not treat a publish as terminal-current until this artifact is visible on Vercel and the live verifier accepts it.
+
 Mobile UI is part of the release gate. The market heatmap on mobile must remain a two-column grid:
 
 ```css
