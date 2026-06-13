@@ -42,6 +42,13 @@ if (!fastGateScript) {
 if (!packageJson.scripts?.["freshness:local-repair"]) {
   issues.push("package.json missing scripts.freshness:local-repair");
 }
+const mainReleaseScript = packageJson.scripts && packageJson.scripts["release:main"];
+if (!mainReleaseScript) {
+  issues.push("package.json missing scripts.release:main");
+} else {
+  if (!/\bpwsh\.exe\b/i.test(mainReleaseScript)) issues.push("release:main must use PowerShell 7 pwsh.exe");
+  if (!/run-main-release-pipeline\.ps1/i.test(mainReleaseScript)) issues.push("release:main must run run-main-release-pipeline.ps1");
+}
 
 if (process.platform === "win32") {
   for (const expected of [
@@ -86,6 +93,27 @@ if (!fs.existsSync(path.join(ROOT, "run-local-freshness-repair.ps1"))) {
   const repairScript = read("run-local-freshness-repair.ps1");
   if (!/verify:data-freshness/.test(repairScript) || !/freshness:gate:fast/.test(repairScript)) {
     issues.push("run-local-freshness-repair.ps1 must verify local data and repair with freshness:gate:fast");
+  }
+}
+
+if (!fs.existsSync(path.join(ROOT, "run-main-release-pipeline.ps1"))) {
+  issues.push("run-main-release-pipeline.ps1 missing main release pipeline");
+} else {
+  const releasePipeline = read("run-main-release-pipeline.ps1");
+  for (const marker of [
+    "git fetch origin main",
+    "git pull --ff-only origin main",
+    "npm run verify:bump",
+    "npm run bump:version",
+    "npm run sync:source",
+    "npm run deploy",
+    "npm run verify:live-version",
+    "git push origin HEAD:main",
+  ]) {
+    if (!releasePipeline.includes(marker)) issues.push(`run-main-release-pipeline.ps1 missing ${marker}`);
+  }
+  if (!/Assert-CleanTree/.test(releasePipeline)) {
+    issues.push("run-main-release-pipeline.ps1 must require a clean tree before syncing main");
   }
 }
 
@@ -157,6 +185,18 @@ if (!/ETIMEDOUT|ECONNRESET|fetch failed/.test(gate)) {
 const healthSummary = read("scripts/generate-health-summary.js");
 if (!/ETIMEDOUT|ECONNRESET|fetch failed|AbortError/.test(healthSummary)) {
   issues.push("generate-health-summary.js must classify external source timeout warnings");
+}
+
+const sourceSyncScript = read("scripts/sync-main-deploy-source.js");
+for (const file of [
+  "terminal-live-check.js",
+  "terminal-watchlist-module.js",
+  "data/data-manifest.json",
+  "data/terminal-home-bundle.json",
+  "data/institution-latest.json",
+  "data/warrant-flow-latest.json",
+]) {
+  if (!sourceSyncScript.includes(file)) issues.push(`sync-main-deploy-source.js missing ${file}`);
 }
 
 for (const legacyScript of [
@@ -246,6 +286,8 @@ if (fetchResult.status !== 0) {
       "FRESHNESS-GATE-MOBILE.md",
       "scripts/verify-publish-gate.js",
       "run-live-freshness-gate.ps1",
+      "run-main-release-pipeline.ps1",
+      "package.json",
       "scripts/generate-health-summary.js",
     ]);
     const dirty = status.stdout

@@ -31,6 +31,14 @@ npm run freshness:gate:fast
 
 Both gates must end with `verify:data-freshness:live` before the terminal is considered current.
 
+Main release/deploy must use the guarded release chain:
+
+```powershell
+npm run release:main
+```
+
+This wrapper enforces: sync `origin/main` -> bump version if needed -> deploy -> verify live version -> push GitHub.
+
 Do not run scoped publishing commands such as:
 
 ```powershell

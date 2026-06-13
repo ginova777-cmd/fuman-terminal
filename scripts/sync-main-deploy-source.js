@@ -13,9 +13,12 @@ const FILES = [
   "styles.css",
   "terminal.js",
   "terminal-app.js",
+  "terminal-chip-flow.js",
   "terminal-core.js",
+  "terminal-live-check.js",
   "terminal-modules.js",
   "terminal-warrant-flow.js",
+  "terminal-watchlist-module.js",
   "terminal-watchlist.css",
   "fuman-sw.js",
   "api/version.js",
@@ -31,6 +34,15 @@ const FILES = [
   "run-flow.ps1",
   "flow-health.ps1",
   "data/afterhours-supabase-status.json",
+  "data/data-manifest.json",
+  "data/terminal-home-bundle.json",
+  "data/institution-latest.json",
+  "data/institution-slim.json",
+  "data/institution-mobile-top.json",
+  "data/warrant-flow-latest.json",
+  "data/warrant-flow-slim.json",
+  "data/warrant-flow-mobile-top.json",
+  "data/flow-health-latest.json",
 ];
 
 if (!fs.existsSync(DEPLOY_ROOT)) {

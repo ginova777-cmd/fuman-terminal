@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vercel dev",
     "deploy": "vercel --prod",
+    "release:main": "pwsh.exe -NoProfile -ExecutionPolicy Bypass -File run-main-release-pipeline.ps1",
     "release": "node scripts/release.js",
     "snapshot:data": "node scripts/commit-data-snapshot.js",
     "archive:old-source": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/archive-old-source.ps1",

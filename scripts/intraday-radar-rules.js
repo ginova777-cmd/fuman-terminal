@@ -1,9 +1,64 @@
 const EXCLUDED_CODES = new Set([
   "2330", "2412", "3045",
 ]);
+const EXCLUDED_INDUSTRY_PATTERN = /水泥|軍工|國防|航太/;
+const MIN_AVG_VOLUME_5 = 3000;
+const MIN_CUMULATIVE_BID_ASK_VOLUME = 3000;
 
 function cleanNumber(value) {
   return Number(String(value ?? "").replace(/[,+%]/g, "").trim()) || 0;
+}
+
+function hasOwnValue(stock, key) {
+  return Object.prototype.hasOwnProperty.call(stock || {}, key)
+    && stock[key] !== undefined
+    && stock[key] !== null
+    && String(stock[key]).trim() !== "";
+}
+
+function flagTrue(value) {
+  if (value === true) return true;
+  const text = String(value ?? "").trim().toLowerCase();
+  return text === "true" || text === "1" || text === "yes" || text === "y";
+}
+
+function flagFalse(value) {
+  if (value === false) return true;
+  const text = String(value ?? "").trim().toLowerCase();
+  return text === "false" || text === "0" || text === "no" || text === "n";
+}
+
+function firstNumber(stock, keys) {
+  for (const key of keys) {
+    if (hasOwnValue(stock, key)) return cleanNumber(stock[key]);
+  }
+  return null;
+}
+
+function isCommonStockType(stock) {
+  if (!hasOwnValue(stock, "stock_type") && !hasOwnValue(stock, "stockType")) return true;
+  const type = String(stock.stock_type ?? stock.stockType ?? "").trim().toUpperCase();
+  return !type || type === "COMMONSTOCK" || type === "COMMON_STOCK" || type === "COMMON";
+}
+
+function hasEnoughDaytradeVolume(stock) {
+  const avgVolume5 = firstNumber(stock, ["avg_volume_5", "avgVolume5", "avg5Volume"]);
+  if (avgVolume5 !== null && avgVolume5 < MIN_AVG_VOLUME_5) return false;
+
+  const cumulativeBidAsk = firstNumber(stock, ["cumulative_bid_ask_volume", "cumulativeBidAskVolume"]);
+  if (cumulativeBidAsk !== null) return cumulativeBidAsk >= MIN_CUMULATIVE_BID_ASK_VOLUME;
+
+  const hasCumulativeBid = hasOwnValue(stock, "cumulative_bid_volume") || hasOwnValue(stock, "cumulativeBidVolume");
+  const hasCumulativeAsk = hasOwnValue(stock, "cumulative_ask_volume") || hasOwnValue(stock, "cumulativeAskVolume");
+  if (hasCumulativeBid || hasCumulativeAsk) {
+    const bid = firstNumber(stock, ["cumulative_bid_volume", "cumulativeBidVolume"]) || 0;
+    const ask = firstNumber(stock, ["cumulative_ask_volume", "cumulativeAskVolume"]) || 0;
+    return bid + ask >= MIN_CUMULATIVE_BID_ASK_VOLUME;
+  }
+
+  const tradeVolume = firstNumber(stock, ["tradeVolume", "volume"]);
+  if (tradeVolume !== null && tradeVolume < MIN_CUMULATIVE_BID_ASK_VOLUME) return false;
+  return true;
 }
 
 function avg(values) {
@@ -17,10 +72,23 @@ function isIntradayTradable(stock) {
   const value = cleanNumber(stock?.value);
   const volume = cleanNumber(stock?.tradeVolume);
   const name = String(stock?.name || "");
+  const industry = String(stock?.industry || stock?.officialIndustry || stock?.primaryIndustry || "");
   if (!/^\d{4}$/.test(code) || /^00/.test(code)) return false;
   if (/ETF|ETN|DR|指數|台灣50|高股息|正2|反1|期貨|債/i.test(name)) return false;
+  if (EXCLUDED_INDUSTRY_PATTERN.test(`${name} ${industry}`)) return false;
   if (/^(28|58)/.test(code)) return false;
   if (EXCLUDED_CODES.has(code)) return false;
+  if (!isCommonStockType(stock)) return false;
+  if (flagFalse(stock?.is_active ?? stock?.isActive)) return false;
+  if (flagTrue(stock?.is_etf ?? stock?.isEtf)) return false;
+  if (flagTrue(stock?.is_warrant ?? stock?.isWarrant)) return false;
+  if (flagTrue(stock?.is_cb ?? stock?.isCb)) return false;
+  if (flagTrue(stock?.is_blacklisted ?? stock?.isBlacklisted)) return false;
+  if (flagTrue(stock?.is_daytrade_unsuitable ?? stock?.isDaytradeUnsuitable)) return false;
+  if (flagTrue(stock?.is_halted ?? stock?.isHalted ?? stock?.is_suspended ?? stock?.isSuspended)) return false;
+  if (flagTrue(stock?.is_trial ?? stock?.isTrial)) return false;
+  if (!hasEnoughDaytradeVolume(stock)) return false;
+  if (close <= 0) return false;
   if (close >= 900) return false;
   return true;
 }
@@ -163,6 +231,7 @@ module.exports = {
   cleanNumber,
   detectSignals,
   formatTradePrice,
+  hasEnoughDaytradeVolume,
   isIntradayTradable,
   ma35SourceLabel,
   roundTradePrice,

@@ -17,6 +17,19 @@ cd C:\fuman-terminal-sync
 npm run freshness:gate
 ```
 
+## 正式主線發布入口
+
+```powershell
+cd C:\fuman-terminal-sync
+npm run release:main
+```
+
+固定順序：
+
+```text
+sync origin/main -> bump version -> deploy -> verify live version -> push GitHub
+```
+
 ## 成功標準
 
 更新完不算成功。
