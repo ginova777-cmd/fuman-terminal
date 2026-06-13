@@ -150,6 +150,9 @@ if (!/FUMAN_INSIDE_FRESHNESS_GATE/.test(cacheSync) || !/freshness:gate:fast/.tes
 if (!/Verify live data freshness/.test(cacheSync) || !/--live/.test(cacheSync)) {
   issues.push("run-cache-sync.ps1 post-publish verifier must use live data freshness");
 }
+if (!/FUMAN_SKIP_TERMINAL_GATE_ARTIFACT/.test(cacheSync)) {
+  issues.push("run-cache-sync.ps1 post-publish verifier must skip terminal gate artifact until run-live-freshness-gate publishes it");
+}
 if (!/Pre-publish data freshness gate/.test(cacheSync)) {
   issues.push("run-cache-sync.ps1 missing pre-publish freshness gate");
 }
@@ -396,6 +399,7 @@ if (fetchResult.status !== 0) {
       "scripts/verify-publish-gate.js",
       "scripts/verify-data-freshness.js",
       "run-live-freshness-gate.ps1",
+      "run-cache-sync.ps1",
       "run-main-release-pipeline.ps1",
       "package.json",
       "scripts/generate-health-summary.js",

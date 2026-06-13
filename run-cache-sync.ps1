@@ -97,14 +97,24 @@ function Invoke-PublishedDataVerification {
   if (-not (Test-Path -LiteralPath $script)) {
     throw "Live data freshness verification script missing: $script"
   }
+  $previousSkipTerminalGate = $env:FUMAN_SKIP_TERMINAL_GATE_ARTIFACT
   for ($attempt = 1; $attempt -le 3; $attempt++) {
-    Write-Log "=== Verify live data freshness attempt $attempt/3 $(Get-Date) ==="
-    & $nodeExe "--use-system-ca" $script "--live" 2>&1 | ForEach-Object { Write-Log $_ }
-    $verifyExit = $LASTEXITCODE
-    if ($verifyExit -eq 0) { return }
-    if ($attempt -lt 3) {
-      Write-Log "Live data freshness verification failed with exit code $verifyExit; retrying in 20 seconds."
-      Start-Sleep -Seconds 20
+    try {
+      $env:FUMAN_SKIP_TERMINAL_GATE_ARTIFACT = "1"
+      Write-Log "=== Verify live data freshness attempt $attempt/3 $(Get-Date) ==="
+      & $nodeExe "--use-system-ca" $script "--live" 2>&1 | ForEach-Object { Write-Log $_ }
+      $verifyExit = $LASTEXITCODE
+      if ($verifyExit -eq 0) { return }
+      if ($attempt -lt 3) {
+        Write-Log "Live data freshness verification failed with exit code $verifyExit; retrying in 20 seconds."
+        Start-Sleep -Seconds 20
+      }
+    } finally {
+      if ($null -eq $previousSkipTerminalGate) {
+        Remove-Item Env:FUMAN_SKIP_TERMINAL_GATE_ARTIFACT -ErrorAction SilentlyContinue
+      } else {
+        $env:FUMAN_SKIP_TERMINAL_GATE_ARTIFACT = $previousSkipTerminalGate
+      }
     }
   }
   throw "Live data freshness verification failed after 3 attempts"
