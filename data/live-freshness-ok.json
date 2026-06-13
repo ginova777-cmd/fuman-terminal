@@ -1,22 +1,22 @@
 {
   "ok": true,
-  "gateId": "20260613224054-6a67b25db7bf",
-  "checkedAt": "2026-06-13T22:40:54.7061300+08:00",
+  "gateId": "20260613232338-7d7f09bdd9ed",
+  "checkedAt": "2026-06-13T23:23:38.3018148+08:00",
   "version": "chip-flow-hardening-20260611-34",
-  "publishHead": "6a67b25 (HEAD -> main, origin/main, origin/HEAD) Update scheduled cache 2026-06-13 22:40",
+  "publishHead": "7d7f09b (HEAD -> main, origin/main, origin/HEAD) Clarify CB conversion price states",
   "verifier": "npm run verify:data-freshness:live",
-  "log": "C:\\fuman-runtime\\logs\\live-freshness-gate-20260613-223917.log",
+  "log": "C:\\fuman-runtime\\logs\\live-freshness-gate-20260613-232228.log",
   "mode": "fast",
   "manifestCount": 133,
   "manifestCbCount": 10,
   "cbCount": 10,
-  "cbUpdatedAt": "06/13/2026 13:59:46",
+  "cbUpdatedAt": "06/13/2026 15:18:38",
   "rawRefresh": [
     {
       "label": "realtime radar raw refresh",
       "ok": true,
       "exitCode": 0,
-      "checkedAt": "2026-06-13T22:39:18.4073000+08:00",
+      "checkedAt": "2026-06-13T23:22:29.8454861+08:00",
       "warningCount": 0,
       "warnings": []
     },
@@ -24,7 +24,7 @@
       "label": "strategy2 intraday raw refresh",
       "ok": false,
       "exitCode": 1,
-      "checkedAt": "2026-06-13T22:39:18.5560839+08:00",
+      "checkedAt": "2026-06-13T23:22:30.0074886+08:00",
       "warningCount": 0,
       "warnings": []
     },
@@ -32,7 +32,7 @@
       "label": "institution raw refresh",
       "ok": true,
       "exitCode": 0,
-      "checkedAt": "2026-06-13T22:39:40.5657795+08:00",
+      "checkedAt": "2026-06-13T23:22:44.4746987+08:00",
       "warningCount": 0,
       "warnings": []
     },
@@ -40,7 +40,7 @@
       "label": "warrant flow raw refresh",
       "ok": true,
       "exitCode": 0,
-      "checkedAt": "2026-06-13T22:40:19.2615117+08:00",
+      "checkedAt": "2026-06-13T23:23:10.9765215+08:00",
       "warningCount": 0,
       "warnings": []
     }
