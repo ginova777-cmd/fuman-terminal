@@ -1,8 +1,8 @@
 {
   "ok": true,
   "source": "github-actions-backup",
-  "updatedAt": "2026-06-12T14:07:05.669Z",
-  "generatedDate": "20260612",
+  "updatedAt": "2026-06-13T09:37:22.578Z",
+  "generatedDate": "20260613",
   "usedDate": "20260612",
   "sourceDate": "20260612",
   "schedule": "06:00/21:00",
@@ -1967,10 +1967,8 @@
   "sourceHealth": {
     "issuedSharesCount": 1976,
     "volumeAverageCount": 2201,
-    "warningCount": 1,
-    "warnings": [
-      "twse volume fetch failed: 20260603 :: https://www.twse.com.tw/rwd/zh/afterTrading/MI_INDEX?date=20260603&type=ALLBUT0999&response=json HTTP 403"
-    ]
+    "warningCount": 0,
+    "warnings": []
   },
   "count": 80,
   "matches": [
@@ -2002,7 +2000,7 @@
           "short": "漲停十字",
           "icon": "十",
           "score": 100,
-          "reason": "近20日漲停後出十字星，橫盤 8 天、區間 22.01%，縮量後今日放量 2.57 倍突破。"
+          "reason": "近20日漲停後出十字星，橫盤 8 天、區間 22.01%，縮量後今日放量 2.48 倍突破。"
         }
       ],
       "strategy4Score": 0,
@@ -2014,7 +2012,7 @@
         "short": "漲停十字",
         "icon": "十",
         "score": 100,
-        "reason": "近20日漲停後出十字星，橫盤 8 天、區間 22.01%，縮量後今日放量 2.57 倍突破。"
+        "reason": "近20日漲停後出十字星，橫盤 8 天、區間 22.01%，縮量後今日放量 2.48 倍突破。"
       }
     },
     {
@@ -2045,7 +2043,7 @@
           "short": "布林KDJ",
           "icon": "K",
           "score": 100,
-          "reason": "三線向上中軌買點：20MA 146.22、上軌 159.23、下軌 133.22；KDJ 黃金交叉 K 51.6 / D 43.9，量比 2.08。",
+          "reason": "三線向上中軌買點：20MA 146.22、上軌 159.23、下軌 133.22；KDJ 黃金交叉 K 51.6 / D 43.9，量比 2.04。",
           "bollingerMode": "三線向上中軌買點",
           "bollingerMiddle": 146.22,
           "bollingerUpper": 159.23,
@@ -2053,7 +2051,7 @@
           "kdjK": 51.6,
           "kdjD": 43.9,
           "kdjJ": 66.9,
-          "volumeRatio": 2.08
+          "volumeRatio": 2.04
         }
       ],
       "strategy4Score": 0,
@@ -2065,7 +2063,7 @@
         "short": "布林KDJ",
         "icon": "K",
         "score": 100,
-        "reason": "三線向上中軌買點：20MA 146.22、上軌 159.23、下軌 133.22；KDJ 黃金交叉 K 51.6 / D 43.9，量比 2.08。",
+        "reason": "三線向上中軌買點：20MA 146.22、上軌 159.23、下軌 133.22；KDJ 黃金交叉 K 51.6 / D 43.9，量比 2.04。",
         "bollingerMode": "三線向上中軌買點",
         "bollingerMiddle": 146.22,
         "bollingerUpper": 159.23,
@@ -2073,7 +2071,7 @@
         "kdjK": 51.6,
         "kdjD": 43.9,
         "kdjJ": 66.9,
-        "volumeRatio": 2.08
+        "volumeRatio": 2.04
       }
     },
     {
@@ -2104,7 +2102,7 @@
           "short": "布林KDJ",
           "icon": "K",
           "score": 100,
-          "reason": "三線走平下軌買點：20MA 153.40、上軌 175.88、下軌 130.92；KDJ 黃金交叉 K 36.5 / D 34.6，量比 1.76。",
+          "reason": "三線走平下軌買點：20MA 153.40、上軌 175.88、下軌 130.92；KDJ 黃金交叉 K 36.5 / D 34.6，量比 1.73。",
           "bollingerMode": "三線走平下軌買點",
           "bollingerMiddle": 153.4,
           "bollingerUpper": 175.88,
@@ -2112,7 +2110,7 @@
           "kdjK": 36.5,
           "kdjD": 34.6,
           "kdjJ": 40.3,
-          "volumeRatio": 1.76
+          "volumeRatio": 1.73
         }
       ],
       "strategy4Score": 99,
@@ -2131,7 +2129,7 @@
         "short": "布林KDJ",
         "icon": "K",
         "score": 100,
-        "reason": "三線走平下軌買點：20MA 153.40、上軌 175.88、下軌 130.92；KDJ 黃金交叉 K 36.5 / D 34.6，量比 1.76。",
+        "reason": "三線走平下軌買點：20MA 153.40、上軌 175.88、下軌 130.92；KDJ 黃金交叉 K 36.5 / D 34.6，量比 1.73。",
         "bollingerMode": "三線走平下軌買點",
         "bollingerMiddle": 153.4,
         "bollingerUpper": 175.88,
@@ -2139,7 +2137,7 @@
         "kdjK": 36.5,
         "kdjD": 34.6,
         "kdjJ": 40.3,
-        "volumeRatio": 1.76
+        "volumeRatio": 1.73
       }
     },
     {
@@ -2170,7 +2168,7 @@
           "short": "布林KDJ",
           "icon": "K",
           "score": 100,
-          "reason": "三線向上中軌買點：20MA 569.90、上軌 666.76、下軌 473.04；KDJ 黃金交叉 K 36.1 / D 33.3，量比 1.20。",
+          "reason": "三線向上中軌買點：20MA 569.90、上軌 666.76、下軌 473.04；KDJ 黃金交叉 K 36.1 / D 33.3，量比 1.14。",
           "bollingerMode": "三線向上中軌買點",
           "bollingerMiddle": 569.9,
           "bollingerUpper": 666.76,
@@ -2178,7 +2176,7 @@
           "kdjK": 36.1,
           "kdjD": 33.3,
           "kdjJ": 41.8,
-          "volumeRatio": 1.2
+          "volumeRatio": 1.14
         }
       ],
       "strategy4Score": 97,
@@ -2197,7 +2195,7 @@
         "short": "布林KDJ",
         "icon": "K",
         "score": 100,
-        "reason": "三線向上中軌買點：20MA 569.90、上軌 666.76、下軌 473.04；KDJ 黃金交叉 K 36.1 / D 33.3，量比 1.20。",
+        "reason": "三線向上中軌買點：20MA 569.90、上軌 666.76、下軌 473.04；KDJ 黃金交叉 K 36.1 / D 33.3，量比 1.14。",
         "bollingerMode": "三線向上中軌買點",
         "bollingerMiddle": 569.9,
         "bollingerUpper": 666.76,
@@ -2205,7 +2203,7 @@
         "kdjK": 36.1,
         "kdjD": 33.3,
         "kdjJ": 41.8,
-        "volumeRatio": 1.2
+        "volumeRatio": 1.14
       }
     },
     {
@@ -2367,65 +2365,6 @@
         "icon": "◆",
         "score": 100,
         "reason": "外資 +15,230,108、投信 +17,459,251 同買，法人合計 +37,955,298；漲幅 6.80%。"
-      }
-    },
-    {
-      "code": "3131",
-      "name": "弘塑",
-      "close": 3230,
-      "open": 0,
-      "high": 0,
-      "low": 0,
-      "prevClose": 0,
-      "limitUp": 0,
-      "change": 195,
-      "percent": 6.43,
-      "value": 1728224435,
-      "tradeVolume": 535289,
-      "market": "TPEX",
-      "valueRank": 93,
-      "volumeRank": 55,
-      "inst": {
-        "foreign": -125848,
-        "trust": 108000,
-        "dealer": -1989,
-        "total": -19837
-      },
-      "matches": [
-        {
-          "id": "bollinger_kdj_buy",
-          "short": "布林KDJ",
-          "icon": "K",
-          "score": 100,
-          "reason": "三線向上中軌買點：20MA 3084.75、上軌 3641.76、下軌 2527.74；KDJ 黃金交叉 K 44.2 / D 38.1，量比 1.44。",
-          "bollingerMode": "三線向上中軌買點",
-          "bollingerMiddle": 3084.75,
-          "bollingerUpper": 3641.76,
-          "bollingerLower": 2527.74,
-          "kdjK": 44.2,
-          "kdjD": 38.1,
-          "kdjJ": 56.5,
-          "volumeRatio": 1.44
-        }
-      ],
-      "strategy4Score": 0,
-      "strategy4Reason": "",
-      "strategy4Signals": [],
-      "score": 100,
-      "activeMatch": {
-        "id": "bollinger_kdj_buy",
-        "short": "布林KDJ",
-        "icon": "K",
-        "score": 100,
-        "reason": "三線向上中軌買點：20MA 3084.75、上軌 3641.76、下軌 2527.74；KDJ 黃金交叉 K 44.2 / D 38.1，量比 1.44。",
-        "bollingerMode": "三線向上中軌買點",
-        "bollingerMiddle": 3084.75,
-        "bollingerUpper": 3641.76,
-        "bollingerLower": 2527.74,
-        "kdjK": 44.2,
-        "kdjD": 38.1,
-        "kdjJ": 56.5,
-        "volumeRatio": 1.44
       }
     },
     {
@@ -3249,7 +3188,7 @@
           "short": "布林KDJ",
           "icon": "K",
           "score": 100,
-          "reason": "三線向上中軌買點：20MA 68.01、上軌 76.93、下軌 59.10；KDJ 黃金交叉 K 47.4 / D 45.2，量比 1.22。",
+          "reason": "三線向上中軌買點：20MA 68.01、上軌 76.93、下軌 59.10；KDJ 黃金交叉 K 47.4 / D 45.2，量比 1.21。",
           "bollingerMode": "三線向上中軌買點",
           "bollingerMiddle": 68.01,
           "bollingerUpper": 76.93,
@@ -3257,7 +3196,7 @@
           "kdjK": 47.4,
           "kdjD": 45.2,
           "kdjJ": 52,
-          "volumeRatio": 1.22
+          "volumeRatio": 1.21
         }
       ],
       "strategy4Score": 97,
@@ -3276,7 +3215,7 @@
         "short": "布林KDJ",
         "icon": "K",
         "score": 100,
-        "reason": "三線向上中軌買點：20MA 68.01、上軌 76.93、下軌 59.10；KDJ 黃金交叉 K 47.4 / D 45.2，量比 1.22。",
+        "reason": "三線向上中軌買點：20MA 68.01、上軌 76.93、下軌 59.10；KDJ 黃金交叉 K 47.4 / D 45.2，量比 1.21。",
         "bollingerMode": "三線向上中軌買點",
         "bollingerMiddle": 68.01,
         "bollingerUpper": 76.93,
@@ -3284,7 +3223,7 @@
         "kdjK": 47.4,
         "kdjD": 45.2,
         "kdjJ": 52,
-        "volumeRatio": 1.22
+        "volumeRatio": 1.21
       }
     },
     {
@@ -3594,7 +3533,7 @@
           "short": "布林KDJ",
           "icon": "K",
           "score": 100,
-          "reason": "三線向上中軌買點：20MA 83.92、上軌 86.72、下軌 81.13；KDJ 黃金交叉 K 85.2 / D 77.6，量比 2.82。",
+          "reason": "三線向上中軌買點：20MA 83.92、上軌 86.72、下軌 81.13；KDJ 黃金交叉 K 85.2 / D 77.6，量比 2.77。",
           "bollingerMode": "三線向上中軌買點",
           "bollingerMiddle": 83.92,
           "bollingerUpper": 86.72,
@@ -3602,7 +3541,7 @@
           "kdjK": 85.2,
           "kdjD": 77.6,
           "kdjJ": 100.3,
-          "volumeRatio": 2.82
+          "volumeRatio": 2.77
         }
       ],
       "strategy4Score": 0,
@@ -3614,7 +3553,7 @@
         "short": "布林KDJ",
         "icon": "K",
         "score": 100,
-        "reason": "三線向上中軌買點：20MA 83.92、上軌 86.72、下軌 81.13；KDJ 黃金交叉 K 85.2 / D 77.6，量比 2.82。",
+        "reason": "三線向上中軌買點：20MA 83.92、上軌 86.72、下軌 81.13；KDJ 黃金交叉 K 85.2 / D 77.6，量比 2.77。",
         "bollingerMode": "三線向上中軌買點",
         "bollingerMiddle": 83.92,
         "bollingerUpper": 86.72,
@@ -3622,7 +3561,7 @@
         "kdjK": 85.2,
         "kdjD": 77.6,
         "kdjJ": 100.3,
-        "volumeRatio": 2.82
+        "volumeRatio": 2.77
       }
     },
     {
@@ -3857,7 +3796,7 @@
           "short": "布林KDJ",
           "icon": "K",
           "score": 100,
-          "reason": "三線向上中軌買點：20MA 48.74、上軌 50.43、下軌 47.04；KDJ 黃金交叉 K 54.3 / D 52.7，量比 4.34。",
+          "reason": "三線向上中軌買點：20MA 48.74、上軌 50.43、下軌 47.04；KDJ 黃金交叉 K 54.3 / D 52.7，量比 4.32。",
           "bollingerMode": "三線向上中軌買點",
           "bollingerMiddle": 48.74,
           "bollingerUpper": 50.43,
@@ -3865,7 +3804,7 @@
           "kdjK": 54.3,
           "kdjD": 52.7,
           "kdjJ": 57.4,
-          "volumeRatio": 4.34
+          "volumeRatio": 4.32
         }
       ],
       "strategy4Score": 0,
@@ -3877,7 +3816,7 @@
         "short": "布林KDJ",
         "icon": "K",
         "score": 100,
-        "reason": "三線向上中軌買點：20MA 48.74、上軌 50.43、下軌 47.04；KDJ 黃金交叉 K 54.3 / D 52.7，量比 4.34。",
+        "reason": "三線向上中軌買點：20MA 48.74、上軌 50.43、下軌 47.04；KDJ 黃金交叉 K 54.3 / D 52.7，量比 4.32。",
         "bollingerMode": "三線向上中軌買點",
         "bollingerMiddle": 48.74,
         "bollingerUpper": 50.43,
@@ -3885,7 +3824,7 @@
         "kdjK": 54.3,
         "kdjD": 52.7,
         "kdjJ": 57.4,
-        "volumeRatio": 4.34
+        "volumeRatio": 4.32
       }
     },
     {
@@ -4170,7 +4109,7 @@
           "short": "布林KDJ",
           "icon": "K",
           "score": 100,
-          "reason": "三線向上中軌買點：20MA 36.29、上軌 39.03、下軌 33.54；KDJ 黃金交叉 K 69.7 / D 66.9，量比 1.78。",
+          "reason": "三線向上中軌買點：20MA 36.29、上軌 39.03、下軌 33.54；KDJ 黃金交叉 K 69.7 / D 66.9，量比 1.77。",
           "bollingerMode": "三線向上中軌買點",
           "bollingerMiddle": 36.29,
           "bollingerUpper": 39.03,
@@ -4178,7 +4117,7 @@
           "kdjK": 69.7,
           "kdjD": 66.9,
           "kdjJ": 75.2,
-          "volumeRatio": 1.78
+          "volumeRatio": 1.77
         }
       ],
       "strategy4Score": 100,
@@ -4209,7 +4148,7 @@
         "short": "布林KDJ",
         "icon": "K",
         "score": 100,
-        "reason": "三線向上中軌買點：20MA 36.29、上軌 39.03、下軌 33.54；KDJ 黃金交叉 K 69.7 / D 66.9，量比 1.78。",
+        "reason": "三線向上中軌買點：20MA 36.29、上軌 39.03、下軌 33.54；KDJ 黃金交叉 K 69.7 / D 66.9，量比 1.77。",
         "bollingerMode": "三線向上中軌買點",
         "bollingerMiddle": 36.29,
         "bollingerUpper": 39.03,
@@ -4217,7 +4156,7 @@
         "kdjK": 69.7,
         "kdjD": 66.9,
         "kdjJ": 75.2,
-        "volumeRatio": 1.78
+        "volumeRatio": 1.77
       }
     },
     {
@@ -4626,7 +4565,7 @@
           "short": "布林KDJ",
           "icon": "K",
           "score": 90,
-          "reason": "三線走平下軌買點：20MA 18.85、上軌 19.84、下軌 17.85；KDJ 黃金交叉 K 26.5 / D 24.8，量比 0.91。",
+          "reason": "三線走平下軌買點：20MA 18.85、上軌 19.84、下軌 17.85；KDJ 黃金交叉 K 26.5 / D 24.8，量比 0.90。",
           "bollingerMode": "三線走平下軌買點",
           "bollingerMiddle": 18.85,
           "bollingerUpper": 19.84,
@@ -4634,7 +4573,7 @@
           "kdjK": 26.5,
           "kdjD": 24.8,
           "kdjJ": 29.9,
-          "volumeRatio": 0.91
+          "volumeRatio": 0.9
         }
       ],
       "strategy4Score": 93,
@@ -4734,7 +4673,7 @@
           "short": "布林KDJ",
           "icon": "K",
           "score": 84,
-          "reason": "三線走平下軌買點：20MA 62.34、上軌 63.83、下軌 60.84；KDJ 黃金交叉 K 52.7 / D 45.5，量比 1.66。",
+          "reason": "三線走平下軌買點：20MA 62.34、上軌 63.83、下軌 60.84；KDJ 黃金交叉 K 52.7 / D 45.5，量比 1.64。",
           "bollingerMode": "三線走平下軌買點",
           "bollingerMiddle": 62.34,
           "bollingerUpper": 63.83,
@@ -4742,7 +4681,7 @@
           "kdjK": 52.7,
           "kdjD": 45.5,
           "kdjJ": 67.1,
-          "volumeRatio": 1.66
+          "volumeRatio": 1.64
         }
       ],
       "strategy4Score": 0,
@@ -4935,7 +4874,7 @@
           "short": "布林KDJ",
           "icon": "K",
           "score": 88,
-          "reason": "三線向上中軌買點：20MA 82.96、上軌 87.61、下軌 78.30；KDJ 黃金交叉 K 70.8 / D 68.7，量比 1.70。",
+          "reason": "三線向上中軌買點：20MA 82.96、上軌 87.61、下軌 78.30；KDJ 黃金交叉 K 70.8 / D 68.7，量比 1.67。",
           "bollingerMode": "三線向上中軌買點",
           "bollingerMiddle": 82.96,
           "bollingerUpper": 87.61,
@@ -4943,7 +4882,7 @@
           "kdjK": 70.8,
           "kdjD": 68.7,
           "kdjJ": 75,
-          "volumeRatio": 1.7
+          "volumeRatio": 1.67
         }
       ],
       "strategy4Score": 0,
@@ -5381,6 +5320,65 @@
       }
     },
     {
+      "code": "3131",
+      "name": "弘塑",
+      "close": 3230,
+      "open": 0,
+      "high": 0,
+      "low": 0,
+      "prevClose": 0,
+      "limitUp": 0,
+      "change": 195,
+      "percent": 6.43,
+      "value": 1728224435,
+      "tradeVolume": 535289,
+      "market": "TPEX",
+      "valueRank": 93,
+      "volumeRank": 55,
+      "inst": {
+        "foreign": -125848,
+        "trust": 108000,
+        "dealer": -1989,
+        "total": -19837
+      },
+      "matches": [
+        {
+          "id": "bollinger_kdj_buy",
+          "short": "布林KDJ",
+          "icon": "K",
+          "score": 99,
+          "reason": "三線向上中軌買點：20MA 3084.75、上軌 3641.76、下軌 2527.74；KDJ 黃金交叉 K 44.2 / D 38.1，量比 1.33。",
+          "bollingerMode": "三線向上中軌買點",
+          "bollingerMiddle": 3084.75,
+          "bollingerUpper": 3641.76,
+          "bollingerLower": 2527.74,
+          "kdjK": 44.2,
+          "kdjD": 38.1,
+          "kdjJ": 56.5,
+          "volumeRatio": 1.33
+        }
+      ],
+      "strategy4Score": 0,
+      "strategy4Reason": "",
+      "strategy4Signals": [],
+      "score": 99,
+      "activeMatch": {
+        "id": "bollinger_kdj_buy",
+        "short": "布林KDJ",
+        "icon": "K",
+        "score": 99,
+        "reason": "三線向上中軌買點：20MA 3084.75、上軌 3641.76、下軌 2527.74；KDJ 黃金交叉 K 44.2 / D 38.1，量比 1.33。",
+        "bollingerMode": "三線向上中軌買點",
+        "bollingerMiddle": 3084.75,
+        "bollingerUpper": 3641.76,
+        "bollingerLower": 2527.74,
+        "kdjK": 44.2,
+        "kdjD": 38.1,
+        "kdjJ": 56.5,
+        "volumeRatio": 1.33
+      }
+    },
+    {
       "code": "2010",
       "name": "春源",
       "close": 24.6,
@@ -5407,8 +5405,8 @@
           "id": "bollinger_kdj_buy",
           "short": "布林KDJ",
           "icon": "K",
-          "score": 99,
-          "reason": "三線向上中軌買點：20MA 23.33、上軌 24.77、下軌 21.89；KDJ 黃金交叉 K 78.0 / D 77.6，量比 1.89。",
+          "score": 98,
+          "reason": "三線向上中軌買點：20MA 23.33、上軌 24.77、下軌 21.89；KDJ 黃金交叉 K 78.0 / D 77.6，量比 1.88。",
           "bollingerMode": "三線向上中軌買點",
           "bollingerMiddle": 23.33,
           "bollingerUpper": 24.77,
@@ -5416,19 +5414,19 @@
           "kdjK": 78,
           "kdjD": 77.6,
           "kdjJ": 78.9,
-          "volumeRatio": 1.89
+          "volumeRatio": 1.88
         }
       ],
       "strategy4Score": 0,
       "strategy4Reason": "",
       "strategy4Signals": [],
-      "score": 99,
+      "score": 98,
       "activeMatch": {
         "id": "bollinger_kdj_buy",
         "short": "布林KDJ",
         "icon": "K",
-        "score": 99,
-        "reason": "三線向上中軌買點：20MA 23.33、上軌 24.77、下軌 21.89；KDJ 黃金交叉 K 78.0 / D 77.6，量比 1.89。",
+        "score": 98,
+        "reason": "三線向上中軌買點：20MA 23.33、上軌 24.77、下軌 21.89；KDJ 黃金交叉 K 78.0 / D 77.6，量比 1.88。",
         "bollingerMode": "三線向上中軌買點",
         "bollingerMiddle": 23.33,
         "bollingerUpper": 24.77,
@@ -5436,7 +5434,7 @@
         "kdjK": 78,
         "kdjD": 77.6,
         "kdjJ": 78.9,
-        "volumeRatio": 1.89
+        "volumeRatio": 1.88
       }
     },
     {
@@ -5467,7 +5465,7 @@
           "short": "布林KDJ",
           "icon": "K",
           "score": 97,
-          "reason": "三線向上中軌買點：20MA 32.88、上軌 37.06、下軌 28.69；KDJ 黃金交叉 K 52.5 / D 47.9，量比 2.35。",
+          "reason": "三線向上中軌買點：20MA 32.88、上軌 37.06、下軌 28.69；KDJ 黃金交叉 K 52.5 / D 47.9，量比 2.34。",
           "bollingerMode": "三線向上中軌買點",
           "bollingerMiddle": 32.88,
           "bollingerUpper": 37.06,
@@ -5475,7 +5473,7 @@
           "kdjK": 52.5,
           "kdjD": 47.9,
           "kdjJ": 61.7,
-          "volumeRatio": 2.35
+          "volumeRatio": 2.34
         }
       ],
       "strategy4Score": 0,
@@ -5487,7 +5485,7 @@
         "short": "布林KDJ",
         "icon": "K",
         "score": 97,
-        "reason": "三線向上中軌買點：20MA 32.88、上軌 37.06、下軌 28.69；KDJ 黃金交叉 K 52.5 / D 47.9，量比 2.35。",
+        "reason": "三線向上中軌買點：20MA 32.88、上軌 37.06、下軌 28.69；KDJ 黃金交叉 K 52.5 / D 47.9，量比 2.34。",
         "bollingerMode": "三線向上中軌買點",
         "bollingerMiddle": 32.88,
         "bollingerUpper": 37.06,
@@ -5495,7 +5493,7 @@
         "kdjK": 52.5,
         "kdjD": 47.9,
         "kdjJ": 61.7,
-        "volumeRatio": 2.35
+        "volumeRatio": 2.34
       }
     },
     {
@@ -5569,7 +5567,7 @@
           "short": "布林KDJ",
           "icon": "K",
           "score": 95,
-          "reason": "三線走平下軌買點：20MA 83.04、上軌 88.21、下軌 77.88；KDJ 黃金交叉 K 48.5 / D 46.0，量比 1.07。",
+          "reason": "三線走平下軌買點：20MA 83.04、上軌 88.21、下軌 77.88；KDJ 黃金交叉 K 48.5 / D 46.0，量比 1.06。",
           "bollingerMode": "三線走平下軌買點",
           "bollingerMiddle": 83.04,
           "bollingerUpper": 88.21,
@@ -5577,7 +5575,7 @@
           "kdjK": 48.5,
           "kdjD": 46,
           "kdjJ": 53.5,
-          "volumeRatio": 1.07
+          "volumeRatio": 1.06
         }
       ],
       "strategy4Score": 0,
@@ -5589,7 +5587,7 @@
         "short": "布林KDJ",
         "icon": "K",
         "score": 95,
-        "reason": "三線走平下軌買點：20MA 83.04、上軌 88.21、下軌 77.88；KDJ 黃金交叉 K 48.5 / D 46.0，量比 1.07。",
+        "reason": "三線走平下軌買點：20MA 83.04、上軌 88.21、下軌 77.88；KDJ 黃金交叉 K 48.5 / D 46.0，量比 1.06。",
         "bollingerMode": "三線走平下軌買點",
         "bollingerMiddle": 83.04,
         "bollingerUpper": 88.21,
@@ -5597,7 +5595,7 @@
         "kdjK": 48.5,
         "kdjD": 46,
         "kdjJ": 53.5,
-        "volumeRatio": 1.07
+        "volumeRatio": 1.06
       }
     },
     {
@@ -5687,7 +5685,7 @@
           "short": "布林KDJ",
           "icon": "K",
           "score": 94,
-          "reason": "三線走平下軌買點：20MA 25.44、上軌 26.39、下軌 24.49；KDJ 黃金交叉 K 79.7 / D 76.1，量比 3.56。",
+          "reason": "三線走平下軌買點：20MA 25.44、上軌 26.39、下軌 24.49；KDJ 黃金交叉 K 79.7 / D 76.1，量比 3.52。",
           "bollingerMode": "三線走平下軌買點",
           "bollingerMiddle": 25.44,
           "bollingerUpper": 26.39,
@@ -5695,7 +5693,7 @@
           "kdjK": 79.7,
           "kdjD": 76.1,
           "kdjJ": 87,
-          "volumeRatio": 3.56
+          "volumeRatio": 3.52
         }
       ],
       "strategy4Score": 0,
@@ -5707,7 +5705,7 @@
         "short": "布林KDJ",
         "icon": "K",
         "score": 94,
-        "reason": "三線走平下軌買點：20MA 25.44、上軌 26.39、下軌 24.49；KDJ 黃金交叉 K 79.7 / D 76.1，量比 3.56。",
+        "reason": "三線走平下軌買點：20MA 25.44、上軌 26.39、下軌 24.49；KDJ 黃金交叉 K 79.7 / D 76.1，量比 3.52。",
         "bollingerMode": "三線走平下軌買點",
         "bollingerMiddle": 25.44,
         "bollingerUpper": 26.39,
@@ -5715,7 +5713,7 @@
         "kdjK": 79.7,
         "kdjD": 76.1,
         "kdjJ": 87,
-        "volumeRatio": 3.56
+        "volumeRatio": 3.52
       }
     },
     {
@@ -5805,7 +5803,7 @@
           "short": "布林KDJ",
           "icon": "K",
           "score": 89,
-          "reason": "三線走平下軌買點：20MA 144.70、上軌 160.80、下軌 128.60；KDJ 黃金交叉 K 26.4 / D 25.8，量比 0.97。",
+          "reason": "三線走平下軌買點：20MA 144.70、上軌 160.80、下軌 128.60；KDJ 黃金交叉 K 26.4 / D 25.8，量比 0.96。",
           "bollingerMode": "三線走平下軌買點",
           "bollingerMiddle": 144.7,
           "bollingerUpper": 160.8,
@@ -5813,7 +5811,7 @@
           "kdjK": 26.4,
           "kdjD": 25.8,
           "kdjJ": 27.8,
-          "volumeRatio": 0.97
+          "volumeRatio": 0.96
         }
       ],
       "strategy4Score": 0,
@@ -5825,7 +5823,7 @@
         "short": "布林KDJ",
         "icon": "K",
         "score": 89,
-        "reason": "三線走平下軌買點：20MA 144.70、上軌 160.80、下軌 128.60；KDJ 黃金交叉 K 26.4 / D 25.8，量比 0.97。",
+        "reason": "三線走平下軌買點：20MA 144.70、上軌 160.80、下軌 128.60；KDJ 黃金交叉 K 26.4 / D 25.8，量比 0.96。",
         "bollingerMode": "三線走平下軌買點",
         "bollingerMiddle": 144.7,
         "bollingerUpper": 160.8,
@@ -5833,7 +5831,7 @@
         "kdjK": 26.4,
         "kdjD": 25.8,
         "kdjJ": 27.8,
-        "volumeRatio": 0.97
+        "volumeRatio": 0.96
       }
     },
     {
@@ -5864,7 +5862,7 @@
           "short": "布林KDJ",
           "icon": "K",
           "score": 89,
-          "reason": "三線向上中軌買點：20MA 46.80、上軌 48.76、下軌 44.85；KDJ 黃金交叉 K 70.4 / D 69.3，量比 1.22。",
+          "reason": "三線向上中軌買點：20MA 46.80、上軌 48.76、下軌 44.85；KDJ 黃金交叉 K 70.4 / D 69.3，量比 1.21。",
           "bollingerMode": "三線向上中軌買點",
           "bollingerMiddle": 46.8,
           "bollingerUpper": 48.76,
@@ -5872,7 +5870,7 @@
           "kdjK": 70.4,
           "kdjD": 69.3,
           "kdjJ": 72.5,
-          "volumeRatio": 1.22
+          "volumeRatio": 1.21
         }
       ],
       "strategy4Score": 100,
@@ -5897,7 +5895,7 @@
         "short": "布林KDJ",
         "icon": "K",
         "score": 89,
-        "reason": "三線向上中軌買點：20MA 46.80、上軌 48.76、下軌 44.85；KDJ 黃金交叉 K 70.4 / D 69.3，量比 1.22。",
+        "reason": "三線向上中軌買點：20MA 46.80、上軌 48.76、下軌 44.85；KDJ 黃金交叉 K 70.4 / D 69.3，量比 1.21。",
         "bollingerMode": "三線向上中軌買點",
         "bollingerMiddle": 46.8,
         "bollingerUpper": 48.76,
@@ -5905,66 +5903,7 @@
         "kdjK": 70.4,
         "kdjD": 69.3,
         "kdjJ": 72.5,
-        "volumeRatio": 1.22
-      }
-    },
-    {
-      "code": "2851",
-      "name": "中再保",
-      "close": 37.15,
-      "open": 0,
-      "high": 0,
-      "low": 0,
-      "prevClose": 0,
-      "limitUp": 0,
-      "change": 0.7,
-      "percent": 1.92,
-      "value": 70734624,
-      "tradeVolume": 1915756,
-      "market": "TWSE",
-      "valueRank": 66,
-      "volumeRank": 75,
-      "inst": {
-        "foreign": -9462,
-        "trust": 0,
-        "dealer": 0,
-        "total": -33462
-      },
-      "matches": [
-        {
-          "id": "bollinger_kdj_buy",
-          "short": "布林KDJ",
-          "icon": "K",
-          "score": 87,
-          "reason": "三線向上中軌買點：20MA 35.69、上軌 37.42、下軌 33.96；KDJ 黃金交叉 K 79.9 / D 75.6，量比 1.00。",
-          "bollingerMode": "三線向上中軌買點",
-          "bollingerMiddle": 35.69,
-          "bollingerUpper": 37.42,
-          "bollingerLower": 33.96,
-          "kdjK": 79.9,
-          "kdjD": 75.6,
-          "kdjJ": 88.6,
-          "volumeRatio": 1
-        }
-      ],
-      "strategy4Score": 0,
-      "strategy4Reason": "",
-      "strategy4Signals": [],
-      "score": 87,
-      "activeMatch": {
-        "id": "bollinger_kdj_buy",
-        "short": "布林KDJ",
-        "icon": "K",
-        "score": 87,
-        "reason": "三線向上中軌買點：20MA 35.69、上軌 37.42、下軌 33.96；KDJ 黃金交叉 K 79.9 / D 75.6，量比 1.00。",
-        "bollingerMode": "三線向上中軌買點",
-        "bollingerMiddle": 35.69,
-        "bollingerUpper": 37.42,
-        "bollingerLower": 33.96,
-        "kdjK": 79.9,
-        "kdjD": 75.6,
-        "kdjJ": 88.6,
-        "volumeRatio": 1
+        "volumeRatio": 1.21
       }
     },
     {
@@ -5995,7 +5934,7 @@
           "short": "布林KDJ",
           "icon": "K",
           "score": 86,
-          "reason": "三線走平下軌買點：20MA 108.86、上軌 125.08、下軌 92.63；KDJ 黃金交叉 K 20.1 / D 16.6，量比 0.80。",
+          "reason": "三線走平下軌買點：20MA 108.86、上軌 125.08、下軌 92.63；KDJ 黃金交叉 K 20.1 / D 16.6，量比 0.79。",
           "bollingerMode": "三線走平下軌買點",
           "bollingerMiddle": 108.86,
           "bollingerUpper": 125.08,
@@ -6003,7 +5942,7 @@
           "kdjK": 20.1,
           "kdjD": 16.6,
           "kdjJ": 27.3,
-          "volumeRatio": 0.8
+          "volumeRatio": 0.79
         }
       ],
       "strategy4Score": 0,
@@ -6015,7 +5954,7 @@
         "short": "布林KDJ",
         "icon": "K",
         "score": 86,
-        "reason": "三線走平下軌買點：20MA 108.86、上軌 125.08、下軌 92.63；KDJ 黃金交叉 K 20.1 / D 16.6，量比 0.80。",
+        "reason": "三線走平下軌買點：20MA 108.86、上軌 125.08、下軌 92.63；KDJ 黃金交叉 K 20.1 / D 16.6，量比 0.79。",
         "bollingerMode": "三線走平下軌買點",
         "bollingerMiddle": 108.86,
         "bollingerUpper": 125.08,
@@ -6023,7 +5962,66 @@
         "kdjK": 20.1,
         "kdjD": 16.6,
         "kdjJ": 27.3,
-        "volumeRatio": 0.8
+        "volumeRatio": 0.79
+      }
+    },
+    {
+      "code": "2851",
+      "name": "中再保",
+      "close": 37.15,
+      "open": 0,
+      "high": 0,
+      "low": 0,
+      "prevClose": 0,
+      "limitUp": 0,
+      "change": 0.7,
+      "percent": 1.92,
+      "value": 70734624,
+      "tradeVolume": 1915756,
+      "market": "TWSE",
+      "valueRank": 66,
+      "volumeRank": 75,
+      "inst": {
+        "foreign": -9462,
+        "trust": 0,
+        "dealer": 0,
+        "total": -33462
+      },
+      "matches": [
+        {
+          "id": "bollinger_kdj_buy",
+          "short": "布林KDJ",
+          "icon": "K",
+          "score": 86,
+          "reason": "三線向上中軌買點：20MA 35.69、上軌 37.42、下軌 33.96；KDJ 黃金交叉 K 79.9 / D 75.6，量比 1.00。",
+          "bollingerMode": "三線向上中軌買點",
+          "bollingerMiddle": 35.69,
+          "bollingerUpper": 37.42,
+          "bollingerLower": 33.96,
+          "kdjK": 79.9,
+          "kdjD": 75.6,
+          "kdjJ": 88.6,
+          "volumeRatio": 1
+        }
+      ],
+      "strategy4Score": 0,
+      "strategy4Reason": "",
+      "strategy4Signals": [],
+      "score": 86,
+      "activeMatch": {
+        "id": "bollinger_kdj_buy",
+        "short": "布林KDJ",
+        "icon": "K",
+        "score": 86,
+        "reason": "三線向上中軌買點：20MA 35.69、上軌 37.42、下軌 33.96；KDJ 黃金交叉 K 79.9 / D 75.6，量比 1.00。",
+        "bollingerMode": "三線向上中軌買點",
+        "bollingerMiddle": 35.69,
+        "bollingerUpper": 37.42,
+        "bollingerLower": 33.96,
+        "kdjK": 79.9,
+        "kdjD": 75.6,
+        "kdjJ": 88.6,
+        "volumeRatio": 1
       }
     },
     {
@@ -6086,65 +6084,6 @@
       }
     },
     {
-      "code": "1231",
-      "name": "聯華食",
-      "close": 89.1,
-      "open": 0,
-      "high": 0,
-      "low": 0,
-      "prevClose": 0,
-      "limitUp": 0,
-      "change": 1.9,
-      "percent": 2.18,
-      "value": 33030158,
-      "tradeVolume": 371992,
-      "market": "TWSE",
-      "valueRank": 57,
-      "volumeRank": 47,
-      "inst": {
-        "foreign": 148081,
-        "trust": -2000,
-        "dealer": 0,
-        "total": 147861
-      },
-      "matches": [
-        {
-          "id": "bollinger_kdj_buy",
-          "short": "布林KDJ",
-          "icon": "K",
-          "score": 83,
-          "reason": "三線向上中軌買點：20MA 86.54、上軌 88.79、下軌 84.29；KDJ 黃金交叉 K 67.7 / D 62.1，量比 0.99。",
-          "bollingerMode": "三線向上中軌買點",
-          "bollingerMiddle": 86.54,
-          "bollingerUpper": 88.79,
-          "bollingerLower": 84.29,
-          "kdjK": 67.7,
-          "kdjD": 62.1,
-          "kdjJ": 78.9,
-          "volumeRatio": 0.99
-        }
-      ],
-      "strategy4Score": 0,
-      "strategy4Reason": "",
-      "strategy4Signals": [],
-      "score": 83,
-      "activeMatch": {
-        "id": "bollinger_kdj_buy",
-        "short": "布林KDJ",
-        "icon": "K",
-        "score": 83,
-        "reason": "三線向上中軌買點：20MA 86.54、上軌 88.79、下軌 84.29；KDJ 黃金交叉 K 67.7 / D 62.1，量比 0.99。",
-        "bollingerMode": "三線向上中軌買點",
-        "bollingerMiddle": 86.54,
-        "bollingerUpper": 88.79,
-        "bollingerLower": 84.29,
-        "kdjK": 67.7,
-        "kdjD": 62.1,
-        "kdjJ": 78.9,
-        "volumeRatio": 0.99
-      }
-    },
-    {
       "code": "9940",
       "name": "信義",
       "close": 19.75,
@@ -6172,7 +6111,7 @@
           "short": "布林KDJ",
           "icon": "K",
           "score": 83,
-          "reason": "三線向上中軌買點：20MA 19.01、上軌 19.82、下軌 18.19；KDJ 黃金交叉 K 78.5 / D 74.4，量比 0.90。",
+          "reason": "三線向上中軌買點：20MA 19.01、上軌 19.82、下軌 18.19；KDJ 黃金交叉 K 78.5 / D 74.4，量比 0.89。",
           "bollingerMode": "三線向上中軌買點",
           "bollingerMiddle": 19.01,
           "bollingerUpper": 19.82,
@@ -6180,7 +6119,7 @@
           "kdjK": 78.5,
           "kdjD": 74.4,
           "kdjJ": 86.8,
-          "volumeRatio": 0.9
+          "volumeRatio": 0.89
         }
       ],
       "strategy4Score": 0,
@@ -6192,7 +6131,7 @@
         "short": "布林KDJ",
         "icon": "K",
         "score": 83,
-        "reason": "三線向上中軌買點：20MA 19.01、上軌 19.82、下軌 18.19；KDJ 黃金交叉 K 78.5 / D 74.4，量比 0.90。",
+        "reason": "三線向上中軌買點：20MA 19.01、上軌 19.82、下軌 18.19；KDJ 黃金交叉 K 78.5 / D 74.4，量比 0.89。",
         "bollingerMode": "三線向上中軌買點",
         "bollingerMiddle": 19.01,
         "bollingerUpper": 19.82,
@@ -6200,7 +6139,7 @@
         "kdjK": 78.5,
         "kdjD": 74.4,
         "kdjJ": 86.8,
-        "volumeRatio": 0.9
+        "volumeRatio": 0.89
       }
     },
     {
@@ -6260,6 +6199,72 @@
         "kdjD": 30.5,
         "kdjJ": 49.5,
         "volumeRatio": 1.89
+      }
+    },
+    {
+      "code": "2889",
+      "name": "國票金",
+      "close": 15,
+      "open": 0,
+      "high": 0,
+      "low": 0,
+      "prevClose": 0,
+      "limitUp": 0,
+      "change": 0.05,
+      "percent": 0.33,
+      "value": 122308512,
+      "tradeVolume": 8138925,
+      "market": "TWSE",
+      "valueRank": 72,
+      "volumeRank": 90,
+      "inst": {
+        "foreign": 1413134,
+        "trust": 0,
+        "dealer": 0,
+        "total": 1405134
+      },
+      "matches": [
+        {
+          "id": "bollinger_kdj_buy",
+          "short": "布林KDJ",
+          "icon": "K",
+          "score": 83,
+          "reason": "三線向上中軌買點：20MA 14.79、上軌 15.20、下軌 14.39；KDJ 黃金交叉 K 69.0 / D 67.8，量比 1.23。",
+          "bollingerMode": "三線向上中軌買點",
+          "bollingerMiddle": 14.79,
+          "bollingerUpper": 15.2,
+          "bollingerLower": 14.39,
+          "kdjK": 69,
+          "kdjD": 67.8,
+          "kdjJ": 71.2,
+          "volumeRatio": 1.23
+        }
+      ],
+      "strategy4Score": 100,
+      "strategy4Reason": "趨勢轉強但尚未觸發突破買點；趨勢分 6/8，量比 1.71，位階 中位階。",
+      "strategy4Signals": [
+        {
+          "id": "watch_trend",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 6/8，量比 1.71，位階 中位階。"
+        }
+      ],
+      "score": 83,
+      "activeMatch": {
+        "id": "bollinger_kdj_buy",
+        "short": "布林KDJ",
+        "icon": "K",
+        "score": 83,
+        "reason": "三線向上中軌買點：20MA 14.79、上軌 15.20、下軌 14.39；KDJ 黃金交叉 K 69.0 / D 67.8，量比 1.23。",
+        "bollingerMode": "三線向上中軌買點",
+        "bollingerMiddle": 14.79,
+        "bollingerUpper": 15.2,
+        "bollingerLower": 14.39,
+        "kdjK": 69,
+        "kdjD": 67.8,
+        "kdjJ": 71.2,
+        "volumeRatio": 1.23
       }
     }
   ]
