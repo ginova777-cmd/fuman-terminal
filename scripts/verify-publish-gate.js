@@ -191,6 +191,8 @@ const sourceSyncScript = read("scripts/sync-main-deploy-source.js");
 for (const file of [
   "terminal-live-check.js",
   "terminal-watchlist-module.js",
+  "scripts/intraday-radar-rules.js",
+  "scripts/scan-realtime-radar-cache.js",
   "data/data-manifest.json",
   "data/terminal-home-bundle.json",
   "data/institution-latest.json",
