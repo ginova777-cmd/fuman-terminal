@@ -120,12 +120,12 @@ function Read-GateJson($path) {
 }
 
 function Get-GateCount($payload) {
-  if ($null -ne $payload.count) { return [int]$payload.count }
-  if ($null -ne $payload.total) { return [int]$payload.total }
   if ($payload.rows) { return @($payload.rows).Count }
   if ($payload.data) { return @($payload.data).Count }
   if ($payload.stocks) { return @($payload.stocks).Count }
   if ($payload.entries) { return @($payload.entries.PSObject.Properties).Count }
+  if ($null -ne $payload.count) { return [int]$payload.count }
+  if ($null -ne $payload.total) { return [int]$payload.total }
   return 0
 }
 
