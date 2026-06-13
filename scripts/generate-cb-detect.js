@@ -493,11 +493,70 @@ function technicalFromHistory(history) {
 }
 
 function premiumValue(row) {
-  const issuedPremium = num(row.premium_rate);
-  if (issuedPremium) return issuedPremium;
-  const raw = num(row.conversion_premium_rate || row.tentative_premium_rate);
+  const range = premiumRange(row);
+  return range.mid || 0;
+}
+
+function parsePremiumToken(value) {
+  const raw = num(value);
   if (!raw) return 0;
   return raw > 100 ? raw - 100 : raw;
+}
+
+function premiumRange(row) {
+  const issuedPremium = parsePremiumToken(row.premium_rate || row.conversion_premium_rate);
+  if (issuedPremium) {
+    return { low: issuedPremium, high: issuedPremium, mid: issuedPremium, source: "official" };
+  }
+  const text = String(row.tentative_premium_rate || "").replace(/％/g, "%");
+  const matches = [...text.matchAll(/\d+(?:\.\d+)?/g)].map((match) => parsePremiumToken(match[0])).filter((value) => value > 0);
+  if (matches.length >= 2) {
+    const low = Math.min(...matches);
+    const high = Math.max(...matches);
+    return { low, high, mid: (low + high) / 2, source: "tentative" };
+  }
+  if (matches.length === 1) {
+    return { low: matches[0], high: matches[0], mid: matches[0], source: "tentative" };
+  }
+  return { low: 0, high: 0, mid: 0, source: "missing" };
+}
+
+function buildConversionEstimate({ stockPrice, convertPrice, premium }) {
+  const price = num(stockPrice);
+  const official = num(convertPrice);
+  if (official) {
+    return {
+      status: "official",
+      label: "正式轉換價",
+      effectiveConvertPrice: official,
+      estimatedConvertPriceLow: 0,
+      estimatedConvertPriceHigh: 0,
+      estimatedConvertPriceMid: 0,
+      missingReason: "",
+    };
+  }
+  if (price && premium?.source === "tentative" && premium.mid > 0) {
+    const low = price * (1 + premium.low / 100);
+    const high = price * (1 + premium.high / 100);
+    return {
+      status: "estimated",
+      label: "預估轉換價",
+      effectiveConvertPrice: (low + high) / 2,
+      estimatedConvertPriceLow: roundPrice(low),
+      estimatedConvertPriceHigh: roundPrice(high),
+      estimatedConvertPriceMid: roundPrice((low + high) / 2),
+      missingReason: "CBAS尚未揭露正式轉換價，先用暫定溢價率與現股價估算",
+    };
+  }
+  return {
+    status: "missing",
+    label: "缺轉換價",
+    effectiveConvertPrice: 0,
+    estimatedConvertPriceLow: 0,
+    estimatedConvertPriceHigh: 0,
+    estimatedConvertPriceMid: 0,
+    missingReason: price ? "CBAS尚未揭露正式轉換價或暫定溢價率" : "缺現股價與正式轉換價",
+  };
 }
 
 function roundPrice(value) {
@@ -563,9 +622,11 @@ function buildExclusion({ code, stock, technical }) {
   };
 }
 
-function buildEntryPlan({ stockPrice, convertPrice, technical }) {
+function buildEntryPlan({ stockPrice, convertPrice, technical, conversionInfo }) {
   const price = num(stockPrice);
-  const conversion = num(convertPrice);
+  const conversion = num(convertPrice) || num(conversionInfo?.effectiveConvertPrice);
+  const hasOfficialConversion = num(convertPrice) > 0;
+  const hasEstimatedConversion = !hasOfficialConversion && conversionInfo?.status === "estimated" && conversion > 0;
   const ma5 = num(technical?.ma5);
   const ma35 = num(technical?.ma35);
   const ma200 = num(technical?.ma200);
@@ -607,9 +668,9 @@ function buildEntryPlan({ stockPrice, convertPrice, technical }) {
   const nearMa35Pullback = Boolean(price && ma35 && price >= ma35 * 0.985 && price <= ma35 * 1.035);
   const nearDailyShortPullback = Boolean(price && ((dailyMa5 && price >= dailyMa5 * 0.99 && price <= dailyMa5 * 1.035) || (dailyMa10 && price >= dailyMa10 * 0.99 && price <= dailyMa10 * 1.035)));
   const aboveShortSupport = Boolean(price && ((ma5 && price >= ma5 * 0.99) || (ma35 && price >= ma35 * 0.99) || dailyShortSupport));
-  const lowRiskPass = Boolean(price && conversion && technicalPass && (nearMa35Pullback || nearDailyShortPullback) && aboveShortSupport && (ma35Rising || ma200Rising || allMaRising || dailyShortRising));
-  const stealthPass = Boolean(price && conversion && technicalPass && distance >= -0.08 && distance <= -0.03 && ma200Rising && volumeExpanding);
-  const breakoutPass = Boolean(price && conversion && price >= breakout && volumeRatio20 >= 1.5);
+  const lowRiskPass = Boolean(hasOfficialConversion && price && conversion && technicalPass && (nearMa35Pullback || nearDailyShortPullback) && aboveShortSupport && (ma35Rising || ma200Rising || allMaRising || dailyShortRising));
+  const stealthPass = Boolean(hasOfficialConversion && price && conversion && technicalPass && distance >= -0.08 && distance <= -0.03 && ma200Rising && volumeExpanding);
+  const breakoutPass = Boolean(hasOfficialConversion && price && conversion && price >= breakout && volumeRatio20 >= 1.5);
   const lowRiskStop = lowRiskEntry ? Math.min(lowRiskEntry * 0.96, (ma35 || lowRiskEntry) * 0.985) : 0;
   const models = [
     {
@@ -652,7 +713,9 @@ function buildEntryPlan({ stockPrice, convertPrice, technical }) {
   const selectedModel = models.find((model) => model.pass) || null;
 
   if (!price || !conversion) {
-    tags.push("缺現股價或轉換價");
+    tags.push(conversionInfo?.missingReason || "缺現股價或轉換價");
+  } else if (hasEstimatedConversion) {
+    tags.push("正式轉換價未揭露，僅用暫定溢價估算觀察區間");
   } else if (!technicalPass) {
     tags.push("60分K門檻未通過");
   } else if (selectedModel?.id === "low-risk-pullback") {
@@ -681,7 +744,7 @@ function buildEntryPlan({ stockPrice, convertPrice, technical }) {
     tags.push("已離轉換價較遠");
   }
 
-  if (price && conversion && riskReward >= 2) tags.push("風報比>=2");
+  if (hasOfficialConversion && price && conversion && riskReward >= 2) tags.push("風報比>=2");
   if (price && preferredEntry && price > preferredEntry * 1.08) tags.push("現價高於理想進場區");
 
   return {
@@ -699,7 +762,17 @@ function buildEntryPlan({ stockPrice, convertPrice, technical }) {
     stopLoss: roundPrice(stopLoss),
     target1: roundPrice(target1),
     target2: roundPrice(target2),
-    riskReward,
+    riskReward: hasOfficialConversion ? riskReward : 0,
+    hasOfficialConversion,
+    hasEstimatedConversion,
+    conversionPriceStatus: conversionInfo?.status || (hasOfficialConversion ? "official" : "missing"),
+    conversionPriceLabel: conversionInfo?.label || (hasOfficialConversion ? "正式轉換價" : "缺轉換價"),
+    missingReason: conversionInfo?.missingReason || "",
+    entryDataCompleteness: hasOfficialConversion ? "full" : (hasEstimatedConversion ? "estimated" : "missing"),
+    entryDataCompletenessLabel: hasOfficialConversion ? "完整" : (hasEstimatedConversion ? "預估" : "缺轉換價"),
+    tradable: Boolean(hasOfficialConversion && selectedModel),
+    tradableLabel: hasOfficialConversion ? (selectedModel ? "可交易" : "等訊號") : (hasEstimatedConversion ? "僅觀察" : "不可交易"),
+    tradableReason: hasOfficialConversion ? (selectedModel ? "正式轉換價與進場模型通過" : "有正式轉換價但進場模型未通過") : (hasEstimatedConversion ? "只有暫定溢價估算，不能當正式進場價" : (conversionInfo?.missingReason || "缺正式轉換價")),
     tags,
   };
 }
@@ -720,8 +793,7 @@ function scoreRow(row, source, technical = {}, entryPlan = {}) {
   const distance = num(entryPlan.conversionDistancePct);
   const volumeRatio20 = num(entryPlan.volumeRatio20);
   const riskReward = num(entryPlan.riskReward);
-  const hasEntryPrices = !Array.isArray(entryPlan.tags)
-    || !entryPlan.tags.includes("缺現股價或轉換價");
+  const hasEntryPrices = entryPlan.hasOfficialConversion === true;
 
   if (source.stage === "董事會決議") {
     breakdown.cbEvent += 5;
@@ -881,17 +953,28 @@ function normalize(row, source, stockMap, technicalMap, quoteMap) {
   const code = String(row.code || row.convert_target_code || "").trim();
   const cbCode = String(row.cb_code || row.bond_code || "").trim();
   const cbName = String(row.cb_name || row.underlying_bond || "").trim();
-  const premium = premiumValue(row);
+  const premiumInfo = premiumRange(row);
+  const premium = premiumInfo.mid || 0;
   const stock = stockMap.get(cleanCode(code)) || {};
   const technical = technicalMap.get(cleanCode(code)) || {};
   const quote = quoteMap.get(cleanCode(code)) || {};
   const stockPrice = num(row.underlying_stock_market_price) || num(quote.price) || num(stock.close) || num(technical.stockPrice);
   const convertPrice = num(row.conversion_price);
+  const conversionInfo = buildConversionEstimate({ stockPrice, convertPrice, premium: premiumInfo });
   const stockPriceSource = num(row.underlying_stock_market_price) ? "cbas"
     : quote.source || (num(stock.close) ? "stocks-slim" : (num(technical.stockPrice) ? "yahoo-60m" : ""));
-  const entryPlan = buildEntryPlan({ stockPrice, convertPrice, technical });
+  const entryPlan = buildEntryPlan({ stockPrice, convertPrice, technical, conversionInfo });
   const scored = scoreRow(row, source, technical, entryPlan);
   const exclusion = buildExclusion({ code, stock, technical });
+  const scoreDetail = {
+    event: scored.scoreBreakdown.cbEvent || 0,
+    technical: scored.scoreBreakdown.technical || 0,
+    entryModel: scored.scoreBreakdown.entryModel || 0,
+    volume: scored.scoreBreakdown.volume || 0,
+    riskReward: scored.scoreBreakdown.riskReward || 0,
+    entryCompleteness: entryPlan.hasOfficialConversion ? 20 : (entryPlan.hasEstimatedConversion ? 8 : 0),
+    tradable: entryPlan.tradable ? 10 : 0,
+  };
   return {
     sourceLayer: source.layer,
     stage: source.stage,
@@ -904,6 +987,21 @@ function normalize(row, source, stockMap, technicalMap, quoteMap) {
     convertPrice,
     stockPrice,
     premium,
+    premiumLow: premiumInfo.low || 0,
+    premiumHigh: premiumInfo.high || 0,
+    premiumSource: premiumInfo.source,
+    conversionPriceStatus: entryPlan.conversionPriceStatus,
+    conversionPriceLabel: entryPlan.conversionPriceLabel,
+    estimatedConvertPriceLow: conversionInfo.estimatedConvertPriceLow,
+    estimatedConvertPriceHigh: conversionInfo.estimatedConvertPriceHigh,
+    estimatedConvertPriceMid: conversionInfo.estimatedConvertPriceMid,
+    effectiveConvertPrice: conversionInfo.effectiveConvertPrice,
+    missingConversionReason: entryPlan.missingReason,
+    entryDataCompleteness: entryPlan.entryDataCompleteness,
+    entryDataCompletenessLabel: entryPlan.entryDataCompletenessLabel,
+    tradable: entryPlan.tradable,
+    tradableLabel: entryPlan.tradableLabel,
+    tradableReason: entryPlan.tradableReason,
     conversionDistancePct: entryPlan.conversionDistancePct,
     entrySignal: entryPlan.signal,
     entryLabel: entryPlan.label,
@@ -925,6 +1023,7 @@ function normalize(row, source, stockMap, technicalMap, quoteMap) {
     baseScore: scored.baseScore,
     score: scored.score,
     scoreBreakdown: scored.scoreBreakdown,
+    scoreDetail,
     aboveMa200: technical.aboveMa200 ?? null,
     maAlignedUp: technical.maAlignedUp ?? null,
     ma5Rising: technical.ma5Rising ?? null,
@@ -1044,3 +1143,9 @@ main().catch((error) => {
   console.error(error);
   process.exit(1);
 });
+
+
+
+
+
+
