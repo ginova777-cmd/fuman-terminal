@@ -170,6 +170,18 @@ for (const marker of [
 ]) {
   if (!gate.includes(marker)) issues.push(`run-live-freshness-gate.ps1 missing ${marker}`);
 }
+for (const marker of [
+  "Set-Strategy2IntradayEnv",
+  "STRATEGY2_SCAN_START_MINUTES",
+  "STRATEGY2_ENTRY_START_MINUTES",
+  "STRATEGY2_ENTRY_END_MINUTES",
+  "STRATEGY2_SCAN_END_MINUTES",
+  "525",
+  "545",
+  "720",
+]) {
+  if (!gate.includes(marker)) issues.push(`run-live-freshness-gate.ps1 missing strategy2 governance marker ${marker}`);
+}
 if (!/overlapping run/.test(gate)) {
   issues.push("run-live-freshness-gate.ps1 must skip overlapping scheduled runs cleanly");
 }
@@ -230,6 +242,8 @@ if (!fs.existsSync(path.join(ROOT, "AGENTS.md"))) {
   if (!agents.includes("repo sync preflight")) issues.push("AGENTS.md must explain that freshness:gate blocks stale repos");
   if (!agents.includes("External data-source timeouts")) issues.push("AGENTS.md must explain external source warning handling");
   if (!agents.includes("Do not modify Supabase-related code")) issues.push("AGENTS.md must preserve the current Supabase pause rule");
+  if (!agents.includes("STRATEGY2-FRESHNESS-GOVERNANCE.md")) issues.push("AGENTS.md must point Codex to STRATEGY2-FRESHNESS-GOVERNANCE.md");
+  if (!agents.includes("strategy2-intraday-*.json")) issues.push("AGENTS.md must mention strategy2 JSON cannot bypass freshness gate");
 }
 
 if (!fs.existsSync(path.join(ROOT, "FRESHNESS-GATE-MOBILE.md"))) {
@@ -251,8 +265,36 @@ if (!fs.existsSync(path.join(ROOT, "FRESHNESS-GATE-MOBILE.md"))) {
     "GitHub 或網路不可用",
     "目前先不要修改 Supabase",
     "Fuman Terminal Freshness Gate",
+    "STRATEGY2-FRESHNESS-GOVERNANCE.md",
+    "策略2 A進場區",
   ]) {
     if (!mobile.includes(marker)) issues.push(`FRESHNESS-GATE-MOBILE.md missing ${marker}`);
+  }
+}
+
+if (!fs.existsSync(path.join(ROOT, "STRATEGY2-FRESHNESS-GOVERNANCE.md"))) {
+  issues.push("STRATEGY2-FRESHNESS-GOVERNANCE.md missing strategy2 data governance");
+} else {
+  const strategy2Governance = read("STRATEGY2-FRESHNESS-GOVERNANCE.md");
+  for (const marker of [
+    "策略2資料新鮮度治理",
+    "Verified Data Publish Gate",
+    "npm run freshness:gate",
+    "npm run verify:data-freshness:live",
+    "strategy2 intraday raw refresh",
+    "cache sync all",
+    "live-freshness-ok.json",
+    "STRATEGY2_SCAN_START_MINUTES = 525",
+    "STRATEGY2_ENTRY_START_MINUTES = 545",
+    "STRATEGY2_ENTRY_END_MINUTES = 720",
+    "STRATEGY2_SCAN_END_MINUTES = 720",
+    "A進場區",
+    "latestAAt / firstAAt 最新的在最上方",
+    "STAR 必須來自期貨 + 試撮驗證欄位",
+    ".\\run-cache-sync.ps1 -Scope strategy2",
+    "legacy-entrypoint-guard.ps1",
+  ]) {
+    if (!strategy2Governance.includes(marker)) issues.push(`STRATEGY2-FRESHNESS-GOVERNANCE.md missing ${marker}`);
   }
 }
 

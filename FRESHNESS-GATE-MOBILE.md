@@ -55,6 +55,7 @@ npm run verify:publish-gate
 ```text
 AGENTS.md
 FRESHNESS-GATE-MOBILE.md
+STRATEGY2-FRESHNESS-GOVERNANCE.md
 ```
 
 ## 核心規則
@@ -65,6 +66,24 @@ FRESHNESS-GATE-MOBILE.md
 4. 手動 cache sync 不能繞過 gate。
 5. log、health summary、raw source warning、成功狀態都要留下。
 6. 防別的 Codex 弄壞，不靠口頭提醒，而靠腳本、verifier、AGENTS.md、硬擋規則。
+
+## 策略2專屬規則
+
+策略2資料治理細則在：
+
+```text
+STRATEGY2-FRESHNESS-GOVERNANCE.md
+```
+
+策略2 A進場區、LINE 通知、`strategy2-intraday-*.json` 都不能用舊腳本或手動 cache sync 繞過 gate。
+
+策略2資料只有通過：
+
+```powershell
+npm run verify:data-freshness:live
+```
+
+才算可以給客人看。
 
 ## 防舊 repo
 
