@@ -122,6 +122,8 @@ function battleBubble({ title, subtitle, code, name, time, priceText, pctText, s
 }
 
 function strategy2LiveFlex(events, today) {
+  const strategyText = (event) => (event.strategyTags || event.strategies || []).slice(0, 3).join(" / ") || event.primaryStrategy || event.strategy || "短線動能";
+  const reasonText = (event) => (event.strategyReasons || []).slice(0, 2).join("；") || event.stateReason || event.reason || "首次進入A區，請依紀律觀察。";
   const bubbles = (events || []).slice(0, 10).map((event) => battleBubble({
     title: "【Fuman｜短線戰情室】",
     subtitle: `掃描日期：${dateSlash(today || event.date)}｜策略2 A區通知`,
@@ -132,11 +134,11 @@ function strategy2LiveFlex(events, today) {
     pctText: pct(event.percent || event.pct || event.changePct),
     score: event.maxScore || event.score,
     volume: event.volume || event.tradeVolume,
-    tags: ["A區進場", event.strategy || "短線動能", event.stateReason || event.reason || "量價訊號"].filter(Boolean),
+    tags: ["A區進場", strategyText(event), reasonText(event)].filter(Boolean),
     plan: [
       `進場區間：${price(event.firstAPrice || event.entryPrice)}`,
-      `觸發策略：${event.strategy || "策略2當沖偵測"}`,
-      `理由：${event.stateReason || event.reason || "首次進入A區，請依紀律觀察。"}`,
+      `觸發策略：${strategyText(event)}`,
+      `理由：${reasonText(event)}`,
     ],
   }));
   return bubbles.length === 1 ? bubbles[0] : { type: "carousel", contents: bubbles };

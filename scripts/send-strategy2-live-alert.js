@@ -211,6 +211,11 @@ function entryEventFromRecord(record) {
     firstAPrice: cleanNumber(record.entryPrice) || cleanNumber(record.observedPrice) || cleanNumber(record.close),
     percent: cleanNumber(record.percent),
     tradeVolume: cleanNumber(record.tradeVolume) || cleanNumber(record.volume),
+    primaryStrategy: record.primaryStrategy || "",
+    strategyIds: Array.isArray(record.strategyIds) ? record.strategyIds : [],
+    strategyTags: Array.isArray(record.strategyTags) ? record.strategyTags : [],
+    strategyReasons: Array.isArray(record.strategyReasons) ? record.strategyReasons : [],
+    strategies: Array.isArray(record.strategyTags) ? record.strategyTags : [],
     ma35Source: record.ma35Source || "",
     latestRecord: record,
     source: "record",
@@ -240,7 +245,7 @@ function entryEventsFromPayload(payload) {
     .forEach((event) => byKey.set(eventKey(event), event));
   return [...byKey.values()]
     .filter(isStrategy2LiveDisplayEvent)
-    .sort((a, b) => String(a.firstAAt).localeCompare(String(b.firstAAt)));
+    .sort((a, b) => String(b.latestAAt || b.firstAAt).localeCompare(String(a.latestAAt || a.firstAAt)));
 }
 
 async function main() {

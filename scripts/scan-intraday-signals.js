@@ -3,6 +3,14 @@ const path = require("path");
 const { buildRanks, cleanNumber, detectSignals, isIntradayTradable, ma35SourceLabel } = require("./intraday-radar-rules");
 const { rotateStrategy2IntradayCache } = require("./strategy2-cache-rotation");
 const { overlayFugleWebSocketQuoteMap } = require("../lib/fugle-quote-overlay");
+const {
+  fetchActiveCommonStockQuotes,
+  fetchDailyVolumeAverages,
+  fetchIntraday1m: fetchSupabaseFugleIntraday1m,
+  fetchIntraday1mStatus,
+  fetchQuotesByCodes: fetchSupabaseFugleQuotes,
+  getStrategy2SourceHealth,
+} = require("../lib/supabase-public-slot");
 
 const { ROOT, dataPath, cachePath, repoPath } = require("./runtime-paths");
 const CACHE_DIR = cachePath("intraday");
@@ -24,6 +32,11 @@ const STRATEGY5_BACKUP_FILE = dataPath("strategy5-backup.json");
 const BASE_URL = process.env.FUMAN_BASE_URL || "https://fuman-terminal.vercel.app";
 const MANAGER_MIN_ENTRY_TIME = process.env.TRADE_MANAGER_MIN_ENTRY_TIME || "09:05:00";
 const MAX_QUOTE_AGE_SECONDS = Number(process.env.STRATEGY2_MAX_QUOTE_AGE_SECONDS || 150);
+const SUPABASE_SOURCE_MAX_QUOTE_AGE_SECONDS = Number(process.env.STRATEGY2_SUPABASE_SOURCE_MAX_QUOTE_AGE_SECONDS || 120);
+const SUPABASE_SOURCE_MIN_QUOTES = Number(process.env.STRATEGY2_SUPABASE_SOURCE_MIN_QUOTES || 500);
+const SUPABASE_SOURCE_MIN_ACTIVE_SYMBOLS = Number(process.env.STRATEGY2_SUPABASE_SOURCE_MIN_ACTIVE_SYMBOLS || 500);
+const MIN_AVG_5D_VOLUME = Number(process.env.STRATEGY2_MIN_AVG_5D_VOLUME || 0);
+const SUPABASE_SHARED_SOURCE_ERROR_MESSAGE = "Supabase shared source 異常，等待資料恢復";
 const QUOTE_CACHE_MAX_AGE_SECONDS = Number(process.env.STRATEGY2_QUOTE_CACHE_MAX_AGE_SECONDS || 15 * 60);
 const MIN_REALTIME_COVERAGE = Number(process.env.STRATEGY2_MIN_REALTIME_COVERAGE || 0.5);
 const REALTIME_BATCH_SIZE = Number(process.env.STRATEGY2_REALTIME_BATCH_SIZE || 8);
@@ -42,6 +55,9 @@ const STRATEGY2_SCAN_START_MINUTES = Number(process.env.STRATEGY2_SCAN_START_MIN
 const STRATEGY2_ENTRY_START_MINUTES = Number(process.env.STRATEGY2_ENTRY_START_MINUTES || 9 * 60);
 const STRATEGY2_ENTRY_END_MINUTES = Number(process.env.STRATEGY2_ENTRY_END_MINUTES || 12 * 60);
 const STRATEGY2_SCAN_END_MINUTES = Number(process.env.STRATEGY2_SCAN_END_MINUTES || STRATEGY2_ENTRY_END_MINUTES);
+const STRATEGY2_OPEN_RUSH_END_MINUTES = Number(process.env.STRATEGY2_OPEN_RUSH_END_MINUTES || 9 * 60 + 10);
+const STRATEGY2_EARLY_ATTACK_START_MINUTES = Number(process.env.STRATEGY2_EARLY_ATTACK_START_MINUTES || 9 * 60 + 30);
+const STRATEGY2_EARLY_ATTACK_END_MINUTES = Number(process.env.STRATEGY2_EARLY_ATTACK_END_MINUTES || 10 * 60 + 30);
 const STRATEGY2_1M_WARMUP_LIMIT = Math.max(1, Number(process.env.STRATEGY2_1M_WARMUP_LIMIT || 120));
 const STRATEGY2_1M_SUPABASE_SYNC = process.env.STRATEGY2_1M_SUPABASE_SYNC === "1";
 const MA35_PROVIDER_FAILURE_LIMIT = Math.max(1, Number(process.env.STRATEGY2_MA35_PROVIDER_FAILURE_LIMIT || 8));
@@ -51,10 +67,7 @@ function readSecretText(file) {
   try { return fs.readFileSync(file, "utf8").trim(); } catch { return ""; }
 }
 
-const FUGLE_API_KEY = process.env.FUGLE_API_KEY
-  || process.env.FUGLE_MARKETDATA_API_KEY
-  || readSecretText(path.join(ROOT, "secrets", "fugle-api-key.txt"))
-  || readSecretText(path.join(process.env.FUMAN_RUNTIME_DIR || "C:/fuman-runtime", "secrets", "fugle-api-key.txt"));
+const FUGLE_API_KEY = "";
 const TWELVE_DATA_API_KEY = process.env.TWELVE_DATA_API_KEY
   || process.env.TWELVEDATA_API_KEY
   || readSecretText(path.join(ROOT, "secrets", "twelve-data-api-key.txt"))
@@ -63,13 +76,6 @@ const FINMIND_API_TOKEN = process.env.FINMIND_API_TOKEN
   || process.env.FINMIND_TOKEN
   || readSecretText(path.join(ROOT, "secrets", "finmind-api-token.txt"))
   || readSecretText(path.join(process.env.FUMAN_RUNTIME_DIR || "C:/fuman-runtime", "secrets", "finmind-api-token.txt"));
-const SUPABASE_URL = process.env.SUPABASE_URL
-  || readSecretText(path.join(ROOT, "secrets", "supabase-url.txt"))
-  || readSecretText(path.join(process.env.FUMAN_RUNTIME_DIR || "C:/fuman-runtime", "secrets", "supabase-url.txt"));
-const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY
-  || process.env.SUPABASE_SERVICE_KEY
-  || readSecretText(path.join(ROOT, "secrets", "supabase-service-role-key.txt"))
-  || readSecretText(path.join(process.env.FUMAN_RUNTIME_DIR || "C:/fuman-runtime", "secrets", "supabase-service-role-key.txt"));
 let yahooMa35Failures = 0;
 let fugleMa35Failures = 0;
 let yahooMa35BlockedReason = "";
@@ -261,6 +267,12 @@ function pickStrategy2PublicRecord(record) {
     "deltaVolume",
     "score",
     "strategy",
+    "primaryStrategy",
+    "strategyIds",
+    "strategyTags",
+    "strategyReasons",
+    "preopenStrategy",
+    "preopenSourceDate",
     "reason",
     "stateReason",
     "supportPrice",
@@ -392,6 +404,12 @@ function compactStrategy2Event(event) {
     latestState: event?.latestState,
     maxScore: event?.maxScore,
     strategies: Array.isArray(event?.strategies) ? event.strategies.slice(0, 8) : [],
+    strategyIds: Array.isArray(event?.strategyIds) ? event.strategyIds.slice(0, 8) : [],
+    strategyTags: Array.isArray(event?.strategyTags) ? event.strategyTags.slice(0, 8) : [],
+    strategyReasons: Array.isArray(event?.strategyReasons) ? event.strategyReasons.slice(0, 8) : [],
+    primaryStrategy: event?.primaryStrategy,
+    preopenStrategy: event?.preopenStrategy,
+    preopenSourceDate: event?.preopenSourceDate,
     ma35: event?.ma35,
     ma35Prev: event?.ma35Prev,
     aboveMa35: event?.aboveMa35,
@@ -441,8 +459,9 @@ function buildStrategy2TopReport(report, options = {}) {
   const eventLimit = options.eventLimit || 50;
   const recordLimit = options.recordLimit || 70;
   const source = options.source || "strategy2-mobile-top";
+  const eventDetectedTime = (event) => String(event.latestAAt || event.firstAAt || event.latestSeenAt || event.latestBAt || event.firstBAt || "");
   const rankEvents = (items) => [...items]
-    .sort((a, b) => (Number(b.maxScore) || 0) - (Number(a.maxScore) || 0) || String(b.latestSeenAt || b.latestAAt || "").localeCompare(String(a.latestSeenAt || a.latestAAt || "")));
+    .sort((a, b) => eventDetectedTime(b).localeCompare(eventDetectedTime(a)) || (Number(b.maxScore) || 0) - (Number(a.maxScore) || 0));
   const entryEvents = rankEvents((slim.events || []).filter((event) => event.stateId === "entry" || event.stateId === "go"));
   const watchEvents = rankEvents((slim.events || []).filter((event) => !(event.stateId === "entry" || event.stateId === "go")));
   const events = [...entryEvents, ...watchEvents].slice(0, Math.max(eventLimit, entryEvents.length));
@@ -519,40 +538,7 @@ function publishStaticDataJson(name, value) {
 }
 
 async function upsertStrategy2LatestToSupabase(report) {
-  if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) return false;
-  const payload = report;
-  const baseUrl = SUPABASE_URL.replace(/\/+$/, "");
-  const body = {
-    id: "latest",
-    date: payload.date || "",
-    updated_at: payload.updatedAt || new Date().toISOString(),
-    payload,
-    entry_count: Number(payload.entryCount || 0),
-    record_count: Array.isArray(payload.records) ? payload.records.length : 0,
-    event_count: Array.isArray(payload.events) ? payload.events.length : 0,
-  };
-  try {
-    const response = await fetch(`${baseUrl}/rest/v1/strategy2_latest?on_conflict=id`, {
-      method: "POST",
-      headers: {
-        apikey: SUPABASE_SERVICE_ROLE_KEY,
-        Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
-        "Content-Type": "application/json",
-        Prefer: "resolution=merge-duplicates",
-      },
-      body: JSON.stringify(body),
-    });
-    if (!response.ok) {
-      const text = await response.text().catch(() => "");
-      console.warn(`strategy2 supabase upsert failed: HTTP ${response.status} ${text.slice(0, 160)}`);
-      return false;
-    }
-    console.log(`strategy2 supabase upsert ok: records ${body.record_count}, events ${body.event_count}`);
-    return true;
-  } catch (error) {
-    console.warn(`strategy2 supabase upsert failed: ${error?.message || error}`);
-    return false;
-  }
+  return false;
 }
 
 function normalizeVolumeLots(value) {
@@ -570,7 +556,169 @@ function normalizeRealtimeQuoteVolume(quote) {
 }
 
 function isTrustedStrategy2Ma35Source(source) {
-  return new Set(["fugle-1m", "yahoo-1m", "local-1m", "twelve-1m"]).has(String(source || ""));
+  return new Set(["supabase-fugle-1m", "fugle-1m", "yahoo-1m", "local-1m", "twelve-1m"]).has(String(source || ""));
+}
+
+const STRATEGY2_TRADE_VALUE_OK = Number(process.env.STRATEGY2_TRADE_VALUE_OK || 50000000);
+const STRATEGY2_CONDITION_LABELS = {
+  star: "STAR",
+  preopen_watch: "盤前觀察",
+  open_rush: "開盤沖",
+  early_attack: "早攻續強",
+  intraday_continuation: "盤中續強",
+  triggered_still_strong: "曾發動仍強",
+  rebound_turn: "反彈轉強",
+};
+
+function uniqueCompact(items) {
+  return [...new Set((items || []).filter(Boolean))];
+}
+
+function minutesFromTimestamp(value) {
+  const match = String(value || "").match(/\b(\d{1,2}):(\d{2})/);
+  if (!match) return marketMinutes();
+  return Number(match[1]) * 60 + Number(match[2]);
+}
+
+function hasVerifiedStarPreopenSource(item) {
+  const futuresOk = item?.stockFutureOk === true
+    || item?.stockFuturesOk === true
+    || item?.futureSignalOk === true
+    || item?.preopenFutureOk === true;
+  const trialOk = item?.trialAuctionOk === true
+    || item?.preopenTrialOk === true
+    || item?.finalBlindBuy === true
+    || item?.finalBlindBuyOk === true;
+  return futuresOk && trialOk;
+}
+
+function buildPreopenStrategyMap(today) {
+  const payload = readScorecardSource(OPEN_BUY_SCORECARD_SOURCE_FILE, OPEN_BUY_FILE, OPEN_BUY_BACKUP_FILE);
+  const map = new Map();
+  (payload.matches || []).forEach((item) => {
+    const code = String(item?.code || "");
+    if (!code) return;
+    const id = hasVerifiedStarPreopenSource(item) ? "star" : "preopen_watch";
+    map.set(code, {
+      id,
+      label: STRATEGY2_CONDITION_LABELS[id],
+      sourceDate: compactDateKey(item?.date || item?.quoteDate || payload.usedDate || payload.date, today),
+      score: cleanNumber(item?.score),
+      reason: item?.reason || `${STRATEGY2_CONDITION_LABELS[id]}：來自盤前/開盤名單。`,
+    });
+  });
+  return map;
+}
+
+function strategy2TechFlags(stock) {
+  const close = cleanNumber(stock.close);
+  const latestClose = cleanNumber(stock.latest1mClose) || close;
+  const ma35 = cleanNumber(stock.ma35);
+  const ma35Prev = cleanNumber(stock.ma35Prev);
+  const aboveMa35 = ma35 > 0 && latestClose >= ma35 && isTrustedStrategy2Ma35Source(stock.ma35Source);
+  const ma35Rising = stock.ma35TrendUp === true || (ma35 > 0 && ma35Prev > 0 && ma35 >= ma35Prev);
+  const macdGreenRising = stock.macdHistUp === true || stock.macdUp === true;
+  const kdjBullish = stock.kdUp === true || (stock.kdKUp === true && stock.kdDUp === true);
+  const npsyOrRsi = stock.rsiUp === true;
+  return { close, latestClose, ma35, ma35Prev, aboveMa35, ma35Rising, macdGreenRising, kdjBullish, npsyOrRsi };
+}
+
+function buildStrategy2ConditionMeta(stock, options = {}) {
+  const tags = [];
+  const reasons = [];
+  const add = (id, reason) => {
+    tags.push({ id, label: STRATEGY2_CONDITION_LABELS[id] });
+    if (reason) reasons.push(`${STRATEGY2_CONDITION_LABELS[id]}：${reason}`);
+  };
+  const preopen = options.preopen;
+  if (preopen?.id) add(preopen.id, preopen.reason);
+
+  const minute = minutesFromTimestamp(options.timestamp);
+  const pct = cleanNumber(stock.percent);
+  const open = cleanNumber(stock.open);
+  const high = cleanNumber(stock.high) || cleanNumber(stock.close);
+  const low = cleanNumber(stock.low) || cleanNumber(stock.close);
+  const volume = cleanNumber(stock.tradeVolume);
+  const value = cleanNumber(stock.value) || cleanNumber(stock.close) * volume;
+  const deltaVolume = cleanNumber(stock.deltaVolume);
+  const { close, latestClose, aboveMa35, ma35Rising, macdGreenRising, kdjBullish, npsyOrRsi } = strategy2TechFlags(stock);
+  const tradeValueOk = value >= STRATEGY2_TRADE_VALUE_OK;
+  const strictEntry = options.stateId === "entry" || options.stateId === "go" || options.strictEntry === true;
+  const openingAcceleration = cleanNumber(stock.latest1mVolume) >= 20
+    || deltaVolume >= 50
+    || close >= open * 1.01
+    || volume >= 10000;
+
+  if (
+    minute >= STRATEGY2_ENTRY_START_MINUTES
+    && minute <= STRATEGY2_OPEN_RUSH_END_MINUTES
+    && pct >= 4
+    && aboveMa35
+    && ma35Rising
+    && tradeValueOk
+  ) add("open_rush", `09:00~09:10 漲幅 ${pct.toFixed(2)}%，站上 MA35 且 MA35 向上。`);
+
+  if (
+    minute >= STRATEGY2_EARLY_ATTACK_START_MINUTES
+    && minute <= STRATEGY2_EARLY_ATTACK_END_MINUTES
+    && !strictEntry
+    && pct >= 2
+    && aboveMa35
+    && ma35Rising
+    && macdGreenRising
+    && tradeValueOk
+  ) add("early_attack", `09:30~10:30 漲幅 ${pct.toFixed(2)}%，MA35/MACD 轉強但尚未正式進場。`);
+
+  if (
+    strictEntry
+    || options.signalId === "open_burst_entry"
+    || (options.signalId === "rebound" && options.stateId === "entry")
+    || (
+      volume >= 500
+      && pct >= 2
+      && aboveMa35
+      && ma35Rising
+      && macdGreenRising
+      && kdjBullish
+      && (npsyOrRsi || cleanNumber(stock.latest1mVolume) >= 20 || deltaVolume >= 50)
+    )
+    || (
+      minute <= STRATEGY2_OPEN_RUSH_END_MINUTES
+      && pct >= 5
+      && cleanNumber(stock.latest1mVolume) >= 20
+      && openingAcceleration
+      && open > 0
+      && close >= open
+    )
+  ) add("intraday_continuation", "盤中續攻子型成立或已通過進場區升級。");
+
+  if (
+    options.hadTriggeredStrong
+    && pct >= 1
+    && open > 0
+    && close >= open * 1.01
+    && volume >= 500
+    && close >= open
+    && high > 0
+    && close >= high * 0.985
+    && low >= open * 0.985
+  ) add("triggered_still_strong", `先前已發動，現價仍貼近高點且量 ${Math.round(volume)} 張。`);
+
+  if (
+    volume >= 500
+    && aboveMa35
+    && macdGreenRising
+    && kdjBullish
+  ) add("rebound_turn", `成交量 ${Math.round(volume)} 張，重新站上 MA35，MACD/KDJ 同步翻強。`);
+
+  return {
+    strategyIds: uniqueCompact(tags.map((tag) => tag.id)),
+    strategyTags: uniqueCompact(tags.map((tag) => tag.label)),
+    primaryStrategy: tags[0]?.label || "",
+    strategyReasons: uniqueCompact(reasons),
+    preopenStrategy: preopen?.label || "",
+    preopenSourceDate: preopen?.sourceDate || "",
+  };
 }
 
 function classifyStrategy2State(stock, signal, options = {}) {
@@ -913,6 +1061,7 @@ function appendTrackedSnapshot(cache, stock, timestamp, key, options = {}) {
   const sourceCoverage = cleanNumber(options.sourceCoverage);
   const sourceCoverageHealthy = options.entrySourceHealthy !== false;
   const downgradeEntrySnapshot = isEntryState(latest) && !sourceCoverageHealthy;
+  const strategyMeta = options.strategyMeta || {};
 
   cache.records.push({
     ...latest,
@@ -938,6 +1087,12 @@ function appendTrackedSnapshot(cache, stock, timestamp, key, options = {}) {
     volume,
     percent,
     deltaVolume: Math.max(0, volume - previousVolume),
+    strategyIds: uniqueCompact([...(latest.strategyIds || []), ...(strategyMeta.strategyIds || [])]),
+    strategyTags: uniqueCompact([...(latest.strategyTags || []), ...(strategyMeta.strategyTags || [])]),
+    strategyReasons: uniqueCompact([...(latest.strategyReasons || []), ...(strategyMeta.strategyReasons || [])]),
+    primaryStrategy: strategyMeta.primaryStrategy || latest.primaryStrategy || "",
+    preopenStrategy: strategyMeta.preopenStrategy || latest.preopenStrategy || "",
+    preopenSourceDate: strategyMeta.preopenSourceDate || latest.preopenSourceDate || "",
     sourceCoverage,
     sourceCoverageHealthy,
     isSnapshot: true,
@@ -1140,6 +1295,12 @@ function mergeStrategy2Events(records, key) {
         stateLabel: "待確認",
         maxScore: 0,
         strategies: [],
+        strategyIds: [],
+        strategyTags: [],
+        strategyReasons: [],
+        primaryStrategy: "",
+        preopenStrategy: "",
+        preopenSourceDate: "",
         enhancements: [],
         stateReason: "",
         supportPrice: 0,
@@ -1200,6 +1361,19 @@ function mergeStrategy2Events(records, key) {
       if (record.strategy && !current.strategies.includes(record.strategy)) {
         current.strategies.push(record.strategy);
       }
+      (record.strategyTags || []).forEach((tag) => {
+        if (tag && !current.strategies.includes(tag)) current.strategies.push(tag);
+        if (tag && !current.strategyTags.includes(tag)) current.strategyTags.push(tag);
+      });
+      (record.strategyIds || []).forEach((id) => {
+        if (id && !current.strategyIds.includes(id)) current.strategyIds.push(id);
+      });
+      (record.strategyReasons || []).forEach((reason) => {
+        if (reason && !current.strategyReasons.includes(reason)) current.strategyReasons.push(reason);
+      });
+      current.primaryStrategy = current.primaryStrategy || record.primaryStrategy || current.strategyTags[0] || record.strategy || "";
+      current.preopenStrategy = current.preopenStrategy || record.preopenStrategy || "";
+      current.preopenSourceDate = current.preopenSourceDate || record.preopenSourceDate || "";
       const recordMa35 = cleanNumber(record.ma35);
       const recordAboveMa35 = record.aboveMa35 === true && recordMa35 > 0;
       const recordHasTrustedMa35 = recordAboveMa35 && isTrustedStrategy2Ma35Source(record.ma35Source);
@@ -1266,6 +1440,7 @@ function mergeStrategy2Events(records, key) {
     });
   return Object.values(events).sort((a, b) => {
     if (!!b.firstAAt !== !!a.firstAAt) return b.firstAAt ? 1 : -1;
+    if (a.firstAAt && b.firstAAt) return String(b.latestAAt || b.firstAAt).localeCompare(String(a.latestAAt || a.firstAAt)) || String(a.code).localeCompare(String(b.code));
     return cleanNumber(b.maxScore) - cleanNumber(a.maxScore) || String(a.code).localeCompare(String(b.code));
   });
 }
@@ -1309,8 +1484,29 @@ function isStrictStrategy2Ma35Record(record) {
     && record?.intradayVolumeBurst === true;
 }
 
+function isStrategy2ConditionEntryRecord(record) {
+  const strategyIds = Array.isArray(record?.strategyIds) ? record.strategyIds : [];
+  return strategyIds.some((id) => [
+    "star",
+    "preopen_watch",
+    "open_rush",
+    "early_attack",
+    "intraday_continuation",
+    "triggered_still_strong",
+    "rebound_turn",
+  ].includes(id));
+}
+
 function isStrategy2RecordWithinBaseGate(record) {
   if (isStrictStrategy2Ma35Record(record)) return true;
+  const strategyIds = Array.isArray(record?.strategyIds) ? record.strategyIds : [];
+  if (strategyIds.includes("star") || strategyIds.includes("preopen_watch")) return true;
+  if (strategyIds.includes("triggered_still_strong") || strategyIds.includes("rebound_turn")) {
+    return cleanNumber(record?.percent) >= 1 && (cleanNumber(record?.volume) || cleanNumber(record?.tradeVolume)) >= 500;
+  }
+  if (strategyIds.some((id) => ["open_rush", "early_attack", "intraday_continuation"].includes(id))) {
+    return cleanNumber(record?.percent) >= 2 && (cleanNumber(record?.volume) || cleanNumber(record?.tradeVolume)) >= 500;
+  }
   const pct = cleanNumber(record?.percent);
   const volume = cleanNumber(record?.volume) || cleanNumber(record?.tradeVolume);
   return pct >= 2 && volume >= 2000;
@@ -1319,6 +1515,14 @@ function isStrategy2RecordWithinBaseGate(record) {
 function normalizeStrategy2Records(records) {
   let dropped = 0;
   const normalized = (records || []).map((record) => {
+    if (!isEntryState(record) && isStrategy2ConditionEntryRecord(record)) {
+      return {
+        ...record,
+        stateId: "entry",
+        stateLabel: "進場區",
+        stateReason: (record.strategyReasons || [])[0] || record.stateReason || `${record.primaryStrategy || record.strategy || "策略2"} 條件成立，列入 A 進場區。`,
+      };
+    }
     if (!isEntryState(record) && isStrictStrategy2Ma35Record(record)) {
       const signalId = String(record.signalId || record?.signal?.id || "");
       return {
@@ -1331,7 +1535,7 @@ function normalizeStrategy2Records(records) {
       };
     }
     if (record.stateId && record.stateLabel) {
-      if ((record.stateId === "entry" || record.stateId === "go") && !isStrictStrategy2Ma35Record(record)) {
+      if ((record.stateId === "entry" || record.stateId === "go") && !isStrictStrategy2Ma35Record(record) && !isStrategy2ConditionEntryRecord(record)) {
         return {
           ...record,
           stateId: "wait",
@@ -1369,36 +1573,104 @@ async function fetchJson(url, timeout = 30000) {
 }
 
 async function fetchStocks() {
-  try {
-    const market = await fetchJson(`${BASE_URL}/api/market?t=${Date.now()}`, 30000);
-    if (Array.isArray(market?.stocks) && market.stocks.length) {
-      return market.stocks.map((stock) => ({
-        code: String(stock.code || ""),
-        name: String(stock.name || ""),
-        close: cleanNumber(stock.close),
-        change: cleanNumber(stock.change),
-        percent: cleanNumber(stock.pct ?? stock.percent),
-        value: cleanNumber(stock.value),
-        tradeVolume: normalizeVolumeLots(stock.volume ?? stock.tradeVolume),
-      })).filter((stock) => stock.code && stock.name);
-    }
-  } catch {}
-
-  const payload = await fetchJson("https://openapi.twse.com.tw/v1/exchangeReport/STOCK_DAY_ALL", 30000);
-  return payload.map((stock) => {
-    const close = cleanNumber(stock.ClosingPrice || stock["收盤價"]);
-    const change = cleanNumber(stock.Change || stock["漲跌價差"]);
-    const prevClose = close - change;
+  const result = await fetchActiveCommonStockQuotes({
+    maxQuoteAgeSeconds: SUPABASE_SOURCE_MAX_QUOTE_AGE_SECONDS,
+    minQuotes: SUPABASE_SOURCE_MIN_QUOTES,
+    minActiveSymbols: SUPABASE_SOURCE_MIN_ACTIVE_SYMBOLS,
+  });
+  if (!result.ok) throw new Error(result.error || SUPABASE_SHARED_SOURCE_ERROR_MESSAGE);
+  return result.quotes.map((quote) => {
+    const close = cleanNumber(quote.close);
+    const prevClose = cleanNumber(quote.prevClose);
+    const change = close && prevClose ? close - prevClose : 0;
     return {
-      code: String(stock.Code || stock["證券代號"] || ""),
-      name: String(stock.Name || stock["證券名稱"] || ""),
+      code: String(quote.code || ""),
+      name: String(quote.name || ""),
       close,
       change,
-      percent: prevClose ? (change / prevClose) * 100 : 0,
-      value: cleanNumber(stock.TradeValue || stock["成交金額"]),
-      tradeVolume: normalizeVolumeLots(stock.TradeVolume || stock["成交股數"]),
+      percent: cleanNumber(quote.percent),
+      value: cleanNumber(quote.value),
+      tradeVolume: normalizeVolumeLots(quote.tradeVolume),
+      open: cleanNumber(quote.open),
+      high: cleanNumber(quote.high),
+      low: cleanNumber(quote.low),
+      prevClose,
+      quoteTime: quote.quoteTime || quote.time || quote.updatedAt || "",
+      quoteSource: quote.quoteSource || "supabase-public-slot",
+      realtimeFallback: quote.realtimeFallback || "supabase-public-slot",
+      stockType: quote.stockType || "",
+      session: quote.session || "",
+      isHalted: quote.isHalted === true,
+      isTrial: quote.isTrial === true,
+      cumulativeBidVolume: cleanNumber(quote.cumulativeBidVolume),
+      cumulativeAskVolume: cleanNumber(quote.cumulativeAskVolume),
+      cumulativeBidAskVolume: cleanNumber(quote.cumulativeBidAskVolume),
     };
   }).filter((stock) => stock.code && stock.name && stock.close);
+}
+
+async function annotateDailyVolumeAverages(stocks) {
+  const codes = stocks.map((stock) => stock.code).filter(Boolean);
+  if (!codes.length) return stocks;
+  const result = await fetchDailyVolumeAverages(codes, 5).catch((error) => ({
+    ok: false,
+    byCode: new Map(),
+    error: error?.message || String(error),
+  }));
+  if (!result.ok) {
+    console.warn(`strategy2 daily volume read skipped: ${result.error || "unknown error"}`);
+    return stocks;
+  }
+  const annotated = stocks.map((stock) => {
+    const info = result.byCode.get(String(stock.code)) || {};
+    return {
+      ...stock,
+      avg5dVolume: cleanNumber(info.avgVolume),
+      avg5dVolumeDays: cleanNumber(info.days),
+    };
+  });
+  if (MIN_AVG_5D_VOLUME <= 0) return annotated;
+  const filtered = annotated.filter((stock) => cleanNumber(stock.avg5dVolume) >= MIN_AVG_5D_VOLUME);
+  console.log(`strategy2 daily volume gate: kept ${filtered.length}/${annotated.length}, minAvg5dVolume=${MIN_AVG_5D_VOLUME}`);
+  return filtered;
+}
+
+function buildStrategy2SharedSourceAbnormalReport(cache, key, timestamp, health) {
+  const updatedAt = new Date().toISOString();
+  const statusPayload = health?.payload && typeof health.payload === "object" ? health.payload : {};
+  const statusText = health?.status?.status || "missing";
+  cache.date = key;
+  cache.records = [];
+  cache.updatedAt = updatedAt;
+  cache.realtime = {
+    source: "supabase-public-slot",
+    sourceName: "fugle_shared_source",
+    sourceStatus: statusText,
+    sourceStatusPayload: statusPayload,
+    sourceStatusUpdatedAt: health?.status?.updated_at || health?.status?.checked_at || "",
+    sourceAgeSeconds: Number.isFinite(Number(health?.sourceAgeSeconds)) ? Number(health.sourceAgeSeconds) : null,
+    entrySourceHealthy: false,
+    sourceCoverageHealthy: false,
+    supabaseOnly: true,
+    skippedSupabaseSharedSourceUnhealthy: true,
+    message: SUPABASE_SHARED_SOURCE_ERROR_MESSAGE,
+    reason: health?.reason || health?.message || "source_status missing",
+    scanTimestamp: timestamp,
+  };
+  return enforceStrategy2EntryGuards({
+    source: "strategy2-supabase-first",
+    date: key,
+    updatedAt,
+    status: "supabase_shared_source_unhealthy",
+    message: SUPABASE_SHARED_SOURCE_ERROR_MESSAGE,
+    reason: cache.realtime.reason,
+    realtime: cache.realtime,
+    records: [],
+    events: [],
+    entryCount: 0,
+    aCount: 0,
+    bOnlyCount: 0,
+  });
 }
 
 async function fetchRealtime(stocks, scanTimestamp = timestampKey()) {
@@ -1420,12 +1692,85 @@ async function fetchRealtime(stocks, scanTimestamp = timestampKey()) {
   );
   let fugleRateLimited = false;
   const fallbackStats = {
+    supabasePublicSlot: { requested: 0, recovered: 0, failed: 0, healthy: false, sourceAgeSeconds: null, error: "" },
     fugleWs: { available: 0, used: 0 },
     fugle: { configured: Boolean(FUGLE_API_KEY), requested: 0, recovered: 0, empty: 0, failed: 0, skippedNoKey: 0, rateLimited: false },
     finmind: { configured: Boolean(FINMIND_API_TOKEN), enabled: ENABLE_FINMIND_REALTIME, rescueEnabled: ENABLE_FINMIND_RESCUE, requested: 0, recovered: 0, failed: 0 },
     yahoo: { requested: 0, recovered: 0, failed: 0 },
     rescue: { threshold: REALTIME_RESCUE_COVERAGE, limit: REALTIME_RESCUE_LIMIT, cooldownMs: REALTIME_RESCUE_COOLDOWN_MS, requested: 0, recovered: 0 },
   };
+
+  const supabaseCodes = [...fallbackCandidateCodes];
+  if (supabaseCodes.length) {
+    fallbackStats.supabasePublicSlot.requested = supabaseCodes.length;
+    const supabaseResult = await fetchSupabaseFugleQuotes(supabaseCodes, {
+      maxQuoteAgeSeconds: SUPABASE_SOURCE_MAX_QUOTE_AGE_SECONDS,
+      maxSourceAgeSeconds: SUPABASE_SOURCE_MAX_QUOTE_AGE_SECONDS,
+    }).catch((error) => ({ ok: false, error: error?.message || String(error), byCode: new Map() }));
+    fallbackStats.supabasePublicSlot.healthy = supabaseResult.sourceHealthy === true;
+    fallbackStats.supabasePublicSlot.sourceAgeSeconds = Number.isFinite(Number(supabaseResult.sourceAgeSeconds))
+      ? Number(supabaseResult.sourceAgeSeconds)
+      : null;
+    if (supabaseResult.ok && supabaseResult.byCode instanceof Map) {
+      for (const [code, quote] of supabaseResult.byCode.entries()) {
+        if (!fallbackCandidateCodes.has(String(code))) continue;
+        quotes.set(String(code), quote);
+        recoveredCodes.add(String(code));
+        fallbackStats.supabasePublicSlot.recovered += 1;
+      }
+    } else {
+      fallbackStats.supabasePublicSlot.failed = supabaseCodes.length;
+      fallbackStats.supabasePublicSlot.error = String(supabaseResult.error || "supabase fugle slot unavailable").slice(0, 160);
+      console.log(`realtime supabase fugle slot skipped: ${fallbackStats.supabasePublicSlot.error}`);
+    }
+  }
+
+  const supabaseDiagnostics = quoteDiagnostics();
+  stocks.forEach((stock) => {
+    const code = String(stock.code || "");
+    if (!quotes.has(code) && /^\d{4}$/.test(code) && !code.startsWith("00")) missedCodes.add(code);
+  });
+  fetchRealtime.lastStats = {
+    requested: stocks.length,
+    received: quotes.size,
+    usableBeforeRescue: supabaseDiagnostics.usableCount,
+    coverageBeforeRescue: Number(supabaseDiagnostics.usableCoverage.toFixed(4)),
+    usableAfterRescue: supabaseDiagnostics.usableCount,
+    coverageAfterRescue: Number(supabaseDiagnostics.usableCoverage.toFixed(4)),
+    unusableBreakdown: supabaseDiagnostics.breakdown,
+    sourceHealth: supabaseDiagnostics.sourceHealth,
+    failed: fallbackStats.supabasePublicSlot.failed ? 1 : 0,
+    failedBatches,
+    retryBatches,
+    batchConcurrency: 0,
+    fallbackCandidateLimit: REALTIME_FALLBACK_CANDIDATE_LIMIT,
+    fallbackCandidateCount: fallbackCandidateCodes.size,
+    yahooFallbackConcurrency: 0,
+    fugleRateLimited: false,
+    fallbackStats,
+    finmindRealtimeEnabled: false,
+    finmindRescueEnabled: false,
+    recoveredCodes: [...recoveredCodes],
+    missedCodes: [...missedCodes],
+    staleCodes: [...supabaseDiagnostics.staleCodes].slice(0, 80),
+    noTimeCodes: [...supabaseDiagnostics.noTimeCodes].slice(0, 80),
+    noCloseCodes: [...supabaseDiagnostics.noCloseCodes].slice(0, 80),
+    missedCount: missedCodes.size,
+    supabaseOnly: true,
+  };
+  console.log(
+    `realtime supabase-first stats: requested=${fallbackStats.supabasePublicSlot.requested} recovered=${fallbackStats.supabasePublicSlot.recovered} healthy=${fallbackStats.supabasePublicSlot.healthy} age=${fallbackStats.supabasePublicSlot.sourceAgeSeconds ?? "--"} failed=${fallbackStats.supabasePublicSlot.failed}; `
+    + `usable=${supabaseDiagnostics.usableCount}/${stocks.length} coverage=${Number(supabaseDiagnostics.usableCoverage.toFixed(4))}`
+  );
+  return stocks.map((stock) => {
+    const quote = quotes.get(stock.code);
+    if (!quote?.close) return { ...stock, isRealtime: false };
+    const quoteVolume = normalizeRealtimeQuoteVolume(quote);
+    const value = quoteVolume && cleanNumber(quote.close)
+      ? quoteVolume * cleanNumber(quote.close)
+      : stock.value;
+    return { ...stock, ...quote, quoteTime: quote.time, tradeVolume: quoteVolume, value, isRealtime: true, recoveredFromRealtimeFallback: recoveredCodes.has(stock.code) };
+  });
 
   const wsCodes = stocks
     .map((stock) => String(stock.code || ""))
@@ -1849,7 +2194,8 @@ async function fetchRealtime(stocks, scanTimestamp = timestampKey()) {
     missedCount: missedCodes.size,
   };
   console.log(
-    `realtime fallback stats: fugle configured=${fallbackStats.fugle.configured} requested=${fallbackStats.fugle.requested} recovered=${fallbackStats.fugle.recovered} empty=${fallbackStats.fugle.empty} failed=${fallbackStats.fugle.failed} noKey=${fallbackStats.fugle.skippedNoKey} rateLimited=${fallbackStats.fugle.rateLimited}; `
+    `realtime fallback stats: supabaseFugle requested=${fallbackStats.supabasePublicSlot.requested} recovered=${fallbackStats.supabasePublicSlot.recovered} healthy=${fallbackStats.supabasePublicSlot.healthy} age=${fallbackStats.supabasePublicSlot.sourceAgeSeconds ?? "--"} failed=${fallbackStats.supabasePublicSlot.failed}; `
+    + `fugle configured=${fallbackStats.fugle.configured} requested=${fallbackStats.fugle.requested} recovered=${fallbackStats.fugle.recovered} empty=${fallbackStats.fugle.empty} failed=${fallbackStats.fugle.failed} noKey=${fallbackStats.fugle.skippedNoKey} rateLimited=${fallbackStats.fugle.rateLimited}; `
     + `finmind enabled=${fallbackStats.finmind.enabled} rescue=${fallbackStats.finmind.rescueEnabled} configured=${fallbackStats.finmind.configured} requested=${fallbackStats.finmind.requested} recovered=${fallbackStats.finmind.recovered} failed=${fallbackStats.finmind.failed}; `
     + `yahoo requested=${fallbackStats.yahoo.requested} recovered=${fallbackStats.yahoo.recovered} failed=${fallbackStats.yahoo.failed}; `
     + `rescue usable=${diagnosticsBeforeRescue.usableCount}/${stocks.length}->${finalDiagnostics.usableCount}/${stocks.length} coverage=${Number(diagnosticsBeforeRescue.usableCoverage.toFixed(4))}->${Number(finalDiagnostics.usableCoverage.toFixed(4))} requested=${fallbackStats.rescue.requested || 0} recovered=${fallbackStats.rescue.recovered || 0}`
@@ -1935,34 +2281,7 @@ function storeStrategy2MinuteCandles(cache, code, rows, key, source) {
 }
 
 async function upsertStrategy2MinuteCandlesToSupabase(cache, key) {
-  if (!STRATEGY2_1M_SUPABASE_SYNC || !SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) return false;
-  const rows = Object.values(cache.minuteCandles || {}).flat().slice(-1000).map((row) => ({
-    trade_date: key,
-    code: String(row.code || ""),
-    minute: row.minute,
-    open: cleanNumber(row.open),
-    high: cleanNumber(row.high),
-    low: cleanNumber(row.low),
-    close: cleanNumber(row.close),
-    volume: cleanNumber(row.volume),
-    source: row.source || "fugle",
-    updated_at: new Date().toISOString(),
-  })).filter((row) => row.code && row.minute && row.close > 0);
-  if (!rows.length) return false;
-  try {
-    const baseUrl = SUPABASE_URL.replace(/\/+$/, "");
-    const response = await fetch(`${baseUrl}/rest/v1/strategy2_1m_candles?on_conflict=trade_date,code,minute`, {
-      method: "POST",
-      headers: { apikey: SUPABASE_SERVICE_ROLE_KEY, Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`, "Content-Type": "application/json", Prefer: "resolution=merge-duplicates" },
-      body: JSON.stringify(rows),
-    });
-    if (!response.ok) throw new Error(`HTTP ${response.status} ${(await response.text()).slice(0, 160)}`);
-    console.log(`strategy2 1m supabase upsert ok: ${rows.length} rows`);
-    return true;
-  } catch (error) {
-    console.warn(`strategy2 1m supabase upsert skipped/failed: ${error.message}`);
-    return false;
-  }
+  return false;
 }
 
 function updateMinuteCloseCache(cache, stocks, scanTimestamp, key) {
@@ -2050,7 +2369,8 @@ function enforceStrategy2EntryGuards(report) {
   const records = (report.records || []).map((record) => {
     const recordSourceCoverage = cleanNumber(record?.sourceCoverage);
     const createdUnderUnhealthySource = recordSourceCoverage > 0 && recordSourceCoverage < sourceThreshold;
-    if ((record.stateId === "entry" || record.stateId === "go") && (!isStrictStrategy2Ma35Record(record) || createdUnderUnhealthySource)) {
+    const validEntryRecord = isStrictStrategy2Ma35Record(record) || isStrategy2ConditionEntryRecord(record);
+    if ((record.stateId === "entry" || record.stateId === "go") && (!validEntryRecord || createdUnderUnhealthySource)) {
       downgradedRecords += 1;
       return {
         ...record,
@@ -2066,7 +2386,7 @@ function enforceStrategy2EntryGuards(report) {
   const events = (report.events || []).map((event) => {
     const entryRecords = sourceBlocksEntry
       ? []
-      : records.filter((record) => String(record.code || "") === String(event.code || "") && isStrictStrategy2Ma35Record(record));
+      : records.filter((record) => String(record.code || "") === String(event.code || "") && (isStrictStrategy2Ma35Record(record) || isStrategy2ConditionEntryRecord(record)));
     const entryRecord = entryRecords[0] || null;
     const latestEntryRecord = entryRecords.length
       ? entryRecords.reduce((latest, record) => (String(record.timestamp || record.entryAt || "") > String(latest.timestamp || latest.entryAt || "") ? record : latest), entryRecords[0])
@@ -2087,7 +2407,7 @@ function enforceStrategy2EntryGuards(report) {
     const entryRecordForFields = latestEntryRecord || entryRecord;
     const legacyEntryRecord = sourceBlocksEntry
       ? null
-      : records.find((record) => String(record.code || "") === String(event.code || "") && isStrictStrategy2Ma35Record(record));
+      : records.find((record) => String(record.code || "") === String(event.code || "") && (isStrictStrategy2Ma35Record(record) || isStrategy2ConditionEntryRecord(record)));
     if (!legacyEntryRecord) {
       if (event.firstAAt || event.latestAAt) downgradedEvents += 1;
       return {
@@ -2150,6 +2470,31 @@ function fetchLocalIntradaySma35(cache, code, scanTimestamp) {
   const targetMinute = minuteKey(scanTimestamp);
   const rows = Array.isArray(cache?.minuteCloses?.[String(code)]) ? cache.minuteCloses[String(code)] : [];
   return buildSma35Info(rows, targetMinute, "local-1m", { ma35Symbol: String(code) });
+}
+
+async function fetchSupabaseFugleIntradaySma35(code, scanTimestamp, cache) {
+  const targetMinute = minuteKey(scanTimestamp);
+  const targetDate = targetMinute.slice(0, 10);
+  if (!targetMinute || !targetDate) return null;
+  const result = await fetchSupabaseFugleIntraday1m(code, 240, {
+    maxSourceAgeSeconds: SUPABASE_SOURCE_MAX_QUOTE_AGE_SECONDS,
+  });
+  if (!result.ok) throw new Error(result.error || "supabase fugle 1m unavailable");
+  const rows = (result.candles || [])
+    .map((row) => ({
+      minute: minuteKey(String(row.candleTime || row.time || "").replace("T", " ")),
+      open: cleanNumber(row.open),
+      high: cleanNumber(row.high),
+      low: cleanNumber(row.low),
+      close: cleanNumber(row.close),
+      volume: cleanNumber(row.volume),
+    }))
+    .filter((row) => row.minute.startsWith(targetDate) && row.close > 0);
+  storeStrategy2MinuteCandles(cache, code, rows, targetDate, "supabase-fugle");
+  return buildSma35Info(rows, targetMinute, "supabase-fugle-1m", {
+    ma35Symbol: String(code),
+    sourceAgeSeconds: Number.isFinite(Number(result.sourceAgeSeconds)) ? Number(result.sourceAgeSeconds) : undefined,
+  });
 }
 
 async function fetchFugleIntradaySma35(code, scanTimestamp, cache) {
@@ -2240,6 +2585,14 @@ async function fetchTwelveDataIntradaySma35(code, scanTimestamp) {
 
 async function fetchIntradaySma35WithFallback(code, scanTimestamp, cache) {
   const attempts = [];
+  try {
+    const supabaseFugle = await fetchSupabaseFugleIntradaySma35(code, scanTimestamp, cache);
+    attempts.push({ source: "supabase-fugle-1m", ok: Boolean(supabaseFugle) });
+    if (supabaseFugle) return { ...supabaseFugle, ma35Attempts: attempts };
+  } catch (error) {
+    attempts.push({ source: "supabase-fugle-1m", ok: false, error: error.message });
+  }
+  return { ma35Attempts: attempts, supabaseOnly: true };
   if (fugleMa35BlockedReason) {
     attempts.push({ source: "fugle-1m", ok: false, configured: Boolean(FUGLE_API_KEY), skipped: true, error: fugleMa35BlockedReason });
   } else {
@@ -2337,11 +2690,27 @@ async function fetchMa35Map(stocks, scanTimestamp, cache) {
     .filter(isIntradayTradable)
     .map((stock) => stock.code);
   const map = new Map();
+  const statusResult = await fetchIntraday1mStatus(candidates);
+  const statusByCode = statusResult.ok ? statusResult.byCode : new Map();
+  if (!statusResult.ok) console.log(`strategy2 1m status skipped: ${statusResult.error}`);
   const concurrency = 8;
   let cursor = 0;
   async function worker() {
     while (cursor < candidates.length) {
       const code = candidates[cursor++];
+      const status = statusByCode.get(String(code));
+      const candleCount = cleanNumber(status?.candle_count);
+      if (status && (status.ready_ge_35 === false || candleCount < 35)) {
+        map.set(String(code), {
+          ma35Attempts: [{
+            source: "v_fugle_intraday_1m_status",
+            ok: false,
+            skipped: true,
+            error: `ready_ge_35=false candle_count=${status.candle_count ?? ""}`,
+          }],
+        });
+        continue;
+      }
       const info = await fetchIntradaySma35WithFallback(code, scanTimestamp, cache);
       if (cleanNumber(info?.ma35) > 0) map.set(String(code), info);
     }
@@ -2386,10 +2755,33 @@ async function main() {
   }
   cache.records = normalizeStrategy2Records(cache.records || []);
 
-  const rawStocks = await fetchStocks();
-  const realtimeSourceStocks = rawStocks.filter(isIntradayTradable);
   const timestamp = timestampKey();
-  if (!isStrategy2EntryTime(parts)) {
+  const entryWindow = isStrategy2EntryTime(parts);
+  const sharedSourceHealth = await getStrategy2SourceHealth({
+    maxQuoteAgeSeconds: SUPABASE_SOURCE_MAX_QUOTE_AGE_SECONDS,
+    minQuotes: SUPABASE_SOURCE_MIN_QUOTES,
+    minActiveSymbols: SUPABASE_SOURCE_MIN_ACTIVE_SYMBOLS,
+    requireIntraday1m: entryWindow,
+  }).catch((error) => ({
+    ok: false,
+    message: SUPABASE_SHARED_SOURCE_ERROR_MESSAGE,
+    reason: error?.message || String(error),
+    status: null,
+    payload: {},
+    sourceAgeSeconds: Infinity,
+  }));
+  if (!sharedSourceHealth.ok) {
+    const strategy2Report = buildStrategy2SharedSourceAbnormalReport(cache, key, timestamp, sharedSourceHealth);
+    writeJson(SIGNAL_FILE, cache);
+    writeJson(STRATEGY2_REPORT_FILE, strategy2Report);
+    publishStaticDataJson("strategy2-intraday-latest.json", strategy2Report);
+    console.log(`strategy2 supabase shared source unhealthy: ${sharedSourceHealth.reason || sharedSourceHealth.message || "unknown"}`);
+    return;
+  }
+
+  const rawStocks = await annotateDailyVolumeAverages(await fetchStocks());
+  const realtimeSourceStocks = rawStocks.filter(isIntradayTradable);
+  if (!entryWindow) {
     const warmed = await warmStrategy2MinuteCandles(realtimeSourceStocks, timestamp, cache, key);
     cache.updatedAt = new Date().toISOString();
     writeJson(SIGNAL_FILE, cache);
@@ -2472,12 +2864,24 @@ async function main() {
       latest1mPrevClose: ma35Info.latest1mPrevClose || 0,
       latest1mVolume: ma35Info.latest1mVolume || 0,
       macdDif: ma35Info.macdDif || 0,
+      macdDifPrev: ma35Info.macdDifPrev || 0,
       macdSignal: ma35Info.macdSignal || 0,
+      macdSignalPrev: ma35Info.macdSignalPrev || 0,
       macdHist: ma35Info.macdHist || 0,
+      macdHistPrev: ma35Info.macdHistPrev || 0,
       macdUp: Boolean(ma35Info.macdUp),
+      macdDifUp: Boolean(ma35Info.macdDifUp),
+      macdHistUp: Boolean(ma35Info.macdHistUp),
       kdK: ma35Info.kdK || 0,
+      kdKPrev: ma35Info.kdKPrev || 0,
       kdD: ma35Info.kdD || 0,
+      kdDPrev: ma35Info.kdDPrev || 0,
+      kdJ: ma35Info.kdJ || 0,
+      kdJPrev: ma35Info.kdJPrev || 0,
       kdUp: Boolean(ma35Info.kdUp),
+      kdKUp: Boolean(ma35Info.kdKUp),
+      kdDUp: Boolean(ma35Info.kdDUp),
+      kdJUp: Boolean(ma35Info.kdJUp),
       rsi5: ma35Info.rsi5 || 0,
       rsi5Prev: ma35Info.rsi5Prev || 0,
       rsi10: ma35Info.rsi10 || 0,
@@ -2487,26 +2891,100 @@ async function main() {
   });
   const ranks = buildRanks(liveStocks);
   let added = 0;
+  const preopenStrategyMap = buildPreopenStrategyMap(key);
 
   updateScorecardTradeTracks(scorecardTracker, strategy5Tracker, liveStocks, timestamp, key);
 
   for (const stock of liveStocks) {
-    updateTrackedExtremes(cache, stock, timestamp, key);
     const previous = cache.previous[stock.code] || null;
-    const signals = [detectOpenBurstEntrySignal(stock), detectReboundEntrySignal(stock)].filter(Boolean);
+    const deltaVolume = Math.max(0, cleanNumber(stock.tradeVolume) - cleanNumber(previous?.tradeVolume));
+    const scanStock = { ...stock, deltaVolume };
+    updateTrackedExtremes(cache, scanStock, timestamp, key);
+    const previousRows = cache.records.filter((record) => record.date === key && record.code === scanStock.code);
+    const hadTriggeredStrong = previousRows.some((record) => (
+      isEntryState(record)
+      || (record.strategyIds || []).some((id) => ["open_rush", "early_attack", "intraday_continuation", "rebound_turn"].includes(id))
+    ));
+    const preopen = preopenStrategyMap.get(String(scanStock.code || ""));
+    const signals = [detectOpenBurstEntrySignal(scanStock), detectReboundEntrySignal(scanStock)].filter(Boolean);
     cache.previous[stock.code] = {
-      close: stock.close,
-      high: stock.high,
-      low: stock.low,
-      quoteTime: stock.quoteTime || stock.time || "",
-      tradeVolume: stock.tradeVolume,
-      percent: stock.percent,
+      close: scanStock.close,
+      high: scanStock.high,
+      low: scanStock.low,
+      quoteTime: scanStock.quoteTime || scanStock.time || "",
+      tradeVolume: scanStock.tradeVolume,
+      percent: scanStock.percent,
     };
+    const standaloneMeta = buildStrategy2ConditionMeta(scanStock, { timestamp, preopen, hadTriggeredStrong });
+    if (!signals.length && standaloneMeta.strategyTags.length && !previousRows.length) {
+      cache.records.push({
+        date: key,
+        timestamp,
+        entryAt: timestamp,
+        code: scanStock.code,
+        name: scanStock.name,
+        strategy: standaloneMeta.primaryStrategy || "策略2觀察",
+        stateId: "entry",
+        stateLabel: "進場區",
+        stateReason: standaloneMeta.strategyReasons[0] || "策略2七條件成立，列入 A 進場區。",
+        score: Math.min(96, Math.max(55, cleanNumber(preopen?.score) || Math.round(50 + Math.max(0, cleanNumber(scanStock.percent)) * 6))),
+        entryPrice: scanStock.close,
+        observedPrice: scanStock.close,
+        quoteTime: scanStock.quoteTime || scanStock.time || "",
+        quoteSource: scanStock.quoteSource || scanStock.realtimeFallback || scanStock.closeSource || "api/realtime",
+        sourceCoverage: Number(entrySourceCoverage.toFixed(4)),
+        sourceCoverageHealthy: entrySourceHealthy,
+        observedHigh: scanStock.close,
+        observedHighAt: timestamp,
+        observedLow: scanStock.close,
+        observedLowAt: timestamp,
+        dayHigh: scanStock.high || scanStock.close,
+        dayHighAt: timestamp,
+        dayLow: scanStock.low || scanStock.close,
+        dayLowAt: timestamp,
+        volume: scanStock.tradeVolume,
+        percent: scanStock.percent,
+        reason: standaloneMeta.strategyReasons.join("；"),
+        signalId: standaloneMeta.strategyIds[0] || "strategy2_watch",
+        deltaVolume,
+        ma35: scanStock.ma35,
+        ma35Prev: scanStock.ma35Prev,
+        aboveMa35: strategy2TechFlags(scanStock).aboveMa35,
+        ma35TrendUp: strategy2TechFlags(scanStock).ma35Rising,
+        ma35Source: scanStock.ma35Source,
+        ma35Symbol: scanStock.ma35Symbol,
+        ma35At: scanStock.ma35At,
+        macdDif: scanStock.macdDif,
+        macdSignal: scanStock.macdSignal,
+        macdHist: scanStock.macdHist,
+        macdUp: scanStock.macdUp,
+        kdK: scanStock.kdK,
+        kdD: scanStock.kdD,
+        kdUp: scanStock.kdUp,
+        rsi5: scanStock.rsi5,
+        rsi5Prev: scanStock.rsi5Prev,
+        rsi10: scanStock.rsi10,
+        rsi10Prev: scanStock.rsi10Prev,
+        rsiUp: scanStock.rsiUp,
+        intradayVolumeBurst: deltaVolume >= 50 || cleanNumber(scanStock.tradeVolume) >= 10000,
+        recoveredFromRealtimeFallback: Boolean(scanStock.recoveredFromRealtimeFallback),
+        ...standaloneMeta,
+      });
+      added += 1;
+    }
     signals.forEach((signal) => {
-      const state = classifyStrategy2State(stock, signal, { entrySourceHealthy, sourceCoverage: entrySourceCoverage });
+      const state = classifyStrategy2State(scanStock, signal, { entrySourceHealthy, sourceCoverage: entrySourceCoverage });
       if (!state) return;
+      const strategyMeta = buildStrategy2ConditionMeta(scanStock, {
+        timestamp,
+        preopen,
+        hadTriggeredStrong,
+        signalId: signal.id,
+        stateId: state.stateId,
+        strictEntry: isEntryState(state),
+      });
       const duplicate = cache.records.some((record) => (
-        record.code === stock.code &&
+        record.code === scanStock.code &&
         record.strategy === signal.label &&
         record.timestamp === timestamp
       ));
@@ -2515,8 +2993,8 @@ async function main() {
         date: key,
         timestamp,
         entryAt: timestamp,
-        code: stock.code,
-        name: stock.name,
+        code: scanStock.code,
+        name: scanStock.name,
         strategy: signal.label,
         stateId: state.stateId,
         stateLabel: state.stateLabel,
@@ -2528,21 +3006,21 @@ async function main() {
         entryHigh: signal.entryHigh,
         stopLoss: signal.stopLoss,
         chaseLimit: signal.chaseLimit,
-        observedPrice: stock.close,
-        quoteTime: stock.quoteTime || stock.time || "",
-        quoteSource: "api/realtime",
+        observedPrice: scanStock.close,
+        quoteTime: scanStock.quoteTime || scanStock.time || "",
+        quoteSource: scanStock.quoteSource || scanStock.realtimeFallback || scanStock.closeSource || "api/realtime",
         sourceCoverage: Number(entrySourceCoverage.toFixed(4)),
         sourceCoverageHealthy: entrySourceHealthy,
-        observedHigh: stock.close,
+        observedHigh: scanStock.close,
         observedHighAt: timestamp,
-        observedLow: stock.close,
+        observedLow: scanStock.close,
         observedLowAt: timestamp,
-        dayHigh: stock.high || stock.close,
+        dayHigh: scanStock.high || scanStock.close,
         dayHighAt: timestamp,
-        dayLow: stock.low || stock.close,
+        dayLow: scanStock.low || scanStock.close,
         dayLowAt: timestamp,
-        volume: stock.tradeVolume,
-        percent: stock.percent,
+        volume: scanStock.tradeVolume,
+        percent: scanStock.percent,
         reason: signal.reason,
         signalId: signal.id,
         deltaVolume: signal.deltaVolume,
@@ -2568,11 +3046,13 @@ async function main() {
         rsi10Prev: signal.rsi10Prev,
         rsiUp: signal.rsiUp,
         intradayVolumeBurst: signal.intradayVolumeBurst,
-        recoveredFromRealtimeFallback: Boolean(stock.recoveredFromRealtimeFallback),
+        recoveredFromRealtimeFallback: Boolean(scanStock.recoveredFromRealtimeFallback),
+        ...strategyMeta,
       });
       added += 1;
     });
-    if (appendTrackedSnapshot(cache, stock, timestamp, key, { entrySourceHealthy, sourceCoverage: entrySourceCoverage })) {
+    const snapshotMeta = buildStrategy2ConditionMeta(scanStock, { timestamp, preopen, hadTriggeredStrong });
+    if (appendTrackedSnapshot(cache, scanStock, timestamp, key, { entrySourceHealthy, sourceCoverage: entrySourceCoverage, strategyMeta: snapshotMeta })) {
       added += 1;
     }
   }

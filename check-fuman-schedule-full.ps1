@@ -19,7 +19,7 @@ function Get-FumanTaskDescription($TaskName) {
     "Fuman PC Sleep 2200" { return "Mini PC 晚上 22:00 睡眠" }
     "Fuman Open Buy Cache 0700" { return "策略1「明日開盤入」早上 07:00 快取" }
     "Fuman Open Buy Cache 1600" { return "策略1「明日開盤入」下午 16:00 快取" }
-    "Fuman Strategy2 Intraday Scan" { return "策略2 當沖雷達，08:58 啟動，09:00 後每 3 秒巡邏到 13:30" }
+    "Fuman Strategy2 Intraday Scan" { return "策略2 當沖雷達，08:45 啟動，先抓盤前期貨/試撮，09:00 後每 3 秒巡邏到 13:30" }
     "Fuman Strategy2 LINE Start 0900" { return "策略2 LINE 通知巡邏啟動" }
     "Fuman Strategy2 LINE Stop 1330" { return "策略2 LINE 通知停止" }
     "Fuman Strategy3 Cache 1230" { return "策略3 隔日沖，12:30 先跑主掃描" }
