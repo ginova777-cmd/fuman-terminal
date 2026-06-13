@@ -208,6 +208,8 @@ async function validateTerminalFreshnessGate(payloads, issues) {
   const gateCheckedAt = Date.parse(gate.checkedAt || "");
   const ageMinutes = Number.isFinite(gateCheckedAt) ? (Date.now() - gateCheckedAt) / 60000 : Infinity;
   assertFresh(gate.ok === true, "terminal freshness gate ok=false", issues);
+  assertFresh(Boolean(String(gate.gateId || "").trim()), "terminal freshness gate missing gateId", issues);
+  assertFresh(/^\d{14}-[0-9a-f]{7,12}$/i.test(String(gate.gateId || "")), `terminal freshness gate invalid gateId=${gate.gateId}`, issues);
   assertFresh(String(gate.version || "") === String(version.version || ""), `terminal freshness gate version mismatch gate=${gate.version} live=${version.version}`, issues);
   assertFresh(String(gate.verifier || "").includes("verify:data-freshness:live"), "terminal freshness gate verifier missing live data freshness", issues);
   assertFresh(ageMinutes <= 1440, `terminal freshness gate stale ageMinutes=${Math.round(ageMinutes)}`, issues);
@@ -265,3 +267,4 @@ main().catch((error) => {
   console.error(`[data-freshness] failed: ${error.message}`);
   process.exit(1);
 });
+

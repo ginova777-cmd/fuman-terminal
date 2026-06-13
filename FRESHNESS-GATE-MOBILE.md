@@ -53,6 +53,7 @@ data/live-freshness-ok.json
 這個檔案是 Fuman Terminal Freshness Gate 的通行證。它必須跟目前正式站版本、`data-manifest.json`、`cb-detect-latest.json` 對齊，至少包含：
 
 ```text
+gateId
 version
 checkedAt
 verifier = npm run verify:data-freshness:live
@@ -61,7 +62,7 @@ cbCount
 manifestCbCount
 ```
 
-如果 `live-freshness-ok.json` 不存在、版本不一致、CB rows 和 manifest count 不一致，終端資料不能宣稱是最新。
+如果 `live-freshness-ok.json` 不存在、`gateId` 不是這次發布產生的唯一證明、版本不一致、CB rows 和 manifest count 不一致，終端資料不能宣稱是最新。
 
 ## 每個 Codex 接手先做
 
@@ -192,3 +193,5 @@ Fuman Terminal Freshness Gate
 ## 一句話
 
 我們在做「資料發布流程的治理與防呆」，確保終端只顯示通過即時驗證的最新資料。
+
+

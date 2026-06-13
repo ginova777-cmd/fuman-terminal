@@ -180,6 +180,8 @@ for (const marker of [
   "live-freshness-ok.json",
   "Publish-TerminalFreshnessGate",
   "Wait-TerminalFreshnessGateVisible",
+  "gateId",
+  "Terminal freshness gate visible but not current",
   "FUMAN_SKIP_TERMINAL_GATE_ARTIFACT",
 ]) {
   if (!gate.includes(marker)) issues.push(`run-live-freshness-gate.ps1 missing ${marker}`);
@@ -190,6 +192,8 @@ for (const marker of [
   "validateTerminalFreshnessGate",
   "data/live-freshness-ok.json",
   "terminal freshness gate version mismatch",
+  "terminal freshness gate missing gateId",
+  "terminal freshness gate invalid gateId",
   "terminal freshness gate CB rows not aligned with manifest",
   "FUMAN_SKIP_TERMINAL_GATE_ARTIFACT",
 ]) {
@@ -303,6 +307,7 @@ if (!fs.existsSync(path.join(ROOT, "FRESHNESS-GATE-MOBILE.md"))) {
     "目前先不要修改 Supabase",
     "Fuman Terminal Freshness Gate",
     "live-freshness-ok.json",
+    "gateId",
     "manifestCbCount",
     "STRATEGY2-FRESHNESS-GOVERNANCE.md",
     "策略2 A進場區",
@@ -422,3 +427,4 @@ if (issues.length) {
 }
 
 console.log("[publish-gate] ok");
+

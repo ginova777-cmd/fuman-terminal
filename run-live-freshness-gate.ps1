@@ -160,9 +160,13 @@ function Publish-TerminalFreshnessGate($mode, $rawResults) {
   $manifestPayload = Read-GateJson $manifestPath
   $cbPayload = Read-GateJson $cbPath
   $head = & $gitExe -C $publishRoot log -1 --oneline --decorate
+  $headSha = (& $gitExe -C $publishRoot rev-parse --short=12 HEAD).Trim()
+  if (-not $headSha) { throw "Cannot resolve publish HEAD for terminal freshness gate" }
+  $gateId = "{0}-{1}" -f (Get-Date -Format "yyyyMMddHHmmss"), $headSha
   $statusPath = Join-Path $publishRoot "data\live-freshness-ok.json"
   $status = [ordered]@{
     ok = $true
+    gateId = $gateId
     checkedAt = (Get-Date).ToString("o")
     version = [string]$versionPayload.version
     publishHead = [string]$head
@@ -177,7 +181,7 @@ function Publish-TerminalFreshnessGate($mode, $rawResults) {
   }
   $status | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $statusPath -Encoding utf8
 
-  Write-GateLog "Publishing terminal freshness gate artifact version=$($status.version) cbCount=$($status.cbCount) manifestCbCount=$($status.manifestCbCount)"
+  Write-GateLog "Publishing terminal freshness gate artifact gateId=$($status.gateId) version=$($status.version) cbCount=$($status.cbCount) manifestCbCount=$($status.manifestCbCount)"
   & $gitExe -C $publishRoot add -f "data/live-freshness-ok.json"
   if ($LASTEXITCODE -ne 0) { throw "Stage terminal freshness gate artifact failed" }
   & $gitExe -C $publishRoot diff --cached --quiet -- "data/live-freshness-ok.json"
@@ -194,25 +198,38 @@ function Publish-TerminalFreshnessGate($mode, $rawResults) {
     New-Item -ItemType Directory -Force -Path (Join-Path $terminalRoot "data") | Out-Null
     Copy-Item -LiteralPath $statusPath -Destination (Join-Path $terminalRoot "data\live-freshness-ok.json") -Force
   }
+
+  return [pscustomobject]$status
 }
 
-function Wait-TerminalFreshnessGateVisible {
-  $url = "https://fuman-terminal.vercel.app/data/live-freshness-ok.json?v=$(Get-Date -Format yyyyMMddHHmmss)"
-  for ($attempt = 1; $attempt -le 6; $attempt++) {
+function Wait-TerminalFreshnessGateVisible($expectedStatus) {
+  if (-not $expectedStatus -or -not $expectedStatus.gateId) {
+    throw "Terminal freshness gate visibility check missing expected gateId"
+  }
+  $url = "https://fuman-terminal.vercel.app/data/live-freshness-ok.json?v=$($expectedStatus.gateId)"
+  for ($attempt = 1; $attempt -le 12; $attempt++) {
     try {
-      Write-GateLog "Checking terminal freshness gate visibility attempt $attempt/6"
+      Write-GateLog "Checking terminal freshness gate visibility attempt $attempt/12 gateId=$($expectedStatus.gateId)"
       $response = Invoke-WebRequest -Uri $url -UseBasicParsing -TimeoutSec 30
       $payload = $response.Content | ConvertFrom-Json -ErrorAction Stop
-      if ($payload.ok -eq $true -and $payload.verifier -match "verify:data-freshness:live") {
-        Write-GateLog "Terminal freshness gate visible version=$($payload.version) cbCount=$($payload.cbCount)"
+      $isCurrentGate = $payload.ok -eq $true -and
+        [string]$payload.gateId -eq [string]$expectedStatus.gateId -and
+        [string]$payload.version -eq [string]$expectedStatus.version -and
+        [int]$payload.cbCount -eq [int]$expectedStatus.cbCount -and
+        [int]$payload.manifestCbCount -eq [int]$expectedStatus.manifestCbCount -and
+        [int]$payload.manifestCount -eq [int]$expectedStatus.manifestCount -and
+        [string]$payload.verifier -match "verify:data-freshness:live"
+      if ($isCurrentGate) {
+        Write-GateLog "Terminal freshness gate visible gateId=$($payload.gateId) version=$($payload.version) cbCount=$($payload.cbCount) manifestCbCount=$($payload.manifestCbCount)"
         return
       }
+      Write-GateLog "Terminal freshness gate visible but not current gateId=$($payload.gateId) expected=$($expectedStatus.gateId) cbCount=$($payload.cbCount)/$($expectedStatus.cbCount) manifestCbCount=$($payload.manifestCbCount)/$($expectedStatus.manifestCbCount)"
     } catch {
       Write-GateLog "Terminal freshness gate not visible yet: $($_.Exception.Message)"
     }
     Start-Sleep -Seconds 20
   }
-  throw "Terminal freshness gate artifact was not visible on live site after retries"
+  throw "Terminal freshness gate artifact was not visible on live site after retries gateId=$($expectedStatus.gateId)"
 }
 
 function Invoke-RepoSyncPreflight {
@@ -391,8 +408,8 @@ try {
   Invoke-NpmAt $publishRoot "verify:data-freshness"
   Invoke-LiveDataFreshnessVerify -SkipTerminalGate
   Invoke-NpmAt $publishRoot "verify:live-version"
-  Publish-TerminalFreshnessGate $gateMode @($rawRefreshResults.ToArray())
-  Wait-TerminalFreshnessGateVisible
+  $gateStatus = Publish-TerminalFreshnessGate $gateMode @($rawRefreshResults.ToArray())
+  Wait-TerminalFreshnessGateVisible $gateStatus
   Invoke-LiveDataFreshnessVerify
 
   if (-not $SkipTerminalCopy) {
@@ -412,3 +429,4 @@ try {
 } finally {
   Remove-Item -LiteralPath $lockFile -Force -ErrorAction SilentlyContinue
 }
+
