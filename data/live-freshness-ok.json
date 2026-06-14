@@ -1,15 +1,48 @@
 {
   "ok": true,
-  "gateId": "20260614122121-6106e0985f65",
-  "checkedAt": "2026-06-14T04:21:21.909Z",
-  "version": "chip-flow-hardening-20260611-35",
-  "publishHead": "6106e098 (HEAD -> main, origin/main, origin/HEAD) Bump terminal version to chip-flow-hardening-20260611-35",
+  "gateId": "20260614193131-9159ecf27b23",
+  "checkedAt": "2026-06-14T19:31:31.1859586+08:00",
+  "version": "strategy5-pane-rerender-20260614",
+  "publishHead": "9159ecf (HEAD -> main, origin/main, origin/HEAD) Update scheduled cache 2026-06-14 19:31",
   "verifier": "npm run verify:data-freshness:live",
-  "log": "manual gate artifact refresh after CB UI deploy",
-  "mode": "manual-artifact-refresh",
+  "log": "C:\\fuman-runtime\\logs\\live-freshness-gate-20260614-193003.log",
+  "mode": "fast",
   "manifestCount": 133,
   "manifestCbCount": 10,
   "cbCount": 10,
-  "cbUpdatedAt": "2026-06-13T15:18:38.991Z",
-  "rawRefresh": []
+  "cbUpdatedAt": "06/13/2026 15:18:38",
+  "rawRefresh": [
+    {
+      "label": "realtime radar raw refresh",
+      "ok": true,
+      "exitCode": 0,
+      "checkedAt": "2026-06-14T19:30:05.0035291+08:00",
+      "warningCount": 0,
+      "warnings": []
+    },
+    {
+      "label": "strategy2 intraday raw refresh",
+      "ok": true,
+      "exitCode": 0,
+      "checkedAt": "2026-06-14T19:30:05.1493069+08:00",
+      "warningCount": 0,
+      "warnings": []
+    },
+    {
+      "label": "institution raw refresh",
+      "ok": false,
+      "exitCode": 2,
+      "checkedAt": "2026-06-14T19:30:35.5332189+08:00",
+      "warningCount": 0,
+      "warnings": []
+    },
+    {
+      "label": "warrant flow raw refresh",
+      "ok": true,
+      "exitCode": 0,
+      "checkedAt": "2026-06-14T19:31:00.0287798+08:00",
+      "warningCount": 0,
+      "warnings": []
+    }
+  ]
 }
