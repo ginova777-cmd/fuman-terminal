@@ -20,6 +20,7 @@ const KEY_FILES = [
   "terminal-warrant-flow.js",
   "terminal-watchlist-module.js",
   "terminal-watchlist.css",
+  "lib/supabase-public-slot.js",
   "terminal-strategy-config.js",
   "version.json",
   "package.json",

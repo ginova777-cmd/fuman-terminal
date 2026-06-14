@@ -21,6 +21,7 @@ const FILES = [
   "terminal-warrant-flow.js",
   "terminal-watchlist-module.js",
   "terminal-watchlist.css",
+  "lib/supabase-public-slot.js",
   "fuman-sw.js",
   "api/version.js",
   "terminal-strategy-config.js",
