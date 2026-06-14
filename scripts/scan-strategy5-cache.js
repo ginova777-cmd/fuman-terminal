@@ -7,6 +7,8 @@ const { ROOT, dataPath } = require("./runtime-paths");
 const OUT_FILE = dataPath("strategy5-latest.json");
 const BACKUP_FILE = dataPath("strategy5-backup.json");
 const INSTITUTION_FILE = dataPath("institution-latest.json");
+const CB_DETECT_FILE = dataPath("cb-detect-latest.json");
+const WARRANT_FLOW_FILE = dataPath("warrant-flow-latest.json");
 const STRATEGY4_FILE = dataPath("strategy4-latest.json");
 const STRATEGY4_BACKUP_FILE = dataPath("strategy4-backup.json");
 const STOCK_URL = process.env.STOCK_UNIVERSE_URL || "https://fuman-terminal.vercel.app/api/stocks";
@@ -278,6 +280,87 @@ function readStrategy4Candidates() {
     if (matches.length) return matches;
   }
   return [];
+}
+
+function pickRows(payload, keys = []) {
+  for (const key of keys) {
+    if (Array.isArray(payload?.[key])) return payload[key];
+  }
+  if (Array.isArray(payload)) return payload;
+  return [];
+}
+
+function readChipKConfluenceSources(institutionData = {}) {
+  const cbPayload = readJson(CB_DETECT_FILE, {});
+  const warrantPayload = readJson(WARRANT_FLOW_FILE, {});
+  const cbRows = pickRows(cbPayload, ["matches", "rows", "data", "items"]);
+  const warrantRows = pickRows(warrantPayload, ["matches", "rows", "data", "items"]);
+  const cbByCode = new Map();
+  const warrantByCode = new Map();
+  const instByCode = new Map();
+
+  Object.entries(institutionData || {}).forEach(([rawCode, inst]) => {
+    const code = normalizeCode(rawCode);
+    if (!/^\d{4}$/.test(code)) return;
+    const foreign = cleanNumber(inst?.foreign);
+    const trust = cleanNumber(inst?.trust);
+    const dealer = cleanNumber(inst?.dealer);
+    const total = cleanNumber(inst?.total || foreign + trust + dealer);
+    if (total > 0 || foreign > 0 || trust > 0) instByCode.set(code, { foreign, trust, dealer, total });
+  });
+
+  cbRows.forEach((row) => {
+    const code = normalizeCode(row?.underlyingCode || row?.stockCode || row?.code || row?.targetCode || row?.symbol);
+    if (!/^\d{4}$/.test(code)) return;
+    const score = cleanNumber(row?.score || row?.cbScore || row?.strength || row?.rankScore);
+    const previous = cbByCode.get(code);
+    if (!previous || score >= cleanNumber(previous.score)) cbByCode.set(code, { ...row, score });
+  });
+
+  warrantRows.forEach((row) => {
+    const code = normalizeCode(row?.underlyingCode || row?.stockCode || row?.code || row?.targetCode || row?.symbol);
+    if (!/^\d{4}$/.test(code)) return;
+    const score = cleanNumber(row?.score || row?.flowScore || row?.strength || row?.rankScore);
+    const previous = warrantByCode.get(code);
+    if (!previous || score >= cleanNumber(previous.score)) warrantByCode.set(code, { ...row, score });
+  });
+
+  return { cbByCode, warrantByCode, instByCode };
+}
+
+function buildChipKConfluenceMatch({ stock, inst, confluenceSources, valueRank, volumeRank }) {
+  const code = stock.code;
+  const cb = confluenceSources.cbByCode.get(code);
+  const warrant = confluenceSources.warrantByCode.get(code);
+  const sourceInst = confluenceSources.instByCode.get(code) || inst;
+  if (!cb || !warrant || !sourceInst) return null;
+
+  const pct = cleanNumber(stock.percent);
+  const total = cleanNumber(sourceInst.total);
+  const foreign = cleanNumber(sourceInst.foreign);
+  const trust = cleanNumber(sourceInst.trust);
+  if (total <= 0 && foreign <= 0 && trust <= 0) return null;
+
+  const cbScore = cleanNumber(cb.score);
+  const warrantScore = cleanNumber(warrant.score);
+  const score = clamp(Math.round(
+    78 +
+    Math.min(Math.max(pct, 0) * 2.2, 10) +
+    Math.min(valueRank * 0.06, 6) +
+    Math.min(volumeRank * 0.04, 4) +
+    Math.min(cbScore * 0.05, 4) +
+    Math.min(warrantScore * 0.05, 4)
+  ), 80, 100);
+  const reason = `同時命中買賣超、CB可轉債與權證走向；法人合計 ${formatInstitution(total)}，外資 ${formatInstitution(foreign)}、投信 ${formatInstitution(trust)}。`;
+  return {
+    id: "chip_k_confluence",
+    short: "籌碼老K",
+    icon: "老K",
+    score,
+    reason,
+    cbScore,
+    warrantScore,
+  };
 }
 
 function buildStrategy5Match({ stock, inst, valueRank, volumeRank }) {
@@ -584,6 +667,7 @@ function buildBollingerKdjMatch({ stock, valueRank, volumeRank, rows }) {
 async function buildMatches(stocks, institutionData, issuedSharesMap = new Map(), volumeAverageMap = new Map()) {
   const valueRanks = rankMap(stocks, "value");
   const volumeRanks = rankMap(stocks, "tradeVolume");
+  const confluenceSources = readChipKConfluenceSources(institutionData);
   const baseRows = stocks.map((stock) => {
     const inst = institutionData[stock.code] || {};
     const valueRank = valueRanks.get(stock.code) || 0;
@@ -595,6 +679,7 @@ async function buildMatches(stocks, institutionData, issuedSharesMap = new Map()
     const total = cleanNumber(inst.total || (foreign + trust + dealer));
     const normalizedInst = { foreign, trust, dealer, total };
     const matches = [
+      buildChipKConfluenceMatch({ stock, inst: normalizedInst, confluenceSources, valueRank, volumeRank }),
       buildStrategy5Match({ stock, inst: normalizedInst, valueRank, volumeRank }),
       buildVolumeTurnoverMatch({ stock, issuedSharesMap, volumeAverageMap }),
     ].filter(Boolean);

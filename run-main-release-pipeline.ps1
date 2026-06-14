@@ -8,6 +8,7 @@ $ErrorActionPreference = "Stop"
 $PSNativeCommandUseErrorActionPreference = $false
 
 $root = $PSScriptRoot
+$terminalRoot = if ($env:FUMAN_MAIN_DEPLOY_REPO) { $env:FUMAN_MAIN_DEPLOY_REPO } else { "C:\fuman-terminal" }
 $gitExe = "C:\Program Files\Git\cmd\git.exe"
 $nodeExe = "C:\Program Files\nodejs\node.exe"
 $versionFiles = @(
@@ -50,6 +51,15 @@ function Invoke-ReleaseCheck($label, [scriptblock]$command) {
 
 function Invoke-Npm($scriptName) {
   Invoke-ReleaseCommand "npm run $scriptName" { npm run $scriptName }
+}
+
+function Invoke-NpmAt($workingRoot, $scriptName) {
+  Push-Location $workingRoot
+  try {
+    Invoke-ReleaseCommand "npm run $scriptName ($workingRoot)" { npm run $scriptName }
+  } finally {
+    Pop-Location
+  }
 }
 
 function Get-GitLines($arguments) {
@@ -108,7 +118,7 @@ Invoke-Npm "verify:data-freshness"
 Invoke-Npm "verify:source-sync"
 
 if (-not $SkipDeploy) {
-  Invoke-Npm "deploy"
+  Invoke-NpmAt $terminalRoot "deploy"
 } else {
   Write-ReleaseLog "SkipDeploy selected; deploy command was not run."
 }
