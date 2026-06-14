@@ -162,7 +162,8 @@ function Test-CriticalDataReleaseNeeded($changedFiles) {
     "data\warrant-flow-mobile-top.json",
     "data\warrant-flow-backup.json",
     "data\strategy5-latest.json",
-    "data\strategy5-backup.json"
+    "data\strategy5-backup.json",
+    "data\cb-detect-latest.json"
   )
   $changed = @($changedFiles | ForEach-Object { [string]$_ } | Where-Object { $_ })
   $matches = @($changed | Where-Object { $criticalReleaseFiles -contains $_ })
@@ -894,7 +895,8 @@ try {
       "data\open-buy-latest.json",
       "data\strategy3-latest.json",
       "data\strategy4-latest.json",
-      "data\strategy5-latest.json"
+      "data\strategy5-latest.json",
+      "data\cb-detect-latest.json"
     )
 
     $dataFiles = @(
