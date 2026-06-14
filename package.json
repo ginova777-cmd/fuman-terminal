@@ -40,6 +40,9 @@
     "freshness:gate:fast": "pwsh.exe -NoProfile -ExecutionPolicy Bypass -File run-live-freshness-gate.ps1 -Fast",
     "freshness:local-repair": "pwsh.exe -NoProfile -ExecutionPolicy Bypass -File run-local-freshness-repair.ps1",
     "verify:publish-gate": "node scripts/verify-publish-gate.js"
+    ,"sync:tdcc": "node --use-system-ca scripts/sync-tdcc-shareholding-cache.js"
+    ,"sync:tdcc:backfill": "node --use-system-ca scripts/sync-tdcc-shareholding-cache.js --backfill"
+    ,"scan:tdcc-breakout": "node --use-system-ca scripts/generate-institution-tdcc-breakout.js"
   },
   "engines": {
     "node": "20.x"

@@ -5200,6 +5200,8 @@ body.fuman-light-theme .data-freshness-bar.is-stale span {
   .chip-table td:nth-child(13)::before { content: "同買"; }
   .chip-table td:nth-child(14)::before { content: "法人合計(張)"; }
 
+  #chip-trade-view .chip-table td[data-label]::before { content: attr(data-label); }
+
   .warrant-flow-panel .swing-table td:nth-child(1)::before { content: "排名"; }
   .warrant-flow-panel .swing-table td:nth-child(2)::before { content: "代號"; }
   .warrant-flow-panel .swing-table td:nth-child(3)::before { content: "標的"; }

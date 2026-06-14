@@ -1,0 +1,223 @@
+const fs = require("fs");
+const path = require("path");
+
+const { ROOT, dataPath } = require("./runtime-paths");
+
+const SOURCE_NAME = process.env.FUMAN_TDCC_SOURCE_NAME || "fuman_tdcc_shareholding_1000";
+const HISTORY_FILE = dataPath("tdcc-shareholding-1000-history.json");
+const INSTITUTION_FILE = dataPath("institution-latest.json");
+const OUT_FILE = dataPath("institution-tdcc-breakout.json");
+const TOP_FILE = dataPath("institution-tdcc-breakout-top.json");
+const CSV_FILE = dataPath("institution-tdcc-breakout.csv");
+
+function arg(name, fallback = "") {
+  const prefix = `--${name}=`;
+  return process.argv.find((item) => item.startsWith(prefix))?.slice(prefix.length) || fallback;
+}
+
+function readText(file) {
+  try { return fs.readFileSync(file, "utf8").trim(); } catch { return ""; }
+}
+
+function readSecret(name) {
+  return readText(path.join(ROOT, "secrets", name))
+    || readText(path.join(process.env.FUMAN_RUNTIME_DIR || "C:/fuman-runtime", "secrets", name));
+}
+
+const SUPABASE_URL = (
+  process.env.SUPABASE_URL
+  || process.env.FUMAN_SUPABASE_URL
+  || readSecret("supabase-url.txt")
+  || ""
+).replace(/\/+$/, "");
+const SUPABASE_READ_KEY = process.env.SUPABASE_ANON_KEY
+  || process.env.FUMAN_SUPABASE_ANON_KEY
+  || readSecret("supabase-anon-key.txt")
+  || process.env.SUPABASE_SERVICE_ROLE_KEY
+  || process.env.SUPABASE_SERVICE_KEY
+  || readSecret("supabase-service-role-key.txt");
+
+function readJson(file, fallback) {
+  try { return JSON.parse(fs.readFileSync(file, "utf8")); } catch { return fallback; }
+}
+
+function writeJson(file, payload) {
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.writeFileSync(file, `${JSON.stringify(payload, null, 2)}\n`);
+}
+
+function normalizeCode(value) {
+  const code = String(value || "").trim();
+  return /^\d{4}$/.test(code) ? code : "";
+}
+
+function cleanNumber(value) {
+  return Number(String(value ?? "").replace(/[,+%]/g, "").trim()) || 0;
+}
+
+function ratioRow(week, code) {
+  const row = week?.byCode?.[code];
+  if (!row) return null;
+  const ratio = cleanNumber(row.ratio1000Up ?? row.ratio);
+  return Number.isFinite(ratio) ? ratio : null;
+}
+
+function institutionRows(payload) {
+  if (Array.isArray(payload?.items)) return payload.items;
+  return Object.values(payload?.data || {});
+}
+
+function csvCell(value) {
+  const text = String(value ?? "");
+  return /[",\n]/.test(text) ? `"${text.replace(/"/g, "\"\"")}"` : text;
+}
+
+function writeCsv(file, rows) {
+  const headers = [
+    "code", "name", "foreignStreak", "foreignLots",
+    "ratioDate1", "ratio1", "ratioDate2", "ratio2", "ratioDate3", "ratio3",
+    "ratioIncrease", "close", "changePct", "breakoutScore", "entryType", "heatWarning",
+  ];
+  const lines = [headers.join(",")];
+  for (const row of rows) {
+    lines.push(headers.map((key) => csvCell(row[key])).join(","));
+  }
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.writeFileSync(file, `${lines.join("\n")}\n`);
+}
+
+async function loadTdccFromSupabase() {
+  if (!SUPABASE_URL || !SUPABASE_READ_KEY) return null;
+  const url = `${SUPABASE_URL}/rest/v1/source_status?source_name=eq.${encodeURIComponent(SOURCE_NAME)}&select=payload,updated_at&limit=1`;
+  const response = await fetch(url, {
+    headers: {
+      apikey: SUPABASE_READ_KEY,
+      Authorization: `Bearer ${SUPABASE_READ_KEY}`,
+      Accept: "application/json",
+    },
+  });
+  if (!response.ok) {
+    const text = await response.text().catch(() => "");
+    throw new Error(`Supabase TDCC readback HTTP ${response.status} ${text.slice(0, 180)}`.trim());
+  }
+  const rows = await response.json();
+  const payload = Array.isArray(rows) ? rows[0]?.payload : null;
+  return payload?.weeks ? { ...payload, source: "supabase:source_status" } : null;
+}
+
+async function loadTdccHistory() {
+  if (process.env.FUMAN_TDCC_FORCE_LOCAL !== "1") {
+    try {
+      const remote = await loadTdccFromSupabase();
+      if (remote) return remote;
+    } catch (error) {
+      console.warn(`TDCC Supabase read skipped: ${error.message}`);
+    }
+  }
+  const local = readJson(HISTORY_FILE, null);
+  if (local?.weeks) return { ...local, source: local.source || "local-json" };
+  throw new Error(`missing TDCC cache: ${HISTORY_FILE}`);
+}
+
+function latestDates(history, count) {
+  const explicit = arg("dates", "");
+  if (explicit) {
+    return explicit.split(",").map((item) => item.replace(/\D/g, "").slice(0, 8)).filter((item) => /^\d{8}$/.test(item));
+  }
+  return Object.keys(history.weeks || {}).sort().slice(-count);
+}
+
+function isIncreasing(values, strict) {
+  for (let i = 1; i < values.length; i += 1) {
+    if (strict ? values[i] <= values[i - 1] : values[i] < values[i - 1]) return false;
+  }
+  return true;
+}
+
+async function main() {
+  const institution = readJson(INSTITUTION_FILE, {});
+  const tdcc = await loadTdccHistory();
+  const weeks = Number(arg("weeks", "3"));
+  const dates = latestDates(tdcc, weeks);
+  const strict = process.env.FUMAN_TDCC_STRICT_INCREASE !== "0";
+  if (dates.length < weeks) throw new Error(`TDCC weeks insufficient: need=${weeks} got=${dates.join(",") || "--"}`);
+
+  const matches = [];
+  for (const row of institutionRows(institution)) {
+    const code = normalizeCode(row.code);
+    if (!code) continue;
+    const foreignStreak = Number(row.foreignStreak || 0);
+    const foreign = cleanNumber(row.foreign);
+    if (foreignStreak < 3 || foreign <= 0) continue;
+    const ratios = dates.map((date) => ratioRow(tdcc.weeks[date], code));
+    if (ratios.some((value) => value == null)) continue;
+    if (!isIncreasing(ratios, strict)) continue;
+    const foreignLots = Math.round(foreign / 1000);
+    matches.push({
+      code,
+      name: row.name || code,
+      foreignStreak,
+      foreignLots,
+      ratioDate1: dates[0],
+      ratio1: ratios[0],
+      ratioDate2: dates[1],
+      ratio2: ratios[1],
+      ratioDate3: dates[2],
+      ratio3: ratios[2],
+      ratioIncrease: Number((ratios.at(-1) - ratios[0]).toFixed(2)),
+      close: cleanNumber(row.close),
+      changePct: cleanNumber(row.percent ?? row.changePct),
+      breakoutScore: cleanNumber(row.breakoutScore),
+      entryType: row.entryType || "",
+      heatWarning: row.heatWarning || "",
+      volumeRatio5: cleanNumber(row.volumeRatio5),
+      institutionBuyVolumePct: cleanNumber(row.institutionBuyVolumePct),
+      fiveDayPctSum: cleanNumber(row.fiveDayPctSum),
+      distanceMa20Pct: cleanNumber(row.distanceMa20Pct),
+    });
+  }
+
+  matches.sort((a, b) => (
+    b.ratioIncrease - a.ratioIncrease
+    || b.breakoutScore - a.breakoutScore
+    || b.foreignLots - a.foreignLots
+  ));
+
+  const payload = {
+    ok: true,
+    source: "institution+tdcc-1000-cache",
+    tdccSource: tdcc.source || "unknown",
+    generatedAt: new Date().toISOString(),
+    institutionDate: institution.usedDate || "",
+    dates,
+    criteria: {
+      foreignStreakAtLeast: 3,
+      latestForeignBuyPositive: true,
+      tdccLevel: "15 / 1,000,001 shares and above",
+      strictIncreasing: strict,
+    },
+    count: matches.length,
+    matches,
+  };
+  writeJson(OUT_FILE, payload);
+  writeJson(TOP_FILE, { ...payload, matches: matches.slice(0, Number(arg("top", "80"))) });
+  writeCsv(CSV_FILE, matches);
+  console.log(`institution TDCC breakout generated: matches=${matches.length} dates=${dates.join(",")} tdccSource=${payload.tdccSource}`);
+  console.table(matches.slice(0, 20).map((item) => ({
+    code: item.code,
+    name: item.name,
+    foreignStreak: item.foreignStreak,
+    foreignLots: item.foreignLots,
+    ratioIncrease: item.ratioIncrease,
+    ratio1: item.ratio1,
+    ratio2: item.ratio2,
+    ratio3: item.ratio3,
+    close: item.close,
+    changePct: item.changePct,
+  })));
+}
+
+main().catch((error) => {
+  console.error(error);
+  process.exit(1);
+});

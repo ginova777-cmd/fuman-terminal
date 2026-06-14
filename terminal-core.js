@@ -1,5 +1,5 @@
 (function () {
-  const version = "chip-flow-hardening-20260611-36";
+  const version = "chip-flow-hardening-20260611-37";
   window.FUMAN_TERMINAL_VERSION = version;
   window.FUMAN_TERMINAL_BOOT = {
     version,

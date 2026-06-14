@@ -54,6 +54,7 @@
     institutionBackup: "/data/institution-backup.json",
     institutionSummary: "/data/institution-summary.json",
     institutionMobileTop: "/data/institution-mobile-top.json",
+    institutionTdccBreakout: "/data/institution-tdcc-breakout-top.json",
     warrantFlowCache: "/data/warrant-flow-latest.json",
     warrantFlowSlim: "/data/warrant-flow-slim.json",
     warrantFlowSingleSignal: "/data/warrant-single-signal-top.json",
