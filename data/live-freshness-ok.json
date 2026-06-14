@@ -1,22 +1,28 @@
 {
   "ok": true,
-  "gateId": "20260614193131-9159ecf27b23",
-  "checkedAt": "2026-06-14T19:31:31.1859586+08:00",
-  "version": "strategy5-pane-rerender-20260614",
-  "publishHead": "9159ecf (HEAD -> main, origin/main, origin/HEAD) Update scheduled cache 2026-06-14 19:31",
+  "gateId": "20260614203708-c43aacf742d2",
+  "checkedAt": "2026-06-14T20:37:08.5674989+08:00",
+  "version": "strategy5-data-resync-20260615",
+  "publishHead": "c43aacf (HEAD -> main, origin/main, origin/HEAD) Add strategy5 freshness governance gate",
   "verifier": "npm run verify:data-freshness:live",
-  "log": "C:\\fuman-runtime\\logs\\live-freshness-gate-20260614-193003.log",
+  "log": "C:\\fuman-runtime\\logs\\live-freshness-gate-20260614-203500.log",
   "mode": "fast",
   "manifestCount": 133,
   "manifestCbCount": 10,
   "cbCount": 10,
   "cbUpdatedAt": "06/13/2026 15:18:38",
+  "strategy5Count": 74,
+  "strategy5UpdatedAt": "06/14/2026 12:15:40",
+  "strategy5SourceDate": "20260612",
+  "strategy5ChipKCount": 22,
+  "strategy5ForeignTrustCount": 3,
+  "strategy5MultiCount": 3,
   "rawRefresh": [
     {
       "label": "realtime radar raw refresh",
       "ok": true,
       "exitCode": 0,
-      "checkedAt": "2026-06-14T19:30:05.0035291+08:00",
+      "checkedAt": "2026-06-14T20:35:02.2345363+08:00",
       "warningCount": 0,
       "warnings": []
     },
@@ -24,7 +30,7 @@
       "label": "strategy2 intraday raw refresh",
       "ok": true,
       "exitCode": 0,
-      "checkedAt": "2026-06-14T19:30:05.1493069+08:00",
+      "checkedAt": "2026-06-14T20:35:02.3972583+08:00",
       "warningCount": 0,
       "warnings": []
     },
@@ -32,15 +38,17 @@
       "label": "institution raw refresh",
       "ok": false,
       "exitCode": 2,
-      "checkedAt": "2026-06-14T19:30:35.5332189+08:00",
-      "warningCount": 0,
-      "warnings": []
+      "checkedAt": "2026-06-14T20:35:32.2582232+08:00",
+      "warningCount": 1,
+      "warnings": [
+        "institution metric warning: tpex 5-day metrics failed: 115/06/12 :: terminated"
+      ]
     },
     {
       "label": "warrant flow raw refresh",
       "ok": true,
       "exitCode": 0,
-      "checkedAt": "2026-06-14T19:31:00.0287798+08:00",
+      "checkedAt": "2026-06-14T20:36:09.0259786+08:00",
       "warningCount": 0,
       "warnings": []
     }
