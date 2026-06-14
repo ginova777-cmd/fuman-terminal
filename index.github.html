@@ -6,7 +6,7 @@
     <title>輔滿 股票終端</title>
     <link rel="icon" href="/favicon.ico" sizes="any">
     <link rel="preload" as="image" href="/assets/logo.webp" fetchpriority="high">
-    <link rel="stylesheet" href="styles.css?v=strategy5-oldk-restore-20260615">
+    <link rel="stylesheet" href="styles.css?v=strategy5-oldk-restore-20260616">
   </head>
   <body class="auth-pending">
     <section class="auth-gate" id="auth-gate" aria-label="會員登入">
@@ -246,10 +246,7 @@
 
           <section class="chip-tool">
             <div class="chip-tool-row">
-              <span>個股資訊:</span>
-              <div class="chip-tabs" aria-label="買賣超資料模式">
-                <button class="active" type="button" data-chip-mode="after">盤後</button>
-              </div>
+              <span>排序:</span>
               <select id="chip-sort">
                 <option value="trustForeign">外資+投信買超</option>
                 <option value="trust">投信買超</option>
@@ -261,10 +258,8 @@
             <div class="chip-tool-row">
               <span>項目切換:</span>
               <button class="chip-pill active" type="button" data-chip-filter="joint">外資+投信連買</button>
+              <button class="chip-pill" type="button" data-chip-filter="tdcc1000">外資連3買 + 1000張連3週增</button>
               <button class="chip-pill" type="button" data-chip-filter="trust">投信連續買超</button>
-              <button class="chip-pill" type="button" data-chip-filter="foreign">外資買超</button>
-              <button class="chip-pill" type="button" data-chip-filter="legal">法人同買</button>
-              <button class="chip-pill mobile-full-load" type="button" data-mobile-full-load="chip">完整列表</button>
             </div>
           </section>
 
@@ -552,7 +547,7 @@
       </main>
     </div>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="terminal-core.js?v=strategy5-oldk-restore-20260615"></script>
+    <script src="terminal-core.js?v=strategy5-oldk-restore-20260616"></script>
   </body>
 </html>
 
