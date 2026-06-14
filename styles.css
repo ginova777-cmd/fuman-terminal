@@ -7687,3 +7687,33 @@ body.fuman-light-theme #cb-detect-view .page-header span.refresh-line {
     text-shadow: none !important;
   }
 }
+
+
+.cb-detect-section-title {
+  margin: 4px 0 2px;
+  color: #ffb077;
+  font-size: 13px;
+  font-weight: 900;
+  letter-spacing: 0;
+}
+
+.cb-detect-section-title.muted {
+  color: #9ba8c4;
+  border-top: 1px solid rgba(134, 151, 190, 0.18);
+  padding-top: 14px;
+  margin-top: 10px;
+}
+
+.cb-detect-card.observation {
+  counter-increment: none;
+  padding-left: 66px;
+  opacity: 0.88;
+}
+
+.cb-detect-card.observation::before {
+  content: "觀察";
+  font-size: 13px;
+  border-radius: 12px;
+  color: #b8c3d9;
+  background: rgba(134, 151, 190, 0.12);
+}
