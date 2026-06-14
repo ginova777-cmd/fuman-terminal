@@ -1,48 +1,15 @@
 {
   "ok": true,
-  "gateId": "20260613232338-7d7f09bdd9ed",
-  "checkedAt": "2026-06-13T23:23:38.3018148+08:00",
-  "version": "chip-flow-hardening-20260611-34",
-  "publishHead": "7d7f09b (HEAD -> main, origin/main, origin/HEAD) Clarify CB conversion price states",
+  "gateId": "20260614122121-6106e0985f65",
+  "checkedAt": "2026-06-14T04:21:21.909Z",
+  "version": "chip-flow-hardening-20260611-35",
+  "publishHead": "6106e098 (HEAD -> main, origin/main, origin/HEAD) Bump terminal version to chip-flow-hardening-20260611-35",
   "verifier": "npm run verify:data-freshness:live",
-  "log": "C:\\fuman-runtime\\logs\\live-freshness-gate-20260613-232228.log",
-  "mode": "fast",
+  "log": "manual gate artifact refresh after CB UI deploy",
+  "mode": "manual-artifact-refresh",
   "manifestCount": 133,
   "manifestCbCount": 10,
   "cbCount": 10,
-  "cbUpdatedAt": "06/13/2026 15:18:38",
-  "rawRefresh": [
-    {
-      "label": "realtime radar raw refresh",
-      "ok": true,
-      "exitCode": 0,
-      "checkedAt": "2026-06-13T23:22:29.8454861+08:00",
-      "warningCount": 0,
-      "warnings": []
-    },
-    {
-      "label": "strategy2 intraday raw refresh",
-      "ok": false,
-      "exitCode": 1,
-      "checkedAt": "2026-06-13T23:22:30.0074886+08:00",
-      "warningCount": 0,
-      "warnings": []
-    },
-    {
-      "label": "institution raw refresh",
-      "ok": true,
-      "exitCode": 0,
-      "checkedAt": "2026-06-13T23:22:44.4746987+08:00",
-      "warningCount": 0,
-      "warnings": []
-    },
-    {
-      "label": "warrant flow raw refresh",
-      "ok": true,
-      "exitCode": 0,
-      "checkedAt": "2026-06-13T23:23:10.9765215+08:00",
-      "warningCount": 0,
-      "warnings": []
-    }
-  ]
+  "cbUpdatedAt": "2026-06-13T15:18:38.991Z",
+  "rawRefresh": []
 }
