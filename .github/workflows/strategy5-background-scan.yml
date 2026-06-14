@@ -39,13 +39,21 @@ jobs:
         if: steps.retry.outputs.mode == 'run'
         run: |
           node scripts/scan-strategy5-cache.js
+          node scripts/generate-slim-cache.js
 
       - name: Commit strategy5 cache
         if: steps.retry.outputs.mode == 'run'
         run: |
           git config user.name "fuman-terminal-bot"
           git config user.email "actions@github.com"
-          git add data/strategy5-latest.json data/strategy5-backup.json
+          git add \
+            data/strategy5-latest.json \
+            data/strategy5-backup.json \
+            data/strategy-match-index.json \
+            data/data-status-index.json \
+            data/data-manifest.json \
+            data/mobile-home-summary.json \
+            data/terminal-home-bundle.json
           git diff --cached --quiet || git commit -m "Update strategy5 cache"
           git pull --rebase origin main
           git push
