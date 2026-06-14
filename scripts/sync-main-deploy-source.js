@@ -55,6 +55,7 @@ const FILES = [
   "data/cb-detect-latest.json",
   "data/data-manifest.json",
   "data/data-status-index.json",
+  "data/live-freshness-ok.json",
   "data/strategy-match-index.json",
   "data/strategy5-latest.json",
   "data/strategy5-backup.json",
