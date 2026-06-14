@@ -31,15 +31,53 @@ function writeToBoth(output, payload) {
   }
 }
 
+function payloadFreshness(payload, file) {
+  const candidates = [
+    payload?.updatedAt,
+    payload?.generatedAt,
+    payload?.scanStamp,
+    payload?.asOf,
+    payload?.generatedDate,
+    payload?.usedDate,
+    payload?.date,
+  ];
+  for (const value of candidates) {
+    if (!value) continue;
+    const text = String(value);
+    const parsed = Date.parse(text);
+    if (Number.isFinite(parsed)) return parsed;
+    const compact = text.replace(/\D/g, "");
+    if (compact.length >= 8) {
+      const y = compact.slice(0, 4);
+      const m = compact.slice(4, 6);
+      const d = compact.slice(6, 8);
+      const ymd = Date.parse(`${y}-${m}-${d}T00:00:00+08:00`);
+      if (Number.isFinite(ymd)) return ymd;
+    }
+  }
+  try {
+    return fs.statSync(file).mtimeMs;
+  } catch {
+    return 0;
+  }
+}
+
 function hashPayload(payload) {
   return crypto.createHash("sha1").update(JSON.stringify(payload)).digest("hex").slice(0, 12);
 }
 
 function readOptional(rel, fallback = null) {
+  let freshest = null;
   for (const root of [runtimeRoot, repoRoot, syncRoot]) {
     const file = path.join(root, rel);
-    if (fs.existsSync(file)) return readJson(file);
+    if (!fs.existsSync(file)) continue;
+    const payload = readJson(file);
+    const freshness = payloadFreshness(payload, file);
+    if (!freshest || freshness > freshest.freshness) {
+      freshest = { payload, freshness };
+    }
   }
+  if (freshest) return freshest.payload;
   return fallback;
 }
 
