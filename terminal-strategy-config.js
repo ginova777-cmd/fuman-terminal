@@ -1,5 +1,6 @@
 (function () {
 const STRATEGY_DEFS = [
+  { id: "chip_k_confluence", label: "籌碼老K", short: "籌碼老K", icon: "老K" },
   { id: "multi_strategy_confluence", label: "🔥 多策略共振", short: "共振", icon: "🔥" },
   { id: "foreign_trust_breakout", label: "外資投信連買準突破", short: "準突破", icon: "◆" },
   { id: "volume_turnover_breakout", label: "量價周轉強攻", short: "量價周轉", icon: "量" },
@@ -26,6 +27,7 @@ const STRATEGY_DEFS = [
 const STRATEGY_BY_ID = Object.fromEntries(STRATEGY_DEFS.map((item) => [item.id, item]));
 const STRATEGY5_IDS = ["short_fund_flow", "chip_health_strong", "one_day_rebound", "short_squeeze", "ultra_short"];
 const STRATEGY5_BASE_PRESET_IDS = [
+  "chip_k_confluence",
   "foreign_trust_breakout",
   "limit_up_doji",
   "volume_turnover_breakout",
@@ -36,6 +38,9 @@ const STRATEGY5_PRESET_IDS = [
   ...STRATEGY5_BASE_PRESET_IDS,
 ];
 const STRATEGY5_CARD_META = {
+  chip_k_confluence: {
+    description: "同檔股票同時出現在買賣超、CB可轉債、權證走向，標出籌碼與衍生品共振名單。",
+  },
   multi_strategy_confluence: {
     description: "同時命中 2 個以上策略5主題，每天自動標出多策略共振標的。",
   },
