@@ -56,7 +56,19 @@ function Invoke-Npm($scriptName) {
 function Invoke-NpmAt($workingRoot, $scriptName) {
   Push-Location $workingRoot
   try {
-    Invoke-ReleaseCommand "npm run $scriptName ($workingRoot)" { npm run $scriptName }
+    $previousAllowDeployRoot = $env:FUMAN_ALLOW_DEPLOY_ROOT
+    try {
+      if ($scriptName -eq "deploy" -and ([System.IO.Path]::GetFullPath($workingRoot).TrimEnd('\') -ieq [System.IO.Path]::GetFullPath($terminalRoot).TrimEnd('\'))) {
+        $env:FUMAN_ALLOW_DEPLOY_ROOT = "1"
+      }
+      Invoke-ReleaseCommand "npm run $scriptName ($workingRoot)" { npm run $scriptName }
+    } finally {
+      if ($null -eq $previousAllowDeployRoot) {
+        Remove-Item Env:FUMAN_ALLOW_DEPLOY_ROOT -ErrorAction SilentlyContinue
+      } else {
+        $env:FUMAN_ALLOW_DEPLOY_ROOT = $previousAllowDeployRoot
+      }
+    }
   } finally {
     Pop-Location
   }
