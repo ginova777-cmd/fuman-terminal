@@ -1,5 +1,5 @@
 (function () {
-  const version = "strategy5-data-resync-20260616";
+  const version = "strategy5-data-resync-20260617";
   window.FUMAN_TERMINAL_VERSION = version;
   window.FUMAN_TERMINAL_BOOT = {
     version,
@@ -47,6 +47,11 @@
         .then((payload) => reloadToFreshVersion(String(payload?.version || "").trim()))
         .catch(() => undefined);
     } catch (error) {}
+  };
+
+  const watchRemoteVersion = () => {
+    checkRemoteVersion();
+    setInterval(checkRemoteVersion, 60000);
   };
 
   const warmAuthShell = () => {
@@ -100,7 +105,7 @@
 
   mark("core-start");
   enforceFreshVersion();
-  checkRemoteVersion();
+  watchRemoteVersion();
   warmAuthShell();
   preconnect("https://openapi.twse.com.tw");
 
