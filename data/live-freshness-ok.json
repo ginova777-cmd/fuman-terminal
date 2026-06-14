@@ -1,56 +1,20 @@
 {
   "ok": true,
-  "gateId": "20260614203708-c43aacf742d2",
-  "checkedAt": "2026-06-14T20:37:08.5674989+08:00",
-  "version": "strategy5-data-resync-20260615",
-  "publishHead": "c43aacf (HEAD -> main, origin/main, origin/HEAD) Add strategy5 freshness governance gate",
+  "gateId": "20260614215226-fd641992dff0",
+  "checkedAt": "2026-06-14T13:52:26.324Z",
+  "version": "strategy5-data-resync-20260620",
+  "publishHead": "fd64199 (HEAD -> main, origin/main, origin/HEAD) Prefer freshest cache inputs for slim bundles",
   "verifier": "npm run verify:data-freshness:live",
-  "log": "C:\\fuman-runtime\\logs\\live-freshness-gate-20260614-203500.log",
-  "mode": "fast",
+  "mode": "manual-clean-publish-sync",
   "manifestCount": 133,
   "manifestCbCount": 10,
   "cbCount": 10,
-  "cbUpdatedAt": "06/13/2026 15:18:38",
+  "cbUpdatedAt": "2026-06-13T15:18:38.991Z",
   "strategy5Count": 74,
-  "strategy5UpdatedAt": "06/14/2026 12:15:40",
+  "strategy5UpdatedAt": "2026-06-14T12:15:40.708Z",
   "strategy5SourceDate": "20260612",
   "strategy5ChipKCount": 22,
   "strategy5ForeignTrustCount": 3,
   "strategy5MultiCount": 3,
-  "rawRefresh": [
-    {
-      "label": "realtime radar raw refresh",
-      "ok": true,
-      "exitCode": 0,
-      "checkedAt": "2026-06-14T20:35:02.2345363+08:00",
-      "warningCount": 0,
-      "warnings": []
-    },
-    {
-      "label": "strategy2 intraday raw refresh",
-      "ok": true,
-      "exitCode": 0,
-      "checkedAt": "2026-06-14T20:35:02.3972583+08:00",
-      "warningCount": 0,
-      "warnings": []
-    },
-    {
-      "label": "institution raw refresh",
-      "ok": false,
-      "exitCode": 2,
-      "checkedAt": "2026-06-14T20:35:32.2582232+08:00",
-      "warningCount": 1,
-      "warnings": [
-        "institution metric warning: tpex 5-day metrics failed: 115/06/12 :: terminated"
-      ]
-    },
-    {
-      "label": "warrant flow raw refresh",
-      "ok": true,
-      "exitCode": 0,
-      "checkedAt": "2026-06-14T20:36:09.0259786+08:00",
-      "warningCount": 0,
-      "warnings": []
-    }
-  ]
+  "rawRefresh": []
 }
