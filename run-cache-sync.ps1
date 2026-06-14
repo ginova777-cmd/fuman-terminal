@@ -143,6 +143,66 @@ function Invoke-PrePublishDataFreshnessGate {
   }
 }
 
+function Test-CriticalDataReleaseNeeded($changedFiles) {
+  if ($env:FUMAN_SKIP_CRITICAL_DATA_RELEASE -eq "1") {
+    Write-Log "CRITICAL_DATA_RELEASE_SKIP env FUMAN_SKIP_CRITICAL_DATA_RELEASE=1"
+    return $false
+  }
+  $criticalReleaseFiles = @(
+    "data\institution-latest.json",
+    "data\institution-summary.json",
+    "data\institution-slim.json",
+    "data\institution-mobile-top.json",
+    "data\institution-backup.json",
+    "data\warrant-flow-latest.json",
+    "data\warrant-flow-summary.json",
+    "data\warrant-flow-slim.json",
+    "data\warrant-priority-top.json",
+    "data\warrant-single-signal-top.json",
+    "data\warrant-flow-mobile-top.json",
+    "data\warrant-flow-backup.json",
+    "data\strategy5-latest.json",
+    "data\strategy5-backup.json"
+  )
+  $changed = @($changedFiles | ForEach-Object { [string]$_ } | Where-Object { $_ })
+  $matches = @($changed | Where-Object { $criticalReleaseFiles -contains $_ })
+  if ($matches.Count -gt 0) {
+    Write-Log "CRITICAL_DATA_RELEASE_NEEDED files=$($matches -join ', ')"
+    return $true
+  }
+  Write-Log "CRITICAL_DATA_RELEASE_NOT_NEEDED changed=$($changed.Count)"
+  return $false
+}
+
+function Invoke-CriticalDataReleasePipeline($reason) {
+  if ($env:FUMAN_INSIDE_CRITICAL_DATA_RELEASE -eq "1") {
+    Write-Log "CRITICAL_DATA_RELEASE_SKIP already inside critical data release"
+    return
+  }
+  $previousInside = $env:FUMAN_INSIDE_CRITICAL_DATA_RELEASE
+  try {
+    $env:FUMAN_INSIDE_CRITICAL_DATA_RELEASE = "1"
+    Push-Location $codeRepo
+    try {
+      Write-Log "CRITICAL_DATA_RELEASE_START reason=$reason"
+      npm run release:main -- -ForceBump -CommitMessage "Bump terminal version after critical data refresh" 2>&1 | ForEach-Object { Write-Log $_ }
+      $releaseExit = $LASTEXITCODE
+      Write-Log "CRITICAL_DATA_RELEASE_END exit=$releaseExit"
+      if ($releaseExit -ne 0) {
+        throw "Critical data release pipeline failed with exit code $releaseExit"
+      }
+    } finally {
+      Pop-Location
+    }
+  } finally {
+    if ($null -eq $previousInside) {
+      Remove-Item Env:FUMAN_INSIDE_CRITICAL_DATA_RELEASE -ErrorAction SilentlyContinue
+    } else {
+      $env:FUMAN_INSIDE_CRITICAL_DATA_RELEASE = $previousInside
+    }
+  }
+}
+
 function Test-FastGateCommitDebounce($changedFiles, $criticalFiles) {
   if ($env:FUMAN_FAST_GATE -ne "1") { return $false }
   $debounceMinutes = 20
@@ -987,13 +1047,18 @@ try {
     exit 0
   }
 
-  Invoke-PrePublishDataFreshnessGate
+  $criticalDataReleaseNeeded = Test-CriticalDataReleaseNeeded @($changed)
+
+Invoke-PrePublishDataFreshnessGate
 
   $stamp = Get-Date -Format "yyyy-MM-dd HH:mm"
   Run-Git "Commit cache files" @("commit", "-m", "Update scheduled cache $stamp")
 
   try {
     Run-GitWithRetry "Push cache commit" @("push", "origin", "main")
+    if ($criticalDataReleaseNeeded) {
+      Invoke-CriticalDataReleasePipeline "cache commit pushed"
+    }
   } catch {
     Write-Log "Push failed; resetting to latest origin/main, replaying cache files, and retrying once."
     Save-OutboxSnapshot "push failed: $($_.Exception.Message)" $dataFiles $localPublishedFiles
@@ -1037,9 +1102,13 @@ try {
     }
     $retryChanged = & $gitExe -C $syncRepo diff --cached --name-only
     if ($retryChanged) {
+      $criticalDataReleaseNeededAfterRetry = Test-CriticalDataReleaseNeeded @($retryChanged)
       Invoke-PrePublishDataFreshnessGate
       Run-Git "Commit cache files after retry reset" @("commit", "-m", "Update scheduled cache $stamp retry")
       Run-GitWithRetry "Retry push cache commit" @("push", "origin", "main")
+      if ($criticalDataReleaseNeededAfterRetry) {
+        Invoke-CriticalDataReleasePipeline "cache commit pushed after retry"
+      }
       $scopeDir = Get-OutboxScopeDir
       if (Test-Path -LiteralPath $scopeDir) {
         Get-ChildItem -LiteralPath $scopeDir -Directory -ErrorAction SilentlyContinue |
@@ -1065,6 +1134,9 @@ try {
 
   if ($Scope -eq "strategy3" -or $Scope -eq "all") {
     Test-VercelCacheVisibility "data\strategy3-latest.json"
+  }
+  if ($Scope -eq "strategy5" -or $Scope -eq "all") {
+    Test-VercelCacheVisibility "data\strategy5-latest.json"
   }
   if ($Scope -eq "cb" -or $Scope -eq "all") {
     Test-VercelCacheVisibility "data\cb-detect-latest.json"

@@ -1,6 +1,7 @@
 param(
   [string]$CommitMessage = "",
-  [switch]$SkipDeploy
+  [switch]$SkipDeploy,
+  [switch]$ForceBump
 )
 
 $ErrorActionPreference = "Stop"
@@ -84,7 +85,10 @@ Assert-CleanTree "post-pull main release pipeline"
 
 $beforeVersion = Get-Version
 $bumpStatus = Invoke-ReleaseCheck "npm run verify:bump" { npm run verify:bump }
-if ($bumpStatus -ne 0) {
+if ($ForceBump) {
+  Write-ReleaseLog "ForceBump selected; bumping terminal version even without frontend asset changes."
+  Invoke-Npm "bump:version"
+} elseif ($bumpStatus -ne 0) {
   Invoke-Npm "bump:version"
 }
 $afterVersion = Get-Version
@@ -125,4 +129,4 @@ if ($versionChanged) {
 }
 
 Invoke-ReleaseCommand "git push origin HEAD:main" { & $gitExe -C $root push origin HEAD:main }
-Write-ReleaseLog "ok version=$afterVersion pushed=origin/main deploySkipped=$([bool]$SkipDeploy)"
+Write-ReleaseLog "ok version=$afterVersion pushed=origin/main deploySkipped=$([bool]$SkipDeploy) forceBump=$([bool]$ForceBump)"
