@@ -1,6 +1,6 @@
 {
   "ok": true,
-  "updatedAt": "2026-06-13T14:40:24.863Z",
+  "updatedAt": "2026-06-14T07:45:11.517Z",
   "generatedBy": "generate-performance-report",
   "assets": [
     {
@@ -13,9 +13,9 @@
     {
       "file": "health-summary.json",
       "ok": true,
-      "bytes": 11077,
+      "bytes": 4212,
       "count": 0,
-      "updatedAt": "2026-06-12T12:34:12.797Z"
+      "updatedAt": "2026-06-14T07:45:09.516Z"
     },
     {
       "file": "strategy4-summary.json",
@@ -41,67 +41,67 @@
     {
       "file": "institution-slim.json",
       "ok": true,
-      "bytes": 528627,
+      "bytes": 528710,
       "count": 1883,
-      "updatedAt": "2026-06-13T14:39:40.527Z"
+      "updatedAt": "2026-06-14T05:23:14.078Z"
     },
     {
       "file": "institution-joint-top.json",
       "ok": true,
-      "bytes": 45055,
+      "bytes": 45097,
       "count": 160,
-      "updatedAt": "2026-06-13T14:39:40.527Z"
+      "updatedAt": "2026-06-14T05:23:14.078Z"
     },
     {
       "file": "warrant-flow-slim.json",
       "ok": true,
-      "bytes": 108702,
+      "bytes": 108718,
       "count": 120,
-      "updatedAt": "2026-06-13T14:40:19.185Z"
+      "updatedAt": "2026-06-14T05:23:38.357Z"
     },
     {
       "file": "warrant-priority-top.json",
       "ok": true,
-      "bytes": 90781,
+      "bytes": 90793,
       "count": 120,
-      "updatedAt": "2026-06-13T14:40:19.185Z"
+      "updatedAt": "2026-06-14T05:23:38.357Z"
     },
     {
       "file": "realtime-radar-latest.json",
       "ok": true,
-      "bytes": 342,
+      "bytes": 700,
       "count": 0,
-      "updatedAt": "2026-06-12T14:30:02.268Z"
+      "updatedAt": "2026-06-14T07:45:02.832Z"
     },
     {
       "file": "signal-quality-report.json",
       "ok": true,
       "bytes": 795,
       "count": 0,
-      "updatedAt": "2026-06-13T14:40:24.585Z"
+      "updatedAt": "2026-06-14T07:45:11.250Z"
     },
     {
       "file": "data-quality-report.json",
       "ok": true,
       "bytes": 1556,
       "count": 0,
-      "updatedAt": "2026-06-13T14:40:24.664Z"
+      "updatedAt": "2026-06-14T07:45:11.332Z"
     },
     {
       "file": "data-consistency-report.json",
       "ok": true,
       "bytes": 312,
       "count": 0,
-      "updatedAt": "2026-06-13T14:40:24.737Z"
+      "updatedAt": "2026-06-14T07:45:11.397Z"
     },
     {
       "file": "strategy-weight-report.json",
       "ok": true,
       "bytes": 418,
       "count": 0,
-      "updatedAt": "2026-06-13T14:40:24.797Z"
+      "updatedAt": "2026-06-14T07:45:11.461Z"
     }
   ],
-  "totalBytes": 1204335,
+  "totalBytes": 1197981,
   "missing": []
 }

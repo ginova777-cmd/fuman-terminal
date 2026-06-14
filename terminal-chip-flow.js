@@ -35,6 +35,9 @@
       let tdccBreakoutPayload = null;
       let tdccBreakoutLoadedAt = 0;
       let tdccBreakoutLoading = null;
+      let chipExclusionsPayload = null;
+      let chipExclusionsLoadedAt = 0;
+      let chipExclusionsLoading = null;
       const TDCC_CACHE_MS = 10 * 60 * 1000;
 
       const cleanNumber = scope.cleanNumber;
@@ -112,12 +115,56 @@
         return Number.isFinite(n) ? `${formatNumber(n, 2)}%` : "--";
       }
 
+      function isTdccMode(mode = scope.chipFilter) {
+        return mode === "tdcc1000" || mode === "foreignTrustVolumePct";
+      }
+
+      function chipVolumeLots(value, key = "") {
+        const n = cleanNumber(value);
+        if (!Number.isFinite(n) || n <= 0) return 0;
+        const field = String(key || "").toLowerCase();
+        const shareBasedField = /tradevolume|fivedayavgvolume|avg_volume_5|avgvolume5|avg5volume|innerouter|insideoutside|accumulated|cumulative/.test(field);
+        if (shareBasedField) return n / 1000;
+        return n >= 100000 ? n / 1000 : n;
+      }
+
+      function firstChipVolumeLots(row, keys) {
+        for (const key of keys) {
+          const value = row?.[key];
+          if (value !== undefined && value !== null && String(value).trim() !== "") return chipVolumeLots(value, key);
+        }
+        return 0;
+      }
+
+      function isChipOpportunityCandidate(row) {
+        const code = String(row?.code || row?.Code || "").trim();
+        const name = String(row?.name || row?.Name || "").trim();
+        const industry = String(row?.industry || row?.officialIndustry || row?.primaryIndustry || row?.quoteIndustry || "").trim();
+        const text = `${code} ${name} ${industry}`;
+        if (!/^\d{4}$/.test(code) || /^00/.test(code)) return false;
+        if (Array.isArray(chipExclusionsPayload?.blacklistCodes) && chipExclusionsPayload.blacklistCodes.includes(code)) return false;
+        if (/(ETF|ETN|DR|指數|台灣50|高股息|正2|反1|期貨|債|權證|認購|認售|牛證|熊證|CB|可轉債)/i.test(text)) return false;
+        if (/水泥|軍工|國防|航太|漢翔|雷虎|龍德|駐龍|晟田|寶一|亞航|千附/i.test(text)) return false;
+        const avgVolume5 = firstChipVolumeLots(row, ["fiveDayAvgVolume", "avg_volume_5", "avgVolume5", "avg5Volume"]);
+        if (avgVolume5 > 0 && avgVolume5 < 3000) return false;
+        const innerOuter = firstChipVolumeLots(row, ["innerOuterVolume", "insideOutsideVolume", "accumulatedBidAskVolume", "cumulative_bid_ask_volume", "cumulativeBidAskVolume"]);
+        const bid = firstChipVolumeLots(row, ["cumulative_bid_volume", "cumulativeBidVolume"]);
+        const ask = firstChipVolumeLots(row, ["cumulative_ask_volume", "cumulativeAskVolume"]);
+        const bidAskTotal = innerOuter || (bid || ask ? bid + ask : 0);
+        if (bidAskTotal > 0 && bidAskTotal < 3000) return false;
+        if (!bidAskTotal) {
+          const tradeVolume = firstChipVolumeLots(row, ["tradeVolume", "volume", "TradeVolume"]);
+          if (tradeVolume > 0 && tradeVolume < 3000) return false;
+        }
+        return true;
+      }
+
       function setChipHeaders(mode) {
         const table = document.querySelector("#chip-trade-body")?.closest("table");
         const headRow = table?.querySelector("thead tr");
         if (!headRow) return;
-        const headers = mode === "tdcc1000"
-          ? ["股票代號", "股票名稱", "現價/收盤", "漲幅(%)", "外資連買", "外資買超(張)", "1000張比例 W1", "1000張比例 W2", "1000張比例 W3", "比例增幅", "起漲分", "買點型態", "過熱警示"]
+        const headers = isTdccMode(mode)
+          ? ["股票代號", "股票名稱", "現價/收盤", "漲幅(%)", "外資連買", "外資買超(張)", "外資+投信佔均量", "1000張比例 W1", "1000張比例 W2", "1000張比例 W3", "比例增幅", "起漲分", "買點型態", "過熱警示"]
           : ["股票代號", "股票名稱", "現價/收盤", "漲跌", "漲幅(%)", "成交量(張)", "近5日漲幅累計", "近5日累計均量", "外資買賣超(張)", "投信買賣超(張)", "外資連買", "投信連買", "同買", "法人合計(張)"];
         headRow.innerHTML = headers.map((label) => `<th>${label}</th>`).join("");
       }
@@ -144,8 +191,29 @@
         return tdccBreakoutLoading;
       }
 
+      async function loadChipExclusions(force = false) {
+        if (!force && chipExclusionsPayload && Date.now() - chipExclusionsLoadedAt < TDCC_CACHE_MS) return chipExclusionsPayload;
+        if (chipExclusionsLoading) return chipExclusionsLoading;
+        const endpoint = scope.endpoints?.chipTradeExclusions || "/data/chip-trade-exclusions.json";
+        chipExclusionsLoading = scope.fetchVersionedJson(endpoint, 7000, "", force)
+          .then((payload) => {
+            chipExclusionsPayload = payload?.ok ? payload : { ok: false, blacklistCodes: [] };
+            chipExclusionsLoadedAt = Date.now();
+            return chipExclusionsPayload;
+          })
+          .catch(() => {
+            chipExclusionsPayload = { ok: false, blacklistCodes: [] };
+            chipExclusionsLoadedAt = Date.now();
+            return chipExclusionsPayload;
+          })
+          .finally(() => {
+            chipExclusionsLoading = null;
+          });
+        return chipExclusionsLoading;
+      }
+
       function tdccRows() {
-        return Array.isArray(tdccBreakoutPayload?.matches) ? tdccBreakoutPayload.matches : [];
+        return (Array.isArray(tdccBreakoutPayload?.matches) ? tdccBreakoutPayload.matches : []).filter(isChipOpportunityCandidate);
       }
 
       function updateDateLine() {
@@ -157,7 +225,7 @@
         const institutionKey = normalizeChipDateKey(scope.institutionDate);
         const quoteLabel = quoteDate ? `${quoteDate.slice(0, 4)}/${quoteDate.slice(4, 6)}/${quoteDate.slice(6, 8)}` : "待確認";
         const dateWarning = institutionKey && quoteDate && institutionKey !== quoteDate ? `｜日期不同步：報價 ${quoteLabel}` : "";
-        if (scope.chipFilter === "tdcc1000") {
+        if (isTdccMode()) {
           const dates = Array.isArray(tdccBreakoutPayload?.dates) ? tdccBreakoutPayload.dates.join(" / ") : "等待TDCC";
           dateEl.textContent = `${formatChipDate(scope.institutionDate)}｜TDCC ${dates}｜更新 ${time}${dateWarning}`;
           return;
@@ -174,12 +242,13 @@
             return buildBaseRow(code, inst, stock);
           })
           .filter(Boolean)
+          .filter(isChipOpportunityCandidate)
           .filter((row) => matchesChipFilter(row));
 
         if (!rows.length && Object.keys(scope.institutionData || {}).length) {
           Object.entries(scope.institutionData || {}).forEach(([code, inst]) => {
             const row = buildBaseRow(code, inst, {});
-            if (matchesChipFilter(row)) rows.push(row);
+            if (isChipOpportunityCandidate(row) && matchesChipFilter(row)) rows.push(row);
           });
         }
         return rows;
@@ -211,9 +280,22 @@
       function matchesChipFilter(row) {
         if (scope.chipFilter === "joint") return row.foreign > 0 && row.trust > 0;
         if (scope.chipFilter === "trust") return row.trust > 0;
+        if (scope.chipFilter === "foreignStreak") return row.foreignStreak > 0;
+        if (scope.chipFilter === "trustStreak") return row.trustStreak > 0;
+        if (scope.chipFilter === "jointStreak") return row.jointStreak > 0;
         if (scope.chipFilter === "foreign") return row.foreign > 0;
         if (scope.chipFilter === "legal") return row.total > 0;
         return true;
+      }
+
+      function sortByStreak(rows, key, flowKey) {
+        rows.sort((a, b) => {
+          const streakDiff = cleanNumber(b[key]) - cleanNumber(a[key]);
+          if (streakDiff) return streakDiff;
+          const flowDiff = cleanNumber(b[flowKey]) - cleanNumber(a[flowKey]);
+          if (flowDiff) return flowDiff;
+          return cleanNumber(b.value) - cleanNumber(a.value);
+        });
       }
 
       function renderNormalRows(body, shown, pagination) {
@@ -245,7 +327,7 @@
       }
 
       function renderTdccRows(body, shown, pagination) {
-        const labels = ["代號", "名稱", "現價", "漲幅", "外資連", "外資買超(張)", "1000張W1", "1000張W2", "1000張W3", "增幅", "起漲分", "買點", "過熱"];
+        const labels = ["代號", "名稱", "現價", "漲幅", "外資連", "外資買超(張)", "外資+投信佔均量", "1000張W1", "1000張W2", "1000張W3", "增幅", "起漲分", "買點", "過熱"];
         body.innerHTML = shown.map((row, index) => `
           <tr class="${index === 0 ? "highlight" : ""}" data-chip-row="${escapeText(row.code)}">
             <td class="chip-cell-code"><a href="#" data-chip-code="${escapeText(row.code)}">${escapeText(row.code)}</a></td>
@@ -254,6 +336,7 @@
             <td class="chip-cell-number ${cleanNumber(row.changePct) >= 0 ? "red" : "green"}">${formatChipSignedPercent(row.changePct)}</td>
             <td class="chip-cell-streak">${cleanNumber(row.foreignStreak)} 日</td>
             <td class="chip-cell-flow red">+${Math.round(cleanNumber(row.foreignLots)).toLocaleString("zh-TW")}</td>
+            <td class="chip-cell-number red">+${formatNumber(cleanNumber(row.foreignTrustBuyVolumePct ?? row.institutionBuyVolumePct), 2)}%</td>
             <td class="chip-cell-number">${formatRatio(row.ratio1)}</td>
             <td class="chip-cell-number">${formatRatio(row.ratio2)}</td>
             <td class="chip-cell-number">${formatRatio(row.ratio3)}</td>
@@ -273,14 +356,14 @@
         const sortEl = document.querySelector("#chip-sort");
         if (!body) return;
 
-        const isTdcc = scope.chipFilter === "tdcc1000";
+        const isTdcc = isTdccMode();
         setChipHeaders(scope.chipFilter);
         updateDateLine();
 
         if (isTdcc && !tdccBreakoutPayload) {
-          body.innerHTML = `<tr><td colspan="13">正在載入「外資連3買 + 1000張比例連3週增加」名單...</td></tr>`;
+          body.innerHTML = `<tr><td colspan="14">正在載入「外資連3買 + 1000張比例連3週增加」名單...</td></tr>`;
           loadTdccBreakout(false).then(() => renderChipTradeTable()).catch((error) => {
-            body.innerHTML = `<tr><td colspan="13">TDCC 起漲名單讀取失敗：${chipErrorText(error)}</td></tr>`;
+            body.innerHTML = `<tr><td colspan="14">TDCC 起漲名單讀取失敗：${chipErrorText(error)}</td></tr>`;
           });
           return;
         }
@@ -288,15 +371,24 @@
         const rows = isTdcc ? tdccRows() : baseRows();
         const sortBy = sortEl?.value || "trustForeign";
         if (isTdcc) {
-          rows.sort((a, b) => cleanNumber(b.ratioIncrease) - cleanNumber(a.ratioIncrease) || cleanNumber(b.breakoutScore) - cleanNumber(a.breakoutScore) || cleanNumber(b.foreignLots) - cleanNumber(a.foreignLots));
+          if (scope.chipFilter === "foreignTrustVolumePct" || sortBy === "foreignTrustVolumePct") {
+            rows.sort((a, b) => cleanNumber(b.foreignTrustBuyVolumePct ?? b.institutionBuyVolumePct) - cleanNumber(a.foreignTrustBuyVolumePct ?? a.institutionBuyVolumePct) || cleanNumber(b.breakoutScore) - cleanNumber(a.breakoutScore) || cleanNumber(b.foreignLots) - cleanNumber(a.foreignLots));
+          } else {
+            rows.sort((a, b) => cleanNumber(b.ratioIncrease) - cleanNumber(a.ratioIncrease) || cleanNumber(b.breakoutScore) - cleanNumber(a.breakoutScore) || cleanNumber(b.foreignLots) - cleanNumber(a.foreignLots));
+          }
         } else {
-          rows.sort((a, b) => {
-            if (sortBy === "trust") return b.trust - a.trust;
-            if (sortBy === "foreign") return b.foreign - a.foreign;
-            if (sortBy === "pct") return b.percent - a.percent;
-            if (sortBy === "value") return b.value - a.value;
-            return (b.jointStreak - a.jointStreak) || ((b.foreign + b.trust) - (a.foreign + a.trust));
-          });
+          if (scope.chipFilter === "foreignStreak") sortByStreak(rows, "foreignStreak", "foreign");
+          else if (scope.chipFilter === "trustStreak") sortByStreak(rows, "trustStreak", "trust");
+          else if (scope.chipFilter === "jointStreak") sortByStreak(rows, "jointStreak", "total");
+          else {
+            rows.sort((a, b) => {
+              if (sortBy === "trust") return b.trust - a.trust;
+              if (sortBy === "foreign") return b.foreign - a.foreign;
+              if (sortBy === "pct") return b.percent - a.percent;
+              if (sortBy === "value") return b.value - a.value;
+              return (b.jointStreak - a.jointStreak) || ((b.foreign + b.trust) - (a.foreign + a.trust));
+            });
+          }
         }
 
         const visibleRows = rows.slice(0, 80);
@@ -320,11 +412,15 @@
           const emptyText = {
             joint: "目前沒有符合「外資 + 投信同買」的資料，盤後資料更新後會自動刷新。",
             tdcc1000: "目前沒有符合「外資連3買 + 1000張比例連3週增加」的資料。",
+            foreignTrustVolumePct: "目前沒有符合「外資+投信佔5日均量」的資料。",
             trust: "目前沒有符合「投信買超」的資料，盤後資料更新後會自動刷新。",
+            foreignStreak: "目前沒有符合「外資連買日」的資料，盤後資料更新後會自動刷新。",
+            trustStreak: "目前沒有符合「投信連買日」的資料，盤後資料更新後會自動刷新。",
+            jointStreak: "目前沒有符合「同買日」的資料，盤後資料更新後會自動刷新。",
             foreign: "目前沒有符合「外資買超」的資料，盤後資料更新後會自動刷新。",
             legal: "目前沒有符合「法人同買」的資料，盤後資料更新後會自動刷新。",
           }[scope.chipFilter] || "目前沒有符合條件的資料。";
-          body.innerHTML = `<tr><td colspan="${isTdcc ? 13 : 14}">${emptyText}</td></tr>`;
+          body.innerHTML = `<tr><td colspan="${isTdcc ? 14 : 14}">${emptyText}</td></tr>`;
           if (pagination) pagination.innerHTML = "";
           return;
         }
@@ -349,7 +445,8 @@
       async function loadChipTradeData(force = false) {
         if (!scope.isViewActive("chip-trade") || !scope.canRunViewWork("chip-trade")) return;
         if (!force && scope.chipTradeLoadedAt && Date.now() - scope.chipTradeLoadedAt < scope.CHIP_TRADE_CACHE_MS) {
-          if (scope.chipFilter === "tdcc1000") await loadTdccBreakout(false);
+          await loadChipExclusions(false);
+          if (isTdccMode()) await loadTdccBreakout(false);
           renderChipTradeTable();
           return;
         }
@@ -369,6 +466,7 @@
             scope.fetchVersionedJson(scope.endpoints.strategyStocks, 20000, "", force),
             scope.fetchVersionedJson(scope.isMobileViewport() && !force && !scope.chipTradePreferFull && scope.endpoints.institutionMobileTop ? scope.endpoints.institutionMobileTop : scope.endpoints.institutionSlim, 7000, scope.institutionSummary?.updatedAt || "", force),
             loadTdccBreakout(force),
+            loadChipExclusions(force),
           ]);
 
           if (stockResult.status === "fulfilled") {

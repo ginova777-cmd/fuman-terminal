@@ -1,5 +1,5 @@
 (function () {
-  const VERSION = "strategy5-oldk-restore-20260616";
+  const VERSION = "strategy5-pane-rerender-20260614";
   const modules = {
     sectorMap: { loaded: false, src: "terminal-sector-map.js" },
     strategyConfig: { loaded: false, src: "terminal-strategy-config.js" },

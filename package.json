@@ -42,6 +42,7 @@
     "verify:publish-gate": "node scripts/verify-publish-gate.js"
     ,"sync:tdcc": "node --use-system-ca scripts/sync-tdcc-shareholding-cache.js"
     ,"sync:tdcc:backfill": "node --use-system-ca scripts/sync-tdcc-shareholding-cache.js --backfill"
+    ,"scan:chip-exclusions": "node scripts/generate-chip-trade-exclusions.js"
     ,"scan:tdcc-breakout": "node --use-system-ca scripts/generate-institution-tdcc-breakout.js"
   },
   "engines": {

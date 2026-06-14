@@ -2,6 +2,7 @@ const fs = require("fs");
 const path = require("path");
 
 const { ROOT, dataPath } = require("./runtime-paths");
+const { chipTradeExclusion, loadChipTradeBlacklist } = require("../lib/chip-trade-exclusions");
 
 const SOURCE_NAME = process.env.FUMAN_TDCC_SOURCE_NAME || "fuman_tdcc_shareholding_1000";
 const HISTORY_FILE = dataPath("tdcc-shareholding-1000-history.json");
@@ -76,7 +77,7 @@ function writeCsv(file, rows) {
   const headers = [
     "code", "name", "foreignStreak", "foreignLots",
     "ratioDate1", "ratio1", "ratioDate2", "ratio2", "ratioDate3", "ratio3",
-    "ratioIncrease", "close", "changePct", "breakoutScore", "entryType", "heatWarning",
+    "ratioIncrease", "close", "changePct", "foreignTrustBuyVolumePct", "breakoutScore", "entryType", "heatWarning",
   ];
   const lines = [headers.join(",")];
   for (const row of rows) {
@@ -146,13 +147,13 @@ function fallbackBreakoutFields(row, ratioIncrease) {
   const foreignStreak = cleanNumber(row.foreignStreak);
   const foreign = cleanNumber(row.foreign);
   const trust = cleanNumber(row.trust);
-  const total = cleanNumber(row.total) || foreign + trust + cleanNumber(row.dealer);
+  const foreignTrust = foreign + trust;
   const percent = cleanNumber(row.percent ?? row.changePct);
   const fiveDayPctSum = cleanNumber(row.fiveDayPctSum);
   const tradeVolume = cleanNumber(row.tradeVolume);
   const fiveDayAvgVolume = cleanNumber(row.fiveDayAvgVolume);
   const volumeRatio5 = fiveDayAvgVolume > 0 ? tradeVolume / fiveDayAvgVolume : 0;
-  const institutionBuyVolumePct = fiveDayAvgVolume > 0 ? (total / fiveDayAvgVolume) * 100 : 0;
+  const foreignTrustBuyVolumePct = fiveDayAvgVolume > 0 ? (foreignTrust / fiveDayAvgVolume) * 100 : 0;
 
   let chipScore = 0;
   if (foreignStreak >= 3) chipScore += 28;
@@ -160,8 +161,8 @@ function fallbackBreakoutFields(row, ratioIncrease) {
   if (ratioIncrease >= 1) chipScore += 22;
   else if (ratioIncrease >= 0.5) chipScore += 14;
   else if (ratioIncrease > 0) chipScore += 8;
-  if (institutionBuyVolumePct >= 8) chipScore += 18;
-  else if (institutionBuyVolumePct >= 3) chipScore += 10;
+  if (foreignTrustBuyVolumePct >= 8) chipScore += 18;
+  else if (foreignTrustBuyVolumePct >= 3) chipScore += 10;
   if (foreign > 0 && trust > 0) chipScore += 12;
   chipScore = clamp(chipScore, 0, 100);
 
@@ -212,7 +213,8 @@ function fallbackBreakoutFields(row, ratioIncrease) {
     entryType,
     heatWarning: heatWarnings.join("、") || "正常",
     volumeRatio5: round2(volumeRatio5),
-    institutionBuyVolumePct: round2(institutionBuyVolumePct),
+    foreignTrustBuyVolumePct: round2(foreignTrustBuyVolumePct),
+    institutionBuyVolumePct: round2(foreignTrustBuyVolumePct),
   };
 }
 
@@ -225,11 +227,19 @@ async function main() {
   if (dates.length < weeks) throw new Error(`TDCC weeks insufficient: need=${weeks} got=${dates.join(",") || "--"}`);
 
   const matches = [];
+  const blacklistCodes = loadChipTradeBlacklist();
+  const excludedCounts = {};
   for (const row of institutionRows(institution)) {
     const code = normalizeCode(row.code);
     if (!code) continue;
+    const exclusion = chipTradeExclusion(row, blacklistCodes);
+    if (exclusion.excluded) {
+      for (const reason of exclusion.reasons) excludedCounts[reason] = (excludedCounts[reason] || 0) + 1;
+      continue;
+    }
     const foreignStreak = Number(row.foreignStreak || 0);
     const foreign = cleanNumber(row.foreign);
+    const trust = cleanNumber(row.trust);
     if (foreignStreak < 3 || foreign <= 0) continue;
     const ratios = dates.map((date) => ratioRow(tdcc.weeks[date], code));
     if (ratios.some((value) => value == null)) continue;
@@ -255,7 +265,8 @@ async function main() {
       entryType: row.entryType || fallback.entryType,
       heatWarning: row.heatWarning || fallback.heatWarning,
       volumeRatio5: cleanNumber(row.volumeRatio5) || fallback.volumeRatio5,
-      institutionBuyVolumePct: cleanNumber(row.institutionBuyVolumePct) || fallback.institutionBuyVolumePct,
+      foreignTrustBuyVolumePct: fallback.foreignTrustBuyVolumePct,
+      institutionBuyVolumePct: fallback.foreignTrustBuyVolumePct,
       fiveDayPctSum: cleanNumber(row.fiveDayPctSum),
       distanceMa20Pct: cleanNumber(row.distanceMa20Pct),
     });
@@ -279,7 +290,14 @@ async function main() {
       latestForeignBuyPositive: true,
       tdccLevel: "15 / 1,000,001 shares and above",
       strictIncreasing: strict,
+      buyVolumePctBasis: "foreign + trust / fiveDayAvgVolume",
+      exclusions: [
+        "ETF / 00開頭 / 權證 / 可轉債 / 黑名單 / 水泥 / 軍工",
+        "近5日均量 < 3000張",
+        "內外盤累計 < 3000張；無內外盤欄位時以成交量 < 3000張保底",
+      ],
     },
+    excludedCounts,
     count: matches.length,
     matches,
   };

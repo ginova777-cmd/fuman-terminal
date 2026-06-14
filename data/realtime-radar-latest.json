@@ -1,14 +1,26 @@
 {
+  "ok": true,
   "source": "mini-pc-realtime-radar",
-  "status": "outside_market_time",
+  "status": "retired_intraday_snapshot",
+  "reason": "latest trading day has no completed realtime radar snapshot; stale signals retired and empty snapshot archived",
   "date": "2026-06-12",
-  "timestamp": "2026-06-12 22:30:02",
-  "updatedAt": "2026-06-12T14:30:02.268Z",
-  "updatedAtMs": 1781274602268,
+  "timestamp": "closed",
+  "updatedAt": "2026-06-14T07:45:02.832Z",
+  "updatedAtMs": 1781423102832,
   "staleAfterMs": 20000,
   "maxQuoteAgeSeconds": 150,
   "staleQuoteCount": 0,
+  "failedBatchCount": 0,
+  "count": 0,
   "rows": [],
   "longCount": 0,
-  "shortCount": 0
+  "shortCount": 0,
+  "previousSnapshot": {
+    "date": "2026-06-12",
+    "updatedAt": "2026-06-12T14:30:02.268Z",
+    "status": "outside_market_time",
+    "records": 0,
+    "events": 0,
+    "rows": 0
+  }
 }

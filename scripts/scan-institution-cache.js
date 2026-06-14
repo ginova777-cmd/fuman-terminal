@@ -5,6 +5,7 @@ const { fetchMisQuotes } = require("../lib/mis-quotes");
 const { writeSummary } = require("./cache-summary");
 
 const { ROOT, dataPath } = require("./runtime-paths");
+const { chipTradeExclusion, loadChipTradeBlacklist } = require("../lib/chip-trade-exclusions");
 const OUT_FILE = dataPath("institution-latest.json");
 const BACKUP_FILE = dataPath("institution-backup.json");
 const SUMMARY_FILE = dataPath("institution-summary.json");
@@ -260,7 +261,18 @@ async function main() {
     market: quote.market,
   }));
   tradingMetricResult.warnings.forEach((warning) => console.warn(`institution metric warning: ${warning}`));
-  const data = enrichInstitutionData(payload.data || {}, quoteMap, tradingMetricResult.map);
+  const enrichedData = enrichInstitutionData(payload.data || {}, quoteMap, tradingMetricResult.map);
+  const blacklistCodes = loadChipTradeBlacklist();
+  const data = {};
+  const excludedCounts = {};
+  for (const [code, row] of Object.entries(enrichedData)) {
+    const exclusion = chipTradeExclusion(row, blacklistCodes);
+    if (exclusion.excluded) {
+      for (const reason of exclusion.reasons) excludedCounts[reason] = (excludedCounts[reason] || 0) + 1;
+      continue;
+    }
+    data[code] = row;
+  }
   const count = Object.keys(data).length;
   const output = {
     ...payload,
@@ -270,6 +282,8 @@ async function main() {
     quoteUpdatedAt: stockPayload?.updatedAt || "",
     sourceHealth: {
       fiveDayMetricCount: tradingMetricResult.map.size,
+      excludedBeforePublish: Object.values(excludedCounts).reduce((sum, value) => sum + value, 0),
+      excludedCounts,
       warningCount: tradingMetricResult.warnings.length,
       warnings: tradingMetricResult.warnings.slice(0, 8),
     },

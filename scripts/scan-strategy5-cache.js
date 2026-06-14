@@ -9,6 +9,7 @@ const BACKUP_FILE = dataPath("strategy5-backup.json");
 const INSTITUTION_FILE = dataPath("institution-latest.json");
 const CB_DETECT_FILE = dataPath("cb-detect-latest.json");
 const WARRANT_FLOW_FILE = dataPath("warrant-flow-latest.json");
+const WARRANT_SINGLE_SIGNAL_FILE = dataPath("warrant-single-signal-top.json");
 const STRATEGY4_FILE = dataPath("strategy4-latest.json");
 const STRATEGY4_BACKUP_FILE = dataPath("strategy4-backup.json");
 const STOCK_URL = process.env.STOCK_UNIVERSE_URL || "https://fuman-terminal.vercel.app/api/stocks";
@@ -290,11 +291,24 @@ function pickRows(payload, keys = []) {
   return [];
 }
 
+function pickAllRows(payload, keys = []) {
+  const rows = [];
+  for (const key of keys) {
+    if (Array.isArray(payload?.[key])) {
+      rows.push(...payload[key].map((row) => ({ ...row, sourceBucket: row.sourceBucket || key })));
+    }
+  }
+  return rows.length ? rows : (Array.isArray(payload) ? payload : []);
+}
+
 function readChipKConfluenceSources(institutionData = {}) {
   const cbPayload = readJson(CB_DETECT_FILE, {});
   const warrantPayload = readJson(WARRANT_FLOW_FILE, {});
+  const warrantSinglePayload = readJson(WARRANT_SINGLE_SIGNAL_FILE, {});
   const cbRows = pickRows(cbPayload, ["matches", "rows", "data", "items"]);
-  const warrantRows = pickRows(warrantPayload, ["matches", "rows", "data", "items"]);
+  const warrantRows = pickRows(warrantSinglePayload, ["matches", "rows", "data", "items"])
+    .map((row) => ({ ...row, sourceBucket: row.sourceBucket || "warrant-single-signal-top" }));
+  const fallbackWarrantRows = pickAllRows(warrantPayload, ["singleSignals"]);
   const cbByCode = new Map();
   const warrantByCode = new Map();
   const instByCode = new Map();
@@ -306,7 +320,7 @@ function readChipKConfluenceSources(institutionData = {}) {
     const trust = cleanNumber(inst?.trust);
     const dealer = cleanNumber(inst?.dealer);
     const total = cleanNumber(inst?.total || foreign + trust + dealer);
-    if (total > 0 || foreign > 0 || trust > 0) instByCode.set(code, { foreign, trust, dealer, total });
+    instByCode.set(code, { foreign, trust, dealer, total });
   });
 
   cbRows.forEach((row) => {
@@ -317,7 +331,7 @@ function readChipKConfluenceSources(institutionData = {}) {
     if (!previous || score >= cleanNumber(previous.score)) cbByCode.set(code, { ...row, score });
   });
 
-  warrantRows.forEach((row) => {
+  (warrantRows.length ? warrantRows : fallbackWarrantRows).forEach((row) => {
     const code = normalizeCode(row?.underlyingCode || row?.stockCode || row?.code || row?.targetCode || row?.symbol);
     if (!/^\d{4}$/.test(code)) return;
     const score = cleanNumber(row?.score || row?.flowScore || row?.strength || row?.rankScore);
@@ -333,25 +347,30 @@ function buildChipKConfluenceMatch({ stock, inst, confluenceSources, valueRank, 
   const cb = confluenceSources.cbByCode.get(code);
   const warrant = confluenceSources.warrantByCode.get(code);
   const sourceInst = confluenceSources.instByCode.get(code) || inst;
-  if (!cb || !warrant || !sourceInst) return null;
+  const hitSources = [
+    cb ? "CB可轉債" : "",
+    warrant ? "權證走向" : "",
+    sourceInst ? "買賣超" : "",
+  ].filter(Boolean);
+  if (hitSources.length < 2) return null;
 
   const pct = cleanNumber(stock.percent);
-  const total = cleanNumber(sourceInst.total);
-  const foreign = cleanNumber(sourceInst.foreign);
-  const trust = cleanNumber(sourceInst.trust);
-  if (total <= 0 && foreign <= 0 && trust <= 0) return null;
+  const total = cleanNumber(sourceInst?.total);
+  const foreign = cleanNumber(sourceInst?.foreign);
+  const trust = cleanNumber(sourceInst?.trust);
 
-  const cbScore = cleanNumber(cb.score);
-  const warrantScore = cleanNumber(warrant.score);
+  const cbScore = cleanNumber(cb?.score);
+  const warrantScore = cleanNumber(warrant?.score);
   const score = clamp(Math.round(
-    78 +
+    72 +
+    hitSources.length * 6 +
     Math.min(Math.max(pct, 0) * 2.2, 10) +
     Math.min(valueRank * 0.06, 6) +
     Math.min(volumeRank * 0.04, 4) +
     Math.min(cbScore * 0.05, 4) +
     Math.min(warrantScore * 0.05, 4)
   ), 80, 100);
-  const reason = `同時命中買賣超、CB可轉債與權證走向；法人合計 ${formatInstitution(total)}，外資 ${formatInstitution(foreign)}、投信 ${formatInstitution(trust)}。`;
+  const reason = `命中 ${hitSources.join(" + ")}（三項中 ${hitSources.length} 項）；法人合計 ${formatInstitution(total)}，外資 ${formatInstitution(foreign)}、投信 ${formatInstitution(trust)}。`;
   return {
     id: "chip_k_confluence",
     short: "籌碼老K",
@@ -360,26 +379,150 @@ function buildChipKConfluenceMatch({ stock, inst, confluenceSources, valueRank, 
     reason,
     cbScore,
     warrantScore,
+    hitSources,
   };
 }
 
-function buildStrategy5Match({ stock, inst, valueRank, volumeRank }) {
+function pctChange(from, to) {
+  return from > 0 ? ((to - from) / from) * 100 : 0;
+}
+
+function averageRows(rows, field, count, endOffset = 0) {
+  const end = endOffset ? rows.length - endOffset : rows.length;
+  return avg(rows.slice(Math.max(0, end - count), end).map((row) => cleanNumber(row?.[field])));
+}
+
+function maxRows(rows, field, count, endOffset = 0) {
+  const end = endOffset ? rows.length - endOffset : rows.length;
+  const values = rows.slice(Math.max(0, end - count), end).map((row) => cleanNumber(row?.[field])).filter(Boolean);
+  return values.length ? Math.max(...values) : 0;
+}
+
+function analyzeBreakoutSetup(rows, stock) {
+  if (!Array.isArray(rows) || rows.length < 21) return null;
+  const last = rows.at(-1);
+  const prev = rows.at(-2);
+  const close = cleanNumber(stock.close || last?.close);
+  const open = cleanNumber(last?.open || stock.open || close);
+  const high = cleanNumber(last?.high || stock.high || close);
+  const low = cleanNumber(last?.low || stock.low || close);
+  const volume = cleanNumber(stock.tradeVolume || last?.volume);
+  const ma5 = averageRows(rows, "close", 5);
+  const ma10 = averageRows(rows, "close", 10);
+  const avgVolume5 = averageRows(rows, "volume", 5, 1);
+  const avgVolume20 = averageRows(rows, "volume", 20, 1);
+  const high20 = maxRows(rows, "high", 20, 1);
+  const close5Ago = cleanNumber(rows.at(-6)?.close);
+  const close3Ago = cleanNumber(rows.at(-4)?.close);
+  const fiveDayPct = pctChange(close5Ago, close);
+  const threeDayPct = pctChange(close3Ago, close);
+  const distanceToHigh20Pct = high20 ? ((high20 - close) / high20) * 100 : 99;
+  const volumeRatio5 = avgVolume5 ? volume / avgVolume5 : 0;
+  const volumeRatio20 = avgVolume20 ? volume / avgVolume20 : 0;
+  const range = high - low;
+  const upperShadowRatio = range > 0 ? (high - Math.max(open, close)) / range : 0;
+  const closePosition = range > 0 ? (close - low) / range : 1;
+  const pct = prev?.close ? pctChange(cleanNumber(prev.close), close) : cleanNumber(stock.percent);
+
+  return {
+    close,
+    ma5,
+    ma10,
+    high20,
+    distanceToHigh20Pct,
+    fiveDayPct,
+    threeDayPct,
+    volume,
+    volumeRatio5,
+    volumeRatio20,
+    upperShadowRatio,
+    closePosition,
+    pct,
+  };
+}
+
+function buildStrategy5Match({ stock, inst, valueRank, volumeRank, rows, confluenceSources }) {
   const pct = cleanNumber(stock.percent);
   const foreign = cleanNumber(inst.foreign);
   const trust = cleanNumber(inst.trust);
   const total = cleanNumber(inst.total);
-  const smartMoney = total + trust * 1.4;
+  const setup = analyzeBreakoutSetup(rows, stock);
+  const todayPct = setup ? setup.pct : pct;
   const jointBuying = total > 0 && foreign > 0 && trust > 0;
-  if (!jointBuying || pct <= -1.5 || pct > 7.5) return null;
+  if (!jointBuying || !setup || todayPct <= -1.5 || todayPct > 7.5) return null;
 
-  const scoreBase = clamp(
-    Math.round(35 + pct * 7 + valueRank * 0.24 + volumeRank * 0.18 + Math.sign(smartMoney) * 8),
-    0,
-    100
-  );
-  const score = clamp(scoreBase + 32, 0, 100);
-  const reason = `外資 ${formatInstitution(foreign)}、投信 ${formatInstitution(trust)} 同買，法人合計 ${formatInstitution(total)}；漲幅 ${pct.toFixed(2)}%。`;
-  return { id: "foreign_trust_breakout", short: "準突破", icon: "◆", score, reason };
+  const volume = setup.volume || cleanNumber(stock.tradeVolume);
+  const legalBuyRatio = volume ? (total / volume) * 100 : 0;
+  const foreignBuyRatio = volume ? (foreign / volume) * 100 : 0;
+  const trustBuyRatio = volume ? (trust / volume) * 100 : 0;
+  const foreignStreak = cleanNumber(inst.foreignStreak || stock.foreignStreak);
+  const trustStreak = cleanNumber(inst.trustStreak || stock.trustStreak);
+  const hasCb = Boolean(confluenceSources?.cbByCode?.has(String(stock.code)));
+  const hasWarrant = Boolean(confluenceSources?.warrantByCode?.has(String(stock.code)));
+
+  const positionOk =
+    setup.close > setup.ma5 &&
+    setup.close > setup.ma10 &&
+    setup.distanceToHigh20Pct <= 3 &&
+    setup.fiveDayPct <= 15;
+  const volumeOk =
+    setup.volumeRatio5 >= 1.2 &&
+    setup.volumeRatio20 >= 1.1 &&
+    valueRank >= 55 &&
+    setup.volumeRatio20 <= 6;
+  const continuityOk =
+    trustStreak >= 2 ||
+    foreignStreak >= 2 ||
+    trustBuyRatio >= 1 ||
+    foreignBuyRatio >= 1;
+  const fakeBreakoutOk =
+    setup.upperShadowRatio <= 0.45 &&
+    setup.closePosition >= 0.45 &&
+    setup.threeDayPct <= 12;
+  const concentrationOk =
+    legalBuyRatio >= 0.5 ||
+    trustBuyRatio >= 0.8 ||
+    (hasCb && hasWarrant);
+  if (!positionOk || !volumeOk || !continuityOk || !fakeBreakoutOk || !concentrationOk) return null;
+
+  const score = clamp(Math.round(
+    58 +
+    Math.min(Math.max(todayPct, 0) * 4, 22) +
+    Math.min(valueRank * 0.12, 12) +
+    Math.min(volumeRank * 0.08, 8) +
+    Math.min(setup.volumeRatio5 * 4, 12) +
+    Math.min(Math.max(0, 3 - Math.max(setup.distanceToHigh20Pct, 0)) * 3, 9) +
+    Math.min(trustStreak * 2, 10) +
+    Math.min(foreignStreak * 1.5, 6) +
+    Math.min(Math.max(legalBuyRatio, 0) * 2, 10) +
+    (hasCb ? 3 : 0) +
+    (hasWarrant ? 3 : 0) -
+    Math.min(setup.upperShadowRatio * 12, 8)
+  ), 70, 100);
+  const reason = `外資 ${formatInstitution(foreign)}、投信 ${formatInstitution(trust)} 同買；收盤站上 5/10MA、距20日高 ${setup.distanceToHigh20Pct.toFixed(2)}%，5日漲幅 ${setup.fiveDayPct.toFixed(2)}%；量比5日 ${setup.volumeRatio5.toFixed(2)}、20日 ${setup.volumeRatio20.toFixed(2)}；法人佔量 ${legalBuyRatio.toFixed(2)}%、投信佔量 ${trustBuyRatio.toFixed(2)}%，外資連買 ${foreignStreak} 日、投信連買 ${trustStreak} 日。`;
+  return {
+    id: "foreign_trust_breakout",
+    short: "準突破",
+    icon: "◆",
+    score,
+    reason,
+    ma5: Number(setup.ma5.toFixed(2)),
+    ma10: Number(setup.ma10.toFixed(2)),
+    distanceToHigh20Pct: Number(setup.distanceToHigh20Pct.toFixed(2)),
+    fiveDayPct: Number(setup.fiveDayPct.toFixed(2)),
+    threeDayPct: Number(setup.threeDayPct.toFixed(2)),
+    volumeRatio5: Number(setup.volumeRatio5.toFixed(2)),
+    volumeRatio20: Number(setup.volumeRatio20.toFixed(2)),
+    legalBuyRatio: Number(legalBuyRatio.toFixed(2)),
+    foreignBuyRatio: Number(foreignBuyRatio.toFixed(2)),
+    trustBuyRatio: Number(trustBuyRatio.toFixed(2)),
+    upperShadowPct: Number((setup.upperShadowRatio * 100).toFixed(2)),
+    closePosition: Number(setup.closePosition.toFixed(2)),
+    foreignStreak,
+    trustStreak,
+    hasCb,
+    hasWarrant,
+  };
 }
 
 function buildVolumeTurnoverMatch({ stock, issuedSharesMap, volumeAverageMap }) {
@@ -680,7 +823,6 @@ async function buildMatches(stocks, institutionData, issuedSharesMap = new Map()
     const normalizedInst = { foreign, trust, dealer, total };
     const matches = [
       buildChipKConfluenceMatch({ stock, inst: normalizedInst, confluenceSources, valueRank, volumeRank }),
-      buildStrategy5Match({ stock, inst: normalizedInst, valueRank, volumeRank }),
       buildVolumeTurnoverMatch({ stock, issuedSharesMap, volumeAverageMap }),
     ].filter(Boolean);
     const volumeTurnover = matches.find((match) => match.id === "volume_turnover_breakout");
@@ -699,7 +841,10 @@ async function buildMatches(stocks, institutionData, issuedSharesMap = new Map()
   const strategy4Candidates = readStrategy4Candidates();
   const strategy4ByCode = new Map(strategy4Candidates.map((stock) => [String(stock.code || ""), stock]));
   const historyCandidates = baseRows
-    .filter((stock) => cleanNumber(stock.close) >= 10 && stock.valueRank >= 35)
+    .filter((stock) => {
+      const jointBuying = stock.inst.foreign > 0 && stock.inst.trust > 0 && stock.inst.total > 0;
+      return cleanNumber(stock.close) >= 10 && (stock.valueRank >= 35 || jointBuying);
+    })
     .sort((a, b) => b.valueRank - a.valueRank || b.volumeRank - a.volumeRank || cleanNumber(b.percent) - cleanNumber(a.percent));
   const historyByCode = new Map();
   await mapLimit(historyCandidates, HISTORY_CONCURRENCY, async (stock) => {
@@ -721,13 +866,21 @@ async function buildMatches(stocks, institutionData, issuedSharesMap = new Map()
       volumeRank: stock.volumeRank,
       rows: historyByCode.get(stock.code) || [],
     });
+    const foreignTrustBreakout = buildStrategy5Match({
+      stock: mergedStock,
+      inst: stock.inst,
+      valueRank: stock.valueRank,
+      volumeRank: stock.volumeRank,
+      rows: historyByCode.get(stock.code) || [],
+      confluenceSources,
+    });
     const bollingerKdj = buildBollingerKdjMatch({
       stock: mergedStock,
       valueRank: stock.valueRank,
       volumeRank: stock.volumeRank,
       rows: historyByCode.get(stock.code) || [],
     });
-    const matches = [...stock.matches, limitUpDoji, bollingerKdj].filter(Boolean);
+    const matches = [...stock.matches, foreignTrustBreakout, limitUpDoji, bollingerKdj].filter(Boolean);
     const sortedMatches = matches.sort((a, b) => (b.score || 0) - (a.score || 0));
     const score = sortedMatches.length ? Math.max(...sortedMatches.map((match) => match.score || 0)) : 0;
     return { ...mergedStock, score, matches: sortedMatches, activeMatch: sortedMatches[0] || null };
