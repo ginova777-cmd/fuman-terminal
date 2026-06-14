@@ -1,5 +1,5 @@
 (function () {
-  const VERSION = "chip-flow-hardening-20260611-38";
+  const VERSION = "strategy5-oldk-restore-20260614";
   const modules = {
     sectorMap: { loaded: false, src: "terminal-sector-map.js" },
     strategyConfig: { loaded: false, src: "terminal-strategy-config.js" },

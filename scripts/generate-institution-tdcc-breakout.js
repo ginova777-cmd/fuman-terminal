@@ -134,6 +134,88 @@ function isIncreasing(values, strict) {
   return true;
 }
 
+function clamp(value, min, max) {
+  return Math.min(Math.max(Number(value) || 0, min), max);
+}
+
+function round2(value) {
+  return Number((Number(value) || 0).toFixed(2));
+}
+
+function fallbackBreakoutFields(row, ratioIncrease) {
+  const foreignStreak = cleanNumber(row.foreignStreak);
+  const foreign = cleanNumber(row.foreign);
+  const trust = cleanNumber(row.trust);
+  const total = cleanNumber(row.total) || foreign + trust + cleanNumber(row.dealer);
+  const percent = cleanNumber(row.percent ?? row.changePct);
+  const fiveDayPctSum = cleanNumber(row.fiveDayPctSum);
+  const tradeVolume = cleanNumber(row.tradeVolume);
+  const fiveDayAvgVolume = cleanNumber(row.fiveDayAvgVolume);
+  const volumeRatio5 = fiveDayAvgVolume > 0 ? tradeVolume / fiveDayAvgVolume : 0;
+  const institutionBuyVolumePct = fiveDayAvgVolume > 0 ? (total / fiveDayAvgVolume) * 100 : 0;
+
+  let chipScore = 0;
+  if (foreignStreak >= 3) chipScore += 28;
+  if (foreignStreak >= 5) chipScore += 10;
+  if (ratioIncrease >= 1) chipScore += 22;
+  else if (ratioIncrease >= 0.5) chipScore += 14;
+  else if (ratioIncrease > 0) chipScore += 8;
+  if (institutionBuyVolumePct >= 8) chipScore += 18;
+  else if (institutionBuyVolumePct >= 3) chipScore += 10;
+  if (foreign > 0 && trust > 0) chipScore += 12;
+  chipScore = clamp(chipScore, 0, 100);
+
+  let structureScore = 0;
+  if (percent >= 0 && percent <= 6) structureScore += 32;
+  else if (percent > 6 && percent < 9) structureScore += 18;
+  else if (percent < 0) structureScore += 8;
+  if (fiveDayPctSum >= 0 && fiveDayPctSum <= 20) structureScore += 28;
+  else if (fiveDayPctSum > 20) structureScore -= 18;
+  if (ratioIncrease > 0) structureScore += 20;
+  structureScore = clamp(structureScore, 0, 100);
+
+  let volumeScore = 0;
+  if (volumeRatio5 >= 1.2 && volumeRatio5 <= 3.5) volumeScore += 35;
+  else if (volumeRatio5 >= 0.8 && volumeRatio5 < 1.2) volumeScore += 20;
+  else if (volumeRatio5 > 3.5 && volumeRatio5 <= 5) volumeScore += 14;
+  else if (volumeRatio5 > 5) volumeScore -= 12;
+  if (percent > 0 && volumeRatio5 >= 0.8) volumeScore += 20;
+  if (tradeVolume > 0 && fiveDayAvgVolume > 0) volumeScore += 15;
+  volumeScore = clamp(volumeScore, 0, 100);
+
+  const heatWarnings = [];
+  if (percent >= 9) heatWarnings.push("接近漲停");
+  if (fiveDayPctSum > 20) heatWarnings.push("5日漲幅過熱");
+  if (volumeRatio5 > 5) heatWarnings.push("爆量");
+  if (percent < 0 && foreign > 0) heatWarnings.push("外資買超但收黑");
+  const overheated = heatWarnings.some((text) => /漲停|過熱|爆量/.test(text));
+  const heatScore = overheated ? 45 : heatWarnings.length ? 70 : 100;
+
+  let entryType = "觀察";
+  if (overheated) {
+    entryType = "過熱觀察";
+  } else if (percent >= 0 && percent <= 6 && volumeRatio5 >= 0.8) {
+    entryType = "突破";
+  } else if (foreignStreak >= 3 && percent >= -2 && percent < 2) {
+    entryType = "拉回";
+  }
+
+  const breakoutScore = Math.round(
+    chipScore * 0.35
+    + structureScore * 0.30
+    + heatScore * 0.20
+    + volumeScore * 0.15
+  );
+
+  return {
+    breakoutScore,
+    entryType,
+    heatWarning: heatWarnings.join("、") || "正常",
+    volumeRatio5: round2(volumeRatio5),
+    institutionBuyVolumePct: round2(institutionBuyVolumePct),
+  };
+}
+
 async function main() {
   const institution = readJson(INSTITUTION_FILE, {});
   const tdcc = await loadTdccHistory();
@@ -153,6 +235,8 @@ async function main() {
     if (ratios.some((value) => value == null)) continue;
     if (!isIncreasing(ratios, strict)) continue;
     const foreignLots = Math.round(foreign / 1000);
+    const ratioIncrease = Number((ratios.at(-1) - ratios[0]).toFixed(2));
+    const fallback = fallbackBreakoutFields(row, ratioIncrease);
     matches.push({
       code,
       name: row.name || code,
@@ -164,14 +248,14 @@ async function main() {
       ratio2: ratios[1],
       ratioDate3: dates[2],
       ratio3: ratios[2],
-      ratioIncrease: Number((ratios.at(-1) - ratios[0]).toFixed(2)),
+      ratioIncrease,
       close: cleanNumber(row.close),
       changePct: cleanNumber(row.percent ?? row.changePct),
-      breakoutScore: cleanNumber(row.breakoutScore),
-      entryType: row.entryType || "",
-      heatWarning: row.heatWarning || "",
-      volumeRatio5: cleanNumber(row.volumeRatio5),
-      institutionBuyVolumePct: cleanNumber(row.institutionBuyVolumePct),
+      breakoutScore: cleanNumber(row.breakoutScore) || fallback.breakoutScore,
+      entryType: row.entryType || fallback.entryType,
+      heatWarning: row.heatWarning || fallback.heatWarning,
+      volumeRatio5: cleanNumber(row.volumeRatio5) || fallback.volumeRatio5,
+      institutionBuyVolumePct: cleanNumber(row.institutionBuyVolumePct) || fallback.institutionBuyVolumePct,
       fiveDayPctSum: cleanNumber(row.fiveDayPctSum),
       distanceMa20Pct: cleanNumber(row.distanceMa20Pct),
     });

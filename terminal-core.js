@@ -1,5 +1,5 @@
 (function () {
-  const version = "chip-flow-hardening-20260611-38";
+  const version = "strategy5-oldk-restore-20260614";
   window.FUMAN_TERMINAL_VERSION = version;
   window.FUMAN_TERMINAL_BOOT = {
     version,
