@@ -285,6 +285,8 @@ if (!fs.existsSync(path.join(ROOT, "AGENTS.md"))) {
   if (!agents.includes("strategy2-intraday-*.json")) issues.push("AGENTS.md must mention strategy2 JSON cannot bypass freshness gate");
   if (!agents.includes("REALTIME-RADAR-FRESHNESS-GOVERNANCE.md")) issues.push("AGENTS.md must point Codex to REALTIME-RADAR-FRESHNESS-GOVERNANCE.md");
   if (!agents.includes("realtime-radar-latest.json")) issues.push("AGENTS.md must mention realtime radar JSON cannot bypass freshness gate");
+  if (!agents.includes("STRATEGY5-FRESHNESS-GOVERNANCE.md")) issues.push("AGENTS.md must point Codex to STRATEGY5-FRESHNESS-GOVERNANCE.md");
+  if (!agents.includes("strategy5-latest.json")) issues.push("AGENTS.md must mention strategy5 JSON cannot bypass freshness gate");
 }
 
 if (!fs.existsSync(path.join(ROOT, "FRESHNESS-GATE-MOBILE.md"))) {
@@ -314,6 +316,9 @@ if (!fs.existsSync(path.join(ROOT, "FRESHNESS-GATE-MOBILE.md"))) {
     "REALTIME-RADAR-FRESHNESS-GOVERNANCE.md",
     "/api/market + /api/realtime",
     "realtime-radar-latest.json",
+    "STRATEGY5-FRESHNESS-GOVERNANCE.md",
+    "strategy5-latest.json",
+    "strategy-match-index.json",
   ]) {
     if (!mobile.includes(marker)) issues.push(`FRESHNESS-GATE-MOBILE.md missing ${marker}`);
   }
@@ -371,6 +376,36 @@ if (!fs.existsSync(path.join(ROOT, "REALTIME-RADAR-FRESHNESS-GOVERNANCE.md"))) {
   }
 }
 
+if (!fs.existsSync(path.join(ROOT, "STRATEGY5-FRESHNESS-GOVERNANCE.md"))) {
+  issues.push("STRATEGY5-FRESHNESS-GOVERNANCE.md missing strategy5 data governance");
+} else {
+  const strategy5Governance = read("STRATEGY5-FRESHNESS-GOVERNANCE.md");
+  for (const marker of [
+    "策略5資料新鮮度治理",
+    "Verified Data Publish Gate",
+    "npm run freshness:gate",
+    "strategy5 raw refresh",
+    "node scripts/scan-strategy5-cache.js",
+    "node scripts/generate-slim-cache.js",
+    "strategy5-background-scan.yml",
+    "strategy5-latest.json",
+    "strategy5-backup.json",
+    "strategy-match-index.json",
+    "terminal-home-bundle.json",
+    "chip_k_confluence",
+    "foreign_trust_breakout",
+    "chip_k_confluence=0",
+    "foreign_trust_breakout=42",
+    "live-freshness-ok.json",
+    "strategy5Count",
+    "strategy5ChipKCount",
+    "strategy5ForeignTrustCount",
+    "strategy5MultiCount",
+  ]) {
+    if (!strategy5Governance.includes(marker)) issues.push(`STRATEGY5-FRESHNESS-GOVERNANCE.md missing ${marker}`);
+  }
+}
+
 function runGit(args) {
   return spawnSync("git", args, {
     cwd: ROOT,
@@ -409,6 +444,7 @@ if (fetchResult.status !== 0) {
       "package.json",
       "scripts/generate-health-summary.js",
       "REALTIME-RADAR-FRESHNESS-GOVERNANCE.md",
+      "STRATEGY5-FRESHNESS-GOVERNANCE.md",
     ]);
     const dirty = status.stdout
       .split(/\r?\n/)

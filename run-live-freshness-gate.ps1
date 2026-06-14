@@ -129,6 +129,38 @@ function Get-GateCount($payload) {
   return 0
 }
 
+function Get-Strategy5MatchCount($payload, $matchId) {
+  $count = 0
+  foreach ($item in @($payload.matches)) {
+    foreach ($match in @($item.matches)) {
+      if ([string]$match.id -eq [string]$matchId) {
+        $count++
+        break
+      }
+    }
+  }
+  return $count
+}
+
+function Get-Strategy5MultiCount($payload) {
+  $ids = @(
+    "chip_k_confluence",
+    "foreign_trust_breakout",
+    "limit_up_doji",
+    "volume_turnover_breakout",
+    "bollinger_kdj_buy"
+  )
+  $count = 0
+  foreach ($item in @($payload.matches)) {
+    $hits = 0
+    foreach ($match in @($item.matches)) {
+      if ($ids -contains [string]$match.id) { $hits++ }
+    }
+    if ($hits -ge 2) { $count++ }
+  }
+  return $count
+}
+
 function Invoke-LiveDataFreshnessVerify([switch]$SkipTerminalGate) {
   Push-Location $publishRoot
   try {
@@ -156,9 +188,11 @@ function Publish-TerminalFreshnessGate($mode, $rawResults) {
   $versionPath = Join-Path $publishRoot "version.json"
   $manifestPath = Join-Path $publishRoot "data\data-manifest.json"
   $cbPath = Join-Path $publishRoot "data\cb-detect-latest.json"
+  $strategy5Path = Join-Path $publishRoot "data\strategy5-latest.json"
   $versionPayload = Read-GateJson $versionPath
   $manifestPayload = Read-GateJson $manifestPath
   $cbPayload = Read-GateJson $cbPath
+  $strategy5Payload = Read-GateJson $strategy5Path
   $head = & $gitExe -C $publishRoot log -1 --oneline --decorate
   $headSha = (& $gitExe -C $publishRoot rev-parse --short=12 HEAD).Trim()
   if (-not $headSha) { throw "Cannot resolve publish HEAD for terminal freshness gate" }
@@ -177,11 +211,17 @@ function Publish-TerminalFreshnessGate($mode, $rawResults) {
     manifestCbCount = [int]$manifestPayload.entries."cb-detect-latest.json".count
     cbCount = Get-GateCount $cbPayload
     cbUpdatedAt = [string]$cbPayload.updatedAt
+    strategy5Count = Get-GateCount $strategy5Payload
+    strategy5UpdatedAt = [string]$strategy5Payload.updatedAt
+    strategy5SourceDate = [string]$strategy5Payload.sourceDate
+    strategy5ChipKCount = Get-Strategy5MatchCount $strategy5Payload "chip_k_confluence"
+    strategy5ForeignTrustCount = Get-Strategy5MatchCount $strategy5Payload "foreign_trust_breakout"
+    strategy5MultiCount = Get-Strategy5MultiCount $strategy5Payload
     rawRefresh = @($rawResults)
   }
   $status | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $statusPath -Encoding utf8
 
-  Write-GateLog "Publishing terminal freshness gate artifact gateId=$($status.gateId) version=$($status.version) cbCount=$($status.cbCount) manifestCbCount=$($status.manifestCbCount)"
+  Write-GateLog "Publishing terminal freshness gate artifact gateId=$($status.gateId) version=$($status.version) cbCount=$($status.cbCount) manifestCbCount=$($status.manifestCbCount) strategy5=$($status.strategy5Count) chipK=$($status.strategy5ChipKCount) foreignTrust=$($status.strategy5ForeignTrustCount)"
   & $gitExe -C $publishRoot add -f "data/live-freshness-ok.json"
   if ($LASTEXITCODE -ne 0) { throw "Stage terminal freshness gate artifact failed" }
   & $gitExe -C $publishRoot diff --cached --quiet -- "data/live-freshness-ok.json"
@@ -217,13 +257,17 @@ function Wait-TerminalFreshnessGateVisible($expectedStatus) {
         [string]$payload.version -eq [string]$expectedStatus.version -and
         [int]$payload.cbCount -eq [int]$expectedStatus.cbCount -and
         [int]$payload.manifestCbCount -eq [int]$expectedStatus.manifestCbCount -and
+        [int]$payload.strategy5Count -eq [int]$expectedStatus.strategy5Count -and
+        [int]$payload.strategy5ChipKCount -eq [int]$expectedStatus.strategy5ChipKCount -and
+        [int]$payload.strategy5ForeignTrustCount -eq [int]$expectedStatus.strategy5ForeignTrustCount -and
+        [int]$payload.strategy5MultiCount -eq [int]$expectedStatus.strategy5MultiCount -and
         [int]$payload.manifestCount -eq [int]$expectedStatus.manifestCount -and
         [string]$payload.verifier -match "verify:data-freshness:live"
       if ($isCurrentGate) {
-        Write-GateLog "Terminal freshness gate visible gateId=$($payload.gateId) version=$($payload.version) cbCount=$($payload.cbCount) manifestCbCount=$($payload.manifestCbCount)"
+        Write-GateLog "Terminal freshness gate visible gateId=$($payload.gateId) version=$($payload.version) cbCount=$($payload.cbCount) manifestCbCount=$($payload.manifestCbCount) strategy5=$($payload.strategy5Count) chipK=$($payload.strategy5ChipKCount) foreignTrust=$($payload.strategy5ForeignTrustCount)"
         return
       }
-      Write-GateLog "Terminal freshness gate visible but not current gateId=$($payload.gateId) expected=$($expectedStatus.gateId) cbCount=$($payload.cbCount)/$($expectedStatus.cbCount) manifestCbCount=$($payload.manifestCbCount)/$($expectedStatus.manifestCbCount)"
+      Write-GateLog "Terminal freshness gate visible but not current gateId=$($payload.gateId) expected=$($expectedStatus.gateId) cbCount=$($payload.cbCount)/$($expectedStatus.cbCount) manifestCbCount=$($payload.manifestCbCount)/$($expectedStatus.manifestCbCount) strategy5=$($payload.strategy5Count)/$($expectedStatus.strategy5Count) chipK=$($payload.strategy5ChipKCount)/$($expectedStatus.strategy5ChipKCount) foreignTrust=$($payload.strategy5ForeignTrustCount)/$($expectedStatus.strategy5ForeignTrustCount)"
     } catch {
       Write-GateLog "Terminal freshness gate not visible yet: $($_.Exception.Message)"
     }

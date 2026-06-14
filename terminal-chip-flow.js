@@ -119,6 +119,19 @@
         return mode === "tdcc1000" || mode === "foreignTrustVolumePct";
       }
 
+      function isFocusColumn(columnKey) {
+        if (scope.chipFilter === "foreignTrustVolumePct") return columnKey === "foreignTrustVolumePct";
+        if (scope.chipFilter === "foreignStreak") return columnKey === "foreignStreak";
+        if (scope.chipFilter === "trustStreak") return columnKey === "trustStreak";
+        if (scope.chipFilter === "jointStreak") return columnKey === "jointStreak";
+        if (scope.chipFilter === "tdcc1000") return ["foreignStreak", "ratio1", "ratio2", "ratio3", "ratioIncrease"].includes(columnKey);
+        return false;
+      }
+
+      function focusColumnClass(columnKey) {
+        return isFocusColumn(columnKey) ? " chip-focus-column" : "";
+      }
+
       function chipVolumeLots(value, key = "") {
         const n = cleanNumber(value);
         if (!Number.isFinite(n) || n <= 0) return 0;
@@ -164,9 +177,21 @@
         const headRow = table?.querySelector("thead tr");
         if (!headRow) return;
         const headers = isTdccMode(mode)
-          ? ["股票代號", "股票名稱", "現價/收盤", "漲幅(%)", "外資連買", "外資買超(張)", "外資+投信佔均量", "1000張比例 W1", "1000張比例 W2", "1000張比例 W3", "比例增幅", "起漲分", "買點型態", "過熱警示"]
-          : ["股票代號", "股票名稱", "現價/收盤", "漲跌", "漲幅(%)", "成交量(張)", "近5日漲幅累計", "近5日累計均量", "外資買賣超(張)", "投信買賣超(張)", "外資連買", "投信連買", "同買", "法人合計(張)"];
-        headRow.innerHTML = headers.map((label) => `<th>${label}</th>`).join("");
+          ? [
+              { label: "股票代號" }, { label: "股票名稱" }, { label: "現價/收盤" }, { label: "漲幅(%)" },
+              { label: "外資連買", key: "foreignStreak" }, { label: "外資買超(張)" },
+              { label: "外資+投信佔均量", key: "foreignTrustVolumePct" },
+              { label: "1000張比例 W1", key: "ratio1" }, { label: "1000張比例 W2", key: "ratio2" }, { label: "1000張比例 W3", key: "ratio3" },
+              { label: "比例增幅", key: "ratioIncrease" }, { label: "起漲分" }, { label: "買點型態" }, { label: "過熱警示" },
+            ]
+          : [
+              { label: "股票代號" }, { label: "股票名稱" }, { label: "現價/收盤" }, { label: "漲跌" }, { label: "漲幅(%)" },
+              { label: "成交量(張)" }, { label: "近5日漲幅累計" }, { label: "近5日累計均量" },
+              { label: "外資買賣超(張)" }, { label: "投信買賣超(張)" },
+              { label: "外資連買", key: "foreignStreak" }, { label: "投信連買", key: "trustStreak" }, { label: "同買", key: "jointStreak" },
+              { label: "法人合計(張)" },
+            ];
+        headRow.innerHTML = headers.map((header) => `<th class="${focusColumnClass(header.key).trim()}">${header.label}</th>`).join("");
       }
 
       function setTdLabels(row, labels) {
@@ -315,9 +340,9 @@
               <td class="chip-cell-number">${formatChipLots(row.fiveDayAvgVolume)}</td>
               <td class="chip-cell-flow ${row.foreign >= 0 ? "red" : "green"}">${formatChipSignedLots(row.foreign)}</td>
               <td class="chip-cell-flow ${row.trust >= 0 ? "red" : "green"}">${formatChipSignedLots(row.trust)}</td>
-              <td class="chip-cell-streak">${row.foreignStreak} 日</td>
-              <td class="chip-cell-streak">${row.trustStreak} 日</td>
-              <td class="chip-cell-streak">${row.jointStreak} 日</td>
+              <td class="chip-cell-streak${focusColumnClass("foreignStreak")}">${row.foreignStreak} 日</td>
+              <td class="chip-cell-streak${focusColumnClass("trustStreak")}">${row.trustStreak} 日</td>
+              <td class="chip-cell-streak${focusColumnClass("jointStreak")}">${row.jointStreak} 日</td>
               <td class="chip-cell-flow ${row.total >= 0 ? "red" : "green"}">${formatChipSignedLots(row.total)}</td>
             </tr>
           `;
@@ -334,13 +359,13 @@
             <td class="chip-cell-name">${escapeText(row.name)}</td>
             <td class="chip-cell-number">${formatNumber(cleanNumber(row.close), cleanNumber(row.close) >= 100 ? 0 : 2)}</td>
             <td class="chip-cell-number ${cleanNumber(row.changePct) >= 0 ? "red" : "green"}">${formatChipSignedPercent(row.changePct)}</td>
-            <td class="chip-cell-streak">${cleanNumber(row.foreignStreak)} 日</td>
+            <td class="chip-cell-streak${focusColumnClass("foreignStreak")}">${cleanNumber(row.foreignStreak)} 日</td>
             <td class="chip-cell-flow red">+${Math.round(cleanNumber(row.foreignLots)).toLocaleString("zh-TW")}</td>
-            <td class="chip-cell-number red">+${formatNumber(cleanNumber(row.foreignTrustBuyVolumePct ?? row.institutionBuyVolumePct), 2)}%</td>
-            <td class="chip-cell-number">${formatRatio(row.ratio1)}</td>
-            <td class="chip-cell-number">${formatRatio(row.ratio2)}</td>
-            <td class="chip-cell-number">${formatRatio(row.ratio3)}</td>
-            <td class="chip-cell-number red">+${formatNumber(cleanNumber(row.ratioIncrease), 2)}%</td>
+            <td class="chip-cell-number red${focusColumnClass("foreignTrustVolumePct")}">+${formatNumber(cleanNumber(row.foreignTrustBuyVolumePct ?? row.institutionBuyVolumePct), 2)}%</td>
+            <td class="chip-cell-number${focusColumnClass("ratio1")}">${formatRatio(row.ratio1)}</td>
+            <td class="chip-cell-number${focusColumnClass("ratio2")}">${formatRatio(row.ratio2)}</td>
+            <td class="chip-cell-number${focusColumnClass("ratio3")}">${formatRatio(row.ratio3)}</td>
+            <td class="chip-cell-number red${focusColumnClass("ratioIncrease")}">+${formatNumber(cleanNumber(row.ratioIncrease), 2)}%</td>
             <td class="chip-cell-number">${cleanNumber(row.breakoutScore) || "--"}</td>
             <td class="chip-cell-streak">${escapeText(row.entryType || "--")}</td>
             <td class="chip-cell-name">${escapeText(row.heatWarning || "正常")}</td>

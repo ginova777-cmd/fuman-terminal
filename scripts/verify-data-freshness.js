@@ -7,7 +7,7 @@ const BASE_URL = (process.env.FUMAN_VERIFY_BASE_URL || "https://fuman-terminal.v
 const LIVE = process.argv.includes("--live") || process.env.FUMAN_DATA_FRESHNESS_LIVE === "1";
 const WRITE_REPORT = process.argv.includes("--write") || process.env.FUMAN_WRITE_FRESHNESS_REPORT === "1";
 const SKIP_TERMINAL_GATE = process.env.FUMAN_SKIP_TERMINAL_GATE_ARTIFACT === "1";
-const LOCAL_DATA_DIR = process.env.FUMAN_DATA_DIR || path.join(ROOT, "data");
+const LOCAL_DATA_DIR = process.env.FUMAN_VERIFY_DATA_DIR || path.join(ROOT, "data");
 
 const TARGETS = [
   { name: "data-manifest", file: "data/data-manifest.json", minCount: 25 },
@@ -18,7 +18,8 @@ const TARGETS = [
   { name: "strategy3-latest", file: "data/strategy3-latest.json", minCount: 1 },
   { name: "strategy4-latest", file: "data/strategy4-latest.json", minCount: 1 },
   { name: "strategy4-summary", file: "data/strategy4-summary.json", minCount: 1 },
-  { name: "strategy5-latest", file: "data/strategy5-latest.json" },
+  { name: "strategy5-latest", file: "data/strategy5-latest.json", minCount: 1 },
+  { name: "strategy-match-index", file: "data/strategy-match-index.json", minCount: 1 },
   { name: "warrant-flow-latest", file: "data/warrant-flow-latest.json" },
   { name: "stocks-quotes-slim", file: "data/stocks-quotes-slim.json", minCount: 1000 },
   { name: "institution-latest", file: "data/institution-latest.json", minCount: 1000 },
@@ -116,6 +117,8 @@ function validateCrossPayloads(payloads, issues) {
   const manifest = payloads["data-manifest"];
   const home = payloads["terminal-home-bundle"];
   const quotes = payloads["stocks-quotes-slim"];
+  const strategy5 = payloads["strategy5-latest"];
+  const strategyMatchIndex = payloads["strategy-match-index"];
   const institutionLatest = payloads["institution-latest"];
   const institutionSlim = payloads["institution-slim"];
   const institutionMobile = payloads["institution-mobile-top"];
@@ -133,6 +136,8 @@ function validateCrossPayloads(payloads, issues) {
     ["warrant-flow-slim.json", warrantSlim],
     ["warrant-priority-top.json", warrantPriority],
     ["warrant-flow-mobile-top.json", warrantMobile],
+    ["strategy5-latest.json", strategy5],
+    ["strategy-match-index.json", strategyMatchIndex],
     ["stocks-quotes-slim.json", quotes],
     ["terminal-home-bundle.json", home],
   ]) {
@@ -172,6 +177,7 @@ function validateCrossPayloads(payloads, issues) {
   assertFresh(extractCount(warrantPriority) <= extractCount(warrantSlim), "warrant-priority-top larger than slim", issues);
   assertFresh(extractCount(warrantMobile) <= extractCount(warrantSlim), "warrant-flow-mobile-top larger than slim", issues);
   assertFresh(Number(home?.mobile?.warrant?.count || 0) === extractCount(warrantMobile), "terminal-home-bundle warrant count mismatch mobile", issues);
+  validateStrategy5Governance({ strategy5, strategyMatchIndex, manifest, home, quoteDate, issues });
 
   const quoteMap = new Map(rows(quotes).map((row) => [String(row.code || row.symbol || "").trim(), row]));
   for (const row of rows(warrantSlim).slice(0, 20)) {
@@ -182,6 +188,71 @@ function validateCrossPayloads(payloads, issues) {
       assertFresh(sameNumber(rowClose(row), quoteClose(quote)), `warrant ${code} close mismatch quote`, issues);
       if (Number.isFinite(Number(quote.percent))) assertFresh(sameNumber(rowPercent(row), quote.percent, 0.05), `warrant ${code} percent mismatch quote`, issues);
       assertFresh(normalizeDate(row.quoteDate) === quoteDate, `warrant ${code} quoteDate mismatch quoteDate=${quoteDate}`, issues);
+    }
+  }
+}
+
+function strategy5ThemeCount(strategy5, id) {
+  return rows(strategy5).filter((stock) => (stock.matches || []).some((match) => match.id === id)).length;
+}
+
+function strategy5MultiCount(strategy5) {
+  const ids = new Set(["chip_k_confluence", "foreign_trust_breakout", "limit_up_doji", "volume_turnover_breakout", "bollinger_kdj_buy"]);
+  return rows(strategy5).filter((stock) => (stock.matches || []).filter((match) => ids.has(match.id)).length >= 2).length;
+}
+
+function strategy5RulesFingerprint(strategy5) {
+  return {
+    count: extractCount(strategy5),
+    multi: strategy5MultiCount(strategy5),
+    chipK: strategy5ThemeCount(strategy5, "chip_k_confluence"),
+    foreignTrust: strategy5ThemeCount(strategy5, "foreign_trust_breakout"),
+    limitUpDoji: strategy5ThemeCount(strategy5, "limit_up_doji"),
+    volumeTurnover: strategy5ThemeCount(strategy5, "volume_turnover_breakout"),
+    bollingerKdj: strategy5ThemeCount(strategy5, "bollinger_kdj_buy"),
+  };
+}
+
+function validateStrategy5Governance({ strategy5, strategyMatchIndex, manifest, home, quoteDate, issues }) {
+  const fingerprint = strategy5RulesFingerprint(strategy5);
+  const sourceDate = normalizeDate(strategy5?.sourceDate || strategy5?.usedDate || strategy5?.date);
+  const generatedDate = normalizeDate(strategy5?.generatedDate || strategy5?.updatedAt);
+  const manifestEntry = manifest?.entries?.["strategy5-latest.json"];
+  const indexEntry = manifest?.entries?.["strategy-match-index.json"];
+  const indexByCode = strategyMatchIndex?.byCode || {};
+  const homeStrategy5 = home?.strategies?.strategy5 || home?.desktop?.strategy5 || home?.mobile?.strategy5 || home?.strategy5;
+  const detailLabelById = {
+    chip_k_confluence: "籌碼老K",
+    foreign_trust_breakout: "準突破",
+    limit_up_doji: "漲停十字",
+    volume_turnover_breakout: "量價周轉",
+    bollinger_kdj_buy: "布林KDJ",
+  };
+
+  assertFresh(strategy5?.ok === true, "strategy5-latest ok=false", issues);
+  assertFresh(fingerprint.count === extractCount(strategy5), `strategy5 count mismatch payload=${strategy5?.count} actual=${fingerprint.count}`, issues);
+  assertFresh(fingerprint.chipK >= 1, `strategy5 chip_k_confluence empty; expected latest 籌碼老K rules to produce rows, got ${fingerprint.chipK}`, issues);
+  assertFresh(fingerprint.foreignTrust >= 1 && fingerprint.foreignTrust <= 10, `strategy5 foreign_trust_breakout count out of governed range; got ${fingerprint.foreignTrust}`, issues);
+  assertFresh(fingerprint.chipK !== 0 || fingerprint.foreignTrust !== 42, "strategy5 appears to be stale pre-governance cache chipK=0 foreignTrust=42", issues);
+  assertFresh(fingerprint.multi >= 1, `strategy5 multi_strategy_confluence empty; got ${fingerprint.multi}`, issues);
+  assertFresh(Number(manifestEntry?.count || 0) === fingerprint.count, `strategy5 manifest count mismatch manifest=${manifestEntry?.count} actual=${fingerprint.count}`, issues);
+  assertFresh(Number(indexEntry?.count || 0) >= fingerprint.count, `strategy-match-index manifest count too small index=${indexEntry?.count} strategy5=${fingerprint.count}`, issues);
+  assertFresh(Number(strategyMatchIndex?.count || 0) >= fingerprint.count, `strategy-match-index count too small index=${strategyMatchIndex?.count} strategy5=${fingerprint.count}`, issues);
+  assertFresh(sourceDate === quoteDate, `strategy5 sourceDate mismatch quoteDate=${quoteDate} sourceDate=${sourceDate}`, issues);
+  assertFresh(Boolean(generatedDate), "strategy5 missing generatedDate/updatedAt", issues);
+  assertFresh(Number(homeStrategy5?.count || 0) === fingerprint.count, `terminal-home-bundle strategy5 count mismatch home=${homeStrategy5?.count} actual=${fingerprint.count}`, issues);
+
+  for (const stock of rows(strategy5).slice(0, 40)) {
+    const code = String(stock.code || "").trim();
+    if (!code) continue;
+    const indexMatches = indexByCode[code] || [];
+    const strategy5Index = indexMatches.find((item) => item?.key === "strategy5");
+    const details = Array.isArray(strategy5Index?.details) ? strategy5Index.details.map(String) : [];
+    const strategy5Ids = (stock.matches || []).map((match) => match.id).filter(Boolean);
+    assertFresh(strategy5Index, `strategy-match-index missing strategy5 entry code=${code}`, issues);
+    for (const id of strategy5Ids) {
+      const label = detailLabelById[id] || id;
+      assertFresh(details.includes(label), `strategy-match-index missing strategy5 detail code=${code} id=${id} label=${label}`, issues);
     }
   }
 }
@@ -205,6 +276,8 @@ async function validateTerminalFreshnessGate(payloads, issues) {
 
   const manifest = payloads["data-manifest"];
   const cb = payloads["cb-detect-latest"];
+  const strategy5 = payloads["strategy5-latest"];
+  const strategy5Fingerprint = strategy5RulesFingerprint(strategy5);
   const gateCheckedAt = Date.parse(gate.checkedAt || "");
   const ageMinutes = Number.isFinite(gateCheckedAt) ? (Date.now() - gateCheckedAt) / 60000 : Infinity;
   assertFresh(gate.ok === true, "terminal freshness gate ok=false", issues);
@@ -217,6 +290,10 @@ async function validateTerminalFreshnessGate(payloads, issues) {
   assertFresh(Number(gate.cbCount || 0) === extractCount(cb), `terminal freshness gate CB count mismatch gate=${gate.cbCount} actual=${extractCount(cb)}`, issues);
   assertFresh(Number(gate.manifestCbCount || 0) === Number(manifest?.entries?.["cb-detect-latest.json"]?.count || 0), `terminal freshness gate manifest CB count mismatch gate=${gate.manifestCbCount} actual=${manifest?.entries?.["cb-detect-latest.json"]?.count}`, issues);
   assertFresh(Number(gate.cbCount || 0) === Number(manifest?.entries?.["cb-detect-latest.json"]?.count || 0), `terminal freshness gate CB rows not aligned with manifest gate=${gate.cbCount} manifest=${manifest?.entries?.["cb-detect-latest.json"]?.count}`, issues);
+  assertFresh(Number(gate.strategy5Count || 0) === strategy5Fingerprint.count, `terminal freshness gate strategy5 count mismatch gate=${gate.strategy5Count} actual=${strategy5Fingerprint.count}`, issues);
+  assertFresh(Number(gate.strategy5ChipKCount || 0) === strategy5Fingerprint.chipK, `terminal freshness gate strategy5 chipK mismatch gate=${gate.strategy5ChipKCount} actual=${strategy5Fingerprint.chipK}`, issues);
+  assertFresh(Number(gate.strategy5ForeignTrustCount || 0) === strategy5Fingerprint.foreignTrust, `terminal freshness gate strategy5 foreignTrust mismatch gate=${gate.strategy5ForeignTrustCount} actual=${strategy5Fingerprint.foreignTrust}`, issues);
+  assertFresh(Number(gate.strategy5MultiCount || 0) === strategy5Fingerprint.multi, `terminal freshness gate strategy5 multi mismatch gate=${gate.strategy5MultiCount} actual=${strategy5Fingerprint.multi}`, issues);
 }
 
 

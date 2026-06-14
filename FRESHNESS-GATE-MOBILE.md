@@ -60,6 +60,10 @@ verifier = npm run verify:data-freshness:live
 manifestCount
 cbCount
 manifestCbCount
+strategy5Count
+strategy5ChipKCount
+strategy5ForeignTrustCount
+strategy5MultiCount
 ```
 
 如果 `live-freshness-ok.json` 不存在、`gateId` 不是這次發布產生的唯一證明、版本不一致、CB rows 和 manifest count 不一致，終端資料不能宣稱是最新。
@@ -79,6 +83,7 @@ AGENTS.md
 FRESHNESS-GATE-MOBILE.md
 STRATEGY2-FRESHNESS-GOVERNANCE.md
 REALTIME-RADAR-FRESHNESS-GOVERNANCE.md
+STRATEGY5-FRESHNESS-GOVERNANCE.md
 ```
 
 ## 核心規則
@@ -127,6 +132,35 @@ REALTIME-RADAR-FRESHNESS-GOVERNANCE.md
 `realtime-radar-latest.json`、即時雷達 scanner output、failed batch details、stale quote details、外部來源 warning、名單收斂規則，都不能用舊腳本或手動 cache sync 繞過 gate。
 
 即時雷達資料只有通過：
+
+```powershell
+npm run verify:data-freshness:live
+```
+
+才算可以給客人看。
+
+## 策略5專屬規則
+
+策略5資料治理細則在：
+
+```text
+STRATEGY5-FRESHNESS-GOVERNANCE.md
+```
+
+策略5正式資料流必須同時保護：
+
+```text
+strategy5-latest.json
+strategy5-backup.json
+strategy-match-index.json
+terminal-home-bundle.json
+```
+
+籌碼老K、外資投信連買準突破、多策略共振、量價周轉、布林KDJ 不能只更新單一 JSON。策略5掃描後必須重新生成 slim/index，否則前端可能讀到舊條件或點擊卡片沒有對應資料。
+
+策略5舊快取指紋 `chip_k_confluence=0` 且 `foreign_trust_breakout=42` 必須被 gate 擋下。
+
+策略5資料只有通過：
 
 ```powershell
 npm run verify:data-freshness:live
