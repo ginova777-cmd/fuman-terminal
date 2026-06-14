@@ -161,6 +161,13 @@ function Test-CriticalDataReleaseNeeded($changedFiles) {
     "data\warrant-single-signal-top.json",
     "data\warrant-flow-mobile-top.json",
     "data\warrant-flow-backup.json",
+    "data\strategy4-latest.json",
+    "data\strategy4-summary.json",
+    "data\strategy4-slim.json",
+    "data\strategy4-score-top.json",
+    "data\strategy4-zone-a.json",
+    "data\strategy4-zone-b.json",
+    "data\strategy4-zone-c.json",
     "data\strategy5-latest.json",
     "data\strategy5-backup.json",
     "data\cb-detect-latest.json"

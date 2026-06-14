@@ -11,6 +11,8 @@ const FINMIND_API_TOKEN_FILE = process.env.FINMIND_API_TOKEN_FILE || path.join(R
 const FUGLE_HISTORY_CACHE_DIR = process.env.FUGLE_HISTORY_CACHE_DIR || path.join(RUNTIME_DIR, "cache", "fugle", "historical");
 const STRATEGY4_MIN_AVG_VOLUME_5 = 3000;
 const ALLOW_YAHOO_FALLBACK = process.env.STRATEGY4_ALLOW_YAHOO_FALLBACK !== "0";
+const SUPABASE_FIRST = process.env.STRATEGY4_SUPABASE_FIRST !== "0";
+const ALLOW_EXTERNAL_FALLBACK = process.env.STRATEGY4_SUPABASE_ALLOW_EXTERNAL_FALLBACK === "1";
 
 function readSecret(file) {
   try {
@@ -127,7 +129,7 @@ function readFugleHistoryCache(code, from, to) {
     || !Array.isArray(payload?.rows)
     || payload.rows.length < 60
   ) return null;
-  return { rows: payload.rows, source: "fugle-cache" };
+  return { rows: payload.rows, source: payload.source || "fugle-cache" };
 }
 
 function writeFugleHistoryCache(code, from, to, rows) {
@@ -283,6 +285,7 @@ async function fetchFugleHistory(code) {
   const to = new Date().toISOString().slice(0, 10);
   const cached = readFugleHistoryCache(code, from, to);
   if (cached) return cached;
+  if (SUPABASE_FIRST && !ALLOW_EXTERNAL_FALLBACK) return { rows: [], source: "supabase-cache-miss" };
   const params = new URLSearchParams({
     symbol: code,
     from,
@@ -351,8 +354,21 @@ async function fetchHistory(code, preferredMarket = "") {
     if (primary.rows.length >= 60) {
       rows = primary.rows;
       historySource = primary.source || "fugle";
+    } else if (primary.source) {
+      historySource = primary.source;
     }
   } catch {
+  }
+
+  if (SUPABASE_FIRST && !ALLOW_EXTERNAL_FALLBACK && rows.length < 60) {
+    const value = {
+      code,
+      market,
+      source: historySource || "supabase-cache-miss",
+      rows: [],
+    };
+    cache.set(cacheKey, { ts: Date.now(), value });
+    return value;
   }
 
   if (rows.length < 60) {
@@ -491,6 +507,75 @@ function atr(rows, length = 14) {
   return avg(trs.slice(-length));
 }
 
+function moneyFlowSeries(rows) {
+  return rows.map((row) => {
+    const range = row.high - row.low;
+    return range === 0 ? 0 : ((row.close - row.open) / range) * row.volume;
+  });
+}
+
+function walletSnapshots(rows, lookback = 5) {
+  const mfValues = moneyFlowSeries(rows);
+  const mfAvg = emaSeries(mfValues, 20);
+  const controlSeries = mfAvg.map((_, index) => sma(mfAvg.slice(0, index + 1), 5));
+  const absMfValues = mfValues.map(Math.abs);
+  const volumeMa5Series = absMfValues.map((_, index) => sma(absMfValues.slice(0, index + 1), 5));
+  const volumeMa60Series = absMfValues.map((_, index) => sma(absMfValues.slice(0, index + 1), 60));
+  const start = Math.max(60, rows.length - Math.max(1, lookback));
+  const snapshots = [];
+  for (let index = start; index < rows.length; index += 1) {
+    const row = rows[index];
+    const prevControlLine = controlSeries[index - 1] || 0;
+    const prev2ControlLine = controlSeries[index - 2] || prevControlLine;
+    const controlLine = controlSeries[index] || 0;
+    const volumeMa5 = volumeMa5Series[index] || 0;
+    const volumeMa60 = volumeMa60Series[index] || 0;
+    const prevVolumeMa5 = volumeMa5Series[index - 1] || 0;
+    const prevVolumeMa60 = volumeMa60Series[index - 1] || 0;
+    const volAvg = sma(absMfValues.slice(0, index + 1), 20);
+    const mf = mfValues[index] || 0;
+    const atr14 = atr(rows.slice(0, index + 1), 14);
+    const typicalPrice = (row.high + row.low + row.close) / 3;
+    const isRed = row.close > row.open;
+    const isGray = Math.abs(mf) < volAvg * 0.3;
+    const isStrongMove = Math.abs(mf) > atr14 * 2.5;
+    const isDangerZone = row.close < typicalPrice || (controlLine < prevControlLine && prevControlLine < prev2ControlLine);
+    snapshots.push({
+      date: row.date,
+      mf,
+      controlLine,
+      volumeMa5,
+      volumeMa60,
+      strongBuy: !isGray && isStrongMove && prevControlLine <= 0 && controlLine > 0 && isRed && !isDangerZone,
+      volumeCrossUp: prevVolumeMa5 <= prevVolumeMa60 && volumeMa5 > volumeMa60 && isRed,
+    });
+  }
+  return snapshots;
+}
+
+function walletSnapshot(rows) {
+  const snapshots = walletSnapshots(rows, Number(process.env.STRATEGY4_WALLET_LOOKBACK_BARS || 5));
+  const latestStrongBuy = snapshots.slice().reverse().find((item) => item.strongBuy) || null;
+  const latestVolumeCross = snapshots.slice().reverse().find((item) => item.volumeCrossUp) || null;
+  const latest = snapshots.at(-1) || {
+    mf: 0,
+    controlLine: 0,
+    volumeMa5: 0,
+    volumeMa60: 0,
+    strongBuy: false,
+    volumeCrossUp: false,
+  };
+  return {
+    ...latest,
+    strongBuy: Boolean(latestStrongBuy),
+    volumeCrossUp: Boolean(latestVolumeCross),
+    strongBuyDate: latestStrongBuy?.date || "",
+    volumeCrossDate: latestVolumeCross?.date || "",
+    latestStrongBuy,
+    latestVolumeCross,
+  };
+}
+
 function analyzeRows(rows) {
   if (rows.length < 60) return null;
   const normalizedRows = rows.map((row) => ({ ...row, volume: normalizeVolumeLots(row.volume) }));
@@ -513,6 +598,7 @@ function analyzeRows(rows) {
   const macd = macdSnapshot(closes);
   const rsi14 = rsi(closes, 14);
   const atr14 = atr(rows, 14);
+  const wallet = walletSnapshot(normalizedRows);
   const lookback = normalizedRows.slice(-40);
   const swHigh = Math.max(...lookback.map((row) => row.high));
   const swLow = Math.min(...lookback.map((row) => row.low));
@@ -561,6 +647,7 @@ function analyzeRows(rows) {
     macd,
     rsi14,
     atr14,
+    wallet,
     stage,
     highest20Prev,
     highest10Prev,
@@ -682,6 +769,24 @@ function scanStrategy4(code, market, rows, priceSource = "") {
   if (vFast || vReversal) signals.push({ id: "v_reversal", short: "V轉", icon: "V", reason: vFast ? `3日急跌後放量翻紅，RSI ${daily.rsi14.toFixed(1)}，偏V型快殺反彈。` : "跌深後收紅並突破前高，V轉積分達標。" });
   if (threeInside) signals.push({ id: "three_inside", short: "翻紅", icon: "↻", reason: "三內翻紅結構成立，站上MA20且趨勢確認。" });
   if (goldenCross) signals.push({ id: "golden_cross", short: "金釵", icon: "✦", reason: "MA5 > MA10 > MA20 且收紅，多金釵候選。" });
+  if (daily.wallet.strongBuy) {
+    signals.push({
+      id: "wallet_strong_buy",
+      title: "多方寶石",
+      short: "主力多",
+      icon: "◆",
+      reason: `主力爸爸錢包多方寶石${daily.wallet.strongBuyDate ? `（${daily.wallet.strongBuyDate}）` : ""}：控盤線由負翻正且日K收紅。`,
+    });
+  }
+  if (daily.wallet.volumeCrossUp) {
+    signals.push({
+      id: "wallet_volume_cross",
+      title: "紅色三角形",
+      short: "量叉",
+      icon: "🔺",
+      reason: `主力爸爸錢包量能紅K交叉${daily.wallet.volumeCrossDate ? `（${daily.wallet.volumeCrossDate}）` : ""}：5日資金量均線 ${Math.round(daily.wallet.volumeMa5).toLocaleString("zh-TW")} 上穿 60日 ${Math.round(daily.wallet.volumeMa60).toLocaleString("zh-TW")}。`,
+    });
+  }
 
   const aboveMa20 = last.close > daily.ma20;
   const nearMa20 = daily.ma20 ? Math.abs((last.close - daily.ma20) / daily.ma20) <= 0.06 : false;
@@ -742,6 +847,8 @@ function scanStrategy4(code, market, rows, priceSource = "") {
     prepScore * 2 +
     Math.min(daily.volumeRatio * 8, 18) +
     (daily.macd.macd > daily.macd.signal ? 8 : 0) +
+    (daily.wallet.strongBuy ? 8 : 0) +
+    (daily.wallet.volumeCrossUp ? 6 : 0) +
     (daily.stage.tone === "low" ? 8 : daily.stage.tone === "mid" ? 5 : daily.stage.tone === "high" ? 2 : -8)
   ));
 
@@ -766,6 +873,16 @@ function scanStrategy4(code, market, rows, priceSource = "") {
     score,
     swingSignals: signals,
     signals,
+    wallet: {
+      mf: Math.round(daily.wallet.mf),
+      controlLine: Math.round(daily.wallet.controlLine),
+      volumeMa5: Math.round(daily.wallet.volumeMa5),
+      volumeMa60: Math.round(daily.wallet.volumeMa60),
+      strongBuy: daily.wallet.strongBuy,
+      volumeCrossUp: daily.wallet.volumeCrossUp,
+      strongBuyDate: daily.wallet.strongBuyDate,
+      volumeCrossDate: daily.wallet.volumeCrossDate,
+    },
     reason: signals[0].reason,
   };
 }

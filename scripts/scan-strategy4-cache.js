@@ -29,10 +29,16 @@ const FUGLE_HISTORY_CACHE_DIR = process.env.FUGLE_HISTORY_CACHE_DIR || path.join
 const STRATEGY4_VOLUME_CACHE_FILE = path.join(process.env.FUMAN_RUNTIME_DIR || "C:\\fuman-runtime", "cache", "strategy4-volume-avg5.json");
 const STRATEGY4_VOLUME_REFRESH_DAYS = Number(process.env.STRATEGY4_VOLUME_REFRESH_DAYS || 20);
 const RUNTIME_DIR = process.env.FUMAN_RUNTIME_DIR || "C:\\fuman-runtime";
+const STATE_DIR = process.env.FUMAN_STATE_DIR || path.join(RUNTIME_DIR, "state");
 const SECRET_DIR = path.join(RUNTIME_DIR, "secrets");
 const CONFIG_DIR = path.join(RUNTIME_DIR, "config");
 const BLACKLIST_FILE = process.env.STRATEGY4_BLACKLIST_FILE || path.join(CONFIG_DIR, "fugle-api-blacklist-symbols.txt");
+const HISTORY_PREWARM_SCRIPT = path.join(ROOT, "scripts", "prewarm-strategy4-history-cache.js");
+const HISTORY_PREWARM_STATUS_FILE = path.join(STATE_DIR, "strategy4-history-prewarm-status.json");
+const SUPABASE_STATUS_FILE = path.join(STATE_DIR, "strategy4-supabase-status.json");
 const USE_MIS_QUOTES = process.env.STRATEGY4_USE_MIS === "1";
+const SUPABASE_FIRST = process.env.STRATEGY4_SUPABASE_FIRST !== "0";
+const SKIP_RETRY_ON_SUPABASE_FIRST = process.env.STRATEGY4_SUPABASE_SKIP_RETRY !== "0";
 const FAIL_ON_INCOMPLETE = process.env.STRATEGY4_FAIL_ON_INCOMPLETE !== "0";
 const ALLOW_PARTIAL_PUBLISH = process.env.STRATEGY4_ALLOW_PARTIAL_PUBLISH === "1";
 const RUN_STAMP = process.env.STRATEGY4_SCAN_STAMP || new Date().toISOString().slice(0, 10).replace(/-/g, "");
@@ -47,6 +53,15 @@ const SUPABASE_KEY = process.env.STRATEGY4_SUPABASE_ANON_KEY
   || process.env.SUPABASE_ANON_KEY
   || readText(path.join(SECRET_DIR, "strategy4-supabase-anon-key.txt"))
   || readText(path.join(SECRET_DIR, "supabase-anon-key.txt"));
+const SUPABASE_SERVICE_ROLE_KEY = process.env.STRATEGY4_SUPABASE_SERVICE_ROLE_KEY
+  || process.env.SUPABASE_SERVICE_ROLE_KEY
+  || process.env.SUPABASE_SERVICE_KEY
+  || process.env.FUMAN_SUPABASE_SERVICE_KEY
+  || readText(path.join(SECRET_DIR, "strategy4-supabase-service-role-key.txt"))
+  || readText(path.join(SECRET_DIR, "supabase-service-role-key.txt"));
+const SUPABASE_RESULTS_TABLE = process.env.STRATEGY4_SUPABASE_RESULTS_TABLE || "strategy4_scan_results";
+const SUPABASE_RESULTS_ATTEMPTS = Number(process.env.STRATEGY4_SUPABASE_RESULTS_ATTEMPTS || 4);
+const SYNC_SUPABASE_RESULTS = process.env.STRATEGY4_SYNC_SUPABASE_RESULTS !== "0";
 let strategy4VolumeCache = null;
 
 function readText(file) {
@@ -65,6 +80,19 @@ function readJson(file, fallback) {
   }
 }
 
+function writeJson(file, payload) {
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.writeFileSync(file, `${JSON.stringify(payload, null, 2)}\n`);
+}
+
+function writeSupabaseStatus(ok, details = {}) {
+  writeJson(SUPABASE_STATUS_FILE, {
+    ok,
+    checkedAt: new Date().toISOString(),
+    ...details,
+  });
+}
+
 function normalizeCode(value) {
   return String(value || "").replace(/\D/g, "").slice(0, 4);
 }
@@ -77,6 +105,10 @@ function normalizeVolumeLots(value) {
   const volume = cleanNumber(value);
   if (!volume) return 0;
   return volume >= 100000 ? volume / 1000 : volume;
+}
+
+function normalizeArray(value) {
+  return Array.isArray(value) ? value : [];
 }
 
 function avg(values) {
@@ -157,6 +189,58 @@ async function refreshStrategy4VolumeCacheFromSupabase() {
   } catch (error) {
     console.log(`strategy4 supabase volume avg5 refresh failed: ${error.message || error}`);
   }
+}
+
+function runSupabaseHistoryPrewarm() {
+  if (!SUPABASE_FIRST) return null;
+  if (!fs.existsSync(HISTORY_PREWARM_SCRIPT)) {
+    console.log(`strategy4 supabase prewarm skipped: missing ${HISTORY_PREWARM_SCRIPT}`);
+    return null;
+  }
+  console.log("strategy4 supabase-first prewarm start");
+  const result = spawnSync(process.execPath, [HISTORY_PREWARM_SCRIPT], {
+    cwd: ROOT,
+    encoding: "utf8",
+    timeout: Number(process.env.STRATEGY4_PREWARM_TIMEOUT_MS || 900000),
+    env: {
+      ...process.env,
+      STRATEGY4_SUPABASE_URL: SUPABASE_URL,
+      STRATEGY4_SUPABASE_ANON_KEY: SUPABASE_KEY || process.env.STRATEGY4_SUPABASE_ANON_KEY || "",
+      STRATEGY4_PREWARM_SUPABASE_ONLY: "1",
+      STRATEGY4_PREWARM_BATCHES_PER_RUN: process.env.STRATEGY4_PREWARM_BATCHES_PER_RUN || "999",
+      STRATEGY4_SUPABASE_HISTORY_TABLES: process.env.STRATEGY4_SUPABASE_HISTORY_TABLES || "fugle_daily_ohlcv",
+      STRATEGY4_SUPABASE_HISTORY_CODE_FIELDS: process.env.STRATEGY4_SUPABASE_HISTORY_CODE_FIELDS || "symbol",
+      STRATEGY4_SUPABASE_HISTORY_DATE_FIELDS: process.env.STRATEGY4_SUPABASE_HISTORY_DATE_FIELDS || "trade_date",
+    },
+  });
+  const output = `${result.stdout || ""}${result.stderr || ""}`.trim();
+  if (output) {
+    output.split(/\r?\n/).filter(Boolean).slice(-30).forEach((line) => console.log(`strategy4 prewarm: ${line}`));
+  }
+  if (result.error) {
+    console.log(`strategy4 supabase prewarm failed: ${result.error.message}`);
+  } else if (result.status !== 0) {
+    console.log(`strategy4 supabase prewarm failed: exit ${result.status}`);
+  } else {
+    console.log("strategy4 supabase-first prewarm done");
+  }
+  return readJson(HISTORY_PREWARM_STATUS_FILE, null);
+}
+
+function getSupabaseCoverageStatus() {
+  const status = readJson(HISTORY_PREWARM_STATUS_FILE, null);
+  if (!status) return null;
+  const universe = Number(status.universe || 0);
+  const remainingMiss = Number(status.remainingMiss || 0);
+  const syncStatus = String(status.supabaseSyncStatus?.status || status.syncStatus || status.status || "").toLowerCase();
+  const qualityStatus = remainingMiss > 0 || syncStatus === "partial" ? "partial" : "complete";
+  return {
+    ...status,
+    universe,
+    remainingMiss,
+    coverageRatio: universe ? Number(((universe - remainingMiss) / universe).toFixed(4)) : 0,
+    qualityStatus,
+  };
 }
 
 function cachedAvgVolume5(code) {
@@ -465,7 +549,7 @@ function mergeSourceCounts(sourceCounts, currentSourceCounts) {
   });
 }
 
-function buildOutput({ codes, scannedThisRun, scanned, noDataCodes, scanErrors, currentMatches, dataSourceCounts, complete, runMode, scanStamp, volumeFilter }) {
+function buildOutput({ codes, scannedThisRun, scanned, noDataCodes, scanErrors, currentMatches, dataSourceCounts, complete, runMode, scanStamp, volumeFilter, supabaseCoverage }) {
   const matches = [...currentMatches.values()]
     .sort((a, b) => (b.swingScore || b.score || 0) - (a.swingScore || a.score || 0) || (b.percent || 0) - (a.percent || 0));
   const noDataCount = noDataCodes.size;
@@ -485,8 +569,9 @@ function buildOutput({ codes, scannedThisRun, scanned, noDataCodes, scanErrors, 
   if (complete && yahooSourceRatio > MAX_YAHOO_SOURCE_RATIO) {
     sourceWarnings.push(`Yahoo fallback ratio ${yahooSourceRatio} above ${MAX_YAHOO_SOURCE_RATIO}`);
   }
-  const baseComplete = complete && noDataCount === 0 && errorCount === 0;
-  const qualityStatus = baseComplete ? (sourceWarnings.length ? "degraded" : "complete") : "incomplete";
+  const coveragePartial = supabaseCoverage?.qualityStatus === "partial";
+  const baseComplete = complete && noDataCount === 0 && errorCount === 0 && !coveragePartial;
+  const qualityStatus = coveragePartial ? "partial" : (baseComplete ? (sourceWarnings.length ? "degraded" : "complete") : "incomplete");
   return {
     ok: true,
     source: baseComplete ? "github-actions" : "github-actions-partial",
@@ -497,6 +582,8 @@ function buildOutput({ codes, scannedThisRun, scanned, noDataCodes, scanErrors, 
     runMode,
     complete: baseComplete,
     qualityStatus,
+    supabaseFirst: SUPABASE_FIRST,
+    supabaseCoverage: supabaseCoverage || null,
     pendingCount,
     noDataCount,
     errorCount,
@@ -526,6 +613,142 @@ function writeStrategy4Output(output, writeBackup = false) {
   if (writeBackup) {
     fs.writeFileSync(BACKUP_FILE, `${JSON.stringify({ ...output, source: "github-actions-backup", backupUpdatedAt: new Date().toISOString() }, null, 2)}\n`);
   }
+}
+
+function normalizeSignal(signal) {
+  if (!signal || typeof signal !== "object") return null;
+  const id = String(signal.id || signal.signalId || "").trim();
+  if (!id) return null;
+  return {
+    id,
+    title: String(signal.title || signal.name || signal.short || id).trim(),
+    short: String(signal.short || signal.title || signal.name || id).trim(),
+    icon: String(signal.icon || "").trim(),
+    reason: String(signal.reason || signal.message || "").trim(),
+  };
+}
+
+function strategy4Signals(stock) {
+  const primary = normalizeArray(stock?.signals).length ? stock.signals : stock?.swingSignals;
+  return normalizeArray(primary).map(normalizeSignal).filter(Boolean);
+}
+
+function scanDateFromOutput(output) {
+  const stamp = String(output.scanStamp || output.date || "").trim();
+  if (/^\d{8}$/.test(stamp)) return `${stamp.slice(0, 4)}-${stamp.slice(4, 6)}-${stamp.slice(6, 8)}`;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(stamp)) return stamp;
+  const updatedAt = String(output.updatedAt || "");
+  return /^\d{4}-\d{2}-\d{2}/.test(updatedAt) ? updatedAt.slice(0, 10) : new Date().toISOString().slice(0, 10);
+}
+
+function buildSupabaseScanRows(output, mode = "full") {
+  const matches = normalizeArray(output.matches);
+  const scanDate = scanDateFromOutput(output);
+  const scanTime = String(output.updatedAt || new Date().toISOString());
+  return matches.map((stock, index) => {
+    const signals = strategy4Signals(stock);
+    const hasWalletStrongBuy = signals.some((signal) => signal.id === "wallet_strong_buy");
+    const hasWalletVolumeCross = signals.some((signal) => signal.id === "wallet_volume_cross");
+    const base = {
+      scan_date: scanDate,
+      scan_time: scanTime,
+      strategy: "strategy4",
+      code: normalizeCode(stock.code),
+      name: String(stock.name || stock.code || "").trim(),
+      signals,
+      has_wallet_strong_buy: hasWalletStrongBuy,
+      has_wallet_volume_cross: hasWalletVolumeCross,
+      updated_at: scanTime,
+    };
+    if (mode === "minimal") return base;
+    return {
+      ...base,
+      market: String(stock.market || "").trim(),
+      price: cleanNumber(stock.close || stock.price),
+      change_percent: cleanNumber(stock.percent ?? stock.changePercent ?? stock.pct),
+      volume: cleanNumber(stock.volume || stock.tradeVolume),
+      trade_value: cleanNumber(stock.value || stock.tradeValue),
+      score: cleanNumber(stock.swingScore || stock.score),
+      zone: String(stock.swingZone || stock.zone || "").trim(),
+      zone_label: String(stock.swingZoneLabel || stock.zoneLabel || "").trim(),
+      rank: index + 1,
+      reason: String(stock.reason || signals.map((signal) => signal.reason).filter(Boolean).join("；")).trim(),
+      source: String(output.source || "").trim(),
+      price_source: String(stock.priceSource || output.priceSource || "").trim(),
+      scan_stamp: String(output.scanStamp || "").trim(),
+      run_mode: String(output.runMode || "").trim(),
+      complete: Boolean(output.complete),
+      quality_status: String(output.qualityStatus || "").trim(),
+      payload: stock,
+    };
+  }).filter((row) => /^\d{4}$/.test(row.code));
+}
+
+async function upsertStrategy4ResultsToSupabase(output) {
+  if (!SYNC_SUPABASE_RESULTS) {
+    writeSupabaseStatus(false, { skipped: true, reason: "disabled" });
+    return false;
+  }
+  if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
+    writeSupabaseStatus(false, { skipped: true, reason: "missing Supabase service credentials" });
+    return false;
+  }
+  const baseUrl = SUPABASE_URL.replace(/\/+$/, "");
+  const url = `${baseUrl}/rest/v1/${SUPABASE_RESULTS_TABLE}?on_conflict=scan_date,strategy,code`;
+  let mode = process.env.STRATEGY4_SUPABASE_RESULTS_MODE === "minimal" ? "minimal" : "full";
+  let rows = buildSupabaseScanRows(output, mode);
+  if (!rows.length) {
+    writeSupabaseStatus(false, { skipped: true, reason: "no strategy4 matches", table: SUPABASE_RESULTS_TABLE });
+    return false;
+  }
+  let lastMessage = "";
+  for (let attempt = 1; attempt <= SUPABASE_RESULTS_ATTEMPTS; attempt += 1) {
+    try {
+      const response = await fetch(url, {
+        method: "POST",
+        headers: {
+          apikey: SUPABASE_SERVICE_ROLE_KEY,
+          Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+          "Content-Type": "application/json",
+          Prefer: "resolution=merge-duplicates",
+        },
+        body: JSON.stringify(rows),
+      });
+      if (response.ok) {
+        writeSupabaseStatus(true, {
+          table: SUPABASE_RESULTS_TABLE,
+          scanDate: rows[0].scan_date,
+          rowCount: rows.length,
+          walletStrongBuyCount: rows.filter((row) => row.has_wallet_strong_buy).length,
+          walletVolumeCrossCount: rows.filter((row) => row.has_wallet_volume_cross).length,
+          qualityStatus: output.qualityStatus,
+          mode,
+          attempt,
+        });
+        console.log(`strategy4 supabase upsert ok: ${rows.length} rows into ${SUPABASE_RESULTS_TABLE}, wallet ◆ ${rows.filter((row) => row.has_wallet_strong_buy).length}, 🔺 ${rows.filter((row) => row.has_wallet_volume_cross).length}, quality ${output.qualityStatus}`);
+        return true;
+      }
+      const text = await response.text().catch(() => "");
+      lastMessage = `HTTP ${response.status} ${text.slice(0, 500)}`.trim();
+      if (mode === "full" && /column|schema cache|Could not find/i.test(lastMessage)) {
+        mode = "minimal";
+        rows = buildSupabaseScanRows(output, mode);
+        console.warn(`strategy4 supabase full row rejected, retrying minimal columns: ${lastMessage}`);
+      }
+    } catch (error) {
+      const cause = error?.cause?.message ? ` (${error.cause.message})` : "";
+      lastMessage = `${error?.message || String(error || "unknown error")}${cause}`;
+    }
+    console.warn(`strategy4 supabase upsert attempt ${attempt}/${SUPABASE_RESULTS_ATTEMPTS} failed: ${lastMessage}`);
+    if (attempt < SUPABASE_RESULTS_ATTEMPTS) await sleep(Math.min(15000, 1500 * attempt));
+  }
+  writeSupabaseStatus(false, {
+    table: SUPABASE_RESULTS_TABLE,
+    error: lastMessage || "unknown error",
+    attempts: SUPABASE_RESULTS_ATTEMPTS,
+    mode,
+  });
+  return false;
 }
 
 function refreshSlimCache(label) {
@@ -580,6 +803,8 @@ function syncStrategy4Output(label) {
 }
 
 async function main() {
+  const prewarmStatus = runSupabaseHistoryPrewarm();
+  const supabaseCoverage = getSupabaseCoverageStatus() || prewarmStatus || null;
   const universe = await fetchUniverse();
   const codes = universe.map((stock) => stock.code);
   if (!codes.length) throw new Error("No stock universe");
@@ -666,6 +891,7 @@ async function main() {
         runMode,
         scanStamp,
         volumeFilter,
+        supabaseCoverage,
       });
       writeStrategy4Output(chunkOutput, false);
       syncStrategy4Output(`chunk-${chunk + 1}-of-${chunksToRun}`);
@@ -688,6 +914,7 @@ async function main() {
     runMode,
     scanStamp,
     volumeFilter,
+    supabaseCoverage,
   });
   console.log(`strategy4 first pass done: ${runMode} scannedThisRun ${scannedThisRun}, scannedTotal ${scanned.size}/${codes.length}, matches ${firstPassOutput.count}, noData ${noDataCodes.size}`);
   if (SYNC_PARTIAL) {
@@ -695,7 +922,7 @@ async function main() {
     syncStrategy4Output("first-pass");
   }
 
-  if (noDataCodes.size) {
+  if (noDataCodes.size && !(SUPABASE_FIRST && SKIP_RETRY_ON_SUPABASE_FIRST)) {
     const retryCodes = [...noDataCodes];
     console.log(`strategy4 retry noData start: ${retryCodes.length} codes, chunk size ${RETRY_CHUNK_SIZE}`);
     for (let index = 0; index < retryCodes.length; index += RETRY_CHUNK_SIZE) {
@@ -724,6 +951,7 @@ async function main() {
         runMode,
         scanStamp,
         volumeFilter,
+        supabaseCoverage,
       });
       if (SYNC_PARTIAL) {
         writeStrategy4Output(retryOutput, false);
@@ -745,9 +973,11 @@ async function main() {
     runMode,
     scanStamp,
     volumeFilter,
+    supabaseCoverage,
   });
 
   writeStrategy4Output(output, true);
+  await upsertStrategy4ResultsToSupabase(output);
   syncStrategy4Output("complete");
   console.log(`strategy4 cache updated: ${runMode} scannedThisRun ${scannedThisRun}, scannedTotal ${scanned.size}/${codes.length}, matches ${output.count}, complete ${output.complete}`);
   if (FAIL_ON_INCOMPLETE && !ALLOW_PARTIAL_PUBLISH && !output.complete) {

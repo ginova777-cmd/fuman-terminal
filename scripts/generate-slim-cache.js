@@ -1009,18 +1009,14 @@ const jobs = [
 
 let wrote = 0;
 for (const [name, input, output, build, presets] of jobs) {
-  const candidates = [
-    path.join(runtimeRoot, input),
-    path.join(repoRoot, input),
-  ];
-  const source = candidates.find((file) => fs.existsSync(file));
-  if (!source) {
+  const payloadSource = readOptional(input);
+  if (!payloadSource) {
     console.log(`[slim] skip ${name}: source not found`);
     continue;
   }
-  const payload = build(readJson(source));
+  const payload = build(payloadSource);
   writeToBoth(output, payload);
-  for (const [presetOutput, presetPayload] of presets(readJson(source))) {
+  for (const [presetOutput, presetPayload] of presets(payloadSource)) {
     writeToBoth(presetOutput, presetPayload);
     console.log(`[slim] wrote ${presetOutput} count=${presetPayload.count || presetPayload.rows?.length || presetPayload.matches?.length || 0}`);
   }

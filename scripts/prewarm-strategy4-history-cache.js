@@ -418,9 +418,11 @@ async function main() {
   const supabaseSources = {};
   let supabaseVolumeRows = 0;
   let supabaseVolumeUpdated = 0;
+  let supabaseSyncStatus = null;
 
   try {
     const syncStatus = await readSupabaseSyncStatus(to);
+    supabaseSyncStatus = syncStatus;
     if (syncStatus) {
       console.log(`strategy4 supabase sync status: ${syncStatus.status} ${syncStatus.symbols_loaded || 0}/${syncStatus.symbols_expected || 0}, missing ${syncStatus.missing_symbols_count || 0}`);
       if (!["complete", "partial"].includes(String(syncStatus.status || "").toLowerCase())) {
@@ -506,6 +508,7 @@ async function main() {
     sourceCounts,
     supabaseWarmed,
     supabaseSources,
+    supabaseSyncStatus,
     supabaseVolumeRows,
     supabaseVolumeUpdated,
     errors: errors.slice(-50),

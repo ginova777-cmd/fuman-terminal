@@ -1,76 +1,173 @@
 {
   "ok": true,
-  "source": "github-actions",
-  "updatedAt": "2026-06-12T08:03:21.079Z",
-  "scanStamp": "20260612",
-  "total": 1607,
-  "scannedCount": 1607,
-  "count": 405,
-  "complete": true,
-  "qualityStatus": "complete",
+  "source": "github-actions-partial",
+  "updatedAt": "2026-06-14T14:46:13.443Z",
+  "scanStamp": "20260614",
+  "total": 1608,
+  "scannedCount": 1608,
+  "count": 360,
+  "complete": false,
+  "qualityStatus": "partial",
   "zoneCounts": {
-    "A": 81,
-    "B": 189,
-    "C": 135
+    "A": 138,
+    "B": 129,
+    "C": 93
   },
   "signalCounts": {
-    "saucer": 13,
-    "runaway_gap": 53,
-    "bull_attack": 16,
-    "n_base": 14,
-    "golden_cross": 6,
-    "breakaway_gap": 10,
-    "watch_trend": 189,
-    "v_reversal": 2,
-    "base_setup": 135
+    "wallet_strong_buy": 76,
+    "wallet_volume_cross": 65,
+    "breakaway_gap": 2,
+    "bull_attack": 12,
+    "saucer": 10,
+    "runaway_gap": 20,
+    "n_base": 7,
+    "watch_trend": 129,
+    "golden_cross": 1,
+    "base_setup": 93
   },
   "topMatches": [
     {
-      "code": "3576",
-      "name": "聯合再生",
-      "close": 19.8,
-      "percent": 10.000000000000004,
-      "tradeVolume": 73883,
-      "value": 1462883400,
+      "code": "6244",
+      "name": "茂迪",
+      "close": 31.1,
+      "percent": 20.309477756286263,
+      "tradeVolume": 32021.804,
+      "value": 1043366369,
       "swingScore": 100,
       "swingZone": "A",
       "swingStage": {
         "label": "高基期",
-        "ratio": "0.85",
+        "ratio": "0.66",
         "tone": "high",
-        "value": 0.8503937007874017
+        "value": 0.6603773584905664
       },
       "swingSignals": [
         {
-          "id": "saucer",
-          "title": "",
-          "short": "圓弧",
-          "icon": "◜",
-          "reason": "突破40日整理頸線，量能放大，偏圓弧底突破。"
+          "id": "wallet_strong_buy",
+          "title": "多方寶石",
+          "short": "主力多",
+          "icon": "◆",
+          "reason": "主力爸爸錢包多方寶石（2026-06-03）：控盤線由負翻正且日K收紅。"
         },
         {
-          "id": "runaway_gap",
-          "title": "",
-          "short": "逃逸缺口",
-          "icon": "🚀",
-          "reason": "跳空且站上MA20，多頭段延續，偏逃逸缺口。"
+          "id": "wallet_volume_cross",
+          "title": "紅色三角形",
+          "short": "量叉",
+          "icon": "🔺",
+          "reason": "主力爸爸錢包量能紅K交叉（2026-06-03）：5日資金量均線 7,728 上穿 60日 5,024。"
         }
       ]
     },
     {
-      "code": "4534",
-      "name": "慶騰",
-      "close": 33,
-      "percent": 10,
-      "tradeVolume": 3638,
-      "value": 120054000,
+      "code": "1714",
+      "name": "和桐",
+      "close": 15.2,
+      "percent": 20.15810276679841,
+      "tradeVolume": 109.031,
+      "value": 0,
       "swingScore": 100,
       "swingZone": "A",
       "swingStage": {
         "label": "高基期",
-        "ratio": "0.79",
+        "ratio": "0.93",
         "tone": "high",
-        "value": 0.7902097902097902
+        "value": 0.9251497005988024
+      },
+      "swingSignals": [
+        {
+          "id": "breakaway_gap",
+          "title": "",
+          "short": "突破缺口",
+          "icon": "◆",
+          "reason": "跳空突破近20日整理高點，偏突破缺口。"
+        },
+        {
+          "id": "wallet_volume_cross",
+          "title": "紅色三角形",
+          "short": "量叉",
+          "icon": "🔺",
+          "reason": "主力爸爸錢包量能紅K交叉（2026-06-03）：5日資金量均線 23,240 上穿 60日 4,770。"
+        }
+      ]
+    },
+    {
+      "code": "7788",
+      "name": "松川精密",
+      "close": 278,
+      "percent": 13.008130081300814,
+      "tradeVolume": 2694,
+      "value": 0,
+      "swingScore": 100,
+      "swingZone": "A",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.94",
+        "tone": "high",
+        "value": 0.9432624113475178
+      },
+      "swingSignals": [
+        {
+          "id": "breakaway_gap",
+          "title": "",
+          "short": "突破缺口",
+          "icon": "◆",
+          "reason": "跳空突破近20日整理高點，偏突破缺口。"
+        },
+        {
+          "id": "wallet_strong_buy",
+          "title": "多方寶石",
+          "short": "主力多",
+          "icon": "◆",
+          "reason": "主力爸爸錢包多方寶石（2026-06-05）：控盤線由負翻正且日K收紅。"
+        }
+      ]
+    },
+    {
+      "code": "2483",
+      "name": "百容",
+      "close": 34.65,
+      "percent": 9.999999999999995,
+      "tradeVolume": 5780.64,
+      "value": 0,
+      "swingScore": 100,
+      "swingZone": "A",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.87",
+        "tone": "high",
+        "value": 0.8666666666666666
+      },
+      "swingSignals": [
+        {
+          "id": "wallet_strong_buy",
+          "title": "多方寶石",
+          "short": "主力多",
+          "icon": "◆",
+          "reason": "主力爸爸錢包多方寶石（2026-06-05）：控盤線由負翻正且日K收紅。"
+        },
+        {
+          "id": "wallet_volume_cross",
+          "title": "紅色三角形",
+          "short": "量叉",
+          "icon": "🔺",
+          "reason": "主力爸爸錢包量能紅K交叉（2026-06-11）：5日資金量均線 8,455 上穿 60日 8,342。"
+        }
+      ]
+    },
+    {
+      "code": "2413",
+      "name": "環科",
+      "close": 59.6,
+      "percent": 9.963099630996307,
+      "tradeVolume": 21280.9,
+      "value": 0,
+      "swingScore": 100,
+      "swingZone": "A",
+      "swingStage": {
+        "label": "過熱",
+        "ratio": "1.00+",
+        "tone": "hot",
+        "value": 1
       },
       "swingSignals": [
         {
@@ -78,88 +175,31 @@
           "title": "",
           "short": "攻擊",
           "icon": "🔥",
-          "reason": "站上MA20/EMA21，MACD多頭，量比 1.21，日K多頭攻擊。"
+          "reason": "站上MA20/EMA21，MACD多頭，量比 3.17，日K多頭攻擊。"
         },
         {
-          "id": "runaway_gap",
+          "id": "saucer",
           "title": "",
-          "short": "逃逸缺口",
-          "icon": "🚀",
-          "reason": "跳空且站上MA20，多頭段延續，偏逃逸缺口。"
+          "short": "圓弧",
+          "icon": "◜",
+          "reason": "突破40日整理頸線，量能放大，偏圓弧底突破。"
         }
       ]
     },
     {
-      "code": "6202",
-      "name": "盛群",
-      "close": 59.4,
-      "percent": 9.999999999999998,
-      "tradeVolume": 9334,
-      "value": 554439600,
+      "code": "1605",
+      "name": "華新",
+      "close": 37.7,
+      "percent": 9.912536443148705,
+      "tradeVolume": 52353,
+      "value": 0,
       "swingScore": 100,
       "swingZone": "A",
       "swingStage": {
         "label": "中位階",
-        "ratio": "0.61",
+        "ratio": "0.56",
         "tone": "mid",
-        "value": 0.6111111111111109
-      },
-      "swingSignals": [
-        {
-          "id": "runaway_gap",
-          "title": "",
-          "short": "逃逸缺口",
-          "icon": "🚀",
-          "reason": "跳空且站上MA20，多頭段延續，偏逃逸缺口。"
-        }
-      ]
-    },
-    {
-      "code": "4939",
-      "name": "亞電",
-      "close": 66.2,
-      "percent": 9.966777408637874,
-      "tradeVolume": 12877,
-      "value": 852457400,
-      "swingScore": 100,
-      "swingZone": "A",
-      "swingStage": {
-        "label": "高基期",
-        "ratio": "0.84",
-        "tone": "high",
-        "value": 0.8383561643835619
-      },
-      "swingSignals": [
-        {
-          "id": "n_base",
-          "title": "",
-          "short": "N字",
-          "icon": "",
-          "reason": "爆量突破後回檔不破半分位，再突破前高 65.60，N字共振。"
-        },
-        {
-          "id": "runaway_gap",
-          "title": "",
-          "short": "逃逸缺口",
-          "icon": "🚀",
-          "reason": "跳空且站上MA20，多頭段延續，偏逃逸缺口。"
-        }
-      ]
-    },
-    {
-      "code": "6834",
-      "name": "天二科技",
-      "close": 84.1,
-      "percent": 9.93464052287581,
-      "tradeVolume": 12894,
-      "value": 1084385400,
-      "swingScore": 100,
-      "swingZone": "A",
-      "swingStage": {
-        "label": "高基期",
-        "ratio": "0.98",
-        "tone": "high",
-        "value": 0.9824902723735407
+        "value": 0.56401384083045
       },
       "swingSignals": [
         {
@@ -177,28 +217,170 @@
           "reason": "跳空且站上MA20，多頭段延續，偏逃逸缺口。"
         },
         {
-          "id": "golden_cross",
-          "title": "",
-          "short": "金釵",
-          "icon": "✦",
-          "reason": "MA5 > MA10 > MA20 且收紅，多金釵候選。"
+          "id": "wallet_strong_buy",
+          "title": "多方寶石",
+          "short": "主力多",
+          "icon": "◆",
+          "reason": "主力爸爸錢包多方寶石（2026-06-12）：控盤線由負翻正且日K收紅。"
+        },
+        {
+          "id": "wallet_volume_cross",
+          "title": "紅色三角形",
+          "short": "量叉",
+          "icon": "🔺",
+          "reason": "主力爸爸錢包量能紅K交叉（2026-06-08）：5日資金量均線 26,110 上穿 60日 15,815。"
         }
       ]
     },
     {
-      "code": "8039",
-      "name": "台虹",
-      "close": 149.5,
-      "percent": 9.926470588235293,
-      "tradeVolume": 17650,
-      "value": 2638675000,
+      "code": "9136",
+      "name": "巨騰-DR",
+      "close": 17.75,
+      "percent": 9.907120743034065,
+      "tradeVolume": 6494.823,
+      "value": 0,
+      "swingScore": 100,
+      "swingZone": "A",
+      "swingStage": {
+        "label": "過熱",
+        "ratio": "1.00+",
+        "tone": "hot",
+        "value": 1
+      },
+      "swingSignals": [
+        {
+          "id": "bull_attack",
+          "title": "",
+          "short": "攻擊",
+          "icon": "🔥",
+          "reason": "站上MA20/EMA21，MACD多頭，量比 1.77，日K多頭攻擊。"
+        },
+        {
+          "id": "saucer",
+          "title": "",
+          "short": "圓弧",
+          "icon": "◜",
+          "reason": "突破40日整理頸線，量能放大，偏圓弧底突破。"
+        },
+        {
+          "id": "wallet_volume_cross",
+          "title": "紅色三角形",
+          "short": "量叉",
+          "icon": "🔺",
+          "reason": "主力爸爸錢包量能紅K交叉（2026-06-04）：5日資金量均線 3,098 上穿 60日 1,603。"
+        }
+      ]
+    },
+    {
+      "code": "3090",
+      "name": "日電貿",
+      "close": 233,
+      "percent": 9.90566037735849,
+      "tradeVolume": 26407.041,
+      "value": 0,
+      "swingScore": 100,
+      "swingZone": "A",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.88",
+        "tone": "high",
+        "value": 0.8751560549313359
+      },
+      "swingSignals": [
+        {
+          "id": "wallet_volume_cross",
+          "title": "紅色三角形",
+          "short": "量叉",
+          "icon": "🔺",
+          "reason": "主力爸爸錢包量能紅K交叉（2026-06-11）：5日資金量均線 6,070 上穿 60日 5,140。"
+        }
+      ]
+    },
+    {
+      "code": "2520",
+      "name": "冠德",
+      "close": 35.6,
+      "percent": 9.876543209876552,
+      "tradeVolume": 9908.759,
+      "value": 0,
+      "swingScore": 100,
+      "swingZone": "A",
+      "swingStage": {
+        "label": "過熱",
+        "ratio": "1.00+",
+        "tone": "hot",
+        "value": 1
+      },
+      "swingSignals": [
+        {
+          "id": "bull_attack",
+          "title": "",
+          "short": "攻擊",
+          "icon": "🔥",
+          "reason": "站上MA20/EMA21，MACD多頭，量比 4.96，日K多頭攻擊。"
+        },
+        {
+          "id": "saucer",
+          "title": "",
+          "short": "圓弧",
+          "icon": "◜",
+          "reason": "突破40日整理頸線，量能放大，偏圓弧底突破。"
+        },
+        {
+          "id": "wallet_volume_cross",
+          "title": "紅色三角形",
+          "short": "量叉",
+          "icon": "🔺",
+          "reason": "主力爸爸錢包量能紅K交叉（2026-06-09）：5日資金量均線 3,000 上穿 60日 1,012。"
+        }
+      ]
+    },
+    {
+      "code": "5521",
+      "name": "工信",
+      "close": 11.25,
+      "percent": 9.75609756097561,
+      "tradeVolume": 10164.062,
+      "value": 0,
       "swingScore": 100,
       "swingZone": "A",
       "swingStage": {
         "label": "中位階",
-        "ratio": "0.53",
+        "ratio": "0.52",
         "tone": "mid",
-        "value": 0.5333333333333333
+        "value": 0.5245901639344263
+      },
+      "swingSignals": [
+        {
+          "id": "wallet_strong_buy",
+          "title": "多方寶石",
+          "short": "主力多",
+          "icon": "◆",
+          "reason": "主力爸爸錢包多方寶石（2026-06-10）：控盤線由負翻正且日K收紅。"
+        },
+        {
+          "id": "wallet_volume_cross",
+          "title": "紅色三角形",
+          "short": "量叉",
+          "icon": "🔺",
+          "reason": "主力爸爸錢包量能紅K交叉（2026-06-10）：5日資金量均線 4,011 上穿 60日 3,197。"
+        }
+      ]
+    },
+    {
+      "code": "5483",
+      "name": "中美晶",
+      "close": 159,
+      "percent": 9.655172413793103,
+      "tradeVolume": 20490.947,
+      "value": 3231601613,
+      "swingScore": 100,
+      "swingZone": "A",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.64",
+        "tone": "high",
+        "value": 0.6371681415929203
       },
       "swingSignals": [
         {
@@ -207,25 +389,359 @@
           "short": "逃逸缺口",
           "icon": "🚀",
           "reason": "跳空且站上MA20，多頭段延續，偏逃逸缺口。"
+        },
+        {
+          "id": "wallet_strong_buy",
+          "title": "多方寶石",
+          "short": "主力多",
+          "icon": "◆",
+          "reason": "主力爸爸錢包多方寶石（2026-06-12）：控盤線由負翻正且日K收紅。"
         }
       ]
     },
     {
-      "code": "2402",
-      "name": "毅嘉",
-      "close": 66.6,
-      "percent": 9.900990099009888,
-      "tradeVolume": 9306,
-      "value": 619779600,
+      "code": "8112",
+      "name": "至上",
+      "close": 101,
+      "percent": 9.071274298056162,
+      "tradeVolume": 47777,
+      "value": 0,
       "swingScore": 100,
       "swingZone": "A",
       "swingStage": {
-        "label": "低基期",
-        "ratio": "0.33",
-        "tone": "low",
-        "value": 0.3284671532846713
+        "label": "高基期",
+        "ratio": "0.88",
+        "tone": "high",
+        "value": 0.8795180722891567
       },
       "swingSignals": [
+        {
+          "id": "bull_attack",
+          "title": "",
+          "short": "攻擊",
+          "icon": "🔥",
+          "reason": "站上MA20/EMA21，MACD多頭，量比 1.32，日K多頭攻擊。"
+        },
+        {
+          "id": "n_base",
+          "title": "",
+          "short": "N字",
+          "icon": "",
+          "reason": "爆量突破後回檔不破半分位，再突破前高 98.40，N字共振。"
+        },
+        {
+          "id": "saucer",
+          "title": "",
+          "short": "圓弧",
+          "icon": "◜",
+          "reason": "突破40日整理頸線，量能放大，偏圓弧底突破。"
+        }
+      ]
+    },
+    {
+      "code": "1708",
+      "name": "東鹼",
+      "close": 48,
+      "percent": 8.597285067873296,
+      "tradeVolume": 11005,
+      "value": 0,
+      "swingScore": 100,
+      "swingZone": "A",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.86",
+        "tone": "high",
+        "value": 0.8550185873605947
+      },
+      "swingSignals": [
+        {
+          "id": "bull_attack",
+          "title": "",
+          "short": "攻擊",
+          "icon": "🔥",
+          "reason": "站上MA20/EMA21，MACD多頭，量比 1.34，日K多頭攻擊。"
+        },
+        {
+          "id": "runaway_gap",
+          "title": "",
+          "short": "逃逸缺口",
+          "icon": "🚀",
+          "reason": "跳空且站上MA20，多頭段延續，偏逃逸缺口。"
+        },
+        {
+          "id": "wallet_strong_buy",
+          "title": "多方寶石",
+          "short": "主力多",
+          "icon": "◆",
+          "reason": "主力爸爸錢包多方寶石（2026-06-03）：控盤線由負翻正且日K收紅。"
+        },
+        {
+          "id": "wallet_volume_cross",
+          "title": "紅色三角形",
+          "short": "量叉",
+          "icon": "🔺",
+          "reason": "主力爸爸錢包量能紅K交叉（2026-06-03）：5日資金量均線 15,824 上穿 60日 5,013。"
+        }
+      ]
+    },
+    {
+      "code": "8182",
+      "name": "加高",
+      "close": 53.6,
+      "percent": 8.064516129032258,
+      "tradeVolume": 22412.717,
+      "value": 1270594525,
+      "swingScore": 100,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.80",
+        "tone": "high",
+        "value": 0.7962264150943397
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 7/8，量比 3.63，位階 高基期。"
+        }
+      ]
+    },
+    {
+      "code": "8071",
+      "name": "能率網通",
+      "close": 24.5,
+      "percent": 7.929515418502206,
+      "tradeVolume": 11231.54,
+      "value": 294509390,
+      "swingScore": 100,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.76",
+        "tone": "high",
+        "value": 0.7613168724279836
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 7/8，量比 3.01，位階 高基期。"
+        }
+      ]
+    },
+    {
+      "code": "8996",
+      "name": "高力",
+      "close": 1210,
+      "percent": 7.555555555555555,
+      "tradeVolume": 5831.697,
+      "value": 0,
+      "swingScore": 100,
+      "swingZone": "A",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.70",
+        "tone": "high",
+        "value": 0.696969696969697
+      },
+      "swingSignals": [
+        {
+          "id": "bull_attack",
+          "title": "",
+          "short": "攻擊",
+          "icon": "🔥",
+          "reason": "站上MA20/EMA21，MACD多頭，量比 1.86，日K多頭攻擊。"
+        },
+        {
+          "id": "wallet_strong_buy",
+          "title": "多方寶石",
+          "short": "主力多",
+          "icon": "◆",
+          "reason": "主力爸爸錢包多方寶石（2026-06-08）：控盤線由負翻正且日K收紅。"
+        }
+      ]
+    },
+    {
+      "code": "6174",
+      "name": "安碁",
+      "close": 50.3,
+      "percent": 7.021276595744674,
+      "tradeVolume": 12160.938,
+      "value": 649500153,
+      "swingScore": 100,
+      "swingZone": "A",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.83",
+        "tone": "high",
+        "value": 0.8276422764227641
+      },
+      "swingSignals": [
+        {
+          "id": "wallet_strong_buy",
+          "title": "多方寶石",
+          "short": "主力多",
+          "icon": "◆",
+          "reason": "主力爸爸錢包多方寶石（2026-06-09）：控盤線由負翻正且日K收紅。"
+        },
+        {
+          "id": "wallet_volume_cross",
+          "title": "紅色三角形",
+          "short": "量叉",
+          "icon": "🔺",
+          "reason": "主力爸爸錢包量能紅K交叉（2026-06-09）：5日資金量均線 4,272 上穿 60日 1,539。"
+        }
+      ]
+    },
+    {
+      "code": "1303",
+      "name": "南亞",
+      "close": 103.5,
+      "percent": 6.811145510835908,
+      "tradeVolume": 46923,
+      "value": 0,
+      "swingScore": 100,
+      "swingZone": "A",
+      "swingStage": {
+        "label": "中位階",
+        "ratio": "0.61",
+        "tone": "mid",
+        "value": 0.6062992125984251
+      },
+      "swingSignals": [
+        {
+          "id": "wallet_volume_cross",
+          "title": "紅色三角形",
+          "short": "量叉",
+          "icon": "🔺",
+          "reason": "主力爸爸錢包量能紅K交叉（2026-06-11）：5日資金量均線 22,774 上穿 60日 23,216。"
+        }
+      ]
+    },
+    {
+      "code": "2313",
+      "name": "華通",
+      "close": 275,
+      "percent": 6.177606177606178,
+      "tradeVolume": 92016.311,
+      "value": 0,
+      "swingScore": 100,
+      "swingZone": "A",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.70",
+        "tone": "high",
+        "value": 0.6965174129353234
+      },
+      "swingSignals": [
+        {
+          "id": "wallet_strong_buy",
+          "title": "多方寶石",
+          "short": "主力多",
+          "icon": "◆",
+          "reason": "主力爸爸錢包多方寶石（2026-06-09）：控盤線由負翻正且日K收紅。"
+        },
+        {
+          "id": "wallet_volume_cross",
+          "title": "紅色三角形",
+          "short": "量叉",
+          "icon": "🔺",
+          "reason": "主力爸爸錢包量能紅K交叉（2026-06-09）：5日資金量均線 40,334 上穿 60日 27,354。"
+        }
+      ]
+    },
+    {
+      "code": "8261",
+      "name": "富鼎",
+      "close": 165.5,
+      "percent": 5.7507987220447285,
+      "tradeVolume": 10389,
+      "value": 0,
+      "swingScore": 100,
+      "swingZone": "A",
+      "swingStage": {
+        "label": "中位階",
+        "ratio": "0.56",
+        "tone": "mid",
+        "value": 0.5607476635514018
+      },
+      "swingSignals": [
+        {
+          "id": "wallet_strong_buy",
+          "title": "多方寶石",
+          "short": "主力多",
+          "icon": "◆",
+          "reason": "主力爸爸錢包多方寶石（2026-06-09）：控盤線由負翻正且日K收紅。"
+        }
+      ]
+    },
+    {
+      "code": "2542",
+      "name": "興富發",
+      "close": 45.45,
+      "percent": 5.208333333333333,
+      "tradeVolume": 60906.374,
+      "value": 0,
+      "swingScore": 100,
+      "swingZone": "A",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.95",
+        "tone": "high",
+        "value": 0.9475806451612905
+      },
+      "swingSignals": [
+        {
+          "id": "saucer",
+          "title": "",
+          "short": "圓弧",
+          "icon": "◜",
+          "reason": "突破40日整理頸線，量能放大，偏圓弧底突破。"
+        },
+        {
+          "id": "wallet_volume_cross",
+          "title": "紅色三角形",
+          "short": "量叉",
+          "icon": "🔺",
+          "reason": "主力爸爸錢包量能紅K交叉（2026-06-09）：5日資金量均線 14,726 上穿 60日 5,765。"
+        }
+      ]
+    },
+    {
+      "code": "1618",
+      "name": "合機",
+      "close": 42.7,
+      "percent": 4.528763769889845,
+      "tradeVolume": 2923,
+      "value": 0,
+      "swingScore": 100,
+      "swingZone": "A",
+      "swingStage": {
+        "label": "中位階",
+        "ratio": "0.59",
+        "tone": "mid",
+        "value": 0.5889570552147245
+      },
+      "swingSignals": [
+        {
+          "id": "bull_attack",
+          "title": "",
+          "short": "攻擊",
+          "icon": "🔥",
+          "reason": "站上MA20/EMA21，MACD多頭，量比 1.58，日K多頭攻擊。"
+        },
+        {
+          "id": "saucer",
+          "title": "",
+          "short": "圓弧",
+          "icon": "◜",
+          "reason": "突破40日整理頸線，量能放大，偏圓弧底突破。"
+        },
         {
           "id": "runaway_gap",
           "title": "",
@@ -238,312 +754,42 @@
     {
       "code": "2484",
       "name": "希華",
-      "close": 66.7,
-      "percent": 9.884678747940692,
-      "tradeVolume": 55167,
-      "value": 3679638900,
-      "swingScore": 100,
-      "swingZone": "A",
-      "swingStage": {
-        "label": "過熱",
-        "ratio": "1.00+",
-        "tone": "hot",
-        "value": 1
-      },
-      "swingSignals": [
-        {
-          "id": "bull_attack",
-          "title": "",
-          "short": "攻擊",
-          "icon": "🔥",
-          "reason": "站上MA20/EMA21，MACD多頭，量比 1.49，日K多頭攻擊。"
-        },
-        {
-          "id": "n_base",
-          "title": "",
-          "short": "N字",
-          "icon": "",
-          "reason": "爆量突破後回檔不破半分位，再突破前高 60.80，N字共振。"
-        },
-        {
-          "id": "saucer",
-          "title": "",
-          "short": "圓弧",
-          "icon": "◜",
-          "reason": "突破40日整理頸線，量能放大，偏圓弧底突破。"
-        },
-        {
-          "id": "breakaway_gap",
-          "title": "",
-          "short": "突破缺口",
-          "icon": "◆",
-          "reason": "跳空突破近20日整理高點，偏突破缺口。"
-        }
-      ]
-    },
-    {
-      "code": "3090",
-      "name": "日電貿",
-      "close": 256,
-      "percent": 9.871244635193133,
-      "tradeVolume": 38521,
-      "value": 9861376000,
-      "swingScore": 100,
-      "swingZone": "A",
-      "swingStage": {
-        "label": "過熱",
-        "ratio": "1.00+",
-        "tone": "hot",
-        "value": 1
-      },
-      "swingSignals": [
-        {
-          "id": "saucer",
-          "title": "",
-          "short": "圓弧",
-          "icon": "◜",
-          "reason": "突破40日整理頸線，量能放大，偏圓弧底突破。"
-        },
-        {
-          "id": "breakaway_gap",
-          "title": "",
-          "short": "突破缺口",
-          "icon": "◆",
-          "reason": "跳空突破近20日整理高點，偏突破缺口。"
-        },
-        {
-          "id": "golden_cross",
-          "title": "",
-          "short": "金釵",
-          "icon": "✦",
-          "reason": "MA5 > MA10 > MA20 且收紅，多金釵候選。"
-        }
-      ]
-    },
-    {
-      "code": "2305",
-      "name": "全友",
-      "close": 25.1,
-      "percent": 9.846827133479213,
-      "tradeVolume": 9567,
-      "value": 240131700,
-      "swingScore": 100,
-      "swingZone": "A",
-      "swingStage": {
-        "label": "高基期",
-        "ratio": "0.98",
-        "tone": "high",
-        "value": 0.9803921568627452
-      },
-      "swingSignals": [
-        {
-          "id": "bull_attack",
-          "title": "",
-          "short": "攻擊",
-          "icon": "🔥",
-          "reason": "站上MA20/EMA21，MACD多頭，量比 1.21，日K多頭攻擊。"
-        },
-        {
-          "id": "n_base",
-          "title": "",
-          "short": "N字",
-          "icon": "",
-          "reason": "爆量突破後回檔不破半分位，再突破前高 25.00，N字共振。"
-        },
-        {
-          "id": "golden_cross",
-          "title": "",
-          "short": "金釵",
-          "icon": "✦",
-          "reason": "MA5 > MA10 > MA20 且收紅，多金釵候選。"
-        }
-      ]
-    },
-    {
-      "code": "9136",
-      "name": "巨騰-DR",
-      "close": 17.35,
-      "percent": 9.810126582278485,
-      "tradeVolume": 5673,
-      "value": 98426550,
+      "close": 60.7,
+      "percent": 4.475043029259899,
+      "tradeVolume": 82086.808,
+      "value": 0,
       "swingScore": 100,
       "swingZone": "A",
       "swingStage": {
         "label": "高基期",
         "ratio": "0.85",
         "tone": "high",
-        "value": 0.8533585619678338
+        "value": 0.8477508650519033
       },
       "swingSignals": [
         {
-          "id": "bull_attack",
-          "title": "",
-          "short": "攻擊",
-          "icon": "🔥",
-          "reason": "站上MA20/EMA21，MACD多頭，量比 1.33，日K多頭攻擊。"
+          "id": "wallet_volume_cross",
+          "title": "紅色三角形",
+          "short": "量叉",
+          "icon": "🔺",
+          "reason": "主力爸爸錢包量能紅K交叉（2026-06-08）：5日資金量均線 28,215 上穿 60日 9,973。"
         }
       ]
     },
     {
-      "code": "8261",
-      "name": "富鼎",
-      "close": 173.5,
-      "percent": 9.81012658227848,
-      "tradeVolume": 13611,
-      "value": 2361508500,
-      "swingScore": 100,
-      "swingZone": "A",
-      "swingStage": {
-        "label": "中位階",
-        "ratio": "0.61",
-        "tone": "mid",
-        "value": 0.6119402985074627
-      },
-      "swingSignals": [
-        {
-          "id": "runaway_gap",
-          "title": "",
-          "short": "逃逸缺口",
-          "icon": "🚀",
-          "reason": "跳空且站上MA20，多頭段延續，偏逃逸缺口。"
-        }
-      ]
-    },
-    {
-      "code": "8105",
-      "name": "凌巨",
-      "close": 22.45,
-      "percent": 9.7799511002445,
-      "tradeVolume": 41222,
-      "value": 925433900,
-      "swingScore": 100,
-      "swingZone": "A",
-      "swingStage": {
-        "label": "過熱",
-        "ratio": "1.00+",
-        "tone": "hot",
-        "value": 1
-      },
-      "swingSignals": [
-        {
-          "id": "bull_attack",
-          "title": "",
-          "short": "攻擊",
-          "icon": "🔥",
-          "reason": "站上MA20/EMA21，MACD多頭，量比 2.21，日K多頭攻擊。"
-        },
-        {
-          "id": "saucer",
-          "title": "",
-          "short": "圓弧",
-          "icon": "◜",
-          "reason": "突破40日整理頸線，量能放大，偏圓弧底突破。"
-        }
-      ]
-    },
-    {
-      "code": "2404",
-      "name": "漢唐",
-      "close": 1310,
-      "percent": 9.623430962343097,
-      "tradeVolume": 5527,
-      "value": 7240370000,
-      "swingScore": 100,
-      "swingZone": "A",
-      "swingStage": {
-        "label": "高基期",
-        "ratio": "0.92",
-        "tone": "high",
-        "value": 0.9178403755868545
-      },
-      "swingSignals": [
-        {
-          "id": "runaway_gap",
-          "title": "",
-          "short": "逃逸缺口",
-          "icon": "🚀",
-          "reason": "跳空且站上MA20，多頭段延續，偏逃逸缺口。"
-        },
-        {
-          "id": "golden_cross",
-          "title": "",
-          "short": "金釵",
-          "icon": "✦",
-          "reason": "MA5 > MA10 > MA20 且收紅，多金釵候選。"
-        }
-      ]
-    },
-    {
-      "code": "6153",
-      "name": "嘉聯益",
-      "close": 22.25,
-      "percent": 9.605911330049258,
-      "tradeVolume": 28480,
-      "value": 633680000,
+      "code": "2493",
+      "name": "揚博",
+      "close": 188.5,
+      "percent": 4.43213296398892,
+      "tradeVolume": 14278.232,
+      "value": 0,
       "swingScore": 100,
       "swingZone": "A",
       "swingStage": {
         "label": "高基期",
         "ratio": "0.95",
         "tone": "high",
-        "value": 0.9519999999999998
-      },
-      "swingSignals": [
-        {
-          "id": "bull_attack",
-          "title": "",
-          "short": "攻擊",
-          "icon": "🔥",
-          "reason": "站上MA20/EMA21，MACD多頭，量比 2.43，日K多頭攻擊。"
-        },
-        {
-          "id": "saucer",
-          "title": "",
-          "short": "圓弧",
-          "icon": "◜",
-          "reason": "突破40日整理頸線，量能放大，偏圓弧底突破。"
-        }
-      ]
-    },
-    {
-      "code": "2241",
-      "name": "艾姆勒",
-      "close": 43.1,
-      "percent": 7.615480649188526,
-      "tradeVolume": 5014,
-      "value": 216103400,
-      "swingScore": 100,
-      "swingZone": "A",
-      "swingStage": {
-        "label": "高基期",
-        "ratio": "0.96",
-        "tone": "high",
-        "value": 0.9620253164556961
-      },
-      "swingSignals": [
-        {
-          "id": "n_base",
-          "title": "",
-          "short": "N字",
-          "icon": "",
-          "reason": "爆量突破後回檔不破半分位，再突破前高 42.50，N字共振。"
-        }
-      ]
-    },
-    {
-      "code": "3665",
-      "name": "貿聯-KY",
-      "close": 2310,
-      "percent": 6.944444444444445,
-      "tradeVolume": 3901,
-      "value": 9011310000,
-      "swingScore": 100,
-      "swingZone": "A",
-      "swingStage": {
-        "label": "中位階",
-        "ratio": "0.39",
-        "tone": "mid",
-        "value": 0.391304347826087
+        "value": 0.9548387096774194
       },
       "swingSignals": [
         {
@@ -552,152 +798,31 @@
           "short": "逃逸缺口",
           "icon": "🚀",
           "reason": "跳空且站上MA20，多頭段延續，偏逃逸缺口。"
-        },
-        {
-          "id": "golden_cross",
-          "title": "",
-          "short": "金釵",
-          "icon": "✦",
-          "reason": "MA5 > MA10 > MA20 且收紅，多金釵候選。"
         }
       ]
     },
     {
-      "code": "2413",
-      "name": "環科",
-      "close": 61.2,
-      "percent": 6.434782608695658,
-      "tradeVolume": 23177,
-      "value": 1418432400,
-      "swingScore": 100,
-      "swingZone": "B",
-      "swingStage": {
-        "label": "高基期",
-        "ratio": "0.91",
-        "tone": "high",
-        "value": 0.9056603773584906
-      },
-      "swingSignals": [
-        {
-          "id": "watch_trend",
-          "title": "",
-          "short": "B觀察",
-          "icon": "B",
-          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 7/8，量比 2.67，位階 高基期。"
-        }
-      ]
-    },
-    {
-      "code": "2393",
-      "name": "億光",
-      "close": 70.9,
-      "percent": 5.037037037037045,
-      "tradeVolume": 5521,
-      "value": 391438900,
+      "code": "2478",
+      "name": "大毅",
+      "close": 177.5,
+      "percent": 4.411764705882353,
+      "tradeVolume": 36879.434,
+      "value": 0,
       "swingScore": 100,
       "swingZone": "A",
       "swingStage": {
         "label": "高基期",
-        "ratio": "0.72",
+        "ratio": "0.92",
         "tone": "high",
-        "value": 0.7210884353741501
+        "value": 0.9233870967741935
       },
       "swingSignals": [
         {
-          "id": "bull_attack",
-          "title": "",
-          "short": "攻擊",
-          "icon": "🔥",
-          "reason": "站上MA20/EMA21，MACD多頭，量比 1.48，日K多頭攻擊。"
-        }
-      ]
-    },
-    {
-      "code": "2610",
-      "name": "華航",
-      "close": 20.4,
-      "percent": 4.884318766066834,
-      "tradeVolume": 78967,
-      "value": 1610926800,
-      "swingScore": 100,
-      "swingZone": "A",
-      "swingStage": {
-        "label": "高基期",
-        "ratio": "0.90",
-        "tone": "high",
-        "value": 0.8999999999999998
-      },
-      "swingSignals": [
-        {
-          "id": "bull_attack",
-          "title": "",
-          "short": "攻擊",
-          "icon": "🔥",
-          "reason": "站上MA20/EMA21，MACD多頭，量比 1.35，日K多頭攻擊。"
-        },
-        {
-          "id": "saucer",
-          "title": "",
-          "short": "圓弧",
-          "icon": "◜",
-          "reason": "突破40日整理頸線，量能放大，偏圓弧底突破。"
-        },
-        {
-          "id": "breakaway_gap",
-          "title": "",
-          "short": "突破缺口",
-          "icon": "◆",
-          "reason": "跳空突破近20日整理高點，偏突破缺口。"
-        }
-      ]
-    },
-    {
-      "code": "2520",
-      "name": "冠德",
-      "close": 35,
-      "percent": 4.790419161676651,
-      "tradeVolume": 6781,
-      "value": 237335000,
-      "swingScore": 100,
-      "swingZone": "A",
-      "swingStage": {
-        "label": "高基期",
-        "ratio": "0.84",
-        "tone": "high",
-        "value": 0.8441558441558439
-      },
-      "swingSignals": [
-        {
-          "id": "bull_attack",
-          "title": "",
-          "short": "攻擊",
-          "icon": "🔥",
-          "reason": "站上MA20/EMA21，MACD多頭，量比 2.37，日K多頭攻擊。"
-        }
-      ]
-    },
-    {
-      "code": "6239",
-      "name": "力成",
-      "close": 347.5,
-      "percent": 4.354354354354354,
-      "tradeVolume": 92120,
-      "value": 32011700000,
-      "swingScore": 100,
-      "swingZone": "A",
-      "swingStage": {
-        "label": "高基期",
-        "ratio": "0.79",
-        "tone": "high",
-        "value": 0.7876344086021505
-      },
-      "swingSignals": [
-        {
-          "id": "runaway_gap",
-          "title": "",
-          "short": "逃逸缺口",
-          "icon": "🚀",
-          "reason": "跳空且站上MA20，多頭段延續，偏逃逸缺口。"
+          "id": "wallet_volume_cross",
+          "title": "紅色三角形",
+          "short": "量叉",
+          "icon": "🔺",
+          "reason": "主力爸爸錢包量能紅K交叉（2026-06-09）：5日資金量均線 5,426 上穿 60日 3,161。"
         }
       ]
     },
@@ -706,8 +831,8 @@
       "name": "凱崴",
       "close": 69.4,
       "percent": 4.047976011994007,
-      "tradeVolume": 29183,
-      "value": 2025300200,
+      "tradeVolume": 29814.854,
+      "value": 2060257689,
       "swingScore": 100,
       "swingZone": "A",
       "swingStage": {
@@ -723,23 +848,119 @@
           "short": "逃逸缺口",
           "icon": "🚀",
           "reason": "跳空且站上MA20，多頭段延續，偏逃逸缺口。"
+        },
+        {
+          "id": "wallet_strong_buy",
+          "title": "多方寶石",
+          "short": "主力多",
+          "icon": "◆",
+          "reason": "主力爸爸錢包多方寶石（2026-06-12）：控盤線由負翻正且日K收紅。"
         }
       ]
     },
     {
-      "code": "2605",
-      "name": "新興",
-      "close": 31.6,
-      "percent": 3.947368421052641,
-      "tradeVolume": 8195,
-      "value": 258962000,
+      "code": "8163",
+      "name": "達方",
+      "close": 43.7,
+      "percent": 3.9239001189060776,
+      "tradeVolume": 3302,
+      "value": 0,
+      "swingScore": 100,
+      "swingZone": "A",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.84",
+        "tone": "high",
+        "value": 0.8444444444444446
+      },
+      "swingSignals": [
+        {
+          "id": "wallet_volume_cross",
+          "title": "紅色三角形",
+          "short": "量叉",
+          "icon": "🔺",
+          "reason": "主力爸爸錢包量能紅K交叉（2026-06-09）：5日資金量均線 2,646 上穿 60日 1,436。"
+        }
+      ]
+    },
+    {
+      "code": "9103",
+      "name": "美德醫療-DR",
+      "close": 6.06,
+      "percent": 3.5897435897435894,
+      "tradeVolume": 9476.326,
+      "value": 0,
+      "swingScore": 100,
+      "swingZone": "A",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.75",
+        "tone": "high",
+        "value": 0.7462686567164176
+      },
+      "swingSignals": [
+        {
+          "id": "n_base",
+          "title": "",
+          "short": "N字",
+          "icon": "",
+          "reason": "爆量突破後回檔不破半分位，再突破前高 5.98，N字共振。"
+        },
+        {
+          "id": "wallet_strong_buy",
+          "title": "多方寶石",
+          "short": "主力多",
+          "icon": "◆",
+          "reason": "主力爸爸錢包多方寶石（2026-06-04）：控盤線由負翻正且日K收紅。"
+        }
+      ]
+    },
+    {
+      "code": "1295",
+      "name": "生合",
+      "close": 50.2,
+      "percent": 2.553626149131767,
+      "tradeVolume": 87.38,
+      "value": 4339080,
+      "swingScore": 100,
+      "swingZone": "A",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.18",
+        "tone": "low",
+        "value": 0.18238993710691853
+      },
+      "swingSignals": [
+        {
+          "id": "wallet_strong_buy",
+          "title": "多方寶石",
+          "short": "主力多",
+          "icon": "◆",
+          "reason": "主力爸爸錢包多方寶石（2026-06-08）：控盤線由負翻正且日K收紅。"
+        },
+        {
+          "id": "wallet_volume_cross",
+          "title": "紅色三角形",
+          "short": "量叉",
+          "icon": "🔺",
+          "reason": "主力爸爸錢包量能紅K交叉（2026-06-10）：5日資金量均線 17,085 上穿 60日 26,937。"
+        }
+      ]
+    },
+    {
+      "code": "2406",
+      "name": "國碩",
+      "close": 35.85,
+      "percent": 2.428571428571433,
+      "tradeVolume": 37490.317,
+      "value": 0,
       "swingScore": 100,
       "swingZone": "B",
       "swingStage": {
-        "label": "低基期",
-        "ratio": "0.32",
-        "tone": "low",
-        "value": 0.32394366197183116
+        "label": "中位階",
+        "ratio": "0.56",
+        "tone": "mid",
+        "value": 0.5641025641025643
       },
       "swingSignals": [
         {
@@ -747,84 +968,34 @@
           "title": "",
           "short": "B觀察",
           "icon": "B",
-          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 5/8，量比 1.26，位階 低基期。"
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 6/8，量比 1.90，位階 中位階。"
         }
       ]
     },
     {
-      "code": "2401",
-      "name": "凌陽",
-      "close": 28.6,
-      "percent": 3.8112522686025434,
-      "tradeVolume": 17367,
-      "value": 496696200,
+      "code": "6807",
+      "name": "峰源-KY",
+      "close": 34.1,
+      "percent": 2.4024024024024158,
+      "tradeVolume": 5606,
+      "value": 0,
       "swingScore": 100,
       "swingZone": "A",
       "swingStage": {
-        "label": "中位階",
-        "ratio": "0.58",
-        "tone": "mid",
-        "value": 0.5789473684210528
+        "label": "低基期",
+        "ratio": "0.26",
+        "tone": "low",
+        "value": 0.2564102564102565
       },
       "swingSignals": [
         {
-          "id": "runaway_gap",
+          "id": "n_base",
           "title": "",
-          "short": "逃逸缺口",
-          "icon": "🚀",
-          "reason": "跳空且站上MA20，多頭段延續，偏逃逸缺口。"
-        }
-      ]
-    },
-    {
-      "code": "2915",
-      "name": "潤泰全",
-      "close": 51,
-      "percent": 3.7639877924720273,
-      "tradeVolume": 4119,
-      "value": 210069000,
-      "swingScore": 100,
-      "swingZone": "A",
-      "swingStage": {
-        "label": "高基期",
-        "ratio": "0.91",
-        "tone": "high",
-        "value": 0.9139784946236562
-      },
-      "swingSignals": [
-        {
-          "id": "saucer",
-          "title": "",
-          "short": "圓弧",
-          "icon": "◜",
-          "reason": "突破40日整理頸線，量能放大，偏圓弧底突破。"
+          "short": "N字",
+          "icon": "",
+          "reason": "爆量突破後回檔不破半分位，再突破前高 33.55，N字共振。"
         },
         {
-          "id": "breakaway_gap",
-          "title": "",
-          "short": "突破缺口",
-          "icon": "◆",
-          "reason": "跳空突破近20日整理高點，偏突破缺口。"
-        }
-      ]
-    },
-    {
-      "code": "8112",
-      "name": "至上",
-      "close": 98.8,
-      "percent": 3.45549738219895,
-      "tradeVolume": 67356,
-      "value": 6654772800,
-      "swingScore": 100,
-      "swingZone": "A",
-      "swingStage": {
-        "label": "高基期",
-        "ratio": "0.79",
-        "tone": "high",
-        "value": 0.7911646586345381
-      },
-      "swingSignals": [
-        {
           "id": "runaway_gap",
           "title": "",
           "short": "逃逸缺口",
@@ -834,44 +1005,19 @@
       ]
     },
     {
-      "code": "2323",
-      "name": "中環",
-      "close": 11.2,
-      "percent": 3.2258064516129004,
-      "tradeVolume": 9926,
-      "value": 111171200,
-      "swingScore": 100,
-      "swingZone": "A",
-      "swingStage": {
-        "label": "中位階",
-        "ratio": "0.54",
-        "tone": "mid",
-        "value": 0.5414201183431951
-      },
-      "swingSignals": [
-        {
-          "id": "runaway_gap",
-          "title": "",
-          "short": "逃逸缺口",
-          "icon": "🚀",
-          "reason": "跳空且站上MA20，多頭段延續，偏逃逸缺口。"
-        }
-      ]
-    },
-    {
-      "code": "5521",
-      "name": "工信",
-      "close": 10.55,
-      "percent": 2.9268292682926895,
-      "tradeVolume": 7182,
-      "value": 75770100,
+      "code": "3406",
+      "name": "玉晶光",
+      "close": 693,
+      "percent": 2.363367799113737,
+      "tradeVolume": 6775.271,
+      "value": 0,
       "swingScore": 100,
       "swingZone": "B",
       "swingStage": {
-        "label": "低基期",
-        "ratio": "0.31",
-        "tone": "low",
-        "value": 0.31034482758620696
+        "label": "高基期",
+        "ratio": "0.77",
+        "tone": "high",
+        "value": 0.7736549165120594
       },
       "swingSignals": [
         {
@@ -879,24 +1025,24 @@
           "title": "",
           "short": "B觀察",
           "icon": "B",
-          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 6/8，量比 1.22，位階 低基期。"
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 7/8，量比 1.73，位階 高基期。"
         }
       ]
     },
     {
-      "code": "2501",
-      "name": "國建",
-      "close": 26.5,
-      "percent": 2.912621359223301,
-      "tradeVolume": 12305,
-      "value": 326082500,
+      "code": "1259",
+      "name": "安心",
+      "close": 59.6,
+      "percent": 2.0547945205479503,
+      "tradeVolume": 19008,
+      "value": 0,
       "swingScore": 100,
       "swingZone": "A",
       "swingStage": {
         "label": "高基期",
-        "ratio": "0.85",
+        "ratio": "0.73",
         "tone": "high",
-        "value": 0.852173913043478
+        "value": 0.7254901960784317
       },
       "swingSignals": [
         {
@@ -904,326 +1050,63 @@
           "title": "",
           "short": "攻擊",
           "icon": "🔥",
-          "reason": "站上MA20/EMA21，MACD多頭，量比 2.13，日K多頭攻擊。"
+          "reason": "站上MA20/EMA21，MACD多頭，量比 1.43，日K多頭攻擊。"
+        },
+        {
+          "id": "wallet_volume_cross",
+          "title": "紅色三角形",
+          "short": "量叉",
+          "icon": "🔺",
+          "reason": "主力爸爸錢包量能紅K交叉（2026-06-11）：5日資金量均線 7,661 上穿 60日 7,163。"
         }
       ]
     },
     {
-      "code": "9945",
-      "name": "潤泰新",
-      "close": 26.8,
-      "percent": 2.8790786948176583,
-      "tradeVolume": 14866,
-      "value": 398408800,
-      "swingScore": 100,
-      "swingZone": "A",
-      "swingStage": {
-        "label": "高基期",
-        "ratio": "0.92",
-        "tone": "high",
-        "value": 0.9176470588235299
-      },
-      "swingSignals": [
-        {
-          "id": "bull_attack",
-          "title": "",
-          "short": "攻擊",
-          "icon": "🔥",
-          "reason": "站上MA20/EMA21，MACD多頭，量比 1.38，日K多頭攻擊。"
-        },
-        {
-          "id": "n_base",
-          "title": "",
-          "short": "N字",
-          "icon": "",
-          "reason": "爆量突破後回檔不破半分位，再突破前高 26.55，N字共振。"
-        },
-        {
-          "id": "saucer",
-          "title": "",
-          "short": "圓弧",
-          "icon": "◜",
-          "reason": "突破40日整理頸線，量能放大，偏圓弧底突破。"
-        }
-      ]
-    },
-    {
-      "code": "2890",
-      "name": "永豐金",
-      "close": 34.15,
-      "percent": 2.706766917293229,
-      "tradeVolume": 64926,
-      "value": 2217222900,
-      "swingScore": 100,
-      "swingZone": "A",
-      "swingStage": {
-        "label": "高基期",
-        "ratio": "0.87",
-        "tone": "high",
-        "value": 0.8730158730158725
-      },
-      "swingSignals": [
-        {
-          "id": "bull_attack",
-          "title": "",
-          "short": "攻擊",
-          "icon": "🔥",
-          "reason": "站上MA20/EMA21，MACD多頭，量比 1.32，日K多頭攻擊。"
-        },
-        {
-          "id": "saucer",
-          "title": "",
-          "short": "圓弧",
-          "icon": "◜",
-          "reason": "突破40日整理頸線，量能放大，偏圓弧底突破。"
-        },
-        {
-          "id": "runaway_gap",
-          "title": "",
-          "short": "逃逸缺口",
-          "icon": "🚀",
-          "reason": "跳空且站上MA20，多頭段延續，偏逃逸缺口。"
-        }
-      ]
-    },
-    {
-      "code": "2618",
-      "name": "長榮航",
-      "close": 38.7,
-      "percent": 2.652519893899204,
-      "tradeVolume": 75296,
-      "value": 2913955200,
-      "swingScore": 100,
-      "swingZone": "A",
-      "swingStage": {
-        "label": "高基期",
-        "ratio": "0.89",
-        "tone": "high",
-        "value": 0.887096774193549
-      },
-      "swingSignals": [
-        {
-          "id": "bull_attack",
-          "title": "",
-          "short": "攻擊",
-          "icon": "🔥",
-          "reason": "站上MA20/EMA21，MACD多頭，量比 1.28，日K多頭攻擊。"
-        },
-        {
-          "id": "saucer",
-          "title": "",
-          "short": "圓弧",
-          "icon": "◜",
-          "reason": "突破40日整理頸線，量能放大，偏圓弧底突破。"
-        },
-        {
-          "id": "breakaway_gap",
-          "title": "",
-          "short": "突破缺口",
-          "icon": "◆",
-          "reason": "跳空突破近20日整理高點，偏突破缺口。"
-        }
-      ]
-    },
-    {
-      "code": "2903",
-      "name": "遠百",
-      "close": 23.85,
-      "percent": 2.5806451612903287,
-      "tradeVolume": 4744,
-      "value": 113144400,
-      "swingScore": 100,
-      "swingZone": "A",
-      "swingStage": {
-        "label": "高基期",
-        "ratio": "0.96",
-        "tone": "high",
-        "value": 0.9574468085106391
-      },
-      "swingSignals": [
-        {
-          "id": "bull_attack",
-          "title": "",
-          "short": "攻擊",
-          "icon": "🔥",
-          "reason": "站上MA20/EMA21，MACD多頭，量比 1.59，日K多頭攻擊。"
-        },
-        {
-          "id": "saucer",
-          "title": "",
-          "short": "圓弧",
-          "icon": "◜",
-          "reason": "突破40日整理頸線，量能放大，偏圓弧底突破。"
-        }
-      ]
-    },
-    {
-      "code": "2646",
-      "name": "星宇航空",
-      "close": 20.6,
-      "percent": 1.980198019801991,
-      "tradeVolume": 5950,
-      "value": 122570000,
-      "swingScore": 100,
-      "swingZone": "A",
-      "swingStage": {
-        "label": "中位階",
-        "ratio": "0.47",
-        "tone": "mid",
-        "value": 0.4736842105263164
-      },
-      "swingSignals": [
-        {
-          "id": "runaway_gap",
-          "title": "",
-          "short": "逃逸缺口",
-          "icon": "🚀",
-          "reason": "跳空且站上MA20，多頭段延續，偏逃逸缺口。"
-        }
-      ]
-    },
-    {
-      "code": "2834",
-      "name": "臺企銀",
-      "close": 17.3,
-      "percent": 1.7647058823529453,
-      "tradeVolume": 53139,
-      "value": 919304700,
-      "swingScore": 100,
-      "swingZone": "A",
-      "swingStage": {
-        "label": "高基期",
-        "ratio": "0.86",
-        "tone": "high",
-        "value": 0.8571428571428571
-      },
-      "swingSignals": [
-        {
-          "id": "bull_attack",
-          "title": "",
-          "short": "攻擊",
-          "icon": "🔥",
-          "reason": "站上MA20/EMA21，MACD多頭，量比 1.29，日K多頭攻擊。"
-        },
-        {
-          "id": "n_base",
-          "title": "",
-          "short": "N字",
-          "icon": "",
-          "reason": "爆量突破後回檔不破半分位，再突破前高 17.25，N字共振。"
-        },
-        {
-          "id": "saucer",
-          "title": "",
-          "short": "圓弧",
-          "icon": "◜",
-          "reason": "突破40日整理頸線，量能放大，偏圓弧底突破。"
-        },
-        {
-          "id": "breakaway_gap",
-          "title": "",
-          "short": "突破缺口",
-          "icon": "◆",
-          "reason": "跳空突破近20日整理高點，偏突破缺口。"
-        }
-      ]
-    },
-    {
-      "code": "4763",
-      "name": "材料*-KY",
-      "close": 44.45,
-      "percent": 1.6000000000000065,
-      "tradeVolume": 4851,
-      "value": 215626950,
-      "swingScore": 100,
-      "swingZone": "A",
-      "swingStage": {
-        "label": "中位階",
-        "ratio": "0.54",
-        "tone": "mid",
-        "value": 0.5379746835443039
-      },
-      "swingSignals": [
-        {
-          "id": "runaway_gap",
-          "title": "",
-          "short": "逃逸缺口",
-          "icon": "🚀",
-          "reason": "跳空且站上MA20，多頭段延續，偏逃逸缺口。"
-        }
-      ]
-    },
-    {
-      "code": "1722",
-      "name": "台肥",
-      "close": 48.4,
-      "percent": 1.5739769150052467,
-      "tradeVolume": 4237,
-      "value": 205070800,
+      "code": "5223",
+      "name": "安力-KY",
+      "close": 25.6,
+      "percent": 1.9920318725099602,
+      "tradeVolume": 22.843,
+      "value": 579361,
       "swingScore": 100,
       "swingZone": "A",
       "swingStage": {
         "label": "中位階",
         "ratio": "0.55",
         "tone": "mid",
-        "value": 0.5471698113207547
+        "value": 0.5454545454545456
       },
       "swingSignals": [
         {
-          "id": "bull_attack",
-          "title": "",
-          "short": "攻擊",
-          "icon": "🔥",
-          "reason": "站上MA20/EMA21，MACD多頭，量比 1.28，日K多頭攻擊。"
+          "id": "wallet_strong_buy",
+          "title": "多方寶石",
+          "short": "主力多",
+          "icon": "◆",
+          "reason": "主力爸爸錢包多方寶石（2026-06-09）：控盤線由負翻正且日K收紅。"
         },
         {
-          "id": "runaway_gap",
-          "title": "",
-          "short": "逃逸缺口",
-          "icon": "🚀",
-          "reason": "跳空且站上MA20，多頭段延續，偏逃逸缺口。"
+          "id": "wallet_volume_cross",
+          "title": "紅色三角形",
+          "short": "量叉",
+          "icon": "🔺",
+          "reason": "主力爸爸錢包量能紅K交叉（2026-06-09）：5日資金量均線 17,122 上穿 60日 17,594。"
         }
       ]
     },
     {
-      "code": "2812",
-      "name": "台中銀",
-      "close": 19.5,
-      "percent": 1.5625000000000038,
-      "tradeVolume": 13121,
-      "value": 255859500,
+      "code": "2002",
+      "name": "中鋼",
+      "close": 18.9,
+      "percent": 1.8867924528301772,
+      "tradeVolume": 53797,
+      "value": 0,
       "swingScore": 100,
       "swingZone": "A",
       "swingStage": {
-        "label": "中位階",
-        "ratio": "0.53",
-        "tone": "mid",
-        "value": 0.5283018867924526
-      },
-      "swingSignals": [
-        {
-          "id": "runaway_gap",
-          "title": "",
-          "short": "逃逸缺口",
-          "icon": "🚀",
-          "reason": "跳空且站上MA20，多頭段延續，偏逃逸缺口。"
-        }
-      ]
-    },
-    {
-      "code": "2884",
-      "name": "玉山金",
-      "close": 34.35,
-      "percent": 1.4771048744460855,
-      "tradeVolume": 49546,
-      "value": 1701905100,
-      "swingScore": 100,
-      "swingZone": "A",
-      "swingStage": {
-        "label": "高基期",
-        "ratio": "0.91",
-        "tone": "high",
-        "value": 0.91358024691358
+        "label": "低基期",
+        "ratio": "0.29",
+        "tone": "low",
+        "value": 0.2881355932203383
       },
       "swingSignals": [
         {
@@ -1238,17 +1121,17 @@
     {
       "code": "9904",
       "name": "寶成",
-      "close": 26.65,
-      "percent": 1.3307984790874443,
-      "tradeVolume": 17798,
-      "value": 474316700,
+      "close": 26.75,
+      "percent": 1.711026615969579,
+      "tradeVolume": 11955,
+      "value": 0,
       "swingScore": 100,
       "swingZone": "A",
       "swingStage": {
         "label": "中位階",
-        "ratio": "0.49",
+        "ratio": "0.52",
         "tone": "mid",
-        "value": 0.49206349206349137
+        "value": 0.5238095238095236
       },
       "swingSignals": [
         {
@@ -1257,48 +1140,30 @@
           "short": "逃逸缺口",
           "icon": "🚀",
           "reason": "跳空且站上MA20，多頭段延續，偏逃逸缺口。"
-        }
-      ]
-    },
-    {
-      "code": "2801",
-      "name": "彰銀",
-      "close": 22.6,
-      "percent": 1.1185682326621922,
-      "tradeVolume": 39701,
-      "value": 897242600,
-      "swingScore": 100,
-      "swingZone": "A",
-      "swingStage": {
-        "label": "高基期",
-        "ratio": "0.88",
-        "tone": "high",
-        "value": 0.8793103448275869
-      },
-      "swingSignals": [
+        },
         {
-          "id": "breakaway_gap",
-          "title": "",
-          "short": "突破缺口",
+          "id": "wallet_strong_buy",
+          "title": "多方寶石",
+          "short": "主力多",
           "icon": "◆",
-          "reason": "跳空突破近20日整理高點，偏突破缺口。"
+          "reason": "主力爸爸錢包多方寶石（2026-06-09）：控盤線由負翻正且日K收紅。"
         }
       ]
     },
     {
-      "code": "8996",
-      "name": "高力",
-      "close": 1145,
-      "percent": 0.43859649122807015,
-      "tradeVolume": 3053,
-      "value": 3495685000,
+      "code": "2633",
+      "name": "台灣高鐵",
+      "close": 25.8,
+      "percent": 1.574803149606308,
+      "tradeVolume": 9342.701,
+      "value": 0,
       "swingScore": 100,
       "swingZone": "B",
       "swingStage": {
         "label": "中位階",
-        "ratio": "0.41",
+        "ratio": "0.45",
         "tone": "mid",
-        "value": 0.4074074074074074
+        "value": 0.4545454545454547
       },
       "swingSignals": [
         {
@@ -1306,7 +1171,360 @@
           "title": "",
           "short": "B觀察",
           "icon": "B",
-          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 7/8，量比 0.84，位階 中位階。"
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 7/8，量比 0.87，位階 中位階。"
+        }
+      ]
+    },
+    {
+      "code": "1722",
+      "name": "台肥",
+      "close": 48.4,
+      "percent": 1.467505241090138,
+      "tradeVolume": 4237,
+      "value": 0,
+      "swingScore": 100,
+      "swingZone": "A",
+      "swingStage": {
+        "label": "中位階",
+        "ratio": "0.55",
+        "tone": "mid",
+        "value": 0.5471698113207547
+      },
+      "swingSignals": [
+        {
+          "id": "wallet_strong_buy",
+          "title": "多方寶石",
+          "short": "主力多",
+          "icon": "◆",
+          "reason": "主力爸爸錢包多方寶石（2026-06-08）：控盤線由負翻正且日K收紅。"
+        }
+      ]
+    },
+    {
+      "code": "6581",
+      "name": "鋼聯",
+      "close": 109,
+      "percent": 1.3953488372093024,
+      "tradeVolume": 18739,
+      "value": 0,
+      "swingScore": 100,
+      "swingZone": "A",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.37",
+        "tone": "low",
+        "value": 0.3684210526315789
+      },
+      "swingSignals": [
+        {
+          "id": "n_base",
+          "title": "",
+          "short": "N字",
+          "icon": "",
+          "reason": "爆量突破後回檔不破半分位，再突破前高 108.00，N字共振。"
+        }
+      ]
+    },
+    {
+      "code": "2347",
+      "name": "聯強",
+      "close": 92.2,
+      "percent": 1.3186813186813218,
+      "tradeVolume": 18930.734,
+      "value": 0,
+      "swingScore": 100,
+      "swingZone": "A",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.73",
+        "tone": "high",
+        "value": 0.7277777777777783
+      },
+      "swingSignals": [
+        {
+          "id": "bull_attack",
+          "title": "",
+          "short": "攻擊",
+          "icon": "🔥",
+          "reason": "站上MA20/EMA21，MACD多頭，量比 2.12，日K多頭攻擊。"
+        }
+      ]
+    },
+    {
+      "code": "2105",
+      "name": "正新",
+      "close": 35,
+      "percent": 1.3024602026049288,
+      "tradeVolume": 26782.619,
+      "value": 0,
+      "swingScore": 100,
+      "swingZone": "A",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.94",
+        "tone": "high",
+        "value": 0.9368421052631585
+      },
+      "swingSignals": [
+        {
+          "id": "bull_attack",
+          "title": "",
+          "short": "攻擊",
+          "icon": "🔥",
+          "reason": "站上MA20/EMA21，MACD多頭，量比 1.29，日K多頭攻擊。"
+        }
+      ]
+    },
+    {
+      "code": "6153",
+      "name": "嘉聯益",
+      "close": 20.75,
+      "percent": 1.2195121951219512,
+      "tradeVolume": 52166.141,
+      "value": 0,
+      "swingScore": 100,
+      "swingZone": "A",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.71",
+        "tone": "high",
+        "value": 0.7119999999999999
+      },
+      "swingSignals": [
+        {
+          "id": "wallet_strong_buy",
+          "title": "多方寶石",
+          "short": "主力多",
+          "icon": "◆",
+          "reason": "主力爸爸錢包多方寶石（2026-06-08）：控盤線由負翻正且日K收紅。"
+        }
+      ]
+    },
+    {
+      "code": "2547",
+      "name": "日勝生",
+      "close": 11.15,
+      "percent": 0.9049773755656076,
+      "tradeVolume": 25092.422,
+      "value": 0,
+      "swingScore": 100,
+      "swingZone": "A",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.79",
+        "tone": "high",
+        "value": 0.7928994082840238
+      },
+      "swingSignals": [
+        {
+          "id": "bull_attack",
+          "title": "",
+          "short": "攻擊",
+          "icon": "🔥",
+          "reason": "站上MA20/EMA21，MACD多頭，量比 4.98，日K多頭攻擊。"
+        },
+        {
+          "id": "saucer",
+          "title": "",
+          "short": "圓弧",
+          "icon": "◜",
+          "reason": "突破40日整理頸線，量能放大，偏圓弧底突破。"
+        },
+        {
+          "id": "wallet_strong_buy",
+          "title": "多方寶石",
+          "short": "主力多",
+          "icon": "◆",
+          "reason": "主力爸爸錢包多方寶石（2026-06-08）：控盤線由負翻正且日K收紅。"
+        }
+      ]
+    },
+    {
+      "code": "2515",
+      "name": "中工",
+      "close": 12.8,
+      "percent": 0.7874015748031609,
+      "tradeVolume": 18454.826,
+      "value": 0,
+      "swingScore": 100,
+      "swingZone": "A",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.30",
+        "tone": "low",
+        "value": 0.2978723404255324
+      },
+      "swingSignals": [
+        {
+          "id": "wallet_volume_cross",
+          "title": "紅色三角形",
+          "short": "量叉",
+          "icon": "🔺",
+          "reason": "主力爸爸錢包量能紅K交叉（2026-06-08）：5日資金量均線 3,220 上穿 60日 4,725。"
+        }
+      ]
+    },
+    {
+      "code": "8422",
+      "name": "可寧衛*",
+      "close": 29.45,
+      "percent": 0.6837606837606813,
+      "tradeVolume": 10075,
+      "value": 0,
+      "swingScore": 100,
+      "swingZone": "A",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.65",
+        "tone": "high",
+        "value": 0.6480000000000001
+      },
+      "swingSignals": [
+        {
+          "id": "wallet_strong_buy",
+          "title": "多方寶石",
+          "short": "主力多",
+          "icon": "◆",
+          "reason": "主力爸爸錢包多方寶石（2026-06-09）：控盤線由負翻正且日K收紅。"
+        }
+      ]
+    },
+    {
+      "code": "3221",
+      "name": "台嘉碩",
+      "close": 60.4,
+      "percent": 0.6666666666666643,
+      "tradeVolume": 19855.301,
+      "value": 1227489597,
+      "swingScore": 100,
+      "swingZone": "A",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.74",
+        "tone": "high",
+        "value": 0.7404844290657437
+      },
+      "swingSignals": [
+        {
+          "id": "wallet_strong_buy",
+          "title": "多方寶石",
+          "short": "主力多",
+          "icon": "◆",
+          "reason": "主力爸爸錢包多方寶石（2026-06-08）：控盤線由負翻正且日K收紅。"
+        },
+        {
+          "id": "wallet_volume_cross",
+          "title": "紅色三角形",
+          "short": "量叉",
+          "icon": "🔺",
+          "reason": "主力爸爸錢包量能紅K交叉（2026-06-09）：5日資金量均線 16,484 上穿 60日 7,662。"
+        }
+      ]
+    },
+    {
+      "code": "2901",
+      "name": "欣欣",
+      "close": 23.3,
+      "percent": 0.6479481641468775,
+      "tradeVolume": 19501,
+      "value": 0,
+      "swingScore": 100,
+      "swingZone": "B",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.34",
+        "tone": "low",
+        "value": 0.3400000000000006
+      },
+      "swingSignals": [
+        {
+          "id": "watch_trend",
+          "title": "",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 6/8，量比 0.88，位階 低基期。"
+        }
+      ]
+    },
+    {
+      "code": "9951",
+      "name": "皇田",
+      "close": 52.9,
+      "percent": 0.5703422053231885,
+      "tradeVolume": 52.585,
+      "value": 2787462,
+      "swingScore": 100,
+      "swingZone": "A",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.36",
+        "tone": "low",
+        "value": 0.35714285714285693
+      },
+      "swingSignals": [
+        {
+          "id": "wallet_strong_buy",
+          "title": "多方寶石",
+          "short": "主力多",
+          "icon": "◆",
+          "reason": "主力爸爸錢包多方寶石（2026-06-09）：控盤線由負翻正且日K收紅。"
+        }
+      ]
+    },
+    {
+      "code": "9905",
+      "name": "大華",
+      "close": 20.8,
+      "percent": 0.48309178743962045,
+      "tradeVolume": 93,
+      "value": 0,
+      "swingScore": 100,
+      "swingZone": "A",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.20",
+        "tone": "low",
+        "value": 0.20454545454545428
+      },
+      "swingSignals": [
+        {
+          "id": "wallet_volume_cross",
+          "title": "紅色三角形",
+          "short": "量叉",
+          "icon": "🔺",
+          "reason": "主力爸爸錢包量能紅K交叉（2026-06-09）：5日資金量均線 28,440 上穿 60日 17,076。"
+        }
+      ]
+    },
+    {
+      "code": "1565",
+      "name": "精華",
+      "close": 94.1,
+      "percent": 0.42689434364993756,
+      "tradeVolume": 114.281,
+      "value": 10768688,
+      "swingScore": 100,
+      "swingZone": "A",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.12",
+        "tone": "low",
+        "value": 0.11999999999999968
+      },
+      "swingSignals": [
+        {
+          "id": "wallet_strong_buy",
+          "title": "多方寶石",
+          "short": "主力多",
+          "icon": "◆",
+          "reason": "主力爸爸錢包多方寶石（2026-06-09）：控盤線由負翻正且日K收紅。"
+        },
+        {
+          "id": "wallet_volume_cross",
+          "title": "紅色三角形",
+          "short": "量叉",
+          "icon": "🔺",
+          "reason": "主力爸爸錢包量能紅K交叉（2026-06-09）：5日資金量均線 11,732 上穿 60日 4,948。"
         }
       ]
     },
@@ -1336,402 +1554,248 @@
       ]
     },
     {
-      "code": "2889",
-      "name": "國票金",
-      "close": 15,
-      "percent": 0.33444816053512183,
-      "tradeVolume": 8087,
-      "value": 121305000,
+      "code": "1216",
+      "name": "統一",
+      "close": 75.9,
+      "percent": 0.3968253968254119,
+      "tradeVolume": 12083,
+      "value": 0,
       "swingScore": 100,
-      "swingZone": "B",
-      "swingStage": {
-        "label": "中位階",
-        "ratio": "0.57",
-        "tone": "mid",
-        "value": 0.565217391304348
-      },
-      "swingSignals": [
-        {
-          "id": "watch_trend",
-          "title": "",
-          "short": "B觀察",
-          "icon": "B",
-          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 6/8，量比 1.71，位階 中位階。"
-        }
-      ]
-    },
-    {
-      "code": "6244",
-      "name": "茂迪",
-      "close": 31.1,
-      "percent": -0.47999999999999543,
-      "tradeVolume": 31859,
-      "value": 990814900,
-      "swingScore": 100,
-      "swingZone": "B",
-      "swingStage": {
-        "label": "高基期",
-        "ratio": "0.66",
-        "tone": "high",
-        "value": 0.6603773584905664
-      },
-      "swingSignals": [
-        {
-          "id": "watch_trend",
-          "title": "",
-          "short": "B觀察",
-          "icon": "B",
-          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 7/8，量比 2.53，位階 高基期。"
-        }
-      ]
-    },
-    {
-      "code": "8422",
-      "name": "可寧衛*",
-      "close": 29,
-      "percent": -0.8547008547008548,
-      "tradeVolume": 14647,
-      "value": 424763000,
-      "swingScore": 100,
-      "swingZone": "B",
-      "swingStage": {
-        "label": "中位階",
-        "ratio": "0.58",
-        "tone": "mid",
-        "value": 0.5760000000000002
-      },
-      "swingSignals": [
-        {
-          "id": "watch_trend",
-          "title": "",
-          "short": "B觀察",
-          "icon": "B",
-          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 7/8，量比 0.89，位階 中位階。"
-        }
-      ]
-    },
-    {
-      "code": "8182",
-      "name": "加高",
-      "close": 53.6,
-      "percent": -1.651376146788988,
-      "tradeVolume": 22283,
-      "value": 1194368800,
-      "swingScore": 100,
-      "swingZone": "B",
-      "swingStage": {
-        "label": "高基期",
-        "ratio": "0.80",
-        "tone": "high",
-        "value": 0.7962264150943397
-      },
-      "swingSignals": [
-        {
-          "id": "watch_trend",
-          "title": "",
-          "short": "B觀察",
-          "icon": "B",
-          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 7/8，量比 3.21，位階 高基期。"
-        }
-      ]
-    },
-    {
-      "code": "8071",
-      "name": "能率網通",
-      "close": 24.5,
-      "percent": -1.803607214428855,
-      "tradeVolume": 11181,
-      "value": 273934500,
-      "swingScore": 100,
-      "swingZone": "B",
-      "swingStage": {
-        "label": "高基期",
-        "ratio": "0.76",
-        "tone": "high",
-        "value": 0.7613168724279836
-      },
-      "swingSignals": [
-        {
-          "id": "watch_trend",
-          "title": "",
-          "short": "B觀察",
-          "icon": "B",
-          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 7/8，量比 2.77，位階 高基期。"
-        }
-      ]
-    },
-    {
-      "code": "3441",
-      "name": "聯一光",
-      "close": 70,
-      "percent": -2.097902097902098,
-      "tradeVolume": 18876,
-      "value": 1321320000,
-      "swingScore": 100,
-      "swingZone": "B",
-      "swingStage": {
-        "label": "高基期",
-        "ratio": "0.87",
-        "tone": "high",
-        "value": 0.8728323699421965
-      },
-      "swingSignals": [
-        {
-          "id": "watch_trend",
-          "title": "",
-          "short": "B觀察",
-          "icon": "B",
-          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 7/8，量比 3.11，位階 高基期。"
-        }
-      ]
-    },
-    {
-      "code": "6270",
-      "name": "倍微",
-      "close": 34.4,
-      "percent": -2.2727272727272845,
-      "tradeVolume": 3216,
-      "value": 110630400,
-      "swingScore": 100,
-      "swingZone": "B",
-      "swingStage": {
-        "label": "中位階",
-        "ratio": "0.54",
-        "tone": "mid",
-        "value": 0.544159544159544
-      },
-      "swingSignals": [
-        {
-          "id": "watch_trend",
-          "title": "",
-          "short": "B觀察",
-          "icon": "B",
-          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 7/8，量比 1.23，位階 中位階。"
-        }
-      ]
-    },
-    {
-      "code": "6155",
-      "name": "鈞寶",
-      "close": 82,
-      "percent": -2.4970273483947616,
-      "tradeVolume": 35506,
-      "value": 2911492000,
-      "swingScore": 100,
-      "swingZone": "B",
-      "swingStage": {
-        "label": "高基期",
-        "ratio": "0.84",
-        "tone": "high",
-        "value": 0.8407643312101911
-      },
-      "swingSignals": [
-        {
-          "id": "watch_trend",
-          "title": "",
-          "short": "B觀察",
-          "icon": "B",
-          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 7/8，量比 1.72，位階 高基期。"
-        }
-      ]
-    },
-    {
-      "code": "3042",
-      "name": "晶技",
-      "close": 224.5,
-      "percent": -4.468085106382979,
-      "tradeVolume": 72615,
-      "value": 16302067500,
-      "swingScore": 100,
-      "swingZone": "B",
-      "swingStage": {
-        "label": "高基期",
-        "ratio": "0.80",
-        "tone": "high",
-        "value": 0.8026315789473685
-      },
-      "swingSignals": [
-        {
-          "id": "watch_trend",
-          "title": "",
-          "short": "B觀察",
-          "icon": "B",
-          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 7/8，量比 2.09，位階 高基期。"
-        }
-      ]
-    },
-    {
-      "code": "8021",
-      "name": "尖點",
-      "close": 522,
-      "percent": -8.421052631578947,
-      "tradeVolume": 25995,
-      "value": 13569390000,
-      "swingScore": 100,
-      "swingZone": "B",
-      "swingStage": {
-        "label": "中位階",
-        "ratio": "0.62",
-        "tone": "mid",
-        "value": 0.6167883211678832
-      },
-      "swingSignals": [
-        {
-          "id": "watch_trend",
-          "title": "",
-          "short": "B觀察",
-          "icon": "B",
-          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 7/8，量比 3.09，位階 中位階。"
-        }
-      ]
-    },
-    {
-      "code": "1605",
-      "name": "華新",
-      "close": 37.7,
-      "percent": 9.912536443148705,
-      "tradeVolume": 56334,
-      "value": 2123791800,
-      "swingScore": 99,
       "swingZone": "A",
-      "swingStage": {
-        "label": "中位階",
-        "ratio": "0.56",
-        "tone": "mid",
-        "value": 0.56401384083045
-      },
-      "swingSignals": [
-        {
-          "id": "runaway_gap",
-          "title": "",
-          "short": "逃逸缺口",
-          "icon": "🚀",
-          "reason": "跳空且站上MA20，多頭段延續，偏逃逸缺口。"
-        }
-      ]
-    },
-    {
-      "code": "5483",
-      "name": "中美晶",
-      "close": 159,
-      "percent": 9.655172413793103,
-      "tradeVolume": 20132,
-      "value": 3200988000,
-      "swingScore": 99,
-      "swingZone": "A",
-      "swingStage": {
-        "label": "高基期",
-        "ratio": "0.64",
-        "tone": "high",
-        "value": 0.6371681415929203
-      },
-      "swingSignals": [
-        {
-          "id": "runaway_gap",
-          "title": "",
-          "short": "逃逸缺口",
-          "icon": "🚀",
-          "reason": "跳空且站上MA20，多頭段延續，偏逃逸缺口。"
-        }
-      ]
-    },
-    {
-      "code": "2327",
-      "name": "國巨*",
-      "close": 855,
-      "percent": 1.5439429928741093,
-      "tradeVolume": 85848,
-      "value": 73400040000,
-      "swingScore": 99,
-      "swingZone": "B",
       "swingStage": {
         "label": "高基期",
         "ratio": "0.90",
         "tone": "high",
-        "value": 0.8983320095313742
+        "value": 0.9024390243902443
       },
       "swingSignals": [
         {
-          "id": "watch_trend",
-          "title": "",
-          "short": "B觀察",
-          "icon": "B",
-          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 7/8，量比 1.63，位階 高基期。"
+          "id": "wallet_strong_buy",
+          "title": "多方寶石",
+          "short": "主力多",
+          "icon": "◆",
+          "reason": "主力爸爸錢包多方寶石（2026-06-09）：控盤線由負翻正且日K收紅。"
+        },
+        {
+          "id": "wallet_volume_cross",
+          "title": "紅色三角形",
+          "short": "量叉",
+          "icon": "🔺",
+          "reason": "主力爸爸錢包量能紅K交叉（2026-06-11）：5日資金量均線 9,302 上穿 60日 7,407。"
         }
       ]
     },
     {
-      "code": "1449",
-      "name": "佳和",
-      "close": 14.35,
-      "percent": 0.7017543859649098,
-      "tradeVolume": 2751,
-      "value": 39476850,
-      "swingScore": 99,
-      "swingZone": "B",
-      "swingStage": {
-        "label": "中位階",
-        "ratio": "0.48",
-        "tone": "mid",
-        "value": 0.48421052631578926
-      },
-      "swingSignals": [
-        {
-          "id": "watch_trend",
-          "title": "",
-          "short": "B觀察",
-          "icon": "B",
-          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 7/8，量比 0.95，位階 中位階。"
-        }
-      ]
-    },
-    {
-      "code": "9949",
-      "name": "琉園",
-      "close": 23.9,
-      "percent": 0.4201680672268818,
-      "tradeVolume": 17,
-      "value": 406300,
-      "swingScore": 99,
+      "code": "4581",
+      "name": "光隆精密-KY",
+      "close": 49.85,
+      "percent": 0.301810865191144,
+      "tradeVolume": 12003,
+      "value": 0,
+      "swingScore": 100,
       "swingZone": "A",
       "swingStage": {
         "label": "低基期",
-        "ratio": "0.11",
+        "ratio": "0.22",
         "tone": "low",
-        "value": 0.10819672131147531
+        "value": 0.22368421052631632
       },
       "swingSignals": [
         {
-          "id": "n_base",
-          "title": "",
-          "short": "N字",
-          "icon": "",
-          "reason": "爆量突破後回檔不破半分位，再突破前高 23.80，N字共振。"
+          "id": "wallet_strong_buy",
+          "title": "多方寶石",
+          "short": "主力多",
+          "icon": "◆",
+          "reason": "主力爸爸錢包多方寶石（2026-06-11）：控盤線由負翻正且日K收紅。"
         }
       ]
     },
     {
-      "code": "2542",
-      "name": "興富發",
-      "close": 44.95,
-      "percent": -0.8820286659316396,
-      "tradeVolume": 31206,
-      "value": 1402709700,
-      "swingScore": 99,
-      "swingZone": "B",
+      "code": "9907",
+      "name": "統一實",
+      "close": 16.8,
+      "percent": 0.2985074626865714,
+      "tradeVolume": 2629,
+      "value": 0,
+      "swingScore": 100,
+      "swingZone": "A",
       "swingStage": {
-        "label": "高基期",
-        "ratio": "0.84",
-        "tone": "high",
-        "value": 0.8395522388059702
+        "label": "中位階",
+        "ratio": "0.43",
+        "tone": "mid",
+        "value": 0.4255319148936174
       },
       "swingSignals": [
         {
-          "id": "watch_trend",
+          "id": "wallet_strong_buy",
+          "title": "多方寶石",
+          "short": "主力多",
+          "icon": "◆",
+          "reason": "主力爸爸錢包多方寶石（2026-06-11）：控盤線由負翻正且日K收紅。"
+        }
+      ]
+    },
+    {
+      "code": "3665",
+      "name": "貿聯-KY",
+      "close": 2160,
+      "percent": 0.23201856148491878,
+      "tradeVolume": 5944.676,
+      "value": 0,
+      "swingScore": 100,
+      "swingZone": "A",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.26",
+        "tone": "low",
+        "value": 0.2608695652173913
+      },
+      "swingSignals": [
+        {
+          "id": "wallet_volume_cross",
+          "title": "紅色三角形",
+          "short": "量叉",
+          "icon": "🔺",
+          "reason": "主力爸爸錢包量能紅K交叉（2026-06-08）：5日資金量均線 1,883 上穿 60日 1,723。"
+        }
+      ]
+    },
+    {
+      "code": "2886",
+      "name": "兆豐金",
+      "close": 43.4,
+      "percent": 0,
+      "tradeVolume": 30307.283,
+      "value": 0,
+      "swingScore": 100,
+      "swingZone": "A",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.94",
+        "tone": "high",
+        "value": 0.9399999999999992
+      },
+      "swingSignals": [
+        {
+          "id": "wallet_volume_cross",
+          "title": "紅色三角形",
+          "short": "量叉",
+          "icon": "🔺",
+          "reason": "主力爸爸錢包量能紅K交叉（2026-06-09）：5日資金量均線 14,369 上穿 60日 13,450。"
+        }
+      ]
+    },
+    {
+      "code": "6201",
+      "name": "亞弘電",
+      "close": 47,
+      "percent": 0,
+      "tradeVolume": 78926,
+      "value": 0,
+      "swingScore": 100,
+      "swingZone": "A",
+      "swingStage": {
+        "label": "低基期",
+        "ratio": "0.23",
+        "tone": "low",
+        "value": 0.2328767123287674
+      },
+      "swingSignals": [
+        {
+          "id": "wallet_volume_cross",
+          "title": "紅色三角形",
+          "short": "量叉",
+          "icon": "🔺",
+          "reason": "主力爸爸錢包量能紅K交叉（2026-06-08）：5日資金量均線 17,187 上穿 60日 21,294。"
+        }
+      ]
+    },
+    {
+      "code": "9942",
+      "name": "茂順",
+      "close": 119.5,
+      "percent": 0,
+      "tradeVolume": 80415,
+      "value": 0,
+      "swingScore": 100,
+      "swingZone": "A",
+      "swingStage": {
+        "label": "中位階",
+        "ratio": "0.60",
+        "tone": "mid",
+        "value": 0.6
+      },
+      "swingSignals": [
+        {
+          "id": "bull_attack",
           "title": "",
-          "short": "B觀察",
-          "icon": "B",
-          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 7/8，量比 1.63，位階 高基期。"
+          "short": "攻擊",
+          "icon": "🔥",
+          "reason": "站上MA20/EMA21，MACD多頭，量比 2.17，日K多頭攻擊。"
+        },
+        {
+          "id": "wallet_strong_buy",
+          "title": "多方寶石",
+          "short": "主力多",
+          "icon": "◆",
+          "reason": "主力爸爸錢包多方寶石（2026-06-11）：控盤線由負翻正且日K收紅。"
+        },
+        {
+          "id": "wallet_volume_cross",
+          "title": "紅色三角形",
+          "short": "量叉",
+          "icon": "🔺",
+          "reason": "主力爸爸錢包量能紅K交叉（2026-06-11）：5日資金量均線 25,178 上穿 60日 21,804。"
+        }
+      ]
+    },
+    {
+      "code": "2504",
+      "name": "國產",
+      "close": 36.95,
+      "percent": -0.13513513513512745,
+      "tradeVolume": 2978.191,
+      "value": 0,
+      "swingScore": 100,
+      "swingZone": "A",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.86",
+        "tone": "high",
+        "value": 0.8552631578947375
+      },
+      "swingSignals": [
+        {
+          "id": "wallet_volume_cross",
+          "title": "紅色三角形",
+          "short": "量叉",
+          "icon": "🔺",
+          "reason": "主力爸爸錢包量能紅K交叉（2026-06-10）：5日資金量均線 2,311 上穿 60日 1,496。"
+        }
+      ]
+    },
+    {
+      "code": "8121",
+      "name": "越峰",
+      "close": 44.4,
+      "percent": -0.2247191011235987,
+      "tradeVolume": 2926.664,
+      "value": 130102199,
+      "swingScore": 100,
+      "swingZone": "A",
+      "swingStage": {
+        "label": "高基期",
+        "ratio": "0.91",
+        "tone": "high",
+        "value": 0.9130434782608694
+      },
+      "swingSignals": [
+        {
+          "id": "wallet_volume_cross",
+          "title": "紅色三角形",
+          "short": "量叉",
+          "icon": "🔺",
+          "reason": "主力爸爸錢包量能紅K交叉（2026-06-08）：5日資金量均線 1,394 上穿 60日 897。"
         }
       ]
     }

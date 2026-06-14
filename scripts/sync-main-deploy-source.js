@@ -25,6 +25,7 @@ const FILES = [
   "lib/supabase-public-slot.js",
   "fuman-sw.js",
   "api/version.js",
+  "api/scan-strategy4.js",
   "terminal-strategy-config.js",
   "scripts/bump-version.js",
   "scripts/generate-cb-detect.js",
@@ -36,6 +37,9 @@ const FILES = [
   "scripts/scan-institution-cache.js",
   "scripts/scan-realtime-radar-cache.js",
   "scripts/scan-strategy5-cache.js",
+  "scripts/scan-strategy4-cache.js",
+  "scripts/prewarm-strategy4-history-cache.js",
+  "scripts/generate-slim-cache.js",
   "scripts/sync-afterhours-supabase-status.js",
   "scripts/sync-main-deploy-source.js",
   "scripts/verify-data-freshness.js",
@@ -47,6 +51,8 @@ const FILES = [
   "scripts/verify-version-bump-needed.js",
   "scripts/verify-version-consistency.js",
   "run-cache-sync.ps1",
+  "run-auto-main-release.ps1",
+  "install-auto-main-release-task.ps1",
   "run-cb-detect.ps1",
   "run-flow.ps1",
   "flow-health.ps1",
@@ -57,6 +63,13 @@ const FILES = [
   "data/data-status-index.json",
   "data/live-freshness-ok.json",
   "data/strategy-match-index.json",
+  "data/strategy4-latest.json",
+  "data/strategy4-summary.json",
+  "data/strategy4-slim.json",
+  "data/strategy4-score-top.json",
+  "data/strategy4-zone-a.json",
+  "data/strategy4-zone-b.json",
+  "data/strategy4-zone-c.json",
   "data/strategy5-latest.json",
   "data/strategy5-backup.json",
   "data/terminal-home-bundle.json",
@@ -71,6 +84,12 @@ const FILES = [
   "data/warrant-flow-mobile-top.json",
   "data/flow-health-latest.json",
 ];
+
+for (const zone of ["b", "c"]) {
+  for (let page = 1; page <= 48; page += 1) {
+    FILES.push(`data/strategy4-zone-${zone}-page-${page}.json`);
+  }
+}
 
 if (!fs.existsSync(DEPLOY_ROOT)) {
   console.warn(`[sync-source] deploy root missing, skipped: ${DEPLOY_ROOT}`);
