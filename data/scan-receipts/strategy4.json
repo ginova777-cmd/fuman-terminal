@@ -1,0 +1,22 @@
+{
+  "strategy": "strategy4",
+  "label": "strategy4 raw refresh",
+  "tier": "critical",
+  "startedAt": "2026-06-15T22:33:28.7691212+08:00",
+  "finishedAt": "2026-06-15T22:34:04.4841380+08:00",
+  "status": "degraded",
+  "exitCode": 0,
+  "scanned": 1660,
+  "total": 1660,
+  "matches": 379,
+  "complete": true,
+  "qualityStatus": "degraded",
+  "fallback": false,
+  "payloadPath": "C:\\fuman-runtime\\data\\strategy4-latest.json",
+  "warnings": [
+    "strategy4 prewarm: prewarm batch 1/2 (1262-4178) supabase-only: skip strategy API fallback for 40 missing history caches",
+    "strategy4 prewarm: prewarm batch 2/2 (4195-9188) supabase-only: skip strategy API fallback for 38 missing history caches"
+  ],
+  "blockingReason": "",
+  "log": "C:\\fuman-runtime\\logs\\full-scan-20260615-220557.log"
+}

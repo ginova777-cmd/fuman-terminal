@@ -2,7 +2,7 @@
   "ok": true,
   "source": "github-actions-backup",
   "priceSource": "official-daily-k",
-  "updatedAt": "2026-06-15T14:27:49.462Z",
+  "updatedAt": "2026-06-15T14:33:59.672Z",
   "scanStamp": "20260615",
   "fullScan": true,
   "runMode": "full",
@@ -19,15 +19,15 @@
     "remainingMiss": 78,
     "maxRemainingMiss": 2000,
     "sourceCounts": {},
-    "supabaseWarmed": 26,
+    "supabaseWarmed": 21,
     "supabaseSources": {
-      "fugle_daily_ohlcv.symbol.trade_date": 26
+      "fugle_daily_ohlcv.symbol.trade_date": 21
     },
     "supabaseSyncStatus": null,
     "supabaseVolumeRows": 20942,
     "supabaseVolumeUpdated": 20909,
     "errors": [],
-    "updatedAt": "2026-06-15T14:27:21.448Z",
+    "updatedAt": "2026-06-15T14:33:39.679Z",
     "coverageRatio": 0.953,
     "qualityStatus": "partial"
   },
@@ -30467,5 +30467,5 @@
       "reason": "低/中位階整理接近發動；準備分 5/7，RSI 44.9，量比 0.34。"
     }
   ],
-  "backupUpdatedAt": "2026-06-15T14:27:49.482Z"
+  "backupUpdatedAt": "2026-06-15T14:33:59.690Z"
 }
