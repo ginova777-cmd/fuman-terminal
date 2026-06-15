@@ -64,6 +64,32 @@ npm run verify:mobile-layout
 npm run verify:mobile-layout:live
 ```
 
+
+## Auto Main Release Chain For Codex
+
+Other Codex agents must keep terminal release automation on the guarded chain. Before claiming data or UI is current, automatically detect repo state first:
+
+```powershell
+git fetch origin main
+git status -sb
+npm run verify:publish-gate
+```
+
+If the checkout is behind `origin/main`, ahead/behind has diverged, or the tree has unexpected dirty files, stop and fix sync/dirty state before deploy. Do not manually copy data, manually bump versions, deploy from a stale tree, or push GitHub separately.
+
+The only normal release path is:
+
+```text
+sync main -> bump if needed -> deploy -> live verify -> push GitHub
+```
+
+Run it through:
+
+```powershell
+npm run release:main
+```
+
+`npm run release:main` is responsible for `git fetch`, `git pull --ff-only origin main`, version bump detection, `npm run sync:source`, Vercel production deploy, `npm run verify:live-version`, and final `git push origin HEAD:main`. If any step fails, the terminal is not current yet.
 Main release/deploy must use the guarded release chain:
 
 ```powershell
@@ -135,4 +161,5 @@ Before claiming the terminal is current, run:
 npm run verify:publish-gate
 npm run verify:data-freshness:live
 ```
+
 
