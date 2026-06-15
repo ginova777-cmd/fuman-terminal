@@ -1,6 +1,6 @@
 {
   "ok": true,
-  "updatedAt": "2026-06-15T13:33:27.345Z",
+  "updatedAt": "2026-06-15T14:58:07.436Z",
   "strategy2": {
     "latestSignals": 0,
     "latestGo": 0,
@@ -27,15 +27,15 @@
     "updatedAt": "2026-06-15T07:45:02.555Z"
   },
   "strategy4": {
-    "total": 1608,
-    "count": 360,
-    "complete": false,
+    "total": 1660,
+    "count": 379,
+    "complete": true,
     "zoneCounts": {
-      "A": 138,
-      "B": 129,
-      "C": 93
+      "A": 166,
+      "B": 141,
+      "C": 72
     },
-    "avgScore": 88.275,
-    "updatedAt": "2026-06-14T14:46:13.443Z"
+    "avgScore": 87.7730870712401,
+    "updatedAt": "2026-06-15T14:33:59.672Z"
   }
 }

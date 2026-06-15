@@ -1,19 +1,12 @@
 {
   "ok": true,
-  "updatedAt": "2026-06-15T13:33:27.521Z",
-  "issues": [
-    {
-      "level": "medium",
-      "message": "strategy4 summary/slim count mismatch",
-      "summary": 405,
-      "slim": 360
-    }
-  ],
+  "updatedAt": "2026-06-15T14:58:07.607Z",
+  "issues": [],
   "counts": {
-    "strategy4Full": 360,
-    "strategy4Summary": 405,
-    "strategy4Slim": 360,
-    "strategy4ZoneSum": 360,
+    "strategy4Full": 379,
+    "strategy4Summary": 379,
+    "strategy4Slim": 379,
+    "strategy4ZoneSum": 379,
     "institutionSlim": 1883,
     "institutionJointTop": 160,
     "warrantSlim": 120,

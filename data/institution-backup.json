@@ -39557,11 +39557,24 @@
     "TPEx 3itrade_hedge_result"
   ],
   "source": "github-actions-backup",
-  "updatedAt": "2026-06-14T05:23:14.078Z",
+  "updatedAt": "2026-06-15T14:19:27.511Z",
   "quoteUpdatedAt": "2026-06-14T05:23:10.474Z",
   "sourceHealth": {
     "fiveDayMetricCount": 1964,
     "warningCount": 0,
-    "warnings": []
-  }
+    "warnings": [],
+    "fallback": true,
+    "fallbackReason": "scan returned too few rows (332)",
+    "fallbackDetails": {
+      "count": 332,
+      "minimum": 1000,
+      "warnings": []
+    },
+    "previousUpdatedAt": "2026-06-15T13:49:55.427Z",
+    "previousUsedDate": "20260612",
+    "previousCount": 1883,
+    "previousAgeDays": 3
+  },
+  "fallbackFromPrevious": true,
+  "fallbackReason": "scan returned too few rows (332)"
 }

@@ -1,7 +1,7 @@
 {
   "ok": true,
   "source": "market-summary",
-  "updatedAt": "2026-06-15T13:33:25.959Z",
+  "updatedAt": "2026-06-15T14:58:05.888Z",
   "marketStatus": "night",
   "trading": false,
   "indexes": [
@@ -25,20 +25,20 @@
   "futuresNear": {
     "name": "臺指期066",
     "month": "TXFF6-M",
-    "price": "46083",
-    "change": "+486",
-    "pct": "+1.07%",
-    "volume": "16771",
+    "price": "46043",
+    "change": "+446",
+    "pct": "+0.98%",
+    "volume": "25140",
     "basisLabel": "多方勢（高於結算）",
     "basisSide": "long"
   },
   "futuresNext": {
     "name": "臺指期076",
     "month": "TXFG6-M",
-    "price": "46280",
-    "change": "+460",
-    "pct": "+1.00%",
-    "volume": "2541",
+    "price": "46246",
+    "change": "+426",
+    "pct": "+0.93%",
+    "volume": "3387",
     "basisLabel": "多方勢（高於結算）",
     "basisSide": "long"
   },
