@@ -1,12 +1,12 @@
 {
-  "ok": true,
-  "updatedAt": "2026-06-14T07:45:16.645Z",
-  "risk": "medium",
+  "ok": false,
+  "updatedAt": "2026-06-15T07:45:19.765Z",
+  "risk": "high",
   "risks": [
     {
-      "level": "medium",
+      "level": "high",
       "area": "freshness",
-      "message": "資料超過 SLA 1 個",
+      "message": "資料超過 SLA 嚴重逾時 1 個",
       "files": [
         "strategy4-summary.json"
       ],
@@ -18,9 +18,9 @@
           "date": "",
           "count": 405,
           "updatedAt": "2026-06-12T08:03:21.079Z",
-          "bytes": 44075,
+          "bytes": 45814,
           "slaHours": 30,
-          "ageHours": 47.69876472222222
+          "ageHours": 71.69963166666666
         }
       ]
     }
@@ -48,11 +48,11 @@
       "date": "",
       "count": 0,
       "updatedAt": "",
-      "bytes": 558
+      "bytes": 712
     },
-    "checkedAt": "2026-06-14T04:21:21.909Z",
-    "publishHead": "6106e098 (HEAD -> main, origin/main, origin/HEAD) Bump terminal version to chip-flow-hardening-20260611-35",
-    "mode": "manual-artifact-refresh",
+    "checkedAt": "2026-06-14T13:52:26.324Z",
+    "publishHead": "fd64199 (HEAD -> main, origin/main, origin/HEAD) Prefer freshest cache inputs for slim bundles",
+    "mode": "manual-clean-publish-sync",
     "rawRefresh": []
   },
   "runtime": {
@@ -64,8 +64,8 @@
         "status": "",
         "date": "",
         "count": 0,
-        "updatedAt": "2026-06-12T14:31:07.149Z",
-        "bytes": 152998
+        "updatedAt": "2026-06-15T04:21:50.608Z",
+        "bytes": 153761
       },
       {
         "file": "strategy4-summary.json",
@@ -74,16 +74,16 @@
         "date": "",
         "count": 405,
         "updatedAt": "2026-06-12T08:03:21.079Z",
-        "bytes": 44075
+        "bytes": 45814
       },
       {
         "file": "strategy5-latest.json",
         "ok": true,
         "status": "",
-        "date": "20260612",
-        "count": 80,
-        "updatedAt": "2026-06-13T09:37:22.578Z",
-        "bytes": 143063
+        "date": "20260615",
+        "count": 62,
+        "updatedAt": "2026-06-15T04:26:35.822Z",
+        "bytes": 143434
       },
       {
         "file": "institution-summary.json",
@@ -92,7 +92,7 @@
         "date": "20260612",
         "count": 1883,
         "updatedAt": "2026-06-14T05:23:14.078Z",
-        "bytes": 65362
+        "bytes": 68256
       },
       {
         "file": "warrant-flow-summary.json",
@@ -100,26 +100,26 @@
         "status": "",
         "date": "",
         "count": 120,
-        "updatedAt": "2026-06-14T05:23:38.357Z",
-        "bytes": 57828
+        "updatedAt": "2026-06-15T04:21:37.191Z",
+        "bytes": 55154
       },
       {
         "file": "strategy2-intraday-latest.json",
         "ok": true,
         "status": "retired_intraday_snapshot",
-        "date": "2026-06-12",
+        "date": "2026-06-15",
         "count": 0,
-        "updatedAt": "2026-06-12T07:45:02.435Z",
-        "bytes": 775
+        "updatedAt": "2026-06-15T07:45:02.550Z",
+        "bytes": 780
       },
       {
         "file": "realtime-radar-latest.json",
         "ok": true,
         "status": "retired_intraday_snapshot",
-        "date": "2026-06-12",
+        "date": "2026-06-15",
         "count": 0,
-        "updatedAt": "2026-06-14T07:45:02.832Z",
-        "bytes": 700
+        "updatedAt": "2026-06-15T07:45:02.555Z",
+        "bytes": 684
       },
       {
         "file": "performance-report.json",
@@ -127,8 +127,8 @@
         "status": "",
         "date": "",
         "count": 0,
-        "updatedAt": "2026-06-14T07:45:11.517Z",
-        "bytes": 2391
+        "updatedAt": "2026-06-15T07:45:15.214Z",
+        "bytes": 2392
       },
       {
         "file": "signal-quality-report.json",
@@ -136,8 +136,8 @@
         "status": "",
         "date": "",
         "count": 0,
-        "updatedAt": "2026-06-14T07:45:11.250Z",
-        "bytes": 795
+        "updatedAt": "2026-06-15T07:45:14.947Z",
+        "bytes": 785
       },
       {
         "file": "data-quality-report.json",
@@ -145,8 +145,8 @@
         "status": "",
         "date": "",
         "count": 0,
-        "updatedAt": "2026-06-14T07:45:11.332Z",
-        "bytes": 1556
+        "updatedAt": "2026-06-15T07:45:15.029Z",
+        "bytes": 1998
       },
       {
         "file": "data-consistency-report.json",
@@ -154,8 +154,8 @@
         "status": "",
         "date": "",
         "count": 0,
-        "updatedAt": "2026-06-14T07:45:11.397Z",
-        "bytes": 312
+        "updatedAt": "2026-06-15T07:45:15.097Z",
+        "bytes": 450
       },
       {
         "file": "strategy-weight-report.json",
@@ -163,7 +163,7 @@
         "status": "",
         "date": "",
         "count": 0,
-        "updatedAt": "2026-06-14T07:45:11.461Z",
+        "updatedAt": "2026-06-15T07:45:15.153Z",
         "bytes": 418
       }
     ]

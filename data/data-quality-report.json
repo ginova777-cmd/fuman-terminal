@@ -1,132 +1,29 @@
 {
-  "ok": false,
-  "updatedAt": "2026-06-15T04:04:23.295Z",
+  "ok": true,
+  "updatedAt": "2026-06-15T11:40:25.947Z",
   "files": [
     {
       "file": "market-summary.json",
       "ok": true,
-      "bytes": 154325,
+      "bytes": 153221,
       "count": 80,
-      "updatedAt": "2026-06-15T04:04:21.889Z",
+      "updatedAt": "2026-06-15T11:40:24.676Z",
       "issues": []
     },
     {
       "file": "strategy2-intraday-latest.json",
-      "ok": false,
-      "bytes": 808618,
-      "count": 311,
-      "updatedAt": "2026-06-15T04:00:58.545Z",
-      "issues": [
-        {
-          "level": "high",
-          "message": "strategy2 invalid entry rows 184",
-          "samples": [
-            {
-              "code": "2441",
-              "name": "超豐",
-              "timestamp": "2026-06-15 11:53:48",
-              "signalId": "rebound",
-              "ma35": 127.7,
-              "ma35Source": "supabase-fugle-1m",
-              "aboveMa35": true,
-              "macdUp": false,
-              "kdUp": true,
-              "intradayVolumeBurst": true
-            },
-            {
-              "code": "2483",
-              "name": "百容",
-              "timestamp": "2026-06-15 11:53:48",
-              "signalId": "rebound",
-              "ma35": 38.097142857142856,
-              "ma35Source": "supabase-fugle-1m",
-              "aboveMa35": true,
-              "macdUp": false,
-              "kdUp": false,
-              "intradayVolumeBurst": true
-            },
-            {
-              "code": "2483",
-              "name": "百容",
-              "timestamp": "2026-06-15 11:53:57",
-              "signalId": "rebound",
-              "ma35": 38.097142857142856,
-              "ma35Source": "supabase-fugle-1m",
-              "aboveMa35": true,
-              "macdUp": false,
-              "kdUp": false,
-              "intradayVolumeBurst": true
-            },
-            {
-              "code": "2483",
-              "name": "百容",
-              "timestamp": "2026-06-15 11:54:10",
-              "signalId": "rebound",
-              "ma35": 38.097142857142856,
-              "ma35Source": "supabase-fugle-1m",
-              "aboveMa35": true,
-              "macdUp": false,
-              "kdUp": false,
-              "intradayVolumeBurst": true
-            },
-            {
-              "code": "2483",
-              "name": "百容",
-              "timestamp": "2026-06-15 11:54:18",
-              "signalId": "rebound",
-              "ma35": 38.097142857142856,
-              "ma35Source": "supabase-fugle-1m",
-              "aboveMa35": true,
-              "macdUp": false,
-              "kdUp": false,
-              "intradayVolumeBurst": true
-            },
-            {
-              "code": "2483",
-              "name": "百容",
-              "timestamp": "2026-06-15 11:54:24",
-              "signalId": "rebound",
-              "ma35": 38.097142857142856,
-              "ma35Source": "supabase-fugle-1m",
-              "aboveMa35": true,
-              "macdUp": false,
-              "kdUp": false,
-              "intradayVolumeBurst": true
-            },
-            {
-              "code": "2483",
-              "name": "百容",
-              "timestamp": "2026-06-15 11:54:31",
-              "signalId": "rebound",
-              "ma35": 38.097142857142856,
-              "ma35Source": "supabase-fugle-1m",
-              "aboveMa35": true,
-              "macdUp": false,
-              "kdUp": false,
-              "intradayVolumeBurst": true
-            },
-            {
-              "code": "2483",
-              "name": "百容",
-              "timestamp": "2026-06-15 11:54:52",
-              "signalId": "rebound",
-              "ma35": 38.097142857142856,
-              "ma35Source": "supabase-fugle-1m",
-              "aboveMa35": true,
-              "macdUp": false,
-              "kdUp": false,
-              "intradayVolumeBurst": true
-            }
-          ]
-        }
-      ]
+      "ok": true,
+      "bytes": 780,
+      "count": 0,
+      "updatedAt": "2026-06-15T07:45:02.550Z",
+      "issues": []
     },
     {
       "file": "realtime-radar-latest.json",
       "ok": true,
-      "bytes": 104158,
-      "count": 80,
-      "updatedAt": "2026-06-15T04:02:06.075Z",
+      "bytes": 684,
+      "count": 0,
+      "updatedAt": "2026-06-15T07:45:02.555Z",
       "issues": []
     },
     {
@@ -174,117 +71,13 @@
     {
       "file": "warrant-flow-latest.json",
       "ok": true,
-      "bytes": 481464,
+      "bytes": 478943,
       "count": 120,
-      "updatedAt": "2026-06-15T04:04:10.283Z",
+      "updatedAt": "2026-06-15T11:39:58.882Z",
       "issues": []
     }
   ],
-  "highIssues": [
-    {
-      "file": "strategy2-intraday-latest.json",
-      "level": "high",
-      "message": "strategy2 invalid entry rows 184",
-      "samples": [
-        {
-          "code": "2441",
-          "name": "超豐",
-          "timestamp": "2026-06-15 11:53:48",
-          "signalId": "rebound",
-          "ma35": 127.7,
-          "ma35Source": "supabase-fugle-1m",
-          "aboveMa35": true,
-          "macdUp": false,
-          "kdUp": true,
-          "intradayVolumeBurst": true
-        },
-        {
-          "code": "2483",
-          "name": "百容",
-          "timestamp": "2026-06-15 11:53:48",
-          "signalId": "rebound",
-          "ma35": 38.097142857142856,
-          "ma35Source": "supabase-fugle-1m",
-          "aboveMa35": true,
-          "macdUp": false,
-          "kdUp": false,
-          "intradayVolumeBurst": true
-        },
-        {
-          "code": "2483",
-          "name": "百容",
-          "timestamp": "2026-06-15 11:53:57",
-          "signalId": "rebound",
-          "ma35": 38.097142857142856,
-          "ma35Source": "supabase-fugle-1m",
-          "aboveMa35": true,
-          "macdUp": false,
-          "kdUp": false,
-          "intradayVolumeBurst": true
-        },
-        {
-          "code": "2483",
-          "name": "百容",
-          "timestamp": "2026-06-15 11:54:10",
-          "signalId": "rebound",
-          "ma35": 38.097142857142856,
-          "ma35Source": "supabase-fugle-1m",
-          "aboveMa35": true,
-          "macdUp": false,
-          "kdUp": false,
-          "intradayVolumeBurst": true
-        },
-        {
-          "code": "2483",
-          "name": "百容",
-          "timestamp": "2026-06-15 11:54:18",
-          "signalId": "rebound",
-          "ma35": 38.097142857142856,
-          "ma35Source": "supabase-fugle-1m",
-          "aboveMa35": true,
-          "macdUp": false,
-          "kdUp": false,
-          "intradayVolumeBurst": true
-        },
-        {
-          "code": "2483",
-          "name": "百容",
-          "timestamp": "2026-06-15 11:54:24",
-          "signalId": "rebound",
-          "ma35": 38.097142857142856,
-          "ma35Source": "supabase-fugle-1m",
-          "aboveMa35": true,
-          "macdUp": false,
-          "kdUp": false,
-          "intradayVolumeBurst": true
-        },
-        {
-          "code": "2483",
-          "name": "百容",
-          "timestamp": "2026-06-15 11:54:31",
-          "signalId": "rebound",
-          "ma35": 38.097142857142856,
-          "ma35Source": "supabase-fugle-1m",
-          "aboveMa35": true,
-          "macdUp": false,
-          "kdUp": false,
-          "intradayVolumeBurst": true
-        },
-        {
-          "code": "2483",
-          "name": "百容",
-          "timestamp": "2026-06-15 11:54:52",
-          "signalId": "rebound",
-          "ma35": 38.097142857142856,
-          "ma35Source": "supabase-fugle-1m",
-          "aboveMa35": true,
-          "macdUp": false,
-          "kdUp": false,
-          "intradayVolumeBurst": true
-        }
-      ]
-    }
-  ],
+  "highIssues": [],
   "mediumIssues": [
     {
       "file": "strategy4-latest.json",

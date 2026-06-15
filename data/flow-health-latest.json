@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-06-14T22:22:51.0722357Z",
+  "updatedAt": "2026-06-15T03:47:23.2581161Z",
   "institution": {
     "scope": "institution",
     "status": "watchdog_failed",
@@ -14,13 +14,12 @@
   },
   "warrant": {
     "scope": "warrant",
-    "status": "ok",
-    "message": "Watchdog rerun completed",
-    "updatedAt": "2026-06-14T21:50:53.3137685Z",
+    "status": "publish_delayed",
+    "message": "Warrant flow scan succeeded but Git publish failed",
+    "updatedAt": "2026-06-15T03:47:23.2562636Z",
     "detail": {
-      "expectedTime": "05:30",
-      "log": "C:\\fuman-runtime\\logs\\flow-watchdog-warrant-20260615-055003.log",
-      "reason": "warrant not updated after 05:30; updatedAt=06/14/2026 21:31:02"
+      "exitCode": 1,
+      "log": "C:\\fuman-runtime\\logs\\warrant-flow-20260615-114628.log"
     }
   }
 }
