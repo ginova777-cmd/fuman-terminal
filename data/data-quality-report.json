@@ -1,29 +1,132 @@
 {
-  "ok": true,
-  "updatedAt": "2026-06-15T00:05:17.299Z",
+  "ok": false,
+  "updatedAt": "2026-06-15T02:59:26.073Z",
   "files": [
     {
       "file": "market-summary.json",
       "ok": true,
-      "bytes": 159318,
+      "bytes": 153895,
       "count": 80,
-      "updatedAt": "2026-06-12T13:34:32.429Z",
+      "updatedAt": "2026-06-15T02:59:24.721Z",
       "issues": []
     },
     {
       "file": "strategy2-intraday-latest.json",
-      "ok": true,
-      "bytes": 806,
-      "count": 0,
-      "updatedAt": "2026-06-12T07:45:02.435Z",
-      "issues": []
+      "ok": false,
+      "bytes": 78083,
+      "count": 29,
+      "updatedAt": "2026-06-15T02:55:16.947Z",
+      "issues": [
+        {
+          "level": "high",
+          "message": "strategy2 invalid entry rows 29",
+          "samples": [
+            {
+              "code": "4534",
+              "name": "慶騰",
+              "timestamp": "2026-06-15 10:51:59",
+              "signalId": "preopen_watch",
+              "ma35": 0,
+              "ma35Source": "",
+              "aboveMa35": false,
+              "macdUp": false,
+              "kdUp": false,
+              "intradayVolumeBurst": false
+            },
+            {
+              "code": "4534",
+              "name": "慶騰",
+              "timestamp": "2026-06-15 10:52:05",
+              "signalId": "preopen_watch",
+              "ma35": 0,
+              "ma35Source": "",
+              "aboveMa35": false,
+              "macdUp": false,
+              "kdUp": false,
+              "intradayVolumeBurst": false
+            },
+            {
+              "code": "4534",
+              "name": "慶騰",
+              "timestamp": "2026-06-15 10:52:10",
+              "signalId": "preopen_watch",
+              "ma35": 0,
+              "ma35Source": "",
+              "aboveMa35": false,
+              "macdUp": false,
+              "kdUp": false,
+              "intradayVolumeBurst": false
+            },
+            {
+              "code": "4534",
+              "name": "慶騰",
+              "timestamp": "2026-06-15 10:52:15",
+              "signalId": "preopen_watch",
+              "ma35": 0,
+              "ma35Source": "",
+              "aboveMa35": false,
+              "macdUp": false,
+              "kdUp": false,
+              "intradayVolumeBurst": false
+            },
+            {
+              "code": "4534",
+              "name": "慶騰",
+              "timestamp": "2026-06-15 10:52:20",
+              "signalId": "preopen_watch",
+              "ma35": 0,
+              "ma35Source": "",
+              "aboveMa35": false,
+              "macdUp": false,
+              "kdUp": false,
+              "intradayVolumeBurst": false
+            },
+            {
+              "code": "4534",
+              "name": "慶騰",
+              "timestamp": "2026-06-15 10:52:43",
+              "signalId": "preopen_watch",
+              "ma35": 0,
+              "ma35Source": "",
+              "aboveMa35": false,
+              "macdUp": false,
+              "kdUp": false,
+              "intradayVolumeBurst": false
+            },
+            {
+              "code": "4534",
+              "name": "慶騰",
+              "timestamp": "2026-06-15 10:52:48",
+              "signalId": "preopen_watch",
+              "ma35": 0,
+              "ma35Source": "",
+              "aboveMa35": false,
+              "macdUp": false,
+              "kdUp": false,
+              "intradayVolumeBurst": false
+            },
+            {
+              "code": "4534",
+              "name": "慶騰",
+              "timestamp": "2026-06-15 10:52:53",
+              "signalId": "preopen_watch",
+              "ma35": 0,
+              "ma35Source": "",
+              "aboveMa35": false,
+              "macdUp": false,
+              "kdUp": false,
+              "intradayVolumeBurst": false
+            }
+          ]
+        }
+      ]
     },
     {
       "file": "realtime-radar-latest.json",
       "ok": true,
-      "bytes": 700,
-      "count": 0,
-      "updatedAt": "2026-06-14T07:45:02.832Z",
+      "bytes": 101832,
+      "count": 80,
+      "updatedAt": "2026-06-15T02:56:58.420Z",
       "issues": []
     },
     {
@@ -73,11 +176,115 @@
       "ok": true,
       "bytes": 482418,
       "count": 120,
-      "updatedAt": "2026-06-15T00:05:11.883Z",
+      "updatedAt": "2026-06-15T02:59:13.205Z",
       "issues": []
     }
   ],
-  "highIssues": [],
+  "highIssues": [
+    {
+      "file": "strategy2-intraday-latest.json",
+      "level": "high",
+      "message": "strategy2 invalid entry rows 29",
+      "samples": [
+        {
+          "code": "4534",
+          "name": "慶騰",
+          "timestamp": "2026-06-15 10:51:59",
+          "signalId": "preopen_watch",
+          "ma35": 0,
+          "ma35Source": "",
+          "aboveMa35": false,
+          "macdUp": false,
+          "kdUp": false,
+          "intradayVolumeBurst": false
+        },
+        {
+          "code": "4534",
+          "name": "慶騰",
+          "timestamp": "2026-06-15 10:52:05",
+          "signalId": "preopen_watch",
+          "ma35": 0,
+          "ma35Source": "",
+          "aboveMa35": false,
+          "macdUp": false,
+          "kdUp": false,
+          "intradayVolumeBurst": false
+        },
+        {
+          "code": "4534",
+          "name": "慶騰",
+          "timestamp": "2026-06-15 10:52:10",
+          "signalId": "preopen_watch",
+          "ma35": 0,
+          "ma35Source": "",
+          "aboveMa35": false,
+          "macdUp": false,
+          "kdUp": false,
+          "intradayVolumeBurst": false
+        },
+        {
+          "code": "4534",
+          "name": "慶騰",
+          "timestamp": "2026-06-15 10:52:15",
+          "signalId": "preopen_watch",
+          "ma35": 0,
+          "ma35Source": "",
+          "aboveMa35": false,
+          "macdUp": false,
+          "kdUp": false,
+          "intradayVolumeBurst": false
+        },
+        {
+          "code": "4534",
+          "name": "慶騰",
+          "timestamp": "2026-06-15 10:52:20",
+          "signalId": "preopen_watch",
+          "ma35": 0,
+          "ma35Source": "",
+          "aboveMa35": false,
+          "macdUp": false,
+          "kdUp": false,
+          "intradayVolumeBurst": false
+        },
+        {
+          "code": "4534",
+          "name": "慶騰",
+          "timestamp": "2026-06-15 10:52:43",
+          "signalId": "preopen_watch",
+          "ma35": 0,
+          "ma35Source": "",
+          "aboveMa35": false,
+          "macdUp": false,
+          "kdUp": false,
+          "intradayVolumeBurst": false
+        },
+        {
+          "code": "4534",
+          "name": "慶騰",
+          "timestamp": "2026-06-15 10:52:48",
+          "signalId": "preopen_watch",
+          "ma35": 0,
+          "ma35Source": "",
+          "aboveMa35": false,
+          "macdUp": false,
+          "kdUp": false,
+          "intradayVolumeBurst": false
+        },
+        {
+          "code": "4534",
+          "name": "慶騰",
+          "timestamp": "2026-06-15 10:52:53",
+          "signalId": "preopen_watch",
+          "ma35": 0,
+          "ma35Source": "",
+          "aboveMa35": false,
+          "macdUp": false,
+          "kdUp": false,
+          "intradayVolumeBurst": false
+        }
+      ]
+    }
+  ],
   "mediumIssues": [
     {
       "file": "strategy4-latest.json",
