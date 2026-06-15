@@ -180,6 +180,15 @@ function Enter-FullScanLock {
   [ordered]@{ pid = $PID; startedAt = (Get-Date).ToString("o"); log = $log } | ConvertTo-Json -Compress | Set-Content -LiteralPath $lockFile -Encoding utf8
 }
 
+function Get-Strategy3ScanEnv {
+  $minutes = ((Get-Date).Hour * 60) + (Get-Date).Minute
+  if ($minutes -lt 780) {
+    Write-ScanLog "strategy3 before 13:00; STRATEGY3_REQUIRE_AFTER_1300=0 for pre-session freshness scan"
+    return @{ STRATEGY3_REQUIRE_AFTER_1300 = "0" }
+  }
+  return @{}
+}
+
 Enter-FullScanLock
 try {
   Write-ScanLog "Full scan started"
@@ -200,7 +209,7 @@ try {
   }
 
   Invoke-ScanTask "open-buy" "open buy raw refresh" "critical" "scripts\scan-open-buy-cache.js" (Join-Path $runtimeRoot "data\open-buy-latest.json") @{}
-  Invoke-ScanTask "strategy3" "strategy3 raw refresh" "critical" "scripts\scan-strategy3-cache.js" (Join-Path $runtimeRoot "data\strategy3-latest.json") @{}
+  Invoke-ScanTask "strategy3" "strategy3 raw refresh" "critical" "scripts\scan-strategy3-cache.js" (Join-Path $runtimeRoot "data\strategy3-latest.json") (Get-Strategy3ScanEnv)
 
   if (-not $SkipInstitution) {
     Invoke-ScanTask "institution" "institution raw refresh" "degradable" "scripts\scan-institution-cache.js" (Join-Path $runtimeRoot "data\institution-latest.json") @{

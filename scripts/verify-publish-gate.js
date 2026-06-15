@@ -249,6 +249,8 @@ for (const marker of [
   "scan-summary.json",
   "TimeoutSeconds",
   "timeout after ${TimeoutSeconds}s",
+  "Get-Strategy3ScanEnv",
+  "STRATEGY3_REQUIRE_AFTER_1300 = \"0\"",
 ]) {
   if (!fullScan.includes(marker)) issues.push(`run-full-scan.ps1 missing strategy3 receipt marker ${marker}`);
 }
