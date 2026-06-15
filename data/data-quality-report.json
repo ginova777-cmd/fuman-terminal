@@ -1,19 +1,19 @@
 {
   "ok": true,
-  "updatedAt": "2026-06-14T12:36:18.092Z",
+  "updatedAt": "2026-06-15T00:05:17.299Z",
   "files": [
     {
       "file": "market-summary.json",
       "ok": true,
-      "bytes": 152998,
+      "bytes": 159318,
       "count": 80,
-      "updatedAt": "2026-06-12T14:31:07.149Z",
+      "updatedAt": "2026-06-12T13:34:32.429Z",
       "issues": []
     },
     {
       "file": "strategy2-intraday-latest.json",
       "ok": true,
-      "bytes": 775,
+      "bytes": 806,
       "count": 0,
       "updatedAt": "2026-06-12T07:45:02.435Z",
       "issues": []
@@ -29,15 +29,20 @@
     {
       "file": "strategy4-latest.json",
       "ok": true,
-      "bytes": 695669,
-      "count": 405,
-      "updatedAt": "2026-06-12T08:03:21.079Z",
-      "issues": []
+      "bytes": 720694,
+      "count": 360,
+      "updatedAt": "2026-06-14T14:46:13.443Z",
+      "issues": [
+        {
+          "level": "medium",
+          "message": "extreme percent rows 3"
+        }
+      ]
     },
     {
       "file": "strategy4-summary.json",
       "ok": true,
-      "bytes": 44075,
+      "bytes": 45814,
       "count": 405,
       "updatedAt": "2026-06-12T08:03:21.079Z",
       "issues": []
@@ -45,15 +50,20 @@
     {
       "file": "strategy4-slim.json",
       "ok": true,
-      "bytes": 180886,
-      "count": 405,
-      "updatedAt": "2026-06-12T08:03:21.079Z",
-      "issues": []
+      "bytes": 169527,
+      "count": 360,
+      "updatedAt": "2026-06-14T14:46:13.443Z",
+      "issues": [
+        {
+          "level": "medium",
+          "message": "extreme percent rows 3"
+        }
+      ]
     },
     {
       "file": "institution-latest.json",
       "ok": true,
-      "bytes": 941369,
+      "bytes": 980936,
       "count": 1883,
       "updatedAt": "2026-06-14T05:23:14.078Z",
       "issues": []
@@ -61,12 +71,23 @@
     {
       "file": "warrant-flow-latest.json",
       "ok": true,
-      "bytes": 482362,
+      "bytes": 482418,
       "count": 120,
-      "updatedAt": "2026-06-14T12:36:08.974Z",
+      "updatedAt": "2026-06-15T00:05:11.883Z",
       "issues": []
     }
   ],
   "highIssues": [],
-  "mediumIssues": []
+  "mediumIssues": [
+    {
+      "file": "strategy4-latest.json",
+      "level": "medium",
+      "message": "extreme percent rows 3"
+    },
+    {
+      "file": "strategy4-slim.json",
+      "level": "medium",
+      "message": "extreme percent rows 3"
+    }
+  ]
 }

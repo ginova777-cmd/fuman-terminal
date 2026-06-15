@@ -1,8 +1,8 @@
 {
   "ok": true,
   "source": "github-actions-backup",
-  "updatedAt": "2026-06-14T12:15:40.708Z",
-  "generatedDate": "20260614",
+  "updatedAt": "2026-06-14T22:00:36.558Z",
+  "generatedDate": "20260615",
   "usedDate": "20260612",
   "sourceDate": "20260612",
   "schedule": "06:00/21:00",
@@ -2009,20 +2009,15 @@
           ]
         }
       ],
-      "strategy4Score": 100,
-      "strategy4Reason": "突破40日整理頸線，量能放大，偏圓弧底突破。",
+      "strategy4Score": 99,
+      "strategy4Reason": "主力爸爸錢包多方寶石（2026-06-10）：控盤線由負翻正且日K收紅。",
       "strategy4Signals": [
         {
-          "id": "saucer",
-          "short": "圓弧",
-          "icon": "◜",
-          "reason": "突破40日整理頸線，量能放大，偏圓弧底突破。"
-        },
-        {
-          "id": "runaway_gap",
-          "short": "逃逸缺口",
-          "icon": "🚀",
-          "reason": "跳空且站上MA20，多頭段延續，偏逃逸缺口。"
+          "id": "wallet_strong_buy",
+          "title": "多方寶石",
+          "short": "主力多",
+          "icon": "◆",
+          "reason": "主力爸爸錢包多方寶石（2026-06-10）：控盤線由負翻正且日K收紅。"
         }
       ],
       "score": 100,
@@ -2181,7 +2176,7 @@
           "volumeRatio": 1.73
         }
       ],
-      "strategy4Score": 99,
+      "strategy4Score": 100,
       "strategy4Reason": "跳空且站上MA20，多頭段延續，偏逃逸缺口。",
       "strategy4Signals": [
         {
@@ -2189,6 +2184,13 @@
           "short": "逃逸缺口",
           "icon": "🚀",
           "reason": "跳空且站上MA20，多頭段延續，偏逃逸缺口。"
+        },
+        {
+          "id": "wallet_strong_buy",
+          "title": "多方寶石",
+          "short": "主力多",
+          "icon": "◆",
+          "reason": "主力爸爸錢包多方寶石（2026-06-12）：控盤線由負翻正且日K收紅。"
         }
       ],
       "score": 100,
@@ -2245,7 +2247,7 @@
           ]
         }
       ],
-      "strategy4Score": 93,
+      "strategy4Score": 90,
       "strategy4Reason": "爆量突破後回檔不破半分位，再突破前高 126.50，N字共振。",
       "strategy4Signals": [
         {
@@ -2309,14 +2311,15 @@
           "volumeRatio": 1.14
         }
       ],
-      "strategy4Score": 97,
-      "strategy4Reason": "跳空且站上MA20，多頭段延續，偏逃逸缺口。",
+      "strategy4Score": 88,
+      "strategy4Reason": "主力爸爸錢包量能紅K交叉（2026-06-08）：5日資金量均線 14,296 上穿 60日 11,436。",
       "strategy4Signals": [
         {
-          "id": "runaway_gap",
-          "short": "逃逸缺口",
-          "icon": "🚀",
-          "reason": "跳空且站上MA20，多頭段延續，偏逃逸缺口。"
+          "id": "wallet_volume_cross",
+          "title": "紅色三角形",
+          "short": "量叉",
+          "icon": "🔺",
+          "reason": "主力爸爸錢包量能紅K交叉（2026-06-08）：5日資金量均線 14,296 上穿 60日 11,436。"
         }
       ],
       "score": 100,
@@ -2373,14 +2376,14 @@
           "volumeRatio": 1
         }
       ],
-      "strategy4Score": 88,
-      "strategy4Reason": "趨勢轉強但尚未觸發突破買點；趨勢分 7/8，量比 1.30，位階 高基期。",
+      "strategy4Score": 89,
+      "strategy4Reason": "趨勢轉強但尚未觸發突破買點；趨勢分 7/8，量比 1.31，位階 高基期。",
       "strategy4Signals": [
         {
           "id": "watch_trend",
           "short": "B觀察",
           "icon": "B",
-          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 7/8，量比 1.30，位階 高基期。"
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 7/8，量比 1.31，位階 高基期。"
         }
       ],
       "score": 100,
@@ -2432,14 +2435,14 @@
           "volumeRatio": 1.6
         }
       ],
-      "strategy4Score": 88,
-      "strategy4Reason": "趨勢轉強但尚未觸發突破買點；趨勢分 6/8，量比 0.63，位階 高基期。",
+      "strategy4Score": 74,
+      "strategy4Reason": "趨勢轉強但尚未觸發突破買點；趨勢分 5/8，量比 0.52，位階 高基期。",
       "strategy4Signals": [
         {
           "id": "watch_trend",
           "short": "B觀察",
           "icon": "B",
-          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 6/8，量比 0.63，位階 高基期。"
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 5/8，量比 0.52，位階 高基期。"
         }
       ],
       "score": 100,
@@ -2547,13 +2550,19 @@
         }
       ],
       "strategy4Score": 100,
-      "strategy4Reason": "趨勢轉強但尚未觸發突破買點；趨勢分 7/8，量比 2.67，位階 高基期。",
+      "strategy4Reason": "站上MA20/EMA21，MACD多頭，量比 3.17，日K多頭攻擊。",
       "strategy4Signals": [
         {
-          "id": "watch_trend",
-          "short": "B觀察",
-          "icon": "B",
-          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 7/8，量比 2.67，位階 高基期。"
+          "id": "bull_attack",
+          "short": "攻擊",
+          "icon": "🔥",
+          "reason": "站上MA20/EMA21，MACD多頭，量比 3.17，日K多頭攻擊。"
+        },
+        {
+          "id": "saucer",
+          "short": "圓弧",
+          "icon": "◜",
+          "reason": "突破40日整理頸線，量能放大，偏圓弧底突破。"
         }
       ],
       "score": 100,
@@ -2712,16 +2721,9 @@
           ]
         }
       ],
-      "strategy4Score": 78,
-      "strategy4Reason": "趨勢轉強但尚未觸發突破買點；趨勢分 5/8，量比 0.71，位階 高基期。",
-      "strategy4Signals": [
-        {
-          "id": "watch_trend",
-          "short": "B觀察",
-          "icon": "B",
-          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 5/8，量比 0.71，位階 高基期。"
-        }
-      ],
+      "strategy4Score": 0,
+      "strategy4Reason": "",
+      "strategy4Signals": [],
       "score": 100,
       "activeMatch": {
         "id": "chip_k_confluence",
@@ -2774,7 +2776,7 @@
           "volumeRatio": 1.77
         }
       ],
-      "strategy4Score": 88,
+      "strategy4Score": 100,
       "strategy4Reason": "跳空突破近20日整理高點，偏突破缺口。",
       "strategy4Signals": [
         {
@@ -2782,6 +2784,13 @@
           "short": "突破缺口",
           "icon": "◆",
           "reason": "跳空突破近20日整理高點，偏突破缺口。"
+        },
+        {
+          "id": "wallet_volume_cross",
+          "title": "紅色三角形",
+          "short": "量叉",
+          "icon": "🔺",
+          "reason": "主力爸爸錢包量能紅K交叉（2026-06-03）：5日資金量均線 23,240 上穿 60日 4,770。"
         }
       ],
       "score": 100,
@@ -2833,14 +2842,14 @@
           "volumeRatio": 1
         }
       ],
-      "strategy4Score": 87,
-      "strategy4Reason": "趨勢轉強但尚未觸發突破買點；趨勢分 7/8，量比 0.91，位階 高基期。",
+      "strategy4Score": 92,
+      "strategy4Reason": "跳空且站上MA20，多頭段延續，偏逃逸缺口。",
       "strategy4Signals": [
         {
-          "id": "watch_trend",
-          "short": "B觀察",
-          "icon": "B",
-          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 7/8，量比 0.91，位階 高基期。"
+          "id": "runaway_gap",
+          "short": "逃逸缺口",
+          "icon": "🚀",
+          "reason": "跳空且站上MA20，多頭段延續，偏逃逸缺口。"
         }
       ],
       "score": 100,
@@ -2892,16 +2901,9 @@
           "volumeRatio": 2.05
         }
       ],
-      "strategy4Score": 93,
-      "strategy4Reason": "趨勢轉強但尚未觸發突破買點；趨勢分 6/8，量比 1.37，位階 中位階。",
-      "strategy4Signals": [
-        {
-          "id": "watch_trend",
-          "short": "B觀察",
-          "icon": "B",
-          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 6/8，量比 1.37，位階 中位階。"
-        }
-      ],
+      "strategy4Score": 0,
+      "strategy4Reason": "",
+      "strategy4Signals": [],
       "score": 100,
       "activeMatch": {
         "id": "volume_turnover_breakout",
@@ -3038,26 +3040,14 @@
           "volumeRatio": 1.74
         }
       ],
-      "strategy4Score": 100,
-      "strategy4Reason": "站上MA20/EMA21，MACD多頭，量比 1.35，日K多頭攻擊。",
+      "strategy4Score": 93,
+      "strategy4Reason": "趨勢轉強但尚未觸發突破買點；趨勢分 6/8，量比 1.02，位階 高基期。",
       "strategy4Signals": [
         {
-          "id": "bull_attack",
-          "short": "攻擊",
-          "icon": "🔥",
-          "reason": "站上MA20/EMA21，MACD多頭，量比 1.35，日K多頭攻擊。"
-        },
-        {
-          "id": "saucer",
-          "short": "圓弧",
-          "icon": "◜",
-          "reason": "突破40日整理頸線，量能放大，偏圓弧底突破。"
-        },
-        {
-          "id": "breakaway_gap",
-          "short": "突破缺口",
-          "icon": "◆",
-          "reason": "跳空突破近20日整理高點，偏突破缺口。"
+          "id": "watch_trend",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 6/8，量比 1.02，位階 高基期。"
         }
       ],
       "score": 100,
@@ -3124,14 +3114,15 @@
           "volumeRatio": 1.21
         }
       ],
-      "strategy4Score": 97,
-      "strategy4Reason": "跳空且站上MA20，多頭段延續，偏逃逸缺口。",
+      "strategy4Score": 95,
+      "strategy4Reason": "主力爸爸錢包多方寶石（2026-06-09）：控盤線由負翻正且日K收紅。",
       "strategy4Signals": [
         {
-          "id": "runaway_gap",
-          "short": "逃逸缺口",
-          "icon": "🚀",
-          "reason": "跳空且站上MA20，多頭段延續，偏逃逸缺口。"
+          "id": "wallet_strong_buy",
+          "title": "多方寶石",
+          "short": "主力多",
+          "icon": "◆",
+          "reason": "主力爸爸錢包多方寶石（2026-06-09）：控盤線由負翻正且日K收紅。"
         }
       ],
       "score": 100,
@@ -3188,14 +3179,15 @@
           ]
         }
       ],
-      "strategy4Score": 70,
-      "strategy4Reason": "低/中位階整理接近發動；準備分 6/7，RSI 48.3，量比 0.61。",
+      "strategy4Score": 93,
+      "strategy4Reason": "主力爸爸錢包量能紅K交叉（2026-06-08）：5日資金量均線 4,948 上穿 60日 4,228。",
       "strategy4Signals": [
         {
-          "id": "base_setup",
-          "short": "C準備",
-          "icon": "C",
-          "reason": "低/中位階整理接近發動；準備分 6/7，RSI 48.3，量比 0.61。"
+          "id": "wallet_volume_cross",
+          "title": "紅色三角形",
+          "short": "量叉",
+          "icon": "🔺",
+          "reason": "主力爸爸錢包量能紅K交叉（2026-06-08）：5日資金量均線 4,948 上穿 60日 4,228。"
         }
       ],
       "score": 100,
@@ -3302,16 +3294,9 @@
           "volumeRatio": 1.13
         }
       ],
-      "strategy4Score": 92,
-      "strategy4Reason": "趨勢轉強但尚未觸發突破買點；趨勢分 7/8，量比 1.51，位階 高基期。",
-      "strategy4Signals": [
-        {
-          "id": "watch_trend",
-          "short": "B觀察",
-          "icon": "B",
-          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 7/8，量比 1.51，位階 高基期。"
-        }
-      ],
+      "strategy4Score": 0,
+      "strategy4Reason": "",
+      "strategy4Signals": [],
       "score": 100,
       "activeMatch": {
         "id": "volume_turnover_breakout",
@@ -3374,14 +3359,14 @@
           "volumeRatio": 3.1
         }
       ],
-      "strategy4Score": 100,
-      "strategy4Reason": "跳空且站上MA20，多頭段延續，偏逃逸缺口。",
+      "strategy4Score": 79,
+      "strategy4Reason": "趨勢轉強但尚未觸發突破買點；趨勢分 5/8，量比 0.61，位階 高基期。",
       "strategy4Signals": [
         {
-          "id": "runaway_gap",
-          "short": "逃逸缺口",
-          "icon": "🚀",
-          "reason": "跳空且站上MA20，多頭段延續，偏逃逸缺口。"
+          "id": "watch_trend",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 5/8，量比 0.61，位階 高基期。"
         }
       ],
       "score": 100,
@@ -3444,6 +3429,13 @@
           "short": "逃逸缺口",
           "icon": "🚀",
           "reason": "跳空且站上MA20，多頭段延續，偏逃逸缺口。"
+        },
+        {
+          "id": "wallet_strong_buy",
+          "title": "多方寶石",
+          "short": "主力多",
+          "icon": "◆",
+          "reason": "主力爸爸錢包多方寶石（2026-06-12）：控盤線由負翻正且日K收紅。"
         }
       ],
       "score": 100,
@@ -3554,14 +3546,14 @@
           ]
         }
       ],
-      "strategy4Score": 66,
-      "strategy4Reason": "低/中位階整理接近發動；準備分 6/7，RSI 43.0，量比 0.48。",
+      "strategy4Score": 69,
+      "strategy4Reason": "低/中位階整理接近發動；準備分 6/7，RSI 45.1，量比 0.48。",
       "strategy4Signals": [
         {
           "id": "base_setup",
           "short": "C準備",
           "icon": "C",
-          "reason": "低/中位階整理接近發動；準備分 6/7，RSI 43.0，量比 0.48。"
+          "reason": "低/中位階整理接近發動；準備分 6/7，RSI 45.1，量比 0.48。"
         }
       ],
       "score": 100,
@@ -3616,16 +3608,9 @@
           "volumeRatio": 2
         }
       ],
-      "strategy4Score": 74,
-      "strategy4Reason": "低/中位階整理接近發動；準備分 5/7，RSI 45.3，量比 1.00。",
-      "strategy4Signals": [
-        {
-          "id": "base_setup",
-          "short": "C準備",
-          "icon": "C",
-          "reason": "低/中位階整理接近發動；準備分 5/7，RSI 45.3，量比 1.00。"
-        }
-      ],
+      "strategy4Score": 0,
+      "strategy4Reason": "",
+      "strategy4Signals": [],
       "score": 100,
       "activeMatch": {
         "id": "volume_turnover_breakout",
@@ -3855,13 +3840,25 @@
         }
       ],
       "strategy4Score": 100,
-      "strategy4Reason": "跳空且站上MA20，多頭段延續，偏逃逸缺口。",
+      "strategy4Reason": "站上MA20/EMA21，MACD多頭，量比 1.32，日K多頭攻擊。",
       "strategy4Signals": [
         {
-          "id": "runaway_gap",
-          "short": "逃逸缺口",
-          "icon": "🚀",
-          "reason": "跳空且站上MA20，多頭段延續，偏逃逸缺口。"
+          "id": "bull_attack",
+          "short": "攻擊",
+          "icon": "🔥",
+          "reason": "站上MA20/EMA21，MACD多頭，量比 1.32，日K多頭攻擊。"
+        },
+        {
+          "id": "n_base",
+          "short": "N字",
+          "icon": "",
+          "reason": "爆量突破後回檔不破半分位，再突破前高 98.40，N字共振。"
+        },
+        {
+          "id": "saucer",
+          "short": "圓弧",
+          "icon": "◜",
+          "reason": "突破40日整理頸線，量能放大，偏圓弧底突破。"
         }
       ],
       "score": 100,
@@ -4023,14 +4020,14 @@
           ]
         }
       ],
-      "strategy4Score": 61,
-      "strategy4Reason": "低/中位階整理接近發動；準備分 5/7，RSI 38.4，量比 0.51。",
+      "strategy4Score": 64,
+      "strategy4Reason": "低/中位階整理接近發動；準備分 5/7，RSI 46.2，量比 0.51。",
       "strategy4Signals": [
         {
           "id": "base_setup",
           "short": "C準備",
           "icon": "C",
-          "reason": "低/中位階整理接近發動；準備分 5/7，RSI 38.4，量比 0.51。"
+          "reason": "低/中位階整理接近發動；準備分 5/7，RSI 46.2，量比 0.51。"
         }
       ],
       "score": 100,
@@ -4085,14 +4082,15 @@
           ]
         }
       ],
-      "strategy4Score": 89,
-      "strategy4Reason": "趨勢轉強但尚未觸發突破買點；趨勢分 6/8，量比 0.76，位階 高基期。",
+      "strategy4Score": 100,
+      "strategy4Reason": "主力爸爸錢包量能紅K交叉（2026-06-09）：5日資金量均線 4,100 上穿 60日 2,452。",
       "strategy4Signals": [
         {
-          "id": "watch_trend",
-          "short": "B觀察",
-          "icon": "B",
-          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 6/8，量比 0.76，位階 高基期。"
+          "id": "wallet_volume_cross",
+          "title": "紅色三角形",
+          "short": "量叉",
+          "icon": "🔺",
+          "reason": "主力爸爸錢包量能紅K交叉（2026-06-09）：5日資金量均線 4,100 上穿 60日 2,452。"
         }
       ],
       "score": 100,
@@ -4149,26 +4147,14 @@
           "volumeRatio": 1.77
         }
       ],
-      "strategy4Score": 100,
-      "strategy4Reason": "站上MA20/EMA21，MACD多頭，量比 1.28，日K多頭攻擊。",
+      "strategy4Score": 90,
+      "strategy4Reason": "趨勢轉強但尚未觸發突破買點；趨勢分 6/8，量比 0.85，位階 高基期。",
       "strategy4Signals": [
         {
-          "id": "bull_attack",
-          "short": "攻擊",
-          "icon": "🔥",
-          "reason": "站上MA20/EMA21，MACD多頭，量比 1.28，日K多頭攻擊。"
-        },
-        {
-          "id": "saucer",
-          "short": "圓弧",
-          "icon": "◜",
-          "reason": "突破40日整理頸線，量能放大，偏圓弧底突破。"
-        },
-        {
-          "id": "breakaway_gap",
-          "short": "突破缺口",
-          "icon": "◆",
-          "reason": "跳空突破近20日整理高點，偏突破缺口。"
+          "id": "watch_trend",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 6/8，量比 0.85，位階 高基期。"
         }
       ],
       "score": 100,
@@ -4235,20 +4221,14 @@
           "hasWarrant": false
         }
       ],
-      "strategy4Score": 100,
-      "strategy4Reason": "站上MA20/EMA21，MACD多頭，量比 1.59，日K多頭攻擊。",
+      "strategy4Score": 87,
+      "strategy4Reason": "趨勢轉強但尚未觸發突破買點；趨勢分 6/8，量比 0.56，位階 高基期。",
       "strategy4Signals": [
         {
-          "id": "bull_attack",
-          "short": "攻擊",
-          "icon": "🔥",
-          "reason": "站上MA20/EMA21，MACD多頭，量比 1.59，日K多頭攻擊。"
-        },
-        {
-          "id": "saucer",
-          "short": "圓弧",
-          "icon": "◜",
-          "reason": "突破40日整理頸線，量能放大，偏圓弧底突破。"
+          "id": "watch_trend",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 6/8，量比 0.56，位階 高基期。"
         }
       ],
       "score": 100,
@@ -4388,9 +4368,17 @@
           ]
         }
       ],
-      "strategy4Score": 0,
-      "strategy4Reason": "",
-      "strategy4Signals": [],
+      "strategy4Score": 85,
+      "strategy4Reason": "主力爸爸錢包多方寶石（2026-06-08）：控盤線由負翻正且日K收紅。",
+      "strategy4Signals": [
+        {
+          "id": "wallet_strong_buy",
+          "title": "多方寶石",
+          "short": "主力多",
+          "icon": "◆",
+          "reason": "主力爸爸錢包多方寶石（2026-06-08）：控盤線由負翻正且日K收紅。"
+        }
+      ],
       "score": 100,
       "activeMatch": {
         "id": "chip_k_confluence",
@@ -4443,14 +4431,22 @@
           ]
         }
       ],
-      "strategy4Score": 61,
-      "strategy4Reason": "低/中位階整理接近發動；準備分 5/7，RSI 44.7，量比 0.48。",
+      "strategy4Score": 100,
+      "strategy4Reason": "主力爸爸錢包多方寶石（2026-06-08）：控盤線由負翻正且日K收紅。",
       "strategy4Signals": [
         {
-          "id": "base_setup",
-          "short": "C準備",
-          "icon": "C",
-          "reason": "低/中位階整理接近發動；準備分 5/7，RSI 44.7，量比 0.48。"
+          "id": "wallet_strong_buy",
+          "title": "多方寶石",
+          "short": "主力多",
+          "icon": "◆",
+          "reason": "主力爸爸錢包多方寶石（2026-06-08）：控盤線由負翻正且日K收紅。"
+        },
+        {
+          "id": "wallet_volume_cross",
+          "title": "紅色三角形",
+          "short": "量叉",
+          "icon": "🔺",
+          "reason": "主力爸爸錢包量能紅K交叉（2026-06-08）：5日資金量均線 16,236 上穿 60日 15,778。"
         }
       ],
       "score": 100,
@@ -4564,9 +4560,16 @@
           ]
         }
       ],
-      "strategy4Score": 0,
-      "strategy4Reason": "",
-      "strategy4Signals": [],
+      "strategy4Score": 87,
+      "strategy4Reason": "趨勢轉強但尚未觸發突破買點；趨勢分 6/8，量比 0.47，位階 高基期。",
+      "strategy4Signals": [
+        {
+          "id": "watch_trend",
+          "short": "B觀察",
+          "icon": "B",
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 6/8，量比 0.47，位階 高基期。"
+        }
+      ],
       "score": 99,
       "activeMatch": {
         "id": "chip_k_confluence",
@@ -4678,14 +4681,14 @@
           ]
         }
       ],
-      "strategy4Score": 98,
-      "strategy4Reason": "趨勢轉強但尚未觸發突破買點；趨勢分 6/8，量比 1.21，位階 中位階。",
+      "strategy4Score": 100,
+      "strategy4Reason": "趨勢轉強但尚未觸發突破買點；趨勢分 7/8，量比 1.38，位階 中位階。",
       "strategy4Signals": [
         {
           "id": "watch_trend",
           "short": "B觀察",
           "icon": "B",
-          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 6/8，量比 1.21，位階 中位階。"
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 7/8，量比 1.38，位階 中位階。"
         }
       ],
       "score": 98,
@@ -4740,9 +4743,17 @@
           ]
         }
       ],
-      "strategy4Score": 0,
-      "strategy4Reason": "",
-      "strategy4Signals": [],
+      "strategy4Score": 98,
+      "strategy4Reason": "主力爸爸錢包量能紅K交叉（2026-06-09）：5日資金量均線 21,025 上穿 60日 12,367。",
+      "strategy4Signals": [
+        {
+          "id": "wallet_volume_cross",
+          "title": "紅色三角形",
+          "short": "量叉",
+          "icon": "🔺",
+          "reason": "主力爸爸錢包量能紅K交叉（2026-06-09）：5日資金量均線 21,025 上穿 60日 12,367。"
+        }
+      ],
       "score": 98,
       "activeMatch": {
         "id": "chip_k_confluence",
@@ -4795,14 +4806,15 @@
           ]
         }
       ],
-      "strategy4Score": 99,
-      "strategy4Reason": "趨勢轉強但尚未觸發突破買點；趨勢分 7/8，量比 1.63，位階 高基期。",
+      "strategy4Score": 97,
+      "strategy4Reason": "主力爸爸錢包量能紅K交叉（2026-06-09）：5日資金量均線 15,504 上穿 60日 17,414。",
       "strategy4Signals": [
         {
-          "id": "watch_trend",
-          "short": "B觀察",
-          "icon": "B",
-          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 7/8，量比 1.63，位階 高基期。"
+          "id": "wallet_volume_cross",
+          "title": "紅色三角形",
+          "short": "量叉",
+          "icon": "🔺",
+          "reason": "主力爸爸錢包量能紅K交叉（2026-06-09）：5日資金量均線 15,504 上穿 60日 17,414。"
         }
       ],
       "score": 98,
@@ -4918,9 +4930,16 @@
           "volumeRatio": 1.06
         }
       ],
-      "strategy4Score": 0,
-      "strategy4Reason": "",
-      "strategy4Signals": [],
+      "strategy4Score": 87,
+      "strategy4Reason": "低/中位階整理接近發動；準備分 7/7，RSI 51.6，量比 0.81。",
+      "strategy4Signals": [
+        {
+          "id": "base_setup",
+          "short": "C準備",
+          "icon": "C",
+          "reason": "低/中位階整理接近發動；準備分 7/7，RSI 51.6，量比 0.81。"
+        }
+      ],
       "score": 95,
       "activeMatch": {
         "id": "bollinger_kdj_buy",
@@ -5264,7 +5283,7 @@
           "volumeRatio": 0.9
         }
       ],
-      "strategy4Score": 93,
+      "strategy4Score": 100,
       "strategy4Reason": "跳空且站上MA20，多頭段延續，偏逃逸缺口。",
       "strategy4Signals": [
         {
@@ -5390,19 +5409,14 @@
         }
       ],
       "strategy4Score": 100,
-      "strategy4Reason": "站上MA20/EMA21，MACD多頭，量比 1.28，日K多頭攻擊。",
+      "strategy4Reason": "主力爸爸錢包多方寶石（2026-06-08）：控盤線由負翻正且日K收紅。",
       "strategy4Signals": [
         {
-          "id": "bull_attack",
-          "short": "攻擊",
-          "icon": "🔥",
-          "reason": "站上MA20/EMA21，MACD多頭，量比 1.28，日K多頭攻擊。"
-        },
-        {
-          "id": "runaway_gap",
-          "short": "逃逸缺口",
-          "icon": "🚀",
-          "reason": "跳空且站上MA20，多頭段延續，偏逃逸缺口。"
+          "id": "wallet_strong_buy",
+          "title": "多方寶石",
+          "short": "主力多",
+          "icon": "◆",
+          "reason": "主力爸爸錢包多方寶石（2026-06-08）：控盤線由負翻正且日K收紅。"
         }
       ],
       "score": 89,
@@ -5874,14 +5888,14 @@
           "volumeRatio": 1.23
         }
       ],
-      "strategy4Score": 100,
-      "strategy4Reason": "趨勢轉強但尚未觸發突破買點；趨勢分 6/8，量比 1.71，位階 中位階。",
+      "strategy4Score": 98,
+      "strategy4Reason": "趨勢轉強但尚未觸發突破買點；趨勢分 6/8，量比 1.27，位階 中位階。",
       "strategy4Signals": [
         {
           "id": "watch_trend",
           "short": "B觀察",
           "icon": "B",
-          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 6/8，量比 1.71，位階 中位階。"
+          "reason": "趨勢轉強但尚未觸發突破買點；趨勢分 6/8，量比 1.27，位階 中位階。"
         }
       ],
       "score": 83,
