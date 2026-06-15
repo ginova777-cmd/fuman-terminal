@@ -19,6 +19,11 @@ const TARGETS = [
   { name: "strategy3-latest", file: "data/strategy3-latest.json", minCount: 1 },
   { name: "strategy4-latest", file: "data/strategy4-latest.json", minCount: 1 },
   { name: "strategy4-summary", file: "data/strategy4-summary.json", minCount: 1 },
+  { name: "strategy4-slim", file: "data/strategy4-slim.json", minCount: 1 },
+  { name: "strategy4-score-top", file: "data/strategy4-score-top.json", minCount: 1 },
+  { name: "strategy4-zone-a", file: "data/strategy4-zone-a.json" },
+  { name: "strategy4-zone-b", file: "data/strategy4-zone-b.json" },
+  { name: "strategy4-zone-c", file: "data/strategy4-zone-c.json" },
   { name: "strategy5-latest", file: "data/strategy5-latest.json", minCount: 1 },
   { name: "strategy-match-index", file: "data/strategy-match-index.json", minCount: 1 },
   { name: "warrant-flow-latest", file: "data/warrant-flow-latest.json" },
@@ -64,6 +69,7 @@ function extractDate(payload) {
 }
 
 function extractCount(payload) {
+  if (!payload) return 0;
   if (Number.isFinite(Number(payload.count))) return Number(payload.count);
   if (Number.isFinite(Number(payload.total))) return Number(payload.total);
   if (Array.isArray(payload.items)) return payload.items.length;
@@ -77,6 +83,7 @@ function extractCount(payload) {
 }
 
 function rows(payload) {
+  if (!payload) return [];
   if (Array.isArray(payload)) return payload;
   if (Array.isArray(payload.matches)) return payload.matches;
   if (Array.isArray(payload.rows)) return payload.rows;
@@ -119,6 +126,13 @@ function validateCrossPayloads(payloads, issues) {
   const home = payloads["terminal-home-bundle"];
   const quotes = payloads["stocks-quotes-slim"];
   const strategy5 = payloads["strategy5-latest"];
+  const strategy4 = payloads["strategy4-latest"];
+  const strategy4Summary = payloads["strategy4-summary"];
+  const strategy4Slim = payloads["strategy4-slim"];
+  const strategy4ScoreTop = payloads["strategy4-score-top"];
+  const strategy4ZoneA = payloads["strategy4-zone-a"];
+  const strategy4ZoneB = payloads["strategy4-zone-b"];
+  const strategy4ZoneC = payloads["strategy4-zone-c"];
   const openBuy = payloads["open-buy-latest"];
   const strategyMatchIndex = payloads["strategy-match-index"];
   const institutionLatest = payloads["institution-latest"];
@@ -139,6 +153,10 @@ function validateCrossPayloads(payloads, issues) {
     ["warrant-priority-top.json", warrantPriority],
     ["warrant-flow-mobile-top.json", warrantMobile],
     ["open-buy-latest.json", openBuy],
+    ["strategy4-latest.json", strategy4],
+    ["strategy4-summary.json", strategy4Summary],
+    ["strategy4-slim.json", strategy4Slim],
+    ["strategy4-score-top.json", strategy4ScoreTop],
     ["strategy5-latest.json", strategy5],
     ["strategy-match-index.json", strategyMatchIndex],
     ["stocks-quotes-slim.json", quotes],
@@ -158,6 +176,23 @@ function validateCrossPayloads(payloads, issues) {
   assertFresh(openBuy?.ok === true, "open-buy-latest ok=false", issues);
   assertFresh(extractCount(openBuy) > 0, "open-buy-latest empty", issues);
   assertFresh(!quoteDate || openBuyDate === quoteDate, `open-buy sourceDate mismatch quoteDate=${quoteDate} sourceDate=${openBuyDate}`, issues);
+
+  const strategy4Date = normalizeDate(strategy4?.scanStamp || strategy4?.sourceDate || strategy4?.updatedAt);
+  const strategy4Count = extractCount(strategy4);
+  const strategy4SlimCount = extractCount(strategy4Slim);
+  const strategy4ZoneTotal = extractCount(strategy4ZoneA) + extractCount(strategy4ZoneB) + extractCount(strategy4ZoneC);
+  const strategy4Home = home?.strategies?.strategy4 || home?.desktop?.strategy4 || home?.mobile?.strategy4 || home?.strategy4;
+  assertFresh(strategy4?.ok === true, "strategy4-latest ok=false", issues);
+  assertFresh(strategy4?.complete === true, "strategy4-latest complete=false; full daily scan did not publish", issues);
+  assertFresh(!/partial/i.test(String(strategy4?.source || "")), `strategy4-latest source is partial source=${strategy4?.source}`, issues);
+  assertFresh(Number(strategy4?.total || 0) >= 1500, `strategy4 total too small total=${strategy4?.total}`, issues);
+  assertFresh(strategy4Count === rows(strategy4).length, `strategy4 count mismatch count=${strategy4?.count} rows=${rows(strategy4).length}`, issues);
+  assertFresh(!quoteDate || strategy4Date === quoteDate, `strategy4 scanStamp mismatch quoteDate=${quoteDate} scanDate=${strategy4Date}`, issues);
+  assertFresh(extractCount(strategy4Summary) === strategy4Count, `strategy4-summary count mismatch latest=${strategy4Count} summary=${extractCount(strategy4Summary)}`, issues);
+  assertFresh(strategy4SlimCount === strategy4Count, `strategy4-slim count mismatch latest=${strategy4Count} slim=${strategy4SlimCount}`, issues);
+  assertFresh(strategy4ZoneTotal === strategy4SlimCount, `strategy4 zone total mismatch zones=${strategy4ZoneTotal} slim=${strategy4SlimCount}`, issues);
+  assertFresh(extractCount(strategy4ScoreTop) === Math.min(120, strategy4SlimCount), `strategy4-score-top count mismatch top=${extractCount(strategy4ScoreTop)} slim=${strategy4SlimCount}`, issues);
+  assertFresh(Number(strategy4Home?.count || 0) === extractCount(strategy4ScoreTop), `terminal-home-bundle strategy4 count mismatch home=${strategy4Home?.count} top=${extractCount(strategy4ScoreTop)}`, issues);
 
   const latestFirst = rows(warrantLatest)[0];
   const slimFirst = rows(warrantSlim)[0];

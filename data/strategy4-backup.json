@@ -2,12 +2,12 @@
   "ok": true,
   "source": "github-actions-backup",
   "priceSource": "official-daily-k",
-  "updatedAt": "2026-06-15T13:32:16.838Z",
+  "updatedAt": "2026-06-15T14:27:49.462Z",
   "scanStamp": "20260615",
   "fullScan": true,
   "runMode": "full",
-  "complete": false,
-  "qualityStatus": "partial",
+  "complete": true,
+  "qualityStatus": "degraded",
   "supabaseFirst": true,
   "supabaseCoverage": {
     "ok": true,
@@ -27,7 +27,7 @@
     "supabaseVolumeRows": 20942,
     "supabaseVolumeUpdated": 20909,
     "errors": [],
-    "updatedAt": "2026-06-15T13:32:04.271Z",
+    "updatedAt": "2026-06-15T14:27:21.448Z",
     "coverageRatio": 0.953,
     "qualityStatus": "partial"
   },
@@ -1762,7 +1762,10 @@
   "yahooSourceRatio": 0,
   "misSourceCount": 0,
   "misSourceRatio": 0,
-  "sourceWarnings": [],
+  "sourceWarnings": [
+    "Supabase history coverage partial; published as degraded complete after scanning full universe",
+    "No daily-K history for 53 scanned codes; published as degraded complete"
+  ],
   "volumeFilter": {
     "enabled": true,
     "rule": "avgVolume5-gte",
@@ -30464,5 +30467,5 @@
       "reason": "低/中位階整理接近發動；準備分 5/7，RSI 44.9，量比 0.34。"
     }
   ],
-  "backupUpdatedAt": "2026-06-15T13:32:16.849Z"
+  "backupUpdatedAt": "2026-06-15T14:27:49.482Z"
 }

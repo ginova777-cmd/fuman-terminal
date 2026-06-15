@@ -189,12 +189,14 @@ function Publish-TerminalFreshnessGate($mode, $rawResults) {
   $manifestPath = Join-Path $publishRoot "data\data-manifest.json"
   $cbPath = Join-Path $publishRoot "data\cb-detect-latest.json"
   $strategy5Path = Join-Path $publishRoot "data\strategy5-latest.json"
+  $strategy4Path = Join-Path $publishRoot "data\strategy4-latest.json"
   $openBuyPath = Join-Path $publishRoot "data\open-buy-latest.json"
   $starPath = Join-Path $publishRoot "data\star-preopen-latest.json"
   $versionPayload = Read-GateJson $versionPath
   $manifestPayload = Read-GateJson $manifestPath
   $cbPayload = Read-GateJson $cbPath
   $strategy5Payload = Read-GateJson $strategy5Path
+  $strategy4Payload = Read-GateJson $strategy4Path
   $openBuyPayload = Read-GateJson $openBuyPath
   $starPayload = Read-GateJson $starPath
   $head = & $gitExe -C $publishRoot log -1 --oneline --decorate
@@ -218,6 +220,11 @@ function Publish-TerminalFreshnessGate($mode, $rawResults) {
     strategy5Count = Get-GateCount $strategy5Payload
     strategy5UpdatedAt = [string]$strategy5Payload.updatedAt
     strategy5SourceDate = [string]$strategy5Payload.sourceDate
+    strategy4Count = Get-GateCount $strategy4Payload
+    strategy4UpdatedAt = [string]$strategy4Payload.updatedAt
+    strategy4ScanStamp = [string]$strategy4Payload.scanStamp
+    strategy4Complete = [bool]$strategy4Payload.complete
+    strategy4Total = [int]$strategy4Payload.total
     openBuyCount = Get-GateCount $openBuyPayload
     openBuySourceDate = [string]$openBuyPayload.usedDate
     openBuyUpdatedAt = [string]$openBuyPayload.updatedAt
@@ -269,6 +276,9 @@ function Wait-TerminalFreshnessGateVisible($expectedStatus) {
         [string]$payload.version -eq [string]$expectedStatus.version -and
         [int]$payload.cbCount -eq [int]$expectedStatus.cbCount -and
         [int]$payload.manifestCbCount -eq [int]$expectedStatus.manifestCbCount -and
+        [int]$payload.strategy4Count -eq [int]$expectedStatus.strategy4Count -and
+        [string]$payload.strategy4ScanStamp -eq [string]$expectedStatus.strategy4ScanStamp -and
+        [bool]$payload.strategy4Complete -eq [bool]$expectedStatus.strategy4Complete -and
         [int]$payload.strategy5Count -eq [int]$expectedStatus.strategy5Count -and
         [int]$payload.openBuyCount -eq [int]$expectedStatus.openBuyCount -and
         [int]$payload.starCount -eq [int]$expectedStatus.starCount -and
@@ -428,7 +438,22 @@ try {
     try {
       $null = Invoke-GateCommand "open buy raw refresh" { & $nodeExe "scripts\scan-open-buy-cache.js" } -AllowFailure
       $null = Invoke-GateCommand "strategy3 raw refresh" { & $nodeExe "scripts\scan-strategy3-cache.js" } -AllowFailure
-      $null = Invoke-GateCommand "strategy4 raw refresh" { & $nodeExe "scripts\scan-strategy4-cache.js" } -AllowFailure
+      $previousFullScan = $env:FULL_SCAN
+      $previousFailOnIncomplete = $env:STRATEGY4_FAIL_ON_INCOMPLETE
+      $previousAllowPartialPublish = $env:STRATEGY4_ALLOW_PARTIAL_PUBLISH
+      $previousSyncPartial = $env:STRATEGY4_SYNC_PARTIAL
+      try {
+        $env:FULL_SCAN = "1"
+        $env:STRATEGY4_FAIL_ON_INCOMPLETE = "1"
+        $env:STRATEGY4_ALLOW_PARTIAL_PUBLISH = "0"
+        $env:STRATEGY4_SYNC_PARTIAL = "0"
+        $null = Invoke-GateCommand "strategy4 raw refresh" { & $nodeExe "scripts\scan-strategy4-cache.js" }
+      } finally {
+        if ($null -eq $previousFullScan) { Remove-Item Env:FULL_SCAN -ErrorAction SilentlyContinue } else { $env:FULL_SCAN = $previousFullScan }
+        if ($null -eq $previousFailOnIncomplete) { Remove-Item Env:STRATEGY4_FAIL_ON_INCOMPLETE -ErrorAction SilentlyContinue } else { $env:STRATEGY4_FAIL_ON_INCOMPLETE = $previousFailOnIncomplete }
+        if ($null -eq $previousAllowPartialPublish) { Remove-Item Env:STRATEGY4_ALLOW_PARTIAL_PUBLISH -ErrorAction SilentlyContinue } else { $env:STRATEGY4_ALLOW_PARTIAL_PUBLISH = $previousAllowPartialPublish }
+        if ($null -eq $previousSyncPartial) { Remove-Item Env:STRATEGY4_SYNC_PARTIAL -ErrorAction SilentlyContinue } else { $env:STRATEGY4_SYNC_PARTIAL = $previousSyncPartial }
+      }
       $previousStrategy5UseMis = $env:STRATEGY5_USE_MIS
       try {
         $env:STRATEGY5_USE_MIS = "0"

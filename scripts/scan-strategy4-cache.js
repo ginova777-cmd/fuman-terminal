@@ -571,11 +571,14 @@ function buildOutput({ codes, scannedThisRun, scanned, noDataCodes, scanErrors, 
     sourceWarnings.push(`Yahoo fallback ratio ${yahooSourceRatio} above ${MAX_YAHOO_SOURCE_RATIO}`);
   }
   const coveragePartial = supabaseCoverage?.qualityStatus === "partial";
-  const degradedComplete = ALLOW_DEGRADED_COMPLETE && complete && scanned.size === codes.length && errorCount === 0;
+  const degradedComplete = ALLOW_DEGRADED_COMPLETE && scanned.size === codes.length && errorCount === 0;
   const baseComplete = degradedComplete || (complete && noDataCount === 0 && errorCount === 0 && !coveragePartial);
   const qualityStatus = coveragePartial
-    ? "partial"
+    ? (baseComplete ? "degraded" : "partial")
     : (baseComplete ? ((sourceWarnings.length || noDataCount > 0) ? "degraded" : "complete") : "incomplete");
+  if (baseComplete && coveragePartial) {
+    sourceWarnings.push("Supabase history coverage partial; published as degraded complete after scanning full universe");
+  }
   if (baseComplete && noDataCount > 0) {
     sourceWarnings.push(`No daily-K history for ${noDataCount} scanned codes; published as degraded complete`);
   }
