@@ -331,6 +331,26 @@ if (!fs.existsSync(path.join(ROOT, "AGENTS.md"))) {
   if (!agents.includes("realtime-radar-latest.json")) issues.push("AGENTS.md must mention realtime radar JSON cannot bypass freshness gate");
   if (!agents.includes("STRATEGY5-FRESHNESS-GOVERNANCE.md")) issues.push("AGENTS.md must point Codex to STRATEGY5-FRESHNESS-GOVERNANCE.md");
   if (!agents.includes("strategy5-latest.json")) issues.push("AGENTS.md must mention strategy5 JSON cannot bypass freshness gate");
+  if (!agents.includes("VERSION-LIVE-SYNC-GOVERNANCE.md")) issues.push("AGENTS.md must point Codex to VERSION-LIVE-SYNC-GOVERNANCE.md");
+  if (!agents.includes("npm run verify:live-version")) issues.push("AGENTS.md must explain version/live sync verification");
+}
+
+if (!fs.existsSync(path.join(ROOT, "VERSION-LIVE-SYNC-GOVERNANCE.md"))) {
+  issues.push("VERSION-LIVE-SYNC-GOVERNANCE.md missing version/live sync governance");
+} else {
+  const versionLiveSync = read("VERSION-LIVE-SYNC-GOVERNANCE.md");
+  for (const marker of [
+    "npm run verify:live-version",
+    "version-json check failed",
+    "terminal-app hash mismatch",
+    "main -> bump -> deploy -> live verify -> push GitHub",
+    "台指期大結算",
+    "美股四巫日",
+    "installMarketAiRuntimeLine",
+    "installMarketAiLoadingGuard",
+  ]) {
+    if (!versionLiveSync.includes(marker)) issues.push(`VERSION-LIVE-SYNC-GOVERNANCE.md missing ${marker}`);
+  }
 }
 
 if (!fs.existsSync(path.join(ROOT, "FRESHNESS-GATE-MOBILE.md"))) {
