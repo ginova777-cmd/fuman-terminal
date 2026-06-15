@@ -1,5 +1,5 @@
 (function () {
-  const VERSION = "strategy5-data-resync-20260628";
+  const VERSION = "strategy5-data-resync-20260629";
   const modules = {
     sectorMap: { loaded: false, src: "terminal-sector-map.js" },
     strategyConfig: { loaded: false, src: "terminal-strategy-config.js" },

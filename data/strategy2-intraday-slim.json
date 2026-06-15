@@ -1,1 +1,31 @@
-{"source":"strategy2-09-to-1330-patrol","profile":"strategy2-fast-slim","date":"2026-06-15","updatedAt":"2026-06-15T02:55:16.947Z","realtime":{"requested":41,"received":41,"failed":0,"usable":41,"coverage":1,"coverageBeforeRescue":1,"coverageAfterRescue":1,"cachedRecovered":0,"entrySourceHealthy":true,"entrySourceCoverageThreshold":0.5,"skippedPartialCoverage":false},"records":[{"code":"4534","name":"慶騰","date":"2026-06-15","timestamp":"2026-06-15 10:54:46","entryAt":"2026-06-15 10:54:46","firstAAt":"","firstBAt":"","stateId":"entry","stateLabel":"進場區","signalId":"preopen_watch","entryPrice":36.3,"observedPrice":36.3,"close":0,"observedHigh":36.3,"observedHighAt":"2026-06-15 10:54:46","percent":10,"volume":3903,"tradeVolume":0,"deltaVolume":0,"score":96,"strategy":"盤前觀察","reason":"盤前觀察：開盤無腦入：漲幅 10.00%，成交量 3,679 張、量比 1.22，收盤站上MA35 26.08，紅K強攻收在日內強勢區，前一天先列入開盤進場名單。","stateReason":"盤前觀察：開盤無腦入：漲幅 10.00%，成交量 3,679 張、量比 1.22，收盤站上MA35 26.08，紅K強攻收在日內強勢區，前一天先列入開盤進場名單。","supportPrice":0,"sourceCoverage":1,"sourceCoverageHealthy":true,"ma35":0,"ma35Prev":0,"aboveMa35":false,"ma35TrendUp":false,"ma35Source":"","ma35At":"","ma35Symbol":"","ma35Attempts":0,"macdDif":0,"macdSignal":0,"macdHist":0,"macdUp":false,"kdK":0,"kdD":0,"kdUp":false,"intradayVolumeBurst":false}],"events":[{"code":"4534","name":"慶騰","date":"2026-06-15","firstBAt":"10:51:59","firstBPrice":36.3,"highAfterB":36.3,"highAfterBAt":"10:52:05","firstAAt":"10:51:59","firstAPrice":36.3,"firstTradableAAt":"10:51:59","firstTradableAPrice":36.3,"latestAAt":"10:54:46","latestAPrice":36.3,"latestBAt":"","latestBPrice":0,"latestSeenAt":"10:54:46","latestSeenPrice":36.3,"highAfterA":36.3,"highAfterAAt":"10:52:05","highestPrice":36.3,"highestAt":"10:52:05","stateId":"entry","stateLabel":"進場區","signalId":"preopen_watch","latestState":"entry","maxScore":96,"strategies":["盤前觀察","曾發動仍強"],"ma35":0,"ma35Prev":0,"aboveMa35":false,"ma35TrendUp":false,"ma35Source":"","ma35At":"","ma35Symbol":"","macdUp":false,"kdUp":false,"intradayVolumeBurst":false,"latestRecord":{"code":"4534","name":"慶騰","date":"2026-06-15","timestamp":"2026-06-15 10:54:46","entryAt":"2026-06-15 10:54:46","firstAAt":"","firstBAt":"","stateId":"entry","stateLabel":"進場區","signalId":"preopen_watch","entryPrice":36.3,"observedPrice":36.3,"close":0,"observedHigh":36.3,"observedHighAt":"2026-06-15 10:54:46","percent":10,"volume":3903,"tradeVolume":0,"deltaVolume":0,"score":96,"strategy":"盤前觀察","reason":"盤前觀察：開盤無腦入：漲幅 10.00%，成交量 3,679 張、量比 1.22，收盤站上MA35 26.08，紅K強攻收在日內強勢區，前一天先列入開盤進場名單。","stateReason":"盤前觀察：開盤無腦入：漲幅 10.00%，成交量 3,679 張、量比 1.22，收盤站上MA35 26.08，紅K強攻收在日內強勢區，前一天先列入開盤進場名單。","supportPrice":0,"sourceCoverage":1,"sourceCoverageHealthy":true,"ma35":0,"ma35Prev":0,"aboveMa35":false,"ma35TrendUp":false,"ma35Source":"","ma35At":"","ma35Symbol":"","ma35Attempts":0,"macdDif":0,"macdSignal":0,"macdHist":0,"macdUp":false,"kdK":0,"kdD":0,"kdUp":false,"intradayVolumeBurst":false},"enhancements":[],"stateReason":"盤前觀察：開盤無腦入：漲幅 10.00%，成交量 3,679 張、量比 1.22，收盤站上MA35 26.08，紅K強攻收在日內強勢區，前一天先列入開盤進場名單。","supportPrice":0}],"entryCount":1,"aCount":1,"bOnlyCount":0,"slim":{"generatedAt":"2026-06-15T02:59:24.852Z","sourceRecords":29,"records":1,"events":1,"enhancementLimit":8}}
+{
+  "source": "strategy2-supabase-first",
+  "profile": "strategy2-fast-slim",
+  "date": "2026-06-15",
+  "updatedAt": "2026-06-15T03:37:29.200Z",
+  "realtime": {
+    "requested": 0,
+    "received": 0,
+    "failed": 0,
+    "usable": 0,
+    "coverage": 0,
+    "coverageBeforeRescue": 0,
+    "coverageAfterRescue": 0,
+    "cachedRecovered": 0,
+    "entrySourceHealthy": false,
+    "entrySourceCoverageThreshold": 0,
+    "skippedPartialCoverage": false
+  },
+  "records": [],
+  "events": [],
+  "entryCount": 0,
+  "aCount": 0,
+  "bOnlyCount": 0,
+  "slim": {
+    "generatedAt": "2026-06-15T03:37:29.210Z",
+    "sourceRecords": 0,
+    "records": 0,
+    "events": 0,
+    "enhancementLimit": 8
+  }
+}
