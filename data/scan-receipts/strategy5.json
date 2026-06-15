@@ -1,0 +1,21 @@
+{
+  "strategy": "strategy5",
+  "label": "strategy5 raw refresh",
+  "tier": "critical",
+  "startedAt": "2026-06-15T22:34:04.4903477+08:00",
+  "finishedAt": "2026-06-15T22:34:37.9088713+08:00",
+  "status": "degraded",
+  "exitCode": 0,
+  "scanned": 1958,
+  "total": 1958,
+  "matches": 80,
+  "complete": true,
+  "qualityStatus": "",
+  "fallback": false,
+  "payloadPath": "C:\\fuman-runtime\\data\\strategy5-latest.json",
+  "warnings": [
+    "strategy5 source warning: twse volume fetch failed: 20260605 :: https://www.twse.com.tw/rwd/zh/afterTrading/MI_INDEX?date=20260605&type=ALLBUT0999&response=json HTTP 403"
+  ],
+  "blockingReason": "",
+  "log": "C:\\fuman-runtime\\logs\\full-scan-20260615-220557.log"
+}
