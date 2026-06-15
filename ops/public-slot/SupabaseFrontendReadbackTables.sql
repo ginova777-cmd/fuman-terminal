@@ -55,6 +55,7 @@ alter table public.strategy1_open_buy_latest enable row level security;
 alter table public.fuman_realtime_radar_cache enable row level security;
 
 drop policy if exists "read strategy2 latest" on public.strategy2_latest;
+drop policy if exists "anon upsert strategy2 latest" on public.strategy2_latest;
 drop policy if exists "read strategy1 open buy latest" on public.strategy1_open_buy_latest;
 drop policy if exists "read fuman realtime radar cache" on public.fuman_realtime_radar_cache;
 
@@ -63,6 +64,13 @@ on public.strategy2_latest
 for select
 to anon
 using (true);
+
+create policy "anon upsert strategy2 latest"
+on public.strategy2_latest
+for all
+to anon
+using (id = 'latest')
+with check (id = 'latest');
 
 create policy "read strategy1 open buy latest"
 on public.strategy1_open_buy_latest
@@ -76,7 +84,7 @@ for select
 to anon
 using (true);
 
-grant select on public.strategy2_latest to anon;
+grant select, insert, update on public.strategy2_latest to anon;
 grant select on public.strategy1_open_buy_latest to anon;
 grant select on public.fuman_realtime_radar_cache to anon;
 

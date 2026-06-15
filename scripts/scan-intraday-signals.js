@@ -538,7 +538,46 @@ function publishStaticDataJson(name, value) {
 }
 
 async function upsertStrategy2LatestToSupabase(report) {
-  return false;
+  const supabaseUrl = String(process.env.SUPABASE_URL || process.env.FUMAN_SUPABASE_URL || "https://cpmpfhbzutkiecccekfr.supabase.co").replace(/\/+$/, "");
+  const anonKey = process.env.SUPABASE_ANON_KEY
+    || process.env.FUMAN_SUPABASE_ANON_KEY
+    || readSecretText(path.join(process.env.FUMAN_RUNTIME_DIR || "C:/fuman-runtime", "secrets", "supabase-anon-key.txt"))
+    || readSecretText(path.join(ROOT, "secrets", "supabase-anon-key.txt"));
+  if (!supabaseUrl || !anonKey) {
+    console.warn("strategy2_latest upsert skipped: missing Supabase anon key");
+    return false;
+  }
+  const payload = {
+    id: "latest",
+    date: report.date || "",
+    updated_at: report.updatedAt || new Date().toISOString(),
+    entry_count: cleanNumber(report.entryCount || report.aCount),
+    record_count: Array.isArray(report.records) ? report.records.length : 0,
+    event_count: Array.isArray(report.events) ? report.events.length : 0,
+    payload: report,
+  };
+  try {
+    const response = await fetch(`${supabaseUrl}/rest/v1/strategy2_latest?on_conflict=id`, {
+      method: "POST",
+      headers: {
+        apikey: anonKey,
+        Authorization: `Bearer ${anonKey}`,
+        "Content-Type": "application/json",
+        Prefer: "resolution=merge-duplicates",
+      },
+      body: JSON.stringify(payload),
+      signal: AbortSignal.timeout ? AbortSignal.timeout(15000) : undefined,
+    });
+    if (!response.ok) {
+      const text = await response.text().catch(() => "");
+      console.warn(`strategy2_latest upsert skipped: HTTP ${response.status} ${text.slice(0, 160)}`);
+      return false;
+    }
+    return true;
+  } catch (error) {
+    console.warn(`strategy2_latest upsert skipped: ${error?.message || String(error)}`);
+    return false;
+  }
 }
 
 function normalizeVolumeLots(value) {
@@ -933,6 +972,9 @@ function secondsSinceIso(value) {
 }
 
 function hasUsableQuote(stock, scanTimestamp) {
+  if (stock?.sourceHealthOk === true && secondsSinceIso(stock.quoteSeenAt) <= MAX_QUOTE_AGE_SECONDS && cleanNumber(stock.close) > 0) {
+    return true;
+  }
   if (stock?.recoveredFromQuoteCache) {
     return cleanNumber(stock.close) > 0
       && secondsSinceIso(stock.quoteSeenAt) <= QUOTE_CACHE_MAX_AGE_SECONDS
@@ -1829,6 +1871,11 @@ async function fetchRealtime(stocks, scanTimestamp = timestampKey()) {
         noteSource(quote, "noClose");
         return;
       }
+      if (quote.sourceHealthOk === true && secondsSinceIso(quote.quoteSeenAt) <= MAX_QUOTE_AGE_SECONDS) {
+        usableCodes.add(code);
+        noteSource(quote, "usable");
+        return;
+      }
       const age = quoteAgeSeconds(scanTimestamp, quote.quoteTime || quote.time);
       if (age == null) {
         noTimeCodes.add(code);
@@ -2700,13 +2747,15 @@ async function fetchMa35Map(stocks, scanTimestamp, cache) {
       const code = candidates[cursor++];
       const status = statusByCode.get(String(code));
       const candleCount = cleanNumber(status?.candle_count);
-      if (status && (status.ready_ge_35 === false || candleCount < 35)) {
+      const latestCandleAge = cleanNumber(status?.latest_candle_age_seconds);
+      const staleLatestCandle = latestCandleAge > Math.max(240, SUPABASE_SOURCE_MAX_QUOTE_AGE_SECONDS * 2);
+      if (status && (status.ready_ge_35 === false || candleCount < 35 || status.has_today_data === false || staleLatestCandle)) {
         map.set(String(code), {
           ma35Attempts: [{
             source: "v_fugle_intraday_1m_status",
             ok: false,
             skipped: true,
-            error: `ready_ge_35=false candle_count=${status.candle_count ?? ""}`,
+            error: `1m_not_ready ready_ge_35=${status.ready_ge_35} candle_count=${status.candle_count ?? ""} has_today_data=${status.has_today_data} latest_age=${status.latest_candle_age_seconds ?? ""}`,
           }],
         });
         continue;
@@ -2762,6 +2811,7 @@ async function main() {
     minQuotes: SUPABASE_SOURCE_MIN_QUOTES,
     minActiveSymbols: SUPABASE_SOURCE_MIN_ACTIVE_SYMBOLS,
     requireIntraday1m: entryWindow,
+    verifyAnonReadAccess: true,
   }).catch((error) => ({
     ok: false,
     message: SUPABASE_SHARED_SOURCE_ERROR_MESSAGE,

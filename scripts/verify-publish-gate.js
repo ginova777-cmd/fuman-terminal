@@ -125,6 +125,20 @@ if (!fs.existsSync(path.join(ROOT, "run-main-release-pipeline.ps1"))) {
   }
 }
 
+if (!fs.existsSync(path.join(ROOT, "run-auto-main-release.ps1"))) {
+  issues.push("run-auto-main-release.ps1 missing daily main release wrapper");
+} else {
+  const autoMainRelease = read("run-auto-main-release.ps1");
+  if (!/npm run release:main/.test(autoMainRelease) || !/main -> bump -> deploy -> live verify -> push GitHub/.test(autoMainRelease)) {
+    issues.push("run-auto-main-release.ps1 must delegate the daily publish chain to npm run release:main");
+  }
+  for (const bypass of ["Invoke-Strategy4FullScan", "npm run deploy", "npm run freshness:gate:fast", "git push origin HEAD:main"]) {
+    if (autoMainRelease.includes(bypass)) {
+      issues.push(`run-auto-main-release.ps1 must not bypass release:main with ${bypass}`);
+    }
+  }
+}
+
 if (!fs.existsSync(path.join(ROOT, "legacy-entrypoint-guard.ps1"))) {
   issues.push("legacy-entrypoint-guard.ps1 missing legacy script redirect guard");
 } else {

@@ -13,6 +13,24 @@ const SUPABASE_KEY = process.env.SUPABASE_ANON_KEY
   || process.env.FUMAN_SUPABASE_ANON_KEY
   || readSecretText(path.join(RUNTIME_DIR, "secrets", "supabase-anon-key.txt"));
 
+function staticFallback(reason = "") {
+  try {
+    const payload = JSON.parse(fs.readFileSync(path.join(process.cwd(), "data", "strategy2-intraday-latest.json"), "utf8"));
+    return {
+      ...payload,
+      cacheSource: "static-fallback",
+      transport: {
+        source: "static-json",
+        via: "api/strategy2-latest",
+        fallbackReason: reason,
+        fetchedAt: new Date().toISOString(),
+      },
+    };
+  } catch (error) {
+    return { ok: false, error: "strategy2_static_fallback_failed", detail: error?.message || String(error) };
+  }
+}
+
 module.exports = async function handler(request, response) {
   response.setHeader("Cache-Control", "no-store, max-age=0, must-revalidate");
   response.setHeader("CDN-Cache-Control", "no-store");
@@ -26,7 +44,7 @@ module.exports = async function handler(request, response) {
   try {
     const base = String(SUPABASE_URL || "").replace(/\/+$/, "");
     if (!base || !SUPABASE_KEY) {
-      response.status(500).json({ ok: false, error: "supabase_not_configured" });
+      response.status(200).json(staticFallback("supabase_not_configured"));
       return;
     }
     const url = `${base}/rest/v1/strategy2_latest?id=eq.latest&select=payload,updated_at&limit=1`;
@@ -39,18 +57,13 @@ module.exports = async function handler(request, response) {
     });
     if (!upstream.ok) {
       const text = await upstream.text().catch(() => "");
-      response.status(upstream.status).json({
-        ok: false,
-        error: "supabase_fetch_failed",
-        status: upstream.status,
-        detail: text.slice(0, 200),
-      });
+      response.status(200).json(staticFallback(`supabase_fetch_failed HTTP ${upstream.status} ${text.slice(0, 120)}`));
       return;
     }
     const rows = await upstream.json();
     const row = Array.isArray(rows) ? rows[0] : rows;
     if (!row?.payload) {
-      response.status(404).json({ ok: false, error: "strategy2_latest_empty" });
+      response.status(200).json(staticFallback("strategy2_latest_empty"));
       return;
     }
     response.status(200).json({
@@ -64,6 +77,6 @@ module.exports = async function handler(request, response) {
       },
     });
   } catch (error) {
-    response.status(500).json({ ok: false, error: error?.message || String(error) });
+    response.status(200).json(staticFallback(error?.message || String(error)));
   }
 };
