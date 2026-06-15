@@ -27,6 +27,7 @@ const KEY_FILES = [
   "scripts/bump-version.js",
   "scripts/generate-cb-detect.js",
   "scripts/prepare-deploy.js",
+  "scripts/scan-strategy3-cache.js",
   "scripts/scan-strategy5-cache.js",
   "scripts/verify-mobile-layout.js",
   "scripts/sync-afterhours-supabase-status.js",

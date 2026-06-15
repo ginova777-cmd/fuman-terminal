@@ -69,6 +69,19 @@ function verifyMarketEventReminderGuard(app) {
   console.log("[live-version] market event reminders ok");
 }
 
+function verifyMarketAiPriorityRiskGuard(text) {
+  const required = [
+    "installMarketAiPriorityRiskGuard",
+    "事件波動風險最高",
+    "個股極端波動風險",
+    "AI 盤中/盤後模式風險",
+  ];
+  for (const marker of required) {
+    if (!text.includes(marker)) throw new Error(`AI priority risk guard missing ${marker}`);
+  }
+  console.log("[live-version] AI priority risk guard ok");
+}
+
 async function verifyOnce() {
   const version = detectLocalVersion();
   await expectOk("version-json", "/version.json", (body) => {
@@ -78,7 +91,7 @@ async function verifyOnce() {
       return false;
     }
   });
-  const home = await expectOk("home", "/", (body) => body.includes(`terminal-core.js?v=${version}`) && body.includes(`styles.css?v=${version}`));
+  const home = await expectOk("home", "/", (body) => body.includes(`terminal-core.js?v=${version}`) && body.includes(`terminal-ai-risk-guard.js?v=${version}`) && body.includes(`styles.css?v=${version}`));
   await expectOk("core", `/terminal-core.js?v=${version}`, (body) => body.includes(`const version = "${version}"`) && body.includes("FUMAN_TERMINAL_VERSION"));
   await expectOk("bootstrap", `/terminal.js?v=${version}`, (body) => body.includes("terminal-app.js"));
   await expectOk("service-worker", `/fuman-sw.js?v=${version}`, (body) => body.includes(`fuman-terminal-sw-${version}`) && body.includes(`/terminal-app.js?v=${version}`) && body.includes("networkFirstStatic"));
@@ -89,6 +102,8 @@ async function verifyOnce() {
     throw new Error(`terminal-app hash mismatch local=${localAppHash} live=${liveAppHash}`);
   }
   verifyMarketEventReminderGuard(app);
+  const riskGuard = await expectOk("AI priority risk guard", `/terminal-ai-risk-guard.js?v=${version}`, (body) => body.includes("installMarketAiPriorityRiskGuard"));
+  verifyMarketAiPriorityRiskGuard(riskGuard);
   console.log(`[live-version] ok version=${version} terminal-app=${liveAppHash}`);
 }
 

@@ -287,6 +287,7 @@ for (const file of [
   "terminal-watchlist-module.js",
   "scripts/intraday-radar-rules.js",
   "scripts/scan-realtime-radar-cache.js",
+  "scripts/scan-strategy3-cache.js",
   "data/data-manifest.json",
   "data/terminal-home-bundle.json",
   "data/institution-latest.json",
@@ -348,6 +349,10 @@ if (!fs.existsSync(path.join(ROOT, "VERSION-LIVE-SYNC-GOVERNANCE.md"))) {
     "美股四巫日",
     "installMarketAiRuntimeLine",
     "installMarketAiLoadingGuard",
+    "installMarketAiPriorityRiskGuard",
+    "事件波動風險最高",
+    "個股極端波動風險",
+    "AI 盤中/盤後模式風險",
   ]) {
     if (!versionLiveSync.includes(marker)) issues.push(`VERSION-LIVE-SYNC-GOVERNANCE.md missing ${marker}`);
   }

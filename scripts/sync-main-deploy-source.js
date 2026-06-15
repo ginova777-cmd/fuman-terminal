@@ -36,6 +36,7 @@ const FILES = [
   "scripts/guard-source-tree.js",
   "scripts/scan-institution-cache.js",
   "scripts/scan-realtime-radar-cache.js",
+  "scripts/scan-strategy3-cache.js",
   "scripts/scan-strategy5-cache.js",
   "scripts/scan-strategy4-cache.js",
   "scripts/prewarm-strategy4-history-cache.js",

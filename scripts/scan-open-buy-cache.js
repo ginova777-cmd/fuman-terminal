@@ -169,6 +169,15 @@ function sourceDate(payload) {
   }).format(new Date(updated)).replace(/\D/g, "");
 }
 
+function assertNotOlderThanPrevious(previousPayload, currentPayload) {
+  const previousDate = sourceDate(previousPayload);
+  const currentDate = sourceDate(currentPayload);
+  if (!(previousPayload?.matches || []).length) return;
+  if (!/^\d{8}$/.test(previousDate) || !/^\d{8}$/.test(currentDate)) return;
+  if (currentDate < previousDate) {
+    throw new Error(`Refusing to overwrite newer open-buy cache ${previousDate} with stale source ${currentDate}`);
+  }
+}
 function preservePreviousTradingSource(previousPayload, currentPayload) {
   const previousDate = sourceDate(previousPayload);
   const currentDate = sourceDate(currentPayload);
@@ -426,6 +435,7 @@ async function main() {
 
   const output = buildOutput(chunksToRun, true);
 
+  assertNotOlderThanPrevious(previousRaw, output);
   preservePreviousTradingSource((previousRaw.matches || []).length ? previousRaw : backup, output);
 
   await publishOutput(output, { backupOnMatches: true });
@@ -436,4 +446,5 @@ main().catch((error) => {
   console.error(error);
   process.exit(1);
 });
+
 

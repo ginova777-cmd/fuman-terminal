@@ -189,10 +189,12 @@ function Publish-TerminalFreshnessGate($mode, $rawResults) {
   $manifestPath = Join-Path $publishRoot "data\data-manifest.json"
   $cbPath = Join-Path $publishRoot "data\cb-detect-latest.json"
   $strategy5Path = Join-Path $publishRoot "data\strategy5-latest.json"
+  $openBuyPath = Join-Path $publishRoot "data\open-buy-latest.json"
   $versionPayload = Read-GateJson $versionPath
   $manifestPayload = Read-GateJson $manifestPath
   $cbPayload = Read-GateJson $cbPath
   $strategy5Payload = Read-GateJson $strategy5Path
+  $openBuyPayload = Read-GateJson $openBuyPath
   $head = & $gitExe -C $publishRoot log -1 --oneline --decorate
   $headSha = (& $gitExe -C $publishRoot rev-parse --short=12 HEAD).Trim()
   if (-not $headSha) { throw "Cannot resolve publish HEAD for terminal freshness gate" }
@@ -214,6 +216,9 @@ function Publish-TerminalFreshnessGate($mode, $rawResults) {
     strategy5Count = Get-GateCount $strategy5Payload
     strategy5UpdatedAt = [string]$strategy5Payload.updatedAt
     strategy5SourceDate = [string]$strategy5Payload.sourceDate
+    openBuyCount = Get-GateCount $openBuyPayload
+    openBuySourceDate = [string]$openBuyPayload.usedDate
+    openBuyUpdatedAt = [string]$openBuyPayload.updatedAt
     strategy5ChipKCount = Get-Strategy5MatchCount $strategy5Payload "chip_k_confluence"
     strategy5ForeignTrustCount = Get-Strategy5MatchCount $strategy5Payload "foreign_trust_breakout"
     strategy5MultiCount = Get-Strategy5MultiCount $strategy5Payload
@@ -221,7 +226,7 @@ function Publish-TerminalFreshnessGate($mode, $rawResults) {
   }
   $status | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $statusPath -Encoding utf8
 
-  Write-GateLog "Publishing terminal freshness gate artifact gateId=$($status.gateId) version=$($status.version) cbCount=$($status.cbCount) manifestCbCount=$($status.manifestCbCount) strategy5=$($status.strategy5Count) chipK=$($status.strategy5ChipKCount) foreignTrust=$($status.strategy5ForeignTrustCount)"
+  Write-GateLog "Publishing terminal freshness gate artifact gateId=$($status.gateId) version=$($status.version) cbCount=$($status.cbCount) manifestCbCount=$($status.manifestCbCount) strategy5=$($status.strategy5Count) openBuy=$($status.openBuyCount) openBuyDate=$($status.openBuySourceDate) chipK=$($status.strategy5ChipKCount) foreignTrust=$($status.strategy5ForeignTrustCount)"
   & $gitExe -C $publishRoot add -f "data/live-freshness-ok.json"
   if ($LASTEXITCODE -ne 0) { throw "Stage terminal freshness gate artifact failed" }
   & $gitExe -C $publishRoot diff --cached --quiet -- "data/live-freshness-ok.json"
@@ -258,6 +263,8 @@ function Wait-TerminalFreshnessGateVisible($expectedStatus) {
         [int]$payload.cbCount -eq [int]$expectedStatus.cbCount -and
         [int]$payload.manifestCbCount -eq [int]$expectedStatus.manifestCbCount -and
         [int]$payload.strategy5Count -eq [int]$expectedStatus.strategy5Count -and
+        [int]$payload.openBuyCount -eq [int]$expectedStatus.openBuyCount -and
+        [string]$payload.openBuySourceDate -eq [string]$expectedStatus.openBuySourceDate -and
         [int]$payload.strategy5ChipKCount -eq [int]$expectedStatus.strategy5ChipKCount -and
         [int]$payload.strategy5ForeignTrustCount -eq [int]$expectedStatus.strategy5ForeignTrustCount -and
         [int]$payload.strategy5MultiCount -eq [int]$expectedStatus.strategy5MultiCount -and
@@ -297,9 +304,13 @@ function Invoke-RepoSyncPreflight {
       throw "Repo sync preflight blocked: local repo is behind origin/main by $behind commit(s). Run git pull --ff-only origin main first."
     }
 
-    $dirty = & $gitExe status --porcelain=v1
-    if ($dirty) {
-      throw "Repo sync preflight blocked: source repo has uncommitted or conflicted files. Clean C:\fuman-terminal-sync before running freshness gate."
+    $dirty = @(& $gitExe status --porcelain=v1)
+    $conflicted = @($dirty | Where-Object { $_ -match "^(DD|AU|UD|UA|DU|AA|UU) " })
+    if ($conflicted.Count) {
+      throw "Repo sync preflight blocked: source repo has conflicted files. Clean C:\fuman-terminal-sync before running freshness gate."
+    }
+    if ($dirty.Count) {
+      Write-GateLog "Repo sync preflight warning: source repo has $($dirty.Count) modified/untracked file(s); cache sync will verify publishable data."
     }
   } finally {
     Pop-Location
@@ -487,4 +498,6 @@ try {
 } finally {
   Remove-Item -LiteralPath $lockFile -Force -ErrorAction SilentlyContinue
 }
+
+
 

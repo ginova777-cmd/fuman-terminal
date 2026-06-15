@@ -1,27 +1,28 @@
-const CACHE_VERSION = "fuman-terminal-sw-strategy5-data-resync-20260629";
+const CACHE_VERSION = "fuman-terminal-sw-strategy5-data-resync-20260632";
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 const DATA_CACHE = `${CACHE_VERSION}-data`;
 
 const STATIC_ASSETS = [
-  "/styles.css?v=strategy5-data-resync-20260629",
-  "/terminal-core.js?v=strategy5-data-resync-20260629",
-  "/terminal-modules.js?v=strategy5-data-resync-20260629",
-  "/terminal-sector-map.js?v=strategy5-data-resync-20260629",
-  "/terminal-strategy-config.js?v=strategy5-data-resync-20260629",
-  "/terminal-market-config.js?v=strategy5-data-resync-20260629",
-  "/terminal-ui-config.js?v=strategy5-data-resync-20260629",
-  "/terminal-runtime-config.js?v=strategy5-data-resync-20260629",
-  "/terminal-tuning-config.js?v=strategy5-data-resync-20260629",
-  "/terminal-worker.js?v=strategy5-data-resync-20260629",
-  "/terminal.js?v=strategy5-data-resync-20260629",
-  "/terminal-app.js?v=strategy5-data-resync-20260629",
-  "/terminal-chip-flow.js?v=strategy5-data-resync-20260629",
-  "/terminal-warrant-flow.js?v=strategy5-data-resync-20260629",
-  "/terminal-watchlist-module.js?v=strategy5-data-resync-20260629",
-  "/terminal-realtime-radar.css?v=strategy5-data-resync-20260629",
-  "/terminal-intraday-radar.css?v=strategy5-data-resync-20260629",
-  "/terminal-utility.css?v=strategy5-data-resync-20260629",
-  "/refresh.html?v=strategy5-data-resync-20260629",
+  "/styles.css?v=strategy5-data-resync-20260632",
+  "/terminal-core.js?v=strategy5-data-resync-20260632",
+  "/terminal-modules.js?v=strategy5-data-resync-20260632",
+  "/terminal-sector-map.js?v=strategy5-data-resync-20260632",
+  "/terminal-strategy-config.js?v=strategy5-data-resync-20260632",
+  "/terminal-market-config.js?v=strategy5-data-resync-20260632",
+  "/terminal-ui-config.js?v=strategy5-data-resync-20260632",
+  "/terminal-runtime-config.js?v=strategy5-data-resync-20260632",
+  "/terminal-tuning-config.js?v=strategy5-data-resync-20260632",
+  "/terminal-worker.js?v=strategy5-data-resync-20260632",
+  "/terminal.js?v=strategy5-data-resync-20260632",
+  "/terminal-app.js?v=strategy5-data-resync-20260632",
+  "/terminal-ai-risk-guard.js?v=strategy5-data-resync-20260632",
+  "/terminal-chip-flow.js?v=strategy5-data-resync-20260632",
+  "/terminal-warrant-flow.js?v=strategy5-data-resync-20260632",
+  "/terminal-watchlist-module.js?v=strategy5-data-resync-20260632",
+  "/terminal-realtime-radar.css?v=strategy5-data-resync-20260632",
+  "/terminal-intraday-radar.css?v=strategy5-data-resync-20260632",
+  "/terminal-utility.css?v=strategy5-data-resync-20260632",
+  "/refresh.html?v=strategy5-data-resync-20260632",
   "/assets/logo.webp",
   "/favicon.ico",
 ];
@@ -197,6 +198,10 @@ self.addEventListener("fetch", (event) => {
     return;
   }
   if (url.pathname === "/terminal-app.js") {
+    event.respondWith(networkFirstStatic(request));
+    return;
+  }
+  if (url.pathname === "/terminal-ai-risk-guard.js") {
     event.respondWith(networkFirstStatic(request));
     return;
   }

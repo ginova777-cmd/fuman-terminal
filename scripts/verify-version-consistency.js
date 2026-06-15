@@ -26,10 +26,12 @@ function requireIncludes(file, needle) {
 
 requireIncludes("index.html", `styles.css?v=${VERSION}`);
 requireIncludes("index.html", `terminal-core.js?v=${VERSION}`);
+requireIncludes("index.html", `terminal-ai-risk-guard.js?v=${VERSION}`);
 requireIncludes("terminal-core.js", `const version = "${VERSION}"`);
 requireIncludes("terminal-modules.js", `const VERSION = "${VERSION}"`);
 requireIncludes("fuman-sw.js", `?v=${VERSION}`);
 requireIncludes("fuman-sw.js", `/terminal-app.js?v=${VERSION}`);
+requireIncludes("fuman-sw.js", `/terminal-ai-risk-guard.js?v=${VERSION}`);
 requireIncludes("refresh.html", `/?v=${VERSION}`);
 requireIncludes("version.json", `"version": "${VERSION}"`);
 requireIncludes("terminal-core.js", "/version.json?fresh=");
@@ -40,7 +42,7 @@ requireIncludes("scripts/verify-deployment.js", "detectVersion");
 requireIncludes("scripts/e2e-smoke.js", "detectVersion");
 
 const staleLiteral = "strategy4-remove-zone-card-20260601-05";
-for (const file of ["index.html", "terminal-core.js", "terminal-modules.js", "terminal.js", "terminal-app.js", "fuman-sw.js", "scripts/verify-deployment.js", "scripts/e2e-smoke.js"]) {
+for (const file of ["index.html", "terminal-core.js", "terminal-modules.js", "terminal.js", "terminal-app.js", "terminal-ai-risk-guard.js", "fuman-sw.js", "scripts/verify-deployment.js", "scripts/e2e-smoke.js"]) {
   if (read(file).includes(staleLiteral)) issues.push(`${file}: stale literal ${staleLiteral}`);
 }
 
@@ -56,6 +58,9 @@ if (!sw.includes("async function networkFirstStatic") || !sw.includes('["script"
 }
 if (!sw.includes('url.pathname === "/terminal-app.js"')) {
   issues.push("fuman-sw.js: terminal-app.js must be explicitly network-first");
+}
+if (!sw.includes('url.pathname === "/terminal-ai-risk-guard.js"')) {
+  issues.push("fuman-sw.js: terminal-ai-risk-guard.js must be explicitly network-first");
 }
 if (!sw.includes("if (isDataRequest(url)) {\n    event.respondWith(networkFirst(request));")) {
   issues.push("fuman-sw.js: data requests must be network-first");

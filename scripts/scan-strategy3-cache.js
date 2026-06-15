@@ -1,6 +1,7 @@
 const fs = require("fs");
 const path = require("path");
 const { fetchMisQuotes } = require("../lib/mis-quotes");
+const { fetchIntraday1m } = require("../lib/supabase-public-slot");
 
 const ROOT = path.resolve(__dirname, "..");
 const DATA_DIR = process.env.FUMAN_DATA_DIR || path.join(ROOT, "data");
@@ -15,6 +16,11 @@ const CAPITAL_URLS = [
 const SOURCE_WARNING_LIMIT = Number(process.env.STRATEGY3_SOURCE_WARNING_LIMIT || 3);
 const MIN_ISSUED_SHARES_COUNT = Number(process.env.STRATEGY3_MIN_ISSUED_SHARES_COUNT || 1000);
 const MIN_VOLUME_AVERAGE_COUNT = Number(process.env.STRATEGY3_MIN_VOLUME_AVERAGE_COUNT || 1000);
+const STRATEGY3_REQUIRE_TV_ENTRY = process.env.STRATEGY3_REQUIRE_TV_ENTRY !== "0";
+const STRATEGY3_TV_CANDIDATE_LIMIT = Number(process.env.STRATEGY3_TV_CANDIDATE_LIMIT || 160);
+const STRATEGY3_TV_CANDLE_LIMIT = Number(process.env.STRATEGY3_TV_CANDLE_LIMIT || 160);
+const STRATEGY3_TV_CONCURRENCY = Number(process.env.STRATEGY3_TV_CONCURRENCY || 8);
+const STRATEGY3_TV_MAX_SOURCE_AGE_SECONDS = Number(process.env.STRATEGY3_TV_MAX_SOURCE_AGE_SECONDS || 12 * 60 * 60);
 
 function readJson(file, fallback) {
   try { return JSON.parse(fs.readFileSync(file, "utf8")); } catch { return fallback; }
@@ -73,6 +79,111 @@ function cleanNumber(value) {
 
 function clamp(value, min, max) {
   return Math.min(Math.max(value, min), max);
+}
+
+function emaSeries(values, length) {
+  const rows = (values || []).map(cleanNumber);
+  const k = 2 / (length + 1);
+  let ema = 0;
+  return rows.map((value, index) => {
+    ema = index === 0 ? value : value * k + ema * (1 - k);
+    return ema;
+  });
+}
+
+function smaAt(values, index, length) {
+  if (index < length - 1) return 0;
+  const slice = values.slice(index - length + 1, index + 1).map(cleanNumber);
+  return slice.reduce((sum, value) => sum + value, 0) / length;
+}
+
+function candleMinutes(candle) {
+  const text = String(candle?.candleTime || candle?.time || "");
+  const match = text.match(/\b(\d{1,2}):(\d{2})(?::\d{2})?\b/);
+  if (!match) {
+    const parsed = Date.parse(text);
+    if (!Number.isFinite(parsed)) return null;
+    const parts = new Intl.DateTimeFormat("en-GB", {
+      timeZone: "Asia/Taipei",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    }).formatToParts(new Date(parsed));
+    const get = (type) => Number(parts.find((part) => part.type === type)?.value || 0);
+    return get("hour") * 60 + get("minute");
+  }
+  return Number(match[1]) * 60 + Number(match[2]);
+}
+
+function analyzeTradingViewOvernightEntry(candles) {
+  const rows = (candles || [])
+    .map((row) => ({
+      ...row,
+      open: cleanNumber(row.open),
+      high: cleanNumber(row.high),
+      low: cleanNumber(row.low),
+      close: cleanNumber(row.close),
+      volume: cleanNumber(row.volume),
+      minutes: candleMinutes(row),
+    }))
+    .filter((row) => row.open > 0 && row.high > 0 && row.low > 0 && row.close > 0 && row.volume > 0);
+  if (rows.length < 35) {
+    return { ok: false, reason: `1分K不足 ${rows.length}/35`, signal: "tv_overnight_entry", candleCount: rows.length };
+  }
+  const moneyFlow = rows.map((row) => (row.high - row.low) === 0 ? 0 : ((row.close - row.open) / (row.high - row.low)) * row.volume);
+  const mfAvg = emaSeries(moneyFlow, 8);
+  const controlLine = mfAvg.map((_, index) => smaAt(mfAvg, index, 2));
+  const rawObv = rows.map((row, index) => {
+    if (index === 0) return 0;
+    if (row.close > rows[index - 1].close) return row.volume;
+    if (row.close < rows[index - 1].close) return -row.volume;
+    return 0;
+  });
+  const obvLine = emaSeries(rawObv, 10);
+  const lastSessionRows = rows
+    .map((row, index) => ({ row, index }))
+    .filter((item) => item.row.minutes != null && item.row.minutes >= 13 * 60 && item.row.minutes <= 13 * 60 + 30);
+  if (!lastSessionRows.length) {
+    return { ok: false, reason: "缺少 13:00-13:30 尾盤1分K", signal: "tv_overnight_entry", candleCount: rows.length };
+  }
+  const item = lastSessionRows.at(-1);
+  const index = item.index;
+  const highest100 = Math.max(...rows.slice(Math.max(0, index - 99), index + 1).map((row) => row.high));
+  const isNearHigh = item.row.close >= highest100 * 0.98;
+  const currentControl = cleanNumber(controlLine[index]);
+  const previousControl = cleanNumber(controlLine[index - 1]);
+  const currentObv = cleanNumber(obvLine[index]);
+  const controlDirUp = currentControl > previousControl;
+  const ok = isNearHigh && currentControl > 0 && controlDirUp && currentObv > 0;
+  return {
+    ok,
+    signal: "tv_overnight_entry",
+    candleCount: rows.length,
+    lastCandleTime: item.row.candleTime || item.row.time || "",
+    nearHigh: isNearHigh,
+    highest100: Number(highest100.toFixed(2)),
+    close: Number(item.row.close.toFixed(2)),
+    controlLine: Number(currentControl.toFixed(2)),
+    previousControlLine: Number(previousControl.toFixed(2)),
+    controlDirUp,
+    obvLine: Number(currentObv.toFixed(2)),
+    reason: ok
+      ? `TradingView隔日沖進場：13:00-13:30 尾盤、收盤貼近100根高點98%內、控盤線為正且上彎、OBV為正。`
+      : `TradingView隔日沖未通過：尾盤=${Boolean(item)}、近高=${isNearHigh}、控盤線=${currentControl.toFixed(2)}、控盤上彎=${controlDirUp}、OBV=${currentObv.toFixed(2)}。`,
+  };
+}
+
+async function mapLimit(items, limit, mapper) {
+  const out = new Array(items.length);
+  let next = 0;
+  const workers = Array.from({ length: Math.max(1, Math.min(limit, items.length)) }, async () => {
+    while (next < items.length) {
+      const index = next++;
+      out[index] = await mapper(items[index], index);
+    }
+  });
+  await Promise.all(workers);
+  return out;
 }
 
 async function fetchJson(url, timeout = 30000) {
@@ -271,10 +382,10 @@ function rankMap(stocks, key) {
   return ranks;
 }
 
-function buildMatches(stocks, issuedSharesMap, volumeAverageMap) {
+async function buildMatches(stocks, issuedSharesMap, volumeAverageMap, sourceWarnings) {
   const valueRanks = rankMap(stocks, "value");
   const volumeRanks = rankMap(stocks, "tradeVolume");
-  return stocks.map((stock) => {
+  const scored = stocks.map((stock) => {
     const valueRank = valueRanks.get(stock.code) || 0;
     const volumeRank = volumeRanks.get(stock.code) || 0;
     const pct = Number(stock.percent) || 0;
@@ -291,8 +402,8 @@ function buildMatches(stocks, issuedSharesMap, volumeAverageMap) {
       Math.min(volumeRatio * 12, 20) -
       heatPenalty
     ), 0, 100);
-    const pass = pct > 3 && pct <= 5 && volumeLots >= 1000 && turnoverRate > 5 && volumeRatio > 1;
-    const reason = pass
+    const fixedPass = pct > 3 && pct <= 5 && volumeLots >= 1000 && turnoverRate > 5 && volumeRatio > 1;
+    const fixedReason = fixedPass
       ? `符合固定條件：漲幅 ${pct.toFixed(2)}%、成交量 ${Math.round(volumeLots).toLocaleString("zh-TW")} 張、周轉率 ${turnoverRate.toFixed(2)}%、量比 ${volumeRatio.toFixed(2)}。`
       : "未符合固定隔日沖條件。";
     return {
@@ -304,9 +415,9 @@ function buildMatches(stocks, issuedSharesMap, volumeAverageMap) {
       volumeRatio: Number(volumeRatio.toFixed(2)),
       projectedRatio: Number(volumeRatio.toFixed(2)),
       overnightScore,
-      overnightState: pass ? "通過" : "觀察",
+      overnightState: fixedPass ? "通過" : "觀察",
       score: overnightScore,
-      matches: [{ id: "overnight_chip", reason }],
+      matches: [{ id: "overnight_chip", reason: fixedReason }],
     };
   })
     .filter((stock) => (
@@ -317,6 +428,46 @@ function buildMatches(stocks, issuedSharesMap, volumeAverageMap) {
       stock.turnoverRate > 5 &&
       stock.volumeRatio > 1
     ))
+    .sort((a, b) => b.overnightScore - a.overnightScore || b.value - a.value)
+    .slice(0, Math.max(80, STRATEGY3_TV_CANDIDATE_LIMIT));
+
+  if (!STRATEGY3_REQUIRE_TV_ENTRY) return scored.slice(0, 80);
+
+  const analyzed = await mapLimit(scored, STRATEGY3_TV_CONCURRENCY, async (stock) => {
+    try {
+      const result = await fetchIntraday1m(stock.code, STRATEGY3_TV_CANDLE_LIMIT, {
+        maxSourceAgeSeconds: STRATEGY3_TV_MAX_SOURCE_AGE_SECONDS,
+        maxQuoteAgeSeconds: STRATEGY3_TV_MAX_SOURCE_AGE_SECONDS,
+      });
+      const tvEntry = analyzeTradingViewOvernightEntry(result.candles || result.rows || []);
+      return {
+        ...stock,
+        tvOvernightEntry: tvEntry,
+        overnightScore: clamp(stock.overnightScore + (tvEntry.ok ? 12 : 0), 0, 100),
+        score: clamp(stock.overnightScore + (tvEntry.ok ? 12 : 0), 0, 100),
+        overnightState: tvEntry.ok ? "通過" : "觀察",
+        matches: [
+          ...stock.matches,
+          { id: "tv_overnight_entry", reason: tvEntry.reason },
+        ],
+      };
+    } catch (error) {
+      const message = `strategy3 TV entry fetch failed ${stock.code}: ${error?.message || String(error)}`;
+      sourceWarnings.push(message);
+      return {
+        ...stock,
+        tvOvernightEntry: { ok: false, signal: "tv_overnight_entry", reason: message },
+        overnightState: "觀察",
+        matches: [
+          ...stock.matches,
+          { id: "tv_overnight_entry", reason: message },
+        ],
+      };
+    }
+  });
+
+  return analyzed
+    .filter((stock) => stock.tvOvernightEntry?.ok)
     .sort((a, b) => b.overnightScore - a.overnightScore || b.value - a.value)
     .slice(0, 80);
 }
@@ -344,7 +495,7 @@ async function main() {
   if (sourceHealth.status === "failed") {
     throw new Error(`Strategy3 source health failed: ${sourceHealth.issues.join("; ")}`);
   }
-  const matches = buildMatches(stocks, issuedSharesMap, volumeAverageMap);
+  const matches = await buildMatches(stocks, issuedSharesMap, volumeAverageMap, sourceWarnings);
   const quoteDate = stocks.find((stock) => stock.quoteDate)?.quoteDate || "";
   const output = {
     ok: true,

@@ -15,6 +15,7 @@ const TARGETS = [
   { name: "market-summary", file: "data/market-summary.json" },
   { name: "health-summary", file: "data/health-summary.json" },
   { name: "stocks-index", file: "data/stocks-index.json", minCount: 1000 },
+  { name: "open-buy-latest", file: "data/open-buy-latest.json", minCount: 1 },
   { name: "strategy3-latest", file: "data/strategy3-latest.json", minCount: 1 },
   { name: "strategy4-latest", file: "data/strategy4-latest.json", minCount: 1 },
   { name: "strategy4-summary", file: "data/strategy4-summary.json", minCount: 1 },
@@ -118,6 +119,7 @@ function validateCrossPayloads(payloads, issues) {
   const home = payloads["terminal-home-bundle"];
   const quotes = payloads["stocks-quotes-slim"];
   const strategy5 = payloads["strategy5-latest"];
+  const openBuy = payloads["open-buy-latest"];
   const strategyMatchIndex = payloads["strategy-match-index"];
   const institutionLatest = payloads["institution-latest"];
   const institutionSlim = payloads["institution-slim"];
@@ -136,6 +138,7 @@ function validateCrossPayloads(payloads, issues) {
     ["warrant-flow-slim.json", warrantSlim],
     ["warrant-priority-top.json", warrantPriority],
     ["warrant-flow-mobile-top.json", warrantMobile],
+    ["open-buy-latest.json", openBuy],
     ["strategy5-latest.json", strategy5],
     ["strategy-match-index.json", strategyMatchIndex],
     ["stocks-quotes-slim.json", quotes],
@@ -151,6 +154,10 @@ function validateCrossPayloads(payloads, issues) {
   assertFresh(!quoteDate || !institutionSlimDate || institutionSlimDate <= quoteDate, `institution-slim date mismatch quoteDate=${quoteDate}`, issues);
   assertFresh(extractCount(institutionMobile) <= extractCount(institutionSlim), "institution-mobile-top larger than institution-slim", issues);
   assertFresh(extractCount(cb) > 0, "cb-detect-latest empty", issues);
+  const openBuyDate = normalizeDate(openBuy?.usedDate || openBuy?.date || openBuy?.sourceDate);
+  assertFresh(openBuy?.ok === true, "open-buy-latest ok=false", issues);
+  assertFresh(extractCount(openBuy) > 0, "open-buy-latest empty", issues);
+  assertFresh(!quoteDate || openBuyDate === quoteDate, `open-buy sourceDate mismatch quoteDate=${quoteDate} sourceDate=${openBuyDate}`, issues);
 
   const latestFirst = rows(warrantLatest)[0];
   const slimFirst = rows(warrantSlim)[0];
@@ -283,6 +290,7 @@ async function validateTerminalFreshnessGate(payloads, issues) {
   const manifest = payloads["data-manifest"];
   const cb = payloads["cb-detect-latest"];
   const strategy5 = payloads["strategy5-latest"];
+  const openBuy = payloads["open-buy-latest"];
   const strategy5Fingerprint = strategy5RulesFingerprint(strategy5);
   const gateCheckedAt = Date.parse(gate.checkedAt || "");
   const ageMinutes = Number.isFinite(gateCheckedAt) ? (Date.now() - gateCheckedAt) / 60000 : Infinity;
@@ -296,6 +304,8 @@ async function validateTerminalFreshnessGate(payloads, issues) {
   assertFresh(Number(gate.cbCount || 0) === extractCount(cb), `terminal freshness gate CB count mismatch gate=${gate.cbCount} actual=${extractCount(cb)}`, issues);
   assertFresh(Number(gate.manifestCbCount || 0) === Number(manifest?.entries?.["cb-detect-latest.json"]?.count || 0), `terminal freshness gate manifest CB count mismatch gate=${gate.manifestCbCount} actual=${manifest?.entries?.["cb-detect-latest.json"]?.count}`, issues);
   assertFresh(Number(gate.cbCount || 0) === Number(manifest?.entries?.["cb-detect-latest.json"]?.count || 0), `terminal freshness gate CB rows not aligned with manifest gate=${gate.cbCount} manifest=${manifest?.entries?.["cb-detect-latest.json"]?.count}`, issues);
+  assertFresh(Number(gate.openBuyCount || 0) === extractCount(openBuy), `terminal freshness gate openBuy count mismatch gate=${gate.openBuyCount} actual=${extractCount(openBuy)}`, issues);
+  assertFresh(normalizeDate(gate.openBuySourceDate) === normalizeDate(openBuy?.usedDate || openBuy?.date || openBuy?.sourceDate), `terminal freshness gate openBuy date mismatch gate=${gate.openBuySourceDate} actual=${openBuy?.usedDate || openBuy?.date || openBuy?.sourceDate}`, issues);
   assertFresh(Number(gate.strategy5Count || 0) === strategy5Fingerprint.count, `terminal freshness gate strategy5 count mismatch gate=${gate.strategy5Count} actual=${strategy5Fingerprint.count}`, issues);
   assertFresh(Number(gate.strategy5ChipKCount || 0) === strategy5Fingerprint.chipK, `terminal freshness gate strategy5 chipK mismatch gate=${gate.strategy5ChipKCount} actual=${strategy5Fingerprint.chipK}`, issues);
   assertFresh(Number(gate.strategy5ForeignTrustCount || 0) === strategy5Fingerprint.foreignTrust, `terminal freshness gate strategy5 foreignTrust mismatch gate=${gate.strategy5ForeignTrustCount} actual=${strategy5Fingerprint.foreignTrust}`, issues);
@@ -350,4 +360,5 @@ main().catch((error) => {
   console.error(`[data-freshness] failed: ${error.message}`);
   process.exit(1);
 });
+
 

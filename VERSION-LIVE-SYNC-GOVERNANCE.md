@@ -115,13 +115,23 @@ The AI panel must keep:
 
 - `installMarketAiLoadingGuard`
 - `installMarketAiRuntimeLine`
+- `installMarketAiPriorityRiskGuard`
 - visible text: `AI 判讀運作時間`
+- visible text: `事件波動風險最高`
+- visible text: `個股極端波動風險`
+- visible text: `AI 盤中/盤後模式風險`
 
 If AI panel loading stalls, the loading guard should force:
 
 ```text
 terminal-home-bundle -> market-summary -> stock fallback -> render AI panel
 ```
+
+The priority risk guard must keep these three first-layer warnings above the original AI risk reminders:
+
+- event volatility: `6/17 台指期大結算` and `6/19 美股四巫日`
+- extreme single-stock volatility: near limit-up / limit-down stocks are directional warnings, not chase signals
+- AI session mode: 09:00-13:30 is intraday operation; after that the panel is post-market mode and should be treated as next-day risk context
 
 ## Codex Rule
 
