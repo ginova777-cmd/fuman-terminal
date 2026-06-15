@@ -1,12 +1,12 @@
 {
   "ok": true,
-  "gateId": "20260615205742-6c207d7b1fa1",
-  "checkedAt": "2026-06-15T20:57:42.1060378+08:00",
+  "gateId": "20260615210130-f8de7baddaa0",
+  "checkedAt": "2026-06-15T21:01:30.8946556+08:00",
   "version": "strategy5-data-resync-20260636",
-  "publishHead": "6c207d7 (HEAD -> main, origin/main, origin/HEAD) Update scheduled cache 2026-06-15 20:57",
+  "publishHead": "f8de7ba (HEAD -> main, origin/main, origin/HEAD) Remove strategy1 schedule controls",
   "verifier": "npm run verify:data-freshness:live",
-  "log": "C:\\fuman-runtime\\logs\\live-freshness-gate-20260615-203740.log",
-  "mode": "full",
+  "log": "C:\\fuman-runtime\\logs\\live-freshness-gate-20260615-210003.log",
+  "mode": "fast",
   "manifestCount": 133,
   "manifestCbCount": 11,
   "cbCount": 11,
@@ -30,7 +30,7 @@
       "label": "realtime radar raw refresh",
       "ok": true,
       "exitCode": 0,
-      "checkedAt": "2026-06-15T20:37:41.7947466+08:00",
+      "checkedAt": "2026-06-15T21:00:04.9728639+08:00",
       "warningCount": 0,
       "warnings": []
     },
@@ -38,7 +38,7 @@
       "label": "STAR preopen raw refresh",
       "ok": true,
       "exitCode": 0,
-      "checkedAt": "2026-06-15T20:37:42.7938168+08:00",
+      "checkedAt": "2026-06-15T21:00:05.7201833+08:00",
       "warningCount": 0,
       "warnings": []
     },
@@ -46,7 +46,7 @@
       "label": "strategy2 intraday raw refresh",
       "ok": true,
       "exitCode": 0,
-      "checkedAt": "2026-06-15T20:37:42.8894246+08:00",
+      "checkedAt": "2026-06-15T21:00:05.9021771+08:00",
       "warningCount": 0,
       "warnings": []
     },
@@ -54,74 +54,18 @@
       "label": "institution raw refresh",
       "ok": false,
       "exitCode": 2,
-      "checkedAt": "2026-06-15T20:37:57.3213021+08:00",
-      "warningCount": 0,
-      "warnings": []
+      "checkedAt": "2026-06-15T21:00:38.0367696+08:00",
+      "warningCount": 2,
+      "warnings": [
+        "stock universe fetch failed: This operation was aborted",
+        "institution source warnings: terminated"
+      ]
     },
     {
       "label": "warrant flow raw refresh",
       "ok": true,
       "exitCode": 0,
-      "checkedAt": "2026-06-15T20:38:20.6466940+08:00",
-      "warningCount": 0,
-      "warnings": []
-    },
-    {
-      "label": "open buy raw refresh",
-      "ok": true,
-      "exitCode": 0,
-      "checkedAt": "2026-06-15T20:55:34.7139241+08:00",
-      "warningCount": 97,
-      "warnings": [
-        "open-buy chunk 1/41 (1101-1324) done: matches 0, failed so far 0",
-        "open-buy chunk 2/41 (1325-1467) done: matches 0, failed so far 0",
-        "open-buy chunk 3/41 (1468-1584) done: matches 0, failed so far 0",
-        "open-buy chunk 4/41 (1586-1737) done: matches 0, failed so far 0",
-        "open-buy chunk 5/41 (1742-2025) done: matches 0, failed so far 0",
-        "open-buy chunk 6/41 (2027-2236) done: matches 0, failed so far 0",
-        "open-buy chunk 7/41 (2239-2364) done: matches 0, failed so far 0",
-        "open-buy chunk 8/41 (2365-2432) done: matches 0, failed so far 0",
-        "open-buy chunk 9/41 (2433-2498) done: matches 0, failed so far 0",
-        "open-buy chunk 10/41 (2501-2634) done: matches 0, failed so far 0",
-        "open-buy chunk 11/41 (2636-2845) done: matches 0, failed so far 0",
-        "open-buy chunk 12/41 (2849-3008) done: matches 0, failed so far 0"
-      ]
-    },
-    {
-      "label": "strategy3 raw refresh",
-      "ok": true,
-      "exitCode": 0,
-      "checkedAt": "2026-06-15T20:55:52.6434039+08:00",
-      "warningCount": 1,
-      "warnings": [
-        "strategy3 source warning: issuedSharesCount 0 below 1000; turnover filter disabled until stock_capital_latest is populated"
-      ]
-    },
-    {
-      "label": "strategy4 raw refresh",
-      "ok": false,
-      "exitCode": 1,
-      "checkedAt": "2026-06-15T20:56:20.4130777+08:00",
-      "warningCount": 1,
-      "warnings": [
-        "strategy4 supabase upsert attempt 1/4 failed: HTTP 400 {\"code\":\"PGRST204\",\"details\":null,\"hint\":null,\"message\":\"Could not find the 'complete' column of 'strategy4_scan_results' in the schema cache\"}"
-      ]
-    },
-    {
-      "label": "strategy5 raw refresh",
-      "ok": true,
-      "exitCode": 0,
-      "checkedAt": "2026-06-15T20:56:52.3992980+08:00",
-      "warningCount": 1,
-      "warnings": [
-        "strategy5 source warning: twse volume fetch failed: 20260604 :: https://www.twse.com.tw/rwd/zh/afterTrading/MI_INDEX?date=20260604&type=ALLBUT0999&response=json HTTP 403"
-      ]
-    },
-    {
-      "label": "cb detect raw refresh",
-      "ok": true,
-      "exitCode": 0,
-      "checkedAt": "2026-06-15T20:57:00.1970459+08:00",
+      "checkedAt": "2026-06-15T21:00:55.2837845+08:00",
       "warningCount": 0,
       "warnings": []
     }
