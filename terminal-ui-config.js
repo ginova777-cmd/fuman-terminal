@@ -3,7 +3,7 @@
     market: { label: "盤中即時", next: "持續輪巡" },
     watchlist: { label: "盤中即時", next: "持續輪巡" },
     intraday: { label: "盤中即時", next: "持續輪巡" },
-    openBuy: { label: "07:00 / 16:00", times: ["07:00", "16:00"] },
+    openBuy: { label: "14:30", times: ["14:30"] },
     strategy3: { label: "13:00", times: ["13:00"] },
     swing: { label: "14:30", times: ["14:30"] },
     strategy5: { label: "06:00 / 21:00", times: ["06:00", "21:00"] },

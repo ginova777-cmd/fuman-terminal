@@ -403,7 +403,7 @@ const SCHEDULE_META = {
   market: { label: "盤中即時", next: "持續輪巡" },
   watchlist: { label: "盤中即時", next: "持續輪巡" },
   intraday: { label: "盤中即時", next: "持續輪巡" },
-  openBuy: { label: "07:00 / 14:30", times: ["07:00", "14:30"] },
+  openBuy: { label: "14:30", times: ["14:30"] },
   strategy3: { label: "13:00", times: ["13:00"] },
   swing: { label: "07:00 / 14:30", times: ["07:00", "14:30"] },
   strategy5: { label: "06:00 / 21:00", times: ["06:00", "21:00"] },
@@ -1396,7 +1396,7 @@ function labelUpdateModes() {
   document.querySelectorAll(".strategy-card[data-strategy]").forEach((card) => {
     const text = card.textContent || "";
     if (text.includes("策略2")) appendUpdateBadge(card, "立即更新", "live");
-    if (text.includes("策略1")) appendUpdateBadge(card, "07/14:30完整掃", "slow");
+    if (text.includes("策略1")) appendUpdateBadge(card, "14:30完整掃", "slow");
     if (text.includes("策略3")) appendUpdateBadge(card, "13:00完整掃", "slow");
     if (text.includes("策略4")) appendUpdateBadge(card, "07/14:30完整掃", "slow");
     if (text.includes("策略5")) appendUpdateBadge(card, "MIS即時", "live");
@@ -5510,10 +5510,7 @@ function renderOpenBuyRadar(universe) {
           <h2>${titleWithSchedule("⚡", "策略1-明日開盤入", "openBuy")}</h2>
           <p>14:30後先出明日候選；08:55後看最終名單。買入：09:00 開盤價｜停利 +1.2%｜停損 -1.0%｜09:10 強制出場。${scanText}</p>
         </div>
-        <div class="swing-controls">
-          <label>更新模式：<select><option>07:00 / 14:30 完整掃</option></select></label>
-          <label>市場：<select><option>排除ETF</option></select></label>
-        </div>
+
       </div>
       <div class="swing-signal-grid">
         <button class="swing-card active selected" type="button">

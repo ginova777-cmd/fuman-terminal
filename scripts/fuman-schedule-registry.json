@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-06-09T23:50:00.000Z",
+  "updatedAt": "2026-06-09T23:50:00Z",
   "tasks": [
     {
       "taskName": "\\Fuman PC Wake 0430",
@@ -60,22 +60,13 @@
       ]
     },
     {
-      "taskName": "\\Fuman Open Buy Cache 0700",
-      "displayName": "Fuman Open Buy Cache 0700",
-      "description": "策略1「明日開盤入」早上 07:00 快取",
-      "time": "07:00",
+      "taskName": "\\Fuman Open Buy Cache 1430",
+      "displayName": "Fuman Open Buy Cache 1430",
+      "description": "策略1「明日開盤入」下午 14:30 快取",
+      "time": "14:30",
       "aliases": [
         "策略1",
-        "open buy 0700"
-      ]
-    },
-    {
-      "taskName": "\\Fuman Open Buy Cache 1600",
-      "displayName": "Fuman Open Buy Cache 1600",
-      "description": "策略1「明日開盤入」下午 16:00 快取",
-      "time": "16:00",
-      "aliases": [
-        "open buy 1600"
+        "open buy 1430"
       ]
     },
     {
