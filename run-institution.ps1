@@ -38,6 +38,47 @@ function Invoke-NodeScan($scriptPath, $label) {
   }
 }
 
+function Copy-VerifiedFile($source, $destination, $label) {
+  if (-not (Test-Path -LiteralPath $source)) {
+    throw "$label source missing: $source"
+  }
+  New-Item -ItemType Directory -Force -Path (Split-Path -Parent $destination) | Out-Null
+  Copy-Item -LiteralPath $source -Destination $destination -Force
+  $srcHash = (Get-FileHash -LiteralPath $source -Algorithm SHA256).Hash
+  $dstHash = (Get-FileHash -LiteralPath $destination -Algorithm SHA256).Hash
+  if ($srcHash -ne $dstHash) {
+    throw "$label copy verification failed: $destination"
+  }
+}
+
+function Sync-InstitutionLocalCache {
+  $dataDir = Join-Path $runtime "data"
+  $mainDeployRepo = if ($env:FUMAN_MAIN_DEPLOY_REPO) { $env:FUMAN_MAIN_DEPLOY_REPO } else { "C:\fuman-terminal" }
+  $targets = @("${PSScriptRoot}", $mainDeployRepo) | Select-Object -Unique
+  $files = @(
+    "institution-latest.json",
+    "institution-summary.json",
+    "institution-slim.json",
+    "institution-joint-top.json",
+    "institution-foreign-top.json",
+    "institution-trust-top.json",
+    "institution-mobile-top.json",
+    "institution-backup.json",
+    "data-status-index.json",
+    "data-manifest.json",
+    "terminal-home-bundle.json",
+    "mobile-home-summary.json"
+  )
+  foreach ($targetRoot in $targets) {
+    foreach ($file in $files) {
+      $source = Join-Path $dataDir $file
+      if (Test-Path -LiteralPath $source) {
+        Copy-VerifiedFile $source (Join-Path $targetRoot "data\$file") "institution local mirror $file"
+      }
+    }
+  }
+}
+
 "=== Institution scan start $(Get-Date) ===" | Out-File $log -Encoding utf8
 . "${PSScriptRoot}\schedule-guard.ps1"
 . "${PSScriptRoot}\flow-health.ps1"
@@ -47,6 +88,23 @@ if ($scanExit -ne 0) {
   "Institution scan failed with exit code $scanExit" >> $log
   Write-FumanFlowHealth -Scope institution -Status scan_failed -Message "Institution scan failed" -Detail @{ exitCode = $scanExit; log = $log }
   exit $scanExit
+}
+
+"Institution scan succeeded; refreshing slim/top cache files before publish" >> $log
+$slimExit = Invoke-NodeScan "scripts\generate-slim-cache.js" "Institution slim refresh"
+if ($slimExit -ne 0) {
+  "Institution slim refresh failed with exit code $slimExit" >> $log
+  Write-FumanFlowHealth -Scope institution -Status publish_delayed -Message "Institution scan succeeded but slim refresh failed" -Detail @{ exitCode = $slimExit; log = $log }
+  exit $slimExit
+}
+
+try {
+  Sync-InstitutionLocalCache
+  "Institution cache mirrored to local terminal data folders" >> $log
+} catch {
+  "Institution local mirror failed: $($_.Exception.Message)" >> $log
+  Write-FumanFlowHealth -Scope institution -Status publish_delayed -Message "Institution scan succeeded but local mirror failed" -Detail @{ error = $_.Exception.Message; log = $log }
+  exit 1
 }
 
 $publishOk = $false
