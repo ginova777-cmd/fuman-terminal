@@ -1,7 +1,7 @@
 {
   "ok": true,
   "source": "market-summary",
-  "updatedAt": "2026-06-15T12:07:05.600Z",
+  "updatedAt": "2026-06-15T12:32:18.509Z",
   "marketStatus": "night",
   "trading": false,
   "indexes": [
@@ -25,20 +25,20 @@
   "futuresNear": {
     "name": "臺指期066",
     "month": "TXFF6-M",
-    "price": "46058",
-    "change": "+461",
-    "pct": "+1.01%",
-    "volume": "13059",
+    "price": "46088",
+    "change": "+491",
+    "pct": "+1.08%",
+    "volume": "13796",
     "basisLabel": "多方勢（高於結算）",
     "basisSide": "long"
   },
   "futuresNext": {
     "name": "臺指期076",
     "month": "TXFG6-M",
-    "price": "46258",
-    "change": "+438",
-    "pct": "+0.96%",
-    "volume": "1977",
+    "price": "46276",
+    "change": "+456",
+    "pct": "+1.00%",
+    "volume": "2078",
     "basisLabel": "多方勢（高於結算）",
     "basisSide": "long"
   },
@@ -2233,7 +2233,7 @@
     },
     {
       "name": "其他電子",
-      "up": 57,
+      "up": 56,
       "down": 22,
       "stocks": [
         {
@@ -2822,7 +2822,7 @@
     {
       "name": "電機機械",
       "up": 65,
-      "down": 28,
+      "down": 27,
       "stocks": [
         {
           "Code": "3167",
@@ -3010,6 +3010,101 @@
       ]
     },
     {
+      "name": "其他",
+      "up": 46,
+      "down": 31,
+      "stocks": [
+        {
+          "Code": "0050",
+          "Name": "元大台灣50",
+          "Market": "",
+          "ClosingPrice": 105.25,
+          "Change": 3.3,
+          "TradeValue": 10066320500,
+          "TradeVolume": "",
+          "percent": "",
+          "quoteDate": "20260615"
+        },
+        {
+          "Code": "0052",
+          "Name": "富邦科技",
+          "Market": "",
+          "ClosingPrice": 61.6,
+          "Change": 2,
+          "TradeValue": 1894816000,
+          "TradeVolume": "",
+          "percent": "",
+          "quoteDate": "20260615"
+        },
+        {
+          "Code": "0056",
+          "Name": "元大高股息",
+          "Market": "",
+          "ClosingPrice": 51.5,
+          "Change": 0.9,
+          "TradeValue": 1687758000,
+          "TradeVolume": "",
+          "percent": "",
+          "quoteDate": "20260615"
+        },
+        {
+          "Code": "5871",
+          "Name": "中租-KY",
+          "Market": "",
+          "ClosingPrice": 118.5,
+          "Change": -3,
+          "TradeValue": 1265935500,
+          "TradeVolume": "",
+          "percent": "",
+          "quoteDate": "20260615"
+        },
+        {
+          "Code": "8936",
+          "Name": "國統",
+          "Market": "",
+          "ClosingPrice": 57.9,
+          "Change": 1.9,
+          "TradeValue": 814826700,
+          "TradeVolume": "",
+          "percent": "",
+          "quoteDate": "20260615"
+        },
+        {
+          "Code": "8932",
+          "Name": "智通*",
+          "Market": "",
+          "ClosingPrice": 103,
+          "Change": -3.5,
+          "TradeValue": 668779000,
+          "TradeVolume": "",
+          "percent": "",
+          "quoteDate": "20260615"
+        },
+        {
+          "Code": "9945",
+          "Name": "潤泰新",
+          "Market": "",
+          "ClosingPrice": 27.05,
+          "Change": 0.25,
+          "TradeValue": 494041200,
+          "TradeVolume": "",
+          "percent": "",
+          "quoteDate": "20260615"
+        },
+        {
+          "Code": "9933",
+          "Name": "中鼎",
+          "Market": "",
+          "ClosingPrice": 42.8,
+          "Change": 1.85,
+          "TradeValue": 342014800,
+          "TradeVolume": "",
+          "percent": "",
+          "quoteDate": "20260615"
+        }
+      ]
+    },
+    {
       "name": "半導體設備/測試",
       "up": 9,
       "down": 4,
@@ -3105,103 +3200,8 @@
       ]
     },
     {
-      "name": "其他",
-      "up": 35,
-      "down": 22,
-      "stocks": [
-        {
-          "Code": "0050",
-          "Name": "元大台灣50",
-          "Market": "",
-          "ClosingPrice": 105.25,
-          "Change": 3.3,
-          "TradeValue": 10066320500,
-          "TradeVolume": "",
-          "percent": "",
-          "quoteDate": "20260615"
-        },
-        {
-          "Code": "0052",
-          "Name": "富邦科技",
-          "Market": "",
-          "ClosingPrice": 61.6,
-          "Change": 2,
-          "TradeValue": 1894816000,
-          "TradeVolume": "",
-          "percent": "",
-          "quoteDate": "20260615"
-        },
-        {
-          "Code": "0056",
-          "Name": "元大高股息",
-          "Market": "",
-          "ClosingPrice": 51.5,
-          "Change": 0.9,
-          "TradeValue": 1687758000,
-          "TradeVolume": "",
-          "percent": "",
-          "quoteDate": "20260615"
-        },
-        {
-          "Code": "5871",
-          "Name": "中租-KY",
-          "Market": "",
-          "ClosingPrice": 118.5,
-          "Change": -3,
-          "TradeValue": 1265935500,
-          "TradeVolume": "",
-          "percent": "",
-          "quoteDate": "20260615"
-        },
-        {
-          "Code": "8936",
-          "Name": "國統",
-          "Market": "",
-          "ClosingPrice": 57.9,
-          "Change": 1.9,
-          "TradeValue": 814826700,
-          "TradeVolume": "",
-          "percent": "",
-          "quoteDate": "20260615"
-        },
-        {
-          "Code": "8932",
-          "Name": "智通*",
-          "Market": "",
-          "ClosingPrice": 103,
-          "Change": -3.5,
-          "TradeValue": 668779000,
-          "TradeVolume": "",
-          "percent": "",
-          "quoteDate": "20260615"
-        },
-        {
-          "Code": "9945",
-          "Name": "潤泰新",
-          "Market": "",
-          "ClosingPrice": 27.05,
-          "Change": 0.25,
-          "TradeValue": 494041200,
-          "TradeVolume": "",
-          "percent": "",
-          "quoteDate": "20260615"
-        },
-        {
-          "Code": "9933",
-          "Name": "中鼎",
-          "Market": "",
-          "ClosingPrice": 42.8,
-          "Change": 1.85,
-          "TradeValue": 342014800,
-          "TradeVolume": "",
-          "percent": "",
-          "quoteDate": "20260615"
-        }
-      ]
-    },
-    {
       "name": "電子通路",
-      "up": 22,
+      "up": 21,
       "down": 9,
       "stocks": [
         {
@@ -3940,7 +3940,7 @@
     {
       "name": "資訊服務",
       "up": 26,
-      "down": 17,
+      "down": 16,
       "stocks": [
         {
           "Code": "5410",
@@ -4320,7 +4320,7 @@
     {
       "name": "鋼鐵",
       "up": 36,
-      "down": 12,
+      "down": 11,
       "stocks": [
         {
           "Code": "2002",
@@ -4414,8 +4414,8 @@
     },
     {
       "name": "綠能環保",
-      "up": 12,
-      "down": 10,
+      "up": 10,
+      "down": 9,
       "stocks": [
         {
           "Code": "6944",
@@ -4605,7 +4605,7 @@
     {
       "name": "建材營造",
       "up": 43,
-      "down": 40,
+      "down": 39,
       "stocks": [
         {
           "Code": "2542",
@@ -4750,8 +4750,8 @@
     },
     {
       "name": "生技醫療",
-      "up": 49,
-      "down": 45,
+      "up": 46,
+      "down": 44,
       "stocks": [
         {
           "Code": "6446",
@@ -4782,17 +4782,6 @@
           "ClosingPrice": 311,
           "Change": -6.5,
           "TradeValue": 174782000,
-          "TradeVolume": "",
-          "percent": "",
-          "quoteDate": "20260615"
-        },
-        {
-          "Code": "7827",
-          "Name": "漢康-KY創",
-          "Market": "",
-          "ClosingPrice": 163.5,
-          "Change": 3.5,
-          "TradeValue": 108237000,
           "TradeVolume": "",
           "percent": "",
           "quoteDate": "20260615"
@@ -4837,6 +4826,17 @@
           "ClosingPrice": 72.2,
           "Change": 4.2,
           "TradeValue": 58337600,
+          "TradeVolume": "",
+          "percent": "",
+          "quoteDate": "20260615"
+        },
+        {
+          "Code": "6547",
+          "Name": "高端疫苗",
+          "Market": "",
+          "ClosingPrice": 45.85,
+          "Change": -0.15,
+          "TradeValue": 57954400,
           "TradeVolume": "",
           "percent": "",
           "quoteDate": "20260615"
@@ -5120,7 +5120,7 @@
     {
       "name": "觀光餐旅",
       "up": 24,
-      "down": 21,
+      "down": 20,
       "stocks": [
         {
           "Code": "2731",
@@ -5309,7 +5309,7 @@
     },
     {
       "name": "食品",
-      "up": 16,
+      "up": 15,
       "down": 14,
       "stocks": [
         {
@@ -5595,7 +5595,7 @@
     {
       "name": "文創",
       "up": 9,
-      "down": 14,
+      "down": 13,
       "stocks": [
         {
           "Code": "3293",
@@ -5784,8 +5784,8 @@
     },
     {
       "name": "居家生活",
-      "up": 7,
-      "down": 7,
+      "up": 5,
+      "down": 6,
       "stocks": [
         {
           "Code": "8464",
@@ -6163,8 +6163,59 @@
       ]
     },
     {
+      "name": "先進封裝/CoWoS",
+      "up": 2,
+      "down": 2,
+      "stocks": [
+        {
+          "Code": "6239",
+          "Name": "力成",
+          "Market": "",
+          "ClosingPrice": 327,
+          "Change": -20.5,
+          "TradeValue": 16851291000,
+          "TradeVolume": "",
+          "percent": "",
+          "quoteDate": "20260615"
+        },
+        {
+          "Code": "6257",
+          "Name": "矽格",
+          "Market": "",
+          "ClosingPrice": 222,
+          "Change": 0.5,
+          "TradeValue": 1459650000,
+          "TradeVolume": "",
+          "percent": "",
+          "quoteDate": "20260615"
+        },
+        {
+          "Code": "3264",
+          "Name": "欣銓",
+          "Market": "",
+          "ClosingPrice": 228,
+          "Change": 0.5,
+          "TradeValue": 1199736000,
+          "TradeVolume": "",
+          "percent": "",
+          "quoteDate": "20260615"
+        },
+        {
+          "Code": "3131",
+          "Name": "弘塑",
+          "Market": "",
+          "ClosingPrice": 3215,
+          "Change": -15,
+          "TradeValue": 1157400000,
+          "TradeVolume": "",
+          "percent": "",
+          "quoteDate": "20260615"
+        }
+      ]
+    },
+    {
       "name": "數位雲端",
-      "up": 6,
+      "up": 5,
       "down": 6,
       "stocks": [
         {
@@ -6223,17 +6274,6 @@
           "quoteDate": "20260615"
         },
         {
-          "Code": "7839",
-          "Name": "達人網",
-          "Market": "",
-          "ClosingPrice": 52.5,
-          "Change": 16.5,
-          "TradeValue": 23625000,
-          "TradeVolume": "",
-          "percent": "",
-          "quoteDate": "20260615"
-        },
-        {
           "Code": "6165",
           "Name": "浪凡",
           "Market": "",
@@ -6254,54 +6294,14 @@
           "TradeVolume": "",
           "percent": "",
           "quoteDate": "20260615"
-        }
-      ]
-    },
-    {
-      "name": "先進封裝/CoWoS",
-      "up": 2,
-      "down": 2,
-      "stocks": [
-        {
-          "Code": "6239",
-          "Name": "力成",
-          "Market": "",
-          "ClosingPrice": 327,
-          "Change": -20.5,
-          "TradeValue": 16851291000,
-          "TradeVolume": "",
-          "percent": "",
-          "quoteDate": "20260615"
         },
         {
-          "Code": "6257",
-          "Name": "矽格",
+          "Code": "3130",
+          "Name": "一零四",
           "Market": "",
-          "ClosingPrice": 222,
-          "Change": 0.5,
-          "TradeValue": 1459650000,
-          "TradeVolume": "",
-          "percent": "",
-          "quoteDate": "20260615"
-        },
-        {
-          "Code": "3264",
-          "Name": "欣銓",
-          "Market": "",
-          "ClosingPrice": 228,
-          "Change": 0.5,
-          "TradeValue": 1199736000,
-          "TradeVolume": "",
-          "percent": "",
-          "quoteDate": "20260615"
-        },
-        {
-          "Code": "3131",
-          "Name": "弘塑",
-          "Market": "",
-          "ClosingPrice": 3215,
-          "Change": -15,
-          "TradeValue": 1157400000,
+          "ClosingPrice": 227,
+          "Change": 3,
+          "TradeValue": 11577000,
           "TradeVolume": "",
           "percent": "",
           "quoteDate": "20260615"

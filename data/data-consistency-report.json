@@ -1,6 +1,6 @@
 {
   "ok": true,
-  "updatedAt": "2026-06-15T12:07:07.234Z",
+  "updatedAt": "2026-06-15T12:32:20.345Z",
   "issues": [
     {
       "level": "medium",
@@ -16,7 +16,7 @@
     "strategy4ZoneSum": 360,
     "institutionSlim": 1883,
     "institutionJointTop": 160,
-    "warrantSlim": 120,
-    "warrantTop": 120
+    "warrantSlim": 64,
+    "warrantTop": 64
   }
 }

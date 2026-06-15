@@ -2,7 +2,7 @@
   "ok": true,
   "source": "github-actions-backup",
   "priceSource": "official-daily-k",
-  "updatedAt": "2026-06-15T11:33:25.341Z",
+  "updatedAt": "2026-06-15T12:30:52.601Z",
   "scanStamp": "20260615",
   "fullScan": true,
   "runMode": "full",
@@ -25,9 +25,9 @@
     },
     "supabaseSyncStatus": null,
     "supabaseVolumeRows": 20942,
-    "supabaseVolumeUpdated": 20908,
+    "supabaseVolumeUpdated": 20905,
     "errors": [],
-    "updatedAt": "2026-06-15T11:32:58.942Z",
+    "updatedAt": "2026-06-15T12:30:39.262Z",
     "coverageRatio": 0.953,
     "qualityStatus": "partial"
   },
@@ -30464,5 +30464,5 @@
       "reason": "低/中位階整理接近發動；準備分 5/7，RSI 44.9，量比 0.34。"
     }
   ],
-  "backupUpdatedAt": "2026-06-15T11:33:25.352Z"
+  "backupUpdatedAt": "2026-06-15T12:30:52.627Z"
 }
