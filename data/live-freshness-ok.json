@@ -1,21 +1,57 @@
 {
   "ok": true,
-  "gateId": "20260615001937-36a599ec77f9",
-  "checkedAt": "2026-06-15T00:19:37.021Z",
-  "version": "strategy5-data-resync-20260623",
-  "publishHead": "36a599ec77f9",
+  "gateId": "20260615105957-d866fa3fd22c",
+  "checkedAt": "2026-06-15T10:59:57.7473806+08:00",
+  "version": "strategy5-data-resync-20260628",
+  "publishHead": "d866fa3 (HEAD -> main, origin/main, origin/HEAD) Use single realtime scans in freshness gate",
   "verifier": "npm run verify:data-freshness:live",
-  "log": "manual-wallet-filter-gate-after-deploy",
-  "mode": "manual-short",
+  "log": "C:\\fuman-runtime\\logs\\live-freshness-gate-20260615-105657.log",
+  "mode": "fast",
   "manifestCount": 133,
   "manifestCbCount": 10,
   "cbCount": 10,
-  "cbUpdatedAt": "2026-06-13T15:18:38.991Z",
+  "cbUpdatedAt": "06/13/2026 15:18:38",
   "strategy5Count": 74,
-  "strategy5UpdatedAt": "2026-06-14T22:00:36.558Z",
+  "strategy5UpdatedAt": "06/14/2026 22:00:36",
   "strategy5SourceDate": "20260612",
   "strategy5ChipKCount": 22,
   "strategy5ForeignTrustCount": 3,
   "strategy5MultiCount": 3,
-  "rawRefresh": []
+  "rawRefresh": [
+    {
+      "label": "realtime radar raw refresh",
+      "ok": true,
+      "exitCode": 0,
+      "checkedAt": "2026-06-15T10:57:34.8150294+08:00",
+      "warningCount": 2,
+      "warnings": [
+        "realtime radar supabase upload failed: supabase upload failed HTTP 404 {\"code\":\"PGRST205\",\"details\":null,\"hint\":\"Perhaps you meant the table 'public.fugle_intraday_1m'\",\"message\":\"Could not find the table 'public.fuman_realtime_radar_cache' in the schema cache\"}",
+        "realtime radar 2026-06-15 10:56:58: rows 80 status degraded stale 177 [6655(3018s),8101(2669s),2024(2431s),1413(2288s),1323(2033s),1236(1670s),7732(1505s),1418(1342s),1473(1182s),2321(1159s),4106(1132s),2939(995s)] failed 1/14"
+      ]
+    },
+    {
+      "label": "strategy2 intraday raw refresh",
+      "ok": true,
+      "exitCode": 0,
+      "checkedAt": "2026-06-15T10:57:35.7973497+08:00",
+      "warningCount": 0,
+      "warnings": []
+    },
+    {
+      "label": "institution raw refresh",
+      "ok": false,
+      "exitCode": 2,
+      "checkedAt": "2026-06-15T10:58:19.9275828+08:00",
+      "warningCount": 0,
+      "warnings": []
+    },
+    {
+      "label": "warrant flow raw refresh",
+      "ok": true,
+      "exitCode": 0,
+      "checkedAt": "2026-06-15T10:59:13.2859349+08:00",
+      "warningCount": 0,
+      "warnings": []
+    }
+  ]
 }
