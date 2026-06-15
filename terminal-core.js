@@ -1,5 +1,5 @@
 (function () {
-  const version = "strategy5-data-resync-20260640";
+  const version = "institution-cache-refresh-20260616-01";
   window.FUMAN_TERMINAL_VERSION = version;
   window.FUMAN_TERMINAL_BOOT = {
     version,
