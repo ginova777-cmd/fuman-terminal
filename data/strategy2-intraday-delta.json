@@ -1,1 +1,9 @@
-{"ok":true,"source":"strategy2-intraday-delta","date":"2026-06-12","updatedAt":"2026-06-12T07:45:02.435Z","since":"2026-06-12T07:45:02.435Z","count":0,"events":[],"records":[]}
+{
+  "ok": true,
+  "source": "strategy2-intraday-delta",
+  "updatedAt": "2026-06-15T01:34:38.311Z",
+  "since": "2026-06-15T01:34:38.311Z",
+  "count": 0,
+  "events": [],
+  "records": []
+}

@@ -1,7 +1,17 @@
-const SUPABASE_URL = process.env.SUPABASE_URL || "https://jxnqyqnigsppqsxinlrq.supabase.co";
+const fs = require("fs");
+const path = require("path");
+
+function readSecretText(file) {
+  try { return fs.readFileSync(file, "utf8").trim(); } catch { return ""; }
+}
+
+const RUNTIME_DIR = process.env.FUMAN_RUNTIME_DIR || "C:/fuman-runtime";
+const SUPABASE_URL = process.env.SUPABASE_URL
+  || process.env.FUMAN_SUPABASE_URL
+  || "https://cpmpfhbzutkiecccekfr.supabase.co";
 const SUPABASE_KEY = process.env.SUPABASE_ANON_KEY
-  || process.env.SUPABASE_SERVICE_ROLE_KEY
-  || "sb_publishable_kCocRYzO4oCBnFRQO_pfvg_JZUl0oxm";
+  || process.env.FUMAN_SUPABASE_ANON_KEY
+  || readSecretText(path.join(RUNTIME_DIR, "secrets", "supabase-anon-key.txt"));
 
 module.exports = async function handler(request, response) {
   response.setHeader("Cache-Control", "no-store, max-age=0, must-revalidate");
