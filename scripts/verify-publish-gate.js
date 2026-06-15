@@ -499,6 +499,7 @@ if (fetchResult.status !== 0) {
   } else {
     const allowedDirty = new Set([
       "AGENTS.md",
+      "VERSION-LIVE-SYNC-GOVERNANCE.md",
       "FRESHNESS-GATE-MOBILE.md",
       "scripts/verify-publish-gate.js",
       "scripts/verify-data-freshness.js",
