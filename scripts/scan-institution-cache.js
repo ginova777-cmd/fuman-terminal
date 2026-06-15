@@ -10,9 +10,48 @@ const OUT_FILE = dataPath("institution-latest.json");
 const BACKUP_FILE = dataPath("institution-backup.json");
 const SUMMARY_FILE = dataPath("institution-summary.json");
 const STOCK_URL = process.env.STOCK_UNIVERSE_URL || "https://fuman-terminal.vercel.app/api/stocks";
+const MIN_PUBLISH_ROWS = Number(process.env.INSTITUTION_MIN_PUBLISH_ROWS || 1000);
+const MAX_FALLBACK_AGE_DAYS = Number(process.env.INSTITUTION_MAX_FALLBACK_AGE_DAYS || 5);
 
 function readJson(file, fallback) {
   try { return JSON.parse(fs.readFileSync(file, "utf8")); } catch { return fallback; }
+}
+
+function writeInstitutionOutput(output) {
+  fs.mkdirSync(path.dirname(OUT_FILE), { recursive: true });
+  fs.writeFileSync(OUT_FILE, `${JSON.stringify(output, null, 2)}\n`);
+  writeSummary("institution", output, SUMMARY_FILE);
+  fs.writeFileSync(BACKUP_FILE, `${JSON.stringify({ ...output, source: "github-actions-backup" }, null, 2)}\n`);
+}
+
+function publishFallback(previous, reason, details = {}) {
+  const previousData = previous && typeof previous.data === "object" ? previous.data : {};
+  const previousCount = Object.keys(previousData).length;
+  const previousAge = ageInDays(previous.usedDate);
+  if (previousCount < MIN_PUBLISH_ROWS || previousAge > MAX_FALLBACK_AGE_DAYS) return false;
+  const output = {
+    ...previous,
+    ok: true,
+    source: "github-actions-fallback",
+    fallbackFromPrevious: true,
+    fallbackReason: reason,
+    updatedAt: new Date().toISOString(),
+    sourceHealth: {
+      ...(previous.sourceHealth || {}),
+      fallback: true,
+      fallbackReason: reason,
+      fallbackDetails: details,
+      previousUpdatedAt: previous.updatedAt || "",
+      previousUsedDate: previous.usedDate || "",
+      previousCount,
+      previousAgeDays: previousAge,
+    },
+    count: previousCount,
+    data: previousData,
+  };
+  writeInstitutionOutput(output);
+  console.warn(`institution fallback published from previous cache: rows ${previousCount}, usedDate ${output.usedDate || "--"}, reason ${reason}`);
+  return true;
 }
 
 function ymdToDate(ymd) {
@@ -236,7 +275,7 @@ function enrichInstitutionData(data, quoteMap, tradingMetricMap = new Map()) {
 }
 
 async function main() {
-  const backup = readJson(BACKUP_FILE, { ok: true, data: {} });
+  const previous = readJson(OUT_FILE, readJson(BACKUP_FILE, { ok: true, data: {} }));
   const [payload, stockPayload, tradingMetricResult] = await Promise.all([runHandler(), runStocksHandler(), fetchHistoricalTradingMetrics()]);
   if ((payload.errors || []).length) {
     console.warn(`institution source warnings: ${(payload.errors || []).join(" | ")}`);
@@ -292,19 +331,20 @@ async function main() {
   };
 
   const dataAge = ageInDays(output.usedDate);
-  if (count < 1000) {
-    console.error(`institution cache scan returned too few rows (${count}); keeping existing cache files unchanged`);
+  if (count < MIN_PUBLISH_ROWS) {
+    const reason = `scan returned too few rows (${count})`;
+    if (publishFallback(previous, reason, { count, minimum: MIN_PUBLISH_ROWS, warnings: tradingMetricResult.warnings.slice(0, 8) })) return;
+    console.error(`institution cache ${reason}; no acceptable fallback cache available`);
     process.exit(2);
   }
   if (dataAge > 3) {
-    console.error(`institution cache is stale: usedDate ${output.usedDate || "--"}, age ${dataAge} days; keeping existing cache files unchanged`);
+    const reason = `scan stale: usedDate ${output.usedDate || "--"}, age ${dataAge} days`;
+    if (publishFallback(previous, reason, { usedDate: output.usedDate || "", ageDays: dataAge })) return;
+    console.error(`institution cache is stale: usedDate ${output.usedDate || "--"}, age ${dataAge} days; no acceptable fallback cache available`);
     process.exit(2);
   }
 
-  fs.mkdirSync(path.dirname(OUT_FILE), { recursive: true });
-  fs.writeFileSync(OUT_FILE, `${JSON.stringify(output, null, 2)}\n`);
-  writeSummary("institution", output, SUMMARY_FILE);
-  fs.writeFileSync(BACKUP_FILE, `${JSON.stringify({ ...output, source: "github-actions-backup" }, null, 2)}\n`);
+  writeInstitutionOutput(output);
   console.log(`institution cache updated: rows ${count}, usedDate ${output.usedDate || "--"}, stockRows ${stockRows}, misQuotes ${misQuotes.size}`);
 }
 

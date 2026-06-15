@@ -41,6 +41,7 @@ const SUPABASE_FIRST = process.env.STRATEGY4_SUPABASE_FIRST !== "0";
 const SKIP_RETRY_ON_SUPABASE_FIRST = process.env.STRATEGY4_SUPABASE_SKIP_RETRY !== "0";
 const FAIL_ON_INCOMPLETE = process.env.STRATEGY4_FAIL_ON_INCOMPLETE !== "0";
 const ALLOW_PARTIAL_PUBLISH = process.env.STRATEGY4_ALLOW_PARTIAL_PUBLISH === "1";
+const ALLOW_DEGRADED_COMPLETE = process.env.STRATEGY4_ALLOW_DEGRADED_COMPLETE !== "0";
 const RUN_STAMP = process.env.STRATEGY4_SCAN_STAMP || new Date().toISOString().slice(0, 10).replace(/-/g, "");
 const SUPABASE_URL = (
   process.env.STRATEGY4_SUPABASE_URL
@@ -570,8 +571,14 @@ function buildOutput({ codes, scannedThisRun, scanned, noDataCodes, scanErrors, 
     sourceWarnings.push(`Yahoo fallback ratio ${yahooSourceRatio} above ${MAX_YAHOO_SOURCE_RATIO}`);
   }
   const coveragePartial = supabaseCoverage?.qualityStatus === "partial";
-  const baseComplete = complete && noDataCount === 0 && errorCount === 0 && !coveragePartial;
-  const qualityStatus = coveragePartial ? "partial" : (baseComplete ? (sourceWarnings.length ? "degraded" : "complete") : "incomplete");
+  const degradedComplete = ALLOW_DEGRADED_COMPLETE && complete && scanned.size === codes.length && errorCount === 0;
+  const baseComplete = degradedComplete || (complete && noDataCount === 0 && errorCount === 0 && !coveragePartial);
+  const qualityStatus = coveragePartial
+    ? "partial"
+    : (baseComplete ? ((sourceWarnings.length || noDataCount > 0) ? "degraded" : "complete") : "incomplete");
+  if (baseComplete && noDataCount > 0) {
+    sourceWarnings.push(`No daily-K history for ${noDataCount} scanned codes; published as degraded complete`);
+  }
   return {
     ok: true,
     source: baseComplete ? "github-actions" : "github-actions-partial",
@@ -734,6 +741,7 @@ async function upsertStrategy4ResultsToSupabase(output) {
         mode = "minimal";
         rows = buildSupabaseScanRows(output, mode);
         console.warn(`strategy4 supabase full row rejected, retrying minimal columns: ${lastMessage}`);
+        continue;
       }
     } catch (error) {
       const cause = error?.cause?.message ? ` (${error.cause.message})` : "";
