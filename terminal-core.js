@@ -1,5 +1,5 @@
 (function () {
-  const version = "strategy5-data-resync-20260635";
+  const version = "strategy5-data-resync-20260636";
   window.FUMAN_TERMINAL_VERSION = version;
   window.FUMAN_TERMINAL_BOOT = {
     version,
@@ -86,7 +86,8 @@
       .then((registration) => {
         window.FUMAN_TERMINAL_BOOT.serviceWorker = registration.active ? "active" : "registered"; if (registration.waiting) registration.waiting.postMessage({ type: "SKIP_WAITING" }); if (registration.update) registration.update().catch(() => undefined);
         const worker = registration.active || navigator.serviceWorker.controller;
-        if (worker) worker.postMessage({ type: "PREFETCH_DATA" });
+        const mobile = window.matchMedia?.("(max-width: 760px)")?.matches;
+        if (worker) setTimeout(() => worker.postMessage({ type: "PREFETCH_DATA" }), mobile ? 8000 : 1200);
       })
       .catch((error) => {
         window.FUMAN_TERMINAL_BOOT.serviceWorker = "disabled";

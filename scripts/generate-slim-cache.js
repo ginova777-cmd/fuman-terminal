@@ -1107,7 +1107,6 @@ async function main() {
     wrote += 1;
     console.log(`[slim] wrote ${output} count=${payload.count || Object.keys(payload.data || {}).length}`);
   }
-
   if (wrote) {
     const mobileSummary = mobileHomeSummary();
     writeToBoth("data/mobile-home-summary.json", mobileSummary);
@@ -1153,3 +1152,4 @@ main().catch((error) => {
   console.error(error);
   process.exit(1);
 });
+

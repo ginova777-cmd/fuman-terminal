@@ -24,6 +24,7 @@ const STRATEGY2_HISTORY_WRITE_INTERVAL_MS = Math.max(0, Number(process.env.STRAT
 const OPEN_BUY_SCORECARD_SOURCE_FILE = dataPath("open-buy-scorecard-source.json");
 const OPEN_BUY_FILE = dataPath("open-buy-latest.json");
 const OPEN_BUY_BACKUP_FILE = dataPath("open-buy-backup.json");
+const STAR_PREOPEN_FILE = dataPath("star-preopen-latest.json");
 const STRATEGY3_SCORECARD_SOURCE_FILE = dataPath("strategy3-scorecard-source.json");
 const STRATEGY3_FILE = dataPath("strategy3-latest.json");
 const STRATEGY3_BACKUP_FILE = dataPath("strategy3-backup.json");
@@ -633,6 +634,26 @@ function hasVerifiedStarPreopenSource(item) {
   return futuresOk && trialOk;
 }
 
+
+function readStarPreopenSource(today) {
+  const payload = readJson(STAR_PREOPEN_FILE, { ok: true, finalMatches: [], matches: [] });
+  const sourceDate = compactDateKey(payload.usedDate || payload.date || payload.quoteDate, today);
+  if (sourceDate !== today) return { ok: true, matches: [] };
+  const matches = (payload.finalMatches || payload.matches || [])
+    .filter((item) => item?.finalBlindBuy === true || item?.finalBlindBuyOk === true)
+    .map((item) => ({
+      ...item,
+      stockFutureOk: true,
+      preopenFutureOk: true,
+      preopenTrialOk: true,
+      trialAuctionOk: true,
+      finalBlindBuy: true,
+      finalBlindBuyOk: true,
+      strategyIds: [...new Set([...(item.strategyIds || []), "star"])],
+      reason: item.reason || "STAR：期貨 + 試撮 FinalBlindBuy 通過。",
+    }));
+  return { ...payload, matches };
+}
 function buildPreopenStrategyMap(today) {
   const payload = readScorecardSource(OPEN_BUY_SCORECARD_SOURCE_FILE, OPEN_BUY_FILE, OPEN_BUY_BACKUP_FILE);
   const map = new Map();
@@ -3163,3 +3184,5 @@ main().catch((error) => {
   console.error(error);
   process.exit(1);
 });
+
+
