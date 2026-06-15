@@ -250,6 +250,11 @@ for (const marker of [
 ]) {
   if (!fullScan.includes(marker)) issues.push(`run-full-scan.ps1 missing strategy3 receipt marker ${marker}`);
 }
+const strategy3ScanIndex = fullScan.indexOf('Invoke-ScanTask "strategy3" "strategy3 raw refresh" "critical"');
+const institutionScanIndex = fullScan.indexOf('Invoke-ScanTask "institution" "institution raw refresh" "degradable"');
+if (strategy3ScanIndex < 0 || institutionScanIndex < 0 || strategy3ScanIndex > institutionScanIndex) {
+  issues.push("run-full-scan.ps1 must run critical strategy3 before slow degradable institution scan");
+}
 for (const marker of [
   "\"strategy3\"",
   "stale scan receipt",

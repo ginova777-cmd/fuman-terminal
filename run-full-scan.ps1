@@ -171,6 +171,10 @@ try {
       STRATEGY2_REALTIME_FUGLE_ONLY = "1"
     }
   }
+
+  Invoke-ScanTask "open-buy" "open buy raw refresh" "critical" "scripts\scan-open-buy-cache.js" (Join-Path $runtimeRoot "data\open-buy-latest.json") @{}
+  Invoke-ScanTask "strategy3" "strategy3 raw refresh" "critical" "scripts\scan-strategy3-cache.js" (Join-Path $runtimeRoot "data\strategy3-latest.json") @{}
+
   if (-not $SkipInstitution) {
     Invoke-ScanTask "institution" "institution raw refresh" "degradable" "scripts\scan-institution-cache.js" (Join-Path $runtimeRoot "data\institution-latest.json") @{
       INSTITUTION_SLOW_SCAN = "1"
@@ -183,8 +187,6 @@ try {
     Invoke-ScanTask "warrant-flow" "warrant flow raw refresh" "degradable" "scripts\scan-warrant-flow-cache.js" (Join-Path $runtimeRoot "data\warrant-flow-latest.json") @{}
   }
 
-  Invoke-ScanTask "open-buy" "open buy raw refresh" "critical" "scripts\scan-open-buy-cache.js" (Join-Path $runtimeRoot "data\open-buy-latest.json") @{}
-  Invoke-ScanTask "strategy3" "strategy3 raw refresh" "critical" "scripts\scan-strategy3-cache.js" (Join-Path $runtimeRoot "data\strategy3-latest.json") @{}
   Invoke-ScanTask "strategy4" "strategy4 raw refresh" "critical" "scripts\scan-strategy4-cache.js" (Join-Path $runtimeRoot "data\strategy4-latest.json") @{ STRATEGY4_ALLOW_DEGRADED_COMPLETE = "1" }
   Invoke-ScanTask "strategy5" "strategy5 raw refresh" "critical" "scripts\scan-strategy5-cache.js" (Join-Path $runtimeRoot "data\strategy5-latest.json") @{ STRATEGY5_USE_MIS = "0" }
   Invoke-ScanTask "cb-detect" "cb detect raw refresh" "optional" "scripts\generate-cb-detect.js" (Join-Path $runtimeRoot "data\cb-detect-latest.json") @{}
