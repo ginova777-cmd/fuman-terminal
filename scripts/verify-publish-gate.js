@@ -159,8 +159,8 @@ if (/FUMAN_ALLOW_SCOPED_PUBLISH/.test(cacheSync)) {
 if (/FUMAN_STRATEGY4_SCOPED_PUBLISH/.test(cacheSync)) {
   issues.push("run-cache-sync.ps1 must not expose strategy4 scoped publish bypass");
 }
-if (!/FUMAN_INSIDE_FRESHNESS_GATE/.test(cacheSync) || !/freshness:gate:fast/.test(cacheSync)) {
-  issues.push("run-cache-sync.ps1 direct calls must redirect to npm run freshness:gate:fast by default");
+if (!/FUMAN_INSIDE_FRESHNESS_GATE/.test(cacheSync) || !/freshness:gate/.test(cacheSync)) {
+  issues.push("run-cache-sync.ps1 direct calls must redirect to npm run freshness:gate by default");
 }
 if (!/npm run snapshot:data/.test(cacheSync) || !/CACHE_SYNC_WRITE_CODE_REPO/.test(gate) || !/CACHE_SYNC_WRITE_CODE_REPO_CRITICAL_ONLY/.test(gate)) {
   issues.push("freshness gate critical data release must snapshot source data before release:main");
