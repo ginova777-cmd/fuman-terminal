@@ -50,6 +50,25 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function verifyMarketEventReminderGuard(app) {
+  const required = [
+    "installMarketSettlementTitleBadgeGuard",
+    "台指期大結算",
+    "美股四巫日",
+    "market-nav-label",
+    'title.appendChild(document.createTextNode(" "))',
+  ];
+  for (const marker of required) {
+    if (!app.includes(marker)) throw new Error(`market event reminder guard missing ${marker}`);
+  }
+  const taiexIndex = app.indexOf("台指期大結算");
+  const witchingIndex = app.indexOf("美股四巫日");
+  if (taiexIndex < 0 || witchingIndex < 0 || taiexIndex > witchingIndex) {
+    throw new Error("market event reminder order must be 台指期大結算 before 美股四巫日");
+  }
+  console.log("[live-version] market event reminders ok");
+}
+
 async function verifyOnce() {
   const version = detectLocalVersion();
   await expectOk("version-json", "/version.json", (body) => {
@@ -69,6 +88,7 @@ async function verifyOnce() {
   if (localAppHash !== liveAppHash) {
     throw new Error(`terminal-app hash mismatch local=${localAppHash} live=${liveAppHash}`);
   }
+  verifyMarketEventReminderGuard(app);
   console.log(`[live-version] ok version=${version} terminal-app=${liveAppHash}`);
 }
 

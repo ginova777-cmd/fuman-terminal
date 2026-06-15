@@ -222,6 +222,21 @@ for (const marker of [
 ]) {
   if (!mobileLayoutVerifier.includes(marker)) issues.push(`verify-mobile-layout.js missing ${marker}`);
 }
+
+const liveVersionVerifier = read("scripts/verify-live-version.js");
+for (const marker of [
+  "verifyMarketEventReminderGuard",
+  "installMarketSettlementTitleBadgeGuard",
+  "台指期大結算",
+  "美股四巫日",
+  "market event reminder order must be 台指期大結算 before 美股四巫日",
+]) {
+  if (!liveVersionVerifier.includes(marker)) issues.push(`verify-live-version.js missing market event reminder marker ${marker}`);
+}
+if (!gate.includes("verify:live-version")) {
+  issues.push("run-live-freshness-gate.ps1 must include verify:live-version for market event reminders");
+}
+
 for (const marker of [
   "Set-Strategy2IntradayEnv",
   "STRATEGY2_SCAN_START_MINUTES",
