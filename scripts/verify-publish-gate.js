@@ -248,6 +248,27 @@ for (const marker of [
 ]) {
   if (!liveVersionVerifier.includes(marker)) issues.push(`verify-live-version.js missing market event reminder marker ${marker}`);
 }
+for (const marker of [
+  "verifyMarketAiPriorityRiskGuard",
+  "terminal-ai-risk-guard.js",
+  "installMarketAiPriorityRiskGuard",
+  "事件波動風險最高",
+  "個股極端波動風險",
+  "AI 盤中/盤後模式風險",
+]) {
+  if (!liveVersionVerifier.includes(marker)) issues.push(`verify-live-version.js missing AI priority risk marker ${marker}`);
+}
+const aiRiskGuard = read("terminal-ai-risk-guard.js");
+for (const marker of [
+  "installMarketAiPriorityRiskGuard",
+  "事件波動風險最高",
+  "個股極端波動風險",
+  "AI 盤中/盤後模式風險",
+]) {
+  if (!aiRiskGuard.includes(marker)) issues.push(`terminal-ai-risk-guard.js missing ${marker}`);
+}
+if (!read("index.html").includes("terminal-ai-risk-guard.js")) issues.push("index.html missing terminal-ai-risk-guard.js");
+if (!read("index.github.html").includes("terminal-ai-risk-guard.js")) issues.push("index.github.html missing terminal-ai-risk-guard.js");
 if (!gate.includes("verify:live-version")) {
   issues.push("run-live-freshness-gate.ps1 must include verify:live-version for market event reminders");
 }

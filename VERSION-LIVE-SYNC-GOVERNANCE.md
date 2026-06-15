@@ -115,6 +115,7 @@ The AI panel must keep:
 
 - `installMarketAiLoadingGuard`
 - `installMarketAiRuntimeLine`
+- `terminal-ai-risk-guard.js`
 - `installMarketAiPriorityRiskGuard`
 - visible text: `AI 判讀運作時間`
 - visible text: `事件波動風險最高`
