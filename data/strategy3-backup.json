@@ -1,20 +1,18 @@
 {
   "ok": true,
   "source": "github-actions-backup",
-  "updatedAt": "2026-06-15T06:11:21.961Z",
+  "updatedAt": "2026-06-15T06:21:08.457Z",
   "usedDate": "20260615",
   "total": 1079,
   "count": 2,
-  "sourceWarnings": [
-    "tpex volume fetch failed: 115/06/04 :: terminated"
-  ],
-  "qualityStatus": "degraded",
+  "sourceWarnings": [],
+  "qualityStatus": "ok",
   "sourceHealth": {
-    "status": "degraded",
+    "status": "ok",
     "issuedSharesCount": 1976,
     "volumeAverageCount": 2201,
     "stockUniverseCount": 1079,
-    "warningCount": 1,
+    "warningCount": 0,
     "warningLimit": 3,
     "minIssuedSharesCount": 1000,
     "minVolumeAverageCount": 1000,
