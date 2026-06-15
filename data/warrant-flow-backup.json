@@ -1,6 +1,6 @@
 {
   "ok": true,
-  "updatedAt": "2026-06-15T11:39:58.882Z",
+  "updatedAt": "2026-06-15T11:48:44.658Z",
   "query": "",
   "scanned": 17246,
   "count": 120,
@@ -15388,6 +15388,7 @@
     "上櫃: fetch failed",
     "上櫃: no warrant rows",
     "MOPS 權證成交檔為空，已改用 TWSE/TPEX 收盤行情備援。",
+    "TPEX 官方日收盤 115/06/15: terminated",
     "已剔除 74 筆找不到官方標的收盤價的權證。"
   ],
   "sources": [
