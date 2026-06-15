@@ -1,0 +1,21 @@
+{
+  "strategy": "strategy3",
+  "label": "strategy3 raw refresh",
+  "tier": "critical",
+  "startedAt": "2026-06-15T22:33:11.2007783+08:00",
+  "finishedAt": "2026-06-15T22:33:28.7593388+08:00",
+  "status": "degraded",
+  "exitCode": 0,
+  "scanned": 0,
+  "total": 313,
+  "matches": 13,
+  "complete": true,
+  "qualityStatus": "degraded",
+  "fallback": false,
+  "payloadPath": "C:\\fuman-runtime\\data\\strategy3-latest.json",
+  "warnings": [
+    "strategy3 source warning: issuedSharesCount 0 below 1000; turnover filter disabled until stock_capital_latest is populated"
+  ],
+  "blockingReason": "",
+  "log": "C:\\fuman-runtime\\logs\\full-scan-20260615-220557.log"
+}

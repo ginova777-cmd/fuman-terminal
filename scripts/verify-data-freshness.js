@@ -325,6 +325,7 @@ async function validateTerminalFreshnessGate(payloads, issues) {
   const manifest = payloads["data-manifest"];
   const cb = payloads["cb-detect-latest"];
   const strategy5 = payloads["strategy5-latest"];
+  const strategy4 = payloads["strategy4-latest"];
   const openBuy = payloads["open-buy-latest"];
   const strategy5Fingerprint = strategy5RulesFingerprint(strategy5);
   const gateCheckedAt = Date.parse(gate.checkedAt || "");
@@ -341,6 +342,10 @@ async function validateTerminalFreshnessGate(payloads, issues) {
   assertFresh(Number(gate.cbCount || 0) === Number(manifest?.entries?.["cb-detect-latest.json"]?.count || 0), `terminal freshness gate CB rows not aligned with manifest gate=${gate.cbCount} manifest=${manifest?.entries?.["cb-detect-latest.json"]?.count}`, issues);
   assertFresh(Number(gate.openBuyCount || 0) === extractCount(openBuy), `terminal freshness gate openBuy count mismatch gate=${gate.openBuyCount} actual=${extractCount(openBuy)}`, issues);
   assertFresh(normalizeDate(gate.openBuySourceDate) === normalizeDate(openBuy?.usedDate || openBuy?.date || openBuy?.sourceDate), `terminal freshness gate openBuy date mismatch gate=${gate.openBuySourceDate} actual=${openBuy?.usedDate || openBuy?.date || openBuy?.sourceDate}`, issues);
+  assertFresh(Number(gate.strategy4Count || 0) === extractCount(strategy4), `terminal freshness gate strategy4 count mismatch gate=${gate.strategy4Count} actual=${extractCount(strategy4)}`, issues);
+  assertFresh(normalizeDate(gate.strategy4ScanStamp) === normalizeDate(strategy4?.scanStamp), `terminal freshness gate strategy4 scanStamp mismatch gate=${gate.strategy4ScanStamp} actual=${strategy4?.scanStamp}`, issues);
+  assertFresh(Boolean(gate.strategy4Complete) === Boolean(strategy4?.complete), `terminal freshness gate strategy4 complete mismatch gate=${gate.strategy4Complete} actual=${strategy4?.complete}`, issues);
+  assertFresh(Number(gate.strategy4Total || 0) === Number(strategy4?.total || 0), `terminal freshness gate strategy4 total mismatch gate=${gate.strategy4Total} actual=${strategy4?.total}`, issues);
   assertFresh(Number(gate.strategy5Count || 0) === strategy5Fingerprint.count, `terminal freshness gate strategy5 count mismatch gate=${gate.strategy5Count} actual=${strategy5Fingerprint.count}`, issues);
   assertFresh(Number(gate.strategy5ChipKCount || 0) === strategy5Fingerprint.chipK, `terminal freshness gate strategy5 chipK mismatch gate=${gate.strategy5ChipKCount} actual=${strategy5Fingerprint.chipK}`, issues);
   assertFresh(Number(gate.strategy5ForeignTrustCount || 0) === strategy5Fingerprint.foreignTrust, `terminal freshness gate strategy5 foreignTrust mismatch gate=${gate.strategy5ForeignTrustCount} actual=${strategy5Fingerprint.foreignTrust}`, issues);
