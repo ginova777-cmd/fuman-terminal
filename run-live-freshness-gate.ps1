@@ -369,7 +369,7 @@ try {
     Set-Strategy2IntradayEnv
     Push-Location $syncRoot
     try {
-      $null = Invoke-GateCommand "strategy2 intraday raw refresh" { & $nodeExe "scripts\patrol-intraday-signals.js" } -AllowFailure
+      $null = Invoke-GateCommand "strategy2 intraday raw refresh" { & $nodeExe "scripts\scan-intraday-signals.js" } -AllowFailure
     } finally {
       Pop-Location
     }
