@@ -860,7 +860,7 @@ function dataStatusIndex() {
   ];
   const entries = {};
   for (const file of files) {
-    const payload = readRepoOptional(`data/${file}`, {});
+    const payload = readOptional(`data/${file}`, {});
     entries[file] = {
       ok: payload?.ok !== false,
       status: payload?.status || "",
@@ -923,7 +923,7 @@ function dataManifest() {
   for (let page = 1; page <= 48; page += 1) files.push(`strategy4-zone-c-page-${page}.json`);
   const entries = {};
   for (const file of files) {
-    const payload = readRepoOptional(`data/${file}`, null);
+    const payload = readOptional(`data/${file}`, null);
     if (!payload) continue;
     const json = JSON.stringify(payload);
     entries[file] = {

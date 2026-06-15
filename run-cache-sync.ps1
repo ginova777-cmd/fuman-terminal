@@ -1051,6 +1051,19 @@ try {
     $copiedFiles.Add($file) | Out-Null
   }
 
+  Write-Log "=== Refresh derived cache files after raw cache copy $(Get-Date) ==="
+  Update-SlimCacheFiles
+
+  foreach ($file in @($copiedFiles | Select-Object -Unique)) {
+    $source = Join-Path $codeRepo $file
+    if (-not (Test-Path $source)) {
+      Write-Log "Missing refreshed code repo file, skipped: $source"
+      continue
+    }
+    Copy-CacheFile $file $source $syncRepo "refreshed"
+    Copy-MainDeployCacheFile $file $source "refreshed"
+  }
+
   foreach ($requiredFile in $criticalLatestFiles) {
     if (-not $copiedFiles.Contains($requiredFile)) {
       throw "$requiredFile was not copied; refusing to publish partial latest cache set."
