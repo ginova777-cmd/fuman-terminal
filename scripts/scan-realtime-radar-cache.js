@@ -37,6 +37,8 @@ const REALTIME_RESCAN_BATCH_SIZE = Number(process.env.REALTIME_RADAR_RESCAN_BATC
 const REALTIME_BATCH_TIMEOUT_MS = Number(process.env.REALTIME_RADAR_BATCH_TIMEOUT_MS || 10000);
 const REALTIME_BATCH_CONCURRENCY = Math.max(1, Number(process.env.REALTIME_RADAR_BATCH_CONCURRENCY || 6));
 const REALTIME_RADAR_ALERT_COOLDOWN_MS = Math.max(0, Number(process.env.REALTIME_RADAR_ALERT_COOLDOWN_MS || 15 * 60 * 1000));
+const MARKET_START_MINUTES = 9 * 60;
+const MARKET_END_MINUTES = 13 * 60 + 30;
 
 function writeJson(file, value) {
   fs.mkdirSync(path.dirname(file), { recursive: true });
@@ -236,7 +238,7 @@ function chunkStocks(stocks = [], size = REALTIME_RESCAN_BATCH_SIZE) {
 
 function isMarketTime(parts = taipeiParts()) {
   const minutes = Number(parts.hour) * 60 + Number(parts.minute);
-  return minutes >= 9 * 60 && minutes <= 13 * 60 + 30;
+  return minutes >= MARKET_START_MINUTES && minutes <= MARKET_END_MINUTES;
 }
 
 function secondsOfDay(value) {
@@ -601,24 +603,8 @@ async function main() {
     return;
   }
   if (!isMarketTime(parts)) {
-    const payload = {
-      source: "mini-pc-realtime-radar",
-      status: "outside_market_time",
-      date: key,
-      timestamp,
-      updatedAt: new Date(detectedAt).toISOString(),
-      updatedAtMs: detectedAt,
-      staleAfterMs: STALE_AFTER_MS,
-      maxQuoteAgeSeconds: MAX_QUOTE_AGE_SECONDS,
-      staleQuoteCount: 0,
-      rows: [],
-      longCount: 0,
-      shortCount: 0,
-    };
-    writeJson(OUT_FILE, payload);
-    await safeUploadRealtimeRadarPayload(payload);
     writeFailedBatchQueue([]);
-    console.log(`realtime radar skipped outside market time ${timestamp}`);
+    console.log(`realtime radar skipped outside 09:00-13:30 detection window ${timestamp}; existing snapshot left unchanged`);
     return;
   }
 

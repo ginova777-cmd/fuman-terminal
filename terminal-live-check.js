@@ -1179,7 +1179,7 @@ function renderRealtimeRadar() {
     realtimeRadarLastUpdatedAt = Date.now();
     saveRealtimeRadarLastRows(rows);
   }
-  const displayRows = rows.length ? rows : realtimeRadarLastRows;
+  const displayRows = radarOpen && rows.length ? rows : realtimeRadarLastRows;
   const longAll = displayRows.filter((stock) => stock.side === "long");
   const shortAll = displayRows.filter((stock) => stock.side === "short");
   const longRows = longAll.slice(0, 8);

@@ -111,9 +111,14 @@ function isBeforeMarket(parts = taipeiParts()) {
   return taipeiMinuteOfDay(parts) < MARKET_START_MINUTES;
 }
 
+function isAfterMarket(parts = taipeiParts()) {
+  return taipeiMinuteOfDay(parts) > MARKET_END_MINUTES;
+}
+
 function msUntilMarketOpen(parts = taipeiParts()) {
   const minutes = taipeiMinuteOfDay(parts);
-  return Math.max(0, (MARKET_START_MINUTES - minutes) * 60 * 1000);
+  const seconds = Number(parts.second || 0);
+  return Math.max(0, (MARKET_START_MINUTES - minutes) * 60 * 1000 - seconds * 1000);
 }
 
 function sleep(ms) {
@@ -144,13 +149,13 @@ async function main() {
     await sleep(msUntilMarketOpen() + 1000);
   }
 
+  if (isAfterMarket()) {
+    console.log("realtime radar patrol skipped after 13:30 market close");
+    return;
+  }
+
   if (!isMarketTime()) {
-    touchPatrolLock(patrolLock);
-    if (runScan()) successCount += 1;
-    else failureCount += 1;
-    touchPatrolLock(patrolLock);
-    console.log(`realtime radar patrol single run: success ${successCount}, failure ${failureCount}`);
-    if (!successCount) process.exit(1);
+    console.log("realtime radar patrol skipped outside 09:00-13:30 detection window");
     return;
   }
 
