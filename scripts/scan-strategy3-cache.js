@@ -31,6 +31,7 @@ const STRATEGY3_TV_CANDIDATE_LIMIT = Number(process.env.STRATEGY3_TV_CANDIDATE_L
 const STRATEGY3_TV_CANDLE_LIMIT = Number(process.env.STRATEGY3_TV_CANDLE_LIMIT || 160);
 const STRATEGY3_TV_CONCURRENCY = Number(process.env.STRATEGY3_TV_CONCURRENCY || 8);
 const STRATEGY3_REQUIRE_TURNOVER = process.env.STRATEGY3_REQUIRE_TURNOVER === "1";
+const STRATEGY3_REQUIRE_VOLUME_AVERAGE = process.env.STRATEGY3_REQUIRE_VOLUME_AVERAGE === "1";
 const STRATEGY3_USE_SUPABASE = process.env.STRATEGY3_USE_SUPABASE !== "0";
 const STRATEGY3_REQUIRE_AFTER_1300 = process.env.STRATEGY3_REQUIRE_AFTER_1300 !== "0";
 const STRATEGY3_MIN_AFTER_1300_CANDIDATES = Number(process.env.STRATEGY3_MIN_AFTER_1300_CANDIDATES || 20);
@@ -59,8 +60,10 @@ function buildSourceHealth(stocks, issuedSharesMap, volumeAverageMap, sourceWarn
   } else if (issuedSharesMap.size < MIN_ISSUED_SHARES_COUNT) {
     warnings.push(`issuedSharesCount ${issuedSharesMap.size} below ${MIN_ISSUED_SHARES_COUNT}; turnover filter disabled until stock_capital_latest is populated`);
   }
-  if (volumeAverageMap.size < MIN_VOLUME_AVERAGE_COUNT) {
+  if (STRATEGY3_REQUIRE_VOLUME_AVERAGE && volumeAverageMap.size < MIN_VOLUME_AVERAGE_COUNT) {
     issues.push(`volumeAverageCount ${volumeAverageMap.size} below ${MIN_VOLUME_AVERAGE_COUNT}`);
+  } else if (volumeAverageMap.size < MIN_VOLUME_AVERAGE_COUNT) {
+    warnings.push(`volumeAverageCount ${volumeAverageMap.size} below ${MIN_VOLUME_AVERAGE_COUNT}; volume ratio is advisory for TV-only strategy3`);
   }
   if (STRATEGY3_REQUIRE_AFTER_1300 && after1300Count < STRATEGY3_MIN_AFTER_1300_CANDIDATES) {
     issues.push(`after1300ReadyCount ${after1300Count} below ${STRATEGY3_MIN_AFTER_1300_CANDIDATES}`);
@@ -81,6 +84,7 @@ function buildSourceHealth(stocks, issuedSharesMap, volumeAverageMap, sourceWarn
     minVolumeAverageCount: MIN_VOLUME_AVERAGE_COUNT,
     minAfter1300Candidates: STRATEGY3_MIN_AFTER_1300_CANDIDATES,
     requireTurnover: STRATEGY3_REQUIRE_TURNOVER,
+    requireVolumeAverage: STRATEGY3_REQUIRE_VOLUME_AVERAGE,
     requireAfter1300: STRATEGY3_REQUIRE_AFTER_1300,
     issues,
     warnings,
