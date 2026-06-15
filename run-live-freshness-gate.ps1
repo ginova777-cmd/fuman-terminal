@@ -420,8 +420,12 @@ try {
 
   $previousInsideGate = $env:FUMAN_INSIDE_FRESHNESS_GATE
   $previousFastGate = $env:FUMAN_FAST_GATE
+  $previousWriteCodeRepo = $env:CACHE_SYNC_WRITE_CODE_REPO
+  $previousWriteCriticalOnly = $env:CACHE_SYNC_WRITE_CODE_REPO_CRITICAL_ONLY
   try {
     $env:FUMAN_INSIDE_FRESHNESS_GATE = "1"
+    $env:CACHE_SYNC_WRITE_CODE_REPO = "1"
+    $env:CACHE_SYNC_WRITE_CODE_REPO_CRITICAL_ONLY = "1"
     if ($Fast) {
       $env:FUMAN_FAST_GATE = "1"
     } else {
@@ -438,6 +442,16 @@ try {
       Remove-Item Env:FUMAN_FAST_GATE -ErrorAction SilentlyContinue
     } else {
       $env:FUMAN_FAST_GATE = $previousFastGate
+    }
+    if ($null -eq $previousWriteCodeRepo) {
+      Remove-Item Env:CACHE_SYNC_WRITE_CODE_REPO -ErrorAction SilentlyContinue
+    } else {
+      $env:CACHE_SYNC_WRITE_CODE_REPO = $previousWriteCodeRepo
+    }
+    if ($null -eq $previousWriteCriticalOnly) {
+      Remove-Item Env:CACHE_SYNC_WRITE_CODE_REPO_CRITICAL_ONLY -ErrorAction SilentlyContinue
+    } else {
+      $env:CACHE_SYNC_WRITE_CODE_REPO_CRITICAL_ONLY = $previousWriteCriticalOnly
     }
   }
   if ($syncExit -ne 0) {

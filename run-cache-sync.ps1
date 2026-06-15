@@ -143,12 +143,8 @@ function Invoke-PrePublishDataFreshnessGate {
   }
 }
 
-function Test-CriticalDataReleaseNeeded($changedFiles) {
-  if ($env:FUMAN_SKIP_CRITICAL_DATA_RELEASE -eq "1") {
-    Write-Log "CRITICAL_DATA_RELEASE_SKIP env FUMAN_SKIP_CRITICAL_DATA_RELEASE=1"
-    return $false
-  }
-  $criticalReleaseFiles = @(
+function Get-CriticalDataReleaseFiles {
+  return @(
     "data\institution-latest.json",
     "data\institution-summary.json",
     "data\institution-slim.json",
@@ -161,6 +157,9 @@ function Test-CriticalDataReleaseNeeded($changedFiles) {
     "data\warrant-single-signal-top.json",
     "data\warrant-flow-mobile-top.json",
     "data\warrant-flow-backup.json",
+    "data\strategy3-latest.json",
+    "data\strategy3-backup.json",
+    "data\strategy3-scorecard-source.json",
     "data\strategy4-latest.json",
     "data\strategy4-summary.json",
     "data\strategy4-slim.json",
@@ -172,6 +171,14 @@ function Test-CriticalDataReleaseNeeded($changedFiles) {
     "data\strategy5-backup.json",
     "data\cb-detect-latest.json"
   )
+}
+
+function Test-CriticalDataReleaseNeeded($changedFiles) {
+  if ($env:FUMAN_SKIP_CRITICAL_DATA_RELEASE -eq "1") {
+    Write-Log "CRITICAL_DATA_RELEASE_SKIP env FUMAN_SKIP_CRITICAL_DATA_RELEASE=1"
+    return $false
+  }
+  $criticalReleaseFiles = Get-CriticalDataReleaseFiles
   $changed = @($changedFiles | ForEach-Object { [string]$_ } | Where-Object { $_ })
   $matches = @($changed | Where-Object { $criticalReleaseFiles -contains $_ })
   if ($matches.Count -gt 0) {
@@ -193,6 +200,12 @@ function Invoke-CriticalDataReleasePipeline($reason) {
     Push-Location $codeRepo
     try {
       Write-Log "CRITICAL_DATA_RELEASE_START reason=$reason"
+      npm run snapshot:data 2>&1 | ForEach-Object { Write-Log $_ }
+      $snapshotExit = $LASTEXITCODE
+      Write-Log "CRITICAL_DATA_SNAPSHOT_END exit=$snapshotExit"
+      if ($snapshotExit -ne 0) {
+        throw "Critical data snapshot failed with exit code $snapshotExit"
+      }
       npm run release:main -- -ForceBump -CommitMessage "Bump terminal version after critical data refresh" 2>&1 | ForEach-Object { Write-Log $_ }
       $releaseExit = $LASTEXITCODE
       Write-Log "CRITICAL_DATA_RELEASE_END exit=$releaseExit"
@@ -514,6 +527,10 @@ function Test-IntradayFlowProtectedFile($file) {
 }
 function Copy-CodeRepoCacheFile($file, $source, $label) {
   if ($publishToCodeRepo) {
+    if ($env:CACHE_SYNC_WRITE_CODE_REPO_CRITICAL_ONLY -eq "1" -and $file -notin (Get-CriticalDataReleaseFiles)) {
+      Write-Log "Skipping code repo cache copy ($label non-critical): $file"
+      return
+    }
     Copy-CacheFile $file $source $codeRepo $label
     return
   }

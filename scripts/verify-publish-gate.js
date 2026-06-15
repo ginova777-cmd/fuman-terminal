@@ -149,6 +149,7 @@ if (!fs.existsSync(path.join(ROOT, "legacy-entrypoint-guard.ps1"))) {
 }
 
 const cacheSync = read("run-cache-sync.ps1");
+const gate = read("run-live-freshness-gate.ps1");
 if (!/if \(\$Scope -ne "all"\)/.test(cacheSync)) {
   issues.push("run-cache-sync.ps1 must block every non-all scope");
 }
@@ -160,6 +161,21 @@ if (/FUMAN_STRATEGY4_SCOPED_PUBLISH/.test(cacheSync)) {
 }
 if (!/FUMAN_INSIDE_FRESHNESS_GATE/.test(cacheSync) || !/freshness:gate:fast/.test(cacheSync)) {
   issues.push("run-cache-sync.ps1 direct calls must redirect to npm run freshness:gate:fast by default");
+}
+if (!/npm run snapshot:data/.test(cacheSync) || !/CACHE_SYNC_WRITE_CODE_REPO/.test(gate) || !/CACHE_SYNC_WRITE_CODE_REPO_CRITICAL_ONLY/.test(gate)) {
+  issues.push("freshness gate critical data release must snapshot source data before release:main");
+}
+if (!/Get-CriticalDataReleaseFiles/.test(cacheSync) || !/CACHE_SYNC_WRITE_CODE_REPO_CRITICAL_ONLY/.test(cacheSync)) {
+  issues.push("run-cache-sync.ps1 must limit freshness-gate source repo writes to critical data files");
+}
+for (const strategy3CriticalFile of [
+  "data\\strategy3-latest.json",
+  "data\\strategy3-backup.json",
+  "data\\strategy3-scorecard-source.json",
+]) {
+  if (!cacheSync.includes(strategy3CriticalFile)) {
+    issues.push(`run-cache-sync.ps1 critical data release missing ${strategy3CriticalFile}`);
+  }
 }
 if (!/Verify live data freshness/.test(cacheSync) || !/--live/.test(cacheSync)) {
   issues.push("run-cache-sync.ps1 post-publish verifier must use live data freshness");
@@ -174,7 +190,6 @@ if (!/FAST_DEBOUNCE_SKIP/.test(cacheSync) || !/FUMAN_FAST_GATE_COMMIT_DEBOUNCE_M
   issues.push("run-cache-sync.ps1 missing fast gate commit debounce");
 }
 
-const gate = read("run-live-freshness-gate.ps1");
 for (const marker of [
   "Invoke-RepoSyncPreflight",
   "git fetch origin main",

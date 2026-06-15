@@ -30,6 +30,15 @@ npm run release:main
 sync origin/main -> bump version -> deploy -> verify live version -> push GitHub
 ```
 
+`npm run freshness:gate` 是總控入口。策略3、策略5、權證、法人等 critical data 只要更新，gate 必須先把資料回寫到官方 source repo，執行：
+
+```powershell
+npm run snapshot:data
+npm run release:main -- -ForceBump
+```
+
+也就是每日發布鏈必須被 gate 包住：main -> bump -> deploy -> live verify -> push GitHub。策略3不能只停在 runtime 或 publish-sync。
+
 ## 成功標準
 
 更新完不算成功。
