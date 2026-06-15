@@ -76,7 +76,7 @@ function Write-Receipt($receipt) {
   $receipts.Add($receipt) | Out-Null
 }
 
-function Invoke-ScanTask($strategy, $label, $tier, $script, $payloadPath, $envVars = @{}) {
+function Invoke-ScanTask($strategy, $label, $tier, $script, $payloadPath, $envVars = @{}, [int]$TimeoutSeconds = 0) {
   $startedAt = (Get-Date)
   Write-ScanLog "START [$tier] $label"
   $previousEnv = @{}
@@ -89,15 +89,42 @@ function Invoke-ScanTask($strategy, $label, $tier, $script, $payloadPath, $envVa
   try {
     Push-Location $syncRoot
     try {
-      & $nodeExe $script *>&1 | ForEach-Object {
-        $text = [string]$_
-        Write-Host $text
-        Add-Content -LiteralPath $log -Value $text -Encoding utf8
-        if ($text -match "(?i)\b(warn|warning|failed|timeout|timed out|ETIMEDOUT|ECONNRESET|fetch failed|HTTP 403|HTTP 404|HTTP 429|fallback|partial|incomplete|source warnings)\b") {
-          $warnings.Add($text) | Out-Null
+      if ($TimeoutSeconds -gt 0) {
+        $psi = [System.Diagnostics.ProcessStartInfo]::new()
+        $psi.FileName = $nodeExe
+        $psi.ArgumentList.Add($script)
+        $psi.WorkingDirectory = $syncRoot
+        $psi.UseShellExecute = $false
+        $psi.RedirectStandardOutput = $true
+        $psi.RedirectStandardError = $true
+        $proc = [System.Diagnostics.Process]::Start($psi)
+        if (-not $proc.WaitForExit($TimeoutSeconds * 1000)) {
+          try { $proc.Kill($true) } catch { try { $proc.Kill() } catch {} }
+          $exitCode = 124
+          $warnings.Add("timeout after ${TimeoutSeconds}s") | Out-Null
+          Write-ScanLog "TIMEOUT [$tier] $label after ${TimeoutSeconds}s"
+        } else {
+          $exitCode = $proc.ExitCode
         }
+        foreach ($text in @($proc.StandardOutput.ReadToEnd(), $proc.StandardError.ReadToEnd()) -join "`n" -split "`r?`n") {
+          if (-not $text) { continue }
+          Write-Host $text
+          Add-Content -LiteralPath $log -Value $text -Encoding utf8
+          if ($text -match "(?i)\b(warn|warning|failed|timeout|timed out|ETIMEDOUT|ECONNRESET|fetch failed|HTTP 403|HTTP 404|HTTP 429|fallback|partial|incomplete|source warnings)\b") {
+            $warnings.Add($text) | Out-Null
+          }
+        }
+      } else {
+        & $nodeExe $script *>&1 | ForEach-Object {
+          $text = [string]$_
+          Write-Host $text
+          Add-Content -LiteralPath $log -Value $text -Encoding utf8
+          if ($text -match "(?i)\b(warn|warning|failed|timeout|timed out|ETIMEDOUT|ECONNRESET|fetch failed|HTTP 403|HTTP 404|HTTP 429|fallback|partial|incomplete|source warnings)\b") {
+            $warnings.Add($text) | Out-Null
+          }
+        }
+        $exitCode = $LASTEXITCODE
       }
-      $exitCode = $LASTEXITCODE
     } finally {
       Pop-Location
     }
@@ -181,10 +208,10 @@ try {
       INSTITUTION_REQUEST_DELAY_MS = "15000"
       INSTITUTION_FETCH_RETRIES = "4"
       SHIOAJI_PYTHON = "C:\Users\ginov\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe"
-    }
+    } 420
   }
   if (-not $SkipWarrant) {
-    Invoke-ScanTask "warrant-flow" "warrant flow raw refresh" "degradable" "scripts\scan-warrant-flow-cache.js" (Join-Path $runtimeRoot "data\warrant-flow-latest.json") @{}
+    Invoke-ScanTask "warrant-flow" "warrant flow raw refresh" "degradable" "scripts\scan-warrant-flow-cache.js" (Join-Path $runtimeRoot "data\warrant-flow-latest.json") @{} 240
   }
 
   Invoke-ScanTask "strategy4" "strategy4 raw refresh" "critical" "scripts\scan-strategy4-cache.js" (Join-Path $runtimeRoot "data\strategy4-latest.json") @{ STRATEGY4_ALLOW_DEGRADED_COMPLETE = "1" }

@@ -247,6 +247,8 @@ for (const marker of [
   "data\\strategy3-latest.json",
   "data\\scan-receipts",
   "scan-summary.json",
+  "TimeoutSeconds",
+  "timeout after ${TimeoutSeconds}s",
 ]) {
   if (!fullScan.includes(marker)) issues.push(`run-full-scan.ps1 missing strategy3 receipt marker ${marker}`);
 }
@@ -254,6 +256,9 @@ const strategy3ScanIndex = fullScan.indexOf('Invoke-ScanTask "strategy3" "strate
 const institutionScanIndex = fullScan.indexOf('Invoke-ScanTask "institution" "institution raw refresh" "degradable"');
 if (strategy3ScanIndex < 0 || institutionScanIndex < 0 || strategy3ScanIndex > institutionScanIndex) {
   issues.push("run-full-scan.ps1 must run critical strategy3 before slow degradable institution scan");
+}
+if (!/institution raw refresh[\s\S]*\}\s+420/.test(fullScan) || !/warrant flow raw refresh[\s\S]*\@{}\s+240/.test(fullScan)) {
+  issues.push("run-full-scan.ps1 must bound degradable institution/warrant scans so strategy3 publish is not blocked");
 }
 for (const marker of [
   "\"strategy3\"",
