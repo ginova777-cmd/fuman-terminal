@@ -617,8 +617,17 @@ function writeStrategy4Output(output, writeBackup = false) {
   fs.mkdirSync(path.dirname(OUT_FILE), { recursive: true });
   fs.writeFileSync(OUT_FILE, `${JSON.stringify(output, null, 2)}\n`);
   writeSummary("strategy4", output, SUMMARY_FILE);
+  const runtimeDataDir = path.join(RUNTIME_DIR, "data");
+  const runtimeOutFile = path.join(runtimeDataDir, "strategy4-latest.json");
+  const runtimeSummaryFile = path.join(runtimeDataDir, "strategy4-summary.json");
+  const runtimeBackupFile = path.join(runtimeDataDir, "strategy4-backup.json");
+  fs.mkdirSync(runtimeDataDir, { recursive: true });
+  fs.writeFileSync(runtimeOutFile, `${JSON.stringify(output, null, 2)}\n`);
+  writeSummary("strategy4", output, runtimeSummaryFile);
   if (writeBackup) {
-    fs.writeFileSync(BACKUP_FILE, `${JSON.stringify({ ...output, source: "github-actions-backup", backupUpdatedAt: new Date().toISOString() }, null, 2)}\n`);
+    const backupPayload = { ...output, source: "github-actions-backup", backupUpdatedAt: new Date().toISOString() };
+    fs.writeFileSync(BACKUP_FILE, `${JSON.stringify(backupPayload, null, 2)}\n`);
+    fs.writeFileSync(runtimeBackupFile, `${JSON.stringify(backupPayload, null, 2)}\n`);
   }
 }
 
