@@ -618,17 +618,39 @@ function mobileHomeSummary() {
   const strategy2 = readOptional("data/strategy2-intraday-live-top.json", readOptional("data/strategy2-intraday-top.json", {}));
   const chip = readOptional("data/institution-mobile-top.json", {});
   const warrant = readOptional("data/warrant-flow-mobile-top.json", {});
+  const sectors = normalizeArray(market?.sectors).map((sector) => {
+    const up = cleanNumber(sector?.up);
+    const down = cleanNumber(sector?.down);
+    const total = cleanNumber(sector?.total) || up + down + cleanNumber(sector?.flat);
+    const breadth = total ? (up - down) / total : 0;
+    return {
+      name: sector?.name || "",
+      up,
+      down,
+      total,
+      breadth,
+    };
+  }).filter((sector) => sector.name && sector.total);
+  const upCount = sectors.reduce((sum, sector) => sum + sector.up, 0);
+  const downCount = sectors.reduce((sum, sector) => sum + sector.down, 0);
+  const sampleCount = cleanNumber(market?.sample) || cleanNumber(market?.stockCount) || sectors.reduce((sum, sector) => sum + sector.total, 0);
+  const strongSectors = normalizeArray(market?.strongSectors).length
+    ? normalizeArray(market?.strongSectors).slice(0, 5)
+    : sectors.slice().sort((a, b) => b.breadth - a.breadth || b.up - a.up).slice(0, 5);
+  const weakSectors = normalizeArray(market?.weakSectors).length
+    ? normalizeArray(market?.weakSectors).slice(0, 5)
+    : sectors.slice().sort((a, b) => a.breadth - b.breadth || b.down - a.down).slice(0, 5);
   return {
     source: "mobile-home-summary",
     updatedAt: new Date().toISOString(),
     market: {
       updatedAt: market?.updatedAt || "",
-      sample: cleanNumber(market?.sample),
-      up: cleanNumber(market?.up),
-      down: cleanNumber(market?.down),
-      flat: cleanNumber(market?.flat),
-      strongSectors: (market?.strongSectors || []).slice(0, 5),
-      weakSectors: (market?.weakSectors || []).slice(0, 5),
+      sample: sampleCount,
+      up: cleanNumber(market?.up) || upCount,
+      down: cleanNumber(market?.down) || downCount,
+      flat: cleanNumber(market?.flat) || Math.max(0, sampleCount - upCount - downCount),
+      strongSectors,
+      weakSectors,
     },
     health: {
       risk: health?.risk || health?.status || "",

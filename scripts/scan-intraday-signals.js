@@ -2825,6 +2825,7 @@ async function main() {
     writeJson(SIGNAL_FILE, cache);
     writeJson(STRATEGY2_REPORT_FILE, strategy2Report);
     publishStaticDataJson("strategy2-intraday-latest.json", strategy2Report);
+    await upsertStrategy2LatestToSupabase(strategy2Report);
     console.log(`strategy2 supabase shared source unhealthy: ${sharedSourceHealth.reason || sharedSourceHealth.message || "unknown"}`);
     return;
   }
