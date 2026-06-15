@@ -335,6 +335,7 @@ function Test-OutboxDisabledFile($file) {
   return $file -in @(
     "data\market-summary.json",
     "data\mobile-home-summary.json",
+    "data\strategy-match-index.json",
     "data\terminal-home-bundle.json",
     "data\data-status-index.json",
     "data\data-manifest.json"
@@ -1054,7 +1055,25 @@ try {
   Write-Log "=== Refresh derived cache files after raw cache copy $(Get-Date) ==="
   Update-SlimCacheFiles
 
-  foreach ($file in @($copiedFiles | Select-Object -Unique)) {
+  $refreshedDerivedFiles = @(
+    "data\market-summary.json",
+    "data\mobile-home-summary.json",
+    "data\terminal-home-bundle.json",
+    "data\data-status-index.json",
+    "data\data-manifest.json",
+    "data\stocks-slim.json",
+    "data\stocks-index.json",
+    "data\stocks-quotes-slim.json",
+    "data\stocks-quotes-mobile-top.json",
+    "data\performance-report.json",
+    "data\signal-quality-report.json",
+    "data\data-quality-report.json",
+    "data\data-consistency-report.json",
+    "data\strategy-weight-report.json",
+    "data\strategy-match-index.json"
+  )
+
+  foreach ($file in @(($copiedFiles + $refreshedDerivedFiles) | Select-Object -Unique)) {
     $source = Join-Path $codeRepo $file
     if (-not (Test-Path $source)) {
       Write-Log "Missing refreshed code repo file, skipped: $source"
@@ -1062,6 +1081,9 @@ try {
     }
     Copy-CacheFile $file $source $syncRepo "refreshed"
     Copy-MainDeployCacheFile $file $source "refreshed"
+    if (-not $copiedFiles.Contains($file)) {
+      $copiedFiles.Add($file) | Out-Null
+    }
   }
 
   foreach ($requiredFile in $criticalLatestFiles) {
