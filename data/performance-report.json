@@ -1,14 +1,14 @@
 {
   "ok": true,
-  "updatedAt": "2026-06-15T03:04:43.053Z",
+  "updatedAt": "2026-06-15T04:04:23.555Z",
   "generatedBy": "generate-performance-report",
   "assets": [
     {
       "file": "market-summary.json",
       "ok": true,
-      "bytes": 153373,
+      "bytes": 154325,
       "count": 0,
-      "updatedAt": "2026-06-15T03:04:41.401Z"
+      "updatedAt": "2026-06-15T04:04:21.889Z"
     },
     {
       "file": "health-summary.json",
@@ -55,53 +55,53 @@
     {
       "file": "warrant-flow-slim.json",
       "ok": true,
-      "bytes": 108067,
+      "bytes": 108061,
       "count": 120,
-      "updatedAt": "2026-06-15T03:04:33.640Z"
+      "updatedAt": "2026-06-15T04:04:10.283Z"
     },
     {
       "file": "warrant-priority-top.json",
       "ok": true,
       "bytes": 90242,
       "count": 120,
-      "updatedAt": "2026-06-15T03:04:33.640Z"
+      "updatedAt": "2026-06-15T04:04:10.283Z"
     },
     {
       "file": "realtime-radar-latest.json",
       "ok": true,
-      "bytes": 103895,
+      "bytes": 104158,
       "count": 80,
-      "updatedAt": "2026-06-15T03:02:46.803Z"
+      "updatedAt": "2026-06-15T04:02:06.075Z"
     },
     {
       "file": "signal-quality-report.json",
       "ok": true,
-      "bytes": 787,
+      "bytes": 788,
       "count": 0,
-      "updatedAt": "2026-06-15T03:04:42.716Z"
+      "updatedAt": "2026-06-15T04:04:23.188Z"
     },
     {
       "file": "data-quality-report.json",
       "ok": true,
-      "bytes": 7979,
+      "bytes": 8371,
       "count": 0,
-      "updatedAt": "2026-06-15T03:04:42.806Z"
+      "updatedAt": "2026-06-15T04:04:23.295Z"
     },
     {
       "file": "data-consistency-report.json",
       "ok": true,
       "bytes": 450,
       "count": 0,
-      "updatedAt": "2026-06-15T03:04:42.903Z"
+      "updatedAt": "2026-06-15T04:04:23.386Z"
     },
     {
       "file": "strategy-weight-report.json",
       "ok": true,
       "bytes": 418,
       "count": 0,
-      "updatedAt": "2026-06-15T03:04:42.980Z"
+      "updatedAt": "2026-06-15T04:04:23.484Z"
     }
   ],
-  "totalBytes": 1331180,
+  "totalBytes": 1332782,
   "missing": []
 }
