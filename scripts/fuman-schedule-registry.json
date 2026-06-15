@@ -176,10 +176,10 @@
       ]
     },
     {
-      "taskName": "\\Fuman Strategy4 Cache 1430",
-      "displayName": "Fuman Strategy4 Cache 1430",
-      "description": "策略4波段，下午 14:30 全台股掃描",
-      "time": "14:30",
+      "taskName": "\\Fuman Auto Main Release 1615",
+      "displayName": "Fuman Auto Main Release 1615",
+      "description": "策略4波段，下午 16:15 完整掃描後同步、部署、驗證並推送 GitHub",
+      "time": "16:15",
       "aliases": [
         "策略4"
       ]

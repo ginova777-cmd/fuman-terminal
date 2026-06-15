@@ -2,7 +2,6 @@ const WORKFLOWS = {
   patrol: { workflow: "schedule-patrol.yml" },
   openBuy: { workflow: "open-buy-background-scan.yml", inputs: { full_scan: "true" } },
   strategy3: { workflow: "strategy3-background-scan.yml" },
-  strategy4: { workflow: "strategy4-background-scan.yml", inputs: { full_scan: "true" } },
   strategy5: { workflow: "strategy5-background-scan.yml" },
   flow: { workflow: "flow-cache.yml", inputs: { force_run: "false" } },
   intradayRecord: { workflow: "intraday-radar-scorecard.yml", inputs: { mode: "record", force_report: "false" } },
@@ -100,9 +99,6 @@ async function selectTasks(now) {
   if (inRange(now, 13 * 60, 14 * 60 + 30) && shouldRunEvery(now, 10, 0)) {
     tasks.push("strategy3");
   }
-
-  await pushOnceInWindow(tasks, "strategy4", now, 7 * 60, 8 * 60 + 30);
-  await pushOnceInWindow(tasks, "strategy4", now, 14 * 60 + 30, 16 * 60);
 
   await pushOnceInWindow(tasks, "strategy5", now, 6 * 60, 6 * 60 + 20);
   await pushOnceInWindow(tasks, "strategy5", now, 21 * 60, 21 * 60 + 20);

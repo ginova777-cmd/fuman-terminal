@@ -61,6 +61,36 @@ function Invoke-NpmAt($workingRoot, $scriptName) {
   }
 }
 
+function Invoke-Strategy4FullScan {
+  $previous = @{
+    STRATEGY4_SUPABASE_FIRST = $env:STRATEGY4_SUPABASE_FIRST
+    STRATEGY4_SUPABASE_SKIP_RETRY = $env:STRATEGY4_SUPABASE_SKIP_RETRY
+    STRATEGY4_ALLOW_PARTIAL_PUBLISH = $env:STRATEGY4_ALLOW_PARTIAL_PUBLISH
+    STRATEGY4_FAIL_ON_INCOMPLETE = $env:STRATEGY4_FAIL_ON_INCOMPLETE
+    FULL_SCAN = $env:FULL_SCAN
+    STRATEGY4_SUPABASE_URL = $env:STRATEGY4_SUPABASE_URL
+  }
+  try {
+    $env:STRATEGY4_SUPABASE_FIRST = "1"
+    $env:STRATEGY4_SUPABASE_SKIP_RETRY = "1"
+    $env:STRATEGY4_ALLOW_PARTIAL_PUBLISH = "1"
+    $env:STRATEGY4_FAIL_ON_INCOMPLETE = "0"
+    $env:FULL_SCAN = "1"
+    if (-not $env:STRATEGY4_SUPABASE_URL) {
+      $env:STRATEGY4_SUPABASE_URL = "https://cpmpfhbzutkiecccekfr.supabase.co"
+    }
+    Invoke-ReleaseStep "strategy4 full scan" { & "C:\Program Files\nodejs\node.exe" (Join-Path $root "scripts\scan-strategy4-cache.js") }
+  } finally {
+    foreach ($key in $previous.Keys) {
+      if ($null -eq $previous[$key]) {
+        Remove-Item "Env:$key" -ErrorAction SilentlyContinue
+      } else {
+        Set-Item "Env:$key" $previous[$key]
+      }
+    }
+  }
+}
+
 function Invoke-Git($label, [string[]]$arguments) {
   Invoke-ReleaseStep $label { & $gitExe -C $root @arguments }
 }
@@ -118,6 +148,7 @@ try {
     Write-ReleaseLog "Dirty tree detected but not behind origin/main; continuing with local generated changes."
   }
 
+  Invoke-Strategy4FullScan
   Invoke-Npm "bump:version"
   Invoke-Npm "sync:source"
   Invoke-Npm "verify:version"
