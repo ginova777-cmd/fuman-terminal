@@ -1,6 +1,7 @@
 const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
+const { fetchMisQuotes } = require("../lib/mis-quotes");
 
 const repoRoot = path.resolve(__dirname, "..");
 const runtimeRoot = process.env.FUMAN_RUNTIME_ROOT || "C:\\fuman-runtime";
@@ -741,8 +742,43 @@ function slimStocks() {
   };
 }
 
-function stocksIndexFiles(payload = slimStocks()) {
-  const stocks = normalizeArray(payload?.stocks);
+function warrantQuoteCodes() {
+  const warrant = readOptional("data/warrant-flow-latest.json", {});
+  return [
+    ...normalizeArray(warrant?.matches),
+    ...normalizeArray(warrant?.singleSignals),
+  ]
+    .map((item) => String(item?.underlyingCode || item?.code || "").trim())
+    .filter((code) => /^\d{4}$/.test(code));
+}
+
+async function enrichStocksWithWarrantMisQuotes(stocks) {
+  const codes = warrantQuoteCodes();
+  if (!codes.length) return stocks;
+  const quotes = await fetchMisQuotes(codes, 60);
+  if (!quotes.size) return stocks;
+  const byCode = new Map(stocks.map((stock) => [String(stock.code || stock.Code || "").trim(), stock]));
+  for (const [code, quote] of quotes) {
+    if (!quote?.close || !quote?.quoteDate) continue;
+    const existing = byCode.get(code) || {};
+    byCode.set(code, {
+      ...existing,
+      code,
+      name: quote.name || existing.name || existing.Name || code,
+      market: quote.market || existing.market || existing.Market || "",
+      close: quote.close,
+      change: quote.change,
+      percent: quote.percent,
+      tradeVolume: quote.tradeVolume,
+      value: quote.value,
+      quoteDate: quote.quoteDate,
+    });
+  }
+  return [...byCode.values()];
+}
+
+async function stocksIndexFiles(payload = slimStocks()) {
+  const stocks = await enrichStocksWithWarrantMisQuotes(normalizeArray(payload?.stocks));
   const index = stocks.map((stock) => ({
     code: String(stock.code || stock.Code || ""),
     name: String(stock.name || stock.Name || stock.code || stock.Code || ""),
@@ -1054,45 +1090,66 @@ const jobs = [
   ["warrant", "data/warrant-flow-latest.json", "data/warrant-flow-slim.json", slimWarrant, (payload) => [...warrantPresetFiles(payload), ["data/warrant-flow-mobile-top.json", mobileWarrantTop(payload)]]],
 ];
 
-let wrote = 0;
-for (const [name, input, output, build, presets] of jobs) {
-  const payloadSource = readOptional(input);
-  if (!payloadSource) {
-    console.log(`[slim] skip ${name}: source not found`);
-    continue;
+async function main() {
+  let wrote = 0;
+  for (const [name, input, output, build, presets] of jobs) {
+    const payloadSource = readOptional(input);
+    if (!payloadSource) {
+      console.log(`[slim] skip ${name}: source not found`);
+      continue;
+    }
+    const payload = build(payloadSource);
+    writeToBoth(output, payload);
+    for (const [presetOutput, presetPayload] of presets(payloadSource)) {
+      writeToBoth(presetOutput, presetPayload);
+      console.log(`[slim] wrote ${presetOutput} count=${presetPayload.count || presetPayload.rows?.length || presetPayload.matches?.length || 0}`);
+    }
+    wrote += 1;
+    console.log(`[slim] wrote ${output} count=${payload.count || Object.keys(payload.data || {}).length}`);
   }
-  const payload = build(payloadSource);
-  writeToBoth(output, payload);
-  for (const [presetOutput, presetPayload] of presets(payloadSource)) {
-    writeToBoth(presetOutput, presetPayload);
-    console.log(`[slim] wrote ${presetOutput} count=${presetPayload.count || presetPayload.rows?.length || presetPayload.matches?.length || 0}`);
+
+  if (wrote) {
+    const mobileSummary = mobileHomeSummary();
+    writeToBoth("data/mobile-home-summary.json", mobileSummary);
+    console.log(`[slim] wrote data/mobile-home-summary.json strategy2=${mobileSummary.strategy2.count || 0} chip=${mobileSummary.chip.count || 0} warrant=${mobileSummary.warrant.count || 0}`);
+    const stocksSlim = slimStocks();
+    writeToBoth("data/stocks-slim.json", stocksSlim);
+    console.log(`[slim] wrote data/stocks-slim.json count=${stocksSlim.count || 0}`);
+    for (const [stockOutput, stockPayload] of await stocksIndexFiles(stocksSlim)) {
+      writeToBoth(stockOutput, stockPayload);
+      console.log(`[slim] wrote ${stockOutput} count=${stockPayload.count || 0}`);
+    }
+    const warrantSource = readOptional("data/warrant-flow-latest.json");
+    if (warrantSource) {
+      const warrantSlim = slimWarrant(warrantSource);
+      writeToBoth("data/warrant-flow-slim.json", warrantSlim);
+      for (const [presetOutput, presetPayload] of warrantPresetFiles(warrantSource)) {
+        writeToBoth(presetOutput, presetPayload);
+        console.log(`[slim] refreshed ${presetOutput} count=${presetPayload.count || presetPayload.rows?.length || presetPayload.matches?.length || 0}`);
+      }
+      writeToBoth("data/warrant-flow-mobile-top.json", mobileWarrantTop(warrantSource));
+      console.log(`[slim] refreshed data/warrant-flow-slim.json count=${warrantSlim.count || 0}`);
+    }
+    const refreshedMobileSummary = mobileHomeSummary();
+    writeToBoth("data/mobile-home-summary.json", refreshedMobileSummary);
+    console.log(`[slim] refreshed data/mobile-home-summary.json strategy2=${refreshedMobileSummary.strategy2.count || 0} chip=${refreshedMobileSummary.chip.count || 0} warrant=${refreshedMobileSummary.warrant.count || 0}`);
+    const strategyMatchIndex = buildStrategyMatchIndex();
+    writeToBoth("data/strategy-match-index.json", strategyMatchIndex);
+    console.log(`[slim] wrote data/strategy-match-index.json codes=${strategyMatchIndex.count || 0}`);
+    const statusIndex = dataStatusIndex();
+    writeToBoth("data/data-status-index.json", statusIndex);
+    console.log(`[slim] wrote data/data-status-index.json files=${Object.keys(statusIndex.entries || {}).length}`);
+    const homeBundle = terminalHomeBundle();
+    writeToBoth("data/terminal-home-bundle.json", homeBundle);
+    console.log(`[slim] wrote data/terminal-home-bundle.json stocks=${homeBundle.stocks.count || 0}`);
+    const manifest = dataManifest();
+    writeToBoth("data/data-manifest.json", manifest);
+    console.log(`[slim] wrote data/data-manifest.json files=${manifest.count || 0}`);
   }
-  wrote += 1;
-  console.log(`[slim] wrote ${output} count=${payload.count || Object.keys(payload.data || {}).length}`);
+  if (!wrote) process.exitCode = 1;
 }
 
-if (wrote) {
-  const mobileSummary = mobileHomeSummary();
-  writeToBoth("data/mobile-home-summary.json", mobileSummary);
-  console.log(`[slim] wrote data/mobile-home-summary.json strategy2=${mobileSummary.strategy2.count || 0} chip=${mobileSummary.chip.count || 0} warrant=${mobileSummary.warrant.count || 0}`);
-  const stocksSlim = slimStocks();
-  writeToBoth("data/stocks-slim.json", stocksSlim);
-  console.log(`[slim] wrote data/stocks-slim.json count=${stocksSlim.count || 0}`);
-  for (const [stockOutput, stockPayload] of stocksIndexFiles(stocksSlim)) {
-    writeToBoth(stockOutput, stockPayload);
-    console.log(`[slim] wrote ${stockOutput} count=${stockPayload.count || 0}`);
-  }
-  const strategyMatchIndex = buildStrategyMatchIndex();
-  writeToBoth("data/strategy-match-index.json", strategyMatchIndex);
-  console.log(`[slim] wrote data/strategy-match-index.json codes=${strategyMatchIndex.count || 0}`);
-  const statusIndex = dataStatusIndex();
-  writeToBoth("data/data-status-index.json", statusIndex);
-  console.log(`[slim] wrote data/data-status-index.json files=${Object.keys(statusIndex.entries || {}).length}`);
-  const homeBundle = terminalHomeBundle();
-  writeToBoth("data/terminal-home-bundle.json", homeBundle);
-  console.log(`[slim] wrote data/terminal-home-bundle.json stocks=${homeBundle.stocks.count || 0}`);
-  const manifest = dataManifest();
-  writeToBoth("data/data-manifest.json", manifest);
-  console.log(`[slim] wrote data/data-manifest.json files=${manifest.count || 0}`);
-}
-if (!wrote) process.exitCode = 1;
+main().catch((error) => {
+  console.error(error);
+  process.exit(1);
+});

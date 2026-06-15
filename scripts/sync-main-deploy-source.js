@@ -14,6 +14,7 @@ const FILES = [
   "styles.css",
   "terminal.js",
   "terminal-app.js",
+  "terminal-ai-risk-guard.js",
   "terminal-chip-flow.js",
   "terminal-core.js",
   "terminal-live-check.js",

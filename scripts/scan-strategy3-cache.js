@@ -1,7 +1,12 @@
 const fs = require("fs");
 const path = require("path");
 const { fetchMisQuotes } = require("../lib/mis-quotes");
-const { fetchIntraday1m } = require("../lib/supabase-public-slot");
+const {
+  fetchStrategy3CapitalMap,
+  fetchStrategy3Intraday1mLatestN,
+  fetchStrategy3QuoteReady,
+  verifyStrategy3ReadAccess,
+} = require("../lib/supabase-public-slot");
 
 const ROOT = path.resolve(__dirname, "..");
 const DATA_DIR = process.env.FUMAN_DATA_DIR || path.join(ROOT, "data");
@@ -20,7 +25,10 @@ const STRATEGY3_REQUIRE_TV_ENTRY = process.env.STRATEGY3_REQUIRE_TV_ENTRY !== "0
 const STRATEGY3_TV_CANDIDATE_LIMIT = Number(process.env.STRATEGY3_TV_CANDIDATE_LIMIT || 160);
 const STRATEGY3_TV_CANDLE_LIMIT = Number(process.env.STRATEGY3_TV_CANDLE_LIMIT || 160);
 const STRATEGY3_TV_CONCURRENCY = Number(process.env.STRATEGY3_TV_CONCURRENCY || 8);
-const STRATEGY3_TV_MAX_SOURCE_AGE_SECONDS = Number(process.env.STRATEGY3_TV_MAX_SOURCE_AGE_SECONDS || 12 * 60 * 60);
+const STRATEGY3_REQUIRE_TURNOVER = process.env.STRATEGY3_REQUIRE_TURNOVER === "1";
+const STRATEGY3_USE_SUPABASE = process.env.STRATEGY3_USE_SUPABASE !== "0";
+const STRATEGY3_REQUIRE_AFTER_1300 = process.env.STRATEGY3_REQUIRE_AFTER_1300 !== "0";
+const STRATEGY3_MIN_AFTER_1300_CANDIDATES = Number(process.env.STRATEGY3_MIN_AFTER_1300_CANDIDATES || 20);
 
 function readJson(file, fallback) {
   try { return JSON.parse(fs.readFileSync(file, "utf8")); } catch { return fallback; }
@@ -38,25 +46,37 @@ function preserveScorecardSource(payload) {
 
 function buildSourceHealth(stocks, issuedSharesMap, volumeAverageMap, sourceWarnings) {
   const issues = [];
-  if (issuedSharesMap.size < MIN_ISSUED_SHARES_COUNT) {
+  const warnings = [];
+  const after1300Count = stocks.filter((stock) => stock.hasAfter1300Candle || cleanNumber(stock.after1300CandleCount) > 0).length;
+  if (STRATEGY3_REQUIRE_TURNOVER && issuedSharesMap.size < MIN_ISSUED_SHARES_COUNT) {
     issues.push(`issuedSharesCount ${issuedSharesMap.size} below ${MIN_ISSUED_SHARES_COUNT}`);
+  } else if (issuedSharesMap.size < MIN_ISSUED_SHARES_COUNT) {
+    warnings.push(`issuedSharesCount ${issuedSharesMap.size} below ${MIN_ISSUED_SHARES_COUNT}; turnover filter disabled until stock_capital_latest is populated`);
   }
   if (volumeAverageMap.size < MIN_VOLUME_AVERAGE_COUNT) {
     issues.push(`volumeAverageCount ${volumeAverageMap.size} below ${MIN_VOLUME_AVERAGE_COUNT}`);
+  }
+  if (STRATEGY3_REQUIRE_AFTER_1300 && after1300Count < STRATEGY3_MIN_AFTER_1300_CANDIDATES) {
+    issues.push(`after1300ReadyCount ${after1300Count} below ${STRATEGY3_MIN_AFTER_1300_CANDIDATES}`);
   }
   if (sourceWarnings.length > SOURCE_WARNING_LIMIT) {
     issues.push(`warningCount ${sourceWarnings.length} above ${SOURCE_WARNING_LIMIT}`);
   }
   return {
-    status: issues.length ? "failed" : (sourceWarnings.length ? "degraded" : "ok"),
+    status: issues.length ? "failed" : ((sourceWarnings.length || warnings.length) ? "degraded" : "ok"),
     issuedSharesCount: issuedSharesMap.size,
     volumeAverageCount: volumeAverageMap.size,
     stockUniverseCount: stocks.length,
-    warningCount: sourceWarnings.length,
+    after1300ReadyCount: after1300Count,
+    warningCount: sourceWarnings.length + warnings.length,
     warningLimit: SOURCE_WARNING_LIMIT,
     minIssuedSharesCount: MIN_ISSUED_SHARES_COUNT,
     minVolumeAverageCount: MIN_VOLUME_AVERAGE_COUNT,
+    minAfter1300Candidates: STRATEGY3_MIN_AFTER_1300_CANDIDATES,
+    requireTurnover: STRATEGY3_REQUIRE_TURNOVER,
+    requireAfter1300: STRATEGY3_REQUIRE_AFTER_1300,
     issues,
+    warnings,
   };
 }
 
@@ -99,6 +119,19 @@ function smaAt(values, index, length) {
 
 function candleMinutes(candle) {
   const text = String(candle?.candleTime || candle?.time || "");
+  if (/T/.test(text) || /(?:Z|[+-]\d{2}:\d{2})$/.test(text)) {
+    const parsed = Date.parse(text);
+    if (Number.isFinite(parsed)) {
+      const parts = new Intl.DateTimeFormat("en-GB", {
+        timeZone: "Asia/Taipei",
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: false,
+      }).formatToParts(new Date(parsed));
+      const get = (type) => Number(parts.find((part) => part.type === type)?.value || 0);
+      return get("hour") * 60 + get("minute");
+    }
+  }
   const match = text.match(/\b(\d{1,2}):(\d{2})(?::\d{2})?\b/);
   if (!match) {
     const parsed = Date.parse(text);
@@ -292,6 +325,55 @@ async function fetchUniverse() {
   });
 }
 
+async function fetchSupabaseStrategy3Universe() {
+  const access = await verifyStrategy3ReadAccess();
+  const quoteResult = await fetchStrategy3QuoteReady({ minQuotes: 500 });
+  if (!quoteResult.ok) throw new Error(quoteResult.error || "strategy3 quote ready unavailable");
+  const stocks = quoteResult.quotes.map((quote) => ({
+    code: quote.code,
+    name: quote.name,
+    close: quote.close,
+    change: quote.change,
+    percent: quote.percent,
+    value: quote.value || quote.tradeValue,
+    tradeVolume: quote.tradeVolume,
+    quoteDate: String(quote.updatedAt || quote.quoteTimeRaw || "").slice(0, 10).replace(/\D/g, ""),
+    avgVolume: quote.avgVolume,
+    volumeRatio: quote.volumeRatio,
+    projectedRatio: quote.projectedRatio,
+    issuedShares: quote.issuedShares,
+    after1300CandleCount: quote.after1300CandleCount,
+    hasAfter1300Candle: quote.hasAfter1300Candle,
+    has1300Candle: quote.has1300Candle,
+    intradayCandleCount: quote.intradayCandleCount,
+    latestCandleTime: quote.latestCandleTime,
+    quoteSource: quote.quoteReadySource,
+  }));
+  const warnings = [];
+  let capitalResult = { byCode: new Map() };
+  try {
+    capitalResult = await fetchStrategy3CapitalMap(stocks.map((stock) => stock.code));
+  } catch (error) {
+    warnings.push(`stock_capital_latest read skipped: ${error?.message || String(error)}`);
+  }
+  const issuedSharesMap = new Map(capitalResult.byCode);
+  stocks.forEach((stock) => {
+    if (cleanNumber(stock.issuedShares) > 0) issuedSharesMap.set(stock.code, cleanNumber(stock.issuedShares));
+  });
+  const volumeAverageMap = new Map();
+  stocks.forEach((stock) => {
+    if (stock.avgVolume > 0) volumeAverageMap.set(stock.code, stock.avgVolume);
+  });
+  if (!access.ok) warnings.push(`strategy3 supabase read access partial: ${access.failed.map((item) => item.table).join(",")}`);
+  return {
+    stocks,
+    issuedSharesMap,
+    volumeAverageMap,
+    warnings,
+    source: "supabase-strategy3",
+  };
+}
+
 async function fetchIssuedShares() {
   const map = new Map();
   const warnings = [];
@@ -393,7 +475,7 @@ async function buildMatches(stocks, issuedSharesMap, volumeAverageMap, sourceWar
     const issuedShares = issuedSharesMap.get(stock.code) || 0;
     const turnoverRate = issuedShares ? (stock.tradeVolume / issuedShares) * 100 : 0;
     const avgVolume = volumeAverageMap.get(stock.code) || 0;
-    const volumeRatio = avgVolume ? stock.tradeVolume / avgVolume : 0;
+    const volumeRatio = cleanNumber(stock.volumeRatio) || (avgVolume ? stock.tradeVolume / avgVolume : 0);
     const heatPenalty = pct > 8.8 ? 24 : pct > 6.5 ? 12 : pct < 0 ? 30 : 0;
     const overnightScore = clamp(Math.round(
       Math.min((pct - 3) * 18, 36) +
@@ -402,9 +484,10 @@ async function buildMatches(stocks, issuedSharesMap, volumeAverageMap, sourceWar
       Math.min(volumeRatio * 12, 20) -
       heatPenalty
     ), 0, 100);
-    const fixedPass = pct > 3 && pct <= 5 && volumeLots >= 1000 && turnoverRate > 5 && volumeRatio > 1;
+    const turnoverPass = STRATEGY3_REQUIRE_TURNOVER ? turnoverRate > 5 : true;
+    const fixedPass = pct > 3 && pct <= 5 && volumeLots >= 1000 && turnoverPass && volumeRatio > 1;
     const fixedReason = fixedPass
-      ? `符合固定條件：漲幅 ${pct.toFixed(2)}%、成交量 ${Math.round(volumeLots).toLocaleString("zh-TW")} 張、周轉率 ${turnoverRate.toFixed(2)}%、量比 ${volumeRatio.toFixed(2)}。`
+      ? `符合固定條件：漲幅 ${pct.toFixed(2)}%、成交量 ${Math.round(volumeLots).toLocaleString("zh-TW")} 張、${STRATEGY3_REQUIRE_TURNOVER ? `周轉率 ${turnoverRate.toFixed(2)}%、` : "周轉率待股本補齊、"}量比 ${volumeRatio.toFixed(2)}。`
       : "未符合固定隔日沖條件。";
     return {
       ...stock,
@@ -425,7 +508,7 @@ async function buildMatches(stocks, issuedSharesMap, volumeAverageMap, sourceWar
       stock.percent > 3 &&
       stock.percent <= 5 &&
       stock.volumeLots >= 1000 &&
-      stock.turnoverRate > 5 &&
+      (!STRATEGY3_REQUIRE_TURNOVER || stock.turnoverRate > 5) &&
       stock.volumeRatio > 1
     ))
     .sort((a, b) => b.overnightScore - a.overnightScore || b.value - a.value)
@@ -435,10 +518,7 @@ async function buildMatches(stocks, issuedSharesMap, volumeAverageMap, sourceWar
 
   const analyzed = await mapLimit(scored, STRATEGY3_TV_CONCURRENCY, async (stock) => {
     try {
-      const result = await fetchIntraday1m(stock.code, STRATEGY3_TV_CANDLE_LIMIT, {
-        maxSourceAgeSeconds: STRATEGY3_TV_MAX_SOURCE_AGE_SECONDS,
-        maxQuoteAgeSeconds: STRATEGY3_TV_MAX_SOURCE_AGE_SECONDS,
-      });
+      const result = await fetchStrategy3Intraday1mLatestN(stock.code, STRATEGY3_TV_CANDLE_LIMIT);
       const tvEntry = analyzeTradingViewOvernightEntry(result.candles || result.rows || []);
       return {
         ...stock,
@@ -475,20 +555,42 @@ async function buildMatches(stocks, issuedSharesMap, volumeAverageMap, sourceWar
 async function main() {
   const backup = readJson(BACKUP_FILE, { ok: true, matches: [] });
   const previousRaw = readJson(OUT_FILE, { ok: true, matches: [] });
-  const [stocks, issuedSharesResult, volumeAverageResult] = await Promise.all([
-    fetchUniverse(),
-    fetchIssuedShares(),
-    fetchHistoricalVolumes(),
-  ]);
+  let source = "github-actions-mis-realtime";
+  let stocks = [];
+  let issuedSharesMap = new Map();
+  let volumeAverageMap = new Map();
+  let sourceWarnings = [];
+  if (STRATEGY3_USE_SUPABASE) {
+    try {
+      const supabase = await fetchSupabaseStrategy3Universe();
+      source = supabase.source;
+      stocks = supabase.stocks;
+      issuedSharesMap = supabase.issuedSharesMap;
+      volumeAverageMap = supabase.volumeAverageMap;
+      sourceWarnings = supabase.warnings;
+    } catch (error) {
+      sourceWarnings.push(`strategy3 supabase fallback: ${error?.message || String(error)}`);
+    }
+  }
+  if (!stocks.length) {
+    const [fallbackStocks, issuedSharesResult, volumeAverageResult] = await Promise.all([
+      fetchUniverse(),
+      fetchIssuedShares(),
+      fetchHistoricalVolumes(),
+    ]);
+    stocks = fallbackStocks;
+    issuedSharesMap = issuedSharesResult.map;
+    volumeAverageMap = volumeAverageResult.map;
+    sourceWarnings = [
+      ...sourceWarnings,
+      ...issuedSharesResult.warnings,
+      ...volumeAverageResult.warnings,
+    ];
+  }
   if (!stocks.length) throw new Error("No stock universe");
-  const issuedSharesMap = issuedSharesResult.map;
-  const volumeAverageMap = volumeAverageResult.map;
-  const sourceWarnings = [
-    ...issuedSharesResult.warnings,
-    ...volumeAverageResult.warnings,
-  ];
   sourceWarnings.forEach((warning) => console.warn(`strategy3 source warning: ${warning}`));
   const sourceHealth = buildSourceHealth(stocks, issuedSharesMap, volumeAverageMap, sourceWarnings);
+  (sourceHealth.warnings || []).forEach((warning) => console.warn(`strategy3 source warning: ${warning}`));
   if (sourceHealth.status !== "ok") {
     console.warn(`strategy3 source health ${sourceHealth.status}: ${sourceHealth.issues.join("; ") || "warnings present"}`);
   }
@@ -499,7 +601,7 @@ async function main() {
   const quoteDate = stocks.find((stock) => stock.quoteDate)?.quoteDate || "";
   const output = {
     ok: true,
-    source: "github-actions-mis-realtime",
+    source,
     updatedAt: new Date().toISOString(),
     usedDate: quoteDate,
     total: stocks.length,
