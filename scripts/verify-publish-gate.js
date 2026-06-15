@@ -306,6 +306,7 @@ const sourceSyncScript = read("scripts/sync-main-deploy-source.js");
 for (const file of [
   "terminal-live-check.js",
   "terminal-watchlist-module.js",
+  "lib/supabase-public-slot.js",
   "scripts/intraday-radar-rules.js",
   "scripts/scan-realtime-radar-cache.js",
   "scripts/scan-strategy3-cache.js",
@@ -315,6 +316,17 @@ for (const file of [
   "data/warrant-flow-latest.json",
 ]) {
   if (!sourceSyncScript.includes(file)) issues.push(`sync-main-deploy-source.js missing ${file}`);
+}
+
+const strategy3Scanner = read("scripts/scan-strategy3-cache.js");
+for (const marker of [
+  "fetchStrategy3QuoteReady",
+  "fetchStrategy3Intraday1mLatestN",
+  "chipTradeExclusion",
+  "STRATEGY3_APPLY_BLACKLIST",
+  "TradingView 隔日沖判斷",
+]) {
+  if (!strategy3Scanner.includes(marker)) issues.push(`scan-strategy3-cache.js missing strategy3 TV-only marker ${marker}`);
 }
 
 for (const legacyScript of [

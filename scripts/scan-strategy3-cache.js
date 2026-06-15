@@ -7,12 +7,17 @@ const {
   fetchStrategy3QuoteReady,
   verifyStrategy3ReadAccess,
 } = require("../lib/supabase-public-slot");
+const {
+  chipTradeExclusion,
+  loadChipTradeBlacklist,
+} = require("../lib/chip-trade-exclusions");
 
 const ROOT = path.resolve(__dirname, "..");
 const DATA_DIR = process.env.FUMAN_DATA_DIR || path.join(ROOT, "data");
 const OUT_FILE = path.join(DATA_DIR, "strategy3-latest.json");
 const BACKUP_FILE = path.join(DATA_DIR, "strategy3-backup.json");
 const SCORECARD_SOURCE_FILE = path.join(DATA_DIR, "strategy3-scorecard-source.json");
+const CHIP_EXCLUSIONS_FILE = path.join(DATA_DIR, "chip-trade-exclusions.json");
 const STOCK_URL = process.env.STOCK_UNIVERSE_URL || "https://fuman-terminal.vercel.app/api/stocks";
 const CAPITAL_URLS = [
   "https://mopsfin.twse.com.tw/opendata/t187ap03_L.csv",
@@ -22,13 +27,14 @@ const SOURCE_WARNING_LIMIT = Number(process.env.STRATEGY3_SOURCE_WARNING_LIMIT |
 const MIN_ISSUED_SHARES_COUNT = Number(process.env.STRATEGY3_MIN_ISSUED_SHARES_COUNT || 1000);
 const MIN_VOLUME_AVERAGE_COUNT = Number(process.env.STRATEGY3_MIN_VOLUME_AVERAGE_COUNT || 1000);
 const STRATEGY3_REQUIRE_TV_ENTRY = process.env.STRATEGY3_REQUIRE_TV_ENTRY !== "0";
-const STRATEGY3_TV_CANDIDATE_LIMIT = Number(process.env.STRATEGY3_TV_CANDIDATE_LIMIT || 160);
+const STRATEGY3_TV_CANDIDATE_LIMIT = Number(process.env.STRATEGY3_TV_CANDIDATE_LIMIT || 0);
 const STRATEGY3_TV_CANDLE_LIMIT = Number(process.env.STRATEGY3_TV_CANDLE_LIMIT || 160);
 const STRATEGY3_TV_CONCURRENCY = Number(process.env.STRATEGY3_TV_CONCURRENCY || 8);
 const STRATEGY3_REQUIRE_TURNOVER = process.env.STRATEGY3_REQUIRE_TURNOVER === "1";
 const STRATEGY3_USE_SUPABASE = process.env.STRATEGY3_USE_SUPABASE !== "0";
 const STRATEGY3_REQUIRE_AFTER_1300 = process.env.STRATEGY3_REQUIRE_AFTER_1300 !== "0";
 const STRATEGY3_MIN_AFTER_1300_CANDIDATES = Number(process.env.STRATEGY3_MIN_AFTER_1300_CANDIDATES || 20);
+const STRATEGY3_APPLY_BLACKLIST = process.env.STRATEGY3_APPLY_BLACKLIST !== "0";
 
 function readJson(file, fallback) {
   try { return JSON.parse(fs.readFileSync(file, "utf8")); } catch { return fallback; }
@@ -44,7 +50,7 @@ function preserveScorecardSource(payload) {
   }, null, 2)}\n`);
 }
 
-function buildSourceHealth(stocks, issuedSharesMap, volumeAverageMap, sourceWarnings) {
+function buildSourceHealth(stocks, issuedSharesMap, volumeAverageMap, sourceWarnings, exclusionStats = {}) {
   const issues = [];
   const warnings = [];
   const after1300Count = stocks.filter((stock) => stock.hasAfter1300Candle || cleanNumber(stock.after1300CandleCount) > 0).length;
@@ -68,6 +74,7 @@ function buildSourceHealth(stocks, issuedSharesMap, volumeAverageMap, sourceWarn
     volumeAverageCount: volumeAverageMap.size,
     stockUniverseCount: stocks.length,
     after1300ReadyCount: after1300Count,
+    exclusionStats,
     warningCount: sourceWarnings.length + warnings.length,
     warningLimit: SOURCE_WARNING_LIMIT,
     minIssuedSharesCount: MIN_ISSUED_SHARES_COUNT,
@@ -77,6 +84,52 @@ function buildSourceHealth(stocks, issuedSharesMap, volumeAverageMap, sourceWarn
     requireAfter1300: STRATEGY3_REQUIRE_AFTER_1300,
     issues,
     warnings,
+  };
+}
+
+function loadStrategy3Blacklist() {
+  const codes = loadChipTradeBlacklist();
+  const generated = readJson(CHIP_EXCLUSIONS_FILE, {});
+  (generated.blacklistCodes || []).map(normalizeCode).filter(Boolean).forEach((code) => codes.add(code));
+  return codes;
+}
+
+function applyStrategy3Exclusions(stocks, blacklistCodes) {
+  if (!STRATEGY3_APPLY_BLACKLIST) {
+    return { stocks, stats: { enabled: false, input: stocks.length, excluded: 0, kept: stocks.length, byReason: {} } };
+  }
+  const byReason = {};
+  const examples = [];
+  const kept = [];
+  for (const stock of stocks) {
+    const exclusion = chipTradeExclusion({
+      ...stock,
+      avgVolume5: stock.avgVolume,
+      tradeVolume: stock.tradeVolume,
+      is_blacklisted: stock.is_blacklisted ?? stock.isBlacklisted,
+      is_daytrade_unsuitable: stock.is_daytrade_unsuitable ?? stock.isDaytradeUnsuitable,
+      is_halted: stock.is_halted ?? stock.isHalted,
+      is_trial: stock.is_trial ?? stock.isTrial,
+    }, blacklistCodes);
+    if (!exclusion.excluded) {
+      kept.push(stock);
+      continue;
+    }
+    exclusion.reasons.forEach((reason) => {
+      byReason[reason] = (byReason[reason] || 0) + 1;
+    });
+    if (examples.length < 40) examples.push({ code: stock.code, name: stock.name, reasons: exclusion.reasons });
+  }
+  return {
+    stocks: kept,
+    stats: {
+      enabled: true,
+      input: stocks.length,
+      excluded: stocks.length - kept.length,
+      kept: kept.length,
+      byReason,
+      examples,
+    },
   };
 }
 
@@ -348,6 +401,15 @@ async function fetchSupabaseStrategy3Universe() {
     intradayCandleCount: quote.intradayCandleCount,
     latestCandleTime: quote.latestCandleTime,
     quoteSource: quote.quoteReadySource,
+    stockType: quote.stockType,
+    market: quote.market,
+    isHalted: quote.isHalted,
+    isTrial: quote.isTrial,
+    is_blacklisted: quote.is_blacklisted,
+    is_daytrade_unsuitable: quote.is_daytrade_unsuitable,
+    is_etf: quote.is_etf,
+    is_warrant: quote.is_warrant,
+    is_cb: quote.is_cb,
   }));
   const warnings = [];
   let capitalResult = { byCode: new Map() };
@@ -485,10 +547,10 @@ async function buildMatches(stocks, issuedSharesMap, volumeAverageMap, sourceWar
       heatPenalty
     ), 0, 100);
     const turnoverPass = STRATEGY3_REQUIRE_TURNOVER ? turnoverRate > 5 : true;
-    const fixedPass = pct > 3 && pct <= 5 && volumeLots >= 1000 && turnoverPass && volumeRatio > 1;
+    const fixedPass = stock.close > 0 && (stock.hasAfter1300Candle || cleanNumber(stock.after1300CandleCount) > 0);
     const fixedReason = fixedPass
-      ? `符合固定條件：漲幅 ${pct.toFixed(2)}%、成交量 ${Math.round(volumeLots).toLocaleString("zh-TW")} 張、${STRATEGY3_REQUIRE_TURNOVER ? `周轉率 ${turnoverRate.toFixed(2)}%、` : "周轉率待股本補齊、"}量比 ${volumeRatio.toFixed(2)}。`
-      : "未符合固定隔日沖條件。";
+      ? `進入 TradingView 隔日沖判斷：有 13:00 後1分K，最終只看 TV 條件。`
+      : "未進入 TradingView 隔日沖判斷：缺少價格或 13:00 後1分K。";
     return {
       ...stock,
       valueRank,
@@ -498,21 +560,14 @@ async function buildMatches(stocks, issuedSharesMap, volumeAverageMap, sourceWar
       volumeRatio: Number(volumeRatio.toFixed(2)),
       projectedRatio: Number(volumeRatio.toFixed(2)),
       overnightScore,
-      overnightState: fixedPass ? "通過" : "觀察",
+      overnightState: fixedPass ? "待TV判斷" : "觀察",
       score: overnightScore,
       matches: [{ id: "overnight_chip", reason: fixedReason }],
     };
   })
-    .filter((stock) => (
-      stock.close >= 10 &&
-      stock.percent > 3 &&
-      stock.percent <= 5 &&
-      stock.volumeLots >= 1000 &&
-      (!STRATEGY3_REQUIRE_TURNOVER || stock.turnoverRate > 5) &&
-      stock.volumeRatio > 1
-    ))
+    .filter((stock) => stock.close > 0 && (stock.hasAfter1300Candle || cleanNumber(stock.after1300CandleCount) > 0))
     .sort((a, b) => b.overnightScore - a.overnightScore || b.value - a.value)
-    .slice(0, Math.max(80, STRATEGY3_TV_CANDIDATE_LIMIT));
+    .slice(0, STRATEGY3_TV_CANDIDATE_LIMIT > 0 ? STRATEGY3_TV_CANDIDATE_LIMIT : undefined);
 
   if (!STRATEGY3_REQUIRE_TV_ENTRY) return scored.slice(0, 80);
 
@@ -560,6 +615,7 @@ async function main() {
   let issuedSharesMap = new Map();
   let volumeAverageMap = new Map();
   let sourceWarnings = [];
+  let exclusionStats = {};
   if (STRATEGY3_USE_SUPABASE) {
     try {
       const supabase = await fetchSupabaseStrategy3Universe();
@@ -588,8 +644,12 @@ async function main() {
     ];
   }
   if (!stocks.length) throw new Error("No stock universe");
+  const exclusionResult = applyStrategy3Exclusions(stocks, loadStrategy3Blacklist());
+  stocks = exclusionResult.stocks;
+  exclusionStats = exclusionResult.stats;
+  if (!stocks.length) throw new Error("No stock universe after strategy3 exclusions");
   sourceWarnings.forEach((warning) => console.warn(`strategy3 source warning: ${warning}`));
-  const sourceHealth = buildSourceHealth(stocks, issuedSharesMap, volumeAverageMap, sourceWarnings);
+  const sourceHealth = buildSourceHealth(stocks, issuedSharesMap, volumeAverageMap, sourceWarnings, exclusionStats);
   (sourceHealth.warnings || []).forEach((warning) => console.warn(`strategy3 source warning: ${warning}`));
   if (sourceHealth.status !== "ok") {
     console.warn(`strategy3 source health ${sourceHealth.status}: ${sourceHealth.issues.join("; ") || "warnings present"}`);
