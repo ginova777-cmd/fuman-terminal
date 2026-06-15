@@ -61,6 +61,7 @@ const STRATEGY2_EARLY_ATTACK_END_MINUTES = Number(process.env.STRATEGY2_EARLY_AT
 const STRATEGY2_1M_WARMUP_LIMIT = Math.max(1, Number(process.env.STRATEGY2_1M_WARMUP_LIMIT || 120));
 const STRATEGY2_1M_SUPABASE_SYNC = process.env.STRATEGY2_1M_SUPABASE_SYNC === "1";
 const MA35_PROVIDER_FAILURE_LIMIT = Math.max(1, Number(process.env.STRATEGY2_MA35_PROVIDER_FAILURE_LIMIT || 8));
+const RETAIN_LAST_GOOD_ON_SOURCE_UNHEALTHY_SECONDS = Math.max(0, Number(process.env.STRATEGY2_RETAIN_LAST_GOOD_ON_SOURCE_UNHEALTHY_SECONDS || 10 * 60));
 let lastRealtimeCoverageRescueAt = 0;
 
 function readSecretText(file) {
@@ -1715,6 +1716,18 @@ function buildStrategy2SharedSourceAbnormalReport(cache, key, timestamp, health)
   });
 }
 
+function readRetainableStrategy2EntryReport(key) {
+  if (RETAIN_LAST_GOOD_ON_SOURCE_UNHEALTHY_SECONDS <= 0) return null;
+  const report = readJson(STRATEGY2_REPORT_FILE, null);
+  if (!report || report.date !== key) return null;
+  const entryCount = cleanNumber(report.entryCount || report.aCount);
+  const updatedAtMs = Date.parse(report.updatedAt || report.generatedAt || "");
+  if (!(entryCount > 0) || !Number.isFinite(updatedAtMs)) return null;
+  const ageSeconds = (Date.now() - updatedAtMs) / 1000;
+  if (ageSeconds < 0 || ageSeconds > RETAIN_LAST_GOOD_ON_SOURCE_UNHEALTHY_SECONDS) return null;
+  return { report, ageSeconds };
+}
+
 async function fetchRealtime(stocks, scanTimestamp = timestampKey()) {
   const quotes = new Map();
   const recoveredCodes = new Set();
@@ -2821,6 +2834,11 @@ async function main() {
     sourceAgeSeconds: Infinity,
   }));
   if (!sharedSourceHealth.ok) {
+    const retained = readRetainableStrategy2EntryReport(key);
+    if (retained) {
+      console.log(`strategy2 supabase shared source unhealthy; retain last good A report age=${Math.round(retained.ageSeconds)}s reason=${sharedSourceHealth.reason || sharedSourceHealth.message || "unknown"}`);
+      return;
+    }
     const strategy2Report = buildStrategy2SharedSourceAbnormalReport(cache, key, timestamp, sharedSourceHealth);
     writeJson(SIGNAL_FILE, cache);
     writeJson(STRATEGY2_REPORT_FILE, strategy2Report);

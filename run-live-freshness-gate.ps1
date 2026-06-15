@@ -359,7 +359,7 @@ try {
     $env:REALTIME_RADAR_PATROL_INTERVAL_MS = "3000"
     Push-Location $syncRoot
     try {
-      $null = Invoke-GateCommand "realtime radar raw refresh" { & $nodeExe "scripts\patrol-realtime-radar-cache.js" } -AllowFailure
+      $null = Invoke-GateCommand "realtime radar raw refresh" { & $nodeExe "scripts\scan-realtime-radar-cache.js" } -AllowFailure
     } finally {
       Pop-Location
     }
