@@ -4,6 +4,7 @@
     marketSummary: "/data/market-summary.json",
     mobileHomeSummary: "/data/mobile-home-summary.json",
     terminalHomeBundle: "/data/terminal-home-bundle.json",
+    terminalHomeMobileSlim: "/data/terminal-home-mobile-slim.json",
     dataStatusIndex: "/data/data-status-index.json",
     dataManifest: "/data/data-manifest.json",
     stocksSlim: "/data/stocks-slim.json",

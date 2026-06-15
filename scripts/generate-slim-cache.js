@@ -834,6 +834,7 @@ function dataStatusIndex() {
     "market-summary.json",
     "health-summary.json",
     "mobile-home-summary.json",
+    "terminal-home-mobile-slim.json",
     "stocks-slim.json",
     "stocks-index.json",
     "stocks-quotes-slim.json",
@@ -885,6 +886,7 @@ function dataManifest() {
     "market-summary.json",
     "mobile-home-summary.json",
     "terminal-home-bundle.json",
+    "terminal-home-mobile-slim.json",
     "data-status-index.json",
     "stocks-slim.json",
     "stocks-index.json",
@@ -992,6 +994,62 @@ function terminalHomeBundle() {
         sourceDate: strategy5?.sourceDate || strategy5?.usedDate || "",
         count: cleanNumber(strategy5?.count || normalizeArray(strategy5?.matches).length),
         top: normalizeArray(strategy5?.matches).slice(0, 12),
+      },
+    },
+  };
+}
+
+
+function terminalHomeMobileSlim() {
+  const mobile = readOptional("data/mobile-home-summary.json", mobileHomeSummary());
+  const status = readOptional("data/data-status-index.json", dataStatusIndex());
+  const stocks = readOptional("data/stocks-quotes-mobile-top.json", {});
+  const openBuy = readOptional("data/open-buy-latest.json", {});
+  const strategy4Top = readOptional("data/strategy4-score-top.json", {});
+  const strategy5 = readOptional("data/strategy5-latest.json", {});
+  return {
+    ok: true,
+    source: "terminal-home-mobile-slim",
+    updatedAt: new Date().toISOString(),
+    mobile,
+    status: {
+      updatedAt: status.updatedAt || "",
+      entries: Object.fromEntries(Object.entries(status.entries || {}).filter(([key]) => [
+        "market-summary.json",
+        "live-freshness-ok.json",
+        "mobile-home-summary.json",
+        "stocks-quotes-mobile-top.json",
+        "strategy2-intraday-live-top.json",
+        "realtime-radar-latest.json",
+        "strategy4-score-top.json",
+        "warrant-flow-mobile-top.json",
+      ].includes(key))),
+    },
+    stocks: {
+      updatedAt: stocks.updatedAt || "",
+      resolvedTradeDate: stocks.resolvedTradeDate || stocks.today || "",
+      count: cleanNumber(stocks.count || normalizeArray(stocks.quotes).length),
+      top: normalizeArray(stocks.quotes).slice(0, 48),
+    },
+    strategies: {
+      openBuy: {
+        updatedAt: openBuy?.updatedAt || "",
+        date: openBuy?.usedDate || openBuy?.date || "",
+        count: cleanNumber(openBuy?.count || normalizeArray(openBuy?.matches).length),
+        top: normalizeArray(openBuy?.matches).slice(0, 6),
+      },
+      strategy4: {
+        updatedAt: strategy4Top?.updatedAt || "",
+        date: strategy4Top?.scanStamp || strategy4Top?.date || "",
+        count: cleanNumber(strategy4Top?.count || normalizeArray(strategy4Top?.matches).length),
+        top: normalizeArray(strategy4Top?.matches).slice(0, 8),
+      },
+      strategy5: {
+        updatedAt: strategy5?.updatedAt || "",
+        date: strategy5?.generatedDate || taipeiDateFromIso(strategy5?.updatedAt) || strategy5?.usedDate || strategy5?.date || "",
+        sourceDate: strategy5?.sourceDate || strategy5?.usedDate || "",
+        count: cleanNumber(strategy5?.count || normalizeArray(strategy5?.matches).length),
+        top: normalizeArray(strategy5?.matches).slice(0, 6),
       },
     },
   };
@@ -1144,6 +1202,9 @@ async function main() {
     const homeBundle = terminalHomeBundle();
     writeToBoth("data/terminal-home-bundle.json", homeBundle);
     console.log(`[slim] wrote data/terminal-home-bundle.json stocks=${homeBundle.stocks.count || 0}`);
+    const mobileSlimBundle = terminalHomeMobileSlim();
+    writeToBoth("data/terminal-home-mobile-slim.json", mobileSlimBundle);
+    console.log(`[slim] wrote data/terminal-home-mobile-slim.json stocks=${mobileSlimBundle.stocks.count || 0}`);
     const manifest = dataManifest();
     writeToBoth("data/data-manifest.json", manifest);
     console.log(`[slim] wrote data/data-manifest.json files=${manifest.count || 0}`);

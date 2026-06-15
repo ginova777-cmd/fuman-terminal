@@ -235,6 +235,16 @@ for (const marker of [
   if (!dataFreshnessVerifier.includes(marker)) issues.push(`verify-data-freshness.js missing ${marker}`);
 }
 
+const mobileHealthVerifier = read("scripts/verify-mobile-health.js");
+for (const marker of [
+  "FIRST_SCREEN_BUDGET_BYTES",
+  "FIRST_SCREEN_JSON_BUDGET_BYTES",
+  "FIRST_SCREEN_FORBIDDEN",
+  "/data/terminal-home-mobile-slim.json",
+]) {
+  if (!mobileHealthVerifier.includes(marker)) issues.push(`verify-mobile-health.js missing ${marker}`);
+}
+
 const mobileLayoutVerifier = read("scripts/verify-mobile-layout.js");
 for (const marker of [
   "repeat(2, minmax(0, 1fr))",
@@ -318,6 +328,7 @@ for (const file of [
   "scripts/scan-strategy3-cache.js",
   "data/data-manifest.json",
   "data/terminal-home-bundle.json",
+  "data/terminal-home-mobile-slim.json",
   "data/institution-latest.json",
   "scripts/scan-open-buy-cache.js",
   "scripts/scan-star-preopen.js",
