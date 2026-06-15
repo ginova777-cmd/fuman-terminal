@@ -157,11 +157,17 @@ function validateCrossPayloads(payloads, issues) {
   const priorityFirst = rows(warrantPriority)[0];
   const mobileFirst = rows(warrantMobile)[0];
   const homeFirst = home?.mobile?.warrant?.top?.[0];
+  const quoteMap = new Map(rows(quotes).map((row) => [String(row.code || row.symbol || "").trim(), row]));
   assertFresh(latestFirst && slimFirst, "missing warrant first rows across latest/slim", issues);
   if (latestFirst && slimFirst) {
     for (const [label, row] of [["slim", slimFirst]]) {
       assertFresh(String(row.code || "") === String(latestFirst.code || ""), `warrant ${label} first code mismatch`, issues);
-      assertFresh(sameNumber(rowClose(row), rowClose(latestFirst)), `warrant ${label} first close mismatch`, issues);
+      const quote = quoteMap.get(String(row.code || row.underlyingCode || "").trim());
+      assertFresh(quote, `missing stock quote for warrant ${label} first code=${row.code || row.underlyingCode || ""}`, issues);
+      if (quote) {
+        assertFresh(sameNumber(rowClose(row), quoteClose(quote)), `warrant ${label} first close mismatch quote`, issues);
+        if (Number.isFinite(Number(quote.percent))) assertFresh(sameNumber(rowPercent(row), quote.percent, 0.05), `warrant ${label} first percent mismatch quote`, issues);
+      }
       assertFresh(sameNumber(row.finalScore, latestFirst.finalScore, 0), `warrant ${label} first finalScore mismatch`, issues);
       assertFresh(normalizeDate(row.quoteDate) === quoteDate, `warrant ${label} first quoteDate mismatch quoteDate=${quoteDate}`, issues);
     }
@@ -181,7 +187,6 @@ function validateCrossPayloads(payloads, issues) {
   assertFresh(Number(home?.mobile?.warrant?.count || 0) === extractCount(warrantMobile), "terminal-home-bundle warrant count mismatch mobile", issues);
   validateStrategy5Governance({ strategy5, strategyMatchIndex, manifest, home, quoteDate, issues });
 
-  const quoteMap = new Map(rows(quotes).map((row) => [String(row.code || row.symbol || "").trim(), row]));
   for (const row of rows(warrantSlim).slice(0, 20)) {
     const code = String(row.code || row.underlyingCode || "").trim();
     const quote = quoteMap.get(code);
