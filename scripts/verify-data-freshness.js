@@ -29,7 +29,7 @@ const TARGETS = [
   { name: "warrant-flow-latest", file: "data/warrant-flow-latest.json" },
   { name: "stocks-quotes-slim", file: "data/stocks-quotes-slim.json", minCount: 1000 },
   { name: "institution-latest", file: "data/institution-latest.json", minCount: 1000 },
-  { name: "institution-slim", file: "data/institution-slim.json", minCount: 1000 },
+  { name: "institution-slim", file: "data/institution-slim.json", minCount: Number(process.env.INSTITUTION_MIN_OUTPUT_ROWS || 250) },
   { name: "institution-mobile-top", file: "data/institution-mobile-top.json", minCount: 1 },
   { name: "cb-detect-latest", file: "data/cb-detect-latest.json", minCount: 1 },
   { name: "warrant-flow-slim", file: "data/warrant-flow-slim.json", minCount: 1 },

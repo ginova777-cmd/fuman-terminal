@@ -13,6 +13,8 @@ const STOCK_URL = process.env.STOCK_UNIVERSE_URL || "https://fuman-terminal.verc
 const SLOW_SCAN = ["1", "true", "yes"].includes(String(process.env.INSTITUTION_SLOW_SCAN || "").toLowerCase());
 const REQUEST_DELAY_MS = Number(process.env.INSTITUTION_REQUEST_DELAY_MS || (SLOW_SCAN ? 15000 : 1200));
 const FETCH_RETRIES = Number(process.env.INSTITUTION_FETCH_RETRIES || (SLOW_SCAN ? 4 : 1));
+const MIN_SOURCE_ROWS = Number(process.env.INSTITUTION_MIN_SOURCE_ROWS || 1000);
+const MIN_OUTPUT_ROWS = Number(process.env.INSTITUTION_MIN_OUTPUT_ROWS || 250);
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -353,8 +355,13 @@ async function main() {
   };
 
   const dataAge = ageInDays(output.usedDate);
-  if (count < 1000) {
-    console.error(`institution cache scan returned too few rows (${count}); keeping existing cache files unchanged`);
+  const sourceCount = Object.keys(payload.data || {}).length;
+  if (sourceCount < MIN_SOURCE_ROWS) {
+    console.error(`institution source returned too few rows (${sourceCount}); keeping existing cache files unchanged`);
+    process.exit(2);
+  }
+  if (count < MIN_OUTPUT_ROWS) {
+    console.error(`institution cache scan returned too few rows after exclusions (${count}); keeping existing cache files unchanged`);
     process.exit(2);
   }
   if (dataAge > 3) {

@@ -1,12 +1,21 @@
 const CACHE_MS = 5 * 60 * 1000;
 let cache = null;
+const fs = require("fs");
+const path = require("path");
 
 const SLOW_SCAN = ["1", "true", "yes"].includes(String(process.env.INSTITUTION_SLOW_SCAN || "").toLowerCase());
 const REQUEST_DELAY_MS = Number(process.env.INSTITUTION_REQUEST_DELAY_MS || (SLOW_SCAN ? 15000 : 1200));
 const FETCH_RETRIES = Number(process.env.INSTITUTION_FETCH_RETRIES || (SLOW_SCAN ? 4 : 1));
 const SOURCE_ERROR_LIMIT = Number(process.env.INSTITUTION_SOURCE_ERROR_LIMIT || (SLOW_SCAN ? 3 : 8));
 const SOURCE_PROVIDER = String(process.env.INSTITUTION_SOURCE_PROVIDER || "").toLowerCase();
-const FINMIND_TOKEN = process.env.FINMIND_TOKEN || process.env.FINMIND_API_TOKEN || "";
+const FINMIND_TOKEN_FILE = process.env.FINMIND_API_TOKEN_FILE
+  || path.join(process.env.FUMAN_RUNTIME_DIR || "C:/fuman-runtime", "secrets", "finmind-api-token.txt");
+
+function readSecret(file) {
+  try { return fs.readFileSync(file, "utf8").trim(); } catch { return ""; }
+}
+
+const FINMIND_TOKEN = process.env.FINMIND_TOKEN || process.env.FINMIND_API_TOKEN || readSecret(FINMIND_TOKEN_FILE);
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
