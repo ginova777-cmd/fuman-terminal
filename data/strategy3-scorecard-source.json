@@ -180,5 +180,6 @@
       ]
     }
   ],
-  "preservedAt": "2026-06-15T11:08:08.013Z"
+  "preservedAt": "2026-06-15T12:02:09.056Z",
+  "preservedReason": "strategy3 current scan produced zero matches"
 }
