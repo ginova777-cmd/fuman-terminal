@@ -1,7 +1,7 @@
 {
   "ok": true,
   "source": "github-actions-mis-realtime",
-  "updatedAt": "2026-06-15T05:31:25.372Z",
+  "updatedAt": "2026-06-15T05:41:20.968Z",
   "usedDate": "20260615",
   "total": 1953,
   "count": 4,
@@ -39,15 +39,15 @@
       "volumeRank": 95,
       "volumeLots": 15658,
       "turnoverRate": 8.47,
-      "volumeRatio": 1.74,
-      "projectedRatio": 1.74,
+      "volumeRatio": 1.76,
+      "projectedRatio": 1.76,
       "overnightScore": 100,
       "overnightState": "通過",
       "score": 100,
       "matches": [
         {
           "id": "overnight_chip",
-          "reason": "符合固定條件：漲幅 4.83%、成交量 15,658 張、周轉率 8.47%、量比 1.74。"
+          "reason": "符合固定條件：漲幅 4.83%、成交量 15,658 張、周轉率 8.47%、量比 1.76。"
         }
       ]
     },
@@ -103,15 +103,15 @@
       "volumeRank": 94,
       "volumeLots": 13911,
       "turnoverRate": 8.44,
-      "volumeRatio": 4.11,
-      "projectedRatio": 4.11,
+      "volumeRatio": 4.39,
+      "projectedRatio": 4.39,
       "overnightScore": 84,
       "overnightState": "通過",
       "score": 84,
       "matches": [
         {
           "id": "overnight_chip",
-          "reason": "符合固定條件：漲幅 3.90%、成交量 13,911 張、周轉率 8.44%、量比 4.11。"
+          "reason": "符合固定條件：漲幅 3.90%、成交量 13,911 張、周轉率 8.44%、量比 4.39。"
         }
       ]
     },
