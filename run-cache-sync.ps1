@@ -157,6 +157,12 @@ function Get-CriticalDataReleaseFiles {
     "data\warrant-single-signal-top.json",
     "data\warrant-flow-mobile-top.json",
     "data\warrant-flow-backup.json",
+    "data\open-buy-latest.json",
+    "data\open-buy-backup.json",
+    "data\open-buy-scorecard-source.json",
+    "data\star-preopen-latest.json",
+    "data\star-preopen-backup.json",
+    "data\star-preopen-scorecard-source.json",
     "data\strategy3-latest.json",
     "data\strategy3-backup.json",
     "data\strategy3-scorecard-source.json",
@@ -840,13 +846,17 @@ try {
     )
   } elseif ($Scope -eq "openBuy") {
     $criticalLatestFiles = @(
-      "data\open-buy-latest.json"
+      "data\open-buy-latest.json",
+      "data\star-preopen-latest.json"
     )
 
     $dataFiles = @(
       "data\open-buy-latest.json",
       "data\open-buy-backup.json",
-      "data\open-buy-scorecard-source.json"
+      "data\open-buy-scorecard-source.json",
+      "data\star-preopen-latest.json",
+      "data\star-preopen-backup.json",
+      "data\star-preopen-scorecard-source.json"
     )
   } elseif ($Scope -eq "strategy3") {
     $criticalLatestFiles = @(
@@ -1179,3 +1189,6 @@ Invoke-PrePublishDataFreshnessGate
 } finally {
   Remove-Item -LiteralPath $lockFile -Force -ErrorAction SilentlyContinue
 }
+
+
+

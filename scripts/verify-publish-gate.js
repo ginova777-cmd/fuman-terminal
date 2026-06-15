@@ -169,6 +169,8 @@ if (!/Get-CriticalDataReleaseFiles/.test(cacheSync) || !/CACHE_SYNC_WRITE_CODE_R
   issues.push("run-cache-sync.ps1 must limit freshness-gate source repo writes to critical data files");
 }
 for (const strategy3CriticalFile of [
+  "data\\open-buy-latest.json",
+  "data\\star-preopen-latest.json",
   "data\\strategy3-latest.json",
   "data\\strategy3-backup.json",
   "data\\strategy3-scorecard-source.json",
@@ -197,6 +199,10 @@ for (const marker of [
   "strategy2 intraday raw refresh",
   "institution raw refresh",
   "warrant flow raw refresh",
+  "STAR preopen raw refresh",
+  "star-preopen-latest.json",
+  "starCount",
+  "starFinalBlindBuyCount",
   "open buy raw refresh",
   "strategy3 raw refresh",
   "strategy4 raw refresh",
@@ -313,6 +319,13 @@ for (const file of [
   "data/data-manifest.json",
   "data/terminal-home-bundle.json",
   "data/institution-latest.json",
+  "scripts/scan-open-buy-cache.js",
+  "scripts/scan-star-preopen.js",
+  "data/open-buy-latest.json",
+  "data/open-buy-backup.json",
+  "data/open-buy-scorecard-source.json",
+  "data/star-preopen-latest.json",
+  "data/star-preopen-scorecard-source.json",
   "data/warrant-flow-latest.json",
 ]) {
   if (!sourceSyncScript.includes(file)) issues.push(`sync-main-deploy-source.js missing ${file}`);
@@ -566,4 +579,5 @@ if (issues.length) {
 }
 
 console.log("[publish-gate] ok");
+
 

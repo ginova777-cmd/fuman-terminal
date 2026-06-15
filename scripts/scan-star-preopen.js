@@ -4,10 +4,11 @@ const fs = require("fs");
 const path = require("path");
 
 const {
-  fetchFutoptQuotesLive,
-  fetchFutoptTickerMap,
+  fetchFutoptStockMappingReady,
+  fetchPreopenFinalBlindBuyReady,
   fetchPreopenSnapshotHistory,
   fetchPreopenSnapshots,
+  fetchSourceStatus,
 } = require("../lib/supabase-public-slot");
 const { dataPath } = require("./runtime-paths");
 
@@ -96,14 +97,8 @@ function bidAskRatio(bidVolume, askVolume) {
   return ask > 0 ? bid / ask : 0;
 }
 
-function futurePct(quote) {
-  const direct = cleanNumber(quote?.change_percent);
-  if (direct) return direct;
-  return percentChange(quote?.last_price, quote?.previous_close);
-}
-
-function quoteVolume(quote) {
-  return cleanNumber(quote?.total_volume ?? quote?.volume);
+function normalizeBool(value) {
+  return value === true || String(value).toLowerCase() === "true";
 }
 
 function normalizePreopen(row) {
@@ -115,8 +110,8 @@ function normalizePreopen(row) {
     code,
     name: row?.name || code,
     market: row?.market || "",
-    updatedAt: row?.updated_at || row?.observed_at || "",
-    observedAt: row?.observed_at || row?.updated_at || "",
+    updatedAt: row?.updated_at || row?.observed_at || row?.latest_observed_at || "",
+    observedAt: row?.observed_at || row?.latest_observed_at || row?.updated_at || "",
     referencePrice,
     trialPrice,
     trialPct: percentChange(trialPrice, referencePrice),
@@ -126,8 +121,28 @@ function normalizePreopen(row) {
     bestBidPrice,
     bestAskPrice: cleanNumber(row?.best_ask_price),
     bestBidOk: bestBidPrice > 0 && trialPrice > 0 && bestBidPrice >= trialPrice,
-    isTrial: row?.is_trial === true,
-    isLimitUpBid: row?.is_limit_up_bid === true,
+    isTrial: normalizeBool(row?.is_trial),
+    isLimitUpBid: normalizeBool(row?.is_limit_up_bid),
+    limitUpPrice: cleanNumber(row?.limit_up_price),
+  };
+}
+
+function normalizeMapping(row) {
+  const code = normalizeCode(row?.stock_symbol || row?.underlying_symbol || row?.symbol);
+  return {
+    code,
+    name: row?.stock_name || row?.underlying_name || code,
+    futureSymbol: String(row?.future_symbol || "").trim().toUpperCase(),
+    futurePct: cleanNumber(row?.fut_change_percent ?? row?.change_percent),
+    txfPct: cleanNumber(row?.txf_change_percent),
+    futureRelativeTxf: cleanNumber(row?.rel_to_txf),
+    futureVolume: cleanNumber(row?.total_volume),
+    quoteUpdatedAt: row?.quote_updated_at || row?.updated_at || "",
+    quoteAgeSeconds: cleanNumber(row?.quote_age_seconds),
+    hasMapping: normalizeBool(row?.has_mapping),
+    hasQuote: normalizeBool(row?.has_quote),
+    quoteFresh180s: normalizeBool(row?.quote_fresh_180s),
+    futoptReady: normalizeBool(row?.futopt_ready),
   };
 }
 
@@ -149,15 +164,6 @@ function historyVolatilityPct(history) {
   const min = Math.min(...prices);
   const max = Math.max(...prices);
   return min > 0 ? ((max - min) / min) * 100 : 0;
-}
-
-function chooseFutureTicker(tickers) {
-  const nowDate = taipeiDateKey();
-  const eligible = (tickers || [])
-    .filter((row) => row?.future_symbol)
-    .filter((row) => String(row?.product || "").toUpperCase().includes("STOCK") || normalizeCode(row?.underlying_symbol))
-    .sort((a, b) => String(a.end_date || "99999999").localeCompare(String(b.end_date || "99999999")));
-  return eligible.find((row) => String(row.end_date || "99999999").replace(/\D/g, "") >= nowDate) || eligible[0] || null;
 }
 
 function ruleResult(ok, label) {
@@ -193,53 +199,54 @@ async function main() {
   const date = taipeiDateKey(now);
   const updatedAt = now.toISOString();
 
-  const [tickerResult, preopenResult, quoteResult] = await Promise.all([
-    fetchFutoptTickerMap(),
+  const [mappingResult, preopenResult, sourceStatus] = await Promise.all([
+    fetchFutoptStockMappingReady(),
     fetchPreopenSnapshots(),
-    fetchFutoptQuotesLive(),
+    fetchSourceStatus().catch((error) => ({ ok: false, error: error?.message || String(error), rows: [] })),
   ]);
 
-  const tickerMap = tickerResult.byUnderlying || new Map();
-  const preopenRows = preopenResult.rows || [];
-  const quoteMap = quoteResult.bySymbol || new Map();
-  const txfQuote = quoteResult.txf || quoteMap.get("TXF") || null;
-  const txfPct = futurePct(txfQuote);
+  const mappings = (mappingResult.rows || []).map(normalizeMapping).filter((row) => /^\d{4}$/.test(row.code));
+  const preopenByCode = new Map((preopenResult.rows || []).map(normalizePreopen).filter((row) => /^\d{4}$/.test(row.code)).map((row) => [row.code, row]));
   const candidates = [];
-  const watch = [];
+  const diagnostics = {
+    futoptQuoteLiveHasStockFutures: mappings.some((row) => row.hasQuote && row.futureSymbol && row.futureSymbol !== "TXF"),
+    futoptReadyCount: mappings.filter((row) => row.futoptReady).length,
+    futoptMappedCount: mappings.filter((row) => row.hasMapping).length,
+    futoptQuoteCount: mappings.filter((row) => row.hasQuote).length,
+    futoptFresh180Count: mappings.filter((row) => row.quoteFresh180s).length,
+    preopenSnapshotCount: preopenByCode.size,
+    finalBlindBuyReadyCount: 0,
+    finalBlindBuyHas3SnapshotsCount: 0,
+    sourceStatusOk: sourceStatus.ok === true,
+    sourceStatusPayload: sourceStatus.latest?.payload || {},
+  };
 
-  for (const raw of preopenRows) {
-    const preopen = normalizePreopen(raw);
-    if (!/^\d{4}$/.test(preopen.code) || preopen.trialPrice <= 0 || preopen.referencePrice <= 0) continue;
-    const ticker = chooseFutureTicker(tickerMap.get(preopen.code) || []);
-    if (!ticker) continue;
-    const futureQuote = quoteMap.get(String(ticker.future_symbol || "").toUpperCase());
-    if (!futureQuote) continue;
-
-    const fpct = futurePct(futureQuote);
-    const fvol = quoteVolume(futureQuote);
-    const relative = fpct - txfPct;
+  for (const mapping of mappings) {
+    if (!mapping.futoptReady || !mapping.hasMapping || !mapping.hasQuote || !mapping.quoteFresh180s) continue;
+    const preopen = preopenByCode.get(mapping.code);
+    if (!preopen || preopen.trialPrice <= 0 || preopen.referencePrice <= 0) continue;
     const baseFailures = [
-      ruleResult(fpct >= THRESHOLDS.futurePct, `期貨漲幅 ${fpct.toFixed(2)}% < ${THRESHOLDS.futurePct}%`),
-      ruleResult(relative >= THRESHOLDS.futureRelativeTxf, `相對 TXF ${relative.toFixed(2)}% < ${THRESHOLDS.futureRelativeTxf}%`),
-      ruleResult(fvol >= THRESHOLDS.futureVolume, `期貨量 ${Math.round(fvol)} < ${THRESHOLDS.futureVolume}`),
+      ruleResult(mapping.futurePct >= THRESHOLDS.futurePct, `期貨漲幅 ${mapping.futurePct.toFixed(2)}% < ${THRESHOLDS.futurePct}%`),
+      ruleResult(mapping.futureRelativeTxf >= THRESHOLDS.futureRelativeTxf, `相對 TXF ${mapping.futureRelativeTxf.toFixed(2)}% < ${THRESHOLDS.futureRelativeTxf}%`),
+      ruleResult(mapping.futureVolume >= THRESHOLDS.futureVolume, `期貨量 ${Math.round(mapping.futureVolume)} < ${THRESHOLDS.futureVolume}`),
       ruleResult(preopen.trialPct >= THRESHOLDS.trialPct, `試撮漲幅 ${preopen.trialPct.toFixed(2)}% < ${THRESHOLDS.trialPct}%`),
       ruleResult(preopen.bidAskRatio >= THRESHOLDS.bidAskRatio, `委買賣比 ${preopen.bidAskRatio.toFixed(2)} < ${THRESHOLDS.bidAskRatio}`),
       ruleResult(preopen.bestBidOk, "最佳買價未達試撮價"),
     ].filter(Boolean);
     if (baseFailures.length) continue;
 
-    watch.push(preopen.code);
     candidates.push({
       date,
-      code: preopen.code,
-      name: preopen.name,
+      code: mapping.code,
+      name: preopen.name || mapping.name,
       market: preopen.market,
-      futureSymbol: ticker.future_symbol,
-      futureName: ticker.name || "",
-      futurePct: Number(fpct.toFixed(4)),
-      txfPct: Number(txfPct.toFixed(4)),
-      futureRelativeTxf: Number(relative.toFixed(4)),
-      futureVolume: fvol,
+      futureSymbol: mapping.futureSymbol,
+      futurePct: Number(mapping.futurePct.toFixed(4)),
+      txfPct: Number(mapping.txfPct.toFixed(4)),
+      futureRelativeTxf: Number(mapping.futureRelativeTxf.toFixed(4)),
+      futureVolume: mapping.futureVolume,
+      futureQuoteUpdatedAt: mapping.quoteUpdatedAt,
+      futureQuoteAgeSeconds: mapping.quoteAgeSeconds,
       trialPrice: preopen.trialPrice,
       referencePrice: preopen.referencePrice,
       trialPct: Number(preopen.trialPct.toFixed(4)),
@@ -250,6 +257,7 @@ async function main() {
       bestAskPrice: preopen.bestAskPrice,
       bestBidOk: preopen.bestBidOk,
       isLimitUpBid: preopen.isLimitUpBid,
+      limitUpPrice: preopen.limitUpPrice,
       stockFutureOk: true,
       preopenFutureOk: true,
       preopenTrialOk: true,
@@ -258,8 +266,19 @@ async function main() {
       finalBlindBuyOk: false,
       finalReasons: [],
       updatedAt: preopen.updatedAt || updatedAt,
+      sourceTables: ["v_futopt_stock_mapping_ready", "fugle_preopen_snapshot"],
     });
   }
+
+  let finalReadyResult = { ok: true, rows: [], count: 0 };
+  if (candidates.length) {
+    finalReadyResult = await fetchPreopenFinalBlindBuyReady(candidates.map((item) => item.code), {
+      limit: Math.max(100, candidates.length),
+    });
+    diagnostics.finalBlindBuyReadyCount = (finalReadyResult.rows || []).filter((row) => normalizeBool(row?.final_blind_buy_history_ready)).length;
+    diagnostics.finalBlindBuyHas3SnapshotsCount = (finalReadyResult.rows || []).filter((row) => normalizeBool(row?.has_3_snapshots_last_1m) || cleanNumber(row?.snapshots_last_1m) >= 3).length;
+  }
+  const finalReadyByCode = new Map((finalReadyResult.rows || []).map((row) => [normalizeCode(row?.symbol), row]).filter(([code]) => /^\d{4}$/.test(code)));
 
   let historyByCode = new Map();
   if (candidates.length) {
@@ -271,18 +290,24 @@ async function main() {
   }
 
   const matches = candidates.map((item) => {
+    const ready = finalReadyByCode.get(item.code) || {};
+    const readyPreopen = normalizePreopen(ready);
     const history = recentHistory(historyByCode.get(item.code) || [], now.getTime());
     const earliest = history[0] || null;
     const latest = history[history.length - 1] || null;
-    const latestTrialPct = latest ? latest.trialPct : item.trialPct;
-    const latestBidAskRatio = latest ? latest.bidAskRatio : item.bidAskRatio;
-    const latestBestBidOk = latest ? latest.bestBidOk : item.bestBidOk;
-    const latestIsLimitUpBid = latest ? latest.isLimitUpBid : item.isLimitUpBid;
+    const latestTrialPct = readyPreopen.trialPrice ? readyPreopen.trialPct : (latest ? latest.trialPct : item.trialPct);
+    const latestBidAskRatio = readyPreopen.trialPrice ? readyPreopen.bidAskRatio : (latest ? latest.bidAskRatio : item.bidAskRatio);
+    const latestBestBidOk = readyPreopen.trialPrice ? readyPreopen.bestBidOk : (latest ? latest.bestBidOk : item.bestBidOk);
+    const latestIsLimitUpBid = readyPreopen.trialPrice ? readyPreopen.isLimitUpBid : (latest ? latest.isLimitUpBid : item.isLimitUpBid);
+    const snapshotsLast1m = Math.max(cleanNumber(ready?.snapshots_last_1m), history.length);
+    const historyReady = normalizeBool(ready?.final_blind_buy_history_ready);
+    const has3Snapshots = normalizeBool(ready?.has_3_snapshots_last_1m) || snapshotsLast1m >= THRESHOLDS.finalSnapshotCount;
     const latestNotWeaker = !earliest || !latest || latest.trialPrice >= earliest.trialPrice;
     const volatility = historyVolatilityPct(history);
     const finalFailures = [
       ruleResult(finalWindowActive, "不在 08:58~08:59 終判窗口"),
-      ruleResult(history.length >= THRESHOLDS.finalSnapshotCount, `1分鐘 snapshot ${history.length} < ${THRESHOLDS.finalSnapshotCount}`),
+      ruleResult(has3Snapshots, `ready view 1分鐘 snapshot ${snapshotsLast1m} < ${THRESHOLDS.finalSnapshotCount}`),
+      ruleResult(historyReady, "final_blind_buy_history_ready=false"),
       ruleResult(volatility <= THRESHOLDS.finalVolatilityPct, `1分鐘試撮波動 ${volatility.toFixed(2)}% > ${THRESHOLDS.finalVolatilityPct}%`),
       ruleResult(latestTrialPct >= THRESHOLDS.finalTrialPct, `終判試撮漲幅 ${latestTrialPct.toFixed(2)}% < ${THRESHOLDS.finalTrialPct}%`),
       ruleResult(latestBidAskRatio >= THRESHOLDS.finalBidAskRatio, `終判委買賣比 ${latestBidAskRatio.toFixed(2)} < ${THRESHOLDS.finalBidAskRatio}`),
@@ -295,7 +320,10 @@ async function main() {
     const finalBlindBuy = finalFailures.length === 0;
     const out = {
       ...item,
-      snapshotCount1m: history.length,
+      snapshotCount1m: snapshotsLast1m,
+      historyReady,
+      has3SnapshotsLast1m: has3Snapshots,
+      finalReadyLatestObservedAt: ready?.latest_observed_at || "",
       trialVolatility1m: Number(volatility.toFixed(4)),
       latestTrialPct: Number(latestTrialPct.toFixed(4)),
       latestBidAskRatio: Number(latestBidAskRatio.toFixed(4)),
@@ -309,6 +337,7 @@ async function main() {
       strategyIds: finalBlindBuy ? ["star", "final_blind_buy"] : ["star_watch"],
       quoteDate: date,
       reason: "",
+      sourceTables: [...new Set([...item.sourceTables, "v_fugle_preopen_final_blind_buy_ready", "v_fugle_preopen_snapshot_history"])],
     };
     out.score = buildScore(out);
     out.reason = buildReason(out);
@@ -332,6 +361,7 @@ async function main() {
   const payload = {
     ok: true,
     strategy: "STAR",
+    mode: "supabase-first",
     date,
     usedDate: date,
     quoteDate: date,
@@ -341,14 +371,25 @@ async function main() {
     finalWindowActive,
     thresholds: THRESHOLDS,
     source: {
-      tickers: tickerResult.count || 0,
-      futuresQuotes: quoteResult.count || 0,
-      preopenSnapshots: preopenRows.length,
-      txfPct: Number(txfPct.toFixed(4)),
+      projectUrl: "https://cpmpfhbzutkiecccekfr.supabase.co",
+      primary: ["v_futopt_stock_mapping_ready", "fugle_preopen_snapshot", "v_fugle_preopen_final_blind_buy_ready"],
+      secondary: ["v_fugle_preopen_snapshot_history"],
+      noDirectFugleApi: true,
+      mappingReadyRows: mappingResult.count || mappings.length,
+      preopenSnapshots: preopenResult.count || preopenByCode.size,
+      finalReadyRows: finalReadyResult.count || 0,
     },
+    diagnostics,
+    emptyResultChecklist: [
+      "futopt_quotes_live 是否有個股期貨，不是只有 TXF",
+      "v_futopt_stock_mapping_ready 的 futopt_ready 數量",
+      "fugle_preopen_snapshot 是否有今日 08:45 後資料",
+      "v_fugle_preopen_final_blind_buy_ready 是否在 08:58~08:59 有 snapshots_last_1m >= 3",
+      "source_status.payload.futopt_ok / preopen_ok / preopen_history_ok 是否為 true",
+    ],
     matches,
     finalMatches,
-    watchCount: watch.length,
+    watchCount: matches.length,
     matchCount: matches.length,
     finalMatchCount: finalMatches.length,
   };
@@ -373,14 +414,15 @@ async function main() {
     });
   }
 
-  console.log(`STAR preopen ok: candidates ${matches.length}, FinalBlindBuy ${finalMatches.length}, window=${windowActive}, finalWindow=${finalWindowActive}`);
-  if (!windowActive) console.log("STAR preopen note: outside 08:45~08:59, wrote diagnostics only.");
+  console.log(`STAR preopen ok: candidates ${matches.length}, FinalBlindBuy ${finalMatches.length}, futoptReady=${diagnostics.futoptReadyCount}, preopen=${diagnostics.preopenSnapshotCount}, finalReady=${diagnostics.finalBlindBuyReadyCount}, window=${windowActive}, finalWindow=${finalWindowActive}`);
+  if (!windowActive) console.log("STAR preopen note: outside 08:45~08:59, wrote Supabase diagnostics only.");
 }
 
 main().catch((error) => {
   const payload = {
     ok: false,
     strategy: "STAR",
+    mode: "supabase-first",
     date: taipeiDateKey(),
     updatedAt: new Date().toISOString(),
     error: error?.message || String(error),

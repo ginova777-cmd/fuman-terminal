@@ -35,6 +35,8 @@ const FILES = [
   "scripts/intraday-radar-rules.js",
   "scripts/prepare-deploy.js",
   "scripts/guard-source-tree.js",
+  "scripts/scan-open-buy-cache.js",
+  "scripts/scan-star-preopen.js",
   "scripts/scan-institution-cache.js",
   "scripts/scan-realtime-radar-cache.js",
   "scripts/scan-strategy3-cache.js",
@@ -55,6 +57,7 @@ const FILES = [
   "scripts/verify-supabase-json.js",
   "scripts/verify-version-bump-needed.js",
   "scripts/verify-version-consistency.js",
+  "run-live-freshness-gate.ps1",
   "run-cache-sync.ps1",
   "run-auto-main-release.ps1",
   "install-auto-main-release-task.ps1",
@@ -77,6 +80,12 @@ const FILES = [
   "data/stocks-quotes-mobile-top.json",
   "data/stocks-quotes-slim.json",
   "data/stocks-slim.json",
+  "data/open-buy-latest.json",
+  "data/open-buy-backup.json",
+  "data/open-buy-scorecard-source.json",
+  "data/star-preopen-latest.json",
+  "data/star-preopen-backup.json",
+  "data/star-preopen-scorecard-source.json",
   "data/strategy-match-index.json",
   "data/strategy-weight-report.json",
   "data/strategy2-intraday-live-top.json",
@@ -131,3 +140,4 @@ for (const file of FILES) {
 }
 
 console.log(`[sync-source] ok copied=${copied} deploy=${DEPLOY_ROOT}`);
+
