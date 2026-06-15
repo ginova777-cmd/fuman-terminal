@@ -10,48 +10,21 @@ const OUT_FILE = dataPath("institution-latest.json");
 const BACKUP_FILE = dataPath("institution-backup.json");
 const SUMMARY_FILE = dataPath("institution-summary.json");
 const STOCK_URL = process.env.STOCK_UNIVERSE_URL || "https://fuman-terminal.vercel.app/api/stocks";
-const MIN_PUBLISH_ROWS = Number(process.env.INSTITUTION_MIN_PUBLISH_ROWS || 1000);
-const MAX_FALLBACK_AGE_DAYS = Number(process.env.INSTITUTION_MAX_FALLBACK_AGE_DAYS || 5);
+const SLOW_SCAN = ["1", "true", "yes"].includes(String(process.env.INSTITUTION_SLOW_SCAN || "").toLowerCase());
+const REQUEST_DELAY_MS = Number(process.env.INSTITUTION_REQUEST_DELAY_MS || (SLOW_SCAN ? 15000 : 1200));
+const FETCH_RETRIES = Number(process.env.INSTITUTION_FETCH_RETRIES || (SLOW_SCAN ? 4 : 1));
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function isRetriableFetchError(error) {
+  const message = String(error?.message || "");
+  return /HTTP (403|429|500|502|503|504)|aborted|fetch failed/i.test(message);
+}
 
 function readJson(file, fallback) {
   try { return JSON.parse(fs.readFileSync(file, "utf8")); } catch { return fallback; }
-}
-
-function writeInstitutionOutput(output) {
-  fs.mkdirSync(path.dirname(OUT_FILE), { recursive: true });
-  fs.writeFileSync(OUT_FILE, `${JSON.stringify(output, null, 2)}\n`);
-  writeSummary("institution", output, SUMMARY_FILE);
-  fs.writeFileSync(BACKUP_FILE, `${JSON.stringify({ ...output, source: "github-actions-backup" }, null, 2)}\n`);
-}
-
-function publishFallback(previous, reason, details = {}) {
-  const previousData = previous && typeof previous.data === "object" ? previous.data : {};
-  const previousCount = Object.keys(previousData).length;
-  const previousAge = ageInDays(previous.usedDate);
-  if (previousCount < MIN_PUBLISH_ROWS || previousAge > MAX_FALLBACK_AGE_DAYS) return false;
-  const output = {
-    ...previous,
-    ok: true,
-    source: "github-actions-fallback",
-    fallbackFromPrevious: true,
-    fallbackReason: reason,
-    updatedAt: new Date().toISOString(),
-    sourceHealth: {
-      ...(previous.sourceHealth || {}),
-      fallback: true,
-      fallbackReason: reason,
-      fallbackDetails: details,
-      previousUpdatedAt: previous.updatedAt || "",
-      previousUsedDate: previous.usedDate || "",
-      previousCount,
-      previousAgeDays: previousAge,
-    },
-    count: previousCount,
-    data: previousData,
-  };
-  writeInstitutionOutput(output);
-  console.warn(`institution fallback published from previous cache: rows ${previousCount}, usedDate ${output.usedDate || "--"}, reason ${reason}`);
-  return true;
 }
 
 function ymdToDate(ymd) {
@@ -95,21 +68,31 @@ function runHandler() {
 }
 
 async function fetchJson(url, timeout = 30000) {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeout);
-  try {
-    const response = await fetch(url, {
-      signal: controller.signal,
-      headers: {
-        "User-Agent": "Mozilla/5.0 (compatible; FumanTerminalBot/1.0)",
-        Accept: "application/json,text/plain,*/*",
-      },
-    });
-    if (!response.ok) throw new Error(`${url} HTTP ${response.status}`);
-    return await response.json();
-  } finally {
-    clearTimeout(timer);
+  let lastError = null;
+  for (let attempt = 1; attempt <= FETCH_RETRIES; attempt++) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeout);
+    try {
+      if (REQUEST_DELAY_MS > 0) await sleep(REQUEST_DELAY_MS);
+      const response = await fetch(url, {
+        signal: controller.signal,
+        headers: {
+          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125 Safari/537.36",
+          Accept: "application/json,text/plain,*/*",
+        },
+      });
+      if (!response.ok) throw new Error(`${url} HTTP ${response.status}`);
+      return await response.json();
+    } catch (error) {
+      lastError = error;
+      if (attempt >= FETCH_RETRIES || !isRetriableFetchError(error)) break;
+      const backoffMs = REQUEST_DELAY_MS + attempt * (SLOW_SCAN ? 30000 : 3000);
+      await sleep(backoffMs);
+    } finally {
+      clearTimeout(timer);
+    }
   }
+  throw lastError;
 }
 
 async function runStocksHandler() {
@@ -252,6 +235,28 @@ function buildQuoteMap(payload) {
   return map;
 }
 
+function buildQuoteMapFromInstitutionData(data) {
+  const map = new Map();
+  for (const row of Object.values(data || {})) {
+    const code = String(row.code || "").trim();
+    if (!/^\d{4}$/.test(code)) continue;
+    const close = cleanNumber(row.close);
+    const tradeVolume = cleanNumber(row.tradeVolume);
+    if (close <= 0 && tradeVolume <= 0) continue;
+    map.set(code, {
+      code,
+      name: String(row.name || "").trim(),
+      close,
+      change: Number(row.change) || 0,
+      percent: Number(row.percent) || 0,
+      tradeVolume,
+      value: cleanNumber(row.value),
+      market: row.quoteMarket || row.market || "",
+    });
+  }
+  return map;
+}
+
 function enrichInstitutionData(data, quoteMap, tradingMetricMap = new Map()) {
   const output = {};
   for (const [code, row] of Object.entries(data || {})) {
@@ -275,8 +280,20 @@ function enrichInstitutionData(data, quoteMap, tradingMetricMap = new Map()) {
 }
 
 async function main() {
-  const previous = readJson(OUT_FILE, readJson(BACKUP_FILE, { ok: true, data: {} }));
-  const [payload, stockPayload, tradingMetricResult] = await Promise.all([runHandler(), runStocksHandler(), fetchHistoricalTradingMetrics()]);
+  const backup = readJson(BACKUP_FILE, { ok: true, data: {} });
+  let payload;
+  let stockPayload;
+  let tradingMetricResult;
+  if (SLOW_SCAN) {
+    console.log(`institution slow scan enabled: requestDelay=${REQUEST_DELAY_MS}ms retries=${FETCH_RETRIES}`);
+    payload = await runHandler();
+    await sleep(5000);
+    stockPayload = await runStocksHandler();
+    await sleep(5000);
+    tradingMetricResult = await fetchHistoricalTradingMetrics();
+  } else {
+    [payload, stockPayload, tradingMetricResult] = await Promise.all([runHandler(), runStocksHandler(), fetchHistoricalTradingMetrics()]);
+  }
   if ((payload.errors || []).length) {
     console.warn(`institution source warnings: ${(payload.errors || []).join(" | ")}`);
   }
@@ -285,6 +302,11 @@ async function main() {
     console.warn(`stock universe quote enrichment weak: ok=${Boolean(stockPayload?.ok)}, rows=${stockRows}`);
   }
   const quoteMap = buildQuoteMap(stockPayload);
+  if (quoteMap.size < 100) {
+    const backupQuoteMap = buildQuoteMapFromInstitutionData(backup.data || {});
+    backupQuoteMap.forEach((quote, code) => quoteMap.set(code, quote));
+    console.warn(`stock universe fallback used: backupQuotes=${backupQuoteMap.size}`);
+  }
   const misQuotes = await fetchMisQuotes(Object.keys(payload.data || {}));
   if (!misQuotes.size) {
     console.warn("MIS quote enrichment returned 0 rows; institution rows will still be guarded by official source freshness");
@@ -331,20 +353,19 @@ async function main() {
   };
 
   const dataAge = ageInDays(output.usedDate);
-  if (count < MIN_PUBLISH_ROWS) {
-    const reason = `scan returned too few rows (${count})`;
-    if (publishFallback(previous, reason, { count, minimum: MIN_PUBLISH_ROWS, warnings: tradingMetricResult.warnings.slice(0, 8) })) return;
-    console.error(`institution cache ${reason}; no acceptable fallback cache available`);
+  if (count < 1000) {
+    console.error(`institution cache scan returned too few rows (${count}); keeping existing cache files unchanged`);
     process.exit(2);
   }
   if (dataAge > 3) {
-    const reason = `scan stale: usedDate ${output.usedDate || "--"}, age ${dataAge} days`;
-    if (publishFallback(previous, reason, { usedDate: output.usedDate || "", ageDays: dataAge })) return;
-    console.error(`institution cache is stale: usedDate ${output.usedDate || "--"}, age ${dataAge} days; no acceptable fallback cache available`);
+    console.error(`institution cache is stale: usedDate ${output.usedDate || "--"}, age ${dataAge} days; keeping existing cache files unchanged`);
     process.exit(2);
   }
 
-  writeInstitutionOutput(output);
+  fs.mkdirSync(path.dirname(OUT_FILE), { recursive: true });
+  fs.writeFileSync(OUT_FILE, `${JSON.stringify(output, null, 2)}\n`);
+  writeSummary("institution", output, SUMMARY_FILE);
+  fs.writeFileSync(BACKUP_FILE, `${JSON.stringify({ ...output, source: "github-actions-backup" }, null, 2)}\n`);
   console.log(`institution cache updated: rows ${count}, usedDate ${output.usedDate || "--"}, stockRows ${stockRows}, misQuotes ${misQuotes.size}`);
 }
 

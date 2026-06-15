@@ -31,7 +31,7 @@ function Write-Log($message) {
 }
 
 if ($env:FUMAN_INSIDE_FRESHNESS_GATE -ne "1") {
-  $redirectScript = if ($env:FUMAN_LEGACY_GATE_SCRIPT) { $env:FUMAN_LEGACY_GATE_SCRIPT } else { "freshness:gate:fast" }
+  $redirectScript = if ($env:FUMAN_LEGACY_GATE_SCRIPT) { $env:FUMAN_LEGACY_GATE_SCRIPT } else { "freshness:gate" }
   Write-Log "Direct cache sync redirected to npm run $redirectScript. scope=$Scope"
   Push-Location $PSScriptRoot
   try {

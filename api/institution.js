@@ -1,6 +1,20 @@
 const CACHE_MS = 5 * 60 * 1000;
 let cache = null;
 
+const SLOW_SCAN = ["1", "true", "yes"].includes(String(process.env.INSTITUTION_SLOW_SCAN || "").toLowerCase());
+const REQUEST_DELAY_MS = Number(process.env.INSTITUTION_REQUEST_DELAY_MS || (SLOW_SCAN ? 15000 : 1200));
+const FETCH_RETRIES = Number(process.env.INSTITUTION_FETCH_RETRIES || (SLOW_SCAN ? 4 : 1));
+const FINMIND_TOKEN = process.env.FINMIND_TOKEN || process.env.FINMIND_API_TOKEN || "";
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function isRetriableFetchError(error) {
+  const message = String(error?.message || "");
+  return /HTTP (403|429|500|502|503|504)|aborted|fetch failed/i.test(message);
+}
+
 function cleanNumber(value) {
   return Number(String(value ?? "").replace(/[,+]/g, "").trim()) || 0;
 }
@@ -36,23 +50,33 @@ function formatTpexDate(date) {
 }
 
 async function fetchJson(url, timeout = 20000) {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeout);
-  try {
-    const response = await fetch(url, {
-      signal: controller.signal,
-      headers: {
-        "User-Agent": "Mozilla/5.0 (compatible; FumanTerminal/1.0)",
-        Accept: "application/json,text/plain,*/*",
-        Referer: "https://www.twse.com.tw/",
-      },
-    });
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
-    const text = await response.text();
-    return JSON.parse(text.replace(/^\uFEFF/, ""));
-  } finally {
-    clearTimeout(timer);
+  let lastError = null;
+  for (let attempt = 1; attempt <= FETCH_RETRIES; attempt++) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeout);
+    try {
+      if (REQUEST_DELAY_MS > 0) await sleep(REQUEST_DELAY_MS);
+      const response = await fetch(url, {
+        signal: controller.signal,
+        headers: {
+          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125 Safari/537.36",
+          Accept: "application/json,text/plain,*/*",
+          Referer: "https://www.twse.com.tw/",
+        },
+      });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const text = await response.text();
+      return JSON.parse(text.replace(/^\uFEFF/, ""));
+    } catch (error) {
+      lastError = error;
+      if (attempt >= FETCH_RETRIES || !isRetriableFetchError(error)) break;
+      const backoffMs = REQUEST_DELAY_MS + attempt * (SLOW_SCAN ? 30000 : 3000);
+      await sleep(backoffMs);
+    } finally {
+      clearTimeout(timer);
+    }
   }
+  throw lastError;
 }
 
 function rowRecord(fields, row) {
@@ -160,6 +184,98 @@ async function recentRows(fetcher, limit = 8) {
   return { groups, errors };
 }
 
+function formatIsoDate(date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
+
+function getRecordValue(record, names) {
+  const entries = Object.entries(record || {});
+  for (const name of names) {
+    const direct = record?.[name];
+    if (direct !== undefined && direct !== "") return direct;
+    const found = entries.find(([key]) => String(key).toLowerCase().replace(/[^a-z0-9]/g, "").includes(String(name).toLowerCase().replace(/[^a-z0-9]/g, "")));
+    if (found && found[1] !== undefined && found[1] !== "") return found[1];
+  }
+  return "";
+}
+
+async function fetchFinMindData(dataset, date) {
+  const params = new URLSearchParams({
+    dataset,
+    start_date: formatIsoDate(date),
+    end_date: formatIsoDate(date),
+  });
+  const headers = { Accept: "application/json" };
+  if (FINMIND_TOKEN) headers.Authorization = `Bearer ${FINMIND_TOKEN}`;
+  const response = await fetch(`https://api.finmindtrade.com/api/v4/data?${params}`, { headers });
+  if (!response.ok) throw new Error(`FinMind ${dataset} HTTP ${response.status}`);
+  const payload = await response.json();
+  if (!payload?.data || !Array.isArray(payload.data)) throw new Error(`FinMind ${dataset} returned no data`);
+  return payload.data;
+}
+
+function parseFinMindWideRow(row) {
+  const code = String(getRecordValue(row, ["stock_id", "stockid"]) || "").trim();
+  if (!/^\d{4}$/.test(code)) return null;
+  const name = String(getRecordValue(row, ["stock_name", "stockname", "name"]) || "").trim();
+  const foreign = (
+    cleanNumber(getRecordValue(row, ["Foreign_Investor_buy"])) -
+    cleanNumber(getRecordValue(row, ["Foreign_Investor_sell"])) +
+    cleanNumber(getRecordValue(row, ["Foreign_Dealer_Self_buy"])) -
+    cleanNumber(getRecordValue(row, ["Foreign_Dealer_Self_sell"]))
+  );
+  const trust = cleanNumber(getRecordValue(row, ["Investment_Trust_buy"])) - cleanNumber(getRecordValue(row, ["Investment_Trust_sell"]));
+  const dealer = (
+    cleanNumber(getRecordValue(row, ["Dealer_buy"])) -
+    cleanNumber(getRecordValue(row, ["Dealer_sell"])) +
+    cleanNumber(getRecordValue(row, ["Dealer_self_buy"])) -
+    cleanNumber(getRecordValue(row, ["Dealer_self_sell"])) +
+    cleanNumber(getRecordValue(row, ["Dealer_Hedging_buy"])) -
+    cleanNumber(getRecordValue(row, ["Dealer_Hedging_sell"]))
+  );
+  const total = foreign + trust + dealer;
+  return { code, name, foreign, trust, dealer, total, market: "FinMind" };
+}
+
+function parseFinMindLongRows(rows) {
+  const byCode = new Map();
+  for (const row of rows) {
+    const code = String(getRecordValue(row, ["stock_id", "stockid"]) || "").trim();
+    if (!/^\d{4}$/.test(code)) continue;
+    const stockName = String(getRecordValue(row, ["stock_name", "stockname"]) || "").trim();
+    const investor = String(getRecordValue(row, ["name", "institutional_investors", "institutionalinvestors"]) || "").toLowerCase();
+    const amount = cleanNumber(getRecordValue(row, ["buy"])) - cleanNumber(getRecordValue(row, ["sell"]));
+    const item = byCode.get(code) || { code, name: stockName, foreign: 0, trust: 0, dealer: 0, total: 0, market: "FinMind" };
+    if (stockName && !item.name) item.name = stockName;
+    if (/foreign|外資|外陸/.test(investor)) item.foreign += amount;
+    else if (/trust|投信/.test(investor)) item.trust += amount;
+    else if (/dealer|自營/.test(investor)) item.dealer += amount;
+    item.total = item.foreign + item.trust + item.dealer;
+    byCode.set(code, item);
+  }
+  return Array.from(byCode.values());
+}
+
+async function fetchFinMindInstitution(date) {
+  const ymd = formatYmd(date);
+  const errors = [];
+  try {
+    const rows = (await fetchFinMindData("TaiwanStockInstitutionalInvestorsBuySellWide", date))
+      .map(parseFinMindWideRow)
+      .filter(Boolean);
+    if (rows.length) return { date: ymd, rows, source: "FinMind Wide" };
+  } catch (error) {
+    errors.push(error.message);
+  }
+  try {
+    const rows = parseFinMindLongRows(await fetchFinMindData("TaiwanStockInstitutionalInvestorsBuySell", date));
+    if (rows.length) return { date: ymd, rows, source: "FinMind" };
+  } catch (error) {
+    errors.push(error.message);
+  }
+  return { date: ymd, rows: [], errors };
+}
+
 function buildMarketData(history) {
   const groups = history.groups || [];
   const latest = groups.find((group) => group.rows?.length);
@@ -232,15 +348,30 @@ module.exports = async function handler(request, response) {
   }
 
   try {
-    const [twseHistory, tpexHistory] = await Promise.all([
-      recentRows(fetchTwseInstitution, 8),
-      recentRows(fetchTpexInstitution, 8),
-    ]);
+    const [twseHistory, tpexHistory] = SLOW_SCAN
+      ? [await recentRows(fetchTwseInstitution, 8), await recentRows(fetchTpexInstitution, 8)]
+      : await Promise.all([
+        recentRows(fetchTwseInstitution, 8),
+        recentRows(fetchTpexInstitution, 8),
+      ]);
     const twseData = buildMarketData(twseHistory);
     const tpexData = buildMarketData(tpexHistory);
-    const data = { ...twseData, ...tpexData };
-    const twseDate = twseHistory.groups?.[0]?.date || "";
-    const tpexDate = tpexHistory.groups?.[0]?.date || "";
+    let data = { ...twseData, ...tpexData };
+    let twseDate = twseHistory.groups?.[0]?.date || "";
+    let tpexDate = tpexHistory.groups?.[0]?.date || "";
+    const errors = [...(twseHistory.errors || []), ...(tpexHistory.errors || [])];
+    const sources = ["TWSE T86", "TPEx 3itrade_hedge_result"];
+    if (Object.keys(data).length < 1000) {
+      const finMindHistory = await recentRows(fetchFinMindInstitution, 3);
+      const finMindData = buildMarketData(finMindHistory);
+      if (Object.keys(finMindData).length >= 1000) {
+        data = finMindData;
+        twseDate = finMindHistory.groups?.[0]?.date || twseDate;
+        tpexDate = finMindHistory.groups?.[0]?.date || tpexDate;
+        sources.push(finMindHistory.groups?.[0]?.source || "FinMind");
+      }
+      errors.push(...(finMindHistory.errors || []));
+    }
     const dates = [twseDate, tpexDate].filter(Boolean).sort();
     const payload = {
       ok: true,
@@ -248,8 +379,8 @@ module.exports = async function handler(request, response) {
       sourceDates: { twse: twseDate, tpex: tpexDate },
       count: Object.keys(data).length,
       data,
-      errors: [...(twseHistory.errors || []), ...(tpexHistory.errors || [])].slice(0, 8),
-      sources: ["TWSE T86", "TPEx 3itrade_hedge_result"],
+      errors: errors.slice(0, 12),
+      sources,
     };
     cache = { ts: Date.now(), payload };
     response.status(200).json(payload);
