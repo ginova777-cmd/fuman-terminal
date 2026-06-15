@@ -39,7 +39,7 @@
     "scan:full": "pwsh.exe -NoProfile -ExecutionPolicy Bypass -File ./run-full-scan.ps1",
     "publish:gate": "pwsh.exe -NoProfile -ExecutionPolicy Bypass -File ./run-publish-gate.ps1",
     "release:daily": "pwsh.exe -NoProfile -ExecutionPolicy Bypass -File ./run-daily-release.ps1",
-    "freshness:gate": "pwsh.exe -NoProfile -ExecutionPolicy Bypass -File run-live-freshness-gate.ps1",
+    "freshness:gate": "npm run release:daily",
     "freshness:gate:fast": "pwsh.exe -NoProfile -ExecutionPolicy Bypass -File run-live-freshness-gate.ps1 -Fast",
     "freshness:local-repair": "pwsh.exe -NoProfile -ExecutionPolicy Bypass -File run-local-freshness-repair.ps1",
     "verify:publish-gate": "node scripts/verify-publish-gate.js",

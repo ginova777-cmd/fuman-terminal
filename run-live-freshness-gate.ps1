@@ -4,6 +4,7 @@ param(
   [switch]$SkipWarrant,
   [switch]$SkipInstitution,
   [switch]$SkipTerminalCopy,
+  [switch]$SkipRawRefresh,
   [switch]$Fast
 )
 
@@ -385,7 +386,11 @@ try {
   Invoke-RepoSyncPreflight
   Set-FumanRuntimeEnv
 
-  if (-not $SkipRealtime) {
+  if ($SkipRawRefresh) {
+    Write-GateLog "Raw refresh skipped; publish gate will only sync, verify, and publish already-scanned data."
+  }
+
+  if (-not $SkipRawRefresh -and -not $SkipRealtime) {
     $env:REALTIME_RADAR_PATROL_INTERVAL_MS = "3000"
     Push-Location $syncRoot
     try {
@@ -395,7 +400,7 @@ try {
     }
   }
 
-  if (-not $SkipStrategy2) {
+  if (-not $SkipRawRefresh -and -not $SkipStrategy2) {
     Set-Strategy2IntradayEnv
     Push-Location $syncRoot
     try {
@@ -406,7 +411,7 @@ try {
     }
   }
 
-  if (-not $SkipInstitution) {
+  if (-not $SkipRawRefresh -and -not $SkipInstitution) {
     Push-Location $syncRoot
     $previousInstitutionSlowScan = $env:INSTITUTION_SLOW_SCAN
     $previousInstitutionDelay = $env:INSTITUTION_REQUEST_DELAY_MS
@@ -430,7 +435,7 @@ try {
     }
   }
 
-  if (-not $SkipWarrant) {
+  if (-not $SkipRawRefresh -and -not $SkipWarrant) {
     Push-Location $syncRoot
     try {
       $null = Invoke-GateCommand "warrant flow raw refresh" { & $nodeExe "scripts\scan-warrant-flow-cache.js" } -AllowFailure
@@ -439,7 +444,7 @@ try {
     }
   }
 
-  if (-not $Fast) {
+  if (-not $SkipRawRefresh -and -not $Fast) {
     Push-Location $syncRoot
     try {
       $null = Invoke-GateCommand "open buy raw refresh" { & $nodeExe "scripts\scan-open-buy-cache.js" } -AllowFailure
@@ -475,7 +480,7 @@ try {
     } finally {
       Pop-Location
     }
-  } else {
+  } elseif ($Fast) {
     Write-GateLog "Fast gate selected; long raw scans skipped and existing verified caches will be reused."
   }
 
@@ -523,7 +528,7 @@ try {
     Write-GateLog "cache sync returned non-zero after publish; final live freshness check is now authoritative"
   }
 
-  $gateMode = if ($Fast) { "fast" } else { "full" }
+  $gateMode = if ($SkipRawRefresh) { "publish" } elseif ($Fast) { "fast" } else { "full" }
   Invoke-NpmAt $publishRoot "verify:data-freshness"
   Invoke-LiveDataFreshnessVerify -SkipTerminalGate
   Invoke-NpmAt $publishRoot "verify:live-version"

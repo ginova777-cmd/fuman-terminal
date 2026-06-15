@@ -40,8 +40,22 @@ const gateScript = packageJson.scripts && packageJson.scripts["freshness:gate"];
 if (!gateScript) {
   issues.push("package.json missing scripts.freshness:gate");
 } else {
-  if (!/\bpwsh\.exe\b/i.test(gateScript)) issues.push("freshness:gate must use PowerShell 7 pwsh.exe");
-  if (!/run-live-freshness-gate\.ps1/i.test(gateScript)) issues.push("freshness:gate must run run-live-freshness-gate.ps1");
+  if (!/npm run release:daily/.test(gateScript)) issues.push("freshness:gate must delegate to npm run release:daily");
+}
+for (const [scriptName, marker] of [
+  ["scan:full", "run-full-scan.ps1"],
+  ["publish:gate", "run-publish-gate.ps1"],
+  ["release:daily", "run-daily-release.ps1"],
+]) {
+  const script = packageJson.scripts && packageJson.scripts[scriptName];
+  if (!script) {
+    issues.push(`package.json missing scripts.${scriptName}`);
+  } else {
+    if (!/\bpwsh\.exe\b/i.test(script)) issues.push(`${scriptName} must use PowerShell 7 pwsh.exe`);
+    if (!new RegExp(marker.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i").test(script)) {
+      issues.push(`${scriptName} must run ${marker}`);
+    }
+  }
 }
 const fastGateScript = packageJson.scripts && packageJson.scripts["freshness:gate:fast"];
 if (!fastGateScript) {
@@ -150,6 +164,9 @@ if (!fs.existsSync(path.join(ROOT, "legacy-entrypoint-guard.ps1"))) {
 
 const cacheSync = read("run-cache-sync.ps1");
 const gate = read("run-live-freshness-gate.ps1");
+const fullScan = read("run-full-scan.ps1");
+const publishGate = read("run-publish-gate.ps1");
+const dailyRelease = read("run-daily-release.ps1");
 if (!/if \(\$Scope -ne "all"\)/.test(cacheSync)) {
   issues.push("run-cache-sync.ps1 must block every non-all scope");
 }
@@ -220,6 +237,34 @@ for (const marker of [
   "FUMAN_SKIP_TERMINAL_GATE_ARTIFACT",
 ]) {
   if (!gate.includes(marker)) issues.push(`run-live-freshness-gate.ps1 missing ${marker}`);
+}
+if (!/SkipRawRefresh/.test(gate) || !/Raw refresh skipped/.test(gate) || !/\$gateMode = if \(\$SkipRawRefresh\)/.test(gate)) {
+  issues.push("run-live-freshness-gate.ps1 must support publish-only mode via -SkipRawRefresh");
+}
+for (const marker of [
+  "Invoke-ScanTask \"strategy3\" \"strategy3 raw refresh\" \"critical\"",
+  "scripts\\scan-strategy3-cache.js",
+  "data\\strategy3-latest.json",
+  "data\\scan-receipts",
+  "scan-summary.json",
+]) {
+  if (!fullScan.includes(marker)) issues.push(`run-full-scan.ps1 missing strategy3 receipt marker ${marker}`);
+}
+for (const marker of [
+  "\"strategy3\"",
+  "stale scan receipt",
+  "blocking scan receipt",
+  "run-live-freshness-gate.ps1",
+  "-SkipRawRefresh",
+]) {
+  if (!publishGate.includes(marker)) issues.push(`run-publish-gate.ps1 missing publish gate marker ${marker}`);
+}
+for (const marker of [
+  "run-full-scan.ps1",
+  "scripts\\generate-slim-cache.js",
+  "run-publish-gate.ps1",
+]) {
+  if (!dailyRelease.includes(marker)) issues.push(`run-daily-release.ps1 missing daily release marker ${marker}`);
 }
 
 const dataFreshnessVerifier = read("scripts/verify-data-freshness.js");
@@ -568,7 +613,19 @@ if (fetchResult.status !== 0) {
       "run-live-freshness-gate.ps1",
       "run-cache-sync.ps1",
       "run-main-release-pipeline.ps1",
+      "run-daily-release.ps1",
+      "run-full-scan.ps1",
+      "run-publish-gate.ps1",
       "package.json",
+      "data/data-manifest.json",
+      "data/data-status-index.json",
+      "data/mobile-home-summary.json",
+      "data/strategy-match-index.json",
+      "data/strategy2-intraday-live-top.json",
+      "data/strategy2-intraday-slim.json",
+      "data/strategy2-intraday-top.json",
+      "data/terminal-home-bundle.json",
+      "data/terminal-home-mobile-slim.json",
       "scripts/generate-health-summary.js",
       "REALTIME-RADAR-FRESHNESS-GOVERNANCE.md",
       "STRATEGY5-FRESHNESS-GOVERNANCE.md",
