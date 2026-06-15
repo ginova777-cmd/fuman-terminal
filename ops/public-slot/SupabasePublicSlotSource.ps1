@@ -109,7 +109,7 @@ function Get-PublicSlotNullableLots {
 function Write-PublicSlotSourceStatus {
   param(
     [Parameter(Mandatory = $true)][string]$SourceName,
-    [ValidateSet("ok", "stale", "error", "starting", "stopped")]
+    [ValidateSet("ok", "stale", "degraded", "error", "starting", "stopped")]
     [string]$Status = "ok",
     [string]$Message = $null,
     [string]$TradeDate = (Get-Date).ToString("yyyy-MM-dd"),

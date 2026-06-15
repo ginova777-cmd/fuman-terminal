@@ -130,12 +130,16 @@ function normalizeStock(row) {
     percent: cleanNumber(row.Percent || row.percent),
     value: cleanNumber(row.TradeValue || row.value),
     tradeVolume: cleanNumber(row.TradeVolume || row.tradeVolume),
+    quoteDate: row.quoteDate || row.TradeDate || row.tradeDate || "",
     market: row.market || row.Market || "",
   };
 }
 
 async function fetchUniverse() {
-  const payload = await fetchJson(STOCK_URL);
+  const localPayload = readJson(dataPath("stocks-slim.json"), null);
+  const payload = cleanNumber(localPayload?.count) >= 1000 && Array.isArray(localPayload?.stocks)
+    ? localPayload
+    : await fetchJson(STOCK_URL);
   const rows = Array.isArray(payload) ? payload : (payload.stocks || []);
   const base = rows.map(normalizeStock).filter(Boolean);
   const fugle = overlayFugleWebSocketQuotes(base, { source: "strategy5-universe" });
@@ -905,7 +909,7 @@ async function main() {
   ];
   sourceWarnings.forEach((warning) => console.warn(`strategy5 source warning: ${warning}`));
   const matches = await buildMatches(stocks, institution.data || {}, issuedSharesResult.map, volumeAverageResult.map);
-  const quoteDate = institution.usedDate || institution.date || stocks.find((stock) => stock.quoteDate)?.quoteDate || "";
+  const quoteDate = stocks.find((stock) => stock.quoteDate)?.quoteDate || institution.usedDate || institution.date || "";
   const now = new Date();
   const output = {
     ok: true,

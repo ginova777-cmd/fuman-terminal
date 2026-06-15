@@ -89,9 +89,13 @@ async function main() {
     count: stocks.length,
     stocks,
   };
+  if (!slim.ok) {
+    console.error(`[stocks-slim] refused to overwrite full cache: count=${slim.count} < ${MIN_STOCK_COUNT}`);
+    process.exitCode = 1;
+    return;
+  }
   writeToAll("data/stocks-slim.json", slim);
   console.log(`[stocks-slim] wrote data/stocks-slim.json count=${slim.count} date=${slim.resolvedTradeDate || slim.today || "unknown"} ok=${slim.ok}`);
-  if (!slim.ok) process.exitCode = 1;
 }
 
 main().catch((error) => {

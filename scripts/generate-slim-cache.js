@@ -263,6 +263,12 @@ function institutionPresetFiles(payload) {
 function slimWarrant(payload) {
   const matches = Array.isArray(payload?.matches) ? payload.matches : [];
   const singleSignals = Array.isArray(payload?.singleSignals) ? payload.singleSignals : [];
+  const quoteRows = normalizeArray(readOptional("data/stocks-quotes-slim.json", {})?.quotes);
+  const quoteByCode = new Map(quoteRows.map((row) => [String(row?.code || "").trim(), row]).filter(([code]) => code));
+  const quoteFor = (item) => quoteByCode.get(String(item?.underlyingCode || item?.code || "").trim()) || null;
+  const closeFor = (item) => cleanNumber(quoteFor(item)?.close ?? item.displayClose ?? item.underlyingClose ?? item.close ?? item.stockClose);
+  const percentFor = (item) => cleanNumber(quoteFor(item)?.percent ?? item.displayPercent ?? item.underlyingPercent ?? item.percent ?? item.stockPercent);
+  const quoteDateFor = (item) => quoteFor(item)?.quoteDate || item.quoteDate || "";
   return {
     ok: Boolean(payload?.ok ?? true),
     source: payload?.source || "warrant-flow-slim",
@@ -274,8 +280,8 @@ function slimWarrant(payload) {
       name: String(item.underlyingName || item.name || item.underlyingCode || item.code || ""),
       underlyingCode: String(item.underlyingCode || item.code || ""),
       underlyingName: String(item.underlyingName || item.name || ""),
-      underlyingClose: cleanNumber(item.underlyingClose ?? item.close ?? item.stockClose),
-      underlyingPercent: cleanNumber(item.underlyingPercent ?? item.percent ?? item.stockPercent),
+      underlyingClose: closeFor(item),
+      underlyingPercent: percentFor(item),
       callValue: cleanNumber(item.callValue),
       putValue: cleanNumber(item.putValue),
       callCount: cleanNumber(item.callCount),
@@ -291,17 +297,20 @@ function slimWarrant(payload) {
       branchStatus: item.branchStatus || "",
       actionLabel: item.actionLabel || "",
       signalGrade: item.signalGrade || item.level || item.grade || "",
-      displayClose: cleanNumber(item.displayClose ?? item.underlyingClose ?? item.close),
-      displayPercent: cleanNumber(item.displayPercent ?? item.underlyingPercent ?? item.percent),
+      displayClose: closeFor(item),
+      displayPercent: percentFor(item),
       tradeDate: item.tradeDate || "",
-      quoteDate: item.quoteDate || "",
+      quoteDate: quoteDateFor(item),
       reason: item.reason || "",
     })),
-    singleSignals: singleSignals.map(slimSingleWarrantSignal),
+    singleSignals: singleSignals.map((item) => slimSingleWarrantSignal(item, { quote: quoteFor(item) })),
   };
 }
 
-function slimSingleWarrantSignal(item) {
+function slimSingleWarrantSignal(item, options = {}) {
+  const quote = options.quote || null;
+  const close = cleanNumber(quote?.close ?? item.displayClose ?? item.underlyingClose ?? item.close ?? item.stockClose);
+  const percent = cleanNumber(quote?.percent ?? item.displayPercent ?? item.underlyingPercent ?? item.percent ?? item.stockPercent);
   return {
     code: String(item.underlyingCode || item.code || ""),
     name: String(item.underlyingName || item.name || item.underlyingCode || item.code || ""),
@@ -309,8 +318,8 @@ function slimSingleWarrantSignal(item) {
     underlyingName: String(item.underlyingName || item.name || ""),
     warrantCode: String(item.warrantCode || ""),
     warrantName: String(item.warrantName || ""),
-    underlyingClose: cleanNumber(item.underlyingClose ?? item.close ?? item.stockClose),
-    underlyingPercent: cleanNumber(item.underlyingPercent ?? item.percent ?? item.stockPercent),
+    underlyingClose: close,
+    underlyingPercent: percent,
     value: cleanNumber(item.value),
     volume: cleanNumber(item.volume),
     strike: cleanNumber(item.strike),
@@ -331,10 +340,10 @@ function slimSingleWarrantSignal(item) {
     score: cleanNumber(item.score),
     signalGrade: item.signalGrade || "",
     actionLabel: item.actionLabel || "",
-    displayClose: cleanNumber(item.displayClose ?? item.underlyingClose ?? item.close),
-    displayPercent: cleanNumber(item.displayPercent ?? item.underlyingPercent ?? item.percent),
+    displayClose: close,
+    displayPercent: percent,
     tradeDate: item.tradeDate || "",
-    quoteDate: item.quoteDate || "",
+    quoteDate: quote?.quoteDate || item.quoteDate || "",
     reason: item.reason || "",
   };
 }
@@ -685,9 +694,25 @@ function mobileHomeSummary() {
 }
 
 function slimStocks() {
-  const existing = readOptional("data/stocks-slim.json", null);
-  if (cleanNumber(existing?.count) >= 500 && normalizeArray(existing?.stocks).length >= 500) {
-    return existing;
+  const existingCandidates = [runtimeRoot, repoRoot, syncRoot]
+    .map((root) => {
+      const file = path.join(root, "data/stocks-slim.json");
+      if (!fs.existsSync(file)) return null;
+      const payload = readJson(file);
+      return {
+        payload,
+        count: Math.max(cleanNumber(payload?.count), normalizeArray(payload?.stocks).length),
+        freshness: payloadFreshness(payload, file),
+      };
+    })
+    .filter(Boolean)
+    .sort((a, b) => b.count - a.count || b.freshness - a.freshness);
+  const completeExisting = existingCandidates.find((item) => item.count >= 1000);
+  if (completeExisting) return completeExisting.payload;
+  const fallbackExisting = existingCandidates.find((item) => item.count >= 500);
+  if (fallbackExisting) {
+    console.warn(`[slim] keeping partial stocks cache count=${fallbackExisting.count}; no complete cache found`);
+    return fallbackExisting.payload;
   }
   const market = readOptional("data/market-summary.json", {});
   const rows = normalizeArray(market?.stocks).map((stock) => {

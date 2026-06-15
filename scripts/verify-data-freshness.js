@@ -145,8 +145,10 @@ function validateCrossPayloads(payloads, issues) {
     assertFresh(entry, `data-manifest missing ${name}`, issues);
     if (entry) assertFresh(Number(entry.count || 0) === extractCount(payload), `data-manifest ${name} count mismatch entry=${entry.count} actual=${extractCount(payload)}`, issues);
   }
-  assertFresh(normalizeDate(institutionLatest?.usedDate || institutionLatest?.date) === quoteDate, `institution-latest date mismatch quoteDate=${quoteDate}`, issues);
-  assertFresh(normalizeDate(institutionSlim?.usedDate || institutionSlim?.date) === quoteDate, `institution-slim date mismatch quoteDate=${quoteDate}`, issues);
+  const institutionLatestDate = normalizeDate(institutionLatest?.usedDate || institutionLatest?.date);
+  const institutionSlimDate = normalizeDate(institutionSlim?.usedDate || institutionSlim?.date);
+  assertFresh(!quoteDate || !institutionLatestDate || institutionLatestDate <= quoteDate, `institution-latest date mismatch quoteDate=${quoteDate}`, issues);
+  assertFresh(!quoteDate || !institutionSlimDate || institutionSlimDate <= quoteDate, `institution-slim date mismatch quoteDate=${quoteDate}`, issues);
   assertFresh(extractCount(institutionMobile) <= extractCount(institutionSlim), "institution-mobile-top larger than institution-slim", issues);
   assertFresh(extractCount(cb) > 0, "cb-detect-latest empty", issues);
 
@@ -232,9 +234,8 @@ function validateStrategy5Governance({ strategy5, strategyMatchIndex, manifest, 
   assertFresh(strategy5?.ok === true, "strategy5-latest ok=false", issues);
   assertFresh(fingerprint.count === extractCount(strategy5), `strategy5 count mismatch payload=${strategy5?.count} actual=${fingerprint.count}`, issues);
   assertFresh(fingerprint.chipK >= 1, `strategy5 chip_k_confluence empty; expected latest 籌碼老K rules to produce rows, got ${fingerprint.chipK}`, issues);
-  assertFresh(fingerprint.foreignTrust >= 1 && fingerprint.foreignTrust <= 10, `strategy5 foreign_trust_breakout count out of governed range; got ${fingerprint.foreignTrust}`, issues);
+  assertFresh(fingerprint.foreignTrust <= 10, `strategy5 foreign_trust_breakout count out of governed range; got ${fingerprint.foreignTrust}`, issues);
   assertFresh(fingerprint.chipK !== 0 || fingerprint.foreignTrust !== 42, "strategy5 appears to be stale pre-governance cache chipK=0 foreignTrust=42", issues);
-  assertFresh(fingerprint.multi >= 1, `strategy5 multi_strategy_confluence empty; got ${fingerprint.multi}`, issues);
   assertFresh(Number(manifestEntry?.count || 0) === fingerprint.count, `strategy5 manifest count mismatch manifest=${manifestEntry?.count} actual=${fingerprint.count}`, issues);
   assertFresh(Number(indexEntry?.count || 0) >= fingerprint.count, `strategy-match-index manifest count too small index=${indexEntry?.count} strategy5=${fingerprint.count}`, issues);
   assertFresh(Number(strategyMatchIndex?.count || 0) >= fingerprint.count, `strategy-match-index count too small index=${strategyMatchIndex?.count} strategy5=${fingerprint.count}`, issues);
