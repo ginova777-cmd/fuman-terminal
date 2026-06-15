@@ -59,6 +59,7 @@ const STRATEGY2_OPEN_RUSH_END_MINUTES = Number(process.env.STRATEGY2_OPEN_RUSH_E
 const STRATEGY2_EARLY_ATTACK_START_MINUTES = Number(process.env.STRATEGY2_EARLY_ATTACK_START_MINUTES || 9 * 60 + 30);
 const STRATEGY2_EARLY_ATTACK_END_MINUTES = Number(process.env.STRATEGY2_EARLY_ATTACK_END_MINUTES || 10 * 60 + 30);
 const STRATEGY2_1M_WARMUP_LIMIT = Math.max(1, Number(process.env.STRATEGY2_1M_WARMUP_LIMIT || 120));
+const STRATEGY2_1M_STATUS_MAX_AGE_SECONDS = Math.max(240, Number(process.env.STRATEGY2_1M_STATUS_MAX_AGE_SECONDS || 15 * 60));
 const STRATEGY2_1M_SUPABASE_SYNC = process.env.STRATEGY2_1M_SUPABASE_SYNC === "1";
 const MA35_PROVIDER_FAILURE_LIMIT = Math.max(1, Number(process.env.STRATEGY2_MA35_PROVIDER_FAILURE_LIMIT || 8));
 const RETAIN_LAST_GOOD_ON_SOURCE_UNHEALTHY_SECONDS = Math.max(0, Number(process.env.STRATEGY2_RETAIN_LAST_GOOD_ON_SOURCE_UNHEALTHY_SECONDS || 10 * 60));
@@ -1530,12 +1531,9 @@ function isStrictStrategy2Ma35Record(record) {
 function isStrategy2ConditionEntryRecord(record) {
   const strategyIds = Array.isArray(record?.strategyIds) ? record.strategyIds : [];
   return strategyIds.some((id) => [
-    "star",
-    "preopen_watch",
     "open_rush",
     "early_attack",
     "intraday_continuation",
-    "triggered_still_strong",
     "rebound_turn",
   ].includes(id));
 }
@@ -2761,7 +2759,7 @@ async function fetchMa35Map(stocks, scanTimestamp, cache) {
       const status = statusByCode.get(String(code));
       const candleCount = cleanNumber(status?.candle_count);
       const latestCandleAge = cleanNumber(status?.latest_candle_age_seconds);
-      const staleLatestCandle = latestCandleAge > Math.max(240, SUPABASE_SOURCE_MAX_QUOTE_AGE_SECONDS * 2);
+      const staleLatestCandle = latestCandleAge > STRATEGY2_1M_STATUS_MAX_AGE_SECONDS;
       if (status && (status.ready_ge_35 === false || candleCount < 35 || status.has_today_data === false || staleLatestCandle)) {
         map.set(String(code), {
           ma35Attempts: [{
