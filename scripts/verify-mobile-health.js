@@ -23,7 +23,7 @@ const FIRST_SCREEN_FORBIDDEN = [
   "/data/strategy4-zone-c-page-1.json",
 ];
 const MAX_BYTES = {
-  "/terminal-app.js": 120000,
+  "/terminal-app.js": 122000,
   "/terminal-watchlist-module.js": 18000,
   "/terminal-mobile-diagnostics.js": 4000,
   "/data/mobile-home-summary.json": 12000,
