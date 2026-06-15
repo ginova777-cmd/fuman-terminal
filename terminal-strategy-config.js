@@ -90,7 +90,10 @@ const SWING_SIGNAL_DEFS = [
   { id: "runaway_gap", title: "逃逸缺口", icon: "🚀", hint: "多頭延續型缺口" },
   { id: "v_reversal", title: "V轉反彈", icon: "", hint: "跌深後快速翻紅" },
   { id: "three_inside", title: "三內翻紅", icon: "↻", hint: "弱轉強反轉型態" },
-  { id: "golden_cross", title: "多金釵", icon: "✦", hint: "短均線轉強候選" },];
+  { id: "golden_cross", title: "多金釵", icon: "✦", hint: "短均線轉強候選" },
+  { id: "wallet_strong_buy", title: "多方寶石", icon: "◆", hint: "主力爸爸錢包多方寶石" },
+  { id: "wallet_volume_cross", title: "紅色三角形", icon: "🔺", hint: "主力爸爸錢包量能紅K交叉" },
+];
   window.FUMAN_STRATEGY_CONFIG = {
     STRATEGY_DEFS,
     STRATEGY_BY_ID,
