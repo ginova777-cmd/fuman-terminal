@@ -53,6 +53,8 @@ function Enter-Lock {
 }
 
 function Invoke-MainReleaseChain {
+  Invoke-ReleaseStep "npm run snapshot:data" { npm run snapshot:data }
+
   $releaseArgs = @("run", "release:main", "--")
   if ($CommitMessage) {
     $releaseArgs += @("-CommitMessage", $CommitMessage)
