@@ -1,6 +1,6 @@
 {
   "ok": true,
-  "updatedAt": "2026-06-15T12:30:24.000Z",
+  "updatedAt": "2026-06-15T12:50:15.447Z",
   "query": "",
   "scanned": 4349,
   "count": 64,
@@ -11,7 +11,7 @@
       "market": "上櫃",
       "tradeDate": "1150615",
       "underlyingClose": 2320,
-      "underlyingPercent": 0.43,
+      "underlyingPercent": 0.4329004329004329,
       "priceVerified": true,
       "basicVerified": true,
       "quoteSource": "TPEX daily_close_quotes",
@@ -124,10 +124,10 @@
       "code": "8299",
       "name": "群聯",
       "close": 2320,
-      "percent": 0.43,
+      "percent": 0.4329004329004329,
       "quoteDate": "20260615",
       "displayClose": 2320,
-      "displayPercent": 0.43
+      "displayPercent": 0.4329004329004329
     },
     {
       "underlyingName": "雙鴻",
@@ -383,7 +383,7 @@
       "market": "上櫃",
       "tradeDate": "1150615",
       "underlyingClose": 228,
-      "underlyingPercent": 0.22,
+      "underlyingPercent": 0.21978021978021978,
       "priceVerified": true,
       "basicVerified": true,
       "quoteSource": "TPEX daily_close_quotes",
@@ -496,10 +496,10 @@
       "code": "3264",
       "name": "欣銓",
       "close": 228,
-      "percent": 0.22,
+      "percent": 0.21978021978021978,
       "quoteDate": "20260615",
       "displayClose": 228,
-      "displayPercent": 0.22
+      "displayPercent": 0.21978021978021978
     },
     {
       "underlyingName": "譜瑞-KY",
@@ -631,7 +631,7 @@
       "market": "上櫃",
       "tradeDate": "1150615",
       "underlyingClose": 222.5,
-      "underlyingPercent": 0.68,
+      "underlyingPercent": 0.6787330316742082,
       "priceVerified": true,
       "basicVerified": true,
       "quoteSource": "TPEX daily_close_quotes",
@@ -744,10 +744,10 @@
       "code": "3152",
       "name": "璟德",
       "close": 222.5,
-      "percent": 0.68,
+      "percent": 0.6787330316742082,
       "quoteDate": "20260615",
       "displayClose": 222.5,
-      "displayPercent": 0.68
+      "displayPercent": 0.6787330316742082
     },
     {
       "underlyingName": "穩懋",
@@ -755,7 +755,7 @@
       "market": "上櫃",
       "tradeDate": "1150615",
       "underlyingClose": 511,
-      "underlyingPercent": 1.19,
+      "underlyingPercent": 1.188118811881188,
       "priceVerified": true,
       "basicVerified": true,
       "quoteSource": "TPEX daily_close_quotes",
@@ -868,10 +868,10 @@
       "code": "3105",
       "name": "穩懋",
       "close": 511,
-      "percent": 1.19,
+      "percent": 1.188118811881188,
       "quoteDate": "20260615",
       "displayClose": 511,
-      "displayPercent": 1.19
+      "displayPercent": 1.188118811881188
     },
     {
       "underlyingName": "久元",
@@ -879,7 +879,7 @@
       "market": "上櫃",
       "tradeDate": "1150615",
       "underlyingClose": 98.1,
-      "underlyingPercent": 0.82,
+      "underlyingPercent": 0.8221993833504595,
       "priceVerified": true,
       "basicVerified": true,
       "quoteSource": "TPEX daily_close_quotes",
@@ -992,10 +992,10 @@
       "code": "6261",
       "name": "久元",
       "close": 98.1,
-      "percent": 0.82,
+      "percent": 0.8221993833504595,
       "quoteDate": "20260615",
       "displayClose": 98.1,
-      "displayPercent": 0.82
+      "displayPercent": 0.8221993833504595
     },
     {
       "underlyingName": "閎康",
@@ -1003,7 +1003,7 @@
       "market": "上櫃",
       "tradeDate": "1150615",
       "underlyingClose": 293.5,
-      "underlyingPercent": 0.17,
+      "underlyingPercent": 0.17064846416382254,
       "priceVerified": true,
       "basicVerified": true,
       "quoteSource": "TPEX daily_close_quotes",
@@ -1116,10 +1116,10 @@
       "code": "3587",
       "name": "閎康",
       "close": 293.5,
-      "percent": 0.17,
+      "percent": 0.17064846416382254,
       "quoteDate": "20260615",
       "displayClose": 293.5,
-      "displayPercent": 0.17
+      "displayPercent": 0.17064846416382254
     },
     {
       "underlyingName": "良維",
@@ -1127,7 +1127,7 @@
       "market": "上櫃",
       "tradeDate": "1150615",
       "underlyingClose": 303,
-      "underlyingPercent": 0.5,
+      "underlyingPercent": 0.4975124378109453,
       "priceVerified": true,
       "basicVerified": true,
       "quoteSource": "TPEX daily_close_quotes",
@@ -1240,10 +1240,10 @@
       "code": "6290",
       "name": "良維",
       "close": 303,
-      "percent": 0.5,
+      "percent": 0.4975124378109453,
       "quoteDate": "20260615",
       "displayClose": 303,
-      "displayPercent": 0.5
+      "displayPercent": 0.4975124378109453
     },
     {
       "underlyingName": "世界",
@@ -1251,7 +1251,7 @@
       "market": "上櫃",
       "tradeDate": "1150615",
       "underlyingClose": 174.5,
-      "underlyingPercent": 2.95,
+      "underlyingPercent": 2.949852507374631,
       "priceVerified": true,
       "basicVerified": true,
       "quoteSource": "TPEX daily_close_quotes",
@@ -1364,10 +1364,10 @@
       "code": "5347",
       "name": "世界",
       "close": 174.5,
-      "percent": 2.95,
+      "percent": 2.949852507374631,
       "quoteDate": "20260615",
       "displayClose": 174.5,
-      "displayPercent": 2.95
+      "displayPercent": 2.949852507374631
     },
     {
       "underlyingName": "順達",
@@ -1375,7 +1375,7 @@
       "market": "上櫃",
       "tradeDate": "1150615",
       "underlyingClose": 428.5,
-      "underlyingPercent": 2.51,
+      "underlyingPercent": 2.511961722488038,
       "priceVerified": true,
       "basicVerified": true,
       "quoteSource": "TPEX daily_close_quotes",
@@ -1488,10 +1488,10 @@
       "code": "3211",
       "name": "順達",
       "close": 428.5,
-      "percent": 2.51,
+      "percent": 2.511961722488038,
       "quoteDate": "20260615",
       "displayClose": 428.5,
-      "displayPercent": 2.51
+      "displayPercent": 2.511961722488038
     },
     {
       "underlyingName": "元太",
@@ -1499,7 +1499,7 @@
       "market": "上櫃",
       "tradeDate": "1150615",
       "underlyingClose": 200.5,
-      "underlyingPercent": 2.3,
+      "underlyingPercent": 2.295918367346939,
       "priceVerified": true,
       "basicVerified": true,
       "quoteSource": "TPEX daily_close_quotes",
@@ -1612,10 +1612,10 @@
       "code": "8069",
       "name": "元太",
       "close": 200.5,
-      "percent": 2.3,
+      "percent": 2.295918367346939,
       "quoteDate": "20260615",
       "displayClose": 200.5,
-      "displayPercent": 2.3
+      "displayPercent": 2.295918367346939
     },
     {
       "underlyingName": "德微",
@@ -1623,7 +1623,7 @@
       "market": "上櫃",
       "tradeDate": "1150615",
       "underlyingClose": 318,
-      "underlyingPercent": 2.25,
+      "underlyingPercent": 2.2508038585209005,
       "priceVerified": true,
       "basicVerified": true,
       "quoteSource": "TPEX daily_close_quotes",
@@ -1736,10 +1736,10 @@
       "code": "3675",
       "name": "德微",
       "close": 318,
-      "percent": 2.25,
+      "percent": 2.2508038585209005,
       "quoteDate": "20260615",
       "displayClose": 318,
-      "displayPercent": 2.25
+      "displayPercent": 2.2508038585209005
     },
     {
       "underlyingName": "茂迪",
@@ -1747,7 +1747,7 @@
       "market": "上櫃",
       "tradeDate": "1150615",
       "underlyingClose": 31.9,
-      "underlyingPercent": 2.57,
+      "underlyingPercent": 2.5723472668810197,
       "priceVerified": true,
       "basicVerified": true,
       "quoteSource": "TPEX daily_close_quotes",
@@ -1860,10 +1860,10 @@
       "code": "6244",
       "name": "茂迪",
       "close": 31.9,
-      "percent": 2.57,
+      "percent": 2.5723472668810197,
       "quoteDate": "20260615",
       "displayClose": 31.9,
-      "displayPercent": 2.57
+      "displayPercent": 2.5723472668810197
     },
     {
       "underlyingName": "巨漢",
@@ -1871,7 +1871,7 @@
       "market": "上櫃",
       "tradeDate": "1150615",
       "underlyingClose": 404.5,
-      "underlyingPercent": 1.89,
+      "underlyingPercent": 1.8891687657430731,
       "priceVerified": true,
       "basicVerified": true,
       "quoteSource": "TPEX daily_close_quotes",
@@ -1984,10 +1984,10 @@
       "code": "6903",
       "name": "巨漢",
       "close": 404.5,
-      "percent": 1.89,
+      "percent": 1.8891687657430731,
       "quoteDate": "20260615",
       "displayClose": 404.5,
-      "displayPercent": 1.89
+      "displayPercent": 1.8891687657430731
     },
     {
       "underlyingName": "台特化",
@@ -1995,7 +1995,7 @@
       "market": "上櫃",
       "tradeDate": "1150615",
       "underlyingClose": 275.5,
-      "underlyingPercent": 0.92,
+      "underlyingPercent": 0.9157509157509158,
       "priceVerified": true,
       "basicVerified": true,
       "quoteSource": "TPEX daily_close_quotes",
@@ -2108,10 +2108,10 @@
       "code": "4772",
       "name": "台特化",
       "close": 275.5,
-      "percent": 0.92,
+      "percent": 0.9157509157509158,
       "quoteDate": "20260615",
       "displayClose": 275.5,
-      "displayPercent": 0.92
+      "displayPercent": 0.9157509157509158
     },
     {
       "underlyingName": "旺矽",
@@ -2119,7 +2119,7 @@
       "market": "上櫃",
       "tradeDate": "1150615",
       "underlyingClose": 6435,
-      "underlyingPercent": -0.77,
+      "underlyingPercent": -0.7710100231303008,
       "priceVerified": true,
       "basicVerified": true,
       "quoteSource": "TPEX daily_close_quotes",
@@ -2232,10 +2232,10 @@
       "code": "6223",
       "name": "旺矽",
       "close": 6435,
-      "percent": -0.77,
+      "percent": -0.7710100231303008,
       "quoteDate": "20260615",
       "displayClose": 6435,
-      "displayPercent": -0.77
+      "displayPercent": -0.7710100231303008
     },
     {
       "underlyingName": "精測",
@@ -2243,7 +2243,7 @@
       "market": "上櫃",
       "tradeDate": "1150615",
       "underlyingClose": 3595,
-      "underlyingPercent": -0.42,
+      "underlyingPercent": -0.41551246537396125,
       "priceVerified": true,
       "basicVerified": true,
       "quoteSource": "TPEX daily_close_quotes",
@@ -2356,10 +2356,10 @@
       "code": "6510",
       "name": "精測",
       "close": 3595,
-      "percent": -0.42,
+      "percent": -0.41551246537396125,
       "quoteDate": "20260615",
       "displayClose": 3595,
-      "displayPercent": -0.42
+      "displayPercent": -0.41551246537396125
     },
     {
       "underlyingName": "富喬",
@@ -2367,7 +2367,7 @@
       "market": "上櫃",
       "tradeDate": "1150615",
       "underlyingClose": 95.1,
-      "underlyingPercent": -1.14,
+      "underlyingPercent": -1.1434511434511523,
       "priceVerified": true,
       "basicVerified": true,
       "quoteSource": "TPEX daily_close_quotes",
@@ -2480,10 +2480,10 @@
       "code": "1815",
       "name": "富喬",
       "close": 95.1,
-      "percent": -1.14,
+      "percent": -1.1434511434511523,
       "quoteDate": "20260615",
       "displayClose": 95.1,
-      "displayPercent": -1.14
+      "displayPercent": -1.1434511434511523
     },
     {
       "underlyingName": "系統電",
@@ -2491,7 +2491,7 @@
       "market": "上櫃",
       "tradeDate": "1150615",
       "underlyingClose": 69.1,
-      "underlyingPercent": -0.86,
+      "underlyingPercent": -0.8608321377331543,
       "priceVerified": true,
       "basicVerified": true,
       "quoteSource": "TPEX daily_close_quotes",
@@ -2604,10 +2604,10 @@
       "code": "5309",
       "name": "系統電",
       "close": 69.1,
-      "percent": -0.86,
+      "percent": -0.8608321377331543,
       "quoteDate": "20260615",
       "displayClose": 69.1,
-      "displayPercent": -0.86
+      "displayPercent": -0.8608321377331543
     },
     {
       "underlyingName": "鈊象",
@@ -2615,7 +2615,7 @@
       "market": "上櫃",
       "tradeDate": "1150615",
       "underlyingClose": 751,
-      "underlyingPercent": -0.53,
+      "underlyingPercent": -0.5298013245033113,
       "priceVerified": true,
       "basicVerified": true,
       "quoteSource": "TPEX daily_close_quotes",
@@ -2728,10 +2728,10 @@
       "code": "3293",
       "name": "鈊象",
       "close": 751,
-      "percent": -0.53,
+      "percent": -0.5298013245033113,
       "quoteDate": "20260615",
       "displayClose": 751,
-      "displayPercent": -0.53
+      "displayPercent": -0.5298013245033113
     },
     {
       "underlyingName": "弘塑",
@@ -2739,7 +2739,7 @@
       "market": "上櫃",
       "tradeDate": "1150615",
       "underlyingClose": 3215,
-      "underlyingPercent": -0.46,
+      "underlyingPercent": -0.46439628482972134,
       "priceVerified": true,
       "basicVerified": true,
       "quoteSource": "TPEX daily_close_quotes",
@@ -2852,10 +2852,10 @@
       "code": "3131",
       "name": "弘塑",
       "close": 3215,
-      "percent": -0.46,
+      "percent": -0.46439628482972134,
       "quoteDate": "20260615",
       "displayClose": 3215,
-      "displayPercent": -0.46
+      "displayPercent": -0.46439628482972134
     },
     {
       "underlyingName": "精材",
@@ -2863,7 +2863,7 @@
       "market": "上櫃",
       "tradeDate": "1150615",
       "underlyingClose": 240,
-      "underlyingPercent": 3,
+      "underlyingPercent": 3.004291845493562,
       "priceVerified": true,
       "basicVerified": true,
       "quoteSource": "TPEX daily_close_quotes",
@@ -2976,10 +2976,10 @@
       "code": "3374",
       "name": "精材",
       "close": 240,
-      "percent": 3,
+      "percent": 3.004291845493562,
       "quoteDate": "20260615",
       "displayClose": 240,
-      "displayPercent": 3
+      "displayPercent": 3.004291845493562
     },
     {
       "underlyingName": "家登",
@@ -2987,7 +2987,7 @@
       "market": "上櫃",
       "tradeDate": "1150615",
       "underlyingClose": 502,
-      "underlyingPercent": -0.2,
+      "underlyingPercent": -0.19880715705765406,
       "priceVerified": true,
       "basicVerified": true,
       "quoteSource": "TPEX daily_close_quotes",
@@ -3100,10 +3100,10 @@
       "code": "3680",
       "name": "家登",
       "close": 502,
-      "percent": -0.2,
+      "percent": -0.19880715705765406,
       "quoteDate": "20260615",
       "displayClose": 502,
-      "displayPercent": -0.2
+      "displayPercent": -0.19880715705765406
     },
     {
       "underlyingName": "台星科",
@@ -3111,7 +3111,7 @@
       "market": "上櫃",
       "tradeDate": "1150615",
       "underlyingClose": 176.5,
-      "underlyingPercent": -1.4,
+      "underlyingPercent": -1.3966480446927374,
       "priceVerified": true,
       "basicVerified": true,
       "quoteSource": "TPEX daily_close_quotes",
@@ -3224,10 +3224,10 @@
       "code": "3265",
       "name": "台星科",
       "close": 176.5,
-      "percent": -1.4,
+      "percent": -1.3966480446927374,
       "quoteDate": "20260615",
       "displayClose": 176.5,
-      "displayPercent": -1.4
+      "displayPercent": -1.3966480446927374
     },
     {
       "underlyingName": "均華",
@@ -3235,7 +3235,7 @@
       "market": "上櫃",
       "tradeDate": "1150615",
       "underlyingClose": 1115,
-      "underlyingPercent": 3.24,
+      "underlyingPercent": 3.2407407407407405,
       "priceVerified": true,
       "basicVerified": true,
       "quoteSource": "TPEX daily_close_quotes",
@@ -3348,10 +3348,10 @@
       "code": "6640",
       "name": "均華",
       "close": 1115,
-      "percent": 3.24,
+      "percent": 3.2407407407407405,
       "quoteDate": "20260615",
       "displayClose": 1115,
-      "displayPercent": 3.24
+      "displayPercent": 3.2407407407407405
     },
     {
       "underlyingName": "新應材",
@@ -3359,7 +3359,7 @@
       "market": "上櫃",
       "tradeDate": "1150615",
       "underlyingClose": 950,
-      "underlyingPercent": 3.15,
+      "underlyingPercent": 3.1487513572204127,
       "priceVerified": true,
       "basicVerified": true,
       "quoteSource": "TPEX daily_close_quotes",
@@ -3472,10 +3472,10 @@
       "code": "4749",
       "name": "新應材",
       "close": 950,
-      "percent": 3.15,
+      "percent": 3.1487513572204127,
       "quoteDate": "20260615",
       "displayClose": 950,
-      "displayPercent": 3.15
+      "displayPercent": 3.1487513572204127
     },
     {
       "underlyingName": "沛亨",
@@ -3483,7 +3483,7 @@
       "market": "上櫃",
       "tradeDate": "1150615",
       "underlyingClose": 556,
-      "underlyingPercent": 3.73,
+      "underlyingPercent": 3.731343283582089,
       "priceVerified": true,
       "basicVerified": true,
       "quoteSource": "TPEX daily_close_quotes",
@@ -3596,10 +3596,10 @@
       "code": "6291",
       "name": "沛亨",
       "close": 556,
-      "percent": 3.73,
+      "percent": 3.731343283582089,
       "quoteDate": "20260615",
       "displayClose": 556,
-      "displayPercent": 3.73
+      "displayPercent": 3.731343283582089
     },
     {
       "underlyingName": "宏捷科",
@@ -3607,7 +3607,7 @@
       "market": "上櫃",
       "tradeDate": "1150615",
       "underlyingClose": 156,
-      "underlyingPercent": 3.31,
+      "underlyingPercent": 3.3112582781456954,
       "priceVerified": true,
       "basicVerified": true,
       "quoteSource": "TPEX daily_close_quotes",
@@ -3720,10 +3720,10 @@
       "code": "8086",
       "name": "宏捷科",
       "close": 156,
-      "percent": 3.31,
+      "percent": 3.3112582781456954,
       "quoteDate": "20260615",
       "displayClose": 156,
-      "displayPercent": 3.31
+      "displayPercent": 3.3112582781456954
     },
     {
       "underlyingName": "東捷",
@@ -3731,7 +3731,7 @@
       "market": "上櫃",
       "tradeDate": "1150615",
       "underlyingClose": 139.5,
-      "underlyingPercent": 3.72,
+      "underlyingPercent": 3.717472118959108,
       "priceVerified": true,
       "basicVerified": true,
       "quoteSource": "TPEX daily_close_quotes",
@@ -3844,10 +3844,10 @@
       "code": "8064",
       "name": "東捷",
       "close": 139.5,
-      "percent": 3.72,
+      "percent": 3.717472118959108,
       "quoteDate": "20260615",
       "displayClose": 139.5,
-      "displayPercent": 3.72
+      "displayPercent": 3.717472118959108
     },
     {
       "underlyingName": "陽程",
@@ -3855,7 +3855,7 @@
       "market": "上櫃",
       "tradeDate": "1150615",
       "underlyingClose": 125.5,
-      "underlyingPercent": 3.72,
+      "underlyingPercent": 3.71900826446281,
       "priceVerified": true,
       "basicVerified": true,
       "quoteSource": "TPEX daily_close_quotes",
@@ -3968,10 +3968,10 @@
       "code": "3498",
       "name": "陽程",
       "close": 125.5,
-      "percent": 3.72,
+      "percent": 3.71900826446281,
       "quoteDate": "20260615",
       "displayClose": 125.5,
-      "displayPercent": 3.72
+      "displayPercent": 3.71900826446281
     },
     {
       "underlyingName": "威剛",
@@ -3979,7 +3979,7 @@
       "market": "上櫃",
       "tradeDate": "1150615",
       "underlyingClose": 423,
-      "underlyingPercent": 4.32,
+      "underlyingPercent": 4.315659679408138,
       "priceVerified": true,
       "basicVerified": true,
       "quoteSource": "TPEX daily_close_quotes",
@@ -4092,10 +4092,10 @@
       "code": "3260",
       "name": "威剛",
       "close": 423,
-      "percent": 4.32,
+      "percent": 4.315659679408138,
       "quoteDate": "20260615",
       "displayClose": 423,
-      "displayPercent": 4.32
+      "displayPercent": 4.315659679408138
     },
     {
       "underlyingName": "方土昶",
@@ -4103,7 +4103,7 @@
       "market": "上櫃",
       "tradeDate": "1150615",
       "underlyingClose": 58.4,
-      "underlyingPercent": -0.85,
+      "underlyingPercent": -0.8488964346349746,
       "priceVerified": true,
       "basicVerified": true,
       "quoteSource": "TPEX daily_close_quotes",
@@ -4216,10 +4216,10 @@
       "code": "6265",
       "name": "方土昶",
       "close": 58.4,
-      "percent": -0.85,
+      "percent": -0.8488964346349746,
       "quoteDate": "20260615",
       "displayClose": 58.4,
-      "displayPercent": -0.85
+      "displayPercent": -0.8488964346349746
     },
     {
       "underlyingName": "力旺",
@@ -4227,7 +4227,7 @@
       "market": "上櫃",
       "tradeDate": "1150615",
       "underlyingClose": 3200,
-      "underlyingPercent": 3.56,
+      "underlyingPercent": 3.559870550161812,
       "priceVerified": true,
       "basicVerified": true,
       "quoteSource": "TPEX daily_close_quotes",
@@ -4340,10 +4340,10 @@
       "code": "3529",
       "name": "力旺",
       "close": 3200,
-      "percent": 3.56,
+      "percent": 3.559870550161812,
       "quoteDate": "20260615",
       "displayClose": 3200,
-      "displayPercent": 3.56
+      "displayPercent": 3.559870550161812
     },
     {
       "underlyingName": "均豪",
@@ -4351,7 +4351,7 @@
       "market": "上櫃",
       "tradeDate": "1150615",
       "underlyingClose": 105,
-      "underlyingPercent": 2.94,
+      "underlyingPercent": 2.941176470588235,
       "priceVerified": true,
       "basicVerified": true,
       "quoteSource": "TPEX daily_close_quotes",
@@ -4464,10 +4464,10 @@
       "code": "5443",
       "name": "均豪",
       "close": 105,
-      "percent": 2.94,
+      "percent": 2.941176470588235,
       "quoteDate": "20260615",
       "displayClose": 105,
-      "displayPercent": 2.94
+      "displayPercent": 2.941176470588235
     },
     {
       "underlyingName": "宜特",
@@ -4475,7 +4475,7 @@
       "market": "上櫃",
       "tradeDate": "1150615",
       "underlyingClose": 169,
-      "underlyingPercent": 5.96,
+      "underlyingPercent": 5.956112852664576,
       "priceVerified": true,
       "basicVerified": true,
       "quoteSource": "TPEX daily_close_quotes",
@@ -4588,10 +4588,10 @@
       "code": "3289",
       "name": "宜特",
       "close": 169,
-      "percent": 5.96,
+      "percent": 5.956112852664576,
       "quoteDate": "20260615",
       "displayClose": 169,
-      "displayPercent": 5.96
+      "displayPercent": 5.956112852664576
     },
     {
       "underlyingName": "印能科技",
@@ -4599,7 +4599,7 @@
       "market": "上櫃",
       "tradeDate": "1150615",
       "underlyingClose": 2930,
-      "underlyingPercent": 5.4,
+      "underlyingPercent": 5.39568345323741,
       "priceVerified": true,
       "basicVerified": true,
       "quoteSource": "TPEX daily_close_quotes",
@@ -4712,10 +4712,10 @@
       "code": "7734",
       "name": "印能科技",
       "close": 2930,
-      "percent": 5.4,
+      "percent": 5.39568345323741,
       "quoteDate": "20260615",
       "displayClose": 2930,
-      "displayPercent": 5.4
+      "displayPercent": 5.39568345323741
     },
     {
       "underlyingName": "信紘科",
@@ -4723,7 +4723,7 @@
       "market": "上櫃",
       "tradeDate": "1150615",
       "underlyingClose": 278,
-      "underlyingPercent": 3.15,
+      "underlyingPercent": 3.153988868274583,
       "priceVerified": true,
       "basicVerified": true,
       "quoteSource": "TPEX daily_close_quotes",
@@ -4836,10 +4836,10 @@
       "code": "6667",
       "name": "信紘科",
       "close": 278,
-      "percent": 3.15,
+      "percent": 3.153988868274583,
       "quoteDate": "20260615",
       "displayClose": 278,
-      "displayPercent": 3.15
+      "displayPercent": 3.153988868274583
     },
     {
       "underlyingName": "信驊",
@@ -4847,7 +4847,7 @@
       "market": "上櫃",
       "tradeDate": "1150615",
       "underlyingClose": 17810,
-      "underlyingPercent": -3.44,
+      "underlyingPercent": -3.44266738953646,
       "priceVerified": true,
       "basicVerified": true,
       "quoteSource": "TPEX daily_close_quotes",
@@ -4960,10 +4960,10 @@
       "code": "5274",
       "name": "信驊",
       "close": 17810,
-      "percent": -3.44,
+      "percent": -3.44266738953646,
       "quoteDate": "20260615",
       "displayClose": 17810,
-      "displayPercent": -3.44
+      "displayPercent": -3.44266738953646
     },
     {
       "underlyingName": "智通*",
@@ -4971,7 +4971,7 @@
       "market": "上櫃",
       "tradeDate": "1150615",
       "underlyingClose": 103,
-      "underlyingPercent": -3.29,
+      "underlyingPercent": -3.286384976525822,
       "priceVerified": true,
       "basicVerified": true,
       "quoteSource": "TPEX daily_close_quotes",
@@ -5084,10 +5084,10 @@
       "code": "8932",
       "name": "智通*",
       "close": 103,
-      "percent": -3.29,
+      "percent": -3.286384976525822,
       "quoteDate": "20260615",
       "displayClose": 103,
-      "displayPercent": -3.29
+      "displayPercent": -3.286384976525822
     },
     {
       "underlyingName": "佳邦",
@@ -5095,7 +5095,7 @@
       "market": "上櫃",
       "tradeDate": "1150615",
       "underlyingClose": 104,
-      "underlyingPercent": 5.48,
+      "underlyingPercent": 5.4766734279918925,
       "priceVerified": true,
       "basicVerified": true,
       "quoteSource": "TPEX daily_close_quotes",
@@ -5208,10 +5208,10 @@
       "code": "6284",
       "name": "佳邦",
       "close": 104,
-      "percent": 5.48,
+      "percent": 5.4766734279918925,
       "quoteDate": "20260615",
       "displayClose": 104,
-      "displayPercent": 5.48
+      "displayPercent": 5.4766734279918925
     },
     {
       "underlyingName": "擎亞",
@@ -5219,7 +5219,7 @@
       "market": "上櫃",
       "tradeDate": "1150615",
       "underlyingClose": 145.5,
-      "underlyingPercent": 9.81,
+      "underlyingPercent": 9.811320754716983,
       "priceVerified": true,
       "basicVerified": true,
       "quoteSource": "TPEX daily_close_quotes",
@@ -5332,10 +5332,10 @@
       "code": "8096",
       "name": "擎亞",
       "close": 145.5,
-      "percent": 9.81,
+      "percent": 9.811320754716983,
       "quoteDate": "20260615",
       "displayClose": 145.5,
-      "displayPercent": 9.81
+      "displayPercent": 9.811320754716983
     },
     {
       "underlyingName": "臺慶科",
@@ -5343,7 +5343,7 @@
       "market": "上櫃",
       "tradeDate": "1150615",
       "underlyingClose": 322,
-      "underlyingPercent": 9.9,
+      "underlyingPercent": 9.897610921501707,
       "priceVerified": true,
       "basicVerified": true,
       "quoteSource": "TPEX daily_close_quotes",
@@ -5456,10 +5456,10 @@
       "code": "3357",
       "name": "臺慶科",
       "close": 322,
-      "percent": 9.9,
+      "percent": 9.897610921501707,
       "quoteDate": "20260615",
       "displayClose": 322,
-      "displayPercent": 9.9
+      "displayPercent": 9.897610921501707
     },
     {
       "underlyingName": "廣閎科",
@@ -5467,7 +5467,7 @@
       "market": "上櫃",
       "tradeDate": "1150615",
       "underlyingClose": 185.5,
-      "underlyingPercent": 9.76,
+      "underlyingPercent": 9.763313609467456,
       "priceVerified": true,
       "basicVerified": true,
       "quoteSource": "TPEX daily_close_quotes",
@@ -5580,10 +5580,10 @@
       "code": "6693",
       "name": "廣閎科",
       "close": 185.5,
-      "percent": 9.76,
+      "percent": 9.763313609467456,
       "quoteDate": "20260615",
       "displayClose": 185.5,
-      "displayPercent": 9.76
+      "displayPercent": 9.763313609467456
     },
     {
       "underlyingName": "聖暉*",
@@ -5591,7 +5591,7 @@
       "market": "上櫃",
       "tradeDate": "1150615",
       "underlyingClose": 1255,
-      "underlyingPercent": 6.36,
+      "underlyingPercent": 6.3559322033898304,
       "priceVerified": true,
       "basicVerified": true,
       "quoteSource": "TPEX daily_close_quotes",
@@ -5704,10 +5704,10 @@
       "code": "5536",
       "name": "聖暉*",
       "close": 1255,
-      "percent": 6.36,
+      "percent": 6.3559322033898304,
       "quoteDate": "20260615",
       "displayClose": 1255,
-      "displayPercent": 6.36
+      "displayPercent": 6.3559322033898304
     },
     {
       "underlyingName": "中美晶",
@@ -5715,7 +5715,7 @@
       "market": "上櫃",
       "tradeDate": "1150615",
       "underlyingClose": 174.5,
-      "underlyingPercent": 9.75,
+      "underlyingPercent": 9.748427672955975,
       "priceVerified": true,
       "basicVerified": true,
       "quoteSource": "TPEX daily_close_quotes",
@@ -5828,10 +5828,10 @@
       "code": "5483",
       "name": "中美晶",
       "close": 174.5,
-      "percent": 9.75,
+      "percent": 9.748427672955975,
       "quoteDate": "20260615",
       "displayClose": 174.5,
-      "displayPercent": 9.75
+      "displayPercent": 9.748427672955975
     },
     {
       "underlyingName": "華景電",
@@ -5839,7 +5839,7 @@
       "market": "上櫃",
       "tradeDate": "1150615",
       "underlyingClose": 449,
-      "underlyingPercent": 6.65,
+      "underlyingPercent": 6.65083135391924,
       "priceVerified": true,
       "basicVerified": true,
       "quoteSource": "TPEX daily_close_quotes",
@@ -5952,10 +5952,10 @@
       "code": "6788",
       "name": "華景電",
       "close": 449,
-      "percent": 6.65,
+      "percent": 6.65083135391924,
       "quoteDate": "20260615",
       "displayClose": 449,
-      "displayPercent": 6.65
+      "displayPercent": 6.65083135391924
     },
     {
       "underlyingName": "朋程",
@@ -5963,7 +5963,7 @@
       "market": "上櫃",
       "tradeDate": "1150615",
       "underlyingClose": 183,
-      "underlyingPercent": 8.93,
+      "underlyingPercent": 8.928571428571429,
       "priceVerified": true,
       "basicVerified": true,
       "quoteSource": "TPEX daily_close_quotes",
@@ -6076,10 +6076,10 @@
       "code": "8255",
       "name": "朋程",
       "close": 183,
-      "percent": 8.93,
+      "percent": 8.928571428571429,
       "quoteDate": "20260615",
       "displayClose": 183,
-      "displayPercent": 8.93
+      "displayPercent": 8.928571428571429
     },
     {
       "underlyingName": "博智",
@@ -6087,7 +6087,7 @@
       "market": "上櫃",
       "tradeDate": "1150615",
       "underlyingClose": 376,
-      "underlyingPercent": 6.97,
+      "underlyingPercent": 6.970128022759601,
       "priceVerified": true,
       "basicVerified": true,
       "quoteSource": "TPEX daily_close_quotes",
@@ -6200,10 +6200,10 @@
       "code": "8155",
       "name": "博智",
       "close": 376,
-      "percent": 6.97,
+      "percent": 6.970128022759601,
       "quoteDate": "20260615",
       "displayClose": 376,
-      "displayPercent": 6.97
+      "displayPercent": 6.970128022759601
     },
     {
       "underlyingName": "光頡",
@@ -6211,7 +6211,7 @@
       "market": "上櫃",
       "tradeDate": "1150615",
       "underlyingClose": 129.5,
-      "underlyingPercent": 9.75,
+      "underlyingPercent": 9.745762711864407,
       "priceVerified": true,
       "basicVerified": true,
       "quoteSource": "TPEX daily_close_quotes",
@@ -6324,10 +6324,10 @@
       "code": "3624",
       "name": "光頡",
       "close": 129.5,
-      "percent": 9.75,
+      "percent": 9.745762711864407,
       "quoteDate": "20260615",
       "displayClose": 129.5,
-      "displayPercent": 9.75
+      "displayPercent": 9.745762711864407
     },
     {
       "underlyingName": "新盛力",
@@ -6335,7 +6335,7 @@
       "market": "上櫃",
       "tradeDate": "1150615",
       "underlyingClose": 252,
-      "underlyingPercent": 6.78,
+      "underlyingPercent": 6.779661016949152,
       "priceVerified": true,
       "basicVerified": true,
       "quoteSource": "TPEX daily_close_quotes",
@@ -6448,10 +6448,10 @@
       "code": "4931",
       "name": "新盛力",
       "close": 252,
-      "percent": 6.78,
+      "percent": 6.779661016949152,
       "quoteDate": "20260615",
       "displayClose": 252,
-      "displayPercent": 6.78
+      "displayPercent": 6.779661016949152
     },
     {
       "underlyingName": "亞電",
@@ -6459,7 +6459,7 @@
       "market": "上櫃",
       "tradeDate": "1150615",
       "underlyingClose": 70.5,
-      "underlyingPercent": 6.5,
+      "underlyingPercent": 6.495468277945616,
       "priceVerified": true,
       "basicVerified": true,
       "quoteSource": "TPEX daily_close_quotes",
@@ -6572,10 +6572,10 @@
       "code": "4939",
       "name": "亞電",
       "close": 70.5,
-      "percent": 6.5,
+      "percent": 6.495468277945616,
       "quoteDate": "20260615",
       "displayClose": 70.5,
-      "displayPercent": 6.5
+      "displayPercent": 6.495468277945616
     },
     {
       "underlyingName": "勤凱科技",
@@ -6583,7 +6583,7 @@
       "market": "上櫃",
       "tradeDate": "1150615",
       "underlyingClose": 401.5,
-      "underlyingPercent": 6.64,
+      "underlyingPercent": 6.640106241699867,
       "priceVerified": true,
       "basicVerified": true,
       "quoteSource": "TPEX daily_close_quotes",
@@ -6696,10 +6696,10 @@
       "code": "4760",
       "name": "勤凱科技",
       "close": 401.5,
-      "percent": 6.64,
+      "percent": 6.640106241699867,
       "quoteDate": "20260615",
       "displayClose": 401.5,
-      "displayPercent": 6.64
+      "displayPercent": 6.640106241699867
     },
     {
       "underlyingName": "環球晶",
@@ -6707,7 +6707,7 @@
       "market": "上櫃",
       "tradeDate": "1150615",
       "underlyingClose": 950,
-      "underlyingPercent": 9.95,
+      "underlyingPercent": 9.953703703703704,
       "priceVerified": true,
       "basicVerified": true,
       "quoteSource": "TPEX daily_close_quotes",
@@ -6820,10 +6820,10 @@
       "code": "6488",
       "name": "環球晶",
       "close": 950,
-      "percent": 9.95,
+      "percent": 9.953703703703704,
       "quoteDate": "20260615",
       "displayClose": 950,
-      "displayPercent": 9.95
+      "displayPercent": 9.953703703703704
     },
     {
       "underlyingName": "立敦",
@@ -6831,7 +6831,7 @@
       "market": "上櫃",
       "tradeDate": "1150615",
       "underlyingClose": 108,
-      "underlyingPercent": 9.53,
+      "underlyingPercent": 9.533468559837734,
       "priceVerified": true,
       "basicVerified": true,
       "quoteSource": "TPEX daily_close_quotes",
@@ -6944,10 +6944,10 @@
       "code": "6175",
       "name": "立敦",
       "close": 108,
-      "percent": 9.53,
+      "percent": 9.533468559837734,
       "quoteDate": "20260615",
       "displayClose": 108,
-      "displayPercent": 9.53
+      "displayPercent": 9.533468559837734
     },
     {
       "underlyingName": "華容",
@@ -6955,7 +6955,7 @@
       "market": "上櫃",
       "tradeDate": "1150615",
       "underlyingClose": 46.55,
-      "underlyingPercent": 9.92,
+      "underlyingPercent": 9.917355371900815,
       "priceVerified": true,
       "basicVerified": true,
       "quoteSource": "TPEX daily_close_quotes",
@@ -7068,10 +7068,10 @@
       "code": "5328",
       "name": "華容",
       "close": 46.55,
-      "percent": 9.92,
+      "percent": 9.917355371900815,
       "quoteDate": "20260615",
       "displayClose": 46.55,
-      "displayPercent": 9.92
+      "displayPercent": 9.917355371900815
     },
     {
       "underlyingName": "雷科",
@@ -7079,7 +7079,7 @@
       "market": "上櫃",
       "tradeDate": "1150615",
       "underlyingClose": 136,
-      "underlyingPercent": 9.68,
+      "underlyingPercent": 9.67741935483871,
       "priceVerified": true,
       "basicVerified": true,
       "quoteSource": "TPEX daily_close_quotes",
@@ -7192,10 +7192,10 @@
       "code": "6207",
       "name": "雷科",
       "close": 136,
-      "percent": 9.68,
+      "percent": 9.67741935483871,
       "quoteDate": "20260615",
       "displayClose": 136,
-      "displayPercent": 9.68
+      "displayPercent": 9.67741935483871
     },
     {
       "underlyingName": "宜鼎",
@@ -7203,7 +7203,7 @@
       "market": "上櫃",
       "tradeDate": "1150615",
       "underlyingClose": 1920,
-      "underlyingPercent": 6.37,
+      "underlyingPercent": 6.3711911357340725,
       "priceVerified": true,
       "basicVerified": true,
       "quoteSource": "TPEX daily_close_quotes",
@@ -7316,10 +7316,10 @@
       "code": "5289",
       "name": "宜鼎",
       "close": 1920,
-      "percent": 6.37,
+      "percent": 6.3711911357340725,
       "quoteDate": "20260615",
       "displayClose": 1920,
-      "displayPercent": 6.37
+      "displayPercent": 6.3711911357340725
     },
     {
       "underlyingName": "朋億*",
@@ -7327,7 +7327,7 @@
       "market": "上櫃",
       "tradeDate": "1150615",
       "underlyingClose": 342.5,
-      "underlyingPercent": 9.95,
+      "underlyingPercent": 9.951845906902086,
       "priceVerified": true,
       "basicVerified": true,
       "quoteSource": "TPEX daily_close_quotes",
@@ -7440,10 +7440,10 @@
       "code": "6613",
       "name": "朋億*",
       "close": 342.5,
-      "percent": 9.95,
+      "percent": 9.951845906902086,
       "quoteDate": "20260615",
       "displayClose": 342.5,
-      "displayPercent": 9.95
+      "displayPercent": 9.951845906902086
     },
     {
       "underlyingName": "合晶",
@@ -7451,7 +7451,7 @@
       "market": "上櫃",
       "tradeDate": "1150615",
       "underlyingClose": 97.7,
-      "underlyingPercent": 9.9,
+      "underlyingPercent": 9.898762654668163,
       "priceVerified": true,
       "basicVerified": true,
       "quoteSource": "TPEX daily_close_quotes",
@@ -7564,10 +7564,10 @@
       "code": "6182",
       "name": "合晶",
       "close": 97.7,
-      "percent": 9.9,
+      "percent": 9.898762654668163,
       "quoteDate": "20260615",
       "displayClose": 97.7,
-      "displayPercent": 9.9
+      "displayPercent": 9.898762654668163
     },
     {
       "underlyingName": "昇達科",
@@ -7575,7 +7575,7 @@
       "market": "上櫃",
       "tradeDate": "1150615",
       "underlyingClose": 1555,
-      "underlyingPercent": -7.99,
+      "underlyingPercent": -7.988165680473373,
       "priceVerified": true,
       "basicVerified": true,
       "quoteSource": "TPEX daily_close_quotes",
@@ -7688,10 +7688,10 @@
       "code": "3491",
       "name": "昇達科",
       "close": 1555,
-      "percent": -7.99,
+      "percent": -7.988165680473373,
       "quoteDate": "20260615",
       "displayClose": 1555,
-      "displayPercent": -7.99
+      "displayPercent": -7.988165680473373
     },
     {
       "underlyingName": "凱崴",
@@ -7699,7 +7699,7 @@
       "market": "上櫃",
       "tradeDate": "1150615",
       "underlyingClose": 67.8,
-      "underlyingPercent": -2.31,
+      "underlyingPercent": -2.3054755043227786,
       "priceVerified": true,
       "basicVerified": true,
       "quoteSource": "TPEX daily_close_quotes",
@@ -7812,10 +7812,10 @@
       "code": "5498",
       "name": "凱崴",
       "close": 67.8,
-      "percent": -2.31,
+      "percent": -2.3054755043227786,
       "quoteDate": "20260615",
       "displayClose": 67.8,
-      "displayPercent": -2.31
+      "displayPercent": -2.3054755043227786
     },
     {
       "underlyingName": "台燿",
@@ -7823,7 +7823,7 @@
       "market": "上櫃",
       "tradeDate": "1150615",
       "underlyingClose": 1570,
-      "underlyingPercent": 9.79,
+      "underlyingPercent": 9.79020979020979,
       "priceVerified": true,
       "basicVerified": true,
       "quoteSource": "TPEX daily_close_quotes",
@@ -7936,10 +7936,10 @@
       "code": "6274",
       "name": "台燿",
       "close": 1570,
-      "percent": 9.79,
+      "percent": 9.79020979020979,
       "quoteDate": "20260615",
       "displayClose": 1570,
-      "displayPercent": 9.79
+      "displayPercent": 9.79020979020979
     }
   ],
   "singleSignalCount": 2,
@@ -7952,7 +7952,7 @@
       "underlyingCode": "8299",
       "underlyingName": "群聯",
       "underlyingClose": 2320,
-      "underlyingPercent": 0.43,
+      "underlyingPercent": 0.4329004329004329,
       "value": 3959420,
       "volume": 2306000,
       "strike": 2243.5,
@@ -7977,10 +7977,10 @@
       "quoteSource": "TPEX daily_close_quotes",
       "reason": "A：單券強訊號。707735 群聯元大5A購02 單券成交 396 萬，標的 群聯 0.43%，接近價平，最近到期 127 天。",
       "close": 2320,
-      "percent": 0.43,
+      "percent": 0.4329004329004329,
       "quoteDate": "20260615",
       "displayClose": 2320,
-      "displayPercent": 0.43
+      "displayPercent": 0.4329004329004329
     },
     {
       "warrantCode": "707840",
@@ -7990,7 +7990,7 @@
       "underlyingCode": "6223",
       "underlyingName": "旺矽",
       "underlyingClose": 6435,
-      "underlyingPercent": -0.77,
+      "underlyingPercent": -0.7710100231303008,
       "value": 3260560,
       "volume": 1865000,
       "strike": 6350,
@@ -8015,10 +8015,10 @@
       "quoteSource": "TPEX daily_close_quotes",
       "reason": "A：單券強訊號。707840 旺矽國泰5B購02 單券成交 326 萬，標的 旺矽 -0.77%，接近價平，最近到期 161 天。",
       "close": 6435,
-      "percent": -0.77,
+      "percent": -0.7710100231303008,
       "quoteDate": "20260615",
       "displayClose": 6435,
-      "displayPercent": -0.77
+      "displayPercent": -0.7710100231303008
     }
   ],
   "errors": [
