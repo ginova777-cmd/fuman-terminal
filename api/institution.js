@@ -4,6 +4,8 @@ let cache = null;
 const SLOW_SCAN = ["1", "true", "yes"].includes(String(process.env.INSTITUTION_SLOW_SCAN || "").toLowerCase());
 const REQUEST_DELAY_MS = Number(process.env.INSTITUTION_REQUEST_DELAY_MS || (SLOW_SCAN ? 15000 : 1200));
 const FETCH_RETRIES = Number(process.env.INSTITUTION_FETCH_RETRIES || (SLOW_SCAN ? 4 : 1));
+const SOURCE_ERROR_LIMIT = Number(process.env.INSTITUTION_SOURCE_ERROR_LIMIT || (SLOW_SCAN ? 3 : 8));
+const SOURCE_PROVIDER = String(process.env.INSTITUTION_SOURCE_PROVIDER || "").toLowerCase();
 const FINMIND_TOKEN = process.env.FINMIND_TOKEN || process.env.FINMIND_API_TOKEN || "";
 
 function sleep(ms) {
@@ -173,12 +175,20 @@ async function latestRows(fetcher) {
 async function recentRows(fetcher, limit = 8) {
   const errors = [];
   const groups = [];
+  let consecutiveRetriableErrors = 0;
   for (const date of recentTradingDates(limit)) {
     try {
       const result = await fetcher(date);
       if (result.rows.length) groups.push(result);
+      consecutiveRetriableErrors = 0;
     } catch (error) {
       errors.push(error.message);
+      if (isRetriableFetchError(error)) consecutiveRetriableErrors += 1;
+      else consecutiveRetriableErrors = 0;
+      if (consecutiveRetriableErrors >= SOURCE_ERROR_LIMIT) {
+        errors.push(`source circuit breaker opened after ${consecutiveRetriableErrors} consecutive retriable errors`);
+        break;
+      }
     }
   }
   return { groups, errors };
@@ -348,21 +358,28 @@ module.exports = async function handler(request, response) {
   }
 
   try {
-    const [twseHistory, tpexHistory] = SLOW_SCAN
-      ? [await recentRows(fetchTwseInstitution, 8), await recentRows(fetchTpexInstitution, 8)]
-      : await Promise.all([
-        recentRows(fetchTwseInstitution, 8),
-        recentRows(fetchTpexInstitution, 8),
-      ]);
-    const twseData = buildMarketData(twseHistory);
-    const tpexData = buildMarketData(tpexHistory);
-    let data = { ...twseData, ...tpexData };
-    let twseDate = twseHistory.groups?.[0]?.date || "";
-    let tpexDate = tpexHistory.groups?.[0]?.date || "";
-    const errors = [...(twseHistory.errors || []), ...(tpexHistory.errors || [])];
-    const sources = ["TWSE T86", "TPEx 3itrade_hedge_result"];
+    let data = {};
+    let twseDate = "";
+    let tpexDate = "";
+    const errors = [];
+    const sources = [];
+    if (SOURCE_PROVIDER !== "finmind") {
+      const [twseHistory, tpexHistory] = SLOW_SCAN
+        ? [await recentRows(fetchTwseInstitution, 8), await recentRows(fetchTpexInstitution, 8)]
+        : await Promise.all([
+          recentRows(fetchTwseInstitution, 8),
+          recentRows(fetchTpexInstitution, 8),
+        ]);
+      const twseData = buildMarketData(twseHistory);
+      const tpexData = buildMarketData(tpexHistory);
+      data = { ...twseData, ...tpexData };
+      twseDate = twseHistory.groups?.[0]?.date || "";
+      tpexDate = tpexHistory.groups?.[0]?.date || "";
+      errors.push(...(twseHistory.errors || []), ...(tpexHistory.errors || []));
+      sources.push("TWSE T86", "TPEx 3itrade_hedge_result");
+    }
     if (Object.keys(data).length < 1000) {
-      const finMindHistory = await recentRows(fetchFinMindInstitution, 3);
+      const finMindHistory = await recentRows(fetchFinMindInstitution, SOURCE_PROVIDER === "finmind" ? 8 : 3);
       const finMindData = buildMarketData(finMindHistory);
       if (Object.keys(finMindData).length >= 1000) {
         data = finMindData;

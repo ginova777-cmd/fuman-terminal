@@ -411,15 +411,21 @@ try {
     $previousInstitutionSlowScan = $env:INSTITUTION_SLOW_SCAN
     $previousInstitutionDelay = $env:INSTITUTION_REQUEST_DELAY_MS
     $previousInstitutionRetries = $env:INSTITUTION_FETCH_RETRIES
+    $previousInstitutionProvider = $env:INSTITUTION_SOURCE_PROVIDER
+    $previousShioajiPython = $env:SHIOAJI_PYTHON
     try {
       if (-not $env:INSTITUTION_SLOW_SCAN) { $env:INSTITUTION_SLOW_SCAN = "1" }
       if (-not $env:INSTITUTION_REQUEST_DELAY_MS) { $env:INSTITUTION_REQUEST_DELAY_MS = "15000" }
       if (-not $env:INSTITUTION_FETCH_RETRIES) { $env:INSTITUTION_FETCH_RETRIES = "4" }
+      if (-not $env:INSTITUTION_SOURCE_PROVIDER) { $env:INSTITUTION_SOURCE_PROVIDER = "finmind" }
+      if (-not $env:SHIOAJI_PYTHON) { $env:SHIOAJI_PYTHON = "C:\Users\ginov\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe" }
       $null = Invoke-GateCommand "institution raw refresh" { & $nodeExe "scripts\scan-institution-cache.js" } -AllowFailure
     } finally {
       if ($null -eq $previousInstitutionSlowScan) { Remove-Item Env:INSTITUTION_SLOW_SCAN -ErrorAction SilentlyContinue } else { $env:INSTITUTION_SLOW_SCAN = $previousInstitutionSlowScan }
       if ($null -eq $previousInstitutionDelay) { Remove-Item Env:INSTITUTION_REQUEST_DELAY_MS -ErrorAction SilentlyContinue } else { $env:INSTITUTION_REQUEST_DELAY_MS = $previousInstitutionDelay }
       if ($null -eq $previousInstitutionRetries) { Remove-Item Env:INSTITUTION_FETCH_RETRIES -ErrorAction SilentlyContinue } else { $env:INSTITUTION_FETCH_RETRIES = $previousInstitutionRetries }
+      if ($null -eq $previousInstitutionProvider) { Remove-Item Env:INSTITUTION_SOURCE_PROVIDER -ErrorAction SilentlyContinue } else { $env:INSTITUTION_SOURCE_PROVIDER = $previousInstitutionProvider }
+      if ($null -eq $previousShioajiPython) { Remove-Item Env:SHIOAJI_PYTHON -ErrorAction SilentlyContinue } else { $env:SHIOAJI_PYTHON = $previousShioajiPython }
       Pop-Location
     }
   }
