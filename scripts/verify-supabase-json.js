@@ -101,6 +101,34 @@ function fetchSupabase(pathname) {
   });
 }
 
+function fetchSupabaseCount(pathname) {
+  return new Promise((resolve, reject) => {
+    if (!SUPABASE_URL || !SUPABASE_KEY) return reject(new Error("missing Supabase credentials"));
+    const url = `${SUPABASE_URL}/rest/v1/${pathname}`;
+    const req = https.request(url, {
+      method: "HEAD",
+      timeout: 20000,
+      headers: {
+        apikey: SUPABASE_KEY,
+        Authorization: `Bearer ${SUPABASE_KEY}`,
+        Prefer: "count=exact",
+      },
+    }, (res) => {
+      res.resume();
+      res.on("end", () => {
+        if (res.statusCode < 200 || res.statusCode >= 300) {
+          return reject(new Error(`${pathname} HTTP ${res.statusCode}`));
+        }
+        const range = res.headers["content-range"] || "";
+        resolve(Number(String(range).match(/\/(\d+)$/)?.[1] || 0));
+      });
+    });
+    req.on("timeout", () => req.destroy(new Error(`timeout ${url}`)));
+    req.on("error", reject);
+    req.end();
+  });
+}
+
 function verifyJsonSurface(issues) {
   const manifest = readJson(path.join(DATA_DIR, "data-manifest.json"), {});
   const status = readJson(path.join(DATA_DIR, "data-status-index.json"), {});
@@ -157,14 +185,32 @@ async function verifySupabaseReadbacks(warnings, issues) {
 
   const openBuy = readJson(path.join(DATA_DIR, "open-buy-latest.json"), {});
   const openBuyTable = process.env.SUPABASE_OPEN_BUY_TABLE || "strategy1_open_buy_latest";
+  const openBuyRunsTable = process.env.SUPABASE_OPEN_BUY_RUNS_TABLE || "strategy1_open_buy_runs";
+  const openBuyResultsTable = process.env.SUPABASE_OPEN_BUY_RESULTS_TABLE || "strategy1_open_buy_results";
   try {
-    const rows = await fetchSupabase(`${openBuyTable}?id=eq.latest&select=id,updated_at,match_count,scanned_count,total_count`);
+    const rows = await fetchSupabase(`${openBuyTable}?id=eq.latest&select=id,updated_at,match_count,scanned_count,total_count,run_id`);
     const row = Array.isArray(rows) ? rows[0] : null;
     if (!row) warn(warnings, `${openBuyTable} missing latest row`);
     if (row) {
+      const expectedRunId = String(openBuy.runId || row.run_id || "");
       if (Number(row.match_count || 0) !== (Array.isArray(openBuy.matches) ? openBuy.matches.length : 0)) warn(warnings, "open-buy Supabase/JSON match_count mismatch");
       if (Number(row.scanned_count || 0) !== (Array.isArray(openBuy.scannedCodes) ? openBuy.scannedCodes.length : 0)) warn(warnings, "open-buy Supabase/JSON scanned_count mismatch");
       if (Number(row.total_count || 0) !== Number(openBuy.total || 0)) warn(warnings, "open-buy Supabase/JSON total_count mismatch");
+      if (!expectedRunId) warn(warnings, "open-buy run_id missing from JSON/latest row");
+      if (expectedRunId && String(row.run_id || "") !== expectedRunId) warn(warnings, `open-buy latest run_id mismatch latest=${row.run_id} json=${expectedRunId}`);
+      if (expectedRunId) {
+        const runRows = await fetchSupabase(`${openBuyRunsTable}?strategy=eq.strategy1&status=eq.complete&complete=eq.true&select=run_id,result_count,scanned_count,expected_total,finished_at&order=finished_at.desc&limit=1`);
+        const run = Array.isArray(runRows) ? runRows[0] : null;
+        if (!run?.run_id) warn(warnings, `${openBuyRunsTable} missing latest complete run`);
+        if (run?.run_id && String(run.run_id) !== expectedRunId) warn(warnings, `open-buy complete run gate mismatch run=${run.run_id} json=${expectedRunId}`);
+        if (run) {
+          if (Number(run.result_count || 0) !== (Array.isArray(openBuy.matches) ? openBuy.matches.length : 0)) warn(warnings, "open-buy run gate result_count mismatch");
+          if (Number(run.scanned_count || 0) !== (Array.isArray(openBuy.scannedCodes) ? openBuy.scannedCodes.length : 0)) warn(warnings, "open-buy run gate scanned_count mismatch");
+          if (Number(run.expected_total || 0) !== Number(openBuy.total || 0)) warn(warnings, "open-buy run gate expected_total mismatch");
+        }
+        const resultCount = await fetchSupabaseCount(`${openBuyResultsTable}?run_id=eq.${encodeURIComponent(expectedRunId)}&strategy=eq.strategy1&select=code`);
+        if (resultCount !== (Array.isArray(openBuy.matches) ? openBuy.matches.length : 0)) warn(warnings, `open-buy result gate row count mismatch supabase=${resultCount} json=${Array.isArray(openBuy.matches) ? openBuy.matches.length : 0}`);
+      }
     }
   } catch (error) {
     warn(warnings, `open-buy Supabase readback skipped: ${error.message}`);

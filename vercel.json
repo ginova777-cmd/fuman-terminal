@@ -55,7 +55,20 @@
       ]
     },
     {
-      "source": "/((?!fuman-sw\\.js$).*)\\.(js|css)",
+      "source": "/terminal-runtime-config.js",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "no-store"
+        },
+        {
+          "key": "X-Content-Type-Options",
+          "value": "nosniff"
+        }
+      ]
+    },
+    {
+      "source": "/((?!fuman-sw\\.js$|terminal-runtime-config\\.js$).*)\\.(js|css)",
       "headers": [
         {
           "key": "Cache-Control",
@@ -133,11 +146,63 @@
       ]
     },
     {
+      "source": "/data/strategy4-latest.json",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "no-store"
+        },
+        {
+          "key": "X-Content-Type-Options",
+          "value": "nosniff"
+        }
+      ]
+    },
+    {
+      "source": "/data/strategy4-summary.json",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "no-store"
+        },
+        {
+          "key": "X-Content-Type-Options",
+          "value": "nosniff"
+        }
+      ]
+    },
+    {
+      "source": "/data/strategy4-slim.json",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "no-store"
+        },
+        {
+          "key": "X-Content-Type-Options",
+          "value": "nosniff"
+        }
+      ]
+    },
+    {
+      "source": "/data/strategy4-score-top.json",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "no-store"
+        },
+        {
+          "key": "X-Content-Type-Options",
+          "value": "nosniff"
+        }
+      ]
+    },
+    {
       "source": "/data/strategy4-zone-(b|c)-page-(.*).json",
       "headers": [
         {
           "key": "Cache-Control",
-          "value": "public, max-age=30, stale-while-revalidate=300"
+          "value": "no-store"
         },
         {
           "key": "X-Content-Type-Options",
@@ -150,7 +215,20 @@
       "headers": [
         {
           "key": "Cache-Control",
-          "value": "public, max-age=30, stale-while-revalidate=300"
+          "value": "no-store"
+        },
+        {
+          "key": "X-Content-Type-Options",
+          "value": "nosniff"
+        }
+      ]
+    },
+    {
+      "source": "/data/strategy4-(.*).json",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "no-store"
         },
         {
           "key": "X-Content-Type-Options",
@@ -211,6 +289,58 @@
       ]
     },
     {
+      "source": "/data/strategy4-latest.json",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "no-store"
+        },
+        {
+          "key": "X-Content-Type-Options",
+          "value": "nosniff"
+        }
+      ]
+    },
+    {
+      "source": "/data/strategy4-summary.json",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "no-store"
+        },
+        {
+          "key": "X-Content-Type-Options",
+          "value": "nosniff"
+        }
+      ]
+    },
+    {
+      "source": "/data/strategy4-slim.json",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "no-store"
+        },
+        {
+          "key": "X-Content-Type-Options",
+          "value": "nosniff"
+        }
+      ]
+    },
+    {
+      "source": "/data/strategy4-score-top.json",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "no-store"
+        },
+        {
+          "key": "X-Content-Type-Options",
+          "value": "nosniff"
+        }
+      ]
+    },
+    {
       "source": "/data/strategy2-intraday-latest.json",
       "headers": [
         {
@@ -247,3 +377,4 @@
     }
   ]
 }
+

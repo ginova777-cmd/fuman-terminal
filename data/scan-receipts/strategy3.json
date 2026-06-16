@@ -2,20 +2,22 @@
   "strategy": "strategy3",
   "label": "strategy3 raw refresh",
   "tier": "critical",
-  "startedAt": "2026-06-15T22:33:11.2007783+08:00",
-  "finishedAt": "2026-06-15T22:33:28.7593388+08:00",
-  "status": "degraded",
-  "exitCode": 0,
+  "startedAt": "2026-06-16T20:26:36.7567510+08:00",
+  "finishedAt": "2026-06-16T20:26:51.3149698+08:00",
+  "status": "failed",
+  "exitCode": 1,
   "scanned": 0,
-  "total": 313,
-  "matches": 13,
+  "total": 297,
+  "matches": 1,
   "complete": true,
   "qualityStatus": "degraded",
   "fallback": false,
   "payloadPath": "C:\\fuman-runtime\\data\\strategy3-latest.json",
   "warnings": [
-    "strategy3 source warning: issuedSharesCount 0 below 1000; turnover filter disabled until stock_capital_latest is populated"
+    "strategy3 source warning: strategy3 supabase fallback: fugle_quotes_latest HTTP 400 {\"code\":\"42703\",\"details\":null,\"hint\":null,\"message\":\"column fugle_quotes_latest.cumulative_bid_volume does not exist\"}",
+    "strategy3 source health failed: after1300ReadyCount 0 below 20",
+    "Error: Strategy3 source health failed: after1300ReadyCount 0 below 20"
   ],
-  "blockingReason": "",
-  "log": "C:\\fuman-runtime\\logs\\full-scan-20260615-220557.log"
+  "blockingReason": "critical scan failed with exit code 1",
+  "log": "C:\\fuman-runtime\\logs\\full-scan-20260616-201003.log"
 }

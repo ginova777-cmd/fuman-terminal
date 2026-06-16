@@ -1,6 +1,17 @@
 (function () {
   const source = `
+let warrantFlowTab = "volume";
+let warrantFlowChipData = [];
+
 function normalizeSingleWarrantRows(payload) {
+  const matches = normalizeArray(payload && payload.matches);
+  if (matches.length) return matches;
+  return normalizeArray(payload && payload.singleSignals);
+}
+
+function normalizeWarrantVolumeRows(payload) {
+  const volumeMatches = normalizeArray(payload && payload.volumeMatches);
+  if (volumeMatches.length) return volumeMatches;
   const matches = normalizeArray(payload && payload.matches);
   if (matches.length) return matches;
   return normalizeArray(payload && payload.singleSignals);
@@ -52,6 +63,39 @@ function formatWarrantMoney(value) {
   return Math.round(number).toLocaleString("zh-TW");
 }
 
+function normalizeWarrantFlowTab(tab) {
+  return ["volume", "chip", "watch", "history"].includes(tab) ? tab : "volume";
+}
+
+function setWarrantFlowTab(tab) {
+  warrantFlowTab = normalizeWarrantFlowTab(tab);
+  warrantFlowPage = 1;
+  warrantFlowLastRenderSignature = "";
+  renderWarrantFlow();
+}
+
+function installWarrantFlowTabHandler() {
+  if (window.__fumanWarrantFlowTabsReady) return;
+  window.__fumanWarrantFlowTabsReady = true;
+  document.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-warrant-flow-tab]");
+    if (!button) return;
+    event.preventDefault();
+    setWarrantFlowTab(button.dataset.warrantFlowTab);
+  });
+}
+
+function renderWarrantFlowTabs() {
+  const tabButton = (tab, label, title) =>
+    '<button class="' + (warrantFlowTab === tab ? "active" : "") + '" type="button" data-warrant-flow-tab="' + tab + '" title="' + escapeAttr(title || label) + '">' + label + '</button>';
+  return [
+    tabButton("volume", "權證爆量", "用 30 分量、流通、倍數排序"),
+    tabButton("chip", "權證籌碼", "查看原本權證籌碼條件"),
+    tabButton("watch", "觀察中", "查看觀察中"),
+    tabButton("history", "歷史", "查看歷史"),
+  ].join("");
+}
+
 function hydrateWarrantFlowItem(item) {
   const rawName = String(item.underlyingName || item.name || "").trim();
   const exact = latestStocks.find((stock) => stock.code === String(item.underlyingCode || item.code || "").trim() || stock.name === rawName);
@@ -84,15 +128,19 @@ function hydrateWarrantFlowItem(item) {
     actionLabel: item.actionLabel || (repeatLarge ? "單券連續大額" : "單券大額"),
     warrantCode: String(item.warrantCode || item.symbol || "").trim(),
     warrantName: String(item.warrantName || item.name || "").trim(),
+    thirtyMinuteVolume: cleanNumber(item.thirtyMinuteVolume),
+    floatingUnits: cleanNumber(item.floatingUnits),
+    volumeMultiple: cleanNumber(item.volumeMultiple),
     priority: { isPriority: true, score, label: item.actionLabel || (repeatLarge ? "單券連續大額" : "單券大額") },
   };
 }
 
-function getWarrantPriorityRows() {
-  const signature = String(warrantFlowUpdatedAt || 0) + ":" + warrantFlowData.length + ":" + latestStocks.length;
+function getWarrantPriorityRows(sourceRows) {
+  const baseRows = normalizeArray(sourceRows || warrantFlowData);
+  const signature = String(warrantFlowUpdatedAt || 0) + ":" + baseRows.length + ":" + latestStocks.length + ":" + (baseRows === warrantFlowChipData ? "chip" : "flow");
   if (signature === warrantFlowPrioritySignature && warrantFlowPriorityCache.length) return warrantFlowPriorityCache;
   warrantFlowPrioritySignature = signature;
-  warrantFlowPriorityCache = warrantFlowData
+  warrantFlowPriorityCache = baseRows
     .map(hydrateWarrantFlowItem)
     .sort((a, b) =>
       Number(b.repeatLarge) - Number(a.repeatLarge) ||
@@ -102,6 +150,22 @@ function getWarrantPriorityRows() {
     )
     .map((item, index) => ({ ...item, rank: index + 1 }));
   return warrantFlowPriorityCache;
+}
+
+function getWarrantVolumeRows(rows) {
+  return rows
+    .map((item) => {
+      const thirtyMinuteVolume = cleanNumber(item.thirtyMinuteVolume) || Math.round(cleanNumber(item.callVolume || item.volume) / 1000);
+      const floatingUnits = cleanNumber(item.floatingUnits) || Math.max(1, Math.round(cleanNumber(item.callCount || item.signalCount) || cleanNumber(item.callValue || item.value) / 100000));
+      const volumeMultiple = cleanNumber(item.volumeMultiple) || thirtyMinuteVolume / Math.max(1, floatingUnits * 5);
+      return { ...item, thirtyMinuteVolume, floatingUnits, volumeMultiple };
+    })
+    .sort((a, b) =>
+      cleanNumber(b.volumeMultiple) - cleanNumber(a.volumeMultiple) ||
+      cleanNumber(b.thirtyMinuteVolume) - cleanNumber(a.thirtyMinuteVolume) ||
+      cleanNumber(b.score) - cleanNumber(a.score)
+    )
+    .map((item, index) => ({ ...item, volumeRank: index + 1 }));
 }
 
 function renderWarrantSignalBadges(item) {
@@ -135,26 +199,33 @@ function renderWarrantSignalBadges(item) {
 function renderWarrantFlow() {
   const panel = viewPanels["warrant-flow"];
   if (!panel) return;
+  installWarrantFlowTabHandler();
+  warrantFlowTab = normalizeWarrantFlowTab(warrantFlowTab);
   const keyword = warrantFlowKeyword.trim().toLowerCase();
-  const allRows = getWarrantPriorityRows();
+  const sourceRows = warrantFlowTab === "volume" ? warrantFlowData : (warrantFlowChipData.length ? warrantFlowChipData : warrantFlowData);
+  const allRows = getWarrantPriorityRows(sourceRows);
   const filteredRows = keyword
     ? allRows.filter((item) =>
       item.code.includes(keyword) ||
       item.name.toLowerCase().includes(keyword) ||
       item.warrantCode.toLowerCase().includes(keyword) ||
-      item.warrantName.toLowerCase().includes(keyword))
+      item.warrantName.toLowerCase().includes(keyword) ||
+      String(item.actionLabel || "").toLowerCase().includes(keyword))
     : allRows;
+  const activeRows = warrantFlowTab === "volume" ? getWarrantVolumeRows(filteredRows) : filteredRows;
   const pageSize = 10;
-  const pageCount = Math.max(1, Math.ceil(filteredRows.length / pageSize));
+  const pageCount = Math.max(1, Math.ceil(activeRows.length / pageSize));
   warrantFlowPage = Math.min(Math.max(1, warrantFlowPage), pageCount);
   const pageStart = (warrantFlowPage - 1) * pageSize;
-  const rows = filteredRows.slice(pageStart, pageStart + pageSize);
+  const rows = activeRows.slice(pageStart, pageStart + pageSize);
   const listLabel = keyword
-    ? "搜尋結果 " + filteredRows.length + " 檔｜第 " + warrantFlowPage + "/" + pageCount + " 頁"
-    : "單券精選 " + allRows.length + " 檔｜第 " + warrantFlowPage + "/" + pageCount + " 頁";
+    ? "搜尋結果 " + activeRows.length + " 檔｜第 " + warrantFlowPage + "/" + pageCount + " 頁"
+    : (warrantFlowTab === "volume" ? "權證爆量 " : warrantFlowTab === "chip" ? "權證籌碼 " : warrantFlowTab === "watch" ? "觀察中 " : "歷史 ") + activeRows.length + " 檔｜第 " + warrantFlowPage + "/" + pageCount + " 頁";
   const helperText = keyword
-    ? "搜尋盤後單券大額精選；可用股票代號、名稱或權證代號查詢。"
-    : "顯示盤後單券大額權證精選：同券連續大額、價平附近與標的漲幅可控；ETF 與 2330 已排除。";
+    ? "搜尋權證清單；可用股票代號、名稱或權證代號查詢。"
+    : warrantFlowTab === "volume"
+      ? "顯示盤中爆量觀察：用 30 分量、流通與倍數排序。"
+      : "顯示盤後單券大額權證精選：同券連續大額、價平附近與標的漲幅可控；ETF 與 2330 已排除。";
   const warrantQuoteDate = getWarrantQuoteDate();
   const stockQuoteDate = getWarrantStockQuoteDate();
   const scanTime = warrantFlowUpdatedAt ? new Date(warrantFlowUpdatedAt).toLocaleString("zh-TW", { hour12: false }) : "待確認";
@@ -162,15 +233,31 @@ function renderWarrantFlow() {
     ? "｜日期不同步：權證 " + formatWarrantDateKey(warrantQuoteDate) + " / 報價 " + formatWarrantDateKey(stockQuoteDate)
     : "";
   const freshnessText = "權證掃描 " + scanTime + "｜權證日期 " + formatWarrantDateKey(warrantQuoteDate) + "｜報價日期 " + formatWarrantDateKey(stockQuoteDate) + dateWarning;
-  const pagination = buildTerminalPagination("warrant", warrantFlowPage, pageCount, filteredRows.length);
-  const renderSignature = String(warrantFlowUpdatedAt || 0) + ":" + keyword + ":" + warrantFlowPage + ":" + filteredRows.length + ":" + rows.map((item) => item.code + ":" + item.rank + ":" + item.score + ":" + item.value).join("|");
+  const pagination = buildTerminalPagination("warrant", warrantFlowPage, pageCount, activeRows.length);
+  const renderSignature = String(warrantFlowUpdatedAt || 0) + ":" + warrantFlowTab + ":" + keyword + ":" + warrantFlowPage + ":" + activeRows.length + ":" + rows.map((item) => item.code + ":" + (item.rank || item.volumeRank) + ":" + item.score + ":" + item.value + ":" + item.stockClose + ":" + item.volumeMultiple).join("|");
   if (renderSignature === warrantFlowLastRenderSignature) return;
   warrantFlowLastRenderSignature = renderSignature;
 
-  const body = rows.length ? rows.map((item) => {
+  const body = warrantFlowTab === "watch" || warrantFlowTab === "history"
+    ? '<tr><td colspan="9">「' + (warrantFlowTab === "watch" ? "觀察中" : "歷史") + '」頁籤已保留，下一步可接指定名單或歷史資料。</td></tr>'
+    : rows.length ? rows.map((item) => {
     const sign = item.stockPercent >= 0 ? "+" : "";
-    const hot = item.repeatLarge ? "hot" : item.score >= 70 ? "mid" : "low";
+    const hot = warrantFlowTab === "volume" ? (item.volumeMultiple >= 5 ? "hot" : item.volumeMultiple >= 2 ? "mid" : "low") : (item.repeatLarge ? "hot" : item.score >= 70 ? "mid" : "low");
     const pct = Number.isFinite(Number(item.stockPercent)) ? sign + formatNumber(item.stockPercent, 2) + "%" : "--";
+    if (warrantFlowTab === "volume") {
+      return '<tr>' +
+      '<td><span class="swing-score">' + (item.volumeRank || "--") + '</span></td>' +
+      '<td><span class="code">' + escapeAttr(item.code || "--") + '</span></td>' +
+      '<td>' + escapeAttr(item.name) + '</td>' +
+      '<td class="price">' + formatNumber(item.stockClose, item.stockClose >= 100 ? 0 : 2) + '</td>' +
+      '<td><span class="code">' + escapeAttr(item.warrantCode || "--") + '</span><br><small>' + escapeAttr(item.warrantName || "--") + '</small></td>' +
+      '<td><b class="swing-stage ' + hot + '">' + formatNumber(item.thirtyMinuteVolume, 0) + '</b></td>' +
+      '<td><b class="swing-stage mid">' + formatNumber(item.floatingUnits, 0) + '</b></td>' +
+      '<td><b class="swing-stage ' + hot + '">' + formatNumber(item.volumeMultiple, 1) + '</b></td>' +
+      '<td class="price">' + pct + '</td>' +
+      '<td class="warrant-reason-cell">' + renderWarrantSignalBadges(item) + '</td>' +
+      '</tr>';
+    }
     return '<tr>' +
       '<td><span class="swing-score">' + (item.rank || "--") + '</span></td>' +
       '<td><span class="code">' + escapeAttr(item.code || "--") + '</span></td>' +
@@ -182,7 +269,10 @@ function renderWarrantFlow() {
       '<td class="price">' + pct + '</td>' +
       '<td class="warrant-reason-cell">' + renderWarrantSignalBadges(item) + '</td>' +
       '</tr>';
-  }).join("") : '<tr><td colspan="9">' + (keyword ? "單券精選內找不到這檔股票或權證。" : "權證單券精選讀取中。") + '</td></tr>';
+  }).join("") : '<tr><td colspan="' + (warrantFlowTab === "volume" ? "10" : "9") + '">' + (keyword ? "單券精選內找不到這檔股票或權證。" : "權證單券精選讀取中。") + '</td></tr>';
+  const tableHeader = warrantFlowTab === "volume"
+    ? '<th>排名</th><th>股票代號</th><th>標的名稱</th><th>收盤價</th><th>權證代號</th><th>30 分量</th><th>流通</th><th>倍數</th><th>標的漲幅</th><th>原因</th>'
+    : '<th>排名</th><th>股票代號</th><th>標的名稱</th><th>收盤價</th><th>權證代號</th><th>單券金額</th><th>訊號</th><th>標的漲幅</th><th>原因</th>';
 
   panel.innerHTML = [
     '<section class="swing-dashboard warrant-flow-dashboard">',
@@ -193,15 +283,15 @@ function renderWarrantFlow() {
     renderDataFreshnessBarHtml("warrant-flow"),
     '<section class="swing-panel warrant-flow-panel">',
     '<div class="swing-tabs">',
-    '<button class="active" type="button" data-warrant-refresh>' + listLabel + '</button>',
+    renderWarrantFlowTabs(),
     '<div class="swing-actions warrant-search-box">',
-    '<small class="warrant-search-hint">🔥 搜尋單券精選</small>',
+    '<small class="warrant-search-hint">🔥 ' + escapeAttr(listLabel) + '</small>',
     '<div class="warrant-search-row">',
     '<input id="warrant-flow-search" type="search" placeholder="搜尋股票/權證代號或名稱" value="' + escapeAttr(warrantFlowKeyword) + '" data-warrant-flow-search>',
     '<button id="warrant-flow-refresh" type="button" data-warrant-refresh data-mobile-full-load="warrant">重新整理</button>',
     '</div></div></div>',
     '<table class="swing-table"><thead><tr>',
-    '<th>排名</th><th>股票代號</th><th>標的名稱</th><th>收盤價</th><th>權證代號</th><th>單券金額</th><th>訊號</th><th>標的漲幅</th><th>原因</th>',
+    tableHeader,
     '</tr></thead><tbody>' + body + '</tbody></table>',
     pagination,
     '</section></section>',
@@ -217,19 +307,22 @@ async function loadWarrantFlow(force = false) {
   const panel = viewPanels["warrant-flow"];
   try {
     if (!latestStocks.length) loadStrategyStocks();
-    let payload = await fetchVersionedJson(endpoints.warrantFlowSingleSignal || "/data/warrant-single-signal-top.json", 7000, (warrantFlowSummary && warrantFlowSummary.updatedAt) || "", true);
-    let rows = normalizeSingleWarrantRows(payload);
+    let payload = await fetchVersionedJson(endpoints.warrantFlowSlim || "/data/warrant-flow-slim.json", 9000, (warrantFlowSummary && warrantFlowSummary.updatedAt) || "", force);
+    let rows = normalizeWarrantVolumeRows(payload);
+    warrantFlowChipData = normalizeArray(payload && payload.singleSignals);
     if (!rows.length) {
-      payload = await fetchVersionedJson(endpoints.warrantFlowMobileTop || endpoints.warrantFlowSlim, 8000, (warrantFlowSummary && warrantFlowSummary.updatedAt) || "", force);
-      rows = normalizeArray(payload && payload.singleSignals);
+      payload = await fetchVersionedJson(endpoints.warrantFlowCache || "/data/warrant-flow-latest.json", 10000, (warrantFlowSummary && warrantFlowSummary.updatedAt) || "", force);
+      rows = normalizeWarrantVolumeRows(payload);
+      warrantFlowChipData = normalizeArray(payload && payload.singleSignals);
     }
     if (!rows.length) {
-      payload = await fetchVersionedJson(endpoints.warrantFlowSlim, 9000, (warrantFlowSummary && warrantFlowSummary.updatedAt) || "", force);
-      rows = normalizeArray(payload && payload.singleSignals);
+      payload = await fetchVersionedJson(endpoints.warrantFlowMobileTop || "/data/warrant-flow-mobile-top.json", 8000, (warrantFlowSummary && warrantFlowSummary.updatedAt) || "", force);
+      rows = normalizeWarrantVolumeRows(payload);
+      warrantFlowChipData = normalizeArray(payload && payload.singleSignals);
     }
-    if (!rows.length) {
-      payload = await fetchVersionedJson(endpoints.warrantFlowCache, 10000, (warrantFlowSummary && warrantFlowSummary.updatedAt) || "", force);
-      rows = normalizeArray(payload && payload.singleSignals);
+    if (!warrantFlowChipData.length) {
+      const chipPayload = await fetchVersionedJson(endpoints.warrantFlowSingleSignal || "/data/warrant-single-signal-top.json", 7000, (warrantFlowSummary && warrantFlowSummary.updatedAt) || "", true);
+      warrantFlowChipData = normalizeSingleWarrantRows(chipPayload);
     }
     warrantFlowData = rows;
     warrantFlowPrioritySignature = "";
@@ -253,7 +346,7 @@ async function loadWarrantFlow(force = false) {
 
   window.FUMAN_WARRANT_FLOW_MODULE = {
     install(context) {
-      return Function("scope", "with (scope) {\n" + source + "\nreturn { renderWarrantFlow, loadWarrantFlow };\n}")(context.scope);
+      return Function("scope", "with (scope) {\n" + source + "\nreturn { renderWarrantFlow, loadWarrantFlow, setWarrantFlowTab };\n}")(context.scope);
     },
   };
 })();

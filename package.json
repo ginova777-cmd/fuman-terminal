@@ -33,6 +33,8 @@
     "verify:heatmap": "node --use-system-ca scripts/verify-heatmap-realtime.js",
     "verify:data-freshness": "node --use-system-ca scripts/verify-data-freshness.js",
     "verify:data-freshness:live": "node --use-system-ca scripts/verify-data-freshness.js --live",
+    "verify:warrant-freshness": "node --use-system-ca scripts/verify-warrant-freshness.js",
+    "verify:warrant-freshness:live": "node --use-system-ca scripts/verify-warrant-freshness.js --live",
     "verify:local-ops": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/verify-local-ops.ps1",
     "verify:all": "node scripts/verify-all.js",
     "verify:data-freshness:write": "node --use-system-ca scripts/verify-data-freshness.js --write",
@@ -42,12 +44,22 @@
     "freshness:gate": "npm run release:daily",
     "freshness:gate:fast": "pwsh.exe -NoProfile -ExecutionPolicy Bypass -File run-live-freshness-gate.ps1 -Fast",
     "freshness:local-repair": "pwsh.exe -NoProfile -ExecutionPolicy Bypass -File run-local-freshness-repair.ps1",
+    "strategy4:publish:fast": "node --use-system-ca scripts/publish-strategy4-fast.js",
+    "sync:finmind:quotes": "node --use-system-ca scripts/sync-finmind-quotes-live.js",
+    "sync:finmind:daily": "node --use-system-ca scripts/sync-finmind-daily-ohlcv.js",
+    "sync:finmind:universe": "node --use-system-ca scripts/sync-finmind-stock-universe.js",
+    "sync:finmind:core": "npm run sync:finmind:universe && npm run sync:finmind:daily && npm run sync:finmind:quotes",
+    "sync:finmind:chip": "node --use-system-ca scripts/sync-finmind-chip-data.js",
+    "sync:finmind:kbar": "node --use-system-ca scripts/sync-finmind-intraday-1m.js",
+    "strategy2:coverage": "node --use-system-ca scripts/check-strategy2-supabase-coverage.js",
+    "strategy2:coverage:watch": "node --use-system-ca scripts/check-strategy2-supabase-coverage.js --watch --until=09:10",
     "verify:publish-gate": "node scripts/verify-publish-gate.js",
     "sync:tdcc": "node --use-system-ca scripts/sync-tdcc-shareholding-cache.js",
     "sync:tdcc:backfill": "node --use-system-ca scripts/sync-tdcc-shareholding-cache.js --backfill",
     "scan:chip-exclusions": "node scripts/generate-chip-trade-exclusions.js",
     "scan:tdcc-breakout": "node --use-system-ca scripts/generate-institution-tdcc-breakout.js",
-    "scan:star": "node --use-system-ca scripts/scan-star-preopen.js"
+    "scan:star": "node --use-system-ca scripts/scan-star-preopen.js",
+    "verify:run-gates": "node --use-system-ca scripts/verify-run-id-complete-gates.js"
   },
   "engines": {
     "node": "20.x"

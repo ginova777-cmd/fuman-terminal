@@ -1,0 +1,21 @@
+{
+  "strategy": "institution",
+  "label": "institution raw refresh",
+  "tier": "degradable",
+  "startedAt": "2026-06-16T20:26:51.3343905+08:00",
+  "finishedAt": "2026-06-16T20:33:51.4555914+08:00",
+  "status": "degraded",
+  "exitCode": 124,
+  "scanned": 0,
+  "total": 0,
+  "matches": 290,
+  "complete": true,
+  "qualityStatus": "",
+  "fallback": false,
+  "payloadPath": "C:\\fuman-runtime\\data\\institution-latest.json",
+  "warnings": [
+    "timeout after 420s"
+  ],
+  "blockingReason": "",
+  "log": "C:\\fuman-runtime\\logs\\full-scan-20260616-201003.log"
+}

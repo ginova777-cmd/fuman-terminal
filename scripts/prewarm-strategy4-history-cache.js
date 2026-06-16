@@ -15,7 +15,7 @@ const BATCHES_PER_RUN = Number(process.env.STRATEGY4_PREWARM_BATCHES_PER_RUN || 
 const SLEEP_MS = Number(process.env.STRATEGY4_PREWARM_SLEEP_MS || 800);
 const MAX_REMAINING_MISS = Number(process.env.STRATEGY4_PREWARM_MAX_REMAINING_MISS || 2000);
 const SUPABASE_ONLY = process.env.STRATEGY4_PREWARM_SUPABASE_ONLY !== "0";
-const SUPABASE_TABLES = String(process.env.STRATEGY4_SUPABASE_HISTORY_TABLES || "fugle_daily_ohlcv,fugle_daily_candles,fugle_historical_candles,stock_historical_candles,taiwan_stock_price,fugle_daily_volume")
+const SUPABASE_TABLES = String(process.env.STRATEGY4_SUPABASE_HISTORY_TABLES || "strategy4_daily_ohlcv_view")
   .split(",")
   .map((item) => item.trim())
   .filter(Boolean);
@@ -60,6 +60,12 @@ function cleanNumber(value) {
   return Number(String(value ?? "").replace(/[,+%]/g, "").trim()) || 0;
 }
 
+function flagTrue(value) {
+  if (value === true) return true;
+  const text = String(value ?? "").trim().toLowerCase();
+  return text === "true" || text === "1" || text === "yes" || text === "y";
+}
+
 function isoDateDaysAgo(days) {
   const date = new Date();
   date.setDate(date.getDate() - days);
@@ -73,11 +79,16 @@ function historyCacheFile(code) {
 function normalizeHistoryRow(row) {
   const date = String(row.date || row.trade_date || row.trading_date || "").slice(0, 10);
   const close = cleanNumber(row.close || row.closing_price || row.price);
-  if (!date || !close) return null;
+  const volumeLots = cleanNumber(row.volume_lots ?? row.volumeLots ?? row.volume ?? row.trade_volume ?? row.trading_volume);
+  const volumeShares = cleanNumber(row.volume_shares ?? row.volumeShares) || (volumeLots ? volumeLots * 1000 : 0);
+  if (!date || !close || !volumeLots) return null;
   return {
     date,
-    volume: cleanNumber(row.volume || row.trade_volume || row.trading_volume),
-    value: cleanNumber(row.value || row.turnover || row.trade_value || row.trading_money),
+    volume: Number(volumeLots.toFixed(4)),
+    volume_lots: Number(volumeLots.toFixed(4)),
+    volume_shares: Number(volumeShares.toFixed(0)),
+    volumeUnit: "lots",
+    value: cleanNumber(row.trade_value_twd ?? row.tradeValueTwd ?? row.value ?? row.turnover ?? row.trade_value ?? row.trading_money),
     open: cleanNumber(row.open || row.opening_price),
     high: cleanNumber(row.high || row.max || row.highest_price),
     low: cleanNumber(row.low || row.min || row.lowest_price),
@@ -88,9 +99,16 @@ function normalizeHistoryRow(row) {
 
 function normalizeVolumeRow(row) {
   const date = String(row.date || row.trade_date || row.trading_date || "").slice(0, 10);
-  const volume = cleanNumber(row.volume || row.trade_volume || row.trading_volume);
-  if (!date || !volume) return null;
-  return { date, volume };
+  const volumeLots = cleanNumber(row.volume_lots ?? row.volumeLots ?? row.volume ?? row.trade_volume ?? row.trading_volume);
+  const volumeShares = cleanNumber(row.volume_shares ?? row.volumeShares) || (volumeLots ? volumeLots * 1000 : 0);
+  if (!date || !volumeLots) return null;
+  return {
+    date,
+    volume: Number(volumeLots.toFixed(4)),
+    volume_lots: Number(volumeLots.toFixed(4)),
+    volume_shares: Number(volumeShares.toFixed(0)),
+    volumeUnit: "lots",
+  };
 }
 
 function writePrefilterVolumeCache(code, from, to, rows, source = "supabase-fugle-volume") {
@@ -339,10 +357,12 @@ function callStrategy4Handler(stocks) {
 function normalizeStock(row) {
   const code = normalizeCode(row.Code || row.code || row.symbol || row["證券代號"]);
   const name = String(row.Name || row.name || row["證券名稱"] || "").trim();
-  if (!/^\d{4}$/.test(code) || /^00/.test(code) || !name) return null;
-  if (row.is_active === false || row.is_etf === true || row.is_warrant === true || row.is_cb === true || row.is_blacklisted === true || row.is_daytrade_unsuitable === true) return null;
   const industry = String(row.industry || row.officialIndustry || row.primaryIndustry || "").trim();
-  if (/水泥|軍工|國防|航太/.test(`${name} ${industry}`)) return null;
+  const text = `${code} ${name} ${industry}`;
+  if (!/^\d{4}$/.test(code) || /^00/.test(code) || !name) return null;
+  if (row.is_active === false || flagTrue(row.is_etf) || flagTrue(row.is_warrant) || flagTrue(row.is_cb) || flagTrue(row.is_blacklisted) || flagTrue(row.is_daytrade_unsuitable)) return null;
+  if (/(ETF|ETN|DR|指數|台灣50|高股息|正2|反1|期貨|債|權證|認購|認售|牛證|熊證|CB|可轉債)/i.test(text)) return null;
+  if (/水泥|軍工|國防|航太|漢翔|雷虎|龍德|駐龍|晟田|寶一|亞航|千附/i.test(text)) return null;
   return {
     code,
     name,
@@ -530,3 +550,5 @@ main().catch((error) => {
   });
   process.exit(1);
 });
+
+

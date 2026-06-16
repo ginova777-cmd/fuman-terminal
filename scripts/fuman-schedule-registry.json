@@ -60,13 +60,13 @@
       ]
     },
     {
-      "taskName": "\\Fuman Open Buy Cache 1430",
-      "displayName": "Fuman Open Buy Cache 1430",
-      "description": "策略1「明日開盤入」下午 14:30 快取",
-      "time": "14:30",
+      "taskName": "\\Fuman Open Buy Cache 1600",
+      "displayName": "Fuman Open Buy Cache 1600",
+      "description": "策略1「明日開盤入」下午 16:00 完整快取",
+      "time": "16:00",
       "aliases": [
         "策略1",
-        "open buy 1430"
+        "open buy 1600"
       ]
     },
     {
@@ -339,3 +339,4 @@
     }
   ]
 }
+

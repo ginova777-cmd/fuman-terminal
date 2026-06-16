@@ -53,7 +53,8 @@ function Invoke-PublicSlotUpsert {
     [Parameter(Mandatory = $true)][string]$Table,
     [Parameter(Mandatory = $true)][string]$OnConflict,
     [Parameter(Mandatory = $true)][object[]]$Rows,
-    [int]$RetryCount = 2
+    [int]$RetryCount = 2,
+    [int]$TimeoutSec = 20
   )
 
   if (-not $Rows -or $Rows.Count -eq 0) { return }
@@ -67,7 +68,7 @@ function Invoke-PublicSlotUpsert {
 
   for ($attempt = 0; $attempt -le $RetryCount; $attempt++) {
     try {
-      Invoke-RestMethod -Uri $uri -Method Post -Headers $headers -Body $body | Out-Null
+      Invoke-RestMethod -Uri $uri -Method Post -Headers $headers -Body $body -TimeoutSec $TimeoutSec -ErrorAction Stop | Out-Null
       return
     } catch {
       if ($attempt -ge $RetryCount) { throw }

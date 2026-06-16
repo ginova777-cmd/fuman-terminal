@@ -1,5 +1,338 @@
 # Codex Operating Rule
 
+## Supabase / Fugle Shared Source Handoff
+
+This project has a live Supabase/Fugle shared source used by intraday strategies. Before changing any Supabase/Fugle collector, writer, health view, strategy coverage check, or daytrade data contract, read this section and verify live data directly.
+
+## Official Publish Target
+
+The only official user-facing terminal is:
+
+```text
+https://fuman-terminal.vercel.app
+```
+
+`https://fuman-terminal-sync.vercel.app` is not the production terminal. Do not deploy there and report the terminal as updated. Strategy scans may be correct in `C:\fuman-terminal-sync`, and source sync may be correct, while users still see old data if `C:\fuman-terminal` has not been deployed to the `fuman-terminal` Vercel project.
+
+For strategy4 urgent publishes, use the fast lane from `C:\fuman-terminal-sync`:
+
+```powershell
+npm run strategy4:publish:fast
+```
+
+That lane must scan strategy4, regenerate slim/zone files, bump the frontend/service-worker cache version, sync to `C:\fuman-terminal`, deploy the official `fuman-terminal` project, and verify `https://fuman-terminal.vercel.app/data/strategy4-latest.json`. Do not treat a successful `fuman-terminal-sync` deployment as production evidence.
+
+The fastest possible strategy4 path is Supabase-backed: `scripts\scan-strategy4-cache.js` writes `public.strategy4_scan_results` with a `run_id`, and the terminal reads `api/latest-signals?strategy=strategy4` with `Cache-Control: no-store`. `api/strategy4-latest.js` remains the strategy-specific implementation, and `api/refresh` is an alias for callers that want a refresh-style endpoint. The API must read the latest `strategy4_scan_runs.status=complete` run and must never read a running run. Keep static `data/strategy4-*.json` as the deploy fallback.
+
+When running strategy4 manually or from automation, use:
+
+```powershell
+$env:FULL_SCAN='1'
+$env:STRATEGY4_SUPABASE_RUN_ID='1'
+node C:\fuman-terminal\scripts\scan-strategy4-cache.js
+```
+
+Do not use `scan_date` / `scan_time` as the primary read gate anymore. `legacy-scan-time` is fallback only.
+
+## Strategy2 Run ID Complete Gate
+
+Strategy2 is an intraday fast-path scanner. During market hours, do not route Strategy2 through deploy, version bump, GitHub push, or the full release chain for each scan. The correct intraday path is:
+
+```text
+scan Strategy2 -> write latest JSON/runtime files -> upsert strategy2_latest -> publish complete run_id batch to Supabase
+```
+
+The official Strategy2 scan scripts are:
+
+```text
+C:\fuman-terminal\run-strategy2-intraday.ps1
+C:\fuman-terminal\scripts\scan-intraday-signals.js
+C:\fuman-terminal-sync\run-strategy2-intraday.ps1
+C:\fuman-terminal-sync\scripts\scan-intraday-signals.js
+```
+
+Strategy2 Node publishing must preserve both paths:
+
+```text
+1. strategy2_latest remains compatible with the old page.
+2. publish_strategy2_complete_run() publishes the complete run_id batch.
+```
+
+`strategy2_latest` may use the anon key for old-page compatibility. `publish_strategy2_complete_run()` must use the Supabase service role key from:
+
+```text
+C:\fuman-runtime\secrets\supabase-service-role-key.txt
+```
+
+The complete run payload must include at least:
+
+```text
+events
+records
+entryCount
+qualityStatus
+schemaVersion
+dataContractSource
+```
+
+Required Strategy2 complete-run contract:
+
+```text
+schemaVersion = strategy2-run-id-complete-v1
+dataContractSource = supabase:strategy2_intraday_ready_cache
+qualityStatus = ok or degraded
+run_id format = strategy2-YYYYMMDD-HHMMSS
+```
+
+Supabase complete-run objects:
+
+```text
+public.strategy2_scan_runs
+public.strategy2_scan_results
+public.v_strategy2_latest_complete_run
+public.publish_strategy2_complete_run(text, date, jsonb)
+```
+
+`publish_strategy2_complete_run()` is responsible for:
+
+```text
+1. writing public.strategy2_scan_runs with complete=true
+2. splitting payload.events into public.strategy2_scan_results where row_kind='event'
+3. splitting payload.records into public.strategy2_scan_results where row_kind='record'
+4. updating public.strategy2_latest with run_id, complete, quality_status, schema_version, and data_contract_source
+```
+
+Future Strategy2 readers should migrate to:
+
+```text
+public.v_strategy2_latest_complete_run
+public.strategy2_scan_results
+```
+
+Do not use `scan_time` as the primary latest gate for Strategy2. Use the latest complete run. Legacy JSON and `strategy2_latest` are compatibility fallback only.
+
+After a formal Strategy2 scan, verify:
+
+```text
+public.strategy2_scan_runs where strategy='strategy2' and complete=true order by finished_at desc limit 1
+public.strategy2_scan_results where run_id = latest run_id
+strategy2_latest where id='latest'
+```
+
+The latest run must contain both `row_kind='event'` and `row_kind='record'` when signals/records exist, and must keep:
+
+```text
+complete = true
+schema_version = strategy2-run-id-complete-v1
+data_contract_source = supabase:strategy2_intraday_ready_cache
+```
+
+### Data Contract And Unit Governance
+
+The largest recurring risk is not Supabase or Fugle availability; it is an unlocked data contract. Every strategy-facing field must make its unit explicit and must be validated before publishing strategy caches.
+
+Do not let strategies guess whether a field is shares, lots, TWD, thousand TWD, raw Fugle units, or already converted units. Supabase should clean data into strategy-ready views; strategies should only make trading decisions.
+
+Required naming convention for new or repaired strategy-facing columns:
+
+```text
+volume_shares
+volume_lots
+trade_value_twd
+avg_volume_5_lots
+avg_volume_20_lots
+cumulative_bid_volume_lots
+cumulative_ask_volume_lots
+cumulative_bid_ask_volume_lots
+quote_updated_at
+```
+
+Avoid generic strategy-facing names such as `volume`, `avg_volume5`, or `trade_value` unless the table is a raw-source table and the unit is documented in `payload.volume_unit`. For strategies, prefer `*_lots`, `*_shares`, or `*_twd`.
+
+Priority design:
+
+```text
+1. Supabase view normalizes all volume fields into volume_lots / avg_volume_5_lots.
+2. Strategy scripts read only strategy-ready view fields such as avg_volume_5_lots.
+3. Publish gate blocks cache publication when unit sanity checks fail.
+4. Cache files include schemaVersion, volumeUnit, source, and generatedAt.
+```
+
+Recommended strategy view pattern:
+
+```text
+Raw Fugle daily volume remains volume_shares if it comes in shares.
+Strategy view exposes volume_lots = volume_shares / 1000.
+Strategy view exposes avg_volume_5_lots and avg_volume_20_lots.
+Strategies must not calculate or infer lot conversion from raw tables.
+```
+
+Minimum data-quality gate before publishing strategy caches:
+
+```text
+volume_lots > 0
+avg_volume_5_lots is present for volume-filtered strategies
+volume_shares / volume_lots is approximately 1000 when both exist
+trade_value_twd approximately equals close * volume_shares, within a reasonable tolerance
+reject obviously impossible low-price/high-volume or high-price/low-volume anomalies
+block publish if schemaVersion is missing, volumeUnit is missing, or unit check fails
+```
+
+Cache contract:
+
+```json
+{
+  "schemaVersion": "strategy-cache-vN",
+  "volumeUnit": "lots",
+  "source": "supabase-strategy-view",
+  "generatedAt": "ISO-8601"
+}
+```
+
+If a cache has no `schemaVersion`, no `volumeUnit`, or an old schema version, force a rebuild. Do not silently reuse old cache data.
+
+Keep realtime quote data separate from daily OHLCV data. Intraday bid/ask cumulative fields are quote-layer fields and must not be mixed into daily K-bar inference. Use a separate realtime quote table/view, for example:
+
+```text
+fugle_realtime_quote_latest or equivalent view
+cumulative_bid_volume_lots
+cumulative_ask_volume_lots
+cumulative_bid_ask_volume_lots
+quote_updated_at
+```
+
+Centralize exclusions in a shared module or Supabase view. Do not scatter product/blacklist rules across strategy scripts. At minimum exclude or explicitly flag:
+
+```text
+ETF / 00 prefix
+warrants
+convertible bonds
+blacklist
+cement
+defense / military
+finance and aviation if the strategy policy requires it
+suspended or inactive symbols
+```
+
+For strategy4 specifically, the preferred path is:
+
+```text
+1. Create or use a Supabase strategy-ready daily OHLCV view such as strategy4_daily_ohlcv_view.
+2. The view must expose avg_volume_5_lots and avg_volume_20_lots.
+3. Strategy4 must read avg_volume_5_lots directly and must not guess units.
+4. Strategy4 publish must run a volume/trade-value unit gate before writing cache.
+5. Strategy4 cache must reject old schemaVersion or missing volumeUnit.
+```
+
+Live REST base:
+
+```text
+https://cpmpfhbzutkiecccekfr.supabase.co/rest/v1
+```
+
+Local keys and runtime state:
+
+```text
+C:\fuman-runtime\secrets\supabase-anon-key.txt
+C:\fuman-runtime\secrets\supabase-service-role-key.txt
+C:\fuman-runtime\state\fugle-websocket-status.json
+C:\fuman-runtime\cache\intraday\fugle-ws-quotes.json
+```
+
+Shared source scripts:
+
+```text
+C:\fuman-terminal-sync\ops\public-slot\Run-PublicSlotSharedSource.ps1
+C:\fuman-terminal-sync\ops\public-slot\Start-PublicSlotSharedSource.cmd
+C:\fuman-terminal-sync\ops\public-slot\Watchdog-PublicSlotSharedSource.ps1
+C:\fuman-terminal\scripts\fugle-websocket-collector.js
+```
+
+Current intended runtime shape:
+
+```text
+writer process: exactly 1 Run-PublicSlotSharedSource.ps1
+collector process: exactly 1 fugle-websocket-collector.js
+collector cache: ok=true, subscribed=1600, quotes around 1600, pending normally 0-160 during rotation
+Start-PublicSlotSharedSource.cmd: -RestQuoteBatchSize 20 -RestQuoteEverySeconds 10 -Direct1mBatchSize 3 -Direct1mEverySeconds 60 -FutoptQuoteBatchSize 10 -FutoptQuoteEverySeconds 60
+```
+
+Do not raise `Direct1mBatchSize` casually. Fugle direct 1m has returned 429 at 10 symbols/minute. The current design is: keep quote freshness broad and fast, derive/update 1m rows from quotes, and rotate direct 1m in a small priority batch.
+
+Health gate for strategies:
+
+```text
+source_status.status should be ok
+source_status.payload.quotes_ok should be true
+source_status.payload.intraday_1m_ok should be true
+source_status.payload.daily_volume_ok should be true
+source_status.payload.degraded_but_usable_for_intraday should be false in normal mode
+source_status.payload.quote_age_seconds should be <= 120
+v_fugle_quotes_live_health.coverage_120s should normally be high, around >= 0.85 after a stable 120s window
+v_fugle_quotes_live_health.quote_age_seconds should be <= 120
+```
+
+Important quote timestamp contract:
+
+```text
+fugle_quotes_live.updated_at = shared source write / supply freshness time
+fugle_quotes_live.last_trade_time = Fugle raw last trade / quote time
+```
+
+Do not change `updated_at` back to Fugle `last_trade_time`. Some stocks do not trade every minute; using last trade time for supply freshness makes coverage look stale even when the shared source just refreshed the row.
+
+Known view/display caveat:
+
+`v_fugle_quotes_live_health` must calculate freshness from `fugle_quotes_live.updated_at`, not `last_trade_time`. If raw `fugle_quotes_live.updated_at` rows are fresh but `v_fugle_quotes_live_health.coverage_120s` is low, the health view definition is wrong or stale. Use/update:
+
+```text
+outputs/fix-v-fugle-quotes-live-health.sql
+```
+
+Actual Supabase column names that differ from older strategy notes:
+
+```text
+fugle_daily_volume_avg: avg_5d_volume, avg_20d_volume, days_5, days_20
+fugle_preopen_snapshot: best_bid_price, best_ask_price, bid1_price, ask1_price
+v_fugle_preopen_snapshot_history: best_bid_price, best_ask_price, observed_at
+futopt_quotes_live: future_symbol, last_price, change_percent, total_volume
+v_fugle_intraday_1m_status: today_candle_count exists; rows_today may not exist in current deployed view
+```
+
+Before reporting Supabase/Fugle as healthy, run a live check equivalent to:
+
+```powershell
+$url='https://cpmpfhbzutkiecccekfr.supabase.co'
+$anon=(Get-Content -LiteralPath 'C:\fuman-runtime\secrets\supabase-anon-key.txt' -Raw).Trim()
+$h=@{apikey=$anon; Authorization="Bearer $anon"}
+Invoke-RestMethod -Uri "$url/rest/v1/source_status?source_name=eq.fugle_shared_source&select=status,updated_at,message,payload&order=updated_at.desc&limit=1" -Headers $h
+Invoke-RestMethod -Uri "$url/rest/v1/v_fugle_quotes_live_health?select=*&limit=1" -Headers $h
+Invoke-RestMethod -Uri "$url/rest/v1/fugle_quotes_live?select=symbol,updated_at,last_trade_time,price,total_volume,trade_value,change_percent&order=updated_at.desc&limit=20" -Headers $h
+Invoke-RestMethod -Uri "$url/rest/v1/v_fugle_intraday_1m_status?select=symbol,latest_candle_time,today_candle_count,ready_ge_35,latest_candle_age_seconds,updated_at&has_today_data=eq.true&order=latest_candle_time.desc&limit=20" -Headers $h
+Invoke-RestMethod -Uri "$url/rest/v1/fugle_daily_volume?select=symbol,trade_date,volume,updated_at&order=updated_at.desc&limit=20" -Headers $h
+Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -match 'Run-PublicSlotSharedSource\.ps1|fugle-websocket-collector\.js' } | Select-Object ProcessId,Name,CreationDate,CommandLine
+Get-Content -LiteralPath C:\fuman-runtime\state\fugle-websocket-status.json
+```
+
+Recent healthy reference from 2026-06-16 around 13:14 Asia/Taipei:
+
+```text
+source_status=ok
+quotes=1600
+quote_age_seconds=33
+intraday_1m_ok=true
+daily_volume_ok=true
+latest_candle_time=2026-06-16 13:11 Asia/Taipei
+intraday_1m_rows_today=1155
+avg_volume5_eligible=391
+daytrade_hot_symbols=300
+v_fugle_quotes_live_health fresh_quote_count_120s=1600
+v_fugle_quotes_live_health coverage_120s=0.9639
+collector ok=true subscribed=1600 quotes=1600 pending=0
+```
+
+If `source_status` is ok but strategy output still says stale, first check whether the strategy is querying old columns or an unsorted `source_status` row. Always order `source_status` by `updated_at.desc`.
+
 Mobile-readable summary: `FRESHNESS-GATE-MOBILE.md`
 
 Strategy2 data governance: `STRATEGY2-FRESHNESS-GOVERNANCE.md`
@@ -67,12 +400,14 @@ npm run verify:mobile-layout:live
 
 ## Auto Main Release Chain For Codex
 
-Other Codex agents must keep terminal release automation on the guarded chain. Before claiming data or UI is current, automatically detect repo state first:
+Other Codex agents must keep terminal release automation on the guarded chain. Before claiming data or UI is current, automatically detect repo state, version drift, and live alignment first:
 
 ```powershell
 git fetch origin main
 git status -sb
 npm run verify:publish-gate
+npm run verify:version
+npm run verify:live-version
 ```
 
 If the checkout is behind `origin/main`, ahead/behind has diverged, or the tree has unexpected dirty files, stop and fix sync/dirty state before deploy. Do not manually copy data, manually bump versions, deploy from a stale tree, or push GitHub separately.
@@ -130,14 +465,14 @@ Run it through:
 npm run release:main
 ```
 
-`npm run release:main` is responsible for `git fetch`, `git pull --ff-only origin main`, version bump detection, `npm run sync:source`, Vercel production deploy, `npm run verify:live-version`, and final `git push origin HEAD:main`. If any step fails, the terminal is not current yet.
+`npm run release:main` is responsible for `git fetch`, `git pull --ff-only origin main`, version bump detection, `npm run sync:source`, Vercel production deploy, `npm run verify:live-version`, `npm run verify:warrant-freshness:live`, `npm run verify:data-freshness:live`, and final `git push origin HEAD:main`. If any step fails, the terminal is not current yet.
 Main release/deploy must use the guarded release chain:
 
 ```powershell
 npm run release:main
 ```
 
-This wrapper enforces: sync `origin/main` -> bump version if needed -> deploy -> verify live version -> push GitHub.
+This wrapper enforces: sync `origin/main` -> bump version if needed -> deploy -> verify live version -> verify warrant freshness live -> verify data freshness live -> push GitHub.
 
 Version detection and live alignment must be automatic. `npm run verify:live-version` detects the local frontend version, reads the live `version.json`, fetches versioned assets, compares live `terminal-app.js` against local `terminal-app.js`, and verifies market event reminders. If it fails with `version-json check failed` or `terminal-app hash mismatch`, do not edit version strings backwards. Re-align by running the guarded chain:
 
@@ -173,11 +508,59 @@ Raw scanners may refresh runtime data, but publishing must be centralized throug
 
 Strategy3 data is a critical publish artifact. `strategy3-latest.json`, `strategy3-backup.json`, and `strategy3-scorecard-source.json` must be copied back into the official source repo by the freshness gate, committed with `npm run snapshot:data`, and then released through `npm run release:main` so the daily chain is: main -> bump -> deploy -> live verify -> push GitHub.
 
-Strategy2 data is governed separately as well: strategy2 A-zone JSON, LINE alerts, intraday patrol output, and `strategy2-intraday-*.json` must not be published by scoped sync or manual copy. They must pass through the freshness gate and final live verifier.
+Strategy2, realtime radar, market overview, and AI interpretation have a two-layer freshness model because they are intraday ledgers, not slow end-of-day publish artifacts.
 
-Realtime radar data is governed separately as well: `realtime-radar-latest.json`, realtime radar scanner output, failed batch details, stale quote details, and radar filter rules must not be published by scoped sync or manual copy. They must pass through the freshness gate and final live verifier.
+Intraday fast path, 08:45-13:30 Asia/Taipei:
+
+- Strategy2 A-zone scans, realtime radar scans, market overview refreshes, and AI interpretation refreshes may update runtime/latest JSON, cache JSON, or Supabase readback rows directly so the terminal can display the newest intraday state quickly.
+- The terminal may read the latest runtime JSON or cache output for display.
+- strategy2-intraday-*.json cannot bypass the freshness gate for close, archival, official publish, or versioned terminal release.
+- The fast path only runs necessary freshness checks: data timestamp is current, source health is OK, quote/candle coverage is acceptable, and stale/source-unhealthy reasons are visible when blocked.
+- The fast path must not bump versions, deploy Vercel, push GitHub, or run the full main release chain on every scan tick/refresh.
+- Do not insert `npm run freshness:gate`, `npm run release:main`, deploy, or GitHub push into the 3-second Strategy2 A-zone hot path, realtime radar scan loop, market overview refresh loop, or AI interpretation refresh loop.
+
+Slow path for close, archival, official publish, or versioned terminal release:
+
+```text
+freshness:gate -> release:main -> live verify -> push GitHub
+```
+
+Use the project scripts:
+
+```powershell
+npm run freshness:gate
+npm run release:main
+npm run verify:data-freshness:live
+```
+
+The slow path is required before claiming official published data, archived history, GitHub main, Vercel live data, or terminal version alignment is current. If the slow path is blocked by a dirty tree, stale main, deploy failure, live verify failure, or GitHub push failure, report the blocker and do not pretend the official publish is complete. The intraday fast path may continue writing runtime/latest JSON, cache JSON, and Supabase readback rows as long as its source-health and staleness checks are visible.
+
+Strategy2 raw-source readiness must be detected before the A-zone scan window. Starting at 08:00 Asia/Taipei, run the strategy2 Supabase/Fugle coverage preflight:
+
+```powershell
+npm run strategy2:coverage:watch
+```
+
+The scheduled wrapper is:
+
+```powershell
+.\run-strategy2-supabase-coverage-watch.ps1
+```
+
+This preflight only checks raw-source coverage and writes `C:\fuman-runtime\state\strategy2-supabase-coverage.json`; it must not publish JSON, copy cache files, or replace `npm run freshness:gate`. It must verify the raw sources strategy2 needs from Supabase REST base URL `https://cpmpfhbzutkiecccekfr.supabase.co/rest/v1`: `source_status`, `v_fugle_quotes_live_health`, `fugle_quotes_live`, `fugle_intraday_1m`, `v_fugle_intraday_1m_status`, `stock_universe`, `fugle_daily_volume_avg`, preopen snapshots, and futopt mapping/quotes. Important: `v_fugle_intraday_1m_status` does not provide `rows_today`; use `today_candle_count`. If coverage is low at 08:00-09:10, report the blocker early instead of letting A-zone appear empty without explanation.
+
+Realtime radar, market overview, and AI interpretation follow the same two-layer model as Strategy2. During 08:45-13:30 they are intraday fast-path ledgers that may update `realtime-radar-latest.json`, market overview latest/cache JSON, AI interpretation latest/cache JSON, scanner output, failed batch details, stale quote details, and filter/interpretation reasons quickly, with source-health/staleness reasons visible. For close, archival, official publish, or versioned terminal release, they must go through `npm run freshness:gate`, `npm run release:main`, and the final live verifier instead of scoped sync or manual copy.
 
 Strategy5 data is governed separately as well: `strategy5-latest.json`, `strategy5-backup.json`, `strategy-match-index.json`, 籌碼老K, 外資投信連買準突破, and multi-strategy confluence output must not be published by scoped sync or manual copy. They must pass through the freshness gate and final live verifier.
+
+Warrant flow is governed separately from institution/buy-sell flow. `warrant-flow-latest.json`, `warrant-flow-slim.json`, `warrant-priority-top.json`, `warrant-single-signal-top.json`, and the `volumeMatches` fields for `30 分量 / 流通 / 倍數` must not be published by scoped sync or manual copy. They must pass:
+
+```powershell
+npm run verify:warrant-freshness
+npm run verify:warrant-freshness:live
+```
+
+`verify:warrant-freshness:live` is part of the guarded main release chain. If warrant latest/slim disagree, or live `volumeMatches` is missing, stop and repair warrant generation before claiming the terminal is current. Do not let institution/buy-sell count failures hide warrant freshness, and do not let warrant freshness bypass the central release chain.
 
 Windows Task Scheduler should use these official tasks:
 
@@ -200,7 +583,12 @@ Before claiming the terminal is current, run:
 
 ```powershell
 npm run verify:publish-gate
+npm run verify:warrant-freshness:live
 npm run verify:data-freshness:live
 ```
+
+
+
+
 
 

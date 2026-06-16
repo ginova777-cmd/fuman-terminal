@@ -19,6 +19,25 @@ const CAPITAL_URLS = [
 ];
 const USE_MIS_QUOTES = process.env.STRATEGY5_USE_MIS === "1";
 const HISTORY_CONCURRENCY = Math.max(1, Number(process.env.STRATEGY5_HISTORY_CONCURRENCY || 8));
+const RUNTIME_DIR = process.env.FUMAN_RUNTIME_DIR || "C:/fuman-runtime";
+const SUPABASE_URL = (
+  process.env.SUPABASE_URL
+  || process.env.FUMAN_SUPABASE_URL
+  || "https://cpmpfhbzutkiecccekfr.supabase.co"
+).replace(/\/+$/, "");
+
+function readSecretText(file) {
+  try { return fs.readFileSync(file, "utf8").trim(); } catch { return ""; }
+}
+
+const SUPABASE_READ_KEY = process.env.SUPABASE_ANON_KEY
+  || process.env.FUMAN_SUPABASE_ANON_KEY
+  || readSecretText(path.join(RUNTIME_DIR, "secrets", "supabase-anon-key.txt"));
+const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY
+  || process.env.FUMAN_SUPABASE_SERVICE_ROLE_KEY
+  || readSecretText(path.join(RUNTIME_DIR, "secrets", "supabase-service-role-key.txt"));
+const STRATEGY5_RUNS_TABLE = process.env.STRATEGY5_SUPABASE_RUNS_TABLE || "strategy5_scan_runs";
+const STRATEGY5_RESULTS_TABLE = process.env.STRATEGY5_SUPABASE_RESULTS_TABLE || "strategy5_scan_results";
 
 function readJson(file, fallback) {
   try { return JSON.parse(fs.readFileSync(file, "utf8")); } catch { return fallback; }
@@ -36,6 +55,128 @@ function normalizeCode(value) {
   return String(value || "").replace(/\D/g, "").slice(0, 4);
 }
 
+function strategy5RunIdFromOutput(output) {
+  const stamp = String(output.generatedDate || output.sourceDate || output.usedDate || output.updatedAt || new Date().toISOString()).replace(/\D/g, "").slice(0, 8);
+  const time = String(output.updatedAt || new Date().toISOString()).replace(/\D/g, "").slice(0, 14).padEnd(14, "0");
+  return String(output.runId || process.env.STRATEGY5_RUN_ID || `strategy5-${stamp}-${time}`).replace(/[^a-zA-Z0-9_-]/g, "-");
+}
+
+function strategy5ScanDate(output) {
+  const raw = String(output.generatedDate || output.sourceDate || output.usedDate || output.updatedAt || new Date().toISOString()).replace(/\D/g, "").slice(0, 8);
+  if (raw.length === 8) return `${raw.slice(0, 4)}-${raw.slice(4, 6)}-${raw.slice(6, 8)}`;
+  return new Date().toISOString().slice(0, 10);
+}
+
+function strategy5Signals(item) {
+  return Array.isArray(item?.matches) ? item.matches.filter((match) => match && typeof match === "object") : [];
+}
+
+function buildStrategy5RunRow(output, runId, status = "complete") {
+  const complete = status === "complete";
+  const scanTime = String(output.updatedAt || new Date().toISOString());
+  return {
+    run_id: runId,
+    strategy: "strategy5",
+    scan_date: strategy5ScanDate(output),
+    started_at: String(output.startedAt || output.updatedAt || new Date().toISOString()),
+    finished_at: complete ? scanTime : null,
+    status,
+    expected_total: cleanNumber(output.total),
+    scanned_count: Array.isArray(output.scannedCodes) ? output.scannedCodes.length : cleanNumber(output.scannedThisRun),
+    result_count: complete ? (Array.isArray(output.matches) ? output.matches.length : cleanNumber(output.count)) : 0,
+    complete,
+    quality_status: complete ? "complete" : status,
+    source: String(output.source || "").trim(),
+    schema_version: output.schemaVersion || "strategy5-run-id-complete-v1",
+    data_contract_source: output.dataContractSource || "strategy5-cache",
+    generated_at: String(output.updatedAt || new Date().toISOString()),
+    updated_at: scanTime,
+    payload: {
+      count: cleanNumber(output.count),
+      total: cleanNumber(output.total),
+      usedDate: output.usedDate || "",
+      sourceDate: output.sourceDate || "",
+      generatedDate: output.generatedDate || "",
+      schedule: output.schedule || "",
+      sourceHealth: output.sourceHealth || {},
+    },
+  };
+}
+
+function buildStrategy5ResultRows(output, runId) {
+  const matches = Array.isArray(output.matches) ? output.matches : [];
+  const scanDate = strategy5ScanDate(output);
+  const scanTime = String(output.updatedAt || new Date().toISOString());
+  return matches.map((stock, index) => ({
+    run_id: runId,
+    strategy: "strategy5",
+    scan_date: scanDate,
+    code: normalizeCode(stock.code),
+    name: String(stock.name || stock.code || "").trim(),
+    price: cleanNumber(stock.close || stock.price),
+    close: cleanNumber(stock.close || stock.price),
+    change_percent: cleanNumber(stock.percent ?? stock.changePercent),
+    volume: cleanNumber(stock.volume || stock.tradeVolume),
+    trade_volume: cleanNumber(stock.tradeVolume || stock.volume),
+    trade_value: cleanNumber(stock.value || stock.tradeValue),
+    score: cleanNumber(stock.score),
+    rank: index + 1,
+    reason: String(stock.reason || stock.activeMatch?.reason || "").trim(),
+    signals: strategy5Signals(stock),
+    payload: stock,
+    complete: true,
+    quality_status: "complete",
+    schema_version: output.schemaVersion || "strategy5-run-id-complete-v1",
+    data_contract_source: output.dataContractSource || "strategy5-cache",
+    generated_at: scanTime,
+    updated_at: scanTime,
+  })).filter((row) => /^\d{4}$/.test(row.code));
+}
+
+async function upsertStrategy5Rows(table, rows, conflict) {
+  if (!rows.length) return true;
+  const response = await fetch(`${SUPABASE_URL}/rest/v1/${table}?on_conflict=${encodeURIComponent(conflict)}`, {
+    method: "POST",
+    headers: {
+      apikey: SUPABASE_SERVICE_ROLE_KEY,
+      Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+      "Content-Type": "application/json",
+      Prefer: "resolution=merge-duplicates",
+    },
+    body: JSON.stringify(rows),
+  });
+  if (!response.ok) {
+    const body = await response.text().catch(() => "");
+    throw new Error(`${table} upsert HTTP ${response.status} ${body.slice(0, 180)}`.trim());
+  }
+  return true;
+}
+
+async function publishStrategy5CompleteRunToSupabase(output) {
+  if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
+    console.warn("strategy5 supabase complete run skipped: missing service role key");
+    return false;
+  }
+  if (output?.fullScan !== true || !Array.isArray(output.matches) || !output.matches.length) {
+    console.warn("strategy5 supabase complete run skipped: incomplete or empty output");
+    return false;
+  }
+  const runId = strategy5RunIdFromOutput(output);
+  const runningRow = buildStrategy5RunRow(output, runId, "running");
+  const completeRow = buildStrategy5RunRow({ ...output, runId }, runId, "complete");
+  const resultRows = buildStrategy5ResultRows(output, runId);
+  await upsertStrategy5Rows(STRATEGY5_RUNS_TABLE, [runningRow], "run_id");
+  await upsertStrategy5Rows(STRATEGY5_RESULTS_TABLE, resultRows, "run_id,strategy,code");
+  await upsertStrategy5Rows(STRATEGY5_RUNS_TABLE, [completeRow], "run_id");
+  output.runId = runId;
+  output.complete = true;
+  output.qualityStatus = "complete";
+  output.schemaVersion = completeRow.schema_version;
+  output.dataContractSource = completeRow.data_contract_source;
+  console.log(`strategy5 supabase run_id gate ok: ${runId}, matches ${resultRows.length}`);
+  return true;
+}
+
 async function fetchJson(url, timeout = 30000) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeout);
@@ -49,6 +190,27 @@ async function fetchJson(url, timeout = 30000) {
     });
     if (!response.ok) throw new Error(`${url} HTTP ${response.status}`);
     return await response.json();
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function fetchSupabaseRows(table, query, timeout = 20000) {
+  if (!SUPABASE_URL || !SUPABASE_READ_KEY) return [];
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeout);
+  try {
+    const response = await fetch(`${SUPABASE_URL}/rest/v1/${table}?${query}`, {
+      signal: controller.signal,
+      headers: {
+        apikey: SUPABASE_READ_KEY,
+        Authorization: `Bearer ${SUPABASE_READ_KEY}`,
+        Accept: "application/json",
+      },
+    });
+    if (!response.ok) return [];
+    const rows = await response.json();
+    return Array.isArray(rows) ? rows : [];
   } finally {
     clearTimeout(timer);
   }
@@ -344,6 +506,54 @@ function readChipKConfluenceSources(institutionData = {}) {
   });
 
   return { cbByCode, warrantByCode, instByCode };
+}
+
+async function fetchFinMindChipLatestMap(limit = 5000) {
+  if (process.env.STRATEGY5_USE_FINMIND_CHIP === "0") return new Map();
+  const rows = await fetchSupabaseRows(
+    "v_chip_flows_latest",
+    `select=symbol,trade_date,foreign_net,investment_trust_net,dealer_net,institution_total_net,margin_balance,short_balance,source&limit=${Number(limit || 5000)}`
+  ).catch(() => []);
+  const map = new Map();
+  rows.forEach((row) => {
+    const code = normalizeCode(row.symbol);
+    if (!/^\d{4}$/.test(code)) return;
+    const foreign = cleanNumber(row.foreign_net);
+    const trust = cleanNumber(row.investment_trust_net);
+    const dealer = cleanNumber(row.dealer_net);
+    const total = cleanNumber(row.institution_total_net || foreign + trust + dealer);
+    map.set(code, {
+      foreign,
+      trust,
+      dealer,
+      total,
+      marginBalance: cleanNumber(row.margin_balance),
+      shortBalance: cleanNumber(row.short_balance),
+      source: row.source || "finmind-chip",
+      tradeDate: row.trade_date || "",
+    });
+  });
+  return map;
+}
+
+function mergeInstitutionDataWithFinMind(baseData = {}, finmindMap = new Map()) {
+  if (!finmindMap.size) return baseData || {};
+  const merged = { ...(baseData || {}) };
+  finmindMap.forEach((finmind, code) => {
+    const current = merged[code] || {};
+    const foreign = cleanNumber(current.foreign);
+    const trust = cleanNumber(current.trust);
+    const dealer = cleanNumber(current.dealer);
+    merged[code] = {
+      ...current,
+      foreign: foreign || finmind.foreign,
+      trust: trust || finmind.trust,
+      dealer: dealer || finmind.dealer,
+      total: cleanNumber(current.total) || finmind.total,
+      finmindChip: finmind,
+    };
+  });
+  return merged;
 }
 
 function buildChipKConfluenceMatch({ stock, inst, confluenceSources, valueRank, volumeRank }) {
@@ -897,6 +1107,11 @@ async function buildMatches(stocks, institutionData, issuedSharesMap = new Map()
 async function main() {
   const backup = readJson(BACKUP_FILE, { ok: true, matches: [] });
   const institution = readJson(INSTITUTION_FILE, { data: {} });
+  const finmindChipMap = await fetchFinMindChipLatestMap().catch((error) => {
+    console.warn(`strategy5 FinMind chip supplement skipped: ${error.message}`);
+    return new Map();
+  });
+  const institutionData = mergeInstitutionDataWithFinMind(institution.data || {}, finmindChipMap);
   const [stocks, issuedSharesResult, volumeAverageResult] = await Promise.all([
     fetchUniverse(),
     fetchIssuedShares(),
@@ -907,8 +1122,9 @@ async function main() {
     ...issuedSharesResult.warnings,
     ...volumeAverageResult.warnings,
   ];
+  if (finmindChipMap.size) sourceWarnings.push(`FinMind chip supplement rows=${finmindChipMap.size}`);
   sourceWarnings.forEach((warning) => console.warn(`strategy5 source warning: ${warning}`));
-  const matches = await buildMatches(stocks, institution.data || {}, issuedSharesResult.map, volumeAverageResult.map);
+  const matches = await buildMatches(stocks, institutionData, issuedSharesResult.map, volumeAverageResult.map);
   const quoteDate = stocks.find((stock) => stock.quoteDate)?.quoteDate || institution.usedDate || institution.date || "";
   const now = new Date();
   const output = {
@@ -920,18 +1136,22 @@ async function main() {
     sourceDate: quoteDate,
     schedule: "06:00/21:00",
     fullScan: true,
+    complete: true,
     total: stocks.length,
     scannedThisRun: stocks.length,
     scannedCodes: stocks.map((stock) => stock.code),
     sourceHealth: {
       issuedSharesCount: issuedSharesResult.map.size,
       volumeAverageCount: volumeAverageResult.map.size,
+      finmindChipCount: finmindChipMap.size,
       warningCount: sourceWarnings.length,
       warnings: sourceWarnings.slice(0, 8),
     },
     count: matches.length,
     matches,
   };
+
+  await publishStrategy5CompleteRunToSupabase(output);
 
   fs.mkdirSync(path.dirname(OUT_FILE), { recursive: true });
   fs.writeFileSync(OUT_FILE, `${JSON.stringify(output, null, 2)}\n`);
@@ -944,5 +1164,7 @@ main().catch((error) => {
   console.error(error);
   process.exit(1);
 });
+
+
 
 

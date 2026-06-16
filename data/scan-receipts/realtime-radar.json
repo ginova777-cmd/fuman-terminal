@@ -2,8 +2,8 @@
   "strategy": "realtime-radar",
   "label": "realtime radar raw refresh",
   "tier": "optional",
-  "startedAt": "2026-06-15T23:20:23.6009199+08:00",
-  "finishedAt": "2026-06-15T23:20:23.7147688+08:00",
+  "startedAt": "2026-06-16T21:25:24.7168623+08:00",
+  "finishedAt": "2026-06-16T21:25:24.8360191+08:00",
   "status": "complete",
   "exitCode": 0,
   "scanned": 0,
@@ -15,5 +15,5 @@
   "payloadPath": "C:\\fuman-runtime\\data\\realtime-radar-latest.json",
   "warnings": [],
   "blockingReason": "",
-  "log": "C:\\fuman-runtime\\logs\\full-scan-20260615-232023.log"
+  "log": "C:\\fuman-runtime\\logs\\full-scan-20260616-212524.log"
 }

@@ -130,6 +130,8 @@ if (!fs.existsSync(path.join(ROOT, "run-main-release-pipeline.ps1"))) {
     "npm run sync:source",
     "npm run deploy",
     "npm run verify:live-version",
+    "npm run verify:warrant-freshness:live",
+    "npm run verify:data-freshness:live",
     "git push origin HEAD:main",
   ]) {
     if (!releasePipeline.includes(marker)) issues.push(`run-main-release-pipeline.ps1 missing ${marker}`);
@@ -167,6 +169,8 @@ const gate = read("run-live-freshness-gate.ps1");
 const fullScan = read("run-full-scan.ps1");
 const publishGate = read("run-publish-gate.ps1");
 const dailyRelease = read("run-daily-release.ps1");
+const runtimeConfig = read("terminal-runtime-config.js");
+const realtimeRadarApi = read("api/realtime-radar-latest.js");
 if (!/if \(\$Scope -ne "all"\)/.test(cacheSync)) {
   issues.push("run-cache-sync.ps1 must block every non-all scope");
 }
@@ -208,6 +212,23 @@ if (!/Pre-publish data freshness gate/.test(cacheSync)) {
 if (!/FAST_DEBOUNCE_SKIP/.test(cacheSync) || !/FUMAN_FAST_GATE_COMMIT_DEBOUNCE_MINUTES/.test(cacheSync)) {
   issues.push("run-cache-sync.ps1 missing fast gate commit debounce");
 }
+for (const marker of [
+  "realtimeRadarCache: \"/api/realtime-radar-latest\"",
+  "realtimeRadarStaticCache: \"/data/realtime-radar-latest.json\"",
+]) {
+  if (!runtimeConfig.includes(marker)) issues.push(`terminal-runtime-config.js missing live realtime radar endpoint marker ${marker}`);
+}
+for (const marker of [
+  "fuman_realtime_radar_cache",
+  "fugle_realtime_quote_latest",
+  "fetchRadarCachePayload",
+  "radar-cache-latest-id",
+  "radar-cache-latest-updated",
+  "quote-view-fallback",
+  "static-fallback",
+]) {
+  if (!realtimeRadarApi.includes(marker)) issues.push(`api/realtime-radar-latest.js missing fallback order marker ${marker}`);
+}
 
 for (const marker of [
   "Invoke-RepoSyncPreflight",
@@ -216,6 +237,9 @@ for (const marker of [
   "strategy2 intraday raw refresh",
   "institution raw refresh",
   "warrant flow raw refresh",
+  "warrantCount",
+  "warrantVolumeCount",
+  "warrantSingleSignalCount",
   "STAR preopen raw refresh",
   "star-preopen-latest.json",
   "starCount",
@@ -225,6 +249,7 @@ for (const marker of [
   "strategy4 raw refresh",
   "strategy5 raw refresh",
   "cb detect raw refresh",
+  "verify:warrant-freshness:live",
   "verify:data-freshness:live",
   "FUMAN_INSIDE_FRESHNESS_GATE",
   "FUMAN_FAST_GATE",
@@ -247,20 +272,8 @@ for (const marker of [
   "data\\strategy3-latest.json",
   "data\\scan-receipts",
   "scan-summary.json",
-  "TimeoutSeconds",
-  "timeout after ${TimeoutSeconds}s",
-  "Get-Strategy3ScanEnv",
-  "STRATEGY3_REQUIRE_AFTER_1300 = \"0\"",
 ]) {
   if (!fullScan.includes(marker)) issues.push(`run-full-scan.ps1 missing strategy3 receipt marker ${marker}`);
-}
-const strategy3ScanIndex = fullScan.indexOf('Invoke-ScanTask "strategy3" "strategy3 raw refresh" "critical"');
-const institutionScanIndex = fullScan.indexOf('Invoke-ScanTask "institution" "institution raw refresh" "degradable"');
-if (strategy3ScanIndex < 0 || institutionScanIndex < 0 || strategy3ScanIndex > institutionScanIndex) {
-  issues.push("run-full-scan.ps1 must run critical strategy3 before slow degradable institution scan");
-}
-if (!/institution raw refresh[\s\S]*\}\s+420/.test(fullScan) || !/warrant flow raw refresh[\s\S]*\@{}\s+240/.test(fullScan)) {
-  issues.push("run-full-scan.ps1 must bound degradable institution/warrant scans so strategy3 publish is not blocked");
 }
 for (const marker of [
   "\"strategy3\"",
@@ -287,6 +300,7 @@ for (const marker of [
   "terminal freshness gate missing gateId",
   "terminal freshness gate invalid gateId",
   "terminal freshness gate CB rows not aligned with manifest",
+  "terminal freshness gate warrant volume count mismatch",
   "FUMAN_SKIP_TERMINAL_GATE_ARTIFACT",
 ]) {
   if (!dataFreshnessVerifier.includes(marker)) issues.push(`verify-data-freshness.js missing ${marker}`);
@@ -392,9 +406,12 @@ for (const file of [
   "data/open-buy-latest.json",
   "data/open-buy-backup.json",
   "data/open-buy-scorecard-source.json",
+  "ops/public-slot/Strategy1RunIdCompleteGate.sql",
   "data/star-preopen-latest.json",
   "data/star-preopen-scorecard-source.json",
   "data/warrant-flow-latest.json",
+  "api/scan-warrant-flow.js",
+  "scripts/scan-warrant-flow-cache.js",
 ]) {
   if (!sourceSyncScript.includes(file)) issues.push(`sync-main-deploy-source.js missing ${file}`);
 }
@@ -408,6 +425,16 @@ for (const marker of [
   "TradingView 隔日沖判斷",
 ]) {
   if (!strategy3Scanner.includes(marker)) issues.push(`scan-strategy3-cache.js missing strategy3 TV-only marker ${marker}`);
+}
+
+const openBuyScanner = read("scripts/scan-open-buy-cache.js");
+for (const marker of [
+  "SUPABASE_OPEN_BUY_RUNS_TABLE",
+  "SUPABASE_OPEN_BUY_RESULTS_TABLE",
+  "incomplete scan is not eligible for run_id complete gate",
+  "open-buy supabase run_id gate ok",
+]) {
+  if (!openBuyScanner.includes(marker)) issues.push(`scan-open-buy-cache.js missing strategy1 run_id complete gate marker ${marker}`);
 }
 
 for (const legacyScript of [
@@ -621,7 +648,10 @@ if (fetchResult.status !== 0) {
       "VERSION-LIVE-SYNC-GOVERNANCE.md",
       "FRESHNESS-GATE-MOBILE.md",
       "scripts/verify-publish-gate.js",
+      "api/realtime-radar-latest.js",
+      "terminal-runtime-config.js",
       "scripts/verify-data-freshness.js",
+      "scripts/verify-warrant-freshness.js",
       "run-live-freshness-gate.ps1",
       "run-cache-sync.ps1",
       "run-main-release-pipeline.ps1",

@@ -3,7 +3,10 @@ param(
   [string]$ProjectUrl = "https://cpmpfhbzutkiecccekfr.supabase.co",
   [string]$RuntimeDir = "C:\fuman-runtime",
   [string]$SourceName = "fugle_shared_source",
-  [int]$MaxSourceAgeSeconds = 120,
+  [int]$MaxSourceAgeSeconds = 300,
+  [double]$MinQuoteCoverage120 = 0.85,
+  [int]$MinFreshQuoteCount120 = 1200,
+  [int]$MaxQuoteAgeSeconds = 60,
   [string]$ActiveStart = "08:00",
   [string]$ActiveEnd = "14:10"
 )
@@ -14,6 +17,8 @@ $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $LogDir = Join-Path $ScriptDir "runtime"
 $LogFile = Join-Path $LogDir ("public-slot-watchdog-{0}.log" -f (Get-Date -Format "yyyyMMdd"))
 $AnonKeyFile = Join-Path $RuntimeDir "secrets\supabase-anon-key.txt"
+$CollectorScript = "C:\fuman-terminal\scripts\fugle-websocket-collector.js"
+$NodeExe = "C:\Program Files\nodejs\node.exe"
 
 New-Item -ItemType Directory -Force -Path $LogDir | Out-Null
 
@@ -78,11 +83,18 @@ function Get-SourceStatusAgeSeconds {
         $quoteAge = [int]$row.payload.quote_age_seconds
       }
     } catch {}
+    $usableForIntraday = $false
+    try {
+      if ($row.payload -and $null -ne $row.payload.degraded_but_usable_for_intraday) {
+        $usableForIntraday = [bool]$row.payload.degraded_but_usable_for_intraday
+      }
+    } catch {}
     return [pscustomobject]@{
       Ok = $true
       Reason = "status=$($row.status); source_age=${age}s; quote_age=${quoteAge}s"
       AgeSeconds = $age
       QuoteAgeSeconds = $quoteAge
+      DegradedUsableForIntraday = $usableForIntraday
       Status = [string]$row.status
     }
   } catch {
@@ -102,6 +114,111 @@ function Test-SharedSourceProcessRunning {
     return (@($matches).Count -gt 0)
   } catch {
     return $false
+  }
+}
+
+function Get-QuoteLiveHealth {
+  param([string]$AnonKey)
+  try {
+    $headers = @{
+      apikey = $AnonKey
+      Authorization = "Bearer $AnonKey"
+    }
+    $uri = "$($ProjectUrl.TrimEnd('/'))/rest/v1/v_fugle_quotes_live_health?select=*&limit=1"
+    $rows = Invoke-RestMethod -Uri $uri -Method Get -Headers $headers -TimeoutSec 12 -ErrorAction Stop
+    if (-not $rows -or $rows.Count -lt 1) {
+      return [pscustomobject]@{
+        Ok = $false
+        Reason = "v_fugle_quotes_live_health 無資料"
+      }
+    }
+    $row = @($rows)[0]
+    $coverage120 = [double]$row.coverage_120s
+    $fresh120 = [int]$row.fresh_quote_count_120s
+    $quoteAge = [int]$row.quote_age_seconds
+    $ok = ($coverage120 -ge $MinQuoteCoverage120 -and $fresh120 -ge $MinFreshQuoteCount120 -and $quoteAge -le $MaxQuoteAgeSeconds)
+    return [pscustomobject]@{
+      Ok = $ok
+      Reason = "quote_health coverage_120s=$coverage120 fresh_120s=$fresh120 quote_age=${quoteAge}s latest=$($row.latest_quote_time)"
+      Coverage120 = $coverage120
+      Fresh120 = $fresh120
+      QuoteAgeSeconds = $quoteAge
+    }
+  } catch {
+    return [pscustomobject]@{
+      Ok = $false
+      Reason = "讀取 quote health 失敗：$($_.Exception.Message)"
+    }
+  }
+}
+
+function Get-CollectorProcesses {
+  try {
+    return @(Get-CimInstance Win32_Process -Filter "Name = 'node.exe'" |
+      Where-Object { $_.CommandLine -match "fugle-websocket-collector\.js" })
+  } catch {
+    return @()
+  }
+}
+
+function Get-CollectorCacheHealth {
+  $statusFile = Join-Path $RuntimeDir "state\fugle-websocket-status.json"
+  try {
+    if (-not (Test-Path -LiteralPath $statusFile)) {
+      return [pscustomobject]@{
+        Ok = $false
+        Reason = "collector status file missing"
+      }
+    }
+    $rawStatus = Get-Content -LiteralPath $statusFile -Raw -ErrorAction Stop
+    $status = $rawStatus | ConvertFrom-Json
+    $updatedAtText = [string]$status.updatedAt
+    if ($rawStatus -match '"updatedAt"\s*:\s*"([^"]+)"') { $updatedAtText = $Matches[1] }
+    $updatedAt = [datetimeoffset]::Parse($updatedAtText).ToUniversalTime()
+    $ageSeconds = [int]([math]::Max(0, ([datetimeoffset]::UtcNow - $updatedAt).TotalSeconds))
+    $quotes = [int]$status.quotes
+    $pending = [int]$status.pending
+    $ok = ([bool]$status.ok -and (($quotes -ge $MinFreshQuoteCount120) -or (($quotes + $pending) -ge $MinFreshQuoteCount120)) -and $ageSeconds -le 90)
+    return [pscustomobject]@{
+      Ok = $ok
+      Reason = "collector_cache ok=$($status.ok) quotes=$quotes pending=$pending age=${ageSeconds}s pid=$($status.pid)"
+      Quotes = $quotes
+      AgeSeconds = $ageSeconds
+    }
+  } catch {
+    return [pscustomobject]@{
+      Ok = $false
+      Reason = "collector status read failed: $($_.Exception.Message)"
+    }
+  }
+}
+
+function Restart-FugleQuoteCollector {
+  param([string]$Reason)
+  Write-WatchdogLog "需要重啟 Fugle quote collector：$Reason"
+  try {
+    $collectors = @(Get-CollectorProcesses)
+    foreach ($proc in $collectors) {
+      try {
+        Stop-Process -Id $proc.ProcessId -Force -ErrorAction Stop
+        Write-WatchdogLog "已停止 collector pid=$($proc.ProcessId)"
+      } catch {
+        Write-WatchdogLog "停止 collector pid=$($proc.ProcessId) 失敗：$($_.Exception.Message)"
+      }
+    }
+    Start-Sleep -Seconds 2
+    if (-not (Test-Path -LiteralPath $NodeExe)) {
+      Write-WatchdogLog "找不到 node.exe：$NodeExe"
+      return
+    }
+    if (-not (Test-Path -LiteralPath $CollectorScript)) {
+      Write-WatchdogLog "找不到 collector script：$CollectorScript"
+      return
+    }
+    Start-Process -FilePath $NodeExe -ArgumentList "`"$CollectorScript`"" -WindowStyle Hidden | Out-Null
+    Write-WatchdogLog "已啟動 collector：$CollectorScript"
+  } catch {
+    Write-WatchdogLog "重啟 collector 失敗：$($_.Exception.Message)"
   }
 }
 
@@ -129,9 +246,26 @@ if ([string]::IsNullOrWhiteSpace($anonKey)) {
 }
 
 $isRunning = Test-SharedSourceProcessRunning
+$collectorProcesses = @(Get-CollectorProcesses)
+$collectorCache = Get-CollectorCacheHealth
 $health = Get-SourceStatusAgeSeconds -AnonKey $anonKey
+$quoteHealth = Get-QuoteLiveHealth -AnonKey $anonKey
 
-Write-WatchdogLog "檢查結果：process_running=$isRunning；$($health.Reason)"
+Write-WatchdogLog "檢查結果：process_running=$isRunning；collector_count=$($collectorProcesses.Count)；$($collectorCache.Reason)；$($health.Reason)；$($quoteHealth.Reason)"
+
+if ($collectorProcesses.Count -ne 1) {
+  Restart-FugleQuoteCollector -Reason "collector_count=$($collectorProcesses.Count)，應為 1"
+  exit 0
+}
+
+if (-not $quoteHealth.Ok -and -not $collectorCache.Ok) {
+  Restart-FugleQuoteCollector -Reason $quoteHealth.Reason
+  exit 0
+}
+
+if (-not $quoteHealth.Ok -and $collectorCache.Ok) {
+  Write-WatchdogLog "quote health 尚未達標，但 collector cache 健康，暫不重啟 collector，讓 shared source 繼續寫入追平。"
+}
 
 if (-not $isRunning) {
   Start-SharedSourceTask -Reason "shared source 程序沒有在跑"
@@ -140,6 +274,11 @@ if (-not $isRunning) {
 
 if (-not $health.Ok) {
   Start-SharedSourceTask -Reason $health.Reason
+  exit 0
+}
+
+if ($health.Status -eq "degraded" -and $health.DegradedUsableForIntraday -and $null -ne $health.QuoteAgeSeconds -and $health.QuoteAgeSeconds -le $MaxSourceAgeSeconds) {
+  Write-WatchdogLog "正常：shared source 為 degraded 但 intraday 可用，quote_age=$($health.QuoteAgeSeconds)s。"
   exit 0
 }
 

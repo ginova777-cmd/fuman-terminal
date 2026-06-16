@@ -8,10 +8,12 @@ $env:FUMAN_DATA_DIR = "C:\fuman-runtime\data"
 $env:FUMAN_CACHE_DIR = "C:\fuman-runtime\cache"
 $env:FUMAN_STATE_DIR = "C:\fuman-runtime\state"
 $env:INTRADAY_PATROL_INTERVAL_MS = "3000"
-$env:STRATEGY2_SCAN_START_MINUTES = "525"
+$env:STRATEGY2_SCAN_START_MINUTES = "480"
 $env:STRATEGY2_ENTRY_START_MINUTES = "545"
-$env:STRATEGY2_ENTRY_END_MINUTES = "720"
+$env:STRATEGY2_ENTRY_END_MINUTES = "810"
 $env:STRATEGY2_SCAN_END_MINUTES = "810"
+$env:STRATEGY2_PUBLISH_INTERVAL_MS = "0"
+$env:STRATEGY2_RETAIN_LAST_GOOD_ON_SOURCE_UNHEALTHY_SECONDS = "14400"
 $env:STRATEGY2_REALTIME_FUGLE_ONLY = "0"
 $env:STRATEGY2_REALTIME_FALLBACK_CANDIDATE_LIMIT = "1200"
 $env:STRATEGY2_1M_WARMUP_LIMIT = "120"
@@ -22,8 +24,10 @@ $env:STRATEGY2_MIN_REALTIME_COVERAGE = "0.25"
 $env:STRATEGY2_REALTIME_RESCUE_COVERAGE = "0.70"
 $env:STRATEGY2_REALTIME_RESCUE_LIMIT = "300"
 $env:STRATEGY2_REALTIME_RESCUE_COOLDOWN_MS = "30000"
-$env:STRATEGY2_ENABLE_FINMIND_REALTIME = "0"
-$env:STRATEGY2_ENABLE_FINMIND_RESCUE = "0"
+$env:STRATEGY2_ENABLE_FINMIND_REALTIME = "1"
+$env:STRATEGY2_ENABLE_FINMIND_RESCUE = "1"
+$env:STRATEGY2_SUPABASE_QUOTES_TABLE = "v_market_quotes_unified"
+$env:STRATEGY2_SUPABASE_QUOTES_HEALTH_VIEW = "v_market_quotes_unified_health"
 $env:STRATEGY2_MIN_ENTRY_SOURCE_COVERAGE = "0.50"
 $env:STRATEGY2_HISTORY_WRITE_INTERVAL_MS = "60000"
 $nodeExe = "C:\Program Files\nodejs\node.exe"
@@ -42,12 +46,12 @@ if ($exitCode -ne 0) {
   exit $exitCode
 }
 
-$syncAfterOutput = "${PSScriptRoot}\run-sync-after-output.ps1"
-if (Test-Path -LiteralPath $syncAfterOutput) {
-  & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $syncAfterOutput -Label "Strategy2 intraday cache" -LogPath $log >> $log 2>&1
-  if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-} else {
-  "Strategy2 intraday cache written; sync helper not found." >> $log
-}
+# Strategy2 is an intraday fast-path ledger. Do not redirect to freshness:gate,
+# deploy, bump, or GitHub push during 08:45-13:30 runtime refreshes.
+"Strategy2 intraday cache written; fast-path sync-after-output skipped." >> $log
 
 "=== Strategy2 intraday patrol end $(Get-Date) ===" >> $log
+
+
+
+

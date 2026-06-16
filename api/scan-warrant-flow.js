@@ -928,6 +928,34 @@ function detectSingleWarrantSignals(rows, aggregateItems = [], keyword = "") {
   return [...byUnderlying.values()].slice(0, 20);
 }
 
+function buildVolumeMatches(items, keyword = "") {
+  return items
+    .filter((item) => keyword ? matchesUnderlyingKeyword(item, keyword) : true)
+    .filter((item) =>
+      cleanNumber(item.callVolume) >= 500000 ||
+      cleanNumber(item.callValue) >= 3000000 ||
+      cleanNumber(item.callCount) >= 10
+    )
+    .map((item) => {
+      const thirtyMinuteVolume = Math.round(cleanNumber(item.callVolume) / 1000);
+      const floatingUnits = Math.max(1, Math.round(cleanNumber(item.callCount) || cleanNumber(item.callValue) / 100000));
+      const volumeMultiple = thirtyMinuteVolume / Math.max(1, floatingUnits * 5);
+      return {
+        ...item,
+        thirtyMinuteVolume,
+        floatingUnits,
+        volumeMultiple: Number(volumeMultiple.toFixed(2)),
+      };
+    })
+    .sort((a, b) =>
+      cleanNumber(b.volumeMultiple) - cleanNumber(a.volumeMultiple) ||
+      cleanNumber(b.thirtyMinuteVolume) - cleanNumber(a.thirtyMinuteVolume) ||
+      cleanNumber(b.callValue) - cleanNumber(a.callValue) ||
+      cleanNumber(b.warrantHeatScore) - cleanNumber(a.warrantHeatScore)
+    )
+    .slice(0, keyword ? 30 : 320);
+}
+
 module.exports = async function handler(request, response) {
   response.setHeader("Access-Control-Allow-Origin", "*");
   response.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
@@ -949,6 +977,7 @@ module.exports = async function handler(request, response) {
     const { rows, errors } = await fetchWarrants();
     const aggregated = aggregate(rows, keyword);
     const matches = aggregated.slice(0, keyword ? 30 : 120);
+    const volumeMatches = buildVolumeMatches(aggregated, keyword);
     const singleSignals = detectSingleWarrantSignals(rows, aggregated, keyword).slice(0, keyword ? 20 : 20);
     const payload = {
       ok: true,
@@ -957,6 +986,8 @@ module.exports = async function handler(request, response) {
       scanned: rows.length,
       count: matches.length,
       matches,
+      volumeCount: volumeMatches.length,
+      volumeMatches,
       singleSignalCount: singleSignals.length,
       singleSignals,
       errors,

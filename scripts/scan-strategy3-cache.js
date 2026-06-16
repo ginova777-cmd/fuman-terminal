@@ -36,6 +36,15 @@ const STRATEGY3_USE_SUPABASE = process.env.STRATEGY3_USE_SUPABASE !== "0";
 const STRATEGY3_REQUIRE_AFTER_1300 = process.env.STRATEGY3_REQUIRE_AFTER_1300 !== "0";
 const STRATEGY3_MIN_AFTER_1300_CANDIDATES = Number(process.env.STRATEGY3_MIN_AFTER_1300_CANDIDATES || 20);
 const STRATEGY3_APPLY_BLACKLIST = process.env.STRATEGY3_APPLY_BLACKLIST !== "0";
+const SUPABASE_URL = String(process.env.SUPABASE_URL || process.env.FUMAN_SUPABASE_URL || "https://cpmpfhbzutkiecccekfr.supabase.co").replace(/\/+$/, "");
+const RUNTIME_DIR = process.env.FUMAN_RUNTIME_DIR || "C:/fuman-runtime";
+const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY
+  || process.env.FUMAN_SUPABASE_SERVICE_ROLE_KEY
+  || (() => { try { return fs.readFileSync(path.join(RUNTIME_DIR, "secrets", "supabase-service-role-key.txt"), "utf8").trim(); } catch { return ""; } })();
+const SYNC_SUPABASE_RESULTS = process.env.STRATEGY3_SYNC_SUPABASE_RESULTS !== "0";
+const SUPABASE_RESULTS_TABLE = process.env.STRATEGY3_SUPABASE_RESULTS_TABLE || "strategy3_scan_results";
+const SUPABASE_RUNS_TABLE = process.env.STRATEGY3_SUPABASE_RUNS_TABLE || "strategy3_scan_runs";
+const SUPABASE_RESULTS_ATTEMPTS = Math.max(1, Number(process.env.STRATEGY3_SUPABASE_RESULTS_ATTEMPTS || 3));
 
 function readJson(file, fallback) {
   try { return JSON.parse(fs.readFileSync(file, "utf8")); } catch { return fallback; }
@@ -152,6 +161,136 @@ function preservePreviousTradingSource(previousPayload, currentPayload) {
 
 function cleanNumber(value) {
   return Number(String(value ?? "").replace(/[,+%]/g, "").trim()) || 0;
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function scanDateFromOutput(output) {
+  const stamp = String(output.usedDate || output.date || "").replace(/\D/g, "");
+  if (/^\d{8}$/.test(stamp)) return `${stamp.slice(0, 4)}-${stamp.slice(4, 6)}-${stamp.slice(6, 8)}`;
+  const updatedAt = String(output.updatedAt || "");
+  return /^\d{4}-\d{2}-\d{2}/.test(updatedAt) ? updatedAt.slice(0, 10) : new Date().toISOString().slice(0, 10);
+}
+
+function strategy3RunIdFromOutput(output) {
+  const scanDate = scanDateFromOutput(output).replace(/-/g, "");
+  const stamp = Date.parse(String(output.updatedAt || ""));
+  const time = Number.isFinite(stamp)
+    ? new Date(stamp).toISOString().replace(/\D/g, "").slice(0, 14)
+    : new Date().toISOString().replace(/\D/g, "").slice(0, 14);
+  return String(process.env.STRATEGY3_RUN_ID || `strategy3-${scanDate}-${time}`).replace(/[^a-zA-Z0-9_-]/g, "-");
+}
+
+function normalizeStrategy3Signals(stock) {
+  const rows = Array.isArray(stock?.matches) ? stock.matches : [];
+  return rows.map((signal) => ({
+    id: String(signal?.id || "").trim(),
+    reason: String(signal?.reason || "").trim(),
+  })).filter((signal) => signal.id || signal.reason);
+}
+
+function buildSupabaseRunRow(output, runId, status = "complete") {
+  const scanTime = String(output.updatedAt || new Date().toISOString());
+  return {
+    run_id: runId,
+    strategy: "strategy3",
+    scan_date: scanDateFromOutput(output),
+    started_at: String(output.startedAt || output.updatedAt || new Date().toISOString()),
+    finished_at: status === "complete" ? scanTime : null,
+    status,
+    expected_total: cleanNumber(output.total),
+    scanned_count: cleanNumber(output.total),
+    result_count: status === "complete" ? cleanNumber(output.count) : 0,
+    error_count: status === "failed" ? 1 : 0,
+    complete: status === "complete",
+    quality_status: String(output.qualityStatus || "").trim(),
+    source: String(output.source || "").trim(),
+    generated_at: scanTime,
+    updated_at: scanTime,
+    payload: {
+      count: cleanNumber(output.count),
+      total: cleanNumber(output.total),
+      usedDate: output.usedDate || "",
+      sourceWarnings: (output.sourceWarnings || []).slice(0, 20),
+      sourceHealth: output.sourceHealth || null,
+    },
+  };
+}
+
+function buildSupabaseScanRows(output, runId) {
+  const scanDate = scanDateFromOutput(output);
+  const scanTime = String(output.updatedAt || new Date().toISOString());
+  return (output.matches || []).map((stock, index) => {
+    const signals = normalizeStrategy3Signals(stock);
+    return {
+      run_id: runId,
+      strategy: "strategy3",
+      scan_date: scanDate,
+      code: normalizeCode(stock.code),
+      name: String(stock.name || stock.code || "").trim(),
+      price: cleanNumber(stock.close || stock.price),
+      close: cleanNumber(stock.close || stock.price),
+      change_percent: cleanNumber(stock.percent ?? stock.changePercent),
+      volume: cleanNumber(stock.tradeVolume || stock.volume),
+      trade_volume: cleanNumber(stock.tradeVolume || stock.volume),
+      trade_value: cleanNumber(stock.value || stock.tradeValue),
+      score: cleanNumber(stock.score || stock.overnightScore),
+      rank: index + 1,
+      reason: String(stock.tvOvernightEntry?.reason || signals.map((signal) => signal.reason).filter(Boolean).join("；")).trim(),
+      signals,
+      complete: true,
+      quality_status: String(output.qualityStatus || "").trim(),
+      generated_at: scanTime,
+      updated_at: scanTime,
+      payload: stock,
+    };
+  }).filter((row) => /^\d{4}$/.test(row.code));
+}
+
+async function upsertSupabaseRows(table, rows, conflictTarget) {
+  const response = await fetch(`${SUPABASE_URL}/rest/v1/${table}?on_conflict=${conflictTarget}`, {
+    method: "POST",
+    headers: {
+      apikey: SUPABASE_SERVICE_ROLE_KEY,
+      Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+      "Content-Type": "application/json",
+      Prefer: "resolution=merge-duplicates",
+    },
+    body: JSON.stringify(rows),
+  });
+  if (response.ok) return;
+  const text = await response.text().catch(() => "");
+  throw new Error(`${table} HTTP ${response.status} ${text.slice(0, 500)}`.trim());
+}
+
+async function upsertStrategy3ResultsToSupabase(output) {
+  if (!SYNC_SUPABASE_RESULTS) return false;
+  if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
+    console.warn("strategy3 supabase upsert skipped: missing Supabase service credentials");
+    return false;
+  }
+  const runId = strategy3RunIdFromOutput(output);
+  const runningOutput = { ...output, count: 0 };
+  const rows = buildSupabaseScanRows(output, runId);
+  if (!rows.length) return false;
+  let lastMessage = "";
+  for (let attempt = 1; attempt <= SUPABASE_RESULTS_ATTEMPTS; attempt += 1) {
+    try {
+      await upsertSupabaseRows(SUPABASE_RUNS_TABLE, [buildSupabaseRunRow(runningOutput, runId, "running")], "run_id");
+      await upsertSupabaseRows(SUPABASE_RESULTS_TABLE, rows, "run_id,strategy,code");
+      await upsertSupabaseRows(SUPABASE_RUNS_TABLE, [buildSupabaseRunRow(output, runId, "complete")], "run_id");
+      console.log(`strategy3 supabase upsert ok: ${rows.length} rows into ${SUPABASE_RESULTS_TABLE}, run ${runId}`);
+      return true;
+    } catch (error) {
+      lastMessage = error?.message || String(error);
+      console.warn(`strategy3 supabase upsert attempt ${attempt}/${SUPABASE_RESULTS_ATTEMPTS} failed: ${lastMessage}`);
+      if (attempt < SUPABASE_RESULTS_ATTEMPTS) await sleep(Math.min(15000, 1500 * attempt));
+    }
+  }
+  console.warn(`strategy3 supabase upsert failed: ${lastMessage}`);
+  return false;
 }
 
 function clamp(value, min, max) {
@@ -612,6 +751,7 @@ async function buildMatches(stocks, issuedSharesMap, volumeAverageMap, sourceWar
 }
 
 async function main() {
+  const startedAt = new Date().toISOString();
   const backup = readJson(BACKUP_FILE, { ok: true, matches: [] });
   const previousRaw = readJson(OUT_FILE, { ok: true, matches: [] });
   let source = "github-actions-mis-realtime";
@@ -666,10 +806,12 @@ async function main() {
   const output = {
     ok: true,
     source,
+    startedAt,
     updatedAt: new Date().toISOString(),
     usedDate: quoteDate,
     total: stocks.length,
     count: matches.length,
+    complete: true,
     sourceWarnings,
     qualityStatus: sourceHealth.status,
     sourceHealth,
@@ -692,6 +834,7 @@ async function main() {
     }
     throw new Error("Strategy3 scan produced zero matches; preserved previous valid output and refused to publish an empty result");
   }
+  await upsertStrategy3ResultsToSupabase(output);
   fs.writeFileSync(OUT_FILE, `${JSON.stringify(output, null, 2)}\n`);
   fs.writeFileSync(BACKUP_FILE, `${JSON.stringify({ ...output, source: "github-actions-backup" }, null, 2)}\n`);
   console.log(`strategy3 cache updated: matches ${matches.length}`);

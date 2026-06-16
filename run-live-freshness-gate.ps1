@@ -135,6 +135,13 @@ function Get-GateCount($payload) {
   return 0
 }
 
+function Get-GateArrayCount($payload, $propertyName) {
+  if (-not $payload) { return 0 }
+  $propertyNames = @($payload.PSObject.Properties.Name)
+  if ($propertyNames -notcontains $propertyName) { return 0 }
+  return @($payload.$propertyName).Count
+}
+
 function Get-Strategy5MatchCount($payload, $matchId) {
   $count = 0
   foreach ($item in @($payload.matches)) {
@@ -201,6 +208,7 @@ function Publish-TerminalFreshnessGate($mode, $rawResults) {
   $institutionLatestPath = Join-Path $publishRoot "data\institution-latest.json"
   $institutionSlimPath = Join-Path $publishRoot "data\institution-slim.json"
   $institutionTdccPath = Join-Path $publishRoot "data\institution-tdcc-breakout-top.json"
+  $warrantSlimPath = Join-Path $publishRoot "data\warrant-flow-slim.json"
   $versionPayload = Read-GateJson $versionPath
   $manifestPayload = Read-GateJson $manifestPath
   $cbPayload = Read-GateJson $cbPath
@@ -211,6 +219,7 @@ function Publish-TerminalFreshnessGate($mode, $rawResults) {
   $institutionLatestPayload = Read-GateJson $institutionLatestPath
   $institutionSlimPayload = Read-GateJson $institutionSlimPath
   $institutionTdccPayload = Read-GateJson $institutionTdccPath
+  $warrantSlimPayload = Read-GateJson $warrantSlimPath
   $head = & $gitExe -C $publishRoot log -1 --oneline --decorate
   $headSha = (& $gitExe -C $publishRoot rev-parse --short=12 HEAD).Trim()
   if (-not $headSha) { throw "Cannot resolve publish HEAD for terminal freshness gate" }
@@ -222,7 +231,7 @@ function Publish-TerminalFreshnessGate($mode, $rawResults) {
     checkedAt = (Get-Date).ToString("o")
     version = [string]$versionPayload.version
     publishHead = [string]$head
-    verifier = "npm run verify:data-freshness:live"
+    verifier = "npm run verify:warrant-freshness:live; npm run verify:data-freshness:live"
     log = $log
     mode = $mode
     manifestCount = Get-GateCount $manifestPayload
@@ -253,6 +262,10 @@ function Publish-TerminalFreshnessGate($mode, $rawResults) {
     institutionTdccCount = Get-GateCount $institutionTdccPayload
     institutionTdccDate = [string]$institutionTdccPayload.institutionDate
     institutionTdccGeneratedAt = [string]$institutionTdccPayload.generatedAt
+    warrantCount = Get-GateCount $warrantSlimPayload
+    warrantVolumeCount = Get-GateArrayCount $warrantSlimPayload "volumeMatches"
+    warrantSingleSignalCount = Get-GateArrayCount $warrantSlimPayload "singleSignals"
+    warrantUpdatedAt = [string]$warrantSlimPayload.updatedAt
     strategy5ChipKCount = Get-Strategy5MatchCount $strategy5Payload "chip_k_confluence"
     strategy5ForeignTrustCount = Get-Strategy5MatchCount $strategy5Payload "foreign_trust_breakout"
     strategy5MultiCount = Get-Strategy5MultiCount $strategy5Payload

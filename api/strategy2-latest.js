@@ -13,6 +13,9 @@ const SUPABASE_KEY = process.env.SUPABASE_ANON_KEY
   || process.env.FUMAN_SUPABASE_ANON_KEY
   || readSecretText(path.join(RUNTIME_DIR, "secrets", "supabase-anon-key.txt"));
 
+const LATEST_RUN_VIEW = process.env.STRATEGY2_SUPABASE_LATEST_RUN_VIEW || "v_strategy2_latest_complete_run";
+const LATEST_TABLE = process.env.STRATEGY2_SUPABASE_LATEST_TABLE || "strategy2_latest";
+
 function staticFallback(reason = "") {
   try {
     const payload = JSON.parse(fs.readFileSync(path.join(process.cwd(), "data", "strategy2-intraday-latest.json"), "utf8"));
@@ -31,6 +34,75 @@ function staticFallback(reason = "") {
   }
 }
 
+async function fetchRows(base, table, query) {
+  const upstream = await fetch(`${base}/rest/v1/${table}?${query}`, {
+    headers: {
+      apikey: SUPABASE_KEY,
+      Authorization: `Bearer ${SUPABASE_KEY}`,
+      Accept: "application/json",
+    },
+    cache: "no-store",
+  });
+  if (!upstream.ok) {
+    const text = await upstream.text().catch(() => "");
+    throw new Error(`${table} HTTP ${upstream.status} ${text.slice(0, 120)}`.trim());
+  }
+  const rows = await upstream.json();
+  return Array.isArray(rows) ? rows : [];
+}
+
+async function fetchCompleteRunPayload(base) {
+  const rows = await fetchRows(
+    base,
+    LATEST_RUN_VIEW,
+    [
+      "select=*",
+      "strategy=eq.strategy2",
+      "status=eq.complete",
+      "complete=eq.true",
+      "limit=1",
+    ].join("&")
+  );
+  const run = rows[0];
+  if (!run?.run_id || !run?.payload) return null;
+  return {
+    ...run.payload,
+    updatedAt: run.payload.updatedAt || run.updated_at || run.finished_at,
+    runId: run.payload.runId || run.run_id,
+    complete: true,
+    qualityStatus: run.payload.qualityStatus || run.quality_status || "complete",
+    cacheSource: "supabase-api",
+    transport: {
+      source: "supabase",
+      latestRunView: LATEST_RUN_VIEW,
+      gate: "run_id",
+      runId: run.run_id,
+      via: "api/strategy2-latest",
+      fetchedAt: new Date().toISOString(),
+    },
+  };
+}
+
+async function fetchLatestRowPayload(base) {
+  const rows = await fetchRows(base, LATEST_TABLE, "id=eq.latest&select=payload,updated_at,run_id&limit=1");
+  const row = rows[0];
+  if (!row?.payload) return null;
+  return {
+    ...row.payload,
+    updatedAt: row.payload.updatedAt || row.updated_at,
+    runId: row.payload.runId || row.run_id || "",
+    cacheSource: row.run_id ? "supabase-api" : "supabase-latest-fallback",
+    transport: {
+      source: "supabase",
+      table: LATEST_TABLE,
+      gate: row.run_id ? "latest-run-id" : "latest-row-no-run-id",
+      runId: row.run_id || "",
+      via: "api/strategy2-latest",
+      fetchedAt: new Date().toISOString(),
+    },
+  };
+}
+
 module.exports = async function handler(request, response) {
   response.setHeader("Cache-Control", "no-store, max-age=0, must-revalidate");
   response.setHeader("CDN-Cache-Control", "no-store");
@@ -47,35 +119,17 @@ module.exports = async function handler(request, response) {
       response.status(200).json(staticFallback("supabase_not_configured"));
       return;
     }
-    const url = `${base}/rest/v1/strategy2_latest?id=eq.latest&select=payload,updated_at&limit=1`;
-    const upstream = await fetch(url, {
-      headers: {
-        apikey: SUPABASE_KEY,
-        Authorization: `Bearer ${SUPABASE_KEY}`,
-        Accept: "application/json",
-      },
-    });
-    if (!upstream.ok) {
-      const text = await upstream.text().catch(() => "");
-      response.status(200).json(staticFallback(`supabase_fetch_failed HTTP ${upstream.status} ${text.slice(0, 120)}`));
+    const completeRun = await fetchCompleteRunPayload(base).catch(() => null);
+    if (completeRun) {
+      response.status(200).json(completeRun);
       return;
     }
-    const rows = await upstream.json();
-    const row = Array.isArray(rows) ? rows[0] : rows;
-    if (!row?.payload) {
+    const latestRow = await fetchLatestRowPayload(base);
+    if (!latestRow) {
       response.status(200).json(staticFallback("strategy2_latest_empty"));
       return;
     }
-    response.status(200).json({
-      ...row.payload,
-      updatedAt: row.payload.updatedAt || row.updated_at,
-      cacheSource: "supabase-api",
-      transport: {
-        source: "supabase",
-        via: "api/strategy2-latest",
-        fetchedAt: new Date().toISOString(),
-      },
-    });
+    response.status(200).json(latestRow);
   } catch (error) {
     response.status(200).json(staticFallback(error?.message || String(error)));
   }

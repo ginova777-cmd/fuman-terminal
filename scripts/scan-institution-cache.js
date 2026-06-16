@@ -15,6 +15,22 @@ const REQUEST_DELAY_MS = Number(process.env.INSTITUTION_REQUEST_DELAY_MS || (SLO
 const FETCH_RETRIES = Number(process.env.INSTITUTION_FETCH_RETRIES || (SLOW_SCAN ? 4 : 1));
 const MIN_SOURCE_ROWS = Number(process.env.INSTITUTION_MIN_SOURCE_ROWS || 1000);
 const MIN_OUTPUT_ROWS = Number(process.env.INSTITUTION_MIN_OUTPUT_ROWS || 250);
+const RUNTIME_DIR = process.env.FUMAN_RUNTIME_DIR || "C:/fuman-runtime";
+const SUPABASE_URL = (
+  process.env.SUPABASE_URL
+  || process.env.FUMAN_SUPABASE_URL
+  || readSecretText(path.join(RUNTIME_DIR, "secrets", "supabase-url.txt"))
+  || "https://cpmpfhbzutkiecccekfr.supabase.co"
+).replace(/\/+$/, "");
+const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY
+  || process.env.FUMAN_SUPABASE_SERVICE_ROLE_KEY
+  || readSecretText(path.join(RUNTIME_DIR, "secrets", "supabase-service-role-key.txt"));
+const INSTITUTION_RUNS_TABLE = process.env.INSTITUTION_SUPABASE_RUNS_TABLE || "institution_scan_runs";
+const INSTITUTION_RESULTS_TABLE = process.env.INSTITUTION_SUPABASE_RESULTS_TABLE || "institution_scan_results";
+
+function readSecretText(file) {
+  try { return fs.readFileSync(file, "utf8").trim(); } catch { return ""; }
+}
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -108,6 +124,126 @@ async function runStocksHandler() {
 
 function cleanNumber(value) {
   return Number(String(value ?? "").replace(/[,+%]/g, "").trim()) || 0;
+}
+
+function normalizeCode(value) {
+  return String(value || "").replace(/\D/g, "").slice(0, 4);
+}
+
+function normalizeDateKey(value) {
+  return String(value || "").replace(/\D/g, "").slice(0, 8);
+}
+
+function dateForSupabase(value) {
+  const key = normalizeDateKey(value);
+  if (key.length === 8) return `${key.slice(0, 4)}-${key.slice(4, 6)}-${key.slice(6, 8)}`;
+  return new Date().toISOString().slice(0, 10);
+}
+
+function institutionRunIdFromOutput(output) {
+  const stamp = normalizeDateKey(output.usedDate || output.date || output.updatedAt || new Date().toISOString()) || "unknown";
+  const time = String(output.updatedAt || new Date().toISOString()).replace(/\D/g, "").slice(0, 14).padEnd(14, "0");
+  return String(output.runId || process.env.INSTITUTION_RUN_ID || `institution-${stamp}-${time}`).replace(/[^a-zA-Z0-9_-]/g, "-");
+}
+
+async function upsertSupabaseRows(table, rows, conflict) {
+  if (!rows.length) return;
+  if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) throw new Error("institution supabase credentials missing");
+  const batchSize = Math.max(1, Number(process.env.INSTITUTION_SUPABASE_BATCH_SIZE || 300));
+  for (let i = 0; i < rows.length; i += batchSize) {
+    const chunk = rows.slice(i, i + batchSize);
+    const response = await fetch(`${SUPABASE_URL}/rest/v1/${table}?on_conflict=${encodeURIComponent(conflict)}`, {
+      method: "POST",
+      headers: {
+        apikey: SUPABASE_SERVICE_ROLE_KEY,
+        Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+        "Content-Type": "application/json",
+        Prefer: "resolution=merge-duplicates,return=minimal",
+      },
+      body: JSON.stringify(chunk),
+    });
+    if (!response.ok) {
+      const text = await response.text().catch(() => "");
+      throw new Error(`${table} upsert HTTP ${response.status}: ${text.slice(0, 240)}`);
+    }
+  }
+}
+
+function buildInstitutionRunRow(output, runId, status = "complete") {
+  const complete = status === "complete";
+  const scanTime = String(output.updatedAt || new Date().toISOString());
+  const sourceCount = Object.keys(output.data || {}).length;
+  return {
+    run_id: runId,
+    strategy: "institution",
+    scan_date: dateForSupabase(output.usedDate || output.date || output.updatedAt),
+    started_at: String(output.startedAt || output.updatedAt || new Date().toISOString()),
+    finished_at: complete ? scanTime : null,
+    status,
+    expected_total: cleanNumber(output.sourceCount || sourceCount),
+    scanned_count: cleanNumber(output.scannedCount || output.sourceCount || sourceCount),
+    result_count: complete ? sourceCount : 0,
+    complete,
+    quality_status: complete ? "complete" : status,
+    source: String(output.source || "").trim(),
+    schema_version: output.schemaVersion || "institution-run-id-complete-v1",
+    data_contract_source: output.dataContractSource || "institution-cache",
+    generated_at: scanTime,
+    updated_at: scanTime,
+    payload: {
+      count: cleanNumber(output.count),
+      usedDate: output.usedDate || "",
+      quoteUpdatedAt: output.quoteUpdatedAt || "",
+      sourceHealth: output.sourceHealth || {},
+    },
+  };
+}
+
+function buildInstitutionResultRows(output, runId) {
+  const scanDate = dateForSupabase(output.usedDate || output.date || output.updatedAt);
+  const scanTime = String(output.updatedAt || new Date().toISOString());
+  return Object.values(output.data || {})
+    .sort((a, b) => Math.abs(cleanNumber(b.total)) - Math.abs(cleanNumber(a.total)) || String(a.code).localeCompare(String(b.code)))
+    .map((row, index) => ({
+      run_id: runId,
+      strategy: "institution",
+      scan_date: scanDate,
+      code: normalizeCode(row.code),
+      name: String(row.name || row.code || "").trim(),
+      close: cleanNumber(row.close),
+      change_percent: cleanNumber(row.percent),
+      trade_volume: cleanNumber(row.tradeVolume),
+      trade_value: cleanNumber(row.value),
+      foreign_net: cleanNumber(row.foreign),
+      trust_net: cleanNumber(row.trust),
+      dealer_net: cleanNumber(row.dealer),
+      total_net: cleanNumber(row.total),
+      rank: index + 1,
+      reason: "",
+      payload: row,
+      complete: true,
+      quality_status: "complete",
+      schema_version: output.schemaVersion || "institution-run-id-complete-v1",
+      data_contract_source: output.dataContractSource || "institution-cache",
+      generated_at: scanTime,
+      updated_at: scanTime,
+    }))
+    .filter((row) => row.code);
+}
+
+async function publishInstitutionCompleteRunToSupabase(output) {
+  if (!SUPABASE_SERVICE_ROLE_KEY) {
+    console.warn("institution supabase run_id gate skipped: missing service role key");
+    return null;
+  }
+  const runId = institutionRunIdFromOutput(output);
+  const running = buildInstitutionRunRow(output, runId, "running");
+  const rows = buildInstitutionResultRows(output, runId);
+  await upsertSupabaseRows(INSTITUTION_RUNS_TABLE, [running], "run_id");
+  await upsertSupabaseRows(INSTITUTION_RESULTS_TABLE, rows, "run_id,strategy,code");
+  await upsertSupabaseRows(INSTITUTION_RUNS_TABLE, [buildInstitutionRunRow(output, runId, "complete")], "run_id");
+  console.log(`institution supabase run_id gate ok: ${runId}, rows ${rows.length}`);
+  return runId;
 }
 
 function formatTwseDate(date) {
@@ -353,6 +489,10 @@ async function main() {
     count,
     data,
   };
+  output.runId = institutionRunIdFromOutput(output);
+  output.complete = true;
+  output.schemaVersion = output.schemaVersion || "institution-run-id-complete-v1";
+  output.dataContractSource = output.dataContractSource || "institution-cache";
 
   const dataAge = ageInDays(output.usedDate);
   const sourceCount = Object.keys(payload.data || {}).length;
@@ -368,6 +508,8 @@ async function main() {
     console.error(`institution cache is stale: usedDate ${output.usedDate || "--"}, age ${dataAge} days; keeping existing cache files unchanged`);
     process.exit(2);
   }
+
+  await publishInstitutionCompleteRunToSupabase(output);
 
   fs.mkdirSync(path.dirname(OUT_FILE), { recursive: true });
   fs.writeFileSync(OUT_FILE, `${JSON.stringify(output, null, 2)}\n`);

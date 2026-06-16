@@ -16,6 +16,15 @@ const KEY_FILES = [
   "terminal-live-check.js",
   "fuman-sw.js",
   "api/version.js",
+  "api/strategy5-latest.js",
+  "api/terminal-home.js",
+  "api/latest-signals.js",
+  "api/strategy4-latest.js",
+  "api/strategy3-latest.js",
+  "api/strategy2-latest.js",
+  "api/institution-latest.js",
+  "api/warrant-flow-latest.js",
+  "api/scan-warrant-flow.js",
   "terminal-chip-flow.js",
   "terminal-warrant-flow.js",
   "terminal-watchlist-module.js",
@@ -29,11 +38,15 @@ const KEY_FILES = [
   "scripts/prepare-deploy.js",
   "scripts/scan-strategy3-cache.js",
   "scripts/scan-strategy5-cache.js",
+  "scripts/scan-institution-cache.js",
+  "scripts/scan-warrant-flow-cache.js",
   "scripts/verify-mobile-layout.js",
   "scripts/sync-afterhours-supabase-status.js",
   "scripts/sync-main-deploy-source.js",
   "scripts/verify-data-freshness.js",
+  "scripts/verify-warrant-freshness.js",
   "scripts/verify-supabase-json.js",
+  "scripts/verify-run-id-complete-gates.js",
   "data/data-consistency-report.json",
   "data/data-quality-report.json",
   "data/data-manifest.json",
@@ -67,6 +80,11 @@ const KEY_FILES = [
   "data/warrant-single-signal-top.json",
   "data/flow-health-latest.json",
   "data/afterhours-supabase-status.json",
+  "ops/public-slot/FinMindUnifiedQuoteViews.sql",
+  "ops/public-slot/Strategy3QuoteReadyFugleFirstFix.sql",
+  "ops/public-slot/Strategy5RunIdCompleteGate.sql",
+  "ops/public-slot/InstitutionRunIdCompleteGate.sql",
+  "ops/public-slot/WarrantFlowRunIdCompleteGate.sql",
 ];
 
 function sha256(file) {
@@ -120,3 +138,15 @@ if (issues.length) {
 }
 
 console.log(`[source-sync] ok source=${SOURCE_ROOT} deploy=${DEPLOY_ROOT} version=${sourceVersion || "unknown"}`);
+
+
+
+
+
+
+
+
+
+
+
+

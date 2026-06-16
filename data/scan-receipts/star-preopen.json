@@ -2,8 +2,8 @@
   "strategy": "star-preopen",
   "label": "STAR preopen raw refresh",
   "tier": "optional",
-  "startedAt": "2026-06-15T23:20:23.7381749+08:00",
-  "finishedAt": "2026-06-15T23:20:24.2403583+08:00",
+  "startedAt": "2026-06-16T21:25:24.8637956+08:00",
+  "finishedAt": "2026-06-16T21:25:27.3502988+08:00",
   "status": "complete",
   "exitCode": 0,
   "scanned": 0,
@@ -15,5 +15,5 @@
   "payloadPath": "C:\\fuman-runtime\\data\\star-preopen-latest.json",
   "warnings": [],
   "blockingReason": "",
-  "log": "C:\\fuman-runtime\\logs\\full-scan-20260615-232023.log"
+  "log": "C:\\fuman-runtime\\logs\\full-scan-20260616-212524.log"
 }

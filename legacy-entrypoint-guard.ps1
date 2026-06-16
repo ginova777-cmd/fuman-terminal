@@ -6,7 +6,7 @@ if ($env:FUMAN_LEGACY_SCAN_ONLY -eq "1") {
   return
 }
 
-$directScanLabels = @("run-open-buy.ps1", "run-open-buy-sync-retry.ps1")
+$directScanLabels = @("run-open-buy.ps1", "run-open-buy-sync-retry.ps1", "run-strategy2-intraday.ps1")
 if ($directScanLabels -contains $Label) {
   return
 }

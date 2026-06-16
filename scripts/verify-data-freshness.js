@@ -83,6 +83,13 @@ function extractCount(payload) {
   return 0;
 }
 
+function extractVolumeCount(payload) {
+  if (!payload) return 0;
+  if (Number.isFinite(Number(payload.volumeCount))) return Number(payload.volumeCount);
+  if (Array.isArray(payload.volumeMatches)) return payload.volumeMatches.length;
+  return 0;
+}
+
 function rows(payload) {
   if (!payload) return [];
   if (Array.isArray(payload)) return payload;
@@ -334,6 +341,7 @@ async function validateTerminalFreshnessGate(payloads, issues) {
   const institutionLatest = payloads["institution-latest"];
   const institutionSlim = payloads["institution-slim"];
   const institutionTdcc = payloads["institution-tdcc-breakout-top"];
+  const warrantSlim = payloads["warrant-flow-slim"];
   const strategy5Fingerprint = strategy5RulesFingerprint(strategy5);
   const gateCheckedAt = Date.parse(gate.checkedAt || "");
   const ageMinutes = Number.isFinite(gateCheckedAt) ? (Date.now() - gateCheckedAt) / 60000 : Infinity;
@@ -353,6 +361,9 @@ async function validateTerminalFreshnessGate(payloads, issues) {
   assertFresh(normalizeDate(gate.institutionSlimDate) === normalizeDate(institutionSlim?.usedDate || institutionSlim?.date), `terminal freshness gate institution slim date mismatch gate=${gate.institutionSlimDate} actual=${institutionSlim?.usedDate || institutionSlim?.date}`, issues);
   assertFresh(Number(gate.institutionTdccCount || 0) === extractCount(institutionTdcc), `terminal freshness gate institution TDCC count mismatch gate=${gate.institutionTdccCount} actual=${extractCount(institutionTdcc)}`, issues);
   assertFresh(normalizeDate(gate.institutionTdccDate) === normalizeDate(institutionTdcc?.institutionDate || institutionTdcc?.usedDate || institutionTdcc?.date), `terminal freshness gate institution TDCC date mismatch gate=${gate.institutionTdccDate} actual=${institutionTdcc?.institutionDate || institutionTdcc?.usedDate || institutionTdcc?.date}`, issues);
+  assertFresh(Number(gate.warrantCount || 0) === extractCount(warrantSlim), `terminal freshness gate warrant count mismatch gate=${gate.warrantCount} actual=${extractCount(warrantSlim)}`, issues);
+  assertFresh(Number(gate.warrantVolumeCount || 0) === extractVolumeCount(warrantSlim), `terminal freshness gate warrant volume count mismatch gate=${gate.warrantVolumeCount} actual=${extractVolumeCount(warrantSlim)}`, issues);
+  assertFresh(Number(gate.warrantSingleSignalCount || 0) === Number(warrantSlim?.singleSignalCount || 0), `terminal freshness gate warrant single signal count mismatch gate=${gate.warrantSingleSignalCount} actual=${warrantSlim?.singleSignalCount}`, issues);
   assertFresh(Number(gate.openBuyCount || 0) === extractCount(openBuy), `terminal freshness gate openBuy count mismatch gate=${gate.openBuyCount} actual=${extractCount(openBuy)}`, issues);
   assertFresh(normalizeDate(gate.openBuySourceDate) === normalizeDate(openBuy?.usedDate || openBuy?.date || openBuy?.sourceDate), `terminal freshness gate openBuy date mismatch gate=${gate.openBuySourceDate} actual=${openBuy?.usedDate || openBuy?.date || openBuy?.sourceDate}`, issues);
   assertFresh(Number(gate.strategy4Count || 0) === extractCount(strategy4), `terminal freshness gate strategy4 count mismatch gate=${gate.strategy4Count} actual=${extractCount(strategy4)}`, issues);

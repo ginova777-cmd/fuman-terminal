@@ -129,7 +129,13 @@ function readFugleHistoryCache(code, from, to) {
     || !Array.isArray(payload?.rows)
     || payload.rows.length < 60
   ) return null;
-  return { rows: payload.rows, source: payload.source || "fugle-cache" };
+  const source = payload.source || "fugle-cache";
+  const sourceUnit = /supabase|fugle|finmind|yahoo|twse|tpex/i.test(source) ? "shares" : "";
+  const rows = payload.rows.map((row) => ({
+    ...row,
+    volumeUnit: row.volumeUnit || row.volume_unit || sourceUnit || undefined,
+  }));
+  return { rows, source };
 }
 
 function writeFugleHistoryCache(code, from, to, rows) {
@@ -149,6 +155,7 @@ function normalizeTwseRows(payload) {
   return payload.data.map((row) => ({
     date: rocToIso(row[0]),
     volume: cleanNumber(row[1]),
+    volumeUnit: "shares",
     value: cleanNumber(row[2]),
     open: cleanNumber(row[3]),
     high: cleanNumber(row[4]),
@@ -164,6 +171,7 @@ function normalizeTpexRows(payload) {
   return table.data.map((row) => ({
     date: rocToIso(row[0]),
     volume: cleanNumber(row[1]),
+    volumeUnit: "shares",
     value: cleanNumber(row[2]) * 1000,
     open: cleanNumber(row[3]),
     high: cleanNumber(row[4]),
@@ -180,6 +188,7 @@ function normalizeTpexDailyRow(row, date) {
   return {
     date,
     volume: cleanNumber(row[8]) / 1000,
+    volumeUnit: "lots",
     value: cleanNumber(row[9]),
     open: cleanNumber(row[4]),
     high: cleanNumber(row[5]),
@@ -194,6 +203,7 @@ function normalizeFugleRows(payload) {
   return payload.data.map((row) => ({
     date: String(row.date || "").slice(0, 10),
     volume: cleanNumber(row.volume),
+    volumeUnit: "shares",
     value: cleanNumber(row.turnover),
     open: cleanNumber(row.open),
     high: cleanNumber(row.high),
@@ -208,6 +218,7 @@ function normalizeFinMindRows(payload) {
   return rows.map((row) => ({
     date: String(row.date || "").slice(0, 10),
     volume: cleanNumber(row.Trading_Volume),
+    volumeUnit: "shares",
     value: cleanNumber(row.Trading_money),
     open: cleanNumber(row.open),
     high: cleanNumber(row.max),
@@ -224,6 +235,7 @@ function normalizeYahooRows(payload) {
   return timestamps.map((ts, index) => ({
     date: new Date(ts * 1000).toISOString().slice(0, 10),
     volume: cleanNumber(quote.volume?.[index]),
+    volumeUnit: "shares",
     value: 0,
     open: cleanNumber(quote.open?.[index]),
     high: cleanNumber(quote.high?.[index]),
@@ -443,9 +455,24 @@ function avg(values) {
   return nums.length ? nums.reduce((sum, value) => sum + value, 0) / nums.length : 0;
 }
 
-function normalizeVolumeLots(value) {
+function normalizeVolumeLots(value, row = {}) {
   const volume = cleanNumber(value);
   if (!volume) return 0;
+  const unit = String(row?.volumeUnit || row?.volume_unit || "").toLowerCase();
+  if (/share|stock|股/.test(unit)) return volume / 1000;
+  if (/lot|張/.test(unit)) return volume;
+
+  const close = cleanNumber(row?.close);
+  const tradeValue = cleanNumber(row?.value || row?.tradeValue || row?.turnover);
+  if (close > 0 && tradeValue > 0) {
+    const valueIfShares = close * volume;
+    const valueIfLots = close * volume * 1000;
+    const shareGap = Math.abs(valueIfShares - tradeValue) / Math.max(tradeValue, 1);
+    const lotGap = Math.abs(valueIfLots - tradeValue) / Math.max(tradeValue, 1);
+    if (shareGap < lotGap) return volume / 1000;
+    if (lotGap < shareGap) return volume;
+  }
+
   return volume >= 100000 ? volume / 1000 : volume;
 }
 
@@ -578,7 +605,7 @@ function walletSnapshot(rows) {
 
 function analyzeRows(rows) {
   if (rows.length < 60) return null;
-  const normalizedRows = rows.map((row) => ({ ...row, volume: normalizeVolumeLots(row.volume) }));
+  const normalizedRows = rows.map((row) => ({ ...row, volume: normalizeVolumeLots(row.volume, row), volumeUnit: "lots" }));
   const closes = normalizedRows.map((row) => row.close);
   const volumes = normalizedRows.map((row) => row.volume);
   const last = normalizedRows.at(-1);
@@ -838,8 +865,17 @@ function scanStrategy4(code, market, rows, priceSource = "") {
     });
   }
 
-  if (!signals.length) return null;
-  const zoneBase = swingZone === "A" ? 48 : swingZone === "B" ? 38 : 32;
+  if (!signals.length) {
+    swingZone = "C";
+    swingZoneLabel = "C區準備";
+    signals.push({
+      id: "full_scan_watch",
+      short: "全掃",
+      icon: "C",
+      reason: `完整掃描保留：扣除剔除名單後納入策略4股票池；趨勢分 ${trendScore}/8，準備分 ${prepScore}/7，量比 ${daily.volumeRatio.toFixed(2)}，位階 ${daily.stage.label}。`,
+    });
+  }
+  const zoneBase = swingZone === "A" ? 48 : swingZone === "B" ? 38 : 28;
   const score = Math.min(100, Math.round(
     zoneBase +
     signals.length * 7 +
@@ -957,5 +993,8 @@ module.exports = async function handler(request, response) {
       .filter(Boolean),
   });
 };
+
+
+
 
 

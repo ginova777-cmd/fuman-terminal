@@ -1,5 +1,5 @@
 (function () {
-  const version = "institution-cache-refresh-20260616-02";
+  const version = "institution-cache-refresh-20260616-10";
   window.FUMAN_TERMINAL_VERSION = version;
   window.FUMAN_TERMINAL_BOOT = {
     version,

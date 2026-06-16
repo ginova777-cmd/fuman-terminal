@@ -109,6 +109,40 @@ STAR
 
 但 STAR 不能用 `open-buy` 文字、分數或「開盤無腦入」推論；STAR 必須來自期貨 + 試撮驗證欄位。
 
+## Supabase / 富果 REST 原料來源
+
+策略2 Codex 只能把 Supabase / 富果當作原始資料來源；12 個 A 進場策略、MA35、KDJ、MACD、NPSY、RSI、分時量比、外內比、再起漲型態都必須由策略2 scanner 自己計算。
+
+Supabase REST base URL:
+
+```text
+https://cpmpfhbzutkiecccekfr.supabase.co/rest/v1
+```
+
+策略2可讀原料來源：
+
+```text
+https://cpmpfhbzutkiecccekfr.supabase.co/rest/v1/source_status
+https://cpmpfhbzutkiecccekfr.supabase.co/rest/v1/v_fugle_quotes_live_health
+https://cpmpfhbzutkiecccekfr.supabase.co/rest/v1/fugle_quotes_live
+https://cpmpfhbzutkiecccekfr.supabase.co/rest/v1/fugle_intraday_1m
+https://cpmpfhbzutkiecccekfr.supabase.co/rest/v1/v_fugle_intraday_1m_status
+https://cpmpfhbzutkiecccekfr.supabase.co/rest/v1/stock_universe
+https://cpmpfhbzutkiecccekfr.supabase.co/rest/v1/fugle_daily_volume_avg
+https://cpmpfhbzutkiecccekfr.supabase.co/rest/v1/fugle_preopen_snapshot
+https://cpmpfhbzutkiecccekfr.supabase.co/rest/v1/v_fugle_preopen_snapshot_history
+https://cpmpfhbzutkiecccekfr.supabase.co/rest/v1/fugle_preopen_snapshot_history
+https://cpmpfhbzutkiecccekfr.supabase.co/rest/v1/v_fugle_preopen_final_blind_buy_ready
+https://cpmpfhbzutkiecccekfr.supabase.co/rest/v1/v_futopt_stock_mapping_ready
+https://cpmpfhbzutkiecccekfr.supabase.co/rest/v1/futopt_quotes_live
+```
+
+重要欄位提醒：
+
+```text
+v_fugle_intraday_1m_status 沒有 rows_today；今天 1分K 筆數要讀 today_candle_count。
+```
+
 ## 防繞過
 
 不得用以下方式發布策略2資料：

@@ -27,7 +27,17 @@ const FILES = [
   "lib/supabase-public-slot.js",
   "fuman-sw.js",
   "api/version.js",
+  "api/strategy5-latest.js",
+  "api/strategy3-latest.js",
+  "api/strategy2-latest.js",
+  "api/institution-latest.js",
+  "api/warrant-flow-latest.js",
+  "api/scan-warrant-flow.js",
   "api/scan-strategy4.js",
+  "api/strategy4-latest.js",
+  "api/latest-signals.js",
+  "api/terminal-home.js",
+  "api/refresh.js",
   "terminal-strategy-config.js",
   "scripts/bump-version.js",
   "scripts/generate-cb-detect.js",
@@ -38,6 +48,7 @@ const FILES = [
   "scripts/guard-source-tree.js",
   "scripts/scan-open-buy-cache.js",
   "scripts/scan-star-preopen.js",
+  "scripts/scan-warrant-flow-cache.js",
   "scripts/scan-institution-cache.js",
   "scripts/scan-realtime-radar-cache.js",
   "scripts/scan-strategy3-cache.js",
@@ -51,13 +62,21 @@ const FILES = [
   "scripts/sync-afterhours-supabase-status.js",
   "scripts/sync-main-deploy-source.js",
   "scripts/verify-data-freshness.js",
+  "scripts/verify-warrant-freshness.js",
   "scripts/verify-live-version.js",
   "scripts/verify-service-worker-smoke.js",
   "scripts/verify-source-sync.js",
   "scripts/verify-mobile-layout.js",
   "scripts/verify-supabase-json.js",
+  "scripts/verify-run-id-complete-gates.js",
   "scripts/verify-version-bump-needed.js",
   "scripts/verify-version-consistency.js",
+  "ops/public-slot/Strategy1RunIdCompleteGate.sql",
+  "ops/public-slot/FinMindUnifiedQuoteViews.sql",
+  "ops/public-slot/Strategy3QuoteReadyFugleFirstFix.sql",
+  "ops/public-slot/Strategy5RunIdCompleteGate.sql",
+  "ops/public-slot/InstitutionRunIdCompleteGate.sql",
+  "ops/public-slot/WarrantFlowRunIdCompleteGate.sql",
   "run-live-freshness-gate.ps1",
   "run-cache-sync.ps1",
   "run-auto-main-release.ps1",
@@ -143,4 +162,12 @@ for (const file of FILES) {
 }
 
 console.log(`[sync-source] ok copied=${copied} deploy=${DEPLOY_ROOT}`);
+
+
+
+
+
+
+
+
 

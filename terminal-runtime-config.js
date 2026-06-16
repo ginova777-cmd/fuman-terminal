@@ -3,9 +3,9 @@
     backend: "/api/market",
     marketSummary: "/data/market-summary.json",
     mobileHomeSummary: "/data/mobile-home-summary.json",
-    terminalHomeBundle: "/data/terminal-home-bundle.json",
+    terminalHomeBundle: "/api/terminal-home",
     terminalHomeMobileSlim: "/data/terminal-home-mobile-slim.json",
-    dataStatusIndex: "/data/data-status-index.json",
+    dataStatusIndex: "/api/terminal-home",
     dataManifest: "/data/data-manifest.json",
     stocksSlim: "/data/stocks-slim.json",
     stocksIndex: "/data/stocks-index.json",
@@ -16,8 +16,13 @@
     institution: "/api/institution",
     history: "/api/history",
     realtime: "/api/realtime",
+    realtimeRadarLatestApi: "/api/realtime-radar-latest",
+    marketAiLive: "/api/market-ai-live",
     scanOpenBuy: "/api/scan-open-buy",
     scanStrategy4: "/api/scan-strategy4",
+    latestSignalsApi: "/api/latest-signals",
+    refreshApi: "/api/refresh",
+    strategy4LatestApi: "/api/latest-signals?strategy=strategy4",
     scanWarrantFlow: "/api/scan-warrant-flow",
     exportAuth: "/api/export-auth",
     frontendError: "/api/frontend-error",
@@ -37,11 +42,12 @@
     strategy4ZoneCPage1: "/data/strategy4-zone-c-page-1.json",
     strategy4Backup: "/data/strategy4-backup.json",
     strategy4Summary: "/data/strategy4-summary.json",
-    strategy3Cache: "/data/strategy3-latest.json",
+    strategy3Cache: "/api/latest-signals?strategy=strategy3",
     strategy3Backup: "/data/strategy3-backup.json",
-    strategy5Cache: "/data/strategy5-latest.json",
+    strategy5Cache: "/api/latest-signals?strategy=strategy5",
     strategy5Backup: "/data/strategy5-backup.json",
-    realtimeRadarCache: "/data/realtime-radar-latest.json",
+    realtimeRadarCache: "/api/realtime-radar-latest",
+    realtimeRadarStaticCache: "/data/realtime-radar-latest.json",
     marketAiOpenReboundCache: "/data/fugle-open-rebound-latest.json",
     openReboundLatest: "/data/open-rebound-latest.json",
     strategy2IntradayLatestApi: "/api/strategy2-latest",
@@ -50,13 +56,13 @@
     strategy2IntradayTop: "/data/strategy2-intraday-top.json",
     strategy2IntradayLiveTop: "/data/strategy2-intraday-live-top.json",
     strategy2IntradayDelta: "/data/strategy2-intraday-delta.json",
-    institutionCache: "/data/institution-latest.json",
+    institutionCache: "/api/institution-latest",
     institutionSlim: "/data/institution-slim.json",
     institutionBackup: "/data/institution-backup.json",
     institutionSummary: "/data/institution-summary.json",
     institutionMobileTop: "/data/institution-mobile-top.json",
     institutionTdccBreakout: "/data/institution-tdcc-breakout-top.json",
-    warrantFlowCache: "/data/warrant-flow-latest.json",
+    warrantFlowCache: "/api/warrant-flow-latest",
     warrantFlowSlim: "/data/warrant-flow-slim.json",
     warrantFlowSingleSignal: "/data/warrant-single-signal-top.json",
     warrantFlowBackup: "/data/warrant-flow-backup.json",
@@ -83,6 +89,9 @@
     endpoints,
   };
 })();
+
+
+
 
 
 

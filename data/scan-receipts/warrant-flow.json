@@ -1,0 +1,19 @@
+{
+  "strategy": "warrant-flow",
+  "label": "warrant flow raw refresh",
+  "tier": "degradable",
+  "startedAt": "2026-06-16T20:33:51.4788753+08:00",
+  "finishedAt": "2026-06-16T20:34:00.5512297+08:00",
+  "status": "complete",
+  "exitCode": 0,
+  "scanned": 0,
+  "total": 0,
+  "matches": 120,
+  "complete": true,
+  "qualityStatus": "",
+  "fallback": false,
+  "payloadPath": "C:\\fuman-runtime\\data\\warrant-flow-latest.json",
+  "warnings": [],
+  "blockingReason": "",
+  "log": "C:\\fuman-runtime\\logs\\full-scan-20260616-201003.log"
+}

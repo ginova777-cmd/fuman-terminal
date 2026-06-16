@@ -263,6 +263,7 @@ function institutionPresetFiles(payload) {
 
 function slimWarrant(payload) {
   const matches = Array.isArray(payload?.matches) ? payload.matches : [];
+  const volumeMatches = Array.isArray(payload?.volumeMatches) ? payload.volumeMatches : [];
   const singleSignals = Array.isArray(payload?.singleSignals) ? payload.singleSignals : [];
   const quoteRows = normalizeArray(readOptional("data/stocks-quotes-slim.json", {})?.quotes);
   const quoteByCode = new Map(quoteRows.map((row) => [String(row?.code || "").trim(), row]).filter(([code]) => code));
@@ -275,6 +276,7 @@ function slimWarrant(payload) {
     source: payload?.source || "warrant-flow-slim",
     updatedAt: payload?.updatedAt || "",
     count: cleanNumber(payload?.count || matches.length),
+    volumeCount: cleanNumber(payload?.volumeCount || volumeMatches.length),
     singleSignalCount: cleanNumber(payload?.singleSignalCount || singleSignals.length),
     matches: matches.map((item) => ({
       code: String(item.underlyingCode || item.code || ""),
@@ -288,6 +290,39 @@ function slimWarrant(payload) {
       callCount: cleanNumber(item.callCount),
       putCount: cleanNumber(item.putCount),
       callPutRatio: cleanNumber(item.callPutRatio),
+      score: cleanNumber(item.score),
+      finalScore: cleanNumber(item.finalScore),
+      warrantHeatScore: cleanNumber(item.warrantHeatScore),
+      stockSetupScore: cleanNumber(item.stockSetupScore),
+      stockSetupLabel: item.stockSetupLabel || "",
+      branchPowerScore: cleanNumber(item.branchPowerScore),
+      branchAvailable: Boolean(item.branchAvailable),
+      branchStatus: item.branchStatus || "",
+      actionLabel: item.actionLabel || "",
+      signalGrade: item.signalGrade || item.level || item.grade || "",
+      displayClose: closeFor(item),
+      displayPercent: percentFor(item),
+      tradeDate: item.tradeDate || "",
+      quoteDate: quoteDateFor(item),
+      reason: item.reason || "",
+    })),
+    volumeMatches: volumeMatches.map((item) => ({
+      code: String(item.underlyingCode || item.code || ""),
+      name: String(item.underlyingName || item.name || item.underlyingCode || item.code || ""),
+      underlyingCode: String(item.underlyingCode || item.code || ""),
+      underlyingName: String(item.underlyingName || item.name || ""),
+      underlyingClose: closeFor(item),
+      underlyingPercent: percentFor(item),
+      callValue: cleanNumber(item.callValue),
+      putValue: cleanNumber(item.putValue),
+      callVolume: cleanNumber(item.callVolume),
+      putVolume: cleanNumber(item.putVolume),
+      callCount: cleanNumber(item.callCount),
+      putCount: cleanNumber(item.putCount),
+      callPutRatio: cleanNumber(item.callPutRatio),
+      thirtyMinuteVolume: cleanNumber(item.thirtyMinuteVolume),
+      floatingUnits: cleanNumber(item.floatingUnits),
+      volumeMultiple: cleanNumber(item.volumeMultiple),
       score: cleanNumber(item.score),
       finalScore: cleanNumber(item.finalScore),
       warrantHeatScore: cleanNumber(item.warrantHeatScore),

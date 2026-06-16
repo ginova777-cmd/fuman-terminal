@@ -1,28 +1,28 @@
-const CACHE_VERSION = "fuman-terminal-sw-institution-cache-refresh-20260616-02";
+const CACHE_VERSION = "fuman-terminal-sw-institution-cache-refresh-20260616-10";
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 const DATA_CACHE = `${CACHE_VERSION}-data`;
 
 const STATIC_ASSETS = [
-  "/styles.css?v=institution-cache-refresh-20260616-02",
-  "/terminal-core.js?v=institution-cache-refresh-20260616-02",
-  "/terminal-modules.js?v=institution-cache-refresh-20260616-02",
-  "/terminal-sector-map.js?v=institution-cache-refresh-20260616-02",
-  "/terminal-strategy-config.js?v=institution-cache-refresh-20260616-02",
-  "/terminal-market-config.js?v=institution-cache-refresh-20260616-02",
-  "/terminal-ui-config.js?v=institution-cache-refresh-20260616-02",
-  "/terminal-runtime-config.js?v=institution-cache-refresh-20260616-02",
-  "/terminal-tuning-config.js?v=institution-cache-refresh-20260616-02",
-  "/terminal-worker.js?v=institution-cache-refresh-20260616-02",
-  "/terminal.js?v=institution-cache-refresh-20260616-02",
-  "/terminal-app.js?v=institution-cache-refresh-20260616-02",
-  "/terminal-ai-risk-guard.js?v=institution-cache-refresh-20260616-02",
-  "/terminal-chip-flow.js?v=institution-cache-refresh-20260616-02",
-  "/terminal-warrant-flow.js?v=institution-cache-refresh-20260616-02",
-  "/terminal-watchlist-module.js?v=institution-cache-refresh-20260616-02",
-  "/terminal-realtime-radar.css?v=institution-cache-refresh-20260616-02",
-  "/terminal-intraday-radar.css?v=institution-cache-refresh-20260616-02",
-  "/terminal-utility.css?v=institution-cache-refresh-20260616-02",
-  "/refresh.html?v=institution-cache-refresh-20260616-02",
+  "/styles.css?v=institution-cache-refresh-20260616-10",
+  "/terminal-core.js?v=institution-cache-refresh-20260616-10",
+  "/terminal-modules.js?v=institution-cache-refresh-20260616-10",
+  "/terminal-sector-map.js?v=institution-cache-refresh-20260616-10",
+  "/terminal-strategy-config.js?v=institution-cache-refresh-20260616-10",
+  "/terminal-market-config.js?v=institution-cache-refresh-20260616-10",
+  "/terminal-ui-config.js?v=institution-cache-refresh-20260616-10",
+  "/terminal-runtime-config.js?v=institution-cache-refresh-20260616-10",
+  "/terminal-tuning-config.js?v=institution-cache-refresh-20260616-10",
+  "/terminal-worker.js?v=institution-cache-refresh-20260616-10",
+  "/terminal.js?v=institution-cache-refresh-20260616-10",
+  "/terminal-app.js?v=institution-cache-refresh-20260616-10",
+  "/terminal-ai-risk-guard.js?v=institution-cache-refresh-20260616-10",
+  "/terminal-chip-flow.js?v=institution-cache-refresh-20260616-10",
+  "/terminal-warrant-flow.js?v=institution-cache-refresh-20260616-10",
+  "/terminal-watchlist-module.js?v=institution-cache-refresh-20260616-10",
+  "/terminal-realtime-radar.css?v=institution-cache-refresh-20260616-10",
+  "/terminal-intraday-radar.css?v=institution-cache-refresh-20260616-10",
+  "/terminal-utility.css?v=institution-cache-refresh-20260616-10",
+  "/refresh.html?v=institution-cache-refresh-20260616-10",
   "/assets/logo.webp",
   "/favicon.ico",
 ];
@@ -51,6 +51,7 @@ const NETWORK_FIRST_DATA_PATTERNS = [
   /\/data\/data-manifest\.json/i,
   /\/data\/data-status-index\.json/i,
   /\/data\/open-buy-latest\.json/i,
+  /\/data\/strategy4-.*\.json/i,
   /\/data\/strategy4-summary\.json/i,
 ];
 
@@ -69,6 +70,9 @@ const PREFETCH_DATA_ASSETS = [
 const LIVE_PATTERNS = [
   /\/api\/realtime/i,
   /\/api\/scan-/i,
+  /\/api\/strategy4-latest/i,
+  /\/api\/latest-signals/i,
+  /\/api\/refresh/i,
   /\/data\/strategy2-intraday-latest\.json/i,
   /\/data\/realtime-radar-latest\.json/i,
 ];

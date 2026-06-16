@@ -54,8 +54,8 @@ const REALTIME_RESCUE_COOLDOWN_MS = Math.max(0, Number(process.env.STRATEGY2_REA
 const MIN_ENTRY_SOURCE_COVERAGE = Number(process.env.STRATEGY2_MIN_ENTRY_SOURCE_COVERAGE || 0.5);
 const STRATEGY2_SCAN_START_MINUTES = Number(process.env.STRATEGY2_SCAN_START_MINUTES || 8 * 60);
 const STRATEGY2_ENTRY_START_MINUTES = Number(process.env.STRATEGY2_ENTRY_START_MINUTES || 9 * 60);
-const STRATEGY2_ENTRY_END_MINUTES = Number(process.env.STRATEGY2_ENTRY_END_MINUTES || 12 * 60);
-const STRATEGY2_SCAN_END_MINUTES = Number(process.env.STRATEGY2_SCAN_END_MINUTES || STRATEGY2_ENTRY_END_MINUTES);
+const STRATEGY2_ENTRY_END_MINUTES = Number(process.env.STRATEGY2_ENTRY_END_MINUTES || (13 * 60 + 30));
+const STRATEGY2_SCAN_END_MINUTES = Number(process.env.STRATEGY2_SCAN_END_MINUTES || (13 * 60 + 30));
 const STRATEGY2_OPEN_RUSH_END_MINUTES = Number(process.env.STRATEGY2_OPEN_RUSH_END_MINUTES || 9 * 60 + 10);
 const STRATEGY2_EARLY_ATTACK_START_MINUTES = Number(process.env.STRATEGY2_EARLY_ATTACK_START_MINUTES || 9 * 60 + 30);
 const STRATEGY2_EARLY_ATTACK_END_MINUTES = Number(process.env.STRATEGY2_EARLY_ATTACK_END_MINUTES || 10 * 60 + 30);
@@ -63,7 +63,7 @@ const STRATEGY2_1M_WARMUP_LIMIT = Math.max(1, Number(process.env.STRATEGY2_1M_WA
 const STRATEGY2_1M_STATUS_MAX_AGE_SECONDS = Math.max(240, Number(process.env.STRATEGY2_1M_STATUS_MAX_AGE_SECONDS || 15 * 60));
 const STRATEGY2_1M_SUPABASE_SYNC = process.env.STRATEGY2_1M_SUPABASE_SYNC === "1";
 const MA35_PROVIDER_FAILURE_LIMIT = Math.max(1, Number(process.env.STRATEGY2_MA35_PROVIDER_FAILURE_LIMIT || 8));
-const RETAIN_LAST_GOOD_ON_SOURCE_UNHEALTHY_SECONDS = Math.max(0, Number(process.env.STRATEGY2_RETAIN_LAST_GOOD_ON_SOURCE_UNHEALTHY_SECONDS || 10 * 60));
+const RETAIN_LAST_GOOD_ON_SOURCE_UNHEALTHY_SECONDS = Math.max(0, Number(process.env.STRATEGY2_RETAIN_LAST_GOOD_ON_SOURCE_UNHEALTHY_SECONDS || 4 * 60 * 60));
 let lastRealtimeCoverageRescueAt = 0;
 
 function readSecretText(file) {
@@ -241,6 +241,22 @@ function rsiInfo(values) {
   };
 }
 
+function npsyInfo(values, period = 12) {
+  const closes = values.map(cleanNumber).filter((value) => value > 0);
+  if (closes.length < period + 2) return {};
+  const scoreAt = (endIndex) => {
+    let up = 0;
+    for (let index = endIndex - period + 1; index <= endIndex; index += 1) {
+      if (closes[index] > closes[index - 1]) up += 1;
+    }
+    return (up / period) * 100;
+  };
+  const last = closes.length - 1;
+  const npsy = scoreAt(last);
+  const npsyPrev = scoreAt(last - 1);
+  return { npsy, npsyPrev, npsyUp: npsy > npsyPrev };
+}
+
 function writeJson(file, value) {
   fs.mkdirSync(path.dirname(file), { recursive: true });
   fs.writeFileSync(file, `${JSON.stringify(value, null, 2)}\n`);
@@ -265,9 +281,13 @@ function pickStrategy2PublicRecord(record) {
     "observedHigh",
     "observedHighAt",
     "percent",
+    "value",
     "volume",
     "tradeVolume",
     "deltaVolume",
+    "avg5dVolume",
+    "cumulativeBidVolume",
+    "cumulativeAskVolume",
     "score",
     "strategy",
     "primaryStrategy",
@@ -296,6 +316,9 @@ function pickStrategy2PublicRecord(record) {
     "kdK",
     "kdD",
     "kdUp",
+    "npsy",
+    "npsyPrev",
+    "npsyUp",
     "intradayVolumeBurst",
   ].forEach((key) => {
     const value = record?.[key];
@@ -540,25 +563,116 @@ function publishStaticDataJson(name, value) {
   writeStaticDataTargets("strategy2-intraday-delta.json", buildStrategy2DeltaReport(value));
 }
 
+function getStrategy2TaipeiParts(value) {
+  const date = new Date(value || Date.now());
+  const safeDate = Number.isFinite(date.getTime()) ? date : new Date();
+  const parts = Object.fromEntries(new Intl.DateTimeFormat("en-US", {
+    timeZone: "Asia/Taipei",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  }).formatToParts(safeDate).map((part) => [part.type, part.value]));
+  return {
+    year: parts.year,
+    month: parts.month,
+    day: parts.day,
+    hour: parts.hour === "24" ? "00" : parts.hour,
+    minute: parts.minute,
+    second: parts.second,
+  };
+}
+
+function buildStrategy2CompleteRunPayload(report) {
+  const qualityStatus = report.qualityStatus
+    || (report.realtime?.entrySourceHealthy === false || report.realtime?.skippedPartialCoverage ? "degraded" : "ok");
+  return {
+    ...report,
+    events: Array.isArray(report.events) ? report.events : [],
+    records: Array.isArray(report.records) ? report.records : [],
+    entryCount: cleanNumber(report.entryCount || report.aCount),
+    qualityStatus,
+    schemaVersion: report.schemaVersion || "strategy2-run-id-complete-v1",
+    dataContractSource: report.dataContractSource || "supabase:strategy2_intraday_ready_cache",
+  };
+}
+
+function buildStrategy2CompleteRunId(report) {
+  const scanDate = String(report.date || "").match(/^\d{4}-\d{2}-\d{2}$/)
+    ? String(report.date)
+    : null;
+  const parts = getStrategy2TaipeiParts(report.updatedAt || report.generatedAt || Date.now());
+  const ymd = scanDate ? scanDate.replace(/\D/g, "") : `${parts.year}${parts.month}${parts.day}`;
+  return `strategy2-${ymd}-${parts.hour}${parts.minute}${parts.second}`;
+}
+
+async function publishStrategy2CompleteRunToSupabase({ supabaseUrl, publishKey, report }) {
+  if (!publishKey) {
+    console.warn("strategy2 complete run publish skipped: missing Supabase service role key");
+    return false;
+  }
+  const scanDate = String(report.date || "").match(/^\d{4}-\d{2}-\d{2}$/)
+    ? String(report.date)
+    : (() => {
+      const parts = getStrategy2TaipeiParts(report.updatedAt || report.generatedAt || Date.now());
+      return `${parts.year}-${parts.month}-${parts.day}`;
+    })();
+  const rpcPayload = {
+    p_run_id: buildStrategy2CompleteRunId(report),
+    p_scan_date: scanDate,
+    p_payload: report,
+  };
+  try {
+    const response = await fetch(`${supabaseUrl}/rest/v1/rpc/publish_strategy2_complete_run`, {
+      method: "POST",
+      headers: {
+        apikey: publishKey,
+        Authorization: `Bearer ${publishKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(rpcPayload),
+      signal: AbortSignal.timeout ? AbortSignal.timeout(15000) : undefined,
+    });
+    if (!response.ok) {
+      const text = await response.text().catch(() => "");
+      console.warn(`strategy2 complete run publish skipped: HTTP ${response.status} ${text.slice(0, 160)}`);
+      return false;
+    }
+    return true;
+  } catch (error) {
+    console.warn(`strategy2 complete run publish skipped: ${error?.message || String(error)}`);
+    return false;
+  }
+}
+
 async function upsertStrategy2LatestToSupabase(report) {
   const supabaseUrl = String(process.env.SUPABASE_URL || process.env.FUMAN_SUPABASE_URL || "https://cpmpfhbzutkiecccekfr.supabase.co").replace(/\/+$/, "");
   const anonKey = process.env.SUPABASE_ANON_KEY
     || process.env.FUMAN_SUPABASE_ANON_KEY
     || readSecretText(path.join(process.env.FUMAN_RUNTIME_DIR || "C:/fuman-runtime", "secrets", "supabase-anon-key.txt"))
     || readSecretText(path.join(ROOT, "secrets", "supabase-anon-key.txt"));
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+    || process.env.FUMAN_SUPABASE_SERVICE_ROLE_KEY
+    || readSecretText(path.join(process.env.FUMAN_RUNTIME_DIR || "C:/fuman-runtime", "secrets", "supabase-service-role-key.txt"))
+    || readSecretText(path.join(ROOT, "secrets", "supabase-service-role-key.txt"));
   if (!supabaseUrl || !anonKey) {
     console.warn("strategy2_latest upsert skipped: missing Supabase anon key");
     return false;
   }
+  const completePayload = buildStrategy2CompleteRunPayload(report);
   const payload = {
     id: "latest",
-    date: report.date || "",
-    updated_at: report.updatedAt || new Date().toISOString(),
-    entry_count: cleanNumber(report.entryCount || report.aCount),
-    record_count: Array.isArray(report.records) ? report.records.length : 0,
-    event_count: Array.isArray(report.events) ? report.events.length : 0,
-    payload: report,
+    date: completePayload.date || "",
+    updated_at: completePayload.updatedAt || new Date().toISOString(),
+    entry_count: cleanNumber(completePayload.entryCount || completePayload.aCount),
+    record_count: Array.isArray(completePayload.records) ? completePayload.records.length : 0,
+    event_count: Array.isArray(completePayload.events) ? completePayload.events.length : 0,
+    payload: completePayload,
   };
+  let latestOk = false;
   try {
     const response = await fetch(`${supabaseUrl}/rest/v1/strategy2_latest?on_conflict=id`, {
       method: "POST",
@@ -574,13 +688,14 @@ async function upsertStrategy2LatestToSupabase(report) {
     if (!response.ok) {
       const text = await response.text().catch(() => "");
       console.warn(`strategy2_latest upsert skipped: HTTP ${response.status} ${text.slice(0, 160)}`);
-      return false;
+    } else {
+      latestOk = true;
     }
-    return true;
   } catch (error) {
     console.warn(`strategy2_latest upsert skipped: ${error?.message || String(error)}`);
-    return false;
   }
+  const completeOk = await publishStrategy2CompleteRunToSupabase({ supabaseUrl, publishKey: serviceKey, report: completePayload });
+  return latestOk && completeOk;
 }
 
 function normalizeVolumeLots(value) {
@@ -602,6 +717,9 @@ function isTrustedStrategy2Ma35Source(source) {
 }
 
 const STRATEGY2_TRADE_VALUE_OK = Number(process.env.STRATEGY2_TRADE_VALUE_OK || 50000000);
+const STRATEGY2_MIN_TRADE_VALUE_ENTRY = Number(process.env.STRATEGY2_MIN_TRADE_VALUE_ENTRY || 30000000);
+const STRATEGY2_MIN_CUMULATIVE_VOLUME_ENTRY = Number(process.env.STRATEGY2_MIN_CUMULATIVE_VOLUME_ENTRY || 500);
+const STRATEGY2_MIN_AVG5D_VOLUME_OK = Number(process.env.STRATEGY2_MIN_AVG5D_VOLUME_OK || 3000);
 const STRATEGY2_CONDITION_LABELS = {
   star: "STAR",
   preopen_watch: "盤前觀察",
@@ -610,6 +728,11 @@ const STRATEGY2_CONDITION_LABELS = {
   intraday_continuation: "盤中續強",
   triggered_still_strong: "曾發動仍強",
   rebound_turn: "反彈轉強",
+  confirmed_re_rise: "正式再起漲",
+  early_re_rise_entry: "早期再起漲",
+  creeping_re_rise: "低量沿線再起漲",
+  deep_rebound: "跌深反彈轉強",
+  opening_breakout: "開盤強勢突破",
 };
 
 function uniqueCompact(items) {
@@ -681,8 +804,16 @@ function strategy2TechFlags(stock) {
   const ma35Rising = stock.ma35TrendUp === true || (ma35 > 0 && ma35Prev > 0 && ma35 >= ma35Prev);
   const macdGreenRising = stock.macdHistUp === true || stock.macdUp === true;
   const kdjBullish = stock.kdUp === true || (stock.kdKUp === true && stock.kdDUp === true);
-  const npsyOrRsi = stock.rsiUp === true;
-  return { close, latestClose, ma35, ma35Prev, aboveMa35, ma35Rising, macdGreenRising, kdjBullish, npsyOrRsi };
+  const npsyUp = stock.npsyUp === true;
+  const rsiUp = stock.rsiUp === true;
+  const npsyOrRsi = npsyUp || rsiUp;
+  const latestOpen = cleanNumber(stock.latest1mOpen) || cleanNumber(stock.open);
+  const latestPrevClose = cleanNumber(stock.latest1mPrevClose);
+  const priceMomentumUp = latestClose > 0 && (
+    (latestPrevClose > 0 && latestClose >= latestPrevClose)
+    || (latestOpen > 0 && latestClose >= latestOpen)
+  );
+  return { close, latestClose, ma35, ma35Prev, aboveMa35, ma35Rising, macdGreenRising, kdjBullish, npsyUp, rsiUp, npsyOrRsi, priceMomentumUp };
 }
 
 function buildStrategy2ConditionMeta(stock, options = {}) {
@@ -703,13 +834,100 @@ function buildStrategy2ConditionMeta(stock, options = {}) {
   const volume = cleanNumber(stock.tradeVolume);
   const value = cleanNumber(stock.value) || cleanNumber(stock.close) * volume;
   const deltaVolume = cleanNumber(stock.deltaVolume);
-  const { close, latestClose, aboveMa35, ma35Rising, macdGreenRising, kdjBullish, npsyOrRsi } = strategy2TechFlags(stock);
+  const latest1mVolume = cleanNumber(stock.latest1mVolume);
+  const avg5dVolume = cleanNumber(stock.avg5dVolume);
+  const cumulativeBidVolume = cleanNumber(stock.cumulativeBidVolume);
+  const cumulativeAskVolume = cleanNumber(stock.cumulativeAskVolume);
+  const buySellRatio = cumulativeAskVolume > 0 ? cumulativeBidVolume / cumulativeAskVolume : (cumulativeBidVolume > 0 ? 99 : 0);
+  const { close, latestClose, aboveMa35, ma35Rising, macdGreenRising, kdjBullish, npsyUp, rsiUp, npsyOrRsi, priceMomentumUp } = strategy2TechFlags(stock);
   const tradeValueOk = value >= STRATEGY2_TRADE_VALUE_OK;
+  const entryVolumeOk = volume >= STRATEGY2_MIN_CUMULATIVE_VOLUME_ENTRY || value >= STRATEGY2_MIN_TRADE_VALUE_ENTRY;
+  const strictVolumeOk = latest1mVolume >= 50 || deltaVolume >= 50 || volume >= 2000 || value >= STRATEGY2_TRADE_VALUE_OK;
+  const avg5dVolumeOk = avg5dVolume >= STRATEGY2_MIN_AVG5D_VOLUME_OK;
+  const liquidityOk = volume >= STRATEGY2_MIN_CUMULATIVE_VOLUME_ENTRY || value >= STRATEGY2_MIN_TRADE_VALUE_ENTRY;
+  const reRisePattern = aboveMa35 && ma35Rising && priceMomentumUp && latestClose >= low * 1.01;
+  const minuteVolumeBase = avg5dVolume > 0 ? Math.max(1, avg5dVolume / 270) : 0;
+  const minuteVolumeRatio = minuteVolumeBase ? latest1mVolume / minuteVolumeBase : 0;
+  const strongMinuteVolumeRatio = minuteVolumeBase ? Math.max(latest1mVolume, deltaVolume) / minuteVolumeBase : 0;
   const strictEntry = options.stateId === "entry" || options.stateId === "go" || options.strictEntry === true;
-  const openingAcceleration = cleanNumber(stock.latest1mVolume) >= 20
+  const openingAcceleration = latest1mVolume >= 20
     || deltaVolume >= 50
     || close >= open * 1.01
     || volume >= 10000;
+
+  if (
+    entryVolumeOk
+    && strictVolumeOk
+    && pct >= 2
+    && pct < 9.9
+    && aboveMa35
+    && ma35Rising
+    && reRisePattern
+    && npsyUp
+    && kdjBullish
+    && macdGreenRising
+  ) add("confirmed_re_rise", `漲幅 ${pct.toFixed(2)}%，站上/守住 MA35，MA35 向上，NPSY/KDJ/MACD 柱狀體同步向上。`);
+
+  if (
+    entryVolumeOk
+    && strictVolumeOk
+    && latest1mVolume >= 50
+    && avg5dVolumeOk
+    && liquidityOk
+    && pct >= -1
+    && aboveMa35
+    && ma35Rising
+    && reRisePattern
+    && kdjBullish
+    && macdGreenRising
+    && npsyOrRsi
+  ) add("early_re_rise_entry", `最近分時量 ${Math.round(latest1mVolume)} 張，累計量 ${Math.round(volume)} 張，早期再起漲條件成立。`);
+
+  if (
+    value >= STRATEGY2_MIN_TRADE_VALUE_ENTRY
+    && pct >= -1
+    && aboveMa35
+    && ma35Rising
+    && reRisePattern
+    && priceMomentumUp
+    && kdjBullish
+    && macdGreenRising
+    && npsyOrRsi
+  ) add("creeping_re_rise", `成交金額 ${Math.round(value / 10000).toLocaleString("zh-TW")} 萬，沿 MA35 低量再起漲。`);
+
+  if (
+    entryVolumeOk
+    && strictVolumeOk
+    && avg5dVolumeOk
+    && liquidityOk
+    && pct >= -8
+    && pct < -1
+    && low > 0
+    && latestClose >= low * 1.03
+    && aboveMa35
+    && ma35Rising
+    && reRisePattern
+    && kdjBullish
+    && macdGreenRising
+    && npsyOrRsi
+  ) add("deep_rebound", `跌幅 ${pct.toFixed(2)}%，自低點反彈 ${(((latestClose - low) / low) * 100).toFixed(2)}%，轉強站回 MA35。`);
+
+  if (
+    minute <= STRATEGY2_OPEN_RUSH_END_MINUTES
+    && avg5dVolumeOk
+    && liquidityOk
+    && pct >= 5
+    && pct < 9.9
+    && latest1mVolume >= 20
+    && open > 0
+    && latestClose > open
+    && (
+      minuteVolumeRatio >= 2
+      || strongMinuteVolumeRatio >= 2.5
+      || priceMomentumUp
+      || buySellRatio >= 2
+    )
+  ) add("opening_breakout", `09:10 前漲幅 ${pct.toFixed(2)}%，分時量 ${Math.round(latest1mVolume)} 張，現價站上開盤價。`);
 
   if (
     minute >= STRATEGY2_ENTRY_START_MINUTES
@@ -742,12 +960,12 @@ function buildStrategy2ConditionMeta(stock, options = {}) {
       && ma35Rising
       && macdGreenRising
       && kdjBullish
-      && (npsyOrRsi || cleanNumber(stock.latest1mVolume) >= 20 || deltaVolume >= 50)
+      && (npsyOrRsi || latest1mVolume >= 20 || deltaVolume >= 50)
     )
     || (
       minute <= STRATEGY2_OPEN_RUSH_END_MINUTES
       && pct >= 5
-      && cleanNumber(stock.latest1mVolume) >= 20
+      && latest1mVolume >= 20
       && openingAcceleration
       && open > 0
       && close >= open
@@ -795,10 +1013,14 @@ function classifyStrategy2State(stock, signal, options = {}) {
     return { stateId: "wait", stateLabel: "待確認", stateReason: `${label}條件已符合，但本輪市場來源可用率 ${Number(options.sourceCoverage || 0).toFixed(2)} 未達 ${MIN_ENTRY_SOURCE_COVERAGE.toFixed(2)}，暫不升級。`, score };
   }
   if (signal.id === "rebound") {
-    if (actionableRebound) {
-      return { stateId: "entry", stateLabel: "進場區", stateReason: "反彈進場：1分K回踩MA35後重新站上，且量能放大、MACD/KD/RSI 任一轉強。", score };
-    }
-    return { stateId: "rebound", stateLabel: "反彈", stateReason: "反彈：1分K回踩MA35後重新站上，MACD/KD/RSI 任一轉強。", score };
+    return {
+      stateId: "entry",
+      stateLabel: "進場區",
+      stateReason: actionableRebound
+        ? "反彈進場：1分K回踩MA35後重新站上，且量能放大、MACD/KD/RSI 任一轉強。"
+        : "反彈進場：1分K回踩MA35後重新站上，MACD/KD/RSI 任一轉強。",
+      score,
+    };
   }
   return { stateId: "entry", stateLabel: "進場區", stateReason: "開彈進場：1分K close > MA35，MACD/DIF/K/D/J 全部向上。", score };
 }
@@ -1552,25 +1774,43 @@ function isStrictStrategy2Ma35Record(record) {
 function isStrategy2ConditionEntryRecord(record) {
   const strategyIds = Array.isArray(record?.strategyIds) ? record.strategyIds : [];
   return strategyIds.some((id) => [
+    "star",
+    "preopen_watch",
     "open_rush",
     "early_attack",
     "intraday_continuation",
+    "triggered_still_strong",
     "rebound_turn",
+    "confirmed_re_rise",
+    "early_re_rise_entry",
+    "creeping_re_rise",
+    "deep_rebound",
+    "opening_breakout",
   ].includes(id));
 }
 
 function isStrategy2RecordWithinBaseGate(record) {
   if (isStrictStrategy2Ma35Record(record)) return true;
   const strategyIds = Array.isArray(record?.strategyIds) ? record.strategyIds : [];
-  if (strategyIds.includes("star") || strategyIds.includes("preopen_watch")) return true;
-  if (strategyIds.includes("triggered_still_strong") || strategyIds.includes("rebound_turn")) {
-    return cleanNumber(record?.percent) >= 1 && (cleanNumber(record?.volume) || cleanNumber(record?.tradeVolume)) >= 500;
-  }
-  if (strategyIds.some((id) => ["open_rush", "early_attack", "intraday_continuation"].includes(id))) {
-    return cleanNumber(record?.percent) >= 2 && (cleanNumber(record?.volume) || cleanNumber(record?.tradeVolume)) >= 500;
-  }
   const pct = cleanNumber(record?.percent);
   const volume = cleanNumber(record?.volume) || cleanNumber(record?.tradeVolume);
+  const value = cleanNumber(record?.value);
+  if (strategyIds.includes("star") || strategyIds.includes("preopen_watch")) return true;
+  if (strategyIds.includes("deep_rebound")) {
+    return pct >= -8 && pct < -1 && (volume >= STRATEGY2_MIN_CUMULATIVE_VOLUME_ENTRY || value >= STRATEGY2_MIN_TRADE_VALUE_ENTRY);
+  }
+  if (strategyIds.includes("creeping_re_rise")) {
+    return pct >= -1 && value >= STRATEGY2_MIN_TRADE_VALUE_ENTRY;
+  }
+  if (strategyIds.includes("triggered_still_strong") || strategyIds.includes("rebound_turn")) {
+    return pct >= 1 && volume >= 500;
+  }
+  if (strategyIds.some((id) => ["early_re_rise_entry"].includes(id))) {
+    return pct >= -1 && (volume >= STRATEGY2_MIN_CUMULATIVE_VOLUME_ENTRY || value >= STRATEGY2_MIN_TRADE_VALUE_ENTRY);
+  }
+  if (strategyIds.some((id) => ["open_rush", "early_attack", "intraday_continuation", "confirmed_re_rise", "opening_breakout"].includes(id))) {
+    return pct >= 2 && (volume >= 500 || value >= STRATEGY2_MIN_TRADE_VALUE_ENTRY);
+  }
   return pct >= 2 && volume >= 2000;
 }
 
@@ -1634,11 +1874,12 @@ async function fetchJson(url, timeout = 30000) {
   }
 }
 
-async function fetchStocks() {
+async function fetchStocks(options = {}) {
   const result = await fetchActiveCommonStockQuotes({
-    maxQuoteAgeSeconds: SUPABASE_SOURCE_MAX_QUOTE_AGE_SECONDS,
-    minQuotes: SUPABASE_SOURCE_MIN_QUOTES,
+    maxQuoteAgeSeconds: options.maxQuoteAgeSeconds || SUPABASE_SOURCE_MAX_QUOTE_AGE_SECONDS,
+    minQuotes: options.minQuotes ?? SUPABASE_SOURCE_MIN_QUOTES,
     minActiveSymbols: SUPABASE_SOURCE_MIN_ACTIVE_SYMBOLS,
+    allowWarmupSource: options.allowWarmupSource,
   });
   if (!result.ok) throw new Error(result.error || SUPABASE_SHARED_SOURCE_ERROR_MESSAGE);
   return result.quotes.map((quote) => {
@@ -2325,6 +2566,7 @@ function buildSma35Info(rows, targetMinute, source, extra = {}) {
   const macd = macdInfo(closes);
   const kd = kdInfo(indicatorRows);
   const rsi = rsiInfo(closes);
+  const npsy = npsyInfo(closes);
   return {
     ma35,
     ma35Prev,
@@ -2341,6 +2583,7 @@ function buildSma35Info(rows, targetMinute, source, extra = {}) {
     ...macd,
     ...kd,
     ...rsi,
+    ...npsy,
     ...extra,
   };
 }
@@ -2551,12 +2794,13 @@ function fetchLocalIntradaySma35(cache, code, scanTimestamp) {
   return buildSma35Info(rows, targetMinute, "local-1m", { ma35Symbol: String(code) });
 }
 
-async function fetchSupabaseFugleIntradaySma35(code, scanTimestamp, cache) {
+async function fetchSupabaseFugleIntradaySma35(code, scanTimestamp, cache, options = {}) {
   const targetMinute = minuteKey(scanTimestamp);
   const targetDate = targetMinute.slice(0, 10);
   if (!targetMinute || !targetDate) return null;
   const result = await fetchSupabaseFugleIntraday1m(code, 240, {
     maxSourceAgeSeconds: SUPABASE_SOURCE_MAX_QUOTE_AGE_SECONDS,
+    allowWarmupSource: options.allowWarmupSource,
   });
   if (!result.ok) throw new Error(result.error || "supabase fugle 1m unavailable");
   const rows = (result.candles || [])
@@ -2662,10 +2906,10 @@ async function fetchTwelveDataIntradaySma35(code, scanTimestamp) {
   return null;
 }
 
-async function fetchIntradaySma35WithFallback(code, scanTimestamp, cache) {
+async function fetchIntradaySma35WithFallback(code, scanTimestamp, cache, options = {}) {
   const attempts = [];
   try {
-    const supabaseFugle = await fetchSupabaseFugleIntradaySma35(code, scanTimestamp, cache);
+    const supabaseFugle = await fetchSupabaseFugleIntradaySma35(code, scanTimestamp, cache, options);
     attempts.push({ source: "supabase-fugle-1m", ok: Boolean(supabaseFugle) });
     if (supabaseFugle) return { ...supabaseFugle, ma35Attempts: attempts };
   } catch (error) {
@@ -2811,7 +3055,7 @@ async function warmStrategy2MinuteCandles(stocks, scanTimestamp, cache, key) {
   async function worker() {
     while (index < batch.length) {
       const code = batch[index++];
-      const info = await fetchIntradaySma35WithFallback(code, scanTimestamp, cache);
+      const info = await fetchIntradaySma35WithFallback(code, scanTimestamp, cache, { allowWarmupSource: true });
       if (cleanNumber(info?.latest1mClose) > 0) warmed += 1;
     }
   }
@@ -2852,7 +3096,9 @@ async function main() {
     payload: {},
     sourceAgeSeconds: Infinity,
   }));
-  if (!sharedSourceHealth.ok) {
+  if (!sharedSourceHealth.ok && !entryWindow) {
+    console.log("strategy2 pre-entry warmup continuing with shared source warning: " + (sharedSourceHealth.reason || sharedSourceHealth.message || "unknown"));
+  } else if (!sharedSourceHealth.ok) {
     const retained = readRetainableStrategy2EntryReport(key);
     if (retained) {
       console.log(`strategy2 supabase shared source unhealthy; retain last good A report age=${Math.round(retained.ageSeconds)}s reason=${sharedSourceHealth.reason || sharedSourceHealth.message || "unknown"}`);
@@ -2867,7 +3113,11 @@ async function main() {
     return;
   }
 
-  const rawStocks = await annotateDailyVolumeAverages(await fetchStocks());
+  const rawStocks = await annotateDailyVolumeAverages(await fetchStocks(!entryWindow ? {
+    allowWarmupSource: true,
+    maxQuoteAgeSeconds: QUOTE_CACHE_MAX_AGE_SECONDS,
+    minQuotes: 1,
+  } : {}));
   const realtimeSourceStocks = rawStocks.filter(isIntradayTradable);
   if (!entryWindow) {
     const warmed = await warmStrategy2MinuteCandles(realtimeSourceStocks, timestamp, cache, key);
@@ -2975,6 +3225,9 @@ async function main() {
       rsi10: ma35Info.rsi10 || 0,
       rsi10Prev: ma35Info.rsi10Prev || 0,
       rsiUp: Boolean(ma35Info.rsiUp),
+      npsy: ma35Info.npsy || 0,
+      npsyPrev: ma35Info.npsyPrev || 0,
+      npsyUp: Boolean(ma35Info.npsyUp),
     };
   });
   const ranks = buildRanks(liveStocks);
@@ -2991,7 +3244,17 @@ async function main() {
     const previousRows = cache.records.filter((record) => record.date === key && record.code === scanStock.code);
     const hadTriggeredStrong = previousRows.some((record) => (
       isEntryState(record)
-      || (record.strategyIds || []).some((id) => ["open_rush", "early_attack", "intraday_continuation", "rebound_turn"].includes(id))
+      || (record.strategyIds || []).some((id) => [
+        "open_rush",
+        "early_attack",
+        "intraday_continuation",
+        "rebound_turn",
+        "confirmed_re_rise",
+        "early_re_rise_entry",
+        "creeping_re_rise",
+        "deep_rebound",
+        "opening_breakout",
+      ].includes(id))
     ));
     const preopen = preopenStrategyMap.get(String(scanStock.code || ""));
     const signals = [detectOpenBurstEntrySignal(scanStock), detectReboundEntrySignal(scanStock)].filter(Boolean);
@@ -3004,7 +3267,12 @@ async function main() {
       percent: scanStock.percent,
     };
     const standaloneMeta = buildStrategy2ConditionMeta(scanStock, { timestamp, preopen, hadTriggeredStrong });
-    if (!signals.length && standaloneMeta.strategyTags.length && !previousRows.length) {
+    const hasStandaloneDuplicate = cache.records.some((record) => (
+      record.code === scanStock.code
+      && record.timestamp === timestamp
+      && (record.strategyIds || []).some((id) => (standaloneMeta.strategyIds || []).includes(id))
+    ));
+    if (!signals.length && standaloneMeta.strategyTags.length && !hasStandaloneDuplicate) {
       cache.records.push({
         date: key,
         timestamp,
@@ -3031,6 +3299,10 @@ async function main() {
         dayLow: scanStock.low || scanStock.close,
         dayLowAt: timestamp,
         volume: scanStock.tradeVolume,
+        value: scanStock.value,
+        avg5dVolume: scanStock.avg5dVolume,
+        cumulativeBidVolume: scanStock.cumulativeBidVolume,
+        cumulativeAskVolume: scanStock.cumulativeAskVolume,
         percent: scanStock.percent,
         reason: standaloneMeta.strategyReasons.join("；"),
         signalId: standaloneMeta.strategyIds[0] || "strategy2_watch",
@@ -3054,6 +3326,9 @@ async function main() {
         rsi10: scanStock.rsi10,
         rsi10Prev: scanStock.rsi10Prev,
         rsiUp: scanStock.rsiUp,
+        npsy: scanStock.npsy,
+        npsyPrev: scanStock.npsyPrev,
+        npsyUp: scanStock.npsyUp,
         intradayVolumeBurst: deltaVolume >= 50 || cleanNumber(scanStock.tradeVolume) >= 10000,
         recoveredFromRealtimeFallback: Boolean(scanStock.recoveredFromRealtimeFallback),
         ...standaloneMeta,
@@ -3108,6 +3383,10 @@ async function main() {
         dayLow: scanStock.low || scanStock.close,
         dayLowAt: timestamp,
         volume: scanStock.tradeVolume,
+        value: scanStock.value,
+        avg5dVolume: scanStock.avg5dVolume,
+        cumulativeBidVolume: scanStock.cumulativeBidVolume,
+        cumulativeAskVolume: scanStock.cumulativeAskVolume,
         percent: scanStock.percent,
         reason: signal.reason,
         signalId: signal.id,
@@ -3133,6 +3412,9 @@ async function main() {
         rsi10: signal.rsi10,
         rsi10Prev: signal.rsi10Prev,
         rsiUp: signal.rsiUp,
+        npsy: scanStock.npsy,
+        npsyPrev: scanStock.npsyPrev,
+        npsyUp: scanStock.npsyUp,
         intradayVolumeBurst: signal.intradayVolumeBurst,
         recoveredFromRealtimeFallback: Boolean(scanStock.recoveredFromRealtimeFallback),
         ...strategyMeta,
@@ -3184,5 +3466,9 @@ main().catch((error) => {
   console.error(error);
   process.exit(1);
 });
+
+
+
+
 
 
