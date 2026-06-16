@@ -1,6 +1,6 @@
 {
   "ok": true,
-  "updatedAt": "2026-06-15T15:40:08.800Z",
+  "updatedAt": "2026-06-16T00:09:19.360Z",
   "files": [
     {
       "file": "market-summary.json",
@@ -31,7 +31,7 @@
       "ok": true,
       "bytes": 760548,
       "count": 379,
-      "updatedAt": "2026-06-15T14:33:59.672Z",
+      "updatedAt": "2026-06-15T22:59:25.380Z",
       "issues": [
         {
           "level": "medium",
@@ -44,7 +44,7 @@
       "ok": true,
       "bytes": 49838,
       "count": 379,
-      "updatedAt": "2026-06-15T14:33:59.672Z",
+      "updatedAt": "2026-06-15T22:59:25.380Z",
       "issues": []
     },
     {
@@ -52,7 +52,7 @@
       "ok": true,
       "bytes": 179086,
       "count": 379,
-      "updatedAt": "2026-06-15T14:33:59.672Z",
+      "updatedAt": "2026-06-15T22:59:25.380Z",
       "issues": [
         {
           "level": "medium",
@@ -63,22 +63,22 @@
     {
       "file": "institution-latest.json",
       "ok": true,
-      "bytes": 215928,
-      "count": 436,
-      "updatedAt": "2026-06-15T15:38:23.933Z",
+      "bytes": 216637,
+      "count": 443,
+      "updatedAt": "2026-06-15T23:37:42.053Z",
       "issues": [
         {
           "level": "medium",
-          "message": "zero close ratio high 129/436"
+          "message": "zero close ratio high 129/443"
         }
       ]
     },
     {
       "file": "warrant-flow-latest.json",
       "ok": true,
-      "bytes": 478643,
-      "count": 120,
-      "updatedAt": "2026-06-15T15:07:48.263Z",
+      "bytes": 248842,
+      "count": 64,
+      "updatedAt": "2026-06-16T00:04:58.783Z",
       "issues": []
     }
   ],
@@ -97,7 +97,7 @@
     {
       "file": "institution-latest.json",
       "level": "medium",
-      "message": "zero close ratio high 129/436"
+      "message": "zero close ratio high 129/443"
     }
   ]
 }

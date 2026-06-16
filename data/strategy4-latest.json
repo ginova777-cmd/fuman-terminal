@@ -2,7 +2,7 @@
   "ok": true,
   "source": "github-actions",
   "priceSource": "official-daily-k",
-  "updatedAt": "2026-06-15T14:33:59.672Z",
+  "updatedAt": "2026-06-15T22:59:25.380Z",
   "scanStamp": "20260615",
   "fullScan": true,
   "runMode": "full",
@@ -27,7 +27,7 @@
     "supabaseVolumeRows": 20942,
     "supabaseVolumeUpdated": 20909,
     "errors": [],
-    "updatedAt": "2026-06-15T14:33:39.679Z",
+    "updatedAt": "2026-06-15T22:59:17.031Z",
     "coverageRatio": 0.953,
     "qualityStatus": "partial"
   },

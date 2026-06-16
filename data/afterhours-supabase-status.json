@@ -1,55 +1,55 @@
 {
   "ok": true,
-  "sourceName": "fuman_afterhours_flow",
-  "checkedAt": "2026-06-11T16:44:17.353Z",
+  "sourceName": "fuman_afterhours_cb",
+  "checkedAt": "2026-06-15T13:45:13.094Z",
   "required": [
+    "cb"
+  ],
+  "optional": [
     "institution",
     "warrant"
   ],
-  "optional": [
-    "cb"
-  ],
   "sources": {
-    "institution": {
+    "cb": {
       "ok": true,
       "required": true,
+      "name": "cb",
+      "label": "CB",
+      "file": "cb-detect-latest.json",
+      "count": 11,
+      "tradeDate": "20260615",
+      "updatedAt": "2026-06-15T13:45:12.965Z",
+      "hash": "3c987eb8328cad3dcec3a152910412f5e3c906908375b89f03b1559577a89582",
+      "error": ""
+    },
+    "institution": {
+      "ok": true,
+      "required": false,
       "name": "institution",
       "label": "買賣超",
       "file": "institution-latest.json",
-      "count": 1880,
-      "tradeDate": "20260611",
-      "updatedAt": "2026-06-11T13:20:43.874Z",
-      "hash": "eb246e3f75477f7fc00883fede206984bef831186b070ab156c14be16d401a09",
+      "count": 1883,
+      "tradeDate": "20260612",
+      "updatedAt": "2026-06-14T05:23:14.078Z",
+      "hash": "36f68555386d55ba2b0c7f6d69a585b67995a23c864930b8f8e60a52d813d8f8",
       "error": ""
     },
     "warrant": {
       "ok": true,
-      "required": true,
+      "required": false,
       "name": "warrant",
       "label": "權證走向",
       "file": "warrant-flow-latest.json",
       "count": 120,
-      "tradeDate": "20260611",
-      "updatedAt": "2026-06-11T12:50:30.296Z",
-      "hash": "a0e24e9ceb5e1e5345241f50ecd972e0f9ec3c24004ae9b5b177fd31e749eff1",
-      "error": ""
-    },
-    "cb": {
-      "ok": true,
-      "required": false,
-      "name": "cb",
-      "label": "CB",
-      "file": "cb-detect-latest.json",
-      "count": 25,
-      "tradeDate": "20260611",
-      "updatedAt": "2026-06-11T13:45:14.354Z",
-      "hash": "3db59e0a01307c31f5b823f2c421b385923c8c45150755c2a96c7965215ac46a",
+      "tradeDate": "20260615",
+      "updatedAt": "2026-06-15T13:17:03.813Z",
+      "hash": "fb34f1ce70cada17b342424d334a695c0a22fcb5b214c06492562ab0813eb9ed",
       "error": ""
     }
   },
   "supabase": {
     "ok": true,
     "table": "source_status",
-    "readbackUpdatedAt": "2026-06-11T16:44:17.354+00:00"
+    "readbackUpdatedAt": "2026-06-15T13:45:13.095+00:00"
   }
 }

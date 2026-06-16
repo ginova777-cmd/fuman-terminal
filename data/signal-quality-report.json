@@ -1,6 +1,6 @@
 {
   "ok": true,
-  "updatedAt": "2026-06-15T15:40:08.707Z",
+  "updatedAt": "2026-06-16T00:09:19.272Z",
   "strategy2": {
     "latestSignals": 0,
     "latestGo": 0,
@@ -36,6 +36,6 @@
       "C": 72
     },
     "avgScore": 87.7730870712401,
-    "updatedAt": "2026-06-15T14:33:59.672Z"
+    "updatedAt": "2026-06-15T22:59:25.380Z"
   }
 }
