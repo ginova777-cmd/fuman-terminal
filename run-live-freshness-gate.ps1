@@ -121,8 +121,9 @@ function Read-GateJson($path) {
 }
 
 function Get-GateCount($payload) {
-  if ($null -ne $payload.count) { return [int]$payload.count }
-  if ($null -ne $payload.total) { return [int]$payload.total }
+  $propertyNames = @($payload.PSObject.Properties.Name)
+  if ($propertyNames -contains "count") { return [int]$payload.count }
+  if ($propertyNames -contains "total") { return [int]$payload.total }
   if ($payload.rows) { return @($payload.rows).Count }
   if ($payload.data) {
     if ($payload.data -is [array]) { return @($payload.data).Count }
