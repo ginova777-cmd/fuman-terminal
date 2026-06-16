@@ -1,6 +1,6 @@
 {
   "ok": true,
-  "updatedAt": "2026-06-16T00:23:19.106Z",
+  "updatedAt": "2026-06-16T21:37:01.180Z",
   "files": [
     {
       "file": "market-summary.json",
@@ -13,9 +13,9 @@
     {
       "file": "strategy2-intraday-latest.json",
       "ok": true,
-      "bytes": 6608,
+      "bytes": 778,
       "count": 0,
-      "updatedAt": "2026-06-16T00:20:41.322Z",
+      "updatedAt": "2026-06-16T07:45:02.774Z",
       "issues": []
     },
     {
@@ -23,62 +23,62 @@
       "ok": true,
       "bytes": 684,
       "count": 0,
-      "updatedAt": "2026-06-15T07:45:02.555Z",
+      "updatedAt": "2026-06-16T07:45:02.784Z",
       "issues": []
     },
     {
       "file": "strategy4-latest.json",
       "ok": true,
-      "bytes": 760548,
-      "count": 379,
-      "updatedAt": "2026-06-15T22:59:25.380Z",
+      "bytes": 947658,
+      "count": 306,
+      "updatedAt": "2026-06-16T12:34:47.185Z",
       "issues": [
         {
           "level": "medium",
-          "message": "extreme percent rows 9"
+          "message": "extreme percent rows 4"
         }
       ]
     },
     {
       "file": "strategy4-summary.json",
       "ok": true,
-      "bytes": 49838,
-      "count": 379,
-      "updatedAt": "2026-06-15T22:59:25.380Z",
+      "bytes": 49416,
+      "count": 306,
+      "updatedAt": "2026-06-16T12:34:47.185Z",
       "issues": []
     },
     {
       "file": "strategy4-slim.json",
       "ok": true,
-      "bytes": 179086,
-      "count": 379,
-      "updatedAt": "2026-06-15T22:59:25.380Z",
+      "bytes": 146563,
+      "count": 306,
+      "updatedAt": "2026-06-16T12:34:47.185Z",
       "issues": [
         {
           "level": "medium",
-          "message": "extreme percent rows 9"
+          "message": "extreme percent rows 4"
         }
       ]
     },
     {
       "file": "institution-latest.json",
       "ok": true,
-      "bytes": 216637,
-      "count": 443,
-      "updatedAt": "2026-06-15T23:37:42.053Z",
+      "bytes": 224411,
+      "count": 453,
+      "updatedAt": "2026-06-16T21:35:41.719Z",
       "issues": [
         {
           "level": "medium",
-          "message": "zero close ratio high 129/443"
+          "message": "zero close ratio high 133/453"
         }
       ]
     },
     {
       "file": "warrant-flow-latest.json",
       "ok": true,
-      "bytes": 1419849,
+      "bytes": 1440646,
       "count": 120,
-      "updatedAt": "2026-06-16T00:15:01.544Z",
+      "updatedAt": "2026-06-16T21:35:53.993Z",
       "issues": []
     }
   ],
@@ -87,17 +87,17 @@
     {
       "file": "strategy4-latest.json",
       "level": "medium",
-      "message": "extreme percent rows 9"
+      "message": "extreme percent rows 4"
     },
     {
       "file": "strategy4-slim.json",
       "level": "medium",
-      "message": "extreme percent rows 9"
+      "message": "extreme percent rows 4"
     },
     {
       "file": "institution-latest.json",
       "level": "medium",
-      "message": "zero close ratio high 129/443"
+      "message": "zero close ratio high 133/453"
     }
   ]
 }

@@ -1,7 +1,7 @@
 {
   "ok": true,
   "source": "github-actions-backup",
-  "updatedAt": "2026-06-16T14:05:22.708Z",
+  "updatedAt": "2026-06-16T15:21:20.288Z",
   "generatedDate": "20260616",
   "usedDate": "20260616",
   "sourceDate": "20260616",
@@ -2177,7 +2177,7 @@
       "inst": {
         "foreign": 46936671,
         "trust": 5807775,
-        "dealer": 95412,
+        "dealer": -187298,
         "total": 52839858
       },
       "matches": [
@@ -2224,7 +2224,7 @@
       "inst": {
         "foreign": 3627517,
         "trust": 0,
-        "dealer": 363816,
+        "dealer": 269195,
         "total": 3991333
       },
       "matches": [
@@ -2337,7 +2337,7 @@
       "inst": {
         "foreign": 4910281,
         "trust": 515203,
-        "dealer": 925118,
+        "dealer": 0,
         "total": 6350602
       },
       "matches": [
@@ -2507,7 +2507,7 @@
       "inst": {
         "foreign": 2445077,
         "trust": 57000,
-        "dealer": 51277,
+        "dealer": 59318,
         "total": 2553354
       },
       "matches": [
@@ -2630,7 +2630,7 @@
       "inst": {
         "foreign": -866626,
         "trust": 0,
-        "dealer": 41,
+        "dealer": 0,
         "total": -866585
       },
       "matches": [
@@ -2690,7 +2690,7 @@
       "inst": {
         "foreign": 35104807,
         "trust": 9428522,
-        "dealer": -1269998,
+        "dealer": 1632803,
         "total": 43263331
       },
       "matches": [
@@ -2856,7 +2856,7 @@
       "inst": {
         "foreign": 3171876,
         "trust": 0,
-        "dealer": 1255174,
+        "dealer": 1074508,
         "total": 4427050
       },
       "matches": [
@@ -3010,7 +3010,7 @@
       "inst": {
         "foreign": 8115653,
         "trust": 13429000,
-        "dealer": 277896,
+        "dealer": 69870,
         "total": 21822549
       },
       "matches": [
@@ -3434,7 +3434,7 @@
       "inst": {
         "foreign": 7533563,
         "trust": 1764000,
-        "dealer": 1298469,
+        "dealer": 2501308,
         "total": 10596032
       },
       "matches": [
@@ -3497,7 +3497,7 @@
       "inst": {
         "foreign": 1045895,
         "trust": 0,
-        "dealer": 81061,
+        "dealer": 32100,
         "total": 1126956
       },
       "matches": [
@@ -3622,7 +3622,7 @@
       "inst": {
         "foreign": -318875,
         "trust": 0,
-        "dealer": 221594,
+        "dealer": 0,
         "total": -97281
       },
       "matches": [
@@ -3689,7 +3689,7 @@
       "inst": {
         "foreign": 9643710,
         "trust": -529755,
-        "dealer": 33320,
+        "dealer": 622125,
         "total": 9147275
       },
       "matches": [
@@ -3941,7 +3941,7 @@
       "inst": {
         "foreign": -1070401,
         "trust": 334635,
-        "dealer": 239717,
+        "dealer": 121127,
         "total": -496049
       },
       "matches": [
@@ -4134,7 +4134,7 @@
       "inst": {
         "foreign": -72992,
         "trust": -49000,
-        "dealer": 20300,
+        "dealer": 14920,
         "total": -101692
       },
       "matches": [
@@ -4197,7 +4197,7 @@
       "inst": {
         "foreign": 220000,
         "trust": 0,
-        "dealer": -1000,
+        "dealer": 2956,
         "total": 219000
       },
       "matches": [
@@ -4260,7 +4260,7 @@
       "inst": {
         "foreign": 28997764,
         "trust": 11348144,
-        "dealer": 796481,
+        "dealer": 7042797,
         "total": 41142389
       },
       "matches": [
@@ -4316,7 +4316,7 @@
       "inst": {
         "foreign": -830246,
         "trust": 217520,
-        "dealer": -130363,
+        "dealer": 0,
         "total": -743089
       },
       "matches": [
@@ -4442,7 +4442,7 @@
       "inst": {
         "foreign": -20493265,
         "trust": 0,
-        "dealer": 5608,
+        "dealer": -138902,
         "total": -20487657
       },
       "matches": [
@@ -4877,9 +4877,9 @@
       "volumeRank": 98,
       "inst": {
         "foreign": -382091,
-        "trust": 3836676,
-        "dealer": -157723,
-        "total": 3296862
+        "trust": 3848676,
+        "dealer": 107319,
+        "total": 3308862
       },
       "matches": [
         {
@@ -5758,7 +5758,7 @@
       }
     }
   ],
-  "runId": "strategy5-20260616-20260616140522",
+  "runId": "strategy5-20260616-20260616152120",
   "qualityStatus": "complete",
   "schemaVersion": "strategy5-run-id-complete-v1",
   "dataContractSource": "strategy5-cache"
