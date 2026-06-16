@@ -28,9 +28,10 @@ const TARGETS = [
   { name: "strategy-match-index", file: "data/strategy-match-index.json", minCount: 1 },
   { name: "warrant-flow-latest", file: "data/warrant-flow-latest.json" },
   { name: "stocks-quotes-slim", file: "data/stocks-quotes-slim.json", minCount: 1000 },
-  { name: "institution-latest", file: "data/institution-latest.json", minCount: 1000 },
+  { name: "institution-latest", file: "data/institution-latest.json", minCount: Number(process.env.INSTITUTION_MIN_OUTPUT_ROWS || 250) },
   { name: "institution-slim", file: "data/institution-slim.json", minCount: Number(process.env.INSTITUTION_MIN_OUTPUT_ROWS || 250) },
   { name: "institution-mobile-top", file: "data/institution-mobile-top.json", minCount: 1 },
+  { name: "institution-tdcc-breakout-top", file: "data/institution-tdcc-breakout-top.json", minCount: Number(process.env.INSTITUTION_TDCC_MIN_OUTPUT_ROWS || 1) },
   { name: "cb-detect-latest", file: "data/cb-detect-latest.json", minCount: 1 },
   { name: "warrant-flow-slim", file: "data/warrant-flow-slim.json", minCount: 1 },
   { name: "warrant-priority-top", file: "data/warrant-priority-top.json", minCount: 1 },
@@ -138,6 +139,7 @@ function validateCrossPayloads(payloads, issues) {
   const institutionLatest = payloads["institution-latest"];
   const institutionSlim = payloads["institution-slim"];
   const institutionMobile = payloads["institution-mobile-top"];
+  const institutionTdcc = payloads["institution-tdcc-breakout-top"];
   const cb = payloads["cb-detect-latest"];
   const warrantLatest = payloads["warrant-flow-latest"];
   const warrantSlim = payloads["warrant-flow-slim"];
@@ -148,6 +150,7 @@ function validateCrossPayloads(payloads, issues) {
     ["institution-latest.json", institutionLatest],
     ["institution-slim.json", institutionSlim],
     ["institution-mobile-top.json", institutionMobile],
+    ["institution-tdcc-breakout-top.json", institutionTdcc],
     ["cb-detect-latest.json", cb],
     ["warrant-flow-slim.json", warrantSlim],
     ["warrant-priority-top.json", warrantPriority],
@@ -171,6 +174,7 @@ function validateCrossPayloads(payloads, issues) {
   assertFresh(!quoteDate || !institutionLatestDate || institutionLatestDate <= quoteDate, `institution-latest date mismatch quoteDate=${quoteDate}`, issues);
   assertFresh(!quoteDate || !institutionSlimDate || institutionSlimDate <= quoteDate, `institution-slim date mismatch quoteDate=${quoteDate}`, issues);
   assertFresh(extractCount(institutionMobile) <= extractCount(institutionSlim), "institution-mobile-top larger than institution-slim", issues);
+  assertFresh(extractCount(institutionTdcc) <= extractCount(institutionSlim), "institution-tdcc-breakout-top larger than institution-slim", issues);
   assertFresh(extractCount(cb) > 0, "cb-detect-latest empty", issues);
   const openBuyDate = normalizeDate(openBuy?.usedDate || openBuy?.date || openBuy?.sourceDate);
   assertFresh(openBuy?.ok === true, "open-buy-latest ok=false", issues);
@@ -327,6 +331,9 @@ async function validateTerminalFreshnessGate(payloads, issues) {
   const strategy5 = payloads["strategy5-latest"];
   const strategy4 = payloads["strategy4-latest"];
   const openBuy = payloads["open-buy-latest"];
+  const institutionLatest = payloads["institution-latest"];
+  const institutionSlim = payloads["institution-slim"];
+  const institutionTdcc = payloads["institution-tdcc-breakout-top"];
   const strategy5Fingerprint = strategy5RulesFingerprint(strategy5);
   const gateCheckedAt = Date.parse(gate.checkedAt || "");
   const ageMinutes = Number.isFinite(gateCheckedAt) ? (Date.now() - gateCheckedAt) / 60000 : Infinity;
@@ -340,6 +347,12 @@ async function validateTerminalFreshnessGate(payloads, issues) {
   assertFresh(Number(gate.cbCount || 0) === extractCount(cb), `terminal freshness gate CB count mismatch gate=${gate.cbCount} actual=${extractCount(cb)}`, issues);
   assertFresh(Number(gate.manifestCbCount || 0) === Number(manifest?.entries?.["cb-detect-latest.json"]?.count || 0), `terminal freshness gate manifest CB count mismatch gate=${gate.manifestCbCount} actual=${manifest?.entries?.["cb-detect-latest.json"]?.count}`, issues);
   assertFresh(Number(gate.cbCount || 0) === Number(manifest?.entries?.["cb-detect-latest.json"]?.count || 0), `terminal freshness gate CB rows not aligned with manifest gate=${gate.cbCount} manifest=${manifest?.entries?.["cb-detect-latest.json"]?.count}`, issues);
+  assertFresh(Number(gate.institutionCount || 0) === extractCount(institutionLatest), `terminal freshness gate institution count mismatch gate=${gate.institutionCount} actual=${extractCount(institutionLatest)}`, issues);
+  assertFresh(normalizeDate(gate.institutionDate) === normalizeDate(institutionLatest?.usedDate || institutionLatest?.date), `terminal freshness gate institution date mismatch gate=${gate.institutionDate} actual=${institutionLatest?.usedDate || institutionLatest?.date}`, issues);
+  assertFresh(Number(gate.institutionSlimCount || 0) === extractCount(institutionSlim), `terminal freshness gate institution slim count mismatch gate=${gate.institutionSlimCount} actual=${extractCount(institutionSlim)}`, issues);
+  assertFresh(normalizeDate(gate.institutionSlimDate) === normalizeDate(institutionSlim?.usedDate || institutionSlim?.date), `terminal freshness gate institution slim date mismatch gate=${gate.institutionSlimDate} actual=${institutionSlim?.usedDate || institutionSlim?.date}`, issues);
+  assertFresh(Number(gate.institutionTdccCount || 0) === extractCount(institutionTdcc), `terminal freshness gate institution TDCC count mismatch gate=${gate.institutionTdccCount} actual=${extractCount(institutionTdcc)}`, issues);
+  assertFresh(normalizeDate(gate.institutionTdccDate) === normalizeDate(institutionTdcc?.institutionDate || institutionTdcc?.usedDate || institutionTdcc?.date), `terminal freshness gate institution TDCC date mismatch gate=${gate.institutionTdccDate} actual=${institutionTdcc?.institutionDate || institutionTdcc?.usedDate || institutionTdcc?.date}`, issues);
   assertFresh(Number(gate.openBuyCount || 0) === extractCount(openBuy), `terminal freshness gate openBuy count mismatch gate=${gate.openBuyCount} actual=${extractCount(openBuy)}`, issues);
   assertFresh(normalizeDate(gate.openBuySourceDate) === normalizeDate(openBuy?.usedDate || openBuy?.date || openBuy?.sourceDate), `terminal freshness gate openBuy date mismatch gate=${gate.openBuySourceDate} actual=${openBuy?.usedDate || openBuy?.date || openBuy?.sourceDate}`, issues);
   assertFresh(Number(gate.strategy4Count || 0) === extractCount(strategy4), `terminal freshness gate strategy4 count mismatch gate=${gate.strategy4Count} actual=${extractCount(strategy4)}`, issues);

@@ -193,6 +193,9 @@ function Publish-TerminalFreshnessGate($mode, $rawResults) {
   $strategy4Path = Join-Path $publishRoot "data\strategy4-latest.json"
   $openBuyPath = Join-Path $publishRoot "data\open-buy-latest.json"
   $starPath = Join-Path $publishRoot "data\star-preopen-latest.json"
+  $institutionLatestPath = Join-Path $publishRoot "data\institution-latest.json"
+  $institutionSlimPath = Join-Path $publishRoot "data\institution-slim.json"
+  $institutionTdccPath = Join-Path $publishRoot "data\institution-tdcc-breakout-top.json"
   $versionPayload = Read-GateJson $versionPath
   $manifestPayload = Read-GateJson $manifestPath
   $cbPayload = Read-GateJson $cbPath
@@ -200,6 +203,9 @@ function Publish-TerminalFreshnessGate($mode, $rawResults) {
   $strategy4Payload = Read-GateJson $strategy4Path
   $openBuyPayload = Read-GateJson $openBuyPath
   $starPayload = Read-GateJson $starPath
+  $institutionLatestPayload = Read-GateJson $institutionLatestPath
+  $institutionSlimPayload = Read-GateJson $institutionSlimPath
+  $institutionTdccPayload = Read-GateJson $institutionTdccPath
   $head = & $gitExe -C $publishRoot log -1 --oneline --decorate
   $headSha = (& $gitExe -C $publishRoot rev-parse --short=12 HEAD).Trim()
   if (-not $headSha) { throw "Cannot resolve publish HEAD for terminal freshness gate" }
@@ -234,6 +240,14 @@ function Publish-TerminalFreshnessGate($mode, $rawResults) {
     starWindowActive = [bool]$starPayload.windowActive
     starFinalWindowActive = [bool]$starPayload.finalWindowActive
     starUpdatedAt = [string]$starPayload.updatedAt
+    institutionCount = Get-GateCount $institutionLatestPayload
+    institutionDate = [string]$institutionLatestPayload.usedDate
+    institutionSource = [string]$institutionLatestPayload.source
+    institutionSlimCount = Get-GateCount $institutionSlimPayload
+    institutionSlimDate = [string]$institutionSlimPayload.usedDate
+    institutionTdccCount = Get-GateCount $institutionTdccPayload
+    institutionTdccDate = [string]$institutionTdccPayload.institutionDate
+    institutionTdccGeneratedAt = [string]$institutionTdccPayload.generatedAt
     strategy5ChipKCount = Get-Strategy5MatchCount $strategy5Payload "chip_k_confluence"
     strategy5ForeignTrustCount = Get-Strategy5MatchCount $strategy5Payload "foreign_trust_breakout"
     strategy5MultiCount = Get-Strategy5MultiCount $strategy5Payload
@@ -241,7 +255,7 @@ function Publish-TerminalFreshnessGate($mode, $rawResults) {
   }
   $status | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $statusPath -Encoding utf8
 
-  Write-GateLog "Publishing terminal freshness gate artifact gateId=$($status.gateId) version=$($status.version) cbCount=$($status.cbCount) manifestCbCount=$($status.manifestCbCount) strategy5=$($status.strategy5Count) openBuy=$($status.openBuyCount) openBuyDate=$($status.openBuySourceDate) star=$($status.starCount) finalBlindBuy=$($status.starFinalBlindBuyCount) chipK=$($status.strategy5ChipKCount) foreignTrust=$($status.strategy5ForeignTrustCount)"
+  Write-GateLog "Publishing terminal freshness gate artifact gateId=$($status.gateId) version=$($status.version) cbCount=$($status.cbCount) manifestCbCount=$($status.manifestCbCount) institution=$($status.institutionCount) institutionDate=$($status.institutionDate) institutionTdcc=$($status.institutionTdccCount) institutionTdccDate=$($status.institutionTdccDate) strategy5=$($status.strategy5Count) openBuy=$($status.openBuyCount) openBuyDate=$($status.openBuySourceDate) star=$($status.starCount) finalBlindBuy=$($status.starFinalBlindBuyCount) chipK=$($status.strategy5ChipKCount) foreignTrust=$($status.strategy5ForeignTrustCount)"
   & $gitExe -C $publishRoot add -f "data/live-freshness-ok.json"
   if ($LASTEXITCODE -ne 0) { throw "Stage terminal freshness gate artifact failed" }
   & $gitExe -C $publishRoot diff --cached --quiet -- "data/live-freshness-ok.json"
@@ -281,6 +295,12 @@ function Wait-TerminalFreshnessGateVisible($expectedStatus) {
         [string]$payload.strategy4ScanStamp -eq [string]$expectedStatus.strategy4ScanStamp -and
         [bool]$payload.strategy4Complete -eq [bool]$expectedStatus.strategy4Complete -and
         [int]$payload.strategy5Count -eq [int]$expectedStatus.strategy5Count -and
+        [int]$payload.institutionCount -eq [int]$expectedStatus.institutionCount -and
+        [string]$payload.institutionDate -eq [string]$expectedStatus.institutionDate -and
+        [int]$payload.institutionSlimCount -eq [int]$expectedStatus.institutionSlimCount -and
+        [string]$payload.institutionSlimDate -eq [string]$expectedStatus.institutionSlimDate -and
+        [int]$payload.institutionTdccCount -eq [int]$expectedStatus.institutionTdccCount -and
+        [string]$payload.institutionTdccDate -eq [string]$expectedStatus.institutionTdccDate -and
         [int]$payload.openBuyCount -eq [int]$expectedStatus.openBuyCount -and
         [int]$payload.starCount -eq [int]$expectedStatus.starCount -and
         [int]$payload.starFinalBlindBuyCount -eq [int]$expectedStatus.starFinalBlindBuyCount -and
@@ -291,10 +311,10 @@ function Wait-TerminalFreshnessGateVisible($expectedStatus) {
         [int]$payload.manifestCount -eq [int]$expectedStatus.manifestCount -and
         [string]$payload.verifier -match "verify:data-freshness:live"
       if ($isCurrentGate) {
-        Write-GateLog "Terminal freshness gate visible gateId=$($payload.gateId) version=$($payload.version) cbCount=$($payload.cbCount) manifestCbCount=$($payload.manifestCbCount) strategy5=$($payload.strategy5Count) star=$($payload.starCount) finalBlindBuy=$($payload.starFinalBlindBuyCount) chipK=$($payload.strategy5ChipKCount) foreignTrust=$($payload.strategy5ForeignTrustCount)"
+        Write-GateLog "Terminal freshness gate visible gateId=$($payload.gateId) version=$($payload.version) cbCount=$($payload.cbCount) manifestCbCount=$($payload.manifestCbCount) institution=$($payload.institutionCount) institutionTdcc=$($payload.institutionTdccCount) strategy5=$($payload.strategy5Count) star=$($payload.starCount) finalBlindBuy=$($payload.starFinalBlindBuyCount) chipK=$($payload.strategy5ChipKCount) foreignTrust=$($payload.strategy5ForeignTrustCount)"
         return
       }
-      Write-GateLog "Terminal freshness gate visible but not current gateId=$($payload.gateId) expected=$($expectedStatus.gateId) cbCount=$($payload.cbCount)/$($expectedStatus.cbCount) manifestCbCount=$($payload.manifestCbCount)/$($expectedStatus.manifestCbCount) strategy5=$($payload.strategy5Count)/$($expectedStatus.strategy5Count) star=$($payload.starCount)/$($expectedStatus.starCount) finalBlindBuy=$($payload.starFinalBlindBuyCount)/$($expectedStatus.starFinalBlindBuyCount) chipK=$($payload.strategy5ChipKCount)/$($expectedStatus.strategy5ChipKCount) foreignTrust=$($payload.strategy5ForeignTrustCount)/$($expectedStatus.strategy5ForeignTrustCount)"
+      Write-GateLog "Terminal freshness gate visible but not current gateId=$($payload.gateId) expected=$($expectedStatus.gateId) cbCount=$($payload.cbCount)/$($expectedStatus.cbCount) manifestCbCount=$($payload.manifestCbCount)/$($expectedStatus.manifestCbCount) institution=$($payload.institutionCount)/$($expectedStatus.institutionCount) institutionTdcc=$($payload.institutionTdccCount)/$($expectedStatus.institutionTdccCount) strategy5=$($payload.strategy5Count)/$($expectedStatus.strategy5Count) star=$($payload.starCount)/$($expectedStatus.starCount) finalBlindBuy=$($payload.starFinalBlindBuyCount)/$($expectedStatus.starFinalBlindBuyCount) chipK=$($payload.strategy5ChipKCount)/$($expectedStatus.strategy5ChipKCount) foreignTrust=$($payload.strategy5ForeignTrustCount)/$($expectedStatus.strategy5ForeignTrustCount)"
     } catch {
       Write-GateLog "Terminal freshness gate not visible yet: $($_.Exception.Message)"
     }
@@ -424,7 +444,8 @@ try {
       if (-not $env:INSTITUTION_FETCH_RETRIES) { $env:INSTITUTION_FETCH_RETRIES = "4" }
       if (-not $env:INSTITUTION_SOURCE_PROVIDER) { $env:INSTITUTION_SOURCE_PROVIDER = "finmind" }
       if (-not $env:SHIOAJI_PYTHON) { $env:SHIOAJI_PYTHON = "C:\Users\ginov\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe" }
-      $null = Invoke-GateCommand "institution raw refresh" { & $nodeExe "scripts\scan-institution-cache.js" } -AllowFailure
+      $null = Invoke-GateCommand "institution raw refresh" { & $nodeExe "scripts\scan-institution-cache.js" }
+      $null = Invoke-GateCommand "institution TDCC breakout refresh" { & $nodeExe "scripts\generate-institution-tdcc-breakout.js" }
     } finally {
       if ($null -eq $previousInstitutionSlowScan) { Remove-Item Env:INSTITUTION_SLOW_SCAN -ErrorAction SilentlyContinue } else { $env:INSTITUTION_SLOW_SCAN = $previousInstitutionSlowScan }
       if ($null -eq $previousInstitutionDelay) { Remove-Item Env:INSTITUTION_REQUEST_DELAY_MS -ErrorAction SilentlyContinue } else { $env:INSTITUTION_REQUEST_DELAY_MS = $previousInstitutionDelay }

@@ -13,6 +13,8 @@ Push-Location $syncRoot
 try {
   & $nodeExe "scripts\generate-slim-cache.js"
   if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+  & $nodeExe "scripts\generate-institution-tdcc-breakout.js"
+  if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 } finally {
   Pop-Location
 }

@@ -63,6 +63,9 @@ function Sync-InstitutionLocalCache {
     "institution-foreign-top.json",
     "institution-trust-top.json",
     "institution-mobile-top.json",
+    "institution-tdcc-breakout.json",
+    "institution-tdcc-breakout-top.json",
+    "institution-tdcc-breakout.csv",
     "institution-backup.json",
     "data-status-index.json",
     "data-manifest.json",
@@ -96,6 +99,13 @@ if ($slimExit -ne 0) {
   "Institution slim refresh failed with exit code $slimExit" >> $log
   Write-FumanFlowHealth -Scope institution -Status publish_delayed -Message "Institution scan succeeded but slim refresh failed" -Detail @{ exitCode = $slimExit; log = $log }
   exit $slimExit
+}
+
+$tdccExit = Invoke-NodeScan "scripts\generate-institution-tdcc-breakout.js" "Institution TDCC breakout refresh"
+if ($tdccExit -ne 0) {
+  "Institution TDCC breakout refresh failed with exit code $tdccExit" >> $log
+  Write-FumanFlowHealth -Scope institution -Status publish_delayed -Message "Institution scan succeeded but TDCC breakout refresh failed" -Detail @{ exitCode = $tdccExit; log = $log }
+  exit $tdccExit
 }
 
 try {

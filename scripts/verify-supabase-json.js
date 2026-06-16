@@ -16,7 +16,7 @@ const PANEL_FILES = {
   strategy3: ["strategy3-latest.json"],
   strategy4: ["strategy4-summary.json", "strategy4-score-top.json", "strategy4-zone-a.json", "strategy4-zone-b-page-1.json"],
   strategy5: ["strategy5-latest.json"],
-  chipTrade: ["institution-latest.json", "institution-slim.json", "institution-mobile-top.json"],
+  chipTrade: ["institution-latest.json", "institution-slim.json", "institution-mobile-top.json", "institution-tdcc-breakout-top.json"],
   warrantFlow: ["warrant-flow-latest.json", "warrant-flow-slim.json", "warrant-priority-top.json", "warrant-flow-mobile-top.json"],
   cbDetect: ["cb-detect-latest.json"],
   realtimeRadar: ["realtime-radar-latest.json"],

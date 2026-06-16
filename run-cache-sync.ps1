@@ -149,6 +149,9 @@ function Get-CriticalDataReleaseFiles {
     "data\institution-summary.json",
     "data\institution-slim.json",
     "data\institution-mobile-top.json",
+    "data\institution-tdcc-breakout.json",
+    "data\institution-tdcc-breakout-top.json",
+    "data\institution-tdcc-breakout.csv",
     "data\institution-backup.json",
     "data\warrant-flow-latest.json",
     "data\warrant-flow-summary.json",
@@ -518,6 +521,9 @@ function Test-IntradayFlowProtectedFile($file) {
     "data\institution-joint-top.json",
     "data\institution-foreign-top.json",
     "data\institution-trust-top.json",
+    "data\institution-tdcc-breakout.json",
+    "data\institution-tdcc-breakout-top.json",
+    "data\institution-tdcc-breakout.csv",
     "data\institution-backup.json",
     "data\warrant-flow-latest.json",
     "data\warrant-flow-summary.json",
@@ -784,6 +790,7 @@ try {
   if ($Scope -eq "flow") {
     $criticalLatestFiles = @(
       "data\institution-latest.json",
+      "data\institution-tdcc-breakout-top.json",
       "data\warrant-flow-latest.json"
     )
 
@@ -795,6 +802,9 @@ try {
       "data\institution-foreign-top.json",
       "data\institution-trust-top.json",
       "data\institution-mobile-top.json",
+      "data\institution-tdcc-breakout.json",
+      "data\institution-tdcc-breakout-top.json",
+      "data\institution-tdcc-breakout.csv",
       "data\institution-backup.json",
       "data\warrant-flow-latest.json",
       "data\warrant-flow-summary.json",
@@ -810,7 +820,8 @@ try {
     )
   } elseif ($Scope -eq "institution") {
     $criticalLatestFiles = @(
-      "data\institution-latest.json"
+      "data\institution-latest.json",
+      "data\institution-tdcc-breakout-top.json"
     )
 
     $dataFiles = @(
@@ -821,6 +832,9 @@ try {
       "data\institution-foreign-top.json",
       "data\institution-trust-top.json",
       "data\institution-mobile-top.json",
+      "data\institution-tdcc-breakout.json",
+      "data\institution-tdcc-breakout-top.json",
+      "data\institution-tdcc-breakout.csv",
       "data\institution-backup.json",
       "data\afterhours-supabase-status.json",
       "data\flow-health-latest.json",
@@ -926,6 +940,7 @@ try {
   } else {
     $criticalLatestFiles = @(
       "data\institution-latest.json",
+      "data\institution-tdcc-breakout-top.json",
       "data\warrant-flow-latest.json",
       "data\open-buy-latest.json",
       "data\strategy3-latest.json",
@@ -942,6 +957,9 @@ try {
       "data\institution-foreign-top.json",
       "data\institution-trust-top.json",
       "data\institution-mobile-top.json",
+      "data\institution-tdcc-breakout.json",
+      "data\institution-tdcc-breakout-top.json",
+      "data\institution-tdcc-breakout.csv",
       "data\institution-backup.json",
       "data\warrant-flow-latest.json",
       "data\warrant-flow-summary.json",
@@ -1198,6 +1216,7 @@ Invoke-PrePublishDataFreshnessGate
 
   if ($Scope -eq "flow" -or $Scope -eq "institution" -or $Scope -eq "all") {
     Test-VercelCacheVisibility "data\institution-latest.json"
+    Test-VercelCacheVisibility "data\institution-tdcc-breakout-top.json"
   }
   if ($Scope -eq "flow" -or $Scope -eq "warrant" -or $Scope -eq "all") {
     Test-VercelCacheVisibility "data\warrant-flow-latest.json"

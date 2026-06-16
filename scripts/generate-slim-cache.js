@@ -826,7 +826,7 @@ function statusDateForFile(file, payload) {
   if (file === "strategy5-latest.json") {
     return payload?.generatedDate || taipeiDateFromIso(payload?.updatedAt || payload?.scanStamp) || payload?.usedDate || payload?.date || "";
   }
-  return payload?.usedDate || payload?.date || payload?.tradeDate || payload?.resolvedTradeDate || payload?.scanStamp || "";
+  return payload?.usedDate || payload?.date || payload?.tradeDate || payload?.resolvedTradeDate || payload?.institutionDate || payload?.scanStamp || "";
 }
 
 function dataStatusIndex() {
@@ -852,6 +852,7 @@ function dataStatusIndex() {
     "institution-latest.json",
     "institution-slim.json",
     "institution-mobile-top.json",
+    "institution-tdcc-breakout-top.json",
     "cb-detect-latest.json",
     "warrant-flow-latest.json",
     "warrant-flow-slim.json",
@@ -910,6 +911,7 @@ function dataManifest() {
     "institution-latest.json",
     "institution-slim.json",
     "institution-mobile-top.json",
+    "institution-tdcc-breakout-top.json",
     "cb-detect-latest.json",
     "warrant-flow-latest.json",
     "warrant-flow-slim.json",
@@ -1080,7 +1082,7 @@ function indexDetails(row, key) {
     ],
     strategy5: [
       signalText(row.activeMatch),
-      ...normalizeArray(row.matches).map(signalText),
+      ...normalizeArray(row.matches).flatMap((match) => [match?.label, match?.short, match?.title, match?.name, match?.id].map(signalText)),
     ],
     realtime: [
       row.signal,
@@ -1088,7 +1090,7 @@ function indexDetails(row, key) {
       ...normalizeArray(row.signalTags).map(signalText),
     ],
   };
-  return [...new Set((sources[key] || []).map(signalText).map((item) => String(item || "").trim()).filter(Boolean))].slice(0, 5);
+  return [...new Set((sources[key] || []).map(signalText).map((item) => String(item || "").trim()).filter(Boolean))].slice(0, 12);
 }
 
 function buildStrategyMatchIndex() {
@@ -1103,7 +1105,7 @@ function buildStrategyMatchIndex() {
   const byCode = {};
   const strategies = {};
   for (const def of definitions) {
-    const payload = readOptional(def.file, def.fallbackFile ? readOptional(def.fallbackFile, {}) : {});
+    const payload = readRepoOptional(def.file, def.fallbackFile ? readRepoOptional(def.fallbackFile, {}) : {});
     const rows = def.fields.flatMap((field) => normalizeArray(payload?.[field])).filter((row) => row?.code);
     const date = payload?.usedDate || payload?.date || payload?.tradeDate || payload?.scanStamp || payload?.updatedAt || "";
     strategies[def.key] = {

@@ -1,5 +1,5 @@
 (function () {
-  const VERSION = "institution-cache-refresh-20260616-01";
+  const VERSION = "institution-cache-refresh-20260616-02";
   const modules = {
     sectorMap: { loaded: false, src: "terminal-sector-map.js" },
     strategyConfig: { loaded: false, src: "terminal-strategy-config.js" },

@@ -58,6 +58,8 @@ const KEY_FILES = [
   "data/institution-latest.json",
   "data/institution-slim.json",
   "data/institution-mobile-top.json",
+  "data/institution-tdcc-breakout.json",
+  "data/institution-tdcc-breakout-top.json",
   "data/warrant-flow-latest.json",
   "data/warrant-flow-slim.json",
   "data/warrant-flow-mobile-top.json",

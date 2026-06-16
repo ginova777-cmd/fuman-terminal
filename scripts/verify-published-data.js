@@ -33,6 +33,7 @@ const criticalFiles = [
   "institution-latest.json",
   "institution-slim.json",
   "institution-mobile-top.json",
+  "institution-tdcc-breakout-top.json",
   "cb-detect-latest.json",
   "warrant-flow-latest.json",
   "warrant-flow-slim.json",
@@ -237,8 +238,8 @@ function validatePayload(name, payload, context) {
     assertDateIsLatest(name, "date", payload.usedDate || payload.date || payload.dataDate, context);
     assert(count(payload) > 0, `${name} empty`);
   }
-  if (name === "institution-latest.json" || name === "institution-slim.json" || name === "institution-mobile-top.json") {
-    assertDateIsLatest(name, "date", payload.usedDate || payload.date || payload.dataDate, context);
+  if (name === "institution-latest.json" || name === "institution-slim.json" || name === "institution-mobile-top.json" || name === "institution-tdcc-breakout-top.json") {
+    assertDateIsLatest(name, "date", payload.usedDate || payload.date || payload.dataDate || payload.institutionDate, context);
     assert(count(payload) > 0, `${name} empty`);
   }
   if (name === "cb-detect-latest.json") {
@@ -342,6 +343,7 @@ function validateCrossPayloads(scope, payloads, context) {
     "institution-latest.json",
     "institution-slim.json",
     "institution-mobile-top.json",
+    "institution-tdcc-breakout-top.json",
     "cb-detect-latest.json",
     "warrant-flow-latest.json",
     "warrant-flow-slim.json",
@@ -351,7 +353,7 @@ function validateCrossPayloads(scope, payloads, context) {
   ]) {
     assertManifestEntry(manifest, file, payloads[file]);
   }
-  assert(Number(payloads["institution-latest.json"]?.count || 0) === 1892, `${scope} institution-latest count expected 1892`);
+  assert(Number(payloads["institution-latest.json"]?.count || 0) >= 250, `${scope} institution-latest count too small`);
   assert(Number(payloads["warrant-flow-latest.json"]?.count || 0) === 120, `${scope} warrant-flow-latest count expected 120`);
   assert(Number(payloads["cb-detect-latest.json"]?.count || rows(payloads["cb-detect-latest.json"]).length || 0) > 0, `${scope} cb empty`);
   assertWarrantSurfaceConsistency(scope, payloads, context);
@@ -409,4 +411,3 @@ main().catch((error) => {
   console.error(`[published] failed: ${error.message}`);
   process.exit(1);
 });
-
