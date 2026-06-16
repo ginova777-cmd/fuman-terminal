@@ -77,6 +77,47 @@ npm run verify:publish-gate
 
 If the checkout is behind `origin/main`, ahead/behind has diverged, or the tree has unexpected dirty files, stop and fix sync/dirty state before deploy. Do not manually copy data, manually bump versions, deploy from a stale tree, or push GitHub separately.
 
+Codex must treat the release chain as an automated detection loop, not a manual checklist. The required order is:
+
+```text
+detect current main -> sync main -> detect version drift -> bump version if needed -> deploy production -> live verify -> push GitHub -> verify live freshness
+```
+
+Use the project scripts to do that detection. A Codex agent may not skip directly to `vercel --prod`, `git push`, or manual file copy unless it first proves the guarded chain is blocked and reports the blocker.
+
+Required detection commands:
+
+```powershell
+git fetch origin main
+git status -sb
+npm run verify:publish-gate
+npm run verify:version
+npm run verify:live-version
+```
+
+If local version and live version differ, Codex must not edit version strings backwards and must not guess the correct cache key. Run the guarded chain so `scripts/bump-version.js` advances the version and all versioned assets move together:
+
+```powershell
+npm run release:main
+```
+
+When data freshness is part of the change, run the freshness gate first, then release main:
+
+```powershell
+npm run freshness:gate
+npm run release:main
+npm run verify:data-freshness:live
+```
+
+The terminal is current only when all of these are true:
+
+- `npm run verify:version` passes locally.
+- `npm run verify:live-version` passes against `https://fuman-terminal.vercel.app`.
+- `npm run verify:data-freshness:live` passes.
+- `data/live-freshness-ok.json` is visible on Vercel with the current version and gateId.
+- `git status -sb` shows no unexpected source changes except explicitly acknowledged generated cache residue.
+- `origin/main` contains the final release/gate commit.
+
 The only normal release path is:
 
 ```text
