@@ -121,12 +121,16 @@ function Read-GateJson($path) {
 }
 
 function Get-GateCount($payload) {
-  if ($payload.rows) { return @($payload.rows).Count }
-  if ($payload.data) { return @($payload.data).Count }
-  if ($payload.stocks) { return @($payload.stocks).Count }
-  if ($payload.entries) { return @($payload.entries.PSObject.Properties).Count }
   if ($null -ne $payload.count) { return [int]$payload.count }
   if ($null -ne $payload.total) { return [int]$payload.total }
+  if ($payload.rows) { return @($payload.rows).Count }
+  if ($payload.data) {
+    if ($payload.data -is [array]) { return @($payload.data).Count }
+    if ($payload.data.PSObject -and $payload.data.PSObject.Properties) { return @($payload.data.PSObject.Properties).Count }
+    return @($payload.data).Count
+  }
+  if ($payload.stocks) { return @($payload.stocks).Count }
+  if ($payload.entries) { return @($payload.entries.PSObject.Properties).Count }
   return 0
 }
 
