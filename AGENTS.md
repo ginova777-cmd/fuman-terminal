@@ -14,6 +14,130 @@ https://fuman-terminal.vercel.app
 
 `https://fuman-terminal-sync.vercel.app` is not the production terminal. Do not deploy there and report the terminal as updated. Strategy scans may be correct in `C:\fuman-terminal-sync`, and source sync may be correct, while users still see old data if `C:\fuman-terminal` has not been deployed to the `fuman-terminal` Vercel project.
 
+## Mobile Ultra Terminal Contract
+
+The official customer-facing mobile terminal is:
+
+```text
+https://fuman-terminal.vercel.app/mobile
+```
+
+Keep this URL permanently available. If `/mobile` or any required mobile data file returns 404, treat it as a production incident. The mobile page must be committed to `origin/main`, not only deployed from a dirty local tree. A local `vercel --prod` can appear successful and still be overwritten later by GitHub/Vercel automation if the files are not in `main`.
+
+The mobile terminal is designed for lowest phone CPU and heat:
+
+```text
+phone renders scan-side conclusions only
+phone does not compute AI rankings, strategy matches, sector sorting, risk lists, or analysis text
+```
+
+Required mobile assets:
+
+```text
+mobile.html
+data/mobile-runtime-config.json
+data/mobile-boot.json
+data/mobile-digest.json
+data/mobile-ai-latest.html
+data/mobile-ai-lite.html
+data/mobile-ai-ultra.html
+data/mobile-terminal-latest.json
+data/mobile-stock-analysis-latest.json
+data/mobile-strategy1-ultra.html
+data/mobile-strategy2-ultra.html
+data/mobile-strategy3-ultra.html
+data/mobile-strategy4-ultra.html
+data/mobile-strategy5-ultra.html
+data/mobile-chip-ultra.html
+data/mobile-warrant-ultra.html
+scripts/publish-mobile-update-event.js
+scripts/verify-mobile-ai-fragment.js
+scripts/verify-mobile-realtime.js
+```
+
+`data/mobile-runtime-config.json` may contain the Supabase anon key because it is a public key used by the browser for Realtime subscriptions. Never put the Supabase `service_role` key in `mobile.html`, any `data/*.json`, Vercel public assets, GitHub, or frontend runtime config. The service role key belongs only on the scanner/server side, currently:
+
+```text
+C:\fuman-runtime\secrets\supabase-service-role-key.txt
+```
+
+The mobile Realtime project is:
+
+```text
+https://cpmpfhbzutkiecccekfr.supabase.co
+table: public.mobile_update_events
+```
+
+Realtime update flow:
+
+```text
+scan/generate mobile files
+publish/deploy verified files
+live verification passes
+scripts/publish-mobile-update-event.js inserts public.mobile_update_events
+mobile.html receives Supabase Realtime WebSocket postgres_changes INSERT
+mobile.html refetches /data/mobile-boot.json
+hash changes decide which small fragment to fetch
+120 second polling remains as a fallback only
+```
+
+Do not publish a mobile update event immediately after local file generation if the files have not been deployed/live-verified yet. If an event is sent too early, phones may refetch Vercel edge files before the new `mobile-boot.json` is visible. The event should be sent only after live publish verification, as in `run-live-freshness-gate.ps1` and `postdeploy`.
+
+Mobile page behavior that must remain true:
+
+- It fetches `/data/mobile-runtime-config.json`; it must not hardcode the anon key in `mobile.html`.
+- It opens a Realtime WebSocket only while the page is visible.
+- It closes Realtime while hidden and reconnects on visibility return.
+- It keeps the 120 second polling fallback.
+- When a Realtime event arrives but the boot hash has not changed yet, it retries after a short delay to absorb CDN edge lag.
+- It stores watchlist data only in phone localStorage key `fuman_mobile_watchlist_v1`.
+- The "看分析" modal reads precomputed `data/mobile-stock-analysis-latest.json`.
+- `mobile-stock-analysis-latest.json` must include terminal strategy matches and `signalsText`, for example `策略4-波段：分區A、突破缺口、量叉`.
+
+Run these checks before claiming the mobile terminal is healthy:
+
+```powershell
+npm run verify:mobile-ai-fragment
+npm run verify:mobile-layout
+npm run verify:mobile-realtime
+npm run verify:mobile-ai-fragment:live
+npm run verify:mobile-layout:live
+```
+
+The live spot checks are:
+
+```powershell
+Invoke-WebRequest https://fuman-terminal.vercel.app/mobile -UseBasicParsing
+Invoke-WebRequest https://fuman-terminal.vercel.app/data/mobile-runtime-config.json -UseBasicParsing
+Invoke-WebRequest https://fuman-terminal.vercel.app/data/mobile-boot.json -UseBasicParsing
+Invoke-WebRequest https://fuman-terminal.vercel.app/data/mobile-stock-analysis-latest.json -UseBasicParsing
+```
+
+To test push delivery after a verified publish:
+
+```powershell
+npm run mobile:update-event -- --source=manual-verify
+```
+
+`scripts/publish-mobile-update-event.js` also attempts to clean old `mobile_update_events` rows. Supabase must grant `DELETE` on `public.mobile_update_events` to `service_role`. Maintenance SQL lives at:
+
+```text
+ops/public-slot/MobileUpdateEventsMaintenance.sql
+```
+
+If Realtime verification fails, do not remove the fallback polling to hide the problem. Check:
+
+```text
+anon can SELECT public.mobile_update_events
+service_role can INSERT public.mobile_update_events
+service_role can DELETE old public.mobile_update_events rows
+table is in supabase_realtime publication
+mobile runtime config points to cpmpfhbzutkiecccekfr
+service_role key is not leaked into public files
+```
+
+Do not replace this setup with Vercel Serverless SSE unless the long-connection behavior has been load-tested. Supabase Realtime is the current long-connection layer for the mobile terminal.
+
 For strategy4 urgent publishes, use the fast lane from `C:\fuman-terminal-sync`:
 
 ```powershell
