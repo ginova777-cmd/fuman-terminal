@@ -48,6 +48,14 @@ function writeTextToBoth(output, text) {
   }
 }
 
+function clearDirInAllRoots(output) {
+  for (const root of [...new Set([repoRoot, runtimeRoot, syncRoot])]) {
+    const target = path.join(root, output);
+    if (fs.existsSync(target)) fs.rmSync(target, { recursive: true, force: true });
+    fs.mkdirSync(target, { recursive: true });
+  }
+}
+
 function escapeHtml(value) {
   return String(value ?? "")
     .replace(/&/g, "&amp;")
@@ -1086,6 +1094,31 @@ function mobileStockAnalysisLatest(panel = null) {
     analyses,
   };
 }
+
+function writeMobileStockAnalysisFiles(payload) {
+  clearDirInAllRoots("data/mobile-analysis");
+  const analyses = payload?.analyses || {};
+  for (const [code, analysis] of Object.entries(analyses)) {
+    const safeCode = encodeURIComponent(String(code).trim());
+    if (!safeCode) continue;
+    writeToBoth(`data/mobile-analysis/${safeCode}.json`, {
+      ok: true,
+      source: "mobile-stock-analysis",
+      updatedAt: payload?.updatedAt || new Date().toISOString(),
+      code,
+      ...analysis,
+    });
+  }
+  writeToBoth("data/mobile-analysis/index.json", {
+    ok: true,
+    source: "mobile-stock-analysis-index",
+    updatedAt: payload?.updatedAt || new Date().toISOString(),
+    count: Object.keys(analyses).length,
+    codes: Object.keys(analyses),
+  });
+  return Object.keys(analyses).length;
+}
+
 function mobileTerminalLatest() {
   const mobile = readOptional("data/mobile-home-summary.json", mobileHomeSummary());
   const breadth = readOptional("data/market-ai-breadth-latest.json", marketAiBreadthLatest(mobile));
@@ -2030,11 +2063,13 @@ async function main() {
     writeToBoth("data/market-ai-panel-latest.json", marketAiPanel);
     const mobileStockAnalysis = mobileStockAnalysisLatest(marketAiPanel);
     writeToBoth("data/mobile-stock-analysis-latest.json", mobileStockAnalysis);
+    const mobileAnalysisFileCount = writeMobileStockAnalysisFiles(mobileStockAnalysis);
     console.log(`[slim] refreshed data/mobile-home-summary.json strategy2=${refreshedMobileSummary.strategy2.count || 0} chip=${refreshedMobileSummary.chip.count || 0} warrant=${refreshedMobileSummary.warrant.count || 0}`);
     console.log(`[slim] refreshed data/market-ai-breadth-latest.json sample=${refreshedMarketAiBreadth.sample || 0} up=${refreshedMarketAiBreadth.up || 0} down=${refreshedMarketAiBreadth.down || 0}`);
     console.log(`[slim] wrote data/market-ai-live.json strategy2=${marketAiLive.summary.strategy2Count || 0} radar=${marketAiLive.summary.realtimeRadarCount || 0}`);
     console.log(`[slim] wrote data/market-ai-panel-latest.json priority=${marketAiPanel.priorityStocks?.length || 0} risk=${marketAiPanel.riskStocks?.length || 0}`);
     console.log(`[slim] wrote data/mobile-stock-analysis-latest.json count=${mobileStockAnalysis.count || 0}`);
+    console.log(`[slim] wrote data/mobile-analysis/*.json count=${mobileAnalysisFileCount}`);
     const strategyMatchIndex = buildStrategyMatchIndex();
     writeToBoth("data/strategy-match-index.json", strategyMatchIndex);
     console.log(`[slim] wrote data/strategy-match-index.json codes=${strategyMatchIndex.count || 0}`);

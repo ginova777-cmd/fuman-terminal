@@ -172,6 +172,10 @@ const FILES = [
   "data/flow-health-latest.json",
 ];
 
+const DIRECTORIES = [
+  "data/mobile-analysis",
+];
+
 for (const zone of ["b", "c"]) {
   for (let page = 1; page <= 48; page += 1) {
     FILES.push(`data/strategy4-zone-${zone}-page-${page}.json`);
@@ -208,7 +212,28 @@ for (const file of FILES) {
   copied += 1;
 }
 
-console.log(`[sync-source] ok copied=${copied} deploy=${DEPLOY_ROOT}`);
+let copiedFromDirs = 0;
+function copyDirectory(sourceDir, targetDir) {
+  if (!fs.existsSync(sourceDir)) return;
+  fs.mkdirSync(targetDir, { recursive: true });
+  for (const entry of fs.readdirSync(sourceDir, { withFileTypes: true })) {
+    const source = path.join(sourceDir, entry.name);
+    const target = path.join(targetDir, entry.name);
+    if (entry.isDirectory()) {
+      copyDirectory(source, target);
+    } else if (entry.isFile()) {
+      fs.mkdirSync(path.dirname(target), { recursive: true });
+      fs.copyFileSync(source, target);
+      copiedFromDirs += 1;
+    }
+  }
+}
+
+for (const directory of DIRECTORIES) {
+  copyDirectory(path.join(SOURCE_ROOT, directory), path.join(DEPLOY_ROOT, directory));
+}
+
+console.log(`[sync-source] ok copied=${copied} copiedFromDirs=${copiedFromDirs} deploy=${DEPLOY_ROOT}`);
 
 
 

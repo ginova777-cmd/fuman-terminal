@@ -120,7 +120,11 @@ async function main() {
   const boot = await readJson("data/mobile-boot.json");
   const runtimeConfig = await readJson("data/mobile-runtime-config.json");
   const stockAnalysis = await readJson("data/mobile-stock-analysis-latest.json");
+  const stockAnalysisRows = Object.values(stockAnalysis?.analyses || {});
+  const sampleAnalysisCode = String(stockAnalysisRows.find((row) => row?.code)?.code || "");
+  const sampleAnalysis = sampleAnalysisCode ? await readJson(`data/mobile-analysis/${encodeURIComponent(sampleAnalysisCode)}.json`) : null;
   const mobileShell = await readText("mobile.html");
+  const vercel = await readJson("vercel.json");
   const packageJson = JSON.parse(readLocal("package.json"));
   const mobileEventScript = readLocal("scripts/publish-mobile-update-event.js");
   const terminalFragments = Object.fromEntries(await Promise.all(MOBILE_TERMINAL_KEYS.map(async (key) => [key, await readText(`data/mobile-${key}-ultra.html`)])));
@@ -165,12 +169,20 @@ async function main() {
   if (stockAnalysis?.source !== "mobile-stock-analysis-latest") issues.push("mobile stock analysis must expose source=mobile-stock-analysis-latest");
   if (Number(stockAnalysis?.count || 0) < 3) issues.push("mobile stock analysis must include at least 3 stocks");
   if (!stockAnalysis?.analyses || typeof stockAnalysis.analyses !== "object") issues.push("mobile stock analysis must expose analyses map");
-  const stockAnalysisRows = Object.values(stockAnalysis?.analyses || {});
   if (!stockAnalysisRows.some((row) => Array.isArray(row?.strategies) && row.strategies.length)) {
     issues.push("mobile stock analysis must include precomputed terminal strategy matches");
   }
   if (!stockAnalysisRows.some((row) => String(row?.signalsText || "").includes("策略"))) {
     issues.push("mobile stock analysis signalsText must include terminal strategy labels");
+  }
+  if (!sampleAnalysisCode) {
+    issues.push("mobile stock analysis must expose at least one code for per-stock lazy analysis");
+  }
+  if (sampleAnalysisCode && sampleAnalysis?.source !== "mobile-stock-analysis") {
+    issues.push(`mobile per-stock analysis file missing or invalid code=${sampleAnalysisCode}`);
+  }
+  if (sampleAnalysisCode && sampleAnalysis?.code !== sampleAnalysisCode) {
+    issues.push(`mobile per-stock analysis code mismatch code=${sampleAnalysisCode}`);
   }
   if (boot?.digest?.ultraHash !== digest.ultraHash) issues.push("mobile boot digest ultraHash must match mobile digest");
   if (boot?.lowPower?.lowEndVariant !== "ultra") issues.push("mobile boot lowPower.lowEndVariant must be ultra");
@@ -210,9 +222,8 @@ async function main() {
 
   requireText(sw, "/data/mobile-digest.json", "service worker must prefetch/cache mobile digest");
   requireText(sw, "/data/mobile-boot.json", "service worker must prefetch/cache mobile boot");
-  requireText(sw, "/data/mobile-ai-latest.html", "service worker must prefetch/cache mobile AI HTML");
-  requireText(sw, "/data/mobile-ai-lite.html", "service worker must prefetch/cache mobile AI lite HTML");
   requireText(sw, "/data/mobile-ai-ultra.html", "service worker must prefetch/cache mobile AI ultra HTML");
+  requireText(sw, "/\\/data\\/mobile-analysis\\/[^/]+\\.json/i", "service worker must network-first per-stock mobile analysis");
   requireText(sw, "PREFETCH_DATA_LOW_POWER", "service worker must support low-power prefetch");
   requireText(sw, "/\\/data\\/mobile-digest\\.json/i", "service worker must network-first mobile digest");
 
@@ -234,8 +245,10 @@ async function main() {
   requireText(mobileShell, "fuman_mobile_watchlist_v1", "mobile shell must persist watchlist locally");
   requireText(mobileShell, "data-ai-stock-code", "mobile shell must handle analyze buttons");
   requireText(mobileShell, "data-ai-watch-code", "mobile shell must handle watch buttons");
-  requireText(mobileShell, "/data/mobile-stock-analysis-latest.json", "mobile shell must fetch stock analysis JSON");
+  requireText(mobileShell, "/data/mobile-analysis/", "mobile shell must lazy-load per-stock analysis JSON");
+  requireText(mobileShell, "/data/mobile-stock-analysis-latest.json", "mobile shell must keep stock analysis index fallback");
   requireText(mobileShell, "analysisFor", "mobile shell must use precomputed stock analysis");
+  requireText(mobileShell, "analysisCache", "mobile shell must cache per-stock analysis");
   requireText(mobileShell, "data-watch-remove", "mobile shell must support removing watchlist rows");
   requireText(mobileShell, "mobile-modal", "mobile shell must show lightweight analysis modal");
   requireText(mobileShell, "boot?.fragments?.[k]?.url", "mobile shell must fetch strategy fragments from boot");
@@ -266,8 +279,25 @@ async function main() {
   if (mobileShell.includes("terminal-app.js") || mobileShell.includes("styles.css") || mobileShell.includes("serviceWorker.register")) {
     issues.push("mobile shell must not load full terminal app/css/service worker");
   }
+  if (mobileShell.includes('href="/data/mobile-ai-ultra.html" as="fetch"')) {
+    issues.push("mobile shell must not preload AI fragment before boot; first paint should stay boot-only");
+  }
   if (css.includes("#market-view #market-ai-panel,")) {
     issues.push("mobile AI containment must not wrap the entire #market-ai-panel");
+  }
+  const headerFor = (source) => (vercel.headers || []).find((item) => item.source === source);
+  const headerValue = (item, key) => (item?.headers || []).find((header) => String(header.key).toLowerCase() === key.toLowerCase())?.value || "";
+  const mobileBootHeader = headerFor("/data/mobile-boot.json");
+  const mobileBootBrowserCache = headerValue(mobileBootHeader, "Cache-Control");
+  const mobileBootVercelCache = headerValue(mobileBootHeader, "Vercel-CDN-Cache-Control");
+  if (!/no-cache/i.test(mobileBootBrowserCache) || !/max-age=0/i.test(mobileBootBrowserCache)) {
+    issues.push("vercel mobile-boot browser cache must be no-cache max-age=0");
+  }
+  if (!/max-age=3/i.test(mobileBootVercelCache) || !/stale-while-revalidate=6/i.test(mobileBootVercelCache)) {
+    issues.push("vercel mobile-boot edge cache must be max-age=3 stale-while-revalidate=6");
+  }
+  if (!headerFor("/data/mobile-analysis/(.*).json")) {
+    issues.push("vercel must define short cache headers for per-stock mobile analysis files");
   }
 
   if (issues.length) {
