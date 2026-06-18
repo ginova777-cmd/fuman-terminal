@@ -287,6 +287,8 @@ async function main() {
   requireText(mobileShell, "visualViewport", "mobile shell must use visualViewport for fast orientation/viewport detection");
   requireText(mobileShell, "data-orientation", "mobile shell must expose data-orientation for portrait/landscape CSS");
   requireText(mobileShell, "orientationchange", "mobile shell must listen for orientation changes without refetching boot");
+  requireText(mobileShell, "data-sun", "mobile shell must support sunlight mode without loading full CSS");
+  requireText(mobileShell, "fuman_mobile_sun", "mobile sunlight mode must persist locally only");
   requireText(mobileShell, "setInterval(()=>{if(!document.hidden&&active!==\"watch\")load(false)},120000)", "mobile shell must keep 120s polling fallback");
   if (mobileShell.includes(String(runtimeConfig?.supabaseAnonKey || "__missing__"))) {
     issues.push("mobile shell must not hardcode supabase anon key");

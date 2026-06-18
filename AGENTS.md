@@ -117,6 +117,7 @@ Mobile page behavior that must remain true:
 - Low-end phones must not idle-prefetch other tabs. `mobile.html` must respect `boot.lowPower.disablePrefetchOnLowEnd` using lightweight `Save-Data`, `deviceMemory`, and `hardwareConcurrency` checks.
 - Realtime update events must be debounced/merged before refetching boot so a burst of scan events wakes the phone once, not once per event.
 - Mobile ultra strategy/chip/warrant fragments are capped at Top 5 by the scanner (`boot.lowPower.tabTopLimit`). AI ultra remains Top 3. Do not move this slicing to the phone.
+- Mobile sunlight mode is local-only: `mobile.html` toggles `html[data-sun]` and persists `fuman_mobile_sun` in localStorage. Do not load full `styles.css`, images, fonts, or extra data for sunlight mode.
 - It stores watchlist data only in phone localStorage key `fuman_mobile_watchlist_v1`.
 - The "看分析" modal first reads precomputed per-stock files at `data/mobile-analysis/{code}.json`.
 - `data/mobile-stock-analysis-latest.json` is fallback only and should not be downloaded on first paint.
