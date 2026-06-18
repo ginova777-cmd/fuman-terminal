@@ -114,6 +114,8 @@ Mobile page behavior that must remain true:
 - It uses `visualViewport` plus `orientationchange` to update `html[data-orientation="portrait|landscape"]` immediately.
 - Phone portrait/landscape switching must not refetch `/api/mobile-boot`, recompute AI, rebuild the page, or clear cached fragments. Only lightweight CSS/layout state may change.
 - Mobile cache safety must be enforced by `npm run verify:mobile-cache-contract`, not by adding runtime work to the phone. The phone must stay on the hot path of boot hash compare, versioned fragment fetch, and simple render only.
+- Mobile API-only safety must be enforced by `npm run verify:mobile-api-only`. The phone's latest truth is `/api/mobile-boot` with `no-store`; static JSON files may exist as scan-side artifacts, but `mobile.html` must not poll `/data/mobile-boot.json`, `data-manifest.json`, `data-status-index.json`, `mobile-terminal-latest.json`, `mobile-digest.json`, `*-backup.json`, cache sync, freshness gate, release pipeline, or Vercel deploy as data repair.
+- Realtime/polling must compare backend version state (`boot_hash`, and future runId-compatible fields) and then fetch no-store API plus versioned fragments. If a backend contract is incompatible, use an explicit `force_reload` event path; do not make the phone self-heal by loading full static data.
 - Low-end phones must not idle-prefetch other tabs. `mobile.html` must respect `boot.lowPower.disablePrefetchOnLowEnd` using lightweight `Save-Data`, `deviceMemory`, and `hardwareConcurrency` checks.
 - Realtime update events must be debounced/merged before refetching boot so a burst of scan events wakes the phone once, not once per event.
 - Mobile ultra strategy/chip/warrant fragments are capped at Top 5 by the scanner (`boot.lowPower.tabTopLimit`). AI ultra remains Top 3. Do not move this slicing to the phone.
@@ -159,10 +161,12 @@ Run these checks before claiming the mobile terminal is healthy:
 
 ```powershell
 npm run verify:mobile-ai-fragment
+npm run verify:mobile-api-only
 npm run verify:mobile-cache-contract
 npm run verify:mobile-layout
 npm run verify:mobile-realtime
 npm run verify:mobile-ai-fragment:live
+npm run verify:mobile-api-only:live
 npm run verify:mobile-cache-contract:live
 npm run verify:mobile-layout:live
 ```
