@@ -58,6 +58,38 @@ function postJson(url, key, payload) {
   });
 }
 
+function deleteOldEvents(url, key) {
+  return new Promise((resolve) => {
+    const retentionDays = Number(process.env.MOBILE_UPDATE_EVENT_RETENTION_DAYS || 14);
+    if (!Number.isFinite(retentionDays) || retentionDays <= 0) return resolve(null);
+    const cutoff = new Date(Date.now() - retentionDays * 86400000).toISOString();
+    const endpoint = new URL(`${url}/rest/v1/mobile_update_events?created_at=lt.${encodeURIComponent(cutoff)}`);
+    const request = https.request({
+      method: "DELETE",
+      hostname: endpoint.hostname,
+      path: `${endpoint.pathname}${endpoint.search}`,
+      family: 4,
+      headers: {
+        apikey: key,
+        Authorization: `Bearer ${key}`,
+        Prefer: "return=minimal",
+      },
+      timeout: 15000,
+    }, (response) => {
+      const chunks = [];
+      response.on("data", (chunk) => chunks.push(chunk));
+      response.on("end", () => resolve({
+        ok: response.statusCode >= 200 && response.statusCode < 300,
+        status: response.statusCode,
+        text: Buffer.concat(chunks).toString("utf8"),
+      }));
+    });
+    request.on("timeout", () => request.destroy(new Error("request timeout")));
+    request.on("error", (error) => resolve({ ok: false, status: 0, text: error.message }));
+    request.end();
+  });
+}
+
 function changedKeysFromBoot(boot) {
   const keys = new Set(["mobile-boot"]);
   if (boot?.digest?.ultraHash || boot?.digest?.aiHash) keys.add("ai");
@@ -131,6 +163,11 @@ async function publish() {
     if (strict) throw new Error(message);
     console.warn(message);
     return;
+  }
+
+  const cleanup = await deleteOldEvents(supabaseUrl, serviceKey);
+  if (cleanup && !cleanup.ok) {
+    console.warn(`[mobile-event] cleanup skipped status=${cleanup.status} body=${String(cleanup.text || "").slice(0, 240)}`);
   }
 
   console.log(`[mobile-event] published version=${version} hash=${bootHash} keys=${payload.changed_keys.join(",")}`);

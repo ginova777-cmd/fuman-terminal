@@ -118,6 +118,7 @@ async function main() {
   const ultra = await maybeReadText("data/mobile-ai-ultra.html");
   const digest = await readJson("data/mobile-digest.json");
   const boot = await readJson("data/mobile-boot.json");
+  const runtimeConfig = await readJson("data/mobile-runtime-config.json");
   const stockAnalysis = await readJson("data/mobile-stock-analysis-latest.json");
   const mobileShell = await readText("mobile.html");
   const packageJson = JSON.parse(readLocal("package.json"));
@@ -158,6 +159,9 @@ async function main() {
   if (!digest.aiUpdatedAt) issues.push("mobile digest must include aiUpdatedAt");
   if (!digest.bias) issues.push("mobile digest must include bias");
   if (boot?.source !== "mobile-boot") issues.push("mobile boot must expose source=mobile-boot");
+  if (runtimeConfig?.source !== "mobile-runtime-config") issues.push("mobile runtime config must expose source=mobile-runtime-config");
+  if (!runtimeConfig?.supabaseAnonKey) issues.push("mobile runtime config must include supabase anon key");
+  if (!runtimeConfig?.realtimeUrl || !runtimeConfig?.realtimeTable) issues.push("mobile runtime config must include realtime URL and table");
   if (stockAnalysis?.source !== "mobile-stock-analysis-latest") issues.push("mobile stock analysis must expose source=mobile-stock-analysis-latest");
   if (Number(stockAnalysis?.count || 0) < 3) issues.push("mobile stock analysis must include at least 3 stocks");
   if (!stockAnalysis?.analyses || typeof stockAnalysis.analyses !== "object") issues.push("mobile stock analysis must expose analyses map");
@@ -223,6 +227,7 @@ async function main() {
     issues.push(`mobile.html exceeds ${MOBILE_SHELL_BUDGET_BYTES} bytes actual=${mobileShellBytes}`);
   }
   requireText(mobileShell, "/data/mobile-boot.json", "mobile shell must fetch mobile boot");
+  requireText(mobileShell, "/data/mobile-runtime-config.json", "mobile shell must fetch mobile runtime config");
   requireText(mobileShell, "/data/mobile-ai-ultra.html", "mobile shell must fetch ultra fragment");
   requireText(mobileShell, "data-fragment=\"strategy5\"", "mobile shell must expose strategy tabs");
   requireText(mobileShell, "data-fragment=\"watch\"", "mobile shell must expose watchlist tab");
@@ -237,9 +242,19 @@ async function main() {
   requireText(mobileShell, "mobile_update_events", "mobile shell must subscribe to mobile update events");
   requireText(mobileShell, "WebSocket", "mobile shell must use realtime push updates");
   requireText(mobileShell, "postgres_changes", "mobile shell must handle Supabase realtime postgres changes");
+  requireText(mobileShell, "realtimeUpdate", "mobile shell must retry after realtime update if boot hash is unchanged");
   requireText(mobileShell, "setInterval(()=>{if(!document.hidden&&active!==\"watch\")load(false)},120000)", "mobile shell must keep 120s polling fallback");
+  if (mobileShell.includes(String(runtimeConfig?.supabaseAnonKey || "__missing__"))) {
+    issues.push("mobile shell must not hardcode supabase anon key");
+  }
   if (!String(packageJson?.scripts?.["mobile:update-event"] || "").includes("publish-mobile-update-event.js")) {
     issues.push("package.json must expose mobile:update-event script");
+  }
+  if (!String(packageJson?.scripts?.["verify:mobile-realtime"] || "").includes("verify-mobile-realtime.js")) {
+    issues.push("package.json must expose verify:mobile-realtime script");
+  }
+  if (!String(packageJson?.scripts?.postdeploy || "").includes("verify-mobile-realtime.js")) {
+    issues.push("postdeploy must verify mobile realtime before publishing event");
   }
   if (!String(packageJson?.scripts?.postdeploy || "").includes("publish-mobile-update-event.js --source=postdeploy")) {
     issues.push("postdeploy must publish mobile update event after live verification");
@@ -247,6 +262,7 @@ async function main() {
   requireText(mobileEventScript, "mobile_update_events", "mobile update event publisher must write mobile_update_events");
   requireText(mobileEventScript, "SUPABASE_SERVICE_ROLE_KEY", "mobile update event publisher must use service role key");
   requireText(mobileEventScript, "data/mobile-boot.json", "mobile update event publisher must read mobile boot");
+  requireText(mobileEventScript, "MOBILE_UPDATE_EVENT_RETENTION_DAYS", "mobile update event publisher must support cleanup retention");
   if (mobileShell.includes("terminal-app.js") || mobileShell.includes("styles.css") || mobileShell.includes("serviceWorker.register")) {
     issues.push("mobile shell must not load full terminal app/css/service worker");
   }
