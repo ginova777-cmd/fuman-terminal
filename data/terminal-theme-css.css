@@ -1,0 +1,87 @@
+/* terminal-theme-css-runtime-20260619 */
+body.fuman-light-theme .dashboard:has(#watchlist-view.active),
+body.fuman-light-theme .dashboard:has(#watchlist-view:not([hidden])),
+html:has(body.fuman-light-theme #watchlist-view.active),
+html:has(body.fuman-light-theme #watchlist-view:not([hidden])),
+body.fuman-light-theme:has(#watchlist-view.active),
+body.fuman-light-theme:has(#watchlist-view:not([hidden])),
+body.fuman-light-theme .app-shell:has(#watchlist-view.active),
+body.fuman-light-theme .app-shell:has(#watchlist-view:not([hidden])),
+body.fuman-light-theme #watchlist-view,
+body.fuman-light-theme #watchlist-view.view-panel,
+body.fuman-light-theme #watchlist-view.active,
+body.fuman-light-theme #watchlist-view .watchlist-layout {
+  background: #f6f8fb !important;
+  background-image: none !important;
+  color: #172033 !important;
+}
+
+body.fuman-light-theme #watchlist-view .watchlist-analysis-pane,
+body.fuman-light-theme #watchlist-view .watchlist-list-pane,
+body.fuman-light-theme #watchlist-view .watchlist-stock-list {
+  background-color: #f6f8fb !important;
+  background-image: none !important;
+}
+
+body.fuman-light-theme #watchlist-view .watchlist-analysis-pane,
+body.fuman-light-theme #watchlist-view .watch-analysis-panel.ta-dashboard,
+body.fuman-light-theme #watchlist-view .ta-dashboard {
+  background: #ffffff !important;
+  color: #172033 !important;
+  border-color: #dbe3ee !important;
+}
+
+body.fuman-light-theme #watchlist-view .watch-analysis-panel,
+body.fuman-light-theme #watchlist-view .watch-detail-sections,
+body.fuman-light-theme #watchlist-view .watch-card-carousel {
+  background: transparent !important;
+  color: #172033 !important;
+}
+
+body.fuman-light-theme #watchlist-view .watch-mobile-empty,
+body.fuman-light-theme #watchlist-view .watchlist-stock-list > div[style],
+body.fuman-light-theme #watchlist-view .watchlist-analysis-pane > div[style] {
+  border-color: #dbe3ee !important;
+  background: #ffffff !important;
+  color: #64748b !important;
+}
+
+body.fuman-light-theme #watchlist-view .watch-detail-section-card,
+body.fuman-light-theme #watchlist-view .watch-detail-trend-card,
+body.fuman-light-theme #watchlist-view .watch-note-row article,
+body.fuman-light-theme #watchlist-view .watch-ta-panel .ta-gauge-card {
+  background: #ffffff !important;
+  color: #172033 !important;
+  border-color: #dbe3ee !important;
+  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.06), inset 0 1px 0 rgba(255,255,255,0.92) !important;
+}
+
+body.fuman-light-theme #watchlist-view .watch-detail-hero h2,
+body.fuman-light-theme #watchlist-view .watch-detail-section-card strong,
+body.fuman-light-theme #watchlist-view .watch-detail-trend-card strong {
+  color: #111827 !important;
+}
+
+body.fuman-light-theme #watchlist-view .watch-detail-hero span,
+body.fuman-light-theme #watchlist-view .watch-detail-section-card span,
+body.fuman-light-theme #watchlist-view .watch-detail-trend-card span {
+  color: #51627a !important;
+}
+
+body.fuman-light-theme #watchlist-view .watch-detail-hero p,
+body.fuman-light-theme #watchlist-view .watch-detail-section-card em,
+body.fuman-light-theme #watchlist-view .watch-detail-trend-card em {
+  color: #475569 !important;
+}
+
+body.fuman-light-theme #watchlist-view .watch-detail-section-card b,
+body.fuman-light-theme #watchlist-view .watch-detail-trend-card b,
+body.fuman-light-theme #watchlist-view .watch-match-group b {
+  color: #f59e0b !important;
+}
+
+body.fuman-light-theme #watchlist-view .watch-detail-close {
+  border-color: #dbe3ee !important;
+  background: #ffffff !important;
+  color: #64748b !important;
+}

@@ -1,19 +1,17 @@
 $ErrorActionPreference = "Stop"
 $PSNativeCommandUseErrorActionPreference = $false
-. "${PSScriptRoot}\legacy-entrypoint-guard.ps1" -Label "run-strategy3-watchdog.ps1"
-
 Set-Location "${PSScriptRoot}"
 
 $runtimeDir = "C:\fuman-runtime"
-$dataDir = Join-Path $runtimeDir "data"
 $logDir = Join-Path $runtimeDir "logs"
 $stateDir = Join-Path $runtimeDir "state"
 New-Item -ItemType Directory -Force -Path $logDir, $stateDir | Out-Null
 
 $log = Join-Path $logDir ("strategy3-watchdog-{0}.log" -f (Get-Date -Format yyyyMMdd-HHmmss))
 $statusFile = Join-Path $stateDir "strategy3-watchdog-status.json"
-$strategy3File = Join-Path $dataDir "strategy3-latest.json"
-$runner = "${PSScriptRoot}\run-strategy3.ps1"
+$runner = "${PSScriptRoot}\run-strategy3-complete-scan.ps1"
+$strategy3ApiBaseUrl = if ($env:FUMAN_VERCEL_BASE_URL) { $env:FUMAN_VERCEL_BASE_URL.TrimEnd("/") } else { "https://fuman-terminal.vercel.app" }
+$strategy3ApiUrl = "$strategy3ApiBaseUrl/api/strategy3-latest"
 
 function Write-WatchdogLog {
   param([string]$Message)
@@ -54,34 +52,49 @@ function Convert-DateTextToYmd {
 }
 
 function Get-Strategy3Payload {
-  if (-not (Test-Path -LiteralPath $strategy3File)) { return $null }
+  $timestamp = [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()
+  $url = "$strategy3ApiUrl`?ts=$timestamp"
   try {
-    return Get-Content -LiteralPath $strategy3File -Raw | ConvertFrom-Json -ErrorAction Stop
+    $response = Invoke-WebRequest -Uri $url -UseBasicParsing -TimeoutSec 30 -Headers @{ "Cache-Control" = "no-cache" }
+    $cacheControl = [string]$response.Headers["Cache-Control"]
+    if ($cacheControl -notmatch "no-store") {
+      Write-WatchdogLog "strategy3 API missing no-store cache header: Cache-Control=$cacheControl"
+      return $null
+    }
+    return ([string]$response.Content | ConvertFrom-Json -ErrorAction Stop)
   } catch {
-    Write-WatchdogLog "strategy3 latest JSON parse failed: $($_.Exception.Message)"
+    Write-WatchdogLog "strategy3 latest API failed: $($_.Exception.Message)"
     return $null
   }
 }
 
 function Test-Strategy3Healthy {
   param($Payload)
-  if (-not $Payload) { return @{ Healthy = $false; Reason = "missing or invalid strategy3 latest JSON" } }
+  if (-not $Payload) { return @{ Healthy = $false; Reason = "missing or invalid strategy3 latest API payload" } }
   $today = Get-TaipeiTodayYmd
-  $usedDate = Convert-DateTextToYmd $Payload.usedDate
+  $usedDate = Convert-DateTextToYmd $(if ($Payload.scanDate) { $Payload.scanDate } elseif ($Payload.usedDate) { $Payload.usedDate } else { $Payload.date })
   $count = if ($null -ne $Payload.count) { [int]$Payload.count } else { @($Payload.matches).Count }
+  $runId = [string]$Payload.runId
+  $complete = [bool]$Payload.complete
   $qualityStatus = [string]$Payload.qualityStatus
   $sourceStatus = [string]$Payload.sourceHealth.status
 
+  if (-not $runId) {
+    return @{ Healthy = $false; Reason = "missing API runId" }
+  }
+  if (-not $complete) {
+    return @{ Healthy = $false; Reason = "API run is not complete runId=$runId" }
+  }
   if ($usedDate -ne $today) {
-    return @{ Healthy = $false; Reason = "stale usedDate=$usedDate today=$today" }
+    return @{ Healthy = $false; Reason = "stale API date=$usedDate today=$today runId=$runId" }
   }
   if ($count -le 0) {
-    return @{ Healthy = $false; Reason = "empty strategy3 result count=$count" }
+    return @{ Healthy = $false; Reason = "empty strategy3 API result count=$count runId=$runId" }
   }
   if ($qualityStatus -eq "failed" -or $sourceStatus -eq "failed") {
-    return @{ Healthy = $false; Reason = "source health failed qualityStatus=$qualityStatus sourceStatus=$sourceStatus" }
+    return @{ Healthy = $false; Reason = "API source health failed runId=$runId qualityStatus=$qualityStatus sourceStatus=$sourceStatus" }
   }
-  return @{ Healthy = $true; Reason = "usedDate=$usedDate count=$count qualityStatus=$qualityStatus sourceStatus=$sourceStatus" }
+  return @{ Healthy = $true; Reason = "runId=$runId date=$usedDate count=$count qualityStatus=$qualityStatus sourceStatus=$sourceStatus" }
 }
 
 function Test-Strategy3Running {
@@ -135,3 +148,5 @@ if (-not $postHealth.Healthy) {
 Write-WatchdogLog "strategy3 recovered: $($postHealth.Reason)"
 Write-WatchdogStatus "success" "recovered: $($postHealth.Reason)"
 exit 0
+
+

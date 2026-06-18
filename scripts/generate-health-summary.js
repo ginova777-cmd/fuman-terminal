@@ -159,7 +159,6 @@ function riskItem(level, area, message, meta = {}) {
 
 const DATA_SLA_HOURS = {
   "market-summary.json": 12,
-  "strategy4-summary.json": 30,
   "strategy5-latest.json": 30,
   "institution-summary.json": 42,
   "warrant-flow-summary.json": 42,
@@ -202,7 +201,6 @@ function effectiveSlaHours(file) {
     if (file === "strategy2-intraday-latest.json") return 72;
     if (file === "market-summary.json") return 72;
   }
-  if (file === "strategy4-summary.json" && taipeiMinuteOfDay() < 15 * 60 + 30) return 96;
   return DATA_SLA_HOURS[file] || 36;
 }
 
@@ -280,7 +278,6 @@ function main() {
     }));
   const data = [
     "market-summary.json",
-    "strategy4-summary.json",
     "strategy5-latest.json",
     "institution-summary.json",
     "warrant-flow-summary.json",

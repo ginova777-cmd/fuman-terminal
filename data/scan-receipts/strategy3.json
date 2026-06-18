@@ -2,22 +2,29 @@
   "strategy": "strategy3",
   "label": "strategy3 raw refresh",
   "tier": "critical",
-  "startedAt": "2026-06-16T20:26:36.7567510+08:00",
-  "finishedAt": "2026-06-16T20:26:51.3149698+08:00",
+  "startedAt": "2026-06-16T13:37:28.6674772+08:00",
+  "finishedAt": "2026-06-16T13:37:58.4098100+08:00",
   "status": "failed",
   "exitCode": 1,
   "scanned": 0,
-  "total": 297,
-  "matches": 1,
-  "complete": true,
+  "total": 289,
+  "matches": 12,
+  "complete": false,
   "qualityStatus": "degraded",
   "fallback": false,
   "payloadPath": "C:\\fuman-runtime\\data\\strategy3-latest.json",
   "warnings": [
-    "strategy3 source warning: strategy3 supabase fallback: fugle_quotes_latest HTTP 400 {\"code\":\"42703\",\"details\":null,\"hint\":null,\"message\":\"column fugle_quotes_latest.cumulative_bid_volume does not exist\"}",
-    "strategy3 source health failed: after1300ReadyCount 0 below 20",
-    "Error: Strategy3 source health failed: after1300ReadyCount 0 below 20"
+    "strategy3 source warning: strategy3 supabase fallback: strategy3 quotes 7<500",
+    "strategy3 source warning: twse volume fetch failed: 20260612 :: https://www.twse.com.tw/rwd/zh/afterTrading/MI_INDEX?date=20260612&type=ALLBUT0999&response=json HTTP 403",
+    "strategy3 source warning: twse volume fetch failed: 20260611 :: https://www.twse.com.tw/rwd/zh/afterTrading/MI_INDEX?date=20260611&type=ALLBUT0999&response=json HTTP 403",
+    "strategy3 source warning: twse volume fetch failed: 20260610 :: https://www.twse.com.tw/rwd/zh/afterTrading/MI_INDEX?date=20260610&type=ALLBUT0999&response=json HTTP 403",
+    "strategy3 source warning: twse volume fetch failed: 20260609 :: https://www.twse.com.tw/rwd/zh/afterTrading/MI_INDEX?date=20260609&type=ALLBUT0999&response=json HTTP 403",
+    "strategy3 source warning: twse volume fetch failed: 20260608 :: https://www.twse.com.tw/rwd/zh/afterTrading/MI_INDEX?date=20260608&type=ALLBUT0999&response=json HTTP 403",
+    "strategy3 source warning: twse volume fetch failed: 20260605 :: https://www.twse.com.tw/rwd/zh/afterTrading/MI_INDEX?date=20260605&type=ALLBUT0999&response=json HTTP 403",
+    "strategy3 source warning: twse volume fetch failed: 20260604 :: https://www.twse.com.tw/rwd/zh/afterTrading/MI_INDEX?date=20260604&type=ALLBUT0999&response=json HTTP 403",
+    "strategy3 source health failed: after1300ReadyCount 0 below 20; warningCount 8 above 3",
+    "Error: Strategy3 source health failed: after1300ReadyCount 0 below 20; warningCount 8 above 3"
   ],
   "blockingReason": "critical scan failed with exit code 1",
-  "log": "C:\\fuman-runtime\\logs\\full-scan-20260616-201003.log"
+  "log": "C:\\fuman-runtime\\logs\\full-scan-20260616-131248.log"
 }

@@ -21,22 +21,21 @@ const EXPECTED_SCHEMA = "strategy4-cache-v3-unit-contract";
 const EXPECTED_UNIT = "lots";
 const EXPECTED_SOURCE = "supabase:strategy4_daily_ohlcv_view";
 
-function staticFallback(reason = "") {
-  try {
-    const payload = JSON.parse(fs.readFileSync(path.join(process.cwd(), "data", "strategy4-latest.json"), "utf8"));
-    return {
-      ...payload,
-      cacheSource: "static-fallback",
-      transport: {
-        source: "static-json",
-        via: "api/strategy4-latest",
-        fallbackReason: reason,
-        fetchedAt: new Date().toISOString(),
-      },
-    };
-  } catch (error) {
-    return { ok: false, error: "strategy4_static_fallback_failed", detail: error?.message || String(error) };
-  }
+function apiOnlyError(error, detail = "") {
+  return {
+    ok: false,
+    cacheSource: "api-only",
+    error,
+    detail,
+    transport: {
+      source: "supabase",
+      table: TABLE,
+      runTable: RUNS_TABLE,
+      gate: "run_id",
+      via: "api/strategy4-latest",
+      fetchedAt: new Date().toISOString(),
+    },
+  };
 }
 
 async function fetchRowsFrom(table, query) {
@@ -108,7 +107,42 @@ function normalizePayload(row) {
   };
 }
 
-function buildPayload(rows, total) {
+function countBy(values) {
+  return values.reduce((acc, value) => {
+    const key = String(value || "(blank)");
+    acc[key] = cleanNumber(acc[key]) + 1;
+    return acc;
+  }, {});
+}
+
+function buildStrategy4SourceHealth(rows, run, matches) {
+  const runPayload = run?.payload && typeof run.payload === "object" ? run.payload : {};
+  const sourceWarnings = Array.isArray(runPayload.sourceWarnings) ? [...runPayload.sourceWarnings] : [];
+  const resultSourceCounts = countBy(rows.map((row) => row.price_source || row.payload?.priceSource || ""));
+  const allExpectedSource = Object.keys(resultSourceCounts).length === 1 && resultSourceCounts[EXPECTED_SOURCE] === rows.length;
+  if (String(run?.quality_status || rows[0]?.quality_status || "") === "degraded" && !sourceWarnings.length && !runPayload.supabaseCoverage) {
+    sourceWarnings.push("Legacy degraded run has no source detail in strategy4_scan_runs.payload; inferred source mix from result rows.");
+  }
+  return {
+    status: String(run?.quality_status || rows[0]?.quality_status || ""),
+    sourceWarnings,
+    resultSourceCounts,
+    allRowsExpectedSource: allExpectedSource,
+    yahooSourceCount: cleanNumber(runPayload.yahooSourceCount),
+    yahooSourceRatio: cleanNumber(runPayload.yahooSourceRatio),
+    misSourceCount: cleanNumber(runPayload.misSourceCount),
+    misSourceRatio: cleanNumber(runPayload.misSourceRatio),
+    dataSourceCounts: runPayload.dataSourceCounts || {},
+    supabaseCoverage: runPayload.supabaseCoverage || null,
+    expectedTotal: cleanNumber(run?.expected_total),
+    scannedCount: cleanNumber(run?.scanned_count),
+    resultCount: cleanNumber(run?.result_count) || matches.length,
+    noDataCount: cleanNumber(run?.no_data_count),
+    errorCount: cleanNumber(run?.error_count),
+  };
+}
+
+function buildPayload(rows, total, run = null) {
   const first = rows[0] || {};
   const matches = rows
     .slice()
@@ -136,12 +170,14 @@ function buildPayload(rows, total) {
     count: matches.length,
     total: Math.max(matches.length, cleanNumber(total), 1500),
     zones,
+    sourceHealth: buildStrategy4SourceHealth(rows, run, matches),
     matches,
     transport: {
       source: "supabase",
       table: TABLE,
       runTable: RUNS_TABLE,
       runId: String(first.run_id || ""),
+      gate: "run_id",
       via: "api/strategy4-latest",
       fetchedAt: new Date().toISOString(),
     },
@@ -152,7 +188,7 @@ async function fetchLatestCompleteRun() {
   const rows = await fetchRowsFrom(
     RUNS_TABLE,
     [
-      "select=run_id,scan_date,finished_at,status,complete,result_count,schema_version,volume_unit,data_contract_source",
+      "select=run_id,scan_date,finished_at,status,complete,expected_total,scanned_count,result_count,no_data_count,error_count,schema_version,volume_unit,data_contract_source,quality_status,payload",
       "strategy=eq.strategy4",
       "status=eq.complete",
       "complete=eq.true",
@@ -170,16 +206,16 @@ async function fetchLatestCompleteRun() {
 
 async function fetchLatestCompleteRows() {
   const run = await fetchLatestCompleteRun();
-  if (!run?.run_id) return { rows: [], gate: "missing-complete-run", runId: "" };
+  if (!run?.run_id) return { rows: [], run: null, gate: "missing-complete-run", runId: "" };
   const query = [
-    "select=run_id,scan_date,scan_time,code,name,signals,price,change_percent,volume,trade_value,score,zone,zone_label,rank,reason,complete,quality_status,schema_version,volume_unit,data_contract_source,generated_at,payload,updated_at",
+    "select=run_id,scan_date,scan_time,code,name,signals,price,change_percent,volume,trade_value,score,zone,zone_label,rank,reason,complete,quality_status,schema_version,volume_unit,data_contract_source,price_source,generated_at,payload,updated_at",
     "strategy=eq.strategy4",
     `run_id=eq.${encodeURIComponent(run.run_id)}`,
     "order=rank.asc",
     "limit=2000",
   ].join("&");
   const rows = await fetchRows(query);
-  return { rows, gate: "run_id", runId: run.run_id };
+  return { rows, run, gate: "run_id", runId: run.run_id };
 }
 
 module.exports = async function handler(request, response) {
@@ -194,26 +230,26 @@ module.exports = async function handler(request, response) {
 
   try {
     if (!SUPABASE_URL || !SUPABASE_KEY) {
-      response.status(200).json(staticFallback("supabase_not_configured"));
+      response.status(503).json(apiOnlyError("strategy4_supabase_not_configured"));
       return;
     }
     const latest = await fetchLatestCompleteRows();
     const rows = latest.rows || [];
     if (!rows.length) {
-      response.status(200).json(staticFallback("strategy4_scan_results_latest_empty"));
+      response.status(404).json(apiOnlyError("strategy4_complete_run_empty", latest.gate || "missing rows"));
       return;
     }
     const total = await fetchExactCount("strategy4_stock_universe_view", "select=symbol&is_strategy4_eligible=eq.true&limit=1").catch(() => 0);
-    const payload = buildPayload(rows, total);
+    const payload = buildPayload(rows, total, latest.run);
     payload.transport.gate = latest.gate || "";
     payload.transport.runId = latest.runId || payload.transport.runId || "";
     payload.runId = latest.runId || payload.runId || "";
     if (payload.schemaVersion !== EXPECTED_SCHEMA || payload.volumeUnit !== EXPECTED_UNIT || payload.dataContractSource !== EXPECTED_SOURCE) {
-      response.status(200).json(staticFallback("strategy4_supabase_contract_mismatch"));
+      response.status(409).json(apiOnlyError("strategy4_supabase_contract_mismatch"));
       return;
     }
     response.status(200).json(payload);
   } catch (error) {
-    response.status(200).json(staticFallback(error?.message || String(error)));
+    response.status(502).json(apiOnlyError("strategy4_api_only_failed", error?.message || String(error)));
   }
 };

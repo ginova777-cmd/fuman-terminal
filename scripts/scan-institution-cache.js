@@ -27,6 +27,7 @@ const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY
   || readSecretText(path.join(RUNTIME_DIR, "secrets", "supabase-service-role-key.txt"));
 const INSTITUTION_RUNS_TABLE = process.env.INSTITUTION_SUPABASE_RUNS_TABLE || "institution_scan_runs";
 const INSTITUTION_RESULTS_TABLE = process.env.INSTITUTION_SUPABASE_RESULTS_TABLE || "institution_scan_results";
+const INSTITUTION_API_ONLY = true;
 
 function readSecretText(file) {
   try { return fs.readFileSync(file, "utf8").trim(); } catch { return ""; }
@@ -511,6 +512,10 @@ async function main() {
 
   await publishInstitutionCompleteRunToSupabase(output);
 
+  if (INSTITUTION_API_ONLY) {
+    console.log(`institution API-only: skipped static institution*.json output, rows ${count}, usedDate ${output.usedDate || "--"}`);
+    return;
+  }
   fs.mkdirSync(path.dirname(OUT_FILE), { recursive: true });
   fs.writeFileSync(OUT_FILE, `${JSON.stringify(output, null, 2)}\n`);
   writeSummary("institution", output, SUMMARY_FILE);

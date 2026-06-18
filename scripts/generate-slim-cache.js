@@ -1,12 +1,17 @@
 const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
+const { upsertSnapshot } = require("../lib/supabase-snapshots");
 const { fetchMisQuotes } = require("../lib/mis-quotes");
 
 const repoRoot = path.resolve(__dirname, "..");
 const runtimeRoot = process.env.FUMAN_RUNTIME_ROOT || "C:\\fuman-runtime";
 const syncRoot = process.env.FUMAN_SYNC_DIR || "C:\\fuman-terminal-sync";
+const deployRoot = process.env.FUMAN_DEPLOY_DIR || "C:\\fuman-terminal";
 const STRATEGY4_MIN_AVG_VOLUME_5 = 3000;
+const STRATEGY4_API_ONLY = true;
+const OPEN_BUY_API_ONLY = true;
+const DESKTOP_API_ONLY_STATIC_OUTPUT = true;
 
 function cleanNumber(value) {
   return Number(String(value ?? "").replace(/[,+%]/g, "").trim()) || 0;
@@ -26,8 +31,39 @@ function writeJson(file, payload) {
   fs.renameSync(tempFile, file);
 }
 
+function dataRoots(order = "runtime-first") {
+  const roots = order === "repo-first"
+    ? [repoRoot, syncRoot, runtimeRoot, deployRoot]
+    : [runtimeRoot, deployRoot, repoRoot, syncRoot];
+  return [...new Set(roots.filter(Boolean))];
+}
+
+function isStrategy4StaticOutput(output) {
+  return /^data[\\/]+strategy4.*\.json$/i.test(String(output || ""));
+}
+
+function isOpenBuyStaticOutput(output) {
+  return /^data[\\/]+open-buy.*\.json$/i.test(String(output || ""));
+}
+
+function isDesktopApiOnlyStaticOutput(output) {
+  return /^data[\\/]+(?:strategy2-intraday|strategy3|strategy5|institution|warrant-flow|warrant-priority|warrant-single-signal|cb-detect).*\.json$/i.test(String(output || ""));
+}
+
 function writeToBoth(output, payload) {
-  for (const root of [...new Set([repoRoot, runtimeRoot, syncRoot])]) {
+  if (STRATEGY4_API_ONLY && isStrategy4StaticOutput(output)) {
+    console.log(`strategy4 API-only: skipped static slim output ${output}`);
+    return;
+  }
+  if (OPEN_BUY_API_ONLY && isOpenBuyStaticOutput(output)) {
+    console.log(`open-buy API-only: skipped static slim output ${output}`);
+    return;
+  }
+  if (DESKTOP_API_ONLY_STATIC_OUTPUT && isDesktopApiOnlyStaticOutput(output)) {
+    console.log(`desktop API-only: skipped static slim output ${output}`);
+    return;
+  }
+  for (const root of dataRoots("repo-first")) {
     writeJson(path.join(root, output), payload);
   }
 }
@@ -43,13 +79,13 @@ function writeText(file, text) {
 }
 
 function writeTextToBoth(output, text) {
-  for (const root of [...new Set([repoRoot, runtimeRoot, syncRoot])]) {
+  for (const root of dataRoots("repo-first")) {
     writeText(path.join(root, output), text);
   }
 }
 
 function clearDirInAllRoots(output) {
-  for (const root of [...new Set([repoRoot, runtimeRoot, syncRoot])]) {
+  for (const root of dataRoots("repo-first")) {
     const target = path.join(root, output);
     if (fs.existsSync(target)) fs.rmSync(target, { recursive: true, force: true });
     fs.mkdirSync(target, { recursive: true });
@@ -101,7 +137,7 @@ function hashPayload(payload) {
 
 function readOptional(rel, fallback = null) {
   let freshest = null;
-  for (const root of [runtimeRoot, repoRoot, syncRoot]) {
+  for (const root of dataRoots("runtime-first")) {
     const file = path.join(root, rel);
     if (!fs.existsSync(file)) continue;
     const payload = readJson(file);
@@ -115,7 +151,7 @@ function readOptional(rel, fallback = null) {
 }
 
 function readRepoOptional(rel, fallback = null) {
-  for (const root of [repoRoot, syncRoot, runtimeRoot]) {
+  for (const root of dataRoots("repo-first")) {
     const file = path.join(root, rel);
     if (fs.existsSync(file)) return readJson(file);
   }
@@ -124,6 +160,19 @@ function readRepoOptional(rel, fallback = null) {
 
 function normalizeArray(value) {
   return Array.isArray(value) ? value : [];
+}
+
+function indexRowsFromPayload(payload, def) {
+  return def.fields.flatMap((field) => {
+    const value = payload?.[field];
+    if (def.objectFields?.includes(field) && value && typeof value === "object" && !Array.isArray(value)) {
+      return Object.values(value);
+    }
+    return normalizeArray(value);
+  }).filter((row) => {
+    const codeField = def.codeField || "code";
+    return row?.[codeField] || row?.code;
+  });
 }
 
 function payloadCount(payload) {
@@ -915,7 +964,6 @@ function slimStockForPanel(stock) {
 function marketAiPanelLatest() {
   const market = readOptional("data/market-summary.json", {});
   const breadth = readOptional("data/market-ai-breadth-latest.json", marketAiBreadthLatest());
-  const strategy4 = readOptional("data/strategy4-score-top.json", {});
   const strategy5 = readOptional("data/strategy5-latest.json", {});
   const strategy2 = readOptional("data/strategy2-intraday-live-top.json", readOptional("data/strategy2-intraday-top.json", {}));
   const radar = readOptional("data/realtime-radar-latest.json", {});
@@ -936,7 +984,6 @@ function marketAiPanelLatest() {
   const strongSectors = [...sectors].sort((a, b) => b.pct - a.pct || b.up - a.up).slice(0, 8);
   const weakSectors = [...sectors].sort((a, b) => a.pct - b.pct || b.down - a.down).slice(0, 8);
   const strategyRows = [
-    ...normalizeArray(strategy4?.matches).slice(0, 40),
     ...normalizeArray(strategy5?.matches).slice(0, 40),
     ...normalizeArray(strategy2?.events || strategy2?.records).slice(0, 24),
     ...normalizeArray(radar?.rows).slice(0, 24),
@@ -1184,7 +1231,6 @@ function mobileTerminalLatest() {
 }
 
 const MOBILE_AI_FRAGMENT_VERSION = "mobile-ai-v1";
-const MOBILE_ULTRA_TAB_LIMIT = 5;
 
 function mobileAiLatestHtml(panel = marketAiPanelLatest()) {
   const summary = panel?.summary || {};
@@ -1408,8 +1454,6 @@ function mobileBootLatest(mobileTerminal, digest, fragments = {}) {
     lowPower: {
       defaultVariant: "lite",
       lowEndVariant: "ultra",
-      disablePrefetchOnLowEnd: true,
-      tabTopLimit: MOBILE_ULTRA_TAB_LIMIT,
       digestPollMs: 60000,
       fullHtmlBudget: 30000,
       liteHtmlBudget: 16000,
@@ -1510,7 +1554,7 @@ function mobileStrategyFragments() {
     ["strategy1", "策略1 開盤入", "16:00 候選 / 08:55 最終名單", openBuy, ["rows", "matches"], ["開盤價進場", "有賺就走", "09:10 強制出場"]],
     ["strategy2", "策略2 當沖", "2 分 K 即時偵測摘要", strategy2, ["events", "records"], ["只看進場區", "等待量價確認", "盤中訊號掃描端完成"]],
     ["strategy3", "策略3 日線", "日線條件掃描摘要", strategy3, ["rows", "matches"], ["日線結構", "低頻確認", "不追盤中雜訊"]],
-    ["strategy4", "策略4 波段", "波段分數前排", strategy4, ["rows", "matches"], ["突破/缺口/V轉", "掃描端已排序", "手機只顯示前排"]],
+    ["strategy4", "策略4 波段", "主力籌碼與波段分數", strategy4, ["rows", "matches"], ["波段分區", "主力籌碼", "分數排序"]],
     ["strategy5", "策略5 綜合", "籌碼與價量共振", strategy5, ["rows", "matches"], ["多策略共振", "法人與價量", "只顯示預排序"]],
     ["chip", "法人籌碼", "外資/投信/自營合計", institution, ["rows"], ["連買優先", "合計買超", "籌碼集中"]],
     ["warrant", "權證資金", "認購熱度與標的型態", warrant, ["matches", "singleSignals"], ["權證先熱", "標的型態", "只看候選觀察"]],
@@ -1525,7 +1569,6 @@ function mobileStrategyFragments() {
       updatedAt: payload?.updatedAt || payload?.date || "",
       total: payloadCount(payload),
       rows: mobileFragmentRows(payload, keys),
-      limit: MOBILE_ULTRA_TAB_LIMIT,
     }),
   }]));
 }
@@ -1656,6 +1699,31 @@ function taipeiDateFromIso(value) {
     day: "2-digit",
   }).formatToParts(date).map((part) => [part.type, part.value]));
   return `${parts.year}${parts.month}${parts.day}`;
+}
+
+function isAfterTaipei1330(now = new Date()) {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Taipei",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  }).formatToParts(now).reduce((acc, part) => {
+    if (part.type !== "literal") acc[part.type] = Number(part.value || 0);
+    return acc;
+  }, {});
+  const seconds = (parts.hour || 0) * 3600 + (parts.minute || 0) * 60 + (parts.second || 0);
+  return seconds > 13 * 3600 + 30 * 60;
+}
+
+async function safeUpsertSnapshot(key, payload, options = {}) {
+  const result = await upsertSnapshot(key, payload, {
+    locked: isAfterTaipei1330(),
+    reason: isAfterTaipei1330() ? "after-1330-cache" : "snapshot-cache",
+    ...options,
+  });
+  if (!result.ok && !result.skipped) console.warn(`[snapshot] ${key} upsert skipped: ${result.error}`);
+  else if (result.ok) console.log(`[snapshot] ${key} upsert ok tradeDate=${result.tradeDate}`);
 }
 
 function statusDateForFile(file, payload) {
@@ -1817,9 +1885,9 @@ function terminalHomeBundle() {
   const mobile = readOptional("data/mobile-home-summary.json", mobileHomeSummary());
   const status = readOptional("data/data-status-index.json", dataStatusIndex());
   const stocks = readOptional("data/stocks-slim.json", slimStocks());
-  const strategy4Top = readOptional("data/strategy4-score-top.json", {});
   const openBuy = readOptional("data/open-buy-latest.json", {});
   const strategy3 = readOptional("data/strategy3-latest.json", {});
+  const strategy4Top = readOptional("data/strategy4-score-top.json", {});
   const strategy5 = readOptional("data/strategy5-latest.json", {});
   return {
     ok: true,
@@ -1951,6 +2019,26 @@ function indexDetails(row, key) {
       row.reason,
       ...normalizeArray(row.signalTags).map(signalText),
     ],
+    institution: [
+      row.total > 0 ? "法人合計買超" : row.total < 0 ? "法人合計賣超" : "法人中性",
+      row.foreign > 0 ? "外資買超" : row.foreign < 0 ? "外資賣超" : "",
+      row.trust > 0 ? "投信買超" : row.trust < 0 ? "投信賣超" : "",
+      row.jointStreak ? `連買${row.jointStreak}日` : "",
+    ],
+    cb: [
+      row.entryLabel,
+      row.tradableLabel,
+      row.conversionPriceLabel,
+      row.sourceLayer,
+      row.cbName,
+    ],
+    warrant: [
+      row.signalGrade ? `等級${row.signalGrade}` : "",
+      row.actionLabel,
+      row.stockSetupLabel,
+      row.branchLabel,
+      row.level ? `Level ${row.level}` : "",
+    ],
   };
   return [...new Set((sources[key] || []).map(signalText).map((item) => String(item || "").trim()).filter(Boolean))].slice(0, 12);
 }
@@ -1963,12 +2051,15 @@ function buildStrategyMatchIndex() {
     { key: "strategy4", label: "策略4-波段", file: "data/strategy4-slim.json", fields: ["matches"] },
     { key: "strategy5", label: "策略5-綜合策略", file: "data/strategy5-latest.json", fields: ["matches"] },
     { key: "realtime", label: "即時雷達", file: "data/realtime-radar-latest.json", fields: ["rows"] },
+    { key: "institution", label: "買賣超", file: "data/institution-latest.json", fields: ["data", "rows", "matches"], objectFields: ["data"] },
+    { key: "cb", label: "CB名單", file: "data/cb-detect-latest.json", fields: ["rows", "matches"] },
+    { key: "warrant", label: "權證", file: "data/warrant-flow-latest.json", fields: ["matches", "rows"], codeField: "underlyingCode" },
   ];
   const byCode = {};
   const strategies = {};
   for (const def of definitions) {
     const payload = readRepoOptional(def.file, def.fallbackFile ? readRepoOptional(def.fallbackFile, {}) : {});
-    const rows = def.fields.flatMap((field) => normalizeArray(payload?.[field])).filter((row) => row?.code);
+    const rows = indexRowsFromPayload(payload, def);
     const date = payload?.usedDate || payload?.date || payload?.tradeDate || payload?.scanStamp || payload?.updatedAt || "";
     strategies[def.key] = {
       label: def.label,
@@ -1978,12 +2069,12 @@ function buildStrategyMatchIndex() {
       count: rows.length,
     };
     for (const row of rows) {
-      const code = String(row.code || "").trim();
+      const code = String(row?.[def.codeField || "code"] || row.code || "").trim();
       if (!code) continue;
       const entry = {
         key: def.key,
         label: def.label,
-        score: cleanNumber(row.score || row.maxScore || row.swingScore),
+        score: cleanNumber(row.score || row.maxScore || row.swingScore || row.finalScore || row.total),
         date,
         updatedAt: payload?.updatedAt || payload?.scanStamp || row.updatedAt || "",
         details: indexDetails(row, def.key),
@@ -2004,13 +2095,24 @@ function buildStrategyMatchIndex() {
     byCode,
   };
 }
+
+async function writeStrategyMatchIndexSnapshot() {
+  const strategyMatchIndex = buildStrategyMatchIndex();
+  writeToBoth("data/strategy-match-index.json", strategyMatchIndex);
+  await safeUpsertSnapshot("watchlist_match_index", strategyMatchIndex, {
+    source: "data/strategy-match-index.json",
+    snapshotId: `watchlist-match-index-${String(strategyMatchIndex.updatedAt || Date.now()).replace(/\D/g, "").slice(0, 14)}`,
+  });
+  console.log(`[slim] wrote data/strategy-match-index.json codes=${strategyMatchIndex.count || 0}`);
+  return strategyMatchIndex;
+}
+
 const jobs = [
   ["strategy2", "data/strategy2-intraday-latest.json", "data/strategy2-intraday-slim.json", slimStrategy2, (payload) => [
     ["data/strategy2-intraday-top.json", topStrategy2(payload)],
     ["data/strategy2-intraday-live-top.json", liveTopStrategy2(payload)],
     ["data/strategy2-intraday-delta.json", deltaStrategy2(payload)],
   ]],
-  ["strategy4", "data/strategy4-latest.json", "data/strategy4-slim.json", slimStrategy4, strategy4PresetFiles],
   ["institution", "data/institution-latest.json", "data/institution-slim.json", slimInstitution, (payload) => [...institutionPresetFiles(payload), ...institutionPageFiles(payload), ["data/institution-mobile-top.json", mobileInstitutionTop(payload)]]],
   ["warrant", "data/warrant-flow-latest.json", "data/warrant-flow-slim.json", slimWarrant, (payload) => [...warrantPresetFiles(payload), ...warrantPageFiles(payload), ["data/warrant-flow-mobile-top.json", mobileWarrantTop(payload)]]],
 ];
@@ -2032,6 +2134,7 @@ async function main() {
     wrote += 1;
     console.log(`[slim] wrote ${output} count=${payload.count || Object.keys(payload.data || {}).length}`);
   }
+  await writeStrategyMatchIndexSnapshot();
   if (wrote) {
     const mobileSummary = mobileHomeSummary();
     writeToBoth("data/mobile-home-summary.json", mobileSummary);
@@ -2063,11 +2166,12 @@ async function main() {
     writeToBoth("data/market-ai-breadth-latest.json", refreshedMarketAiBreadth);
     const marketAiLive = marketAiLiveCache();
     writeToBoth("data/market-ai-live.json", marketAiLive);
+    await safeUpsertSnapshot("market_ai_live", marketAiLive, {
+      source: "data/market-ai-live.json",
+      snapshotId: marketAiLive.runId || `market-ai-live-${marketAiLive.updatedAt || Date.now()}`,
+    });
     const marketAiPanel = marketAiPanelLatest();
     writeToBoth("data/market-ai-panel-latest.json", marketAiPanel);
-    const strategyMatchIndex = buildStrategyMatchIndex();
-    writeToBoth("data/strategy-match-index.json", strategyMatchIndex);
-    console.log(`[slim] wrote data/strategy-match-index.json codes=${strategyMatchIndex.count || 0}`);
     const mobileStockAnalysis = mobileStockAnalysisLatest(marketAiPanel);
     writeToBoth("data/mobile-stock-analysis-latest.json", mobileStockAnalysis);
     const mobileAnalysisFileCount = writeMobileStockAnalysisFiles(mobileStockAnalysis);
@@ -2122,7 +2226,7 @@ async function main() {
     writeToBoth("data/data-manifest.json", finalManifest);
     console.log(`[slim] finalized data-manifest.json files=${finalManifest.count || 0}`);
   }
-  if (!wrote) process.exitCode = 1;
+  if (!wrote) console.log("[slim] no legacy slim jobs wrote; API-only snapshot outputs refreshed");
 }
 
 main().catch((error) => {

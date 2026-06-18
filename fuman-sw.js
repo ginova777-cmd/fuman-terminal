@@ -1,28 +1,29 @@
-const CACHE_VERSION = "fuman-terminal-sw-institution-cache-refresh-20260616-10";
+const CACHE_VERSION = "fuman-terminal-sw-desktop-api-only-all-20260618-16";
+const RUNTIME_THEME_CSS_LOADER = "terminal-theme-css-snapshot-first-20260619";
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 const DATA_CACHE = `${CACHE_VERSION}-data`;
 
 const STATIC_ASSETS = [
-  "/styles.css?v=institution-cache-refresh-20260616-10",
-  "/terminal-core.js?v=institution-cache-refresh-20260616-10",
-  "/terminal-modules.js?v=institution-cache-refresh-20260616-10",
-  "/terminal-sector-map.js?v=institution-cache-refresh-20260616-10",
-  "/terminal-strategy-config.js?v=institution-cache-refresh-20260616-10",
-  "/terminal-market-config.js?v=institution-cache-refresh-20260616-10",
-  "/terminal-ui-config.js?v=institution-cache-refresh-20260616-10",
-  "/terminal-runtime-config.js?v=institution-cache-refresh-20260616-10",
-  "/terminal-tuning-config.js?v=institution-cache-refresh-20260616-10",
-  "/terminal-worker.js?v=institution-cache-refresh-20260616-10",
-  "/terminal.js?v=institution-cache-refresh-20260616-10",
-  "/terminal-app.js?v=institution-cache-refresh-20260616-10",
-  "/terminal-ai-risk-guard.js?v=institution-cache-refresh-20260616-10",
-  "/terminal-chip-flow.js?v=institution-cache-refresh-20260616-10",
-  "/terminal-warrant-flow.js?v=institution-cache-refresh-20260616-10",
-  "/terminal-watchlist-module.js?v=institution-cache-refresh-20260616-10",
-  "/terminal-realtime-radar.css?v=institution-cache-refresh-20260616-10",
-  "/terminal-intraday-radar.css?v=institution-cache-refresh-20260616-10",
-  "/terminal-utility.css?v=institution-cache-refresh-20260616-10",
-  "/refresh.html?v=institution-cache-refresh-20260616-10",
+  "/styles.css?v=desktop-api-only-all-20260618-16",
+  "/terminal-core.js?v=desktop-api-only-all-20260618-16",
+  "/terminal-modules.js?v=desktop-api-only-all-20260618-16",
+  "/terminal-sector-map.js?v=desktop-api-only-all-20260618-16",
+  "/terminal-strategy-config.js?v=desktop-api-only-all-20260618-16",
+  "/terminal-market-config.js?v=desktop-api-only-all-20260618-16",
+  "/terminal-ui-config.js?v=desktop-api-only-all-20260618-16",
+  "/terminal-runtime-config.js?v=desktop-api-only-all-20260618-16",
+  "/terminal-tuning-config.js?v=desktop-api-only-all-20260618-16",
+  "/terminal-worker.js?v=desktop-api-only-all-20260618-16",
+  "/terminal.js?v=desktop-api-only-all-20260618-16",
+  "/terminal-app.js?v=desktop-api-only-all-20260618-16",
+  "/terminal-ai-risk-guard.js?v=desktop-api-only-all-20260618-16",
+  "/terminal-chip-flow.js?v=desktop-api-only-all-20260618-16",
+  "/terminal-warrant-flow.js?v=desktop-api-only-all-20260618-16",
+  "/terminal-watchlist-module.js?v=desktop-api-only-all-20260618-16",
+  "/terminal-realtime-radar.css?v=desktop-api-only-all-20260618-16",
+  "/terminal-intraday-radar.css?v=desktop-api-only-all-20260618-16",
+  "/terminal-utility.css?v=desktop-api-only-all-20260618-16",
+  "/refresh.html?v=desktop-api-only-all-20260618-16",
   "/assets/logo.webp",
   "/favicon.ico",
 ];
@@ -52,7 +53,6 @@ const DATA_PATTERNS = [
   /\/data\/stocks-slim\.json/i,
   /\/data\/stocks-index\.json/i,
   /\/data\/strategy-match-index\.json/i,
-  /\/data\/strategy4-zone-b-page-\d+\.json/i,
   /\/data\/health-summary\.json/i,
 ];
 
@@ -62,8 +62,6 @@ const NETWORK_FIRST_DATA_PATTERNS = [
   /\/data\/mobile-boot\.json/i,
   /\/data\/mobile-analysis\/[^/]+\.json/i,
   /\/data\/open-buy-latest\.json/i,
-  /\/data\/strategy4-.*\.json/i,
-  /\/data\/strategy4-summary\.json/i,
 ];
 
 const PREFETCH_CORE_DATA_ASSETS = [
@@ -89,7 +87,6 @@ const PREFETCH_DATA_ASSETS = [
   "/data/mobile-home-summary.json",
   "/data/market-summary.json",
   "/data/health-summary.json",
-  "/data/strategy4-score-top.json",
   "/data/data-status-index.json",
   "/data/stocks-quotes-mobile-top.json",
 ];
@@ -97,7 +94,14 @@ const PREFETCH_DATA_ASSETS = [
 const LIVE_PATTERNS = [
   /\/api\/realtime/i,
   /\/api\/scan-/i,
+  /\/api\/open-buy-latest/i,
+  /\/api\/strategy2-latest/i,
+  /\/api\/strategy3-latest/i,
   /\/api\/strategy4-latest/i,
+  /\/api\/strategy5-latest/i,
+  /\/api\/institution-latest/i,
+  /\/api\/warrant-flow-latest/i,
+  /\/api\/cb-detect-latest/i,
   /\/api\/latest-signals/i,
   /\/api\/refresh/i,
   /\/data\/strategy2-intraday-latest\.json/i,
@@ -141,6 +145,60 @@ function isNetworkFirstDataRequest(url) {
   return NETWORK_FIRST_DATA_PATTERNS.some((pattern) => pattern.test(url.pathname));
 }
 
+function isStrategy4StaticDataRequest(url) {
+  return /^\/data\/strategy4(?:-|$).*\.json$/i.test(url.pathname);
+}
+
+function isOpenBuyStaticDataRequest(url) {
+  return /^\/data\/open-buy(?:-|$).*\.json$/i.test(url.pathname);
+}
+
+function isDesktopApiOnlyStaticDataRequest(url) {
+  return /^\/data\/(?:strategy2-intraday|strategy3|strategy5|institution|warrant-flow|warrant-priority|warrant-single-signal|cb-detect)(?:-|$).*\.json$/i.test(url.pathname);
+}
+
+function strategy4StaticDisabledResponse() {
+  return new Response(JSON.stringify({
+    ok: false,
+    error: "strategy4_static_disabled",
+    message: "Strategy4 desktop is API-only. Use /api/strategy4-latest.",
+  }), {
+    status: 410,
+    headers: {
+      "Content-Type": "application/json; charset=utf-8",
+      "Cache-Control": "no-store, must-revalidate, max-age=0",
+    },
+  });
+}
+
+function openBuyStaticDisabledResponse() {
+  return new Response(JSON.stringify({
+    ok: false,
+    error: "open_buy_static_disabled",
+    message: "Strategy1 desktop is API-only. Use /api/open-buy-latest.",
+  }), {
+    status: 410,
+    headers: {
+      "Content-Type": "application/json; charset=utf-8",
+      "Cache-Control": "no-store, must-revalidate, max-age=0",
+    },
+  });
+}
+
+function desktopApiOnlyStaticDisabledResponse(pathname) {
+  return new Response(JSON.stringify({
+    ok: false,
+    error: "desktop_static_disabled",
+    message: `Desktop terminal is API-only. Static data path is disabled: ${pathname}`,
+  }), {
+    status: 410,
+    headers: {
+      "Content-Type": "application/json; charset=utf-8",
+      "Cache-Control": "no-store, must-revalidate, max-age=0",
+    },
+  });
+}
+
 async function networkFirst(request) {
   const cache = await caches.open(DATA_CACHE);
   try {
@@ -169,6 +227,9 @@ async function prefetchLowPowerDataAssets() {
 async function prefetchAssetList(assets) {
   const cache = await caches.open(DATA_CACHE);
   await Promise.allSettled(assets.map(async (pathname) => {
+    if (/^\/data\/strategy4(?:-|$).*\.json$/i.test(pathname)) return;
+    if (/^\/data\/open-buy(?:-|$).*\.json$/i.test(pathname)) return;
+    if (/^\/data\/(?:strategy2-intraday|strategy3|strategy5|institution|warrant-flow|warrant-priority|warrant-single-signal|cb-detect)(?:-|$).*\.json$/i.test(pathname)) return;
     const request = new Request(pathname, { cache: "reload" });
     const response = await fetch(request);
     if (response.ok) await cache.put(request, response.clone());
@@ -230,6 +291,18 @@ self.addEventListener("fetch", (event) => {
   if (!isSameOriginGet(request)) return;
   const url = new URL(request.url);
   if (isLiveRequest(url)) return;
+  if (isStrategy4StaticDataRequest(url)) {
+    event.respondWith(strategy4StaticDisabledResponse());
+    return;
+  }
+  if (isOpenBuyStaticDataRequest(url)) {
+    event.respondWith(openBuyStaticDisabledResponse());
+    return;
+  }
+  if (isDesktopApiOnlyStaticDataRequest(url)) {
+    event.respondWith(desktopApiOnlyStaticDisabledResponse(url.pathname));
+    return;
+  }
   if (request.mode === "navigate" || request.destination === "document" || url.pathname === "/" || url.pathname === "/index.html") {
     event.respondWith(fetch(request, { cache: "no-store" }).catch(() => caches.match(request, { ignoreSearch: false })));
     return;
@@ -259,6 +332,13 @@ self.addEventListener("fetch", (event) => {
   }
 
 });
+
+
+
+
+
+
+
 
 
 

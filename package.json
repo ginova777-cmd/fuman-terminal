@@ -54,6 +54,7 @@
     "sync:finmind:kbar": "node --use-system-ca scripts/sync-finmind-intraday-1m.js",
     "strategy2:coverage": "node --use-system-ca scripts/check-strategy2-supabase-coverage.js",
     "strategy2:coverage:watch": "node --use-system-ca scripts/check-strategy2-supabase-coverage.js --watch --until=09:10",
+    "verify:desktop-api-only": "node scripts/verify-desktop-api-only.js",
     "verify:publish-gate": "node scripts/verify-publish-gate.js",
     "sync:tdcc": "node --use-system-ca scripts/sync-tdcc-shareholding-cache.js",
     "sync:tdcc:backfill": "node --use-system-ca scripts/sync-tdcc-shareholding-cache.js --backfill",

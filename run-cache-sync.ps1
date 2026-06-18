@@ -145,40 +145,12 @@ function Invoke-PrePublishDataFreshnessGate {
 
 function Get-CriticalDataReleaseFiles {
   return @(
-    "data\institution-latest.json",
-    "data\institution-summary.json",
-    "data\institution-slim.json",
-    "data\institution-mobile-top.json",
     "data\institution-tdcc-breakout.json",
     "data\institution-tdcc-breakout-top.json",
     "data\institution-tdcc-breakout.csv",
-    "data\institution-backup.json",
-    "data\warrant-flow-latest.json",
-    "data\warrant-flow-summary.json",
-    "data\warrant-flow-slim.json",
-    "data\warrant-priority-top.json",
-    "data\warrant-single-signal-top.json",
-    "data\warrant-flow-mobile-top.json",
-    "data\warrant-flow-backup.json",
-    "data\open-buy-latest.json",
-    "data\open-buy-backup.json",
-    "data\open-buy-scorecard-source.json",
     "data\star-preopen-latest.json",
     "data\star-preopen-backup.json",
-    "data\star-preopen-scorecard-source.json",
-    "data\strategy3-latest.json",
-    "data\strategy3-backup.json",
-    "data\strategy3-scorecard-source.json",
-    "data\strategy4-latest.json",
-    "data\strategy4-summary.json",
-    "data\strategy4-slim.json",
-    "data\strategy4-score-top.json",
-    "data\strategy4-zone-a.json",
-    "data\strategy4-zone-b.json",
-    "data\strategy4-zone-c.json",
-    "data\strategy5-latest.json",
-    "data\strategy5-backup.json",
-    "data\cb-detect-latest.json"
+    "data\star-preopen-scorecard-source.json"
   )
 }
 
@@ -492,16 +464,7 @@ function Assert-CopiedFile($file, $source, $target) {
 }
 
 function Assert-CacheFileSize($file, $source) {
-  if ($file -notlike "data\open-buy-*.json") { return }
-  $maxBytes = 1048576
-  $parsedMaxBytes = 0
-  if ([int64]::TryParse($env:OPEN_BUY_SYNC_MAX_BYTES, [ref]$parsedMaxBytes) -and $parsedMaxBytes -gt 0) {
-    $maxBytes = $parsedMaxBytes
-  }
-  $size = (Get-Item -LiteralPath $source).Length
-  if ($size -gt $maxBytes) {
-    throw "$file is too large for openBuy sync: $size bytes > $maxBytes bytes"
-  }
+  return
 }
 
 function Copy-CacheFile($file, $source, $targetRoot, $label) {
@@ -515,22 +478,9 @@ function Copy-CacheFile($file, $source, $targetRoot, $label) {
 function Test-IntradayFlowProtectedFile($file) {
   if ($Scope -ne "all") { return $false }
   if ($file -notin @(
-    "data\institution-latest.json",
-    "data\institution-summary.json",
-    "data\institution-slim.json",
-    "data\institution-joint-top.json",
-    "data\institution-foreign-top.json",
-    "data\institution-trust-top.json",
     "data\institution-tdcc-breakout.json",
     "data\institution-tdcc-breakout-top.json",
     "data\institution-tdcc-breakout.csv",
-    "data\institution-backup.json",
-    "data\warrant-flow-latest.json",
-    "data\warrant-flow-summary.json",
-    "data\warrant-flow-slim.json",
-    "data\warrant-priority-top.json",
-    "data\warrant-single-signal-top.json",
-    "data\warrant-flow-backup.json",
     "data\afterhours-supabase-status.json",
     "data\flow-health-latest.json"
   )) { return $false }
@@ -637,7 +587,18 @@ function Get-TextSha256($text) {
   }
 }
 
+function Test-DesktopApiOnlyStaticDataFile($file) {
+  # DESKTOP_API_ONLY_STATIC_FILTER: these desktop terminal datasets must be served by Supabase latest APIs only.
+  $normalized = ([string]$file) -replace "/", "\"
+  if ($normalized -match "\\mobile-" -or $normalized -match "-mobile-" -or $normalized -match "tdcc-breakout") { return $false }
+  return $normalized -match "^data\\(open-buy|strategy2-intraday|strategy3|strategy4|strategy5|institution|warrant-flow|warrant-priority|warrant-single-signal|cb-detect).+\.json$"
+}
+
 function Test-VercelCacheVisibility($file) {
+  if (Test-DesktopApiOnlyStaticDataFile $file) {
+    Write-Log "VERCEL_VISIBLE_SKIPPED file=$file reason=desktop-api-only-static-disabled"
+    return
+  }
   $baseUrl = $env:FUMAN_VERCEL_BASE_URL
   if (-not $baseUrl) { $baseUrl = "https://fuman-terminal.vercel.app" }
   $localPath = Join-Path $syncRepo $file
@@ -874,65 +835,21 @@ try {
       "data\star-preopen-scorecard-source.json"
     )
   } elseif ($Scope -eq "strategy3") {
-    $criticalLatestFiles = @(
-      "data\strategy3-latest.json"
-    )
-
-    $dataFiles = @(
-      "data\strategy3-latest.json",
-      "data\strategy3-backup.json",
-      "data\strategy3-scorecard-source.json"
-    )
+    $criticalLatestFiles = @()
+    $dataFiles = @()
   } elseif ($Scope -eq "strategy2") {
-    $criticalLatestFiles = @(
-      "data\strategy2-intraday-latest.json",
-      "data\strategy2-intraday-top.json",
-      "data\strategy2-intraday-live-top.json"
-    )
-
-    $dataFiles = @(
-      "data\strategy2-intraday-latest.json",
-      "data\strategy2-intraday-slim.json",
-      "data\strategy2-intraday-top.json",
-      "data\strategy2-intraday-live-top.json",
-      "data\strategy2-intraday-delta.json",
-      "data\strategy2-scorecard-source.json"
-    )
+    $criticalLatestFiles = @()
+    $dataFiles = @()
   } elseif ($Scope -eq "strategy4") {
-    $criticalLatestFiles = @(
-      "data\strategy4-latest.json"
-    )
-
-    $dataFiles = @(
-      "data\strategy4-latest.json",
-      "data\strategy4-summary.json",
-      "data\strategy4-slim.json",
-      "data\strategy4-zone-a.json",
-      "data\strategy4-zone-b.json",
-      "data\strategy4-zone-c.json",
-      "data\strategy4-score-top.json",
-      "data\strategy4-backup.json"
-    )
-    for ($page = 1; $page -le 48; $page++) {
-      $dataFiles += "data\strategy4-zone-b-page-$page.json"
-      $dataFiles += "data\strategy4-zone-c-page-$page.json"
-    }
+    $criticalLatestFiles = @()
+    $dataFiles = @()
   } elseif ($Scope -eq "strategy5") {
-    $criticalLatestFiles = @(
-      "data\strategy5-latest.json"
-    )
-
-    $dataFiles = @(
-      "data\strategy5-latest.json",
-      "data\strategy5-backup.json"
-    )
+    $criticalLatestFiles = @()
+    $dataFiles = @()
   } elseif ($Scope -eq "cb") {
-    $criticalLatestFiles = @(
-      "data\cb-detect-latest.json"
-    )
+    $criticalLatestFiles = @()
 
     $dataFiles = @(
-      "data\cb-detect-latest.json",
       "data\afterhours-supabase-status.json",
       "data\data-status-index.json",
       "data\data-manifest.json"
@@ -1018,6 +935,13 @@ try {
   if ($Scope -eq "all") {
     $criticalLatestFiles = @($criticalLatestFiles | Where-Object { -not (Test-IntradayFlowProtectedFile $_) })
   }
+
+  $desktopApiOnlyStaticFiles = @($dataFiles | Where-Object { Test-DesktopApiOnlyStaticDataFile $_ })
+  if ($desktopApiOnlyStaticFiles.Count -gt 0) {
+    Write-Log "DESKTOP_API_ONLY_STATIC_FILTER removed=$($desktopApiOnlyStaticFiles -join ', ')"
+  }
+  $dataFiles = @($dataFiles | Where-Object { -not (Test-DesktopApiOnlyStaticDataFile $_) })
+  $criticalLatestFiles = @($criticalLatestFiles | Where-Object { -not (Test-DesktopApiOnlyStaticDataFile $_) })
 
   $copiedFiles = New-Object System.Collections.Generic.List[string]
   $localPublishedFiles = @()

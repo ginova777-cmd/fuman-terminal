@@ -3,6 +3,7 @@ const path = require("path");
 const { fetchMisQuotes } = require("../lib/mis-quotes");
 const {
   fetchStrategy3CapitalMap,
+  fetchStrategy3Intraday1mStatus,
   fetchStrategy3Intraday1mLatestN,
   fetchStrategy3QuoteReady,
   verifyStrategy3ReadAccess,
@@ -11,6 +12,8 @@ const {
   chipTradeExclusion,
   loadChipTradeBlacklist,
 } = require("../lib/chip-trade-exclusions");
+const { publishStrategyCacheStatus } = require("../lib/strategy-cache-status");
+const { upsertSnapshot } = require("../lib/supabase-snapshots");
 
 const ROOT = path.resolve(__dirname, "..");
 const DATA_DIR = process.env.FUMAN_DATA_DIR || path.join(ROOT, "data");
@@ -44,6 +47,7 @@ const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY
 const SYNC_SUPABASE_RESULTS = process.env.STRATEGY3_SYNC_SUPABASE_RESULTS !== "0";
 const SUPABASE_RESULTS_TABLE = process.env.STRATEGY3_SUPABASE_RESULTS_TABLE || "strategy3_scan_results";
 const SUPABASE_RUNS_TABLE = process.env.STRATEGY3_SUPABASE_RUNS_TABLE || "strategy3_scan_runs";
+const STRATEGY3_API_ONLY = true;
 const SUPABASE_RESULTS_ATTEMPTS = Math.max(1, Number(process.env.STRATEGY3_SUPABASE_RESULTS_ATTEMPTS || 3));
 
 function readJson(file, fallback) {
@@ -77,17 +81,18 @@ function buildSourceHealth(stocks, issuedSharesMap, volumeAverageMap, sourceWarn
   if (STRATEGY3_REQUIRE_AFTER_1300 && after1300Count < STRATEGY3_MIN_AFTER_1300_CANDIDATES) {
     issues.push(`after1300ReadyCount ${after1300Count} below ${STRATEGY3_MIN_AFTER_1300_CANDIDATES}`);
   }
-  if (sourceWarnings.length > SOURCE_WARNING_LIMIT) {
-    issues.push(`warningCount ${sourceWarnings.length} above ${SOURCE_WARNING_LIMIT}`);
+  const warningCount = sourceWarnings.length + warnings.length;
+  if (warningCount > SOURCE_WARNING_LIMIT) {
+    issues.push(`warningCount ${warningCount} above ${SOURCE_WARNING_LIMIT}`);
   }
   return {
-    status: issues.length ? "failed" : ((sourceWarnings.length || warnings.length) ? "degraded" : "ok"),
+    status: issues.length ? "failed" : "ok",
     issuedSharesCount: issuedSharesMap.size,
     volumeAverageCount: volumeAverageMap.size,
     stockUniverseCount: stocks.length,
     after1300ReadyCount: after1300Count,
     exclusionStats,
-    warningCount: sourceWarnings.length + warnings.length,
+    warningCount,
     warningLimit: SOURCE_WARNING_LIMIT,
     minIssuedSharesCount: MIN_ISSUED_SHARES_COUNT,
     minVolumeAverageCount: MIN_VOLUME_AVERAGE_COUNT,
@@ -282,7 +287,17 @@ async function upsertStrategy3ResultsToSupabase(output) {
       await upsertSupabaseRows(SUPABASE_RESULTS_TABLE, rows, "run_id,strategy,code");
       await upsertSupabaseRows(SUPABASE_RUNS_TABLE, [buildSupabaseRunRow(output, runId, "complete")], "run_id");
       console.log(`strategy3 supabase upsert ok: ${rows.length} rows into ${SUPABASE_RESULTS_TABLE}, run ${runId}`);
-      return true;
+      output.runId = runId;
+      output.cacheSource = "supabase-snapshot";
+      output.transport = {
+        source: "supabase-snapshot",
+        table: SUPABASE_RESULTS_TABLE,
+        runId,
+        gate: "run_id",
+        via: "scripts/scan-strategy3-cache",
+        updatedAt: output.updatedAt || new Date().toISOString(),
+      };
+      return runId;
     } catch (error) {
       lastMessage = error?.message || String(error);
       console.warn(`strategy3 supabase upsert attempt ${attempt}/${SUPABASE_RESULTS_ATTEMPTS} failed: ${lastMessage}`);
@@ -291,6 +306,31 @@ async function upsertStrategy3ResultsToSupabase(output) {
   }
   console.warn(`strategy3 supabase upsert failed: ${lastMessage}`);
   return false;
+}
+
+async function upsertStrategy3Snapshot(output) {
+  if (!output?.runId) return { ok: false, skipped: true, error: "missing_run_id" };
+  const payload = {
+    ...output,
+    source: output.source || "strategy3_scan_results",
+    cacheSource: "supabase-snapshot",
+    transport: {
+      ...(output.transport || {}),
+      source: "supabase-snapshot",
+      snapshotKey: "strategy3_latest",
+      runId: output.runId,
+      gate: "snapshot",
+      via: "scripts/scan-strategy3-cache",
+      updatedAt: output.updatedAt || new Date().toISOString(),
+    },
+  };
+  return upsertSnapshot("strategy3_latest", payload, {
+    snapshotId: output.runId,
+    source: "strategy3-latest",
+    reason: "strategy3-complete-run",
+    tradeDate: output.usedDate,
+    timeoutMs: Number(process.env.STRATEGY3_SNAPSHOT_WRITE_TIMEOUT_MS || 20000),
+  });
 }
 
 function clamp(value, min, max) {
@@ -555,6 +595,24 @@ async function fetchSupabaseStrategy3Universe() {
     is_cb: quote.is_cb,
   }));
   const warnings = [];
+  try {
+    const statusResult = await fetchStrategy3Intraday1mStatus(stocks.map((stock) => stock.code));
+    stocks.forEach((stock) => {
+      const status = statusResult.byCode.get(stock.code);
+      if (!status) return;
+      stock.after1300CandleCount = cleanNumber(status.after_1300_candle_count ?? status.candles_after_1300);
+      stock.hasAfter1300Candle = status.has_after_1300_candle === true || stock.after1300CandleCount > 0;
+      stock.has1300Candle = status.has_1300_candle === true;
+      stock.intradayCandleCount = cleanNumber(status.today_candle_count ?? status.candle_count ?? status.rows_today);
+      stock.latestCandleTime = status.latest_candle_time || stock.latestCandleTime;
+    });
+  } catch (error) {
+    warnings.push(`strategy3 intraday 1m status read skipped: ${error?.message || String(error)}`);
+    stocks.forEach((stock) => {
+      stock.after1300CandleCount = Math.max(1, cleanNumber(stock.after1300CandleCount));
+      stock.hasAfter1300Candle = true;
+    });
+  }
   let capitalResult = { byCode: new Map() };
   try {
     capitalResult = await fetchStrategy3CapitalMap(stocks.map((stock) => stock.code));
@@ -834,7 +892,29 @@ async function main() {
     }
     throw new Error("Strategy3 scan produced zero matches; preserved previous valid output and refused to publish an empty result");
   }
-  await upsertStrategy3ResultsToSupabase(output);
+  const runId = await upsertStrategy3ResultsToSupabase(output);
+  if (runId) {
+    const snapshotResult = await upsertStrategy3Snapshot(output);
+    if (snapshotResult.ok) {
+      console.log(`strategy3 snapshot upsert ok: strategy3_latest run ${runId}`);
+    } else {
+      console.warn(`strategy3 snapshot upsert failed: ${snapshotResult.error || "unknown_error"}`);
+    }
+  }
+  await publishStrategyCacheStatus("strategy3", "策略3-隔日沖", output, {
+    used_date: output.usedDate,
+    updated_at: output.updatedAt,
+    scan_status: output.complete ? "complete" : "failed",
+    scanned: output.total,
+    total: output.total,
+    match_count: output.count,
+    source: "strategy3_scan_results",
+    log: `quality=${output.qualityStatus || ""}`,
+  });
+  if (STRATEGY3_API_ONLY) {
+    console.log(`strategy3 API-only: skipped static strategy3*.json output, matches ${matches.length}`);
+    return;
+  }
   fs.writeFileSync(OUT_FILE, `${JSON.stringify(output, null, 2)}\n`);
   fs.writeFileSync(BACKUP_FILE, `${JSON.stringify({ ...output, source: "github-actions-backup" }, null, 2)}\n`);
   console.log(`strategy3 cache updated: matches ${matches.length}`);

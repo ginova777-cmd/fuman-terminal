@@ -18,22 +18,22 @@ const SUPABASE_KEY = process.env.SUPABASE_ANON_KEY
 const TABLE = process.env.INSTITUTION_SUPABASE_RESULTS_TABLE || "institution_scan_results";
 const LATEST_RUN_VIEW = process.env.INSTITUTION_SUPABASE_LATEST_RUN_VIEW || "v_institution_latest_complete_run";
 
-function staticFallback(reason = "") {
-  try {
-    const payload = JSON.parse(fs.readFileSync(path.join(process.cwd(), "data", "institution-latest.json"), "utf8"));
-    return {
-      ...payload,
-      cacheSource: "static-fallback",
-      transport: {
-        source: "static-json",
-        via: "api/institution-latest",
-        fallbackReason: reason,
-        fetchedAt: new Date().toISOString(),
-      },
-    };
-  } catch (error) {
-    return { ok: false, error: "institution_static_fallback_failed", detail: error?.message || String(error) };
-  }
+function apiOnlyError(reason = "") {
+  return {
+    ok: false,
+    error: "institution_api_only_unavailable",
+    detail: reason,
+    cacheSource: "none",
+    data: {},
+    rows: [],
+    transport: {
+      source: "supabase",
+      latestRunView: LATEST_RUN_VIEW,
+      gate: "run_id",
+      via: "api/institution-latest",
+      fetchedAt: new Date().toISOString(),
+    },
+  };
 }
 
 async function fetchRowsFrom(table, query) {
@@ -152,16 +152,16 @@ module.exports = async function handler(request, response) {
 
   try {
     if (!SUPABASE_URL || !SUPABASE_KEY) {
-      response.status(200).json(staticFallback("supabase_not_configured"));
+      response.status(503).json(apiOnlyError("supabase_not_configured"));
       return;
     }
     const latest = await fetchLatestCompleteRows();
     if (!latest.rows.length) {
-      response.status(200).json(staticFallback("institution_scan_results_latest_empty"));
+      response.status(404).json(apiOnlyError("institution_scan_results_latest_empty"));
       return;
     }
     response.status(200).json(buildPayload(latest.rows, latest.run));
   } catch (error) {
-    response.status(200).json(staticFallback(error?.message || String(error)));
+    response.status(503).json(apiOnlyError(error?.message || String(error)));
   }
 };

@@ -6,9 +6,6 @@ const FILES = [
   "market-summary.json",
   "strategy2-intraday-latest.json",
   "realtime-radar-latest.json",
-  "strategy4-latest.json",
-  "strategy4-summary.json",
-  "strategy4-slim.json",
   "institution-latest.json",
   "warrant-flow-latest.json",
 ];

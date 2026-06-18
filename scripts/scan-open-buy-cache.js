@@ -3,6 +3,7 @@ const path = require("path");
 const scanOpenBuy = require("../api/scan-open-buy");
 const fetchStocks = require("../stocks");
 const { fetchMisQuotes } = require("../lib/mis-quotes");
+const { publishStrategyCacheStatus } = require("../lib/strategy-cache-status");
 
 const { ROOT, dataPath, statePath } = require("./runtime-paths");
 const OUT_FILE = dataPath("open-buy-latest.json");
@@ -38,6 +39,7 @@ const SUPABASE_OPEN_BUY_TABLE = process.env.SUPABASE_OPEN_BUY_TABLE || "strategy
 const SUPABASE_OPEN_BUY_RUNS_TABLE = process.env.SUPABASE_OPEN_BUY_RUNS_TABLE || "strategy1_open_buy_runs";
 const SUPABASE_OPEN_BUY_RESULTS_TABLE = process.env.SUPABASE_OPEN_BUY_RESULTS_TABLE || "strategy1_open_buy_results";
 const OPEN_BUY_SYNC_SUPABASE_RESULTS = process.env.OPEN_BUY_SYNC_SUPABASE_RESULTS !== "0";
+const OPEN_BUY_API_ONLY = true;
 
 function readJson(file, fallback) {
   try { return JSON.parse(fs.readFileSync(file, "utf8")); } catch { return fallback; }
@@ -265,7 +267,13 @@ async function upsertOpenBuyLatestToSupabase(payload) {
     id: "latest",
     run_id: runId,
     date: payload.usedDate || payload.date || "",
+    used_date: payload.usedDate || payload.date || "",
     updated_at: payload.updatedAt || new Date().toISOString(),
+    scan_status: payload.complete ? "complete" : "incomplete",
+    completed_chunks: Number(payload.completedChunks || 0),
+    total_chunks: Number(payload.totalChunks || 0),
+    scanned: Array.isArray(payload.scannedCodes) ? payload.scannedCodes.length : Number(payload.scannedThisRun || 0),
+    total: Number(payload.total || 0),
     payload,
     match_count: Array.isArray(payload.matches) ? payload.matches.length : 0,
     scanned_count: Array.isArray(payload.scannedCodes) ? payload.scannedCodes.length : 0,
@@ -293,6 +301,16 @@ async function upsertOpenBuyLatestToSupabase(payload) {
         lastMessage = `HTTP ${response.status} ${text.slice(0, 240)}`.trim();
       } else {
         const readback = await verifyOpenBuySupabaseReadback(baseUrl, body);
+        await publishStrategyCacheStatus("strategy1", "策略1-明日開盤入", payload, {
+          used_date: body.used_date,
+          updated_at: body.updated_at,
+          scan_status: body.scan_status,
+          scanned: body.scanned,
+          total: body.total,
+          match_count: body.match_count,
+          source: SUPABASE_OPEN_BUY_TABLE,
+          log: `run_id=${runId}`,
+        });
         writeSupabaseStatus(true, {
           table: SUPABASE_OPEN_BUY_TABLE,
           runTable: SUPABASE_OPEN_BUY_RUNS_TABLE,
@@ -324,9 +342,23 @@ async function upsertOpenBuyLatestToSupabase(payload) {
     error: lastMessage || "unknown error",
     attempts,
   });
+  await publishStrategyCacheStatus("strategy1", "策略1-明日開盤入", payload, {
+    used_date: body.used_date,
+    updated_at: new Date().toISOString(),
+    scan_status: "failed",
+    scanned: body.scanned,
+    total: body.total,
+    match_count: body.match_count,
+    source: SUPABASE_OPEN_BUY_TABLE,
+    error: lastMessage || "unknown error",
+  });
   return false;
 }
 function preserveScorecardSource(payload) {
+  if (OPEN_BUY_API_ONLY) {
+    console.log("open-buy API-only: skipped static open-buy-scorecard-source.json output");
+    return;
+  }
   if (!(payload.matches || []).length) return;
   fs.mkdirSync(path.dirname(SCORECARD_SOURCE_FILE), { recursive: true });
   fs.writeFileSync(SCORECARD_SOURCE_FILE, `${JSON.stringify({
@@ -515,12 +547,15 @@ async function runHandlerWithRetry(codes, label) {
 }
 
 async function main() {
+  if (!FULL_SCAN) {
+    throw new Error("Open-buy API-only requires full scan -> Supabase complete run; partial static JSON runs are disabled");
+  }
   const universe = await fetchUniverse();
   const codes = universe.map((stock) => stock.code);
   if (!codes.length) throw new Error("No stock universe");
 
-  const previousRaw = readJson(OUT_FILE, { ok: true, total: codes.length, scannedCodes: [], matches: [] });
-  const backup = readJson(BACKUP_FILE, { ok: true, matches: [] });
+  const previousRaw = { ok: true, total: codes.length, scannedCodes: [], matches: [] };
+  const backup = { ok: true, matches: [] };
   const currentMatches = new Map();
   const scanned = new Set();
   const failedCodes = new Set();
@@ -556,11 +591,32 @@ async function main() {
     };
   }
 
-  async function publishOutput(output, { backupOnMatches = false } = {}) {
-    fs.mkdirSync(path.dirname(OUT_FILE), { recursive: true });
-    fs.writeFileSync(OUT_FILE, `${JSON.stringify(output, null, 2)}\n`);
-    if (backupOnMatches && output.matches.length) {
-      fs.writeFileSync(BACKUP_FILE, `${JSON.stringify({ ...output, source: "github-actions-backup" }, null, 2)}\n`);
+  async function publishRunningStatus(output, log = "") {
+    await publishStrategyCacheStatus("strategy1", "策略1-明日開盤入", output, {
+      used_date: output.usedDate,
+      updated_at: output.updatedAt,
+      scan_status: output.scanStatus || (output.complete ? "complete" : "running"),
+      scanned: Array.isArray(output.scannedCodes) ? output.scannedCodes.length : output.scannedThisRun,
+      total: output.total,
+      match_count: output.count,
+      source: SUPABASE_OPEN_BUY_TABLE,
+      log,
+    });
+  }
+
+  async function publishCompleteOutput(output, { backupOnMatches = false } = {}) {
+    if (output.complete !== true || output.scanStatus !== "complete") {
+      await publishRunningStatus(output, "blocked non-complete publish to latest");
+      throw new Error(`Refusing to publish non-complete open-buy output: status=${output.scanStatus} complete=${output.complete}`);
+    }
+    if (!OPEN_BUY_API_ONLY) {
+      fs.mkdirSync(path.dirname(OUT_FILE), { recursive: true });
+      fs.writeFileSync(OUT_FILE, `${JSON.stringify(output, null, 2)}\n`);
+      if (backupOnMatches && output.matches.length) {
+        fs.writeFileSync(BACKUP_FILE, `${JSON.stringify({ ...output, source: "github-actions-backup" }, null, 2)}\n`);
+      }
+    } else {
+      console.log(`open-buy API-only: skipped static open-buy*.json output, backup=${backupOnMatches ? "requested" : "no"}`);
     }
     await upsertOpenBuyLatestToSupabase(output);
   }
@@ -609,15 +665,15 @@ async function main() {
     console.log(`${label} done: matches ${matches.length}, failed so far ${failedCodes.size}`);
     if (currentMatches.size > lastPublishedCount) {
       const partialOutput = buildOutput(chunk + 1, false);
-      await publishOutput(partialOutput);
+      await publishRunningStatus(partialOutput, `running chunks ${chunk + 1}/${chunksToRun}`);
       lastPublishedCount = currentMatches.size;
-      console.log(`open-buy partial published: chunks ${chunk + 1}/${chunksToRun}, scanned ${scannedThisRun}/${codes.length}, matches ${partialOutput.matches.length}`);
+      console.log(`open-buy running status updated: chunks ${chunk + 1}/${chunksToRun}, scanned ${scannedThisRun}/${codes.length}, matches ${partialOutput.matches.length}`);
     }
   }
 
   if (failedCodes.size || scanned.size !== codes.length || scannedThisRun !== codes.length) {
     const incompleteOutput = buildOutput(chunksToRun, false, "incomplete");
-    await publishOutput(incompleteOutput, { backupOnMatches: true });
+    await publishRunningStatus(incompleteOutput, `incomplete failed=${failedCodes.size}`);
     throw new Error(`Open-buy full scan incomplete: scanned ${scanned.size}/${codes.length}, failed ${failedCodes.size}`);
   }
 
@@ -626,7 +682,7 @@ async function main() {
   assertNotOlderThanPrevious(previousRaw, output);
   preservePreviousTradingSource((previousRaw.matches || []).length ? previousRaw : backup, output);
 
-  await publishOutput(output, { backupOnMatches: true });
+  await publishCompleteOutput(output, { backupOnMatches: true });
   console.log(`open-buy cache updated: full market scan scanned ${scannedThisRun}/${codes.length}, matches ${output.matches.length}`);
 }
 

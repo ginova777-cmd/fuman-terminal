@@ -25,9 +25,6 @@ function main() {
   const files = [
     "market-summary.json",
     "health-summary.json",
-    "strategy4-summary.json",
-    "strategy4-slim.json",
-    "strategy4-zone-a.json",
     "institution-slim.json",
     "institution-joint-top.json",
     "warrant-flow-slim.json",

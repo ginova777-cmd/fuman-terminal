@@ -10,6 +10,14 @@ function read(file) {
 
 const issues = [];
 
+const desktopApiOnlyGuard = spawnSync(process.execPath, [path.join(ROOT, "scripts", "verify-desktop-api-only.js")], {
+  cwd: ROOT,
+  encoding: "utf8",
+});
+if (desktopApiOnlyGuard.status !== 0) {
+  issues.push(`verify-desktop-api-only failed: ${(desktopApiOnlyGuard.stderr || desktopApiOnlyGuard.stdout || "").trim()}`);
+}
+
 function queryScheduledTask(taskName) {
   const escaped = taskName.replace(/'/g, "''");
   const result = spawnSync("powershell.exe", [
@@ -171,6 +179,16 @@ const publishGate = read("run-publish-gate.ps1");
 const dailyRelease = read("run-daily-release.ps1");
 const runtimeConfig = read("terminal-runtime-config.js");
 const realtimeRadarApi = read("api/realtime-radar-latest.js");
+const openBuyLatestApi = read("api/open-buy-latest.js");
+const strategy4LatestApi = read("api/strategy4-latest.js");
+const strategy4Scanner = read("scripts/scan-strategy4-cache.js");
+const runStrategy4 = read("run-strategy4.ps1");
+const slimCacheGenerator = read("scripts/generate-slim-cache.js");
+const sourceSync = read("scripts/sync-main-deploy-source.js");
+const strategy2CompleteRunPublisher = read("scripts/publish-strategy2-complete-run.js");
+const runIdCompleteGate = read("scripts/verify-run-id-complete-gates.js");
+const terminalLiveCheck = read("terminal-live-check.js");
+const terminalApp = read("terminal-app.js");
 if (!/if \(\$Scope -ne "all"\)/.test(cacheSync)) {
   issues.push("run-cache-sync.ps1 must block every non-all scope");
 }
@@ -189,15 +207,9 @@ if (!/npm run snapshot:data/.test(cacheSync) || !/CACHE_SYNC_WRITE_CODE_REPO/.te
 if (!/Get-CriticalDataReleaseFiles/.test(cacheSync) || !/CACHE_SYNC_WRITE_CODE_REPO_CRITICAL_ONLY/.test(cacheSync)) {
   issues.push("run-cache-sync.ps1 must limit freshness-gate source repo writes to critical data files");
 }
-for (const strategy3CriticalFile of [
-  "data\\open-buy-latest.json",
-  "data\\star-preopen-latest.json",
-  "data\\strategy3-latest.json",
-  "data\\strategy3-backup.json",
-  "data\\strategy3-scorecard-source.json",
-]) {
-  if (!cacheSync.includes(strategy3CriticalFile)) {
-    issues.push(`run-cache-sync.ps1 critical data release missing ${strategy3CriticalFile}`);
+for (const marker of ["DESKTOP_API_ONLY_STATIC_FILTER", "Test-DesktopApiOnlyStaticDataFile", "desktop-api-only-static-disabled"]) {
+  if (!cacheSync.includes(marker)) {
+    issues.push(`run-cache-sync.ps1 missing desktop API-only static filter marker ${marker}`);
   }
 }
 if (!/Verify live data freshness/.test(cacheSync) || !/--live/.test(cacheSync)) {
@@ -217,6 +229,70 @@ for (const marker of [
   "realtimeRadarStaticCache: \"/data/realtime-radar-latest.json\"",
 ]) {
   if (!runtimeConfig.includes(marker)) issues.push(`terminal-runtime-config.js missing live realtime radar endpoint marker ${marker}`);
+}
+for (const marker of [
+  "openBuyCache: \"/api/open-buy-latest\"",
+  "strategy4Cache: \"/api/strategy4-latest\"",
+  "strategy3Cache: \"/api/strategy3-latest\"",
+  "strategy5Cache: \"/api/strategy5-latest\"",
+  "institutionCache: \"/api/institution-latest\"",
+  "warrantFlowCache: \"/api/warrant-flow-latest\"",
+]) {
+  if (!runtimeConfig.includes(marker)) issues.push(`terminal-runtime-config.js must keep complete-run/no-store frontend endpoint ${marker}`);
+}
+if (/legacy-scan-time/.test(strategy4LatestApi) || !/gate: "run_id"/.test(strategy4LatestApi)) {
+  issues.push("api/strategy4-latest.js must read latest complete run by run_id and must not fall back to legacy scan_time");
+}
+if (/staticFallback|static-fallback|\/data\/strategy4-|strategy4_static|strategy4_scan_results_latest_empty/.test(strategy4LatestApi)) {
+  issues.push("api/strategy4-latest.js must be API-only and must not fall back to static strategy4 JSON");
+}
+if (!/api\/open-buy-latest/.test(openBuyLatestApi) || !/v_strategy1_open_buy_latest_complete_run/.test(openBuyLatestApi) || !/Cache-Control", "no-store/.test(openBuyLatestApi)) {
+  issues.push("api/open-buy-latest.js must expose strategy1 latest complete run with no-store headers");
+}
+if (/legacy scan_time gate|legacy_scan_time_gate|includeRunId = false|STRATEGY4_SUPABASE_RUN_ID/.test(strategy4Scanner)) {
+  issues.push("scan-strategy4-cache.js must hard-fail when run_id complete gate is unavailable, not retry legacy scan_time");
+}
+if (!/STRATEGY4_API_ONLY = true/.test(strategy4Scanner) || /OUT_FILE|BACKUP_FILE|SUMMARY_FILE|writeSummary\("strategy4"|fs\.writeFileSync\([^)]*strategy4-(latest|backup|summary)\.json/.test(strategy4Scanner)) {
+  issues.push("scan-strategy4-cache.js must be API-only: full scan publishes Supabase complete run only, no data/strategy4 static output");
+}
+if (/run-cache-sync|generate-slim-cache|run-strategy4-postflight|data\\strategy4|data\/strategy4|strategy4-(latest|backup|summary|slim|zone|score).*\.json/.test(runStrategy4) || !/api\/strategy4-latest/.test(runStrategy4)) {
+  issues.push("run-strategy4.ps1 must be API-only: no static strategy4 JSON copy, slim generation, cache sync, or static postflight");
+}
+if (/"strategy4", "data\/strategy4-latest\.json"|strategy4PresetFiles\]/.test(slimCacheGenerator)) {
+  issues.push("generate-slim-cache.js must not generate strategy4 static slim/zone/page JSON");
+}
+if (/data\/strategy4-|strategy4-score/.test(sourceSync)) {
+  issues.push("sync-main-deploy-source.js must not publish strategy4 static JSON artifacts");
+}
+if (!/publish_strategy2_complete_run/.test(strategy2CompleteRunPublisher) || !/strategy2_latest\?on_conflict=id/.test(strategy2CompleteRunPublisher)) {
+  issues.push("publish-strategy2-complete-run.js must publish strategy2_latest and Supabase complete run RPC");
+}
+if (!/strategy1,strategy2,strategy3,strategy4,strategy5,institution,warrant_flow/.test(runIdCompleteGate) || /RUN_GATE_OPTIONAL \|\| "strategy2"/.test(runIdCompleteGate)) {
+  issues.push("verify-run-id-complete-gates.js must require strategy2 as a strict complete-run gate by default");
+}
+for (const marker of [
+  "/api/open-buy-latest",
+  "/api/strategy4-latest",
+  "/api/strategy3-latest",
+  "/api/strategy5-latest",
+  "/api/institution-latest",
+  "/api/warrant-flow-latest",
+]) {
+  if (!terminalLiveCheck.includes(marker) && !runtimeConfig.includes(marker)) {
+    issues.push(`frontend source missing complete-run/no-store polling endpoint ${marker}`);
+  }
+}
+if (!/loadOpenBuySupabasePayload/.test(terminalApp) || !/api\/open-buy-latest/.test(terminalApp)) {
+  issues.push("terminal-app.js must poll api/open-buy-latest before static open-buy fallback");
+}
+if (!/pollCompleteRunUpdates/.test(terminalLiveCheck) || !/installCompleteRunPollingManager/.test(terminalApp) || !/installStrategy3ApiRunPolling/.test(terminalApp)) {
+  issues.push("frontend must keep unified complete-run polling manager for API no-store auto updates, including strategy3 API run polling");
+}
+if (!/installStrategy4ApiRunPolling/.test(terminalApp)) {
+  issues.push("frontend must keep strategy4 API run polling for forced reload on runId change");
+}
+if (/\/data\/strategy4-|localStorage\.getItem\(STRATEGY4|localStorage\.setItem\(STRATEGY4/.test(terminalLiveCheck) || /\/data\/strategy4-|localStorage\.getItem\(STRATEGY4|localStorage\.setItem\(STRATEGY4/.test(terminalApp)) {
+  issues.push("strategy4 frontend must be API-only: no static JSON, backup JSON, or localStorage seed data paths");
 }
 for (const marker of [
   "fuman_realtime_radar_cache",
@@ -397,19 +473,16 @@ for (const file of [
   "scripts/intraday-radar-rules.js",
   "scripts/scan-realtime-radar-cache.js",
   "scripts/scan-strategy3-cache.js",
+  "scripts/verify-desktop-api-only.js",
   "data/data-manifest.json",
   "data/terminal-home-bundle.json",
   "data/terminal-home-mobile-slim.json",
-  "data/institution-latest.json",
   "scripts/scan-open-buy-cache.js",
   "scripts/scan-star-preopen.js",
-  "data/open-buy-latest.json",
-  "data/open-buy-backup.json",
-  "data/open-buy-scorecard-source.json",
   "ops/public-slot/Strategy1RunIdCompleteGate.sql",
   "data/star-preopen-latest.json",
   "data/star-preopen-scorecard-source.json",
-  "data/warrant-flow-latest.json",
+  "api/desktop-static-disabled.js",
   "api/scan-warrant-flow.js",
   "scripts/scan-warrant-flow-cache.js",
 ]) {
@@ -443,8 +516,6 @@ for (const legacyScript of [
   "run-open-buy.ps1",
   "run-open-buy-sync-retry.ps1",
   "run-strategy2-intraday.ps1",
-  "run-strategy3.ps1",
-  "run-strategy3-watchdog.ps1",
   "run-strategy5.ps1",
   "run-realtime-radar.ps1",
   "run-market-overview.ps1",
@@ -454,6 +525,18 @@ for (const legacyScript of [
   if (!/legacy-entrypoint-guard\.ps1/.test(scriptText)) {
     issues.push(`${legacyScript} must redirect to legacy-entrypoint-guard.ps1`);
   }
+}
+
+const runStrategy3 = read("run-strategy3.ps1");
+if (!/run-strategy3-complete-scan\.ps1/.test(runStrategy3) || /run-cache-sync\.ps1|strategy3-latest\.json/.test(runStrategy3)) {
+  issues.push("run-strategy3.ps1 must call the complete scan path without static JSON or cache sync");
+}
+const strategy3Watchdog = read("run-strategy3-watchdog.ps1");
+for (const marker of ["/api/strategy3-latest", "Cache-Control", "no-store", "runId", "complete"]) {
+  if (!strategy3Watchdog.includes(marker)) issues.push(`run-strategy3-watchdog.ps1 missing API-only watchdog marker ${marker}`);
+}
+if (/strategy3-latest\.json|run-cache-sync\.ps1/.test(strategy3Watchdog)) {
+  issues.push("run-strategy3-watchdog.ps1 must not read strategy3 static JSON or repair through cache sync");
 }
 
 if (!fs.existsSync(path.join(ROOT, "AGENTS.md"))) {
@@ -689,5 +772,7 @@ if (issues.length) {
 }
 
 console.log("[publish-gate] ok");
+
+
 
 

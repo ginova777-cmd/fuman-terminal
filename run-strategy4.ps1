@@ -139,116 +139,22 @@ if ($scanExit -ne 0) {
   exit $scanExit
 }
 
-$runtimeData = Join-Path $runtime "data"
-New-Item -ItemType Directory -Force -Path $runtimeData | Out-Null
-Copy-Item -LiteralPath (Join-Path $repo "data\strategy4-latest.json") -Destination (Join-Path $runtimeData "strategy4-latest.json") -Force
-Copy-Item -LiteralPath (Join-Path $repo "data\strategy4-summary.json") -Destination (Join-Path $runtimeData "strategy4-summary.json") -Force
-& $nodeExe "scripts\generate-slim-cache.js" *>&1 | Tee-Object -FilePath $log -Append
-Copy-Item -LiteralPath (Join-Path $repo "data\strategy4-backup.json") -Destination (Join-Path $runtimeData "strategy4-backup.json") -Force
-Write-Log "Strategy4 cache copied to runtime data for clean sync."
+Write-Log "Strategy4 API-only: static JSON copy, slim generation, cache sync, postflight static checks, and JSON-based sheet upload are disabled."
 
-$strategy4Output = Get-Content -LiteralPath (Join-Path $repo "data\strategy4-latest.json") -Raw | ConvertFrom-Json
-$sheetUploaded = $false
-
-if ($env:STRATEGY4_UPLOAD_SHEET_AFTER_SCAN -ne "0" -and $strategy4Output.complete -eq $true) {
-  $uploadScript = Join-Path $repo "run-upload-backtest-google-sheet.ps1"
-  if (Test-Path -LiteralPath $uploadScript) {
-    Write-Log "=== Strategy4 Google Sheet upload start $(Get-Date) ==="
-    $previousOnly = $env:GOOGLE_SHEET_ONLY
-    $env:GOOGLE_SHEET_ONLY = "策略4成績單"
-    try {
-      & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $uploadScript $strategy4Stamp *>&1 | Tee-Object -FilePath $log -Append | Out-Null
-      $sheetExit = $LASTEXITCODE
-    } finally {
-      if ($null -ne $previousOnly) {
-        $env:GOOGLE_SHEET_ONLY = $previousOnly
-      } else {
-        Remove-Item Env:GOOGLE_SHEET_ONLY -ErrorAction SilentlyContinue
-      }
-    }
-    if ($sheetExit -ne 0) {
-      Write-Log "Strategy4 Google Sheet upload failed with exit code $sheetExit; continuing because Strategy4 JSON publish is complete."
-    } else {
-      $sheetUploaded = $true
-      Write-Log "=== Strategy4 Google Sheet upload end $(Get-Date) ==="
-    }
-  } else {
-    Write-Log "Strategy4 Google Sheet upload script not found: $uploadScript"
-  }
-}
-
-$syncScript = Join-Path $repo "run-cache-sync.ps1"
-if (Test-Path -LiteralPath $syncScript) {
-  Write-Log "=== Strategy4 clean cache sync start $(Get-Date) ==="
-  $syncExit = Invoke-CacheSyncWithRetry $syncScript 3
-  if ($syncExit -ne 0) {
-    Write-Log "Strategy4 clean cache sync failed with exit code $syncExit"
-    $retryScript = Join-Path $repo "run-strategy4-sync-retry.ps1"
-    if (Test-Path -LiteralPath $retryScript) {
-      Write-Log "Strategy4 sync retry background scan started because cache sync failed."
-      Start-Process -FilePath "C:\Program Files\PowerShell\7\pwsh.exe" -ArgumentList @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $retryScript) -WindowStyle Hidden | Out-Null
-    } else {
-      Write-Log "Strategy4 sync retry script not found: $retryScript"
-    }
-  }
-  else {
-    Write-Log "=== Strategy4 clean cache sync end $(Get-Date) ==="
-  }
-} else {
-  Write-Log "run-cache-sync.ps1 not found; strategy4 files updated locally only."
-}
-
-$postflightScript = Join-Path $repo "run-strategy4-postflight.ps1"
-if (Test-Path -LiteralPath $postflightScript) {
-  Write-Log "=== Strategy4 postflight start $(Get-Date) ==="
-  & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $postflightScript *>&1 | Tee-Object -FilePath $log -Append | Out-Null
-  $postflightExit = $LASTEXITCODE
-  if ($postflightExit -ne 0) {
-    Write-Log "Strategy4 postflight failed with exit code $postflightExit"
-    exit $postflightExit
-  }
-  Write-Log "=== Strategy4 postflight end $(Get-Date) ==="
-} else {
-  Write-Log "Strategy4 postflight script not found: $postflightScript"
-}
-
-if ($env:STRATEGY4_UPLOAD_SHEET_AFTER_SCAN -ne "0" -and $strategy4Output.complete -eq $true -and -not $sheetUploaded) {
-  $uploadScript = Join-Path $repo "run-upload-backtest-google-sheet.ps1"
-  if (Test-Path -LiteralPath $uploadScript) {
-    Write-Log "=== Strategy4 Google Sheet upload start $(Get-Date) ==="
-    $previousOnly = $env:GOOGLE_SHEET_ONLY
-    $env:GOOGLE_SHEET_ONLY = "策略4成績單"
-    try {
-      & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $uploadScript $strategy4Stamp *>&1 | Tee-Object -FilePath $log -Append | Out-Null
-      $sheetExit = $LASTEXITCODE
-    } finally {
-      if ($null -ne $previousOnly) {
-        $env:GOOGLE_SHEET_ONLY = $previousOnly
-      } else {
-        Remove-Item Env:GOOGLE_SHEET_ONLY -ErrorAction SilentlyContinue
-      }
-    }
-    if ($sheetExit -ne 0) {
-      Write-Log "Strategy4 Google Sheet upload failed with exit code $sheetExit; continuing because Strategy4 JSON publish is complete."
-    } else {
-      Write-Log "=== Strategy4 Google Sheet upload end $(Get-Date) ==="
-    }
-  } else {
-    Write-Log "Strategy4 Google Sheet upload script not found: $uploadScript"
-  }
-} else {
-  if ($strategy4Output.complete -ne $true) {
-    Write-Log "Strategy4 Google Sheet upload skipped because scan is incomplete: scanned=$($strategy4Output.scannedThisRun)/$($strategy4Output.total), noData=$($strategy4Output.noDataCount), errors=$($strategy4Output.errorCount)."
-    $resumeScript = Join-Path $repo "run-strategy4-resume.ps1"
-    if (Test-Path -LiteralPath $resumeScript) {
-      Write-Log "Strategy4 resume background scan started because scan is incomplete."
-      Start-Process -FilePath "C:\Program Files\PowerShell\7\pwsh.exe" -ArgumentList @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $resumeScript) -WindowStyle Hidden | Out-Null
-    } else {
-      Write-Log "Strategy4 resume script not found: $resumeScript"
-    }
-  } else {
-    Write-Log "Strategy4 Google Sheet upload skipped because STRATEGY4_UPLOAD_SHEET_AFTER_SCAN=0."
-  }
+$apiUrl = "https://fuman-terminal.vercel.app/api/strategy4-latest?fresh=$([DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds())"
+try {
+  $apiResponse = Invoke-WebRequest -Uri $apiUrl -UseBasicParsing -TimeoutSec 45
+  $strategy4Output = $apiResponse.Content | ConvertFrom-Json
+  $cacheControl = [string]$apiResponse.Headers["Cache-Control"]
+  if ($apiResponse.StatusCode -ne 200) { throw "HTTP $($apiResponse.StatusCode)" }
+  if ($strategy4Output.ok -ne $true) { throw "api ok=false error=$($strategy4Output.error)" }
+  if ([string]::IsNullOrWhiteSpace([string]$strategy4Output.runId)) { throw "missing runId" }
+  if (([int]$strategy4Output.count) -le 0) { throw "empty count=$($strategy4Output.count)" }
+  if ($cacheControl -notmatch "no-store") { throw "missing no-store cache-control=$cacheControl" }
+  Write-Log "Strategy4 API-only verification ok: runId=$($strategy4Output.runId) count=$($strategy4Output.count) scanStamp=$($strategy4Output.scanStamp) cache=$cacheControl"
+} catch {
+  Write-Log "Strategy4 API-only verification failed: $($_.Exception.Message)"
+  exit 1
 }
 
 Write-Log "=== Strategy4 full scan end $(Get-Date) ==="

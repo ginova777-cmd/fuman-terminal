@@ -23,12 +23,6 @@ const criticalFiles = [
   "open-buy-latest.json",
   "strategy2-intraday-latest.json",
   "strategy3-latest.json",
-  "strategy4-latest.json",
-  "strategy4-summary.json",
-  "strategy4-slim.json",
-  "strategy4-score-top.json",
-  "strategy4-zone-a.json",
-  "strategy4-zone-b-page-1.json",
   "strategy5-latest.json",
   "institution-latest.json",
   "institution-slim.json",
@@ -176,7 +170,7 @@ function validateMarketSummary(name, payload, context) {
 function validateDataStatusIndex(name, payload, context) {
   assert(payload.ok === true, `${name} ok=false`);
   const entries = payload.entries || {};
-  for (const required of ["market-summary.json", "stocks-index.json", "strategy4-summary.json", "institution-slim.json"]) {
+  for (const required of ["market-summary.json", "stocks-index.json", "institution-slim.json"]) {
     assert(entries[required], `${name} missing ${required}`);
   }
   validateMarketSummaryEntry(name, entries["market-summary.json"], context);
@@ -219,19 +213,6 @@ function validatePayload(name, payload, context) {
   }
   if (name === "strategy3-latest.json") {
     assert(normalizeDate(payload.usedDate) === latestTradeDate, `${name} stale usedDate=${payload.usedDate} latestTradeDate=${latestTradeDate} today=${today}`);
-    assert(count(payload) > 0, `${name} empty`);
-  }
-  if (name === "strategy4-latest.json") {
-    assert(isNotOlderThanLatestTradeDate(payload.scanStamp || payload.dataDate || payload.updatedAt, latestTradeDate), `${name} stale scanStamp=${payload.scanStamp || payload.dataDate || payload.updatedAt} latestTradeDate=${latestTradeDate} today=${today}`);
-    assert(payload.complete === true, `${name} incomplete`);
-    assert(count(payload) > 0, `${name} empty`);
-  }
-  if (name === "strategy4-summary.json") {
-    assert(isNotOlderThanLatestTradeDate(payload.scanStamp || payload.dataDate || payload.updatedAt, latestTradeDate), `${name} stale scanStamp=${payload.scanStamp || payload.dataDate || payload.updatedAt} latestTradeDate=${latestTradeDate} today=${today}`);
-    assert(count(payload) > 0, `${name} empty`);
-  }
-  if (name.startsWith("strategy4-") && name !== "strategy4-latest.json" && name !== "strategy4-summary.json") {
-    assert(isNotOlderThanLatestTradeDate(payload.scanStamp || payload.dataDate || payload.updatedAt, latestTradeDate), `${name} stale scanStamp=${payload.scanStamp || payload.dataDate || payload.updatedAt} latestTradeDate=${latestTradeDate}`);
     assert(count(payload) > 0, `${name} empty`);
   }
   if (name === "strategy5-latest.json") {

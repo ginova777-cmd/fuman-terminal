@@ -1424,6 +1424,7 @@ function labelChipTradeMode() {
 
 const endpoints = {
   backend: "/api/market",
+  heatmapLatest: "/data/heatmap-latest.json",
   heatmap: "/api/heatmap",
   institution: "/api/institution",
   history: "/api/history",
@@ -1432,18 +1433,18 @@ const endpoints = {
   scanStrategy4: "/api/scan-strategy4",
   scanWarrantFlow: "/api/scan-warrant-flow",
   exportAuth: "/api/export-auth",
-  openBuyCache: "/data/open-buy-latest.json",
-  openBuyBackup: "/data/open-buy-backup.json",
-  strategy4Cache: "/data/strategy4-latest.json",
-  strategy4Backup: "/data/strategy4-backup.json",
-  strategy3Cache: "/data/strategy3-latest.json",
-  strategy3Backup: "/data/strategy3-backup.json",
-  strategy5Cache: "/data/strategy5-latest.json",
-  strategy5Backup: "/data/strategy5-backup.json",
-  institutionCache: "/data/institution-latest.json",
-  institutionBackup: "/data/institution-backup.json",
-  warrantFlowCache: "/data/warrant-flow-latest.json",
-  warrantFlowBackup: "/data/warrant-flow-backup.json",
+  openBuyCache: "/api/open-buy-latest",
+  openBuyBackup: "",
+  strategy4Cache: "/api/strategy4-latest",
+  strategy4Backup: "/api/strategy4-latest",
+  strategy3Cache: "/api/strategy3-latest",
+  strategy3Backup: "",
+  strategy5Cache: "/api/strategy5-latest",
+  strategy5Backup: "",
+  institutionCache: "/api/institution-latest",
+  institutionBackup: "",
+  warrantFlowCache: "/api/warrant-flow-latest",
+  warrantFlowBackup: "",
   strategyStocks: "/api/stocks",
   stocks: "https://openapi.twse.com.tw/v1/exchangeReport/STOCK_DAY_ALL",
 };
@@ -1502,6 +1503,8 @@ let strategy4ScanCount = 0;
 let strategy4ScannedCodes = new Set();
 let strategy4ScanTotal = 0;
 let strategy4CacheLoading = false;
+let strategy4ApiRunId = "";
+let openBuyApiRunId = "";
 let strategy3Data = [];
 let strategy3UpdatedAt = 0;
 let strategy3CacheLoading = false;
@@ -1947,6 +1950,7 @@ function commitStrategy4Pending() {
 }
 
 function mergeStrategy4Cache(payload) {
+  strategy4ApiRunId = String(payload?.runId || payload?.transport?.runId || payload?.updatedAt || "");
   strategy4ScanMatches = {};
   strategy4ScannedCodes = new Set();
   const scannedCodes = normalizeArray(payload?.scannedCodes);
@@ -1957,50 +1961,18 @@ function mergeStrategy4Cache(payload) {
   updateStrategy4Scan({ matches: normalizeArray(payload?.matches), scannedCodes: [] });
   const updatedAt = Date.parse(payload?.updatedAt || "");
   strategy4ScanLastAt = Number.isFinite(updatedAt) ? updatedAt : Date.now();
-  saveStrategy4LocalCache();
 }
 
 function saveStrategy4LocalCache() {
   try {
-    const matches = Object.values(strategy4ScanMatches);
-    const payload = {
-      source: "github-actions",
-      updatedAt: strategy4ScanLastAt || Date.now(),
-      total: strategy4ScanTotal,
-      scannedCodes: [...strategy4ScannedCodes],
-      matches,
-    };
-    localStorage.setItem(STRATEGY4_LOCAL_CACHE_KEY, JSON.stringify(payload));
-    if (matches.length) {
-      localStorage.setItem(STRATEGY4_BACKUP_CACHE_KEY, JSON.stringify(payload));
-    }
+    localStorage.removeItem(STRATEGY4_LOCAL_CACHE_KEY);
+    localStorage.removeItem(STRATEGY4_BACKUP_CACHE_KEY);
   } catch (error) {}
 }
 
 function loadStrategy4LocalCache() {
-  try {
-    let payload = JSON.parse(localStorage.getItem(STRATEGY4_LOCAL_CACHE_KEY) || "{}");
-    if (!Array.isArray(payload.matches) || !payload.matches.length) {
-      payload = JSON.parse(localStorage.getItem(STRATEGY4_BACKUP_CACHE_KEY) || "{}");
-    }
-    if (!String(payload.source || "").includes("github-actions")) return false;
-    if (!Array.isArray(payload.matches) || !payload.matches.length) return false;
-    if (payload.total) strategy4ScanTotal = cleanNumber(payload.total);
-    strategy4ScanMatches = {};
-    strategy4ScannedCodes = new Set();
-    normalizeArray(payload.scannedCodes).forEach((code) => {
-      if (code) strategy4ScannedCodes.add(code);
-    });
-    normalizeArray(payload.matches).forEach((item) => {
-      if (!item?.code) return;
-      strategy4ScanMatches[item.code] = { ...item };
-    });
-    strategy4ScanCount = Object.keys(strategy4ScanMatches).length;
-    strategy4ScanLastAt = cleanNumber(payload.updatedAt) || Date.now();
-    return true;
-  } catch (error) {
-    return false;
-  }
+  saveStrategy4LocalCache();
+  return false;
 }
 
 function hasFreshStrategy4Scan() {
@@ -2263,48 +2235,18 @@ function commitOpenBuyPending() {
 
 function saveOpenBuyLocalCache() {
   try {
-    const matches = Object.values(openBuyScanMatches);
-    const payload = {
-      source: "github-actions",
-      updatedAt: openBuyScanLastAt || Date.now(),
-      total: openBuyScanTotal,
-      scannedCodes: [...openBuyScannedCodes],
-      matches,
-    };
-    localStorage.setItem(OPEN_BUY_LOCAL_CACHE_KEY, JSON.stringify(payload));
-    if (matches.length) {
-      localStorage.setItem(OPEN_BUY_BACKUP_CACHE_KEY, JSON.stringify(payload));
-    }
+    localStorage.removeItem(OPEN_BUY_LOCAL_CACHE_KEY);
+    localStorage.removeItem(OPEN_BUY_BACKUP_CACHE_KEY);
   } catch (error) {}
 }
 
 function loadOpenBuyLocalCache() {
-  try {
-    let payload = JSON.parse(localStorage.getItem(OPEN_BUY_LOCAL_CACHE_KEY) || "{}");
-    if (!Array.isArray(payload.matches) || !payload.matches.length) {
-      payload = JSON.parse(localStorage.getItem(OPEN_BUY_BACKUP_CACHE_KEY) || "{}");
-    }
-    if (!String(payload.source || "").includes("github-actions")) return false;
-    if (!Array.isArray(payload.matches) || !payload.matches.length) return false;
-    if (payload.total) openBuyScanTotal = cleanNumber(payload.total);
-    openBuyScanMatches = {};
-    openBuyScannedCodes = new Set();
-    normalizeArray(payload.scannedCodes).forEach((code) => {
-      if (code) openBuyScannedCodes.add(code);
-    });
-    normalizeArray(payload.matches).forEach((item) => {
-      if (!item?.code) return;
-      openBuyScanMatches[item.code] = { ...item };
-    });
-    openBuyScanCount = Object.keys(openBuyScanMatches).length;
-    openBuyScanLastAt = cleanNumber(payload.updatedAt) || Date.now();
-    return true;
-  } catch (error) {
-    return false;
-  }
+  saveOpenBuyLocalCache();
+  return false;
 }
 
 function mergeOpenBuyCache(payload) {
+  openBuyApiRunId = String(payload?.runId || payload?.transport?.runId || payload?.updatedAt || "");
   openBuyScanMatches = {};
   openBuyScannedCodes = new Set();
   openBuyPage = 1;
@@ -2323,6 +2265,22 @@ function mergeOpenBuyCache(payload) {
   saveOpenBuyLocalCache();
 }
 
+function normalizeOpenBuyApiPayload(payload) {
+  if (payload?.strategies?.openBuy) {
+    return {
+      ...payload.strategies.openBuy,
+      ok: payload.ok !== false,
+      source: payload.strategies.openBuy.source || "api/terminal-home:openBuy",
+      updatedAt: payload.strategies.openBuy.updatedAt || payload.updatedAt || "",
+      matches: normalizeArray(payload.strategies.openBuy.matches || payload.strategies.openBuy.top),
+      count: cleanNumber(payload.strategies.openBuy.count),
+      total: cleanNumber(payload.strategies.openBuy.count),
+      transport: payload.transport || payload.strategies.openBuy.transport || {},
+    };
+  }
+  return payload;
+}
+
 async function loadOpenBuyCache(force = false) {
   if (openBuyCacheLoading) return;
   if (!shouldLoadOpenBuyRemote(force)) return;
@@ -2333,10 +2291,10 @@ async function loadOpenBuyCache(force = false) {
   openBuyCacheLoading = true;
   openBuyCacheCheckedAt = Date.now();
   try {
-    let payload = await fetchJson(`${endpoints.openBuyCache}?t=${Date.now()}`, 10000);
-    if (!normalizeArray(payload?.matches).length) {
-      payload = await fetchJson(`${endpoints.openBuyBackup}?t=${Date.now()}`, 10000);
-    }
+    const payload = normalizeOpenBuyApiPayload(await fetchJson(`${endpoints.openBuyCache}?t=${Date.now()}`, 10000));
+    if (!payload?.ok || !Array.isArray(payload.matches) || !normalizeArray(payload.matches).length) throw new Error(payload?.error || "open_buy_api_only_empty");
+    const nextRunId = String(payload?.runId || payload?.transport?.runId || payload?.updatedAt || "");
+    if (!force && openBuyApiRunId && nextRunId && openBuyApiRunId === nextRunId && openBuyScanLastAt) return;
     const incomingMatches = normalizeArray(payload?.matches);
     const hasCurrentMatches = Object.keys(openBuyScanMatches).length > 0;
     if (payload?.ok && Array.isArray(payload.matches) && (incomingMatches.length || !hasCurrentMatches)) {
@@ -2344,6 +2302,7 @@ async function loadOpenBuyCache(force = false) {
       renderStrategyScanner();
     }
   } catch (error) {
+    if (strategySummary) strategySummary.textContent = `策略1 API-only 載入失敗：${error?.message || error}`;
   } finally {
     openBuyCacheLoading = false;
   }
@@ -6338,6 +6297,33 @@ function renderHeatmapFromCache() {
   return sectors.length > 0;
 }
 
+async function loadHeatmapLatestSnapshot(force = false) {
+  try {
+    const data = await fetchJson(`${endpoints.heatmapLatest}?t=${Date.now()}`, 5000, { cache: force ? "no-store" : "default" });
+    const sectors = normalizeArray(data?.sectors);
+    if (data?.ok !== false && sectors.length) {
+      renderHeatmapSectors(sectors);
+      return true;
+    }
+  } catch (error) {}
+  return renderHeatmapFromCache();
+}
+
+function isHeatmapDetectionWindow() {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Taipei",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  }).formatToParts(new Date()).reduce((acc, part) => {
+    if (part.type !== "literal") acc[part.type] = part.value;
+    return acc;
+  }, {});
+  const seconds = Number(parts.hour || 0) * 3600 + Number(parts.minute || 0) * 60 + Number(parts.second || 0);
+  return seconds >= 9 * 3600 && seconds <= 13 * 3600 + 30 * 60;
+}
+
 function applyRealtimeQuoteToHeatmapStock(stock, quote) {
   const close = cleanNumber(quote?.close);
   const prev = cleanNumber(quote?.prevClose) || cleanNumber(quote?.prev) || (close - cleanNumber(quote?.change));
@@ -6980,6 +6966,11 @@ async function loadMarketData() {
 }
 
 async function loadHeatmap() {
+  const hasSnapshot = await loadHeatmapLatestSnapshot(true);
+  if (!isHeatmapDetectionWindow()) {
+    if (!hasSnapshot) heatmap.innerHTML = `<div class="empty-state">今日收盤熱力圖快取暫時無法取得，請稍後重新整理。</div>`;
+    return;
+  }
   if (!Object.keys(sectorStocksCache).length && !heatmap.children.length) {
     heatmap.innerHTML = `<div class="empty-state">載入產業資料中...</div>`;
   } else {
@@ -7289,22 +7280,20 @@ async function refreshOpenBuyScan(force = false) {
 
 async function loadStrategy4Cache(force = false) {
   if (strategy4CacheLoading) return;
-  if (!force && strategy4ScanLastAt) return;
   if (shouldSkipMobileOtherStrategyCacheRefresh("strategy4", Boolean(strategy4ScanLastAt), force)) {
     renderStrategyScanner();
     return;
   }
   strategy4CacheLoading = true;
   try {
-    let payload = await fetchJson(`${endpoints.strategy4Cache}?t=${Date.now()}`, 10000);
-    if (!normalizeArray(payload?.matches).length) {
-      payload = await fetchJson(`${endpoints.strategy4Backup}?t=${Date.now()}`, 10000);
-    }
-    if (payload?.ok && Array.isArray(payload.matches)) {
-      mergeStrategy4Cache(payload);
-      renderStrategyScanner();
-    }
+    const payload = await fetchJson(`${endpoints.strategy4Cache}?t=${Date.now()}`, 10000);
+    if (!payload?.ok || !Array.isArray(payload.matches) || !payload.matches.length) throw new Error(payload?.error || "strategy4_api_only_empty");
+    const nextRunId = String(payload?.runId || payload?.transport?.runId || payload?.updatedAt || "");
+    if (!force && strategy4ApiRunId && nextRunId && strategy4ApiRunId === nextRunId && strategy4ScanLastAt) return;
+    mergeStrategy4Cache(payload);
+    renderStrategyScanner();
   } catch (error) {
+    if (strategySummary) strategySummary.textContent = `策略4 API-only 載入失敗：${error?.message || error}`;
   } finally {
     strategy4CacheLoading = false;
   }
@@ -7312,6 +7301,59 @@ async function loadStrategy4Cache(force = false) {
 
 async function refreshStrategyHistoryScan(force = false) {
   await loadStrategy4Cache(force);
+}
+
+const COMPLETE_RUN_POLL_MS = Math.max(30000, cleanNumber(FUMAN_TUNING_CONFIG.completeRunPollMs || 60000));
+const completeRunPollSignatures = new Map();
+let completeRunPollLoading = false;
+
+function withFreshQuery(url) {
+  const separator = String(url || "").includes("?") ? "&" : "?";
+  return `${url}${separator}t=${Date.now()}`;
+}
+
+function completeRunSignature(payload) {
+  const value = payload?.runId
+    || payload?.transport?.runId
+    || payload?.updatedAt
+    || payload?.generatedAt
+    || payload?.status?.updatedAt
+    || "";
+  return String(value || "");
+}
+
+async function pollCompleteRunTarget(target, initial = false) {
+  if (!target?.url) return;
+  const payload = await fetchJson(withFreshQuery(target.url), target.timeout || 10000);
+  const scopedPayload = typeof target.extract === "function" ? target.extract(payload) : payload;
+  const signature = completeRunSignature(scopedPayload);
+  if (!signature) return;
+  const previous = completeRunPollSignatures.get(target.key);
+  completeRunPollSignatures.set(target.key, signature);
+  if (initial || previous === signature) return;
+  await target.refresh(scopedPayload, payload);
+}
+
+async function pollCompleteRunUpdates(initial = false) {
+  if (completeRunPollLoading || isDocumentHidden()) return;
+  completeRunPollLoading = true;
+  const targets = [
+    { key: "openBuy", url: endpoints.openBuyCache, refresh: (payload) => { mergeOpenBuyCache(normalizeOpenBuyApiPayload(payload)); renderStrategyScanner(); } },
+    { key: "strategy2", url: endpoints.strategy2IntradayLatestApi || "/api/strategy2-latest", refresh: () => refreshStrategyRealtimeScan("force") },
+    { key: "strategy3", url: endpoints.strategy3Cache, refresh: () => loadStrategy3Cache(true) },
+    { key: "strategy4", url: endpoints.strategy4Cache, refresh: () => loadStrategy4Cache(true) },
+    { key: "strategy5", url: endpoints.strategy5Cache, refresh: () => loadStrategy5Cache(true) },
+    { key: "institution", url: endpoints.institutionCache, refresh: () => loadInstitution() },
+    { key: "warrant", url: endpoints.warrantFlowCache, refresh: () => loadWarrantFlow(true) },
+  ];
+  try {
+    const results = await Promise.allSettled(targets.map((target) => pollCompleteRunTarget(target, initial)));
+    if (!initial && results.some((result) => result.status === "fulfilled")) {
+      refreshDataFreshnessBars();
+    }
+  } finally {
+    completeRunPollLoading = false;
+  }
 }
 
 tickClock();
@@ -7370,6 +7412,8 @@ setInterval(() => refreshStrategyRealtimeScan("background"), INTRADAY_BACKGROUND
 setInterval(() => {
   if (!isDocumentHidden() && isViewActive("market")) loadHeatmap();
 }, 15*60*1000);
+deferUiWork(() => pollCompleteRunUpdates(true), 2500);
+setInterval(() => pollCompleteRunUpdates(false), COMPLETE_RUN_POLL_MS);
 
 // ===== 自選股功能 =====
 const watchlistView = document.querySelector("#watchlist-view");

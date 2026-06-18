@@ -18,8 +18,15 @@ async function fetchText(url, options = {}, timeout = 15000) {
   }
 }
 
+const { readSnapshot } = require("../lib/supabase-snapshots");
+
 let heatmapCache = null;
 const HEATMAP_CACHE_MS = 15000;
+const ROOT = require("path").resolve(__dirname, "..");
+const RUNTIME_ROOT = process.env.FUMAN_RUNTIME_DIR || process.env.FUMAN_RUNTIME_ROOT || "C:\\fuman-runtime";
+const HEATMAP_LATEST_FILE = "heatmap-latest.json";
+const HEATMAP_WINDOW_START_SECONDS = 9 * 60 * 60;
+const HEATMAP_WINDOW_END_SECONDS = 13 * 60 * 60 + 30 * 60;
 
 function withTimeout(promise, timeout, fallback) {
   let timer;
@@ -31,6 +38,94 @@ function withTimeout(promise, timeout, fallback) {
 
 function isFreshHeatmapCache() {
   return heatmapCache && Date.now() - heatmapCache.cachedAt < HEATMAP_CACHE_MS;
+}
+
+function heatmapCacheCandidates(file = HEATMAP_LATEST_FILE) {
+  const path = require("path");
+  return [
+    path.join(RUNTIME_ROOT, "data", file),
+    path.join(ROOT, "data", file),
+  ];
+}
+
+function readLatestHeatmapSnapshot() {
+  const fs = require("fs");
+  const rows = heatmapCacheCandidates()
+    .filter((file) => fs.existsSync(file))
+    .map((file) => {
+      const payload = JSON.parse(fs.readFileSync(file, "utf8"));
+      const parsed = Date.parse(payload?.updatedAt || payload?.generatedAt || "");
+      const mtime = fs.statSync(file).mtimeMs;
+      return { file, payload, freshness: Number.isFinite(parsed) ? parsed : mtime };
+    })
+    .sort((a, b) => b.freshness - a.freshness);
+  return rows[0] || null;
+}
+
+function taipeiClock(now = new Date()) {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Taipei",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  }).formatToParts(now).reduce((acc, part) => {
+    if (part.type !== "literal") acc[part.type] = part.value;
+    return acc;
+  }, {});
+  const hour = Number(parts.hour || 0);
+  const minute = Number(parts.minute || 0);
+  const second = Number(parts.second || 0);
+  return {
+    date: `${parts.year}-${parts.month}-${parts.day}`,
+    time: `${parts.hour}:${parts.minute}:${parts.second}`,
+    seconds: hour * 60 * 60 + minute * 60 + second,
+  };
+}
+
+function isHeatmapDetectWindow(clock = taipeiClock()) {
+  return clock.seconds >= HEATMAP_WINDOW_START_SECONDS && clock.seconds <= HEATMAP_WINDOW_END_SECONDS;
+}
+
+function attachHeatmapDetectWindow(payload, clock, reason) {
+  return {
+    ...payload,
+    servedAt: new Date().toISOString(),
+    heatmapDetectWindow: {
+      timezone: "Asia/Taipei",
+      start: "09:00:00",
+      end: "13:30:00",
+      active: isHeatmapDetectWindow(clock),
+      reason,
+      hasSnapshot: Boolean(payload?.snapshot) || reason === "after-1330-cache",
+      taipeiDate: clock.date,
+      taipeiTime: clock.time,
+    },
+  };
+}
+
+function snapshotHeatmapPayload(snapshot, clock) {
+  return attachHeatmapDetectWindow({
+    ...(snapshot.payload || {}),
+    cacheSource: "supabase:market_snapshots",
+    snapshot: {
+      key: snapshot.key,
+      tradeDate: snapshot.tradeDate,
+      snapshotId: snapshot.snapshotId,
+      locked: snapshot.locked,
+      source: snapshot.source,
+      updatedAt: snapshot.updatedAt,
+      finalizedAt: snapshot.finalizedAt,
+    },
+    cache: {
+      hit: true,
+      source: "supabase:market_snapshots",
+      reason: snapshot.reason || (snapshot.locked ? "after-1330-cache" : "supabase-snapshot"),
+    },
+  }, clock, snapshot.reason || (snapshot.locked ? "after-1330-cache" : "supabase-snapshot"));
 }
 
 function buildHeatmapHealth(sectors, quoteMap) {
@@ -2657,10 +2752,43 @@ module.exports = async function handler(request, response) {
   if (request.method === "OPTIONS") { response.status(204).end(); return; }
   if (request.method !== "GET") { response.status(405).json({ ok: false, error: "Method not allowed" }); return; }
 
+  const clock = taipeiClock();
+  const detectWindowActive = isHeatmapDetectWindow(clock);
+  const snapshot = await readSnapshot("heatmap_latest", {
+    tradeDate: clock.date,
+    allowLatestFallback: true,
+    timeoutMs: 8000,
+  });
+  if (snapshot?.payload) {
+    response.setHeader("Cache-Control", "no-store, max-age=0");
+    response.status(200).json(snapshotHeatmapPayload(snapshot, clock));
+    return;
+  }
+
+  if (!detectWindowActive) {
+    const snapshot = readLatestHeatmapSnapshot();
+    if (snapshot?.payload) {
+      response.setHeader("Cache-Control", "no-store, max-age=0");
+      response.status(200).json(attachHeatmapDetectWindow(
+        {
+          ...snapshot.payload,
+          cache: {
+            hit: true,
+            source: snapshot.file,
+            reason: "after-1330-cache",
+          },
+        },
+        clock,
+        "after-1330-cache"
+      ));
+      return;
+    }
+  }
+
   if (isFreshHeatmapCache()) {
     response.setHeader("Cache-Control", "no-store, max-age=0");
     response.status(200).json({
-      ...heatmapCache.payload,
+      ...attachHeatmapDetectWindow(heatmapCache.payload, clock, "memory-cache"),
       cache: { hit: true, ageMs: Date.now() - heatmapCache.cachedAt, ttlMs: HEATMAP_CACHE_MS },
     });
     return;
@@ -2800,7 +2928,10 @@ module.exports = async function handler(request, response) {
     heatmapCache = { cachedAt: Date.now(), payload };
 
     response.setHeader("Cache-Control", "no-store, max-age=0");
-    response.status(200).json({ ...payload, cache: { hit: false, ageMs: 0, ttlMs: HEATMAP_CACHE_MS } });
+    response.status(200).json({
+      ...attachHeatmapDetectWindow(payload, clock, "live-detect-window"),
+      cache: { hit: false, ageMs: 0, ttlMs: HEATMAP_CACHE_MS },
+    });
   } catch (error) {
     response.status(502).json({ ok: false, error: error.message });
   }

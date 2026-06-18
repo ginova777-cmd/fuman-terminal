@@ -1,5 +1,5 @@
 (function () {
-  const version = "institution-cache-refresh-20260616-10";
+  const version = "desktop-api-only-all-20260618-16";
   window.FUMAN_TERMINAL_VERSION = version;
   window.FUMAN_TERMINAL_BOOT = {
     version,
@@ -104,11 +104,48 @@
     document.head.appendChild(link);
   };
 
+  const loadRuntimeThemeCss = () => {
+    try {
+      const url = `/api/terminal-theme-css?fresh=${Date.now()}`;
+      fetch(url, { cache: "no-store" })
+        .then((response) => {
+          if (!response.ok) return Promise.reject(new Error(`theme css ${response.status}`));
+          const type = response.headers?.get?.("content-type") || "";
+          return type.includes("application/json")
+            ? response.json().then((payload) => String(payload?.css || ""))
+            : response.text();
+        })
+        .then((css) => {
+          if (!css || !css.trim()) return;
+          let style = document.querySelector("#fuman-runtime-theme-css");
+          if (!style) {
+            style = document.createElement("style");
+            style.id = "fuman-runtime-theme-css";
+            style.dataset.source = "api/terminal-theme-css";
+            document.head.appendChild(style);
+          }
+          style.textContent = css;
+          window.FUMAN_TERMINAL_BOOT.runtimeThemeCss = {
+            ok: true,
+            bytes: css.length,
+            loadedAt: Date.now(),
+          };
+        })
+        .catch(() => {
+          window.FUMAN_TERMINAL_BOOT.runtimeThemeCss = {
+            ok: false,
+            loadedAt: Date.now(),
+          };
+        });
+    } catch (error) {}
+  };
+
   mark("core-start");
   enforceFreshVersion();
   watchRemoteVersion();
   warmAuthShell();
   preconnect("https://openapi.twse.com.tw");
+  loadRuntimeThemeCss();
 
   const loadMain = () => {
     if (document.querySelector("script[data-fuman-terminal-main]")) return;
@@ -139,6 +176,15 @@
     setTimeout(loadMain, 0);
   }
 })();
+
+
+
+
+
+
+
+
+
 
 
 

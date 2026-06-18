@@ -1,6 +1,7 @@
 const fs = require("fs/promises");
 const fsSync = require("fs");
 const path = require("path");
+const { upsertSnapshot } = require("../lib/supabase-snapshots");
 
 const CBAS_BASE = "https://cbas16889.pscnet.com.tw/api/CbasQuote";
 const RUNTIME_DIR = process.env.FUMAN_RUNTIME_DIR || "C:\\fuman-runtime";
@@ -67,6 +68,22 @@ function monthStarts(count = HISTORY_MONTHS) {
     });
   }
   return dates;
+}
+
+function taipeiTimestamp(value = Date.now()) {
+  const date = new Date(value);
+  const safeDate = Number.isFinite(date.getTime()) ? date : new Date();
+  const parts = Object.fromEntries(new Intl.DateTimeFormat("en-US", {
+    timeZone: "Asia/Taipei",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  }).formatToParts(safeDate).map((part) => [part.type, part.value]));
+  return `${parts.year}${parts.month}${parts.day}-${parts.hour === "24" ? "00" : parts.hour}${parts.minute}${parts.second}`;
 }
 
 function normalizeTwseRows(payload) {
@@ -1108,10 +1125,16 @@ async function main() {
   const compactCandidates = compactByUnderlyingStock(candidates)
     .sort(compareCandidates);
 
+  const updatedAt = new Date().toISOString();
+  const runId = `cb-detect-${taipeiTimestamp(updatedAt)}`;
   const payload = {
     ok: true,
+    complete: true,
+    runId,
+    qualityStatus: compactCandidates.length ? "complete" : "empty",
+    count: compactCandidates.length,
     source: "CBAS",
-    updatedAt: new Date().toISOString(),
+    updatedAt,
     sourceCounts,
     excludedCounts: {
       veto: allCandidates.length - candidates.length,
@@ -1129,13 +1152,12 @@ async function main() {
     rows: compactCandidates,
   };
 
-  await fs.mkdir(path.dirname(OUT_FILE), { recursive: true });
-  await fs.writeFile(OUT_FILE, `${JSON.stringify(payload, null, 2)}\n`, "utf8");
-  if (path.resolve(CODE_OUT_FILE).toLowerCase() !== path.resolve(OUT_FILE).toLowerCase()) {
-    await fs.mkdir(path.dirname(CODE_OUT_FILE), { recursive: true });
-    await fs.writeFile(CODE_OUT_FILE, `${JSON.stringify(payload, null, 2)}\n`, "utf8");
-  }
-  console.log(`wrote ${OUT_FILE} (${compactCandidates.length} rows, compacted ${candidates.length - compactCandidates.length} same-stock CB rows)`);
+  const snapshot = await upsertSnapshot("cb_detect_latest", payload, {
+    source: "cb-detect-api-only",
+    reason: "cb-detect-complete-run",
+  });
+  if (!snapshot.ok) throw new Error(`cb-detect Supabase snapshot write failed: ${snapshot.error || snapshot.reason || "unknown"}`);
+  console.log(`cb-detect API-only: wrote Supabase snapshot (${compactCandidates.length} rows, compacted ${candidates.length - compactCandidates.length} same-stock CB rows)`);
   console.log(compactCandidates.slice(0, 12).map((row) => `${row.score} ${row.sourceLayer} ${row.code} ${row.cbName} ${row.tags.join(" / ")}`).join("\n"));
 }
 

@@ -23,7 +23,6 @@ const SUPABASE_KEY = process.env.SUPABASE_ANON_KEY
   || readSecretText(path.join(RUNTIME_DIR, "secrets", "supabase-anon-key.txt"));
 
 const OPEN_BUY_RUN_VIEW = process.env.SUPABASE_OPEN_BUY_LATEST_RUN_VIEW || "v_strategy1_open_buy_latest_complete_run";
-const OPEN_BUY_LATEST_TABLE = process.env.SUPABASE_OPEN_BUY_TABLE || "strategy1_open_buy_latest";
 const OPEN_BUY_RESULTS_TABLE = process.env.SUPABASE_OPEN_BUY_RESULTS_TABLE || "strategy1_open_buy_results";
 
 function readJson(file, fallback = {}) {
@@ -60,24 +59,6 @@ async function fetchSupabaseRows(table, query) {
   if (!response.ok) {
     const text = await response.text().catch(() => "");
     throw new Error(`${table} HTTP ${response.status} ${text.slice(0, 180)}`.trim());
-  }
-  const rows = await response.json();
-  return Array.isArray(rows) ? rows : [];
-}
-
-async function fetchSupabaseRpc(functionName, query) {
-  if (!SUPABASE_URL || !SUPABASE_KEY) throw new Error("supabase_not_configured");
-  const response = await fetch(`${SUPABASE_URL}/rest/v1/rpc/${functionName}?${query}`, {
-    headers: {
-      apikey: SUPABASE_KEY,
-      Authorization: `Bearer ${SUPABASE_KEY}`,
-      Accept: "application/json",
-    },
-    cache: "no-store",
-  });
-  if (!response.ok) {
-    const text = await response.text().catch(() => "");
-    throw new Error(`${functionName} HTTP ${response.status} ${text.slice(0, 180)}`.trim());
   }
   const rows = await response.json();
   return Array.isArray(rows) ? rows : [];
@@ -137,63 +118,6 @@ function normalizeOpenBuyRow(row) {
 
 async function fetchOpenBuyLatest(base) {
   try {
-    let latestWarning = "";
-    try {
-      const rpcRow = (await fetchSupabaseRpc("get_latest_strategy_payload", "p_strategy_key=strategy1"))[0];
-      const latest = rpcRow?.payload
-        ? {
-          id: "latest",
-          run_id: rpcRow.payload.runId || rpcRow.payload.run_id || "",
-          used_date: rpcRow.used_date,
-          date: rpcRow.used_date,
-          updated_at: rpcRow.updated_at,
-          scan_status: rpcRow.scan_status,
-          scanned: rpcRow.scanned,
-          total: rpcRow.total,
-          match_count: rpcRow.match_count,
-          payload: rpcRow.payload,
-          source: rpcRow.source,
-        }
-        : (await fetchSupabaseRows(
-          OPEN_BUY_LATEST_TABLE,
-          [
-            "select=id,run_id,used_date,date,updated_at,scan_status,completed_chunks,total_chunks,scanned,total,match_count,scanned_count,total_count,payload",
-            "id=eq.latest",
-            "limit=1",
-          ].join("&")
-        ))[0];
-      if (latest?.payload && typeof latest.payload === "object") {
-        const payload = latest.payload;
-        const matches = Array.isArray(payload.matches) ? payload.matches : [];
-        return {
-          ...payload,
-          ok: payload.ok !== false,
-          source: "supabase:strategy1_open_buy_latest",
-          cacheSource: "supabase-api",
-          runId: String(latest.run_id || payload.runId || ""),
-          updatedAt: String(latest.updated_at || payload.updatedAt || new Date().toISOString()),
-          usedDate: String(latest.used_date || latest.date || payload.usedDate || payload.date || "").replace(/\D/g, ""),
-          complete: latest.scan_status ? latest.scan_status === "complete" : payload.complete !== false,
-          qualityStatus: String(latest.scan_status || payload.qualityStatus || "complete"),
-          count: cleanNumber(latest.match_count ?? payload.count ?? matches.length),
-          total: cleanNumber(latest.total ?? latest.total_count ?? payload.total),
-          scannedCount: cleanNumber(latest.scanned ?? latest.scanned_count ?? payload.scannedCount),
-          matches,
-          transport: {
-            source: "supabase",
-            rpc: "get_latest_strategy_payload",
-            table: OPEN_BUY_LATEST_TABLE,
-            gate: "latest-payload",
-            runId: String(latest.run_id || payload.runId || ""),
-            via: "api/terminal-home",
-            fetchedAt: new Date().toISOString(),
-          },
-        };
-      }
-    } catch (error) {
-      latestWarning = error?.message || String(error);
-    }
-
     const run = (await fetchSupabaseRows(
       OPEN_BUY_RUN_VIEW,
       [
@@ -236,7 +160,6 @@ async function fetchOpenBuyLatest(base) {
         gate: "run_id",
         runId: String(run.run_id || ""),
         via: "api/terminal-home",
-        latestPayloadWarning: latestWarning,
         fetchedAt: new Date().toISOString(),
       },
     };

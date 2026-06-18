@@ -16,10 +16,6 @@ const RULES = {
     files: ["data/open-buy-latest.json"],
     slots: ["14:30"],
   },
-  strategy4: {
-    files: ["data/strategy4-latest.json"],
-    slots: ["07:00", "14:30"],
-  },
   strategy5: {
     files: ["data/strategy5-latest.json"],
     slots: ["06:00", "21:00"],

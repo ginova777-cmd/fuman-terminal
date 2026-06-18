@@ -18,6 +18,7 @@ const SIGNAL_FILE = path.join(CACHE_DIR, "signals.json");
 const SCORECARD_TRACK_FILE = path.join(CACHE_DIR, "scorecard-trades.json");
 const STRATEGY5_TRACK_FILE = path.join(CACHE_DIR, "strategy5-scorecard-trades.json");
 const STRATEGY2_REPORT_FILE = dataPath("strategy2-intraday-latest.json");
+const STRATEGY2_API_ONLY = true;
 const STRATEGY2_SCORECARD_SOURCE_FILE = dataPath("strategy2-scorecard-source.json");
 const STRATEGY2_HISTORY_DIR = dataPath("strategy2-intraday-history");
 const STRATEGY2_HISTORY_WRITE_INTERVAL_MS = Math.max(0, Number(process.env.STRATEGY2_HISTORY_WRITE_INTERVAL_MS || 5 * 60 * 1000));
@@ -53,15 +54,16 @@ const REALTIME_RESCUE_LIMIT = Math.max(0, Number(process.env.STRATEGY2_REALTIME_
 const REALTIME_RESCUE_COOLDOWN_MS = Math.max(0, Number(process.env.STRATEGY2_REALTIME_RESCUE_COOLDOWN_MS || 30 * 1000));
 const MIN_ENTRY_SOURCE_COVERAGE = Number(process.env.STRATEGY2_MIN_ENTRY_SOURCE_COVERAGE || 0.5);
 const STRATEGY2_SCAN_START_MINUTES = Number(process.env.STRATEGY2_SCAN_START_MINUTES || 8 * 60);
-const STRATEGY2_ENTRY_START_MINUTES = Number(process.env.STRATEGY2_ENTRY_START_MINUTES || 9 * 60);
-const STRATEGY2_ENTRY_END_MINUTES = Number(process.env.STRATEGY2_ENTRY_END_MINUTES || (13 * 60 + 30));
-const STRATEGY2_SCAN_END_MINUTES = Number(process.env.STRATEGY2_SCAN_END_MINUTES || (13 * 60 + 30));
+const STRATEGY2_ENTRY_START_MINUTES = Number(process.env.STRATEGY2_ENTRY_START_MINUTES || (8 * 60 + 45));
+const STRATEGY2_ENTRY_END_MINUTES = Number(process.env.STRATEGY2_ENTRY_END_MINUTES || (12 * 60));
+const STRATEGY2_SCAN_END_MINUTES = Number(process.env.STRATEGY2_SCAN_END_MINUTES || (12 * 60));
 const STRATEGY2_OPEN_RUSH_END_MINUTES = Number(process.env.STRATEGY2_OPEN_RUSH_END_MINUTES || 9 * 60 + 10);
 const STRATEGY2_EARLY_ATTACK_START_MINUTES = Number(process.env.STRATEGY2_EARLY_ATTACK_START_MINUTES || 9 * 60 + 30);
 const STRATEGY2_EARLY_ATTACK_END_MINUTES = Number(process.env.STRATEGY2_EARLY_ATTACK_END_MINUTES || 10 * 60 + 30);
 const STRATEGY2_1M_WARMUP_LIMIT = Math.max(1, Number(process.env.STRATEGY2_1M_WARMUP_LIMIT || 120));
 const STRATEGY2_1M_STATUS_MAX_AGE_SECONDS = Math.max(240, Number(process.env.STRATEGY2_1M_STATUS_MAX_AGE_SECONDS || 15 * 60));
 const STRATEGY2_1M_SUPABASE_SYNC = process.env.STRATEGY2_1M_SUPABASE_SYNC === "1";
+const STRATEGY2_SKIP_SUPABASE_PUBLISH = process.env.STRATEGY2_SKIP_SUPABASE_PUBLISH === "1";
 const MA35_PROVIDER_FAILURE_LIMIT = Math.max(1, Number(process.env.STRATEGY2_MA35_PROVIDER_FAILURE_LIMIT || 8));
 const RETAIN_LAST_GOOD_ON_SOURCE_UNHEALTHY_SECONDS = Math.max(0, Number(process.env.STRATEGY2_RETAIN_LAST_GOOD_ON_SOURCE_UNHEALTHY_SECONDS || 4 * 60 * 60));
 let lastRealtimeCoverageRescueAt = 0;
@@ -552,6 +554,10 @@ function writeStaticDataTargets(name, payload, options = {}) {
 }
 
 function publishStaticDataJson(name, value) {
+  if (STRATEGY2_API_ONLY && /^strategy2-intraday.*\.json$/i.test(String(name || ""))) {
+    console.log(`strategy2 API-only: skipped static ${name} output`);
+    return;
+  }
   const payload = value;
   const slimPayload = name === "strategy2-intraday-latest.json" ? buildStrategy2FastSlimReport(value) : null;
   const topPayload = name === "strategy2-intraday-latest.json" ? buildStrategy2MobileTopReport(value) : null;
@@ -609,6 +615,109 @@ function buildStrategy2CompleteRunId(report) {
   return `strategy2-${ymd}-${parts.hour}${parts.minute}${parts.second}`;
 }
 
+function buildStrategy2RealtimePayload(report, runId) {
+  return {
+    strategy: "strategy2",
+    event: "complete-run",
+    runId,
+    date: report.date || "",
+    updatedAt: report.updatedAt || new Date().toISOString(),
+    entryCount: cleanNumber(report.entryCount || report.aCount),
+    recordCount: Array.isArray(report.records) ? report.records.length : 0,
+    eventCount: Array.isArray(report.events) ? report.events.length : 0,
+    qualityStatus: report.qualityStatus || "",
+    schemaVersion: report.schemaVersion || "strategy2-run-id-complete-v1",
+    dataContractSource: report.dataContractSource || "supabase:strategy2_intraday_ready_cache",
+  };
+}
+
+async function broadcastStrategy2CompleteRun({ supabaseUrl, publishKey, report, runId }) {
+  if (!publishKey || process.env.STRATEGY2_DISABLE_REALTIME_BROADCAST === "1") return false;
+  const topic = process.env.STRATEGY2_REALTIME_TOPIC || "fuman-strategy2-complete";
+  const event = process.env.STRATEGY2_REALTIME_EVENT || "complete-run";
+  const payload = buildStrategy2RealtimePayload(report, runId);
+  try {
+    const response = await fetch(`${supabaseUrl}/realtime/v1/api/broadcast/${encodeURIComponent(topic)}/events/${encodeURIComponent(event)}`, {
+      method: "POST",
+      headers: {
+        apikey: publishKey,
+        Authorization: `Bearer ${publishKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(payload),
+      signal: AbortSignal.timeout ? AbortSignal.timeout(8000) : undefined,
+    });
+    if (!response.ok) {
+      const text = await response.text().catch(() => "");
+      console.warn(`strategy2 realtime broadcast skipped: HTTP ${response.status} ${text.slice(0, 160)}`);
+      return false;
+    }
+    console.log(`strategy2 realtime broadcast ok: ${topic}/${event} ${runId}`);
+    return true;
+  } catch (error) {
+    console.warn(`strategy2 realtime broadcast skipped: ${error?.message || String(error)}`);
+    return false;
+  }
+}
+function getStrategy2BroadcastConfig() {
+  if (global.__strategy2BroadcastConfig) return global.__strategy2BroadcastConfig;
+  const supabaseUrl = String(process.env.SUPABASE_URL || process.env.FUMAN_SUPABASE_URL || "https://cpmpfhbzutkiecccekfr.supabase.co").replace(/\/+$/, "");
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+    || process.env.FUMAN_SUPABASE_SERVICE_ROLE_KEY
+    || readSecretText(path.join(process.env.FUMAN_RUNTIME_DIR || "C:/fuman-runtime", "secrets", "supabase-service-role-key.txt"))
+    || readSecretText(path.join(ROOT, "secrets", "supabase-service-role-key.txt"));
+  global.__strategy2BroadcastConfig = { supabaseUrl, publishKey: serviceKey };
+  return global.__strategy2BroadcastConfig;
+}
+
+function buildStrategy2CandidateHitPayload(record) {
+  return {
+    strategy: "strategy2",
+    event: "candidate-hit",
+    date: record.date || "",
+    timestamp: record.timestamp || record.entryAt || "",
+    code: String(record.code || ""),
+    name: String(record.name || record.code || ""),
+    stateId: record.stateId || "",
+    stateLabel: record.stateLabel || "",
+    signalId: record.signalId || record.primaryStrategy || "",
+    strategyLabel: record.strategy || record.primaryStrategy || "",
+    score: cleanNumber(record.score),
+    price: cleanNumber(record.entryPrice || record.observedPrice),
+    percent: cleanNumber(record.percent),
+    volume: cleanNumber(record.volume || record.tradeVolume),
+    reason: String(record.reason || record.stateReason || "").slice(0, 180),
+    sourceCoverage: cleanNumber(record.sourceCoverage),
+    updatedAt: new Date().toISOString(),
+  };
+}
+
+async function broadcastStrategy2CandidateHit(record) {
+  if (!record || process.env.STRATEGY2_DISABLE_REALTIME_BROADCAST === "1") return false;
+  if (!["entry", "go"].includes(String(record.stateId || ""))) return false;
+  const { supabaseUrl, publishKey } = getStrategy2BroadcastConfig();
+  if (!supabaseUrl || !publishKey) return false;
+  const topic = process.env.STRATEGY2_REALTIME_TOPIC || "fuman-strategy2-complete";
+  const event = process.env.STRATEGY2_REALTIME_CANDIDATE_EVENT || "candidate-hit";
+  const payload = buildStrategy2CandidateHitPayload(record);
+  try {
+    const response = await fetch(`${supabaseUrl}/realtime/v1/api/broadcast/${encodeURIComponent(topic)}/events/${encodeURIComponent(event)}`, {
+      method: "POST",
+      headers: {
+        apikey: publishKey,
+        Authorization: `Bearer ${publishKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(payload),
+      signal: AbortSignal.timeout ? AbortSignal.timeout(5000) : undefined,
+    });
+    if (!response.ok) return false;
+    console.log(`strategy2 candidate-hit broadcast ok: ${payload.code} ${payload.signalId || payload.stateId}`);
+    return true;
+  } catch {
+    return false;
+  }
+}
 async function publishStrategy2CompleteRunToSupabase({ supabaseUrl, publishKey, report }) {
   if (!publishKey) {
     console.warn("strategy2 complete run publish skipped: missing Supabase service role key");
@@ -620,8 +729,9 @@ async function publishStrategy2CompleteRunToSupabase({ supabaseUrl, publishKey, 
       const parts = getStrategy2TaipeiParts(report.updatedAt || report.generatedAt || Date.now());
       return `${parts.year}-${parts.month}-${parts.day}`;
     })();
+  const runId = buildStrategy2CompleteRunId(report);
   const rpcPayload = {
-    p_run_id: buildStrategy2CompleteRunId(report),
+    p_run_id: runId,
     p_scan_date: scanDate,
     p_payload: report,
   };
@@ -641,6 +751,7 @@ async function publishStrategy2CompleteRunToSupabase({ supabaseUrl, publishKey, 
       console.warn(`strategy2 complete run publish skipped: HTTP ${response.status} ${text.slice(0, 160)}`);
       return false;
     }
+    await broadcastStrategy2CompleteRun({ supabaseUrl, publishKey, report, runId });
     return true;
   } catch (error) {
     console.warn(`strategy2 complete run publish skipped: ${error?.message || String(error)}`);
@@ -1165,6 +1276,15 @@ function taipeiParts(date = new Date()) {
     hour12: false,
   }).formatToParts(date);
   return Object.fromEntries(parts.map((part) => [part.type, part.value]));
+}
+
+function scanTaipeiParts() {
+  const override = process.env.STRATEGY2_SCAN_TIMESTAMP || process.env.FUMAN_SCAN_TIMESTAMP || "";
+  if (override) {
+    const parsed = Date.parse(String(override).includes("T") ? String(override) : String(override).replace(" ", "T") + "+08:00");
+    if (Number.isFinite(parsed)) return taipeiParts(new Date(parsed));
+  }
+  return taipeiParts();
 }
 
 function dateKey(parts = taipeiParts()) {
@@ -3022,16 +3142,17 @@ async function fetchMa35Map(stocks, scanTimestamp, cache) {
     while (cursor < candidates.length) {
       const code = candidates[cursor++];
       const status = statusByCode.get(String(code));
-      const candleCount = cleanNumber(status?.candle_count);
+      const candleCount = cleanNumber(status?.today_candle_count ?? status?.candle_count ?? status?.rows_today);
       const latestCandleAge = cleanNumber(status?.latest_candle_age_seconds);
+      const readyGe35 = status?.ready_ge_35 === true || candleCount >= 35;
       const staleLatestCandle = latestCandleAge > STRATEGY2_1M_STATUS_MAX_AGE_SECONDS;
-      if (status && (status.ready_ge_35 === false || candleCount < 35 || status.has_today_data === false || staleLatestCandle)) {
+      if (status && (!readyGe35 || status.has_today_data === false || staleLatestCandle)) {
         map.set(String(code), {
           ma35Attempts: [{
             source: "v_fugle_intraday_1m_status",
             ok: false,
             skipped: true,
-            error: `1m_not_ready ready_ge_35=${status.ready_ge_35} candle_count=${status.candle_count ?? ""} has_today_data=${status.has_today_data} latest_age=${status.latest_candle_age_seconds ?? ""}`,
+            error: `1m_not_ready ready_ge_35=${status.ready_ge_35} candle_count=${candleCount} has_today_data=${status.has_today_data} latest_age=${status.latest_candle_age_seconds ?? ""}`,
           }],
         });
         continue;
@@ -3064,7 +3185,7 @@ async function warmStrategy2MinuteCandles(stocks, scanTimestamp, cache, key) {
 }
 
 async function main() {
-  const parts = taipeiParts();
+  const parts = scanTaipeiParts();
   const key = dateKey(parts);
   if (!isMarketTime(parts)) {
     console.log(`skip intraday scan outside market time: ${timestampKey(parts)}`);
@@ -3080,7 +3201,7 @@ async function main() {
   }
   cache.records = normalizeStrategy2Records(cache.records || []);
 
-  const timestamp = timestampKey();
+  const timestamp = timestampKey(parts);
   const entryWindow = isStrategy2EntryTime(parts);
   const sharedSourceHealth = await getStrategy2SourceHealth({
     maxQuoteAgeSeconds: SUPABASE_SOURCE_MAX_QUOTE_AGE_SECONDS,
@@ -3106,7 +3227,7 @@ async function main() {
     }
     const strategy2Report = buildStrategy2SharedSourceAbnormalReport(cache, key, timestamp, sharedSourceHealth);
     writeJson(SIGNAL_FILE, cache);
-    writeJson(STRATEGY2_REPORT_FILE, strategy2Report);
+    if (!STRATEGY2_API_ONLY) writeJson(STRATEGY2_REPORT_FILE, strategy2Report);
     publishStaticDataJson("strategy2-intraday-latest.json", strategy2Report);
     await upsertStrategy2LatestToSupabase(strategy2Report);
     console.log(`strategy2 supabase shared source unhealthy: ${sharedSourceHealth.reason || sharedSourceHealth.message || "unknown"}`);
@@ -3175,7 +3296,7 @@ async function main() {
     });
     cache.records = strategy2Report.records;
     writeJson(SIGNAL_FILE, cache);
-    writeJson(STRATEGY2_REPORT_FILE, strategy2Report);
+    if (!STRATEGY2_API_ONLY) writeJson(STRATEGY2_REPORT_FILE, strategy2Report);
     publishStaticDataJson("strategy2-intraday-latest.json", strategy2Report);
     await upsertStrategy2MinuteCandlesToSupabase(cache, key);
   await upsertStrategy2LatestToSupabase(strategy2Report);
@@ -3333,6 +3454,7 @@ async function main() {
         recoveredFromRealtimeFallback: Boolean(scanStock.recoveredFromRealtimeFallback),
         ...standaloneMeta,
       });
+      broadcastStrategy2CandidateHit(cache.records[cache.records.length - 1]).catch(() => {});
       added += 1;
     }
     signals.forEach((signal) => {
@@ -3419,6 +3541,7 @@ async function main() {
         recoveredFromRealtimeFallback: Boolean(scanStock.recoveredFromRealtimeFallback),
         ...strategyMeta,
       });
+      broadcastStrategy2CandidateHit(cache.records[cache.records.length - 1]).catch(() => {});
       added += 1;
     });
     const snapshotMeta = buildStrategy2ConditionMeta(scanStock, { timestamp, preopen, hadTriggeredStrong });
@@ -3448,7 +3571,7 @@ async function main() {
   });
   cache.records = strategy2Report.records;
   writeJson(SIGNAL_FILE, cache);
-  writeJson(STRATEGY2_REPORT_FILE, strategy2Report);
+  if (!STRATEGY2_API_ONLY) writeJson(STRATEGY2_REPORT_FILE, strategy2Report);
   publishStaticDataJson("strategy2-intraday-latest.json", strategy2Report);
   await upsertStrategy2LatestToSupabase(strategy2Report);
   const strategy2HistoryFile = path.join(STRATEGY2_HISTORY_DIR, `${key}.json`);
@@ -3466,6 +3589,8 @@ main().catch((error) => {
   console.error(error);
   process.exit(1);
 });
+
+
 
 
 

@@ -34,54 +34,18 @@ if ($exitCode -ne 0) {
   exit $exitCode
 }
 
-$syncScript = "${PSScriptRoot}\run-cache-sync.ps1"
-$syncStatusFile = "C:\fuman-runtime\state\open-buy-sync-status.json"
-New-Item -ItemType Directory -Force -Path (Split-Path $syncStatusFile -Parent) | Out-Null
-
-function Write-OpenBuySyncStatus($status, $attempt, $exitCode, $message) {
-  @{
-    status = $status
-    attempt = $attempt
-    exitCode = $exitCode
-    message = $message
-    updatedAt = (Get-Date).ToString("o")
-    log = $log
-  } | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $syncStatusFile -Encoding utf8
-}
-
-if (Test-Path -LiteralPath $syncScript) {
-  $syncAttempts = 4
-  $parsedSyncAttempts = 0
-  if ([int]::TryParse($env:OPEN_BUY_SYNC_ATTEMPTS, [ref]$parsedSyncAttempts) -and $parsedSyncAttempts -gt 0) {
-    $syncAttempts = $parsedSyncAttempts
+$verifyUrl = "https://fuman-terminal.vercel.app/api/open-buy-latest?ts=$([DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds())"
+"Open buy API-only scan complete; verifying latest complete-run API $verifyUrl" >> $log
+try {
+  $response = Invoke-WebRequest $verifyUrl -UseBasicParsing
+  $payload = $response.Content | ConvertFrom-Json
+  if ($response.StatusCode -ne 200 -or $payload.ok -ne $true -or $payload.complete -ne $true -or -not $payload.runId) {
+    throw "open-buy API verification failed status=$($response.StatusCode) ok=$($payload.ok) complete=$($payload.complete) runId=$($payload.runId)"
   }
-  $syncExitCode = 1
-  for ($attempt = 1; $attempt -le $syncAttempts; $attempt++) {
-    "Open buy cache files written locally; starting isolated openBuy Git sync attempt $attempt/$syncAttempts" >> $log
-    Write-OpenBuySyncStatus "running" $attempt $null "isolated openBuy Git sync running"
-    & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $syncScript -Scope openBuy >> $log 2>&1
-    $syncExitCode = $LASTEXITCODE
-    if ($syncExitCode -eq 0) {
-      Write-OpenBuySyncStatus "success" $attempt 0 "isolated openBuy Git sync completed"
-      "Open buy isolated Git sync completed on attempt $attempt/$syncAttempts" >> $log
-      break
-    }
-    "Open buy isolated Git sync attempt $attempt/$syncAttempts failed with exit code $syncExitCode" >> $log
-    if ($attempt -lt $syncAttempts) {
-      $sleepSeconds = [math]::Min(300, 30 * [math]::Pow(2, $attempt - 1))
-      Write-OpenBuySyncStatus "retry_wait" $attempt $syncExitCode "retrying after $sleepSeconds seconds"
-      "Open buy isolated Git sync retrying after $sleepSeconds seconds" >> $log
-      Start-Sleep -Seconds $sleepSeconds
-    }
-  }
-  if ($syncExitCode -ne 0) {
-    Write-OpenBuySyncStatus "failed" $syncAttempts $syncExitCode "isolated openBuy Git sync failed after retries"
-    "Open buy isolated Git sync failed after $syncAttempts attempts with exit code $syncExitCode" >> $log
-    exit $syncExitCode
-  }
-} else {
-  Write-OpenBuySyncStatus "skipped" 0 $null "missing $syncScript"
-  "Open buy isolated Git sync skipped; missing $syncScript" >> $log
+  "Open buy API-only verified runId=$($payload.runId) count=$($payload.count) usedDate=$($payload.usedDate)" >> $log
+} catch {
+  "Open buy API-only verification failed: $($_.Exception.Message)" >> $log
+  exit 1
 }
 "=== Open buy full scan end $(Get-Date) ===" >> $log
 

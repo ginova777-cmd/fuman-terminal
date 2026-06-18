@@ -18,23 +18,17 @@ const SUPABASE_KEY = process.env.SUPABASE_ANON_KEY
 const LATEST_RUN_VIEW = process.env.SUPABASE_OPEN_BUY_LATEST_RUN_VIEW || "v_strategy1_open_buy_latest_complete_run";
 const TABLE = process.env.SUPABASE_OPEN_BUY_RESULTS_TABLE || "strategy1_open_buy_results";
 
-function staticFallback(reason = "") {
-  try {
-    const payload = JSON.parse(fs.readFileSync(path.join(process.cwd(), "data", "open-buy-latest.json"), "utf8"));
-    return {
-      ...payload,
-      cacheSource: "static-fallback",
-      transport: {
-        ...(payload.transport || {}),
-        source: "static-json",
-        via: "api/open-buy-latest",
-        fallbackReason: reason,
-        fetchedAt: new Date().toISOString(),
-      },
-    };
-  } catch (error) {
-    return { ok: false, error: "open_buy_static_fallback_failed", detail: error?.message || String(error) };
-  }
+function taipeiDateKey(value = new Date()) {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Taipei",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(value).reduce((out, part) => {
+    if (part.type !== "literal") out[part.type] = part.value;
+    return out;
+  }, {});
+  return `${parts.year}-${parts.month}-${parts.day}`;
 }
 
 async function fetchRowsFrom(table, query) {
@@ -86,6 +80,7 @@ async function fetchLatestCompleteRun() {
       "strategy=eq.strategy1",
       "status=eq.complete",
       "complete=eq.true",
+      "order=finished_at.desc",
       "limit=1",
     ].join("&")
   );
@@ -138,6 +133,24 @@ function buildPayload(rows, run) {
   };
 }
 
+function missingPayload(error, detail = "") {
+  return {
+    ok: false,
+    error,
+    detail,
+    date: taipeiDateKey(),
+    cacheSource: "none",
+    transport: {
+      source: "supabase",
+      latestRunView: LATEST_RUN_VIEW,
+      table: TABLE,
+      gate: "run_id",
+      via: "api/open-buy-latest",
+      fetchedAt: new Date().toISOString(),
+    },
+  };
+}
+
 module.exports = async function handler(request, response) {
   response.setHeader("Cache-Control", "no-store, max-age=0, must-revalidate");
   response.setHeader("CDN-Cache-Control", "no-store");
@@ -150,16 +163,16 @@ module.exports = async function handler(request, response) {
 
   try {
     if (!SUPABASE_URL || !SUPABASE_KEY) {
-      response.status(200).json(staticFallback("supabase_not_configured"));
+      response.status(503).json(missingPayload("strategy1_supabase_not_configured"));
       return;
     }
     const latest = await fetchLatestCompleteRows();
-    if (!latest.rows.length) {
-      response.status(200).json(staticFallback("strategy1_open_buy_results_latest_empty"));
+    if (!latest.run?.run_id) {
+      response.status(404).json(missingPayload("strategy1_complete_run_missing"));
       return;
     }
     response.status(200).json(buildPayload(latest.rows, latest.run));
   } catch (error) {
-    response.status(200).json(staticFallback(error?.message || String(error)));
+    response.status(503).json(missingPayload("strategy1_complete_run_fetch_failed", error?.message || String(error)));
   }
 };

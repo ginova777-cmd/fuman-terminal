@@ -2,13 +2,13 @@
   "strategy": "strategy4",
   "label": "strategy4 raw refresh",
   "tier": "critical",
-  "startedAt": "2026-06-16T20:34:00.5650981+08:00",
-  "finishedAt": "2026-06-16T20:34:51.2384270+08:00",
-  "status": "degraded",
-  "exitCode": 0,
+  "startedAt": "2026-06-16T13:37:58.4199717+08:00",
+  "finishedAt": "2026-06-16T13:38:46.2163034+08:00",
+  "status": "failed",
+  "exitCode": 1,
   "scanned": 1654,
   "total": 1654,
-  "matches": 306,
+  "matches": 13,
   "complete": true,
   "qualityStatus": "degraded",
   "fallback": false,
@@ -17,6 +17,6 @@
     "strategy4 prewarm: prewarm batch 1/2 (1262-4178) supabase-only: skip strategy API fallback for 40 missing history caches",
     "strategy4 prewarm: prewarm batch 2/2 (4195-8480) supabase-only: skip strategy API fallback for 36 missing history caches"
   ],
-  "blockingReason": "",
-  "log": "C:\\fuman-runtime\\logs\\full-scan-20260616-201003.log"
+  "blockingReason": "critical scan failed with exit code 1",
+  "log": "C:\\fuman-runtime\\logs\\full-scan-20260616-131248.log"
 }

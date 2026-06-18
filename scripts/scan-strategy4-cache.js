@@ -4,12 +4,9 @@ const { spawnSync } = require("child_process");
 const scanStrategy4 = require("../api/scan-strategy4");
 const fetchStocks = require("../stocks");
 const { fetchMisQuotes } = require("../lib/mis-quotes");
-const { writeSummary } = require("./cache-summary");
+const { publishStrategyCacheStatus } = require("../lib/strategy-cache-status");
 
 const ROOT = path.resolve(__dirname, "..");
-const OUT_FILE = path.join(ROOT, "data", "strategy4-latest.json");
-const BACKUP_FILE = path.join(ROOT, "data", "strategy4-backup.json");
-const SUMMARY_FILE = path.join(ROOT, "data", "strategy4-summary.json");
 const BATCH_SIZE = Number(process.env.STRATEGY4_BATCH_SIZE || 80);
 const CHUNK_SIZE = Number(process.env.STRATEGY4_CHUNK_SIZE || BATCH_SIZE);
 const RETRY_CHUNK_SIZE = Number(process.env.STRATEGY4_RETRY_CHUNK_SIZE || CHUNK_SIZE);
@@ -72,6 +69,7 @@ const SUPABASE_RUNS_TABLE = process.env.STRATEGY4_SUPABASE_RUNS_TABLE || "strate
 const SUPABASE_QUOTE_VIEW = process.env.STRATEGY4_QUOTE_VIEW || "fugle_realtime_quote_latest";
 const SUPABASE_RESULTS_ATTEMPTS = Number(process.env.STRATEGY4_SUPABASE_RESULTS_ATTEMPTS || 4);
 const SYNC_SUPABASE_RESULTS = process.env.STRATEGY4_SYNC_SUPABASE_RESULTS !== "0";
+const STRATEGY4_API_ONLY = true;
 let strategy4VolumeCache = null;
 let strategy4VolumeCacheSource = `supabase:${STRATEGY4_DAILY_VIEW}`;
 
@@ -753,7 +751,11 @@ function mergeSourceCounts(sourceCounts, currentSourceCounts) {
 }
 
 function buildOutput({ codes, scannedThisRun, scanned, noDataCodes, scanErrors, currentMatches, dataSourceCounts, complete, runMode, scanStamp, volumeFilter, quoteLiquidityFilter, supabaseCoverage }) {
-  const matches = [...currentMatches.values()]
+  const expectedMatchDate = normalizeIsoDate(scanStamp) || scanDateFromOutput({ scanStamp });
+  const allMatches = [...currentMatches.values()];
+  const staleMatches = allMatches.filter((item) => normalizeIsoDate(item.date || item.tradeDate || item.usedDate) !== expectedMatchDate);
+  const matches = allMatches
+    .filter((item) => normalizeIsoDate(item.date || item.tradeDate || item.usedDate) === expectedMatchDate)
     .sort((a, b) => (b.swingScore || b.score || 0) - (a.swingScore || a.score || 0) || (b.percent || 0) - (a.percent || 0));
   const noDataCount = noDataCodes.size;
   const errorCount = scanErrors.length;
@@ -783,6 +785,10 @@ function buildOutput({ codes, scannedThisRun, scanned, noDataCodes, scanErrors, 
   }
   if (baseComplete && noDataCount > 0) {
     sourceWarnings.push(`No daily-K history for ${noDataCount} scanned codes; published as degraded complete`);
+  }
+  if (staleMatches.length) {
+    const staleDates = [...new Set(staleMatches.map((item) => normalizeIsoDate(item.date || item.tradeDate || item.usedDate)).filter(Boolean))].slice(0, 8);
+    sourceWarnings.push(`Filtered ${staleMatches.length} stale Strategy4 matches not on scan date ${expectedMatchDate}${staleDates.length ? `: ${staleDates.join(", ")}` : ""}`);
   }
   return {
     ok: true,
@@ -820,6 +826,8 @@ function buildOutput({ codes, scannedThisRun, scanned, noDataCodes, scanErrors, 
     quoteLiquidityFilter: quoteLiquidityFilter || null,
     quoteLiquidityFilteredCount: quoteLiquidityFilter?.filtered?.length || 0,
     quoteLiquidityFilteredCodes: (quoteLiquidityFilter?.filtered || []).map((item) => item.code),
+    staleFilteredCount: staleMatches.length,
+    staleFilteredDates: [...new Set(staleMatches.map((item) => normalizeIsoDate(item.date || item.tradeDate || item.usedDate)).filter(Boolean))].slice(0, 8),
     count: matches.length,
     matches,
   };
@@ -833,21 +841,7 @@ function writeStrategy4Output(output, writeBackup = false) {
       ...contract.warnings.slice(0, 20).map((warning) => `Strategy4 volume contract warning: ${warning}`),
     ];
   }
-  fs.mkdirSync(path.dirname(OUT_FILE), { recursive: true });
-  fs.writeFileSync(OUT_FILE, `${JSON.stringify(output, null, 2)}\n`);
-  writeSummary("strategy4", output, SUMMARY_FILE);
-  const runtimeDataDir = path.join(RUNTIME_DIR, "data");
-  const runtimeOutFile = path.join(runtimeDataDir, "strategy4-latest.json");
-  const runtimeSummaryFile = path.join(runtimeDataDir, "strategy4-summary.json");
-  const runtimeBackupFile = path.join(runtimeDataDir, "strategy4-backup.json");
-  fs.mkdirSync(runtimeDataDir, { recursive: true });
-  fs.writeFileSync(runtimeOutFile, `${JSON.stringify(output, null, 2)}\n`);
-  writeSummary("strategy4", output, runtimeSummaryFile);
-  if (writeBackup) {
-    const backupPayload = { ...output, source: "github-actions-backup", backupUpdatedAt: new Date().toISOString() };
-    fs.writeFileSync(BACKUP_FILE, `${JSON.stringify(backupPayload, null, 2)}\n`);
-    fs.writeFileSync(runtimeBackupFile, `${JSON.stringify(backupPayload, null, 2)}\n`);
-  }
+  console.log(`strategy4 API-only: skipped static data/strategy4*.json output, backup=${writeBackup ? "requested" : "no"}`);
 }
 
 function validateStrategy4VolumeCache(cache, options = {}) {
@@ -918,6 +912,13 @@ function scanDateFromOutput(output) {
   return /^\d{4}-\d{2}-\d{2}/.test(updatedAt) ? updatedAt.slice(0, 10) : new Date().toISOString().slice(0, 10);
 }
 
+function normalizeIsoDate(value) {
+  const text = String(value || "").trim();
+  if (/^\d{8}$/.test(text)) return `${text.slice(0, 4)}-${text.slice(4, 6)}-${text.slice(6, 8)}`;
+  const match = text.match(/^\d{4}-\d{2}-\d{2}/);
+  return match ? match[0] : "";
+}
+
 function strategy4RunIdFromOutput(output) {
   const scanDate = scanDateFromOutput(output).replace(/-/g, "");
   const stamp = Date.parse(String(output.generatedAt || output.updatedAt || ""));
@@ -956,6 +957,13 @@ function buildSupabaseRunRow(output, runId) {
       zones: output.zones || null,
       runMode: output.runMode || "",
       scanStamp: output.scanStamp || "",
+      sourceWarnings: output.sourceWarnings || [],
+      yahooSourceCount: cleanNumber(output.yahooSourceCount),
+      yahooSourceRatio: cleanNumber(output.yahooSourceRatio),
+      misSourceCount: cleanNumber(output.misSourceCount),
+      misSourceRatio: cleanNumber(output.misSourceRatio),
+      dataSourceCounts: output.dataSourceCounts || {},
+      supabaseCoverage: output.supabaseCoverage || null,
     },
   };
 }
@@ -1043,8 +1051,8 @@ async function upsertStrategy4ResultsToSupabase(output) {
   }
   const baseUrl = SUPABASE_URL.replace(/\/+$/, "");
   const runId = strategy4RunIdFromOutput(output);
-  let includeRunId = process.env.STRATEGY4_SUPABASE_RUN_ID !== "0";
-  let conflictTarget = includeRunId ? "run_id,strategy,code" : "scan_date,strategy,code";
+  const includeRunId = true;
+  const conflictTarget = "run_id,strategy,code";
   let url = `${baseUrl}/rest/v1/${SUPABASE_RESULTS_TABLE}?on_conflict=${conflictTarget}`;
   let mode = process.env.STRATEGY4_SUPABASE_RESULTS_MODE === "minimal" ? "minimal" : "full";
   let rows = buildSupabaseScanRows(output, mode, runId, includeRunId);
@@ -1066,7 +1074,23 @@ async function upsertStrategy4ResultsToSupabase(output) {
         body: JSON.stringify(rows),
       });
       if (response.ok) {
-        if (includeRunId) await upsertStrategy4RunToSupabase(output, runId);
+        if (includeRunId) {
+          const runOk = await upsertStrategy4RunToSupabase(output, runId);
+          if (!runOk) {
+            lastMessage = "strategy4 complete run upsert failed";
+            throw new Error(lastMessage);
+          }
+        }
+        await publishStrategyCacheStatus("strategy4", "策略4-主力籌碼", output, {
+          used_date: output.scanStamp || output.date || scanDateFromOutput(output),
+          updated_at: output.updatedAt || new Date().toISOString(),
+          scan_status: output.complete === false ? "failed" : "complete",
+          scanned: output.total,
+          total: output.total,
+          match_count: output.count,
+          source: SUPABASE_RESULTS_TABLE,
+          log: `run_id=${runId}`,
+        });
         writeSupabaseStatus(true, {
           table: SUPABASE_RESULTS_TABLE,
           runTable: includeRunId ? SUPABASE_RUNS_TABLE : "",
@@ -1085,12 +1109,7 @@ async function upsertStrategy4ResultsToSupabase(output) {
       const text = await response.text().catch(() => "");
       lastMessage = `HTTP ${response.status} ${text.slice(0, 500)}`.trim();
       if (includeRunId && /run_id|constraint|schema cache|Could not find|no unique|ON CONFLICT/i.test(lastMessage)) {
-        includeRunId = false;
-        conflictTarget = "scan_date,strategy,code";
-        url = `${baseUrl}/rest/v1/${SUPABASE_RESULTS_TABLE}?on_conflict=${conflictTarget}`;
-        rows = buildSupabaseScanRows(output, mode, runId, includeRunId);
-        console.warn(`strategy4 supabase run_id unavailable, retrying legacy scan_time gate: ${lastMessage}`);
-        continue;
+        throw new Error(`strategy4 supabase run_id gate unavailable: ${lastMessage}`);
       }
       if (mode === "full" && /column|schema cache|Could not find/i.test(lastMessage)) {
         mode = "minimal";
@@ -1115,6 +1134,10 @@ async function upsertStrategy4ResultsToSupabase(output) {
 }
 
 function refreshSlimCache(label) {
+  if (STRATEGY4_API_ONLY) {
+    console.log(`strategy4 API-only: skipped slim static output (${label})`);
+    return;
+  }
   const script = path.join(ROOT, "scripts", "generate-slim-cache.js");
   if (!fs.existsSync(script)) return;
   const result = spawnSync(process.execPath, [script], {
@@ -1134,6 +1157,10 @@ function refreshSlimCache(label) {
 }
 
 function syncStrategy4Output(label) {
+  if (STRATEGY4_API_ONLY) {
+    console.log(`strategy4 API-only: skipped static sync (${label})`);
+    return;
+  }
   if (!SYNC_PARTIAL) return;
   if (!fs.existsSync(SYNC_SCRIPT)) {
     console.log(`strategy4 sync skipped (${label}): missing ${SYNC_SCRIPT}`);
@@ -1166,6 +1193,9 @@ function syncStrategy4Output(label) {
 }
 
 async function main() {
+  if (!FULL_SCAN) {
+    throw new Error("Strategy4 API-only requires full scan -> Supabase complete run; partial static JSON runs are disabled");
+  }
   const prewarmStatus = runSupabaseHistoryPrewarm();
   const supabaseCoverage = getSupabaseCoverageStatus() || prewarmStatus || null;
   const universe = await fetchUniverse();
@@ -1173,13 +1203,12 @@ async function main() {
   if (!codes.length) throw new Error("No stock universe");
   await refreshStrategy4VolumeCacheFromSupabase();
 
-  const previousRaw = readJson(OUT_FILE, {
+  const previousRaw = {
     ok: true,
     total: codes.length,
     scannedCodes: [],
     matches: [],
-  });
-  const backup = readJson(BACKUP_FILE, { ok: true, matches: [] });
+  };
   const scanStamp = FULL_SCAN ? RUN_STAMP : (previousRaw.scanStamp || previousRaw.stamp || RUN_STAMP);
   const currentMatches = new Map();
   const dataSourceCounts = new Map();

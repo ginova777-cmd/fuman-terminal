@@ -15,8 +15,10 @@ const API_KEY_FILES = [
   path.join(RUNTIME_DIR, "secrets", "fugle-api-key.txt"),
   "C:/fuman-terminal/secrets/fugle-api-key.txt",
 ];
-const LOOP_MS = Math.max(3000, Number(process.env.FUGLE_COLLECTOR_LOOP_MS || 5000));
-const BATCH_SIZE = Math.max(1, Number(process.env.FUGLE_COLLECTOR_BATCH_SIZE || 60));
+const LOOP_MS = Math.max(1000, Number(process.env.FUGLE_COLLECTOR_LOOP_MS || 3000));
+const BATCH_SIZE = Math.max(1, Number(process.env.FUGLE_COLLECTOR_BATCH_SIZE || 120));
+const PER_SYMBOL_DELAY_MS = Math.max(0, Number(process.env.FUGLE_COLLECTOR_PER_SYMBOL_DELAY_MS || 50));
+const CONCURRENCY = Math.max(1, Number(process.env.FUGLE_COLLECTOR_CONCURRENCY || 20));
 const QUOTE_TTL_MS = Math.max(30000, Number(process.env.FUGLE_COLLECTOR_QUOTE_TTL_MS || 180000));
 
 let cursor = 0;
@@ -63,6 +65,10 @@ function writeStatus(extra = {}) {
     subscribed: extra.subscribed || 0,
     pending: extra.pending || 0,
     quotes: extra.quotes || 0,
+    loopMs: LOOP_MS,
+    batchSize: BATCH_SIZE,
+    perSymbolDelayMs: PER_SYMBOL_DELAY_MS,
+    concurrency: CONCURRENCY,
     lastMessageAt,
     last429At,
     cooldownUntil: cooldownUntil ? new Date(cooldownUntil).toISOString() : "",
@@ -182,14 +188,26 @@ async function tick() {
   }
 
   const quotes = [];
-  for (const code of batch) {
-    try {
-      const payload = await fetchQuote(code, apiKey);
-      const quote = normalizeQuote(payload, code);
+  for (let offset = 0; offset < batch.length; offset += CONCURRENCY) {
+    const chunk = batch.slice(offset, offset + CONCURRENCY);
+    const results = await Promise.all(chunk.map(async (code) => {
+      try {
+        const payload = await fetchQuote(code, apiKey);
+        return normalizeQuote(payload, code);
+      } catch (error) {
+        if (String(error?.message || "").includes("429")) {
+          last429At = nowIso();
+          cooldownUntil = Date.now() + 60000;
+        }
+        return null;
+      }
+    }));
+    for (const quote of results) {
       if (quote) quotes.push(quote);
-      await new Promise((resolve) => setTimeout(resolve, 150));
-    } catch (error) {
-      if (String(error?.message || "").includes("429")) break;
+    }
+    if (cooldownUntil && Date.now() < cooldownUntil) break;
+    if (PER_SYMBOL_DELAY_MS > 0) {
+      await new Promise((resolve) => setTimeout(resolve, PER_SYMBOL_DELAY_MS));
     }
   }
   cursor = (cursor + Math.max(1, batch.length)) % symbols.length;

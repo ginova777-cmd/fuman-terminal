@@ -15,17 +15,6 @@ const FINMIND_TOKEN = process.env.FINMIND_API_TOKEN
 const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY
   || process.env.FUMAN_SUPABASE_SERVICE_ROLE_KEY
   || readSecret(path.join(RUNTIME_DIR, "secrets", "supabase-service-role-key.txt"));
-const SUPABASE_BATCH_SIZE = Math.max(1, Number(process.env.FINMIND_SUPABASE_BATCH_SIZE || 200));
-const SUPABASE_UPSERT_ATTEMPTS = Math.max(1, Number(process.env.FINMIND_SUPABASE_UPSERT_ATTEMPTS || 4));
-const SUPABASE_UPSERT_TIMEOUT_MS = Math.max(5000, Number(process.env.FINMIND_SUPABASE_UPSERT_TIMEOUT_MS || 45000));
-
-function sleep(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-function timeoutSignal(ms) {
-  return AbortSignal.timeout ? AbortSignal.timeout(ms) : undefined;
-}
 
 function number(value) {
   const n = Number(value);
@@ -85,7 +74,7 @@ async function fetchFinMindSnapshot(codes) {
       Authorization: `Bearer ${FINMIND_TOKEN}`,
       "User-Agent": "FumanFinMindSupplement/1.0",
     },
-    signal: timeoutSignal(30000),
+    signal: AbortSignal.timeout ? AbortSignal.timeout(30000) : undefined,
   });
   if (!response.ok) throw new Error(`FinMind snapshot HTTP ${response.status}`);
   const payload = await response.json();
@@ -93,42 +82,26 @@ async function fetchFinMindSnapshot(codes) {
   return Array.isArray(payload?.data) ? payload.data : [];
 }
 
-async function upsertChunk(chunk, offset) {
-  let lastError = "";
-  for (let attempt = 1; attempt <= SUPABASE_UPSERT_ATTEMPTS; attempt += 1) {
-    try {
-      const response = await fetch(`${SUPABASE_URL}/rest/v1/finmind_quotes_live?on_conflict=symbol`, {
-        method: "POST",
-        headers: {
-          apikey: SUPABASE_SERVICE_KEY,
-          Authorization: `Bearer ${SUPABASE_SERVICE_KEY}`,
-          "Content-Type": "application/json",
-          Prefer: "resolution=merge-duplicates,return=minimal",
-        },
-        body: JSON.stringify(chunk),
-        signal: timeoutSignal(SUPABASE_UPSERT_TIMEOUT_MS),
-      });
-      if (response.ok) return;
-      const text = await response.text().catch(() => "");
-      lastError = `HTTP ${response.status}: ${text.slice(0, 200)}`;
-    } catch (error) {
-      lastError = error?.message || String(error);
-    }
-    if (attempt < SUPABASE_UPSERT_ATTEMPTS) {
-      const delayMs = Math.min(30000, 1000 * (2 ** (attempt - 1)));
-      console.warn(`Supabase finmind_quotes_live chunk offset ${offset} attempt ${attempt}/${SUPABASE_UPSERT_ATTEMPTS} failed: ${lastError}; retry in ${delayMs}ms`);
-      await sleep(delayMs);
-    }
-  }
-  throw new Error(`Supabase finmind_quotes_live chunk offset ${offset} failed after ${SUPABASE_UPSERT_ATTEMPTS} attempts: ${lastError}`);
-}
-
 async function upsertSupabase(rows) {
   if (!SUPABASE_SERVICE_KEY) throw new Error("missing Supabase service role key");
   let written = 0;
-  for (let i = 0; i < rows.length; i += SUPABASE_BATCH_SIZE) {
-    const chunk = rows.slice(i, i + SUPABASE_BATCH_SIZE);
-    await upsertChunk(chunk, i);
+  for (let i = 0; i < rows.length; i += 500) {
+    const chunk = rows.slice(i, i + 500);
+    const response = await fetch(`${SUPABASE_URL}/rest/v1/finmind_quotes_live?on_conflict=symbol`, {
+      method: "POST",
+      headers: {
+        apikey: SUPABASE_SERVICE_KEY,
+        Authorization: `Bearer ${SUPABASE_SERVICE_KEY}`,
+        "Content-Type": "application/json",
+        Prefer: "resolution=merge-duplicates",
+      },
+      body: JSON.stringify(chunk),
+      signal: AbortSignal.timeout ? AbortSignal.timeout(30000) : undefined,
+    });
+    if (!response.ok) {
+      const text = await response.text().catch(() => "");
+      throw new Error(`Supabase upsert HTTP ${response.status}: ${text.slice(0, 200)}`);
+    }
     written += chunk.length;
   }
   return written;

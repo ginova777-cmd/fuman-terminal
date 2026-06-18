@@ -15,7 +15,7 @@ const STRATEGIES = [
     key: "strategy2",
     label: "策略2-盤中即時",
     load: () => captureHandler(require("../api/strategy2-latest")).then((result) => result.body),
-    allowZero: true,
+    allowZero: false,
   },
   {
     key: "strategy3",
@@ -93,3 +93,4 @@ function statusFor(strategy, payload) {
   }
   if (issues.length) process.exit(1);
 })();
+

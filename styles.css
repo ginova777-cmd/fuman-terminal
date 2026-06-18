@@ -7788,7 +7788,39 @@ body.fuman-light-theme #cb-detect-view .page-header span.refresh-line {
     grid-template-columns: 36px minmax(0, 1fr);
   }
 
-  #market-view .mobile-ai-ultra-row > button {
+#market-view .mobile-ai-ultra-row > button {
     grid-column: 1 / -1;
   }
+}
+
+/* watchlist-light-surface-final-20260618 */
+body.fuman-light-theme .dashboard:has(#watchlist-view.active),
+body.fuman-light-theme .dashboard:has(#watchlist-view:not([hidden])),
+body.fuman-light-theme .app-shell:has(#watchlist-view.active),
+body.fuman-light-theme .app-shell:has(#watchlist-view:not([hidden])),
+body.fuman-light-theme #watchlist-view,
+body.fuman-light-theme #watchlist-view.view-panel,
+body.fuman-light-theme #watchlist-view.active,
+body.fuman-light-theme #watchlist-view .watchlist-layout {
+  background: #f6f8fb !important;
+  background-image: none !important;
+  color: #172033 !important;
+}
+
+body.fuman-light-theme #watchlist-view .watchlist-analysis-pane,
+body.fuman-light-theme #watchlist-view .watchlist-list-pane,
+body.fuman-light-theme #watchlist-view .watchlist-stock-list {
+  background-color: #f6f8fb !important;
+  background-image: none !important;
+}
+
+body.fuman-light-theme #watchlist-view .watchlist-analysis-pane {
+  background: #ffffff !important;
+  color: #172033 !important;
+  border-color: #dbe3ee !important;
+}
+
+body.fuman-light-theme #watchlist-view .watchlist-stock-list > div[style],
+body.fuman-light-theme #watchlist-view .watchlist-analysis-pane > div[style] {
+  color: #64748b !important;
 }

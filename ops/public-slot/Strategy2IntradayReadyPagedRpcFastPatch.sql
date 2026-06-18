@@ -1,6 +1,6 @@
 -- Strategy2 fast paged ready RPC, 2026-06-16.
 -- Replaces the first paged RPC implementation. This version pages from
--- v_market_quotes_unified first, then joins only that page to universe/daily/status
+-- fugle_quotes_live first, then joins only that page to universe/daily/status
 -- tables so Strategy2 can scan all rows without view full-scan timeouts.
 
 create or replace function public.get_strategy2_intraday_ready(
@@ -58,10 +58,9 @@ as $$
       q.session,
       q.is_halted,
       q.is_trial,
-      coalesce(q.quote_updated_at, q.updated_at) as updated_at,
-      q.quote_age_seconds,
+      q.updated_at,
       q.stock_type
-    from public.v_market_quotes_unified q
+    from public.fugle_quotes_live q
     where q.symbol ~ '^[0-9]{4}$'
       and coalesce(q.stock_type, 'COMMONSTOCK') = 'COMMONSTOCK'
     order by q.symbol asc
@@ -84,7 +83,7 @@ as $$
     q.open_price,
     q.high_price,
     q.low_price,
-    coalesce(q.quote_age_seconds, greatest(0, floor(extract(epoch from (now() - q.updated_at))))::integer) as quote_age_seconds,
+    greatest(0, floor(extract(epoch from (now() - q.updated_at))))::integer as quote_age_seconds,
     coalesce(d.avg_5d_volume, 0) as avg_5d_volume,
     coalesce(s.today_candle_count, s.candle_count, 0)::integer as today_candle_count,
     s.latest_candle_time,
@@ -104,9 +103,9 @@ as $$
     d.days_20::integer as avg_20d_days,
     s.updated_at as intraday_1m_status_updated_at
   from page_quotes q
-  left join public.v_stock_universe_unified u
+  left join public.stock_universe u
     on u.symbol = q.symbol
-  left join public.v_daily_volume_avg_unified d
+  left join public.fugle_daily_volume_avg d
     on d.symbol = q.symbol
   left join public.v_fugle_intraday_1m_status s
     on s.symbol = q.symbol

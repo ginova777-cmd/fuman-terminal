@@ -39,6 +39,8 @@ const FILES = [
   "api/scan-warrant-flow.js",
   "api/scan-strategy4.js",
   "api/strategy4-latest.js",
+  "api/cb-detect-latest.js",
+  "api/desktop-static-disabled.js",
   "api/latest-signals.js",
   "api/latest-strategy.js",
   "api/terminal-home.js",
@@ -72,6 +74,7 @@ const FILES = [
   "scripts/patrol-schedules.js",
   "scripts/sync-afterhours-supabase-status.js",
   "scripts/sync-main-deploy-source.js",
+  "scripts/verify-desktop-api-only.js",
   "scripts/verify-data-freshness.js",
   "scripts/verify-warrant-freshness.js",
   "scripts/verify-live-version.js",
@@ -102,7 +105,6 @@ const FILES = [
   "flow-health.ps1",
   "data/afterhours-supabase-status.json",
   "data/chip-trade-exclusions.json",
-  "data/cb-detect-latest.json",
   "data/data-consistency-report.json",
   "data/data-quality-report.json",
   "data/data-manifest.json",
@@ -134,43 +136,17 @@ const FILES = [
   "data/stocks-quotes-mobile-top.json",
   "data/stocks-quotes-slim.json",
   "data/stocks-slim.json",
-  "data/open-buy-latest.json",
-  "data/open-buy-backup.json",
-  "data/open-buy-scorecard-source.json",
   "data/star-preopen-latest.json",
   "data/star-preopen-backup.json",
   "data/star-preopen-scorecard-source.json",
   "data/strategy-match-index.json",
   "data/strategy-weight-report.json",
-  "data/strategy2-intraday-live-top.json",
-  "data/strategy2-intraday-slim.json",
-  "data/strategy2-intraday-top.json",
-  "data/strategy3-latest.json",
-  "data/strategy3-backup.json",
-  "data/strategy3-scorecard-source.json",
-  "data/strategy4-latest.json",
-  "data/strategy4-summary.json",
-  "data/strategy4-slim.json",
-  "data/strategy4-score-top.json",
-  "data/strategy4-zone-a.json",
-  "data/strategy4-zone-b.json",
-  "data/strategy4-zone-c.json",
-  "data/strategy5-latest.json",
-  "data/strategy5-backup.json",
   "data/terminal-home-bundle.json",
   "data/terminal-home-mobile-slim.json",
-  "data/institution-latest.json",
-  "data/institution-slim.json",
-  "data/institution-mobile-top.json",
   "data/institution-tdcc-breakout.json",
   "data/institution-tdcc-breakout-top.json",
   "data/institution-tdcc-breakout.csv",
   "data/tdcc-shareholding-1000-history.json",
-  "data/warrant-flow-latest.json",
-  "data/warrant-flow-slim.json",
-  "data/warrant-flow-mobile-top.json",
-  "data/warrant-priority-top.json",
-  "data/warrant-single-signal-top.json",
   "data/flow-health-latest.json",
 ];
 
@@ -178,20 +154,7 @@ const DIRECTORIES = [
   "data/mobile-analysis",
 ];
 
-for (const zone of ["b", "c"]) {
-  for (let page = 1; page <= 48; page += 1) {
-    FILES.push(`data/strategy4-zone-${zone}-page-${page}.json`);
-  }
-}
-
 for (const prefix of [
-  "open-buy",
-  "strategy2-intraday",
-  "strategy3",
-  "strategy4-score",
-  "strategy5",
-  "institution",
-  "warrant-flow",
   "warrant-volume",
 ]) {
   for (let page = 1; page <= 24; page += 1) {

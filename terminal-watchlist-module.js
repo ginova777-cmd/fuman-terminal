@@ -57,15 +57,21 @@
     }
     
     function ensureWatchlistAnalysisStyles() {
-      loadFumanStyle("terminal-watchlist.css", "watchlist-analysis-styles");
+      const version = window.FUMAN_TERMINAL_VERSION || window.FUMAN_TERMINAL_BOOT?.version || Date.now();
+      loadFumanStyle(`terminal-watchlist.css?v=${encodeURIComponent(version)}`, "watchlist-analysis-styles");
     }
     
     function showTVAnalysis(code, name) {
       const symbol = `TWSE:${code}`;
+      const isLightTheme = document.body.classList.contains("fuman-light-theme");
+      const headerBorder = isLightTheme ? "#dbe3ee" : "#2a2f45";
+      const headerMuted = isLightTheme ? "#64748b" : "#aaa";
+      const headerText = isLightTheme ? "#111827" : "#fff";
+      const widgetTheme = isLightTheme ? "light" : "dark";
       watchlistAnalysis.innerHTML = `
-        <div style="width:100%; padding:16px 20px 0; border-bottom:1px solid #2a2f45;">
-          <div style="color:#aaa; font-size:12px;">技術分析</div>
-          <div style="font-size:18px; font-weight:700; color:#fff; margin-top:2px;">${code} ${name}</div>
+        <div style="width:100%; padding:16px 20px 0; border-bottom:1px solid ${headerBorder};">
+          <div style="color:${headerMuted}; font-size:12px;">技術分析</div>
+          <div style="font-size:18px; font-weight:700; color:${headerText}; margin-top:2px;">${code} ${name}</div>
         </div>
         <div style="flex:1; width:100%; display:flex; flex-direction:column; gap:0;">
           <div class="tradingview-widget-container" style="flex:1; min-height:460px;">
@@ -80,7 +86,7 @@
               "showIntervalTabs": true,
               "displayMode": "single",
               "locale": "zh_TW",
-              "colorTheme": "dark"
+              "colorTheme": "${widgetTheme}"
             }
             <\/script>
           </div>
@@ -455,11 +461,18 @@
       { key: "strategy4", label: "策略4-波段", urls: () => [endpoints.strategy4ScoreTop, endpoints.strategy4ZoneA, endpoints.strategy4ZoneBPage1], fields: ["matches"] },
       { key: "strategy5", label: "策略5-綜合策略", urls: () => [endpoints.strategy5Cache, endpoints.strategy5Backup], fields: ["matches"] },
       { key: "realtime", label: "即時雷達", urls: () => [endpoints.realtimeRadarCache], fields: ["rows"] },
+      { key: "institution", label: "買賣超", urls: () => [endpoints.institutionCache, endpoints.institutionSlim, endpoints.institutionMobileTop], fields: ["data", "rows", "matches"], dataObject: true },
+      { key: "cb", label: "CB名單", urls: () => [endpoints.cbDetectCache], fields: ["rows", "matches"] },
+      { key: "warrant", label: "權證", urls: () => [endpoints.warrantFlowCache, endpoints.warrantFlowMobileTop, endpoints.warrantFlowSlim], fields: ["matches", "rows"], codeField: "underlyingCode" },
     ];
     
     function watchlistRowsFromPayload(payload, fields = []) {
       if (Array.isArray(payload)) return payload;
-      return fields.flatMap((field) => normalizeArray(payload?.[field]));
+      return fields.flatMap((field) => {
+        const value = payload?.[field];
+        if (value && !Array.isArray(value) && typeof value === "object") return Object.values(value);
+        return normalizeArray(value);
+      });
     }
     
     function watchlistSignalLabelById(id) {
@@ -511,6 +524,26 @@
         ],
         realtime: [
           ...normalizeArray(row.signalTags).map(watchlistSignalText),
+        ],
+        institution: [
+          row.total > 0 ? "法人合計買超" : row.total < 0 ? "法人合計賣超" : "法人中性",
+          row.foreign > 0 ? "外資買超" : row.foreign < 0 ? "外資賣超" : "",
+          row.trust > 0 ? "投信買超" : row.trust < 0 ? "投信賣超" : "",
+          row.jointStreak ? `連買${row.jointStreak}日` : "",
+        ],
+        cb: [
+          row.entryLabel,
+          row.tradableLabel,
+          row.conversionPriceLabel,
+          row.sourceLayer,
+          row.cbName,
+        ],
+        warrant: [
+          row.signalGrade ? `等級${row.signalGrade}` : "",
+          row.actionLabel,
+          row.stockSetupLabel,
+          row.branchLabel,
+          row.level ? `Level ${row.level}` : "",
         ],
       };
       const labels = (detailSources[sourceKey] || []).map(watchlistSignalText).map((item) => String(item || "").trim()).filter(Boolean);
@@ -571,7 +604,8 @@
       }
       const sources = watchlistStrategyMatchCache || await watchlistStrategyMatchPromise;
       return sources.flatMap((source) => {
-        const rows = normalizeArray(source.rows).filter((row) => String(row?.code || "") === targetCode);
+        const codeField = source.codeField || "code";
+        const rows = normalizeArray(source.rows).filter((row) => String(row?.[codeField] || row?.code || "") === targetCode);
         if (!rows.length) return [];
         const details = [...new Set(rows.flatMap((row) => watchlistStrategyDetails(row, source.key)))].slice(0, 5);
         const score = Math.max(...rows.map((row) => cleanNumber(row.score || row.maxScore)).filter(Boolean), 0);
@@ -585,17 +619,36 @@
       });
     }
     
+    const WATCHLIST_CHIP_MATCH_KEYS = new Set(["institution", "cb", "warrant"]);
+
+    function watchlistMatchPill(match) {
+      const detail = match.details.length ? `：${match.details.join("、")}` : "";
+      return `<span>${escapeAttr(match.label)}${escapeAttr(detail)}</span>`;
+    }
+
+    function watchlistMatchGroupMarkup(title, matches, emptyText) {
+      const pills = matches.map(watchlistMatchPill).join("");
+      return `
+        <div class="watch-match-group">
+          <b>${title} ${matches.length}</b>
+          <div class="watch-strategy-list">${pills || `<span class="empty">${emptyText}</span>`}</div>
+        </div>
+      `;
+    }
+
     function watchlistStrategySummaryMarkup(matches) {
       if (!matches.length) {
-        return `<strong>0</strong><em>未出現在策略終端</em>`;
+        return `<strong>0</strong><em>未出現在策略 / 籌碼終端</em>`;
       }
-      const pills = matches.map((match) => {
-        const detail = match.details.length ? `：${match.details.join("、")}` : "";
-        return `<span>${escapeAttr(match.label)}${escapeAttr(detail)}</span>`;
-      }).join("");
+      const strategyMatches = matches.filter((match) => !WATCHLIST_CHIP_MATCH_KEYS.has(match.key));
+      const chipMatches = matches.filter((match) => WATCHLIST_CHIP_MATCH_KEYS.has(match.key));
       return `
         <strong>${matches.length}</strong>
-        <div class="watch-strategy-list">${pills}</div>
+        <em>策略 ${strategyMatches.length}｜籌碼 ${chipMatches.length}</em>
+        <div class="watch-match-grid">
+          ${watchlistMatchGroupMarkup("策略命中", strategyMatches, "未命中策略")}
+          ${watchlistMatchGroupMarkup("籌碼命中", chipMatches, "未命中籌碼")}
+        </div>
       `;
     }
     
@@ -682,7 +735,7 @@
               <em>前收 ${formatStockPrice(model.prevClose)} → 現價 ${formatStockPrice(stock.close)}</em>
             </article>
             <article class="watch-metric">
-              <span>符合策略</span>
+              <span>符合策略 / 籌碼</span>
               ${watchlistStrategySummaryMarkup(strategyMatches)}
             </article>
           </section>

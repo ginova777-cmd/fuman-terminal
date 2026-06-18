@@ -3,6 +3,7 @@ const path = require("path");
 const marketHandler = require("../api/market");
 const heatmapHandler = require("../api/heatmap");
 const stocksHandler = require("../api/stocks");
+const { upsertSnapshot } = require("../lib/supabase-snapshots");
 const { ROOT, dataPath } = require("./runtime-paths");
 
 function writeJson(file, payload) {
@@ -50,6 +51,64 @@ function slimSector(sector) {
     down: sector.down,
     total: sector.total,
     stocks: Array.isArray(sector.stocks) ? sector.stocks.slice(0, 8).map(slimStock) : [],
+  };
+}
+
+function compactHeatmapStock(stock) {
+  return {
+    code: stock.code || "",
+    name: stock.name || "",
+    close: stock.close,
+    prev: stock.prev,
+    change: stock.change,
+    pct: stock.pct,
+    amountYi: stock.amountYi,
+    value: stock.value,
+    volume: stock.volume,
+    quoteDate: stock.quoteDate || "",
+    quoteTime: stock.quoteTime || "",
+    isRealtime: stock.isRealtime === true,
+    industry: stock.industry || "",
+    primaryIndustry: stock.primaryIndustry || "",
+    officialIndustry: stock.officialIndustry || "",
+    isAiSupplyChain: stock.isAiSupplyChain === true,
+  };
+}
+
+function compactHeatmapSnapshot(snapshot) {
+  return {
+    ok: snapshot.ok,
+    source: snapshot.source,
+    updatedAt: snapshot.updatedAt,
+    stockCount: snapshot.stockCount,
+    realtimeStockCount: snapshot.realtimeStockCount,
+    sectorCount: snapshot.sectorCount,
+    health: snapshot.health,
+    cache: snapshot.cache,
+    cacheSource: snapshot.cacheSource,
+    resolvedTradeDate: snapshot.resolvedTradeDate,
+    today: snapshot.today,
+    snapshotMode: "sector-top5",
+    sectors: Array.isArray(snapshot.sectors) ? snapshot.sectors.map((sector) => ({
+      name: sector.name || "",
+      pct: sector.pct,
+      avgPct: sector.avgPct,
+      breadthPct: sector.breadthPct,
+      totalValue: sector.totalValue,
+      amountYi: sector.amountYi,
+      count: sector.count,
+      up: sector.up,
+      down: sector.down,
+      flat: sector.flat,
+      leader: sector.leader || "",
+      leaderCode: sector.leaderCode || "",
+      stocks: Array.isArray(sector.stocks)
+        ? [...sector.stocks]
+          .sort((a, b) => Number(b.value || 0) - Number(a.value || 0))
+          .slice(0, 5)
+          .map(compactHeatmapStock)
+        : [],
+    })) : [],
   };
 }
 
@@ -131,9 +190,50 @@ async function main() {
     today: todayKey,
   };
   assertTodayMarketSummary(summary);
+  const heatmapSnapshot = {
+    ...heatmapPayload,
+    ok: Boolean(heatmapPayload.ok),
+    source: "heatmap-latest",
+    cacheSource: "data/heatmap-latest.json",
+    updatedAt: summary.updatedAt,
+    resolvedTradeDate: summary.resolvedTradeDate,
+    today: summary.today,
+  };
   writeJson(path.join(ROOT, "data", "market-summary.json"), summary);
   writeJson(dataPath("market-summary.json"), summary);
-  console.log(`market summary wrote stocks=${summary.stockCount} sectors=${summary.sectors.length}`);
+  writeJson(path.join(ROOT, "data", "heatmap-latest.json"), heatmapSnapshot);
+  writeJson(dataPath("heatmap-latest.json"), heatmapSnapshot);
+  await safeUpsertSnapshot("heatmap_latest", compactHeatmapSnapshot(heatmapSnapshot), {
+    source: "data/heatmap-latest.json#sector-top5",
+    snapshotId: `heatmap-latest-${summary.resolvedTradeDate || summary.today}-${String(summary.updatedAt).replace(/\D/g, "").slice(8, 14)}`,
+  });
+  console.log(`market summary wrote stocks=${summary.stockCount} sectors=${summary.sectors.length} heatmapSectors=${Array.isArray(heatmapSnapshot.sectors) ? heatmapSnapshot.sectors.length : 0}`);
+}
+
+function isAfterTaipei1330(now = new Date()) {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Taipei",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  }).formatToParts(now).reduce((acc, part) => {
+    if (part.type !== "literal") acc[part.type] = Number(part.value || 0);
+    return acc;
+  }, {});
+  const seconds = (parts.hour || 0) * 3600 + (parts.minute || 0) * 60 + (parts.second || 0);
+  return seconds > 13 * 3600 + 30 * 60;
+}
+
+async function safeUpsertSnapshot(key, payload, options = {}) {
+  const locked = isAfterTaipei1330();
+  const result = await upsertSnapshot(key, payload, {
+    locked,
+    reason: locked ? "after-1330-cache" : "snapshot-cache",
+    ...options,
+  });
+  if (!result.ok && !result.skipped) console.warn(`[snapshot] ${key} upsert skipped: ${result.error}`);
+  else if (result.ok) console.log(`[snapshot] ${key} upsert ok tradeDate=${result.tradeDate}`);
 }
 
 main().catch((error) => {

@@ -363,6 +363,20 @@
   gap: 6px;
   margin-top: 8px;
 }
+.watch-match-grid {
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
+}
+.watch-match-group {
+  display: grid;
+  gap: 4px;
+}
+.watch-match-group b {
+  color: #cdd9f4;
+  font-size: 11px;
+  font-weight: 900;
+}
 .watch-strategy-list span {
   display: inline-flex;
   width: fit-content;
@@ -375,6 +389,10 @@
   font-size: 11px;
   font-weight: 850;
   line-height: 1.25;
+}
+.watch-strategy-list span.empty {
+  background: rgba(127, 166, 255, 0.10);
+  color: #91a3c7;
 }
 .watch-note-row {
   display: grid;
@@ -404,7 +422,16 @@
 .watch-down { color: #20d18b !important; }
 .watch-flat { color: #dbe7ff !important; }
 body.fuman-light-theme #watchlist-view,
+body.fuman-light-theme #watchlist-view.view-panel,
+body.fuman-light-theme #watchlist-view.active,
+body.fuman-light-theme .dashboard:has(#watchlist-view.active),
+body.fuman-light-theme .dashboard:has(#watchlist-view:not([hidden])),
+body.fuman-light-theme .app-shell:has(#watchlist-view.active),
+body.fuman-light-theme .app-shell:has(#watchlist-view:not([hidden])),
+body.fuman-light-theme #watchlist-view .watchlist-layout,
 body.fuman-light-theme #watchlist-view .watch-analysis-panel {
+  background: #f6f8fb !important;
+  background-image: none !important;
   color: #172033 !important;
   font-family: "Noto Sans TC", "Microsoft JhengHei", "PingFang TC", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   -webkit-font-smoothing: antialiased;
@@ -415,6 +442,18 @@ body.fuman-light-theme #watchlist-view .ta-dashboard {
   background: #ffffff !important;
   color: #172033 !important;
   border-color: #dbe3ee !important;
+}
+body.fuman-light-theme #watchlist-view .watchlist-list-pane,
+body.fuman-light-theme #watchlist-view .watchlist-stock-list,
+body.fuman-light-theme #watchlist-view .watch-analysis-panel,
+body.fuman-light-theme #watchlist-view .watch-detail-sections,
+body.fuman-light-theme #watchlist-view .watch-card-carousel {
+  background: transparent !important;
+  color: #172033 !important;
+}
+body.fuman-light-theme #watchlist-view .watchlist-stock-list > div[style],
+body.fuman-light-theme #watchlist-view .watchlist-analysis-pane > div[style] {
+  color: #64748b !important;
 }
 body.fuman-light-theme #watchlist-view .watchlist-card {
   background: #ffffff !important;
@@ -476,6 +515,8 @@ body.fuman-light-theme #watchlist-view .watch-market-badge {
 }
 body.fuman-light-theme #watchlist-view .watch-metric,
 body.fuman-light-theme #watchlist-view .watch-analysis-card,
+body.fuman-light-theme #watchlist-view .watch-detail-section-card,
+body.fuman-light-theme #watchlist-view .watch-detail-trend-card,
 body.fuman-light-theme #watchlist-view .watch-note-row article,
 body.fuman-light-theme #watchlist-view .watch-ta-panel .ta-gauge-card {
   background: #ffffff !important;
@@ -497,6 +538,8 @@ body.fuman-light-theme #watchlist-view .watch-metric:nth-child(4) {
 }
 body.fuman-light-theme #watchlist-view .watch-metric strong,
 body.fuman-light-theme #watchlist-view .watch-analysis-card strong,
+body.fuman-light-theme #watchlist-view .watch-detail-section-card strong,
+body.fuman-light-theme #watchlist-view .watch-detail-trend-card strong,
 body.fuman-light-theme #watchlist-view .watch-ta-panel .ta-gauge-card h3,
 body.fuman-light-theme #watchlist-view .watch-ta-panel .ta-gauge-card > strong {
   color: #111827 !important;
@@ -505,10 +548,20 @@ body.fuman-light-theme #watchlist-view .watch-ta-panel .ta-gauge-card > strong {
 }
 body.fuman-light-theme #watchlist-view .watch-metric em,
 body.fuman-light-theme #watchlist-view .watch-analysis-card em,
+body.fuman-light-theme #watchlist-view .watch-detail-section-card em,
+body.fuman-light-theme #watchlist-view .watch-detail-trend-card em,
 body.fuman-light-theme #watchlist-view .watch-note-row small,
 body.fuman-light-theme #watchlist-view .watch-ta-panel .ta-gauge-card small {
   color: #475569 !important;
   font-weight: 600 !important;
+}
+body.fuman-light-theme #watchlist-view .watch-detail-section-card span,
+body.fuman-light-theme #watchlist-view .watch-detail-trend-card span {
+  color: #51627a !important;
+}
+body.fuman-light-theme #watchlist-view .watch-detail-section-card b,
+body.fuman-light-theme #watchlist-view .watch-detail-trend-card b {
+  color: #f59e0b !important;
 }
 body.fuman-light-theme #watchlist-view .watch-analysis-card b {
   color: #f59e0b !important;

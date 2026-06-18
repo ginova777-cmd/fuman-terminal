@@ -18,7 +18,7 @@ const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY
 
 const STRATEGIES = [
   { key: "strategy1", endpoint: "/api/open-buy-latest", handler: "../api/open-buy-latest", allowZero: false },
-  { key: "strategy2", endpoint: "/api/strategy2-latest", handler: "../api/strategy2-latest", allowZero: true },
+  { key: "strategy2", endpoint: "/api/strategy2-latest", handler: "../api/strategy2-latest", allowZero: false },
   { key: "strategy3", endpoint: "/api/strategy3-latest", handler: "../api/strategy3-latest", allowZero: false },
   { key: "strategy4", endpoint: "/api/strategy4-latest", handler: "../api/strategy4-latest", allowZero: false },
   { key: "strategy5", endpoint: "/api/strategy5-latest", handler: "../api/strategy5-latest", allowZero: false },
@@ -136,3 +136,4 @@ function verifyStaticContracts(issues) {
   console.error(`[strategy-chain] failed: ${error.message}`);
   process.exit(1);
 });
+

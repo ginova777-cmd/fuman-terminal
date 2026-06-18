@@ -18,22 +18,21 @@ const SUPABASE_KEY = process.env.SUPABASE_ANON_KEY
 const TABLE = process.env.STRATEGY3_SUPABASE_RESULTS_TABLE || "strategy3_scan_results";
 const LATEST_RUN_VIEW = process.env.STRATEGY3_SUPABASE_LATEST_RUN_VIEW || "v_strategy3_latest_complete_run";
 
-function staticFallback(reason = "") {
-  try {
-    const payload = JSON.parse(fs.readFileSync(path.join(process.cwd(), "data", "strategy3-latest.json"), "utf8"));
-    return {
-      ...payload,
-      cacheSource: "static-fallback",
-      transport: {
-        source: "static-json",
-        via: "api/strategy3-latest",
-        fallbackReason: reason,
-        fetchedAt: new Date().toISOString(),
-      },
-    };
-  } catch (error) {
-    return { ok: false, error: "strategy3_static_fallback_failed", detail: error?.message || String(error) };
-  }
+function apiOnlyError(reason = "") {
+  return {
+    ok: false,
+    error: "strategy3_api_only_unavailable",
+    detail: reason,
+    cacheSource: "none",
+    matches: [],
+    transport: {
+      source: "supabase",
+      latestRunView: LATEST_RUN_VIEW,
+      gate: "run_id",
+      via: "api/strategy3-latest",
+      fetchedAt: new Date().toISOString(),
+    },
+  };
 }
 
 async function fetchRowsFrom(table, query) {
@@ -83,6 +82,21 @@ function normalizePayload(row) {
   };
 }
 
+function normalizeSourceHealth(value) {
+  const sourceHealth = value && typeof value === "object" ? { ...value } : null;
+  if (!sourceHealth) return null;
+  const issueCount = Array.isArray(sourceHealth.issues) ? sourceHealth.issues.length : 0;
+  const warningCount = cleanNumber(sourceHealth.warningCount);
+  const warningLimit = cleanNumber(sourceHealth.warningLimit) || 3;
+  const status = String(sourceHealth.status || "");
+  if (status === "degraded" && issueCount === 0 && warningCount <= warningLimit) {
+    sourceHealth.status = "ok";
+    sourceHealth.normalizedFrom = "degraded";
+    sourceHealth.normalizedReason = "non-blocking warnings under limit";
+  }
+  return sourceHealth;
+}
+
 function buildPayload(rows, run) {
   const first = rows[0] || {};
   const matches = rows
@@ -90,6 +104,8 @@ function buildPayload(rows, run) {
     .sort((a, b) => cleanNumber(a.rank) - cleanNumber(b.rank) || String(a.code).localeCompare(String(b.code)))
     .map(normalizePayload);
   const scanDate = String(first.scan_date || run?.scan_date || "").replace(/-/g, "");
+  const sourceHealth = normalizeSourceHealth(run?.payload?.sourceHealth);
+  const qualityStatus = sourceHealth?.status || String(first.quality_status || run?.quality_status || "");
   return {
     ok: true,
     source: "supabase:strategy3_scan_results",
@@ -99,9 +115,10 @@ function buildPayload(rows, run) {
     updatedAt: String(run?.finished_at || first.updated_at || new Date().toISOString()),
     usedDate: scanDate,
     complete: true,
-    qualityStatus: String(first.quality_status || run?.quality_status || ""),
+    qualityStatus,
     count: matches.length,
     total: Math.max(matches.length, cleanNumber(run?.expected_total || run?.scanned_count)),
+    sourceHealth,
     matches,
     transport: {
       source: "supabase",
@@ -158,16 +175,16 @@ module.exports = async function handler(request, response) {
 
   try {
     if (!SUPABASE_URL || !SUPABASE_KEY) {
-      response.status(200).json(staticFallback("supabase_not_configured"));
+      response.status(503).json(apiOnlyError("supabase_not_configured"));
       return;
     }
     const latest = await fetchLatestCompleteRows();
     if (!latest.rows.length) {
-      response.status(200).json(staticFallback("strategy3_scan_results_latest_empty"));
+      response.status(404).json(apiOnlyError("strategy3_scan_results_latest_empty"));
       return;
     }
     response.status(200).json(buildPayload(latest.rows, latest.run));
   } catch (error) {
-    response.status(200).json(staticFallback(error?.message || String(error)));
+    response.status(503).json(apiOnlyError(error?.message || String(error)));
   }
 };

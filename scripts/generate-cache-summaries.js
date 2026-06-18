@@ -8,8 +8,6 @@ function readJson(file) {
 }
 
 const jobs = [
-  ["strategy4", path.join(ROOT, "data", "strategy4-latest.json"), path.join(ROOT, "data", "strategy4-summary.json")],
-  ["strategy4", dataPath("strategy4-latest.json"), dataPath("strategy4-summary.json")],
   ["institution", dataPath("institution-latest.json"), dataPath("institution-summary.json")],
   ["warrant", dataPath("warrant-flow-latest.json"), dataPath("warrant-flow-summary.json")],
 ];

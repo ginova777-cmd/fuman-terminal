@@ -6,9 +6,8 @@ const SCAN_SCRIPT = path.join(__dirname, "scan-intraday-signals.js");
 const INTERVAL_MS = Number(process.env.INTRADAY_PATROL_INTERVAL_MS || 3000);
 const PUBLISH_INTERVAL_MS = Math.max(0, Number(process.env.STRATEGY2_PUBLISH_INTERVAL_MS || 60 * 1000));
 const MARKET_START_MINUTES = Number(process.env.STRATEGY2_SCAN_START_MINUTES || 8 * 60);
-const MARKET_END_MINUTES = 13 * 60 + 30;
-const PUBLISH_SCRIPT = path.resolve(__dirname, "..", "run-cache-sync.ps1");
-const POWERSHELL_EXE = process.env.FUMAN_POWERSHELL_EXE || "C:\\Program Files\\PowerShell\\7\\pwsh.exe";
+const MARKET_END_MINUTES = 12 * 60;
+const PUBLISH_SCRIPT = path.resolve(__dirname, "publish-strategy2-complete-run.js");
 const STATE_DIR = process.env.FUMAN_STATE_DIR || path.resolve(__dirname, "..", "state");
 const PATROL_LOCK_FILE = path.join(STATE_DIR, "strategy2-intraday-patrol.lock");
 const SCAN_LOCK_FILE = path.join(STATE_DIR, "strategy2-intraday-scan.lock");
@@ -157,21 +156,9 @@ function publishStrategy2Cache(force = false) {
   if (publishRunning) return;
   lastPublishAt = now;
   publishRunning = true;
-  const child = spawn(POWERSHELL_EXE, [
-    "-NoProfile",
-    "-ExecutionPolicy",
-    "Bypass",
-    "-File",
-    PUBLISH_SCRIPT,
-    "-Scope",
-    "strategy2",
-  ], {
+  const child = spawn(process.execPath, [PUBLISH_SCRIPT], {
     cwd: path.resolve(__dirname, ".."),
-    env: {
-      ...process.env,
-      CACHE_SYNC_WRITE_CODE_REPO: "1",
-      SYNC_STRATEGY2_FULL_LATEST: "1",
-    },
+    env: process.env,
     stdio: "inherit",
     windowsHide: true,
   });
@@ -231,3 +218,4 @@ main().catch((error) => {
   console.error(error);
   process.exit(1);
 });
+

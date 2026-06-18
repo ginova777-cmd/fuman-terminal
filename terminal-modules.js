@@ -1,5 +1,5 @@
 (function () {
-  const VERSION = "institution-cache-refresh-20260616-10";
+  const VERSION = "desktop-api-only-all-20260618-16";
   const modules = {
     sectorMap: { loaded: false, src: "terminal-sector-map.js" },
     strategyConfig: { loaded: false, src: "terminal-strategy-config.js" },
@@ -38,6 +38,16 @@
     },
   };
 })();
+
+
+
+
+
+
+
+
+
+
 
 
 

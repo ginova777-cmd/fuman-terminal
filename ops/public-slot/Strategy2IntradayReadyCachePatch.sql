@@ -98,7 +98,7 @@ begin
   )
   select
     q.symbol,
-    coalesce(u.name, q.name) as name,
+    coalesce(q.name, u.name) as name,
     case
       when coalesce(q.market, u.market) = 'TSE' then 'TWSE'
       when coalesce(q.market, u.market) = 'OTC' then 'TPEX'
@@ -125,16 +125,16 @@ begin
     q.session,
     q.is_halted,
     q.is_trial,
-    coalesce(q.quote_updated_at, q.updated_at) as quote_updated_at,
+    q.updated_at as quote_updated_at,
     d.avg_20d_volume,
     d.days_5::integer as avg_5d_days,
     d.days_20::integer as avg_20d_days,
     s.updated_at as intraday_1m_status_updated_at,
     now() as refreshed_at
-  from public.v_market_quotes_unified q
-  left join public.v_stock_universe_unified u
+  from public.fugle_quotes_live q
+  left join public.stock_universe u
     on u.symbol = q.symbol
-  left join public.v_daily_volume_avg_unified d
+  left join public.fugle_daily_volume_avg d
     on d.symbol = q.symbol
   left join public.v_fugle_intraday_1m_status s
     on s.symbol = q.symbol

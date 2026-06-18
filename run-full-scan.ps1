@@ -38,6 +38,22 @@ function Read-JsonFile($path) {
   try { return Get-Content -LiteralPath $path -Raw | ConvertFrom-Json -ErrorAction Stop } catch { return $null }
 }
 
+function Read-FullScanLock {
+  if (-not (Test-Path -LiteralPath $lockFile)) { return $null }
+  try {
+    $raw = Get-Content -LiteralPath $lockFile -Raw -ErrorAction Stop
+    if ($raw.Trim().StartsWith("{")) { return $raw | ConvertFrom-Json -ErrorAction Stop }
+  } catch {}
+  return $null
+}
+
+function Test-FullScanLockOwnerAlive($lockInfo) {
+  $pidValue = 0
+  if ($lockInfo -and $lockInfo.pid) { [void][int]::TryParse([string]$lockInfo.pid, [ref]$pidValue) }
+  if ($pidValue -le 0) { return $true }
+  return [bool](Get-Process -Id $pidValue -ErrorAction SilentlyContinue)
+}
+
 function Get-Count($payload) {
   if ($null -eq $payload) { return 0 }
   if ($payload.matches) { return @($payload.matches).Count }
@@ -171,10 +187,12 @@ function Invoke-ScanTask($strategy, $label, $tier, $script, $payloadPath, $envVa
 function Enter-FullScanLock {
   if (Test-Path -LiteralPath $lockFile) {
     $age = (Get-Date) - (Get-Item -LiteralPath $lockFile).LastWriteTime
-    if ($age.TotalMinutes -lt 30) {
-      Write-ScanLog "Another full scan appears to be running; lock=$lockFile age=$([math]::Round($age.TotalMinutes, 1))m"
+    $lockInfo = Read-FullScanLock
+    if (Test-FullScanLockOwnerAlive $lockInfo) {
+      Write-ScanLog "Another full scan appears to be running; lock=$lockFile pid=$($lockInfo.pid) age=$([math]::Round($age.TotalMinutes, 1))m"
       exit 2
     }
+    Write-ScanLog "Removing orphaned full scan lock; lock=$lockFile pid=$($lockInfo.pid) age=$([math]::Round($age.TotalMinutes, 1))m"
     Remove-Item -LiteralPath $lockFile -Force
   }
   [ordered]@{ pid = $PID; startedAt = (Get-Date).ToString("o"); log = $log } | ConvertTo-Json -Compress | Set-Content -LiteralPath $lockFile -Encoding utf8

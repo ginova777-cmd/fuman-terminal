@@ -21,6 +21,7 @@ const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY
   || readSecretText(path.join(RUNTIME_DIR, "secrets", "supabase-service-role-key.txt"));
 const WARRANT_FLOW_RUNS_TABLE = process.env.WARRANT_FLOW_SUPABASE_RUNS_TABLE || "warrant_flow_scan_runs";
 const WARRANT_FLOW_RESULTS_TABLE = process.env.WARRANT_FLOW_SUPABASE_RESULTS_TABLE || "warrant_flow_scan_results";
+const WARRANT_FLOW_API_ONLY = true;
 
 function readSecretText(file) {
   try { return fs.readFileSync(file, "utf8").trim(); } catch { return ""; }
@@ -360,6 +361,10 @@ async function main() {
 
   await publishWarrantFlowCompleteRunToSupabase(output);
 
+  if (WARRANT_FLOW_API_ONLY) {
+    console.log(`warrant-flow API-only: skipped static warrant-flow*.json output, matches ${matches.length}, tradeDate ${newestTradeDate || "--"}`);
+    return;
+  }
   writeLatestToRoots(output);
   writeSummary("warrant", output, SUMMARY_FILE);
   writeJson(BACKUP_FILE, { ...output, source: "github-actions-backup" });

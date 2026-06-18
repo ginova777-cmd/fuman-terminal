@@ -19,16 +19,6 @@ function issue(level, message, meta = {}) {
 
 function main() {
   const issues = [];
-  const s4Full = read("strategy4-latest.json");
-  const s4Summary = read("strategy4-summary.json");
-  const s4Slim = read("strategy4-slim.json");
-  const zoneA = read("strategy4-zone-a.json");
-  const zoneB = read("strategy4-zone-b.json");
-  const zoneC = read("strategy4-zone-c.json");
-  const zoneSum = count(zoneA) + count(zoneB) + count(zoneC);
-  if (s4Full && s4Slim && count(s4Full) !== count(s4Slim)) issues.push(issue("high", "strategy4 full/slim count mismatch", { full: count(s4Full), slim: count(s4Slim) }));
-  if (s4Summary && s4Slim && count(s4Summary) !== count(s4Slim)) issues.push(issue("medium", "strategy4 summary/slim count mismatch", { summary: count(s4Summary), slim: count(s4Slim) }));
-  if (s4Slim && zoneSum !== count(s4Slim)) issues.push(issue("high", "strategy4 zone sum mismatch", { zoneSum, slim: count(s4Slim) }));
   const inst = read("institution-slim.json");
   const instJoint = read("institution-joint-top.json");
   if (inst && instJoint && count(instJoint) > count(inst)) issues.push(issue("high", "institution top larger than slim", { top: count(instJoint), slim: count(inst) }));
@@ -40,10 +30,6 @@ function main() {
     updatedAt: new Date().toISOString(),
     issues,
     counts: {
-      strategy4Full: count(s4Full),
-      strategy4Summary: count(s4Summary),
-      strategy4Slim: count(s4Slim),
-      strategy4ZoneSum: zoneSum,
       institutionSlim: count(inst),
       institutionJointTop: count(instJoint),
       warrantSlim: count(warrant),

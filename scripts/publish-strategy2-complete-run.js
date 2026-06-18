@@ -9,10 +9,6 @@ function readSecretText(file) {
   try { return fs.readFileSync(file, "utf8").trim(); } catch { return ""; }
 }
 
-function readJson(file) {
-  try { return JSON.parse(fs.readFileSync(file, "utf8")); } catch { return null; }
-}
-
 function cleanNumber(value) {
   const number = Number(String(value ?? "").replace(/[,+%]/g, ""));
   return Number.isFinite(number) ? number : 0;
@@ -70,22 +66,6 @@ function buildCompleteRunId(report) {
   return `strategy2-${scanDate.replace(/\D/g, "")}-${parts.hour}${parts.minute}${parts.second}`;
 }
 
-function sourceCandidates() {
-  return [
-    process.env.STRATEGY2_COMPLETE_RUN_SOURCE,
-    path.join(RUNTIME_DIR, "data", "strategy2-intraday-latest.json"),
-    path.join(ROOT, "data", "strategy2-intraday-latest.json"),
-  ].filter(Boolean);
-}
-
-function readLatestReport() {
-  for (const file of sourceCandidates()) {
-    const payload = readJson(file);
-    if (payload) return { file, payload };
-  }
-  throw new Error("missing strategy2-intraday-latest.json source");
-}
-
 function supabaseConfig() {
   const supabaseUrl = String(
     process.env.SUPABASE_URL
@@ -105,7 +85,45 @@ function supabaseConfig() {
   return { supabaseUrl, serviceKey, publishKey: serviceKey || anonKey };
 }
 
+async function fetchSupabaseJson(url, key) {
+  const timeoutMs = Math.max(15000, Number(process.env.STRATEGY2_COMPLETE_RUN_PUBLISH_TIMEOUT_MS || 90000));
+  const response = await fetch(url, {
+    headers: {
+      apikey: key,
+      Authorization: `Bearer ${key}`,
+      Accept: "application/json",
+    },
+    cache: "no-store",
+    signal: AbortSignal.timeout ? AbortSignal.timeout(timeoutMs) : undefined,
+  });
+  if (!response.ok) {
+    const text = await response.text().catch(() => "");
+    throw new Error(`HTTP ${response.status} ${text.slice(0, 180)}`.trim());
+  }
+  return response.json();
+}
+
+async function readLatestReportFromSupabase(config) {
+  const rows = await fetchSupabaseJson(
+    `${config.supabaseUrl}/rest/v1/strategy2_latest?id=eq.latest&select=payload,updated_at,date,entry_count`,
+    config.publishKey
+  );
+  const row = Array.isArray(rows) ? rows[0] : null;
+  const payload = row?.payload && typeof row.payload === "object" ? row.payload : null;
+  if (!payload) throw new Error("missing Supabase strategy2_latest payload");
+  return {
+    source: "supabase:strategy2_latest",
+    payload: {
+      ...payload,
+      updatedAt: payload.updatedAt || row.updated_at,
+      date: payload.date || row.date,
+      entryCount: payload.entryCount || row.entry_count,
+    },
+  };
+}
+
 async function postJson(url, key, body, prefer) {
+  const timeoutMs = Math.max(15000, Number(process.env.STRATEGY2_COMPLETE_RUN_PUBLISH_TIMEOUT_MS || 90000));
   const response = await fetch(url, {
     method: "POST",
     headers: {
@@ -115,7 +133,7 @@ async function postJson(url, key, body, prefer) {
       ...(prefer ? { Prefer: prefer } : {}),
     },
     body: JSON.stringify(body),
-    signal: AbortSignal.timeout ? AbortSignal.timeout(15000) : undefined,
+    signal: AbortSignal.timeout ? AbortSignal.timeout(timeoutMs) : undefined,
   });
   if (!response.ok) {
     const text = await response.text().catch(() => "");
@@ -124,11 +142,12 @@ async function postJson(url, key, body, prefer) {
 }
 
 async function main() {
-  const { file, payload } = readLatestReport();
+  const config = supabaseConfig();
+  const { source, payload } = await readLatestReportFromSupabase(config);
   const report = buildCompleteRunPayload(payload);
   const scanDate = normalizeScanDate(report.date, report.updatedAt || report.generatedAt || Date.now());
   const runId = buildCompleteRunId(report);
-  const { supabaseUrl, serviceKey, publishKey } = supabaseConfig();
+  const { supabaseUrl, serviceKey, publishKey } = config;
   if (!supabaseUrl || !publishKey) throw new Error("missing Supabase publish credentials");
   if (!serviceKey) throw new Error("missing Supabase service role key for complete-run RPC");
 
@@ -155,8 +174,8 @@ async function main() {
     scanned: report.records.length,
     total: report.records.length,
     match_count: cleanNumber(report.entryCount || report.aCount || report.events.length),
-    source: "strategy2_complete_run_repair",
-    log: `run_id=${runId}; events=${report.events.length}; source=${file}`,
+    source: "strategy2_complete_run_supabase",
+    log: `run_id=${runId}; events=${report.events.length}; source=${source}`,
   });
 
   console.log(`[strategy2-complete-run] ok run=${runId} date=${scanDate} records=${report.records.length} events=${report.events.length}`);

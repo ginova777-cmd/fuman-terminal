@@ -1,6 +1,12 @@
 {
   "version": 2,
   "cleanUrls": true,
+  "rewrites": [
+    {
+      "source": "/data/(open-buy|strategy2-intraday|strategy3|strategy4|strategy5|institution|warrant-flow|warrant-priority|warrant-single-signal|cb-detect)(.*).json",
+      "destination": "/api/desktop-static-disabled"
+    }
+  ],
   "headers": [
     {
       "source": "/mobile",
@@ -124,7 +130,15 @@
       "headers": [
         {
           "key": "Cache-Control",
-          "value": "public, max-age=15, stale-while-revalidate=120"
+          "value": "public, max-age=5, stale-while-revalidate=30"
+        },
+        {
+          "key": "CDN-Cache-Control",
+          "value": "public, max-age=5, stale-while-revalidate=30"
+        },
+        {
+          "key": "Vercel-CDN-Cache-Control",
+          "value": "public, max-age=5, stale-while-revalidate=30"
         },
         {
           "key": "X-Content-Type-Options",
@@ -137,7 +151,36 @@
       "headers": [
         {
           "key": "Cache-Control",
-          "value": "public, max-age=15, stale-while-revalidate=120"
+          "value": "no-cache, max-age=0, must-revalidate"
+        },
+        {
+          "key": "CDN-Cache-Control",
+          "value": "public, max-age=3, stale-while-revalidate=6"
+        },
+        {
+          "key": "Vercel-CDN-Cache-Control",
+          "value": "public, max-age=3, stale-while-revalidate=6"
+        },
+        {
+          "key": "X-Content-Type-Options",
+          "value": "nosniff"
+        }
+      ]
+    },
+    {
+      "source": "/data/mobile-runtime-config.json",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=30, stale-while-revalidate=120"
+        },
+        {
+          "key": "CDN-Cache-Control",
+          "value": "public, max-age=30, stale-while-revalidate=120"
+        },
+        {
+          "key": "Vercel-CDN-Cache-Control",
+          "value": "public, max-age=30, stale-while-revalidate=120"
         },
         {
           "key": "X-Content-Type-Options",
@@ -150,7 +193,36 @@
       "headers": [
         {
           "key": "Cache-Control",
-          "value": "public, max-age=15, stale-while-revalidate=120"
+          "value": "public, max-age=5, stale-while-revalidate=30"
+        },
+        {
+          "key": "CDN-Cache-Control",
+          "value": "public, max-age=5, stale-while-revalidate=30"
+        },
+        {
+          "key": "Vercel-CDN-Cache-Control",
+          "value": "public, max-age=5, stale-while-revalidate=30"
+        },
+        {
+          "key": "X-Content-Type-Options",
+          "value": "nosniff"
+        }
+      ]
+    },
+    {
+      "source": "/data/mobile-analysis/(.*).json",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=5, stale-while-revalidate=30"
+        },
+        {
+          "key": "CDN-Cache-Control",
+          "value": "public, max-age=5, stale-while-revalidate=30"
+        },
+        {
+          "key": "Vercel-CDN-Cache-Control",
+          "value": "public, max-age=5, stale-while-revalidate=30"
         },
         {
           "key": "X-Content-Type-Options",
@@ -163,7 +235,15 @@
       "headers": [
         {
           "key": "Cache-Control",
-          "value": "public, max-age=15, stale-while-revalidate=120"
+          "value": "public, max-age=5, stale-while-revalidate=30"
+        },
+        {
+          "key": "CDN-Cache-Control",
+          "value": "public, max-age=5, stale-while-revalidate=30"
+        },
+        {
+          "key": "Vercel-CDN-Cache-Control",
+          "value": "public, max-age=5, stale-while-revalidate=30"
         },
         {
           "key": "X-Content-Type-Options",

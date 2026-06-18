@@ -84,20 +84,9 @@ function realtimeRadarQuality() {
 }
 
 function strategy4Quality() {
-  const payload = firstJson([
-    dataPath("strategy4-latest.json"),
-    path.join(ROOT, "data", "strategy4-latest.json"),
-  ], {});
-  const matches = Array.isArray(payload.matches) ? payload.matches : [];
-  const zoneCounts = { A: 0, B: 0, C: 0 };
-  for (const item of matches) zoneCounts[item.swingZone || "A"] = (zoneCounts[item.swingZone || "A"] || 0) + 1;
   return {
-    total: cleanNumber(payload.total),
-    count: cleanNumber(payload.count || matches.length),
-    complete: Boolean(payload.complete),
-    zoneCounts,
-    avgScore: matches.length ? matches.reduce((sum, item) => sum + cleanNumber(item.swingScore || item.score), 0) / matches.length : 0,
-    updatedAt: payload.updatedAt || "",
+    apiOnly: true,
+    staticJsonDisabled: true,
   };
 }
 

@@ -2,6 +2,7 @@ const fs = require("fs");
 const path = require("path");
 const { fetchMisQuotes } = require("../lib/mis-quotes");
 const { overlayFugleWebSocketQuotes } = require("../lib/fugle-quote-overlay");
+const { publishStrategyCacheStatus } = require("../lib/strategy-cache-status");
 
 const { ROOT, dataPath } = require("./runtime-paths");
 const OUT_FILE = dataPath("strategy5-latest.json");
@@ -10,8 +11,6 @@ const INSTITUTION_FILE = dataPath("institution-latest.json");
 const CB_DETECT_FILE = dataPath("cb-detect-latest.json");
 const WARRANT_FLOW_FILE = dataPath("warrant-flow-latest.json");
 const WARRANT_SINGLE_SIGNAL_FILE = dataPath("warrant-single-signal-top.json");
-const STRATEGY4_FILE = dataPath("strategy4-latest.json");
-const STRATEGY4_BACKUP_FILE = dataPath("strategy4-backup.json");
 const STOCK_URL = process.env.STOCK_UNIVERSE_URL || "https://fuman-terminal.vercel.app/api/stocks";
 const CAPITAL_URLS = [
   "https://mopsfin.twse.com.tw/opendata/t187ap03_L.csv",
@@ -38,6 +37,7 @@ const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY
   || readSecretText(path.join(RUNTIME_DIR, "secrets", "supabase-service-role-key.txt"));
 const STRATEGY5_RUNS_TABLE = process.env.STRATEGY5_SUPABASE_RUNS_TABLE || "strategy5_scan_runs";
 const STRATEGY5_RESULTS_TABLE = process.env.STRATEGY5_SUPABASE_RESULTS_TABLE || "strategy5_scan_results";
+const STRATEGY5_API_ONLY = true;
 
 function readJson(file, fallback) {
   try { return JSON.parse(fs.readFileSync(file, "utf8")); } catch { return fallback; }
@@ -438,14 +438,6 @@ function formatInstitution(value) {
 }
 
 function readStrategy4Candidates() {
-  const payloads = [
-    readJson(STRATEGY4_FILE, null),
-    readJson(STRATEGY4_BACKUP_FILE, null),
-  ].filter(Boolean);
-  for (const payload of payloads) {
-    const matches = Array.isArray(payload.matches) ? payload.matches : [];
-    if (matches.length) return matches;
-  }
   return [];
 }
 
@@ -1152,7 +1144,21 @@ async function main() {
   };
 
   await publishStrategy5CompleteRunToSupabase(output);
+  await publishStrategyCacheStatus("strategy5", "策略5-量價籌碼", output, {
+    used_date: output.sourceDate || output.generatedDate || output.usedDate || output.date,
+    updated_at: output.updatedAt || output.generatedAt || new Date().toISOString(),
+    scan_status: output.ok === false ? "failed" : "complete",
+    scanned: output.total,
+    total: output.total,
+    match_count: output.count,
+    source: STRATEGY5_RESULTS_TABLE,
+    log: `quality=${output.qualityStatus || ""}`,
+  });
 
+  if (STRATEGY5_API_ONLY) {
+    console.log(`strategy5 API-only: skipped static strategy5*.json output, matches ${matches.length}`);
+    return;
+  }
   fs.mkdirSync(path.dirname(OUT_FILE), { recursive: true });
   fs.writeFileSync(OUT_FILE, `${JSON.stringify(output, null, 2)}\n`);
   if (matches.length) fs.writeFileSync(BACKUP_FILE, `${JSON.stringify({ ...output, source: "github-actions-backup" }, null, 2)}\n`);
