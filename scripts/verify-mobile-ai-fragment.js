@@ -269,6 +269,9 @@ async function main() {
   requireText(mobileShell, "m.payload?.record", "mobile shell must read realtime event record payload");
   requireText(mobileShell, "schedulePrefetch", "mobile shell must prefetch other fragments after first paint");
   requireText(mobileShell, "if(boot)loadFragment(active,false)", "mobile tab switching must not refetch boot when boot already exists");
+  requireText(mobileShell, "visualViewport", "mobile shell must use visualViewport for fast orientation/viewport detection");
+  requireText(mobileShell, "data-orientation", "mobile shell must expose data-orientation for portrait/landscape CSS");
+  requireText(mobileShell, "orientationchange", "mobile shell must listen for orientation changes without refetching boot");
   requireText(mobileShell, "setInterval(()=>{if(!document.hidden&&active!==\"watch\")load(false)},120000)", "mobile shell must keep 120s polling fallback");
   if (mobileShell.includes(String(runtimeConfig?.supabaseAnonKey || "__missing__"))) {
     issues.push("mobile shell must not hardcode supabase anon key");
