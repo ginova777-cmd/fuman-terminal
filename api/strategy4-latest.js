@@ -169,37 +169,17 @@ async function fetchLatestCompleteRun() {
 }
 
 async function fetchLatestCompleteRows() {
-  try {
-    const run = await fetchLatestCompleteRun();
-    if (run?.run_id) {
-      const query = [
-        "select=run_id,scan_date,scan_time,code,name,signals,price,change_percent,volume,trade_value,score,zone,zone_label,rank,reason,complete,quality_status,schema_version,volume_unit,data_contract_source,generated_at,payload,updated_at",
-        "strategy=eq.strategy4",
-        `run_id=eq.${encodeURIComponent(run.run_id)}`,
-        "order=rank.asc",
-        "limit=2000",
-      ].join("&");
-      const rows = await fetchRows(query);
-      if (rows.length) return { rows, gate: "run_id", runId: run.run_id };
-    }
-  } catch (error) {
-    // Backward compatibility until Strategy4RunIdCompleteGate.sql is applied and PostgREST schema cache refreshes.
-  }
-
-  const latest = await fetchRows("select=scan_date,scan_time&strategy=eq.strategy4&complete=eq.true&order=scan_time.desc&limit=1");
-  const scanDate = latest[0]?.scan_date;
-  const scanTime = latest[0]?.scan_time;
-  if (!scanDate || !scanTime) return { rows: [], gate: "legacy-scan-time", runId: "" };
+  const run = await fetchLatestCompleteRun();
+  if (!run?.run_id) return { rows: [], gate: "missing-complete-run", runId: "" };
   const query = [
-    "select=scan_date,scan_time,code,name,signals,price,change_percent,volume,trade_value,score,zone,zone_label,rank,reason,complete,quality_status,schema_version,volume_unit,data_contract_source,generated_at,payload,updated_at",
+    "select=run_id,scan_date,scan_time,code,name,signals,price,change_percent,volume,trade_value,score,zone,zone_label,rank,reason,complete,quality_status,schema_version,volume_unit,data_contract_source,generated_at,payload,updated_at",
     "strategy=eq.strategy4",
-    `scan_date=eq.${encodeURIComponent(scanDate)}`,
-    `scan_time=eq.${encodeURIComponent(scanTime)}`,
+    `run_id=eq.${encodeURIComponent(run.run_id)}`,
     "order=rank.asc",
     "limit=2000",
   ].join("&");
   const rows = await fetchRows(query);
-  return { rows, gate: "legacy-scan-time", runId: "" };
+  return { rows, gate: "run_id", runId: run.run_id };
 }
 
 module.exports = async function handler(request, response) {

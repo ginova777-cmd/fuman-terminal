@@ -51,8 +51,8 @@ function todayTaipei() {
 }
 
 const expectedDate = process.env.RUN_GATE_DATE || todayTaipei();
-const strictStrategies = new Set(String(process.env.RUN_GATE_STRICT || "strategy1,strategy3,strategy4,strategy5,institution,warrant_flow").split(",").map((item) => item.trim()).filter(Boolean));
-const optionalStrategies = new Set(String(process.env.RUN_GATE_OPTIONAL || "strategy2").split(",").map((item) => item.trim()).filter(Boolean));
+const strictStrategies = new Set(String(process.env.RUN_GATE_STRICT || "strategy1,strategy2,strategy3,strategy4,strategy5,institution,warrant_flow").split(",").map((item) => item.trim()).filter(Boolean));
+const optionalStrategies = new Set(String(process.env.RUN_GATE_OPTIONAL || "").split(",").map((item) => item.trim()).filter(Boolean));
 
 const gates = [
   { key: "strategy1", view: "v_strategy1_open_buy_latest_complete_run" },
