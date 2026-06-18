@@ -16,6 +16,7 @@
     "health:chip": "node scripts/health-check-chip-trade.js",
     "verify:contracts": "node scripts/verify-data-contracts.js",
     "verify:mobile": "node --use-system-ca scripts/verify-mobile-health.js && node --use-system-ca scripts/verify-mobile-layout.js --live",
+    "verify:mobile-entry": "node scripts/verify-mobile-entry-redirect.js",
     "verify:mobile-layout": "node --use-system-ca scripts/verify-mobile-layout.js",
     "verify:mobile-layout:live": "node --use-system-ca scripts/verify-mobile-layout.js --live",
     "e2e:smoke": "node --use-system-ca scripts/e2e-smoke.js",

@@ -78,6 +78,7 @@ const FILES = [
   "scripts/verify-service-worker-smoke.js",
   "scripts/verify-source-sync.js",
   "scripts/verify-mobile-layout.js",
+  "scripts/verify-mobile-entry-redirect.js",
   "scripts/verify-mobile-ai-fragment.js",
   "scripts/verify-mobile-realtime.js",
   "scripts/verify-supabase-json.js",

@@ -4,6 +4,9 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>輔滿 股票終端</title>
+    <script>
+      (()=>{try{const p=new URLSearchParams(location.search),force=p.get("desktop")==="1";if(force)sessionStorage.setItem("fuman_force_desktop","1");const ua=navigator.userAgent||"",coarse=matchMedia?.("(pointer: coarse)")?.matches,small=matchMedia?.("(max-width: 820px)")?.matches,mobile=/Android|iPhone|iPad|iPod|Mobile|Windows Phone/i.test(ua)||(coarse&&small);if(mobile&&!force&&sessionStorage.getItem("fuman_force_desktop")!=="1")location.replace("/mobile")}catch{}})();
+    </script>
     <link rel="icon" href="/favicon.ico" sizes="any">
     <link rel="preload" as="image" href="/assets/logo.webp" fetchpriority="high">
     <link rel="stylesheet" href="styles.css?v=institution-cache-refresh-20260616-10">
