@@ -120,8 +120,8 @@ async function main() {
   const boot = await readJson("data/mobile-boot.json");
   const stockAnalysis = await readJson("data/mobile-stock-analysis-latest.json");
   const mobileShell = await readText("mobile.html");
-  const packageJson = await readJson("package.json");
-  const mobileEventScript = await readText("scripts/publish-mobile-update-event.js");
+  const packageJson = JSON.parse(readLocal("package.json"));
+  const mobileEventScript = readLocal("scripts/publish-mobile-update-event.js");
   const terminalFragments = Object.fromEntries(await Promise.all(MOBILE_TERMINAL_KEYS.map(async (key) => [key, await readText(`data/mobile-${key}-ultra.html`)])));
   const app = await readText("terminal-app.js");
   const sw = await readText("fuman-sw.js");

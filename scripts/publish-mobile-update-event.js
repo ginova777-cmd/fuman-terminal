@@ -70,16 +70,33 @@ async function publish() {
     return;
   }
 
-  const response = await fetch(`${supabaseUrl}/rest/v1/mobile_update_events`, {
-    method: "POST",
-    headers: {
-      apikey: serviceKey,
-      Authorization: `Bearer ${serviceKey}`,
-      "Content-Type": "application/json",
-      Prefer: "return=minimal",
-    },
-    body: JSON.stringify(payload),
-  });
+  let response = null;
+  let lastError = null;
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    try {
+      response = await fetch(`${supabaseUrl}/rest/v1/mobile_update_events`, {
+        method: "POST",
+        headers: {
+          apikey: serviceKey,
+          Authorization: `Bearer ${serviceKey}`,
+          "Content-Type": "application/json",
+          Prefer: "return=minimal",
+        },
+        body: JSON.stringify(payload),
+      });
+      if (response.ok || response.status < 500) break;
+    } catch (error) {
+      lastError = error;
+    }
+    await new Promise((resolve) => setTimeout(resolve, attempt * 1000));
+  }
+
+  if (!response) {
+    const message = `[mobile-event] publish failed ${lastError?.message || lastError || "unknown fetch error"}`;
+    if (strict) throw new Error(message);
+    console.warn(message);
+    return;
+  }
 
   if (!response.ok) {
     const detail = await response.text();
