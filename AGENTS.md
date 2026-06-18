@@ -113,6 +113,7 @@ Mobile page behavior that must remain true:
 - When a Realtime event arrives and the boot hash changed, it retries quickly if the new boot has not appeared yet.
 - It uses `visualViewport` plus `orientationchange` to update `html[data-orientation="portrait|landscape"]` immediately.
 - Phone portrait/landscape switching must not refetch `/api/mobile-boot`, recompute AI, rebuild the page, or clear cached fragments. Only lightweight CSS/layout state may change.
+- Mobile cache safety must be enforced by `npm run verify:mobile-cache-contract`, not by adding runtime work to the phone. The phone must stay on the hot path of boot hash compare, versioned fragment fetch, and simple render only.
 - It stores watchlist data only in phone localStorage key `fuman_mobile_watchlist_v1`.
 - The "看分析" modal first reads precomputed per-stock files at `data/mobile-analysis/{code}.json`.
 - `data/mobile-stock-analysis-latest.json` is fallback only and should not be downloaded on first paint.
@@ -122,9 +123,11 @@ Run these checks before claiming the mobile terminal is healthy:
 
 ```powershell
 npm run verify:mobile-ai-fragment
+npm run verify:mobile-cache-contract
 npm run verify:mobile-layout
 npm run verify:mobile-realtime
 npm run verify:mobile-ai-fragment:live
+npm run verify:mobile-cache-contract:live
 npm run verify:mobile-layout:live
 ```
 
