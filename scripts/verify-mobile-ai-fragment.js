@@ -59,6 +59,13 @@ async function readJson(rel) {
   return JSON.parse(await readText(rel));
 }
 
+async function readLiveHeaders(rel) {
+  const url = `${baseUrl}/${rel.replace(/^\/+/, "")}?verify=${Date.now()}`;
+  const response = await fetch(url, { cache: "no-store" });
+  if (!response.ok) throw new Error(`${url} returned ${response.status}`);
+  return response.headers;
+}
+
 async function maybeReadText(rel) {
   try {
     return await readText(rel);
@@ -124,7 +131,7 @@ async function main() {
   const sampleAnalysisCode = String(stockAnalysisRows.find((row) => row?.code)?.code || "");
   const sampleAnalysis = sampleAnalysisCode ? await readJson(`data/mobile-analysis/${encodeURIComponent(sampleAnalysisCode)}.json`) : null;
   const mobileShell = await readText("mobile.html");
-  const vercel = await readJson("vercel.json");
+  const vercel = JSON.parse(readLocal("vercel.json"));
   const packageJson = JSON.parse(readLocal("package.json"));
   const mobileEventScript = readLocal("scripts/publish-mobile-update-event.js");
   const terminalFragments = Object.fromEntries(await Promise.all(MOBILE_TERMINAL_KEYS.map(async (key) => [key, await readText(`data/mobile-${key}-ultra.html`)])));
@@ -295,6 +302,17 @@ async function main() {
   }
   if (!/max-age=3/i.test(mobileBootVercelCache) || !/stale-while-revalidate=6/i.test(mobileBootVercelCache)) {
     issues.push("vercel mobile-boot edge cache must be max-age=3 stale-while-revalidate=6");
+  }
+  if (live) {
+    const liveMobileBootHeaders = await readLiveHeaders("data/mobile-boot.json");
+    const liveBrowserCache = liveMobileBootHeaders.get("cache-control") || "";
+    const liveCdnCache = liveMobileBootHeaders.get("cdn-cache-control") || "";
+    if (!/no-cache/i.test(liveBrowserCache) || !/max-age=0/i.test(liveBrowserCache)) {
+      issues.push(`live mobile-boot browser cache must be no-cache max-age=0 actual=${liveBrowserCache}`);
+    }
+    if (!/max-age=3/i.test(liveCdnCache) || !/stale-while-revalidate=6/i.test(liveCdnCache)) {
+      issues.push(`live mobile-boot CDN cache must be max-age=3 stale-while-revalidate=6 actual=${liveCdnCache}`);
+    }
   }
   if (!headerFor("/data/mobile-analysis/(.*).json")) {
     issues.push("vercel must define short cache headers for per-stock mobile analysis files");
