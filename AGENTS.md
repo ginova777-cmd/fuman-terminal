@@ -119,6 +119,38 @@ Mobile page behavior that must remain true:
 - `data/mobile-stock-analysis-latest.json` is fallback only and should not be downloaded on first paint.
 - `mobile-stock-analysis-latest.json` must include terminal strategy matches and `signalsText`, for example `策略4-波段：分區A、突破缺口、量叉`.
 
+### Mobile Cache Contract
+
+The mobile terminal intentionally has many generated `/data/mobile-*` files. Do not delete them only because a health check reports many mobile static files. They are scan-side precomputed conclusions and are part of the low-CPU mobile design. The safety rule is not "fewer files"; the safety rule is:
+
+```text
+phone fetches the smallest needed versioned file
+phone never computes from large raw data
+phone never accepts stale boot/fragment state when the network is available
+```
+
+Use this gate whenever touching mobile boot, mobile fragments, service worker cache behavior, Vercel headers, or mobile Realtime update flow:
+
+```powershell
+npm run verify:mobile-cache-contract
+npm run verify:mobile-cache-contract:live
+```
+
+This gate is build/deploy verification only. It must not add runtime work to `mobile.html`, must not add extra phone polling, and must not make the phone download more data. If the gate fails, fix the cache/header/hash contract rather than adding mobile-side computation.
+
+The contract enforced by `scripts/verify-mobile-cache-contract.js` is:
+
+- `mobile.html` uses `/api/mobile-boot` as the primary boot endpoint.
+- `/api/mobile-boot` returns browser/CDN/Vercel `no-store` headers.
+- Static `/data/mobile-boot.json` may exist as generated source/fallback, but it is not the primary phone boot endpoint.
+- Mobile fragments and per-stock analysis URLs stay versioned with `?v=hash` or `?v=updatedAt`.
+- Supabase Realtime events include `boot_hash`; if the hash is unchanged, the phone does nothing.
+- Tab switching reuses the current boot and cached fragments; it does not refetch boot.
+- Service Worker data requests stay network-first.
+- Service Worker fallback cache must respect query strings, especially fragment `?v=hash`; do not use `ignoreSearch:true` for versioned mobile fragment fallback.
+- `mobile.html` must not register the full service worker.
+- `mobile.html` must not preload large fallback files before boot hash is known.
+
 Run these checks before claiming the mobile terminal is healthy:
 
 ```powershell
