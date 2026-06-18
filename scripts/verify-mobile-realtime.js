@@ -33,7 +33,7 @@ function requestJson(method, endpoint, key, payload = null) {
         "Content-Type": "application/json",
         ...(body ? { "Content-Length": Buffer.byteLength(body), Prefer: "return=representation" } : {}),
       },
-      timeout: 15000,
+      timeout: 30000,
     }, (res) => {
       const chunks = [];
       res.on("data", (chunk) => chunks.push(chunk));
@@ -135,3 +135,4 @@ main().catch((error) => {
   console.error(error?.stack || error);
   process.exitCode = 1;
 });
+
