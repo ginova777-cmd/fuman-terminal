@@ -1184,6 +1184,7 @@ function mobileTerminalLatest() {
 }
 
 const MOBILE_AI_FRAGMENT_VERSION = "mobile-ai-v1";
+const MOBILE_ULTRA_TAB_LIMIT = 5;
 
 function mobileAiLatestHtml(panel = marketAiPanelLatest()) {
   const summary = panel?.summary || {};
@@ -1407,6 +1408,8 @@ function mobileBootLatest(mobileTerminal, digest, fragments = {}) {
     lowPower: {
       defaultVariant: "lite",
       lowEndVariant: "ultra",
+      disablePrefetchOnLowEnd: true,
+      tabTopLimit: MOBILE_ULTRA_TAB_LIMIT,
       digestPollMs: 60000,
       fullHtmlBudget: 30000,
       liteHtmlBudget: 16000,
@@ -1522,6 +1525,7 @@ function mobileStrategyFragments() {
       updatedAt: payload?.updatedAt || payload?.date || "",
       total: payloadCount(payload),
       rows: mobileFragmentRows(payload, keys),
+      limit: MOBILE_ULTRA_TAB_LIMIT,
     }),
   }]));
 }
@@ -2061,6 +2065,9 @@ async function main() {
     writeToBoth("data/market-ai-live.json", marketAiLive);
     const marketAiPanel = marketAiPanelLatest();
     writeToBoth("data/market-ai-panel-latest.json", marketAiPanel);
+    const strategyMatchIndex = buildStrategyMatchIndex();
+    writeToBoth("data/strategy-match-index.json", strategyMatchIndex);
+    console.log(`[slim] wrote data/strategy-match-index.json codes=${strategyMatchIndex.count || 0}`);
     const mobileStockAnalysis = mobileStockAnalysisLatest(marketAiPanel);
     writeToBoth("data/mobile-stock-analysis-latest.json", mobileStockAnalysis);
     const mobileAnalysisFileCount = writeMobileStockAnalysisFiles(mobileStockAnalysis);
@@ -2070,9 +2077,6 @@ async function main() {
     console.log(`[slim] wrote data/market-ai-panel-latest.json priority=${marketAiPanel.priorityStocks?.length || 0} risk=${marketAiPanel.riskStocks?.length || 0}`);
     console.log(`[slim] wrote data/mobile-stock-analysis-latest.json count=${mobileStockAnalysis.count || 0}`);
     console.log(`[slim] wrote data/mobile-analysis/*.json count=${mobileAnalysisFileCount}`);
-    const strategyMatchIndex = buildStrategyMatchIndex();
-    writeToBoth("data/strategy-match-index.json", strategyMatchIndex);
-    console.log(`[slim] wrote data/strategy-match-index.json codes=${strategyMatchIndex.count || 0}`);
     for (const [pageOutput, pagePayload] of strategyPresetPageFiles()) {
       writeToBoth(pageOutput, pagePayload);
       if (pagePayload.page === 1) console.log(`[slim] wrote ${pageOutput} total=${pagePayload.totalCount || 0}`);

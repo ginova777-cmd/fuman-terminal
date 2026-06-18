@@ -114,6 +114,9 @@ Mobile page behavior that must remain true:
 - It uses `visualViewport` plus `orientationchange` to update `html[data-orientation="portrait|landscape"]` immediately.
 - Phone portrait/landscape switching must not refetch `/api/mobile-boot`, recompute AI, rebuild the page, or clear cached fragments. Only lightweight CSS/layout state may change.
 - Mobile cache safety must be enforced by `npm run verify:mobile-cache-contract`, not by adding runtime work to the phone. The phone must stay on the hot path of boot hash compare, versioned fragment fetch, and simple render only.
+- Low-end phones must not idle-prefetch other tabs. `mobile.html` must respect `boot.lowPower.disablePrefetchOnLowEnd` using lightweight `Save-Data`, `deviceMemory`, and `hardwareConcurrency` checks.
+- Realtime update events must be debounced/merged before refetching boot so a burst of scan events wakes the phone once, not once per event.
+- Mobile ultra strategy/chip/warrant fragments are capped at Top 5 by the scanner (`boot.lowPower.tabTopLimit`). AI ultra remains Top 3. Do not move this slicing to the phone.
 - It stores watchlist data only in phone localStorage key `fuman_mobile_watchlist_v1`.
 - The "看分析" modal first reads precomputed per-stock files at `data/mobile-analysis/{code}.json`.
 - `data/mobile-stock-analysis-latest.json` is fallback only and should not be downloaded on first paint.

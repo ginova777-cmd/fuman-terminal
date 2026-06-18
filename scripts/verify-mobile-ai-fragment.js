@@ -11,6 +11,7 @@ const ULTRA_HTML_BUDGET_BYTES = 9000;
 const ULTRA_DOM_NODE_BUDGET = 90;
 const MOBILE_SHELL_BUDGET_BYTES = 18000;
 const MOBILE_TERMINAL_FRAGMENT_BUDGET_BYTES = 12000;
+const MOBILE_ULTRA_TAB_LIMIT = 5;
 const MOBILE_TERMINAL_KEYS = ["strategy1", "strategy2", "strategy3", "strategy4", "strategy5", "chip", "warrant"];
 const FRESHNESS_VALUES = new Set(["fresh", "stale", "expired"]);
 const issues = [];
@@ -30,6 +31,10 @@ function sha1(text) {
 
 function bytes(text) {
   return Buffer.byteLength(text);
+}
+
+function cleanNumber(value) {
+  return Number(String(value ?? "").replace(/[,+%]/g, "").trim()) || 0;
 }
 
 function requireText(text, needle, message) {
@@ -194,6 +199,8 @@ async function main() {
   }
   if (boot?.digest?.ultraHash !== digest.ultraHash) issues.push("mobile boot digest ultraHash must match mobile digest");
   if (boot?.lowPower?.lowEndVariant !== "ultra") issues.push("mobile boot lowPower.lowEndVariant must be ultra");
+  if (boot?.lowPower?.disablePrefetchOnLowEnd !== true) issues.push("mobile boot must disable prefetch on low-end phones");
+  if (cleanNumber(boot?.lowPower?.tabTopLimit) !== MOBILE_ULTRA_TAB_LIMIT) issues.push(`mobile boot lowPower.tabTopLimit must be ${MOBILE_ULTRA_TAB_LIMIT}`);
   for (const key of MOBILE_TERMINAL_KEYS) {
     const fragment = terminalFragments[key] || "";
     const fragmentBytes = bytes(fragment);
@@ -207,6 +214,10 @@ async function main() {
     }
     if (Number(boot?.fragments?.[key]?.bytes) !== fragmentBytes) {
       issues.push(`mobile boot fragment bytes mismatch key=${key}`);
+    }
+    const rowCount = (fragment.match(/class="mobile-terminal-row"/g) || []).length;
+    if (rowCount > MOBILE_ULTRA_TAB_LIMIT) {
+      issues.push(`mobile ${key} ultra fragment must render at most ${MOBILE_ULTRA_TAB_LIMIT} rows actual=${rowCount}`);
     }
   }
 
@@ -268,6 +279,10 @@ async function main() {
   requireText(mobileShell, "boot_hash", "mobile shell must use realtime boot_hash to skip unchanged updates");
   requireText(mobileShell, "m.payload?.record", "mobile shell must read realtime event record payload");
   requireText(mobileShell, "schedulePrefetch", "mobile shell must prefetch other fragments after first paint");
+  requireText(mobileShell, "disablePrefetchOnLowEnd", "mobile shell must disable idle prefetch on low-end phones");
+  requireText(mobileShell, "deviceMemory", "mobile shell must consider deviceMemory for low-end mode");
+  requireText(mobileShell, "hardwareConcurrency", "mobile shell must consider hardwareConcurrency for low-end mode");
+  requireText(mobileShell, "clearTimeout(rt);rt=setTimeout", "mobile shell must debounce realtime update events");
   requireText(mobileShell, "if(boot)loadFragment(active,false)", "mobile tab switching must not refetch boot when boot already exists");
   requireText(mobileShell, "visualViewport", "mobile shell must use visualViewport for fast orientation/viewport detection");
   requireText(mobileShell, "data-orientation", "mobile shell must expose data-orientation for portrait/landscape CSS");

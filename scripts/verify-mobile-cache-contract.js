@@ -88,9 +88,15 @@ function checkLocal() {
   requireText(mobile, 'url.includes("?v=")?url:fresh(url)', "mobile fragment fetch must preserve versioned ?v=hash URLs");
   requireText(mobile, 'v="+encodeURIComponent', "mobile fragments and analysis must be versioned by hash/updatedAt");
   requireText(mobile, "boot_hash", "mobile realtime must compare boot_hash before fetching");
-  requireText(mobile, "if(next&&before&&next===before)return", "mobile realtime must skip unchanged boot_hash events");
+  if (!mobile.includes("if(next&&before&&next===before)return") && !mobile.includes("if(n&&b&&n===b)return")) {
+    issues.push("mobile realtime must skip unchanged boot_hash events");
+  }
   requireText(mobile, "if(boot)loadFragment(active,false)", "mobile tab switching must reuse boot and cached fragments");
   requireText(mobile, "cache.get(k)?.hash===h", "mobile fragments must be cached by hash");
+  requireText(mobile, "disablePrefetchOnLowEnd", "mobile shell must disable prefetch on low-end phones");
+  requireText(mobile, "deviceMemory", "mobile shell must detect low-end memory before prefetching");
+  requireText(mobile, "hardwareConcurrency", "mobile shell must detect low-end CPU before prefetching");
+  requireText(mobile, "clearTimeout(rt);rt=setTimeout", "mobile realtime updates must be debounced");
   requireText(mobile, "/data/mobile-analysis/", "mobile analysis must be lazy-loaded per stock");
   rejectText(mobile, 'bootUrl="/data/mobile-boot.json"', "mobile shell must not use static mobile-boot.json as primary boot endpoint");
   rejectText(mobile, "serviceWorker.register", "mobile shell must not register the full service worker");
