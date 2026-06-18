@@ -32,6 +32,30 @@ function writeToBoth(output, payload) {
   }
 }
 
+function writeText(file, text) {
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  const tempFile = path.join(
+    path.dirname(file),
+    `.${path.basename(file)}.${process.pid}.${Date.now()}.tmp`
+  );
+  fs.writeFileSync(tempFile, text, "utf8");
+  fs.renameSync(tempFile, file);
+}
+
+function writeTextToBoth(output, text) {
+  for (const root of [...new Set([repoRoot, runtimeRoot, syncRoot])]) {
+    writeText(path.join(root, output), text);
+  }
+}
+
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
 function payloadFreshness(payload, file) {
   const candidates = [
     payload?.updatedAt,
@@ -103,8 +127,9 @@ function payloadCount(payload) {
   if (Array.isArray(payload?.data)) return payload.data.length;
   if (Array.isArray(payload?.stocks)) return payload.stocks.length;
   if (Array.isArray(payload?.quotes)) return payload.quotes.length;
+  if (Array.isArray(payload?.sectors)) return payload.sectors.length;
   if (payload?.entries && typeof payload.entries === "object") return Object.keys(payload.entries).length;
-  return cleanNumber(payload?.count || payload?.total || payload?.matchCount);
+  return cleanNumber(payload?.count || payload?.total || payload?.matchCount || payload?.sectorCount);
 }
 
 function slimSignal(signal) {
@@ -409,6 +434,86 @@ function warrantPresetFiles(payload) {
       count: singleRows.length,
       matches: singleRows,
     }],
+  ];
+}
+
+function pageFiles(prefix, rows, base = {}, options = {}) {
+  const pageSize = cleanNumber(options.pageSize) || 25;
+  const maxPages = cleanNumber(options.maxPages) || Math.max(1, Math.ceil(rows.length / pageSize));
+  const totalPages = Math.max(1, Math.ceil(rows.length / pageSize));
+  const files = [];
+  for (let page = 1; page <= maxPages; page += 1) {
+    const index = (page - 1) * pageSize;
+    const pageRows = rows.slice(index, index + pageSize);
+    files.push([`data/${prefix}-page-${page}.json`, {
+      ...base,
+      source: `${prefix}-page`,
+      page,
+      pageSize,
+      totalPages,
+      totalCount: rows.length,
+      count: pageRows.length,
+      rows: pageRows,
+      matches: pageRows,
+    }]);
+  }
+  return files;
+}
+
+function strategyPresetPageFiles() {
+  const openBuy = readOptional("data/open-buy-latest.json", {});
+  const strategy2 = readOptional("data/strategy2-intraday-live-top.json", readOptional("data/strategy2-intraday-top.json", {}));
+  const strategy3 = readOptional("data/strategy3-latest.json", {});
+  const strategy4 = readOptional("data/strategy4-score-top.json", {});
+  const strategy5 = readOptional("data/strategy5-latest.json", {});
+  const files = [];
+  files.push(...pageFiles("open-buy", normalizeArray(openBuy.matches), {
+    ok: openBuy?.ok !== false,
+    updatedAt: openBuy?.updatedAt || "",
+    usedDate: openBuy?.usedDate || openBuy?.date || "",
+  }, { maxPages: 24 }));
+  files.push(...pageFiles("strategy2-intraday", normalizeArray(strategy2.events || strategy2.records), {
+    ok: strategy2?.ok !== false,
+    updatedAt: strategy2?.updatedAt || "",
+    date: strategy2?.date || "",
+  }, { maxPages: 24 }));
+  files.push(...pageFiles("strategy3", normalizeArray(strategy3.matches), {
+    ok: strategy3?.ok !== false,
+    updatedAt: strategy3?.updatedAt || "",
+    usedDate: strategy3?.usedDate || strategy3?.date || "",
+  }, { maxPages: 24 }));
+  files.push(...pageFiles("strategy4-score", normalizeArray(strategy4.matches), {
+    ok: strategy4?.ok !== false,
+    updatedAt: strategy4?.updatedAt || "",
+    scanStamp: strategy4?.scanStamp || "",
+  }, { maxPages: 24 }));
+  files.push(...pageFiles("strategy5", normalizeArray(strategy5.matches), {
+    ok: strategy5?.ok !== false,
+    updatedAt: strategy5?.updatedAt || "",
+    generatedDate: strategy5?.generatedDate || "",
+    sourceDate: strategy5?.sourceDate || strategy5?.usedDate || "",
+  }, { maxPages: 24 }));
+  return files;
+}
+
+function institutionPageFiles(payload) {
+  const slim = slimInstitution(payload);
+  const rows = Object.values(slim.data || {}).sort((a, b) => cleanNumber(b.total) - cleanNumber(a.total));
+  return pageFiles("institution", rows, {
+    ok: slim.ok,
+    updatedAt: slim.updatedAt,
+    usedDate: slim.usedDate,
+    quoteUpdatedAt: slim.quoteUpdatedAt,
+  }, { maxPages: 24 });
+}
+
+function warrantPageFiles(payload) {
+  const slim = slimWarrant(payload);
+  const rows = [...slim.matches].sort((a, b) => cleanNumber(b.score) - cleanNumber(a.score) || cleanNumber(b.callValue) - cleanNumber(a.callValue));
+  const volumeRows = [...slim.volumeMatches].sort((a, b) => cleanNumber(b.volumeMultiple) - cleanNumber(a.volumeMultiple) || cleanNumber(b.score) - cleanNumber(a.score));
+  return [
+    ...pageFiles("warrant-flow", rows, { ok: slim.ok, updatedAt: slim.updatedAt }, { maxPages: 24 }),
+    ...pageFiles("warrant-volume", volumeRows, { ok: slim.ok, updatedAt: slim.updatedAt }, { maxPages: 24 }),
   ];
 }
 
@@ -729,6 +834,665 @@ function mobileHomeSummary() {
   };
 }
 
+function marketAiBreadthLatest(summary = mobileHomeSummary()) {
+  const market = summary.market || {};
+  const up = cleanNumber(market.up);
+  const down = cleanNumber(market.down);
+  const flat = cleanNumber(market.flat);
+  const sample = cleanNumber(market.sample) || up + down + flat;
+  const directionalCount = up + down;
+  const directionalRatio = directionalCount ? up / directionalCount * 100 : 50;
+  const upRatio = sample ? up / sample * 100 : 0;
+  const downRatio = sample ? down / sample * 100 : 0;
+  return {
+    ok: sample >= 500 && directionalCount > 0,
+    source: "market-ai-breadth-latest",
+    updatedAt: new Date().toISOString(),
+    marketUpdatedAt: market.updatedAt || summary.updatedAt || "",
+    sample,
+    up,
+    down,
+    flat,
+    upRatio: Number(upRatio.toFixed(2)),
+    downRatio: Number(downRatio.toFixed(2)),
+    directionalCount,
+    directionalRatio: Number(directionalRatio.toFixed(2)),
+    bias: directionalRatio >= 55 && up > down ? "多方偏強" : directionalRatio <= 45 && down > up ? "空方壓制" : "盤中保守",
+    reason: "市場廣度 上漲 " + up.toLocaleString("zh-TW") + " / 下跌 " + down.toLocaleString("zh-TW") + " / 平盤 " + flat.toLocaleString("zh-TW"),
+  };
+}
+
+function marketAiLiveCache() {
+  const marketPayload = readOptional("data/market-summary.json", {});
+  const breadth = readOptional("data/market-ai-breadth-latest.json", {});
+  const strategy2 = readOptional("data/strategy2-intraday-live-top.json", readOptional("data/strategy2-intraday-top.json", {}));
+  const realtimeRadar = readOptional("data/realtime-radar-latest.json", {});
+  const strategy2Count = payloadCount(strategy2);
+  const realtimeRadarCount = payloadCount(realtimeRadar);
+  return {
+    ok: Boolean(marketPayload?.ok !== false || strategy2?.ok !== false || realtimeRadar?.ok !== false),
+    source: "scan-data-bundle",
+    cacheSource: "data/market-ai-live.json",
+    updatedAt: new Date().toISOString(),
+    market: marketPayload,
+    breadth,
+    strategy2,
+    realtimeRadar,
+    summary: {
+      marketStatus: marketPayload?.marketStatus || marketPayload?.status || "",
+      trading: marketPayload?.trading === true,
+      strategy2Count,
+      realtimeRadarCount,
+      strategy2Source: strategy2?.cacheSource || strategy2?.source || strategy2?.transport?.source || "",
+      realtimeRadarSource: realtimeRadar?.cacheSource || realtimeRadar?.source || realtimeRadar?.transport?.source || "",
+    },
+  };
+}
+
+function slimStockForPanel(stock) {
+  return {
+    code: String(stock?.code || stock?.Code || ""),
+    name: String(stock?.name || stock?.Name || stock?.code || stock?.Code || ""),
+    close: cleanNumber(stock?.close || stock?.ClosingPrice),
+    change: cleanNumber(stock?.change || stock?.Change),
+    percent: cleanNumber(stock?.percent || stock?.pct),
+    value: cleanNumber(stock?.value || stock?.TradeValue),
+    tradeVolume: cleanNumber(stock?.tradeVolume || stock?.TradeVolume || stock?.volume),
+    industry: String(stock?.industry || stock?.sector || stock?.group || ""),
+    score: cleanNumber(stock?.score || stock?.swingScore || stock?.maxScore || stock?.reboundScore),
+    tags: normalizeArray(stock?.tags || stock?.signals || stock?.swingSignals).slice(0, 5).map(signalText).filter(Boolean),
+  };
+}
+
+function marketAiPanelLatest() {
+  const market = readOptional("data/market-summary.json", {});
+  const breadth = readOptional("data/market-ai-breadth-latest.json", marketAiBreadthLatest());
+  const strategy4 = readOptional("data/strategy4-score-top.json", {});
+  const strategy5 = readOptional("data/strategy5-latest.json", {});
+  const strategy2 = readOptional("data/strategy2-intraday-live-top.json", readOptional("data/strategy2-intraday-top.json", {}));
+  const radar = readOptional("data/realtime-radar-latest.json", {});
+  const quotes = readOptional("data/stocks-quotes-mobile-top.json", {});
+  const sectors = normalizeArray(market?.sectors).map((sector) => {
+    const up = cleanNumber(sector?.up);
+    const down = cleanNumber(sector?.down);
+    const sample = up + down + cleanNumber(sector?.flat);
+    return {
+      name: String(sector?.name || ""),
+      up,
+      down,
+      sample,
+      pct: sample ? Number(((up - down) / sample * 100).toFixed(2)) : 0,
+      count: normalizeArray(sector?.stocks).length,
+    };
+  }).filter((sector) => sector.name);
+  const strongSectors = [...sectors].sort((a, b) => b.pct - a.pct || b.up - a.up).slice(0, 8);
+  const weakSectors = [...sectors].sort((a, b) => a.pct - b.pct || b.down - a.down).slice(0, 8);
+  const strategyRows = [
+    ...normalizeArray(strategy4?.matches).slice(0, 40),
+    ...normalizeArray(strategy5?.matches).slice(0, 40),
+    ...normalizeArray(strategy2?.events || strategy2?.records).slice(0, 24),
+    ...normalizeArray(radar?.rows).slice(0, 24),
+  ].map(slimStockForPanel).filter((stock) => stock.code);
+  const byCode = new Map();
+  for (const stock of strategyRows) {
+    const previous = byCode.get(stock.code);
+    byCode.set(stock.code, previous ? {
+      ...previous,
+      score: Math.max(previous.score, stock.score),
+      tags: [...new Set([...previous.tags, ...stock.tags])].slice(0, 6),
+      value: Math.max(previous.value, stock.value),
+      percent: Math.abs(stock.percent) > Math.abs(previous.percent) ? stock.percent : previous.percent,
+    } : stock);
+  }
+  const priorityStocks = [...byCode.values()].sort((a, b) => cleanNumber(b.score) - cleanNumber(a.score) || cleanNumber(b.value) - cleanNumber(a.value)).slice(0, 20);
+  const quoteRows = normalizeArray(quotes?.quotes).map(slimStockForPanel).filter((stock) => stock.code);
+  const riskStocks = [...quoteRows].filter((stock) => stock.percent <= -3 || stock.percent >= 8.5).sort((a, b) => Math.abs(b.percent) - Math.abs(a.percent)).slice(0, 12);
+  const hotGroups = {
+    all: priorityStocks.slice(0, 10),
+    momentum: [...priorityStocks].sort((a, b) => cleanNumber(b.percent) - cleanNumber(a.percent)).slice(0, 10),
+    risk: riskStocks.slice(0, 10),
+    intraday: normalizeArray(strategy2?.events || strategy2?.records).slice(0, 10).map(slimStockForPanel),
+    legal: [],
+  };
+  return {
+    ok: true,
+    source: "market-ai-panel-latest",
+    updatedAt: new Date().toISOString(),
+    marketUpdatedAt: market?.updatedAt || "",
+    breadth,
+    summary: {
+      bias: breadth?.bias || "盤中保守",
+      sample: cleanNumber(breadth?.sample),
+      up: cleanNumber(breadth?.up),
+      down: cleanNumber(breadth?.down),
+      flat: cleanNumber(breadth?.flat),
+      upRatio: cleanNumber(breadth?.upRatio),
+      downRatio: cleanNumber(breadth?.downRatio),
+      directionalRatio: cleanNumber(breadth?.directionalRatio),
+      confidence: cleanNumber(breadth?.sample) >= 1000 ? Math.min(92, Math.round(58 + 1.4 * Math.abs(cleanNumber(breadth?.upRatio) - 50))) : "中",
+      reason: breadth?.reason || "",
+    },
+    strongSectors,
+    weakSectors,
+    priorityStocks,
+    riskStocks,
+    hotGroups,
+    observationStocks: priorityStocks.slice(0, 10),
+    advice: [
+      breadth?.bias === "多方偏強" ? "順勢追蹤" : breadth?.bias === "空方壓制" ? "降低追價" : "等待方向",
+      "只看強族群前 3 名",
+      "跌破量價支撐先降槓桿",
+    ],
+  };
+}
+
+function mobileStockAnalysisLatest(panel = null) {
+  const sourcePanel = panel || readOptional("data/market-ai-panel-latest.json", marketAiPanelLatest());
+  const strategyIndex = readOptional("data/strategy-match-index.json", {});
+  const stockIndex = readOptional("data/stocks-index.json", {});
+  const stockNameByCode = new Map(normalizeArray(stockIndex?.stocks).map((stock) => [String(stock?.code || "").trim(), String(stock?.name || "")]));
+  const breadth = sourcePanel?.breadth || {};
+  const summary = sourcePanel?.summary || {};
+  const byCode = new Map();
+  function strategyMatchesFor(code) {
+    return normalizeArray(strategyIndex?.byCode?.[code]).map((match) => {
+      const details = normalizeArray(match?.details).map(signalText).filter(Boolean).slice(0, 6);
+      return {
+        key: String(match?.key || ""),
+        label: String(match?.label || strategyIndex?.strategies?.[match?.key]?.label || match?.key || "終端策略"),
+        score: cleanNumber(match?.score),
+        details,
+        date: String(match?.date || ""),
+        updatedAt: String(match?.updatedAt || ""),
+      };
+    }).filter((match) => match.label);
+  }
+  function strategySignalText(matches) {
+    return matches.map((match) => {
+      const detailText = match.details.length ? `：${match.details.join("、")}` : "";
+      return `${match.label}${detailText}`;
+    }).join("；");
+  }
+  function add(stock = {}, bucket = "priority", rank = 0) {
+    const code = String(stock?.code || "").trim();
+    if (!code) return;
+    const resolvedName = String(stock?.name || stockNameByCode.get(code) || code);
+    const previous = byCode.get(code) || {
+      code,
+      name: resolvedName,
+      sources: [],
+      tags: [],
+    };
+    const score = cleanNumber(stock?.score);
+    const percent = cleanNumber(stock?.percent);
+    const value = cleanNumber(stock?.value);
+    const tags = normalizeArray(stock?.tags).map(signalText).filter(Boolean);
+    const sourceLabel = bucket === "risk" ? "風險清單" : bucket === "momentum" ? "動能排序" : bucket === "strategy" ? "終端策略" : "優先清單";
+    byCode.set(code, {
+      ...previous,
+      name: previous.name || resolvedName,
+      score: Math.max(cleanNumber(previous.score), score),
+      percent: Math.abs(percent) > Math.abs(cleanNumber(previous.percent)) ? percent : cleanNumber(previous.percent),
+      value: Math.max(cleanNumber(previous.value), value),
+      industry: previous.industry || String(stock?.industry || ""),
+      rank: previous.rank || rank || 0,
+      sources: [...new Set([...previous.sources, sourceLabel])],
+      tags: [...new Set([...previous.tags, ...tags])].slice(0, 8),
+      bucket,
+    });
+  }
+  normalizeArray(sourcePanel?.priorityStocks).slice(0, 20).forEach((stock, index) => add(stock, "priority", index + 1));
+  normalizeArray(sourcePanel?.riskStocks).slice(0, 12).forEach((stock, index) => add(stock, "risk", index + 1));
+  normalizeArray(sourcePanel?.hotGroups?.momentum).slice(0, 10).forEach((stock, index) => add(stock, "momentum", index + 1));
+  Object.keys(strategyIndex?.byCode || {}).forEach((code, index) => add({ code }, "strategy", index + 1));
+  const analyses = {};
+  for (const stock of byCode.values()) {
+    const isRisk = stock.sources.includes("風險清單");
+    const matches = strategyMatchesFor(stock.code);
+    const strategySources = matches.map((match) => match.label);
+    const strategyTags = matches.flatMap((match) => match.details.length ? match.details : [match.label]);
+    const signalsText = strategySignalText(matches) || (stock.tags.length ? stock.tags.join("、") : "掃描端綜合排序");
+    const valueText = stock.value ? `${(stock.value / 1e8).toFixed(1)} 億` : "--";
+    const tagText = signalsText || "掃描端綜合排序";
+    analyses[stock.code] = {
+      code: stock.code,
+      name: stock.name,
+      updatedAt: sourcePanel?.updatedAt || "",
+      marketBias: summary?.bias || breadth?.bias || "",
+      sources: [...new Set([...strategySources, ...stock.sources])],
+      strategies: matches,
+      signalsText,
+      score: stock.score,
+      percent: Number(stock.percent.toFixed(2)),
+      value: stock.value,
+      valueText,
+      industry: stock.industry || "",
+      tags: [...new Set([...strategyTags, ...stock.tags])].slice(0, 10),
+      reason: isRisk
+        ? `漲跌幅 ${stock.percent.toFixed(2)}%，命中 ${tagText}；屬於極端波動清單，先確認是否過熱、跌破或流動性異常。`
+        : `綜合分數 ${stock.score || "--"}，成交值 ${valueText}，命中 ${tagText}。`,
+      aiView: `${summary?.bias || breadth?.bias || "盤勢觀察"}：${summary?.reason || breadth?.reason || "以掃描端排序為主，手機不重新計算。"}`,
+      action: isRisk ? "先控風險，不追價；等待量價重新確認。" : "列入優先觀察；只在量價續強且未過熱時追蹤。",
+      risk: stock.percent >= 8.5 ? "漲幅偏高，留意開高走低或爆量不漲。" : stock.percent <= -3 ? "跌幅偏大，先等止跌與量縮。" : "跌破短線支撐或量縮轉弱時降低權重。",
+    };
+  }
+  return {
+    ok: true,
+    source: "mobile-stock-analysis-latest",
+    updatedAt: new Date().toISOString(),
+    strategyIndexUpdatedAt: strategyIndex?.updatedAt || "",
+    marketUpdatedAt: sourcePanel?.marketUpdatedAt || "",
+    count: Object.keys(analyses).length,
+    analyses,
+  };
+}
+function mobileTerminalLatest() {
+  const mobile = readOptional("data/mobile-home-summary.json", mobileHomeSummary());
+  const breadth = readOptional("data/market-ai-breadth-latest.json", marketAiBreadthLatest(mobile));
+  const aiPanel = readOptional("data/market-ai-panel-latest.json", marketAiPanelLatest());
+  const manifest = readOptional("data/data-manifest.json", {});
+  const status = readOptional("data/data-status-index.json", {});
+  const strategy2 = readOptional("data/strategy2-intraday-live-top.json", readOptional("data/strategy2-intraday-top.json", {}));
+  const institution = readOptional("data/institution-mobile-top.json", {});
+  const warrant = readOptional("data/warrant-flow-mobile-top.json", {});
+  const strategy4 = readOptional("data/strategy4-score-top.json", {});
+  const strategy5 = readOptional("data/strategy5-page-1.json", readOptional("data/strategy5-latest.json", {}));
+  return {
+    ok: true,
+    source: "mobile-terminal-latest",
+    updatedAt: new Date().toISOString(),
+    mobile,
+    breadth,
+    aiPanel,
+    manifest: {
+      updatedAt: manifest?.updatedAt || "",
+      count: cleanNumber(manifest?.count),
+      entries: Object.fromEntries(Object.entries(manifest?.entries || {}).filter(([key]) => [
+        "market-summary.json",
+        "market-ai-breadth-latest.json",
+        "market-ai-panel-latest.json",
+        "strategy2-intraday-live-top.json",
+        "strategy4-score-top.json",
+        "strategy5-page-1.json",
+        "institution-mobile-top.json",
+        "warrant-flow-mobile-top.json",
+      ].includes(key))),
+    },
+    status: {
+      updatedAt: status?.updatedAt || "",
+      entries: status?.entries || {},
+    },
+    strategy2: {
+      updatedAt: strategy2?.updatedAt || "",
+      count: payloadCount(strategy2),
+      rows: normalizeArray(strategy2?.events || strategy2?.records).slice(0, 12),
+    },
+    strategy4: {
+      updatedAt: strategy4?.updatedAt || "",
+      count: payloadCount(strategy4),
+      rows: normalizeArray(strategy4?.matches).slice(0, 12),
+    },
+    strategy5: {
+      updatedAt: strategy5?.updatedAt || "",
+      count: payloadCount(strategy5),
+      rows: normalizeArray(strategy5?.rows || strategy5?.matches).slice(0, 12),
+    },
+    institution: {
+      updatedAt: institution?.updatedAt || "",
+      count: payloadCount(institution),
+      rows: normalizeArray(institution?.rows).slice(0, 12),
+    },
+    warrant: {
+      updatedAt: warrant?.updatedAt || "",
+      count: payloadCount(warrant),
+      rows: normalizeArray(warrant?.matches).slice(0, 12),
+    },
+  };
+}
+
+const MOBILE_AI_FRAGMENT_VERSION = "mobile-ai-v1";
+
+function mobileAiLatestHtml(panel = marketAiPanelLatest()) {
+  const summary = panel?.summary || {};
+  const breadth = panel?.breadth || {};
+  const bias = summary.bias || breadth.bias || "盤中保守";
+  const priorityStocks = normalizeArray(panel?.priorityStocks).slice(0, 10);
+  const riskStocks = normalizeArray(panel?.riskStocks).slice(0, 8);
+  const strongNames = normalizeArray(panel?.strongSectors).slice(0, 4).map((item) => item.name).filter(Boolean).join("、") || "尚未形成明顯主流";
+  const weakNames = normalizeArray(panel?.weakSectors).slice(0, 4).map((item) => item.name).filter(Boolean).join("、") || "暫無明顯弱勢族群";
+  const stockRow = (stock, index, mode = "priority") => {
+    const pct = cleanNumber(stock.percent);
+    const score = cleanNumber(stock.score);
+    const tags = normalizeArray(stock.tags).slice(0, 4).map((tag) => `<span>${escapeHtml(tag)}</span>`).join("");
+    return `
+      <article class="market-ai-stock-row" data-mobile-ai-contract="stock-row">
+        <div class="market-ai-rank">#${index + 1}</div>
+        <div>
+          <h4><span class="market-ai-code">${escapeHtml(stock.code)}</span><span class="market-ai-name">${escapeHtml(stock.name)}</span></h4>
+          <p>${mode === "risk" ? "風險" : "優先"}分數 ${score || "--"}，漲幅 ${pct.toFixed(2)}%，成交值 ${(cleanNumber(stock.value) / 1e8).toFixed(1)} 億</p>
+          <p>${escapeHtml(normalizeArray(stock.tags).slice(0, 2).join("、") || (mode === "risk" ? "波動過熱，先控部位。" : "掃描端已完成排序，手機直接顯示。"))}</p>
+        </div>
+        <div>
+          <span class="market-ai-chip">${escapeHtml(stock.industry || "--")}</span>
+          <span class="market-ai-chip">${(cleanNumber(stock.value) / 1e8).toFixed(1)} 億</span>
+        </div>
+        <div class="market-ai-score"><small>${mode === "risk" ? "風險" : "綜合"}</small><strong>${score || "--"}</strong></div>
+        <div class="market-ai-tags">${tags}</div>
+        <div class="market-ai-actions">
+          <button type="button" data-mobile-ai-contract="analyze" data-ai-stock-code="${escapeHtml(stock.code)}" data-ai-stock-name="${escapeHtml(stock.name)}">看分析</button>
+          <button type="button" data-mobile-ai-contract="watch" data-ai-watch-code="${escapeHtml(stock.code)}" data-ai-watch-name="${escapeHtml(stock.name)}">加入自選</button>
+        </div>
+      </article>
+    `;
+  };
+  const points = [
+    `市場廣度有效漲跌多方占 ${cleanNumber(summary.directionalRatio || breadth.directionalRatio).toFixed(1)}%，上漲 ${cleanNumber(summary.up || breadth.up).toLocaleString("zh-TW")} / 下跌 ${cleanNumber(summary.down || breadth.down).toLocaleString("zh-TW")}。`,
+    `族群焦點：${strongNames}；弱勢端留意 ${weakNames}。`,
+    bias === "多方偏強" ? "盤勢偏多，優先追蹤已排序完成的強勢清單。" : bias === "空方壓制" ? "盤勢偏空，降低追價，等待反彈量價確認。" : "盤勢保守，縮小部位並等待方向擴散。",
+  ];
+  return `
+    <section class="mobile-ai-fragment" data-mobile-ai-fragment="1" data-mobile-ai-contract="root" data-mobile-ai-version="${MOBILE_AI_FRAGMENT_VERSION}" data-mobile-ai-updated-at="${escapeHtml(panel?.updatedAt || "")}">
+      <section class="market-ai-summary">
+        <article class="market-ai-card hero">
+          <small>盤中決策節奏</small>
+          <strong>${escapeHtml(bias)}</strong>
+          <p>${escapeHtml(summary.reason || breadth.reason || "掃描端已完成市場廣度判讀，手機直接顯示結論。")}</p>
+          <div class="market-ai-metrics">
+            <span>樣本<b>${cleanNumber(summary.sample || breadth.sample).toLocaleString("zh-TW")}</b></span>
+            <span>多方<b>${cleanNumber(summary.up || breadth.up).toLocaleString("zh-TW")}</b></span>
+            <span>空方<b>${cleanNumber(summary.down || breadth.down).toLocaleString("zh-TW")}</b></span>
+            <span>信心<b>${escapeHtml(summary.confidence || "中")}</b></span>
+          </div>
+        </article>
+        <article class="market-ai-card">
+          <small>盤勢廣度</small>
+          <strong>${cleanNumber(summary.directionalRatio || breadth.directionalRatio).toFixed(1)}%</strong>
+          <p>全樣本上漲 ${cleanNumber(summary.upRatio || breadth.upRatio).toFixed(1)}%，下跌 ${cleanNumber(summary.downRatio || breadth.downRatio).toFixed(1)}%。</p>
+        </article>
+        <article class="market-ai-card warning">
+          <small>風險控管</small>
+          <strong>${riskStocks.length ? "先控風險" : "風險正常"}</strong>
+          <p>${escapeHtml(weakNames)} 需要留意；極端波動標的已由掃描端預先列出。</p>
+        </article>
+        <article class="market-ai-card">
+          <small>優先觀察</small>
+          <strong>${priorityStocks[0] ? `${escapeHtml(priorityStocks[0].code)} ${escapeHtml(priorityStocks[0].name)}` : "--"}</strong>
+          <p>${priorityStocks[0] ? `綜合分數 ${cleanNumber(priorityStocks[0].score) || "--"}，族群 ${escapeHtml(priorityStocks[0].industry || "--")}，手機不再排序。` : "等待掃描完成。"}</p>
+        </article>
+      </section>
+      <div class="market-ai-sort-note mobile-ai-stale-note" data-mobile-ai-stale-note hidden>等待最新掃描更新。</div>
+      <div class="market-ai-sort-note mobile-ai-manual-note">
+        <button type="button" data-mobile-ai-full-load="1">手動完整載入</button>
+      </div>
+      <section class="market-ai-advice">
+        ${normalizeArray(panel?.advice).slice(0, 3).map((item, index) => `
+          <article class="market-ai-card" data-ai-advice="${index === 0 ? "entry" : index === 1 ? "sector" : "risk"}" role="button" tabindex="0" aria-expanded="false">
+            <small>${index === 0 ? "進場紀律" : index === 1 ? "族群聚焦" : "風險排除"}</small>
+            <strong>${escapeHtml(item)}</strong>
+            <p>${escapeHtml(points[index] || "")}</p>
+          </article>
+        `).join("")}
+      </section>
+      <section class="market-ai-main">
+        <article class="market-ai-block">
+          <h3>AI 今日重點</h3>
+          <small>${escapeHtml(panel?.updatedAt || "")}</small>
+          <div class="market-ai-list">
+            ${points.map((text, index) => `<div class="market-ai-point"><b>${index + 1}</b><span>${escapeHtml(text)}</span></div>`).join("")}
+          </div>
+        </article>
+        <aside class="market-ai-block">
+          <h3>風險提醒</h3>
+          <small>${riskStocks.length} 則</small>
+          <div class="market-ai-risk">
+            <article><h4>族群集中</h4><p>主流若集中在少數股票，先等第二波量價確認。</p><div class="market-ai-chips">${normalizeArray(panel?.strongSectors).slice(0, 4).map((sector) => `<span class="market-ai-chip">${escapeHtml(sector.name)}</span>`).join("")}</div></article>
+            <article><h4>波動過熱</h4><p>${escapeHtml(riskStocks.slice(0, 4).map((stock) => `${stock.code} ${stock.name}`).join("、") || "暫無極端標的")}。</p></article>
+          </div>
+        </aside>
+      </section>
+      <section class="market-ai-block">
+        <h3>優先觀察清單</h3>
+        <small>掃描端預排序 Top ${priorityStocks.length}</small>
+        <div class="market-ai-hot">${priorityStocks.map((stock, index) => stockRow(stock, index)).join("") || '<div class="empty-state">等待掃描完成。</div>'}</div>
+      </section>
+      <section class="market-ai-block">
+        <h3>風險清單</h3>
+        <small>掃描端預排序 Top ${riskStocks.length}</small>
+        <div class="market-ai-hot">${riskStocks.map((stock, index) => stockRow(stock, index, "risk")).join("") || '<div class="empty-state">目前沒有極端波動標的。</div>'}</div>
+      </section>
+    </section>
+  `.trim();
+}
+
+function mobileAiLiteHtml(panel = marketAiPanelLatest()) {
+  const litePanel = {
+    ...panel,
+    priorityStocks: normalizeArray(panel?.priorityStocks).slice(0, 5),
+    riskStocks: normalizeArray(panel?.riskStocks).slice(0, 5),
+  };
+  return mobileAiLatestHtml(litePanel);
+}
+
+function mobileAiUltraHtml(panel = marketAiPanelLatest()) {
+  const summary = panel?.summary || {};
+  const breadth = panel?.breadth || {};
+  const bias = summary.bias || breadth.bias || "盤中保守";
+  const priorityStocks = normalizeArray(panel?.priorityStocks).slice(0, 3);
+  const riskStocks = normalizeArray(panel?.riskStocks).slice(0, 3);
+  const strongNames = normalizeArray(panel?.strongSectors).slice(0, 3).map((item) => item.name).filter(Boolean).join("、") || "尚未形成明顯主流";
+  const weakNames = normalizeArray(panel?.weakSectors).slice(0, 3).map((item) => item.name).filter(Boolean).join("、") || "暫無明顯弱勢族群";
+  const points = [
+    `市場廣度多方 ${cleanNumber(summary.directionalRatio || breadth.directionalRatio).toFixed(1)}%，上漲 ${cleanNumber(summary.up || breadth.up).toLocaleString("zh-TW")} / 下跌 ${cleanNumber(summary.down || breadth.down).toLocaleString("zh-TW")}。`,
+    `強勢族群：${strongNames}。`,
+    bias === "多方偏強" ? "偏多，只看掃描端排好的前三名。" : bias === "空方壓制" ? "偏空，先控風險與等待反彈確認。" : "保守，縮小部位等待方向擴散。",
+  ];
+  const compactRow = (stock, index, mode = "priority") => `
+    <article class="market-ai-stock-row mobile-ai-ultra-row" data-mobile-ai-contract="stock-row">
+      <div class="market-ai-rank">#${index + 1}</div>
+      <div>
+        <h4>${escapeHtml(stock.code)} ${escapeHtml(stock.name)}</h4>
+        <p>${mode === "risk" ? "風險" : "優先"} ${cleanNumber(stock.score) || "--"}｜${cleanNumber(stock.percent).toFixed(2)}%｜${escapeHtml(stock.industry || "--")}</p>
+      </div>
+      <button type="button" data-mobile-ai-contract="analyze" data-ai-stock-code="${escapeHtml(stock.code)}" data-ai-stock-name="${escapeHtml(stock.name)}">看分析</button>
+      <button type="button" data-mobile-ai-contract="watch" data-ai-watch-code="${escapeHtml(stock.code)}" data-ai-watch-name="${escapeHtml(stock.name)}">加入自選</button>
+    </article>
+  `;
+  return `
+    <section class="mobile-ai-fragment mobile-ai-ultra-fragment" data-mobile-ai-fragment="1" data-mobile-ai-contract="root" data-mobile-ai-version="${MOBILE_AI_FRAGMENT_VERSION}" data-mobile-ai-variant="ultra" data-mobile-ai-updated-at="${escapeHtml(panel?.updatedAt || "")}">
+      <section class="market-ai-summary">
+        <article class="market-ai-card hero">
+          <small>低階手機模式</small>
+          <strong>${escapeHtml(bias)}</strong>
+          <p>${escapeHtml(summary.reason || breadth.reason || "掃描端已完成市場廣度判讀，手機只顯示結論。")}</p>
+          <div class="market-ai-metrics">
+            <span>樣本<b>${cleanNumber(summary.sample || breadth.sample).toLocaleString("zh-TW")}</b></span>
+            <span>多方<b>${cleanNumber(summary.up || breadth.up).toLocaleString("zh-TW")}</b></span>
+            <span>空方<b>${cleanNumber(summary.down || breadth.down).toLocaleString("zh-TW")}</b></span>
+          </div>
+        </article>
+      </section>
+      <div class="market-ai-sort-note mobile-ai-stale-note" data-mobile-ai-stale-note hidden>等待最新掃描更新。</div>
+      <div class="market-ai-sort-note mobile-ai-manual-note"><button type="button" data-mobile-ai-full-load="1">手動完整載入</button></div>
+      <section class="market-ai-block">
+        <h3>AI 今日重點</h3>
+        <small>${escapeHtml(panel?.updatedAt || "")}</small>
+        <div class="market-ai-list">${points.map((text, index) => `<div class="market-ai-point"><b>${index + 1}</b><span>${escapeHtml(text)}</span></div>`).join("")}</div>
+      </section>
+      <section class="market-ai-block">
+        <h3>優先 Top 3</h3>
+        <small>手機不排序，只顯示掃描結果</small>
+        <div class="market-ai-hot">${priorityStocks.map((stock, index) => compactRow(stock, index)).join("") || '<div class="empty-state">等待掃描完成。</div>'}</div>
+      </section>
+      <section class="market-ai-block">
+        <h3>風險 Top 3</h3>
+        <small>${escapeHtml(weakNames)}</small>
+        <div class="market-ai-hot">${riskStocks.map((stock, index) => compactRow(stock, index, "risk")).join("") || '<div class="empty-state">目前沒有極端波動標的。</div>'}</div>
+      </section>
+    </section>
+  `.trim();
+}
+
+function mobileAiFreshness(updatedAt) {
+  const updated = Date.parse(updatedAt || "");
+  if (!Number.isFinite(updated)) return "expired";
+  const ageMs = Date.now() - updated;
+  if (ageMs <= 10 * 60 * 1000) return "fresh";
+  if (ageMs <= 30 * 60 * 1000) return "stale";
+  return "expired";
+}
+
+function mobileDigest(html, panel, mobileTerminal, liteHtml = "", ultraHtml = "") {
+  const htmlHash = crypto.createHash("sha1").update(html).digest("hex").slice(0, 12);
+  const liteHash = crypto.createHash("sha1").update(liteHtml || "").digest("hex").slice(0, 12);
+  const ultraHash = crypto.createHash("sha1").update(ultraHtml || "").digest("hex").slice(0, 12);
+  return {
+    ok: true,
+    source: "mobile-digest",
+    fragmentVersion: MOBILE_AI_FRAGMENT_VERSION,
+    updatedAt: new Date().toISOString(),
+    aiHash: htmlHash,
+    htmlHash,
+    htmlBytes: Buffer.byteLength(html),
+    liteHash,
+    liteBytes: Buffer.byteLength(liteHtml || ""),
+    ultraHash,
+    ultraBytes: Buffer.byteLength(ultraHtml || ""),
+    aiUpdatedAt: panel?.updatedAt || "",
+    freshness: mobileAiFreshness(panel?.updatedAt || ""),
+    mobileHash: hashPayload(mobileTerminal),
+    mobileUpdatedAt: mobileTerminal?.updatedAt || "",
+    breadthHash: hashPayload(panel?.breadth || {}),
+    bias: panel?.summary?.bias || panel?.breadth?.bias || "",
+  };
+}
+
+function mobileBootLatest(mobileTerminal, digest, fragments = {}) {
+  return {
+    ok: true,
+    source: "mobile-boot",
+    updatedAt: new Date().toISOString(),
+    lowPower: {
+      defaultVariant: "lite",
+      lowEndVariant: "ultra",
+      digestPollMs: 60000,
+      fullHtmlBudget: 30000,
+      liteHtmlBudget: 16000,
+      ultraHtmlBudget: 9000,
+    },
+    fragments: Object.fromEntries(Object.entries(fragments).map(([key, item]) => [key, {
+      url: "/" + item.file.replace(/\\/g, "/"),
+      hash: crypto.createHash("sha1").update(item.html || "").digest("hex").slice(0, 12),
+      bytes: Buffer.byteLength(item.html || ""),
+    }])),
+    digest: {
+      fragmentVersion: digest?.fragmentVersion || MOBILE_AI_FRAGMENT_VERSION,
+      freshness: digest?.freshness || "expired",
+      aiUpdatedAt: digest?.aiUpdatedAt || "",
+      aiHash: digest?.aiHash || "",
+      liteHash: digest?.liteHash || "",
+      ultraHash: digest?.ultraHash || "",
+      htmlBytes: cleanNumber(digest?.htmlBytes),
+      liteBytes: cleanNumber(digest?.liteBytes),
+      ultraBytes: cleanNumber(digest?.ultraBytes),
+      bias: digest?.bias || "",
+    },
+    mobile: mobileTerminal?.mobile || {},
+    breadth: mobileTerminal?.breadth || {},
+    aiSummary: mobileTerminal?.aiPanel?.summary || {},
+    status: {
+      updatedAt: mobileTerminal?.status?.updatedAt || "",
+    },
+  };
+}
+
+function mobileFragmentStock(row = {}) {
+  const active = row?.activeMatch || row?.mainMatch || {};
+  return {
+    code: String(row?.code || row?.Code || row?.underlyingCode || ""),
+    name: String(row?.name || row?.Name || row?.underlyingName || row?.code || row?.Code || ""),
+    percent: cleanNumber(row?.percent ?? row?.pct ?? row?.underlyingPercent),
+    score: cleanNumber(row?.score ?? row?.finalScore ?? row?.maxScore ?? row?.swingScore ?? active?.score),
+    close: cleanNumber(row?.close ?? row?.underlyingClose),
+    value: cleanNumber(row?.value ?? row?.tradeValue ?? row?.callValue),
+    label: String(row?.status || row?.actionLabel || row?.signalGrade || row?.stateLabel || active?.short || active?.label || ""),
+    reason: String(row?.reason || active?.reason || row?.strategy || row?.source || ""),
+  };
+}
+
+function mobileFragmentRows(payload, keys = []) {
+  const candidates = keys.length ? keys : ["rows", "matches", "events", "records", "top", "singleSignals"];
+  for (const key of candidates) {
+    const rows = normalizeArray(payload?.[key]);
+    if (rows.length) return rows;
+  }
+  return [];
+}
+
+function mobileTerminalFragmentHtml(config = {}) {
+  const rows = normalizeArray(config.rows).map(mobileFragmentStock).filter((row) => row.code).slice(0, config.limit || 12);
+  const points = normalizeArray(config.points).slice(0, 3);
+  const rowHtml = rows.map((row, index) => `
+    <article class="mobile-terminal-row">
+      <b>#${index + 1}</b>
+      <div>
+        <h4>${escapeHtml(row.code)} ${escapeHtml(row.name)}</h4>
+        <p>${escapeHtml(row.label || config.rowLabel || "掃描命中")}｜${row.score || "--"}｜${row.percent.toFixed(2)}%</p>
+        <small>${escapeHtml(row.reason).slice(0, 80)}</small>
+      </div>
+      <div class="mobile-terminal-actions">
+        <button type="button" data-mobile-ai-contract="analyze" data-ai-stock-code="${escapeHtml(row.code)}" data-ai-stock-name="${escapeHtml(row.name)}">看分析</button>
+        <button type="button" data-mobile-ai-contract="watch" data-ai-watch-code="${escapeHtml(row.code)}" data-ai-watch-name="${escapeHtml(row.name)}">加入自選</button>
+      </div>
+    </article>
+  `).join("");
+  return `
+    <section class="mobile-terminal-fragment" data-mobile-terminal-fragment="1" data-mobile-fragment-key="${escapeHtml(config.key || "")}">
+      <article class="mobile-terminal-head">
+        <small>${escapeHtml(config.kicker || "掃描端結論")}</small>
+        <strong>${escapeHtml(config.title || "策略快看")}</strong>
+        <p>${escapeHtml(config.subtitle || "手機只顯示掃描完成結果。")}</p>
+        <div class="mobile-terminal-stats">
+          <span>數量<b>${cleanNumber(config.total || rows.length).toLocaleString("zh-TW")}</b></span>
+          <span>更新<b>${escapeHtml(String(config.updatedAt || "").slice(11, 19) || "--")}</b></span>
+        </div>
+      </article>
+      ${points.length ? `<section class="mobile-terminal-points">${points.map((point, index) => `<p><b>${index + 1}</b>${escapeHtml(point)}</p>`).join("")}</section>` : ""}
+      <section class="mobile-terminal-list">${rowHtml || '<div class="empty-state">等待掃描完成。</div>'}</section>
+    </section>
+  `.trim();
+}
+
+function mobileStrategyFragments() {
+  const openBuy = readOptional("data/open-buy-page-1.json", readOptional("data/open-buy-latest.json", {}));
+  const strategy2 = readOptional("data/strategy2-intraday-live-top.json", readOptional("data/strategy2-intraday-top.json", {}));
+  const strategy3 = readOptional("data/strategy3-page-1.json", readOptional("data/strategy3-latest.json", {}));
+  const strategy4 = readOptional("data/strategy4-score-page-1.json", readOptional("data/strategy4-score-top.json", {}));
+  const strategy5 = readOptional("data/strategy5-page-1.json", readOptional("data/strategy5-latest.json", {}));
+  const institution = readOptional("data/institution-mobile-top.json", {});
+  const warrant = readOptional("data/warrant-flow-mobile-top.json", {});
+  const definitions = [
+    ["strategy1", "策略1 開盤入", "16:00 候選 / 08:55 最終名單", openBuy, ["rows", "matches"], ["開盤價進場", "有賺就走", "09:10 強制出場"]],
+    ["strategy2", "策略2 當沖", "2 分 K 即時偵測摘要", strategy2, ["events", "records"], ["只看進場區", "等待量價確認", "盤中訊號掃描端完成"]],
+    ["strategy3", "策略3 日線", "日線條件掃描摘要", strategy3, ["rows", "matches"], ["日線結構", "低頻確認", "不追盤中雜訊"]],
+    ["strategy4", "策略4 波段", "波段分數前排", strategy4, ["rows", "matches"], ["突破/缺口/V轉", "掃描端已排序", "手機只顯示前排"]],
+    ["strategy5", "策略5 綜合", "籌碼與價量共振", strategy5, ["rows", "matches"], ["多策略共振", "法人與價量", "只顯示預排序"]],
+    ["chip", "法人籌碼", "外資/投信/自營合計", institution, ["rows"], ["連買優先", "合計買超", "籌碼集中"]],
+    ["warrant", "權證資金", "認購熱度與標的型態", warrant, ["matches", "singleSignals"], ["權證先熱", "標的型態", "只看候選觀察"]],
+  ];
+  return Object.fromEntries(definitions.map(([key, title, subtitle, payload, keys, points]) => [key, {
+    file: `data/mobile-${key}-ultra.html`,
+    html: mobileTerminalFragmentHtml({
+      key,
+      title,
+      subtitle,
+      points,
+      updatedAt: payload?.updatedAt || payload?.date || "",
+      total: payloadCount(payload),
+      rows: mobileFragmentRows(payload, keys),
+    }),
+  }]));
+}
+
 function slimStocks() {
   const existingCandidates = [runtimeRoot, repoRoot, syncRoot]
     .map((root) => {
@@ -867,8 +1631,15 @@ function statusDateForFile(file, payload) {
 function dataStatusIndex() {
   const files = [
     "market-summary.json",
+    "heatmap-latest.json",
     "health-summary.json",
     "mobile-home-summary.json",
+    "market-ai-breadth-latest.json",
+    "market-ai-panel-latest.json",
+    "mobile-stock-analysis-latest.json",
+    "market-ai-live.json",
+    "mobile-terminal-latest.json",
+    "mobile-digest.json",
     "terminal-home-mobile-slim.json",
     "stocks-slim.json",
     "stocks-index.json",
@@ -883,6 +1654,7 @@ function dataStatusIndex() {
     "strategy4-slim.json",
     "strategy4-score-top.json",
     "strategy4-zone-b-page-1.json",
+    "strategy5-page-1.json",
     "strategy5-latest.json",
     "institution-latest.json",
     "institution-slim.json",
@@ -894,6 +1666,7 @@ function dataStatusIndex() {
     "warrant-priority-top.json",
     "warrant-single-signal-top.json",
     "warrant-flow-mobile-top.json",
+    "warrant-flow-page-1.json",
     "realtime-radar-latest.json",
   ];
   const entries = {};
@@ -920,7 +1693,14 @@ function dataStatusIndex() {
 function dataManifest() {
   const files = [
     "market-summary.json",
+    "heatmap-latest.json",
     "mobile-home-summary.json",
+    "market-ai-breadth-latest.json",
+    "market-ai-panel-latest.json",
+    "mobile-stock-analysis-latest.json",
+    "market-ai-live.json",
+    "mobile-terminal-latest.json",
+    "mobile-digest.json",
     "terminal-home-bundle.json",
     "terminal-home-mobile-slim.json",
     "data-status-index.json",
@@ -943,6 +1723,7 @@ function dataManifest() {
     "strategy4-zone-b.json",
     "strategy4-zone-c.json",
     "strategy5-latest.json",
+    "strategy5-page-1.json",
     "institution-latest.json",
     "institution-slim.json",
     "institution-mobile-top.json",
@@ -953,6 +1734,7 @@ function dataManifest() {
     "warrant-priority-top.json",
     "warrant-single-signal-top.json",
     "warrant-flow-mobile-top.json",
+    "warrant-flow-page-1.json",
     "realtime-radar-latest.json",
     "afterhours-supabase-status.json",
     "health-summary.json",
@@ -963,6 +1745,14 @@ function dataManifest() {
   ];
   for (let page = 1; page <= 48; page += 1) files.push(`strategy4-zone-b-page-${page}.json`);
   for (let page = 1; page <= 48; page += 1) files.push(`strategy4-zone-c-page-${page}.json`);
+  for (let page = 1; page <= 24; page += 1) files.push(`open-buy-page-${page}.json`);
+  for (let page = 1; page <= 24; page += 1) files.push(`strategy2-intraday-page-${page}.json`);
+  for (let page = 1; page <= 24; page += 1) files.push(`strategy3-page-${page}.json`);
+  for (let page = 1; page <= 24; page += 1) files.push(`strategy4-score-page-${page}.json`);
+  for (let page = 1; page <= 24; page += 1) files.push(`strategy5-page-${page}.json`);
+  for (let page = 1; page <= 24; page += 1) files.push(`institution-page-${page}.json`);
+  for (let page = 1; page <= 24; page += 1) files.push(`warrant-flow-page-${page}.json`);
+  for (let page = 1; page <= 24; page += 1) files.push(`warrant-volume-page-${page}.json`);
   const entries = {};
   for (const file of files) {
     const payload = readRepoOptional(`data/${file}`, null);
@@ -1184,8 +1974,8 @@ const jobs = [
     ["data/strategy2-intraday-delta.json", deltaStrategy2(payload)],
   ]],
   ["strategy4", "data/strategy4-latest.json", "data/strategy4-slim.json", slimStrategy4, strategy4PresetFiles],
-  ["institution", "data/institution-latest.json", "data/institution-slim.json", slimInstitution, (payload) => [...institutionPresetFiles(payload), ["data/institution-mobile-top.json", mobileInstitutionTop(payload)]]],
-  ["warrant", "data/warrant-flow-latest.json", "data/warrant-flow-slim.json", slimWarrant, (payload) => [...warrantPresetFiles(payload), ["data/warrant-flow-mobile-top.json", mobileWarrantTop(payload)]]],
+  ["institution", "data/institution-latest.json", "data/institution-slim.json", slimInstitution, (payload) => [...institutionPresetFiles(payload), ...institutionPageFiles(payload), ["data/institution-mobile-top.json", mobileInstitutionTop(payload)]]],
+  ["warrant", "data/warrant-flow-latest.json", "data/warrant-flow-slim.json", slimWarrant, (payload) => [...warrantPresetFiles(payload), ...warrantPageFiles(payload), ["data/warrant-flow-mobile-top.json", mobileWarrantTop(payload)]]],
 ];
 
 async function main() {
@@ -1208,7 +1998,10 @@ async function main() {
   if (wrote) {
     const mobileSummary = mobileHomeSummary();
     writeToBoth("data/mobile-home-summary.json", mobileSummary);
+    const marketAiBreadth = marketAiBreadthLatest(mobileSummary);
+    writeToBoth("data/market-ai-breadth-latest.json", marketAiBreadth);
     console.log(`[slim] wrote data/mobile-home-summary.json strategy2=${mobileSummary.strategy2.count || 0} chip=${mobileSummary.chip.count || 0} warrant=${mobileSummary.warrant.count || 0}`);
+    console.log(`[slim] wrote data/market-ai-breadth-latest.json sample=${marketAiBreadth.sample || 0} up=${marketAiBreadth.up || 0} down=${marketAiBreadth.down || 0}`);
     const stocksSlim = slimStocks();
     writeToBoth("data/stocks-slim.json", stocksSlim);
     console.log(`[slim] wrote data/stocks-slim.json count=${stocksSlim.count || 0}`);
@@ -1229,10 +2022,26 @@ async function main() {
     }
     const refreshedMobileSummary = mobileHomeSummary();
     writeToBoth("data/mobile-home-summary.json", refreshedMobileSummary);
+    const refreshedMarketAiBreadth = marketAiBreadthLatest(refreshedMobileSummary);
+    writeToBoth("data/market-ai-breadth-latest.json", refreshedMarketAiBreadth);
+    const marketAiLive = marketAiLiveCache();
+    writeToBoth("data/market-ai-live.json", marketAiLive);
+    const marketAiPanel = marketAiPanelLatest();
+    writeToBoth("data/market-ai-panel-latest.json", marketAiPanel);
+    const mobileStockAnalysis = mobileStockAnalysisLatest(marketAiPanel);
+    writeToBoth("data/mobile-stock-analysis-latest.json", mobileStockAnalysis);
     console.log(`[slim] refreshed data/mobile-home-summary.json strategy2=${refreshedMobileSummary.strategy2.count || 0} chip=${refreshedMobileSummary.chip.count || 0} warrant=${refreshedMobileSummary.warrant.count || 0}`);
+    console.log(`[slim] refreshed data/market-ai-breadth-latest.json sample=${refreshedMarketAiBreadth.sample || 0} up=${refreshedMarketAiBreadth.up || 0} down=${refreshedMarketAiBreadth.down || 0}`);
+    console.log(`[slim] wrote data/market-ai-live.json strategy2=${marketAiLive.summary.strategy2Count || 0} radar=${marketAiLive.summary.realtimeRadarCount || 0}`);
+    console.log(`[slim] wrote data/market-ai-panel-latest.json priority=${marketAiPanel.priorityStocks?.length || 0} risk=${marketAiPanel.riskStocks?.length || 0}`);
+    console.log(`[slim] wrote data/mobile-stock-analysis-latest.json count=${mobileStockAnalysis.count || 0}`);
     const strategyMatchIndex = buildStrategyMatchIndex();
     writeToBoth("data/strategy-match-index.json", strategyMatchIndex);
     console.log(`[slim] wrote data/strategy-match-index.json codes=${strategyMatchIndex.count || 0}`);
+    for (const [pageOutput, pagePayload] of strategyPresetPageFiles()) {
+      writeToBoth(pageOutput, pagePayload);
+      if (pagePayload.page === 1) console.log(`[slim] wrote ${pageOutput} total=${pagePayload.totalCount || 0}`);
+    }
     const statusIndex = dataStatusIndex();
     writeToBoth("data/data-status-index.json", statusIndex);
     console.log(`[slim] wrote data/data-status-index.json files=${Object.keys(statusIndex.entries || {}).length}`);
@@ -1245,6 +2054,34 @@ async function main() {
     const manifest = dataManifest();
     writeToBoth("data/data-manifest.json", manifest);
     console.log(`[slim] wrote data/data-manifest.json files=${manifest.count || 0}`);
+    const mobileTerminal = mobileTerminalLatest();
+    writeToBoth("data/mobile-terminal-latest.json", mobileTerminal);
+    console.log(`[slim] wrote data/mobile-terminal-latest.json ai=${mobileTerminal.aiPanel?.priorityStocks?.length || 0} strategy5=${mobileTerminal.strategy5?.count || 0}`);
+    const mobileAiHtml = mobileAiLatestHtml(marketAiPanel);
+    writeTextToBoth("data/mobile-ai-latest.html", mobileAiHtml);
+    const mobileAiLite = mobileAiLiteHtml(marketAiPanel);
+    writeTextToBoth("data/mobile-ai-lite.html", mobileAiLite);
+    const mobileAiUltra = mobileAiUltraHtml(marketAiPanel);
+    writeTextToBoth("data/mobile-ai-ultra.html", mobileAiUltra);
+    const digest = mobileDigest(mobileAiHtml, marketAiPanel, mobileTerminal, mobileAiLite, mobileAiUltra);
+    writeToBoth("data/mobile-digest.json", digest);
+    const strategyFragments = mobileStrategyFragments();
+    for (const fragment of Object.values(strategyFragments)) {
+      writeTextToBoth(fragment.file, fragment.html);
+    }
+    const mobileBoot = mobileBootLatest(mobileTerminal, digest, strategyFragments);
+    writeToBoth("data/mobile-boot.json", mobileBoot);
+    console.log(`[slim] wrote data/mobile-ai-latest.html bytes=${Buffer.byteLength(mobileAiHtml)} hash=${digest.aiHash}`);
+    console.log(`[slim] wrote data/mobile-ai-lite.html bytes=${Buffer.byteLength(mobileAiLite)} hash=${digest.liteHash}`);
+    console.log(`[slim] wrote data/mobile-ai-ultra.html bytes=${Buffer.byteLength(mobileAiUltra)} hash=${digest.ultraHash}`);
+    console.log(`[slim] wrote data/mobile-digest.json aiHash=${digest.aiHash} bias=${digest.bias}`);
+    console.log(`[slim] wrote data/mobile-boot.json variant=${mobileBoot.lowPower.lowEndVariant} ultraBytes=${mobileBoot.digest.ultraBytes}`);
+    console.log(`[slim] wrote mobile strategy fragments count=${Object.keys(strategyFragments).length}`);
+    const finalStatusIndex = dataStatusIndex();
+    writeToBoth("data/data-status-index.json", finalStatusIndex);
+    const finalManifest = dataManifest();
+    writeToBoth("data/data-manifest.json", finalManifest);
+    console.log(`[slim] finalized data-manifest.json files=${finalManifest.count || 0}`);
   }
   if (!wrote) process.exitCode = 1;
 }

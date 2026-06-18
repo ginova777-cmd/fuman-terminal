@@ -7,6 +7,7 @@ const DEPLOY_ROOT = process.env.FUMAN_DEPLOY_SOURCE_DIR || "C:\\fuman-terminal";
 const FILES = [
   "index.html",
   "index.github.html",
+  "mobile.html",
   "refresh.html",
   "version.json",
   "vercel.json",
@@ -25,8 +26,10 @@ const FILES = [
   "terminal-watchlist.css",
   "lib/chip-trade-exclusions.js",
   "lib/supabase-public-slot.js",
+  "lib/strategy-cache-status.js",
   "fuman-sw.js",
   "api/version.js",
+  "api/open-buy-latest.js",
   "api/strategy5-latest.js",
   "api/strategy3-latest.js",
   "api/strategy2-latest.js",
@@ -36,8 +39,10 @@ const FILES = [
   "api/scan-strategy4.js",
   "api/strategy4-latest.js",
   "api/latest-signals.js",
+  "api/latest-strategy.js",
   "api/terminal-home.js",
   "api/refresh.js",
+  "api/performance-report.js",
   "terminal-strategy-config.js",
   "scripts/bump-version.js",
   "scripts/generate-cb-detect.js",
@@ -52,8 +57,12 @@ const FILES = [
   "scripts/scan-institution-cache.js",
   "scripts/scan-realtime-radar-cache.js",
   "scripts/scan-strategy3-cache.js",
+  "scripts/publish-strategy2-complete-run.js",
   "scripts/scan-strategy5-cache.js",
   "scripts/scan-strategy4-cache.js",
+  "scripts/strategy-api-capture.js",
+  "scripts/publish-strategy-cache-status.js",
+  "scripts/verify-strategy-runtime-chain.js",
   "scripts/prewarm-strategy4-history-cache.js",
   "scripts/generate-slim-cache.js",
   "scripts/fuman-master-schedule.js",
@@ -67,11 +76,13 @@ const FILES = [
   "scripts/verify-service-worker-smoke.js",
   "scripts/verify-source-sync.js",
   "scripts/verify-mobile-layout.js",
+  "scripts/verify-mobile-ai-fragment.js",
   "scripts/verify-supabase-json.js",
   "scripts/verify-run-id-complete-gates.js",
   "scripts/verify-version-bump-needed.js",
   "scripts/verify-version-consistency.js",
   "ops/public-slot/Strategy1RunIdCompleteGate.sql",
+  "ops/public-slot/StrategyCacheStatusAndLatestPayload.sql",
   "ops/public-slot/FinMindUnifiedQuoteViews.sql",
   "ops/public-slot/Strategy3QuoteReadyFugleFirstFix.sql",
   "ops/public-slot/Strategy5RunIdCompleteGate.sql",
@@ -93,6 +104,23 @@ const FILES = [
   "data/data-status-index.json",
   "data/live-freshness-ok.json",
   "data/market-summary.json",
+  "data/heatmap-latest.json",
+  "data/market-ai-breadth-latest.json",
+  "data/market-ai-panel-latest.json",
+  "data/market-ai-live.json",
+  "data/mobile-boot.json",
+  "data/mobile-terminal-latest.json",
+  "data/mobile-ai-latest.html",
+  "data/mobile-ai-lite.html",
+  "data/mobile-ai-ultra.html",
+  "data/mobile-strategy1-ultra.html",
+  "data/mobile-strategy2-ultra.html",
+  "data/mobile-strategy3-ultra.html",
+  "data/mobile-strategy4-ultra.html",
+  "data/mobile-strategy5-ultra.html",
+  "data/mobile-chip-ultra.html",
+  "data/mobile-warrant-ultra.html",
+  "data/mobile-digest.json",
   "data/mobile-home-summary.json",
   "data/performance-report.json",
   "data/signal-quality-report.json",
@@ -146,6 +174,21 @@ for (const zone of ["b", "c"]) {
   }
 }
 
+for (const prefix of [
+  "open-buy",
+  "strategy2-intraday",
+  "strategy3",
+  "strategy4-score",
+  "strategy5",
+  "institution",
+  "warrant-flow",
+  "warrant-volume",
+]) {
+  for (let page = 1; page <= 24; page += 1) {
+    FILES.push(`data/${prefix}-page-${page}.json`);
+  }
+}
+
 if (!fs.existsSync(DEPLOY_ROOT)) {
   console.warn(`[sync-source] deploy root missing, skipped: ${DEPLOY_ROOT}`);
   process.exit(0);
@@ -162,6 +205,8 @@ for (const file of FILES) {
 }
 
 console.log(`[sync-source] ok copied=${copied} deploy=${DEPLOY_ROOT}`);
+
+
 
 
 

@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#070a12">
+  <title>輔滿極速手機版</title>
+  <link rel="preload" href="/data/mobile-boot.json" as="fetch" crossorigin="anonymous">
+  <link rel="preload" href="/data/mobile-ai-ultra.html" as="fetch" crossorigin="anonymous">
+  <style>
+    :root{color-scheme:dark;--bg:#070a12;--panel:#101623;--line:#223047;--text:#edf3ff;--muted:#91a0b8;--red:#ff6b7a;--green:#4bd18f;--blue:#74a7ff}
+    *{box-sizing:border-box}
+    html,body{margin:0;min-height:100%;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans TC",Arial,sans-serif}
+    body{padding:12px;line-height:1.45;letter-spacing:0}
+    a{color:inherit;text-decoration:none}
+    button{font:inherit}
+    .shell{max-width:720px;margin:0 auto}
+    .top{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:2px 0 12px}
+    .brand{display:grid;gap:2px;min-width:0}
+    .brand strong{font-size:18px}
+    .brand small,.stamp{color:var(--muted);font-size:12px}
+    .actions{display:flex;gap:8px;flex:0 0 auto}
+    .actions button,.actions a,.market-ai-actions button,.mobile-ai-manual-note button,.mobile-modal button{min-height:36px;border:1px solid var(--line);border-radius:8px;background:#141b2a;color:var(--text);padding:0 10px}
+    .tabs{display:flex;gap:8px;overflow-x:auto;overscroll-behavior-x:contain;padding:2px 0 10px;margin:0 -2px}
+    .tabs button{flex:0 0 auto;min-height:34px;border:1px solid var(--line);border-radius:999px;background:#111827;color:var(--muted);padding:0 11px}
+    .tabs button.active{background:#1b2940;color:var(--text);border-color:#3b5d91}
+    .hero{border:1px solid var(--line);border-radius:10px;background:var(--panel);padding:14px;margin-bottom:10px}
+    .hero small,.market-ai-card small,.market-ai-block small{display:block;color:var(--muted);font-size:12px}
+    .hero strong,.market-ai-card strong{display:block;font-size:28px;margin:4px 0}
+    .hero p,.market-ai-card p,.market-ai-block p{margin:0;color:#c8d3e7}
+    .metrics{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:12px}
+    .metrics span{border:1px solid var(--line);border-radius:8px;padding:8px;color:var(--muted);font-size:12px}
+    .metrics b{display:block;color:var(--text);font-size:16px;margin-top:2px}
+    .status{margin:10px 0;color:var(--muted);font-size:12px}
+    .status[data-freshness=fresh]{color:#90e8b4}
+    .status[data-freshness=expired]{color:#ff9aa4}
+    .mobile-ai-fragment{display:grid;gap:10px;contain:layout paint style}
+    .market-ai-summary,.market-ai-main,.market-ai-advice{display:block}
+    .market-ai-card,.market-ai-block,.market-ai-stock-row{border:1px solid var(--line);border-radius:10px;background:var(--panel);padding:12px;box-shadow:none!important;transform:none!important}
+    .market-ai-card.hero{display:none}
+    .market-ai-metrics{display:none}
+    .market-ai-block{content-visibility:auto;contain-intrinsic-size:1px 420px}
+    .market-ai-block h3{font-size:16px;margin:0 0 2px}
+    .market-ai-list{display:grid;gap:8px;margin-top:10px}
+    .market-ai-point{display:grid;grid-template-columns:28px 1fr;gap:8px;align-items:start;color:#d9e4f5}
+    .market-ai-point b{display:grid;place-items:center;width:24px;height:24px;border-radius:50%;background:#1b2940;color:var(--blue);font-size:12px}
+    .market-ai-hot{display:grid;gap:8px;margin-top:10px}
+    .market-ai-stock-row{display:grid;grid-template-columns:34px minmax(0,1fr);gap:8px;align-items:center}
+    .market-ai-rank{color:var(--blue);font-weight:700}
+    .market-ai-stock-row h4{margin:0;font-size:15px}
+    .market-ai-stock-row p{font-size:13px}
+    .market-ai-stock-row>button,.mobile-terminal-row button{grid-column:1/-1;min-height:34px;border:1px solid var(--line);border-radius:8px;background:#162238;color:var(--text)}
+    .market-ai-sort-note{border:1px solid var(--line);border-radius:8px;background:#111827;color:var(--muted);padding:9px;font-size:13px}
+    .mobile-terminal-fragment{display:grid;gap:10px;contain:layout paint style}
+    .mobile-terminal-head,.mobile-terminal-points,.mobile-terminal-row{border:1px solid var(--line);border-radius:10px;background:var(--panel);padding:12px}
+    .mobile-terminal-head small,.mobile-terminal-row small{display:block;color:var(--muted);font-size:12px}
+    .mobile-terminal-head strong{display:block;font-size:24px;margin:3px 0}
+    .mobile-terminal-head p,.mobile-terminal-row p{margin:0;color:#c8d3e7}
+    .mobile-terminal-stats{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-top:10px}
+    .mobile-terminal-stats span{border:1px solid var(--line);border-radius:8px;padding:8px;color:var(--muted);font-size:12px}
+    .mobile-terminal-stats b{display:block;color:var(--text)}
+    .mobile-terminal-points{display:grid;gap:7px}
+    .mobile-terminal-points p{margin:0;color:#d9e4f5}
+    .mobile-terminal-points b{display:inline-grid;place-items:center;width:22px;height:22px;border-radius:50%;background:#1b2940;color:var(--blue);font-size:12px;margin-right:8px}
+    .mobile-terminal-list{display:grid;gap:8px}
+    .mobile-terminal-row{display:grid;grid-template-columns:34px 1fr;gap:8px;align-items:start;content-visibility:auto;contain-intrinsic-size:1px 82px}
+    .mobile-terminal-row>b{color:var(--blue)}
+    .mobile-terminal-row h4{margin:0;font-size:15px}
+    .mobile-terminal-actions{grid-column:1/-1;display:grid;grid-template-columns:1fr 1fr;gap:8px}
+    .watch-row{border:1px solid var(--line);border-radius:10px;background:var(--panel);padding:12px;display:grid;grid-template-columns:1fr auto;gap:8px;align-items:center}
+    .watch-row h4{margin:0;font-size:15px}.watch-row small{display:block;color:var(--muted);font-size:12px}
+    .mobile-toast{position:fixed;left:12px;right:12px;bottom:14px;z-index:20;border:1px solid var(--line);border-radius:10px;background:#121b2c;color:var(--text);padding:10px;text-align:center;box-shadow:0 10px 30px #0008}
+    .mobile-modal{position:fixed;inset:auto 12px 12px;z-index:30;border:1px solid var(--line);border-radius:12px;background:#101623;color:var(--text);padding:14px;box-shadow:0 18px 50px #000b}
+    .mobile-modal h3{margin:0 0 6px;font-size:18px}.mobile-modal p{margin:0 0 10px;color:#c8d3e7}.mobile-modal div{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+    .empty-state{color:var(--muted);padding:10px}
+    [hidden]{display:none!important}
+    @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <header class="top">
+      <div class="brand"><strong>輔滿極速手機版</strong><small>只顯示掃描端結論</small></div>
+      <nav class="actions"><button id="refresh" type="button">更新</button><a href="/">完整終端</a></nav>
+    </header>
+    <section class="hero" id="hero">
+      <small>AI 盤勢</small>
+      <strong>讀取中</strong>
+      <p>正在取得掃描端完成的手機結論。</p>
+      <div class="metrics"><span>樣本<b>--</b></span><span>多方<b>--</b></span><span>空方<b>--</b></span></div>
+    </section>
+    <div class="status" id="status">等待資料</div>
+    <nav class="tabs" id="tabs" aria-label="極速手機分頁">
+      <button class="active" type="button" data-fragment="ai">AI</button>
+      <button type="button" data-fragment="strategy1">策略1</button>
+      <button type="button" data-fragment="strategy2">策略2</button>
+      <button type="button" data-fragment="strategy3">策略3</button>
+      <button type="button" data-fragment="strategy4">策略4</button>
+      <button type="button" data-fragment="strategy5">策略5</button>
+      <button type="button" data-fragment="chip">法人</button>
+      <button type="button" data-fragment="warrant">權證</button>
+      <button type="button" data-fragment="watch">自選</button>
+    </nav>
+    <section id="content">等待掃描完成。</section>
+  </main>
+  <script>
+    (()=>{const $=id=>document.getElementById(id),hero=$("hero"),status=$("status"),content=$("content"),refresh=$("refresh"),tabs=$("tabs"),watchKey="fuman_mobile_watchlist_v1";let boot=null,active="ai",busy=false,analysis=null;const cache=new Map,fresh=url=>url+(url.includes("?")?"&":"?")+"t="+Date.now(),j=url=>fetch(fresh(url),{cache:"no-store"}).then(r=>{if(!r.ok)throw Error(r.status);return r.json()}),t=url=>fetch(fresh(url),{cache:"no-store"}).then(r=>{if(!r.ok)throw Error(r.status);return r.text()});function esc(v){return String(v??"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[m]))}function watches(){try{return JSON.parse(localStorage.getItem(watchKey)||"[]")}catch{return[]}}function saveWatches(a){localStorage.setItem(watchKey,JSON.stringify(a.slice(0,80)))}function toast(msg){let n=document.querySelector(".mobile-toast");if(!n){n=document.createElement("div");n.className="mobile-toast";document.body.appendChild(n)}n.textContent=msg;clearTimeout(toast.timer);toast.timer=setTimeout(()=>n.remove(),1400)}function rowText(el){return (el?.closest(".market-ai-stock-row,.mobile-terminal-row,.watch-row")?.innerText||"").replace(/\s+/g," ").slice(0,220)}async function analysisFor(code){if(!analysis)analysis=await j("/data/mobile-stock-analysis-latest.json");return analysis?.analyses?.[String(code||"").trim()]||null}function addWatch(code,name,reason){code=String(code||"").trim();if(!code)return;let a=watches().filter(x=>String(x.code)!==code);a.unshift({code,name:name||code,reason:reason||"",addedAt:new Date().toISOString()});saveWatches(a);toast(`已加入自選 ${code}`);if(active==="watch")renderWatch()}function removeWatch(code){saveWatches(watches().filter(x=>String(x.code)!==String(code)));renderWatch();toast(`已移除 ${code}`)}function modal(code,name,reason){document.querySelector(".mobile-modal")?.remove();const n=document.createElement("section");n.className="mobile-modal";n.innerHTML=`<h3>${esc(code)} ${esc(name||"")}</h3><p>讀取掃描端分析...</p><div><button type="button" data-modal-watch="${esc(code)}" data-modal-name="${esc(name||"")}">加入自選</button><button type="button" data-modal-close="1">關閉</button></div>`;document.body.appendChild(n);analysisFor(code).then(a=>{if(!document.body.contains(n))return;const body=a?`<p><b>來源</b>：${esc((a.sources||[]).join(" / ")||"--")}</p><p><b>訊號</b>：${esc(a.signalsText||(a.tags||[]).join("、")||"--")}</p><p><b>判讀</b>：${esc(a.reason||"")}</p><p><b>AI</b>：${esc(a.aiView||"")}</p><p><b>操作</b>：${esc(a.action||"")}</p><p><b>風險</b>：${esc(a.risk||"")}</p>`:`<p>${esc(reason||"掃描端已命中，完整細節請回完整終端。")}</p>`;n.innerHTML=`<h3>${esc(code)} ${esc(a?.name||name||"")}</h3>${body}<div><button type="button" data-modal-watch="${esc(code)}" data-modal-name="${esc(a?.name||name||"")}">加入自選</button><button type="button" data-modal-close="1">關閉</button></div>`}).catch(()=>{if(document.body.contains(n))n.querySelector("p").textContent=reason||"暫時讀不到分析檔。"})}function renderWatch(){const a=watches();status.dataset.freshness="fresh";status.textContent=`自選股 ${a.length} 檔｜存在這支手機`;content.innerHTML=a.length?`<section class="mobile-terminal-fragment"><article class="mobile-terminal-head"><small>本機自選</small><strong>自選股</strong><p>存在手機瀏覽器 localStorage，不增加掃描端負擔。</p></article><section class="mobile-terminal-list">${a.map(x=>`<article class="watch-row"><div><h4>${esc(x.code)} ${esc(x.name)}</h4><small>${esc(x.reason||x.addedAt||"")}</small></div><button type="button" data-watch-remove="${esc(x.code)}">移除</button></article>`).join("")}</section></section>`:'<div class="empty-state">尚未加入自選股。</div>'}function urlFor(k){return k==="ai"?"/data/mobile-ai-ultra.html":boot?.fragments?.[k]?.url||`/data/mobile-${k}-ultra.html`}function hashFor(k){return k==="ai"?boot?.digest?.ultraHash:boot?.fragments?.[k]?.hash}function paintBoot(b){const s=b.aiSummary||{},d=b.digest||{};hero.innerHTML=`<small>AI 盤勢</small><strong>${esc(s.bias||d.bias||"--")}</strong><p>${esc(s.reason||"掃描端已完成判讀，手機只顯示結論。")}</p><div class="metrics"><span>樣本<b>${Number(s.sample||0).toLocaleString("zh-TW")}</b></span><span>多方<b>${Number(s.up||0).toLocaleString("zh-TW")}</b></span><span>空方<b>${Number(s.down||0).toLocaleString("zh-TW")}</b></span></div>`;status.dataset.freshness=d.freshness||"";status.textContent=`${d.freshness||"unknown"}｜${d.aiUpdatedAt||b.updatedAt||""}｜AI ${Number(d.ultraBytes||0).toLocaleString("zh-TW")} bytes`}async function loadFragment(k,force=false){if(k==="watch"){renderWatch();return}const h=hashFor(k)||"";if(!force&&cache.get(k)?.hash===h){content.innerHTML=cache.get(k).html;return}const html=await t(urlFor(k));cache.set(k,{hash:h,html});content.innerHTML=html}async function load(force=false){if(busy)return;busy=true;const started=performance.now();try{boot=await j("/data/mobile-boot.json");paintBoot(boot);await loadFragment(active,force);window.__mobileUltraMs=Math.round(performance.now()-started)}catch(e){status.dataset.freshness="expired";status.textContent="等待最新掃描或網路恢復";content.innerHTML='<div class="empty-state">等待掃描完成。</div>'}finally{busy=false}}tabs.addEventListener("click",e=>{const b=e.target.closest("[data-fragment]");if(!b)return;active=b.dataset.fragment;tabs.querySelectorAll("button").forEach(x=>x.classList.toggle("active",x===b));load(false)},{passive:true});content.addEventListener("click",e=>{const a=e.target.closest("[data-ai-stock-code]"),w=e.target.closest("[data-ai-watch-code]"),r=e.target.closest("[data-watch-remove]");if(a){modal(a.dataset.aiStockCode,a.dataset.aiStockName,rowText(a));return}if(w){addWatch(w.dataset.aiWatchCode,w.dataset.aiWatchName,rowText(w));return}if(r){removeWatch(r.dataset.watchRemove)}});document.addEventListener("click",e=>{const c=e.target.closest("[data-modal-close]"),w=e.target.closest("[data-modal-watch]");if(c)document.querySelector(".mobile-modal")?.remove();if(w){addWatch(w.dataset.modalWatch,w.dataset.modalName,rowText(w));document.querySelector(".mobile-modal")?.remove()}});refresh.addEventListener("click",()=>load(true),{passive:true});document.addEventListener("visibilitychange",()=>{if(!document.hidden)load(false)},{passive:true});load(false);setInterval(()=>{if(!document.hidden&&active!=="watch")load(false)},120000)})();
+  </script>
+</body>
+</html>

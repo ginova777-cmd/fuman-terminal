@@ -1,28 +1,28 @@
-const CACHE_VERSION = "fuman-terminal-sw-institution-cache-refresh-20260616-10";
+const CACHE_VERSION = "fuman-terminal-sw-strategy2-api-live-20260618-1600";
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 const DATA_CACHE = `${CACHE_VERSION}-data`;
 
 const STATIC_ASSETS = [
-  "/styles.css?v=institution-cache-refresh-20260616-10",
-  "/terminal-core.js?v=institution-cache-refresh-20260616-10",
-  "/terminal-modules.js?v=institution-cache-refresh-20260616-10",
-  "/terminal-sector-map.js?v=institution-cache-refresh-20260616-10",
-  "/terminal-strategy-config.js?v=institution-cache-refresh-20260616-10",
-  "/terminal-market-config.js?v=institution-cache-refresh-20260616-10",
-  "/terminal-ui-config.js?v=institution-cache-refresh-20260616-10",
-  "/terminal-runtime-config.js?v=institution-cache-refresh-20260616-10",
-  "/terminal-tuning-config.js?v=institution-cache-refresh-20260616-10",
-  "/terminal-worker.js?v=institution-cache-refresh-20260616-10",
-  "/terminal.js?v=institution-cache-refresh-20260616-10",
-  "/terminal-app.js?v=institution-cache-refresh-20260616-10",
-  "/terminal-ai-risk-guard.js?v=institution-cache-refresh-20260616-10",
-  "/terminal-chip-flow.js?v=institution-cache-refresh-20260616-10",
-  "/terminal-warrant-flow.js?v=institution-cache-refresh-20260616-10",
-  "/terminal-watchlist-module.js?v=institution-cache-refresh-20260616-10",
-  "/terminal-realtime-radar.css?v=institution-cache-refresh-20260616-10",
-  "/terminal-intraday-radar.css?v=institution-cache-refresh-20260616-10",
-  "/terminal-utility.css?v=institution-cache-refresh-20260616-10",
-  "/refresh.html?v=institution-cache-refresh-20260616-10",
+  "/styles.css?v=strategy2-api-live-20260618-1600",
+  "/terminal-core.js?v=strategy2-api-live-20260618-1600",
+  "/terminal-modules.js?v=strategy2-api-live-20260618-1600",
+  "/terminal-sector-map.js?v=strategy2-api-live-20260618-1600",
+  "/terminal-strategy-config.js?v=strategy2-api-live-20260618-1600",
+  "/terminal-market-config.js?v=strategy2-api-live-20260618-1600",
+  "/terminal-ui-config.js?v=strategy2-api-live-20260618-1600",
+  "/terminal-runtime-config.js?v=strategy2-api-live-20260618-1600",
+  "/terminal-tuning-config.js?v=strategy2-api-live-20260618-1600",
+  "/terminal-worker.js?v=strategy2-api-live-20260618-1600",
+  "/terminal.js?v=strategy2-api-live-20260618-1600",
+  "/terminal-app.js?v=strategy2-api-live-20260618-1600",
+  "/terminal-ai-risk-guard.js?v=strategy2-api-live-20260618-1600",
+  "/terminal-chip-flow.js?v=strategy2-api-live-20260618-1600",
+  "/terminal-warrant-flow.js?v=strategy2-api-live-20260618-1600",
+  "/terminal-watchlist-module.js?v=strategy2-api-live-20260618-1600",
+  "/terminal-realtime-radar.css?v=strategy2-api-live-20260618-1600",
+  "/terminal-intraday-radar.css?v=strategy2-api-live-20260618-1600",
+  "/terminal-utility.css?v=strategy2-api-live-20260618-1600",
+  "/refresh.html?v=strategy2-api-live-20260618-1600",
   "/assets/logo.webp",
   "/favicon.ico",
 ];
@@ -33,12 +33,20 @@ const DATA_PATTERNS = [
   /\/data\/.*-top\.json/i,
   /\/data\/.*-index\.json/i,
   /\/data\/.*-latest\.json/i,
+  /\/data\/mobile-ai-latest\.html/i,
+  /\/data\/mobile-ai-lite\.html/i,
+  /\/data\/mobile-ai-ultra\.html/i,
   /\/data\/.*-page-\d+\.json/i,
   /\/data\/market-summary\.json/i,
   /\/data\/mobile-home-summary\.json/i,
+  /\/data\/mobile-boot\.json/i,
   /\/data\/terminal-home-bundle\.json/i,
   /\/data\/data-status-index\.json/i,
   /\/data\/data-manifest\.json/i,
+  /\/data\/mobile-digest\.json/i,
+  /\/data\/mobile-ai-latest\.html/i,
+  /\/data\/mobile-ai-lite\.html/i,
+  /\/data\/mobile-ai-ultra\.html/i,
   /\/data\/live-freshness-ok\.json/i,
   /\/data\/stocks-slim\.json/i,
   /\/data\/stocks-index\.json/i,
@@ -50,13 +58,32 @@ const DATA_PATTERNS = [
 const NETWORK_FIRST_DATA_PATTERNS = [
   /\/data\/data-manifest\.json/i,
   /\/data\/data-status-index\.json/i,
+  /\/data\/mobile-boot\.json/i,
   /\/data\/open-buy-latest\.json/i,
   /\/data\/strategy4-.*\.json/i,
   /\/data\/strategy4-summary\.json/i,
 ];
 
-const PREFETCH_DATA_ASSETS = [
+const PREFETCH_CORE_DATA_ASSETS = [
+  "/data/mobile-boot.json",
   "/data/data-manifest.json",
+  "/data/mobile-digest.json",
+  "/data/mobile-ai-ultra.html",
+];
+
+const PREFETCH_LOW_POWER_DATA_ASSETS = [
+  "/data/mobile-boot.json",
+  "/data/mobile-digest.json",
+  "/data/mobile-ai-ultra.html",
+];
+
+const PREFETCH_DATA_ASSETS = [
+  ...PREFETCH_CORE_DATA_ASSETS,
+  "/data/mobile-ai-latest.html",
+  "/data/mobile-ai-lite.html",
+  "/data/mobile-terminal-latest.json",
+  "/data/market-ai-panel-latest.json",
+  "/data/market-ai-breadth-latest.json",
   "/data/live-freshness-ok.json",
   "/data/terminal-home-bundle.json",
   "/data/mobile-home-summary.json",
@@ -82,7 +109,7 @@ self.addEventListener("install", (event) => {
     caches.open(STATIC_CACHE)
       .then((cache) => cache.addAll(STATIC_ASSETS))
       .catch(() => undefined)
-      .then(() => prefetchDataAssets())
+      .then(() => prefetchCoreDataAssets())
       .then(() => self.skipWaiting())
   );
 });
@@ -93,7 +120,7 @@ self.addEventListener("activate", (event) => {
       .then((keys) => Promise.all(keys
         .filter((key) => key.startsWith("fuman-terminal-sw-") && (!key.startsWith(CACHE_VERSION) || key.endsWith("-data")))
         .map((key) => caches.delete(key))))
-      .then(() => prefetchDataAssets())
+      .then(() => prefetchCoreDataAssets())
       .then(() => self.clients.claim())
   );
 });
@@ -128,8 +155,20 @@ async function networkFirst(request) {
 }
 
 async function prefetchDataAssets() {
+  return prefetchAssetList(PREFETCH_DATA_ASSETS);
+}
+
+async function prefetchCoreDataAssets() {
+  return prefetchAssetList(PREFETCH_CORE_DATA_ASSETS);
+}
+
+async function prefetchLowPowerDataAssets() {
+  return prefetchAssetList(PREFETCH_LOW_POWER_DATA_ASSETS);
+}
+
+async function prefetchAssetList(assets) {
   const cache = await caches.open(DATA_CACHE);
-  await Promise.allSettled(PREFETCH_DATA_ASSETS.map(async (pathname) => {
+  await Promise.allSettled(assets.map(async (pathname) => {
     const request = new Request(pathname, { cache: "reload" });
     const response = await fetch(request);
     if (response.ok) await cache.put(request, response.clone());
@@ -182,7 +221,9 @@ async function networkFirstStatic(request) {
 self.addEventListener("message", (event) => {
   if (event.data && event.data.type === "SKIP_WAITING") self.skipWaiting();
   if (event.data && event.data.type === "PREFETCH_DATA") event.waitUntil(prefetchDataAssets());
-  if (event.data && event.data.type === "CLEAR_DATA_CACHE") event.waitUntil(caches.delete(DATA_CACHE).then(() => prefetchDataAssets()));
+  if (event.data && event.data.type === "PREFETCH_DATA_LOW_POWER") event.waitUntil(prefetchLowPowerDataAssets());
+  if (event.data && event.data.type === "CLEAR_DATA_CACHE") event.waitUntil(caches.delete(DATA_CACHE).then(() => prefetchCoreDataAssets()));
+  if (event.data && event.data.type === "CLEAR_DATA_CACHE_LOW_POWER") event.waitUntil(caches.delete(DATA_CACHE).then(() => prefetchLowPowerDataAssets()));
 });
 self.addEventListener("fetch", (event) => {
   const request = event.request;

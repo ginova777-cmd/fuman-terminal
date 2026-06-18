@@ -7717,3 +7717,78 @@ body.fuman-light-theme #cb-detect-view .page-header span.refresh-line {
   color: #b8c3d9;
   background: rgba(134, 151, 190, 0.12);
 }
+
+@media (max-width: 760px) {
+  body.fuman-low-power *,
+  body.fuman-low-power *::before,
+  body.fuman-low-power *::after {
+    animation: none !important;
+    transition-duration: 0.01ms !important;
+    filter: none !important;
+    backdrop-filter: none !important;
+    scroll-behavior: auto !important;
+  }
+
+  body.fuman-low-power .market-ai-card,
+  body.fuman-low-power .strategy5-detail-card,
+  body.fuman-low-power .swing-card,
+  body.fuman-low-power .metric-card {
+    box-shadow: none !important;
+    transform: none !important;
+  }
+
+  body.fuman-no-images img:not([data-critical-image]),
+  body.fuman-no-images picture,
+  body.fuman-no-images video {
+    display: none !important;
+  }
+
+  #market-view .mobile-ai-fragment,
+  #market-view .mobile-ai-fragment .market-ai-summary,
+  #market-view .mobile-ai-fragment .market-ai-advice,
+  #market-view .mobile-ai-fragment .market-ai-main,
+  #market-view .mobile-ai-fragment .market-ai-block,
+  #market-view .mobile-ai-fragment .market-ai-hot {
+    contain: layout paint style;
+  }
+
+  #market-view .mobile-ai-fragment .market-ai-block,
+  #market-view .mobile-ai-fragment .market-ai-hot {
+    content-visibility: auto;
+    contain-intrinsic-size: 1px 520px;
+  }
+
+  #market-view .mobile-ai-fragment *,
+  #market-view .mobile-ai-fragment *::before,
+  #market-view .mobile-ai-fragment *::after {
+    animation: none !important;
+    transition-duration: 0.01ms !important;
+    filter: none !important;
+    backdrop-filter: none !important;
+  }
+
+  #market-view .mobile-ai-ultra-fragment {
+    display: block;
+  }
+
+  #market-view .mobile-ai-ultra-fragment .market-ai-summary,
+  #market-view .mobile-ai-ultra-fragment .market-ai-main,
+  #market-view .mobile-ai-ultra-fragment .market-ai-advice {
+    display: block;
+  }
+
+  #market-view .mobile-ai-ultra-fragment .market-ai-card,
+  #market-view .mobile-ai-ultra-fragment .market-ai-block,
+  #market-view .mobile-ai-ultra-fragment .market-ai-stock-row {
+    box-shadow: none !important;
+    transform: none !important;
+  }
+
+  #market-view .mobile-ai-ultra-row {
+    grid-template-columns: 36px minmax(0, 1fr);
+  }
+
+  #market-view .mobile-ai-ultra-row > button {
+    grid-column: 1 / -1;
+  }
+}

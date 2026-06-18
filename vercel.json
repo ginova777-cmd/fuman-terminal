@@ -3,6 +3,32 @@
   "cleanUrls": true,
   "headers": [
     {
+      "source": "/mobile",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "no-store"
+        },
+        {
+          "key": "X-Content-Type-Options",
+          "value": "nosniff"
+        }
+      ]
+    },
+    {
+      "source": "/mobile.html",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "no-store"
+        },
+        {
+          "key": "X-Content-Type-Options",
+          "value": "nosniff"
+        }
+      ]
+    },
+    {
       "source": "/fuman-sw.js",
       "headers": [
         {
@@ -86,6 +112,58 @@
         {
           "key": "Cache-Control",
           "value": "public, max-age=31536000, immutable"
+        },
+        {
+          "key": "X-Content-Type-Options",
+          "value": "nosniff"
+        }
+      ]
+    },
+    {
+      "source": "/data/mobile-(strategy1|strategy2|strategy3|strategy4|strategy5|chip|warrant)-ultra.html",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=15, stale-while-revalidate=120"
+        },
+        {
+          "key": "X-Content-Type-Options",
+          "value": "nosniff"
+        }
+      ]
+    },
+    {
+      "source": "/data/mobile-boot.json",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=15, stale-while-revalidate=120"
+        },
+        {
+          "key": "X-Content-Type-Options",
+          "value": "nosniff"
+        }
+      ]
+    },
+    {
+      "source": "/data/mobile-stock-analysis-latest.json",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=15, stale-while-revalidate=120"
+        },
+        {
+          "key": "X-Content-Type-Options",
+          "value": "nosniff"
+        }
+      ]
+    },
+    {
+      "source": "/data/mobile-ai-ultra.html",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=15, stale-while-revalidate=120"
         },
         {
           "key": "X-Content-Type-Options",

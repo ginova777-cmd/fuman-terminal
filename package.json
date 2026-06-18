@@ -23,7 +23,7 @@
     "sync:source": "node scripts/sync-main-deploy-source.js",
     "verify:version": "node scripts/verify-version-consistency.js",
     "predeploy": "node scripts/prepare-deploy.js",
-    "postdeploy": "node --use-system-ca scripts/verify-live-version.js --retry && node --use-system-ca scripts/verify-mobile-layout.js --live",
+    "postdeploy": "node --use-system-ca scripts/verify-live-version.js --retry && node --use-system-ca scripts/verify-mobile-layout.js --live && node --use-system-ca scripts/verify-mobile-ai-fragment.js --live",
     "guard:source": "node scripts/guard-source-tree.js",
     "verify:live-version": "node --use-system-ca scripts/verify-live-version.js",
     "verify:bump": "node scripts/verify-version-bump-needed.js",
@@ -59,7 +59,9 @@
     "scan:chip-exclusions": "node scripts/generate-chip-trade-exclusions.js",
     "scan:tdcc-breakout": "node --use-system-ca scripts/generate-institution-tdcc-breakout.js",
     "scan:star": "node --use-system-ca scripts/scan-star-preopen.js",
-    "verify:run-gates": "node --use-system-ca scripts/verify-run-id-complete-gates.js"
+    "verify:run-gates": "node --use-system-ca scripts/verify-run-id-complete-gates.js",
+    "verify:mobile-ai-fragment": "node scripts/verify-mobile-ai-fragment.js",
+    "verify:mobile-ai-fragment:live": "node --use-system-ca scripts/verify-mobile-ai-fragment.js --live"
   },
   "engines": {
     "node": "20.x"
