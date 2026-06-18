@@ -134,6 +134,7 @@ async function main() {
   const vercel = JSON.parse(readLocal("vercel.json"));
   const packageJson = JSON.parse(readLocal("package.json"));
   const mobileEventScript = readLocal("scripts/publish-mobile-update-event.js");
+  const mobileBootApi = readLocal("api/mobile-boot.js");
   const terminalFragments = Object.fromEntries(await Promise.all(MOBILE_TERMINAL_KEYS.map(async (key) => [key, await readText(`data/mobile-${key}-ultra.html`)])));
   const app = await readText("terminal-app.js");
   const sw = await readText("fuman-sw.js");
@@ -244,7 +245,7 @@ async function main() {
   if (mobileShellBytes > MOBILE_SHELL_BUDGET_BYTES) {
     issues.push(`mobile.html exceeds ${MOBILE_SHELL_BUDGET_BYTES} bytes actual=${mobileShellBytes}`);
   }
-  requireText(mobileShell, "/data/mobile-boot.json", "mobile shell must fetch mobile boot");
+  requireText(mobileShell, "/api/mobile-boot", "mobile shell must fetch no-store mobile boot API");
   requireText(mobileShell, "/data/mobile-runtime-config.json", "mobile shell must fetch mobile runtime config");
   requireText(mobileShell, "/data/mobile-ai-ultra.html", "mobile shell must fetch ultra fragment");
   requireText(mobileShell, "data-fragment=\"strategy5\"", "mobile shell must expose strategy tabs");
@@ -259,10 +260,13 @@ async function main() {
   requireText(mobileShell, "data-watch-remove", "mobile shell must support removing watchlist rows");
   requireText(mobileShell, "mobile-modal", "mobile shell must show lightweight analysis modal");
   requireText(mobileShell, "boot?.fragments?.[k]?.url", "mobile shell must fetch strategy fragments from boot");
+  requireText(mobileShell, "v=\"+encodeURIComponent", "mobile shell must version fragment URLs by hash");
   requireText(mobileShell, "mobile_update_events", "mobile shell must subscribe to mobile update events");
   requireText(mobileShell, "WebSocket", "mobile shell must use realtime push updates");
   requireText(mobileShell, "postgres_changes", "mobile shell must handle Supabase realtime postgres changes");
   requireText(mobileShell, "realtimeUpdate", "mobile shell must retry after realtime update if boot hash is unchanged");
+  requireText(mobileShell, "boot_hash", "mobile shell must use realtime boot_hash to skip unchanged updates");
+  requireText(mobileShell, "m.payload?.record", "mobile shell must read realtime event record payload");
   requireText(mobileShell, "setInterval(()=>{if(!document.hidden&&active!==\"watch\")load(false)},120000)", "mobile shell must keep 120s polling fallback");
   if (mobileShell.includes(String(runtimeConfig?.supabaseAnonKey || "__missing__"))) {
     issues.push("mobile shell must not hardcode supabase anon key");
@@ -282,7 +286,13 @@ async function main() {
   requireText(mobileEventScript, "mobile_update_events", "mobile update event publisher must write mobile_update_events");
   requireText(mobileEventScript, "SUPABASE_SERVICE_ROLE_KEY", "mobile update event publisher must use service role key");
   requireText(mobileEventScript, "data/mobile-boot.json", "mobile update event publisher must read mobile boot");
+  requireText(mobileEventScript, "boot_hash", "mobile update event publisher must include boot hash");
+  requireText(mobileEventScript, "changed_keys", "mobile update event publisher must include changed keys");
   requireText(mobileEventScript, "MOBILE_UPDATE_EVENT_RETENTION_DAYS", "mobile update event publisher must support cleanup retention");
+  requireText(mobileBootApi, "data\", \"mobile-boot.json", "mobile boot API must read generated mobile boot file");
+  requireText(mobileBootApi, "Cache-Control\", \"no-store", "mobile boot API must set no-store browser cache");
+  requireText(mobileBootApi, "CDN-Cache-Control\", \"no-store", "mobile boot API must bypass CDN cache");
+  requireText(mobileBootApi, "Vercel-CDN-Cache-Control\", \"no-store", "mobile boot API must bypass Vercel CDN cache");
   if (mobileShell.includes("terminal-app.js") || mobileShell.includes("styles.css") || mobileShell.includes("serviceWorker.register")) {
     issues.push("mobile shell must not load full terminal app/css/service worker");
   }
@@ -304,6 +314,15 @@ async function main() {
     issues.push("vercel mobile-boot edge cache must be max-age=3 stale-while-revalidate=6");
   }
   if (live) {
+    const liveMobileBootApiHeaders = await readLiveHeaders("api/mobile-boot");
+    const liveApiCache = liveMobileBootApiHeaders.get("cache-control") || "";
+    const liveApiCdnCache = liveMobileBootApiHeaders.get("cdn-cache-control") || "";
+    if (!/no-store/i.test(liveApiCache)) {
+      issues.push(`live mobile-boot API must be no-store actual=${liveApiCache}`);
+    }
+    if (!/no-store/i.test(liveApiCdnCache)) {
+      issues.push(`live mobile-boot API CDN cache must be no-store actual=${liveApiCdnCache}`);
+    }
     const liveMobileBootHeaders = await readLiveHeaders("data/mobile-boot.json");
     const liveBrowserCache = liveMobileBootHeaders.get("cache-control") || "";
     const liveCdnCache = liveMobileBootHeaders.get("cdn-cache-control") || "";

@@ -29,6 +29,7 @@ const FILES = [
   "lib/strategy-cache-status.js",
   "fuman-sw.js",
   "api/version.js",
+  "api/mobile-boot.js",
   "api/open-buy-latest.js",
   "api/strategy5-latest.js",
   "api/strategy3-latest.js",
