@@ -267,6 +267,8 @@ async function main() {
   requireText(mobileShell, "realtimeUpdate", "mobile shell must retry after realtime update if boot hash is unchanged");
   requireText(mobileShell, "boot_hash", "mobile shell must use realtime boot_hash to skip unchanged updates");
   requireText(mobileShell, "m.payload?.record", "mobile shell must read realtime event record payload");
+  requireText(mobileShell, "schedulePrefetch", "mobile shell must prefetch other fragments after first paint");
+  requireText(mobileShell, "if(boot)loadFragment(active,false)", "mobile tab switching must not refetch boot when boot already exists");
   requireText(mobileShell, "setInterval(()=>{if(!document.hidden&&active!==\"watch\")load(false)},120000)", "mobile shell must keep 120s polling fallback");
   if (mobileShell.includes(String(runtimeConfig?.supabaseAnonKey || "__missing__"))) {
     issues.push("mobile shell must not hardcode supabase anon key");
