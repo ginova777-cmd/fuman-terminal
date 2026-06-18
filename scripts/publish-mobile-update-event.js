@@ -1,4 +1,5 @@
 const fs = require("fs");
+const https = require("https");
 const path = require("path");
 
 const ROOT = path.resolve(__dirname, "..");
@@ -20,6 +21,41 @@ function readSecret(name) {
 
 function readJson(rel) {
   return JSON.parse(fs.readFileSync(path.join(ROOT, rel), "utf8"));
+}
+
+function postJson(url, key, payload) {
+  const body = JSON.stringify(payload);
+  const endpoint = new URL(url);
+  return new Promise((resolve, reject) => {
+    const request = https.request({
+      method: "POST",
+      hostname: endpoint.hostname,
+      path: `${endpoint.pathname}${endpoint.search}`,
+      family: 4,
+      headers: {
+        apikey: key,
+        Authorization: `Bearer ${key}`,
+        "Content-Type": "application/json",
+        "Content-Length": Buffer.byteLength(body),
+        Prefer: "return=minimal",
+      },
+      timeout: 15000,
+    }, (response) => {
+      const chunks = [];
+      response.on("data", (chunk) => chunks.push(chunk));
+      response.on("end", () => {
+        resolve({
+          ok: response.statusCode >= 200 && response.statusCode < 300,
+          status: response.statusCode,
+          text: Buffer.concat(chunks).toString("utf8"),
+        });
+      });
+    });
+    request.on("timeout", () => request.destroy(new Error("request timeout")));
+    request.on("error", reject);
+    request.write(body);
+    request.end();
+  });
 }
 
 function changedKeysFromBoot(boot) {
@@ -74,16 +110,7 @@ async function publish() {
   let lastError = null;
   for (let attempt = 1; attempt <= 3; attempt += 1) {
     try {
-      response = await fetch(`${supabaseUrl}/rest/v1/mobile_update_events`, {
-        method: "POST",
-        headers: {
-          apikey: serviceKey,
-          Authorization: `Bearer ${serviceKey}`,
-          "Content-Type": "application/json",
-          Prefer: "return=minimal",
-        },
-        body: JSON.stringify(payload),
-      });
+      response = await postJson(`${supabaseUrl}/rest/v1/mobile_update_events`, serviceKey, payload);
       if (response.ok || response.status < 500) break;
     } catch (error) {
       lastError = error;
@@ -99,7 +126,7 @@ async function publish() {
   }
 
   if (!response.ok) {
-    const detail = await response.text();
+    const detail = response.text || "";
     const message = `[mobile-event] publish failed status=${response.status} body=${detail.slice(0, 500)}`;
     if (strict) throw new Error(message);
     console.warn(message);
