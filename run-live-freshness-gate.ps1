@@ -582,6 +582,12 @@ try {
   }
 
   $head = & $gitExe -C $publishRoot log -1 --oneline --decorate
+  Push-Location $syncRoot
+  try {
+    $null = Invoke-GateCommand "publish mobile update event" { & $nodeExe "scripts\publish-mobile-update-event.js" --source=live-freshness-gate } -AllowFailure
+  } finally {
+    Pop-Location
+  }
   Write-GateLog "SUCCESS live freshness gate passed; publishHead=$head"
   Write-GateLog "Log: $log"
   exit 0

@@ -58,6 +58,7 @@ const FILES = [
   "scripts/scan-realtime-radar-cache.js",
   "scripts/scan-strategy3-cache.js",
   "scripts/publish-strategy2-complete-run.js",
+  "scripts/publish-mobile-update-event.js",
   "scripts/scan-strategy5-cache.js",
   "scripts/scan-strategy4-cache.js",
   "scripts/strategy-api-capture.js",

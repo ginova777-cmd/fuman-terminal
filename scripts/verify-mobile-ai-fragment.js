@@ -120,6 +120,8 @@ async function main() {
   const boot = await readJson("data/mobile-boot.json");
   const stockAnalysis = await readJson("data/mobile-stock-analysis-latest.json");
   const mobileShell = await readText("mobile.html");
+  const packageJson = await readJson("package.json");
+  const mobileEventScript = await readText("scripts/publish-mobile-update-event.js");
   const terminalFragments = Object.fromEntries(await Promise.all(MOBILE_TERMINAL_KEYS.map(async (key) => [key, await readText(`data/mobile-${key}-ultra.html`)])));
   const app = await readText("terminal-app.js");
   const sw = await readText("fuman-sw.js");
@@ -232,6 +234,19 @@ async function main() {
   requireText(mobileShell, "data-watch-remove", "mobile shell must support removing watchlist rows");
   requireText(mobileShell, "mobile-modal", "mobile shell must show lightweight analysis modal");
   requireText(mobileShell, "boot?.fragments?.[k]?.url", "mobile shell must fetch strategy fragments from boot");
+  requireText(mobileShell, "mobile_update_events", "mobile shell must subscribe to mobile update events");
+  requireText(mobileShell, "WebSocket", "mobile shell must use realtime push updates");
+  requireText(mobileShell, "postgres_changes", "mobile shell must handle Supabase realtime postgres changes");
+  requireText(mobileShell, "setInterval(()=>{if(!document.hidden&&active!==\"watch\")load(false)},120000)", "mobile shell must keep 120s polling fallback");
+  if (!String(packageJson?.scripts?.["mobile:update-event"] || "").includes("publish-mobile-update-event.js")) {
+    issues.push("package.json must expose mobile:update-event script");
+  }
+  if (!String(packageJson?.scripts?.postdeploy || "").includes("publish-mobile-update-event.js --source=postdeploy")) {
+    issues.push("postdeploy must publish mobile update event after live verification");
+  }
+  requireText(mobileEventScript, "mobile_update_events", "mobile update event publisher must write mobile_update_events");
+  requireText(mobileEventScript, "SUPABASE_SERVICE_ROLE_KEY", "mobile update event publisher must use service role key");
+  requireText(mobileEventScript, "data/mobile-boot.json", "mobile update event publisher must read mobile boot");
   if (mobileShell.includes("terminal-app.js") || mobileShell.includes("styles.css") || mobileShell.includes("serviceWorker.register")) {
     issues.push("mobile shell must not load full terminal app/css/service worker");
   }
