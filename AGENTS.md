@@ -111,6 +111,8 @@ Mobile page behavior that must remain true:
 - It closes Realtime while hidden and reconnects on visibility return.
 - It keeps the 120 second polling fallback.
 - When a Realtime event arrives and the boot hash changed, it retries quickly if the new boot has not appeared yet.
+- It uses `visualViewport` plus `orientationchange` to update `html[data-orientation="portrait|landscape"]` immediately.
+- Phone portrait/landscape switching must not refetch `/api/mobile-boot`, recompute AI, rebuild the page, or clear cached fragments. Only lightweight CSS/layout state may change.
 - It stores watchlist data only in phone localStorage key `fuman_mobile_watchlist_v1`.
 - The "看分析" modal first reads precomputed per-stock files at `data/mobile-analysis/{code}.json`.
 - `data/mobile-stock-analysis-latest.json` is fallback only and should not be downloaded on first paint.
