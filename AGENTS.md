@@ -35,12 +35,14 @@ Required mobile assets:
 
 ```text
 mobile.html
+api/mobile-boot.js
 data/mobile-runtime-config.json
 data/mobile-boot.json
 data/mobile-digest.json
 data/mobile-ai-latest.html
 data/mobile-ai-lite.html
 data/mobile-ai-ultra.html
+data/mobile-analysis/{code}.json
 data/mobile-terminal-latest.json
 data/mobile-stock-analysis-latest.json
 data/mobile-strategy1-ultra.html
@@ -75,23 +77,43 @@ scan/generate mobile files
 publish/deploy verified files
 live verification passes
 scripts/publish-mobile-update-event.js inserts public.mobile_update_events
+event row includes boot_hash and changed_keys
 mobile.html receives Supabase Realtime WebSocket postgres_changes INSERT
-mobile.html refetches /data/mobile-boot.json
-hash changes decide which small fragment to fetch
+mobile.html compares event.boot_hash with the current boot hash
+if boot_hash is unchanged, mobile does nothing
+if boot_hash changed, mobile.html refetches /api/mobile-boot
+/api/mobile-boot reads data/mobile-boot.json but returns no-store/no-CDN headers
+hash changes decide which versioned small fragment to fetch
+fragment and analysis URLs must include ?v=hash or ?v=updatedAt
 120 second polling remains as a fallback only
 ```
 
-Do not publish a mobile update event immediately after local file generation if the files have not been deployed/live-verified yet. If an event is sent too early, phones may refetch Vercel edge files before the new `mobile-boot.json` is visible. The event should be sent only after live publish verification, as in `run-live-freshness-gate.ps1` and `postdeploy`.
+Do not publish a mobile update event immediately after local file generation if the files have not been deployed/live-verified yet. If an event is sent too early, phones may refetch before the new `mobile-boot.json` and versioned fragments are visible. The event should be sent only after live publish verification, as in `run-live-freshness-gate.ps1` and `postdeploy`.
+
+`/api/mobile-boot` is the primary phone boot endpoint. It must remain a Vercel function/API response with these headers:
+
+```text
+Cache-Control: no-store, max-age=0, must-revalidate
+CDN-Cache-Control: no-store
+Vercel-CDN-Cache-Control: no-store
+```
+
+`/data/mobile-boot.json` remains the generated source file and static fallback, but mobile.html should not use it as the primary update check because static CDN cache can delay edge visibility.
 
 Mobile page behavior that must remain true:
 
 - It fetches `/data/mobile-runtime-config.json`; it must not hardcode the anon key in `mobile.html`.
+- It fetches `/api/mobile-boot` for boot/manifest state; do not change the primary boot fetch back to `/data/mobile-boot.json`.
+- It uses Realtime event `boot_hash` to skip unchanged updates without fetching.
+- It appends version hashes to fragment URLs, for example `/data/mobile-ai-ultra.html?v=<ultraHash>`.
+- It appends a version to per-stock analysis URLs, for example `/data/mobile-analysis/2327.json?v=<bootUpdatedAt>`.
 - It opens a Realtime WebSocket only while the page is visible.
 - It closes Realtime while hidden and reconnects on visibility return.
 - It keeps the 120 second polling fallback.
-- When a Realtime event arrives but the boot hash has not changed yet, it retries after a short delay to absorb CDN edge lag.
+- When a Realtime event arrives and the boot hash changed, it retries quickly if the new boot has not appeared yet.
 - It stores watchlist data only in phone localStorage key `fuman_mobile_watchlist_v1`.
-- The "看分析" modal reads precomputed `data/mobile-stock-analysis-latest.json`.
+- The "看分析" modal first reads precomputed per-stock files at `data/mobile-analysis/{code}.json`.
+- `data/mobile-stock-analysis-latest.json` is fallback only and should not be downloaded on first paint.
 - `mobile-stock-analysis-latest.json` must include terminal strategy matches and `signalsText`, for example `策略4-波段：分區A、突破缺口、量叉`.
 
 Run these checks before claiming the mobile terminal is healthy:
@@ -108,10 +130,14 @@ The live spot checks are:
 
 ```powershell
 Invoke-WebRequest https://fuman-terminal.vercel.app/mobile -UseBasicParsing
+Invoke-WebRequest https://fuman-terminal.vercel.app/api/mobile-boot -UseBasicParsing
 Invoke-WebRequest https://fuman-terminal.vercel.app/data/mobile-runtime-config.json -UseBasicParsing
 Invoke-WebRequest https://fuman-terminal.vercel.app/data/mobile-boot.json -UseBasicParsing
+Invoke-WebRequest https://fuman-terminal.vercel.app/data/mobile-analysis/2327.json -UseBasicParsing
 Invoke-WebRequest https://fuman-terminal.vercel.app/data/mobile-stock-analysis-latest.json -UseBasicParsing
 ```
+
+The live `/api/mobile-boot` response must show no-store headers. If it does not, the phone can still be delayed by a stale edge boot payload even when Realtime is working.
 
 To test push delivery after a verified publish:
 
@@ -131,6 +157,7 @@ If Realtime verification fails, do not remove the fallback polling to hide the p
 anon can SELECT public.mobile_update_events
 service_role can INSERT public.mobile_update_events
 service_role can DELETE old public.mobile_update_events rows
+event rows include boot_hash and changed_keys
 table is in supabase_realtime publication
 mobile runtime config points to cpmpfhbzutkiecccekfr
 service_role key is not leaked into public files
