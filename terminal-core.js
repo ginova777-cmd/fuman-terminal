@@ -1,5 +1,5 @@
 (function () {
-  const version = "desktop-api-only-strategy5-fasttabs-20260619-03";
+  const version = "desktop-api-only-strategy5-singlepane-20260619-04";
   window.FUMAN_TERMINAL_VERSION = version;
   window.FUMAN_TERMINAL_BOOT = {
     version,
