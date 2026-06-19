@@ -319,18 +319,39 @@ function updateMobileAiStaleNote(){const note=marketAiPanel?.querySelector?.("[d
   window.__fumanTerminalConfluenceRunIdPolling=!0;
   let seenRunId="";
   let loading=!1;
+  const CACHE_KEY="fuman-terminal-confluence-valid-cache-v1";
   const pollMs=Math.max(3e4,cleanNumber(FUMAN_TUNING_CONFIG.terminalConfluencePollMs||6e4));
   const fresh=url=>`${url}${String(url||"").includes("?")?"&":"?"}t=${Date.now()}`;
   const indexUrl=()=>endpoints.strategyMatchIndex||"/api/watchlist-match-index";
   const confluenceUrl=()=>`${endpoints.latestSignalsApi||"/api/latest-signals"}?strategy=confluence&limit=120`;
   const runIdOf=payload=>String(payload?.runId||payload?.transport?.snapshotId||payload?.transport?.updatedAt||payload?.updatedAt||"");
-  async function reloadConfluenceRows(){
+  function restoreConfluenceCache(){
+    try{
+      const payload=JSON.parse(localStorage.getItem(CACHE_KEY)||"null");
+      const rows=normalizeArray(payload?.rows);
+      if(!rows.length)return false;
+      if(!normalizeArray(strategy5TerminalConfluenceData).length)strategy5TerminalConfluenceData=rows;
+      strategy5TerminalConfluenceUpdatedAt=cleanNumber(payload.updatedAt)||Date.now();
+      seenRunId=String(payload.runId||seenRunId||"");
+      window.__fumanTerminalConfluenceRunId=seenRunId;
+      return true;
+    }catch(error){return false}
+  }
+  function saveConfluenceCache(runId){
+    try{
+      const rows=normalizeArray(strategy5TerminalConfluenceData);
+      if(!rows.length)return;
+      localStorage.setItem(CACHE_KEY,JSON.stringify({runId:runId||seenRunId||"",updatedAt:strategy5TerminalConfluenceUpdatedAt||Date.now(),rows:rows.slice(0,180)}));
+    }catch(error){}
+  }
+  async function reloadConfluenceRows(runId=""){
     const payload=await fetchJson(fresh(confluenceUrl()),8e3);
     const rows=normalizeArray(payload?.matches||payload?.rows);
     if(payload?.ok===!1||!rows.length)return!1;
     strategy5TerminalConfluenceData=rows;
     strategy5TerminalConfluenceUpdatedAt=Date.now();
-    window.__fumanTerminalConfluenceRunId=String(payload?.runId||payload?.transport?.snapshotId||seenRunId||"");
+    window.__fumanTerminalConfluenceRunId=String(payload?.runId||payload?.transport?.snapshotId||runId||seenRunId||"");
+    saveConfluenceCache(window.__fumanTerminalConfluenceRunId);
     return!0;
   }
   async function poll(initial=!1){
@@ -344,12 +365,10 @@ function updateMobileAiStaleNote(){const note=marketAiPanel?.querySelector?.("[d
       const changed=seenRunId&&seenRunId!==runId;
       if(!seenRunId)seenRunId=runId;
       if(changed||initial&&!normalizeArray(strategy5TerminalConfluenceData).length){
-        seenRunId=runId;
-        strategy5TerminalConfluenceData=[];
-        strategy5TerminalConfluenceUpdatedAt=0;
-        const loaded=await reloadConfluenceRows();
-        if(loaded&&isViewActive?.("strategy")&&strategyPresetMode==="strategy5"){
-          renderStrategyScanner?.();
+        const loaded=await reloadConfluenceRows(runId);
+        if(loaded){
+          seenRunId=runId;
+          if(isViewActive?.("strategy")&&strategyPresetMode==="strategy5")renderStrategyScanner?.();
         }
       }
     }catch(error){
@@ -358,7 +377,8 @@ function updateMobileAiStaleNote(){const note=marketAiPanel?.querySelector?.("[d
       loading=!1;
     }
   }
-  deferUiWork?.(()=>poll(!0),2500);
+  restoreConfluenceCache();
+  deferUiWork?.(()=>poll(!0),600);
   setInterval(()=>poll(!1),pollMs);
   window.addEventListener?.("focus",()=>poll(!1));
   document.addEventListener?.("visibilitychange",()=>{if(!document.hidden)poll(!1)});
