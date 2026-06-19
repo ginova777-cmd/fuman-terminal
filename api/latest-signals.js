@@ -38,7 +38,13 @@ function buildConfluencePayload(index, { minCount = 2, limit = 120 } = {}) {
     const sourceCount = matches.length;
     const totalRawScore = matches.reduce((sum, item) => sum + cleanNumber(item?.rawScore ?? item?.score), 0);
     const maxScore = matches.reduce((max, item) => Math.max(max, cleanNumber(item?.rawScore ?? item?.score)), 0);
-    const rankScore = sourceCount + Math.max(0, Math.min(sourceCount * 100, totalRawScore)) / 1000;
+    const strategy5InternalCount = matches.reduce((max, item) => {
+      const key = String(item?.key || "");
+      return key === "strategy5" ? Math.max(max, cleanNumber(item?.internalCount)) : max;
+    }, 0);
+    const rankScore = sourceCount
+      + Math.max(0, Math.min(99, strategy5InternalCount)) / 100
+      + Math.max(0, Math.min(sourceCount * 100, totalRawScore)) / 100000;
     return {
       code,
       name: namesByCode[code] || matches.find((item) => item?.name)?.name || code,
@@ -56,6 +62,8 @@ function buildConfluencePayload(index, { minCount = 2, limit = 120 } = {}) {
       maxScore,
       sourceCount,
       confluenceCount: sourceCount,
+      terminalConfluenceCount: sourceCount,
+      strategy5InternalCount,
       strategies: matches,
       matches,
       labels: matches.map((item) => item?.label).filter(Boolean),
@@ -66,7 +74,7 @@ function buildConfluencePayload(index, { minCount = 2, limit = 120 } = {}) {
       updatedAt: matches.map((item) => item?.updatedAt).filter(Boolean).sort().at(-1) || index?.updatedAt || "",
     };
   }).filter((row) => row.sourceCount >= minCount)
-    .sort((a, b) => b.sourceCount - a.sourceCount || b.score - a.score || b.maxScore - a.maxScore || a.code.localeCompare(b.code))
+    .sort((a, b) => b.sourceCount - a.sourceCount || b.strategy5InternalCount - a.strategy5InternalCount || b.score - a.score || b.maxScore - a.maxScore || a.code.localeCompare(b.code))
     .slice(0, limit);
   return {
     ok: true,

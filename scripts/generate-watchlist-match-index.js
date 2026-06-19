@@ -27,6 +27,16 @@ function confluenceRankScore(rawScore) {
   return 1 + Math.max(0, Math.min(100, cleanNumber(rawScore))) / 1000;
 }
 
+function strategy5InternalCount(row, source) {
+  if (source.key !== "strategy5") return 0;
+  const ids = normalizeArray(row.matches)
+    .map((match) => String(match?.id || match?.label || match?.short || match?.title || "").trim())
+    .filter(Boolean);
+  const activeId = String(row.activeMatch?.id || row.activeMatch?.label || row.activeMatch?.short || "").trim();
+  if (activeId) ids.push(activeId);
+  return Math.max(1, new Set(ids).size);
+}
+
 function normalizeArray(value) {
   return Array.isArray(value) ? value : [];
 }
@@ -199,11 +209,13 @@ async function main() {
           quoteByCode[code] = quote;
         }
         const rawScore = cleanNumber(row.score || row.maxScore || row.swingScore || row.finalScore || row.total);
+        const internalCount = strategy5InternalCount(row, source);
         const entry = {
           key: sourceKeyFor(row, source),
           label: sourceLabelFor(row, source),
           score: confluenceRankScore(rawScore),
           rawScore,
+          internalCount,
           date,
           updatedAt: payload.updatedAt || payload.generatedAt || payload.scanStamp || row.updatedAt || "",
           details: detailsFor(row, source.key),
@@ -226,6 +238,7 @@ async function main() {
         continue;
       }
       previous.score = Math.max(cleanNumber(previous.score), cleanNumber(entry.score));
+      previous.internalCount = Math.max(cleanNumber(previous.internalCount), cleanNumber(entry.internalCount));
       previous.details = [...new Set([...previous.details, ...entry.details])].slice(0, 12);
       previous.updatedAt = previous.updatedAt || entry.updatedAt;
       previous.date = previous.date || entry.date;

@@ -42,7 +42,7 @@ const STRATEGY5_CARD_META = {
     description: "同檔股票同時出現在買賣超、CB可轉債、權證走向，標出籌碼與衍生品共振名單。",
   },
   multi_strategy_confluence: {
-    description: "同時命中 2 個以上策略5主題，每天自動標出多策略共振標的。",
+    description: "全終端策略與籌碼至少命中 2 項，符合越多項排序越前。",
   },
   foreign_trust_breakout: {
     description: "外資與投信同步買超，漲幅未過熱，優先觀察準突破名單。",
