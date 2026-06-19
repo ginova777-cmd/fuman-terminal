@@ -720,8 +720,7 @@ async function broadcastStrategy2CandidateHit(record) {
 }
 async function publishStrategy2CompleteRunToSupabase({ supabaseUrl, publishKey, report }) {
   if (!publishKey) {
-    console.warn("strategy2 complete run publish skipped: missing Supabase service role key");
-    return false;
+    throw new Error("strategy2 complete run publish failed: missing Supabase service role key");
   }
   const scanDate = String(report.date || "").match(/^\d{4}-\d{2}-\d{2}$/)
     ? String(report.date)
@@ -748,14 +747,12 @@ async function publishStrategy2CompleteRunToSupabase({ supabaseUrl, publishKey, 
     });
     if (!response.ok) {
       const text = await response.text().catch(() => "");
-      console.warn(`strategy2 complete run publish skipped: HTTP ${response.status} ${text.slice(0, 160)}`);
-      return false;
+      throw new Error(`strategy2 complete run publish failed: HTTP ${response.status} ${text.slice(0, 160)}`);
     }
     await broadcastStrategy2CompleteRun({ supabaseUrl, publishKey, report, runId });
     return true;
   } catch (error) {
-    console.warn(`strategy2 complete run publish skipped: ${error?.message || String(error)}`);
-    return false;
+    throw new Error(`strategy2 complete run publish failed: ${error?.message || String(error)}`);
   }
 }
 

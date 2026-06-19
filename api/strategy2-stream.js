@@ -13,6 +13,8 @@ const SUPABASE_KEY = process.env.SUPABASE_ANON_KEY
   || process.env.FUMAN_SUPABASE_ANON_KEY
   || readSecretText(path.join(RUNTIME_DIR, "secrets", "supabase-anon-key.txt"));
 const LATEST_RUN_VIEW = process.env.STRATEGY2_SUPABASE_LATEST_RUN_VIEW || "v_strategy2_latest_complete_run";
+const RUNS_TABLE = process.env.STRATEGY2_SUPABASE_RUNS_TABLE || "strategy2_scan_runs";
+const AUTHORITATIVE_GATE = "complete-run-authoritative";
 const STREAM_INTERVAL_MS = Math.max(1500, Number(process.env.STRATEGY2_SSE_POLL_MS || 4000));
 const STREAM_MAX_MS = Math.max(8000, Number(process.env.STRATEGY2_SSE_MAX_MS || 25000));
 
@@ -32,26 +34,45 @@ function taipeiDateKey(value = new Date()) {
 async function fetchLatestRun() {
   const base = String(SUPABASE_URL || "").replace(/\/+$/, "");
   if (!base || !SUPABASE_KEY) return null;
-  const query = [
-    "select=run_id,scan_date,finished_at,updated_at,status,complete,result_count,quality_status,schema_version,data_contract_source,payload",
+  const select = "select=run_id,scan_date,finished_at,updated_at,status,complete,result_count,quality_status,schema_version,data_contract_source,payload";
+  const readRows = async (table, query) => {
+    const response = await fetch(`${base}/rest/v1/${table}?${query}`, {
+      headers: {
+        apikey: SUPABASE_KEY,
+        Authorization: `Bearer ${SUPABASE_KEY}`,
+        Accept: "application/json",
+      },
+      cache: "no-store",
+    });
+    if (!response.ok) throw new Error(`strategy2 stream read failed HTTP ${response.status}`);
+    const rows = await response.json();
+    return Array.isArray(rows) ? rows : [];
+  };
+  const hasRows = payload => Array.isArray(payload?.events) && payload.events.length > 0
+    || Array.isArray(payload?.records) && payload.records.length > 0
+    || Array.isArray(payload?.rows) && payload.rows.length > 0;
+  const latestRows = await readRows(LATEST_RUN_VIEW, [
+    select,
     "strategy=eq.strategy2",
     "status=eq.complete",
     "complete=eq.true",
-    `scan_date=eq.${taipeiDateKey()}`,
-    "order=finished_at.desc",
     "limit=1",
-  ].join("&");
-  const response = await fetch(`${base}/rest/v1/${LATEST_RUN_VIEW}?${query}`, {
-    headers: {
-      apikey: SUPABASE_KEY,
-      Authorization: `Bearer ${SUPABASE_KEY}`,
-      Accept: "application/json",
-    },
-    cache: "no-store",
-  });
-  if (!response.ok) throw new Error(`strategy2 stream read failed HTTP ${response.status}`);
-  const rows = await response.json();
-  const run = Array.isArray(rows) ? rows[0] : null;
+  ].join("&"));
+  const skippedEmptyRunIds = [];
+  let run = latestRows[0] || null;
+  if (run?.run_id && !hasRows(run.payload || {})) {
+    skippedEmptyRunIds.push(run.run_id);
+    const historyRows = await readRows(RUNS_TABLE, [
+      select,
+      "strategy=eq.strategy2",
+      "status=eq.complete",
+      "complete=eq.true",
+      "result_count=gt.0",
+      "order=scan_date.desc,finished_at.desc",
+      "limit=10",
+    ].join("&"));
+    run = historyRows.find(row => row?.run_id && hasRows(row.payload || {})) || null;
+  }
   if (!run?.run_id) return null;
   const payload = run.payload || {};
   return {
@@ -66,6 +87,9 @@ async function fetchLatestRun() {
     qualityStatus: payload.qualityStatus || run.quality_status || "",
     schemaVersion: payload.schemaVersion || run.schema_version || "strategy2-run-id-complete-v1",
     dataContractSource: payload.dataContractSource || run.data_contract_source || "",
+    gate: AUTHORITATIVE_GATE,
+    latestCompleteRunCorrected: skippedEmptyRunIds.length > 0,
+    skippedEmptyRunIds,
   };
 }
 

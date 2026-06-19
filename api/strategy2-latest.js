@@ -14,6 +14,8 @@ const SUPABASE_KEY = process.env.SUPABASE_ANON_KEY
   || readSecretText(path.join(RUNTIME_DIR, "secrets", "supabase-anon-key.txt"));
 
 const LATEST_RUN_VIEW = process.env.STRATEGY2_SUPABASE_LATEST_RUN_VIEW || "v_strategy2_latest_complete_run";
+const RUNS_TABLE = process.env.STRATEGY2_SUPABASE_RUNS_TABLE || "strategy2_scan_runs";
+const AUTHORITATIVE_GATE = "complete-run-authoritative";
 function apiOnlyError(error, detail = "") {
   return {
     ok: false,
@@ -25,7 +27,7 @@ function apiOnlyError(error, detail = "") {
     transport: {
       source: "supabase",
       latestRunView: LATEST_RUN_VIEW,
-      gate: "run_id",
+      gate: AUTHORITATIVE_GATE,
       via: "api/strategy2-latest",
       fetchedAt: new Date().toISOString(),
     },
@@ -49,8 +51,42 @@ async function fetchRows(base, table, query) {
   return Array.isArray(rows) ? rows : [];
 }
 
+function hasStrategy2PayloadRows(payload) {
+  return Array.isArray(payload?.events) && payload.events.length > 0
+    || Array.isArray(payload?.records) && payload.records.length > 0
+    || Array.isArray(payload?.rows) && payload.rows.length > 0;
+}
+
+function buildStrategy2RunPayload(run, { skippedEmptyRunIds = [], sourceTable = LATEST_RUN_VIEW } = {}) {
+  const payload = run.payload || {};
+  return {
+    ...payload,
+    ok: payload.ok !== false,
+    updatedAt: payload.updatedAt || run.updated_at || run.finished_at,
+    runId: payload.runId || run.run_id,
+    date: payload.date || run.scan_date || run.date,
+    complete: true,
+    qualityStatus: payload.qualityStatus || run.quality_status || "complete",
+    cacheSource: "supabase-api",
+    gate: AUTHORITATIVE_GATE,
+    latestCompleteRunCorrected: skippedEmptyRunIds.length > 0,
+    correctionReason: skippedEmptyRunIds.length ? "empty_complete_run_skipped" : "",
+    skippedEmptyRunIds,
+    transport: {
+      source: "supabase",
+      latestRunView: LATEST_RUN_VIEW,
+      sourceTable,
+      gate: AUTHORITATIVE_GATE,
+      runId: run.run_id,
+      skippedEmptyRunIds,
+      via: "api/strategy2-latest",
+      fetchedAt: new Date().toISOString(),
+    },
+  };
+}
+
 async function fetchCompleteRunPayload(base) {
-  const rows = await fetchRows(
+  const latestRows = await fetchRows(
     base,
     LATEST_RUN_VIEW,
     [
@@ -61,24 +97,28 @@ async function fetchCompleteRunPayload(base) {
       "limit=1",
     ].join("&")
   );
-  const run = rows[0];
-  if (!run?.run_id || !run?.payload) return null;
-  return {
-    ...run.payload,
-    updatedAt: run.payload.updatedAt || run.updated_at || run.finished_at,
-    runId: run.payload.runId || run.run_id,
-    complete: true,
-    qualityStatus: run.payload.qualityStatus || run.quality_status || "complete",
-    cacheSource: "supabase-api",
-    transport: {
-      source: "supabase",
-      latestRunView: LATEST_RUN_VIEW,
-      gate: "run_id",
-      runId: run.run_id,
-      via: "api/strategy2-latest",
-      fetchedAt: new Date().toISOString(),
-    },
-  };
+  const skippedEmptyRunIds = [];
+  const latestRun = latestRows[0];
+  if (latestRun?.run_id && latestRun?.payload && hasStrategy2PayloadRows(latestRun.payload)) {
+    return buildStrategy2RunPayload(latestRun);
+  }
+  if (latestRun?.run_id) skippedEmptyRunIds.push(latestRun.run_id);
+
+  const historyRows = await fetchRows(
+    base,
+    RUNS_TABLE,
+    [
+      "select=*",
+      "strategy=eq.strategy2",
+      "status=eq.complete",
+      "complete=eq.true",
+      "result_count=gt.0",
+      "order=scan_date.desc,finished_at.desc",
+      "limit=10",
+    ].join("&")
+  );
+  const historyRun = historyRows.find(row => row?.run_id && row?.payload && hasStrategy2PayloadRows(row.payload));
+  return historyRun ? buildStrategy2RunPayload(historyRun, { skippedEmptyRunIds, sourceTable: RUNS_TABLE }) : null;
 }
 
 module.exports = async function handler(request, response) {
