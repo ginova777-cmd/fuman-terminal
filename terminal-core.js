@@ -1,5 +1,5 @@
 (function () {
-  const version = "desktop-api-only-all-20260618-18";
+  const version = "desktop-api-only-strategy5-fastpaint-20260619-02";
   window.FUMAN_TERMINAL_VERSION = version;
   window.FUMAN_TERMINAL_BOOT = {
     version,
