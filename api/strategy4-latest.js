@@ -193,14 +193,17 @@ async function fetchLatestCompleteRun() {
       "status=eq.complete",
       "complete=eq.true",
       "order=finished_at.desc",
-      "limit=1",
+      "limit=12",
     ].join("&")
   );
-  const row = rows[0];
+  const row = rows.find((candidate) => {
+    if (!candidate?.run_id) return false;
+    if (candidate.schema_version && candidate.schema_version !== EXPECTED_SCHEMA) return false;
+    if (candidate.volume_unit && candidate.volume_unit !== EXPECTED_UNIT) return false;
+    if (candidate.data_contract_source && candidate.data_contract_source !== EXPECTED_SOURCE) return false;
+    return true;
+  });
   if (!row?.run_id) return null;
-  if (row.schema_version && row.schema_version !== EXPECTED_SCHEMA) return null;
-  if (row.volume_unit && row.volume_unit !== EXPECTED_UNIT) return null;
-  if (row.data_contract_source && row.data_contract_source !== EXPECTED_SOURCE) return null;
   return row;
 }
 

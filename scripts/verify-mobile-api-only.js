@@ -97,13 +97,24 @@ function checkMobileShell() {
 
 function checkApiBoot() {
   const apiBoot = read("api/mobile-boot.js");
+  const fragmentApi = read("api/mobile-fragment.js");
   requireText(apiBoot, 'Cache-Control", "no-store', "/api/mobile-boot must be browser no-store");
   requireText(apiBoot, 'CDN-Cache-Control", "no-store', "/api/mobile-boot must be CDN no-store");
   requireText(apiBoot, 'Vercel-CDN-Cache-Control", "no-store', "/api/mobile-boot must be Vercel CDN no-store");
+  requireText(apiBoot, "/api/mobile-fragment?tab=", "/api/mobile-boot must point strategy tabs to API-rendered fragments");
+  for (const endpoint of ["/api/open-buy-latest", "/api/strategy2-latest", "/api/strategy3-latest", "/api/strategy4-latest", "/api/strategy5-latest", "/api/institution-latest", "/api/warrant-flow-latest"]) {
+    requireText(apiBoot, endpoint, `/api/mobile-boot must derive mobile fragments from ${endpoint}`);
+    requireText(fragmentApi, endpoint, `/api/mobile-fragment must render rows from ${endpoint}`);
+  }
+  for (const staleFragment of ["mobile-strategy1-ultra.html", "mobile-strategy2-ultra.html", "mobile-strategy3-ultra.html", "mobile-strategy4-ultra.html", "mobile-strategy5-ultra.html", "mobile-chip-ultra.html", "mobile-warrant-ultra.html"]) {
+    rejectText(apiBoot, staleFragment, `/api/mobile-boot must not point tabs to static ${staleFragment}`);
+  }
   rejectText(apiBoot, "backup.json", "/api/mobile-boot must not fall back to backup JSON");
   rejectText(apiBoot, "freshness:gate", "/api/mobile-boot must not trigger freshness gate as repair");
   rejectText(apiBoot, "release:main", "/api/mobile-boot must not trigger release pipeline as repair");
   rejectText(apiBoot, "vercel --prod", "/api/mobile-boot must not trigger Vercel deploy as repair");
+  requireText(fragmentApi, 'Cache-Control", "no-store', "/api/mobile-fragment must be browser no-store");
+  requireText(fragmentApi, "data-run-id", "/api/mobile-fragment must expose API runId in the rendered fragment");
 }
 
 function checkGeneratorAndContracts() {
@@ -167,6 +178,24 @@ async function checkLive() {
   }
   if (!/no-store/i.test(boot.response.headers.get("cdn-cache-control") || "")) {
     pushIssue(`live /api/mobile-boot CDN must be no-store actual=${boot.response.headers.get("cdn-cache-control") || "<missing>"}`);
+  }
+  let bootJson = null;
+  try { bootJson = JSON.parse(boot.text); } catch {}
+  for (const tab of ["strategy1", "strategy2", "strategy3", "strategy4", "strategy5", "chip", "warrant"]) {
+    const fragment = bootJson?.fragments?.[tab];
+    if (!String(fragment?.url || "").startsWith("/api/mobile-fragment?tab=")) {
+      pushIssue(`live /api/mobile-boot fragment ${tab} must point to /api/mobile-fragment actual=${fragment?.url || "<missing>"}`);
+      continue;
+    }
+    if (!fragment?.runId) pushIssue(`live /api/mobile-boot fragment ${tab} missing runId`);
+  }
+  const strategy2Fragment = await fetchLive("api/mobile-fragment?tab=strategy2");
+  if (!strategy2Fragment.response.ok) pushIssue(`live /api/mobile-fragment?tab=strategy2 returned ${strategy2Fragment.response.status}`);
+  if (!/no-store/i.test(strategy2Fragment.response.headers.get("cache-control") || "")) {
+    pushIssue(`live /api/mobile-fragment must be no-store actual=${strategy2Fragment.response.headers.get("cache-control") || "<missing>"}`);
+  }
+  if (!strategy2Fragment.text.includes("data-run-id")) {
+    pushIssue("live /api/mobile-fragment must render data-run-id");
   }
 }
 
