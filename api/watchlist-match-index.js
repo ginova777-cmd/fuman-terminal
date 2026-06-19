@@ -1,13 +1,4 @@
-const fs = require("fs");
-const path = require("path");
 const { readSnapshot } = require("../lib/supabase-snapshots");
-
-const ROOT = path.resolve(__dirname, "..");
-const RUNTIME_DIR = process.env.FUMAN_RUNTIME_DIR || process.env.FUMAN_RUNTIME_ROOT || "C:\\fuman-runtime";
-const STATIC_CANDIDATES = [
-  path.join(RUNTIME_DIR, "data", "strategy-match-index.json"),
-  path.join(ROOT, "data", "strategy-match-index.json"),
-];
 
 function hasIndex(payload) {
   return Boolean(payload && payload.byCode && typeof payload.byCode === "object");
@@ -41,11 +32,15 @@ function normalizePayload(payload, cacheSource, transport = {}) {
   const byCode = payload?.byCode && typeof payload.byCode === "object" ? payload.byCode : {};
   const clock = taipeiClock();
   const hasSnapshot = cacheSource === "supabase:market_snapshots";
+  const rawRunId = payload?.runId || transport.snapshotId || "";
+  const fallbackStamp = String(transport.updatedAt || payload?.updatedAt || "").replace(/\D/g, "").slice(0, 14);
+  const runId = String(rawRunId || (fallbackStamp ? `watchlist-match-index-${fallbackStamp}` : ""));
   return {
     ...payload,
     ok: payload?.ok !== false,
     source: payload?.source || "strategy-match-index",
     cacheSource,
+    runId,
     count: Number(payload?.count || Object.keys(byCode).length) || 0,
     byCode,
     strategies: payload?.strategies && typeof payload.strategies === "object" ? payload.strategies : {},
@@ -80,23 +75,6 @@ async function readSnapshotPayload() {
   });
 }
 
-function readStaticPayload() {
-  for (const file of STATIC_CANDIDATES) {
-    try {
-      const payload = JSON.parse(fs.readFileSync(file, "utf8"));
-      if (!hasIndex(payload)) continue;
-      return normalizePayload(payload, "data/strategy-match-index.json", {
-        file,
-        reason: "static-fallback",
-        gate: "static-fallback",
-      });
-    } catch {
-      // Try the next local cache candidate.
-    }
-  }
-  return null;
-}
-
 module.exports = async function handler(request, response) {
   response.setHeader("Cache-Control", "no-store, max-age=0, must-revalidate");
   response.setHeader("CDN-Cache-Control", "no-store");
@@ -114,13 +92,7 @@ module.exports = async function handler(request, response) {
       return;
     }
   } catch {
-    // Fall through to local JSON.
-  }
-
-  const fallback = readStaticPayload();
-  if (fallback) {
-    response.status(200).json(fallback);
-    return;
+    // API-only: do not fall back to local JSON.
   }
 
   response.status(503).json({

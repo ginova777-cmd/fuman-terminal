@@ -246,10 +246,13 @@ async function main() {
     byCode[code] = [...merged.values()].sort((a, b) => cleanNumber(b.score) - cleanNumber(a.score) || a.key.localeCompare(b.key));
   }
 
+  const updatedAt = new Date().toISOString();
+  const runId = `watchlist-match-index-${updatedAt.replace(/\D/g, "").slice(0, 14)}`;
   const payload = {
     ok: true,
     source: "watchlist-match-index",
-    updatedAt: new Date().toISOString(),
+    runId,
+    updatedAt,
     count: Object.keys(byCode).length,
     warnings,
     strategies,
@@ -266,7 +269,7 @@ async function main() {
   const locked = isAfterTaipei1330(clock);
   const snapshot = await upsertSnapshot("watchlist_match_index", payload, {
     source: "data/strategy-match-index.json",
-    snapshotId: `watchlist-match-index-${payload.updatedAt.replace(/\D/g, "").slice(0, 14)}`,
+    snapshotId: runId,
     tradeDate: clock.date,
     locked,
     reason: locked ? "after-1330-cache" : "snapshot-cache",
