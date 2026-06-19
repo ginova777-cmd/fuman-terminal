@@ -1,5 +1,5 @@
 (function () {
-  const VERSION = "desktop-api-only-strategy5-institution-breakout-20260619-11";
+  const VERSION = "desktop-api-only-strategy5-institution-breakout-20260619-12";
   const modules = {
     sectorMap: { loaded: false, src: "terminal-sector-map.js" },
     strategyConfig: { loaded: false, src: "terminal-strategy-config.js" },
@@ -38,6 +38,8 @@
     },
   };
 })();
+
+
 
 
 

@@ -7824,3 +7824,18 @@ body.fuman-light-theme #watchlist-view .watchlist-stock-list > div[style],
 body.fuman-light-theme #watchlist-view .watchlist-analysis-pane > div[style] {
   color: #64748b !important;
 }
+
+/* terminal-click-responsiveness-20260619 */
+.nav-item.pressed,
+.strategy-nav.pressed,
+.member-state.pressed {
+  transform: translateY(1px) scale(0.995);
+  filter: brightness(1.12);
+}
+.nav-item,
+.strategy-nav,
+.member-state,
+button,
+[role="button"] {
+  touch-action: manipulation;
+}

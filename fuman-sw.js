@@ -1,29 +1,29 @@
-const CACHE_VERSION = "fuman-terminal-sw-desktop-api-only-strategy5-institution-breakout-20260619-11";
+const CACHE_VERSION = "fuman-terminal-sw-desktop-api-only-strategy5-institution-breakout-20260619-12";
 const RUNTIME_THEME_CSS_LOADER = "terminal-theme-css-snapshot-first-20260619";
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 const DATA_CACHE = `${CACHE_VERSION}-data`;
 
 const STATIC_ASSETS = [
-  "/styles.css?v=desktop-api-only-strategy5-institution-breakout-20260619-11",
-  "/terminal-core.js?v=desktop-api-only-strategy5-institution-breakout-20260619-11",
-  "/terminal-modules.js?v=desktop-api-only-strategy5-institution-breakout-20260619-11",
-  "/terminal-sector-map.js?v=desktop-api-only-strategy5-institution-breakout-20260619-11",
-  "/terminal-strategy-config.js?v=desktop-api-only-strategy5-institution-breakout-20260619-11",
-  "/terminal-market-config.js?v=desktop-api-only-strategy5-institution-breakout-20260619-11",
-  "/terminal-ui-config.js?v=desktop-api-only-strategy5-institution-breakout-20260619-11",
-  "/terminal-runtime-config.js?v=desktop-api-only-strategy5-institution-breakout-20260619-11",
-  "/terminal-tuning-config.js?v=desktop-api-only-strategy5-institution-breakout-20260619-11",
-  "/terminal-worker.js?v=desktop-api-only-strategy5-institution-breakout-20260619-11",
-  "/terminal.js?v=desktop-api-only-strategy5-institution-breakout-20260619-11",
-  "/terminal-app.js?v=desktop-api-only-strategy5-institution-breakout-20260619-11",
-  "/terminal-ai-risk-guard.js?v=desktop-api-only-strategy5-institution-breakout-20260619-11",
-  "/terminal-chip-flow.js?v=desktop-api-only-strategy5-institution-breakout-20260619-11",
-  "/terminal-warrant-flow.js?v=desktop-api-only-strategy5-institution-breakout-20260619-11",
-  "/terminal-watchlist-module.js?v=desktop-api-only-strategy5-institution-breakout-20260619-11",
-  "/terminal-realtime-radar.css?v=desktop-api-only-strategy5-institution-breakout-20260619-11",
-  "/terminal-intraday-radar.css?v=desktop-api-only-strategy5-institution-breakout-20260619-11",
-  "/terminal-utility.css?v=desktop-api-only-strategy5-institution-breakout-20260619-11",
-  "/refresh.html?v=desktop-api-only-strategy5-institution-breakout-20260619-11",
+  "/styles.css?v=desktop-api-only-strategy5-institution-breakout-20260619-12",
+  "/terminal-core.js?v=desktop-api-only-strategy5-institution-breakout-20260619-12",
+  "/terminal-modules.js?v=desktop-api-only-strategy5-institution-breakout-20260619-12",
+  "/terminal-sector-map.js?v=desktop-api-only-strategy5-institution-breakout-20260619-12",
+  "/terminal-strategy-config.js?v=desktop-api-only-strategy5-institution-breakout-20260619-12",
+  "/terminal-market-config.js?v=desktop-api-only-strategy5-institution-breakout-20260619-12",
+  "/terminal-ui-config.js?v=desktop-api-only-strategy5-institution-breakout-20260619-12",
+  "/terminal-runtime-config.js?v=desktop-api-only-strategy5-institution-breakout-20260619-12",
+  "/terminal-tuning-config.js?v=desktop-api-only-strategy5-institution-breakout-20260619-12",
+  "/terminal-worker.js?v=desktop-api-only-strategy5-institution-breakout-20260619-12",
+  "/terminal.js?v=desktop-api-only-strategy5-institution-breakout-20260619-12",
+  "/terminal-app.js?v=desktop-api-only-strategy5-institution-breakout-20260619-12",
+  "/terminal-ai-risk-guard.js?v=desktop-api-only-strategy5-institution-breakout-20260619-12",
+  "/terminal-chip-flow.js?v=desktop-api-only-strategy5-institution-breakout-20260619-12",
+  "/terminal-warrant-flow.js?v=desktop-api-only-strategy5-institution-breakout-20260619-12",
+  "/terminal-watchlist-module.js?v=desktop-api-only-strategy5-institution-breakout-20260619-12",
+  "/terminal-realtime-radar.css?v=desktop-api-only-strategy5-institution-breakout-20260619-12",
+  "/terminal-intraday-radar.css?v=desktop-api-only-strategy5-institution-breakout-20260619-12",
+  "/terminal-utility.css?v=desktop-api-only-strategy5-institution-breakout-20260619-12",
+  "/refresh.html?v=desktop-api-only-strategy5-institution-breakout-20260619-12",
   "/assets/logo.webp",
   "/favicon.ico",
 ];
@@ -332,6 +332,7 @@ self.addEventListener("fetch", (event) => {
   }
 
 });
+
 
 
 
