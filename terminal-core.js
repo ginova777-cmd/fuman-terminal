@@ -1,5 +1,5 @@
 (function () {
-  const version = "desktop-api-only-strategy5-volume-units-20260619-08";
+  const version = "desktop-api-only-strategy5-institution-streak-20260619-10";
   window.FUMAN_TERMINAL_VERSION = version;
   window.FUMAN_TERMINAL_BOOT = {
     version,
