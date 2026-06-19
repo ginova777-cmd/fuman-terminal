@@ -733,11 +733,12 @@ function buildStrategy5Match({ stock, inst, valueRank, volumeRank, rows, conflue
 
 function buildVolumeTurnoverMatch({ stock, issuedSharesMap, volumeAverageMap }) {
   const pct = cleanNumber(stock.percent);
-  const volumeLots = cleanNumber(stock.tradeVolume) / 1000;
+  const volumeLots = cleanNumber(stock.tradeVolume);
+  const volumeShares = volumeLots * 1000;
   const issuedShares = issuedSharesMap.get(stock.code) || 0;
-  const turnoverRate = issuedShares ? (cleanNumber(stock.tradeVolume) / issuedShares) * 100 : 0;
+  const turnoverRate = issuedShares ? (volumeShares / issuedShares) * 100 : 0;
   const avgVolume = volumeAverageMap.get(stock.code) || 0;
-  const volumeRatio = avgVolume ? cleanNumber(stock.tradeVolume) / avgVolume : 0;
+  const volumeRatio = avgVolume ? volumeShares / avgVolume : 0;
   if (!(pct >= 3 && pct <= 8 && volumeLots >= 1000 && turnoverRate > 5 && volumeRatio >= 1)) return null;
   const score = clamp(Math.round(
     48 +
