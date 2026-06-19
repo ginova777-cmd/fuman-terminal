@@ -1,5 +1,5 @@
 (function () {
-  const VERSION = "desktop-api-only-all-20260618-17";
+  const VERSION = "desktop-api-only-all-20260618-18";
   const modules = {
     sectorMap: { loaded: false, src: "terminal-sector-map.js" },
     strategyConfig: { loaded: false, src: "terminal-strategy-config.js" },
