@@ -446,3 +446,111 @@ function updateMobileAiStaleNote(){const note=marketAiPanel?.querySelector?.("[d
 
 
 
+
+;(function installStrategy5InstantPaneSwitch(){
+  if(window.__fumanStrategy5InstantPaneSwitch)return;
+  window.__fumanStrategy5InstantPaneSwitch=true;
+  if(typeof switchStrategy5Filter!=="function")return;
+  const originalSwitchStrategy5Filter=switchStrategy5Filter;
+  let pendingRenderTimer=0;
+  const html=value=>String(value??"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+  const num=value=>Number(String(value??"").replace(/[,+%]/g,""))||0;
+  const rowsOf=value=>Array.isArray(value)?value:[];
+  function rowMatchesStrategy5Id(row,id){
+    if(!id||id==="all"||id==="strategy5_all")return true;
+    const matches=rowsOf(row?.matches);
+    return matches.some(match=>String(match?.id||match?.key||match?.type||"")===id||String(match?.short||match?.label||"")===id);
+  }
+  function activeMatch(row,id){
+    const matches=rowsOf(row?.matches);
+    return matches.find(match=>String(match?.id||match?.key||match?.type||"")===id)||row?.activeMatch||matches[0]||{};
+  }
+  function sortRows(rows){
+    return rows.slice().sort((a,b)=>
+      num(b.confluenceCount||b.totalConfluence||b.hitCount||b.matchCount||rowsOf(b.matches).length)-num(a.confluenceCount||a.totalConfluence||a.hitCount||a.matchCount||rowsOf(a.matches).length)||
+      rowsOf(b.matches).length-rowsOf(a.matches).length||
+      num(b.score||b.activeMatch?.score)-num(a.score||a.activeMatch?.score)||
+      num(b.percent)-num(a.percent)||
+      num(b.value)-num(a.value)
+    );
+  }
+  function buildRows(id){
+    if(id==="multi_strategy_confluence"||id==="confluence"){
+      return sortRows(rowsOf(strategy5TerminalConfluenceData));
+    }
+    return sortRows(rowsOf(strategy5Data).filter(row=>rowMatchesStrategy5Id(row,id)));
+  }
+  function buildPane(id,label){
+    const rows=buildRows(id);
+    const updatedAt=id==="multi_strategy_confluence"||id==="confluence"?strategy5TerminalConfluenceUpdatedAt:strategy5UpdatedAt;
+    const meta=updatedAt?`上次有效結果 ${new Date(updatedAt).toLocaleTimeString("zh-TW",{hour12:false,hour:"2-digit",minute:"2-digit"})}｜背景更新中`:"背景更新中";
+    const cards=rows.slice(0,60).map(row=>{
+      const match=activeMatch(row,id);
+      const matches=rowsOf(row?.matches);
+      const confluence=num(row.confluenceCount||row.totalConfluence||row.hitCount||row.matchCount||matches.length);
+      const internal=matches.length;
+      const pct=num(row.percent||row.changePercent);
+      const score=Math.round(num(match.score||row.score));
+      const tags=matches.slice(0,4).map(item=>`<span>${html(item.short||item.label||item.id||item.key||"命中")}</span>`).join("");
+      return `<article class="strategy5-instant-card" data-code="${html(row.code)}">
+        <div class="strategy5-instant-main">
+          <strong>${html(row.name||row.code)}</strong><small>${html(row.code||"")}</small>
+          <p>${html(match.reason||row.reason||"符合目前分頁條件")}</p>
+          <div class="strategy5-instant-tags">${tags||`<span>${html(label||"策略5")}</span>`}</div>
+        </div>
+        <div class="strategy5-instant-score"><strong>${score||"--"}</strong><span>${pct>=0?"+":""}${pct.toFixed(2)}%</span></div>
+        <div class="strategy5-instant-meta"><span>全終端 ${confluence||internal}</span><span>策略5 ${internal}</span></div>
+      </article>`;
+    }).join("");
+    return `<section class="strategy5-results is-active strategy5-instant-pane" data-strategy5-pane="${html(id)}">
+      <div class="strategy5-instant-head"><strong>${html(label||"策略5")}</strong><span>${rows.length.toLocaleString("zh-TW")} 檔｜${meta}</span></div>
+      ${cards?`<div class="strategy5-instant-list">${cards}</div>`:`<div class="empty-state">目前沒有符合「${html(label||id)}」的上一次有效結果，背景更新中...</div>`}
+    </section>`;
+  }
+  function paintInstantPane(button,nextId){
+    const shell=document.querySelector("#strategy-view.strategy5-only .strategy5-shell.strategy5-clean");
+    const dashboard=shell?.querySelector(".strategy5-dashboard");
+    if(!shell||!dashboard)return false;
+    const label=(button?.textContent||nextId||"策略5").trim();
+    const cached=typeof strategy5ResultsCache!=="undefined"?strategy5ResultsCache.get(nextId):"";
+    document.querySelectorAll("[data-strategy5-filter]").forEach(item=>{
+      const active=item.dataset.strategy5Filter===nextId;
+      item.classList.toggle("active",active);
+      item.setAttribute("aria-selected",active?"true":"false");
+      item.tabIndex=active?0:-1;
+    });
+    shell.querySelectorAll(".strategy5-results[data-strategy5-pane]").forEach(pane=>pane.remove());
+    dashboard.insertAdjacentHTML("beforeend",cached||buildPane(nextId,label));
+    refreshStrategy5FastDomCache?.(true);
+    enforceStrategy5ActivePane?.(nextId);
+    clearTimeout(pendingRenderTimer);
+    pendingRenderTimer=setTimeout(()=>{
+      if(isViewActive?.("strategy")&&strategyPresetMode==="strategy5"&&strategy5ActiveId===nextId){
+        renderStrategyScanner?.();
+      }
+    },cached?350:900);
+    return true;
+  }
+  switchStrategy5Filter=function(filterButton,event=null){
+    const nextId=filterButton?.dataset?.strategy5Filter||"multi_strategy_confluence";
+    event?.preventDefault?.();
+    event?.stopPropagation?.();
+    event?.stopImmediatePropagation?.();
+    strategy5FilterPointerStart=null;
+    strategy5LastFilterTapAt=Date.now();
+    strategy5LastFilterTapId=nextId;
+    strategy5TabScrollLeft=filterButton?.closest?.(".strategy5-preset-tabs")?.scrollLeft||strategy5TabScrollLeft;
+    strategy5ShouldFocusActiveTab=false;
+    strategyPresetMode="strategy5";
+    strategy5ActiveId=nextId;
+    selectedStrategyIds=new Set([nextId]);
+    strategy5Page=1;
+    refreshStrategy5FastDomCache?.(true);
+    if(paintInstantPane(filterButton,nextId)){
+      scheduleStrategy5RouteSave?.();
+      return false;
+    }
+    return originalSwitchStrategy5Filter(filterButton,event);
+  };
+  window.fumanSelectStrategy5Filter=(button,event)=>switchStrategy5Filter(button,event);
+})();
