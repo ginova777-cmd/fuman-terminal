@@ -1,5 +1,5 @@
 (function () {
-  const version = "desktop-api-only-all-20260618-16";
+  const version = "desktop-api-only-all-20260618-17";
   window.FUMAN_TERMINAL_VERSION = version;
   window.FUMAN_TERMINAL_BOOT = {
     version,
