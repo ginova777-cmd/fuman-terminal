@@ -1,5 +1,5 @@
 (function () {
-  const VERSION = "desktop-api-only-all-20260618-18";
+  const VERSION = "desktop-api-only-strategy5-volume-units-20260619-08";
   const modules = {
     sectorMap: { loaded: false, src: "terminal-sector-map.js" },
     strategyConfig: { loaded: false, src: "terminal-strategy-config.js" },
@@ -38,6 +38,7 @@
     },
   };
 })();
+
 
 
 

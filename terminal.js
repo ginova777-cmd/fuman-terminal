@@ -88,6 +88,23 @@
   window.FUMAN_TERMINAL_LOAD_APP = loadApp;
   window.FUMAN_TERMINAL_PREFETCH_APP = prefetchApp;
 
+  function replayInteractionAfterLoad(event, reason) {
+    if (window.FUMAN_TERMINAL_APP_READY) return false;
+    const target = event.target.closest("[data-view], .strategy-card[data-strategy], [data-strategy-mode], [data-swing-sort], [data-swing-zone-filter], [data-swing-filter], [data-intraday-sort], [data-intraday-filter], [data-strategy5-filter], [data-chip-filter], #chip-sort");
+    if (!target) return false;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    loadApp(reason).then(() => {
+      if (!target.isConnected) return;
+      target.dispatchEvent(new MouseEvent("click", {
+        bubbles: true,
+        cancelable: true,
+        view: window,
+      }));
+    }).catch(() => undefined);
+    return true;
+  }
+
   document.addEventListener("click", (event) => {
     const memberButton = event.target.closest("#member-state");
     if (!memberButton) return;
@@ -117,6 +134,7 @@
   });
 
   document.addEventListener("click", (event) => {
+    if (replayInteractionAfterLoad(event, "interaction-replay")) return;
     if (event.target.closest("[data-view], .strategy-card, .brand-refresh, button, input, select")) {
       loadApp("interaction");
     }
