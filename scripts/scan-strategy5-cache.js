@@ -3,11 +3,11 @@ const path = require("path");
 const { fetchMisQuotes } = require("../lib/mis-quotes");
 const { overlayFugleWebSocketQuotes } = require("../lib/fugle-quote-overlay");
 const { publishStrategyCacheStatus } = require("../lib/strategy-cache-status");
+const institutionLatestHandler = require("../api/institution-latest");
 
 const { ROOT, dataPath } = require("./runtime-paths");
 const OUT_FILE = dataPath("strategy5-latest.json");
 const BACKUP_FILE = dataPath("strategy5-backup.json");
-const INSTITUTION_FILE = dataPath("institution-latest.json");
 const CB_DETECT_FILE = dataPath("cb-detect-latest.json");
 const WARRANT_FLOW_FILE = dataPath("warrant-flow-latest.json");
 const WARRANT_SINGLE_SIGNAL_FILE = dataPath("warrant-single-signal-top.json");
@@ -41,6 +41,35 @@ const STRATEGY5_API_ONLY = true;
 
 function readJson(file, fallback) {
   try { return JSON.parse(fs.readFileSync(file, "utf8")); } catch { return fallback; }
+}
+function createCaptureResponse() {
+  let statusCode = 200;
+  let payload = null;
+  return {
+    setHeader() {},
+    status(code) {
+      statusCode = code;
+      return this;
+    },
+    json(body) {
+      payload = body;
+      return this;
+    },
+    get statusCode() { return statusCode; },
+    get payload() { return payload; },
+  };
+}
+
+async function loadInstitutionLatestPayload() {
+  const response = createCaptureResponse();
+  await institutionLatestHandler({ method: "GET" }, response);
+  const payload = response.payload;
+  const data = payload?.data && typeof payload.data === "object" ? payload.data : {};
+  if (response.statusCode >= 400 || !payload?.ok || !payload?.complete || !Object.keys(data).length) {
+    const detail = payload?.detail || payload?.error || `HTTP ${response.statusCode}`;
+    throw new Error(`strategy5 institution latest unavailable: ${detail}`);
+  }
+  return payload;
 }
 
 function cleanNumber(value) {
@@ -655,39 +684,40 @@ function buildStrategy5Match({ stock, inst, valueRank, volumeRank, rows, conflue
   const setup = analyzeBreakoutSetup(rows, stock);
   const todayPct = setup ? setup.pct : pct;
   const jointBuying = total > 0 && foreign > 0 && trust > 0;
-  if (!jointBuying || !setup || todayPct <= -1.5 || todayPct > 7.5) return null;
+  if (!jointBuying || !setup || todayPct <= -2.5 || todayPct > 10.2) return null;
 
-  const volume = setup.volume || cleanNumber(stock.tradeVolume);
-  const legalBuyRatio = volume ? (total / volume) * 100 : 0;
-  const foreignBuyRatio = volume ? (foreign / volume) * 100 : 0;
-  const trustBuyRatio = volume ? (trust / volume) * 100 : 0;
+  const volumeLots = cleanNumber(stock.tradeVolume);
+  const historyVolume = cleanNumber(setup.volume);
+  const volumeShares = volumeLots ? volumeLots * 1000 : historyVolume;
+  const legalBuyRatio = volumeShares ? (total / volumeShares) * 100 : 0;
+  const foreignBuyRatio = volumeShares ? (foreign / volumeShares) * 100 : 0;
+  const trustBuyRatio = volumeShares ? (trust / volumeShares) * 100 : 0;
   const foreignStreak = cleanNumber(inst.foreignStreak || stock.foreignStreak);
   const trustStreak = cleanNumber(inst.trustStreak || stock.trustStreak);
   const hasCb = Boolean(confluenceSources?.cbByCode?.has(String(stock.code)));
   const hasWarrant = Boolean(confluenceSources?.warrantByCode?.has(String(stock.code)));
 
   const positionOk =
-    setup.close > setup.ma5 &&
-    setup.close > setup.ma10 &&
-    setup.distanceToHigh20Pct <= 3 &&
-    setup.fiveDayPct <= 15;
+    (setup.close > setup.ma5 || setup.close > setup.ma10) &&
+    setup.distanceToHigh20Pct <= 8 &&
+    setup.fiveDayPct <= 25;
   const volumeOk =
-    setup.volumeRatio5 >= 1.2 &&
-    setup.volumeRatio20 >= 1.1 &&
-    valueRank >= 55 &&
-    setup.volumeRatio20 <= 6;
+    valueRank >= 40 &&
+    setup.volumeRatio20 <= 10 &&
+    (setup.volumeRatio5 >= 0.75 || setup.volumeRatio20 >= 0.75 || valueRank >= 55);
   const continuityOk =
     trustStreak >= 2 ||
     foreignStreak >= 2 ||
-    trustBuyRatio >= 1 ||
-    foreignBuyRatio >= 1;
+    trustBuyRatio >= 0.2 ||
+    foreignBuyRatio >= 0.2;
   const fakeBreakoutOk =
-    setup.upperShadowRatio <= 0.45 &&
-    setup.closePosition >= 0.45 &&
-    setup.threeDayPct <= 12;
+    setup.upperShadowRatio <= 0.65 &&
+    setup.closePosition >= 0.3 &&
+    setup.threeDayPct <= 18;
   const concentrationOk =
-    legalBuyRatio >= 0.5 ||
-    trustBuyRatio >= 0.8 ||
+    legalBuyRatio >= 0.2 ||
+    trustBuyRatio >= 0.1 ||
+    foreignBuyRatio >= 0.1 ||
     (hasCb && hasWarrant);
   if (!positionOk || !volumeOk || !continuityOk || !fakeBreakoutOk || !concentrationOk) return null;
 
@@ -1027,7 +1057,17 @@ async function buildMatches(stocks, institutionData, issuedSharesMap = new Map()
     const trust = cleanNumber(inst.trust);
     const dealer = cleanNumber(inst.dealer);
     const total = cleanNumber(inst.total || (foreign + trust + dealer));
-    const normalizedInst = { foreign, trust, dealer, total };
+    const normalizedInst = {
+      foreign,
+      trust,
+      dealer,
+      total,
+      foreignStreak: cleanNumber(inst.foreignStreak || inst.foreign_streak),
+      trustStreak: cleanNumber(inst.trustStreak || inst.trust_streak),
+      jointStreak: cleanNumber(inst.jointStreak || inst.joint_streak),
+      tradeVolume: cleanNumber(inst.tradeVolume || inst.trade_volume),
+      value: cleanNumber(inst.value || inst.trade_value),
+    };
     const matches = [
       buildChipKConfluenceMatch({ stock, inst: normalizedInst, confluenceSources, valueRank, volumeRank }),
       buildVolumeTurnoverMatch({ stock, issuedSharesMap, volumeAverageMap }),
@@ -1098,7 +1138,7 @@ async function buildMatches(stocks, institutionData, issuedSharesMap = new Map()
 
 async function main() {
   const backup = readJson(BACKUP_FILE, { ok: true, matches: [] });
-  const institution = readJson(INSTITUTION_FILE, { data: {} });
+  const institution = await loadInstitutionLatestPayload();
   const finmindChipMap = await fetchFinMindChipLatestMap().catch((error) => {
     console.warn(`strategy5 FinMind chip supplement skipped: ${error.message}`);
     return new Map();
