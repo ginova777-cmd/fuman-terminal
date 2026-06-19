@@ -14,6 +14,315 @@ https://fuman-terminal.vercel.app
 
 `https://fuman-terminal-sync.vercel.app` is not the production terminal. Do not deploy there and report the terminal as updated. Strategy scans may be correct in `C:\fuman-terminal-sync`, and source sync may be correct, while users still see old data if `C:\fuman-terminal` has not been deployed to the `fuman-terminal` Vercel project.
 
+## Desktop API-Only Latest Run Contract
+
+The desktop terminal is API-only for strategy/chip/warrant display. Do not repair desktop display by pointing the frontend back to static `/data/*.json` files, by asking the user to manually run PowerShell checks, or by using Vercel deploy as a scan refresh mechanism.
+
+The official data flow is:
+
+```text
+full scan
+-> write a new Supabase complete run
+-> /api/*-latest reads Supabase with no-store
+-> API selects the newest valid non-empty complete run
+-> frontend polling detects runId changes
+-> frontend forces API reload
+-> terminal display updates
+```
+
+### API-Only Data Refresh Authority
+
+API-only data updates must not depend on frontend version strings, service-worker cache versions, Vercel deployment side effects, or static asset cache busting. The authoritative data freshness signal is the backend complete-run identity:
+
+```text
+Supabase complete run
+run_id / runId
+result rows for that runId
+/api/*-latest no-store response
+frontend polling/realtime comparing runId
+```
+
+Required rule:
+
+```text
+Data changed because a new valid Supabase complete run exists.
+The API exposes that run through a new runId.
+The frontend sees the runId change and reloads that API payload.
+```
+
+Strict prohibitions:
+
+```text
+Do not bump version.json only to make strategy/chip/warrant data appear fresh.
+Do not change terminal-core.js CACHE/version strings as a data refresh mechanism.
+Do not deploy Vercel only to solve stale API data.
+Do not rely on browser hard refresh, service-worker replacement, or asset query strings to publish scan results.
+Do not report an API-only data fix as complete just because the frontend version changed.
+```
+
+Allowed version use:
+
+```text
+Use version.json / terminal-core.js / fuman-sw.js version changes only when frontend static assets changed and browser cache busting is required.
+Do not change versions when the fix is only scanner logic, Supabase rows, latest API selection, or runId polling behavior.
+```
+
+Verification for API-only data fixes:
+
+```text
+1. Run or confirm the scanner wrote a new Supabase complete run.
+2. Confirm /api/*-latest returns ok=true, no-store headers, count > 0, and the expected runId.
+3. Confirm the relevant strategy ids/rows exist in the API payload.
+4. Confirm frontend polling/reload is keyed by runId, not by version string.
+5. Run npm run monitor:terminal-api for production health when the change touches production behavior.
+```
+
+Latest APIs must send these headers:
+
+```text
+Cache-Control: no-store, max-age=0, must-revalidate
+CDN-Cache-Control: no-store
+Vercel-CDN-Cache-Control: no-store
+```
+
+Complete-run gate:
+
+```text
+status = complete
+complete = true
+result_count > 0 when the run/view exposes result_count
+actual result rows length > 0
+```
+
+If the newest complete run is empty, invalid, running, incomplete, or has no result rows, the API must skip it and continue searching recent complete runs until it finds the latest valid non-empty complete run. Empty complete runs must never overwrite the previous valid official result.
+
+This rule is intentional for rest days, holidays, early morning before scan completion, partial source outages, and failed scans:
+
+```text
+If no newer valid non-empty complete run exists, keep serving the previous valid complete run.
+When a later trading day publishes a valid non-empty complete run, the runId changes and the frontend switches automatically.
+```
+
+Do not implement a latest API that only reads `limit=1` from a latest view and returns empty/404 when that newest complete run has zero rows. The API/view layer must explicitly avoid empty complete runs.
+
+Endpoints currently expected to follow this contract:
+
+```text
+/api/open-buy-latest
+/api/strategy2-latest
+/api/strategy3-latest
+/api/strategy4-latest
+/api/strategy5-latest
+/api/institution-latest
+/api/institution-tdcc-breakout-latest
+/api/warrant-flow-latest
+```
+
+Related files:
+
+```text
+api/open-buy-latest.js
+api/strategy2-latest.js
+api/strategy3-latest.js
+api/strategy4-latest.js
+api/strategy5-latest.js
+api/institution-latest.js
+api/institution-tdcc-breakout-latest.js
+api/warrant-flow-latest.js
+api/terminal-home.js
+terminal-app.js
+terminal-chip-flow.js
+terminal-runtime-config.js
+```
+
+Frontend refresh rule:
+
+- Polling/realtime should compare backend version state such as `runId`.
+- When `runId` changes, force a no-store API reload for the affected view.
+- Do not make the user click twice or manually refresh to see a new complete run.
+- Do not let lazy loading swallow the first strategy/chip click; if the app module is still loading, replay the click after load.
+
+TDCC breakout is API-only:
+
+```text
+/api/institution-tdcc-breakout-latest
+```
+
+Do not route desktop TDCC breakout back to `/data/institution-tdcc-breakout-top.json`; static desktop data may be disabled and can return HTTP 410.
+
+### Buy/Sell Chip Incident Pattern
+
+Known production incident from 2026-06-19:
+
+```text
+User symptom:
+- 外資+投信佔5日均量 clicked but no rows displayed.
+- 外資連3買 + 1000張連3週增 clicked but no rows displayed.
+
+Root cause:
+1. Live terminal-chip-flow.js was still using old logic and classified foreignTrustVolumePct as a TDCC mode.
+2. foreignTrustVolumePct therefore tried to read TDCC data instead of /api/institution-latest.
+3. Live /api/institution-tdcc-breakout-latest was missing and returned HTTP 404.
+4. The main institution API still had data; this was not a Supabase institution data outage.
+```
+
+Required fix when this happens:
+
+```text
+1. In terminal-chip-flow.js, isTdccMode() must return only mode === "tdcc1000".
+2. foreignTrustVolumePct must render through the normal buy/sell table path using /api/institution-latest.
+3. terminal-runtime-config.js must set institutionTdccBreakout to /api/institution-tdcc-breakout-latest.
+4. api/institution-tdcc-breakout-latest.js must exist and return HTTP 200 on production.
+5. Do not route either strategy back to /data/*.json.
+6. Verify production JS, runtime config, institution API, and TDCC API directly.
+```
+
+Required production verification:
+
+```text
+/api/institution-latest returns ok=true and count > 0
+foreignTrust5dCandidates > 0
+/api/institution-tdcc-breakout-latest returns HTTP 200 and ok=true
+terminal-chip-flow.js contains: return mode === "tdcc1000";
+terminal-chip-flow.js does not contain: tdcc1000 || foreignTrustVolumePct
+terminal-runtime-config.js contains: institutionTdccBreakout: "/api/institution-tdcc-breakout-latest"
+npm run monitor:terminal-api returns ok=true
+```
+
+Do not tell the user this is a data/scan/Supabase issue until these frontend and endpoint checks pass. If the API has data but the user's desktop is blank, check live frontend JS and runtime config before changing scanners.
+
+## Automatic Production Health Monitor
+
+The user must not be responsible for manually checking production health. The Windows machine should run the monitor automatically:
+
+```text
+Scheduled task: Fuman Terminal API Health
+Frequency: every 15 minutes
+Runner: C:\fuman-terminal\run-terminal-api-health.ps1
+Script: C:\fuman-terminal\scripts\monitor-terminal-api-health.js
+Status file: C:\fuman-runtime\state\terminal-api-health-latest.json
+NPM command: npm run monitor:terminal-api
+```
+
+The monitor checks production `https://fuman-terminal.vercel.app` for:
+
+```text
+version.json expected version
+/api/institution-latest count > 0
+foreign + investment trust / 5-day average volume candidates > 0
+/api/open-buy-latest count > 0
+/api/strategy3-latest count > 0
+/api/strategy4-latest count > 0
+/api/strategy5-latest count > 0
+/api/warrant-flow-latest count > 0
+/api/institution-tdcc-breakout-latest HTTP 200 and ok
+no-store cache headers on APIs
+terminal-chip-flow.js isTdccMode must be tdcc1000-only
+terminal-runtime-config.js institutionTdccBreakout must be /api/institution-tdcc-breakout-latest
+```
+
+If Telegram or LINE environment variables are configured, the monitor sends alerts only for critical failures and uses a cooldown to avoid repeated noise. Normal checks stay quiet.
+
+Known good production reference from 2026-06-19:
+
+```text
+version = desktop-api-only-all-20260618-23
+institution count = 486
+foreignTrust5dCandidates = 169
+open-buy count = 14
+strategy3 count = 2
+tdcc breakout count = 3
+strategy4 count = 187
+strategy5 count = 80
+warrant-flow count = 120
+```
+
+## Keeping Production Healthy
+
+Do not make the user manually verify production with ad hoc PowerShell commands. The expected operating model is:
+
+```text
+scanner publishes data
+latest APIs enforce non-empty complete-run gates
+frontend reloads on runId changes
+Windows health monitor checks production every 15 minutes
+Codex investigates only when monitor/user reports a failure
+```
+
+Normal daily operation:
+
+```text
+1. Let scheduled scans publish Supabase complete runs.
+2. Let /api/*-latest read the newest valid non-empty complete run.
+3. Let frontend polling/realtime detect runId changes and reload.
+4. Let "Fuman Terminal API Health" monitor production every 15 minutes.
+5. Check C:\fuman-runtime\state\terminal-api-health-latest.json only when debugging or reporting status.
+```
+
+After any code change that touches scanner output, latest APIs, frontend polling/reload, runtime config, TDCC breakout, or monitor logic, verify at minimum:
+
+```text
+node --check api/open-buy-latest.js
+node --check api/strategy2-latest.js
+node --check api/strategy3-latest.js
+node --check api/strategy4-latest.js
+node --check api/strategy5-latest.js
+node --check api/institution-latest.js
+node --check api/institution-tdcc-breakout-latest.js
+node --check api/warrant-flow-latest.js
+node --check scripts/monitor-terminal-api-health.js
+npm run monitor:terminal-api
+```
+
+For live production status, the authoritative automated check is:
+
+```text
+npm run monitor:terminal-api
+```
+
+This command must remain a read-only production health check. It should not deploy, mutate Supabase scan data, bump versions, rewrite generated data, or repair by static fallback.
+
+Windows Task Scheduler must keep this task enabled:
+
+```text
+Task name: Fuman Terminal API Health
+Task to run: powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:\fuman-terminal\run-terminal-api-health.ps1
+Repeat: every 15 minutes
+Expected Last Result: 0
+```
+
+If production becomes blank or stale, debug in this order:
+
+```text
+1. Read C:\fuman-runtime\state\terminal-api-health-latest.json.
+2. Identify which endpoint failed or returned count 0.
+3. Check that the endpoint has no-store headers.
+4. Check that the endpoint skips empty complete runs and returns the latest non-empty runId.
+5. Check Supabase run/result tables for that runId.
+6. Check frontend polling/reload only after the API returns a correct payload.
+7. Do not use /data/*.json or static fallback to hide the incident.
+```
+
+Production must be considered healthy only when all of these are true:
+
+```text
+version.json matches the expected deployed version
+/api/institution-latest returns count > 0
+foreign + investment trust / 5-day average volume candidates > 0
+/api/open-buy-latest returns count > 0
+/api/strategy3-latest returns count > 0
+/api/strategy4-latest returns count > 0
+/api/strategy5-latest returns count > 0
+/api/warrant-flow-latest returns count > 0
+/api/institution-tdcc-breakout-latest returns HTTP 200 and ok
+latest APIs return no-store headers
+live terminal-chip-flow.js does not classify foreignTrustVolumePct as TDCC
+live terminal-runtime-config.js points institutionTdccBreakout to /api/institution-tdcc-breakout-latest
+frontend updates when runId changes
+```
+
+If a new trading day produces a valid non-empty complete run, production should switch automatically without manual reload or deploy. If a new trading day produces only running, incomplete, invalid, or empty complete runs, production should continue showing the previous valid formal result.
+
 ## Strategy2 Authoritative Display Contract
 
 Strategy2 is finalized as:
@@ -879,6 +1188,25 @@ Realtime radar, market overview, and AI interpretation follow the same two-layer
 
 Strategy5 data is governed separately as well: `strategy5-latest.json`, `strategy5-backup.json`, `strategy-match-index.json`, 籌碼老K, 外資投信連買準突破, and multi-strategy confluence output must not be published by scoped sync or manual copy. They must pass through the freshness gate and final live verifier.
 
+Watchlist strategy/chip matches are API-only and snapshot-governed. The official production flow is:
+
+```text
+完整掃描 -> Supabase snapshot -> /api/watchlist-match-index no-store -> 回傳 runId -> 前端 polling 偵測 runId -> 變更就清 cache 並重畫終端
+```
+
+Rules for this flow:
+
+- `scripts/generate-watchlist-match-index.js` is the only writer for the official `watchlist_match_index` Supabase snapshot and `data/strategy-match-index.json` local/runtime fallback.
+- `watchlist_match_index` is the only official watchlist strategy/chip cache. It must include strategy 1/2/3/4/5 plus chip sources `institution`, `warrant`, and `cb` when those source APIs match a watchlist code.
+- `/api/watchlist-match-index` must stay `no-store`, must prefer Supabase `watchlist_match_index`, must return a top-level `runId`, and may fall back to local `data/strategy-match-index.json` only when Supabase readback fails.
+- The frontend must use `/api/watchlist-match-index` first. It must poll the returned `runId`; when the `runId` changes, clear the in-memory watchlist strategy cache and redraw the terminal.
+- `scripts/generate-slim-cache.js` must never write or upsert `watchlist_match_index`, and must never replace the full watchlist match index with static/slim/legacy-only data.
+- Warrant matches must read `matches`, `rows`, `volumeMatches`, and `singleSignals`. Do not drop `volumeMatches` or `singleSignals`; doing so hides valid warrant hits.
+- Strategy2 matches may contain multiple independent signals for one stock. Keep distinct Strategy2 signal keys such as `strategy2:早盤逐筆追蹤` and `strategy2:真跳空` instead of collapsing them into one generic `strategy2` chip. Multiple rows for the same Strategy2 signal may still merge details.
+- Data refreshes do not require deploy: rerunning the full scan, writing a new Supabase snapshot, changing `runId`, or changing watchlist hit counts should update through API-only polling.
+- Deploy is required only when program code or frontend assets change: `/api/watchlist-match-index`, `terminal-watchlist-module.js`, `scripts/generate-watchlist-match-index.js`, CSS/HTML/JS, service worker, or boot/versioned assets.
+- Regression checks must be source-driven, not single-stock hardcoded. For any sampled or user-reported watchlist code, compare source API hits against `/api/watchlist-match-index`: if strategy/chip/warrant/CB source data contains a hit, the index must contain the corresponding label/key. If source data still contains a hit but the watchlist terminal does not show it, repair the parser, generator, Supabase snapshot, API runId, or frontend cache before claiming the terminal is current.
+
 Warrant flow is governed separately from institution/buy-sell flow. `warrant-flow-latest.json`, `warrant-flow-slim.json`, `warrant-priority-top.json`, `warrant-single-signal-top.json`, and the `volumeMatches` fields for `30 分量 / 流通 / 倍數` must not be published by scoped sync or manual copy. They must pass:
 
 ```powershell
@@ -913,8 +1241,81 @@ npm run verify:warrant-freshness:live
 npm run verify:data-freshness:live
 ```
 
+## Desktop API-Only Deploy Gate
 
+Desktop production deploys must not be blocked by the old static `/data/*.json` freshness gate. The desktop terminal is API-only, so predeploy should verify the API-only contract instead of requiring static files that scanners intentionally no longer publish.
 
+Default predeploy flow should include:
 
+```text
+guard:source
+verify:bump
+sync:source
+verify:version
+verify:sw
+verify:mobile-layout
+verify:desktop-api-only
+verify:source-sync
+```
 
+`verify:data-freshness` is the old static JSON gate. Do not run it by default for desktop API-only deploys because it expects files such as:
+
+```text
+/data/open-buy-latest.json
+/data/institution-latest.json
+/data/warrant-flow-latest.json
+/data/strategy4-latest.json
+/data/strategy5-latest.json
+```
+
+Those files may intentionally be absent or disabled under API-only mode. Missing static JSON must not be used as a reason to claim the API-only desktop terminal is broken.
+
+Run the static freshness gate only when explicitly requested for static archive/history work:
+
+```powershell
+$env:FUMAN_VERIFY_STATIC_DATA_FRESHNESS = "1"
+npm run deploy
+```
+
+For desktop API-only production health, use:
+
+```text
+npm run monitor:terminal-api
+```
+
+That monitor checks the real production API endpoints, no-store headers, buy/sell frontend contract, and TDCC breakout endpoint. It is the correct gate for `/api/*-latest` display health.
+
+If `npm run deploy` is blocked by `verify:data-freshness` while the desktop is API-only, fix `scripts/prepare-deploy.js` so it runs `verify:desktop-api-only` by default and only runs `verify:data-freshness` when `FUMAN_VERIFY_STATIC_DATA_FRESHNESS=1` is set. Do not restore static JSON output to satisfy the old gate.
+
+## Buy/Sell Chip Nightly Schedule
+
+Buy/sell chip data should use the B plan:
+
+```text
+21:00 buy/sell complete scan
+21:15 watchdog check; rerun only if the 21:00 scan failed
+```
+
+Expected Windows scheduled tasks:
+
+```text
+Fuman 買賣超 Cache 2100
+- Start time: 21:00
+- Runner: C:\fuman-terminal-sync\run-institution.ps1
+- Purpose: full institution scan and Supabase complete run publish
+
+Fuman 買賣超 Watchdog 2120
+- Start time: 21:15
+- Runner: C:\fuman-terminal-sync\run-flow-watchdog.ps1 -Scope institution -ExpectedTime 21:00
+- Purpose: verify the 21:00 institution cache; rerun only when stale/missing/too small
+```
+
+Morning buy/sell full-cache tasks should stay removed unless explicitly requested again:
+
+```text
+Fuman 買賣超 Cache 0600
+Fuman 買賣超 Watchdog 0620
+```
+
+Reason: institution buy/sell data is after-hours data. The main official update should happen at 21:00, with a 21:15 watchdog. A 06:00 buy/sell rerun adds another failure point and does not materially improve freshness for the desktop API-only display.
 
