@@ -364,3 +364,82 @@ function updateMobileAiStaleNote(){const note=marketAiPanel?.querySelector?.("[d
   document.addEventListener?.("visibilitychange",()=>{if(!document.hidden)poll(!1)});
 })();
 
+;(function installStrategy5CacheFirstPaint(){
+  if(window.__fumanStrategy5CacheFirstPaint)return;
+  window.__fumanStrategy5CacheFirstPaint=!0;
+  if(typeof loadStrategy5Cache!=="function")return;
+  const CACHE_KEY="fuman-strategy5-valid-cache-v2";
+  const TIMEOUT_MS=Math.max(1200,Math.min(2500,cleanNumber(FUMAN_TUNING_CONFIG.strategy5FastPaintTimeoutMs||1800)));
+  const originalLoadStrategy5Cache=loadStrategy5Cache;
+  const later=ms=>new Promise(resolve=>setTimeout(resolve,ms));
+  function readCache(){
+    try{
+      const payload=JSON.parse(localStorage.getItem(CACHE_KEY)||"null");
+      if(!payload||!Array.isArray(payload.strategy5Data)||!payload.strategy5Data.length)return null;
+      return payload;
+    }catch(error){return null}
+  }
+  function writeCache(){
+    try{
+      if(!Array.isArray(strategy5Data)||!strategy5Data.length)return;
+      localStorage.setItem(CACHE_KEY,JSON.stringify({
+        strategy5Data:strategy5Data.slice(0,250),
+        strategy5UpdatedAt:strategy5UpdatedAt||Date.now(),
+        strategy5UsedDateKey:strategy5UsedDateKey||"",
+        strategy5TerminalConfluenceData:Array.isArray(strategy5TerminalConfluenceData)?strategy5TerminalConfluenceData.slice(0,160):[],
+        strategy5TerminalConfluenceUpdatedAt:strategy5TerminalConfluenceUpdatedAt||0,
+        savedAt:Date.now()
+      }));
+    }catch(error){}
+  }
+  function restoreCache(){
+    const payload=readCache();
+    if(!payload)return false;
+    try{
+      if(!Array.isArray(strategy5Data)||!strategy5Data.length)strategy5Data=payload.strategy5Data;
+      if(!strategy5UpdatedAt)strategy5UpdatedAt=cleanNumber(payload.strategy5UpdatedAt)||cleanNumber(payload.savedAt)||Date.now();
+      if(!strategy5UsedDateKey)strategy5UsedDateKey=payload.strategy5UsedDateKey||strategy5UsedDateKey||"";
+      if(Array.isArray(payload.strategy5TerminalConfluenceData)&&payload.strategy5TerminalConfluenceData.length&&!Array.isArray(strategy5TerminalConfluenceData)||Array.isArray(payload.strategy5TerminalConfluenceData)&&payload.strategy5TerminalConfluenceData.length&&!strategy5TerminalConfluenceData.length){
+        strategy5TerminalConfluenceData=payload.strategy5TerminalConfluenceData;
+        strategy5TerminalConfluenceUpdatedAt=cleanNumber(payload.strategy5TerminalConfluenceUpdatedAt)||cleanNumber(payload.savedAt)||Date.now();
+      }
+      return true;
+    }catch(error){return false}
+  }
+  function markUpdating(){
+    try{
+      if(strategySummary&&isViewActive?.("strategy")&&strategyPresetMode==="strategy5"&&!/更新中/.test(strategySummary.textContent||"")){
+        strategySummary.textContent=`${strategySummary.textContent}｜更新中`;
+      }
+    }catch(error){}
+  }
+  function paintFromCache(){
+    if(isViewActive?.("strategy")&&strategyPresetMode==="strategy5"&&typeof renderStrategyScanner==="function"){
+      renderStrategyScanner();
+      markUpdating();
+    }
+  }
+  async function refreshRemote(force){
+    const result=await originalLoadStrategy5Cache.call(this,force);
+    writeCache();
+    if(isViewActive?.("strategy")&&strategyPresetMode==="strategy5"&&typeof renderStrategyScanner==="function")renderStrategyScanner();
+    return result;
+  }
+  loadStrategy5Cache=async function(force=false){
+    const restored=restoreCache();
+    if(restored)paintFromCache();
+    const task=refreshRemote.call(this,force).catch(error=>{
+      if(typeof recordFrontendError==="function")recordFrontendError("strategy5-cache-first-refresh",error);
+      return restored;
+    });
+    if(restored&&!force)return task.then(()=>true),true;
+    if(restored&&force)return Promise.race([task,later(TIMEOUT_MS).then(()=>true)]);
+    return Promise.race([task,later(TIMEOUT_MS).then(()=>false)]);
+  };
+  deferUiWork?.(()=>{
+    restoreCache();
+    isTerminalUnlocked?.()&&loadStrategy5Cache(false);
+  },2000);
+  window.addEventListener?.("focus",()=>{isTerminalUnlocked?.()&&loadStrategy5Cache(false)},{passive:true});
+})();
+
