@@ -1315,10 +1315,37 @@ watchlist_match_index 必須包含策略1/2/3/4/5，以及買賣超、權證、C
 有上一次有效結果時先顯示舊結果並標示更新中，不要空白 loading 等 API。
 ```
 
+Strategy5 loading / cache rule:
+
+```text
+策略5與多策略共振不得在等待 API 時清空畫面。
+使用者點策略5或切換策略5分頁時，必須先用記憶體資料或 localStorage 上一次有效結果立即 render。
+右上或狀態列可顯示更新中，但主內容不可空白 loading。
+策略5本體和多策略共振必須分開載入；其中一個 API 慢，不得拖慢另一個區塊或分頁。
+/api/watchlist-match-index polling 只用來取得 runId / snapshot identity，不拿來每次重抓大 payload。
+runId 沒變時，不重抓 /api/latest-signals?strategy=confluence。
+runId 變更時，背景抓新的 /api/latest-signals?strategy=confluence；新 rows 成功回來後才替換畫面與快取。
+新 payload 失敗、逾時、ok=false、或 rows 為空時，繼續保留上一筆有效多策略共振結果，不得產生假成功，也不得覆蓋為空畫面。
+點擊策略5分頁的等待時間上限應短；超過約 1.5-2 秒就顯示既有快取並讓背景更新繼續跑。
+```
+
+The incident pattern to avoid:
+
+```text
+錯誤做法：
+runId 變更或進入策略5時，先把 strategy5TerminalConfluenceData 清空，再等待 /api/latest-signals?strategy=confluence 大 payload。
+
+使用者症狀：
+策略5或多策略共振一直顯示 loading、空白、點分頁反應很慢。
+
+正確做法：
+保留上一筆有效 rows -> 背景檢查 runId -> runId 變才抓大 payload -> 新 payload 成功才 replace -> 失敗就繼續顯示舊有效資料。
+```
+
 Watchlist strategy/chip matches are API-only and snapshot-governed. The official production flow is:
 
 ```text
-完整掃描 -> Supabase snapshot -> /api/watchlist-match-index no-store -> 回傳 runId -> 前端 polling 偵測 runId -> 變更就清 cache 並重畫終端
+完整掃描 -> Supabase snapshot -> /api/watchlist-match-index no-store -> 回傳 runId -> 前端 polling 偵測 runId -> runId 變更才背景重抓大 payload -> 成功後替換快取並重畫終端
 ```
 
 Rules for this flow:
@@ -1326,7 +1353,7 @@ Rules for this flow:
 - `scripts/generate-watchlist-match-index.js` is the only writer for the official `watchlist_match_index` Supabase snapshot and `data/strategy-match-index.json` local/runtime fallback.
 - `watchlist_match_index` is the only official watchlist strategy/chip cache. It must include strategy 1/2/3/4/5 plus chip sources `institution`, `warrant`, and `cb` when those source APIs match a watchlist code.
 - `/api/watchlist-match-index` must stay `no-store`, must prefer Supabase `watchlist_match_index`, must return a top-level `runId`, and may fall back to local `data/strategy-match-index.json` only when Supabase readback fails.
-- The frontend must use `/api/watchlist-match-index` first. It must poll the returned `runId`; when the `runId` changes, clear the in-memory watchlist strategy cache and redraw the terminal.
+- The frontend must use `/api/watchlist-match-index` first. It must poll the returned `runId`; when the `runId` changes, keep the last valid visible result, reload the affected large payload in the background, and replace cache/display only after the new payload is valid and non-empty.
 - `scripts/generate-slim-cache.js` must never write or upsert `watchlist_match_index`, and must never replace the full watchlist match index with static/slim/legacy-only data.
 - Warrant matches must read `matches`, `rows`, `volumeMatches`, and `singleSignals`. Do not drop `volumeMatches` or `singleSignals`; doing so hides valid warrant hits.
 - Strategy2 matches may contain multiple independent signals for one stock. Keep distinct Strategy2 signal keys such as `strategy2:早盤逐筆追蹤` and `strategy2:真跳空` instead of collapsing them into one generic `strategy2` chip. Multiple rows for the same Strategy2 signal may still merge details.
