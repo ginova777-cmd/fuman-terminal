@@ -81,6 +81,7 @@ function buildConfluencePayload(index, { minCount = 2, limit = 120 } = {}) {
     source: "watchlist-match-index-confluence",
     cacheSource: index?.cacheSource || index?.source || "",
     updatedAt: index?.updatedAt || new Date().toISOString(),
+    runId: index?.runId || index?.transport?.runId || "",
     minCount,
     count: rows.length,
     matches: rows,
