@@ -14,13 +14,17 @@ const SOURCES = [
   { key: "strategy4", label: "策略4-波段", api: "strategy4-latest", fields: ["matches", "rows"] },
   { key: "strategy5", label: "策略5-綜合策略", api: "strategy5-latest", fields: ["matches", "rows"] },
   { key: "institution", label: "買賣超", api: "institution-latest", fields: ["data", "rows", "matches"], objectFields: ["data"] },
-  { key: "warrant", label: "權證", api: "warrant-flow-latest", fields: ["matches", "rows"], codeField: "underlyingCode" },
+  { key: "warrant", label: "權證", api: "warrant-flow-latest", fields: ["matches", "rows", "volumeMatches", "singleSignals"], codeField: "underlyingCode" },
   { key: "cb", label: "CB名單", api: "cb-detect-latest", fields: ["rows", "matches"] },
 ];
 
 function cleanNumber(value) {
   const number = Number(String(value ?? "").replace(/[,+%]/g, "").trim());
   return Number.isFinite(number) ? number : 0;
+}
+
+function confluenceRankScore(rawScore) {
+  return 1 + Math.max(0, Math.min(100, cleanNumber(rawScore))) / 1000;
 }
 
 function normalizeArray(value) {
@@ -91,6 +95,19 @@ function detailsFor(row, key) {
   return [...new Set((sources[key] || []).map(signalText).map((item) => String(item || "").trim()).filter(Boolean))].slice(0, 12);
 }
 
+function sourceKeyFor(row, source) {
+  if (source.key !== "strategy2") return source.key;
+  const signalId = String(row.strategy || row.primaryStrategy || row.stateLabel || row.signalId || row.stateId || "").trim();
+  const safeSignalId = signalId.replace(/\s+/g, "_").replace(/^_+|_+$/g, "");
+  return safeSignalId ? `${source.key}:${safeSignalId}` : source.key;
+}
+
+function sourceLabelFor(row, source) {
+  if (source.key !== "strategy2") return source.label;
+  const strategy = signalText(row.strategy || row.primaryStrategy || row.stateLabel || row.signalId);
+  return strategy ? `策略2-${strategy}` : source.label;
+}
+
 function createCaptureResponse() {
   return {
     statusCode: 200,
@@ -144,6 +161,8 @@ function isAfterTaipei1330(clock = taipeiClock()) {
 
 async function main() {
   const byCode = {};
+  const namesByCode = {};
+  const quoteByCode = {};
   const strategies = {};
   const warnings = [];
 
@@ -163,10 +182,28 @@ async function main() {
       for (const row of rows) {
         const code = String(row?.[source.codeField || "code"] || row.code || "").trim();
         if (!/^\d{4}$/.test(code)) continue;
+        const name = String(row?.name || row?.stockName || row?.underlyingName || "").trim();
+        if (name && !namesByCode[code]) namesByCode[code] = name;
+        const quote = {
+          close: cleanNumber(row.close || row.price || row.lastPrice || row.referencePrice),
+          price: cleanNumber(row.price || row.close || row.lastPrice || row.referencePrice),
+          percent: cleanNumber(row.percent ?? row.changePercent ?? row.change_percent),
+          volume: cleanNumber(row.volume || row.tradeVolume || row.trade_volume),
+          tradeVolume: cleanNumber(row.tradeVolume || row.volume || row.trade_volume),
+          value: cleanNumber(row.value || row.tradeValue || row.trade_value),
+          tradeValue: cleanNumber(row.tradeValue || row.value || row.trade_value),
+          market: String(row.market || row.exchange || "").trim(),
+          updatedAt: payload.updatedAt || payload.generatedAt || payload.scanStamp || row.updatedAt || "",
+        };
+        if (!quoteByCode[code] || quote.value > cleanNumber(quoteByCode[code].value) || quote.close > 0 && cleanNumber(quoteByCode[code].close) <= 0) {
+          quoteByCode[code] = quote;
+        }
+        const rawScore = cleanNumber(row.score || row.maxScore || row.swingScore || row.finalScore || row.total);
         const entry = {
-          key: source.key,
-          label: source.label,
-          score: cleanNumber(row.score || row.maxScore || row.swingScore || row.finalScore || row.total),
+          key: sourceKeyFor(row, source),
+          label: sourceLabelFor(row, source),
+          score: confluenceRankScore(rawScore),
+          rawScore,
           date,
           updatedAt: payload.updatedAt || payload.generatedAt || payload.scanStamp || row.updatedAt || "",
           details: detailsFor(row, source.key),
@@ -203,6 +240,8 @@ async function main() {
     count: Object.keys(byCode).length,
     warnings,
     strategies,
+    namesByCode,
+    quoteByCode,
     byCode,
   };
 
