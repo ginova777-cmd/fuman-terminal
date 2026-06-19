@@ -14,6 +14,134 @@ https://fuman-terminal.vercel.app
 
 `https://fuman-terminal-sync.vercel.app` is not the production terminal. Do not deploy there and report the terminal as updated. Strategy scans may be correct in `C:\fuman-terminal-sync`, and source sync may be correct, while users still see old data if `C:\fuman-terminal` has not been deployed to the `fuman-terminal` Vercel project.
 
+## Strategy2 Authoritative Display Contract
+
+Strategy2 is finalized as:
+
+```text
+tick-driven hot pool + candidate-hit + complete-run backing
+event-first
+complete-run-authoritative
+```
+
+One-line operating rule:
+
+```text
+During market hours, quote ticks drive the hot pool and candidate-hit provides fast provisional detection.
+Convergence, correction, rest-day display, and terminal display are backed by complete-run through /api/strategy2-latest.
+```
+
+Authoritative terminal results must come from the Supabase complete-run path:
+
+```text
+public.v_strategy2_latest_complete_run
+public.strategy2_scan_runs
+public.strategy2_scan_results
+/api/strategy2-latest
+Cache-Control: no-store
+gate=complete-run-authoritative
+```
+
+Realtime speed signals:
+
+```text
+quote-tick
+candidate-hit
+```
+
+These are speed/provisional signals only. They may wake the frontend, refresh the hot pool, and show candidate state quickly, but they must never replace the formal complete-run result.
+
+Formal correction signal:
+
+```text
+complete-run
+```
+
+When `complete-run` arrives, the frontend must refetch `/api/strategy2-latest` with a cache-busting/no-store request and correct the Strategy2 screen from that response.
+
+Broadcast/SSE contract:
+
+```text
+Broadcast topic: fuman-strategy2-complete
+Broadcast events: quote-tick, candidate-hit, complete-run
+SSE fallback: /api/strategy2-stream
+Formal API: /api/strategy2-latest
+```
+
+Intraday official scan flow:
+
+```text
+intraday complete scan
+-> public.publish_strategy2_complete_run()
+-> public.strategy2_scan_runs / public.strategy2_scan_results
+-> /api/strategy2-latest no-store
+-> frontend polling / Realtime / SSE auto-refresh
+```
+
+`public.publish_strategy2_complete_run()` failure is a scanner failure. Do not only warn and then claim the scan succeeded.
+
+Trading-day replacement rule:
+
+```text
+If a newer trading day publishes a non-empty complete-run, it automatically replaces the previous valid trading day's complete-run.
+If the newest complete-run is empty or invalid, /api/strategy2-latest must skip it and keep serving the latest valid complete-run.
+```
+
+This means the terminal may display the previous valid trading day's Strategy2 complete-run during rest days, holidays, or before the next valid scan is complete. Once the next non-empty complete-run exists, it becomes the displayed authority automatically.
+
+Frontend display rules:
+
+- The desktop terminal may render a prior trading day's `complete-run-authoritative` payload across date boundaries.
+- A `complete-run-authoritative` payload must not be discarded only because its date is not `marketAiTodayKey()`.
+- A `complete-run-authoritative` payload must not be filtered out only because reconstructed rows do not have today's live quote fields.
+- Static/local fallback data may remain blocked by same-day and quote freshness guards.
+- Do not use `strategy2_latest` as the terminal display source.
+
+Strict prohibitions:
+
+- Do not downgrade Strategy2 to polling-only.
+- Do not use static JSON to fill the desktop terminal Strategy2 screen.
+- Do not fallback to yesterday's static data.
+- Do not use `strategy2_latest` as the terminal display source.
+- Do not use a slow readiness/cache view as the terminal display source.
+- Do not remove the complete-run gate for speed.
+- Do not manually insert fake `strategy2_latest` rows or fake Realtime signals.
+
+Known good live reference from 2026-06-18:
+
+```text
+runId = strategy2-20260618-190153
+date = 2026-06-18
+entryCount = 104
+aCount = 104
+records = 601
+events = 104
+qualityStatus = ok
+cacheSource = supabase-api
+gate = complete-run-authoritative
+```
+
+If the API has rows but the desktop terminal is blank, first check frontend guards around:
+
+```text
+loadStrategy2IntradayCache()
+ensureStrategy2IntradayTodayCache()
+renderIntradayRadar()
+isIntradayTradable()
+strategy2IntradayCacheAuthoritative
+isStrategy2AuthoritativePayload()
+```
+
+Related files:
+
+```text
+api/strategy2-latest.js
+api/strategy2-stream.js
+terminal-app.js
+scripts/scan-intraday-signals.js
+scripts/fugle-websocket-collector.js
+```
+
 ## Mobile Ultra Terminal Contract
 
 The official customer-facing mobile terminal is:
@@ -232,10 +360,10 @@ Do not use `scan_date` / `scan_time` as the primary read gate anymore. `legacy-s
 
 ## Strategy2 Run ID Complete Gate
 
-Strategy2 is an intraday fast-path scanner. During market hours, do not route Strategy2 through deploy, version bump, GitHub push, or the full release chain for each scan. The correct intraday path is:
+Strategy2 is an intraday fast-path scanner. During market hours, do not route Strategy2 through deploy, version bump, GitHub push, or the full release chain for each scan. The correct intraday authoritative path is:
 
 ```text
-scan Strategy2 -> write latest JSON/runtime files -> upsert strategy2_latest -> publish complete run_id batch to Supabase
+quote tick / candidate-hit speed signals -> scan Strategy2 -> publish complete run_id batch to Supabase -> /api/strategy2-latest no-store
 ```
 
 The official Strategy2 scan scripts are:
@@ -247,14 +375,14 @@ C:\fuman-terminal-sync\run-strategy2-intraday.ps1
 C:\fuman-terminal-sync\scripts\scan-intraday-signals.js
 ```
 
-Strategy2 Node publishing must preserve both paths:
+Strategy2 Node publishing may preserve the legacy compatibility write, but terminal display must not read it:
 
 ```text
-1. strategy2_latest remains compatible with the old page.
-2. publish_strategy2_complete_run() publishes the complete run_id batch.
+1. strategy2_latest is legacy compatibility only and must not be the desktop terminal display source.
+2. publish_strategy2_complete_run() publishes the complete run_id batch and is the formal display authority.
 ```
 
-`strategy2_latest` may use the anon key for old-page compatibility. `publish_strategy2_complete_run()` must use the Supabase service role key from:
+`strategy2_latest` may use the anon key for old-page compatibility only. `publish_strategy2_complete_run()` must use the Supabase service role key from:
 
 ```text
 C:\fuman-runtime\secrets\supabase-service-role-key.txt
@@ -295,8 +423,10 @@ public.publish_strategy2_complete_run(text, date, jsonb)
 1. writing public.strategy2_scan_runs with complete=true
 2. splitting payload.events into public.strategy2_scan_results where row_kind='event'
 3. splitting payload.records into public.strategy2_scan_results where row_kind='record'
-4. updating public.strategy2_latest with run_id, complete, quality_status, schema_version, and data_contract_source
+4. optionally updating public.strategy2_latest for legacy compatibility only
 ```
+
+If `publish_strategy2_complete_run()` fails, the scanner must fail. Do not downgrade the failure to a warning or claim the Strategy2 scan succeeded.
 
 Future Strategy2 readers should migrate to:
 
@@ -305,14 +435,14 @@ public.v_strategy2_latest_complete_run
 public.strategy2_scan_results
 ```
 
-Do not use `scan_time` as the primary latest gate for Strategy2. Use the latest complete run. Legacy JSON and `strategy2_latest` are compatibility fallback only.
+Do not use `scan_time` as the primary latest gate for Strategy2. Use the latest non-empty complete run. Legacy JSON and `strategy2_latest` are compatibility fallback only and must not feed the desktop terminal Strategy2 display.
 
 After a formal Strategy2 scan, verify:
 
 ```text
 public.strategy2_scan_runs where strategy='strategy2' and complete=true order by finished_at desc limit 1
 public.strategy2_scan_results where run_id = latest run_id
-strategy2_latest where id='latest'
+optional legacy compatibility only: strategy2_latest where id='latest'
 ```
 
 The latest run must contain both `row_kind='event'` and `row_kind='record'` when signals/records exist, and must keep:
