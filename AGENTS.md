@@ -1188,6 +1188,133 @@ Realtime radar, market overview, and AI interpretation follow the same two-layer
 
 Strategy5 data is governed separately as well: `strategy5-latest.json`, `strategy5-backup.json`, `strategy-match-index.json`, 籌碼老K, 外資投信連買準突破, and multi-strategy confluence output must not be published by scoped sync or manual copy. They must pass through the freshness gate and final live verifier.
 
+### Strategy5 本體 / 全終端多策略共振分流規則
+
+策略5畫面可以同時放「策略5本體」與「多策略共振」，但資料流、責任範圍、排序邏輯必須分開。不要把策略5內部策略別和全終端跨策略共振混成同一個來源、同一個計數或同一個快取。
+
+策略5本體負責「策略5內部策略別」：
+
+```text
+漲停十字
+布林 KDJ
+籌碼老K
+周轉突破
+外資投信突破
+其他策略5主題
+```
+
+策略5本體正式資料流：
+
+```text
+完整掃描
+-> strategy5_scan_runs / strategy5_scan_results complete run
+-> /api/strategy5-latest no-store
+-> 策略5畫面中的策略5本體區塊 / 分頁
+```
+
+策略5本體規則：
+
+```text
+/api/strategy5-latest 是策略5本體的正式來源。
+strategy5_scan_results 必須是 complete run 且 result rows > 0。
+策略5內部命中數只計算策略5自己的 matches。
+策略5內部排序可使用策略5分數、漲幅、成交值等欄位。
+不要用 watchlist_match_index 取代 /api/strategy5-latest 的策略5本體結果。
+不要用 /api/latest-signals?strategy=confluence 覆蓋策略5本體細節。
+```
+
+全終端多策略共振負責跨終端來源：
+
+```text
+策略1
+策略2
+策略3
+策略4
+策略5
+買賣超
+權證
+CB
+籌碼
+```
+
+全終端多策略共振正式資料流：
+
+```text
+各策略 latest API 彙整
+-> Supabase watchlist_match_index snapshot
+-> /api/watchlist-match-index no-store
+-> /api/latest-signals?strategy=confluence
+-> 策略5畫面中的「多策略共振」區塊 / 分頁
+```
+
+多策略共振規則：
+
+```text
+多策略共振計算的是全終端命中來源，不是只計算策略5內部 matches。
+watchlist_match_index 必須包含策略1/2/3/4/5，以及買賣超、權證、CB、籌碼來源。
+/api/watchlist-match-index 必須 no-store、回傳頂層 runId，並以 Supabase snapshot 為優先來源。
+/api/latest-signals?strategy=confluence 若提供多策略共振，必須讀取同一套最新有效 snapshot / runId，不可自造不同排序。
+前端多策略共振 polling 只比對 runId；runId 沒變不重抓大 payload，runId 變更才清 cache 並重畫。
+```
+
+排序必須分三層：
+
+```text
+第一層：全終端共振項數越多越上面。
+第二層：策略5內部命中越多越上面。
+第三層：分數 / 漲幅 / 成交值。
+```
+
+排序欄位定義：
+
+```text
+全終端共振項數 = 策略1 + 策略2 + 策略3 + 策略4 + 策略5 + 買賣超 + 權證 + CB + 籌碼等跨終端來源命中數。
+策略5內部命中數 = 漲停十字 + 布林KDJ + 籌碼老K + 周轉突破 + 外資投信突破 + 其他策略5主題命中數。
+同股票可同時有全終端共振項數與策略5內部命中數，兩者必須分開保存、分開顯示、分開排序。
+```
+
+排序範例：
+
+```text
+某檔股票同時命中：
+策略5-布林KDJ
+策略5-籌碼老K
+策略4
+買賣超
+權證
+
+排序計算：
+全終端共振 = 5 項
+策略5內部共振 = 2 項
+
+排序時先看全終端共振 5，再看策略5內部共振 2，最後才看分數 / 漲幅 / 成交值。
+```
+
+禁止事項：
+
+```text
+不要把策略5本體與全終端多策略共振混成同一個 API payload。
+不要把策略5內部 matches 數量當成全終端共振數量。
+不要把策略1/2/3/4、買賣超、權證、CB、籌碼塞回 strategy5_scan_results 當策略5本體。
+不要讓 /api/strategy5-latest 等待 /api/latest-signals?strategy=confluence 才能顯示。
+不要讓多策略共振讀不到時拖慢或清空策略5本體。
+不要以版本、部署或靜態 JSON 當作 Strategy5 / 多策略共振資料更新機制。
+```
+
+前端顯示規則：
+
+```text
+策略5綜合策略畫面可以包含兩個區塊 / 分頁：
+1. 策略5本體
+2. 多策略共振
+
+兩者可以同畫面呈現，但必須分開載入。
+策略5本體讀 /api/strategy5-latest。
+多策略共振讀 /api/latest-signals?strategy=confluence 或 /api/watchlist-match-index。
+哪個 API 先回來就先畫哪個，不互相阻塞。
+有上一次有效結果時先顯示舊結果並標示更新中，不要空白 loading 等 API。
+```
+
 Watchlist strategy/chip matches are API-only and snapshot-governed. The official production flow is:
 
 ```text
