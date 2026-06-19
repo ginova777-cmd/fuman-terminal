@@ -574,3 +574,31 @@ function updateMobileAiStaleNote(){const note=marketAiPanel?.querySelector?.("[d
   };
   window.fumanSelectStrategy5Filter=(button,event)=>switchStrategy5Filter(button,event);
 })();
+;(function installStrategy5NavDefaultPane(){
+  if(window.__fumanStrategy5NavDefaultPane)return;
+  window.__fumanStrategy5NavDefaultPane=true;
+  if(typeof applyStrategyPresetFromLink!=="function")return;
+  const originalApplyStrategyPresetFromLink=applyStrategyPresetFromLink;
+  function isStrategy5Link(link){
+    return String(link?.textContent||"").includes("策略5");
+  }
+  function resetStrategy5EntryPane(){
+    const entryId="multi_strategy_confluence";
+    strategyPresetMode="strategy5";
+    strategy5ActiveId=entryId;
+    selectedStrategyIds=new Set([entryId]);
+    strategy5Page=1;
+    const entryButton=document.querySelector(`[data-strategy5-filter="${entryId}"]`);
+    if(typeof switchStrategy5Filter==="function"&&entryButton){
+      switchStrategy5Filter(entryButton,null);
+      return;
+    }
+    refreshStrategy5FastDomCache?.(true);
+    enforceStrategy5ActivePane?.(entryId);
+  }
+  applyStrategyPresetFromLink=function(link){
+    const result=originalApplyStrategyPresetFromLink.call(this,link);
+    if(isStrategy5Link(link))resetStrategy5EntryPane();
+    return result;
+  };
+})();
