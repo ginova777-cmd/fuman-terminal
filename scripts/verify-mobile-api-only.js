@@ -153,9 +153,21 @@ function checkVercelHeaders() {
 }
 
 async function fetchLive(rel) {
-  const response = await fetch(`${baseUrl}/${rel.replace(/^\/+/, "")}?verify=${Date.now()}`, { cache: "no-store" });
-  const text = await response.text().catch(() => "");
-  return { response, text };
+  const clean = rel.replace(/^\/+/, "");
+  const joiner = clean.includes("?") ? "&" : "?";
+  const url = `${baseUrl}/${clean}${joiner}verify=${Date.now()}`;
+  let lastError = null;
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    try {
+      const response = await fetch(url, { cache: "no-store" });
+      const text = await response.text().catch(() => "");
+      return { response, text };
+    } catch (error) {
+      lastError = error;
+      await new Promise((resolve) => setTimeout(resolve, 500 * attempt));
+    }
+  }
+  throw new Error(`fetchLive failed ${clean}: ${lastError?.cause?.message || lastError?.message || lastError}`);
 }
 
 async function checkLive() {
