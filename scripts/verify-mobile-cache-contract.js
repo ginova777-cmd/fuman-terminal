@@ -98,6 +98,7 @@ function checkLocal() {
   requireText(mobile, "hardwareConcurrency", "mobile shell must detect low-end CPU before prefetching");
   requireText(mobile, "clearTimeout(rt);rt=setTimeout", "mobile realtime updates must be debounced");
   requireText(mobile, "data-sun", "mobile sunlight mode must be local CSS state only");
+  requireText(mobile, 'html[data-sun="1"]', "mobile sunlight mode CSS selector must quote the attribute value for mobile browsers");
   requireText(mobile, "fuman_mobile_sun", "mobile sunlight mode must persist in localStorage only");
   requireText(mobile, "/data/mobile-analysis/", "mobile analysis must be lazy-loaded per stock");
   rejectText(mobile, 'bootUrl="/data/mobile-boot.json"', "mobile shell must not use static mobile-boot.json as primary boot endpoint");

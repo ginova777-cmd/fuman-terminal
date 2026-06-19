@@ -82,6 +82,7 @@ function checkMobileShell() {
   requireText(mobile, "setInterval(()=>{if(!document.hidden&&active!==\"watch\")load(false)},120000)", "mobile must keep 120s polling fallback only as backup");
   requireText(mobile, "cache.get(k)?.hash===h", "mobile fragments must render from hash contract instead of recalculating data");
   requireText(mobile, "location.reload", "mobile must have a hard reload path when the API-only contract reports a new incompatible run");
+  requireText(mobile, 'html[data-sun="1"]', "mobile sunlight selector must quote attribute value so phones apply it");
 
   rejectText(mobile, 'bootUrl="/data/mobile-boot.json"', "mobile shell must not poll static /data/mobile-boot.json");
   rejectText(mobile, "/data/data-manifest.json", "mobile shell must not poll data-manifest.json as latest truth");
