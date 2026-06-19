@@ -1,5 +1,5 @@
 (function () {
-  const VERSION = "desktop-api-only-strategy5-volume-units-20260619-08";
+  const VERSION = "desktop-api-only-strategy5-institution-streak-20260619-11";
   const modules = {
     sectorMap: { loaded: false, src: "terminal-sector-map.js" },
     strategyConfig: { loaded: false, src: "terminal-strategy-config.js" },
