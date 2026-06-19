@@ -1092,8 +1092,7 @@ async function buildMatches(stocks, institutionData, issuedSharesMap = new Map()
     return { ...mergedStock, score, matches: sortedMatches, activeMatch: sortedMatches[0] || null };
   })
     .filter((stock) => stock.matches.length && stock.activeMatch && stock.score && stock.close >= 10)
-    .sort((a, b) => b.score - a.score || b.percent - a.percent || b.value - a.value)
-    .slice(0, 80);
+    .sort((a, b) => b.score - a.score || b.percent - a.percent || b.value - a.value);
 }
 
 async function main() {

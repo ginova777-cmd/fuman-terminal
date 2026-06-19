@@ -1,5 +1,5 @@
 (function () {
-  const version = "desktop-api-only-strategy5-instantpane-20260619-05";
+  const version = "desktop-api-only-strategy5-fullscan-20260619-06";
   window.FUMAN_TERMINAL_VERSION = version;
   window.FUMAN_TERMINAL_BOOT = {
     version,
