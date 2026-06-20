@@ -1,5 +1,6 @@
 const fs = require("fs");
 const path = require("path");
+const { isTwseTradingDay } = require("../scripts/twse-trading-day");
 
 function readSecretText(file) {
   try { return fs.readFileSync(file, "utf8").trim(); } catch { return ""; }
@@ -34,6 +35,60 @@ function taipeiDateKey(date = new Date()) {
   }).formatToParts(date);
   const byType = Object.fromEntries(parts.map((part) => [part.type, part.value]));
   return `${byType.year}${byType.month}${byType.day}`;
+}
+
+function compactDateKey(value) {
+  const text = String(value || "");
+  const parsed = Date.parse(text);
+  if (Number.isFinite(parsed)) return taipeiDateKey(new Date(parsed));
+  return text.replace(/\D/g, "").slice(0, 8);
+}
+
+function isoDateKey(value) {
+  const key = compactDateKey(value);
+  return /^\d{8}$/.test(key) ? `${key.slice(0, 4)}-${key.slice(4, 6)}-${key.slice(6, 8)}` : "";
+}
+
+function radarPayloadTradeDate(payload) {
+  const rows = Array.isArray(payload?.rows) ? payload.rows : [];
+  return [
+    payload?.resolvedTradeDate,
+    payload?.tradeDate,
+    payload?.usedDate,
+    payload?.dataDate,
+    payload?.date,
+    payload?.marketDataDate,
+    ...rows.flatMap((row) => [row?.radarDate, row?.tradeDate, row?.quoteDate, row?.date, row?.timestamp, row?.radarUpdatedAt]),
+  ].map(compactDateKey).filter(Boolean).sort().at(-1) || "";
+}
+
+function buildMarketSession(tradingDay, payload) {
+  const today = taipeiDateKey();
+  const marketDataDate = radarPayloadTradeDate(payload);
+  return {
+    taipeiDate: isoDateKey(today),
+    today,
+    marketDataDate,
+    marketDataIsoDate: isoDateKey(marketDataDate),
+    hasTodayMarketData: Boolean(marketDataDate && marketDataDate === today),
+    closed: !tradingDay?.isTradingDay,
+    reason: tradingDay?.reason || (!tradingDay?.isTradingDay ? "non-trading-day" : "regular_trading_day"),
+    source: tradingDay?.source || "twse-trading-day",
+  };
+}
+
+function withMarketSession(payload, marketSession, reason = "") {
+  return {
+    ...payload,
+    reason: reason || payload?.reason,
+    marketSession,
+    transport: {
+      ...(payload?.transport || {}),
+      via: "api/realtime-radar-latest",
+      gate: marketSession?.closed ? "non-trading-day-cache" : "trading-day-live",
+      fetchedAt: new Date().toISOString(),
+    },
+  };
 }
 
 function radarScore(row) {
@@ -175,28 +230,56 @@ module.exports = async function handler(request, response) {
   }
 
   try {
+    const tradingDay = await isTwseTradingDay(new Date(), {
+      stateDir: process.env.FUMAN_STATE_DIR || path.join("/tmp", "fuman-state"),
+    });
+
     if (!SUPABASE_URL || !SUPABASE_KEY) {
-      response.status(200).json(staticFallback("supabase_not_configured"));
+      const payload = staticFallback("supabase_not_configured");
+      const session = buildMarketSession(tradingDay, payload);
+      response.status(200).json(withMarketSession(payload, session, session.closed ? "non-trading-day-cache" : "supabase_not_configured"));
       return;
     }
+
     const radarCache = await fetchRadarCachePayload();
     const row = radarCache.row;
     let primaryError = radarCache.error || "";
+
+    if (!tradingDay.isTradingDay) {
+      const payload = row?.payload ? {
+        ...row.payload,
+        updatedAt: row.payload.updatedAt || row.updated_at,
+        cacheSource: "supabase-radar-cache",
+        transport: {
+          source: "supabase",
+          table: TABLE,
+          mode: radarCache.mode,
+        },
+      } : staticFallback(primaryError || "non_trading_day_static_fallback");
+      const session = buildMarketSession(tradingDay, payload);
+      response.status(200).json(withMarketSession(payload, session, "non-trading-day-cache"));
+      return;
+    }
+
     if (!row?.payload) {
       try {
         const quoteRows = await fetchSupabaseJson(`${QUOTE_TABLE}?select=symbol,name,market,price,open_price,high_price,low_price,previous_close,change_percent,volume_lots,trade_value_twd,last_trade_time,quote_updated_at&order=trade_value_twd.desc.nullslast&limit=120`);
         const quotePayload = quoteRowsToRadarPayload(Array.isArray(quoteRows) ? quoteRows : []);
         if (quotePayload.rows.length) {
-          response.status(200).json(quotePayload);
+          const session = buildMarketSession(tradingDay, quotePayload);
+          response.status(200).json(withMarketSession(quotePayload, session));
           return;
         }
       } catch (error) {
         primaryError = [primaryError, error?.message || String(error)].filter(Boolean).join(" | ");
       }
-      response.status(200).json(staticFallback(primaryError || "realtime_radar_latest_empty"));
+      const payload = staticFallback(primaryError || "realtime_radar_latest_empty");
+      const session = buildMarketSession(tradingDay, payload);
+      response.status(200).json(withMarketSession(payload, session));
       return;
     }
-    response.status(200).json({
+
+    const payload = {
       ...row.payload,
       updatedAt: row.payload.updatedAt || row.updated_at,
       cacheSource: "supabase-radar-cache",
@@ -207,8 +290,12 @@ module.exports = async function handler(request, response) {
         mode: radarCache.mode,
         fetchedAt: new Date().toISOString(),
       },
-    });
+    };
+    const session = buildMarketSession(tradingDay, payload);
+    response.status(200).json(withMarketSession(payload, session));
   } catch (error) {
-    response.status(200).json(staticFallback(error?.message || String(error)));
+    const payload = staticFallback(error?.message || String(error));
+    const session = buildMarketSession({ isTradingDay: false, reason: "trading-day-check-failed", source: "fallback" }, payload);
+    response.status(200).json(withMarketSession(payload, session, "non-trading-day-cache"));
   }
 };
