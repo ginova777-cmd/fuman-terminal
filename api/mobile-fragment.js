@@ -150,9 +150,28 @@ function numberText(value, digits = 2) {
   return num.toFixed(digits).replace(/\.00$/, "");
 }
 
-function rowHtml(row, index) {
+function rowHtml(row, index, tab = "") {
   const code = firstValue(row, ["code", "stock_id", "stockId", "symbol", "underlyingCode", "ticker"], "--");
   const name = firstValue(row, ["name", "stock_name", "stockName", "underlyingName", "company"], "");
+  if (tab === "strategy2") {
+    const entryTime = firstValue(row, ["entryAt", "timestamp", "quoteTime", "latestSeenAt", "latestAAt", "firstAAt"], "--");
+    const entryPrice = firstValue(row, ["entryPrice", "observedPrice", "latestSeenPrice", "latestAPrice", "firstAPrice", "supportPrice"], "--");
+    const state = firstValue(row, ["stateLabel", "actionLabel", "label", "signal", "strategy"], "即時偵測");
+    const reason = firstValue(row, ["reason", "stateReason", "summary", "description", "memo", "note"], "");
+    return `
+    <article class="mobile-terminal-row">
+      <b>#${index + 1}</b>
+      <div>
+        <h4>${esc(shortTime(entryTime))}｜${esc(code)} ${esc(name)}</h4>
+        <p>${esc(state)}｜進場價格 ${esc(numberText(entryPrice))}</p>
+        <small>${esc(String(reason).slice(0, 150))}</small>
+      </div>
+      <div class="mobile-terminal-actions">
+        <button type="button" data-mobile-ai-contract="analyze" data-ai-stock-code="${esc(code)}" data-ai-stock-name="${esc(name)}">看分析</button>
+        <button type="button" data-mobile-ai-contract="watch" data-ai-watch-code="${esc(code)}" data-ai-watch-name="${esc(name)}">加入自選</button>
+      </div>
+    </article>`;
+  }
   const action = firstValue(row, ["actionLabel", "label", "signal", "signalName", "strategy", "status", "source"], "掃描命中");
   const score = firstValue(row, ["finalScore", "score", "rankScore", "totalScore"], "--");
   const pct = firstValue(row, ["percent", "changePercent", "pct", "displayPercent", "risePct"], null);
@@ -182,7 +201,7 @@ function renderFragment(tab, config, payload) {
   const quality = payload?.qualityStatus || payload?.sourceHealth?.status || "";
   const statusLine = [config.subtitle, runId ? `run ${runId}` : "", quality ? `quality ${quality}` : ""].filter(Boolean).join("｜");
   const points = config.points.map((point, index) => `<p><b>${index + 1}</b>${esc(point)}</p>`).join("");
-  const list = rows.length ? rows.map(rowHtml).join("") : `<div class="empty-state">等待最新 complete run。</div>`;
+  const list = rows.length ? rows.map((row, index) => rowHtml(row, index, tab)).join("") : `<div class="empty-state">等待最新 complete run。</div>`;
   return `<section class="mobile-terminal-fragment" data-mobile-terminal-fragment="1" data-mobile-fragment-key="${esc(tab)}" data-run-id="${esc(runId)}">
       <article class="mobile-terminal-head">
         <small>API-only complete run</small>
