@@ -103,8 +103,17 @@ function arrayAt(value, keys) {
   return [];
 }
 
-function normalizeRows(payload) {
-  return arrayAt(payload, [
+function rowTimeValue(row) {
+  const value = firstValue(row, ["latestSeenAt", "timestamp", "quoteTime", "entryAt", "latestAAt", "firstAAt", "highestAt"], "");
+  const parsed = Date.parse(String(value || "").replace(" ", "T"));
+  if (Number.isFinite(parsed)) return parsed;
+  const match = String(value || "").match(/(\d{1,2}):(\d{2})(?::(\d{2}))?/);
+  if (!match) return 0;
+  return Number(match[1]) * 3600 + Number(match[2]) * 60 + Number(match[3] || 0);
+}
+
+function normalizeRows(payload, tab = "") {
+  const rows = arrayAt(payload, [
     "matches",
     "results",
     "rows",
@@ -120,7 +129,11 @@ function normalizeRows(payload) {
     "payload.matches",
     "payload.results",
     "mobile.top",
-  ]).slice(0, 20);
+  ]);
+  if (tab === "strategy2") {
+    return [...rows].sort((a, b) => rowTimeValue(b) - rowTimeValue(a)).slice(0, 20);
+  }
+  return rows.slice(0, 20);
 }
 
 function firstValue(row, keys, fallback = "") {
@@ -161,7 +174,7 @@ function rowHtml(row, index) {
 }
 
 function renderFragment(tab, config, payload) {
-  const rows = normalizeRows(payload);
+  const rows = normalizeRows(payload, tab);
   const reportedCount = Number(payload?.count ?? payload?.total ?? payload?.result_count ?? 0) || 0;
   const count = Math.max(reportedCount, rows.length);
   const updatedAt = payload?.updatedAt || payload?.finishedAt || payload?.generatedAt || payload?.scanTime || payload?.date || "";
