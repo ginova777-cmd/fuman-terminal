@@ -118,17 +118,28 @@ function compactDate(value) {
   return text.replace(/\D/g, "").slice(0, 8);
 }
 
-function newestMarketDataDate(breadth, marketSummary, stocksSlim) {
+function marketPayloadTradeDates(payload) {
+  const stocks = Array.isArray(payload?.market?.stocks) ? payload.market.stocks : [];
+  const stockDates = stocks
+    .map((stock) => stock?.quoteDate || stock?.date || stock?.Date || stock?.tradeDate)
+    .map(compactDate)
+    .filter(Boolean);
   return [
-    breadth?.resolvedTradeDate,
-    breadth?.tradeDate,
-    breadth?.sourceDate,
-    breadth?.date,
+    payload?.market?.sourceTradeDate,
+    payload?.market?.marketDates?.twse,
+    payload?.market?.marketDates?.tpex,
+    ...stockDates,
+  ];
+}
+
+function newestMarketDataDate(breadth, marketSummary, stocksSlim, cached) {
+  return [
     marketSummary?.marketDates?.twse,
     marketSummary?.marketDates?.tpex,
     stocksSlim?.resolvedTradeDate,
     stocksSlim?.marketDates?.twse,
     stocksSlim?.marketDates?.tpex,
+    ...marketPayloadTradeDates(cached),
   ].map(compactDate).filter(Boolean).sort().at(-1) || "";
 }
 
@@ -137,8 +148,8 @@ function isWeekend(clock) {
   return weekday.startsWith("sat") || weekday.startsWith("sun");
 }
 
-function marketSessionState(clock, breadth, marketSummary, stocksSlim) {
-  const marketDataDate = newestMarketDataDate(breadth, marketSummary, stocksSlim);
+function marketSessionState(clock, breadth, marketSummary, stocksSlim, cached) {
+  const marketDataDate = newestMarketDataDate(breadth, marketSummary, stocksSlim, cached);
   const hasTodayMarketData = Boolean(marketDataDate && marketDataDate === clock.ymd);
   const closed = isWeekend(clock) || !hasTodayMarketData;
   return {
@@ -268,7 +279,7 @@ module.exports = async function handler(request, response) {
   const breadth = readCachedBreadth();
   const marketSummary = readCachedMarketSummary();
   const stocksSlim = readCachedStocksSlim();
-  const session = marketSessionState(clock, breadth, marketSummary, stocksSlim);
+  const session = marketSessionState(clock, breadth, marketSummary, stocksSlim, cached);
 
   if (cached && session.closed && !shouldRefresh(request)) {
     response.status(200).json(normalizeNonTradingCachePayload(
