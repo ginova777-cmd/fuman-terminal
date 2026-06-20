@@ -10,8 +10,11 @@ const ROOT = path.resolve(__dirname, "..");
 const RUNTIME_ROOT = process.env.FUMAN_RUNTIME_DIR || process.env.FUMAN_RUNTIME_ROOT || "C:\\fuman-runtime";
 const CACHE_FILE = "market-ai-live.json";
 const BREADTH_FILE = "market-ai-breadth-latest.json";
+const MARKET_SUMMARY_FILE = "market-summary.json";
+const STOCKS_SLIM_FILE = "stocks-slim.json";
 const AI_WINDOW_START_SECONDS = 9 * 60 * 60;
 const AI_WINDOW_END_SECONDS = 13 * 60 * 60 + 30 * 60;
+const SNAPSHOT_TIMEOUT_MS = Number(process.env.FUMAN_MARKET_AI_SNAPSHOT_TIMEOUT_MS || 1500);
 
 function cacheCandidates(file = CACHE_FILE) {
   return [
@@ -50,6 +53,14 @@ function readCachedBreadth() {
   return hasBreadthPayload(payload) ? payload : null;
 }
 
+function readCachedMarketSummary() {
+  return readLatestCachedFile(MARKET_SUMMARY_FILE);
+}
+
+function readCachedStocksSlim() {
+  return readLatestCachedFile(STOCKS_SLIM_FILE);
+}
+
 function writeJsonAtomic(file, payload) {
   fs.mkdirSync(path.dirname(file), { recursive: true });
   const temp = path.join(path.dirname(file), `.${path.basename(file)}.${process.pid}.${Date.now()}.tmp`);
@@ -68,6 +79,7 @@ function taipeiClock(now = new Date()) {
     year: "numeric",
     month: "2-digit",
     day: "2-digit",
+    weekday: "short",
     hour: "2-digit",
     minute: "2-digit",
     second: "2-digit",
@@ -81,13 +93,62 @@ function taipeiClock(now = new Date()) {
   const second = Number(parts.second || 0);
   return {
     date: `${parts.year}-${parts.month}-${parts.day}`,
+    ymd: `${parts.year}${parts.month}${parts.day}`,
     time: `${parts.hour}:${parts.minute}:${parts.second}`,
     seconds: hour * 60 * 60 + minute * 60 + second,
+    weekday: String(parts.weekday || ""),
   };
 }
 
 function isMarketAiDetectWindow(clock = taipeiClock()) {
   return clock.seconds >= AI_WINDOW_START_SECONDS && clock.seconds <= AI_WINDOW_END_SECONDS;
+}
+
+function compactDate(value) {
+  const text = String(value || "");
+  const parsed = Date.parse(text);
+  if (Number.isFinite(parsed)) {
+    return new Intl.DateTimeFormat("en-CA", {
+      timeZone: "Asia/Taipei",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).format(new Date(parsed)).replace(/\D/g, "");
+  }
+  return text.replace(/\D/g, "").slice(0, 8);
+}
+
+function newestMarketDataDate(breadth, marketSummary, stocksSlim) {
+  return [
+    breadth?.resolvedTradeDate,
+    breadth?.tradeDate,
+    breadth?.sourceDate,
+    breadth?.date,
+    marketSummary?.marketDates?.twse,
+    marketSummary?.marketDates?.tpex,
+    stocksSlim?.resolvedTradeDate,
+    stocksSlim?.marketDates?.twse,
+    stocksSlim?.marketDates?.tpex,
+  ].map(compactDate).filter(Boolean).sort().at(-1) || "";
+}
+
+function isWeekend(clock) {
+  const weekday = String(clock?.weekday || "").toLowerCase();
+  return weekday.startsWith("sat") || weekday.startsWith("sun");
+}
+
+function marketSessionState(clock, breadth, marketSummary, stocksSlim) {
+  const marketDataDate = newestMarketDataDate(breadth, marketSummary, stocksSlim);
+  const hasTodayMarketData = Boolean(marketDataDate && marketDataDate === clock.ymd);
+  const closed = isWeekend(clock) || !hasTodayMarketData;
+  return {
+    taipeiDate: clock.date,
+    today: clock.ymd,
+    marketDataDate,
+    hasTodayMarketData,
+    closed,
+    reason: isWeekend(clock) ? "weekend" : hasTodayMarketData ? "today-market-data" : "no-today-market-data",
+  };
 }
 
 function cachedResponsePayload(cached, breadth, clock, reason = "cache") {
@@ -175,24 +236,43 @@ module.exports = async function handler(request, response) {
   const detectWindowActive = isMarketAiDetectWindow(clock);
   const cached = readCachedPayload();
   const breadth = readCachedBreadth();
+  const marketSummary = readCachedMarketSummary();
+  const stocksSlim = readCachedStocksSlim();
+  const session = marketSessionState(clock, breadth, marketSummary, stocksSlim);
+
+  if (cached && session.closed && !shouldRefresh(request)) {
+    response.status(200).json({
+      ...cachedResponsePayload(cached, breadth, clock, "non-trading-day-cache"),
+      reason: "non-trading-day-cache",
+      marketSession: { ...session, closed: true },
+    });
+    return;
+  }
+
   const snapshot = await readSnapshot("market_ai_live", {
     tradeDate: clock.date,
     allowLatestFallback: true,
-    timeoutMs: 8000,
+    timeoutMs: SNAPSHOT_TIMEOUT_MS,
   });
 
   if (snapshot?.payload) {
-    response.status(200).json(snapshotResponsePayload(snapshot, breadth, clock));
+    response.status(200).json({
+      ...snapshotResponsePayload(snapshot, breadth, clock),
+      marketSession: session,
+    });
     return;
   }
 
   if (cached && (!shouldRefresh(request) || !detectWindowActive)) {
-    response.status(200).json(cachedResponsePayload(
-      cached,
-      breadth,
-      clock,
-      detectWindowActive ? "normal-cache" : "after-1330-cache"
-    ));
+    response.status(200).json({
+      ...cachedResponsePayload(
+        cached,
+        breadth,
+        clock,
+        detectWindowActive ? "normal-cache" : "after-1330-cache"
+      ),
+      marketSession: session,
+    });
     return;
   }
 
@@ -231,6 +311,7 @@ module.exports = async function handler(request, response) {
       taipeiDate: clock.date,
       taipeiTime: clock.time,
     },
+    marketSession: session,
   };
 
   for (const file of cacheCandidates()) {
