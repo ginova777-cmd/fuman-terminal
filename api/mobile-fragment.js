@@ -95,6 +95,32 @@ function shortTime(value) {
   return text.slice(0, 19).replace("T", " ") || "--";
 }
 
+function intradayTimeParts(value) {
+  const match = String(value || "").match(/(\d{1,2}):(\d{2})(?::(\d{2}))?/);
+  if (!match) return null;
+  return {
+    hour: Number(match[1]),
+    minute: Number(match[2]),
+    second: Number(match[3] || 0),
+  };
+}
+
+function intradayTimeText(value) {
+  const parts = intradayTimeParts(value);
+  if (!parts) return "--";
+  return [
+    String(parts.hour).padStart(2, "0"),
+    String(parts.minute).padStart(2, "0"),
+    String(parts.second).padStart(2, "0"),
+  ].join(":");
+}
+
+function intradayTimeValue(value) {
+  const parts = intradayTimeParts(value);
+  if (!parts) return 0;
+  return parts.hour * 3600 + parts.minute * 60 + parts.second;
+}
+
 function arrayAt(value, keys) {
   for (const key of keys) {
     const current = key.split(".").reduce((obj, part) => obj?.[part], value);
@@ -103,13 +129,17 @@ function arrayAt(value, keys) {
   return [];
 }
 
-function rowTimeValue(row) {
-  const value = firstValue(row, ["latestSeenAt", "timestamp", "quoteTime", "entryAt", "latestAAt", "firstAAt", "highestAt"], "");
-  const parsed = Date.parse(String(value || "").replace(" ", "T"));
-  if (Number.isFinite(parsed)) return parsed;
-  const match = String(value || "").match(/(\d{1,2}):(\d{2})(?::(\d{2}))?/);
-  if (!match) return 0;
-  return Number(match[1]) * 3600 + Number(match[2]) * 60 + Number(match[3] || 0);
+function strategy2EntryTime(row) {
+  return firstValue(row, ["entryAt", "timestamp", "quoteTime", "latestSeenAt", "latestAAt", "firstAAt", "highestAt"], "");
+}
+
+function strategy2TimeValue(row) {
+  return intradayTimeValue(strategy2EntryTime(row));
+}
+
+function inStrategy2Window(row) {
+  const seconds = strategy2TimeValue(row);
+  return seconds >= 8 * 3600 + 45 * 60 && seconds <= 12 * 3600;
 }
 
 function normalizeRows(payload, tab = "") {
@@ -131,7 +161,7 @@ function normalizeRows(payload, tab = "") {
     "mobile.top",
   ]);
   if (tab === "strategy2") {
-    return [...rows].sort((a, b) => rowTimeValue(b) - rowTimeValue(a)).slice(0, 20);
+    return [...rows].filter(inStrategy2Window).sort((a, b) => strategy2TimeValue(b) - strategy2TimeValue(a)).slice(0, 20);
   }
   return rows.slice(0, 20);
 }
@@ -154,7 +184,7 @@ function rowHtml(row, index, tab = "") {
   const code = firstValue(row, ["code", "stock_id", "stockId", "symbol", "underlyingCode", "ticker"], "--");
   const name = firstValue(row, ["name", "stock_name", "stockName", "underlyingName", "company"], "");
   if (tab === "strategy2") {
-    const entryTime = firstValue(row, ["entryAt", "timestamp", "quoteTime", "latestSeenAt", "latestAAt", "firstAAt"], "--");
+    const entryTime = strategy2EntryTime(row);
     const entryPrice = firstValue(row, ["entryPrice", "observedPrice", "latestSeenPrice", "latestAPrice", "firstAPrice", "supportPrice"], "--");
     const state = firstValue(row, ["stateLabel", "actionLabel", "label", "signal", "strategy"], "即時偵測");
     const reason = firstValue(row, ["reason", "stateReason", "summary", "description", "memo", "note"], "");
@@ -162,7 +192,7 @@ function rowHtml(row, index, tab = "") {
     <article class="mobile-terminal-row">
       <b>#${index + 1}</b>
       <div>
-        <h4>${esc(shortTime(entryTime))}｜${esc(code)} ${esc(name)}</h4>
+        <h4>${esc(intradayTimeText(entryTime))}｜${esc(code)} ${esc(name)}</h4>
         <p>${esc(state)}｜進場價格 ${esc(numberText(entryPrice))}</p>
         <small>${esc(String(reason).slice(0, 150))}</small>
       </div>
