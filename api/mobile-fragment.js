@@ -111,8 +111,12 @@ function normalizeRows(payload) {
     "items",
     "candidates",
     "signals",
+    "records",
+    "events",
     "data",
     "top",
+    "payload.records",
+    "payload.events",
     "payload.matches",
     "payload.results",
     "mobile.top",
@@ -158,7 +162,8 @@ function rowHtml(row, index) {
 
 function renderFragment(tab, config, payload) {
   const rows = normalizeRows(payload);
-  const count = Number(payload?.count ?? payload?.total ?? payload?.result_count ?? rows.length) || rows.length;
+  const reportedCount = Number(payload?.count ?? payload?.total ?? payload?.result_count ?? 0) || 0;
+  const count = Math.max(reportedCount, rows.length);
   const updatedAt = payload?.updatedAt || payload?.finishedAt || payload?.generatedAt || payload?.scanTime || payload?.date || "";
   const runId = payload?.runId || payload?.transport?.runId || "";
   const quality = payload?.qualityStatus || payload?.sourceHealth?.status || "";
