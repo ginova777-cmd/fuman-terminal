@@ -170,6 +170,36 @@ function cachedResponsePayload(cached, breadth, clock, reason = "cache") {
   };
 }
 
+function normalizeNonTradingCachePayload(payload, session) {
+  const marketDataDate = session?.marketDataDate || "";
+  const marketDates = marketDataDate
+    ? { ...(payload?.market?.marketDates || {}), twse: marketDataDate, tpex: marketDataDate }
+    : payload?.market?.marketDates;
+  return {
+    ...payload,
+    reason: "non-trading-day-cache",
+    market: payload?.market ? {
+      ...payload.market,
+      trading: false,
+      marketStatus: "closed",
+      today: session?.today || payload.market.today,
+      resolvedTradeDate: marketDataDate || payload.market.resolvedTradeDate,
+      sourceTradeDate: marketDataDate || payload.market.sourceTradeDate,
+      marketDates,
+    } : payload?.market,
+    summary: payload?.summary ? {
+      ...payload.summary,
+      trading: false,
+      marketStatus: "closed",
+    } : payload?.summary,
+    aiDetectWindow: payload?.aiDetectWindow ? {
+      ...payload.aiDetectWindow,
+      reason: "non-trading-day-cache",
+    } : payload?.aiDetectWindow,
+    marketSession: { ...session, closed: true },
+  };
+}
+
 function snapshotResponsePayload(snapshot, breadth, clock) {
   const payload = snapshot.payload || {};
   return cachedResponsePayload(
@@ -241,11 +271,10 @@ module.exports = async function handler(request, response) {
   const session = marketSessionState(clock, breadth, marketSummary, stocksSlim);
 
   if (cached && session.closed && !shouldRefresh(request)) {
-    response.status(200).json({
-      ...cachedResponsePayload(cached, breadth, clock, "non-trading-day-cache"),
-      reason: "non-trading-day-cache",
-      marketSession: { ...session, closed: true },
-    });
+    response.status(200).json(normalizeNonTradingCachePayload(
+      cachedResponsePayload(cached, breadth, clock, "non-trading-day-cache"),
+      session
+    ));
     return;
   }
 
@@ -320,3 +349,4 @@ module.exports = async function handler(request, response) {
 
   response.status(200).json(payload);
 };
+
