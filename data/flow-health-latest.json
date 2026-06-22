@@ -1,25 +1,24 @@
 {
-  "warrant": {
-    "scope": "warrant",
-    "status": "publish_delayed",
-    "message": "Warrant flow scan succeeded but Git publish failed",
-    "updatedAt": "2026-06-15T21:57:30.5799217Z",
-    "detail": {
-      "log": "C:\\fuman-runtime\\logs\\warrant-flow-20260616-053006.log",
-      "exitCode": 1
-    }
-  },
-  "updatedAt": "2026-06-15T23:00:03.6099014Z",
+  "updatedAt": "2026-06-22T13:34:42.8224698Z",
   "institution": {
     "scope": "institution",
-    "status": "watchdog_failed",
-    "message": "Watchdog rerun failed",
-    "updatedAt": "2026-06-15T23:00:03.6095118Z",
+    "status": "publish_delayed",
+    "message": "Institution scan succeeded but Git publish failed",
+    "updatedAt": "2026-06-22T13:34:42.8196211Z",
     "detail": {
-      "expectedTime": "06:00",
       "exitCode": 1,
-      "reason": "institution count too low: 440",
-      "log": "C:\\fuman-runtime\\logs\\flow-watchdog-institution-20260616-062003.log"
+      "log": "C:\\fuman-runtime\\logs\\institution-20260622-212048.log"
+    }
+  },
+  "warrant": {
+    "scope": "warrant",
+    "status": "ok",
+    "message": "Watchdog rerun completed",
+    "updatedAt": "2026-06-22T13:13:12.8276725Z",
+    "detail": {
+      "log": "C:\\fuman-runtime\\logs\\flow-watchdog-warrant-20260622-210203.log",
+      "reason": "missing warrant cache",
+      "expectedTime": "20:30"
     }
   }
 }

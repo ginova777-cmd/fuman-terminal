@@ -1,55 +1,6 @@
 {
-  "ok": true,
+  "ok": false,
   "sourceName": "fuman_afterhours_cb",
-  "checkedAt": "2026-06-15T13:45:13.094Z",
-  "required": [
-    "cb"
-  ],
-  "optional": [
-    "institution",
-    "warrant"
-  ],
-  "sources": {
-    "cb": {
-      "ok": true,
-      "required": true,
-      "name": "cb",
-      "label": "CB",
-      "file": "cb-detect-latest.json",
-      "count": 11,
-      "tradeDate": "20260615",
-      "updatedAt": "2026-06-15T13:45:12.965Z",
-      "hash": "3c987eb8328cad3dcec3a152910412f5e3c906908375b89f03b1559577a89582",
-      "error": ""
-    },
-    "institution": {
-      "ok": true,
-      "required": false,
-      "name": "institution",
-      "label": "買賣超",
-      "file": "institution-latest.json",
-      "count": 1883,
-      "tradeDate": "20260612",
-      "updatedAt": "2026-06-14T05:23:14.078Z",
-      "hash": "36f68555386d55ba2b0c7f6d69a585b67995a23c864930b8f8e60a52d813d8f8",
-      "error": ""
-    },
-    "warrant": {
-      "ok": true,
-      "required": false,
-      "name": "warrant",
-      "label": "權證走向",
-      "file": "warrant-flow-latest.json",
-      "count": 120,
-      "tradeDate": "20260615",
-      "updatedAt": "2026-06-15T13:17:03.813Z",
-      "hash": "fb34f1ce70cada17b342424d334a695c0a22fcb5b214c06492562ab0813eb9ed",
-      "error": ""
-    }
-  },
-  "supabase": {
-    "ok": true,
-    "table": "source_status",
-    "readbackUpdatedAt": "2026-06-15T13:45:13.095+00:00"
-  }
+  "checkedAt": "2026-06-22T13:25:14.424Z",
+  "error": "afterhours Supabase blocked: cb"
 }

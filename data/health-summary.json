@@ -1,27 +1,16 @@
 {
   "ok": false,
-  "updatedAt": "2026-06-15T07:45:19.765Z",
+  "updatedAt": "2026-06-22T07:58:13.746Z",
   "risk": "high",
   "risks": [
     {
       "level": "high",
-      "area": "freshness",
-      "message": "資料超過 SLA 嚴重逾時 1 個",
+      "area": "runtime",
+      "message": "資料檔缺失或不可解析 3 個",
       "files": [
-        "strategy4-summary.json"
-      ],
-      "stale": [
-        {
-          "file": "strategy4-summary.json",
-          "ok": true,
-          "status": "",
-          "date": "",
-          "count": 405,
-          "updatedAt": "2026-06-12T08:03:21.079Z",
-          "bytes": 45814,
-          "slaHours": 30,
-          "ageHours": 71.69963166666666
-        }
+        "strategy5-latest.json",
+        "institution-summary.json",
+        "warrant-flow-summary.json"
       ]
     }
   ],
@@ -56,7 +45,7 @@
     "rawRefresh": []
   },
   "runtime": {
-    "ok": true,
+    "ok": false,
     "data": [
       {
         "file": "market-summary.json",
@@ -64,62 +53,47 @@
         "status": "",
         "date": "",
         "count": 0,
-        "updatedAt": "2026-06-15T04:21:50.608Z",
-        "bytes": 153761
-      },
-      {
-        "file": "strategy4-summary.json",
-        "ok": true,
-        "status": "",
-        "date": "",
-        "count": 405,
-        "updatedAt": "2026-06-12T08:03:21.079Z",
-        "bytes": 45814
+        "updatedAt": "2026-06-22T07:06:23.622Z",
+        "bytes": 109063
       },
       {
         "file": "strategy5-latest.json",
-        "ok": true,
-        "status": "",
-        "date": "20260615",
-        "count": 62,
-        "updatedAt": "2026-06-15T04:26:35.822Z",
-        "bytes": 143434
+        "ok": false,
+        "count": 0,
+        "updatedAt": "",
+        "bytes": 0
       },
       {
         "file": "institution-summary.json",
-        "ok": true,
-        "status": "",
-        "date": "20260612",
-        "count": 1883,
-        "updatedAt": "2026-06-14T05:23:14.078Z",
-        "bytes": 68256
+        "ok": false,
+        "count": 0,
+        "updatedAt": "",
+        "bytes": 0
       },
       {
         "file": "warrant-flow-summary.json",
-        "ok": true,
-        "status": "",
-        "date": "",
-        "count": 120,
-        "updatedAt": "2026-06-15T04:21:37.191Z",
-        "bytes": 55154
+        "ok": false,
+        "count": 0,
+        "updatedAt": "",
+        "bytes": 0
       },
       {
         "file": "strategy2-intraday-latest.json",
         "ok": true,
         "status": "retired_intraday_snapshot",
-        "date": "2026-06-15",
+        "date": "2026-06-22",
         "count": 0,
-        "updatedAt": "2026-06-15T07:45:02.550Z",
-        "bytes": 780
+        "updatedAt": "2026-06-22T07:45:04.420Z",
+        "bytes": 714
       },
       {
         "file": "realtime-radar-latest.json",
         "ok": true,
         "status": "retired_intraday_snapshot",
-        "date": "2026-06-15",
+        "date": "2026-06-22",
         "count": 0,
-        "updatedAt": "2026-06-15T07:45:02.555Z",
-        "bytes": 684
+        "updatedAt": "2026-06-22T07:45:04.424Z",
+        "bytes": 690
       },
       {
         "file": "performance-report.json",
@@ -127,8 +101,8 @@
         "status": "",
         "date": "",
         "count": 0,
-        "updatedAt": "2026-06-15T07:45:15.214Z",
-        "bytes": 2392
+        "updatedAt": "2026-06-22T07:45:42.305Z",
+        "bytes": 1915
       },
       {
         "file": "signal-quality-report.json",
@@ -136,8 +110,8 @@
         "status": "",
         "date": "",
         "count": 0,
-        "updatedAt": "2026-06-15T07:45:14.947Z",
-        "bytes": 785
+        "updatedAt": "2026-06-22T07:45:42.024Z",
+        "bytes": 631
       },
       {
         "file": "data-quality-report.json",
@@ -145,8 +119,8 @@
         "status": "",
         "date": "",
         "count": 0,
-        "updatedAt": "2026-06-15T07:45:15.029Z",
-        "bytes": 1998
+        "updatedAt": "2026-06-22T07:45:42.103Z",
+        "bytes": 1224
       },
       {
         "file": "data-consistency-report.json",
@@ -154,8 +128,8 @@
         "status": "",
         "date": "",
         "count": 0,
-        "updatedAt": "2026-06-15T07:45:15.097Z",
-        "bytes": 450
+        "updatedAt": "2026-06-22T07:45:42.167Z",
+        "bytes": 201
       },
       {
         "file": "strategy-weight-report.json",
@@ -163,7 +137,7 @@
         "status": "",
         "date": "",
         "count": 0,
-        "updatedAt": "2026-06-15T07:45:15.153Z",
+        "updatedAt": "2026-06-22T07:45:42.230Z",
         "bytes": 418
       }
     ]

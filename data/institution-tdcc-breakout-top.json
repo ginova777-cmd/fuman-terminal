@@ -1,0 +1,29 @@
+{
+  "ok": true,
+  "source": "institution+tdcc-1000-cache",
+  "tdccSource": "supabase:source_status",
+  "generatedAt": "2026-06-22T14:40:57.668Z",
+  "institutionDate": "",
+  "dates": [
+    "20260529",
+    "20260605",
+    "20260612"
+  ],
+  "criteria": {
+    "foreignStreakAtLeast": 3,
+    "latestForeignBuyPositive": true,
+    "tdccLevel": "15 / 1,000,001 shares and above",
+    "strictIncreasing": true,
+    "buyVolumePctBasis": "foreign + trust / fiveDayAvgVolume",
+    "exclusions": [
+      "ETF / 00開頭",
+      "金融股",
+      "航空股",
+      "黑名單",
+      "水泥 / 軍工"
+    ]
+  },
+  "excludedCounts": {},
+  "count": 0,
+  "matches": []
+}
