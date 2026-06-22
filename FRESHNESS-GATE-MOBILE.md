@@ -51,6 +51,34 @@ npm run verify:data-freshness:live
 
 才算成功。
 
+## Legacy Artifact Opt-In
+
+`data/live-freshness-ok.json` is legacy diagnostic only.
+
+Live freshness authority is:
+
+```text
+Supabase complete run
+-> no-store API
+-> frontend polling
+```
+
+Do not use `live-freshness-ok.json` as a deploy gate, publish gate, or freshness gate unless `FUMAN_CHECK_LEGACY_TERMINAL_GATE_ARTIFACT=1` is explicitly set.
+
+每日戰鬥狀態只看：
+
+```powershell
+npm run verify:data-freshness:live
+npm run verify:publish-gate
+```
+
+成功時應看到：
+
+```text
+[data-freshness] ok mode=live entries=26
+[publish-gate] ok
+```
+
 ## 終端可讀憑證
 
 正式站必須有：

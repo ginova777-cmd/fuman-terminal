@@ -240,7 +240,7 @@ for (const marker of [
 ]) {
   if (!runtimeConfig.includes(marker)) issues.push(`terminal-runtime-config.js must keep complete-run/no-store frontend endpoint ${marker}`);
 }
-if (/legacy-scan-time/.test(strategy4LatestApi) || !/gate: "run_id"/.test(strategy4LatestApi)) {
+if (/legacy-scan-time/.test(strategy4LatestApi) || !/gate: "(run_id|complete-run-authoritative)"/.test(strategy4LatestApi)) {
   issues.push("api/strategy4-latest.js must read latest complete run by run_id and must not fall back to legacy scan_time");
 }
 if (/staticFallback|static-fallback|\/data\/strategy4-|strategy4_static|strategy4_scan_results_latest_empty/.test(strategy4LatestApi)) {
@@ -591,6 +591,14 @@ if (!fs.existsSync(path.join(ROOT, "FRESHNESS-GATE-MOBILE.md"))) {
     "npm run freshness:gate",
     "npm run verify:data-freshness:live",
     "npm run verify:publish-gate",
+    "data/live-freshness-ok.json` is legacy diagnostic only",
+    "Live freshness authority is",
+    "Supabase complete run",
+    "no-store API",
+    "frontend polling",
+    "FUMAN_CHECK_LEGACY_TERMINAL_GATE_ARTIFACT=1",
+    "[data-freshness] ok mode=live entries=26",
+    "[publish-gate] ok",
     "git pull --ff-only origin main",
     "repo sync preflight",
     "外部來源 timeout",

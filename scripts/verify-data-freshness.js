@@ -8,6 +8,7 @@ const LIVE = process.argv.includes("--live") || process.env.FUMAN_DATA_FRESHNESS
 const WRITE_REPORT = process.argv.includes("--write") || process.env.FUMAN_WRITE_FRESHNESS_REPORT === "1";
 const CHECK_LEGACY_TERMINAL_GATE = process.env.FUMAN_CHECK_LEGACY_TERMINAL_GATE_ARTIFACT === "1";
 const SKIP_TERMINAL_GATE = process.env.FUMAN_SKIP_TERMINAL_GATE_ARTIFACT !== "0";
+const VERIFY_STATIC_DATA_FRESHNESS = process.env.FUMAN_VERIFY_STATIC_DATA_FRESHNESS === "1";
 const LOCAL_DATA_DIR = process.env.FUMAN_VERIFY_DATA_DIR || path.join(ROOT, "data");
 
 const TARGETS = [
@@ -39,8 +40,39 @@ const TARGETS = [
   { name: "warrant-flow-mobile-top", file: "data/warrant-flow-mobile-top.json", api: "api/warrant-flow-latest", derive: "warrant-flow-mobile-top", minCount: 1 },
 ];
 
+const LIVE_API_TARGETS = [
+  { name: "data-manifest", endpoint: "api/mobile-boot" },
+  { name: "terminal-home-bundle", endpoint: "api/terminal-home" },
+  { name: "market-summary", endpoint: "api/market-ai-live" },
+  { name: "health-summary", endpoint: "api/mobile-boot" },
+  { name: "stocks-index", endpoint: "api/heatmap", minCount: 500 },
+  { name: "open-buy-latest", endpoint: "api/open-buy-latest", minCount: 1, requireRunId: true },
+  { name: "strategy3-latest", endpoint: "api/strategy3-latest", minCount: 1, requireRunId: true },
+  { name: "strategy4-latest", endpoint: "api/strategy4-latest", minCount: 1, requireRunId: true },
+  { name: "strategy4-summary", endpoint: "api/strategy4-latest?top=1&compact=1&limit=20", minCount: 1, requireRunId: true },
+  { name: "strategy4-slim", endpoint: "api/strategy4-latest?top=1&compact=1&limit=80", minCount: 1, requireRunId: true },
+  { name: "strategy4-score-top", endpoint: "api/strategy4-latest?top=1&compact=1&limit=120", minCount: 1, requireRunId: true },
+  { name: "strategy4-zone-a", endpoint: "api/strategy4-latest", minCount: 1, requireRunId: true },
+  { name: "strategy4-zone-b", endpoint: "api/strategy4-latest", minCount: 1, requireRunId: true },
+  { name: "strategy4-zone-c", endpoint: "api/strategy4-latest", minCount: 1, requireRunId: true },
+  { name: "strategy5-latest", endpoint: "api/strategy5-latest?top=1&compact=1&limit=50", minCount: 1, requireRunId: true },
+  { name: "strategy-match-index", endpoint: "api/watchlist-match-index", minCount: 1, requireRunId: true },
+  { name: "warrant-flow-latest", endpoint: "api/warrant-flow-latest?top=1&compact=1&limit=30", minCount: 1, requireRunId: true, requireWarrantContract: true },
+  { name: "stocks-quotes-slim", endpoint: "api/heatmap", minCount: 500 },
+  { name: "institution-latest", endpoint: "api/institution-latest", minCount: Number(process.env.INSTITUTION_MIN_OUTPUT_ROWS || 250), requireRunId: true },
+  { name: "institution-slim", endpoint: "api/institution-latest?top=1&compact=1&limit=100", minCount: 1, requireRunId: true },
+  { name: "institution-mobile-top", endpoint: "api/institution-latest?top=1&compact=1&limit=50", minCount: 1, requireRunId: true },
+  { name: "institution-tdcc-breakout-top", endpoint: "api/institution-tdcc-breakout-latest", minCount: Number(process.env.INSTITUTION_TDCC_MIN_OUTPUT_ROWS || 1) },
+  { name: "cb-detect-latest", endpoint: "api/cb-detect-latest", minCount: 1, requireRunId: true },
+  { name: "warrant-flow-slim", endpoint: "api/warrant-flow-latest?top=1&compact=1&limit=80", minCount: 1, requireRunId: true, requireWarrantContract: true },
+  { name: "warrant-priority-top", endpoint: "api/warrant-flow-latest?top=1&compact=1&limit=120", minCount: 1, requireRunId: true, requireWarrantContract: true },
+  { name: "warrant-flow-mobile-top", endpoint: "api/warrant-flow-latest?top=1&compact=1&limit=50", minCount: 1, requireRunId: true, requireWarrantContract: true },
+];
+
 function fetchText(pathname, timeoutMs = 20000) {
-  const url = `${BASE_URL}/${pathname}?v=freshness-${Date.now()}`;
+  const cleanPath = String(pathname || "").replace(/^\/+/, "");
+  const separator = cleanPath.includes("?") ? "&" : "?";
+  const url = `${BASE_URL}/${cleanPath}${separator}v=freshness-${Date.now()}`;
   return new Promise((resolve, reject) => {
     const req = https.get(url, { timeout: timeoutMs, headers: { "cache-control": "no-cache" } }, (res) => {
       let body = "";
@@ -102,6 +134,7 @@ function extractCount(payload) {
   if (!payload) return 0;
   if (Number.isFinite(Number(payload.count))) return Number(payload.count);
   if (Number.isFinite(Number(payload.total))) return Number(payload.total);
+  if (Number.isFinite(Number(payload.stockCount))) return Number(payload.stockCount);
   if (Array.isArray(payload.items)) return payload.items.length;
   if (Array.isArray(payload.matches)) return payload.matches.length;
   if (Array.isArray(payload.rows)) return payload.rows.length;
@@ -117,6 +150,47 @@ function extractVolumeCount(payload) {
   if (Number.isFinite(Number(payload.volumeCount))) return Number(payload.volumeCount);
   if (Array.isArray(payload.volumeMatches)) return payload.volumeMatches.length;
   return 0;
+}
+
+function extractRunId(payload) {
+  return String(
+    payload?.runId ||
+    payload?.run_id ||
+    payload?.snapshotId ||
+    payload?.snapshot_id ||
+    payload?.bootHash ||
+    payload?.boot_hash ||
+    payload?.transport?.runId ||
+    payload?.transport?.run_id ||
+    ""
+  ).trim();
+}
+
+function extractRowsForLiveApi(payload) {
+  if (!payload) return [];
+  if (Array.isArray(payload.rows)) return payload.rows;
+  if (Array.isArray(payload.matches)) return payload.matches;
+  if (Array.isArray(payload.data)) return payload.data;
+  if (Array.isArray(payload.items)) return payload.items;
+  if (Array.isArray(payload.stocks)) return payload.stocks;
+  if (Array.isArray(payload.quotes)) return payload.quotes;
+  return [];
+}
+
+function validateWarrantContract(payload, name, issues) {
+  const contract = payload?.dataContract || {};
+  assertFresh(contract.ok === true, `${name}: warrant dataContract ok=false`, issues);
+  assertFresh(String(payload?.schemaVersion || "").includes("warrant-flow-run-id-complete-v1"), `${name}: schemaVersion not run-id complete v1`, issues);
+  const volumeRows = Array.isArray(payload?.volumeMatches) ? payload.volumeMatches : [];
+  assertFresh(volumeRows.length > 0, `${name}: volumeMatches empty`, issues);
+  for (const row of volumeRows.slice(0, 10)) {
+    assertFresh(Boolean(String(row?.warrantCode || "").trim()), `${name}: volumeMatches row missing warrantCode`, issues);
+    assertFresh(Boolean(String(row?.warrantName || "").trim()), `${name}: volumeMatches row missing warrantName`, issues);
+    assertFresh(/^\d{4}$/.test(String(row?.underlyingCode || "").trim()), `${name}: volumeMatches row missing 4-digit underlyingCode`, issues);
+    assertFresh(Number.isFinite(Number(row?.thirtyMinuteVolume)), `${name}: volumeMatches row missing thirtyMinuteVolume`, issues);
+    assertFresh(Number.isFinite(Number(row?.floatingUnits)), `${name}: volumeMatches row missing floatingUnits`, issues);
+    assertFresh(Number.isFinite(Number(row?.volumeMultiple)), `${name}: volumeMatches row missing volumeMultiple`, issues);
+  }
 }
 
 function rows(payload) {
@@ -477,7 +551,90 @@ async function loadTarget(target) {
   return deriveApiPayload(JSON.parse(result.body), target.derive);
 }
 
+async function loadLiveApiTarget(target) {
+  const result = await fetchText(target.endpoint);
+  if (result.status < 200 || result.status >= 300) throw new Error(`${target.name} HTTP ${result.status}`);
+  return JSON.parse(result.body);
+}
+
+async function validateLegacyGateArtifactIfOpted(report, issues) {
+  if (!LIVE || !CHECK_LEGACY_TERMINAL_GATE || SKIP_TERMINAL_GATE) return;
+  try {
+    const gate = await fetchJsonFile("data/live-freshness-ok.json");
+    report.legacyGateArtifact = {
+      ok: gate?.ok === true,
+      gateId: gate?.gateId || null,
+      checkedAt: gate?.checkedAt || null,
+    };
+    assertFresh(gate?.ok === true, "legacy terminal freshness gate ok=false", issues);
+  } catch (error) {
+    report.legacyGateArtifact = { ok: false, error: error.message };
+    issues.push(`legacy terminal freshness gate unavailable: ${error.message}`);
+  }
+}
+
+async function verifyLiveApiOnly() {
+  const report = {
+    ok: true,
+    mode: "live",
+    authority: "supabase-complete-run-api",
+    checkedAt: new Date().toISOString(),
+    entries: {},
+  };
+  const issues = [];
+
+  for (const target of LIVE_API_TARGETS) {
+    try {
+      const payload = await loadLiveApiTarget(target);
+      const count = extractCount(payload);
+      const rowsCount = extractRowsForLiveApi(payload).length;
+      const runId = extractRunId(payload);
+      const date = normalizeDate(
+        payload?.usedDate ||
+        payload?.sourceDate ||
+        payload?.marketDataDate ||
+        payload?.marketSession?.marketDataDate ||
+        payload?.date ||
+        payload?.updatedAt ||
+        payload?.generatedAt
+      );
+      const ok = target.minCount ? count >= target.minCount : true;
+      report.entries[target.name] = {
+        ok,
+        endpoint: target.endpoint,
+        count,
+        rows: rowsCount,
+        date,
+        runId: runId || null,
+        cacheSource: payload?.cacheSource || payload?.source || null,
+      };
+      if (payload?.ok === false) issues.push(`${target.name}: ok=false reason=${payload.reason || payload.error || "unknown"}`);
+      if (!ok) issues.push(`${target.name}: count ${count} < ${target.minCount}`);
+      if (target.requireRunId && !runId) issues.push(`${target.name}: missing runId/snapshot id`);
+      if (target.requireWarrantContract) validateWarrantContract(payload, target.name, issues);
+    } catch (error) {
+      report.entries[target.name] = { ok: false, endpoint: target.endpoint, error: error.message };
+      issues.push(`${target.name}: ${error.message}`);
+    }
+  }
+
+  await validateLegacyGateArtifactIfOpted(report, issues);
+  report.ok = issues.length === 0;
+  const outPath = path.join(ROOT, "data", "data-freshness-report.json");
+  if (WRITE_REPORT) fs.writeFileSync(outPath, JSON.stringify(report, null, 2) + "\n", "utf8");
+  if (issues.length) {
+    console.error("[data-freshness] failed");
+    for (const issue of issues) console.error("- " + issue);
+    process.exit(1);
+  }
+  console.log(`[data-freshness] ok mode=live entries=${Object.keys(report.entries).length}`);
+}
+
 async function main() {
+  if (LIVE && !VERIFY_STATIC_DATA_FRESHNESS) {
+    await verifyLiveApiOnly();
+    return;
+  }
   const report = {
     ok: true,
     mode: LIVE ? "live" : "local",
