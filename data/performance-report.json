@@ -1,6 +1,6 @@
 {
   "ok": true,
-  "updatedAt": "2026-06-22T15:00:06.961Z",
+  "updatedAt": "2026-06-22T15:04:35.542Z",
   "generatedBy": "generate-performance-report",
   "assets": [
     {
@@ -8,7 +8,7 @@
       "ok": true,
       "bytes": 109113,
       "count": 0,
-      "updatedAt": "2026-06-22T15:00:02.551Z"
+      "updatedAt": "2026-06-22T15:04:31.107Z"
     },
     {
       "file": "health-summary.json",
@@ -57,28 +57,28 @@
       "ok": true,
       "bytes": 631,
       "count": 0,
-      "updatedAt": "2026-06-22T15:00:06.677Z"
+      "updatedAt": "2026-06-22T15:04:35.254Z"
     },
     {
       "file": "data-quality-report.json",
       "ok": true,
       "bytes": 1224,
       "count": 0,
-      "updatedAt": "2026-06-22T15:00:06.746Z"
+      "updatedAt": "2026-06-22T15:04:35.329Z"
     },
     {
       "file": "data-consistency-report.json",
       "ok": true,
       "bytes": 201,
       "count": 0,
-      "updatedAt": "2026-06-22T15:00:06.821Z"
+      "updatedAt": "2026-06-22T15:04:35.400Z"
     },
     {
       "file": "strategy-weight-report.json",
       "ok": true,
       "bytes": 418,
       "count": 0,
-      "updatedAt": "2026-06-22T15:00:06.892Z"
+      "updatedAt": "2026-06-22T15:04:35.471Z"
     }
   ],
   "totalBytes": 628324,
