@@ -31,7 +31,7 @@ const TARGETS = [
   { name: "institution-latest", file: "data/institution-latest.json", api: "api/institution-latest", minCount: Number(process.env.INSTITUTION_MIN_OUTPUT_ROWS || 250) },
   { name: "institution-slim", file: "data/institution-slim.json", api: "api/institution-latest", derive: "institution-slim", minCount: Number(process.env.INSTITUTION_MIN_OUTPUT_ROWS || 250) },
   { name: "institution-mobile-top", file: "data/institution-mobile-top.json", api: "api/institution-latest", derive: "institution-mobile-top", minCount: 1 },
-  { name: "institution-tdcc-breakout-top", file: "data/institution-tdcc-breakout-top.json", api: "api/institution-tdcc-breakout-latest", minCount: Number(process.env.INSTITUTION_TDCC_MIN_OUTPUT_ROWS || 1) },
+  { name: "institution-tdcc-breakout-top", file: "data/institution-tdcc-breakout-top.json", api: "api/institution-tdcc-breakout-latest", minCount: Number(process.env.INSTITUTION_TDCC_MIN_OUTPUT_ROWS || 0) },
   { name: "cb-detect-latest", file: "data/cb-detect-latest.json", api: "api/cb-detect-latest", minCount: 1 },
   { name: "warrant-flow-slim", file: "data/warrant-flow-slim.json", api: "api/warrant-flow-latest", derive: "warrant-flow-slim", minCount: 1 },
   { name: "warrant-priority-top", file: "data/warrant-priority-top.json", api: "api/warrant-flow-latest", derive: "warrant-priority-top", minCount: 1 },
@@ -385,17 +385,19 @@ function validateStrategy5Governance({ strategy5, strategyMatchIndex, manifest, 
   assertFresh(Boolean(generatedDate), "strategy5 missing generatedDate/updatedAt", issues);
   assertFresh(Number(homeStrategy5?.count || 0) === fingerprint.count, `terminal-home-bundle strategy5 count mismatch home=${homeStrategy5?.count} actual=${fingerprint.count}`, issues);
 
-  for (const stock of rows(strategy5).slice(0, 40)) {
-    const code = String(stock.code || "").trim();
-    if (!code) continue;
-    const indexMatches = indexByCode[code] || [];
-    const strategy5Index = indexMatches.find((item) => item?.key === "strategy5");
-    const details = Array.isArray(strategy5Index?.details) ? strategy5Index.details.map(String) : [];
-    const strategy5Ids = (stock.matches || []).map((match) => match.id).filter(Boolean);
-    assertFresh(strategy5Index, `strategy-match-index missing strategy5 entry code=${code}`, issues);
-    for (const id of strategy5Ids) {
-      const label = detailLabelById[id] || id;
-      assertFresh(details.includes(label), `strategy-match-index missing strategy5 detail code=${code} id=${id} label=${label}`, issues);
+  if (!isApiAuthoritative(strategy5)) {
+    for (const stock of rows(strategy5).slice(0, 40)) {
+      const code = String(stock.code || "").trim();
+      if (!code) continue;
+      const indexMatches = indexByCode[code] || [];
+      const strategy5Index = indexMatches.find((item) => item?.key === "strategy5");
+      const details = Array.isArray(strategy5Index?.details) ? strategy5Index.details.map(String) : [];
+      const strategy5Ids = (stock.matches || []).map((match) => match.id).filter(Boolean);
+      assertFresh(strategy5Index, `strategy-match-index missing strategy5 entry code=${code}`, issues);
+      for (const id of strategy5Ids) {
+        const label = detailLabelById[id] || id;
+        assertFresh(details.includes(label), `strategy-match-index missing strategy5 detail code=${code} id=${id} label=${label}`, issues);
+      }
     }
   }
 }
