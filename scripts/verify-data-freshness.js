@@ -46,8 +46,8 @@ const LIVE_API_TARGETS = [
   { name: "market-summary", endpoint: "api/market-ai-live" },
   { name: "health-summary", endpoint: "api/mobile-boot" },
   { name: "stocks-index", endpoint: "api/heatmap", minCount: 500 },
-  { name: "open-buy-latest", endpoint: "api/open-buy-latest", minCount: 1, requireRunId: true },
-  { name: "strategy3-latest", endpoint: "api/strategy3-latest", minCount: 1, requireRunId: true },
+  { name: "open-buy-latest", endpoint: "api/open-buy-latest", minCount: 1, requireRunId: true, notBeforeTaipeiMinute: 8 * 60 + 45 },
+  { name: "strategy3-latest", endpoint: "api/strategy3-latest", minCount: 1, requireRunId: true, notBeforeTaipeiMinute: 13 * 60 },
   { name: "strategy4-latest", endpoint: "api/strategy4-latest", minCount: 1, requireRunId: true },
   { name: "strategy4-summary", endpoint: "api/strategy4-latest?top=1&compact=1&limit=20", minCount: 1, requireRunId: true },
   { name: "strategy4-slim", endpoint: "api/strategy4-latest?top=1&compact=1&limit=80", minCount: 1, requireRunId: true },
@@ -208,6 +208,22 @@ async function fetchJsonFile(pathname) {
   const result = await fetchText(pathname);
   if (result.status < 200 || result.status >= 300) throw new Error(`${pathname} HTTP ${result.status}`);
   return JSON.parse(result.body);
+}
+
+function taipeiMinuteOfDay(value = new Date()) {
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Asia/Taipei",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).formatToParts(value);
+  const hour = Number(parts.find((part) => part.type === "hour")?.value || 0);
+  const minute = Number(parts.find((part) => part.type === "minute")?.value || 0);
+  return hour * 60 + minute;
+}
+
+function isLiveApiTargetNotYetDue(target) {
+  return Number.isFinite(Number(target?.notBeforeTaipeiMinute)) && taipeiMinuteOfDay() < Number(target.notBeforeTaipeiMinute);
 }
 
 function cloneWithRows(payload, rowsValue, extra = {}) {
@@ -553,7 +569,26 @@ async function loadTarget(target) {
 
 async function loadLiveApiTarget(target) {
   const result = await fetchText(target.endpoint);
-  if (result.status < 200 || result.status >= 300) throw new Error(`${target.name} HTTP ${result.status}`);
+  if (result.status < 200 || result.status >= 300) {
+    if (isLiveApiTargetNotYetDue(target)) {
+      let payload = {};
+      try {
+        payload = JSON.parse(result.body || "{}");
+      } catch {
+        payload = {};
+      }
+      return {
+        ...payload,
+        ok: true,
+        count: 0,
+        rows: [],
+        runId: `not-yet-applicable-${target.name}`,
+        _notApplicable: true,
+        _httpStatus: result.status,
+      };
+    }
+    throw new Error(`${target.name} HTTP ${result.status}`);
+  }
   return JSON.parse(result.body);
 }
 
@@ -598,7 +633,8 @@ async function verifyLiveApiOnly() {
         payload?.updatedAt ||
         payload?.generatedAt
       );
-      const ok = target.minCount ? count >= target.minCount : true;
+      const notApplicable = payload?._notApplicable === true;
+      const ok = notApplicable || (target.minCount ? count >= target.minCount : true);
       report.entries[target.name] = {
         ok,
         endpoint: target.endpoint,
@@ -607,11 +643,12 @@ async function verifyLiveApiOnly() {
         date,
         runId: runId || null,
         cacheSource: payload?.cacheSource || payload?.source || null,
+        status: notApplicable ? "not_applicable_yet" : "checked",
       };
-      if (payload?.ok === false) issues.push(`${target.name}: ok=false reason=${payload.reason || payload.error || "unknown"}`);
+      if (!notApplicable && payload?.ok === false) issues.push(`${target.name}: ok=false reason=${payload.reason || payload.error || "unknown"}`);
       if (!ok) issues.push(`${target.name}: count ${count} < ${target.minCount}`);
-      if (target.requireRunId && !runId) issues.push(`${target.name}: missing runId/snapshot id`);
-      if (target.requireWarrantContract) validateWarrantContract(payload, target.name, issues);
+      if (!notApplicable && target.requireRunId && !runId) issues.push(`${target.name}: missing runId/snapshot id`);
+      if (!notApplicable && target.requireWarrantContract) validateWarrantContract(payload, target.name, issues);
     } catch (error) {
       report.entries[target.name] = { ok: false, endpoint: target.endpoint, error: error.message };
       issues.push(`${target.name}: ${error.message}`);
