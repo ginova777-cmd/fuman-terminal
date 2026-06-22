@@ -205,25 +205,18 @@ function Invoke-LiveDataFreshnessVerify([switch]$SkipTerminalGate) {
 function Publish-TerminalFreshnessGate($mode, $rawResults) {
   $versionPath = Join-Path $publishRoot "version.json"
   $manifestPath = Join-Path $publishRoot "data\data-manifest.json"
-  $strategy5Path = Join-Path $publishRoot "data\strategy5-latest.json"
-  $strategy4Path = Join-Path $publishRoot "data\strategy4-latest.json"
-  $openBuyPath = Join-Path $publishRoot "data\open-buy-latest.json"
   $starPath = Join-Path $publishRoot "data\star-preopen-latest.json"
-  $institutionLatestPath = Join-Path $publishRoot "data\institution-latest.json"
-  $institutionSlimPath = Join-Path $publishRoot "data\institution-slim.json"
-  $institutionTdccPath = Join-Path $publishRoot "data\institution-tdcc-breakout-top.json"
-  $warrantSlimPath = Join-Path $publishRoot "data\warrant-flow-slim.json"
   $versionPayload = Read-GateJson $versionPath
   $manifestPayload = Read-GateJson $manifestPath
   $cbPayload = Read-GateApiJson "https://fuman-terminal.vercel.app/api/cb-detect-latest"
-  $strategy5Payload = Read-GateJson $strategy5Path
-  $strategy4Payload = Read-GateJson $strategy4Path
-  $openBuyPayload = Read-GateJson $openBuyPath
+  $strategy5Payload = Read-GateApiJson "https://fuman-terminal.vercel.app/api/strategy5-latest"
+  $strategy4Payload = Read-GateApiJson "https://fuman-terminal.vercel.app/api/strategy4-latest"
+  $openBuyPayload = Read-GateApiJson "https://fuman-terminal.vercel.app/api/open-buy-latest"
   $starPayload = Read-GateJson $starPath
-  $institutionLatestPayload = Read-GateJson $institutionLatestPath
-  $institutionSlimPayload = Read-GateJson $institutionSlimPath
-  $institutionTdccPayload = Read-GateJson $institutionTdccPath
-  $warrantSlimPayload = Read-GateJson $warrantSlimPath
+  $institutionLatestPayload = Read-GateApiJson "https://fuman-terminal.vercel.app/api/institution-latest"
+  $institutionSlimPayload = $institutionLatestPayload
+  $institutionTdccPayload = Read-GateApiJson "https://fuman-terminal.vercel.app/api/institution-tdcc-breakout-latest"
+  $warrantSlimPayload = Read-GateApiJson "https://fuman-terminal.vercel.app/api/warrant-flow-latest"
   $head = & $gitExe -C $publishRoot log -1 --oneline --decorate
   $headSha = (& $gitExe -C $publishRoot rev-parse --short=12 HEAD).Trim()
   if (-not $headSha) { throw "Cannot resolve publish HEAD for terminal freshness gate" }
