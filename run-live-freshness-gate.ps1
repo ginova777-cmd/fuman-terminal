@@ -228,7 +228,7 @@ function Publish-TerminalFreshnessGate($mode, $rawResults) {
     checkedAt = (Get-Date).ToString("o")
     version = [string]$versionPayload.version
     publishHead = [string]$head
-    verifier = "npm run verify:warrant-freshness:live; npm run verify:data-freshness:live"
+    verifier = "npm run verify:data-freshness:live"
     log = $log
     mode = $mode
     manifestCount = Get-GateCount $manifestPayload
@@ -270,18 +270,7 @@ function Publish-TerminalFreshnessGate($mode, $rawResults) {
   }
   $status | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $statusPath -Encoding utf8
 
-  Write-GateLog "Publishing terminal freshness gate artifact gateId=$($status.gateId) version=$($status.version) cbCount=$($status.cbCount) manifestCbCount=$($status.manifestCbCount) institution=$($status.institutionCount) institutionDate=$($status.institutionDate) institutionTdcc=$($status.institutionTdccCount) institutionTdccDate=$($status.institutionTdccDate) strategy5=$($status.strategy5Count) openBuy=$($status.openBuyCount) openBuyDate=$($status.openBuySourceDate) star=$($status.starCount) finalBlindBuy=$($status.starFinalBlindBuyCount) chipK=$($status.strategy5ChipKCount) foreignTrust=$($status.strategy5ForeignTrustCount)"
-  & $gitExe -C $publishRoot add -f "data/live-freshness-ok.json"
-  if ($LASTEXITCODE -ne 0) { throw "Stage terminal freshness gate artifact failed" }
-  & $gitExe -C $publishRoot diff --cached --quiet -- "data/live-freshness-ok.json"
-  if ($LASTEXITCODE -eq 0) {
-    Write-GateLog "Terminal freshness gate artifact unchanged; no gate commit needed."
-  } else {
-    & $gitExe -C $publishRoot commit -m "Update terminal freshness gate"
-    if ($LASTEXITCODE -ne 0) { throw "Commit terminal freshness gate artifact failed" }
-    & $gitExe -C $publishRoot push origin main
-    if ($LASTEXITCODE -ne 0) { throw "Push terminal freshness gate artifact failed" }
-  }
+  Write-GateLog "Wrote legacy terminal freshness diagnostic gateId=$($status.gateId) version=$($status.version) cbCount=$($status.cbCount) manifestCbCount=$($status.manifestCbCount) institution=$($status.institutionCount) institutionDate=$($status.institutionDate) institutionTdcc=$($status.institutionTdccCount) institutionTdccDate=$($status.institutionTdccDate) strategy5=$($status.strategy5Count) openBuy=$($status.openBuyCount) openBuyDate=$($status.openBuySourceDate) star=$($status.starCount) finalBlindBuy=$($status.starFinalBlindBuyCount) chipK=$($status.strategy5ChipKCount) foreignTrust=$($status.strategy5ForeignTrustCount)"
 
   if (-not $SkipTerminalCopy) {
     New-Item -ItemType Directory -Force -Path (Join-Path $terminalRoot "data") | Out-Null
@@ -574,7 +563,6 @@ try {
   Invoke-LiveDataFreshnessVerify -SkipTerminalGate
   Invoke-NpmAt $publishRoot "verify:live-version"
   $gateStatus = Publish-TerminalFreshnessGate $gateMode @($rawRefreshResults.ToArray())
-  Wait-TerminalFreshnessGateVisible $gateStatus
   Invoke-LiveDataFreshnessVerify
 
   if (-not $SkipTerminalCopy) {

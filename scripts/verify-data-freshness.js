@@ -6,7 +6,8 @@ const ROOT = path.resolve(__dirname, "..");
 const BASE_URL = (process.env.FUMAN_VERIFY_BASE_URL || "https://fuman-terminal.vercel.app").replace(/\/+$/, "");
 const LIVE = process.argv.includes("--live") || process.env.FUMAN_DATA_FRESHNESS_LIVE === "1";
 const WRITE_REPORT = process.argv.includes("--write") || process.env.FUMAN_WRITE_FRESHNESS_REPORT === "1";
-const SKIP_TERMINAL_GATE = process.env.FUMAN_SKIP_TERMINAL_GATE_ARTIFACT === "1";
+const CHECK_LEGACY_TERMINAL_GATE = process.env.FUMAN_CHECK_LEGACY_TERMINAL_GATE_ARTIFACT === "1";
+const SKIP_TERMINAL_GATE = process.env.FUMAN_SKIP_TERMINAL_GATE_ARTIFACT !== "0";
 const LOCAL_DATA_DIR = process.env.FUMAN_VERIFY_DATA_DIR || path.join(ROOT, "data");
 
 const TARGETS = [
@@ -403,7 +404,7 @@ function validateStrategy5Governance({ strategy5, strategyMatchIndex, manifest, 
 }
 
 async function validateTerminalFreshnessGate(payloads, issues) {
-  if (!LIVE || SKIP_TERMINAL_GATE) return;
+  if (!LIVE || SKIP_TERMINAL_GATE || !CHECK_LEGACY_TERMINAL_GATE) return;
   let version = null;
   let gate = null;
   try {

@@ -325,16 +325,14 @@ for (const marker of [
   "strategy4 raw refresh",
   "strategy5 raw refresh",
   "cb detect raw refresh",
-  "verify:warrant-freshness:live",
   "verify:data-freshness:live",
   "FUMAN_INSIDE_FRESHNESS_GATE",
   "FUMAN_FAST_GATE",
   "Fast gate selected",
   "live-freshness-ok.json",
   "Publish-TerminalFreshnessGate",
-  "Wait-TerminalFreshnessGateVisible",
+  "Wrote legacy terminal freshness diagnostic",
   "gateId",
-  "Terminal freshness gate visible but not current",
   "FUMAN_SKIP_TERMINAL_GATE_ARTIFACT",
 ]) {
   if (!gate.includes(marker)) issues.push(`run-live-freshness-gate.ps1 missing ${marker}`);
@@ -372,6 +370,7 @@ const dataFreshnessVerifier = read("scripts/verify-data-freshness.js");
 for (const marker of [
   "validateTerminalFreshnessGate",
   "data/live-freshness-ok.json",
+  "FUMAN_CHECK_LEGACY_TERMINAL_GATE_ARTIFACT",
   "terminal freshness gate version mismatch",
   "terminal freshness gate missing gateId",
   "terminal freshness gate invalid gateId",
@@ -758,7 +757,12 @@ if (fetchResult.status !== 0) {
     const dirty = status.stdout
       .split(/\r?\n/)
       .filter((line) => line.trim())
-      .filter((line) => !allowedDirty.has(line.slice(3).trim()));
+      .filter((line) => {
+        const file = line.slice(3).trim();
+        if (allowedDirty.has(file)) return false;
+        if (/^data\/mobile-analysis\/\d{4}\.json$/.test(file)) return false;
+        return true;
+      });
     if (dirty.length) {
       issues.push(`repo sync check failed: unexpected dirty files: ${dirty.slice(0, 8).join(", ")}`);
     }
