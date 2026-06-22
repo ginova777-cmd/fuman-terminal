@@ -285,7 +285,12 @@ function Publish-TerminalFreshnessGate($mode, $rawResults) {
 
   if (-not $SkipTerminalCopy) {
     New-Item -ItemType Directory -Force -Path (Join-Path $terminalRoot "data") | Out-Null
-    Copy-Item -LiteralPath $statusPath -Destination (Join-Path $terminalRoot "data\live-freshness-ok.json") -Force
+    $terminalStatusPath = Join-Path $terminalRoot "data\live-freshness-ok.json"
+    if ([string]::Equals((Resolve-Path -LiteralPath $statusPath).Path, (Resolve-Path -LiteralPath $terminalStatusPath -ErrorAction SilentlyContinue).Path, [System.StringComparison]::OrdinalIgnoreCase)) {
+      Write-GateLog "Terminal freshness gate artifact copy skipped; source and destination are the same file."
+    } else {
+      Copy-Item -LiteralPath $statusPath -Destination $terminalStatusPath -Force
+    }
   }
 
   return [pscustomobject]$status
