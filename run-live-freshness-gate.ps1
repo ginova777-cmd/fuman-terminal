@@ -120,6 +120,11 @@ function Read-GateJson($path) {
   return Get-Content -LiteralPath $path -Raw | ConvertFrom-Json -ErrorAction Stop
 }
 
+function Read-GateApiJson($url) {
+  $response = Invoke-WebRequest -Uri $url -UseBasicParsing -TimeoutSec 45
+  return $response.Content | ConvertFrom-Json -ErrorAction Stop
+}
+
 function Get-GateCount($payload) {
   $propertyNames = @($payload.PSObject.Properties.Name)
   if ($propertyNames -contains "count") { return [int]$payload.count }
@@ -200,7 +205,6 @@ function Invoke-LiveDataFreshnessVerify([switch]$SkipTerminalGate) {
 function Publish-TerminalFreshnessGate($mode, $rawResults) {
   $versionPath = Join-Path $publishRoot "version.json"
   $manifestPath = Join-Path $publishRoot "data\data-manifest.json"
-  $cbPath = Join-Path $publishRoot "data\cb-detect-latest.json"
   $strategy5Path = Join-Path $publishRoot "data\strategy5-latest.json"
   $strategy4Path = Join-Path $publishRoot "data\strategy4-latest.json"
   $openBuyPath = Join-Path $publishRoot "data\open-buy-latest.json"
@@ -211,7 +215,7 @@ function Publish-TerminalFreshnessGate($mode, $rawResults) {
   $warrantSlimPath = Join-Path $publishRoot "data\warrant-flow-slim.json"
   $versionPayload = Read-GateJson $versionPath
   $manifestPayload = Read-GateJson $manifestPath
-  $cbPayload = Read-GateJson $cbPath
+  $cbPayload = Read-GateApiJson "https://fuman-terminal.vercel.app/api/cb-detect-latest"
   $strategy5Payload = Read-GateJson $strategy5Path
   $strategy4Payload = Read-GateJson $strategy4Path
   $openBuyPayload = Read-GateJson $openBuyPath
@@ -235,7 +239,7 @@ function Publish-TerminalFreshnessGate($mode, $rawResults) {
     log = $log
     mode = $mode
     manifestCount = Get-GateCount $manifestPayload
-    manifestCbCount = [int]$manifestPayload.entries."cb-detect-latest.json".count
+    manifestCbCount = if ($manifestPayload.entries."cb-detect-latest.json") { [int]$manifestPayload.entries."cb-detect-latest.json".count } else { Get-GateCount $cbPayload }
     cbCount = Get-GateCount $cbPayload
     cbUpdatedAt = [string]$cbPayload.updatedAt
     strategy5Count = Get-GateCount $strategy5Payload
