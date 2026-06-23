@@ -2201,7 +2201,17 @@ async function fetchRealtime(stocks, scanTimestamp = timestampKey()) {
     const value = quoteVolume && cleanNumber(quote.close)
       ? quoteVolume * cleanNumber(quote.close)
       : stock.value;
-    return { ...stock, ...quote, quoteTime: quote.time, tradeVolume: quoteVolume, value, isRealtime: true, recoveredFromRealtimeFallback: recoveredCodes.has(stock.code) };
+    return {
+      ...stock,
+      ...quote,
+      avg5dVolume: cleanNumber(quote.avg5dVolume) || cleanNumber(stock.avg5dVolume),
+      avg5dVolumeDays: cleanNumber(quote.avg5dVolumeDays) || cleanNumber(stock.avg5dVolumeDays),
+      quoteTime: quote.time,
+      tradeVolume: quoteVolume,
+      value,
+      isRealtime: true,
+      recoveredFromRealtimeFallback: recoveredCodes.has(stock.code),
+    };
   });
 
   const wsCodes = stocks
@@ -2644,7 +2654,17 @@ async function fetchRealtime(stocks, scanTimestamp = timestampKey()) {
     const value = quoteVolume && cleanNumber(quote.close)
       ? quoteVolume * cleanNumber(quote.close)
       : stock.value;
-    return { ...stock, ...quote, quoteTime: quote.time, tradeVolume: quoteVolume, value, isRealtime: true, recoveredFromRealtimeFallback: recoveredCodes.has(stock.code) };
+    return {
+      ...stock,
+      ...quote,
+      avg5dVolume: cleanNumber(quote.avg5dVolume) || cleanNumber(stock.avg5dVolume),
+      avg5dVolumeDays: cleanNumber(quote.avg5dVolumeDays) || cleanNumber(stock.avg5dVolumeDays),
+      quoteTime: quote.time,
+      tradeVolume: quoteVolume,
+      value,
+      isRealtime: true,
+      recoveredFromRealtimeFallback: recoveredCodes.has(stock.code),
+    };
   });
 }
 
