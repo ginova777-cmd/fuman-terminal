@@ -135,6 +135,10 @@ const RETIRED_PREFIXES = [
   "cb-detect-page-",
 ];
 
+const RETIRED_DIRECTORIES = [
+  ".vercel/output",
+];
+
 const RUNTIME_RETENTION_DAYS = Number(process.env.FUMAN_API_ONLY_CLEANUP_RUNTIME_RETENTION_DAYS || 14);
 const RUNTIME_HISTORY_RETENTION_DAYS = Number(process.env.FUMAN_API_ONLY_CLEANUP_HISTORY_RETENTION_DAYS || 3);
 const LOG_RETENTION_DAYS = Number(process.env.FUMAN_API_ONLY_CLEANUP_LOG_RETENTION_DAYS || 30);
@@ -157,6 +161,27 @@ const ENTRYPOINT_MARKER_FILES = [
   "index.html",
   "index.github.html",
   "terminal-live-check.js",
+];
+const RETIRED_STRATEGY1_MARKERS = [
+  "latest-payload",
+  "loadPreopenStrengthCodes",
+  "loadStockFutureStrengthCodes",
+  "strategy1-preopen-* runs being selected as latest complete base run",
+  "fuman-terminal-sync.vercel.app",
+  "readOptional(\"data/open-buy-latest.json\"",
+  "readOptional(\"data/open-buy-page-1.json\"",
+];
+const STRATEGY1_MARKER_FILES = [
+  "api/open-buy-latest.js",
+  "api/terminal-home.js",
+  "api/mobile-fragment.js",
+  "scripts/generate-slim-cache.js",
+  "run-open-buy-preopen.ps1",
+  "run-open-buy.ps1",
+  "run-open-buy-sync-retry.ps1",
+  "terminal-app.js",
+  "terminal-live-check.js",
+  "terminal-runtime-config.js",
 ];
 
 function parseArgs(argv) {
@@ -198,6 +223,22 @@ function rmFile(root, rel, result, dryRun) {
     return;
   }
   if (!dryRun) fs.unlinkSync(target);
+  result.deleted.push(target);
+}
+
+function rmDirectory(root, rel, result, dryRun) {
+  const target = path.resolve(root, rel);
+  if (!isInside(root, target)) {
+    result.skipped.push({ path: target, reason: "outside-root" });
+    return;
+  }
+  if (!fs.existsSync(target)) return;
+  const stat = fs.statSync(target);
+  if (!stat.isDirectory()) {
+    result.skipped.push({ path: target, reason: "not-directory" });
+    return;
+  }
+  if (!dryRun) fs.rmSync(target, { recursive: true, force: true });
   result.deleted.push(target);
 }
 
@@ -301,7 +342,11 @@ function cleanupRoot(root, args) {
   for (const rel of [...EXACT_RETIRED, ...listRetiredDataFiles(root)]) {
     rmFile(root, rel, result, args.dryRun);
   }
+  for (const rel of RETIRED_DIRECTORIES) {
+    rmDirectory(root, rel, result, args.dryRun);
+  }
   scanRetiredEntrypointMarkers(root, result);
+  scanRetiredStrategy1Markers(root, result);
   return result;
 }
 
@@ -313,6 +358,19 @@ function scanRetiredEntrypointMarkers(root, result) {
     for (const marker of RETIRED_ENTRYPOINT_MARKERS) {
       if (content.includes(marker)) {
         result.issues.push({ path: target, marker, reason: "retired-entrypoint-marker" });
+      }
+    }
+  }
+}
+
+function scanRetiredStrategy1Markers(root, result) {
+  for (const rel of STRATEGY1_MARKER_FILES) {
+    const target = path.join(root, rel);
+    if (!fs.existsSync(target) || !fs.statSync(target).isFile()) continue;
+    const content = fs.readFileSync(target, "utf8");
+    for (const marker of RETIRED_STRATEGY1_MARKERS) {
+      if (content.includes(marker)) {
+        result.issues.push({ path: target, marker, reason: "retired-strategy1-static-or-gate-marker" });
       }
     }
   }

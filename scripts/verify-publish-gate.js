@@ -241,8 +241,22 @@ if (!/api\/open-buy-latest/.test(openBuyLatestApi) || !/strategy1_open_buy_runs/
 if (/v_strategy1_open_buy_latest_complete_run|LATEST_RUN_VIEW|latestRunView|latest_run_view/.test(openBuyLatestApi)) {
   issues.push("api/open-buy-latest.js must not use legacy latest run view fallback");
 }
+if (/latest-payload/.test(openBuyLatestApi)) {
+  issues.push("api/open-buy-latest.js must not expose legacy latest-payload gate");
+}
 if (/OPEN_BUY_RUN_VIEW|v_strategy1_open_buy_latest_complete_run|latestRunView|latest_run_view/.test(read("api/terminal-home.js"))) {
   issues.push("api/terminal-home.js must delegate Strategy1 to /api/open-buy-latest and must not keep a separate latest view path");
+}
+for (const [file, content] of [
+  ["api/terminal-home.js", read("api/terminal-home.js")],
+  ["terminal-runtime-config.js", runtimeConfig],
+  ["terminal-app.js", terminalApp],
+  ["terminal-live-check.js", terminalLiveCheck],
+  ["scripts/generate-slim-cache.js", slimCacheGenerator],
+]) {
+  if (/fuman-terminal-sync\.vercel\.app/.test(content)) {
+    issues.push(`${file} must not point runtime/deploy behavior at fuman-terminal-sync.vercel.app; official site is fuman-terminal.vercel.app`);
+  }
 }
 if (/legacy scan_time gate|legacy_scan_time_gate|includeRunId = false|STRATEGY4_SUPABASE_RUN_ID/.test(strategy4Scanner)) {
   issues.push("scan-strategy4-cache.js must hard-fail when run_id complete gate is unavailable, not retry legacy scan_time");
@@ -255,6 +269,12 @@ if (/run-cache-sync|generate-slim-cache|run-strategy4-postflight|data\\strategy4
 }
 if (/"strategy4", "data\/strategy4-latest\.json"|strategy4PresetFiles\]/.test(slimCacheGenerator)) {
   issues.push("generate-slim-cache.js must not generate strategy4 static slim/zone/page JSON");
+}
+if (/readOptional\("data\/open-buy-(?:latest|page-1)\.json"/.test(slimCacheGenerator)) {
+  issues.push("generate-slim-cache.js must not read Strategy1 open-buy static JSON; Strategy1 is Supabase API-only");
+}
+if (!/readOpenBuyApiOnlyPayload/.test(slimCacheGenerator) || !/open-buy-api-only-static-disabled/.test(slimCacheGenerator)) {
+  issues.push("generate-slim-cache.js must disable Strategy1 static slim fragments with an API-only placeholder");
 }
 if (/data\/strategy4-|strategy4-score/.test(sourceSync)) {
   issues.push("sync-main-deploy-source.js must not publish strategy4 static JSON artifacts");
@@ -515,6 +535,14 @@ for (const marker of [
   "warrant-flow-page-",
   "cb-detect-page-",
   "RETIRED_ENTRYPOINT_MARKERS",
+  "RETIRED_DIRECTORIES",
+  ".vercel/output",
+  "RETIRED_STRATEGY1_MARKERS",
+  "latest-payload",
+  "loadPreopenStrengthCodes",
+  "loadStockFutureStrengthCodes",
+  "scanRetiredStrategy1Markers",
+  "retired-strategy1-static-or-gate-marker",
   "FMN://strategy.scan",
   "綜合策略選股",
   "等待官方股票資料",
@@ -803,12 +831,14 @@ if (fetchResult.status !== 0) {
       "scripts/sync-main-deploy-source.js",
       "scripts/verify-source-sync.js",
       "scripts/cleanup-api-only-retired-artifacts.js",
+      "scripts/generate-slim-cache.js",
       "install-api-only-cleanup-task.ps1",
       "run-main-release-pipeline.ps1",
       "run-daily-release.ps1",
       "run-full-scan.ps1",
       "run-publish-gate.ps1",
       "package.json",
+      "run-local-freshness-repair.ps1",
       "data/data-manifest.json",
       "data/data-status-index.json",
       "data/heatmap-latest.json",
@@ -816,6 +846,7 @@ if (fetchResult.status !== 0) {
       "data/market-summary.json",
       "data/mobile-boot.json",
       "data/mobile-home-summary.json",
+      "data/mobile-stock-analysis-latest.json",
       "data/mobile-terminal-latest.json",
       "data/strategy-match-index.json",
       "data/strategy2-intraday-live-top.json",

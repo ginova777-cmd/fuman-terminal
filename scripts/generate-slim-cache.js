@@ -158,6 +158,29 @@ function readRepoOptional(rel, fallback = null) {
   return fallback;
 }
 
+function apiOnlyStaticDisabledPayload(source) {
+  return {
+    ok: true,
+    source,
+    cacheSource: "api-only-static-disabled",
+    updatedAt: "",
+    usedDate: "",
+    date: "",
+    count: 0,
+    rows: [],
+    matches: [],
+  };
+}
+
+function readOpenBuyApiOnlyPayload() {
+  if (OPEN_BUY_API_ONLY) {
+    return apiOnlyStaticDisabledPayload("open-buy-api-only-static-disabled");
+  }
+  const base = ["data", "open-buy-latest.json"].join("/");
+  const page = ["data", "open-buy-page-1.json"].join("/");
+  return readOptional(page, readOptional(base, {}));
+}
+
 function normalizeArray(value) {
   return Array.isArray(value) ? value : [];
 }
@@ -518,7 +541,7 @@ function pageFiles(prefix, rows, base = {}, options = {}) {
 }
 
 function strategyPresetPageFiles() {
-  const openBuy = readOptional("data/open-buy-latest.json", {});
+  const openBuy = readOpenBuyApiOnlyPayload();
   const strategy2 = readOptional("data/strategy2-intraday-live-top.json", readOptional("data/strategy2-intraday-top.json", {}));
   const strategy3 = readOptional("data/strategy3-latest.json", {});
   const strategy4 = readOptional("data/strategy4-score-top.json", {});
@@ -1543,7 +1566,7 @@ function mobileTerminalFragmentHtml(config = {}) {
 }
 
 function mobileStrategyFragments() {
-  const openBuy = readOptional("data/open-buy-page-1.json", readOptional("data/open-buy-latest.json", {}));
+  const openBuy = readOpenBuyApiOnlyPayload();
   const strategy2 = readOptional("data/strategy2-intraday-live-top.json", readOptional("data/strategy2-intraday-top.json", {}));
   const strategy3 = readOptional("data/strategy3-page-1.json", readOptional("data/strategy3-latest.json", {}));
   const strategy4 = readOptional("data/strategy4-score-page-1.json", readOptional("data/strategy4-score-top.json", {}));
@@ -1885,7 +1908,7 @@ function terminalHomeBundle() {
   const mobile = readOptional("data/mobile-home-summary.json", mobileHomeSummary());
   const status = readOptional("data/data-status-index.json", dataStatusIndex());
   const stocks = readOptional("data/stocks-slim.json", slimStocks());
-  const openBuy = readOptional("data/open-buy-latest.json", {});
+  const openBuy = readOpenBuyApiOnlyPayload();
   const strategy3 = readOptional("data/strategy3-latest.json", {});
   const strategy4Top = readOptional("data/strategy4-score-top.json", {});
   const strategy5 = readOptional("data/strategy5-latest.json", {});
@@ -1936,7 +1959,7 @@ function terminalHomeMobileSlim() {
   const mobile = readOptional("data/mobile-home-summary.json", mobileHomeSummary());
   const status = readOptional("data/data-status-index.json", dataStatusIndex());
   const stocks = readOptional("data/stocks-quotes-mobile-top.json", {});
-  const openBuy = readOptional("data/open-buy-latest.json", {});
+  const openBuy = readOpenBuyApiOnlyPayload();
   const strategy4Top = readOptional("data/strategy4-score-top.json", {});
   const strategy5 = readOptional("data/strategy5-latest.json", {});
   return {
@@ -2057,7 +2080,9 @@ function buildStrategyMatchIndex() {
   const byCode = {};
   const strategies = {};
   for (const def of definitions) {
-    const payload = readRepoOptional(def.file, def.fallbackFile ? readRepoOptional(def.fallbackFile, {}) : {});
+    const payload = def.key === "openBuy" && OPEN_BUY_API_ONLY
+      ? apiOnlyStaticDisabledPayload("open-buy-api-only-static-disabled")
+      : readRepoOptional(def.file, def.fallbackFile ? readRepoOptional(def.fallbackFile, {}) : {});
     const rows = indexRowsFromPayload(payload, def);
     const date = payload?.usedDate || payload?.date || payload?.tradeDate || payload?.scanStamp || payload?.updatedAt || "";
     strategies[def.key] = {
