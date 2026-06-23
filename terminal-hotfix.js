@@ -5,7 +5,6 @@
   installDesktopApiPollingCache();
   installDesktopViewSnapshotCache();
   installInstantViewSwitch();
-  installPointerFastOfficialClick();
   installDesktopInteractionBudget();
   installFastViewClickReplay();
   installWarmMainApp();
@@ -96,7 +95,7 @@
       window.clearTimeout(window.__fumanViewSwitchingTimer);
       window.__fumanViewSwitchingTimer = window.setTimeout(() => {
         document.body.classList.remove("fuman-view-switching");
-      }, 180);
+      }, 120);
       document.querySelectorAll(".view-panel").forEach((item) => {
         const active = item === panel;
         item.classList.toggle("active", active);
@@ -122,6 +121,11 @@
     document.addEventListener("pointerdown", (event) => {
       const link = event.target.closest?.("[data-view]");
       if (!link || link.closest("[data-member-tab]")) return;
+      if (link.dataset.view === "strategy") {
+        window.FUMAN_HOTFIX_WARM_ROUTE?.(link, "strategy-pointer");
+        window.FUMAN_TERMINAL_LOAD_APP?.("strategy-pointer");
+        return;
+      }
       switchNow(link);
       window.FUMAN_HOTFIX_WARM_ROUTE?.(link, "pointer");
       window.FUMAN_TERMINAL_LOAD_APP?.("instant-view-pointer");
@@ -139,11 +143,13 @@
     document.addEventListener("mousedown", (event) => {
       const link = event.target.closest?.("[data-view]");
       if (!link || link.closest("[data-member-tab]")) return;
+      if (link.dataset.view === "strategy") return;
       switchNow(link);
     }, true);
     document.addEventListener("keydown", (event) => {
       if (event.key !== "Enter" && event.key !== " ") return;
       const link = event.target.closest?.("[data-view]");
+      if (link?.dataset?.view === "strategy") return;
       if (link) switchNow(link);
     }, true);
   }
@@ -157,7 +163,7 @@
       const last = window.__fumanLastReplayRoute || {};
       const now = Date.now();
       window.__fumanLastReplayRoute = { key, at: now };
-      return last.key === key && now - Number(last.at || 0) < 900;
+      return last.key === key && now - Number(last.at || 0) < 480;
     };
     const replayClick = (link, sourceEvent) => {
       if (!link || link.dataset.fumanHotfixReplayQueued === "1") return;
@@ -182,7 +188,7 @@
           }
           link.dispatchEvent(event);
         };
-        window.setTimeout(afterPaint, 96);
+        window.setTimeout(afterPaint, 24);
       });
     };
     document.addEventListener("click", (event) => {
@@ -191,6 +197,11 @@
       if (event.__fumanFastOfficialClick) return;
       if (event.__fumanDeferredViewClick) return;
       if (event.button && event.button !== 0) return;
+      if (link.dataset.view === "strategy") {
+        window.FUMAN_HOTFIX_WARM_ROUTE?.(link, "strategy-native-click");
+        window.FUMAN_TERMINAL_LOAD_APP?.("strategy-native-click");
+        return;
+      }
       const switched = window.FUMAN_HOTFIX_SWITCH_VIEW_NOW?.(link);
       if (!switched) return;
       window.FUMAN_HOTFIX_WARM_ROUTE?.(link, "click");
@@ -205,59 +216,8 @@
       window.clearTimeout(window.__fumanViewHydratingTimer);
       window.__fumanViewHydratingTimer = window.setTimeout(() => {
         document.body.classList.remove("fuman-view-hydrating");
-      }, 520);
+      }, 300);
       replayClick(link, event);
-    }, true);
-  }
-
-  function installPointerFastOfficialClick() {
-    if (window.__fumanPointerFastOfficialClick) return;
-    window.__fumanPointerFastOfficialClick = true;
-    const shouldFastClick = (link) => {
-      if (!link || link.closest("[data-member-tab]")) return false;
-      if (!link.matches?.("[data-view]")) return false;
-      const view = link.dataset.view || "";
-      return ["strategy", "chip-trade", "cb-detect", "warrant-flow", "watchlist", "market"].includes(view);
-    };
-    const routeKeyFor = (link) => `${link.dataset.view || ""}|${(link.textContent || "").trim()}`;
-    const dispatchOfficialClick = (link, sourceEvent) => {
-      const now = Date.now();
-      const route = routeKeyFor(link);
-      const last = window.__fumanFastOfficialClickLast || {};
-      if (last.route === route && now - Number(last.at || 0) < 700) return;
-      window.__fumanFastOfficialClickLast = { route, at: now };
-      const click = new MouseEvent("click", {
-        bubbles: true,
-        cancelable: true,
-        view: window,
-        ctrlKey: !!sourceEvent.ctrlKey,
-        shiftKey: !!sourceEvent.shiftKey,
-        altKey: !!sourceEvent.altKey,
-        metaKey: !!sourceEvent.metaKey,
-        button: 0,
-      });
-      try {
-        Object.defineProperty(click, "__fumanFastOfficialClick", { value: true });
-      } catch (error) {
-        click.__fumanFastOfficialClick = true;
-      }
-      link.dispatchEvent(click);
-      mark(`fast-official-click:${route}`);
-    };
-    document.addEventListener("pointerdown", (event) => {
-      const link = event.target.closest?.("[data-view]");
-      if (!shouldFastClick(link)) return;
-      window.FUMAN_HOTFIX_SWITCH_VIEW_NOW?.(link);
-      dispatchOfficialClick(link, event);
-    }, true);
-    document.addEventListener("click", (event) => {
-      const link = event.target.closest?.("[data-view]");
-      if (!shouldFastClick(link) || event.__fumanFastOfficialClick || event.__fumanDeferredViewClick) return;
-      const last = window.__fumanFastOfficialClickLast || {};
-      if (last.route === routeKeyFor(link) && Date.now() - Number(last.at || 0) < 900) {
-        event.preventDefault();
-        event.stopImmediatePropagation();
-      }
     }, true);
   }
 
@@ -299,7 +259,7 @@
       window.__fumanLastOfficialRoute = { route, at: now };
       scheduleAfterPaint(() => {
         document.body?.classList?.remove("fuman-view-switching");
-      }, 120);
+      }, 60);
     }, true);
 
     const originalSetInterval = window.setInterval.bind(window);
