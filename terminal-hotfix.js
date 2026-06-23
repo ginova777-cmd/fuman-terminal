@@ -7,7 +7,6 @@
   installInstantViewSwitch();
   installDesktopInteractionBudget();
   installFastViewClickReplay();
-  installStableShellSpeedLayer();
   installWarmMainApp();
   installScriptPreload();
   installHotPathDataWarmup();
@@ -60,30 +59,6 @@
       body.fuman-view-switching .chip-flow-shell {
         content-visibility: auto;
         contain-intrinsic-size: 720px;
-      }
-      body.fuman-view-switching .fuman-heavy-item,
-      body.fuman-view-hydrating .fuman-heavy-item {
-        content-visibility: auto;
-        contain-intrinsic-size: 88px;
-      }
-      body.fuman-view-switching .fuman-deferred-row,
-      body.fuman-view-hydrating .fuman-deferred-row {
-        display: none !important;
-      }
-      .view-panel[data-fuman-snapshot-at]::before {
-        content: "快取畫面";
-        position: absolute;
-        right: 16px;
-        top: 12px;
-        z-index: 2;
-        padding: 4px 8px;
-        border: 1px solid rgba(255, 168, 72, .42);
-        border-radius: 999px;
-        color: #ffb15c;
-        background: rgba(18, 24, 38, .72);
-        font-size: 11px;
-        pointer-events: none;
-        opacity: .86;
       }
       [data-view] {
         -webkit-tap-highlight-color: transparent;
@@ -139,7 +114,6 @@
       window.__fumanLastInstantView = { view, at: Date.now() };
       window.__fumanCurrentInstantRoute = `${view}|${(link.textContent || "").trim()}`;
       window.FUMAN_HOTFIX_RESTORE_VIEW_SNAPSHOT?.(view, panel);
-      window.FUMAN_HOTFIX_VIRTUALIZE_PANEL?.(panel, "switch");
       mark(`instant-view:${view}`);
       return true;
     };
@@ -290,134 +264,6 @@
     };
   }
 
-  function installStableShellSpeedLayer() {
-    if (window.__fumanStableShellSpeedLayer) return;
-    window.__fumanStableShellSpeedLayer = true;
-    const importantRoutes = ["strategy5", "strategy4", "strategy2", "chip-trade", "cb-detect", "warrant-flow", "watchlist", "market"];
-    const quietMs = 1400;
-    const batchSize = 60;
-    const revealSize = 42;
-
-    const isSwitching = () => {
-      const last = window.__fumanLastInstantView;
-      return document.body?.classList?.contains("fuman-view-switching") ||
-        document.body?.classList?.contains("fuman-view-hydrating") ||
-        !!(last && Date.now() - Number(last.at || 0) < quietMs);
-    };
-    const afterPaint = (task, delay = 0) => {
-      requestAnimationFrame(() => requestAnimationFrame(() => setTimeout(task, delay)));
-    };
-    const runIdle = (task, timeout = 700) => {
-      if ("requestIdleCallback" in window) requestIdleCallback(task, { timeout });
-      else setTimeout(task, 60);
-    };
-    const markQuiet = (reason = "switch") => {
-      window.__fumanPollingQuietUntil = Math.max(Number(window.__fumanPollingQuietUntil || 0), Date.now() + quietMs);
-      mark(`polling-quiet:${reason}`);
-    };
-    const isQuiet = () => Date.now() < Number(window.__fumanPollingQuietUntil || 0) || isSwitching();
-    const virtualItemSelector = [
-      "tbody tr",
-      ".swing-card",
-      ".strategy-card[data-code]",
-      ".strategy5-card",
-      ".terminal-card",
-      ".stock-card",
-      ".chip-card",
-      ".warrant-card",
-      ".signal-card",
-      ".watchlist-card"
-    ].join(",");
-
-    function virtualizePanel(panel, reason = "render") {
-      if (!panel || panel.dataset.fumanVirtualizing === "1") return;
-      const items = [...panel.querySelectorAll(virtualItemSelector)]
-        .filter((item) => !item.closest(".sidebar") && !item.closest(".strategy-list"));
-      if (items.length <= batchSize + 20) {
-        items.forEach((item) => item.classList.add("fuman-heavy-item"));
-        return;
-      }
-      panel.dataset.fumanVirtualizing = "1";
-      items.forEach((item, index) => {
-        item.classList.add("fuman-heavy-item");
-        item.classList.toggle("fuman-deferred-row", index >= batchSize);
-      });
-      let cursor = batchSize;
-      const reveal = () => {
-        const stop = Math.min(cursor + revealSize, items.length);
-        for (let index = cursor; index < stop; index += 1) {
-          items[index]?.classList.remove("fuman-deferred-row");
-        }
-        cursor = stop;
-        if (cursor < items.length) {
-          runIdle(reveal, 900);
-        } else {
-          delete panel.dataset.fumanVirtualizing;
-          mark(`virtualized:${reason}:${items.length}`);
-        }
-      };
-      afterPaint(() => runIdle(reveal, 900), 120);
-    }
-
-    function virtualizeActive(reason = "active") {
-      document.querySelectorAll(".view-panel.active").forEach((panel) => virtualizePanel(panel, reason));
-    }
-
-    function warmPriorityRoutes(reason = "stable-shell") {
-      if (typeof window.FUMAN_HOTFIX_WARM_ROUTE !== "function") return;
-      let delay = 0;
-      importantRoutes.forEach((route, index) => {
-        setTimeout(() => window.FUMAN_HOTFIX_WARM_ROUTE(route, `${reason}:${index}`), delay);
-        delay += index < 3 ? 140 : 420;
-      });
-    }
-
-    document.addEventListener("pointerdown", (event) => {
-      if (!event.target.closest?.("[data-view]")) return;
-      markQuiet("pointer");
-      afterPaint(() => virtualizeActive("pointer"), 60);
-    }, true);
-    document.addEventListener("click", (event) => {
-      if (!event.target.closest?.("[data-view],[data-chip-filter],[data-strategy5-filter],[data-terminal-page],[data-intraday-filter],[data-swing-filter],[data-swing-zone-filter]")) return;
-      markQuiet("click");
-      afterPaint(() => virtualizeActive("click"), 80);
-    }, true);
-
-    const originalSetTimeout = window.setTimeout.bind(window);
-    window.setTimeout = function fumanQuietSetTimeout(callback, delay, ...args) {
-      if (typeof callback !== "function" || Number(delay || 0) < 800 || Number(delay || 0) > 200000) {
-        return originalSetTimeout(callback, delay, ...args);
-      }
-      return originalSetTimeout(function quietTimeout(...innerArgs) {
-        if (isQuiet()) {
-          originalSetTimeout(() => callback.apply(this, innerArgs), quietMs);
-          return;
-        }
-        return callback.apply(this, innerArgs);
-      }, delay, ...args);
-    };
-
-    const observer = new MutationObserver(() => {
-      if (window.__fumanVirtualizeTimer) clearTimeout(window.__fumanVirtualizeTimer);
-      window.__fumanVirtualizeTimer = setTimeout(() => virtualizeActive("mutation"), 180);
-    });
-    const observe = () => {
-      const root = document.querySelector(".dashboard") || document.body;
-      if (root && !root.dataset.fumanStableShellObserved) {
-        root.dataset.fumanStableShellObserved = "1";
-        observer.observe(root, { childList: true, subtree: true });
-      }
-      virtualizeActive("boot");
-    };
-    window.FUMAN_HOTFIX_VIRTUALIZE_PANEL = virtualizePanel;
-    if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", observe, { once: true });
-    else observe();
-    afterPaint(() => warmPriorityRoutes("startup"), 250);
-    window.addEventListener("focus", () => {
-      if (!isSwitching()) warmPriorityRoutes("focus");
-    }, { passive: true });
-  }
-
   function installWarmMainApp() {
     if (window.__fumanHotfixWarmMainApp) return;
     window.__fumanHotfixWarmMainApp = true;
@@ -482,11 +328,11 @@
         "/api/terminal-home",
       ],
       strategy: [
-        "/api/strategy5-latest",
-        "/api/strategy4-latest",
-        "/api/strategy2-latest",
         "/api/open-buy-latest",
+        "/api/strategy2-latest",
         "/api/strategy3-latest",
+        "/api/strategy4-latest",
+        "/api/strategy5-latest",
         "/api/latest-signals?strategy=strategy4",
         "/api/realtime-radar-latest",
       ],
@@ -507,11 +353,6 @@
     const critical = [
       "/api/terminal-fast-bundle",
       "/api/terminal-home",
-      "/api/strategy5-latest",
-      "/api/strategy4-latest",
-      "/api/strategy2-latest",
-      "/api/institution-latest",
-      "/api/cb-detect-latest",
       "/api/market",
       "/api/stocks",
       "/api/watchlist-match-index",
@@ -520,7 +361,12 @@
     const sequence = [
       ...critical,
       "/api/open-buy-latest",
+      "/api/strategy2-latest",
       "/api/strategy3-latest",
+      "/api/strategy5-latest",
+      "/api/strategy4-latest",
+      "/api/institution-latest",
+      "/api/cb-detect-latest",
       "/api/warrant-flow-latest",
     ];
     const warmOne = (url, reason = "warm") => {
@@ -528,13 +374,13 @@
       if (!key) return Promise.resolve(false);
       const now = Date.now();
       const last = warmed.get(key) || 0;
-      if (now - last < 90000) return Promise.resolve(false);
+      if (now - last < 120000) return Promise.resolve(false);
       warmed.set(key, now);
       const controller = "AbortController" in window ? new AbortController() : null;
       const timer = controller ? setTimeout(() => controller.abort(), 4500) : 0;
       mark(`warm:${reason}:${key.replace(/^\/api\//, "")}`);
       return fetch(key, {
-        cache: "reload",
+        cache: "no-store",
         priority: reason === "pointer" || reason === "click" ? "high" : "low",
         signal: controller?.signal,
       }).then(async (response) => {
@@ -587,10 +433,10 @@
         strategy5: ["/api/strategy5-latest", "/api/stocks"],
       };
       const urls = strategySpecific[route] || routeGroups[route] || [];
-      warmList(urls, reason, reason === "pointer" || reason === "click" ? 4 : 2);
+      warmList(urls, reason, reason === "pointer" || reason === "click" ? 3 : 2);
     };
     const scheduleFullWarm = () => {
-      const run = () => warmList(sequence, "startup", 3);
+      const run = () => warmList(sequence, "startup", 2);
       if ("requestIdleCallback" in window) {
         requestIdleCallback(run, { timeout: 1600 });
       } else {
@@ -613,17 +459,17 @@
     const memory = new Map();
     const inflight = new Map();
     const sessionPrefix = "FUMAN_DESKTOP_API_SESSION_CACHE:";
-    const sessionMaxBodyBytes = 1500000;
-    const staleWhileRevalidateMs = 600000;
+    const sessionMaxBodyBytes = 900000;
+    const staleWhileRevalidateMs = 180000;
     const skipPattern = /\/api\/(?:export|refresh|frontend-error|performance-report|version|terminal-theme-css|scan-|github|history|realtime(?:$|\?))/i;
     const apiPattern = /\/api\/(?:market|terminal-home|terminal-fast-bundle|market-ai|heatmap|stocks|watchlist-match-index|open-buy-latest|strategy[2345]-latest|latest-strategy|latest-signals|realtime-radar-latest|institution-latest|chip-trade|warrant-flow-latest|cb-detect-latest|mobile-boot|mobile-fragment)/i;
     const ttlFor = (pathname) => {
-      if (/strategy2|realtime-radar/i.test(pathname)) return 12000;
-      if (/market(?:$|-ai)|heatmap/i.test(pathname)) return 20000;
-      if (/strategy[345]|open-buy/i.test(pathname)) return 60000;
-      if (/institution|chip-trade|warrant|cb-detect/i.test(pathname)) return 90000;
-      if (/stocks|terminal-home|watchlist-match-index|mobile/i.test(pathname)) return 120000;
-      return 30000;
+      if (/strategy2|realtime-radar/i.test(pathname)) return 3000;
+      if (/market(?:$|-ai)|heatmap/i.test(pathname)) return 8000;
+      if (/strategy[345]|open-buy/i.test(pathname)) return 15000;
+      if (/institution|chip-trade|warrant|cb-detect/i.test(pathname)) return 30000;
+      if (/stocks|terminal-home|watchlist-match-index|mobile/i.test(pathname)) return 45000;
+      return 10000;
     };
     const cloneFromRecord = (record) => new Response(record.body, {
       status: record.status,
@@ -637,12 +483,12 @@
     };
     const maxStaleFor = (pathname) => {
       if (isViewSwitching()) {
-        if (/strategy2|realtime-radar/i.test(pathname)) return 180000;
-        if (/market(?:$|-ai)|heatmap/i.test(pathname)) return 180000;
-        return 900000;
+        if (/strategy2|realtime-radar/i.test(pathname)) return 60000;
+        if (/market(?:$|-ai)|heatmap/i.test(pathname)) return 90000;
+        return 600000;
       }
-      if (/strategy2|realtime-radar/i.test(pathname)) return 90000;
-      if (/market(?:$|-ai)|heatmap/i.test(pathname)) return 120000;
+      if (/strategy2|realtime-radar/i.test(pathname)) return 20000;
+      if (/market(?:$|-ai)|heatmap/i.test(pathname)) return 45000;
       return staleWhileRevalidateMs;
     };
     const withCacheHeader = (record, value) => ({
@@ -767,7 +613,7 @@
         if (!inflight.has(key)) {
           const refresh = () => refreshNetwork(input, init, key, pathname).catch(() => null);
           if (isViewSwitching()) {
-            setTimeout(refresh, 1400);
+            setTimeout(refresh, 850);
           } else {
             refresh();
           }
@@ -794,8 +640,8 @@
     if (window.__fumanDesktopViewSnapshotCache) return;
     window.__fumanDesktopViewSnapshotCache = true;
     const snapshotPrefix = "FUMAN_DESKTOP_VIEW_SNAPSHOT:";
-    const maxSnapshotChars = 1100000;
-    const maxSnapshotAgeMs = 1200000;
+    const maxSnapshotChars = 650000;
+    const maxSnapshotAgeMs = 240000;
     const viewPanels = {
       market: "#market-view",
       strategy: "#strategy-view",
@@ -861,17 +707,13 @@
       const item = readSnapshot(view);
       if (!item?.html) return false;
       const currentText = panel.textContent || "";
-      const last = window.__fumanLastInstantView;
-      const duringSwitch = document.body?.classList?.contains("fuman-view-switching") ||
-        !!(last && Date.now() - Number(last.at || 0) < 500);
-      const shouldRestore = duringSwitch || !currentText.trim() || /載入中|loading|目前沒有|請先登入/i.test(currentText);
+      const shouldRestore = !currentText.trim() || /載入中|loading|目前沒有|請先登入/i.test(currentText);
       if (!shouldRestore) return false;
       panel.dataset.fumanSnapshotRestoring = "1";
       panel.innerHTML = item.html;
       panel.scrollTop = Number(item.scrollTop || 0);
       panel.dataset.fumanSnapshotAt = String(item.at);
       window.setTimeout(() => delete panel.dataset.fumanSnapshotRestoring, 0);
-      window.FUMAN_HOTFIX_VIRTUALIZE_PANEL?.(panel, `snapshot:${view}`);
       mark(`view-snapshot-restore:${view}`);
       return true;
     };
