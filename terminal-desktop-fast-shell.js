@@ -9,18 +9,42 @@
   const SNAPSHOT_MAX_AGE_MS = 10 * 60 * 1000;
   const SNAPSHOT_MAX_CHARS = 850000;
   const SNAPSHOT_ROUTES = ["strategy|策略1", "strategy|策略2", "strategy|策略3", "strategy|策略4", "strategy|策略5"];
+  const CANVAS_REFRESH_TTL_MS = 8000;
+  const CANVAS_ROW_HEIGHT = 46;
+  const CANVAS_HEADER_HEIGHT = 128;
+  const CANVAS_ENDPOINTS = {
+    "strategy|策略1": "/api/open-buy-latest",
+    "strategy|策略2": "/api/strategy2-latest",
+    "strategy|策略3": "/api/strategy3-latest",
+    "strategy|策略4": "/api/strategy4-latest",
+    "strategy|策略5": "/api/strategy5-latest",
+  };
   let pendingTimer = 0;
   let snapshotTimer = 0;
   let snapshotDbPromise = null;
+  let canvasFrame = 0;
   let lastRoute = "";
   let lastAt = 0;
   let fastClickRoute = "";
   let fastClickAt = 0;
   let activeSnapshotRoute = "";
   const routeSnapshots = new Map();
+  const canvasStore = new Map();
+  const canvasInflight = new Map();
+  const canvasState = {
+    route: "",
+    source: "",
+    query: "",
+    offset: 0,
+    hoverIndex: -1,
+    selectedIndex: -1,
+    rows: [],
+    filtered: [],
+  };
 
   installStyle();
   installRouteSnapshots();
+  installCanvasHandlers();
   installRouteFeedback();
 
   function routeKey(link) {
@@ -147,6 +171,320 @@
     return rows.slice(0, 90);
   }
 
+  function cleanNumber(value) {
+    const number = Number(String(value ?? "").replace(/[,+%]/g, "").trim());
+    return Number.isFinite(number) ? number : 0;
+  }
+
+  function endpointForRoute(route) {
+    return CANVAS_ENDPOINTS[route] || "";
+  }
+
+  function flattenApiArrays(payload, depth = 0, out = []) {
+    if (!payload || depth > 3 || out.length > 12) return out;
+    if (Array.isArray(payload)) {
+      if (payload.some((item) => item && typeof item === "object")) out.push(payload);
+      return out;
+    }
+    if (typeof payload !== "object") return out;
+    ["matches", "events", "records", "rows", "signals", "items", "results", "stocks", "data"].forEach((key) => {
+      const value = payload[key];
+      if (Array.isArray(value) && value.some((item) => item && typeof item === "object")) out.push(value);
+    });
+    Object.keys(payload).slice(0, 18).forEach((key) => {
+      const value = payload[key];
+      if (value && typeof value === "object" && !Array.isArray(value)) flattenApiArrays(value, depth + 1, out);
+    });
+    return out;
+  }
+
+  function normalizeCanvasRow(row, index) {
+    const payload = row?.payload && typeof row.payload === "object" ? row.payload : {};
+    const active = row?.activeMatch || payload.activeMatch || (Array.isArray(row?.matches) ? row.matches[0] : null) || (Array.isArray(payload.matches) ? payload.matches[0] : null) || {};
+    const merged = { ...payload, ...row };
+    const rawCode = merged.code || merged.stockNo || merged.stock_no || merged.symbol || merged.ticker || merged.stockId || merged.stock_id || "";
+    const code = String(rawCode).match(/\d{4}/)?.[0] || String(rawCode || "").trim();
+    const name = String(merged.name || merged.stockName || merged.stock_name || merged.companyName || merged.company_name || code || "").trim();
+    const pct = merged.percent ?? merged.changePercent ?? merged.change_percent ?? merged.change ?? merged.pct ?? "";
+    const score = merged.score ?? merged.rankScore ?? merged.swingScore ?? active.score ?? merged.signalScore ?? "";
+    const reason = String(merged.reason || active.reason || merged.message || merged.note || "").trim();
+    const state = String(merged.state || merged.status || active.name || active.id || "").trim();
+    const price = merged.price ?? merged.close ?? merged.lastPrice ?? merged.entryPrice ?? "";
+    const volume = merged.volume ?? merged.tradeVolume ?? merged.volumeLots ?? merged.trade_volume ?? "";
+    const line = compactText([
+      code,
+      name,
+      state,
+      reason,
+      price !== "" ? `價 ${price}` : "",
+      volume !== "" ? `量 ${volume}` : "",
+    ].filter(Boolean).join(" ｜ "), 160);
+    return {
+      rank: cleanNumber(merged.rank) || index + 1,
+      code,
+      title: compactText(name || reason || state || code || `訊號 ${index + 1}`, 64),
+      pct: pct === "" || pct == null ? "" : String(pct).includes("%") ? String(pct) : `${cleanNumber(pct).toFixed(2)}%`,
+      score: score === "" || score == null ? "" : String(Math.round(cleanNumber(score) * 100) / 100),
+      reason: compactText(reason || state || line, 180),
+      price: price === "" || price == null ? "" : String(price),
+      volume: volume === "" || volume == null ? "" : String(volume),
+      line,
+    };
+  }
+
+  function normalizeCanvasRowsFromPayload(payload) {
+    const arrays = flattenApiArrays(payload);
+    const best = arrays
+      .map((rows) => rows.map(normalizeCanvasRow).filter((row) => row.code || row.title))
+      .sort((a, b) => b.length - a.length)[0] || [];
+    return best
+      .sort((a, b) => cleanNumber(a.rank) - cleanNumber(b.rank) || cleanNumber(b.score) - cleanNumber(a.score) || String(a.code).localeCompare(String(b.code), "zh-Hant"))
+      .slice(0, 200);
+  }
+
+  function setCanvasRows(route, rows, source = "memory", at = Date.now()) {
+    const cleanRows = (Array.isArray(rows) ? rows : []).filter((row) => row && (row.code || row.title || row.line));
+    if (!route || !cleanRows.length) return false;
+    canvasStore.set(route, { rows: cleanRows, source, at });
+    if (canvasState.route === route) {
+      canvasState.rows = cleanRows;
+      canvasState.source = source;
+      applyCanvasFilter();
+      scheduleCanvasDraw();
+    }
+    return true;
+  }
+
+  function rowsForRoute(route) {
+    const memory = canvasStore.get(route);
+    if (memory?.rows?.length) return memory.rows;
+    const snapshot = routeSnapshots.get(route);
+    if (snapshot?.rows?.length) {
+      setCanvasRows(route, snapshot.rows, "snapshot", snapshot.at || Date.now());
+      return snapshot.rows;
+    }
+    return [];
+  }
+
+  function applyCanvasFilter() {
+    const query = compactText(canvasState.query, 80).toLowerCase();
+    canvasState.filtered = query
+      ? canvasState.rows.filter((row) => [row.code, row.title, row.reason, row.line].join(" ").toLowerCase().includes(query))
+      : canvasState.rows.slice();
+    const maxOffset = Math.max(0, canvasState.filtered.length - 1);
+    canvasState.offset = Math.max(0, Math.min(canvasState.offset, maxOffset));
+  }
+
+  function fetchCanvasRows(route, force = false) {
+    const endpoint = endpointForRoute(route);
+    if (!endpoint) return Promise.resolve([]);
+    const cached = canvasStore.get(route);
+    if (!force && cached?.rows?.length && Date.now() - Number(cached.at || 0) < CANVAS_REFRESH_TTL_MS) {
+      return Promise.resolve(cached.rows);
+    }
+    if (canvasInflight.has(route)) return canvasInflight.get(route);
+    const url = `${endpoint}${endpoint.includes("?") ? "&" : "?"}canvas=1&t=${Date.now()}`;
+    const task = fetch(url, { cache: "no-store" })
+      .then((response) => response.ok ? response.json() : Promise.reject(new Error(`HTTP ${response.status}`)))
+      .then((payload) => {
+        const rows = normalizeCanvasRowsFromPayload(payload);
+        if (rows.length) {
+          setCanvasRows(route, rows, "api", Date.now());
+          routeSnapshots.set(route, { ...(routeSnapshots.get(route) || {}), at: Date.now(), rows });
+          writeSessionSnapshot(route, { ...(routeSnapshots.get(route) || {}), at: Date.now(), rows, html: "" });
+          writeIndexedSnapshot(route, { ...(routeSnapshots.get(route) || {}), at: Date.now(), rows, html: "" });
+        }
+        return rows;
+      })
+      .catch(() => rowsForRoute(route))
+      .finally(() => canvasInflight.delete(route));
+    canvasInflight.set(route, task);
+    return task;
+  }
+
+  function currentCanvasShell() {
+    return document.querySelector(".desktop-route-shell.desktop-canvas-app");
+  }
+
+  function visibleCanvasCapacity(canvas) {
+    const rect = canvas?.getBoundingClientRect?.();
+    const height = Math.max(360, Math.min(760, Math.floor(rect?.height || (window.innerHeight || 900) * 0.62)));
+    return Math.max(5, Math.floor((height - CANVAS_HEADER_HEIGHT - 16) / CANVAS_ROW_HEIGHT));
+  }
+
+  function clampCanvasOffset(canvas) {
+    const capacity = visibleCanvasCapacity(canvas);
+    const maxOffset = Math.max(0, canvasState.filtered.length - capacity);
+    canvasState.offset = Math.max(0, Math.min(canvasState.offset, maxOffset));
+  }
+
+  function setCanvasStatus(text) {
+    const shell = currentCanvasShell();
+    if (!shell) return;
+    const status = shell.querySelector(".desktop-canvas-status");
+    const count = shell.querySelector(".desktop-canvas-count");
+    const visible = canvasState.filtered.length;
+    const total = canvasState.rows.length;
+    const source = canvasState.source ? String(canvasState.source).replace(/^canvas-/, "") : "shell";
+    if (count) count.textContent = `${visible}/${total}`;
+    if (status) status.textContent = text || `${source} · ${new Date().toLocaleTimeString("zh-TW", { hour12: false })}`;
+  }
+
+  function scheduleCanvasDraw() {
+    window.cancelAnimationFrame(canvasFrame);
+    canvasFrame = window.requestAnimationFrame(drawCurrentCanvas);
+  }
+
+  function drawCurrentCanvas() {
+    const shell = currentCanvasShell();
+    const canvas = shell?.querySelector(".desktop-route-canvas");
+    if (!canvas) return;
+    clampCanvasOffset(canvas);
+    drawRouteCanvas(canvas, strategyMeta(canvasState.route || activeSnapshotRoute), canvasState.filtered, canvasState.source);
+    setCanvasStatus();
+  }
+
+  function canvasHitIndex(canvas, event) {
+    const rect = canvas.getBoundingClientRect();
+    const y = event.clientY - rect.top;
+    if (y < CANVAS_HEADER_HEIGHT) return -1;
+    const localIndex = Math.floor((y - CANVAS_HEADER_HEIGHT) / CANVAS_ROW_HEIGHT);
+    const index = canvasState.offset + localIndex;
+    return index >= 0 && index < canvasState.filtered.length ? index : -1;
+  }
+
+  function hideCanvasDetail() {
+    const detail = currentCanvasShell()?.querySelector(".desktop-canvas-detail");
+    if (detail) {
+      detail.hidden = true;
+      detail.innerHTML = "";
+    }
+  }
+
+  function showCanvasDetail(row, index) {
+    const detail = currentCanvasShell()?.querySelector(".desktop-canvas-detail");
+    if (!detail || !row) return;
+    detail.hidden = false;
+    detail.innerHTML = `
+      <div class="desktop-canvas-detail-panel">
+        <button type="button" class="desktop-canvas-detail-close" data-canvas-detail-close aria-label="關閉">×</button>
+        <div class="desktop-canvas-detail-kicker">#${escapeHtml(row.rank || index + 1)} · ${escapeHtml(canvasState.route.replace("strategy|", ""))}</div>
+        <h3>${escapeHtml(row.code || "--")} ${escapeHtml(row.title || "")}</h3>
+        <p>${escapeHtml(row.reason || row.line || "目前沒有更多說明。")}</p>
+        <div class="desktop-canvas-detail-grid">
+          <span>分數 <strong>${escapeHtml(row.score || "--")}</strong></span>
+          <span>漲幅 <strong>${escapeHtml(row.pct || "--")}</strong></span>
+          <span>價格 <strong>${escapeHtml(row.price || "--")}</strong></span>
+          <span>量能 <strong>${escapeHtml(row.volume || "--")}</strong></span>
+        </div>
+      </div>
+    `;
+  }
+
+  function installCanvasHandlers() {
+    if (document.documentElement.dataset.fumanCanvasHandlersReady === "1") return;
+    document.documentElement.dataset.fumanCanvasHandlersReady = "1";
+
+    document.addEventListener("input", (event) => {
+      const input = event.target.closest?.(".desktop-canvas-search");
+      if (!input) return;
+      canvasState.query = input.value || "";
+      canvasState.offset = 0;
+      canvasState.hoverIndex = -1;
+      applyCanvasFilter();
+      setCanvasStatus("搜尋套用");
+      scheduleCanvasDraw();
+    }, true);
+
+    document.addEventListener("click", (event) => {
+      const close = event.target.closest?.("[data-canvas-detail-close]");
+      if (close) {
+        event.preventDefault();
+        hideCanvasDetail();
+        return;
+      }
+      const refresh = event.target.closest?.("[data-canvas-refresh]");
+      if (refresh) {
+        event.preventDefault();
+        const route = canvasState.route || activeSnapshotRoute;
+        setCanvasStatus("更新中");
+        fetchCanvasRows(route, true).then(() => {
+          if (canvasState.route === route) {
+            applyCanvasFilter();
+            scheduleCanvasDraw();
+          }
+        }).catch(() => setCanvasStatus("沿用快照"));
+        return;
+      }
+      const canvas = event.target.closest?.(".desktop-route-canvas");
+      if (!canvas) return;
+      const index = canvasHitIndex(canvas, event);
+      if (index < 0) return;
+      canvasState.selectedIndex = index;
+      showCanvasDetail(canvasState.filtered[index], index);
+      scheduleCanvasDraw();
+      event.preventDefault();
+    }, true);
+
+    document.addEventListener("pointermove", (event) => {
+      const canvas = event.target.closest?.(".desktop-route-canvas");
+      if (!canvas) return;
+      const index = canvasHitIndex(canvas, event);
+      if (index === canvasState.hoverIndex) return;
+      canvasState.hoverIndex = index;
+      scheduleCanvasDraw();
+    }, true);
+
+    document.addEventListener("pointerout", (event) => {
+      const canvas = event.target.closest?.(".desktop-route-canvas");
+      if (!canvas || canvas.contains(event.relatedTarget)) return;
+      if (canvasState.hoverIndex === -1) return;
+      canvasState.hoverIndex = -1;
+      scheduleCanvasDraw();
+    }, true);
+
+    document.addEventListener("wheel", (event) => {
+      const canvas = event.target.closest?.(".desktop-route-canvas");
+      if (!canvas) return;
+      const direction = event.deltaY > 0 ? 1 : -1;
+      const step = Math.max(1, Math.min(8, Math.round(Math.abs(event.deltaY) / 42)));
+      const oldOffset = canvasState.offset;
+      canvasState.offset += direction * step;
+      clampCanvasOffset(canvas);
+      if (canvasState.offset !== oldOffset) {
+        event.preventDefault();
+        hideCanvasDetail();
+        scheduleCanvasDraw();
+      }
+    }, { capture: true, passive: false });
+
+    document.addEventListener("keydown", (event) => {
+      const canvas = event.target.closest?.(".desktop-route-canvas");
+      if (!canvas) return;
+      const capacity = visibleCanvasCapacity(canvas);
+      const oldOffset = canvasState.offset;
+      if (event.key === "ArrowDown") canvasState.offset += 1;
+      else if (event.key === "ArrowUp") canvasState.offset -= 1;
+      else if (event.key === "PageDown") canvasState.offset += capacity;
+      else if (event.key === "PageUp") canvasState.offset -= capacity;
+      else if (event.key === "Home") canvasState.offset = 0;
+      else if (event.key === "End") canvasState.offset = canvasState.filtered.length;
+      else if (event.key === "Enter" && canvasState.hoverIndex >= 0) {
+        showCanvasDetail(canvasState.filtered[canvasState.hoverIndex], canvasState.hoverIndex);
+        event.preventDefault();
+        return;
+      } else {
+        return;
+      }
+      clampCanvasOffset(canvas);
+      if (canvasState.offset !== oldOffset) {
+        event.preventDefault();
+        hideCanvasDetail();
+        scheduleCanvasDraw();
+      }
+    }, true);
+  }
+
   function escapeHtml(value) {
     return String(value ?? "")
       .replace(/&/g, "&amp;")
@@ -183,7 +521,7 @@
       const raw = sessionStorage.getItem(SNAPSHOT_PREFIX + key);
       if (!raw) return null;
       const item = JSON.parse(raw);
-      if (!item?.html || Date.now() - Number(item.at || 0) > SNAPSHOT_MAX_AGE_MS) return null;
+      if ((!item?.html && !item?.rows?.length) || Date.now() - Number(item.at || 0) > SNAPSHOT_MAX_AGE_MS) return null;
       return item;
     } catch (error) {
       return null;
@@ -205,7 +543,8 @@
         const request = tx.objectStore(SNAPSHOT_STORE).get(key);
         request.onsuccess = () => {
           const item = request.result;
-          resolve(item?.html && Date.now() - Number(item.at || 0) <= SNAPSHOT_MAX_AGE_MS ? item : null);
+          const hasContent = item?.html || item?.rows?.length;
+          resolve(hasContent && Date.now() - Number(item.at || 0) <= SNAPSHOT_MAX_AGE_MS ? item : null);
         };
         request.onerror = () => resolve(null);
       } catch (error) {
@@ -244,6 +583,7 @@
       rows: extractLiteRows(panel),
     };
     routeSnapshots.set(key, item);
+    if (item.rows.length) setCanvasRows(key, item.rows, "dom-snapshot", item.at);
     writeSessionSnapshot(key, item);
     writeIndexedSnapshot(key, item);
   }
@@ -261,18 +601,18 @@
 
   function applySnapshot(key, item, source) {
     const panel = document.querySelector("#strategy-view");
-    if (!key || !item?.html || !panel) return false;
+    if (!key || (!item?.html && !item?.rows?.length) || !panel) return false;
     if (Date.now() - Number(item.at || 0) > SNAPSHOT_MAX_AGE_MS) return false;
     if (Array.isArray(item.rows) && item.rows.length) {
+      setCanvasRows(key, item.rows, `canvas-${source}`, item.at || Date.now());
       renderStrategyRouteShell(key, `canvas-${source}`, item.rows);
       return true;
     }
-    panel.dataset.fumanRouteSnapshotRestoring = "1";
-    panel.innerHTML = item.html;
-    panel.scrollTop = Number(item.scrollTop || 0);
-    panel.dataset.fumanRouteSnapshotKey = key;
-    panel.dataset.fumanRouteSnapshotSource = source || "";
-    window.setTimeout(() => delete panel.dataset.fumanRouteSnapshotRestoring, 0);
+    const template = document.createElement("template");
+    template.innerHTML = item.html || "";
+    const rows = extractLiteRows(template.content);
+    if (rows.length) setCanvasRows(key, rows, `html-${source}`, item.at || Date.now());
+    renderStrategyRouteShell(key, `html-${source}`, rows);
     return true;
   }
 
@@ -300,9 +640,9 @@
     if (!canvas) return;
     const rect = canvas.getBoundingClientRect();
     const width = Math.max(520, Math.floor(rect.width || canvas.parentElement?.clientWidth || 920));
-    const rowHeight = 46;
-    const rowsToDraw = rows.length ? rows.slice(0, 28) : [];
-    const height = Math.max(260, 116 + Math.max(rowsToDraw.length, 4) * rowHeight);
+    const height = Math.max(380, Math.min(760, Math.floor((window.innerHeight || 900) * 0.68)));
+    const capacity = Math.max(5, Math.floor((height - CANVAS_HEADER_HEIGHT - 16) / CANVAS_ROW_HEIGHT));
+    const rowsToDraw = rows.length ? rows.slice(canvasState.offset, canvasState.offset + capacity) : [];
     const dpr = Math.min(2, window.devicePixelRatio || 1);
     canvas.width = Math.floor(width * dpr);
     canvas.height = Math.floor(height * dpr);
@@ -334,21 +674,29 @@
     ctx.fillStyle = "#9fb0cb";
     ctx.font = "14px system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
     ctx.fillText(compactText(meta.summary, 84), 70, 68);
+    ctx.textAlign = "right";
+    ctx.fillStyle = "#ffb27b";
+    ctx.font = "800 13px system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+    ctx.fillText(`${rows.length} 筆`, width - 32, 42);
+    ctx.fillStyle = "#9fb0cb";
+    ctx.font = "12px system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+    ctx.fillText(compactText(source || "shell", 28), width - 32, 66);
+    ctx.textAlign = "left";
 
     ctx.fillStyle = "rgba(15,23,42,0.86)";
-    roundRect(ctx, 24, 88, width - 48, 42, 12);
+    roundRect(ctx, 24, 88, width - 48, 38, 12);
     ctx.fill();
     ctx.fillStyle = "#9fb0cb";
     ctx.font = "700 13px system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
-    ctx.fillText("Rank", 46, 114);
-    ctx.fillText("Code", 106, 114);
-    ctx.fillText("Signal", 184, 114);
-    ctx.fillText("Score", width - 176, 114);
-    ctx.fillText("Change", width - 92, 114);
+    ctx.fillText("Rank", 46, 112);
+    ctx.fillText("Code", 106, 112);
+    ctx.fillText("Signal", 184, 112);
+    ctx.fillText("Score", width - 176, 112);
+    ctx.fillText("Change", width - 92, 112);
 
     if (!rowsToDraw.length) {
       for (let i = 0; i < 5; i += 1) {
-        const y = 146 + i * rowHeight;
+        const y = CANVAS_HEADER_HEIGHT + 18 + i * CANVAS_ROW_HEIGHT;
         const alpha = 0.16 - i * 0.014;
         ctx.fillStyle = `rgba(148,163,184,${alpha})`;
         roundRect(ctx, 42, y, width - 84 - i * 28, 18, 9);
@@ -361,10 +709,25 @@
     }
 
     rowsToDraw.forEach((row, index) => {
-      const y = 142 + index * rowHeight;
-      ctx.fillStyle = index % 2 ? "rgba(15,23,42,0.58)" : "rgba(30,41,59,0.46)";
-      roundRect(ctx, 24, y - 24, width - 48, 38, 10);
+      const globalIndex = canvasState.offset + index;
+      const y = CANVAS_HEADER_HEIGHT + index * CANVAS_ROW_HEIGHT + 28;
+      const active = globalIndex === canvasState.selectedIndex;
+      const hover = globalIndex === canvasState.hoverIndex;
+      ctx.fillStyle = active
+        ? "rgba(255,112,55,0.22)"
+        : hover
+          ? "rgba(255,112,55,0.13)"
+          : index % 2
+            ? "rgba(15,23,42,0.58)"
+            : "rgba(30,41,59,0.46)";
+      roundRect(ctx, 24, y - 29, width - 48, 42, 10);
       ctx.fill();
+      if (active || hover) {
+        ctx.strokeStyle = active ? "rgba(255,112,55,0.95)" : "rgba(255,112,55,0.42)";
+        ctx.lineWidth = 1;
+        roundRect(ctx, 24.5, y - 28.5, width - 49, 41, 10);
+        ctx.stroke();
+      }
       ctx.fillStyle = "#ff8a3d";
       ctx.font = "800 13px system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
       ctx.fillText(String(row.rank || index + 1), 48, y);
@@ -373,7 +736,10 @@
       ctx.fillText(row.code || "--", 106, y);
       ctx.fillStyle = "#e8eefc";
       ctx.font = "700 14px system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
-      ctx.fillText(compactText(row.title || row.line || "", 54), 184, y);
+      ctx.fillText(compactText(row.title || row.line || "", 42), 184, y - 6);
+      ctx.fillStyle = "#8391aa";
+      ctx.font = "12px system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+      ctx.fillText(compactText(row.reason || row.line || "", 70), 184, y + 11);
       ctx.fillStyle = "#e8eefc";
       ctx.textAlign = "right";
       ctx.fillText(row.score || "--", width - 130, y);
@@ -381,6 +747,19 @@
       ctx.fillText(row.pct || "--", width - 38, y);
       ctx.textAlign = "left";
     });
+
+    if (rows.length > capacity) {
+      const trackTop = CANVAS_HEADER_HEIGHT;
+      const trackHeight = height - CANVAS_HEADER_HEIGHT - 18;
+      const thumbHeight = Math.max(34, trackHeight * (capacity / rows.length));
+      const thumbTop = trackTop + (trackHeight - thumbHeight) * (canvasState.offset / Math.max(1, rows.length - capacity));
+      ctx.fillStyle = "rgba(148,163,184,0.12)";
+      roundRect(ctx, width - 14, trackTop, 5, trackHeight, 4);
+      ctx.fill();
+      ctx.fillStyle = "rgba(255,112,55,0.58)";
+      roundRect(ctx, width - 14, thumbTop, 5, thumbHeight, 4);
+      ctx.fill();
+    }
   }
 
   function roundRect(ctx, x, y, width, height, radius) {
@@ -397,6 +776,21 @@
   function renderStrategyRouteShell(link, source, rows = []) {
     const panel = document.querySelector("#strategy-view");
     if (!panel) return false;
+    const key = strategyRouteKey(link);
+    const previousRoute = canvasState.route;
+    const stored = canvasStore.get(key);
+    const incomingRows = rows.length ? rows : rowsForRoute(key);
+    activeSnapshotRoute = key;
+    canvasState.route = key;
+    canvasState.source = source || stored?.source || "shell";
+    canvasState.rows = incomingRows;
+    if (previousRoute !== key) {
+      canvasState.offset = 0;
+      canvasState.hoverIndex = -1;
+      canvasState.selectedIndex = -1;
+      hideCanvasDetail();
+    }
+    applyCanvasFilter();
     const meta = strategyMeta(link);
     panel.dataset.fumanRouteSnapshotRestoring = "1";
     panel.classList.remove("strategy5-only", "strategy3-only", "swing-only", "open-buy-only");
@@ -416,13 +810,15 @@
     if (headerBadge) headerBadge.textContent = meta.badge;
     if (toolbarTitle) toolbarTitle.textContent = meta.title;
     if (toolbarBadge) toolbarBadge.textContent = meta.badge;
-    if (summary) summary.textContent = `${meta.title}｜畫面已切換，正在同步最新資料。`;
-    if (count) count.textContent = "--";
-    if (avg) avg.textContent = "--";
-    if (top) top.textContent = "--";
+    const scoreValues = canvasState.filtered.map((row) => cleanNumber(row.score)).filter((value) => value);
+    const avgScore = scoreValues.length ? Math.round(scoreValues.reduce((sum, value) => sum + value, 0) / scoreValues.length) : 0;
+    if (summary) summary.textContent = `${meta.title}｜Canvas 常駐列表，資料背景同步。`;
+    if (count) count.textContent = String(canvasState.filtered.length || "--");
+    if (avg) avg.textContent = avgScore ? String(avgScore) : "--";
+    if (top) top.textContent = canvasState.filtered[0]?.code || "--";
     if (table) {
       table.innerHTML = `
-        <section class="desktop-route-shell" data-route-shell="${escapeHtml(strategyRouteKey(link))}" data-route-source="${escapeHtml(source || "")}">
+        <section class="desktop-route-shell desktop-canvas-app" data-route-shell="${escapeHtml(key)}" data-route-source="${escapeHtml(canvasState.source || "")}">
           <div class="desktop-route-shell-head">
             <span>${escapeHtml(meta.icon)}</span>
             <div>
@@ -431,15 +827,28 @@
             </div>
           </div>
           <div class="desktop-route-shell-grid">
-            <article><span>切換狀態</span><strong>已同步</strong></article>
-            <article><span>資料狀態</span><strong>${rows.length ? "快照命中" : "背景更新"}</strong></article>
+            <article><span>切換狀態</span><strong>立即</strong></article>
+            <article><span>資料狀態</span><strong>${canvasState.rows.length ? "快照命中" : "背景更新"}</strong></article>
             <article><span>手感模式</span><strong>Canvas</strong></article>
           </div>
-          <canvas class="desktop-route-canvas" aria-label="${escapeHtml(meta.title)} Canvas 快速列表"></canvas>
+          <div class="desktop-canvas-toolbar">
+            <label class="desktop-canvas-search-wrap">
+              <span>搜尋</span>
+              <input class="desktop-canvas-search" value="${escapeHtml(canvasState.query || "")}" placeholder="代號 / 名稱 / 訊號" autocomplete="off" spellcheck="false">
+            </label>
+            <button type="button" class="desktop-canvas-refresh" data-canvas-refresh>刷新</button>
+            <span class="desktop-canvas-count">${escapeHtml(`${canvasState.filtered.length}/${canvasState.rows.length}`)}</span>
+            <span class="desktop-canvas-status">${escapeHtml(canvasState.source || "shell")}</span>
+          </div>
+          <canvas class="desktop-route-canvas" tabindex="0" aria-label="${escapeHtml(meta.title)} Canvas 快速列表"></canvas>
+          <div class="desktop-canvas-detail" hidden></div>
         </section>
       `;
       const canvas = table.querySelector(".desktop-route-canvas");
-      requestAnimationFrame(() => drawRouteCanvas(canvas, meta, rows, source));
+      requestAnimationFrame(() => {
+        drawRouteCanvas(canvas, meta, canvasState.filtered, canvasState.source);
+        setCanvasStatus();
+      });
     }
     window.setTimeout(() => delete panel.dataset.fumanRouteSnapshotRestoring, 0);
     return true;
@@ -447,9 +856,15 @@
 
   function activateStrategyRoute(link, source) {
     switchStrategyViewNow(link);
-    if (!restoreStrategySnapshot(link)) {
-      renderStrategyRouteShell(link, source);
-    }
+    const key = strategyRouteKey(link);
+    const rows = rowsForRoute(key);
+    renderStrategyRouteShell(link, source, rows);
+    restoreStrategySnapshot(link);
+    fetchCanvasRows(key, false).then((apiRows) => {
+      if (activeSnapshotRoute !== key || canvasState.route !== key) return;
+      if (apiRows?.length) renderStrategyRouteShell(key, "api", apiRows);
+      else scheduleCanvasDraw();
+    }).catch(() => setCanvasStatus("沿用快照"));
   }
 
   function switchStrategyViewNow(link) {
@@ -481,9 +896,15 @@
     panel.dataset.fumanRouteSnapshotReady = "1";
     SNAPSHOT_ROUTES.forEach((key) => {
       const item = readSessionSnapshot(key);
-      if (item) routeSnapshots.set(key, item);
+      if (item) {
+        routeSnapshots.set(key, item);
+        if (item.rows?.length) setCanvasRows(key, item.rows, "session", item.at || Date.now());
+      }
       readIndexedSnapshot(key).then((dbItem) => {
-        if (dbItem) routeSnapshots.set(key, dbItem);
+        if (dbItem) {
+          routeSnapshots.set(key, dbItem);
+          if (dbItem.rows?.length) setCanvasRows(key, dbItem.rows, "indexeddb", dbItem.at || Date.now());
+        }
       }).catch(() => undefined);
     });
     new MutationObserver(() => {
@@ -522,12 +943,9 @@
     fastClickAt = now;
     activateStrategyRoute(link, "fast-click");
     warm(link, "strategy-fast-click");
-    const task = window.FUMAN_TERMINAL_APP_READY
-      ? Promise.resolve(true)
-      : window.FUMAN_TERMINAL_LOAD_APP?.("desktop-strategy-fast-click");
-    Promise.resolve(task).then(() => {
-      if (link.isConnected) dispatchOfficialClick(link, sourceEvent);
-    }).catch(() => undefined);
+    if (!window.FUMAN_TERMINAL_APP_READY) {
+      window.FUMAN_TERMINAL_LOAD_APP?.("desktop-strategy-canvas-background");
+    }
   }
 
   function setPending(link, source) {
@@ -670,6 +1088,131 @@
         border-radius: 18px;
         background: #090f1c;
         box-shadow: inset 0 0 0 1px rgba(148,163,184,0.16);
+        cursor: default;
+        touch-action: none;
+        user-select: none;
+      }
+      .desktop-route-canvas:focus {
+        outline: 2px solid rgba(255,112,55,0.72);
+        outline-offset: 3px;
+      }
+      .desktop-canvas-toolbar {
+        display: grid;
+        grid-template-columns: minmax(220px, 1fr) auto auto auto;
+        align-items: end;
+        gap: 12px;
+        margin-top: 18px;
+      }
+      .desktop-canvas-search-wrap {
+        display: grid;
+        gap: 7px;
+        color: #8796b2;
+        font-size: 12px;
+        font-weight: 800;
+        letter-spacing: 0;
+      }
+      .desktop-canvas-search {
+        width: 100%;
+        min-height: 42px;
+        border: 1px solid rgba(148,163,184,0.22);
+        border-radius: 12px;
+        padding: 0 14px;
+        color: #f8fafc;
+        background: rgba(8,13,24,0.88);
+        font: 800 14px system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        outline: none;
+      }
+      .desktop-canvas-search:focus {
+        border-color: rgba(255,112,55,0.72);
+        box-shadow: 0 0 0 3px rgba(255,112,55,0.12);
+      }
+      .desktop-canvas-refresh {
+        min-height: 42px;
+        border: 1px solid rgba(255,112,55,0.48);
+        border-radius: 12px;
+        padding: 0 16px;
+        color: #ffd0b5;
+        background: rgba(255,112,55,0.12);
+        font: 900 14px system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        cursor: pointer;
+      }
+      .desktop-canvas-count,
+      .desktop-canvas-status {
+        min-height: 42px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border: 1px solid rgba(148,163,184,0.18);
+        border-radius: 12px;
+        padding: 0 14px;
+        color: #b8c5da;
+        background: rgba(15,23,42,0.68);
+        white-space: nowrap;
+        font: 800 13px system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      }
+      .desktop-canvas-detail {
+        position: sticky;
+        bottom: 14px;
+        z-index: 3;
+        margin-top: -8px;
+      }
+      .desktop-canvas-detail[hidden] {
+        display: none !important;
+      }
+      .desktop-canvas-detail-panel {
+        position: relative;
+        border: 1px solid rgba(255,112,55,0.58);
+        border-radius: 16px;
+        padding: 18px;
+        background:
+          linear-gradient(135deg, rgba(255,112,55,0.18), rgba(15,23,42,0.96)),
+          rgba(9,15,28,0.96);
+        box-shadow: 0 22px 54px rgba(0,0,0,0.36);
+      }
+      .desktop-canvas-detail-close {
+        position: absolute;
+        top: 12px;
+        right: 12px;
+        width: 32px;
+        height: 32px;
+        border: 1px solid rgba(148,163,184,0.24);
+        border-radius: 10px;
+        color: #f8fafc;
+        background: rgba(15,23,42,0.82);
+        cursor: pointer;
+      }
+      .desktop-canvas-detail-kicker {
+        color: #ffb27b;
+        font-size: 12px;
+        font-weight: 900;
+      }
+      .desktop-canvas-detail-panel h3 {
+        margin: 8px 42px 8px 0;
+        color: #f8fafc;
+        font-size: 20px;
+      }
+      .desktop-canvas-detail-panel p {
+        margin: 0;
+        color: #b8c5da;
+        line-height: 1.65;
+      }
+      .desktop-canvas-detail-grid {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 10px;
+        margin-top: 14px;
+      }
+      .desktop-canvas-detail-grid span {
+        border: 1px solid rgba(148,163,184,0.17);
+        border-radius: 12px;
+        padding: 10px;
+        color: #8796b2;
+        background: rgba(15,23,42,0.65);
+      }
+      .desktop-canvas-detail-grid strong {
+        display: block;
+        margin-top: 5px;
+        color: #f8fafc;
       }
       .desktop-route-shell-lines {
         display: grid;
