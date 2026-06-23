@@ -1,6 +1,6 @@
 (function () {
-  if (window.__fumanTerminalHotfix === "20260623-01") return;
-  window.__fumanTerminalHotfix = "20260623-01";
+  if (window.__fumanTerminalHotfix === "20260623-02") return;
+  window.__fumanTerminalHotfix = "20260623-02";
 
   installDesktopApiPollingCache();
   installInstantViewSwitch();
@@ -65,6 +65,7 @@
         }
       });
       document.body.dataset.fumanInstantView = view;
+      window.__fumanLastInstantView = { view, at: Date.now() };
       mark(`instant-view:${view}`);
       return true;
     };
@@ -73,6 +74,7 @@
       const link = event.target.closest?.("[data-view]");
       if (!link || link.closest("[data-member-tab]")) return;
       switchNow(link);
+      window.FUMAN_TERMINAL_LOAD_APP?.("instant-view-pointer");
     }, true);
     document.addEventListener("mousedown", (event) => {
       const link = event.target.closest?.("[data-view]");
@@ -93,7 +95,7 @@
       if (!link || link.dataset.fumanHotfixReplayQueued === "1") return;
       link.dataset.fumanHotfixReplayQueued = "1";
       requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
+        const afterPaint = () => {
           delete link.dataset.fumanHotfixReplayQueued;
           const event = new MouseEvent("click", {
             bubbles: true,
@@ -111,7 +113,12 @@
             event.__fumanDeferredViewClick = true;
           }
           link.dispatchEvent(event);
-        });
+        };
+        if ("scheduler" in window && typeof window.scheduler?.postTask === "function") {
+          window.scheduler.postTask(afterPaint, { priority: "user-visible" }).catch(afterPaint);
+        } else {
+          setTimeout(afterPaint, 0);
+        }
       });
     };
     document.addEventListener("click", (event) => {
@@ -121,6 +128,10 @@
       if (event.button && event.button !== 0) return;
       const switched = window.FUMAN_HOTFIX_SWITCH_VIEW_NOW?.(link);
       if (!switched) return;
+      if (!window.FUMAN_TERMINAL_APP_READY) {
+        window.FUMAN_TERMINAL_LOAD_APP?.("instant-view-click");
+        return;
+      }
       event.preventDefault();
       event.stopImmediatePropagation();
       replayClick(link, event);
