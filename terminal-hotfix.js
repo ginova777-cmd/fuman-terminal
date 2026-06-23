@@ -157,40 +157,6 @@
   function installFastViewClickReplay() {
     if (window.__fumanFastViewClickReplay) return;
     window.__fumanFastViewClickReplay = true;
-    const routeKeyFor = (link) => `${link?.dataset?.view || ""}|${(link?.textContent || "").trim()}`;
-    const shouldThrottle = (link) => {
-      const key = routeKeyFor(link);
-      const last = window.__fumanLastReplayRoute || {};
-      const now = Date.now();
-      window.__fumanLastReplayRoute = { key, at: now };
-      return last.key === key && now - Number(last.at || 0) < 480;
-    };
-    const replayClick = (link, sourceEvent) => {
-      if (!link || link.dataset.fumanHotfixReplayQueued === "1") return;
-      link.dataset.fumanHotfixReplayQueued = "1";
-      requestAnimationFrame(() => {
-        const afterPaint = () => {
-          delete link.dataset.fumanHotfixReplayQueued;
-          const event = new MouseEvent("click", {
-            bubbles: true,
-            cancelable: true,
-            view: window,
-            ctrlKey: !!sourceEvent.ctrlKey,
-            shiftKey: !!sourceEvent.shiftKey,
-            altKey: !!sourceEvent.altKey,
-            metaKey: !!sourceEvent.metaKey,
-            button: 0,
-          });
-          try {
-            Object.defineProperty(event, "__fumanDeferredViewClick", { value: true });
-          } catch (error) {
-            event.__fumanDeferredViewClick = true;
-          }
-          link.dispatchEvent(event);
-        };
-        window.setTimeout(afterPaint, 24);
-      });
-    };
     document.addEventListener("click", (event) => {
       const link = event.target.closest?.("[data-view]");
       if (!link || link.closest("[data-member-tab]")) return;
@@ -202,22 +168,8 @@
         window.FUMAN_TERMINAL_LOAD_APP?.("strategy-native-click");
         return;
       }
-      const switched = window.FUMAN_HOTFIX_SWITCH_VIEW_NOW?.(link);
-      if (!switched) return;
       window.FUMAN_HOTFIX_WARM_ROUTE?.(link, "click");
-      if (!window.FUMAN_TERMINAL_APP_READY) {
-        window.FUMAN_TERMINAL_LOAD_APP?.("instant-view-click");
-        return;
-      }
-      event.preventDefault();
-      event.stopImmediatePropagation();
-      if (shouldThrottle(link)) return;
-      document.body.classList.add("fuman-view-hydrating");
-      window.clearTimeout(window.__fumanViewHydratingTimer);
-      window.__fumanViewHydratingTimer = window.setTimeout(() => {
-        document.body.classList.remove("fuman-view-hydrating");
-      }, 300);
-      replayClick(link, event);
+      window.FUMAN_TERMINAL_LOAD_APP?.("view-click-warm");
     }, true);
   }
 
@@ -251,11 +203,6 @@
       const route = `${link.dataset.view || ""}|${(link.textContent || "").trim()}`;
       const lastOfficial = window.__fumanLastOfficialRoute || {};
       const now = Date.now();
-      if (lastOfficial.route === route && now - Number(lastOfficial.at || 0) < 1200) {
-        event.preventDefault();
-        event.stopImmediatePropagation();
-        return;
-      }
       window.__fumanLastOfficialRoute = { route, at: now };
       scheduleAfterPaint(() => {
         document.body?.classList?.remove("fuman-view-switching");
@@ -269,7 +216,7 @@
       }
       return originalSetInterval(function budgetedInterval(...innerArgs) {
         if (isSwitching()) {
-          window.setTimeout(() => callback.apply(this, innerArgs), 900);
+          window.setTimeout(() => callback.apply(this, innerArgs), 160);
           return;
         }
         return callback.apply(this, innerArgs);

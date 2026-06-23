@@ -9,7 +9,6 @@
 
   installStyle();
   installRouteFeedback();
-  installContentCommitWatcher();
 
   function routeKey(link) {
     return `${link?.dataset?.view || ""}|${(link?.textContent || "").replace(/\s+/g, " ").trim()}`;
@@ -36,18 +35,14 @@
     document.querySelectorAll(".fuman-shell-pending").forEach((item) => {
       if (item !== link) item.classList.remove("fuman-shell-pending");
     });
-    link.classList.add("fuman-shell-pending");
-    document.body.classList.add("fuman-shell-switching");
-    document.body.dataset.fumanShellPending = route;
     warm(link, source);
+    link.classList.add("fuman-shell-pending");
 
     window.clearTimeout(pendingTimer);
-    pendingTimer = window.setTimeout(clearPending, 900);
+    pendingTimer = window.setTimeout(clearPending, 120);
   }
 
   function clearPending() {
-    document.body.classList.remove("fuman-shell-switching");
-    delete document.body.dataset.fumanShellPending;
     document.querySelectorAll(".fuman-shell-pending").forEach((item) => {
       item.classList.remove("fuman-shell-pending");
     });
@@ -72,21 +67,6 @@
     }, true);
   }
 
-  function installContentCommitWatcher() {
-    const root = document.querySelector("main") || document.body;
-    const observer = new MutationObserver(() => {
-      if (!document.body.classList.contains("fuman-shell-switching")) return;
-      window.clearTimeout(pendingTimer);
-      pendingTimer = window.setTimeout(clearPending, 120);
-    });
-    observer.observe(root, {
-      subtree: true,
-      childList: true,
-      attributes: true,
-      attributeFilter: ["class", "hidden", "aria-hidden"],
-    });
-  }
-
   function installStyle() {
     if (document.querySelector("#fuman-desktop-fast-shell-style")) return;
     const style = document.createElement("style");
@@ -101,13 +81,7 @@
         box-shadow: inset 0 0 0 1px rgba(255, 112, 55, 0.55), 0 8px 24px rgba(255, 112, 55, 0.12) !important;
         transform: translate3d(2px, 0, 0);
       }
-      body.fuman-shell-switching .view-panel,
-      body.fuman-shell-switching .strategy-terminal,
-      body.fuman-shell-switching .chip-flow-shell,
-      body.fuman-shell-switching .terminal-table {
-        transition: none !important;
-      }
-      body.fuman-shell-switching [data-view] {
+      [data-view] {
         transition: border-color 70ms ease, background-color 70ms ease, box-shadow 70ms ease, transform 70ms ease !important;
       }
     `;
