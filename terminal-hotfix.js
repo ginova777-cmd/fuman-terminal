@@ -1,8 +1,9 @@
 (function () {
-  if (window.__fumanTerminalHotfix === "20260623-07") return;
-  window.__fumanTerminalHotfix = "20260623-07";
+  if (window.__fumanTerminalHotfix === "20260623-08") return;
+  window.__fumanTerminalHotfix = "20260623-08";
 
   installDesktopApiPollingCache();
+  installDesktopViewSnapshotCache();
   installInstantViewSwitch();
   installFastViewClickReplay();
   installWarmMainApp();
@@ -36,6 +37,14 @@
       body.fuman-view-switching .dashboard,
       body.fuman-view-switching .view-panel {
         contain: layout paint style;
+      }
+      body.fuman-view-hydrating .view-panel.active {
+        content-visibility: auto;
+        contain-intrinsic-size: 900px;
+      }
+      body.fuman-view-switching .view-panel:not(.active) {
+        content-visibility: hidden;
+        contain-intrinsic-size: 900px;
       }
       [data-view] {
         -webkit-tap-highlight-color: transparent;
@@ -86,6 +95,7 @@
       });
       document.body.dataset.fumanInstantView = view;
       window.__fumanLastInstantView = { view, at: Date.now() };
+      window.FUMAN_HOTFIX_RESTORE_VIEW_SNAPSHOT?.(view, panel);
       mark(`instant-view:${view}`);
       return true;
     };
@@ -153,7 +163,7 @@
           }
           link.dispatchEvent(event);
         };
-        requestAnimationFrame(afterPaint);
+        window.setTimeout(afterPaint, 42);
       });
     };
     document.addEventListener("click", (event) => {
@@ -171,6 +181,11 @@
       event.preventDefault();
       event.stopImmediatePropagation();
       if (shouldThrottle(link)) return;
+      document.body.classList.add("fuman-view-hydrating");
+      window.clearTimeout(window.__fumanViewHydratingTimer);
+      window.__fumanViewHydratingTimer = window.setTimeout(() => {
+        document.body.classList.remove("fuman-view-hydrating");
+      }, 320);
       replayClick(link, event);
     }, true);
   }
@@ -489,6 +504,96 @@
       return task.then(cloneFromRecord);
     };
     window.FUMAN_HOTFIX_PRIME_API_CACHE = primeApiCache;
+  }
+
+  function installDesktopViewSnapshotCache() {
+    if (window.__fumanDesktopViewSnapshotCache) return;
+    window.__fumanDesktopViewSnapshotCache = true;
+    const snapshotPrefix = "FUMAN_DESKTOP_VIEW_SNAPSHOT:";
+    const maxSnapshotChars = 650000;
+    const maxSnapshotAgeMs = 240000;
+    const viewPanels = {
+      market: "#market-view",
+      strategy: "#strategy-view",
+      watchlist: "#watchlist-view",
+      "chip-trade": "#chip-trade-view",
+      "cb-detect": "#cb-detect-view",
+      "warrant-flow": "#warrant-flow-view",
+      member: "#member-view",
+    };
+    const memory = new Map();
+    let saveTimer = 0;
+    const getPanelView = (panel) => {
+      for (const [view, selector] of Object.entries(viewPanels)) {
+        if (panel?.matches?.(selector)) return view;
+      }
+      return "";
+    };
+    const readSnapshot = (view) => {
+      const cached = memory.get(view);
+      if (cached && Date.now() - cached.at <= maxSnapshotAgeMs) return cached;
+      try {
+        const raw = sessionStorage.getItem(snapshotPrefix + view);
+        if (!raw) return null;
+        const item = JSON.parse(raw);
+        if (!item?.html || Date.now() - Number(item.at || 0) > maxSnapshotAgeMs) return null;
+        memory.set(view, item);
+        return item;
+      } catch (error) {
+        return null;
+      }
+    };
+    const writeSnapshot = (view, panel) => {
+      if (!view || !panel || !panel.classList.contains("active")) return;
+      const html = panel.innerHTML || "";
+      if (!html || html.length > maxSnapshotChars) return;
+      if (/載入中|loading|skeleton/i.test(panel.textContent || "") && html.length < 12000) return;
+      const item = {
+        at: Date.now(),
+        scrollTop: panel.scrollTop || 0,
+        html,
+      };
+      memory.set(view, item);
+      try {
+        sessionStorage.setItem(snapshotPrefix + view, JSON.stringify(item));
+      } catch (error) {}
+    };
+    const scheduleSave = () => {
+      window.clearTimeout(saveTimer);
+      saveTimer = window.setTimeout(() => {
+        document.querySelectorAll(".view-panel.active").forEach((panel) => {
+          writeSnapshot(getPanelView(panel), panel);
+        });
+      }, 220);
+    };
+    const restoreSnapshot = (view, panel) => {
+      if (!view || !panel || panel.dataset.fumanSnapshotRestoring === "1") return false;
+      const item = readSnapshot(view);
+      if (!item?.html) return false;
+      const currentText = panel.textContent || "";
+      const shouldRestore = !currentText.trim() || /載入中|loading|目前沒有|請先登入/i.test(currentText);
+      if (!shouldRestore) return false;
+      panel.dataset.fumanSnapshotRestoring = "1";
+      panel.innerHTML = item.html;
+      panel.scrollTop = Number(item.scrollTop || 0);
+      panel.dataset.fumanSnapshotAt = String(item.at);
+      window.setTimeout(() => delete panel.dataset.fumanSnapshotRestoring, 0);
+      mark(`view-snapshot-restore:${view}`);
+      return true;
+    };
+    window.FUMAN_HOTFIX_RESTORE_VIEW_SNAPSHOT = restoreSnapshot;
+    if (document.readyState === "loading") {
+      document.addEventListener("DOMContentLoaded", scheduleSave, { once: true });
+    } else {
+      scheduleSave();
+    }
+    new MutationObserver(scheduleSave).observe(document.documentElement, {
+      childList: true,
+      subtree: true,
+    });
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "hidden") scheduleSave();
+    });
   }
 
   function installStrategy1OpenBuyRollbackGuard() {
