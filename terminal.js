@@ -12,6 +12,8 @@
   ];
   let appPromise = null;
 
+  installDesktopApiPollingCache();
+
   function mark(name) {
     if (!("performance" in window) || !performance.mark) return;
     try { performance.mark(`fuman:${name}`); } catch (error) {}
@@ -45,6 +47,66 @@
 
   function loadDependencies() {
     return Promise.all(dependencyScripts.map((item) => loadScriptOnce(item)));
+  }
+
+  function installDesktopApiPollingCache() {
+    if (window.__fumanDesktopApiPollingCache) return;
+    window.__fumanDesktopApiPollingCache = true;
+    const originalFetch = window.fetch.bind(window);
+    const memory = new Map();
+    const inflight = new Map();
+    const skipPattern = /\/api\/(?:export|refresh|frontend-error|performance-report|version|terminal-theme-css|scan-|github|history|realtime(?:$|\?))/i;
+    const apiPattern = /\/api\/(?:market|terminal-home|market-ai|heatmap|stocks|watchlist-match-index|open-buy-latest|strategy[2345]-latest|latest-strategy|realtime-radar-latest|institution-latest|chip-trade|warrant-flow-latest|cb-detect-latest|mobile-boot|mobile-fragment)/i;
+    const ttlFor = (pathname) => {
+      if (/strategy2|realtime-radar/i.test(pathname)) return 3000;
+      if (/market(?:$|-ai)|heatmap/i.test(pathname)) return 8000;
+      if (/strategy[345]|open-buy/i.test(pathname)) return 15000;
+      if (/institution|chip-trade|warrant|cb-detect/i.test(pathname)) return 30000;
+      if (/stocks|terminal-home|watchlist-match-index|mobile/i.test(pathname)) return 45000;
+      return 10000;
+    };
+    const cloneFromRecord = (record) => new Response(record.body, {
+      status: record.status,
+      statusText: record.statusText,
+      headers: record.headers,
+    });
+    const cacheKeyFor = (input, init = {}) => {
+      const method = String(init?.method || input?.method || "GET").toUpperCase();
+      if (method !== "GET") return "";
+      const url = new URL(typeof input === "string" ? input : input?.url || "", location.href);
+      if (url.origin !== location.origin) return "";
+      if (!apiPattern.test(url.pathname) || skipPattern.test(url.pathname)) return "";
+      if (url.searchParams.has("force") || url.searchParams.has("refresh")) return "";
+      ["t", "ts", "fresh", "_", "cacheBust"].forEach((key) => url.searchParams.delete(key));
+      return `${url.pathname}?${url.searchParams.toString()}`;
+    };
+    window.fetch = function fumanCachedFetch(input, init = {}) {
+      const key = cacheKeyFor(input, init);
+      if (!key) return originalFetch(input, init);
+      const now = Date.now();
+      const cached = memory.get(key);
+      if (cached && now - cached.at <= cached.ttl) {
+        return Promise.resolve(cloneFromRecord(cached));
+      }
+      if (inflight.has(key)) {
+        return inflight.get(key).then(cloneFromRecord);
+      }
+      const task = originalFetch(input, init).then(async (response) => {
+        const body = await response.clone().text();
+        const record = {
+          at: Date.now(),
+          ttl: ttlFor(new URL(typeof input === "string" ? input : input?.url || "", location.href).pathname),
+          status: response.status,
+          statusText: response.statusText,
+          headers: [...response.headers.entries()],
+          body,
+        };
+        if (response.ok) memory.set(key, record);
+        return record;
+      }).finally(() => inflight.delete(key));
+      inflight.set(key, task);
+      return task.then(cloneFromRecord);
+    };
   }
 
   function loadScriptOnce(item) {
