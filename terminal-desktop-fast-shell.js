@@ -42,8 +42,8 @@
   }
 
   function strategyRouteKey(link) {
-    const text = (link?.textContent || "").replace(/\s+/g, " ").trim();
-    if (!isStrategyLink(link)) return "";
+    const text = (typeof link === "string" ? link : link?.textContent || "").replace(/\s+/g, " ").trim();
+    if (typeof link !== "string" && !isStrategyLink(link)) return "";
     if (text.includes("策略1")) return "strategy|策略1";
     if (text.includes("策略2")) return "strategy|策略2";
     if (text.includes("策略3")) return "strategy|策略3";
@@ -102,6 +102,49 @@
       badge: "FMN://strategy.api",
       summary: "正在切換策略畫面。",
     };
+  }
+
+  function compactText(value, limit = 96) {
+    const text = String(value ?? "").replace(/\s+/g, " ").trim();
+    return text.length > limit ? `${text.slice(0, limit - 1)}…` : text;
+  }
+
+  function extractLiteRows(panel) {
+    if (!panel) return [];
+    const selectors = [
+      ".strategy5-stock-card",
+      ".swing-card",
+      ".terminal-table tbody tr",
+      ".strategy-table tbody tr",
+      ".strategy-table tr",
+      "[data-stock-code]",
+      "article",
+    ];
+    const seen = new Set();
+    const rows = [];
+    for (const selector of selectors) {
+      panel.querySelectorAll(selector).forEach((node) => {
+        if (rows.length >= 90 || seen.has(node)) return;
+        seen.add(node);
+        const text = compactText(node.textContent, 120);
+        if (!text || /正在|loading|背景更新|切換狀態|資料狀態|手感模式/i.test(text)) return;
+        const code = node.dataset?.stockCode || text.match(/\b\d{4}\b/)?.[0] || "";
+        if (!code && text.length < 8) return;
+        const pct = text.match(/[+-]?\d+(?:\.\d+)?%/)?.[0] || "";
+        const score = text.match(/(?:分數|score|命中|訊號)\s*[:：]?\s*([+-]?\d+(?:\.\d+)?)/i)?.[1] || "";
+        const title = code ? compactText(text.replace(code, "").trim(), 54) : compactText(text, 54);
+        rows.push({
+          rank: rows.length + 1,
+          code,
+          title: title || code || `訊號 ${rows.length + 1}`,
+          pct,
+          score,
+          line: text,
+        });
+      });
+      if (rows.length >= 12) break;
+    }
+    return rows.slice(0, 90);
   }
 
   function escapeHtml(value) {
@@ -182,6 +225,7 @@
 
   function isWorthSavingSnapshot(panel) {
     const html = panel?.innerHTML || "";
+    if (panel?.querySelector?.(".desktop-route-shell")) return false;
     if (!html || html.length > SNAPSHOT_MAX_CHARS) return false;
     const text = panel.textContent || "";
     if (/正在載入|loading/i.test(text) && html.length < 18000) return false;
@@ -197,6 +241,7 @@
       at: Date.now(),
       scrollTop: panel.scrollTop || 0,
       html: panel.innerHTML,
+      rows: extractLiteRows(panel),
     };
     routeSnapshots.set(key, item);
     writeSessionSnapshot(key, item);
@@ -218,6 +263,10 @@
     const panel = document.querySelector("#strategy-view");
     if (!key || !item?.html || !panel) return false;
     if (Date.now() - Number(item.at || 0) > SNAPSHOT_MAX_AGE_MS) return false;
+    if (Array.isArray(item.rows) && item.rows.length) {
+      renderStrategyRouteShell(key, `canvas-${source}`, item.rows);
+      return true;
+    }
     panel.dataset.fumanRouteSnapshotRestoring = "1";
     panel.innerHTML = item.html;
     panel.scrollTop = Number(item.scrollTop || 0);
@@ -247,7 +296,105 @@
     return false;
   }
 
-  function renderStrategyRouteShell(link, source) {
+  function drawRouteCanvas(canvas, meta, rows = [], source = "") {
+    if (!canvas) return;
+    const rect = canvas.getBoundingClientRect();
+    const width = Math.max(520, Math.floor(rect.width || canvas.parentElement?.clientWidth || 920));
+    const rowHeight = 46;
+    const rowsToDraw = rows.length ? rows.slice(0, 28) : [];
+    const height = Math.max(260, 116 + Math.max(rowsToDraw.length, 4) * rowHeight);
+    const dpr = Math.min(2, window.devicePixelRatio || 1);
+    canvas.width = Math.floor(width * dpr);
+    canvas.height = Math.floor(height * dpr);
+    canvas.style.height = `${height}px`;
+    const ctx = canvas.getContext("2d", { alpha: false });
+    if (!ctx) return;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.fillStyle = "#090f1c";
+    ctx.fillRect(0, 0, width, height);
+
+    const gradient = ctx.createLinearGradient(0, 0, width, 0);
+    gradient.addColorStop(0, "rgba(255,112,55,0.20)");
+    gradient.addColorStop(0.55, "rgba(30,41,59,0.45)");
+    gradient.addColorStop(1, "rgba(59,130,246,0.10)");
+    ctx.fillStyle = gradient;
+    roundRect(ctx, 0.5, 0.5, width - 1, height - 1, 18);
+    ctx.fill();
+    ctx.strokeStyle = "rgba(255,112,55,0.38)";
+    ctx.lineWidth = 1;
+    roundRect(ctx, 0.5, 0.5, width - 1, height - 1, 18);
+    ctx.stroke();
+
+    ctx.fillStyle = "#ff8a3d";
+    ctx.font = "700 28px system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+    ctx.fillText(meta.icon, 28, 48);
+    ctx.fillStyle = "#f8fafc";
+    ctx.font = "800 22px system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+    ctx.fillText(meta.title, 70, 42);
+    ctx.fillStyle = "#9fb0cb";
+    ctx.font = "14px system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+    ctx.fillText(compactText(meta.summary, 84), 70, 68);
+
+    ctx.fillStyle = "rgba(15,23,42,0.86)";
+    roundRect(ctx, 24, 88, width - 48, 42, 12);
+    ctx.fill();
+    ctx.fillStyle = "#9fb0cb";
+    ctx.font = "700 13px system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+    ctx.fillText("Rank", 46, 114);
+    ctx.fillText("Code", 106, 114);
+    ctx.fillText("Signal", 184, 114);
+    ctx.fillText("Score", width - 176, 114);
+    ctx.fillText("Change", width - 92, 114);
+
+    if (!rowsToDraw.length) {
+      for (let i = 0; i < 5; i += 1) {
+        const y = 146 + i * rowHeight;
+        const alpha = 0.16 - i * 0.014;
+        ctx.fillStyle = `rgba(148,163,184,${alpha})`;
+        roundRect(ctx, 42, y, width - 84 - i * 28, 18, 9);
+        ctx.fill();
+      }
+      ctx.fillStyle = "#9fb0cb";
+      ctx.font = "700 14px system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+      ctx.fillText(source.includes("canvas") ? "讀取快照中" : "已切換，背景同步資料", 44, height - 28);
+      return;
+    }
+
+    rowsToDraw.forEach((row, index) => {
+      const y = 142 + index * rowHeight;
+      ctx.fillStyle = index % 2 ? "rgba(15,23,42,0.58)" : "rgba(30,41,59,0.46)";
+      roundRect(ctx, 24, y - 24, width - 48, 38, 10);
+      ctx.fill();
+      ctx.fillStyle = "#ff8a3d";
+      ctx.font = "800 13px system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+      ctx.fillText(String(row.rank || index + 1), 48, y);
+      ctx.fillStyle = "#9bc4ff";
+      ctx.font = "800 14px system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+      ctx.fillText(row.code || "--", 106, y);
+      ctx.fillStyle = "#e8eefc";
+      ctx.font = "700 14px system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+      ctx.fillText(compactText(row.title || row.line || "", 54), 184, y);
+      ctx.fillStyle = "#e8eefc";
+      ctx.textAlign = "right";
+      ctx.fillText(row.score || "--", width - 130, y);
+      ctx.fillStyle = String(row.pct || "").includes("-") ? "#34d399" : "#fb7185";
+      ctx.fillText(row.pct || "--", width - 38, y);
+      ctx.textAlign = "left";
+    });
+  }
+
+  function roundRect(ctx, x, y, width, height, radius) {
+    const r = Math.min(radius, width / 2, height / 2);
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.arcTo(x + width, y, x + width, y + height, r);
+    ctx.arcTo(x + width, y + height, x, y + height, r);
+    ctx.arcTo(x, y + height, x, y, r);
+    ctx.arcTo(x, y, x + width, y, r);
+    ctx.closePath();
+  }
+
+  function renderStrategyRouteShell(link, source, rows = []) {
     const panel = document.querySelector("#strategy-view");
     if (!panel) return false;
     const meta = strategyMeta(link);
@@ -285,14 +432,14 @@
           </div>
           <div class="desktop-route-shell-grid">
             <article><span>切換狀態</span><strong>已同步</strong></article>
-            <article><span>資料狀態</span><strong>背景更新</strong></article>
-            <article><span>手感模式</span><strong>snapshot</strong></article>
+            <article><span>資料狀態</span><strong>${rows.length ? "快照命中" : "背景更新"}</strong></article>
+            <article><span>手感模式</span><strong>Canvas</strong></article>
           </div>
-          <div class="desktop-route-shell-lines" aria-hidden="true">
-            <i></i><i></i><i></i><i></i>
-          </div>
+          <canvas class="desktop-route-canvas" aria-label="${escapeHtml(meta.title)} Canvas 快速列表"></canvas>
         </section>
       `;
+      const canvas = table.querySelector(".desktop-route-canvas");
+      requestAnimationFrame(() => drawRouteCanvas(canvas, meta, rows, source));
     }
     window.setTimeout(() => delete panel.dataset.fumanRouteSnapshotRestoring, 0);
     return true;
@@ -514,6 +661,15 @@
       .desktop-route-shell-grid strong {
         color: #e8eefc;
         font-size: 18px;
+      }
+      .desktop-route-canvas {
+        display: block;
+        width: 100%;
+        min-height: 300px;
+        margin-top: 20px;
+        border-radius: 18px;
+        background: #090f1c;
+        box-shadow: inset 0 0 0 1px rgba(148,163,184,0.16);
       }
       .desktop-route-shell-lines {
         display: grid;
