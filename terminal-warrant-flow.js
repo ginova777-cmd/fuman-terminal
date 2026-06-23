@@ -2,19 +2,101 @@
   const source = `
 let warrantFlowTab = "volume";
 let warrantFlowChipData = [];
+const WARRANT_FLOW_VALID_CACHE_KEY = "fuman-terminal-warrant-flow-valid-cache-v2";
+const WARRANT_FLOW_LEGACY_CACHE_KEY = "fuman-terminal-warrant-flow-valid-cache-v1";
+const WARRANT_FLOW_CACHE_MAX_AGE_MS = 12 * 60 * 60 * 1000;
 
 function normalizeSingleWarrantRows(payload) {
-  const matches = normalizeArray(payload && payload.matches);
-  if (matches.length) return matches;
   return normalizeArray(payload && payload.singleSignals);
 }
 
+function isApiWarrantPayload(payload) {
+  return Boolean(
+    payload &&
+    payload.ok !== false &&
+    payload.cacheSource === "supabase-api" &&
+    payload.runId &&
+    (!payload.dataContract || payload.dataContract.ok === true)
+  );
+}
+
+function isSingleWarrantVolumeRow(item) {
+  const warrantCode = String((item && item.warrantCode) || "").trim();
+  const warrantName = String((item && item.warrantName) || "").trim();
+  const underlyingCode = String((item && (item.underlyingCode || item.code)) || "").trim();
+  return /^\\d{5,6}$/.test(warrantCode) &&
+    /^\\d{4}$/.test(underlyingCode) &&
+    warrantCode !== underlyingCode &&
+    Boolean(warrantName) &&
+    cleanNumber(item && item.thirtyMinuteVolume) > 0 &&
+    cleanNumber(item && item.floatingUnits) > 0 &&
+    cleanNumber(item && item.volumeMultiple) > 0;
+}
+
 function normalizeWarrantVolumeRows(payload) {
-  const volumeMatches = normalizeArray(payload && payload.volumeMatches);
+  const volumeMatches = normalizeArray(payload && payload.volumeMatches).filter(isSingleWarrantVolumeRow);
   if (volumeMatches.length) return volumeMatches;
-  const matches = normalizeArray(payload && payload.matches);
-  if (matches.length) return matches;
-  return normalizeArray(payload && payload.singleSignals);
+  const rows = normalizeArray(payload && payload.rows).filter(isSingleWarrantVolumeRow);
+  if (rows.length) return rows;
+  return [];
+}
+
+function applyWarrantFlowSnapshot(payload) {
+  if (!isApiWarrantPayload(payload)) return false;
+  const rows = normalizeWarrantVolumeRows(payload);
+  if (!rows.length) return false;
+  const chipRows = normalizeArray(payload && payload.singleSignals);
+  warrantFlowData = rows;
+  warrantFlowChipData = chipRows.length ? chipRows : warrantFlowChipData;
+  warrantFlowPrioritySignature = "";
+  warrantFlowLastRenderSignature = "";
+  const updatedAt = Date.parse((payload && payload.updatedAt) || "");
+  warrantFlowUpdatedAt = Number.isFinite(updatedAt) ? updatedAt : Date.now();
+  return true;
+}
+
+function saveWarrantFlowLocalCache(payload) {
+  try {
+    if (!isApiWarrantPayload(payload)) return false;
+    const rows = normalizeArray(warrantFlowData);
+    if (!rows.length) return false;
+    localStorage.setItem(WARRANT_FLOW_VALID_CACHE_KEY, JSON.stringify({
+      savedAt: Date.now(),
+      updatedAt: new Date(warrantFlowUpdatedAt || Date.now()).toISOString(),
+      ok: true,
+      cacheSource: payload.cacheSource,
+      runId: payload.runId,
+      schemaVersion: payload.schemaVersion || "",
+      dataContract: payload.dataContract || { ok: true },
+      usedDate: payload.usedDate || "",
+      sourceDate: payload.sourceDate || "",
+      marketSession: payload.marketSession || null,
+      rows,
+      singleSignals: normalizeArray(warrantFlowChipData),
+    }));
+    localStorage.removeItem(WARRANT_FLOW_LEGACY_CACHE_KEY);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function restoreWarrantFlowLocalCache() {
+  if (normalizeArray(warrantFlowData).length) return true;
+  try {
+    localStorage.removeItem(WARRANT_FLOW_LEGACY_CACHE_KEY);
+    const payload = JSON.parse(localStorage.getItem(WARRANT_FLOW_VALID_CACHE_KEY) || "null");
+    if (!payload || Date.now() - Number(payload.savedAt || 0) > WARRANT_FLOW_CACHE_MAX_AGE_MS) return false;
+    return applyWarrantFlowSnapshot(payload);
+  } catch {
+    return false;
+  }
+}
+
+function warrantFlowApiEndpoint(limit) {
+  const configured = String(endpoints.warrantFlowSlim || endpoints.warrantFlowCache || "/api/warrant-flow-latest");
+  const base = configured.split("?")[0] || "/api/warrant-flow-latest";
+  return base + "?top=1&compact=1&limit=" + limit;
 }
 
 function normalizeWarrantDateKey(value) {
@@ -155,10 +237,18 @@ function getWarrantPriorityRows(sourceRows) {
 function getWarrantVolumeRows(rows) {
   return rows
     .map((item) => {
-      const thirtyMinuteVolume = cleanNumber(item.thirtyMinuteVolume) || Math.round(cleanNumber(item.callVolume || item.volume) / 1000);
-      const floatingUnits = cleanNumber(item.floatingUnits) || Math.max(1, Math.round(cleanNumber(item.callCount || item.signalCount) || cleanNumber(item.callValue || item.value) / 100000));
-      const volumeMultiple = cleanNumber(item.volumeMultiple) || thirtyMinuteVolume / Math.max(1, floatingUnits * 5);
-      return { ...item, thirtyMinuteVolume, floatingUnits, volumeMultiple };
+      const thirtyMinuteVolume = cleanNumber(item.thirtyMinuteVolume) || Math.round(cleanNumber(item.volume) / 1000);
+      const floatingUnits = cleanNumber(item.floatingUnits);
+      const volumeMultiple = cleanNumber(item.volumeMultiple) || (floatingUnits ? thirtyMinuteVolume / Math.max(1, floatingUnits) : 0);
+      const topWarrant = normalizeArray(item.topWarrants)[0] || {};
+      return {
+        ...item,
+        warrantCode: String(item.warrantCode || item.symbol || topWarrant.code || "").trim(),
+        warrantName: String(item.warrantName || topWarrant.name || "").trim(),
+        thirtyMinuteVolume,
+        floatingUnits,
+        volumeMultiple,
+      };
     })
     .sort((a, b) =>
       cleanNumber(b.volumeMultiple) - cleanNumber(a.volumeMultiple) ||
@@ -269,7 +359,7 @@ function renderWarrantFlow() {
       '<td class="price">' + pct + '</td>' +
       '<td class="warrant-reason-cell">' + renderWarrantSignalBadges(item) + '</td>' +
       '</tr>';
-  }).join("") : '<tr><td colspan="' + (warrantFlowTab === "volume" ? "10" : "9") + '">' + (keyword ? "單券精選內找不到這檔股票或權證。" : "權證單券精選讀取中。") + '</td></tr>';
+  }).join("") : '<tr><td colspan="' + (warrantFlowTab === "volume" ? "10" : "9") + '">' + (keyword ? "單券精選內找不到這檔股票或權證。" : "權證快照尚未建立；背景同步完成後會自動更新。") + '</td></tr>';
   const tableHeader = warrantFlowTab === "volume"
     ? '<th>排名</th><th>股票代號</th><th>標的名稱</th><th>收盤價</th><th>權證代號</th><th>30 分量</th><th>流通</th><th>倍數</th><th>標的漲幅</th><th>原因</th>'
     : '<th>排名</th><th>股票代號</th><th>標的名稱</th><th>收盤價</th><th>權證代號</th><th>單券金額</th><th>訊號</th><th>標的漲幅</th><th>原因</th>';
@@ -302,35 +392,24 @@ async function loadWarrantFlow(force = false) {
   if (!isViewActive("warrant-flow")) return;
   warrantFlowHasOpened = true;
   if (warrantFlowLoading) return;
-  if (!force) renderWarrantFlow();
+  const restored = restoreWarrantFlowLocalCache();
+  if (!force || restored) renderWarrantFlow();
   warrantFlowLoading = true;
   const panel = viewPanels["warrant-flow"];
   try {
     if (!latestStocks.length) loadStrategyStocks();
-    let payload = await fetchVersionedJson(endpoints.warrantFlowSlim || "/data/warrant-flow-slim.json", 9000, (warrantFlowSummary && warrantFlowSummary.updatedAt) || "", force);
+    let payload = await fetchVersionedJson(warrantFlowApiEndpoint(30), 9000, (warrantFlowSummary && warrantFlowSummary.updatedAt) || "", force);
     let rows = normalizeWarrantVolumeRows(payload);
-    warrantFlowChipData = normalizeArray(payload && payload.singleSignals);
-    if (!rows.length) {
-      payload = await fetchVersionedJson(endpoints.warrantFlowCache || "/data/warrant-flow-latest.json", 10000, (warrantFlowSummary && warrantFlowSummary.updatedAt) || "", force);
+    warrantFlowChipData = normalizeSingleWarrantRows(payload);
+    if (!rows.length || !isApiWarrantPayload(payload)) {
+      payload = await fetchVersionedJson(warrantFlowApiEndpoint(120), 10000, (warrantFlowSummary && warrantFlowSummary.updatedAt) || "", force);
       rows = normalizeWarrantVolumeRows(payload);
-      warrantFlowChipData = normalizeArray(payload && payload.singleSignals);
+      warrantFlowChipData = normalizeSingleWarrantRows(payload);
     }
-    if (!rows.length) {
-      payload = await fetchVersionedJson(endpoints.warrantFlowMobileTop || "/data/warrant-flow-mobile-top.json", 8000, (warrantFlowSummary && warrantFlowSummary.updatedAt) || "", force);
-      rows = normalizeWarrantVolumeRows(payload);
-      warrantFlowChipData = normalizeArray(payload && payload.singleSignals);
-    }
-    if (!warrantFlowChipData.length) {
-      const chipPayload = await fetchVersionedJson(endpoints.warrantFlowSingleSignal || "/data/warrant-single-signal-top.json", 7000, (warrantFlowSummary && warrantFlowSummary.updatedAt) || "", true);
-      warrantFlowChipData = normalizeSingleWarrantRows(chipPayload);
-    }
-    warrantFlowData = rows;
-    warrantFlowPrioritySignature = "";
-    warrantFlowLastRenderSignature = "";
+    if (!rows.length || !isApiWarrantPayload(payload)) return;
+    applyWarrantFlowSnapshot({ ...(payload || {}), rows, volumeMatches: rows, singleSignals: warrantFlowChipData });
     warrantFlowPage = 1;
-    const updatedAt = Date.parse((payload && payload.updatedAt) || "");
-    warrantFlowUpdatedAt = Number.isFinite(updatedAt) ? updatedAt : Date.now();
-    saveWarrantFlowLocalCache();
+    saveWarrantFlowLocalCache(payload);
     applyStaticTitleIcons();
     renderWarrantFlow();
   } catch (error) {

@@ -4,7 +4,8 @@ const path = require("path");
 
 const ROOT = path.resolve(__dirname, "..");
 const BASE_URL = (process.env.FUMAN_VERIFY_BASE_URL || "https://fuman-terminal.vercel.app").replace(/\/+$/, "");
-const LIVE = process.argv.includes("--live") || process.env.FUMAN_WARRANT_FRESHNESS_LIVE === "1";
+const STATIC = process.argv.includes("--static") || process.env.FUMAN_VERIFY_WARRANT_STATIC === "1";
+const LIVE = !STATIC;
 const LOCAL_DATA_DIR = process.env.FUMAN_VERIFY_DATA_DIR || path.join(ROOT, "data");
 
 const FILES = {
