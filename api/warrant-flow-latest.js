@@ -248,7 +248,40 @@ async function fetchLatestCompleteRun() {
   return rows[0]?.run_id ? rows[0] : null;
 }
 
-async function fetchRecentCompleteRuns(limit = 8) {
+async function fetchRecentCompleteRunsFromResults(limit = 6000) {
+  const byRun = new Map();
+  let beforeUpdatedAt = "";
+  for (let page = 0; page < 8 && byRun.size < limit; page += 1) {
+    const query = [
+      "select=run_id,scan_date,complete,quality_status,schema_version,data_contract_source,generated_at,updated_at",
+      "strategy=eq.warrant_flow",
+      "complete=eq.true",
+      "order=updated_at.desc",
+      "limit=1000",
+    ];
+    if (beforeUpdatedAt) query.push(`updated_at=lt.${encodeURIComponent(beforeUpdatedAt)}`);
+    const rows = await fetchRowsFrom(TABLE, query.join("&"));
+    if (!rows.length) break;
+    for (const row of rows) {
+      const runId = String(row?.run_id || "");
+      if (!runId || byRun.has(runId)) continue;
+      byRun.set(runId, {
+        run_id: runId,
+        scan_date: row.scan_date,
+        finished_at: row.generated_at || row.updated_at,
+        quality_status: row.quality_status,
+        schema_version: row.schema_version,
+        data_contract_source: row.data_contract_source,
+        complete: row.complete,
+      });
+    }
+    beforeUpdatedAt = String(rows[rows.length - 1]?.updated_at || "");
+    if (rows.length < 1000 || !beforeUpdatedAt) break;
+  }
+  return Array.from(byRun.values());
+}
+
+async function fetchRecentCompleteRuns(limit = 24) {
   const rows = await fetchRowsFrom(
     LATEST_RUN_VIEW,
     [
@@ -260,7 +293,18 @@ async function fetchRecentCompleteRuns(limit = 8) {
       `limit=${limit}`,
     ].join("&")
   );
-  return rows.filter((row) => row?.run_id);
+  const merged = [];
+  const seen = new Set();
+  const addRun = (run) => {
+    const runId = String(run?.run_id || "");
+    if (!runId || seen.has(runId)) return;
+    seen.add(runId);
+    merged.push(run);
+  };
+  rows.forEach(addRun);
+  const resultRuns = await fetchRecentCompleteRunsFromResults();
+  resultRuns.forEach(addRun);
+  return merged.slice(0, limit);
 }
 
 async function fetchRowsForRun(run) {
@@ -279,14 +323,34 @@ async function fetchRowsForRun(run) {
 
 async function fetchLatestCompleteRows() {
   const runs = await fetchRecentCompleteRuns();
+  const skippedInvalidRuns = [];
   for (const run of runs) {
     if (run.result_count !== undefined && cleanNumber(run.result_count) <= 0) continue;
     const rows = await fetchRowsForRun(run);
-    if (rows.length) return { rows, run };
+    if (!rows.length) continue;
+    const payload = buildPayload(rows, run);
+    const dataContract = validateDataContract(payload);
+    if (dataContract.ok) return { rows, run, skippedInvalidRuns };
+    skippedInvalidRuns.push({
+      runId: String(run.run_id || ""),
+      finishedAt: String(run.finished_at || ""),
+      issues: dataContract.issues,
+    });
   }
   const run = await fetchLatestCompleteRun();
-  if (!run?.run_id) return { rows: [], run: runs[0] || null };
-  return { rows: await fetchRowsForRun(run), run };
+  if (!run?.run_id) return { rows: [], run: runs[0] || null, skippedInvalidRuns };
+  const rows = await fetchRowsForRun(run);
+  const payload = buildPayload(rows, run);
+  const dataContract = validateDataContract(payload);
+  if (rows.length && dataContract.ok) return { rows, run, skippedInvalidRuns };
+  if (rows.length) {
+    skippedInvalidRuns.push({
+      runId: String(run.run_id || ""),
+      finishedAt: String(run.finished_at || ""),
+      issues: dataContract.issues,
+    });
+  }
+  return { rows: [], run, skippedInvalidRuns };
 }
 
 function buildMarketSession(tradingDay, payload) {
@@ -352,6 +416,13 @@ module.exports = async function handler(request, response) {
       return;
     }
     const payload = buildPayload(latest.rows, latest.run);
+    if (latest.skippedInvalidRuns?.length) {
+      payload.transport = {
+        ...(payload.transport || {}),
+        gate: "contract_valid_run",
+        skippedInvalidRuns: latest.skippedInvalidRuns,
+      };
+    }
     const dataContract = validateDataContract(payload);
     payload.dataContract = dataContract;
     if (!dataContract.ok) {
