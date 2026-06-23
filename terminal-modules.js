@@ -1,5 +1,5 @@
 (function () {
-  const VERSION = "public-terminal-fast-20260623-09";
+  const VERSION = "strategy1-two-cards-20260623-03";
   const modules = {
     sectorMap: { loaded: false, src: "terminal-sector-map.js" },
     strategyConfig: { loaded: false, src: "terminal-strategy-config.js" },
