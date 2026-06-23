@@ -13,6 +13,7 @@
   let appPromise = null;
 
   installDesktopApiPollingCache();
+  installInstantViewSwitch();
 
   function mark(name) {
     if (!("performance" in window) || !performance.mark) return;
@@ -47,6 +48,49 @@
 
   function loadDependencies() {
     return Promise.all(dependencyScripts.map((item) => loadScriptOnce(item)));
+  }
+
+  function installInstantViewSwitch() {
+    if (window.__fumanInstantViewSwitch) return;
+    window.__fumanInstantViewSwitch = true;
+    const panels = {
+      market: "#market-view",
+      strategy: "#strategy-view",
+      watchlist: "#watchlist-view",
+      "chip-trade": "#chip-trade-view",
+      "cb-detect": "#cb-detect-view",
+      "warrant-flow": "#warrant-flow-view",
+      member: "#member-view",
+    };
+    const switchNow = (link) => {
+      const view = link?.dataset?.view;
+      const selector = panels[view];
+      if (!selector) return;
+      const panel = document.querySelector(selector);
+      if (!panel) return;
+      document.querySelectorAll(".view-panel").forEach((item) => {
+        const active = item === panel;
+        item.classList.toggle("active", active);
+        item.hidden = !active;
+      });
+      document.querySelectorAll("[data-view]").forEach((item) => {
+        item.classList.toggle("active", item === link);
+      });
+      document.body.dataset.fumanInstantView = view;
+      if ("performance" in window && performance.mark) {
+        try { performance.mark(`fuman:instant-view:${view}`); } catch (error) {}
+      }
+    };
+    document.addEventListener("pointerdown", (event) => {
+      const link = event.target.closest("[data-view]");
+      if (!link || link.closest("[data-member-tab]")) return;
+      switchNow(link);
+    }, true);
+    document.addEventListener("keydown", (event) => {
+      if (event.key !== "Enter" && event.key !== " ") return;
+      const link = event.target.closest("[data-view]");
+      if (link) switchNow(link);
+    }, true);
   }
 
   function installDesktopApiPollingCache() {
