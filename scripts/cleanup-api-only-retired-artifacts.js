@@ -1,5 +1,6 @@
 const fs = require("fs");
 const path = require("path");
+const { spawnSync } = require("child_process");
 
 const REPO_ROOT = path.resolve(__dirname, "..");
 const DEFAULT_ROOTS = [
@@ -256,6 +257,94 @@ function listRetiredDataFiles(root) {
   return matched;
 }
 
+function runGit(root, args) {
+  const result = spawnSync("git", args, {
+    cwd: root,
+    encoding: "utf8",
+    windowsHide: true,
+  });
+  return {
+    ok: result.status === 0,
+    status: result.status,
+    stdout: String(result.stdout || "").trim(),
+    stderr: String(result.stderr || "").trim(),
+  };
+}
+
+function parseBranchLine(line) {
+  const text = String(line || "").trim();
+  const match = text.match(/^##\s+([^\s.]+)(?:\.\.\.([^\s]+))?(?:\s+\[(.+)\])?/);
+  if (!match) return { branch: "", upstream: "", ahead: 0, behind: 0 };
+  const state = String(match[3] || "");
+  const ahead = Number((state.match(/ahead\s+(\d+)/) || [])[1] || 0);
+  const behind = Number((state.match(/behind\s+(\d+)/) || [])[1] || 0);
+  return { branch: match[1] || "", upstream: match[2] || "", ahead, behind };
+}
+
+function scanGitWorktreeHealth(root, result) {
+  if (!fs.existsSync(path.join(root, ".git"))) return;
+  const branch = runGit(root, ["status", "-sb"]);
+  const porcelain = runGit(root, ["status", "--porcelain=v1"]);
+  const git = {
+    ok: branch.ok && porcelain.ok,
+    branch: "",
+    upstream: "",
+    ahead: 0,
+    behind: 0,
+    dirtyCount: 0,
+    modifiedCount: 0,
+    deletedCount: 0,
+    untrackedCount: 0,
+    sample: [],
+    error: "",
+  };
+  if (!branch.ok || !porcelain.ok) {
+    git.error = branch.stderr || porcelain.stderr || "git status failed";
+    result.issues.push({ path: root, reason: "git-status-failed", message: git.error });
+    result.git = git;
+    return;
+  }
+  Object.assign(git, parseBranchLine(branch.stdout.split(/\r?\n/)[0] || ""));
+  const dirty = porcelain.stdout.split(/\r?\n/).map((line) => line.trimEnd()).filter(Boolean);
+  git.dirtyCount = dirty.length;
+  git.deletedCount = dirty.filter((line) => line.startsWith("D ") || line.startsWith(" D")).length;
+  git.untrackedCount = dirty.filter((line) => line.startsWith("??")).length;
+  git.modifiedCount = dirty.filter((line) => /^.{0,2}M/.test(line) || /^M/.test(line)).length;
+  git.sample = dirty.slice(0, 80);
+  if (git.behind > 0) {
+    result.issues.push({
+      path: root,
+      reason: "git-behind-origin-main",
+      branch: git.branch,
+      upstream: git.upstream,
+      behind: git.behind,
+      message: `worktree is behind ${git.upstream || "upstream"} by ${git.behind} commit(s)`,
+    });
+  }
+  if (git.ahead > 0) {
+    result.issues.push({
+      path: root,
+      reason: "git-ahead-origin-main",
+      branch: git.branch,
+      upstream: git.upstream,
+      ahead: git.ahead,
+      message: `worktree is ahead of ${git.upstream || "upstream"} by ${git.ahead} commit(s)`,
+    });
+  }
+  if (git.dirtyCount > 0) {
+    result.issues.push({
+      path: root,
+      reason: "git-worktree-dirty",
+      dirtyCount: git.dirtyCount,
+      modifiedCount: git.modifiedCount,
+      deletedCount: git.deletedCount,
+      untrackedCount: git.untrackedCount,
+      message: `worktree has ${git.dirtyCount} dirty file(s)`,
+    });
+  }
+  result.git = git;
+}
+
 function pruneMatchingDirectories(parentDir, predicate, result, dryRun) {
   if (!fs.existsSync(parentDir)) return;
   for (const entry of fs.readdirSync(parentDir, { withFileTypes: true })) {
@@ -337,7 +426,7 @@ function pruneStaleRuntimeFrontPageFiles(runtimeRoot, result, dryRun) {
 }
 
 function cleanupRoot(root, args) {
-  const result = { root, exists: fs.existsSync(root), deleted: [], skipped: [], issues: [] };
+  const result = { root, exists: fs.existsSync(root), deleted: [], skipped: [], issues: [], git: null };
   if (!result.exists) return result;
   for (const rel of [...EXACT_RETIRED, ...listRetiredDataFiles(root)]) {
     rmFile(root, rel, result, args.dryRun);
@@ -347,6 +436,7 @@ function cleanupRoot(root, args) {
   }
   scanRetiredEntrypointMarkers(root, result);
   scanRetiredStrategy1Markers(root, result);
+  scanGitWorktreeHealth(root, result);
   return result;
 }
 
