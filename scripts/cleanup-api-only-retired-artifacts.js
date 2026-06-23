@@ -46,7 +46,14 @@ const EXACT_RETIRED = [
   "data/chip-trade-health-latest.json",
   "data/data-freshness-report.json",
   "data/fugle-open-rebound-latest.json",
+  "data/heatmap-latest.json",
   "data/institution-mobile-top.json",
+  "data/market-summary.json",
+  "data/mobile-boot.json",
+  "data/mobile-terminal-latest.json",
+  "data/terminal-home-mobile-slim.json",
+  "data/data-manifest.json",
+  "data/data-status-index.json",
   "data/live-freshness-ok.json",
   "data/open-buy-latest.json",
   "data/open-buy-backup.json",
@@ -102,6 +109,15 @@ const RETIRED_PREFIXES = [
 
 const RUNTIME_RETENTION_DAYS = Number(process.env.FUMAN_API_ONLY_CLEANUP_RUNTIME_RETENTION_DAYS || 14);
 const LOG_RETENTION_DAYS = Number(process.env.FUMAN_API_ONLY_CLEANUP_LOG_RETENTION_DAYS || 30);
+const RUNTIME_STALE_FRONT_PAGE_FILES = [
+  "data/heatmap-latest.json",
+  "data/market-summary.json",
+  "data/mobile-boot.json",
+  "data/mobile-terminal-latest.json",
+  "data/terminal-home-mobile-slim.json",
+  "data/data-manifest.json",
+  "data/data-status-index.json",
+];
 
 function parseArgs(argv) {
   const args = { dryRun: false, roots: [], runtimeRoot: DEFAULT_RUNTIME_ROOT, json: false, writeStatus: true };
@@ -179,6 +195,56 @@ function pruneOldFiles(dir, maxAgeDays, result, dryRun) {
   }
 }
 
+function taipeiDateKey(date) {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Taipei",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(date);
+}
+
+function extractDateKeys(value, keys = new Set()) {
+  if (!value || typeof value !== "object") return keys;
+  for (const [key, item] of Object.entries(value)) {
+    if (/date/i.test(key) && typeof item === "string") {
+      const compact = item.replace(/[^0-9]/g, "");
+      if (/^20[0-9]{6}$/.test(compact)) keys.add(compact.slice(0, 4) + "-" + compact.slice(4, 6) + "-" + compact.slice(6, 8));
+      else if (/^20[0-9]{2}-[0-9]{2}-[0-9]{2}$/.test(item)) keys.add(item.slice(0, 10));
+    } else if (item && typeof item === "object") {
+      extractDateKeys(item, keys);
+    }
+  }
+  return keys;
+}
+
+function isRuntimeFrontPageStale(file, todayKey) {
+  const stat = fs.statSync(file);
+  if (taipeiDateKey(stat.mtime) < todayKey) return true;
+  try {
+    const parsed = JSON.parse(fs.readFileSync(file, "utf8"));
+    const keys = extractDateKeys(parsed);
+    if (keys.size && !keys.has(todayKey) && [...keys].every((key) => key < todayKey)) return true;
+  } catch {}
+  return false;
+}
+
+function pruneStaleRuntimeFrontPageFiles(runtimeRoot, result, dryRun) {
+  const todayKey = taipeiDateKey(new Date());
+  for (const rel of RUNTIME_STALE_FRONT_PAGE_FILES) {
+    const target = path.join(runtimeRoot, rel);
+    if (!fs.existsSync(target)) continue;
+    if (!isInside(runtimeRoot, target)) {
+      result.skipped.push({ path: target, reason: "outside-runtime-root" });
+      continue;
+    }
+    if (!fs.statSync(target).isFile()) continue;
+    if (!isRuntimeFrontPageStale(target, todayKey)) continue;
+    if (!dryRun) fs.unlinkSync(target);
+    result.deleted.push(target);
+  }
+}
+
 function cleanupRoot(root, args) {
   const result = { root, exists: fs.existsSync(root), deleted: [], skipped: [] };
   if (!result.exists) return result;
@@ -201,6 +267,7 @@ async function main() {
   const runtimeResult = { root: args.runtimeRoot, deleted: [], skipped: [] };
   pruneOldFiles(path.join(args.runtimeRoot, "archive", "strategy2-intraday", "static-latest"), RUNTIME_RETENTION_DAYS, runtimeResult, args.dryRun);
   pruneOldFiles(path.join(args.runtimeRoot, "logs"), LOG_RETENTION_DAYS, runtimeResult, args.dryRun);
+  pruneStaleRuntimeFrontPageFiles(args.runtimeRoot, runtimeResult, args.dryRun);
 
   const payload = {
     ok: true,
