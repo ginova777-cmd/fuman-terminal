@@ -3339,7 +3339,7 @@ async function main() {
   const ma35Map = await fetchMa35Map(realtimeStocks, timestamp, cache);
   const liveStocks = realtimeStocks.map((stock) => {
     const ma35Info = ma35Map.get(stock.code) || {};
-    return {
+    const merged = {
       ...stock,
       ma35: ma35Info.ma35 || 0,
       ma35Prev: ma35Info.ma35Prev || 0,
@@ -3354,6 +3354,10 @@ async function main() {
       latest1mClose: ma35Info.latest1mClose || 0,
       latest1mPrevClose: ma35Info.latest1mPrevClose || 0,
       latest1mVolume: ma35Info.latest1mVolume || 0,
+      recent60High: ma35Info.recent60High || 0,
+      previousTwoHigh: ma35Info.previousTwoHigh || 0,
+      breakoutPreviousTwoHigh: Boolean(ma35Info.breakoutPreviousTwoHigh),
+      nearRecent60High: Boolean(ma35Info.nearRecent60High),
       macdDif: ma35Info.macdDif || 0,
       macdDifPrev: ma35Info.macdDifPrev || 0,
       macdSignal: ma35Info.macdSignal || 0,
@@ -3381,6 +3385,13 @@ async function main() {
       npsy: ma35Info.npsy || 0,
       npsyPrev: ma35Info.npsyPrev || 0,
       npsyUp: Boolean(ma35Info.npsyUp),
+    };
+    const amplitude = openAmplitudePercent(merged);
+    return {
+      ...merged,
+      prevClosePercent: cleanNumber(stock.percent),
+      amplitudePercent: amplitude,
+      percent: amplitude,
     };
   });
   const ranks = buildRanks(liveStocks);
@@ -3487,6 +3498,75 @@ async function main() {
         ...standaloneMeta,
       });
       broadcastStrategy2CandidateHit(cache.records[cache.records.length - 1]).catch(() => {});
+      added += 1;
+    }
+    const motherPoolMeta = buildStrategy2MotherPoolMeta(scanStock);
+    const hasMotherPoolDuplicate = cache.records.some((record) => (
+      record.code === scanStock.code
+      && record.timestamp === timestamp
+      && (record.strategyIds || []).includes("strategy2_mother_pool")
+    ));
+    if (motherPoolMeta.ok && !hasMotherPoolDuplicate) {
+      cache.records.push({
+        date: key,
+        timestamp,
+        entryAt: timestamp,
+        code: scanStock.code,
+        name: scanStock.name,
+        strategy: motherPoolMeta.primaryStrategy,
+        stateId: "watch",
+        stateLabel: "待確認",
+        stateReason: motherPoolMeta.strategyReasons[0] || "符合策略2母池，等待 1分K/MA35/MACD/KD 進一步確認。",
+        score: Math.min(88, Math.max(50, Math.round(48 + Math.max(0, cleanNumber(scanStock.percent)) * 4))),
+        entryPrice: scanStock.close,
+        observedPrice: scanStock.close,
+        quoteTime: scanStock.quoteTime || scanStock.time || "",
+        quoteSource: scanStock.quoteSource || scanStock.realtimeFallback || scanStock.closeSource || "api/realtime",
+        sourceCoverage: Number(entrySourceCoverage.toFixed(4)),
+        sourceCoverageHealthy: technicalEntryHealthy,
+        observedHigh: scanStock.close,
+        observedHighAt: timestamp,
+        observedLow: scanStock.close,
+        observedLowAt: timestamp,
+        dayHigh: scanStock.high || scanStock.close,
+        dayHighAt: timestamp,
+        dayLow: scanStock.low || scanStock.close,
+        dayLowAt: timestamp,
+        volume: scanStock.tradeVolume,
+        value: scanStock.value,
+        avg5dVolume: scanStock.avg5dVolume,
+        cumulativeBidVolume: scanStock.cumulativeBidVolume,
+        cumulativeAskVolume: scanStock.cumulativeAskVolume,
+        percent: scanStock.percent,
+        reason: motherPoolMeta.strategyReasons.join("；"),
+        signalId: "strategy2_mother_pool",
+        deltaVolume,
+        ma35: scanStock.ma35,
+        ma35Prev: scanStock.ma35Prev,
+        aboveMa35: strategy2TechFlags(scanStock).aboveMa35,
+        ma35TrendUp: strategy2TechFlags(scanStock).ma35Rising,
+        ma35Source: scanStock.ma35Source,
+        ma35Symbol: scanStock.ma35Symbol,
+        ma35At: scanStock.ma35At,
+        macdDif: scanStock.macdDif,
+        macdSignal: scanStock.macdSignal,
+        macdHist: scanStock.macdHist,
+        macdUp: scanStock.macdUp,
+        kdK: scanStock.kdK,
+        kdD: scanStock.kdD,
+        kdUp: scanStock.kdUp,
+        rsi5: scanStock.rsi5,
+        rsi5Prev: scanStock.rsi5Prev,
+        rsi10: scanStock.rsi10,
+        rsi10Prev: scanStock.rsi10Prev,
+        rsiUp: scanStock.rsiUp,
+        npsy: scanStock.npsy,
+        npsyPrev: scanStock.npsyPrev,
+        npsyUp: scanStock.npsyUp,
+        intradayVolumeBurst: deltaVolume >= 50 || cleanNumber(scanStock.tradeVolume) >= 10000,
+        recoveredFromRealtimeFallback: Boolean(scanStock.recoveredFromRealtimeFallback),
+        ...motherPoolMeta,
+      });
       added += 1;
     }
     signals.forEach((signal) => {
