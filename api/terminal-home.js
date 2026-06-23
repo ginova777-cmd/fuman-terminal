@@ -25,10 +25,6 @@ const SUPABASE_KEY = process.env.SUPABASE_ANON_KEY
 const OPEN_BUY_RUN_VIEW = process.env.SUPABASE_OPEN_BUY_LATEST_RUN_VIEW || "v_strategy1_open_buy_latest_complete_run";
 const OPEN_BUY_RESULTS_TABLE = process.env.SUPABASE_OPEN_BUY_RESULTS_TABLE || "strategy1_open_buy_results";
 
-function readJson(file, fallback = {}) {
-  try { return JSON.parse(fs.readFileSync(path.join(process.cwd(), file), "utf8")); } catch { return fallback; }
-}
-
 function createCaptureResponse() {
   return {
     statusCode: 200,
@@ -164,15 +160,17 @@ async function fetchOpenBuyLatest(base) {
       },
     };
   } catch (error) {
-    const fallback = base?.strategies?.openBuy || readJson("data/open-buy-latest.json", {});
     return {
-      ...fallback,
-      cacheSource: "static-fallback",
+      ok: false,
+      error: "strategy1_open_buy_unavailable",
+      reason: error?.message || String(error),
+      cacheSource: "none",
+      count: 0,
+      matches: [],
       transport: {
-        ...(fallback.transport || {}),
-        source: "static-json",
+        source: "none",
         via: "api/terminal-home",
-        fallbackReason: error?.message || String(error),
+        gate: "api-only-no-static-fallback",
         fetchedAt: new Date().toISOString(),
       },
     };
@@ -203,8 +201,7 @@ function buildHomePayload(base, parts) {
   const strategy5 = parts.strategy5 || {};
   const institution = parts.institution || {};
   const warrant = parts.warrant || {};
-  const fallback = base && typeof base === "object" ? base : {};
-  const mobile = fallback.mobile && typeof fallback.mobile === "object" ? { ...fallback.mobile } : {};
+  const mobile = {};
 
   mobile.strategy2 = {
     updatedAt: strategy2.updatedAt || strategy2.generatedAt || mobile.strategy2?.updatedAt || "",
@@ -231,7 +228,6 @@ function buildHomePayload(base, parts) {
   };
 
   const statusEntries = {
-    ...(fallback.status?.entries || {}),
     "institution-latest.json": buildStatusEntry(institution, "supabase:institution_scan_results"),
     "warrant-flow-latest.json": buildStatusEntry(warrant, "supabase:warrant_flow_scan_results"),
     "open-buy-latest.json": buildStatusEntry(openBuy, "supabase:strategy1_open_buy_results"),
@@ -242,21 +238,18 @@ function buildHomePayload(base, parts) {
   };
 
   return {
-    ...fallback,
     ok: true,
     source: "terminal-home-sql-gate",
     cacheSource: "supabase-api",
     updatedAt: now,
     mobile,
     status: {
-      ...(fallback.status || {}),
       ok: true,
       source: "terminal-home-sql-gate-status",
       updatedAt: now,
       entries: statusEntries,
     },
     strategies: {
-      ...(fallback.strategies || {}),
       openBuy: {
         updatedAt: openBuy.updatedAt || openBuy.generatedAt || "",
         date: openBuy.usedDate || openBuy.date || "",
@@ -315,16 +308,7 @@ function buildHomePayload(base, parts) {
       via: "api/terminal-home",
       gate: "sql-run-id-complete",
       fetchedAt: now,
-      fallbacks: {
-        staticBundle: fallback?.source || "",
-        openBuy: parts.openBuy?.cacheSource === "static-fallback",
-        strategy2: parts.strategy2?.cacheSource === "static-fallback",
-        strategy3: parts.strategy3?.cacheSource === "static-fallback",
-        strategy4: parts.strategy4?.cacheSource === "static-fallback",
-        strategy5: parts.strategy5?.cacheSource === "static-fallback",
-        institution: parts.institution?.cacheSource === "static-fallback",
-        warrant: parts.warrant?.cacheSource === "static-fallback",
-      },
+      fallbacks: {},
       runIds: {
         institution: institution.runId || institution.transport?.runId || "",
         warrant: warrant.runId || warrant.transport?.runId || "",
@@ -348,10 +332,9 @@ module.exports = async function handler(request, response) {
     return;
   }
 
-  const base = readJson("data/terminal-home-bundle.json", { ok: true, source: "terminal-home-bundle-fallback" });
   try {
     const [openBuy, strategy2, strategy3, strategy4, strategy5, institution, warrant] = await Promise.all([
-      fetchOpenBuyLatest(base),
+      fetchOpenBuyLatest(),
       callJson(strategy2Latest, request),
       callJson(strategy3Latest, request),
       callJson(strategy4Latest, request),
@@ -359,15 +342,19 @@ module.exports = async function handler(request, response) {
       callJson(institutionLatest, request),
       callJson(warrantFlowLatest, request),
     ]);
-    response.status(200).json(buildHomePayload(base, { openBuy, strategy2, strategy3, strategy4, strategy5, institution, warrant }));
+    response.status(200).json(buildHomePayload(null, { openBuy, strategy2, strategy3, strategy4, strategy5, institution, warrant }));
   } catch (error) {
-    response.status(200).json({
-      ...base,
-      cacheSource: "static-fallback",
+    response.status(503).json({
+      ok: false,
+      error: "terminal_home_api_only_unavailable",
+      reason: error?.message || String(error),
+      cacheSource: "none",
+      strategies: {},
+      status: { ok: false, entries: {} },
       transport: {
-        source: "static-json",
+        source: "none",
         via: "api/terminal-home",
-        fallbackReason: error?.message || String(error),
+        gate: "api-only-no-static-fallback",
         fetchedAt: new Date().toISOString(),
       },
     });

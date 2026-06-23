@@ -201,22 +201,22 @@ async function fetchRadarCachePayload() {
   return { row: null, mode: "", error: errors.join(" | ") };
 }
 
-function staticFallback(reason = "") {
-  try {
-    const payload = JSON.parse(fs.readFileSync(path.join(__dirname, "..", "data", "realtime-radar-latest.json"), "utf8"));
-    return {
-      ...payload,
-      cacheSource: "static-fallback",
-      transport: {
-        source: "static-json",
-        via: "api/realtime-radar-latest",
-        fallbackReason: reason,
-        fetchedAt: new Date().toISOString(),
-      },
-    };
-  } catch (error) {
-    return { ok: false, error: "realtime_radar_static_fallback_failed", detail: error?.message || String(error) };
-  }
+function unavailablePayload(reason = "") {
+  return {
+    ok: false,
+    error: "realtime_radar_supabase_unavailable",
+    reason,
+    cacheSource: "none",
+    source: "api-only",
+    count: 0,
+    rows: [],
+    transport: {
+      source: "none",
+      via: "api/realtime-radar-latest",
+      gate: "api-only-no-static-fallback",
+      fetchedAt: new Date().toISOString(),
+    },
+  };
 }
 
 module.exports = async function handler(request, response) {
@@ -235,9 +235,9 @@ module.exports = async function handler(request, response) {
     });
 
     if (!SUPABASE_URL || !SUPABASE_KEY) {
-      const payload = staticFallback("supabase_not_configured");
+      const payload = unavailablePayload("supabase_not_configured");
       const session = buildMarketSession(tradingDay, payload);
-      response.status(200).json(withMarketSession(payload, session, session.closed ? "non-trading-day-cache" : "supabase_not_configured"));
+      response.status(503).json(withMarketSession(payload, session, "supabase_not_configured"));
       return;
     }
 
@@ -246,7 +246,13 @@ module.exports = async function handler(request, response) {
     let primaryError = radarCache.error || "";
 
     if (!tradingDay.isTradingDay) {
-      const payload = row?.payload ? {
+      if (!row?.payload) {
+        const payload = unavailablePayload(primaryError || "non_trading_day_supabase_cache_empty");
+        const session = buildMarketSession(tradingDay, payload);
+        response.status(503).json(withMarketSession(payload, session, "non_trading_day_supabase_cache_empty"));
+        return;
+      }
+      const payload = {
         ...row.payload,
         updatedAt: row.payload.updatedAt || row.updated_at,
         cacheSource: "supabase-radar-cache",
@@ -255,7 +261,7 @@ module.exports = async function handler(request, response) {
           table: TABLE,
           mode: radarCache.mode,
         },
-      } : staticFallback(primaryError || "non_trading_day_static_fallback");
+      };
       const session = buildMarketSession(tradingDay, payload);
       response.status(200).json(withMarketSession(payload, session, "non-trading-day-cache"));
       return;
@@ -273,9 +279,9 @@ module.exports = async function handler(request, response) {
       } catch (error) {
         primaryError = [primaryError, error?.message || String(error)].filter(Boolean).join(" | ");
       }
-      const payload = staticFallback(primaryError || "realtime_radar_latest_empty");
+      const payload = unavailablePayload(primaryError || "realtime_radar_latest_empty");
       const session = buildMarketSession(tradingDay, payload);
-      response.status(200).json(withMarketSession(payload, session));
+      response.status(503).json(withMarketSession(payload, session, "realtime_radar_latest_empty"));
       return;
     }
 
@@ -294,8 +300,8 @@ module.exports = async function handler(request, response) {
     const session = buildMarketSession(tradingDay, payload);
     response.status(200).json(withMarketSession(payload, session));
   } catch (error) {
-    const payload = staticFallback(error?.message || String(error));
-    const session = buildMarketSession({ isTradingDay: false, reason: "trading-day-check-failed", source: "fallback" }, payload);
-    response.status(200).json(withMarketSession(payload, session, "non-trading-day-cache"));
+    const payload = unavailablePayload(error?.message || String(error));
+    const session = buildMarketSession({ isTradingDay: false, reason: "trading-day-check-failed", source: "api-only" }, payload);
+    response.status(503).json(withMarketSession(payload, session, "realtime_radar_api_error"));
   }
 };

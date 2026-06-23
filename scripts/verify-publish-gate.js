@@ -222,9 +222,11 @@ if (!/FAST_DEBOUNCE_SKIP/.test(cacheSync) || !/FUMAN_FAST_GATE_COMMIT_DEBOUNCE_M
 }
 for (const marker of [
   "realtimeRadarCache: \"/api/realtime-radar-latest\"",
-  "realtimeRadarStaticCache: \"/data/realtime-radar-latest.json\"",
 ]) {
   if (!runtimeConfig.includes(marker)) issues.push(`terminal-runtime-config.js missing live realtime radar endpoint marker ${marker}`);
+}
+if (/realtimeRadarStaticCache:\s*"\/data\/realtime-radar-latest\.json"/.test(runtimeConfig)) {
+  issues.push("terminal-runtime-config.js must not expose realtime radar static cache fallback");
 }
 for (const marker of [
   "openBuyCache: \"/api/open-buy-latest\"",

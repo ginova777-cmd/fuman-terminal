@@ -46,7 +46,7 @@ function normalizePayload(payload, cacheSource, transport = {}) {
     strategies: payload?.strategies && typeof payload.strategies === "object" ? payload.strategies : {},
     watchlistDetectWindow: {
       timezone: "Asia/Taipei",
-      reason: transport.reason || (hasSnapshot ? "supabase-snapshot" : "static-fallback"),
+      reason: transport.reason || (hasSnapshot ? "supabase-snapshot" : "api-only-unavailable"),
       hasSnapshot,
       taipeiDate: clock.date,
       taipeiTime: clock.time,
