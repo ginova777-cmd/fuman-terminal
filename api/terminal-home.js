@@ -23,6 +23,22 @@ async function callJson(handler, request) {
   return capture.body && typeof capture.body === "object" ? capture.body : { ok: false, error: "empty_api_payload" };
 }
 
+async function safeCall(label, loader) {
+  try {
+    const payload = await loader();
+    return payload && typeof payload === "object"
+      ? payload
+      : { ok: false, source: label, error: "empty_api_payload" };
+  } catch (error) {
+    return {
+      ok: false,
+      source: label,
+      error: "terminal_home_part_unavailable",
+      reason: error?.message || String(error),
+    };
+  }
+}
+
 function cleanNumber(value) {
   const number = Number(String(value ?? "").replace(/[,+%]/g, ""));
   return Number.isFinite(number) ? number : 0;
@@ -205,12 +221,15 @@ function buildHomePayload(base, parts) {
       gate: strategy4.transport?.gate || "",
       complete: strategy4.complete === true,
     },
+    partial: Object.values(parts).some((part) => part?.ok === false),
     transport: {
       source: "supabase",
       via: "api/terminal-home",
       gate: "sql-run-id-complete",
       fetchedAt: now,
-      fallbacks: {},
+      fallbacks: Object.fromEntries(Object.entries(parts)
+        .filter(([, part]) => part?.ok === false)
+        .map(([key, part]) => [key, part?.reason || part?.error || "unavailable"])),
       runIds: {
         institution: institution.runId || institution.transport?.runId || "",
         warrant: warrant.runId || warrant.transport?.runId || "",
@@ -236,13 +255,13 @@ module.exports = async function handler(request, response) {
 
   try {
     const [openBuy, strategy2, strategy3, strategy4, strategy5, institution, warrant] = await Promise.all([
-      fetchOpenBuyLatest(),
-      callJson(latestStrategy, { ...request, query: { key: strategy2 } }),
-      callJson(strategy3Latest, request),
-      callJson(strategy4Latest, request),
-      callJson(strategy5Latest, request),
-      callJson(institutionLatest, request),
-      callJson(warrantFlowLatest, request),
+      safeCall("openBuy", () => fetchOpenBuyLatest()),
+      safeCall("strategy2", () => callJson(latestStrategy, { ...request, query: { ...(request.query || {}), key: "strategy2" } })),
+      safeCall("strategy3", () => callJson(strategy3Latest, request)),
+      safeCall("strategy4", () => callJson(strategy4Latest, request)),
+      safeCall("strategy5", () => callJson(strategy5Latest, request)),
+      safeCall("institution", () => callJson(institutionLatest, request)),
+      safeCall("warrant", () => callJson(warrantFlowLatest, request)),
     ]);
     response.status(200).json(buildHomePayload(null, { openBuy, strategy2, strategy3, strategy4, strategy5, institution, warrant }));
   } catch (error) {
