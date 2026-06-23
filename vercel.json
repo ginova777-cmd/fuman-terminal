@@ -3,6 +3,28 @@
   "cleanUrls": true,
   "rewrites": [
     {
+      "source": "/",
+      "has": [
+        {
+          "type": "header",
+          "key": "sec-ch-ua-mobile",
+          "value": "\\?1"
+        }
+      ],
+      "destination": "/mobile.html"
+    },
+    {
+      "source": "/",
+      "has": [
+        {
+          "type": "header",
+          "key": "user-agent",
+          "value": ".*(Android|iPhone|iPad|iPod|Mobile|Windows Phone).*"
+        }
+      ],
+      "destination": "/mobile.html"
+    },
+    {
       "source": "/data/(open-buy|strategy2-intraday|strategy3|strategy4|strategy5|institution|warrant-flow|warrant-priority|warrant-single-signal|cb-detect)(.*).json",
       "destination": "/api/desktop-static-disabled"
     }
