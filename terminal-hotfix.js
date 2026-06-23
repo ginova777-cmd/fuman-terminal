@@ -1,6 +1,6 @@
 (function () {
-  if (window.__fumanTerminalHotfix === "20260623-06") return;
-  window.__fumanTerminalHotfix = "20260623-06";
+  if (window.__fumanTerminalHotfix === "20260623-07") return;
+  window.__fumanTerminalHotfix = "20260623-07";
 
   installDesktopApiPollingCache();
   installInstantViewSwitch();
@@ -20,6 +20,10 @@
     const style = document.createElement("style");
     style.id = "fuman-terminal-hotfix-style";
     style.textContent = `
+      html.fuman-desktop-fast-path,
+      html.fuman-desktop-fast-path body {
+        scroll-behavior: auto !important;
+      }
       body.fuman-view-switching .view-panel {
         transition: none !important;
       }
@@ -40,6 +44,7 @@
       }
     `;
     document.head.appendChild(style);
+    document.documentElement.classList.add("fuman-desktop-fast-path");
   }
 
   function installInstantViewSwitch() {
@@ -148,7 +153,7 @@
           }
           link.dispatchEvent(event);
         };
-        requestAnimationFrame(() => setTimeout(afterPaint, 8));
+        requestAnimationFrame(afterPaint);
       });
     };
     document.addEventListener("click", (event) => {
@@ -364,6 +369,8 @@
     const originalFetch = window.fetch.bind(window);
     const memory = new Map();
     const inflight = new Map();
+    const sessionPrefix = "FUMAN_DESKTOP_API_SESSION_CACHE:";
+    const sessionMaxBodyBytes = 900000;
     const skipPattern = /\/api\/(?:export|refresh|frontend-error|performance-report|version|terminal-theme-css|scan-|github|history|realtime(?:$|\?))/i;
     const apiPattern = /\/api\/(?:market|terminal-home|terminal-fast-bundle|market-ai|heatmap|stocks|watchlist-match-index|open-buy-latest|strategy[2345]-latest|latest-strategy|latest-signals|realtime-radar-latest|institution-latest|chip-trade|warrant-flow-latest|cb-detect-latest|mobile-boot|mobile-fragment)/i;
     const ttlFor = (pathname) => {
@@ -379,6 +386,34 @@
       statusText: record.statusText,
       headers: record.headers,
     });
+    const readSessionRecord = (key) => {
+      try {
+        const raw = sessionStorage.getItem(sessionPrefix + key);
+        if (!raw) return null;
+        const record = JSON.parse(raw);
+        if (!record || !Number.isFinite(Number(record.at)) || !Number.isFinite(Number(record.ttl))) return null;
+        if (Date.now() - Number(record.at) > Number(record.ttl)) {
+          sessionStorage.removeItem(sessionPrefix + key);
+          return null;
+        }
+        return record;
+      } catch (error) {
+        return null;
+      }
+    };
+    const writeSessionRecord = (key, record) => {
+      try {
+        if (!key || !record?.body || String(record.body).length > sessionMaxBodyBytes) return;
+        sessionStorage.setItem(sessionPrefix + key, JSON.stringify(record));
+      } catch (error) {
+        try {
+          Object.keys(sessionStorage)
+            .filter((keyName) => keyName.startsWith(sessionPrefix))
+            .slice(0, 8)
+            .forEach((keyName) => sessionStorage.removeItem(keyName));
+        } catch (cleanupError) {}
+      }
+    };
     const primeApiCache = (endpoints, meta = {}) => {
       if (!endpoints || typeof endpoints !== "object") return 0;
       let count = 0;
@@ -388,7 +423,7 @@
           if (!key || payload === undefined) return;
           if (payload && typeof payload === "object" && payload.ok === false) return;
           const pathname = new URL(endpoint, location.href).pathname;
-          memory.set(key, {
+          const record = {
             at: Date.now(),
             ttl: Math.max(ttlFor(pathname), 45000),
             status: 200,
@@ -399,7 +434,9 @@
               ["x-fuman-cache-reason", String(meta.reason || "")],
             ],
             body: JSON.stringify(payload),
-          });
+          };
+          memory.set(key, record);
+          writeSessionRecord(key, record);
           count += 1;
         } catch (error) {}
       });
@@ -424,6 +461,11 @@
       if (cached && now - cached.at <= cached.ttl) {
         return Promise.resolve(cloneFromRecord(cached));
       }
+      const sessionCached = readSessionRecord(key);
+      if (sessionCached) {
+        memory.set(key, sessionCached);
+        return Promise.resolve(cloneFromRecord(sessionCached));
+      }
       if (inflight.has(key)) {
         return inflight.get(key).then(cloneFromRecord);
       }
@@ -437,7 +479,10 @@
           headers: [...response.headers.entries()],
           body,
         };
-        if (response.ok) memory.set(key, record);
+        if (response.ok) {
+          memory.set(key, record);
+          writeSessionRecord(key, record);
+        }
         return record;
       }).finally(() => inflight.delete(key));
       inflight.set(key, task);

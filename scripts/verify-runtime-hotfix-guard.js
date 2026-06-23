@@ -3,7 +3,7 @@ const https = require("https");
 const path = require("path");
 
 const ROOT = path.resolve(__dirname, "..");
-const EXPECTED_HOTFIX = "20260623-06";
+const EXPECTED_HOTFIX = "20260623-07";
 const BASE_URL = (process.env.FUMAN_VERIFY_BASE_URL || "https://fuman-terminal.vercel.app").replace(/\/+$/, "");
 const LIVE = process.argv.includes("--live");
 
@@ -129,6 +129,9 @@ async function main() {
   requireMarker("terminal-hotfix.js", "FUMAN_HOTFIX_PRIME_API_CACHE");
   requireMarker("terminal-hotfix.js", "installHotPathDataWarmup");
   requireMarker("terminal-hotfix.js", "primeApiCache");
+  requireMarker("terminal-hotfix.js", "FUMAN_DESKTOP_API_SESSION_CACHE");
+  requireMarker("terminal-hotfix.js", "readSessionRecord");
+  requireMarker("terminal-hotfix.js", "fuman-desktop-fast-path");
 
   requireMarker("index.html", "/api/mobile-page");
   if (read("index.html").includes("fuman_force_desktop")) {
