@@ -4,6 +4,7 @@ const path = require("path");
 
 const ROOT = path.resolve(__dirname, "..");
 const EXPECTED_HOTFIX = "20260623-09";
+const EXPECTED_FRONTEND_VERSION = "public-terminal-fast-20260623-09";
 const BASE_URL = (process.env.FUMAN_VERIFY_BASE_URL || "https://fuman-terminal.vercel.app").replace(/\/+$/, "");
 const LIVE = process.argv.includes("--live");
 
@@ -142,6 +143,15 @@ async function main() {
   requireMarker("terminal.js", "FUMAN_PUBLIC_TERMINAL_UNLOCK");
   requireMarker("terminal-app.js", "status:\"public_terminal\"");
   requireMarker("terminal-app.js", "FUMAN_SUPABASE_URL&&FUMAN_SUPABASE_KEY");
+  requireMarker("version.json", EXPECTED_FRONTEND_VERSION);
+  requireMarker("terminal-core.js", `const version = "${EXPECTED_FRONTEND_VERSION}"`);
+  requireMarker("index.html", `terminal-core.js?v=${EXPECTED_FRONTEND_VERSION}`);
+  requireMarker("fuman-sw.js", `fuman-terminal-sw-${EXPECTED_FRONTEND_VERSION}`);
+  for (const file of ["version.json", "index.html", "terminal-core.js", "fuman-sw.js"]) {
+    if (read(file).includes("strategy1-two-cards-20260623-03")) {
+      issues.push(`${file} still contains retired frontend version`);
+    }
+  }
 
   requireMarker("index.html", "/api/mobile-page");
   requireMarker("index.html", "public-terminal");
