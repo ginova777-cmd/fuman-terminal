@@ -52,6 +52,67 @@
     return "strategy|unknown";
   }
 
+  function strategyMeta(linkOrKey) {
+    const text = typeof linkOrKey === "string"
+      ? linkOrKey
+      : (linkOrKey?.textContent || "").replace(/\s+/g, " ").trim();
+    if (text.includes("策略1")) {
+      return {
+        icon: "⚡",
+        title: "策略1-明日開盤入",
+        badge: "FMN://strategy.open-buy",
+        summary: "21:30 產生明日候選，08:55 最終確認，09:00 只執行 BUY 名單。",
+      };
+    }
+    if (text.includes("策略2")) {
+      return {
+        icon: "◔",
+        title: "策略2-當沖雷達",
+        badge: "FMN://strategy.intraday",
+        summary: "08:45-13:30 即時偵測，先切畫面，資料背景刷新。",
+      };
+    }
+    if (text.includes("策略3")) {
+      return {
+        icon: "◐",
+        title: "策略3-隔日沖",
+        badge: "FMN://strategy.overnight",
+        summary: "盤後籌碼與量價候選，先顯示快照，再同步最新資料。",
+      };
+    }
+    if (text.includes("策略4")) {
+      return {
+        icon: "└",
+        title: "策略4-波段",
+        badge: "FMN://strategy.swing",
+        summary: "波段區間與訊號分層，切頁不等待資料整理完成。",
+      };
+    }
+    if (text.includes("策略5")) {
+      return {
+        icon: "▰",
+        title: "策略5-綜合策略",
+        badge: "FMN://strategy.composite",
+        summary: "策略5 多分頁結果，固定殼先顯示，完整內容背景補齊。",
+      };
+    }
+    return {
+      icon: "◆",
+      title: "策略模組",
+      badge: "FMN://strategy.api",
+      summary: "正在切換策略畫面。",
+    };
+  }
+
+  function escapeHtml(value) {
+    return String(value ?? "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#39;");
+  }
+
   function activeStrategyRouteKey() {
     const active = document.querySelector('[data-view="strategy"].active');
     return strategyRouteKey(active) || activeSnapshotRoute;
@@ -186,6 +247,64 @@
     return false;
   }
 
+  function renderStrategyRouteShell(link, source) {
+    const panel = document.querySelector("#strategy-view");
+    if (!panel) return false;
+    const meta = strategyMeta(link);
+    panel.dataset.fumanRouteSnapshotRestoring = "1";
+    panel.classList.remove("strategy5-only", "strategy3-only", "swing-only", "open-buy-only");
+    const headerTitle = panel.querySelector(".strategy-header h1");
+    const headerText = panel.querySelector(".strategy-header p");
+    const headerBadge = panel.querySelector(".strategy-header .console-badge");
+    const toolbarTitle = panel.querySelector(".strategy-toolbar h2");
+    const toolbarBadge = panel.querySelector(".strategy-toolbar .console-badge");
+    const summary = panel.querySelector("#strategy-summary");
+    const count = panel.querySelector("#strategy-match-count");
+    const avg = panel.querySelector("#strategy-avg-score");
+    const top = panel.querySelector("#strategy-top-hit");
+    const table = panel.querySelector("#strategy-table");
+
+    if (headerTitle) headerTitle.textContent = `${meta.icon} ${meta.title}`;
+    if (headerText) headerText.textContent = meta.summary;
+    if (headerBadge) headerBadge.textContent = meta.badge;
+    if (toolbarTitle) toolbarTitle.textContent = meta.title;
+    if (toolbarBadge) toolbarBadge.textContent = meta.badge;
+    if (summary) summary.textContent = `${meta.title}｜畫面已切換，正在同步最新資料。`;
+    if (count) count.textContent = "--";
+    if (avg) avg.textContent = "--";
+    if (top) top.textContent = "--";
+    if (table) {
+      table.innerHTML = `
+        <section class="desktop-route-shell" data-route-shell="${escapeHtml(strategyRouteKey(link))}" data-route-source="${escapeHtml(source || "")}">
+          <div class="desktop-route-shell-head">
+            <span>${escapeHtml(meta.icon)}</span>
+            <div>
+              <h2>${escapeHtml(meta.title)}</h2>
+              <p>${escapeHtml(meta.summary)}</p>
+            </div>
+          </div>
+          <div class="desktop-route-shell-grid">
+            <article><span>切換狀態</span><strong>已同步</strong></article>
+            <article><span>資料狀態</span><strong>背景更新</strong></article>
+            <article><span>手感模式</span><strong>snapshot</strong></article>
+          </div>
+          <div class="desktop-route-shell-lines" aria-hidden="true">
+            <i></i><i></i><i></i><i></i>
+          </div>
+        </section>
+      `;
+    }
+    window.setTimeout(() => delete panel.dataset.fumanRouteSnapshotRestoring, 0);
+    return true;
+  }
+
+  function activateStrategyRoute(link, source) {
+    switchStrategyViewNow(link);
+    if (!restoreStrategySnapshot(link)) {
+      renderStrategyRouteShell(link, source);
+    }
+  }
+
   function switchStrategyViewNow(link) {
     activeSnapshotRoute = strategyRouteKey(link) || activeSnapshotRoute;
     if (window.FUMAN_HOTFIX_SWITCH_VIEW_NOW?.(link)) return true;
@@ -254,8 +373,7 @@
     if (route === fastClickRoute && now - fastClickAt < 180) return;
     fastClickRoute = route;
     fastClickAt = now;
-    switchStrategyViewNow(link);
-    restoreStrategySnapshot(link);
+    activateStrategyRoute(link, "fast-click");
     warm(link, "strategy-fast-click");
     const task = window.FUMAN_TERMINAL_APP_READY
       ? Promise.resolve(true)
@@ -296,8 +414,7 @@
       if (isStrategyLink(link)) {
         event.preventDefault();
         event.stopImmediatePropagation();
-        switchStrategyViewNow(link);
-        restoreStrategySnapshot(link);
+        activateStrategyRoute(link, "pointer");
         setPending(link, "strategy-pointer");
         runStrategyFastClick(link, event);
         return;
@@ -340,6 +457,78 @@
       [data-view] {
         transition: border-color 70ms ease, background-color 70ms ease, box-shadow 70ms ease, transform 70ms ease !important;
       }
+      .desktop-route-shell {
+        border: 1px solid rgba(255, 112, 55, 0.35);
+        border-radius: 18px;
+        padding: 22px;
+        background:
+          linear-gradient(135deg, rgba(255, 112, 55, 0.12), rgba(30, 41, 59, 0.18)),
+          rgba(10, 16, 28, 0.82);
+        box-shadow: inset 0 0 0 1px rgba(255,255,255,0.03), 0 18px 44px rgba(0,0,0,0.22);
+        contain: layout paint style;
+      }
+      .desktop-route-shell-head {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        min-height: 64px;
+      }
+      .desktop-route-shell-head > span {
+        display: grid;
+        place-items: center;
+        width: 48px;
+        height: 48px;
+        border: 1px solid rgba(255, 112, 55, 0.5);
+        border-radius: 14px;
+        color: #ff8a3d;
+        font-size: 24px;
+        background: rgba(255, 112, 55, 0.1);
+      }
+      .desktop-route-shell-head h2 {
+        margin: 0 0 7px;
+        color: #f8fafc;
+        font-size: 22px;
+      }
+      .desktop-route-shell-head p {
+        margin: 0;
+        color: #9fb0cb;
+      }
+      .desktop-route-shell-grid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 12px;
+        margin-top: 20px;
+      }
+      .desktop-route-shell-grid article {
+        border: 1px solid rgba(148, 163, 184, 0.18);
+        border-radius: 12px;
+        padding: 14px;
+        background: rgba(15, 23, 42, 0.72);
+      }
+      .desktop-route-shell-grid span {
+        display: block;
+        margin-bottom: 8px;
+        color: #7f8da8;
+        font-size: 13px;
+      }
+      .desktop-route-shell-grid strong {
+        color: #e8eefc;
+        font-size: 18px;
+      }
+      .desktop-route-shell-lines {
+        display: grid;
+        gap: 10px;
+        margin-top: 22px;
+      }
+      .desktop-route-shell-lines i {
+        display: block;
+        height: 18px;
+        border-radius: 999px;
+        background: linear-gradient(90deg, rgba(148,163,184,0.16), rgba(255,112,55,0.18), rgba(148,163,184,0.12));
+      }
+      .desktop-route-shell-lines i:nth-child(2) { width: 82%; }
+      .desktop-route-shell-lines i:nth-child(3) { width: 64%; }
+      .desktop-route-shell-lines i:nth-child(4) { width: 74%; }
     `;
     document.head.appendChild(style);
     document.documentElement.classList.add("fuman-desktop-fast-shell");
