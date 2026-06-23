@@ -143,7 +143,20 @@
       ]
     },
     {
-      "source": "/((?!fuman-sw\\.js$|terminal-runtime-config\\.js$|terminal-hotfix\\.js$).*)\\.(js|css)",
+      "source": "/terminal-desktop-canvas-worker.js",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "no-store"
+        },
+        {
+          "key": "X-Content-Type-Options",
+          "value": "nosniff"
+        }
+      ]
+    },
+    {
+      "source": "/((?!fuman-sw\\.js$|terminal-runtime-config\\.js$|terminal-hotfix\\.js$|terminal-desktop-canvas-worker\\.js$).*)\\.(js|css)",
       "headers": [
         {
           "key": "Cache-Control",

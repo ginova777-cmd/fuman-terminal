@@ -19,10 +19,19 @@
     "strategy|策略4": "/api/strategy4-latest",
     "strategy|策略5": "/api/strategy5-latest",
   };
+  const CANVAS_WORKER_URL = "/terminal-desktop-canvas-worker.js";
   let pendingTimer = 0;
   let snapshotTimer = 0;
   let snapshotDbPromise = null;
   let canvasFrame = 0;
+  let canvasRowsVersion = 0;
+  let canvasWorker = null;
+  let canvasWorkerReady = false;
+  let canvasWorkerFailed = false;
+  let canvasWorkerMode = "main-canvas";
+  let canvasWorkerRowsVersion = -1;
+  let canvasWorkerRoute = "";
+  let canvasWorkerAttachedCanvas = null;
   let lastRoute = "";
   let lastAt = 0;
   let fastClickRoute = "";
@@ -273,6 +282,7 @@
       : canvasState.rows.slice();
     const maxOffset = Math.max(0, canvasState.filtered.length - 1);
     canvasState.offset = Math.max(0, Math.min(canvasState.offset, maxOffset));
+    canvasRowsVersion += 1;
   }
 
   function fetchCanvasRows(route, force = false) {
@@ -327,7 +337,8 @@
     const total = canvasState.rows.length;
     const source = canvasState.source ? String(canvasState.source).replace(/^canvas-/, "") : "shell";
     if (count) count.textContent = `${visible}/${total}`;
-    if (status) status.textContent = text || `${source} · ${new Date().toLocaleTimeString("zh-TW", { hour12: false })}`;
+    const mode = canvasWorkerReady ? canvasWorkerMode : source;
+    if (status) status.textContent = text || `${mode} · ${new Date().toLocaleTimeString("zh-TW", { hour12: false })}`;
   }
 
   function scheduleCanvasDraw() {
@@ -340,8 +351,114 @@
     const canvas = shell?.querySelector(".desktop-route-canvas");
     if (!canvas) return;
     clampCanvasOffset(canvas);
+    if (drawCanvasWithWorker(canvas)) {
+      setCanvasStatus();
+      return;
+    }
     drawRouteCanvas(canvas, strategyMeta(canvasState.route || activeSnapshotRoute), canvasState.filtered, canvasState.source);
     setCanvasStatus();
+  }
+
+  function workerCanvasSupported() {
+    return !canvasWorkerFailed &&
+      "Worker" in window &&
+      "OffscreenCanvas" in window &&
+      typeof HTMLCanvasElement !== "undefined" &&
+      typeof HTMLCanvasElement.prototype.transferControlToOffscreen === "function";
+  }
+
+  function getCanvasWorker() {
+    if (!workerCanvasSupported()) return null;
+    if (canvasWorker) return canvasWorker;
+    try {
+      const url = `${CANVAS_WORKER_URL}?runtime=${encodeURIComponent(window.__fumanDesktopFastShell || "20260623-09")}&t=${Date.now()}`;
+      canvasWorker = new Worker(url);
+      canvasWorker.onmessage = (event) => {
+        const data = event.data || {};
+        if (data.type === "ready") {
+          canvasWorkerReady = !!data.ok;
+          canvasWorkerMode = data.mode || "worker-offscreen";
+          setCanvasStatus(canvasWorkerReady ? canvasWorkerMode : "Canvas fallback");
+          scheduleCanvasDraw();
+        } else if (data.type === "drawn") {
+          canvasWorkerMode = data.mode || canvasWorkerMode;
+        }
+      };
+      canvasWorker.onerror = () => {
+        canvasWorkerFailed = true;
+        canvasWorkerReady = false;
+        canvasWorkerMode = "main-canvas";
+        try {
+          canvasWorker?.terminate?.();
+        } catch (error) {}
+        canvasWorker = null;
+      };
+      return canvasWorker;
+    } catch (error) {
+      canvasWorkerFailed = true;
+      return null;
+    }
+  }
+
+  function canvasDrawMetrics(canvas) {
+    const rect = canvas.getBoundingClientRect();
+    const width = Math.max(520, Math.floor(rect.width || canvas.parentElement?.clientWidth || 920));
+    const height = Math.max(380, Math.min(760, Math.floor((window.innerHeight || 900) * 0.68)));
+    const dpr = Math.min(2, window.devicePixelRatio || 1);
+    canvas.style.height = `${height}px`;
+    return { width, height, dpr };
+  }
+
+  function attachWorkerCanvas(canvas) {
+    const worker = getCanvasWorker();
+    if (!worker) return false;
+    if (canvas.dataset.fumanWorkerCanvas === "1") return true;
+    try {
+      const offscreen = canvas.transferControlToOffscreen();
+      canvas.dataset.fumanWorkerCanvas = "1";
+      canvasWorkerAttachedCanvas = canvas;
+      canvasWorkerRowsVersion = -1;
+      worker.postMessage({ type: "attach", canvas: offscreen }, [offscreen]);
+      return true;
+    } catch (error) {
+      canvasWorkerFailed = true;
+      return false;
+    }
+  }
+
+  function syncCanvasWorkerRows(worker) {
+    if (!worker) return;
+    if (canvasWorkerRowsVersion === canvasRowsVersion && canvasWorkerRoute === canvasState.route) return;
+    canvasWorkerRowsVersion = canvasRowsVersion;
+    canvasWorkerRoute = canvasState.route;
+    worker.postMessage({
+      type: "rows",
+      route: canvasState.route,
+      rows: canvasState.filtered,
+    });
+  }
+
+  function drawCanvasWithWorker(canvas) {
+    if (!workerCanvasSupported() || !attachWorkerCanvas(canvas)) return false;
+    const worker = getCanvasWorker();
+    if (!worker) return false;
+    const metrics = canvasDrawMetrics(canvas);
+    syncCanvasWorkerRows(worker);
+    worker.postMessage({
+      type: "draw",
+      route: canvasState.route,
+      meta: strategyMeta(canvasState.route || activeSnapshotRoute),
+      source: canvasState.source,
+      offset: canvasState.offset,
+      hoverIndex: canvasState.hoverIndex,
+      selectedIndex: canvasState.selectedIndex,
+      width: metrics.width,
+      height: metrics.height,
+      dpr: metrics.dpr,
+      rowHeight: CANVAS_ROW_HEIGHT,
+      headerHeight: CANVAS_HEADER_HEIGHT,
+    });
+    return true;
   }
 
   function canvasHitIndex(canvas, event) {
@@ -846,7 +963,9 @@
       `;
       const canvas = table.querySelector(".desktop-route-canvas");
       requestAnimationFrame(() => {
-        drawRouteCanvas(canvas, meta, canvasState.filtered, canvasState.source);
+        if (!drawCanvasWithWorker(canvas)) {
+          drawRouteCanvas(canvas, meta, canvasState.filtered, canvasState.source);
+        }
         setCanvasStatus();
       });
     }
