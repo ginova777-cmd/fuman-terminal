@@ -1,10 +1,11 @@
 (function () {
-  if (window.__fumanTerminalHotfix === "20260623-02") return;
-  window.__fumanTerminalHotfix = "20260623-02";
+  if (window.__fumanTerminalHotfix === "20260623-03") return;
+  window.__fumanTerminalHotfix = "20260623-03";
 
   installDesktopApiPollingCache();
   installInstantViewSwitch();
   installFastViewClickReplay();
+  installWarmMainApp();
   installHotfixStyle();
 
   function mark(name) {
@@ -22,6 +23,13 @@
       }
       body.fuman-view-switching [data-view] {
         transition: background-color 80ms ease, border-color 80ms ease, color 80ms ease !important;
+      }
+      body.fuman-view-switching {
+        scroll-behavior: auto !important;
+      }
+      body.fuman-view-switching .dashboard,
+      body.fuman-view-switching .view-panel {
+        contain: layout paint style;
       }
     `;
     document.head.appendChild(style);
@@ -91,6 +99,14 @@
   function installFastViewClickReplay() {
     if (window.__fumanFastViewClickReplay) return;
     window.__fumanFastViewClickReplay = true;
+    const routeKeyFor = (link) => `${link?.dataset?.view || ""}|${(link?.textContent || "").trim()}`;
+    const shouldThrottle = (link) => {
+      const key = routeKeyFor(link);
+      const last = window.__fumanLastReplayRoute || {};
+      const now = Date.now();
+      window.__fumanLastReplayRoute = { key, at: now };
+      return last.key === key && now - Number(last.at || 0) < 220;
+    };
     const replayClick = (link, sourceEvent) => {
       if (!link || link.dataset.fumanHotfixReplayQueued === "1") return;
       link.dataset.fumanHotfixReplayQueued = "1";
@@ -114,11 +130,7 @@
           }
           link.dispatchEvent(event);
         };
-        if ("scheduler" in window && typeof window.scheduler?.postTask === "function") {
-          window.scheduler.postTask(afterPaint, { priority: "user-visible" }).catch(afterPaint);
-        } else {
-          setTimeout(afterPaint, 0);
-        }
+        requestAnimationFrame(() => setTimeout(afterPaint, 8));
       });
     };
     document.addEventListener("click", (event) => {
@@ -134,8 +146,31 @@
       }
       event.preventDefault();
       event.stopImmediatePropagation();
+      if (shouldThrottle(link)) return;
       replayClick(link, event);
     }, true);
+  }
+
+  function installWarmMainApp() {
+    if (window.__fumanHotfixWarmMainApp) return;
+    window.__fumanHotfixWarmMainApp = true;
+    let attempts = 0;
+    const warm = () => {
+      attempts += 1;
+      if (typeof window.FUMAN_TERMINAL_LOAD_APP === "function") {
+        const task = window.FUMAN_TERMINAL_LOAD_APP("hotfix-warm");
+        if (task && typeof task.catch === "function") task.catch(() => undefined);
+        return;
+      }
+      if (attempts < 24) {
+        setTimeout(warm, attempts < 6 ? 50 : 120);
+      }
+    };
+    if (document.readyState === "loading") {
+      document.addEventListener("DOMContentLoaded", () => setTimeout(warm, 50), { once: true });
+    } else {
+      setTimeout(warm, 50);
+    }
   }
 
   function installDesktopApiPollingCache() {
