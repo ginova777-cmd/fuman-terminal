@@ -211,14 +211,11 @@ for (const marker of ["DESKTOP_API_ONLY_STATIC_FILTER", "Test-DesktopApiOnlyStat
     issues.push(`run-cache-sync.ps1 missing desktop API-only static filter marker ${marker}`);
   }
 }
-if (!/Verify live data freshness/.test(cacheSync) || !/--live/.test(cacheSync)) {
-  issues.push("run-cache-sync.ps1 post-publish verifier must use live data freshness");
+if (/verify:data-freshness|verify-data-freshness|FUMAN_SKIP_TERMINAL_GATE_ARTIFACT/.test(cacheSync)) {
+  issues.push("run-cache-sync.ps1 must not call removed daily freshness verifier or terminal gate artifact path");
 }
-if (!/FUMAN_SKIP_TERMINAL_GATE_ARTIFACT/.test(cacheSync)) {
-  issues.push("run-cache-sync.ps1 post-publish verifier must skip terminal gate artifact until run-live-freshness-gate publishes it");
-}
-if (!/Pre-publish data freshness gate/.test(cacheSync)) {
-  issues.push("run-cache-sync.ps1 missing pre-publish freshness gate");
+if (!/Pre-publish data freshness gate removed/.test(cacheSync)) {
+  issues.push("run-cache-sync.ps1 must explicitly disable the removed pre-publish data freshness gate");
 }
 if (!/FAST_DEBOUNCE_SKIP/.test(cacheSync) || !/FUMAN_FAST_GATE_COMMIT_DEBOUNCE_MINUTES/.test(cacheSync)) {
   issues.push("run-cache-sync.ps1 missing fast gate commit debounce");
@@ -312,13 +309,7 @@ for (const marker of [
   "strategy2 intraday raw refresh",
   "institution raw refresh",
   "warrant flow raw refresh",
-  "warrantCount",
-  "warrantVolumeCount",
-  "warrantSingleSignalCount",
   "STAR preopen raw refresh",
-  "star-preopen-latest.json",
-  "starCount",
-  "starFinalBlindBuyCount",
   "open buy raw refresh",
   "strategy3 raw refresh",
   "strategy4 raw refresh",
@@ -619,7 +610,7 @@ if (!fs.existsSync(path.join(ROOT, "REALTIME-RADAR-FRESHNESS-GOVERNANCE.md"))) {
     "即時雷達 Supabase API-Only Governance",
     "API 必須回 `ok`",
     "marketSession.marketDataDate",
-    "ETF / ETN / DR / 指數 / 權證 / CB / 非普通股",
+    "ETF、ETN、DR、指數、權證、CB、非普通股",
     "不要呼叫 `verify:data-freshness`",
     "不要依賴 `scripts/verify-data-freshness.js`",
     "不要用 `data/live-freshness-ok.json`",
