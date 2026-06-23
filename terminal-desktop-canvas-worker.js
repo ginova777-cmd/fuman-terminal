@@ -3,6 +3,9 @@
 
   const WORKER_VERSION = "20260623-09";
   const rowsByRoute = new Map();
+  const rowVersionsByRoute = new Map();
+  const buffers = new Map();
+  const MAX_BUFFERS = 14;
   let canvas = null;
   let ctx = null;
   let gpuProbe = "none";
@@ -48,9 +51,19 @@
     }
   }
 
-  function setRows(route, rows) {
+  function clearRouteBuffers(route) {
+    for (const [key, item] of buffers) {
+      if (item.route === route) buffers.delete(key);
+    }
+  }
+
+  function setRows(route, rows, version) {
     if (!route) return;
+    const nextVersion = String(version ?? Date.now());
+    const previousVersion = rowVersionsByRoute.get(route);
     rowsByRoute.set(route, Array.isArray(rows) ? rows : []);
+    rowVersionsByRoute.set(route, nextVersion);
+    if (previousVersion !== nextVersion) clearRouteBuffers(route);
   }
 
   function drawEmpty(context, width, height, source, headerHeight, rowHeight) {
@@ -133,77 +146,169 @@
     context.fill();
   }
 
-  function draw(payload) {
-    if (!ctx || !canvas) return;
+  function normalizePayload(payload) {
     const width = Math.max(520, Number(payload.width || 920));
     const height = Math.max(380, Number(payload.height || 520));
     const dpr = Math.max(1, Math.min(2, Number(payload.dpr || 1)));
     const rowHeight = Number(payload.rowHeight || 46);
     const headerHeight = Number(payload.headerHeight || 128);
-    const rows = rowsByRoute.get(payload.route) || [];
-    const capacity = Math.max(5, Math.floor((height - headerHeight - 16) / rowHeight));
-    canvas.width = Math.floor(width * dpr);
-    canvas.height = Math.floor(height * dpr);
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    ctx.fillStyle = "#090f1c";
-    ctx.fillRect(0, 0, width, height);
+    return {
+      ...payload,
+      width,
+      height,
+      dpr,
+      rowHeight,
+      headerHeight,
+      offset: Math.max(0, Number(payload.offset || 0)),
+      hoverIndex: Number.isFinite(Number(payload.hoverIndex)) ? Number(payload.hoverIndex) : -1,
+      selectedIndex: Number.isFinite(Number(payload.selectedIndex)) ? Number(payload.selectedIndex) : -1,
+    };
+  }
 
-    const gradient = ctx.createLinearGradient(0, 0, width, 0);
+  function bufferKey(payload) {
+    const route = payload.route || "";
+    const version = rowVersionsByRoute.get(route) || "0";
+    const meta = payload.meta || {};
+    return JSON.stringify([
+      route,
+      version,
+      payload.width,
+      payload.height,
+      payload.dpr,
+      payload.rowHeight,
+      payload.headerHeight,
+      payload.offset,
+      compactText(meta.title || "", 48),
+    ]);
+  }
+
+  function trimBuffers() {
+    while (buffers.size > MAX_BUFFERS) {
+      let oldestKey = "";
+      let oldestAt = Infinity;
+      for (const [key, item] of buffers) {
+        if (item.at < oldestAt) {
+          oldestAt = item.at;
+          oldestKey = key;
+        }
+      }
+      if (!oldestKey) return;
+      buffers.delete(oldestKey);
+    }
+  }
+
+  function renderFrame(targetCanvas, context, payload, rows) {
+    const {
+      width,
+      height,
+      dpr,
+      rowHeight,
+      headerHeight,
+    } = payload;
+    const capacity = Math.max(5, Math.floor((height - headerHeight - 16) / rowHeight));
+    targetCanvas.width = Math.floor(width * dpr);
+    targetCanvas.height = Math.floor(height * dpr);
+    context.setTransform(dpr, 0, 0, dpr, 0, 0);
+    context.fillStyle = "#090f1c";
+    context.fillRect(0, 0, width, height);
+
+    const gradient = context.createLinearGradient(0, 0, width, 0);
     gradient.addColorStop(0, "rgba(255,112,55,0.20)");
     gradient.addColorStop(0.55, "rgba(30,41,59,0.45)");
     gradient.addColorStop(1, "rgba(59,130,246,0.10)");
-    ctx.fillStyle = gradient;
-    roundRect(ctx, 0.5, 0.5, width - 1, height - 1, 18);
-    ctx.fill();
-    ctx.strokeStyle = "rgba(255,112,55,0.38)";
-    ctx.lineWidth = 1;
-    roundRect(ctx, 0.5, 0.5, width - 1, height - 1, 18);
-    ctx.stroke();
+    context.fillStyle = gradient;
+    roundRect(context, 0.5, 0.5, width - 1, height - 1, 18);
+    context.fill();
+    context.strokeStyle = "rgba(255,112,55,0.38)";
+    context.lineWidth = 1;
+    roundRect(context, 0.5, 0.5, width - 1, height - 1, 18);
+    context.stroke();
 
     const meta = payload.meta || {};
-    ctx.fillStyle = "#ff8a3d";
-    ctx.font = "700 28px system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
-    ctx.fillText(meta.icon || "◆", 28, 48);
-    ctx.fillStyle = "#f8fafc";
-    ctx.font = "800 22px system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
-    ctx.fillText(meta.title || "策略模組", 70, 42);
-    ctx.fillStyle = "#9fb0cb";
-    ctx.font = "14px system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
-    ctx.fillText(compactText(meta.summary || "", 84), 70, 68);
-    ctx.textAlign = "right";
-    ctx.fillStyle = "#ffb27b";
-    ctx.font = "800 13px system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
-    ctx.fillText(`${rows.length} 筆`, width - 32, 42);
-    ctx.fillStyle = "#9fb0cb";
-    ctx.font = "12px system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
-    ctx.fillText(compactText(payload.source || `worker-${gpuProbe}`, 28), width - 32, 66);
-    ctx.textAlign = "left";
+    context.fillStyle = "#ff8a3d";
+    context.font = "700 28px system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+    context.fillText(meta.icon || "◆", 28, 48);
+    context.fillStyle = "#f8fafc";
+    context.font = "800 22px system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+    context.fillText(meta.title || "策略模組", 70, 42);
+    context.fillStyle = "#9fb0cb";
+    context.font = "14px system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+    context.fillText(compactText(meta.summary || "", 84), 70, 68);
+    context.textAlign = "right";
+    context.fillStyle = "#ffb27b";
+    context.font = "800 13px system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+    context.fillText(`${rows.length} 筆`, width - 32, 42);
+    context.fillStyle = "#9fb0cb";
+    context.font = "12px system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+    context.fillText(compactText(payload.source || `worker-${gpuProbe}`, 28), width - 32, 66);
+    context.textAlign = "left";
 
-    ctx.fillStyle = "rgba(15,23,42,0.86)";
-    roundRect(ctx, 24, 88, width - 48, 38, 12);
-    ctx.fill();
-    ctx.fillStyle = "#9fb0cb";
-    ctx.font = "700 13px system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
-    ctx.fillText("Rank", 46, 112);
-    ctx.fillText("Code", 106, 112);
-    ctx.fillText("Signal", 184, 112);
-    ctx.fillText("Score", width - 176, 112);
-    ctx.fillText("Change", width - 92, 112);
+    context.fillStyle = "rgba(15,23,42,0.86)";
+    roundRect(context, 24, 88, width - 48, 38, 12);
+    context.fill();
+    context.fillStyle = "#9fb0cb";
+    context.font = "700 13px system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+    context.fillText("Rank", 46, 112);
+    context.fillText("Code", 106, 112);
+    context.fillText("Signal", 184, 112);
+    context.fillText("Score", width - 176, 112);
+    context.fillText("Change", width - 92, 112);
 
     if (rows.length) {
-      drawRows(ctx, rows, { ...payload, width, height, rowHeight, headerHeight }, capacity);
-      drawScrollbar(ctx, rows, { ...payload, width, height, headerHeight }, capacity);
+      drawRows(context, rows, payload, capacity);
+      drawScrollbar(context, rows, payload, capacity);
     } else {
-      drawEmpty(ctx, width, height, payload.source || "", headerHeight, rowHeight);
+      drawEmpty(context, width, height, payload.source || "", headerHeight, rowHeight);
+    }
+  }
+
+  function preRender(payload) {
+    const next = normalizePayload(payload || {});
+    const rows = rowsByRoute.get(next.route) || [];
+    if (!next.route || !rows.length || typeof OffscreenCanvas === "undefined") return;
+    const key = bufferKey(next);
+    if (buffers.has(key)) {
+      postMessage({ type: "preRendered", route: next.route, count: rows.length, cached: true, mode: `worker-buffer-${gpuProbe}` });
+      return;
+    }
+    try {
+      const offscreen = new OffscreenCanvas(Math.floor(next.width * next.dpr), Math.floor(next.height * next.dpr));
+      const bctx = offscreen.getContext("2d", { alpha: false, desynchronized: true });
+      if (!bctx) return;
+      renderFrame(offscreen, bctx, next, rows);
+      buffers.set(key, { route: next.route, canvas: offscreen, at: Date.now() });
+      trimBuffers();
+      postMessage({ type: "preRendered", route: next.route, count: rows.length, cached: false, mode: `worker-buffer-${gpuProbe}` });
+    } catch (error) {}
+  }
+
+  function draw(payload) {
+    if (!ctx || !canvas) return;
+    const next = normalizePayload(payload || {});
+    const rows = rowsByRoute.get(next.route) || [];
+    const key = bufferKey(next);
+    const canUseBuffer = !!next.preferBuffer && next.hoverIndex < 0 && next.selectedIndex < 0;
+    const cached = canUseBuffer ? buffers.get(key) : null;
+    if (cached?.canvas) {
+      canvas.width = Math.floor(next.width * next.dpr);
+      canvas.height = Math.floor(next.height * next.dpr);
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.drawImage(cached.canvas, 0, 0);
+      cached.at = Date.now();
+      postMessage({ type: "drawn", route: next.route, count: rows.length, buffered: true, mode: `worker-buffer-${gpuProbe}` });
+      return;
     }
 
-    postMessage({ type: "drawn", route: payload.route, count: rows.length, mode: `worker-offscreen-${gpuProbe}` });
+    renderFrame(canvas, ctx, next, rows);
+
+    postMessage({ type: "drawn", route: next.route, count: rows.length, buffered: false, mode: `worker-offscreen-${gpuProbe}` });
   }
 
   self.onmessage = (event) => {
     const data = event.data || {};
     if (data.type === "attach") attach(data.canvas);
-    else if (data.type === "rows") setRows(data.route, data.rows);
+    else if (data.type === "rows") setRows(data.route, data.rows, data.version);
+    else if (data.type === "preRender") preRender(data);
     else if (data.type === "draw") draw(data);
   };
 })();

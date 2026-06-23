@@ -32,6 +32,7 @@
   let canvasWorkerRowsVersion = -1;
   let canvasWorkerRoute = "";
   let canvasWorkerAttachedCanvas = null;
+  let canvasPreRenderTimer = 0;
   let lastRoute = "";
   let lastAt = 0;
   let fastClickRoute = "";
@@ -40,6 +41,8 @@
   const routeSnapshots = new Map();
   const canvasStore = new Map();
   const canvasInflight = new Map();
+  const canvasRouteVersions = new Map();
+  const canvasPreRenderedRoutes = new Set();
   const canvasState = {
     route: "",
     source: "",
@@ -256,6 +259,11 @@
     const cleanRows = (Array.isArray(rows) ? rows : []).filter((row) => row && (row.code || row.title || row.line));
     if (!route || !cleanRows.length) return false;
     canvasStore.set(route, { rows: cleanRows, source, at });
+    canvasRouteVersions.set(route, Number(canvasRouteVersions.get(route) || 0) + 1);
+    canvasPreRenderedRoutes.delete(route);
+    if (workerCanvasSupported()) {
+      window.setTimeout(() => preRenderStrategyRoute(route, `rows-${source}`), 40);
+    }
     if (canvasState.route === route) {
       canvasState.rows = cleanRows;
       canvasState.source = source;
@@ -380,8 +388,12 @@
           canvasWorkerReady = !!data.ok;
           canvasWorkerMode = data.mode || "worker-offscreen";
           setCanvasStatus(canvasWorkerReady ? canvasWorkerMode : "Canvas fallback");
+          primeStrategyBuffers("worker-ready");
           scheduleCanvasDraw();
         } else if (data.type === "drawn") {
+          canvasWorkerMode = data.mode || canvasWorkerMode;
+        } else if (data.type === "preRendered") {
+          if (data.route) canvasPreRenderedRoutes.add(data.route);
           canvasWorkerMode = data.mode || canvasWorkerMode;
         }
       };
@@ -404,7 +416,10 @@
   function primeCanvasWorker() {
     const run = () => {
       const worker = getCanvasWorker();
-      if (worker) canvasWorkerMode = "worker-warming";
+      if (worker) {
+        canvasWorkerMode = "worker-warming";
+        primeStrategyBuffers("idle-prime");
+      }
     };
     if ("requestIdleCallback" in window) {
       requestIdleCallback(run, { timeout: 1200 });
@@ -441,14 +456,96 @@
 
   function syncCanvasWorkerRows(worker) {
     if (!worker) return;
-    if (canvasWorkerRowsVersion === canvasRowsVersion && canvasWorkerRoute === canvasState.route) return;
-    canvasWorkerRowsVersion = canvasRowsVersion;
+    const versionToken = workerRowsVersionToken(canvasState.route);
+    if (canvasWorkerRowsVersion === versionToken && canvasWorkerRoute === canvasState.route) return;
+    canvasWorkerRowsVersion = versionToken;
     canvasWorkerRoute = canvasState.route;
     worker.postMessage({
       type: "rows",
       route: canvasState.route,
       rows: canvasState.filtered,
+      version: versionToken,
     });
+  }
+
+  function workerRowsVersionToken(route) {
+    return `${Number(canvasRouteVersions.get(route) || 0)}:${canvasState.query || ""}`;
+  }
+
+  function filteredRowsForRoute(route, rows) {
+    const query = compactText(canvasState.query, 80).toLowerCase();
+    if (!query) return rows.slice();
+    return rows.filter((row) => [row.code, row.title, row.reason, row.line].join(" ").toLowerCase().includes(query));
+  }
+
+  function canvasPreRenderMetrics() {
+    const canvas = currentCanvasShell()?.querySelector(".desktop-route-canvas");
+    if (canvas) return canvasDrawMetrics(canvas);
+    const container = document.querySelector("#strategy-table") || document.querySelector("#strategy-view") || document.body;
+    const rect = container?.getBoundingClientRect?.();
+    const width = Math.max(520, Math.floor(rect?.width || Math.min(1280, (window.innerWidth || 1440) - 460)));
+    const height = Math.max(380, Math.min(760, Math.floor((window.innerHeight || 900) * 0.68)));
+    const dpr = Math.min(2, window.devicePixelRatio || 1);
+    return { width, height, dpr };
+  }
+
+  function sendWorkerRowsForRoute(route, rows, versionToken) {
+    const worker = getCanvasWorker();
+    if (!worker || !route || !rows?.length) return false;
+    worker.postMessage({
+      type: "rows",
+      route,
+      rows,
+      version: versionToken || workerRowsVersionToken(route),
+    });
+    return true;
+  }
+
+  function postPreRenderRoute(route, rows, source = "prebuffer") {
+    const worker = getCanvasWorker();
+    if (!worker || !route || !rows?.length) return false;
+    const metrics = canvasPreRenderMetrics();
+    const versionToken = workerRowsVersionToken(route);
+    sendWorkerRowsForRoute(route, rows, versionToken);
+    worker.postMessage({
+      type: "preRender",
+      route,
+      meta: strategyMeta(route),
+      source,
+      offset: 0,
+      hoverIndex: -1,
+      selectedIndex: -1,
+      width: metrics.width,
+      height: metrics.height,
+      dpr: metrics.dpr,
+      rowHeight: CANVAS_ROW_HEIGHT,
+      headerHeight: CANVAS_HEADER_HEIGHT,
+      preferBuffer: true,
+    });
+    canvasPreRenderedRoutes.add(route);
+    return true;
+  }
+
+  function preRenderStrategyRoute(route, reason = "hover") {
+    if (!route || !workerCanvasSupported()) return;
+    const rows = filteredRowsForRoute(route, rowsForRoute(route));
+    if (rows.length) {
+      postPreRenderRoute(route, rows, reason);
+      return;
+    }
+    fetchCanvasRows(route, false).then((nextRows) => {
+      if (!nextRows?.length) return;
+      postPreRenderRoute(route, filteredRowsForRoute(route, nextRows), reason);
+    }).catch(() => undefined);
+  }
+
+  function primeStrategyBuffers(reason = "idle") {
+    window.clearTimeout(canvasPreRenderTimer);
+    canvasPreRenderTimer = window.setTimeout(() => {
+      SNAPSHOT_ROUTES.forEach((route, index) => {
+        window.setTimeout(() => preRenderStrategyRoute(route, `${reason}-${index + 1}`), index * 90);
+      });
+    }, 120);
   }
 
   function drawCanvasWithWorker(canvas) {
@@ -470,6 +567,7 @@
       dpr: metrics.dpr,
       rowHeight: CANVAS_ROW_HEIGHT,
       headerHeight: CANVAS_HEADER_HEIGHT,
+      preferBuffer: true,
     });
     return true;
   }
@@ -1158,7 +1256,10 @@
 
     document.addEventListener("mouseover", (event) => {
       const link = event.target.closest?.(NAV_SELECTOR);
-      if (link) warm(link, "hover");
+      if (link) {
+        warm(link, "hover");
+        if (isStrategyLink(link)) preRenderStrategyRoute(strategyRouteKey(link), "hover-buffer");
+      }
     }, true);
 
     document.addEventListener("click", (event) => {
