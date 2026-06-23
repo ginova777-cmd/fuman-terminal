@@ -1,11 +1,13 @@
 (function () {
-  if (window.__fumanTerminalHotfix === "20260623-03") return;
-  window.__fumanTerminalHotfix = "20260623-03";
+  if (window.__fumanTerminalHotfix === "20260623-04") return;
+  window.__fumanTerminalHotfix = "20260623-04";
 
   installDesktopApiPollingCache();
   installInstantViewSwitch();
   installFastViewClickReplay();
   installWarmMainApp();
+  installScriptPreload();
+  installHotPathDataWarmup();
   installHotfixStyle();
 
   function mark(name) {
@@ -30,6 +32,11 @@
       body.fuman-view-switching .dashboard,
       body.fuman-view-switching .view-panel {
         contain: layout paint style;
+      }
+      [data-view] {
+        -webkit-tap-highlight-color: transparent;
+        touch-action: manipulation;
+        user-select: none;
       }
     `;
     document.head.appendChild(style);
@@ -82,7 +89,18 @@
       const link = event.target.closest?.("[data-view]");
       if (!link || link.closest("[data-member-tab]")) return;
       switchNow(link);
+      window.FUMAN_HOTFIX_WARM_ROUTE?.(link, "pointer");
       window.FUMAN_TERMINAL_LOAD_APP?.("instant-view-pointer");
+    }, true);
+    document.addEventListener("pointerenter", (event) => {
+      const link = event.target.closest?.("[data-view]");
+      if (!link || link.closest("[data-member-tab]")) return;
+      window.FUMAN_HOTFIX_WARM_ROUTE?.(link, "hover");
+    }, true);
+    document.addEventListener("pointerover", (event) => {
+      const link = event.target.closest?.("[data-view]");
+      if (!link || link.closest("[data-member-tab]")) return;
+      window.FUMAN_HOTFIX_WARM_ROUTE?.(link, "hover");
     }, true);
     document.addEventListener("mousedown", (event) => {
       const link = event.target.closest?.("[data-view]");
@@ -140,6 +158,7 @@
       if (event.button && event.button !== 0) return;
       const switched = window.FUMAN_HOTFIX_SWITCH_VIEW_NOW?.(link);
       if (!switched) return;
+      window.FUMAN_HOTFIX_WARM_ROUTE?.(link, "click");
       if (!window.FUMAN_TERMINAL_APP_READY) {
         window.FUMAN_TERMINAL_LOAD_APP?.("instant-view-click");
         return;
@@ -173,6 +192,160 @@
     }
   }
 
+  function installScriptPreload() {
+    if (window.__fumanHotfixScriptPreload) return;
+    window.__fumanHotfixScriptPreload = true;
+    const version = window.FUMAN_TERMINAL_BOOT?.version || window.FUMAN_TERMINAL_VERSION || "";
+    const withVersion = (path) => version ? `${path}?v=${encodeURIComponent(version)}` : path;
+    const resources = [
+      { href: withVersion("/terminal-app.js"), as: "script" },
+      { href: withVersion("/terminal-modules.js"), as: "script" },
+      { href: withVersion("/terminal-worker.js"), as: "worker" },
+      { href: withVersion("/terminal-watchlist-module.js"), as: "script" },
+      { href: withVersion("/terminal-strategy-config.js"), as: "script" },
+      { href: withVersion("/terminal-tuning-config.js"), as: "script" },
+    ];
+    resources.forEach((item) => {
+      if (!item.href || document.querySelector(`link[href="${item.href}"]`)) return;
+      const link = document.createElement("link");
+      link.rel = item.as === "worker" ? "prefetch" : "preload";
+      link.as = item.as === "worker" ? "script" : item.as;
+      link.href = item.href;
+      link.crossOrigin = "anonymous";
+      document.head.appendChild(link);
+    });
+  }
+
+  function installHotPathDataWarmup() {
+    if (window.__fumanHotPathDataWarmup) return;
+    window.__fumanHotPathDataWarmup = true;
+    const warmed = new Map();
+    const routeGroups = {
+      market: [
+        "/api/terminal-home",
+        "/api/market",
+        "/api/heatmap",
+        "/api/market-ai-live",
+        "/api/market-ai-panel-live",
+      ],
+      watchlist: [
+        "/api/stocks",
+        "/api/watchlist-match-index",
+        "/api/terminal-home",
+      ],
+      strategy: [
+        "/api/open-buy-latest",
+        "/api/strategy2-latest",
+        "/api/strategy3-latest",
+        "/api/strategy4-latest",
+        "/api/strategy5-latest",
+        "/api/latest-signals?strategy=strategy4",
+        "/api/realtime-radar-latest",
+      ],
+      "chip-trade": [
+        "/api/institution-latest",
+        "/api/watchlist-match-index",
+      ],
+      "cb-detect": [
+        "/api/cb-detect-latest",
+      ],
+      "warrant-flow": [
+        "/api/warrant-flow-latest",
+      ],
+      member: [
+        "/api/terminal-home",
+      ],
+    };
+    const critical = [
+      "/api/terminal-home",
+      "/api/market",
+      "/api/stocks",
+      "/api/watchlist-match-index",
+      "/api/latest-signals?strategy=strategy4",
+    ];
+    const sequence = [
+      ...critical,
+      "/api/open-buy-latest",
+      "/api/strategy2-latest",
+      "/api/strategy3-latest",
+      "/api/strategy5-latest",
+      "/api/strategy4-latest",
+      "/api/institution-latest",
+      "/api/cb-detect-latest",
+      "/api/warrant-flow-latest",
+    ];
+    const warmOne = (url, reason = "warm") => {
+      const key = String(url || "");
+      if (!key) return Promise.resolve(false);
+      const now = Date.now();
+      const last = warmed.get(key) || 0;
+      if (now - last < 120000) return Promise.resolve(false);
+      warmed.set(key, now);
+      const controller = "AbortController" in window ? new AbortController() : null;
+      const timer = controller ? setTimeout(() => controller.abort(), 4500) : 0;
+      mark(`warm:${reason}:${key.replace(/^\/api\//, "")}`);
+      return fetch(key, {
+        cache: "no-store",
+        priority: reason === "pointer" || reason === "click" ? "high" : "low",
+        signal: controller?.signal,
+      }).catch(() => null).finally(() => {
+        if (timer) clearTimeout(timer);
+      });
+    };
+    const warmList = (urls, reason = "warm", concurrency = 2) => {
+      const queue = [...new Set((urls || []).filter(Boolean))];
+      let running = 0;
+      const next = () => {
+        while (running < concurrency && queue.length) {
+          running += 1;
+          warmOne(queue.shift(), reason).finally(() => {
+            running -= 1;
+            next();
+          });
+        }
+      };
+      next();
+    };
+    const routeForLink = (link) => {
+      const view = link?.dataset?.view || "";
+      const text = link?.textContent || "";
+      if (view !== "strategy") return view;
+      if (text.includes("策略1")) return "strategy1";
+      if (text.includes("策略2") || text.includes("當沖")) return "strategy2";
+      if (text.includes("策略3")) return "strategy3";
+      if (text.includes("策略4") || text.includes("波段")) return "strategy4";
+      if (text.includes("策略5")) return "strategy5";
+      return "strategy";
+    };
+    const warmRoute = (link, reason = "route") => {
+      const route = typeof link === "string" ? link : routeForLink(link);
+      const strategySpecific = {
+        strategy1: ["/api/open-buy-latest", "/api/stocks"],
+        strategy2: ["/api/strategy2-latest", "/api/realtime-radar-latest", "/api/stocks"],
+        strategy3: ["/api/strategy3-latest", "/api/stocks"],
+        strategy4: ["/api/strategy4-latest", "/api/latest-signals?strategy=strategy4", "/api/stocks"],
+        strategy5: ["/api/strategy5-latest", "/api/stocks"],
+      };
+      const urls = strategySpecific[route] || routeGroups[route] || [];
+      warmList(urls, reason, reason === "pointer" || reason === "click" ? 3 : 2);
+    };
+    const scheduleFullWarm = () => {
+      const run = () => warmList(sequence, "startup", 2);
+      if ("requestIdleCallback" in window) {
+        requestIdleCallback(run, { timeout: 1600 });
+      } else {
+        setTimeout(run, 800);
+      }
+    };
+    window.FUMAN_HOTFIX_WARM_ROUTE = warmRoute;
+    window.FUMAN_HOTFIX_WARM_ALL = () => warmList(sequence, "manual", 3);
+    if (document.readyState === "loading") {
+      document.addEventListener("DOMContentLoaded", scheduleFullWarm, { once: true });
+    } else {
+      scheduleFullWarm();
+    }
+  }
+
   function installDesktopApiPollingCache() {
     if (window.__fumanDesktopApiPollingCache) return;
     window.__fumanDesktopApiPollingCache = true;
@@ -180,7 +353,7 @@
     const memory = new Map();
     const inflight = new Map();
     const skipPattern = /\/api\/(?:export|refresh|frontend-error|performance-report|version|terminal-theme-css|scan-|github|history|realtime(?:$|\?))/i;
-    const apiPattern = /\/api\/(?:market|terminal-home|market-ai|heatmap|stocks|watchlist-match-index|open-buy-latest|strategy[2345]-latest|latest-strategy|realtime-radar-latest|institution-latest|chip-trade|warrant-flow-latest|cb-detect-latest|mobile-boot|mobile-fragment)/i;
+    const apiPattern = /\/api\/(?:market|terminal-home|market-ai|heatmap|stocks|watchlist-match-index|open-buy-latest|strategy[2345]-latest|latest-strategy|latest-signals|realtime-radar-latest|institution-latest|chip-trade|warrant-flow-latest|cb-detect-latest|mobile-boot|mobile-fragment)/i;
     const ttlFor = (pathname) => {
       if (/strategy2|realtime-radar/i.test(pathname)) return 3000;
       if (/market(?:$|-ai)|heatmap/i.test(pathname)) return 8000;
