@@ -49,6 +49,34 @@ const EXACT_RETIRED = [
   "data/heatmap-latest.json",
   "data/institution-mobile-top.json",
   "data/market-summary.json",
+  "data/market-ai-breadth-latest.json",
+  "data/market-ai-panel-latest.json",
+  "data/market-ai-live.json",
+  "data/mobile-ai-latest.html",
+  "data/mobile-ai-lite.html",
+  "data/mobile-ai-ultra.html",
+  "data/mobile-home-summary.json",
+  "data/mobile-stock-analysis-latest.json",
+  "data/mobile-strategy1-ultra.html",
+  "data/mobile-strategy2-ultra.html",
+  "data/mobile-strategy3-ultra.html",
+  "data/mobile-strategy4-ultra.html",
+  "data/mobile-strategy5-ultra.html",
+  "data/mobile-chip-ultra.html",
+  "data/mobile-warrant-ultra.html",
+  "data/mobile-digest.json",
+  "data/terminal-home-bundle.json",
+  "data/flow-health-latest.json",
+  "data/health-summary.json",
+  "data/scan-receipts/scan-summary.json",
+  "data/scan-receipts/strategy2.json",
+  "data/institution-tdcc-breakout.json",
+  "data/institution-tdcc-breakout-top.json",
+  "data/institution-tdcc-breakout.csv",
+  "data/tdcc-shareholding-1000-history.json",
+  "data/star-preopen-latest.json",
+  "data/star-preopen-backup.json",
+  "data/star-preopen-scorecard-source.json",
   "data/mobile-boot.json",
   "data/mobile-terminal-latest.json",
   "data/terminal-home-mobile-slim.json",
@@ -108,6 +136,7 @@ const RETIRED_PREFIXES = [
 ];
 
 const RUNTIME_RETENTION_DAYS = Number(process.env.FUMAN_API_ONLY_CLEANUP_RUNTIME_RETENTION_DAYS || 14);
+const RUNTIME_HISTORY_RETENTION_DAYS = Number(process.env.FUMAN_API_ONLY_CLEANUP_HISTORY_RETENTION_DAYS || 3);
 const LOG_RETENTION_DAYS = Number(process.env.FUMAN_API_ONLY_CLEANUP_LOG_RETENTION_DAYS || 30);
 const RUNTIME_STALE_FRONT_PAGE_FILES = [
   "data/heatmap-latest.json",
@@ -173,6 +202,16 @@ function listRetiredDataFiles(root) {
     }
   }
   return matched;
+}
+
+function pruneMatchingDirectories(parentDir, predicate, result, dryRun) {
+  if (!fs.existsSync(parentDir)) return;
+  for (const entry of fs.readdirSync(parentDir, { withFileTypes: true })) {
+    if (!entry.isDirectory() || !predicate(entry.name)) continue;
+    const target = path.join(parentDir, entry.name);
+    if (!dryRun) fs.rmSync(target, { recursive: true, force: true });
+    result.deleted.push(target);
+  }
 }
 
 function pruneOldFiles(dir, maxAgeDays, result, dryRun) {
@@ -266,6 +305,8 @@ async function main() {
   const rootResults = args.roots.map((root) => cleanupRoot(root, args));
   const runtimeResult = { root: args.runtimeRoot, deleted: [], skipped: [] };
   pruneOldFiles(path.join(args.runtimeRoot, "archive", "strategy2-intraday", "static-latest"), RUNTIME_RETENTION_DAYS, runtimeResult, args.dryRun);
+  pruneOldFiles(path.join(args.runtimeRoot, "archive", "strategy2-intraday", "history"), RUNTIME_HISTORY_RETENTION_DAYS, runtimeResult, args.dryRun);
+  pruneMatchingDirectories(path.join(args.runtimeRoot, "cache", "fugle"), (name) => /^historical-legacy-mixed-units-/i.test(name), runtimeResult, args.dryRun);
   pruneOldFiles(path.join(args.runtimeRoot, "logs"), LOG_RETENTION_DAYS, runtimeResult, args.dryRun);
   pruneStaleRuntimeFrontPageFiles(args.runtimeRoot, runtimeResult, args.dryRun);
 
