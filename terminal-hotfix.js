@@ -1,6 +1,6 @@
 (function () {
-  if (window.__fumanTerminalHotfix === "20260623-05") return;
-  window.__fumanTerminalHotfix = "20260623-05";
+  if (window.__fumanTerminalHotfix === "20260623-06") return;
+  window.__fumanTerminalHotfix = "20260623-06";
 
   installDesktopApiPollingCache();
   installInstantViewSwitch();
@@ -386,6 +386,7 @@
         try {
           const key = cacheKeyFor(endpoint, { method: "GET" });
           if (!key || payload === undefined) return;
+          if (payload && typeof payload === "object" && payload.ok === false) return;
           const pathname = new URL(endpoint, location.href).pathname;
           memory.set(key, {
             at: Date.now(),

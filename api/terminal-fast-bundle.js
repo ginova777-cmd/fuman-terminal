@@ -111,6 +111,8 @@ function summarize(payload) {
 function publicEndpointMap(results) {
   const map = {};
   for (const [endpoint, result] of Object.entries(results)) {
+    if (Number(result.statusCode || 0) >= 500) continue;
+    if (result.payload && typeof result.payload === "object" && result.payload.ok === false) continue;
     map[endpoint] = result.payload;
   }
   return map;
@@ -129,20 +131,20 @@ module.exports = async function handler(request, response) {
 
   const startedAt = Date.now();
   const tasks = [
-    ["/api/terminal-home", terminalHome, {}, 7000],
-    ["/api/market", market, {}, 5200],
-    ["/api/stocks", stocks, {}, 5200],
-    ["/api/watchlist-match-index", watchlistMatchIndex, {}, 5200],
-    ["/api/open-buy-latest", openBuyLatest, {}, 6200],
-    ["/api/strategy2-latest", strategy2Latest, {}, 6200],
-    ["/api/strategy3-latest", strategy3Latest, {}, 6200],
-    ["/api/strategy4-latest", strategy4Latest, {}, 6800],
-    ["/api/strategy5-latest", strategy5Latest, {}, 6200],
-    ["/api/latest-signals?strategy=strategy4", latestSignals, { strategy: "strategy4" }, 6200],
-    ["/api/realtime-radar-latest", realtimeRadarLatest, {}, 5200],
-    ["/api/institution-latest", institutionLatest, {}, 6200],
-    ["/api/cb-detect-latest", cbDetectLatest, {}, 5200],
-    ["/api/warrant-flow-latest", warrantFlowLatest, {}, 6800],
+    ["/api/terminal-home", terminalHome, {}, 2600],
+    ["/api/market", market, {}, 2200],
+    ["/api/stocks", stocks, {}, 2400],
+    ["/api/watchlist-match-index", watchlistMatchIndex, {}, 2400],
+    ["/api/open-buy-latest", openBuyLatest, {}, 2600],
+    ["/api/strategy2-latest", strategy2Latest, {}, 2600],
+    ["/api/strategy3-latest", strategy3Latest, {}, 2600],
+    ["/api/strategy4-latest", strategy4Latest, {}, 2800],
+    ["/api/strategy5-latest", strategy5Latest, {}, 2600],
+    ["/api/latest-signals?strategy=strategy4", latestSignals, { strategy: "strategy4" }, 2600],
+    ["/api/realtime-radar-latest", realtimeRadarLatest, {}, 2200],
+    ["/api/institution-latest", institutionLatest, {}, 2400],
+    ["/api/cb-detect-latest", cbDetectLatest, {}, 2400],
+    ["/api/warrant-flow-latest", warrantFlowLatest, {}, 2800],
   ];
 
   const rows = await Promise.all(tasks.map(([endpoint, handlerFn, query, timeout]) => (
@@ -152,14 +154,19 @@ module.exports = async function handler(request, response) {
   const endpoints = publicEndpointMap(results);
   const summary = Object.fromEntries(Object.entries(endpoints).map(([endpoint, payload]) => [endpoint, summarize(payload)]));
   const elapsedMs = Date.now() - startedAt;
+  const misses = rows
+    .filter((item) => Number(item.statusCode || 0) >= 500 || item.payload?.ok === false)
+    .map((item) => item.label);
   const payload = {
     ok: true,
+    partial: misses.length > 0,
     source: "terminal-fast-bundle",
     cacheSource: "api/terminal-fast-bundle",
     updatedAt: new Date().toISOString(),
     elapsedMs,
     endpoints,
     summary,
+    misses,
     timings: Object.fromEntries(rows.map((item) => [item.label, item.elapsedMs || 0])),
   };
 
