@@ -6,6 +6,7 @@
   installDesktopViewSnapshotCache();
   installInstantViewSwitch();
   installDesktopInteractionBudget();
+  installInstantNavIntent();
   installFastViewClickReplay();
   installWarmMainApp();
   installScriptPreload();
@@ -262,6 +263,68 @@
         return callback.apply(this, innerArgs);
       }, delay, ...args);
     };
+  }
+
+  function installInstantNavIntent() {
+    if (window.__fumanInstantNavIntent) return;
+    window.__fumanInstantNavIntent = true;
+    const routeKeyFor = (link) => `${link?.dataset?.view || ""}|${(link?.textContent || "").trim()}`;
+    const isStrategyLink = (link) => link?.dataset?.view === "strategy";
+    const setActiveNav = (link) => {
+      document.querySelectorAll("[data-view]").forEach((item) => {
+        const active = item === link;
+        item.classList.toggle("active", active);
+        item.toggleAttribute("aria-current", active);
+      });
+    };
+    const showStrategyHint = (link) => {
+      const panel = document.querySelector("#strategy-view");
+      if (!panel || !isStrategyLink(link)) return;
+      const title = panel.querySelector(".strategy-header h1, .strategy-toolbar h2, h1, h2");
+      const label = (link.textContent || "").trim();
+      if (title && label) title.textContent = label;
+      panel.dataset.fumanInstantStrategy = label;
+    };
+    const applyStrategyNow = (link) => {
+      if (!isStrategyLink(link)) return false;
+      if (window.__fumanApplyingInstantStrategy === routeKeyFor(link)) return true;
+      window.__fumanApplyingInstantStrategy = routeKeyFor(link);
+      setActiveNav(link);
+      showStrategyHint(link);
+      try {
+        if (typeof window.applyStrategyPresetFromLink === "function") {
+          window.applyStrategyPresetFromLink(link);
+          if (typeof window.renderStrategyScanner === "function") {
+            requestAnimationFrame(() => window.renderStrategyScanner());
+          }
+          mark(`instant-strategy:${(link.textContent || "").trim()}`);
+          return true;
+        }
+      } catch (error) {}
+      setTimeout(() => {
+        try {
+          if (typeof window.applyStrategyPresetFromLink === "function") {
+            window.applyStrategyPresetFromLink(link);
+            if (typeof window.renderStrategyScanner === "function") window.renderStrategyScanner();
+            mark(`instant-strategy-late:${(link.textContent || "").trim()}`);
+          }
+        } catch (error) {}
+      }, 120);
+      return false;
+    };
+    const apply = (event) => {
+      const link = event.target.closest?.("[data-view]");
+      if (!link || link.closest("[data-member-tab]")) return;
+      window.FUMAN_HOTFIX_SWITCH_VIEW_NOW?.(link);
+      if (isStrategyLink(link)) applyStrategyNow(link);
+    };
+    document.addEventListener("pointerdown", apply, true);
+    document.addEventListener("mousedown", apply, true);
+    document.addEventListener("click", (event) => {
+      const link = event.target.closest?.("[data-view]");
+      if (!link || !isStrategyLink(link) || event.__fumanDeferredViewClick) return;
+      applyStrategyNow(link);
+    }, true);
   }
 
   function installWarmMainApp() {
