@@ -94,6 +94,8 @@ C:\fuman-terminal\scripts\intraday-radar-rules.js
 
 `cleanup:api-only-retired` must delete the retired root/static copies if they reappear. Do not restore them for compatibility.
 
+The cleanup task is intentionally broad for API-only governance. Root-level scanner/cache copies such as `scan-open-buy-cache.js`, `scan-strategy4-cache.js`, `scan-strategy5-cache.js`, `scan-warrant-flow-cache.js`, root-level `*-latest.json`/`*-backup.json`, old freshness wrappers, and old page caches such as `data\warrant-volume-page-*.json` are retired. The official scanner source lives under `scripts\`, and official data freshness comes from Supabase complete runs/snapshots through no-store APIs.
+
 ## 3. Latest API Contract
 
 Every strategy, chip, warrant, CB, market AI, heatmap, and mobile boot latest API should return stable metadata:

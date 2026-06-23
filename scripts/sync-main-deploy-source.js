@@ -164,7 +164,31 @@ const LEGACY_FRESHNESS_OK_FILE = path.join("data", "live-" + "freshness-ok.json"
 
 const RETIRED_ARTIFACTS = [
   "run-open-buy-sync-retry.ps1",
+  "run-freshness-gate-task.ps1",
+  "run-verify-data-freshness.ps1",
+  "open-buy-latest.json",
+  "open-buy-backup.json",
+  "institution-latest.json",
+  "institution-backup.json",
+  "strategy4-latest.json",
+  "strategy4-backup.json",
+  "strategy5-latest.json",
+  "strategy5-backup.json",
+  "warrant-flow-latest.json",
+  "warrant-flow-backup.json",
+  "scan-institution-cache.js",
+  "scan-open-buy-cache.js",
+  "scan-open-buy.js",
+  "scan-strategy4-cache.js",
+  "scan-strategy4.js",
+  "scan-strategy5-cache.js",
+  "scan-warrant-flow-cache.js",
+  "scan-warrant-flow.js",
   LEGACY_FRESHNESS_OK_FILE,
+  path.join("data", "chip-trade-health-latest.json"),
+  path.join("data", "data-freshness-report.json"),
+  path.join("data", "fugle-open-rebound-latest.json"),
+  path.join("data", "institution-mobile-top.json"),
   path.join("data", `${STRATEGY4_KEY}-latest.json`),
   path.join("data", `${STRATEGY4_KEY}-backup.json`),
   path.join("data", `${STRATEGY4_KEY}-summary.json`),
@@ -183,11 +207,7 @@ for (const prefix of [
   "warrant-volume",
 ]) {
   for (let page = 1; page <= 24; page += 1) {
-    if (prefix === "warrant-volume") {
-      FILES.push(`data/${prefix}-page-${page}.json`);
-    } else {
-      RETIRED_ARTIFACTS.push(path.join("data", `${prefix}-page-${page}.json`));
-    }
+    RETIRED_ARTIFACTS.push(path.join("data", `${prefix}-page-${page}.json`));
   }
 }
 
