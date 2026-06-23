@@ -11,7 +11,7 @@
           "value": "\\?1"
         }
       ],
-      "destination": "/mobile.html"
+      "destination": "/api/mobile-page"
     },
     {
       "source": "/",
@@ -22,7 +22,15 @@
           "value": ".*(Android|iPhone|iPad|iPod|Mobile|Windows Phone).*"
         }
       ],
-      "destination": "/mobile.html"
+      "destination": "/api/mobile-page"
+    },
+    {
+      "source": "/mobile",
+      "destination": "/api/mobile-page"
+    },
+    {
+      "source": "/mobile.html",
+      "destination": "/api/mobile-page"
     },
     {
       "source": "/data/(open-buy|strategy2-intraday|strategy3|strategy4|strategy5|institution|warrant-flow|warrant-priority|warrant-single-signal|cb-detect)(.*).json",

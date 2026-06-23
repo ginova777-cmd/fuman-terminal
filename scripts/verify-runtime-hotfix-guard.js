@@ -90,6 +90,15 @@ async function verifyLive() {
     "DATA_PATTERNS",
   ]);
 
+  const mobilePage = await fetchText("/api/mobile-page");
+  assertLiveText("mobile-page", mobilePage, [
+    "輔滿手機終端",
+    "API only polling",
+  ]);
+  if (mobilePage.body.includes("輔滿 股票終端")) {
+    issues.push("mobile-page live returned desktop terminal HTML");
+  }
+
   const bundle = await fetchText("/api/terminal-fast-bundle", 35000);
   if (bundle.status < 200 || bundle.status >= 300) {
     issues.push(`terminal-fast-bundle live HTTP ${bundle.status}: ${bundle.url}`);
@@ -121,6 +130,10 @@ async function main() {
   requireMarker("terminal-hotfix.js", "installHotPathDataWarmup");
   requireMarker("terminal-hotfix.js", "primeApiCache");
 
+  requireMarker("index.html", "/api/mobile-page");
+  requireMarker(path.join("api", "mobile-page.js"), "mobile.html");
+  requireMarker(path.join("api", "mobile-page.js"), "text/html; charset=utf-8");
+
   requireMarker(path.join("api", "terminal-fast-bundle.js"), "source: \"terminal-fast-bundle\"");
   requireMarker(path.join("api", "terminal-fast-bundle.js"), "partial");
   requireMarker(path.join("api", "terminal-fast-bundle.js"), "misses");
@@ -132,6 +145,7 @@ async function main() {
   requireMarker("fuman-sw.js", "PREFETCH_CORE_DATA_ASSETS");
 
   const vercel = read("vercel.json");
+  requireMarker("vercel.json", "/api/mobile-page");
   requireJsonHeader(vercel, "/terminal-hotfix.js", "no-store");
   requireJsonHeader(vercel, "/fuman-sw.js", "no-store");
   if (!vercel.includes("terminal-hotfix\\\\.js$")) {

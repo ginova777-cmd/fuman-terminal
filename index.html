@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>輔滿 股票終端</title>
     <script>
-      (()=>{try{const p=new URLSearchParams(location.search),force=p.get("desktop")==="1";if(force)sessionStorage.setItem("fuman_force_desktop","1");const ua=navigator.userAgent||"",coarse=matchMedia?.("(pointer: coarse)")?.matches,small=matchMedia?.("(max-width: 820px)")?.matches,mobile=/Android|iPhone|iPad|iPod|Mobile|Windows Phone/i.test(ua)||(coarse&&small);if(mobile&&!force&&sessionStorage.getItem("fuman_force_desktop")!=="1"){fetch("/mobile.html",{cache:"no-store"}).then(r=>r.text()).then(html=>{document.open();document.write(html);document.close()}).catch(()=>location.replace("/mobile"))}}catch{}})();
+      (()=>{try{const p=new URLSearchParams(location.search),force=p.get("desktop")==="1";if(force)sessionStorage.setItem("fuman_force_desktop","1");const ua=navigator.userAgent||"",coarse=matchMedia?.("(pointer: coarse)")?.matches,small=matchMedia?.("(max-width: 820px)")?.matches,mobile=/Android|iPhone|iPad|iPod|Mobile|Windows Phone/i.test(ua)||(coarse&&small);if(mobile&&!force&&sessionStorage.getItem("fuman_force_desktop")!=="1"){fetch("/api/mobile-page",{cache:"no-store"}).then(r=>r.text()).then(html=>{document.open();document.write(html);document.close()}).catch(()=>location.replace("/api/mobile-page"))}}catch{}})();
     </script>
     <link rel="icon" href="/favicon.ico" sizes="any">
     <link rel="preload" as="image" href="/assets/logo.webp" fetchpriority="high">
