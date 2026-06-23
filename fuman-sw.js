@@ -28,11 +28,14 @@ const STATIC_ASSETS = [
   "/favicon.ico",
 ];
 
-const DATA_PATTERNS = [];
+const DATA_PATTERNS = [
+  /\/api\/terminal-fast-bundle/i,
+];
 
 const NETWORK_FIRST_DATA_PATTERNS = [];
 
 const PREFETCH_CORE_DATA_ASSETS = [
+  "/api/terminal-fast-bundle",
   "/api/mobile-boot",
 ];
 
@@ -44,7 +47,6 @@ const PREFETCH_DATA_ASSETS = [
   ...PREFETCH_CORE_DATA_ASSETS,
   "/api/terminal-home",
   "/api/market-ai-live",
-  "/api/market-ai-panel-live",
 ];
 
 const LIVE_PATTERNS = [
