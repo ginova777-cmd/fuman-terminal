@@ -64,6 +64,15 @@ Expected success:
 
 If this passes, the API-only governance chain is healthy. Use targeted verifiers such as `verify:warrant-freshness:live` and `verify:cb-detect-live` for specific data domains. If a legacy checker complains about `/data/*.json`, `live-freshness-ok.json`, or `verify-data-freshness`, treat it as obsolete and remove the old dependency instead of restoring the legacy verifier.
 
+Retired static/cache artifacts are cleaned by:
+
+```text
+npm run cleanup:api-only-retired
+install-api-only-cleanup-task.ps1
+```
+
+The cleanup task must only delete explicit API-only retired artifacts and old logs/archives. It must not delete Supabase writer code, runtime secrets, active mobile boot/digest files, or scanner source files that still belong to the API-only pipeline.
+
 ## 3. Latest API Contract
 
 Every strategy, chip, warrant, CB, market AI, heatmap, and mobile boot latest API should return stable metadata:

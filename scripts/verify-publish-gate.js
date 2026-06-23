@@ -36,6 +36,9 @@ function queryScheduledTask(taskName) {
 }
 
 const packageJson = JSON.parse(read("package.json"));
+if (!packageJson.scripts?.["cleanup:api-only-retired"] || !/cleanup-api-only-retired-artifacts\.js/.test(packageJson.scripts["cleanup:api-only-retired"])) {
+  issues.push("package.json missing scripts.cleanup:api-only-retired");
+}
 for (const scriptName of ["verify:mobile-layout", "verify:mobile-layout:live"]) {
   if (!packageJson.scripts?.[scriptName]) {
     issues.push(`package.json missing scripts.${scriptName}`);
@@ -481,8 +484,35 @@ for (const file of [
   "api/desktop-static-disabled.js",
   "api/scan-warrant-flow.js",
   "scripts/scan-warrant-flow-cache.js",
+  "scripts/cleanup-api-only-retired-artifacts.js",
+  "run-api-only-retired-cleanup.ps1",
+  "install-api-only-cleanup-task.ps1",
 ]) {
   if (!sourceSyncScript.includes(file)) issues.push(`sync-main-deploy-source.js missing ${file}`);
+}
+
+const apiOnlyCleanup = read("scripts/cleanup-api-only-retired-artifacts.js");
+for (const marker of [
+  "api-only-retired-artifact-cleanup",
+  "data/live-freshness-ok.json",
+  "open-buy-page-",
+  "strategy2-intraday-page-",
+  "strategy3-page-",
+  "strategy4-page-",
+  "strategy5-page-",
+  "warrant-flow-page-",
+  "cb-detect-page-",
+]) {
+  if (!apiOnlyCleanup.includes(marker)) issues.push(`cleanup-api-only-retired-artifacts.js missing ${marker}`);
+}
+
+const cleanupTaskInstaller = read("install-api-only-cleanup-task.ps1");
+for (const marker of [
+  "Fuman API-Only Retired Artifact Cleanup 1535",
+  "run-api-only-retired-cleanup.ps1",
+  "New-ScheduledTaskTrigger -Daily",
+]) {
+  if (!cleanupTaskInstaller.includes(marker)) issues.push(`install-api-only-cleanup-task.ps1 missing ${marker}`);
 }
 
 const strategy3Scanner = read("scripts/scan-strategy3-cache.js");
@@ -734,11 +764,14 @@ if (fetchResult.status !== 0) {
       "scripts/verify-deployment.js",
       "scripts/verify-warrant-freshness.js",
       "run-live-freshness-gate.ps1",
+      "run-api-only-retired-cleanup.ps1",
       "run-cache-sync.ps1",
       "run-open-buy-sync-retry.ps1",
       "scripts/intraday-radar-rules.js",
       "scripts/sync-main-deploy-source.js",
       "scripts/verify-source-sync.js",
+      "scripts/cleanup-api-only-retired-artifacts.js",
+      "install-api-only-cleanup-task.ps1",
       "run-main-release-pipeline.ps1",
       "run-daily-release.ps1",
       "run-full-scan.ps1",
