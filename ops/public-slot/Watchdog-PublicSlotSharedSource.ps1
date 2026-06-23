@@ -14,10 +14,11 @@ param(
 $ErrorActionPreference = "Continue"
 
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
+$FumanRoot = Split-Path -Parent (Split-Path -Parent $ScriptDir)
 $LogDir = Join-Path $ScriptDir "runtime"
 $LogFile = Join-Path $LogDir ("public-slot-watchdog-{0}.log" -f (Get-Date -Format "yyyyMMdd"))
 $AnonKeyFile = Join-Path $RuntimeDir "secrets\supabase-anon-key.txt"
-$CollectorScript = "C:\fuman-terminal\scripts\fugle-websocket-collector.js"
+$CollectorScript = Join-Path $FumanRoot "scripts\fugle-websocket-collector.js"
 $NodeExe = "C:\Program Files\nodejs\node.exe"
 
 New-Item -ItemType Directory -Force -Path $LogDir | Out-Null
@@ -293,3 +294,5 @@ if ($health.AgeSeconds -gt $MaxSourceAgeSeconds) {
 }
 
 Write-WatchdogLog "正常：shared source 有在跑，Supabase 也還新鮮。"
+
+

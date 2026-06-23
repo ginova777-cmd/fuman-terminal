@@ -9,6 +9,10 @@ const DEFAULT_ROOTS = [
 const DEFAULT_RUNTIME_ROOT = process.env.FUMAN_RUNTIME_DIR || "C:\\fuman-runtime";
 
 const EXACT_RETIRED = [
+  "scan-intraday-signals.js",
+  "intraday-radar-rules.js",
+  ".vercel/output/static/scan-intraday-signals.js",
+  ".vercel/output/static/intraday-radar-rules.js",
   "run-open-buy-sync-retry.ps1",
   "data/live-freshness-ok.json",
   "data/open-buy-latest.json",
@@ -188,3 +192,4 @@ main().catch((error) => {
   console.error(`[api-only-cleanup] failed: ${error?.stack || error?.message || error}`);
   process.exit(1);
 });
+

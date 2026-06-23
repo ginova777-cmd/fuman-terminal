@@ -52,6 +52,8 @@ const FILES = [
   "scripts/generate-chip-trade-exclusions.js",
   "scripts/generate-institution-tdcc-breakout.js",
   "scripts/intraday-radar-rules.js",
+  "scripts/scan-intraday-signals.js",
+  "scripts/fugle-websocket-collector.js",
   "scripts/prepare-deploy.js",
   "scripts/guard-source-tree.js",
   "scripts/scan-open-buy-cache.js",
@@ -96,6 +98,7 @@ const FILES = [
   "ops/public-slot/Strategy5RunIdCompleteGate.sql",
   "ops/public-slot/InstitutionRunIdCompleteGate.sql",
   "ops/public-slot/WarrantFlowRunIdCompleteGate.sql",
+  "ops/public-slot/Watchdog-PublicSlotSharedSource.ps1",
   "ops/public-slot/MobileUpdateEventsMaintenance.sql",
   "run-live-freshness-gate.ps1",
   "run-api-only-retired-cleanup.ps1",
@@ -275,6 +278,7 @@ for (const directory of DIRECTORIES) {
 }
 
 console.log(`[sync-source] ok copied=${copied} copiedFromDirs=${copiedFromDirs} retiredDeleted=${retiredDeleted} deploy=${DEPLOY_ROOT}`);
+
 
 
 

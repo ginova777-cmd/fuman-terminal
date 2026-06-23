@@ -72,6 +72,27 @@ install-api-only-cleanup-task.ps1
 ```
 
 The cleanup task must only delete explicit API-only retired artifacts and old logs/archives. It must not delete Supabase writer code, runtime secrets, active mobile boot/digest files, or scanner source files that still belong to the API-only pipeline.
+Strategy2 retired root copies are dangerous and must not be used:
+
+```text
+C:\fuman-terminal\scan-intraday-signals.js
+C:\fuman-terminal\intraday-radar-rules.js
+C:\fuman-terminal-sync\scan-intraday-signals.js
+C:\fuman-terminal-sync\intraday-radar-rules.js
+C:\fuman-terminal\.vercel\output\static\scan-intraday-signals.js
+C:\fuman-terminal\.vercel\output\static\intraday-radar-rules.js
+```
+
+The only Strategy2 scanner/rules authority is under `scripts\`:
+
+```text
+C:\fuman-terminal-sync\scripts\scan-intraday-signals.js
+C:\fuman-terminal-sync\scripts\intraday-radar-rules.js
+C:\fuman-terminal\scripts\scan-intraday-signals.js
+C:\fuman-terminal\scripts\intraday-radar-rules.js
+```
+
+`cleanup:api-only-retired` must delete the retired root/static copies if they reappear. Do not restore them for compatibility.
 
 ## 3. Latest API Contract
 
@@ -692,3 +713,5 @@ sync project looks correct
 ```
 
 Say fixed only when the official production API returns the correct no-store payload and the relevant verifier passes.
+
+

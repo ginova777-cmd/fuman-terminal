@@ -470,6 +470,8 @@ for (const file of [
   "terminal-watchlist-module.js",
   "lib/supabase-public-slot.js",
   "scripts/intraday-radar-rules.js",
+  "scripts/scan-intraday-signals.js",
+  "scripts/fugle-websocket-collector.js",
   "scripts/scan-realtime-radar-cache.js",
   "scripts/scan-strategy3-cache.js",
   "scripts/verify-desktop-api-only.js",
@@ -479,6 +481,7 @@ for (const file of [
   "scripts/scan-open-buy-cache.js",
   "scripts/scan-star-preopen.js",
   "ops/public-slot/Strategy1RunIdCompleteGate.sql",
+  "ops/public-slot/Watchdog-PublicSlotSharedSource.ps1",
   "data/star-preopen-latest.json",
   "data/star-preopen-scorecard-source.json",
   "api/desktop-static-disabled.js",
@@ -494,6 +497,10 @@ for (const file of [
 const apiOnlyCleanup = read("scripts/cleanup-api-only-retired-artifacts.js");
 for (const marker of [
   "api-only-retired-artifact-cleanup",
+  "scan-intraday-signals.js",
+  "intraday-radar-rules.js",
+  ".vercel/output/static/scan-intraday-signals.js",
+  ".vercel/output/static/intraday-radar-rules.js",
   "data/live-freshness-ok.json",
   "open-buy-page-",
   "strategy2-intraday-page-",
@@ -768,6 +775,8 @@ if (fetchResult.status !== 0) {
       "run-cache-sync.ps1",
       "run-open-buy-sync-retry.ps1",
       "scripts/intraday-radar-rules.js",
+  "scripts/scan-intraday-signals.js",
+  "scripts/fugle-websocket-collector.js",
       "scripts/sync-main-deploy-source.js",
       "scripts/verify-source-sync.js",
       "scripts/cleanup-api-only-retired-artifacts.js",
@@ -793,6 +802,7 @@ if (fetchResult.status !== 0) {
       "STRATEGY2-FRESHNESS-GOVERNANCE.md",
       "lib/supabase-public-slot.js",
       "scripts/scan-intraday-signals.js",
+      "ops/public-slot/Watchdog-PublicSlotSharedSource.ps1",
     ]);
     const dirty = status.stdout
       .split(/\r?\n/)
@@ -816,3 +826,4 @@ if (issues.length) {
 }
 
 console.log("[publish-gate] ok");
+
