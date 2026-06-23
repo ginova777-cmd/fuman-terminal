@@ -49,9 +49,8 @@ function Write-FlowHealth($scope, $status, $message, $detail = @{}) {
 }
 
 function Invoke-FlowFreshnessVerification {
-  Write-FlowLog "Running data freshness verification before publish success"
-  & $nodeExe "scripts\verify-data-freshness.js" >> $log 2>&1
-  return $LASTEXITCODE
+  Write-FlowLog "Legacy data freshness verifier removed; running afterhours Supabase verification"
+  return Invoke-AfterhoursSupabaseVerification
 }
 
 function Invoke-AfterhoursSupabaseVerification {

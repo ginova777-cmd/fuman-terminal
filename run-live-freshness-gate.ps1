@@ -179,159 +179,6 @@ function Get-Strategy5MultiCount($payload) {
   return $count
 }
 
-function Invoke-LiveDataFreshnessVerify([switch]$SkipTerminalGate) {
-  Push-Location $publishRoot
-  try {
-    if ($SkipTerminalGate) {
-      $previous = $env:FUMAN_SKIP_TERMINAL_GATE_ARTIFACT
-      try {
-        $env:FUMAN_SKIP_TERMINAL_GATE_ARTIFACT = "1"
-        Invoke-GateCommand "npm run verify:data-freshness:live skip terminal gate ($publishRoot)" { npm run verify:data-freshness:live }
-      } finally {
-        if ($null -eq $previous) {
-          Remove-Item Env:FUMAN_SKIP_TERMINAL_GATE_ARTIFACT -ErrorAction SilentlyContinue
-        } else {
-          $env:FUMAN_SKIP_TERMINAL_GATE_ARTIFACT = $previous
-        }
-      }
-    } else {
-      Invoke-GateCommand "npm run verify:data-freshness:live ($publishRoot)" { npm run verify:data-freshness:live }
-    }
-  } finally {
-    Pop-Location
-  }
-}
-
-function Publish-TerminalFreshnessGate($mode, $rawResults) {
-  $versionPath = Join-Path $publishRoot "version.json"
-  $manifestPath = Join-Path $publishRoot "data\data-manifest.json"
-  $starPath = Join-Path $publishRoot "data\star-preopen-latest.json"
-  $versionPayload = Read-GateJson $versionPath
-  $manifestPayload = Read-GateJson $manifestPath
-  $cbPayload = Read-GateApiJson "https://fuman-terminal.vercel.app/api/cb-detect-latest"
-  $strategy5Payload = Read-GateApiJson "https://fuman-terminal.vercel.app/api/strategy5-latest"
-  $strategy4Payload = Read-GateApiJson "https://fuman-terminal.vercel.app/api/strategy4-latest"
-  $openBuyPayload = Read-GateApiJson "https://fuman-terminal.vercel.app/api/open-buy-latest"
-  $starPayload = Read-GateJson $starPath
-  $institutionLatestPayload = Read-GateApiJson "https://fuman-terminal.vercel.app/api/institution-latest"
-  $institutionSlimPayload = $institutionLatestPayload
-  $institutionTdccPayload = Read-GateApiJson "https://fuman-terminal.vercel.app/api/institution-tdcc-breakout-latest"
-  $warrantSlimPayload = Read-GateApiJson "https://fuman-terminal.vercel.app/api/warrant-flow-latest"
-  $head = & $gitExe -C $publishRoot log -1 --oneline --decorate
-  $headSha = (& $gitExe -C $publishRoot rev-parse --short=12 HEAD).Trim()
-  if (-not $headSha) { throw "Cannot resolve publish HEAD for terminal freshness gate" }
-  $gateId = "{0}-{1}" -f (Get-Date -Format "yyyyMMddHHmmss"), $headSha
-  $statusPath = Join-Path $publishRoot "data\live-freshness-ok.json"
-  $status = [ordered]@{
-    ok = $true
-    gateId = $gateId
-    checkedAt = (Get-Date).ToString("o")
-    version = [string]$versionPayload.version
-    publishHead = [string]$head
-    verifier = "npm run verify:data-freshness:live"
-    log = $log
-    mode = $mode
-    manifestCount = Get-GateCount $manifestPayload
-    manifestCbCount = if ($manifestPayload.entries."cb-detect-latest.json") { [int]$manifestPayload.entries."cb-detect-latest.json".count } else { Get-GateCount $cbPayload }
-    cbCount = Get-GateCount $cbPayload
-    cbUpdatedAt = [string]$cbPayload.updatedAt
-    strategy5Count = Get-GateCount $strategy5Payload
-    strategy5UpdatedAt = [string]$strategy5Payload.updatedAt
-    strategy5SourceDate = [string]$strategy5Payload.sourceDate
-    strategy4Count = Get-GateCount $strategy4Payload
-    strategy4UpdatedAt = [string]$strategy4Payload.updatedAt
-    strategy4ScanStamp = [string]$strategy4Payload.scanStamp
-    strategy4Complete = [bool]$strategy4Payload.complete
-    strategy4Total = [int]$strategy4Payload.total
-    openBuyCount = Get-GateCount $openBuyPayload
-    openBuySourceDate = [string]$openBuyPayload.usedDate
-    openBuyUpdatedAt = [string]$openBuyPayload.updatedAt
-    starCount = Get-GateCount $starPayload
-    starFinalBlindBuyCount = [int](@($starPayload.finalMatches).Count)
-    starWindowActive = [bool]$starPayload.windowActive
-    starFinalWindowActive = [bool]$starPayload.finalWindowActive
-    starUpdatedAt = [string]$starPayload.updatedAt
-    institutionCount = Get-GateCount $institutionLatestPayload
-    institutionDate = [string]$institutionLatestPayload.usedDate
-    institutionSource = [string]$institutionLatestPayload.source
-    institutionSlimCount = Get-GateCount $institutionSlimPayload
-    institutionSlimDate = [string]$institutionSlimPayload.usedDate
-    institutionTdccCount = Get-GateCount $institutionTdccPayload
-    institutionTdccDate = [string]$institutionTdccPayload.institutionDate
-    institutionTdccGeneratedAt = [string]$institutionTdccPayload.generatedAt
-    warrantCount = Get-GateCount $warrantSlimPayload
-    warrantVolumeCount = Get-GateArrayCount $warrantSlimPayload "volumeMatches"
-    warrantSingleSignalCount = Get-GateArrayCount $warrantSlimPayload "singleSignals"
-    warrantUpdatedAt = [string]$warrantSlimPayload.updatedAt
-    strategy5ChipKCount = Get-Strategy5MatchCount $strategy5Payload "chip_k_confluence"
-    strategy5ForeignTrustCount = Get-Strategy5MatchCount $strategy5Payload "foreign_trust_breakout"
-    strategy5MultiCount = Get-Strategy5MultiCount $strategy5Payload
-    rawRefresh = @($rawResults)
-  }
-  $status | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $statusPath -Encoding utf8
-
-  Write-GateLog "Wrote legacy terminal freshness diagnostic gateId=$($status.gateId) version=$($status.version) cbCount=$($status.cbCount) manifestCbCount=$($status.manifestCbCount) institution=$($status.institutionCount) institutionDate=$($status.institutionDate) institutionTdcc=$($status.institutionTdccCount) institutionTdccDate=$($status.institutionTdccDate) strategy5=$($status.strategy5Count) openBuy=$($status.openBuyCount) openBuyDate=$($status.openBuySourceDate) star=$($status.starCount) finalBlindBuy=$($status.starFinalBlindBuyCount) chipK=$($status.strategy5ChipKCount) foreignTrust=$($status.strategy5ForeignTrustCount)"
-
-  if (-not $SkipTerminalCopy) {
-    New-Item -ItemType Directory -Force -Path (Join-Path $terminalRoot "data") | Out-Null
-    $terminalStatusPath = Join-Path $terminalRoot "data\live-freshness-ok.json"
-    if ([string]::Equals((Resolve-Path -LiteralPath $statusPath).Path, (Resolve-Path -LiteralPath $terminalStatusPath -ErrorAction SilentlyContinue).Path, [System.StringComparison]::OrdinalIgnoreCase)) {
-      Write-GateLog "Terminal freshness gate artifact copy skipped; source and destination are the same file."
-    } else {
-      Copy-Item -LiteralPath $statusPath -Destination $terminalStatusPath -Force
-    }
-  }
-
-  return [pscustomobject]$status
-}
-
-function Wait-TerminalFreshnessGateVisible($expectedStatus) {
-  if (-not $expectedStatus -or -not $expectedStatus.gateId) {
-    throw "Terminal freshness gate visibility check missing expected gateId"
-  }
-  $url = "https://fuman-terminal.vercel.app/data/live-freshness-ok.json?v=$($expectedStatus.gateId)"
-  for ($attempt = 1; $attempt -le 12; $attempt++) {
-    try {
-      Write-GateLog "Checking terminal freshness gate visibility attempt $attempt/12 gateId=$($expectedStatus.gateId)"
-      $response = Invoke-WebRequest -Uri $url -UseBasicParsing -TimeoutSec 30
-      $payload = $response.Content | ConvertFrom-Json -ErrorAction Stop
-      $isCurrentGate = $payload.ok -eq $true -and
-        [string]$payload.gateId -eq [string]$expectedStatus.gateId -and
-        [string]$payload.version -eq [string]$expectedStatus.version -and
-        [int]$payload.cbCount -eq [int]$expectedStatus.cbCount -and
-        [int]$payload.manifestCbCount -eq [int]$expectedStatus.manifestCbCount -and
-        [int]$payload.strategy4Count -eq [int]$expectedStatus.strategy4Count -and
-        [string]$payload.strategy4ScanStamp -eq [string]$expectedStatus.strategy4ScanStamp -and
-        [bool]$payload.strategy4Complete -eq [bool]$expectedStatus.strategy4Complete -and
-        [int]$payload.strategy5Count -eq [int]$expectedStatus.strategy5Count -and
-        [int]$payload.institutionCount -eq [int]$expectedStatus.institutionCount -and
-        [string]$payload.institutionDate -eq [string]$expectedStatus.institutionDate -and
-        [int]$payload.institutionSlimCount -eq [int]$expectedStatus.institutionSlimCount -and
-        [string]$payload.institutionSlimDate -eq [string]$expectedStatus.institutionSlimDate -and
-        [int]$payload.institutionTdccCount -eq [int]$expectedStatus.institutionTdccCount -and
-        [string]$payload.institutionTdccDate -eq [string]$expectedStatus.institutionTdccDate -and
-        [int]$payload.openBuyCount -eq [int]$expectedStatus.openBuyCount -and
-        [int]$payload.starCount -eq [int]$expectedStatus.starCount -and
-        [int]$payload.starFinalBlindBuyCount -eq [int]$expectedStatus.starFinalBlindBuyCount -and
-        [string]$payload.openBuySourceDate -eq [string]$expectedStatus.openBuySourceDate -and
-        [int]$payload.strategy5ChipKCount -eq [int]$expectedStatus.strategy5ChipKCount -and
-        [int]$payload.strategy5ForeignTrustCount -eq [int]$expectedStatus.strategy5ForeignTrustCount -and
-        [int]$payload.strategy5MultiCount -eq [int]$expectedStatus.strategy5MultiCount -and
-        [int]$payload.manifestCount -eq [int]$expectedStatus.manifestCount -and
-        [string]$payload.verifier -match "verify:data-freshness:live"
-      if ($isCurrentGate) {
-        Write-GateLog "Terminal freshness gate visible gateId=$($payload.gateId) version=$($payload.version) cbCount=$($payload.cbCount) manifestCbCount=$($payload.manifestCbCount) institution=$($payload.institutionCount) institutionTdcc=$($payload.institutionTdccCount) strategy5=$($payload.strategy5Count) star=$($payload.starCount) finalBlindBuy=$($payload.starFinalBlindBuyCount) chipK=$($payload.strategy5ChipKCount) foreignTrust=$($payload.strategy5ForeignTrustCount)"
-        return
-      }
-      Write-GateLog "Terminal freshness gate visible but not current gateId=$($payload.gateId) expected=$($expectedStatus.gateId) cbCount=$($payload.cbCount)/$($expectedStatus.cbCount) manifestCbCount=$($payload.manifestCbCount)/$($expectedStatus.manifestCbCount) institution=$($payload.institutionCount)/$($expectedStatus.institutionCount) institutionTdcc=$($payload.institutionTdccCount)/$($expectedStatus.institutionTdccCount) strategy5=$($payload.strategy5Count)/$($expectedStatus.strategy5Count) star=$($payload.starCount)/$($expectedStatus.starCount) finalBlindBuy=$($payload.starFinalBlindBuyCount)/$($expectedStatus.starFinalBlindBuyCount) chipK=$($payload.strategy5ChipKCount)/$($expectedStatus.strategy5ChipKCount) foreignTrust=$($payload.strategy5ForeignTrustCount)/$($expectedStatus.strategy5ForeignTrustCount)"
-    } catch {
-      Write-GateLog "Terminal freshness gate not visible yet: $($_.Exception.Message)"
-    }
-    Start-Sleep -Seconds 20
-  }
-  throw "Terminal freshness gate artifact was not visible on live site after retries gateId=$($expectedStatus.gateId)"
-}
-
 function Invoke-RepoSyncPreflight {
   Push-Location $syncRoot
   try {
@@ -559,16 +406,12 @@ try {
   }
 
   $gateMode = if ($SkipRawRefresh) { "publish" } elseif ($Fast) { "fast" } else { "full" }
-  Invoke-NpmAt $publishRoot "verify:data-freshness"
-  Invoke-LiveDataFreshnessVerify -SkipTerminalGate
   Invoke-NpmAt $publishRoot "verify:live-version"
-  $gateStatus = Publish-TerminalFreshnessGate $gateMode @($rawRefreshResults.ToArray())
-  Invoke-LiveDataFreshnessVerify
+  Write-GateLog "Legacy terminal freshness diagnostic disabled; not writing data/live-freshness-ok.json"
 
   if (-not $SkipTerminalCopy) {
     Write-GateLog "Copying verified publish data back to terminal root"
     Copy-Item -Path (Join-Path $publishRoot "data\*.json") -Destination (Join-Path $terminalRoot "data") -Force
-    Invoke-NpmAt $terminalRoot "verify:data-freshness"
   }
 
   $head = & $gitExe -C $publishRoot log -1 --oneline --decorate

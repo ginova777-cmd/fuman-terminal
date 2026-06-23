@@ -25,7 +25,7 @@ $versionFiles = @(
 # Release invariant checked by scripts/verify-publish-gate.js:
 # git fetch origin main -> git pull --ff-only origin main -> npm run verify:bump
 # -> npm run bump:version when required -> npm run sync:source -> npm run deploy
-# -> npm run verify:live-version -> npm run verify:warrant-freshness:live -> npm run verify:data-freshness:live
+# -> npm run verify:live-version -> npm run verify:warrant-freshness:live
 # -> git push origin HEAD:main.
 
 function Write-ReleaseLog($message) {
@@ -128,7 +128,6 @@ Invoke-Npm "sync:source"
 Invoke-Npm "verify:version"
 Invoke-Npm "verify:sw"
 Invoke-Npm "verify:warrant-freshness"
-Invoke-Npm "verify:data-freshness"
 Invoke-Npm "verify:source-sync"
 
 if (-not $SkipDeploy) {
@@ -139,18 +138,6 @@ if (-not $SkipDeploy) {
 
 Invoke-Npm "verify:live-version"
 Invoke-Npm "verify:warrant-freshness:live"
-
-$previousSkipTerminalGateArtifact = $env:FUMAN_SKIP_TERMINAL_GATE_ARTIFACT
-try {
-  $env:FUMAN_SKIP_TERMINAL_GATE_ARTIFACT = "1"
-  Invoke-Npm "verify:data-freshness:live"
-} finally {
-  if ($null -eq $previousSkipTerminalGateArtifact) {
-    Remove-Item Env:FUMAN_SKIP_TERMINAL_GATE_ARTIFACT -ErrorAction SilentlyContinue
-  } else {
-    $env:FUMAN_SKIP_TERMINAL_GATE_ARTIFACT = $previousSkipTerminalGateArtifact
-  }
-}
 
 $versionChanged = $beforeVersion -ne $afterVersion
 if ($versionChanged) {

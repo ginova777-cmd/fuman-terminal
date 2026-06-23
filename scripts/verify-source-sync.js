@@ -43,7 +43,6 @@ const KEY_FILES = [
   "scripts/verify-mobile-layout.js",
   "scripts/sync-afterhours-supabase-status.js",
   "scripts/sync-main-deploy-source.js",
-  "scripts/verify-data-freshness.js",
   "scripts/verify-warrant-freshness.js",
   "scripts/verify-supabase-json.js",
   "scripts/verify-run-id-complete-gates.js",

@@ -1,190 +1,35 @@
-# 策略2資料新鮮度治理
+# 策略2 Supabase API-Only Governance
 
-Strategy2 Data Freshness Governance
+策略2正式資料來源是 Supabase complete run / shared source health / no-store API。不要再使用舊靜態 freshness verifier 或 `live-freshness-ok.json` 判斷策略2是否可用。
 
-Verified Data Publish Gate / 資料發布閘門機制
+## 正式契約
 
-## 目的
+- `source_status.payload.intraday_1m_ok`、`ready_ge_35_symbols`、`ready_ge_80_symbols` 是 1 分 K 供給健康依據。
+- `v_strategy2_detection_health` 是策略2專用健康檢查入口。
+- `v_strategy2_entry_events_today` 是 A 進場區歷史逐筆資料入口。
+- `strategy2_latest` 必須跟上最新 shared source；若 source 已恢復但 latest 落後，應刷新策略2 run。
+- 盤後 shared source `stopped` 不可被誤判成盤中 1 分 K 壞掉；盤後狀態應是 `afterhours_stopped_ok`。
 
-策略2不是單純更新 `strategy2-intraday-*.json`。
+## 禁止恢復的舊路徑
 
-策略2資料只有在「掃描、發布、live 驗證」全部通過後，才可以被視為可給客人看的 A 進場區資料。
+- 不要呼叫 `verify:data-freshness` 或 `verify:data-freshness:live`。
+- 不要依賴 `scripts/verify-data-freshness.js`。
+- 不要用 `data/live-freshness-ok.json` 當策略2發布 gate。
+- 不要讓 `run-cache-sync.ps1`、`run-local-freshness-repair.ps1`、`run-flow.ps1`、`run-live-freshness-gate.ps1` 重新接回舊 verifier。
 
-## 唯一入口
+## 可接受驗證
 
-正式資料發布只能走：
+- `npm run verify:publish-gate`
+- 策略2專用 SQL/RPC 驗證
+- live API readback：確認 `strategy2_ready_cache_ok=true`、`entry_count`、`run_id`、`updated_at`、`quality_status`
 
-```powershell
-cd C:\fuman-terminal-sync
-npm run freshness:gate
-```
+## 交易時間窗
 
-例行快速更新只能走：
+策略2仍保留固定交易時間窗：
 
-```powershell
-cd C:\fuman-terminal-sync
-npm run freshness:gate:fast
-```
+- `STRATEGY2_SCAN_START_MINUTES = 525`
+- `STRATEGY2_ENTRY_START_MINUTES = 545`
+- `STRATEGY2_ENTRY_END_MINUTES = 720`
+- `STRATEGY2_SCAN_END_MINUTES = 720`
 
-## 成功標準
-
-策略2掃描成功不等於發布成功。
-
-策略2 JSON 寫出成功不等於發布成功。
-
-只有最後通過：
-
-```powershell
-npm run verify:data-freshness:live
-```
-
-才算策略2資料新鮮度通過。
-
-## 策略2 gate 必備流程
-
-`run-live-freshness-gate.ps1` 必須包含：
-
-```text
-strategy2 intraday raw refresh
-cache sync all
-verify:data-freshness
-verify:data-freshness:live
-live-freshness-ok.json
-```
-
-策略2 raw refresh 只負責產生候選資料；發布權限屬於 freshness gate。
-
-## 策略2時間窗
-
-策略2 gate 必須設定：
-
-```text
-STRATEGY2_SCAN_START_MINUTES = 525
-STRATEGY2_ENTRY_START_MINUTES = 545
-STRATEGY2_ENTRY_END_MINUTES = 720
-STRATEGY2_SCAN_END_MINUTES = 720
-```
-
-說明：
-
-```text
-08:45 開始策略2盤前/暖機讀取
-09:05 後才進入正式可交易進場時間
-12:00 後不再開新進場
-```
-
-## 策略2 A進場區治理
-
-A進場區必須來自策略2掃描結果，並保留：
-
-```text
-進場時間
-股票代號
-股票名稱
-策略
-strategyIds
-strategyTags
-strategyReasons
-sourceCoverage
-sourceCoverageHealthy
-```
-
-A進場區排序規則：
-
-```text
-latestAAt / firstAAt 最新的在最上方
-```
-
-七種策略任一成立，可以列入 A 進場區：
-
-```text
-STAR
-盤前觀察
-開盤沖
-早攻續強
-盤中續強
-曾發動仍強
-反彈轉強
-```
-
-但 STAR 不能用 `open-buy` 文字、分數或「開盤無腦入」推論；STAR 必須來自期貨 + 試撮驗證欄位。
-
-## Supabase / 富果 REST 原料來源
-
-策略2 Codex 只能把 Supabase / 富果當作原始資料來源；12 個 A 進場策略、MA35、KDJ、MACD、NPSY、RSI、分時量比、外內比、再起漲型態都必須由策略2 scanner 自己計算。
-
-Supabase REST base URL:
-
-```text
-https://cpmpfhbzutkiecccekfr.supabase.co/rest/v1
-```
-
-策略2可讀原料來源：
-
-```text
-https://cpmpfhbzutkiecccekfr.supabase.co/rest/v1/source_status
-https://cpmpfhbzutkiecccekfr.supabase.co/rest/v1/v_fugle_quotes_live_health
-https://cpmpfhbzutkiecccekfr.supabase.co/rest/v1/fugle_quotes_live
-https://cpmpfhbzutkiecccekfr.supabase.co/rest/v1/fugle_intraday_1m
-https://cpmpfhbzutkiecccekfr.supabase.co/rest/v1/v_fugle_intraday_1m_status
-https://cpmpfhbzutkiecccekfr.supabase.co/rest/v1/stock_universe
-https://cpmpfhbzutkiecccekfr.supabase.co/rest/v1/fugle_daily_volume_avg
-https://cpmpfhbzutkiecccekfr.supabase.co/rest/v1/fugle_preopen_snapshot
-https://cpmpfhbzutkiecccekfr.supabase.co/rest/v1/v_fugle_preopen_snapshot_history
-https://cpmpfhbzutkiecccekfr.supabase.co/rest/v1/fugle_preopen_snapshot_history
-https://cpmpfhbzutkiecccekfr.supabase.co/rest/v1/v_fugle_preopen_final_blind_buy_ready
-https://cpmpfhbzutkiecccekfr.supabase.co/rest/v1/v_futopt_stock_mapping_ready
-https://cpmpfhbzutkiecccekfr.supabase.co/rest/v1/futopt_quotes_live
-```
-
-重要欄位提醒：
-
-```text
-v_fugle_intraday_1m_status 沒有 rows_today；今天 1分K 筆數要讀 today_candle_count。
-```
-
-## 防繞過
-
-不得用以下方式發布策略2資料：
-
-```powershell
-.\run-cache-sync.ps1 -Scope strategy2
-.\run-strategy2-intraday.ps1
-node scripts\scan-intraday-signals.js
-手動複製 data\strategy2-intraday-*.json
-手動改 C:\fuman-terminal\data
-```
-
-舊入口必須導向 `legacy-entrypoint-guard.ps1`，再轉進 `npm run freshness:gate:fast`。
-
-## 可觀測性
-
-每次 gate 必須留下：
-
-```text
-C:\fuman-runtime\logs\live-freshness-gate-*.log
-data\live-freshness-ok.json
-rawRefresh.strategy2 intraday raw refresh
-health summary / data freshness verifier 結果
-外部 source warning
-```
-
-外部來源 timeout、HTTP 403/404、fetch failed、source unhealthy 是 warning，但最後仍以 `verify:data-freshness:live` 為準。
-
-## 硬擋規則
-
-`npm run verify:publish-gate` 必須檢查：
-
-```text
-STRATEGY2-FRESHNESS-GOVERNANCE.md 存在
-AGENTS.md 指向本文件
-FRESHNESS-GATE-MOBILE.md 指向本文件
-run-live-freshness-gate.ps1 包含 strategy2 raw refresh
-run-live-freshness-gate.ps1 包含策略2時間窗
-run-strategy2-intraday.ps1 不能繞過 legacy-entrypoint-guard.ps1
-run-cache-sync.ps1 不能允許 -Scope strategy2
-```
-
-## 一句話
-
-策略2資料只有通過 Verified Data Publish Gate，才可以出現在客人看到的 A進場區。
+策略2是否可交易，要看 Supabase shared source 與策略2 latest 是否一致，不看舊 static JSON freshness gate。

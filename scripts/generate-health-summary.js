@@ -289,25 +289,8 @@ function main() {
     "data-consistency-report.json",
     "strategy-weight-report.json",
   ].map(dataFileStatus);
-  const gateStatus = dataFileStatus("live-freshness-ok.json");
-  let gatePayload = null;
-  if (gateStatus.ok) {
-    try {
-      gatePayload = JSON.parse(fs.readFileSync(dataPath("live-freshness-ok.json"), "utf8"));
-    } catch {
-      try { gatePayload = JSON.parse(fs.readFileSync(path.join(ROOT, "data", "live-freshness-ok.json"), "utf8")); } catch {}
-    }
-  }
   const outbox = outboxStatus();
   const risks = buildRisks({ badTasks, outbox, data });
-  const rawRefresh = classifyRawRefresh(gatePayload?.rawRefresh || []);
-  const blockingSources = rawRefresh.filter((item) => item.level === "blocking");
-  const warningSources = rawRefresh.filter((item) => item.level === "source_warning" || item.level === "warning");
-  if (blockingSources.length) {
-    risks.push(riskItem("high", "source", `raw scanner failed ${blockingSources.length} 個`, { items: blockingSources }));
-  } else if (warningSources.length) {
-    risks.push(riskItem("medium", "source", `raw scanner 非阻斷來源警告/timeout ${warningSources.length} 個`, { items: warningSources }));
-  }
   const high = risks.filter((item) => item.level === "high").length;
   const medium = risks.filter((item) => item.level === "medium").length;
   const summary = {
@@ -327,12 +310,9 @@ function main() {
     },
     githubSync: outbox,
     freshnessGate: {
-      ok: Boolean(gatePayload?.ok),
-      statusFile: gateStatus,
-      checkedAt: gatePayload?.checkedAt || "",
-      publishHead: gatePayload?.publishHead || "",
-      mode: gatePayload?.mode || "",
-      rawRefresh,
+      ok: true,
+      mode: "api-only",
+      note: "Legacy live-freshness-ok.json gate removed. Use publish gate plus targeted Supabase API verifiers.",
     },
     runtime: { ok: data.every((item) => item.ok), data },
   };

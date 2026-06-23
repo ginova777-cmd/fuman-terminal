@@ -121,8 +121,8 @@ if (!fs.existsSync(path.join(ROOT, "run-local-freshness-repair.ps1"))) {
   issues.push("run-local-freshness-repair.ps1 missing local data repair script");
 } else {
   const repairScript = read("run-local-freshness-repair.ps1");
-  if (!/verify:data-freshness/.test(repairScript) || !/freshness:gate:fast/.test(repairScript)) {
-    issues.push("run-local-freshness-repair.ps1 must verify local data and repair with freshness:gate:fast");
+  if (!/freshness:gate:fast/.test(repairScript) || /verify:data-freshness/.test(repairScript)) {
+    issues.push("run-local-freshness-repair.ps1 must repair with freshness:gate:fast and must not use removed verify:data-freshness");
   }
 }
 
@@ -139,7 +139,6 @@ if (!fs.existsSync(path.join(ROOT, "run-main-release-pipeline.ps1"))) {
     "npm run deploy",
     "npm run verify:live-version",
     "npm run verify:warrant-freshness:live",
-    "npm run verify:data-freshness:live",
     "git push origin HEAD:main",
   ]) {
     if (!releasePipeline.includes(marker)) issues.push(`run-main-release-pipeline.ps1 missing ${marker}`);
@@ -325,15 +324,10 @@ for (const marker of [
   "strategy4 raw refresh",
   "strategy5 raw refresh",
   "cb detect raw refresh",
-  "verify:data-freshness:live",
   "FUMAN_INSIDE_FRESHNESS_GATE",
   "FUMAN_FAST_GATE",
   "Fast gate selected",
-  "live-freshness-ok.json",
-  "Publish-TerminalFreshnessGate",
-  "Wrote legacy terminal freshness diagnostic",
-  "gateId",
-  "FUMAN_SKIP_TERMINAL_GATE_ARTIFACT",
+  "Legacy terminal freshness diagnostic disabled",
 ]) {
   if (!gate.includes(marker)) issues.push(`run-live-freshness-gate.ps1 missing ${marker}`);
 }
@@ -364,21 +358,6 @@ for (const marker of [
   "run-publish-gate.ps1",
 ]) {
   if (!dailyRelease.includes(marker)) issues.push(`run-daily-release.ps1 missing daily release marker ${marker}`);
-}
-
-const dataFreshnessVerifier = read("scripts/verify-data-freshness.js");
-for (const marker of [
-  "validateTerminalFreshnessGate",
-  "data/live-freshness-ok.json",
-  "FUMAN_CHECK_LEGACY_TERMINAL_GATE_ARTIFACT",
-  "terminal freshness gate version mismatch",
-  "terminal freshness gate missing gateId",
-  "terminal freshness gate invalid gateId",
-  "terminal freshness gate CB rows not aligned with manifest",
-  "terminal freshness gate warrant volume count mismatch",
-  "FUMAN_SKIP_TERMINAL_GATE_ARTIFACT",
-]) {
-  if (!dataFreshnessVerifier.includes(marker)) issues.push(`verify-data-freshness.js missing ${marker}`);
 }
 
 const mobileHealthVerifier = read("scripts/verify-mobile-health.js");
@@ -452,8 +431,11 @@ if (!/overlapping run/.test(gate)) {
 }
 
 const serviceWorker = read("fuman-sw.js");
-if (!/networkFirst\(request\)/.test(serviceWorker) || !/cache: "no-store"/.test(serviceWorker) || !/live-freshness-ok\.json/.test(serviceWorker)) {
-  issues.push("fuman-sw.js must keep mobile data requests network-first/no-store and include live-freshness-ok.json");
+if (!/networkFirst\(request\)/.test(serviceWorker) || !/cache: "no-store"/.test(serviceWorker)) {
+  issues.push("fuman-sw.js must keep mobile data requests network-first/no-store");
+}
+if (/live-freshness-ok\.json/.test(serviceWorker)) {
+  issues.push("fuman-sw.js must not keep legacy live-freshness-ok.json in data cache patterns");
 }
 if (!/ETIMEDOUT|ECONNRESET|fetch failed/.test(gate)) {
   issues.push("run-live-freshness-gate.ps1 must capture external source timeout warnings");
@@ -542,21 +524,26 @@ if (!fs.existsSync(path.join(ROOT, "AGENTS.md"))) {
   issues.push("AGENTS.md missing Codex publish rule");
 } else {
   const agents = read("AGENTS.md");
-  if (!agents.includes("npm run freshness:gate")) issues.push("AGENTS.md must name npm run freshness:gate as the only publish entrypoint");
-  if (!agents.includes("data/live-freshness-ok.json")) issues.push("AGENTS.md must explain the live terminal freshness gate artifact");
-  if (!agents.includes("FRESHNESS-GATE-MOBILE.md")) issues.push("AGENTS.md must point Codex to FRESHNESS-GATE-MOBILE.md");
-  if (!agents.includes("git pull --ff-only origin main")) issues.push("AGENTS.md must require Codex to sync before touching the project");
-  if (!agents.includes("repo sync preflight")) issues.push("AGENTS.md must explain that freshness:gate blocks stale repos");
-  if (!agents.includes("External data-source timeouts")) issues.push("AGENTS.md must explain external source warning handling");
-  if (!agents.includes("Do not modify Supabase-related code")) issues.push("AGENTS.md must preserve the current Supabase pause rule");
-  if (!agents.includes("STRATEGY2-FRESHNESS-GOVERNANCE.md")) issues.push("AGENTS.md must point Codex to STRATEGY2-FRESHNESS-GOVERNANCE.md");
-  if (!agents.includes("strategy2-intraday-*.json")) issues.push("AGENTS.md must mention strategy2 JSON cannot bypass freshness gate");
-  if (!agents.includes("REALTIME-RADAR-FRESHNESS-GOVERNANCE.md")) issues.push("AGENTS.md must point Codex to REALTIME-RADAR-FRESHNESS-GOVERNANCE.md");
-  if (!agents.includes("realtime-radar-latest.json")) issues.push("AGENTS.md must mention realtime radar JSON cannot bypass freshness gate");
-  if (!agents.includes("STRATEGY5-FRESHNESS-GOVERNANCE.md")) issues.push("AGENTS.md must point Codex to STRATEGY5-FRESHNESS-GOVERNANCE.md");
-  if (!agents.includes("strategy5-latest.json")) issues.push("AGENTS.md must mention strategy5 JSON cannot bypass freshness gate");
-  if (!agents.includes("VERSION-LIVE-SYNC-GOVERNANCE.md")) issues.push("AGENTS.md must point Codex to VERSION-LIVE-SYNC-GOVERNANCE.md");
-  if (!agents.includes("npm run verify:live-version")) issues.push("AGENTS.md must explain version/live sync verification");
+  for (const marker of [
+    "Fuman Terminal Codex Operating Contract",
+    "Supabase API-only",
+    "Do not use these as data freshness authority",
+    "npm run verify:publish-gate",
+    "Strategy 1 Open Buy",
+    "Strategy 2 Intraday",
+    "Strategy 3 Tail",
+    "Strategy 4 Swing",
+    "Strategy 5 Composite",
+    "Institution / Chip",
+    "Warrant Flow",
+    "CB Detect",
+    "Shared Fugle Intraday Source",
+  ]) {
+    if (!agents.includes(marker)) issues.push(`AGENTS.md missing operating contract marker ${marker}`);
+  }
+  if (!/remove the old dependency instead of restoring the legacy verifier/.test(agents)) {
+    issues.push("AGENTS.md must tell Codex to remove obsolete freshness dependencies instead of restoring the legacy verifier");
+  }
 }
 
 if (!fs.existsSync(path.join(ROOT, "VERSION-LIVE-SYNC-GOVERNANCE.md"))) {
@@ -586,41 +573,19 @@ if (!fs.existsSync(path.join(ROOT, "FRESHNESS-GATE-MOBILE.md"))) {
 } else {
   const mobile = read("FRESHNESS-GATE-MOBILE.md");
   for (const marker of [
-    "資料新鮮度治理",
-    "Verified Data Publish Gate",
-    "npm run freshness:gate",
-    "npm run verify:data-freshness:live",
+    "API-Only Publish Governance",
+    "Fuman Terminal no longer uses the old daily data freshness verifier",
+    "Removed legacy authority",
     "npm run verify:publish-gate",
-    "data/live-freshness-ok.json` is legacy diagnostic only",
-    "Live freshness authority is",
-    "Supabase complete run",
-    "no-store API",
-    "frontend polling",
-    "FUMAN_CHECK_LEGACY_TERMINAL_GATE_ARTIFACT=1",
-    "[data-freshness] ok mode=live entries=26",
-    "[publish-gate] ok",
-    "git pull --ff-only origin main",
-    "repo sync preflight",
-    "外部來源 timeout",
-    "手機資料請求必須 network-first / no-store",
-    "排程重疊",
-    "不要手動改 publish data",
-    "GitHub 或網路不可用",
-    "目前先不要修改 Supabase",
-    "Fuman Terminal Freshness Gate",
-    "live-freshness-ok.json",
-    "gateId",
-    "manifestCbCount",
-    "STRATEGY2-FRESHNESS-GOVERNANCE.md",
-    "策略2 A進場區",
-    "REALTIME-RADAR-FRESHNESS-GOVERNANCE.md",
-    "/api/market + /api/realtime",
-    "realtime-radar-latest.json",
-    "STRATEGY5-FRESHNESS-GOVERNANCE.md",
-    "strategy5-latest.json",
-    "strategy-match-index.json",
+    "Supabase complete run or snapshot",
+    "Targeted data verifiers remain valid",
+    "Do not restore scripts/verify-data-freshness.js",
+    "Do not add verify:data-freshness back to package.json",
   ]) {
     if (!mobile.includes(marker)) issues.push(`FRESHNESS-GATE-MOBILE.md missing ${marker}`);
+  }
+  if (!/If an old script complains that `verify-data-freshness\.js` is missing/.test(mobile)) {
+    issues.push("FRESHNESS-GATE-MOBILE.md must tell Codex to remove old dependencies instead of recreating verify-data-freshness.js");
   }
 }
 
@@ -629,22 +594,18 @@ if (!fs.existsSync(path.join(ROOT, "STRATEGY2-FRESHNESS-GOVERNANCE.md"))) {
 } else {
   const strategy2Governance = read("STRATEGY2-FRESHNESS-GOVERNANCE.md");
   for (const marker of [
-    "策略2資料新鮮度治理",
-    "Verified Data Publish Gate",
-    "npm run freshness:gate",
-    "npm run verify:data-freshness:live",
-    "strategy2 intraday raw refresh",
-    "cache sync all",
-    "live-freshness-ok.json",
+    "策略2 Supabase API-Only Governance",
+    "v_strategy2_detection_health",
+    "v_strategy2_entry_events_today",
+    "afterhours_stopped_ok",
+    "不要呼叫 `verify:data-freshness`",
+    "不要依賴 `scripts/verify-data-freshness.js`",
+    "不要用 `data/live-freshness-ok.json`",
     "STRATEGY2_SCAN_START_MINUTES = 525",
     "STRATEGY2_ENTRY_START_MINUTES = 545",
     "STRATEGY2_ENTRY_END_MINUTES = 720",
     "STRATEGY2_SCAN_END_MINUTES = 720",
-    "A進場區",
-    "latestAAt / firstAAt 最新的在最上方",
-    "STAR 必須來自期貨 + 試撮驗證欄位",
-    ".\\run-cache-sync.ps1 -Scope strategy2",
-    "legacy-entrypoint-guard.ps1",
+    "npm run verify:publish-gate",
   ]) {
     if (!strategy2Governance.includes(marker)) issues.push(`STRATEGY2-FRESHNESS-GOVERNANCE.md missing ${marker}`);
   }
@@ -655,22 +616,14 @@ if (!fs.existsSync(path.join(ROOT, "REALTIME-RADAR-FRESHNESS-GOVERNANCE.md"))) {
 } else {
   const realtimeRadarGovernance = read("REALTIME-RADAR-FRESHNESS-GOVERNANCE.md");
   for (const marker of [
-    "即時雷達資料新鮮度治理",
-    "Verified Data Publish Gate",
-    "npm run freshness:gate",
-    "npm run verify:data-freshness:live",
-    "/api/market + /api/realtime",
-    "realtime-radar-latest.json",
+    "即時雷達 Supabase API-Only Governance",
+    "API 必須回 `ok`",
+    "marketSession.marketDataDate",
     "ETF / ETN / DR / 指數 / 權證 / CB / 非普通股",
-    "2330、2412、3045",
-    "水泥 / 軍工 / 國防 / 航太",
-    "avg_volume_5 < 3000",
-    "cumulative_bid_ask_volume < 3000",
-    "score 高到低 -> 成交值高到低 -> 取前 80 檔",
-    "failed batch details",
-    "stale quote details",
-    "Supabase 不是即時雷達必要條件",
-    "legacy-entrypoint-guard.ps1",
+    "不要呼叫 `verify:data-freshness`",
+    "不要依賴 `scripts/verify-data-freshness.js`",
+    "不要用 `data/live-freshness-ok.json`",
+    "npm run verify:publish-gate",
   ]) {
     if (!realtimeRadarGovernance.includes(marker)) issues.push(`REALTIME-RADAR-FRESHNESS-GOVERNANCE.md missing ${marker}`);
   }
@@ -681,26 +634,15 @@ if (!fs.existsSync(path.join(ROOT, "STRATEGY5-FRESHNESS-GOVERNANCE.md"))) {
 } else {
   const strategy5Governance = read("STRATEGY5-FRESHNESS-GOVERNANCE.md");
   for (const marker of [
-    "策略5資料新鮮度治理",
-    "Verified Data Publish Gate",
-    "npm run freshness:gate",
-    "strategy5 raw refresh",
-    "node scripts/scan-strategy5-cache.js",
-    "node scripts/generate-slim-cache.js",
-    "strategy5-background-scan.yml",
-    "strategy5-latest.json",
-    "strategy5-backup.json",
-    "strategy-match-index.json",
-    "terminal-home-bundle.json",
-    "chip_k_confluence",
-    "foreign_trust_breakout",
-    "chip_k_confluence=0",
-    "foreign_trust_breakout=42",
-    "live-freshness-ok.json",
-    "strategy5Count",
-    "strategy5ChipKCount",
-    "strategy5ForeignTrustCount",
-    "strategy5MultiCount",
+    "策略5 Supabase API-Only Governance",
+    "/api/strategy5-latest",
+    "`rows` 必須是 `matches` 的 alias",
+    "?top=1&compact=1&limit=50",
+    "readback log 至少包含 `runId`",
+    "不要呼叫 `verify:data-freshness`",
+    "不要依賴 `scripts/verify-data-freshness.js`",
+    "不要用 `data/live-freshness-ok.json`",
+    "不要把策略5正式來源退回",
   ]) {
     if (!strategy5Governance.includes(marker)) issues.push(`STRATEGY5-FRESHNESS-GOVERNANCE.md missing ${marker}`);
   }
@@ -740,7 +682,6 @@ if (fetchResult.status !== 0) {
       "scripts/verify-publish-gate.js",
       "api/realtime-radar-latest.js",
       "terminal-runtime-config.js",
-      "scripts/verify-data-freshness.js",
       "scripts/verify-warrant-freshness.js",
       "run-live-freshness-gate.ps1",
       "run-cache-sync.ps1",
@@ -772,7 +713,7 @@ if (fetchResult.status !== 0) {
         return true;
       });
     if (dirty.length) {
-      issues.push(`repo sync check failed: unexpected dirty files: ${dirty.slice(0, 8).join(", ")}`);
+      issues.push(`repo sync check failed: unexpected dirty files: ${dirty.join(", ")}`);
     }
   }
 }
@@ -784,7 +725,3 @@ if (issues.length) {
 }
 
 console.log("[publish-gate] ok");
-
-
-
-

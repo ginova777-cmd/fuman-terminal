@@ -1,50 +1,25 @@
-# 策略5資料新鮮度治理
+# 策略5 Supabase API-Only Governance
 
-策略5屬於 Fuman Terminal Freshness Gate 的受管資料。資料發布流程必須走 Verified Data Publish Gate，不能手動修改或只提交單一 JSON。
+策略5正式來源是 Supabase complete run 與 `/api/strategy5-latest`。舊 static JSON 只可作為 legacy artifact，不可作為 freshness authority。
 
-## 發布入口
+## API 契約
 
-- 只允許用 `npm run freshness:gate` 或主發布鏈 `main -> bump -> deploy -> live verify -> push GitHub` 發布。
-- 策略5原始掃描必須由 `strategy5 raw refresh` 或 `node scripts/scan-strategy5-cache.js` 產生。
-- 策略5掃描後必須執行 `node scripts/generate-slim-cache.js`，同步 `strategy-match-index.json`、`data-manifest.json`、`terminal-home-bundle.json`。
-- GitHub `strategy5-background-scan.yml` 必須同時 commit `strategy5-latest.json`、`strategy5-backup.json`、`strategy-match-index.json`、`data-status-index.json`、`data-manifest.json`、`mobile-home-summary.json`、`terminal-home-bundle.json`。
+- `/api/strategy5-latest` 必須回 `ok`、`runId`、`usedDate`、`sourceDate`、`marketSession.marketDataDate`、`count`、`resultCount`、`matches`、`rows`。
+- `rows` 必須是 `matches` 的 alias；`rows.length === matches.length`，輕量查詢時 `rows.length === count`。
+- `?top=1&compact=1&limit=50` 必須真的限制回傳筆數並精簡 payload。
+- `resultCount > count` 表示完整 run 筆數大於本次輕量回傳筆數，不代表資料缺少。
 
-## 策略5硬檢查
+## Scanner 契約
 
-`npm run verify:data-freshness` 與 `npm run verify:data-freshness:live` 必須驗證：
+- `scripts/scan-strategy5-cache.js` 寫入 complete run 後必須 readback。
+- readback log 至少包含 `runId`、`resultRows`、`readbackCount`、`status`、`complete`。
+- 若 `readbackCount !== resultRows.length`，不可宣稱發布成功。
 
-- `strategy5-latest.json` `ok=true` 且 `count` 等於實際 `matches.length`。
-- 籌碼老K `chip_k_confluence` 不可為 0。
-- 外資投信連買準突破 `foreign_trust_breakout` 必須走新條件，數量需在治理範圍內。
-- 舊快取指紋 `chip_k_confluence=0` 且 `foreign_trust_breakout=42` 必須擋下。
-- 多策略共振不可為 0。
-- `strategy-match-index.json` 必須包含策略5標的與對應 details，例如 `籌碼老K`、`準突破`、`量價周轉`、`布林KDJ`。
-- `terminal-home-bundle.json` 的策略5 count 必須與 `strategy5-latest.json` 一致。
+## 禁止恢復的舊路徑
 
-## Fuman Terminal Freshness Gate
+- 不要呼叫 `verify:data-freshness` 或 `verify:data-freshness:live`。
+- 不要依賴 `scripts/verify-data-freshness.js`。
+- 不要用 `data/live-freshness-ok.json` 記錄策略5指紋。
+- 不要把策略5正式來源退回 `/data/strategy5-latest.json`、`strategy5-page-1.json` 或其他 static JSON。
 
-`data/live-freshness-ok.json` 必須記錄策略5指紋：
-
-- `strategy5Count`
-- `strategy5ChipKCount`
-- `strategy5ForeignTrustCount`
-- `strategy5MultiCount`
-- `strategy5UpdatedAt`
-- `strategy5SourceDate`
-
-Live gate 驗證時，以上欄位必須與正式站當下的 `strategy5-latest.json` 完全一致。
-
-## 失敗處理
-
-如果正式站出現籌碼老K歸零、外資投信回到舊數量、或點擊策略5卡片顯示舊資料：
-
-1. `git pull --ff-only origin main`
-2. 重新跑 `node scripts/scan-strategy5-cache.js`
-3. 重新跑 `node scripts/generate-slim-cache.js`
-4. `npm run verify:data-freshness`
-5. `npm run sync:source`
-6. `vercel --prod`
-7. `npm run verify:data-freshness:live`
-8. commit 並 `git push origin main`
-
-不要只複製 `strategy5-latest.json`，也不要跳過 `strategy-match-index.json`。
+策略5發布健康由 Supabase readback、API shape、publish gate、targeted verifier 決定。

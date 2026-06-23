@@ -1948,7 +1948,6 @@ function terminalHomeMobileSlim() {
       updatedAt: status.updatedAt || "",
       entries: Object.fromEntries(Object.entries(status.entries || {}).filter(([key]) => [
         "market-summary.json",
-        "live-freshness-ok.json",
         "mobile-home-summary.json",
         "stocks-quotes-mobile-top.json",
         "strategy2-intraday-live-top.json",

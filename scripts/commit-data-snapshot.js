@@ -59,7 +59,6 @@ for (const file of files) {
   }
 }
 
-run("verify:data-freshness", [process.execPath, "--use-system-ca", path.join(ROOT, "scripts", "verify-data-freshness.js")]);
 git(["add", "data"], { stdio: "inherit" });
 git(["commit", "-m", "Publish data snapshot"], { stdio: "inherit" });
 console.log(`[snapshot:data] ok files=${files.length}`);

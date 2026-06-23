@@ -48,27 +48,21 @@ Vercel deploy side effects
 browser hard refresh
 ```
 
-Static JSON may exist only for legacy diagnostics or explicit fallback. It must not be the official gate unless this is explicitly set:
+Static JSON may exist only for legacy diagnostics or explicit fallback. It must not be the official freshness authority.
+
+The daily battle-state check is:
 
 ```text
-FUMAN_CHECK_LEGACY_TERMINAL_GATE_ARTIFACT=1
-```
-
-The daily battle-state checks are:
-
-```text
-npm run verify:data-freshness:live
 npm run verify:publish-gate
 ```
 
 Expected success:
 
 ```text
-[data-freshness] ok mode=live entries=26
 [publish-gate] ok
 ```
 
-If these pass, the API-only data chain is healthy. If a legacy checker complains about `/data/*.json` or `live-freshness-ok.json`, treat it as legacy noise unless the user explicitly opted in.
+If this passes, the API-only governance chain is healthy. Use targeted verifiers such as `verify:warrant-freshness:live` and `verify:cb-detect-live` for specific data domains. If a legacy checker complains about `/data/*.json`, `live-freshness-ok.json`, or `verify-data-freshness`, treat it as obsolete and remove the old dependency instead of restoring the legacy verifier.
 
 ## 3. Latest API Contract
 
@@ -668,4 +662,3 @@ sync project looks correct
 ```
 
 Say fixed only when the official production API returns the correct no-store payload and the relevant verifier passes.
-

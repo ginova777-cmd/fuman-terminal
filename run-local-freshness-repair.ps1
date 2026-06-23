@@ -33,24 +33,12 @@ function Invoke-LoggedNpm($root, $scriptName) {
 }
 
 Write-RepairLog "Local freshness repair started"
-$verifyExit = Invoke-LoggedNpm $terminalRoot "verify:data-freshness"
-if ($verifyExit -eq 0) {
-  Write-RepairLog "SUCCESS local terminal data already fresh"
-  exit 0
-}
-
-Write-RepairLog "Local terminal freshness failed; running fast freshness gate repair"
+Write-RepairLog "Legacy data freshness verifier removed; running fast freshness gate repair directly"
 $gateExit = Invoke-LoggedNpm $syncRoot "freshness:gate:fast"
 if ($gateExit -ne 0) {
   Write-RepairLog "FAILED fast freshness gate repair exit=$gateExit"
   exit $gateExit
 }
 
-$finalExit = Invoke-LoggedNpm $terminalRoot "verify:data-freshness"
-if ($finalExit -ne 0) {
-  Write-RepairLog "FAILED local terminal data still stale after repair"
-  exit $finalExit
-}
-
-Write-RepairLog "SUCCESS local terminal data repaired and verified"
+Write-RepairLog "SUCCESS local terminal repair completed"
 exit 0

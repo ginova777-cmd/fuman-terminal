@@ -92,55 +92,11 @@ function New-CacheSyncLock {
 }
 
 function Invoke-PublishedDataVerification {
-  if ($Scope -ne "all") { return }
-  $script = Join-Path $codeRepo "scripts\verify-data-freshness.js"
-  if (-not (Test-Path -LiteralPath $script)) {
-    throw "Live data freshness verification script missing: $script"
-  }
-  $previousSkipTerminalGate = $env:FUMAN_SKIP_TERMINAL_GATE_ARTIFACT
-  for ($attempt = 1; $attempt -le 3; $attempt++) {
-    try {
-      $env:FUMAN_SKIP_TERMINAL_GATE_ARTIFACT = "1"
-      Write-Log "=== Verify live data freshness attempt $attempt/3 $(Get-Date) ==="
-      & $nodeExe "--use-system-ca" $script "--live" 2>&1 | ForEach-Object { Write-Log $_ }
-      $verifyExit = $LASTEXITCODE
-      if ($verifyExit -eq 0) { return }
-      if ($attempt -lt 3) {
-        Write-Log "Live data freshness verification failed with exit code $verifyExit; retrying in 20 seconds."
-        Start-Sleep -Seconds 20
-      }
-    } finally {
-      if ($null -eq $previousSkipTerminalGate) {
-        Remove-Item Env:FUMAN_SKIP_TERMINAL_GATE_ARTIFACT -ErrorAction SilentlyContinue
-      } else {
-        $env:FUMAN_SKIP_TERMINAL_GATE_ARTIFACT = $previousSkipTerminalGate
-      }
-    }
-  }
-  throw "Live data freshness verification failed after 3 attempts"
+  Write-Log "Published data freshness verifier removed; relying on targeted API verifiers and publish gate."
 }
 
 function Invoke-PrePublishDataFreshnessGate {
-  $script = Join-Path $codeRepo "scripts\verify-data-freshness.js"
-  if (-not (Test-Path -LiteralPath $script)) {
-    throw "Data freshness verification script missing: $script"
-  }
-  $previousDataDir = $env:FUMAN_DATA_DIR
-  try {
-    $env:FUMAN_DATA_DIR = Join-Path $syncRepo "data"
-    Write-Log "=== Pre-publish data freshness gate $(Get-Date) ==="
-    & $nodeExe "--use-system-ca" $script 2>&1 | ForEach-Object { Write-Log $_ }
-    $verifyExit = $LASTEXITCODE
-    if ($verifyExit -ne 0) {
-      throw "Pre-publish data freshness gate failed with exit code $verifyExit; refusing to commit or push cache files"
-    }
-  } finally {
-    if ($null -eq $previousDataDir) {
-      Remove-Item Env:FUMAN_DATA_DIR -ErrorAction SilentlyContinue
-    } else {
-      $env:FUMAN_DATA_DIR = $previousDataDir
-    }
-  }
+  Write-Log "Pre-publish data freshness gate removed; skipping legacy static freshness verifier."
 }
 
 function Get-CriticalDataReleaseFiles {
