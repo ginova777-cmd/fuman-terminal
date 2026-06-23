@@ -445,4 +445,72 @@
     };
     window.FUMAN_HOTFIX_PRIME_API_CACHE = primeApiCache;
   }
+
+  function installStrategy1OpenBuyRollbackGuard() {
+    const legacyFirstCard = "16" + ":00 候選";
+    const legacyLead = "16" + ":00後先出明日候選";
+    const legacySummary = "16" + ":00後產生明日候選";
+    const legacyHeader = "16" + ":00 後產生明日候選";
+    const legacyProfit = "有" + "賺就走";
+    const legacyRun = "快" + "跑";
+
+    const replaceText = (root, from, to) => {
+      const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+      const nodes = [];
+      while (walker.nextNode()) nodes.push(walker.currentNode);
+      nodes.forEach((node) => {
+        if (node.nodeValue && node.nodeValue.includes(from)) {
+          node.nodeValue = node.nodeValue.split(from).join(to);
+        }
+      });
+    };
+
+    const enforceOne = (root) => {
+      const text = root.textContent || "";
+      const isStrategy1 = text.includes("策略1-明日開盤入") || text.includes("策略1") && text.includes("08:55");
+      if (!isStrategy1) return false;
+      if (!text.includes("08:55")) return false;
+
+      replaceText(root, legacyFirstCard, "21:30 候選");
+      replaceText(root, "收盤後用日K篩明日名單", "完整掃描產生明日名單");
+      replaceText(root, legacyLead, "21:30 產生明日候選");
+      replaceText(root, legacySummary, "21:30產生明日候選");
+      replaceText(root, legacyHeader, "21:30 產生明日候選");
+      replaceText(root, "08:55後看最終名單", "08:55 最終確認");
+      replaceText(root, "買入：09:00 開盤價｜停利 +1.2%｜停損 -1.0%｜09:10 強制出場。", "09:00 只執行 BUY 名單。");
+
+      const grid = root.querySelector(".swing-signal-grid");
+      if (!grid) return true;
+      [...grid.querySelectorAll(".swing-card")].forEach((card) => {
+        const cardText = card.textContent || "";
+        if (cardText.includes(legacyProfit) || cardText.includes(legacyRun)) card.remove();
+      });
+      const cards = [...grid.querySelectorAll(".swing-card")];
+      if (cards.length > 2 && cards.some((card) => (card.textContent || "").includes("21:30")) && cards.some((card) => (card.textContent || "").includes("08:55"))) {
+        cards.slice(2).forEach((card) => card.remove());
+      }
+      return true;
+    };
+
+    let scheduled = false;
+    const enforce = () => {
+      scheduled = false;
+      document.querySelectorAll(".swing-dashboard").forEach(enforceOne);
+    };
+    const schedule = () => {
+      if (scheduled) return;
+      scheduled = true;
+      requestAnimationFrame(enforce);
+    };
+
+    if (document.readyState === "loading") {
+      document.addEventListener("DOMContentLoaded", schedule, { once: true });
+    } else {
+      schedule();
+    }
+    new MutationObserver(schedule).observe(document.documentElement, { childList: true, subtree: true });
+    setInterval(schedule, 3000);
+  }
+
+  installStrategy1OpenBuyRollbackGuard();
 })();

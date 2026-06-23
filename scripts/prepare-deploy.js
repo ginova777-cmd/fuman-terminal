@@ -25,6 +25,7 @@ function runCheck(label, command) {
 }
 
 run("guard:source", ["npm", "run", "guard:source"]);
+run("verify:strategy1-open-buy-ui", ["npm", "run", "verify:strategy1-open-buy-ui"]);
 const bumpStatus = runCheck("verify:bump", ["npm", "run", "verify:bump"]);
 if (bumpStatus !== 0) {
   run("bump:version", ["npm", "run", "bump:version"]);

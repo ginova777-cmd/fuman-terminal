@@ -5031,7 +5031,7 @@ function setStrategyChrome(mode) {
       : swing
       ? "用波段指標邏輯整理全台股，盤中即時更新價量，分類突破缺口、逃逸缺口、V轉與多頭攻擊。"
       : openBuy
-      ? "14:30 後產生明日候選，08:55 後看最終名單，09:00 開盤入，有賺就走。"
+      ? "21:30 產生明日候選，08:55 最終確認，09:00 只執行 BUY 名單。"
       : strategy3
       ? ""
       : "左側切換日線、籌碼與高波動策略；右側即時重算符合條件的股票訊號。";
@@ -5427,7 +5427,7 @@ function renderOpenBuyRadar(universe) {
     ? `已掃描 ${scannedCount}/${totalCount}｜候選 ${scanCount}｜${new Date(openBuyScanLastAt).toLocaleTimeString("zh-TW", { hour12: false })}`
     : `等待後端掃描 0/${totalCount}`;
 
-  if (strategySummary) strategySummary.textContent = `策略1-明日開盤入｜16:00後產生明日候選｜08:55後看最終名單｜${scanText}`;
+  if (strategySummary) strategySummary.textContent = `策略1-明日開盤入｜21:30產生明日候選｜08:55最終確認｜${scanText}`;
   if (strategyMatchCount) strategyMatchCount.textContent = rows.length.toLocaleString("zh-TW");
   if (strategyAvgScore) strategyAvgScore.textContent = rows.length ? Math.round(rows.reduce((sum, stock) => sum + stock.score, 0) / rows.length) : "--";
   if (strategyTopHit) strategyTopHit.textContent = rows.length ? "+1.2%" : "--";
@@ -5458,7 +5458,7 @@ function renderOpenBuyRadar(universe) {
       </tr>
     `;
   }).join("") : `
-    <tr><td colspan="10">策略1後端掃描中。16:00後可看明日候選，08:55後用盤前狀態做最終確認；第一版先用日K條件產生開盤入名單。</td></tr>
+    <tr><td colspan="10">策略1後端掃描中。21:30 產生明日候選，08:55 用盤前狀態做最終確認。</td></tr>
   `;
   const pager = buildTerminalPagination("openBuy", openBuyPage, openBuyPaged.totalPages, rows.length);
 
@@ -5467,19 +5467,16 @@ function renderOpenBuyRadar(universe) {
       <div class="swing-topbar">
         <div>
           <h2>${titleWithSchedule("⚡", "策略1-明日開盤入", "openBuy")}</h2>
-          <p>16:00後先出明日候選；08:55後看最終名單。買入：09:00 開盤價｜停利 +1.2%｜停損 -1.0%｜09:10 強制出場。${scanText}</p>
+          <p>21:30 產生明日候選；08:55 盤前最終確認。09:00 只執行 BUY 名單。${scanText}</p>
         </div>
 
       </div>
       <div class="swing-signal-grid">
         <button class="swing-card active selected" type="button">
-          <div><strong>16:00 候選</strong><small>收盤後用日K篩明日名單</small></div><em>${scanCount}</em>
+          <div><strong>21:30 候選</strong><small>完整掃描產生明日名單</small></div><em>${scanCount}</em>
         </button>
         <button class="swing-card active" type="button">
           <div><strong>08:55 最終</strong><small>盤前最後確認後開盤買</small></div><em>待接</em>
-        </button>
-        <button class="swing-card active" type="button">
-          <div><strong>有賺就走</strong><small>+1.2% 停利，09:10 不戀戰</small></div><em>快跑</em>
         </button>
       </div>
       <section class="swing-panel">

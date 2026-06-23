@@ -1,29 +1,10 @@
-const fs = require("fs");
-const path = require("path");
-
-const strategy2Latest = require("./strategy2-latest");
+const openBuyLatest = require("./open-buy-latest");
+const latestStrategy = require("./latest-strategy");
 const strategy3Latest = require("./strategy3-latest");
 const strategy4Latest = require("./strategy4-latest");
 const strategy5Latest = require("./strategy5-latest");
 const institutionLatest = require("./institution-latest");
 const warrantFlowLatest = require("./warrant-flow-latest");
-
-function readSecretText(file) {
-  try { return fs.readFileSync(file, "utf8").trim(); } catch { return ""; }
-}
-
-const RUNTIME_DIR = process.env.FUMAN_RUNTIME_DIR || "C:/fuman-runtime";
-const SUPABASE_URL = String(
-  process.env.SUPABASE_URL
-  || process.env.FUMAN_SUPABASE_URL
-  || "https://cpmpfhbzutkiecccekfr.supabase.co"
-).replace(/\/+$/, "");
-const SUPABASE_KEY = process.env.SUPABASE_ANON_KEY
-  || process.env.FUMAN_SUPABASE_ANON_KEY
-  || readSecretText(path.join(RUNTIME_DIR, "secrets", "supabase-anon-key.txt"));
-
-const OPEN_BUY_RUN_VIEW = process.env.SUPABASE_OPEN_BUY_LATEST_RUN_VIEW || "v_strategy1_open_buy_latest_complete_run";
-const OPEN_BUY_RESULTS_TABLE = process.env.SUPABASE_OPEN_BUY_RESULTS_TABLE || "strategy1_open_buy_results";
 
 function createCaptureResponse() {
   return {
@@ -40,24 +21,6 @@ async function callJson(handler, request) {
   const capture = createCaptureResponse();
   await handler({ ...request, method: "GET" }, capture);
   return capture.body && typeof capture.body === "object" ? capture.body : { ok: false, error: "empty_api_payload" };
-}
-
-async function fetchSupabaseRows(table, query) {
-  if (!SUPABASE_URL || !SUPABASE_KEY) throw new Error("supabase_not_configured");
-  const response = await fetch(`${SUPABASE_URL}/rest/v1/${table}?${query}`, {
-    headers: {
-      apikey: SUPABASE_KEY,
-      Authorization: `Bearer ${SUPABASE_KEY}`,
-      Accept: "application/json",
-    },
-    cache: "no-store",
-  });
-  if (!response.ok) {
-    const text = await response.text().catch(() => "");
-    throw new Error(`${table} HTTP ${response.status} ${text.slice(0, 180)}`.trim());
-  }
-  const rows = await response.json();
-  return Array.isArray(rows) ? rows : [];
 }
 
 function cleanNumber(value) {
@@ -113,72 +76,7 @@ function normalizeOpenBuyRow(row) {
 }
 
 async function fetchOpenBuyLatest(base) {
-  try {
-    const run = (await fetchSupabaseRows(
-      OPEN_BUY_RUN_VIEW,
-      [
-        "select=*",
-        "strategy=eq.strategy1",
-        "status=eq.complete",
-        "complete=eq.true",
-        "limit=1",
-      ].join("&")
-    ))[0];
-    if (!run?.run_id) throw new Error("strategy1_complete_run_empty");
-    const rows = await fetchSupabaseRows(
-      OPEN_BUY_RESULTS_TABLE,
-      [
-        "select=run_id,scan_date,code,name,price,close,change_percent,volume,trade_volume,trade_value,score,rank,reason,signals,payload,complete,quality_status,generated_at,updated_at",
-        "strategy=eq.strategy1",
-        `run_id=eq.${encodeURIComponent(run.run_id)}`,
-        "order=rank.asc",
-        "limit=2000",
-      ].join("&")
-    );
-    const matches = rows.map(normalizeOpenBuyRow);
-    return {
-      ok: true,
-      source: "supabase:strategy1_open_buy_results",
-      cacheSource: "supabase-api",
-      runId: String(run.run_id || ""),
-      updatedAt: String(run.finished_at || run.updated_at || new Date().toISOString()),
-      usedDate: String(run.scan_date || "").replace(/-/g, ""),
-      complete: true,
-      qualityStatus: String(run.quality_status || "complete"),
-      count: matches.length,
-      total: Math.max(matches.length, cleanNumber(run.expected_total)),
-      scannedCount: cleanNumber(run.scanned_count),
-      matches,
-      transport: {
-        source: "supabase",
-        latestRunView: OPEN_BUY_RUN_VIEW,
-        table: OPEN_BUY_RESULTS_TABLE,
-        gate: "run_id",
-        runId: String(run.run_id || ""),
-        via: "api/terminal-home",
-        fetchedAt: new Date().toISOString(),
-      },
-    };
-  } catch (error) {
-    const message = error?.message || String(error);
-    return {
-      ok: false,
-      error: "open_buy_api_unavailable",
-      reason: message,
-      detail: message,
-      cacheSource: "none",
-      count: 0,
-      total: 0,
-      matches: [],
-      transport: {
-        source: "supabase",
-        via: "api/terminal-home",
-        gate: "api-only-no-static-fallback",
-        error: message,
-        fetchedAt: new Date().toISOString(),
-      },
-    };
-  }
+  return callJson(openBuyLatest, base || {});
 }
 
 function buildStatusEntry(payload, source) {
@@ -339,7 +237,7 @@ module.exports = async function handler(request, response) {
   try {
     const [openBuy, strategy2, strategy3, strategy4, strategy5, institution, warrant] = await Promise.all([
       fetchOpenBuyLatest(),
-      callJson(strategy2Latest, request),
+      callJson(latestStrategy, { ...request, query: { key: strategy2 } }),
       callJson(strategy3Latest, request),
       callJson(strategy4Latest, request),
       callJson(strategy5Latest, request),
@@ -364,3 +262,5 @@ module.exports = async function handler(request, response) {
     });
   }
 };
+
+

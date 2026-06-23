@@ -5,7 +5,7 @@ const TAB_CONFIG = {
     title: "策略1 開盤入",
     subtitle: "Supabase complete run",
     endpoint: "/api/open-buy-latest",
-    points: ["開盤價進場", "有賺就走", "09:10 強制出場"],
+    points: ["21:30 候選", "08:55 最終"],
   },
   strategy2: {
     title: "策略2 當沖",

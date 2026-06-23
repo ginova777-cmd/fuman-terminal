@@ -1,5 +1,5 @@
 (function () {
-  const version = "desktop-api-polling-fast-20260623-02";
+  const version = "strategy1-two-cards-20260623-02";
   window.FUMAN_TERMINAL_VERSION = version;
   window.FUMAN_TERMINAL_BOOT = {
     version,

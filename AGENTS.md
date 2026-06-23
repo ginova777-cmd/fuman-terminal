@@ -94,7 +94,7 @@ C:\fuman-terminal\scripts\intraday-radar-rules.js
 
 `cleanup:api-only-retired` must delete the retired root/static copies if they reappear. Do not restore them for compatibility.
 
-The cleanup task is intentionally broad for API-only governance. Root-level scanner/cache copies such as `scan-open-buy-cache.js`, `scan-strategy4-cache.js`, `scan-strategy5-cache.js`, `scan-warrant-flow-cache.js`, root-level `*-latest.json`/`*-backup.json`, old freshness wrappers, old page caches such as `data\warrant-volume-page-*.json`, and first-screen repo fallbacks such as `data\heatmap-latest.json`, `data\market-summary.json`, `data\mobile-boot.json`, `data\mobile-terminal-latest.json`, `data\terminal-home-mobile-slim.json`, `data\data-manifest.json`, and `data\data-status-index.json` are retired. The official scanner source lives under `scripts\`, and official data freshness comes from Supabase complete runs/snapshots through no-store APIs. Runtime first-screen files under `C:\fuman-runtime\data` may exist, but cleanup deletes them when they are stale rather than deleting today's fresh runtime snapshots. Old complete-run history, stale Strategy2 latest gate artifacts, stale market-summary/static home bundles, TDCC fallback files, general data manifests, mobile HTML/static summary fragments, and nested terminal-home bundles are retired because they can make today's Supabase/API data look stale or overwrite it in the first screen. Keep official history in Supabase complete-run tables or API responses, not in deploy-root static JSON.
+The cleanup task is intentionally broad for API-only governance. Retired root/static scanner copies, stale root-level latest/backup JSON, obsolete freshness wrappers, and stale first-screen repo fallbacks must be deleted when they reappear. The official scanner source lives under `scripts\`, and official data freshness comes from Supabase complete runs/snapshots through no-store APIs. Runtime first-screen files under `C:\fuman-runtime\data` may exist, but cleanup deletes them when they are stale rather than deleting today's fresh runtime snapshots.
 
 ## 3. Latest API Contract
 
@@ -244,60 +244,254 @@ If snapshot_count is low or five-level order book is thin/missing, do not hard-b
 
 Before 08:45 Taipei time, Strategy1 may be not applicable. Freshness gate must not fail just because the opening run is not due yet.
 
-## 6. Strategy 2 Intraday / A-Zone
+## 6. Strategy 2 Intraday / Full-Window Ledger
 
-Official APIs:
+Strategy2 is API-only and complete-run authoritative. It must show the full 08:45-12:00 intraday ledger on desktop after market close. If the user says the Strategy2 terminal has no data, do not restore static JSON, do not use Vercel as the fix, and do not route back to retired endpoints. Rebuild/publish the complete run, verify Supabase, verify the no-store API, then verify the frontend ledger display.
+
+### Official Strategy2 APIs
+
+Use only these runtime APIs:
 
 ```text
-/api/strategy2-latest
-/api/strategy2-entry-history
-/api/strategy2-detection-health
+/api/latest-strategy?key=strategy2
+/api/strategy2-stream
 ```
 
-Supabase authority:
+`/api/latest-strategy?key=strategy2` is the JSON payload authority. It must read `v_strategy2_latest_complete_run` first and return top-level:
 
 ```text
+records
+events
+rows
+matches
+runId
+date / usedDate
+count
+transport.gate = complete-run-authoritative
+cacheSource
+```
+
+`/api/strategy2-stream` is only the run notification/SSE channel. It announces the latest complete runId and counts; it is not a replacement for the full JSON ledger.
+
+### Supabase Authority
+
+```text
+v_strategy2_latest_complete_run
 strategy2_scan_runs
-strategy2_scan_results
-v_strategy2_entry_events_today
-v_strategy2_detection_health
-refresh_strategy2_intraday_ready_cache()
-source_status.payload
-fugle_source_coverage
+strategy_cache_status
+strategy2_scan_results, when needed for audit/detail
 ```
 
-Health must distinguish data-source health from Strategy2 latest freshness:
+Required complete-run gate:
 
 ```text
-quotes_ok
-intraday_1m_ok
-daily_volume_ok
-futopt_ok
-preopen_ok
-ready_ge_35_symbols
-ready_ge_80_symbols
-intraday_1m_stale_seconds
-latest_candle_time
-strategy2_ready_cache_ok
-strategy2_latest_updated_at
-strategy2_entry_count
+strategy = strategy2
+status = complete
+complete = true
+payload.records.length > 0
+payload.events.length > 0 when entry events exist
+run_id present
+scan_date = current Taipei trading date
+transport.gate = complete-run-authoritative
 ```
 
-If `source_status.updated_at > strategy2_latest.updated_at` and `intraday_1m_ok=true`, refresh Strategy2 latest / ready cache or generate a new run. Do not leave Strategy2 degraded while shared source is healthy.
+The latest complete run view must not point to an empty payload. If the latest view returns an empty payload but `strategy2_scan_runs` has a valid complete run with rows, repair the latest view/source ordering instead of displaying empty data.
 
-After market close, `source_status=stopped` with a message like `Stopped after 14:05` should be `afterhours_stopped_ok`, not `intraday_1m_not_ok`.
+### Daily Runtime Flow
 
-Each entry should include:
+Before/during 08:45-12:00:
 
 ```text
-entry_source
-detection_source
-quality_status
-run_id
-state_id
+1. Use API polling only.
+2. Build the common-stock mother pool from Supabase quotes/common-stock active views.
+3. Exclude ETF, warrants, halted/test/non-common-stock, large exclusion list, and manual exclusions.
+4. Use amplitude = current price vs open price. Do not use Fugle/Supabase change_percent as the +2% Strategy2 condition.
+5. Candidate base:
+   price 10-1000
+   amplitude >= 2%
+   amplitude < 9.9%
+   today volume > 0
+   not near limit-up
+6. Liquidity passes if any of:
+   avg5_volume > 3000
+   amplitude >= 2% + today volume > 5000 + daily MA bullish when available
+   today volume > avg5_volume * 2 + today volume >= 10000 + volume rank top 100
+7. Poll/scan loop targets:
+   LoopSeconds = 5
+   PrefilterCount = 180
+   DeepScanCount = 60
+   FastTrackCount = 40
+   BarsPerSymbol = 80
 ```
 
-Do not mix Strategy2 A-near-entry terminal records with formal MA35-only entries. Scorecard main table uses terminal A-near-entry first; formal MA35 is auxiliary.
+Signal rules:
+
+```text
+Opening/futures preopen:
+08:45-09:00 individual stock futures / preopen records must enter the Strategy2 records ledger.
+
+Rebound strengthening:
+outer volume > inner volume
+amplitude >= 2% vs open
+above MA35
+MACD strengthening
+KDJ strengthening
+current price >= open, or open-to-now >= 0.5%, or latest price near recent high
+
+Intraday continuation:
+09:10-12:00
+amplitude >= 2% vs open
+above MA35
+MA35 rising
+breaks previous two highs within previous 60 bars
+current price >= open
+MACD/KDJ/NPSY/RSI or volume confirmation
+```
+
+After 12:00 / after market close:
+
+```text
+1. Do not blank Strategy2.
+2. Run/replay the full 08:45-12:00 window if the live terminal did not collect a complete ledger.
+3. Publish a complete run with all records/events.
+4. The desktop terminal must still show today's 08:45-12:00 ledger until midnight.
+5. After 00:00 Taipei time, the display may clear for the next day and restart detection at 08:45.
+```
+
+Known replay/publish commands:
+
+```text
+node scripts\\replay-strategy2-full-window-from-1m.js
+node scripts\\publish-strategy2-complete-run.js
+```
+
+The expected full-window replay shape is:
+
+```text
+records > 0
+events >= 0
+first = 08:45:00
+last = 12:00:00
+runId = strategy2-YYYYMMDD-HHMMSS
+```
+
+Example verified 2026-06-23 run:
+
+```text
+runId = strategy2-20260623-141634
+records = 1597
+events = 161
+first = 08:45:00
+last = 12:00:00
+gate = complete-run-authoritative
+```
+
+### Desktop Terminal Display Contract
+
+The desktop Strategy2 terminal must show the complete records ledger, not just merged events.
+
+Frontend contract:
+
+```text
+terminal-runtime-config.js:
+strategy2IntradayLatestApi = /api/latest-strategy?key=strategy2
+strategy2IntradayCache = /api/latest-strategy?key=strategy2
+strategy2IntradaySlim = /api/latest-strategy?key=strategy2
+strategy2IntradayTop = /api/latest-strategy?key=strategy2
+strategy2IntradayLiveTop = /api/latest-strategy?key=strategy2
+
+terminal-app.js:
+loadStrategy2IntradayPayload() reads /api/latest-strategy?key=strategy2.
+loadStrategy2IntradayCache() must preserve payload.records as strategy2IntradayRecordRows.
+renderIntradayRadar() must use strategy2IntradayRecordRows when scanClosed=true, so after close the table displays the full 08:45-12:00 ledger.
+```
+
+Do not collapse records into one row per code only. Merged `events` are useful for A-zone summaries, but the user-facing post-close backtest view requires `records` as逐筆資料.
+
+The table must allow search/sort and must show at least:
+
+```text
+time
+code
+name
+state
+signal
+entry/observed price
+amplitude/percent
+volume
+risk/entry plan when available
+reason
+```
+
+If the API returns records but the UI is empty, inspect frontend filters first:
+
+```text
+isIntradayVisibleSessionRow()
+getIntradayEntryTime()
+scanClosed branch in renderIntradayRadar()
+strategy2IntradayRecordRows population
+keyword filters
+old localStorage payloads
+service worker / terminal-app.js version
+```
+
+### Local Desktop API-Only Terminal
+
+For local desktop verification without Vercel, use:
+
+```text
+C:\\fuman-terminal\\run-local-api-only-terminal.ps1
+http://127.0.0.1:8787/?desktop=1
+```
+
+The local server:
+
+```text
+C:\\fuman-terminal\\scripts\\local-api-only-server.js
+```
+
+It serves static terminal files and executes `api/*.js` handlers directly. Use this when the user says the computer terminal has no data. Do not tell the user the data exists only because the API was checked; verify the desktop terminal bundle can load the ledger:
+
+```text
+Invoke-WebRequest http://127.0.0.1:8787/api/latest-strategy?key=strategy2
+terminal-app.js contains strategy2IntradayRecordRows
+terminal-app.js contains recordLedgerRow
+```
+
+### Verification Checklist
+
+Minimum checks before reporting Strategy2 fixed:
+
+```text
+
+GET /api/latest-strategy?key=strategy2:
+status = 200
+date = current Taipei trading date
+records.length > 0
+runId present
+transport.payloadGate or transport.gate = complete-run-authoritative
+
+GET /api/strategy2-stream:
+emits strategy2-run
+runId matches latest complete run
+
+Frontend:
+node --check terminal-app.js
+terminal-app.js contains strategy2IntradayRecordRows
+terminal-app.js contains recordLedgerRow
+desktop Strategy2 page displays the records ledger after close
+```
+
+Health/source-status rule:
+
+```text
+quotes_ok=false -> do not publish the Strategy2 quote universe.
+quotes_ok=true and intraday_1m_ok=false -> publish quote candidate universe, mark degraded_intraday_1m, and do not upgrade rows into technical A-zone.
+source_status=error/stale/stopped must not by itself blank Strategy2 when quote readback or complete-run readback is healthy.
+After market close, source_status=stopped with a message like Stopped after 14:05 is afterhours_stopped_ok, not an empty Strategy2 state.
+```
+
+Do not mix Strategy2 A-near-entry terminal records with formal MA35-only entries. The terminal can show A-near-entry and full ledger rows; formal MA35 is auxiliary and should not erase the records ledger.
 
 ## 7. Strategy 3 Tail / 13:00
 
@@ -717,3 +911,18 @@ sync project looks correct
 Say fixed only when the official production API returns the correct no-store payload and the relevant verifier passes.
 
 
+
+
+
+
+All sidebar strategy entries must behave like Strategy5 fastest-first main entry: clicking 策略1/2/3/4/5 must immediately select that strategy main result page and render it, without first showing waiting, overview, confluence, mixed, or generic Strategy Center pages. Main entry ids are 策略1=open_buy, 策略2=intraday_2m, 策略3=strategy3, 策略4=swing_radar, 策略5=strategy5_all. Do not first show FMN://strategy.scan, 綜合策略選股, 策略中心, 載入全台股股票池, or multi_strategy_confluence.
+
+Runtime note: browser loads terminal.js through terminal-core.js. When changing strategy entry behavior, update/sync terminal.js, not only terminal-app.js, otherwise the visible app keeps showing old Strategy Center / 綜合策略選股 behavior.
+
+Generic 策略中心 links with no specific 策略1-5 label must also bypass the overview and default to the main Strategy5 result page, never to 綜合策略選股.
+
+Strategy view no-overview fallback: if strategy view opens with no selected strategy or tries to render 綜合策略選股 / FMN://strategy.scan, force strategy5_all immediately. index.html must also not contain visible 綜合策略選股 copy.
+
+Do not leave visible generic Strategy Center chrome in setStrategyChrome or index.html. Fallback labels must not include 綜合策略選股 or FMN://strategy.scan; use direct main-result labels instead.
+
+Rollback guard: run `npm run verify:strategy-direct-main` after any strategy-view/frontend entry change. This guard fails if 綜合策略選股, FMN://strategy.scan, visible 策略中心 heading, unsynced terminal.js/terminal-app.js, or missing direct-main fallback returns.
