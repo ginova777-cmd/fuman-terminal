@@ -1,5 +1,4 @@
 (function () {
-  // chip-trade-channel: api-only-independent-v1
   window.FUMAN_CHIP_FLOW_MODULE = {
     install(context) {
       const scope = context?.scope || {};
@@ -39,17 +38,11 @@
       let chipExclusionsPayload = null;
       let chipExclusionsLoadedAt = 0;
       let chipExclusionsLoading = null;
-      let chipTradeFrozen = false;
       const TDCC_CACHE_MS = 10 * 60 * 1000;
-      const CHIP_TRADE_VALID_CACHE_KEY = "fuman-terminal-chip-trade-valid-cache-v1";
 
       const cleanNumber = scope.cleanNumber;
       const formatNumber = scope.formatNumber;
       const normalizeTradeVolumeLots = scope.normalizeTradeVolumeLots;
-
-      function hasChipTradeRows() {
-        return Boolean(scope.institutionData && Object.keys(scope.institutionData).length);
-      }
 
       function escapeText(value) {
         return String(value ?? "").replace(/[&<>"']/g, (char) => ({
@@ -96,45 +89,6 @@
         } catch {}
       }
 
-      function applyChipTradePayload(payload) {
-        let next = payload;
-        if (next?.rows && !next.data) {
-          next = { ...next, ok: next.ok ?? true, data: Object.fromEntries(next.rows.map((row) => [String(row.code || ""), row]).filter(([code]) => code)) };
-        }
-        if (!next?.ok || !next?.data || !Object.keys(next.data).length) return false;
-        scope.institutionData = next.data;
-        scope.institutionDate = next.usedDate || scope.institutionDate || "";
-        const updatedAt = Date.parse(next.updatedAt || "");
-        scope.institutionUpdatedAt = Number.isFinite(updatedAt) ? updatedAt : Date.now();
-        scope.chipTradeLoadedAt = Date.now();
-        try {
-          localStorage.setItem(CHIP_TRADE_VALID_CACHE_KEY, JSON.stringify({
-            runId: next.runId || next.transport?.runId || "",
-            usedDate: next.usedDate || "",
-            updatedAt: next.updatedAt || new Date(scope.institutionUpdatedAt).toISOString(),
-            savedAt: Date.now(),
-            data: next.data,
-          }));
-        } catch {}
-        return true;
-      }
-
-      function restoreChipTradeLocalCache() {
-        if (hasChipTradeRows()) return true;
-        try {
-          const payload = JSON.parse(localStorage.getItem(CHIP_TRADE_VALID_CACHE_KEY) || "null");
-          if (!payload?.data || !Object.keys(payload.data).length) return false;
-          scope.institutionData = payload.data;
-          scope.institutionDate = payload.usedDate || scope.institutionDate || "";
-          const updatedAt = Date.parse(payload.updatedAt || "");
-          scope.institutionUpdatedAt = Number.isFinite(updatedAt) ? updatedAt : cleanNumber(payload.savedAt) || Date.now();
-          scope.chipTradeLoadedAt = Date.now();
-          return true;
-        } catch {
-          return false;
-        }
-      }
-
       function formatChipSignedLots(value) {
         const n = cleanNumber(value);
         if (!Number.isFinite(n)) return "--";
@@ -162,11 +116,11 @@
       }
 
       function isTdccMode(mode = scope.chipFilter) {
-        return mode === "tdcc1000";
+        return mode === "tdcc1000" || mode === "foreignTrustVolumePct";
       }
 
       function isFocusColumn(columnKey) {
-        if (scope.chipFilter === "foreignTrustVolumePct") return ["fiveDayAvgVolume", "foreignFlow", "trustFlow", "foreignTrustVolumePct"].includes(columnKey);
+        if (scope.chipFilter === "foreignTrustVolumePct") return columnKey === "foreignTrustVolumePct";
         if (scope.chipFilter === "foreignStreak") return columnKey === "foreignStreak";
         if (scope.chipFilter === "trustStreak") return columnKey === "trustStreak";
         if (scope.chipFilter === "jointStreak") return columnKey === "jointStreak";
@@ -204,6 +158,17 @@
         if (Array.isArray(chipExclusionsPayload?.blacklistCodes) && chipExclusionsPayload.blacklistCodes.includes(code)) return false;
         if (/(ETF|ETN|DR|指數|台灣50|高股息|正2|反1|期貨|債|權證|認購|認售|牛證|熊證|CB|可轉債)/i.test(text)) return false;
         if (/水泥|軍工|國防|航太|漢翔|雷虎|龍德|駐龍|晟田|寶一|亞航|千附/i.test(text)) return false;
+        const avgVolume5 = firstChipVolumeLots(row, ["fiveDayAvgVolume", "avg_volume_5", "avgVolume5", "avg5Volume"]);
+        if (avgVolume5 > 0 && avgVolume5 < 3000) return false;
+        const innerOuter = firstChipVolumeLots(row, ["innerOuterVolume", "insideOutsideVolume", "accumulatedBidAskVolume", "cumulative_bid_ask_volume", "cumulativeBidAskVolume"]);
+        const bid = firstChipVolumeLots(row, ["cumulative_bid_volume", "cumulativeBidVolume"]);
+        const ask = firstChipVolumeLots(row, ["cumulative_ask_volume", "cumulativeAskVolume"]);
+        const bidAskTotal = innerOuter || (bid || ask ? bid + ask : 0);
+        if (bidAskTotal > 0 && bidAskTotal < 3000) return false;
+        if (!bidAskTotal) {
+          const tradeVolume = firstChipVolumeLots(row, ["tradeVolume", "volume", "TradeVolume"]);
+          if (tradeVolume > 0 && tradeVolume < 3000) return false;
+        }
         return true;
       }
 
@@ -221,8 +186,8 @@
             ]
           : [
               { label: "股票代號" }, { label: "股票名稱" }, { label: "現價/收盤" }, { label: "漲跌" }, { label: "漲幅(%)" },
-              { label: "成交量(張)" }, { label: "近5日漲幅累計" }, { label: "近5日累計均量", key: "fiveDayAvgVolume" },
-              { label: "外資買賣超(張)", key: "foreignFlow" }, { label: "投信買賣超(張)", key: "trustFlow" },
+              { label: "成交量(張)" }, { label: "近5日漲幅累計" }, { label: "近5日累計均量" },
+              { label: "外資買賣超(張)" }, { label: "投信買賣超(張)" },
               { label: "外資連買", key: "foreignStreak" }, { label: "投信連買", key: "trustStreak" }, { label: "同買", key: "jointStreak" },
               { label: "法人合計(張)" },
             ];
@@ -238,7 +203,7 @@
       async function loadTdccBreakout(force = false) {
         if (!force && tdccBreakoutPayload && Date.now() - tdccBreakoutLoadedAt < TDCC_CACHE_MS) return tdccBreakoutPayload;
         if (tdccBreakoutLoading) return tdccBreakoutLoading;
-        const endpoint = scope.endpoints?.chipTradeTdccBreakout || scope.endpoints?.institutionTdccBreakout || "/api/chip-trade-tdcc-breakout-latest";
+        const endpoint = scope.endpoints?.institutionTdccBreakout || "/data/institution-tdcc-breakout-top.json";
         tdccBreakoutLoading = scope.fetchVersionedJson(endpoint, 10000, "", force)
           .then((payload) => {
             tdccBreakoutPayload = payload?.ok ? payload : null;
@@ -274,13 +239,6 @@
 
       function tdccRows() {
         return (Array.isArray(tdccBreakoutPayload?.matches) ? tdccBreakoutPayload.matches : []).filter(isChipOpportunityCandidate);
-      }
-
-      function institutionPayloadEndpoint() {
-        if (scope.chipFilter === "foreignTrustVolumePct" && (scope.endpoints.chipTradeForeignTrustVolumePct || scope.endpoints.institutionForeignTrustVolumePct)) {
-          return scope.endpoints.chipTradeForeignTrustVolumePct || scope.endpoints.institutionForeignTrustVolumePct;
-        }
-        return scope.endpoints.chipTradeLatest || scope.endpoints.institutionCache || scope.endpoints.institutionSlim;
       }
 
       function updateDateLine() {
@@ -341,7 +299,6 @@
           foreignStreak: Number(inst.foreignStreak) || 0,
           trustStreak: Number(inst.trustStreak) || 0,
           jointStreak: Number(inst.jointStreak) || 0,
-          foreignTrustBuyVolumePct: cleanNumber(inst.foreignTrustBuyVolumePct ?? inst.institutionBuyVolumePct),
         };
       }
 
@@ -351,7 +308,6 @@
         if (scope.chipFilter === "foreignStreak") return row.foreignStreak > 0;
         if (scope.chipFilter === "trustStreak") return row.trustStreak > 0;
         if (scope.chipFilter === "jointStreak") return row.jointStreak > 0;
-        if (scope.chipFilter === "foreignTrustVolumePct") return (row.foreign + row.trust) > 0 && cleanNumber(row.foreignTrustBuyVolumePct) > 0;
         if (scope.chipFilter === "foreign") return row.foreign > 0;
         if (scope.chipFilter === "legal") return row.total > 0;
         return true;
@@ -381,9 +337,9 @@
               <td data-chip-percent class="chip-cell-number ${row.percent >= 0 ? "red" : "green"}">${hasQuote ? formatNumber(row.percent, 2) : "--"}</td>
               <td class="chip-cell-number" data-chip-volume>${hasQuote ? Math.round(row.volume).toLocaleString("zh-TW") : "--"}</td>
               <td class="chip-cell-number ${row.fiveDayPctSum >= 0 ? "red" : "green"}">${formatChipSignedPercent(row.fiveDayPctSum)}</td>
-              <td class="chip-cell-number${focusColumnClass("fiveDayAvgVolume")}">${formatChipLots(row.fiveDayAvgVolume)}</td>
-              <td class="chip-cell-flow ${row.foreign >= 0 ? "red" : "green"}${focusColumnClass("foreignFlow")}">${formatChipSignedLots(row.foreign)}</td>
-              <td class="chip-cell-flow ${row.trust >= 0 ? "red" : "green"}${focusColumnClass("trustFlow")}">${formatChipSignedLots(row.trust)}</td>
+              <td class="chip-cell-number">${formatChipLots(row.fiveDayAvgVolume)}</td>
+              <td class="chip-cell-flow ${row.foreign >= 0 ? "red" : "green"}">${formatChipSignedLots(row.foreign)}</td>
+              <td class="chip-cell-flow ${row.trust >= 0 ? "red" : "green"}">${formatChipSignedLots(row.trust)}</td>
               <td class="chip-cell-streak${focusColumnClass("foreignStreak")}">${row.foreignStreak} 日</td>
               <td class="chip-cell-streak${focusColumnClass("trustStreak")}">${row.trustStreak} 日</td>
               <td class="chip-cell-streak${focusColumnClass("jointStreak")}">${row.jointStreak} 日</td>
@@ -421,7 +377,6 @@
 
       function renderChipTradeTable() {
         if (!scope.isViewActive("chip-trade")) return;
-        restoreChipTradeLocalCache();
         const body = document.querySelector("#chip-trade-body");
         const sortEl = document.querySelector("#chip-sort");
         if (!body) return;
@@ -447,8 +402,7 @@
             rows.sort((a, b) => cleanNumber(b.ratioIncrease) - cleanNumber(a.ratioIncrease) || cleanNumber(b.breakoutScore) - cleanNumber(a.breakoutScore) || cleanNumber(b.foreignLots) - cleanNumber(a.foreignLots));
           }
         } else {
-          if (scope.chipFilter === "foreignTrustVolumePct") rows.sort((a, b) => cleanNumber(b.foreignTrustBuyVolumePct) - cleanNumber(a.foreignTrustBuyVolumePct) || ((b.foreign + b.trust) - (a.foreign + a.trust)));
-          else if (scope.chipFilter === "foreignStreak") sortByStreak(rows, "foreignStreak", "foreign");
+          if (scope.chipFilter === "foreignStreak") sortByStreak(rows, "foreignStreak", "foreign");
           else if (scope.chipFilter === "trustStreak") sortByStreak(rows, "trustStreak", "trust");
           else if (scope.chipFilter === "jointStreak") sortByStreak(rows, "jointStreak", "total");
           else {
@@ -515,35 +469,18 @@
 
       async function loadChipTradeData(force = false) {
         if (!scope.isViewActive("chip-trade") || !scope.canRunViewWork("chip-trade")) return;
-        const restored = restoreChipTradeLocalCache();
-        const hasInstitutionRows = hasChipTradeRows();
-        if (chipTradeFrozen && hasInstitutionRows) {
-          renderChipTradeTable();
-          return;
-        }
-        if (restored && hasInstitutionRows) {
-          chipTradeFrozen = true;
-          renderChipTradeTable();
-          return;
-        }
         if (!force && scope.chipTradeLoadedAt && Date.now() - scope.chipTradeLoadedAt < scope.CHIP_TRADE_CACHE_MS) {
+          await loadChipExclusions(false);
+          if (isTdccMode()) await loadTdccBreakout(false);
           renderChipTradeTable();
-          if (hasInstitutionRows) chipTradeFrozen = true;
-          if (!chipTradeFrozen) loadChipExclusions(false).catch(() => {});
-          if (!chipTradeFrozen && isTdccMode()) loadTdccBreakout(false).catch(() => {});
           return;
         }
-        if (scope.chipTradeLoading) {
-          if (hasInstitutionRows) renderChipTradeTable();
-          return;
-        }
+        if (scope.chipTradeLoading) return;
         scope.chipTradeLoading = true;
         const body = document.querySelector("#chip-trade-body");
-        if (restored || hasInstitutionRows) {
-          renderChipTradeTable();
-        } else if (body) {
+        if (body) {
           scope.loadInstitutionSummary().then(() => {
-            if (!scope.chipTradeLoading || !scope.institutionSummary || hasChipTradeRows()) return;
+            if (!scope.chipTradeLoading || !scope.institutionSummary || scope.institutionData && Object.keys(scope.institutionData).length) return;
             body.innerHTML = `<tr><td colspan="14">法人摘要已載入：${scope.institutionSummary.count || 0} 檔。正在讀取完整買賣超資料...</td></tr>`;
           });
           body.innerHTML = `<tr><td colspan="14">正在載入盤後法人資料...</td></tr>`;
@@ -552,7 +489,7 @@
         try {
           const [stockResult, instResult, tdccResult] = await Promise.allSettled([
             scope.fetchVersionedJson(scope.endpoints.strategyStocks, 20000, "", force),
-            scope.fetchVersionedJson(institutionPayloadEndpoint(), 10000, scope.institutionSummary?.updatedAt || "", force),
+            scope.fetchVersionedJson(scope.isMobileViewport() && !force && !scope.chipTradePreferFull && scope.endpoints.institutionMobileTop ? scope.endpoints.institutionMobileTop : scope.endpoints.institutionSlim, 7000, scope.institutionSummary?.updatedAt || "", force),
             loadTdccBreakout(force),
             loadChipExclusions(force),
           ]);
@@ -568,13 +505,17 @@
             instPayload = { ...instPayload, ok: instPayload.ok ?? true, data: Object.fromEntries(instPayload.rows.map((row) => [String(row.code || ""), row])) };
           }
           if (!instPayload?.ok || !instPayload?.data || !Object.keys(instPayload.data).length) {
-            instPayload = await scope.fetchVersionedJson(scope.endpoints.chipTradeLatest || scope.endpoints.institutionCache, 10000, scope.institutionSummary?.updatedAt || "", force);
+            instPayload = await scope.fetchVersionedJson(scope.endpoints.institutionCache, 10000, scope.institutionSummary?.updatedAt || "", force);
           }
           if (!instPayload?.ok || !instPayload?.data || !Object.keys(instPayload.data).length) {
             instPayload = await scope.fetchVersionedJson(scope.endpoints.institutionBackup, 10000, scope.institutionSummary?.updatedAt || "", force);
           }
-          const applied = applyChipTradePayload(instPayload);
-          chipTradeFrozen = applied && hasChipTradeRows();
+          if (instPayload?.ok && instPayload?.data) {
+            scope.institutionData = instPayload.data;
+            scope.institutionDate = instPayload.usedDate || "";
+            const updatedAt = Date.parse(instPayload.updatedAt || "");
+            scope.institutionUpdatedAt = Number.isFinite(updatedAt) ? updatedAt : Date.now();
+          }
           if (tdccResult.status === "rejected") {
             console.warn("[FUMAN] TDCC breakout load skipped", tdccResult.reason);
           }
@@ -584,15 +525,10 @@
           renderChipTradeTable();
         } catch (error) {
           reportChipFlowError("load", error);
-          if (hasChipTradeRows()) renderChipTradeTable();
-          else if (body) body.innerHTML = `<tr><td colspan="14">買賣超資料檔讀取失敗：${chipErrorText(error)}。已回報 frontend-error，請重新整理或稍後再試。</td></tr>`;
+          if (body) body.innerHTML = `<tr><td colspan="14">買賣超資料檔讀取失敗：${chipErrorText(error)}。已回報 frontend-error，請重新整理或稍後再試。</td></tr>`;
         } finally {
           scope.chipTradeLoading = false;
         }
-      }
-
-      if (restoreChipTradeLocalCache() && hasChipTradeRows()) {
-        chipTradeFrozen = true;
       }
 
       return { renderChipTradeTable, loadChipTradeData };

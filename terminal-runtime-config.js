@@ -1,5 +1,4 @@
 (function () {
-  // chip-trade-channel: api-only-independent-v1
   const endpoints = {
     backend: "/api/market",
     marketSummary: "/api/market",
@@ -68,18 +67,12 @@
     strategy2IntradayTop: "/api/strategy2-latest",
     strategy2IntradayLiveTop: "/api/strategy2-latest",
     strategy2IntradayDelta: "",
-    chipTradeLatest: "/api/chip-trade-latest",
-    chipTradeSummary: "/api/chip-trade-latest?shape=top&compact=1&limit=1",
-    chipTradeMobileTop: "/api/chip-trade-latest?shape=top&compact=1&limit=120",
-    chipTradeForeignTrustVolumePct: "/api/chip-trade-latest?shape=foreignTrustVolumePct&limit=120",
-    chipTradeTdccBreakout: "/api/chip-trade-tdcc-breakout-latest",
     institutionCache: "/api/institution-latest",
     institutionSlim: "/api/institution-latest",
     institutionBackup: "",
-    institutionSummary: "/api/chip-trade-latest?shape=top&compact=1&limit=1",
-    institutionMobileTop: "/api/chip-trade-latest?shape=top&compact=1&limit=120",
-    institutionForeignTrustVolumePct: "/api/chip-trade-latest?shape=foreignTrustVolumePct&limit=120",
-    institutionTdccBreakout: "/api/chip-trade-tdcc-breakout-latest",
+    institutionSummary: "/api/institution-latest",
+    institutionMobileTop: "/api/institution-latest",
+    institutionTdccBreakout: "/api/institution-latest",
     warrantFlowCache: "/api/warrant-flow-latest",
     warrantFlowSlim: "/api/warrant-flow-latest",
     warrantFlowSingleSignal: "/api/warrant-flow-latest",
@@ -112,7 +105,6 @@
     endpoints,
   };
 })();
-
 
 
 
