@@ -6,6 +6,8 @@
   let pendingTimer = 0;
   let lastRoute = "";
   let lastAt = 0;
+  let fastClickRoute = "";
+  let fastClickAt = 0;
 
   installStyle();
   installRouteFeedback();
@@ -22,6 +24,44 @@
     if (!link) return;
     window.FUMAN_TERMINAL_LOAD_APP?.(`desktop-fast-shell-${source}`);
     window.FUMAN_HOTFIX_WARM_ROUTE?.(link, `desktop-fast-shell-${source}`);
+  }
+
+  function isStrategyLink(link) {
+    return link?.dataset?.view === "strategy";
+  }
+
+  function dispatchOfficialClick(link, sourceEvent) {
+    const event = new MouseEvent("click", {
+      bubbles: true,
+      cancelable: true,
+      view: window,
+      ctrlKey: !!sourceEvent.ctrlKey,
+      shiftKey: !!sourceEvent.shiftKey,
+      altKey: !!sourceEvent.altKey,
+      metaKey: !!sourceEvent.metaKey,
+      button: 0,
+    });
+    try {
+      Object.defineProperty(event, "__fumanDesktopFastShellClick", { value: true });
+    } catch (error) {
+      event.__fumanDesktopFastShellClick = true;
+    }
+    link.dispatchEvent(event);
+  }
+
+  function runStrategyFastClick(link, sourceEvent) {
+    const route = routeKey(link);
+    const now = Date.now();
+    if (route === fastClickRoute && now - fastClickAt < 180) return;
+    fastClickRoute = route;
+    fastClickAt = now;
+    warm(link, "strategy-fast-click");
+    const task = window.FUMAN_TERMINAL_APP_READY
+      ? Promise.resolve(true)
+      : window.FUMAN_TERMINAL_LOAD_APP?.("desktop-strategy-fast-click");
+    Promise.resolve(task).then(() => {
+      if (link.isConnected) dispatchOfficialClick(link, sourceEvent);
+    }).catch(() => undefined);
   }
 
   function setPending(link, source) {
@@ -52,6 +92,13 @@
     document.addEventListener("pointerdown", (event) => {
       const link = event.target.closest?.(NAV_SELECTOR);
       if (!link || !isPrimaryPointer(event)) return;
+      if (isStrategyLink(link)) {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        setPending(link, "strategy-pointer");
+        runStrategyFastClick(link, event);
+        return;
+      }
       setPending(link, "pointer");
     }, true);
 
@@ -62,7 +109,13 @@
 
     document.addEventListener("click", (event) => {
       const link = event.target.closest?.(NAV_SELECTOR);
+      if (event.__fumanDesktopFastShellClick) return;
       if (!link || event.__fumanDeferredViewClick || event.__fumanFastOfficialClick) return;
+      if (isStrategyLink(link) && routeKey(link) === fastClickRoute && Date.now() - fastClickAt < 700) {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        return;
+      }
       setPending(link, "click");
     }, true);
   }
