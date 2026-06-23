@@ -3,7 +3,7 @@ const https = require("https");
 const path = require("path");
 
 const ROOT = path.resolve(__dirname, "..");
-const EXPECTED_HOTFIX = "20260623-09";
+const EXPECTED_HOTFIX = "20260623-10";
 const EXPECTED_FRONTEND_VERSION = "public-terminal-fast-20260623-09";
 const BASE_URL = (process.env.FUMAN_VERIFY_BASE_URL || "https://fuman-terminal.vercel.app").replace(/\/+$/, "");
 const LIVE = process.argv.includes("--live");
@@ -139,6 +139,9 @@ async function main() {
   requireMarker("terminal-hotfix.js", "stale-while-revalidate");
   requireMarker("terminal-hotfix.js", "stale-if-error");
   requireMarker("terminal-hotfix.js", "observedPanels");
+  requireMarker("terminal-hotfix.js", "installPublicTerminalUnlock");
+  requireMarker("terminal-hotfix.js", "fuman-public-terminal");
+  requireMarker("terminal-hotfix.js", "公開終端");
   requireMarker("terminal.js", "unlockPublicTerminalShell");
   requireMarker("terminal.js", "FUMAN_PUBLIC_TERMINAL_UNLOCK");
   requireMarker("terminal-app.js", "status:\"public_terminal\"");
