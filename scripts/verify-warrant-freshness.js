@@ -1,19 +1,6 @@
-const fs = require("fs");
 const https = require("https");
-const path = require("path");
 
-const ROOT = path.resolve(__dirname, "..");
 const BASE_URL = (process.env.FUMAN_VERIFY_BASE_URL || "https://fuman-terminal.vercel.app").replace(/\/+$/, "");
-const STATIC = process.argv.includes("--static") || process.env.FUMAN_VERIFY_WARRANT_STATIC === "1";
-const LIVE = !STATIC;
-const LOCAL_DATA_DIR = process.env.FUMAN_VERIFY_DATA_DIR || path.join(ROOT, "data");
-
-const FILES = {
-  latest: "data/warrant-flow-latest.json",
-  slim: "data/warrant-flow-slim.json",
-  priority: "data/warrant-priority-top.json",
-  mobile: "data/warrant-flow-mobile-top.json",
-};
 
 function fetchText(pathname, timeoutMs = 20000) {
   const cleanPath = String(pathname || "").replace(/^\/+/, "");
@@ -63,8 +50,7 @@ function compactDateKey(value) {
 }
 
 async function readJson(rel) {
-  if (LIVE) return JSON.parse(await fetchText(rel));
-  return JSON.parse(fs.readFileSync(path.join(LOCAL_DATA_DIR, rel.replace(/^data[\\/]/, "")), "utf8"));
+  return JSON.parse(await fetchText(rel));
 }
 
 function rows(payload) {
@@ -151,7 +137,6 @@ async function verifyWatchlistWarrantCoverage(apiPayload, issues) {
 }
 
 async function verifySupabaseApi(issues) {
-  if (!LIVE) return null;
   const apiPayload = JSON.parse(await fetchText("api/warrant-flow-latest?top=1&compact=1&limit=5"));
   const coveragePayload = JSON.parse(await fetchText("api/warrant-flow-latest?top=1&compact=1&limit=500"));
   const apiRows = rows(apiPayload);
@@ -196,64 +181,13 @@ async function verifySupabaseApi(issues) {
 
 async function main() {
   const issues = [];
-  if (LIVE) {
-    const apiSummary = await verifySupabaseApi(issues);
-    if (issues.length) {
-      console.error("[warrant-freshness] failed live api-only");
-      for (const issue of issues) console.error(`- ${issue}`);
-      process.exit(1);
-    }
-    console.log(`[warrant-freshness] ok live api-only apiRun=${apiSummary.runId} apiRows=${apiSummary.rows}/${apiSummary.matchesTotal || apiSummary.count} apiVolume=${apiSummary.volumeRows}/${apiSummary.volumeMatchesTotal || "--"} usedDate=${apiSummary.usedDate} schema=${apiSummary.schemaVersion} watchlistWarrant=${apiSummary.watchlistSummary.warrantCodes}`);
-    return;
-  }
-
-  const payloads = {};
-  for (const [key, file] of Object.entries(FILES)) payloads[key] = await readJson(file);
-
   const apiSummary = await verifySupabaseApi(issues);
-  const latestRows = rows(payloads.latest);
-  const slimRows = rows(payloads.slim);
-  const priorityRows = rows(payloads.priority);
-  const mobileRows = rows(payloads.mobile);
-  const latestVolumeRows = volumeRows(payloads.latest);
-  const slimVolumeRows = volumeRows(payloads.slim);
-
-  assertOk(payloads.latest?.ok !== false, "warrant-flow-latest ok=false", issues);
-  assertOk(payloads.slim?.ok !== false, "warrant-flow-slim ok=false", issues);
-  assertOk(count(payloads.latest) >= 50, `warrant-flow-latest matches too small count=${count(payloads.latest)}`, issues);
-  assertOk(count(payloads.slim) >= 50, `warrant-flow-slim matches too small count=${count(payloads.slim)}`, issues);
-  assertOk(priorityRows.length >= 50, `warrant-priority-top too small rows=${priorityRows.length}`, issues);
-  assertOk(mobileRows.length >= 20, `warrant-flow-mobile-top too small rows=${mobileRows.length}`, issues);
-  assertOk(volumeCount(payloads.latest) >= 50, `warrant-flow-latest volumeMatches too small count=${volumeCount(payloads.latest)}`, issues);
-  assertOk(volumeCount(payloads.slim) === volumeCount(payloads.latest), `warrant-flow-slim volumeCount mismatch slim=${volumeCount(payloads.slim)} latest=${volumeCount(payloads.latest)}`, issues);
-  assertOk(slimVolumeRows.length === volumeCount(payloads.slim), `warrant-flow-slim volumeMatches length mismatch rows=${slimVolumeRows.length} count=${volumeCount(payloads.slim)}`, issues);
-
-  const latestFirst = latestRows[0];
-  const slimFirst = slimRows[0];
-  const priorityFirst = priorityRows[0];
-  if (latestFirst && slimFirst) {
-    assertOk(String(latestFirst.code || latestFirst.underlyingCode || "") === String(slimFirst.code || slimFirst.underlyingCode || ""), "warrant-flow latest/slim first code mismatch", issues);
-  }
-  if (latestFirst && priorityFirst) {
-    assertOk(String(latestFirst.code || latestFirst.underlyingCode || "") === String(priorityFirst.code || priorityFirst.underlyingCode || ""), "warrant priority first code mismatch", issues);
-  }
-
-  for (const row of slimVolumeRows.slice(0, 20)) {
-    const code = String(row.code || row.underlyingCode || "").trim();
-    assertOk(Boolean(code), "warrant volume row missing code", issues);
-    assertOk(Number(row.thirtyMinuteVolume || 0) > 0, `warrant volume ${code} thirtyMinuteVolume missing`, issues);
-    assertOk(Number(row.floatingUnits || 0) > 0, `warrant volume ${code} floatingUnits missing`, issues);
-    assertOk(Number(row.volumeMultiple || 0) > 0, `warrant volume ${code} volumeMultiple missing`, issues);
-  }
-
   if (issues.length) {
-    console.error(`[warrant-freshness] failed ${LIVE ? "live" : "local"}`);
+    console.error("[warrant-freshness] failed live api-only");
     for (const issue of issues) console.error(`- ${issue}`);
     process.exit(1);
   }
-
-  const apiText = apiSummary ? ` apiRun=${apiSummary.runId} apiRows=${apiSummary.rows}/${apiSummary.matchesTotal || apiSummary.count} apiVolume=${apiSummary.volumeRows}/${apiSummary.volumeMatchesTotal || "--"}` : "";
-  console.log(`[warrant-freshness] ok ${LIVE ? "live" : "local"} matches=${count(payloads.slim)} volume=${volumeCount(payloads.slim)} updatedAt=${payloads.slim?.updatedAt || "--"}${apiText}`);
+  console.log(`[warrant-freshness] ok live api-only apiRun=${apiSummary.runId} apiRows=${apiSummary.rows}/${apiSummary.matchesTotal || apiSummary.count} apiVolume=${apiSummary.volumeRows}/${apiSummary.volumeMatchesTotal || "--"} usedDate=${apiSummary.usedDate} schema=${apiSummary.schemaVersion} watchlistWarrant=${apiSummary.watchlistSummary.warrantCodes}`);
 }
 
 main().catch((error) => {
