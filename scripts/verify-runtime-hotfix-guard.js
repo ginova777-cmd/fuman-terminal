@@ -131,6 +131,9 @@ async function main() {
   requireMarker("terminal-hotfix.js", "primeApiCache");
 
   requireMarker("index.html", "/api/mobile-page");
+  if (read("index.html").includes("fuman_force_desktop")) {
+    issues.push("index.html must not persist mobile users into desktop mode");
+  }
   requireMarker(path.join("api", "mobile-page.js"), "mobile.html");
   requireMarker(path.join("api", "mobile-page.js"), "text/html; charset=utf-8");
 
