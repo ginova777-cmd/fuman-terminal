@@ -122,7 +122,20 @@
       ]
     },
     {
-      "source": "/((?!fuman-sw\\.js$|terminal-runtime-config\\.js$).*)\\.(js|css)",
+      "source": "/terminal-hotfix.js",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "no-store"
+        },
+        {
+          "key": "X-Content-Type-Options",
+          "value": "nosniff"
+        }
+      ]
+    },
+    {
+      "source": "/((?!fuman-sw\\.js$|terminal-runtime-config\\.js$|terminal-hotfix\\.js$).*)\\.(js|css)",
       "headers": [
         {
           "key": "Cache-Control",
