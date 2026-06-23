@@ -75,6 +75,7 @@ const FILES = [
   "scripts/sync-afterhours-supabase-status.js",
   "scripts/sync-main-deploy-source.js",
   "scripts/verify-desktop-api-only.js",
+  "scripts/verify-publish-gate.js",
   "scripts/verify-warrant-freshness.js",
   "scripts/verify-live-version.js",
   "scripts/verify-service-worker-smoke.js",

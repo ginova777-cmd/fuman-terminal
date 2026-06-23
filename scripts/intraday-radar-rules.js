@@ -42,18 +42,18 @@ function isCommonStockType(stock) {
 }
 
 function hasEnoughDaytradeVolume(stock) {
-  const avgVolume5 = firstNumber(stock, ["avg_volume_5", "avgVolume5", "avg5Volume"]);
+  const avgVolume5 = firstNumber(stock, ["avg_volume_5", "avgVolume5", "avg5Volume", "avg5dVolume", "avg_5d_volume"]);
   if (avgVolume5 !== null && avgVolume5 < MIN_AVG_VOLUME_5) return false;
 
   const cumulativeBidAsk = firstNumber(stock, ["cumulative_bid_ask_volume", "cumulativeBidAskVolume"]);
-  if (cumulativeBidAsk !== null) return cumulativeBidAsk >= MIN_CUMULATIVE_BID_ASK_VOLUME;
+  if (cumulativeBidAsk !== null && cumulativeBidAsk > 0) return cumulativeBidAsk >= MIN_CUMULATIVE_BID_ASK_VOLUME;
 
   const hasCumulativeBid = hasOwnValue(stock, "cumulative_bid_volume") || hasOwnValue(stock, "cumulativeBidVolume");
   const hasCumulativeAsk = hasOwnValue(stock, "cumulative_ask_volume") || hasOwnValue(stock, "cumulativeAskVolume");
   if (hasCumulativeBid || hasCumulativeAsk) {
     const bid = firstNumber(stock, ["cumulative_bid_volume", "cumulativeBidVolume"]) || 0;
     const ask = firstNumber(stock, ["cumulative_ask_volume", "cumulativeAskVolume"]) || 0;
-    return bid + ask >= MIN_CUMULATIVE_BID_ASK_VOLUME;
+    if (bid + ask > 0) return bid + ask >= MIN_CUMULATIVE_BID_ASK_VOLUME;
   }
 
   const tradeVolume = firstNumber(stock, ["tradeVolume", "volume"]);
@@ -64,6 +64,13 @@ function hasEnoughDaytradeVolume(stock) {
 function avg(values) {
   const rows = values.map(cleanNumber).filter((value) => Number.isFinite(value));
   return rows.length ? rows.reduce((sum, value) => sum + value, 0) / rows.length : 0;
+}
+
+function openAmplitudePercent(stock) {
+  const close = cleanNumber(stock?.latest1mClose || stock?.close);
+  const open = cleanNumber(stock?.open || stock?.latest1mOpen);
+  if (close <= 0 || open <= 0) return cleanNumber(stock?.amplitudePercent || stock?.percent);
+  return ((close - open) / open) * 100;
 }
 
 function isIntradayTradable(stock) {
@@ -130,7 +137,7 @@ function buildRanks(stocks) {
   return {
     values: stocks.map((stock) => cleanNumber(stock.value)).sort((a, b) => a - b),
     volumes: stocks.map((stock) => cleanNumber(stock.tradeVolume)).sort((a, b) => a - b),
-    percents: stocks.map((stock) => cleanNumber(stock.percent)).sort((a, b) => a - b),
+    percents: stocks.map(openAmplitudePercent).sort((a, b) => a - b),
   };
 }
 
@@ -140,7 +147,7 @@ function detectSignals(stock, previous = null, ranks = null) {
   const high = cleanNumber(stock.high) || close;
   const low = cleanNumber(stock.low) || close;
   const prevClose = cleanNumber(stock.prevClose) || (close - cleanNumber(stock.change));
-  const pct = cleanNumber(stock.percent);
+  const pct = openAmplitudePercent(stock);
   const volume = cleanNumber(stock.tradeVolume);
   const value = cleanNumber(stock.value) || close * volume;
   const valueRank = ranks ? rankValue(value, ranks.values) : 0;
