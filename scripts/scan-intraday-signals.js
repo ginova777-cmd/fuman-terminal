@@ -831,6 +831,7 @@ const STRATEGY2_MIN_AVG5D_VOLUME_OK = Number(process.env.STRATEGY2_MIN_AVG5D_VOL
 const STRATEGY2_CONDITION_LABELS = {
   star: "STAR",
   preopen_watch: "盤前觀察",
+  strategy2_mother_pool: "母池觀察",
   open_rush: "開盤沖",
   early_attack: "早攻續強",
   intraday_continuation: "盤中續強",
@@ -922,6 +923,34 @@ function strategy2TechFlags(stock) {
     || (latestOpen > 0 && latestClose >= latestOpen)
   );
   return { close, latestClose, ma35, ma35Prev, aboveMa35, ma35Rising, macdGreenRising, kdjBullish, npsyUp, rsiUp, npsyOrRsi, priceMomentumUp };
+}
+
+function openAmplitudePercent(stock) {
+  const close = cleanNumber(stock.latest1mClose || stock.close);
+  const open = cleanNumber(stock.open || stock.latest1mOpen);
+  if (close <= 0 || open <= 0) return cleanNumber(stock.percent);
+  return ((close - open) / open) * 100;
+}
+
+function buildStrategy2MotherPoolMeta(stock) {
+  const close = cleanNumber(stock.close);
+  const pct = openAmplitudePercent(stock);
+  const volume = cleanNumber(stock.tradeVolume);
+  const value = cleanNumber(stock.value) || close * volume;
+  const avg5dVolume = cleanNumber(stock.avg5dVolume || stock.avg_5d_volume || stock.avgVolume5);
+  const ok = pct >= 2
+    && (volume >= 3000 || value >= STRATEGY2_MIN_TRADE_VALUE_ENTRY)
+    && avg5dVolume >= STRATEGY2_MIN_AVG5D_VOLUME_OK
+    && close >= 10
+    && close <= 1000;
+  if (!ok) return { ok: false, strategyIds: [], strategyTags: [], strategyReasons: [] };
+  return {
+    ok: true,
+    strategyIds: ["strategy2_mother_pool"],
+    strategyTags: [STRATEGY2_CONDITION_LABELS.strategy2_mother_pool],
+    primaryStrategy: STRATEGY2_CONDITION_LABELS.strategy2_mother_pool,
+    strategyReasons: [`幅度 ${pct.toFixed(2)}%，成交量 ${Math.round(volume).toLocaleString("zh-TW")} 張，成交金額 ${Math.round(value / 10000).toLocaleString("zh-TW")} 萬，5日均量 ${Math.round(avg5dVolume).toLocaleString("zh-TW")} 張。`],
+  };
 }
 
 function buildStrategy2ConditionMeta(stock, options = {}) {
