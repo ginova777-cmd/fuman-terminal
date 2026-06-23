@@ -40,6 +40,7 @@ const EXACT_RETIRED = [
   "warrant-flow-latest.json",
   "warrant-flow-backup.json",
   "run-freshness-gate-task.ps1",
+  "run-local-freshness-repair.ps1",
   "run-verify-data-freshness.ps1",
   "run-open-buy-sync-retry.ps1",
   "data/chip-trade-health-latest.json",

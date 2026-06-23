@@ -72,9 +72,6 @@ const fastGateScript = packageJson.scripts && packageJson.scripts["freshness:gat
 if (!fastGateScript) {
   issues.push("package.json missing scripts.freshness:gate:fast");
 }
-if (!packageJson.scripts?.["freshness:local-repair"]) {
-  issues.push("package.json missing scripts.freshness:local-repair");
-}
 const mainReleaseScript = packageJson.scripts && packageJson.scripts["release:main"];
 if (!mainReleaseScript) {
   issues.push("package.json missing scripts.release:main");
@@ -87,7 +84,6 @@ if (process.platform === "win32") {
   for (const expected of [
     ["Fuman Freshness Gate Fast 0845-1645", "run freshness:gate:fast", "C:\\fuman-terminal-sync", 8],
     ["Fuman Freshness Gate Full 0610 2010", "run freshness:gate", "C:\\fuman-terminal-sync", 2],
-    ["Fuman Terminal Local Freshness Verify 0830-2230", "run freshness:local-repair", "C:\\fuman-terminal-sync", 8],
     ["Fuman Publish Gate Verify 0820", "run verify:publish-gate", "C:\\fuman-terminal-sync", 1],
   ]) {
     const [name, args, workingDirectory, minTriggers] = expected;
@@ -108,24 +104,6 @@ if (process.platform === "win32") {
     if (Number(task.TriggerCount || 0) < minTriggers) {
       issues.push(`${name} trigger count too low: ${task.TriggerCount}`);
     }
-  }
-}
-
-if (!fs.existsSync(path.join(ROOT, "run-freshness-gate-task.ps1"))) {
-  issues.push("run-freshness-gate-task.ps1 missing scheduled task wrapper");
-} else {
-  const taskWrapper = read("run-freshness-gate-task.ps1");
-  if (!/Set-Location -LiteralPath \$PSScriptRoot/.test(taskWrapper) || !/npm run freshness:gate/.test(taskWrapper)) {
-    issues.push("run-freshness-gate-task.ps1 must only enter repo root and run npm run freshness:gate");
-  }
-}
-
-if (!fs.existsSync(path.join(ROOT, "run-local-freshness-repair.ps1"))) {
-  issues.push("run-local-freshness-repair.ps1 missing local data repair script");
-} else {
-  const repairScript = read("run-local-freshness-repair.ps1");
-  if (!/freshness:gate:fast/.test(repairScript) || /verify:data-freshness/.test(repairScript)) {
-    issues.push("run-local-freshness-repair.ps1 must repair with freshness:gate:fast and must not use removed verify:data-freshness");
   }
 }
 

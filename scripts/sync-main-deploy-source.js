@@ -165,6 +165,7 @@ const LEGACY_FRESHNESS_OK_FILE = path.join("data", "live-" + "freshness-ok.json"
 const RETIRED_ARTIFACTS = [
   "run-open-buy-sync-retry.ps1",
   "run-freshness-gate-task.ps1",
+  "run-local-freshness-repair.ps1",
   "run-verify-data-freshness.ps1",
   "open-buy-latest.json",
   "open-buy-backup.json",
