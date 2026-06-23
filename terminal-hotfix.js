@@ -1,8 +1,7 @@
 (function () {
-  if (window.__fumanTerminalHotfix === "20260623-10") return;
-  window.__fumanTerminalHotfix = "20260623-10";
+  if (window.__fumanTerminalHotfix === "20260623-09") return;
+  window.__fumanTerminalHotfix = "20260623-09";
 
-  installPublicTerminalUnlock();
   installDesktopApiPollingCache();
   installDesktopViewSnapshotCache();
   installInstantViewSwitch();
@@ -51,11 +50,6 @@
         -webkit-tap-highlight-color: transparent;
         touch-action: manipulation;
         user-select: none;
-      }
-      body.public-terminal #auth-gate,
-      body.fuman-public-terminal #auth-gate {
-        display: none !important;
-        pointer-events: none !important;
       }
     `;
     document.head.appendChild(style);
@@ -194,42 +188,6 @@
       }, 320);
       replayClick(link, event);
     }, true);
-  }
-
-  function installPublicTerminalUnlock() {
-    if (window.__fumanPublicTerminalUnlocker) return;
-    window.__fumanPublicTerminalUnlocker = true;
-    const unlock = () => {
-      document.body?.classList?.add("auth-ready", "public-terminal", "fuman-public-terminal");
-      document.body?.classList?.remove("auth-pending", "auth-locked", "auth-login-open");
-      const gate = document.querySelector("#auth-gate");
-      if (gate) {
-        gate.hidden = true;
-        gate.setAttribute("aria-hidden", "true");
-      }
-      const memberState = document.querySelector("#member-state");
-      if (memberState && /檢查中|未登入|登入/.test(memberState.textContent || "")) {
-        memberState.textContent = "公開終端";
-      }
-      window.FUMAN_PUBLIC_TERMINAL_UNLOCK = true;
-    };
-    if (document.readyState === "loading") {
-      document.addEventListener("DOMContentLoaded", unlock, { once: true });
-    } else {
-      unlock();
-    }
-    let ticks = 0;
-    const timer = window.setInterval(() => {
-      unlock();
-      ticks += 1;
-      if (ticks >= 30) window.clearInterval(timer);
-    }, 400);
-    new MutationObserver(unlock).observe(document.documentElement, {
-      attributes: true,
-      attributeFilter: ["class"],
-      childList: true,
-      subtree: true,
-    });
   }
 
   function installWarmMainApp() {
