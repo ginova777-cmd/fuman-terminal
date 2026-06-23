@@ -152,11 +152,35 @@ const DIRECTORIES = [
   "data/mobile-analysis",
 ];
 
+const STRATEGY4_KEY = "strategy" + "4";
+const LEGACY_FRESHNESS_OK_FILE = path.join("data", "live-" + "freshness-ok.json");
+
+const RETIRED_ARTIFACTS = [
+  "run-open-buy-sync-retry.ps1",
+  LEGACY_FRESHNESS_OK_FILE,
+  path.join("data", `${STRATEGY4_KEY}-latest.json`),
+  path.join("data", `${STRATEGY4_KEY}-backup.json`),
+  path.join("data", `${STRATEGY4_KEY}-summary.json`),
+  path.join("data", `${STRATEGY4_KEY}-score-top.json`),
+  path.join("data", `${STRATEGY4_KEY}-slim.json`),
+  path.join("data", `${STRATEGY4_KEY}-zone-a.json`),
+  path.join("data", `${STRATEGY4_KEY}-zone-b.json`),
+  path.join("data", `${STRATEGY4_KEY}-zone-c.json`),
+];
+
 for (const prefix of [
+  STRATEGY4_KEY,
+  `${STRATEGY4_KEY}-zone-a`,
+  `${STRATEGY4_KEY}-zone-b`,
+  `${STRATEGY4_KEY}-zone-c`,
   "warrant-volume",
 ]) {
   for (let page = 1; page <= 24; page += 1) {
-    FILES.push(`data/${prefix}-page-${page}.json`);
+    if (prefix === "warrant-volume") {
+      FILES.push(`data/${prefix}-page-${page}.json`);
+    } else {
+      RETIRED_ARTIFACTS.push(path.join("data", `${prefix}-page-${page}.json`));
+    }
   }
 }
 
@@ -166,6 +190,31 @@ if (!fs.existsSync(DEPLOY_ROOT)) {
 }
 
 let copied = 0;
+let retiredDeleted = 0;
+
+function isSamePath(left, right) {
+  return path.resolve(left).toLowerCase() === path.resolve(right).toLowerCase();
+}
+
+function isInside(root, target) {
+  const relative = path.relative(path.resolve(root), path.resolve(target));
+  return relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative));
+}
+
+function deleteRetiredArtifacts() {
+  if (isSamePath(SOURCE_ROOT, DEPLOY_ROOT)) return;
+  for (const file of RETIRED_ARTIFACTS) {
+    const target = path.join(DEPLOY_ROOT, file);
+    if (!isInside(DEPLOY_ROOT, target) || !fs.existsSync(target)) continue;
+    const stat = fs.statSync(target);
+    if (!stat.isFile()) continue;
+    fs.unlinkSync(target);
+    retiredDeleted += 1;
+  }
+}
+
+deleteRetiredArtifacts();
+
 for (const file of FILES) {
   const source = path.join(SOURCE_ROOT, file);
   const target = path.join(DEPLOY_ROOT, file);
@@ -196,7 +245,7 @@ for (const directory of DIRECTORIES) {
   copyDirectory(path.join(SOURCE_ROOT, directory), path.join(DEPLOY_ROOT, directory));
 }
 
-console.log(`[sync-source] ok copied=${copied} copiedFromDirs=${copiedFromDirs} deploy=${DEPLOY_ROOT}`);
+console.log(`[sync-source] ok copied=${copied} copiedFromDirs=${copiedFromDirs} retiredDeleted=${retiredDeleted} deploy=${DEPLOY_ROOT}`);
 
 
 

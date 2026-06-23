@@ -50,7 +50,6 @@ const KEY_FILES = [
   "data/data-quality-report.json",
   "data/data-manifest.json",
   "data/data-status-index.json",
-  "data/cb-detect-latest.json",
   "data/market-summary.json",
   "data/mobile-home-summary.json",
   "data/performance-report.json",
@@ -61,22 +60,12 @@ const KEY_FILES = [
   "data/stocks-slim.json",
   "data/strategy-match-index.json",
   "data/strategy-weight-report.json",
-  "data/strategy2-intraday-live-top.json",
-  "data/strategy2-intraday-slim.json",
-  "data/strategy2-intraday-top.json",
-  "data/strategy5-latest.json",
-  "data/strategy5-backup.json",
+  "data/star-preopen-latest.json",
+  "data/star-preopen-scorecard-source.json",
   "data/terminal-home-bundle.json",
-  "data/institution-latest.json",
-  "data/institution-slim.json",
   "data/institution-mobile-top.json",
   "data/institution-tdcc-breakout.json",
   "data/institution-tdcc-breakout-top.json",
-  "data/warrant-flow-latest.json",
-  "data/warrant-flow-slim.json",
-  "data/warrant-flow-mobile-top.json",
-  "data/warrant-priority-top.json",
-  "data/warrant-single-signal-top.json",
   "data/flow-health-latest.json",
   "data/afterhours-supabase-status.json",
   "ops/public-slot/FinMindUnifiedQuoteViews.sql",
@@ -86,12 +75,40 @@ const KEY_FILES = [
   "ops/public-slot/WarrantFlowRunIdCompleteGate.sql",
 ];
 
+const RETIRED_ARTIFACTS = [
+  "run-open-buy-sync-retry.ps1",
+  "data/live-freshness-ok.json",
+  "data/strategy4-latest.json",
+  "data/strategy4-backup.json",
+  "data/strategy4-summary.json",
+  "data/strategy4-score-top.json",
+  "data/strategy4-slim.json",
+  "data/strategy4-zone-a.json",
+  "data/strategy4-zone-b.json",
+  "data/strategy4-zone-c.json",
+];
+
+for (const prefix of [
+  "strategy4",
+  "strategy4-zone-a",
+  "strategy4-zone-b",
+  "strategy4-zone-c",
+]) {
+  for (let page = 1; page <= 24; page += 1) {
+    RETIRED_ARTIFACTS.push(`data/${prefix}-page-${page}.json`);
+  }
+}
+
 function sha256(file) {
   return crypto.createHash("sha256").update(fs.readFileSync(file)).digest("hex");
 }
 
 function relPath(root, file) {
   return path.join(root, file);
+}
+
+function isSamePath(left, right) {
+  return path.resolve(left).toLowerCase() === path.resolve(right).toLowerCase();
 }
 
 function detectVersion(root) {
@@ -127,6 +144,15 @@ for (const file of KEY_FILES) {
   const deployHash = sha256(deployFile);
   if (sourceHash !== deployHash) {
     issues.push(`hash mismatch ${file} source=${sourceHash.slice(0, 12)} deploy=${deployHash.slice(0, 12)}`);
+  }
+}
+
+if (!isSamePath(SOURCE_ROOT, DEPLOY_ROOT)) {
+  for (const file of RETIRED_ARTIFACTS) {
+    const deployFile = relPath(DEPLOY_ROOT, file);
+    if (fs.existsSync(deployFile)) {
+      issues.push(`deploy source contains retired artifact ${file}`);
+    }
   }
 }
 

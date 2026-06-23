@@ -1,6 +1,19 @@
 # 策略2 Supabase API-Only Governance
 
-策略2正式資料來源是 Supabase complete run / shared source health / no-store API。不要再使用舊靜態 freshness verifier 或 `live-freshness-ok.json` 判斷策略2是否可用。
+策略2正式資料來源是 Supabase complete run / 分層 shared source health / no-store API。不要再使用舊靜態 freshness verifier 或 `live-freshness-ok.json` 判斷策略2是否可用。
+
+## 分層 Health Gate
+
+策略2不能再被單一 `source_status.status` 硬殺。分成兩層：
+
+- `canPublishUniverse`：由 quotes health / coverage / active symbols / anon readback 決定。這層 OK 就可以發布策略2母池觀察。
+- `canUpgradeTechnicalEntry`：由 `canPublishUniverse` + `intraday_1m_ok` / ready cache / latest 1m freshness 決定。這層 OK 才能升級 A 區技術確認。
+
+口徑：
+
+- quotes 壞：策略2母池不可發布，可保留上一筆 good A report 或回 quote source unhealthy。
+- quotes 好、1 分 K 壞或 stale：母池照常發布，標 `degraded_intraday_1m`，候選只能 WATCH / 待確認，不升級 A 區。
+- `source_status=error/stale/stopped` 不能單獨讓策略2空白；若 quote readback 正常，應走分層 degraded，而不是 `supabase_shared_source_unhealthy`。
 
 ## 正式契約
 

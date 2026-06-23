@@ -185,6 +185,8 @@ const runStrategy4 = read("run-strategy4.ps1");
 const slimCacheGenerator = read("scripts/generate-slim-cache.js");
 const sourceSync = read("scripts/sync-main-deploy-source.js");
 const strategy2CompleteRunPublisher = read("scripts/publish-strategy2-complete-run.js");
+const strategy2SharedSource = read("lib/supabase-public-slot.js");
+const strategy2Scanner = read("scripts/scan-intraday-signals.js");
 const runIdCompleteGate = read("scripts/verify-run-id-complete-gates.js");
 const terminalLiveCheck = read("terminal-live-check.js");
 const terminalApp = read("terminal-app.js");
@@ -551,6 +553,12 @@ if (!fs.existsSync(path.join(ROOT, "AGENTS.md"))) {
     "Warrant Flow",
     "CB Detect",
     "Shared Fugle Intraday Source",
+    "Per-Strategy Health Gate Boundaries",
+    "Strategy2: quotes health controls candidate universe publication; intraday_1m health only controls A-zone technical upgrade.",
+    "Strategy3: complete run / TV confirmation / latest-N after-13:00 gate.",
+    "Strategy4: current common-stock universe / daily OHLC / history coverage gate.",
+    "Strategy5: complete run / result readback gate.",
+    "Institution / Warrant / CB: API contract gate",
   ]) {
     if (!agents.includes(marker)) issues.push(`AGENTS.md missing operating contract marker ${marker}`);
   }
@@ -610,6 +618,11 @@ if (!fs.existsSync(path.join(ROOT, "STRATEGY2-FRESHNESS-GOVERNANCE.md"))) {
     "策略2 Supabase API-Only Governance",
     "v_strategy2_detection_health",
     "v_strategy2_entry_events_today",
+    "分層 Health Gate",
+    "canPublishUniverse",
+    "canUpgradeTechnicalEntry",
+    "degraded_intraday_1m",
+    "不升級 A 區",
     "afterhours_stopped_ok",
     "不要呼叫 `verify:data-freshness`",
     "不要依賴 `scripts/verify-data-freshness.js`",
@@ -622,6 +635,26 @@ if (!fs.existsSync(path.join(ROOT, "STRATEGY2-FRESHNESS-GOVERNANCE.md"))) {
   ]) {
     if (!strategy2Governance.includes(marker)) issues.push(`STRATEGY2-FRESHNESS-GOVERNANCE.md missing ${marker}`);
   }
+}
+
+
+for (const marker of [
+  "canPublishUniverse",
+  "canUpgradeTechnicalEntry",
+  "degraded_intraday_1m",
+  "healthLayers",
+]) {
+  if (!strategy2SharedSource.includes(marker)) issues.push(`lib/supabase-public-slot.js missing Strategy2 layered health marker ${marker}`);
+}
+for (const marker of [
+  "sharedSourceCanPublishUniverse",
+  "sharedSourceCanUpgradeTechnicalEntry",
+  "quoteEntrySourceHealthy",
+  "technicalEntryHealthy",
+  "quote universe will publish but A-zone technical upgrade is disabled",
+  "quote 母池保留，但 1分K/技術確認未就緒，暫不升級 A 區",
+]) {
+  if (!strategy2Scanner.includes(marker)) issues.push(`scan-intraday-signals.js missing Strategy2 split gate marker ${marker}`);
 }
 
 if (!fs.existsSync(path.join(ROOT, "REALTIME-RADAR-FRESHNESS-GOVERNANCE.md"))) {
@@ -704,6 +737,7 @@ if (fetchResult.status !== 0) {
       "run-live-freshness-gate.ps1",
       "run-cache-sync.ps1",
       "scripts/sync-main-deploy-source.js",
+      "scripts/verify-source-sync.js",
       "run-main-release-pipeline.ps1",
       "run-daily-release.ps1",
       "run-full-scan.ps1",
@@ -721,6 +755,9 @@ if (fetchResult.status !== 0) {
       "scripts/generate-health-summary.js",
       "REALTIME-RADAR-FRESHNESS-GOVERNANCE.md",
       "STRATEGY5-FRESHNESS-GOVERNANCE.md",
+      "STRATEGY2-FRESHNESS-GOVERNANCE.md",
+      "lib/supabase-public-slot.js",
+      "scripts/scan-intraday-signals.js",
     ]);
     const dirty = status.stdout
       .split(/\r?\n/)
@@ -744,4 +781,3 @@ if (issues.length) {
 }
 
 console.log("[publish-gate] ok");
-

@@ -3214,12 +3214,14 @@ async function main() {
     payload: {},
     sourceAgeSeconds: Infinity,
   }));
-  if (!sharedSourceHealth.ok && !entryWindow) {
+  const sharedSourceCanPublishUniverse = sharedSourceHealth.canPublishUniverse === true;
+  const sharedSourceCanUpgradeTechnicalEntry = !entryWindow || sharedSourceHealth.canUpgradeTechnicalEntry === true;
+  if (!sharedSourceCanPublishUniverse && !entryWindow) {
     console.log("strategy2 pre-entry warmup continuing with shared source warning: " + (sharedSourceHealth.reason || sharedSourceHealth.message || "unknown"));
-  } else if (!sharedSourceHealth.ok) {
+  } else if (!sharedSourceCanPublishUniverse) {
     const retained = readRetainableStrategy2EntryReport(key);
     if (retained) {
-      console.log(`strategy2 supabase shared source unhealthy; retain last good A report age=${Math.round(retained.ageSeconds)}s reason=${sharedSourceHealth.reason || sharedSourceHealth.message || "unknown"}`);
+      console.log(`strategy2 quote source unhealthy; retain last good A report age=${Math.round(retained.ageSeconds)}s reason=${sharedSourceHealth.reason || sharedSourceHealth.message || "unknown"}`);
       return;
     }
     const strategy2Report = buildStrategy2SharedSourceAbnormalReport(cache, key, timestamp, sharedSourceHealth);
@@ -3227,8 +3229,11 @@ async function main() {
     if (!STRATEGY2_API_ONLY) writeJson(STRATEGY2_REPORT_FILE, strategy2Report);
     publishStaticDataJson("strategy2-intraday-latest.json", strategy2Report);
     await upsertStrategy2LatestToSupabase(strategy2Report);
-    console.log(`strategy2 supabase shared source unhealthy: ${sharedSourceHealth.reason || sharedSourceHealth.message || "unknown"}`);
+    console.log(`strategy2 quote source unhealthy: ${sharedSourceHealth.reason || sharedSourceHealth.message || "unknown"}`);
     return;
+  }
+  if (entryWindow && sharedSourceCanPublishUniverse && !sharedSourceCanUpgradeTechnicalEntry) {
+    console.log(`strategy2 shared source degraded; quote universe will publish but A-zone technical upgrade is disabled: ${sharedSourceHealth.reason || sharedSourceHealth.message || sharedSourceHealth.degradationMode || "intraday_1m_not_ready"}`);
   }
 
   const rawStocks = await annotateDailyVolumeAverages(await fetchStocks(!entryWindow ? {
@@ -3259,7 +3264,9 @@ async function main() {
   const fugleWsCoverage = realtimeSourceStocks.length ? cleanNumber(realtimeStats?.fallbackStats?.fugleWs?.used) / realtimeSourceStocks.length : 0;
   const entrySourceCoverage = Math.max(coverage, fugleWsCoverage);
   const entrySourceUsable = Math.max(quoteUsable, fugleWsUsable);
-  const entrySourceHealthy = entrySourceCoverage >= MIN_ENTRY_SOURCE_COVERAGE;
+  const quoteEntrySourceHealthy = entrySourceCoverage >= MIN_ENTRY_SOURCE_COVERAGE;
+  const technicalEntryHealthy = quoteEntrySourceHealthy && sharedSourceCanUpgradeTechnicalEntry;
+  const entrySourceHealthy = technicalEntryHealthy;
   const cachedRecovered = realtimeStocks.filter((stock) => stock.recoveredFromQuoteCache).length;
   const realtimeSummaryBase = {
     ...realtimeStats,
@@ -3273,6 +3280,14 @@ async function main() {
     quoteCacheMaxAgeSeconds: QUOTE_CACHE_MAX_AGE_SECONDS,
     entrySourceCoverageThreshold: MIN_ENTRY_SOURCE_COVERAGE,
     entrySourceHealthy,
+    quoteEntrySourceHealthy,
+    technicalEntryHealthy,
+    intraday1mHealthy: sharedSourceHealth.intraday1mOk === true,
+    canPublishUniverse: sharedSourceCanPublishUniverse,
+    canUpgradeTechnicalEntry: sharedSourceCanUpgradeTechnicalEntry,
+    healthGateMode: sharedSourceHealth.degradationMode || (sharedSourceCanUpgradeTechnicalEntry ? "ok" : "degraded_intraday_1m"),
+    healthLayers: sharedSourceHealth.healthLayers || null,
+    sharedSourceReason: sharedSourceHealth.reason || sharedSourceHealth.message || "",
     initialBatchSize: REALTIME_BATCH_SIZE,
     retryBatchSize: REALTIME_RETRY_BATCH_SIZE,
   };
@@ -3398,16 +3413,16 @@ async function main() {
         code: scanStock.code,
         name: scanStock.name,
         strategy: standaloneMeta.primaryStrategy || "策略2觀察",
-        stateId: "entry",
-        stateLabel: "進場區",
-        stateReason: standaloneMeta.strategyReasons[0] || "策略2七條件成立，列入 A 進場區。",
+        stateId: technicalEntryHealthy ? "entry" : "wait",
+        stateLabel: technicalEntryHealthy ? "進場區" : "待確認",
+        stateReason: technicalEntryHealthy ? (standaloneMeta.strategyReasons[0] || "策略2七條件成立，列入 A 進場區。") : `${standaloneMeta.strategyReasons[0] || "策略2母池條件成立"}；quote 母池保留，但 1分K/技術確認未就緒，暫不升級 A 區。`,
         score: Math.min(96, Math.max(55, cleanNumber(preopen?.score) || Math.round(50 + Math.max(0, cleanNumber(scanStock.percent)) * 6))),
         entryPrice: scanStock.close,
         observedPrice: scanStock.close,
         quoteTime: scanStock.quoteTime || scanStock.time || "",
         quoteSource: scanStock.quoteSource || scanStock.realtimeFallback || scanStock.closeSource || "api/realtime",
         sourceCoverage: Number(entrySourceCoverage.toFixed(4)),
-        sourceCoverageHealthy: entrySourceHealthy,
+        sourceCoverageHealthy: technicalEntryHealthy,
         observedHigh: scanStock.close,
         observedHighAt: timestamp,
         observedLow: scanStock.close,
@@ -3455,7 +3470,7 @@ async function main() {
       added += 1;
     }
     signals.forEach((signal) => {
-      const state = classifyStrategy2State(scanStock, signal, { entrySourceHealthy, sourceCoverage: entrySourceCoverage });
+      const state = classifyStrategy2State(scanStock, signal, { entrySourceHealthy: technicalEntryHealthy, sourceCoverage: entrySourceCoverage });
       if (!state) return;
       const strategyMeta = buildStrategy2ConditionMeta(scanStock, {
         timestamp,
@@ -3492,7 +3507,7 @@ async function main() {
         quoteTime: scanStock.quoteTime || scanStock.time || "",
         quoteSource: scanStock.quoteSource || scanStock.realtimeFallback || scanStock.closeSource || "api/realtime",
         sourceCoverage: Number(entrySourceCoverage.toFixed(4)),
-        sourceCoverageHealthy: entrySourceHealthy,
+        sourceCoverageHealthy: technicalEntryHealthy,
         observedHigh: scanStock.close,
         observedHighAt: timestamp,
         observedLow: scanStock.close,
@@ -3542,7 +3557,7 @@ async function main() {
       added += 1;
     });
     const snapshotMeta = buildStrategy2ConditionMeta(scanStock, { timestamp, preopen, hadTriggeredStrong });
-    if (appendTrackedSnapshot(cache, scanStock, timestamp, key, { entrySourceHealthy, sourceCoverage: entrySourceCoverage, strategyMeta: snapshotMeta })) {
+    if (appendTrackedSnapshot(cache, scanStock, timestamp, key, { entrySourceHealthy: technicalEntryHealthy, sourceCoverage: entrySourceCoverage, strategyMeta: snapshotMeta })) {
       added += 1;
     }
   }
@@ -3586,11 +3601,3 @@ main().catch((error) => {
   console.error(error);
   process.exit(1);
 });
-
-
-
-
-
-
-
-

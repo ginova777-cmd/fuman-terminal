@@ -137,6 +137,27 @@ return no-store API payload
 
 Supabase REST/PostgREST may cap rows at 1000. Any API that can return more than 1000 rows must page with ranges. Do not assume `limit=3000` returns everything.
 
+### Per-Strategy Health Gate Boundaries
+
+Do not use one shared source health flag as a global kill-switch for every strategy. Each strategy has its own authority and gate:
+
+```text
+Strategy1: preopen / futopt / daily / chip ready + decision gate. Hard block BUY when 08:55 data is not ready.
+Strategy2: quotes health controls candidate universe publication; intraday_1m health only controls A-zone technical upgrade.
+Strategy3: complete run / TV confirmation / latest-N after-13:00 gate. Do not empty the run because shared intraday health wobbles.
+Strategy4: current common-stock universe / daily OHLC / history coverage gate. Quote health is not the authority.
+Strategy5: complete run / result readback gate. Shared source health is not the authority.
+Institution / Warrant / CB: API contract gate: runId, usedDate/sourceDate, rows/count, schemaVersion when applicable, and readback.
+```
+
+Strategy2 special rule:
+
+```text
+quotes_ok=false -> do not publish the Strategy2 quote universe.
+quotes_ok=true and intraday_1m_ok=false -> publish quote candidate universe, mark degraded_intraday_1m, and do not upgrade rows into technical A-zone.
+source_status=error/stale/stopped must not by itself blank Strategy2 when quote readback is healthy.
+```
+
 ## 5. Strategy 1 Open Buy / Preopen
 
 Official API:
