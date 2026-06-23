@@ -5,6 +5,7 @@
   installDesktopApiPollingCache();
   installDesktopViewSnapshotCache();
   installInstantViewSwitch();
+  installDesktopInteractionBudget();
   installFastViewClickReplay();
   installWarmMainApp();
   installScriptPreload();
@@ -28,6 +29,11 @@
       body.fuman-view-switching .view-panel {
         transition: none !important;
       }
+      body.fuman-view-switching .view-panel.active {
+        content-visibility: auto;
+        contain: layout paint style;
+        contain-intrinsic-size: 900px;
+      }
       body.fuman-view-switching [data-view] {
         transition: background-color 80ms ease, border-color 80ms ease, color 80ms ease !important;
       }
@@ -46,10 +52,21 @@
         content-visibility: hidden;
         contain-intrinsic-size: 900px;
       }
+      body.fuman-view-switching .strategy-terminal,
+      body.fuman-view-switching .strategy-list,
+      body.fuman-view-switching .watchlist-grid,
+      body.fuman-view-switching .terminal-table,
+      body.fuman-view-switching .chip-flow-shell {
+        content-visibility: auto;
+        contain-intrinsic-size: 720px;
+      }
       [data-view] {
         -webkit-tap-highlight-color: transparent;
         touch-action: manipulation;
         user-select: none;
+      }
+      [data-view].fuman-pressing {
+        transform: translate3d(1px, 0, 0);
       }
     `;
     document.head.appendChild(style);
@@ -95,6 +112,7 @@
       });
       document.body.dataset.fumanInstantView = view;
       window.__fumanLastInstantView = { view, at: Date.now() };
+      window.__fumanCurrentInstantRoute = `${view}|${(link.textContent || "").trim()}`;
       window.FUMAN_HOTFIX_RESTORE_VIEW_SNAPSHOT?.(view, panel);
       mark(`instant-view:${view}`);
       return true;
@@ -138,7 +156,7 @@
       const last = window.__fumanLastReplayRoute || {};
       const now = Date.now();
       window.__fumanLastReplayRoute = { key, at: now };
-      return last.key === key && now - Number(last.at || 0) < 220;
+      return last.key === key && now - Number(last.at || 0) < 900;
     };
     const replayClick = (link, sourceEvent) => {
       if (!link || link.dataset.fumanHotfixReplayQueued === "1") return;
@@ -163,7 +181,7 @@
           }
           link.dispatchEvent(event);
         };
-        window.setTimeout(afterPaint, 42);
+        window.setTimeout(afterPaint, 96);
       });
     };
     document.addEventListener("click", (event) => {
@@ -185,9 +203,65 @@
       window.clearTimeout(window.__fumanViewHydratingTimer);
       window.__fumanViewHydratingTimer = window.setTimeout(() => {
         document.body.classList.remove("fuman-view-hydrating");
-      }, 320);
+      }, 520);
       replayClick(link, event);
     }, true);
+  }
+
+  function installDesktopInteractionBudget() {
+    if (window.__fumanDesktopInteractionBudget) return;
+    window.__fumanDesktopInteractionBudget = true;
+
+    const isViewLink = (target) => target?.closest?.("[data-view]:not([data-member-tab])");
+    const isSwitching = () => {
+      const last = window.__fumanLastInstantView;
+      return document.body?.classList?.contains("fuman-view-switching") ||
+        !!(last && Date.now() - Number(last.at || 0) < 900);
+    };
+    const scheduleAfterPaint = (task, delay = 0) => {
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => window.setTimeout(task, delay));
+      });
+    };
+
+    document.addEventListener("pointerdown", (event) => {
+      const link = isViewLink(event.target);
+      if (!link) return;
+      link.classList.add("fuman-pressing");
+      window.clearTimeout(link.__fumanPressingTimer);
+      link.__fumanPressingTimer = window.setTimeout(() => link.classList.remove("fuman-pressing"), 140);
+    }, true);
+
+    document.addEventListener("click", (event) => {
+      const link = isViewLink(event.target);
+      if (!link || event.__fumanDeferredViewClick) return;
+      const route = `${link.dataset.view || ""}|${(link.textContent || "").trim()}`;
+      const lastOfficial = window.__fumanLastOfficialRoute || {};
+      const now = Date.now();
+      if (lastOfficial.route === route && now - Number(lastOfficial.at || 0) < 1200) {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        return;
+      }
+      window.__fumanLastOfficialRoute = { route, at: now };
+      scheduleAfterPaint(() => {
+        document.body?.classList?.remove("fuman-view-switching");
+      }, 120);
+    }, true);
+
+    const originalSetInterval = window.setInterval.bind(window);
+    window.setInterval = function fumanBudgetedSetInterval(callback, delay, ...args) {
+      if (typeof callback !== "function" || Number(delay || 0) < 1000) {
+        return originalSetInterval(callback, delay, ...args);
+      }
+      return originalSetInterval(function budgetedInterval(...innerArgs) {
+        if (isSwitching()) {
+          window.setTimeout(() => callback.apply(this, innerArgs), 900);
+          return;
+        }
+        return callback.apply(this, innerArgs);
+      }, delay, ...args);
+    };
   }
 
   function installWarmMainApp() {
@@ -402,7 +476,17 @@
       statusText: record.statusText,
       headers: record.headers,
     });
+    const isViewSwitching = () => {
+      const last = window.__fumanLastInstantView;
+      return document.body?.classList?.contains("fuman-view-switching") ||
+        !!(last && Date.now() - Number(last.at || 0) < 900);
+    };
     const maxStaleFor = (pathname) => {
+      if (isViewSwitching()) {
+        if (/strategy2|realtime-radar/i.test(pathname)) return 60000;
+        if (/market(?:$|-ai)|heatmap/i.test(pathname)) return 90000;
+        return 600000;
+      }
       if (/strategy2|realtime-radar/i.test(pathname)) return 20000;
       if (/market(?:$|-ai)|heatmap/i.test(pathname)) return 45000;
       return staleWhileRevalidateMs;
@@ -527,7 +611,12 @@
       if (stale) {
         memory.set(key, stale);
         if (!inflight.has(key)) {
-          refreshNetwork(input, init, key, pathname).catch(() => null);
+          const refresh = () => refreshNetwork(input, init, key, pathname).catch(() => null);
+          if (isViewSwitching()) {
+            setTimeout(refresh, 850);
+          } else {
+            refresh();
+          }
         }
         return Promise.resolve(cloneFromRecord(withCacheHeader(stale, "stale-while-revalidate")));
       }
