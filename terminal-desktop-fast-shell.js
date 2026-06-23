@@ -54,6 +54,7 @@
   installStyle();
   installRouteSnapshots();
   installCanvasHandlers();
+  primeCanvasWorker();
   installRouteFeedback();
 
   function routeKey(link) {
@@ -397,6 +398,18 @@
     } catch (error) {
       canvasWorkerFailed = true;
       return null;
+    }
+  }
+
+  function primeCanvasWorker() {
+    const run = () => {
+      const worker = getCanvasWorker();
+      if (worker) canvasWorkerMode = "worker-warming";
+    };
+    if ("requestIdleCallback" in window) {
+      requestIdleCallback(run, { timeout: 1200 });
+    } else {
+      window.setTimeout(run, 700);
     }
   }
 
@@ -890,6 +903,70 @@
     ctx.closePath();
   }
 
+  function drawCanvasShellFrame(canvas, meta) {
+    requestAnimationFrame(() => {
+      if (!drawCanvasWithWorker(canvas)) {
+        drawRouteCanvas(canvas, meta, canvasState.filtered, canvasState.source);
+      }
+      setCanvasStatus();
+    });
+  }
+
+  function canvasShellHtml(key, meta) {
+    return `
+      <section class="desktop-route-shell desktop-canvas-app" data-route-shell="${escapeHtml(key)}" data-route-source="${escapeHtml(canvasState.source || "")}">
+        <div class="desktop-route-shell-head">
+          <span data-canvas-meta-icon>${escapeHtml(meta.icon)}</span>
+          <div>
+            <h2 data-canvas-meta-title>${escapeHtml(meta.title)}</h2>
+            <p data-canvas-meta-summary>${escapeHtml(meta.summary)}</p>
+          </div>
+        </div>
+        <div class="desktop-route-shell-grid">
+          <article><span>切換狀態</span><strong data-canvas-switch-state>立即</strong></article>
+          <article><span>資料狀態</span><strong data-canvas-data-state>${canvasState.rows.length ? "快照命中" : "背景更新"}</strong></article>
+          <article><span>手感模式</span><strong data-canvas-mode-state>Worker Canvas</strong></article>
+        </div>
+        <div class="desktop-canvas-toolbar">
+          <label class="desktop-canvas-search-wrap">
+            <span>搜尋</span>
+            <input class="desktop-canvas-search" value="${escapeHtml(canvasState.query || "")}" placeholder="代號 / 名稱 / 訊號" autocomplete="off" spellcheck="false">
+          </label>
+          <button type="button" class="desktop-canvas-refresh" data-canvas-refresh>刷新</button>
+          <span class="desktop-canvas-count">${escapeHtml(`${canvasState.filtered.length}/${canvasState.rows.length}`)}</span>
+          <span class="desktop-canvas-status">${escapeHtml(canvasWorkerReady ? canvasWorkerMode : canvasState.source || "shell")}</span>
+        </div>
+        <canvas class="desktop-route-canvas" tabindex="0" aria-label="${escapeHtml(meta.title)} Canvas 快速列表"></canvas>
+        <div class="desktop-canvas-detail" hidden></div>
+      </section>
+    `;
+  }
+
+  function updateCanvasShell(shell, key, meta) {
+    if (!shell) return null;
+    shell.dataset.routeShell = key;
+    shell.dataset.routeSource = canvasState.source || "";
+    const icon = shell.querySelector("[data-canvas-meta-icon]") || shell.querySelector(".desktop-route-shell-head > span");
+    const title = shell.querySelector("[data-canvas-meta-title]") || shell.querySelector(".desktop-route-shell-head h2");
+    const summary = shell.querySelector("[data-canvas-meta-summary]") || shell.querySelector(".desktop-route-shell-head p");
+    const dataState = shell.querySelector("[data-canvas-data-state]") || shell.querySelector(".desktop-route-shell-grid article:nth-child(2) strong");
+    const modeState = shell.querySelector("[data-canvas-mode-state]") || shell.querySelector(".desktop-route-shell-grid article:nth-child(3) strong");
+    const count = shell.querySelector(".desktop-canvas-count");
+    const status = shell.querySelector(".desktop-canvas-status");
+    const input = shell.querySelector(".desktop-canvas-search");
+    const canvas = shell.querySelector(".desktop-route-canvas");
+    if (icon) icon.textContent = meta.icon;
+    if (title) title.textContent = meta.title;
+    if (summary) summary.textContent = meta.summary;
+    if (dataState) dataState.textContent = canvasState.rows.length ? "快照命中" : "背景更新";
+    if (modeState) modeState.textContent = canvasWorkerReady ? "OffscreenCanvas" : "Canvas";
+    if (count) count.textContent = `${canvasState.filtered.length}/${canvasState.rows.length}`;
+    if (status) status.textContent = canvasWorkerReady ? canvasWorkerMode : canvasState.source || "shell";
+    if (input && document.activeElement !== input) input.value = canvasState.query || "";
+    if (canvas) canvas.setAttribute("aria-label", `${meta.title} Canvas 快速列表`);
+    return canvas;
+  }
+
   function renderStrategyRouteShell(link, source, rows = []) {
     const panel = document.querySelector("#strategy-view");
     if (!panel) return false;
@@ -934,40 +1011,13 @@
     if (avg) avg.textContent = avgScore ? String(avgScore) : "--";
     if (top) top.textContent = canvasState.filtered[0]?.code || "--";
     if (table) {
-      table.innerHTML = `
-        <section class="desktop-route-shell desktop-canvas-app" data-route-shell="${escapeHtml(key)}" data-route-source="${escapeHtml(canvasState.source || "")}">
-          <div class="desktop-route-shell-head">
-            <span>${escapeHtml(meta.icon)}</span>
-            <div>
-              <h2>${escapeHtml(meta.title)}</h2>
-              <p>${escapeHtml(meta.summary)}</p>
-            </div>
-          </div>
-          <div class="desktop-route-shell-grid">
-            <article><span>切換狀態</span><strong>立即</strong></article>
-            <article><span>資料狀態</span><strong>${canvasState.rows.length ? "快照命中" : "背景更新"}</strong></article>
-            <article><span>手感模式</span><strong>Canvas</strong></article>
-          </div>
-          <div class="desktop-canvas-toolbar">
-            <label class="desktop-canvas-search-wrap">
-              <span>搜尋</span>
-              <input class="desktop-canvas-search" value="${escapeHtml(canvasState.query || "")}" placeholder="代號 / 名稱 / 訊號" autocomplete="off" spellcheck="false">
-            </label>
-            <button type="button" class="desktop-canvas-refresh" data-canvas-refresh>刷新</button>
-            <span class="desktop-canvas-count">${escapeHtml(`${canvasState.filtered.length}/${canvasState.rows.length}`)}</span>
-            <span class="desktop-canvas-status">${escapeHtml(canvasState.source || "shell")}</span>
-          </div>
-          <canvas class="desktop-route-canvas" tabindex="0" aria-label="${escapeHtml(meta.title)} Canvas 快速列表"></canvas>
-          <div class="desktop-canvas-detail" hidden></div>
-        </section>
-      `;
-      const canvas = table.querySelector(".desktop-route-canvas");
-      requestAnimationFrame(() => {
-        if (!drawCanvasWithWorker(canvas)) {
-          drawRouteCanvas(canvas, meta, canvasState.filtered, canvasState.source);
-        }
-        setCanvasStatus();
-      });
+      let shell = table.querySelector(".desktop-route-shell.desktop-canvas-app");
+      if (!shell) {
+        table.innerHTML = canvasShellHtml(key, meta);
+        shell = table.querySelector(".desktop-route-shell.desktop-canvas-app");
+      }
+      const canvas = updateCanvasShell(shell, key, meta);
+      drawCanvasShellFrame(canvas, meta);
     }
     window.setTimeout(() => delete panel.dataset.fumanRouteSnapshotRestoring, 0);
     return true;
