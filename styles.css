@@ -840,13 +840,16 @@ body::after {
 
 .chip-table th.chip-focus-column,
 .chip-table td.chip-focus-column {
-  background: rgba(255, 122, 69, 0.2);
-  box-shadow: inset 0 0 0 1px rgba(255, 122, 69, 0.48);
+  background: rgba(255, 122, 69, 0.24);
+  box-shadow:
+    inset 3px 0 0 rgba(255, 122, 69, 0.96),
+    inset 0 0 0 1px rgba(255, 122, 69, 0.58);
+  color: #ffd7c2;
 }
 
 .chip-table th.chip-focus-column {
   color: #ffffff;
-  background: rgba(255, 122, 69, 0.82);
+  background: rgba(255, 122, 69, 0.88);
 }
 
 .chip-table a {
@@ -6482,7 +6485,10 @@ body.fuman-light-theme .strategy5-page-heading .schedule-status-pill {
   body.fuman-light-theme #chip-trade-view .chip-table th.chip-focus-column,
   body.fuman-light-theme #chip-trade-view .chip-table td.chip-focus-column {
     background: #fff1e6 !important;
-    box-shadow: inset 0 0 0 1px rgba(249, 115, 22, 0.5) !important;
+    box-shadow:
+      inset 3px 0 0 rgba(249, 115, 22, 0.92),
+      inset 0 0 0 1px rgba(249, 115, 22, 0.5) !important;
+    color: #9a3412 !important;
   }
 
   body.fuman-light-theme #chip-trade-view .chip-table th.chip-focus-column {
