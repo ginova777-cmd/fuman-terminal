@@ -28,65 +28,23 @@ const STATIC_ASSETS = [
   "/favicon.ico",
 ];
 
-const DATA_PATTERNS = [
-  /\/data\/.*summary\.json/i,
-  /\/data\/.*-slim\.json/i,
-  /\/data\/.*-top\.json/i,
-  /\/data\/.*-index\.json/i,
-  /\/data\/.*-latest\.json/i,
-  /\/data\/mobile-ai-latest\.html/i,
-  /\/data\/mobile-ai-lite\.html/i,
-  /\/data\/mobile-ai-ultra\.html/i,
-  /\/data\/mobile-analysis\/[^/]+\.json/i,
-  /\/data\/.*-page-\d+\.json/i,
-  /\/data\/market-summary\.json/i,
-  /\/data\/mobile-home-summary\.json/i,
-  /\/data\/mobile-boot\.json/i,
-  /\/data\/terminal-home-bundle\.json/i,
-  /\/data\/data-status-index\.json/i,
-  /\/data\/data-manifest\.json/i,
-  /\/data\/mobile-digest\.json/i,
-  /\/data\/mobile-ai-latest\.html/i,
-  /\/data\/mobile-ai-lite\.html/i,
-  /\/data\/mobile-ai-ultra\.html/i,
-  /\/data\/stocks-slim\.json/i,
-  /\/data\/stocks-index\.json/i,
-  /\/data\/strategy-match-index\.json/i,
-  /\/data\/health-summary\.json/i,
-];
+const DATA_PATTERNS = [];
 
-const NETWORK_FIRST_DATA_PATTERNS = [
-  /\/data\/data-manifest\.json/i,
-  /\/data\/data-status-index\.json/i,
-  /\/data\/mobile-boot\.json/i,
-  /\/data\/mobile-analysis\/[^/]+\.json/i,
-  /\/data\/open-buy-latest\.json/i,
-];
+const NETWORK_FIRST_DATA_PATTERNS = [];
 
 const PREFETCH_CORE_DATA_ASSETS = [
-  "/data/mobile-boot.json",
-  "/data/data-manifest.json",
-  "/data/mobile-digest.json",
-  "/data/mobile-ai-ultra.html",
+  "/api/mobile-boot",
 ];
 
 const PREFETCH_LOW_POWER_DATA_ASSETS = [
-  "/data/mobile-boot.json",
-  "/data/mobile-digest.json",
-  "/data/mobile-ai-ultra.html",
+  "/api/mobile-boot",
 ];
 
 const PREFETCH_DATA_ASSETS = [
   ...PREFETCH_CORE_DATA_ASSETS,
-  "/data/mobile-terminal-latest.json",
-  "/data/market-ai-panel-latest.json",
-  "/data/market-ai-breadth-latest.json",
-  "/data/terminal-home-bundle.json",
-  "/data/mobile-home-summary.json",
-  "/data/market-summary.json",
-  "/data/health-summary.json",
-  "/data/data-status-index.json",
-  "/data/stocks-quotes-mobile-top.json",
+  "/api/terminal-home",
+  "/api/market-ai-live",
+  "/api/market-ai-panel-live",
 ];
 
 const LIVE_PATTERNS = [
@@ -100,10 +58,13 @@ const LIVE_PATTERNS = [
   /\/api\/institution-latest/i,
   /\/api\/warrant-flow-latest/i,
   /\/api\/cb-detect-latest/i,
+  /\/api\/mobile-boot/i,
+  /\/api\/mobile-fragment/i,
+  /\/api\/terminal-home/i,
+  /\/api\/market-ai-live/i,
+  /\/api\/market-ai-panel-live/i,
   /\/api\/latest-signals/i,
   /\/api\/refresh/i,
-  /\/data\/strategy2-intraday-latest\.json/i,
-  /\/data\/realtime-radar-latest\.json/i,
 ];
 
 self.addEventListener("install", (event) => {
@@ -330,6 +291,8 @@ self.addEventListener("fetch", (event) => {
   }
 
 });
+
+
 
 
 

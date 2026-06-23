@@ -1,17 +1,17 @@
 (function () {
   const endpoints = {
     backend: "/api/market",
-    marketSummary: "/data/market-summary.json",
-    mobileHomeSummary: "/data/mobile-home-summary.json",
+    marketSummary: "/api/market",
+    mobileHomeSummary: "/api/mobile-boot",
     terminalHomeBundle: "/api/terminal-home",
-    terminalHomeMobileSlim: "/data/terminal-home-mobile-slim.json",
+    terminalHomeMobileSlim: "/api/mobile-boot",
     dataStatusIndex: "/api/terminal-home",
-    dataManifest: "/data/data-manifest.json",
-    stocksSlim: "/data/stocks-slim.json",
-    stocksIndex: "/data/stocks-index.json",
-    stocksQuotesSlim: "/data/stocks-quotes-slim.json",
-    stocksQuotesMobileTop: "/data/stocks-quotes-mobile-top.json",
-    healthSummary: "/data/health-summary.json",
+    dataManifest: "",
+    stocksSlim: "/api/stocks",
+    stocksIndex: "/api/stocks",
+    stocksQuotesSlim: "/api/stocks",
+    stocksQuotesMobileTop: "/api/stocks",
+    healthSummary: "/api/terminal-home",
     heatmapLatest: "/api/heatmap",
     heatmap: "/api/heatmap",
     institution: "/api/institution",
@@ -20,13 +20,13 @@
     realtimeRadarLatestApi: "/api/realtime-radar-latest",
     marketAiLive: "/api/market-ai-live",
     marketAiBreadthLatest: "/api/market-ai-live",
-    marketAiPanelLatest: "/data/market-ai-panel-latest.json",
+    marketAiPanelLatest: "/api/market-ai-panel-live",
     mobileBoot: "/api/mobile-boot",
     mobileTerminalLatest: "/api/mobile-boot",
-    mobileAiLatest: "/data/mobile-ai-latest.html",
-    mobileAiLite: "/data/mobile-ai-lite.html",
-    mobileAiUltra: "/data/mobile-ai-ultra.html",
-    mobileDigest: "/data/mobile-digest.json",
+    mobileAiLatest: "/api/mobile-fragment?tab=strategy1",
+    mobileAiLite: "/api/mobile-fragment?tab=strategy1",
+    mobileAiUltra: "/api/mobile-fragment?tab=strategy1",
+    mobileDigest: "/api/mobile-boot",
     scanOpenBuy: "/api/scan-open-buy",
     scanStrategy4: "/api/scan-strategy4",
     latestSignalsApi: "/api/latest-signals",
@@ -36,7 +36,7 @@
     exportAuth: "/api/export-auth",
     frontendError: "/api/frontend-error",
     performanceReport: "/api/performance-report",
-    strategyWeights: "/data/strategy-weight-report.json",
+    strategyWeights: "",
     strategyMatchIndex: "/api/watchlist-match-index",
     openBuyCache: "/api/open-buy-latest",
     openBuyBackup: "",
@@ -105,6 +105,9 @@
     endpoints,
   };
 })();
+
+
+
 
 
 

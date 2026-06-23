@@ -378,7 +378,7 @@ for (const marker of [
   "FIRST_SCREEN_BUDGET_BYTES",
   "FIRST_SCREEN_JSON_BUDGET_BYTES",
   "FIRST_SCREEN_FORBIDDEN",
-  "/data/terminal-home-mobile-slim.json",
+  "/api/mobile-boot",
 ]) {
   if (!mobileHealthVerifier.includes(marker)) issues.push(`verify-mobile-health.js missing ${marker}`);
 }
@@ -744,3 +744,4 @@ if (issues.length) {
 }
 
 console.log("[publish-gate] ok");
+

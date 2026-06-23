@@ -9,13 +9,17 @@ const FIRST_SCREEN_TARGETS = [
   "/terminal-app.js",
   "/terminal-watchlist-module.js",
   "/terminal-mobile-diagnostics.js",
-  "/data/mobile-home-summary.json",
-  "/data/terminal-home-mobile-slim.json",
-  "/data/stocks-quotes-mobile-top.json",
-  "/data/strategy2-intraday-live-top.json",
+  "/api/mobile-boot",
+  "/api/terminal-home",
+  "/api/strategy2-latest?top=1&compact=1&limit=50",
 ];
 const FIRST_SCREEN_FORBIDDEN = [
+  "/data/mobile-home-summary.json",
   "/data/terminal-home-bundle.json",
+  "/data/terminal-home-mobile-slim.json",
+  "/data/mobile-digest.json",
+  "/data/mobile-ai-ultra.html",
+  "/data/market-ai-panel-latest.json",
   "/data/stocks-index.json",
   "/data/stocks-quotes-slim.json",
   "/data/strategy4-zone-a.json",
@@ -26,20 +30,9 @@ const MAX_BYTES = {
   "/terminal-app.js": 122000,
   "/terminal-watchlist-module.js": 18000,
   "/terminal-mobile-diagnostics.js": 4000,
-  "/data/mobile-home-summary.json": 12000,
-  "/data/terminal-home-bundle.json": 20000,
-  "/data/terminal-home-mobile-slim.json": 12000,
-  "/data/strategy2-intraday-live-top.json": 12000,
-  "/data/strategy2-intraday-top.json": 18000,
-  "/data/institution-mobile-top.json": 16000,
-  "/data/warrant-flow-mobile-top.json": 8000,
-  "/data/strategy4-score-top.json": 12000,
-  "/data/strategy4-zone-a.json": 14000,
-  "/data/strategy4-zone-b-page-1.json": 9000,
-  "/data/strategy4-zone-c-page-1.json": 9000,
-  "/data/stocks-index.json": 26000,
-  "/data/stocks-quotes-mobile-top.json": 18000,
-  "/data/stocks-quotes-slim.json": 52000,
+  "/api/mobile-boot": 30000,
+  "/api/terminal-home": 45000,
+  "/api/strategy2-latest?top=1&compact=1&limit=50": 30000,
 };
 
 const TARGETS = [
@@ -47,20 +40,9 @@ const TARGETS = [
   { path: "/terminal-app.js", kind: "script", versioned: true, maxBytes: MAX_BYTES["/terminal-app.js"], cache: /immutable/i },
   { path: "/terminal-watchlist-module.js", kind: "script", versioned: true, maxBytes: MAX_BYTES["/terminal-watchlist-module.js"], cache: /immutable/i },
   { path: "/terminal-mobile-diagnostics.js", kind: "script", versioned: true, maxBytes: MAX_BYTES["/terminal-mobile-diagnostics.js"], cache: /immutable/i },
-  { path: "/data/mobile-home-summary.json", kind: "json", maxBytes: MAX_BYTES["/data/mobile-home-summary.json"], cache: /stale-while-revalidate/i },
-  { path: "/data/terminal-home-bundle.json", kind: "json", maxBytes: MAX_BYTES["/data/terminal-home-bundle.json"], cache: /stale-while-revalidate/i },
-  { path: "/data/terminal-home-mobile-slim.json", kind: "json", maxBytes: MAX_BYTES["/data/terminal-home-mobile-slim.json"], cache: /stale-while-revalidate/i },
-  { path: "/data/strategy2-intraday-live-top.json", kind: "json", maxBytes: MAX_BYTES["/data/strategy2-intraday-live-top.json"], cache: /stale-while-revalidate|no-store/i },
-  { path: "/data/strategy2-intraday-top.json", kind: "json", maxBytes: MAX_BYTES["/data/strategy2-intraday-top.json"], cache: /stale-while-revalidate/i },
-  { path: "/data/institution-mobile-top.json", kind: "json", maxBytes: MAX_BYTES["/data/institution-mobile-top.json"], cache: /stale-while-revalidate/i },
-  { path: "/data/warrant-flow-mobile-top.json", kind: "json", maxBytes: MAX_BYTES["/data/warrant-flow-mobile-top.json"], cache: /stale-while-revalidate/i },
-  { path: "/data/strategy4-score-top.json", kind: "json", maxBytes: MAX_BYTES["/data/strategy4-score-top.json"], cache: /no-store/i },
-  { path: "/data/strategy4-zone-a.json", kind: "json", maxBytes: MAX_BYTES["/data/strategy4-zone-a.json"], cache: /no-store/i },
-  { path: "/data/strategy4-zone-b-page-1.json", kind: "json", maxBytes: MAX_BYTES["/data/strategy4-zone-b-page-1.json"], cache: /no-store/i },
-  { path: "/data/strategy4-zone-c-page-1.json", kind: "json", maxBytes: MAX_BYTES["/data/strategy4-zone-c-page-1.json"], cache: /no-store/i },
-  { path: "/data/stocks-index.json", kind: "json", maxBytes: MAX_BYTES["/data/stocks-index.json"], cache: /stale-while-revalidate/i },
-  { path: "/data/stocks-quotes-mobile-top.json", kind: "json", maxBytes: MAX_BYTES["/data/stocks-quotes-mobile-top.json"], cache: /stale-while-revalidate/i },
-  { path: "/data/stocks-quotes-slim.json", kind: "json", maxBytes: MAX_BYTES["/data/stocks-quotes-slim.json"], cache: /stale-while-revalidate/i },
+  { path: "/api/mobile-boot", kind: "json", maxBytes: MAX_BYTES["/api/mobile-boot"], cache: /no-store/i },
+  { path: "/api/terminal-home", kind: "json", maxBytes: MAX_BYTES["/api/terminal-home"], cache: /no-store/i },
+  { path: "/api/strategy2-latest?top=1&compact=1&limit=50", kind: "json", maxBytes: MAX_BYTES["/api/strategy2-latest?top=1&compact=1&limit=50"], cache: /no-store/i },
 ];
 
 function fetchBuffer(pathname, version = "") {
@@ -174,3 +156,4 @@ main().catch((error) => {
   console.error(`[mobile] failed: ${error.message}`);
   process.exit(1);
 });
+
