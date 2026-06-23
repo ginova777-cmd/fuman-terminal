@@ -1,0 +1,162 @@
+const fs = require("fs");
+const https = require("https");
+const path = require("path");
+
+const ROOT = path.resolve(__dirname, "..");
+const EXPECTED_HOTFIX = "20260623-06";
+const BASE_URL = (process.env.FUMAN_VERIFY_BASE_URL || "https://fuman-terminal.vercel.app").replace(/\/+$/, "");
+const LIVE = process.argv.includes("--live");
+
+const issues = [];
+
+function filePath(file) {
+  return path.join(ROOT, file);
+}
+
+function read(file) {
+  const target = filePath(file);
+  if (!fs.existsSync(target)) {
+    issues.push(`${file} is missing`);
+    return "";
+  }
+  return fs.readFileSync(target, "utf8");
+}
+
+function requireMarker(file, marker, label = marker) {
+  const text = read(file);
+  if (!text.includes(marker)) {
+    issues.push(`${file} missing ${label}`);
+  }
+  return text;
+}
+
+function requireJsonHeader(vercel, source, value) {
+  const normalized = vercel.replace(/\s+/g, " ");
+  if (!normalized.includes(`"source": "${source}"`)) {
+    issues.push(`vercel.json missing header source ${source}`);
+  }
+  if (!normalized.includes(`"value": "${value}"`)) {
+    issues.push(`vercel.json missing header value ${value}`);
+  }
+}
+
+function fetchText(pathname, timeoutMs = 25000) {
+  const fresh = pathname.includes("?") ? `&guard=${Date.now()}` : `?guard=${Date.now()}`;
+  const url = `${BASE_URL}${pathname}${fresh}`;
+  return new Promise((resolve, reject) => {
+    const req = https.get(url, { timeout: timeoutMs, headers: { "cache-control": "no-cache" } }, (res) => {
+      let body = "";
+      res.setEncoding("utf8");
+      res.on("data", (chunk) => {
+        body += chunk;
+      });
+      res.on("end", () => {
+        resolve({ url, status: res.statusCode, headers: res.headers, body });
+      });
+    });
+    req.on("timeout", () => req.destroy(new Error(`timeout ${url}`)));
+    req.on("error", reject);
+  });
+}
+
+function assertLiveText(name, result, markers) {
+  if (result.status < 200 || result.status >= 300) {
+    issues.push(`${name} live HTTP ${result.status}: ${result.url}`);
+    return;
+  }
+  for (const marker of markers) {
+    if (!result.body.includes(marker)) {
+      issues.push(`${name} live missing ${marker}`);
+    }
+  }
+  const cacheControl = String(result.headers["cache-control"] || "");
+  if (name !== "terminal-fast-bundle" && !cacheControl.toLowerCase().includes("no-store")) {
+    issues.push(`${name} live cache-control is not no-store: ${cacheControl || "(empty)"}`);
+  }
+  console.log(`[runtime-hotfix] live ${name} ok`);
+}
+
+async function verifyLive() {
+  const hotfix = await fetchText("/terminal-hotfix.js");
+  assertLiveText("terminal-hotfix", hotfix, [
+    EXPECTED_HOTFIX,
+    "terminal-fast-bundle",
+    "FUMAN_HOTFIX_PRIME_API_CACHE",
+  ]);
+
+  const serviceWorker = await fetchText("/fuman-sw.js");
+  assertLiveText("fuman-sw", serviceWorker, [
+    "/api/terminal-fast-bundle",
+    "DATA_PATTERNS",
+  ]);
+
+  const bundle = await fetchText("/api/terminal-fast-bundle", 35000);
+  if (bundle.status < 200 || bundle.status >= 300) {
+    issues.push(`terminal-fast-bundle live HTTP ${bundle.status}: ${bundle.url}`);
+    return;
+  }
+  try {
+    const payload = JSON.parse(bundle.body);
+    if (payload.source !== "terminal-fast-bundle") {
+      issues.push(`terminal-fast-bundle live source mismatch: ${payload.source || "(empty)"}`);
+    }
+    if (!payload.endpoints || typeof payload.endpoints !== "object") {
+      issues.push("terminal-fast-bundle live endpoints missing");
+    }
+    if (!Array.isArray(payload.misses)) {
+      issues.push("terminal-fast-bundle live misses missing");
+    }
+    console.log(
+      `[runtime-hotfix] live terminal-fast-bundle ok partial=${Boolean(payload.partial)} misses=${payload.misses?.length || 0}`,
+    );
+  } catch (error) {
+    issues.push(`terminal-fast-bundle live invalid JSON: ${error.message}`);
+  }
+}
+
+async function main() {
+  requireMarker("terminal-hotfix.js", EXPECTED_HOTFIX, `hotfix ${EXPECTED_HOTFIX}`);
+  requireMarker("terminal-hotfix.js", "/api/terminal-fast-bundle");
+  requireMarker("terminal-hotfix.js", "FUMAN_HOTFIX_PRIME_API_CACHE");
+  requireMarker("terminal-hotfix.js", "installHotPathDataWarmup");
+  requireMarker("terminal-hotfix.js", "primeApiCache");
+
+  requireMarker(path.join("api", "terminal-fast-bundle.js"), "source: \"terminal-fast-bundle\"");
+  requireMarker(path.join("api", "terminal-fast-bundle.js"), "partial");
+  requireMarker(path.join("api", "terminal-fast-bundle.js"), "misses");
+  requireMarker(path.join("api", "terminal-fast-bundle.js"), "fast_bundle_timeout");
+  requireMarker(path.join("api", "terminal-fast-bundle.js"), "Promise.all");
+
+  requireMarker("fuman-sw.js", "/api/terminal-fast-bundle");
+  requireMarker("fuman-sw.js", "DATA_PATTERNS");
+  requireMarker("fuman-sw.js", "PREFETCH_CORE_DATA_ASSETS");
+
+  const vercel = read("vercel.json");
+  requireJsonHeader(vercel, "/terminal-hotfix.js", "no-store");
+  requireJsonHeader(vercel, "/fuman-sw.js", "no-store");
+  if (!vercel.includes("terminal-hotfix\\\\.js$")) {
+    issues.push("vercel.json immutable JS rule does not exclude terminal-hotfix.js");
+  }
+  if (!vercel.includes("fuman-sw\\\\.js$")) {
+    issues.push("vercel.json immutable JS rule does not exclude fuman-sw.js");
+  }
+
+  if (LIVE) {
+    await verifyLive();
+  }
+
+  if (issues.length > 0) {
+    console.error("[runtime-hotfix] rollback guard failed:");
+    for (const issue of issues) {
+      console.error(`- ${issue}`);
+    }
+    process.exit(1);
+  }
+
+  console.log(`[runtime-hotfix] ok hotfix=${EXPECTED_HOTFIX}${LIVE ? " live=ok" : ""}`);
+}
+
+main().catch((error) => {
+  console.error(`[runtime-hotfix] failed: ${error.stack || error.message}`);
+  process.exit(1);
+});
