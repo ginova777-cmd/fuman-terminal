@@ -1,6 +1,6 @@
 (function () {
-  if (window.__fumanTerminalHotfix === "20260623-04") return;
-  window.__fumanTerminalHotfix = "20260623-04";
+  if (window.__fumanTerminalHotfix === "20260623-05") return;
+  window.__fumanTerminalHotfix = "20260623-05";
 
   installDesktopApiPollingCache();
   installInstantViewSwitch();
@@ -222,11 +222,11 @@
     const warmed = new Map();
     const routeGroups = {
       market: [
+        "/api/terminal-fast-bundle",
         "/api/terminal-home",
         "/api/market",
         "/api/heatmap",
         "/api/market-ai-live",
-        "/api/market-ai-panel-live",
       ],
       watchlist: [
         "/api/stocks",
@@ -257,6 +257,7 @@
       ],
     };
     const critical = [
+      "/api/terminal-fast-bundle",
       "/api/terminal-home",
       "/api/market",
       "/api/stocks",
@@ -288,6 +289,17 @@
         cache: "no-store",
         priority: reason === "pointer" || reason === "click" ? "high" : "low",
         signal: controller?.signal,
+      }).then(async (response) => {
+        if (response.ok && key.startsWith("/api/terminal-fast-bundle")) {
+          const payload = await response.clone().json().catch(() => null);
+          if (payload?.endpoints) {
+            window.FUMAN_HOTFIX_PRIME_API_CACHE?.(payload.endpoints, {
+              source: "terminal-fast-bundle",
+              reason,
+            });
+          }
+        }
+        return response;
       }).catch(() => null).finally(() => {
         if (timer) clearTimeout(timer);
       });
@@ -353,7 +365,7 @@
     const memory = new Map();
     const inflight = new Map();
     const skipPattern = /\/api\/(?:export|refresh|frontend-error|performance-report|version|terminal-theme-css|scan-|github|history|realtime(?:$|\?))/i;
-    const apiPattern = /\/api\/(?:market|terminal-home|market-ai|heatmap|stocks|watchlist-match-index|open-buy-latest|strategy[2345]-latest|latest-strategy|latest-signals|realtime-radar-latest|institution-latest|chip-trade|warrant-flow-latest|cb-detect-latest|mobile-boot|mobile-fragment)/i;
+    const apiPattern = /\/api\/(?:market|terminal-home|terminal-fast-bundle|market-ai|heatmap|stocks|watchlist-match-index|open-buy-latest|strategy[2345]-latest|latest-strategy|latest-signals|realtime-radar-latest|institution-latest|chip-trade|warrant-flow-latest|cb-detect-latest|mobile-boot|mobile-fragment)/i;
     const ttlFor = (pathname) => {
       if (/strategy2|realtime-radar/i.test(pathname)) return 3000;
       if (/market(?:$|-ai)|heatmap/i.test(pathname)) return 8000;
@@ -367,6 +379,32 @@
       statusText: record.statusText,
       headers: record.headers,
     });
+    const primeApiCache = (endpoints, meta = {}) => {
+      if (!endpoints || typeof endpoints !== "object") return 0;
+      let count = 0;
+      Object.entries(endpoints).forEach(([endpoint, payload]) => {
+        try {
+          const key = cacheKeyFor(endpoint, { method: "GET" });
+          if (!key || payload === undefined) return;
+          const pathname = new URL(endpoint, location.href).pathname;
+          memory.set(key, {
+            at: Date.now(),
+            ttl: Math.max(ttlFor(pathname), 45000),
+            status: 200,
+            statusText: "OK",
+            headers: [
+              ["content-type", "application/json; charset=utf-8"],
+              ["x-fuman-cache", "terminal-fast-bundle"],
+              ["x-fuman-cache-reason", String(meta.reason || "")],
+            ],
+            body: JSON.stringify(payload),
+          });
+          count += 1;
+        } catch (error) {}
+      });
+      if (count) mark(`bundle-prime:${meta.reason || "bundle"}:${count}`);
+      return count;
+    };
     const cacheKeyFor = (input, init = {}) => {
       const method = String(init?.method || input?.method || "GET").toUpperCase();
       if (method !== "GET") return "";
@@ -404,5 +442,6 @@
       inflight.set(key, task);
       return task.then(cloneFromRecord);
     };
+    window.FUMAN_HOTFIX_PRIME_API_CACHE = primeApiCache;
   }
 })();
