@@ -147,6 +147,17 @@ const RUNTIME_STALE_FRONT_PAGE_FILES = [
   "data/data-manifest.json",
   "data/data-status-index.json",
 ];
+const RETIRED_ENTRYPOINT_MARKERS = [
+  "FMN://strategy.scan",
+  "綜合策略選股",
+  "等待官方股票資料",
+  "載入全台股股票池",
+];
+const ENTRYPOINT_MARKER_FILES = [
+  "index.html",
+  "index.github.html",
+  "terminal-live-check.js",
+];
 
 function parseArgs(argv) {
   const args = { dryRun: false, roots: [], runtimeRoot: DEFAULT_RUNTIME_ROOT, json: false, writeStatus: true };
@@ -285,12 +296,26 @@ function pruneStaleRuntimeFrontPageFiles(runtimeRoot, result, dryRun) {
 }
 
 function cleanupRoot(root, args) {
-  const result = { root, exists: fs.existsSync(root), deleted: [], skipped: [] };
+  const result = { root, exists: fs.existsSync(root), deleted: [], skipped: [], issues: [] };
   if (!result.exists) return result;
   for (const rel of [...EXACT_RETIRED, ...listRetiredDataFiles(root)]) {
     rmFile(root, rel, result, args.dryRun);
   }
+  scanRetiredEntrypointMarkers(root, result);
   return result;
+}
+
+function scanRetiredEntrypointMarkers(root, result) {
+  for (const rel of ENTRYPOINT_MARKER_FILES) {
+    const target = path.join(root, rel);
+    if (!fs.existsSync(target) || !fs.statSync(target).isFile()) continue;
+    const content = fs.readFileSync(target, "utf8");
+    for (const marker of RETIRED_ENTRYPOINT_MARKERS) {
+      if (content.includes(marker)) {
+        result.issues.push({ path: target, marker, reason: "retired-entrypoint-marker" });
+      }
+    }
+  }
 }
 
 function writeStatus(runtimeRoot, payload) {

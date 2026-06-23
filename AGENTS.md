@@ -6,6 +6,42 @@ This is the first file every Codex must read before touching Fuman Terminal.
 
 The current priority is Strategy1 open-buy API-only stability. The user does not want another temporary frontend patch that gets overwritten later. Fixes must survive GitHub/Vercel redeploys, scheduled jobs, stale local build output, and old static cache files.
 
+## Fuman Terminal Codex Operating Contract
+
+Supabase API-only is the authority for production data. Do not use these as data freshness authority: static `/data/*.json`, `live-freshness-ok.json`, frontend version bumps, service worker cache bumps, browser hard refreshes, or Vercel deploy side effects.
+
+Run `npm run verify:publish-gate` before publishing. If a legacy checker complains about removed freshness artifacts, remove the old dependency instead of restoring the legacy verifier.
+
+Strategy 1 Open Buy: preopen ready / decision gate controls BUY publication.
+
+Strategy 2 Intraday: quotes health controls candidate universe publication; intraday_1m health only controls A-zone technical upgrade.
+
+Strategy2: quotes health controls candidate universe publication; intraday_1m health only controls A-zone technical upgrade.
+
+Strategy 3 Tail: complete run / TV confirmation / latest-N after-13:00 gate.
+
+Strategy3: complete run / TV confirmation / latest-N after-13:00 gate.
+
+Strategy 4 Swing: current common-stock universe / daily OHLC / history coverage gate.
+
+Strategy4: current common-stock universe / daily OHLC / history coverage gate.
+
+Strategy 5 Composite: complete run / result readback gate.
+
+Strategy5: complete run / result readback gate.
+
+Institution / Chip: API contract gate.
+
+Warrant Flow: API contract gate.
+
+CB Detect: API contract gate.
+
+Shared Fugle Intraday Source: quote freshness, intraday_1m coverage, ready counts, and source coverage must be observable without relying on static files.
+
+Per-Strategy Health Gate Boundaries: source health may degrade a technical upgrade, but must not wipe a strategy's candidate universe unless that strategy's own contract says so.
+
+Institution / Warrant / CB: API contract gate
+
 ## Official Targets
 
 Only this production URL is official:

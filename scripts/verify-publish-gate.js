@@ -514,8 +514,26 @@ for (const marker of [
   "strategy5-page-",
   "warrant-flow-page-",
   "cb-detect-page-",
+  "RETIRED_ENTRYPOINT_MARKERS",
+  "FMN://strategy.scan",
+  "綜合策略選股",
+  "等待官方股票資料",
+  "載入全台股股票池",
 ]) {
   if (!apiOnlyCleanup.includes(marker)) issues.push(`cleanup-api-only-retired-artifacts.js missing ${marker}`);
+}
+
+for (const [file, markers] of [
+  ["index.html", ["FMN://strategy.scan", "綜合策略選股", "等待官方股票資料"]],
+  ["index.github.html", ["FMN://strategy.scan", "綜合策略選股", "等待官方股票資料"]],
+  ["terminal-live-check.js", ["FMN://strategy.scan", "綜合策略選股", "載入全台股股票池"]],
+]) {
+  const content = read(file);
+  for (const marker of markers) {
+    if (content.includes(marker)) {
+      issues.push(`${file} contains retired entrypoint marker ${marker}`);
+    }
+  }
 }
 
 const cleanupTaskInstaller = read("install-api-only-cleanup-task.ps1");

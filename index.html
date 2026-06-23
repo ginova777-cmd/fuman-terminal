@@ -9,7 +9,7 @@
     </script>
     <link rel="icon" href="/favicon.ico" sizes="any">
     <link rel="preload" as="image" href="/assets/logo.webp" fetchpriority="high">
-    <link rel="stylesheet" href="styles.css?v=strategy1-two-cards-20260623-02">
+    <link rel="stylesheet" href="styles.css?v=strategy1-two-cards-20260623-03">
   </head>
   <body class="auth-pending">
     <section class="auth-gate" id="auth-gate" aria-label="會員登入">
@@ -17,7 +17,7 @@
         <span class="auth-badge" style="color:#ff8a3d!important;-webkit-text-fill-color:#ff8a3d!important;">FUMAN TERMINAL</span>
         <h1 style="color:#ffe7b7!important;-webkit-text-fill-color:#ffe7b7!important;text-shadow:0 0 22px rgba(255,199,117,.2)!important;">輔滿</h1>
         <h2 style="color:#ff9b45!important;-webkit-text-fill-color:#ff9b45!important;text-shadow:0 0 18px rgba(255,122,69,.22)!important;">股票終端</h2>
-        <p>登入後查看市場總覽、策略中心、自選股與籌碼內容。</p>
+        <p>登入後查看市場總覽、策略模組、自選股與籌碼內容。</p>
 
         <div class="auth-tabs" role="tablist" aria-label="登入或註冊">
           <button class="active" type="button" data-auth-mode="login">登入</button>
@@ -68,7 +68,7 @@
         <nav class="nav-list" aria-label="Main navigation">
           <a class="nav-item active" href="#" data-view="market" data-mobile-label="市場"><span class="nav-icon globe">●</span>市場總覽</a>
           <a class="nav-item" href="#" data-view="watchlist" data-mobile-label="個股"><span class="nav-icon">☆</span>自選股</a>
-          <p class="nav-label">策略中心</p>
+          <p class="nav-label">策略模組</p>
           <a class="strategy-nav" href="#" data-view="strategy" data-mobile-label="雷達"><span class="s1">⚡</span>策略1-明日開盤入</a>
           <a class="strategy-nav" href="#" data-view="strategy" data-mobile-label="當沖"><span class="s2">◔</span>策略2-當沖雷達</a>
           <a class="strategy-nav" href="#" data-view="strategy" data-mobile-label="隔日"><span class="s3">◐</span>策略3-隔日沖</a>
@@ -92,12 +92,12 @@
 
       <main class="dashboard">
 
-        <!-- 策略中心 -->
+        <!-- 策略模組 -->
         <section class="view-panel" id="strategy-view" hidden>
           <header class="strategy-header">
             <div>
               <span class="console-badge">策略控管台</span>
-              <h1>策略中心</h1>
+              <h1>策略模組</h1>
               <p>左側切換日線、籌碼與高波動策略；右側即時重算符合條件的股票訊號。</p>
             </div>
             <div class="header-time strategy-time">05/07 17:20</div>
@@ -110,8 +110,8 @@
             <section class="strategy-results">
               <div class="strategy-toolbar">
                 <div>
-                  <span class="console-badge">FMN://strategy.scan</span>
-                  <h2>綜合策略選股</h2>
+                  <span class="console-badge">FMN://strategy.api</span>
+                  <h2>策略模組總覽</h2>
                   <p id="strategy-summary">點選左側策略，立即篩出命中股票。</p>
                 </div>
                 <div class="strategy-actions">
@@ -135,7 +135,7 @@
               </label>
 
               <div class="strategy-table" id="strategy-table">
-                <div class="empty-state">等待官方股票資料...</div>
+                <div class="empty-state">正在連線 Supabase API...</div>
               </div>
             </section>
           </section>
@@ -553,8 +553,8 @@
     </div>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="terminal-hotfix.js" data-fuman-terminal-hotfix="1"></script>
-    <script src="terminal-core.js?v=strategy1-two-cards-20260623-02"></script>
-    <script src="terminal-ai-risk-guard.js?v=strategy1-two-cards-20260623-02"></script>
+    <script src="terminal-core.js?v=strategy1-two-cards-20260623-03"></script>
+    <script src="terminal-ai-risk-guard.js?v=strategy1-two-cards-20260623-03"></script>
   </body>
 </html>
 

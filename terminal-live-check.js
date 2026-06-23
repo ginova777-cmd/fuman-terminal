@@ -5017,10 +5017,10 @@ function setStrategyChrome(mode) {
   const strategy5 = mode === "strategy5";
   const openBuy = mode === "openBuy";
   const strategy3 = mode === "strategy3";
-  if (strategyBadge) strategyBadge.textContent = intraday ? "FMN://intraday.2m.scan" : swing ? "FMN://swing.daily.scan" : openBuy ? "FMN://open.buy.scan" : "FMN://strategy.scan";
+  if (strategyBadge) strategyBadge.textContent = intraday ? "FMN://intraday.2m.scan" : swing ? "FMN://swing.daily.scan" : openBuy ? "FMN://open.buy.scan" : "FMN://strategy.api";
   const icon = intraday ? "◔" : swing ? "└" : openBuy ? "⚡" : strategy5 ? "▰" : "⚡";
-  const title = intraday ? "2分K當沖雷達" : swing ? "策略4-波段雷達" : openBuy ? "策略1-明日開盤入" : strategy5 ? "策略5-綜合策略" : "綜合策略選股";
-  const headerTitle = intraday ? "2分K當沖雷達" : swing ? "策略4-波段雷達" : openBuy ? "策略1-明日開盤入" : strategy5 ? "策略5-綜合策略" : "策略中心";
+  const title = intraday ? "2分K當沖雷達" : swing ? "策略4-波段雷達" : openBuy ? "策略1-明日開盤入" : strategy5 ? "策略5-綜合策略" : "策略模組總覽";
+  const headerTitle = intraday ? "2分K當沖雷達" : swing ? "策略4-波段雷達" : openBuy ? "策略1-明日開盤入" : strategy5 ? "策略5-綜合策略" : "策略模組";
   const scheduleKey = intraday ? "intraday" : swing ? "swing" : openBuy ? "openBuy" : strategy5 ? "strategy5" : "market";
   setTitleWithSchedule(strategyTitle, icon, title, scheduleKey);
   setTitleWithSchedule(strategyHeaderTitle, icon, headerTitle, scheduleKey);
@@ -5683,7 +5683,7 @@ function renderStrategyScanner() {
   strategyModeButtons.forEach((button) => button.classList.toggle("active", button.dataset.strategyMode === strategyMode));
 
   if (!latestStocks.length) {
-    strategyTable.innerHTML = `<div class="empty-state">載入全台股股票池...</div>`;
+    strategyTable.innerHTML = `<div class="empty-state">連線 Supabase 股票池...</div>`;
     if (strategySummary) strategySummary.textContent = "正在載入上市櫃全市場股票資料。";
     loadStrategyStocks();
     return;
