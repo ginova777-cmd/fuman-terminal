@@ -196,6 +196,16 @@ if (!fs.existsSync(DEPLOY_ROOT)) {
 let copied = 0;
 let retiredDeleted = 0;
 
+const TEXT_EXTENSIONS = new Set([
+  ".css",
+  ".csv",
+  ".html",
+  ".js",
+  ".json",
+  ".ps1",
+  ".sql",
+]);
+
 function isSamePath(left, right) {
   return path.resolve(left).toLowerCase() === path.resolve(right).toLowerCase();
 }
@@ -217,15 +227,32 @@ function deleteRetiredArtifacts() {
   }
 }
 
+function comparableContent(file) {
+  if (!TEXT_EXTENSIONS.has(path.extname(file).toLowerCase())) {
+    return fs.readFileSync(file);
+  }
+  return fs.readFileSync(file, "utf8").replace(/\r\n?/g, "\n");
+}
+
+function shouldCopy(source, target) {
+  if (!fs.existsSync(target)) return true;
+  return comparableContent(source) !== comparableContent(target);
+}
+
+function copyFileIfChanged(source, target) {
+  fs.mkdirSync(path.dirname(target), { recursive: true });
+  if (!shouldCopy(source, target)) return false;
+  fs.copyFileSync(source, target);
+  return true;
+}
+
 deleteRetiredArtifacts();
 
 for (const file of FILES) {
   const source = path.join(SOURCE_ROOT, file);
   const target = path.join(DEPLOY_ROOT, file);
   if (!fs.existsSync(source)) continue;
-  fs.mkdirSync(path.dirname(target), { recursive: true });
-  fs.copyFileSync(source, target);
-  copied += 1;
+  if (copyFileIfChanged(source, target)) copied += 1;
 }
 
 let copiedFromDirs = 0;
@@ -238,9 +265,7 @@ function copyDirectory(sourceDir, targetDir) {
     if (entry.isDirectory()) {
       copyDirectory(source, target);
     } else if (entry.isFile()) {
-      fs.mkdirSync(path.dirname(target), { recursive: true });
-      fs.copyFileSync(source, target);
-      copiedFromDirs += 1;
+      if (copyFileIfChanged(source, target)) copiedFromDirs += 1;
     }
   }
 }

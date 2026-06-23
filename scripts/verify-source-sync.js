@@ -99,8 +99,25 @@ for (const prefix of [
   }
 }
 
+const TEXT_EXTENSIONS = new Set([
+  ".css",
+  ".csv",
+  ".html",
+  ".js",
+  ".json",
+  ".ps1",
+  ".sql",
+]);
+
+function comparableContent(file) {
+  if (!TEXT_EXTENSIONS.has(path.extname(file).toLowerCase())) {
+    return fs.readFileSync(file);
+  }
+  return fs.readFileSync(file, "utf8").replace(/\r\n?/g, "\n");
+}
+
 function sha256(file) {
-  return crypto.createHash("sha256").update(fs.readFileSync(file)).digest("hex");
+  return crypto.createHash("sha256").update(comparableContent(file)).digest("hex");
 }
 
 function relPath(root, file) {
