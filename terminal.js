@@ -12,8 +12,7 @@
   ];
   let appPromise = null;
 
-  installDesktopApiPollingCache();
-  installInstantViewSwitch();
+  unlockPublicTerminalShell();
 
   function mark(name) {
     if (!("performance" in window) || !performance.mark) return;
@@ -23,6 +22,7 @@
   function loadApp(reason = "idle") {
     if (window.FUMAN_TERMINAL_APP_READY) return Promise.resolve(window.FUMAN_TERMINAL_APP_READY);
     if (appPromise) return appPromise;
+    unlockPublicTerminalShell();
     mark(`app-request:${reason}`);
     appPromise = loadDependencies().then(() => new Promise((resolve, reject) => {
       const existing = document.querySelector("script[data-fuman-terminal-app]");
@@ -48,6 +48,18 @@
 
   function loadDependencies() {
     return Promise.all(dependencyScripts.map((item) => loadScriptOnce(item)));
+  }
+
+  function unlockPublicTerminalShell() {
+    document.body?.classList?.add("auth-ready", "public-terminal");
+    document.body?.classList?.remove("auth-pending", "auth-locked", "auth-login-open");
+    document.querySelector("#auth-gate")?.setAttribute("aria-hidden", "true");
+    document.querySelector("#auth-gate")?.setAttribute("hidden", "");
+    const memberState = document.querySelector("#member-state");
+    if (memberState && /檢查中/.test(memberState.textContent || "")) {
+      memberState.textContent = "公開終端";
+    }
+    window.FUMAN_PUBLIC_TERMINAL_UNLOCK = true;
   }
 
   function installInstantViewSwitch() {

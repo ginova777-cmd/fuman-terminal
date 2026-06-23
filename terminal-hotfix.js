@@ -1,6 +1,6 @@
 (function () {
-  if (window.__fumanTerminalHotfix === "20260623-08") return;
-  window.__fumanTerminalHotfix = "20260623-08";
+  if (window.__fumanTerminalHotfix === "20260623-09") return;
+  window.__fumanTerminalHotfix = "20260623-09";
 
   installDesktopApiPollingCache();
   installDesktopViewSnapshotCache();
@@ -386,6 +386,7 @@
     const inflight = new Map();
     const sessionPrefix = "FUMAN_DESKTOP_API_SESSION_CACHE:";
     const sessionMaxBodyBytes = 900000;
+    const staleWhileRevalidateMs = 180000;
     const skipPattern = /\/api\/(?:export|refresh|frontend-error|performance-report|version|terminal-theme-css|scan-|github|history|realtime(?:$|\?))/i;
     const apiPattern = /\/api\/(?:market|terminal-home|terminal-fast-bundle|market-ai|heatmap|stocks|watchlist-match-index|open-buy-latest|strategy[2345]-latest|latest-strategy|latest-signals|realtime-radar-latest|institution-latest|chip-trade|warrant-flow-latest|cb-detect-latest|mobile-boot|mobile-fragment)/i;
     const ttlFor = (pathname) => {
@@ -401,16 +402,36 @@
       statusText: record.statusText,
       headers: record.headers,
     });
-    const readSessionRecord = (key) => {
+    const maxStaleFor = (pathname) => {
+      if (/strategy2|realtime-radar/i.test(pathname)) return 20000;
+      if (/market(?:$|-ai)|heatmap/i.test(pathname)) return 45000;
+      return staleWhileRevalidateMs;
+    };
+    const withCacheHeader = (record, value) => ({
+      ...record,
+      headers: [
+        ...(Array.isArray(record.headers) ? record.headers : []),
+        ["x-fuman-cache", value],
+      ],
+    });
+    const isRecordFresh = (record, now = Date.now()) => {
+      return record && now - Number(record.at || 0) <= Number(record.ttl || 0);
+    };
+    const isRecordUsableStale = (record, pathname, now = Date.now()) => {
+      return record && now - Number(record.at || 0) <= Number(record.ttl || 0) + maxStaleFor(pathname || "");
+    };
+    const readSessionRecord = (key, options = {}) => {
       try {
         const raw = sessionStorage.getItem(sessionPrefix + key);
         if (!raw) return null;
         const record = JSON.parse(raw);
         if (!record || !Number.isFinite(Number(record.at)) || !Number.isFinite(Number(record.ttl))) return null;
-        if (Date.now() - Number(record.at) > Number(record.ttl)) {
+        const pathname = options.pathname || key.split("?")[0] || "";
+        if (!options.allowStale && !isRecordFresh(record)) {
           sessionStorage.removeItem(sessionPrefix + key);
           return null;
         }
+        if (options.allowStale && !isRecordUsableStale(record, pathname)) return null;
         return record;
       } catch (error) {
         return null;
@@ -468,27 +489,12 @@
       ["t", "ts", "fresh", "_", "cacheBust"].forEach((key) => url.searchParams.delete(key));
       return `${url.pathname}?${url.searchParams.toString()}`;
     };
-    window.fetch = function fumanCachedFetch(input, init = {}) {
-      const key = cacheKeyFor(input, init);
-      if (!key) return originalFetch(input, init);
-      const now = Date.now();
-      const cached = memory.get(key);
-      if (cached && now - cached.at <= cached.ttl) {
-        return Promise.resolve(cloneFromRecord(cached));
-      }
-      const sessionCached = readSessionRecord(key);
-      if (sessionCached) {
-        memory.set(key, sessionCached);
-        return Promise.resolve(cloneFromRecord(sessionCached));
-      }
-      if (inflight.has(key)) {
-        return inflight.get(key).then(cloneFromRecord);
-      }
+    const refreshNetwork = (input, init, key, pathname) => {
       const task = originalFetch(input, init).then(async (response) => {
         const body = await response.clone().text();
         const record = {
           at: Date.now(),
-          ttl: ttlFor(new URL(typeof input === "string" ? input : input?.url || "", location.href).pathname),
+          ttl: ttlFor(pathname),
           status: response.status,
           statusText: response.statusText,
           headers: [...response.headers.entries()],
@@ -501,7 +507,42 @@
         return record;
       }).finally(() => inflight.delete(key));
       inflight.set(key, task);
-      return task.then(cloneFromRecord);
+      return task;
+    };
+    window.fetch = function fumanCachedFetch(input, init = {}) {
+      const key = cacheKeyFor(input, init);
+      if (!key) return originalFetch(input, init);
+      const now = Date.now();
+      const pathname = key.split("?")[0] || "";
+      const cached = memory.get(key);
+      if (isRecordFresh(cached, now)) {
+        return Promise.resolve(cloneFromRecord(withCacheHeader(cached, "memory-fresh")));
+      }
+      const sessionCached = readSessionRecord(key, { pathname, allowStale: true });
+      if (sessionCached && isRecordFresh(sessionCached, now)) {
+        memory.set(key, sessionCached);
+        return Promise.resolve(cloneFromRecord(withCacheHeader(sessionCached, "session-fresh")));
+      }
+      const stale = isRecordUsableStale(cached, pathname, now) ? cached : sessionCached;
+      if (stale) {
+        memory.set(key, stale);
+        if (!inflight.has(key)) {
+          refreshNetwork(input, init, key, pathname).catch(() => null);
+        }
+        return Promise.resolve(cloneFromRecord(withCacheHeader(stale, "stale-while-revalidate")));
+      }
+      if (inflight.has(key)) {
+        return inflight.get(key).then(cloneFromRecord);
+      }
+      return refreshNetwork(input, init, key, pathname)
+        .then(cloneFromRecord)
+        .catch((error) => {
+          const fallback = readSessionRecord(key, { pathname, allowStale: true }) || memory.get(key);
+          if (fallback && isRecordUsableStale(fallback, pathname)) {
+            return cloneFromRecord(withCacheHeader(fallback, "stale-if-error"));
+          }
+          throw error;
+        });
     };
     window.FUMAN_HOTFIX_PRIME_API_CACHE = primeApiCache;
   }
@@ -522,6 +563,7 @@
       member: "#member-view",
     };
     const memory = new Map();
+    const observedPanels = new WeakSet();
     let saveTimer = 0;
     const getPanelView = (panel) => {
       for (const [view, selector] of Object.entries(viewPanels)) {
@@ -561,10 +603,15 @@
     const scheduleSave = () => {
       window.clearTimeout(saveTimer);
       saveTimer = window.setTimeout(() => {
-        document.querySelectorAll(".view-panel.active").forEach((panel) => {
+        const run = () => document.querySelectorAll(".view-panel.active").forEach((panel) => {
           writeSnapshot(getPanelView(panel), panel);
         });
-      }, 220);
+        if ("requestIdleCallback" in window) {
+          requestIdleCallback(run, { timeout: 500 });
+        } else {
+          run();
+        }
+      }, 360);
     };
     const restoreSnapshot = (view, panel) => {
       if (!view || !panel || panel.dataset.fumanSnapshotRestoring === "1") return false;
@@ -587,9 +634,20 @@
     } else {
       scheduleSave();
     }
-    new MutationObserver(scheduleSave).observe(document.documentElement, {
+    const observePanels = () => {
+      document.querySelectorAll(".view-panel").forEach((panel) => {
+        if (observedPanels.has(panel)) return;
+        observedPanels.add(panel);
+        new MutationObserver(scheduleSave).observe(panel, {
+          childList: true,
+          subtree: true,
+        });
+      });
+    };
+    observePanels();
+    new MutationObserver(observePanels).observe(document.body || document.documentElement, {
       childList: true,
-      subtree: true,
+      subtree: false,
     });
     document.addEventListener("visibilitychange", () => {
       if (document.visibilityState === "hidden") scheduleSave();

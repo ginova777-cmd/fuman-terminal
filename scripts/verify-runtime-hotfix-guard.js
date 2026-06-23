@@ -3,7 +3,7 @@ const https = require("https");
 const path = require("path");
 
 const ROOT = path.resolve(__dirname, "..");
-const EXPECTED_HOTFIX = "20260623-08";
+const EXPECTED_HOTFIX = "20260623-09";
 const BASE_URL = (process.env.FUMAN_VERIFY_BASE_URL || "https://fuman-terminal.vercel.app").replace(/\/+$/, "");
 const LIVE = process.argv.includes("--live");
 
@@ -135,8 +135,19 @@ async function main() {
   requireMarker("terminal-hotfix.js", "installDesktopViewSnapshotCache");
   requireMarker("terminal-hotfix.js", "FUMAN_DESKTOP_VIEW_SNAPSHOT");
   requireMarker("terminal-hotfix.js", "FUMAN_HOTFIX_RESTORE_VIEW_SNAPSHOT");
+  requireMarker("terminal-hotfix.js", "stale-while-revalidate");
+  requireMarker("terminal-hotfix.js", "stale-if-error");
+  requireMarker("terminal-hotfix.js", "observedPanels");
+  requireMarker("terminal.js", "unlockPublicTerminalShell");
+  requireMarker("terminal.js", "FUMAN_PUBLIC_TERMINAL_UNLOCK");
+  requireMarker("terminal-app.js", "status:\"public_terminal\"");
+  requireMarker("terminal-app.js", "FUMAN_SUPABASE_URL&&FUMAN_SUPABASE_KEY");
 
   requireMarker("index.html", "/api/mobile-page");
+  requireMarker("index.html", "public-terminal");
+  if (read("index.html").includes('<body class="auth-pending">')) {
+    issues.push("index.html must not start in auth-pending mode");
+  }
   if (read("index.html").includes("fuman_force_desktop")) {
     issues.push("index.html must not persist mobile users into desktop mode");
   }
