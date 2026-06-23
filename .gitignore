@@ -13,4 +13,6 @@ terminal-conflict-backup.js
 .vercel
 ops/public-slot/runtime/
 ops/public-slot/*.bak-*
+data/mobile-analysis/*.json
+!data/mobile-analysis/index.json
 

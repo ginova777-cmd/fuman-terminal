@@ -141,7 +141,7 @@ async function main() {
     ["service-worker", `/fuman-sw.js?v=${version}`, (r) => r.body.includes("strategy2-intraday-latest") && r.body.includes("realtime-radar-latest")],
     ["terminal-bootstrap", `/terminal.js?v=${version}`, (r) => r.body.includes("FUMAN_TERMINAL_LOAD_APP") && r.body.includes("terminal-app.js")],
     ["terminal-app", `/terminal-app.js?v=${version}`, (r) => r.body.includes("FUMAN_LIVE_MEMORY_TTL_MS") && r.body.includes("loadStrategyWeights")],
-    ["strategy3", "/data/strategy3-latest.json?v=verify", (r) => { const p = parseJson(r); return isNotOlderThanLatestTradeDate(p.usedDate || p.date || p.updatedAt, strategy3TradeDate) && Number(p.count) > 0; }],
+    ["strategy3-api", "/api/strategy3-latest?v=verify", (r) => { const p = parseJson(r); return p.ok === true && isNotOlderThanLatestTradeDate(p.usedDate || p.date || p.updatedAt, strategy3TradeDate) && Number(p.count) > 0 && !!p.runId; }],
     ["strategy4-api", "/api/strategy4-latest?v=verify", (r) => { const p = parseJson(r); return p.ok === true && p.complete === true && Number(p.count) > 0 && !!p.runId; }],
     ["data-manifest", "/data/data-manifest.json?v=verify", (r) => { const p = parseJson(r); return p.ok === true && Number(p.count) >= 25 && p.entries?.["stocks-index.json"]?.count > 1000; }],
     ["stocks-index", "/data/stocks-index.json?v=verify", (r) => { const p = parseJson(r); return p.ok === true && Number(p.count) > 1000; }],

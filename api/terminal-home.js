@@ -160,17 +160,21 @@ async function fetchOpenBuyLatest(base) {
       },
     };
   } catch (error) {
+    const message = error?.message || String(error);
     return {
       ok: false,
-      error: "strategy1_open_buy_unavailable",
-      reason: error?.message || String(error),
+      error: "open_buy_api_unavailable",
+      reason: message,
+      detail: message,
       cacheSource: "none",
       count: 0,
+      total: 0,
       matches: [],
       transport: {
-        source: "none",
+        source: "supabase",
         via: "api/terminal-home",
         gate: "api-only-no-static-fallback",
+        error: message,
         fetchedAt: new Date().toISOString(),
       },
     };

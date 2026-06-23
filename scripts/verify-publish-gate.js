@@ -262,6 +262,12 @@ if (/"strategy4", "data\/strategy4-latest\.json"|strategy4PresetFiles\]/.test(sl
 if (/data\/strategy4-|strategy4-score/.test(sourceSync)) {
   issues.push("sync-main-deploy-source.js must not publish strategy4 static JSON artifacts");
 }
+if (/data\/live-freshness-ok\.json/.test(sourceSync)) {
+  issues.push("sync-main-deploy-source.js must not publish legacy live-freshness-ok.json artifact");
+}
+if (/readJson\("data\/open-buy-latest\.json"/.test(read("api/terminal-home.js"))) {
+  issues.push("api/terminal-home.js must not fallback to legacy data/open-buy-latest.json");
+}
 if (!/publish_strategy2_complete_run/.test(strategy2CompleteRunPublisher) || !/strategy2_latest\?on_conflict=id/.test(strategy2CompleteRunPublisher)) {
   issues.push("publish-strategy2-complete-run.js must publish strategy2_latest and Supabase complete run RPC");
 }
@@ -291,6 +297,20 @@ if (!/installStrategy4ApiRunPolling/.test(terminalApp)) {
 }
 if (/\/data\/strategy4-|localStorage\.getItem\(STRATEGY4|localStorage\.setItem\(STRATEGY4/.test(terminalLiveCheck) || /\/data\/strategy4-|localStorage\.getItem\(STRATEGY4|localStorage\.setItem\(STRATEGY4/.test(terminalApp)) {
   issues.push("strategy4 frontend must be API-only: no static JSON, backup JSON, or localStorage seed data paths");
+}
+for (const legacyPath of [
+  "/data/open-buy-latest.json",
+  "/data/strategy3-latest.json",
+  "/data/strategy4-latest.json",
+  "/data/strategy5-latest.json",
+  "/data/institution-latest.json",
+  "/data/warrant-flow-latest.json",
+  "/data/cb-detect-latest.json",
+  "/data/live-freshness-ok.json",
+]) {
+  if (terminalApp.includes(legacyPath) || terminalLiveCheck.includes(legacyPath) || runtimeConfig.includes(legacyPath)) {
+    issues.push(`frontend must not use legacy static freshness source ${legacyPath}; use Supabase complete-run no-store API polling`);
+  }
 }
 for (const marker of [
   "fuman_realtime_radar_cache",
@@ -669,15 +689,21 @@ if (fetchResult.status !== 0) {
     issues.push("repo sync check failed: cannot inspect working tree");
   } else {
     const allowedDirty = new Set([
+      ".gitignore",
       "AGENTS.md",
       "VERSION-LIVE-SYNC-GOVERNANCE.md",
       "FRESHNESS-GATE-MOBILE.md",
       "scripts/verify-publish-gate.js",
       "api/realtime-radar-latest.js",
+      "api/terminal-home.js",
       "terminal-runtime-config.js",
+      "scripts/e2e-smoke.js",
+      "scripts/verify-data-freshness.js",
+      "scripts/verify-deployment.js",
       "scripts/verify-warrant-freshness.js",
       "run-live-freshness-gate.ps1",
       "run-cache-sync.ps1",
+      "scripts/sync-main-deploy-source.js",
       "run-main-release-pipeline.ps1",
       "run-daily-release.ps1",
       "run-full-scan.ps1",
