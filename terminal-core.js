@@ -1,5 +1,5 @@
 (function () {
-  const version = "strategy1-two-cards-20260623-03";
+  const version = "public-terminal-fast-20260623-09";
   window.FUMAN_TERMINAL_VERSION = version;
   window.FUMAN_TERMINAL_BOOT = {
     version,
