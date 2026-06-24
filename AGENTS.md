@@ -122,6 +122,189 @@ FUMAN_SUPABASE_SERVICE_ROLE_KEY
 
 ## 策略規則
 
+### 策略1：明日開盤入正式流程
+
+策略1保留在終端，不能刪掉，也不能改成會員牆或靜態展示。策略1目前是正式站實戰鏈路：
+
+```text
+21:30 候選完整掃
+-> Supabase strategy1 complete run
+-> 08:55 最終確認 / decision_ready
+-> /api/open-buy-latest no-store API
+-> /api/desktop-route-snapshot
+-> /api/terminal-fast-bundle snapshot first
+-> 終端策略1畫面
+-> 09:00 只執行 BUY 名單
+```
+
+目前程式基準：
+
+```text
+Production code baseline before this AGENTS update:
+e40588a2
+
+Strategy1 API:
+api/open-buy-latest.js
+
+Strategy1 scanner:
+scripts/scan-open-buy-cache.js
+api/scan-open-buy.js
+
+Desktop snapshot builder:
+lib/desktop-route-snapshot-builder.js
+
+Fast bundle:
+api/terminal-fast-bundle.js
+```
+
+策略1資料權威：
+
+- `strategy1_open_buy_runs`
+- `strategy1_open_buy_results`
+- `v_strategy1_ready_status`
+- `/api/open-buy-latest`
+- `/api/desktop-route-snapshot`
+- `/api/terminal-fast-bundle`
+
+策略1不是資料權威：
+
+- `data/open-buy-latest.json`
+- `data/open-buy-page-*.json`
+- `data/open-buy-backup.json`
+- `data-manifest`
+- `data-status-index`
+- `live-freshness-ok`
+- `verify-data-freshness`
+- `fuman-terminal-sync`
+- `schedule-dispatch`
+- service worker cache
+- frontend version bump
+
+策略1完整掃時間與用途：
+
+- `21:30`：產生明日候選。完整掃全市場普通股，寫入 Supabase complete run。
+- `08:55`：最終確認。確認期貨/市場必要資料、run readiness、`decision_ready`，供開盤前展示與執行。
+- `09:00`：只執行 `decision=BUY` 名單。`WATCH` 只觀察，`BLOCK` 不進場。
+- `09:01`：只有部分 setup 的進場提示會要求站回開盤價；這是策略輸出文字的一部分，不要在前端另改規則。
+
+策略1 scanner 必須這樣跑：
+
+```powershell
+$env:FULL_SCAN="1"
+node scripts\scan-open-buy-cache.js
+```
+
+scanner 規則：
+
+- `FULL_SCAN=1` 是必要條件；非 full scan 必須直接失敗。
+- `OPEN_BUY_API_ONLY = true` 必須維持。
+- 不允許 partial static JSON 發布。
+- 掃描全市場股票 universe，預設批次 `OPEN_BUY_BATCH_SIZE=48`。
+- 每個 chunk 失敗最多 retry 3 次；仍失敗時切半重試。
+- 任何 failed code、掃描數不足、`scanned.size !== codes.length` 都不能 publish complete。
+- running 狀態只可寫 Supabase status，不可覆蓋 latest complete result。
+- complete output 才能 upsert `strategy1_open_buy_runs` / `strategy1_open_buy_results` / latest row。
+- readback 必須核對 latest row、latest complete run、results row count 與 run count。
+
+策略1 API gate：
+
+```text
+gate = complete-run-authoritative+decision-ready
+```
+
+`/api/open-buy-latest` 必須：
+
+- 永遠回 `Cache-Control: no-store`。
+- 支援 `canvas=1&compact=1&shell=1&limit=N`。
+- compact / shell / snapshotBuild / fastBundle 路徑也必須讀 `v_strategy1_ready_status`，不能跳過 `decision_ready`。
+- 先讀 `v_strategy1_ready_status`。
+- `decision_ready !== true` 時，不可把今日未就緒空資料當正式結果。
+- 再讀 `strategy1_open_buy_runs` 最新 complete run。
+- complete run 必須 `status=complete`、`complete=true`、`expected_total > 0`、`scanned_count > 0`、`expected_total === scanned_count`。
+- 若 ready status 有 `latest_trading_day` / `trade_date`，run date 必須對齊。
+- 再用 `run_id` 讀 `strategy1_open_buy_results`。
+- 只把 `decision=BUY` 放入 `matches` / `rows` 給前端主清單。
+- `WATCH` / `BLOCK` 可以保留統計與 meta，但不能混入 BUY 執行名單。
+
+策略1未就緒空包保護：
+
+- `futopt_not_ready`
+- `waiting_snapshot`
+- `decisionReady=false`
+- `strategy1_decision_not_ready`
+- `strategy1_complete_run_missing`
+- `strategy1_complete_run_empty`
+- `strategy1_complete_run_fetch_failed`
+- `snapshot-friendly-empty`
+
+遇到以上狀態時：
+
+- 不准覆蓋既有可用 desktop snapshot 畫面。
+- 不准把空包寫成 complete snapshot。
+- 不准讓 terminal 畫面被今日未就緒資料洗空。
+- desktop route snapshot builder 要把策略1當 soft snapshot endpoint 處理。
+- 若新建 snapshot partial，且上一版 complete snapshot 可用，必須保留上一版 complete snapshot。
+- `/api/terminal-fast-bundle` 預設必須先讀 Supabase `desktop_route_snapshot`，不是直接 live 打所有 API。
+
+策略1偵測條件由 `api/scan-open-buy.js` 管控，接手者不要自行改條件。現行高層條件如下，僅供理解與回歸檢查：
+
+- 母池先排除：非四碼、`00` 開頭、ETF/ETN、指數商品、高股息、槓反、期貨、債、權證、認購/認售、牛熊證、CB/可轉債、停牌/暫停交易、黑名單。
+- 額外排除：水泥、軍工、國防、航太、金融、航空等程式內硬排除族群。
+- 日K 少於 35 根直接 `BLOCK`。
+- 基本品質：價格、流動性、MA35、MA5/MA10/MA20、20日高低、量比、成交量、紅K/影線/收近高點等由程式計算。
+- BUY setup 來源：`A級 開盤無腦入`、`B級 突破候選`、`B級 第一/二根攻擊`、`B級 高周轉候選`、`C級 深跌反彈`、`C級 洗盤反彈`。
+- WATCH setup：品質與 MA35 達標但未達 21:30 BUY 候選強度。
+- 分數由各 setup 公式計算；不要改權重、閾值、setup 名稱、BUY/WATCH/BLOCK 規則，除非使用者明確要求改策略。
+
+策略1前端 / shell 規則：
+
+- 策略1到策略5共用 `strategy` view，`strategy` 必須留在 `PUBLIC_VIEWS`。
+- 策略1不應被會員牆擋住；登入與否不是策略頁可見性的判斷來源。
+- 前端只畫後端整理好的小包，策略1 compact 通常 `limit=60`。
+- 不要讓 `terminal-app.js` 在切頁瞬間重新接管畫面。
+- 不要新增密集 polling。
+- 不要用 cache bump 或版本 bump 假裝修資料。
+- 不要把 Codex latency/debug 面板給客人看。
+
+策略1進 desktop snapshot：
+
+- `lib/desktop-route-snapshot-builder.js` 必須包含 `/api/open-buy-latest`。
+- query 必須含 `canvas=1&compact=1&shell=1&limit=60`。
+- build request 會追加 `fastBundle=1&snapshotBuild=1`。
+- 策略1如果回 `snapshot-friendly-empty` 或 waiting 狀態，不能使完整 snapshot 被 partial 空包覆蓋。
+- `/api/terminal-fast-bundle` 正常 production 應顯示：
+  - `cacheSource = supabase:desktop_route_snapshot`
+  - `snapshotHit = true`
+  - `snapshotFresh = true`
+  - `partial = false`
+  - `endpointCount >= 10`
+  - `hasStrategy2Snapshot = false`
+
+策略1修改後至少驗證：
+
+```powershell
+node --check api\open-buy-latest.js
+node --check scripts\scan-open-buy-cache.js
+node --check lib\desktop-route-snapshot-builder.js
+node --check api\terminal-fast-bundle.js
+npm run verify:strategy1-open-buy-ui
+npm run verify:version
+npm run verify:runtime-hotfix
+npm run verify:desktop-api-only
+npm run verify:publish-gate
+```
+
+部署後驗正式站：
+
+```powershell
+npm run verify:live-version
+npm run verify:deploy
+npm run e2e:smoke
+npm run monitor:production
+```
+
+若 `monitor:production`、`verify:deploy`、`production-health` 與直接 API 檢查衝突，以現行 production health 與 live API 事實為準，並更新舊 verifier；不要復活 retired static freshness / manifest 檢查鏈。
+
 策略2：
 
 - 當沖頁，必須即時。
