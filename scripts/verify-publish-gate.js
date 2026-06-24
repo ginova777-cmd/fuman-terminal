@@ -250,6 +250,12 @@ if (/v_strategy1_open_buy_latest_complete_run|LATEST_RUN_VIEW|latestRunView|late
 if (/latest-payload/.test(openBuyLatestApi)) {
   issues.push("api/open-buy-latest.js must not expose legacy latest-payload gate");
 }
+if (/snapshot-friendly-skip-ready-status/.test(openBuyLatestApi) || /options\.snapshotFriendly\s*\?\s*\{\s*decision_ready:\s*false/.test(openBuyLatestApi)) {
+  issues.push("api/open-buy-latest.js snapshot/compact path must still read v_strategy1_ready_status and must not bypass decision_ready");
+}
+if (!/emptySnapshotPayload\("strategy1_decision_not_ready"/.test(openBuyLatestApi)) {
+  issues.push("api/open-buy-latest.js compact snapshot response must return an empty Strategy1 payload when decision_ready is false");
+}
 if (/OPEN_BUY_RUN_VIEW|v_strategy1_open_buy_latest_complete_run|latestRunView|latest_run_view/.test(read("api/terminal-home.js"))) {
   issues.push("api/terminal-home.js must delegate Strategy1 to /api/open-buy-latest and must not keep a separate latest view path");
 }

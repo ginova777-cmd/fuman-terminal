@@ -301,6 +301,13 @@ function emptySnapshotPayload(error, detail = "") {
   };
 }
 
+function decisionReadyError(readyStatus) {
+  return readyStatus?.last_error
+    || readyStatus?.lastError
+    || readyStatus?.message
+    || "decision_ready=false";
+}
+
 module.exports = async function handler(request, response) {
   response.setHeader("Cache-Control", "no-store, max-age=0, must-revalidate");
   response.setHeader("CDN-Cache-Control", "no-store");
@@ -330,11 +337,14 @@ module.exports = async function handler(request, response) {
       response.status(503).json(missingPayload("strategy1_supabase_not_configured"));
       return;
     }
-    const readyStatus = options.snapshotFriendly
-      ? { decision_ready: false, last_error: "snapshot-friendly-skip-ready-status" }
-      : await fetchReadyStatus();
-    if (readyStatus?.decision_ready !== true && !options.snapshotFriendly) {
-      response.status(503).json(missingPayload("strategy1_decision_not_ready", readyStatus?.last_error || "decision_ready=false"));
+    const readyStatus = await fetchReadyStatus();
+    if (readyStatus?.decision_ready !== true) {
+      const detail = decisionReadyError(readyStatus);
+      if (options.snapshotFriendly) {
+        response.status(200).json(emptySnapshotPayload("strategy1_decision_not_ready", detail));
+        return;
+      }
+      response.status(503).json(missingPayload("strategy1_decision_not_ready", detail));
       return;
     }
     const run = await fetchLatestCompleteRun(readyStatus, options.snapshotFriendly ? 12 : 50);
