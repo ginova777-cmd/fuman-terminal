@@ -61,6 +61,18 @@ function taipeiMinuteOfDay(date = new Date()) {
   return Number(p.hour) * 60 + Number(p.minute);
 }
 
+function isIntraday1mRequired(date = new Date()) {
+  const minute = taipeiMinuteOfDay(date);
+  return minute >= 9 * 60 && minute <= 13 * 60 + 40;
+}
+
+function intraday1mSessionState(date = new Date()) {
+  const minute = taipeiMinuteOfDay(date);
+  if (minute < 9 * 60) return "preopen";
+  if (minute <= 13 * 60 + 40) return "regular";
+  return "closed";
+}
+
 function parseTimeToMinute(value) {
   const match = String(value || "").match(/^(\d{1,2}):(\d{2})$/);
   if (!match) return null;
@@ -135,6 +147,13 @@ async function checkOnce() {
   const dailyVolumeCoverage = quoteCodes.length ? dailyVolumeRows / Math.min(quoteCodes.length, 500) : 0;
   const minuteOfDay = taipeiMinuteOfDay(checkedAt);
   const strictQuoteFreshRequired = minuteOfDay >= 9 * 60 && minuteOfDay <= 13 * 60 + 40;
+  const intraday1mRequired = isIntraday1mRequired(checkedAt);
+  const intraday1mState = intraday1mSessionState(checkedAt);
+  const intraday1mStatusLabel = intraday1mRequired
+    ? (intradayRowsReady > 0 ? "READY" : "NOT READY")
+    : intraday1mState === "closed"
+      ? "已收盤"
+      : "待開盤";
 
   const issues = [
     issue(sourceStatusResult.ok !== false && Boolean(sourceStatusResult.latest || health.status), "critical", "source-status-missing", "source_status fugle_shared_source readback failed", { error: sourceStatusResult.error || "" }),
@@ -152,7 +171,7 @@ async function checkOnce() {
     issue(quoteCount >= MIN_QUOTES, "warning", "quote-rows-low", `quote rows ${quoteCount} below ${MIN_QUOTES}`, { quoteCount, min: MIN_QUOTES }),
     issue(Boolean(health.anonRead?.ok), "critical", "anon-read-failed", "anon read target check failed", { failed: health.anonRead?.failed || [] }),
     issue(quoteRows.length > 0, "critical", "active-quotes-empty", "fugle_quotes_live returned no active common stock quotes", { error: quoteResult.error || "" }),
-    issue(intradayRowsReady > 0 || taipeiMinuteOfDay(checkedAt) < 9 * 60, "warning", "intraday-1m-not-ready", "fugle_intraday_1m status has no today rows yet", { intradayRowsReady, error: statusResult.error || "" }),
+    issue(intradayRowsReady > 0 || !intraday1mRequired, "warning", "intraday-1m-not-ready", "fugle_intraday_1m status has no today rows during market session", { intradayRowsReady, sessionState: intraday1mState, statusLabel: intraday1mStatusLabel, error: statusResult.error || "" }),
     issue(dailyVolumeCoverage >= MIN_DAILY_VOLUME_COVERAGE, "warning", "daily-volume-coverage-low", `daily volume coverage ${dailyVolumeCoverage.toFixed(4)} below ${MIN_DAILY_VOLUME_COVERAGE}`, { dailyVolumeRows, sampleSize: Math.min(quoteCodes.length, 500) }),
     issue(countRows(preopenResult.rows) >= MIN_PREOPEN_ROWS || taipeiMinuteOfDay(checkedAt) >= 9 * 60, "warning", "preopen-snapshot-low", "preopen snapshot rows are not ready", { rows: countRows(preopenResult.rows), error: preopenResult.error || "" }),
     issue(countRows(finalBlindBuyResult.rows) >= 0, "warning", "final-blind-buy-read-failed", "final blind buy ready read failed", { error: finalBlindBuyResult.error || "" }),
@@ -186,6 +205,9 @@ async function checkOnce() {
       activeSymbols,
       activeCommonStockQuotes: quoteRows.length,
       intraday1mReadyRows: intradayRowsReady,
+      intraday1mRequired,
+      intraday1mSessionState: intraday1mState,
+      intraday1mStatusLabel,
       dailyVolumeRows,
       dailyVolumeCoverage,
       preopenRows: countRows(preopenResult.rows),
@@ -200,7 +222,7 @@ async function checkOnce() {
     logFile: LOG_FILE,
   };
   fs.writeFileSync(OUT_FILE, `${JSON.stringify(payload, null, 2)}\n`, "utf8");
-  log(`coverage ok=${payload.ok} quotes=${quoteCount} coverage=${quoteCoverage || 0} age=${quoteAge || "--"} 1m=${intradayRowsReady} daily=${dailyVolumeRows} preopen=${payload.coverage.preopenRows} futopt=${payload.coverage.futoptQuoteRows} issues=${issues.length}`);
+  log(`coverage ok=${payload.ok} quotes=${quoteCount} coverage=${quoteCoverage || 0} age=${quoteAge || "--"} 1m=${intraday1mStatusLabel}/${intradayRowsReady} daily=${dailyVolumeRows} preopen=${payload.coverage.preopenRows} futopt=${payload.coverage.futoptQuoteRows} issues=${issues.length}`);
   return payload;
 }
 
