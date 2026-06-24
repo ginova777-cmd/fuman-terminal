@@ -73,13 +73,17 @@ scanner / writer
 - Supabase route snapshot
 - API 回傳的 `runId` / `snapshotId` / `updatedAt` / `usedDate`
 
-策略快照 / API gate：
+策略快照 / API gate 不能只看 `run_id`。所有策略資料接入 desktop snapshot 或 terminal fast bundle 前，至少要核對：
 
-- 不只看 `run_id`。
-- 必須確認 run row `status=complete`、`complete=true`。
-- 必須確認 `expected_total > 0`、`scanned_count > 0`、`expected_total === scanned_count`。
-- 必須做 results readback，確認回讀結果列數與 run row 的 `result_count` 一致。
+- run row 必須 `status=complete` 且 `complete=true`。
+- scanner readback 必須成功，不能只寫入後未回讀就當完成。
+- `expected_total` / `scanned_count` / `readback_count` 這類完整性欄位必須合理。
+- 有 `expected_total` 的策略必須確認 `expected_total > 0`、`scanned_count > 0`、`expected_total === scanned_count`。
+- results row count 必須和 run metadata 對得上；若有 `result_count`，readback row count 必須一致。
+- results row count 為 0 或小於預期時，不能把它包進正式 snapshot。
 - 小包 API 可只回 `limit=N` 筆可畫資料，但 `count` / `resultCount` / readback 必須代表完整 complete run 結果，不可把小包筆數誤當完整結果。
+- API 回傳給前端的小包可以限制 `limit`，但完整性判斷必須在後端用 complete/readback/expected_total 做完。
+- 若 complete/readback/expected_total 任一 gate 不過，保留上一版可用 snapshot，不要發布 partial 或空包假裝成功。
 
 不是正式 freshness 來源：
 
@@ -555,6 +559,12 @@ npm run monitor:production
 ## 目前 Vercel 狀態
 
 正式只保留 `fuman-terminal` 作為使用者入口。舊 sync / publish-sync 專案已退休，不應再部署、不應再寄通知。
+
+部署硬規則：
+
+- 不要從 dirty 的 `C:\fuman-terminal` 直接部署。
+- `C:\fuman-terminal` 若有未提交或未確認的本機修改，先中止，改用乾淨 worktree 從 `origin/main` 接最新狀態後再改、驗證、部署。
+- 部署前必須確認工作樹乾淨；若有 unrelated dirty changes，不要混進部署。
 
 ### 部署防呆：Vercel project 必查
 
