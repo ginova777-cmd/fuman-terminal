@@ -38,14 +38,16 @@ module.exports = async function handler(request, response) {
   }
 
   try {
-    const { payload, write } = await buildAndWriteDesktopRouteSnapshot(request, {
+    const { payload, write, watchlistWrite } = await buildAndWriteDesktopRouteSnapshot(request, {
       reason: request.headers?.["x-vercel-cron"] === "1"
         ? "vercel-cron-desktop-route-snapshot"
         : "manual-desktop-route-snapshot-refresh",
     });
-    response.status(write?.ok === false ? 207 : 200).json({
-      ok: write?.ok !== false,
+    const ok = write?.ok !== false && watchlistWrite?.ok !== false;
+    response.status(ok ? 200 : 207).json({
+      ok,
       write,
+      watchlistWrite,
       summary: payload.summary,
       misses: payload.misses,
       partial: payload.partial,
