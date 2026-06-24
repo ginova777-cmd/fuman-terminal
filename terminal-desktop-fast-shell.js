@@ -802,6 +802,10 @@
     return isStrategy3Route(route) || isStrategy4Route(route) || isStrategy5Route(route);
   }
 
+  function canvasPageSizeForRoute(route = canvasState.route) {
+    return isWideStrategyTableRoute(route) ? 10 : 0;
+  }
+
   function canvasRowHeightForRoute(route = canvasState.route) {
     return isWideStrategyTableRoute(route) ? 94 : CANVAS_ROW_HEIGHT;
   }
@@ -1202,13 +1206,48 @@
     const height = Math.max(360, Math.min(760, Math.floor(rect?.height || (window.innerHeight || 900) * 0.62)));
     const rowHeight = canvasRowHeightForRoute();
     const headerHeight = canvasHeaderHeightForRoute();
+    const pageSize = canvasPageSizeForRoute();
+    if (pageSize) return pageSize;
     return Math.max(isWideStrategyTableRoute(canvasState.route) ? 3 : 5, Math.floor((height - headerHeight - 16) / rowHeight));
   }
 
   function clampCanvasOffset(canvas) {
     const capacity = visibleCanvasCapacity(canvas);
     const maxOffset = Math.max(0, canvasState.filtered.length - capacity);
-    canvasState.offset = Math.max(0, Math.min(canvasState.offset, maxOffset));
+    const pageSize = canvasPageSizeForRoute();
+    const nextOffset = Math.max(0, Math.min(canvasState.offset, maxOffset));
+    canvasState.offset = pageSize ? Math.floor(nextOffset / pageSize) * pageSize : nextOffset;
+  }
+
+  function updateCanvasPagination(shell) {
+    const panel = shell || currentCanvasShell();
+    if (!panel) return;
+    const wrap = panel.querySelector("[data-canvas-pagination]");
+    if (!wrap) return;
+    const pageSize = canvasPageSizeForRoute(canvasState.route);
+    if (!pageSize) {
+      wrap.hidden = true;
+      wrap.innerHTML = "";
+      return;
+    }
+    const totalRows = canvasState.filtered.length;
+    const totalPages = Math.max(1, Math.ceil(totalRows / pageSize));
+    const currentPage = Math.min(totalPages, Math.floor(canvasState.offset / pageSize) + 1);
+    const start = totalRows ? canvasState.offset + 1 : 0;
+    const end = Math.min(totalRows, canvasState.offset + pageSize);
+    const startPage = Math.max(1, Math.min(currentPage - 2, Math.max(1, totalPages - 4)));
+    const endPage = Math.min(totalPages, startPage + 4);
+    const buttons = [];
+    for (let page = startPage; page <= endPage; page += 1) {
+      buttons.push(`<button type="button" data-canvas-page="${page}" class="${page === currentPage ? "active" : ""}">${page}</button>`);
+    }
+    wrap.hidden = false;
+    wrap.innerHTML = `
+      <button type="button" data-canvas-page="prev" ${currentPage <= 1 ? "disabled" : ""}>上一頁</button>
+      ${buttons.join("")}
+      <button type="button" data-canvas-page="next" ${currentPage >= totalPages ? "disabled" : ""}>下一頁</button>
+      <span>第 ${currentPage} / ${totalPages} 頁｜${start}-${end} / ${totalRows} 筆</span>
+    `;
   }
 
   function setCanvasStatus(text) {
@@ -1222,6 +1261,7 @@
     if (count) count.textContent = `${visible}/${total}`;
     const mode = canvasWorkerReady ? canvasWorkerMode : source;
     if (status) status.textContent = text || `${mode} · ${new Date().toLocaleTimeString("zh-TW", { hour12: false })}`;
+    updateCanvasPagination(shell);
   }
 
   function scheduleCanvasDraw() {
@@ -1308,7 +1348,11 @@
     const width = Math.max(520, Math.floor(parentWidth));
     const viewportHeight = window.innerHeight || 900;
     const isFixed = FIXED_ROUTE_KEYS.includes(route);
-    const height = Math.max(isFixed ? 440 : 420, Math.min(isFixed ? 700 : 680, Math.floor(viewportHeight - 320)));
+    const pageSize = canvasPageSizeForRoute(route);
+    const pagedHeight = pageSize ? canvasHeaderHeightForRoute(route) + canvasRowHeightForRoute(route) * pageSize + 24 : 0;
+    const height = pageSize
+      ? pagedHeight
+      : Math.max(isFixed ? 440 : 420, Math.min(isFixed ? 700 : 680, Math.floor(viewportHeight - 320)));
     const dpr = Math.min(2, window.devicePixelRatio || 1);
     const key = `${route}|${Math.round(width / 8) * 8}|${height}|${dpr}|${canvasThemeMode()}`;
     const cached = canvasMetricsCache.get(key);
@@ -1690,18 +1734,6 @@
       fillCanvasMultiline(ctx, row.triggerReason || row.reason || row.line, col("trigger").x + 6, y + 10, Math.max(14, Math.floor((col("trigger").width - 12) / 13)), 18, 2);
     });
 
-    if (rows.length > capacity) {
-      const trackTop = headerHeight;
-      const trackHeight = height - headerHeight - 18;
-      const thumbHeight = Math.max(34, trackHeight * (capacity / rows.length));
-      const thumbTop = trackTop + (trackHeight - thumbHeight) * (canvasState.offset / Math.max(1, rows.length - capacity));
-      ctx.fillStyle = canvasThemeMode() === "light" ? "rgba(100,116,139,0.16)" : "rgba(148,163,184,0.12)";
-      roundRect(ctx, width - 14, trackTop, 5, trackHeight, 4);
-      ctx.fill();
-      ctx.fillStyle = canvasThemeMode() === "light" ? "rgba(249,115,22,0.62)" : "rgba(255,112,55,0.58)";
-      roundRect(ctx, width - 14, thumbTop, 5, thumbHeight, 4);
-      ctx.fill();
-    }
   }
 
   function canvasHitIndex(canvas, event) {
@@ -1812,6 +1844,27 @@
         scheduleCanvasDraw();
         return;
       }
+      const pageButton = event.target.closest?.("[data-canvas-page]");
+      if (pageButton) {
+        event.preventDefault();
+        const pageSize = canvasPageSizeForRoute();
+        if (!pageSize) return;
+        const totalPages = Math.max(1, Math.ceil(canvasState.filtered.length / pageSize));
+        const currentPage = Math.min(totalPages, Math.floor(canvasState.offset / pageSize) + 1);
+        const action = pageButton.dataset.canvasPage || "1";
+        const nextPage = action === "prev"
+          ? currentPage - 1
+          : action === "next"
+            ? currentPage + 1
+            : cleanNumber(action) || 1;
+        canvasState.offset = (Math.max(1, Math.min(totalPages, nextPage)) - 1) * pageSize;
+        canvasState.hoverIndex = -1;
+        canvasState.selectedIndex = -1;
+        hideCanvasDetail();
+        setCanvasStatus("分頁切換");
+        scheduleCanvasDraw();
+        return;
+      }
       const canvas = event.target.closest?.(".desktop-route-canvas");
       if (!canvas) return;
       const index = canvasHitIndex(canvas, event);
@@ -1842,6 +1895,7 @@
     document.addEventListener("wheel", (event) => {
       const canvas = event.target.closest?.(".desktop-route-canvas");
       if (!canvas) return;
+      if (canvasPageSizeForRoute()) return;
       const direction = event.deltaY > 0 ? 1 : -1;
       const step = Math.max(1, Math.min(8, Math.round(Math.abs(event.deltaY) / 42)));
       const oldOffset = canvasState.offset;
@@ -1858,8 +1912,11 @@
       const canvas = event.target.closest?.(".desktop-route-canvas");
       if (!canvas) return;
       const capacity = visibleCanvasCapacity(canvas);
+      const pageSize = canvasPageSizeForRoute();
       const oldOffset = canvasState.offset;
-      if (event.key === "ArrowDown") canvasState.offset += 1;
+      if (pageSize && (event.key === "ArrowDown" || event.key === "PageDown")) canvasState.offset += pageSize;
+      else if (pageSize && (event.key === "ArrowUp" || event.key === "PageUp")) canvasState.offset -= pageSize;
+      else if (event.key === "ArrowDown") canvasState.offset += 1;
       else if (event.key === "ArrowUp") canvasState.offset -= 1;
       else if (event.key === "PageDown") canvasState.offset += capacity;
       else if (event.key === "PageUp") canvasState.offset -= capacity;
@@ -2566,6 +2623,7 @@
         </div>
         <div class="desktop-strategy4-signal-filters" data-strategy4-signal-filters hidden></div>
         <canvas class="desktop-route-canvas" tabindex="0" aria-label="${escapeHtml(meta.title)} Canvas 快速列表"></canvas>
+        <div class="desktop-canvas-pagination" data-canvas-pagination hidden></div>
         <div class="desktop-canvas-detail" hidden></div>
       </section>
     `;
@@ -3369,6 +3427,41 @@
       .desktop-route-canvas:focus {
         outline: 2px solid rgba(255,112,55,0.72);
         outline-offset: 3px;
+      }
+      .desktop-canvas-pagination {
+        display: flex;
+        align-items: center;
+        justify-content: flex-end;
+        gap: 8px;
+        flex-wrap: wrap;
+        margin-top: 12px;
+      }
+      .desktop-canvas-pagination[hidden] {
+        display: none !important;
+      }
+      .desktop-canvas-pagination button {
+        min-width: 38px;
+        min-height: 34px;
+        border: 1px solid rgba(148,163,184,0.18);
+        border-radius: 10px;
+        padding: 0 12px;
+        color: #cbd5e1;
+        background: rgba(15,23,42,0.72);
+        font: 800 12px system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        cursor: pointer;
+      }
+      .desktop-canvas-pagination button.active {
+        border-color: rgba(255,112,55,0.72);
+        color: #fff7ed;
+        background: rgba(255,112,55,0.2);
+      }
+      .desktop-canvas-pagination button:disabled {
+        cursor: default;
+        opacity: 0.42;
+      }
+      .desktop-canvas-pagination span {
+        color: #8fa3c0;
+        font: 800 12px system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
       }
       .desktop-canvas-toolbar {
         display: grid;
