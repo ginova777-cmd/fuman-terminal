@@ -24,6 +24,7 @@
   const API_ONLY_POLL_MS = 30000;
   const PERF_LOG_KEY = "fuman-desktop-fast-perf-log-v1";
   const LAST_ROUTE_KEY = window.FUMAN_RUNTIME_CONFIG?.lastRouteKey || "fuman-terminal-last-route-v1";
+  const DEFAULT_DESKTOP_ROUTE_KEY = "strategy|策略5";
   const CANVAS_ROW_HEIGHT = 46;
   const CANVAS_HEADER_HEIGHT = 128;
   const STRATEGY4_PAGE_SIZE = 10;
@@ -298,7 +299,7 @@
   function shouldRestoreNonMarketRoute() {
     const active = window.__fumanDesktopActiveRoute;
     if (active?.key && !isMarketRoute(active.key)) return true;
-    const key = readSavedLastRouteKey();
+    const key = readSavedLastRouteKey() || DEFAULT_DESKTOP_ROUTE_KEY;
     return !!key && !isMarketRoute(key);
   }
 
@@ -306,7 +307,7 @@
     if (document.documentElement.dataset.fumanInitialRouteRestoreReady === "1") return;
     document.documentElement.dataset.fumanInitialRouteRestoreReady = "1";
     const run = () => {
-      const key = readSavedLastRouteKey();
+      const key = readSavedLastRouteKey() || DEFAULT_DESKTOP_ROUTE_KEY;
       if (!key || isMarketRoute(key)) return false;
       const link = linkForRouteKey(key);
       if (!link) return false;
