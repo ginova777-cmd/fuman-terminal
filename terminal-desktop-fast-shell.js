@@ -2506,15 +2506,27 @@
   }
 
   function loadScriptOnce(src, attr) {
-    if (attr && document.querySelector(`script[${attr}]`)) return Promise.resolve(true);
-    const existing = Array.from(document.scripts).find((script) => script.src === src);
-    if (existing) return Promise.resolve(true);
+    const existingByAttr = attr ? document.querySelector(`script[${attr}]`) : null;
+    const existing = existingByAttr || Array.from(document.scripts).find((script) => script.src === src);
+    if (existing) {
+      if (existing.dataset.fumanLoaded === "1") return Promise.resolve(true);
+      return new Promise((resolve, reject) => {
+        existing.addEventListener("load", () => {
+          existing.dataset.fumanLoaded = "1";
+          resolve(true);
+        }, { once: true });
+        existing.addEventListener("error", reject, { once: true });
+      });
+    }
     return new Promise((resolve, reject) => {
       const script = document.createElement("script");
       script.src = src;
       script.async = false;
       if (attr) script.setAttribute(attr, "1");
-      script.addEventListener("load", () => resolve(true), { once: true });
+      script.addEventListener("load", () => {
+        script.dataset.fumanLoaded = "1";
+        resolve(true);
+      }, { once: true });
       script.addEventListener("error", reject, { once: true });
       document.body.appendChild(script);
     });
