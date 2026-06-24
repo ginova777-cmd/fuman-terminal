@@ -12,7 +12,7 @@ const STRATEGY_DEFS = [
   { id: "red_to_green", label: "昨日紅轉綠", short: "紅轉綠", icon: "↻" },
   { id: "intraday_2m", label: "2分K當沖雷達", short: "當沖", icon: "⌁" },
   { id: "investment_trust", label: "投信連買認養股", short: "投信", icon: "▦" },
-  { id: "vcp", label: "VCP 波段收斂", short: "VCP", icon: "⌁" },
+  { id: "vcp", label: "波段收斂型態", short: "收斂", icon: "⌁" },
   { id: "ma_bull", label: "均線多頭排列", short: "均線", icon: "☰" },
   { id: "sync_backtest", label: "高同步率回測", short: "同步", icon: "▣" },
   { id: "overnight_chip", label: "隔日沖吸籌監控", short: "隔日", icon: "⌬" },

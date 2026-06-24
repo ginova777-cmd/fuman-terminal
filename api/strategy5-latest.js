@@ -15,6 +15,28 @@ const TABLE = process.env.STRATEGY5_SUPABASE_RESULTS_TABLE || "strategy5_scan_re
 const LATEST_RUN_VIEW = process.env.STRATEGY5_SUPABASE_LATEST_RUN_VIEW || "v_strategy5_latest_complete_run";
 const COMPLETE_RUN_GATE = "complete-run-authoritative+result-readback";
 const FORBIDDEN_UI_MATCH_IDS = new Set(["foreign_trust_breakout"]);
+const STRATEGY5_UI_MATCH_META = {
+  chip_k_confluence: { label: "籌碼老K", short: "籌碼老K" },
+  multi_strategy_confluence: { label: "多策略共振", short: "共振" },
+  volume_turnover_breakout: { label: "量價周轉強攻", short: "量價周轉" },
+  bollinger_kdj_buy: { label: "布林KDJ買點", short: "布林KDJ" },
+  momentum: { label: "動能分數達標", short: "動能" },
+  main_force_chip: { label: "主力籌碼盤整", short: "主力" },
+  limit_up_doji: { label: "漲停十字星", short: "漲停十字" },
+  twenty_day_breakout: { label: "突破20日新高", short: "突破" },
+  opening_power: { label: "開盤即戰力狙擊", short: "開盤" },
+  red_to_green: { label: "昨日紅轉綠", short: "紅轉綠" },
+  investment_trust: { label: "投信連買認養股", short: "投信" },
+  vcp: { label: "波段收斂型態", short: "收斂" },
+  ma_bull: { label: "均線多頭排列", short: "均線" },
+  sync_backtest: { label: "高同步率回測", short: "同步" },
+  overnight_chip: { label: "隔日沖吸籌監控", short: "隔日" },
+  short_fund_flow: { label: "短線資金動能", short: "資金" },
+  chip_health_strong: { label: "籌碼健檢強勢", short: "籌碼" },
+  one_day_rebound: { label: "大跌一日反彈", short: "反彈" },
+  short_squeeze: { label: "融券嘎空雷達", short: "嘎空" },
+  ultra_short: { label: "超短線操作", short: "短打" },
+};
 
 function apiOnlyError(reason = "") {
   return {
@@ -91,12 +113,25 @@ function parseRequestOptions(request) {
   }
 }
 
+function normalizeMatch(match) {
+  if (!match || typeof match !== "object") return null;
+  const id = String(match.id || match.key || match.type || "").trim();
+  if (!id || FORBIDDEN_UI_MATCH_IDS.has(id)) return null;
+  const meta = STRATEGY5_UI_MATCH_META[id] || {};
+  return {
+    ...match,
+    id,
+    label: meta.label || match.label || match.title || match.name || id,
+    short: meta.short || match.short || meta.label || match.label || id,
+  };
+}
+
 function normalizePayload(row) {
   const payload = row.payload && typeof row.payload === "object" ? row.payload : {};
   const rawMatches = Array.isArray(payload.matches || row.signals) ? (payload.matches || row.signals) : [];
-  const matches = rawMatches.filter((match) => !FORBIDDEN_UI_MATCH_IDS.has(String(match?.id || match?.key || match?.type || "")));
+  const matches = rawMatches.map(normalizeMatch).filter(Boolean);
   const activeMatchId = String(payload.activeMatch?.id || payload.activeMatch?.key || payload.activeMatch?.type || "");
-  const activeMatch = activeMatchId && !FORBIDDEN_UI_MATCH_IDS.has(activeMatchId) ? payload.activeMatch : matches[0] || null;
+  const activeMatch = activeMatchId && !FORBIDDEN_UI_MATCH_IDS.has(activeMatchId) ? normalizeMatch(payload.activeMatch) : matches[0] || null;
   return {
     ...payload,
     matches,
