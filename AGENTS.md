@@ -120,6 +120,48 @@ FUMAN_SUPABASE_SERVICE_ROLE_KEY
 - 點擊期間暫停背景 polling，避免搶主執行緒。
 - 不要讓舊 `terminal-app.js` 的 showView / render / warm load 搶回主控制權。
 
+### 2026-06-24 策略 fast shell API-only 修正
+
+正式站目前策略頁 fast shell 基準：
+
+```text
+Latest strategy fast shell UI cleanup commit:
+30b76d194fb1bd2018fa2d83fca70551179328e0
+
+API-only polling stability commit:
+43e89f01cee68948c3b3da53d2bca9920d569f38
+
+Strategy3 API bridge commit:
+057f7ec1a14abcaddcb830b90246c66537940bad
+```
+
+策略1 / 3 / 4 / 5 在桌面 fixed shell 必須走 API-only rows：
+
+- 不再用 DOM snapshot 當策略資料來源。
+- fast shell 啟動時會清掉策略1 / 3 / 4 / 5 的舊 `sessionStorage` / `IndexedDB` DOM snapshot。
+- `strategy3` 不可再顯示 `dom-snapshot` 來源，不可把 DOM 文字抽成 `多多訊號2035`、`A區數量` 這類錯欄位資料。
+- `terminal-desktop-fast-shell.js` 的 `__fumanDesktopFastShellApiOnlyPoll` marker 必須保留，避免同頁重新載入新 fast shell 腳本時被舊 marker 擋住。
+- API-only polling 需要保守輪詢，目前 `API_ONLY_POLL_MS = 30000`；不要改成密集 polling。
+- polling 必須用 row signature 比對；資料簽名沒變時不可重建整個 DOM，只更新 Canvas / status，避免每 30 秒跳動。
+- 策略2當沖維持 live intent，不放進冷處理；不要把策略2加入 API-only cold snapshot 清理規則。
+
+策略1 / 2 / 3 / 4 / 5 的策略頁舊 chrome 已剔除：
+
+- 隱藏舊 `strategy-header`。
+- 隱藏左側 `strategy-list` / 策略清單。
+- 隱藏舊 `strategy-toolbar`。
+- 隱藏舊三張 metrics 卡。
+- 隱藏舊搜尋股票列。
+- 隱藏 Canvas shell 內部搜尋 / 刷新 / status toolbar。
+- 保留且優先顯示 fixed shell / Canvas 策略結果主畫面。
+
+不可回復：
+
+- 不要恢復黃框區域的舊策略清單、舊 toolbar、舊 metrics、舊搜尋列。
+- 不要用 DOM snapshot / session snapshot / IndexedDB snapshot 取代策略 API rows。
+- 不要靠 bump 版本號或 service worker cache bump 掩蓋資料或畫面錯誤。
+- 不要把 Codex latency/debug 面板露給客戶。
+
 ## 策略規則
 
 ### 策略1：明日開盤入正式流程
