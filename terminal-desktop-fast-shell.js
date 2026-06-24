@@ -13,7 +13,7 @@
   const API_ONLY_STRATEGY_ROUTES = ["strategy|策略1", "strategy|策略3", "strategy|策略4", "strategy|策略5"];
   const LIVE_API_STRATEGY_ROUTES = ["strategy|策略2"];
   const FIXED_ROUTE_KEYS = ["market|市場總覽", "chip-trade|買賣超", "cb-detect|CB可轉債", "warrant-flow|權證走向", "watchlist|自選股"];
-  const FIXED_CANVAS_PERSIST_ROUTES = ["market|市場總覽", "chip-trade|買賣超", "cb-detect|CB可轉債", "warrant-flow|權證走向"];
+  const FIXED_CANVAS_PERSIST_ROUTES = ["chip-trade|買賣超", "cb-detect|CB可轉債", "warrant-flow|權證走向"];
   const CANVAS_REFRESH_TTL_MS = 18000;
   const API_ONLY_POLL_MS = 30000;
   const PERF_LOG_KEY = "fuman-desktop-fast-perf-log-v1";
@@ -784,6 +784,10 @@
 
   function isStrategy3Route(route) {
     return String(route || "") === "strategy|策略3";
+  }
+
+  function isMarketRoute(route) {
+    return String(route || "") === "market|市場總覽";
   }
 
   function isWideStrategyTableRoute(route) {
@@ -2365,6 +2369,15 @@
     renderSignalFilterControls(wrap, counts, active, isStrategy5Route(canvasState.route) ? "data-strategy5-signal-filter" : "data-strategy4-signal-filter");
   }
 
+  function removeFixedPageShell(route) {
+    const panel = panelForRoute(route);
+    if (!panel) return;
+    panel.querySelectorAll(":scope > .desktop-route-shell.desktop-canvas-app.desktop-fixed-page-shell").forEach((node) => node.remove());
+    panel.classList.remove("fuman-fixed-shell-panel", "fuman-fixed-shell-active");
+    delete panel.dataset.fumanCanvasPersistent;
+    delete panel.dataset.fumanRouteSnapshotRestoring;
+  }
+
   function canvasShellHtml(key, meta) {
     return `
       <section class="desktop-route-shell desktop-canvas-app" data-route-shell="${escapeHtml(key)}" data-route-source="${escapeHtml(canvasState.source || "")}">
@@ -2521,6 +2534,10 @@
     const key = fixedRouteKey(link);
     const panel = panelForRoute(key);
     if (!key || !panel) return false;
+    if (isMarketRoute(key)) {
+      removeFixedPageShell(key);
+      return false;
+    }
     const previousRoute = canvasState.route;
     const stored = canvasStore.get(key);
     const incomingRows = rows.length ? rows : rowsForRoute(key);
@@ -2578,6 +2595,10 @@
   function restoreFixedPageSnapshot(link) {
     const key = fixedRouteKey(link);
     if (!key) return false;
+    if (isMarketRoute(key)) {
+      removeFixedPageShell(key);
+      return false;
+    }
     activeSnapshotRoute = key;
     const memoryItem = routeSnapshots.get(key);
     if (memoryItem?.rows?.length && Date.now() - Number(memoryItem.at || 0) <= SNAPSHOT_MAX_AGE_MS) {
@@ -2640,6 +2661,11 @@
     beginInteractionHold(`fixed-${source || "route"}`, 720);
     switchFixedViewNow(link);
     markLatency("nav", key);
+    if (isMarketRoute(key)) {
+      removeFixedPageShell(key);
+      markLatency("shell", key);
+      return true;
+    }
     const panel = panelForRoute(key);
     let rows = rowsForRoute(key);
     if (!rows.length) {
