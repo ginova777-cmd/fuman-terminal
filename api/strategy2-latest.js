@@ -177,15 +177,16 @@ function compactText(value, limit = 160) {
 function compactStrategy2Row(row, index = 0) {
   const active = row?.activeMatch && typeof row.activeMatch === "object" ? row.activeMatch : {};
   const match = Array.isArray(row?.matches) && row.matches[0] && typeof row.matches[0] === "object" ? row.matches[0] : {};
-  const code = String(row?.code || row?.stockNo || row?.stock_no || row?.symbol || "").match(/\d{4}/)?.[0] || "";
-  const name = compactText(row?.name || row?.stockName || row?.stock_name || code || "", 48);
-  const state = compactText(row?.state || row?.stateId || row?.status || active.name || active.id || match.name || match.id || "", 48);
+  const latest = row?.latestRecord && typeof row.latestRecord === "object" ? row.latestRecord : {};
+  const code = String(row?.code || latest.code || row?.stockNo || row?.stock_no || row?.symbol || "").match(/\d{4}/)?.[0] || "";
+  const name = compactText(row?.name || latest.name || row?.stockName || row?.stock_name || code || "", 48);
+  const state = compactText(row?.stateLabel || row?.state || row?.stateId || row?.status || latest.stateLabel || latest.stateId || active.name || active.id || match.name || match.id || "", 48);
   const reason = compactText(
-    row?.reason || row?.signal || active.reason || match.reason || row?.note || row?.message || "",
+    row?.reason || row?.stateReason || row?.strategyReasons?.[0] || latest.reason || latest.stateReason || latest.strategyReasons?.[0] || row?.signal || active.reason || match.reason || row?.note || row?.message || "",
     180
   );
-  const percent = row?.percent ?? row?.changePercent ?? row?.change_percent ?? row?.change ?? "";
-  const score = row?.score ?? row?.rankScore ?? active.score ?? match.score ?? "";
+  const percent = row?.percent ?? latest.percent ?? row?.changePercent ?? row?.change_percent ?? row?.change ?? "";
+  const score = row?.score ?? row?.maxScore ?? latest.score ?? row?.rankScore ?? active.score ?? match.score ?? "";
   return {
     rank: cleanNumber(row?.rank) || index + 1,
     code,
@@ -198,12 +199,12 @@ function compactStrategy2Row(row, index = 0) {
     reason,
     score,
     percent,
-    price: row?.price ?? row?.close ?? row?.observedPrice ?? row?.entryPrice ?? "",
-    close: row?.close ?? row?.price ?? row?.observedPrice ?? "",
-    volume: row?.volume ?? row?.tradeVolume ?? row?.volumeLots ?? "",
-    value: row?.value ?? row?.tradeValue ?? "",
-    quoteTime: row?.quoteTime || row?.time || row?.updatedAt || "",
-    time: row?.time || row?.quoteTime || "",
+    price: row?.price ?? row?.latestSeenPrice ?? row?.latestBPrice ?? row?.close ?? row?.observedPrice ?? row?.entryPrice ?? latest.observedPrice ?? latest.entryPrice ?? "",
+    close: row?.close ?? row?.price ?? row?.latestSeenPrice ?? row?.observedPrice ?? latest.observedPrice ?? "",
+    volume: row?.volume ?? row?.tradeVolume ?? row?.volumeLots ?? latest.volume ?? "",
+    value: row?.value ?? row?.tradeValue ?? latest.value ?? "",
+    quoteTime: row?.quoteTime || latest.quoteTime || row?.latestSeenAt || row?.time || row?.updatedAt || "",
+    time: row?.time || row?.quoteTime || row?.latestSeenAt || latest.quoteTime || "",
     activeMatch: active?.id || active?.name || active?.reason ? {
       id: active.id || active.name || "",
       name: active.name || active.id || "",
@@ -236,10 +237,7 @@ function compactStrategy2Payload(payload, options) {
   const events = rankStrategy2Rows(payload?.events).slice(0, limit);
   const eventCodes = new Set(events.map((row) => row.code).filter(Boolean));
   const rankedRecords = rankStrategy2Rows(payload?.records);
-  const records = [
-    ...rankedRecords.filter((row) => eventCodes.has(row.code)),
-    ...rankedRecords.filter((row) => !eventCodes.has(row.code)),
-  ].slice(0, limit);
+  const records = rankedRecords.filter((row) => !eventCodes.has(row.code)).slice(0, limit);
   const seen = new Set();
   const rows = [...events, ...records]
     .filter((row) => {
@@ -249,6 +247,11 @@ function compactStrategy2Payload(payload, options) {
       return true;
     })
     .slice(0, limit);
+  const hasRows = rows.length > 0;
+  const noTodayDetections = !hasRows && Boolean(payload?.noTodayDetections);
+  const reason = hasRows && payload?.reason === "today-complete-run-empty"
+    ? "complete-run-authoritative"
+    : payload?.reason || "complete-run-authoritative";
   return {
     ok: payload?.ok !== false,
     compact: true,
@@ -259,8 +262,8 @@ function compactStrategy2Payload(payload, options) {
     mode: options.today || options.live ? "strategy2-live-battle" : "strategy2-live",
     cacheSource: payload?.cacheSource || "supabase-api",
     gate: payload?.gate || AUTHORITATIVE_GATE,
-    reason: payload?.reason || "complete-run-authoritative",
-    noTodayDetections: Boolean(payload?.noTodayDetections),
+    reason,
+    noTodayDetections,
     updatedAt: payload?.updatedAt || payload?.generatedAt || "",
     generatedAt: payload?.generatedAt || payload?.updatedAt || "",
     runId: payload?.runId || payload?.transport?.runId || "",
