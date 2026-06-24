@@ -762,6 +762,15 @@
     return STRATEGY4_SIGNAL_LABELS[key] || STRATEGY4_SIGNAL_LABELS[raw] || "";
   }
 
+  function strategyNameLabel(value) {
+    const raw = String(value || "").trim();
+    if (!raw) return "";
+    const key = raw.toLowerCase().replace(/[\s-]+/g, "_");
+    const defs = window.FUMAN_STRATEGY_CONFIG?.STRATEGY_BY_ID || {};
+    const match = defs[key] || defs[raw];
+    return match?.label || match?.short || strategy4SignalLabel(raw) || "";
+  }
+
   function normalizeSignalRows(value, route = "") {
     const translateStrategy4 = isStrategy4Route(route);
     return (Array.isArray(value) ? value : [])
@@ -965,7 +974,7 @@
     const primarySignal = signals[0] || null;
     const rawSubStrategy = merged.subStrategy || merged.strategyLabel || merged.signalLabel || merged.setupName || merged.setup_type || active.short || active.label || active.name || primarySignal?.label || "";
     const subStrategy = compactText(
-      (isStrategy4Route(route) && strategy4SignalLabel(rawSubStrategy)) || rawSubStrategy,
+      strategyNameLabel(rawSubStrategy) || (isStrategy4Route(route) && strategy4SignalLabel(rawSubStrategy)) || rawSubStrategy,
       42
     );
     const subStrategyId = compactText(
@@ -973,6 +982,10 @@
       48
     );
     const signalLine = signalSummary(signals);
+    const strategyDisplay = compactText(
+      strategyNameLabel(subStrategyId) || strategyNameLabel(rawSubStrategy) || subStrategy || signalLine,
+      64
+    );
     const strategy4MatchedLabels = isStrategy4Route(route)
       ? signals.map((signal) => signal.label || signal.id || "").filter(Boolean).join("、")
       : "";
@@ -993,7 +1006,6 @@
       : [
         cleanNumber(volumeRatio) ? "量能啟動" : "",
         cleanNumber(tradeValue) ? "高成交額" : "",
-        cleanNumber(legal5d) > 0 ? "法人5D偏多" : "",
         cleanNumber(price) > 0 ? "流動性足" : "",
       ].filter(Boolean).slice(0, 4);
     const line = compactText([
@@ -1014,6 +1026,7 @@
       reason: compactText(reason || state || line, 180),
       subStrategy,
       subStrategyId,
+      strategyDisplay,
       signalLabel: subStrategy,
       signalLine,
       signals,
@@ -1595,13 +1608,9 @@
       ["side", "多空", 72],
       ["price", "價格", 86],
       ["pct", "漲幅", 88],
-      ["volume", "量", 100],
-      ["ratio", "推估量比", 112],
-      ["value", "成交額", 108],
-      ["legal", "法人5D", 98],
       ["score", "分數", 76],
-      ["ai", "AI分析", 260],
-      ["trigger", "觸發原因", 260],
+      ["ai", "策略", 300],
+      ["trigger", "觸發原因", 360],
     ];
     const strategy4Spec = [
       ["rank", "排名", 58],
@@ -1609,11 +1618,9 @@
       ["side", "多空", 72],
       ["price", "價格", 86],
       ["pct", "漲幅", 88],
-      ["volume", "量", 104],
-      ["ratio", "推估量比", 118],
       ["score", "分數", 76],
-      ["ai", "AI分析", 360],
-      ["trigger", "觸發原因", 360],
+      ["ai", "策略", 340],
+      ["trigger", "觸發原因", 420],
     ];
     const strategy5Spec = [
       ["rank", "排名", 58],
@@ -1621,13 +1628,9 @@
       ["side", "多空", 72],
       ["price", "價格", 86],
       ["pct", "漲幅", 88],
-      ["volume", "量", 100],
-      ["ratio", "推估量比", 112],
-      ["value", "成交額", 108],
-      ["legal", "法人5D", 98],
       ["score", "分數", 76],
-      ["ai", "AI分析", 260],
-      ["trigger", "觸發原因", 260],
+      ["ai", "策略", 300],
+      ["trigger", "觸發原因", 360],
     ];
     const spec = isStrategy4Route(route) ? strategy4Spec : isStrategy5Route(route) ? strategy5Spec : strategy3Spec;
     const base = spec.reduce((sum, item) => sum + item[2], 0);
@@ -1671,7 +1674,6 @@
   }
 
   function drawWideStrategyCanvasRows(ctx, colors, width, height, rows, rowsToDraw, source, capacity, rowHeight, headerHeight) {
-    const isStrategy4 = isStrategy4Route(canvasState.route);
     const columns = wideStrategyColumnLayout(width, canvasState.route);
     const col = (key) => columns.find((item) => item.key === key) || { x: width - 120, width: 90 };
     ctx.fillStyle = colors.header;
@@ -1729,20 +1731,14 @@
       ctx.fillStyle = String(pctText).includes("-") ? colors.down : colors.up;
       ctx.fillText(pctText || "--", col("pct").x + 6, y - 2);
       ctx.fillStyle = colors.text;
-      ctx.fillText(formatCompactNumber(row.volumeLots || row.volume, 0) || "--", col("volume").x + 6, y - 2);
-      ctx.fillText(formatRatioValue(row.volumeRatio) || "--", col("ratio").x + 6, y - 2);
-      if (!isStrategy4) {
-        ctx.fillText(formatTradeValue(row.tradeValue) || "--", col("value").x + 6, y - 2);
-        ctx.fillText(formatCompactNumber(row.legal5d, 0) || "--", col("legal").x + 6, y - 2);
-      }
       ctx.fillText(row.score || "--", col("score").x + 6, y - 2);
 
-      ctx.fillStyle = row.aiStatus === "觀察" ? colors.muted : colors.up;
+      ctx.fillStyle = colors.up;
       ctx.font = "900 13px system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
-      ctx.fillText(row.aiStatus || "通過", col("ai").x + 6, y - 24);
+      ctx.fillText(row.strategyDisplay || row.subStrategy || "--", col("ai").x + 6, y - 24);
       ctx.fillStyle = colors.muted;
       ctx.font = "13px system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
-      fillCanvasMultiline(ctx, row.aiSummary || row.reason || row.line, col("ai").x + 6, y - 2, Math.max(14, Math.floor((col("ai").width - 12) / 13)), 18, 3);
+      fillCanvasMultiline(ctx, row.signalLine || row.aiSummary || row.reason || row.line, col("ai").x + 6, y - 2, Math.max(14, Math.floor((col("ai").width - 12) / 13)), 18, 3);
 
       const tags = Array.isArray(row.triggerTags) ? row.triggerTags.slice(0, 2) : [];
       let tagX = col("trigger").x + 6;
@@ -1799,16 +1795,9 @@
           <span>分數 <strong>${escapeHtml(row.score || "--")}</strong></span>
           <span>漲幅 <strong>${escapeHtml(row.pct || "--")}</strong></span>
           <span>價格 <strong>${escapeHtml(formatPriceValue(row.price) || row.price || "--")}</strong></span>
-          <span>量能 <strong>${escapeHtml(formatCompactNumber(row.volumeLots || row.volume, 0) || row.volume || "--")}</strong></span>
-          ${isWideStrategyTableRoute(canvasState.route) && !isStrategy4Route(canvasState.route) ? `
-            <span>推估量比 <strong>${escapeHtml(formatRatioValue(row.volumeRatio) || "--")}</strong></span>
-            <span>成交額 <strong>${escapeHtml(formatTradeValue(row.tradeValue) || "--")}</strong></span>
-            <span>法人5D <strong>${escapeHtml(formatCompactNumber(row.legal5d, 0) || "--")}</strong></span>
-            <span>多空 <strong>${escapeHtml(row.longShort || "多")}</strong></span>
-          ` : isStrategy4Route(canvasState.route) ? `
-            <span>推估量比 <strong>${escapeHtml(formatRatioValue(row.volumeRatio) || "--")}</strong></span>
-            <span>符合策略 <strong>${escapeHtml(row.aiSummary || row.signalLine || "--")}</strong></span>
-            <span>多空 <strong>${escapeHtml(row.longShort || "多")}</strong></span>
+          <span>多空 <strong>${escapeHtml(row.longShort || "多")}</strong></span>
+          ${isWideStrategyTableRoute(canvasState.route) ? `
+            <span>策略 <strong>${escapeHtml(row.strategyDisplay || row.subStrategy || row.signalLine || "--")}</strong></span>
           ` : ""}
         </div>
       </div>
