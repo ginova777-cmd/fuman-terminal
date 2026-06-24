@@ -786,7 +786,7 @@
   }
 
   function isWideStrategyTableRoute(route) {
-    return isStrategy3Route(route) || isStrategy5Route(route);
+    return isStrategy3Route(route) || isStrategy4Route(route) || isStrategy5Route(route);
   }
 
   function canvasRowHeightForRoute(route = canvasState.route) {
