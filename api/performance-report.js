@@ -55,6 +55,18 @@ function normalizeSummary(summary) {
   };
 }
 
+function appendPerformanceLog(payload) {
+  try {
+    const dir = process.env.FUMAN_PERFORMANCE_REPORT_DIR
+      || (process.env.VERCEL ? "/tmp/fuman-performance-reports" : path.join(process.cwd(), ".performance-reports"));
+    fs.mkdirSync(dir, { recursive: true });
+    fs.appendFileSync(path.join(dir, "performance-reports.jsonl"), `${JSON.stringify(payload)}\n`, "utf8");
+    return { ok: true };
+  } catch (error) {
+    return { ok: false, error: error?.message || String(error) };
+  }
+}
+
 module.exports = async function handler(req, res) {
   if (req.method !== "POST") {
     res.status(405).json({ ok: false, error: "method not allowed" });
@@ -72,17 +84,21 @@ module.exports = async function handler(req, res) {
       summary: normalizeSummary(body.summary || {}),
       rows: items,
     };
-    const dir = process.env.FUMAN_PERFORMANCE_REPORT_DIR || path.join(process.cwd(), ".performance-reports");
-    fs.mkdirSync(dir, { recursive: true });
-    fs.appendFileSync(path.join(dir, "performance-reports.jsonl"), `${JSON.stringify(payload)}\n`, "utf8");
+    let snapshotWrite = null;
     if (payload.source === "desktop-route-latency") {
-      await upsertSnapshot("desktop_route_latency_latest", payload, {
+      snapshotWrite = await upsertSnapshot("desktop_route_latency_latest", payload, {
         source: "performance-report",
         reason: "desktop-route-latency",
         timeoutMs: 4000,
-      }).catch(() => undefined);
+      }).catch((error) => ({ ok: false, error: error?.message || String(error) }));
     }
-    res.status(200).json({ ok: true, count: items.length });
+    const logWrite = appendPerformanceLog(payload);
+    res.status(200).json({
+      ok: true,
+      count: items.length,
+      snapshotWrite: snapshotWrite ? { ok: snapshotWrite.ok !== false, key: snapshotWrite.key || "desktop_route_latency_latest" } : null,
+      logWrite,
+    });
   } catch (error) {
     res.status(200).json({ ok: false });
   }
