@@ -17,6 +17,21 @@ function cleanNumber(value) {
   return Number(String(value ?? "").replace(/[,+%]/g, "").trim()) || 0;
 }
 
+function readRequestOptions(request) {
+  try {
+    const url = new URL(request.url, `https://${request.headers.host || "localhost"}`);
+    const canvas = url.searchParams.get("canvas") === "1";
+    const compact = url.searchParams.get("compact") === "1" || url.searchParams.get("shell") === "1";
+    const smallPayload = canvas || compact;
+    const fallbackLimit = smallPayload ? 60 : 80;
+    const maxLimit = smallPayload ? 120 : 300;
+    const limit = Math.max(1, Math.min(maxLimit, cleanNumber(url.searchParams.get("limit")) || fallbackLimit));
+    return { canvas, compact, smallPayload, limit };
+  } catch {
+    return { canvas: false, compact: false, smallPayload: false, limit: 80 };
+  }
+}
+
 function normalizeCode(value) {
   const code = String(value || "").trim();
   return /^\d{4}$/.test(code) ? code : "";
@@ -133,7 +148,7 @@ async function loadTdccHistory() {
   return { ...payload, source: "supabase:source_status" };
 }
 
-function buildPayload({ institution, tdcc, top = 80 }) {
+function buildPayload({ institution, tdcc, top = 80, options = {} }) {
   const weeks = Number(process.env.FUMAN_TDCC_BREAKOUT_WEEKS || 3);
   const dates = latestDates(tdcc, weeks);
   const strict = process.env.FUMAN_TDCC_STRICT_INCREASE !== "0";
@@ -184,7 +199,8 @@ function buildPayload({ institution, tdcc, top = 80 }) {
   }
 
   matches.sort((a, b) => b.ratioIncrease - a.ratioIncrease || b.breakoutScore - a.breakoutScore || b.foreignLots - a.foreignLots);
-  const topMatches = matches.slice(0, top);
+  const limit = Math.max(1, Math.min(options.smallPayload ? 120 : 300, cleanNumber(options.limit) || top));
+  const topMatches = matches.slice(0, limit);
   return {
     ok: true,
     source: "supabase:institution+tdcc-1000",
@@ -202,6 +218,9 @@ function buildPayload({ institution, tdcc, top = 80 }) {
     excludedCounts,
     count: topMatches.length,
     total: matches.length,
+    returnedCount: topMatches.length,
+    canvas: Boolean(options.canvas),
+    compact: Boolean(options.compact),
     matches: topMatches,
     rows: topMatches,
     transport: {
@@ -225,11 +244,12 @@ module.exports = async function handler(request, response) {
   }
 
   try {
+    const options = readRequestOptions(request);
     const protocol = request.headers["x-forwarded-proto"] || "https";
     const host = request.headers.host || "fuman-terminal.vercel.app";
     const institution = await fetchJson(`${protocol}://${host}/api/institution-latest`);
     const tdcc = await loadTdccHistory();
-    response.status(200).json(buildPayload({ institution, tdcc }));
+    response.status(200).json(buildPayload({ institution, tdcc, options }));
   } catch (error) {
     response.status(503).json({
       ok: false,

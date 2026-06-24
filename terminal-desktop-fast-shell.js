@@ -49,6 +49,14 @@
     "cb-detect|CB可轉債": { limit: 60, ttl: 32000 },
     "warrant-flow|權證走向": { limit: 60, ttl: 32000 },
   };
+  const CHIP_TRADE_ROUTE = "chip-trade|買賣超";
+  const CHIP_TRADE_FILTERS = [
+    { key: "tdcc1000", label: "外資連3買 + 1000張連3週增", endpoint: "/api/institution-tdcc-breakout-latest" },
+    { key: "foreignTrustVolumePct", label: "外資+投信佔5日均量", endpoint: "/api/institution-latest" },
+    { key: "foreignStreak", label: "外資連買日", endpoint: "/api/institution-latest" },
+    { key: "trustStreak", label: "投信連買日", endpoint: "/api/institution-latest" },
+    { key: "jointStreak", label: "同買日", endpoint: "/api/institution-latest" },
+  ];
   const CANVAS_WORKER_URL = "/terminal-desktop-canvas-worker.js";
   let pendingTimer = 0;
   let snapshotTimer = 0;
@@ -856,11 +864,19 @@
   }
 
   function endpointForRoute(route) {
+    if (isChipTradeRoute(route)) {
+      const active = CHIP_TRADE_FILTERS.find((item) => item.key === canvasState.signalFilter);
+      return active?.endpoint || CANVAS_ENDPOINTS[route] || "";
+    }
     return CANVAS_ENDPOINTS[route] || "";
   }
 
   function isStrategyRoute(route) {
     return String(route || "").startsWith("strategy|");
+  }
+
+  function isChipTradeRoute(route) {
+    return route === CHIP_TRADE_ROUTE;
   }
 
   function isApiBackedSnapshotItem(item) {
@@ -934,6 +950,7 @@
     });
     if (options.live) query.set("live", "1");
     if (options.today) query.set("today", "1");
+    if (isChipTradeRoute(route) && canvasState.signalFilter) query.set("mode", canvasState.signalFilter);
     if (withBust) query.set("t", String(Date.now()));
     return `${endpoint}${endpoint.includes("?") ? "&" : "?"}${query.toString()}`;
   }
@@ -946,6 +963,7 @@
     } catch (error) {
       pathname = String(endpoint).split("?")[0];
     }
+    if (pathname === "/api/institution-tdcc-breakout-latest") return CHIP_TRADE_ROUTE;
     return Object.keys(CANVAS_ENDPOINTS).find((route) => CANVAS_ENDPOINTS[route] === pathname) || "";
   }
 
@@ -979,7 +997,7 @@
     const rawCode = merged.code || merged.Code || merged.stockNo || merged.StockNo || merged.stock_no || merged.symbol || merged.Symbol || merged.ticker || merged.stockId || merged.stock_id || "";
     const code = String(rawCode).match(/\d{4}/)?.[0] || String(rawCode || "").trim();
     const name = String(merged.name || merged.Name || merged.stockName || merged.StockName || merged.stock_name || merged.companyName || merged.company_name || code || "").trim();
-    const pct = merged.percent ?? merged.Percent ?? merged.changePercent ?? merged.ChangePercent ?? merged.change_percent ?? merged.change ?? merged.Change ?? merged.pct ?? "";
+    const pct = merged.percent ?? merged.Percent ?? merged.changePct ?? merged.changePercent ?? merged.ChangePercent ?? merged.change_percent ?? merged.change ?? merged.Change ?? merged.pct ?? "";
     const score = merged.score ?? merged.Score ?? merged.rankScore ?? merged.RankScore ?? merged.swingScore ?? active.score ?? merged.signalScore ?? "";
     const reason = String(merged.reason || active.reason || merged.message || merged.note || "").trim();
     const state = String(merged.state || merged.status || active.name || active.id || "").trim();
@@ -1055,6 +1073,19 @@
       volumeRatio: volumeRatio === "" || volumeRatio == null ? "" : String(volumeRatio),
       tradeValue: tradeValue === "" || tradeValue == null ? "" : String(tradeValue),
       legal5d: legal5d === "" || legal5d == null ? "" : String(legal5d),
+      foreign: pickFirstValue(merged.foreign, merged.foreignNet, merged.foreign_net, merged.foreignBuy, merged.foreign_buy),
+      trust: pickFirstValue(merged.trust, merged.trustNet, merged.trust_net, merged.trustBuy, merged.trust_buy),
+      total: pickFirstValue(merged.total, merged.totalNet, merged.total_net, merged.institutionTotal),
+      foreignStreak: pickFirstValue(merged.foreignStreak, merged.foreign_streak),
+      trustStreak: pickFirstValue(merged.trustStreak, merged.trust_streak),
+      jointStreak: pickFirstValue(merged.jointStreak, merged.joint_streak),
+      foreignTrustBuyVolumePct: pickFirstValue(merged.foreignTrustBuyVolumePct, merged.institutionBuyVolumePct, merged.foreignTrustVolumePct),
+      institutionBuyVolumePct: pickFirstValue(merged.institutionBuyVolumePct, merged.foreignTrustBuyVolumePct, merged.foreignTrustVolumePct),
+      foreignLots: pickFirstValue(merged.foreignLots, merged.foreign_lots),
+      ratio1: pickFirstValue(merged.ratio1, merged.ratio1000Week1),
+      ratio2: pickFirstValue(merged.ratio2, merged.ratio1000Week2),
+      ratio3: pickFirstValue(merged.ratio3, merged.ratio1000Week3),
+      ratioIncrease: pickFirstValue(merged.ratioIncrease, merged.ratio_increase),
       longShort: compactText(merged.longShort || merged.side || merged.direction || "多", 8),
       aiStatus,
       aiSummary,
@@ -1188,9 +1219,11 @@
   function applyCanvasFilter() {
     const query = compactText(canvasState.query, 80).toLowerCase();
     const signalFilter = (isStrategy4Route(canvasState.route) || isStrategy5Route(canvasState.route)) ? compactText(canvasState.signalFilter, 80).toLowerCase() : "";
+    const chipFilter = isChipTradeRoute(canvasState.route) ? compactText(canvasState.signalFilter || "", 80) : "";
     canvasState.filtered = canvasState.rows.filter((row) => {
       const signalText = [row.subStrategyId, row.subStrategy, row.signalLine, ...(row.signals || []).flatMap((signal) => [signal.id, signal.label, signal.reason])].join(" ").toLowerCase();
       if (signalFilter && !signalText.includes(signalFilter)) return false;
+      if (chipFilter && !matchesChipTradeFilter(row, chipFilter)) return false;
       if (!query) return true;
       return [
         row.code,
@@ -1215,16 +1248,36 @@
     canvasRowsVersion += 1;
   }
 
+  function matchesChipTradeFilter(row, filter) {
+    if (!filter) return true;
+    const foreign = cleanNumber(row.foreign);
+    const trust = cleanNumber(row.trust);
+    if (filter === "tdcc1000") {
+      const ratioHit = cleanNumber(row.ratioIncrease) > 0
+        || (cleanNumber(row.ratio3) > 0 && cleanNumber(row.ratio3) >= cleanNumber(row.ratio2) && cleanNumber(row.ratio2) >= cleanNumber(row.ratio1));
+      return cleanNumber(row.foreignStreak) >= 3 && (cleanNumber(row.foreignLots) > 0 || foreign > 0) && ratioHit;
+    }
+    if (filter === "foreignTrustVolumePct") {
+      return foreign + trust > 0 && cleanNumber(row.foreignTrustBuyVolumePct || row.institutionBuyVolumePct) > 0;
+    }
+    if (filter === "foreignStreak") return cleanNumber(row.foreignStreak) > 0;
+    if (filter === "trustStreak") return cleanNumber(row.trustStreak) > 0;
+    if (filter === "jointStreak") return cleanNumber(row.jointStreak) > 0;
+    return true;
+  }
+
   function fetchCanvasRows(route, force = false) {
     const endpoint = endpointForRoute(route);
     if (!endpoint) return Promise.resolve([]);
     const cached = canvasStore.get(route);
     const options = canvasOptionsForRoute(route);
     const ttl = Number(options.ttl || CANVAS_REFRESH_TTL_MS);
-    if (!force && cached?.rows?.length && Date.now() - Number(cached.at || 0) < ttl) {
+    const bypassRouteCache = isChipTradeRoute(route) && Boolean(canvasState.signalFilter);
+    if (!force && !bypassRouteCache && cached?.rows?.length && Date.now() - Number(cached.at || 0) < ttl) {
       return Promise.resolve(cached.rows);
     }
-    if (canvasInflight.has(route)) return canvasInflight.get(route);
+    const inflightKey = isChipTradeRoute(route) ? `${route}|${canvasState.signalFilter || ""}` : route;
+    if (canvasInflight.has(inflightKey)) return canvasInflight.get(inflightKey);
     const url = compactCanvasUrlForRoute(route, true);
     const task = fetch(url, { cache: force ? "no-store" : "default" })
       .then((response) => response.ok ? response.json() : Promise.reject(new Error(`HTTP ${response.status}`)))
@@ -1236,8 +1289,8 @@
         return rows;
       })
       .catch(() => rowsForRoute(route))
-      .finally(() => canvasInflight.delete(route));
-    canvasInflight.set(route, task);
+      .finally(() => canvasInflight.delete(inflightKey));
+    canvasInflight.set(inflightKey, task);
     return task;
   }
 
@@ -1874,6 +1927,30 @@
         scheduleCanvasDraw();
         return;
       }
+      const chipFilter = event.target.closest?.("[data-chip-canvas-filter]");
+      if (chipFilter) {
+        event.preventDefault();
+        if (!isChipTradeRoute(canvasState.route)) return;
+        const next = chipFilter.dataset.chipCanvasFilter || CHIP_TRADE_FILTERS[0].key;
+        if (canvasState.signalFilter === next && canvasState.rows.length) return;
+        canvasState.signalFilter = next;
+        canvasState.offset = 0;
+        canvasState.hoverIndex = -1;
+        canvasState.selectedIndex = -1;
+        hideCanvasDetail();
+        applyCanvasFilter();
+        updateChipTradeFilterControls(currentCanvasShell());
+        setCanvasStatus("買賣超策略更新中");
+        scheduleCanvasDraw();
+        fetchCanvasRows(canvasState.route, true).then(() => {
+          if (!isChipTradeRoute(canvasState.route) || canvasState.signalFilter !== next) return;
+          applyCanvasFilter();
+          updateChipTradeFilterControls(currentCanvasShell());
+          setCanvasStatus("買賣超策略套用");
+          scheduleCanvasDraw();
+        }).catch(() => setCanvasStatus("沿用快照"));
+        return;
+      }
       const pageButton = event.target.closest?.("[data-canvas-page]");
       if (pageButton) {
         event.preventDefault();
@@ -2470,6 +2547,32 @@
     renderSignalFilterControls(wrap, counts, active, isStrategy5Route(canvasState.route) ? "data-strategy5-signal-filter" : "data-strategy4-signal-filter");
   }
 
+  function chipTradeFilterCount(rows, filter) {
+    return (Array.isArray(rows) ? rows : []).filter((row) => matchesChipTradeFilter(row, filter)).length;
+  }
+
+  function updateChipTradeFilterControls(shell) {
+    const panel = shell || currentCanvasShell();
+    if (!panel) return;
+    const wrap = panel.querySelector("[data-chip-canvas-filters]");
+    if (!wrap) return;
+    if (!isChipTradeRoute(canvasState.route)) {
+      wrap.hidden = true;
+      wrap.innerHTML = "";
+      return;
+    }
+    const active = canvasState.signalFilter || CHIP_TRADE_FILTERS[0].key;
+    wrap.hidden = false;
+    wrap.innerHTML = CHIP_TRADE_FILTERS.map((item) => {
+      const count = item.endpoint === endpointForRoute(canvasState.route) ? chipTradeFilterCount(canvasState.rows, item.key) : 0;
+      return `
+        <button type="button" data-chip-canvas-filter="${escapeHtml(item.key)}" class="${active === item.key ? "active" : ""}">
+          ${escapeHtml(item.label)} <b>${escapeHtml(String(count))}</b>
+        </button>
+      `;
+    }).join("");
+  }
+
   function removeFixedPageShell(route) {
     const panel = panelForRoute(route);
     if (!panel) return;
@@ -2670,6 +2773,7 @@
           <span class="desktop-canvas-status">${escapeHtml(canvasWorkerReady ? canvasWorkerMode : canvasState.source || "shell")}</span>
         </div>
         <div class="desktop-strategy4-signal-filters" data-strategy4-signal-filters hidden></div>
+        <div class="desktop-strategy4-signal-filters" data-chip-canvas-filters hidden></div>
         <canvas class="desktop-route-canvas" tabindex="0" aria-label="${escapeHtml(meta.title)} Canvas 快速列表"></canvas>
         <div class="desktop-canvas-pagination" data-canvas-pagination hidden></div>
         <div class="desktop-canvas-detail" hidden></div>
@@ -2737,6 +2841,7 @@
     if (input && document.activeElement !== input) input.value = canvasState.query || "";
     if (canvas) canvas.setAttribute("aria-label", `${meta.title} Canvas 快速列表`);
     updateStrategySignalControls(shell);
+    updateChipTradeFilterControls(shell);
     updateCanvasPagination(shell);
     return canvas;
   }
@@ -2816,7 +2921,7 @@
     canvasState.source = source || stored?.source || "shell";
     canvasState.rows = incomingRows;
     if (previousRoute !== key) {
-      canvasState.signalFilter = "";
+      canvasState.signalFilter = isChipTradeRoute(key) ? CHIP_TRADE_FILTERS[0].key : "";
       canvasState.offset = 0;
       canvasState.hoverIndex = -1;
       canvasState.selectedIndex = -1;
