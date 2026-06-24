@@ -109,6 +109,23 @@ async function upsertSupabaseRows(table, rows, conflict) {
   }
 }
 
+async function fetchSupabaseRows(table, query) {
+  if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) throw new Error("warrant-flow supabase credentials missing");
+  const response = await fetch(`${SUPABASE_URL}/rest/v1/${table}?${query}`, {
+    headers: {
+      apikey: SUPABASE_SERVICE_ROLE_KEY,
+      Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+      Accept: "application/json",
+    },
+  });
+  if (!response.ok) {
+    const text = await response.text().catch(() => "");
+    throw new Error(`${table} readback HTTP ${response.status}: ${text.slice(0, 240)}`);
+  }
+  const rows = await response.json();
+  return Array.isArray(rows) ? rows : [];
+}
+
 function buildWarrantFlowRunRow(output, runId, status = "complete") {
   const complete = status === "complete";
   const scanTime = String(output.updatedAt || new Date().toISOString());
@@ -191,11 +208,57 @@ async function publishWarrantFlowCompleteRunToSupabase(output) {
   const runId = warrantFlowRunIdFromOutput(output);
   const running = buildWarrantFlowRunRow(output, runId, "running");
   const rows = buildWarrantFlowResultRows(output, runId);
+  const expectedRows = cleanNumber(running.expected_total);
+  if (expectedRows <= 0 || rows.length <= 0 || rows.length !== expectedRows) {
+    throw new Error(`warrant-flow complete run refused: expected rows ${expectedRows}, built rows ${rows.length}`);
+  }
   await upsertSupabaseRows(WARRANT_FLOW_RUNS_TABLE, [running], "run_id");
   await upsertSupabaseRows(WARRANT_FLOW_RESULTS_TABLE, rows, "run_id,strategy,result_type,code");
-  await upsertSupabaseRows(WARRANT_FLOW_RUNS_TABLE, [buildWarrantFlowRunRow(output, runId, "complete")], "run_id");
+  const completeRun = buildWarrantFlowRunRow(output, runId, "complete");
+  await upsertSupabaseRows(WARRANT_FLOW_RUNS_TABLE, [completeRun], "run_id");
+  await verifyWarrantFlowSupabaseReadback(runId, completeRun, rows.length);
   console.log(`warrant-flow supabase run_id gate ok: ${runId}, rows ${rows.length}`);
   return runId;
+}
+
+async function verifyWarrantFlowSupabaseReadback(runId, expectedRun, expectedRows) {
+  const runRows = await fetchSupabaseRows(
+    WARRANT_FLOW_RUNS_TABLE,
+    [
+      "select=run_id,status,complete,expected_total,scanned_count,result_count",
+      `run_id=eq.${encodeURIComponent(runId)}`,
+      "strategy=eq.warrant_flow",
+      "limit=1",
+    ].join("&")
+  );
+  const run = runRows[0];
+  if (!run?.run_id) throw new Error(`warrant-flow readback failed: complete run missing ${runId}`);
+  const expectedTotal = cleanNumber(run.expected_total);
+  const scannedCount = cleanNumber(run.scanned_count);
+  const resultCount = cleanNumber(run.result_count);
+  if (String(run.status) !== "complete" || run.complete !== true) {
+    throw new Error(`warrant-flow readback failed: run not complete ${runId}`);
+  }
+  if (expectedTotal <= 0 || scannedCount <= 0 || expectedTotal !== scannedCount) {
+    throw new Error(`warrant-flow readback failed: expected/scanned mismatch ${expectedTotal}/${scannedCount}`);
+  }
+  if (resultCount !== expectedRows || resultCount !== cleanNumber(expectedRun.result_count)) {
+    throw new Error(`warrant-flow readback failed: result_count mismatch ${resultCount}/${expectedRows}`);
+  }
+
+  const resultRows = await fetchSupabaseRows(
+    WARRANT_FLOW_RESULTS_TABLE,
+    [
+      "select=run_id",
+      "strategy=eq.warrant_flow",
+      `run_id=eq.${encodeURIComponent(runId)}`,
+      "complete=eq.true",
+      `limit=${Math.min(Math.max(expectedRows + 1, 1), 5000)}`,
+    ].join("&")
+  );
+  if (resultRows.length !== expectedRows) {
+    throw new Error(`warrant-flow readback failed: result rows mismatch ${resultRows.length}/${expectedRows}`);
+  }
 }
 
 function stockCodeOf(item) {

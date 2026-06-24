@@ -225,6 +225,27 @@ function validateDataContract(payload) {
   };
 }
 
+function completeRunGateIssues(run, rows) {
+  const issues = [];
+  const rowCount = Array.isArray(rows) ? rows.length : 0;
+  if (!run?.run_id) issues.push("run_id_missing");
+  if (run?.status !== undefined && String(run.status) !== "complete") issues.push(`status_not_complete:${run.status}`);
+  if (run?.complete !== undefined && run.complete !== true) issues.push("complete_not_true");
+
+  const expectedTotal = run?.expected_total === undefined ? null : cleanNumber(run.expected_total);
+  const scannedCount = run?.scanned_count === undefined ? null : cleanNumber(run.scanned_count);
+  const resultCount = run?.result_count === undefined ? null : cleanNumber(run.result_count);
+  if (expectedTotal !== null && expectedTotal <= 0) issues.push(`expected_total_invalid:${expectedTotal}`);
+  if (scannedCount !== null && scannedCount <= 0) issues.push(`scanned_count_invalid:${scannedCount}`);
+  if (expectedTotal !== null && scannedCount !== null && expectedTotal !== scannedCount) {
+    issues.push(`expected_scanned_mismatch:${expectedTotal}/${scannedCount}`);
+  }
+  if (resultCount !== null && resultCount <= 0) issues.push(`result_count_invalid:${resultCount}`);
+  if (resultCount !== null && rowCount !== resultCount) issues.push(`result_count_readback_mismatch:${resultCount}/${rowCount}`);
+  if (rowCount <= 0) issues.push("readback_rows_empty");
+  return issues;
+}
+
 function normalizeRow(row) {
   const payload = row.payload && typeof row.payload === "object" ? row.payload : {};
   return {
@@ -341,7 +362,7 @@ async function fetchRecentCompleteRunsFromResults(limit = 6000) {
 }
 
 async function fetchRecentCompleteRuns(limit = 24) {
-  const rows = await fetchRowsFrom(
+  return fetchRowsFrom(
     LATEST_RUN_VIEW,
     [
       "select=*",
@@ -352,18 +373,6 @@ async function fetchRecentCompleteRuns(limit = 24) {
       `limit=${limit}`,
     ].join("&")
   );
-  const merged = [];
-  const seen = new Set();
-  const addRun = (run) => {
-    const runId = String(run?.run_id || "");
-    if (!runId || seen.has(runId)) return;
-    seen.add(runId);
-    merged.push(run);
-  };
-  rows.forEach(addRun);
-  const resultRuns = await fetchRecentCompleteRunsFromResults();
-  resultRuns.forEach(addRun);
-  return merged.slice(0, limit);
 }
 
 async function fetchRowsForRun(run, limit = 3000) {
@@ -386,10 +395,18 @@ async function fetchLatestCompleteRows(options = {}) {
   const skippedInvalidRuns = [];
   for (const run of runs) {
     if (run.result_count !== undefined && cleanNumber(run.result_count) <= 0) continue;
-    const rows = await fetchRowsForRun(run, options.snapshotFriendly ? options.limit : 3000);
+    const rows = await fetchRowsForRun(run, 3000);
     if (!rows.length) continue;
     const payload = buildPayload(rows, run);
-    if (options.snapshotFriendly) return { rows, run, skippedInvalidRuns };
+    const gateIssues = completeRunGateIssues(run, rows);
+    if (gateIssues.length) {
+      skippedInvalidRuns.push({
+        runId: String(run.run_id || ""),
+        finishedAt: String(run.finished_at || ""),
+        issues: gateIssues,
+      });
+      continue;
+    }
     const dataContract = validateDataContract(payload);
     if (dataContract.ok) return { rows, run, skippedInvalidRuns };
     skippedInvalidRuns.push({
@@ -400,9 +417,17 @@ async function fetchLatestCompleteRows(options = {}) {
   }
   const run = await fetchLatestCompleteRun();
   if (!run?.run_id) return { rows: [], run: runs[0] || null, skippedInvalidRuns };
-  const rows = await fetchRowsForRun(run, options.snapshotFriendly ? options.limit : 3000);
+  const rows = await fetchRowsForRun(run, 3000);
   const payload = buildPayload(rows, run);
-  if (options.snapshotFriendly && rows.length) return { rows, run, skippedInvalidRuns };
+  const gateIssues = completeRunGateIssues(run, rows);
+  if (gateIssues.length) {
+    skippedInvalidRuns.push({
+      runId: String(run.run_id || ""),
+      finishedAt: String(run.finished_at || ""),
+      issues: gateIssues,
+    });
+    return { rows: [], run, skippedInvalidRuns };
+  }
   const dataContract = validateDataContract(payload);
   if (rows.length && dataContract.ok) return { rows, run, skippedInvalidRuns };
   if (rows.length) {
@@ -507,11 +532,13 @@ module.exports = async function handler(request, response) {
     const dataContract = options.snapshotFriendly
       ? {
           ok: true,
-          partial: true,
+          partial: false,
           skipped: true,
-          reason: "snapshot-friendly-limited-read",
+          reason: "snapshot-friendly-full-run-validated",
           requiredSchemaVersion: REQUIRED_SCHEMA_VERSION,
           schemaVersion: payload.schemaVersion || "",
+          readbackCount: fullPayload.count + fullPayload.volumeCount + fullPayload.singleSignalCount,
+          returnedCount: payload.returnedCount,
         }
       : validateDataContract(fullPayload);
     payload.dataContract = dataContract;
