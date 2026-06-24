@@ -1965,6 +1965,7 @@
     const meta = strategyMeta(link);
     panel.dataset.fumanRouteSnapshotRestoring = "1";
     panel.dataset.fumanCanvasPersistent = "1";
+    panel.classList.add("fuman-api-only-strategy-route");
     panel.classList.remove("strategy5-only", "strategy3-only", "swing-only", "open-buy-only");
     const headerTitle = panel.querySelector(".strategy-header h1");
     const headerText = panel.querySelector(".strategy-header p");
@@ -2461,6 +2462,27 @@
       .desktop-route-shell-grid,
       .desktop-canvas-toolbar {
         display: none !important;
+      }
+      #strategy-view.fuman-api-only-strategy-route > .strategy-header,
+      #strategy-view.fuman-api-only-strategy-route .strategy-list,
+      #strategy-view.fuman-api-only-strategy-route .strategy-toolbar,
+      #strategy-view.fuman-api-only-strategy-route .strategy-metrics,
+      #strategy-view.fuman-api-only-strategy-route .strategy-search {
+        display: none !important;
+      }
+      #strategy-view.fuman-api-only-strategy-route .strategy-terminal,
+      #strategy-view.fuman-api-only-strategy-route .strategy-results,
+      #strategy-view.fuman-api-only-strategy-route #strategy-table,
+      #strategy-view.fuman-api-only-strategy-route .strategy-table {
+        width: 100% !important;
+        max-width: none !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        display: block !important;
+        grid-template-columns: 1fr !important;
+      }
+      #strategy-view.fuman-api-only-strategy-route .desktop-route-shell.desktop-canvas-app {
+        margin-top: 0 !important;
       }
       .fuman-theme-toggle {
         position: fixed !important;
