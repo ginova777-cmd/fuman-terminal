@@ -87,6 +87,7 @@
   };
 
   installStyle();
+  installDesktopThemeToggle();
   installCanvasThemeObserver();
   installRouteSnapshots();
   installFixedPageSnapshots();
@@ -2254,6 +2255,49 @@
     }
   }
 
+  function installDesktopThemeToggle() {
+    const run = () => {
+      if (!document.body) return;
+      const themeKey = window.FUMAN_RUNTIME_CONFIG?.themeKey || "fuman-terminal-theme";
+      let button = document.querySelector("#fuman-theme-toggle");
+      if (!button) {
+        button = document.createElement("button");
+        button.id = "fuman-theme-toggle";
+        button.className = "fuman-theme-toggle";
+        button.type = "button";
+        document.body.appendChild(button);
+      }
+      const applyTheme = (theme) => {
+        const light = theme === "light";
+        document.body.classList.toggle("fuman-light-theme", light);
+        document.documentElement.dataset.fumanTheme = light ? "light" : "dark";
+        button.textContent = light ? "☀" : "☾";
+        button.title = light ? "切換月亮模式" : "切換陽光模式";
+        button.setAttribute("aria-label", button.title);
+        button.dataset.fumanThemeToggleReady = "1";
+        canvasPreRenderedRoutes.clear();
+        canvasWorkerRowsVersion = -1;
+        scheduleCanvasDraw();
+      };
+      const queryTheme = new URLSearchParams(location.search).get("theme") || "";
+      const savedTheme = localStorage.getItem(themeKey) || "";
+      const initialTheme = /陽光|light|sun/i.test(queryTheme) ? "light" : /夜幕|月亮|dark|moon/i.test(queryTheme) ? "dark" : savedTheme === "light" ? "light" : "dark";
+      applyTheme(initialTheme);
+      if (button.dataset.fumanDesktopFastBound !== "1") {
+        button.dataset.fumanDesktopFastBound = "1";
+        button.addEventListener("click", (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          const next = document.body.classList.contains("fuman-light-theme") ? "dark" : "light";
+          localStorage.setItem(themeKey, next);
+          applyTheme(next);
+        });
+      }
+    };
+    if (document.body) run();
+    else document.addEventListener("DOMContentLoaded", run, { once: true });
+  }
+
   function keepDesktopFastStyleLast() {
     if (document.documentElement.dataset.fumanDesktopFastStyleOrder === "1") return;
     document.documentElement.dataset.fumanDesktopFastStyleOrder = "1";
@@ -2303,6 +2347,29 @@
       [data-view] {
         transition: none !important;
         contain: layout paint style;
+      }
+      .fuman-theme-toggle {
+        position: fixed !important;
+        top: calc(env(safe-area-inset-top, 0px) + 18px) !important;
+        right: 18px !important;
+        z-index: 100001 !important;
+        width: 46px !important;
+        height: 46px !important;
+        display: grid !important;
+        place-items: center !important;
+        border: 1px solid rgba(148, 163, 184, 0.28) !important;
+        border-radius: 12px !important;
+        background: rgba(15, 23, 42, 0.9) !important;
+        color: #facc15 !important;
+        font-size: 24px !important;
+        line-height: 1 !important;
+        cursor: pointer !important;
+        box-shadow: 0 16px 38px rgba(0, 0, 0, 0.28) !important;
+        backdrop-filter: blur(10px);
+      }
+      .fuman-theme-toggle:hover {
+        transform: translateY(-1px);
+        border-color: rgba(249, 115, 22, 0.72) !important;
       }
       .desktop-route-shell {
         border: 1px solid rgba(255, 112, 55, 0.35);
