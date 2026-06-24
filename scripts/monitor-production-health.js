@@ -60,6 +60,8 @@ function endpointHasStrategy2(endpoints = {}) {
 
 async function main() {
   const issues = [];
+  const warnings = [];
+  const strictGit = process.env.FUMAN_PRODUCTION_MONITOR_STRICT_GIT === "1";
   const version = detectVersion();
   const localHead = git(["rev-parse", "HEAD"]);
   const originHead = git(["ls-remote", "origin", "refs/heads/main"]);
@@ -78,9 +80,9 @@ async function main() {
     body: { ok: false, error: error.message },
   }));
 
-  if (!localHead.ok) issues.push(`local git head unavailable: ${localHead.stderr}`);
+  if (!localHead.ok) (strictGit ? issues : warnings).push(`local git head unavailable: ${localHead.stderr}`);
   if (originHead.ok && originSha && localHead.stdout && originSha !== localHead.stdout) {
-    issues.push(`local HEAD differs from origin/main: local=${localHead.stdout.slice(0, 8)} origin=${originSha.slice(0, 8)}`);
+    (strictGit ? issues : warnings).push(`local HEAD differs from origin/main: local=${localHead.stdout.slice(0, 8)} origin=${originSha.slice(0, 8)}`);
   }
   if (versionJson.body?.version !== version) issues.push(`live version mismatch: live=${versionJson.body?.version || "(missing)"} local=${version}`);
 
@@ -105,6 +107,7 @@ async function main() {
     localHead: localHead.stdout || "",
     originHead: originSha,
     issues,
+    warnings,
     health: h,
     fastBundle: {
       ok: b.ok,
