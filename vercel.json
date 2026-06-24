@@ -1,6 +1,12 @@
 {
   "version": 2,
   "cleanUrls": true,
+  "crons": [
+    {
+      "path": "/api/desktop-route-snapshot-refresh",
+      "schedule": "*/5 * * * *"
+    }
+  ],
   "rewrites": [
     {
       "source": "/",
@@ -143,6 +149,19 @@
       ]
     },
     {
+      "source": "/terminal-desktop-fast-shell.js",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "no-store"
+        },
+        {
+          "key": "X-Content-Type-Options",
+          "value": "nosniff"
+        }
+      ]
+    },
+    {
       "source": "/terminal-desktop-canvas-worker.js",
       "headers": [
         {
@@ -156,7 +175,33 @@
       ]
     },
     {
-      "source": "/((?!fuman-sw\\.js$|terminal-runtime-config\\.js$|terminal-hotfix\\.js$|terminal-desktop-canvas-worker\\.js$).*)\\.(js|css)",
+      "source": "/styles.css",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "no-store"
+        },
+        {
+          "key": "X-Content-Type-Options",
+          "value": "nosniff"
+        }
+      ]
+    },
+    {
+      "source": "/terminal-theme.css",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "no-store"
+        },
+        {
+          "key": "X-Content-Type-Options",
+          "value": "nosniff"
+        }
+      ]
+    },
+    {
+      "source": "/((?!fuman-sw\\.js$|styles\\.css$|terminal-theme\\.css$|terminal-runtime-config\\.js$|terminal-hotfix\\.js$|terminal-desktop-fast-shell\\.js$|terminal-desktop-canvas-worker\\.js$).*)\\.(js|css)",
       "headers": [
         {
           "key": "Cache-Control",

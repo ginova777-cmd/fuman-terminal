@@ -121,28 +121,32 @@
     document.addEventListener("pointerdown", (event) => {
       const link = event.target.closest?.("[data-view]");
       if (!link || link.closest("[data-member-tab]")) return;
+      if (window.__fumanDesktopFastShell === "20260623-09") return;
       if (link.dataset.view === "strategy") {
         window.FUMAN_HOTFIX_WARM_ROUTE?.(link, "strategy-pointer");
-        window.FUMAN_TERMINAL_LOAD_APP?.("strategy-pointer");
+        window.FUMAN_TERMINAL_PREFETCH_APP?.();
         return;
       }
       switchNow(link);
       window.FUMAN_HOTFIX_WARM_ROUTE?.(link, "pointer");
-      window.FUMAN_TERMINAL_LOAD_APP?.("instant-view-pointer");
+      window.FUMAN_TERMINAL_PREFETCH_APP?.();
     }, true);
     document.addEventListener("pointerenter", (event) => {
       const link = event.target.closest?.("[data-view]");
       if (!link || link.closest("[data-member-tab]")) return;
+      if (window.__fumanDesktopFastShell === "20260623-09") return;
       window.FUMAN_HOTFIX_WARM_ROUTE?.(link, "hover");
     }, true);
     document.addEventListener("pointerover", (event) => {
       const link = event.target.closest?.("[data-view]");
       if (!link || link.closest("[data-member-tab]")) return;
+      if (window.__fumanDesktopFastShell === "20260623-09") return;
       window.FUMAN_HOTFIX_WARM_ROUTE?.(link, "hover");
     }, true);
     document.addEventListener("mousedown", (event) => {
       const link = event.target.closest?.("[data-view]");
       if (!link || link.closest("[data-member-tab]")) return;
+      if (window.__fumanDesktopFastShell === "20260623-09") return;
       if (link.dataset.view === "strategy") return;
       switchNow(link);
     }, true);
@@ -160,16 +164,17 @@
     document.addEventListener("click", (event) => {
       const link = event.target.closest?.("[data-view]");
       if (!link || link.closest("[data-member-tab]")) return;
+      if (window.__fumanDesktopFastShell === "20260623-09") return;
       if (event.__fumanFastOfficialClick) return;
       if (event.__fumanDeferredViewClick) return;
       if (event.button && event.button !== 0) return;
       if (link.dataset.view === "strategy") {
         window.FUMAN_HOTFIX_WARM_ROUTE?.(link, "strategy-native-click");
-        window.FUMAN_TERMINAL_LOAD_APP?.("strategy-native-click");
+        window.FUMAN_TERMINAL_PREFETCH_APP?.();
         return;
       }
       window.FUMAN_HOTFIX_WARM_ROUTE?.(link, "click");
-      window.FUMAN_TERMINAL_LOAD_APP?.("view-click-warm");
+      window.FUMAN_TERMINAL_PREFETCH_APP?.();
     }, true);
   }
 
@@ -228,10 +233,35 @@
     if (window.__fumanHotfixWarmMainApp) return;
     window.__fumanHotfixWarmMainApp = true;
     let attempts = 0;
+    const isFastShellBusy = () => Math.max(0, Number(window.__fumanDesktopFastInteractionUntil || 0) - Date.now()) > 0;
+    const keepLegacyCold = () => {
+      if (window.__fumanDesktopFastShell !== "20260623-09") return false;
+      try {
+        if (new URLSearchParams(location.search).get("legacy") === "1") return false;
+      } catch (error) {}
+      return !window.FUMAN_TERMINAL_APP_READY;
+    };
     const warm = () => {
       attempts += 1;
+      if (keepLegacyCold()) {
+        window.FUMAN_TERMINAL_PREFETCH_APP?.();
+        document.documentElement.dataset.fumanLegacyAppState = "prefetch-only";
+        if (attempts < 6) setTimeout(warm, attempts < 3 ? 2400 : 9000);
+        return;
+      }
+      if (window.__fumanDesktopFastShell === "20260623-09" && isFastShellBusy()) {
+        setTimeout(warm, 620);
+        return;
+      }
       if (typeof window.FUMAN_TERMINAL_LOAD_APP === "function") {
-        const task = window.FUMAN_TERMINAL_LOAD_APP("hotfix-warm");
+        if (window.__fumanDesktopFastShell === "20260623-09" && !window.FUMAN_TERMINAL_APP_READY) {
+          window.FUMAN_TERMINAL_PREFETCH_APP?.();
+          if (attempts < 18) {
+            setTimeout(warm, attempts < 4 ? 1400 : 2400);
+            return;
+          }
+        }
+        const task = window.FUMAN_TERMINAL_LOAD_APP("hotfix-warm-idle");
         if (task && typeof task.catch === "function") task.catch(() => undefined);
         return;
       }
@@ -240,9 +270,9 @@
       }
     };
     if (document.readyState === "loading") {
-      document.addEventListener("DOMContentLoaded", () => setTimeout(warm, 50), { once: true });
+      document.addEventListener("DOMContentLoaded", () => setTimeout(warm, 4200), { once: true });
     } else {
-      setTimeout(warm, 50);
+      setTimeout(warm, 4200);
     }
   }
 
@@ -251,18 +281,26 @@
     window.__fumanHotfixScriptPreload = true;
     const version = window.FUMAN_TERMINAL_BOOT?.version || window.FUMAN_TERMINAL_VERSION || "";
     const withVersion = (path) => version ? `${path}?v=${encodeURIComponent(version)}` : path;
+    const keepLegacyCold = () => {
+      try {
+        if (new URLSearchParams(location.search).get("legacy") === "1") return false;
+      } catch (error) {}
+      return window.__fumanDesktopFastShell === "20260623-09"
+        || document.documentElement.classList.contains("fuman-desktop-fast-path");
+    };
     const resources = [
-      { href: withVersion("/terminal-app.js"), as: "script" },
-      { href: withVersion("/terminal-modules.js"), as: "script" },
+      { href: withVersion("/terminal-app.js"), as: "script", rel: "prefetch" },
+      { href: withVersion("/terminal-modules.js"), as: "script", rel: "prefetch" },
       { href: withVersion("/terminal-worker.js"), as: "worker" },
       { href: withVersion("/terminal-watchlist-module.js"), as: "script" },
       { href: withVersion("/terminal-strategy-config.js"), as: "script" },
       { href: withVersion("/terminal-tuning-config.js"), as: "script" },
     ];
     resources.forEach((item) => {
+      if (keepLegacyCold() && /\/terminal-app\.js/i.test(item.href || "")) return;
       if (!item.href || document.querySelector(`link[href="${item.href}"]`)) return;
       const link = document.createElement("link");
-      link.rel = item.as === "worker" ? "prefetch" : "preload";
+      link.rel = item.rel || (item.as === "worker" ? "prefetch" : "preload");
       link.as = item.as === "worker" ? "script" : item.as;
       link.href = item.href;
       link.crossOrigin = "anonymous";
@@ -274,11 +312,13 @@
     if (window.__fumanHotPathDataWarmup) return;
     window.__fumanHotPathDataWarmup = true;
     const warmed = new Map();
+    const fastBundleUrl = "/api/terminal-fast-bundle?canvas=1&compact=1&shell=1";
+    const marketCompactUrl = "/api/market?canvas=1&compact=1&shell=1&limit=24";
     const routeGroups = {
       market: [
-        "/api/terminal-fast-bundle",
+        fastBundleUrl,
         "/api/terminal-home",
-        "/api/market",
+        marketCompactUrl,
         "/api/heatmap",
         "/api/market-ai-live",
       ],
@@ -288,46 +328,45 @@
         "/api/terminal-home",
       ],
       strategy: [
-        "/api/open-buy-latest",
-        "/api/strategy2-latest",
-        "/api/strategy3-latest",
-        "/api/strategy4-latest",
-        "/api/strategy5-latest",
+        "/api/open-buy-latest?canvas=1&compact=1&shell=1&limit=60",
+        "/api/strategy2-latest?canvas=1&compact=1&shell=1&limit=60",
+        "/api/strategy3-latest?canvas=1&compact=1&shell=1&limit=60",
+        "/api/strategy4-latest?canvas=1&compact=1&shell=1&limit=70",
+        "/api/strategy5-latest?canvas=1&compact=1&shell=1&limit=70",
         "/api/latest-signals?strategy=strategy4",
         "/api/realtime-radar-latest",
       ],
       "chip-trade": [
-        "/api/institution-latest",
+        "/api/institution-latest?canvas=1&compact=1&shell=1&limit=60",
         "/api/watchlist-match-index",
       ],
       "cb-detect": [
-        "/api/cb-detect-latest",
+        "/api/cb-detect-latest?canvas=1&compact=1&shell=1&limit=60",
       ],
       "warrant-flow": [
-        "/api/warrant-flow-latest",
+        "/api/warrant-flow-latest?canvas=1&compact=1&shell=1&limit=60",
       ],
       member: [
         "/api/terminal-home",
       ],
     };
     const critical = [
-      "/api/terminal-fast-bundle",
+      fastBundleUrl,
       "/api/terminal-home",
-      "/api/market",
+      marketCompactUrl,
       "/api/stocks",
       "/api/watchlist-match-index",
-      "/api/latest-signals?strategy=strategy4",
     ];
     const sequence = [
       ...critical,
-      "/api/open-buy-latest",
-      "/api/strategy2-latest",
-      "/api/strategy3-latest",
-      "/api/strategy5-latest",
-      "/api/strategy4-latest",
-      "/api/institution-latest",
-      "/api/cb-detect-latest",
-      "/api/warrant-flow-latest",
+      "/api/open-buy-latest?canvas=1&compact=1&shell=1&limit=60",
+      "/api/strategy2-latest?canvas=1&compact=1&shell=1&limit=60",
+      "/api/strategy3-latest?canvas=1&compact=1&shell=1&limit=60",
+      "/api/strategy5-latest?canvas=1&compact=1&shell=1&limit=70",
+      "/api/strategy4-latest?canvas=1&compact=1&shell=1&limit=70",
+      "/api/institution-latest?canvas=1&compact=1&shell=1&limit=60",
+      "/api/cb-detect-latest?canvas=1&compact=1&shell=1&limit=60",
+      "/api/warrant-flow-latest?canvas=1&compact=1&shell=1&limit=60",
     ];
     const warmOne = (url, reason = "warm") => {
       const key = String(url || "");
@@ -386,21 +425,28 @@
     const warmRoute = (link, reason = "route") => {
       const route = typeof link === "string" ? link : routeForLink(link);
       const strategySpecific = {
-        strategy1: ["/api/open-buy-latest", "/api/stocks"],
-        strategy2: ["/api/strategy2-latest", "/api/realtime-radar-latest", "/api/stocks"],
-        strategy3: ["/api/strategy3-latest", "/api/stocks"],
-        strategy4: ["/api/strategy4-latest", "/api/latest-signals?strategy=strategy4", "/api/stocks"],
-        strategy5: ["/api/strategy5-latest", "/api/stocks"],
+        strategy1: ["/api/open-buy-latest?canvas=1&compact=1&shell=1&limit=60", "/api/stocks"],
+        strategy2: ["/api/strategy2-latest?canvas=1&compact=1&shell=1&limit=60", "/api/realtime-radar-latest", "/api/stocks"],
+        strategy3: ["/api/strategy3-latest?canvas=1&compact=1&shell=1&limit=60", "/api/stocks"],
+        strategy4: ["/api/strategy4-latest?canvas=1&compact=1&shell=1&limit=70", "/api/latest-signals?strategy=strategy4", "/api/stocks"],
+        strategy5: ["/api/strategy5-latest?canvas=1&compact=1&shell=1&limit=70", "/api/stocks"],
       };
       const urls = strategySpecific[route] || routeGroups[route] || [];
-      warmList(urls, reason, reason === "pointer" || reason === "click" ? 3 : 2);
+      warmList(urls, reason, reason === "pointer" || reason === "click" ? 1 : 2);
     };
     const scheduleFullWarm = () => {
-      const run = () => warmList(sequence, "startup", 2);
+      const run = () => {
+        const until = Math.max(0, Number(window.__fumanDesktopFastInteractionUntil || 0) - Date.now());
+        if (until > 0 || document.hidden) {
+          setTimeout(run, Math.max(1800, until + 900));
+          return;
+        }
+        warmList(sequence, "startup", 1);
+      };
       if ("requestIdleCallback" in window) {
-        requestIdleCallback(run, { timeout: 1600 });
+        requestIdleCallback(run, { timeout: 6500 });
       } else {
-        setTimeout(run, 800);
+        setTimeout(run, 6500);
       }
     };
     window.FUMAN_HOTFIX_WARM_ROUTE = warmRoute;

@@ -14,6 +14,14 @@
     realtimeRadar: { loaded: false, src: "terminal-app.js" },
   };
 
+  function keepLegacyAppCold() {
+    try {
+      if (new URLSearchParams(location.search).get("legacy") === "1") return false;
+    } catch (error) {}
+    return window.__fumanDesktopFastShell === VERSION
+      || document.documentElement.classList.contains("fuman-desktop-fast-path");
+  }
+
   window.FUMAN_TERMINAL_MODULES = {
     version: VERSION,
     modules,
@@ -23,6 +31,7 @@
     preload(name) {
       const item = modules[name];
       if (!item || item.preloaded) return;
+      if (keepLegacyAppCold() && /terminal-app\.js$/i.test(item.src || "")) return;
       item.preloaded = true;
       const link = document.createElement("link");
       link.rel = "prefetch";
@@ -30,7 +39,7 @@
       document.head.appendChild(link);
     },
     preloadForView(viewName) {
-      if (window.FUMAN_TERMINAL_PREFETCH_APP) window.FUMAN_TERMINAL_PREFETCH_APP();
+      if (!keepLegacyAppCold() && window.FUMAN_TERMINAL_PREFETCH_APP) window.FUMAN_TERMINAL_PREFETCH_APP();
       if (viewName === "strategy") this.preload("strategy4");
       if (viewName === "chip-trade") this.preload("chipFlow");
       if (viewName === "warrant-flow") this.preload("warrantFlow");

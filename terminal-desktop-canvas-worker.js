@@ -26,6 +26,55 @@
     context.closePath();
   }
 
+  function palette(theme) {
+    if (theme === "light") {
+      return {
+        bg: "#f6f9fc",
+        frameA: "rgba(255,247,237,0.96)",
+        frameB: "rgba(235,244,255,0.92)",
+        frameC: "rgba(255,255,255,0.98)",
+        stroke: "rgba(249,115,22,0.28)",
+        accent: "#f97316",
+        accentSoft: "rgba(249,115,22,0.12)",
+        accentHover: "rgba(249,115,22,0.08)",
+        title: "#172033",
+        text: "#25334a",
+        muted: "#64748b",
+        header: "rgba(226,236,248,0.86)",
+        row: "rgba(255,255,255,0.88)",
+        rowAlt: "rgba(246,250,255,0.9)",
+        blue: "#2563eb",
+        up: "#dc2626",
+        down: "#059669",
+        skeleton: "rgba(100,116,139,",
+        scrollTrack: "rgba(100,116,139,0.16)",
+        scrollThumb: "rgba(249,115,22,0.62)",
+      };
+    }
+    return {
+      bg: "#090f1c",
+      frameA: "rgba(255,112,55,0.20)",
+      frameB: "rgba(30,41,59,0.45)",
+      frameC: "rgba(59,130,246,0.10)",
+      stroke: "rgba(255,112,55,0.38)",
+      accent: "#ff8a3d",
+      accentSoft: "rgba(255,112,55,0.22)",
+      accentHover: "rgba(255,112,55,0.13)",
+      title: "#f8fafc",
+      text: "#e8eefc",
+      muted: "#9fb0cb",
+      header: "rgba(15,23,42,0.86)",
+      row: "rgba(30,41,59,0.46)",
+      rowAlt: "rgba(15,23,42,0.58)",
+      blue: "#9bc4ff",
+      up: "#fb7185",
+      down: "#34d399",
+      skeleton: "rgba(148,163,184,",
+      scrollTrack: "rgba(148,163,184,0.12)",
+      scrollThumb: "rgba(255,112,55,0.58)",
+    };
+  }
+
   function probeGpuMode() {
     try {
       if (typeof OffscreenCanvas === "undefined") return "none";
@@ -66,20 +115,20 @@
     if (previousVersion !== nextVersion) clearRouteBuffers(route);
   }
 
-  function drawEmpty(context, width, height, source, headerHeight, rowHeight) {
+  function drawEmpty(context, width, height, source, headerHeight, rowHeight, colors) {
     for (let i = 0; i < 5; i += 1) {
       const y = headerHeight + 18 + i * rowHeight;
       const alpha = 0.16 - i * 0.014;
-      context.fillStyle = `rgba(148,163,184,${alpha})`;
+      context.fillStyle = `${colors.skeleton}${alpha})`;
       roundRect(context, 42, y, width - 84 - i * 28, 18, 9);
       context.fill();
     }
-    context.fillStyle = "#9fb0cb";
+    context.fillStyle = colors.muted;
     context.font = "700 14px system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
     context.fillText(String(source || "").includes("canvas") ? "讀取快照中" : "已切換，背景同步資料", 44, height - 28);
   }
 
-  function drawRows(context, rows, payload, capacity) {
+  function drawRows(context, rows, payload, capacity, colors) {
     const {
       width,
       headerHeight,
@@ -95,53 +144,53 @@
       const active = globalIndex === selectedIndex;
       const hover = globalIndex === hoverIndex;
       context.fillStyle = active
-        ? "rgba(255,112,55,0.22)"
+        ? colors.accentSoft
         : hover
-          ? "rgba(255,112,55,0.13)"
+          ? colors.accentHover
           : index % 2
-            ? "rgba(15,23,42,0.58)"
-            : "rgba(30,41,59,0.46)";
+            ? colors.rowAlt
+            : colors.row;
       roundRect(context, 24, y - 29, width - 48, 42, 10);
       context.fill();
       if (active || hover) {
-        context.strokeStyle = active ? "rgba(255,112,55,0.95)" : "rgba(255,112,55,0.42)";
+        context.strokeStyle = active ? colors.accent : colors.stroke;
         context.lineWidth = 1;
         roundRect(context, 24.5, y - 28.5, width - 49, 41, 10);
         context.stroke();
       }
 
-      context.fillStyle = "#ff8a3d";
+      context.fillStyle = colors.accent;
       context.font = "800 13px system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
       context.fillText(String(row.rank || index + 1), 48, y);
-      context.fillStyle = "#9bc4ff";
+      context.fillStyle = colors.blue;
       context.font = "800 14px system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
       context.fillText(row.code || "--", 106, y);
-      context.fillStyle = "#e8eefc";
+      context.fillStyle = colors.text;
       context.font = "700 14px system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
       context.fillText(compactText(row.title || row.line || "", 42), 184, y - 6);
-      context.fillStyle = "#8391aa";
+      context.fillStyle = colors.muted;
       context.font = "12px system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
       context.fillText(compactText(row.reason || row.line || "", 70), 184, y + 11);
-      context.fillStyle = "#e8eefc";
+      context.fillStyle = colors.text;
       context.textAlign = "right";
       context.fillText(row.score || "--", width - 130, y);
-      context.fillStyle = String(row.pct || "").includes("-") ? "#34d399" : "#fb7185";
+      context.fillStyle = String(row.pct || "").includes("-") ? colors.down : colors.up;
       context.fillText(row.pct || "--", width - 38, y);
       context.textAlign = "left";
     });
   }
 
-  function drawScrollbar(context, rows, payload, capacity) {
+  function drawScrollbar(context, rows, payload, capacity, colors) {
     if (rows.length <= capacity) return;
     const { width, height, headerHeight, offset } = payload;
     const trackTop = headerHeight;
     const trackHeight = height - headerHeight - 18;
     const thumbHeight = Math.max(34, trackHeight * (capacity / rows.length));
     const thumbTop = trackTop + (trackHeight - thumbHeight) * (offset / Math.max(1, rows.length - capacity));
-    context.fillStyle = "rgba(148,163,184,0.12)";
+    context.fillStyle = colors.scrollTrack;
     roundRect(context, width - 14, trackTop, 5, trackHeight, 4);
     context.fill();
-    context.fillStyle = "rgba(255,112,55,0.58)";
+    context.fillStyle = colors.scrollThumb;
     roundRect(context, width - 14, thumbTop, 5, thumbHeight, 4);
     context.fill();
   }
@@ -162,6 +211,7 @@
       offset: Math.max(0, Number(payload.offset || 0)),
       hoverIndex: Number.isFinite(Number(payload.hoverIndex)) ? Number(payload.hoverIndex) : -1,
       selectedIndex: Number.isFinite(Number(payload.selectedIndex)) ? Number(payload.selectedIndex) : -1,
+      theme: payload.theme === "light" ? "light" : "dark",
     };
   }
 
@@ -178,6 +228,7 @@
       payload.rowHeight,
       payload.headerHeight,
       payload.offset,
+      payload.theme,
       compactText(meta.title || "", 48),
     ]);
   }
@@ -206,47 +257,48 @@
       headerHeight,
     } = payload;
     const capacity = Math.max(5, Math.floor((height - headerHeight - 16) / rowHeight));
+    const colors = palette(payload.theme);
     targetCanvas.width = Math.floor(width * dpr);
     targetCanvas.height = Math.floor(height * dpr);
     context.setTransform(dpr, 0, 0, dpr, 0, 0);
-    context.fillStyle = "#090f1c";
+    context.fillStyle = colors.bg;
     context.fillRect(0, 0, width, height);
 
     const gradient = context.createLinearGradient(0, 0, width, 0);
-    gradient.addColorStop(0, "rgba(255,112,55,0.20)");
-    gradient.addColorStop(0.55, "rgba(30,41,59,0.45)");
-    gradient.addColorStop(1, "rgba(59,130,246,0.10)");
+    gradient.addColorStop(0, colors.frameA);
+    gradient.addColorStop(0.55, colors.frameB);
+    gradient.addColorStop(1, colors.frameC);
     context.fillStyle = gradient;
     roundRect(context, 0.5, 0.5, width - 1, height - 1, 18);
     context.fill();
-    context.strokeStyle = "rgba(255,112,55,0.38)";
+    context.strokeStyle = colors.stroke;
     context.lineWidth = 1;
     roundRect(context, 0.5, 0.5, width - 1, height - 1, 18);
     context.stroke();
 
     const meta = payload.meta || {};
-    context.fillStyle = "#ff8a3d";
+    context.fillStyle = colors.accent;
     context.font = "700 28px system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
     context.fillText(meta.icon || "◆", 28, 48);
-    context.fillStyle = "#f8fafc";
+    context.fillStyle = colors.title;
     context.font = "800 22px system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
     context.fillText(meta.title || "策略模組", 70, 42);
-    context.fillStyle = "#9fb0cb";
+    context.fillStyle = colors.muted;
     context.font = "14px system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
     context.fillText(compactText(meta.summary || "", 84), 70, 68);
     context.textAlign = "right";
-    context.fillStyle = "#ffb27b";
+    context.fillStyle = colors.accent;
     context.font = "800 13px system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
     context.fillText(`${rows.length} 筆`, width - 32, 42);
-    context.fillStyle = "#9fb0cb";
+    context.fillStyle = colors.muted;
     context.font = "12px system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
     context.fillText(compactText(payload.source || `worker-${gpuProbe}`, 28), width - 32, 66);
     context.textAlign = "left";
 
-    context.fillStyle = "rgba(15,23,42,0.86)";
+    context.fillStyle = colors.header;
     roundRect(context, 24, 88, width - 48, 38, 12);
     context.fill();
-    context.fillStyle = "#9fb0cb";
+    context.fillStyle = colors.muted;
     context.font = "700 13px system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
     context.fillText("Rank", 46, 112);
     context.fillText("Code", 106, 112);
@@ -255,10 +307,10 @@
     context.fillText("Change", width - 92, 112);
 
     if (rows.length) {
-      drawRows(context, rows, payload, capacity);
-      drawScrollbar(context, rows, payload, capacity);
+      drawRows(context, rows, payload, capacity, colors);
+      drawScrollbar(context, rows, payload, capacity, colors);
     } else {
-      drawEmpty(context, width, height, payload.source || "", headerHeight, rowHeight);
+      drawEmpty(context, width, height, payload.source || "", headerHeight, rowHeight, colors);
     }
   }
 
