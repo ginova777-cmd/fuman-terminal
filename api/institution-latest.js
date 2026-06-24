@@ -69,18 +69,27 @@ function readRequestOptions(request) {
 
 function normalizeRow(row) {
   const payload = row.payload && typeof row.payload === "object" ? row.payload : {};
+  const foreign = cleanNumber(payload.foreign ?? row.foreign_net);
+  const trust = cleanNumber(payload.trust ?? row.trust_net);
+  const tradeVolume = cleanNumber(payload.tradeVolume || row.trade_volume);
+  const fiveDayAvgVolume = cleanNumber(payload.fiveDayAvgVolume || payload.five_day_avg_volume);
+  const foreignTrustBuyVolumePct = cleanNumber(payload.foreignTrustBuyVolumePct ?? payload.institutionBuyVolumePct ?? payload.foreignTrustVolumePct)
+    || (fiveDayAvgVolume > 0 ? ((foreign + trust) / fiveDayAvgVolume) * 100 : 0);
   return {
     ...payload,
     code: String(payload.code || row.code || "").trim(),
     name: String(payload.name || row.name || row.code || "").trim(),
     close: cleanNumber(payload.close || row.close),
     percent: cleanNumber(payload.percent ?? row.change_percent),
-    tradeVolume: cleanNumber(payload.tradeVolume || row.trade_volume),
+    tradeVolume,
     value: cleanNumber(payload.value || row.trade_value),
-    foreign: cleanNumber(payload.foreign ?? row.foreign_net),
-    trust: cleanNumber(payload.trust ?? row.trust_net),
+    foreign,
+    trust,
     dealer: cleanNumber(payload.dealer ?? row.dealer_net),
     total: cleanNumber(payload.total ?? row.total_net),
+    fiveDayAvgVolume,
+    foreignTrustBuyVolumePct,
+    institutionBuyVolumePct: foreignTrustBuyVolumePct,
   };
 }
 

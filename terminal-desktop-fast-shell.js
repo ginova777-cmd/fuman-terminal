@@ -1192,6 +1192,7 @@
       jointStreak: pickFirstValue(merged.jointStreak, merged.joint_streak),
       foreignTrustBuyVolumePct: pickFirstValue(merged.foreignTrustBuyVolumePct, merged.institutionBuyVolumePct, merged.foreignTrustVolumePct),
       institutionBuyVolumePct: pickFirstValue(merged.institutionBuyVolumePct, merged.foreignTrustBuyVolumePct, merged.foreignTrustVolumePct),
+      fiveDayAvgVolume: pickFirstValue(merged.fiveDayAvgVolume, merged.five_day_avg_volume),
       foreignLots: pickFirstValue(merged.foreignLots, merged.foreign_lots),
       ratio1: pickFirstValue(merged.ratio1, merged.ratio1000Week1),
       ratio2: pickFirstValue(merged.ratio2, merged.ratio1000Week2),
@@ -1434,12 +1435,20 @@
       return cleanNumber(row.foreignStreak) >= 3 && (cleanNumber(row.foreignLots) > 0 || foreign > 0) && ratioHit;
     }
     if (filter === "foreignTrustVolumePct") {
-      return foreign + trust > 0 && cleanNumber(row.foreignTrustBuyVolumePct || row.institutionBuyVolumePct) > 0;
+      return foreign + trust > 0 && chipTradeForeignTrustVolumePct(row) > 0;
     }
     if (filter === "foreignStreak") return cleanNumber(row.foreignStreak) > 0;
     if (filter === "trustStreak") return cleanNumber(row.trustStreak) > 0;
     if (filter === "jointStreak") return cleanNumber(row.jointStreak) > 0;
     return true;
+  }
+
+  function chipTradeForeignTrustVolumePct(row) {
+    const explicit = cleanNumber(row?.foreignTrustBuyVolumePct || row?.institutionBuyVolumePct || row?.foreignTrustVolumePct);
+    if (explicit > 0) return explicit;
+    const avgVolume = cleanNumber(row?.fiveDayAvgVolume || row?.five_day_avg_volume);
+    if (avgVolume <= 0) return 0;
+    return ((cleanNumber(row?.foreign) + cleanNumber(row?.trust)) / avgVolume) * 100;
   }
 
   function fetchCanvasRows(route, force = false) {
@@ -2775,7 +2784,7 @@
         ctx.fillStyle = colors.text;
         ctx.fillText(`${Math.round(cleanNumber(row.foreignStreak))}/${Math.round(cleanNumber(row.trustStreak))}/${Math.round(cleanNumber(row.jointStreak))}`, width - 236, y);
         ctx.fillStyle = colors.accent;
-        ctx.fillText(`${formatCanvasNumber(row.foreignTrustBuyVolumePct || row.institutionBuyVolumePct, 2)}%`, width - 144, y);
+        ctx.fillText(`${formatCanvasNumber(chipTradeForeignTrustVolumePct(row), 2)}%`, width - 144, y);
         ctx.fillStyle = String(row.pct || "").includes("-") ? colors.down : colors.up;
         ctx.fillText(row.pct || "--", width - 72, y);
       }
@@ -2963,10 +2972,11 @@
     const active = canvasState.signalFilter || CHIP_TRADE_DEFAULT_FILTER;
     wrap.hidden = false;
     wrap.innerHTML = CHIP_TRADE_FILTERS.map((item) => {
-      const count = item.endpoint === endpointForRoute(canvasState.route) ? chipTradeFilterCount(canvasState.rows, item.key) : 0;
+      const currentEndpoint = endpointForRoute(canvasState.route);
+      const count = item.endpoint === currentEndpoint ? chipTradeFilterCount(canvasState.rows, item.key) : null;
       return `
         <button type="button" data-chip-canvas-filter="${escapeHtml(item.key)}" class="${active === item.key ? "active" : ""}">
-          ${escapeHtml(item.label)} <b>${escapeHtml(String(count))}</b>
+          ${escapeHtml(item.label)} <b>${escapeHtml(count == null ? "…" : String(count))}</b>
         </button>
       `;
     }).join("");
