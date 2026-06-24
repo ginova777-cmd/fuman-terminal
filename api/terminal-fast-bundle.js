@@ -142,13 +142,19 @@ function publicEndpointMap(results) {
 }
 
 function isSoftSnapshotEndpoint(endpoint) {
-  return String(endpoint || "").startsWith("/api/warrant-flow-latest")
+  return String(endpoint || "").startsWith("/api/open-buy-latest")
+    || String(endpoint || "").startsWith("/api/warrant-flow-latest")
     || String(endpoint || "").startsWith("/api/cb-detect-latest");
 }
 
 function buildSoftSnapshotFallback(endpoint, result, via) {
+  const isOpenBuy = String(endpoint || "").startsWith("/api/open-buy-latest");
   const isWarrant = String(endpoint || "").startsWith("/api/warrant-flow-latest");
-  const source = isWarrant ? "supabase:warrant_flow_scan_results" : "supabase:cb_detect_cache";
+  const source = isOpenBuy
+    ? "supabase:strategy1_open_buy_results"
+    : isWarrant
+      ? "supabase:warrant_flow_scan_results"
+      : "supabase:cb_detect_cache";
   const reason = result?.payload?.detail
     || result?.payload?.error
     || result?.payload?.reason
