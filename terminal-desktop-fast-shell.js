@@ -16,8 +16,10 @@
   const SNAPSHOT_ROUTES = ["strategy|策略1", "strategy|策略2", "strategy|策略3", "strategy|策略4", "strategy|策略5"];
   const API_ONLY_STRATEGY_ROUTES = ["strategy|策略1", "strategy|策略3", "strategy|策略4", "strategy|策略5"];
   const LIVE_API_STRATEGY_ROUTES = ["strategy|策略2"];
-  const FIXED_ROUTE_KEYS = ["market|市場總覽", "chip-trade|買賣超", "cb-detect|CB可轉債", "warrant-flow|權證走向", "watchlist|自選股"];
-  const FIXED_CANVAS_PERSIST_ROUTES = ["chip-trade|買賣超", "cb-detect|CB可轉債", "warrant-flow|權證走向"];
+  const CB_DETECT_ROUTE = "cb-detect|CB可轉債";
+  const FIXED_ROUTE_KEYS = ["market|市場總覽", "chip-trade|買賣超", CB_DETECT_ROUTE, "warrant-flow|權證走向", "watchlist|自選股"];
+  const FIXED_CANVAS_PERSIST_ROUTES = ["chip-trade|買賣超", CB_DETECT_ROUTE, "warrant-flow|權證走向"];
+  const API_ONLY_FIXED_ROUTE_KEYS = [CB_DETECT_ROUTE];
   const CANVAS_REFRESH_TTL_MS = 18000;
   const API_ONLY_POLL_MS = 30000;
   const PERF_LOG_KEY = "fuman-desktop-fast-perf-log-v1";
@@ -982,6 +984,11 @@
     return API_ONLY_STRATEGY_ROUTES.includes(key) || LIVE_API_STRATEGY_ROUTES.includes(key);
   }
 
+  function isApiOnlySnapshotRoute(route) {
+    const key = String(route || "");
+    return isApiOnlyPollingRoute(key) || API_ONLY_FIXED_ROUTE_KEYS.includes(key);
+  }
+
   function rowSignature(rows = []) {
     return (Array.isArray(rows) ? rows : [])
       .map((row) => [
@@ -1008,7 +1015,8 @@
   }
 
   function purgeApiOnlyStrategySnapshots() {
-    API_ONLY_STRATEGY_ROUTES.forEach((key) => {
+    const keys = [...API_ONLY_STRATEGY_ROUTES, ...API_ONLY_FIXED_ROUTE_KEYS];
+    keys.forEach((key) => {
       try { sessionStorage.removeItem(SNAPSHOT_PREFIX + key); } catch (error) {}
       routeSnapshots.delete(key);
       canvasStore.delete(key);
@@ -1019,7 +1027,7 @@
       if (!db) return;
       try {
         const tx = db.transaction(SNAPSHOT_STORE, "readwrite");
-        API_ONLY_STRATEGY_ROUTES.forEach((key) => tx.objectStore(SNAPSHOT_STORE).delete(key));
+        keys.forEach((key) => tx.objectStore(SNAPSHOT_STORE).delete(key));
       } catch (error) {}
     }).catch(() => undefined);
   }
@@ -2419,6 +2427,16 @@
   }
 
   function saveFixedPageSnapshotNow(route) {
+    if (API_ONLY_FIXED_ROUTE_KEYS.includes(String(route || ""))) {
+      const stored = canvasStore.get(route);
+      if (stored?.rows?.length && !isDomDerivedSource(stored.source)) {
+        const item = { at: Date.now(), scrollTop: 0, html: "", rows: stored.rows };
+        routeSnapshots.set(route, item);
+        writeSessionSnapshot(route, item);
+        writeIndexedSnapshot(route, item);
+      }
+      return;
+    }
     const panel = panelForRoute(route);
     if (!route || !panel?.classList?.contains("active") || !isWorthSavingSnapshot(panel)) return;
     const rows = extractLiteRows(panel);
@@ -2488,6 +2506,13 @@
     document.documentElement.dataset.fumanFixedPageSnapshotsReady = "1";
     const install = () => {
       FIXED_ROUTE_KEYS.forEach((route) => {
+        if (isApiOnlySnapshotRoute(route)) {
+          try { sessionStorage.removeItem(SNAPSHOT_PREFIX + route); } catch (error) {}
+          routeSnapshots.delete(route);
+          canvasStore.delete(route);
+          canvasRouteVersions.delete(route);
+          return;
+        }
         const item = readSessionSnapshot(route);
         if (item) {
           routeSnapshots.set(route, item);
