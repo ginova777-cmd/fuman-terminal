@@ -1,6 +1,6 @@
 # AGENTS.md
 
-Last updated: 2026-06-24 17:07 Asia/Taipei
+Last updated: 2026-06-24 17:13 Asia/Taipei
 
 給後續接手這個工作區的 Codex：請先讀這份，再改程式。這份只保留目前有效狀態。
 
@@ -202,14 +202,22 @@ fuman-terminal      = 正式站
 fuman-terminal-sync = 另一個舊/同步 Vercel project，需另外停用或移除
 ```
 
-注意：`C:\fuman-terminal-sync` 是不同 Vercel project：
+注意：`C:\fuman-terminal-sync` 曾經連到不同 Vercel project：
 
 ```text
 projectName = fuman-terminal-sync
 projectId = prj_AFIoVawOujEtsEYEF4W0ni23txGX
 ```
 
-不要從 `C:\fuman-terminal-sync` 部署正式站，避免舊流程或舊資料重新回來。
+此 Vercel project 已於 2026-06-24 17:11 Asia/Taipei 刪除，不要重建。
+
+另一個會跟 main 自動部署的舊 Vercel project 也已刪除：
+
+```text
+projectName = fuman-terminal-publish-sync
+```
+
+不要從 `C:\fuman-terminal-sync` 或任何 sync/publish-sync project 部署正式站，避免舊流程或舊資料重新回來。
 
 舊外部 dispatch API 已刪除：
 
