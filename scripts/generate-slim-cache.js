@@ -6,7 +6,7 @@ const { fetchMisQuotes } = require("../lib/mis-quotes");
 
 const repoRoot = path.resolve(__dirname, "..");
 const runtimeRoot = process.env.FUMAN_RUNTIME_ROOT || "C:\\fuman-runtime";
-const syncRoot = process.env.FUMAN_SYNC_DIR || "C:\\fuman-terminal-sync";
+const syncRoot = process.env.FUMAN_SYNC_DIR || "C:\\fuman-terminal";
 const deployRoot = process.env.FUMAN_DEPLOY_DIR || "C:\\fuman-terminal";
 const STRATEGY4_MIN_AVG_VOLUME_5 = 3000;
 const STRATEGY4_API_ONLY = true;

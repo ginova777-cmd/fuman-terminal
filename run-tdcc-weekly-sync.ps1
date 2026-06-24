@@ -1,9 +1,9 @@
 $ErrorActionPreference = "Stop"
 
-$repo = "C:\fuman-terminal-sync"
+$repo = "C:\fuman-terminal"
 $node = "C:\Program Files\nodejs\node.exe"
 $logDir = "C:\fuman-runtime\logs"
-$dataDir = "C:\fuman-terminal-sync\data"
+$dataDir = "C:\fuman-terminal\data"
 $stamp = Get-Date -Format "yyyyMMdd-HHmmss"
 $logFile = Join-Path $logDir "tdcc-weekly-sync-$stamp.log"
 

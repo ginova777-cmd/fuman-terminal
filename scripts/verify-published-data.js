@@ -6,7 +6,7 @@ const { spawnSync } = require("child_process");
 const { isTwseTradingDay } = require("./twse-trading-day");
 
 const runtimeDir = process.env.FUMAN_DATA_DIR || "C:\\fuman-runtime\\data";
-const syncDir = process.env.FUMAN_SYNC_DATA_DIR || "C:\\fuman-terminal-sync\\data";
+const syncDir = process.env.FUMAN_SYNC_DATA_DIR || "C:\\fuman-terminal\\data";
 const syncRepo = process.env.FUMAN_SYNC_REPO || path.dirname(syncDir);
 const gitExe = process.env.FUMAN_GIT_EXE || "C:\\Program Files\\Git\\cmd\\git.exe";
 const baseUrl = (process.env.FUMAN_VERIFY_BASE_URL || "https://fuman-terminal.vercel.app").replace(/\/+$/, "");

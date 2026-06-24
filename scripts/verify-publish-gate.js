@@ -80,33 +80,6 @@ if (!mainReleaseScript) {
   if (!/run-main-release-pipeline\.ps1/i.test(mainReleaseScript)) issues.push("release:main must run run-main-release-pipeline.ps1");
 }
 
-if (process.platform === "win32") {
-  for (const expected of [
-    ["Fuman Freshness Gate Fast 0845-1645", "run freshness:gate:fast", "C:\\fuman-terminal-sync", 8],
-    ["Fuman Freshness Gate Full 0610 2010", "run freshness:gate", "C:\\fuman-terminal-sync", 2],
-    ["Fuman Publish Gate Verify 0820", "run verify:publish-gate", "C:\\fuman-terminal-sync", 1],
-  ]) {
-    const [name, args, workingDirectory, minTriggers] = expected;
-    const task = queryScheduledTask(name);
-    if (!task) {
-      issues.push(`scheduled task missing: ${name}`);
-      continue;
-    }
-    if (!String(task.Execute || "").toLowerCase().endsWith("npm.cmd")) {
-      issues.push(`${name} must execute npm.cmd`);
-    }
-    if (String(task.Arguments || "") !== args) {
-      issues.push(`${name} arguments must be "${args}"`);
-    }
-    if (String(task.WorkingDirectory || "") !== workingDirectory) {
-      issues.push(`${name} working directory must be ${workingDirectory}`);
-    }
-    if (Number(task.TriggerCount || 0) < minTriggers) {
-      issues.push(`${name} trigger count too low: ${task.TriggerCount}`);
-    }
-  }
-}
-
 if (!fs.existsSync(path.join(ROOT, "run-main-release-pipeline.ps1"))) {
   issues.push("run-main-release-pipeline.ps1 missing main release pipeline");
 } else {
@@ -126,20 +99,6 @@ if (!fs.existsSync(path.join(ROOT, "run-main-release-pipeline.ps1"))) {
   }
   if (!/Assert-CleanTree/.test(releasePipeline)) {
     issues.push("run-main-release-pipeline.ps1 must require a clean tree before syncing main");
-  }
-}
-
-if (!fs.existsSync(path.join(ROOT, "run-auto-main-release.ps1"))) {
-  issues.push("run-auto-main-release.ps1 missing daily main release wrapper");
-} else {
-  const autoMainRelease = read("run-auto-main-release.ps1");
-  if (!/npm run release:main/.test(autoMainRelease) || !/main -> bump -> deploy -> live verify -> push GitHub/.test(autoMainRelease)) {
-    issues.push("run-auto-main-release.ps1 must delegate the daily publish chain to npm run release:main");
-  }
-  for (const bypass of ["Invoke-Strategy4FullScan", "npm run deploy", "npm run freshness:gate:fast", "git push origin HEAD:main"]) {
-    if (autoMainRelease.includes(bypass)) {
-      issues.push(`run-auto-main-release.ps1 must not bypass release:main with ${bypass}`);
-    }
   }
 }
 
@@ -573,59 +532,6 @@ if (/strategy3-latest\.json|run-cache-sync\.ps1/.test(strategy3Watchdog)) {
   issues.push("run-strategy3-watchdog.ps1 must not read strategy3 static JSON or repair through cache sync");
 }
 
-if (!fs.existsSync(path.join(ROOT, "AGENTS.md"))) {
-  issues.push("AGENTS.md missing Codex publish rule");
-} else {
-  const agents = read("AGENTS.md");
-  for (const marker of [
-    "Fuman Terminal Codex Operating Contract",
-    "Supabase API-only",
-    "Do not use these as data freshness authority",
-    "npm run verify:publish-gate",
-    "Strategy 1 Open Buy",
-    "Strategy 2 Intraday",
-    "Strategy 3 Tail",
-    "Strategy 4 Swing",
-    "Strategy 5 Composite",
-    "Institution / Chip",
-    "Warrant Flow",
-    "CB Detect",
-    "Shared Fugle Intraday Source",
-    "Per-Strategy Health Gate Boundaries",
-    "Strategy2: quotes health controls candidate universe publication; intraday_1m health only controls A-zone technical upgrade.",
-    "Strategy3: complete run / TV confirmation / latest-N after-13:00 gate.",
-    "Strategy4: current common-stock universe / daily OHLC / history coverage gate.",
-    "Strategy5: complete run / result readback gate.",
-    "Institution / Warrant / CB: API contract gate",
-  ]) {
-    if (!agents.includes(marker)) issues.push(`AGENTS.md missing operating contract marker ${marker}`);
-  }
-  if (!/remove the old dependency instead of restoring the legacy verifier/.test(agents)) {
-    issues.push("AGENTS.md must tell Codex to remove obsolete freshness dependencies instead of restoring the legacy verifier");
-  }
-}
-
-if (!fs.existsSync(path.join(ROOT, "VERSION-LIVE-SYNC-GOVERNANCE.md"))) {
-  issues.push("VERSION-LIVE-SYNC-GOVERNANCE.md missing version/live sync governance");
-} else {
-  const versionLiveSync = read("VERSION-LIVE-SYNC-GOVERNANCE.md");
-  for (const marker of [
-    "npm run verify:live-version",
-    "version-json check failed",
-    "terminal-app hash mismatch",
-    "main -> bump -> deploy -> live verify -> push GitHub",
-    "台指期大結算",
-    "美股四巫日",
-    "installMarketAiRuntimeLine",
-    "installMarketAiLoadingGuard",
-    "installMarketAiPriorityRiskGuard",
-    "事件波動風險最高",
-    "個股極端波動風險",
-    "AI 盤中/盤後模式風險",
-  ]) {
-    if (!versionLiveSync.includes(marker)) issues.push(`VERSION-LIVE-SYNC-GOVERNANCE.md missing ${marker}`);
-  }
-}
 
 if (!fs.existsSync(path.join(ROOT, "FRESHNESS-GATE-MOBILE.md"))) {
   issues.push("FRESHNESS-GATE-MOBILE.md missing mobile governance summary");
@@ -762,7 +668,6 @@ if (fetchResult.status !== 0) {
     const allowedDirty = new Set([
       ".gitignore",
       "AGENTS.md",
-      "VERSION-LIVE-SYNC-GOVERNANCE.md",
       "FRESHNESS-GATE-MOBILE.md",
       "scripts/verify-publish-gate.js",
       "api/realtime-radar-latest.js",

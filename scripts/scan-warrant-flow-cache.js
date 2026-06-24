@@ -8,7 +8,7 @@ const OUT_FILE = dataPath("warrant-flow-latest.json");
 const BACKUP_FILE = dataPath("warrant-flow-backup.json");
 const SUMMARY_FILE = dataPath("warrant-flow-summary.json");
 const STOCK_QUOTES_FILE = dataPath("stocks-quotes-slim.json");
-const SYNC_ROOT = process.env.FUMAN_SYNC_DIR || "C:\\fuman-terminal-sync";
+const SYNC_ROOT = process.env.FUMAN_SYNC_DIR || "C:\\fuman-terminal";
 const RUNTIME_DIR = process.env.FUMAN_RUNTIME_DIR || "C:/fuman-runtime";
 const SUPABASE_URL = (
   process.env.SUPABASE_URL

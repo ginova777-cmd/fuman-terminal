@@ -5,7 +5,7 @@ const { spawnSync } = require("child_process");
 const REPO_ROOT = path.resolve(__dirname, "..");
 const DEFAULT_ROOTS = [
   process.env.FUMAN_TERMINAL_ROOT || "C:\\fuman-terminal",
-  process.env.FUMAN_SYNC_ROOT || "C:\\fuman-terminal-sync",
+  process.env.FUMAN_SYNC_ROOT || "C:\\fuman-terminal",
 ].filter(Boolean);
 const DEFAULT_RUNTIME_ROOT = process.env.FUMAN_RUNTIME_DIR || "C:\\fuman-runtime";
 
@@ -183,7 +183,7 @@ const RETIRED_STRATEGY1_MARKERS = [
   "loadPreopenStrengthCodes",
   "loadStockFutureStrengthCodes",
   "strategy1-preopen-* runs being selected as latest complete base run",
-  "fuman-terminal-sync.vercel.app",
+  "fuman-terminal.vercel.app",
   "readOptional(\"data/open-buy-latest.json\"",
   "readOptional(\"data/open-buy-page-1.json\"",
 ];

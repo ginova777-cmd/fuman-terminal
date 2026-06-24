@@ -8,7 +8,7 @@ $PSNativeCommandUseErrorActionPreference = $false
 
 $sourceRepo = "C:\fuman-runtime"
 $codeRepo = "${PSScriptRoot}"
-$syncRepo = if ($env:FUMAN_PUBLISH_SYNC_REPO) { $env:FUMAN_PUBLISH_SYNC_REPO } else { "C:\fuman-terminal-publish-sync" }
+$syncRepo = if ($env:FUMAN_PUBLISH_SYNC_REPO) { $env:FUMAN_PUBLISH_SYNC_REPO } else { "C:\fuman-terminal" }
 $mainDeployRepo = if ($env:FUMAN_MAIN_DEPLOY_REPO) { $env:FUMAN_MAIN_DEPLOY_REPO } else { "C:\fuman-terminal" }
 $publishToCodeRepo = $env:CACHE_SYNC_WRITE_CODE_REPO -eq "1"
 $repoUrl = "https://github.com/ginova777-cmd/fuman-terminal.git"

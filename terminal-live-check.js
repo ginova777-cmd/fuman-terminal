@@ -411,19 +411,7 @@ const SCHEDULE_META = {
   warrant: { label: "06:00 / 21:00", times: ["06:00", "21:00"] },
 };
 
-const WORKFLOW_BY_SCHEDULE = {
-  openBuy: "open-buy-background-scan.yml",
-  intraday: "intraday-radar-scorecard.yml",
-  strategy3: "strategy3-background-scan.yml",
-  swing: "strategy4-background-scan.yml",
-  strategy5: "strategy5-background-scan.yml",
-  chip: "flow-cache.yml",
-  warrant: "flow-cache.yml",
-};
-
-const GITHUB_WORKFLOW_API = "https://api.github.com/repos/ginova777-cmd/fuman-terminal/actions/workflows";
-const workflowRunStatus = {};
-let workflowRunStatusReady = false;
+let workflowRunStatusReady = true;
 
 function scheduleDateForToday(time) {
   const [hour, minute] = time.split(":").map(Number);
@@ -475,8 +463,7 @@ function formatScheduleDate(date) {
 }
 
 function getWorkflowRunForSchedule(key) {
-  const workflow = WORKFLOW_BY_SCHEDULE[key];
-  return workflow ? workflowRunStatus[workflow] : null;
+  return null;
 }
 
 function hasSuccessfulWorkflowRun(key, latestDue) {
@@ -536,15 +523,6 @@ function refreshScheduleTitles() {
 }
 
 async function loadWorkflowRunStatus() {
-  const workflows = [...new Set(Object.values(WORKFLOW_BY_SCHEDULE))];
-  const results = await Promise.allSettled(workflows.map(async (workflow) => {
-    const url = `${GITHUB_WORKFLOW_API}/${workflow}/runs?per_page=1&ts=${Date.now()}`;
-    const response = await fetch(url, { headers: { "Accept": "application/vnd.github+json" } });
-    if (!response.ok) throw new Error(`${workflow} HTTP ${response.status}`);
-    const payload = await response.json();
-    workflowRunStatus[workflow] = payload.workflow_runs?.[0] || null;
-  }));
-  workflowRunStatusReady = results.some((result) => result.status === "fulfilled");
   refreshScheduleTitles();
 }
 

@@ -6,7 +6,7 @@ const { dataPath, repoPath, runtimePath } = require("./runtime-paths");
 const STRATEGY2_LATEST_NAME = "strategy2-intraday-latest.json";
 const STRATEGY2_HISTORY_DIR = dataPath("strategy2-intraday-history");
 const STRATEGY2_ARCHIVE_DIR = runtimePath("archive", "strategy2-intraday");
-const DEFAULT_SYNC_ROOT = process.env.FUMAN_SYNC_DIR || "C:\\fuman-terminal-sync";
+const DEFAULT_SYNC_ROOT = process.env.FUMAN_SYNC_DIR || "C:\\fuman-terminal";
 const RAW_HISTORY_KEEP_DAYS = Math.max(0, Number(process.env.STRATEGY2_HISTORY_RAW_KEEP_DAYS || 0));
 const ARCHIVE_KEEP_DAYS = Math.max(1, Number(process.env.STRATEGY2_ARCHIVE_KEEP_DAYS || 14));
 

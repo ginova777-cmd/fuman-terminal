@@ -11,16 +11,6 @@
     warrant: { label: "06:00 / 21:00", times: ["06:00", "21:00"] },
   };
 
-  const WORKFLOW_BY_SCHEDULE = {
-    openBuy: "open-buy-background-scan.yml",
-    intraday: "intraday-radar-scorecard.yml",
-    strategy3: "strategy3-background-scan.yml",
-    swing: "strategy4-background-scan.yml",
-    strategy5: "strategy5-background-scan.yml",
-    chip: "flow-cache.yml",
-    warrant: "flow-cache.yml",
-  };
-
   const technicalTimeframes = [
     { key: "1", label: "1分", momentum: 1.55, volume: 0.08, money: 0.45 },
     { key: "5", label: "5分", momentum: 1.42, volume: 0.10, money: 0.55 },
@@ -36,7 +26,6 @@
 
   window.FUMAN_UI_CONFIG = {
     SCHEDULE_META,
-    WORKFLOW_BY_SCHEDULE,
     technicalTimeframes,
   };
 })();

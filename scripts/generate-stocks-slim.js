@@ -3,7 +3,7 @@ const path = require("path");
 const stocksHandler = require("../api/stocks");
 const { ROOT, dataPath } = require("./runtime-paths");
 
-const syncRoot = process.env.FUMAN_SYNC_DIR || "C:\\fuman-terminal-sync";
+const syncRoot = process.env.FUMAN_SYNC_DIR || "C:\\fuman-terminal";
 const MIN_STOCK_COUNT = Number(process.env.STOCKS_SLIM_MIN_COUNT || 1500);
 
 function cleanNumber(value) {

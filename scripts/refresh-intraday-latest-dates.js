@@ -3,7 +3,7 @@ const path = require("path");
 const { ROOT, DATA_DIR, dataPath } = require("./runtime-paths");
 const { isTwseTradingDay } = require("./twse-trading-day");
 
-const syncRoot = process.env.FUMAN_SYNC_DIR || "C:\\fuman-terminal-sync";
+const syncRoot = process.env.FUMAN_SYNC_DIR || "C:\\fuman-terminal";
 const stateDir = process.env.FUMAN_STATE_DIR || path.join(process.env.FUMAN_RUNTIME_DIR || "C:\\fuman-runtime", "state");
 
 function writeJson(file, payload) {

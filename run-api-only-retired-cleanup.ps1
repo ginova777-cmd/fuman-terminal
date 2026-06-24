@@ -43,7 +43,7 @@ if (Test-LockAlive) {
 } | ConvertTo-Json -Compress | Set-Content -LiteralPath $lockFile -Encoding utf8
 
 try {
-  $args = @($script, "--root", "C:\fuman-terminal", "--root", "C:\fuman-terminal-sync", "--runtime-root", $runtimeRoot)
+  $args = @($script, "--root", "C:\fuman-terminal", "--root", "C:\fuman-terminal", "--runtime-root", $runtimeRoot)
   if ($DryRun) { $args += "--dry-run" }
   Write-CleanupLog "START node cleanup dryRun=$DryRun"
   & $nodeExe @args *>&1 | ForEach-Object {

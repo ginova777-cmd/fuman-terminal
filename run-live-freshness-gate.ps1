@@ -12,7 +12,7 @@ $ErrorActionPreference = "Stop"
 $PSNativeCommandUseErrorActionPreference = $false
 
 $syncRoot = $PSScriptRoot
-$publishRoot = if ($env:FUMAN_PUBLISH_SYNC_REPO) { $env:FUMAN_PUBLISH_SYNC_REPO } else { "C:\fuman-terminal-publish-sync" }
+$publishRoot = if ($env:FUMAN_PUBLISH_SYNC_REPO) { $env:FUMAN_PUBLISH_SYNC_REPO } else { "C:\fuman-terminal" }
 $terminalRoot = if ($env:FUMAN_MAIN_DEPLOY_REPO) { $env:FUMAN_MAIN_DEPLOY_REPO } else { "C:\fuman-terminal" }
 $runtimeRoot = if ($env:FUMAN_RUNTIME_DIR) { $env:FUMAN_RUNTIME_DIR } else { "C:\fuman-runtime" }
 $lockFile = Join-Path $runtimeRoot "locks\live-freshness-gate.lock"
@@ -203,7 +203,7 @@ function Invoke-RepoSyncPreflight {
     $dirty = @(& $gitExe status --porcelain=v1)
     $conflicted = @($dirty | Where-Object { $_ -match "^(DD|AU|UD|UA|DU|AA|UU) " })
     if ($conflicted.Count) {
-      throw "Repo sync preflight blocked: source repo has conflicted files. Clean C:\fuman-terminal-sync before running freshness gate."
+      throw "Repo sync preflight blocked: source repo has conflicted files. Clean C:\fuman-terminal before running freshness gate."
     }
     if ($dirty.Count) {
       Write-GateLog "Repo sync preflight warning: source repo has $($dirty.Count) modified/untracked file(s); cache sync will verify publishable data."

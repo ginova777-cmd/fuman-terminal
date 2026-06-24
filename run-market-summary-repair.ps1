@@ -10,7 +10,7 @@ $env:NODE_OPTIONS = "--use-system-ca"
 
 $runtimeDir = "C:\fuman-runtime"
 $codeRepo = "${PSScriptRoot}"
-$syncRepo = if ($env:FUMAN_PUBLISH_SYNC_REPO) { $env:FUMAN_PUBLISH_SYNC_REPO } else { "C:\fuman-terminal-publish-sync" }
+$syncRepo = if ($env:FUMAN_PUBLISH_SYNC_REPO) { $env:FUMAN_PUBLISH_SYNC_REPO } else { "C:\fuman-terminal" }
 $nodeExe = "C:\Program Files\nodejs\node.exe"
 $gitExe = "C:\Program Files\Git\cmd\git.exe"
 $logDir = Join-Path $runtimeDir "logs"

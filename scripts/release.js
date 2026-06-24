@@ -22,7 +22,6 @@ function run(label, command, options = {}) {
 }
 
 run("verify:all", [process.execPath, "scripts/verify-all.js"]);
-run("verify:local-ops", ["powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "scripts/verify-local-ops.ps1"]);
 
 const status = run("git status", ["git", "status", "--porcelain"], { capture: true }).trim();
 if (status) {

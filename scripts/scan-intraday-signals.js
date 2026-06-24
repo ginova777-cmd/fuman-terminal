@@ -547,7 +547,7 @@ function writeStaticDataTargets(name, payload, options = {}) {
   const targets = [];
   if (!options.skipRuntime) targets.push(dataPath(name));
   targets.push(repoPath("data", name));
-  const syncRoot = process.env.FUMAN_SYNC_DIR || "C:\\fuman-terminal-sync";
+  const syncRoot = process.env.FUMAN_SYNC_DIR || "C:\\fuman-terminal";
   if (fs.existsSync(syncRoot)) targets.push(path.join(syncRoot, "data", name));
   [...new Set(targets.map((file) => path.resolve(file)))].forEach((file) => {
     writeJson(file, payload);

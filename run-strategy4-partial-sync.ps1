@@ -2,7 +2,7 @@ $ErrorActionPreference = "Continue"
 $PSNativeCommandUseErrorActionPreference = $false
 
 $codeRepo = "${PSScriptRoot}"
-$syncRepo = if ($env:FUMAN_PUBLISH_SYNC_REPO) { $env:FUMAN_PUBLISH_SYNC_REPO } else { "C:\fuman-terminal-publish-sync" }
+$syncRepo = if ($env:FUMAN_PUBLISH_SYNC_REPO) { $env:FUMAN_PUBLISH_SYNC_REPO } else { "C:\fuman-terminal" }
 $gitExe = "C:\Program Files\Git\cmd\git.exe"
 $logDir = Join-Path $codeRepo "logs"
 $lockFile = Join-Path $codeRepo "locks\strategy4-partial-sync.lock"
