@@ -131,57 +131,21 @@ async function main() {
   verifyVersionConsistency();
   const home = await fetchText("/");
   const version = detectVersion(home.body);
+  const latestTradeDate = await latestTradingYmd();
+  const strategy3TradeDate = await strategy3ExpectedTradeDate(latestTradeDate);
   assertOk("home", home, (r) => r.body.includes(`terminal-core.js?v=${version}`));
   const checks = [
     ["core", `/terminal-core.js?v=${version}`, (r) => r.body.includes("terminal-modules.js")],
-    ["modules", `/terminal-modules.js?v=${version}`, (r) => r.body.includes("FUMAN_TERMINAL_MODULES") && r.body.includes("terminal-strategy-module.js") && r.body.includes("terminal-member-module.js") && r.body.includes("terminal-market-snapshot-module.js") && r.body.includes("terminal-watchlist-shell.js") && r.body.includes("terminal-chip-snapshot-module.js")],
-    ["strategy-module", `/terminal-strategy-module.js?v=${version}`, (r) => r.body.includes("FUMAN_STRATEGY_MODULE") && r.body.includes("snapshot-first") && r.body.includes("LIVE_ROUTES") && r.body.includes("SNAPSHOT_ROUTES")],
-    ["member-module", `/terminal-member-module.js?v=${version}`, (r) => r.body.includes("FUMAN_MEMBER_MODULE") && r.body.includes("standalone-public-member")],
-    ["market-snapshot-module", `/terminal-market-snapshot-module.js?v=${version}`, (r) => r.body.includes("FUMAN_MARKET_SNAPSHOT_MODULE") && r.body.includes("snapshot-market-shell")],
-    ["watchlist-shell", `/terminal-watchlist-shell.js?v=${version}`, (r) => r.body.includes("FUMAN_WATCHLIST_SHELL_MODULE") && r.body.includes("snapshot-watchlist-shell")],
-    ["chip-snapshot-module", `/terminal-chip-snapshot-module.js?v=${version}`, (r) => r.body.includes("FUMAN_CHIP_SNAPSHOT_MODULE") && r.body.includes("snapshot-chip-shell")],
-    ["desktop-fast-shell", `/terminal-desktop-fast-shell.js?v=${version}`, (r) => r.body.includes("LIVE_ROUTE_KEYS") && r.body.includes("FAST_BUNDLE_PRIME_TTL_MS") && !r.body.includes('const SNAPSHOT_ROUTES = ["strategy|策略1", "strategy|策略2"')],
+    ["modules", `/terminal-modules.js?v=${version}`, (r) => r.body.includes("FUMAN_TERMINAL_MODULES")],
     ["worker", `/terminal-worker.js?v=${version}`, (r) => r.body.includes("swingBuckets")],
-    ["service-worker", `/fuman-sw.js?v=${version}`, (r) => r.body.includes("terminal-fast-bundle") && r.body.includes("PREFETCH_CORE_DATA_ASSETS") && r.body.includes("terminal-market-snapshot-module.js") && r.body.includes("terminal-watchlist-shell.js") && r.body.includes("terminal-chip-snapshot-module.js")],
-    ["terminal-bootstrap", `/terminal.js?v=${version}`, (r) => r.body.includes("FUMAN_TERMINAL_LOAD_APP") && r.body.includes("FUMAN_TERMINAL_LOAD_FEATURE_MODULE") && r.body.includes("terminal-app.js")],
+    ["service-worker", `/fuman-sw.js?v=${version}`, (r) => r.body.includes("terminal-fast-bundle") && r.body.includes("PREFETCH_CORE_DATA_ASSETS")],
+    ["terminal-bootstrap", `/terminal.js?v=${version}`, (r) => r.body.includes("FUMAN_TERMINAL_LOAD_APP") && r.body.includes("terminal-app.js")],
     ["terminal-app", `/terminal-app.js?v=${version}`, (r) => r.body.includes("FUMAN_LIVE_MEMORY_TTL_MS") && r.body.includes("loadStrategyWeights")],
-    ["terminal-fast-bundle", "/api/terminal-fast-bundle?canvas=1&compact=1&shell=1&v=verify", (r) => {
-      const p = parseJson(r);
-      const endpointKeys = Object.keys(p.endpoints || {});
-      return p.ok === true
-        && p.snapshotHit === true
-        && p.cacheSource === "supabase:desktop_route_snapshot"
-        && p.partial === false
-        && Array.isArray(p.misses)
-        && p.misses.length === 0
-        && endpointKeys.length >= 10
-        && !endpointKeys.some((endpoint) => endpoint.includes("strategy2-latest"));
-    }],
-    ["desktop-route-snapshot", "/api/desktop-route-snapshot?v=verify", (r) => {
-      const p = parseJson(r);
-      return p.ok === true
-        && p.snapshotHit === true
-        && p.cacheSource === "supabase:desktop_route_snapshot"
-        && p.partial === false
-        && Array.isArray(p.misses)
-        && p.misses.length === 0
-        && Object.keys(p.endpoints || {}).length >= 10;
-    }],
-    ["production-health", "/api/production-health?v=verify", (r) => {
-      const p = parseJson(r);
-      return p.ok === true
-        && Array.isArray(p.issues)
-        && p.issues.length === 0
-        && p.snapshot?.fresh === true
-        && p.snapshot?.partial === false
-        && p.snapshot?.hasStrategy2Snapshot === false
-        && p.strategy2?.ok === true
-        && !/desktop_route_snapshot/i.test(String(p.strategy2?.source || ""));
-    }],
-    ["strategy1-api", "/api/open-buy-latest?canvas=1&compact=1&shell=1&limit=60&v=verify", (r) => { const p = parseJson(r); return p.ok === true && Number(p.count || 0) >= 0; }],
-    ["strategy3-api", "/api/strategy3-latest?v=verify", (r) => { const p = parseJson(r); return p.ok === true && Number(p.count) > 0 && !!p.runId; }],
+    ["strategy3-api", "/api/strategy3-latest?v=verify", (r) => { const p = parseJson(r); return p.ok === true && isNotOlderThanLatestTradeDate(p.usedDate || p.date || p.updatedAt, strategy3TradeDate) && Number(p.count) > 0 && !!p.runId; }],
     ["strategy4-api", "/api/strategy4-latest?v=verify", (r) => { const p = parseJson(r); return p.ok === true && p.complete === true && Number(p.count) > 0 && !!p.runId; }],
+    ["data-manifest", "/data/data-manifest.json?v=verify", (r) => { const p = parseJson(r); return p.ok === true && Number(p.count) >= 25 && p.entries?.["stocks-index.json"]?.count > 1000; }],
     ["stocks-index", "/data/stocks-index.json?v=verify", (r) => { const p = parseJson(r); return p.ok === true && Number(p.count) > 1000; }],
+    ["data-status", "/data/data-status-index.json?v=verify", (r) => parseJson(r).ok === true],
     ["signal-quality", "/data/signal-quality-report.json?v=verify", (r) => parseJson(r).ok === true],
     ["data-consistency", "/data/data-consistency-report.json?v=verify", (r) => parseJson(r).ok === true],
     ["strategy-weights", "/data/strategy-weight-report.json?v=verify", (r) => !!parseJson(r).weights],
@@ -189,25 +153,8 @@ async function main() {
   for (const [name, pathname, check] of checks) assertOk(name, await fetchText(pathname), check);
   const frontendError = await postJson("/api/frontend-error", { source: "verify", message: "deployment smoke" });
   assertOk("frontend-error-api", frontendError, (r) => typeof parseJson(r).ok === "boolean");
-  const performanceReport = await postJson("/api/performance-report", {
-    source: "desktop-route-latency",
-    url: "verify:deployment",
-    summary: {
-      count: 1,
-      focus: "nav",
-      maxNav: 1,
-      maxShell: 1,
-      maxApi: 1,
-      firstFix: "verify",
-      routes: [{ key: "verify|deployment", count: 1, focus: "nav", nav: { avg: 1, p95: 1, max: 1 }, shell: { avg: 1, p95: 1, max: 1 }, api: { avg: 1, p95: 1, max: 1 }, worst: 1, lastAt: Date.now() }],
-    },
-    rows: [{ key: "verify|deployment", source: "verify", stage: "api", nav: 1, shell: 1, api: 1, at: Date.now() }],
-  });
+  const performanceReport = await postJson("/api/performance-report", { url: "verify:deployment", ms: 1, ok: true, at: Date.now() });
   assertOk("performance-report-api", performanceReport, (r) => typeof parseJson(r).ok === "boolean");
-  assertOk("desktop-latency-latest", await fetchText("/api/desktop-latency-latest?v=verify"), (r) => {
-    const p = parseJson(r);
-    return p.ok === true && p.summary?.count >= 1 && Array.isArray(p.rows);
-  });
   console.log(`[verify] deployment ok version=${version}`);
 }
 

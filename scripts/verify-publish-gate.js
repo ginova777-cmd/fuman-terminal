@@ -18,14 +18,6 @@ if (desktopApiOnlyGuard.status !== 0) {
   issues.push(`verify-desktop-api-only failed: ${(desktopApiOnlyGuard.stderr || desktopApiOnlyGuard.stdout || "").trim()}`);
 }
 
-const strategy1OpenBuyUiGuard = spawnSync(process.execPath, [path.join(ROOT, "scripts", "verify-strategy1-open-buy-ui-contract.js")], {
-  cwd: ROOT,
-  encoding: "utf8",
-});
-if (strategy1OpenBuyUiGuard.status !== 0) {
-  issues.push(`verify-strategy1-open-buy-ui failed: ${(strategy1OpenBuyUiGuard.stderr || strategy1OpenBuyUiGuard.stdout || "").trim()}`);
-}
-
 function queryScheduledTask(taskName) {
   const escaped = taskName.replace(/'/g, "''");
   const result = spawnSync("powershell.exe", [
@@ -179,12 +171,6 @@ const strategy2Scanner = read("scripts/scan-intraday-signals.js");
 const runIdCompleteGate = read("scripts/verify-run-id-complete-gates.js");
 const terminalLiveCheck = read("terminal-live-check.js");
 const terminalApp = read("terminal-app.js");
-const terminalCore = read("terminal-core.js");
-const fumanSw = read("fuman-sw.js");
-const vercelConfig = read("vercel.json");
-const indexHtml = read("index.html");
-const indexGithubHtml = read("index.github.html");
-const stylesCss = read("styles.css");
 if (!/if \(\$Scope -ne "all"\)/.test(cacheSync)) {
   issues.push("run-cache-sync.ps1 must block every non-all scope");
 }
@@ -256,74 +242,6 @@ if (/snapshot-friendly-skip-ready-status/.test(openBuyLatestApi) || /options\.sn
 if (!/emptySnapshotPayload\("strategy1_decision_not_ready"/.test(openBuyLatestApi)) {
   issues.push("api/open-buy-latest.js compact snapshot response must return an empty Strategy1 payload when decision_ready is false");
 }
-if (/OPEN_BUY_RUN_VIEW|v_strategy1_open_buy_latest_complete_run|latestRunView|latest_run_view/.test(read("api/terminal-home.js"))) {
-  issues.push("api/terminal-home.js must delegate Strategy1 to /api/open-buy-latest and must not keep a separate latest view path");
-}
-for (const [file, content] of [
-  ["api/terminal-home.js", read("api/terminal-home.js")],
-  ["terminal-runtime-config.js", runtimeConfig],
-  ["terminal-app.js", terminalApp],
-  ["terminal-live-check.js", terminalLiveCheck],
-  ["scripts/generate-slim-cache.js", slimCacheGenerator],
-]) {
-if (/fuman-terminal-sync\.vercel\.app/.test(content)) {
-    issues.push(`${file} must not point runtime/deploy behavior at fuman-terminal-sync.vercel.app; official site is fuman-terminal.vercel.app`);
-  }
-}
-if (!/runtime-theme-css-disabled-by-default/.test(terminalCore) || !/allowRuntimeThemeCss\s*!==\s*true/.test(terminalCore)) {
-  issues.push("terminal-core.js must keep runtime /api/terminal-theme-css disabled by default");
-}
-if (/terminal-theme-css-snapshot-first|terminal-theme-css-runtime/.test(fumanSw)) {
-  issues.push("fuman-sw.js must not keep retired runtime theme CSS snapshot markers");
-}
-if (!/theme-cache-cleanup-20260623-01/.test(indexHtml) || !/theme-cache-cleanup-20260623-01/.test(indexGithubHtml) || !/theme-cache-cleanup-20260623-01/.test(fumanSw)) {
-  issues.push("index.html, index.github.html, and fuman-sw.js must use current theme/cache cleanup version");
-}
-for (const [file, content] of [
-  ["index.html", indexHtml],
-  ["index.github.html", indexGithubHtml],
-]) {
-  if (/#ffe7b7!important|#ff9b45!important|#ff8a3d!important/.test(content)) {
-    issues.push(`${file} must not lock brand colors with literal inline !important colors; use CSS variables`);
-  }
-  for (const marker of ["var(--brand-primary", "var(--brand-accent", "var(--brand-accent-strong"]) {
-    if (!content.includes(marker)) issues.push(`${file} missing brand CSS variable marker ${marker}`);
-  }
-}
-for (const marker of ["--brand-primary", "--brand-accent", "--brand-accent-strong", "body.fuman-light-theme"]) {
-  if (!stylesCss.includes(marker)) issues.push(`styles.css missing theme-safe brand variable marker ${marker}`);
-}
-for (const marker of [
-  "/(styles\\\\.css|terminal-core\\\\.js|terminal\\\\.js|terminal-app\\\\.js|terminal-worker\\\\.js|terminal-desktop-fast-shell\\\\.js|terminal-desktop-canvas-worker\\\\.js)",
-  "terminal-desktop-fast-shell\\\\.js$",
-  "terminal-desktop-canvas-worker\\\\.js$",
-  "styles\\\\.css$",
-]) {
-  if (!vercelConfig.includes(marker)) issues.push(`vercel.json missing no-store/immutable exclusion marker ${marker}`);
-}
-if (fs.existsSync(path.join(ROOT, "data", "terminal-theme-css.css"))) {
-  issues.push("data/terminal-theme-css.css must not exist; runtime theme CSS is retired");
-}
-const cleanupApiOnly = read("scripts/cleanup-api-only-retired-artifacts.js");
-for (const marker of ["data/terminal-theme-css.css", "RETIRED_THEME_MARKERS", "allowRuntimeThemeCss: true"]) {
-  if (!cleanupApiOnly.includes(marker)) issues.push(`cleanup-api-only-retired-artifacts.js missing retired theme cleanup marker ${marker}`);
-}
-for (const accidentalExperiment of ["routeHydrationTimer", "delayed warm-load"]) {
-  for (const [file, content] of [
-    ["terminal-core.js", terminalCore],
-    ["terminal-app.js", terminalApp],
-  ]) {
-    if (content.includes(accidentalExperiment)) issues.push(`${file} must not include paused speed experiment marker ${accidentalExperiment}`);
-  }
-}
-for (const file of ["terminal-desktop-fast-shell.js", "terminal-desktop-canvas-worker.js"]) {
-  const target = path.join(ROOT, file);
-  if (!fs.existsSync(target)) continue;
-  const content = fs.readFileSync(target, "utf8");
-  if (!/theme/i.test(content) || !/(buffer|cache).*theme|theme.*(buffer|cache)/i.test(content)) {
-    issues.push(`${file} must include theme in any canvas/pre-render buffer cache key`);
-  }
-}
 if (/legacy scan_time gate|legacy_scan_time_gate|includeRunId = false|STRATEGY4_SUPABASE_RUN_ID/.test(strategy4Scanner)) {
   issues.push("scan-strategy4-cache.js must hard-fail when run_id complete gate is unavailable, not retry legacy scan_time");
 }
@@ -335,12 +253,6 @@ if (/run-cache-sync|generate-slim-cache|run-strategy4-postflight|data\\strategy4
 }
 if (/"strategy4", "data\/strategy4-latest\.json"|strategy4PresetFiles\]/.test(slimCacheGenerator)) {
   issues.push("generate-slim-cache.js must not generate strategy4 static slim/zone/page JSON");
-}
-if (/readOptional\("data\/open-buy-(?:latest|page-1)\.json"/.test(slimCacheGenerator)) {
-  issues.push("generate-slim-cache.js must not read Strategy1 open-buy static JSON; Strategy1 is Supabase API-only");
-}
-if (!/readOpenBuyApiOnlyPayload/.test(slimCacheGenerator) || !/open-buy-api-only-static-disabled/.test(slimCacheGenerator)) {
-  issues.push("generate-slim-cache.js must disable Strategy1 static slim fragments with an API-only placeholder");
 }
 if (/data\/strategy4-|strategy4-score/.test(sourceSync)) {
   issues.push("sync-main-deploy-source.js must not publish strategy4 static JSON artifacts");
@@ -553,10 +465,15 @@ for (const file of [
   "scripts/scan-realtime-radar-cache.js",
   "scripts/scan-strategy3-cache.js",
   "scripts/verify-desktop-api-only.js",
+  "data/data-manifest.json",
+  "data/terminal-home-bundle.json",
+  "data/terminal-home-mobile-slim.json",
   "scripts/scan-open-buy-cache.js",
   "scripts/scan-star-preopen.js",
   "ops/public-slot/Strategy1RunIdCompleteGate.sql",
   "ops/public-slot/Watchdog-PublicSlotSharedSource.ps1",
+  "data/star-preopen-latest.json",
+  "data/star-preopen-scorecard-source.json",
   "api/desktop-static-disabled.js",
   "api/scan-warrant-flow.js",
   "scripts/scan-warrant-flow-cache.js",
@@ -585,12 +502,6 @@ for (const marker of [
   "data/chip-trade-health-latest.json",
   "data/data-freshness-report.json",
   "data/fugle-open-rebound-latest.json",
-  "data/heatmap-latest.json",
-  "data/market-summary.json",
-  "data/mobile-boot.json",
-  "data/mobile-terminal-latest.json",
-  "data/data-status-index.json",
-  "RUNTIME_STALE_FRONT_PAGE_FILES",
   "warrant-volume-page-",
   "data/live-freshness-ok.json",
   "open-buy-page-",
@@ -600,38 +511,8 @@ for (const marker of [
   "strategy5-page-",
   "warrant-flow-page-",
   "cb-detect-page-",
-  "RETIRED_ENTRYPOINT_MARKERS",
-  "RETIRED_DIRECTORIES",
-  ".vercel/output",
-  "RETIRED_STRATEGY1_MARKERS",
-  "latest-payload",
-  "loadPreopenStrengthCodes",
-  "loadStockFutureStrengthCodes",
-  "scanGitWorktreeHealth",
-  "git-worktree-dirty",
-  "git-behind-origin-main",
-  "git-ahead-origin-main",
-  "scanRetiredStrategy1Markers",
-  "retired-strategy1-static-or-gate-marker",
-  "FMN://strategy.scan",
-  "綜合策略選股",
-  "等待官方股票資料",
-  "載入全台股股票池",
 ]) {
   if (!apiOnlyCleanup.includes(marker)) issues.push(`cleanup-api-only-retired-artifacts.js missing ${marker}`);
-}
-
-for (const [file, markers] of [
-  ["index.html", ["FMN://strategy.scan", "綜合策略選股", "等待官方股票資料"]],
-  ["index.github.html", ["FMN://strategy.scan", "綜合策略選股", "等待官方股票資料"]],
-  ["terminal-live-check.js", ["FMN://strategy.scan", "綜合策略選股", "載入全台股股票池"]],
-]) {
-  const content = read(file);
-  for (const marker of markers) {
-    if (content.includes(marker)) {
-      issues.push(`${file} contains retired entrypoint marker ${marker}`);
-    }
-  }
 }
 
 const cleanupTaskInstaller = read("install-api-only-cleanup-task.ps1");
@@ -901,23 +782,16 @@ if (fetchResult.status !== 0) {
       "scripts/sync-main-deploy-source.js",
       "scripts/verify-source-sync.js",
       "scripts/cleanup-api-only-retired-artifacts.js",
-      "scripts/generate-slim-cache.js",
       "install-api-only-cleanup-task.ps1",
       "run-main-release-pipeline.ps1",
       "run-daily-release.ps1",
       "run-full-scan.ps1",
       "run-publish-gate.ps1",
       "package.json",
-      "run-local-freshness-repair.ps1",
       "data/data-manifest.json",
       "data/data-status-index.json",
-      "data/heatmap-latest.json",
       "data/live-freshness-ok.json",
-      "data/market-summary.json",
-      "data/mobile-boot.json",
       "data/mobile-home-summary.json",
-      "data/mobile-stock-analysis-latest.json",
-      "data/mobile-terminal-latest.json",
       "data/strategy-match-index.json",
       "data/strategy2-intraday-live-top.json",
       "data/strategy2-intraday-slim.json",

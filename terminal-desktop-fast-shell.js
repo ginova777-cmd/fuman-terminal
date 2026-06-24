@@ -6,15 +6,12 @@
   const SNAPSHOT_DB = "fuman-desktop-route-snapshots";
   const SNAPSHOT_STORE = "snapshots";
   const SNAPSHOT_PREFIX = "FUMAN_DESKTOP_ROUTE_SNAPSHOT:";
-  const SNAPSHOT_MAX_AGE_MS = 6 * 60 * 60 * 1000;
-  const LIVE_SNAPSHOT_MAX_AGE_MS = 8 * 1000;
+  const SNAPSHOT_MAX_AGE_MS = 10 * 60 * 1000;
   const SNAPSHOT_MAX_CHARS = 850000;
-  const SNAPSHOT_ROUTES = ["strategy|策略1", "strategy|策略3", "strategy|策略4", "strategy|策略5"];
+  const SNAPSHOT_ROUTES = ["strategy|策略1", "strategy|策略2", "strategy|策略3", "strategy|策略4", "strategy|策略5"];
   const FIXED_ROUTE_KEYS = ["market|市場總覽", "chip-trade|買賣超", "cb-detect|CB可轉債", "warrant-flow|權證走向", "watchlist|自選股"];
   const FIXED_CANVAS_PERSIST_ROUTES = ["market|市場總覽", "chip-trade|買賣超", "cb-detect|CB可轉債", "warrant-flow|權證走向"];
-  const LIVE_ROUTE_KEYS = new Set(["strategy|策略2"]);
-  const CANVAS_REFRESH_TTL_MS = 5 * 60 * 1000;
-  const FAST_BUNDLE_PRIME_TTL_MS = 90 * 1000;
+  const CANVAS_REFRESH_TTL_MS = 18000;
   const PERF_LOG_KEY = "fuman-desktop-fast-perf-log-v1";
   const CANVAS_ROW_HEIGHT = 46;
   const CANVAS_HEADER_HEIGHT = 128;
@@ -33,15 +30,15 @@
     "warrant-flow|權證走向": "/api/warrant-flow-latest",
   };
   const CANVAS_ROUTE_OPTIONS = {
-    "market|市場總覽": { limit: 24, ttl: 90 * 1000 },
-    "strategy|策略1": { limit: 60, ttl: 5 * 60 * 1000 },
-    "strategy|策略2": { limit: 60, ttl: 3500 },
-    "strategy|策略3": { limit: 60, ttl: 5 * 60 * 1000 },
-    "strategy|策略4": { limit: 70, ttl: 5 * 60 * 1000 },
-    "strategy|策略5": { limit: 70, ttl: 5 * 60 * 1000 },
-    "chip-trade|買賣超": { limit: 60, ttl: 5 * 60 * 1000 },
-    "cb-detect|CB可轉債": { limit: 60, ttl: 5 * 60 * 1000 },
-    "warrant-flow|權證走向": { limit: 60, ttl: 5 * 60 * 1000 },
+    "market|市場總覽": { limit: 24, ttl: 14000 },
+    "strategy|策略1": { limit: 60, ttl: 18000 },
+    "strategy|策略2": { limit: 60, ttl: 6500 },
+    "strategy|策略3": { limit: 60, ttl: 22000 },
+    "strategy|策略4": { limit: 70, ttl: 24000 },
+    "strategy|策略5": { limit: 70, ttl: 22000 },
+    "chip-trade|買賣超": { limit: 60, ttl: 32000 },
+    "cb-detect|CB可轉債": { limit: 60, ttl: 32000 },
+    "warrant-flow|權證走向": { limit: 60, ttl: 32000 },
   };
   const CANVAS_WORKER_URL = "/terminal-desktop-canvas-worker.js";
   let pendingTimer = 0;
@@ -68,7 +65,6 @@
   let hoverPreRenderTimer = 0;
   let routeSwitchSeq = 0;
   let latencySeq = 0;
-  let perfFlushTimer = 0;
   const INTERACTION_HOLD_MS = 920;
   const routeSnapshots = new Map();
   const canvasStore = new Map();
@@ -111,14 +107,6 @@
 
   function isPrimaryPointer(event) {
     return !event.button && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey;
-  }
-
-  function isLiveRoute(key) {
-    return LIVE_ROUTE_KEYS.has(String(key || ""));
-  }
-
-  function snapshotMaxAgeForKey(key) {
-    return isLiveRoute(key) ? LIVE_SNAPSHOT_MAX_AGE_MS : SNAPSHOT_MAX_AGE_MS;
   }
 
   function beginInteractionHold(reason = "route", ms = INTERACTION_HOLD_MS) {
@@ -281,44 +269,7 @@
       localStorage.setItem(PERF_LOG_KEY, JSON.stringify(next));
       window.__fumanDesktopPerfLog = next;
       document.documentElement.dataset.fumanDesktopPerfLogSize = String(next.length);
-      schedulePerformanceLogFlush(false);
     } catch (error) {}
-  }
-
-  function schedulePerformanceLogFlush(force = false) {
-    window.clearTimeout(perfFlushTimer);
-    perfFlushTimer = window.setTimeout(() => flushPerformanceLog(force), force ? 0 : 2200);
-  }
-
-  function flushPerformanceLog(force = false) {
-    try {
-      if (!window.FUMAN_DESKTOP_PERF_LOG || !window.fetch) return Promise.resolve(false);
-      const rows = window.FUMAN_DESKTOP_PERF_LOG.read().slice(-50);
-      if (!rows.length) return Promise.resolve(false);
-      const now = Date.now();
-      const lastAt = Number(localStorage.getItem("fumanDesktopPerfLastFlushAt") || 0);
-      if (!force && rows.length < 8) return Promise.resolve(false);
-      if (!force && now - lastAt < 60000) return Promise.resolve(false);
-      const summary = window.FUMAN_DESKTOP_PERF_LOG.summary();
-      const payload = {
-        source: "desktop-route-latency",
-        url: location.pathname + location.search,
-        viewport: `${window.innerWidth || 0}x${window.innerHeight || 0}`,
-        summary,
-        rows,
-        at: now,
-      };
-      const body = JSON.stringify(payload);
-      localStorage.setItem("fumanDesktopPerfLastFlushAt", String(now));
-      return fetch("/api/performance-report", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body,
-        keepalive: body.length < 60000,
-      }).then(() => true).catch(() => false);
-    } catch (error) {
-      return Promise.resolve(false);
-    }
   }
 
   function installPerformanceLogExport() {
@@ -339,80 +290,26 @@
       },
       summary() {
         const rows = this.read();
-        const usable = rows.filter((row) => row && row.key);
-        const maxOf = (name) => Math.max(0, ...usable.map((row) => Number(row?.[name] || 0)));
-        const values = (routeRows, name) => routeRows.map((row) => Number(row?.[name] || 0)).filter((value) => Number.isFinite(value) && value > 0);
-        const avg = (items) => items.length ? Math.round(items.reduce((sum, value) => sum + value, 0) / items.length) : 0;
-        const percentile = (items, ratio) => {
-          if (!items.length) return 0;
-          const sorted = items.slice().sort((a, b) => a - b);
-          return sorted[Math.min(sorted.length - 1, Math.max(0, Math.ceil(sorted.length * ratio) - 1))] || 0;
-        };
-        const routeMap = new Map();
-        usable.forEach((row) => {
-          const key = String(row.key || "unknown");
-          routeMap.set(key, (routeMap.get(key) || []).concat(row));
-        });
-        const routes = [...routeMap.entries()].map(([key, routeRows]) => {
-          const navValues = values(routeRows, "nav");
-          const shellValues = values(routeRows, "shell");
-          const apiValues = values(routeRows, "api");
-          const maxNavRoute = Math.max(0, ...navValues);
-          const maxShellRoute = Math.max(0, ...shellValues);
-          const maxApiRoute = Math.max(0, ...apiValues);
-          const focus = maxApiRoute >= maxNavRoute && maxApiRoute >= maxShellRoute
-            ? "api"
-            : maxShellRoute >= maxNavRoute
-              ? "shell"
-              : "nav";
-          return {
-            key,
-            count: routeRows.length,
-            focus,
-            nav: { avg: avg(navValues), p95: percentile(navValues, 0.95), max: maxNavRoute },
-            shell: { avg: avg(shellValues), p95: percentile(shellValues, 0.95), max: maxShellRoute },
-            api: { avg: avg(apiValues), p95: percentile(apiValues, 0.95), max: maxApiRoute },
-            worst: Math.max(maxNavRoute, maxShellRoute, maxApiRoute),
-            lastAt: Math.max(0, ...routeRows.map((row) => Number(row.at || 0))),
-          };
-        }).sort((a, b) => b.worst - a.worst || b.lastAt - a.lastAt);
+        const maxOf = (name) => Math.max(0, ...rows.map((row) => Number(row?.[name] || 0)));
         const maxNav = maxOf("nav");
         const maxShell = maxOf("shell");
         const maxApi = maxOf("api");
         const focus = maxApi >= maxNav && maxApi >= maxShell ? "api" : maxShell >= maxNav ? "shell" : "nav";
-        const slowest = usable.slice().sort((a, b) => Math.max(Number(b.nav || 0), Number(b.shell || 0), Number(b.api || 0)) - Math.max(Number(a.nav || 0), Number(a.shell || 0), Number(a.api || 0))).slice(0, 8);
-        const firstFix = routes[0]
-          ? `${routes[0].key} ${routes[0].focus} max=${routes[0][routes[0].focus]?.max || routes[0].worst}ms`
-          : "";
         return {
-          count: usable.length,
+          count: rows.length,
           maxNav,
           maxShell,
           maxApi,
           focus,
-          firstFix,
-          routes,
-          slowest,
+          slowest: rows.slice().sort((a, b) => Math.max(Number(b.nav || 0), Number(b.shell || 0), Number(b.api || 0)) - Math.max(Number(a.nav || 0), Number(a.shell || 0), Number(a.api || 0))).slice(0, 8),
         };
       },
       recommend() {
         const summary = this.summary();
         if (!summary.count) return "尚無資料：開 codexLatency 後切幾次分頁再看。";
-        const target = summary.routes?.[0];
-        const prefix = target ? `最慢頁：${target.key}，瓶頸=${target.focus}。` : "";
-        if (summary.focus === "api") return `${prefix}api 高：優先檢查 route snapshot、API 小包、Supabase 查詢量。`;
-        if (summary.focus === "shell") return `${prefix}shell 高：優先檢查 Canvas 首畫、固定尺寸、DOM 抽 row。`;
-        return `${prefix}nav 高：優先檢查側欄事件、active CSS、重複 click/pointer handler。`;
-      },
-      print() {
-        const summary = this.summary();
-        console.table?.(summary.routes || []);
-        console.info?.("[FUMAN perf]", summary);
-        console.info?.("[FUMAN perf recommend]", this.recommend());
-        return summary;
-      },
-      flush() {
-        return flushPerformanceLog(true);
+        if (summary.focus === "api") return "api 高：優先檢查 API 小包、快取 TTL、Supabase 查詢量。";
+        if (summary.focus === "shell") return "shell 高：優先檢查 Canvas 首畫、固定尺寸、DOM 抽 row。";
+        return "nav 高：優先檢查側欄事件、active CSS、重複 click/pointer handler。";
       },
     };
   }
@@ -942,7 +839,7 @@
   function primeDesktopFastBundle(force = false, reason = "startup") {
     const now = Date.now();
     if (!force && desktopFastBundlePromise) return desktopFastBundlePromise;
-    if (!force && now - desktopFastBundleAt < FAST_BUNDLE_PRIME_TTL_MS) return Promise.resolve(0);
+    if (!force && now - desktopFastBundleAt < 45000) return Promise.resolve(0);
     desktopFastBundleAt = now;
     const url = `/api/terminal-fast-bundle?canvas=1&compact=1&shell=1&t=${now}`;
     desktopFastBundlePromise = fetch(url, { cache: force ? "no-store" : "default", priority: "low" })
@@ -994,11 +891,6 @@
     const ttl = Number(options.ttl || CANVAS_REFRESH_TTL_MS);
     if (!force && cached?.rows?.length && Date.now() - Number(cached.at || 0) < ttl) {
       return Promise.resolve(cached.rows);
-    }
-    if (!force && !isLiveRoute(route)) {
-      const snapshotRows = rowsForRoute(route);
-      if (snapshotRows.length) return Promise.resolve(snapshotRows);
-      return primeDesktopFastBundle(false, "route-snapshot").then(() => rowsForRoute(route));
     }
     if (canvasInflight.has(route)) return canvasInflight.get(route);
     const url = compactCanvasUrlForRoute(route, true);
@@ -1519,7 +1411,7 @@
       const raw = sessionStorage.getItem(SNAPSHOT_PREFIX + key);
       if (!raw) return null;
       const item = JSON.parse(raw);
-      if ((!item?.html && !item?.rows?.length) || Date.now() - Number(item.at || 0) > snapshotMaxAgeForKey(key)) return null;
+      if ((!item?.html && !item?.rows?.length) || Date.now() - Number(item.at || 0) > SNAPSHOT_MAX_AGE_MS) return null;
       return item;
     } catch (error) {
       return null;
@@ -1542,7 +1434,7 @@
         request.onsuccess = () => {
           const item = request.result;
           const hasContent = item?.html || item?.rows?.length;
-          resolve(hasContent && Date.now() - Number(item.at || 0) <= snapshotMaxAgeForKey(key) ? item : null);
+          resolve(hasContent && Date.now() - Number(item.at || 0) <= SNAPSHOT_MAX_AGE_MS ? item : null);
         };
         request.onerror = () => resolve(null);
       } catch (error) {
@@ -1626,7 +1518,7 @@
   function applySnapshot(key, item, source) {
     const panel = document.querySelector("#strategy-view");
     if (!key || (!item?.html && !item?.rows?.length) || !panel) return false;
-    if (Date.now() - Number(item.at || 0) > snapshotMaxAgeForKey(key)) return false;
+    if (Date.now() - Number(item.at || 0) > SNAPSHOT_MAX_AGE_MS) return false;
     if (Array.isArray(item.rows) && item.rows.length) {
       setCanvasRows(key, item.rows, `canvas-${source}`, item.at || Date.now());
       renderStrategyRouteShell(key, `canvas-${source}`, item.rows);
@@ -2048,7 +1940,7 @@
     if (!key) return false;
     activeSnapshotRoute = key;
     const memoryItem = routeSnapshots.get(key);
-    if (memoryItem?.rows?.length && Date.now() - Number(memoryItem.at || 0) <= snapshotMaxAgeForKey(key)) {
+    if (memoryItem?.rows?.length && Date.now() - Number(memoryItem.at || 0) <= SNAPSHOT_MAX_AGE_MS) {
       setCanvasRows(key, memoryItem.rows, "canvas-memory", memoryItem.at || Date.now());
       renderFixedPageShell(link, "canvas-memory", memoryItem.rows);
       return true;
