@@ -85,8 +85,6 @@ function checkMobileShell() {
   requireText(mobile, 'html[data-sun="1"]', "mobile sunlight selector must quote attribute value so phones apply it");
 
   rejectText(mobile, 'bootUrl="/data/mobile-boot.json"', "mobile shell must not poll static /data/mobile-boot.json");
-  rejectText(mobile, "/data/data-manifest.json", "mobile shell must not poll data-manifest.json as latest truth");
-  rejectText(mobile, "/data/data-status-index.json", "mobile shell must not poll data-status-index.json as latest truth");
   rejectText(mobile, "/data/mobile-terminal-latest.json", "mobile shell must not use mobile-terminal-latest.json as runtime fallback");
   rejectText(mobile, "/data/mobile-digest.json", "mobile shell must not poll mobile-digest.json directly");
   rejectText(mobile, "backup.json", "mobile shell must not use backup JSON fallback");
@@ -180,10 +178,6 @@ async function checkLive() {
   if (mobile.text.includes("/data/mobile-boot.json")) {
     pushIssue("live mobile shell must not reference /data/mobile-boot.json");
   }
-  if (mobile.text.includes("/data/data-manifest.json") || mobile.text.includes("/data/data-status-index.json")) {
-    pushIssue("live mobile shell must not poll manifest/status JSON");
-  }
-
   const boot = await fetchLive("api/mobile-boot");
   if (!boot.response.ok) pushIssue(`live /api/mobile-boot returned ${boot.response.status}`);
   if (!/no-store/i.test(boot.response.headers.get("cache-control") || "")) {

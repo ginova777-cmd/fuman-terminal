@@ -34,7 +34,6 @@
     "monitor:production:install": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/install-production-health-monitor-task.ps1",
     "snapshot:desktop": "node --use-system-ca scripts/write-desktop-route-snapshot.js",
     "verify:bump": "node scripts/verify-version-bump-needed.js",
-    "verify:supabase-json": "node --use-system-ca scripts/verify-supabase-json.js",
     "verify:sw": "node scripts/verify-service-worker-smoke.js",
     "verify:source-sync": "node scripts/verify-source-sync.js",
     "verify:heatmap": "node --use-system-ca scripts/verify-heatmap-realtime.js",

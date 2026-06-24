@@ -44,7 +44,6 @@ const KEY_FILES = [
   "scripts/sync-afterhours-supabase-status.js",
   "scripts/sync-main-deploy-source.js",
   "scripts/verify-warrant-freshness.js",
-  "scripts/verify-supabase-json.js",
   "scripts/verify-run-id-complete-gates.js",
   "data/data-consistency-report.json",
   "data/data-quality-report.json",
@@ -65,8 +64,7 @@ const KEY_FILES = [
 ];
 
 const RETIRED_ARTIFACTS = [
-  "run-open-buy-sync-retry.ps1",
-  "data/live-freshness-ok.json",
+  "run-open-buy-sync-retry.ps1",
   "data/strategy4-latest.json",
   "data/strategy4-backup.json",
   "data/strategy4-summary.json",

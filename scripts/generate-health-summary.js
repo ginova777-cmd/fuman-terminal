@@ -311,8 +311,7 @@ function main() {
     githubSync: outbox,
     freshnessGate: {
       ok: true,
-      mode: "api-only",
-      note: "Legacy live-freshness-ok.json gate removed. Use publish gate plus targeted Supabase API verifiers.",
+      mode: "api-only",
     },
     runtime: { ok: data.every((item) => item.ok), data },
   };

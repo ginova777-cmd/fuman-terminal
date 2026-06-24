@@ -1193,8 +1193,6 @@ function mobileTerminalLatest() {
   const mobile = readOptional("data/mobile-home-summary.json", mobileHomeSummary());
   const breadth = readOptional("data/market-ai-breadth-latest.json", marketAiBreadthLatest(mobile));
   const aiPanel = readOptional("data/market-ai-panel-latest.json", marketAiPanelLatest());
-  const manifest = readOptional("data/data-manifest.json", {});
-  const status = readOptional("data/data-status-index.json", {});
   const strategy2 = readOptional("data/strategy2-intraday-live-top.json", readOptional("data/strategy2-intraday-top.json", {}));
   const institution = readOptional("data/institution-mobile-top.json", {});
   const warrant = readOptional("data/warrant-flow-mobile-top.json", {});
@@ -1207,24 +1205,6 @@ function mobileTerminalLatest() {
     mobile,
     breadth,
     aiPanel,
-    manifest: {
-      updatedAt: manifest?.updatedAt || "",
-      count: cleanNumber(manifest?.count),
-      entries: Object.fromEntries(Object.entries(manifest?.entries || {}).filter(([key]) => [
-        "market-summary.json",
-        "market-ai-breadth-latest.json",
-        "market-ai-panel-latest.json",
-        "strategy2-intraday-live-top.json",
-        "strategy4-score-top.json",
-        "strategy5-page-1.json",
-        "institution-mobile-top.json",
-        "warrant-flow-mobile-top.json",
-      ].includes(key))),
-    },
-    status: {
-      updatedAt: status?.updatedAt || "",
-      entries: status?.entries || {},
-    },
     strategy2: {
       updatedAt: strategy2?.updatedAt || "",
       count: payloadCount(strategy2),
@@ -1756,157 +1736,8 @@ function statusDateForFile(file, payload) {
   return payload?.usedDate || payload?.date || payload?.tradeDate || payload?.resolvedTradeDate || payload?.institutionDate || payload?.scanStamp || "";
 }
 
-function dataStatusIndex() {
-  const files = [
-    "market-summary.json",
-    "heatmap-latest.json",
-    "health-summary.json",
-    "mobile-home-summary.json",
-    "market-ai-breadth-latest.json",
-    "market-ai-panel-latest.json",
-    "mobile-stock-analysis-latest.json",
-    "market-ai-live.json",
-    "mobile-terminal-latest.json",
-    "mobile-digest.json",
-    "terminal-home-mobile-slim.json",
-    "stocks-slim.json",
-    "stocks-index.json",
-    "stocks-quotes-slim.json",
-    "stocks-quotes-mobile-top.json",
-    "strategy-match-index.json",
-    "open-buy-latest.json",
-    "strategy2-intraday-latest.json",
-    "strategy3-latest.json",
-    "strategy4-latest.json",
-    "strategy4-summary.json",
-    "strategy4-slim.json",
-    "strategy4-score-top.json",
-    "strategy4-zone-b-page-1.json",
-    "strategy5-page-1.json",
-    "strategy5-latest.json",
-    "institution-latest.json",
-    "institution-slim.json",
-    "institution-mobile-top.json",
-    "institution-tdcc-breakout-top.json",
-    "cb-detect-latest.json",
-    "warrant-flow-latest.json",
-    "warrant-flow-slim.json",
-    "warrant-priority-top.json",
-    "warrant-single-signal-top.json",
-    "warrant-flow-mobile-top.json",
-    "warrant-flow-page-1.json",
-    "realtime-radar-latest.json",
-  ];
-  const entries = {};
-  for (const file of files) {
-    const payload = readRepoOptional(`data/${file}`, {});
-    entries[file] = {
-      ok: payload?.ok !== false,
-      status: payload?.status || "",
-      source: payload?.source || "",
-      date: statusDateForFile(file, payload),
-      sourceDate: payload?.sourceDate || payload?.usedDate || "",
-      updatedAt: payload?.updatedAt || payload?.scanStamp || "",
-      count: payloadCount(payload),
-    };
-  }
-  return {
-    ok: true,
-    source: "data-status-index",
-    updatedAt: new Date().toISOString(),
-    entries,
-  };
-}
-
-function dataManifest() {
-  const files = [
-    "market-summary.json",
-    "heatmap-latest.json",
-    "mobile-home-summary.json",
-    "market-ai-breadth-latest.json",
-    "market-ai-panel-latest.json",
-    "mobile-stock-analysis-latest.json",
-    "market-ai-live.json",
-    "mobile-terminal-latest.json",
-    "mobile-digest.json",
-    "terminal-home-bundle.json",
-    "terminal-home-mobile-slim.json",
-    "data-status-index.json",
-    "stocks-slim.json",
-    "stocks-index.json",
-    "stocks-quotes-slim.json",
-    "stocks-quotes-mobile-top.json",
-    "strategy-match-index.json",
-    "open-buy-latest.json",
-    "strategy2-intraday-latest.json",
-    "strategy2-intraday-slim.json",
-    "strategy2-intraday-top.json",
-    "strategy2-intraday-live-top.json",
-    "strategy3-latest.json",
-    "strategy4-latest.json",
-    "strategy4-summary.json",
-    "strategy4-slim.json",
-    "strategy4-score-top.json",
-    "strategy4-zone-a.json",
-    "strategy4-zone-b.json",
-    "strategy4-zone-c.json",
-    "strategy5-latest.json",
-    "strategy5-page-1.json",
-    "institution-latest.json",
-    "institution-slim.json",
-    "institution-mobile-top.json",
-    "institution-tdcc-breakout-top.json",
-    "cb-detect-latest.json",
-    "warrant-flow-latest.json",
-    "warrant-flow-slim.json",
-    "warrant-priority-top.json",
-    "warrant-single-signal-top.json",
-    "warrant-flow-mobile-top.json",
-    "warrant-flow-page-1.json",
-    "realtime-radar-latest.json",
-    "afterhours-supabase-status.json",
-    "health-summary.json",
-    "signal-quality-report.json",
-    "data-quality-report.json",
-    "data-consistency-report.json",
-    "strategy-weight-report.json",
-  ];
-  for (let page = 1; page <= 48; page += 1) files.push(`strategy4-zone-b-page-${page}.json`);
-  for (let page = 1; page <= 48; page += 1) files.push(`strategy4-zone-c-page-${page}.json`);
-  for (let page = 1; page <= 24; page += 1) files.push(`open-buy-page-${page}.json`);
-  for (let page = 1; page <= 24; page += 1) files.push(`strategy2-intraday-page-${page}.json`);
-  for (let page = 1; page <= 24; page += 1) files.push(`strategy3-page-${page}.json`);
-  for (let page = 1; page <= 24; page += 1) files.push(`strategy4-score-page-${page}.json`);
-  for (let page = 1; page <= 24; page += 1) files.push(`strategy5-page-${page}.json`);
-  for (let page = 1; page <= 24; page += 1) files.push(`institution-page-${page}.json`);
-  for (let page = 1; page <= 24; page += 1) files.push(`warrant-flow-page-${page}.json`);
-  for (let page = 1; page <= 24; page += 1) files.push(`warrant-volume-page-${page}.json`);
-  const entries = {};
-  for (const file of files) {
-    const payload = readRepoOptional(`data/${file}`, null);
-    if (!payload) continue;
-    const json = JSON.stringify(payload);
-    entries[file] = {
-      hash: crypto.createHash("sha1").update(json).digest("hex").slice(0, 12),
-      bytes: Buffer.byteLength(json),
-      updatedAt: payload?.updatedAt || payload?.scanStamp || "",
-      date: statusDateForFile(file, payload),
-      sourceDate: payload?.sourceDate || payload?.usedDate || "",
-      count: payloadCount(payload),
-    };
-  }
-  return {
-    ok: true,
-    source: "data-manifest",
-    updatedAt: new Date().toISOString(),
-    count: Object.keys(entries).length,
-    entries,
-  };
-}
-
 function terminalHomeBundle() {
-  const mobile = readOptional("data/mobile-home-summary.json", mobileHomeSummary());
-  const status = readOptional("data/data-status-index.json", dataStatusIndex());
+  const mobile = readOptional("data/mobile-home-summary.json", mobileHomeSummary());
   const stocks = readOptional("data/stocks-slim.json", slimStocks());
   const openBuy = readOpenBuyApiOnlyPayload();
   const strategy3 = readOptional("data/strategy3-latest.json", {});
@@ -1956,8 +1787,7 @@ function terminalHomeBundle() {
 
 
 function terminalHomeMobileSlim() {
-  const mobile = readOptional("data/mobile-home-summary.json", mobileHomeSummary());
-  const status = readOptional("data/data-status-index.json", dataStatusIndex());
+  const mobile = readOptional("data/mobile-home-summary.json", mobileHomeSummary());
   const stocks = readOptional("data/stocks-quotes-mobile-top.json", {});
   const openBuy = readOpenBuyApiOnlyPayload();
   const strategy4Top = readOptional("data/strategy4-score-top.json", {});
@@ -2209,18 +2039,12 @@ async function main() {
       writeToBoth(pageOutput, pagePayload);
       if (pagePayload.page === 1) console.log(`[slim] wrote ${pageOutput} total=${pagePayload.totalCount || 0}`);
     }
-    const statusIndex = dataStatusIndex();
-    writeToBoth("data/data-status-index.json", statusIndex);
-    console.log(`[slim] wrote data/data-status-index.json files=${Object.keys(statusIndex.entries || {}).length}`);
     const homeBundle = terminalHomeBundle();
     writeToBoth("data/terminal-home-bundle.json", homeBundle);
     console.log(`[slim] wrote data/terminal-home-bundle.json stocks=${homeBundle.stocks.count || 0}`);
     const mobileSlimBundle = terminalHomeMobileSlim();
     writeToBoth("data/terminal-home-mobile-slim.json", mobileSlimBundle);
     console.log(`[slim] wrote data/terminal-home-mobile-slim.json stocks=${mobileSlimBundle.stocks.count || 0}`);
-    const manifest = dataManifest();
-    writeToBoth("data/data-manifest.json", manifest);
-    console.log(`[slim] wrote data/data-manifest.json files=${manifest.count || 0}`);
     const mobileTerminal = mobileTerminalLatest();
     writeToBoth("data/mobile-terminal-latest.json", mobileTerminal);
     console.log(`[slim] wrote data/mobile-terminal-latest.json ai=${mobileTerminal.aiPanel?.priorityStocks?.length || 0} strategy5=${mobileTerminal.strategy5?.count || 0}`);
@@ -2244,11 +2068,6 @@ async function main() {
     console.log(`[slim] wrote data/mobile-digest.json aiHash=${digest.aiHash} bias=${digest.bias}`);
     console.log(`[slim] wrote data/mobile-boot.json variant=${mobileBoot.lowPower.lowEndVariant} ultraBytes=${mobileBoot.digest.ultraBytes}`);
     console.log(`[slim] wrote mobile strategy fragments count=${Object.keys(strategyFragments).length}`);
-    const finalStatusIndex = dataStatusIndex();
-    writeToBoth("data/data-status-index.json", finalStatusIndex);
-    const finalManifest = dataManifest();
-    writeToBoth("data/data-manifest.json", finalManifest);
-    console.log(`[slim] finalized data-manifest.json files=${finalManifest.count || 0}`);
   }
   if (!wrote) console.log("[slim] no legacy slim jobs wrote; API-only snapshot outputs refreshed");
 }

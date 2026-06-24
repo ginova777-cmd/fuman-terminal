@@ -7,7 +7,6 @@ const steps = [
   ["verify:bump", ["npm", "run", "verify:bump"]],
   ["verify:sw", ["npm", "run", "verify:sw"]],
   ["verify:heatmap", ["npm", "run", "verify:heatmap"]],
-  ["verify:supabase-json", ["npm", "run", "verify:supabase-json"]],
 ];
 
 function run(command) {

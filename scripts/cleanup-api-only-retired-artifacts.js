@@ -41,11 +41,9 @@ const EXACT_RETIRED = [
   "warrant-flow-latest.json",
   "warrant-flow-backup.json",
   "run-freshness-gate-task.ps1",
-  "run-local-freshness-repair.ps1",
-  "run-verify-data-freshness.ps1",
+  "run-local-freshness-repair.ps1",
   "run-open-buy-sync-retry.ps1",
-  "data/chip-trade-health-latest.json",
-  "data/data-freshness-report.json",
+  "data/chip-trade-health-latest.json",
   "data/fugle-open-rebound-latest.json",
   "data/heatmap-latest.json",
   "data/institution-mobile-top.json",
@@ -81,10 +79,7 @@ const EXACT_RETIRED = [
   "data/star-preopen-scorecard-source.json",
   "data/mobile-boot.json",
   "data/mobile-terminal-latest.json",
-  "data/terminal-home-mobile-slim.json",
-  "data/data-manifest.json",
-  "data/data-status-index.json",
-  "data/live-freshness-ok.json",
+  "data/terminal-home-mobile-slim.json",
   "data/open-buy-latest.json",
   "data/open-buy-backup.json",
   "data/open-buy-scorecard-source.json",
@@ -149,9 +144,7 @@ const RUNTIME_STALE_FRONT_PAGE_FILES = [
   "data/market-summary.json",
   "data/mobile-boot.json",
   "data/mobile-terminal-latest.json",
-  "data/terminal-home-mobile-slim.json",
-  "data/data-manifest.json",
-  "data/data-status-index.json",
+  "data/terminal-home-mobile-slim.json",
   "data/terminal-theme-css.css",
 ];
 const RETIRED_THEME_MARKERS = [

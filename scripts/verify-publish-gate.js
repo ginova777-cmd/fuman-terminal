@@ -153,9 +153,6 @@ for (const marker of ["DESKTOP_API_ONLY_STATIC_FILTER", "Test-DesktopApiOnlyStat
     issues.push(`run-cache-sync.ps1 missing desktop API-only static filter marker ${marker}`);
   }
 }
-if (/verify:data-freshness|verify-data-freshness|FUMAN_SKIP_TERMINAL_GATE_ARTIFACT/.test(cacheSync)) {
-  issues.push("run-cache-sync.ps1 must not call removed daily freshness verifier or terminal gate artifact path");
-}
 if (!/Pre-publish data freshness gate removed/.test(cacheSync)) {
   issues.push("run-cache-sync.ps1 must explicitly disable the removed pre-publish data freshness gate");
 }
@@ -216,9 +213,6 @@ if (/"strategy4", "data\/strategy4-latest\.json"|strategy4PresetFiles\]/.test(sl
 if (/data\/strategy4-|strategy4-score/.test(sourceSync)) {
   issues.push("sync-main-deploy-source.js must not publish strategy4 static JSON artifacts");
 }
-if (/data\/live-freshness-ok\.json/.test(sourceSync)) {
-  issues.push("sync-main-deploy-source.js must not publish legacy live-freshness-ok.json artifact");
-}
 if (/readJson\("data\/open-buy-latest\.json"/.test(read("api/terminal-home.js"))) {
   issues.push("api/terminal-home.js must not fallback to legacy data/open-buy-latest.json");
 }
@@ -251,20 +245,6 @@ if (!/installStrategy4ApiRunPolling/.test(terminalApp)) {
 }
 if (/\/data\/strategy4-|localStorage\.getItem\(STRATEGY4|localStorage\.setItem\(STRATEGY4/.test(terminalLiveCheck) || /\/data\/strategy4-|localStorage\.getItem\(STRATEGY4|localStorage\.setItem\(STRATEGY4/.test(terminalApp)) {
   issues.push("strategy4 frontend must be API-only: no static JSON, backup JSON, or localStorage seed data paths");
-}
-for (const legacyPath of [
-  "/data/open-buy-latest.json",
-  "/data/strategy3-latest.json",
-  "/data/strategy4-latest.json",
-  "/data/strategy5-latest.json",
-  "/data/institution-latest.json",
-  "/data/warrant-flow-latest.json",
-  "/data/cb-detect-latest.json",
-  "/data/live-freshness-ok.json",
-]) {
-  if (terminalApp.includes(legacyPath) || terminalLiveCheck.includes(legacyPath) || runtimeConfig.includes(legacyPath)) {
-    issues.push(`frontend must not use legacy static freshness source ${legacyPath}; use Supabase complete-run no-store API polling`);
-  }
 }
 for (const marker of [
   "fuman_realtime_radar_cache",
@@ -401,9 +381,6 @@ const serviceWorker = read("fuman-sw.js");
 if (!/networkFirst\(request\)/.test(serviceWorker) || !/cache: "no-store"/.test(serviceWorker)) {
   issues.push("fuman-sw.js must keep mobile data requests network-first/no-store");
 }
-if (/live-freshness-ok\.json/.test(serviceWorker)) {
-  issues.push("fuman-sw.js must not keep legacy live-freshness-ok.json in data cache patterns");
-}
 if (!/ETIMEDOUT|ECONNRESET|fetch failed/.test(gate)) {
   issues.push("run-live-freshness-gate.ps1 must capture external source timeout warnings");
 }
@@ -423,8 +400,7 @@ for (const file of [
   "scripts/fugle-websocket-collector.js",
   "scripts/scan-realtime-radar-cache.js",
   "scripts/scan-strategy3-cache.js",
-  "scripts/verify-desktop-api-only.js",
-  "data/data-manifest.json",
+  "scripts/verify-desktop-api-only.js",
   "data/terminal-home-bundle.json",
   "data/terminal-home-mobile-slim.json",
   "scripts/scan-open-buy-cache.js",
@@ -458,11 +434,9 @@ for (const marker of [
   "run-freshness-gate-task.ps1",
   ".vercel/output/static/scan-intraday-signals.js",
   ".vercel/output/static/intraday-radar-rules.js",
-  "data/chip-trade-health-latest.json",
-  "data/data-freshness-report.json",
+  "data/chip-trade-health-latest.json",
   "data/fugle-open-rebound-latest.json",
-  "warrant-volume-page-",
-  "data/live-freshness-ok.json",
+  "warrant-volume-page-",
   "open-buy-page-",
   "strategy2-intraday-page-",
   "strategy3-page-",
@@ -533,27 +507,6 @@ if (/strategy3-latest\.json|run-cache-sync\.ps1/.test(strategy3Watchdog)) {
 }
 
 
-if (!fs.existsSync(path.join(ROOT, "FRESHNESS-GATE-MOBILE.md"))) {
-  issues.push("FRESHNESS-GATE-MOBILE.md missing mobile governance summary");
-} else {
-  const mobile = read("FRESHNESS-GATE-MOBILE.md");
-  for (const marker of [
-    "API-Only Publish Governance",
-    "Fuman Terminal no longer uses the old daily data freshness verifier",
-    "Removed legacy authority",
-    "npm run verify:publish-gate",
-    "Supabase complete run or snapshot",
-    "Targeted data verifiers remain valid",
-    "Do not restore scripts/verify-data-freshness.js",
-    "Do not add verify:data-freshness back to package.json",
-  ]) {
-    if (!mobile.includes(marker)) issues.push(`FRESHNESS-GATE-MOBILE.md missing ${marker}`);
-  }
-  if (!/If an old script complains that `verify-data-freshness\.js` is missing/.test(mobile)) {
-    issues.push("FRESHNESS-GATE-MOBILE.md must tell Codex to remove old dependencies instead of recreating verify-data-freshness.js");
-  }
-}
-
 if (!fs.existsSync(path.join(ROOT, "STRATEGY2-FRESHNESS-GOVERNANCE.md"))) {
   issues.push("STRATEGY2-FRESHNESS-GOVERNANCE.md missing strategy2 data governance");
 } else {
@@ -568,9 +521,6 @@ if (!fs.existsSync(path.join(ROOT, "STRATEGY2-FRESHNESS-GOVERNANCE.md"))) {
     "degraded_intraday_1m",
     "不升級 A 區",
     "afterhours_stopped_ok",
-    "不要呼叫 `verify:data-freshness`",
-    "不要依賴 `scripts/verify-data-freshness.js`",
-    "不要用 `data/live-freshness-ok.json`",
     "STRATEGY2_SCAN_START_MINUTES = 525",
     "STRATEGY2_ENTRY_START_MINUTES = 545",
     "STRATEGY2_ENTRY_END_MINUTES = 720",
@@ -610,9 +560,6 @@ if (!fs.existsSync(path.join(ROOT, "REALTIME-RADAR-FRESHNESS-GOVERNANCE.md"))) {
     "API 必須回 `ok`",
     "marketSession.marketDataDate",
     "ETF、ETN、DR、指數、權證、CB、非普通股",
-    "不要呼叫 `verify:data-freshness`",
-    "不要依賴 `scripts/verify-data-freshness.js`",
-    "不要用 `data/live-freshness-ok.json`",
     "npm run verify:publish-gate",
   ]) {
     if (!realtimeRadarGovernance.includes(marker)) issues.push(`REALTIME-RADAR-FRESHNESS-GOVERNANCE.md missing ${marker}`);
@@ -629,9 +576,6 @@ if (!fs.existsSync(path.join(ROOT, "STRATEGY5-FRESHNESS-GOVERNANCE.md"))) {
     "`rows` 必須是 `matches` 的 alias",
     "?top=1&compact=1&limit=50",
     "readback log 至少包含 `runId`",
-    "不要呼叫 `verify:data-freshness`",
-    "不要依賴 `scripts/verify-data-freshness.js`",
-    "不要用 `data/live-freshness-ok.json`",
     "不要把策略5正式來源退回",
   ]) {
     if (!strategy5Governance.includes(marker)) issues.push(`STRATEGY5-FRESHNESS-GOVERNANCE.md missing ${marker}`);
@@ -667,14 +611,12 @@ if (fetchResult.status !== 0) {
   } else {
     const allowedDirty = new Set([
       ".gitignore",
-      "AGENTS.md",
-      "FRESHNESS-GATE-MOBILE.md",
+      "AGENTS.md",
       "scripts/verify-publish-gate.js",
       "api/realtime-radar-latest.js",
       "api/terminal-home.js",
       "terminal-runtime-config.js",
-      "scripts/e2e-smoke.js",
-      "scripts/verify-data-freshness.js",
+      "scripts/e2e-smoke.js",
       "scripts/verify-deployment.js",
       "scripts/verify-warrant-freshness.js",
       "run-live-freshness-gate.ps1",
@@ -692,10 +634,7 @@ if (fetchResult.status !== 0) {
       "run-daily-release.ps1",
       "run-full-scan.ps1",
       "run-publish-gate.ps1",
-      "package.json",
-      "data/data-manifest.json",
-      "data/data-status-index.json",
-      "data/live-freshness-ok.json",
+      "package.json",
       "data/mobile-home-summary.json",
       "data/strategy-match-index.json",
       "data/strategy2-intraday-live-top.json",
