@@ -2010,6 +2010,21 @@ body.fuman-light-theme #watchlist-view .watchlist-entry-copy h1 .page-title-icon
 }
 
 /* brand-yellow-lock-final-20260601 */
+[data-view="realtime-radar"].member-locked-link,
+[data-view="cb-detect"].member-locked-link {
+  opacity: 1 !important;
+  pointer-events: auto !important;
+  filter: none !important;
+}
+
+[data-view="realtime-radar"].member-locked-link::before,
+[data-view="realtime-radar"].member-locked-link::after,
+[data-view="cb-detect"].member-locked-link::before,
+[data-view="cb-detect"].member-locked-link::after {
+  content: none !important;
+  display: none !important;
+}
+
 html body .auth-card .auth-badge,
 html body.fuman-light-theme .auth-card .auth-badge {
   color: #ff8a3d !important;
