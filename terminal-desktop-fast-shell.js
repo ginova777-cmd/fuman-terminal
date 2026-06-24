@@ -2351,7 +2351,7 @@
       .fuman-theme-toggle {
         position: fixed !important;
         top: calc(env(safe-area-inset-top, 0px) + 18px) !important;
-        right: 18px !important;
+        right: 42px !important;
         z-index: 100001 !important;
         width: 46px !important;
         height: 46px !important;
