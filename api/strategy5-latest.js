@@ -19,7 +19,7 @@ const STRATEGY5_UI_MATCH_META = {
   chip_k_confluence: { label: "籌碼老K", short: "籌碼老K" },
   multi_strategy_confluence: { label: "多策略共振", short: "共振" },
   volume_turnover_breakout: { label: "量價周轉強攻", short: "量價周轉" },
-  bollinger_kdj_buy: { label: "布林KDJ買點", short: "布林KDJ" },
+  bollinger_kdj_buy: { label: "布林隨機買點", short: "布林隨機" },
   momentum: { label: "動能分數達標", short: "動能" },
   main_force_chip: { label: "主力籌碼盤整", short: "主力" },
   limit_up_doji: { label: "漲停十字星", short: "漲停十字" },

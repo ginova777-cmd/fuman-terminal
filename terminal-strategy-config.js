@@ -3,7 +3,7 @@ const STRATEGY_DEFS = [
   { id: "chip_k_confluence", label: "籌碼老K", short: "籌碼老K", icon: "老K" },
   { id: "multi_strategy_confluence", label: "🔥 多策略共振", short: "共振", icon: "🔥" },
   { id: "volume_turnover_breakout", label: "量價周轉強攻", short: "量價周轉", icon: "量" },
-  { id: "bollinger_kdj_buy", label: "布林KDJ買點", short: "布林KDJ", icon: "K" },
+  { id: "bollinger_kdj_buy", label: "布林隨機買點", short: "布林隨機", icon: "布" },
   { id: "momentum", label: "動能分數 75+", short: "動能", icon: "⚡" },
   { id: "main_force_chip", label: "主力籌碼盤整", short: "主力", icon: "♣" },
   { id: "limit_up_doji", label: "漲停十字星", short: "漲停十字", icon: "十" },
