@@ -27,6 +27,8 @@ function emptyPayload(reason = "cb_detect_snapshot_missing", options = {}) {
     count: 0,
     returnedCount: 0,
     canvas: Boolean(options.canvas),
+    compact: Boolean(options.compact),
+    shell: Boolean(options.shell),
     rows: [],
     matches: [],
     updatedAt: new Date().toISOString(),
@@ -49,11 +51,18 @@ function cleanNumber(value) {
 function readRequestOptions(request) {
   try {
     const url = new URL(request.url, `https://${request.headers.host || "localhost"}`);
-    const canvas = url.searchParams.get("canvas") === "1";
-    const limit = Math.max(1, Math.min(canvas ? 120 : 3000, cleanNumber(url.searchParams.get("limit")) || (canvas ? 80 : 3000)));
-    return { canvas, limit };
+    const query = request.query || {};
+    const getParam = (key) => url.searchParams.get(key) ?? query[key];
+    const canvas = getParam("canvas") === "1";
+    const compact = getParam("compact") === "1";
+    const shell = getParam("shell") === "1";
+    const compactIntent = canvas || compact || shell || getParam("fastBundle") === "1" || getParam("snapshotBuild") === "1";
+    const defaultLimit = compactIntent ? 60 : 3000;
+    const maxLimit = compactIntent ? 70 : 3000;
+    const limit = Math.max(1, Math.min(maxLimit, cleanNumber(getParam("limit")) || defaultLimit));
+    return { canvas, compact, shell, compactIntent, limit };
   } catch {
-    return { canvas: false, limit: 3000 };
+    return { canvas: false, compact: false, shell: false, compactIntent: false, limit: 3000 };
   }
 }
 
@@ -83,8 +92,12 @@ module.exports = async function handler(request, response) {
       response.status(200).json(emptyPayload("cb_detect_snapshot_missing", options));
       return;
     }
-    const rows = Array.isArray(snapshot.payload.rows) ? snapshot.payload.rows : [];
-    const outputRows = options.canvas ? rows.slice(0, options.limit || 80) : rows;
+    const rows = Array.isArray(snapshot.payload.rows)
+      ? snapshot.payload.rows
+      : Array.isArray(snapshot.payload.matches)
+        ? snapshot.payload.matches
+        : [];
+    const outputRows = options.compactIntent ? rows.slice(0, options.limit || 60) : rows;
     response.status(200).json({
       ...snapshot.payload,
       ok: snapshot.payload.ok !== false,
@@ -93,7 +106,10 @@ module.exports = async function handler(request, response) {
       count: Number(snapshot.payload.count || rows.length || 0),
       returnedCount: outputRows.length,
       canvas: Boolean(options.canvas),
+      compact: Boolean(options.compact),
+      shell: Boolean(options.shell),
       rows: outputRows,
+      matches: outputRows,
       cacheSource: "supabase-snapshot",
       runId: snapshot.payload.runId || snapshot.snapshotId || "",
       updatedAt: snapshot.payload.updatedAt || snapshot.updatedAt || "",
