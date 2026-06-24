@@ -2828,6 +2828,94 @@
           color: #475569 !important;
           border-color: #d8e3ef !important;
         }
+
+        html body.fuman-light-theme.public-terminal .app-shell,
+        html body.fuman-light-theme.public-terminal .dashboard,
+        html body.fuman-light-theme.public-terminal main {
+          background:
+            linear-gradient(rgba(15, 23, 42, 0.028) 1px, transparent 1px),
+            linear-gradient(90deg, rgba(15, 23, 42, 0.022) 1px, transparent 1px),
+            #f6f8fb !important;
+          background-size: 30px 30px, 30px 30px, auto !important;
+          color: #0f172a !important;
+        }
+        html body.fuman-light-theme.public-terminal .desktop-route-shell {
+          border-color: #d9e2ee !important;
+          background: #ffffff !important;
+          color: #0f172a !important;
+          box-shadow: 0 14px 34px rgba(15, 23, 42, 0.07) !important;
+        }
+        html body.fuman-light-theme.public-terminal .desktop-route-shell-head > span {
+          border-color: rgba(249, 115, 22, 0.42) !important;
+          background: #fff7ed !important;
+          color: #f97316 !important;
+          box-shadow: none !important;
+        }
+        html body.fuman-light-theme.public-terminal .desktop-route-shell-head h2,
+        html body.fuman-light-theme.public-terminal .desktop-canvas-detail-panel h3 {
+          color: #0f172a !important;
+        }
+        html body.fuman-light-theme.public-terminal .desktop-route-shell-head p,
+        html body.fuman-light-theme.public-terminal .desktop-canvas-search-wrap,
+        html body.fuman-light-theme.public-terminal .desktop-canvas-detail-panel p {
+          color: #64748b !important;
+        }
+        html body.fuman-light-theme.public-terminal .desktop-route-shell-grid article,
+        html body.fuman-light-theme.public-terminal .desktop-canvas-count,
+        html body.fuman-light-theme.public-terminal .desktop-canvas-status,
+        html body.fuman-light-theme.public-terminal .desktop-canvas-detail-grid span {
+          border-color: #d9e2ee !important;
+          background: #f8fafc !important;
+          color: #334155 !important;
+          box-shadow: none !important;
+        }
+        html body.fuman-light-theme.public-terminal .desktop-route-shell-grid span,
+        html body.fuman-light-theme.public-terminal .desktop-canvas-detail-grid span {
+          color: #64748b !important;
+        }
+        html body.fuman-light-theme.public-terminal .desktop-route-shell-grid strong,
+        html body.fuman-light-theme.public-terminal .desktop-canvas-detail-grid strong {
+          color: #0f172a !important;
+        }
+        html body.fuman-light-theme.public-terminal .desktop-route-canvas {
+          background: #f8fafc !important;
+          box-shadow: inset 0 0 0 1px #d9e2ee, 0 10px 24px rgba(15, 23, 42, 0.055) !important;
+        }
+        html body.fuman-light-theme.public-terminal .desktop-canvas-search {
+          border-color: #cbd8e6 !important;
+          background: #ffffff !important;
+          color: #0f172a !important;
+          box-shadow: none !important;
+        }
+        html body.fuman-light-theme.public-terminal .desktop-canvas-search::placeholder {
+          color: #94a3b8 !important;
+        }
+        html body.fuman-light-theme.public-terminal .desktop-canvas-refresh {
+          border-color: #fb923c !important;
+          background: #fff7ed !important;
+          color: #9a3412 !important;
+          box-shadow: none !important;
+        }
+        html body.fuman-light-theme.public-terminal .desktop-canvas-detail-panel {
+          border-color: #fb923c !important;
+          background: #ffffff !important;
+          color: #0f172a !important;
+          box-shadow: 0 18px 44px rgba(15, 23, 42, 0.12) !important;
+        }
+        html body.fuman-light-theme.public-terminal .desktop-canvas-detail-close {
+          border-color: #cbd8e6 !important;
+          background: #ffffff !important;
+          color: #334155 !important;
+        }
+        html body.fuman-light-theme.public-terminal .desktop-route-shell-lines i {
+          background: linear-gradient(90deg, rgba(100,116,139,0.12), rgba(249,115,22,0.16), rgba(37,99,235,0.10)) !important;
+        }
+        html body.fuman-light-theme.public-terminal .fuman-theme-toggle {
+          border-color: #cbd8e6 !important;
+          background: #ffffff !important;
+          color: #f59e0b !important;
+          box-shadow: 0 10px 24px rgba(15, 23, 42, 0.12) !important;
+        }
       }
     `;
     document.head.appendChild(style);

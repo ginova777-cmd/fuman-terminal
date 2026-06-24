@@ -2199,3 +2199,264 @@ body.fuman-light-theme {
     box-shadow: inset 0 1px 0 rgba(255,255,255,0.92), 0 14px 32px rgba(30, 41, 59, 0.075) !important;
   }
 }
+
+/* desktop-sun-moon-final-20260624 */
+@media (min-width: 901px) {
+  html body.fuman-light-theme.public-terminal {
+    color-scheme: light !important;
+    background: #f6f8fb !important;
+    color: #0f172a !important;
+  }
+
+  html body.fuman-light-theme.public-terminal .app-shell,
+  html body.fuman-light-theme.public-terminal .dashboard,
+  html body.fuman-light-theme.public-terminal main {
+    background:
+      linear-gradient(rgba(15, 23, 42, 0.028) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(15, 23, 42, 0.022) 1px, transparent 1px),
+      #f6f8fb !important;
+    background-size: 30px 30px, 30px 30px, auto !important;
+    color: #0f172a !important;
+  }
+
+  html body.fuman-light-theme.public-terminal .sidebar {
+    background: #ffffff !important;
+    border-right: 1px solid #d9e2ee !important;
+    color: #1e293b !important;
+    box-shadow: 10px 0 30px rgba(15, 23, 42, 0.055) !important;
+  }
+
+  html body.fuman-light-theme.public-terminal .brand {
+    background: #ffffff !important;
+    border-bottom: 1px solid #e5edf6 !important;
+  }
+
+  html body.fuman-light-theme.public-terminal .brand strong,
+  html body.fuman-light-theme.public-terminal .brand strong *,
+  html body.fuman-light-theme.public-terminal .brand small,
+  html body.fuman-light-theme.public-terminal .nav-label,
+  html body.fuman-light-theme.public-terminal .chip-menu h2,
+  html body.fuman-light-theme.public-terminal .sidebar-foot,
+  html body.fuman-light-theme.public-terminal .refresh-line,
+  html body.fuman-light-theme.public-terminal .terminal-message {
+    text-shadow: none !important;
+    filter: none !important;
+  }
+
+  html body.fuman-light-theme.public-terminal .brand strong,
+  html body.fuman-light-theme.public-terminal .brand strong * {
+    color: #9a3412 !important;
+    -webkit-text-fill-color: #9a3412 !important;
+  }
+
+  html body.fuman-light-theme.public-terminal .brand strong b,
+  html body.fuman-light-theme.public-terminal .brand span {
+    color: #f97316 !important;
+    -webkit-text-fill-color: #f97316 !important;
+  }
+
+  html body.fuman-light-theme.public-terminal .brand small,
+  html body.fuman-light-theme.public-terminal .nav-label,
+  html body.fuman-light-theme.public-terminal .chip-menu h2,
+  html body.fuman-light-theme.public-terminal .sidebar-foot,
+  html body.fuman-light-theme.public-terminal .refresh-line,
+  html body.fuman-light-theme.public-terminal .terminal-message {
+    color: #64748b !important;
+  }
+
+  html body.fuman-light-theme.public-terminal .nav-item,
+  html body.fuman-light-theme.public-terminal .strategy-nav,
+  html body.fuman-light-theme.public-terminal .chip-menu-link,
+  html body.fuman-light-theme.public-terminal [data-view] {
+    border: 1px solid #dbe5f0 !important;
+    border-radius: 9px !important;
+    background: #f8fafc !important;
+    color: #243449 !important;
+    box-shadow: none !important;
+  }
+
+  html body.fuman-light-theme.public-terminal .nav-item:hover,
+  html body.fuman-light-theme.public-terminal .strategy-nav:hover,
+  html body.fuman-light-theme.public-terminal .chip-menu-link:hover,
+  html body.fuman-light-theme.public-terminal [data-view]:hover {
+    background: #ffffff !important;
+    border-color: #bfdbfe !important;
+    color: #1d4ed8 !important;
+  }
+
+  html body.fuman-light-theme.public-terminal .nav-item.active,
+  html body.fuman-light-theme.public-terminal .strategy-nav.active,
+  html body.fuman-light-theme.public-terminal .chip-menu-link.active,
+  html body.fuman-light-theme.public-terminal [data-view].active,
+  html body.fuman-light-theme.public-terminal [data-view].fuman-instant-active {
+    background: #fff7ed !important;
+    border-color: #fb923c !important;
+    color: #9a3412 !important;
+    box-shadow: inset 4px 0 0 #f97316, 0 8px 20px rgba(249, 115, 22, 0.1) !important;
+  }
+
+  html body.fuman-light-theme.public-terminal .sidebar .nav-icon,
+  html body.fuman-light-theme.public-terminal .sidebar .strategy-nav span,
+  html body.fuman-light-theme.public-terminal .sidebar .chip-menu-link span {
+    color: #f97316 !important;
+    -webkit-text-fill-color: #f97316 !important;
+    opacity: 1 !important;
+    filter: none !important;
+    text-shadow: none !important;
+  }
+
+  html body.fuman-light-theme.public-terminal .view-panel,
+  html body.fuman-light-theme.public-terminal #market-view,
+  html body.fuman-light-theme.public-terminal #strategy-view,
+  html body.fuman-light-theme.public-terminal #chip-trade-view,
+  html body.fuman-light-theme.public-terminal #cb-detect-view,
+  html body.fuman-light-theme.public-terminal #warrant-flow-view,
+  html body.fuman-light-theme.public-terminal #watchlist-view,
+  html body.fuman-light-theme.public-terminal .strategy-terminal,
+  html body.fuman-light-theme.public-terminal .strategy-results {
+    background: transparent !important;
+    color: #0f172a !important;
+  }
+
+  html body.fuman-light-theme.public-terminal .page-header,
+  html body.fuman-light-theme.public-terminal .strategy-header,
+  html body.fuman-light-theme.public-terminal .radar-topbar,
+  html body.fuman-light-theme.public-terminal .intraday-topbar,
+  html body.fuman-light-theme.public-terminal .swing-topbar,
+  html body.fuman-light-theme.public-terminal .strategy5-page-heading,
+  html body.fuman-light-theme.public-terminal #chip-trade-view .chip-page-header,
+  html body.fuman-light-theme.public-terminal #warrant-flow-view .page-header,
+  html body.fuman-light-theme.public-terminal #warrant-flow-view .swing-topbar,
+  html body.fuman-light-theme.public-terminal #watchlist-view .watchlist-entry-card,
+  html body.fuman-light-theme.public-terminal .metric-card,
+  html body.fuman-light-theme.public-terminal .strength-panel,
+  html body.fuman-light-theme.public-terminal .terminal-card,
+  html body.fuman-light-theme.public-terminal .radar-ai-box,
+  html body.fuman-light-theme.public-terminal .radar-signal-card,
+  html body.fuman-light-theme.public-terminal .swing-dashboard,
+  html body.fuman-light-theme.public-terminal .intraday-dashboard,
+  html body.fuman-light-theme.public-terminal .strategy5-dashboard,
+  html body.fuman-light-theme.public-terminal .chip-tool,
+  html body.fuman-light-theme.public-terminal .chip-table-wrap,
+  html body.fuman-light-theme.public-terminal .swing-panel,
+  html body.fuman-light-theme.public-terminal .warrant-flow-panel,
+  html body.fuman-light-theme.public-terminal .watchlist-card,
+  html body.fuman-light-theme.public-terminal .watch-analysis-panel,
+  html body.fuman-light-theme.public-terminal .ta-dashboard,
+  html body.fuman-light-theme.public-terminal .stock-card,
+  html body.fuman-light-theme.public-terminal .market-ai-card,
+  html body.fuman-light-theme.public-terminal .market-ai-block {
+    border: 1px solid #d9e2ee !important;
+    border-radius: 10px !important;
+    background: #ffffff !important;
+    color: #0f172a !important;
+    box-shadow: 0 10px 26px rgba(15, 23, 42, 0.065) !important;
+  }
+
+  html body.fuman-light-theme.public-terminal .page-header,
+  html body.fuman-light-theme.public-terminal .strategy-header,
+  html body.fuman-light-theme.public-terminal .radar-topbar,
+  html body.fuman-light-theme.public-terminal .intraday-topbar,
+  html body.fuman-light-theme.public-terminal .swing-topbar,
+  html body.fuman-light-theme.public-terminal .strategy5-page-heading,
+  html body.fuman-light-theme.public-terminal #chip-trade-view .chip-page-header,
+  html body.fuman-light-theme.public-terminal #warrant-flow-view .page-header,
+  html body.fuman-light-theme.public-terminal #warrant-flow-view .swing-topbar {
+    border-left: 4px solid #f97316 !important;
+  }
+
+  html body.fuman-light-theme.public-terminal h1,
+  html body.fuman-light-theme.public-terminal h2,
+  html body.fuman-light-theme.public-terminal h3,
+  html body.fuman-light-theme.public-terminal h4,
+  html body.fuman-light-theme.public-terminal strong,
+  html body.fuman-light-theme.public-terminal .stock-name,
+  html body.fuman-light-theme.public-terminal .code {
+    color: #0f172a !important;
+  }
+
+  html body.fuman-light-theme.public-terminal p,
+  html body.fuman-light-theme.public-terminal small,
+  html body.fuman-light-theme.public-terminal span,
+  html body.fuman-light-theme.public-terminal em,
+  html body.fuman-light-theme.public-terminal td {
+    text-shadow: none !important;
+  }
+
+  html body.fuman-light-theme.public-terminal input,
+  html body.fuman-light-theme.public-terminal select,
+  html body.fuman-light-theme.public-terminal textarea {
+    border-color: #cbd8e6 !important;
+    background: #ffffff !important;
+    color: #0f172a !important;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.96) !important;
+  }
+
+  html body.fuman-light-theme.public-terminal input::placeholder,
+  html body.fuman-light-theme.public-terminal textarea::placeholder {
+    color: #94a3b8 !important;
+  }
+
+  html body.fuman-light-theme.public-terminal button:not(.fuman-theme-toggle),
+  html body.fuman-light-theme.public-terminal .chip-tabs button,
+  html body.fuman-light-theme.public-terminal .chip-pill,
+  html body.fuman-light-theme.public-terminal .terminal-pagination button,
+  html body.fuman-light-theme.public-terminal .swing-tabs button {
+    border-color: #cbd8e6 !important;
+    background: #ffffff !important;
+    color: #334155 !important;
+    box-shadow: none !important;
+  }
+
+  html body.fuman-light-theme.public-terminal button.active:not(.fuman-theme-toggle),
+  html body.fuman-light-theme.public-terminal .chip-tabs button.active,
+  html body.fuman-light-theme.public-terminal .chip-pill.active,
+  html body.fuman-light-theme.public-terminal .terminal-pagination button.active,
+  html body.fuman-light-theme.public-terminal .swing-tabs button.active {
+    border-color: #fb923c !important;
+    background: #fff7ed !important;
+    color: #9a3412 !important;
+  }
+
+  html body.fuman-light-theme.public-terminal table,
+  html body.fuman-light-theme.public-terminal .chip-table,
+  html body.fuman-light-theme.public-terminal .swing-table,
+  html body.fuman-light-theme.public-terminal .intraday-table {
+    border-color: #d9e2ee !important;
+    background: #ffffff !important;
+    color: #0f172a !important;
+  }
+
+  html body.fuman-light-theme.public-terminal table thead,
+  html body.fuman-light-theme.public-terminal table th,
+  html body.fuman-light-theme.public-terminal .stock-head {
+    background: #eef4fb !important;
+    color: #475569 !important;
+    border-color: #d9e2ee !important;
+  }
+
+  html body.fuman-light-theme.public-terminal table td,
+  html body.fuman-light-theme.public-terminal table tr {
+    border-color: #e5edf6 !important;
+    color: #334155 !important;
+  }
+
+  html body.fuman-light-theme.public-terminal .up,
+  html body.fuman-light-theme.public-terminal .red,
+  html body.fuman-light-theme.public-terminal .positive {
+    color: #dc2626 !important;
+  }
+
+  html body.fuman-light-theme.public-terminal .down,
+  html body.fuman-light-theme.public-terminal .green,
+  html body.fuman-light-theme.public-terminal .negative {
+    color: #059669 !important;
+  }
+
+  html body.fuman-light-theme.public-terminal .fuman-theme-toggle {
+    background: #ffffff !important;
+    border-color: #cbd8e6 !important;
+    color: #f59e0b !important;
+    box-shadow: 0 10px 24px rgba(15, 23, 42, 0.12) !important;
+  }
+}
