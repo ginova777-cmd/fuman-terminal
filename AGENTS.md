@@ -230,6 +230,21 @@ jointStreak             同買日                         -> /api/institution-la
 - 若對應 endpoint 尚未載入，filter badge count 顯示 `...`，不要顯示 `0`。
 - 只有在對應 endpoint 實際完成 fetch 且回傳 zero results 時，才可以顯示 `0`。
 
+已確認解法，不要回退：
+
+- `api/institution-latest.js` 現在必須直接補出 `foreignTrustBuyVolumePct` 與 `institutionBuyVolumePct`。
+- 公式固定為 `(外資 + 投信) / 5日均量 * 100`；欄位來源是 `foreign` + `trust` / `fiveDayAvgVolume`。
+- `terminal-desktop-fast-shell.js` 必須保留前端 fallback：即使吃到舊 snapshot 沒帶 `foreignTrustBuyVolumePct` / `institutionBuyVolumePct`，也要用 `foreign` / `trust` / `fiveDayAvgVolume` 現算。
+- 不可把缺欄位、舊 snapshot、跨 endpoint 未載入誤判成 `0`。
+- TDCC 這類另一個 endpoint 尚未載入的 count 要顯示待載入符號 `...`，不可顯示假 `0`。
+
+這次實際遇到的舊阻擋：
+
+- 舊 `verify:chip` / `health:chip` 仍硬追已退休的 `data/institution-latest.json`，在乾淨 API-only clone 會失敗；處理方式是刪 verifier / script 引用，不恢復靜態 JSON。
+- 舊 snapshot 可能沒有 `foreignTrustBuyVolumePct` / `institutionBuyVolumePct`，導致前端若只看顯式欄位會顯示假 `0`；處理方式是 API 補欄位 + fast shell fallback。
+- 舊泛用策略 renderer 會把買賣超畫成 `Rank / Code / Signal`，內容怪且像沒資料；處理方式是買賣超使用自己的 Canvas table renderer。
+- 部署驗證時 preview deployment 與正式 alias 可能短暫不同步；驗證必須看 `https://fuman-terminal.vercel.app` 正式 alias 與 production monitor，不可只看 preview URL。
+
 已退休的買賣超靜態 verifier 不可復活：
 
 - `verify:chip` / `health:chip` 已從 `package.json` 移除。
