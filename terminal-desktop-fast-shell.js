@@ -17,6 +17,7 @@
   const API_ONLY_STRATEGY_ROUTES = ["strategy|策略1", "strategy|策略3", "strategy|策略4", "strategy|策略5"];
   const LIVE_API_STRATEGY_ROUTES = ["strategy|策略2"];
   const CB_DETECT_ROUTE = "cb-detect|CB可轉債";
+  const WARRANT_FLOW_ROUTE = "warrant-flow|權證走向";
   const FIXED_ROUTE_KEYS = ["market|市場總覽", "chip-trade|買賣超", CB_DETECT_ROUTE, "warrant-flow|權證走向", "watchlist|自選股"];
   const FIXED_CANVAS_PERSIST_ROUTES = ["chip-trade|買賣超", CB_DETECT_ROUTE, "warrant-flow|權證走向"];
   const API_ONLY_FIXED_ROUTE_KEYS = ["chip-trade|買賣超", CB_DETECT_ROUTE, "warrant-flow|權證走向"];
@@ -973,6 +974,10 @@
     return route === CHIP_TRADE_ROUTE;
   }
 
+  function isWarrantFlowRoute(route) {
+    return route === WARRANT_FLOW_ROUTE;
+  }
+
   function isApiBackedSnapshotItem(item) {
     return Boolean(item?.rows?.length) && !item.html;
   }
@@ -1214,8 +1219,82 @@
     };
   }
 
+  function normalizeWarrantCanvasRow(row, index, group) {
+    const topWarrant = Array.isArray(row?.topWarrants) ? row.topWarrants[0] || {} : {};
+    const code = String(row?.underlyingCode || row?.code || "").trim();
+    const title = compactText(row?.underlyingName || row?.name || code || "--", 64);
+    const score = cleanNumber(row?.score || row?.finalScore || row?.warrantHeatScore);
+    const pct = row?.underlyingPercent ?? row?.percent ?? row?.changePercent ?? "";
+    const price = row?.underlyingClose ?? row?.close ?? row?.price ?? "";
+    const warrantCode = String(row?.warrantCode || row?.symbol || topWarrant.code || "").trim();
+    const warrantName = compactText(row?.warrantName || topWarrant.name || "", 44);
+    const thirtyMinuteVolume = cleanNumber(row?.thirtyMinuteVolume || row?.callVolume || row?.volume);
+    const floatingUnits = cleanNumber(row?.floatingUnits || row?.callCount || row?.breadth);
+    const volumeMultiple = cleanNumber(row?.volumeMultiple || row?.warrantHeatScore || row?.score);
+    const value = cleanNumber(row?.value || row?.totalSignalValue || row?.callValue);
+    const signalCount = cleanNumber(row?.estimatedLargeSignalCount || row?.largeSignalCount || row?.signalCount);
+    const actionLabel = compactText(row?.actionLabel || row?.signalGrade || (group === "single" ? "單檔權證訊號" : "標的熱度"), 32);
+    const reason = compactText(row?.reason || row?.stockSetupLabel || row?.branchLabel || "", 180);
+    const signalLine = group === "single"
+      ? compactText([warrantCode, warrantName, actionLabel, signalCount ? `${signalCount}筆` : ""].filter(Boolean).join(" ｜ "), 120)
+      : compactText([
+        warrantCode ? `熱門 ${warrantCode}` : "",
+        thirtyMinuteVolume ? `30分量 ${Math.round(thirtyMinuteVolume).toLocaleString("zh-TW")}` : "",
+        floatingUnits ? `廣度 ${Math.round(floatingUnits).toLocaleString("zh-TW")}` : "",
+        volumeMultiple ? `熱度 ${formatCanvasNumber(volumeMultiple, 1)}` : "",
+      ].filter(Boolean).join(" ｜ "), 120);
+    return {
+      rank: cleanNumber(row?.rank) || index + 1,
+      code,
+      title,
+      pct: pct === "" || pct == null ? "" : String(pct).includes("%") ? String(pct) : `${cleanNumber(pct).toFixed(2)}%`,
+      price: price === "" || price == null ? "" : String(price),
+      score: score ? String(Math.round(score * 100) / 100) : "",
+      reason,
+      line: compactText([code, title, signalLine, reason].filter(Boolean).join(" ｜ "), 180),
+      signalLine,
+      strategyGroup: group,
+      strategyDisplay: group === "single" ? "策略B 單檔權證訊號" : "策略A 標的權證熱度",
+      warrantCode,
+      warrantName,
+      thirtyMinuteVolume,
+      floatingUnits,
+      volumeMultiple,
+      value,
+      signalCount,
+      actionLabel,
+      triggerReason: reason,
+      triggerTags: group === "single" ? [actionLabel, warrantCode].filter(Boolean) : ["標的熱度", warrantCode || "認購彙總"].filter(Boolean),
+    };
+  }
+
+  function normalizeWarrantCanvasRowsFromPayload(payload) {
+    const volumeRows = (Array.isArray(payload?.volumeMatches) && payload.volumeMatches.length ? payload.volumeMatches : payload?.rows || [])
+      .filter((row) => row && (row.underlyingCode || row.code))
+      .map((row, index) => normalizeWarrantCanvasRow(row, index, "volume"))
+      .filter((row) => row.code || row.title)
+      .sort((a, b) =>
+        cleanNumber(b.volumeMultiple) - cleanNumber(a.volumeMultiple) ||
+        cleanNumber(b.thirtyMinuteVolume) - cleanNumber(a.thirtyMinuteVolume) ||
+        cleanNumber(b.score) - cleanNumber(a.score)
+      )
+      .map((row, index) => ({ ...row, rank: index + 1 }));
+    const singleRows = (Array.isArray(payload?.singleSignals) ? payload.singleSignals : [])
+      .filter((row) => row && (row.underlyingCode || row.code || row.warrantCode))
+      .map((row, index) => normalizeWarrantCanvasRow(row, index, "single"))
+      .filter((row) => row.code || row.title)
+      .sort((a, b) =>
+        cleanNumber(b.value) - cleanNumber(a.value) ||
+        cleanNumber(b.signalCount) - cleanNumber(a.signalCount) ||
+        cleanNumber(b.score) - cleanNumber(a.score)
+      )
+      .map((row, index) => ({ ...row, rank: index + 1 }));
+    return [...volumeRows, ...singleRows].slice(0, 120);
+  }
+
   function normalizeCanvasRowsFromPayload(payload, route = "") {
     if (isRoutePayloadNotDrawable(payload, route)) return [];
+    if (isWarrantFlowRoute(route)) return normalizeWarrantCanvasRowsFromPayload(payload);
     const limit = canvasOptionsForRoute(route).limit || 60;
     const minLimit = isStrategy4Route(route) ? 10 : 20;
     const arrays = flattenApiArrays(payload);
@@ -1423,6 +1502,11 @@
         row.volumeRatio,
         row.tradeValue,
         row.legal5d,
+        row.strategyGroup,
+        row.strategyDisplay,
+        row.warrantCode,
+        row.warrantName,
+        row.actionLabel,
       ].join(" ").toLowerCase().includes(query);
     });
     const pageSize = canvasPageSizeForRoute();
@@ -2615,6 +2699,10 @@
       drawChipTradeCanvasRows(ctx, colors, width, height, rows, rowsToDraw, source || "", capacity, rowHeight, headerHeight);
       return;
     }
+    if (isWarrantFlowRoute(canvasState.route)) {
+      drawWarrantFlowCanvasRows(ctx, colors, width, height, rows, source || "", headerHeight);
+      return;
+    }
 
     ctx.fillStyle = colors.header;
     roundRect(ctx, 24, 88, width - 48, 38, 12);
@@ -2815,6 +2903,121 @@
     ctx.fillStyle = colors.muted;
     ctx.font = "700 12px system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
     ctx.fillText(`${CHIP_TRADE_FILTERS.find((item) => item.key === activeFilter)?.label || "買賣超"}｜${compactText(source || "snapshot", 24)}`, 32, height - 24);
+  }
+
+  function drawWarrantSectionHeader(ctx, colors, x, y, width, title, subtitle, count) {
+    ctx.fillStyle = colors.header;
+    roundRect(ctx, x, y, width, 34, 10);
+    ctx.fill();
+    ctx.fillStyle = colors.accent;
+    ctx.font = "900 14px system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+    ctx.fillText(title, x + 14, y + 22);
+    ctx.fillStyle = colors.muted;
+    ctx.font = "800 12px system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+    ctx.fillText(compactText(subtitle, 58), x + 210, y + 22);
+    ctx.textAlign = "right";
+    ctx.fillText(`${count} 筆`, x + width - 14, y + 22);
+    ctx.textAlign = "left";
+  }
+
+  function drawWarrantMiniColumns(ctx, colors, y, width, single = false) {
+    ctx.fillStyle = colors.muted;
+    ctx.font = "800 12px system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+    const labels = single
+      ? [["Rank", 46], ["Code", 106], ["單檔權證", 184], ["金額", width - 390], ["訊號", width - 274], ["Score", width - 150], ["Change", width - 72]]
+      : [["Rank", 46], ["Code", 106], ["標的熱度", 184], ["30分量", width - 430], ["廣度", width - 322], ["熱度", width - 230], ["Score", width - 150], ["Change", width - 72]];
+    labels.forEach(([label, x], index) => {
+      ctx.textAlign = index >= 3 ? "right" : "left";
+      ctx.fillText(label, x, y);
+    });
+    ctx.textAlign = "left";
+  }
+
+  function drawWarrantFlowCanvasRows(ctx, colors, width, height, rows, source, headerHeight) {
+    const volumeRows = rows.filter((row) => row.strategyGroup !== "single");
+    const singleRows = rows.filter((row) => row.strategyGroup === "single");
+    const rowHeight = 36;
+    const topY = 88;
+    const available = Math.max(320, height - topY - 42);
+    const volumeLimit = Math.max(3, Math.min(7, Math.floor((available * 0.52 - 58) / rowHeight)));
+    const singleLimit = Math.max(2, Math.min(5, Math.floor((available * 0.48 - 58) / rowHeight)));
+
+    drawWarrantSectionHeader(ctx, colors, 24, topY, width - 48, "策略A 標的權證熱度", "volumeMatches：先看標的認購熱度與資金聚集", volumeRows.length);
+    drawWarrantMiniColumns(ctx, colors, topY + 56, width, false);
+    volumeRows.slice(0, volumeLimit).forEach((row, index) => {
+      const y = topY + 86 + index * rowHeight;
+      const pctText = row.pct || "--";
+      ctx.fillStyle = index % 2 ? colors.rowAlt : colors.row;
+      roundRect(ctx, 24, y - 24, width - 48, 30, 8);
+      ctx.fill();
+      ctx.fillStyle = colors.accent;
+      ctx.font = "900 12px system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+      ctx.fillText(String(row.rank || index + 1), 48, y - 3);
+      ctx.fillStyle = colors.blue;
+      ctx.font = "900 13px system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+      ctx.fillText(row.code || "--", 106, y - 3);
+      ctx.fillStyle = colors.text;
+      ctx.font = "900 13px system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+      ctx.fillText(compactText(`${row.title || "--"} ${row.warrantCode ? `· ${row.warrantCode}` : ""}`, 42), 184, y - 8);
+      ctx.fillStyle = colors.muted;
+      ctx.font = "12px system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+      ctx.fillText(compactText(row.reason || row.signalLine || "", 72), 184, y + 8);
+      ctx.textAlign = "right";
+      ctx.fillStyle = colors.text;
+      ctx.font = "800 13px system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+      ctx.fillText(formatCanvasNumber(row.thirtyMinuteVolume, 0), width - 430, y - 3);
+      ctx.fillText(formatCanvasNumber(row.floatingUnits, 0), width - 322, y - 3);
+      ctx.fillStyle = colors.accent;
+      ctx.fillText(formatCanvasNumber(row.volumeMultiple, 1), width - 230, y - 3);
+      ctx.fillStyle = colors.text;
+      ctx.fillText(row.score || "--", width - 150, y - 3);
+      ctx.fillStyle = String(pctText).includes("-") ? colors.down : colors.up;
+      ctx.fillText(pctText, width - 72, y - 3);
+      ctx.textAlign = "left";
+    });
+
+    const sectionBY = topY + 86 + volumeLimit * rowHeight + 16;
+    drawWarrantSectionHeader(ctx, colors, 24, sectionBY, width - 48, "策略B 單檔權證訊號", "singleSignals：再看單一權證大額與連續訊號", singleRows.length);
+    drawWarrantMiniColumns(ctx, colors, sectionBY + 56, width, true);
+    singleRows.slice(0, singleLimit).forEach((row, index) => {
+      const y = sectionBY + 86 + index * rowHeight;
+      const pctText = row.pct || "--";
+      ctx.fillStyle = index % 2 ? colors.rowAlt : colors.row;
+      roundRect(ctx, 24, y - 24, width - 48, 30, 8);
+      ctx.fill();
+      ctx.fillStyle = colors.accent;
+      ctx.font = "900 12px system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+      ctx.fillText(String(row.rank || index + 1), 48, y - 3);
+      ctx.fillStyle = colors.blue;
+      ctx.font = "900 13px system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+      ctx.fillText(row.code || "--", 106, y - 3);
+      ctx.fillStyle = colors.text;
+      ctx.font = "900 13px system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+      ctx.fillText(compactText(`${row.title || "--"} · ${row.warrantCode || "--"}`, 42), 184, y - 8);
+      ctx.fillStyle = colors.muted;
+      ctx.font = "12px system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+      ctx.fillText(compactText(row.warrantName || row.reason || "", 72), 184, y + 8);
+      ctx.textAlign = "right";
+      ctx.fillStyle = colors.text;
+      ctx.font = "800 13px system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+      ctx.fillText(formatYi(row.value), width - 390, y - 3);
+      ctx.fillStyle = colors.accent;
+      ctx.fillText(row.actionLabel || "--", width - 274, y - 3);
+      ctx.fillStyle = colors.text;
+      ctx.fillText(row.score || "--", width - 150, y - 3);
+      ctx.fillStyle = String(pctText).includes("-") ? colors.down : colors.up;
+      ctx.fillText(pctText, width - 72, y - 3);
+      ctx.textAlign = "left";
+    });
+
+    if (!volumeRows.length && !singleRows.length) {
+      ctx.fillStyle = colors.muted;
+      ctx.font = "800 15px system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+      ctx.fillText("權證兩大策略資料同步中，完成後會自動分區顯示。", 44, 164);
+    }
+    ctx.fillStyle = colors.muted;
+    ctx.font = "700 12px system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+    ctx.fillText(`策略A ${volumeRows.length}｜策略B ${singleRows.length}｜${compactText(source || "snapshot", 26)}`, 32, height - 24);
   }
 
   function formatCanvasNumber(value, digits = 0) {
