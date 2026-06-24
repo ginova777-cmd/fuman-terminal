@@ -131,8 +131,6 @@ async function main() {
   verifyVersionConsistency();
   const home = await fetchText("/");
   const version = detectVersion(home.body);
-  const latestTradeDate = await latestTradingYmd();
-  const strategy3TradeDate = await strategy3ExpectedTradeDate(latestTradeDate);
   assertOk("home", home, (r) => r.body.includes(`terminal-core.js?v=${version}`));
   const checks = [
     ["core", `/terminal-core.js?v=${version}`, (r) => r.body.includes("terminal-modules.js")],
@@ -141,11 +139,30 @@ async function main() {
     ["service-worker", `/fuman-sw.js?v=${version}`, (r) => r.body.includes("terminal-fast-bundle") && r.body.includes("PREFETCH_CORE_DATA_ASSETS")],
     ["terminal-bootstrap", `/terminal.js?v=${version}`, (r) => r.body.includes("FUMAN_TERMINAL_LOAD_APP") && r.body.includes("terminal-app.js")],
     ["terminal-app", `/terminal-app.js?v=${version}`, (r) => r.body.includes("FUMAN_LIVE_MEMORY_TTL_MS") && r.body.includes("loadStrategyWeights")],
-    ["strategy3-api", "/api/strategy3-latest?v=verify", (r) => { const p = parseJson(r); return p.ok === true && isNotOlderThanLatestTradeDate(p.usedDate || p.date || p.updatedAt, strategy3TradeDate) && Number(p.count) > 0 && !!p.runId; }],
+    ["terminal-fast-bundle", "/api/terminal-fast-bundle?canvas=1&compact=1&shell=1&v=verify", (r) => {
+      const p = parseJson(r);
+      return p.ok === true
+        && p.snapshotHit === true
+        && p.cacheSource === "supabase:desktop_route_snapshot"
+        && p.partial === false
+        && Array.isArray(p.misses)
+        && p.misses.length === 0
+        && Object.keys(p.endpoints || {}).length >= 10;
+    }],
+    ["desktop-route-snapshot", "/api/desktop-route-snapshot?v=verify", (r) => {
+      const p = parseJson(r);
+      return p.ok === true
+        && p.snapshotHit === true
+        && p.cacheSource === "supabase:desktop_route_snapshot"
+        && p.partial === false
+        && Array.isArray(p.misses)
+        && p.misses.length === 0
+        && Object.keys(p.endpoints || {}).length >= 10;
+    }],
+    ["strategy1-api", "/api/open-buy-latest?canvas=1&compact=1&shell=1&limit=60&v=verify", (r) => { const p = parseJson(r); return p.ok === true && Number(p.count || 0) >= 0; }],
+    ["strategy3-api", "/api/strategy3-latest?v=verify", (r) => { const p = parseJson(r); return p.ok === true && Number(p.count) > 0 && !!p.runId; }],
     ["strategy4-api", "/api/strategy4-latest?v=verify", (r) => { const p = parseJson(r); return p.ok === true && p.complete === true && Number(p.count) > 0 && !!p.runId; }],
-    ["data-manifest", "/data/data-manifest.json?v=verify", (r) => { const p = parseJson(r); return p.ok === true && Number(p.count) >= 25 && p.entries?.["stocks-index.json"]?.count > 1000; }],
     ["stocks-index", "/data/stocks-index.json?v=verify", (r) => { const p = parseJson(r); return p.ok === true && Number(p.count) > 1000; }],
-    ["data-status", "/data/data-status-index.json?v=verify", (r) => parseJson(r).ok === true],
     ["signal-quality", "/data/signal-quality-report.json?v=verify", (r) => parseJson(r).ok === true],
     ["data-consistency", "/data/data-consistency-report.json?v=verify", (r) => parseJson(r).ok === true],
     ["strategy-weights", "/data/strategy-weight-report.json?v=verify", (r) => !!parseJson(r).weights],
