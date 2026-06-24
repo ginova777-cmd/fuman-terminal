@@ -121,10 +121,10 @@ function shapeTopPayload(req, payload) {
       shaped.data = Object.fromEntries(entries.slice(0, limit).map(([code, row]) => [code, compact ? compactRow(row) : row]));
     }
   }
-  if (Array.isArray(payload.matches)) shaped.count = payload.matches.length;
-  if (Array.isArray(payload.rows)) shaped.count = payload.rows.length;
-  if (Array.isArray(payload.volumeMatches)) shaped.volumeCount = payload.volumeMatches.length;
-  if (Array.isArray(payload.singleSignals)) shaped.singleSignalCount = payload.singleSignals.length;
+  if (payload.count === undefined && Array.isArray(payload.matches)) shaped.count = payload.matches.length;
+  if (payload.count === undefined && Array.isArray(payload.rows)) shaped.count = payload.rows.length;
+  if (payload.volumeCount === undefined && Array.isArray(payload.volumeMatches)) shaped.volumeCount = payload.volumeMatches.length;
+  if (payload.singleSignalCount === undefined && Array.isArray(payload.singleSignals)) shaped.singleSignalCount = payload.singleSignals.length;
   shaped.shape = compact ? "compact" : "top";
   shaped.limit = limit;
   return shaped;
