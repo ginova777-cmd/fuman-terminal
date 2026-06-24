@@ -368,9 +368,9 @@ async function fetchCompleteRunPayload(base, marketSession = null, options = nul
   if (latestRun?.run_id && latestRun?.payload && hasStrategy2PayloadRows(latestRun.payload) && allowedForMarketSession(latestRun, marketSession)) {
     return buildStrategy2RunPayload(latestRun, { marketSession, options });
   }
-  if (options?.today && latestRun?.run_id && payloadRunDate(latestRun.payload || {}, latestRun) === marketSession?.today) {
-    return buildStrategy2RunPayload(latestRun, { marketSession, options, emptyToday: true });
-  }
+  const emptyTodayRun = options?.today && latestRun?.run_id && payloadRunDate(latestRun.payload || {}, latestRun) === marketSession?.today
+    ? latestRun
+    : null;
   if (latestRun?.run_id) skippedEmptyRunIds.push(latestRun.run_id);
 
   const historyRows = await fetchRows(
@@ -382,13 +382,15 @@ async function fetchCompleteRunPayload(base, marketSession = null, options = nul
       "status=eq.complete",
       "complete=eq.true",
       "result_count=gt.0",
+      options?.today && marketSession?.today ? "scan_date=eq." + isoDate(marketSession.today) : "",
       marketSession?.closed && marketSession.marketDataIsoDate ? "scan_date=lte." + marketSession.marketDataIsoDate : "",
       "order=scan_date.desc,finished_at.desc",
       "limit=10",
     ].filter(Boolean).join("&")
   );
   const historyRun = historyRows.find(row => row?.run_id && row?.payload && hasStrategy2PayloadRows(row.payload) && allowedForMarketSession(row, marketSession));
-  return historyRun ? buildStrategy2RunPayload(historyRun, { skippedEmptyRunIds, sourceTable: RUNS_TABLE, marketSession, options }) : null;
+  if (historyRun) return buildStrategy2RunPayload(historyRun, { skippedEmptyRunIds, sourceTable: RUNS_TABLE, marketSession, options });
+  return emptyTodayRun ? buildStrategy2RunPayload(emptyTodayRun, { marketSession, options, emptyToday: true }) : null;
 }
 
 module.exports = async function handler(request, response) {
