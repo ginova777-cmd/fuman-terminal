@@ -817,6 +817,10 @@
     return String(route || "") === "strategy|策略4";
   }
 
+  function isStrategy2Route(route) {
+    return String(route || "") === "strategy|策略2";
+  }
+
   function isStrategy5Route(route) {
     return String(route || "") === "strategy|策略5";
   }
@@ -982,7 +986,11 @@
     const score = merged.score ?? merged.Score ?? merged.rankScore ?? merged.RankScore ?? merged.swingScore ?? active.score ?? merged.signalScore ?? "";
     const reason = String(merged.reason || active.reason || merged.message || merged.note || "").trim();
     const state = String(merged.state || merged.status || active.name || active.id || "").trim();
+    const stateId = String(merged.stateId || merged.state_id || merged.statusId || merged.status_id || active.id || active.key || "").trim();
+    const intent = String(merged.intent || merged.liveIntent || merged.entryIntent || merged.entry_intent || "").trim();
+    const time = merged.time || merged.Time || merged.detectedAt || merged.detected_at || merged.seenAt || merged.seen_at || merged.quoteTime || merged.quote_time || merged.createdAt || merged.created_at || "";
     const price = merged.price ?? merged.Price ?? merged.close ?? merged.Close ?? merged.ClosingPrice ?? merged.lastPrice ?? merged.LastPrice ?? merged.entryPrice ?? "";
+    const entryPrice = pickFirstValue(merged.entryPrice, merged.entry_price, merged.latestAPrice, merged.latest_a_price, merged.firstAPrice, merged.first_a_price, price);
     const volume = merged.volume ?? merged.Volume ?? merged.tradeVolume ?? merged.TradeVolume ?? merged.volumeLots ?? merged.trade_volume ?? "";
     const volumeLots = pickFirstValue(merged.volumeLots, merged.VolumeLots, merged.volume_lots, cleanNumber(volume) > 100000 ? cleanNumber(volume) / 1000 : "");
     const volumeRatio = pickFirstValue(merged.projectedRatio, merged.volumeRatio, merged.VolumeRatio, merged.projected_ratio, merged.estimatedVolumeRatio, merged.estimated_volume_ratio);
@@ -1042,6 +1050,10 @@
       pct: pct === "" || pct == null ? "" : String(pct).includes("%") ? String(pct) : `${cleanNumber(pct).toFixed(2)}%`,
       score: score === "" || score == null ? "" : String(Math.round(cleanNumber(score) * 100) / 100),
       reason: compactText(reason || state || line, 180),
+      state: compactText(state, 32),
+      stateId: compactText(stateId, 40),
+      intent: compactText(intent, 40),
+      time: compactText(time, 32),
       subStrategy,
       subStrategyId,
       strategyDisplay,
@@ -1049,6 +1061,7 @@
       signalLine,
       signals,
       price: price === "" || price == null ? "" : String(price),
+      entryPrice: entryPrice === "" || entryPrice == null ? "" : String(entryPrice),
       volume: volume === "" || volume == null ? "" : String(volume),
       volumeLots: volumeLots === "" || volumeLots == null ? "" : String(Math.round(cleanNumber(volumeLots))),
       volumeRatio: volumeRatio === "" || volumeRatio == null ? "" : String(volumeRatio),
@@ -1068,12 +1081,68 @@
     const limit = canvasOptionsForRoute(route).limit || 60;
     const minLimit = isStrategy4Route(route) ? 10 : 20;
     const arrays = flattenApiArrays(payload);
+    if (isStrategy2Route(route)) {
+      const preferred = Array.isArray(payload?.rows) && payload.rows.some((row) => row && typeof row === "object")
+        ? payload.rows
+        : arrays.sort((a, b) => b.length - a.length)[0] || [];
+      return preferred
+        .map((row, index) => normalizeCanvasRow(row, index, route))
+        .filter((row) => row.code || row.title)
+        .sort(strategy2SortRows)
+        .slice(0, Math.max(minLimit, Math.min(240, limit)));
+    }
     const best = arrays
       .map((rows) => rows.map((row, index) => normalizeCanvasRow(row, index, route)).filter((row) => row.code || row.title))
       .sort((a, b) => b.length - a.length)[0] || [];
     return best
       .sort((a, b) => cleanNumber(a.rank) - cleanNumber(b.rank) || cleanNumber(b.score) - cleanNumber(a.score) || String(a.code).localeCompare(String(b.code), "zh-Hant"))
       .slice(0, Math.max(minLimit, Math.min(isLiveStrategyRoute(route) ? 240 : 120, limit)));
+  }
+
+  function strategy2TimeValue(row) {
+    const raw = String(row?.time || row?.seenAt || row?.detectedAt || row?.quoteTime || "").trim();
+    if (!raw) return 0;
+    const hms = raw.match(/(\d{1,2}):(\d{2})(?::(\d{2}))?/);
+    if (hms) return cleanNumber(hms[1]) * 3600 + cleanNumber(hms[2]) * 60 + cleanNumber(hms[3] || 0);
+    const stamp = Date.parse(raw);
+    return Number.isFinite(stamp) ? stamp : 0;
+  }
+
+  function strategy2SortRows(a, b) {
+    return strategy2TimeValue(b) - strategy2TimeValue(a)
+      || cleanNumber(a.rank) - cleanNumber(b.rank)
+      || cleanNumber(b.score) - cleanNumber(a.score)
+      || String(a.code).localeCompare(String(b.code), "zh-Hant");
+  }
+
+  function strategy2Text(row) {
+    return [
+      row?.stateId,
+      row?.state,
+      row?.intent,
+      row?.subStrategyId,
+      row?.subStrategy,
+      row?.signalLine,
+      row?.reason,
+    ].filter(Boolean).join(" ");
+  }
+
+  function strategy2Tone(row) {
+    const text = strategy2Text(row);
+    const lower = text.toLowerCase();
+    const combo = `${lower} ${text}`;
+    const paused = /pause|hold|history|b[-_ ]?only|暫停|歷史|市場來源可用率/.test(combo);
+    const hasPrepareSetup = /prepare|candidate|ready|watch|預備|準備|候選|早期|再起漲|反彈|轉強|續強|盤中續強|曾發動仍強/.test(combo);
+    if (!paused && /entry|enter|go|buy|trigger|fire|進場|買進|攻擊|突破/.test(combo)) return "entry";
+    if (!paused && hasPrepareSetup) return "prepare";
+    if (hasPrepareSetup && !/暫停進場區顯示|市場來源/.test(combo)) return "prepare";
+    return "history";
+  }
+
+  function strategy2TimeLabel(row) {
+    const raw = String(row?.time || "").trim();
+    const hms = raw.match(/\d{1,2}:\d{2}(?::\d{2})?/);
+    return hms ? hms[0] : raw || "--";
   }
 
   function isRoutePayloadNotDrawable(payload, route = "") {
@@ -1102,6 +1171,10 @@
       canvasState.rows = cleanRows;
       canvasState.source = source;
       applyCanvasFilter();
+      if (isStrategy2Route(route)) {
+        updateStrategy2BattleShell(currentCanvasShell(), route, strategyMeta(route));
+        return true;
+      }
       scheduleCanvasDraw();
     }
     return true;
@@ -1852,6 +1925,11 @@
         fetchCanvasRows(route, true).then(() => {
           if (canvasState.route === route) {
             applyCanvasFilter();
+            if (isStrategy2Route(route)) {
+              updateStrategy2BattleShell(currentCanvasShell(), route, strategyMeta(route));
+              setCanvasStatus("已刷新");
+              return;
+            }
             scheduleCanvasDraw();
           }
         }).catch(() => setCanvasStatus("沿用快照"));
@@ -2106,6 +2184,11 @@
         const next = rowSignature(rows);
         if (before === next && canvasState.route === route) {
           canvasState.source = `api-only-poll-${reason}`;
+          if (isStrategy2Route(route)) {
+            updateStrategy2BattleShell(currentCanvasShell(), route, strategyMeta(route));
+            setCanvasStatus();
+            return;
+          }
           setCanvasStatus();
           scheduleCanvasDraw();
           return;
@@ -2114,6 +2197,11 @@
           canvasState.rows = rows;
           canvasState.source = `api-only-poll-${reason}`;
           applyCanvasFilter();
+          if (isStrategy2Route(route)) {
+            updateStrategy2BattleShell(currentCanvasShell(), route, strategyMeta(route));
+            setCanvasStatus();
+            return;
+          }
           scheduleCanvasDraw();
           setCanvasStatus();
           return;
@@ -2570,6 +2658,135 @@
     `;
   }
 
+  function strategy2NoteLabel(row, tone, history = false) {
+    const raw = compactText(row?.signalLine || row?.subStrategy || row?.reason || row?.state || "", history ? 120 : 72);
+    if (!history && tone === "prepare" && /暫停進場區顯示|市場來源/.test(raw)) return row?.state && row.state !== "待確認" ? row.state : "預備進場";
+    if (raw) return raw;
+    if (tone === "entry") return "進場";
+    if (tone === "prepare") return "預備進場";
+    return "--";
+  }
+
+  function strategy2PriceLabel(row) {
+    const value = row?.entryPrice || row?.price || "";
+    return formatPriceValue(value) || String(value || "--");
+  }
+
+  function strategy2RowsHtml(rows, mode = "history") {
+    const isEntryTable = mode === "entry";
+    if (!rows.length) {
+      return `<div class="strategy2-empty">${isEntryTable ? "目前沒有即時進場 / 預備進場訊號" : "目前沒有今日歷史紀錄"}</div>`;
+    }
+    const body = rows.map((row, index) => {
+      const tone = isEntryTable ? strategy2Tone(row) : "history";
+      const note = strategy2NoteLabel(row, tone, !isEntryTable);
+      const pct = row?.pct || "--";
+      const score = row?.score || "--";
+      return `
+        <tr class="strategy2-battle-row strategy2-tone-${escapeHtml(tone)}">
+          <td class="strategy2-col-rank">${escapeHtml(isEntryTable ? strategy2TimeLabel(row) : String(index + 1))}</td>
+          <td class="strategy2-col-time">${escapeHtml(isEntryTable ? row?.code || "--" : strategy2TimeLabel(row))}</td>
+          <td class="strategy2-col-symbol">
+            <strong>${escapeHtml(isEntryTable ? row?.title || row?.code || "--" : row?.code || "--")}</strong>
+            <span>${escapeHtml(isEntryTable ? row?.code || "" : row?.title || "")}</span>
+          </td>
+          <td class="strategy2-col-price">${escapeHtml(strategy2PriceLabel(row))}</td>
+          <td class="strategy2-col-note"><span>${escapeHtml(note)}</span></td>
+          <td class="strategy2-col-score">${escapeHtml(score)}</td>
+          <td class="strategy2-col-change">${escapeHtml(pct)}</td>
+        </tr>
+      `;
+    }).join("");
+    return `
+      <table class="strategy2-terminal-table ${isEntryTable ? "strategy2-top-table" : "strategy2-history-table"}">
+        <thead>
+          <tr>
+            <th>${isEntryTable ? "進場時間" : "序"}</th>
+            <th>${isEntryTable ? "標的" : "進場時間"}</th>
+            <th>${isEntryTable ? "名稱" : "標的"}</th>
+            <th>進場價</th>
+            <th>備註</th>
+            <th>分數</th>
+            <th>漲幅</th>
+          </tr>
+        </thead>
+        <tbody>${body}</tbody>
+      </table>
+    `;
+  }
+
+  function strategy2BattleShellHtml(key, meta) {
+    return `
+      <section class="desktop-route-shell desktop-canvas-app strategy2-battle-shell" data-route-shell="${escapeHtml(key)}" data-route-source="${escapeHtml(canvasState.source || "")}">
+        <div class="strategy2-battle-header">
+          <div>
+            <span class="strategy2-battle-kicker">${escapeHtml(meta.icon)} 策略2</span>
+            <h2 data-canvas-meta-title>${escapeHtml(meta.title)}</h2>
+            <p data-canvas-meta-summary>當沖即時偵測，今日進場與歷史紀錄分區顯示。</p>
+          </div>
+          <div class="strategy2-battle-stats">
+            <strong class="desktop-canvas-count">${escapeHtml(`${canvasState.filtered.length}筆`)}</strong>
+            <span class="desktop-canvas-status">${escapeHtml(canvasState.source || "api")}</span>
+            <button type="button" class="strategy2-battle-refresh" data-canvas-refresh>刷新</button>
+          </div>
+        </div>
+        <div class="strategy2-battle-board">
+          <section class="strategy2-battle-panel strategy2-entry-panel" aria-label="即時進場">
+            <header>
+              <div>
+                <span>即時進場（最新在上）</span>
+                <strong data-strategy2-entry-count>0 筆</strong>
+              </div>
+              <small data-strategy2-entry-note>進場黃字，預備進場深藍</small>
+            </header>
+            <div class="strategy2-battle-scroll" data-strategy2-entry-rows></div>
+          </section>
+          <section class="strategy2-battle-panel strategy2-history-panel" aria-label="今日歷史紀錄">
+            <header>
+              <div>
+                <span>今日歷史紀錄（最新在上）</span>
+                <strong data-strategy2-history-count>0 筆</strong>
+              </div>
+              <small>完整保留今日 live API 偵測列</small>
+            </header>
+            <div class="strategy2-battle-scroll" data-strategy2-history-rows></div>
+          </section>
+        </div>
+      </section>
+    `;
+  }
+
+  function updateStrategy2BattleShell(shell, key, meta) {
+    if (!shell) return;
+    shell.dataset.routeShell = key;
+    shell.dataset.routeSource = canvasState.source || "";
+    const rows = [...canvasState.filtered].sort(strategy2SortRows);
+    const liveRows = rows.filter((row) => {
+      const tone = strategy2Tone(row);
+      return tone === "entry" || tone === "prepare";
+    }).slice(0, 24);
+    const entryCount = liveRows.filter((row) => strategy2Tone(row) === "entry").length;
+    const prepareCount = liveRows.filter((row) => strategy2Tone(row) === "prepare").length;
+    const title = shell.querySelector("[data-canvas-meta-title]");
+    const summary = shell.querySelector("[data-canvas-meta-summary]");
+    const count = shell.querySelector(".desktop-canvas-count");
+    const status = shell.querySelector(".desktop-canvas-status");
+    const entryCountNode = shell.querySelector("[data-strategy2-entry-count]");
+    const entryNote = shell.querySelector("[data-strategy2-entry-note]");
+    const historyCountNode = shell.querySelector("[data-strategy2-history-count]");
+    const entryRows = shell.querySelector("[data-strategy2-entry-rows]");
+    const historyRows = shell.querySelector("[data-strategy2-history-rows]");
+    if (title) title.textContent = meta.title;
+    if (summary) summary.textContent = "當沖即時偵測，今日進場與歷史紀錄分區顯示。";
+    if (count) count.textContent = `${rows.length}筆`;
+    if (status) status.textContent = canvasState.source || "api";
+    if (entryCountNode) entryCountNode.textContent = `${entryCount} 進場 / ${prepareCount} 預備`;
+    if (entryNote) entryNote.textContent = entryCount ? "黃色為進場列，深藍為預備進場" : "深藍為預備進場，黃字只留給真正進場";
+    if (historyCountNode) historyCountNode.textContent = `${rows.length} 筆`;
+    if (entryRows) entryRows.innerHTML = strategy2RowsHtml(liveRows, "entry");
+    if (historyRows) historyRows.innerHTML = strategy2RowsHtml(rows, "history");
+  }
+
   function ensurePersistentFixedCanvas(route) {
     if (!FIXED_CANVAS_PERSIST_ROUTES.includes(route)) return false;
     const panel = panelForRoute(route);
@@ -2682,12 +2899,21 @@
     if (top) top.textContent = canvasState.filtered[0]?.code || "--";
     if (table) {
       let shell = table.querySelector(".desktop-route-shell.desktop-canvas-app");
-      if (!shell) {
+      if (isStrategy2Route(key)) {
+        if (!shell || !shell.classList.contains("strategy2-battle-shell")) {
+          table.innerHTML = strategy2BattleShellHtml(key, meta);
+          shell = table.querySelector(".desktop-route-shell.desktop-canvas-app");
+        }
+        updateStrategy2BattleShell(shell, key, meta);
+      } else if (!shell || shell.classList.contains("strategy2-battle-shell")) {
         table.innerHTML = canvasShellHtml(key, meta);
         shell = table.querySelector(".desktop-route-shell.desktop-canvas-app");
+        const canvas = updateCanvasShell(shell, key, meta);
+        drawCanvasShellFrame(canvas, meta);
+      } else {
+        const canvas = updateCanvasShell(shell, key, meta);
+        drawCanvasShellFrame(canvas, meta);
       }
-      const canvas = updateCanvasShell(shell, key, meta);
-      drawCanvasShellFrame(canvas, meta);
     }
     window.setTimeout(() => delete panel.dataset.fumanRouteSnapshotRestoring, 0);
     return true;
@@ -3376,6 +3602,200 @@
       .desktop-route-canvas:focus {
         outline: 2px solid rgba(255,112,55,0.72);
         outline-offset: 3px;
+      }
+      .strategy2-battle-shell {
+        display: grid;
+        grid-template-rows: auto minmax(0, 1fr);
+        gap: 14px;
+        min-height: 680px;
+        padding: 18px;
+      }
+      .strategy2-battle-header {
+        display: flex;
+        align-items: flex-end;
+        justify-content: space-between;
+        gap: 18px;
+        padding-bottom: 10px;
+        border-bottom: 1px solid rgba(148, 163, 184, 0.16);
+      }
+      .strategy2-battle-kicker {
+        display: block;
+        margin-bottom: 6px;
+        color: #ffb27b;
+        font-size: 12px;
+        font-weight: 900;
+      }
+      .strategy2-battle-header h2 {
+        margin: 0;
+        color: #f8fafc;
+        font-size: 23px;
+      }
+      .strategy2-battle-header p {
+        margin: 7px 0 0;
+        color: #9fb0cb;
+        font-size: 13px;
+      }
+      .strategy2-battle-stats {
+        display: flex;
+        align-items: center;
+        justify-content: flex-end;
+        gap: 9px;
+        flex-wrap: wrap;
+      }
+      .strategy2-battle-refresh {
+        min-height: 38px;
+        border: 1px solid rgba(250, 204, 21, 0.42);
+        border-radius: 10px;
+        padding: 0 14px;
+        color: #fef3c7;
+        background: rgba(161, 98, 7, 0.18);
+        font: 900 13px system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        cursor: pointer;
+      }
+      .strategy2-battle-board {
+        display: grid;
+        grid-template-rows: minmax(210px, 0.82fr) minmax(330px, 1.18fr);
+        gap: 14px;
+        min-height: 610px;
+      }
+      .strategy2-battle-panel {
+        min-width: 0;
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+        border: 1px solid rgba(148, 163, 184, 0.18);
+        border-radius: 12px;
+        background: rgba(3, 8, 18, 0.68);
+      }
+      .strategy2-entry-panel {
+        border-color: rgba(250, 204, 21, 0.36);
+        background:
+          linear-gradient(90deg, rgba(250, 204, 21, 0.08), rgba(30, 64, 175, 0.12)),
+          rgba(3, 8, 18, 0.72);
+      }
+      .strategy2-battle-panel header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 10px 14px;
+        border-bottom: 1px solid rgba(148, 163, 184, 0.14);
+        background: rgba(15, 23, 42, 0.58);
+      }
+      .strategy2-battle-panel header span {
+        display: block;
+        color: #fef08a;
+        font: 900 15px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      }
+      .strategy2-battle-panel header strong {
+        display: block;
+        margin-top: 3px;
+        color: #bfdbfe;
+        font: 800 12px system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      }
+      .strategy2-battle-panel header small {
+        color: #8fb3e8;
+        font: 800 12px system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        text-align: right;
+      }
+      .strategy2-battle-scroll {
+        min-height: 0;
+        overflow: auto;
+      }
+      .strategy2-terminal-table {
+        width: 100%;
+        border-collapse: collapse;
+        table-layout: fixed;
+        font: 800 14px/1.35 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      }
+      .strategy2-terminal-table th {
+        position: sticky;
+        top: 0;
+        z-index: 1;
+        padding: 9px 10px;
+        color: #e0e7ff;
+        background: #07111f;
+        text-align: left;
+        border-bottom: 1px solid rgba(148, 163, 184, 0.22);
+      }
+      .strategy2-terminal-table td {
+        padding: 8px 10px;
+        color: #d7e2f7;
+        border-bottom: 1px solid rgba(148, 163, 184, 0.08);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .strategy2-terminal-table tbody tr:nth-child(even) {
+        background: rgba(15, 23, 42, 0.42);
+      }
+      .strategy2-tone-entry td,
+      .strategy2-tone-entry .strategy2-col-symbol strong {
+        color: #fef08a;
+        font-weight: 950;
+      }
+      .strategy2-tone-prepare {
+        background: rgba(23, 37, 84, 0.84) !important;
+      }
+      .strategy2-tone-prepare td,
+      .strategy2-tone-prepare .strategy2-col-symbol strong {
+        color: #bfdbfe;
+      }
+      .strategy2-tone-prepare .strategy2-col-note span {
+        display: inline-flex;
+        max-width: 100%;
+        min-height: 22px;
+        align-items: center;
+        border: 1px solid rgba(59, 130, 246, 0.48);
+        border-radius: 999px;
+        padding: 0 9px;
+        background: rgba(30, 64, 175, 0.9);
+        color: #dbeafe;
+      }
+      .strategy2-col-rank { width: 8%; color: #fbbf24 !important; }
+      .strategy2-col-time { width: 10%; }
+      .strategy2-col-symbol { width: 16%; }
+      .strategy2-col-price { width: 10%; text-align: right; }
+      .strategy2-col-note { width: 36%; }
+      .strategy2-col-score { width: 8%; text-align: right; }
+      .strategy2-col-change { width: 12%; text-align: right; color: #ff6b90 !important; }
+      .strategy2-col-symbol strong,
+      .strategy2-col-symbol span {
+        display: block;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .strategy2-col-symbol span {
+        margin-top: 2px;
+        color: #83a1d5;
+        font-size: 12px;
+      }
+      .strategy2-empty {
+        display: grid;
+        min-height: 124px;
+        place-items: center;
+        padding: 18px;
+        color: #93a4bd;
+        font: 900 14px system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      }
+      @media (max-width: 860px) {
+        .strategy2-battle-shell {
+          min-height: 720px;
+          padding: 14px;
+        }
+        .strategy2-battle-header,
+        .strategy2-battle-panel header {
+          align-items: flex-start;
+          flex-direction: column;
+        }
+        .strategy2-battle-stats {
+          justify-content: flex-start;
+        }
+        .strategy2-terminal-table {
+          min-width: 760px;
+        }
       }
       .desktop-canvas-pagination {
         display: flex;
