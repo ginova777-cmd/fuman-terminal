@@ -359,6 +359,21 @@ function updateMobileAiStaleNote(){const note=marketAiPanel?.querySelector?.("[d
   document.addEventListener?.("visibilitychange",()=>{if(!document.hidden)poll(!1)});
 })();
 
+;(function installDesktopMarketExports(){
+  if(window.__fumanDesktopMarketExports==="20260624-01")return;
+  window.__fumanDesktopMarketExports="20260624-01";
+  const expose=(name,fn)=>{
+    if(typeof fn==="function")window[name]=fn;
+  };
+  try{
+    expose("showView",typeof showView!=="undefined"?showView:null);
+    expose("loadMarketData",typeof loadMarketData!=="undefined"?loadMarketData:null);
+    expose("loadHeatmap",typeof loadHeatmap!=="undefined"?loadHeatmap:null);
+    expose("renderMarketAiPanel",typeof renderMarketAiPanel!=="undefined"?renderMarketAiPanel:null);
+    expose("renderRealtimeRadar",typeof renderRealtimeRadar!=="undefined"?renderRealtimeRadar:null);
+  }catch(error){}
+})();
+
 
 
 
