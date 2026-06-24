@@ -1328,7 +1328,7 @@
     const canvas = shell?.querySelector(".desktop-route-canvas");
     if (!canvas) return;
     clampCanvasOffset(canvas);
-    if (!isWideStrategyTableRoute(canvasState.route) && drawCanvasWithWorker(canvas)) {
+    if (isStrategyRoute(canvasState.route) && !isWideStrategyTableRoute(canvasState.route) && drawCanvasWithWorker(canvas)) {
       setCanvasStatus();
       return;
     }
@@ -2385,7 +2385,7 @@
 
   function drawCanvasShellFrame(canvas, meta) {
     requestAnimationFrame(() => {
-      if (isWideStrategyTableRoute(canvasState.route) || !drawCanvasWithWorker(canvas)) {
+      if (!isStrategyRoute(canvasState.route) || isWideStrategyTableRoute(canvasState.route) || !drawCanvasWithWorker(canvas)) {
         drawRouteCanvas(canvas, meta, canvasState.filtered, canvasState.source);
       }
       setCanvasStatus();
