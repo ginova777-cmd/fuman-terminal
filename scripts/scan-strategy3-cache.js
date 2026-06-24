@@ -5,7 +5,6 @@ const {
   fetchStrategy3CapitalMap,
   fetchStrategy3Intraday1mStatus,
   fetchStrategy3Intraday1mLatestN,
-  fetchActiveCommonStockQuotes,
   fetchStrategy3QuoteReady,
   verifyStrategy3ReadAccess,
 } = require("../lib/supabase-public-slot");
@@ -31,27 +30,15 @@ const SOURCE_WARNING_LIMIT = Number(process.env.STRATEGY3_SOURCE_WARNING_LIMIT |
 const MIN_ISSUED_SHARES_COUNT = Number(process.env.STRATEGY3_MIN_ISSUED_SHARES_COUNT || 1000);
 const MIN_VOLUME_AVERAGE_COUNT = Number(process.env.STRATEGY3_MIN_VOLUME_AVERAGE_COUNT || 1000);
 const STRATEGY3_REQUIRE_TV_ENTRY = process.env.STRATEGY3_REQUIRE_TV_ENTRY !== "0";
-const STRATEGY3_LOOP_SECONDS = Number(process.env.STRATEGY3_LOOP_SECONDS || 5);
-const STRATEGY3_PREFILTER_COUNT = Number(process.env.STRATEGY3_PREFILTER_COUNT || 180);
-const STRATEGY3_DEEP_SCAN_COUNT = Number(process.env.STRATEGY3_DEEP_SCAN_COUNT || 60);
-const STRATEGY3_FAST_TRACK_COUNT = Number(process.env.STRATEGY3_FAST_TRACK_COUNT || 40);
-const STRATEGY3_TV_CANDIDATE_LIMIT = Number(process.env.STRATEGY3_TV_CANDIDATE_LIMIT || STRATEGY3_PREFILTER_COUNT);
-const STRATEGY3_TV_CANDLE_LIMIT = Number(process.env.STRATEGY3_TV_CANDLE_LIMIT || 80);
+const STRATEGY3_TV_CANDIDATE_LIMIT = Number(process.env.STRATEGY3_TV_CANDIDATE_LIMIT || 0);
+const STRATEGY3_TV_CANDLE_LIMIT = Number(process.env.STRATEGY3_TV_CANDLE_LIMIT || 160);
 const STRATEGY3_TV_CONCURRENCY = Number(process.env.STRATEGY3_TV_CONCURRENCY || 8);
 const STRATEGY3_REQUIRE_TURNOVER = process.env.STRATEGY3_REQUIRE_TURNOVER === "1";
 const STRATEGY3_REQUIRE_VOLUME_AVERAGE = process.env.STRATEGY3_REQUIRE_VOLUME_AVERAGE === "1";
 const STRATEGY3_USE_SUPABASE = process.env.STRATEGY3_USE_SUPABASE !== "0";
-const STRATEGY3_REQUIRE_AFTER_1300 = process.env.STRATEGY3_REQUIRE_AFTER_1300 === "1";
+const STRATEGY3_REQUIRE_AFTER_1300 = process.env.STRATEGY3_REQUIRE_AFTER_1300 !== "0";
 const STRATEGY3_MIN_AFTER_1300_CANDIDATES = Number(process.env.STRATEGY3_MIN_AFTER_1300_CANDIDATES || 20);
 const STRATEGY3_APPLY_BLACKLIST = process.env.STRATEGY3_APPLY_BLACKLIST !== "0";
-const STRATEGY3_PRICE_MIN = Number(process.env.STRATEGY3_PRICE_MIN || 10);
-const STRATEGY3_PRICE_MAX = Number(process.env.STRATEGY3_PRICE_MAX || 1000);
-const STRATEGY3_MIN_OPEN_PERCENT = Number(process.env.STRATEGY3_MIN_OPEN_PERCENT || 2);
-const STRATEGY3_MAX_OPEN_PERCENT = Number(process.env.STRATEGY3_MAX_OPEN_PERCENT || 9.9);
-const STRATEGY3_MIN_AVG5_VOLUME_LOTS = Number(process.env.STRATEGY3_MIN_AVG5_VOLUME_LOTS || 3000);
-const STRATEGY3_CHANNEL2_MIN_VOLUME_LOTS = Number(process.env.STRATEGY3_CHANNEL2_MIN_VOLUME_LOTS || 5000);
-const STRATEGY3_CHANNEL3_MIN_VOLUME_LOTS = Number(process.env.STRATEGY3_CHANNEL3_MIN_VOLUME_LOTS || 10000);
-const STRATEGY3_CHANNEL3_VOLUME_RANK_TOP = Number(process.env.STRATEGY3_CHANNEL3_VOLUME_RANK_TOP || 100);
 const SUPABASE_URL = String(process.env.SUPABASE_URL || process.env.FUMAN_SUPABASE_URL || "https://cpmpfhbzutkiecccekfr.supabase.co").replace(/\/+$/, "");
 const RUNTIME_DIR = process.env.FUMAN_RUNTIME_DIR || "C:/fuman-runtime";
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY
@@ -132,26 +119,24 @@ function applyStrategy3Exclusions(stocks, blacklistCodes) {
   const byReason = {};
   const examples = [];
   const kept = [];
-  const hardExcludeReason = (reason) => !/近5日均量|內外盤累計|成交量<3000/.test(String(reason || ""));
   for (const stock of stocks) {
     const exclusion = chipTradeExclusion({
       ...stock,
-      avgVolume5: 0,
-      tradeVolume: Math.max(cleanNumber(stock.tradeVolume), 3000000),
+      avgVolume5: stock.avgVolume,
+      tradeVolume: stock.tradeVolume,
       is_blacklisted: stock.is_blacklisted ?? stock.isBlacklisted,
       is_daytrade_unsuitable: stock.is_daytrade_unsuitable ?? stock.isDaytradeUnsuitable,
       is_halted: stock.is_halted ?? stock.isHalted,
       is_trial: stock.is_trial ?? stock.isTrial,
     }, blacklistCodes);
-    const reasons = exclusion.reasons.filter(hardExcludeReason);
-    if (!reasons.length) {
+    if (!exclusion.excluded) {
       kept.push(stock);
       continue;
     }
-    reasons.forEach((reason) => {
+    exclusion.reasons.forEach((reason) => {
       byReason[reason] = (byReason[reason] || 0) + 1;
     });
-    if (examples.length < 40) examples.push({ code: stock.code, name: stock.name, reasons });
+    if (examples.length < 40) examples.push({ code: stock.code, name: stock.name, reasons: exclusion.reasons });
   }
   return {
     stocks: kept,
@@ -410,7 +395,7 @@ function analyzeTradingViewOvernightEntry(candles) {
       volume: cleanNumber(row.volume),
       minutes: candleMinutes(row),
     }))
-    .filter((row) => row.open > 0 && row.high > 0 && row.low > 0 && row.close > 0);
+    .filter((row) => row.open > 0 && row.high > 0 && row.low > 0 && row.close > 0 && row.volume > 0);
   if (rows.length < 35) {
     return { ok: false, reason: `1分K不足 ${rows.length}/35`, signal: "tv_overnight_entry", candleCount: rows.length };
   }
@@ -576,121 +561,27 @@ async function fetchUniverse() {
   });
 }
 
-function volumeLotsFromQuote(value) {
-  const volume = cleanNumber(value);
-  return volume >= 100000 ? volume / 1000 : volume;
-}
-
-function openPercentFromQuote(quote) {
-  const close = cleanNumber(quote.close ?? quote.price);
-  const open = cleanNumber(quote.open ?? quote.openPrice ?? quote.open_price);
-  return open > 0 ? ((close - open) / open) * 100 : 0;
-}
-
-function dailyMaBullishOrUnknown(quote) {
-  const ma5 = cleanNumber(quote.ma5 ?? quote.ma_5 ?? quote.dailyMa5 ?? quote.close_ma5);
-  const ma10 = cleanNumber(quote.ma10 ?? quote.ma_10 ?? quote.dailyMa10 ?? quote.close_ma10);
-  const ma20 = cleanNumber(quote.ma20 ?? quote.ma_20 ?? quote.dailyMa20 ?? quote.close_ma20);
-  const ma60 = cleanNumber(quote.ma60 ?? quote.ma_60 ?? quote.dailyMa60 ?? quote.close_ma60);
-  if (ma5 > 0 && ma10 > 0 && ma20 > 0) return ma5 > ma10 && ma10 > ma20;
-  if (ma5 > 0 && ma20 > 0 && ma60 > 0) return ma5 > ma20 && ma20 > ma60;
-  return true;
-}
-
-function buildStrategy3MotherPool(quotes) {
-  const normalized = (quotes || []).map((quote) => {
-    const close = cleanNumber(quote.close ?? quote.price);
-    const open = cleanNumber(quote.open ?? quote.openPrice ?? quote.open_price);
-    const openPercent = openPercentFromQuote({ ...quote, close, open });
-    const tradeVolumeLots = volumeLotsFromQuote(quote.tradeVolume ?? quote.totalVolume ?? quote.volume ?? quote.trade_volume);
-    const avg5VolumeLots = volumeLotsFromQuote(quote.avgVolume ?? quote.avg5dVolume ?? quote.avg_volume_5 ?? quote.avg_5d_volume ?? quote.avg5Volume);
-    return {
-      ...quote,
-      close,
-      price: close,
-      open,
-      openPercent,
-      percent: openPercent,
-      changePercent: openPercent,
-      tradeVolumeLots,
-      avg5VolumeLots,
-      tradeVolume: tradeVolumeLots * 1000,
-      avgVolume: avg5VolumeLots * 1000,
-      value: cleanNumber(quote.value || quote.tradeValue) || close * tradeVolumeLots * 1000,
-      tradeValue: cleanNumber(quote.tradeValue || quote.value) || close * tradeVolumeLots * 1000,
-    };
-  }).filter((stock) => (
-    stock.close >= STRATEGY3_PRICE_MIN
-    && stock.close <= STRATEGY3_PRICE_MAX
-    && stock.openPercent >= STRATEGY3_MIN_OPEN_PERCENT
-    && stock.openPercent < STRATEGY3_MAX_OPEN_PERCENT
-    && stock.tradeVolumeLots > 0
-  ));
-
-  const ranked = [...normalized].sort((a, b) => b.tradeVolumeLots - a.tradeVolumeLots);
-  const rankByCode = new Map(ranked.map((stock, index) => [stock.code, index + 1]));
-  return normalized.map((stock) => {
-    const todayVolumeRank = rankByCode.get(stock.code) || 9999;
-    const channel1 = stock.avg5VolumeLots > STRATEGY3_MIN_AVG5_VOLUME_LOTS;
-    const channel2 = stock.openPercent >= STRATEGY3_MIN_OPEN_PERCENT
-      && stock.tradeVolumeLots > STRATEGY3_CHANNEL2_MIN_VOLUME_LOTS
-      && dailyMaBullishOrUnknown(stock);
-    const channel3 = stock.avg5VolumeLots > 0
-      && stock.tradeVolumeLots > stock.avg5VolumeLots * 2
-      && stock.tradeVolumeLots >= STRATEGY3_CHANNEL3_MIN_VOLUME_LOTS
-      && todayVolumeRank <= STRATEGY3_CHANNEL3_VOLUME_RANK_TOP;
-    const poolChannels = [
-      channel1 ? "avg5_volume>3000" : "",
-      channel2 ? "open_pct>=2,total_volume>5000,daily_ma_bullish_or_unknown" : "",
-      channel3 ? "total_volume>avg5*2,total_volume>=10000,volume_rank_top100" : "",
-    ].filter(Boolean);
-    return {
-      ...stock,
-      todayVolumeRank,
-      strategy3PoolChannels: poolChannels,
-      strategy3PoolPass: poolChannels.length > 0,
-    };
-  }).filter((stock) => stock.strategy3PoolPass);
-}
-
 async function fetchSupabaseStrategy3Universe() {
   const access = await verifyStrategy3ReadAccess();
-  const warnings = [];
-  let quoteSourceLabel = "supabase-active-commonstock-strategy3";
-  let quoteResult = await fetchActiveCommonStockQuotes({ minQuotes: 500, maxRows: 6000, pageSize: 500, timeout: 20000 });
-  if (!quoteResult.ok || quoteResult.sourceHealthy === false) {
-    console.warn(`strategy3 active commonstock source skipped: ${quoteResult.error || quoteResult.health?.reason || "source unhealthy"}`);
-    const fallback = await fetchStrategy3QuoteReady({ minQuotes: 500 });
-    if (fallback.ok) {
-      quoteResult = { ...fallback, sourceHealthy: true, sourceAgeSeconds: null, health: null };
-      quoteSourceLabel = "supabase-strategy3-quote-ready";
-    }
-  }
-  if (!quoteResult.ok) throw new Error(quoteResult.error || "strategy3 active common stock quotes unavailable");
-  const stocks = buildStrategy3MotherPool(quoteResult.quotes).map((quote) => ({
+  const quoteResult = await fetchStrategy3QuoteReady({ minQuotes: 500 });
+  if (!quoteResult.ok) throw new Error(quoteResult.error || "strategy3 quote ready unavailable");
+  const stocks = quoteResult.quotes.map((quote) => ({
     code: quote.code,
     name: quote.name,
     close: quote.close,
-    open: quote.open,
-    change: quote.close - quote.open,
-    percent: quote.openPercent,
-    openPercent: quote.openPercent,
+    change: quote.change,
+    percent: quote.percent,
     value: quote.value || quote.tradeValue,
-    tradeValue: quote.tradeValue || quote.value,
     tradeVolume: quote.tradeVolume,
-    tradeVolumeLots: quote.tradeVolumeLots,
     quoteDate: String(quote.updatedAt || quote.quoteTimeRaw || "").slice(0, 10).replace(/\D/g, ""),
     avgVolume: quote.avgVolume,
-    avg5VolumeLots: quote.avg5VolumeLots,
-    volumeRatio: quote.avgVolume ? quote.tradeVolume / quote.avgVolume : cleanNumber(quote.volumeRatio),
-    projectedRatio: quote.avgVolume ? quote.tradeVolume / quote.avgVolume : cleanNumber(quote.projectedRatio || quote.volumeRatio),
+    volumeRatio: quote.volumeRatio,
+    projectedRatio: quote.projectedRatio,
     issuedShares: quote.issuedShares,
-    todayVolumeRank: quote.todayVolumeRank,
-    strategy3PoolChannels: quote.strategy3PoolChannels,
     after1300CandleCount: quote.after1300CandleCount,
     hasAfter1300Candle: quote.hasAfter1300Candle,
     has1300Candle: quote.has1300Candle,
-    intradayCandleCount: quote.intradayCandleCount ?? quote.todayCandleCount,
+    intradayCandleCount: quote.intradayCandleCount,
     latestCandleTime: quote.latestCandleTime,
     quoteSource: quote.quoteReadySource,
     stockType: quote.stockType,
@@ -703,6 +594,7 @@ async function fetchSupabaseStrategy3Universe() {
     is_warrant: quote.is_warrant,
     is_cb: quote.is_cb,
   }));
+  const warnings = [];
   try {
     const statusResult = await fetchStrategy3Intraday1mStatus(stocks.map((stock) => stock.code));
     stocks.forEach((stock) => {
@@ -741,7 +633,7 @@ async function fetchSupabaseStrategy3Universe() {
     issuedSharesMap,
     volumeAverageMap,
     warnings,
-    source: quoteSourceLabel,
+    source: "supabase-strategy3",
   };
 }
 
@@ -842,7 +734,7 @@ async function buildMatches(stocks, issuedSharesMap, volumeAverageMap, sourceWar
     const valueRank = valueRanks.get(stock.code) || 0;
     const volumeRank = volumeRanks.get(stock.code) || 0;
     const pct = Number(stock.percent) || 0;
-    const volumeLots = stock.tradeVolumeLots || (stock.tradeVolume / 1000);
+    const volumeLots = stock.tradeVolume / 1000;
     const issuedShares = issuedSharesMap.get(stock.code) || 0;
     const turnoverRate = issuedShares ? (stock.tradeVolume / issuedShares) * 100 : 0;
     const avgVolume = volumeAverageMap.get(stock.code) || 0;
@@ -856,10 +748,10 @@ async function buildMatches(stocks, issuedSharesMap, volumeAverageMap, sourceWar
       heatPenalty
     ), 0, 100);
     const turnoverPass = STRATEGY3_REQUIRE_TURNOVER ? turnoverRate > 5 : true;
-    const fixedPass = stock.close > 0 && stock.strategy3PoolPass !== false;
+    const fixedPass = stock.close > 0 && (stock.hasAfter1300Candle || cleanNumber(stock.after1300CandleCount) > 0);
     const fixedReason = fixedPass
-      ? `策略3母池通過：開盤幅度=${pct.toFixed(2)}%、流動性通道=${(stock.strategy3PoolChannels || []).join("+") || "未標記"}；接著偵測 TradingView 隔日沖進場。`
-      : "未進入策略3母池：缺少有效價格或母池條件未通過。";
+      ? `進入 TradingView 隔日沖判斷：有 13:00 後1分K，最終只看 TV 條件。`
+      : "未進入 TradingView 隔日沖判斷：缺少價格或 13:00 後1分K。";
     return {
       ...stock,
       valueRank,
@@ -874,13 +766,13 @@ async function buildMatches(stocks, issuedSharesMap, volumeAverageMap, sourceWar
       matches: [{ id: "overnight_chip", reason: fixedReason }],
     };
   })
-    .filter((stock) => stock.close > 0 && stock.strategy3PoolPass !== false)
-    .sort((a, b) => b.overnightScore - a.overnightScore || b.value - a.value);
+    .filter((stock) => stock.close > 0 && (stock.hasAfter1300Candle || cleanNumber(stock.after1300CandleCount) > 0))
+    .sort((a, b) => b.overnightScore - a.overnightScore || b.value - a.value)
+    .slice(0, STRATEGY3_TV_CANDIDATE_LIMIT > 0 ? STRATEGY3_TV_CANDIDATE_LIMIT : undefined);
 
-  const tvCandidates = STRATEGY3_TV_CANDIDATE_LIMIT > 0 ? scored.slice(0, STRATEGY3_TV_CANDIDATE_LIMIT) : scored;
-  console.log(`strategy3 mother pool=${stocks.length} prefilter=${tvCandidates.length} deepScan=${STRATEGY3_DEEP_SCAN_COUNT} fastTrack=${STRATEGY3_FAST_TRACK_COUNT} barsPerSymbol=${STRATEGY3_TV_CANDLE_LIMIT} loopSeconds=${STRATEGY3_LOOP_SECONDS}`);
+  if (!STRATEGY3_REQUIRE_TV_ENTRY) return scored.slice(0, 80);
 
-  const analyzed = await mapLimit(tvCandidates, STRATEGY3_TV_CONCURRENCY, async (stock) => {
+  const analyzed = await mapLimit(scored, STRATEGY3_TV_CONCURRENCY, async (stock) => {
     try {
       const result = await fetchStrategy3Intraday1mLatestN(stock.code, STRATEGY3_TV_CANDLE_LIMIT);
       const tvEntry = analyzeTradingViewOvernightEntry(result.candles || result.rows || []);
@@ -911,7 +803,7 @@ async function buildMatches(stocks, issuedSharesMap, volumeAverageMap, sourceWar
   });
 
   return analyzed
-    .filter((stock) => !STRATEGY3_REQUIRE_TV_ENTRY || stock.tvOvernightEntry?.ok)
+    .filter((stock) => stock.tvOvernightEntry?.ok)
     .sort((a, b) => b.overnightScore - a.overnightScore || b.value - a.value)
     .slice(0, 80);
 }
@@ -1032,8 +924,4 @@ main().catch((error) => {
   console.error(error);
   process.exit(1);
 });
-
-
-
-
 

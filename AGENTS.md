@@ -1,487 +1,719 @@
-# AGENTS.md
+# Fuman Terminal Codex Operating Contract
 
-Last updated: 2026-06-24 17:13 Asia/Taipei
+This file is the first document every Codex must read before touching Fuman Terminal.
 
-給後續接手這個工作區的 Codex：請先讀這份，再改程式。這份只保留目前有效狀態。
+The user wants a stable Supabase API-only trading terminal. Do not repair data freshness by bumping frontend versions, redeploying Vercel, restoring static JSON, or asking the user to manually refresh the browser. Data fixes must happen through scanners/writers, Supabase complete runs or snapshots, no-store APIs, and explicit verification.
 
-## 目前主線
+## 1. Official Production Target
 
-使用者目前主線是「Fuman Terminal 正式股票終端」。
-
-正式站：
+The only user-facing production terminal is:
 
 ```text
 https://fuman-terminal.vercel.app
 ```
 
-目前固定版本：
+`https://fuman-terminal-sync.vercel.app` is not the official terminal. Do not report production fixed after only deploying or verifying the sync Vercel project.
+
+Important local paths:
 
 ```text
-public-terminal-fast-20260623-09
+C:\fuman-terminal       production app / deployment repo
+C:\fuman-terminal-sync  scanner/source sync repo and many scheduled tasks
+C:\fuman-runtime        runtime cache, secrets, generated data
 ```
 
-最新 production/main commit：
+Before changing production behavior, confirm which repo the scheduled task or scanner actually uses.
+
+## 2. Global Data Authority
+
+Official data flow:
 
 ```text
-3e49d51c2f2c06cde1f7ece9bc21325800eb3638
+scanner / collector / writer
+-> Supabase complete run or Supabase snapshot
+-> no-store /api endpoint
+-> frontend polling by runId / snapshotId / bootHash
+-> UI refresh
 ```
 
-目前極致化狀態：
+Do not use these as data freshness authority:
 
 ```text
-約 93% - 95%
+/data/*.json
+data/live-freshness-ok.json
+version.json
+terminal-core.js version strings
+service worker cache bump
+Vercel deploy side effects
+browser hard refresh
 ```
 
-使用者明確要求：
+Static JSON may exist only for legacy diagnostics or explicit fallback. It must not be the official freshness authority.
 
-- 不要隨便 bump 版本號。
-- 不要用版本號/cache bump 假裝變快。
-- 策略2是當沖即時資料，不可冷處理、不可放進 desktop route snapshot。
-- 桌面與手機都要速度、手感、穩定。
-- 左側分頁切換要立即反應，側欄選取、標題、內容要同步。
-- 不要把 Codex latency/debug 面板給客人看。
-
-## 目前有效專案位置
-
-正式專案資料夾：
+The daily battle-state check is:
 
 ```text
-C:\fuman-terminal
+npm run verify:publish-gate
 ```
 
-Git remote/main 來源：
+Expected success:
 
 ```text
-https://github.com/ginova777-cmd/fuman-terminal.git
+[publish-gate] ok
 ```
 
-注意：`C:\fuman-terminal` 目前有本機 dirty 內容，而且本機 HEAD 可能落後 `origin/main`。不要在沒有確認的情況下直接從這個 dirty 目錄部署。
+If this passes, the API-only governance chain is healthy. Use targeted verifiers such as `verify:warrant-freshness:live` and `verify:cb-detect-live` for specific data domains. If a legacy checker complains about `/data/*.json`, `live-freshness-ok.json`, or `verify-data-freshness`, treat it as obsolete and remove the old dependency instead of restoring the legacy verifier.
 
-若要部署或做大修改，建議：
+Retired static/cache artifacts are cleaned by:
 
 ```text
-1. 先確認 origin/main 是最新。
-2. 用乾淨 worktree 或先處理好本機 dirty 狀態。
-3. 不要 git reset / checkout 覆蓋使用者變更。
-4. 部署前跑 production guard。
+npm run cleanup:api-only-retired
+install-api-only-cleanup-task.ps1
 ```
 
-## 目前架構
-
-桌面終端目前使用：
+The cleanup task must only delete explicit API-only retired artifacts and old logs/archives. It must not delete Supabase writer code, runtime secrets, active mobile boot/digest files, or scanner source files that still belong to the API-only pipeline.
+Strategy2 retired root copies are dangerous and must not be used:
 
 ```text
-fixed shell
-Canvas / OffscreenCanvas 列表
-compact API payload
-desktop route snapshot
-memory / session / IndexedDB snapshot
-production health monitor
-防回滾 guard
+C:\fuman-terminal\scan-intraday-signals.js
+C:\fuman-terminal\intraday-radar-rules.js
+C:\fuman-terminal-sync\scan-intraday-signals.js
+C:\fuman-terminal-sync\intraday-radar-rules.js
+C:\fuman-terminal\.vercel\output\static\scan-intraday-signals.js
+C:\fuman-terminal\.vercel\output\static\intraday-radar-rules.js
 ```
 
-核心檔案：
+The only Strategy2 scanner/rules authority is under `scripts\`:
 
 ```text
-terminal-desktop-fast-shell.js
-terminal-desktop-canvas-worker.js
-terminal-strategy-module.js
-terminal-chip-snapshot-module.js
-terminal-market-snapshot-module.js
-terminal-watchlist-shell.js
-terminal.js
-terminal-hotfix.js
-terminal-app.js
-api/terminal-fast-bundle.js
-api/desktop-route-snapshot.js
-api/desktop-route-snapshot-refresh.js
-api/production-health.js
-api/performance-report.js
-api/desktop-latency-latest.js
-lib/desktop-route-snapshot-builder.js
-lib/desktop-route-snapshot-cache.js
-scripts/write-desktop-route-snapshot.js
-scripts/monitor-production-health.js
-scripts/verify-production-guard.js
-run-full-scan.ps1
-run-production-health-monitor.ps1
-scripts/install-production-health-monitor-task.ps1
+C:\fuman-terminal-sync\scripts\scan-intraday-signals.js
+C:\fuman-terminal-sync\scripts\intraday-radar-rules.js
+C:\fuman-terminal\scripts\scan-intraday-signals.js
+C:\fuman-terminal\scripts\intraday-radar-rules.js
 ```
 
-## 已完成的速度與穩定性處理
+`cleanup:api-only-retired` must delete the retired root/static copies if they reappear. Do not restore them for compatibility.
 
-目前已完成：
+The cleanup task is intentionally broad for API-only governance. Root-level scanner/cache copies such as `scan-open-buy-cache.js`, `scan-strategy4-cache.js`, `scan-strategy5-cache.js`, `scan-warrant-flow-cache.js`, root-level `*-latest.json`/`*-backup.json`, old freshness wrappers, and old page caches such as `data\warrant-volume-page-*.json` are retired. The official scanner source lives under `scripts\`, and official data freshness comes from Supabase complete runs/snapshots through no-store APIs.
 
-- 桌面固定 fast shell。
-- Canvas / OffscreenCanvas 列表常駐。
-- DOM 只保留按鈕、搜尋、詳細彈窗等必要互動。
-- 左側分頁快切，不應等待 API 才切畫面。
-- 策略頁、籌碼頁、CB、權證、市場、自選都走 fixed shell / compact payload。
-- `/api/terminal-fast-bundle` 優先讀 Supabase `desktop_route_snapshot`。
-- `/api/desktop-route-snapshot-refresh` 可預產 13 個 route endpoint 小包。
-- 遠端 snapshot refresh 預設只寫主 `desktop_route_snapshot`，避免 Vercel serverless request 因連續寫多個 endpoint snapshot 被 `ECONNRESET`。
-- full scan 寫 desktop snapshot 已改成硬性門檻：`--fail-on-partial --min-endpoints=10`。
-- endpoint-level snapshot cache 已有底層支援，適合由本機 full scan / scanner 寫入，不建議由 Vercel request 一次寫太多筆。
-- production health API 會檢查 snapshot fresh、partial=false、endpoint count、策略2即時。
-- production health snapshot freshness 已對齊 desktop route snapshot，預設 6 小時，避免 Vercel cron 因正常快取誤報 503。
-- latency log 會寫入 Supabase `desktop_route_latency_latest`，並由 `/api/desktop-latency-latest` 讀取。
-- Windows 排程 `FumanTerminalProductionHealthMonitor` 已建立，每 5 分鐘巡檢正式站。
-- monitor 會把本機 git drift 當 warning，不再因 `C:\fuman-terminal` dirty 而誤報正式站壞掉。
-- 防回滾 guard 仍會把 dirty worktree / local HEAD 落後 origin 當部署阻擋條件，這是正確行為。
+## 3. Latest API Contract
 
-## Strategy 2 原則
-
-策略2是當沖即時資料。
-
-規則：
+Every strategy, chip, warrant, CB, market AI, heatmap, and mobile boot latest API should return stable metadata:
 
 ```text
-不可冷處理。
-不可放進 desktop route snapshot。
-不可因速度把它改成 stale snapshot。
-可以做 compact/live API。
-可以做 pointerdown 預熱。
-可以做 memory cache，但要保留 live intent。
+ok
+runId or snapshotId
+usedDate
+sourceDate
+marketSession.marketDataDate
+count
+rows
+matches, if legacy clients still need it
+updatedAt
+reason
+transport.gate
+cacheSource
 ```
 
-production health 目前確認：
+If an API historically returned `matches`, keep `matches`, but also return:
 
 ```text
-hasStrategy2Snapshot = false
-strategy2 API = ok
+rows: matches
 ```
 
-## 已退休 / 已清除的舊流程
-
-GitHub Actions 舊排程已從 `origin/main` 的 `.github/workflows` 全部移除。
-
-已移除的 workflow：
+When both arrays exist:
 
 ```text
-flow-cache.yml
-fuman-master-schedule.yml
-github-schedule-test.yml
-intraday-radar-scorecard.yml
-open-buy-background-scan.yml
-schedule-heartbeat.yml
-schedule-patrol.yml
-schedule-wakeup-probe.yml
-strategy2-intraday-snapshot.yml
-strategy3-background-scan.yml
-strategy4-background-scan.yml
-strategy5-background-scan.yml
+rows.length === matches.length
+rows.length === count
 ```
 
-最後確認：
+No-store headers are required:
 
 ```text
-git ls-tree -r --name-only origin/main .github/workflows = empty
-gh workflow list --repo ginova777-cmd/fuman-terminal --all = empty
-gh run list --status queued / in_progress = empty
+Cache-Control: no-store, max-age=0, must-revalidate
+CDN-Cache-Control: no-store
+Vercel-CDN-Cache-Control: no-store
 ```
 
-目前正式 Vercel 專案是：
+Trading-day rule:
 
 ```text
-projectName = fuman-terminal
-projectId = prj_x0R2mMFsL0Xto4whcbPTKQTKJRUl
-domain = https://fuman-terminal.vercel.app
+During a trading day, never silently fallback to an older trading date.
+Only a confirmed closed/non-trading day may fallback to latest completed trading day.
+If today data is missing on a trading day, return stale/failed with reason.
 ```
 
-目前正式站只保留兩個 Vercel cron：
+## 4. Supabase Read/Write Rules
+
+Write path:
 
 ```text
-/api/desktop-route-snapshot-refresh  每 5 分鐘
-/api/production-health               每 10 分鐘
+create run/snapshot
+write rows/payload
+mark complete
+read back by runId/snapshotId
+verify count/date/content
+only then publish update event or report success
 ```
 
-這兩個是目前有效流程，不是舊流程。若 Gmail 仍收到通知，先看寄件來源與 project 名稱：
+Read path:
 
 ```text
-fuman-terminal      = 正式站
-fuman-terminal-sync = 另一個舊/同步 Vercel project，需另外停用或移除
+select latest valid complete run/snapshot
+validate date
+validate count > 0 when applicable
+validate source contract
+return no-store API payload
 ```
 
-注意：`C:\fuman-terminal-sync` 曾經連到不同 Vercel project：
+Supabase REST/PostgREST may cap rows at 1000. Any API that can return more than 1000 rows must page with ranges. Do not assume `limit=3000` returns everything.
+
+### Per-Strategy Health Gate Boundaries
+
+Do not use one shared source health flag as a global kill-switch for every strategy. Each strategy has its own authority and gate:
 
 ```text
-projectName = fuman-terminal-sync
-projectId = prj_AFIoVawOujEtsEYEF4W0ni23txGX
+Strategy1: preopen / futopt / daily / chip ready + decision gate. Hard block BUY when 08:55 data is not ready.
+Strategy2: quotes health controls candidate universe publication; intraday_1m health only controls A-zone technical upgrade.
+Strategy3: complete run / TV confirmation / latest-N after-13:00 gate. Do not empty the run because shared intraday health wobbles.
+Strategy4: current common-stock universe / daily OHLC / history coverage gate. Quote health is not the authority.
+Strategy5: complete run / result readback gate. Shared source health is not the authority.
+Institution / Warrant / CB: API contract gate: runId, usedDate/sourceDate, rows/count, schemaVersion when applicable, and readback.
 ```
 
-此 Vercel project 已於 2026-06-24 17:11 Asia/Taipei 刪除，不要重建。
-
-另一個會跟 main 自動部署的舊 Vercel project 也已刪除：
+Strategy2 special rule:
 
 ```text
-projectName = fuman-terminal-publish-sync
+quotes_ok=false -> do not publish the Strategy2 quote universe.
+quotes_ok=true and intraday_1m_ok=false -> publish quote candidate universe, mark degraded_intraday_1m, and do not upgrade rows into technical A-zone.
+source_status=error/stale/stopped must not by itself blank Strategy2 when quote readback is healthy.
 ```
 
-不要從 `C:\fuman-terminal-sync` 或任何 sync/publish-sync project 部署正式站，避免舊流程或舊資料重新回來。
+## 5. Strategy 1 Open Buy / Preopen
 
-舊外部 dispatch API 已刪除：
+Official API:
 
 ```text
-/api/schedule-dispatch
+/api/open-buy-latest
 ```
 
-不可再恢復成 GitHub workflow dispatch。若外部舊排程仍打這條 URL，正式站應回 404，不應觸發任何 GitHub workflow。
-
-## Desktop Route Snapshot 狀態
-
-最後一次正式檢查結果：
+Supabase authority:
 
 ```text
-snapshot ok = true
-partial = false
-endpointCount = 13
-misses = []
-source = supabase:desktop_route_snapshot
-updatedAt = 2026-06-24T08:29:13.665Z
-productionHealth = ok
-fastBundle = ok
-maxAgeMs = 21600000
+strategy1_open_buy_runs
+strategy1_open_buy_results
+strategy1_ready_status
+strategy1_futopt_preopen_latest
+v_strategy1_preopen_features
+v_strategy1_preopen_history_coverage
 ```
 
-目前納入 snapshot / fast bundle 的重點 endpoint：
+Required gate:
 
 ```text
-/api/terminal-home
-/api/market?canvas=1&compact=1&shell=1&limit=24
-/api/stocks?limit=120&compact=1&shell=1
-/api/open-buy-latest?canvas=1&compact=1&shell=1&limit=60
-/api/strategy3-latest?canvas=1&compact=1&shell=1&limit=60
-/api/strategy4-latest?canvas=1&compact=1&shell=1&limit=70
-/api/strategy5-latest?canvas=1&compact=1&shell=1&limit=70
-/api/latest-signals?strategy=strategy4&compact=1&shell=1&limit=70
-/api/realtime-radar-latest?compact=1&shell=1&limit=50
-/api/institution-latest?canvas=1&compact=1&shell=1&limit=60
-/api/cb-detect-latest?canvas=1&compact=1&shell=1&limit=60
-/api/warrant-flow-latest?canvas=1&compact=1&shell=1&limit=60
-/api/watchlist-match-index?compact=1&shell=1&limit=80
+status=complete
+complete=true
+run_trade_date = latest trading day
+decision_ready=true when strict mode applies
+gate = complete-run-authoritative+decision-ready
 ```
 
-策略2不在 snapshot endpoint 裡，這是刻意設計。
-
-## 正式站健康監控
-
-Windows 排程：
+Rows should include:
 
 ```text
-FumanTerminalProductionHealthMonitor
+decision = BUY / WATCH / BLOCK
+setup_type = open_attack / futopt_attack / stock_preopen_attack
+block_reason
+preopen_attack_confidence = high / medium / low_data
 ```
 
-執行內容：
+Save BUY/WATCH/BLOCK when debugging is needed. Frontend may show only BUY, but debug must be able to see why symbols were blocked.
+
+Preopen requirements:
 
 ```text
-C:\Program Files\PowerShell\7\pwsh.exe -NoProfile -ExecutionPolicy Bypass -File "C:\fuman-terminal\run-production-health-monitor.ps1" -ProjectRoot "C:\fuman-terminal"
+08:45-08:55 snapshot history
+symbols >= 1500 when ready
+latest_snapshot_at >= 08:54:30
+five-level bid/ask coverage >= 80% when available
+futopt quote age <= 300 seconds
 ```
 
-頻率：
+If snapshot_count is low or five-level order book is thin/missing, do not hard-block promising symbols only as `thin_blocked`; mark `preopen_attack_confidence=low_data` so strategy can downgrade instead of disappearing.
+
+Before 08:45 Taipei time, Strategy1 may be not applicable. Freshness gate must not fail just because the opening run is not due yet.
+
+## 6. Strategy 2 Intraday / A-Zone
+
+Official APIs:
 
 ```text
-每 5 分鐘
+/api/strategy2-latest
+/api/strategy2-entry-history
+/api/strategy2-detection-health
 ```
 
-最後確認：
+Supabase authority:
 
 ```text
-Last Result = 0
-Status = Ready
-Scheduled Task State = Enabled
+strategy2_scan_runs
+strategy2_scan_results
+v_strategy2_entry_events_today
+v_strategy2_detection_health
+refresh_strategy2_intraday_ready_cache()
+source_status.payload
+fugle_source_coverage
 ```
 
-log / receipt：
+Health must distinguish data-source health from Strategy2 latest freshness:
 
 ```text
-C:\fuman-runtime\logs\production-health-monitor-YYYYMMDD.log
-C:\fuman-runtime\data\scan-receipts\production-health-monitor.json
-C:\fuman-runtime\logs\production-health.jsonl
+quotes_ok
+intraday_1m_ok
+daily_volume_ok
+futopt_ok
+preopen_ok
+ready_ge_35_symbols
+ready_ge_80_symbols
+intraday_1m_stale_seconds
+latest_candle_time
+strategy2_ready_cache_ok
+strategy2_latest_updated_at
+strategy2_entry_count
 ```
 
-## 驗證狀態
+If `source_status.updated_at > strategy2_latest.updated_at` and `intraday_1m_ok=true`, refresh Strategy2 latest / ready cache or generate a new run. Do not leave Strategy2 degraded while shared source is healthy.
 
-2026-06-24 16:30 左右已完成以下正式站驗證：
+After market close, `source_status=stopped` with a message like `Stopped after 14:05` should be `afterhours_stopped_ok`, not `intraday_1m_not_ok`.
+
+Each entry should include:
 
 ```text
-npm run monitor:production      -> ok
-npm run verify:live-version     -> ok
-node --use-system-ca scripts\verify-deployment.js -> ok
-npm run e2e:smoke               -> ok
-npm run snapshot:desktop -- --remote --fail-on-partial --min-endpoints=10 --source=codex-final-check --base-url=https://fuman-terminal.vercel.app -> ok
+entry_source
+detection_source
+quality_status
+run_id
+state_id
 ```
 
-`npm run guard:production` 在 `C:\fuman-terminal` 會失敗，原因不是正式站壞，而是該本機資料夾 dirty 且 local HEAD 落後 origin/main。這是防回滾 guard 的正確保護。若要讓 guard 通過，請用乾淨 worktree 或先安全處理本機 dirty 狀態。
+Do not mix Strategy2 A-near-entry terminal records with formal MA35-only entries. Scorecard main table uses terminal A-near-entry first; formal MA35 is auxiliary.
 
-## 部署前必跑
+## 7. Strategy 3 Tail / 13:00
 
-修改後至少跑：
+Official API:
 
 ```text
-node --check terminal-desktop-fast-shell.js
-node --check terminal-desktop-canvas-worker.js
-node --check terminal-strategy-module.js
-node --check terminal.js
-node --check terminal-hotfix.js
-node --check api/strategy2-latest.js
-npm run verify:version
+/api/strategy3-latest
 ```
 
-部署後至少跑：
+Supabase authority:
 
 ```text
-npm run verify:live-version
-node --use-system-ca scripts\verify-deployment.js
-npm run e2e:smoke
-npm run monitor:production
-npm run guard:production
+strategy3_scan_runs
+strategy3_scan_results
+strategy3_intraday_1m_status_latest
+v_strategy3_intraday_1m_status
+v_strategy3_quote_ready
+get_strategy3_intraday_1m_latest_n(codes, limit)
 ```
 
-如果是在 dirty 的 `C:\fuman-terminal` 跑 `guard:production` 失敗，請先確認是不是本機狀態問題，不要直接判定正式站壞。
+Strategy3 is a 13:00 tail strategy. Do not fail daily live freshness before 13:00 Taipei time just because the Strategy3 run is not due yet.
 
-## 正式部署流程
-
-建議使用乾淨 worktree：
+Hard gate after due time:
 
 ```text
-git fetch origin
-git worktree add <clean-worktree-path> origin/main
+usedDate = current trading day
+cacheSource = supabase-api
+runId non-empty
+count > 0
+badUnder2 = 0
+qualityGates present
 ```
 
-修改後：
+Quality gates should expose:
 
 ```text
-git status -sb
-npm run verify:version
-git add <files>
-git commit -m "<message>"
-git push origin HEAD:main
-vercel --prod --yes
-npm run snapshot:desktop -- --remote --fail-on-partial --min-endpoints=10 --source=<reason> --base-url=https://fuman-terminal.vercel.app
-npm run verify:live-version
-node --use-system-ca scripts\verify-deployment.js
-npm run e2e:smoke
-npm run monitor:production
-npm run guard:production
+qualityGates.countOk
+qualityGates.usedDateOk
+qualityGates.cacheSourceOk
+qualityGates.runIdOk
+qualityGates.allPercentOk
+qualityGates.badUnder2
+qualityGates.minAbsPercent
 ```
 
-部署後一定看正式 alias：
+If Strategy3 is long-only, main rows should require `percent >= 2`. If negative rebound candidates are kept, split them into a rebound/observe section instead of mixing them with the main long list.
+
+## 8. Strategy 4 Swing / Daily OHLC
+
+Official API:
 
 ```text
-https://fuman-terminal.vercel.app
+/api/strategy4-latest
 ```
 
-不要只看 preview URL。
-
-## 給策略 / 籌碼 Codex 的接手說明
-
-請貼給負責策略或籌碼的 Codex：
+Supabase authority:
 
 ```text
-不要改版本號，不要重寫前端殼。
-現在正式終端走 fixed shell + Canvas + desktop route snapshot。
-你只更新自己的 scanner / Supabase complete run / API handler。
-API 必須支援 canvas=1&compact=1&shell=1&limit=N，只回前 30-70 筆可畫資料。
-route 要能被 /api/desktop-route-snapshot 收進 endpoints，讓 /api/terminal-fast-bundle 先讀快照。
-策略2是當沖即時，不要冷處理，不要放 desktop snapshot。
-不要新增密集 polling，不要讓 terminal-app.js 在切頁瞬間接管畫面。
-不要改策略條件、分數、掃描規則來解決速度問題。
-改完先 node --check，再驗正式 alias。
+strategy4_scan_runs
+strategy4_scan_results
+strategy4_daily_ohlcv_view
+strategy4_stock_universe_view
 ```
 
-## Latency / Debug
-
-客人正常網址：
+Universe rules:
 
 ```text
-https://fuman-terminal.vercel.app/?desktop=1
+current Taiwan common stocks only
+exclude ETF / warrant / CB / suspended / delisted / old merged symbols
+2311 and 2325 must not be eligible
+3711 must be eligible
+history-ready universe excludes insufficient daily OHLC names
+coverageRatio should be 1 when history gate is clean
 ```
 
-Codex 除錯網址：
+Do not use Yahoo or Hong Kong daily K fallback for Taiwan stock history when Fugle / FinMind / Supabase OHLC is available. Do not reintroduce old Taiwan symbols such as 2311/2325 when the current symbol is 3711.
+
+Patch / run order:
 
 ```text
-https://fuman-terminal.vercel.app/?desktop=1&codexLatency=1&codexLatencyAuto=1
+Strategy4CurrentUniverseGate.sql
+Strategy4HistoryReadyUniverseGate.sql
+prewarm / backfill local cache when needed
+full scan
+verify universe total == scannedCount
 ```
 
-客人不應看到 latency 面板。舊的公開參數不應再顯示面板：
+## 9. Strategy 5 Composite
+
+Official API:
 
 ```text
-latency=1
-latencyAuto=1
+/api/strategy5-latest
 ```
 
-Console helper：
-
-```js
-FUMAN_DESKTOP_PERF_LOG.summary()
-FUMAN_DESKTOP_PERF_LOG.recommend()
-FUMAN_DESKTOP_PERF_LOG.read()
-FUMAN_DESKTOP_PERF_LOG.flush()
-FUMAN_DESKTOP_PERF_LOG.clear()
-```
-
-判讀：
+Supabase authority:
 
 ```text
-nav 高   -> 側欄事件 / active 狀態 / CSS selector
-shell 高 -> Canvas 首畫 / 固定殼 DOM
-api 高   -> API payload / cache / TTL / Supabase query / snapshot freshness
+strategy5_scan_runs
+strategy5_scan_results
 ```
 
-最新 latency 會寫到：
+Query contract:
 
 ```text
-/api/desktop-latency-latest
-Supabase snapshot key: desktop_route_latency_latest
+?top=1&compact=1&limit=50 must actually limit and compact payload
+count = returned rows count
+resultCount = full complete run result count
+rows = returned rows
+matches retained for legacy clients if needed
 ```
 
-## CSS 清理原則
-
-目前不要啟用機器人自動刪 CSS。
-
-可以做：
-
-- CSS audit report
-- 重複 selector report
-- `!important` 數量 report
-- 色票與主題覆蓋 report
-- 人工小範圍合併
-
-不要做：
-
-- 自動刪 `styles.css`
-- 自動刪 `terminal-theme.css`
-- 自動刪 runtime theme CSS
-- 未經畫面驗證就自動合併 hotfix CSS
-
-CSS 清理前至少驗：
+Publish contract:
 
 ```text
-桌面夜幕
-桌面陽光
-手機夜幕
-手機陽光
+write running run
+write result rows
+write complete run
+readback by run_id
+readbackCount == resultRows.length
+log runId / resultRows / readbackCount / status / complete
 ```
 
-## 不要做的事
+Do not move Strategy5 back to static JSON. Do not let watchlist match index overwrite `/api/strategy5-latest`.
 
-- 不要 bump version，除非使用者明確要求。
-- 不要把速度問題用版本號/cache bump 假裝解決。
-- 不要回退到大量 DOM table。
-- 不要讓左側分頁點擊立即喚醒整包 `terminal-app.js`。
-- 不要改策略規則來假裝速度變快。
-- 不要把 Codex latency 面板暴露給客人。
-- 不要直接從 dirty 的 `C:\fuman-terminal` 強行部署。
-- 不要說「修好了」但沒有驗正式 alias。
+## 10. Institution / Chip / Buying-Selling
 
-## 接手優先順序
+Official APIs:
 
 ```text
-1. 讀本 AGENTS.md。
-2. 確認正式站版本仍是 public-terminal-fast-20260623-09。
-3. 確認 production health / snapshot / smoke。
-4. 若是速度問題，先看 FUMAN_DESKTOP_PERF_LOG.summary() 或 /api/desktop-latency-latest。
-5. nav / shell / api 哪個高，就修哪一層。
-6. 不改策略規則，不亂 bump 版本。
-7. 驗證正式 alias 後再回報。
+/api/institution-latest
+/api/institution-tdcc-breakout-latest
+/api/watchlist-match-index
 ```
+
+Supabase authority:
+
+```text
+institution_scan_runs
+institution_scan_results
+institution_tdcc_breakout
+watchlist_match_index snapshot
+```
+
+Rows must be read with Supabase paging/range. If scanner wrote 1640 rows, API count must be 1640, not 1000.
+
+API contract:
+
+```text
+cacheSource = supabase-api
+runId non-empty
+usedDate/sourceDate = trading day
+count = full Supabase rows, or compact count with explicit resultCount
+rows/data length matches the contract
+```
+
+Do not use Vercel deploy to refresh institution/chip data. Scanner writes Supabase; API reads Supabase. FinMind may be a scanner source provider, not a frontend data authority.
+
+## 11. Warrant Flow
+
+Official API:
+
+```text
+/api/warrant-flow-latest
+```
+
+Supabase authority:
+
+```text
+warrant_flow_scan_runs
+warrant_flow_scan_results
+watchlist_match_index snapshot
+```
+
+Required contract:
+
+```text
+cacheSource = supabase-api
+schemaVersion >= warrant-flow-run-id-complete-v1
+dataContract.ok = true
+usedDate/sourceDate/marketDataDate are YYYYMMDD, not ROC date like 1150622
+top/compact/limit query shapes response
+volumeMatches are single warrant rows, not underlying aggregate rows
+```
+
+Each `volumeMatches` row must include:
+
+```text
+warrantCode
+warrantName
+underlyingCode
+thirtyMinuteVolume
+floatingUnits
+volumeMultiple
+```
+
+Watchlist index must include warrant underlying matches for `volumeMatches` and `singleSignals`, or warrant signals will not light up in radar/watchlist.
+
+Verify with:
+
+```text
+npm run verify:warrant-freshness:live
+```
+
+## 12. CB Detect
+
+Official API:
+
+```text
+/api/cb-detect-latest
+```
+
+Supabase authority:
+
+```text
+cb_detect_latest snapshot
+cb-detect-supabase-status.json for diagnostics
+cb-detect-run-history.json for recent metadata
+```
+
+Scanner contract:
+
+```text
+npm run scan:cb-detect
+write Supabase snapshot
+readback same runId
+verify count / usedDate / sourceCounts / excludedCounts
+write status with lastSuccessAt / lastErrorAt / lastError / consecutiveFailures
+keep recent run history
+```
+
+API contract:
+
+```text
+cacheSource = supabase-snapshot
+runId non-empty
+usedDate/sourceDate stable
+rows array
+count = rows.length
+stale/issues visible
+```
+
+Verify with:
+
+```text
+npm run verify:cb-detect-live
+```
+
+## 13. Market AI / Heatmap / Mobile Boot
+
+Official APIs:
+
+```text
+/api/market-ai-live
+/api/market-ai-panel-live
+/api/heatmap
+/api/mobile-boot
+```
+
+Supabase authority:
+
+```text
+market_ai_snapshots
+market_ai_live
+market_ai_panel
+mobile_boot
+heatmap_latest
+mobile_update_events
+```
+
+Trading-day rule:
+
+```text
+During a trading day, never silently fallback to an older trading date.
+Only closed/non-trading-day sessions may fallback to latest completed trading day.
+```
+
+Required observability:
+
+```text
+cacheSource = supabase:market_snapshots when Supabase snapshot is used
+fallback boolean
+stale boolean
+reason when stale/fallback/failed
+snapshot.key
+runId or snapshotId
+bootHash when available
+marketSession.today
+marketSession.marketDataDate
+```
+
+For `/api/heatmap`:
+
+```text
+cacheSource = supabase:market_snapshots
+snapshotMode = sector-top5
+snapshot.key = heatmap_latest
+```
+
+For `/api/mobile-boot`:
+
+```text
+cacheSource = supabase:market_snapshots
+fallback = false when fresh
+stale = false when fresh
+snapshot.key = mobile_boot
+```
+
+## 14. Shared Fugle Intraday Source
+
+Shared source must serve daytrade candidates, not only symbols that changed recently.
+
+Required 1m behavior:
+
+```text
+08:00 build today universe
+08:55-09:00 build preopen_hot_symbols
+09:00 write fugle_intraday_1m immediately
+09:00-09:10 prioritize preopen hot / A-grade names
+09:10 onward backfill missing 09:00+ candles
+09:35 ready_ge_35_symbols should rise
+```
+
+Candidate priority:
+
+```text
+preopen strong
+top 300 gainers
+top 300 volume
+top 300 trade value
+avg volume 5 days > 3000
+high turnover / daytrade candidates
+```
+
+Synthetic / flat candle rule:
+
+```text
+synthetic_flat OHLC can be used for MA35 / SMA5 / RSI / MACD / KD / NPSY / price trend
+synthetic_flat volume must not be used for volume explosion / volume ratio / average volume / strict volume OK
+```
+
+Payload fields:
+
+```text
+payload.source = fugle_direct / quote_derived / synthetic_flat
+payload.synthetic = true / false
+payload.volume_source = direct / quote_delta / synthetic_zero
+payload.volume_strategy_usable = true / false
+```
+
+Source status must expose separated health:
+
+```text
+quotes_ok
+preopen_ok
+futopt_ok
+intraday_1m_ok
+daily_volume_ok
+quote_age_seconds
+intraday_1m_stale_seconds
+latest_candle_time
+ready_ge_35_symbols
+ready_ge_35_ratio
+ready_ge_80_symbols
+ready_ge_80_ratio
+synthetic_ratio
+writer_version / build_id when available
+```
+
+If 1m writer is stopped after market close, health views should report afterhours stopped OK, not live intraday failure.
+
+## 15. Scorecard Contract
+
+Scorecard is a dashboard/report layer, not the source of truth. It consumes APIs and append-only ledgers.
+
+Every API used by scorecard should return:
+
+```text
+usedDate
+sourceDate
+marketSession.marketDataDate
+runId
+count
+rows
+updatedAt
+reason
+transport.gate
+```
+
+Do not calculate scorecard rows from mismatched dates. Do not mix a fallback report date with latest strategy data from another date unless clearly labeled.
+
+Scorecard should not invent trades. If a source has only signal-day estimates, label it as signal-day estimate. If a source has real entry/exit outcomes, label it as backtested outcome.
+
+## 16. What To Do When Something Looks Broken
+
+Use this order:
+
+```text
+1. Check the official production API, not static JSON.
+2. Check API metadata: runId, usedDate, sourceDate, count, cacheSource, transport.gate.
+3. Check Supabase complete run/snapshot exists and is complete.
+4. Check scanner/writer readback verification.
+5. Check frontend polling only if API is already correct.
+6. Deploy only when API code or frontend code changed.
+```
+
+Do not say fixed because:
+
+```text
+Vercel deployed
+version changed
+browser refreshed
+static JSON was regenerated
+sync project looks correct
+```
+
+Say fixed only when the official production API returns the correct no-store payload and the relevant verifier passes.
+
+
