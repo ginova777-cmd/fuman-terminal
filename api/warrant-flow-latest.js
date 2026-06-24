@@ -12,6 +12,10 @@ function readSecretText(file) {
 const RUNTIME_DIR = process.env.FUMAN_RUNTIME_DIR || "C:/fuman-runtime";
 const SUPABASE_URL = terminalSupabaseUrl({ runtimeDir: RUNTIME_DIR });
 const SUPABASE_KEY = terminalSupabaseKey({ runtimeDir: RUNTIME_DIR });
+const FALLBACK_SUPABASE_URL = String(
+  process.env.WARRANT_FLOW_FALLBACK_SUPABASE_URL || "https://cpmpfhbzutkiecccekfr.supabase.co"
+).replace(/\/+$/, "");
+let activeSupabaseUrl = SUPABASE_URL;
 
 const TABLE = process.env.WARRANT_FLOW_SUPABASE_RESULTS_TABLE || "warrant_flow_scan_results";
 const LATEST_RUN_VIEW = process.env.WARRANT_FLOW_SUPABASE_LATEST_RUN_VIEW || "v_warrant_flow_latest_complete_run";
@@ -87,6 +91,7 @@ function apiOnlyError(reason = "", tradingDay = null) {
     marketSession,
     transport: {
       source: "supabase",
+      supabaseHost: safeHost(activeSupabaseUrl),
       latestRunView: LATEST_RUN_VIEW,
       gate: closed ? "non-trading-day-cache" : "run_id",
       via: "api/warrant-flow-latest",
@@ -129,6 +134,7 @@ function emptySnapshotPayload(reason = "warrant_flow_snapshot_empty", tradingDay
     },
     transport: {
       source: "supabase",
+      supabaseHost: safeHost(activeSupabaseUrl),
       table: TABLE,
       latestRunView: LATEST_RUN_VIEW,
       gate: "snapshot-friendly-empty",
@@ -139,7 +145,7 @@ function emptySnapshotPayload(reason = "warrant_flow_snapshot_empty", tradingDay
 }
 
 async function fetchRowsFrom(table, query) {
-  const response = await fetch(`${SUPABASE_URL}/rest/v1/${table}?${query}`, {
+  const response = await fetch(`${activeSupabaseUrl}/rest/v1/${table}?${query}`, {
     headers: {
       apikey: SUPABASE_KEY,
       Authorization: `Bearer ${SUPABASE_KEY}`,
@@ -158,6 +164,14 @@ async function fetchRowsFrom(table, query) {
 function cleanNumber(value) {
   const number = Number(String(value ?? "").replace(/[,+%]/g, ""));
   return Number.isFinite(number) ? number : 0;
+}
+
+function safeHost(value) {
+  try {
+    return new URL(value).host;
+  } catch {
+    return "";
+  }
 }
 
 function readRequestOptions(request) {
@@ -302,6 +316,7 @@ function buildPayload(rows, run, options = {}) {
     singleSignals: outputSingleSignals,
     transport: {
       source: "supabase",
+      supabaseHost: safeHost(activeSupabaseUrl),
       table: TABLE,
       latestRunView: LATEST_RUN_VIEW,
       gate: "run_id",
@@ -511,13 +526,25 @@ module.exports = async function handler(request, response) {
       response.status(503).json(apiOnlyError("supabase_not_configured", tradingDay));
       return;
     }
-    const latest = await fetchLatestCompleteRows(options);
+    const sourceErrors = [];
+    let latest = { rows: [], run: null, skippedInvalidRuns: [] };
+    const candidates = [...new Set([SUPABASE_URL, FALLBACK_SUPABASE_URL].filter(Boolean))];
+    for (const candidate of candidates) {
+      activeSupabaseUrl = candidate;
+      try {
+        latest = await fetchLatestCompleteRows(options);
+        if (latest.rows.length) break;
+        sourceErrors.push(`${safeHost(candidate)}:empty`);
+      } catch (error) {
+        sourceErrors.push(`${safeHost(candidate)}:${error?.message || String(error)}`);
+      }
+    }
     if (!latest.rows.length) {
       if (options.snapshotFriendly) {
-        response.status(200).json(emptySnapshotPayload("warrant_flow_scan_results_latest_empty", tradingDay, options));
+        response.status(200).json(emptySnapshotPayload(sourceErrors.join(" | ") || "warrant_flow_scan_results_latest_empty", tradingDay, options));
         return;
       }
-      response.status(404).json(apiOnlyError("warrant_flow_scan_results_latest_empty", tradingDay));
+      response.status(404).json(apiOnlyError(sourceErrors.join(" | ") || "warrant_flow_scan_results_latest_empty", tradingDay));
       return;
     }
     const fullPayload = buildPayload(latest.rows, latest.run);
