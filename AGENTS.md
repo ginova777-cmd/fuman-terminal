@@ -1,6 +1,6 @@
 # AGENTS.md
 
-Last updated: 2026-06-24 17:03 Asia/Taipei
+Last updated: 2026-06-24 17:07 Asia/Taipei
 
 給後續接手這個工作區的 Codex：請先讀這份，再改程式。這份只保留目前有效狀態。
 
@@ -211,13 +211,13 @@ projectId = prj_AFIoVawOujEtsEYEF4W0ni23txGX
 
 不要從 `C:\fuman-terminal-sync` 部署正式站，避免舊流程或舊資料重新回來。
 
-舊外部 dispatch API 已退休：
+舊外部 dispatch API 已刪除：
 
 ```text
 /api/schedule-dispatch
 ```
 
-目前只回 `410 schedule_dispatch_retired`，不可再恢復成 GitHub workflow dispatch。
+不可再恢復成 GitHub workflow dispatch。若外部舊排程仍打這條 URL，正式站應回 404，不應觸發任何 GitHub workflow。
 
 ## Desktop Route Snapshot 狀態
 
