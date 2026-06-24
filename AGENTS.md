@@ -1,835 +1,408 @@
-# Fuman Terminal AGENTS
+# AGENTS.md
 
-Last updated: 2026-06-23
+Last updated: 2026-06-24 16:30 Asia/Taipei
 
-This is the first file every Codex must read before touching Fuman Terminal.
+給後續接手這個工作區的 Codex：請先讀這份，再改程式。這份只保留目前有效狀態。
 
-The current priority is Strategy1 open-buy API-only stability. The user does not want another temporary frontend patch that gets overwritten later. Fixes must survive GitHub/Vercel redeploys, scheduled jobs, stale local build output, and old static cache files.
+## 目前主線
 
-## Fuman Terminal Codex Operating Contract
+使用者目前主線是「Fuman Terminal 正式股票終端」。
 
-Supabase API-only is the authority for production data. Do not use these as data freshness authority: static `/data/*.json`, `live-freshness-ok.json`, frontend version bumps, service worker cache bumps, browser hard refreshes, or Vercel deploy side effects.
-
-Run `npm run verify:publish-gate` before publishing. If a legacy checker complains about removed freshness artifacts, remove the old dependency instead of restoring the legacy verifier.
-
-Strategy 1 Open Buy: preopen ready / decision gate controls BUY publication.
-
-Strategy 2 Intraday: quotes health controls candidate universe publication; intraday_1m health only controls A-zone technical upgrade.
-
-Strategy2: quotes health controls candidate universe publication; intraday_1m health only controls A-zone technical upgrade.
-
-Strategy 3 Tail: complete run / TV confirmation / latest-N after-13:00 gate.
-
-Strategy3: complete run / TV confirmation / latest-N after-13:00 gate.
-
-Strategy 4 Swing: current common-stock universe / daily OHLC / history coverage gate.
-
-Strategy4: current common-stock universe / daily OHLC / history coverage gate.
-
-Strategy 5 Composite: complete run / result readback gate.
-
-Strategy5: complete run / result readback gate.
-
-Strategy5 frontend must not restore `foreign_trust_breakout`.
-
-Strategy5 removed preset:
-
-```text
-foreign_trust_breakout
-外資投信連買準突破
-準突破
-```
-
-This removed preset must not appear in:
-
-```text
-terminal-strategy-config.js STRATEGY_DEFS
-terminal-strategy-config.js STRATEGY5_BASE_PRESET_IDS
-terminal-strategy-config.js STRATEGY5_PRESET_IDS
-terminal-strategy-config.js STRATEGY5_CARD_META
-terminal-app.js loading fallback title
-terminal-app.js active strategy fallback
-```
-
-Allowed internal scanner/evaluator fields may still contain `foreign_trust_breakout` for legacy scoring/debug data, but production Strategy5 UI must not expose it as a tab, card, title, or default loading pane.
-
-Required live checks after Strategy5 frontend changes:
-
-```text
-terminal-strategy-config.js has foreign_trust_breakout = false
-terminal-strategy-config.js has 外資投信連買準突破 = false
-terminal-app.js has 外資投信連買準突破 = false
-terminal-app.js has STRATEGY_BY_ID.foreign_trust_breakout = false
-```
-
-Institution / Chip: API contract gate.
-
-Warrant Flow: API contract gate.
-
-CB Detect: API contract gate.
-
-Shared Fugle Intraday Source: quote freshness, intraday_1m coverage, ready counts, and source coverage must be observable without relying on static files.
-
-Per-Strategy Health Gate Boundaries: source health may degrade a technical upgrade, but must not wipe a strategy's candidate universe unless that strategy's own contract says so.
-
-Institution / Warrant / CB: API contract gate
-
-## Official Targets
-
-Only this production URL is official:
+正式站：
 
 ```text
 https://fuman-terminal.vercel.app
 ```
 
-This is not the official user-facing terminal:
+目前固定版本：
 
 ```text
-https://fuman-terminal-sync.vercel.app
+public-terminal-fast-20260623-09
 ```
 
-Important local paths:
+最新 production/main commit：
 
 ```text
-C:\fuman-terminal       production app / Vercel deploy repo
-C:\fuman-terminal-sync  sync / scanner / scheduled-task repo
-C:\fuman-runtime        runtime cache, secrets, generated data
+a35aca73aa4211db0cb05e0c52d3c492dbcc3168
 ```
 
-Do not report production fixed after only editing local files, deploying the wrong Vercel project, or verifying only the sync project.
-
-## Global Data Rule
-
-Fuman Terminal is Supabase / API-only.
-
-## Desktop Market Overview Removed
-
-The desktop market overview page is retired by user request.
-
-Do not restore:
+目前極致化狀態：
 
 ```text
-市場總覽
-index.html #market-view
-index.html data-view="market"
-sidebar 市場總覽 nav item
-default active page = market
+約 93% - 95%
 ```
 
-Production desktop first view should enter Strategy5 composite / strategy main page unless the user explicitly requests another existing module.
+使用者明確要求：
 
-Required checks after desktop routing / index changes:
+- 不要隨便 bump 版本號。
+- 不要用版本號/cache bump 假裝變快。
+- 策略2是當沖即時資料，不可冷處理、不可放進 desktop route snapshot。
+- 桌面與手機都要速度、手感、穩定。
+- 左側分頁切換要立即反應，側欄選取、標題、內容要同步。
+- 不要把 Codex latency/debug 面板給客人看。
+
+## 目前有效專案位置
+
+正式專案資料夾：
 
 ```text
-index.html has 市場總覽 = false
-index.html has market-view = false
-index.html has data-view="market" = false
-terminal-app.js has installMarketOverviewRemovalGuard = true
-terminal-hotfix.js has installMarketOverviewRemovalHotfix = true
+C:\fuman-terminal
 ```
 
-Old browser state may still contain last route = market. Runtime guards must redirect market to Strategy5 instead of showing an empty retired page.
-
-Official data flow:
+Git remote/main 來源：
 
 ```text
-scanner / collector / writer
--> Supabase complete run or Supabase snapshot
--> no-store /api endpoint
--> frontend polling / rendering
--> production UI
+https://github.com/ginova777-cmd/fuman-terminal.git
 ```
 
-Never use these as official data freshness authority:
+注意：`C:\fuman-terminal` 目前有本機 dirty 內容，而且本機 HEAD 可能落後 `origin/main`。不要在沒有確認的情況下直接從這個 dirty 目錄部署。
+
+若要部署或做大修改，建議：
 
 ```text
-static /data/*.json
-data/open-buy-latest.json
-data/open-buy-backup.json
-data/open-buy-page-*.json
-data/live-freshness-ok.json
-version.json
-terminal-core.js version bump
-service worker cache bump
-Vercel deploy side effect
-browser hard refresh
-manual fake JSON patch
+1. 先確認 origin/main 是最新。
+2. 用乾淨 worktree 或先處理好本機 dirty 狀態。
+3. 不要 git reset / checkout 覆蓋使用者變更。
+4. 部署前跑 production guard。
 ```
 
-Static JSON can exist only as legacy diagnostics or retired artifact cleanup input. It must not drive Strategy1 production data.
+## 目前架構
 
-## Strategy1 Name And Positioning
-
-Strategy1 is:
+桌面終端目前使用：
 
 ```text
-策略1「明日開盤入 / open-buy」
+fixed shell
+Canvas / OffscreenCanvas 列表
+compact API payload
+desktop route snapshot
+memory / session / IndexedDB snapshot
+production health monitor
+防回滾 guard
 ```
 
-It is not a generic frontend table and not a static JSON page. It is a Supabase complete-run and readiness-gated flow.
-
-Main operational meaning:
+核心檔案：
 
 ```text
-21:30 產生明日候選
-08:45 準備與檢查個股期貨 / source coverage
-08:55 盤前最終確認五檔 / 試搓 / 委買委賣
-09:00 只執行 08:55 全部過關的 BUY 名單
-09:10 不強就出，不凹單
-```
-
-21:30 produces candidates. It does not directly allow hanging limit-up orders.
-
-08:55 is the executable upgrade gate. Only after preopen price, gap, bid/ask depth, and support pass may a candidate become executable.
-
-## Strategy1 UI Contract
-
-Production Strategy1 main UI must show only two cards:
-
-```text
-1. 21:30 候選
-2. 08:55 最終
-```
-
-Never restore a third card:
-
-```text
-排除/降級
-有賺就走
-快跑
-WATCH
-BLOCK
-stale
-quote mismatch
-尾盤倒貨
-短線過熱
-量價不一致
-```
-
-Those states belong only in:
-
-```text
-strategy1_open_buy_results
-strategy1_open_buy_audit
-debug output
-source audit
-```
-
-Frontend main list and the two cards must only display:
-
-```text
-decision = BUY
-```
-
-WATCH and BLOCK must remain saved in Supabase for debugging, but not shown in the Strategy1 main list.
-
-## Strategy1 API Contract
-
-Official API:
-
-```text
-/api/open-buy-latest
-```
-
-Official Supabase authority:
-
-```text
-strategy1_open_buy_runs
-strategy1_open_buy_results
-v_strategy1_ready_status
-v_strategy1_preopen_features
-v_strategy1_futopt_preopen_join
-v_strategy1_preopen_history_coverage
-strategy1_futopt_preopen_latest
-```
-
-The API must not read or fallback to:
-
-```text
-data/open-buy-latest.json
-data/open-buy-backup.json
-data/open-buy-page-*.json
-strategy1_open_buy_latest.payload
-v_strategy1_open_buy_latest_complete_run
-LATEST_RUN_VIEW
-OPEN_BUY_RUN_VIEW
-latestRunView
-latest_run_view
-gate = latest-payload
-```
-
-Formal latest run must satisfy:
-
-```text
-status = complete
-complete = true
-expected_total = scanned_count
-run_trade_date = latest_trading_day
-gate = complete-run-authoritative+decision-ready
-```
-
-Readiness gate:
-
-```text
-v_strategy1_ready_status.decision_ready = true
-```
-
-If any of the readiness inputs is not ready, do not show BUY:
-
-```text
-daily_ready
-chip_ready
-preopen_ready
-futopt_ready
-```
-
-Correct blocked API state may look like:
-
-```text
-status = 503
-error = strategy1_decision_not_ready
-lastError = daily_not_ready
-gate = complete-run-authoritative+decision-ready
-latest_run_source = strategy1_open_buy_runs
-ready_status_view = v_strategy1_ready_status
-```
-
-That is a data readiness block. It is not a reason to bring back a third UI card or any static fallback.
-
-`strategy1_open_buy_results` rows must include:
-
-```text
-decision = BUY / WATCH / BLOCK
-block_reason
-setup_type
-```
-
-`/api/open-buy-latest` response must include:
-
-```text
-gate = complete-run-authoritative+decision-ready
-expectedTotal
-scannedCount
-resultCount
-buyCount
-watchCount
-blockCount
-meta.expected_total
-meta.scanned_count
-meta.result_count
-meta.buy_count
-meta.watch_count
-meta.block_count
-cacheSource = supabase-api when ready
-decisionReady
-lastError
-```
-
-`matches` and `rows` must contain only `decision=BUY`.
-
-## Strategy1 21:30 Base Candidate Rules
-
-21:30 complete scan creates tomorrow's base candidates.
-
-It must cover:
-
-```text
-前一天強收
-收最高或接近最高
-成交量放大但不要失控
-站上 MA35
-紅 K 強攻、收在日內強勢區
-短線不能連噴太多天
-偏好第一根或第二根攻擊
-嘎空燃料
-融券餘額仍高
-融券回補率不能太高
-借券賣出餘額仍高
-借券回補率不能太高
-法人 / 主力代理是否持續買入
-法人明顯倒貨降分
-同族群至少 2-3 檔同步強加分
-族群沒有同步降分
-高周轉 / 當沖熱門
-尾盤是否倒貨
-漲停鎖住品質
-流動性細分
-```
-
-Setup classification:
-
-```text
-A級 開盤無腦入
-B級 突破候選
-C級 深跌反彈
-C級 洗盤反彈
-```
-
-A級:
-
-```text
-21:30 候選，08:55 全過才可考慮盤前掛漲停
-```
-
-B級:
-
-```text
-可列 Strategy1 觀察；只有 08:55 非常強才升級，否則 09:00 後確認
-```
-
-C級 深跌反彈:
-
-```text
-不盤前掛漲停；只做 09:01 站回開盤價 / VWAP 後短打
-```
-
-C級 洗盤反彈:
-
-```text
-不盤前掛漲停；只做開盤後不破低、站回開盤價後確認
-```
-
-## Strategy1 Stock Pool Hard Exclusions
-
-Hard exclusions:
-
-```text
-ETF / 00 開頭
-水泥
-軍工 / 國防 / 航太
-金融
-航空
-權證
-可轉債
-黑名單
-```
-
-Do not use this as Strategy1 hard exclusion:
-
-```text
-近 5 日均量 <= 3000 張
-```
-
-It may be a scoring / liquidity factor, not a pool-killing hard exclusion.
-
-## Strategy1 08:45 Prepare
-
-08:45 is not only coverage/source/debug. It must check individual stock futures too.
-
-Individual stock futures preopen strong conditions:
-
-```text
-個股期貨漲幅 >= 2%
-相對 TXF >= 1%
-成交量 >= 80
-報價新鮮 <= 300 秒
-```
-
-Individual stock futures strength can add symbols to the 08:45 observation pool, but must not alone mark a stock as A級開盤無腦入.
-
-08:45 prepare must also expose source coverage and freshness:
-
-```text
-preopenCoverage
-futopt freshness
-quote age
-history coverage
-five-level coverage when available
-```
-
-If source coverage is insufficient, display data incomplete / source not ready. Do not say there are no symbols merely because coverage is incomplete.
-
-## Strategy1 08:55 Final Confirmation
-
-08:55 must check:
-
-```text
-08:45 個股期貨盤前強
-08:45-08:55 現股試搓強攻
-試搓穩定度
-試搓跳空是否過高
-委買 / 委賣支撐
-五檔 / 委買委賣
-```
-
-Stock preopen attack conditions:
-
-```text
-試搓漲幅合理偏強
-試搓不轉弱
-委買有基本張數
-盤前委託不薄
-```
-
-Absorbing sell pressure type:
-
-```text
-委賣明顯大於委買
-但試搓價連續撐住
-可列入 08:55 可預掛候選
-```
-
-Large / high-liquidity hot preopen stocks such as 3711:
-
-```text
-可接受試搓 6%-8%
-委買 >= 100 張
-盤不薄
-8% 以上仍視為過熱
-```
-
-`v_strategy1_preopen_features` is the 08:55 practical primary source. Scanner must prioritize:
-
-```text
-preopen_attack_ok
-preopen_attack_type
-preopen_attack_confidence
-```
-
-Do not rescan raw full-market history to recalculate this as the primary path.
-
-Raw snapshots/history are fallback only.
-
-`low_data_attack` means symbols like 3006 / 3711: preopen attack looks strong but snapshot count or five-level depth is limited. If:
-
-```text
-preopen_attack_ok = true
-```
-
-then it can be included as preopen attack. `preopen_attack_confidence` is for debug/source audit only. Do not split the main list into high/low confidence.
-
-`v_strategy1_futopt_preopen_join` is the merged stock futures + stock preopen source. It must read the cache:
-
-```text
-strategy1_futopt_preopen_latest
-```
-
-Do not join the full futopt raw table inside the view at runtime.
-
-`v_strategy1_preopen_history_coverage` is a source readiness gate.
-
-## Strategy1 Audit
-
-Each Strategy1 scan must write audit:
-
-```text
-run_id
-trade_date
-scanned_count
-buy_count
-watch_count
-block_count
-decision_ready
-message
-```
-
-## Old Files And Caches That Caused Strategy1 Problems
-
-These are known interference sources:
-
-```text
-data/open-buy-latest.json
-data/open-buy-backup.json
-data/open-buy-page-*.json
-strategy1_open_buy_latest.payload
-v_strategy1_open_buy_latest_complete_run
-api/terminal-home.js old independent Strategy1 read path
-run-open-buy-preopen.ps1 calling /api/open-buy-latest for candidates
-strategy1-preopen-* runs being selected as latest complete base run
-loadPreopenStrengthCodes() expanding 08:55 scan to all-market preopen strong names
-loadStockFutureStrengthCodes() expanding 08:55 scan to all-market futures strong names
-legacy-entrypoint-guard.ps1 blocking new 08:45 prepare runner
-fuman-terminal-sync.vercel.app being deployed instead of fuman-terminal.vercel.app
-generate-slim-cache.js old static open-buy diagnostics
-C:\fuman-terminal\.vercel\output stale build output
-origin/main containing old terminal-app.js and overwriting CLI hotfix via Vercel/GitHub auto deploy
-```
-
-Rules:
-
-```text
-08:55 default must confirm 21:30 base candidates, not expand to 125/135 all-market symbols.
-Preopen runs must not become the next 21:30 base candidate source.
-Homepage Strategy1 must delegate to /api/open-buy-latest, not keep a separate latest view path.
-```
-
-## 2026-06-23 Three-Card Rollback Incident
-
-Incident:
-
-```text
-Production Strategy1 showed:
-16:00 候選
-08:55 最終
-有賺就走 / 快跑
-```
-
-Root cause:
-
-```text
-CLI production deploy had been fixed to two cards.
-But origin/main still contained old three-card terminal-app.js, terminal-live-check.js, api/mobile-fragment.js, and scripts/generate-slim-cache.js.
-Vercel/GitHub later deployed origin/main and overwrote production with the old bundle.
-```
-
-Conclusion:
-
-```text
-CLI deploy alone is not enough.
-Fix must be committed and pushed to origin/main.
-```
-
-Rollback guard commit:
-
-```text
-e605a076 Guard strategy1 open-buy two-card contract
-```
-
-Verified production deployment:
-
-```text
-dpl_G9fbAHjmhPaprt7Zdij3kFfkSLZB
-```
-
-Verified production version:
-
-```text
-strategy1-two-cards-20260623-02
-```
-
-## Strategy1 Files That Must Stay In Sync
-
-UI and bundle:
-
-```text
+terminal-desktop-fast-shell.js
+terminal-desktop-canvas-worker.js
+terminal-strategy-module.js
+terminal-chip-snapshot-module.js
+terminal-market-snapshot-module.js
+terminal-watchlist-shell.js
+terminal.js
+terminal-hotfix.js
 terminal-app.js
-terminal-live-check.js
-api/mobile-fragment.js
-scripts/generate-slim-cache.js
-terminal-hotfix.js
+api/terminal-fast-bundle.js
+api/desktop-route-snapshot.js
+api/desktop-route-snapshot-refresh.js
+api/production-health.js
+api/performance-report.js
+api/desktop-latency-latest.js
+lib/desktop-route-snapshot-builder.js
+lib/desktop-route-snapshot-cache.js
+scripts/write-desktop-route-snapshot.js
+scripts/monitor-production-health.js
+scripts/verify-production-guard.js
+run-full-scan.ps1
+run-production-health-monitor.ps1
+scripts/install-production-health-monitor-task.ps1
 ```
 
-Version and cache:
+## 已完成的速度與穩定性處理
+
+目前已完成：
+
+- 桌面固定 fast shell。
+- Canvas / OffscreenCanvas 列表常駐。
+- DOM 只保留按鈕、搜尋、詳細彈窗等必要互動。
+- 左側分頁快切，不應等待 API 才切畫面。
+- 策略頁、籌碼頁、CB、權證、市場、自選都走 fixed shell / compact payload。
+- `/api/terminal-fast-bundle` 優先讀 Supabase `desktop_route_snapshot`。
+- `/api/desktop-route-snapshot-refresh` 可預產 13 個 route endpoint 小包。
+- 遠端 snapshot refresh 預設只寫主 `desktop_route_snapshot`，避免 Vercel serverless request 因連續寫多個 endpoint snapshot 被 `ECONNRESET`。
+- full scan 寫 desktop snapshot 已改成硬性門檻：`--fail-on-partial --min-endpoints=10`。
+- endpoint-level snapshot cache 已有底層支援，適合由本機 full scan / scanner 寫入，不建議由 Vercel request 一次寫太多筆。
+- production health API 會檢查 snapshot fresh、partial=false、endpoint count、策略2即時。
+- latency log 會寫入 Supabase `desktop_route_latency_latest`，並由 `/api/desktop-latency-latest` 讀取。
+- Windows 排程 `FumanTerminalProductionHealthMonitor` 已建立，每 5 分鐘巡檢正式站。
+- monitor 會把本機 git drift 當 warning，不再因 `C:\fuman-terminal` dirty 而誤報正式站壞掉。
+- 防回滾 guard 仍會把 dirty worktree / local HEAD 落後 origin 當部署阻擋條件，這是正確行為。
+
+## Strategy 2 原則
+
+策略2是當沖即時資料。
+
+規則：
 
 ```text
-index.html
-terminal-core.js
-terminal-modules.js
-fuman-sw.js
-refresh.html
-version.json
+不可冷處理。
+不可放進 desktop route snapshot。
+不可因速度把它改成 stale snapshot。
+可以做 compact/live API。
+可以做 pointerdown 預熱。
+可以做 memory cache，但要保留 live intent。
 ```
 
-API:
+production health 目前確認：
 
 ```text
-api/open-buy-latest.js
-api/terminal-home.js
+hasStrategy2Snapshot = false
+strategy2 API = ok
 ```
 
-Guards:
+## Desktop Route Snapshot 狀態
+
+最後一次正式檢查結果：
 
 ```text
-scripts/verify-strategy1-open-buy-ui-contract.js
-scripts/prepare-deploy.js
-scripts/verify-publish-gate.js
-package.json
+snapshot ok = true
+partial = false
+endpointCount = 13
+misses = []
+source = codex-final-check
+updatedAt = 2026-06-24T08:29:13.665Z
+elapsedMs = 15441
 ```
 
-Docs:
+目前納入 snapshot / fast bundle 的重點 endpoint：
 
 ```text
-AGENTS.md
+/api/terminal-home
+/api/market?canvas=1&compact=1&shell=1&limit=24
+/api/stocks?limit=120&compact=1&shell=1
+/api/open-buy-latest?canvas=1&compact=1&shell=1&limit=60
+/api/strategy3-latest?canvas=1&compact=1&shell=1&limit=60
+/api/strategy4-latest?canvas=1&compact=1&shell=1&limit=70
+/api/strategy5-latest?canvas=1&compact=1&shell=1&limit=70
+/api/latest-signals?strategy=strategy4&compact=1&shell=1&limit=70
+/api/realtime-radar-latest?compact=1&shell=1&limit=50
+/api/institution-latest?canvas=1&compact=1&shell=1&limit=60
+/api/cb-detect-latest?canvas=1&compact=1&shell=1&limit=60
+/api/warrant-flow-latest?canvas=1&compact=1&shell=1&limit=60
+/api/watchlist-match-index?compact=1&shell=1&limit=80
 ```
 
-If production still serves old UI, check:
+策略2不在 snapshot endpoint 裡，這是刻意設計。
+
+## 正式站健康監控
+
+Windows 排程：
 
 ```text
-C:\fuman-terminal\.vercel\output
+FumanTerminalProductionHealthMonitor
 ```
 
-Remove stale output before redeploy only after confirming the resolved absolute path is inside:
+執行內容：
 
 ```text
-C:\fuman-terminal\.vercel\output
+C:\Program Files\PowerShell\7\pwsh.exe -NoProfile -ExecutionPolicy Bypass -File "C:\fuman-terminal\run-production-health-monitor.ps1" -ProjectRoot "C:\fuman-terminal"
 ```
 
-Deleting `.vercel/output` is not data repair. It only prevents stale local build output from being redeployed.
-
-## Strategy1 Anti-Rollback Guard
-
-Guard script:
+頻率：
 
 ```text
-scripts/verify-strategy1-open-buy-ui-contract.js
+每 5 分鐘
 ```
 
-NPM command:
+最後確認：
 
 ```text
-npm run verify:strategy1-open-buy-ui
+Last Result = 0
+Status = Ready
+Scheduled Task State = Enabled
 ```
 
-This guard must fail if it sees:
+log / receipt：
 
 ```text
-16:00 候選
-有賺就走
-快跑
-Strategy1 open-buy card count != 2
-mobile fragment old copy
-slim cache generator old copy
-frontend version mismatch
-terminal-hotfix.js missing runtime rollback guard
+C:\fuman-runtime\logs\production-health-monitor-YYYYMMDD.log
+C:\fuman-runtime\data\scan-receipts\production-health-monitor.json
+C:\fuman-runtime\logs\production-health.jsonl
 ```
 
-Deploy preflight must run it:
+## 驗證狀態
+
+2026-06-24 16:30 左右已完成以下正式站驗證：
 
 ```text
-scripts/prepare-deploy.js
+npm run monitor:production      -> ok
+npm run verify:live-version     -> ok
+node --use-system-ca scripts\verify-deployment.js -> ok
+npm run e2e:smoke               -> ok
+npm run snapshot:desktop -- --remote --fail-on-partial --min-endpoints=10 --source=codex-final-check --base-url=https://fuman-terminal.vercel.app -> ok
 ```
 
-Publish gate must run it:
+`npm run guard:production` 在 `C:\fuman-terminal` 會失敗，原因不是正式站壞，而是該本機資料夾 dirty 且 local HEAD 落後 origin/main。這是防回滾 guard 的正確保護。若要讓 guard 通過，請用乾淨 worktree 或先安全處理本機 dirty 狀態。
+
+## 部署前必跑
+
+修改後至少跑：
 
 ```text
-scripts/verify-publish-gate.js
-```
-
-Publish gate must also reject:
-
-```text
-v_strategy1_open_buy_latest_complete_run
-LATEST_RUN_VIEW
-OPEN_BUY_RUN_VIEW
-latestRunView
-latest_run_view
-```
-
-Runtime fallback guard must remain:
-
-```text
-terminal-hotfix.js
-installStrategy1OpenBuyRollbackGuard
-```
-
-Purpose:
-
-```text
-If someone accidentally rolls back only terminal-app.js, but terminal-hotfix.js remains current, the browser removes the third card and rewrites old 16:00 copy back to 21:30.
-```
-
-This runtime guard is last-resort protection. It does not replace fixing source and pushing origin/main.
-
-## Required Strategy1 Verification
-
-Local verification:
-
-```text
-npm run verify:strategy1-open-buy-ui
-npm run verify:version
-npm run verify:publish-gate
-```
-
-Syntax checks:
-
-```text
-node --check terminal-app.js
-node --check terminal-live-check.js
+node --check terminal-desktop-fast-shell.js
+node --check terminal-desktop-canvas-worker.js
+node --check terminal-strategy-module.js
+node --check terminal.js
 node --check terminal-hotfix.js
-node --check api/open-buy-latest.js
-node --check api/terminal-home.js
-node --check scripts/verify-strategy1-open-buy-ui-contract.js
+node --check api/strategy2-latest.js
+npm run verify:version
 ```
 
-Forbidden string scan:
+部署後至少跑：
 
 ```text
-rg -n "16:00 候選|有賺就走|快跑|LATEST_RUN_VIEW|OPEN_BUY_RUN_VIEW|latestRunView|latest_run_view|v_strategy1_open_buy_latest_complete_run" terminal-app.js terminal-live-check.js api/mobile-fragment.js scripts/generate-slim-cache.js api/open-buy-latest.js api/terminal-home.js
+npm run verify:live-version
+node --use-system-ca scripts\verify-deployment.js
+npm run e2e:smoke
+npm run monitor:production
+npm run guard:production
 ```
 
-Expected result:
+如果是在 dirty 的 `C:\fuman-terminal` 跑 `guard:production` 失敗，請先確認是不是本機狀態問題，不要直接判定正式站壞。
+
+## 正式部署流程
+
+建議使用乾淨 worktree：
 
 ```text
-no matches
+git fetch origin
+git worktree add <clean-worktree-path> origin/main
 ```
 
-Live production bundle check must show:
+修改後：
 
 ```text
-version = strategy1-two-cards-20260623-02 or newer
-terminal-app.js has 16:00 候選 = false
-terminal-app.js has 有賺就走 = false
-terminal-app.js swing-card active count = 2
-terminal-app.js has 21:30 候選 = true
-terminal-app.js has 08:55 最終 = true
-terminal-hotfix.js has installStrategy1OpenBuyRollbackGuard = true
+git status -sb
+npm run verify:version
+git add <files>
+git commit -m "<message>"
+git push origin HEAD:main
+vercel --prod --yes
+npm run snapshot:desktop -- --remote --fail-on-partial --min-endpoints=10 --source=<reason> --base-url=https://fuman-terminal.vercel.app
+npm run verify:live-version
+node --use-system-ca scripts\verify-deployment.js
+npm run e2e:smoke
+npm run monitor:production
+npm run guard:production
 ```
 
-Live production API may be blocked by readiness:
+部署後一定看正式 alias：
 
 ```text
-status = 503
-error = strategy1_decision_not_ready
-lastError = daily_not_ready
-gate = complete-run-authoritative+decision-ready
-latest_run_source = strategy1_open_buy_runs
-ready_status_view = v_strategy1_ready_status
+https://fuman-terminal.vercel.app
 ```
 
-That is valid if readiness is false.
+不要只看 preview URL。
 
-## Strategy1 Deploy Procedure
+## 給策略 / 籌碼 Codex 的接手說明
 
-When fixing Strategy1:
+請貼給負責策略或籌碼的 Codex：
 
 ```text
-1. Read AGENTS.md.
-2. Confirm official production target is https://fuman-terminal.vercel.app.
-3. Fix source in a clean worktree based on latest origin/main when rollback risk exists.
-4. Keep C:\fuman-terminal and C:\fuman-terminal-sync in sync.
-5. Run Strategy1 guard, version verify, publish gate.
-6. Commit and push to origin/main.
-7. Deploy official production project.
-8. Live verify production bundle and API.
-9. Only then report fixed.
+不要改版本號，不要重寫前端殼。
+現在正式終端走 fixed shell + Canvas + desktop route snapshot。
+你只更新自己的 scanner / Supabase complete run / API handler。
+API 必須支援 canvas=1&compact=1&shell=1&limit=N，只回前 30-70 筆可畫資料。
+route 要能被 /api/desktop-route-snapshot 收進 endpoints，讓 /api/terminal-fast-bundle 先讀快照。
+策略2是當沖即時，不要冷處理，不要放 desktop snapshot。
+不要新增密集 polling，不要讓 terminal-app.js 在切頁瞬間接管畫面。
+不要改策略條件、分數、掃描規則來解決速度問題。
+改完先 node --check，再驗正式 alias。
 ```
 
-Never say fixed after only:
+## Latency / Debug
+
+客人正常網址：
 
 ```text
-local source edit
-Vercel deploy success
-version bump
-browser screenshot from old cache
-sync project deploy
-API check without frontend bundle check
-frontend check without API gate check
+https://fuman-terminal.vercel.app/?desktop=1
 ```
 
-## Last Known Good Production State
-
-Latest verified UI state:
+Codex 除錯網址：
 
 ```text
-URL = https://fuman-terminal.vercel.app
-version = strategy1-two-cards-20260623-02
-terminal-app.js has 16:00 候選 = false
-terminal-app.js has 有賺就走 = false
-terminal-app.js cards = 2
-terminal-app.js has 21:30 候選 = true
-terminal-app.js has 08:55 最終 = true
-terminal-hotfix.js has installStrategy1OpenBuyRollbackGuard = true
+https://fuman-terminal.vercel.app/?desktop=1&codexLatency=1&codexLatencyAuto=1
 ```
 
-Latest verified API state at the time:
+客人不應看到 latency 面板。舊的公開參數不應再顯示面板：
 
 ```text
-/api/open-buy-latest status = 503
-error = strategy1_decision_not_ready
-lastError = daily_not_ready
-gate = complete-run-authoritative+decision-ready
-latest_run_source = strategy1_open_buy_runs
-ready_status_view = v_strategy1_ready_status
+latency=1
+latencyAuto=1
 ```
 
-This API state means readiness was blocked; it does not mean the UI should show old cards or fallback data.
+Console helper：
+
+```js
+FUMAN_DESKTOP_PERF_LOG.summary()
+FUMAN_DESKTOP_PERF_LOG.recommend()
+FUMAN_DESKTOP_PERF_LOG.read()
+FUMAN_DESKTOP_PERF_LOG.flush()
+FUMAN_DESKTOP_PERF_LOG.clear()
+```
+
+判讀：
+
+```text
+nav 高   -> 側欄事件 / active 狀態 / CSS selector
+shell 高 -> Canvas 首畫 / 固定殼 DOM
+api 高   -> API payload / cache / TTL / Supabase query / snapshot freshness
+```
+
+最新 latency 會寫到：
+
+```text
+/api/desktop-latency-latest
+Supabase snapshot key: desktop_route_latency_latest
+```
+
+## CSS 清理原則
+
+目前不要啟用機器人自動刪 CSS。
+
+可以做：
+
+- CSS audit report
+- 重複 selector report
+- `!important` 數量 report
+- 色票與主題覆蓋 report
+- 人工小範圍合併
+
+不要做：
+
+- 自動刪 `styles.css`
+- 自動刪 `terminal-theme.css`
+- 自動刪 runtime theme CSS
+- 未經畫面驗證就自動合併 hotfix CSS
+
+CSS 清理前至少驗：
+
+```text
+桌面夜幕
+桌面陽光
+手機夜幕
+手機陽光
+```
+
+## 不要做的事
+
+- 不要 bump version，除非使用者明確要求。
+- 不要把速度問題用版本號/cache bump 假裝解決。
+- 不要回退到大量 DOM table。
+- 不要讓左側分頁點擊立即喚醒整包 `terminal-app.js`。
+- 不要改策略規則來假裝速度變快。
+- 不要把 Codex latency 面板暴露給客人。
+- 不要直接從 dirty 的 `C:\fuman-terminal` 強行部署。
+- 不要說「修好了」但沒有驗正式 alias。
+
+## 接手優先順序
+
+```text
+1. 讀本 AGENTS.md。
+2. 確認正式站版本仍是 public-terminal-fast-20260623-09。
+3. 確認 production health / snapshot / smoke。
+4. 若是速度問題，先看 FUMAN_DESKTOP_PERF_LOG.summary() 或 /api/desktop-latency-latest。
+5. nav / shell / api 哪個高，就修哪一層。
+6. 不改策略規則，不亂 bump 版本。
+7. 驗證正式 alias 後再回報。
+```
