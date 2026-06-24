@@ -6324,6 +6324,122 @@ body:not(.fuman-light-theme) .open-buy-reason-tag {
   background: rgba(255, 122, 48, 0.12);
 }
 
+.open-buy-tactical-panel {
+  overflow-x: auto;
+}
+
+.open-buy-tactical-table {
+  min-width: 1420px;
+  table-layout: fixed;
+}
+
+.open-buy-tactical-table th:nth-child(1) { width: 70px; }
+.open-buy-tactical-table th:nth-child(2) { width: 120px; }
+.open-buy-tactical-table th:nth-child(3) { width: 80px; }
+.open-buy-tactical-table th:nth-child(4) { width: 90px; }
+.open-buy-tactical-table th:nth-child(5) { width: 90px; }
+.open-buy-tactical-table th:nth-child(6) { width: 100px; }
+.open-buy-tactical-table th:nth-child(7) { width: 110px; }
+.open-buy-tactical-table th:nth-child(8) { width: 105px; }
+.open-buy-tactical-table th:nth-child(9) { width: 95px; }
+.open-buy-tactical-table th:nth-child(10) { width: 80px; }
+.open-buy-tactical-table th:nth-child(11) { width: 270px; }
+.open-buy-tactical-table th:nth-child(12) { width: 250px; }
+
+.open-buy-tactical-row td {
+  vertical-align: middle;
+}
+
+.open-buy-rank {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
+  min-height: 44px;
+  border: 1px solid rgba(245, 177, 66, 0.45);
+  border-radius: 12px;
+  background: rgba(245, 177, 66, 0.18);
+  color: #f6c860;
+  font-weight: 800;
+  font-size: 18px;
+}
+
+.open-buy-stock {
+  display: grid;
+  gap: 4px;
+}
+
+.open-buy-stock strong {
+  color: #f8fbff;
+  font-size: 16px;
+  font-weight: 800;
+}
+
+.open-buy-stock small {
+  color: #7f94b4;
+  font-size: 13px;
+}
+
+.open-buy-side {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 58px;
+  min-height: 34px;
+  border-radius: 999px;
+  font-weight: 800;
+}
+
+.open-buy-side.long {
+  border: 1px solid rgba(255, 76, 94, 0.45);
+  background: rgba(255, 76, 94, 0.16);
+  color: #ff4f5f;
+}
+
+.open-buy-analysis-cell,
+.open-buy-trigger-cell {
+  color: #aebbd0;
+  line-height: 1.55;
+}
+
+.open-buy-tactical-ai,
+.open-buy-tactical-trigger {
+  display: grid;
+  gap: 8px;
+}
+
+.open-buy-tactical-ai strong {
+  color: #ff4f5f;
+  font-weight: 900;
+}
+
+.open-buy-tactical-ai p,
+.open-buy-tactical-trigger p {
+  margin: 0;
+  color: #b8c7e3;
+}
+
+body.fuman-light-theme .open-buy-stock strong {
+  color: #0f172a;
+}
+
+body.fuman-light-theme .open-buy-tactical-ai p,
+body.fuman-light-theme .open-buy-tactical-trigger p,
+body.fuman-light-theme .open-buy-analysis-cell,
+body.fuman-light-theme .open-buy-trigger-cell {
+  color: #475569;
+}
+
+@media (max-width: 760px) {
+  .open-buy-tactical-table {
+    min-width: 0;
+  }
+
+  .open-buy-tactical-table td::before {
+    content: attr(data-label);
+  }
+}
+
 /* chip-light-flow-colors-20260531 */
 html body.fuman-light-theme #chip-trade-view table.chip-table tbody tr td.red {
   color: #dc2626 !important;

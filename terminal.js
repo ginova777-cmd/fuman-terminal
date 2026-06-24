@@ -2,6 +2,7 @@
   const boot = window.FUMAN_TERMINAL_BOOT || (window.FUMAN_TERMINAL_BOOT = {});
   const version = boot.version || "split-cb-view-20260609-48";
   const appSrc = `/terminal-app.js?v=${version}`;
+  const openBuyViewSrc = `/terminal-open-buy-view.js?v=${version}`;
   const dependencyScripts = [
     { src: `/terminal-sector-map.js?v=${version}`, attr: "data-fuman-sector-map" },
     { src: `/terminal-strategy-config.js?v=${version}`, attr: "data-fuman-strategy-config" },
@@ -37,7 +38,7 @@
     appPromise = loadDependencies().then(() => new Promise((resolve, reject) => {
       const existing = document.querySelector("script[data-fuman-terminal-app]");
       if (existing) {
-        existing.addEventListener("load", () => resolve(true), { once: true });
+        existing.addEventListener("load", () => loadOpenBuyViewPatch().finally(() => resolve(true)), { once: true });
         existing.addEventListener("error", reject, { once: true });
         return;
       }
@@ -46,14 +47,32 @@
       script.async = true;
       script.dataset.fumanTerminalApp = "1";
       script.addEventListener("load", () => {
-        window.FUMAN_TERMINAL_APP_READY = true;
-        mark("app-loaded");
-        resolve(true);
+        loadOpenBuyViewPatch().finally(() => {
+          window.FUMAN_TERMINAL_APP_READY = true;
+          mark("app-loaded");
+          resolve(true);
+        });
       }, { once: true });
       script.addEventListener("error", reject, { once: true });
       document.body.appendChild(script);
     }));
     return appPromise;
+  }
+
+  function loadOpenBuyViewPatch() {
+    if (document.querySelector("script[data-fuman-open-buy-view]")) return Promise.resolve(true);
+    return new Promise((resolve) => {
+      const script = document.createElement("script");
+      script.src = openBuyViewSrc;
+      script.async = true;
+      script.dataset.fumanOpenBuyView = "1";
+      script.addEventListener("load", () => {
+        mark("open-buy-view-loaded");
+        resolve(true);
+      }, { once: true });
+      script.addEventListener("error", () => resolve(false), { once: true });
+      document.body.appendChild(script);
+    });
   }
 
   function loadLegacyModule(name = "all", reason = "") {
