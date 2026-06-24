@@ -686,27 +686,16 @@
   }
 
   const STRATEGY4_SIGNAL_LABELS = {
-    wallet_volume_cross: "主力量能交叉",
-    wallet_strong_buy: "主力強買",
-    saucer: "圓弧底",
+    bull_attack: "攻擊",
+    n_base: "N字",
+    saucer: "圓弧",
     breakaway_gap: "突破缺口",
-    bull_attack: "多方攻擊",
-    runaway_gap: "續強缺口",
-    watch_trend: "趨勢觀察",
-    golden_cross: "黃金交叉",
-    volume_breakout: "量能突破",
-    volume_expansion: "量能放大",
-    trend_breakout: "趨勢突破",
-    ma_breakout: "均線突破",
-    pullback_support: "回測有撐",
-    range_breakout: "區間突破",
-    chip_accumulation: "籌碼累積",
-    strong_close: "強勢收盤",
-    new_high: "波段新高",
-    relative_strength: "相對強勢",
-    volume_price_sync: "量價同步",
-    breakout: "突破訊號",
-    trend: "趨勢訊號",
+    runaway_gap: "逃逸缺口",
+    v_reversal: "V轉",
+    three_inside: "翻紅",
+    golden_cross: "金釵",
+    wallet_strong_buy: "主力多",
+    wallet_volume_cross: "量叉",
   };
 
   function strategy4SignalLabel(value) {
@@ -722,7 +711,7 @@
       .map((signal) => {
         if (!signal || typeof signal !== "object") return null;
         const rawId = signal.id || signal.key || signal.type || signal.name || signal.label || "";
-        const rawLabel = signal.label || signal.name || signal.title || signal.id || signal.key || "";
+        const rawLabel = signal.label || signal.short || signal.title || signal.name || signal.id || signal.key || "";
         const rawReason = signal.reason || signal.message || signal.note || "";
         const id = compactText(rawId, 48);
         const label = compactText((translateStrategy4 && (strategy4SignalLabel(rawId) || strategy4SignalLabel(rawLabel))) || rawLabel || rawId, 40);
