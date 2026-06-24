@@ -1289,7 +1289,11 @@
         cleanNumber(b.score) - cleanNumber(a.score)
       )
       .map((row, index) => ({ ...row, rank: index + 1 }));
-    return [...volumeRows, ...singleRows].slice(0, 120);
+    const singleCodes = new Set(singleRows.map((row) => row.code).filter(Boolean));
+    return [
+      ...volumeRows.map((row) => ({ ...row, hasSingleSignal: singleCodes.has(row.code) })),
+      ...singleRows,
+    ].slice(0, 120);
   }
 
   function normalizeCanvasRowsFromPayload(payload, route = "") {
@@ -1395,6 +1399,7 @@
       }
       updateStrategyFilterControls(currentCanvasShell());
       updateChipTradeFilterControls(currentCanvasShell());
+      updateWarrantFlowTabControls(currentCanvasShell());
       scheduleCanvasDraw();
     }
     return true;
@@ -1483,12 +1488,15 @@
     const query = compactText(canvasState.query, 80).toLowerCase();
     const signalFilter = (isStrategy4Route(canvasState.route) || isStrategy5Route(canvasState.route)) ? compactText(canvasState.signalFilter, 80).toLowerCase() : "";
     const chipFilter = isChipTradeRoute(canvasState.route) ? compactText(canvasState.signalFilter || "", 80) : "";
+    const warrantFilter = isWarrantFlowRoute(canvasState.route) ? compactText(canvasState.signalFilter || "volume", 16) : "";
     const zoneFilter = isStrategy4Route(canvasState.route) ? compactText(canvasState.zoneFilter, 2).toUpperCase() : "";
     canvasState.filtered = canvasState.rows.filter((row) => {
       if (zoneFilter && String(row.swingZone || "").toUpperCase() !== zoneFilter) return false;
       const signalText = [row.subStrategyId, row.subStrategy, row.signalLine, ...(row.signals || []).flatMap((signal) => [signal.id, signal.label, signal.reason])].join(" ").toLowerCase();
       if (signalFilter && !signalText.includes(signalFilter)) return false;
       if (chipFilter && !matchesChipTradeFilter(row, chipFilter)) return false;
+      if (warrantFilter === "single" && row.strategyGroup !== "single") return false;
+      if (warrantFilter !== "single" && isWarrantFlowRoute(canvasState.route) && row.strategyGroup === "single") return false;
       if (!query) return true;
       return [
         row.code,
@@ -2237,6 +2245,23 @@
         }).catch(() => setCanvasStatus("沿用快照"));
         return;
       }
+      const warrantTab = event.target.closest?.("[data-warrant-canvas-tab]");
+      if (warrantTab) {
+        event.preventDefault();
+        if (!isWarrantFlowRoute(canvasState.route)) return;
+        const next = warrantTab.dataset.warrantCanvasTab || "volume";
+        if (canvasState.signalFilter === next && canvasState.rows.length) return;
+        canvasState.signalFilter = next;
+        canvasState.offset = 0;
+        canvasState.hoverIndex = -1;
+        canvasState.selectedIndex = -1;
+        hideCanvasDetail();
+        applyCanvasFilter();
+        updateWarrantFlowTabControls(currentCanvasShell());
+        setCanvasStatus(next === "single" ? "策略B 單檔訊號" : "策略A 標的熱度");
+        scheduleCanvasDraw();
+        return;
+      }
       const zoneFilter = event.target.closest?.("[data-strategy4-zone-filter]");
       if (zoneFilter) {
         event.preventDefault();
@@ -2936,15 +2961,24 @@
   function drawWarrantFlowCanvasRows(ctx, colors, width, height, rows, source, headerHeight) {
     const volumeRows = rows.filter((row) => row.strategyGroup !== "single");
     const singleRows = rows.filter((row) => row.strategyGroup === "single");
+    const activeSingle = canvasState.signalFilter === "single";
+    const activeRows = activeSingle ? singleRows : volumeRows;
     const rowHeight = 36;
     const topY = 88;
-    const available = Math.max(320, height - topY - 42);
-    const volumeLimit = Math.max(3, Math.min(7, Math.floor((available * 0.52 - 58) / rowHeight)));
-    const singleLimit = Math.max(2, Math.min(5, Math.floor((available * 0.48 - 58) / rowHeight)));
+    const visibleLimit = Math.max(5, Math.min(12, Math.floor((Math.max(320, height - topY - 72)) / rowHeight)));
 
-    drawWarrantSectionHeader(ctx, colors, 24, topY, width - 48, "策略A 標的權證熱度", "volumeMatches：先看標的認購熱度與資金聚集", volumeRows.length);
-    drawWarrantMiniColumns(ctx, colors, topY + 56, width, false);
-    volumeRows.slice(0, volumeLimit).forEach((row, index) => {
+    drawWarrantSectionHeader(
+      ctx,
+      colors,
+      24,
+      topY,
+      width - 48,
+      activeSingle ? "策略B 單檔權證訊號" : "策略A 標的權證熱度",
+      activeSingle ? "singleSignals：看單一權證大額與連續訊號" : "volumeMatches：看標的認購熱度與資金聚集；火焰代表同時命中策略B",
+      activeRows.length
+    );
+    drawWarrantMiniColumns(ctx, colors, topY + 56, width, activeSingle);
+    activeRows.slice(0, visibleLimit).forEach((row, index) => {
       const y = topY + 86 + index * rowHeight;
       const pctText = row.pct || "--";
       ctx.fillStyle = index % 2 ? colors.rowAlt : colors.row;
@@ -2958,17 +2992,24 @@
       ctx.fillText(row.code || "--", 106, y - 3);
       ctx.fillStyle = colors.text;
       ctx.font = "900 13px system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
-      ctx.fillText(compactText(`${row.title || "--"} ${row.warrantCode ? `· ${row.warrantCode}` : ""}`, 42), 184, y - 8);
+      const namePrefix = !activeSingle && row.hasSingleSignal ? "🔥 " : "";
+      ctx.fillText(compactText(`${namePrefix}${row.title || "--"} ${row.warrantCode ? `· ${row.warrantCode}` : ""}`, 42), 184, y - 8);
       ctx.fillStyle = colors.muted;
       ctx.font = "12px system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
-      ctx.fillText(compactText(row.reason || row.signalLine || "", 72), 184, y + 8);
+      ctx.fillText(compactText(activeSingle ? row.warrantName || row.reason || "" : row.reason || row.signalLine || "", 72), 184, y + 8);
       ctx.textAlign = "right";
       ctx.fillStyle = colors.text;
       ctx.font = "800 13px system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
-      ctx.fillText(formatCanvasNumber(row.thirtyMinuteVolume, 0), width - 430, y - 3);
-      ctx.fillText(formatCanvasNumber(row.floatingUnits, 0), width - 322, y - 3);
-      ctx.fillStyle = colors.accent;
-      ctx.fillText(formatCanvasNumber(row.volumeMultiple, 1), width - 230, y - 3);
+      if (activeSingle) {
+        ctx.fillText(formatYi(row.value), width - 390, y - 3);
+        ctx.fillStyle = colors.accent;
+        ctx.fillText(row.actionLabel || "--", width - 274, y - 3);
+      } else {
+        ctx.fillText(formatCanvasNumber(row.thirtyMinuteVolume, 0), width - 430, y - 3);
+        ctx.fillText(formatCanvasNumber(row.floatingUnits, 0), width - 322, y - 3);
+        ctx.fillStyle = colors.accent;
+        ctx.fillText(formatCanvasNumber(row.volumeMultiple, 1), width - 230, y - 3);
+      }
       ctx.fillStyle = colors.text;
       ctx.fillText(row.score || "--", width - 150, y - 3);
       ctx.fillStyle = String(pctText).includes("-") ? colors.down : colors.up;
@@ -2976,48 +3017,14 @@
       ctx.textAlign = "left";
     });
 
-    const sectionBY = topY + 86 + volumeLimit * rowHeight + 16;
-    drawWarrantSectionHeader(ctx, colors, 24, sectionBY, width - 48, "策略B 單檔權證訊號", "singleSignals：再看單一權證大額與連續訊號", singleRows.length);
-    drawWarrantMiniColumns(ctx, colors, sectionBY + 56, width, true);
-    singleRows.slice(0, singleLimit).forEach((row, index) => {
-      const y = sectionBY + 86 + index * rowHeight;
-      const pctText = row.pct || "--";
-      ctx.fillStyle = index % 2 ? colors.rowAlt : colors.row;
-      roundRect(ctx, 24, y - 24, width - 48, 30, 8);
-      ctx.fill();
-      ctx.fillStyle = colors.accent;
-      ctx.font = "900 12px system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
-      ctx.fillText(String(row.rank || index + 1), 48, y - 3);
-      ctx.fillStyle = colors.blue;
-      ctx.font = "900 13px system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
-      ctx.fillText(row.code || "--", 106, y - 3);
-      ctx.fillStyle = colors.text;
-      ctx.font = "900 13px system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
-      ctx.fillText(compactText(`${row.title || "--"} · ${row.warrantCode || "--"}`, 42), 184, y - 8);
-      ctx.fillStyle = colors.muted;
-      ctx.font = "12px system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
-      ctx.fillText(compactText(row.warrantName || row.reason || "", 72), 184, y + 8);
-      ctx.textAlign = "right";
-      ctx.fillStyle = colors.text;
-      ctx.font = "800 13px system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
-      ctx.fillText(formatYi(row.value), width - 390, y - 3);
-      ctx.fillStyle = colors.accent;
-      ctx.fillText(row.actionLabel || "--", width - 274, y - 3);
-      ctx.fillStyle = colors.text;
-      ctx.fillText(row.score || "--", width - 150, y - 3);
-      ctx.fillStyle = String(pctText).includes("-") ? colors.down : colors.up;
-      ctx.fillText(pctText, width - 72, y - 3);
-      ctx.textAlign = "left";
-    });
-
-    if (!volumeRows.length && !singleRows.length) {
+    if (!activeRows.length) {
       ctx.fillStyle = colors.muted;
       ctx.font = "800 15px system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
-      ctx.fillText("權證兩大策略資料同步中，完成後會自動分區顯示。", 44, 164);
+      ctx.fillText(activeSingle ? "策略B 單檔權證訊號同步中。" : "策略A 標的權證熱度同步中。", 44, 164);
     }
     ctx.fillStyle = colors.muted;
     ctx.font = "700 12px system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
-    ctx.fillText(`策略A ${volumeRows.length}｜策略B ${singleRows.length}｜${compactText(source || "snapshot", 26)}`, 32, height - 24);
+    ctx.fillText(`策略A ${warrantFlowTabCount(canvasState.rows, "volume")}｜策略B ${warrantFlowTabCount(canvasState.rows, "single")}｜${compactText(source || "snapshot", 26)}`, 32, height - 24);
   }
 
   function formatCanvasNumber(value, digits = 0) {
@@ -3192,6 +3199,33 @@
         </button>
       `;
     }).join("");
+  }
+
+  function warrantFlowTabCount(rows, tab) {
+    return (Array.isArray(rows) ? rows : []).filter((row) => tab === "single" ? row.strategyGroup === "single" : row.strategyGroup !== "single").length;
+  }
+
+  function updateWarrantFlowTabControls(shell) {
+    const panel = shell || currentCanvasShell();
+    if (!panel) return;
+    const wrap = panel.querySelector("[data-warrant-canvas-tabs]");
+    if (!wrap) return;
+    if (!isWarrantFlowRoute(canvasState.route)) {
+      wrap.hidden = true;
+      wrap.innerHTML = "";
+      return;
+    }
+    const active = canvasState.signalFilter === "single" ? "single" : "volume";
+    const tabs = [
+      { key: "volume", label: "策略A 標的熱度", note: "volumeMatches", count: warrantFlowTabCount(canvasState.rows, "volume") },
+      { key: "single", label: "策略B 單檔訊號", note: "singleSignals", count: warrantFlowTabCount(canvasState.rows, "single") },
+    ];
+    wrap.hidden = false;
+    wrap.innerHTML = tabs.map((item) => `
+      <button type="button" data-warrant-canvas-tab="${escapeHtml(item.key)}" class="${active === item.key ? "active" : ""}">
+        ${escapeHtml(item.label)} <b>${escapeHtml(String(item.count))}</b><small>${escapeHtml(item.note)}</small>
+      </button>
+    `).join("");
   }
 
   function updateStrategyFilterControls(shell) {
@@ -3870,6 +3904,7 @@
         <div class="desktop-strategy4-zone-filters" data-strategy4-zone-filters hidden></div>
         <div class="desktop-strategy4-signal-filters" data-strategy4-signal-filters hidden></div>
         <div class="desktop-strategy4-signal-filters" data-chip-canvas-filters hidden></div>
+        <div class="desktop-warrant-flow-tabs" data-warrant-canvas-tabs hidden></div>
         <canvas class="desktop-route-canvas" tabindex="0" aria-label="${escapeHtml(meta.title)} Canvas 快速列表"></canvas>
         <div class="desktop-canvas-pagination" data-canvas-pagination hidden></div>
         <div class="desktop-canvas-detail" hidden></div>
@@ -4068,6 +4103,7 @@
     updateStrategySignalControls(shell);
     updateStrategy4ZoneControls(shell);
     updateChipTradeFilterControls(shell);
+    updateWarrantFlowTabControls(shell);
     updateCanvasPagination(shell);
     return canvas;
   }
@@ -4084,7 +4120,7 @@
     canvasState.source = source || stored?.source || "shell";
     canvasState.rows = incomingRows;
     if (previousRoute !== key) {
-      canvasState.signalFilter = "";
+      canvasState.signalFilter = isWarrantFlowRoute(key) ? "volume" : "";
       canvasState.zoneFilter = "";
       canvasState.offset = 0;
       canvasState.hoverIndex = -1;
@@ -5064,7 +5100,8 @@
         margin-top: 18px;
       }
       .desktop-strategy4-zone-filters,
-      .desktop-strategy4-signal-filters {
+      .desktop-strategy4-signal-filters,
+      .desktop-warrant-flow-tabs {
         display: flex;
         align-items: center;
         gap: 8px;
@@ -5078,11 +5115,13 @@
         margin-top: 6px;
       }
       .desktop-strategy4-zone-filters[hidden],
-      .desktop-strategy4-signal-filters[hidden] {
+      .desktop-strategy4-signal-filters[hidden],
+      .desktop-warrant-flow-tabs[hidden] {
         display: none !important;
       }
       .desktop-strategy4-zone-filters button,
-      .desktop-strategy4-signal-filters button {
+      .desktop-strategy4-signal-filters button,
+      .desktop-warrant-flow-tabs button {
         min-height: 34px;
         border: 1px solid rgba(148,163,184,0.18);
         border-radius: 10px;
@@ -5093,15 +5132,24 @@
         cursor: pointer;
       }
       .desktop-strategy4-zone-filters button.active,
-      .desktop-strategy4-signal-filters button.active {
+      .desktop-strategy4-signal-filters button.active,
+      .desktop-warrant-flow-tabs button.active {
         border-color: rgba(255,112,55,0.68);
         color: #fff3e9;
         background: rgba(255,112,55,0.18);
       }
       .desktop-strategy4-zone-filters b,
-      .desktop-strategy4-signal-filters b {
+      .desktop-strategy4-signal-filters b,
+      .desktop-warrant-flow-tabs b {
         margin-left: 5px;
         color: #ffb27b;
+      }
+      .desktop-warrant-flow-tabs small {
+        display: block;
+        margin-top: 2px;
+        color: #8fb3e8;
+        font-size: 10px;
+        font-weight: 800;
       }
       .desktop-canvas-search-wrap {
         display: grid;
@@ -5289,19 +5337,22 @@
           color: #64748b;
         }
         body.fuman-light-theme .desktop-strategy4-zone-filters button,
-        body.fuman-light-theme .desktop-strategy4-signal-filters button {
+        body.fuman-light-theme .desktop-strategy4-signal-filters button,
+        body.fuman-light-theme .desktop-warrant-flow-tabs button {
           border-color: #cbd8e6;
           color: #334155;
           background: rgba(255,255,255,0.9);
         }
         body.fuman-light-theme .desktop-strategy4-zone-filters button.active,
-        body.fuman-light-theme .desktop-strategy4-signal-filters button.active {
+        body.fuman-light-theme .desktop-strategy4-signal-filters button.active,
+        body.fuman-light-theme .desktop-warrant-flow-tabs button.active {
           border-color: rgba(249,115,22,0.5);
           color: #c2410c;
           background: #fff7ed;
         }
         body.fuman-light-theme .desktop-strategy4-zone-filters b,
-        body.fuman-light-theme .desktop-strategy4-signal-filters b {
+        body.fuman-light-theme .desktop-strategy4-signal-filters b,
+        body.fuman-light-theme .desktop-warrant-flow-tabs b {
           color: #ea580c;
         }
         body.fuman-light-theme .desktop-route-shell-grid article {
@@ -5563,14 +5614,16 @@
           color: #64748b !important;
         }
         html body.fuman-light-theme.public-terminal .desktop-strategy4-zone-filters button,
-        html body.fuman-light-theme.public-terminal .desktop-strategy4-signal-filters button {
+        html body.fuman-light-theme.public-terminal .desktop-strategy4-signal-filters button,
+        html body.fuman-light-theme.public-terminal .desktop-warrant-flow-tabs button {
           border-color: #cbd8e6 !important;
           background: #ffffff !important;
           color: #334155 !important;
           box-shadow: none !important;
         }
         html body.fuman-light-theme.public-terminal .desktop-strategy4-zone-filters button.active,
-        html body.fuman-light-theme.public-terminal .desktop-strategy4-signal-filters button.active {
+        html body.fuman-light-theme.public-terminal .desktop-strategy4-signal-filters button.active,
+        html body.fuman-light-theme.public-terminal .desktop-warrant-flow-tabs button.active {
           border-color: rgba(249, 115, 22, 0.55) !important;
           background: #fff7ed !important;
           color: #c2410c !important;

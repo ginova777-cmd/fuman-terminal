@@ -340,11 +340,13 @@ function renderWarrantFlow() {
     const sign = item.stockPercent >= 0 ? "+" : "";
     const hot = warrantFlowTab === "volume" ? (item.volumeMultiple >= 5 ? "hot" : item.volumeMultiple >= 2 ? "mid" : "low") : (item.repeatLarge ? "hot" : item.score >= 70 ? "mid" : "low");
     const pct = Number.isFinite(Number(item.stockPercent)) ? sign + formatNumber(item.stockPercent, 2) + "%" : "--";
+    const hasSingleSignal = warrantFlowTab === "volume" && warrantFlowChipData.some((single) => String(single && (single.underlyingCode || single.code) || "").trim() === String(item.code || "").trim());
+    const namePrefix = hasSingleSignal ? "🔥 " : "";
     if (warrantFlowTab === "volume") {
       return '<tr>' +
       '<td><span class="swing-score">' + (item.volumeRank || "--") + '</span></td>' +
       '<td><span class="code">' + escapeAttr(item.code || "--") + '</span></td>' +
-      '<td>' + escapeAttr(item.name) + '</td>' +
+      '<td>' + escapeAttr(namePrefix + item.name) + '</td>' +
       '<td class="price">' + formatNumber(item.stockClose, item.stockClose >= 100 ? 0 : 2) + '</td>' +
       '<td><span class="code">' + escapeAttr(item.warrantCode || "--") + '</span><br><small>' + escapeAttr(item.warrantName || "標的彙總") + '</small></td>' +
       '<td><b class="swing-stage ' + hot + '">' + formatNumber(item.thirtyMinuteVolume, 0) + '</b></td>' +
