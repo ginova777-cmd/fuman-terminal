@@ -12,6 +12,7 @@
   const FIXED_ROUTE_KEYS = ["market|市場總覽", "chip-trade|買賣超", "cb-detect|CB可轉債", "warrant-flow|權證走向", "watchlist|自選股"];
   const FIXED_CANVAS_PERSIST_ROUTES = ["market|市場總覽", "chip-trade|買賣超", "cb-detect|CB可轉債", "warrant-flow|權證走向"];
   const CANVAS_REFRESH_TTL_MS = 18000;
+  const API_ONLY_POLL_MS = 30000;
   const PERF_LOG_KEY = "fuman-desktop-fast-perf-log-v1";
   const CANVAS_ROW_HEIGHT = 46;
   const CANVAS_HEADER_HEIGHT = 128;
@@ -99,6 +100,7 @@
   installPerformanceLogExport();
   installPersistentFixedCanvases();
   installDesktopFastBundlePrime();
+  installApiOnlyCanvasPolling();
   primeCanvasWorker();
   installRouteFeedback();
 
@@ -683,6 +685,22 @@
     return CANVAS_ENDPOINTS[route] || "";
   }
 
+  function isStrategyRoute(route) {
+    return String(route || "").startsWith("strategy|");
+  }
+
+  function isApiBackedSnapshotItem(item) {
+    return Boolean(item?.rows?.length) && !item.html;
+  }
+
+  function isDomDerivedSource(source) {
+    return /dom|html|indexeddb|session/i.test(String(source || ""));
+  }
+
+  function isApiOnlyPollingRoute(route) {
+    return isStrategyRoute(route) && route !== "strategy|策略2";
+  }
+
   function canvasOptionsForRoute(route) {
     return CANVAS_ROUTE_OPTIONS[route] || { limit: 60, ttl: CANVAS_REFRESH_TTL_MS };
   }
@@ -824,8 +842,9 @@
 
   function rowsForRoute(route) {
     const memory = canvasStore.get(route);
-    if (memory?.rows?.length) return memory.rows;
+    if (memory?.rows?.length && (!isStrategyRoute(route) || !isDomDerivedSource(memory.source))) return memory.rows;
     const snapshot = routeSnapshots.get(route);
+    if (isStrategyRoute(route) && !isApiBackedSnapshotItem(snapshot)) return [];
     if (snapshot?.rows?.length) {
       setCanvasRows(route, snapshot.rows, "snapshot", snapshot.at || Date.now());
       return snapshot.rows;
@@ -1489,16 +1508,49 @@
     const panel = document.querySelector("#strategy-view");
     const key = activeStrategyRouteKey();
     if (!key || !panel?.classList?.contains("active") || !isWorthSavingSnapshot(panel)) return;
+    const stored = canvasStore.get(key);
+    if (stored?.rows?.length && !isDomDerivedSource(stored.source)) {
+      const item = {
+        at: Date.now(),
+        scrollTop: panel.scrollTop || 0,
+        html: "",
+        rows: stored.rows,
+      };
+      routeSnapshots.set(key, item);
+      writeSessionSnapshot(key, item);
+      writeIndexedSnapshot(key, item);
+      return;
+    }
     const item = {
       at: Date.now(),
       scrollTop: panel.scrollTop || 0,
       html: snapshotHtml(panel),
-      rows: extractLiteRows(panel),
+      rows: [],
     };
     routeSnapshots.set(key, item);
-    if (item.rows.length) setCanvasRows(key, item.rows, "dom-snapshot", item.at);
     writeSessionSnapshot(key, item);
     writeIndexedSnapshot(key, item);
+  }
+
+  function installApiOnlyCanvasPolling() {
+    if (document.documentElement.dataset.fumanApiOnlyCanvasPollingReady === "1") return;
+    document.documentElement.dataset.fumanApiOnlyCanvasPollingReady = "1";
+    const poll = (reason = "timer") => {
+      if (document.hidden || isInteractionHoldActive()) return;
+      const route = canvasState.route || activeSnapshotRoute;
+      if (!isApiOnlyPollingRoute(route)) return;
+      const active = window.__fumanDesktopActiveRoute;
+      if (active?.key && active.key !== route) return;
+      fetchCanvasRows(route, true).then((rows) => {
+        if (!rows?.length || (window.__fumanDesktopActiveRoute?.key && window.__fumanDesktopActiveRoute.key !== route)) return;
+        renderStrategyRouteShell(route, `api-only-poll-${reason}`, rows);
+      }).catch(() => undefined);
+    };
+    window.setInterval(() => poll("interval"), API_ONLY_POLL_MS);
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "visible") window.setTimeout(() => poll("visible"), 600);
+    });
+    window.addEventListener("focus", () => window.setTimeout(() => poll("focus"), 700), { passive: true });
   }
 
   function scheduleStrategySnapshotSave() {
@@ -1533,6 +1585,7 @@
     const panel = document.querySelector("#strategy-view");
     if (!key || (!item?.html && !item?.rows?.length) || !panel) return false;
     if (Date.now() - Number(item.at || 0) > SNAPSHOT_MAX_AGE_MS) return false;
+    if (isStrategyRoute(key) && !isApiBackedSnapshotItem(item)) return false;
     if (Array.isArray(item.rows) && item.rows.length) {
       setCanvasRows(key, item.rows, `canvas-${source}`, item.at || Date.now());
       renderStrategyRouteShell(key, `canvas-${source}`, item.rows);
@@ -1549,6 +1602,7 @@
   function restoreStrategySnapshot(link) {
     const key = strategyRouteKey(link);
     if (!key) return false;
+    if (isApiOnlyPollingRoute(key)) return false;
     activeSnapshotRoute = key;
     const memoryItem = routeSnapshots.get(key);
     if (applySnapshot(key, memoryItem, "memory")) return true;
@@ -2070,15 +2124,16 @@
     if (!panel || panel.dataset.fumanRouteSnapshotReady === "1") return;
     panel.dataset.fumanRouteSnapshotReady = "1";
     SNAPSHOT_ROUTES.forEach((key) => {
+      if (isApiOnlyPollingRoute(key)) return;
       const item = readSessionSnapshot(key);
-      if (item) {
+      if (item && isApiBackedSnapshotItem(item)) {
         routeSnapshots.set(key, item);
-        if (item.rows?.length) setCanvasRows(key, item.rows, "session", item.at || Date.now());
+        setCanvasRows(key, item.rows, "session", item.at || Date.now());
       }
       readIndexedSnapshot(key).then((dbItem) => {
-        if (dbItem) {
+        if (dbItem && isApiBackedSnapshotItem(dbItem)) {
           routeSnapshots.set(key, dbItem);
-          if (dbItem.rows?.length) setCanvasRows(key, dbItem.rows, "indexeddb", dbItem.at || Date.now());
+          setCanvasRows(key, dbItem.rows, "indexeddb", dbItem.at || Date.now());
         }
       }).catch(() => undefined);
     });
