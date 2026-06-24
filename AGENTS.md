@@ -453,6 +453,117 @@ npm run monitor:production
 
 ### 策略3：隔日沖正式條件與流程
 
+#### 策略3給下一位 Codex 的接手摘要
+
+策略3目前已定位為「13:00 後尾盤隔日沖候選」的正式實戰資料源。接手時請先確認自己處理的是策略3資料鏈，不是策略2當沖 live，也不是舊 DOM snapshot 畫面。
+
+一句話原則：
+
+```text
+策略3只相信 scanner -> Supabase complete/readback -> no-store API -> desktop route snapshot -> fixed shell rows。
+```
+
+接手第一步必查：
+
+- 先讀本文件，再讀 `scripts\scan-strategy3-cache.js`、`api\strategy3-latest.js`、`lib\desktop-route-snapshot-builder.js`、`terminal-desktop-fast-shell.js`。
+- 確認正式站仍是 `https://fuman-terminal.vercel.app`。
+- 確認 public version 不可因策略3資料問題而 bump。
+- 確認策略3 endpoint 是 `/api/strategy3-latest`，且支援 `canvas=1&compact=1&shell=1&limit=N`。
+- 確認 strategy3 route 可以被 `/api/desktop-route-snapshot` 收進 endpoints。
+- 確認 `/api/terminal-fast-bundle` 優先讀 Supabase `desktop_route_snapshot`。
+- 確認 production health 維持 `hasStrategy2Snapshot=false`，不要把策略2冷塞進 snapshot。
+
+策略3實戰輸出不可只看 `run_id`。每次判斷「資料接好了」必須同時看：
+
+- run row：`status=complete`、`complete=true`。
+- run metadata：`expected_total > 0`、`scanned_count > 0`、`expected_total === scanned_count`。
+- result metadata：`result_count` 必須合理，且 readback row count 要能對上。
+- scanner readback：寫完 Supabase 後必須能讀回 latest row、latest complete run、results rows。
+- snapshot readback：`strategy3_latest` snapshot 不能空、不能 partial、不能拿舊 DOM rows。
+- API readback：`/api/strategy3-latest?canvas=1&compact=1&shell=1&limit=60` 要回今日 complete run 的可畫 rows。
+- fast bundle readback：`/api/terminal-fast-bundle` 需要顯示 snapshot hit/fresh，且 endpoint count 正常。
+
+如果以上任一項不過：
+
+- 不准把新資料寫入 desktop route snapshot。
+- 不准用空包覆蓋上一版可用 snapshot。
+- 不准在前端硬補欄位或用舊 DOM snapshot 湊資料。
+- 不准用 cache bump / version bump 假裝資料已更新。
+
+策略3固定時間與意義：
+
+- `13:00` 前不能發布正式 complete run，因為策略3要看 13:00-13:30 尾盤 1 分K。
+- `13:00-13:30` 是 TradingView 進場確認核心區間。
+- 盤後 scanner 產出的是隔日候選，不是當下追價訊號。
+- 前端可 30 秒 API-only polling，但資料簽名沒變時不能重建 DOM。
+
+策略3前端欄位必須是正式隔日沖欄位：
+
+- 排名
+- 股票
+- 多空
+- 價格
+- 漲幅
+- 量
+- 推估量比
+- 成交額
+- 法人5D
+- 分數
+- AI分析
+- 觸發原因
+
+前端不可再出現舊錯欄位：
+
+- `Rank / Code / Signal / Score / Change` 的 dom-snapshot 簡表
+- `多多訊號2035`
+- `A區數量`
+- 任何從 DOM 文字誤抽出的假資料
+
+策略3畫面舊 chrome 必須保持剔除：
+
+- 左側策略清單
+- 舊 header
+- 舊 toolbar
+- 舊 metrics cards
+- 舊搜尋列
+- Canvas shell 內部搜尋 / 刷新 / status toolbar
+
+策略3與策略2邊界：
+
+- 策略3是盤後/尾盤隔日沖候選，可進 desktop snapshot。
+- 策略2是當沖即時資料，不可冷處理，不可放進 desktop route snapshot。
+- 不要把策略2 live intent 套給策略3。
+- 不要把策略3 cold snapshot 規則套給策略2。
+
+策略3部署防呆：
+
+- 不要從 dirty 的 `C:\fuman-terminal` 直接部署。
+- 乾淨 worktree 部署前必須檢查 `.vercel/project.json`。
+- `.vercel/project.json` 必須指向正式 `fuman-terminal`：
+
+```json
+{
+  "projectId": "prj_x0R2mMFsL0Xto4whcbPTKQTKJRUl",
+  "orgId": "team_HfAXzMLgDcpw6UFbnexhuxHG",
+  "projectName": "fuman-terminal"
+}
+```
+
+不符合就直接中止，不要讓 Vercel CLI 自動 link 或開新 project。
+
+策略3完成定義：
+
+```text
+scanner complete
++ Supabase readback ok
++ strategy3_latest snapshot ok
++ /api/strategy3-latest compact rows ok
++ /api/desktop-route-snapshot includes strategy3
++ /api/terminal-fast-bundle snapshotHit/fresh ok
++ fixed shell 顯示正式欄位
++ production health ok
+```
+
 策略3是「隔日沖」候選，不是當沖即時頁。正式鏈路必須是：
 
 ```text
