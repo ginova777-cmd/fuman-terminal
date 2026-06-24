@@ -167,14 +167,14 @@
       context.fillText(row.code || "--", 106, y);
       context.fillStyle = colors.text;
       context.font = "700 14px system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
-      const isStrategy4 = String(payload.route || "") === "strategy|策略4";
-      const mainText = isStrategy4 && row.subStrategy
+      const isSubStrategyRoute = String(payload.route || "") === "strategy|策略4" || String(payload.route || "") === "strategy|策略5";
+      const mainText = isSubStrategyRoute && row.subStrategy
         ? `${row.title || row.code || ""} · ${row.subStrategy}`
         : row.title || row.line || "";
       context.fillText(compactText(mainText, 46), 184, y - 6);
       context.fillStyle = colors.muted;
       context.font = "12px system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
-      context.fillText(compactText(isStrategy4 ? row.signalLine || row.reason || row.line || "" : row.reason || row.line || "", 74), 184, y + 11);
+      context.fillText(compactText(isSubStrategyRoute ? row.signalLine || row.reason || row.line || "" : row.reason || row.line || "", 74), 184, y + 11);
       context.fillStyle = colors.text;
       context.textAlign = "right";
       context.fillText(row.score || "--", width - 130, y);

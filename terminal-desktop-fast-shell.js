@@ -709,6 +709,10 @@
     return String(route || "") === "strategy|策略4";
   }
 
+  function isStrategy5Route(route) {
+    return String(route || "") === "strategy|策略5";
+  }
+
   function endpointForRoute(route) {
     return CANVAS_ENDPOINTS[route] || "";
   }
@@ -830,14 +834,14 @@
     const state = String(merged.state || merged.status || active.name || active.id || "").trim();
     const price = merged.price ?? merged.Price ?? merged.close ?? merged.Close ?? merged.ClosingPrice ?? merged.lastPrice ?? merged.LastPrice ?? merged.entryPrice ?? "";
     const volume = merged.volume ?? merged.Volume ?? merged.tradeVolume ?? merged.TradeVolume ?? merged.volumeLots ?? merged.trade_volume ?? "";
-    const signals = normalizeSignalRows(merged.signals || merged.swingSignals || payload.signals || active.signals);
+    const signals = normalizeSignalRows(merged.signals || merged.matches || merged.swingSignals || payload.signals || payload.matches || active.signals);
     const primarySignal = signals[0] || null;
     const subStrategy = compactText(
-      merged.subStrategy || merged.strategyLabel || merged.signalLabel || merged.setupName || merged.setup_type || primarySignal?.label || "",
+      merged.subStrategy || merged.strategyLabel || merged.signalLabel || merged.setupName || merged.setup_type || active.short || active.label || active.name || primarySignal?.label || "",
       42
     );
     const subStrategyId = compactText(
-      merged.subStrategyId || merged.strategyId || merged.signalId || merged.setupId || primarySignal?.id || subStrategy,
+      merged.subStrategyId || merged.strategyId || merged.signalId || merged.setupId || active.id || active.key || active.type || primarySignal?.id || subStrategy,
       48
     );
     const signalLine = signalSummary(signals);
@@ -990,7 +994,7 @@
 
   function applyCanvasFilter() {
     const query = compactText(canvasState.query, 80).toLowerCase();
-    const signalFilter = isStrategy4Route(canvasState.route) ? compactText(canvasState.signalFilter, 80).toLowerCase() : "";
+    const signalFilter = (isStrategy4Route(canvasState.route) || isStrategy5Route(canvasState.route)) ? compactText(canvasState.signalFilter, 80).toLowerCase() : "";
     canvasState.filtered = canvasState.rows.filter((row) => {
       const signalText = [row.subStrategyId, row.subStrategy, row.signalLine, ...(row.signals || []).flatMap((signal) => [signal.id, signal.label, signal.reason])].join(" ").toLowerCase();
       if (signalFilter && !signalText.includes(signalFilter)) return false;
@@ -1433,18 +1437,18 @@
         }).catch(() => setCanvasStatus("沿用快照"));
         return;
       }
-      const signalFilter = event.target.closest?.("[data-strategy4-signal-filter]");
+      const signalFilter = event.target.closest?.("[data-strategy4-signal-filter],[data-strategy5-signal-filter]");
       if (signalFilter) {
         event.preventDefault();
-        if (!isStrategy4Route(canvasState.route)) return;
-        const next = signalFilter.dataset.strategy4SignalFilter || "";
+        if (!isStrategy4Route(canvasState.route) && !isStrategy5Route(canvasState.route)) return;
+        const next = signalFilter.dataset.strategy4SignalFilter || signalFilter.dataset.strategy5SignalFilter || "";
         canvasState.signalFilter = canvasState.signalFilter === next ? "" : next;
         canvasState.offset = 0;
         canvasState.hoverIndex = -1;
         canvasState.selectedIndex = -1;
         hideCanvasDetail();
         applyCanvasFilter();
-        updateStrategy4SignalControls(currentCanvasShell());
+        updateStrategySignalControls(currentCanvasShell());
         setCanvasStatus(canvasState.signalFilter ? "細分篩選" : "全部訊號");
         scheduleCanvasDraw();
         return;
@@ -1840,7 +1844,7 @@
     ctx.font = "700 13px system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
     ctx.fillText("Rank", 46, 112);
     ctx.fillText("Code", 106, 112);
-    ctx.fillText(isStrategy4Route(canvasState.route) ? "Sub Strategy" : "Signal", 184, 112);
+    ctx.fillText((isStrategy4Route(canvasState.route) || isStrategy5Route(canvasState.route)) ? "Sub Strategy" : "Signal", 184, 112);
     ctx.fillText("Score", width - 176, 112);
     ctx.fillText("Change", width - 92, 112);
 
@@ -1886,13 +1890,13 @@
       ctx.fillText(row.code || "--", 106, y);
       ctx.fillStyle = colors.text;
       ctx.font = "700 14px system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
-      const mainText = isStrategy4Route(canvasState.route) && row.subStrategy
+      const mainText = (isStrategy4Route(canvasState.route) || isStrategy5Route(canvasState.route)) && row.subStrategy
         ? `${row.title || row.code || ""} · ${row.subStrategy}`
         : row.title || row.line || "";
       ctx.fillText(compactText(mainText, 46), 184, y - 6);
       ctx.fillStyle = colors.muted;
       ctx.font = "12px system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
-      ctx.fillText(compactText(isStrategy4Route(canvasState.route) ? row.signalLine || row.reason || row.line || "" : row.reason || row.line || "", 74), 184, y + 11);
+      ctx.fillText(compactText((isStrategy4Route(canvasState.route) || isStrategy5Route(canvasState.route)) ? row.signalLine || row.reason || row.line || "" : row.reason || row.line || "", 74), 184, y + 11);
       ctx.fillStyle = colors.text;
       ctx.textAlign = "right";
       ctx.fillText(row.score || "--", width - 130, y);
@@ -1953,27 +1957,58 @@
       .slice(0, 8);
   }
 
-  function updateStrategy4SignalControls(shell) {
-    const panel = shell || currentCanvasShell();
-    if (!panel) return;
-    const wrap = panel.querySelector("[data-strategy4-signal-filters]");
-    if (!wrap) return;
-    if (!isStrategy4Route(canvasState.route)) {
-      wrap.hidden = true;
-      wrap.innerHTML = "";
-      return;
-    }
-    const counts = strategy4SignalCounts(canvasState.rows);
-    const active = canvasState.signalFilter || "";
+  function strategy5SignalCounts(rows = []) {
+    const defs = window.FUMAN_STRATEGY_CONFIG?.STRATEGY_BY_ID || {};
+    const allowedOrder = window.FUMAN_STRATEGY_CONFIG?.STRATEGY5_PRESET_IDS || [];
+    const allowed = new Set(allowedOrder.filter((id) => id !== "multi_strategy_confluence"));
+    const forbidden = new Set([["foreign", "trust", "breakout"].join("_")]);
+    const map = new Map();
+    (Array.isArray(rows) ? rows : []).forEach((row) => {
+      const signals = row?.signals?.length ? row.signals : row?.subStrategy ? [{ id: row.subStrategyId || row.subStrategy, label: row.subStrategy }] : [];
+      signals.forEach((signal) => {
+        const key = compactText(signal.id || signal.label || "", 48);
+        if (!key || forbidden.has(key) || (allowed.size && !allowed.has(key))) return;
+        const label = compactText(defs[key]?.short || defs[key]?.label || signal.label || signal.id || "", 28);
+        if (!label) return;
+        const current = map.get(key) || { key, label, count: 0 };
+        current.count += 1;
+        map.set(key, current);
+      });
+    });
+    const orderIndex = (key) => {
+      const index = allowedOrder.indexOf(key);
+      return index >= 0 ? index : 999;
+    };
+    return [...map.values()]
+      .sort((a, b) => orderIndex(a.key) - orderIndex(b.key) || b.count - a.count || a.label.localeCompare(b.label, "zh-Hant"))
+      .slice(0, 16);
+  }
+
+  function renderSignalFilterControls(wrap, counts, active, datasetName) {
     wrap.hidden = !counts.length;
     wrap.innerHTML = counts.length ? `
-      <button type="button" data-strategy4-signal-filter="" class="${active ? "" : "active"}">全部 <b>${escapeHtml(String(canvasState.rows.length))}</b></button>
+      <button type="button" ${datasetName}="" class="${active ? "" : "active"}">全部 <b>${escapeHtml(String(canvasState.rows.length))}</b></button>
       ${counts.map((item) => `
-        <button type="button" data-strategy4-signal-filter="${escapeHtml(item.key)}" class="${active === item.key ? "active" : ""}">
+        <button type="button" ${datasetName}="${escapeHtml(item.key)}" class="${active === item.key ? "active" : ""}">
           ${escapeHtml(item.label)} <b>${escapeHtml(String(item.count))}</b>
         </button>
       `).join("")}
     ` : "";
+  }
+
+  function updateStrategySignalControls(shell) {
+    const panel = shell || currentCanvasShell();
+    if (!panel) return;
+    const wrap = panel.querySelector("[data-strategy4-signal-filters]");
+    if (!wrap) return;
+    if (!isStrategy4Route(canvasState.route) && !isStrategy5Route(canvasState.route)) {
+      wrap.hidden = true;
+      wrap.innerHTML = "";
+      return;
+    }
+    const active = canvasState.signalFilter || "";
+    const counts = isStrategy5Route(canvasState.route) ? strategy5SignalCounts(canvasState.rows) : strategy4SignalCounts(canvasState.rows);
+    renderSignalFilterControls(wrap, counts, active, isStrategy5Route(canvasState.route) ? "data-strategy5-signal-filter" : "data-strategy4-signal-filter");
   }
 
   function canvasShellHtml(key, meta) {
@@ -2057,7 +2092,7 @@
     if (status) status.textContent = canvasWorkerReady ? canvasWorkerMode : canvasState.source || "shell";
     if (input && document.activeElement !== input) input.value = canvasState.query || "";
     if (canvas) canvas.setAttribute("aria-label", `${meta.title} Canvas 快速列表`);
-    updateStrategy4SignalControls(shell);
+    updateStrategySignalControls(shell);
     return canvas;
   }
 

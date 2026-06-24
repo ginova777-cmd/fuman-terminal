@@ -14,6 +14,7 @@ const SUPABASE_KEY = terminalSupabaseKey({ runtimeDir: RUNTIME_DIR });
 const TABLE = process.env.STRATEGY5_SUPABASE_RESULTS_TABLE || "strategy5_scan_results";
 const LATEST_RUN_VIEW = process.env.STRATEGY5_SUPABASE_LATEST_RUN_VIEW || "v_strategy5_latest_complete_run";
 const COMPLETE_RUN_GATE = "complete-run-authoritative+result-readback";
+const FORBIDDEN_UI_MATCH_IDS = new Set(["foreign_trust_breakout"]);
 
 function apiOnlyError(reason = "") {
   return {
@@ -92,9 +93,13 @@ function parseRequestOptions(request) {
 
 function normalizePayload(row) {
   const payload = row.payload && typeof row.payload === "object" ? row.payload : {};
-  const matches = Array.isArray(payload.matches || row.signals) ? (payload.matches || row.signals) : [];
+  const rawMatches = Array.isArray(payload.matches || row.signals) ? (payload.matches || row.signals) : [];
+  const matches = rawMatches.filter((match) => !FORBIDDEN_UI_MATCH_IDS.has(String(match?.id || match?.key || match?.type || "")));
+  const activeMatchId = String(payload.activeMatch?.id || payload.activeMatch?.key || payload.activeMatch?.type || "");
+  const activeMatch = activeMatchId && !FORBIDDEN_UI_MATCH_IDS.has(activeMatchId) ? payload.activeMatch : matches[0] || null;
   return {
     ...payload,
+    matches,
     code: String(payload.code || row.code || "").trim(),
     name: String(payload.name || row.name || row.code || "").trim(),
     close: cleanNumber(payload.close || payload.price || row.close || row.price),
@@ -105,8 +110,7 @@ function normalizePayload(row) {
     value: cleanNumber(payload.value || payload.tradeValue || row.trade_value),
     tradeValue: cleanNumber(payload.tradeValue || payload.value || row.trade_value),
     score: cleanNumber(payload.score || row.score),
-    matches,
-    activeMatch: payload.activeMatch || matches[0] || null,
+    activeMatch,
     reason: String(payload.reason || row.reason || matches.map((signal) => signal.reason).filter(Boolean).join("；")).trim(),
   };
 }
@@ -119,7 +123,8 @@ function buildPayload(rows, run, options = {}) {
   const matches = rows
     .slice()
     .sort((a, b) => cleanNumber(a.rank) - cleanNumber(b.rank) || String(a.code).localeCompare(String(b.code)))
-    .map(normalizePayload);
+    .map(normalizePayload)
+    .filter((row) => row.matches.length);
   const scanDate = String(first.scan_date || run?.scan_date || "").replace(/-/g, "");
   return {
     ok: true,
