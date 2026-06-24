@@ -3,15 +3,15 @@ const path = require("path");
 const { isTwseTradingDay } = require("../scripts/twse-trading-day");
 const { sendJson } = require("./_http-cache");
 const { readEndpointFromDesktopSnapshot } = require("../lib/desktop-route-snapshot-cache");
-const { serverSupabaseKey, serverSupabaseUrl } = require("../lib/server-supabase-key");
+const { terminalSupabaseKey, terminalSupabaseUrl } = require("../lib/server-supabase-key");
 
 function readSecretText(file) {
   try { return fs.readFileSync(file, "utf8").trim(); } catch { return ""; }
 }
 
 const RUNTIME_DIR = process.env.FUMAN_RUNTIME_DIR || "C:/fuman-runtime";
-const SUPABASE_URL = serverSupabaseUrl({ runtimeDir: RUNTIME_DIR });
-const SUPABASE_KEY = serverSupabaseKey({ runtimeDir: RUNTIME_DIR });
+const SUPABASE_URL = terminalSupabaseUrl({ runtimeDir: RUNTIME_DIR });
+const SUPABASE_KEY = terminalSupabaseKey({ runtimeDir: RUNTIME_DIR });
 
 const TABLE = process.env.WARRANT_FLOW_SUPABASE_RESULTS_TABLE || "warrant_flow_scan_results";
 const LATEST_RUN_VIEW = process.env.WARRANT_FLOW_SUPABASE_LATEST_RUN_VIEW || "v_warrant_flow_latest_complete_run";
