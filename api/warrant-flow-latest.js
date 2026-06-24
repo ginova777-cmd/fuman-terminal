@@ -422,6 +422,7 @@ async function fetchLatestCompleteRows(options = {}) {
       });
       continue;
     }
+    if (options.snapshotFriendly) return { rows, run, skippedInvalidRuns };
     const dataContract = validateDataContract(payload);
     if (dataContract.ok) return { rows, run, skippedInvalidRuns };
     skippedInvalidRuns.push({
@@ -443,6 +444,7 @@ async function fetchLatestCompleteRows(options = {}) {
     });
     return { rows: [], run, skippedInvalidRuns };
   }
+  if (options.snapshotFriendly && rows.length) return { rows, run, skippedInvalidRuns };
   const dataContract = validateDataContract(payload);
   if (rows.length && dataContract.ok) return { rows, run, skippedInvalidRuns };
   if (rows.length) {
