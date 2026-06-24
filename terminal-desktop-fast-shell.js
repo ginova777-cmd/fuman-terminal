@@ -23,6 +23,7 @@
   const PERF_LOG_KEY = "fuman-desktop-fast-perf-log-v1";
   const CANVAS_ROW_HEIGHT = 46;
   const CANVAS_HEADER_HEIGHT = 128;
+  const STRATEGY4_PAGE_SIZE = 10;
   const API_QUIET_PAINT_MS = 460;
   const HOVER_WARM_IDLE_MS = 780;
   const CLICK_WARM_IDLE_MS = 980;
@@ -42,7 +43,7 @@
     "strategy|策略1": { limit: 60, ttl: 18000 },
     "strategy|策略2": { limit: 240, ttl: 6500, live: true, today: true },
     "strategy|策略3": { limit: 60, ttl: 22000 },
-    "strategy|策略4": { limit: 10, ttl: 24000 },
+    "strategy|策略4": { limit: 70, ttl: 24000 },
     "strategy|策略5": { limit: 70, ttl: 22000 },
     "chip-trade|買賣超": { limit: 60, ttl: 32000 },
     "cb-detect|CB可轉債": { limit: 60, ttl: 32000 },
@@ -812,7 +813,7 @@
   }
 
   function canvasPageSizeForRoute(route = canvasState.route) {
-    return isWideStrategyTableRoute(route) ? 10 : 0;
+    return isWideStrategyTableRoute(route) ? STRATEGY4_PAGE_SIZE : 0;
   }
 
   function canvasRowHeightForRoute(route = canvasState.route) {
@@ -1174,8 +1175,12 @@
         row.legal5d,
       ].join(" ").toLowerCase().includes(query);
     });
-    const maxOffset = Math.max(0, canvasState.filtered.length - 1);
+    const pageSize = canvasPageSizeForRoute();
+    const maxOffset = pageSize
+      ? Math.max(0, (Math.ceil(canvasState.filtered.length / pageSize) - 1) * pageSize)
+      : Math.max(0, canvasState.filtered.length - 1);
     canvasState.offset = Math.max(0, Math.min(canvasState.offset, maxOffset));
+    if (pageSize) canvasState.offset = Math.floor(canvasState.offset / pageSize) * pageSize;
     canvasRowsVersion += 1;
   }
 
@@ -1211,21 +1216,23 @@
   }
 
   function visibleCanvasCapacity(canvas) {
+    const pageSize = canvasPageSizeForRoute();
+    if (pageSize) return pageSize;
     const rect = canvas?.getBoundingClientRect?.();
     const height = Math.max(360, Math.min(760, Math.floor(rect?.height || (window.innerHeight || 900) * 0.62)));
     const rowHeight = canvasRowHeightForRoute();
     const headerHeight = canvasHeaderHeightForRoute();
-    const pageSize = canvasPageSizeForRoute();
-    if (pageSize) return pageSize;
     return Math.max(isWideStrategyTableRoute(canvasState.route) ? 3 : 5, Math.floor((height - headerHeight - 16) / rowHeight));
   }
 
   function clampCanvasOffset(canvas) {
     const capacity = visibleCanvasCapacity(canvas);
-    const maxOffset = Math.max(0, canvasState.filtered.length - capacity);
     const pageSize = canvasPageSizeForRoute();
-    const nextOffset = Math.max(0, Math.min(canvasState.offset, maxOffset));
-    canvasState.offset = pageSize ? Math.floor(nextOffset / pageSize) * pageSize : nextOffset;
+    const maxOffset = pageSize
+      ? Math.max(0, (Math.ceil(canvasState.filtered.length / pageSize) - 1) * pageSize)
+      : Math.max(0, canvasState.filtered.length - capacity);
+    canvasState.offset = Math.max(0, Math.min(canvasState.offset, maxOffset));
+    if (pageSize) canvasState.offset = Math.floor(canvasState.offset / pageSize) * pageSize;
   }
 
   function updateCanvasPagination(shell) {
@@ -1267,7 +1274,14 @@
     const visible = canvasState.filtered.length;
     const total = canvasState.rows.length;
     const source = canvasState.source ? String(canvasState.source).replace(/^canvas-/, "") : "shell";
-    if (count) count.textContent = `${visible}/${total}`;
+    const pageSize = canvasPageSizeForRoute();
+    if (count && pageSize) {
+      const pageCount = Math.max(1, Math.ceil(visible / pageSize));
+      const currentPage = Math.min(pageCount, Math.floor(canvasState.offset / pageSize) + 1);
+      count.textContent = `${visible}/${total} · 第 ${currentPage}/${pageCount} 頁`;
+    } else if (count) {
+      count.textContent = `${visible}/${total}`;
+    }
     const mode = canvasWorkerReady ? canvasWorkerMode : source;
     if (status) status.textContent = text || `${mode} · ${new Date().toLocaleTimeString("zh-TW", { hour12: false })}`;
     updateCanvasPagination(shell);
@@ -2675,6 +2689,7 @@
     if (!shell) return null;
     shell.dataset.routeShell = key;
     shell.dataset.routeSource = canvasState.source || "";
+    shell.classList.toggle("desktop-strategy4-paged-shell", isStrategy4Route(key));
     const icon = shell.querySelector("[data-canvas-meta-icon]") || shell.querySelector(".desktop-route-shell-head > span");
     const title = shell.querySelector("[data-canvas-meta-title]") || shell.querySelector(".desktop-route-shell-head h2");
     const summary = shell.querySelector("[data-canvas-meta-summary]") || shell.querySelector(".desktop-route-shell-head p");
@@ -2702,6 +2717,7 @@
     if (input && document.activeElement !== input) input.value = canvasState.query || "";
     if (canvas) canvas.setAttribute("aria-label", `${meta.title} Canvas 快速列表`);
     updateStrategySignalControls(shell);
+    updateCanvasPagination(shell);
     return canvas;
   }
 
@@ -3438,6 +3454,11 @@
         touch-action: none;
         user-select: none;
       }
+      .desktop-strategy4-paged-shell .desktop-route-canvas {
+        height: 1084px;
+        min-height: 1084px;
+        touch-action: auto;
+      }
       .desktop-route-canvas:focus {
         outline: 2px solid rgba(255,112,55,0.72);
         outline-offset: 3px;
@@ -3453,29 +3474,30 @@
       .desktop-canvas-pagination[hidden] {
         display: none !important;
       }
+      .desktop-canvas-pagination span {
+        color: #9fb0cb;
+        font: 800 13px system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        margin-right: 4px;
+      }
       .desktop-canvas-pagination button {
-        min-width: 38px;
+        min-width: 36px;
         min-height: 34px;
-        border: 1px solid rgba(148,163,184,0.18);
+        border: 1px solid rgba(148,163,184,0.2);
         border-radius: 10px;
-        padding: 0 12px;
+        padding: 0 11px;
         color: #cbd5e1;
-        background: rgba(15,23,42,0.72);
-        font: 800 12px system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        background: rgba(15,23,42,0.68);
+        font: 900 12px system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
         cursor: pointer;
       }
       .desktop-canvas-pagination button.active {
         border-color: rgba(255,112,55,0.72);
         color: #fff7ed;
-        background: rgba(255,112,55,0.2);
+        background: rgba(255,112,55,0.22);
       }
       .desktop-canvas-pagination button:disabled {
-        cursor: default;
         opacity: 0.42;
-      }
-      .desktop-canvas-pagination span {
-        color: #8fa3c0;
-        font: 800 12px system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        cursor: default;
       }
       .desktop-canvas-toolbar {
         display: grid;

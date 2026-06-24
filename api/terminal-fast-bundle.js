@@ -279,7 +279,7 @@ module.exports = async function handler(request, response) {
     ["/api/stocks", stocks, { limit: "120", compact: "1", shell: "1" }, 3000],
     ["/api/open-buy-latest", openBuyLatest, compactQuery(60), 2300],
     ["/api/strategy3-latest", strategy3Latest, compactQuery(60), 2300],
-    ["/api/strategy4-latest", strategy4Latest, compactQuery(10), 2500],
+    ["/api/strategy4-latest", strategy4Latest, compactQuery(70), 2500],
     ["/api/strategy5-latest", strategy5Latest, compactQuery(70), 2300],
     ["/api/latest-signals?strategy=strategy4", latestSignals, { strategy: "strategy4", compact: "1", shell: "1", limit: "70" }, 2300],
     ["/api/realtime-radar-latest", realtimeRadarLatest, { compact: "1", shell: "1", limit: "50" }, 2100],
