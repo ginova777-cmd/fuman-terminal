@@ -2,7 +2,12 @@ const strategy2Latest = require("./strategy2-latest");
 const { readDesktopRouteSnapshot } = require("../lib/desktop-route-snapshot-cache");
 const { upsertSnapshot } = require("../lib/supabase-snapshots");
 
-const SNAPSHOT_MAX_AGE_MS = Number(process.env.FUMAN_PRODUCTION_HEALTH_SNAPSHOT_MAX_AGE_MS || 15 * 60 * 1000);
+const SNAPSHOT_MAX_AGE_MS = Number(
+  process.env.FUMAN_PRODUCTION_HEALTH_SNAPSHOT_MAX_AGE_MS
+  || process.env.FUMAN_DESKTOP_ROUTE_SNAPSHOT_MAX_AGE_MS
+  || process.env.DESKTOP_ROUTE_SNAPSHOT_MAX_AGE_MS
+  || 6 * 60 * 60 * 1000
+);
 
 function createCaptureResponse(resolve, label) {
   let settled = false;
