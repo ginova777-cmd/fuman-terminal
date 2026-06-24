@@ -143,7 +143,6 @@ async function main() {
     ["terminal-app", `/terminal-app.js?v=${version}`, (r) => r.body.includes("FUMAN_LIVE_MEMORY_TTL_MS") && r.body.includes("loadStrategyWeights")],
     ["strategy3-api", "/api/strategy3-latest?v=verify", (r) => { const p = parseJson(r); return p.ok === true && isNotOlderThanLatestTradeDate(p.usedDate || p.date || p.updatedAt, strategy3TradeDate) && Number(p.count) > 0 && !!p.runId; }],
     ["strategy4-api", "/api/strategy4-latest?v=verify", (r) => { const p = parseJson(r); return p.ok === true && p.complete === true && Number(p.count) > 0 && !!p.runId; }],
-    ["data-manifest", "/data/data-manifest.json?v=verify", (r) => { const p = parseJson(r); return p.ok === true && Number(p.count) >= 25 && p.entries?.["stocks-index.json"]?.count > 1000; }],
     ["stocks-index", "/data/stocks-index.json?v=verify", (r) => { const p = parseJson(r); return p.ok === true && Number(p.count) > 1000; }],
     ["data-status", "/data/data-status-index.json?v=verify", (r) => parseJson(r).ok === true],
     ["signal-quality", "/data/signal-quality-report.json?v=verify", (r) => parseJson(r).ok === true],

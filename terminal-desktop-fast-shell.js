@@ -769,6 +769,7 @@
   }
 
   function normalizeCanvasRowsFromPayload(payload, route = "") {
+    if (isRoutePayloadNotDrawable(payload, route)) return [];
     const limit = canvasOptionsForRoute(route).limit || 60;
     const arrays = flattenApiArrays(payload);
     const best = arrays
@@ -777,6 +778,18 @@
     return best
       .sort((a, b) => cleanNumber(a.rank) - cleanNumber(b.rank) || cleanNumber(b.score) - cleanNumber(a.score) || String(a.code).localeCompare(String(b.code), "zh-Hant"))
       .slice(0, Math.max(20, Math.min(120, limit)));
+  }
+
+  function isRoutePayloadNotDrawable(payload, route = "") {
+    if (!payload || typeof payload !== "object") return false;
+    if (route !== "strategy|策略1") return false;
+    const reason = String(payload.reason || payload.error || payload.detail || payload.qualityStatus || "").toLowerCase();
+    const decisionReady = payload.decisionReady ?? payload.meta?.decision_ready;
+    return decisionReady === false
+      || reason.includes("not_ready")
+      || reason.includes("waiting_snapshot")
+      || reason.includes("futopt_not_ready")
+      || payload.gate === "complete-run-authoritative+decision-ready";
   }
 
   function setCanvasRows(route, rows, source = "memory", at = Date.now()) {
