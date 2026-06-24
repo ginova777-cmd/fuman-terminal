@@ -1,7 +1,43 @@
 {
   "version": 2,
   "cleanUrls": true,
+  "crons": [
+    {
+      "path": "/api/desktop-route-snapshot-refresh",
+      "schedule": "*/5 * * * *"
+    }
+  ],
   "rewrites": [
+    {
+      "source": "/",
+      "has": [
+        {
+          "type": "header",
+          "key": "sec-ch-ua-mobile",
+          "value": "\\?1"
+        }
+      ],
+      "destination": "/api/mobile-page"
+    },
+    {
+      "source": "/",
+      "has": [
+        {
+          "type": "header",
+          "key": "user-agent",
+          "value": ".*(Android|iPhone|iPad|iPod|Mobile|Windows Phone).*"
+        }
+      ],
+      "destination": "/api/mobile-page"
+    },
+    {
+      "source": "/mobile",
+      "destination": "/api/mobile-page"
+    },
+    {
+      "source": "/mobile.html",
+      "destination": "/api/mobile-page"
+    },
     {
       "source": "/data/(open-buy|strategy2-intraday|strategy3|strategy4|strategy5|institution|warrant-flow|warrant-priority|warrant-single-signal|cb-detect)(.*).json",
       "destination": "/api/desktop-static-disabled"
@@ -100,7 +136,72 @@
       ]
     },
     {
-      "source": "/((?!fuman-sw\\.js$|terminal-runtime-config\\.js$).*)\\.(js|css)",
+      "source": "/terminal-hotfix.js",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "no-store"
+        },
+        {
+          "key": "X-Content-Type-Options",
+          "value": "nosniff"
+        }
+      ]
+    },
+    {
+      "source": "/terminal-desktop-fast-shell.js",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "no-store"
+        },
+        {
+          "key": "X-Content-Type-Options",
+          "value": "nosniff"
+        }
+      ]
+    },
+    {
+      "source": "/terminal-desktop-canvas-worker.js",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "no-store"
+        },
+        {
+          "key": "X-Content-Type-Options",
+          "value": "nosniff"
+        }
+      ]
+    },
+    {
+      "source": "/styles.css",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "no-store"
+        },
+        {
+          "key": "X-Content-Type-Options",
+          "value": "nosniff"
+        }
+      ]
+    },
+    {
+      "source": "/terminal-theme.css",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "no-store"
+        },
+        {
+          "key": "X-Content-Type-Options",
+          "value": "nosniff"
+        }
+      ]
+    },
+    {
+      "source": "/((?!fuman-sw\\.js$|styles\\.css$|terminal-theme\\.css$|terminal-runtime-config\\.js$|terminal-hotfix\\.js$|terminal-desktop-fast-shell\\.js$|terminal-desktop-canvas-worker\\.js$).*)\\.(js|css)",
       "headers": [
         {
           "key": "Cache-Control",
