@@ -306,7 +306,7 @@
     context.font = "700 13px system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
     context.fillText("Rank", 46, 112);
     context.fillText("Code", 106, 112);
-    context.fillText(String(payload.route || "") === "strategy|策略4" ? "Sub Strategy" : "Signal", 184, 112);
+    context.fillText(String(payload.route || "") === "strategy|策略4" ? "細分策略" : "Signal", 184, 112);
     context.fillText("Score", width - 176, 112);
     context.fillText("Change", width - 92, 112);
 

@@ -685,13 +685,48 @@
     return Number.isFinite(number) ? number : 0;
   }
 
-  function normalizeSignalRows(value) {
+  const STRATEGY4_SIGNAL_LABELS = {
+    wallet_volume_cross: "主力量能交叉",
+    wallet_strong_buy: "主力強買",
+    saucer: "圓弧底",
+    breakaway_gap: "突破缺口",
+    bull_attack: "多方攻擊",
+    runaway_gap: "續強缺口",
+    watch_trend: "趨勢觀察",
+    golden_cross: "黃金交叉",
+    volume_breakout: "量能突破",
+    volume_expansion: "量能放大",
+    trend_breakout: "趨勢突破",
+    ma_breakout: "均線突破",
+    pullback_support: "回測有撐",
+    range_breakout: "區間突破",
+    chip_accumulation: "籌碼累積",
+    strong_close: "強勢收盤",
+    new_high: "波段新高",
+    relative_strength: "相對強勢",
+    volume_price_sync: "量價同步",
+    breakout: "突破訊號",
+    trend: "趨勢訊號",
+  };
+
+  function strategy4SignalLabel(value) {
+    const raw = String(value || "").trim();
+    if (!raw) return "";
+    const key = raw.toLowerCase().replace(/[\s-]+/g, "_");
+    return STRATEGY4_SIGNAL_LABELS[key] || STRATEGY4_SIGNAL_LABELS[raw] || "";
+  }
+
+  function normalizeSignalRows(value, route = "") {
+    const translateStrategy4 = isStrategy4Route(route);
     return (Array.isArray(value) ? value : [])
       .map((signal) => {
         if (!signal || typeof signal !== "object") return null;
-        const id = compactText(signal.id || signal.key || signal.type || signal.name || signal.label || "", 48);
-        const label = compactText(signal.label || signal.name || signal.title || signal.id || signal.key || "", 40);
-        const reason = compactText(signal.reason || signal.message || signal.note || "", 96);
+        const rawId = signal.id || signal.key || signal.type || signal.name || signal.label || "";
+        const rawLabel = signal.label || signal.name || signal.title || signal.id || signal.key || "";
+        const rawReason = signal.reason || signal.message || signal.note || "";
+        const id = compactText(rawId, 48);
+        const label = compactText((translateStrategy4 && (strategy4SignalLabel(rawId) || strategy4SignalLabel(rawLabel))) || rawLabel || rawId, 40);
+        const reason = compactText((translateStrategy4 && strategy4SignalLabel(rawReason)) || rawReason, 96);
         if (!id && !label && !reason) return null;
         return { id, label: label || id || reason, reason };
       })
@@ -821,7 +856,7 @@
     return out;
   }
 
-  function normalizeCanvasRow(row, index) {
+  function normalizeCanvasRow(row, index, route = "") {
     const payload = row?.payload && typeof row.payload === "object" ? row.payload : {};
     const active = row?.activeMatch || payload.activeMatch || (Array.isArray(row?.matches) ? row.matches[0] : null) || (Array.isArray(payload.matches) ? payload.matches[0] : null) || {};
     const merged = { ...payload, ...row };
@@ -834,10 +869,11 @@
     const state = String(merged.state || merged.status || active.name || active.id || "").trim();
     const price = merged.price ?? merged.Price ?? merged.close ?? merged.Close ?? merged.ClosingPrice ?? merged.lastPrice ?? merged.LastPrice ?? merged.entryPrice ?? "";
     const volume = merged.volume ?? merged.Volume ?? merged.tradeVolume ?? merged.TradeVolume ?? merged.volumeLots ?? merged.trade_volume ?? "";
-    const signals = normalizeSignalRows(merged.signals || merged.matches || merged.swingSignals || payload.signals || payload.matches || active.signals);
+    const signals = normalizeSignalRows(merged.signals || merged.matches || merged.swingSignals || payload.signals || payload.matches || active.signals, route);
     const primarySignal = signals[0] || null;
+    const rawSubStrategy = merged.subStrategy || merged.strategyLabel || merged.signalLabel || merged.setupName || merged.setup_type || active.short || active.label || active.name || primarySignal?.label || "";
     const subStrategy = compactText(
-      merged.subStrategy || merged.strategyLabel || merged.signalLabel || merged.setupName || merged.setup_type || active.short || active.label || active.name || primarySignal?.label || "",
+      (isStrategy4Route(route) && strategy4SignalLabel(rawSubStrategy)) || rawSubStrategy,
       42
     );
     const subStrategyId = compactText(
@@ -877,7 +913,7 @@
     const limit = canvasOptionsForRoute(route).limit || 60;
     const arrays = flattenApiArrays(payload);
     const best = arrays
-      .map((rows) => rows.map(normalizeCanvasRow).filter((row) => row.code || row.title))
+      .map((rows) => rows.map((row, index) => normalizeCanvasRow(row, index, route)).filter((row) => row.code || row.title))
       .sort((a, b) => b.length - a.length)[0] || [];
     return best
       .sort((a, b) => cleanNumber(a.rank) - cleanNumber(b.rank) || cleanNumber(b.score) - cleanNumber(a.score) || String(a.code).localeCompare(String(b.code), "zh-Hant"))
@@ -1844,7 +1880,7 @@
     ctx.font = "700 13px system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
     ctx.fillText("Rank", 46, 112);
     ctx.fillText("Code", 106, 112);
-    ctx.fillText((isStrategy4Route(canvasState.route) || isStrategy5Route(canvasState.route)) ? "Sub Strategy" : "Signal", 184, 112);
+    ctx.fillText(isStrategy4Route(canvasState.route) ? "細分策略" : isStrategy5Route(canvasState.route) ? "Sub Strategy" : "Signal", 184, 112);
     ctx.fillText("Score", width - 176, 112);
     ctx.fillText("Change", width - 92, 112);
 
