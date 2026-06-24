@@ -1,6 +1,6 @@
 # AGENTS.md
 
-Last updated: 2026-06-24 16:30 Asia/Taipei
+Last updated: 2026-06-24 16:59 Asia/Taipei
 
 給後續接手這個工作區的 Codex：請先讀這份，再改程式。這份只保留目前有效狀態。
 
@@ -23,7 +23,7 @@ public-terminal-fast-20260623-09
 最新 production/main commit：
 
 ```text
-a35aca73aa4211db0cb05e0c52d3c492dbcc3168
+3e49d51c2f2c06cde1f7ece9bc21325800eb3638
 ```
 
 目前極致化狀態：
@@ -123,6 +123,7 @@ scripts/install-production-health-monitor-task.ps1
 - full scan 寫 desktop snapshot 已改成硬性門檻：`--fail-on-partial --min-endpoints=10`。
 - endpoint-level snapshot cache 已有底層支援，適合由本機 full scan / scanner 寫入，不建議由 Vercel request 一次寫太多筆。
 - production health API 會檢查 snapshot fresh、partial=false、endpoint count、策略2即時。
+- production health snapshot freshness 已對齊 desktop route snapshot，預設 6 小時，避免 Vercel cron 因正常快取誤報 503。
 - latency log 會寫入 Supabase `desktop_route_latency_latest`，並由 `/api/desktop-latency-latest` 讀取。
 - Windows 排程 `FumanTerminalProductionHealthMonitor` 已建立，每 5 分鐘巡檢正式站。
 - monitor 會把本機 git drift 當 warning，不再因 `C:\fuman-terminal` dirty 而誤報正式站壞掉。
@@ -150,6 +151,66 @@ hasStrategy2Snapshot = false
 strategy2 API = ok
 ```
 
+## 已退休 / 已清除的舊流程
+
+GitHub Actions 舊排程已從 `origin/main` 的 `.github/workflows` 全部移除。
+
+已移除的 workflow：
+
+```text
+flow-cache.yml
+fuman-master-schedule.yml
+github-schedule-test.yml
+intraday-radar-scorecard.yml
+open-buy-background-scan.yml
+schedule-heartbeat.yml
+schedule-patrol.yml
+schedule-wakeup-probe.yml
+strategy2-intraday-snapshot.yml
+strategy3-background-scan.yml
+strategy4-background-scan.yml
+strategy5-background-scan.yml
+```
+
+最後確認：
+
+```text
+git ls-tree -r --name-only origin/main .github/workflows = empty
+gh workflow list --repo ginova777-cmd/fuman-terminal --all = empty
+gh run list --status queued / in_progress = empty
+```
+
+目前正式 Vercel 專案是：
+
+```text
+projectName = fuman-terminal
+projectId = prj_x0R2mMFsL0Xto4whcbPTKQTKJRUl
+domain = https://fuman-terminal.vercel.app
+```
+
+目前正式站只保留兩個 Vercel cron：
+
+```text
+/api/desktop-route-snapshot-refresh  每 5 分鐘
+/api/production-health               每 10 分鐘
+```
+
+這兩個是目前有效流程，不是舊流程。若 Gmail 仍收到通知，先看寄件來源與 project 名稱：
+
+```text
+fuman-terminal      = 正式站
+fuman-terminal-sync = 另一個舊/同步 Vercel project，需另外停用或移除
+```
+
+注意：`C:\fuman-terminal-sync` 是不同 Vercel project：
+
+```text
+projectName = fuman-terminal-sync
+projectId = prj_AFIoVawOujEtsEYEF4W0ni23txGX
+```
+
+不要從 `C:\fuman-terminal-sync` 部署正式站，避免舊流程或舊資料重新回來。
+
 ## Desktop Route Snapshot 狀態
 
 最後一次正式檢查結果：
@@ -159,9 +220,11 @@ snapshot ok = true
 partial = false
 endpointCount = 13
 misses = []
-source = codex-final-check
+source = supabase:desktop_route_snapshot
 updatedAt = 2026-06-24T08:29:13.665Z
-elapsedMs = 15441
+productionHealth = ok
+fastBundle = ok
+maxAgeMs = 21600000
 ```
 
 目前納入 snapshot / fast bundle 的重點 endpoint：
