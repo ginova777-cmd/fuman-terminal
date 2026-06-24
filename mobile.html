@@ -3,358 +3,104 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-  <title>輔滿手機終端</title>
+  <title>輔滿極速手機版</title>
+  <link rel="preload" href="/api/mobile-boot" as="fetch">
   <style>
-    :root{
-      color-scheme:dark;
-      --bg:#070a10;--panel:#101827;--panel2:#151f31;--line:#26354e;
-      --text:#eef4ff;--muted:#8fa0bb;--hot:#ff8a2a;--green:#31d69b;--red:#ff6d8a;
-      --shadow:0 18px 44px rgba(0,0,0,.34)
-    }
-    html[data-theme="sun"]{
-      color-scheme:light;
-      --bg:#f5f7fb;--panel:#ffffff;--panel2:#eef3f9;--line:#cdd8e6;
-      --text:#142034;--muted:#60708a;--hot:#e66d00;--green:#009c68;--red:#d9325a;
-      --shadow:0 14px 32px rgba(53,71,101,.12)
-    }
+    :root{color-scheme:dark;--bg:#070a12;--panel:#101623;--line:#223047;--text:#edf3ff;--muted:#91a0b8;--blue:#74a7ff}html[data-sun="1"]{color-scheme:light;--bg:#f7f9ff;--panel:#fff;--line:#cbd6e6;--text:#142033;--muted:#5b6b82;--blue:#1763c7}
     *{box-sizing:border-box}
-    html,body{margin:0;min-height:100%;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans TC",Arial,sans-serif;letter-spacing:0}
-    body{padding:12px;padding-bottom:calc(24px + env(safe-area-inset-bottom))}
-    button,input{font:inherit}
-    button{touch-action:manipulation}
-    .app{max-width:760px;margin:0 auto;display:grid;gap:12px}
-    .top{position:sticky;top:0;z-index:10;margin:-12px -12px 0;padding:12px;background:linear-gradient(180deg,var(--bg) 72%,rgba(7,10,16,0));backdrop-filter:blur(14px)}
-    html[data-theme="sun"] .top{background:linear-gradient(180deg,var(--bg) 72%,rgba(245,247,251,0))}
-    .top-line{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}
-    .brand{min-width:0}
-    .brand h1{font-size:24px;line-height:1.1;margin:0;font-weight:900}
-    .brand small{display:block;margin-top:6px;color:var(--muted);font-size:13px}
-    .top-actions{display:flex;gap:8px;flex:0 0 auto}
-    .icon-btn,.pill,.refresh{min-height:38px;border:1px solid var(--line);border-radius:10px;background:var(--panel);color:var(--text);padding:0 12px;box-shadow:none}
-    .icon-btn{min-width:42px;font-weight:800;color:var(--hot)}
-    .refresh{width:100%;font-weight:800}
-    .status-dot{display:inline-block;width:9px;height:9px;border-radius:99px;background:var(--green);box-shadow:0 0 14px var(--green);margin-right:7px}
-    .market{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
-    .market-card{min-height:104px;border:1px solid var(--line);border-radius:8px;background:linear-gradient(145deg,var(--panel),var(--panel2));padding:12px;box-shadow:var(--shadow);overflow:hidden}
-    .market-card small{display:block;color:var(--muted);font-size:12px;white-space:nowrap}
-    .market-card strong{display:block;margin-top:8px;font-size:22px;line-height:1.1}
-    .market-card em{display:block;margin-top:6px;font-style:normal;font-size:12px;color:var(--muted)}
-    .market-card.up em{color:var(--red)}.market-card.down em{color:var(--green)}
-    .search{border:1px solid var(--line);border-radius:12px;background:var(--panel);padding:10px 12px}
-    .search input{width:100%;border:0;outline:0;background:transparent;color:var(--text);font-size:18px}
-    .search input::placeholder{color:color-mix(in srgb,var(--muted) 70%,transparent)}
-    .tabs,.subtabs{display:flex;gap:10px;overflow-x:auto;padding:2px 0 4px;scrollbar-width:none}
-    .tabs::-webkit-scrollbar,.subtabs::-webkit-scrollbar{display:none}
-    .tabs button,.subtabs button{flex:0 0 auto;min-height:48px;border:1px solid var(--line);border-radius:8px;background:var(--panel);color:var(--text);font-weight:850;padding:0 16px}
-    .subtabs button{min-height:40px;font-size:14px}
-    .tabs button.active,.subtabs button.active,.stock-card.selected{border-color:var(--hot);box-shadow:inset 0 0 0 1px var(--hot),0 0 0 1px rgba(255,138,42,.08);background:color-mix(in srgb,var(--hot) 16%,var(--panel))}
-    .panel{border:1px solid var(--line);border-radius:12px;background:var(--panel);padding:14px;box-shadow:var(--shadow)}
-    .panel h2{font-size:18px;margin:0}.panel p{margin:6px 0 0;color:var(--muted)}
-    .stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:12px}
-    .stat{border:1px solid var(--line);background:color-mix(in srgb,var(--panel2) 80%,transparent);border-radius:8px;padding:10px}
-    .stat span{display:block;color:var(--muted);font-size:12px}.stat b{display:block;margin-top:5px;font-size:18px}
-    .list{display:grid;gap:10px}
-    .stock-card{border:1px solid var(--line);border-radius:12px;background:linear-gradient(145deg,var(--panel),color-mix(in srgb,var(--panel2) 82%,transparent));padding:14px;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;content-visibility:auto;contain-intrinsic-size:1px 112px}
-    .stock-card h3{margin:0;font-size:22px;line-height:1.15}
-    .stock-card small{display:block;margin-top:5px;color:var(--muted);font-size:13px}
-    .stock-card .score{text-align:right;font-weight:900;color:var(--green);font-size:22px}
-    .stock-card .reason{grid-column:1/-1;color:var(--muted);font-size:13px;line-height:1.45}
-    .tags{grid-column:1/-1;display:flex;gap:6px;flex-wrap:wrap}
-    .tag{border:1px solid var(--line);background:color-mix(in srgb,var(--panel2) 84%,transparent);border-radius:4px;padding:5px 8px;color:var(--muted);font-size:12px}
-    .empty{border:1px dashed var(--line);border-radius:12px;padding:18px;color:var(--muted);text-align:center}
-    .toast{position:fixed;left:14px;right:14px;bottom:16px;z-index:40;border:1px solid var(--line);border-radius:12px;background:var(--panel);color:var(--text);box-shadow:var(--shadow);padding:12px;text-align:center;font-weight:800}
-    @media (max-width:520px){body{padding:10px}.brand h1{font-size:22px}.market{gap:7px}.market-card{padding:10px;min-height:96px}.market-card strong{font-size:19px}.tabs button{min-height:50px}.stock-card h3{font-size:20px}}
+    html,body{margin:0;min-height:100%;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans TC",Arial,sans-serif}
+    body{padding:12px;line-height:1.45;letter-spacing:0}
+    a{color:inherit;text-decoration:none}
+    .shell{max-width:720px;margin:0 auto}
+    .top{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:2px 0 12px}
+    .brand{display:grid;gap:2px;min-width:0}
+    .brand strong{font-size:18px}
+    .brand small{color:var(--muted);font-size:12px}
+    .actions{display:flex;gap:8px;flex:0 0 auto}
+    .actions button,.actions a,.market-ai-actions button,.mobile-ai-manual-note button,.mobile-modal button{min-height:36px;border:1px solid var(--line);border-radius:8px;background:var(--panel);color:var(--text);padding:0 10px}
+    .tabs{display:flex;gap:8px;overflow-x:auto;padding:2px 0 10px;margin:0 -2px}
+    .tabs button{flex:0 0 auto;min-height:34px;border:1px solid var(--line);border-radius:999px;background:var(--panel);color:var(--muted);padding:0 11px}
+    .tabs button.active{background:var(--line);color:var(--text);border-color:#3b5d91}
+    .hero{border:1px solid var(--line);border-radius:10px;background:var(--panel);padding:14px;margin-bottom:10px}
+    .hero small,.market-ai-card small,.market-ai-block small{display:block;color:var(--muted);font-size:12px}
+    .hero strong,.market-ai-card strong{display:block;font-size:28px;margin:4px 0}
+    .hero p,.market-ai-card p,.market-ai-block p{margin:0;color:var(--muted)}
+    .metrics{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:12px}
+    .metrics span{border:1px solid var(--line);border-radius:8px;padding:8px;color:var(--muted);font-size:12px}
+    .metrics b{display:block;color:var(--text);font-size:16px;margin-top:2px}
+    .status{margin:10px 0;color:var(--muted);font-size:12px}
+    .status[data-freshness=fresh]{color:#90e8b4}
+    .status[data-freshness=expired]{color:#ff9aa4}
+    .mobile-ai-fragment{display:grid;gap:10px;contain:layout paint style}
+    .market-ai-card,.market-ai-block,.market-ai-stock-row{border:1px solid var(--line);border-radius:10px;background:var(--panel);padding:12px}
+    .market-ai-card.hero{display:none}
+    .market-ai-block{content-visibility:auto;contain-intrinsic-size:1px 420px}
+    .market-ai-block h3{font-size:16px;margin:0 0 2px}
+    .market-ai-list{display:grid;gap:8px;margin-top:10px}
+    .market-ai-point{display:grid;grid-template-columns:28px 1fr;gap:8px;align-items:start;color:var(--muted)}
+    .market-ai-point b{display:grid;place-items:center;width:24px;height:24px;border-radius:50%;background:var(--line);color:var(--blue);font-size:12px}
+    .market-ai-hot{display:grid;gap:8px;margin-top:10px}
+    .market-ai-stock-row{display:grid;grid-template-columns:34px minmax(0,1fr);gap:8px;align-items:center}
+    .market-ai-rank{color:var(--blue);font-weight:700}
+    .market-ai-stock-row h4{margin:0;font-size:15px}
+    .market-ai-stock-row p{font-size:13px}
+    .market-ai-stock-row>button,.mobile-terminal-row button{grid-column:1/-1;min-height:34px;border:1px solid var(--line);border-radius:8px;background:var(--panel);color:var(--text)}
+    .market-ai-sort-note{border:1px solid var(--line);border-radius:8px;background:var(--panel);color:var(--muted);padding:9px;font-size:13px}
+    .mobile-terminal-fragment{display:grid;gap:10px;contain:layout paint style}
+    .mobile-terminal-head,.mobile-terminal-points,.mobile-terminal-row{border:1px solid var(--line);border-radius:10px;background:var(--panel);padding:12px}
+    .mobile-terminal-head small,.mobile-terminal-row small{display:block;color:var(--muted);font-size:12px}
+    .mobile-terminal-head strong{display:block;font-size:24px;margin:3px 0}
+    .mobile-terminal-head p,.mobile-terminal-row p{margin:0;color:var(--muted)}
+    .mobile-terminal-stats{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-top:10px}
+    .mobile-terminal-stats span{border:1px solid var(--line);border-radius:8px;padding:8px;color:var(--muted);font-size:12px}
+    .mobile-terminal-stats b{display:block;color:var(--text)}
+    .mobile-terminal-points{display:grid;gap:7px}
+    .mobile-terminal-points p{margin:0;color:var(--muted)}
+    .mobile-terminal-points b{display:inline-grid;place-items:center;width:22px;height:22px;border-radius:50%;background:var(--line);color:var(--blue);font-size:12px;margin-right:8px}
+    .mobile-terminal-list{display:grid;gap:8px}
+    .mobile-terminal-row{display:grid;grid-template-columns:34px 1fr;gap:8px;align-items:start;content-visibility:auto;contain-intrinsic-size:1px 82px}
+    .mobile-terminal-row>b{color:var(--blue)}
+    .mobile-terminal-row h4{margin:0;font-size:15px}
+    .mobile-terminal-actions{grid-column:1/-1;display:grid;grid-template-columns:1fr 1fr;gap:8px}
+    .watch-row{border:1px solid var(--line);border-radius:10px;background:var(--panel);padding:12px;display:grid;grid-template-columns:1fr auto;gap:8px;align-items:center}
+    .watch-row h4{margin:0;font-size:15px}.watch-row small{display:block;color:var(--muted);font-size:12px}
+    .mobile-toast{position:fixed;left:12px;right:12px;bottom:14px;z-index:20;border:1px solid var(--line);border-radius:10px;background:#121b2c;color:var(--text);padding:10px;text-align:center;box-shadow:0 10px 30px #0008}
+    .mobile-modal{position:fixed;inset:auto 12px 12px;z-index:30;border:1px solid var(--line);border-radius:12px;background:#101623;color:var(--text);padding:14px;box-shadow:0 18px 50px #000b}
+    .mobile-modal h3{margin:0 0 6px;font-size:18px}.mobile-modal p{margin:0 0 10px;color:var(--muted)}.mobile-modal div{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+    .empty-state{color:var(--muted);padding:10px}
+    [hidden]{display:none!important}
+    html[data-orientation=landscape] body{padding:8px 12px}
+    #sun:before{content:"☾";color:#d88900}html[data-sun="1"] #sun:before{content:"☀";color:#d88900}
   </style>
 </head>
 <body>
-  <main class="app">
+  <main class="shell">
     <header class="top">
-      <div class="top-line">
-        <div class="brand">
-          <h1><span class="status-dot"></span>輔滿終端</h1>
-          <small id="status">API only polling · 準備中</small>
-        </div>
-        <div class="top-actions">
-          <button class="icon-btn" id="themeBtn" type="button" aria-label="切換夜幕陽光">☾</button>
-          <a class="pill" href="/?desktop=1" style="display:grid;place-items:center;text-decoration:none">電腦</a>
-        </div>
-      </div>
+      <div class="brand"><strong>輔滿極速手機版</strong><small>掃描結論</small></div>
+      <nav class="actions"><button id="sun"></button><button id="refresh">↻</button><a href="/?desktop=1">終端</a></nav>
     </header>
-
-    <section class="market" id="marketCards">
-      <article class="market-card"><small>加權指數</small><strong>--</strong><em>讀取中</em></article>
-      <article class="market-card"><small>櫃買指數</small><strong>--</strong><em>讀取中</em></article>
-      <article class="market-card"><small>台指期夜盤</small><strong>--</strong><em>讀取中</em></article>
+    <section class="hero" id="hero">
+      <small>AI 盤勢</small>
+      <strong>讀取中</strong>
+      <p>正在取得掃描端完成的手機結論。</p>
+      <div class="metrics"><span>樣本<b>--</b></span><span>多方<b>--</b></span><span>空方<b>--</b></span></div>
     </section>
-
-    <label class="search">
-      <input id="searchInput" type="search" placeholder="搜尋代號或名稱" autocomplete="off">
-    </label>
-
-    <nav class="tabs" id="mainTabs">
-      <button class="active" data-tab="flash" type="button">快訊</button>
-      <button data-tab="strategy" type="button">策略</button>
-      <button data-tab="chip" type="button">籌碼</button>
-      <button data-tab="watch" type="button">自選股</button>
+    <div class="status" id="status">等待資料</div>
+    <nav class="tabs" id="tabs">
+      <button class="active" type="button" data-fragment="ai">AI</button>
+      <button type="button" data-fragment="strategy1">策略1</button>
+      <button type="button" data-fragment="strategy2">策略2</button>
+      <button type="button" data-fragment="strategy3">策略3</button>
+      <button type="button" data-fragment="strategy4">策略4</button>
+      <button type="button" data-fragment="strategy5">策略5</button>
+      <button type="button" data-fragment="chip">法人</button>
+      <button type="button" data-fragment="warrant">權證</button>
+      <button type="button" data-fragment="watch">自選</button>
     </nav>
-
-    <nav class="subtabs" id="subTabs"></nav>
-    <section class="panel" id="summary"></section>
-    <button class="refresh" id="refreshBtn" type="button">刷新</button>
-    <section class="list" id="list"></section>
+    <section id="content">等待。</section>
   </main>
-
   <script>
-    (() => {
-      const API = {
-        flash: "/api/realtime-radar-latest",
-        s1: "/api/open-buy-latest",
-        s2: "/api/strategy2-latest",
-        s3: "/api/strategy3-latest",
-        s4: "/api/strategy4-latest",
-        s5: "/api/strategy5-latest",
-        chip: "/api/institution-latest",
-        cb: "/api/cb-detect-latest",
-        warrant: "/api/warrant-flow-latest"
-      };
-      const CHIP_VIEWS = [
-        ["tdcc", "外資連3買 + 1000張連3週增"],
-        ["volume", "外資+投信佔5日均量"],
-        ["foreign", "外資連買日"],
-        ["trust", "投信連買日"],
-        ["joint", "同買日"]
-      ];
-      const STRATEGY_VIEWS = [
-        ["s1", "策略1"], ["s2", "策略2"], ["s3", "策略3"], ["s4", "策略4"], ["s5", "策略5"]
-      ];
-      const CHIP_TABS = [["chip", "買賣超"], ["cb", "CB"], ["warrant", "權證"]];
-      const el = (id) => document.getElementById(id);
-      const state = { main: "flash", sub: "s1", chipSub: "tdcc", selected: "", data: {}, busy: false };
-      const watchKey = "fuman_mobile_watchlist_v2";
-      const status = el("status"), list = el("list"), summary = el("summary"), subTabs = el("subTabs"), search = el("searchInput");
-
-      function esc(value) {
-        return String(value ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#39;" }[c]));
-      }
-      function num(value) {
-        const n = Number(String(value ?? "").replace(/,/g, ""));
-        return Number.isFinite(n) ? n : null;
-      }
-      function first(row, keys, fallback = "") {
-        for (const key of keys) {
-          const v = key.split(".").reduce((o, p) => o?.[p], row);
-          if (v !== undefined && v !== null && v !== "") return v;
-        }
-        return fallback;
-      }
-      function valuesAt(payload, keys) {
-        for (const key of keys) {
-          const value = key.split(".").reduce((o, p) => o?.[p], payload);
-          if (Array.isArray(value)) return value;
-          if (value && typeof value === "object") {
-            const vals = Object.values(value).filter(x => x && typeof x === "object");
-            if (vals.length) return vals;
-          }
-        }
-        return [];
-      }
-      function rows(payload) {
-        return valuesAt(payload, ["matches","results","rows","items","candidates","signals","records","events","data","top","payload.records","payload.events","payload.matches","payload.results","mobile.top"]);
-      }
-      function codeOf(row) { return String(first(row, ["code","stock_id","stockId","symbol","underlyingCode","ticker"], "--")); }
-      function nameOf(row) { return String(first(row, ["name","stock_name","stockName","underlyingName","company"], "")); }
-      function scoreOf(row) { return first(row, ["finalScore","score","rankScore","totalScore","changePercent","pct","risePct","percent","priceChangePercent"], "--"); }
-      function reasonOf(row) { return String(first(row, ["reason","summary","description","memo","note","why","signalReason","stateReason"], "")); }
-      function tagValues(row) {
-        const raw = [
-          first(row, ["actionLabel","label","signal","signalName","strategy","status","source"], ""),
-          first(row, ["foreignText","foreignBuyText","trustText","dealerText"], ""),
-          first(row, ["volumeText","entryPrice","observedPrice","latestSeenPrice"], "")
-        ].filter(Boolean);
-        return raw.slice(0, 3);
-      }
-      function watches() {
-        try { return JSON.parse(localStorage.getItem(watchKey) || "[]"); } catch { return []; }
-      }
-      function saveWatches(items) { localStorage.setItem(watchKey, JSON.stringify(items.slice(0, 80))); }
-      function addWatch(row) {
-        const code = codeOf(row);
-        if (!code || code === "--") return;
-        const item = { code, name: nameOf(row), reason: reasonOf(row), score: scoreOf(row), addedAt: new Date().toISOString() };
-        saveWatches([item, ...watches().filter(x => String(x.code) !== code)]);
-        toast(`已加入自選 ${code}`);
-      }
-      function toast(text) {
-        document.querySelector(".toast")?.remove();
-        const node = document.createElement("div");
-        node.className = "toast";
-        node.textContent = text;
-        document.body.appendChild(node);
-        setTimeout(() => node.remove(), 1500);
-      }
-      function timeoutFetch(url, ms = 9000) {
-        const ctrl = new AbortController();
-        const timer = setTimeout(() => ctrl.abort(), ms);
-        return fetch(`${url}${url.includes("?") ? "&" : "?"}t=${Date.now()}`, { cache: "no-store", signal: ctrl.signal })
-          .then(r => {
-            if (!r.ok) throw new Error(`${r.status}`);
-            return r.json();
-          })
-          .finally(() => clearTimeout(timer));
-      }
-      function marketLabel(item) {
-        return String(first(item, ["name","指數","c","ch","title"], ""));
-      }
-      function marketValue(item) {
-        return first(item, ["price","z","最新指數","收盤指數","value","index"], "--");
-      }
-      function marketChange(item) {
-        const diff = first(item, ["diff","漲跌點數","change","priceChange"], "");
-        const pct = first(item, ["pct","漲跌百分比","changePercent"], "");
-        const sign = first(item, ["sign"], String(diff).startsWith("-") ? "-" : "+");
-        return [diff ? `${sign}${String(diff).replace(/^[+-]/, "")}` : "", pct ? `(${String(pct).replace(/[()]/g, "")}%)` : ""].filter(Boolean).join(" ");
-      }
-      function paintMarket(payload) {
-        const indexRows = Array.isArray(payload?.indexes) ? payload.indexes : [];
-        const weighted = indexRows.find(x => /加權|發行量|t00|TSE/i.test(marketLabel(x))) || indexRows[0] || null;
-        const otc = indexRows.find(x => /櫃買|OTC|o00/i.test(marketLabel(x))) || indexRows[1] || null;
-        const fut = payload?.futuresNear || payload?.futures || null;
-        const cards = [
-          ["加權指數", weighted],
-          ["櫃買指數", otc],
-          ["台指期夜盤", fut]
-        ];
-        el("marketCards").innerHTML = cards.map(([label, item]) => {
-          const v = item ? marketValue(item) : "--";
-          const ch = item ? marketChange(item) || first(item, ["bias","source","_source"], "--") : "讀取失敗";
-          const down = String(ch).includes("-") || String(ch).includes("▼");
-          const up = String(ch).includes("+") || String(ch).includes("▲");
-          return `<article class="market-card ${down ? "down" : up ? "up" : ""}"><small>${esc(label)}</small><strong>${esc(v)}</strong><em>${esc(ch || "--")}</em></article>`;
-        }).join("");
-      }
-      function sortChip(input, view) {
-        const all = [...input];
-        const by = (keys) => (a, b) => (num(first(b, keys, 0)) || 0) - (num(first(a, keys, 0)) || 0);
-        if (view === "tdcc") return all.filter(r => num(first(r, ["tdcc1000Delta","tdccIncrease","thousandIncrease"], 0)) > 0 || /1000|千張|連3/.test(JSON.stringify(r))).sort(by(["tdcc1000Delta","score","totalBuy"]));
-        if (view === "volume") return all.sort(by(["foreignTrustVolumePct","volumePct","score"]));
-        if (view === "foreign") return all.sort(by(["foreignStreak","foreignBuyStreak","score"]));
-        if (view === "trust") return all.sort(by(["trustStreak","investmentTrustStreak","score"]));
-        if (view === "joint") return all.sort(by(["jointStreak","sameBuyStreak","score"]));
-        return all;
-      }
-      function selectedRows() {
-        if (state.main === "watch") return watches();
-        if (state.main === "flash") return rows(state.data.flash).slice(0, 80);
-        if (state.main === "strategy") return rows(state.data[state.sub]).slice(0, 80);
-        if (state.main === "chip") {
-          const tab = state.sub;
-          const base = rows(state.data[tab]);
-          return tab === "chip" ? sortChip(base, state.chipSub).slice(0, 80) : base.slice(0, 80);
-        }
-        return [];
-      }
-      function filteredRows() {
-        const q = search.value.trim().toLowerCase();
-        const data = selectedRows();
-        if (!q) return data;
-        return data.filter(r => `${codeOf(r)} ${nameOf(r)} ${reasonOf(r)}`.toLowerCase().includes(q));
-      }
-      function renderSubtabs() {
-        const items = state.main === "strategy" ? STRATEGY_VIEWS : state.main === "chip" ? CHIP_TABS : [];
-        subTabs.innerHTML = items.map(([key, label]) => `<button class="${state.sub === key ? "active" : ""}" data-sub="${esc(key)}" type="button">${esc(label)}</button>`).join("");
-        if (state.main === "chip" && state.sub === "chip") {
-          subTabs.innerHTML += CHIP_VIEWS.map(([key, label]) => `<button class="${state.chipSub === key ? "active" : ""}" data-chip-sub="${esc(key)}" type="button">${esc(label)}</button>`).join("");
-        }
-      }
-      function renderSummary(data) {
-        const rowsNow = filteredRows();
-        const title = state.main === "flash" ? "即時快訊" : state.main === "strategy" ? STRATEGY_VIEWS.find(x => x[0] === state.sub)?.[1] : state.main === "chip" ? CHIP_TABS.find(x => x[0] === state.sub)?.[1] : "自選股";
-        const updated = first(data, ["updatedAt","finishedAt","generatedAt","scanTime","date"], "");
-        summary.innerHTML = `<h2>${esc(title || "--")} · ${rowsNow.length}</h2><p>${esc(updated ? `更新 ${updated}` : "API only polling，每 20 秒刷新一次。")}</p><div class="stats"><div class="stat"><span>顯示</span><b>${rowsNow.length}</b></div><div class="stat"><span>來源</span><b>API</b></div><div class="stat"><span>選取</span><b>${esc(state.selected || "--")}</b></div></div>`;
-      }
-      function renderList() {
-        renderSubtabs();
-        const data = state.main === "strategy" ? state.data[state.sub] : state.main === "chip" ? state.data[state.sub] : state.data[state.main];
-        renderSummary(data || {});
-        const items = filteredRows();
-        if (!items.length) {
-          list.innerHTML = `<div class="empty">目前沒有符合條件的訊號。</div>`;
-          return;
-        }
-        list.innerHTML = items.map((row, i) => {
-          const code = codeOf(row), name = nameOf(row), score = scoreOf(row), reason = reasonOf(row);
-          const selected = state.selected && state.selected === code ? " selected" : "";
-          const tags = tagValues(row).map(t => `<span class="tag">${esc(t)}</span>`).join("");
-          return `<article class="stock-card${selected}" data-code="${esc(code)}" data-index="${i}">
-            <div><h3>${esc(name || code)}</h3><small>${esc(code)} · ${esc(first(row, ["entryAt","timestamp","quoteTime","latestSeenAt","date"], ""))}</small></div>
-            <div class="score">${esc(score)}</div>
-            <div class="tags">${tags}</div>
-            <div class="reason">${esc(reason || "終端 API 命中。")}</div>
-          </article>`;
-        }).join("");
-      }
-      async function load(force = false) {
-        if (state.busy && !force) return;
-        state.busy = true;
-        status.textContent = "API only polling · 更新中";
-        try {
-          const keys = ["flash","s1","s2","s3","s4","s5","chip","cb","warrant"];
-          const [market, ...payloads] = await Promise.allSettled([
-            timeoutFetch("/api/market", 10000),
-            ...keys.map(k => timeoutFetch(API[k], 9000))
-          ]);
-          if (market.status === "fulfilled") paintMarket(market.value);
-          payloads.forEach((result, i) => {
-            if (result.status === "fulfilled") state.data[keys[i]] = result.value;
-          });
-          status.textContent = `API only polling · ${new Date().toLocaleTimeString("zh-TW", { hour12:false })}`;
-          renderList();
-        } catch (error) {
-          status.textContent = `API only polling · 連線逾時`;
-          renderList();
-        } finally {
-          state.busy = false;
-        }
-      }
-      el("mainTabs").addEventListener("click", (event) => {
-        const btn = event.target.closest("[data-tab]");
-        if (!btn) return;
-        state.main = btn.dataset.tab;
-        if (state.main === "strategy" && !STRATEGY_VIEWS.some(x => x[0] === state.sub)) state.sub = "s1";
-        if (state.main === "chip" && !CHIP_TABS.some(x => x[0] === state.sub)) state.sub = "chip";
-        document.querySelectorAll("#mainTabs button").forEach(b => b.classList.toggle("active", b === btn));
-        renderList();
-      });
-      subTabs.addEventListener("click", (event) => {
-        const sub = event.target.closest("[data-sub]");
-        const chip = event.target.closest("[data-chip-sub]");
-        if (sub) state.sub = sub.dataset.sub;
-        if (chip) state.chipSub = chip.dataset.chipSub;
-        renderList();
-      });
-      list.addEventListener("click", (event) => {
-        const card = event.target.closest(".stock-card");
-        if (!card) return;
-        const row = filteredRows()[Number(card.dataset.index)];
-        state.selected = card.dataset.code;
-        if (row) addWatch(row);
-        renderList();
-      });
-      search.addEventListener("input", renderList);
-      el("refreshBtn").addEventListener("click", () => load(true));
-      el("themeBtn").addEventListener("click", () => {
-        const next = document.documentElement.dataset.theme === "sun" ? "night" : "sun";
-        document.documentElement.dataset.theme = next;
-        el("themeBtn").textContent = next === "sun" ? "☀" : "☾";
-        localStorage.setItem("fuman_mobile_theme", next);
-      });
-      const savedTheme = localStorage.getItem("fuman_mobile_theme") || "night";
-      document.documentElement.dataset.theme = savedTheme;
-      el("themeBtn").textContent = savedTheme === "sun" ? "☀" : "☾";
-      load(true);
-      setInterval(() => { if (!document.hidden) load(false); }, 20000);
-      document.addEventListener("visibilitychange", () => { if (!document.hidden) load(true); });
-    })();
+    (()=>{const $=id=>document.getElementById(id),hero=$("hero"),status=$("status"),content=$("content"),refresh=$("refresh"),sun=$("sun"),tabs=$("tabs"),w="fuman_watchlist",l="fuman_mobile_watchlist_v1",bootUrl="/api/mobile-boot";let boot=null,active="ai",busy=false,pendingLoad=false,analysisIndex=null,realtimeSocket=null,realtimeTimer=null,realtimeRetry=null,realtimeRef=0,prefetched=false,rt=0;const realtime={url:"",key:"",table:"mobile_update_events"},N=navigator;const cache=new Map,analysisCache=new Map,fresh=url=>url+(url.includes("?")?"&":"?")+"t="+Date.now(),ver=(url,h)=>url+(url.includes("?")?"&":"?")+"v="+encodeURIComponent(h||boot?.updatedAt||Date.now()),j=url=>fetch(fresh(url),{cache:"no-store"}).then(r=>{if(!r.ok)throw Error(r.status);return r.json()}),t=url=>fetch(url.includes("?v=")?url:fresh(url),{cache:"no-store"}).then(r=>{if(!r.ok)throw Error(r.status);return r.text()});function esc(v){return String(v??"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[m]))}function watches(){try{return JSON.parse(localStorage.getItem(w)||localStorage.getItem(l)||"[]")}catch{return[]}}function saveWatches(a){const n=a.slice(0,80),v=JSON.stringify(n);localStorage.setItem(w,v);localStorage.setItem(l,v)}function toast(msg){let n=document.querySelector(".mobile-toast");if(!n){n=document.createElement("div");n.className="mobile-toast";document.body.appendChild(n)}n.textContent=msg;clearTimeout(toast.timer);toast.timer=setTimeout(()=>n.remove(),1400)}function rowText(el){return (el?.closest(".market-ai-stock-row,.mobile-terminal-row,.watch-row")?.innerText||"").replace(/\s+/g," ").slice(0,220)}async function loadRuntimeConfig(){try{const c=await j("/data/mobile-runtime-config.json");realtime.url=String(c.realtimeUrl||"");realtime.key=String(c.supabaseAnonKey||"");realtime.table=String(c.realtimeTable||"mobile_update_events")}catch{}}async function analysisFor(code){code=String(code||"").trim();if(!code)return null;if(analysisCache.has(code))return analysisCache.get(code);try{const a=await j(ver(`/data/mobile-analysis/${encodeURIComponent(code)}.json`,boot?.updatedAt));analysisCache.set(code,a);return a}catch{}if(!analysisIndex)analysisIndex=await j(ver("/data/mobile-stock-analysis-latest.json",boot?.updatedAt));const a=analysisIndex?.analyses?.[code]||null;analysisCache.set(code,a);return a}function addWatch(code,name,reason){code=String(code||"").trim();if(!code)return;let a=watches().filter(x=>String(x.code)!==code);a.unshift({code,name:name||code,reason:reason||"",addedAt:new Date().toISOString()});saveWatches(a);toast(`+自選 ${code}`);if(active==="watch")renderWatch()}function removeWatch(code){saveWatches(watches().filter(x=>String(x.code)!==String(code)));renderWatch();toast(`已移除 ${code}`)}function modal(code,name,reason){document.querySelector(".mobile-modal")?.remove();const n=document.createElement("section");n.className="mobile-modal";n.innerHTML=`<h3>${esc(code)} ${esc(name||"")}</h3><p>讀取...</p><div><button type="button" data-modal-watch="${esc(code)}" data-modal-name="${esc(name||"")}">自選</button><button type="button" data-modal-close="1">關</button></div>`;document.body.appendChild(n);analysisFor(code).then(a=>{if(!document.body.contains(n))return;const body=a?`<p><b>來源</b>：${esc((a.sources||[]).join(" / ")||"--")}</p><p><b>訊號</b>：${esc(a.signalsText||(a.tags||[]).join("、")||"--")}</p><p><b>判讀</b>：${esc(a.reason||"")}</p><p><b>AI</b>：${esc(a.aiView||"")}</p><p><b>操作</b>：${esc(a.action||"")}</p><p><b>風險</b>：${esc(a.risk||"")}</p>`:`<p>${esc(reason||"掃描命中。")}</p>`;n.innerHTML=`<h3>${esc(code)} ${esc(a?.name||name||"")}</h3>${body}<div><button type="button" data-modal-watch="${esc(code)}" data-modal-name="${esc(a?.name||name||"")}">自選</button><button type="button" data-modal-close="1">關</button></div>`}).catch(()=>{if(document.body.contains(n))n.querySelector("p").textContent=reason||"讀不到。"})}function renderWatch(){const a=watches();status.dataset.freshness="fresh";status.textContent=`自選 ${a.length}`;content.innerHTML=a.length?`<section class="mobile-terminal-fragment"><article class="mobile-terminal-head"><strong>自選</strong></article><section class="mobile-terminal-list">${a.map(x=>`<article class="watch-row"><div><h4>${esc(x.code)} ${esc(x.name)}</h4><small>${esc(x.reason||x.addedAt||"")}</small></div><button type="button" data-watch-remove="${esc(x.code)}">移除</button></article>`).join("")}</section></section>`:'<div class="empty-state">尚未加入。</div>'}function hashFor(k){return k==="ai"?boot?.digest?.ultraHash:boot?.fragments?.[k]?.hash}function urlFor(k){const h=hashFor(k);return ver(k==="ai"?"/data/mobile-ai-ultra.html":boot?.fragments?.[k]?.url||`/data/mobile-${k}-ultra.html`,h)}function bootHash(b=boot){return b?.digest?.ultraHash||b?.digest?.aiHash||b?.updatedAt||""}function paintBoot(b){const s=b.aiSummary||{},d=b.digest||{};hero.innerHTML=`<small>AI 盤勢</small><strong>${esc(s.bias||d.bias||"--")}</strong><p>${esc(s.reason||"判讀完成。")}</p><div class="metrics"><span>樣本<b>${Number(s.sample||0).toLocaleString("zh-TW")}</b></span><span>多方<b>${Number(s.up||0).toLocaleString("zh-TW")}</b></span><span>空方<b>${Number(s.down||0).toLocaleString("zh-TW")}</b></span></div>`;status.dataset.freshness=d.freshness||"";status.textContent=`${d.freshness||"?"}｜${d.aiUpdatedAt||b.updatedAt||""}｜${Number(d.ultraBytes||0).toLocaleString("zh-TW")}B`}async function loadFragment(k,force=false){if(k==="watch"){renderWatch();return}const h=hashFor(k)||"";if(!force&&cache.get(k)?.hash===h){content.innerHTML=cache.get(k).html;return}const html=await t(urlFor(k));cache.set(k,{hash:h,html});content.innerHTML=html}function schedulePrefetch(){if(prefetched||!boot||boot?.lowPower?.disablePrefetchOnLowEnd&&(N.connection?.saveData||N.deviceMemory<=4||N.hardwareConcurrency<=4))return;prefetched=true;const run=()=>["ai","strategy1","strategy2","strategy3","strategy4","strategy5","chip","warrant"].forEach(k=>{if(k!==active)loadFragment(k,false).catch(()=>{})});window.requestIdleCallback?requestIdleCallback(run,{timeout:2500}):setTimeout(run,900)}async function load(force=false){if(busy){pendingLoad=true;return}busy=true;try{boot=await j(bootUrl);paintBoot(boot);await loadFragment(active,force);schedulePrefetch()}catch(e){status.dataset.freshness="expired";status.textContent="等待↻";content.innerHTML='<div class="empty-state">等待。</div>'}finally{busy=false;if(pendingLoad){pendingLoad=false;setTimeout(()=>load(false),0)}}}tabs.addEventListener("click",e=>{const b=e.target.closest("[data-fragment]");if(!b)return;active=b.dataset.fragment;tabs.querySelectorAll("button").forEach(x=>x.classList.toggle("active",x===b));if(boot)loadFragment(active,false).catch(()=>load(false));else load(false)},{passive:true});content.addEventListener("click",e=>{const a=e.target.closest("[data-ai-stock-code]"),w=e.target.closest("[data-ai-watch-code]"),r=e.target.closest("[data-watch-remove]");if(a){modal(a.dataset.aiStockCode,a.dataset.aiStockName,rowText(a));return}if(w){addWatch(w.dataset.aiWatchCode,w.dataset.aiWatchName,rowText(w));return}if(r){removeWatch(r.dataset.watchRemove)}});document.addEventListener("click",e=>{const c=e.target.closest("[data-modal-close]"),w=e.target.closest("[data-modal-watch]");if(c)document.querySelector(".mobile-modal")?.remove();if(w){addWatch(w.dataset.modalWatch,w.dataset.modalName,rowText(w));document.querySelector(".mobile-modal")?.remove()}});sun.onclick=()=>{let v=document.documentElement.dataset.sun==="1"?"0":"1";document.documentElement.dataset.sun=v;localStorage.setItem("fuman_mobile_sun",v)};document.documentElement.dataset.sun=localStorage.getItem("fuman_mobile_sun")||"0";refresh.addEventListener("click",()=>load(true),{passive:true});function realtimeSend(topic,event,payload){if(!realtimeSocket||realtimeSocket.readyState!==1)return;realtimeSocket.send(JSON.stringify({topic,event,payload:payload||{},ref:String(++realtimeRef)}))}function realtimeClose(){if(realtimeTimer)clearInterval(realtimeTimer);if(realtimeRetry)clearTimeout(realtimeRetry);rt&&clearTimeout(rt);realtimeTimer=null;realtimeRetry=null;if(realtimeSocket){try{realtimeSocket.close()}catch{}}realtimeSocket=null}function realtimeUpdate(row){if(row?.force_reload)location.reload();clearTimeout(rt);rt=setTimeout(()=>{let b=bootHash(),n=String(row?.boot_hash||"");if(n&&b&&n===b)return;load(true);setTimeout(()=>{let a=bootHash();if(!document.hidden&&active!=="watch"&&b&&a===b)load(true)},900)},650)}function realtimeConnect(){if(document.hidden||realtimeSocket||!realtime.key||!realtime.url)return;try{realtimeSocket=new WebSocket(`${realtime.url}?apikey=${encodeURIComponent(realtime.key)}&vsn=1.0.0`);realtimeSocket.addEventListener("open",()=>{realtimeSend(`realtime:public:${realtime.table}`,"phx_join",{config:{postgres_changes:[{event:"INSERT",schema:"public",table:realtime.table}]},access_token:realtime.key});realtimeTimer=setInterval(()=>realtimeSend("phoenix","heartbeat",{}),25000)});realtimeSocket.addEventListener("message",e=>{let m=null;try{m=JSON.parse(e.data)}catch{}if(m&&m.event==="postgres_changes"&&!document.hidden&&active!=="watch")realtimeUpdate(m.payload?.record)});realtimeSocket.addEventListener("close",()=>{realtimeClose();if(!document.hidden)realtimeRetry=setTimeout(realtimeConnect,5000)});realtimeSocket.addEventListener("error",()=>{try{realtimeSocket.close()}catch{}})}catch{realtimeClose()}}function qo(){let v=visualViewport;document.documentElement.dataset.orientation=(v?.width||innerWidth)>(v?.height||innerHeight)?"landscape":"portrait"}visualViewport&&(visualViewport.onresize=qo);onorientationchange=qo;qo();document.addEventListener("visibilitychange",()=>{if(document.hidden)realtimeClose();else{qo();load(false);realtimeConnect()}},{passive:!0});load(false);loadRuntimeConfig().then(realtimeConnect);setInterval(()=>{if(!document.hidden&&active!=="watch")load(false)},120000)})();
   </script>
 </body>
 </html>

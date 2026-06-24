@@ -67,6 +67,7 @@ const EXACT_RETIRED = [
   "data/mobile-warrant-ultra.html",
   "data/mobile-digest.json",
   "data/terminal-home-bundle.json",
+  "data/terminal-theme-css.css",
   "data/flow-health-latest.json",
   "data/health-summary.json",
   "data/scan-receipts/scan-summary.json",
@@ -151,6 +152,20 @@ const RUNTIME_STALE_FRONT_PAGE_FILES = [
   "data/terminal-home-mobile-slim.json",
   "data/data-manifest.json",
   "data/data-status-index.json",
+  "data/terminal-theme-css.css",
+];
+const RETIRED_THEME_MARKERS = [
+  "terminal-theme-css-runtime",
+  "terminal-theme-css-snapshot-first",
+  "allowRuntimeThemeCss: true",
+  "allowRuntimeThemeCss = true",
+];
+const THEME_MARKER_FILES = [
+  "terminal-core.js",
+  "fuman-sw.js",
+  "index.html",
+  "index.github.html",
+  "styles.css",
 ];
 const RETIRED_ENTRYPOINT_MARKERS = [
   "FMN://strategy.scan",
@@ -436,6 +451,7 @@ function cleanupRoot(root, args) {
   }
   scanRetiredEntrypointMarkers(root, result);
   scanRetiredStrategy1Markers(root, result);
+  scanRetiredThemeMarkers(root, result);
   scanGitWorktreeHealth(root, result);
   return result;
 }
@@ -461,6 +477,19 @@ function scanRetiredStrategy1Markers(root, result) {
     for (const marker of RETIRED_STRATEGY1_MARKERS) {
       if (content.includes(marker)) {
         result.issues.push({ path: target, marker, reason: "retired-strategy1-static-or-gate-marker" });
+      }
+    }
+  }
+}
+
+function scanRetiredThemeMarkers(root, result) {
+  for (const rel of THEME_MARKER_FILES) {
+    const target = path.join(root, rel);
+    if (!fs.existsSync(target) || !fs.statSync(target).isFile()) continue;
+    const content = fs.readFileSync(target, "utf8");
+    for (const marker of RETIRED_THEME_MARKERS) {
+      if (content.includes(marker)) {
+        result.issues.push({ path: target, marker, reason: "retired-runtime-theme-css-marker" });
       }
     }
   }

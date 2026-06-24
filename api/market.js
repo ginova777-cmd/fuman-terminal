@@ -1,4 +1,6 @@
 // api/market.js — 即時加權指數 + 櫃買指數 + 台指近全
+const { readEndpointFromDesktopSnapshot } = require("../lib/desktop-route-snapshot-cache");
+
 async function fetchWithTimeout(url, options = {}, timeout = 8000) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeout);
@@ -209,12 +211,77 @@ function getMarketStatus() {
   return "closed";
 }
 
+function cleanRequestNumber(value) {
+  const number = Number(String(value ?? "").replace(/[,+%]/g, ""));
+  return Number.isFinite(number) ? number : 0;
+}
+
+function readRequestOptions(request) {
+  try {
+    const url = new URL(request.url, `https://${request.headers.host || "localhost"}`);
+    const canvas = url.searchParams.get("canvas") === "1";
+    const limit = Math.max(1, Math.min(120, cleanRequestNumber(url.searchParams.get("limit")) || 80));
+    return { canvas, limit };
+  } catch {
+    return { canvas: false, limit: 80 };
+  }
+}
+
+function marketCanvasRows(indexes, futures, otcSignal, limit = 80) {
+  const rows = [];
+  indexes.forEach((item, index) => {
+    rows.push({
+      rank: index + 1,
+      code: item["指數"] === "櫃買指數" ? "OTC" : "TWSE",
+      name: item["指數"] || "市場指數",
+      title: item["指數"] || "市場指數",
+      price: item["收盤指數"] || "",
+      pct: `${item["漲跌"] || ""}${item["漲跌百分比"] || "0"}%`,
+      score: item["漲跌點數"] || "",
+      reason: item._source || "market-index",
+    });
+  });
+  if (futures?.near) {
+    rows.push({
+      rank: rows.length + 1,
+      code: "TXF",
+      name: futures.near.name || "台指期",
+      title: futures.near.name || "台指期",
+      price: futures.near.price || "",
+      pct: futures.near.pct || "",
+      score: futures.near.change || "",
+      reason: futures.near.basisLabel || "futures",
+    });
+  }
+  if (otcSignal) {
+    rows.push({
+      rank: rows.length + 1,
+      code: "006201",
+      name: "櫃買訊號",
+      title: "櫃買訊號",
+      pct: otcSignal.label || "",
+      score: otcSignal.side || "",
+      reason: otcSignal.source || "",
+    });
+  }
+  return rows.slice(0, Math.max(1, Math.min(120, cleanRequestNumber(limit) || 80)));
+}
+
 module.exports = async function handler(request, response) {
   response.setHeader("Access-Control-Allow-Origin", "*");
   response.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
   response.setHeader("Access-Control-Allow-Headers", "Content-Type");
   if (request.method === "OPTIONS") { response.status(204).end(); return; }
   if (request.method !== "GET") { response.status(405).json({ error: "Method not allowed" }); return; }
+
+  const cached = await readEndpointFromDesktopSnapshot(request, {
+    timeoutMs: 650,
+    via: "api/market",
+  });
+  if (cached) {
+    response.status(200).json(cached);
+    return;
+  }
 
   const marketStatus = getMarketStatus();
   const trading = marketStatus === "day";
@@ -228,6 +295,7 @@ module.exports = async function handler(request, response) {
       : "s-maxage=30, stale-while-revalidate=60"
   );
 
+  const requestOptions = readRequestOptions(request);
   response.status(ok ? 200 : 502).json({
     ok,
     source: "MIS即時",
@@ -240,5 +308,8 @@ module.exports = async function handler(request, response) {
     futuresNear: futures.near,
     futuresNext: futures.next,
     otcSignal,
+    canvas: requestOptions.canvas,
+    returnedCount: requestOptions.canvas ? marketCanvasRows(indexes, futures, otcSignal, requestOptions.limit).length : 0,
+    rows: requestOptions.canvas ? marketCanvasRows(indexes, futures, otcSignal, requestOptions.limit) : [],
   });
 };

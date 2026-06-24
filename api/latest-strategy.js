@@ -1,19 +1,14 @@
 const fs = require("fs");
 const path = require("path");
+const { terminalSupabaseKey, terminalSupabaseUrl } = require("../lib/server-supabase-key");
 
 function readSecretText(file) {
   try { return fs.readFileSync(file, "utf8").trim(); } catch { return ""; }
 }
 
 const RUNTIME_DIR = process.env.FUMAN_RUNTIME_DIR || "C:/fuman-runtime";
-const SUPABASE_URL = String(
-  process.env.SUPABASE_URL
-  || process.env.FUMAN_SUPABASE_URL
-  || "https://cpmpfhbzutkiecccekfr.supabase.co"
-).replace(/\/+$/, "");
-const SUPABASE_KEY = process.env.SUPABASE_ANON_KEY
-  || process.env.FUMAN_SUPABASE_ANON_KEY
-  || readSecretText(path.join(RUNTIME_DIR, "secrets", "supabase-anon-key.txt"));
+const SUPABASE_URL = terminalSupabaseUrl({ runtimeDir: RUNTIME_DIR });
+const SUPABASE_KEY = terminalSupabaseKey({ runtimeDir: RUNTIME_DIR });
 
 const ALLOWED_KEYS = new Set(["strategy1", "strategy2", "strategy3", "strategy4", "strategy5"]);
 const STRATEGY_HANDLERS = {

@@ -2,20 +2,16 @@ const fs = require("fs");
 const path = require("path");
 const { isTwseTradingDay } = require("../scripts/twse-trading-day");
 const { sendJson } = require("./_http-cache");
+const { readEndpointFromDesktopSnapshot } = require("../lib/desktop-route-snapshot-cache");
+const { terminalSupabaseKey, terminalSupabaseUrl } = require("../lib/server-supabase-key");
 
 function readSecretText(file) {
   try { return fs.readFileSync(file, "utf8").trim(); } catch { return ""; }
 }
 
 const RUNTIME_DIR = process.env.FUMAN_RUNTIME_DIR || "C:/fuman-runtime";
-const SUPABASE_URL = String(
-  process.env.SUPABASE_URL
-  || process.env.FUMAN_SUPABASE_URL
-  || "https://cpmpfhbzutkiecccekfr.supabase.co"
-).replace(/\/+$/, "");
-const SUPABASE_KEY = process.env.SUPABASE_ANON_KEY
-  || process.env.FUMAN_SUPABASE_ANON_KEY
-  || readSecretText(path.join(RUNTIME_DIR, "secrets", "supabase-anon-key.txt"));
+const SUPABASE_URL = terminalSupabaseUrl({ runtimeDir: RUNTIME_DIR });
+const SUPABASE_KEY = terminalSupabaseKey({ runtimeDir: RUNTIME_DIR });
 
 const TABLE = process.env.WARRANT_FLOW_SUPABASE_RESULTS_TABLE || "warrant_flow_scan_results";
 const LATEST_RUN_VIEW = process.env.WARRANT_FLOW_SUPABASE_LATEST_RUN_VIEW || "v_warrant_flow_latest_complete_run";
@@ -99,6 +95,49 @@ function apiOnlyError(reason = "", tradingDay = null) {
   };
 }
 
+function emptySnapshotPayload(reason = "warrant_flow_snapshot_empty", tradingDay = null, options = {}) {
+  const marketSession = buildEmptyMarketSession(tradingDay);
+  return {
+    ok: true,
+    source: "supabase:warrant_flow_scan_results",
+    cacheSource: "snapshot-friendly-empty",
+    runId: "",
+    usedDate: "",
+    tradeDate: "",
+    sourceDate: "",
+    complete: false,
+    qualityStatus: "waiting_snapshot",
+    schemaVersion: "",
+    dataContractSource: "snapshot-friendly-fallback",
+    count: 0,
+    returnedCount: 0,
+    canvas: Boolean(options.canvas),
+    rows: [],
+    matches: [],
+    volumeCount: 0,
+    volumeMatches: [],
+    singleSignalCount: 0,
+    singleSignals: [],
+    updatedAt: new Date().toISOString(),
+    reason,
+    marketSession,
+    dataContract: {
+      ok: true,
+      partial: true,
+      skipped: true,
+      reason,
+    },
+    transport: {
+      source: "supabase",
+      table: TABLE,
+      latestRunView: LATEST_RUN_VIEW,
+      gate: "snapshot-friendly-empty",
+      via: "api/warrant-flow-latest",
+      fetchedAt: new Date().toISOString(),
+    },
+  };
+}
+
 async function fetchRowsFrom(table, query) {
   const response = await fetch(`${SUPABASE_URL}/rest/v1/${table}?${query}`, {
     headers: {
@@ -119,6 +158,21 @@ async function fetchRowsFrom(table, query) {
 function cleanNumber(value) {
   const number = Number(String(value ?? "").replace(/[,+%]/g, ""));
   return Number.isFinite(number) ? number : 0;
+}
+
+function readRequestOptions(request) {
+  try {
+    const url = new URL(request.url, `https://${request.headers.host || "localhost"}`);
+    const canvas = url.searchParams.get("canvas") === "1";
+    const limit = Math.max(1, Math.min(canvas ? 120 : 3000, cleanNumber(url.searchParams.get("limit")) || (canvas ? 80 : 3000)));
+    const snapshotFriendly = canvas
+      || url.searchParams.get("snapshotBuild") === "1"
+      || url.searchParams.get("fastBundle") === "1"
+      || url.searchParams.get("shell") === "1";
+    return { canvas, limit, snapshotFriendly };
+  } catch {
+    return { canvas: false, limit: 3000, snapshotFriendly: false };
+  }
 }
 
 function schemaVersionAtLeast(actual, required) {
@@ -188,7 +242,7 @@ function normalizeRow(row) {
   };
 }
 
-function buildPayload(rows, run) {
+function buildPayload(rows, run, options = {}) {
   const byType = (type) => rows
     .filter((row) => String(row.result_type || "match") === type)
     .sort((a, b) => cleanNumber(a.rank) - cleanNumber(b.rank) || String(a.code).localeCompare(String(b.code)))
@@ -196,6 +250,9 @@ function buildPayload(rows, run) {
   const matches = byType("match");
   const volumeMatches = byType("volume");
   const singleSignals = byType("single");
+  const outputMatches = options.canvas ? matches.slice(0, options.limit || 80) : matches;
+  const outputVolumeMatches = options.canvas ? volumeMatches.slice(0, options.limit || 80) : volumeMatches;
+  const outputSingleSignals = options.canvas ? singleSignals.slice(0, options.limit || 80) : singleSignals;
   const scanDate = compactDateKey(run?.scan_date || rows[0]?.scan_date || "");
   const usedDate = compactDateKey(run?.payload?.usedDate || run?.payload?.tradeDate || scanDate);
   const sourceDate = compactDateKey(run?.payload?.sourceDate || run?.payload?.tradeDate || scanDate || usedDate);
@@ -214,12 +271,14 @@ function buildPayload(rows, run) {
     schemaVersion: String(run?.schema_version || rows[0]?.schema_version || ""),
     dataContractSource: String(run?.data_contract_source || rows[0]?.data_contract_source || "warrant-flow-cache"),
     count: matches.length,
-    rows: matches,
-    matches,
+    returnedCount: outputMatches.length,
+    canvas: Boolean(options.canvas),
+    rows: outputMatches,
+    matches: outputMatches,
     volumeCount: volumeMatches.length,
-    volumeMatches,
+    volumeMatches: outputVolumeMatches,
     singleSignalCount: singleSignals.length,
-    singleSignals,
+    singleSignals: outputSingleSignals,
     transport: {
       source: "supabase",
       table: TABLE,
@@ -307,8 +366,9 @@ async function fetchRecentCompleteRuns(limit = 24) {
   return merged.slice(0, limit);
 }
 
-async function fetchRowsForRun(run) {
+async function fetchRowsForRun(run, limit = 3000) {
   if (!run?.run_id) return [];
+  const safeLimit = Math.max(1, Math.min(3000, cleanNumber(limit) || 3000));
   return fetchRowsFrom(
     TABLE,
     [
@@ -316,19 +376,20 @@ async function fetchRowsForRun(run) {
       "strategy=eq.warrant_flow",
       `run_id=eq.${encodeURIComponent(run.run_id)}`,
       "order=result_type.asc,rank.asc",
-      "limit=3000",
+      `limit=${safeLimit}`,
     ].join("&")
   );
 }
 
-async function fetchLatestCompleteRows() {
+async function fetchLatestCompleteRows(options = {}) {
   const runs = await fetchRecentCompleteRuns();
   const skippedInvalidRuns = [];
   for (const run of runs) {
     if (run.result_count !== undefined && cleanNumber(run.result_count) <= 0) continue;
-    const rows = await fetchRowsForRun(run);
+    const rows = await fetchRowsForRun(run, options.snapshotFriendly ? options.limit : 3000);
     if (!rows.length) continue;
     const payload = buildPayload(rows, run);
+    if (options.snapshotFriendly) return { rows, run, skippedInvalidRuns };
     const dataContract = validateDataContract(payload);
     if (dataContract.ok) return { rows, run, skippedInvalidRuns };
     skippedInvalidRuns.push({
@@ -339,8 +400,9 @@ async function fetchLatestCompleteRows() {
   }
   const run = await fetchLatestCompleteRun();
   if (!run?.run_id) return { rows: [], run: runs[0] || null, skippedInvalidRuns };
-  const rows = await fetchRowsForRun(run);
+  const rows = await fetchRowsForRun(run, options.snapshotFriendly ? options.limit : 3000);
   const payload = buildPayload(rows, run);
+  if (options.snapshotFriendly && rows.length) return { rows, run, skippedInvalidRuns };
   const dataContract = validateDataContract(payload);
   if (rows.length && dataContract.ok) return { rows, run, skippedInvalidRuns };
   if (rows.length) {
@@ -393,6 +455,15 @@ module.exports = async function handler(request, response) {
     return;
   }
 
+  const cached = await readEndpointFromDesktopSnapshot(request, {
+    timeoutMs: 700,
+    via: "api/warrant-flow-latest",
+  });
+  if (cached) {
+    sendJson(request, response, cached, "warrant-flow");
+    return;
+  }
+
   let tradingDay = null;
   try {
     tradingDay = await isTwseTradingDay(new Date(), { stateDir: TWSE_STATE_DIR });
@@ -405,17 +476,27 @@ module.exports = async function handler(request, response) {
     };
   }
 
+  const options = readRequestOptions(request);
   try {
     if (!SUPABASE_URL || !SUPABASE_KEY) {
+      if (options.snapshotFriendly) {
+        response.status(200).json(emptySnapshotPayload("supabase_not_configured", tradingDay, options));
+        return;
+      }
       response.status(503).json(apiOnlyError("supabase_not_configured", tradingDay));
       return;
     }
-    const latest = await fetchLatestCompleteRows();
+    const latest = await fetchLatestCompleteRows(options);
     if (!latest.rows.length) {
+      if (options.snapshotFriendly) {
+        response.status(200).json(emptySnapshotPayload("warrant_flow_scan_results_latest_empty", tradingDay, options));
+        return;
+      }
       response.status(404).json(apiOnlyError("warrant_flow_scan_results_latest_empty", tradingDay));
       return;
     }
-    const payload = buildPayload(latest.rows, latest.run);
+    const fullPayload = buildPayload(latest.rows, latest.run);
+    const payload = buildPayload(latest.rows, latest.run, options);
     if (latest.skippedInvalidRuns?.length) {
       payload.transport = {
         ...(payload.transport || {}),
@@ -423,7 +504,16 @@ module.exports = async function handler(request, response) {
         skippedInvalidRuns: latest.skippedInvalidRuns,
       };
     }
-    const dataContract = validateDataContract(payload);
+    const dataContract = options.snapshotFriendly
+      ? {
+          ok: true,
+          partial: true,
+          skipped: true,
+          reason: "snapshot-friendly-limited-read",
+          requiredSchemaVersion: REQUIRED_SCHEMA_VERSION,
+          schemaVersion: payload.schemaVersion || "",
+        }
+      : validateDataContract(fullPayload);
     payload.dataContract = dataContract;
     if (!dataContract.ok) {
       const errorPayload = apiOnlyError("warrant_flow_contract_invalid", tradingDay);
@@ -443,6 +533,10 @@ module.exports = async function handler(request, response) {
     }
     sendJson(request, response, withMarketSession(payload, buildMarketSession(tradingDay, payload)), "warrant-flow");
   } catch (error) {
+    if (options.snapshotFriendly) {
+      response.status(200).json(emptySnapshotPayload(error?.message || String(error), tradingDay, options));
+      return;
+    }
     response.status(503).json(apiOnlyError(error?.message || String(error), tradingDay));
   }
 };

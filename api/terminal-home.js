@@ -5,6 +5,7 @@ const strategy4Latest = require("./strategy4-latest");
 const strategy5Latest = require("./strategy5-latest");
 const institutionLatest = require("./institution-latest");
 const warrantFlowLatest = require("./warrant-flow-latest");
+const { readEndpointFromDesktopSnapshot } = require("../lib/desktop-route-snapshot-cache");
 
 function createCaptureResponse() {
   return {
@@ -250,6 +251,16 @@ module.exports = async function handler(request, response) {
 
   if (request.method !== "GET") {
     response.status(405).json({ ok: false, error: "method_not_allowed" });
+    return;
+  }
+
+  const cached = await readEndpointFromDesktopSnapshot(request, {
+    allowFullEndpoint: true,
+    timeoutMs: 700,
+    via: "api/terminal-home",
+  });
+  if (cached) {
+    response.status(200).json(cached);
     return;
   }
 

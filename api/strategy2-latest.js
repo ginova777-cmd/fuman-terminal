@@ -1,5 +1,6 @@
 const fs = require("fs");
 const path = require("path");
+const { terminalSupabaseKey, terminalSupabaseUrl } = require("../lib/server-supabase-key");
 
 function readSecretText(file) {
   try { return fs.readFileSync(file, "utf8").trim(); } catch { return ""; }
@@ -7,12 +8,8 @@ function readSecretText(file) {
 
 const ROOT = path.resolve(__dirname, "..");
 const RUNTIME_DIR = process.env.FUMAN_RUNTIME_DIR || "C:/fuman-runtime";
-const SUPABASE_URL = process.env.SUPABASE_URL
-  || process.env.FUMAN_SUPABASE_URL
-  || "https://cpmpfhbzutkiecccekfr.supabase.co";
-const SUPABASE_KEY = process.env.SUPABASE_ANON_KEY
-  || process.env.FUMAN_SUPABASE_ANON_KEY
-  || readSecretText(path.join(RUNTIME_DIR, "secrets", "supabase-anon-key.txt"));
+const SUPABASE_URL = terminalSupabaseUrl({ root: ROOT, runtimeDir: RUNTIME_DIR });
+const SUPABASE_KEY = terminalSupabaseKey({ root: ROOT, runtimeDir: RUNTIME_DIR });
 
 const LATEST_RUN_VIEW = process.env.STRATEGY2_SUPABASE_LATEST_RUN_VIEW || "v_strategy2_latest_complete_run";
 const RUNS_TABLE = process.env.STRATEGY2_SUPABASE_RUNS_TABLE || "strategy2_scan_runs";
@@ -143,6 +140,151 @@ function apiOnlyError(error, detail = "") {
   };
 }
 
+function parseRequestOptions(request) {
+  let url = null;
+  try {
+    url = new URL(request.url || "", `http://${request.headers?.host || "localhost"}`);
+  } catch {
+    url = new URL("http://localhost/");
+  }
+  const params = url.searchParams;
+  const compact = ["canvas", "compact", "shell"].some((key) => /^(1|true|yes)$/i.test(params.get(key) || ""));
+  const requestedLimit = Number(params.get("limit") || "");
+  const fallbackLimit = compact ? 60 : 200;
+  const maxLimit = compact ? 120 : 500;
+  const limit = Math.max(20, Math.min(maxLimit, Number.isFinite(requestedLimit) && requestedLimit > 0 ? requestedLimit : fallbackLimit));
+  return {
+    compact,
+    canvas: /^(1|true|yes)$/i.test(params.get("canvas") || ""),
+    shell: /^(1|true|yes)$/i.test(params.get("shell") || ""),
+    limit,
+  };
+}
+
+function cleanNumber(value) {
+  const number = Number(String(value ?? "").replace(/[,+%]/g, "").trim());
+  return Number.isFinite(number) ? number : 0;
+}
+
+function compactText(value, limit = 160) {
+  const text = String(value ?? "").replace(/\s+/g, " ").trim();
+  return text.length > limit ? `${text.slice(0, limit - 1)}…` : text;
+}
+
+function compactStrategy2Row(row, index = 0) {
+  const active = row?.activeMatch && typeof row.activeMatch === "object" ? row.activeMatch : {};
+  const match = Array.isArray(row?.matches) && row.matches[0] && typeof row.matches[0] === "object" ? row.matches[0] : {};
+  const code = String(row?.code || row?.stockNo || row?.stock_no || row?.symbol || "").match(/\d{4}/)?.[0] || "";
+  const name = compactText(row?.name || row?.stockName || row?.stock_name || code || "", 48);
+  const state = compactText(row?.state || row?.stateId || row?.status || active.name || active.id || match.name || match.id || "", 48);
+  const reason = compactText(
+    row?.reason || row?.signal || active.reason || match.reason || row?.note || row?.message || "",
+    180
+  );
+  const percent = row?.percent ?? row?.changePercent ?? row?.change_percent ?? row?.change ?? "";
+  const score = row?.score ?? row?.rankScore ?? active.score ?? match.score ?? "";
+  return {
+    rank: cleanNumber(row?.rank) || index + 1,
+    code,
+    name,
+    title: name || code,
+    state,
+    stateId: row?.stateId || row?.state_id || "",
+    status: row?.status || state,
+    signal: compactText(row?.signal || state || reason, 72),
+    reason,
+    score,
+    percent,
+    price: row?.price ?? row?.close ?? row?.observedPrice ?? row?.entryPrice ?? "",
+    close: row?.close ?? row?.price ?? row?.observedPrice ?? "",
+    volume: row?.volume ?? row?.tradeVolume ?? row?.volumeLots ?? "",
+    value: row?.value ?? row?.tradeValue ?? "",
+    quoteTime: row?.quoteTime || row?.time || row?.updatedAt || "",
+    time: row?.time || row?.quoteTime || "",
+    activeMatch: active?.id || active?.name || active?.reason ? {
+      id: active.id || active.name || "",
+      name: active.name || active.id || "",
+      reason: compactText(active.reason || "", 120),
+      score: active.score ?? "",
+    } : undefined,
+  };
+}
+
+function rankStrategy2Rows(rows) {
+  return (Array.isArray(rows) ? rows : [])
+    .filter((row) => row && typeof row === "object")
+    .map((row, index) => compactStrategy2Row(row, index))
+    .filter((row) => row.code || row.name || row.reason)
+    .sort((a, b) => {
+      const aEntry = /entry|go|進場/i.test(`${a.stateId} ${a.state} ${a.signal}`);
+      const bEntry = /entry|go|進場/i.test(`${b.stateId} ${b.state} ${b.signal}`);
+      return Number(bEntry) - Number(aEntry)
+        || cleanNumber(b.score) - cleanNumber(a.score)
+        || cleanNumber(b.percent) - cleanNumber(a.percent)
+        || cleanNumber(a.rank) - cleanNumber(b.rank)
+        || String(a.code).localeCompare(String(b.code), "zh-Hant");
+    })
+    .map((row, index) => ({ ...row, rank: index + 1 }));
+}
+
+function compactStrategy2Payload(payload, options) {
+  if (!options?.compact) return payload;
+  const limit = options.limit || 60;
+  const events = rankStrategy2Rows(payload?.events).slice(0, limit);
+  const eventCodes = new Set(events.map((row) => row.code).filter(Boolean));
+  const rankedRecords = rankStrategy2Rows(payload?.records);
+  const records = [
+    ...rankedRecords.filter((row) => eventCodes.has(row.code)),
+    ...rankedRecords.filter((row) => !eventCodes.has(row.code)),
+  ].slice(0, limit);
+  const seen = new Set();
+  const rows = [...events, ...records]
+    .filter((row) => {
+      const key = row.code ? `${row.code}|${row.state}|${row.reason}` : `${row.rank}|${row.reason}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
+    .slice(0, limit);
+  return {
+    ok: payload?.ok !== false,
+    compact: true,
+    canvas: Boolean(options.canvas),
+    shell: Boolean(options.shell),
+    compactLimit: limit,
+    cacheSource: payload?.cacheSource || "supabase-api",
+    gate: payload?.gate || AUTHORITATIVE_GATE,
+    reason: payload?.reason || "complete-run-authoritative",
+    updatedAt: payload?.updatedAt || payload?.generatedAt || "",
+    generatedAt: payload?.generatedAt || payload?.updatedAt || "",
+    runId: payload?.runId || payload?.transport?.runId || "",
+    date: payload?.date || "",
+    complete: payload?.complete !== false,
+    qualityStatus: payload?.qualityStatus || "complete",
+    scanWindow: payload?.scanWindow || null,
+    marketSession: payload?.marketSession || null,
+    count: rows.length,
+    matchCount: cleanNumber(payload?.matchCount || payload?.entryCount || payload?.aCount || rows.length),
+    entryCount: cleanNumber(payload?.entryCount || payload?.aCount || events.length),
+    aCount: cleanNumber(payload?.aCount || payload?.entryCount || events.length),
+    bOnlyCount: cleanNumber(payload?.bOnlyCount),
+    totalCount: cleanNumber(payload?.totalCount || payload?.scanned || payload?.total || payload?.records?.length),
+    scanned: cleanNumber(payload?.scanned || payload?.records?.length),
+    total: cleanNumber(payload?.total || payload?.records?.length),
+    events,
+    records,
+    rows,
+    transport: {
+      ...(payload?.transport || {}),
+      compact: true,
+      canvas: Boolean(options.canvas),
+      limit,
+      via: "api/strategy2-latest",
+      fetchedAt: new Date().toISOString(),
+    },
+  };
+}
+
 async function fetchRows(base, table, query) {
   const upstream = await fetch(`${base}/rest/v1/${table}?${query}`, {
     headers: {
@@ -166,9 +308,9 @@ function hasStrategy2PayloadRows(payload) {
     || Array.isArray(payload?.rows) && payload.rows.length > 0;
 }
 
-function buildStrategy2RunPayload(run, { skippedEmptyRunIds = [], sourceTable = LATEST_RUN_VIEW, marketSession = null } = {}) {
+function buildStrategy2RunPayload(run, { skippedEmptyRunIds = [], sourceTable = LATEST_RUN_VIEW, marketSession = null, options = null } = {}) {
   const payload = run.payload || {};
-  return {
+  const fullPayload = {
     ...payload,
     ok: payload.ok !== false,
     updatedAt: payload.updatedAt || run.updated_at || run.finished_at,
@@ -194,9 +336,10 @@ function buildStrategy2RunPayload(run, { skippedEmptyRunIds = [], sourceTable = 
       fetchedAt: new Date().toISOString(),
     },
   };
+  return compactStrategy2Payload(fullPayload, options);
 }
 
-async function fetchCompleteRunPayload(base, marketSession = null) {
+async function fetchCompleteRunPayload(base, marketSession = null, options = null) {
   const latestRows = await fetchRows(
     base,
     LATEST_RUN_VIEW,
@@ -211,7 +354,7 @@ async function fetchCompleteRunPayload(base, marketSession = null) {
   const skippedEmptyRunIds = [];
   const latestRun = latestRows[0];
   if (latestRun?.run_id && latestRun?.payload && hasStrategy2PayloadRows(latestRun.payload) && allowedForMarketSession(latestRun, marketSession)) {
-    return buildStrategy2RunPayload(latestRun, { marketSession });
+    return buildStrategy2RunPayload(latestRun, { marketSession, options });
   }
   if (latestRun?.run_id) skippedEmptyRunIds.push(latestRun.run_id);
 
@@ -230,7 +373,7 @@ async function fetchCompleteRunPayload(base, marketSession = null) {
     ].filter(Boolean).join("&")
   );
   const historyRun = historyRows.find(row => row?.run_id && row?.payload && hasStrategy2PayloadRows(row.payload) && allowedForMarketSession(row, marketSession));
-  return historyRun ? buildStrategy2RunPayload(historyRun, { skippedEmptyRunIds, sourceTable: RUNS_TABLE, marketSession }) : null;
+  return historyRun ? buildStrategy2RunPayload(historyRun, { skippedEmptyRunIds, sourceTable: RUNS_TABLE, marketSession, options }) : null;
 }
 
 module.exports = async function handler(request, response) {
@@ -244,13 +387,14 @@ module.exports = async function handler(request, response) {
   }
 
   try {
+    const options = parseRequestOptions(request);
     const base = String(SUPABASE_URL || "").replace(/\/+$/, "");
     if (!base || !SUPABASE_KEY) {
       response.status(503).json(apiOnlyError("strategy2_supabase_not_configured"));
       return;
     }
     const marketSession = marketSessionState();
-    const completeRun = await fetchCompleteRunPayload(base, marketSession);
+    const completeRun = await fetchCompleteRunPayload(base, marketSession, options);
     if (completeRun) {
       response.status(200).json(completeRun);
       return;

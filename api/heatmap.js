@@ -107,6 +107,37 @@ function attachHeatmapDetectWindow(payload, clock, reason) {
   };
 }
 
+function heatmapPayloadRows(payload) {
+  return (payload?.sectors || []).flatMap((sector) => sector?.stocks || sector?.rows || []);
+}
+
+function normalizeHeatmapDate(value) {
+  return String(value || "").replace(/\D/g, "").slice(0, 8);
+}
+
+function normalizeHeatmapTime(value) {
+  const digits = String(value || "").replace(/\D/g, "");
+  if (digits.length >= 6) return digits.slice(0, 6);
+  if (digits.length >= 4) return `${digits.slice(0, 4)}00`;
+  return "";
+}
+
+function heatmapPayloadMeta(payload) {
+  const rows = heatmapPayloadRows(payload);
+  const dates = rows.map((stock) => normalizeHeatmapDate(stock?.quoteDate || stock?.date)).filter(Boolean).sort();
+  const times = rows.map((stock) => normalizeHeatmapTime(stock?.quoteTime || stock?.time || stock?.updatedAt)).filter(Boolean).sort();
+  return {
+    rows: rows.length,
+    maxDate: dates[dates.length - 1] || "",
+    maxTime: times[times.length - 1] || "",
+  };
+}
+
+function isFinalCloseHeatmapPayload(payload, clock) {
+  const meta = heatmapPayloadMeta(payload);
+  const today = String(clock?.date || "").replace(/\D/g, "");
+  return meta.rows >= 500 && meta.maxDate === today && meta.maxTime >= "133000";
+}
 function snapshotHeatmapPayload(snapshot, clock) {
   return attachHeatmapDetectWindow({
     ...(snapshot.payload || {}),
@@ -2749,32 +2780,32 @@ module.exports = async function handler(request, response) {
   response.setHeader("Access-Control-Allow-Origin", "*");
   response.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
   response.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  response.setHeader("Cache-Control", "no-store, max-age=0");
+  response.setHeader("Pragma", "no-cache");
   if (request.method === "OPTIONS") { response.status(204).end(); return; }
   if (request.method !== "GET") { response.status(405).json({ ok: false, error: "Method not allowed" }); return; }
 
   const clock = taipeiClock();
   const detectWindowActive = isHeatmapDetectWindow(clock);
-  const snapshot = await readSnapshot("heatmap_latest", {
-    tradeDate: clock.date,
-    allowLatestFallback: true,
-    timeoutMs: 8000,
-  });
-  if (snapshot?.payload) {
-    response.setHeader("Cache-Control", "no-store, max-age=0");
-    response.status(200).json(snapshotHeatmapPayload(snapshot, clock));
-    return;
-  }
-
   if (!detectWindowActive) {
-    const snapshot = readLatestHeatmapSnapshot();
-    if (snapshot?.payload) {
-      response.setHeader("Cache-Control", "no-store, max-age=0");
+    const snapshot = await readSnapshot("heatmap_latest", {
+      tradeDate: clock.date,
+      allowLatestFallback: false,
+      timeoutMs: 900,
+    });
+    if (snapshot?.payload && isFinalCloseHeatmapPayload(snapshot.payload, clock)) {
+      response.status(200).json(snapshotHeatmapPayload(snapshot, clock));
+      return;
+    }
+
+    const localSnapshot = readLatestHeatmapSnapshot();
+    if (localSnapshot?.payload && isFinalCloseHeatmapPayload(localSnapshot.payload, clock)) {
       response.status(200).json(attachHeatmapDetectWindow(
         {
-          ...snapshot.payload,
+          ...localSnapshot.payload,
           cache: {
             hit: true,
-            source: snapshot.file,
+            source: localSnapshot.file,
             reason: "after-1330-cache",
           },
         },
@@ -2786,7 +2817,6 @@ module.exports = async function handler(request, response) {
   }
 
   if (isFreshHeatmapCache()) {
-    response.setHeader("Cache-Control", "no-store, max-age=0");
     response.status(200).json({
       ...attachHeatmapDetectWindow(heatmapCache.payload, clock, "memory-cache"),
       cache: { hit: true, ageMs: Date.now() - heatmapCache.cachedAt, ttlMs: HEATMAP_CACHE_MS },
@@ -2927,7 +2957,6 @@ module.exports = async function handler(request, response) {
     };
     heatmapCache = { cachedAt: Date.now(), payload };
 
-    response.setHeader("Cache-Control", "no-store, max-age=0");
     response.status(200).json({
       ...attachHeatmapDetectWindow(payload, clock, "live-detect-window"),
       cache: { hit: false, ageMs: 0, ttlMs: HEATMAP_CACHE_MS },
@@ -2936,3 +2965,4 @@ module.exports = async function handler(request, response) {
     response.status(502).json({ ok: false, error: error.message });
   }
 };
+

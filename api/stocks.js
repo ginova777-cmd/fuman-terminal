@@ -1,4 +1,5 @@
 const crypto = require("crypto");
+const { readEndpointFromDesktopSnapshot } = require("../lib/desktop-route-snapshot-cache");
 
 async function fetchText(url, options = {}, timeout = 12000) {
   const controller = new AbortController();
@@ -390,6 +391,16 @@ module.exports = async function handler(request, response) {
   if (request.method === "OPTIONS") { response.status(204).end(); return; }
   if (request.method !== "GET") {
     response.status(405).json({ ok: false, error: "Method not allowed" });
+    return;
+  }
+
+  const cached = await readEndpointFromDesktopSnapshot(request, {
+    timeoutMs: 650,
+    via: "api/stocks",
+  });
+  if (cached) {
+    response.setHeader("Cache-Control", "s-maxage=60, stale-while-revalidate=300");
+    response.status(200).json(cached);
     return;
   }
 

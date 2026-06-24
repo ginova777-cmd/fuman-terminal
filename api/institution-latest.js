@@ -1,19 +1,15 @@
 const fs = require("fs");
 const path = require("path");
+const { readEndpointFromDesktopSnapshot } = require("../lib/desktop-route-snapshot-cache");
+const { terminalSupabaseKey, terminalSupabaseUrl } = require("../lib/server-supabase-key");
 
 function readSecretText(file) {
   try { return fs.readFileSync(file, "utf8").trim(); } catch { return ""; }
 }
 
 const RUNTIME_DIR = process.env.FUMAN_RUNTIME_DIR || "C:/fuman-runtime";
-const SUPABASE_URL = String(
-  process.env.SUPABASE_URL
-  || process.env.FUMAN_SUPABASE_URL
-  || "https://cpmpfhbzutkiecccekfr.supabase.co"
-).replace(/\/+$/, "");
-const SUPABASE_KEY = process.env.SUPABASE_ANON_KEY
-  || process.env.FUMAN_SUPABASE_ANON_KEY
-  || readSecretText(path.join(RUNTIME_DIR, "secrets", "supabase-anon-key.txt"));
+const SUPABASE_URL = terminalSupabaseUrl({ runtimeDir: RUNTIME_DIR });
+const SUPABASE_KEY = terminalSupabaseKey({ runtimeDir: RUNTIME_DIR });
 
 const TABLE = process.env.INSTITUTION_SUPABASE_RESULTS_TABLE || "institution_scan_results";
 const LATEST_RUN_VIEW = process.env.INSTITUTION_SUPABASE_LATEST_RUN_VIEW || "v_institution_latest_complete_run";
@@ -58,6 +54,17 @@ function cleanNumber(value) {
   return Number.isFinite(number) ? number : 0;
 }
 
+function readRequestOptions(request) {
+  try {
+    const url = new URL(request.url, `https://${request.headers.host || "localhost"}`);
+    const canvas = url.searchParams.get("canvas") === "1";
+    const limit = Math.max(1, Math.min(canvas ? 120 : 3000, cleanNumber(url.searchParams.get("limit")) || (canvas ? 80 : 3000)));
+    return { canvas, limit };
+  } catch {
+    return { canvas: false, limit: 3000 };
+  }
+}
+
 function normalizeRow(row) {
   const payload = row.payload && typeof row.payload === "object" ? row.payload : {};
   return {
@@ -75,12 +82,13 @@ function normalizeRow(row) {
   };
 }
 
-function buildPayload(rows, run) {
+function buildPayload(rows, run, options = {}) {
   const sorted = rows
     .slice()
     .sort((a, b) => cleanNumber(a.rank) - cleanNumber(b.rank) || String(a.code).localeCompare(String(b.code)))
     .map(normalizeRow);
-  const data = Object.fromEntries(sorted.map((row) => [row.code, row]).filter(([code]) => code));
+  const outputRows = options.canvas ? sorted.slice(0, options.limit || 80) : sorted;
+  const data = Object.fromEntries(outputRows.map((row) => [row.code, row]).filter(([code]) => code));
   const scanDate = String(run?.scan_date || rows[0]?.scan_date || "").replace(/-/g, "");
   return {
     ok: true,
@@ -95,8 +103,10 @@ function buildPayload(rows, run) {
     schemaVersion: String(run?.schema_version || rows[0]?.schema_version || "institution-run-id-complete-v1"),
     dataContractSource: String(run?.data_contract_source || rows[0]?.data_contract_source || "institution-cache"),
     count: sorted.length,
+    returnedCount: outputRows.length,
+    canvas: Boolean(options.canvas),
     data,
-    rows: sorted,
+    rows: outputRows,
     sourceHealth: run?.payload?.sourceHealth || {},
     transport: {
       source: "supabase",
@@ -124,7 +134,7 @@ async function fetchLatestCompleteRun() {
   return rows[0]?.run_id ? rows[0] : null;
 }
 
-async function fetchLatestCompleteRows() {
+async function fetchLatestCompleteRows(limit = 3000) {
   const run = await fetchLatestCompleteRun();
   if (!run?.run_id) return { rows: [], run: null };
   const rows = await fetchRowsFrom(
@@ -134,7 +144,7 @@ async function fetchLatestCompleteRows() {
       "strategy=eq.institution",
       `run_id=eq.${encodeURIComponent(run.run_id)}`,
       "order=rank.asc",
-      "limit=3000",
+      `limit=${Math.max(1, Math.min(3000, cleanNumber(limit) || 3000))}`,
     ].join("&")
   );
   return { rows, run };
@@ -150,17 +160,27 @@ module.exports = async function handler(request, response) {
     return;
   }
 
+  const cached = await readEndpointFromDesktopSnapshot(request, {
+    timeoutMs: 650,
+    via: "api/institution-latest",
+  });
+  if (cached) {
+    response.status(200).json(cached);
+    return;
+  }
+
   try {
+    const options = readRequestOptions(request);
     if (!SUPABASE_URL || !SUPABASE_KEY) {
       response.status(503).json(apiOnlyError("supabase_not_configured"));
       return;
     }
-    const latest = await fetchLatestCompleteRows();
+    const latest = await fetchLatestCompleteRows(options.canvas ? options.limit : 3000);
     if (!latest.rows.length) {
       response.status(404).json(apiOnlyError("institution_scan_results_latest_empty"));
       return;
     }
-    response.status(200).json(buildPayload(latest.rows, latest.run));
+    response.status(200).json(buildPayload(latest.rows, latest.run, options));
   } catch (error) {
     response.status(503).json(apiOnlyError(error?.message || String(error)));
   }

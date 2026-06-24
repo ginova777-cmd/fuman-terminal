@@ -1,5 +1,6 @@
 const fs = require("fs");
 const path = require("path");
+const { terminalSupabaseKey, terminalSupabaseUrl } = require("../lib/server-supabase-key");
 
 const { chipTradeExclusion, loadChipTradeBlacklist } = require("../lib/chip-trade-exclusions");
 
@@ -9,14 +10,8 @@ function readSecretText(file) {
 
 const RUNTIME_DIR = process.env.FUMAN_RUNTIME_DIR || "C:/fuman-runtime";
 const SOURCE_NAME = process.env.FUMAN_TDCC_SOURCE_NAME || "fuman_tdcc_shareholding_1000";
-const SUPABASE_URL = String(
-  process.env.SUPABASE_URL
-  || process.env.FUMAN_SUPABASE_URL
-  || "https://cpmpfhbzutkiecccekfr.supabase.co"
-).replace(/\/+$/, "");
-const SUPABASE_KEY = process.env.SUPABASE_ANON_KEY
-  || process.env.FUMAN_SUPABASE_ANON_KEY
-  || readSecretText(path.join(RUNTIME_DIR, "secrets", "supabase-anon-key.txt"));
+const SUPABASE_URL = terminalSupabaseUrl({ runtimeDir: RUNTIME_DIR });
+const SUPABASE_KEY = terminalSupabaseKey({ runtimeDir: RUNTIME_DIR });
 
 function cleanNumber(value) {
   return Number(String(value ?? "").replace(/[,+%]/g, "").trim()) || 0;

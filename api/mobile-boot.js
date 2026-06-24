@@ -3,7 +3,7 @@ const crypto = require("crypto");
 const FRAGMENT_TABS = ["strategy1", "strategy2", "strategy3", "strategy4", "strategy5", "chip", "warrant"];
 const TAB_ENDPOINTS = {
   strategy1: "/api/open-buy-latest",
-  strategy2: "/api/strategy2-latest",
+  strategy2: "/api/latest-strategy?key=strategy2",
   strategy3: "/api/strategy3-latest",
   strategy4: "/api/strategy4-latest",
   strategy5: "/api/strategy5-latest",
@@ -129,3 +129,5 @@ module.exports = function handler(request, response) {
     });
   });
 };
+
+

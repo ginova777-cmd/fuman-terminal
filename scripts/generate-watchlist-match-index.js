@@ -9,7 +9,7 @@ const OUTPUT = "data/strategy-match-index.json";
 
 const SOURCES = [
   { key: "openBuy", label: "策略1-明日開盤入", api: "open-buy-latest", fields: ["matches"] },
-  { key: "strategy2", label: "策略2-當沖雷達", api: "strategy2-latest", fields: ["events", "records", "matches", "rows"] },
+  { key: "strategy2", label: "策略2-當沖雷達", api: "latest-strategy?key=strategy2", fields: ["events", "records", "matches", "rows"] },
   { key: "strategy3", label: "策略3-隔日沖", api: "strategy3-latest", fields: ["matches", "rows"] },
   { key: "strategy4", label: "策略4-波段", api: "strategy4-latest", fields: ["matches", "rows"] },
   { key: "strategy5", label: "策略5-綜合策略", api: "strategy5-latest", fields: ["matches", "rows"] },
@@ -286,3 +286,4 @@ main().catch((error) => {
   console.error(error);
   process.exit(1);
 });
+

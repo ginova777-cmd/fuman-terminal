@@ -1,22 +1,15 @@
 const fs = require("fs");
 const path = require("path");
 const { isTwseTradingDay } = require("../scripts/twse-trading-day");
+const { terminalSupabaseKey, terminalSupabaseUrl } = require("../lib/server-supabase-key");
 
 function readSecretText(file) {
   try { return fs.readFileSync(file, "utf8").trim(); } catch { return ""; }
 }
 
 const RUNTIME_DIR = process.env.FUMAN_RUNTIME_DIR || "C:/fuman-runtime";
-const SUPABASE_URL = String(
-  process.env.SUPABASE_URL
-  || process.env.FUMAN_SUPABASE_URL
-  || readSecretText(path.join(RUNTIME_DIR, "secrets", "supabase-url.txt"))
-  || "https://cpmpfhbzutkiecccekfr.supabase.co"
-).replace(/\/+$/, "");
-const SUPABASE_KEY = process.env.SUPABASE_ANON_KEY
-  || process.env.FUMAN_SUPABASE_ANON_KEY
-  || readSecretText(path.join(RUNTIME_DIR, "secrets", "supabase-anon-key.txt"))
-  || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNwbXBmaGJ6dXRraWVjY2Nla2ZyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODEwNDQ0NDYsImV4cCI6MjA5NjYyMDQ0Nn0.8vQ0vICktypLNyDu4MJuXiNZMY0w0op2dtijji-qlFU";
+const SUPABASE_URL = terminalSupabaseUrl({ runtimeDir: RUNTIME_DIR });
+const SUPABASE_KEY = terminalSupabaseKey({ runtimeDir: RUNTIME_DIR });
 const TABLE = process.env.FUMAN_REALTIME_RADAR_TABLE || "fuman_realtime_radar_cache";
 
 const QUOTE_TABLE = process.env.FUMAN_REALTIME_QUOTE_TABLE || "fugle_realtime_quote_latest";

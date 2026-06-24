@@ -3,6 +3,7 @@ const path = require("path");
 const scanInstitution = require("../api/institution");
 const { fetchMisQuotes } = require("../lib/mis-quotes");
 const { writeSummary } = require("./cache-summary");
+const { upsertSnapshot } = require("../lib/supabase-snapshots");
 
 const { ROOT, dataPath } = require("./runtime-paths");
 const { chipTradeExclusion, loadChipTradeBlacklist } = require("../lib/chip-trade-exclusions");
@@ -14,7 +15,7 @@ const SLOW_SCAN = ["1", "true", "yes"].includes(String(process.env.INSTITUTION_S
 const REQUEST_DELAY_MS = Number(process.env.INSTITUTION_REQUEST_DELAY_MS || (SLOW_SCAN ? 15000 : 1200));
 const FETCH_RETRIES = Number(process.env.INSTITUTION_FETCH_RETRIES || (SLOW_SCAN ? 4 : 1));
 const MIN_SOURCE_ROWS = Number(process.env.INSTITUTION_MIN_SOURCE_ROWS || 1000);
-const MIN_OUTPUT_ROWS = Number(process.env.INSTITUTION_MIN_OUTPUT_ROWS || 250);
+const MIN_OUTPUT_ROWS = Number(process.env.INSTITUTION_MIN_OUTPUT_ROWS || 1200);
 const RUNTIME_DIR = process.env.FUMAN_RUNTIME_DIR || "C:/fuman-runtime";
 const SUPABASE_URL = (
   process.env.SUPABASE_URL
@@ -245,6 +246,21 @@ async function publishInstitutionCompleteRunToSupabase(output) {
   await upsertSupabaseRows(INSTITUTION_RUNS_TABLE, [buildInstitutionRunRow(output, runId, "complete")], "run_id");
   console.log(`institution supabase run_id gate ok: ${runId}, rows ${rows.length}`);
   return runId;
+}
+
+async function publishInstitutionSnapshot(output) {
+  if (cleanNumber(output.count) < MIN_OUTPUT_ROWS) {
+    throw new Error(`institution snapshot refused: rows ${output.count} < ${MIN_OUTPUT_ROWS}`);
+  }
+  const result = await upsertSnapshot("chip_trade_latest", output, {
+    snapshotId: output.runId,
+    tradeDate: output.usedDate || output.date || "",
+    source: "supabase:chip_trade_latest",
+    reason: "complete-run-snapshot",
+    timeoutMs: Number(process.env.INSTITUTION_SNAPSHOT_WRITE_TIMEOUT_MS || 30000),
+  });
+  if (!result.ok) throw new Error(`institution snapshot upsert failed: ${result.error || result.reason || "unknown_error"}`);
+  console.log(`institution snapshot ok: chip_trade_latest rows ${output.count}, runId ${output.runId}`);
 }
 
 function formatTwseDate(date) {
@@ -511,6 +527,7 @@ async function main() {
   }
 
   await publishInstitutionCompleteRunToSupabase(output);
+  await publishInstitutionSnapshot(output);
 
   if (INSTITUTION_API_ONLY) {
     console.log(`institution API-only: skipped static institution*.json output, rows ${count}, usedDate ${output.usedDate || "--"}`);

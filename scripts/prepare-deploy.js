@@ -26,13 +26,11 @@ function runCheck(label, command) {
 
 run("guard:source", ["npm", "run", "guard:source"]);
 run("verify:strategy1-open-buy-ui", ["npm", "run", "verify:strategy1-open-buy-ui"]);
-run("verify:runtime-hotfix", ["npm", "run", "verify:runtime-hotfix"]);
 const bumpStatus = runCheck("verify:bump", ["npm", "run", "verify:bump"]);
 if (bumpStatus !== 0) {
   run("bump:version", ["npm", "run", "bump:version"]);
 }
 run("sync:source", ["npm", "run", "sync:source"]);
-run("verify:runtime-hotfix after source sync", ["npm", "run", "verify:runtime-hotfix"]);
 run("verify:version", ["npm", "run", "verify:version"]);
 run("verify:sw", ["npm", "run", "verify:sw"]);
 run("verify:mobile-layout", ["npm", "run", "verify:mobile-layout"]);

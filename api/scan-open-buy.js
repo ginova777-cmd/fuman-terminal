@@ -1,8 +1,21 @@
 const cache = new Map();
 const CACHE_MS = 30 * 60 * 1000;
 let tpexDailyCache = null;
+const fs = require("fs");
+const path = require("path");
 const { fetchMisQuotes, mergeMisQuoteIntoHistory } = require("../lib/mis-quotes");
+const { loadChipTradeBlacklist } = require("../lib/chip-trade-exclusions");
 const USE_MIS_QUOTES = process.env.OPEN_BUY_USE_MIS === "1";
+const blacklistCodes = loadChipTradeBlacklist();
+const RUNTIME_DIR = process.env.FUMAN_RUNTIME_DIR || "C:/fuman-runtime";
+function readSecretText(file) {
+  try { return fs.readFileSync(file, "utf8").trim(); } catch { return ""; }
+}
+const SUPABASE_URL = String(process.env.SUPABASE_URL || process.env.FUMAN_SUPABASE_URL || "https://cpmpfhbzutkiecccekfr.supabase.co").replace(/\/+$/, "");
+const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY
+  || process.env.FUMAN_SUPABASE_ANON_KEY
+  || readSecretText(path.join(RUNTIME_DIR, "secrets", "supabase-anon-key.txt"));
+const OPEN_BUY_DAILY_VIEW = process.env.SUPABASE_STRATEGY1_DAILY_VIEW || "strategy4_daily_ohlcv_view";
 
 async function fetchText(url, options = {}, timeout = 12000) {
   const controller = new AbortController();
@@ -106,6 +119,138 @@ function normalizeTpexDailyRow(row, date) {
   };
 }
 
+function normalizeYahooRows(payload) {
+  const result = payload?.chart?.result?.[0];
+  const timestamps = Array.isArray(result?.timestamp) ? result.timestamp : [];
+  const quote = result?.indicators?.quote?.[0] || {};
+  return timestamps.map((ts, index) => ({
+    date: new Date(ts * 1000).toISOString().slice(0, 10),
+    volume: cleanNumber(quote.volume?.[index]),
+    value: 0,
+    open: cleanNumber(quote.open?.[index]),
+    high: cleanNumber(quote.high?.[index]),
+    low: cleanNumber(quote.low?.[index]),
+    close: cleanNumber(quote.close?.[index]),
+    change: 0,
+  })).filter((row) => row.date && row.close);
+}
+
+async function fetchYahooHistory(code, marketHint = "") {
+  const hint = String(marketHint || "").toUpperCase();
+  const suffixes = hint === "TPEX" ? ["TWO", "TW"] : hint === "TWSE" ? ["TW", "TWO"] : ["TW", "TWO"];
+  for (const suffix of suffixes) {
+    try {
+      const url = `https://query1.finance.yahoo.com/v8/finance/chart/${code}.${suffix}?range=9mo&interval=1d&events=history&includeAdjustedClose=true`;
+      const payload = JSON.parse(await fetchText(url, { headers: { Referer: "https://finance.yahoo.com/" } }, 20000));
+      const rows = normalizeYahooRows(payload);
+      if (rows.length >= 35) return { market: suffix === "TWO" ? "TPEX" : "TWSE", rows, source: `yahoo-${suffix.toLowerCase()}` };
+    } catch {
+    }
+  }
+  return { market: marketHint || "", rows: [], source: "" };
+}
+
+async function fetchSupabaseHistory(code) {
+  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) return { market: "", rows: [], source: "" };
+  const query = [
+    "select=symbol,name,market,industry,trade_date,open,high,low,close,volume_shares,volume_lots,trade_value_twd,source",
+    `symbol=eq.${encodeURIComponent(code)}`,
+    "order=trade_date.desc",
+    "limit=180",
+  ].join("&");
+  try {
+    const text = await fetchText(`${SUPABASE_URL}/rest/v1/${OPEN_BUY_DAILY_VIEW}?${query}`, {
+      headers: {
+        apikey: SUPABASE_ANON_KEY,
+        Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+        Referer: "https://fuman-terminal.vercel.app/",
+      },
+    }, 20000);
+    const payload = JSON.parse(text);
+    const latest = Array.isArray(payload) ? payload[0] : null;
+    const rows = (Array.isArray(payload) ? payload : []).map((row) => ({
+      date: String(row.trade_date || "").slice(0, 10),
+      volume: cleanNumber(row.volume_lots) || normalizeVolumeLots(row.volume_shares),
+      value: cleanNumber(row.trade_value_twd),
+      open: cleanNumber(row.open),
+      high: cleanNumber(row.high),
+      low: cleanNumber(row.low),
+      close: cleanNumber(row.close),
+      change: 0,
+    })).filter((row) => row.date && row.close).sort((a, b) => a.date.localeCompare(b.date));
+    return {
+      market: String(latest?.market || "").toUpperCase() === "OTC" ? "TPEX" : "TWSE",
+      rows,
+      source: `supabase:${OPEN_BUY_DAILY_VIEW}`,
+      stock: latest ? { name: latest.name, industry: latest.industry, market: latest.market } : {},
+    };
+  } catch {
+    return { market: "", rows: [], source: "" };
+  }
+}
+
+function taipeiDateKey(value = new Date()) {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Taipei",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(value).reduce((out, part) => {
+    if (part.type !== "literal") out[part.type] = part.value;
+    return out;
+  }, {});
+  return `${parts.year}-${parts.month}-${parts.day}`;
+}
+
+async function fetchSupabaseQuoteRow(code) {
+  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) return null;
+  const table = process.env.SUPABASE_STRATEGY1_QUOTE_TABLE || "fugle_quotes_latest";
+  const query = [
+    "select=symbol,code,name,market,close,last_price,open,high,low,previous_close,prev_close,change_percent,trade_volume_lots,trade_volume,total_volume,trade_value,updated_at,last_trade_time,quote_time,is_halted,is_trial",
+    `symbol=eq.${encodeURIComponent(code)}`,
+    "limit=1",
+  ].join("&");
+  try {
+    const text = await fetchText(`${SUPABASE_URL}/rest/v1/${table}?${query}`, {
+      headers: {
+        apikey: SUPABASE_ANON_KEY,
+        Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+        Referer: "https://fuman-terminal.vercel.app/",
+      },
+    }, 12000);
+    const rows = JSON.parse(text);
+    return Array.isArray(rows) ? rows[0] || null : null;
+  } catch {
+    return null;
+  }
+}
+
+function mergeLatestQuote(history, quote) {
+  if (!quote) return history;
+  const close = cleanNumber(quote.last_price ?? quote.close);
+  const open = cleanNumber(quote.open);
+  const high = cleanNumber(quote.high);
+  const low = cleanNumber(quote.low);
+  if (!close || !open || !high || !low) return history;
+  const quoteDate = taipeiDateKey(new Date(quote.quote_time || quote.last_trade_time || quote.updated_at || Date.now()));
+  const byDate = new Map((history.rows || []).map((row) => [row.date, row]));
+  byDate.set(quoteDate, {
+    date: quoteDate,
+    volume: cleanNumber(quote.trade_volume_lots ?? quote.total_volume ?? quote.trade_volume),
+    value: cleanNumber(quote.trade_value),
+    open,
+    high,
+    low,
+    close,
+    change: cleanNumber(quote.change_percent),
+  });
+  return {
+    ...history,
+    market: String(quote.market || "").toUpperCase() === "OTC" ? "TPEX" : history.market,
+    rows: [...byDate.values()].sort((a, b) => a.date.localeCompare(b.date)).slice(-260),
+  };
+}
+
 async function fetchTpexDailyQuotes() {
   if (tpexDailyCache && Date.now() - tpexDailyCache.ts < CACHE_MS) return tpexDailyCache.value;
   const url = "https://www.tpex.org.tw/web/stock/aftertrading/daily_close_quotes/stk_quote_result.php?l=zh-tw&o=json&s=0,asc,0";
@@ -158,8 +303,21 @@ async function fetchHistory(code) {
 
   const months = monthStarts(12);
   let market = "TWSE";
-  const twseResults = await Promise.allSettled(months.map((item) => fetchTwseMonth(code, item.twse)));
-  let rows = twseResults.flatMap((result) => result.status === "fulfilled" ? result.value : []);
+  const supabaseHistory = await fetchSupabaseHistory(code);
+  let rows = supabaseHistory.rows || [];
+  if (supabaseHistory.market) market = supabaseHistory.market;
+  let value = mergeLatestQuote({
+    code,
+    market,
+    rows,
+  }, await fetchSupabaseQuoteRow(code));
+  rows = value.rows || [];
+  market = value.market || market;
+
+  if (rows.length < 35) {
+    const twseResults = await Promise.allSettled(months.map((item) => fetchTwseMonth(code, item.twse)));
+    rows = twseResults.flatMap((result) => result.status === "fulfilled" ? result.value : []);
+  }
 
   if (rows.length < 25) {
     market = "TPEX";
@@ -167,9 +325,20 @@ async function fetchHistory(code) {
     rows = tpexResults.flatMap((result) => result.status === "fulfilled" ? result.value : []);
   }
 
+  if (rows.length < 35) {
+    const yahoo = await fetchYahooHistory(code, market);
+    if (yahoo.rows.length >= rows.length) {
+      market = yahoo.market || market;
+      rows = yahoo.rows;
+    }
+  }
+  value = mergeLatestQuote({ code, market, rows }, await fetchSupabaseQuoteRow(code));
+  rows = value.rows || rows;
+  market = value.market || market;
+
   const byDate = new Map();
   rows.forEach((row) => byDate.set(row.date, row));
-  const value = {
+  value = {
     code,
     market,
     rows: [...byDate.values()].sort((a, b) => a.date.localeCompare(b.date)).slice(-260),
@@ -193,8 +362,55 @@ function normalizeVolumeLots(value) {
   return number > 1000000 ? number / 1000 : number;
 }
 
-function scanOpenBuy(code, market, rows) {
-  if (rows.length < 35) return null;
+function flagTrue(value) {
+  if (value === true) return true;
+  const text = String(value ?? "").trim().toLowerCase();
+  return text === "true" || text === "1" || text === "yes" || text === "y";
+}
+
+function strategy1HardExclusion(stock = {}) {
+  const code = normalizeCode(stock.code || stock.symbol);
+  const name = String(stock.name || "").trim();
+  const industry = String(stock.industry || stock.officialIndustry || stock.primaryIndustry || stock.quoteIndustry || "").trim();
+  const text = `${code} ${name} ${industry} ${stock.market || ""}`;
+  const reasons = [];
+  if (!/^\d{4}$/.test(code)) reasons.push("代號格式不符");
+  if (/^00/.test(code)) reasons.push("ETF/00開頭");
+  if (blacklistCodes.has(code)) reasons.push("黑名單");
+  if (flagTrue(stock.is_etf ?? stock.isEtf)) reasons.push("ETF");
+  if (flagTrue(stock.is_warrant ?? stock.isWarrant)) reasons.push("權證");
+  if (flagTrue(stock.is_cb ?? stock.isCb)) reasons.push("可轉債");
+  if (flagTrue(stock.is_blacklisted ?? stock.isBlacklisted)) reasons.push("黑名單");
+  if (flagTrue(stock.is_halted ?? stock.isHalted ?? stock.is_suspended ?? stock.isSuspended)) reasons.push("停牌/暫停交易");
+  if (/(ETF|ETN|指數|高股息|正2|反1|期貨|債|權證|認購|認售|牛證|熊證|CB|可轉債)/i.test(text)) reasons.push("非普通股");
+  if (/水泥|軍工|國防|航太|漢翔|雷虎|龍德|駐龍|晟田|寶一|亞航|千附/i.test(text)) reasons.push("水泥/軍工/國防/航太");
+  if (/^(28|58)/.test(code) || /(金控|銀行|證券|保險|票券|租賃|產險|中租|致和證|統一證|三商壽)/i.test(text)) reasons.push("金融");
+  if (/^(2610|2618|2646|6757)$/.test(code) || /(航空|空運|華航|星宇航空|台灣虎航)/i.test(text)) reasons.push("航空");
+  return [...new Set(reasons)];
+}
+
+function withDecision(row, decision, setupType, reason, extras = {}) {
+  return {
+    ...row,
+    ...extras,
+    decision,
+    setupType,
+    status: setupType,
+    setup: setupType,
+    reason,
+    strategy1Decision: {
+      decision,
+      setupType,
+      blockReason: decision === "BLOCK" ? reason : "",
+    },
+  };
+}
+
+function scanOpenBuy(code, stock, market, rows) {
+  const base = { code, name: stock?.name || code, market };
+  const hardExcluded = strategy1HardExclusion({ ...stock, code, market });
+  if (hardExcluded.length) return withDecision({ ...base, score: 0, signals: [] }, "BLOCK", "母池排除", hardExcluded.join("；"));
+  if (rows.length < 35) return withDecision({ ...base, score: 0, signals: [] }, "BLOCK", "資料不足", `日K不足 ${rows.length}/35`);
   const last = rows.at(-1);
   const prev = rows.at(-2);
   const lastVolume = normalizeVolumeLots(last.volume);
@@ -287,7 +503,19 @@ function scanOpenBuy(code, market, rows) {
     volumeRatio <= 5.0 &&
     reboundCandle;
 
-  if (!(openingPowerSetup || continuationSetup || deepReboundSetup || washoutSetup)) {
+  const recentAttackDays = rows.slice(-5).filter((row, index, list) => {
+    const previous = index > 0 ? list[index - 1] : rows.at(-6);
+    return previous?.close && ((row.close - previous.close) / previous.close) * 100 >= 2;
+  }).length;
+  const firstOrSecondAttack = recentAttackDays <= 2 && pct >= 0.8 && pct <= 8.8 && prevPct <= 5.5;
+  const strongDailyClose = qualityPrice && closeAboveMa35 && last.close > last.open && closeNearHigh && pct >= 0.8 && pct <= 8.8;
+  const volumeExpandedButControlled = lastVolume >= 800 && volumeRatio >= 0.55 && volumeRatio <= 8.5;
+  const firstStageAttack = strongDailyClose && volumeExpandedButControlled && firstOrSecondAttack && (trend || breakout || volumeTurn || reboundTurn);
+  const hotTurnoverSetup = qualityPrice && closeAboveMa35 && lastVolume >= 1500 && pct >= 0.5 && pct <= 9.8 && closeNearHigh && (volumeRatio >= 0.45 || volumeIncreaseRatio >= 1.05);
+  const watchSetup = qualityPrice && closeAboveMa35 && lastVolume >= 600 && pct >= -1.5 && pct <= 9.8 && (closeNearHigh || breakout || volumeRatio >= 0.6);
+  const candidateSetup = openingPowerSetup || continuationSetup || firstStageAttack || hotTurnoverSetup || deepReboundSetup || washoutSetup;
+
+  if (!candidateSetup && !watchSetup) {
     return null;
   }
 
@@ -327,19 +555,60 @@ function scanOpenBuy(code, market, rows) {
     (last.close >= ma20 * 0.97 ? 5 : 0) +
     (last.low <= ma20 * 1.02 ? 4 : 0)
   ));
-  const primarySetup = openingPowerSetup ? "開盤無腦入" : deepReboundSetup ? "深跌反彈" : continuationSetup ? "突破候選" : "洗盤反彈";
-  const score = primarySetup === "開盤無腦入" ? openingPowerScore : primarySetup === "深跌反彈" ? deepReboundScore : primarySetup === "洗盤反彈" ? washoutScore : continuationScore;
+  const firstStageScore = Math.min(96, Math.round(
+    58 +
+    Math.min(Math.max(pct, 0) * 3, 22) +
+    Math.min(volumeRatio * 8, 18) +
+    (breakout ? 8 : 0) +
+    (closeNearHigh ? 6 : 0) +
+    (recentAttackDays <= 2 ? 5 : 0)
+  ));
+  const hotTurnoverScore = Math.min(92, Math.round(
+    52 +
+    Math.min(Math.max(pct, 0) * 2.5, 20) +
+    Math.min(volumeRatio * 7, 16) +
+    Math.min(volumeIncreaseRatio * 4, 10) +
+    (closeNearHigh ? 6 : 0)
+  ));
+  const watchScore = Math.min(78, Math.round(
+    42 +
+    Math.min(Math.max(pct, 0) * 2, 14) +
+    Math.min(volumeRatio * 6, 14) +
+    (closeNearHigh ? 5 : 0) +
+    (breakout ? 5 : 0)
+  ));
+  const primarySetup = openingPowerSetup ? "A級 開盤無腦入"
+    : continuationSetup ? "B級 突破候選"
+    : firstStageAttack ? "B級 第一/二根攻擊"
+    : hotTurnoverSetup ? "B級 高周轉候選"
+    : deepReboundSetup ? "C級 深跌反彈"
+    : washoutSetup ? "C級 洗盤反彈"
+    : "WATCH 觀察";
+  const score = Math.max(
+    openingPowerSetup ? openingPowerScore : 0,
+    continuationSetup ? continuationScore : 0,
+    firstStageAttack ? firstStageScore : 0,
+    hotTurnoverSetup ? hotTurnoverScore : 0,
+    deepReboundSetup ? deepReboundScore : 0,
+    washoutSetup ? washoutScore : 0,
+    watchSetup ? watchScore : 0
+  );
   const takeProfit = Number((last.close * 1.012).toFixed(last.close >= 100 ? 1 : 2));
   const stopLoss = Number((last.close * 0.99).toFixed(last.close >= 100 ? 1 : 2));
   const noChase = Number((last.close * 1.045).toFixed(last.close >= 100 ? 1 : 2));
   const matchedSetups = [
-    openingPowerSetup ? "開盤無腦入" : "",
-    continuationSetup ? "突破候選" : "",
-    deepReboundSetup ? "深跌反彈" : "",
-    washoutSetup ? "洗盤反彈" : "",
+    openingPowerSetup ? "A級 開盤無腦入" : "",
+    continuationSetup ? "B級 突破候選" : "",
+    firstStageAttack ? "B級 第一/二根攻擊" : "",
+    hotTurnoverSetup ? "B級 高周轉候選" : "",
+    deepReboundSetup ? "C級 深跌反彈" : "",
+    washoutSetup ? "C級 洗盤反彈" : "",
+    !candidateSetup && watchSetup ? "WATCH 觀察" : "",
   ].filter(Boolean);
+  const decision = candidateSetup ? "BUY" : "WATCH";
 
-  return {
+  return withDecision({
+    ...base,
     code,
     market,
     date: last.date,
@@ -360,21 +629,21 @@ function scanOpenBuy(code, market, rows) {
     tailKeepsRising,
     matchedSetups,
     score,
-    status: primarySetup,
-    setup: primarySetup,
-    entry: primarySetup === "開盤無腦入" ? "09:00 開盤價" : primarySetup === "突破候選" ? "09:00 開盤價" : "09:01 站回開盤價",
+    entry: primarySetup.includes("開盤無腦入") || primarySetup.includes("突破") || primarySetup.includes("攻擊") || primarySetup.includes("高周轉") ? "09:00 開盤價" : "09:01 站回開盤價",
     takeProfit,
     stopLoss,
     noChase,
     exitTime: "09:10",
-    reason: primarySetup === "深跌反彈"
+    signals: matchedSetups.map((label) => ({ label, reason: label })),
+  }, decision, primarySetup, primarySetup.includes("深跌反彈")
       ? `深跌反彈：長週期高點回落 ${dropPercent.toFixed(1)}%，20日箱體 ${boxRange.toFixed(1)}%，量增 ${volumeIncreaseRatio.toFixed(1)} 倍、量比 ${volumeRatio.toFixed(2)}，收盤站上MA35 ${ma35.toFixed(2)}，紅K突破箱體頸線並站上月線。`
-      : primarySetup === "開盤無腦入"
+      : primarySetup.includes("開盤無腦入")
       ? `開盤無腦入：漲幅 ${pct.toFixed(2)}%，成交量 ${Math.round(lastVolume).toLocaleString("zh-TW")} 張、量比 ${volumeRatio.toFixed(2)}，收盤站上MA35 ${ma35.toFixed(2)}，紅K強攻收在日內強勢區，前一天先列入開盤進場名單。`
-      : primarySetup === "洗盤反彈"
+      : primarySetup.includes("洗盤反彈")
       ? `洗盤反彈：昨日漲幅 ${pct.toFixed(2)}%，前日強勢 ${prevPct.toFixed(2)}%，量比 ${volumeRatio.toFixed(2)}，收盤站上MA35 ${ma35.toFixed(2)}，回測均線後收離低點，09:01 站回開盤價才進。`
-      : `突破候選：昨日漲幅 ${pct.toFixed(2)}%，量比 ${volumeRatio.toFixed(2)}，成交量 ${Math.round(lastVolume).toLocaleString("zh-TW")} 張，收盤站上MA35 ${ma35.toFixed(2)}，尾盤收近高點，列入開盤候選。`,
-  };
+      : decision === "WATCH"
+      ? `觀察：漲幅 ${pct.toFixed(2)}%，量比 ${volumeRatio.toFixed(2)}，收盤站上MA35 ${ma35.toFixed(2)}，但尚未達 21:30 BUY 候選強度。`
+      : `21:30 候選：昨日漲幅 ${pct.toFixed(2)}%，量比 ${volumeRatio.toFixed(2)}，成交量 ${Math.round(lastVolume).toLocaleString("zh-TW")} 張，收盤站上MA35 ${ma35.toFixed(2)}，收近高點/量價轉強，列入明日開盤候選。`);
 }
 
 module.exports = async function handler(request, response) {
@@ -392,6 +661,13 @@ module.exports = async function handler(request, response) {
     .map(normalizeCode)
     .filter((code) => /^\d{4}$/.test(code))
     .filter((code) => !/^00/.test(code));
+  let stockMeta = new Map();
+  try {
+    const parsed = JSON.parse(String(request.query?.stocks || "[]"));
+    if (Array.isArray(parsed)) {
+      stockMeta = new Map(parsed.map((stock) => [normalizeCode(stock?.code || stock?.symbol), stock]).filter(([code]) => /^\d{4}$/.test(code)));
+    }
+  } catch {}
 
   if (!codes.length) {
     response.status(400).json({ ok: false, error: "Missing codes", matches: [] });
@@ -400,15 +676,21 @@ module.exports = async function handler(request, response) {
 
   const quoteMap = USE_MIS_QUOTES ? await fetchMisQuotes(codes) : new Map();
   const results = await Promise.allSettled(codes.map(async (code) => {
+    const stock = stockMeta.get(code) || {};
     const history = mergeMisQuoteIntoHistory(await mergeTpexDailyQuote(code, await fetchHistory(code)), quoteMap.get(code));
-    if (!history.rows.length) return null;
-    return scanOpenBuy(code, history.market, history.rows);
+    if (!history.rows.length) {
+      return withDecision({ code, name: stock.name || code, market: stock.market || "", score: 0, signals: [] }, "BLOCK", "日K缺資料", "TWSE/TPEX/Yahoo 日K皆無有效資料");
+    }
+    return scanOpenBuy(code, stock, history.market, history.rows);
   }));
 
-  const matches = results
+  const rows = results
     .filter((result) => result.status === "fulfilled" && result.value)
     .map((result) => result.value)
     .sort((a, b) => b.score - a.score || b.percent - a.percent);
+  const matches = rows.filter((row) => row.decision === "BUY");
+  const watch = rows.filter((row) => row.decision === "WATCH");
+  const block = rows.filter((row) => row.decision === "BLOCK");
 
   response.setHeader("Cache-Control", "s-maxage=120, stale-while-revalidate=600");
   response.status(200).json({
@@ -417,6 +699,11 @@ module.exports = async function handler(request, response) {
     scanned: codes.length,
     scannedCodes: codes,
     count: matches.length,
+    resultCount: rows.length,
+    buyCount: matches.length,
+    watchCount: watch.length,
+    blockCount: block.length,
+    rows,
     matches,
     rules: {
       takeProfit: "+1.2%",
@@ -429,6 +716,7 @@ module.exports = async function handler(request, response) {
       .filter(Boolean),
   });
 };
+
 
 
 

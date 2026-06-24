@@ -1,19 +1,15 @@
 const fs = require("fs");
 const path = require("path");
+const { readEndpointFromDesktopSnapshot } = require("../lib/desktop-route-snapshot-cache");
+const { terminalSupabaseKey, terminalSupabaseUrl } = require("../lib/server-supabase-key");
 
 function readSecretText(file) {
   try { return fs.readFileSync(file, "utf8").trim(); } catch { return ""; }
 }
 
 const RUNTIME_DIR = process.env.FUMAN_RUNTIME_DIR || "C:/fuman-runtime";
-const SUPABASE_URL = String(
-  process.env.SUPABASE_URL
-  || process.env.FUMAN_SUPABASE_URL
-  || "https://cpmpfhbzutkiecccekfr.supabase.co"
-).replace(/\/+$/, "");
-const SUPABASE_KEY = process.env.SUPABASE_ANON_KEY
-  || process.env.FUMAN_SUPABASE_ANON_KEY
-  || readSecretText(path.join(RUNTIME_DIR, "secrets", "supabase-anon-key.txt"));
+const SUPABASE_URL = terminalSupabaseUrl({ runtimeDir: RUNTIME_DIR });
+const SUPABASE_KEY = terminalSupabaseKey({ runtimeDir: RUNTIME_DIR });
 
 const RUNS_TABLE = process.env.SUPABASE_OPEN_BUY_RUNS_TABLE || "strategy1_open_buy_runs";
 const RESULTS_TABLE = process.env.SUPABASE_OPEN_BUY_RESULTS_TABLE || "strategy1_open_buy_results";
@@ -50,6 +46,21 @@ function isoDateKey(value) {
 function cleanNumber(value) {
   const number = Number(String(value ?? "").replace(/[,+%]/g, ""));
   return Number.isFinite(number) ? number : 0;
+}
+
+function parseRequestOptions(request) {
+  try {
+    const url = new URL(request.url || "", "http://localhost");
+    const canvas = url.searchParams.get("canvas") === "1" || url.searchParams.get("compact") === "1";
+    const limit = Math.max(1, Math.min(canvas ? 120 : 2000, cleanNumber(url.searchParams.get("limit")) || (canvas ? 60 : 2000)));
+    const snapshotFriendly = canvas
+      || url.searchParams.get("snapshotBuild") === "1"
+      || url.searchParams.get("fastBundle") === "1"
+      || url.searchParams.get("shell") === "1";
+    return { canvas, limit, snapshotFriendly };
+  } catch {
+    return { canvas: false, limit: 2000, snapshotFriendly: false };
+  }
 }
 
 async function fetchRowsFrom(table, query) {
@@ -121,7 +132,7 @@ async function fetchReadyStatus() {
   }
 }
 
-async function fetchLatestCompleteRun(readyStatus) {
+async function fetchLatestCompleteRun(readyStatus, limit = 50) {
   const latestTradingDay = compactDateKey(readyStatus?.latest_trading_day || readyStatus?.trade_date || "");
   const rows = await fetchRowsFrom(
     RUNS_TABLE,
@@ -131,7 +142,7 @@ async function fetchLatestCompleteRun(readyStatus) {
       "status=eq.complete",
       "complete=eq.true",
       "order=finished_at.desc",
-      "limit=50",
+      `limit=${Math.max(1, Math.min(50, cleanNumber(limit) || 50))}`,
     ].join("&")
   );
   return rows.find((run) => {
@@ -141,7 +152,7 @@ async function fetchLatestCompleteRun(readyStatus) {
   }) || null;
 }
 
-async function fetchRowsForRun(runId) {
+async function fetchRowsForRun(runId, limit = 2000) {
   return fetchRowsFrom(
     RESULTS_TABLE,
     [
@@ -149,12 +160,12 @@ async function fetchRowsForRun(runId) {
       "strategy=eq.strategy1",
       `run_id=eq.${encodeURIComponent(runId)}`,
       "order=rank.asc",
-      "limit=2000",
+      `limit=${Math.max(1, Math.min(2000, cleanNumber(limit) || 2000))}`,
     ].join("&")
   );
 }
 
-function buildPayload(rows, run, readyStatus) {
+function buildPayload(rows, run, readyStatus, options = {}) {
   const normalized = rows
     .slice()
     .sort((a, b) => cleanNumber(a.rank) - cleanNumber(b.rank) || String(a.code).localeCompare(String(b.code)))
@@ -189,6 +200,7 @@ function buildPayload(rows, run, readyStatus) {
       source: "strategy1-run-date",
     },
     complete: true,
+    canvas: Boolean(options.canvas),
     qualityStatus: String(run.quality_status || rows[0]?.quality_status || "complete"),
     decisionReady: readyStatus?.decision_ready === true,
     lastError: "",
@@ -273,6 +285,22 @@ function missingPayload(error, detail = "") {
   };
 }
 
+function emptySnapshotPayload(error, detail = "") {
+  const payload = missingPayload(error, detail);
+  return {
+    ...payload,
+    ok: true,
+    cacheSource: "snapshot-friendly-empty",
+    complete: false,
+    qualityStatus: "waiting_snapshot",
+    reason: detail || error,
+    transport: {
+      ...(payload.transport || {}),
+      gate: "snapshot-friendly-empty",
+    },
+  };
+}
+
 module.exports = async function handler(request, response) {
   response.setHeader("Cache-Control", "no-store, max-age=0, must-revalidate");
   response.setHeader("CDN-Cache-Control", "no-store");
@@ -283,28 +311,56 @@ module.exports = async function handler(request, response) {
     return;
   }
 
+  const cached = await readEndpointFromDesktopSnapshot(request, {
+    timeoutMs: 650,
+    via: "api/open-buy-latest",
+  });
+  if (cached) {
+    response.status(200).json(cached);
+    return;
+  }
+
+  const options = parseRequestOptions(request);
   try {
     if (!SUPABASE_URL || !SUPABASE_KEY) {
+      if (options.snapshotFriendly) {
+        response.status(200).json(emptySnapshotPayload("strategy1_supabase_not_configured"));
+        return;
+      }
       response.status(503).json(missingPayload("strategy1_supabase_not_configured"));
       return;
     }
-    const readyStatus = await fetchReadyStatus();
-    if (readyStatus?.decision_ready !== true) {
+    const readyStatus = options.snapshotFriendly
+      ? { decision_ready: false, last_error: "snapshot-friendly-skip-ready-status" }
+      : await fetchReadyStatus();
+    if (readyStatus?.decision_ready !== true && !options.snapshotFriendly) {
       response.status(503).json(missingPayload("strategy1_decision_not_ready", readyStatus?.last_error || "decision_ready=false"));
       return;
     }
-    const run = await fetchLatestCompleteRun(readyStatus);
+    const run = await fetchLatestCompleteRun(readyStatus, options.snapshotFriendly ? 12 : 50);
     if (!run?.run_id) {
+      if (options.snapshotFriendly) {
+        response.status(200).json(emptySnapshotPayload("strategy1_complete_run_missing"));
+        return;
+      }
       response.status(404).json(missingPayload("strategy1_complete_run_missing"));
       return;
     }
-    const rows = await fetchRowsForRun(run.run_id);
+    const rows = await fetchRowsForRun(run.run_id, options.limit);
     if (!rows.length) {
+      if (options.snapshotFriendly) {
+        response.status(200).json(emptySnapshotPayload("strategy1_complete_run_empty", run.run_id));
+        return;
+      }
       response.status(404).json(missingPayload("strategy1_complete_run_empty", run.run_id));
       return;
     }
-    response.status(200).json(buildPayload(rows, run, readyStatus));
+    response.status(200).json(buildPayload(rows, run, readyStatus, options));
   } catch (error) {
+    if (options.snapshotFriendly) {
+      response.status(200).json(emptySnapshotPayload("strategy1_complete_run_fetch_failed", error?.message || String(error)));
+      return;
+    }
     response.status(503).json(missingPayload("strategy1_complete_run_fetch_failed", error?.message || String(error)));
   }
 };

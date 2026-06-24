@@ -1,19 +1,15 @@
 const fs = require("fs");
 const path = require("path");
+const { readEndpointFromDesktopSnapshot } = require("../lib/desktop-route-snapshot-cache");
+const { terminalSupabaseKey, terminalSupabaseUrl } = require("../lib/server-supabase-key");
 
 function readSecretText(file) {
   try { return fs.readFileSync(file, "utf8").trim(); } catch { return ""; }
 }
 
 const RUNTIME_DIR = process.env.FUMAN_RUNTIME_DIR || "C:/fuman-runtime";
-const SUPABASE_URL = String(
-  process.env.SUPABASE_URL
-  || process.env.FUMAN_SUPABASE_URL
-  || "https://cpmpfhbzutkiecccekfr.supabase.co"
-).replace(/\/+$/, "");
-const SUPABASE_KEY = process.env.SUPABASE_ANON_KEY
-  || process.env.FUMAN_SUPABASE_ANON_KEY
-  || readSecretText(path.join(RUNTIME_DIR, "secrets", "supabase-anon-key.txt"));
+const SUPABASE_URL = terminalSupabaseUrl({ runtimeDir: RUNTIME_DIR });
+const SUPABASE_KEY = terminalSupabaseKey({ runtimeDir: RUNTIME_DIR });
 
 const TABLE = process.env.STRATEGY4_SUPABASE_RESULTS_TABLE || "strategy4_scan_results";
 const RUNS_TABLE = process.env.STRATEGY4_SUPABASE_RUNS_TABLE || "strategy4_scan_runs";
@@ -82,6 +78,17 @@ function cleanNumber(value) {
   return Number.isFinite(number) ? number : 0;
 }
 
+function parseRequestOptions(request) {
+  try {
+    const url = new URL(request.url || "", "http://localhost");
+    const canvas = url.searchParams.get("canvas") === "1" || url.searchParams.get("compact") === "1";
+    const limit = Math.max(1, Math.min(canvas ? 120 : 2000, cleanNumber(url.searchParams.get("limit")) || (canvas ? 70 : 2000)));
+    return { canvas, limit };
+  } catch {
+    return { canvas: false, limit: 2000 };
+  }
+}
+
 function normalizeSignalList(value) {
   return Array.isArray(value) ? value : [];
 }
@@ -142,7 +149,7 @@ function buildStrategy4SourceHealth(rows, run, matches) {
   };
 }
 
-function buildPayload(rows, total, run = null) {
+function buildPayload(rows, total, run = null, options = {}) {
   const first = rows[0] || {};
   const matches = rows
     .slice()
@@ -166,6 +173,7 @@ function buildPayload(rows, total, run = null) {
     updatedAt: String(first.scan_time || first.updated_at || new Date().toISOString()),
     scanStamp: scanDate,
     complete: Boolean(first.complete),
+    canvas: Boolean(options.canvas),
     qualityStatus: String(first.quality_status || ""),
     count: matches.length,
     total: Math.max(matches.length, cleanNumber(total), 1500),
@@ -207,7 +215,7 @@ async function fetchLatestCompleteRun() {
   return row;
 }
 
-async function fetchLatestCompleteRows() {
+async function fetchLatestCompleteRows(limit = 2000) {
   const run = await fetchLatestCompleteRun();
   if (!run?.run_id) return { rows: [], run: null, gate: "missing-complete-run", runId: "" };
   const query = [
@@ -215,7 +223,7 @@ async function fetchLatestCompleteRows() {
     "strategy=eq.strategy4",
     `run_id=eq.${encodeURIComponent(run.run_id)}`,
     "order=rank.asc",
-    "limit=2000",
+    `limit=${Math.max(1, Math.min(2000, cleanNumber(limit) || 2000))}`,
   ].join("&");
   const rows = await fetchRows(query);
   return { rows, run, gate: "run_id", runId: run.run_id };
@@ -231,19 +239,31 @@ module.exports = async function handler(request, response) {
     return;
   }
 
+  const cached = await readEndpointFromDesktopSnapshot(request, {
+    timeoutMs: 650,
+    via: "api/strategy4-latest",
+  });
+  if (cached) {
+    response.status(200).json(cached);
+    return;
+  }
+
   try {
     if (!SUPABASE_URL || !SUPABASE_KEY) {
       response.status(503).json(apiOnlyError("strategy4_supabase_not_configured"));
       return;
     }
-    const latest = await fetchLatestCompleteRows();
+    const options = parseRequestOptions(request);
+    const latest = await fetchLatestCompleteRows(options.limit);
     const rows = latest.rows || [];
     if (!rows.length) {
       response.status(404).json(apiOnlyError("strategy4_complete_run_empty", latest.gate || "missing rows"));
       return;
     }
-    const total = await fetchExactCount("strategy4_stock_universe_view", "select=symbol&is_strategy4_eligible=eq.true&limit=1").catch(() => 0);
-    const payload = buildPayload(rows, total, latest.run);
+    const total = options.canvas
+      ? cleanNumber(latest.run?.expected_total || latest.run?.scanned_count)
+      : await fetchExactCount("strategy4_stock_universe_view", "select=symbol&is_strategy4_eligible=eq.true&limit=1").catch(() => 0);
+    const payload = buildPayload(rows, total, latest.run, options);
     payload.transport.gate = latest.gate || "";
     payload.transport.runId = latest.runId || payload.transport.runId || "";
     payload.runId = latest.runId || payload.runId || "";

@@ -1,7 +1,7 @@
 const fs = require("fs");
 const path = require("path");
 
-const strategy2Latest = require("./strategy2-latest");
+const latestStrategy = require("./latest-strategy");
 const realtimeRadarLatest = require("./realtime-radar-latest");
 const market = require("./market");
 const { readSnapshot } = require("../lib/supabase-snapshots");
@@ -319,7 +319,7 @@ module.exports = async function handler(request, response) {
   const req = { ...request, method: "GET", query: request.query || {} };
   const [marketResult, strategy2Result, radarResult] = await Promise.all([
     capture(market, req),
-    capture(strategy2Latest, req),
+    capture(latestStrategy, { ...req, query: { key: strategy2 } }),
     capture(realtimeRadarLatest, req),
   ]);
   const strategy2 = strategy2Result.payload || {};
@@ -360,4 +360,6 @@ module.exports = async function handler(request, response) {
 
   response.status(200).json(payload);
 };
+
+
 

@@ -179,6 +179,12 @@ const strategy2Scanner = read("scripts/scan-intraday-signals.js");
 const runIdCompleteGate = read("scripts/verify-run-id-complete-gates.js");
 const terminalLiveCheck = read("terminal-live-check.js");
 const terminalApp = read("terminal-app.js");
+const terminalCore = read("terminal-core.js");
+const fumanSw = read("fuman-sw.js");
+const vercelConfig = read("vercel.json");
+const indexHtml = read("index.html");
+const indexGithubHtml = read("index.github.html");
+const stylesCss = read("styles.css");
 if (!/if \(\$Scope -ne "all"\)/.test(cacheSync)) {
   issues.push("run-cache-sync.ps1 must block every non-all scope");
 }
@@ -254,8 +260,62 @@ for (const [file, content] of [
   ["terminal-live-check.js", terminalLiveCheck],
   ["scripts/generate-slim-cache.js", slimCacheGenerator],
 ]) {
-  if (/fuman-terminal-sync\.vercel\.app/.test(content)) {
+if (/fuman-terminal-sync\.vercel\.app/.test(content)) {
     issues.push(`${file} must not point runtime/deploy behavior at fuman-terminal-sync.vercel.app; official site is fuman-terminal.vercel.app`);
+  }
+}
+if (!/runtime-theme-css-disabled-by-default/.test(terminalCore) || !/allowRuntimeThemeCss\s*!==\s*true/.test(terminalCore)) {
+  issues.push("terminal-core.js must keep runtime /api/terminal-theme-css disabled by default");
+}
+if (/terminal-theme-css-snapshot-first|terminal-theme-css-runtime/.test(fumanSw)) {
+  issues.push("fuman-sw.js must not keep retired runtime theme CSS snapshot markers");
+}
+if (!/theme-cache-cleanup-20260623-01/.test(indexHtml) || !/theme-cache-cleanup-20260623-01/.test(indexGithubHtml) || !/theme-cache-cleanup-20260623-01/.test(fumanSw)) {
+  issues.push("index.html, index.github.html, and fuman-sw.js must use current theme/cache cleanup version");
+}
+for (const [file, content] of [
+  ["index.html", indexHtml],
+  ["index.github.html", indexGithubHtml],
+]) {
+  if (/#ffe7b7!important|#ff9b45!important|#ff8a3d!important/.test(content)) {
+    issues.push(`${file} must not lock brand colors with literal inline !important colors; use CSS variables`);
+  }
+  for (const marker of ["var(--brand-primary", "var(--brand-accent", "var(--brand-accent-strong"]) {
+    if (!content.includes(marker)) issues.push(`${file} missing brand CSS variable marker ${marker}`);
+  }
+}
+for (const marker of ["--brand-primary", "--brand-accent", "--brand-accent-strong", "body.fuman-light-theme"]) {
+  if (!stylesCss.includes(marker)) issues.push(`styles.css missing theme-safe brand variable marker ${marker}`);
+}
+for (const marker of [
+  "/(styles\\\\.css|terminal-core\\\\.js|terminal\\\\.js|terminal-app\\\\.js|terminal-worker\\\\.js|terminal-desktop-fast-shell\\\\.js|terminal-desktop-canvas-worker\\\\.js)",
+  "terminal-desktop-fast-shell\\\\.js$",
+  "terminal-desktop-canvas-worker\\\\.js$",
+  "styles\\\\.css$",
+]) {
+  if (!vercelConfig.includes(marker)) issues.push(`vercel.json missing no-store/immutable exclusion marker ${marker}`);
+}
+if (fs.existsSync(path.join(ROOT, "data", "terminal-theme-css.css"))) {
+  issues.push("data/terminal-theme-css.css must not exist; runtime theme CSS is retired");
+}
+const cleanupApiOnly = read("scripts/cleanup-api-only-retired-artifacts.js");
+for (const marker of ["data/terminal-theme-css.css", "RETIRED_THEME_MARKERS", "allowRuntimeThemeCss: true"]) {
+  if (!cleanupApiOnly.includes(marker)) issues.push(`cleanup-api-only-retired-artifacts.js missing retired theme cleanup marker ${marker}`);
+}
+for (const accidentalExperiment of ["routeHydrationTimer", "delayed warm-load"]) {
+  for (const [file, content] of [
+    ["terminal-core.js", terminalCore],
+    ["terminal-app.js", terminalApp],
+  ]) {
+    if (content.includes(accidentalExperiment)) issues.push(`${file} must not include paused speed experiment marker ${accidentalExperiment}`);
+  }
+}
+for (const file of ["terminal-desktop-fast-shell.js", "terminal-desktop-canvas-worker.js"]) {
+  const target = path.join(ROOT, file);
+  if (!fs.existsSync(target)) continue;
+  const content = fs.readFileSync(target, "utf8");
+  if (!/theme/i.test(content) || !/(buffer|cache).*theme|theme.*(buffer|cache)/i.test(content)) {
+    issues.push(`${file} must include theme in any canvas/pre-render buffer cache key`);
   }
 }
 if (/legacy scan_time gate|legacy_scan_time_gate|includeRunId = false|STRATEGY4_SUPABASE_RUN_ID/.test(strategy4Scanner)) {

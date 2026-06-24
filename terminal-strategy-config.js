@@ -2,7 +2,6 @@
 const STRATEGY_DEFS = [
   { id: "chip_k_confluence", label: "籌碼老K", short: "籌碼老K", icon: "老K" },
   { id: "multi_strategy_confluence", label: "🔥 多策略共振", short: "共振", icon: "🔥" },
-  { id: "foreign_trust_breakout", label: "外資投信連買準突破", short: "準突破", icon: "◆" },
   { id: "volume_turnover_breakout", label: "量價周轉強攻", short: "量價周轉", icon: "量" },
   { id: "bollinger_kdj_buy", label: "布林KDJ買點", short: "布林KDJ", icon: "K" },
   { id: "momentum", label: "動能分數 75+", short: "動能", icon: "⚡" },
@@ -28,7 +27,6 @@ const STRATEGY_BY_ID = Object.fromEntries(STRATEGY_DEFS.map((item) => [item.id, 
 const STRATEGY5_IDS = ["short_fund_flow", "chip_health_strong", "one_day_rebound", "short_squeeze", "ultra_short"];
 const STRATEGY5_BASE_PRESET_IDS = [
   "chip_k_confluence",
-  "foreign_trust_breakout",
   "limit_up_doji",
   "volume_turnover_breakout",
   "bollinger_kdj_buy",
@@ -43,9 +41,6 @@ const STRATEGY5_CARD_META = {
   },
   multi_strategy_confluence: {
     description: "全終端策略與籌碼至少命中 2 項，符合越多項排序越前。",
-  },
-  foreign_trust_breakout: {
-    description: "外資與投信同步買超，漲幅未過熱，優先觀察準突破名單。",
   },
   limit_up_doji: {
     description: "漲停後十字星，橫盤震盪超過 7 天且量能縮，再等放量陽線突破。",
@@ -63,24 +58,7 @@ const INTRADAY_EXCLUDED_CODES = new Set([
   "9103", "9105", "9110", "9136",
 ]);
 
-const INTRADAY_SIGNAL_DEFS = [
-  { id: "early_strength", title: "早盤強勢", icon: "⚡", hint: "漲幅與量能先進雷達" },
-  { id: "volume_burst", title: "爆量", icon: "📊", hint: "成交張數進市場前段" },
-  { id: "daily_breakout", title: "日K突破", icon: "▲", hint: "突破昨日或20日壓力" },
-  { id: "gap", title: "跳空", icon: "🚀", hint: "開盤高於昨收且量能放大" },
-  { id: "breakout", title: "突破", icon: "🔥", hint: "站上盤中強勢區與 VWAP" },
-  { id: "ma35_macd", title: "MA35 + MACD", icon: "🟢", hint: "站上 MA35 且動能向上" },
-  { id: "diamond", title: "鑽石", icon: "💎", hint: "回測 0.618 後收紅轉強" },
-  { id: "volume_diamond", title: "量+鑽石", icon: "💎", hint: "分時放大搭配 0.618 回測" },
-  { id: "volume_ma35", title: "量+MA35", icon: "🟢", hint: "分時放大搭配 MA35 支撐" },
-  { id: "surge", title: "瞬間拉抬", icon: "⚡", hint: "短時間價格快速推升" },
-  { id: "gua_butterfly_buy", title: "蝴蝶買", icon: "🦋", hint: "乖離反彈後突破前高" },
-  { id: "gua_flag_long", title: "旗形多", icon: "🚩", hint: "EMA多頭排列後突破旗形" },
-  { id: "gua_abcd_long", title: "ABCD多", icon: "📈", hint: "回測 EMA9 支撐後轉強" },
-  { id: "gua_orb_long", title: "ORB多", icon: "🚀", hint: "突破近段高點啟動" },
-  { id: "gua_angel_long", title: "Angel多", icon: "👼", hint: "VWAP回測支撐成功" },
-  { id: "gua_vwap_long", title: "VWAP多", icon: "🌀", hint: "由下往上突破 VWAP" },
-];
+const INTRADAY_SIGNAL_DEFS = [];
 
 const SWING_SIGNAL_DEFS = [
   { id: "bull_attack", title: "多頭攻擊", icon: "🔥", hint: "價量轉強且趨勢偏多" },
@@ -106,3 +84,4 @@ const SWING_SIGNAL_DEFS = [
     SWING_SIGNAL_DEFS,
   };
 })();
+

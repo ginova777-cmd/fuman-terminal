@@ -2119,3 +2119,83 @@ body.fuman-light-theme .data-freshness-bar.is-stale {
 body.fuman-light-theme .data-freshness-bar.is-stale::after {
   color: #1d4ed8;
 }
+
+/* desktop-light-premium-runtime-20260623 */
+:root {
+  --fuman-brand-title: #ffe7b7;
+  --fuman-brand-accent: #ff9b45;
+}
+
+body.fuman-light-theme {
+  --fuman-brand-title: #9a3412;
+  --fuman-brand-accent: #f97316;
+}
+
+@media (min-width: 901px) {
+  html body.fuman-light-theme.public-terminal,
+  html body.fuman-light-theme.public-terminal .app-shell,
+  html body.fuman-light-theme.public-terminal .dashboard {
+    background:
+      linear-gradient(rgba(30, 41, 59, 0.035) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(30, 41, 59, 0.028) 1px, transparent 1px),
+      linear-gradient(135deg, #f8fbff 0%, #eef4fb 48%, #f7fbff 100%) !important;
+    background-size: 28px 28px, 28px 28px, auto !important;
+    color: #172033 !important;
+  }
+
+  html body.fuman-light-theme.public-terminal .sidebar,
+  html body.fuman-light-theme.public-terminal .metric-card,
+  html body.fuman-light-theme.public-terminal .strength-panel,
+  html body.fuman-light-theme.public-terminal .terminal-card,
+  html body.fuman-light-theme.public-terminal .chip-tool,
+  html body.fuman-light-theme.public-terminal .chip-table-wrap,
+  html body.fuman-light-theme.public-terminal .swing-panel,
+  html body.fuman-light-theme.public-terminal .warrant-flow-panel,
+  html body.fuman-light-theme.public-terminal .watchlist-card,
+  html body.fuman-light-theme.public-terminal .ta-dashboard {
+    border-color: #d8e3ef !important;
+    background: rgba(255,255,255,0.9) !important;
+    color: #172033 !important;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.92), 0 12px 28px rgba(30, 41, 59, 0.07) !important;
+  }
+
+  html body.fuman-light-theme.public-terminal .nav-item,
+  html body.fuman-light-theme.public-terminal .strategy-nav,
+  html body.fuman-light-theme.public-terminal .chip-menu-link {
+    border: 1px solid #dbe5f0 !important;
+    background: rgba(255,255,255,0.76) !important;
+    color: #334155 !important;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.92), 0 8px 18px rgba(30, 41, 59, 0.045) !important;
+  }
+
+  html body.fuman-light-theme.public-terminal .nav-item.active,
+  html body.fuman-light-theme.public-terminal .strategy-nav.active,
+  html body.fuman-light-theme.public-terminal .chip-menu-link.active {
+    background: linear-gradient(135deg, #fff7ed 0%, #ffffff 68%, #eef6ff 100%) !important;
+    border-color: rgba(249, 115, 22, 0.5) !important;
+    color: #c2410c !important;
+    box-shadow: inset 4px 0 0 #f97316, 0 12px 26px rgba(249, 115, 22, 0.12) !important;
+  }
+
+  html body.fuman-light-theme.public-terminal .page-header,
+  html body.fuman-light-theme.public-terminal .strategy-header,
+  html body.fuman-light-theme.public-terminal .radar-topbar,
+  html body.fuman-light-theme.public-terminal .intraday-topbar,
+  html body.fuman-light-theme.public-terminal .swing-topbar,
+  html body.fuman-light-theme.public-terminal .strategy5-page-heading,
+  html body.fuman-light-theme.public-terminal #chip-trade-view .chip-page-header,
+  html body.fuman-light-theme.public-terminal #warrant-flow-view .page-header {
+    width: auto !important;
+    max-width: none !important;
+    height: auto !important;
+    min-height: 96px !important;
+    max-height: none !important;
+    border: 1px solid #d8e3ef !important;
+    border-left: 4px solid #f97316 !important;
+    border-top: 1px solid #d8e3ef !important;
+    border-radius: 10px !important;
+    background: linear-gradient(135deg, rgba(255,255,255,0.96), rgba(255,247,237,0.78) 52%, rgba(239,246,255,0.88)) !important;
+    color: #172033 !important;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.92), 0 14px 32px rgba(30, 41, 59, 0.075) !important;
+  }
+}

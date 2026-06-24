@@ -101,10 +101,10 @@ async function verifyOpenBuySupabaseReadback(baseUrl, expected) {
   if (String(run.run_id) !== String(expected.run_id)) {
     throw new Error(`run gate mismatch latest=${run.run_id} expected=${expected.run_id}`);
   }
-  if (Number(run.result_count) !== expected.match_count ||
+  if (Number(run.result_count) < expected.match_count ||
       Number(run.scanned_count) !== expected.scanned_count ||
       Number(run.expected_total) !== expected.total_count) {
-    throw new Error(`run gate count mismatch result=${run.result_count}/${expected.match_count} scanned=${run.scanned_count}/${expected.scanned_count} total=${run.expected_total}/${expected.total_count}`);
+    throw new Error(`run gate count mismatch result=${run.result_count}>=${expected.match_count} scanned=${run.scanned_count}/${expected.scanned_count} total=${run.expected_total}/${expected.total_count}`);
   }
   const resultsUrl = `${baseUrl}/rest/v1/${SUPABASE_OPEN_BUY_RESULTS_TABLE}?run_id=eq.${encodeURIComponent(expected.run_id)}&strategy=eq.strategy1&select=code`;
   const resultsResponse = await fetch(resultsUrl, {
@@ -121,8 +121,8 @@ async function verifyOpenBuySupabaseReadback(baseUrl, expected) {
   }
   const contentRange = resultsResponse.headers.get("content-range") || "";
   const resultCount = Number(contentRange.match(/\/(\d+)$/)?.[1] || 0);
-  if (resultCount !== expected.match_count) {
-    throw new Error(`result gate row count mismatch ${resultCount}/${expected.match_count}`);
+  if (resultCount < expected.match_count || resultCount !== Number(run.result_count)) {
+    throw new Error(`result gate row count mismatch rows=${resultCount} run=${run.result_count} buy=${expected.match_count}`);
   }
   return { latest: row, run, resultCount, gate: "run_id" };
 }
@@ -148,10 +148,10 @@ function normalizeSignals(value) {
 }
 
 function buildOpenBuyResultRows(output, runId) {
-  const matches = Array.isArray(output.matches) ? output.matches : [];
+  const rows = Array.isArray(output.rows) && output.rows.length ? output.rows : (Array.isArray(output.matches) ? output.matches : []);
   const scanDate = scanDateFromOutput(output);
   const scanTime = String(output.updatedAt || new Date().toISOString());
-  return matches.map((stock, index) => ({
+  return rows.map((stock, index) => ({
     run_id: runId,
     strategy: "strategy1",
     scan_date: scanDate,
@@ -168,6 +168,9 @@ function buildOpenBuyResultRows(output, runId) {
     reason: String(stock.reason || "").trim(),
     signals: normalizeSignals(stock.signals || stock.openBuySignals),
     payload: stock,
+    decision: String(stock.decision || stock.strategy1Decision?.decision || "BUY").trim().toUpperCase(),
+    block_reason: String(stock.blockReason || stock.strategy1Decision?.blockReason || "").trim(),
+    setup_type: String(stock.setupType || stock.strategy1Decision?.setupType || stock.setup || "").trim(),
     complete: Boolean(output.complete),
     quality_status: output.complete ? "complete" : "incomplete",
     generated_at: String(output.startedAt || output.updatedAt || new Date().toISOString()),
@@ -177,16 +180,21 @@ function buildOpenBuyResultRows(output, runId) {
 
 function buildOpenBuyRunRow(output, runId) {
   const scanTime = String(output.updatedAt || new Date().toISOString());
+  const rows = Array.isArray(output.rows) ? output.rows : [];
+  const buyCount = rows.length ? rows.filter((row) => String(row.decision || row.strategy1Decision?.decision || "").toUpperCase() === "BUY").length : cleanNumber(output.buyCount || output.count);
+  const watchCount = rows.length ? rows.filter((row) => String(row.decision || row.strategy1Decision?.decision || "").toUpperCase() === "WATCH").length : cleanNumber(output.watchCount);
+  const blockCount = rows.length ? rows.filter((row) => String(row.decision || row.strategy1Decision?.decision || "").toUpperCase() === "BLOCK").length : cleanNumber(output.blockCount);
   return {
     run_id: runId,
     strategy: "strategy1",
     scan_date: scanDateFromOutput(output),
+    run_trade_date: scanDateFromOutput(output),
     started_at: String(output.startedAt || output.updatedAt || new Date().toISOString()),
     finished_at: scanTime,
     status: output.complete ? "complete" : "failed",
     expected_total: cleanNumber(output.total),
     scanned_count: Array.isArray(output.scannedCodes) ? output.scannedCodes.length : cleanNumber(output.scannedThisRun),
-    result_count: Array.isArray(output.matches) ? output.matches.length : cleanNumber(output.count),
+    result_count: rows.length || (Array.isArray(output.matches) ? output.matches.length : cleanNumber(output.count)),
     error_count: Array.isArray(output.errors) ? output.errors.length : 0,
     complete: Boolean(output.complete),
     quality_status: output.complete ? "complete" : "incomplete",
@@ -198,6 +206,9 @@ function buildOpenBuyRunRow(output, runId) {
       total: cleanNumber(output.total),
       completedChunks: cleanNumber(output.completedChunks),
       totalChunks: cleanNumber(output.totalChunks),
+      buy_count: buyCount,
+      watch_count: watchCount,
+      block_count: blockCount,
       usedDate: output.usedDate || output.date || "",
     },
   };
@@ -510,9 +521,9 @@ async function fetchUniverse() {
   });
 }
 
-function runHandler(codes) {
+function runHandler(codes, stocks = []) {
   return new Promise((resolve, reject) => {
-    const req = { method: "GET", query: { codes: codes.join(",") } };
+    const req = { method: "GET", query: { codes: codes.join(","), stocks: JSON.stringify(stocks) } };
     const res = {
       statusCode: 200,
       setHeader() {},
@@ -532,11 +543,11 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-async function runHandlerWithRetry(codes, label) {
+async function runHandlerWithRetry(codes, label, stocks = []) {
   let lastError = null;
   for (let attempt = 1; attempt <= 3; attempt++) {
     try {
-      return await runHandler(codes);
+      return await runHandler(codes, stocks);
     } catch (error) {
       lastError = error;
       console.log(`${label} attempt ${attempt} failed: ${error.message}`);
@@ -557,6 +568,7 @@ async function main() {
   const previousRaw = { ok: true, total: codes.length, scannedCodes: [], matches: [] };
   const backup = { ok: true, matches: [] };
   const currentMatches = new Map();
+  const currentRows = new Map();
   const scanned = new Set();
   const failedCodes = new Set();
   let scannedThisRun = 0;
@@ -569,7 +581,10 @@ async function main() {
     const matches = [...currentMatches.values()]
       .sort((a, b) => (b.score || 0) - (a.score || 0) || (b.percent || 0) - (a.percent || 0))
       .slice(0, 200);
-    const quoteDate = universe.find((stock) => stock.quoteDate)?.quoteDate || String(matches[0]?.date || "").replace(/\D/g, "");
+    const rows = [...currentRows.values()]
+      .sort((a, b) => (b.score || 0) - (a.score || 0) || String(a.code || "").localeCompare(String(b.code || "")))
+      .slice(0, 2000);
+    const quoteDate = universe.find((stock) => stock.quoteDate)?.quoteDate || String(matches[0]?.date || rows[0]?.date || scanStamp).replace(/\D/g, "");
     return {
       ok: true,
       source: "github-actions",
@@ -587,6 +602,11 @@ async function main() {
       scannedThisRun,
       scannedCodes: [...scanned].filter((code) => codes.includes(code)),
       count: matches.length,
+      resultCount: rows.length,
+      buyCount: matches.length,
+      watchCount: rows.filter((row) => String(row.decision || "").toUpperCase() === "WATCH").length,
+      blockCount: rows.filter((row) => String(row.decision || "").toUpperCase() === "BLOCK").length,
+      rows,
       matches,
     };
   }
@@ -622,15 +642,18 @@ async function main() {
   }
 
   function mergePayloadMatches(payload) {
-    (payload.matches || []).forEach((item) => {
+    (payload.rows || payload.matches || []).forEach((item) => {
       const base = universe.find((stock) => stock.code === item.code) || {};
-      currentMatches.set(item.code, { ...base, ...item, name: base.name || item.name || item.code });
+      const row = { ...base, ...item, name: base.name || item.name || item.code };
+      currentRows.set(item.code, row);
+      if (String(row.decision || "BUY").toUpperCase() === "BUY") currentMatches.set(item.code, row);
     });
   }
 
   async function scanCodesWithFallback(chunkCodes, label, completedChunks, depth = 0) {
     try {
-      const payload = await runHandlerWithRetry(chunkCodes, label);
+      const chunkStocks = chunkCodes.map((code) => universe.find((stock) => stock.code === code) || { code });
+      const payload = await runHandlerWithRetry(chunkCodes, label, chunkStocks);
       chunkCodes.forEach((code) => {
         scanned.add(code);
         failedCodes.delete(code);

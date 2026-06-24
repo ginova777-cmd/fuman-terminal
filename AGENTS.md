@@ -30,6 +30,38 @@ Strategy 5 Composite: complete run / result readback gate.
 
 Strategy5: complete run / result readback gate.
 
+Strategy5 frontend must not restore `foreign_trust_breakout`.
+
+Strategy5 removed preset:
+
+```text
+foreign_trust_breakout
+外資投信連買準突破
+準突破
+```
+
+This removed preset must not appear in:
+
+```text
+terminal-strategy-config.js STRATEGY_DEFS
+terminal-strategy-config.js STRATEGY5_BASE_PRESET_IDS
+terminal-strategy-config.js STRATEGY5_PRESET_IDS
+terminal-strategy-config.js STRATEGY5_CARD_META
+terminal-app.js loading fallback title
+terminal-app.js active strategy fallback
+```
+
+Allowed internal scanner/evaluator fields may still contain `foreign_trust_breakout` for legacy scoring/debug data, but production Strategy5 UI must not expose it as a tab, card, title, or default loading pane.
+
+Required live checks after Strategy5 frontend changes:
+
+```text
+terminal-strategy-config.js has foreign_trust_breakout = false
+terminal-strategy-config.js has 外資投信連買準突破 = false
+terminal-app.js has 外資投信連買準突破 = false
+terminal-app.js has STRATEGY_BY_ID.foreign_trust_breakout = false
+```
+
 Institution / Chip: API contract gate.
 
 Warrant Flow: API contract gate.
@@ -69,6 +101,34 @@ Do not report production fixed after only editing local files, deploying the wro
 ## Global Data Rule
 
 Fuman Terminal is Supabase / API-only.
+
+## Desktop Market Overview Removed
+
+The desktop market overview page is retired by user request.
+
+Do not restore:
+
+```text
+市場總覽
+index.html #market-view
+index.html data-view="market"
+sidebar 市場總覽 nav item
+default active page = market
+```
+
+Production desktop first view should enter Strategy5 composite / strategy main page unless the user explicitly requests another existing module.
+
+Required checks after desktop routing / index changes:
+
+```text
+index.html has 市場總覽 = false
+index.html has market-view = false
+index.html has data-view="market" = false
+terminal-app.js has installMarketOverviewRemovalGuard = true
+terminal-hotfix.js has installMarketOverviewRemovalHotfix = true
+```
+
+Old browser state may still contain last route = market. Runtime guards must redirect market to Strategy5 instead of showing an empty retired page.
 
 Official data flow:
 

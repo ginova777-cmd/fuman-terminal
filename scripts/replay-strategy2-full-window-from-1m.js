@@ -24,6 +24,7 @@ const EARLY_TRACKING_END = process.env.STRATEGY2_EARLY_TRACKING_END || "09:45:00
 const EARLY_TRACKING_PER_MINUTE = Math.max(1, Number(process.env.STRATEGY2_EARLY_TRACKING_PER_MINUTE || 20));
 const EARLY_TRACKING_MIN_PCT = Number(process.env.STRATEGY2_EARLY_TRACKING_MIN_PCT || 1);
 const EARLY_TRACKING_MIN_VOLUME = Number(process.env.STRATEGY2_EARLY_TRACKING_MIN_VOLUME || 100);
+const STRATEGY2_MIN_AVG5D_VOLUME_OK = Number(process.env.STRATEGY2_MIN_AVG5D_VOLUME_OK || 3000);
 
 function writeJson(file, payload) {
   fs.mkdirSync(path.dirname(file), { recursive: true });
@@ -124,10 +125,56 @@ function techAt(candles, index) {
   };
 }
 
+function openAmplitudePercent(stock) {
+  const close = cleanNumber(stock.latest1mClose || stock.close);
+  const open = cleanNumber(stock.open || stock.dayOpen || stock.latest1mOpen);
+  if (close <= 0 || open <= 0) return cleanNumber(stock.percent);
+  return ((close - open) / open) * 100;
+}
+
+function hasDailyMaBullishAlignment(stock) {
+  const ma5 = cleanNumber(stock.dailyMa5 || stock.ma5 || stock.sma5);
+  const ma10 = cleanNumber(stock.dailyMa10 || stock.ma10 || stock.sma10);
+  const ma20 = cleanNumber(stock.dailyMa20 || stock.ma20 || stock.sma20);
+  const ma60 = cleanNumber(stock.dailyMa60 || stock.ma60 || stock.sma60);
+  const rows = [ma5, ma10, ma20, ma60].filter((value) => value > 0);
+  if (rows.length < 3) return true;
+  if (ma5 > 0 && ma10 > 0 && ma20 > 0 && ma5 < ma10) return false;
+  if (ma10 > 0 && ma20 > 0 && ma10 < ma20) return false;
+  if (ma20 > 0 && ma60 > 0 && ma20 < ma60) return false;
+  return true;
+}
+
+function isStrategy2MotherPoolSnapshot(stock, volumeTop100Codes = new Set()) {
+  const close = cleanNumber(stock.close);
+  const pct = openAmplitudePercent(stock);
+  const volume = cleanNumber(stock.tradeVolume || stock.volume);
+  const avg5dVolume = cleanNumber(stock.avg5dVolume || stock.avg_5d_volume || stock.avgVolume5);
+  const prevClosePct = cleanNumber(stock.prevClosePercent || stock.changePercent || stock.change_percent);
+  const limitUp = cleanNumber(stock.limitUp || stock.limit_up_price || stock.limitUpPrice);
+  const limitUpExcluded = limitUp > 0 ? close >= limitUp * 0.995 : prevClosePct >= 9.7;
+  const channelAvg5 = avg5dVolume > STRATEGY2_MIN_AVG5D_VOLUME_OK;
+  const channelStrongVolume = pct >= 2 && volume > 5000 && hasDailyMaBullishAlignment(stock);
+  const channelVolumeRank = avg5dVolume > 0
+    && volume > avg5dVolume * 2
+    && volume >= 10000
+    && volumeTop100Codes.has(String(stock.code || ""));
+  return close >= 10
+    && close <= 1000
+    && pct >= 2
+    && pct < 9.9
+    && volume > 0
+    && !limitUpExcluded
+    && (channelAvg5 || channelStrongVolume || channelVolumeRank);
+}
+
 function buildSnapshot(base, candle, index, candles, cumulativeVolume, previousSnapshot, date) {
   const time = taipeiTime(candle.candleTime || candle.time);
   const previousClose = cleanNumber(base.prevClose || base.previousClose) || cleanNumber(candles[0]?.open) || cleanNumber(candle.open);
   const close = cleanNumber(candle.close);
+  const dayOpen = cleanNumber(base.open) || cleanNumber(candles[0]?.open) || cleanNumber(candle.open) || close;
+  const prevClosePercent = previousClose ? ((close - previousClose) / previousClose) * 100 : cleanNumber(base.percent);
+  const amplitudePercent = dayOpen ? ((close - dayOpen) / dayOpen) * 100 : prevClosePercent;
   const tradeVolume = cumulativeVolume;
   const tech = techAt(candles, index);
   return {
@@ -136,13 +183,17 @@ function buildSnapshot(base, candle, index, candles, cumulativeVolume, previousS
     date,
     timestamp: `${date} ${time}`,
     close,
-    open: cleanNumber(candle.open) || close,
+    open: dayOpen,
+    dayOpen,
     high: cleanNumber(candle.high) || close,
     low: cleanNumber(candle.low) || close,
     prevClose: previousClose,
     previousClose,
     change: close - previousClose,
-    percent: previousClose ? ((close - previousClose) / previousClose) * 100 : cleanNumber(base.percent),
+    percent: amplitudePercent,
+    amplitudePercent,
+    prevClosePercent,
+    limitUp: cleanNumber(base.limitUp || base.limitUpPrice || base.limit_up_price),
     tradeVolume,
     volume: tradeVolume,
     value: close * tradeVolume,
@@ -162,6 +213,78 @@ function buildSnapshot(base, candle, index, candles, cumulativeVolume, previousS
     ma35Symbol: String(base.code || base.symbol || ""),
     ma35At: candle.candleTime || candle.time,
     ...tech,
+  };
+}
+
+function recordFromMotherPool(stock) {
+  const pct = openAmplitudePercent(stock);
+  const volume = cleanNumber(stock.tradeVolume || stock.volume);
+  const value = cleanNumber(stock.value) || cleanNumber(stock.close) * volume;
+  const timeBucket = String(stock.quoteTime || stock.time || "").replace(/\D/g, "").slice(0, 4) || "unknown";
+  return {
+    date: stock.date,
+    timestamp: stock.timestamp,
+    entryAt: stock.timestamp,
+    code: stock.code,
+    name: stock.name || stock.code,
+    strategy: "母池觀察",
+    stateId: "watch",
+    stateLabel: "待確認",
+    stateReason: `符合策略2母池：幅度 ${pct.toFixed(2)}%，等待 1分K/MA35/MACD/KD 進一步確認。`,
+    score: Math.min(88, Math.max(50, Math.round(48 + Math.max(0, pct) * 4))),
+    entryPrice: roundTradePrice(stock.close),
+    supportPrice: roundTradePrice(stock.ma35 || stock.low || stock.close),
+    entryLow: roundTradePrice(stock.low || stock.close),
+    entryHigh: roundTradePrice(stock.high || stock.close),
+    stopLoss: roundTradePrice((stock.low || stock.close) * 0.985),
+    chaseLimit: roundTradePrice(stock.close * 1.01),
+    observedPrice: stock.close,
+    close: stock.close,
+    open: stock.open,
+    quoteTime: stock.quoteTime,
+    quoteSource: stock.quoteSource,
+    observedHigh: stock.high,
+    observedHighAt: stock.timestamp,
+    observedLow: stock.low,
+    observedLowAt: stock.timestamp,
+    dayHigh: stock.high,
+    dayHighAt: stock.timestamp,
+    dayLow: stock.low,
+    dayLowAt: stock.timestamp,
+    volume,
+    tradeVolume: volume,
+    value,
+    avg5dVolume: stock.avg5dVolume,
+    percent: pct,
+    amplitudePercent: pct,
+    prevClosePercent: stock.prevClosePercent,
+    limitUp: stock.limitUp,
+    reason: `08:45-12:00 母池逐筆偵測：幅度 ${pct.toFixed(2)}%，量 ${Math.round(volume).toLocaleString("zh-TW")} 張。`,
+    signalId: `strategy2_mother_pool_${timeBucket}`,
+    strategyIds: ["strategy2_mother_pool"],
+    strategyTags: ["母池觀察"],
+    primaryStrategy: "母池觀察",
+    strategyReasons: [`幅度 ${pct.toFixed(2)}%，成交量 ${Math.round(volume).toLocaleString("zh-TW")} 張，成交金額 ${Math.round(value / 10000).toLocaleString("zh-TW")} 萬。`],
+    deltaVolume: stock.deltaVolume,
+    ma35: stock.ma35,
+    ma35Prev: stock.ma35Prev,
+    aboveMa35: stock.ma35 > 0 && stock.close >= stock.ma35,
+    ma35TrendUp: stock.ma35TrendUp,
+    ma35Source: stock.ma35Source,
+    ma35Symbol: stock.ma35Symbol,
+    ma35At: stock.ma35At,
+    macdDif: stock.macdDif,
+    macdSignal: stock.macdSignal,
+    macdHist: stock.macdHist,
+    macdUp: stock.macdUp,
+    kdK: stock.kdK,
+    kdD: stock.kdD,
+    kdUp: stock.kdUp,
+    rsiUp: stock.rsiUp,
+    npsyUp: stock.npsyUp,
+    intradayVolumeBurst: stock.deltaVolume >= 50 || volume >= 10000,
+    replayedFrom1mFullWindow: true,
+    replayedMotherPool: true,
   };
 }
 
@@ -439,6 +562,7 @@ async function main() {
   const futoptResult = await fetchFutoptStockMappingReady({ limit: 5000, timeout: 30000 }).catch(() => ({ rows: [] }));
   const records = futoptPreopenRecords(futoptResult.rows || [], quoteByCode, date);
   const earlyTrackingCandidates = [];
+  const motherPoolSnapshots = [];
   let fetchedCodes = 0;
   let candleCodes = 0;
   let cursor = 0;
@@ -474,6 +598,7 @@ async function main() {
         const stock = buildSnapshot(base, candle, index, candles, cumulativeVolume, previousSnapshot, date);
         previousSnapshot = stock;
         if (secondsOfDay(stock.quoteTime) < secondsOfDay("08:45:00")) continue;
+        motherPoolSnapshots.push(stock);
         if (isEarlyTrackingCandidate(stock)) earlyTrackingCandidates.push(stock);
         const signals = detectSignals(stock, previousSnapshot, null)
           .filter((signal) => signal.id === "ma35_buy" || signal.id === "breakout" || signal.id === "gap" || signal.id === "volume_burst");
@@ -485,6 +610,31 @@ async function main() {
     }
   }
   await Promise.all(Array.from({ length: Math.min(CONCURRENCY, quotes.length) }, () => worker()));
+
+  const motherByMinute = new Map();
+  for (const stock of motherPoolSnapshots) {
+    const key = stock.timestamp;
+    if (!motherByMinute.has(key)) motherByMinute.set(key, []);
+    motherByMinute.get(key).push(stock);
+  }
+  for (const [timestamp, rows] of motherByMinute) {
+    const volumeTop100Codes = new Set(
+      [...rows]
+        .sort((a, b) => cleanNumber(b.tradeVolume || b.volume) - cleanNumber(a.tradeVolume || a.volume))
+        .slice(0, 100)
+        .map((stock) => String(stock.code || ""))
+        .filter(Boolean)
+    );
+    for (const stock of rows) {
+      if (!isStrategy2MotherPoolSnapshot(stock, volumeTop100Codes)) continue;
+      const duplicate = records.some((record) => (
+        record.code === stock.code
+        && record.timestamp === timestamp
+        && record.signalId === "strategy2_mother_pool"
+      ));
+      if (!duplicate) records.push(recordFromMotherPool(stock));
+    }
+  }
 
   const earlyByMinute = new Map();
   for (const stock of earlyTrackingCandidates) {
@@ -507,7 +657,7 @@ async function main() {
   const compactRecords = [];
   for (const record of records) {
     const signalId = String(record.signalId || "");
-    if (signalId === "futopt_preopen" || signalId === "early_tracking") {
+    if (signalId === "futopt_preopen" || signalId === "early_tracking" || signalId === "strategy2_mother_pool") {
       compactRecords.push(record);
       continue;
     }

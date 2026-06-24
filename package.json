@@ -13,8 +13,6 @@
     "cleanup:api-only-retired": "node scripts/cleanup-api-only-retired-artifacts.js",
     "verify:deploy": "node --use-system-ca scripts/verify-deployment.js",
     "verify:deployment": "node --use-system-ca scripts/verify-deployment.js",
-    "verify:runtime-hotfix": "node scripts/verify-runtime-hotfix-guard.js",
-    "verify:runtime-hotfix:live": "node --use-system-ca scripts/verify-runtime-hotfix-guard.js --live",
     "verify:chip": "node scripts/verify-chip-trade-contract.js",
     "health:chip": "node scripts/health-check-chip-trade.js",
     "verify:contracts": "node scripts/verify-data-contracts.js",
@@ -26,9 +24,10 @@
     "bump:version": "node scripts/bump-version.js",
     "sync:source": "node scripts/sync-main-deploy-source.js",
     "verify:version": "node scripts/verify-version-consistency.js",
-    "predeploy": "node scripts/verify-runtime-hotfix-guard.js && node scripts/prepare-deploy.js",
-    "postdeploy": "npm run verify:runtime-hotfix:live && node --use-system-ca scripts/verify-live-version.js --retry && node --use-system-ca scripts/verify-mobile-layout.js --live && node --dns-result-order=ipv4first scripts/verify-mobile-realtime.js && node --dns-result-order=ipv4first scripts/publish-mobile-update-event.js --source=postdeploy",
+    "predeploy": "node scripts/prepare-deploy.js",
+    "postdeploy": "node --use-system-ca scripts/verify-live-version.js --retry && node --use-system-ca scripts/verify-mobile-layout.js --live && node --dns-result-order=ipv4first scripts/verify-mobile-realtime.js && node --dns-result-order=ipv4first scripts/publish-mobile-update-event.js --source=postdeploy",
     "guard:source": "node scripts/guard-source-tree.js",
+    "guard:buy-sell-no-rollback": "node scripts/guard-buy-sell-no-rollback.js",
     "verify:live-version": "node --use-system-ca scripts/verify-live-version.js",
     "verify:bump": "node scripts/verify-version-bump-needed.js",
     "verify:supabase-json": "node --use-system-ca scripts/verify-supabase-json.js",
@@ -55,7 +54,6 @@
     "strategy2:coverage:watch": "node --use-system-ca scripts/check-strategy2-supabase-coverage.js --watch --until=09:10",
     "verify:desktop-api-only": "node scripts/verify-desktop-api-only.js",
     "verify:publish-gate": "node scripts/verify-publish-gate.js",
-    "verify:strategy1-open-buy-ui": "node scripts/verify-strategy1-open-buy-ui-contract.js",
     "sync:tdcc": "node --use-system-ca scripts/sync-tdcc-shareholding-cache.js",
     "sync:tdcc:backfill": "node --use-system-ca scripts/sync-tdcc-shareholding-cache.js --backfill",
     "scan:chip-exclusions": "node scripts/generate-chip-trade-exclusions.js",
@@ -69,7 +67,9 @@
     "verify:mobile-ai-fragment": "node scripts/verify-mobile-ai-fragment.js",
     "verify:mobile-ai-fragment:live": "node --dns-result-order=ipv4first --use-system-ca scripts/verify-mobile-ai-fragment.js --live",
     "mobile:update-event": "node --dns-result-order=ipv4first scripts/publish-mobile-update-event.js",
-    "verify:mobile-realtime": "node --dns-result-order=ipv4first scripts/verify-mobile-realtime.js"
+    "verify:mobile-realtime": "node --dns-result-order=ipv4first scripts/verify-mobile-realtime.js",
+    "verify:strategy1-open-buy-ui": "node scripts/verify-strategy1-open-buy-ui-contract.js",
+    "verify:strategy-direct-main": "node scripts/verify-strategy-direct-main-entry.js"
   },
   "engines": {
     "node": "20.x"

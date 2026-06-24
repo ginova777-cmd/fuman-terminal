@@ -5017,9 +5017,9 @@ function setStrategyChrome(mode) {
   const strategy5 = mode === "strategy5";
   const openBuy = mode === "openBuy";
   const strategy3 = mode === "strategy3";
-  if (strategyBadge) strategyBadge.textContent = intraday ? "FMN://intraday.2m.scan" : swing ? "FMN://swing.daily.scan" : openBuy ? "FMN://open.buy.scan" : "FMN://strategy.api";
+  if (strategyBadge) strategyBadge.textContent = intraday ? "FMN://intraday.2m.scan" : swing ? "FMN://swing.daily.scan" : openBuy ? "FMN://open.buy.scan" : "FMN://strategy5.all";
   const icon = intraday ? "◔" : swing ? "└" : openBuy ? "⚡" : strategy5 ? "▰" : "⚡";
-  const title = intraday ? "2分K當沖雷達" : swing ? "策略4-波段雷達" : openBuy ? "策略1-明日開盤入" : strategy5 ? "策略5-綜合策略" : "策略模組總覽";
+  const title = intraday ? "2分K當沖雷達" : swing ? "策略4-波段雷達" : openBuy ? "策略1-明日開盤入" : strategy5 ? "策略5-綜合策略" : "策略5主要結果";
   const headerTitle = intraday ? "2分K當沖雷達" : swing ? "策略4-波段雷達" : openBuy ? "策略1-明日開盤入" : strategy5 ? "策略5-綜合策略" : "策略模組";
   const scheduleKey = intraday ? "intraday" : swing ? "swing" : openBuy ? "openBuy" : strategy5 ? "strategy5" : "market";
   setTitleWithSchedule(strategyTitle, icon, title, scheduleKey);
@@ -5034,7 +5034,7 @@ function setStrategyChrome(mode) {
       ? "21:30 產生明日候選，08:55 最終確認，09:00 只執行 BUY 名單。"
       : strategy3
       ? ""
-      : "左側切換日線、籌碼與高波動策略；右側即時重算符合條件的股票訊號。";
+      : "正在進入主要結果頁。";
     strategyHeaderText.style.display = strategy3 ? "none" : "";
   }
   if (strategyActions) strategyActions.style.display = intraday || swing || strategy5 || openBuy ? "none" : "";
@@ -8521,5 +8521,7 @@ async function refreshSelectedWatchlistQuote() {
 
 renderWatchlist();
 setInterval(refreshSelectedWatchlistQuote, 10000);
+
+
 
 

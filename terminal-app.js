@@ -166,6 +166,118 @@ function updateMobileAiStaleNote(){const note=marketAiPanel?.querySelector?.("[d
   document.addEventListener?.("visibilitychange",()=>{if(!document.hidden)poll(!1)});
 })();
 
+;(function installDesktopFastInteractionGuard(){
+  if(window.__fumanDesktopFastInteractionGuard==="20260623-09")return;
+  window.__fumanDesktopFastInteractionGuard="20260623-09";
+  const DEFAULT_HOLD_MS=920;
+  const scheduled=new Map;
+  let pollSeq=0;
+  function mobile(){try{return isMobileViewport?.()}catch(error){return false}}
+  function now(){return Date.now()}
+  function holdUntil(){return Number(window.__fumanDesktopFastInteractionUntil||0)}
+  function holdRemaining(){return Math.max(0,holdUntil()-now())}
+  function activeRoute(){try{return window.FUMAN_DESKTOP_ROUTE_STATE?.active?.()||window.__fumanDesktopActiveRoute||null}catch(error){return null}}
+  function activeRouteAge(){const route=activeRoute();return route?now()-Number(route.at||0):Infinity}
+  function routeQuietRemaining(){const age=activeRouteAge();return Number.isFinite(age)?Math.max(0,1700-age):0}
+  function quietRemaining(){return Math.max(holdRemaining(),routeQuietRemaining())}
+  function routeViewBlocked(viewName){
+    const route=activeRoute();
+    if(!route||!viewName||activeRouteAge()>1800)return false;
+    return route.view&&route.view!==viewName;
+  }
+  function markHold(reason="route",ms=DEFAULT_HOLD_MS){
+    if(mobile())return 0;
+    const until=now()+Math.max(180,ms);
+    window.__fumanDesktopFastInteractionUntil=Math.max(Number(window.__fumanDesktopFastInteractionUntil||0),until);
+    window.__fumanDesktopFastInteractionReason=reason;
+    document.documentElement.dataset.fumanDesktopInteractionHold=String(window.__fumanDesktopFastInteractionUntil);
+    return window.__fumanDesktopFastInteractionUntil;
+  }
+  function runDeferred(name,fn,item){
+    const rest=quietRemaining();
+    if(rest>0){
+      item.timer=setTimeout(()=>runDeferred(name,fn,item),Math.min(760,Math.max(120,rest+60)));
+      return;
+    }
+    scheduled.delete(name);
+    try{fn.apply(item.context,item.args)}catch(error){recordFrontendError?.("desktop-fast-guard:"+name,error)}
+  }
+  function delayCall(name,fn,context,args,extraDelay=80){
+    const rest=quietRemaining();
+    if(rest<=0)return fn.apply(context,args);
+    const existing=scheduled.get(name);
+    if(existing){
+      existing.context=context;
+      existing.args=args;
+      return Promise.resolve(null);
+    }
+    const item={context:context,args:args,timer:0};
+    scheduled.set(name,item);
+    item.timer=setTimeout(()=>runDeferred(name,fn,item),Math.min(1300,Math.max(140,rest+extraDelay)));
+    return Promise.resolve(null);
+  }
+  function wrap(name,extraDelay=80,viewName=""){
+    let fn=null;
+    try{fn=eval(`typeof ${name}!=="undefined"?${name}:undefined`)}catch(error){fn=window[name]}
+    if("function"!==typeof fn||fn.__fumanDesktopFastGuard)return;
+    const wrapped=function(...args){
+      if(!mobile()&&routeViewBlocked(viewName))return Promise.resolve(null);
+      if(!mobile()&&quietRemaining()>0)return delayCall(name,fn,this,args,extraDelay);
+      return fn.apply(this,args);
+    };
+    wrapped.__fumanDesktopFastGuard=fn;
+    try{eval(`${name}=wrapped`)}catch(error){window[name]=wrapped}
+    window[name]=wrapped;
+  }
+  function installPollingScheduler(){
+    if(window.__fumanDesktopPollingScheduler==="20260623-09")return;
+    window.__fumanDesktopPollingScheduler="20260623-09";
+    const nativeSetInterval=window.setInterval.bind(window);
+    window.setInterval=function(callback,delay,...args){
+      if("function"!==typeof callback)return nativeSetInterval(callback,delay,...args);
+      const label=callback.name||`poll${++pollSeq}`;
+      return nativeSetInterval(function(){
+        const rest=quietRemaining();
+        if(!mobile()&&rest>0){
+          const key=`poll:${label}:${delay}`;
+          if(scheduled.has(key))return;
+          const item={context:this,args:args,timer:0};
+          scheduled.set(key,item);
+          item.timer=setTimeout(()=>runDeferred(key,callback,item),Math.min(1400,Math.max(180,rest+120)));
+          return;
+        }
+        return callback.apply(this,args);
+      },delay);
+    };
+  }
+  document.addEventListener("pointerdown",event=>{
+    const link=event.target.closest?.("[data-view]:not([data-member-tab])");
+    if(!link||mobile())return;
+    const view=link.dataset.view||"nav";
+    markHold(`nav-${view}`,"strategy"===view?DEFAULT_HOLD_MS:620);
+  },true);
+  [
+    ["renderStrategyScanner",120,"strategy"],
+    ["refreshStrategyRealtimeScan",260,"strategy"],
+    ["renderRealtimeRadar",140,"strategy"],
+    ["loadMarketData",260,"market"],
+    ["loadHeatmap",360,"market"],
+    ["loadInstitution",360,"chip-trade"],
+    ["loadInstitutionSummary",320,"chip-trade"],
+    ["loadChipTradeData",300,"chip-trade"],
+    ["loadCbDetectionData",300,"cb-detect"],
+    ["loadWarrantFlow",300,"warrant-flow"],
+    ["renderWatchlist",180,"watchlist"],
+    ["refreshSelectedWatchlistQuote",260,"watchlist"],
+    ["loadTerminalHomeBundle",320,"market"],
+    ["loadMarketSummary",320,"market"],
+    ["renderMarketAiPanel",220,"market"],
+    ["refreshActiveChipWarrantView",300,""]
+  ].forEach(([name,delay,viewName])=>wrap(name,delay,viewName));
+  installPollingScheduler();
+  window.FUMAN_DESKTOP_FAST_HOLD=markHold;
+})();
+
 ;(function installInstitutionCompleteRunPolling(){
   let seenSignature="";
   let loading=false;

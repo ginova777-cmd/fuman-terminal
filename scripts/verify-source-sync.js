@@ -21,7 +21,7 @@ const KEY_FILES = [
   "api/latest-signals.js",
   "api/strategy4-latest.js",
   "api/strategy3-latest.js",
-  "api/strategy2-latest.js",
+  "api/latest-strategy.js",
   "api/institution-latest.js",
   "api/warrant-flow-latest.js",
   "api/scan-warrant-flow.js",
@@ -169,6 +169,7 @@ if (issues.length) {
 }
 
 console.log(`[source-sync] ok source=${SOURCE_ROOT} deploy=${DEPLOY_ROOT} version=${sourceVersion || "unknown"}`);
+
 
 
 

@@ -38,7 +38,18 @@ function Assert-Strategy3CompleteApi {
 const handler = require("./api/strategy3-latest");
 const { captureHandler } = require("./scripts/strategy-api-capture");
 captureHandler(handler).then((result) => {
-  console.log(JSON.stringify(result));
+  const payload = result.body || {};
+  const count = payload.count ?? (Array.isArray(payload.matches) ? payload.matches.length : 0);
+  console.log(JSON.stringify({
+    statusCode: result.statusCode,
+    body: {
+      usedDate: payload.usedDate || "",
+      count,
+      cacheSource: payload.cacheSource || "",
+      runId: payload.runId || "",
+      transport: { gate: payload.transport && payload.transport.gate || "" },
+    },
+  }));
 }).catch((error) => {
   console.error(error && error.stack ? error.stack : String(error));
   process.exit(1);
@@ -66,6 +77,19 @@ $exitCode = $LASTEXITCODE
 if ($null -eq $exitCode) { $exitCode = 0 }
 if ($exitCode -ne 0) { throw "Strategy3 complete scanner failed with exit code $exitCode; log=$log" }
 
-Assert-Strategy3CompleteApi
+$apiVerified = $false
+$lastApiError = ""
+for ($attempt = 1; $attempt -le 6; $attempt++) {
+  try {
+    Assert-Strategy3CompleteApi
+    $apiVerified = $true
+    break
+  } catch {
+    $lastApiError = $_.Exception.Message
+    Write-Strategy3CompleteLog "Strategy3 complete API verify attempt $attempt/6 failed: $lastApiError"
+    if ($attempt -lt 6) { Start-Sleep -Seconds 5 }
+  }
+}
+if (-not $apiVerified) { throw "Strategy3 complete API verification failed after retries: $lastApiError" }
 Write-Strategy3CompleteLog "Strategy3 complete scan end; Supabase complete run + no-store API is the terminal fast path"
 

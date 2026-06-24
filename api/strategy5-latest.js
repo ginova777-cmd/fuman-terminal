@@ -1,19 +1,15 @@
 const fs = require("fs");
 const path = require("path");
+const { readEndpointFromDesktopSnapshot } = require("../lib/desktop-route-snapshot-cache");
+const { terminalSupabaseKey, terminalSupabaseUrl } = require("../lib/server-supabase-key");
 
 function readSecretText(file) {
   try { return fs.readFileSync(file, "utf8").trim(); } catch { return ""; }
 }
 
 const RUNTIME_DIR = process.env.FUMAN_RUNTIME_DIR || "C:/fuman-runtime";
-const SUPABASE_URL = String(
-  process.env.SUPABASE_URL
-  || process.env.FUMAN_SUPABASE_URL
-  || "https://cpmpfhbzutkiecccekfr.supabase.co"
-).replace(/\/+$/, "");
-const SUPABASE_KEY = process.env.SUPABASE_ANON_KEY
-  || process.env.FUMAN_SUPABASE_ANON_KEY
-  || readSecretText(path.join(RUNTIME_DIR, "secrets", "supabase-anon-key.txt"));
+const SUPABASE_URL = terminalSupabaseUrl({ runtimeDir: RUNTIME_DIR });
+const SUPABASE_KEY = terminalSupabaseKey({ runtimeDir: RUNTIME_DIR });
 
 const TABLE = process.env.STRATEGY5_SUPABASE_RESULTS_TABLE || "strategy5_scan_results";
 const LATEST_RUN_VIEW = process.env.STRATEGY5_SUPABASE_LATEST_RUN_VIEW || "v_strategy5_latest_complete_run";
@@ -57,6 +53,17 @@ function cleanNumber(value) {
   return Number.isFinite(number) ? number : 0;
 }
 
+function parseRequestOptions(request) {
+  try {
+    const url = new URL(request.url || "", "http://localhost");
+    const canvas = url.searchParams.get("canvas") === "1" || url.searchParams.get("compact") === "1";
+    const limit = Math.max(1, Math.min(canvas ? 120 : 2000, cleanNumber(url.searchParams.get("limit")) || (canvas ? 70 : 2000)));
+    return { canvas, limit };
+  } catch {
+    return { canvas: false, limit: 2000 };
+  }
+}
+
 function normalizePayload(row) {
   const payload = row.payload && typeof row.payload === "object" ? row.payload : {};
   const matches = Array.isArray(payload.matches || row.signals) ? (payload.matches || row.signals) : [];
@@ -78,7 +85,7 @@ function normalizePayload(row) {
   };
 }
 
-function buildPayload(rows, run) {
+function buildPayload(rows, run, options = {}) {
   const first = rows[0] || {};
   const matches = rows
     .slice()
@@ -97,6 +104,7 @@ function buildPayload(rows, run) {
     schedule: run?.payload?.schedule || "06:00/21:00",
     fullScan: true,
     complete: true,
+    canvas: Boolean(options.canvas),
     qualityStatus: String(first.quality_status || run?.quality_status || "complete"),
     schemaVersion: String(first.schema_version || run?.schema_version || "strategy5-run-id-complete-v1"),
     dataContractSource: String(first.data_contract_source || run?.data_contract_source || "strategy5-cache"),
@@ -131,7 +139,7 @@ async function fetchLatestCompleteRun() {
   return rows[0]?.run_id ? rows[0] : null;
 }
 
-async function fetchLatestCompleteRows() {
+async function fetchLatestCompleteRows(limit = 2000) {
   const run = await fetchLatestCompleteRun();
   if (!run?.run_id) return { rows: [], run: null };
   const rows = await fetchRowsFrom(
@@ -141,7 +149,7 @@ async function fetchLatestCompleteRows() {
       "strategy=eq.strategy5",
       `run_id=eq.${encodeURIComponent(run.run_id)}`,
       "order=rank.asc",
-      "limit=2000",
+      `limit=${Math.max(1, Math.min(2000, cleanNumber(limit) || 2000))}`,
     ].join("&")
   );
   return { rows, run };
@@ -157,17 +165,27 @@ module.exports = async function handler(request, response) {
     return;
   }
 
+  const cached = await readEndpointFromDesktopSnapshot(request, {
+    timeoutMs: 650,
+    via: "api/strategy5-latest",
+  });
+  if (cached) {
+    response.status(200).json(cached);
+    return;
+  }
+
   try {
     if (!SUPABASE_URL || !SUPABASE_KEY) {
       response.status(503).json(apiOnlyError("supabase_not_configured"));
       return;
     }
-    const latest = await fetchLatestCompleteRows();
+    const options = parseRequestOptions(request);
+    const latest = await fetchLatestCompleteRows(options.limit);
     if (!latest.rows.length) {
       response.status(404).json(apiOnlyError("strategy5_scan_results_latest_empty"));
       return;
     }
-    response.status(200).json(buildPayload(latest.rows, latest.run));
+    response.status(200).json(buildPayload(latest.rows, latest.run, options));
   } catch (error) {
     response.status(503).json(apiOnlyError(error?.message || String(error)));
   }

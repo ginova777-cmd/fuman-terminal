@@ -42,23 +42,8 @@ function isCommonStockType(stock) {
 }
 
 function hasEnoughDaytradeVolume(stock) {
-  const avgVolume5 = firstNumber(stock, ["avg_volume_5", "avgVolume5", "avg5Volume", "avg5dVolume", "avg_5d_volume"]);
-  if (avgVolume5 !== null && avgVolume5 < MIN_AVG_VOLUME_5) return false;
-
-  const cumulativeBidAsk = firstNumber(stock, ["cumulative_bid_ask_volume", "cumulativeBidAskVolume"]);
-  if (cumulativeBidAsk !== null && cumulativeBidAsk > 0) return cumulativeBidAsk >= MIN_CUMULATIVE_BID_ASK_VOLUME;
-
-  const hasCumulativeBid = hasOwnValue(stock, "cumulative_bid_volume") || hasOwnValue(stock, "cumulativeBidVolume");
-  const hasCumulativeAsk = hasOwnValue(stock, "cumulative_ask_volume") || hasOwnValue(stock, "cumulativeAskVolume");
-  if (hasCumulativeBid || hasCumulativeAsk) {
-    const bid = firstNumber(stock, ["cumulative_bid_volume", "cumulativeBidVolume"]) || 0;
-    const ask = firstNumber(stock, ["cumulative_ask_volume", "cumulativeAskVolume"]) || 0;
-    if (bid + ask > 0) return bid + ask >= MIN_CUMULATIVE_BID_ASK_VOLUME;
-  }
-
   const tradeVolume = firstNumber(stock, ["tradeVolume", "volume"]);
-  if (tradeVolume !== null && tradeVolume < MIN_CUMULATIVE_BID_ASK_VOLUME) return false;
-  return true;
+  return tradeVolume === null || tradeVolume > 0;
 }
 
 function avg(values) {
@@ -94,9 +79,10 @@ function isIntradayTradable(stock) {
   if (flagTrue(stock?.is_daytrade_unsuitable ?? stock?.isDaytradeUnsuitable)) return false;
   if (flagTrue(stock?.is_halted ?? stock?.isHalted ?? stock?.is_suspended ?? stock?.isSuspended)) return false;
   if (flagTrue(stock?.is_trial ?? stock?.isTrial)) return false;
-  if (!hasEnoughDaytradeVolume(stock)) return false;
   if (close <= 0) return false;
-  if (close >= 900) return false;
+  if (close < 10) return false;
+  if (close > 1000) return false;
+  if (!hasEnoughDaytradeVolume(stock)) return false;
   return true;
 }
 

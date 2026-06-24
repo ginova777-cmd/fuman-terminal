@@ -84,6 +84,21 @@
     stocks: "/api/stocks",
   };
 
+  window.FUMAN_TUNING_CONFIG = {
+    ...(window.FUMAN_TUNING_CONFIG || {}),
+    marketPollTickMs: 12000,
+    marketDomRefreshMs: 90000,
+    intradayFastScanMs: 9000,
+    intradayBackgroundScanMs: 24000,
+    realtimeRadarRefreshMs: 9000,
+    chipWarrantActiveRefreshMs: 120000,
+    completeRunPollMs: 90000,
+    institutionCompleteRunPollMs: 120000,
+    terminalConfluencePollMs: 120000,
+    mobileDigestPollMs: 60000,
+    strategy5FastPaintTimeoutMs: 1400,
+  };
+
   window.FUMAN_RUNTIME_CONFIG = {
     supabaseUrl: "https://jxnqyqnigsppqsxinlrq.supabase.co",
     supabaseKey: "sb_publishable_kCocRYzO4oCBnFRQO_pfvg_JZUl0oxm",

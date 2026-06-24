@@ -33,7 +33,7 @@ const FILES = [
   "api/open-buy-latest.js",
   "api/strategy5-latest.js",
   "api/strategy3-latest.js",
-  "api/strategy2-latest.js",
+  "api/latest-strategy.js",
   "api/institution-latest.js",
   "api/warrant-flow-latest.js",
   "api/scan-warrant-flow.js",
@@ -303,6 +303,7 @@ for (const directory of DIRECTORIES) {
 }
 
 console.log(`[sync-source] ok copied=${copied} copiedFromDirs=${copiedFromDirs} retiredDeleted=${retiredDeleted} deploy=${DEPLOY_ROOT}`);
+
 
 
 
