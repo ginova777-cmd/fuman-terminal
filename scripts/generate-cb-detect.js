@@ -1159,15 +1159,29 @@ async function main() {
   if (!snapshot.ok) throw new Error(`cb-detect Supabase snapshot write failed: ${snapshot.error || snapshot.reason || "unknown"}`);
   console.log(`cb-detect API-only: wrote Supabase snapshot (${compactCandidates.length} rows, compacted ${candidates.length - compactCandidates.length} same-stock CB rows)`);
   console.log(compactCandidates.slice(0, 12).map((row) => `${row.score} ${row.sourceLayer} ${row.code} ${row.cbName} ${row.tags.join(" / ")}`).join("\n"));
+  return {
+    ok: true,
+    runId,
+    updatedAt,
+    count: compactCandidates.length,
+    sourceCounts,
+    compactedDuplicates: candidates.length - compactCandidates.length,
+    topRows: compactCandidates.slice(0, 12).map((row) => ({
+      code: row.code,
+      cbCode: row.cbCode,
+      cbName: row.cbName,
+      score: row.score,
+      sourceLayer: row.sourceLayer,
+      entryLabel: row.entryLabel,
+    })),
+  };
 }
 
-main().catch((error) => {
-  console.error(error);
-  process.exit(1);
-});
+if (require.main === module) {
+  main().catch((error) => {
+    console.error(error);
+    process.exit(1);
+  });
+}
 
-
-
-
-
-
+module.exports = { main };
