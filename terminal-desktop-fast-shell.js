@@ -2348,6 +2348,10 @@
         transition: none !important;
         contain: layout paint style;
       }
+      .desktop-route-shell-grid,
+      .desktop-canvas-toolbar {
+        display: none !important;
+      }
       .fuman-theme-toggle {
         position: fixed !important;
         top: calc(env(safe-area-inset-top, 0px) + 18px) !important;
