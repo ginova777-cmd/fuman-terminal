@@ -5,6 +5,10 @@
     {
       "path": "/api/desktop-route-snapshot-refresh",
       "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/production-health",
+      "schedule": "*/10 * * * *"
     }
   ],
   "rewrites": [

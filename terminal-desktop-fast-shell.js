@@ -301,26 +301,77 @@
       },
       summary() {
         const rows = this.read();
-        const maxOf = (name) => Math.max(0, ...rows.map((row) => Number(row?.[name] || 0)));
+        const usable = rows.filter((row) => row && row.key);
+        const maxOf = (name) => Math.max(0, ...usable.map((row) => Number(row?.[name] || 0)));
+        const values = (routeRows, name) => routeRows.map((row) => Number(row?.[name] || 0)).filter((value) => Number.isFinite(value) && value > 0);
+        const avg = (items) => items.length ? Math.round(items.reduce((sum, value) => sum + value, 0) / items.length) : 0;
+        const percentile = (items, ratio) => {
+          if (!items.length) return 0;
+          const sorted = items.slice().sort((a, b) => a - b);
+          return sorted[Math.min(sorted.length - 1, Math.max(0, Math.ceil(sorted.length * ratio) - 1))] || 0;
+        };
+        const routeMap = new Map();
+        usable.forEach((row) => {
+          const key = String(row.key || "unknown");
+          routeMap.set(key, (routeMap.get(key) || []).concat(row));
+        });
+        const routes = [...routeMap.entries()].map(([key, routeRows]) => {
+          const navValues = values(routeRows, "nav");
+          const shellValues = values(routeRows, "shell");
+          const apiValues = values(routeRows, "api");
+          const maxNavRoute = Math.max(0, ...navValues);
+          const maxShellRoute = Math.max(0, ...shellValues);
+          const maxApiRoute = Math.max(0, ...apiValues);
+          const focus = maxApiRoute >= maxNavRoute && maxApiRoute >= maxShellRoute
+            ? "api"
+            : maxShellRoute >= maxNavRoute
+              ? "shell"
+              : "nav";
+          return {
+            key,
+            count: routeRows.length,
+            focus,
+            nav: { avg: avg(navValues), p95: percentile(navValues, 0.95), max: maxNavRoute },
+            shell: { avg: avg(shellValues), p95: percentile(shellValues, 0.95), max: maxShellRoute },
+            api: { avg: avg(apiValues), p95: percentile(apiValues, 0.95), max: maxApiRoute },
+            worst: Math.max(maxNavRoute, maxShellRoute, maxApiRoute),
+            lastAt: Math.max(0, ...routeRows.map((row) => Number(row.at || 0))),
+          };
+        }).sort((a, b) => b.worst - a.worst || b.lastAt - a.lastAt);
         const maxNav = maxOf("nav");
         const maxShell = maxOf("shell");
         const maxApi = maxOf("api");
         const focus = maxApi >= maxNav && maxApi >= maxShell ? "api" : maxShell >= maxNav ? "shell" : "nav";
+        const slowest = usable.slice().sort((a, b) => Math.max(Number(b.nav || 0), Number(b.shell || 0), Number(b.api || 0)) - Math.max(Number(a.nav || 0), Number(a.shell || 0), Number(a.api || 0))).slice(0, 8);
+        const firstFix = routes[0]
+          ? `${routes[0].key} ${routes[0].focus} max=${routes[0][routes[0].focus]?.max || routes[0].worst}ms`
+          : "";
         return {
-          count: rows.length,
+          count: usable.length,
           maxNav,
           maxShell,
           maxApi,
           focus,
-          slowest: rows.slice().sort((a, b) => Math.max(Number(b.nav || 0), Number(b.shell || 0), Number(b.api || 0)) - Math.max(Number(a.nav || 0), Number(a.shell || 0), Number(a.api || 0))).slice(0, 8),
+          firstFix,
+          routes,
+          slowest,
         };
       },
       recommend() {
         const summary = this.summary();
         if (!summary.count) return "尚無資料：開 codexLatency 後切幾次分頁再看。";
-        if (summary.focus === "api") return "api 高：優先檢查 API 小包、快取 TTL、Supabase 查詢量。";
-        if (summary.focus === "shell") return "shell 高：優先檢查 Canvas 首畫、固定尺寸、DOM 抽 row。";
-        return "nav 高：優先檢查側欄事件、active CSS、重複 click/pointer handler。";
+        const target = summary.routes?.[0];
+        const prefix = target ? `最慢頁：${target.key}，瓶頸=${target.focus}。` : "";
+        if (summary.focus === "api") return `${prefix}api 高：優先檢查 route snapshot、API 小包、Supabase 查詢量。`;
+        if (summary.focus === "shell") return `${prefix}shell 高：優先檢查 Canvas 首畫、固定尺寸、DOM 抽 row。`;
+        return `${prefix}nav 高：優先檢查側欄事件、active CSS、重複 click/pointer handler。`;
+      },
+      print() {
+        const summary = this.summary();
+        console.table?.(summary.routes || []);
+        console.info?.("[FUMAN perf]", summary);
+        console.info?.("[FUMAN perf recommend]", this.recommend());
+        return summary;
       },
     };
   }

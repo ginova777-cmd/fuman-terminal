@@ -18,6 +18,7 @@ const STATIC_ASSETS = [
   "/terminal-app.js?v=public-terminal-fast-20260623-09",
   "/terminal-ai-risk-guard.js?v=public-terminal-fast-20260623-09",
   "/terminal-member-module.js?v=public-terminal-fast-20260623-09",
+  "/terminal-market-snapshot-module.js?v=public-terminal-fast-20260623-09",
   "/terminal-strategy-module.js?v=public-terminal-fast-20260623-09",
   "/terminal-watchlist-shell.js?v=public-terminal-fast-20260623-09",
   "/terminal-chip-snapshot-module.js?v=public-terminal-fast-20260623-09",

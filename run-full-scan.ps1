@@ -3,6 +3,7 @@ param(
   [switch]$SkipStrategy2,
   [switch]$SkipInstitution,
   [switch]$SkipWarrant,
+  [switch]$SkipDesktopSnapshot,
   [switch]$ContinueOnCriticalFailure
 )
 
@@ -207,6 +208,39 @@ function Get-Strategy3ScanEnv {
   return @{}
 }
 
+function Invoke-DesktopRouteSnapshotWrite {
+  if ($SkipDesktopSnapshot) {
+    Write-ScanLog "SKIP desktop route snapshot write"
+    return
+  }
+  Write-ScanLog "START [snapshot] desktop route snapshot write"
+  $exitCode = 0
+  try {
+    Push-Location $syncRoot
+    try {
+      & $nodeExe "scripts\write-desktop-route-snapshot.js" "--allow-partial" "--source=full-scan" *>&1 | ForEach-Object {
+        $text = [string]$_
+        Write-Host $text
+        Add-Content -LiteralPath $log -Value $text -Encoding utf8
+      }
+      $exitCode = $LASTEXITCODE
+    } finally {
+      Pop-Location
+    }
+  } catch {
+    $exitCode = 1
+    Write-ScanLog "desktop route snapshot exception: $($_.Exception.Message)"
+  }
+  if ($exitCode -ne 0) {
+    Write-ScanLog "WARN desktop route snapshot write failed exit=$exitCode"
+    if ($env:FUMAN_REQUIRE_DESKTOP_SNAPSHOT -eq "1") {
+      $criticalFailures.Add("desktop-route-snapshot: snapshot write failed exit=$exitCode") | Out-Null
+    }
+    return
+  }
+  Write-ScanLog "END [snapshot] desktop route snapshot write complete"
+}
+
 Enter-FullScanLock
 try {
   Write-ScanLog "Full scan started"
@@ -244,6 +278,7 @@ try {
   Invoke-ScanTask "strategy4" "strategy4 raw refresh" "critical" "scripts\scan-strategy4-cache.js" (Join-Path $runtimeRoot "data\strategy4-latest.json") @{ STRATEGY4_ALLOW_DEGRADED_COMPLETE = "1" }
   Invoke-ScanTask "strategy5" "strategy5 raw refresh" "critical" "scripts\scan-strategy5-cache.js" (Join-Path $runtimeRoot "data\strategy5-latest.json") @{ STRATEGY5_USE_MIS = "0" }
   Invoke-ScanTask "cb-detect" "cb detect raw refresh" "optional" "scripts\generate-cb-detect.js" (Join-Path $runtimeRoot "data\cb-detect-latest.json") @{}
+  Invoke-DesktopRouteSnapshotWrite
 
   $summary = [ordered]@{
     ok = ($criticalFailures.Count -eq 0)

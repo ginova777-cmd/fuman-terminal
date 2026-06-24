@@ -293,6 +293,7 @@
       { href: withVersion("/terminal-modules.js"), as: "script", rel: "prefetch" },
       { href: withVersion("/terminal-worker.js"), as: "worker" },
       { href: withVersion("/terminal-member-module.js"), as: "script" },
+      { href: withVersion("/terminal-market-snapshot-module.js"), as: "script" },
       { href: withVersion("/terminal-watchlist-shell.js"), as: "script" },
       { href: withVersion("/terminal-chip-snapshot-module.js"), as: "script" },
       { href: withVersion("/terminal-strategy-module.js"), as: "script" },

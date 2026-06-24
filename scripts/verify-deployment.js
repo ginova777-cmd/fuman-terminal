@@ -134,14 +134,15 @@ async function main() {
   assertOk("home", home, (r) => r.body.includes(`terminal-core.js?v=${version}`));
   const checks = [
     ["core", `/terminal-core.js?v=${version}`, (r) => r.body.includes("terminal-modules.js")],
-    ["modules", `/terminal-modules.js?v=${version}`, (r) => r.body.includes("FUMAN_TERMINAL_MODULES") && r.body.includes("terminal-strategy-module.js") && r.body.includes("terminal-member-module.js") && r.body.includes("terminal-watchlist-shell.js") && r.body.includes("terminal-chip-snapshot-module.js")],
+    ["modules", `/terminal-modules.js?v=${version}`, (r) => r.body.includes("FUMAN_TERMINAL_MODULES") && r.body.includes("terminal-strategy-module.js") && r.body.includes("terminal-member-module.js") && r.body.includes("terminal-market-snapshot-module.js") && r.body.includes("terminal-watchlist-shell.js") && r.body.includes("terminal-chip-snapshot-module.js")],
     ["strategy-module", `/terminal-strategy-module.js?v=${version}`, (r) => r.body.includes("FUMAN_STRATEGY_MODULE") && r.body.includes("snapshot-first") && r.body.includes("LIVE_ROUTES") && r.body.includes("SNAPSHOT_ROUTES")],
     ["member-module", `/terminal-member-module.js?v=${version}`, (r) => r.body.includes("FUMAN_MEMBER_MODULE") && r.body.includes("standalone-public-member")],
+    ["market-snapshot-module", `/terminal-market-snapshot-module.js?v=${version}`, (r) => r.body.includes("FUMAN_MARKET_SNAPSHOT_MODULE") && r.body.includes("snapshot-market-shell")],
     ["watchlist-shell", `/terminal-watchlist-shell.js?v=${version}`, (r) => r.body.includes("FUMAN_WATCHLIST_SHELL_MODULE") && r.body.includes("snapshot-watchlist-shell")],
     ["chip-snapshot-module", `/terminal-chip-snapshot-module.js?v=${version}`, (r) => r.body.includes("FUMAN_CHIP_SNAPSHOT_MODULE") && r.body.includes("snapshot-chip-shell")],
     ["desktop-fast-shell", `/terminal-desktop-fast-shell.js?v=${version}`, (r) => r.body.includes("LIVE_ROUTE_KEYS") && r.body.includes("FAST_BUNDLE_PRIME_TTL_MS") && !r.body.includes('const SNAPSHOT_ROUTES = ["strategy|策略1", "strategy|策略2"')],
     ["worker", `/terminal-worker.js?v=${version}`, (r) => r.body.includes("swingBuckets")],
-    ["service-worker", `/fuman-sw.js?v=${version}`, (r) => r.body.includes("terminal-fast-bundle") && r.body.includes("PREFETCH_CORE_DATA_ASSETS") && r.body.includes("terminal-watchlist-shell.js") && r.body.includes("terminal-chip-snapshot-module.js")],
+    ["service-worker", `/fuman-sw.js?v=${version}`, (r) => r.body.includes("terminal-fast-bundle") && r.body.includes("PREFETCH_CORE_DATA_ASSETS") && r.body.includes("terminal-market-snapshot-module.js") && r.body.includes("terminal-watchlist-shell.js") && r.body.includes("terminal-chip-snapshot-module.js")],
     ["terminal-bootstrap", `/terminal.js?v=${version}`, (r) => r.body.includes("FUMAN_TERMINAL_LOAD_APP") && r.body.includes("FUMAN_TERMINAL_LOAD_FEATURE_MODULE") && r.body.includes("terminal-app.js")],
     ["terminal-app", `/terminal-app.js?v=${version}`, (r) => r.body.includes("FUMAN_LIVE_MEMORY_TTL_MS") && r.body.includes("loadStrategyWeights")],
     ["terminal-fast-bundle", "/api/terminal-fast-bundle?canvas=1&compact=1&shell=1&v=verify", (r) => {
@@ -165,6 +166,17 @@ async function main() {
         && Array.isArray(p.misses)
         && p.misses.length === 0
         && Object.keys(p.endpoints || {}).length >= 10;
+    }],
+    ["production-health", "/api/production-health?v=verify", (r) => {
+      const p = parseJson(r);
+      return p.ok === true
+        && Array.isArray(p.issues)
+        && p.issues.length === 0
+        && p.snapshot?.fresh === true
+        && p.snapshot?.partial === false
+        && p.snapshot?.hasStrategy2Snapshot === false
+        && p.strategy2?.ok === true
+        && !/desktop_route_snapshot/i.test(String(p.strategy2?.source || ""));
     }],
     ["strategy1-api", "/api/open-buy-latest?canvas=1&compact=1&shell=1&limit=60&v=verify", (r) => { const p = parseJson(r); return p.ok === true && Number(p.count || 0) >= 0; }],
     ["strategy3-api", "/api/strategy3-latest?v=verify", (r) => { const p = parseJson(r); return p.ok === true && Number(p.count) > 0 && !!p.runId; }],
