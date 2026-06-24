@@ -2520,6 +2520,33 @@
     });
   }
 
+  function clearDesktopMarketCachesAndReload(reason = "market") {
+    const key = "fuman-desktop-market-fresh-reload:20260624-02";
+    try {
+      if (sessionStorage.getItem(key) === "1") return false;
+      sessionStorage.setItem(key, "1");
+    } catch (error) {
+      return false;
+    }
+    const clearCaches = "caches" in window
+      ? caches.keys().then((keys) => Promise.all(keys.filter((name) => /fuman-terminal/i.test(name)).map((name) => caches.delete(name))))
+      : Promise.resolve();
+    const unregisterSw = navigator.serviceWorker?.getRegistrations
+      ? navigator.serviceWorker.getRegistrations().then((registrations) => Promise.all(registrations.map((registration) => registration.unregister())))
+      : Promise.resolve();
+    Promise.allSettled([clearCaches, unregisterSw]).finally(() => {
+      try {
+        const url = new URL(location.href);
+        url.searchParams.set("desktop_market_fresh", `${Date.now()}`);
+        url.searchParams.set("desktop_market_reason", reason);
+        location.replace(url.toString());
+      } catch (error) {
+        location.reload();
+      }
+    });
+    return true;
+  }
+
   function loadOriginalDesktopMarketDirect(reason = "market") {
     if (/^20260624-0[12]$/.test(String(window.__fumanDesktopMarketExports || ""))) return Promise.resolve(true);
     if (originalDesktopMarketDirectPromise) return originalDesktopMarketDirectPromise;
@@ -2536,9 +2563,12 @@
       (promise, [file, attr]) => promise.then(() => loadScriptOnce(`/${file}?v=${encodeURIComponent(version)}`, attr)),
       Promise.resolve(true)
     ).then(() => loadScriptOnce(
-      `/terminal-app.js?v=${encodeURIComponent(version)}&desktop_market_exports=20260624-01`,
+      `/terminal-app.js?v=${encodeURIComponent(version)}&desktop_market_exports=20260624-02`,
       "data-fuman-terminal-app"
     )).then(() => {
+      if (!/^20260624-0[12]$/.test(String(window.__fumanDesktopMarketExports || ""))) {
+        clearDesktopMarketCachesAndReload(reason);
+      }
       window.FUMAN_TERMINAL_APP_READY = true;
       runOriginalDesktopMarketFunctions();
       return true;
