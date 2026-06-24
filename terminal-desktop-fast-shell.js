@@ -2984,6 +2984,9 @@
       #strategy-view.fuman-api-only-strategy-route .strategy-search {
         display: none !important;
       }
+      #strategy-view.fuman-api-only-strategy-route .desktop-route-shell-head {
+        display: none !important;
+      }
       #strategy-view.fuman-api-only-strategy-route .strategy-terminal,
       #strategy-view.fuman-api-only-strategy-route .strategy-results,
       #strategy-view.fuman-api-only-strategy-route #strategy-table,
@@ -2996,6 +2999,9 @@
         grid-template-columns: 1fr !important;
       }
       #strategy-view.fuman-api-only-strategy-route .desktop-route-shell.desktop-canvas-app {
+        margin-top: 0 !important;
+      }
+      #strategy-view.fuman-api-only-strategy-route .desktop-route-canvas {
         margin-top: 0 !important;
       }
       .fuman-theme-toggle {
