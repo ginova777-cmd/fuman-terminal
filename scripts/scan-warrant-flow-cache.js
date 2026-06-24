@@ -2,7 +2,7 @@ const fs = require("fs");
 const path = require("path");
 const scanWarrantFlow = require("../api/scan-warrant-flow");
 const { writeSummary } = require("./cache-summary");
-const { serviceRoleKey, terminalSupabaseUrl } = require("../lib/server-supabase-key");
+const { serverSupabaseUrl, serviceRoleKey } = require("../lib/server-supabase-key");
 
 const { ROOT, dataPath, repoPath } = require("./runtime-paths");
 const OUT_FILE = dataPath("warrant-flow-latest.json");
@@ -11,7 +11,7 @@ const SUMMARY_FILE = dataPath("warrant-flow-summary.json");
 const STOCK_QUOTES_FILE = dataPath("stocks-quotes-slim.json");
 const SYNC_ROOT = process.env.FUMAN_SYNC_DIR || "C:\\fuman-terminal";
 const RUNTIME_DIR = process.env.FUMAN_RUNTIME_DIR || "C:/fuman-runtime";
-const SUPABASE_URL = terminalSupabaseUrl({ runtimeDir: RUNTIME_DIR });
+const SUPABASE_URL = serverSupabaseUrl({ runtimeDir: RUNTIME_DIR });
 const SUPABASE_SERVICE_ROLE_KEY = serviceRoleKey({ runtimeDir: RUNTIME_DIR });
 const WARRANT_FLOW_RUNS_TABLE = process.env.WARRANT_FLOW_SUPABASE_RUNS_TABLE || "warrant_flow_scan_runs";
 const WARRANT_FLOW_RESULTS_TABLE = process.env.WARRANT_FLOW_SUPABASE_RESULTS_TABLE || "warrant_flow_scan_results";
