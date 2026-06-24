@@ -107,7 +107,8 @@ function shapeTopPayload(req, payload) {
   ];
   for (const key of arrayKeys) {
     if (Array.isArray(payload[key])) {
-      shaped[`${key}Total`] = payload[key].length;
+      const totalKey = `${key}Total`;
+      if (payload[totalKey] === undefined) shaped[totalKey] = payload[key].length;
       shaped[key] = compactRows(topArray(payload[key], limit));
     }
   }
