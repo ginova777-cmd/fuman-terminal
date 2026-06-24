@@ -723,6 +723,12 @@ async function publishStrategy2CompleteRunToSupabase({ supabaseUrl, publishKey, 
   if (!publishKey) {
     throw new Error("strategy2 complete run publish failed: missing Supabase service role key");
   }
+  const recordCount = Array.isArray(report.records) ? report.records.length : 0;
+  const eventCount = Array.isArray(report.events) ? report.events.length : 0;
+  if (recordCount <= 0 && eventCount <= 0) {
+    console.warn("strategy2 complete run publish skipped: empty report has no records/events");
+    return false;
+  }
   const scanDate = String(report.date || "").match(/^\d{4}-\d{2}-\d{2}$/)
     ? String(report.date)
     : (() => {
@@ -772,13 +778,19 @@ async function upsertStrategy2LatestToSupabase(report) {
     return false;
   }
   const completePayload = buildStrategy2CompleteRunPayload(report);
+  const recordCount = Array.isArray(completePayload.records) ? completePayload.records.length : 0;
+  const eventCount = Array.isArray(completePayload.events) ? completePayload.events.length : 0;
+  if (recordCount <= 0 && eventCount <= 0) {
+    console.warn("strategy2_latest upsert skipped: empty report has no records/events");
+    return false;
+  }
   const payload = {
     id: "latest",
     date: completePayload.date || "",
     updated_at: completePayload.updatedAt || new Date().toISOString(),
     entry_count: cleanNumber(completePayload.entryCount || completePayload.aCount),
-    record_count: Array.isArray(completePayload.records) ? completePayload.records.length : 0,
-    event_count: Array.isArray(completePayload.events) ? completePayload.events.length : 0,
+    record_count: recordCount,
+    event_count: eventCount,
     payload: completePayload,
   };
   let latestOk = false;

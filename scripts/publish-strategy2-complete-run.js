@@ -145,6 +145,9 @@ async function main() {
   const config = supabaseConfig();
   const { source, payload } = await readLatestReportFromSupabase(config);
   const report = buildCompleteRunPayload(payload);
+  if (report.records.length <= 0 && report.events.length <= 0) {
+    throw new Error("strategy2 complete run publish blocked: empty report has no records/events");
+  }
   const scanDate = normalizeScanDate(report.date, report.updatedAt || report.generatedAt || Date.now());
   const runId = buildCompleteRunId(report);
   const { supabaseUrl, serviceKey, publishKey } = config;
