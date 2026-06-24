@@ -102,6 +102,7 @@
     source: "",
     query: "",
     signalFilter: "",
+    zoneFilter: "",
     offset: 0,
     hoverIndex: -1,
     selectedIndex: -1,
@@ -912,6 +913,7 @@
         row.volumeRatio || "",
         row.tradeValue || "",
         row.legal5d || "",
+        row.swingZone || "",
         row.aiStatus || "",
         row.triggerReason || "",
         row.reason || "",
@@ -1018,6 +1020,8 @@
     const volumeRatio = pickFirstValue(merged.projectedRatio, merged.volumeRatio, merged.VolumeRatio, merged.projected_ratio, merged.estimatedVolumeRatio, merged.estimated_volume_ratio);
     const tradeValue = pickFirstValue(merged.tradeValue, merged.value, merged.TradeValue, merged.trade_value, merged.amount, merged.turnover);
     const legal5d = pickFirstValue(merged.legal5d, merged.legal5D, merged.institutional5d, merged.institutional5D, merged.foreign5d, merged.foreign5D, merged.foreign5dNet, merged.foreign_5d_net, merged.chip5d);
+    const swingZone = compactText(merged.swingZone || merged.zone || merged.swing_zone || payload.swingZone || payload.zone || active.swingZone || "", 2).toUpperCase();
+    const swingZoneLabel = compactText(merged.swingZoneLabel || merged.zoneLabel || merged.zone_label || payload.swingZoneLabel || payload.zoneLabel || active.swingZoneLabel || (swingZone ? `${swingZone}區` : ""), 16);
     const signals = normalizeSignalRows(merged.signals || merged.matches || merged.swingSignals || payload.signals || payload.matches || active.signals, route);
     const primarySignal = signals[0] || null;
     const rawSubStrategy = merged.subStrategy || merged.strategyLabel || merged.signalLabel || merged.setupName || merged.setup_type || active.short || active.label || active.name || primarySignal?.label || "";
@@ -1102,6 +1106,8 @@
       ratio2: pickFirstValue(merged.ratio2, merged.ratio1000Week2),
       ratio3: pickFirstValue(merged.ratio3, merged.ratio1000Week3),
       ratioIncrease: pickFirstValue(merged.ratioIncrease, merged.ratio_increase),
+      swingZone,
+      swingZoneLabel,
       longShort: compactText(merged.longShort || merged.side || merged.direction || "多", 8),
       aiStatus,
       aiSummary,
@@ -1210,6 +1216,7 @@
         updateStrategy2BattleShell(currentCanvasShell(), route, strategyMeta(route));
         return true;
       }
+      updateStrategyFilterControls(currentCanvasShell());
       scheduleCanvasDraw();
     }
     return true;
@@ -1296,7 +1303,9 @@
     const query = compactText(canvasState.query, 80).toLowerCase();
     const signalFilter = (isStrategy4Route(canvasState.route) || isStrategy5Route(canvasState.route)) ? compactText(canvasState.signalFilter, 80).toLowerCase() : "";
     const chipFilter = isChipTradeRoute(canvasState.route) ? compactText(canvasState.signalFilter || "", 80) : "";
+    const zoneFilter = isStrategy4Route(canvasState.route) ? compactText(canvasState.zoneFilter, 2).toUpperCase() : "";
     canvasState.filtered = canvasState.rows.filter((row) => {
+      if (zoneFilter && String(row.swingZone || "").toUpperCase() !== zoneFilter) return false;
       const signalText = [row.subStrategyId, row.subStrategy, row.signalLine, ...(row.signals || []).flatMap((signal) => [signal.id, signal.label, signal.reason])].join(" ").toLowerCase();
       if (signalFilter && !signalText.includes(signalFilter)) return false;
       if (chipFilter && !matchesChipTradeFilter(row, chipFilter)) return false;
@@ -1940,6 +1949,9 @@
         <p>${escapeHtml(row.reason || row.line || "目前沒有更多說明。")}</p>
         ${signalChips ? `<div class="desktop-canvas-signal-list">${signalChips}</div>` : ""}
         <div class="desktop-canvas-detail-grid">
+          ${isStrategy4Route(canvasState.route) ? `
+            <span>分區 <strong>${escapeHtml(row.swingZoneLabel || (row.swingZone ? `${row.swingZone}區` : "--"))}</strong></span>
+          ` : ""}
           <span>分數 <strong>${escapeHtml(row.score || "--")}</strong></span>
           <span>漲幅 <strong>${escapeHtml(row.pct || "--")}</strong></span>
           <span>價格 <strong>${escapeHtml(formatPriceValue(row.price) || row.price || "--")}</strong></span>
@@ -2003,7 +2015,7 @@
         canvasState.selectedIndex = -1;
         hideCanvasDetail();
         applyCanvasFilter();
-        updateStrategySignalControls(currentCanvasShell());
+        updateStrategyFilterControls(currentCanvasShell());
         setCanvasStatus(canvasState.signalFilter ? "細分篩選" : "全部訊號");
         scheduleCanvasDraw();
         return;
@@ -2030,6 +2042,22 @@
           setCanvasStatus("買賣超策略套用");
           scheduleCanvasDraw();
         }).catch(() => setCanvasStatus("沿用快照"));
+        return;
+      }
+      const zoneFilter = event.target.closest?.("[data-strategy4-zone-filter]");
+      if (zoneFilter) {
+        event.preventDefault();
+        if (!isStrategy4Route(canvasState.route)) return;
+        const next = String(zoneFilter.dataset.strategy4ZoneFilter || "").toUpperCase();
+        canvasState.zoneFilter = canvasState.zoneFilter === next ? "" : next;
+        canvasState.offset = 0;
+        canvasState.hoverIndex = -1;
+        canvasState.selectedIndex = -1;
+        hideCanvasDetail();
+        applyCanvasFilter();
+        updateStrategyFilterControls(currentCanvasShell());
+        setCanvasStatus(canvasState.zoneFilter ? `${canvasState.zoneFilter}區篩選` : "全部分區");
+        scheduleCanvasDraw();
         return;
       }
       const pageButton = event.target.closest?.("[data-canvas-page]");
@@ -2584,6 +2612,19 @@
     return [...ordered, ...extras];
   }
 
+  function strategy4ZoneCounts(rows = []) {
+    const counts = { A: 0, B: 0, C: 0 };
+    (Array.isArray(rows) ? rows : []).forEach((row) => {
+      const zone = String(row?.swingZone || "").toUpperCase();
+      if (zone === "A" || zone === "B" || zone === "C") counts[zone] += 1;
+    });
+    return [
+      { key: "A", label: "A區", count: counts.A },
+      { key: "B", label: "B區", count: counts.B },
+      { key: "C", label: "C區", count: counts.C },
+    ];
+  }
+
   function strategy5SignalCounts(rows = []) {
     const defs = window.FUMAN_STRATEGY_CONFIG?.STRATEGY_BY_ID || {};
     const allowedOrder = window.FUMAN_STRATEGY_CONFIG?.STRATEGY5_PRESET_IDS || [];
@@ -2621,6 +2662,29 @@
         </button>
       `).join("")}
     ` : "";
+  }
+
+  function updateStrategy4ZoneControls(shell) {
+    const panel = shell || currentCanvasShell();
+    if (!panel) return;
+    const wrap = panel.querySelector("[data-strategy4-zone-filters]");
+    if (!wrap) return;
+    if (!isStrategy4Route(canvasState.route)) {
+      wrap.hidden = true;
+      wrap.innerHTML = "";
+      return;
+    }
+    const counts = strategy4ZoneCounts(canvasState.rows);
+    const active = canvasState.zoneFilter || "";
+    wrap.hidden = false;
+    wrap.innerHTML = `
+      <button type="button" data-strategy4-zone-filter="" class="${active ? "" : "active"}">全部 <b>${escapeHtml(String(canvasState.rows.length))}</b></button>
+      ${counts.map((item) => `
+        <button type="button" data-strategy4-zone-filter="${escapeHtml(item.key)}" class="${active === item.key ? "active" : ""}" ${item.count ? "" : "disabled"}>
+          ${escapeHtml(item.label)} <b>${escapeHtml(String(item.count))}</b>
+        </button>
+      `).join("")}
+    `;
   }
 
   function updateStrategySignalControls(shell) {
@@ -2662,6 +2726,11 @@
         </button>
       `;
     }).join("");
+  }
+
+  function updateStrategyFilterControls(shell) {
+    updateStrategy4ZoneControls(shell);
+    updateStrategySignalControls(shell);
   }
 
   function removeFixedPageShell(route) {
@@ -3004,6 +3073,7 @@
           <span class="desktop-canvas-count">${escapeHtml(`${canvasState.filtered.length}/${canvasState.rows.length}`)}</span>
           <span class="desktop-canvas-status">${escapeHtml(canvasWorkerReady ? canvasWorkerMode : canvasState.source || "shell")}</span>
         </div>
+        <div class="desktop-strategy4-zone-filters" data-strategy4-zone-filters hidden></div>
         <div class="desktop-strategy4-signal-filters" data-strategy4-signal-filters hidden></div>
         <div class="desktop-strategy4-signal-filters" data-chip-canvas-filters hidden></div>
         <canvas class="desktop-route-canvas" tabindex="0" aria-label="${escapeHtml(meta.title)} Canvas 快速列表"></canvas>
@@ -3202,6 +3272,7 @@
     if (input && document.activeElement !== input) input.value = canvasState.query || "";
     if (canvas) canvas.setAttribute("aria-label", `${meta.title} Canvas 快速列表`);
     updateStrategySignalControls(shell);
+    updateStrategy4ZoneControls(shell);
     updateChipTradeFilterControls(shell);
     updateCanvasPagination(shell);
     return canvas;
@@ -3220,6 +3291,7 @@
     canvasState.rows = incomingRows;
     if (previousRoute !== key) {
       canvasState.signalFilter = "";
+      canvasState.zoneFilter = "";
       canvasState.offset = 0;
       canvasState.hoverIndex = -1;
       canvasState.selectedIndex = -1;
@@ -3292,6 +3364,7 @@
     canvasState.rows = incomingRows;
     if (previousRoute !== key) {
       canvasState.signalFilter = isChipTradeRoute(key) ? CHIP_TRADE_FILTERS[0].key : "";
+      canvasState.zoneFilter = "";
       canvasState.offset = 0;
       canvasState.hoverIndex = -1;
       canvasState.selectedIndex = -1;
@@ -4196,6 +4269,7 @@
         gap: 12px;
         margin-top: 18px;
       }
+      .desktop-strategy4-zone-filters,
       .desktop-strategy4-signal-filters {
         display: flex;
         align-items: center;
@@ -4203,9 +4277,17 @@
         flex-wrap: wrap;
         margin: 12px 0 12px;
       }
+      .desktop-strategy4-zone-filters {
+        margin-bottom: 4px;
+      }
+      .desktop-strategy4-signal-filters {
+        margin-top: 6px;
+      }
+      .desktop-strategy4-zone-filters[hidden],
       .desktop-strategy4-signal-filters[hidden] {
         display: none !important;
       }
+      .desktop-strategy4-zone-filters button,
       .desktop-strategy4-signal-filters button {
         min-height: 34px;
         border: 1px solid rgba(148,163,184,0.18);
@@ -4216,11 +4298,13 @@
         font: 800 12px system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
         cursor: pointer;
       }
+      .desktop-strategy4-zone-filters button.active,
       .desktop-strategy4-signal-filters button.active {
         border-color: rgba(255,112,55,0.68);
         color: #fff3e9;
         background: rgba(255,112,55,0.18);
       }
+      .desktop-strategy4-zone-filters b,
       .desktop-strategy4-signal-filters b {
         margin-left: 5px;
         color: #ffb27b;
@@ -4410,16 +4494,19 @@
         body.fuman-light-theme .desktop-canvas-search-wrap {
           color: #64748b;
         }
+        body.fuman-light-theme .desktop-strategy4-zone-filters button,
         body.fuman-light-theme .desktop-strategy4-signal-filters button {
           border-color: #cbd8e6;
           color: #334155;
           background: rgba(255,255,255,0.9);
         }
+        body.fuman-light-theme .desktop-strategy4-zone-filters button.active,
         body.fuman-light-theme .desktop-strategy4-signal-filters button.active {
           border-color: rgba(249,115,22,0.5);
           color: #c2410c;
           background: #fff7ed;
         }
+        body.fuman-light-theme .desktop-strategy4-zone-filters b,
         body.fuman-light-theme .desktop-strategy4-signal-filters b {
           color: #ea580c;
         }
@@ -4681,12 +4768,14 @@
         html body.fuman-light-theme.public-terminal .desktop-canvas-detail-panel p {
           color: #64748b !important;
         }
+        html body.fuman-light-theme.public-terminal .desktop-strategy4-zone-filters button,
         html body.fuman-light-theme.public-terminal .desktop-strategy4-signal-filters button {
           border-color: #cbd8e6 !important;
           background: #ffffff !important;
           color: #334155 !important;
           box-shadow: none !important;
         }
+        html body.fuman-light-theme.public-terminal .desktop-strategy4-zone-filters button.active,
         html body.fuman-light-theme.public-terminal .desktop-strategy4-signal-filters button.active {
           border-color: rgba(249, 115, 22, 0.55) !important;
           background: #fff7ed !important;

@@ -192,6 +192,43 @@ function buildPayload(rows, total, run = null, options = {}) {
   };
 }
 
+function zoneOfRow(row) {
+  const payload = row?.payload && typeof row.payload === "object" ? row.payload : {};
+  return String(payload.swingZone || payload.zone || row?.zone || "").trim().toUpperCase();
+}
+
+function compactCanvasRows(rows, limit) {
+  const sorted = (Array.isArray(rows) ? rows : [])
+    .slice()
+    .sort((a, b) => cleanNumber(a.rank) - cleanNumber(b.rank) || String(a.code || "").localeCompare(String(b.code || "")));
+  const max = Math.max(30, Math.min(70, cleanNumber(limit) || 70));
+  const zoneOrder = ["A", "B", "C"];
+  const baseEach = Math.max(10, Math.floor(max / zoneOrder.length));
+  const picked = [];
+  const seen = new Set();
+  zoneOrder.forEach((zone) => {
+    sorted
+      .filter((row) => zoneOfRow(row) === zone)
+      .slice(0, baseEach)
+      .forEach((row) => {
+        const key = String(row.code || row.payload?.code || "");
+        if (!key || seen.has(key)) return;
+        seen.add(key);
+        picked.push(row);
+      });
+  });
+  sorted.forEach((row) => {
+    if (picked.length >= max) return;
+    const key = String(row.code || row.payload?.code || "");
+    if (!key || seen.has(key)) return;
+    seen.add(key);
+    picked.push(row);
+  });
+  return picked
+    .sort((a, b) => cleanNumber(a.rank) - cleanNumber(b.rank) || String(a.code || "").localeCompare(String(b.code || "")))
+    .slice(0, max);
+}
+
 async function fetchLatestCompleteRun() {
   const rows = await fetchRowsFrom(
     RUNS_TABLE,
@@ -254,8 +291,8 @@ module.exports = async function handler(request, response) {
       return;
     }
     const options = parseRequestOptions(request);
-    const latest = await fetchLatestCompleteRows(options.limit);
-    const rows = latest.rows || [];
+    const latest = await fetchLatestCompleteRows(options.canvas ? 2000 : options.limit);
+    const rows = options.canvas ? compactCanvasRows(latest.rows || [], options.limit) : latest.rows || [];
     if (!rows.length) {
       response.status(404).json(apiOnlyError("strategy4_complete_run_empty", latest.gate || "missing rows"));
       return;
