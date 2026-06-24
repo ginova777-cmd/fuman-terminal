@@ -1,6 +1,7 @@
 (function () {
-  if (window.__fumanDesktopFastShell === "20260623-09") return;
+  if (window.__fumanDesktopFastShell === "20260623-09" && window.__fumanDesktopFastShellApiOnlyPoll === "20260624-01") return;
   window.__fumanDesktopFastShell = "20260623-09";
+  window.__fumanDesktopFastShellApiOnlyPoll = "20260624-01";
 
   const NAV_SELECTOR = "[data-view]:not([data-member-tab])";
   const SNAPSHOT_DB = "fuman-desktop-route-snapshots";
@@ -9,6 +10,7 @@
   const SNAPSHOT_MAX_AGE_MS = 10 * 60 * 1000;
   const SNAPSHOT_MAX_CHARS = 850000;
   const SNAPSHOT_ROUTES = ["strategy|策略1", "strategy|策略2", "strategy|策略3", "strategy|策略4", "strategy|策略5"];
+  const API_ONLY_STRATEGY_ROUTES = ["strategy|策略1", "strategy|策略3", "strategy|策略4", "strategy|策略5"];
   const FIXED_ROUTE_KEYS = ["market|市場總覽", "chip-trade|買賣超", "cb-detect|CB可轉債", "warrant-flow|權證走向", "watchlist|自選股"];
   const FIXED_CANVAS_PERSIST_ROUTES = ["market|市場總覽", "chip-trade|買賣超", "cb-detect|CB可轉債", "warrant-flow|權證走向"];
   const CANVAS_REFRESH_TTL_MS = 18000;
@@ -89,6 +91,7 @@
 
   installStyle();
   installDesktopThemeToggle();
+  purgeApiOnlyStrategySnapshots();
   installCanvasThemeObserver();
   installRouteSnapshots();
   installFixedPageSnapshots();
@@ -698,7 +701,42 @@
   }
 
   function isApiOnlyPollingRoute(route) {
-    return isStrategyRoute(route) && route !== "strategy|策略2";
+    return API_ONLY_STRATEGY_ROUTES.includes(String(route || ""));
+  }
+
+  function rowSignature(rows = []) {
+    return (Array.isArray(rows) ? rows : [])
+      .map((row) => [
+        row.code || "",
+        row.title || "",
+        row.score || "",
+        row.pct || "",
+        row.price || "",
+        row.volume || "",
+        row.reason || "",
+      ].join(":"))
+      .join("|");
+  }
+
+  function currentRowsSignature(route) {
+    return rowSignature(canvasStore.get(route)?.rows || canvasState.rows || []);
+  }
+
+  function purgeApiOnlyStrategySnapshots() {
+    API_ONLY_STRATEGY_ROUTES.forEach((key) => {
+      try { sessionStorage.removeItem(SNAPSHOT_PREFIX + key); } catch (error) {}
+      routeSnapshots.delete(key);
+      canvasStore.delete(key);
+      canvasRouteVersions.delete(key);
+    });
+    if (!("indexedDB" in window)) return;
+    openSnapshotDb().then((db) => {
+      if (!db) return;
+      try {
+        const tx = db.transaction(SNAPSHOT_STORE, "readwrite");
+        API_ONLY_STRATEGY_ROUTES.forEach((key) => tx.objectStore(SNAPSHOT_STORE).delete(key));
+      } catch (error) {}
+    }).catch(() => undefined);
   }
 
   function canvasOptionsForRoute(route) {
@@ -1541,8 +1579,24 @@
       if (!isApiOnlyPollingRoute(route)) return;
       const active = window.__fumanDesktopActiveRoute;
       if (active?.key && active.key !== route) return;
+      const before = currentRowsSignature(route);
       fetchCanvasRows(route, true).then((rows) => {
         if (!rows?.length || (window.__fumanDesktopActiveRoute?.key && window.__fumanDesktopActiveRoute.key !== route)) return;
+        const next = rowSignature(rows);
+        if (before === next && canvasState.route === route) {
+          canvasState.source = `api-only-poll-${reason}`;
+          setCanvasStatus();
+          scheduleCanvasDraw();
+          return;
+        }
+        if (canvasState.route === route && currentCanvasShell()) {
+          canvasState.rows = rows;
+          canvasState.source = `api-only-poll-${reason}`;
+          applyCanvasFilter();
+          scheduleCanvasDraw();
+          setCanvasStatus();
+          return;
+        }
         renderStrategyRouteShell(route, `api-only-poll-${reason}`, rows);
       }).catch(() => undefined);
     };
