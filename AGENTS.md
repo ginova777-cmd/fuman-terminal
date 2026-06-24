@@ -180,6 +180,77 @@ Strategy3 API bridge commit:
 - 不要靠 bump 版本號或 service worker cache bump 掩蓋資料或畫面錯誤。
 - 不要把 Codex latency/debug 面板露給客戶。
 
+### 2026-06-24 買賣超 / CB fixed shell 銜接狀態
+
+本段是給後續 Codex 的戰鬥狀態交接。使用者已明確指出買賣超畫面曾經「沒有資料」、「內容顯示很奇怪而且很慢」、「外資+投信佔5日均量不可能是 0」。這些都不是前端殼要重寫的問題，而是資料源、renderer 與舊 verifier 的銜接問題。
+
+目前正式 main / production 已接上的基準：
+
+```text
+Latest verified production HEAD:
+19e6b38e731b9c7fab3d5d6d12c7805247325e5b
+
+Known included commits:
+794f59dc Remove retired chip static checks
+b81fb1de Render fixed chip pages on main canvas
+13afa1d8 Restore chip trade canvas filters
+f64fd324 Render chip trade canvas table directly
+6136d143 Fix chip foreign trust volume counts
+```
+
+買賣超固定 shell 現況：
+
+- `terminal-desktop-fast-shell.js` 不可再讓買賣超 / CB / 權證走泛用策略 Canvas worker renderer；這三個 fixed pages 必須由 main thread Canvas 直接畫，避免空白或欄位錯位。
+- 買賣超不可顯示泛用策略表格欄位 `Rank / Code / Signal`；要用買賣超自己的欄位，例如 `外資買超 / 投信買超 / 連買 / 佔均量 / 漲幅`。
+- fast shell 第一屏買賣超預設 filter 是 `foreignStreak`，讓 Supabase snapshot / institution API 可立即畫出資料。
+- `tdcc1000` 是較慢的 TDCC 組合條件，必須保留，但只在使用者點擊該 filter 時才打 `/api/institution-tdcc-breakout-latest`，不要拿它阻塞第一屏。
+
+買賣超原本 5 個策略模式都要存在：
+
+```text
+tdcc1000                外資連3買 + 1000張連3週增     -> /api/institution-tdcc-breakout-latest
+foreignTrustVolumePct   外資+投信佔5日均量             -> /api/institution-latest
+foreignStreak           外資連買日                     -> /api/institution-latest
+trustStreak             投信連買日                     -> /api/institution-latest
+jointStreak             同買日                         -> /api/institution-latest
+```
+
+買賣超 API / scanner 規則：
+
+- `api/institution-latest.js` 必須支援 `canvas=1&compact=1&shell=1&limit=N`，並回小包可畫 rows，不要回整包大資料。
+- `api/institution-tdcc-breakout-latest.js` 也必須支援 `canvas=1&compact=1&shell=1&limit=N`。
+- `api/institution-latest.js` 的 transport gate 是 `complete-run-readback`；只允許 Supabase complete run + readback 完整通過後進正式輸出。
+- `scripts/scan-institution-cache.js` 寫入 Supabase 後必須 read back，確認 count / completeness 後才 mark complete。
+- 小包 `limit` 只能限制前端繪圖 rows；完整性判斷不能用小包筆數代替完整 run count。
+
+買賣超「外資+投信佔5日均量」不可再假 0：
+
+- API rows 若有 `foreignTrustBuyVolumePct` / `institutionBuyVolumePct`，前端可直接使用。
+- 若舊 snapshot 只有 `foreign`、`trust`、`fiveDayAvgVolume`，必須用 `(foreign + trust) / fiveDayAvgVolume * 100` 推導。
+- 若對應 endpoint 尚未載入，filter badge count 顯示 `...`，不要顯示 `0`。
+- 只有在對應 endpoint 實際完成 fetch 且回傳 zero results 時，才可以顯示 `0`。
+
+已退休的買賣超靜態 verifier 不可復活：
+
+- `verify:chip` / `health:chip` 已從 `package.json` 移除。
+- `scripts/verify-chip-trade-contract.js` 已移除。
+- `scripts/health-check-chip-trade.js` 已移除。
+- 不要為了舊 verifier 恢復 `data/institution-latest.json`；乾淨 API-only clone 沒有這個退休靜態 JSON 是正確狀態。
+
+route snapshot / fast bundle 接入要求：
+
+- 非策略2的 fixed / 策略資料源要能被 `/api/desktop-route-snapshot` 收進 endpoints。
+- `/api/terminal-fast-bundle` 要優先讀 Supabase `desktop_route_snapshot`。
+- strategy2 是當沖即時資料，不可放進 desktop route snapshot；可做 compact/live API、pointerdown prewarm、memory cache，但必須保留 live intent。
+- 不要新增密集 polling，不要讓 `terminal-app.js` 在切頁瞬間重新接管畫面。
+
+部署與驗證：
+
+- 不要直接從 dirty 的 `C:\fuman-terminal` 部署；必要時使用乾淨 worktree。
+- 修改 JS 後至少跑 `node --check <改過的 js 檔>`、`npm run verify:version`、`npm run verify:runtime-hotfix`、`npm run verify:desktop-api-only`。
+- 部署後驗正式站，不只看 preview URL：`npm run verify:live-version`、`node --use-system-ca scripts\verify-deployment.js`、`npm run e2e:smoke`、`npm run monitor:production`。
+- production health 應維持 `snapshotHit=true`、`snapshotFresh=true`、`partial=false`、`endpointCount>=10`、`hasStrategy2Snapshot=false`。
+
 ## 策略規則
 
 ### 策略1：明日開盤入正式流程
