@@ -3,7 +3,7 @@ const crypto = require("crypto");
 const FRAGMENT_TABS = ["strategy1", "strategy2", "strategy3", "strategy4", "strategy5", "chip", "warrant"];
 const TAB_ENDPOINTS = {
   strategy1: "/api/open-buy-latest",
-  strategy2: "/api/latest-strategy?key=strategy2",
+  strategy2: "/api/strategy2-latest",
   strategy3: "/api/strategy3-latest",
   strategy4: "/api/strategy4-latest",
   strategy5: "/api/strategy5-latest",
@@ -46,7 +46,13 @@ function signature(tab, payload) {
 async function buildBoot(request) {
   const origin = originFrom(request);
   const results = await Promise.all(FRAGMENT_TABS.map(async (tab) => {
-    const payload = await fetchJsonWithTimeout(`${origin}${TAB_ENDPOINTS[tab]}?mobileBoot=1&ts=${Date.now()}`);
+    const url = new URL(TAB_ENDPOINTS[tab], origin);
+    url.searchParams.set("mobileBoot", "1");
+    url.searchParams.set("compact", "1");
+    url.searchParams.set("shell", "1");
+    url.searchParams.set("limit", tab === "strategy2" ? "50" : "30");
+    url.searchParams.set("ts", String(Date.now()));
+    const payload = await fetchJsonWithTimeout(url.toString());
     return [tab, payload];
   }));
   const fragments = {};

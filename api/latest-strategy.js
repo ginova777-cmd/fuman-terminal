@@ -38,9 +38,21 @@ function createCaptureResponse() {
   };
 }
 
-async function captureHandler(handler, query = {}) {
+async function captureHandlerResponse(handler, request = {}, query = {}) {
   const response = createCaptureResponse();
-  await handler({ method: "GET", query }, response);
+  const mergedQuery = { ...(request.query || {}), ...query };
+  const search = new URLSearchParams(mergedQuery);
+  await handler({
+    ...request,
+    method: "GET",
+    url: `/api/latest-strategy?${search.toString()}`,
+    query: mergedQuery,
+  }, response);
+  return response;
+}
+
+async function captureHandler(handler, request = {}, query = {}) {
+  const response = await captureHandlerResponse(handler, request, query);
   return response.body;
 }
 
@@ -90,6 +102,36 @@ module.exports = async function handler(request, response) {
   }
 
   try {
+    if (key === "strategy2") {
+      const strategy2Response = await captureHandlerResponse(STRATEGY_HANDLERS.strategy2(), request, {
+        live: request.query?.live || "1",
+      });
+      const strategy2 = strategy2Response.body || {};
+      response.status(strategy2Response.statusCode || 200).json({
+        ok: strategy2?.ok !== false,
+        strategyKey: "strategy2",
+        label: "策略2 當沖雷達",
+        usedDate: strategy2?.date || "",
+        updatedAt: strategy2?.updatedAt || strategy2?.generatedAt || "",
+        scanStatus: strategy2?.complete === false ? "incomplete" : "complete",
+        scanned: strategy2?.scanned ?? strategy2?.total ?? "",
+        total: strategy2?.total ?? strategy2?.totalCount ?? "",
+        count: Number(strategy2?.count ?? strategy2?.matchCount ?? payloadCount(strategy2)),
+        source: "api/strategy2-latest",
+        payload: strategy2,
+        transport: {
+          source: "supabase",
+          gate: strategy2?.transport?.gate || "strategy2-live-handler",
+          payloadSource: strategy2?.transport?.source || strategy2?.cacheSource || "",
+          payloadGate: strategy2?.transport?.gate || "",
+          payloadRunId: strategy2?.transport?.runId || strategy2?.runId || "",
+          payloadVia: strategy2?.transport?.via || "api/strategy2-latest",
+          live: true,
+          fetchedAt: new Date().toISOString(),
+        },
+      });
+      return;
+    }
     const row = await fetchStatusRow(key);
     if (!row) {
       response.status(404).json({ ok: false, error: "strategy_not_found", strategyKey: key });
@@ -97,7 +139,7 @@ module.exports = async function handler(request, response) {
     }
     let payload = row.payload || null;
     if (!payload && STRATEGY_HANDLERS[key]) {
-      payload = await captureHandler(STRATEGY_HANDLERS[key]());
+      payload = await captureHandler(STRATEGY_HANDLERS[key](), request);
     }
     const transport = {
       source: "supabase",

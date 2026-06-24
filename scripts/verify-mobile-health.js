@@ -11,7 +11,7 @@ const FIRST_SCREEN_TARGETS = [
   "/terminal-mobile-diagnostics.js",
   "/api/mobile-boot",
   "/api/terminal-home",
-  "/api/latest-strategy?key=strategy2?top=1&compact=1&limit=50",
+  "/api/strategy2-latest?top=1&compact=1&limit=50",
 ];
 const FIRST_SCREEN_FORBIDDEN = [
   "/data/mobile-home-summary.json",
@@ -32,7 +32,7 @@ const MAX_BYTES = {
   "/terminal-mobile-diagnostics.js": 4000,
   "/api/mobile-boot": 30000,
   "/api/terminal-home": 45000,
-  "/api/latest-strategy?key=strategy2?top=1&compact=1&limit=50": 30000,
+  "/api/strategy2-latest?top=1&compact=1&limit=50": 30000,
 };
 
 const TARGETS = [
@@ -42,7 +42,7 @@ const TARGETS = [
   { path: "/terminal-mobile-diagnostics.js", kind: "script", versioned: true, maxBytes: MAX_BYTES["/terminal-mobile-diagnostics.js"], cache: /immutable/i },
   { path: "/api/mobile-boot", kind: "json", maxBytes: MAX_BYTES["/api/mobile-boot"], cache: /no-store/i },
   { path: "/api/terminal-home", kind: "json", maxBytes: MAX_BYTES["/api/terminal-home"], cache: /no-store/i },
-  { path: "/api/latest-strategy?key=strategy2?top=1&compact=1&limit=50", kind: "json", maxBytes: MAX_BYTES["/api/latest-strategy?key=strategy2?top=1&compact=1&limit=50"], cache: /no-store/i },
+  { path: "/api/strategy2-latest?top=1&compact=1&limit=50", kind: "json", maxBytes: MAX_BYTES["/api/strategy2-latest?top=1&compact=1&limit=50"], cache: /no-store/i },
 ];
 
 function fetchBuffer(pathname, version = "") {
