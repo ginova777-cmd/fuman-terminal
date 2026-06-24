@@ -33,6 +33,8 @@ const STRATEGY3_REQUIRE_TV_ENTRY = process.env.STRATEGY3_REQUIRE_TV_ENTRY !== "0
 const STRATEGY3_TV_CANDIDATE_LIMIT = Number(process.env.STRATEGY3_TV_CANDIDATE_LIMIT || 0);
 const STRATEGY3_TV_CANDLE_LIMIT = Number(process.env.STRATEGY3_TV_CANDLE_LIMIT || 160);
 const STRATEGY3_TV_CONCURRENCY = Number(process.env.STRATEGY3_TV_CONCURRENCY || 8);
+const STRATEGY3_1M_READBACK_LIMIT = Number(process.env.STRATEGY3_1M_READBACK_LIMIT || 360);
+const STRATEGY3_1M_READBACK_CONCURRENCY = Number(process.env.STRATEGY3_1M_READBACK_CONCURRENCY || 8);
 const STRATEGY3_REQUIRE_TURNOVER = process.env.STRATEGY3_REQUIRE_TURNOVER === "1";
 const STRATEGY3_REQUIRE_VOLUME_AVERAGE = process.env.STRATEGY3_REQUIRE_VOLUME_AVERAGE === "1";
 const STRATEGY3_USE_SUPABASE = process.env.STRATEGY3_USE_SUPABASE !== "0";
@@ -384,6 +386,33 @@ function candleMinutes(candle) {
   return Number(match[1]) * 60 + Number(match[2]);
 }
 
+function candleTaipeiDateKey(candle) {
+  const text = String(candle?.candleTime || candle?.time || candle?.tradeDate || "");
+  const parsed = Date.parse(text);
+  if (Number.isFinite(parsed)) {
+    const parts = new Intl.DateTimeFormat("en-CA", {
+      timeZone: "Asia/Taipei",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).formatToParts(new Date(parsed));
+    const get = (type) => parts.find((part) => part.type === type)?.value || "";
+    return `${get("year")}${get("month")}${get("day")}`;
+  }
+  const match = text.match(/\b(\d{4})[-/]?(\d{2})[-/]?(\d{2})\b/);
+  return match ? `${match[1]}${match[2]}${match[3]}` : "";
+}
+
+function after1300CandleRows(candles, quoteDate = "") {
+  const expectedDate = String(quoteDate || "").replace(/\D/g, "");
+  return (candles || []).filter((candle) => {
+    const minutes = candleMinutes(candle);
+    if (minutes == null || minutes < 13 * 60) return false;
+    const dateKey = candleTaipeiDateKey(candle);
+    return !expectedDate || !dateKey || dateKey === expectedDate;
+  });
+}
+
 function analyzeTradingViewOvernightEntry(candles) {
   const rows = (candles || [])
     .map((row) => ({
@@ -453,6 +482,54 @@ async function mapLimit(items, limit, mapper) {
   });
   await Promise.all(workers);
   return out;
+}
+
+function strategy3ReadbackCandidates(stocks) {
+  return [...(stocks || [])]
+    .filter((stock) => cleanNumber(stock.close) > 0 && cleanNumber(stock.tradeVolume || stock.volume) > 0)
+    .sort((a, b) => {
+      const scoreA = cleanNumber(a.value || a.tradeValue) / 1000000
+        + cleanNumber(a.tradeVolume || a.volume) / 100000
+        + Math.max(0, cleanNumber(a.percent)) * 8
+        + cleanNumber(a.volumeRatio || a.projectedRatio) * 5;
+      const scoreB = cleanNumber(b.value || b.tradeValue) / 1000000
+        + cleanNumber(b.tradeVolume || b.volume) / 100000
+        + Math.max(0, cleanNumber(b.percent)) * 8
+        + cleanNumber(b.volumeRatio || b.projectedRatio) * 5;
+      return scoreB - scoreA;
+    })
+    .slice(0, Math.max(20, STRATEGY3_1M_READBACK_LIMIT));
+}
+
+async function repairAfter1300StatusFromRpc(stocks, warnings) {
+  const currentReady = (stocks || []).filter((stock) => stock.hasAfter1300Candle || cleanNumber(stock.after1300CandleCount) > 0).length;
+  if (currentReady >= STRATEGY3_MIN_AFTER_1300_CANDIDATES) return { repaired: 0, checked: 0 };
+  const candidates = strategy3ReadbackCandidates(stocks);
+  let repaired = 0;
+  let checked = 0;
+  await mapLimit(candidates, STRATEGY3_1M_READBACK_CONCURRENCY, async (stock) => {
+    if (stock.hasAfter1300Candle || cleanNumber(stock.after1300CandleCount) > 0) return;
+    checked += 1;
+    try {
+      const result = await fetchStrategy3Intraday1mLatestN(stock.code, STRATEGY3_TV_CANDLE_LIMIT);
+      const candles = result.candles || result.rows || [];
+      const afterRows = after1300CandleRows(candles, stock.quoteDate);
+      if (!afterRows.length) return;
+      stock.after1300CandleCount = afterRows.length;
+      stock.hasAfter1300Candle = true;
+      stock.has1300Candle = afterRows.some((row) => candleMinutes(row) === 13 * 60);
+      stock.intradayCandleCount = candles.length;
+      stock.latestCandleTime = afterRows.at(-1)?.candleTime || afterRows.at(-1)?.time || stock.latestCandleTime || "";
+      stock.intradayStatusSource = "rpc-readback";
+      repaired += 1;
+    } catch (error) {
+      return;
+    }
+  });
+  if (repaired > 0) {
+    warnings.push(`strategy3 1m status repaired from RPC readback: ${repaired}/${checked}`);
+  }
+  return { repaired, checked };
 }
 
 async function fetchJson(url, timeout = 30000) {
@@ -613,6 +690,7 @@ async function fetchSupabaseStrategy3Universe() {
       stock.hasAfter1300Candle = true;
     });
   }
+  await repairAfter1300StatusFromRpc(stocks, warnings);
   let capitalResult = { byCode: new Map() };
   try {
     capitalResult = await fetchStrategy3CapitalMap(stocks.map((stock) => stock.code));
