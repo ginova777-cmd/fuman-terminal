@@ -2,6 +2,7 @@ const fs = require("fs");
 const path = require("path");
 const { readEndpointFromDesktopSnapshot } = require("../lib/desktop-route-snapshot-cache");
 const { terminalSupabaseKey, terminalSupabaseUrl } = require("../lib/server-supabase-key");
+const { readSnapshot } = require("../lib/supabase-snapshots");
 
 function readSecretText(file) {
   try { return fs.readFileSync(file, "utf8").trim(); } catch { return ""; }
@@ -13,6 +14,7 @@ const SUPABASE_KEY = terminalSupabaseKey({ runtimeDir: RUNTIME_DIR });
 
 const TABLE = process.env.STRATEGY3_SUPABASE_RESULTS_TABLE || "strategy3_scan_results";
 const LATEST_RUN_VIEW = process.env.STRATEGY3_SUPABASE_LATEST_RUN_VIEW || "v_strategy3_latest_complete_run";
+const SNAPSHOT_KEY = process.env.STRATEGY3_SUPABASE_SNAPSHOT_KEY || "strategy3_latest";
 
 function apiOnlyError(reason = "") {
   return {
@@ -56,7 +58,7 @@ function cleanNumber(value) {
 function parseRequestOptions(request) {
   try {
     const url = new URL(request.url || "", "http://localhost");
-    const canvas = url.searchParams.get("canvas") === "1" || url.searchParams.get("compact") === "1";
+    const canvas = url.searchParams.get("canvas") === "1" || url.searchParams.get("compact") === "1" || url.searchParams.get("shell") === "1";
     const limit = Math.max(1, Math.min(canvas ? 120 : 2000, cleanNumber(url.searchParams.get("limit")) || (canvas ? 60 : 2000)));
     return { canvas, limit };
   } catch {
@@ -89,6 +91,12 @@ function normalizePayload(row) {
   };
 }
 
+function normalizeSnapshotRows(payload) {
+  return Array.isArray(payload?.matches) ? payload.matches
+    : Array.isArray(payload?.rows) ? payload.rows
+      : [];
+}
+
 function normalizeSourceHealth(value) {
   const sourceHealth = value && typeof value === "object" ? { ...value } : null;
   if (!sourceHealth) return null;
@@ -113,6 +121,7 @@ function buildPayload(rows, run, options = {}) {
   const scanDate = String(first.scan_date || run?.scan_date || "").replace(/-/g, "");
   const sourceHealth = normalizeSourceHealth(run?.payload?.sourceHealth);
   const qualityStatus = sourceHealth?.status || String(first.quality_status || run?.quality_status || "");
+  const resultCount = cleanNumber(run?.result_count || run?.payload?.count);
   return {
     ok: true,
     source: "supabase:strategy3_scan_results",
@@ -124,7 +133,8 @@ function buildPayload(rows, run, options = {}) {
     complete: true,
     canvas: Boolean(options.canvas),
     qualityStatus,
-    count: matches.length,
+    count: Math.max(matches.length, resultCount),
+    returnedCount: matches.length,
     total: Math.max(matches.length, cleanNumber(run?.expected_total || run?.scanned_count)),
     sourceHealth,
     matches,
@@ -138,6 +148,54 @@ function buildPayload(rows, run, options = {}) {
       fetchedAt: new Date().toISOString(),
     },
   };
+}
+
+function buildSnapshotPayload(snapshot, options = {}) {
+  const sourcePayload = snapshot?.payload && typeof snapshot.payload === "object" ? snapshot.payload : null;
+  if (!sourcePayload) return null;
+  const rows = normalizeSnapshotRows(sourcePayload);
+  if (!rows.length) return null;
+  const matches = rows
+    .slice(0, options.limit || rows.length)
+    .map((row, index) => normalizePayload({ ...row, rank: row.rank || index + 1, payload: row }));
+  const count = Math.max(cleanNumber(sourcePayload.count), rows.length);
+  const total = Math.max(cleanNumber(sourcePayload.total), count);
+  return {
+    ...sourcePayload,
+    ok: sourcePayload.ok !== false,
+    source: sourcePayload.source || "strategy3_scan_results",
+    cacheSource: "supabase-snapshot",
+    runId: String(sourcePayload.runId || snapshot.snapshotId || ""),
+    updatedAt: String(sourcePayload.updatedAt || snapshot.updatedAt || new Date().toISOString()),
+    generatedAt: String(sourcePayload.generatedAt || sourcePayload.updatedAt || snapshot.updatedAt || new Date().toISOString()),
+    usedDate: String(sourcePayload.usedDate || snapshot.tradeDate || "").replace(/\D/g, ""),
+    complete: sourcePayload.complete !== false,
+    canvas: Boolean(options.canvas),
+    qualityStatus: sourcePayload.qualityStatus || sourcePayload.sourceHealth?.status || "",
+    count,
+    returnedCount: matches.length,
+    total,
+    matches,
+    rows: matches,
+    transport: {
+      ...(sourcePayload.transport || {}),
+      source: "supabase-snapshot",
+      snapshotKey: SNAPSHOT_KEY,
+      snapshotId: snapshot.snapshotId || "",
+      runId: String(sourcePayload.runId || snapshot.snapshotId || ""),
+      gate: "latest-snapshot",
+      via: "api/strategy3-latest",
+      fetchedAt: new Date().toISOString(),
+    },
+  };
+}
+
+async function readLatestSnapshot(options) {
+  const snapshot = await readSnapshot(SNAPSHOT_KEY, {
+    allowLatestFallback: true,
+    timeoutMs: Number(process.env.STRATEGY3_SNAPSHOT_READ_TIMEOUT_MS || 1600),
+  });
+  return buildSnapshotPayload(snapshot, options);
 }
 
 async function fetchLatestCompleteRun() {
@@ -196,6 +254,11 @@ module.exports = async function handler(request, response) {
       return;
     }
     const options = parseRequestOptions(request);
+    const snapshot = await readLatestSnapshot(options);
+    if (snapshot) {
+      response.status(200).json(snapshot);
+      return;
+    }
     const latest = await fetchLatestCompleteRows(options.limit);
     if (!latest.rows.length) {
       response.status(404).json(apiOnlyError("strategy3_scan_results_latest_empty"));
