@@ -181,6 +181,32 @@ async function upsertStrategy5Rows(table, rows, conflict) {
   return true;
 }
 
+async function fetchStrategy5ResultReadbackCount(runId) {
+  const query = [
+    "select=code",
+    "strategy=eq.strategy5",
+    `run_id=eq.${encodeURIComponent(runId)}`,
+    "complete=eq.true",
+    "limit=1",
+  ].join("&");
+  const response = await fetch(`${SUPABASE_URL}/rest/v1/${STRATEGY5_RESULTS_TABLE}?${query}`, {
+    headers: {
+      apikey: SUPABASE_SERVICE_ROLE_KEY,
+      Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+      Accept: "application/json",
+      Prefer: "count=exact",
+    },
+  });
+  if (!response.ok) {
+    const body = await response.text().catch(() => "");
+    throw new Error(`${STRATEGY5_RESULTS_TABLE} readback HTTP ${response.status} ${body.slice(0, 180)}`.trim());
+  }
+  const contentRange = response.headers.get("content-range") || "";
+  const count = Number(contentRange.split("/").pop());
+  if (!Number.isFinite(count)) throw new Error("strategy5 result readback count unavailable");
+  return count;
+}
+
 async function publishStrategy5CompleteRunToSupabase(output) {
   if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
     console.warn("strategy5 supabase complete run skipped: missing service role key");
@@ -192,17 +218,34 @@ async function publishStrategy5CompleteRunToSupabase(output) {
   }
   const runId = strategy5RunIdFromOutput(output);
   const runningRow = buildStrategy5RunRow(output, runId, "running");
-  const completeRow = buildStrategy5RunRow({ ...output, runId }, runId, "complete");
   const resultRows = buildStrategy5ResultRows(output, runId);
+  const completeRow = buildStrategy5RunRow({ ...output, runId }, runId, "complete");
+  completeRow.result_count = resultRows.length;
+  completeRow.payload = {
+    ...(completeRow.payload || {}),
+    count: resultRows.length,
+    resultCount: resultRows.length,
+  };
+  if (completeRow.expected_total <= 0 || completeRow.scanned_count <= 0 || completeRow.expected_total !== completeRow.scanned_count) {
+    throw new Error(`strategy5 complete run blocked: expected_total=${completeRow.expected_total} scanned_count=${completeRow.scanned_count}`);
+  }
+  if (!resultRows.length || resultRows.length !== output.matches.length) {
+    throw new Error(`strategy5 complete run blocked: result row count ${resultRows.length} does not match matches ${output.matches.length}`);
+  }
   await upsertStrategy5Rows(STRATEGY5_RUNS_TABLE, [runningRow], "run_id");
   await upsertStrategy5Rows(STRATEGY5_RESULTS_TABLE, resultRows, "run_id,strategy,code");
+  const readbackCount = await fetchStrategy5ResultReadbackCount(runId);
+  if (readbackCount !== resultRows.length) {
+    throw new Error(`strategy5 complete run blocked: readback ${readbackCount} does not match results ${resultRows.length}`);
+  }
   await upsertStrategy5Rows(STRATEGY5_RUNS_TABLE, [completeRow], "run_id");
   output.runId = runId;
   output.complete = true;
   output.qualityStatus = "complete";
   output.schemaVersion = completeRow.schema_version;
   output.dataContractSource = completeRow.data_contract_source;
-  console.log(`strategy5 supabase run_id gate ok: ${runId}, matches ${resultRows.length}`);
+  output.resultReadbackCount = readbackCount;
+  console.log(`strategy5 supabase complete run readback ok: ${runId}, matches ${resultRows.length}`);
   return true;
 }
 
