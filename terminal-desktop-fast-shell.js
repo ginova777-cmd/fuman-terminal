@@ -1,5 +1,9 @@
 (function () {
-  if (window.__fumanDesktopFastShell === "20260623-09" && window.__fumanDesktopFastShellApiOnlyPoll === "20260624-01") return;
+  if (
+    window.__fumanDesktopFastShell === "20260623-09"
+    && window.__fumanDesktopFastShellApiOnlyPoll === "20260624-01"
+    && window.__fumanMarketOverviewHydrator === "20260624-02"
+  ) return;
   window.__fumanDesktopFastShell = "20260623-09";
   window.__fumanDesktopFastShellApiOnlyPoll = "20260624-01";
 
@@ -2585,15 +2589,20 @@
   }
 
   function installMarketOverviewHydrator() {
+    window.__fumanMarketOverviewHydrator = "20260624-02";
     const run = (force = false) => {
       removeMarketNextMonthCard();
       if (isMarketViewActive()) hydrateMarketOverview(force);
     };
     if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", () => run(true), { once: true });
     else run(true);
-    [250, 1200, 3200].forEach((delay) => window.setTimeout(() => run(false), delay));
+    [250, 1200, 3200, 8000, 16000].forEach((delay) => window.setTimeout(() => run(false), delay));
     window.addEventListener("fuman:desktop-route", (event) => {
       if (isMarketRoute(event?.detail?.key)) run(true);
+    });
+    window.addEventListener("focus", () => run(false));
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "visible") run(false);
     });
   }
 
