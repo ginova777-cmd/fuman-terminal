@@ -818,7 +818,7 @@ function scanStrategy4(code, market, rows, priceSource = "") {
     icon: "Fib",
     reason: `深跌反轉環境成立，負乖離 ${daily.bias20.toFixed(2)}%，Fib 0.382=${daily.fib382.toFixed(2)}、0.500=${daily.fib500.toFixed(2)}、0.618=${daily.fib618.toFixed(2)}。`,
   });
-  if (threeInside) signals.push({ id: "three_inside", short: "翻紅", icon: "↻", reason: "三內翻紅結構成立，站上MA20且趨勢確認。" });
+  if (threeInside) signals.push({ id: "three_inside", short: "三內翻紅", icon: "↻", reason: "三內翻紅結構成立，站上MA20且趨勢確認。" });
   if (goldenCross) signals.push({ id: "golden_cross", short: "金釵", icon: "✦", reason: "MA5 > MA10 > MA20 且收紅，多金釵候選。" });
   if (daily.wallet.strongBuy) {
     signals.push({

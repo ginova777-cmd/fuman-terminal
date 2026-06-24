@@ -749,11 +749,28 @@
     v_reversal: "V轉",
     v_reversal_runaway: "V轉逃逸",
     deep_fall_fib: "深跌FIB",
-    three_inside: "翻紅",
+    three_inside: "三內翻紅",
     golden_cross: "金釵",
     wallet_strong_buy: "主力多",
     wallet_volume_cross: "量叉",
   };
+  const STRATEGY4_SIGNAL_FILTER_ORDER = [
+    "bull_attack",
+    "n_base",
+    "saucer",
+    "three_inside",
+    "golden_cross",
+    "buy_neckline",
+    "buy_pullback_break",
+    "deep_fall_fib",
+    "v_fast",
+    "v_reversal",
+    "v_reversal_runaway",
+    "breakaway_gap",
+    "runaway_gap",
+    "wallet_strong_buy",
+    "wallet_volume_cross",
+  ];
 
   function strategy4SignalLabel(value) {
     const raw = String(value || "").trim();
@@ -2379,16 +2396,22 @@
       const signals = row?.signals?.length ? row.signals : row?.subStrategy ? [{ id: row.subStrategyId || row.subStrategy, label: row.subStrategy }] : [];
       signals.forEach((signal) => {
         const key = compactText(signal.id || signal.label || "", 48);
-        const label = compactText(signal.label || signal.id || "", 28);
+        const label = compactText(strategy4SignalLabel(key) || signal.label || signal.id || "", 28);
         if (!key || !label) return;
         const current = map.get(key) || { key, label, count: 0 };
         current.count += 1;
         map.set(key, current);
       });
     });
-    return [...map.values()]
-      .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label, "zh-Hant"))
-      .slice(0, 8);
+    const ordered = STRATEGY4_SIGNAL_FILTER_ORDER.map((key) => {
+      const existing = map.get(key);
+      return existing || { key, label: STRATEGY4_SIGNAL_LABELS[key] || key, count: 0 };
+    });
+    const used = new Set(ordered.map((item) => item.key));
+    const extras = [...map.values()]
+      .filter((item) => !used.has(item.key))
+      .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label, "zh-Hant"));
+    return [...ordered, ...extras];
   }
 
   function strategy5SignalCounts(rows = []) {
@@ -2423,7 +2446,7 @@
     wrap.innerHTML = counts.length ? `
       <button type="button" ${datasetName}="" class="${active ? "" : "active"}">全部 <b>${escapeHtml(String(canvasState.rows.length))}</b></button>
       ${counts.map((item) => `
-        <button type="button" ${datasetName}="${escapeHtml(item.key)}" class="${active === item.key ? "active" : ""}">
+        <button type="button" ${datasetName}="${escapeHtml(item.key)}" class="${active === item.key ? "active" : ""}" ${item.count ? "" : "disabled"}>
           ${escapeHtml(item.label)} <b>${escapeHtml(String(item.count))}</b>
         </button>
       `).join("")}
