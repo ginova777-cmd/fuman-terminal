@@ -68,6 +68,7 @@
   let hoverPreRenderTimer = 0;
   let routeSwitchSeq = 0;
   let latencySeq = 0;
+  let perfFlushTimer = 0;
   const INTERACTION_HOLD_MS = 920;
   const routeSnapshots = new Map();
   const canvasStore = new Map();
@@ -280,7 +281,44 @@
       localStorage.setItem(PERF_LOG_KEY, JSON.stringify(next));
       window.__fumanDesktopPerfLog = next;
       document.documentElement.dataset.fumanDesktopPerfLogSize = String(next.length);
+      schedulePerformanceLogFlush(false);
     } catch (error) {}
+  }
+
+  function schedulePerformanceLogFlush(force = false) {
+    window.clearTimeout(perfFlushTimer);
+    perfFlushTimer = window.setTimeout(() => flushPerformanceLog(force), force ? 0 : 2200);
+  }
+
+  function flushPerformanceLog(force = false) {
+    try {
+      if (!window.FUMAN_DESKTOP_PERF_LOG || !window.fetch) return Promise.resolve(false);
+      const rows = window.FUMAN_DESKTOP_PERF_LOG.read().slice(-50);
+      if (!rows.length) return Promise.resolve(false);
+      const now = Date.now();
+      const lastAt = Number(localStorage.getItem("fumanDesktopPerfLastFlushAt") || 0);
+      if (!force && rows.length < 8) return Promise.resolve(false);
+      if (!force && now - lastAt < 60000) return Promise.resolve(false);
+      const summary = window.FUMAN_DESKTOP_PERF_LOG.summary();
+      const payload = {
+        source: "desktop-route-latency",
+        url: location.pathname + location.search,
+        viewport: `${window.innerWidth || 0}x${window.innerHeight || 0}`,
+        summary,
+        rows,
+        at: now,
+      };
+      const body = JSON.stringify(payload);
+      localStorage.setItem("fumanDesktopPerfLastFlushAt", String(now));
+      return fetch("/api/performance-report", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body,
+        keepalive: body.length < 60000,
+      }).then(() => true).catch(() => false);
+    } catch (error) {
+      return Promise.resolve(false);
+    }
   }
 
   function installPerformanceLogExport() {
@@ -372,6 +410,9 @@
         console.info?.("[FUMAN perf]", summary);
         console.info?.("[FUMAN perf recommend]", this.recommend());
         return summary;
+      },
+      flush() {
+        return flushPerformanceLog(true);
       },
     };
   }

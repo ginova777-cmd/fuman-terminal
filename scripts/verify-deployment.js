@@ -189,8 +189,25 @@ async function main() {
   for (const [name, pathname, check] of checks) assertOk(name, await fetchText(pathname), check);
   const frontendError = await postJson("/api/frontend-error", { source: "verify", message: "deployment smoke" });
   assertOk("frontend-error-api", frontendError, (r) => typeof parseJson(r).ok === "boolean");
-  const performanceReport = await postJson("/api/performance-report", { url: "verify:deployment", ms: 1, ok: true, at: Date.now() });
+  const performanceReport = await postJson("/api/performance-report", {
+    source: "desktop-route-latency",
+    url: "verify:deployment",
+    summary: {
+      count: 1,
+      focus: "nav",
+      maxNav: 1,
+      maxShell: 1,
+      maxApi: 1,
+      firstFix: "verify",
+      routes: [{ key: "verify|deployment", count: 1, focus: "nav", nav: { avg: 1, p95: 1, max: 1 }, shell: { avg: 1, p95: 1, max: 1 }, api: { avg: 1, p95: 1, max: 1 }, worst: 1, lastAt: Date.now() }],
+    },
+    rows: [{ key: "verify|deployment", source: "verify", stage: "api", nav: 1, shell: 1, api: 1, at: Date.now() }],
+  });
   assertOk("performance-report-api", performanceReport, (r) => typeof parseJson(r).ok === "boolean");
+  assertOk("desktop-latency-latest", await fetchText("/api/desktop-latency-latest?v=verify"), (r) => {
+    const p = parseJson(r);
+    return p.ok === true && p.summary?.count >= 1 && Array.isArray(p.rows);
+  });
   console.log(`[verify] deployment ok version=${version}`);
 }
 

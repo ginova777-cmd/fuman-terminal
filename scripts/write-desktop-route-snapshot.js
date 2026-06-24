@@ -100,6 +100,7 @@ async function writeLocal() {
 async function main() {
   const forceRemote = hasArg("--remote");
   const failOnPartial = hasArg("--fail-on-partial");
+  const minEndpoints = Number(argValue("--min-endpoints", process.env.FUMAN_DESKTOP_SNAPSHOT_MIN_ENDPOINTS || "10")) || 0;
   const hasServiceKey = Boolean(serviceRoleKey({ root: ROOT, runtimeDir: RUNTIME_DIR }));
   const result = forceRemote || !hasServiceKey
     ? await writeRemote()
@@ -112,6 +113,7 @@ async function main() {
   console.log(JSON.stringify(result, null, 2));
   if (!result.ok) process.exit(2);
   if (failOnPartial && result.partial) process.exit(3);
+  if (minEndpoints && Number(result.endpointCount || 0) < minEndpoints) process.exit(4);
 }
 
 main().catch((error) => {

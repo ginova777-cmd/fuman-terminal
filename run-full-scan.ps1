@@ -215,15 +215,17 @@ function Invoke-DesktopRouteSnapshotWrite {
   }
   Write-ScanLog "START [snapshot] desktop route snapshot write"
   $exitCode = 0
+  $snapshotReceipt = $null
   try {
     Push-Location $syncRoot
     try {
-      & $nodeExe "scripts\write-desktop-route-snapshot.js" "--allow-partial" "--source=full-scan" *>&1 | ForEach-Object {
+      & $nodeExe "scripts\write-desktop-route-snapshot.js" "--fail-on-partial" "--source=full-scan" *>&1 | ForEach-Object {
         $text = [string]$_
         Write-Host $text
         Add-Content -LiteralPath $log -Value $text -Encoding utf8
       }
       $exitCode = $LASTEXITCODE
+      $snapshotReceipt = Read-JsonFile (Join-Path $receiptDir "desktop-route-snapshot.json")
     } finally {
       Pop-Location
     }
@@ -232,10 +234,14 @@ function Invoke-DesktopRouteSnapshotWrite {
     Write-ScanLog "desktop route snapshot exception: $($_.Exception.Message)"
   }
   if ($exitCode -ne 0) {
-    Write-ScanLog "WARN desktop route snapshot write failed exit=$exitCode"
-    if ($env:FUMAN_REQUIRE_DESKTOP_SNAPSHOT -eq "1") {
-      $criticalFailures.Add("desktop-route-snapshot: snapshot write failed exit=$exitCode") | Out-Null
-    }
+    Write-ScanLog "FAIL desktop route snapshot write failed exit=$exitCode"
+    $criticalFailures.Add("desktop-route-snapshot: snapshot write failed exit=$exitCode") | Out-Null
+    return
+  }
+  if ($snapshotReceipt -and ($snapshotReceipt.partial -eq $true -or [int]$snapshotReceipt.endpointCount -lt 10)) {
+    $reason = "partial=$($snapshotReceipt.partial) endpointCount=$($snapshotReceipt.endpointCount)"
+    Write-ScanLog "FAIL desktop route snapshot quality gate failed $reason"
+    $criticalFailures.Add("desktop-route-snapshot: quality gate failed $reason") | Out-Null
     return
   }
   Write-ScanLog "END [snapshot] desktop route snapshot write complete"

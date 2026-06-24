@@ -1,5 +1,6 @@
 const strategy2Latest = require("./strategy2-latest");
 const { readDesktopRouteSnapshot } = require("../lib/desktop-route-snapshot-cache");
+const { upsertSnapshot } = require("../lib/supabase-snapshots");
 
 const SNAPSHOT_MAX_AGE_MS = Number(process.env.FUMAN_PRODUCTION_HEALTH_SNAPSHOT_MAX_AGE_MS || 15 * 60 * 1000);
 
@@ -74,6 +75,16 @@ function buildIssue(condition, message, issues) {
   if (!condition) issues.push(message);
 }
 
+async function writeHealthSnapshot(result) {
+  try {
+    await upsertSnapshot("production_health_latest", result, {
+      source: "production-health",
+      reason: result.ok ? "production-health-ok" : "production-health-issues",
+      timeoutMs: 4000,
+    });
+  } catch {}
+}
+
 module.exports = async function handler(request, response) {
   response.setHeader("Cache-Control", "no-store, max-age=0, must-revalidate");
   response.setHeader("CDN-Cache-Control", "no-store");
@@ -142,5 +153,6 @@ module.exports = async function handler(request, response) {
     response.status(result.ok ? 200 : 503).end("");
     return;
   }
+  await writeHealthSnapshot(result);
   response.status(result.ok ? 200 : 503).json(result);
 };
