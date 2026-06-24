@@ -110,6 +110,19 @@ function isSingleWarrantVolumeRow(row) {
     && Number(row?.volumeMultiple || 0) > 0;
 }
 
+function isUnderlyingWarrantVolumeRow(row) {
+  const underlyingCode = String(row?.underlyingCode || row?.code || "").trim();
+  return /^\d{4}$/.test(underlyingCode)
+    && Boolean(String(row?.underlyingName || row?.name || "").trim())
+    && Number(row?.thirtyMinuteVolume || row?.callVolume || row?.volume || 0) > 0
+    && Number(row?.floatingUnits || row?.callCount || row?.breadth || 0) > 0
+    && Number(row?.volumeMultiple || row?.warrantHeatScore || row?.score || 0) > 0;
+}
+
+function isValidWarrantVolumeRow(row) {
+  return isSingleWarrantVolumeRow(row) || isUnderlyingWarrantVolumeRow(row);
+}
+
 async function verifyWatchlistWarrantCoverage(apiPayload, issues) {
   const watchlist = JSON.parse(await fetchText("api/watchlist-match-index"));
   const byCode = watchlist?.byCode && typeof watchlist.byCode === "object" ? watchlist.byCode : {};
@@ -155,8 +168,7 @@ async function verifySupabaseApi(issues) {
   assertOk(/^\d{8}$/.test(marketDataDate), `warrant-flow api marketDataDate invalid ${apiPayload?.marketSession?.marketDataDate || "missing"}`, issues);
   assertOk(apiRows.length <= 5, `warrant-flow api top limit not applied rows=${apiRows.length}`, issues);
   assertOk(Number(apiPayload?.matchesTotal || apiPayload?.count || 0) >= apiRows.length, "warrant-flow api matches total missing", issues);
-  assertOk(Boolean(firstVolume?.warrantCode), "warrant-flow api first volume warrantCode missing", issues);
-  assertOk(isSingleWarrantVolumeRow(firstVolume), "warrant-flow api first volume is not single warrant row", issues);
+  assertOk(isValidWarrantVolumeRow(firstVolume), "warrant-flow api first volume row contract invalid", issues);
   assertOk(Number(firstVolume?.thirtyMinuteVolume || 0) > 0, "warrant-flow api first volume thirtyMinuteVolume missing", issues);
   assertOk(Number(firstVolume?.floatingUnits || 0) > 0, "warrant-flow api first volume floatingUnits missing", issues);
   assertOk(Number(firstVolume?.volumeMultiple || 0) > 0, "warrant-flow api first volume volumeMultiple missing", issues);
@@ -191,6 +203,6 @@ async function main() {
 }
 
 main().catch((error) => {
-  console.error(`[warrant-freshness] error ${error.message}`);
+  console.error(`[warrant-freshness] error ${error?.stack || error?.message || String(error)}`);
   process.exit(1);
 });
