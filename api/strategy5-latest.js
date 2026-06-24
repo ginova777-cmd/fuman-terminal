@@ -16,7 +16,7 @@ const LATEST_RUN_VIEW = process.env.STRATEGY5_SUPABASE_LATEST_RUN_VIEW || "v_str
 const COMPLETE_RUN_GATE = "complete-run-authoritative+result-readback";
 const FORBIDDEN_UI_MATCH_IDS = new Set(["foreign_trust_breakout"]);
 const STRATEGY5_UI_MATCH_META = {
-  chip_k_confluence: { label: "籌碼老K", short: "籌碼老K" },
+  chip_k_confluence: { label: "籌碼共振", short: "籌碼共振" },
   multi_strategy_confluence: { label: "多策略共振", short: "共振" },
   volume_turnover_breakout: { label: "量價周轉強攻", short: "量價周轉" },
   bollinger_kdj_buy: { label: "布林隨機買點", short: "布林隨機" },

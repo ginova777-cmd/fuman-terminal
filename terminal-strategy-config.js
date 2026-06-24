@@ -1,6 +1,6 @@
 (function () {
 const STRATEGY_DEFS = [
-  { id: "chip_k_confluence", label: "籌碼老K", short: "籌碼老K", icon: "老K" },
+  { id: "chip_k_confluence", label: "籌碼共振", short: "籌碼共振", icon: "籌" },
   { id: "multi_strategy_confluence", label: "🔥 多策略共振", short: "共振", icon: "🔥" },
   { id: "volume_turnover_breakout", label: "量價周轉強攻", short: "量價周轉", icon: "量" },
   { id: "bollinger_kdj_buy", label: "布林隨機買點", short: "布林隨機", icon: "布" },
