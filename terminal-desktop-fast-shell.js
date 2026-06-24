@@ -82,6 +82,7 @@
     route: "",
     source: "",
     query: "",
+    signalFilter: "",
     offset: 0,
     hoverIndex: -1,
     selectedIndex: -1,
@@ -684,6 +685,30 @@
     return Number.isFinite(number) ? number : 0;
   }
 
+  function normalizeSignalRows(value) {
+    return (Array.isArray(value) ? value : [])
+      .map((signal) => {
+        if (!signal || typeof signal !== "object") return null;
+        const id = compactText(signal.id || signal.key || signal.type || signal.name || signal.label || "", 48);
+        const label = compactText(signal.label || signal.name || signal.title || signal.id || signal.key || "", 40);
+        const reason = compactText(signal.reason || signal.message || signal.note || "", 96);
+        if (!id && !label && !reason) return null;
+        return { id, label: label || id || reason, reason };
+      })
+      .filter(Boolean);
+  }
+
+  function signalSummary(signals) {
+    return compactText((Array.isArray(signals) ? signals : [])
+      .map((signal) => signal.label || signal.id || signal.reason)
+      .filter(Boolean)
+      .join(" / "), 120);
+  }
+
+  function isStrategy4Route(route) {
+    return String(route || "") === "strategy|策略4";
+  }
+
   function endpointForRoute(route) {
     return CANVAS_ENDPOINTS[route] || "";
   }
@@ -709,6 +734,7 @@
       .map((row) => [
         row.code || "",
         row.title || "",
+        row.subStrategy || "",
         row.score || "",
         row.pct || "",
         row.price || "",
@@ -804,10 +830,22 @@
     const state = String(merged.state || merged.status || active.name || active.id || "").trim();
     const price = merged.price ?? merged.Price ?? merged.close ?? merged.Close ?? merged.ClosingPrice ?? merged.lastPrice ?? merged.LastPrice ?? merged.entryPrice ?? "";
     const volume = merged.volume ?? merged.Volume ?? merged.tradeVolume ?? merged.TradeVolume ?? merged.volumeLots ?? merged.trade_volume ?? "";
+    const signals = normalizeSignalRows(merged.signals || merged.swingSignals || payload.signals || active.signals);
+    const primarySignal = signals[0] || null;
+    const subStrategy = compactText(
+      merged.subStrategy || merged.strategyLabel || merged.signalLabel || merged.setupName || merged.setup_type || primarySignal?.label || "",
+      42
+    );
+    const subStrategyId = compactText(
+      merged.subStrategyId || merged.strategyId || merged.signalId || merged.setupId || primarySignal?.id || subStrategy,
+      48
+    );
+    const signalLine = signalSummary(signals);
     const line = compactText([
       code,
       name,
       state,
+      subStrategy,
       reason,
       price !== "" ? `價 ${price}` : "",
       volume !== "" ? `量 ${volume}` : "",
@@ -819,6 +857,11 @@
       pct: pct === "" || pct == null ? "" : String(pct).includes("%") ? String(pct) : `${cleanNumber(pct).toFixed(2)}%`,
       score: score === "" || score == null ? "" : String(Math.round(cleanNumber(score) * 100) / 100),
       reason: compactText(reason || state || line, 180),
+      subStrategy,
+      subStrategyId,
+      signalLabel: subStrategy,
+      signalLine,
+      signals,
       price: price === "" || price == null ? "" : String(price),
       volume: volume === "" || volume == null ? "" : String(volume),
       line,
@@ -947,9 +990,13 @@
 
   function applyCanvasFilter() {
     const query = compactText(canvasState.query, 80).toLowerCase();
-    canvasState.filtered = query
-      ? canvasState.rows.filter((row) => [row.code, row.title, row.reason, row.line].join(" ").toLowerCase().includes(query))
-      : canvasState.rows.slice();
+    const signalFilter = isStrategy4Route(canvasState.route) ? compactText(canvasState.signalFilter, 80).toLowerCase() : "";
+    canvasState.filtered = canvasState.rows.filter((row) => {
+      const signalText = [row.subStrategyId, row.subStrategy, row.signalLine, ...(row.signals || []).flatMap((signal) => [signal.id, signal.label, signal.reason])].join(" ").toLowerCase();
+      if (signalFilter && !signalText.includes(signalFilter)) return false;
+      if (!query) return true;
+      return [row.code, row.title, row.reason, row.line, row.subStrategy, row.signalLine].join(" ").toLowerCase().includes(query);
+    });
     const maxOffset = Math.max(0, canvasState.filtered.length - 1);
     canvasState.offset = Math.max(0, Math.min(canvasState.offset, maxOffset));
     canvasRowsVersion += 1;
@@ -1326,13 +1373,21 @@
   function showCanvasDetail(row, index) {
     const detail = currentCanvasShell()?.querySelector(".desktop-canvas-detail");
     if (!detail || !row) return;
+    const signalChips = (row.signals || []).slice(0, 8).map((signal) => `
+      <span class="desktop-canvas-signal-chip">
+        ${escapeHtml(signal.label || signal.id || "")}
+        ${signal.reason ? `<small>${escapeHtml(signal.reason)}</small>` : ""}
+      </span>
+    `).join("");
     detail.hidden = false;
     detail.innerHTML = `
       <div class="desktop-canvas-detail-panel">
         <button type="button" class="desktop-canvas-detail-close" data-canvas-detail-close aria-label="關閉">×</button>
         <div class="desktop-canvas-detail-kicker">#${escapeHtml(row.rank || index + 1)} · ${escapeHtml(canvasState.route.replace("strategy|", ""))}</div>
         <h3>${escapeHtml(row.code || "--")} ${escapeHtml(row.title || "")}</h3>
+        ${row.subStrategy ? `<div class="desktop-canvas-detail-substrategy">${escapeHtml(row.subStrategy)}</div>` : ""}
         <p>${escapeHtml(row.reason || row.line || "目前沒有更多說明。")}</p>
+        ${signalChips ? `<div class="desktop-canvas-signal-list">${signalChips}</div>` : ""}
         <div class="desktop-canvas-detail-grid">
           <span>分數 <strong>${escapeHtml(row.score || "--")}</strong></span>
           <span>漲幅 <strong>${escapeHtml(row.pct || "--")}</strong></span>
@@ -1376,6 +1431,22 @@
             scheduleCanvasDraw();
           }
         }).catch(() => setCanvasStatus("沿用快照"));
+        return;
+      }
+      const signalFilter = event.target.closest?.("[data-strategy4-signal-filter]");
+      if (signalFilter) {
+        event.preventDefault();
+        if (!isStrategy4Route(canvasState.route)) return;
+        const next = signalFilter.dataset.strategy4SignalFilter || "";
+        canvasState.signalFilter = canvasState.signalFilter === next ? "" : next;
+        canvasState.offset = 0;
+        canvasState.hoverIndex = -1;
+        canvasState.selectedIndex = -1;
+        hideCanvasDetail();
+        applyCanvasFilter();
+        updateStrategy4SignalControls(currentCanvasShell());
+        setCanvasStatus(canvasState.signalFilter ? "細分篩選" : "全部訊號");
+        scheduleCanvasDraw();
         return;
       }
       const canvas = event.target.closest?.(".desktop-route-canvas");
@@ -1769,7 +1840,7 @@
     ctx.font = "700 13px system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
     ctx.fillText("Rank", 46, 112);
     ctx.fillText("Code", 106, 112);
-    ctx.fillText("Signal", 184, 112);
+    ctx.fillText(isStrategy4Route(canvasState.route) ? "Sub Strategy" : "Signal", 184, 112);
     ctx.fillText("Score", width - 176, 112);
     ctx.fillText("Change", width - 92, 112);
 
@@ -1815,10 +1886,13 @@
       ctx.fillText(row.code || "--", 106, y);
       ctx.fillStyle = colors.text;
       ctx.font = "700 14px system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
-      ctx.fillText(compactText(row.title || row.line || "", 42), 184, y - 6);
+      const mainText = isStrategy4Route(canvasState.route) && row.subStrategy
+        ? `${row.title || row.code || ""} · ${row.subStrategy}`
+        : row.title || row.line || "";
+      ctx.fillText(compactText(mainText, 46), 184, y - 6);
       ctx.fillStyle = colors.muted;
       ctx.font = "12px system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
-      ctx.fillText(compactText(row.reason || row.line || "", 70), 184, y + 11);
+      ctx.fillText(compactText(isStrategy4Route(canvasState.route) ? row.signalLine || row.reason || row.line || "" : row.reason || row.line || "", 74), 184, y + 11);
       ctx.fillStyle = colors.text;
       ctx.textAlign = "right";
       ctx.fillText(row.score || "--", width - 130, y);
@@ -1861,6 +1935,47 @@
     });
   }
 
+  function strategy4SignalCounts(rows = []) {
+    const map = new Map();
+    (Array.isArray(rows) ? rows : []).forEach((row) => {
+      const signals = row?.signals?.length ? row.signals : row?.subStrategy ? [{ id: row.subStrategyId || row.subStrategy, label: row.subStrategy }] : [];
+      signals.forEach((signal) => {
+        const key = compactText(signal.id || signal.label || "", 48);
+        const label = compactText(signal.label || signal.id || "", 28);
+        if (!key || !label) return;
+        const current = map.get(key) || { key, label, count: 0 };
+        current.count += 1;
+        map.set(key, current);
+      });
+    });
+    return [...map.values()]
+      .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label, "zh-Hant"))
+      .slice(0, 8);
+  }
+
+  function updateStrategy4SignalControls(shell) {
+    const panel = shell || currentCanvasShell();
+    if (!panel) return;
+    const wrap = panel.querySelector("[data-strategy4-signal-filters]");
+    if (!wrap) return;
+    if (!isStrategy4Route(canvasState.route)) {
+      wrap.hidden = true;
+      wrap.innerHTML = "";
+      return;
+    }
+    const counts = strategy4SignalCounts(canvasState.rows);
+    const active = canvasState.signalFilter || "";
+    wrap.hidden = !counts.length;
+    wrap.innerHTML = counts.length ? `
+      <button type="button" data-strategy4-signal-filter="" class="${active ? "" : "active"}">全部 <b>${escapeHtml(String(canvasState.rows.length))}</b></button>
+      ${counts.map((item) => `
+        <button type="button" data-strategy4-signal-filter="${escapeHtml(item.key)}" class="${active === item.key ? "active" : ""}">
+          ${escapeHtml(item.label)} <b>${escapeHtml(String(item.count))}</b>
+        </button>
+      `).join("")}
+    ` : "";
+  }
+
   function canvasShellHtml(key, meta) {
     return `
       <section class="desktop-route-shell desktop-canvas-app" data-route-shell="${escapeHtml(key)}" data-route-source="${escapeHtml(canvasState.source || "")}">
@@ -1885,6 +2000,7 @@
           <span class="desktop-canvas-count">${escapeHtml(`${canvasState.filtered.length}/${canvasState.rows.length}`)}</span>
           <span class="desktop-canvas-status">${escapeHtml(canvasWorkerReady ? canvasWorkerMode : canvasState.source || "shell")}</span>
         </div>
+        <div class="desktop-strategy4-signal-filters" data-strategy4-signal-filters hidden></div>
         <canvas class="desktop-route-canvas" tabindex="0" aria-label="${escapeHtml(meta.title)} Canvas 快速列表"></canvas>
         <div class="desktop-canvas-detail" hidden></div>
       </section>
@@ -1941,6 +2057,7 @@
     if (status) status.textContent = canvasWorkerReady ? canvasWorkerMode : canvasState.source || "shell";
     if (input && document.activeElement !== input) input.value = canvasState.query || "";
     if (canvas) canvas.setAttribute("aria-label", `${meta.title} Canvas 快速列表`);
+    updateStrategy4SignalControls(shell);
     return canvas;
   }
 
@@ -1956,6 +2073,7 @@
     canvasState.source = source || stored?.source || "shell";
     canvasState.rows = incomingRows;
     if (previousRoute !== key) {
+      canvasState.signalFilter = "";
       canvasState.offset = 0;
       canvasState.hoverIndex = -1;
       canvasState.selectedIndex = -1;
@@ -2014,6 +2132,7 @@
     canvasState.source = source || stored?.source || "shell";
     canvasState.rows = incomingRows;
     if (previousRoute !== key) {
+      canvasState.signalFilter = "";
       canvasState.offset = 0;
       canvasState.hoverIndex = -1;
       canvasState.selectedIndex = -1;
@@ -2667,6 +2786,35 @@
         gap: 12px;
         margin-top: 18px;
       }
+      .desktop-strategy4-signal-filters {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex-wrap: wrap;
+        margin: 12px 0 12px;
+      }
+      .desktop-strategy4-signal-filters[hidden] {
+        display: none !important;
+      }
+      .desktop-strategy4-signal-filters button {
+        min-height: 34px;
+        border: 1px solid rgba(148,163,184,0.18);
+        border-radius: 10px;
+        padding: 0 11px;
+        color: #b8c5da;
+        background: rgba(15,23,42,0.62);
+        font: 800 12px system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        cursor: pointer;
+      }
+      .desktop-strategy4-signal-filters button.active {
+        border-color: rgba(255,112,55,0.68);
+        color: #fff3e9;
+        background: rgba(255,112,55,0.18);
+      }
+      .desktop-strategy4-signal-filters b {
+        margin-left: 5px;
+        color: #ffb27b;
+      }
       .desktop-canvas-search-wrap {
         display: grid;
         gap: 7px;
@@ -2760,6 +2908,40 @@
         color: #b8c5da;
         line-height: 1.65;
       }
+      .desktop-canvas-detail-substrategy {
+        display: inline-flex;
+        align-items: center;
+        min-height: 28px;
+        margin: 0 0 10px;
+        border: 1px solid rgba(255,112,55,0.42);
+        border-radius: 10px;
+        padding: 0 10px;
+        color: #ffb27b;
+        background: rgba(255,112,55,0.12);
+        font-weight: 900;
+      }
+      .desktop-canvas-signal-list {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-top: 12px;
+      }
+      .desktop-canvas-signal-chip {
+        max-width: 100%;
+        border: 1px solid rgba(148,163,184,0.18);
+        border-radius: 10px;
+        padding: 8px 10px;
+        color: #e8eefc;
+        background: rgba(15,23,42,0.62);
+        font-weight: 800;
+      }
+      .desktop-canvas-signal-chip small {
+        display: block;
+        margin-top: 4px;
+        color: #9fb0cb;
+        font-weight: 700;
+        line-height: 1.35;
+      }
       .desktop-canvas-detail-grid {
         display: grid;
         grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -2818,6 +3000,19 @@
         body.fuman-light-theme .desktop-canvas-search-wrap {
           color: #64748b;
         }
+        body.fuman-light-theme .desktop-strategy4-signal-filters button {
+          border-color: #cbd8e6;
+          color: #334155;
+          background: rgba(255,255,255,0.9);
+        }
+        body.fuman-light-theme .desktop-strategy4-signal-filters button.active {
+          border-color: rgba(249,115,22,0.5);
+          color: #c2410c;
+          background: #fff7ed;
+        }
+        body.fuman-light-theme .desktop-strategy4-signal-filters b {
+          color: #ea580c;
+        }
         body.fuman-light-theme .desktop-route-shell-grid article {
           border-color: #d8e3ef;
           background: rgba(255,255,255,0.78);
@@ -2873,6 +3068,19 @@
         }
         body.fuman-light-theme .desktop-canvas-detail-panel p {
           color: #475569;
+        }
+        body.fuman-light-theme .desktop-canvas-detail-substrategy {
+          border-color: rgba(249, 115, 22, 0.38);
+          color: #c2410c;
+          background: #fff7ed;
+        }
+        body.fuman-light-theme .desktop-canvas-signal-chip {
+          border-color: #d8e3ef;
+          color: #172033;
+          background: rgba(248,251,255,0.92);
+        }
+        body.fuman-light-theme .desktop-canvas-signal-chip small {
+          color: #64748b;
         }
         body.fuman-light-theme .desktop-canvas-detail-grid span {
           border-color: #d8e3ef;
@@ -3061,6 +3269,30 @@
         html body.fuman-light-theme.public-terminal .desktop-route-shell-head p,
         html body.fuman-light-theme.public-terminal .desktop-canvas-search-wrap,
         html body.fuman-light-theme.public-terminal .desktop-canvas-detail-panel p {
+          color: #64748b !important;
+        }
+        html body.fuman-light-theme.public-terminal .desktop-strategy4-signal-filters button {
+          border-color: #cbd8e6 !important;
+          background: #ffffff !important;
+          color: #334155 !important;
+          box-shadow: none !important;
+        }
+        html body.fuman-light-theme.public-terminal .desktop-strategy4-signal-filters button.active {
+          border-color: rgba(249, 115, 22, 0.55) !important;
+          background: #fff7ed !important;
+          color: #c2410c !important;
+        }
+        html body.fuman-light-theme.public-terminal .desktop-canvas-detail-substrategy {
+          border-color: rgba(249, 115, 22, 0.42) !important;
+          background: #fff7ed !important;
+          color: #c2410c !important;
+        }
+        html body.fuman-light-theme.public-terminal .desktop-canvas-signal-chip {
+          border-color: #d9e2ee !important;
+          background: #f8fafc !important;
+          color: #0f172a !important;
+        }
+        html body.fuman-light-theme.public-terminal .desktop-canvas-signal-chip small {
           color: #64748b !important;
         }
         html body.fuman-light-theme.public-terminal .desktop-route-shell-grid article,
