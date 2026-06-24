@@ -54,7 +54,8 @@ async function writeRemote() {
   const baseUrl = argValue("--base-url", DEFAULT_BASE_URL);
   const allowPartial = hasArg("--allow-partial") ? "1" : "0";
   const source = encodeURIComponent(argValue("--source", "scanner-desktop-route-snapshot"));
-  const url = `${baseUrl}/api/desktop-route-snapshot-refresh?allowPartial=${allowPartial}&source=${source}`;
+  const endpointSnapshots = hasArg("--endpoint-snapshots") ? "1" : "0";
+  const url = `${baseUrl}/api/desktop-route-snapshot-refresh?allowPartial=${allowPartial}&source=${source}&endpointSnapshots=${endpointSnapshots}`;
   const secret = process.env.SCHEDULE_DISPATCH_SECRET || process.env.FUMAN_CRON_SECRET || process.env.CRON_SECRET || "";
   const headers = secret ? { "x-schedule-secret": secret } : { "x-vercel-cron": "1" };
   const result = await requestJson(url, headers);

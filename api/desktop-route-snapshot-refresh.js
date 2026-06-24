@@ -38,10 +38,13 @@ module.exports = async function handler(request, response) {
   }
 
   try {
+    const writeEndpointSnapshots = request.query?.endpointSnapshots === "1"
+      || request.query?.endpointSnapshots === "true";
     const { payload, write } = await buildAndWriteDesktopRouteSnapshot(request, {
       reason: request.headers?.["x-vercel-cron"] === "1"
         ? "vercel-cron-desktop-route-snapshot"
         : "manual-desktop-route-snapshot-refresh",
+      writeEndpointSnapshots,
     });
     response.status(write?.ok === false ? 207 : 200).json({
       ok: write?.ok !== false,
