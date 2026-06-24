@@ -7,6 +7,7 @@
   installInstantViewSwitch();
   installDesktopInteractionBudget();
   installFastViewClickReplay();
+  installStrategyPublicRouteBridge();
   installWarmMainApp();
   installScriptPreload();
   installHotPathDataWarmup();
@@ -175,6 +176,45 @@
       }
       window.FUMAN_HOTFIX_WARM_ROUTE?.(link, "click");
       window.FUMAN_TERMINAL_PREFETCH_APP?.();
+    }, true);
+  }
+
+  function installStrategyPublicRouteBridge() {
+    if (window.__fumanStrategyPublicRouteBridge) return;
+    window.__fumanStrategyPublicRouteBridge = true;
+    const isStrategyLink = (target) => {
+      const link = target?.closest?.("[data-view='strategy'],[data-view=\"strategy\"]");
+      if (!link || link.closest("[data-member-tab]")) return null;
+      const text = link.textContent || "";
+      return /策略[1-5]|雷達|當沖|隔日|波段/.test(text) ? link : null;
+    };
+    const unlockForStrategyRoute = (event) => {
+      const link = isStrategyLink(event.target);
+      if (!link) {
+        const otherLink = event.target?.closest?.("[data-view]:not([data-member-tab])");
+        if (otherLink?.dataset?.view && otherLink.dataset.view !== "strategy" && window.__fumanStrategyPublicAuthReadyAdded) {
+          document.body.classList.remove("auth-ready");
+          window.__fumanStrategyPublicAuthReadyAdded = false;
+        }
+        return;
+      }
+      const hadAuthReady = document.body.classList.contains("auth-ready");
+      document.body.classList.add("auth-ready");
+      window.__fumanStrategyPublicAuthReadyAdded = !hadAuthReady;
+      document.querySelectorAll("#strategy-view .member-lock-overlay").forEach((node) => node.remove());
+      document.querySelectorAll("#strategy-view .member-lock-host").forEach((node) => node.classList.remove("member-lock-host"));
+      window.clearTimeout(window.__fumanStrategyPublicRouteTimer);
+      window.__fumanStrategyPublicRouteTimer = window.setTimeout(() => {
+        if (!hadAuthReady && !document.querySelector("#strategy-view.active")) {
+          document.body.classList.remove("auth-ready");
+          window.__fumanStrategyPublicAuthReadyAdded = false;
+        }
+      }, 2000);
+    };
+    document.addEventListener("pointerdown", unlockForStrategyRoute, true);
+    document.addEventListener("click", unlockForStrategyRoute, true);
+    document.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" || event.key === " ") unlockForStrategyRoute(event);
     }, true);
   }
 
