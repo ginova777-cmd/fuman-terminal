@@ -134,20 +134,25 @@ async function main() {
   assertOk("home", home, (r) => r.body.includes(`terminal-core.js?v=${version}`));
   const checks = [
     ["core", `/terminal-core.js?v=${version}`, (r) => r.body.includes("terminal-modules.js")],
-    ["modules", `/terminal-modules.js?v=${version}`, (r) => r.body.includes("FUMAN_TERMINAL_MODULES")],
+    ["modules", `/terminal-modules.js?v=${version}`, (r) => r.body.includes("FUMAN_TERMINAL_MODULES") && r.body.includes("terminal-strategy-module.js") && r.body.includes("terminal-member-module.js")],
+    ["strategy-module", `/terminal-strategy-module.js?v=${version}`, (r) => r.body.includes("FUMAN_STRATEGY_MODULE") && r.body.includes("snapshot-first")],
+    ["member-module", `/terminal-member-module.js?v=${version}`, (r) => r.body.includes("FUMAN_MEMBER_MODULE") && r.body.includes("lazy-legacy")],
+    ["desktop-fast-shell", `/terminal-desktop-fast-shell.js?v=${version}`, (r) => r.body.includes("LIVE_ROUTE_KEYS") && r.body.includes("FAST_BUNDLE_PRIME_TTL_MS") && !r.body.includes('const SNAPSHOT_ROUTES = ["strategy|策略1", "strategy|策略2"')],
     ["worker", `/terminal-worker.js?v=${version}`, (r) => r.body.includes("swingBuckets")],
     ["service-worker", `/fuman-sw.js?v=${version}`, (r) => r.body.includes("terminal-fast-bundle") && r.body.includes("PREFETCH_CORE_DATA_ASSETS")],
     ["terminal-bootstrap", `/terminal.js?v=${version}`, (r) => r.body.includes("FUMAN_TERMINAL_LOAD_APP") && r.body.includes("terminal-app.js")],
     ["terminal-app", `/terminal-app.js?v=${version}`, (r) => r.body.includes("FUMAN_LIVE_MEMORY_TTL_MS") && r.body.includes("loadStrategyWeights")],
     ["terminal-fast-bundle", "/api/terminal-fast-bundle?canvas=1&compact=1&shell=1&v=verify", (r) => {
       const p = parseJson(r);
+      const endpointKeys = Object.keys(p.endpoints || {});
       return p.ok === true
         && p.snapshotHit === true
         && p.cacheSource === "supabase:desktop_route_snapshot"
         && p.partial === false
         && Array.isArray(p.misses)
         && p.misses.length === 0
-        && Object.keys(p.endpoints || {}).length >= 10;
+        && endpointKeys.length >= 10
+        && !endpointKeys.some((endpoint) => endpoint.includes("strategy2-latest"));
     }],
     ["desktop-route-snapshot", "/api/desktop-route-snapshot?v=verify", (r) => {
       const p = parseJson(r);
