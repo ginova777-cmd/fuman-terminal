@@ -10,10 +10,10 @@
     app: { loaded: false, src: "terminal-app.js" },
     strategy: { loaded: false, src: "terminal-strategy-module.js" },
     strategy4: { loaded: false, src: "terminal-strategy-module.js" },
-    chipFlow: { loaded: false, src: "terminal-chip-flow.js" },
-    warrantFlow: { loaded: false, src: "terminal-warrant-flow.js" },
+    chipFlow: { loaded: false, src: "terminal-chip-snapshot-module.js" },
+    warrantFlow: { loaded: false, src: "terminal-chip-snapshot-module.js" },
     realtimeRadar: { loaded: false, src: "terminal-strategy-module.js" },
-    watchlist: { loaded: false, src: "terminal-watchlist-module.js" },
+    watchlist: { loaded: false, src: "terminal-watchlist-shell.js" },
     member: { loaded: false, src: "terminal-member-module.js" },
   };
 

@@ -292,7 +292,10 @@
       { href: withVersion("/terminal-app.js"), as: "script", rel: "prefetch" },
       { href: withVersion("/terminal-modules.js"), as: "script", rel: "prefetch" },
       { href: withVersion("/terminal-worker.js"), as: "worker" },
-      { href: withVersion("/terminal-watchlist-module.js"), as: "script" },
+      { href: withVersion("/terminal-member-module.js"), as: "script" },
+      { href: withVersion("/terminal-watchlist-shell.js"), as: "script" },
+      { href: withVersion("/terminal-chip-snapshot-module.js"), as: "script" },
+      { href: withVersion("/terminal-strategy-module.js"), as: "script" },
       { href: withVersion("/terminal-strategy-config.js"), as: "script" },
       { href: withVersion("/terminal-tuning-config.js"), as: "script" },
     ];
@@ -323,50 +326,31 @@
         "/api/market-ai-live",
       ],
       watchlist: [
-        "/api/stocks",
-        "/api/watchlist-match-index",
-        "/api/terminal-home",
+        fastBundleUrl,
       ],
       strategy: [
-        "/api/open-buy-latest?canvas=1&compact=1&shell=1&limit=60",
+        fastBundleUrl,
         "/api/strategy2-latest?canvas=1&compact=1&shell=1&limit=60",
-        "/api/strategy3-latest?canvas=1&compact=1&shell=1&limit=60",
-        "/api/strategy4-latest?canvas=1&compact=1&shell=1&limit=70",
-        "/api/strategy5-latest?canvas=1&compact=1&shell=1&limit=70",
-        "/api/latest-signals?strategy=strategy4",
-        "/api/realtime-radar-latest",
       ],
       "chip-trade": [
-        "/api/institution-latest?canvas=1&compact=1&shell=1&limit=60",
-        "/api/watchlist-match-index",
+        fastBundleUrl,
       ],
       "cb-detect": [
-        "/api/cb-detect-latest?canvas=1&compact=1&shell=1&limit=60",
+        fastBundleUrl,
       ],
       "warrant-flow": [
-        "/api/warrant-flow-latest?canvas=1&compact=1&shell=1&limit=60",
+        fastBundleUrl,
       ],
-      member: [
-        "/api/terminal-home",
-      ],
+      member: [],
     };
     const critical = [
       fastBundleUrl,
       "/api/terminal-home",
       marketCompactUrl,
-      "/api/stocks",
-      "/api/watchlist-match-index",
     ];
     const sequence = [
       ...critical,
-      "/api/open-buy-latest?canvas=1&compact=1&shell=1&limit=60",
       "/api/strategy2-latest?canvas=1&compact=1&shell=1&limit=60",
-      "/api/strategy3-latest?canvas=1&compact=1&shell=1&limit=60",
-      "/api/strategy5-latest?canvas=1&compact=1&shell=1&limit=70",
-      "/api/strategy4-latest?canvas=1&compact=1&shell=1&limit=70",
-      "/api/institution-latest?canvas=1&compact=1&shell=1&limit=60",
-      "/api/cb-detect-latest?canvas=1&compact=1&shell=1&limit=60",
-      "/api/warrant-flow-latest?canvas=1&compact=1&shell=1&limit=60",
     ];
     const warmOne = (url, reason = "warm") => {
       const key = String(url || "");
@@ -425,11 +409,11 @@
     const warmRoute = (link, reason = "route") => {
       const route = typeof link === "string" ? link : routeForLink(link);
       const strategySpecific = {
-        strategy1: ["/api/open-buy-latest?canvas=1&compact=1&shell=1&limit=60", "/api/stocks"],
-        strategy2: ["/api/strategy2-latest?canvas=1&compact=1&shell=1&limit=60", "/api/realtime-radar-latest", "/api/stocks"],
-        strategy3: ["/api/strategy3-latest?canvas=1&compact=1&shell=1&limit=60", "/api/stocks"],
-        strategy4: ["/api/strategy4-latest?canvas=1&compact=1&shell=1&limit=70", "/api/latest-signals?strategy=strategy4", "/api/stocks"],
-        strategy5: ["/api/strategy5-latest?canvas=1&compact=1&shell=1&limit=70", "/api/stocks"],
+        strategy1: [fastBundleUrl],
+        strategy2: ["/api/strategy2-latest?canvas=1&compact=1&shell=1&limit=60", "/api/realtime-radar-latest"],
+        strategy3: [fastBundleUrl],
+        strategy4: [fastBundleUrl],
+        strategy5: [fastBundleUrl],
       };
       const urls = strategySpecific[route] || routeGroups[route] || [];
       warmList(urls, reason, reason === "pointer" || reason === "click" ? 1 : 2);
