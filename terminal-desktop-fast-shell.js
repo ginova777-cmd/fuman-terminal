@@ -782,7 +782,7 @@
     const values = Object.values(payload);
     if (values.length >= 3 && values.some((item) => item && typeof item === "object" && !Array.isArray(item))) {
       const objectRows = values.filter((item) => item && typeof item === "object" && !Array.isArray(item));
-      if (objectRows.some((item) => item.code || item.name || item.stockNo || item.stock_id || item.payload)) out.push(objectRows);
+      if (objectRows.some((item) => item.code || item.Code || item.name || item.Name || item.stockNo || item.stock_id || item.payload)) out.push(objectRows);
     }
     Object.keys(payload).slice(0, 18).forEach((key) => {
       const value = payload[key];
@@ -795,15 +795,15 @@
     const payload = row?.payload && typeof row.payload === "object" ? row.payload : {};
     const active = row?.activeMatch || payload.activeMatch || (Array.isArray(row?.matches) ? row.matches[0] : null) || (Array.isArray(payload.matches) ? payload.matches[0] : null) || {};
     const merged = { ...payload, ...row };
-    const rawCode = merged.code || merged.stockNo || merged.stock_no || merged.symbol || merged.ticker || merged.stockId || merged.stock_id || "";
+    const rawCode = merged.code || merged.Code || merged.stockNo || merged.StockNo || merged.stock_no || merged.symbol || merged.Symbol || merged.ticker || merged.stockId || merged.stock_id || "";
     const code = String(rawCode).match(/\d{4}/)?.[0] || String(rawCode || "").trim();
-    const name = String(merged.name || merged.stockName || merged.stock_name || merged.companyName || merged.company_name || code || "").trim();
-    const pct = merged.percent ?? merged.changePercent ?? merged.change_percent ?? merged.change ?? merged.pct ?? "";
-    const score = merged.score ?? merged.rankScore ?? merged.swingScore ?? active.score ?? merged.signalScore ?? "";
+    const name = String(merged.name || merged.Name || merged.stockName || merged.StockName || merged.stock_name || merged.companyName || merged.company_name || code || "").trim();
+    const pct = merged.percent ?? merged.Percent ?? merged.changePercent ?? merged.ChangePercent ?? merged.change_percent ?? merged.change ?? merged.Change ?? merged.pct ?? "";
+    const score = merged.score ?? merged.Score ?? merged.rankScore ?? merged.RankScore ?? merged.swingScore ?? active.score ?? merged.signalScore ?? "";
     const reason = String(merged.reason || active.reason || merged.message || merged.note || "").trim();
     const state = String(merged.state || merged.status || active.name || active.id || "").trim();
-    const price = merged.price ?? merged.close ?? merged.lastPrice ?? merged.entryPrice ?? "";
-    const volume = merged.volume ?? merged.tradeVolume ?? merged.volumeLots ?? merged.trade_volume ?? "";
+    const price = merged.price ?? merged.Price ?? merged.close ?? merged.Close ?? merged.ClosingPrice ?? merged.lastPrice ?? merged.LastPrice ?? merged.entryPrice ?? "";
+    const volume = merged.volume ?? merged.Volume ?? merged.tradeVolume ?? merged.TradeVolume ?? merged.volumeLots ?? merged.trade_volume ?? "";
     const line = compactText([
       code,
       name,
@@ -840,13 +840,14 @@
   function isRoutePayloadNotDrawable(payload, route = "") {
     if (!payload || typeof payload !== "object") return false;
     if (route !== "strategy|策略1") return false;
+    const hasDrawableRows = ["matches", "rows", "data", "results", "items"].some((key) => Array.isArray(payload[key]) && payload[key].some((item) => item && typeof item === "object"));
+    if (hasDrawableRows) return false;
     const reason = String(payload.reason || payload.error || payload.detail || payload.qualityStatus || "").toLowerCase();
     const decisionReady = payload.decisionReady ?? payload.meta?.decision_ready;
     return decisionReady === false
       || reason.includes("not_ready")
       || reason.includes("waiting_snapshot")
-      || reason.includes("futopt_not_ready")
-      || payload.gate === "complete-run-authoritative+decision-ready";
+      || reason.includes("futopt_not_ready");
   }
 
   function setCanvasRows(route, rows, source = "memory", at = Date.now()) {
