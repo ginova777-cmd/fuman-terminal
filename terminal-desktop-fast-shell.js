@@ -2521,7 +2521,7 @@
   }
 
   function loadOriginalDesktopMarketDirect(reason = "market") {
-    if (window.__fumanDesktopMarketExports === "20260624-01") return Promise.resolve(true);
+    if (/^20260624-0[12]$/.test(String(window.__fumanDesktopMarketExports || ""))) return Promise.resolve(true);
     if (originalDesktopMarketDirectPromise) return originalDesktopMarketDirectPromise;
     const version = terminalFastVersion();
     const dependencies = [
