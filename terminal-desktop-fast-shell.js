@@ -38,7 +38,7 @@
     "strategy|策略1": { limit: 60, ttl: 18000 },
     "strategy|策略2": { limit: 240, ttl: 6500, live: true, today: true },
     "strategy|策略3": { limit: 60, ttl: 22000 },
-    "strategy|策略4": { limit: 70, ttl: 24000 },
+    "strategy|策略4": { limit: 10, ttl: 24000 },
     "strategy|策略5": { limit: 70, ttl: 22000 },
     "chip-trade|買賣超": { limit: 60, ttl: 32000 },
     "cb-detect|CB可轉債": { limit: 60, ttl: 32000 },
@@ -872,11 +872,12 @@
     const endpoint = endpointForRoute(route);
     if (!endpoint) return "";
     const options = canvasOptionsForRoute(route);
+    const minLimit = isStrategy4Route(route) ? 10 : 20;
     const query = new URLSearchParams({
       canvas: "1",
       compact: "1",
       shell: "1",
-      limit: String(Math.max(20, Math.min(isLiveStrategyRoute(route) ? 240 : 120, options.limit || 60))),
+      limit: String(Math.max(minLimit, Math.min(isLiveStrategyRoute(route) ? 240 : 120, options.limit || 60))),
     });
     if (options.live) query.set("live", "1");
     if (options.today) query.set("today", "1");
@@ -1009,13 +1010,14 @@
   function normalizeCanvasRowsFromPayload(payload, route = "") {
     if (isRoutePayloadNotDrawable(payload, route)) return [];
     const limit = canvasOptionsForRoute(route).limit || 60;
+    const minLimit = isStrategy4Route(route) ? 10 : 20;
     const arrays = flattenApiArrays(payload);
     const best = arrays
       .map((rows) => rows.map((row, index) => normalizeCanvasRow(row, index, route)).filter((row) => row.code || row.title))
       .sort((a, b) => b.length - a.length)[0] || [];
     return best
       .sort((a, b) => cleanNumber(a.rank) - cleanNumber(b.rank) || cleanNumber(b.score) - cleanNumber(a.score) || String(a.code).localeCompare(String(b.code), "zh-Hant"))
-      .slice(0, Math.max(20, Math.min(isLiveStrategyRoute(route) ? 240 : 120, limit)));
+      .slice(0, Math.max(minLimit, Math.min(isLiveStrategyRoute(route) ? 240 : 120, limit)));
   }
 
   function isRoutePayloadNotDrawable(payload, route = "") {
