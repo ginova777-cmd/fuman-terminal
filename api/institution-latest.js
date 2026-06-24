@@ -25,7 +25,7 @@ function apiOnlyError(reason = "") {
     transport: {
       source: "supabase",
       latestRunView: LATEST_RUN_VIEW,
-      gate: "run_id",
+      gate: "complete-run-readback",
       via: "api/institution-latest",
       fetchedAt: new Date().toISOString(),
     },
@@ -58,10 +58,12 @@ function readRequestOptions(request) {
   try {
     const url = new URL(request.url, `https://${request.headers.host || "localhost"}`);
     const canvas = url.searchParams.get("canvas") === "1";
-    const limit = Math.max(1, Math.min(canvas ? 120 : 3000, cleanNumber(url.searchParams.get("limit")) || (canvas ? 80 : 3000)));
-    return { canvas, limit };
+    const compact = url.searchParams.get("compact") === "1" || url.searchParams.get("shell") === "1";
+    const smallPayload = canvas || compact;
+    const limit = Math.max(1, Math.min(smallPayload ? 120 : 3000, cleanNumber(url.searchParams.get("limit")) || (smallPayload ? 80 : 3000)));
+    return { canvas, compact, smallPayload, limit };
   } catch {
-    return { canvas: false, limit: 3000 };
+    return { canvas: false, compact: false, smallPayload: false, limit: 3000 };
   }
 }
 
@@ -87,9 +89,12 @@ function buildPayload(rows, run, options = {}) {
     .slice()
     .sort((a, b) => cleanNumber(a.rank) - cleanNumber(b.rank) || String(a.code).localeCompare(String(b.code)))
     .map(normalizeRow);
-  const outputRows = options.canvas ? sorted.slice(0, options.limit || 80) : sorted;
+  const outputRows = options.smallPayload ? sorted.slice(0, options.limit || 80) : sorted;
   const data = Object.fromEntries(outputRows.map((row) => [row.code, row]).filter(([code]) => code));
   const scanDate = String(run?.scan_date || rows[0]?.scan_date || "").replace(/-/g, "");
+  const expectedTotal = cleanNumber(run?.expected_total);
+  const scannedCount = cleanNumber(run?.scanned_count);
+  const resultCount = cleanNumber(run?.result_count) || sorted.length;
   return {
     ok: true,
     source: "supabase:institution_scan_results",
@@ -102,17 +107,24 @@ function buildPayload(rows, run, options = {}) {
     qualityStatus: String(run?.quality_status || rows[0]?.quality_status || "complete"),
     schemaVersion: String(run?.schema_version || rows[0]?.schema_version || "institution-run-id-complete-v1"),
     dataContractSource: String(run?.data_contract_source || rows[0]?.data_contract_source || "institution-cache"),
-    count: sorted.length,
+    count: resultCount,
     returnedCount: outputRows.length,
     canvas: Boolean(options.canvas),
+    compact: Boolean(options.compact),
     data,
     rows: outputRows,
     sourceHealth: run?.payload?.sourceHealth || {},
+    readback: {
+      expectedTotal,
+      scannedCount,
+      resultCount,
+      rowCount: sorted.length,
+    },
     transport: {
       source: "supabase",
       table: TABLE,
       latestRunView: LATEST_RUN_VIEW,
-      gate: "run_id",
+      gate: "complete-run-readback",
       runId: String(run?.run_id || rows[0]?.run_id || ""),
       via: "api/institution-latest",
       fetchedAt: new Date().toISOString(),
@@ -134,9 +146,32 @@ async function fetchLatestCompleteRun() {
   return rows[0]?.run_id ? rows[0] : null;
 }
 
-async function fetchLatestCompleteRows(limit = 3000) {
+function validateCompleteRun(run) {
+  if (!run?.run_id) throw new Error("institution_complete_run_missing");
+  if (String(run.status || "") !== "complete" || run.complete !== true) throw new Error("institution_complete_run_not_complete");
+  const expectedTotal = cleanNumber(run.expected_total);
+  const scannedCount = cleanNumber(run.scanned_count);
+  const resultCount = cleanNumber(run.result_count);
+  if (expectedTotal <= 0) throw new Error("institution_expected_total_missing");
+  if (scannedCount <= 0) throw new Error("institution_scanned_count_missing");
+  if (expectedTotal !== scannedCount) throw new Error(`institution_scan_incomplete:${scannedCount}/${expectedTotal}`);
+  if (resultCount <= 0) throw new Error("institution_result_count_missing");
+}
+
+function validateReadback(rows, run) {
+  const resultCount = cleanNumber(run?.result_count);
+  if (!rows.length) throw new Error("institution_complete_run_empty");
+  if (resultCount > 0 && rows.length !== resultCount) {
+    throw new Error(`institution_readback_count_mismatch:${rows.length}/${resultCount}`);
+  }
+  const incomplete = rows.find((row) => row.complete === false || String(row.quality_status || "complete") !== "complete");
+  if (incomplete) throw new Error(`institution_readback_incomplete_row:${incomplete.code || ""}`);
+}
+
+async function fetchLatestCompleteRows() {
   const run = await fetchLatestCompleteRun();
   if (!run?.run_id) return { rows: [], run: null };
+  validateCompleteRun(run);
   const rows = await fetchRowsFrom(
     TABLE,
     [
@@ -144,9 +179,10 @@ async function fetchLatestCompleteRows(limit = 3000) {
       "strategy=eq.institution",
       `run_id=eq.${encodeURIComponent(run.run_id)}`,
       "order=rank.asc",
-      `limit=${Math.max(1, Math.min(3000, cleanNumber(limit) || 3000))}`,
+      "limit=3000",
     ].join("&")
   );
+  validateReadback(rows, run);
   return { rows, run };
 }
 
@@ -175,7 +211,7 @@ module.exports = async function handler(request, response) {
       response.status(503).json(apiOnlyError("supabase_not_configured"));
       return;
     }
-    const latest = await fetchLatestCompleteRows(options.canvas ? options.limit : 3000);
+    const latest = await fetchLatestCompleteRows();
     if (!latest.rows.length) {
       response.status(404).json(apiOnlyError("institution_scan_results_latest_empty"));
       return;

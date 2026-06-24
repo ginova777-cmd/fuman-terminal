@@ -171,6 +171,23 @@ async function upsertSupabaseRows(table, rows, conflict) {
   }
 }
 
+async function fetchSupabaseRows(table, query) {
+  if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) throw new Error("institution supabase credentials missing");
+  const response = await fetch(`${SUPABASE_URL}/rest/v1/${table}?${query}`, {
+    headers: {
+      apikey: SUPABASE_SERVICE_ROLE_KEY,
+      Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+      Accept: "application/json",
+    },
+  });
+  if (!response.ok) {
+    const text = await response.text().catch(() => "");
+    throw new Error(`${table} readback HTTP ${response.status}: ${text.slice(0, 240)}`);
+  }
+  const rows = await response.json();
+  return Array.isArray(rows) ? rows : [];
+}
+
 function buildInstitutionRunRow(output, runId, status = "complete") {
   const complete = status === "complete";
   const scanTime = String(output.updatedAt || new Date().toISOString());
@@ -194,6 +211,7 @@ function buildInstitutionRunRow(output, runId, status = "complete") {
     updated_at: scanTime,
     payload: {
       count: cleanNumber(output.count),
+      readbackCount: cleanNumber(output.readbackCount),
       usedDate: output.usedDate || "",
       quoteUpdatedAt: output.quoteUpdatedAt || "",
       sourceHealth: output.sourceHealth || {},
@@ -233,6 +251,27 @@ function buildInstitutionResultRows(output, runId) {
     .filter((row) => row.code);
 }
 
+async function readbackInstitutionResults(runId, expectedCount) {
+  const rows = await fetchSupabaseRows(
+    INSTITUTION_RESULTS_TABLE,
+    [
+      "select=code,complete,quality_status",
+      "strategy=eq.institution",
+      `run_id=eq.${encodeURIComponent(runId)}`,
+      "order=rank.asc",
+      "limit=3000",
+    ].join("&")
+  );
+  if (rows.length !== expectedCount) {
+    throw new Error(`institution supabase readback mismatch: expected ${expectedCount}, got ${rows.length}`);
+  }
+  const incomplete = rows.find((row) => row.complete !== true || String(row.quality_status || "complete") !== "complete");
+  if (incomplete) {
+    throw new Error(`institution supabase readback incomplete row: ${incomplete.code || "unknown"}`);
+  }
+  return rows.length;
+}
+
 async function publishInstitutionCompleteRunToSupabase(output) {
   if (!SUPABASE_SERVICE_ROLE_KEY) {
     console.warn("institution supabase run_id gate skipped: missing service role key");
@@ -243,8 +282,9 @@ async function publishInstitutionCompleteRunToSupabase(output) {
   const rows = buildInstitutionResultRows(output, runId);
   await upsertSupabaseRows(INSTITUTION_RUNS_TABLE, [running], "run_id");
   await upsertSupabaseRows(INSTITUTION_RESULTS_TABLE, rows, "run_id,strategy,code");
+  output.readbackCount = await readbackInstitutionResults(runId, rows.length);
   await upsertSupabaseRows(INSTITUTION_RUNS_TABLE, [buildInstitutionRunRow(output, runId, "complete")], "run_id");
-  console.log(`institution supabase run_id gate ok: ${runId}, rows ${rows.length}`);
+  console.log(`institution supabase complete-run readback gate ok: ${runId}, rows ${rows.length}`);
   return runId;
 }
 
