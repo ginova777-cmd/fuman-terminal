@@ -347,6 +347,180 @@ npm run monitor:production
 
 若 `monitor:production`、`verify:deploy`、`production-health` 與直接 API 檢查衝突，以現行 production health 與 live API 事實為準，並更新舊 verifier；不要復活 retired static freshness / manifest 檢查鏈。
 
+### 策略3：隔日沖正式條件與流程
+
+策略3是「隔日沖」候選，不是當沖即時頁。正式鏈路必須是：
+
+```text
+13:00 後 1 分K / 盤後資料齊備
+-> scripts\scan-strategy3-cache.js 完整掃描
+-> Supabase strategy3 complete run
+-> Supabase strategy3_latest snapshot
+-> /api/strategy3-latest no-store API
+-> /api/desktop-route-snapshot
+-> /api/terminal-fast-bundle snapshot first
+-> fixed shell / Canvas 策略3畫面
+```
+
+策略3目前程式基準：
+
+```text
+Strategy3 scanner:
+scripts\scan-strategy3-cache.js
+
+Strategy3 API:
+api\strategy3-latest.js
+
+Desktop snapshot builder:
+lib\desktop-route-snapshot-builder.js
+
+Fast shell endpoint map:
+terminal-desktop-fast-shell.js
+```
+
+策略3資料權威：
+
+- Supabase `strategy3_scan_runs`
+- Supabase `strategy3_scan_results`
+- Supabase snapshot key `strategy3_latest`
+- `/api/strategy3-latest`
+- `/api/desktop-route-snapshot`
+- `/api/terminal-fast-bundle`
+
+策略3不是資料權威：
+
+- DOM snapshot
+- `sessionStorage` route snapshot
+- IndexedDB DOM route snapshot
+- 靜態 `data/*.json`
+- Google Sheet
+- frontend map / filter / sort
+- service worker cache
+- version bump / cache bump
+
+策略3運作時間與時機：
+
+- 策略3要看尾盤與盤後籌碼/量價候選，不能在 13:00 前發布 complete run。
+- scanner 需要確認 13:00 後 1 分K 候選數；預設 `STRATEGY3_REQUIRE_AFTER_1300 !== "0"`，且 `STRATEGY3_MIN_AFTER_1300_CANDIDATES = 20`。
+- TradingView 進場確認只看 13:00 到 13:30 的尾盤 1 分K 條件。
+- 若 13:00 後資料不足，scanner 必須 fail，不可發布空包或 partial 當 complete。
+- 前端可以 30 秒保守 polling API rows，但資料簽名沒變時不能重建 DOM，避免畫面跳動。
+
+策略3資料來源流程：
+
+- 優先從 Supabase 讀 universe / quote ready / intraday 1m 狀態。
+- 若 Supabase universe 取不到股票，才 fallback 到 `STOCK_URL`，預設 `https://fuman-terminal.vercel.app/api/stocks`。
+- scanner 會補 issued shares、歷史均量、13:00 後 1 分K 狀態、資本額資訊。
+- `STRATEGY3_USE_SUPABASE !== "0"` 必須維持，正式站不要退回純靜態資料鏈。
+- `STRATEGY3_APPLY_BLACKLIST !== "0"` 必須維持，黑名單與不適合當沖/停牌/試撮等排除要在 scanner 端處理。
+
+策略3 source health gate：
+
+- 13:00 後候選數不足時，source health 直接 failed。
+- 若 `STRATEGY3_REQUIRE_TURNOVER = "1"`，issued shares count 不足 `STRATEGY3_MIN_ISSUED_SHARES_COUNT` 時必須 failed。
+- 若 `STRATEGY3_REQUIRE_VOLUME_AVERAGE = "1"`，均量 count 不足 `STRATEGY3_MIN_VOLUME_AVERAGE_COUNT` 時必須 failed。
+- source warning 超過 `STRATEGY3_SOURCE_WARNING_LIMIT`，預設 3，必須 failed。
+- failed 時不可寫入新的 complete run，不可覆蓋既有可用 snapshot。
+
+策略3候選前置條件：
+
+- 股票要有有效價格，`close > 0`。
+- 股票要有 13:00 後 1 分K，`hasAfter1300Candle` 或 `after1300CandleCount > 0`。
+- 排除黑名單、停牌、試撮、不適合當沖、ETF、權證、CB 等 scanner 標記不可交易或不合策略的標的。
+- 不要在前端補條件；條件、排序、分組、分頁都在 scanner / API 端完成。
+
+策略3分數只供排序，不可自行改權重：
+
+- 漲幅分數：`min((pct - 3) * 18, 36)`。
+- 成交量分數：`min(volumeLots / 80, 18)`。
+- 周轉分數：`min(turnoverRate * 6, 30)`。
+- 量比分數：`min(volumeRatio * 12, 20)`。
+- 過熱/弱勢扣分：`pct > 8.8` 扣 24，`pct > 6.5` 扣 12，`pct < 0` 扣 30。
+- 最終 `overnightScore` clamp 到 0 到 100。
+- 排序優先 `overnightScore` 高，再看成交值 `value`。
+
+策略3 TradingView 進場確認：
+
+- 預設 `STRATEGY3_REQUIRE_TV_ENTRY !== "0"`，也就是必須通過 TV 進場確認。
+- 1 分K 至少要有 35 根有效 candles。
+- 使用 money flow 的 EMA8，再做 SMA2 control line。
+- 使用 OBV，再做 EMA10。
+- 必須存在 13:00 到 13:30 的尾盤 candle。
+- 尾盤收盤必須貼近最近 100 根高點 98% 內。
+- control line 必須為正，且相對前一根上彎。
+- OBV 必須為正。
+- 以上全數成立才是正式隔日沖候選。
+
+策略3發布與寫回：
+
+- scanner output 必須 `complete=true`。
+- 若 matches 為 0，scanner 會保留上一版可用輸出並拒絕發布空結果；不要把空結果改成 complete。
+- Supabase run id 格式為 `strategy3-交易日-時間`。
+- 寫入順序是 running run row、results rows、complete run row、`strategy3_latest` snapshot、cache status。
+- `STRATEGY3_API_ONLY = true` 必須維持；靜態 `strategy3*.json` 只是不正式的 legacy/safeguard，不可恢復成正式資料來源。
+
+策略3 API contract：
+
+- `/api/strategy3-latest` 必須永遠回 `Cache-Control: no-store`。
+- 必須支援 `canvas=1&compact=1&shell=1&limit=N`。
+- compact / shell 預設小包，正式畫面通常 `limit=60`，最大不要超過 API 現有限制。
+- API 先讀 desktop route snapshot；若是 live / bypass / snapshotBuild 才走即時讀取。
+- Supabase 讀取順序是 `strategy3_latest` snapshot，fallback 到 latest complete run，再讀 `strategy3_scan_results` rows。
+- 回傳要包含可追蹤欄位，例如 `runId`、`snapshotId`、`updatedAt`、`usedDate`、`complete`、`returnedCount`、`sourceHealth`、`matches`。
+
+策略3進 desktop snapshot：
+
+- `lib/desktop-route-snapshot-builder.js` 必須包含 `/api/strategy3-latest`。
+- query 必須含 `canvas=1&compact=1&shell=1&limit=60`。
+- `/api/terminal-fast-bundle` 必須優先讀 Supabase `desktop_route_snapshot`。
+- production health 應維持：
+  - `snapshotHit = true`
+  - `snapshotFresh = true`
+  - `partial = false`
+  - `endpointCount >= 10`
+  - `hasStrategy2Snapshot = false`
+
+策略3前端 / fixed shell 規則：
+
+- 策略3只吃 API rows，不吃 DOM snapshot。
+- fast shell 啟動時要清掉策略3舊 `sessionStorage` / IndexedDB DOM snapshot。
+- 畫面來源不可顯示 `dom-snapshot`。
+- 不可再出現 `多多訊號2035`、`A區數量` 這種 DOM 文字被誤抽成列資料的錯欄位。
+- 不可恢復黃框舊 chrome：左側策略清單、舊 header、舊 toolbar、舊 metrics 卡、舊搜尋列都要隱藏。
+- polling 保持保守；目前 `API_ONLY_POLL_MS = 30000`。
+- row signature 沒變時不可重建整個 DOM，只更新必要狀態。
+- 不要讓 `terminal-app.js` 在切頁瞬間重新接管畫面。
+
+策略3修改後至少驗證：
+
+```powershell
+node --check scripts\scan-strategy3-cache.js
+node --check api\strategy3-latest.js
+node --check terminal-desktop-fast-shell.js
+npm run verify:version
+npm run verify:runtime-hotfix
+npm run verify:desktop-api-only
+npm run verify:publish-gate
+```
+
+部署後驗正式站：
+
+```powershell
+npm run verify:live-version
+node --use-system-ca scripts\verify-deployment.js
+npm run e2e:smoke
+npm run monitor:production
+```
+
+策略3不可做：
+
+- 不要改策略條件、TV 條件、分數規則、排序權重。
+- 不要新增密集 polling。
+- 不要用 cache bump / version bump 假裝修資料。
+- 不要從 dirty 的 `C:\fuman-terminal` 強行部署。
+- 不要把策略3放回 DOM snapshot / static JSON / Google Sheet 鏈路。
+- 不要把策略2的 live intent 套到策略3，也不要把策略3的 cold snapshot 規則套到策略2。
+
 策略2：
 
 - 當沖頁，必須即時。
