@@ -11,6 +11,7 @@
   const SNAPSHOT_MAX_CHARS = 850000;
   const SNAPSHOT_ROUTES = ["strategy|策略1", "strategy|策略2", "strategy|策略3", "strategy|策略4", "strategy|策略5"];
   const API_ONLY_STRATEGY_ROUTES = ["strategy|策略1", "strategy|策略3", "strategy|策略4", "strategy|策略5"];
+  const LIVE_API_STRATEGY_ROUTES = ["strategy|策略2"];
   const FIXED_ROUTE_KEYS = ["market|市場總覽", "chip-trade|買賣超", "cb-detect|CB可轉債", "warrant-flow|權證走向", "watchlist|自選股"];
   const FIXED_CANVAS_PERSIST_ROUTES = ["market|市場總覽", "chip-trade|買賣超", "cb-detect|CB可轉債", "warrant-flow|權證走向"];
   const CANVAS_REFRESH_TTL_MS = 18000;
@@ -35,7 +36,7 @@
   const CANVAS_ROUTE_OPTIONS = {
     "market|市場總覽": { limit: 24, ttl: 14000 },
     "strategy|策略1": { limit: 60, ttl: 18000 },
-    "strategy|策略2": { limit: 60, ttl: 6500 },
+    "strategy|策略2": { limit: 240, ttl: 6500, live: true, today: true },
     "strategy|策略3": { limit: 60, ttl: 22000 },
     "strategy|策略4": { limit: 70, ttl: 24000 },
     "strategy|策略5": { limit: 70, ttl: 22000 },
@@ -589,9 +590,9 @@
     if (text.includes("策略2")) {
       return {
         icon: "◔",
-        title: "策略2-當沖雷達",
+        title: "策略2-戰鬥模式",
         badge: "FMN://strategy.intraday",
-        summary: "08:45-13:30 即時偵測，先切畫面，資料背景刷新。",
+        summary: "當沖即時偵測，顯示今日所有戰鬥訊號；不進冷快照，資料走 live API。",
       };
     }
     if (text.includes("策略3")) {
@@ -797,6 +798,10 @@
     return isWideStrategyTableRoute(route) ? 128 : CANVAS_HEADER_HEIGHT;
   }
 
+  function isLiveStrategyRoute(route) {
+    return LIVE_API_STRATEGY_ROUTES.includes(String(route || ""));
+  }
+
   function endpointForRoute(route) {
     return CANVAS_ENDPOINTS[route] || "";
   }
@@ -814,7 +819,8 @@
   }
 
   function isApiOnlyPollingRoute(route) {
-    return API_ONLY_STRATEGY_ROUTES.includes(String(route || ""));
+    const key = String(route || "");
+    return API_ONLY_STRATEGY_ROUTES.includes(key) || LIVE_API_STRATEGY_ROUTES.includes(key);
   }
 
   function rowSignature(rows = []) {
@@ -870,8 +876,10 @@
       canvas: "1",
       compact: "1",
       shell: "1",
-      limit: String(Math.max(20, Math.min(120, options.limit || 60))),
+      limit: String(Math.max(20, Math.min(isLiveStrategyRoute(route) ? 240 : 120, options.limit || 60))),
     });
+    if (options.live) query.set("live", "1");
+    if (options.today) query.set("today", "1");
     if (withBust) query.set("t", String(Date.now()));
     return `${endpoint}${endpoint.includes("?") ? "&" : "?"}${query.toString()}`;
   }
@@ -999,7 +1007,7 @@
       .sort((a, b) => b.length - a.length)[0] || [];
     return best
       .sort((a, b) => cleanNumber(a.rank) - cleanNumber(b.rank) || cleanNumber(b.score) - cleanNumber(a.score) || String(a.code).localeCompare(String(b.code), "zh-Hant"))
-      .slice(0, Math.max(20, Math.min(120, limit)));
+      .slice(0, Math.max(20, Math.min(isLiveStrategyRoute(route) ? 240 : 120, limit)));
   }
 
   function isRoutePayloadNotDrawable(payload, route = "") {
@@ -2160,7 +2168,7 @@
       }
       ctx.fillStyle = colors.muted;
       ctx.font = "700 14px system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
-      ctx.fillText(source.includes("canvas") ? "讀取快照中" : "已切換，背景同步資料", 44, height - 28);
+      ctx.fillText(isLiveStrategyRoute(canvasState.route) ? "今日尚無戰鬥訊號，持續即時監控" : source.includes("canvas") ? "讀取快照中" : "已切換，背景同步資料", 44, height - 28);
       return;
     }
 
@@ -2325,7 +2333,7 @@
         </div>
         <div class="desktop-route-shell-grid">
           <article><span>切換狀態</span><strong data-canvas-switch-state>立即</strong></article>
-          <article><span>資料狀態</span><strong data-canvas-data-state>${canvasState.rows.length ? "快照命中" : "背景更新"}</strong></article>
+          <article><span>資料狀態</span><strong data-canvas-data-state>${isLiveStrategyRoute(key) ? "即時偵測" : canvasState.rows.length ? "快照命中" : "背景更新"}</strong></article>
           <article><span>手感模式</span><strong data-canvas-mode-state>Worker Canvas</strong></article>
         </div>
         <div class="desktop-canvas-toolbar">
@@ -2396,7 +2404,7 @@
     if (icon) icon.textContent = meta.icon;
     if (title) title.textContent = meta.title;
     if (summary) summary.textContent = meta.summary;
-    if (dataState) dataState.textContent = canvasState.rows.length ? "快照命中" : "背景更新";
+    if (dataState) dataState.textContent = isLiveStrategyRoute(key) ? "即時偵測" : canvasState.rows.length ? "快照命中" : "背景更新";
     if (modeState) modeState.textContent = canvasWorkerReady ? "OffscreenCanvas" : "Canvas";
     if (count) count.textContent = `${canvasState.filtered.length}/${canvasState.rows.length}`;
     if (status) status.textContent = canvasWorkerReady ? canvasWorkerMode : canvasState.source || "shell";
@@ -2564,7 +2572,7 @@
     restoreStrategySnapshot(link);
     window.setTimeout(() => {
       if (!isRouteCurrent(key, seq) || activeSnapshotRoute !== key || canvasState.route !== key) return;
-      fetchCanvasRows(key, false).then((apiRows) => {
+      fetchCanvasRows(key, isLiveStrategyRoute(key)).then((apiRows) => {
         if (!isRouteCurrent(key, seq) || activeSnapshotRoute !== key || canvasState.route !== key) return;
         if (apiRows?.length) {
           scheduleRoutePaint(key, seq, () => renderStrategyRouteShell(key, "api", apiRows), "api");

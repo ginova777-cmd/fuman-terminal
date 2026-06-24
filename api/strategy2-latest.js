@@ -151,12 +151,15 @@ function parseRequestOptions(request) {
   const compact = ["canvas", "compact", "shell"].some((key) => /^(1|true|yes)$/i.test(params.get(key) || ""));
   const requestedLimit = Number(params.get("limit") || "");
   const fallbackLimit = compact ? 60 : 200;
-  const maxLimit = compact ? 120 : 500;
+  const wantsAllToday = /^(1|true|yes)$/i.test(params.get("today") || params.get("allToday") || "");
+  const maxLimit = compact ? (wantsAllToday ? 240 : 120) : 500;
   const limit = Math.max(20, Math.min(maxLimit, Number.isFinite(requestedLimit) && requestedLimit > 0 ? requestedLimit : fallbackLimit));
   return {
     compact,
     canvas: /^(1|true|yes)$/i.test(params.get("canvas") || ""),
     shell: /^(1|true|yes)$/i.test(params.get("shell") || ""),
+    live: /^(1|true|yes)$/i.test(params.get("live") || ""),
+    today: wantsAllToday,
     limit,
   };
 }
@@ -252,9 +255,12 @@ function compactStrategy2Payload(payload, options) {
     canvas: Boolean(options.canvas),
     shell: Boolean(options.shell),
     compactLimit: limit,
+    battleMode: Boolean(options.today || options.live),
+    mode: options.today || options.live ? "strategy2-live-battle" : "strategy2-live",
     cacheSource: payload?.cacheSource || "supabase-api",
     gate: payload?.gate || AUTHORITATIVE_GATE,
     reason: payload?.reason || "complete-run-authoritative",
+    noTodayDetections: Boolean(payload?.noTodayDetections),
     updatedAt: payload?.updatedAt || payload?.generatedAt || "",
     generatedAt: payload?.generatedAt || payload?.updatedAt || "",
     runId: payload?.runId || payload?.transport?.runId || "",
@@ -278,6 +284,8 @@ function compactStrategy2Payload(payload, options) {
       ...(payload?.transport || {}),
       compact: true,
       canvas: Boolean(options.canvas),
+      live: Boolean(options.live),
+      today: Boolean(options.today),
       limit,
       via: "api/strategy2-latest",
       fetchedAt: new Date().toISOString(),
@@ -308,7 +316,7 @@ function hasStrategy2PayloadRows(payload) {
     || Array.isArray(payload?.rows) && payload.rows.length > 0;
 }
 
-function buildStrategy2RunPayload(run, { skippedEmptyRunIds = [], sourceTable = LATEST_RUN_VIEW, marketSession = null, options = null } = {}) {
+function buildStrategy2RunPayload(run, { skippedEmptyRunIds = [], sourceTable = LATEST_RUN_VIEW, marketSession = null, options = null, emptyToday = false } = {}) {
   const payload = run.payload || {};
   const fullPayload = {
     ...payload,
@@ -320,7 +328,8 @@ function buildStrategy2RunPayload(run, { skippedEmptyRunIds = [], sourceTable = 
     qualityStatus: payload.qualityStatus || run.quality_status || "complete",
     cacheSource: "supabase-api",
     gate: AUTHORITATIVE_GATE,
-    reason: marketSession?.closed ? "non-trading-day-cache" : "complete-run-authoritative",
+    reason: emptyToday ? "today-complete-run-empty" : marketSession?.closed ? "non-trading-day-cache" : "complete-run-authoritative",
+    noTodayDetections: Boolean(emptyToday),
     marketSession,
     latestCompleteRunCorrected: skippedEmptyRunIds.length > 0,
     correctionReason: skippedEmptyRunIds.length ? "empty_complete_run_skipped" : "",
@@ -355,6 +364,9 @@ async function fetchCompleteRunPayload(base, marketSession = null, options = nul
   const latestRun = latestRows[0];
   if (latestRun?.run_id && latestRun?.payload && hasStrategy2PayloadRows(latestRun.payload) && allowedForMarketSession(latestRun, marketSession)) {
     return buildStrategy2RunPayload(latestRun, { marketSession, options });
+  }
+  if (options?.today && latestRun?.run_id && payloadRunDate(latestRun.payload || {}, latestRun) === marketSession?.today) {
+    return buildStrategy2RunPayload(latestRun, { marketSession, options, emptyToday: true });
   }
   if (latestRun?.run_id) skippedEmptyRunIds.push(latestRun.run_id);
 
