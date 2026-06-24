@@ -3655,7 +3655,7 @@
     const liveRows = rows.filter((row) => {
       const tone = strategy2Tone(row);
       return tone === "entry" || tone === "prepare";
-    }).slice(0, 24);
+    }).slice(0, 10);
     const entryCount = liveRows.filter((row) => strategy2Tone(row) === "entry").length;
     const prepareCount = liveRows.filter((row) => strategy2Tone(row) === "prepare").length;
     const title = shell.querySelector("[data-canvas-meta-title]");
@@ -4549,7 +4549,7 @@
       }
       .strategy2-battle-board {
         display: grid;
-        grid-template-rows: minmax(210px, 0.82fr) minmax(330px, 1.18fr);
+        grid-template-rows: minmax(248px, 0.46fr) minmax(390px, 1.54fr);
         gap: 14px;
         min-height: 610px;
       }
