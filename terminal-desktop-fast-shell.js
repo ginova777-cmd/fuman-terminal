@@ -685,6 +685,50 @@
     return Number.isFinite(number) ? number : 0;
   }
 
+  function pickFirstValue(...values) {
+    return values.find((value) => value !== undefined && value !== null && value !== "");
+  }
+
+  function formatCompactNumber(value, digits = 0) {
+    const number = cleanNumber(value);
+    if (!number) return "";
+    return number.toLocaleString("zh-TW", {
+      maximumFractionDigits: digits,
+      minimumFractionDigits: digits,
+    });
+  }
+
+  function formatPriceValue(value) {
+    const number = cleanNumber(value);
+    if (!number) return "";
+    return number.toLocaleString("zh-TW", {
+      minimumFractionDigits: number >= 100 ? 1 : 2,
+      maximumFractionDigits: number >= 100 ? 1 : 2,
+    });
+  }
+
+  function formatPercentValue(value) {
+    if (value === "" || value == null) return "";
+    const number = cleanNumber(value);
+    if (!Number.isFinite(number)) return "";
+    const sign = number > 0 ? "+" : "";
+    return `${sign}${number.toFixed(2)}%`;
+  }
+
+  function formatRatioValue(value) {
+    const number = cleanNumber(value);
+    if (!number) return "";
+    return `${number.toFixed(1)}x`;
+  }
+
+  function formatTradeValue(value) {
+    const number = cleanNumber(value);
+    if (!number) return "";
+    if (number >= 100000000) return `${(number / 100000000).toFixed(2)}億`;
+    if (number >= 10000) return `${Math.round(number / 10000).toLocaleString("zh-TW")}萬`;
+    return number.toLocaleString("zh-TW");
+  }
+
   const STRATEGY4_SIGNAL_LABELS = {
     bull_attack: "攻擊",
     n_base: "N字",
@@ -737,6 +781,18 @@
     return String(route || "") === "strategy|策略5";
   }
 
+  function isStrategy3Route(route) {
+    return String(route || "") === "strategy|策略3";
+  }
+
+  function canvasRowHeightForRoute(route = canvasState.route) {
+    return isStrategy3Route(route) ? 94 : CANVAS_ROW_HEIGHT;
+  }
+
+  function canvasHeaderHeightForRoute(route = canvasState.route) {
+    return isStrategy3Route(route) ? 128 : CANVAS_HEADER_HEIGHT;
+  }
+
   function endpointForRoute(route) {
     return CANVAS_ENDPOINTS[route] || "";
   }
@@ -767,6 +823,11 @@
         row.pct || "",
         row.price || "",
         row.volume || "",
+        row.volumeRatio || "",
+        row.tradeValue || "",
+        row.legal5d || "",
+        row.aiStatus || "",
+        row.triggerReason || "",
         row.reason || "",
       ].join(":"))
       .join("|");
@@ -858,6 +919,10 @@
     const state = String(merged.state || merged.status || active.name || active.id || "").trim();
     const price = merged.price ?? merged.Price ?? merged.close ?? merged.Close ?? merged.ClosingPrice ?? merged.lastPrice ?? merged.LastPrice ?? merged.entryPrice ?? "";
     const volume = merged.volume ?? merged.Volume ?? merged.tradeVolume ?? merged.TradeVolume ?? merged.volumeLots ?? merged.trade_volume ?? "";
+    const volumeLots = pickFirstValue(merged.volumeLots, merged.VolumeLots, merged.volume_lots, cleanNumber(volume) > 100000 ? cleanNumber(volume) / 1000 : "");
+    const volumeRatio = pickFirstValue(merged.projectedRatio, merged.volumeRatio, merged.VolumeRatio, merged.projected_ratio, merged.estimatedVolumeRatio, merged.estimated_volume_ratio);
+    const tradeValue = pickFirstValue(merged.tradeValue, merged.value, merged.TradeValue, merged.trade_value, merged.amount, merged.turnover);
+    const legal5d = pickFirstValue(merged.legal5d, merged.legal5D, merged.institutional5d, merged.institutional5D, merged.foreign5d, merged.foreign5D, merged.foreign5dNet, merged.foreign_5d_net, merged.chip5d);
     const signals = normalizeSignalRows(merged.signals || merged.matches || merged.swingSignals || payload.signals || payload.matches || active.signals, route);
     const primarySignal = signals[0] || null;
     const rawSubStrategy = merged.subStrategy || merged.strategyLabel || merged.signalLabel || merged.setupName || merged.setup_type || active.short || active.label || active.name || primarySignal?.label || "";
@@ -870,6 +935,21 @@
       48
     );
     const signalLine = signalSummary(signals);
+    const aiStatus = compactText(merged.aiStatus || merged.ai_status || merged.overnightState || state || (cleanNumber(score) ? "通過" : ""), 16);
+    const aiSummary = compactText(
+      merged.aiSummary || merged.ai_analysis || merged.analysis || merged.summary || reason || signalLine || "",
+      180
+    );
+    const triggerReason = compactText(
+      merged.triggerReason || merged.trigger_reason || merged.tvOvernightEntry?.reason || reason || signalLine || "",
+      160
+    );
+    const triggerTags = [
+      cleanNumber(volumeRatio) ? "量能啟動" : "",
+      cleanNumber(tradeValue) ? "高成交額" : "",
+      cleanNumber(legal5d) > 0 ? "法人5D偏多" : "",
+      cleanNumber(price) > 0 ? "流動性足" : "",
+    ].filter(Boolean).slice(0, 4);
     const line = compactText([
       code,
       name,
@@ -893,6 +973,15 @@
       signals,
       price: price === "" || price == null ? "" : String(price),
       volume: volume === "" || volume == null ? "" : String(volume),
+      volumeLots: volumeLots === "" || volumeLots == null ? "" : String(Math.round(cleanNumber(volumeLots))),
+      volumeRatio: volumeRatio === "" || volumeRatio == null ? "" : String(volumeRatio),
+      tradeValue: tradeValue === "" || tradeValue == null ? "" : String(tradeValue),
+      legal5d: legal5d === "" || legal5d == null ? "" : String(legal5d),
+      longShort: compactText(merged.longShort || merged.side || merged.direction || "多", 8),
+      aiStatus,
+      aiSummary,
+      triggerReason,
+      triggerTags,
       line,
     };
   }
@@ -1024,7 +1113,19 @@
       const signalText = [row.subStrategyId, row.subStrategy, row.signalLine, ...(row.signals || []).flatMap((signal) => [signal.id, signal.label, signal.reason])].join(" ").toLowerCase();
       if (signalFilter && !signalText.includes(signalFilter)) return false;
       if (!query) return true;
-      return [row.code, row.title, row.reason, row.line, row.subStrategy, row.signalLine].join(" ").toLowerCase().includes(query);
+      return [
+        row.code,
+        row.title,
+        row.reason,
+        row.line,
+        row.subStrategy,
+        row.signalLine,
+        row.aiSummary,
+        row.triggerReason,
+        row.volumeRatio,
+        row.tradeValue,
+        row.legal5d,
+      ].join(" ").toLowerCase().includes(query);
     });
     const maxOffset = Math.max(0, canvasState.filtered.length - 1);
     canvasState.offset = Math.max(0, Math.min(canvasState.offset, maxOffset));
@@ -1065,7 +1166,9 @@
   function visibleCanvasCapacity(canvas) {
     const rect = canvas?.getBoundingClientRect?.();
     const height = Math.max(360, Math.min(760, Math.floor(rect?.height || (window.innerHeight || 900) * 0.62)));
-    return Math.max(5, Math.floor((height - CANVAS_HEADER_HEIGHT - 16) / CANVAS_ROW_HEIGHT));
+    const rowHeight = canvasRowHeightForRoute();
+    const headerHeight = canvasHeaderHeightForRoute();
+    return Math.max(isStrategy3Route(canvasState.route) ? 3 : 5, Math.floor((height - headerHeight - 16) / rowHeight));
   }
 
   function clampCanvasOffset(canvas) {
@@ -1097,7 +1200,7 @@
     const canvas = shell?.querySelector(".desktop-route-canvas");
     if (!canvas) return;
     clampCanvasOffset(canvas);
-    if (drawCanvasWithWorker(canvas)) {
+    if (!isStrategy3Route(canvasState.route) && drawCanvasWithWorker(canvas)) {
       setCanvasStatus();
       return;
     }
@@ -1382,11 +1485,168 @@
     return true;
   }
 
+  function strategy3ColumnLayout(width) {
+    const left = 24;
+    const right = 24;
+    const available = Math.max(900, width - left - right);
+    const spec = [
+      ["rank", "排名", 58],
+      ["stock", "股票", 142],
+      ["side", "多空", 72],
+      ["price", "價格", 86],
+      ["pct", "漲幅", 88],
+      ["volume", "量", 100],
+      ["ratio", "推估量比", 112],
+      ["value", "成交額", 108],
+      ["legal", "法人5D", 98],
+      ["score", "分數", 76],
+      ["ai", "AI分析", 260],
+      ["trigger", "觸發原因", 260],
+    ];
+    const base = spec.reduce((sum, item) => sum + item[2], 0);
+    const scale = Math.min(1, available / base);
+    let x = left;
+    return spec.map(([key, label, baseWidth], index) => {
+      const widthValue = index >= spec.length - 2
+        ? Math.max(180, Math.floor(baseWidth * scale))
+        : Math.max(48, Math.floor(baseWidth * scale));
+      const column = { key, label, x, width: widthValue };
+      x += widthValue;
+      return column;
+    }).filter((column) => column.x < width - right - 32);
+  }
+
+  function drawCanvasPill(ctx, text, x, y, width, colors, tone = "neutral") {
+    const fill = tone === "up" ? "rgba(248,64,86,0.18)" : tone === "accent" ? "rgba(255,112,55,0.20)" : "rgba(148,163,184,0.14)";
+    const stroke = tone === "up" ? "rgba(248,64,86,0.42)" : tone === "accent" ? "rgba(255,112,55,0.44)" : "rgba(148,163,184,0.22)";
+    ctx.fillStyle = fill;
+    roundRect(ctx, x, y - 17, width, 28, 14);
+    ctx.fill();
+    ctx.strokeStyle = stroke;
+    ctx.lineWidth = 1;
+    roundRect(ctx, x + 0.5, y - 16.5, width - 1, 27, 14);
+    ctx.stroke();
+    ctx.fillStyle = tone === "up" ? colors.down : tone === "accent" ? colors.accent : colors.text;
+    ctx.font = "800 13px system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+    ctx.fillText(compactText(text, Math.max(2, Math.floor(width / 13))), x + 14, y + 1);
+  }
+
+  function fillCanvasMultiline(ctx, text, x, y, maxChars, lineHeight, maxLines) {
+    const raw = compactText(text || "", maxChars * maxLines + 8);
+    if (!raw) return;
+    const lines = [];
+    let rest = raw;
+    while (rest && lines.length < maxLines) {
+      lines.push(rest.slice(0, maxChars));
+      rest = rest.slice(maxChars);
+    }
+    lines.forEach((line, index) => ctx.fillText(line, x, y + index * lineHeight));
+  }
+
+  function drawStrategy3CanvasRows(ctx, colors, width, height, rows, rowsToDraw, source, capacity, rowHeight, headerHeight) {
+    const columns = strategy3ColumnLayout(width);
+    const col = (key) => columns.find((item) => item.key === key) || { x: width - 120, width: 90 };
+    ctx.fillStyle = colors.header;
+    roundRect(ctx, 24, 88, width - 48, 38, 8);
+    ctx.fill();
+    ctx.fillStyle = colors.muted;
+    ctx.font = "800 13px system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+    columns.forEach((column) => ctx.fillText(column.label, column.x + 6, 112));
+
+    if (!rowsToDraw.length) {
+      for (let i = 0; i < 4; i += 1) {
+        const y = headerHeight + 18 + i * rowHeight;
+        ctx.fillStyle = colors.skeleton.replace("0.16", String(0.15 - i * 0.018));
+        roundRect(ctx, 42, y, width - 84 - i * 34, 20, 10);
+        ctx.fill();
+      }
+      ctx.fillStyle = colors.muted;
+      ctx.font = "700 14px system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+      ctx.fillText(source.includes("canvas") ? "讀取策略3快照中" : "已切換，背景同步策略3 API", 44, height - 28);
+      return;
+    }
+
+    rowsToDraw.forEach((row, index) => {
+      const globalIndex = canvasState.offset + index;
+      const y = headerHeight + index * rowHeight + 38;
+      const active = globalIndex === canvasState.selectedIndex;
+      const hover = globalIndex === canvasState.hoverIndex;
+      ctx.fillStyle = active ? colors.accentSoft : hover ? colors.accentHover : index % 2 ? colors.rowAlt : colors.row;
+      roundRect(ctx, 24, y - 40, width - 48, rowHeight - 10, 10);
+      ctx.fill();
+      if (active || hover) {
+        ctx.strokeStyle = active ? colors.accent : colors.stroke;
+        ctx.lineWidth = 1;
+        roundRect(ctx, 24.5, y - 39.5, width - 49, rowHeight - 11, 10);
+        ctx.stroke();
+      }
+
+      ctx.fillStyle = colors.accent;
+      ctx.font = "900 13px system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+      ctx.fillText(`#${row.rank || globalIndex + 1}`, col("rank").x + 6, y - 2);
+
+      ctx.fillStyle = colors.text;
+      ctx.font = "900 15px system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+      ctx.fillText(compactText(row.title || row.code || "--", 8), col("stock").x + 6, y - 13);
+      ctx.fillStyle = colors.muted;
+      ctx.font = "13px system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+      ctx.fillText(row.code || "--", col("stock").x + 6, y + 9);
+
+      drawCanvasPill(ctx, row.longShort || "多", col("side").x + 6, y - 2, Math.min(56, col("side").width - 10), colors, "up");
+
+      ctx.fillStyle = colors.text;
+      ctx.font = "800 14px system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+      ctx.fillText(formatPriceValue(row.price) || "--", col("price").x + 6, y - 2);
+      const pctText = row.pct || formatPercentValue(row.pct);
+      ctx.fillStyle = String(pctText).includes("-") ? colors.down : colors.up;
+      ctx.fillText(pctText || "--", col("pct").x + 6, y - 2);
+      ctx.fillStyle = colors.text;
+      ctx.fillText(formatCompactNumber(row.volumeLots || row.volume, 0) || "--", col("volume").x + 6, y - 2);
+      ctx.fillText(formatRatioValue(row.volumeRatio) || "--", col("ratio").x + 6, y - 2);
+      ctx.fillText(formatTradeValue(row.tradeValue) || "--", col("value").x + 6, y - 2);
+      ctx.fillText(formatCompactNumber(row.legal5d, 0) || "--", col("legal").x + 6, y - 2);
+      ctx.fillText(row.score || "--", col("score").x + 6, y - 2);
+
+      ctx.fillStyle = row.aiStatus === "觀察" ? colors.muted : colors.up;
+      ctx.font = "900 13px system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+      ctx.fillText(row.aiStatus || "通過", col("ai").x + 6, y - 24);
+      ctx.fillStyle = colors.muted;
+      ctx.font = "13px system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+      fillCanvasMultiline(ctx, row.aiSummary || row.reason || row.line, col("ai").x + 6, y - 2, Math.max(14, Math.floor((col("ai").width - 12) / 13)), 18, 3);
+
+      const tags = Array.isArray(row.triggerTags) ? row.triggerTags.slice(0, 2) : [];
+      let tagX = col("trigger").x + 6;
+      tags.forEach((tag, tagIndex) => {
+        const tagWidth = Math.min(86, Math.max(58, tag.length * 15));
+        drawCanvasPill(ctx, tag, tagX, y - 24, tagWidth, colors, tagIndex ? "neutral" : "accent");
+        tagX += tagWidth + 6;
+      });
+      ctx.fillStyle = colors.muted;
+      ctx.font = "13px system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+      fillCanvasMultiline(ctx, row.triggerReason || row.reason || row.line, col("trigger").x + 6, y + 10, Math.max(14, Math.floor((col("trigger").width - 12) / 13)), 18, 2);
+    });
+
+    if (rows.length > capacity) {
+      const trackTop = headerHeight;
+      const trackHeight = height - headerHeight - 18;
+      const thumbHeight = Math.max(34, trackHeight * (capacity / rows.length));
+      const thumbTop = trackTop + (trackHeight - thumbHeight) * (canvasState.offset / Math.max(1, rows.length - capacity));
+      ctx.fillStyle = canvasThemeMode() === "light" ? "rgba(100,116,139,0.16)" : "rgba(148,163,184,0.12)";
+      roundRect(ctx, width - 14, trackTop, 5, trackHeight, 4);
+      ctx.fill();
+      ctx.fillStyle = canvasThemeMode() === "light" ? "rgba(249,115,22,0.62)" : "rgba(255,112,55,0.58)";
+      roundRect(ctx, width - 14, thumbTop, 5, thumbHeight, 4);
+      ctx.fill();
+    }
+  }
+
   function canvasHitIndex(canvas, event) {
     const rect = canvas.getBoundingClientRect();
     const y = event.clientY - rect.top;
-    if (y < CANVAS_HEADER_HEIGHT) return -1;
-    const localIndex = Math.floor((y - CANVAS_HEADER_HEIGHT) / CANVAS_ROW_HEIGHT);
+    const headerHeight = canvasHeaderHeightForRoute();
+    const rowHeight = canvasRowHeightForRoute();
+    if (y < headerHeight) return -1;
+    const localIndex = Math.floor((y - headerHeight) / rowHeight);
     const index = canvasState.offset + localIndex;
     return index >= 0 && index < canvasState.filtered.length ? index : -1;
   }
@@ -1420,8 +1680,14 @@
         <div class="desktop-canvas-detail-grid">
           <span>分數 <strong>${escapeHtml(row.score || "--")}</strong></span>
           <span>漲幅 <strong>${escapeHtml(row.pct || "--")}</strong></span>
-          <span>價格 <strong>${escapeHtml(row.price || "--")}</strong></span>
-          <span>量能 <strong>${escapeHtml(row.volume || "--")}</strong></span>
+          <span>價格 <strong>${escapeHtml(formatPriceValue(row.price) || row.price || "--")}</strong></span>
+          <span>量能 <strong>${escapeHtml(formatCompactNumber(row.volumeLots || row.volume, 0) || row.volume || "--")}</strong></span>
+          ${isStrategy3Route(canvasState.route) ? `
+            <span>推估量比 <strong>${escapeHtml(formatRatioValue(row.volumeRatio) || "--")}</strong></span>
+            <span>成交額 <strong>${escapeHtml(formatTradeValue(row.tradeValue) || "--")}</strong></span>
+            <span>法人5D <strong>${escapeHtml(formatCompactNumber(row.legal5d, 0) || "--")}</strong></span>
+            <span>多空 <strong>${escapeHtml(row.longShort || "多")}</strong></span>
+          ` : ""}
         </div>
       </div>
     `;
@@ -1821,7 +2087,9 @@
     if (!canvas) return;
     const metrics = canvasDrawMetrics(canvas);
     const { width, height, dpr } = metrics;
-    const capacity = Math.max(5, Math.floor((height - CANVAS_HEADER_HEIGHT - 16) / CANVAS_ROW_HEIGHT));
+    const rowHeight = canvasRowHeightForRoute(canvasState.route);
+    const headerHeight = canvasHeaderHeightForRoute(canvasState.route);
+    const capacity = Math.max(isStrategy3Route(canvasState.route) ? 3 : 5, Math.floor((height - headerHeight - 16) / rowHeight));
     const rowsToDraw = rows.length ? rows.slice(canvasState.offset, canvasState.offset + capacity) : [];
     canvas.width = Math.floor(width * dpr);
     canvas.height = Math.floor(height * dpr);
@@ -1862,6 +2130,11 @@
     ctx.fillText(compactText(source || "shell", 28), width - 32, 66);
     ctx.textAlign = "left";
 
+    if (isStrategy3Route(canvasState.route)) {
+      drawStrategy3CanvasRows(ctx, colors, width, height, rows, rowsToDraw, source || "", capacity, rowHeight, headerHeight);
+      return;
+    }
+
     ctx.fillStyle = colors.header;
     roundRect(ctx, 24, 88, width - 48, 38, 12);
     ctx.fill();
@@ -1875,7 +2148,7 @@
 
     if (!rowsToDraw.length) {
       for (let i = 0; i < 5; i += 1) {
-        const y = CANVAS_HEADER_HEIGHT + 18 + i * CANVAS_ROW_HEIGHT;
+        const y = headerHeight + 18 + i * rowHeight;
         const alpha = 0.16 - i * 0.014;
         ctx.fillStyle = colors.skeleton.replace("0.16", String(alpha));
         roundRect(ctx, 42, y, width - 84 - i * 28, 18, 9);
@@ -1889,7 +2162,7 @@
 
     rowsToDraw.forEach((row, index) => {
       const globalIndex = canvasState.offset + index;
-      const y = CANVAS_HEADER_HEIGHT + index * CANVAS_ROW_HEIGHT + 28;
+      const y = headerHeight + index * rowHeight + 28;
       const active = globalIndex === canvasState.selectedIndex;
       const hover = globalIndex === canvasState.hoverIndex;
       ctx.fillStyle = active
@@ -1931,8 +2204,8 @@
     });
 
     if (rows.length > capacity) {
-      const trackTop = CANVAS_HEADER_HEIGHT;
-      const trackHeight = height - CANVAS_HEADER_HEIGHT - 18;
+      const trackTop = headerHeight;
+      const trackHeight = height - headerHeight - 18;
       const thumbHeight = Math.max(34, trackHeight * (capacity / rows.length));
       const thumbTop = trackTop + (trackHeight - thumbHeight) * (canvasState.offset / Math.max(1, rows.length - capacity));
       ctx.fillStyle = canvasThemeMode() === "light" ? "rgba(100,116,139,0.16)" : "rgba(148,163,184,0.12)";
@@ -1957,7 +2230,7 @@
 
   function drawCanvasShellFrame(canvas, meta) {
     requestAnimationFrame(() => {
-      if (!drawCanvasWithWorker(canvas)) {
+      if (isStrategy3Route(canvasState.route) || !drawCanvasWithWorker(canvas)) {
         drawRouteCanvas(canvas, meta, canvasState.filtered, canvasState.source);
       }
       setCanvasStatus();
@@ -2107,7 +2380,15 @@
     const count = shell.querySelector(".desktop-canvas-count");
     const status = shell.querySelector(".desktop-canvas-status");
     const input = shell.querySelector(".desktop-canvas-search");
-    const canvas = shell.querySelector(".desktop-route-canvas");
+    let canvas = shell.querySelector(".desktop-route-canvas");
+    if (isStrategy3Route(key) && canvas?.dataset?.fumanWorkerCanvas === "1") {
+      const fresh = document.createElement("canvas");
+      fresh.className = canvas.className;
+      fresh.tabIndex = canvas.tabIndex || 0;
+      fresh.setAttribute("aria-label", `${meta.title} Canvas 快速列表`);
+      canvas.replaceWith(fresh);
+      canvas = fresh;
+    }
     if (icon) icon.textContent = meta.icon;
     if (title) title.textContent = meta.title;
     if (summary) summary.textContent = meta.summary;
