@@ -785,12 +785,16 @@
     return String(route || "") === "strategy|策略3";
   }
 
+  function isWideStrategyTableRoute(route) {
+    return isStrategy3Route(route) || isStrategy5Route(route);
+  }
+
   function canvasRowHeightForRoute(route = canvasState.route) {
-    return isStrategy3Route(route) ? 94 : CANVAS_ROW_HEIGHT;
+    return isWideStrategyTableRoute(route) ? 94 : CANVAS_ROW_HEIGHT;
   }
 
   function canvasHeaderHeightForRoute(route = canvasState.route) {
-    return isStrategy3Route(route) ? 128 : CANVAS_HEADER_HEIGHT;
+    return isWideStrategyTableRoute(route) ? 128 : CANVAS_HEADER_HEIGHT;
   }
 
   function endpointForRoute(route) {
@@ -1168,7 +1172,7 @@
     const height = Math.max(360, Math.min(760, Math.floor(rect?.height || (window.innerHeight || 900) * 0.62)));
     const rowHeight = canvasRowHeightForRoute();
     const headerHeight = canvasHeaderHeightForRoute();
-    return Math.max(isStrategy3Route(canvasState.route) ? 3 : 5, Math.floor((height - headerHeight - 16) / rowHeight));
+    return Math.max(isWideStrategyTableRoute(canvasState.route) ? 3 : 5, Math.floor((height - headerHeight - 16) / rowHeight));
   }
 
   function clampCanvasOffset(canvas) {
@@ -1200,7 +1204,7 @@
     const canvas = shell?.querySelector(".desktop-route-canvas");
     if (!canvas) return;
     clampCanvasOffset(canvas);
-    if (!isStrategy3Route(canvasState.route) && drawCanvasWithWorker(canvas)) {
+    if (!isWideStrategyTableRoute(canvasState.route) && drawCanvasWithWorker(canvas)) {
       setCanvasStatus();
       return;
     }
@@ -1485,7 +1489,7 @@
     return true;
   }
 
-  function strategy3ColumnLayout(width) {
+  function wideStrategyColumnLayout(width) {
     const left = 24;
     const right = 24;
     const available = Math.max(900, width - left - right);
@@ -1543,8 +1547,8 @@
     lines.forEach((line, index) => ctx.fillText(line, x, y + index * lineHeight));
   }
 
-  function drawStrategy3CanvasRows(ctx, colors, width, height, rows, rowsToDraw, source, capacity, rowHeight, headerHeight) {
-    const columns = strategy3ColumnLayout(width);
+  function drawWideStrategyCanvasRows(ctx, colors, width, height, rows, rowsToDraw, source, capacity, rowHeight, headerHeight) {
+    const columns = wideStrategyColumnLayout(width);
     const col = (key) => columns.find((item) => item.key === key) || { x: width - 120, width: 90 };
     ctx.fillStyle = colors.header;
     roundRect(ctx, 24, 88, width - 48, 38, 8);
@@ -1562,7 +1566,7 @@
       }
       ctx.fillStyle = colors.muted;
       ctx.font = "700 14px system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
-      ctx.fillText(source.includes("canvas") ? "讀取策略3快照中" : "已切換，背景同步策略3 API", 44, height - 28);
+      ctx.fillText(source.includes("canvas") ? "讀取策略快照中" : "已切換，背景同步策略 API", 44, height - 28);
       return;
     }
 
@@ -1682,7 +1686,7 @@
           <span>漲幅 <strong>${escapeHtml(row.pct || "--")}</strong></span>
           <span>價格 <strong>${escapeHtml(formatPriceValue(row.price) || row.price || "--")}</strong></span>
           <span>量能 <strong>${escapeHtml(formatCompactNumber(row.volumeLots || row.volume, 0) || row.volume || "--")}</strong></span>
-          ${isStrategy3Route(canvasState.route) ? `
+          ${isWideStrategyTableRoute(canvasState.route) ? `
             <span>推估量比 <strong>${escapeHtml(formatRatioValue(row.volumeRatio) || "--")}</strong></span>
             <span>成交額 <strong>${escapeHtml(formatTradeValue(row.tradeValue) || "--")}</strong></span>
             <span>法人5D <strong>${escapeHtml(formatCompactNumber(row.legal5d, 0) || "--")}</strong></span>
@@ -2089,7 +2093,7 @@
     const { width, height, dpr } = metrics;
     const rowHeight = canvasRowHeightForRoute(canvasState.route);
     const headerHeight = canvasHeaderHeightForRoute(canvasState.route);
-    const capacity = Math.max(isStrategy3Route(canvasState.route) ? 3 : 5, Math.floor((height - headerHeight - 16) / rowHeight));
+    const capacity = Math.max(isWideStrategyTableRoute(canvasState.route) ? 3 : 5, Math.floor((height - headerHeight - 16) / rowHeight));
     const rowsToDraw = rows.length ? rows.slice(canvasState.offset, canvasState.offset + capacity) : [];
     canvas.width = Math.floor(width * dpr);
     canvas.height = Math.floor(height * dpr);
@@ -2130,8 +2134,8 @@
     ctx.fillText(compactText(source || "shell", 28), width - 32, 66);
     ctx.textAlign = "left";
 
-    if (isStrategy3Route(canvasState.route)) {
-      drawStrategy3CanvasRows(ctx, colors, width, height, rows, rowsToDraw, source || "", capacity, rowHeight, headerHeight);
+    if (isWideStrategyTableRoute(canvasState.route)) {
+      drawWideStrategyCanvasRows(ctx, colors, width, height, rows, rowsToDraw, source || "", capacity, rowHeight, headerHeight);
       return;
     }
 
@@ -2230,7 +2234,7 @@
 
   function drawCanvasShellFrame(canvas, meta) {
     requestAnimationFrame(() => {
-      if (isStrategy3Route(canvasState.route) || !drawCanvasWithWorker(canvas)) {
+      if (isWideStrategyTableRoute(canvasState.route) || !drawCanvasWithWorker(canvas)) {
         drawRouteCanvas(canvas, meta, canvasState.filtered, canvasState.source);
       }
       setCanvasStatus();
