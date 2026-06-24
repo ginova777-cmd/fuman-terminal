@@ -243,6 +243,7 @@ jointStreak             同買日                         -> /api/institution-la
 - 舊 `verify:chip` / `health:chip` 仍硬追已退休的 `data/institution-latest.json`，在乾淨 API-only clone 會失敗；處理方式是刪 verifier / script 引用，不恢復靜態 JSON。
 - 舊 snapshot 可能沒有 `foreignTrustBuyVolumePct` / `institutionBuyVolumePct`，導致前端若只看顯式欄位會顯示假 `0`；處理方式是 API 補欄位 + fast shell fallback。
 - 舊泛用策略 renderer 會把買賣超畫成 `Rank / Code / Signal`，內容怪且像沒資料；處理方式是買賣超使用自己的 Canvas table renderer。
+- 舊 DOM/html snapshot 會在買賣超 API rows 先顯示後，把畫面覆蓋成 `dom-snapshot`，造成「一開始有資料，馬上跳掉」；處理方式是把買賣超 / CB / 權證列為 API-only fixed route，並禁止 fixed Canvas routes 接受 `dom-*` / `html-*` rows。
 - 部署驗證時 preview deployment 與正式 alias 可能短暫不同步；驗證必須看 `https://fuman-terminal.vercel.app` 正式 alias 與 production monitor，不可只看 preview URL。
 
 已退休的買賣超靜態 verifier 不可復活：

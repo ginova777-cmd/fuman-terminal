@@ -19,7 +19,7 @@
   const CB_DETECT_ROUTE = "cb-detect|CB可轉債";
   const FIXED_ROUTE_KEYS = ["market|市場總覽", "chip-trade|買賣超", CB_DETECT_ROUTE, "warrant-flow|權證走向", "watchlist|自選股"];
   const FIXED_CANVAS_PERSIST_ROUTES = ["chip-trade|買賣超", CB_DETECT_ROUTE, "warrant-flow|權證走向"];
-  const API_ONLY_FIXED_ROUTE_KEYS = [CB_DETECT_ROUTE];
+  const API_ONLY_FIXED_ROUTE_KEYS = ["chip-trade|買賣超", CB_DETECT_ROUTE, "warrant-flow|權證走向"];
   const CANVAS_REFRESH_TTL_MS = 18000;
   const API_ONLY_POLL_MS = 30000;
   const PERF_LOG_KEY = "fuman-desktop-fast-perf-log-v1";
@@ -981,6 +981,10 @@
     return /dom|html|indexeddb|session/i.test(String(source || ""));
   }
 
+  function isUnsafeFixedDomSource(source) {
+    return /(^|-)dom|(^|-)html/i.test(String(source || ""));
+  }
+
   function isApiOnlyPollingRoute(route) {
     const key = String(route || "");
     return API_ONLY_STRATEGY_ROUTES.includes(key) || LIVE_API_STRATEGY_ROUTES.includes(key);
@@ -1295,6 +1299,7 @@
   function setCanvasRows(route, rows, source = "memory", at = Date.now()) {
     const cleanRows = (Array.isArray(rows) ? rows : []).filter((row) => row && (row.code || row.title || row.line));
     if (!route || !cleanRows.length) return false;
+    if (FIXED_CANVAS_PERSIST_ROUTES.includes(route) && isUnsafeFixedDomSource(source)) return false;
     canvasStore.set(route, { rows: cleanRows, source, at });
     canvasRouteVersions.set(route, Number(canvasRouteVersions.get(route) || 0) + 1);
     canvasPreRenderedRoutes.delete(route);
@@ -1310,6 +1315,7 @@
         return true;
       }
       updateStrategyFilterControls(currentCanvasShell());
+      updateChipTradeFilterControls(currentCanvasShell());
       scheduleCanvasDraw();
     }
     return true;
@@ -1328,8 +1334,10 @@
 
   function rowsForRoute(route) {
     const memory = canvasStore.get(route);
+    if (FIXED_CANVAS_PERSIST_ROUTES.includes(route) && isUnsafeFixedDomSource(memory?.source)) return [];
     if (memory?.rows?.length && (!isStrategyRoute(route) || !isDomDerivedSource(memory.source))) return memory.rows;
     const snapshot = routeSnapshots.get(route);
+    if (API_ONLY_FIXED_ROUTE_KEYS.includes(route) && snapshot?.html) return [];
     if (isStrategyRoute(route) && !isApiBackedSnapshotItem(snapshot)) return [];
     if (snapshot?.rows?.length) {
       setCanvasRows(route, snapshot.rows, "snapshot", snapshot.at || Date.now());
