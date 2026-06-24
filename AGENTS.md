@@ -33,6 +33,12 @@ fuman-terminal
 
 只把 `C:\fuman-terminal` 當正式程式根目錄。不要再建立或依賴已退休的同步/發布副本。
 
+部署安全規則：
+
+- 不要從 dirty 的 `C:\fuman-terminal` repo 部署；若正式根目錄有本機 dirty 內容，必須改用乾淨 worktree。
+- 乾淨 worktree 部署前必須確認 `.vercel/project.json` 指向正式 `fuman-terminal` 專案。
+- 若乾淨 worktree 沒有 `.vercel/project.json`，不可盲部署；先確認 projectId / projectName，避免部署到舊 sync 或錯誤 Vercel 專案。
+
 ## 已退休且不可復活
 
 以下流程已刪除或退出正式鏈路：
@@ -66,6 +72,14 @@ scanner / writer
 - Supabase complete run
 - Supabase route snapshot
 - API 回傳的 `runId` / `snapshotId` / `updatedAt` / `usedDate`
+
+策略快照 / API gate：
+
+- 不只看 `run_id`。
+- 必須確認 run row `status=complete`、`complete=true`。
+- 必須確認 `expected_total > 0`、`scanned_count > 0`、`expected_total === scanned_count`。
+- 必須做 results readback，確認回讀結果列數與 run row 的 `result_count` 一致。
+- 小包 API 可只回 `limit=N` 筆可畫資料，但 `count` / `resultCount` / readback 必須代表完整 complete run 結果，不可把小包筆數誤當完整結果。
 
 不是正式 freshness 來源：
 
