@@ -12,6 +12,15 @@
   ];
   let appPromise = null;
   const legacyModulePromises = new Map();
+  const featureModuleScripts = {
+    member: { src: `/terminal-member-module.js?v=${version}`, attr: "data-fuman-member-module", global: "FUMAN_MEMBER_MODULE" },
+    market: { src: `/terminal-market-snapshot-module.js?v=${version}`, attr: "data-fuman-market-snapshot-module", global: "FUMAN_MARKET_SNAPSHOT_MODULE" },
+    watchlist: { src: `/terminal-watchlist-shell.js?v=${version}`, attr: "data-fuman-watchlist-shell", global: "FUMAN_WATCHLIST_SHELL_MODULE" },
+    chip: { src: `/terminal-chip-snapshot-module.js?v=${version}`, attr: "data-fuman-chip-snapshot-module", global: "FUMAN_CHIP_SNAPSHOT_MODULE" },
+    strategy: { src: `/terminal-strategy-module.js?v=${version}`, attr: "data-fuman-strategy-module", global: "FUMAN_STRATEGY_MODULE" },
+  };
+  const featureModulePromises = new Map();
+  const featureModuleInstances = new Map();
 
   unlockPublicTerminalShell();
 
@@ -50,6 +59,9 @@
   function loadLegacyModule(name = "all", reason = "") {
     const moduleName = String(name || "all").toLowerCase();
     const loadReason = `legacy-module:${moduleName}${reason ? `:${reason}` : ""}`;
+    if (shouldUseFeatureModule(moduleName, reason)) {
+      return loadFeatureModule(moduleName, reason).then(() => false);
+    }
     if (shouldHardColdLegacyModule(moduleName, reason)) {
       prefetchApp();
       document.documentElement.dataset.fumanLegacyModule = `hard-cold:${moduleName}`;
@@ -63,6 +75,59 @@
     mark(`legacy-module-request:${moduleName}`);
     const promise = loadApp(loadReason).finally(() => legacyModulePromises.delete(moduleName));
     legacyModulePromises.set(moduleName, promise);
+    return promise;
+  }
+
+  function shouldUseFeatureModule(moduleName, reason = "") {
+    const name = String(moduleName || "").toLowerCase();
+    if (!featureModuleScripts[name]) return false;
+    if (window.FUMAN_TERMINAL_APP_READY) return false;
+    if (window.__fumanDesktopFastShell !== "20260623-09") return false;
+    try {
+      if (new URLSearchParams(location.search).get("legacy") === "1") return false;
+    } catch (error) {}
+    if (document.body?.dataset?.fumanEager === "1") return false;
+    return !/export|download|settings|admin|legacy|interaction-replay/i.test(String(reason || ""));
+  }
+
+  function featureModuleContext(moduleName, reason = "") {
+    return {
+      version,
+      moduleName,
+      reason,
+      mark,
+      loadApp,
+      prefetchApp,
+      unlockPublicTerminalShell,
+      isDesktopFastShell: () => window.__fumanDesktopFastShell === "20260623-09",
+    };
+  }
+
+  function loadFeatureModule(name = "all", reason = "") {
+    const moduleName = String(name || "all").toLowerCase();
+    const item = featureModuleScripts[moduleName];
+    if (!item) return Promise.resolve(false);
+    if (featureModuleInstances.has(moduleName)) return Promise.resolve(featureModuleInstances.get(moduleName));
+    if (featureModulePromises.has(moduleName)) return featureModulePromises.get(moduleName);
+    mark(`feature-module-request:${moduleName}`);
+    const install = () => {
+      const mod = window[item.global];
+      const instance = typeof mod?.install === "function"
+        ? mod.install(featureModuleContext(moduleName, reason))
+        : mod || true;
+      featureModuleInstances.set(moduleName, instance || true);
+      document.documentElement.dataset.fumanFeatureModule = moduleName;
+      mark(`feature-module-ready:${moduleName}`);
+      return featureModuleInstances.get(moduleName);
+    };
+    const promise = (window[item.global] ? Promise.resolve() : loadScriptOnce(item))
+      .then(install)
+      .catch((error) => {
+        document.documentElement.dataset.fumanFeatureModuleError = `${moduleName}:${error?.message || "load-failed"}`;
+        return false;
+      })
+      .finally(() => featureModulePromises.delete(moduleName));
+    featureModulePromises.set(moduleName, promise);
     return promise;
   }
 
@@ -250,6 +315,14 @@
     return ["market", "strategy", "chip-trade", "cb-detect", "warrant-flow", "watchlist"].includes(view);
   }
 
+  function featureModuleForView(viewName) {
+    if (viewName === "market") return "market";
+    if (viewName === "watchlist") return "watchlist";
+    if (viewName === "strategy") return "strategy";
+    if (viewName === "chip-trade" || viewName === "cb-detect" || viewName === "warrant-flow") return "chip";
+    return "";
+  }
+
   function shouldHardColdLegacyModule(moduleName, reason = "", target = null) {
     if (window.__fumanDesktopFastShell !== "20260623-09") return false;
     try {
@@ -259,14 +332,15 @@
     const text = String(reason || "");
     if (/member|auth|export|legacy|settings|admin|download|interaction-replay/i.test(text)) return false;
     if (target?.closest?.("#member-state, .sidebar-foot .logout, [data-member-tab], #member-view, #auth-gate")) return false;
-    return ["strategy", "chip", "watchlist", "all"].includes(String(moduleName || "").toLowerCase());
+    return ["market", "strategy", "chip", "watchlist", "all"].includes(String(moduleName || "").toLowerCase());
   }
 
   function legacyModuleForTarget(target) {
     if (!target?.closest) return "";
     if (window.__fumanDesktopFastShell === "20260623-09" && target.closest(".desktop-route-shell")) return "";
     if (target.closest("#member-state, .sidebar-foot .logout, [data-member-tab], #member-view, #auth-gate")) return "member";
-    if (target.closest("[data-chip-filter], #chip-sort, #chip-trade-view, [data-chip-trade-mode]")) return "chip";
+    if (target.closest("[data-view='market'], #market-view, #stock-search, #heatmap, [data-market-mode], .brand-refresh, .ticker-strip, .strength-panel")) return "market";
+    if (target.closest("[data-chip-filter], #chip-sort, #chip-trade-view, #cb-detect-view, #warrant-flow-view, [data-chip-trade-mode], [data-warrant-refresh]")) return "chip";
     if (target.closest("[data-view='watchlist'], #watchlist-view, [data-watchlist-action], .watchlist-panel")) return "watchlist";
     if (target.closest(".strategy-card[data-strategy], [data-strategy-mode], [data-swing-sort], [data-swing-zone-filter], [data-swing-filter], [data-intraday-sort], [data-intraday-filter], [data-strategy5-filter], #strategy-view")) return "strategy";
     return "";
@@ -277,6 +351,9 @@
     if (!moduleName) {
       prefetchApp();
       return Promise.resolve(false);
+    }
+    if (shouldUseFeatureModule(moduleName, reason)) {
+      return loadFeatureModule(moduleName, reason).then(() => true);
     }
     if (shouldHardColdLegacyModule(moduleName, reason, target)) {
       prefetchApp();
@@ -326,11 +403,13 @@
 
   window.FUMAN_TERMINAL_LOAD_APP = loadApp;
   window.FUMAN_TERMINAL_PREFETCH_APP = prefetchApp;
+  window.FUMAN_TERMINAL_LOAD_FEATURE_MODULE = loadFeatureModule;
   window.FUMAN_TERMINAL_LEGACY_MODULES = {
     load: (reason = "manual") => loadLegacyModule("all", reason),
     loadModule: loadLegacyModule,
     preload: preloadLegacyModule,
     isLoaded: () => Boolean(window.FUMAN_TERMINAL_APP_READY),
+    market: (reason = "manual") => loadLegacyModule("market", reason),
     strategy: (reason = "manual") => loadLegacyModule("strategy", reason),
     chip: (reason = "manual") => loadLegacyModule("chip", reason),
     watchlist: (reason = "manual") => loadLegacyModule("watchlist", reason),
@@ -340,10 +419,14 @@
   function replayInteractionAfterLoad(event, reason) {
     if (window.FUMAN_TERMINAL_APP_READY) return false;
     if (isDesktopFastShellRouteTarget(event.target)) return false;
-    const target = event.target.closest("[data-view], .strategy-card[data-strategy], [data-strategy-mode], [data-swing-sort], [data-swing-zone-filter], [data-swing-filter], [data-intraday-sort], [data-intraday-filter], [data-strategy5-filter], [data-chip-filter], #chip-sort");
+    const target = event.target.closest("[data-view], #stock-search, [data-market-mode], .brand-refresh, .strategy-card[data-strategy], [data-strategy-mode], [data-swing-sort], [data-swing-zone-filter], [data-swing-filter], [data-intraday-sort], [data-intraday-filter], [data-strategy5-filter], [data-chip-filter], #chip-sort");
     if (!target) return false;
     const moduleName = legacyModuleForTarget(target);
     if (!moduleName) return false;
+    if (shouldUseFeatureModule(moduleName, reason)) {
+      loadFeatureModule(moduleName, reason).catch(() => undefined);
+      return false;
+    }
     if (shouldHardColdLegacyModule(moduleName, reason, target)) {
       prefetchApp();
       return false;
@@ -366,7 +449,7 @@
     if (!memberButton) return;
     event.preventDefault();
     event.stopPropagation();
-    loadLegacyModule("member", "member-state").then(() => {
+    loadFeatureModule("member", "member-state").then(() => {
       if (typeof window.FUMAN_OPEN_MEMBER_CENTER === "function") {
         window.FUMAN_OPEN_MEMBER_CENTER();
       }
@@ -378,7 +461,7 @@
     if (!authButton) return;
     event.preventDefault();
     event.stopPropagation();
-    loadLegacyModule("member", "auth-button").then(() => {
+    loadFeatureModule("member", "auth-button").then(() => {
       if (typeof window.FUMAN_HANDLE_AUTH_BUTTON === "function") {
         window.FUMAN_HANDLE_AUTH_BUTTON();
       }
@@ -388,6 +471,9 @@
   ["pointerdown", "keydown", "touchstart"].forEach((eventName) => {
     window.addEventListener(eventName, (event) => {
       if (isDesktopFastShellRouteTarget(event.target)) {
+        const view = event.target.closest?.("[data-view]")?.dataset?.view || "";
+        const moduleName = featureModuleForView(view);
+        if (moduleName) loadFeatureModule(moduleName, `route-${eventName}`).catch(() => undefined);
         prefetchApp();
         return;
       }
@@ -398,6 +484,9 @@
   document.addEventListener("click", (event) => {
     if (replayInteractionAfterLoad(event, "interaction-replay")) return;
     if (isDesktopFastShellRouteTarget(event.target)) {
+      const view = event.target.closest?.("[data-view]")?.dataset?.view || "";
+      const moduleName = featureModuleForView(view);
+      if (moduleName) loadFeatureModule(moduleName, "route-click").catch(() => undefined);
       prefetchApp();
       deferDesktopFastLoad("route-click-deferred");
       return;

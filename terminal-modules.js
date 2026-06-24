@@ -8,10 +8,14 @@
     runtimeConfig: { loaded: false, src: "terminal-runtime-config.js" },
     tuningConfig: { loaded: false, src: "terminal-tuning-config.js" },
     app: { loaded: false, src: "terminal-app.js" },
-    strategy4: { loaded: false, src: "terminal-app.js" },
-    chipFlow: { loaded: false, src: "terminal-chip-flow.js" },
-    warrantFlow: { loaded: false, src: "terminal-warrant-flow.js" },
-    realtimeRadar: { loaded: false, src: "terminal-app.js" },
+    market: { loaded: false, src: "terminal-market-snapshot-module.js" },
+    strategy: { loaded: false, src: "terminal-strategy-module.js" },
+    strategy4: { loaded: false, src: "terminal-strategy-module.js" },
+    chipFlow: { loaded: false, src: "terminal-chip-snapshot-module.js" },
+    warrantFlow: { loaded: false, src: "terminal-chip-snapshot-module.js" },
+    realtimeRadar: { loaded: false, src: "terminal-strategy-module.js" },
+    watchlist: { loaded: false, src: "terminal-watchlist-shell.js" },
+    member: { loaded: false, src: "terminal-member-module.js" },
   };
 
   function keepLegacyAppCold() {
@@ -40,9 +44,12 @@
     },
     preloadForView(viewName) {
       if (!keepLegacyAppCold() && window.FUMAN_TERMINAL_PREFETCH_APP) window.FUMAN_TERMINAL_PREFETCH_APP();
-      if (viewName === "strategy") this.preload("strategy4");
+      if (viewName === "market") this.preload("market");
+      if (viewName === "strategy") this.preload("strategy");
       if (viewName === "chip-trade") this.preload("chipFlow");
       if (viewName === "warrant-flow") this.preload("warrantFlow");
+      if (viewName === "watchlist") this.preload("watchlist");
+      if (viewName === "member") this.preload("member");
       if (viewName === "realtime-radar") this.preload("realtimeRadar");
     },
   };

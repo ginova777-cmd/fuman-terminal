@@ -1,38 +1,46 @@
-const CACHE_VERSION = "fuman-terminal-sw-desktop-api-only-strategy5-institution-breakout-20260619-12";
+const CACHE_VERSION = "fuman-terminal-sw-public-terminal-fast-20260623-09";
 const RUNTIME_THEME_CSS_LOADER = "terminal-theme-css-snapshot-first-20260619";
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 const DATA_CACHE = `${CACHE_VERSION}-data`;
 
 const STATIC_ASSETS = [
-  "/styles.css?v=desktop-api-only-strategy5-institution-breakout-20260619-12",
-  "/terminal-core.js?v=desktop-api-only-strategy5-institution-breakout-20260619-12",
-  "/terminal-modules.js?v=desktop-api-only-strategy5-institution-breakout-20260619-12",
-  "/terminal-sector-map.js?v=desktop-api-only-strategy5-institution-breakout-20260619-12",
-  "/terminal-strategy-config.js?v=desktop-api-only-strategy5-institution-breakout-20260619-12",
-  "/terminal-market-config.js?v=desktop-api-only-strategy5-institution-breakout-20260619-12",
-  "/terminal-ui-config.js?v=desktop-api-only-strategy5-institution-breakout-20260619-12",
-  "/terminal-runtime-config.js?v=desktop-api-only-strategy5-institution-breakout-20260619-12",
-  "/terminal-tuning-config.js?v=desktop-api-only-strategy5-institution-breakout-20260619-12",
-  "/terminal-worker.js?v=desktop-api-only-strategy5-institution-breakout-20260619-12",
-  "/terminal.js?v=desktop-api-only-strategy5-institution-breakout-20260619-12",
-  "/terminal-app.js?v=desktop-api-only-strategy5-institution-breakout-20260619-12",
-  "/terminal-ai-risk-guard.js?v=desktop-api-only-strategy5-institution-breakout-20260619-12",
-  "/terminal-chip-flow.js?v=desktop-api-only-strategy5-institution-breakout-20260619-12",
-  "/terminal-warrant-flow.js?v=desktop-api-only-strategy5-institution-breakout-20260619-12",
-  "/terminal-watchlist-module.js?v=desktop-api-only-strategy5-institution-breakout-20260619-12",
-  "/terminal-realtime-radar.css?v=desktop-api-only-strategy5-institution-breakout-20260619-12",
-  "/terminal-intraday-radar.css?v=desktop-api-only-strategy5-institution-breakout-20260619-12",
-  "/terminal-utility.css?v=desktop-api-only-strategy5-institution-breakout-20260619-12",
-  "/refresh.html?v=desktop-api-only-strategy5-institution-breakout-20260619-12",
+  "/styles.css?v=public-terminal-fast-20260623-09",
+  "/terminal-core.js?v=public-terminal-fast-20260623-09",
+  "/terminal-modules.js?v=public-terminal-fast-20260623-09",
+  "/terminal-sector-map.js?v=public-terminal-fast-20260623-09",
+  "/terminal-strategy-config.js?v=public-terminal-fast-20260623-09",
+  "/terminal-market-config.js?v=public-terminal-fast-20260623-09",
+  "/terminal-ui-config.js?v=public-terminal-fast-20260623-09",
+  "/terminal-runtime-config.js?v=public-terminal-fast-20260623-09",
+  "/terminal-tuning-config.js?v=public-terminal-fast-20260623-09",
+  "/terminal-worker.js?v=public-terminal-fast-20260623-09",
+  "/terminal.js?v=public-terminal-fast-20260623-09",
+  "/terminal-app.js?v=public-terminal-fast-20260623-09",
+  "/terminal-ai-risk-guard.js?v=public-terminal-fast-20260623-09",
+  "/terminal-member-module.js?v=public-terminal-fast-20260623-09",
+  "/terminal-market-snapshot-module.js?v=public-terminal-fast-20260623-09",
+  "/terminal-strategy-module.js?v=public-terminal-fast-20260623-09",
+  "/terminal-watchlist-shell.js?v=public-terminal-fast-20260623-09",
+  "/terminal-chip-snapshot-module.js?v=public-terminal-fast-20260623-09",
+  "/terminal-chip-flow.js?v=public-terminal-fast-20260623-09",
+  "/terminal-warrant-flow.js?v=public-terminal-fast-20260623-09",
+  "/terminal-watchlist-module.js?v=public-terminal-fast-20260623-09",
+  "/terminal-realtime-radar.css?v=public-terminal-fast-20260623-09",
+  "/terminal-intraday-radar.css?v=public-terminal-fast-20260623-09",
+  "/terminal-utility.css?v=public-terminal-fast-20260623-09",
+  "/refresh.html?v=public-terminal-fast-20260623-09",
   "/assets/logo.webp",
   "/favicon.ico",
 ];
 
-const DATA_PATTERNS = [];
+const DATA_PATTERNS = [
+  /\/api\/terminal-fast-bundle/i,
+];
 
 const NETWORK_FIRST_DATA_PATTERNS = [];
 
 const PREFETCH_CORE_DATA_ASSETS = [
+  "/api/terminal-fast-bundle",
   "/api/mobile-boot",
 ];
 
@@ -44,7 +52,6 @@ const PREFETCH_DATA_ASSETS = [
   ...PREFETCH_CORE_DATA_ASSETS,
   "/api/terminal-home",
   "/api/market-ai-live",
-  "/api/market-ai-panel-live",
 ];
 
 const LIVE_PATTERNS = [

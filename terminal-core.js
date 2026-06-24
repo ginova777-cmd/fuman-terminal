@@ -1,5 +1,5 @@
 (function () {
-  const version = "desktop-api-only-strategy5-institution-breakout-20260619-12";
+  const version = "public-terminal-fast-20260623-09";
   window.FUMAN_TERMINAL_VERSION = version;
   window.FUMAN_TERMINAL_BOOT = {
     version,

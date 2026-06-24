@@ -227,8 +227,20 @@ if (/legacy-scan-time/.test(strategy4LatestApi) || !/gate: "(run_id|complete-run
 if (/staticFallback|static-fallback|\/data\/strategy4-|strategy4_static|strategy4_scan_results_latest_empty/.test(strategy4LatestApi)) {
   issues.push("api/strategy4-latest.js must be API-only and must not fall back to static strategy4 JSON");
 }
-if (!/api\/open-buy-latest/.test(openBuyLatestApi) || !/v_strategy1_open_buy_latest_complete_run/.test(openBuyLatestApi) || !/Cache-Control", "no-store/.test(openBuyLatestApi)) {
-  issues.push("api/open-buy-latest.js must expose strategy1 latest complete run with no-store headers");
+if (!/api\/open-buy-latest/.test(openBuyLatestApi) || !/strategy1_open_buy_runs/.test(openBuyLatestApi) || !/strategy1_open_buy_results/.test(openBuyLatestApi) || !/v_strategy1_ready_status/.test(openBuyLatestApi) || !/Cache-Control", "no-store/.test(openBuyLatestApi)) {
+  issues.push("api/open-buy-latest.js must read Strategy1 from Supabase API-only runs/results with decision_ready and no-store headers");
+}
+if (/v_strategy1_open_buy_latest_complete_run|LATEST_RUN_VIEW|latestRunView|latest_run_view/.test(openBuyLatestApi)) {
+  issues.push("api/open-buy-latest.js must not use legacy latest run view fallback");
+}
+if (/latest-payload/.test(openBuyLatestApi)) {
+  issues.push("api/open-buy-latest.js must not expose legacy latest-payload gate");
+}
+if (/snapshot-friendly-skip-ready-status/.test(openBuyLatestApi) || /options\.snapshotFriendly\s*\?\s*\{\s*decision_ready:\s*false/.test(openBuyLatestApi)) {
+  issues.push("api/open-buy-latest.js snapshot/compact path must still read v_strategy1_ready_status and must not bypass decision_ready");
+}
+if (!/emptySnapshotPayload\("strategy1_decision_not_ready"/.test(openBuyLatestApi)) {
+  issues.push("api/open-buy-latest.js compact snapshot response must return an empty Strategy1 payload when decision_ready is false");
 }
 if (/legacy scan_time gate|legacy_scan_time_gate|includeRunId = false|STRATEGY4_SUPABASE_RUN_ID/.test(strategy4Scanner)) {
   issues.push("scan-strategy4-cache.js must hard-fail when run_id complete gate is unavailable, not retry legacy scan_time");
