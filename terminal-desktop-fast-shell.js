@@ -51,12 +51,13 @@
     "warrant-flow|權證走向": { limit: 60, ttl: 32000 },
   };
   const CHIP_TRADE_ROUTE = "chip-trade|買賣超";
+  const CHIP_TRADE_DEFAULT_FILTER = "foreignStreak";
   const CHIP_TRADE_FILTERS = [
-    { key: "tdcc1000", label: "外資連3買 + 1000張連3週增", endpoint: "/api/institution-tdcc-breakout-latest" },
-    { key: "foreignTrustVolumePct", label: "外資+投信佔5日均量", endpoint: "/api/institution-latest" },
     { key: "foreignStreak", label: "外資連買日", endpoint: "/api/institution-latest" },
     { key: "trustStreak", label: "投信連買日", endpoint: "/api/institution-latest" },
     { key: "jointStreak", label: "同買日", endpoint: "/api/institution-latest" },
+    { key: "foreignTrustVolumePct", label: "外資+投信佔5日均量", endpoint: "/api/institution-latest" },
+    { key: "tdcc1000", label: "外資連3買 + 1000張連3週增", endpoint: "/api/institution-tdcc-breakout-latest" },
   ];
   const CANVAS_WORKER_URL = "/terminal-desktop-canvas-worker.js";
   let pendingTimer = 0;
@@ -2105,7 +2106,7 @@
       if (chipFilter) {
         event.preventDefault();
         if (!isChipTradeRoute(canvasState.route)) return;
-        const next = chipFilter.dataset.chipCanvasFilter || CHIP_TRADE_FILTERS[0].key;
+        const next = chipFilter.dataset.chipCanvasFilter || CHIP_TRADE_DEFAULT_FILTER;
         if (canvasState.signalFilter === next && canvasState.rows.length) return;
         canvasState.signalFilter = next;
         canvasState.offset = 0;
@@ -2566,6 +2567,10 @@
       drawWideStrategyCanvasRows(ctx, colors, width, height, rows, rowsToDraw, source || "", capacity, rowHeight, headerHeight);
       return;
     }
+    if (isChipTradeRoute(canvasState.route)) {
+      drawChipTradeCanvasRows(ctx, colors, width, height, rows, rowsToDraw, source || "", capacity, rowHeight, headerHeight);
+      return;
+    }
 
     ctx.fillStyle = colors.header;
     roundRect(ctx, 24, 88, width - 48, 38, 12);
@@ -2647,6 +2652,138 @@
       roundRect(ctx, width - 14, thumbTop, 5, thumbHeight, 4);
       ctx.fill();
     }
+  }
+
+  function drawChipTradeCanvasRows(ctx, colors, width, height, rows, rowsToDraw, source, capacity, rowHeight, headerHeight) {
+    const activeFilter = canvasState.signalFilter || CHIP_TRADE_DEFAULT_FILTER;
+    const isTdcc = activeFilter === "tdcc1000";
+    const columns = isTdcc
+      ? [
+        ["Rank", 46],
+        ["Code", 112],
+        ["股票", 184],
+        ["外資連買", width - 470],
+        ["W1", width - 360],
+        ["W2", width - 292],
+        ["W3", width - 224],
+        ["增幅", width - 154],
+        ["分數", width - 76],
+      ]
+      : [
+        ["Rank", 46],
+        ["Code", 112],
+        ["股票", 184],
+        ["外資買超", width - 454],
+        ["投信買超", width - 342],
+        ["連買", width - 236],
+        ["佔均量", width - 144],
+        ["漲幅", width - 72],
+      ];
+    ctx.fillStyle = colors.header;
+    roundRect(ctx, 24, 88, width - 48, 38, 12);
+    ctx.fill();
+    ctx.fillStyle = colors.muted;
+    ctx.font = "700 13px system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+    columns.forEach(([label, x], index) => {
+      ctx.textAlign = index >= 3 ? "right" : "left";
+      ctx.fillText(label, x, 112);
+    });
+    ctx.textAlign = "left";
+
+    if (!rowsToDraw.length) {
+      ctx.fillStyle = colors.muted;
+      ctx.font = "800 15px system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+      const label = CHIP_TRADE_FILTERS.find((item) => item.key === activeFilter)?.label || "買賣超";
+      ctx.fillText(`${label} 資料同步中，稍後自動更新`, 44, 158);
+      ctx.fillStyle = colors.skeleton;
+      for (let i = 0; i < 4; i += 1) {
+        roundRect(ctx, 42, 188 + i * 42, width - 84 - i * 34, 16, 8);
+        ctx.fill();
+      }
+      return;
+    }
+
+    rowsToDraw.forEach((row, index) => {
+      const globalIndex = canvasState.offset + index;
+      const y = headerHeight + index * rowHeight + 28;
+      const active = globalIndex === canvasState.selectedIndex;
+      const hover = globalIndex === canvasState.hoverIndex;
+      ctx.fillStyle = active
+        ? colors.accentSoft
+        : hover
+          ? colors.accentHover
+          : index % 2
+            ? colors.rowAlt
+            : colors.row;
+      roundRect(ctx, 24, y - 29, width - 48, 42, 10);
+      ctx.fill();
+      ctx.fillStyle = colors.accent;
+      ctx.font = "800 13px system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+      ctx.fillText(String(row.rank || globalIndex + 1), 48, y);
+      ctx.fillStyle = colors.blue;
+      ctx.font = "800 14px system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+      ctx.fillText(row.code || "--", 112, y);
+      ctx.fillStyle = colors.text;
+      ctx.font = "800 14px system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+      ctx.fillText(compactText(row.title || row.name || row.code || "--", 16), 184, y);
+      ctx.textAlign = "right";
+      ctx.font = "800 13px system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+      if (isTdcc) {
+        ctx.fillStyle = colors.up;
+        ctx.fillText(`${Math.round(cleanNumber(row.foreignStreak))}日`, width - 470, y);
+        ctx.fillStyle = colors.text;
+        ctx.fillText(formatCanvasNumber(row.ratio1, 2), width - 360, y);
+        ctx.fillText(formatCanvasNumber(row.ratio2, 2), width - 292, y);
+        ctx.fillText(formatCanvasNumber(row.ratio3, 2), width - 224, y);
+        ctx.fillStyle = colors.up;
+        ctx.fillText(`+${formatCanvasNumber(row.ratioIncrease, 2)}`, width - 154, y);
+        ctx.fillStyle = colors.text;
+        ctx.fillText(String(row.score || row.breakoutScore || "--"), width - 76, y);
+      } else {
+        const foreign = cleanNumber(row.foreign);
+        const trust = cleanNumber(row.trust);
+        ctx.fillStyle = foreign >= 0 ? colors.up : colors.down;
+        ctx.fillText(formatCanvasLots(foreign), width - 454, y);
+        ctx.fillStyle = trust >= 0 ? colors.up : colors.down;
+        ctx.fillText(formatCanvasLots(trust), width - 342, y);
+        ctx.fillStyle = colors.text;
+        ctx.fillText(`${Math.round(cleanNumber(row.foreignStreak))}/${Math.round(cleanNumber(row.trustStreak))}/${Math.round(cleanNumber(row.jointStreak))}`, width - 236, y);
+        ctx.fillStyle = colors.accent;
+        ctx.fillText(`${formatCanvasNumber(row.foreignTrustBuyVolumePct || row.institutionBuyVolumePct, 2)}%`, width - 144, y);
+        ctx.fillStyle = String(row.pct || "").includes("-") ? colors.down : colors.up;
+        ctx.fillText(row.pct || "--", width - 72, y);
+      }
+      ctx.textAlign = "left";
+    });
+
+    if (rows.length > capacity) {
+      const trackTop = headerHeight;
+      const trackHeight = Math.max(80, height - headerHeight - 40);
+      const thumbHeight = Math.max(32, trackHeight * (capacity / rows.length));
+      const thumbTop = trackTop + (trackHeight - thumbHeight) * (canvasState.offset / Math.max(1, rows.length - capacity));
+      ctx.fillStyle = "rgba(148,163,184,0.18)";
+      roundRect(ctx, width - 16, trackTop, 5, trackHeight, 3);
+      ctx.fill();
+      ctx.fillStyle = colors.accent;
+      roundRect(ctx, width - 16, thumbTop, 5, thumbHeight, 3);
+      ctx.fill();
+    }
+    ctx.fillStyle = colors.muted;
+    ctx.font = "700 12px system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+    ctx.fillText(`${CHIP_TRADE_FILTERS.find((item) => item.key === activeFilter)?.label || "買賣超"}｜${compactText(source || "snapshot", 24)}`, 32, height - 24);
+  }
+
+  function formatCanvasNumber(value, digits = 0) {
+    const number = cleanNumber(value);
+    if (!Number.isFinite(number)) return "--";
+    return number.toLocaleString("zh-TW", { maximumFractionDigits: digits, minimumFractionDigits: digits });
+  }
+
+  function formatCanvasLots(value) {
+    const number = cleanNumber(value);
+    if (!number) return "--";
+    const lots = Math.round(Math.abs(number) >= 100000 ? number / 1000 : number);
+    return `${number > 0 ? "+" : ""}${lots.toLocaleString("zh-TW")}`;
   }
 
   function roundRect(ctx, x, y, width, height, radius) {
@@ -2797,7 +2934,7 @@
       wrap.innerHTML = "";
       return;
     }
-    const active = canvasState.signalFilter || CHIP_TRADE_FILTERS[0].key;
+    const active = canvasState.signalFilter || CHIP_TRADE_DEFAULT_FILTER;
     wrap.hidden = false;
     wrap.innerHTML = CHIP_TRADE_FILTERS.map((item) => {
       const count = item.endpoint === endpointForRoute(canvasState.route) ? chipTradeFilterCount(canvasState.rows, item.key) : 0;
@@ -3445,7 +3582,7 @@
     canvasState.source = source || stored?.source || "shell";
     canvasState.rows = incomingRows;
     if (previousRoute !== key) {
-      canvasState.signalFilter = isChipTradeRoute(key) ? CHIP_TRADE_FILTERS[0].key : "";
+      canvasState.signalFilter = isChipTradeRoute(key) ? CHIP_TRADE_DEFAULT_FILTER : "";
       canvasState.zoneFilter = "";
       canvasState.offset = 0;
       canvasState.hoverIndex = -1;
