@@ -542,6 +542,30 @@ npm run monitor:production
 
 正式只保留 `fuman-terminal` 作為使用者入口。舊 sync / publish-sync 專案已退休，不應再部署、不應再寄通知。
 
+### 部署防呆：Vercel project 必查
+
+任何乾淨 clone、臨時 worktree、Codex workspace、或非 `C:\fuman-terminal` 的工作目錄，在部署前都必須先檢查 `.vercel/project.json`。
+
+正式站唯一允許的 Vercel 專案設定：
+
+```json
+{
+  "projectId": "prj_x0R2mMFsL0Xto4whcbPTKQTKJRUl",
+  "orgId": "team_HfAXzMLgDcpw6UFbnexhuxHG",
+  "projectName": "fuman-terminal"
+}
+```
+
+部署前硬性規則：
+
+- `.vercel/project.json` 不存在：直接中止，不要執行 `vercel --prod`。
+- `projectName` 不是 `fuman-terminal`：直接中止。
+- `projectId` 不是 `prj_x0R2mMFsL0Xto4whcbPTKQTKJRUl`：直接中止。
+- `orgId` 不是 `team_HfAXzMLgDcpw6UFbnexhuxHG`：直接中止。
+- 不要讓 Vercel CLI 自動 `link` 或自動建立新 project。
+- 不要部署到 preview / sync / publish-sync / 新開的 Vercel project 後再說是正式站。
+- 如果 project link 不對，先修正 link，重新確認 `.vercel/project.json`，再部署。
+
 目前有效 cron / health 方向：
 
 - `/api/desktop-route-snapshot-refresh`
