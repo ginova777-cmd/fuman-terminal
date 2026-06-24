@@ -102,6 +102,7 @@
   let originalDesktopMarketRetryTimer = 0;
   let marketApiOnlySignature = "";
   let marketApiOnlyLoading = false;
+  let marketHeatmapSectorRows = [];
   const canvasState = {
     route: "",
     source: "",
@@ -3174,21 +3175,102 @@
     return n >= 100000000 ? `${(n / 100000000).toFixed(n >= 1000000000 ? 1 : 2)} 億` : `${n.toLocaleString("zh-TW")}`;
   }
 
+  function formatMarketHeatmapPrice(value) {
+    const n = Number(value || 0);
+    if (!Number.isFinite(n) || !n) return "--";
+    return n >= 1000 ? n.toLocaleString("zh-TW", { maximumFractionDigits: 1 }) : n.toFixed(n >= 100 ? 1 : 2);
+  }
+
+  function closeMarketHeatmapSectorModal() {
+    document.querySelector("[data-market-heatmap-modal]")?.remove();
+  }
+
+  function renderMarketHeatmapSectorModal(index) {
+    const sector = marketHeatmapSectorRows[Number(index)];
+    if (!sector) return;
+    const stocks = normalizeArray(sector.stocks)
+      .slice()
+      .sort((a, b) => Number(b.value || b.tradeValue || b.amountYi || 0) - Number(a.value || a.tradeValue || a.amountYi || 0));
+    const pct = Number(sector.pct ?? sector.avgPct ?? 0) || 0;
+    const leader = stocks[0];
+    const overlay = document.createElement("section");
+    overlay.className = "sector-modal-overlay";
+    overlay.dataset.marketHeatmapModal = "1";
+    overlay.innerHTML = `
+      <div class="sector-modal-shell" role="dialog" aria-modal="true" aria-label="${escapeHtml(sector.name || sector.industry || "熱力圖分類")}">
+        <header class="sector-modal-header">
+          <div class="sector-modal-title-block">
+            <small>全台上市櫃分類 · API only</small>
+            <h2>${escapeHtml(sector.name || sector.industry || "--")}</h2>
+            <p>${escapeHtml(String(stocks.length || sector.count || 0))} 檔股票，依成交額排序。</p>
+          </div>
+          <button type="button" class="sector-modal-close" data-market-heatmap-close aria-label="關閉">×</button>
+        </header>
+        <div class="sector-modal-summary">
+          <article><span>族群漲幅</span><strong class="${pct >= 0 ? "sector-pct-up" : "sector-pct-down"}">${pct >= 0 ? "+" : ""}${pct.toFixed(2)}%</strong></article>
+          <article><span>股票數</span><strong>${escapeHtml(String(stocks.length || sector.count || 0))}</strong></article>
+          <article><span>上漲 / 下跌</span><strong>${escapeHtml(String(sector.up || 0))}<em>/</em>${escapeHtml(String(sector.down || 0))}</strong></article>
+          <article><span>領頭股</span><strong class="sector-modal-leader">${escapeHtml(leader ? `${leader.name || leader.code} ${(Number(leader.pct || 0) >= 0 ? "+" : "")}${Number(leader.pct || 0).toFixed(2)}%` : "--")}</strong></article>
+        </div>
+        <div class="sector-modal-scroll">
+          ${stocks.length ? `
+            <table class="sector-modal-table">
+              <thead>
+                <tr>
+                  <th>股票</th>
+                  <th>現價</th>
+                  <th>漲跌</th>
+                  <th>成交額</th>
+                  <th>量</th>
+                  <th>官方產業</th>
+                  <th>分類</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${stocks.map((stock, rowIndex) => {
+                  const stockPct = Number(stock.pct ?? stock.percent ?? 0) || 0;
+                  const value = Number(stock.value || stock.tradeValue || (Number(stock.amountYi || 0) * 100000000));
+                  return `
+                    <tr class="sector-modal-row ${rowIndex % 2 ? "is-alt" : ""}">
+                      <td class="sector-modal-stock-cell" data-label="股票">
+                        <div class="sector-modal-stock-title">${escapeHtml(stock.code || "")} <span>${escapeHtml(stock.name || "")}</span></div>
+                        <div class="sector-modal-stock-sub">${escapeHtml(stock.quoteDate || "")} ${escapeHtml(stock.quoteTime || "")}</div>
+                      </td>
+                      <td class="sector-modal-number-cell" data-label="現價">${escapeHtml(formatMarketHeatmapPrice(stock.close || stock.price))}</td>
+                      <td class="sector-modal-number-cell ${stockPct >= 0 ? "sector-pct-up" : "sector-pct-down"}" data-label="漲跌">${stockPct >= 0 ? "+" : ""}${stockPct.toFixed(2)}%</td>
+                      <td class="sector-modal-number-cell" data-label="成交額">${escapeHtml(formatYi(value))}</td>
+                      <td class="sector-modal-number-cell" data-label="量">${Number(stock.volume || stock.tradeVolume || 0).toLocaleString("zh-TW")}</td>
+                      <td class="sector-modal-market-cell" data-label="官方產業">${escapeHtml(stock.officialIndustry || stock.primaryIndustry || "--")}</td>
+                      <td class="sector-modal-market-cell" data-label="分類">${escapeHtml(stock.industry || sector.name || "--")}</td>
+                    </tr>
+                  `;
+                }).join("")}
+              </tbody>
+            </table>
+          ` : '<div class="sector-modal-empty">這個分類目前沒有可顯示股票。</div>'}
+        </div>
+      </div>
+    `;
+    closeMarketHeatmapSectorModal();
+    document.body.appendChild(overlay);
+  }
+
   function renderMarketHeatmapApi(sectors, payload) {
     const heatmap = document.querySelector("#market-view #heatmap");
     if (!heatmap) return;
     const rows = normalizeArray(sectors).slice(0, 60);
     if (!rows.length) return;
+    marketHeatmapSectorRows = rows;
     heatmap.innerHTML = `
       <div class="heatmap-health-bar"><strong>熱力圖 API</strong><span>${escapeHtml(String(payload?.updatedAt || payload?.servedAt || ""))}</span></div>
-      ${rows.map((sector) => {
+      ${rows.map((sector, index) => {
         const pct = Number(sector.pct ?? sector.avgPct ?? 0) || 0;
         const leader = sector.leader || normalizeArray(sector.stocks)[0];
         const leaderText = typeof leader === "string"
           ? leader
           : leader ? `${leader.name || leader.code || "--"} ${Number(leader.pct || 0) >= 0 ? "+" : ""}${Number(leader.pct || 0).toFixed(2)}%` : "--";
         return `
-          <article class="sector-card ${pct >= 0 ? "up" : "down"}">
+          <article class="sector-card ${pct >= 0 ? "hot up" : "cold down"}" data-market-heatmap-sector="${index}" role="button" tabindex="0" title="查看 ${escapeHtml(sector.name || sector.industry || "分類")} 股票">
             <div>
               <h3>${escapeHtml(sector.name || sector.industry || "--")}</h3>
               <strong>${pct >= 0 ? "+" : ""}${pct.toFixed(2)}%</strong>
@@ -3516,6 +3598,30 @@
     const run = (force = false) => refreshMarketApiOnly(force);
     if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", () => run(true), { once: true });
     else run(true);
+    if (!window.__fumanMarketHeatmapModalReady) {
+      window.__fumanMarketHeatmapModalReady = true;
+      document.addEventListener("click", (event) => {
+        const close = event.target.closest?.("[data-market-heatmap-close]");
+        if (close || event.target.matches?.("[data-market-heatmap-modal]")) {
+          closeMarketHeatmapSectorModal();
+          return;
+        }
+        const card = event.target.closest?.("[data-market-heatmap-sector]");
+        if (!card) return;
+        renderMarketHeatmapSectorModal(card.dataset.marketHeatmapSector);
+      }, true);
+      document.addEventListener("keydown", (event) => {
+        if (event.key === "Escape") {
+          closeMarketHeatmapSectorModal();
+          return;
+        }
+        if (event.key !== "Enter" && event.key !== " ") return;
+        const card = event.target.closest?.("[data-market-heatmap-sector]");
+        if (!card) return;
+        event.preventDefault();
+        renderMarketHeatmapSectorModal(card.dataset.marketHeatmapSector);
+      }, true);
+    }
     window.addEventListener("fuman:desktop-route", (event) => {
       if (isMarketRoute(event?.detail?.key)) setTimeout(() => run(true), 80);
     });
