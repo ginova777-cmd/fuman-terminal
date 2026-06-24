@@ -534,6 +534,13 @@ function atr(rows, length = 14) {
   return avg(trs.slice(-length));
 }
 
+function highestHighAtOffset(rows, length, offset = 0) {
+  const end = rows.length - offset;
+  const start = end - length;
+  if (start < 0 || end > rows.length) return NaN;
+  return Math.max(...rows.slice(start, end).map((row) => row.high));
+}
+
 function moneyFlowSeries(rows) {
   return rows.map((row) => {
     const range = row.high - row.low;
@@ -581,7 +588,7 @@ function walletSnapshots(rows, lookback = 5) {
 }
 
 function walletSnapshot(rows) {
-  const snapshots = walletSnapshots(rows, Number(process.env.STRATEGY4_WALLET_LOOKBACK_BARS || 5));
+  const snapshots = walletSnapshots(rows, Number(process.env.STRATEGY4_WALLET_LOOKBACK_BARS || 1));
   const latestStrongBuy = snapshots.slice().reverse().find((item) => item.strongBuy) || null;
   const latestVolumeCross = snapshots.slice().reverse().find((item) => item.volumeCrossUp) || null;
   const latest = snapshots.at(-1) || {
@@ -610,6 +617,7 @@ function analyzeRows(rows) {
   const volumes = normalizedRows.map((row) => row.volume);
   const last = normalizedRows.at(-1);
   const prev = normalizedRows.at(-2);
+  const prev2 = normalizedRows.at(-3);
   const ma5 = sma(closes, 5);
   const ma10 = sma(closes, 10);
   const ma20 = sma(closes, 20);
@@ -638,7 +646,7 @@ function analyzeRows(rows) {
   const highest20Prev = Math.max(...normalizedRows.slice(-21, -1).map((row) => row.high));
   const highest10Prev = Math.max(...normalizedRows.slice(-11, -1).map((row) => row.high));
   const highest2Prev = Math.max(...normalizedRows.slice(-3, -1).map((row) => row.high));
-  const neckline = Math.max(...lookback.slice(0, Math.max(8, Math.floor(lookback.length * 0.6))).map((row) => row.high));
+  const neckline = highestHighAtOffset(normalizedRows, 40, Math.floor(40 * 0.6));
   const prevLookback = normalizedRows.slice(-41, -1);
   const prevSwHigh = Math.max(...prevLookback.map((row) => row.high));
   const prevSwLow = Math.min(...prevLookback.map((row) => row.low));
@@ -646,9 +654,7 @@ function analyzeRows(rows) {
   const fib382 = swLow + swDiff * 0.382;
   const fib500 = swLow + swDiff * 0.5;
   const fib618 = swLow + swDiff * 0.618;
-  const prevNeckline = prevLookback.length
-    ? Math.max(...prevLookback.slice(0, Math.max(8, Math.floor(prevLookback.length * 0.6))).map((row) => row.high))
-    : neckline;
+  const prevNeckline = highestHighAtOffset(normalizedRows, 40, Math.floor(40 * 0.6) + 1);
   const pct = prev?.close ? ((last.close - prev.close) / prev.close) * 100 : 0;
   const gapUp = prev && last.open > prev.high && last.close > last.open;
   const realBody = (last.high - last.low) > 0 ? Math.abs(last.close - last.open) / (last.high - last.low) > 0.3 : false;
@@ -660,6 +666,7 @@ function analyzeRows(rows) {
     rows: normalizedRows,
     last,
     prev,
+    prev2,
     closes,
     ma5,
     ma10,
@@ -668,6 +675,7 @@ function analyzeRows(rows) {
     ma10Prev,
     ma20Offset,
     ema21,
+    ema21Prev,
     volMa5,
     volMa20,
     volumeRatio,
@@ -755,13 +763,14 @@ function scanStrategy4(code, market, rows, priceSource = "") {
   const goldenCross = crossedOver(daily.ma5, daily.ma5Prev, daily.ma10, daily.ma10Prev) && daily.ma10 > daily.ma20 && isRed;
   const breakawayGap = daily.gapUp && last.close > daily.highest20Prev;
   const runawayGap = daily.gapUp && last.close > daily.ma20 && !breakawayGap;
+  const necklineBreak = crossedOver(last.close, prev?.close, daily.neckline, daily.prevNeckline);
   const rightHighBreak = crossedOver(last.close, prev?.close, daily.highest10Prev) && prev?.close > daily.prevNeckline;
-  const saucerBreakout = (crossedOver(last.close, prev?.close, daily.neckline, daily.prevNeckline) || rightHighBreak) &&
+  const saucerBreakout = (necklineBreak || rightHighBreak) &&
     daily.volumeRatio >= 1.1 && isRed && daily.realBody;
   const nState = detectNBase(daily.rows, daily.volMa20);
   const nBase = nState.triggered && daily.realBody && isRed;
   const roc3 = daily.closes.length > 3 ? ((last.close - daily.closes.at(-4)) / daily.closes.at(-4)) * 100 : 0;
-  const vFast = roc3 < -10 && daily.volumeRatio >= 1.5 && isRed && prev && last.close > prev.high && daily.rsi14 < 50;
+  const vFast = roc3 < -10 && daily.volumeRatio >= 1.5 && isRed && prev && daily.prev2 && crossedOver(last.close, prev.close, prev.high, daily.prev2.high) && daily.rsi14 < 50;
   const buyStreak = calcBuyStreak(daily.rows, daily.ma20, daily.volMa20);
   const vReversal = daily.deepFall && isRed && (
     (roc3 < -5 ? 35 : 0) +
@@ -787,13 +796,28 @@ function scanStrategy4(code, market, rows, priceSource = "") {
       c.close > daily.ma20 &&
       trendConfirmed;
   })();
+  const deepFallFib = daily.deepFall && isRed;
 
   if (bullAttack) signals.push({ id: "bull_attack", short: "攻擊", icon: "🔥", reason: `站上MA20/EMA21，MACD多頭，量比 ${daily.volumeRatio.toFixed(2)}，日K多頭攻擊。` });
   if (nBase) signals.push({ id: "n_base", short: "N字", icon: "", reason: `爆量突破後回檔不破半分位，再突破前高 ${nState.fHigh?.toFixed?.(2) || ""}，N字共振。` });
+  if (necklineBreak) signals.push({ id: "buy_neckline", short: "買1", icon: "買1", reason: `突破圓弧底頸線 ${daily.neckline.toFixed(2)}，對應沐滝買點1。` });
+  if (rightHighBreak) signals.push({ id: "buy_pullback_break", short: "買2", icon: "買2", reason: "站回頸線後突破右側10日高點，對應沐滝買點2。" });
   if (saucerBreakout) signals.push({ id: "saucer", short: "圓弧", icon: "◜", reason: "突破40日整理頸線，量能放大，偏圓弧底突破。" });
   if (breakawayGap) signals.push({ id: "breakaway_gap", short: "突破缺口", icon: "◆", reason: "跳空突破近20日整理高點，偏突破缺口。" });
   if (runawayGap) signals.push({ id: "runaway_gap", short: "逃逸缺口", icon: "🚀", reason: "跳空且站上MA20，多頭段延續，偏逃逸缺口。" });
-  if (vFast || vReversal) signals.push({ id: "v_reversal", short: "V轉", icon: "V", reason: vFast ? `3日急跌後放量翻紅，RSI ${daily.rsi14.toFixed(1)}，偏V型快殺反彈。` : "跌深後收紅並突破前高，V轉積分達標。" });
+  if (vFast) signals.push({ id: "v_fast", short: "V快殺", icon: "V", reason: `3日急跌後放量翻紅，RSI ${daily.rsi14.toFixed(1)}，偏V型快殺反彈。` });
+  if (vReversal) signals.push({
+    id: runawayGap ? "v_reversal_runaway" : "v_reversal",
+    short: runawayGap ? "V轉逃逸" : "V轉",
+    icon: "V",
+    reason: runawayGap ? "深跌後反折且同步觸發逃逸缺口，對應沐滝 V轉+逃逸缺口。" : "跌深後收紅並突破前高，V轉積分達標。",
+  });
+  if (deepFallFib) signals.push({
+    id: "deep_fall_fib",
+    short: "深跌FIB",
+    icon: "Fib",
+    reason: `深跌反轉環境成立，負乖離 ${daily.bias20.toFixed(2)}%，Fib 0.382=${daily.fib382.toFixed(2)}、0.500=${daily.fib500.toFixed(2)}、0.618=${daily.fib618.toFixed(2)}。`,
+  });
   if (threeInside) signals.push({ id: "three_inside", short: "翻紅", icon: "↻", reason: "三內翻紅結構成立，站上MA20且趨勢確認。" });
   if (goldenCross) signals.push({ id: "golden_cross", short: "金釵", icon: "✦", reason: "MA5 > MA10 > MA20 且收紅，多金釵候選。" });
   if (daily.wallet.strongBuy) {
