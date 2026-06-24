@@ -2,7 +2,7 @@
   if (
     window.__fumanDesktopFastShell === "20260623-09"
     && window.__fumanDesktopFastShellApiOnlyPoll === "20260624-01"
-    && window.__fumanMarketOverviewHydrator === "20260624-02"
+    && window.__fumanOriginalDesktopMarket === "20260624-01"
   ) return;
   window.__fumanDesktopFastShell = "20260623-09";
   window.__fumanDesktopFastShellApiOnlyPoll = "20260624-01";
@@ -84,8 +84,7 @@
   const fixedSnapshotTimers = new Map();
   let desktopFastBundleAt = 0;
   let desktopFastBundlePromise = null;
-  let marketOverviewHydrateAt = 0;
-  let marketOverviewHydratePromise = null;
+  let originalDesktopMarketPromise = null;
   const canvasState = {
     route: "",
     source: "",
@@ -111,7 +110,7 @@
   installAutoLatencySampler();
   installPerformanceLogExport();
   installPersistentFixedCanvases();
-  installMarketOverviewHydrator();
+  installOriginalDesktopMarketBridge();
   installDesktopFastBundlePrime();
   installApiOnlyCanvasPolling();
   primeCanvasWorker();
@@ -2466,162 +2465,48 @@
     delete panel.dataset.fumanRouteSnapshotRestoring;
   }
 
-  function marketMetricCards() {
-    return [...document.querySelectorAll("#market-view .metric-card")];
-  }
-
-  function removeMarketNextMonthCard() {
-    const cards = marketMetricCards();
-    const nextMonth = cards.find((card, index) => index >= 3 || /台指次月|次月/.test(card.textContent || ""));
-    nextMonth?.remove();
-  }
-
-  function marketNumber(value, digits = 2) {
-    const number = Number(String(value ?? "").replace(/[,+%]/g, ""));
-    if (!Number.isFinite(number)) return "--";
-    return number.toLocaleString("zh-TW", {
-      minimumFractionDigits: digits,
-      maximumFractionDigits: digits,
+  function runOriginalDesktopMarketFunctions() {
+    if (!isMarketViewActive()) return;
+    const calls = [
+      () => window.showView?.("market", document.querySelector('[data-view="market"]')),
+      () => window.loadMarketData?.(true),
+      () => window.loadHeatmap?.(true),
+      () => window.renderMarketAiPanel?.(),
+      () => window.renderRealtimeRadar?.(),
+    ];
+    calls.forEach((call) => {
+      try { call(); } catch (error) {}
     });
   }
 
-  function marketSignedChange(sign, points, percent) {
-    const rawSign = String(sign || "").trim();
-    const prefix = rawSign === "-" ? "-" : "+";
-    const pointText = marketNumber(points, 2);
-    const pctText = marketNumber(percent, 2);
-    return `${prefix}${pointText} / ${prefix}${pctText}%`;
+  function loadOriginalDesktopMarket(reason = "market") {
+    if (originalDesktopMarketPromise) return originalDesktopMarketPromise;
+    const load = window.FUMAN_TERMINAL_LOAD_APP || window.FUMAN_TERMINAL_LEGACY_MODULES?.load;
+    originalDesktopMarketPromise = Promise.resolve(
+      typeof load === "function"
+        ? load(`legacy-original-desktop-${reason}`)
+        : false
+    ).finally(() => {
+      [0, 400, 1400, 3200].forEach((delay) => window.setTimeout(runOriginalDesktopMarketFunctions, delay));
+    });
+    return originalDesktopMarketPromise;
   }
 
-  function marketIndexRecord(indexes, keyword) {
-    return (Array.isArray(indexes) ? indexes : []).find((item) => String(item?.["指數"] || item?.["指數/報酬指數"] || "").includes(keyword));
-  }
-
-  function renderMarketMetricCard(card, label, value, changeHtml, sub = "") {
-    if (!card) return;
-    card.innerHTML = `
-      <span>${escapeHtml(label)}</span>
-      <strong>${escapeHtml(value || "--")}</strong>
-      <em>${escapeHtml(changeHtml || "--")}</em>
-      ${sub ? `<small>${escapeHtml(sub)}</small>` : ""}
-    `;
-  }
-
-  function hydrateMarketMetrics(payload) {
-    removeMarketNextMonthCard();
-    const cards = marketMetricCards();
-    const taiex = marketIndexRecord(payload?.indexes, "發行量加權");
-    const otc = marketIndexRecord(payload?.indexes, "櫃買");
-    const future = payload?.futuresNear || payload?.futures || null;
-    if (taiex) {
-      renderMarketMetricCard(
-        cards[0],
-        "↗ 加權指數",
-        marketNumber(taiex["收盤指數"], 2),
-        marketSignedChange(taiex["漲跌"], taiex["漲跌點數"], taiex["漲跌百分比"]),
-        taiex._source || "MIS即時"
-      );
-    }
-    if (otc) {
-      renderMarketMetricCard(
-        cards[1],
-        "↗ 櫃買指數",
-        marketNumber(otc["收盤指數"], 2),
-        marketSignedChange(otc["漲跌"], otc["漲跌點數"], otc["漲跌百分比"]),
-        payload?.otcSignal?.label || otc._source || "MIS即時"
-      );
-    }
-    if (future) {
-      const change = [future.change, future.pct].filter(Boolean).join(" / ");
-      renderMarketMetricCard(
-        cards[2],
-        "⇅ 台指近",
-        marketNumber(future.price, 0),
-        change || "--",
-        future.basisLabel || future.month || "期交所"
-      );
-    }
-    const time = document.querySelector("#market-view .market-time");
-    if (time && payload?.updatedAt) {
-      time.textContent = new Date(payload.updatedAt).toLocaleString("zh-TW", {
-        timeZone: "Asia/Taipei",
-        month: "2-digit",
-        day: "2-digit",
-        hour: "2-digit",
-        minute: "2-digit",
-        hour12: false,
-      });
-    }
-  }
-
-  function renderFastHeatmap(sectors) {
-    const heatmap = document.querySelector("#market-view #heatmap");
-    if (!heatmap || heatmap.querySelector(".sector-card")) return;
-    const rows = (Array.isArray(sectors) ? sectors : []).slice(0, 24);
-    if (!rows.length) return;
-    heatmap.innerHTML = rows.map((sector) => {
-      const pct = Number(sector.pct ?? sector.avgPct ?? 0);
-      const hot = pct >= 0;
-      const stockLine = (Array.isArray(sector.stocks) ? sector.stocks : [])
-        .slice(0, 3)
-        .map((stock) => `${stock.code || ""} ${stock.name || ""} ${Number(stock.pct || 0).toFixed(2)}%`.trim())
-        .join(" / ");
-      return `
-        <article class="sector-card ${hot ? "hot" : "cold"}" style="--sector-bg: rgba(${hot ? "255, 79, 104" : "0, 210, 154"}, ${Math.min(0.34, Math.max(0.1, Math.abs(pct) / 28 + 0.1)).toFixed(2)})">
-          <h3><span class="sector-name">${escapeHtml(sector.name || "未分類")}</span><span class="sector-pct">${hot ? "+" : ""}${escapeHtml(pct.toFixed(2))}%</span></h3>
-          <p>${escapeHtml(sector.leader || stockLine || "資料同步完成")}</p>
-          <small><span>上漲 ${escapeHtml(String(sector.up ?? "--"))}</span><b>下跌 ${escapeHtml(String(sector.down ?? "--"))}</b></small>
-          <em>${escapeHtml(stockLine || `成交額 ${marketNumber(sector.amountYi || sector.totalValue, 1)} 億`)}</em>
-        </article>
-      `;
-    }).join("");
-  }
-
-  async function hydrateMarketHeatmap() {
-    const heatmap = document.querySelector("#market-view #heatmap");
-    if (!heatmap || heatmap.querySelector(".sector-card")) return;
-    try {
-      const response = await fetch(`/api/heatmap?limit=60&stocks=4&live=1&t=${Date.now()}`, { cache: "no-store" });
-      if (!response.ok) return;
-      const payload = await response.json();
-      renderFastHeatmap(payload?.sectors);
-      const count = document.querySelector("#market-view .sector-section .section-title > span");
-      if (count && Array.isArray(payload?.sectors)) count.textContent = `全部 · ${payload.sectors.length} 個`;
-    } catch (error) {}
-  }
-
-  async function hydrateMarketOverview(force = false) {
-    removeMarketNextMonthCard();
-    if (!force && Date.now() - marketOverviewHydrateAt < 15000) {
-      hydrateMarketHeatmap();
-      return marketOverviewHydratePromise;
-    }
-    marketOverviewHydrateAt = Date.now();
-    marketOverviewHydratePromise = fetch(`/api/market?live=1&canvas=1&compact=1&shell=1&limit=24&t=${Date.now()}`, { cache: "no-store" })
-      .then((response) => response.ok ? response.json() : null)
-      .then((payload) => {
-        if (payload?.ok !== false) hydrateMarketMetrics(payload || {});
-        return hydrateMarketHeatmap();
-      })
-      .catch(() => hydrateMarketHeatmap());
-    return marketOverviewHydratePromise;
-  }
-
-  function installMarketOverviewHydrator() {
-    window.__fumanMarketOverviewHydrator = "20260624-02";
-    const run = (force = false) => {
-      removeMarketNextMonthCard();
-      if (isMarketViewActive()) hydrateMarketOverview(force);
+  function installOriginalDesktopMarketBridge() {
+    window.__fumanOriginalDesktopMarket = "20260624-01";
+    const run = (reason = "market") => {
+      if (!isMarketViewActive()) return;
+      removeFixedPageShell("market|市場總覽");
+      loadOriginalDesktopMarket(reason);
     };
-    if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", () => run(true), { once: true });
-    else run(true);
-    [250, 1200, 3200, 8000, 16000].forEach((delay) => window.setTimeout(() => run(false), delay));
+    if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", () => run("dom"), { once: true });
+    else run("boot");
     window.addEventListener("fuman:desktop-route", (event) => {
-      if (isMarketRoute(event?.detail?.key)) run(true);
+      if (isMarketRoute(event?.detail?.key)) run("route");
     });
-    window.addEventListener("focus", () => run(false));
+    window.addEventListener("focus", () => run("focus"));
     document.addEventListener("visibilitychange", () => {
-      if (document.visibilityState === "visible") run(false);
+      if (document.visibilityState === "visible") run("visible");
     });
   }
 
@@ -2913,6 +2798,7 @@
     markLatency("nav", key);
     if (isMarketRoute(key)) {
       removeFixedPageShell(key);
+      loadOriginalDesktopMarket(`route-${source || "fixed"}`);
       markLatency("shell", key);
       return true;
     }
