@@ -85,6 +85,7 @@
   let desktopFastBundleAt = 0;
   let desktopFastBundlePromise = null;
   let originalDesktopMarketPromise = null;
+  let originalDesktopMarketDirectPromise = null;
   let originalDesktopMarketRetryTimer = 0;
   const canvasState = {
     route: "",
@@ -2492,7 +2493,70 @@
     });
   }
 
+  function reserveOriginalDesktopMarketApp() {
+    if (!isMarketViewActive()) return;
+    if (!window.FUMAN_TERMINAL_APP_READY) {
+      window.FUMAN_TERMINAL_APP_READY = "__fuman_desktop_market_reserved";
+    }
+    document.documentElement.dataset.fumanLegacyAppState = "desktop-market-reserved";
+  }
+
+  function terminalFastVersion() {
+    return window.FUMAN_TERMINAL_BOOT?.version || window.FUMAN_TERMINAL_VERSION || "public-terminal-fast-20260623-09";
+  }
+
+  function loadScriptOnce(src, attr) {
+    if (attr && document.querySelector(`script[${attr}]`)) return Promise.resolve(true);
+    const existing = Array.from(document.scripts).find((script) => script.src === src);
+    if (existing) return Promise.resolve(true);
+    return new Promise((resolve, reject) => {
+      const script = document.createElement("script");
+      script.src = src;
+      script.async = false;
+      if (attr) script.setAttribute(attr, "1");
+      script.addEventListener("load", () => resolve(true), { once: true });
+      script.addEventListener("error", reject, { once: true });
+      document.body.appendChild(script);
+    });
+  }
+
+  function loadOriginalDesktopMarketDirect(reason = "market") {
+    if (window.__fumanDesktopMarketExports === "20260624-01") return Promise.resolve(true);
+    if (originalDesktopMarketDirectPromise) return originalDesktopMarketDirectPromise;
+    const version = terminalFastVersion();
+    const dependencies = [
+      ["terminal-sector-map.js", "data-fuman-sector-map"],
+      ["terminal-strategy-config.js", "data-fuman-strategy-config"],
+      ["terminal-market-config.js", "data-fuman-market-config"],
+      ["terminal-ui-config.js", "data-fuman-ui-config"],
+      ["terminal-runtime-config.js", "data-fuman-runtime-config"],
+      ["terminal-tuning-config.js", "data-fuman-tuning-config"],
+    ];
+    originalDesktopMarketDirectPromise = dependencies.reduce(
+      (promise, [file, attr]) => promise.then(() => loadScriptOnce(`/${file}?v=${encodeURIComponent(version)}`, attr)),
+      Promise.resolve(true)
+    ).then(() => loadScriptOnce(
+      `/terminal-app.js?v=${encodeURIComponent(version)}&desktop_market_exports=20260624-01`,
+      "data-fuman-terminal-app"
+    )).then(() => {
+      window.FUMAN_TERMINAL_APP_READY = true;
+      runOriginalDesktopMarketFunctions();
+      return true;
+    }).catch((error) => {
+      originalDesktopMarketDirectPromise = null;
+      if (window.FUMAN_TERMINAL_APP_READY === "__fuman_desktop_market_reserved") {
+        window.FUMAN_TERMINAL_APP_READY = false;
+      }
+      throw error;
+    });
+    return originalDesktopMarketDirectPromise;
+  }
+
   function loadOriginalDesktopMarket(reason = "market") {
+    reserveOriginalDesktopMarketApp();
+    if (window.FUMAN_TERMINAL_APP_READY === "__fuman_desktop_market_reserved" || !window.__fumanDesktopMarketExports) {
+      return loadOriginalDesktopMarketDirect(reason);
+    }
     const load = window.FUMAN_TERMINAL_LOAD_APP || window.FUMAN_TERMINAL_LEGACY_MODULES?.load;
     if (typeof load !== "function") {
       window.clearTimeout(originalDesktopMarketRetryTimer);
@@ -2514,6 +2578,7 @@
     window.__fumanOriginalDesktopMarket = "20260624-01";
     const run = (reason = "market") => {
       if (!isMarketViewActive()) return;
+      reserveOriginalDesktopMarketApp();
       removeFixedPageShell("market|市場總覽");
       loadOriginalDesktopMarket(reason);
       [240, 900, 2200].forEach((delay) => {
