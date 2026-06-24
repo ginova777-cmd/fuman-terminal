@@ -21,6 +21,7 @@
   const CANVAS_REFRESH_TTL_MS = 18000;
   const API_ONLY_POLL_MS = 30000;
   const PERF_LOG_KEY = "fuman-desktop-fast-perf-log-v1";
+  const LAST_ROUTE_KEY = window.FUMAN_RUNTIME_CONFIG?.lastRouteKey || "fuman-terminal-last-route-v1";
   const CANVAS_ROW_HEIGHT = 46;
   const CANVAS_HEADER_HEIGHT = 128;
   const STRATEGY4_PAGE_SIZE = 10;
@@ -119,6 +120,7 @@
   installCanvasHandlers();
   installActiveRouteGuard();
   installShowViewGuard();
+  installInitialRouteRestore();
   installLatencyPanel();
   installAutoLatencySampler();
   installPerformanceLogExport();
@@ -232,7 +234,86 @@
     try {
       window.dispatchEvent(new CustomEvent("fuman:desktop-route", { detail: route }));
     } catch (error) {}
+    saveDesktopLastRoute(key);
     return route;
+  }
+
+  function savedStrategyRouteName(key) {
+    if (key === "strategy|策略1") return "open_buy";
+    if (key === "strategy|策略2") return "intraday_2m";
+    if (key === "strategy|策略3") return "strategy3";
+    if (key === "strategy|策略4") return "swing_radar";
+    if (key === "strategy|策略5") return "strategy5";
+    return "";
+  }
+
+  function saveDesktopLastRoute(key) {
+    const [viewName = "market"] = String(key || "").split("|");
+    if (!viewName) return;
+    try {
+      localStorage.setItem(LAST_ROUTE_KEY, JSON.stringify({
+        viewName,
+        strategyRoute: viewName === "strategy" ? savedStrategyRouteName(key) : "",
+        at: Date.now(),
+        source: "desktop-fast-shell",
+      }));
+    } catch (error) {}
+  }
+
+  function keyFromSavedLastRoute(route) {
+    if (!route?.viewName) return "";
+    if (Date.now() - cleanNumber(route.at) > 7 * 24 * 60 * 60 * 1000) return "";
+    if (route.viewName === "strategy") {
+      const strategy = String(route.strategyRoute || "");
+      if (strategy === "open_buy") return "strategy|策略1";
+      if (strategy === "intraday_2m") return "strategy|策略2";
+      if (strategy === "strategy3") return "strategy|策略3";
+      if (strategy === "swing_radar") return "strategy|策略4";
+      if (strategy === "strategy5") return "strategy|策略5";
+      return "";
+    }
+    if (route.viewName === "chip-trade") return "chip-trade|買賣超";
+    if (route.viewName === "cb-detect") return "cb-detect|CB可轉債";
+    if (route.viewName === "warrant-flow") return "warrant-flow|權證走向";
+    if (route.viewName === "watchlist") return "watchlist|自選股";
+    if (route.viewName === "market") return "market|市場總覽";
+    return "";
+  }
+
+  function readSavedLastRouteKey() {
+    try {
+      return keyFromSavedLastRoute(JSON.parse(localStorage.getItem(LAST_ROUTE_KEY) || "null"));
+    } catch (error) {
+      return "";
+    }
+  }
+
+  function linkForRouteKey(key) {
+    return Array.from(document.querySelectorAll(NAV_SELECTOR)).find((link) => fixedRouteKey(link) === key) || null;
+  }
+
+  function shouldRestoreNonMarketRoute() {
+    const active = window.__fumanDesktopActiveRoute;
+    if (active?.key && !isMarketRoute(active.key)) return true;
+    const key = readSavedLastRouteKey();
+    return !!key && !isMarketRoute(key);
+  }
+
+  function installInitialRouteRestore() {
+    if (document.documentElement.dataset.fumanInitialRouteRestoreReady === "1") return;
+    document.documentElement.dataset.fumanInitialRouteRestoreReady = "1";
+    const run = () => {
+      const key = readSavedLastRouteKey();
+      if (!key || isMarketRoute(key)) return false;
+      const link = linkForRouteKey(key);
+      if (!link) return false;
+      beginInteractionHold("initial-route-restore", 1400);
+      if (isStrategyLink(link)) activateStrategyRoute(link, "initial-restore");
+      else activateFixedPageRoute(link, "initial-restore");
+      return true;
+    };
+    if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", run, { once: true });
+    else run();
   }
 
   function sameRoute(link, key) {
@@ -2882,6 +2963,7 @@
   function installOriginalDesktopMarketBridge() {
     window.__fumanOriginalDesktopMarket = "20260624-01";
     const run = (reason = "market") => {
+      if (shouldRestoreNonMarketRoute()) return;
       if (!isMarketViewActive()) return;
       reserveOriginalDesktopMarketApp();
       removeFixedPageShell("market|市場總覽");
