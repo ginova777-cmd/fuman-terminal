@@ -95,6 +95,8 @@
   let originalDesktopMarketPromise = null;
   let originalDesktopMarketDirectPromise = null;
   let originalDesktopMarketRetryTimer = 0;
+  let marketApiOnlySignature = "";
+  let marketApiOnlyLoading = false;
   const canvasState = {
     route: "",
     source: "",
@@ -121,6 +123,7 @@
   installPerformanceLogExport();
   installPersistentFixedCanvases();
   installOriginalDesktopMarketBridge();
+  installMarketApiOnlyHydrator();
   installDesktopFastBundlePrime();
   installApiOnlyCanvasPolling();
   primeCanvasWorker();
@@ -2834,6 +2837,147 @@
     document.addEventListener("visibilitychange", () => {
       if (document.visibilityState === "visible") run("visible");
     });
+  }
+
+  function marketApiUrl(path, limit = 60) {
+    const sep = path.includes("?") ? "&" : "?";
+    return `${path}${sep}canvas=1&compact=1&shell=1&limit=${limit}&t=${Date.now()}`;
+  }
+
+  function formatYi(value) {
+    const n = Number(value || 0);
+    if (!Number.isFinite(n) || !n) return "--";
+    return n >= 100000000 ? `${(n / 100000000).toFixed(n >= 1000000000 ? 1 : 2)} 億` : `${n.toLocaleString("zh-TW")}`;
+  }
+
+  function renderMarketHeatmapApi(sectors, payload) {
+    const heatmap = document.querySelector("#market-view #heatmap");
+    if (!heatmap) return;
+    const rows = normalizeArray(sectors).slice(0, 60);
+    if (!rows.length) return;
+    heatmap.innerHTML = `
+      <div class="heatmap-health-bar"><strong>熱力圖 API</strong><span>${escapeHtml(String(payload?.updatedAt || payload?.servedAt || ""))}</span></div>
+      ${rows.map((sector) => {
+        const pct = Number(sector.pct ?? sector.avgPct ?? 0) || 0;
+        const leader = sector.leader || normalizeArray(sector.stocks)[0];
+        const leaderText = typeof leader === "string"
+          ? leader
+          : leader ? `${leader.name || leader.code || "--"} ${Number(leader.pct || 0) >= 0 ? "+" : ""}${Number(leader.pct || 0).toFixed(2)}%` : "--";
+        return `
+          <article class="sector-card ${pct >= 0 ? "up" : "down"}">
+            <div>
+              <h3>${escapeHtml(sector.name || sector.industry || "--")}</h3>
+              <strong>${pct >= 0 ? "+" : ""}${pct.toFixed(2)}%</strong>
+            </div>
+            <p>${escapeHtml(String(sector.count || normalizeArray(sector.stocks).length || 0))} 檔 · ${escapeHtml(formatYi(sector.totalValue || sector.value || (Number(sector.amountYi || 0) * 100000000)))}</p>
+            <small>▲ ${escapeHtml(String(sector.up || 0))} ▼ ${escapeHtml(String(sector.down || 0))}</small>
+            <span>${escapeHtml(leaderText)}</span>
+          </article>
+        `;
+      }).join("")}
+    `;
+    const titleCount = document.querySelector("#market-view .sector-section .section-title > span");
+    if (titleCount) titleCount.textContent = `全部 · ${rows.length} 個`;
+  }
+
+  function ensureMarketApiPanels() {
+    const market = document.querySelector("#market-view");
+    const sector = market?.querySelector(".sector-section");
+    if (!market || !sector) return {};
+    let ai = market.querySelector("[data-market-api-ai]");
+    if (!ai) {
+      ai = document.createElement("section");
+      ai.className = "watch-section market-api-ai";
+      ai.dataset.marketApiAi = "1";
+      ai.innerHTML = '<div class="section-title"><div><h2>AI 判讀</h2><p>API only polling</p></div><span>api</span></div><div data-market-api-ai-body></div>';
+      sector.insertAdjacentElement("afterend", ai);
+    }
+    let radar = market.querySelector("[data-market-api-radar]");
+    if (!radar) {
+      radar = document.createElement("section");
+      radar.className = "watch-section market-api-radar";
+      radar.dataset.marketApiRadar = "1";
+      radar.innerHTML = '<div class="section-title"><div><h2>即時雷達</h2><p>API only polling</p></div><span>api</span></div><div data-market-api-radar-body></div>';
+      ai.insertAdjacentElement("afterend", radar);
+    }
+    return { ai: ai.querySelector("[data-market-api-ai-body]"), radar: radar.querySelector("[data-market-api-radar-body]") };
+  }
+
+  function renderMarketApiAi(heatmapPayload, radarPayload) {
+    const panels = ensureMarketApiPanels();
+    if (!panels.ai) return;
+    const sectors = normalizeArray(heatmapPayload?.sectors);
+    const radarRows = normalizeArray(radarPayload?.rows);
+    const up = sectors.reduce((sum, item) => sum + Number(item.up || 0), 0);
+    const down = sectors.reduce((sum, item) => sum + Number(item.down || 0), 0);
+    const strong = sectors.filter((item) => Number(item.pct || item.avgPct || 0) > 0).slice(0, 4);
+    const longs = radarRows.filter((row) => String(row.side || "").toLowerCase() !== "short").slice(0, 5);
+    const bias = up >= down ? "多方觀察" : "空方控風險";
+    panels.ai.innerHTML = `
+      <div class="market-ai-summary">
+        <article class="market-ai-card hero"><small>盤勢</small><strong>${escapeHtml(bias)}</strong><p>熱力圖上漲 ${up.toLocaleString("zh-TW")} / 下跌 ${down.toLocaleString("zh-TW")}，以 API 最新資料判讀。</p></article>
+        <article class="market-ai-card"><small>強勢族群</small><strong>${escapeHtml(strong[0]?.name || "--")}</strong><p>${escapeHtml(strong.map((item) => `${item.name} ${Number(item.pct || item.avgPct || 0).toFixed(2)}%`).join("、") || "等待資料")}</p></article>
+        <article class="market-ai-card"><small>雷達觀察</small><strong>${escapeHtml(longs[0] ? `${longs[0].code} ${longs[0].name}` : "--")}</strong><p>${escapeHtml(longs.map((row) => `${row.code} ${row.name}`).join("、") || "等待即時雷達")}</p></article>
+      </div>
+    `;
+  }
+
+  function renderMarketApiRadar(radarPayload) {
+    const panels = ensureMarketApiPanels();
+    if (!panels.radar) return;
+    const rows = normalizeArray(radarPayload?.rows).slice(0, 10);
+    panels.radar.innerHTML = rows.length ? `
+      <div class="stock-table">
+        <div class="strategy-row strategy-head"><span>股票</span><span>方向</span><span>價格</span><span>漲幅</span><span>分數</span><span>訊號</span></div>
+        ${rows.map((row) => `
+          <div class="strategy-row">
+            <span><strong>${escapeHtml(row.code || "")}</strong><small>${escapeHtml(row.name || "")}</small></span>
+            <span>${escapeHtml(row.side || "--")}</span>
+            <span>${escapeHtml(String(row.close || "--"))}</span>
+            <span class="${Number(row.percent || row.pct || 0) >= 0 ? "down" : "up"}">${Number(row.percent || row.pct || 0).toFixed(2)}%</span>
+            <em>${escapeHtml(String(Math.round(Number(row.score || 0))))}</em>
+            <small>${escapeHtml(normalizeArray(row.signalTags).slice(0, 3).join("、") || "--")}</small>
+          </div>
+        `).join("")}
+      </div>
+    ` : '<div class="empty-state">即時雷達 API 暫無資料。</div>';
+  }
+
+  function refreshMarketApiOnly(force = false) {
+    if (!isMarketViewActive() || marketApiOnlyLoading) return;
+    marketApiOnlyLoading = true;
+    Promise.all([
+      fetch(marketApiUrl("/api/heatmap", 60), { cache: force ? "no-store" : "default" }).then((res) => res.ok ? res.json() : null).catch(() => null),
+      fetch(marketApiUrl("/api/realtime-radar-latest", 20), { cache: force ? "no-store" : "default" }).then((res) => res.ok ? res.json() : null).catch(() => null),
+    ]).then(([heatmapPayload, radarPayload]) => {
+      const signature = JSON.stringify({
+        heatmap: heatmapPayload?.updatedAt || heatmapPayload?.servedAt || heatmapPayload?.stockCount || "",
+        radar: radarPayload?.updatedAt || radarPayload?.timestamp || radarPayload?.rows?.[0]?.detectedAt || "",
+        heatmapCount: heatmapPayload?.sectorCount || normalizeArray(heatmapPayload?.sectors).length,
+        radarCount: normalizeArray(radarPayload?.rows).length,
+      });
+      if (!force && signature === marketApiOnlySignature) return;
+      marketApiOnlySignature = signature;
+      if (heatmapPayload?.sectors?.length) renderMarketHeatmapApi(heatmapPayload.sectors, heatmapPayload);
+      renderMarketApiAi(heatmapPayload || {}, radarPayload || {});
+      renderMarketApiRadar(radarPayload || {});
+    }).finally(() => {
+      marketApiOnlyLoading = false;
+    });
+  }
+
+  function installMarketApiOnlyHydrator() {
+    const run = (force = false) => refreshMarketApiOnly(force);
+    if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", () => run(true), { once: true });
+    else run(true);
+    window.addEventListener("fuman:desktop-route", (event) => {
+      if (isMarketRoute(event?.detail?.key)) setTimeout(() => run(true), 80);
+    });
+    window.addEventListener("focus", () => run(false));
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "visible") run(false);
+    });
+    setInterval(() => run(false), API_ONLY_POLL_MS);
   }
 
   function canvasShellHtml(key, meta) {
