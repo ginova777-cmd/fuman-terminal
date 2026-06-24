@@ -2321,6 +2321,26 @@
     } catch (error) {}
   }
 
+  async function deleteIndexedSnapshot(key) {
+    const db = await openSnapshotDb();
+    if (!db || !key) return;
+    try {
+      const tx = db.transaction(SNAPSHOT_STORE, "readwrite");
+      tx.objectStore(SNAPSHOT_STORE).delete(key);
+    } catch (error) {}
+  }
+
+  function clearRouteSnapshotCache(route, options = {}) {
+    if (!route) return;
+    try { sessionStorage.removeItem(SNAPSHOT_PREFIX + route); } catch (error) {}
+    routeSnapshots.delete(route);
+    if (options.keepCanvasStore !== true) {
+      canvasStore.delete(route);
+      canvasRouteVersions.delete(route);
+    }
+    deleteIndexedSnapshot(route).catch(() => undefined);
+  }
+
   function isWorthSavingSnapshot(panel) {
     const html = panel?.innerHTML || "";
     if (!html || html.length > SNAPSHOT_MAX_CHARS) return false;
@@ -2428,13 +2448,7 @@
 
   function saveFixedPageSnapshotNow(route) {
     if (API_ONLY_FIXED_ROUTE_KEYS.includes(String(route || ""))) {
-      const stored = canvasStore.get(route);
-      if (stored?.rows?.length && !isDomDerivedSource(stored.source)) {
-        const item = { at: Date.now(), scrollTop: 0, html: "", rows: stored.rows };
-        routeSnapshots.set(route, item);
-        writeSessionSnapshot(route, item);
-        writeIndexedSnapshot(route, item);
-      }
+      clearRouteSnapshotCache(route, { keepCanvasStore: true });
       return;
     }
     const panel = panelForRoute(route);
@@ -2507,10 +2521,7 @@
     const install = () => {
       FIXED_ROUTE_KEYS.forEach((route) => {
         if (isApiOnlySnapshotRoute(route)) {
-          try { sessionStorage.removeItem(SNAPSHOT_PREFIX + route); } catch (error) {}
-          routeSnapshots.delete(route);
-          canvasStore.delete(route);
-          canvasRouteVersions.delete(route);
+          clearRouteSnapshotCache(route);
           return;
         }
         const item = readSessionSnapshot(route);
@@ -3879,6 +3890,10 @@
   function restoreFixedPageSnapshot(link) {
     const key = fixedRouteKey(link);
     if (!key) return false;
+    if (isApiOnlySnapshotRoute(key)) {
+      clearRouteSnapshotCache(key, { keepCanvasStore: true });
+      return false;
+    }
     if (isMarketRoute(key)) {
       removeFixedPageShell(key);
       return false;
