@@ -85,6 +85,7 @@
   let desktopFastBundleAt = 0;
   let desktopFastBundlePromise = null;
   let originalDesktopMarketPromise = null;
+  let originalDesktopMarketRetryTimer = 0;
   const canvasState = {
     route: "",
     source: "",
@@ -2492,12 +2493,17 @@
   }
 
   function loadOriginalDesktopMarket(reason = "market") {
-    if (originalDesktopMarketPromise) return originalDesktopMarketPromise;
     const load = window.FUMAN_TERMINAL_LOAD_APP || window.FUMAN_TERMINAL_LEGACY_MODULES?.load;
+    if (typeof load !== "function") {
+      window.clearTimeout(originalDesktopMarketRetryTimer);
+      originalDesktopMarketRetryTimer = window.setTimeout(() => {
+        if (isMarketViewActive()) loadOriginalDesktopMarket(`${reason}-retry`);
+      }, 180);
+      return Promise.resolve(false);
+    }
+    if (originalDesktopMarketPromise) return originalDesktopMarketPromise;
     originalDesktopMarketPromise = Promise.resolve(
-      typeof load === "function"
-        ? load(`legacy-original-desktop-${reason}`)
-        : false
+      load(`legacy-original-desktop-${reason}`)
     ).finally(() => {
       [0, 400, 1400, 3200].forEach((delay) => window.setTimeout(runOriginalDesktopMarketFunctions, delay));
     });
@@ -2510,6 +2516,16 @@
       if (!isMarketViewActive()) return;
       removeFixedPageShell("market|市場總覽");
       loadOriginalDesktopMarket(reason);
+      [240, 900, 2200].forEach((delay) => {
+        window.setTimeout(() => {
+          if (!isMarketViewActive()) return;
+          if (!window.loadHeatmap || !window.renderMarketAiPanel || !window.renderRealtimeRadar) {
+            loadOriginalDesktopMarket(`${reason}-${delay}`);
+            return;
+          }
+          runOriginalDesktopMarketFunctions();
+        }, delay);
+      });
     };
     if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", () => run("dom"), { once: true });
     else run("boot");
