@@ -1,11 +1,11 @@
 (function () {
   if (
     window.__fumanDesktopFastShell === "20260623-09"
-    && window.__fumanDesktopFastShellApiOnlyPoll === "20260625-02"
+    && window.__fumanDesktopFastShellApiOnlyPoll === "20260625-03"
     && window.__fumanOriginalDesktopMarket === "20260624-01"
   ) return;
   window.__fumanDesktopFastShell = "20260623-09";
-  window.__fumanDesktopFastShellApiOnlyPoll = "20260625-02";
+  window.__fumanDesktopFastShellApiOnlyPoll = "20260625-03";
 
   const NAV_SELECTOR = "[data-view]:not([data-member-tab])";
   const SNAPSHOT_DB = "fuman-desktop-route-snapshots";
@@ -661,7 +661,7 @@
         icon: "◎",
         title: "即時雷達",
         badge: "FMN://radar.live-api",
-        summary: "今日即時雷達走 live API，不讀舊 static JSON 或桌機快照。",
+        summary: "今日即時雷達走 live API，資料由正式 endpoint 直接更新。",
       };
     }
     if (view === "chip-trade") {
