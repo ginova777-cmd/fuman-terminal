@@ -129,34 +129,58 @@ AI 判讀不可只顯示純文字，不可沒有圖表 / 儀表板。
 - 可做 pointerdown prewarm。
 - 可做 memory cache，但必須保留 live intent。
 
-## 發布 / 上傳規則
+## 正式發布 / 上傳硬規則
 
-正式發布只能從乾淨 release clone / worktree 執行。
+以下是所有 Codex 都必須遵守的上傳規則。缺一項就不要發布。
 
-固定規則：
+### 來源規則
 
-1. origin 必須是：
+- 不要從 dirty 的 `C:\fuman-terminal` 直接 deploy。
+- 正式發布只能從乾淨 release clone / worktree 執行。
+- origin 必須指向：
 
 ```text
 https://github.com/ginova777-cmd/fuman-terminal.git
 ```
 
-2. branch 必須追蹤 `origin/main` 或明確 release branch。
-3. 不可把 `C:\fuman-terminal` 或舊 `C:\fuman-terminal-sync` 當 upstream。
-4. 發布前必跑：
+- branch 必須追蹤 `origin/main` 或明確 release branch。
+- 不可把本機 `C:\fuman-terminal` 當 upstream。
+- 不可把舊 `C:\fuman-terminal-sync` 當 upstream。
+- 不可使用舊 sync / publish-sync / preview project 當正式來源。
+
+### 發布前必跑
+
+發布前一定先跑：
 
 ```powershell
 git status -sb
 npm run verify:publish-gate
 ```
 
-5. publish gate 必須通過才可：
+要求：
+
+- `git status -sb` 不能有未確認 dirty / unrelated files。
+- `verify:publish-gate` 必須通過。
+- 若 publish gate 擋住，先修正原因；不可繞過。
+- 不可為了通過 gate 復活舊檔案、舊 workflow、static JSON、Google Sheet 或舊 sync 路徑。
+
+### 正式部署指令
+
+只有 publish gate 通過後，才可以：
 
 ```powershell
 vercel --prod --yes
 ```
 
-6. deploy 後一定驗正式 alias：
+部署時必須確認：
+
+- Vercel project 是正式 `fuman-terminal`。
+- 正式 alias 是 `https://fuman-terminal.vercel.app`。
+- 不可只看 preview URL 就回報完成。
+
+### 部署後必跑
+
+deploy 後一定跑：
 
 ```powershell
 npm run guard:production
@@ -164,16 +188,45 @@ npm run verify:live-version
 npm run monitor:production
 ```
 
-7. 若修改手機，追加：
+若修改手機，追加：
 
 ```powershell
 npm run verify:mobile-api-only:live
 npm run verify:mobile-cache-contract:live
 ```
 
-8. 若修改桌面 UI，必須實際驗：市場總覽、AI 判讀、策略1-5、買賣超、CB、權證、自選股。
-9. `data/scan-receipts/*` 不要跟核心程式修正混 commit，除非明確決定它們是新的 baseline。
-10. 不要手動 full scan 來掩蓋問題。策略1/3/4/5、買賣超、CB、權證等完整掃資料等自然排程更新。
+若修改桌面 UI，必須實際驗：
+
+```text
+市場總覽
+AI 判讀
+策略1
+策略2
+策略3
+策略4
+策略5
+買賣超
+CB
+權證
+自選股
+```
+
+### Commit / receipts 規則
+
+- `data/scan-receipts/*` 不要跟核心程式修正混 commit。
+- receipts 只有在明確決定成為新 baseline 時才 commit。
+- runtime receipt、暫存輸出、scanner log 不可混入 UI / API 修正。
+- 修改 AGENTS.md 或文件，不需要重新 deploy Vercel。
+- 修改正式站程式、API、UI、路由或 service worker，才需要 deploy。
+
+### 禁止用上傳掩蓋問題
+
+- 不要手動 full scan 來掩蓋問題。
+- 不要用 version bump 掩蓋資料錯誤。
+- 不要用 cache bump 掩蓋 renderer 錯誤。
+- 不要用 redeploy 掩蓋 Supabase snapshot / API 問題。
+- 策略1/3/4/5、買賣超、CB、權證等完整掃資料等自然排程更新。
+- 策略2、即時雷達、市場總覽才要求 same-day。
 
 ## 策略 / 籌碼 Codex 合約
 
