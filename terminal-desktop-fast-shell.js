@@ -3951,25 +3951,25 @@
       renderMarketApiAi(state.heatmap || {}, state.radar || {}, state.ai || {});
       renderMarketApiRadar(state.radar || {});
     };
-    fetchMarketJson("/api/market", 24, force, 2600)
+    fetchMarketJson("/api/market", 24, force, 6500)
       .then((payload) => {
         state.market = payload || {};
         renderIfChanged(true);
       })
       .finally(done);
-    fetchMarketJson("/api/heatmap", 60, force, 3200)
+    fetchMarketJson("/api/heatmap", 60, force, 6500)
       .then((payload) => {
         state.heatmap = payload || {};
         renderIfChanged(true);
       })
       .finally(done);
-    fetchMarketJson("/api/realtime-radar-latest", 20, force, 2200)
+    fetchMarketJson("/api/realtime-radar-latest", 20, force, 4200)
       .then((payload) => {
         state.radar = payload || {};
         renderIfChanged(true);
       })
       .finally(done);
-    fetchMarketJson("/api/market-ai-live", 20, force, 2600)
+    fetchMarketJson("/api/market-ai-live", 20, force, 5200)
       .then((payload) => {
         state.ai = payload || {};
         renderIfChanged(true);
