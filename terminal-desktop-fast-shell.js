@@ -3327,12 +3327,25 @@
     return list.find((item) => names.some((name) => String(item?.["指數"] || item?.name || "").includes(name))) || null;
   }
 
+  function marketCanvasRowByCode(payload, codes) {
+    const list = normalizeArray(payload?.rows);
+    return list.find((item) => codes.some((code) => String(item?.code || "").toUpperCase() === code)) || null;
+  }
+
   function formatMarketDelta(item) {
     if (!item) return "等待官方資料";
     const sign = String(item["漲跌"] || item.sign || "").includes("-") ? "-" : "+";
     const diff = String(item["漲跌點數"] ?? item.change ?? "0").replace(/^[+-]/, "");
     const pct = String(item["漲跌百分比"] ?? item.pct ?? "0").replace(/[+%-]/g, "");
     return `${sign}${diff}（${sign}${pct}%）`;
+  }
+
+  function formatMarketRowDelta(row) {
+    if (!row) return "等待官方資料";
+    const score = String(row.score ?? row.change ?? "--");
+    const pct = String(row.pct ?? row.percent ?? "--");
+    const sign = /^-/.test(score) || /^-/.test(pct) ? "" : "+";
+    return `${sign}${score.replace(/^\+/, "")}（${pct}）${row.reason ? ` · ${row.reason}` : ""}`;
   }
 
   function updateMarketMetricCard(card, label, value, subText, positive) {
@@ -3523,29 +3536,32 @@
 
     const twse = marketIndexByName(marketPayload, ["加權", "發行量"]);
     const otc = marketIndexByName(marketPayload, ["櫃買"]);
+    const twseRow = marketCanvasRowByCode(marketPayload, ["TWSE"]);
+    const otcRow = marketCanvasRowByCode(marketPayload, ["OTC"]);
+    const txfRow = marketCanvasRowByCode(marketPayload, ["TXF"]);
     const futuresNear = marketPayload?.futuresNear || marketPayload?.futures || null;
     const futuresNext = marketPayload?.futuresNext || null;
     const cards = [...market.querySelectorAll(".metric-grid .metric-card")];
     updateMarketMetricCard(
       cards[0],
       "↗ 加權指數",
-      formatMarketIndexValue(twse?.["收盤指數"]),
-      formatMarketDelta(twse),
-      !String(twse?.["漲跌"] || "").includes("-")
+      formatMarketIndexValue(twse?.["收盤指數"] || twseRow?.price),
+      twse ? formatMarketDelta(twse) : formatMarketRowDelta(twseRow),
+      twse ? !String(twse?.["漲跌"] || "").includes("-") : !String(twseRow?.pct || twseRow?.score || "").includes("-")
     );
     updateMarketMetricCard(
       cards[1],
       "↗ 櫃買指數",
-      formatMarketIndexValue(otc?.["收盤指數"]),
-      formatMarketDelta(otc),
-      !String(otc?.["漲跌"] || "").includes("-")
+      formatMarketIndexValue(otc?.["收盤指數"] || otcRow?.price),
+      otc ? formatMarketDelta(otc) : formatMarketRowDelta(otcRow),
+      otc ? !String(otc?.["漲跌"] || "").includes("-") : !String(otcRow?.pct || otcRow?.score || "").includes("-")
     );
     updateMarketMetricCard(
       cards[2],
       "⇅ 台指期夜盤",
-      futuresNear?.price ? Number(futuresNear.price).toLocaleString("zh-TW") : "--",
-      futuresNear ? `${futuresNear.change || "--"}（${futuresNear.pct || "--"}）${futuresNear.basisLabel ? ` · ${futuresNear.basisLabel}` : ""}` : "等待期交所資料",
-      !String(futuresNear?.change || "").includes("-")
+      futuresNear?.price ? Number(futuresNear.price).toLocaleString("zh-TW") : txfRow?.price ? Number(txfRow.price).toLocaleString("zh-TW") : "--",
+      futuresNear ? `${futuresNear.change || "--"}（${futuresNear.pct || "--"}）${futuresNear.basisLabel ? ` · ${futuresNear.basisLabel}` : ""}` : formatMarketRowDelta(txfRow),
+      futuresNear ? !String(futuresNear?.change || "").includes("-") : !String(txfRow?.pct || txfRow?.score || "").includes("-")
     );
     updateMarketMetricCard(
       cards[3],
