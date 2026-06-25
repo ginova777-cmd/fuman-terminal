@@ -71,26 +71,88 @@ fixed shell + Canvas / OffscreenCanvas + compact API + route snapshot
 
 ## 市場總覽 / 熱力圖
 
-市場總覽是正式桌面終端主畫面，不是泛用策略頁。
+市場總覽是正式桌面終端主畫面，不是泛用策略頁，也不是純表格頁。
 
-固定顯示：
+### 固定顯示
 
-- 上方四張指數卡：加權指數、櫃買指數、台指期夜盤、台指次月。
-- 下方是熱力圖。
-- 熱力圖分類 tabs 固定包含：`全部`、`官方產業`、`電子細分`、`群組概念`、`集團股`。
-- 點熱力圖產業 / 分類項目，要開啟相關股票 modal。
-- modal 要顯示股票代號、名稱、漲跌幅、成交值，以及可用的外資 / 投信 / 自營等欄位。
-- 熱力圖細項沒有資料時，要顯示明確受控空狀態，不可空白。
+- 點左側「市場總覽」後，主畫面必須顯示市場總覽專用 UI。
+- 上方必須顯示四張指數卡：加權指數、櫃買指數、台指期夜盤、台指次月。
+- 指數卡必須顯示數值、漲跌、漲跌幅或明確等待狀態。
+- 指數卡下方直接接熱力圖區塊。
+- 熱力圖區塊必須有標題、資料時間 / source、分類 tabs、產業 / 族群卡片。
+- 熱力圖不可退回泛用 `Rank / Code / Signal` 表格。
 
-已硬移除且不可恢復：
+### 熱力圖分類 tabs
+
+熱力圖分類 tabs 固定包含：
+
+```text
+全部
+官方產業
+電子細分
+群組概念
+集團股
+```
+
+規則：
+
+- tabs 必須可點選切換。
+- 點選後要即時顯示對應分類卡片。
+- 分類沒有資料時，要顯示受控空狀態，不可空白。
+- 不可顯示假資料或用 `0` 假裝有資料。
+
+### 產業 / 族群卡片
+
+每張熱力圖卡片至少要顯示：
+
+```text
+產業 / 族群名稱
+漲跌幅或平均漲跌
+樣本數 / 檔數
+上漲 / 下跌數
+代表股票或領漲 / 領跌股票
+成交值或可用量能資訊
+```
+
+卡片顏色規則：
+
+- 上漲偏紅 / 暖色。
+- 下跌偏綠 / 冷色。
+- 盤整或中性要有明確中性色。
+- 夜幕 / 陽光模式都要保持可讀性。
+
+### 點擊互動 / modal
+
+- 點熱力圖產業、族群、卡片或分類項目，要開啟相關股票 modal。
+- modal 要維持深色質感卡片，不可跳成瀏覽器預設白底文字。
+- modal 要顯示對應股票清單。
+- modal 內容至少包含：股票代號、股票名稱、漲跌幅、成交值。
+- 若資料有提供，也要顯示外資、投信、自營、成交量、族群、原因等欄位。
+- modal 要有關閉按鈕。
+- modal 沒有資料時，要顯示受控空狀態，不可空白。
+
+### 資料規則
+
+- 熱力圖資料來源必須走 Supabase API / snapshot。
+- 不可用 Google Sheet。
+- 不可用 static JSON data manifest。
+- 不可用 service worker cache 當資料權威。
+- 不可用 version bump / cache bump 假裝資料更新。
+- 不可用 redeploy 掩蓋 Supabase snapshot / API 問題。
+- 市場總覽 / 熱力圖屬於 same-day 資料頁。
+- 若盤中資料未到，要顯示等待或最近 snapshot，並標明時間與 source。
+
+### 已硬移除且不可恢復
 
 - `ticker-strip`
 - `strength-panel`
 - 舊黃框跑馬燈
 - 舊黃框強弱統計
 - 市場總覽泛用 `Rank / Code / Signal` 表格
+- 舊 DOM table
+- 白底純文字熱力圖
 
-相關檔案：
+### 相關檔案
 
 ```text
 terminal-market-overview-restore.js
@@ -99,7 +161,32 @@ terminal-core.js
 fuman-sw.js
 ```
 
-修改市場總覽後，可以更新 market overview asset epoch 讓 service worker 吃新資產；不可 bump 主版本。
+修改市場總覽 / 熱力圖後，可以更新 market overview asset epoch 讓 service worker 吃新資產；不可 bump 主版本 `public-terminal-fast-20260623-09`。
+
+### 修改後驗證
+
+若修改熱力圖，必須驗：
+
+- 市場總覽分頁能正常切換。
+- 上方四張指數卡存在且有資料或受控等待狀態。
+- 熱力圖分類 tabs 存在且可切換。
+- 熱力圖卡片有資料或受控空狀態。
+- 點產業 / 族群卡片會開啟股票 modal。
+- modal 不是白底純文字。
+- modal 內有股票代號、名稱、漲跌幅、成交值等資訊。
+- `ticker-strip` 和 `strength-panel` 不存在。
+- 正式 alias `https://fuman-terminal.vercel.app` 有更新，不只看 preview URL。
+
+### 發布 / 上傳限制
+
+- 修改熱力圖程式後，必須走正式發布 / 上傳硬規則。
+- 不要從 dirty 的 `C:\fuman-terminal` deploy。
+- 只能從乾淨 release clone / worktree 發布。
+- 發布前必跑 `git status -sb` 和 `npm run verify:publish-gate`。
+- publish gate 必須通過才可 `vercel --prod --yes`。
+- deploy 後必跑 `npm run guard:production`、`npm run verify:live-version`、`npm run monitor:production`。
+- 不要把 `data/scan-receipts/*` 跟熱力圖程式修正混 commit。
+- 不要手動 full scan 來掩蓋熱力圖資料問題。
 
 ## AI 判讀
 
