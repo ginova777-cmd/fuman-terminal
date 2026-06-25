@@ -558,6 +558,18 @@ async function fallbackMobileStats(cdp, route, error) {
   };
 }
 
+async function collectDesktopStatsWhenReady(cdp, route, timeoutMs = 22000) {
+  const start = Date.now();
+  let last = null;
+  while (Date.now() - start < timeoutMs) {
+    last = await evaluate(cdp, collectDesktopStats, route)
+      .catch((error) => fallbackDesktopStats(cdp, route, error));
+    if (last?.rowsVisible > 0 && !(last.blockerMatches || []).length) return last;
+    await sleep(900);
+  }
+  return last || { kind: "desktop", routeKey: route.key, label: route.label, ok: false, rowsVisible: 0, blockerMatches: ["desktop stats missing"], warnings: [] };
+}
+
 async function runDesktopMode(browser, theme) {
   const cdp = await createTab(browser.port);
   await setViewport(cdp, { width: 1440, height: 1000, mobile: false });
@@ -571,7 +583,7 @@ async function runDesktopMode(browser, theme) {
       stats = await withTimeout((async () => {
         await clickSelector(cdp, route.selector);
         await sleep(["institution", "cb", "warrant"].includes(route.key) ? 5200 : 3200);
-        return evaluate(cdp, collectDesktopStats, route).catch((error) => fallbackDesktopStats(cdp, route, error));
+        return collectDesktopStatsWhenReady(cdp, route);
       })(), ROUTE_TIMEOUT_MS, `desktop/${theme}/${route.key}`);
     } catch (error) {
       stats = { kind: "desktop", routeKey: route.key, label: route.label, ok: false, rowsVisible: 0, blockerMatches: [error.message], warnings: [] };
