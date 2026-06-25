@@ -134,7 +134,7 @@
   installAutoLatencySampler();
   installPerformanceLogExport();
   installPersistentFixedCanvases();
-  installOriginalDesktopMarketBridge();
+  document.documentElement.dataset.fumanOriginalDesktopMarket = "api-only-disabled";
   installMarketApiOnlyHydrator();
   installDesktopFastBundlePrime();
   installApiOnlyCanvasPolling();
