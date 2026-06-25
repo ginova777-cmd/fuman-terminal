@@ -2482,6 +2482,7 @@
     const poll = (reason = "timer") => {
       if (document.hidden || isInteractionHoldActive()) return;
       const route = canvasState.route || activeSnapshotRoute;
+      if (isMarketRoute(route)) return;
       if (!isApiOnlySnapshotRoute(route)) return;
       const active = window.__fumanDesktopActiveRoute;
       if (active?.key && active.key !== route) return;
@@ -2537,6 +2538,7 @@
   }
 
   function saveFixedPageSnapshotNow(route) {
+    if (isMarketRoute(route)) return;
     if (API_ONLY_FIXED_ROUTE_KEYS.includes(String(route || ""))) {
       const stored = canvasStore.get(route);
       if (stored?.rows?.length && !isDomDerivedSource(stored.source)) {
@@ -3402,6 +3404,39 @@
     applyMarketDesktopMode(marketDesktopMode);
   }
 
+  function renderMarketOverviewShell(link, source = "market-overview") {
+    const key = MARKET_ROUTE;
+    const panel = panelForRoute(key) || document.querySelector("#market-view");
+    if (!panel) return false;
+    activeSnapshotRoute = key;
+    canvasState.route = "";
+    canvasState.source = source || "market-overview";
+    canvasState.rows = [];
+    canvasState.filtered = [];
+    canvasState.query = "";
+    canvasState.offset = 0;
+    canvasState.hoverIndex = -1;
+    canvasState.selectedIndex = -1;
+    removeFixedPageShell(key);
+    panel.querySelectorAll(":scope > .desktop-route-shell.desktop-canvas-app").forEach((node) => node.remove());
+    panel.classList.remove("fuman-fixed-shell-panel", "fuman-fixed-shell-active");
+    panel.classList.add("fuman-market-overview-shell");
+    delete panel.dataset.fumanCanvasPersistent;
+    delete panel.dataset.fumanRouteSnapshotRestoring;
+    restoreMarketDesktopMode();
+    if (link) {
+      document.querySelectorAll("[data-view]").forEach((item) => {
+        const active = item === link;
+        item.classList.toggle("active", active);
+        if (active) item.setAttribute("aria-current", "page");
+        else item.removeAttribute("aria-current");
+      });
+    }
+    window.clearTimeout(window.__fumanMarketOverviewRefreshTimer || 0);
+    window.__fumanMarketOverviewRefreshTimer = window.setTimeout(() => refreshMarketApiOnly(true), 0);
+    return true;
+  }
+
   function closeMarketHeatmapSectorModal() {
     document.querySelector("[data-market-heatmap-modal]")?.remove();
   }
@@ -4259,6 +4294,7 @@
     const key = fixedRouteKey(link);
     const panel = panelForRoute(key);
     if (!key || !panel) return false;
+    if (isMarketRoute(key)) return renderMarketOverviewShell(link, source);
     const previousRoute = canvasState.route;
     const stored = canvasStore.get(key);
     const incomingRows = rows.length ? rows : rowsForRoute(key);
@@ -4381,6 +4417,11 @@
     beginInteractionHold(`fixed-${source || "route"}`, 720);
     switchFixedViewNow(link);
     markLatency("nav", key);
+    if (isMarketRoute(key)) {
+      renderMarketOverviewShell(link, source || "market-click");
+      markLatency("shell", key);
+      return true;
+    }
     const panel = panelForRoute(key);
     let rows = isChipTradeRoute(key) ? [] : rowsForRoute(key);
     if (!rows.length && !isChipTradeRoute(key) && !isApiOnlySnapshotRoute(key)) {
@@ -5786,6 +5827,23 @@
         }
         #market-view.market-ai-mode > :not(.page-header):not(.market-mode-tabs):not(.market-ai-panel) {
           display: none !important;
+        }
+        #market-view.fuman-market-overview-shell > .desktop-route-shell.desktop-canvas-app {
+          display: none !important;
+        }
+        #market-view.fuman-market-overview-shell > .page-header .eyebrow,
+        #market-view.fuman-market-overview-shell > .page-header .refresh-line,
+        #market-view.fuman-market-overview-shell > .page-header .header-time {
+          display: block !important;
+        }
+        #market-view.fuman-market-overview-shell > .metric-grid {
+          display: grid !important;
+          grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+          gap: 12px !important;
+          margin: 12px 0 16px !important;
+        }
+        #market-view.fuman-market-overview-shell > .sector-section {
+          display: block !important;
         }
         #market-view.market-overview-mode > .market-ai-panel {
           display: none !important;
