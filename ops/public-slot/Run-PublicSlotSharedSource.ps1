@@ -17,7 +17,7 @@ param(
   [int]$FutoptQuoteBatchSize = 20,
   [int]$FutoptQuoteEverySeconds = 60,
   [int]$FutoptTickersEverySeconds = 1800,
-  [string]$BlacklistCsvUrl = "https://docs.google.com/spreadsheets/d/1NHFgGryPyktbf1YLlUaXtIId_e5aF9LPE_glQrcN2V0/export?format=csv&gid=32050833",
+  [string]$BlacklistCsvUrl = "",
   [string]$BlacklistFile = "C:\fuman-runtime\config\fugle-api-blacklist-symbols.txt",
   [string]$StopAt = "14:05",
   [switch]$Once,
@@ -372,7 +372,7 @@ function Read-SymbolBlacklist {
       }
     }
   } catch {
-    Write-Log "WARN blacklist sheet unavailable; using local/cache blacklist: $($_.Exception.Message)"
+    Write-Log "WARN blacklist remote unavailable; using local/cache blacklist: $($_.Exception.Message)"
   }
 
   return $symbols

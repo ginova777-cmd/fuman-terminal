@@ -30,10 +30,6 @@ function Get-FumanTaskDescription($TaskName) {
     "Fuman Market Overview Patrol 0900" { return "市場總覽 / 熱力圖 / AI判讀，09:00 啟動巡邏到 13:30" }
     "Fuman Market Overview Patrol" { return "舊版市場總覽任務；目前停用，正式任務請看 Fuman Market Overview Patrol 0900" }
     "Fuman 即時雷達" { return "即時雷達，08:58 開盤前啟動" }
-    "Fuman Trade Manager Patrol 0900" { return "管家巡邏，09:00 啟動" }
-    "Fuman Trade Manager Settlement 1340" { return "管家結算，13:40 執行" }
-    "Fuman Scorecard Initial 1410" { return "成績單含輔滿回測初版，14:10 產生" }
-    "Fuman Scorecard Final 1530" { return "成績單含輔滿回測終版，15:30 產生" }
     "Fuman Daily Health Summary 1545" { return "綜合策略每日健康摘要，15:45 發送" }
     "Fuman Flow Cache 0600" { return "買賣超與權證走向，早上 06:00 合併掃描並發布終端" }
     "Fuman Flow Cache 2100" { return "買賣超與權證走向，晚上 21:00 合併掃描並發布終端" }
@@ -113,9 +109,7 @@ function Get-LatestFumanLogIssue {
   $patterns = switch -Wildcard ($TaskName) {
     "*Strategy3*" { @("strategy3-*.log", "cache-sync-*.log") }
     "*Strategy4*" { @("strategy4-*.log", "cache-sync-*.log") }
-    "*Scorecard*" { @("scorecard-*.log") }
     "*Daily Health Summary*" { @("daily-health-summary-*.log") }
-    "*Trade Manager*" { @("trade-manager-*.log") }
     "*即時雷達*" { @("realtime-radar-*.log") }
     "*Strategy2 Intraday*" { @("strategy2-intraday-*.log") }
     default { @() }

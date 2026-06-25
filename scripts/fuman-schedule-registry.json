@@ -194,42 +194,6 @@
       ]
     },
     {
-      "taskName": "\\Fuman Trade Manager Patrol 0900",
-      "displayName": "Fuman Trade Manager Patrol 0900",
-      "description": "交易管家巡邏，09:00 啟動",
-      "time": "09:00",
-      "aliases": [
-        "交易管家"
-      ]
-    },
-    {
-      "taskName": "\\Fuman Trade Manager Settlement 1340",
-      "displayName": "Fuman Trade Manager Settlement 1340",
-      "description": "交易管家結算，13:40 執行",
-      "time": "13:40",
-      "aliases": [
-        "settlement"
-      ]
-    },
-    {
-      "taskName": "\\Fuman Scorecard Initial 1410",
-      "displayName": "Fuman Scorecard Initial 1410",
-      "description": "成績單含輔滿回測初版，14:10 產生",
-      "time": "14:10",
-      "aliases": [
-        "scorecard initial"
-      ]
-    },
-    {
-      "taskName": "\\Fuman Scorecard Final 1530",
-      "displayName": "Fuman Scorecard Final 1530",
-      "description": "成績單含輔滿回測終版，15:30 產生",
-      "time": "15:30",
-      "aliases": [
-        "scorecard final"
-      ]
-    },
-    {
       "taskName": "\\Fuman Daily Health Summary 1545",
       "displayName": "Fuman Daily Health Summary 1545",
       "description": "每日健康摘要，15:45 產生",
@@ -339,4 +303,3 @@
     }
   ]
 }
-

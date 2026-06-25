@@ -64,19 +64,16 @@ async function main() {
   const stamp = todayStamp();
   const report = readJson(path.join(REPORT_DIR, `backtest-strategy2-manager-radar-${stamp}.json`), {});
   const radar = readJson(path.join(DATA_DIR, "realtime-radar-latest.json"), {});
-  const google = readJson(path.join(STATE_DIR, "google-sheet-upload-status.json"), {});
-  const manager = report.manager?.summary || {};
+
   const radarSummary = report.radar?.summary || {};
   const lines = [
     `綜合策略每日健康摘要｜${dateText(stamp)}`,
     "",
-    `管家交易：${manager.total ?? "--"}｜勝率：${Number.isFinite(Number(manager.winRate)) ? `${Number(manager.winRate).toFixed(1)}%` : "--"}｜損益：${money(manager.pnl)}`,
     `雷達股票去重：${radarSummary.uniqueCodeCount ?? "--"}｜時間桶：${radarSummary.total ?? "--"}｜候選：${radarSummary.entryCandidateRecords ?? "--"}`,
     `即時巡邏：${radar.status || "--"}｜rows=${Array.isArray(radar.rows) ? radar.rows.length : "--"}｜updated=${radar.updatedAt || "--"}`,
     `stale quote：${staleSummary(radar)}`,
     `外部資料源：${summarizeIssues(radar)}`,
     `failed batch：${radar.failedBatchCount ?? "--"}/${radar.totalBatchCount ?? "--"}`,
-    `Google Sheet：${google.ok === true ? "ok" : google.ok === false ? "failed" : "--"}｜pending=${google.pendingCount ?? 0}｜last=${google.lastStamp || "--"}`,
   ];
   const text = lines.join("\n");
   console.log(text);

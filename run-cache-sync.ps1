@@ -143,12 +143,8 @@ function Invoke-CriticalDataReleasePipeline($reason) {
       if ($snapshotExit -ne 0) {
         throw "Critical data snapshot failed with exit code $snapshotExit"
       }
-      npm run release:main -- -ForceBump -CommitMessage "Bump terminal version after critical data refresh" 2>&1 | ForEach-Object { Write-Log $_ }
-      $releaseExit = $LASTEXITCODE
-      Write-Log "CRITICAL_DATA_RELEASE_END exit=$releaseExit"
-      if ($releaseExit -ne 0) {
-        throw "Critical data release pipeline failed with exit code $releaseExit"
-      }
+      Write-Log "CRITICAL_DATA_RELEASE_RETIRED no release:main or version bump from cache sync; snapshot data only."
+      return
     } finally {
       Pop-Location
     }
@@ -268,8 +264,7 @@ function Test-OutboxDisabledFile($file) {
     "data\mobile-home-summary.json",
     "data\strategy-match-index.json",
     "data\terminal-home-bundle.json",
-    "data\data-status-index.json",
-    "data\data-manifest.json"
+    "data\data-status-index.json"
   )
 }
 
@@ -732,8 +727,7 @@ try {
       "data\warrant-flow-backup.json",
       "data\afterhours-supabase-status.json",
       "data\flow-health-latest.json",
-      "data\data-status-index.json",
-      "data\data-manifest.json"
+      "data\data-status-index.json"
     )
   } elseif ($Scope -eq "institution") {
     $criticalLatestFiles = @(
@@ -755,8 +749,7 @@ try {
       "data\institution-backup.json",
       "data\afterhours-supabase-status.json",
       "data\flow-health-latest.json",
-      "data\data-status-index.json",
-      "data\data-manifest.json"
+      "data\data-status-index.json"
     )
   } elseif ($Scope -eq "warrant") {
     $criticalLatestFiles = @(
@@ -773,8 +766,7 @@ try {
       "data\warrant-flow-backup.json",
       "data\afterhours-supabase-status.json",
       "data\flow-health-latest.json",
-      "data\data-status-index.json",
-      "data\data-manifest.json"
+      "data\data-status-index.json"
     )
   } elseif ($Scope -eq "openBuy") {
     $criticalLatestFiles = @(
@@ -807,8 +799,7 @@ try {
 
     $dataFiles = @(
       "data\afterhours-supabase-status.json",
-      "data\data-status-index.json",
-      "data\data-manifest.json"
+      "data\data-status-index.json"
     )
   } else {
     $criticalLatestFiles = @(
@@ -847,7 +838,6 @@ try {
       "data\health-summary.json",
       "data\terminal-home-bundle.json",
       "data\data-status-index.json",
-      "data\data-manifest.json",
       "data\stocks-slim.json",
       "data\stocks-index.json",
       "data\stocks-quotes-slim.json",
@@ -958,7 +948,6 @@ try {
     "data\mobile-home-summary.json",
     "data\terminal-home-bundle.json",
     "data\data-status-index.json",
-    "data\data-manifest.json",
     "data\stocks-slim.json",
     "data\stocks-index.json",
     "data\stocks-quotes-slim.json",

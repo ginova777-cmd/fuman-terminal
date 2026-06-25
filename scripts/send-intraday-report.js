@@ -309,7 +309,7 @@ async function smtpCommand(socket, command, expect = /^[23]/) {
 }
 
 async function sendMail({ host, port, user, pass, to, subject, text }) {
-  console.log("scorecard email disabled; Google Sheet upload only");
+  console.log("scorecard email disabled; scorecard website is source of truth");
   return false;
   const socket = tls.connect({ host, port, servername: host });
   await new Promise((resolve, reject) => {
@@ -824,7 +824,7 @@ function buildRealtimeRadarReport(records, quotes, today) {
 }
 
 async function sendReports(reports, mailConfig) {
-  console.log("scorecard report delivery disabled; Google Sheet upload only");
+  console.log("scorecard report delivery disabled; scorecard website is source of truth");
   return false;
   const failures = [];
   for (const report of reports) {
@@ -859,7 +859,7 @@ function mailConfigFromEnv() {
 }
 
 async function sendScorecardNotifications(reports) {
-  console.log("scorecard notifications skipped; Google Sheet upload only");
+  console.log("scorecard notifications skipped; scorecard website is source of truth");
   return false;
 }
 

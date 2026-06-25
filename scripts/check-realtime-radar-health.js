@@ -302,15 +302,7 @@ async function main() {
     pushIssue(issues, "warning", "frontend-verify-error", frontend.error);
   }
 
-  const google = readJson(path.join(STATE_DIR, "google-sheet-upload-status.json"), {});
-  if (google.ok === false || cleanNumber(google.consecutiveFailures) > 0) pushIssue(issues, "warning", "google-sheet-failed", `Google Sheet consecutiveFailures=${google.consecutiveFailures || 0}`);
-  if (cleanNumber(google.pendingCount) > 0) pushIssue(issues, "warning", "google-sheet-queue", `Google Sheet pending queue=${google.pendingCount}`);
-  const tokenExists = fs.existsSync(path.join(SECRET_DIR, "google-sheets-token.json"));
-  const tokenBackupExists = fs.existsSync(path.join(SECRET_DIR, "google-sheets-token.backup.json"));
-  if (!tokenExists && !tokenBackupExists) pushIssue(issues, "critical", "google-token-missing", "Google Sheet token and backup missing");
-  else if (!tokenExists) pushIssue(issues, "warning", "google-token-restorable", "Google Sheet token missing but backup exists");
-  else if (!tokenBackupExists) pushIssue(issues, "warning", "google-token-backup-missing", "Google Sheet token backup missing");
-
+  // Google Sheet scorecard checks retired: scorecard website / Supabase is the source of truth.
   const radarTask = taskInfo("\\Fuman 即時雷達");
   if (!radarTask.exists) pushIssue(issues, "critical", "schedule-missing", "Fuman realtime radar task missing");
   else if (!/Ready|Running/i.test(radarTask.status || "")) pushIssue(issues, "warning", "schedule-not-ready", `radar task status=${radarTask.status}`);

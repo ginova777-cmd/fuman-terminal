@@ -92,27 +92,8 @@ for ($attempt = 1; $attempt -le $maxAttempts; $attempt++) {
   }
 
   $after = Get-Content -LiteralPath $latestPath -Raw | ConvertFrom-Json
-  if ($after.complete -eq $true -and $env:STRATEGY4_UPLOAD_SHEET_AFTER_SCAN -ne "0") {
-    $uploadScript = Join-Path $repo "run-upload-backtest-google-sheet.ps1"
-    if (Test-Path -LiteralPath $uploadScript) {
-      $previousOnly = $env:GOOGLE_SHEET_ONLY
-      $env:GOOGLE_SHEET_ONLY = "策略4成績單"
-      try {
-        $uploadStamp = if ($after.scanStamp) { $after.scanStamp } else { Get-Date -Format yyyyMMdd }
-        & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $uploadScript $uploadStamp *>&1 | Tee-Object -FilePath $log -Append | Out-Null
-        $sheetExit = $LASTEXITCODE
-      } finally {
-        if ($null -ne $previousOnly) {
-          $env:GOOGLE_SHEET_ONLY = $previousOnly
-        } else {
-          Remove-Item Env:GOOGLE_SHEET_ONLY -ErrorAction SilentlyContinue
-        }
-      }
-      if ($sheetExit -ne 0) {
-        Write-Log "Strategy4 resume Google Sheet upload failed with exit code $sheetExit"
-        exit $sheetExit
-      }
-    }
+  if ($after.complete -eq $true) {
+    Write-Log "Strategy4 resume Google Sheet upload skipped: retired."
     Write-Log "=== Strategy4 resume scan end $(Get-Date) complete=$($after.complete) pending=$($after.pendingCount) noData=$($after.noDataCount) ==="
     exit 0
   }

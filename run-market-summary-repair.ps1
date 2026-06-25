@@ -94,7 +94,6 @@ $files = @(
   "data\mobile-home-summary.json",
   "data\terminal-home-bundle.json",
   "data\data-status-index.json",
-  "data\data-manifest.json",
   "data\stocks-slim.json",
   "data\stocks-index.json",
   "data\stocks-quotes-slim.json",

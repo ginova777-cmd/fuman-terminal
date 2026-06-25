@@ -198,7 +198,7 @@ async function smtpCommand(socket, command, expect = /^[23]/) {
 }
 
 async function sendMail({ subject, text }) {
-  console.log("trade manager email disabled; Google Sheet upload only");
+  console.log("trade manager email disabled; scorecard website is source of truth");
   return false;
   const to = process.env.REPORT_EMAIL_TO;
   const user = process.env.SMTP_USER;
@@ -256,7 +256,7 @@ async function main() {
   const subject = `交易管家成績單｜${dateSlash(today)}`;
   console.log(report);
 
-  console.log("trade manager report notifications skipped; Google Sheet upload only");
+  console.log("trade manager report notifications skipped; scorecard website is source of truth");
 }
 
 main().catch((error) => {

@@ -14,21 +14,6 @@ $rules = @{
     Done = @("Open buy full scan end")
     Detail = @("full market scan", "scanned \d+/\d+", "matches \d+", "Open buy cache sync completed")
   }
-  "run-scorecard.ps1" = @{
-    Log = "scorecard-*.log"
-    Done = @("Scorecard end")
-    Detail = @("Google Sheet upload end", "Scorecard end")
-  }
-  "run-scorecard-final.ps1" = @{
-    Log = "scorecard-*.log"
-    Done = @("Scorecard end")
-    Detail = @("REPORT_SLOT=final", "Google Sheet upload end", "Scorecard end")
-  }
-  "run-scorecard-initial.ps1" = @{
-    Log = "scorecard-*.log"
-    Done = @("Scorecard end")
-    Detail = @("REPORT_SLOT=initial", "Google Sheet upload end", "Scorecard end")
-  }
   "run-strategy2-intraday.ps1" = @{
     Log = "strategy2-intraday-*.log"
     Done = @("Strategy2 intraday patrol end")
@@ -53,16 +38,6 @@ $rules = @{
     Log = "strategy5-*.log"
     Done = @("Strategy5 scan end")
     Detail = @("Strategy5 scan end")
-  }
-  "run-trade-manager-patrol.ps1" = @{
-    Log = "trade-manager-patrol-*.log"
-    Done = @("Trade manager patrol end", "trading window closed")
-    Detail = @("sent \d+ message", "no new action", "trading window closed")
-  }
-  "run-trade-manager-report.ps1" = @{
-    Log = "trade-manager-report-*.log"
-    Done = @("Trade manager settlement report end", "Trade manager Google Sheet upload end")
-    Detail = @("email report sent", "Google Sheet upload end", "Uploaded trade manager scorecard only")
   }
   "run-realtime-radar.ps1" = @{
     Log = "realtime-radar-*.log"
@@ -112,16 +87,12 @@ function Convert-TaskText($taskName) {
   $text = $taskName
   $text = $text -replace "Fuman GitHub 統一同步", "GitHub同步"
   $text = $text -replace "Fuman Open Buy Cache", "策略1掃描"
-  $text = $text -replace "Fuman Scorecard Final", "盤後成績單"
-  $text = $text -replace "Fuman Scorecard Initial", "初版成績單"
   $text = $text -replace "Fuman Strategy2 Intraday Scan", "策略2盤中掃描"
   $text = $text -replace "Fuman Strategy2 LINE Start", "策略2 LINE啟動"
   $text = $text -replace "Fuman Strategy2 LINE Stop", "策略2 LINE停止"
   $text = $text -replace "Fuman Strategy3 Cache", "策略3掃描"
   $text = $text -replace "Fuman Strategy4 Cache", "策略4掃描"
   $text = $text -replace "Fuman Strategy5 Cache", "策略5掃描"
-  $text = $text -replace "Fuman Trade Manager Patrol", "交易管家巡邏"
-  $text = $text -replace "Fuman Trade Manager Settlement", "交易管家結算"
   $text = $text -replace "Fuman Market Overview Patrol", "市場總覽巡邏"
   $text = $text -replace "Fuman PC Sleep", "電腦睡眠"
   $text = $text -replace "Fuman PC Wake", "電腦喚醒"

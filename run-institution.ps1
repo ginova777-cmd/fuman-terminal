@@ -68,7 +68,6 @@ function Sync-InstitutionLocalCache {
     "institution-tdcc-breakout.csv",
     "institution-backup.json",
     "data-status-index.json",
-    "data-manifest.json",
     "terminal-home-bundle.json",
     "mobile-home-summary.json"
   )

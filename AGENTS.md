@@ -883,3 +883,14 @@ npm run verify:live-version
 策略 Codex 只能在自己的分支或乾淨 worktree 更新 scanner / API / Supabase complete run / snapshot payload。不要在策略分支直接 `vercel --prod`，不要改終端版本號，不要改 terminal shell 主線。
 
 改完先合回 `main`，再由統一部署流程上 production。`npm run guard:source` 會擋 dirty、untracked、非 main / 未授權 release branch、behind、ahead 未推、錯誤 `.vercel/project.json`。這條 guard 是防止 A Codex 的新 bundle 被 B Codex 的舊 bundle 蓋回去。
+
+## 已退役 / 暫停流程
+
+目前不要重啟下列流程，除非使用者明確要求：
+
+- Google Sheet 成績單：已由成績單網站 / Supabase snapshot 取代。
+- Google Sheet 上傳工具：退役工具檔已刪除，wrapper 只保留 no-op 防舊呼叫失敗。
+- 交易管家 patrol / settlement：暫停，屬於後續階段，不納入目前終端上線主線。
+- Scorecard Initial / Final / Terminal Watch Windows 排程：已停用。
+
+目前主線只處理正式終端、策略 / 籌碼 API、Supabase snapshot、desktop/mobile terminal 顯示。

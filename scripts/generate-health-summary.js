@@ -65,8 +65,6 @@ const REPLACED_OR_LEGACY_TASKS = new Set([
   "\\Fuman Open Buy Cache 0700",
   "\\Fuman Open Buy Cache 1600",
   "\\Fuman Open Buy Sync Retry",
-  "\\Fuman Scorecard Final 1530",
-  "\\Fuman Scorecard Initial 1410",
   "\\Fuman Strategy2 Intraday Scan",
   "\\Fuman Strategy2 Intraday Warmup 0845",
   "\\Fuman Strategy3 Cache 1230",
@@ -87,10 +85,7 @@ const REPLACED_OR_LEGACY_TASKS = new Set([
   "\\Fuman 買賣超 Watchdog 2120",
 ]);
 
-const NON_TERMINAL_DATA_TASKS = new Set([
-  "\\Fuman Trade Manager Patrol 0900",
-  "\\Fuman Trade Manager Settlement 1340",
-]);
+const NON_TERMINAL_DATA_TASKS = new Set([]);
 
 function isIgnorableTaskResult(task) {
   const name = String(task.TaskName || "");
@@ -311,7 +306,7 @@ function main() {
     githubSync: outbox,
     freshnessGate: {
       ok: true,
-      mode: "api-only",
+      mode: "api-only",
     },
     runtime: { ok: data.every((item) => item.ok), data },
   };
