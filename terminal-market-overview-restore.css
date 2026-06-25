@@ -84,7 +84,7 @@
 
 #market-view.market-overview-mode > .ticker-strip,
 #market-view.market-overview-mode > .strength-panel {
-  display: flex !important;
+  display: none !important;
 }
 
 #market-view.fuman-market-overview-shell > .desktop-route-shell.desktop-canvas-app {
@@ -133,6 +133,41 @@
   margin: 0;
   padding: 12px 0 18px;
   border-bottom: 1px solid rgba(148, 163, 184, 0.08);
+}
+
+#market-view .sector-section .tabs button {
+  min-height: 34px;
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  border-radius: 8px;
+  background: rgba(15, 23, 42, 0.72);
+  color: #cbd5e1;
+  cursor: pointer;
+  padding: 0 14px;
+  font-size: 13px;
+  font-weight: 900;
+}
+
+#market-view .sector-section .tabs button.active,
+#market-view .sector-section .tabs button:hover,
+#market-view .sector-section .tabs button:focus-visible {
+  border-color: rgba(249, 115, 22, 0.68);
+  background: rgba(249, 115, 22, 0.16);
+  color: #ffb36b;
+  outline: none;
+}
+
+body.fuman-light-theme #market-view .sector-section .tabs button {
+  background: rgba(255, 255, 255, 0.78);
+  border-color: rgba(203, 213, 225, 0.85);
+  color: #334155;
+}
+
+body.fuman-light-theme #market-view .sector-section .tabs button.active,
+body.fuman-light-theme #market-view .sector-section .tabs button:hover,
+body.fuman-light-theme #market-view .sector-section .tabs button:focus-visible {
+  background: rgba(255, 237, 213, 0.9);
+  border-color: rgba(249, 115, 22, 0.5);
+  color: #c2410c;
 }
 
 #market-view .heatmap {

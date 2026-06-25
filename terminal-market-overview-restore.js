@@ -6,6 +6,9 @@
       window.__fumanMarketOverviewDirectPainter = true;
       window.__fumanMarketDirectSectors = [];
       window.__fumanMarketAiDrilldowns = {};
+      window.__fumanMarketHeatmapMode = window.__fumanMarketHeatmapMode || "all";
+      window.__fumanMarketHeatmapGroups = {};
+      window.__fumanMarketHeatmapPayload = null;
       const safeText = (value) => String(value ?? "");
       const esc = (value) => safeText(value).replace(/[&<>"']/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[ch]);
       const list = (value) => Array.isArray(value) ? value : [];
@@ -127,7 +130,13 @@
               <div><h2>熱力圖</h2><p>公開資料排序</p></div>
               <span>全部 · -- 個</span>
             </div>
-            <div class="tabs"><button>全部</button><button>官方產業</button><button>電子細分</button><button>群組概念</button><button>集團股</button></div>
+            <div class="tabs" data-market-heatmap-tabs>
+              <button type="button" class="active" data-market-heatmap-mode="all">全部</button>
+              <button type="button" data-market-heatmap-mode="official">官方產業</button>
+              <button type="button" data-market-heatmap-mode="electronics">電子細分</button>
+              <button type="button" data-market-heatmap-mode="themes">群組概念</button>
+              <button type="button" data-market-heatmap-mode="groups">集團股</button>
+            </div>
             <div class="heatmap" id="heatmap"></div>
           `;
           (panel.querySelector(":scope > .terminal-band") || panel.querySelector(":scope > .strength-panel") || tabs).insertAdjacentElement("afterend", section);
@@ -135,6 +144,125 @@
         return panel;
       };
       const marketActive = () => document.querySelector("#market-view.active:not([hidden])");
+      const cleanGroupName = (value) => safeText(value).trim().replace(/業$/u, "") || "";
+      const stockPctValue = (stock) => num(stock?.pct ?? stock?.changePct ?? stock?.changePercent);
+      const stockAmountValue = (stock) => num(stock?.value || (num(stock?.amountYi) * 100000000));
+      const heatmapStockUniverse = (sectors) => list(sectors).flatMap((sector) =>
+        list(sector.stocks).map((stock) => ({
+          ...stock,
+          _sourceSector: sector.name || sector.industry || stock.industry || "--",
+        }))
+      );
+      const firstKnown = (...values) => values.map(cleanGroupName).find(Boolean) || "";
+      const uniqueLabels = (values) => [...new Set(values.map(cleanGroupName).filter(Boolean))];
+      const isElectronicsLabel = (value) => /電子|半導體|IC|PCB|載板|光|網通|AI|CPU|ASIC|IP|記憶體|被動|伺服器|通路|零組件|電源|BBU|UPS|封測|晶圓|矽|面板|光通訊/u.test(safeText(value));
+      const labelsForMode = (stock, mode) => {
+        const profile = stock?.industryProfile || {};
+        const themes = list(stock?.themes || profile.themes);
+        const base = firstKnown(stock?.primaryIndustry, profile.primaryIndustry, stock?.industry, stock?._sourceSector);
+        const official = firstKnown(stock?.officialIndustry, profile.officialIndustry, stock?.primaryIndustry, stock?._sourceSector);
+        if (mode === "official") return [official || base || "未分類"];
+        if (mode === "electronics") {
+          const candidates = uniqueLabels([base, stock?.industry, stock?.primaryIndustry, stock?._sourceSector, ...themes])
+            .filter(isElectronicsLabel);
+          return candidates.length ? candidates : [base || official || "電子其他"];
+        }
+        if (mode === "themes") {
+          const candidates = uniqueLabels([...themes, profile.theme, profile.concept, stock?.concept, base]);
+          return candidates.length ? candidates.slice(0, 2) : [base || official || "未分類"];
+        }
+        if (mode === "groups") {
+          const candidates = uniqueLabels([
+            stock?.companyGroup,
+            stock?.businessGroup,
+            stock?.conglomerate,
+            stock?.group,
+            profile.companyGroup,
+            profile.businessGroup,
+            profile.conglomerate,
+          ]);
+          return candidates.length ? candidates : [`${base || official || stock?._sourceSector || "市場"}系`];
+        }
+        return [base || official || "未分類"];
+      };
+      const aggregateHeatmapSectors = (rawSectors, mode) => {
+        if (mode === "all") return list(rawSectors);
+        const buckets = new Map();
+        heatmapStockUniverse(rawSectors).forEach((stock) => {
+          labelsForMode(stock, mode).forEach((label) => {
+            if (!label) return;
+            if (!buckets.has(label)) buckets.set(label, { name: label, stocks: [], totalValue: 0, up: 0, down: 0, flat: 0 });
+            const bucket = buckets.get(label);
+            const pct = stockPctValue(stock);
+            bucket.stocks.push(stock);
+            bucket.totalValue += stockAmountValue(stock);
+            if (pct > 0) bucket.up++;
+            else if (pct < 0) bucket.down++;
+            else bucket.flat++;
+          });
+        });
+        return [...buckets.values()].filter((group) => group.stocks.length).map((group) => {
+          const totalAmountYi = group.totalValue / 100000000;
+          const avgPct = group.stocks.reduce((sum, stock) => sum + stockPctValue(stock), 0) / group.stocks.length;
+          const weightedPct = group.totalValue
+            ? group.stocks.reduce((sum, stock) => sum + stockPctValue(stock) * stockAmountValue(stock), 0) / group.totalValue
+            : avgPct;
+          const sortedStocks = [...group.stocks].sort((a, b) => stockAmountValue(b) - stockAmountValue(a));
+          const leader = sortedStocks[0];
+          return {
+            name: group.name,
+            pct: Number(weightedPct.toFixed(2)),
+            avgPct: Number(avgPct.toFixed(2)),
+            totalValue: group.totalValue,
+            amountYi: Number(totalAmountYi.toFixed(1)),
+            count: group.stocks.length,
+            up: group.up,
+            down: group.down,
+            flat: group.flat,
+            leader: leader ? `${leader.name || leader.code} ${stockPctValue(leader) >= 0 ? "+" : ""}${stockPctValue(leader).toFixed(2)}%` : "--",
+            leaderCode: leader?.code || "",
+            stocks: sortedStocks,
+          };
+        }).sort((a, b) => num(b.pct ?? b.avgPct) - num(a.pct ?? a.avgPct));
+      };
+      const heatmapModeLabel = (mode) => ({
+        all: "全部",
+        official: "官方產業",
+        electronics: "電子細分",
+        themes: "群組概念",
+        groups: "集團股",
+      })[mode] || "全部";
+      const setHeatmapButtons = (panel, mode) => {
+        panel.querySelectorAll("[data-market-heatmap-mode]").forEach((button) => {
+          button.classList.toggle("active", button.dataset.marketHeatmapMode === mode);
+        });
+      };
+      const renderHeatmapCards = (panel, heatPayload = {}) => {
+        const mode = window.__fumanMarketHeatmapMode || "all";
+        const rawSectors = list(window.__fumanMarketHeatmapPayload?.rawSectors || heatPayload.sectors);
+        const modeSectors = list(window.__fumanMarketHeatmapGroups?.[mode] || rawSectors).slice(0, 80);
+        const heatmap = panel.querySelector("#heatmap");
+        window.__fumanMarketDirectSectors = modeSectors;
+        setHeatmapButtons(panel, mode);
+        if (heatmap) {
+          heatmap.innerHTML = `
+            <div class="heatmap-health-bar"><strong>熱力圖 ${esc(heatmapModeLabel(mode))}</strong><span>${esc(heatPayload.updatedAt || heatPayload.servedAt || "")}</span></div>
+            ${modeSectors.map((sector, index) => {
+              const pct = num(sector.pct ?? sector.avgPct);
+              const leader = sector.leader || list(sector.stocks)[0] || {};
+              const leaderText = typeof leader === "string" ? leader : leader ? `${leader.name || leader.code || "--"} ${num(leader.pct) >= 0 ? "+" : ""}${num(leader.pct).toFixed(2)}%` : "--";
+              return `<article class="sector-card ${pct >= 0 ? "hot up" : "cold down"}" data-market-direct-sector="${index}" role="button" tabindex="0">
+                <div><h3>${esc(sector.name || sector.industry || "--")}</h3><strong>${pct >= 0 ? "+" : ""}${pct.toFixed(2)}%</strong></div>
+                <p>${esc(sector.count || list(sector.stocks).length || 0)} 檔 · ${esc(yi(sector.totalValue || sector.value || (num(sector.amountYi) * 100000000)))}</p>
+                <small>▲ ${esc(sector.up || 0)} ▼ ${esc(sector.down || 0)}</small>
+                <span>${esc(leaderText)}</span>
+              </article>`;
+            }).join("") || '<div class="empty-state">此分類目前沒有資料。</div>'}
+          `;
+        }
+        const count = panel.querySelector(".sector-section .section-title > span");
+        if (count) count.textContent = `${heatmapModeLabel(mode)} · ${modeSectors.length} 個`;
+      };
       const indexBy = (payload, names) => list(payload?.indexes).find((item) => names.some((name) => safeText(item?.["指數"] || item?.name).includes(name))) || null;
       const deltaText = (item) => {
         if (!item) return "等待官方資料";
@@ -172,12 +300,20 @@
         setCard(cards[1], "↗ 櫃買指數", num(otc?.["收盤指數"]).toLocaleString("zh-TW", { minimumFractionDigits: 2, maximumFractionDigits: 2 }), deltaText(otc), !safeText(otc?.["漲跌"]).includes("-"));
         setCard(cards[2], "⇅ 台指期夜盤", near?.price ? num(near.price).toLocaleString("zh-TW") : "--", near ? `${near.change || "--"}（${near.pct || "--"}）${near.basisLabel ? ` · ${near.basisLabel}` : ""}` : "等待期交所資料", !safeText(near?.change).includes("-"));
         setCard(cards[3], "☾ 台指次月", next?.price ? num(next.price).toLocaleString("zh-TW") : "--", next ? `${next.change || "--"}（${next.pct || "--"}）${next.basisLabel ? ` · ${next.basisLabel}` : ""}` : "等待期交所資料", !safeText(next?.change).includes("-"));
-        const sectors = list(heatPayload.sectors).slice(0, 60);
-        if (!sectors.length) return;
-        window.__fumanMarketDirectSectors = sectors;
-        const stocks = sectors.flatMap((sector) => list(sector.stocks));
-        const up = sectors.reduce((sum, sector) => sum + num(sector.up), 0);
-        const down = sectors.reduce((sum, sector) => sum + num(sector.down), 0);
+        const rawSectors = list(heatPayload.sectors).slice(0, 80);
+        if (!rawSectors.length) return;
+        window.__fumanMarketHeatmapPayload = { heatPayload, rawSectors };
+        window.__fumanMarketHeatmapGroups = {
+          all: aggregateHeatmapSectors(rawSectors, "all"),
+          official: aggregateHeatmapSectors(rawSectors, "official"),
+          electronics: aggregateHeatmapSectors(rawSectors, "electronics"),
+          themes: aggregateHeatmapSectors(rawSectors, "themes"),
+          groups: aggregateHeatmapSectors(rawSectors, "groups"),
+        };
+        const sectors = rawSectors;
+        const stocks = rawSectors.flatMap((sector) => list(sector.stocks));
+        const up = rawSectors.reduce((sum, sector) => sum + num(sector.up), 0);
+        const down = rawSectors.reduce((sum, sector) => sum + num(sector.down), 0);
         const sample = num(heatPayload.stockCount || heatPayload.sample || heatPayload.count) || stocks.length || up + down;
         const flat = Math.max(0, sample - up - down);
         const totalValue = sectors.reduce((sum, sector) => sum + num(sector.totalValue || sector.value || (num(sector.amountYi) * 100000000)), 0);
@@ -205,25 +341,7 @@
             return `<span class="${pct >= 0 ? "ticker-up" : "ticker-down"}">${esc(sector.name || sector.industry || "--")} <b>${pct >= 0 ? "+" : ""}${pct.toFixed(2)}%</b> <small>${esc(leaderText)}</small></span>`;
           }).join("");
         }
-        const heatmap = panel.querySelector("#heatmap");
-        if (heatmap) {
-          heatmap.innerHTML = `
-            <div class="heatmap-health-bar"><strong>熱力圖 API</strong><span>${esc(heatPayload.updatedAt || heatPayload.servedAt || "")}</span></div>
-            ${sectors.map((sector, index) => {
-              const pct = num(sector.pct ?? sector.avgPct);
-              const leader = sector.leader || list(sector.stocks)[0] || {};
-              const leaderText = typeof leader === "string" ? leader : leader ? `${leader.name || leader.code || "--"} ${num(leader.pct) >= 0 ? "+" : ""}${num(leader.pct).toFixed(2)}%` : "--";
-              return `<article class="sector-card ${pct >= 0 ? "hot up" : "cold down"}" data-market-direct-sector="${index}" role="button" tabindex="0">
-                <div><h3>${esc(sector.name || sector.industry || "--")}</h3><strong>${pct >= 0 ? "+" : ""}${pct.toFixed(2)}%</strong></div>
-                <p>${esc(sector.count || list(sector.stocks).length || 0)} 檔 · ${esc(yi(sector.totalValue || sector.value || (num(sector.amountYi) * 100000000)))}</p>
-                <small>▲ ${esc(sector.up || 0)} ▼ ${esc(sector.down || 0)}</small>
-                <span>${esc(leaderText)}</span>
-              </article>`;
-            }).join("")}
-          `;
-        }
-        const count = panel.querySelector(".sector-section .section-title > span");
-        if (count) count.textContent = `全部 · ${sectors.length} 個`;
+        renderHeatmapCards(panel, heatPayload);
         const message = panel.querySelector("#terminal-message");
         if (message) message.textContent = "市場總覽已同步 Supabase/API，點熱力圖產業可看相關股票。";
         paintMarketAi(panel, marketPayload, heatPayload);
@@ -487,6 +605,14 @@
         const aiDrilldown = event.target.closest?.("[data-market-ai-drilldown]");
         if (aiDrilldown) {
           openAiDrilldown(aiDrilldown.dataset.marketAiDrilldown);
+          return;
+        }
+        const heatmapModeButton = event.target.closest?.("[data-market-heatmap-mode]");
+        if (heatmapModeButton) {
+          window.__fumanMarketHeatmapMode = heatmapModeButton.dataset.marketHeatmapMode || "all";
+          const panel = ensureMarketScaffold();
+          const heatPayload = window.__fumanMarketHeatmapPayload?.heatPayload || {};
+          renderHeatmapCards(panel, heatPayload);
           return;
         }
         const close = event.target.closest?.("[data-market-direct-close]");
