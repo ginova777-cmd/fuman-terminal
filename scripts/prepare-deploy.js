@@ -28,12 +28,11 @@ run("guard:source", ["npm", "run", "guard:source"]);
 run("verify:strategy1-open-buy-ui", ["npm", "run", "verify:strategy1-open-buy-ui"]);
 const bumpStatus = runCheck("verify:bump", ["npm", "run", "verify:bump"]);
 if (bumpStatus !== 0) {
+  run("version bump approval", ["node", "scripts/require-version-bump-approval.js", "npm run bump:version"]);
   run("bump:version", ["npm", "run", "bump:version"]);
 }
-run("sync:source", ["npm", "run", "sync:source"]);
 run("verify:version", ["npm", "run", "verify:version"]);
 run("verify:sw", ["npm", "run", "verify:sw"]);
 run("verify:mobile-layout", ["npm", "run", "verify:mobile-layout"]);
-run("verify:source-sync", ["npm", "run", "verify:source-sync"]);
 
 console.log("[prepare-deploy] ok");

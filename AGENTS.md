@@ -52,6 +52,10 @@ fuman-terminal
 - 修改後立即 `node --check` 相關 JS，確認 diff 只包含本次需求，再 push 到獨立 branch。
 - 沒有使用者明確要求正式發版時，不要跑 `npm run bump:version`、`npm run release:main`、`vercel --prod` 或其他會改 production alias 的流程。
 - `version.json`、`index.html`、`fuman-sw.js`、service worker cache 不是資料修復手段；不要用 version bump 掩蓋資料、snapshot、renderer 或 fallback 問題。
+- `origin/main` 是唯一正式來源；hotfix 必須先 commit 到獨立分支，再 merge / fast-forward 到 `origin/main`，才算正式。
+- `C:\fuman-terminal` 只當 production mirror；要用它部署前，`git -C C:\fuman-terminal status -sb` 必須乾淨且不能 behind，只允許 `git pull --ff-only` 同步，不在那裡開發。
+- 部署前硬檢查由 `scripts/verify-sync-hard-gate.js` 執行；它會擋 dirty tree、untracked files、非 main / 指定 release branch、behind/upstream 未推、錯誤 `.vercel/project.json`、未提交版本檔。
+- `npm run bump:version`、`npm run release:main`、`npm run deploy` 都必須明確設定 `ALLOW_VERSION_BUMP=1` 才能進行，避免 production alias 無預警跳版。
 
 正式 alias 判讀規則：
 
