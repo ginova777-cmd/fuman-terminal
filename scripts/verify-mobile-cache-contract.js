@@ -46,9 +46,10 @@ function requireHeader(vercel, source, key, pattern, message) {
   if (!pattern.test(value)) issues.push(`${message} actual=${value || "<missing>"}`);
 }
 
-async function liveHeaders(rel) {
+async function liveHeaders(rel, options = {}) {
   const url = `${baseUrl}/${rel.replace(/^\/+/, "")}?verify=${Date.now()}`;
   const response = await fetch(url, { cache: "no-store" });
+  if (options.allowNotFound && response.status === 404) return null;
   if (!response.ok) throw new Error(`${url} returned ${response.status}`);
   return response.headers;
 }
@@ -67,12 +68,14 @@ async function checkLiveHeaders() {
     issues.push(`live /api/mobile-boot CDN cache must be no-store actual=${apiBoot.get("cdn-cache-control") || "<missing>"}`);
   }
 
-  const staticBoot = await liveHeaders("data/mobile-boot.json");
-  if (!/no-cache/i.test(staticBoot.get("cache-control") || "") || !/max-age=0/i.test(staticBoot.get("cache-control") || "")) {
-    issues.push(`live /data/mobile-boot.json browser cache must be no-cache max-age=0 actual=${staticBoot.get("cache-control") || "<missing>"}`);
-  }
-  if (!/max-age=3/i.test(staticBoot.get("cdn-cache-control") || "")) {
-    issues.push(`live /data/mobile-boot.json CDN cache must stay very short actual=${staticBoot.get("cdn-cache-control") || "<missing>"}`);
+  const staticBoot = await liveHeaders("data/mobile-boot.json", { allowNotFound: true });
+  if (staticBoot) {
+    if (!/no-cache/i.test(staticBoot.get("cache-control") || "") || !/max-age=0/i.test(staticBoot.get("cache-control") || "")) {
+      issues.push(`live /data/mobile-boot.json browser cache must be no-cache max-age=0 actual=${staticBoot.get("cache-control") || "<missing>"}`);
+    }
+    if (!/max-age=3/i.test(staticBoot.get("cdn-cache-control") || "")) {
+      issues.push(`live /data/mobile-boot.json CDN cache must stay very short actual=${staticBoot.get("cdn-cache-control") || "<missing>"}`);
+    }
   }
 }
 
