@@ -1,1056 +1,244 @@
-# Fuman Terminal AGENTS.md
+# AGENTS.md
 
 Last updated: 2026-06-25 Asia/Taipei
 
-給後續接手的 Codex：這份是目前有效狀態。舊版同步站、舊 GitHub workflow、舊 auto-release、舊 governance 文件、舊排程 wrapper 都已退休。不要為了通過舊檢查而把它們復活。
+給後續接手本工作區的 Codex：這份只保留目前有效狀態。不要沿用舊 Google Sheet、舊 static JSON、舊同步路徑、舊版本 bump、舊黃框 UI、舊部署流程。
 
-## 目前目標
+## 主線
 
-使用者要的是一個快、穩、可公開給客戶看的輔滿股票終端。
-
-目前方向：
-
-- 正式站只用 `https://fuman-terminal.vercel.app`
-- 架構以 Supabase API / snapshot 為資料核心
-- 桌面與手機都走固定 shell、快照優先、即時資料分流
-- 策略2當沖維持即時，不冷處理
-- 其他策略與籌碼頁面走「上一個完整掃」/ 後端預產 route snapshot
-- 不靠 bump 版本號解決資料或手感問題
-- 不靠 Google Sheet、靜態 JSON、瀏覽器強刷、舊 workflow 當正式資料來源
-
-## 目前正式入口
+正式站：
 
 ```text
-Production URL:
 https://fuman-terminal.vercel.app
-
-Production repo / app:
-C:\fuman-terminal
-
-Vercel project:
-fuman-terminal
 ```
 
-只把 `C:\fuman-terminal` 當正式程式根目錄。不要再建立或依賴已退休的同步/發布副本。
-
-部署安全規則：
-
-- `origin/main` 是唯一 production source；策略 hotfix 必須先在獨立 branch / worktree commit，再 merge 或 fast-forward 到 `origin/main`。
-- `C:\fuman-terminal` 只當 production mirror；不要在這裡開發、rebase、累積未提交 diff 或直接混入策略修正。
-- 要使用 `C:\fuman-terminal` 前，`git -C C:\fuman-terminal status -sb` 必須乾淨且不能 behind；只允許用 `pull --ff-only` 或同步腳本對齊。
-- 每個策略修正獨立處理：Strategy2 coverage、Strategy5 label、CB snapshot、買賣超 verifier / renderer、左側解鎖，不要混成一包。
-- 部署前必須跑 `npm run guard:source`；它會擋 dirty tree、untracked files、非 `main` / 指定 release branch、behind/upstream 未推、錯誤 `.vercel/project.json`、未提交版本檔。
-- 乾淨 worktree 部署前必須確認 `.vercel/project.json` 指向正式 `fuman-terminal` 專案；缺檔不可盲部署。
-- 沒有使用者明確要求正式發版時，不要跑 `npm run bump:version`、`npm run release:main`、`npm run deploy`、`vercel --prod`。
-- `npm run bump:version`、`npm run release:main`、`npm run deploy` 必須明確設定 `ALLOW_VERSION_BUMP=1` 才能進行，避免 production alias 無預警跳版。
-- `version.json`、`index.html`、`fuman-sw.js`、service worker cache 不是資料修復手段；不要用 version bump 掩蓋資料、snapshot、renderer 或 fallback 問題。
-- `data/scan-receipts/*`、暫存 market-ai/mobile data、未追蹤檔不可隨策略 hotfix 混進 commit，除非該任務明確要求。
-
-## 已退休且不可復活
-
-以下流程已刪除或退出正式鏈路：
-
-- GitHub Actions workflow dispatch
-- 舊外部排程 dispatch API
-- 舊 auto main release wrapper
-- 舊 patrol schedule wrapper
-- 舊 fuman master schedule wrapper
-- 舊 sync / publish-sync Vercel 專案
-- 舊 root workflow yml
-- 舊 workflow alert 寄信腳本
-- 舊 sync-only governance docs
-- 舊 static JSON 當正式 freshness authority
-
-如果 verifier 或程式碼還要求以上舊檔案，優先更新 verifier / 引用，不要把舊檔案加回來。
-
-## 目前資料權威
-
-正式資料流：
+固定版本：
 
 ```text
-scanner / writer
--> Supabase run 或 route snapshot
--> no-store API
--> fixed shell / Canvas UI
+public-terminal-fast-20260623-09
 ```
 
-正式 freshness 來源：
-
-- Supabase complete run
-- Supabase route snapshot
-- API 回傳的 `runId` / `snapshotId` / `updatedAt` / `usedDate`
-
-## 資料日期規則
-
-只有以下頁面必須是當天資料：
-
-- 市場總覽
-- 策略2當沖
-- 即時雷達
-
-以下頁面是「每天固定完整掃後更新」，在完整掃尚未安排或尚未跑完前，顯示前一個完整掃結果是正常行為：
-
-- 策略1
-- 策略3
-- 策略4
-- 策略5
-- 買賣超
-- CB
-- 權證走向
-
-驗證腳本不可把上述完整掃頁面因為日期是前一天就判成 stale。這些頁面的正確 gate 是 `latest-complete`：必須有 Supabase complete run、readback、result count / completeness 合理；但不要求 `scan_date` 一定等於今天。只有 `RUN_GATE_DATE_STRICT` 指定的 live 頁才需要 same-day，預設只包含 `strategy2`。
-
-策略快照 / API gate 不能只看 `run_id`。所有策略資料接入 desktop snapshot 或 terminal fast bundle 前，至少要核對：
-
-- run row 必須 `status=complete` 且 `complete=true`。
-- scanner readback 必須成功，不能只寫入後未回讀就當完成。
-- `expected_total` / `scanned_count` / `readback_count` 這類完整性欄位必須合理。
-- 有 `expected_total` 的策略必須確認 `expected_total > 0`、`scanned_count > 0`、`expected_total === scanned_count`。
-- results row count 必須和 run metadata 對得上；若有 `result_count`，readback row count 必須一致。
-- results row count 為 0 或小於預期時，不能把它包進正式 snapshot。
-- 小包 API 可只回 `limit=N` 筆可畫資料，但 `count` / `resultCount` / readback 必須代表完整 complete run 結果，不可把小包筆數誤當完整結果。
-- API 回傳給前端的小包可以限制 `limit`，但完整性判斷必須在後端用 complete/readback/expected_total 做完。
-- 若 complete/readback/expected_total 任一 gate 不過，保留上一版可用 snapshot，不要發布 partial 或空包假裝成功。
-
-不是正式 freshness 來源：
-
-- `/data/*.json`
-- `version.json`
-- service worker cache
-- frontend version bump
-- browser hard refresh
-- Vercel redeploy side effect
-- Google Sheet
-
-## Supabase
-
-Supabase project:
+資料主線：
 
 ```text
-https://jxnqyqnigsppqsxinlrq.supabase.co
+Supabase only polling / snapshot
 ```
 
-正式站需要以下 Vercel environment variables：
+終端架構：
 
 ```text
-SUPABASE_URL
-SUPABASE_ANON_KEY
-FUMAN_SUPABASE_SERVICE_ROLE_KEY
+fixed shell + Canvas / OffscreenCanvas + compact API + route snapshot
 ```
 
-注意：
+## 絕對不要做
 
-- service role key 只能放在 Vercel / 本機 secret，不要寫進程式碼、文件、commit、聊天。
-- 若 service role key 曾外洩，請使用者到 Supabase 旋轉。
-- 前端展示用 anon key / RLS；寫 snapshot 或維護任務才用 service role。
+- 不要隨便 bump 版本號。
+- 不要用 cache bump / version bump 假裝修好資料或速度。
+- 不要從 dirty 的 `C:\fuman-terminal` 直接 deploy。
+- 不要復活 `C:\fuman-terminal-sync`。
+- 不要復活 Google Sheet 正式資料源。
+- 不要復活 static JSON data manifest。
+- 不要讓客戶看到 Codex latency / debug 面板。
+- 不要把策略2放進冷 snapshot。
+- 不要把市場總覽退回泛用 `Rank / Code / Signal` 表格。
+- 不要把 AI 判讀退回純文字列表。
+- 不要把舊黃框跑馬燈 / 強弱統計區塊加回來。
 
-## 桌面終端目前架構
+## 日期規則
 
-桌面已朝極致化方向改造：
+必須當天：
 
-- fixed shell
-- Canvas / OffscreenCanvas 列表
-- memory snapshot
-- IndexedDB / local snapshot fallback
-- route snapshot first
-- latency log
-- polling 降噪
-- 舊大主程式冷啟與隔離
-- 非策略頁逐步 fixed shell / virtual list
+| 頁面 | 規則 |
+|---|---|
+| 市場總覽 | same-day |
+| 策略2-當沖雷達 | same-day live |
+| 即時雷達 | same-day live |
 
-重要原則：
+只要求最新完整掃，不要求當天：
 
-- 左側分頁點擊必須先立即切 shell，不等 API。
-- 舊資料可以先用 snapshot 顯示，再背景更新。
-- 點擊期間暫停背景 polling，避免搶主執行緒。
-- 不要讓舊 `terminal-app.js` 的 showView / render / warm load 搶回主控制權。
+| 頁面 | 規則 |
+|---|---|
+| 策略1 | latest-complete |
+| 策略3 | latest-complete |
+| 策略4 | latest-complete |
+| 策略5 | latest-complete |
+| 買賣超 | latest-complete |
+| CB | latest-complete |
+| 權證走向 | latest-complete |
+| 自選股 | latest-match / route snapshot |
 
-## 手機終端 /mobile 固定規則
+完整掃頁面顯示前一個交易日是正常狀態，不可誤判 stale。
 
-手機終端正式公開路徑固定是：
+## 市場總覽 / 熱力圖
+
+市場總覽是正式桌面終端主畫面，不是泛用策略頁。
+
+固定顯示：
+
+- 上方四張指數卡：加權指數、櫃買指數、台指期夜盤、台指次月。
+- 下方是熱力圖。
+- 熱力圖分類 tabs 固定包含：`全部`、`官方產業`、`電子細分`、`群組概念`、`集團股`。
+- 點熱力圖產業 / 分類項目，要開啟相關股票 modal。
+- modal 要顯示股票代號、名稱、漲跌幅、成交值，以及可用的外資 / 投信 / 自營等欄位。
+- 熱力圖細項沒有資料時，要顯示明確受控空狀態，不可空白。
+
+已硬移除且不可恢復：
+
+- `ticker-strip`
+- `strength-panel`
+- 舊黃框跑馬燈
+- 舊黃框強弱統計
+- 市場總覽泛用 `Rank / Code / Signal` 表格
+
+相關檔案：
 
 ```text
-https://fuman-terminal.vercel.app/mobile
+terminal-market-overview-restore.js
+terminal-market-overview-restore.css
+terminal-core.js
+fuman-sw.js
 ```
 
-手機終端是獨立 shell，不是桌面終端的縮小版。手機頁不需要、也不得顯示進入電腦終端的「終端」按鈕。
+修改市場總覽後，可以更新 market overview asset epoch 讓 service worker 吃新資產；不可 bump 主版本。
 
-固定入口與路由：
+## AI 判讀
 
-- `/mobile` 必須由 `vercel.json` rewrite 到 `/api/mobile-page`。
-- `/mobile.html` 也必須 rewrite 到 `/api/mobile-page`。
-- 行動裝置進 `/` 時，正式 Vercel rewrite 會導到 `/api/mobile-page`；`index.html` 也保留 fetch `/api/mobile-page` 的 fallback。
-- `api/mobile-page.js` 只負責 no-store 回傳 `mobile.html`，不要在這裡混資料邏輯。
-- `mobile.html` 是手機 shell；不要把它改成桌面 terminal shell、login gate、或 marketing landing page。
+AI 判讀是市場總覽的第二分頁。
 
-手機頁禁止事項：
+固定顯示：
 
-- `mobile.html` 不得出現 `href="/?desktop=1"`。
-- `mobile.html` 不得出現 `>終端</a>` 這種桌面終端入口。
-- 不要把桌面側欄、桌面 Canvas shell、桌面 debug / latency 面板搬進手機頁。
-- 不要用 `serviceWorker.register` 或 service worker stale cache 當手機正式資料來源。
-- 不要用 `/data/mobile-boot.json` 當 primary boot endpoint。
-- 不要靠 static JSON manifest、Google Sheet、`C:\fuman-terminal-sync`、version bump 或 Vercel redeploy side effect 修手機資料。
+- 上方顯示 AI 判讀總覽圖表 / 儀表板。
+- 必須包含樣本數、上漲、下跌、信心、盤勢結論、風險或領先族群等摘要。
+- 下方顯示 AI 今日重點、風險提醒、觀察標的 / 族群列表。
+- 黃框箭頭或可點擊符號點進去，要開啟對應股票 / 族群 modal。
+- modal 要維持深色質感卡片，不可跳成瀏覽器預設白底文字。
+- AI 判讀 09:00-13:30 巡邏；收盤後顯示最後 13:30 snapshot。
+- 若 13:30 snapshot 尚未產生，可顯示最近 snapshot，但必須標明 snapshot 時間與 source。
 
-手機資料流：
+AI 判讀不可只顯示純文字，不可沒有圖表 / 儀表板。
+
+## 策略2
+
+策略2是當沖即時資料。
+
+規則：
+
+- 不可冷處理。
+- 不可放進 desktop route snapshot。
+- 可做 compact / live API。
+- 可做 pointerdown prewarm。
+- 可做 memory cache，但必須保留 live intent。
+
+## 發布 / 上傳規則
+
+正式發布只能從乾淨 release clone / worktree 執行。
+
+固定規則：
+
+1. origin 必須是：
 
 ```text
-mobile.html
--> /api/mobile-boot
--> /api/mobile-fragment?tab=...
--> Supabase API / latest complete run / live run
+https://github.com/ginova777-cmd/fuman-terminal.git
 ```
 
-手機 shell 必須使用：
+2. branch 必須追蹤 `origin/main` 或明確 release branch。
+3. 不可把 `C:\fuman-terminal` 或舊 `C:\fuman-terminal-sync` 當 upstream。
+4. 發布前必跑：
 
-- primary boot endpoint：`/api/mobile-boot`
-- fragment endpoint：`/api/mobile-fragment?tab=ai|strategy1|strategy2|strategy3|strategy4|strategy5|chip|cb|warrant|watch`
-- JSON / fragment fetch 必須 `cache:"no-store"` 並帶 cache-busting / version hash。
-- `/api/mobile-boot` 必須設 `Cache-Control: no-store`、`CDN-Cache-Control: no-store`、`Vercel-CDN-Cache-Control: no-store`。
-- fragment URL 必須保留 `?v=hash`，以 boot hash / fragment hash 控制更新。
-- tab 切換要優先使用已載入 boot 和 fragment cache；hash 沒變不要重抓或重畫。
-
-手機 tabs 固定包含：
-
-```text
-AI
-策略1
-策略2
-策略3
-策略4
-策略5
-法人
-CB
-權證
-自選
+```powershell
+git status -sb
+npm run verify:publish-gate
 ```
 
-資料日期規則跟桌面一致：
+5. publish gate 必須通過才可：
 
-- 策略2當沖、即時雷達、市場總覽是當天資料。
-- 策略1 / 3 / 4 / 5、買賣超、CB、權證走向是每日完整掃描後更新；完整掃尚未自然跑完時，顯示上一個 latest complete run 是正常的。
-- 策略1若期貨/選擇權條件尚未 ready，可顯示受控等待 run，例如 `strategy1-waiting-...-futopt-not-ready`；這不是 fallback。
-- 自選 tab 空清單是正常狀態，不得因 rows=0 判 fail。
+```powershell
+vercel --prod --yes
+```
 
-手機 UI 固定驗收範圍：
+6. deploy 後一定驗正式 alias：
 
-- 電腦瀏覽器直接開 `/mobile`
-- 手機直向
-- 手機橫向
-- 平板
-- 夜幕模式
-- 陽光模式
+```powershell
+npm run guard:production
+npm run verify:live-version
+npm run monitor:production
+```
 
-每個模式都必須實際點過所有 tabs，確認：
+7. 若修改手機，追加：
 
-- 頁面不是白底純文字。
-- inline CSS 有合法 `:root{...}`，不得出現壞掉的 `rootcolor-scheme...`。
-- tabs 是 flex，可水平滑動或在大螢幕換行。
-- hero / card 有背景、border、padding。
-- 沒有水平溢出。
-- 每個資料 tab 有 rows/cards 或明確受控等待狀態。
-- runId / date / freshness 顯示合理。
-- 沒有 `timeout`、`HTTP 503`、`fallback`、`static json`、`Google Sheet`、`fuman-terminal-sync`、`讀取失敗`、`載入失敗`。
-
-手機版曾發生過的實際問題：
-
-- `mobile.html` 的 inline CSS 被錯誤壓縮成 `rootcolor-schemedark...`，正式頁變成只剩瀏覽器預設白底文字。修正方式是恢復合法 CSS，並讓 `verify-mobile-layout.js` 檢查 inline mobile shell CSS。
-- `/api/mobile-fragment?tab=strategy1` / `warrant` 曾被誤判 timeout；要分開驗 API 回 200、fragment HTML 有 `data-mobile-fragment-key`、瀏覽器 `#content` 是否成功塞入，不要只看一個錯誤字串。
-- 手機頁曾顯示「終端」桌面入口；使用者已要求剔除。`verify-mobile-entry-redirect.js` 會擋 `href="/?desktop=1"` 和 `>終端</a>`。
-
-手機驗證指令：
-
-```bash
-npm run verify:mobile-entry
-npm run verify:mobile-layout
-npm run verify:mobile-cache-contract
-npm run verify:mobile-api-only
-npm run verify:mobile-layout:live
-npm run verify:mobile-cache-contract:live
+```powershell
 npm run verify:mobile-api-only:live
-npm run verify:mobile-responsive-ui
-npm run verify:publish-gate
+npm run verify:mobile-cache-contract:live
 ```
 
-`verify:mobile-responsive-ui` 會用 headless Chrome 驗：
+8. 若修改桌面 UI，必須實際驗：市場總覽、AI 判讀、策略1-5、買賣超、CB、權證、自選股。
+9. `data/scan-receipts/*` 不要跟核心程式修正混 commit，除非明確決定它們是新的 baseline。
+10. 不要手動 full scan 來掩蓋問題。策略1/3/4/5、買賣超、CB、權證等完整掃資料等自然排程更新。
 
-- `mobile-desktop-night`
-- `mobile-desktop-sun`
-- `mobile-phone-portrait-night`
-- `mobile-phone-portrait-sun`
-- `mobile-phone-landscape-night`
-- `mobile-phone-landscape-sun`
-- `mobile-tablet-night`
-- `mobile-tablet-sun`
+## 策略 / 籌碼 Codex 合約
 
-如果在 Codex sandbox 裡跑 live Node fetch 出現 `EACCES` 或 `fetch failed`，通常是本機權限限制，不代表正式站壞；依規則用提升權限重跑 live verifier。
-
-手機終端修改 / 上線流程：
-
-1. 用乾淨 worktree 或 deploy-clean clone 修改，不要混入 `data/scan-receipts/*` 或 `data/mobile-analysis/*`。
-2. 先跑 local mobile gates。
-3. 跑 `npm run verify:publish-gate`。
-4. 只有使用者明確要求正式生效時，才 push main 並 `vercel --prod`。
-5. 部署後至少跑 `verify:mobile-layout:live`、`verify:mobile-api-only:live`，必要時跑 `verify:mobile-responsive-ui`。
-6. 同步 `C:\fuman-terminal` 時只能 `pull --ff-only`，不要處理或 revert 既有資料髒檔，除非使用者明確要求。
-
-### 2026-06-24 策略 fast shell API-only 修正
-
-正式站目前策略頁 fast shell 基準：
+每個策略或籌碼 Codex 只負責自己的：
 
 ```text
-Latest strategy fast shell UI cleanup commit:
-30b76d194fb1bd2018fa2d83fca70551179328e0
-
-API-only polling stability commit:
-43e89f01cee68948c3b3da53d2bca9920d569f38
-
-Strategy3 API bridge commit:
-057f7ec1a14abcaddcb830b90246c66537940bad
+scanner
+Supabase complete run / table / view / RPC
+API handler
+snapshot payload
 ```
 
-策略1 / 3 / 4 / 5 在桌面 fixed shell 必須走 API-only rows：
-
-- 不再用 DOM snapshot 當策略資料來源。
-- fast shell 啟動時會清掉策略1 / 3 / 4 / 5 的舊 `sessionStorage` / `IndexedDB` DOM snapshot。
-- `strategy3` 不可再顯示 `dom-snapshot` 來源，不可把 DOM 文字抽成 `多多訊號2035`、`A區數量` 這類錯欄位資料。
-- `terminal-desktop-fast-shell.js` 的 `__fumanDesktopFastShellApiOnlyPoll` marker 必須保留，避免同頁重新載入新 fast shell 腳本時被舊 marker 擋住。
-- API-only polling 需要保守輪詢，目前 `API_ONLY_POLL_MS = 30000`；不要改成密集 polling。
-- polling 必須用 row signature 比對；資料簽名沒變時不可重建整個 DOM，只更新 Canvas / status，避免每 30 秒跳動。
-- 策略2當沖維持 live intent，不放進冷處理；不要把策略2加入 API-only cold snapshot 清理規則。
-
-策略1 / 2 / 3 / 4 / 5 的策略頁舊 chrome 已剔除：
-
-- 隱藏舊 `strategy-header`。
-- 隱藏左側 `strategy-list` / 策略清單。
-- 隱藏舊 `strategy-toolbar`。
-- 隱藏舊三張 metrics 卡。
-- 隱藏舊搜尋股票列。
-- 隱藏 Canvas shell 內部搜尋 / 刷新 / status toolbar。
-- 保留且優先顯示 fixed shell / Canvas 策略結果主畫面。
-
-不可回復：
-
-- 不要恢復黃框區域的舊策略清單、舊 toolbar、舊 metrics、舊搜尋列。
-- 不要用 DOM snapshot / session snapshot / IndexedDB snapshot 取代策略 API rows。
-- 不要靠 bump 版本號或 service worker cache bump 掩蓋資料或畫面錯誤。
-- 不要把 Codex latency/debug 面板露給客戶。
-
-### 2026-06-24 買賣超 / CB fixed shell 銜接狀態
-
-本段是給後續 Codex 的戰鬥狀態交接。使用者已明確指出買賣超畫面曾經「沒有資料」、「內容顯示很奇怪而且很慢」、「外資+投信佔5日均量不可能是 0」。這些都不是前端殼要重寫的問題，而是資料源、renderer 與舊 verifier 的銜接問題。
-
-目前正式 main / production 已接上的基準：
+不可碰：
 
 ```text
-Latest verified production HEAD:
-19e6b38e731b9c7fab3d5d6d12c7805247325e5b
-
-Known included commits:
-794f59dc Remove retired chip static checks
-b81fb1de Render fixed chip pages on main canvas
-13afa1d8 Restore chip trade canvas filters
-f64fd324 Render chip trade canvas table directly
-6136d143 Fix chip foreign trust volume counts
+terminal shell
+fixed shell / Canvas 架構
+版本號
+Vercel 部署
+其他策略規則
 ```
 
-買賣超固定 shell 現況：
-
-- `terminal-desktop-fast-shell.js` 不可再讓買賣超 / CB / 權證走泛用策略 Canvas worker renderer；這三個 fixed pages 必須由 main thread Canvas 直接畫，避免空白或欄位錯位。
-- 買賣超不可顯示泛用策略表格欄位 `Rank / Code / Signal`；要用買賣超自己的欄位，例如 `外資買超 / 投信買超 / 連買 / 佔均量 / 漲幅`。
-- fast shell 第一屏買賣超預設 filter 是 `foreignStreak`，讓 Supabase snapshot / institution API 可立即畫出資料。
-- `tdcc1000` 是較慢的 TDCC 組合條件，必須保留，但只在使用者點擊該 filter 時才打 `/api/institution-tdcc-breakout-latest`，不要拿它阻塞第一屏。
-
-買賣超原本 5 個策略模式都要存在：
+API 必須支援：
 
 ```text
-tdcc1000                外資連3買 + 1000張連3週增     -> /api/institution-tdcc-breakout-latest
-foreignTrustVolumePct   外資+投信佔5日均量             -> /api/institution-latest
-foreignStreak           外資連買日                     -> /api/institution-latest
-trustStreak             投信連買日                     -> /api/institution-latest
-jointStreak             同買日                         -> /api/institution-latest
+canvas=1&compact=1&shell=1&limit=N
 ```
 
-買賣超 API / scanner 規則：
-
-- `api/institution-latest.js` 必須支援 `canvas=1&compact=1&shell=1&limit=N`，並回小包可畫 rows，不要回整包大資料。
-- `api/institution-tdcc-breakout-latest.js` 也必須支援 `canvas=1&compact=1&shell=1&limit=N`。
-- `api/institution-latest.js` 的 transport gate 是 `complete-run-readback`；只允許 Supabase complete run + readback 完整通過後進正式輸出。
-- `scripts/scan-institution-cache.js` 寫入 Supabase 後必須 read back，確認 count / completeness 後才 mark complete。
-- 小包 `limit` 只能限制前端繪圖 rows；完整性判斷不能用小包筆數代替完整 run count。
-
-買賣超「外資+投信佔5日均量」不可再假 0：
-
-- API rows 若有 `foreignTrustBuyVolumePct` / `institutionBuyVolumePct`，前端可直接使用。
-- 若舊 snapshot 只有 `foreign`、`trust`、`fiveDayAvgVolume`，必須用 `(foreign + trust) / fiveDayAvgVolume * 100` 推導。
-- 若對應 endpoint 尚未載入，filter badge count 顯示 `...`，不要顯示 `0`。
-- 只有在對應 endpoint 實際完成 fetch 且回傳 zero results 時，才可以顯示 `0`。
-
-已確認解法，不要回退：
-
-- `api/institution-latest.js` 現在必須直接補出 `foreignTrustBuyVolumePct` 與 `institutionBuyVolumePct`。
-- 公式固定為 `(外資 + 投信) / 5日均量 * 100`；欄位來源是 `foreign` + `trust` / `fiveDayAvgVolume`。
-- `terminal-desktop-fast-shell.js` 必須保留前端 fallback：即使吃到舊 snapshot 沒帶 `foreignTrustBuyVolumePct` / `institutionBuyVolumePct`，也要用 `foreign` / `trust` / `fiveDayAvgVolume` 現算。
-- 不可把缺欄位、舊 snapshot、跨 endpoint 未載入誤判成 `0`。
-- TDCC 這類另一個 endpoint 尚未載入的 count 要顯示待載入符號 `...`，不可顯示假 `0`。
-
-這次實際遇到的舊阻擋：
-
-- 舊 `verify:chip` / `health:chip` 仍硬追已退休的 `data/institution-latest.json`，在乾淨 API-only clone 會失敗；處理方式是刪 verifier / script 引用，不恢復靜態 JSON。
-- 舊 snapshot 可能沒有 `foreignTrustBuyVolumePct` / `institutionBuyVolumePct`，導致前端若只看顯式欄位會顯示假 `0`；處理方式是 API 補欄位 + fast shell fallback。
-- 舊泛用策略 renderer 會把買賣超畫成 `Rank / Code / Signal`，內容怪且像沒資料；處理方式是買賣超使用自己的 Canvas table renderer。
-- 部署驗證時 preview deployment 與正式 alias 可能短暫不同步；驗證必須看 `https://fuman-terminal.vercel.app` 正式 alias 與 production monitor，不可只看 preview URL。
-
-已退休的買賣超靜態 verifier 不可復活：
-
-- `verify:chip` / `health:chip` 已從 `package.json` 移除。
-- `scripts/verify-chip-trade-contract.js` 已移除。
-- `scripts/health-check-chip-trade.js` 已移除。
-- 不要為了舊 verifier 恢復 `data/institution-latest.json`；乾淨 API-only clone 沒有這個退休靜態 JSON 是正確狀態。
-
-route snapshot / fast bundle 接入要求：
-
-- 非策略2的 fixed / 策略資料源要能被 `/api/desktop-route-snapshot` 收進 endpoints。
-- `/api/terminal-fast-bundle` 要優先讀 Supabase `desktop_route_snapshot`。
-- strategy2 是當沖即時資料，不可放進 desktop route snapshot；可做 compact/live API、pointerdown prewarm、memory cache，但必須保留 live intent。
-- 不要新增密集 polling，不要讓 `terminal-app.js` 在切頁瞬間重新接管畫面。
-
-部署與驗證：
-
-- 不要直接從 dirty 的 `C:\fuman-terminal` 部署；必要時使用乾淨 worktree。
-- 修改 JS 後至少跑 `node --check <改過的 js 檔>`、`npm run verify:version`、`npm run verify:runtime-hotfix`、`npm run verify:desktop-api-only`。
-- 部署後驗正式站，不只看 preview URL：`npm run verify:live-version`、`node --use-system-ca scripts\verify-deployment.js`、`npm run e2e:smoke`、`npm run monitor:production`。
-- production health 應維持 `snapshotHit=true`、`snapshotFresh=true`、`partial=false`、`endpointCount>=10`、`hasStrategy2Snapshot=false`。
-
-## 策略規則
-
-### 策略1：明日開盤入正式流程
-
-策略1保留在終端，不能刪掉，也不能改成會員牆或靜態展示。策略1目前是正式站實戰鏈路：
+API 回傳至少要有：
 
 ```text
-21:30 候選完整掃
--> Supabase strategy1 complete run
--> 08:55 最終確認 / decision_ready
--> /api/open-buy-latest no-store API
--> /api/desktop-route-snapshot
--> /api/terminal-fast-bundle snapshot first
--> 終端策略1畫面
--> 09:00 只執行 BUY 名單
+runId
+date / usedDate / updatedAt
+source
+count / resultCount
+rows / items
 ```
-
-目前程式基準：
-
-```text
-Production code baseline before this AGENTS update:
-e40588a2
-
-Strategy1 API:
-api/open-buy-latest.js
-
-Strategy1 scanner:
-scripts/scan-open-buy-cache.js
-api/scan-open-buy.js
-
-Desktop snapshot builder:
-lib/desktop-route-snapshot-builder.js
-
-Fast bundle:
-api/terminal-fast-bundle.js
-```
-
-策略1資料權威：
-
-- `strategy1_open_buy_runs`
-- `strategy1_open_buy_results`
-- `v_strategy1_ready_status`
-- `/api/open-buy-latest`
-- `/api/desktop-route-snapshot`
-- `/api/terminal-fast-bundle`
-
-策略1不是資料權威：
-
-- `data/open-buy-latest.json`
-- `data/open-buy-page-*.json`
-- `data/open-buy-backup.json`
-- `data-manifest`
-- `data-status-index`
-- `live-freshness-ok`
-- `verify-data-freshness`
-- `fuman-terminal-sync`
-- `schedule-dispatch`
-- service worker cache
-- frontend version bump
-
-策略1完整掃時間與用途：
-
-- `21:30`：產生明日候選。完整掃全市場普通股，寫入 Supabase complete run。
-- `08:55`：最終確認。確認期貨/市場必要資料、run readiness、`decision_ready`，供開盤前展示與執行。
-- `09:00`：只執行 `decision=BUY` 名單。`WATCH` 只觀察，`BLOCK` 不進場。
-- `09:01`：只有部分 setup 的進場提示會要求站回開盤價；這是策略輸出文字的一部分，不要在前端另改規則。
-
-策略1 scanner 必須這樣跑：
-
-```powershell
-$env:FULL_SCAN="1"
-node scripts\scan-open-buy-cache.js
-```
-
-scanner 規則：
-
-- `FULL_SCAN=1` 是必要條件；非 full scan 必須直接失敗。
-- `OPEN_BUY_API_ONLY = true` 必須維持。
-- 不允許 partial static JSON 發布。
-- 掃描全市場股票 universe，預設批次 `OPEN_BUY_BATCH_SIZE=48`。
-- 每個 chunk 失敗最多 retry 3 次；仍失敗時切半重試。
-- 任何 failed code、掃描數不足、`scanned.size !== codes.length` 都不能 publish complete。
-- running 狀態只可寫 Supabase status，不可覆蓋 latest complete result。
-- complete output 才能 upsert `strategy1_open_buy_runs` / `strategy1_open_buy_results` / latest row。
-- readback 必須核對 latest row、latest complete run、results row count 與 run count。
-
-策略1 API gate：
-
-```text
-gate = complete-run-authoritative+decision-ready
-```
-
-`/api/open-buy-latest` 必須：
-
-- 永遠回 `Cache-Control: no-store`。
-- 支援 `canvas=1&compact=1&shell=1&limit=N`。
-- compact / shell / snapshotBuild / fastBundle 路徑也必須讀 `v_strategy1_ready_status`，不能跳過 `decision_ready`。
-- 先讀 `v_strategy1_ready_status`。
-- `decision_ready !== true` 時，不可把今日未就緒空資料當正式結果。
-- 再讀 `strategy1_open_buy_runs` 最新 complete run。
-- complete run 必須 `status=complete`、`complete=true`、`expected_total > 0`、`scanned_count > 0`、`expected_total === scanned_count`。
-- 若 ready status 有 `latest_trading_day` / `trade_date`，run date 必須對齊。
-- 再用 `run_id` 讀 `strategy1_open_buy_results`。
-- 只把 `decision=BUY` 放入 `matches` / `rows` 給前端主清單。
-- `WATCH` / `BLOCK` 可以保留統計與 meta，但不能混入 BUY 執行名單。
-
-策略1未就緒空包保護：
-
-- `futopt_not_ready`
-- `waiting_snapshot`
-- `decisionReady=false`
-- `strategy1_decision_not_ready`
-- `strategy1_complete_run_missing`
-- `strategy1_complete_run_empty`
-- `strategy1_complete_run_fetch_failed`
-- `snapshot-friendly-empty`
-
-遇到以上狀態時：
-
-- 不准覆蓋既有可用 desktop snapshot 畫面。
-- 不准把空包寫成 complete snapshot。
-- 不准讓 terminal 畫面被今日未就緒資料洗空。
-- desktop route snapshot builder 要把策略1當 soft snapshot endpoint 處理。
-- 若新建 snapshot partial，且上一版 complete snapshot 可用，必須保留上一版 complete snapshot。
-- `/api/terminal-fast-bundle` 預設必須先讀 Supabase `desktop_route_snapshot`，不是直接 live 打所有 API。
-
-策略1偵測條件由 `api/scan-open-buy.js` 管控，接手者不要自行改條件。現行高層條件如下，僅供理解與回歸檢查：
-
-- 母池先排除：非四碼、`00` 開頭、ETF/ETN、指數商品、高股息、槓反、期貨、債、權證、認購/認售、牛熊證、CB/可轉債、停牌/暫停交易、黑名單。
-- 額外排除：水泥、軍工、國防、航太、金融、航空等程式內硬排除族群。
-- 日K 少於 35 根直接 `BLOCK`。
-- 基本品質：價格、流動性、MA35、MA5/MA10/MA20、20日高低、量比、成交量、紅K/影線/收近高點等由程式計算。
-- BUY setup 來源：`A級 開盤無腦入`、`B級 突破候選`、`B級 第一/二根攻擊`、`B級 高周轉候選`、`C級 深跌反彈`、`C級 洗盤反彈`。
-- WATCH setup：品質與 MA35 達標但未達 21:30 BUY 候選強度。
-- 分數由各 setup 公式計算；不要改權重、閾值、setup 名稱、BUY/WATCH/BLOCK 規則，除非使用者明確要求改策略。
-
-策略1前端 / shell 規則：
-
-- 策略1到策略5共用 `strategy` view，`strategy` 必須留在 `PUBLIC_VIEWS`。
-- 策略1不應被會員牆擋住；登入與否不是策略頁可見性的判斷來源。
-- 前端只畫後端整理好的小包，策略1 compact 通常 `limit=60`。
-- 不要讓 `terminal-app.js` 在切頁瞬間重新接管畫面。
-- 不要新增密集 polling。
-- 不要用 cache bump 或版本 bump 假裝修資料。
-- 不要把 Codex latency/debug 面板給客人看。
-
-策略1進 desktop snapshot：
-
-- `lib/desktop-route-snapshot-builder.js` 必須包含 `/api/open-buy-latest`。
-- query 必須含 `canvas=1&compact=1&shell=1&limit=60`。
-- build request 會追加 `fastBundle=1&snapshotBuild=1`。
-- 策略1如果回 `snapshot-friendly-empty` 或 waiting 狀態，不能使完整 snapshot 被 partial 空包覆蓋。
-- `/api/terminal-fast-bundle` 正常 production 應顯示：
-  - `cacheSource = supabase:desktop_route_snapshot`
-  - `snapshotHit = true`
-  - `snapshotFresh = true`
-  - `partial = false`
-  - `endpointCount >= 10`
-  - `hasStrategy2Snapshot = false`
-
-策略1修改後至少驗證：
-
-```powershell
-node --check api\open-buy-latest.js
-node --check scripts\scan-open-buy-cache.js
-node --check lib\desktop-route-snapshot-builder.js
-node --check api\terminal-fast-bundle.js
-npm run verify:strategy1-open-buy-ui
-npm run verify:version
-npm run verify:runtime-hotfix
-npm run verify:desktop-api-only
-npm run verify:publish-gate
-```
-
-部署後驗正式站：
-
-```powershell
-npm run verify:live-version
-npm run verify:deploy
-npm run e2e:smoke
-npm run monitor:production
-```
-
-若 `monitor:production`、`verify:deploy`、`production-health` 與直接 API 檢查衝突，以現行 production health 與 live API 事實為準，並更新舊 verifier；不要復活 retired static freshness / manifest 檢查鏈。
-
-### 策略3：隔日沖正式條件與流程
-
-#### 策略3給下一位 Codex 的接手摘要
-
-策略3目前已定位為「13:00 後尾盤隔日沖候選」的正式實戰資料源。接手時請先確認自己處理的是策略3資料鏈，不是策略2當沖 live，也不是舊 DOM snapshot 畫面。
-
-一句話原則：
-
-```text
-策略3只相信 scanner -> Supabase complete/readback -> no-store API -> desktop route snapshot -> fixed shell rows。
-```
-
-接手第一步必查：
-
-- 先讀本文件，再讀 `scripts\scan-strategy3-cache.js`、`api\strategy3-latest.js`、`lib\desktop-route-snapshot-builder.js`、`terminal-desktop-fast-shell.js`。
-- 確認正式站仍是 `https://fuman-terminal.vercel.app`。
-- 確認 public version 不可因策略3資料問題而 bump。
-- 確認策略3 endpoint 是 `/api/strategy3-latest`，且支援 `canvas=1&compact=1&shell=1&limit=N`。
-- 確認 strategy3 route 可以被 `/api/desktop-route-snapshot` 收進 endpoints。
-- 確認 `/api/terminal-fast-bundle` 優先讀 Supabase `desktop_route_snapshot`。
-- 確認 production health 維持 `hasStrategy2Snapshot=false`，不要把策略2冷塞進 snapshot。
-
-策略3實戰輸出不可只看 `run_id`。每次判斷「資料接好了」必須同時看：
-
-- run row：`status=complete`、`complete=true`。
-- run metadata：`expected_total > 0`、`scanned_count > 0`、`expected_total === scanned_count`。
-- result metadata：`result_count` 必須合理，且 readback row count 要能對上。
-- scanner readback：寫完 Supabase 後必須能讀回 latest row、latest complete run、results rows。
-- snapshot readback：`strategy3_latest` snapshot 不能空、不能 partial、不能拿舊 DOM rows。
-- API readback：`/api/strategy3-latest?canvas=1&compact=1&shell=1&limit=60` 要回今日 complete run 的可畫 rows。
-- fast bundle readback：`/api/terminal-fast-bundle` 需要顯示 snapshot hit/fresh，且 endpoint count 正常。
-
-如果以上任一項不過：
-
-- 不准把新資料寫入 desktop route snapshot。
-- 不准用空包覆蓋上一版可用 snapshot。
-- 不准在前端硬補欄位或用舊 DOM snapshot 湊資料。
-- 不准用 cache bump / version bump 假裝資料已更新。
-
-策略3固定時間與意義：
-
-- `13:00` 前不能發布正式 complete run，因為策略3要看 13:00-13:30 尾盤 1 分K。
-- `13:00-13:30` 是 TradingView 進場確認核心區間。
-- 盤後 scanner 產出的是隔日候選，不是當下追價訊號。
-- 前端可 30 秒 API-only polling，但資料簽名沒變時不能重建 DOM。
-
-策略3前端欄位必須是正式隔日沖欄位：
-
-- 排名
-- 股票
-- 多空
-- 價格
-- 漲幅
-- 量
-- 推估量比
-- 成交額
-- 法人5D
-- 分數
-- AI分析
-- 觸發原因
-
-前端不可再出現舊錯欄位：
-
-- `Rank / Code / Signal / Score / Change` 的 dom-snapshot 簡表
-- `多多訊號2035`
-- `A區數量`
-- 任何從 DOM 文字誤抽出的假資料
-
-策略3畫面舊 chrome 必須保持剔除：
-
-- 左側策略清單
-- 舊 header
-- 舊 toolbar
-- 舊 metrics cards
-- 舊搜尋列
-- Canvas shell 內部搜尋 / 刷新 / status toolbar
-
-策略3與策略2邊界：
-
-- 策略3是盤後/尾盤隔日沖候選，可進 desktop snapshot。
-- 策略2是當沖即時資料，不可冷處理，不可放進 desktop route snapshot。
-- 不要把策略2 live intent 套給策略3。
-- 不要把策略3 cold snapshot 規則套給策略2。
-
-策略3部署防呆：
-
-- 不要從 dirty 的 `C:\fuman-terminal` 直接部署。
-- 乾淨 worktree 部署前必須檢查 `.vercel/project.json`。
-- `.vercel/project.json` 必須指向正式 `fuman-terminal`：
-
-```json
-{
-  "projectId": "prj_x0R2mMFsL0Xto4whcbPTKQTKJRUl",
-  "orgId": "team_HfAXzMLgDcpw6UFbnexhuxHG",
-  "projectName": "fuman-terminal"
-}
-```
-
-不符合就直接中止，不要讓 Vercel CLI 自動 link 或開新 project。
-
-策略3完成定義：
-
-```text
-scanner complete
-+ Supabase readback ok
-+ strategy3_latest snapshot ok
-+ /api/strategy3-latest compact rows ok
-+ /api/desktop-route-snapshot includes strategy3
-+ /api/terminal-fast-bundle snapshotHit/fresh ok
-+ fixed shell 顯示正式欄位
-+ production health ok
-```
-
-策略3是「隔日沖」候選，不是當沖即時頁。正式鏈路必須是：
-
-```text
-13:00 後 1 分K / 盤後資料齊備
--> scripts\scan-strategy3-cache.js 完整掃描
--> Supabase strategy3 complete run
--> Supabase strategy3_latest snapshot
--> /api/strategy3-latest no-store API
--> /api/desktop-route-snapshot
--> /api/terminal-fast-bundle snapshot first
--> fixed shell / Canvas 策略3畫面
-```
-
-策略3目前程式基準：
-
-```text
-Strategy3 scanner:
-scripts\scan-strategy3-cache.js
-
-Strategy3 API:
-api\strategy3-latest.js
-
-Desktop snapshot builder:
-lib\desktop-route-snapshot-builder.js
-
-Fast shell endpoint map:
-terminal-desktop-fast-shell.js
-```
-
-策略3資料權威：
-
-- Supabase `strategy3_scan_runs`
-- Supabase `strategy3_scan_results`
-- Supabase snapshot key `strategy3_latest`
-- `/api/strategy3-latest`
-- `/api/desktop-route-snapshot`
-- `/api/terminal-fast-bundle`
-
-策略3不是資料權威：
-
-- DOM snapshot
-- `sessionStorage` route snapshot
-- IndexedDB DOM route snapshot
-- 靜態 `data/*.json`
-- Google Sheet
-- frontend map / filter / sort
-- service worker cache
-- version bump / cache bump
-
-策略3運作時間與時機：
-
-- 策略3要看尾盤與盤後籌碼/量價候選，不能在 13:00 前發布 complete run。
-- scanner 需要確認 13:00 後 1 分K 候選數；預設 `STRATEGY3_REQUIRE_AFTER_1300 !== "0"`，且 `STRATEGY3_MIN_AFTER_1300_CANDIDATES = 20`。
-- TradingView 進場確認只看 13:00 到 13:30 的尾盤 1 分K 條件。
-- 若 13:00 後資料不足，scanner 必須 fail，不可發布空包或 partial 當 complete。
-- 前端可以 30 秒保守 polling API rows，但資料簽名沒變時不能重建 DOM，避免畫面跳動。
-
-策略3資料來源流程：
-
-- 優先從 Supabase 讀 universe / quote ready / intraday 1m 狀態。
-- 若 Supabase universe 取不到股票，才 fallback 到 `STOCK_URL`，預設 `https://fuman-terminal.vercel.app/api/stocks`。
-- scanner 會補 issued shares、歷史均量、13:00 後 1 分K 狀態、資本額資訊。
-- `STRATEGY3_USE_SUPABASE !== "0"` 必須維持，正式站不要退回純靜態資料鏈。
-- `STRATEGY3_APPLY_BLACKLIST !== "0"` 必須維持，黑名單與不適合當沖/停牌/試撮等排除要在 scanner 端處理。
-
-策略3 source health gate：
-
-- 13:00 後候選數不足時，source health 直接 failed。
-- 若 `STRATEGY3_REQUIRE_TURNOVER = "1"`，issued shares count 不足 `STRATEGY3_MIN_ISSUED_SHARES_COUNT` 時必須 failed。
-- 若 `STRATEGY3_REQUIRE_VOLUME_AVERAGE = "1"`，均量 count 不足 `STRATEGY3_MIN_VOLUME_AVERAGE_COUNT` 時必須 failed。
-- source warning 超過 `STRATEGY3_SOURCE_WARNING_LIMIT`，預設 3，必須 failed。
-- failed 時不可寫入新的 complete run，不可覆蓋既有可用 snapshot。
-
-策略3候選前置條件：
-
-- 股票要有有效價格，`close > 0`。
-- 股票要有 13:00 後 1 分K，`hasAfter1300Candle` 或 `after1300CandleCount > 0`。
-- 排除黑名單、停牌、試撮、不適合當沖、ETF、權證、CB 等 scanner 標記不可交易或不合策略的標的。
-- 不要在前端補條件；條件、排序、分組、分頁都在 scanner / API 端完成。
-
-策略3分數只供排序，不可自行改權重：
-
-- 漲幅分數：`min((pct - 3) * 18, 36)`。
-- 成交量分數：`min(volumeLots / 80, 18)`。
-- 周轉分數：`min(turnoverRate * 6, 30)`。
-- 量比分數：`min(volumeRatio * 12, 20)`。
-- 過熱/弱勢扣分：`pct > 8.8` 扣 24，`pct > 6.5` 扣 12，`pct < 0` 扣 30。
-- 最終 `overnightScore` clamp 到 0 到 100。
-- 排序優先 `overnightScore` 高，再看成交值 `value`。
-
-策略3 TradingView 進場確認：
-
-- 預設 `STRATEGY3_REQUIRE_TV_ENTRY !== "0"`，也就是必須通過 TV 進場確認。
-- 1 分K 至少要有 35 根有效 candles。
-- 使用 money flow 的 EMA8，再做 SMA2 control line。
-- 使用 OBV，再做 EMA10。
-- 必須存在 13:00 到 13:30 的尾盤 candle。
-- 尾盤收盤必須貼近最近 100 根高點 98% 內。
-- control line 必須為正，且相對前一根上彎。
-- OBV 必須為正。
-- 以上全數成立才是正式隔日沖候選。
-
-策略3發布與寫回：
-
-- scanner output 必須 `complete=true`。
-- 若 matches 為 0，scanner 會保留上一版可用輸出並拒絕發布空結果；不要把空結果改成 complete。
-- Supabase run id 格式為 `strategy3-交易日-時間`。
-- 寫入順序是 running run row、results rows、complete run row、`strategy3_latest` snapshot、cache status。
-- `STRATEGY3_API_ONLY = true` 必須維持；靜態 `strategy3*.json` 只是不正式的 legacy/safeguard，不可恢復成正式資料來源。
-
-策略3 API contract：
-
-- `/api/strategy3-latest` 必須永遠回 `Cache-Control: no-store`。
-- 必須支援 `canvas=1&compact=1&shell=1&limit=N`。
-- compact / shell 預設小包，正式畫面通常 `limit=60`，最大不要超過 API 現有限制。
-- API 先讀 desktop route snapshot；若是 live / bypass / snapshotBuild 才走即時讀取。
-- Supabase 讀取順序是 `strategy3_latest` snapshot，fallback 到 latest complete run，再讀 `strategy3_scan_results` rows。
-- 回傳要包含可追蹤欄位，例如 `runId`、`snapshotId`、`updatedAt`、`usedDate`、`complete`、`returnedCount`、`sourceHealth`、`matches`。
-
-策略3進 desktop snapshot：
-
-- `lib/desktop-route-snapshot-builder.js` 必須包含 `/api/strategy3-latest`。
-- query 必須含 `canvas=1&compact=1&shell=1&limit=60`。
-- `/api/terminal-fast-bundle` 必須優先讀 Supabase `desktop_route_snapshot`。
-- production health 應維持：
-  - `snapshotHit = true`
-  - `snapshotFresh = true`
-  - `partial = false`
-  - `endpointCount >= 10`
-  - `hasStrategy2Snapshot = false`
-
-策略3前端 / fixed shell 規則：
-
-- 策略3只吃 API rows，不吃 DOM snapshot。
-- fast shell 啟動時要清掉策略3舊 `sessionStorage` / IndexedDB DOM snapshot。
-- 畫面來源不可顯示 `dom-snapshot`。
-- 不可再出現 `多多訊號2035`、`A區數量` 這種 DOM 文字被誤抽成列資料的錯欄位。
-- 不可恢復黃框舊 chrome：左側策略清單、舊 header、舊 toolbar、舊 metrics 卡、舊搜尋列都要隱藏。
-- polling 保持保守；目前 `API_ONLY_POLL_MS = 30000`。
-- row signature 沒變時不可重建整個 DOM，只更新必要狀態。
-- 不要讓 `terminal-app.js` 在切頁瞬間重新接管畫面。
-
-策略3修改後至少驗證：
-
-```powershell
-node --check scripts\scan-strategy3-cache.js
-node --check api\strategy3-latest.js
-node --check terminal-desktop-fast-shell.js
-npm run verify:version
-npm run verify:runtime-hotfix
-npm run verify:desktop-api-only
-npm run verify:publish-gate
-```
-
-部署後驗正式站：
-
-```powershell
-npm run verify:live-version
-node --use-system-ca scripts\verify-deployment.js
-npm run e2e:smoke
-npm run monitor:production
-```
-
-策略3不可做：
-
-- 不要改策略條件、TV 條件、分數規則、排序權重。
-- 不要新增密集 polling。
-- 不要用 cache bump / version bump 假裝修資料。
-- 不要從 dirty 的 `C:\fuman-terminal` 強行部署。
-- 不要把策略3放回 DOM snapshot / static JSON / Google Sheet 鏈路。
-- 不要把策略2的 live intent 套到策略3，也不要把策略3的 cold snapshot 規則套到策略2。
-
-策略2：
-
-- 當沖頁，必須即時。
-- 不要冷處理。
-- 可以做 fast bundle / memory cache / partial degrade，但不能用過舊 snapshot 假裝最新。
-
-策略1 / 3 / 4 / 5：
-
-- 可走 snapshot-first。
-- 掃描器或後端排程應預產每頁小包。
-- 前端只畫 30-70 筆或使用 Canvas / virtual list。
-
-籌碼：
-
-- 買賣超、CB、權證應走各自 route snapshot / API 小包。
-- 不要共用大包資料後在前端大量 filter / sort。
-
-## 目前 Vercel 狀態
-
-正式只保留 `fuman-terminal` 作為使用者入口。舊 sync / publish-sync 專案已退休，不應再部署、不應再寄通知。
-
-部署硬規則：
-
-- 不要從 dirty 的 `C:\fuman-terminal` 直接部署。
-- `C:\fuman-terminal` 若有未提交或未確認的本機修改，先中止，改用乾淨 worktree 從 `origin/main` 接最新狀態後再改、驗證、部署。
-- 部署前必須確認工作樹乾淨；若有 unrelated dirty changes，不要混進部署。
-
-### 部署防呆：Vercel project 必查
-
-任何乾淨 clone、臨時 worktree、Codex workspace、或非 `C:\fuman-terminal` 的工作目錄，在部署前都必須先檢查 `.vercel/project.json`。
-
-正式站唯一允許的 Vercel 專案設定：
-
-```json
-{
-  "projectId": "prj_x0R2mMFsL0Xto4whcbPTKQTKJRUl",
-  "orgId": "team_HfAXzMLgDcpw6UFbnexhuxHG",
-  "projectName": "fuman-terminal"
-}
-```
-
-部署前硬性規則：
-
-- `.vercel/project.json` 不存在：直接中止，不要執行 `vercel --prod`。
-- `projectName` 不是 `fuman-terminal`：直接中止。
-- `projectId` 不是 `prj_x0R2mMFsL0Xto4whcbPTKQTKJRUl`：直接中止。
-- `orgId` 不是 `team_HfAXzMLgDcpw6UFbnexhuxHG`：直接中止。
-- 不要讓 Vercel CLI 自動 `link` 或自動建立新 project。
-- 不要部署到 preview / sync / publish-sync / 新開的 Vercel project 後再說是正式站。
-- 如果 project link 不對，先修正 link，重新確認 `.vercel/project.json`，再部署。
-
-目前有效 cron / health 方向：
-
-- `/api/desktop-route-snapshot-refresh`
-- `/api/production-health`
-
-已刪除舊外部排程 dispatch API。若外部舊排程仍打舊端點，正式站應回 404，不應觸發任何 workflow。
 
 ## 驗證
 
-常用驗證：
+正式 repo 內常用輕量驗證：
 
 ```powershell
+npm run verify:run-gates
 npm run monitor:production
-npm run e2e:smoke
 npm run verify:live-version
+node --use-system-ca scripts\verify-deployment.js
+npm run e2e:smoke
 ```
 
-若 `verify:publish-gate` 因舊流程檢查失敗，要先判斷是否是 retired workflow / retired sync path / retired static JSON。若是舊流程造成，更新 gate，不要恢復舊流程。
+工作區只讀檢查：
 
-## 開發規則
+```powershell
+node verify-strategy-connections.js
+node verify-legacy-flow-guards.js C:\fuman-terminal
+```
 
-- 使用繁體中文回覆使用者。
-- 使用者重視速度、手感、穩定、不要回滾。
-- 不要再用 bump 版本號當修復手段。
-- 不要偷偷恢復舊 workflow、舊 Vercel 專案、舊 sync repo。
-- 不要把 key 寫進 repo。
-- 不要刪 Supabase 資料，除非使用者明確要求。
-- 修改正式流程後要驗證正式站。
-- 若要清除舊檔，先確認沒有引用，再刪除。
+## 回報格式
 
-## 給其他策略 Codex 的銜接話術
-
-請接新版架構，不要接舊 workflow / sync repo：
+回報使用者時分三類：
 
 ```text
-目前正式終端已改成 Supabase API-only + route snapshot + fixed shell。
-正式根目錄是 C:\fuman-terminal，正式站是 https://fuman-terminal.vercel.app。
-不要使用已退休的同步副本、發布副本、GitHub workflow dispatch、舊排程 dispatch、舊 auto-release。
-策略2維持即時，其它策略和籌碼請寫入各自 Supabase complete run / route snapshot。
-前端只讀 no-store API 或 desktop route snapshot，不要再靠靜態 JSON / Google Sheet / 版本 bump。
-如果遇到舊 verifier 要求舊檔案，請改 verifier，不要恢復舊檔案。
-```
-## 固定版本與 terminal module guard
-
-目前不再用版本 bump 修資料、修策略或修 marker。正式版本字串保持穩定；同步狀態以 Git commit、production health、desktop route snapshot 與 terminal module guard 判斷。
-
-必要 module marker：`chipSnapshot`、`chipFlow`、`warrantFlow` 都必須保留，且都指向 `terminal-chip-snapshot-module.js`。缺 marker 時跑 `npm run verify:terminal-modules` 會 fail；請補 marker，不要 bump 版本號。
-
-`npm run verify:bump` 現在是穩定版本 guard：允許前端小修不 bump，但會阻擋未授權的版本字串變更。真正要公開改版時才可用 `ALLOW_VERSION_BUMP=1` 明確授權。
-## 策略 Codex 分支與部署規則
-
-正式站只認 GitHub `main`。所有策略 Codex 開工前必須先 `git fetch origin`，確認自己的基底不是 behind。
-
-建議分支命名：
-
-```text
-策略1：strategy1-sync
-策略2：strategy2-live
-策略3：strategy3-sync
-策略4：strategy4-sync
-策略5：strategy5-sync
-籌碼買賣超：chip-sync
-籌碼CB：chip-cb-sync
-籌碼權證走向：chip-warrant-sync
+已完成
+驗證結果
+剩餘風險 / 下一步
 ```
 
-策略 Codex 只能在自己的分支或乾淨 worktree 更新 scanner / API / Supabase complete run / snapshot payload。不要在策略分支直接 `vercel --prod`，不要改終端版本號，不要改 terminal shell 主線。
-
-改完先合回 `main`，再由統一部署流程上 production。`npm run guard:source` 會擋 dirty、untracked、非 main / 未授權 release branch、behind、ahead 未推、錯誤 `.vercel/project.json`。這條 guard 是防止 A Codex 的新 bundle 被 B Codex 的舊 bundle 蓋回去。
-
-## 成績單 /88 固定規則
-
-成績單正式公開路徑固定是 `https://fuman-terminal.vercel.app/88`，不得刪除、改路徑或改回只靠本機 Streamlit。`vercel.json` 必須保留 `/88 -> /88.html` rewrite，`88.html` 必須呼叫 `/api/scorecard`。
-
-成績單正式資料源是 Supabase snapshot key `scorecard_latest`。`api/scorecard.js` 必須先讀 Supabase snapshot，`data/scorecard-latest.json` 只允許作為 fallback / bootstrap，不得把 Google Sheet 當正式資料源。
-
-每日固定計算流程是 `run-scorecard-snapshot.ps1` / `npm run scorecard:sync`：從本機 DuckDB 匯出 `data/scorecard-latest.json`，發布到 Supabase snapshot，再跑 `npm run verify:scorecard`。這條流程更新資料，不需要每天 deploy Vercel。
-
-成績單上傳 / 部署規則：
-
-- 成績單每日資料更新只跑 `run-scorecard-snapshot.ps1` / `npm run scorecard:sync`，發布 Supabase snapshot `scorecard_latest`；不需要也不應該每天重新部署 Vercel。
-- 只改成績單文件或 AGENTS 交接文字時，只需要 commit / push；不需要 `vercel --prod`，因為正式 `/88` 畫面程式沒有變。
-- 只有修改 `88.html`、`api/scorecard.js`、`vercel.json`、scorecard scripts、package scripts 或 production route 時，才算成績單程式變更，必須跑完整 gate 後再由乾淨 worktree 上傳。
-- 上傳前必須確認工作樹只包含本次成績單相關檔案；`data/scan-receipts/*`、`data/mobile-analysis/*`、策略 scanner receipts、暫存輸出不得混入成績單程式 commit。
-- 上傳前必須確認 `.vercel/project.json` 指向正式 `fuman-terminal` project，不能讓 Vercel CLI 自動 link、不能部署到 preview / sync / publish-sync / 新 project。
-- `C:\fuman-terminal` 只作 production mirror；同步只能 `git pull --ff-only`，不要在 dirty 的 `C:\fuman-terminal` 直接改檔、commit 或部署。
-- 不可從 `C:\fuman-terminal-sync` 上傳或部署成績單；該路徑不是正式來源。
-- 不可用 Google Sheet、Streamlit、本機 JSON、version bump 或 Vercel redeploy side effect 假裝修好成績單資料。
-- 若需要正式 `/88` 立刻反映程式修改，流程是乾淨 worktree 修改 -> local gates -> `verify:publish-gate` -> commit -> push main -> `vercel --prod` -> live `/88` / `/api/scorecard` 驗證。
-- 若只是 Supabase snapshot 資料更新，流程是跑每日 snapshot job -> `npm run verify:scorecard` -> 確認 `/api/scorecard` cacheSource 是 `supabase-snapshot`；不要 commit receipts，不要 deploy。
-
-改成績單時必跑：
-
-```text
-npm run verify:scorecard
-npm run verify:publish-gate
-npm run guard:production
-```
-
-若 `/88` 或 `/api/scorecard` 在正式站 404，代表路由/API 沒部署進 production；先修 source sync / GitHub main / Vercel 部署，不要改回 Google Sheet，也不要把 `http://127.0.0.1:8501/` 當公開網址。
-
-## 已退役 / 暫停流程
-
-目前不要重啟下列流程，除非使用者明確要求：
-
-- Google Sheet 成績單：已由成績單網站 / Supabase snapshot 取代。
-- Google Sheet 上傳工具：退役工具檔已刪除，wrapper 只保留 no-op 防舊呼叫失敗。
-- 交易管家 patrol / settlement：暫停，屬於後續階段，不納入目前終端上線主線。
-- Scorecard Initial / Final / Terminal Watch Windows 排程：已停用。
-
-目前主線只處理正式終端、策略 / 籌碼 API、Supabase snapshot、desktop/mobile terminal 顯示。
+不要只說「好了」。要講清楚有沒有部署、有沒有 bump version、有沒有碰 dirty tree、有沒有驗正式 alias。
