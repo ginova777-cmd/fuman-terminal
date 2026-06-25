@@ -1736,8 +1736,48 @@ function statusDateForFile(file, payload) {
   return payload?.usedDate || payload?.date || payload?.tradeDate || payload?.resolvedTradeDate || payload?.institutionDate || payload?.scanStamp || "";
 }
 
+function terminalHomeStatusEntry(file, payload, source) {
+  return {
+    ok: payload?.ok !== false,
+    status: payload?.status || payload?.qualityStatus || "",
+    source: payload?.source || source || "",
+    date: statusDateForFile(file, payload),
+    sourceDate: payload?.sourceDate || payload?.usedDate || "",
+    updatedAt: payload?.updatedAt || payload?.generatedAt || payload?.scanStamp || "",
+    count: payloadCount(payload),
+    runId: payload?.runId || payload?.transport?.runId || "",
+    gate: payload?.transport?.gate || "",
+    cacheSource: payload?.cacheSource || "",
+  };
+}
+
+function terminalHomeStatus() {
+  const entries = {
+    "open-buy-latest.json": terminalHomeStatusEntry("open-buy-latest.json", readOpenBuyApiOnlyPayload(), "open-buy-api-only"),
+    "strategy2-intraday-latest.json": terminalHomeStatusEntry("strategy2-intraday-latest.json", readOptional("data/strategy2-intraday-latest.json", {}), "strategy2-intraday"),
+    "strategy3-latest.json": terminalHomeStatusEntry("strategy3-latest.json", readOptional("data/strategy3-latest.json", {}), "strategy3"),
+    "strategy4-latest.json": terminalHomeStatusEntry("strategy4-latest.json", readOptional("data/strategy4-score-top.json", readOptional("data/strategy4-latest.json", {})), "strategy4"),
+    "strategy5-latest.json": terminalHomeStatusEntry("strategy5-latest.json", readOptional("data/strategy5-latest.json", {}), "strategy5"),
+    "institution-latest.json": terminalHomeStatusEntry("institution-latest.json", readOptional("data/institution-latest.json", {}), "institution"),
+    "warrant-flow-latest.json": terminalHomeStatusEntry("warrant-flow-latest.json", readOptional("data/warrant-flow-latest.json", {}), "warrant-flow"),
+    "market-summary.json": terminalHomeStatusEntry("market-summary.json", readOptional("data/market-summary.json", {}), "market"),
+    "mobile-home-summary.json": terminalHomeStatusEntry("mobile-home-summary.json", mobileHomeSummary(), "mobile-home-summary"),
+    "stocks-quotes-mobile-top.json": terminalHomeStatusEntry("stocks-quotes-mobile-top.json", readOptional("data/stocks-quotes-mobile-top.json", {}), "stocks-quotes-mobile-top"),
+    "strategy2-intraday-live-top.json": terminalHomeStatusEntry("strategy2-intraday-live-top.json", readOptional("data/strategy2-intraday-live-top.json", {}), "strategy2-live-top"),
+    "realtime-radar-latest.json": terminalHomeStatusEntry("realtime-radar-latest.json", readOptional("data/realtime-radar-latest.json", {}), "realtime-radar"),
+    "strategy4-score-top.json": terminalHomeStatusEntry("strategy4-score-top.json", readOptional("data/strategy4-score-top.json", {}), "strategy4-score-top"),
+    "warrant-flow-mobile-top.json": terminalHomeStatusEntry("warrant-flow-mobile-top.json", readOptional("data/warrant-flow-mobile-top.json", {}), "warrant-flow-mobile-top"),
+  };
+  return {
+    ok: true,
+    source: "terminal-home-cache-status",
+    updatedAt: new Date().toISOString(),
+    entries,
+  };
+}
 function terminalHomeBundle() {
   const mobile = readOptional("data/mobile-home-summary.json", mobileHomeSummary());
+  const status = terminalHomeStatus();
   const stocks = readOptional("data/stocks-slim.json", slimStocks());
   const openBuy = readOpenBuyApiOnlyPayload();
   const strategy3 = readOptional("data/strategy3-latest.json", {});
@@ -1788,6 +1828,7 @@ function terminalHomeBundle() {
 
 function terminalHomeMobileSlim() {
   const mobile = readOptional("data/mobile-home-summary.json", mobileHomeSummary());
+  const status = terminalHomeStatus();
   const stocks = readOptional("data/stocks-quotes-mobile-top.json", {});
   const openBuy = readOpenBuyApiOnlyPayload();
   const strategy4Top = readOptional("data/strategy4-score-top.json", {});
