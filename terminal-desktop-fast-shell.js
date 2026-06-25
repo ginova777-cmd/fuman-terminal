@@ -107,6 +107,7 @@
   let originalDesktopMarketRetryTimer = 0;
   let marketApiOnlySignature = "";
   let marketApiOnlyLoading = false;
+  let marketDesktopMode = "overview";
   let marketHeatmapSectorRows = [];
   const canvasState = {
     route: "",
@@ -3300,6 +3301,107 @@
     return n >= 1000 ? n.toLocaleString("zh-TW", { maximumFractionDigits: 1 }) : n.toFixed(n >= 100 ? 1 : 2);
   }
 
+  function marketNumber(value) {
+    const n = Number(String(value ?? "").replace(/[,+%]/g, ""));
+    return Number.isFinite(n) ? n : 0;
+  }
+
+  function formatMarketIndexValue(value) {
+    const n = marketNumber(value);
+    if (!n) return "--";
+    return n.toLocaleString("zh-TW", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }
+
+  function compactMarketTime(value) {
+    const text = String(value || "");
+    const date = text.match(/(\d{4})-(\d{2})-(\d{2})/);
+    const time = text.match(/(\d{2}):(\d{2})/);
+    if (date && time) return `${date[2]}/${date[3]} ${time[1]}:${time[2]}`;
+    return text || "--";
+  }
+
+  function marketIndexByName(payload, names) {
+    const list = normalizeArray(payload?.indexes);
+    return list.find((item) => names.some((name) => String(item?.["指數"] || item?.name || "").includes(name))) || null;
+  }
+
+  function formatMarketDelta(item) {
+    if (!item) return "等待官方資料";
+    const sign = String(item["漲跌"] || item.sign || "").includes("-") ? "-" : "+";
+    const diff = String(item["漲跌點數"] ?? item.change ?? "0").replace(/^[+-]/, "");
+    const pct = String(item["漲跌百分比"] ?? item.pct ?? "0").replace(/[+%-]/g, "");
+    return `${sign}${diff}（${sign}${pct}%）`;
+  }
+
+  function updateMarketMetricCard(card, label, value, subText, positive) {
+    if (!card) return;
+    const title = card.querySelector("span");
+    const strong = card.querySelector("strong");
+    const em = card.querySelector("em");
+    if (title) title.textContent = label;
+    if (strong) strong.textContent = value || "--";
+    if (em) em.textContent = subText || "等待官方資料";
+    card.classList.toggle("market-card-up", positive === true);
+    card.classList.toggle("market-card-down", positive === false);
+  }
+
+  function fetchMarketJson(path, limit = 60, force = false, timeoutMs = 6500) {
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => controller.abort(), timeoutMs);
+    return fetch(marketApiUrl(path, limit), {
+      cache: force ? "no-store" : "default",
+      signal: controller.signal,
+    }).then((res) => res.ok ? res.json() : null)
+      .catch(() => null)
+      .finally(() => window.clearTimeout(timer));
+  }
+
+  function ensureMarketDesktopShell() {
+    const market = document.querySelector("#market-view");
+    if (!market) return {};
+    let tabs = market.querySelector("[data-fuman-market-tabs]");
+    if (!tabs) {
+      tabs = document.createElement("section");
+      tabs.className = "market-mode-tabs";
+      tabs.dataset.fumanMarketTabs = "1";
+      tabs.setAttribute("aria-label", "市場總覽切換");
+      tabs.innerHTML = [
+        '<button type="button" class="active" data-market-mode="overview">◉ 市場總覽</button>',
+        '<button type="button" data-market-mode="ai">♙ AI 判讀</button>',
+      ].join("");
+      const header = market.querySelector(".page-header");
+      header?.insertAdjacentElement("afterend", tabs);
+    }
+    let ai = market.querySelector("[data-market-api-ai]");
+    if (!ai) {
+      ai = document.createElement("section");
+      ai.className = "market-ai-panel";
+      ai.dataset.marketApiAi = "1";
+      ai.hidden = true;
+      ai.innerHTML = '<div class="empty-state">載入最新 AI 判讀資料中...</div>';
+      tabs.insertAdjacentElement("afterend", ai);
+    }
+    market.classList.toggle("market-overview-mode", marketDesktopMode !== "ai");
+    market.classList.toggle("market-ai-mode", marketDesktopMode === "ai");
+    tabs.querySelectorAll("[data-market-mode]").forEach((button) => {
+      button.classList.toggle("active", button.dataset.marketMode === marketDesktopMode);
+    });
+    ai.hidden = marketDesktopMode !== "ai";
+    const title = market.querySelector(".page-header h1");
+    if (title) title.textContent = marketDesktopMode === "ai" ? "AI 判讀" : "市場總覽";
+    return { market, tabs, ai };
+  }
+
+  function applyMarketDesktopMode(mode) {
+    marketDesktopMode = mode === "ai" ? "ai" : "overview";
+    ensureMarketDesktopShell();
+  }
+
+  function restoreMarketDesktopMode() {
+    ensureMarketDesktopShell();
+    applyMarketDesktopMode(marketDesktopMode);
+  }
+
   function closeMarketHeatmapSectorModal() {
     document.querySelector("[data-market-heatmap-modal]")?.remove();
   }
@@ -3374,7 +3476,96 @@
     document.body.appendChild(overlay);
   }
 
+  function renderMarketOverviewApi(marketPayload, heatmapPayload) {
+    const shell = ensureMarketDesktopShell();
+    const market = shell.market || document.querySelector("#market-view");
+    if (!market) return;
+    const updatedAt = marketPayload?.updatedAt || heatmapPayload?.updatedAt || heatmapPayload?.servedAt || "";
+    const refresh = market.querySelector(".refresh-line");
+    const clock = market.querySelector(".market-time");
+    if (refresh) refresh.textContent = `${compactMarketTime(updatedAt)} 更新 · API only`;
+    if (clock) clock.textContent = compactMarketTime(updatedAt);
+
+    const twse = marketIndexByName(marketPayload, ["加權", "發行量"]);
+    const otc = marketIndexByName(marketPayload, ["櫃買"]);
+    const futuresNear = marketPayload?.futuresNear || marketPayload?.futures || null;
+    const futuresNext = marketPayload?.futuresNext || null;
+    const cards = [...market.querySelectorAll(".metric-grid .metric-card")];
+    updateMarketMetricCard(
+      cards[0],
+      "↗ 加權指數",
+      formatMarketIndexValue(twse?.["收盤指數"]),
+      formatMarketDelta(twse),
+      !String(twse?.["漲跌"] || "").includes("-")
+    );
+    updateMarketMetricCard(
+      cards[1],
+      "↗ 櫃買指數",
+      formatMarketIndexValue(otc?.["收盤指數"]),
+      formatMarketDelta(otc),
+      !String(otc?.["漲跌"] || "").includes("-")
+    );
+    updateMarketMetricCard(
+      cards[2],
+      "⇅ 台指期夜盤",
+      futuresNear?.price ? Number(futuresNear.price).toLocaleString("zh-TW") : "--",
+      futuresNear ? `${futuresNear.change || "--"}（${futuresNear.pct || "--"}）${futuresNear.basisLabel ? ` · ${futuresNear.basisLabel}` : ""}` : "等待期交所資料",
+      !String(futuresNear?.change || "").includes("-")
+    );
+    updateMarketMetricCard(
+      cards[3],
+      "☾ 台指次月",
+      futuresNext?.price ? Number(futuresNext.price).toLocaleString("zh-TW") : "--",
+      futuresNext ? `${futuresNext.change || "--"}（${futuresNext.pct || "--"}）${futuresNext.basisLabel ? ` · ${futuresNext.basisLabel}` : ""}` : "等待期交所資料",
+      !String(futuresNext?.change || "").includes("-")
+    );
+
+    const sectors = normalizeArray(heatmapPayload?.sectors);
+    const stocks = sectors.flatMap((sector) => normalizeArray(sector?.stocks));
+    const up = sectors.reduce((sum, sector) => sum + marketNumber(sector?.up), 0);
+    const down = sectors.reduce((sum, sector) => sum + marketNumber(sector?.down), 0);
+    const sample = marketNumber(heatmapPayload?.stockCount || heatmapPayload?.sample || heatmapPayload?.count) || stocks.length || up + down;
+    const flat = Math.max(0, sample - up - down);
+    const totalValue = sectors.reduce((sum, sector) => sum + marketNumber(sector?.totalValue || sector?.value || (marketNumber(sector?.amountYi) * 100000000)), 0);
+    const upRatio = sample ? up / sample * 100 : 0;
+    const strength = market.querySelector(".strength-panel");
+    if (strength) {
+      const title = strength.querySelector(".strength-head h2");
+      const sub = strength.querySelector(".strength-head p");
+      const ratio = strength.querySelector(".strength-head strong");
+      const stats = strength.querySelectorAll(".stats-row strong");
+      if (title) title.textContent = up >= down ? "強勢" : "弱勢";
+      if (sub) sub.textContent = `${sample.toLocaleString("zh-TW")} 檔 · 平均 ${Number(heatmapPayload?.avgPct || 0).toFixed(2)}%`;
+      if (ratio) ratio.innerHTML = `${upRatio.toFixed(2)}%<span>上漲比例</span>`;
+      if (stats[0]) stats[0].textContent = up.toLocaleString("zh-TW");
+      if (stats[1]) stats[1].textContent = down.toLocaleString("zh-TW");
+      if (stats[2]) stats[2].textContent = flat.toLocaleString("zh-TW");
+      if (stats[3]) stats[3].textContent = formatYi(totalValue);
+      const red = strength.querySelector(".red-zone");
+      const mid = strength.querySelector(".mid-zone");
+      const green = strength.querySelector(".green-zone");
+      const downRatio = sample ? down / sample * 100 : 0;
+      const flatRatio = Math.max(0, 100 - upRatio - downRatio);
+      if (red) red.style.width = `${Math.max(3, downRatio).toFixed(2)}%`;
+      if (mid) mid.style.width = `${Math.max(3, flatRatio).toFixed(2)}%`;
+      if (green) green.style.width = `${Math.max(3, upRatio).toFixed(2)}%`;
+    }
+
+    const ticker = market.querySelector(".ticker-strip");
+    if (ticker && sectors.length) {
+      const leaders = sectors.slice().sort((a, b) => marketNumber(b?.pct ?? b?.avgPct) - marketNumber(a?.pct ?? a?.avgPct)).slice(0, 24);
+      ticker.innerHTML = leaders.map((sector) => {
+        const pct = marketNumber(sector?.pct ?? sector?.avgPct);
+        const leader = sector?.leader || normalizeArray(sector?.stocks)[0] || {};
+        return `<span class="${pct >= 0 ? "ticker-up" : "ticker-down"}">${escapeHtml(sector?.name || sector?.industry || "--")} <b>${pct >= 0 ? "+" : ""}${pct.toFixed(2)}%</b> <small>${escapeHtml(leader?.name || leader?.code || "")}</small></span>`;
+      }).join("");
+    }
+    const message = market.querySelector("#terminal-message");
+    if (message) message.textContent = "市場總覽已同步 Supabase/API 快照，熱力圖可點選看相關股票。";
+  }
+
   function renderMarketHeatmapApi(sectors, payload) {
+    ensureMarketDesktopShell();
     const heatmap = document.querySelector("#market-view #heatmap");
     if (!heatmap) return;
     const rows = normalizeArray(sectors).slice(0, 60);
@@ -3406,29 +3597,11 @@
   }
 
   function ensureMarketApiPanels() {
-    const market = document.querySelector("#market-view");
-    const sector = market?.querySelector(".sector-section");
-    if (!market || !sector) return {};
-    let ai = market.querySelector("[data-market-api-ai]");
-    if (!ai) {
-      ai = document.createElement("section");
-      ai.className = "watch-section market-api-ai";
-      ai.dataset.marketApiAi = "1";
-      ai.innerHTML = '<div class="section-title"><div><h2>AI 判讀</h2><p>API only polling</p></div><span>api</span></div><div data-market-api-ai-body></div>';
-      sector.insertAdjacentElement("afterend", ai);
-    }
-    let radar = market.querySelector("[data-market-api-radar]");
-    if (!radar) {
-      radar = document.createElement("section");
-      radar.className = "watch-section market-api-radar";
-      radar.dataset.marketApiRadar = "1";
-      radar.innerHTML = '<div class="section-title"><div><h2>即時雷達</h2><p>API only polling</p></div><span>api</span></div><div data-market-api-radar-body></div>';
-      ai.insertAdjacentElement("afterend", radar);
-    }
-    return { ai: ai.querySelector("[data-market-api-ai-body]"), radar: radar.querySelector("[data-market-api-radar-body]") };
+    const shell = ensureMarketDesktopShell();
+    return { ai: shell.ai || null, radar: null };
   }
 
-  function renderMarketApiAi(heatmapPayload, radarPayload) {
+  function renderMarketApiAi(heatmapPayload, radarPayload, aiPayload = {}) {
     const panels = ensureMarketApiPanels();
     if (!panels.ai) return;
     const sectors = normalizeArray(heatmapPayload?.sectors);
@@ -3438,8 +3611,15 @@
     const nameOf = (item) => String(item?.name || item?.industry || item?.sector || "--");
     const stockName = (item) => String(item?.name || item?.Name || "");
     const stockCode = (item) => String(item?.code || item?.Code || item?.stockId || "").trim();
-    const tradeDate = String(heatmapPayload?.resolvedTradeDate || heatmapPayload?.tradeDate || heatmapPayload?.date || "").replace(/-/g, "");
-    const dateLabel = tradeDate.length >= 8 ? `${tradeDate.slice(4, 6)}/${tradeDate.slice(6, 8)}` : "06/24";
+    const tradeDate = String(aiPayload?.aiDetectWindow?.taipeiDate || aiPayload?.snapshot?.tradeDate || heatmapPayload?.resolvedTradeDate || heatmapPayload?.tradeDate || heatmapPayload?.date || "").replace(/-/g, "");
+    const dateLabel = tradeDate.length >= 8 ? `${tradeDate.slice(4, 6)}/${tradeDate.slice(6, 8)}` : compactMarketTime(aiPayload?.updatedAt || heatmapPayload?.updatedAt || "");
+    const detectWindow = aiPayload?.aiDetectWindow || {};
+    const session = aiPayload?.marketSession || {};
+    const isLiveWindow = detectWindow.active === true;
+    const sessionTitle = isLiveWindow ? "巡邏中" : "收盤快照";
+    const sessionText = isLiveWindow
+      ? "09:00-13:30 AI 盤中巡邏，資料更新才重建判讀。"
+      : "收盤後固定顯示最後 13:30 snapshot，不再追著即時波動重算。";
     const up = sectors.reduce((sum, item) => sum + num(item.up), 0);
     const down = sectors.reduce((sum, item) => sum + num(item.down), 0);
     const sectorStocks = sectors.flatMap((sector) => normalizeArray(sector.stocks).map((stock) => ({ ...stock, industry: nameOf(sector), sectorPct: pctOf(sector) })));
@@ -3594,7 +3774,7 @@
     `).join("") : '<div class="empty-state">目前 AI 尚未篩出足夠觀察股。</div>';
     panels.ai.innerHTML = `
       <section class="market-ai-panel">
-        <div class="market-ai-sort-note"><strong>AI 判讀運作時間：09:00-13:30</strong><span>API only polling</span><span>資料簽名不變不重建 DOM</span></div>
+        <div class="market-ai-sort-note"><strong>${escapeHtml(sessionTitle)} · AI 判讀 09:00-13:30</strong><span>${escapeHtml(sessionText)}</span><span>${escapeHtml(session.state || detectWindow.reason || "snapshot")}</span></div>
         <section class="market-ai-summary">
           <article class="market-ai-card hero">
             <small>盤中決策節奏 · 資料 ${escapeHtml(dateLabel)}</small>
@@ -3692,21 +3872,28 @@
 
   function refreshMarketApiOnly(force = false) {
     if (!isMarketViewActive() || marketApiOnlyLoading) return;
+    restoreMarketDesktopMode();
     marketApiOnlyLoading = true;
     Promise.all([
-      fetch(marketApiUrl("/api/heatmap", 60), { cache: force ? "no-store" : "default" }).then((res) => res.ok ? res.json() : null).catch(() => null),
-      fetch(marketApiUrl("/api/realtime-radar-latest", 20), { cache: force ? "no-store" : "default" }).then((res) => res.ok ? res.json() : null).catch(() => null),
-    ]).then(([heatmapPayload, radarPayload]) => {
+      fetchMarketJson("/api/market", 24, force, 7000),
+      fetchMarketJson("/api/heatmap", 60, force, 7000),
+      fetchMarketJson("/api/realtime-radar-latest", 20, force, 5500),
+      fetchMarketJson("/api/market-ai-live", 20, force, 7000),
+    ]).then(([marketPayload, heatmapPayload, radarPayload, aiPayload]) => {
       const signature = JSON.stringify({
-        heatmap: heatmapPayload?.updatedAt || heatmapPayload?.servedAt || heatmapPayload?.stockCount || "",
-        radar: radarPayload?.updatedAt || radarPayload?.timestamp || radarPayload?.rows?.[0]?.detectedAt || "",
+        market: normalizeArray(marketPayload?.indexes).map((item) => `${item["指數"]}:${item["收盤指數"]}:${item["漲跌"]}:${item["漲跌點數"]}:${item["漲跌百分比"]}`).join("|"),
+        futures: `${marketPayload?.futuresNear?.price || marketPayload?.futures?.price || ""}:${marketPayload?.futuresNext?.price || ""}`,
+        heatmap: normalizeArray(heatmapPayload?.sectors).slice(0, 60).map((item) => `${item.name || item.industry}:${item.pct ?? item.avgPct}:${item.up}:${item.down}:${item.count}`).join("|"),
+        ai: aiPayload?.snapshot?.snapshotId || aiPayload?.aiDetectWindow?.active || aiPayload?.summary?.strategy2Count || "",
+        radar: radarPayload?.runId || radarPayload?.timestamp || radarPayload?.rows?.[0]?.detectedAt || "",
         heatmapCount: heatmapPayload?.sectorCount || normalizeArray(heatmapPayload?.sectors).length,
         radarCount: normalizeArray(radarPayload?.rows).length,
       });
       if (!force && signature === marketApiOnlySignature) return;
       marketApiOnlySignature = signature;
+      renderMarketOverviewApi(marketPayload || {}, heatmapPayload || {});
       if (heatmapPayload?.sectors?.length) renderMarketHeatmapApi(heatmapPayload.sectors, heatmapPayload);
-      renderMarketApiAi(heatmapPayload || {}, radarPayload || {});
+      renderMarketApiAi(heatmapPayload || {}, radarPayload || {}, aiPayload || {});
       renderMarketApiRadar(radarPayload || {});
     }).finally(() => {
       marketApiOnlyLoading = false;
@@ -3715,11 +3902,24 @@
 
   function installMarketApiOnlyHydrator() {
     const run = (force = false) => refreshMarketApiOnly(force);
-    if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", () => run(true), { once: true });
-    else run(true);
+    const boot = () => {
+      restoreMarketDesktopMode();
+      run(true);
+    };
+    if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot, { once: true });
+    else boot();
     if (!window.__fumanMarketHeatmapModalReady) {
       window.__fumanMarketHeatmapModalReady = true;
       document.addEventListener("click", (event) => {
+        const mode = event.target.closest?.("[data-market-mode]");
+        if (mode) {
+          event.preventDefault();
+          event.stopPropagation();
+          event.stopImmediatePropagation();
+          applyMarketDesktopMode(mode.dataset.marketMode);
+          if (mode.dataset.marketMode === "ai") run(false);
+          return;
+        }
         const close = event.target.closest?.("[data-market-heatmap-close]");
         if (close || event.target.matches?.("[data-market-heatmap-modal]")) {
           closeMarketHeatmapSectorModal();
@@ -3735,6 +3935,13 @@
           return;
         }
         if (event.key !== "Enter" && event.key !== " ") return;
+        const mode = event.target.closest?.("[data-market-mode]");
+        if (mode) {
+          event.preventDefault();
+          applyMarketDesktopMode(mode.dataset.marketMode);
+          if (mode.dataset.marketMode === "ai") run(false);
+          return;
+        }
         const card = event.target.closest?.("[data-market-heatmap-sector]");
         if (!card) return;
         event.preventDefault();
@@ -5550,6 +5757,136 @@
           background: #ffffff !important;
           color: #f59e0b !important;
           box-shadow: 0 10px 24px rgba(15, 23, 42, 0.12) !important;
+        }
+        #market-view .market-mode-tabs {
+          display: inline-flex !important;
+          align-items: center !important;
+          gap: 8px !important;
+          margin: 10px 0 18px !important;
+          padding: 6px !important;
+          border: 1px solid rgba(234, 179, 8, 0.36) !important;
+          border-radius: 10px !important;
+          background: rgba(15, 23, 42, 0.72) !important;
+        }
+        #market-view .market-mode-tabs button {
+          min-height: 36px !important;
+          padding: 0 14px !important;
+          border: 1px solid transparent !important;
+          border-radius: 8px !important;
+          background: transparent !important;
+          color: #9fb3d9 !important;
+          font-size: 13px !important;
+          font-weight: 900 !important;
+          cursor: pointer !important;
+        }
+        #market-view .market-mode-tabs button.active {
+          border-color: rgba(249, 115, 22, 0.72) !important;
+          background: rgba(249, 115, 22, 0.16) !important;
+          color: #ffb86b !important;
+        }
+        #market-view.market-ai-mode > :not(.page-header):not(.market-mode-tabs):not(.market-ai-panel) {
+          display: none !important;
+        }
+        #market-view.market-overview-mode > .market-ai-panel {
+          display: none !important;
+        }
+        #market-view.market-overview-mode > .ticker-strip,
+        #market-view.market-overview-mode > .strength-panel {
+          display: flex !important;
+        }
+        #market-view.market-overview-mode > .metric-grid .metric-card:nth-child(n + 4) {
+          display: block !important;
+        }
+        #market-view.market-overview-mode > .terminal-band,
+        #market-view.market-overview-mode > .watch-section {
+          display: none !important;
+        }
+        #market-view .metric-card.market-card-up em,
+        #market-view .ticker-strip .ticker-up b {
+          color: #2dd4bf !important;
+        }
+        #market-view .metric-card.market-card-down em,
+        #market-view .ticker-strip .ticker-down b {
+          color: #fb7185 !important;
+        }
+        #market-view .ticker-strip {
+          overflow: hidden !important;
+          white-space: nowrap !important;
+          gap: 18px !important;
+        }
+        #market-view .ticker-strip span {
+          display: inline-flex !important;
+          align-items: center !important;
+          gap: 6px !important;
+          margin-right: 16px !important;
+          color: #aebfe0 !important;
+          font-size: 12px !important;
+        }
+        #market-view .ticker-strip small {
+          color: #7f8da8 !important;
+        }
+        #market-view .sector-card {
+          cursor: pointer !important;
+          transition: transform 120ms ease, border-color 120ms ease, background 120ms ease !important;
+        }
+        #market-view .sector-card:hover,
+        #market-view .sector-card:focus-visible {
+          transform: translateY(-2px) !important;
+          border-color: rgba(249, 115, 22, 0.78) !important;
+          outline: none !important;
+        }
+        #market-view .market-ai-panel {
+          display: block;
+          border: 1px solid rgba(234, 179, 8, 0.26);
+          border-radius: 8px;
+          background:
+            radial-gradient(circle at 20% 0%, rgba(234, 179, 8, 0.12), transparent 34%),
+            rgba(9, 15, 25, 0.82);
+          padding: 18px;
+        }
+        #market-view .market-ai-sort-note {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          flex-wrap: wrap;
+          margin-bottom: 14px;
+          padding: 12px 14px;
+          border: 1px solid rgba(234, 179, 8, 0.28);
+          border-radius: 8px;
+          background: rgba(234, 179, 8, 0.08);
+          color: #f8fafc;
+        }
+        #market-view .market-ai-sort-note span {
+          color: #9fb3d9;
+          font-size: 12px;
+        }
+        body.fuman-light-theme #market-view .market-mode-tabs {
+          border-color: rgba(249, 115, 22, 0.24) !important;
+          background: rgba(255, 255, 255, 0.88) !important;
+        }
+        body.fuman-light-theme #market-view .market-mode-tabs button {
+          color: #64748b !important;
+        }
+        body.fuman-light-theme #market-view .market-mode-tabs button.active {
+          border-color: rgba(249, 115, 22, 0.52) !important;
+          background: #fff7ed !important;
+          color: #c2410c !important;
+        }
+        body.fuman-light-theme #market-view .ticker-strip span,
+        body.fuman-light-theme #market-view .ticker-strip small {
+          color: #64748b !important;
+        }
+        body.fuman-light-theme #market-view .market-ai-panel {
+          border-color: #d8e3ef !important;
+          background:
+            radial-gradient(circle at 20% 0%, rgba(249, 115, 22, 0.10), transparent 34%),
+            #ffffff !important;
+          color: #0f172a !important;
+        }
+        body.fuman-light-theme #market-view .market-ai-sort-note {
+          border-color: rgba(249, 115, 22, 0.28) !important;
+          background: #fff7ed !important;
+          color: #9a3412 !important;
         }
       }
     `;

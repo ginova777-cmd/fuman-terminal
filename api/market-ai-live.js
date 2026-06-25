@@ -319,7 +319,7 @@ module.exports = async function handler(request, response) {
   const req = { ...request, method: "GET", query: request.query || {} };
   const [marketResult, strategy2Result, radarResult] = await Promise.all([
     capture(market, req),
-    capture(latestStrategy, { ...req, query: { key: strategy2 } }),
+    capture(latestStrategy, { ...req, query: { key: "strategy2" } }),
     capture(realtimeRadarLatest, req),
   ]);
   const strategy2 = strategy2Result.payload || {};
