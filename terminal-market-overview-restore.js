@@ -234,11 +234,37 @@
         const up = sectors.reduce((sum, sector) => sum + num(sector.up), 0);
         const down = sectors.reduce((sum, sector) => sum + num(sector.down), 0);
         const sample = num(heatPayload.stockCount || heatPayload.sample || heatPayload.count) || up + down;
-        const strong = sectors.filter((s) => num(s.pct ?? s.avgPct) >= 0).sort((a, b) => num(b.pct ?? b.avgPct) - num(a.pct ?? a.avgPct)).slice(0, 5);
-        const weak = sectors.filter((s) => num(s.pct ?? s.avgPct) < 0).sort((a, b) => num(a.pct ?? a.avgPct) - num(b.pct ?? b.avgPct)).slice(0, 5);
+        const flat = Math.max(0, sample - up - down);
+        const pctOf = (value, base = sample) => base ? Math.max(0, Math.min(100, (value / base) * 100)) : 0;
+        const upRatio = pctOf(up);
+        const downRatio = pctOf(down);
+        const flatRatio = Math.max(0, 100 - upRatio - downRatio);
+        const strong = sectors.filter((s) => num(s.pct ?? s.avgPct) >= 0).sort((a, b) => num(b.pct ?? b.avgPct) - num(a.pct ?? a.avgPct)).slice(0, 8);
+        const weak = sectors.filter((s) => num(s.pct ?? s.avgPct) < 0).sort((a, b) => num(a.pct ?? a.avgPct) - num(b.pct ?? b.avgPct)).slice(0, 8);
         const hotStocks = strong.flatMap((sector) => list(sector.stocks).slice(0, 3).map((stock) => ({ ...stock, industry: sector.name || sector.industry || "--", sectorPct: num(sector.pct ?? sector.avgPct) }))).slice(0, 10);
+        const maxSectorMove = Math.max(1, ...strong.concat(weak).map((sector) => Math.abs(num(sector.pct ?? sector.avgPct))));
+        const maxStockScore = Math.max(1, ...hotStocks.map((stock) => Math.abs(num(stock.pct)) + Math.abs(num(stock.sectorPct)) * 0.45));
+        const sectorBars = (items, tone) => items.length ? items.map((sector, index) => {
+          const pct = num(sector.pct ?? sector.avgPct);
+          const width = Math.max(8, Math.min(100, Math.abs(pct) / maxSectorMove * 100));
+          const count = num(sector.count || list(sector.stocks).length);
+          return `<div class="market-ai-bar-row ${tone}">
+            <div><strong>${index + 1}. ${esc(sector.name || sector.industry || "--")}</strong><span>${count.toLocaleString("zh-TW")} 檔</span></div>
+            <div class="market-ai-bar-track"><i style="width:${width.toFixed(1)}%"></i></div>
+            <b>${pct >= 0 ? "+" : ""}${pct.toFixed(2)}%</b>
+          </div>`;
+        }).join("") : '<div class="empty-state">等待熱力圖資料。</div>';
+        const hotStockRows = hotStocks.length ? hotStocks.map((stock, index) => {
+          const stockPct = num(stock.pct);
+          const score = Math.max(8, Math.min(100, (Math.abs(stockPct) + Math.abs(num(stock.sectorPct)) * 0.45) / maxStockScore * 100));
+          return `<article class="market-ai-stock-row">
+            <div class="market-ai-rank">#${index + 1}</div>
+            <div><h4><span class="market-ai-code">${esc(stock.code)}</span><span class="market-ai-name">${esc(stock.name)}</span></h4><p>${esc(stock.industry)}，漲幅 ${stockPct.toFixed(2)}%，成交額 ${esc(yi(stock.value || stock.amountYi * 100000000))}。</p><div class="market-ai-scorebar"><i style="width:${score.toFixed(1)}%"></i></div></div>
+            <div><span class="market-ai-chip">${esc(stock.industry)}</span><span class="market-ai-chip">${stockPct >= 0 ? "+" : ""}${stockPct.toFixed(2)}%</span></div>
+          </article>`;
+        }).join("") : '<div class="empty-state">等待 AI 判讀資料。</div>';
         ai.innerHTML = `
-          <section class="market-ai-panel">
+          <section class="market-ai-panel market-ai-visual-dashboard">
             <div class="market-ai-sort-note"><strong>AI 判讀 09:00-13:30</strong><span>盤中巡邏，收盤後固定最後 snapshot。</span><span>${esc(heatPayload.heatmapDetectWindow?.reason || "snapshot")}</span></div>
             <section class="market-ai-summary">
               <article class="market-ai-card hero"><small>市場廣度</small><strong>${up >= down ? "多方壓制" : "空方壓制"}</strong><p>上漲 ${up.toLocaleString("zh-TW")} / 下跌 ${down.toLocaleString("zh-TW")}，樣本 ${sample.toLocaleString("zh-TW")}。</p></article>
@@ -246,14 +272,32 @@
               <article class="market-ai-card warning"><small>風險排除</small><strong>${esc(weak[0]?.name || "--")}</strong><p>${esc(weak.slice(0, 3).map((s) => s.name || s.industry).join("、") || "暫無明顯弱勢")}</p></article>
               <article class="market-ai-card"><small>觀察股</small><strong>${esc(hotStocks[0] ? `${hotStocks[0].code} ${hotStocks[0].name}` : "--")}</strong><p>依熱力圖族群強度與成交額排序。</p></article>
             </section>
+            <section class="market-ai-chart-grid">
+              <article class="market-ai-chart-card market-ai-gauge-card">
+                <header><h4>市場廣度圖</h4><span>${upRatio.toFixed(2)}% 上漲</span></header>
+                <div class="market-ai-gauge" style="--ai-up:${upRatio.toFixed(2)};--ai-down:${downRatio.toFixed(2)};">
+                  <div><strong>${upRatio.toFixed(1)}%</strong><span>上漲比例</span></div>
+                </div>
+                <div class="market-ai-breadth-stack" aria-label="漲跌分布">
+                  <i class="market-ai-stack-up" style="width:${upRatio.toFixed(2)}%"></i>
+                  <i class="market-ai-stack-flat" style="width:${flatRatio.toFixed(2)}%"></i>
+                  <i class="market-ai-stack-down" style="width:${downRatio.toFixed(2)}%"></i>
+                </div>
+                <div class="market-ai-mini-stats"><span>上漲 <b>${up.toLocaleString("zh-TW")}</b></span><span>平盤 <b>${flat.toLocaleString("zh-TW")}</b></span><span>下跌 <b>${down.toLocaleString("zh-TW")}</b></span></div>
+              </article>
+              <article class="market-ai-chart-card">
+                <header><h4>強勢族群排行</h4><span>Top ${strong.length}</span></header>
+                <div class="market-ai-bar-list">${sectorBars(strong, "up")}</div>
+              </article>
+              <article class="market-ai-chart-card warning">
+                <header><h4>風險族群排行</h4><span>Bottom ${weak.length}</span></header>
+                <div class="market-ai-bar-list">${sectorBars(weak, "down")}</div>
+              </article>
+            </section>
             <section class="market-ai-block market-ai-hot-section">
               <header><div><h4>熱門觀察股</h4><p>精選前 10 檔</p></div><span>API snapshot</span></header>
               <div class="market-ai-hot">
-                ${hotStocks.length ? hotStocks.map((stock, index) => `<article class="market-ai-stock-row">
-                  <div class="market-ai-rank">#${index + 1}</div>
-                  <div><h4><span class="market-ai-code">${esc(stock.code)}</span><span class="market-ai-name">${esc(stock.name)}</span></h4><p>${esc(stock.industry)}，漲幅 ${num(stock.pct).toFixed(2)}%，成交額 ${esc(yi(stock.value || stock.amountYi * 100000000))}。</p></div>
-                  <div><span class="market-ai-chip">${esc(stock.industry)}</span><span class="market-ai-chip">${num(stock.pct) >= 0 ? "+" : ""}${num(stock.pct).toFixed(2)}%</span></div>
-                </article>`).join("") : '<div class="empty-state">等待 AI 判讀資料。</div>'}
+                ${hotStockRows}
               </div>
             </section>
           </section>
