@@ -836,3 +836,10 @@ npm run verify:live-version
 前端只讀 no-store API 或 desktop route snapshot，不要再靠靜態 JSON / Google Sheet / 版本 bump。
 如果遇到舊 verifier 要求舊檔案，請改 verifier，不要恢復舊檔案。
 ```
+## 固定版本與 terminal module guard
+
+目前不再用版本 bump 修資料、修策略或修 marker。正式版本字串保持穩定；同步狀態以 Git commit、production health、desktop route snapshot 與 terminal module guard 判斷。
+
+必要 module marker：`chipSnapshot`、`chipFlow`、`warrantFlow` 都必須保留，且都指向 `terminal-chip-snapshot-module.js`。缺 marker 時跑 `npm run verify:terminal-modules` 會 fail；請補 marker，不要 bump 版本號。
+
+`npm run verify:bump` 現在是穩定版本 guard：允許前端小修不 bump，但會阻擋未授權的版本字串變更。真正要公開改版時才可用 `ALLOW_VERSION_BUMP=1` 明確授權。

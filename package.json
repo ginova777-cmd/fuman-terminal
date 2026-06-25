@@ -70,7 +70,8 @@
     "mobile:update-event": "node --dns-result-order=ipv4first scripts/publish-mobile-update-event.js",
     "verify:mobile-realtime": "node --dns-result-order=ipv4first scripts/verify-mobile-realtime.js",
     "verify:strategy1-open-buy-ui": "node scripts/verify-strategy1-open-buy-ui-contract.js",
-    "verify:strategy-direct-main": "node scripts/verify-strategy-direct-main-entry.js"
+    "verify:strategy-direct-main": "node scripts/verify-strategy-direct-main-entry.js",
+    "verify:terminal-modules": "node scripts/verify-terminal-modules-contract.js"
   },
   "engines": {
     "node": "20.x"

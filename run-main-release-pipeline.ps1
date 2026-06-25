@@ -24,9 +24,9 @@ $versionFiles = @(
 
 # Release invariant checked by scripts/verify-publish-gate.js:
 # git fetch origin main -> git pull --ff-only origin main -> npm run verify:bump
-# -> npm run bump:version when required -> npm run sync:source -> npm run deploy
-# -> npm run verify:live-version -> npm run verify:warrant-freshness:live
-# -> git push origin HEAD:main.
+# -> npm run sync:source -> npm run deploy -> npm run verify:live-version
+# -> npm run verify:warrant-freshness:live -> git push origin HEAD:main.
+# Frontend version bumps are manual only: pass -ForceBump with ALLOW_VERSION_BUMP=1.
 
 function Write-ReleaseLog($message) {
   Write-Host ("[main-release] {0}" -f $message)
@@ -107,11 +107,12 @@ Invoke-ReleaseCommand "git pull --ff-only origin main" { & $gitExe -C $root pull
 Assert-CleanTree "post-pull main release pipeline"
 
 $beforeVersion = Get-Version
-$bumpStatus = Invoke-ReleaseCheck "npm run verify:bump" { npm run verify:bump }
+Invoke-Npm "verify:bump"
 if ($ForceBump) {
-  Write-ReleaseLog "ForceBump selected; bumping terminal version even without frontend asset changes."
-  Invoke-Npm "bump:version"
-} elseif ($bumpStatus -ne 0) {
+  if ($env:ALLOW_VERSION_BUMP -ne "1") {
+    throw "ForceBump requires ALLOW_VERSION_BUMP=1. Do not bump frontend version for strategy/data fixes."
+  }
+  Write-ReleaseLog "ForceBump selected and approved; bumping terminal version."
   Invoke-Npm "bump:version"
 }
 $afterVersion = Get-Version

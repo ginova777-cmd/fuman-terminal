@@ -18,6 +18,13 @@ if (desktopApiOnlyGuard.status !== 0) {
   issues.push(`verify-desktop-api-only failed: ${(desktopApiOnlyGuard.stderr || desktopApiOnlyGuard.stdout || "").trim()}`);
 }
 
+const terminalModulesGuard = spawnSync(process.execPath, [path.join(ROOT, "scripts", "verify-terminal-modules-contract.js")], {
+  cwd: ROOT,
+  encoding: "utf8",
+});
+if (terminalModulesGuard.status !== 0) {
+  issues.push(`verify-terminal-modules-contract failed: ${(terminalModulesGuard.stderr || terminalModulesGuard.stdout || "").trim()}`);
+}
 function queryScheduledTask(taskName) {
   const escaped = taskName.replace(/'/g, "''");
   const result = spawnSync("powershell.exe", [
@@ -88,7 +95,6 @@ if (!fs.existsSync(path.join(ROOT, "run-main-release-pipeline.ps1"))) {
     "git fetch origin main",
     "git pull --ff-only origin main",
     "npm run verify:bump",
-    "npm run bump:version",
     "npm run sync:source",
     "npm run deploy",
     "npm run verify:live-version",

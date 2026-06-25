@@ -3,6 +3,7 @@ const { spawnSync } = require("child_process");
 const steps = [
   ["guard:source", ["npm", "run", "guard:source"]],
   ["verify:version", ["npm", "run", "verify:version"]],
+  ["verify:terminal-modules", ["npm", "run", "verify:terminal-modules"]],
   ["verify:strategy-direct-main", ["npm", "run", "verify:strategy-direct-main"]],
   ["verify:bump", ["npm", "run", "verify:bump"]],
   ["verify:sw", ["npm", "run", "verify:sw"]],
