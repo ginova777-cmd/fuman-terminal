@@ -275,7 +275,7 @@ try {
       INSTITUTION_REQUEST_DELAY_MS = "15000"
       INSTITUTION_FETCH_RETRIES = "4"
       SHIOAJI_PYTHON = "C:\Users\ginov\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe"
-    } 420
+    } 900
   }
   if (-not $SkipWarrant) {
     Invoke-ScanTask "warrant-flow" "warrant flow raw refresh" "degradable" "scripts\scan-warrant-flow-cache.js" (Join-Path $runtimeRoot "data\warrant-flow-latest.json") @{} 240

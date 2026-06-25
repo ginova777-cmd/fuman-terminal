@@ -5,6 +5,7 @@ const {
   fetchStrategy3CapitalMap,
   fetchStrategy3Intraday1mStatus,
   fetchStrategy3Intraday1mLatestN,
+  fetchStrategy3QuoteLatestReady,
   fetchStrategy3QuoteReady,
   verifyStrategy3ReadAccess,
 } = require("../lib/supabase-public-slot");
@@ -155,6 +156,34 @@ function applyStrategy3Exclusions(stocks, blacklistCodes) {
 
 function sourceDate(payload) {
   return String(payload?.usedDate || payload?.date || payload?.quoteDate || "").replace(/\D/g, "");
+}
+
+function taipeiDateKeyFromValue(value) {
+  const text = String(value || "");
+  const parsed = Date.parse(text);
+  if (Number.isFinite(parsed)) {
+    const parts = new Intl.DateTimeFormat("en-CA", {
+      timeZone: "Asia/Taipei",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).formatToParts(new Date(parsed));
+    const get = (type) => parts.find((part) => part.type === type)?.value || "";
+    return `${get("year")}${get("month")}${get("day")}`;
+  }
+  const compact = text.replace(/\D/g, "");
+  return compact.length >= 8 ? compact.slice(0, 8) : "";
+}
+
+function latestStockDateKey(stocks) {
+  return [...new Set((stocks || []).flatMap((stock) => [
+    taipeiDateKeyFromValue(stock.quoteDate),
+    taipeiDateKeyFromValue(stock.latestCandleTime),
+    taipeiDateKeyFromValue(stock.updatedAt),
+    taipeiDateKeyFromValue(stock.quoteTimeRaw),
+  ]).filter((dateKey) => /^\d{8}$/.test(dateKey)))]
+    .sort()
+    .at(-1) || "";
 }
 
 function preservePreviousTradingSource(previousPayload, currentPayload) {
@@ -532,6 +561,30 @@ async function repairAfter1300StatusFromRpc(stocks, warnings) {
   return { repaired, checked };
 }
 
+async function hydrateAfter1300StatusFromSupabase(stocks, warnings) {
+  if (!Array.isArray(stocks) || !stocks.length) return { statusRows: 0, repaired: 0, checked: 0 };
+  let statusRows = 0;
+  try {
+    const statusResult = await fetchStrategy3Intraday1mStatus(stocks.map((stock) => stock.code));
+    stocks.forEach((stock) => {
+      const status = statusResult.byCode.get(stock.code);
+      if (!status) return;
+      const after1300Count = cleanNumber(status.after_1300_candle_count ?? status.candles_after_1300);
+      stock.after1300CandleCount = after1300Count;
+      stock.hasAfter1300Candle = status.has_after_1300_candle === true || after1300Count > 0;
+      stock.has1300Candle = status.has_1300_candle === true;
+      stock.intradayCandleCount = cleanNumber(status.today_candle_count ?? status.candle_count ?? status.rows_today);
+      stock.latestCandleTime = status.latest_candle_time || stock.latestCandleTime;
+      stock.intradayStatusSource = statusResult.source || stock.intradayStatusSource || "supabase-status";
+      statusRows += 1;
+    });
+  } catch (error) {
+    warnings.push(`strategy3 intraday 1m status read skipped: ${error?.message || String(error)}`);
+  }
+  const repaired = await repairAfter1300StatusFromRpc(stocks, warnings);
+  return { statusRows, ...repaired };
+}
+
 async function fetchJson(url, timeout = 30000) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeout);
@@ -640,8 +693,16 @@ async function fetchUniverse() {
 
 async function fetchSupabaseStrategy3Universe() {
   const access = await verifyStrategy3ReadAccess();
-  const quoteResult = await fetchStrategy3QuoteReady({ minQuotes: 500 });
-  if (!quoteResult.ok) throw new Error(quoteResult.error || "strategy3 quote ready unavailable");
+  const warnings = [];
+  let quoteResult = null;
+  try {
+    quoteResult = await fetchStrategy3QuoteReady({ minQuotes: 500 });
+    if (!quoteResult.ok) throw new Error(quoteResult.error || "strategy3 quote ready unavailable");
+  } catch (error) {
+    warnings.push(`strategy3 quote-ready view fallback to latest quotes: ${error?.message || String(error)}`);
+    quoteResult = await fetchStrategy3QuoteLatestReady({ minQuotes: 500 });
+    if (!quoteResult.ok) throw new Error(quoteResult.error || "strategy3 latest quotes unavailable");
+  }
   const stocks = quoteResult.quotes.map((quote) => ({
     code: quote.code,
     name: quote.name,
@@ -654,6 +715,8 @@ async function fetchSupabaseStrategy3Universe() {
     avgVolume: quote.avgVolume,
     volumeRatio: quote.volumeRatio,
     projectedRatio: quote.projectedRatio,
+    updatedAt: quote.updatedAt,
+    quoteTimeRaw: quote.quoteTimeRaw,
     issuedShares: quote.issuedShares,
     after1300CandleCount: quote.after1300CandleCount,
     hasAfter1300Candle: quote.hasAfter1300Candle,
@@ -671,26 +734,7 @@ async function fetchSupabaseStrategy3Universe() {
     is_warrant: quote.is_warrant,
     is_cb: quote.is_cb,
   }));
-  const warnings = [];
-  try {
-    const statusResult = await fetchStrategy3Intraday1mStatus(stocks.map((stock) => stock.code));
-    stocks.forEach((stock) => {
-      const status = statusResult.byCode.get(stock.code);
-      if (!status) return;
-      stock.after1300CandleCount = cleanNumber(status.after_1300_candle_count ?? status.candles_after_1300);
-      stock.hasAfter1300Candle = status.has_after_1300_candle === true || stock.after1300CandleCount > 0;
-      stock.has1300Candle = status.has_1300_candle === true;
-      stock.intradayCandleCount = cleanNumber(status.today_candle_count ?? status.candle_count ?? status.rows_today);
-      stock.latestCandleTime = status.latest_candle_time || stock.latestCandleTime;
-    });
-  } catch (error) {
-    warnings.push(`strategy3 intraday 1m status read skipped: ${error?.message || String(error)}`);
-    stocks.forEach((stock) => {
-      stock.after1300CandleCount = Math.max(1, cleanNumber(stock.after1300CandleCount));
-      stock.hasAfter1300Candle = true;
-    });
-  }
-  await repairAfter1300StatusFromRpc(stocks, warnings);
+  await hydrateAfter1300StatusFromSupabase(stocks, warnings);
   let capitalResult = { byCode: new Map() };
   try {
     capitalResult = await fetchStrategy3CapitalMap(stocks.map((stock) => stock.code));
@@ -922,6 +966,7 @@ async function main() {
       ...issuedSharesResult.warnings,
       ...volumeAverageResult.warnings,
     ];
+    await hydrateAfter1300StatusFromSupabase(stocks, sourceWarnings);
   }
   if (!stocks.length) throw new Error("No stock universe");
   const exclusionResult = applyStrategy3Exclusions(stocks, loadStrategy3Blacklist());
@@ -938,7 +983,7 @@ async function main() {
     throw new Error(`Strategy3 source health failed: ${sourceHealth.issues.join("; ")}`);
   }
   const matches = await buildMatches(stocks, issuedSharesMap, volumeAverageMap, sourceWarnings);
-  const quoteDate = stocks.find((stock) => stock.quoteDate)?.quoteDate || "";
+  const quoteDate = latestStockDateKey(stocks);
   const output = {
     ok: true,
     source,

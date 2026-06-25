@@ -16,8 +16,9 @@ const RUNS_TABLE = process.env.STRATEGY4_SUPABASE_RUNS_TABLE || "strategy4_scan_
 const EXPECTED_SCHEMA = "strategy4-cache-v3-unit-contract";
 const EXPECTED_UNIT = "lots";
 const EXPECTED_SOURCE = "supabase:strategy4_daily_ohlcv_view";
+const STOCK_DAILY_VOLUME_SOURCE = "supabase:stock_daily_volume";
 const LEGACY_LOTS_SOURCE = "supabase:fugle_daily_volume:legacy-lots";
-const ALLOWED_DATA_CONTRACT_SOURCES = new Set([EXPECTED_SOURCE, LEGACY_LOTS_SOURCE]);
+const ALLOWED_DATA_CONTRACT_SOURCES = new Set([EXPECTED_SOURCE, STOCK_DAILY_VOLUME_SOURCE, LEGACY_LOTS_SOURCE]);
 
 function apiOnlyError(error, detail = "") {
   return {
@@ -134,11 +135,13 @@ function buildStrategy4SourceHealth(rows, run, matches) {
   const sourceWarnings = Array.isArray(runPayload.sourceWarnings) ? [...runPayload.sourceWarnings] : [];
   const resultSourceCounts = countBy(rows.map((row) => row.price_source || row.payload?.priceSource || ""));
   const allExpectedSource = Object.keys(resultSourceCounts).length === 1 && resultSourceCounts[EXPECTED_SOURCE] === rows.length;
-  if (String(run?.quality_status || rows[0]?.quality_status || "") === "degraded" && !sourceWarnings.length && !runPayload.supabaseCoverage) {
+  const qualityStatus = String(run?.quality_status || rows[0]?.quality_status || "");
+  if (qualityStatus === "degraded" && !sourceWarnings.length && !runPayload.supabaseCoverage) {
     sourceWarnings.push("Legacy degraded run has no source detail in strategy4_scan_runs.payload; inferred source mix from result rows.");
   }
   return {
-    status: String(run?.quality_status || rows[0]?.quality_status || ""),
+    status: qualityStatus === "complete" ? "ok" : qualityStatus,
+    qualityStatus,
     sourceWarnings,
     resultSourceCounts,
     allRowsExpectedSource: allExpectedSource,

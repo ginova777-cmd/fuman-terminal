@@ -38,6 +38,7 @@ const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY
 const STRATEGY5_RUNS_TABLE = process.env.STRATEGY5_SUPABASE_RUNS_TABLE || "strategy5_scan_runs";
 const STRATEGY5_RESULTS_TABLE = process.env.STRATEGY5_SUPABASE_RESULTS_TABLE || "strategy5_scan_results";
 const STRATEGY5_API_ONLY = true;
+const STRATEGY5_MAX_FINMIND_CHIP_AGE_DAYS = Number(process.env.STRATEGY5_MAX_FINMIND_CHIP_AGE_DAYS || 3);
 
 function readJson(file, fallback) {
   try { return JSON.parse(fs.readFileSync(file, "utf8")); } catch { return fallback; }
@@ -424,6 +425,14 @@ function taipeiDateKey(date = new Date()) {
   return `${parts.year}${parts.month}${parts.day}`;
 }
 
+function dateAgeDays(dateKey) {
+  const compact = String(dateKey || "").replace(/\D/g, "").slice(0, 8);
+  if (!/^\d{8}$/.test(compact)) return null;
+  const today = taipeiDateKey();
+  const toUtc = (value) => Date.UTC(Number(value.slice(0, 4)), Number(value.slice(4, 6)) - 1, Number(value.slice(6, 8)));
+  return Math.floor((toUtc(today) - toUtc(compact)) / 86400000);
+}
+
 function taipeiParts(date = new Date()) {
   return Object.fromEntries(new Intl.DateTimeFormat("en-CA", {
     timeZone: "Asia/Taipei",
@@ -586,6 +595,9 @@ async function fetchFinMindChipLatestMap(limit = 5000) {
     const trust = cleanNumber(row.investment_trust_net);
     const dealer = cleanNumber(row.dealer_net);
     const total = cleanNumber(row.institution_total_net || foreign + trust + dealer);
+    const tradeDate = row.trade_date || "";
+    const ageDays = dateAgeDays(tradeDate);
+    if (ageDays == null || ageDays > STRATEGY5_MAX_FINMIND_CHIP_AGE_DAYS) return;
     map.set(code, {
       foreign,
       trust,
@@ -594,7 +606,7 @@ async function fetchFinMindChipLatestMap(limit = 5000) {
       marginBalance: cleanNumber(row.margin_balance),
       shortBalance: cleanNumber(row.short_balance),
       source: row.source || "finmind-chip",
-      tradeDate: row.trade_date || "",
+      tradeDate,
     });
   });
   return map;

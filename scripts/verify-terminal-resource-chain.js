@@ -30,6 +30,7 @@ const STRATEGIES = [
     policy: "latest-complete; non-canvas full API may be blocked until futopt decision ready",
     endpoint: "/api/open-buy-latest",
     mobileTab: "strategy1",
+    receiptKey: "open-buy",
     runView: { table: "v_strategy1_open_buy_latest_complete_run", strategy: "strategy1" },
     resultTable: "strategy1_open_buy_results",
     resultStrategy: "strategy1",
@@ -43,6 +44,7 @@ const STRATEGIES = [
     endpoint: "/api/latest-strategy?key=strategy2",
     directEndpoint: "/api/strategy2-latest",
     mobileTab: "strategy2",
+    receiptKey: "strategy2",
     runView: { table: "v_strategy2_latest_complete_run", strategy: "strategy2" },
     resultTable: "strategy2_scan_results",
     resultStrategy: "strategy2",
@@ -54,6 +56,7 @@ const STRATEGIES = [
     policy: "latest complete scan",
     endpoint: "/api/strategy3-latest",
     mobileTab: "strategy3",
+    receiptKey: "strategy3",
     runView: { table: "v_strategy3_latest_complete_run", strategy: "strategy3" },
     resultTable: "strategy3_scan_results",
     resultStrategy: "strategy3",
@@ -64,6 +67,7 @@ const STRATEGIES = [
     policy: "latest complete scan",
     endpoint: "/api/strategy4-latest",
     mobileTab: "strategy4",
+    receiptKey: "strategy4",
     runView: { table: "strategy4_scan_runs", strategy: "strategy4", order: "finished_at.desc" },
     resultTable: "strategy4_scan_results",
     resultStrategy: "strategy4",
@@ -74,6 +78,7 @@ const STRATEGIES = [
     policy: "latest complete scan",
     endpoint: "/api/strategy5-latest",
     mobileTab: "strategy5",
+    receiptKey: "strategy5",
     runView: { table: "v_strategy5_latest_complete_run", strategy: "strategy5" },
     resultTable: "strategy5_scan_results",
     resultStrategy: "strategy5",
@@ -84,6 +89,7 @@ const STRATEGIES = [
     policy: "latest complete scan",
     endpoint: "/api/institution-latest",
     mobileTab: "chip",
+    receiptKey: "institution",
     runView: { table: "v_institution_latest_complete_run", strategy: "institution" },
     resultTable: "institution_scan_results",
     resultStrategy: "institution",
@@ -94,6 +100,7 @@ const STRATEGIES = [
     policy: "snapshot latest",
     endpoint: "/api/cb-detect-latest",
     mobileTab: "cb",
+    receiptKey: "cb-detect",
     snapshotKey: "cb_detect_latest",
   },
   {
@@ -102,6 +109,7 @@ const STRATEGIES = [
     policy: "latest complete scan",
     endpoint: "/api/warrant-flow-latest",
     mobileTab: "warrant",
+    receiptKey: "warrant-flow",
     runView: { table: "v_warrant_flow_latest_complete_run", strategy: "warrant_flow" },
     resultTable: "warrant_flow_scan_results",
     resultStrategy: "warrant_flow",
@@ -111,6 +119,7 @@ const STRATEGIES = [
     label: "即時雷達",
     policy: "same-day live",
     endpoint: "/api/realtime-radar-latest",
+    receiptKey: "realtime-radar",
   },
   {
     key: "market",
@@ -130,6 +139,14 @@ function readSecret(name) {
     } catch {}
   }
   return "";
+}
+
+function readJsonFile(file, fallback = null) {
+  try {
+    return JSON.parse(fs.readFileSync(file, "utf8"));
+  } catch {
+    return fallback;
+  }
 }
 
 function taipeiDateKey(date = new Date()) {
@@ -154,6 +171,32 @@ function compactDate(value) {
 function cleanNumber(value) {
   const number = Number(String(value ?? "").replace(/[,+%]/g, ""));
   return Number.isFinite(number) ? number : 0;
+}
+
+function receiptSummary(receiptKey) {
+  if (!receiptKey) return null;
+  const file = path.join(RUNTIME_DIR, "data", "scan-receipts", `${receiptKey}.json`);
+  const row = readJsonFile(file);
+  if (!row) return { ok: false, key: receiptKey, file, status: "missing", error: "receipt_missing" };
+  return {
+    ok: row.status === "complete" && row.complete !== false && row.fallback !== true,
+    key: receiptKey,
+    file,
+    status: String(row.status || ""),
+    complete: row.complete === true,
+    fallback: row.fallback === true,
+    startedAt: row.startedAt || "",
+    finishedAt: row.finishedAt || "",
+    exitCode: row.exitCode,
+    scanned: cleanNumber(row.scanned),
+    total: cleanNumber(row.total),
+    matches: cleanNumber(row.matches),
+    qualityStatus: row.qualityStatus || "",
+    runId: String(row.runId || ""),
+    blockingReason: row.blockingReason || "",
+    warnings: Array.isArray(row.warnings) ? row.warnings : [],
+    log: row.log || "",
+  };
 }
 
 function withQuery(endpoint, params = {}) {
@@ -376,6 +419,23 @@ function summarizePayload(payload, status = 200, elapsedMs = 0) {
   };
 }
 
+function sourceHealthSummary(payload = {}, supabase = {}) {
+  const health = payload?.sourceHealth || payload?.payload?.sourceHealth || supabase?.row?.payload?.sourceHealth || null;
+  if (!health || typeof health !== "object") return null;
+  return {
+    status: health.status || "",
+    issues: Array.isArray(health.issues) ? health.issues : [],
+    warnings: Array.isArray(health.warnings) ? health.warnings : [],
+    warningCount: cleanNumber(health.warningCount),
+    warningLimit: cleanNumber(health.warningLimit),
+    stockUniverseCount: cleanNumber(health.stockUniverseCount),
+    after1300ReadyCount: cleanNumber(health.after1300ReadyCount),
+    minAfter1300Candidates: cleanNumber(health.minAfter1300Candidates),
+    issuedSharesCount: cleanNumber(health.issuedSharesCount),
+    volumeAverageCount: cleanNumber(health.volumeAverageCount),
+  };
+}
+
 function endpointFromSnapshot(snapshotPayload, endpoint) {
   const endpoints = snapshotPayload?.endpoints && typeof snapshotPayload.endpoints === "object" ? snapshotPayload.endpoints : {};
   const target = new URL(endpoint, BASE_URL);
@@ -441,8 +501,34 @@ function obviousFallback(summary) {
   return /(static|fallback|previous|json-snapshot|snapshot-friendly-empty)/.test(text) || summary?.snapshotFallback;
 }
 
-function issueList(config, supabase, live, compact, snapshot, mobile) {
+function issueList(config, receipt, sourceHealth, supabase, live, compact, snapshot, mobile) {
   const issues = [];
+  if (receipt) {
+    if (receipt.status === "missing") issues.push(`scanner receipt missing: ${receipt.key}`);
+    if (receipt.status === "failed" || receipt.complete === false || receipt.exitCode > 0) {
+      issues.push(`scanner receipt failed: ${receipt.status || "unknown"} exit=${receipt.exitCode ?? ""} ${receipt.blockingReason || ""}`.trim());
+    } else if (receipt.status && receipt.status !== "complete") {
+      issues.push(`scanner receipt not clean: ${receipt.status}`);
+    }
+    if (receipt.fallback) issues.push("scanner receipt fallback=true");
+    if (receipt.runId && supabase?.runId && receipt.runId !== supabase.runId) {
+      issues.push(`scanner receipt runId != Supabase latest (${receipt.runId} vs ${supabase.runId})`);
+    }
+    if (receipt.runId && compact?.runId && receipt.runId !== compact.runId) {
+      issues.push(`scanner receipt runId != terminal API (${receipt.runId} vs ${compact.runId})`);
+    }
+  }
+  if (sourceHealth) {
+    if (sourceHealth.status && sourceHealth.status !== "ok") {
+      issues.push(`sourceHealth ${sourceHealth.status}: ${(sourceHealth.issues || []).join("; ") || "warnings present"}`);
+    }
+    if (sourceHealth.warningLimit && sourceHealth.warningCount > sourceHealth.warningLimit) {
+      issues.push(`sourceHealth warningCount ${sourceHealth.warningCount} > ${sourceHealth.warningLimit}`);
+    }
+    if (sourceHealth.minAfter1300Candidates && sourceHealth.after1300ReadyCount < sourceHealth.minAfter1300Candidates) {
+      issues.push(`sourceHealth after1300ReadyCount ${sourceHealth.after1300ReadyCount} < ${sourceHealth.minAfter1300Candidates}`);
+    }
+  }
   if (live?.status >= 500 || live?.ok === false) issues.push(`live API ${live.status || ""} ${live.error || ""}`.trim());
   if (compact?.status >= 500 || compact?.ok === false) issues.push(`terminal API ${compact.status || ""} ${compact.error || ""}`.trim());
   if (snapshot?.status >= 500 || (snapshot?.ok === false && !(config.allowMissingDesktopSnapshot && snapshot?.error === "endpoint_not_in_desktop_snapshot"))) {
@@ -464,6 +550,7 @@ function issueList(config, supabase, live, compact, snapshot, mobile) {
 }
 
 async function auditOne(config, desktopSnapshotPayload) {
+  const receipt = receiptSummary(config.receiptKey);
   const endpoint = withQuery(config.endpoint, { canvas: 1, compact: 1, shell: 1, limit: 60, t: Date.now() });
   const liveEndpoint = withQuery(config.directEndpoint || config.endpoint, { canvas: 1, compact: 1, shell: 1, limit: 60, live: 1, t: Date.now() });
   const [latestRun, snapshotKey, liveResult, compactResult, mobileResult] = await Promise.all([
@@ -495,11 +582,16 @@ async function auditOne(config, desktopSnapshotPayload) {
   const mobile = mobileResult ? (mobileResult.ok
     ? parseMobileFragment(mobileResult.text)
     : { status: mobileResult.status, ok: false, error: mobileResult.error || mobileResult.text?.slice(0, 140) || "" }) : null;
-  const issues = issueList(config, supabase, live, compact, desktopSnapshot, mobile);
+  const sourceHealth = sourceHealthSummary(liveResult.json, supabase)
+    || sourceHealthSummary(compactResult.json, supabase)
+    || sourceHealthSummary(snapEntry.payload, supabase);
+  const issues = issueList(config, receipt, sourceHealth, supabase, live, compact, desktopSnapshot, mobile);
   return {
     key: config.key,
     label: config.label,
     policy: config.policy,
+    receipt,
+    sourceHealth,
     endpoint,
     liveEndpoint,
     supabase,
@@ -522,9 +614,15 @@ function markdown(results, desktopSnapshot, fastBundle) {
   lines.push(`- Desktop snapshot: status=${desktopSnapshot.status} fresh=${desktopSnapshot.summary?.snapshotFresh ?? ""} updatedAt=${desktopSnapshot.summary?.updatedAt || ""} endpointCount=${desktopSnapshot.summary?.endpointCount || 0}`);
   lines.push(`- Terminal fast bundle: status=${fastBundle.status} fresh=${fastBundle.summary?.snapshotFresh ?? ""} updatedAt=${fastBundle.summary?.updatedAt || ""} endpointCount=${fastBundle.summary?.endpointCount || 0}`);
   lines.push("");
-  lines.push("| 項目 | Supabase 最新 | live=1 API | 終端 compact API | desktop snapshot | mobile fragment | 判定 |");
-  lines.push("|---|---:|---:|---:|---:|---:|---|");
+  lines.push("| 項目 | scanner receipt | source health | Supabase 最新 | live=1 API | 終端 compact API | desktop snapshot | mobile fragment | 判定 |");
+  lines.push("|---|---:|---:|---:|---:|---:|---:|---:|---|");
   for (const row of results) {
+    const receipt = row.receipt
+      ? `${row.receipt.status || "--"}<br>${row.receipt.runId || "--"}<br>${row.receipt.finishedAt || "--"}`
+      : "n/a";
+    const sourceHealth = row.sourceHealth
+      ? `${row.sourceHealth.status || "--"}<br>13:00=${row.sourceHealth.after1300ReadyCount || 0}/${row.sourceHealth.minAfter1300Candidates || "--"} warn=${row.sourceHealth.warningCount || 0}/${row.sourceHealth.warningLimit || "--"}`
+      : "n/a";
     const sup = row.supabase?.ok
       ? `${row.supabase.runId || row.supabase.date || "--"}<br>${row.supabase.count ?? "--"}`
       : `ERR ${row.supabase?.error || "missing"}`;
@@ -534,7 +632,7 @@ function markdown(results, desktopSnapshot, fastBundle) {
     const mob = row.mobileFragment
       ? `${row.mobileFragment.status || "--"} ${row.mobileFragment.runId || "--"}<br>${row.mobileFragment.count ?? "--"}`
       : "n/a";
-    lines.push(`| ${row.label} | ${sup} | ${live} | ${term} | ${snap} | ${mob} | ${row.ok ? "OK" : row.issues.join("<br>")} |`);
+    lines.push(`| ${row.label} | ${receipt} | ${sourceHealth} | ${sup} | ${live} | ${term} | ${snap} | ${mob} | ${row.ok ? "OK" : row.issues.join("<br>")} |`);
   }
   lines.push("");
   lines.push("## Top Rows");

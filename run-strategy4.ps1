@@ -17,10 +17,37 @@ Set-Location $repo
 $logDir = Join-Path $repo "logs"
 New-Item -ItemType Directory -Force -Path $logDir | Out-Null
 $log = Join-Path $logDir ("strategy4-{0}.log" -f (Get-Date -Format yyyyMMdd-HHmmss))
+$receiptDir = Join-Path $env:FUMAN_DATA_DIR "scan-receipts"
+New-Item -ItemType Directory -Force -Path $receiptDir | Out-Null
+$scanStartedAt = (Get-Date).ToString("o")
 $strategy4Stamp = Get-Date -Format yyyyMMdd
 
 function Write-Log($message) {
   $message | Tee-Object -FilePath $log -Append | Out-Null
+}
+
+function Write-Strategy4Receipt($Status, $ExitCode, $Complete, $Matches, $RunId, $Warnings = @(), $BlockingReason = "") {
+  $receipt = [ordered]@{
+    strategy = "strategy4"
+    label = "strategy4 full scan"
+    tier = "critical"
+    startedAt = $scanStartedAt
+    finishedAt = (Get-Date).ToString("o")
+    status = $Status
+    exitCode = $ExitCode
+    scanned = 0
+    total = 0
+    matches = $Matches
+    complete = $Complete
+    qualityStatus = if ($Complete) { "complete" } else { "" }
+    fallback = $false
+    runId = $RunId
+    payloadPath = "supabase:strategy4_scan_results"
+    warnings = @($Warnings)
+    blockingReason = $BlockingReason
+    log = $log
+  }
+  $receipt | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath (Join-Path $receiptDir "strategy4.json") -Encoding utf8
 }
 
 function Invoke-CacheSyncWithRetry($scriptPath, $maxAttempts = 3) {
@@ -86,12 +113,14 @@ try {
   $sourceExit = $LASTEXITCODE
   if ($sourceExit -ne 0) {
     Write-Log "Strategy4 data source verification failed with exit code $sourceExit"
+    Write-Strategy4Receipt "failed" $sourceExit $false 0 "" @("data source verification exit code $sourceExit") "critical scan failed during data source verification"
     exit $sourceExit
   }
   & $nodeExe "scripts\verify-strategy4-contract.js" *>&1 | Tee-Object -FilePath $log -Append
   $contractExit = $LASTEXITCODE
   if ($contractExit -ne 0) {
     Write-Log "Strategy4 contract verification failed with exit code $contractExit"
+    Write-Strategy4Receipt "failed" $contractExit $false 0 "" @("contract verification exit code $contractExit") "critical scan failed during contract verification"
     exit $contractExit
   }
   Write-Log "=== Strategy4 Supabase daily volume cache prewarm start $(Get-Date) ==="
@@ -117,6 +146,7 @@ try {
   }
   if ($prewarmExit -ne 0) {
     Write-Log "Strategy4 Supabase daily volume cache prewarm failed with exit code $prewarmExit"
+    Write-Strategy4Receipt "failed" $prewarmExit $false 0 "" @("prewarm exit code $prewarmExit") "critical scan failed during history cache prewarm"
     exit $prewarmExit
   }
   Write-Log "=== Strategy4 Supabase daily volume cache prewarm end $(Get-Date) ==="
@@ -136,12 +166,13 @@ try {
 
 if ($scanExit -ne 0) {
   Write-Log "Strategy4 scan failed with exit code $scanExit"
+  Write-Strategy4Receipt "failed" $scanExit $false 0 "" @("scanner exit code $scanExit") "critical scan failed with exit code $scanExit"
   exit $scanExit
 }
 
 Write-Log "Strategy4 API-only: static JSON copy, slim generation, cache sync, postflight static checks, and JSON-based sheet upload are disabled."
 
-$apiUrl = "https://fuman-terminal.vercel.app/api/strategy4-latest?fresh=$([DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds())"
+$apiUrl = "https://fuman-terminal.vercel.app/api/strategy4-latest?canvas=1&compact=1&shell=1&limit=70&live=1&fresh=$([DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds())"
 try {
   $apiResponse = Invoke-WebRequest -Uri $apiUrl -UseBasicParsing -TimeoutSec 45
   $strategy4Output = $apiResponse.Content | ConvertFrom-Json
@@ -151,9 +182,17 @@ try {
   if ([string]::IsNullOrWhiteSpace([string]$strategy4Output.runId)) { throw "missing runId" }
   if (([int]$strategy4Output.count) -le 0) { throw "empty count=$($strategy4Output.count)" }
   if ($cacheControl -notmatch "no-store") { throw "missing no-store cache-control=$cacheControl" }
+  $apiUpdatedAtText = [string]($strategy4Output.updatedAt ?? $strategy4Output.generatedAt)
+  if ([string]::IsNullOrWhiteSpace($apiUpdatedAtText)) { throw "missing updatedAt" }
+  $apiUpdatedAt = [DateTimeOffset]::Parse($apiUpdatedAtText)
+  $scanStarted = [DateTimeOffset]::Parse($scanStartedAt)
+  if ($apiUpdatedAt -lt $scanStarted.AddMinutes(-5)) {
+    throw "api did not expose this scan yet: runId=$($strategy4Output.runId) updatedAt=$apiUpdatedAtText scanStartedAt=$scanStartedAt"
+  }
   Write-Log "Strategy4 API-only verification ok: runId=$($strategy4Output.runId) count=$($strategy4Output.count) scanStamp=$($strategy4Output.scanStamp) cache=$cacheControl"
 } catch {
   Write-Log "Strategy4 API-only verification failed: $($_.Exception.Message)"
+  Write-Strategy4Receipt "failed" 1 $false 0 "" @($_.Exception.Message) "critical scan failed during API verification"
   exit 1
 }
 
@@ -162,12 +201,14 @@ if (Test-Path -LiteralPath $snapshotScript) {
   & $snapshotScript -Source "strategy4" -LogPath $log
   if ($LASTEXITCODE -ne 0) {
     Write-Log "Strategy4 desktop snapshot refresh failed with exit code $LASTEXITCODE"
+    Write-Strategy4Receipt "failed" $LASTEXITCODE $false 0 ([string]$strategy4Output.runId) @("desktop snapshot refresh exit code $LASTEXITCODE") "critical scan failed during desktop snapshot refresh"
     exit $LASTEXITCODE
   }
 } else {
   Write-Log "Strategy4 desktop snapshot refresh skipped; helper not found."
 }
 
+Write-Strategy4Receipt "complete" 0 $true ([int]$strategy4Output.count) ([string]$strategy4Output.runId)
 Write-Log "=== Strategy4 full scan end $(Get-Date) ==="
 
 

@@ -11,11 +11,38 @@ $nodeExe = "C:\Program Files\nodejs\node.exe"
 $logDir = Join-Path $env:FUMAN_RUNTIME_DIR "logs"
 New-Item -ItemType Directory -Force -Path $logDir, $env:FUMAN_DATA_DIR, $env:FUMAN_CACHE_DIR, $env:FUMAN_STATE_DIR | Out-Null
 $log = Join-Path $logDir ("strategy3-complete-scan-{0}.log" -f (Get-Date -Format yyyyMMdd-HHmmss))
+$receiptDir = Join-Path $env:FUMAN_DATA_DIR "scan-receipts"
+New-Item -ItemType Directory -Force -Path $receiptDir | Out-Null
+$scanStartedAt = (Get-Date).ToString("o")
 
 function Write-Strategy3CompleteLog($Message) {
   $line = "[{0}] {1}" -f (Get-Date -Format "yyyy-MM-dd HH:mm:ss"), $Message
   Write-Host $line
   Add-Content -LiteralPath $log -Value $line -Encoding utf8
+}
+
+function Write-Strategy3Receipt($Status, $ExitCode, $Complete, $Matches, $RunId, $Warnings = @(), $BlockingReason = "") {
+  $receipt = [ordered]@{
+    strategy = "strategy3"
+    label = "strategy3 raw refresh"
+    tier = "critical"
+    startedAt = $scanStartedAt
+    finishedAt = (Get-Date).ToString("o")
+    status = $Status
+    exitCode = $ExitCode
+    scanned = 0
+    total = 0
+    matches = $Matches
+    complete = $Complete
+    qualityStatus = if ($Complete) { "complete" } else { "" }
+    fallback = $false
+    runId = $RunId
+    payloadPath = (Join-Path $env:FUMAN_DATA_DIR "strategy3-latest.json")
+    warnings = @($Warnings)
+    blockingReason = $BlockingReason
+    log = $log
+  }
+  $receipt | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath (Join-Path $receiptDir "strategy3.json") -Encoding utf8
 }
 
 . "${PSScriptRoot}\schedule-guard.ps1"
@@ -65,10 +92,12 @@ captureHandler(handler).then((result) => {
   $count = if ($null -ne $payload.count) { [int]$payload.count } else { @($payload.matches).Count }
   if ($usedDate -ne $today) { throw "Strategy3 latest API stale; usedDate=$usedDate today=$today" }
   if ($count -le 0) { throw "Strategy3 latest API empty; count=$count" }
-  if ([string]$payload.cacheSource -ne "supabase-api") { throw "Strategy3 latest API did not use complete-run API; cacheSource=$($payload.cacheSource)" }
+  $cacheSource = [string]$payload.cacheSource
+  if ($cacheSource -notin @("supabase-api", "supabase-snapshot")) { throw "Strategy3 latest API did not use Supabase complete-run/snapshot path; cacheSource=$cacheSource" }
   if ([string]::IsNullOrWhiteSpace([string]$payload.runId)) { throw "Strategy3 latest API missing runId" }
-  if ([string]$payload.transport.gate -ne "run_id") { throw "Strategy3 latest API did not use run_id gate; gate=$($payload.transport.gate)" }
+  if ($cacheSource -eq "supabase-api" -and [string]$payload.transport.gate -ne "run_id") { throw "Strategy3 latest API did not use run_id gate; gate=$($payload.transport.gate)" }
   Write-Strategy3CompleteLog "Strategy3 complete API verified: usedDate=$usedDate count=$count runId=$($payload.runId) cacheSource=$($payload.cacheSource) gate=$($payload.transport.gate)"
+  return $payload
 }
 
 Write-Strategy3CompleteLog "Strategy3 complete scan start"
@@ -79,9 +108,10 @@ if ($exitCode -ne 0) { throw "Strategy3 complete scanner failed with exit code $
 
 $apiVerified = $false
 $lastApiError = ""
+$verifiedPayload = $null
 for ($attempt = 1; $attempt -le 6; $attempt++) {
   try {
-    Assert-Strategy3CompleteApi
+    $verifiedPayload = Assert-Strategy3CompleteApi
     $apiVerified = $true
     break
   } catch {
@@ -102,5 +132,6 @@ if (Test-Path -LiteralPath $snapshotScript) {
   Write-Strategy3CompleteLog "Strategy3 desktop snapshot refresh skipped; helper not found."
 }
 
+Write-Strategy3Receipt "complete" 0 $true ([int]$verifiedPayload.count) ([string]$verifiedPayload.runId)
 Write-Strategy3CompleteLog "Strategy3 complete scan end; Supabase complete run + no-store API is the terminal fast path"
 

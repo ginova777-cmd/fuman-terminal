@@ -17,6 +17,33 @@ $nodeExe = "C:\Program Files\nodejs\node.exe"
 $logDir = Join-Path $runtime "logs"
 New-Item -ItemType Directory -Force -Path $logDir | Out-Null
 $log = Join-Path $logDir ("institution-{0}.log" -f (Get-Date -Format "yyyyMMdd-HHmmss"))
+$receiptDir = Join-Path $env:FUMAN_DATA_DIR "scan-receipts"
+New-Item -ItemType Directory -Force -Path $receiptDir | Out-Null
+$scanStartedAt = (Get-Date).ToString("o")
+
+function Write-InstitutionReceipt($Status, $ExitCode, $Complete, $Matches, $RunId, $Warnings = @(), $BlockingReason = "") {
+  $receipt = [ordered]@{
+    strategy = "institution"
+    label = "institution raw refresh"
+    tier = "critical"
+    startedAt = $scanStartedAt
+    finishedAt = (Get-Date).ToString("o")
+    status = $Status
+    exitCode = $ExitCode
+    scanned = 0
+    total = 0
+    matches = $Matches
+    complete = $Complete
+    qualityStatus = if ($Complete) { "complete" } else { "" }
+    fallback = $false
+    runId = $RunId
+    payloadPath = "supabase:institution_scan_results"
+    warnings = @($Warnings)
+    blockingReason = $BlockingReason
+    log = $log
+  }
+  $receipt | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath (Join-Path $receiptDir "institution.json") -Encoding utf8
+}
 
 function Invoke-NodeScan($scriptPath, $label) {
   Push-Location "${PSScriptRoot}"
@@ -38,47 +65,23 @@ function Invoke-NodeScan($scriptPath, $label) {
   }
 }
 
-function Copy-VerifiedFile($source, $destination, $label) {
-  if (-not (Test-Path -LiteralPath $source)) {
-    throw "$label source missing: $source"
+function Assert-InstitutionApi {
+  $url = "https://fuman-terminal.vercel.app/api/institution-latest?canvas=1&compact=1&shell=1&limit=60&live=1&ts=$([DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds())"
+  $response = Invoke-WebRequest -Uri $url -UseBasicParsing -TimeoutSec 45
+  $payload = $response.Content | ConvertFrom-Json
+  if ($response.StatusCode -ne 200 -or $payload.ok -ne $true -or -not $payload.runId) {
+    throw "Institution API verification failed status=$($response.StatusCode) ok=$($payload.ok) runId=$($payload.runId)"
   }
-  New-Item -ItemType Directory -Force -Path (Split-Path -Parent $destination) | Out-Null
-  Copy-Item -LiteralPath $source -Destination $destination -Force
-  $srcHash = (Get-FileHash -LiteralPath $source -Algorithm SHA256).Hash
-  $dstHash = (Get-FileHash -LiteralPath $destination -Algorithm SHA256).Hash
-  if ($srcHash -ne $dstHash) {
-    throw "$label copy verification failed: $destination"
+  if ([int]$payload.count -le 0) { throw "Institution API empty count=$($payload.count)" }
+  $apiUpdatedAtText = [string]($payload.updatedAt ?? $payload.generatedAt)
+  if ([string]::IsNullOrWhiteSpace($apiUpdatedAtText)) { throw "Institution API missing updatedAt" }
+  $apiUpdatedAt = [DateTimeOffset]::Parse($apiUpdatedAtText)
+  $scanStarted = [DateTimeOffset]::Parse($scanStartedAt)
+  if ($apiUpdatedAt -lt $scanStarted.AddMinutes(-5)) {
+    throw "Institution API did not expose this scan yet: runId=$($payload.runId) updatedAt=$apiUpdatedAtText scanStartedAt=$scanStartedAt"
   }
-}
-
-function Sync-InstitutionLocalCache {
-  $dataDir = Join-Path $runtime "data"
-  $mainDeployRepo = if ($env:FUMAN_MAIN_DEPLOY_REPO) { $env:FUMAN_MAIN_DEPLOY_REPO } else { "C:\fuman-terminal" }
-  $targets = @("${PSScriptRoot}", $mainDeployRepo) | Select-Object -Unique
-  $files = @(
-    "institution-latest.json",
-    "institution-summary.json",
-    "institution-slim.json",
-    "institution-joint-top.json",
-    "institution-foreign-top.json",
-    "institution-trust-top.json",
-    "institution-mobile-top.json",
-    "institution-tdcc-breakout.json",
-    "institution-tdcc-breakout-top.json",
-    "institution-tdcc-breakout.csv",
-    "institution-backup.json",
-    "data-status-index.json",
-    "terminal-home-bundle.json",
-    "mobile-home-summary.json"
-  )
-  foreach ($targetRoot in $targets) {
-    foreach ($file in $files) {
-      $source = Join-Path $dataDir $file
-      if (Test-Path -LiteralPath $source) {
-        Copy-VerifiedFile $source (Join-Path $targetRoot "data\$file") "institution local mirror $file"
-      }
-    }
-  }
+  "Institution API verified runId=$($payload.runId) count=$($payload.count) cache=$($payload.cacheSource)" >> $log
+  return $payload
 }
 
 "=== Institution scan start $(Get-Date) ===" | Out-File $log -Encoding utf8
@@ -89,7 +92,17 @@ $scanExit = Invoke-NodeScan "scripts\scan-institution-cache.js" "Institution sca
 if ($scanExit -ne 0) {
   "Institution scan failed with exit code $scanExit" >> $log
   Write-FumanFlowHealth -Scope institution -Status scan_failed -Message "Institution scan failed" -Detail @{ exitCode = $scanExit; log = $log }
+  Write-InstitutionReceipt "failed" $scanExit $false 0 "" @("scanner exit code $scanExit") "critical scan failed with exit code $scanExit"
   exit $scanExit
+}
+
+try {
+  $verifiedPayload = Assert-InstitutionApi
+} catch {
+  "Institution API verification failed: $($_.Exception.Message)" >> $log
+  Write-FumanFlowHealth -Scope institution -Status publish_delayed -Message "Institution scan succeeded but API verification failed" -Detail @{ error = $_.Exception.Message; log = $log }
+  Write-InstitutionReceipt "failed" 1 $false 0 "" @($_.Exception.Message) "critical scan failed during API verification"
+  exit 1
 }
 
 $snapshotScript = "${PSScriptRoot}\refresh-desktop-route-snapshot.ps1"
@@ -98,56 +111,14 @@ if (Test-Path -LiteralPath $snapshotScript) {
   if ($LASTEXITCODE -ne 0) {
     "Institution desktop snapshot refresh failed with exit code $LASTEXITCODE" >> $log
     Write-FumanFlowHealth -Scope institution -Status publish_delayed -Message "Institution scan succeeded but desktop snapshot refresh failed" -Detail @{ exitCode = $LASTEXITCODE; log = $log }
+    Write-InstitutionReceipt "failed" $LASTEXITCODE $false 0 ([string]$verifiedPayload.runId) @("desktop snapshot refresh exit code $LASTEXITCODE") "critical scan failed during desktop snapshot refresh"
     exit $LASTEXITCODE
   }
 } else {
   "Institution desktop snapshot refresh skipped; helper not found." >> $log
 }
 
-"Institution scan succeeded; refreshing slim/top cache files before publish" >> $log
-$slimExit = Invoke-NodeScan "scripts\generate-slim-cache.js" "Institution slim refresh"
-if ($slimExit -ne 0) {
-  "Institution slim refresh failed with exit code $slimExit" >> $log
-  Write-FumanFlowHealth -Scope institution -Status publish_delayed -Message "Institution scan succeeded but slim refresh failed" -Detail @{ exitCode = $slimExit; log = $log }
-  exit $slimExit
-}
-
-$tdccExit = Invoke-NodeScan "scripts\generate-institution-tdcc-breakout.js" "Institution TDCC breakout refresh"
-if ($tdccExit -ne 0) {
-  "Institution TDCC breakout refresh failed with exit code $tdccExit" >> $log
-  Write-FumanFlowHealth -Scope institution -Status publish_delayed -Message "Institution scan succeeded but TDCC breakout refresh failed" -Detail @{ exitCode = $tdccExit; log = $log }
-  exit $tdccExit
-}
-
-try {
-  Sync-InstitutionLocalCache
-  "Institution cache mirrored to local terminal data folders" >> $log
-} catch {
-  "Institution local mirror failed: $($_.Exception.Message)" >> $log
-  Write-FumanFlowHealth -Scope institution -Status publish_delayed -Message "Institution scan succeeded but local mirror failed" -Detail @{ error = $_.Exception.Message; log = $log }
-  exit 1
-}
-
-$publishOk = $false
-$syncScript = "${PSScriptRoot}\run-cache-sync.ps1"
-if (Test-Path $syncScript) {
-  "Institution cache files written locally; starting Git sync now" >> $log
-  & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $syncScript -Scope institution >> $log 2>&1
-  $syncExit = $LASTEXITCODE
-  if ($syncExit -eq 0) {
-    $publishOk = $true
-  } else {
-    "Cache sync failed with exit code $syncExit; scheduled sync remains as fallback" >> $log
-    Write-FumanFlowHealth -Scope institution -Status publish_delayed -Message "Institution scan succeeded but Git publish failed" -Detail @{ exitCode = $syncExit; log = $log }
-    exit $syncExit
-  }
-} else {
-  "Institution cache files written locally; Git sync script not found" >> $log
-  Write-FumanFlowHealth -Scope institution -Status publish_delayed -Message "Institution scan succeeded but Git sync script was not found" -Detail @{ log = $log }
-  exit 1
-}
-
-if ($publishOk) {
-  Write-FumanFlowHealth -Scope institution -Status ok -Message "Institution scan and publish completed" -Detail @{ log = $log }
-}
+Write-InstitutionReceipt "complete" 0 $true ([int]$verifiedPayload.count) ([string]$verifiedPayload.runId)
+Write-FumanFlowHealth -Scope institution -Status ok -Message "Institution scan completed through API-only terminal pipeline" -Detail @{ log = $log; runId = [string]$verifiedPayload.runId }
+"Institution API-only: slim generation, local mirror, and cache sync are disabled; terminal reads Supabase/API plus desktop snapshot." >> $log
 "=== Institution scan end $(Get-Date) ===" >> $log

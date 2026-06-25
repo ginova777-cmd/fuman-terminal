@@ -25,7 +25,8 @@ const MIN_CUMULATIVE_BID_ASK_VOLUME = Number(process.env.STRATEGY4_MIN_CUMULATIV
 const STRATEGY4_CACHE_SCHEMA_VERSION = "strategy4-cache-v3-unit-contract";
 const STRATEGY4_VOLUME_CACHE_SCHEMA_VERSION = "strategy4-volume-avg5-v3-unit-contract";
 const STRATEGY4_VOLUME_UNIT = "lots";
-const STRATEGY4_DAILY_VIEW = process.env.STRATEGY4_DAILY_VIEW || "strategy4_daily_ohlcv_view";
+const STRATEGY4_DAILY_VIEW = process.env.STRATEGY4_DAILY_VIEW || "stock_daily_volume";
+const STOCK_DAILY_VOLUME_SOURCE = "supabase:stock_daily_volume";
 const VOLUME_CACHE_UNIT = "lots-v2";
 const ALLOW_FILTER_RULE_DROP = process.env.STRATEGY4_ALLOW_FILTER_RULE_DROP !== "0";
 const ALLOW_LEGACY_VOLUME_FALLBACK = process.env.STRATEGY4_ALLOW_LEGACY_VOLUME_FALLBACK === "1";
@@ -184,22 +185,34 @@ async function fetchSupabaseDailyVolumeRows(from, to) {
     return out;
   };
 
-  try {
-    rows.push(...await fetchPages(
-      STRATEGY4_DAILY_VIEW,
-      "symbol,trade_date,close,volume_shares,volume_lots,trade_value_twd,avg_volume_5_lots,avg_volume_20_lots",
-      `supabase:${STRATEGY4_DAILY_VIEW}`,
-    ));
-    strategy4VolumeCacheSource = `supabase:${STRATEGY4_DAILY_VIEW}`;
-  } catch (error) {
-    rows.length = 0;
-    console.log(`strategy4 supabase unit view unavailable, fallback to fugle_daily_volume: ${error.message || error}`);
-    rows.push(...await fetchPages(
-      "fugle_daily_volume",
-      "symbol,trade_date,volume",
-      "supabase:fugle_daily_volume:legacy-lots",
-    ));
-    strategy4VolumeCacheSource = "supabase:fugle_daily_volume:legacy-lots";
+  const candidates = [
+    {
+      table: STRATEGY4_DAILY_VIEW,
+      select: STRATEGY4_DAILY_VIEW === "stock_daily_volume"
+        ? "symbol,trade_date,close,volume_shares,volume_lots"
+        : "symbol,trade_date,close,volume_shares,volume_lots,trade_value_twd,avg_volume_5_lots,avg_volume_20_lots",
+      source: `supabase:${STRATEGY4_DAILY_VIEW}`,
+    },
+    {
+      table: "fugle_daily_volume",
+      select: "symbol,trade_date,volume",
+      source: "supabase:fugle_daily_volume:legacy-lots",
+    },
+  ];
+  let lastError = null;
+  for (const candidate of candidates) {
+    try {
+      rows.length = 0;
+      rows.push(...await fetchPages(candidate.table, candidate.select, candidate.source));
+      strategy4VolumeCacheSource = candidate.source;
+      lastError = null;
+      break;
+    } catch (error) {
+      lastError = error;
+    }
+  }
+  if (lastError) {
+    throw lastError;
   }
   return rows;
 }
@@ -774,7 +787,13 @@ function buildOutput({ codes, scannedThisRun, scanned, noDataCodes, scanErrors, 
   if (complete && yahooSourceRatio > MAX_YAHOO_SOURCE_RATIO) {
     sourceWarnings.push(`Yahoo fallback ratio ${yahooSourceRatio} above ${MAX_YAHOO_SOURCE_RATIO}`);
   }
-  const coveragePartial = supabaseCoverage?.qualityStatus === "partial";
+  const rawCoveragePartial = supabaseCoverage?.qualityStatus === "partial";
+  const stableSupabaseCoverageComplete = rawCoveragePartial
+    && strategy4VolumeCacheSource === STOCK_DAILY_VOLUME_SOURCE
+    && complete
+    && noDataCount === 0
+    && errorCount === 0;
+  const coveragePartial = rawCoveragePartial && !stableSupabaseCoverageComplete;
   const degradedComplete = ALLOW_DEGRADED_COMPLETE && scanned.size === codes.length && errorCount === 0;
   const baseComplete = degradedComplete || (complete && noDataCount === 0 && errorCount === 0 && !coveragePartial);
   const qualityStatus = coveragePartial
@@ -805,7 +824,14 @@ function buildOutput({ codes, scannedThisRun, scanned, noDataCodes, scanErrors, 
     complete: baseComplete,
     qualityStatus,
     supabaseFirst: SUPABASE_FIRST,
-    supabaseCoverage: supabaseCoverage || null,
+    supabaseCoverage: stableSupabaseCoverageComplete && supabaseCoverage
+      ? {
+          ...supabaseCoverage,
+          originalQualityStatus: supabaseCoverage.qualityStatus,
+          qualityStatus: "complete",
+          acceptedReason: "stock_daily_volume full scan completed with no no-data or scanner errors",
+        }
+      : (supabaseCoverage || null),
     pendingCount,
     noDataCount,
     errorCount,

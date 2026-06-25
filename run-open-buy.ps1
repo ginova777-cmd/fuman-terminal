@@ -12,6 +12,9 @@ $env:NODE_OPTIONS = "--use-system-ca"
 
 New-Item -ItemType Directory -Force -Path "C:\fuman-runtime\logs" | Out-Null
 $log = "C:\fuman-runtime\logs\open-buy-$(Get-Date -Format yyyyMMdd-HHmmss).log"
+$receiptDir = Join-Path $env:FUMAN_DATA_DIR "scan-receipts"
+New-Item -ItemType Directory -Force -Path $receiptDir | Out-Null
+$scanStartedAt = (Get-Date).ToString("o")
 "=== Open buy full scan start $(Get-Date) ===" | Out-File $log -Encoding utf8
 . "${PSScriptRoot}\schedule-guard.ps1"
 Invoke-FumanWeekdayGuard -Label "Open buy full scan" -LogPath $log
@@ -20,6 +23,30 @@ $env:FULL_SCAN = "1"
 $env:OPEN_BUY_BATCH_SIZE = "64"
 $env:OPEN_BUY_BATCHES_PER_RUN = "999"
 $env:OPEN_BUY_USE_MIS = "0"
+
+function Write-OpenBuyReceipt($Status, $ExitCode, $Complete, $Matches, $RunId, $Warnings = @(), $BlockingReason = "") {
+  $receipt = [ordered]@{
+    strategy = "open-buy"
+    label = "open buy raw refresh"
+    tier = "critical"
+    startedAt = $scanStartedAt
+    finishedAt = (Get-Date).ToString("o")
+    status = $Status
+    exitCode = $ExitCode
+    scanned = 0
+    total = 0
+    matches = $Matches
+    complete = $Complete
+    qualityStatus = if ($Complete) { "complete" } else { "" }
+    fallback = $false
+    runId = $RunId
+    payloadPath = (Join-Path $env:FUMAN_DATA_DIR "open-buy-latest.json")
+    warnings = @($Warnings)
+    blockingReason = $BlockingReason
+    log = $log
+  }
+  $receipt | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath (Join-Path $receiptDir "open-buy.json") -Encoding utf8
+}
 
 & $nodeExe "scripts\scan-open-buy-cache.js" >> $log 2>&1
 $exitCode = $LASTEXITCODE
@@ -31,6 +58,7 @@ Remove-Item Env:OPEN_BUY_USE_MIS -ErrorAction SilentlyContinue
 
 if ($exitCode -ne 0) {
   "Open buy scan failed with exit code $exitCode" >> $log
+  Write-OpenBuyReceipt "failed" $exitCode $false 0 "" @("scanner exit code $exitCode") "critical scan failed with exit code $exitCode"
   exit $exitCode
 }
 
@@ -45,6 +73,7 @@ try {
   "Open buy terminal compact API verified runId=$($payload.runId) count=$($payload.count) usedDate=$($payload.usedDate) decisionReady=$($payload.decisionReady)" >> $log
 } catch {
   "Open buy API-only verification failed: $($_.Exception.Message)" >> $log
+  Write-OpenBuyReceipt "failed" 1 $false 0 "" @($_.Exception.Message) "critical scan failed during API verification"
   exit 1
 }
 
@@ -59,5 +88,6 @@ if (Test-Path -LiteralPath $snapshotScript) {
   "Open buy desktop snapshot refresh skipped; helper not found." >> $log
 }
 
+Write-OpenBuyReceipt "complete" 0 $true ([int]$payload.count) ([string]$payload.runId)
 "=== Open buy full scan end $(Get-Date) ===" >> $log
 

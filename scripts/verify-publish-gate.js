@@ -394,8 +394,15 @@ if (/legacy scan_time gate|legacy_scan_time_gate|includeRunId = false|STRATEGY4_
 if (!/STRATEGY4_API_ONLY = true/.test(strategy4Scanner) || /OUT_FILE|BACKUP_FILE|SUMMARY_FILE|writeSummary\("strategy4"|fs\.writeFileSync\([^)]*strategy4-(latest|backup|summary)\.json/.test(strategy4Scanner)) {
   issues.push("scan-strategy4-cache.js must be API-only: full scan publishes Supabase complete run only, no data/strategy4 static output");
 }
+for (const marker of ["stock_daily_volume", "supabase:stock_daily_volume"]) {
+  if (!strategy4Scanner.includes(marker)) issues.push(`scan-strategy4-cache.js missing stable Strategy4 source marker ${marker}`);
+  if (!strategy4LatestApi.includes(marker)) issues.push(`strategy4-latest.js missing stable Strategy4 source marker ${marker}`);
+}
 if (/run-cache-sync|generate-slim-cache|run-strategy4-postflight|data\\strategy4|data\/strategy4|strategy4-(latest|backup|summary|slim|zone|score).*\.json/.test(runStrategy4) || !/api\/strategy4-latest/.test(runStrategy4)) {
   issues.push("run-strategy4.ps1 must be API-only: no static strategy4 JSON copy, slim generation, cache sync, or static postflight");
+}
+if (!/canvas=1&compact=1&shell=1&limit=70&live=1/.test(runStrategy4)) {
+  issues.push("run-strategy4.ps1 must verify the same compact live Strategy4 API path used by terminal/snapshot");
 }
 if (/"strategy4", "data\/strategy4-latest\.json"|strategy4PresetFiles\]/.test(slimCacheGenerator)) {
   issues.push("generate-slim-cache.js must not generate strategy4 static slim/zone/page JSON");
@@ -477,8 +484,9 @@ for (const marker of [
   "data\\strategy3-latest.json",
   "data\\scan-receipts",
   "scan-summary.json",
+  "} 900",
 ]) {
-  if (!fullScan.includes(marker)) issues.push(`run-full-scan.ps1 missing strategy3 receipt marker ${marker}`);
+  if (!fullScan.includes(marker)) issues.push(`run-full-scan.ps1 missing full scan marker ${marker}`);
 }
 for (const marker of [
   "\"strategy3\"",
@@ -606,6 +614,7 @@ for (const file of [
   "scripts/fugle-websocket-collector.js",
   "scripts/scan-realtime-radar-cache.js",
   "scripts/scan-strategy3-cache.js",
+  "scripts/verify-terminal-source-contracts.js",
   "scripts/verify-desktop-api-only.js",
   "scripts/verify-production-guard.js",
   "scripts/verify-scorecard-snapshot.js",
@@ -689,12 +698,36 @@ for (const marker of [
 const strategy3Scanner = read("scripts/scan-strategy3-cache.js");
 for (const marker of [
   "fetchStrategy3QuoteReady",
+  "fetchStrategy3QuoteLatestReady",
+  "hydrateAfter1300StatusFromSupabase",
+  "latestStockDateKey",
   "fetchStrategy3Intraday1mLatestN",
   "chipTradeExclusion",
   "STRATEGY3_APPLY_BLACKLIST",
   "TradingView 隔日沖判斷",
 ]) {
   if (!strategy3Scanner.includes(marker)) issues.push(`scan-strategy3-cache.js missing strategy3 TV-only marker ${marker}`);
+}
+for (const marker of [
+  "scanner receipt",
+  "sourceHealth",
+]) {
+  const terminalResourceChain = read("scripts/verify-terminal-resource-chain.js");
+  if (!terminalResourceChain.includes(marker)) issues.push(`verify-terminal-resource-chain.js missing source contract marker ${marker}`);
+}
+for (const marker of [
+  "fugle_quotes_latest",
+  "updated_at.desc",
+  "v_strategy3_quote_ready",
+  "strategy4_daily_ohlcv_view",
+  "v_chip_flows_latest",
+  "cumulative_bid_volume",
+]) {
+  const sourceContracts = read("scripts/verify-terminal-source-contracts.js");
+  if (!sourceContracts.includes(marker)) issues.push(`verify-terminal-source-contracts.js missing source contract marker ${marker}`);
+}
+if (!strategy2SharedSource.includes("fetchStrategy3QuoteLatestReady") || !strategy2SharedSource.includes("order: \"updated_at.desc\"")) {
+  issues.push("lib/supabase-public-slot.js must keep Strategy3 latest quote fallback ordered by updated_at.desc");
 }
 
 const openBuyScanner = read("scripts/scan-open-buy-cache.js");
@@ -705,6 +738,22 @@ for (const marker of [
   "open-buy supabase run_id gate ok",
 ]) {
   if (!openBuyScanner.includes(marker)) issues.push(`scan-open-buy-cache.js missing strategy1 run_id complete gate marker ${marker}`);
+}
+for (const marker of ["Write-OpenBuyReceipt", "scan-receipts", "refresh-desktop-route-snapshot.ps1"]) {
+  if (!runOpenBuy.includes(marker)) issues.push(`run-open-buy.ps1 missing standalone receipt/snapshot marker ${marker}`);
+}
+for (const marker of ["Write-InstitutionReceipt", "/api/institution-latest", "Institution API-only"]) {
+  if (!runInstitution.includes(marker)) issues.push(`run-institution.ps1 missing API-only receipt marker ${marker}`);
+}
+if (/run-cache-sync|generate-slim-cache|Sync-InstitutionLocalCache|data\\institution|data\/institution/.test(runInstitution)) {
+  issues.push("run-institution.ps1 must be API-only after scanner success: no slim generation, local mirror, cache sync, or static institution data publish");
+}
+const strategy5Scanner = read("scripts/scan-strategy5-cache.js");
+for (const marker of ["STRATEGY5_MAX_FINMIND_CHIP_AGE_DAYS", "dateAgeDays", "v_chip_flows_latest"]) {
+  if (!strategy5Scanner.includes(marker)) issues.push(`scan-strategy5-cache.js missing stale FinMind chip guard marker ${marker}`);
+}
+if (/run-sync-after-output|generate-slim-cache|data\\strategy5|data\/strategy5/.test(runStrategy5) || !/api\/strategy5-latest/.test(runStrategy5) || !/Strategy5 API-only/.test(runStrategy5)) {
+  issues.push("run-strategy5.ps1 must be API-only after scanner success: no slim generation, cache sync, or static strategy5 data publish");
 }
 
 for (const legacyScript of [
@@ -726,6 +775,9 @@ for (const legacyScript of [
 const runStrategy3 = read("run-strategy3.ps1");
 if (!/run-strategy3-complete-scan\.ps1/.test(runStrategy3) || /run-cache-sync\.ps1|strategy3-latest\.json/.test(runStrategy3)) {
   issues.push("run-strategy3.ps1 must call the complete scan path without static JSON or cache sync");
+}
+for (const marker of ["Write-Strategy3Receipt", "scan-receipts", "refresh-desktop-route-snapshot.ps1"]) {
+  if (!runStrategy3Complete.includes(marker)) issues.push(`run-strategy3-complete-scan.ps1 missing standalone receipt/snapshot marker ${marker}`);
 }
 const strategy3Watchdog = read("run-strategy3-watchdog.ps1");
 for (const marker of ["/api/strategy3-latest", "Cache-Control", "no-store", "runId", "complete"]) {
@@ -893,6 +945,7 @@ if (fetchResult.status !== 0) {
       "data/terminal-home-mobile-slim.json",
       "scripts/generate-health-summary.js",
       "scripts/verify-terminal-resource-chain.js",
+      "scripts/verify-terminal-source-contracts.js",
       "scripts/verify-source-sync.js",
       "REALTIME-RADAR-FRESHNESS-GOVERNANCE.md",
       "STRATEGY5-FRESHNESS-GOVERNANCE.md",
