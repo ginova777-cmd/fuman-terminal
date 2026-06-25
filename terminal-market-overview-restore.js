@@ -176,7 +176,7 @@
         if (mode === "electronics") {
           const candidates = uniqueLabels([base, stock?.industry, stock?.primaryIndustry, stock?._sourceSector, ...themes])
             .filter(isElectronicsLabel);
-          return candidates.length ? candidates : [base || official || "電子其他"];
+          return candidates;
         }
         if (mode === "themes") {
           const candidates = uniqueLabels([...themes, profile.theme, profile.concept, stock?.concept, base]);
