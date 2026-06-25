@@ -1,11 +1,11 @@
 (function () {
   if (
     window.__fumanDesktopFastShell === "20260623-09"
-    && window.__fumanDesktopFastShellApiOnlyPoll === "20260625-04"
+    && window.__fumanDesktopFastShellApiOnlyPoll === "20260625-05"
     && window.__fumanOriginalDesktopMarket === "20260624-01"
   ) return;
   window.__fumanDesktopFastShell = "20260623-09";
-  window.__fumanDesktopFastShellApiOnlyPoll = "20260625-04";
+  window.__fumanDesktopFastShellApiOnlyPoll = "20260625-05";
 
   const NAV_SELECTOR = "[data-view]:not([data-member-tab])";
   const SNAPSHOT_DB = "fuman-desktop-route-snapshots";
@@ -1357,6 +1357,7 @@
     Object.entries(endpoints).forEach(([endpoint, endpointPayload]) => {
       const route = routeForCompactEndpoint(endpoint);
       if (!route) return;
+      if (route === CHIP_TRADE_ROUTE) return;
       const rows = normalizeCanvasRowsFromPayload(endpointPayload, route);
       if (!rows.length) return;
       rememberCanvasRows(route, rows, source, Date.now());
