@@ -1,6 +1,6 @@
 # Fuman Terminal AGENTS.md
 
-Last updated: 2026-06-24 Asia/Taipei
+Last updated: 2026-06-25 Asia/Taipei
 
 給後續接手的 Codex：這份是目前有效狀態。舊版同步站、舊 GitHub workflow、舊 auto-release、舊 governance 文件、舊排程 wrapper 都已退休。不要為了通過舊檢查而把它們復活。
 
@@ -38,6 +38,26 @@ fuman-terminal
 - 不要從 dirty 的 `C:\fuman-terminal` repo 部署；若正式根目錄有本機 dirty 內容，必須改用乾淨 worktree。
 - 乾淨 worktree 部署前必須確認 `.vercel/project.json` 指向正式 `fuman-terminal` 專案。
 - 若乾淨 worktree 沒有 `.vercel/project.json`，不可盲部署；先確認 projectId / projectName，避免部署到舊 sync 或錯誤 Vercel 專案。
+
+## 2026-06-25 分流與版本污染防線
+
+使用者已明確要求：策略、CB、買賣超、左側鎖等小修必須獨立分支處理，避免把多個策略修正混在 dirty main 或自動發布流程裡。
+
+操作規則：
+
+- 不要在 dirty 的 `C:\fuman-terminal` main 上直接做小修、commit、rebase、deploy。
+- 若 `C:\fuman-terminal` 被其他 Codex / 自動流程同步、stash、checkout、bump version，先停手檢查，不要把未確認 diff 直接帶進新 commit。
+- 優先使用乾淨 worktree / clone，例如 `C:\Users\ginov\Documents\Codex\...\work\...` 或 `C:\fuman-terminal-worktrees\...`。
+- 每個小修要獨立 commit；左側解鎖、CB snapshot、買賣超 verifier、Strategy5 label、Strategy2 coverage 這類修正不要混成一包。
+- 修改後立即 `node --check` 相關 JS，確認 diff 只包含本次需求，再 push 到獨立 branch。
+- 沒有使用者明確要求正式發版時，不要跑 `npm run bump:version`、`npm run release:main`、`vercel --prod` 或其他會改 production alias 的流程。
+- `version.json`、`index.html`、`fuman-sw.js`、service worker cache 不是資料修復手段；不要用 version bump 掩蓋資料、snapshot、renderer 或 fallback 問題。
+
+正式 alias 判讀規則：
+
+- 若正式站 alias / public version 突然變成例如 `public-terminal-fast-20260624-11`，先檢查是哪個 release / deploy 流程改了 `version.json`、`index.html`、`fuman-sw.js`。
+- 獨立修正分支若沒有修改上述版本檔，就不要把 production alias 變動歸因到該分支。
+- 驗證正式狀態以 `https://fuman-terminal.vercel.app`、`npm run monitor:production`、`npm run verify:live-version`、`node --use-system-ca scripts\verify-deployment.js` 為準，不只看 preview URL。
 
 ## 已退休且不可復活
 
