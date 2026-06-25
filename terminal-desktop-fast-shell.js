@@ -54,7 +54,7 @@
     "warrant-flow|權證走向": { limit: 60, ttl: 32000 },
   };
   const CHIP_TRADE_ROUTE = "chip-trade|買賣超";
-  const CHIP_TRADE_DEFAULT_FILTER = "foreignStreak";
+  const CHIP_TRADE_DEFAULT_FILTER = "foreignTrustVolumePct";
   const CHIP_TRADE_FILTERS = [
     { key: "foreignStreak", label: "外資連買日", endpoint: "/api/institution-latest" },
     { key: "trustStreak", label: "投信連買日", endpoint: "/api/institution-latest" },
@@ -4069,8 +4069,8 @@
       return true;
     }
     const panel = panelForRoute(key);
-    let rows = rowsForRoute(key);
-    if (!rows.length) {
+    let rows = isChipTradeRoute(key) ? [] : rowsForRoute(key);
+    if (!rows.length && !isChipTradeRoute(key)) {
       const domRows = extractLiteRows(panel);
       if (domRows.length) {
         setCanvasRows(key, domRows, "dom-hot", Date.now());
@@ -4080,7 +4080,7 @@
     }
     renderFixedPageShell(link, source, rows);
     markLatency("shell", key);
-    restoreFixedPageSnapshot(link);
+    if (!isChipTradeRoute(key)) restoreFixedPageSnapshot(link);
     window.setTimeout(() => {
       if (!isRouteCurrent(key, seq) || activeSnapshotRoute !== key || canvasState.route !== key) return;
       fetchCanvasRows(key, false).then((apiRows) => {

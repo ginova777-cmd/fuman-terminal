@@ -16,7 +16,12 @@ const RUN_ONLY = new Set((optionValue("--only") || process.env.FUMAN_UI_E2E_ONLY
   .split(",")
   .map((item) => item.trim())
   .filter(Boolean));
+const ROUTE_FILTER = new Set((optionValue("--routes") || process.env.FUMAN_UI_E2E_ROUTES || "")
+  .split(",")
+  .map((item) => item.trim())
+  .filter(Boolean));
 const EVAL_TIMEOUT_MS = Number(optionValue("--eval-timeout") || process.env.FUMAN_UI_E2E_EVAL_TIMEOUT_MS || 30000);
+const ROUTE_TIMEOUT_MS = Number(optionValue("--route-timeout") || process.env.FUMAN_UI_E2E_ROUTE_TIMEOUT_MS || 45000);
 
 const DESKTOP_ROUTES = [
   { key: "market", label: "market overview", selector: "aside.sidebar a[data-view=\"market\"]" },
@@ -51,6 +56,14 @@ function optionValue(name) {
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function withTimeout(promise, timeoutMs, label) {
+  let timer = null;
+  const timeout = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`${label} timed out after ${timeoutMs}ms`)), timeoutMs);
+  });
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
 }
 
 function withCacheBust(url) {
@@ -552,17 +565,24 @@ async function runDesktopMode(browser, theme) {
   await waitForSelector(cdp, "aside.sidebar [data-view]", 45000);
   await sleep(1200);
   const results = [];
-  for (const route of DESKTOP_ROUTES) {
+  for (const route of DESKTOP_ROUTES.filter((item) => !ROUTE_FILTER.size || ROUTE_FILTER.has(item.key))) {
     let stats = null;
     try {
-      await clickSelector(cdp, route.selector);
-      await sleep(["institution", "cb", "warrant"].includes(route.key) ? 5200 : 3200);
-      stats = await evaluate(cdp, collectDesktopStats, route).catch((error) => fallbackDesktopStats(cdp, route, error));
+      stats = await withTimeout((async () => {
+        await clickSelector(cdp, route.selector);
+        await sleep(["institution", "cb", "warrant"].includes(route.key) ? 5200 : 3200);
+        return evaluate(cdp, collectDesktopStats, route).catch((error) => fallbackDesktopStats(cdp, route, error));
+      })(), ROUTE_TIMEOUT_MS, `desktop/${theme}/${route.key}`);
     } catch (error) {
       stats = { kind: "desktop", routeKey: route.key, label: route.label, ok: false, rowsVisible: 0, blockerMatches: [error.message], warnings: [] };
     }
     stats.theme = theme;
-    stats.screenshot = await screenshot(cdp, `desktop-${theme}-${route.key}.png`).catch((error) => `screenshot failed: ${error.message}`);
+    stats.screenshot = await withTimeout(
+      screenshot(cdp, `desktop-${theme}-${route.key}.png`),
+      Math.min(ROUTE_TIMEOUT_MS, 30000),
+      `desktop/${theme}/${route.key}/screenshot`,
+    ).catch((error) => `screenshot failed: ${error.message}`);
+    console.log(`[terminal-ui-e2e] ${stats.ok ? "ok" : "fail"} desktop/${theme}/${route.key} rows=${stats.rowsVisible || 0}`);
     results.push(stats);
   }
   cdp.close();
@@ -581,24 +601,31 @@ async function runMobileMode(browser, theme) {
   }, theme);
   await sleep(1200);
   const results = [];
-  for (const route of MOBILE_ROUTES) {
+  for (const route of MOBILE_ROUTES.filter((item) => !ROUTE_FILTER.size || ROUTE_FILTER.has(item.key) || ROUTE_FILTER.has(item.fragment))) {
     let stats = null;
     try {
-      await clickSelector(cdp, `#tabs button[data-fragment="${route.fragment}"]`);
-      if (route.fragment !== "watch") {
-        await waitFor(cdp, (fragment) => {
-          const root = document.querySelector("#content [data-mobile-terminal-fragment]");
-          return { ok: root?.dataset?.mobileFragmentKey === fragment };
-        }, route.fragment, 18000, 300).catch(() => waitForSelector(cdp, `#content [data-mobile-fragment-key="${route.fragment}"]`, 18000));
-      } else {
-        await sleep(600);
-      }
-      stats = await evaluate(cdp, collectMobileStats, route).catch((error) => fallbackMobileStats(cdp, route, error));
+      stats = await withTimeout((async () => {
+        await clickSelector(cdp, `#tabs button[data-fragment="${route.fragment}"]`);
+        if (route.fragment !== "watch") {
+          await waitFor(cdp, (fragment) => {
+            const root = document.querySelector("#content [data-mobile-terminal-fragment]");
+            return { ok: root?.dataset?.mobileFragmentKey === fragment };
+          }, route.fragment, 18000, 300).catch(() => waitForSelector(cdp, `#content [data-mobile-fragment-key="${route.fragment}"]`, 18000));
+        } else {
+          await sleep(600);
+        }
+        return evaluate(cdp, collectMobileStats, route).catch((error) => fallbackMobileStats(cdp, route, error));
+      })(), ROUTE_TIMEOUT_MS, `mobile/${theme}/${route.key}`);
     } catch (error) {
       stats = { kind: "mobile", routeKey: route.key, label: route.label, fragment: route.fragment, ok: false, rowsVisible: 0, blockerMatches: [error.message], warnings: [] };
     }
     stats.theme = theme;
-    stats.screenshot = await screenshot(cdp, `mobile-${theme}-${route.key}.png`).catch((error) => `screenshot failed: ${error.message}`);
+    stats.screenshot = await withTimeout(
+      screenshot(cdp, `mobile-${theme}-${route.key}.png`),
+      Math.min(ROUTE_TIMEOUT_MS, 30000),
+      `mobile/${theme}/${route.key}/screenshot`,
+    ).catch((error) => `screenshot failed: ${error.message}`);
+    console.log(`[terminal-ui-e2e] ${stats.ok ? "ok" : "fail"} mobile/${theme}/${route.key} rows=${stats.rowsVisible || 0}`);
     results.push(stats);
   }
   cdp.close();
