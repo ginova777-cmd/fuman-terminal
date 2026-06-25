@@ -798,6 +798,10 @@
     return Number.isFinite(number) ? number : 0;
   }
 
+  function normalizeArray(value) {
+    return Array.isArray(value) ? value : [];
+  }
+
   function pickFirstValue(...values) {
     return values.find((value) => value !== undefined && value !== null && value !== "");
   }
@@ -3446,6 +3450,66 @@
     return n >= 100000000 ? `${(n / 100000000).toFixed(n >= 1000000000 ? 1 : 2)} 億` : `${n.toLocaleString("zh-TW")}`;
   }
 
+  function formatMarketIndexValue(value, digits = 2) {
+    const number = cleanNumber(value);
+    if (!number) return "--";
+    return number.toLocaleString("zh-TW", {
+      minimumFractionDigits: digits,
+      maximumFractionDigits: digits,
+    });
+  }
+
+  function formatMarketIndexChange(record) {
+    const sign = String(record?.["漲跌"] || record?.sign || "").trim() === "-" ? "-" : "+";
+    const points = cleanNumber(record?.["漲跌點數"] ?? record?.change ?? record?.diff);
+    const pct = cleanNumber(record?.["漲跌百分比"] ?? record?.pct ?? record?.percent);
+    const signedPoints = `${sign}${Math.abs(points).toFixed(2)}`;
+    const signedPct = `${sign}${Math.abs(pct).toFixed(2)}%`;
+    return `${signedPoints} (${signedPct})`;
+  }
+
+  function renderMarketIndexesApi(marketPayload) {
+    const cards = [...document.querySelectorAll(".metric-card")];
+    if (!cards.length) return;
+    const indexes = normalizeArray(marketPayload?.indexes);
+    const targets = [
+      { keyword: "發行量加權", label: "加權指數", card: cards[0] },
+      { keyword: "櫃買", label: "櫃買指數", card: cards[1] },
+    ];
+    targets.forEach((target) => {
+      const record = indexes.find((item) => String(item?.["指數"] || item?.["指數/報酬指數"] || item?.name || "").includes(target.keyword));
+      if (!record || !target.card) return;
+      const sign = String(record?.["漲跌"] || record?.sign || "").trim() === "-" ? "-" : "+";
+      const value = record?.["收盤指數"] ?? record?.close ?? record?.price;
+      target.card.innerHTML = `
+        <span>↗ ${escapeHtml(target.label)}</span>
+        <strong>${escapeHtml(formatMarketIndexValue(value, 2))}</strong>
+        <em class="${sign === "-" ? "up" : "down"}">${escapeHtml(formatMarketIndexChange(record))}</em>
+      `;
+    });
+
+    const near = marketPayload?.futuresNear || marketPayload?.futures || null;
+    const statusLabel = {
+      day: "日盤進行中",
+      night: "夜盤進行中",
+      closed: "已收盤",
+    }[marketPayload?.marketStatus] || "";
+    if (cards[2]) {
+      if (near?.price && cleanNumber(near.price) > 0) {
+        const sign = String(near.change || "").startsWith("-") ? "-" : "+";
+        cards[2].innerHTML = `
+          <span>⇅ 台指期夜盤</span>
+          <strong>${escapeHtml(formatMarketIndexValue(near.price, 0))}</strong>
+          <em class="${sign === "-" ? "up" : "down"}">${escapeHtml(near.change || "--")} (${escapeHtml(near.pct || "--")})</em>
+          ${near.basisLabel ? `<small class="metric-signal ${near.basisSide === "short" ? "green" : near.basisSide === "long" ? "red" : ""}">${escapeHtml(near.basisLabel)}</small>` : statusLabel ? `<small>${escapeHtml(statusLabel)}</small>` : ""}
+        `;
+      } else {
+        cards[2].innerHTML = `<span>⇅ 台指期夜盤</span><strong>--</strong><em>${escapeHtml(statusLabel || "等待資料")}</em>`;
+      }
+    }
+    if (cards[3]) cards[3].remove();
+  }
+
   function formatMarketHeatmapPrice(value) {
     const n = Number(value || 0);
     if (!Number.isFinite(n) || !n) return "--";
@@ -3846,17 +3910,21 @@
     if (!isMarketViewActive() || marketApiOnlyLoading) return;
     marketApiOnlyLoading = true;
     Promise.all([
+      fetch(marketApiUrl("/api/market", 24), { cache: force ? "no-store" : "default" }).then((res) => res.ok ? res.json() : null).catch(() => null),
       fetch(marketApiUrl("/api/heatmap", 60), { cache: force ? "no-store" : "default" }).then((res) => res.ok ? res.json() : null).catch(() => null),
       fetch(marketApiUrl("/api/realtime-radar-latest", 20), { cache: force ? "no-store" : "default" }).then((res) => res.ok ? res.json() : null).catch(() => null),
-    ]).then(([heatmapPayload, radarPayload]) => {
+    ]).then(([marketPayload, heatmapPayload, radarPayload]) => {
       const signature = JSON.stringify({
+        market: marketPayload?.updatedAt || marketPayload?.indexes?.[0]?.["收盤指數"] || "",
         heatmap: heatmapPayload?.updatedAt || heatmapPayload?.servedAt || heatmapPayload?.stockCount || "",
         radar: radarPayload?.updatedAt || radarPayload?.timestamp || radarPayload?.rows?.[0]?.detectedAt || "",
+        indexCount: normalizeArray(marketPayload?.indexes).length,
         heatmapCount: heatmapPayload?.sectorCount || normalizeArray(heatmapPayload?.sectors).length,
         radarCount: normalizeArray(radarPayload?.rows).length,
       });
       if (!force && signature === marketApiOnlySignature) return;
       marketApiOnlySignature = signature;
+      if (marketPayload?.ok !== false) renderMarketIndexesApi(marketPayload || {});
       if (heatmapPayload?.sectors?.length) renderMarketHeatmapApi(heatmapPayload.sectors, heatmapPayload);
       renderMarketApiAi(heatmapPayload || {}, radarPayload || {});
       renderMarketApiRadar(radarPayload || {});
