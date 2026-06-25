@@ -7,6 +7,7 @@ const EXPECTED_VERCEL_PROJECT_ID = "prj_x0R2mMFsL0Xto4whcbPTKQTKJRUl";
 const EXPECTED_VERCEL_ORG_ID = "team_HfAXzMLgDcpw6UFbnexhuxHG";
 const EXPECTED_VERCEL_PROJECT_NAME = "fuman-terminal";
 const EXPECTED_NODE_VERSION = "24.x";
+const EXPECTED_GIT_REMOTE_RE = /^(https:\/\/github\.com\/ginova777-cmd\/fuman-terminal\.git|git@github\.com:ginova777-cmd\/fuman-terminal\.git)$/i;
 
 function read(file) {
   return fs.readFileSync(path.join(ROOT, file), "utf8");
@@ -30,6 +31,33 @@ function assertNoPatternInExistingFiles(files, pattern, message) {
     if (pattern.test(read(file))) issues.push(`${file} ${message}`);
   }
 }
+
+function git(args) {
+  return spawnSync("git", args, { cwd: ROOT, encoding: "utf8" });
+}
+
+function assertGitReleaseRemote() {
+  const originUrl = git(["remote", "get-url", "origin"]);
+  if (originUrl.status !== 0) {
+    issues.push(`git origin remote must be configured: ${(originUrl.stderr || originUrl.stdout || "").trim()}`);
+    return;
+  }
+  const remote = String(originUrl.stdout || "").trim();
+  if (!EXPECTED_GIT_REMOTE_RE.test(remote)) {
+    issues.push(`git origin must point to GitHub fuman-terminal, not a local sync tree; current=${remote || "(missing)"}`);
+  }
+  if (/fuman-terminal-sync|^[A-Za-z]:[\\/]/i.test(remote)) {
+    issues.push(`git origin must not be a local path or C:\\fuman-terminal-sync; current=${remote}`);
+  }
+  const upstream = git(["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"]);
+  if (upstream.status !== 0) {
+    issues.push(`current branch must track origin/main before publish: ${(upstream.stderr || upstream.stdout || "").trim()}`);
+  } else if (String(upstream.stdout || "").trim() !== "origin/main") {
+    issues.push(`current branch upstream must be origin/main; current=${String(upstream.stdout || "").trim() || "(missing)"}`);
+  }
+}
+
+assertGitReleaseRemote();
 
 const desktopApiOnlyGuard = spawnSync(process.execPath, [path.join(ROOT, "scripts", "verify-desktop-api-only.js")], {
   cwd: ROOT,

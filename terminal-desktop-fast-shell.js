@@ -1,11 +1,11 @@
 (function () {
   if (
     window.__fumanDesktopFastShell === "20260623-09"
-    && window.__fumanDesktopFastShellApiOnlyPoll === "20260625-07"
+    && window.__fumanDesktopFastShellApiOnlyPoll === "20260625-08"
     && window.__fumanOriginalDesktopMarket === "20260624-01"
   ) return;
   window.__fumanDesktopFastShell = "20260623-09";
-  window.__fumanDesktopFastShellApiOnlyPoll = "20260625-07";
+  window.__fumanDesktopFastShellApiOnlyPoll = "20260625-08";
 
   const NAV_SELECTOR = "[data-view]:not([data-member-tab])";
   const SNAPSHOT_DB = "fuman-desktop-route-snapshots";
@@ -1609,6 +1609,7 @@
     }
     const mode = canvasWorkerReady ? canvasWorkerMode : source;
     if (status) status.textContent = text || `${mode} · ${new Date().toLocaleTimeString("zh-TW", { hour12: false })}`;
+    syncCanvasEmptyStateUi(shell);
     updateCanvasPagination(shell);
   }
 
@@ -1619,19 +1620,55 @@
 
   function drawCurrentCanvas() {
     const shell = currentCanvasShell();
-    const canvas = shell?.querySelector(".desktop-route-canvas");
+    let canvas = shell?.querySelector(".desktop-route-canvas");
     if (!canvas) return;
     clampCanvasOffset(canvas);
+    const meta = strategyMeta(canvasState.route || activeSnapshotRoute);
+    const emptyState = currentCanvasEmptyState();
+    if (emptyState) {
+      canvas = replaceWorkerCanvasForMainDraw(shell, canvas, meta);
+      syncCanvasEmptyStateUi(shell);
+      drawRouteCanvas(canvas, meta, canvasState.filtered, canvasState.source);
+      setCanvasStatus();
+      return;
+    }
     if (isStrategyRoute(canvasState.route) && !isWideStrategyTableRoute(canvasState.route) && drawCanvasWithWorker(canvas)) {
       setCanvasStatus();
       return;
     }
-    drawRouteCanvas(canvas, strategyMeta(canvasState.route || activeSnapshotRoute), canvasState.filtered, canvasState.source);
+    drawRouteCanvas(canvas, meta, canvasState.filtered, canvasState.source);
     setCanvasStatus();
   }
 
   function currentCanvasEmptyState() {
     return canvasEmptyStates.get(canvasState.route || activeSnapshotRoute || "") || null;
+  }
+
+  function replaceWorkerCanvasForMainDraw(shell, canvas, meta) {
+    if (!shell || !canvas || canvas.dataset.fumanWorkerCanvas !== "1") return canvas;
+    const fresh = document.createElement("canvas");
+    fresh.className = canvas.className;
+    fresh.tabIndex = canvas.tabIndex || 0;
+    fresh.setAttribute("aria-label", `${meta.title} Canvas 快速列表`);
+    canvas.replaceWith(fresh);
+    if (canvasWorkerAttachedCanvas === canvas) canvasWorkerAttachedCanvas = null;
+    canvasWorkerRowsVersion = -1;
+    return fresh;
+  }
+
+  function syncCanvasEmptyStateUi(shell = currentCanvasShell()) {
+    if (!shell) return;
+    const route = canvasState.route || activeSnapshotRoute || "";
+    const emptyState = currentCanvasEmptyState();
+    const dataState = shell.querySelector("[data-canvas-data-state]") || shell.querySelector(".desktop-route-shell-grid article:nth-child(2) strong");
+    const status = shell.querySelector(".desktop-canvas-status");
+    const emptyNote = shell.querySelector("[data-canvas-empty-note]");
+    if (dataState) dataState.textContent = isLiveStrategyRoute(route) ? "即時偵測" : canvasState.rows.length ? "快照命中" : emptyState ? "受控等待" : "背景更新";
+    if (status && emptyState) status.textContent = emptyState.reason || "waiting";
+    if (emptyNote) {
+      emptyNote.hidden = !emptyState;
+      emptyNote.textContent = emptyState ? `${emptyState.title}：${emptyState.message} ${emptyState.detail || ""}` : "";
+    }
   }
 
   function workerCanvasSupported() {
@@ -3921,26 +3958,18 @@
     const status = shell.querySelector(".desktop-canvas-status");
     const input = shell.querySelector(".desktop-canvas-search");
     let canvas = shell.querySelector(".desktop-route-canvas");
-    if (isStrategy3Route(key) && canvas?.dataset?.fumanWorkerCanvas === "1") {
-      const fresh = document.createElement("canvas");
-      fresh.className = canvas.className;
-      fresh.tabIndex = canvas.tabIndex || 0;
-      fresh.setAttribute("aria-label", `${meta.title} Canvas 快速列表`);
-      canvas.replaceWith(fresh);
-      canvas = fresh;
+    const emptyState = currentCanvasEmptyState();
+    if ((isStrategy3Route(key) || emptyState) && canvas?.dataset?.fumanWorkerCanvas === "1") {
+      canvas = replaceWorkerCanvasForMainDraw(shell, canvas, meta);
     }
     if (icon) icon.textContent = meta.icon;
     if (title) title.textContent = meta.title;
     if (summary) summary.textContent = meta.summary;
-    const emptyState = currentCanvasEmptyState();
     if (dataState) dataState.textContent = isLiveStrategyRoute(key) ? "即時偵測" : canvasState.rows.length ? "快照命中" : emptyState ? "受控等待" : "背景更新";
     if (modeState) modeState.textContent = canvasWorkerReady ? "OffscreenCanvas" : "Canvas";
     if (count) count.textContent = `${canvasState.filtered.length}/${canvasState.rows.length}`;
     if (status) status.textContent = emptyState ? emptyState.reason || "waiting" : canvasWorkerReady ? canvasWorkerMode : canvasState.source || "shell";
-    if (emptyNote) {
-      emptyNote.hidden = !emptyState;
-      emptyNote.textContent = emptyState ? `${emptyState.title}：${emptyState.message} ${emptyState.detail || ""}` : "";
-    }
+    syncCanvasEmptyStateUi(shell);
     if (input && document.activeElement !== input) input.value = canvasState.query || "";
     if (canvas) canvas.setAttribute("aria-label", `${meta.title} Canvas 快速列表`);
     updateStrategySignalControls(shell);

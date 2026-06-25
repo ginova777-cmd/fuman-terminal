@@ -9,6 +9,7 @@ const BASE_URL = (process.env.FUMAN_VERIFY_BASE_URL || process.env.FUMAN_PRODUCT
 const CHECK_LIVE = !process.argv.includes("--pre-deploy");
 const ALLOW_DIRTY = process.argv.includes("--allow-dirty");
 const ALLOW_AHEAD = process.argv.includes("--allow-ahead");
+const EXPECTED_GIT_REMOTE_RE = /^(https:\/\/github\.com\/ginova777-cmd\/fuman-terminal\.git|git@github\.com:ginova777-cmd\/fuman-terminal\.git)$/i;
 const KEY_FILES = [
   "version.json",
   "terminal-core.js",
@@ -64,6 +65,21 @@ function fetchText(pathname, timeoutMs = 25000) {
 }
 
 function assertGitState() {
+  const originUrl = git(["remote", "get-url", "origin"]);
+  if (!originUrl.ok) {
+    issues.push(`git origin remote must be configured: ${originUrl.stderr}`);
+  } else if (!EXPECTED_GIT_REMOTE_RE.test(originUrl.stdout)) {
+    issues.push(`git origin must point to GitHub fuman-terminal before deploy; current=${originUrl.stdout || "(missing)"}`);
+  }
+  if (/fuman-terminal-sync|^[A-Za-z]:[\\/]/i.test(originUrl.stdout || "")) {
+    issues.push(`git origin must not be a local path or legacy sync tree; current=${originUrl.stdout}`);
+  }
+  const upstream = git(["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"]);
+  if (!upstream.ok) {
+    issues.push(`current branch must track origin/main before deploy: ${upstream.stderr}`);
+  } else if (upstream.stdout !== "origin/main") {
+    issues.push(`current branch upstream must be origin/main; current=${upstream.stdout || "(missing)"}`);
+  }
   const status = git(["status", "--porcelain"]);
   if (!status.ok) {
     issues.push(`git status failed: ${status.stderr}`);
