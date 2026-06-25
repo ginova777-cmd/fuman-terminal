@@ -141,6 +141,17 @@
           `;
           (panel.querySelector(":scope > .terminal-band") || panel.querySelector(":scope > .strength-panel") || tabs).insertAdjacentElement("afterend", section);
         }
+        const heatmapTabs = panel.querySelector(".sector-section .tabs");
+        if (heatmapTabs && !heatmapTabs.matches("[data-market-heatmap-tabs]")) {
+          heatmapTabs.setAttribute("data-market-heatmap-tabs", "1");
+          heatmapTabs.innerHTML = `
+            <button type="button" class="active" data-market-heatmap-mode="all">全部</button>
+            <button type="button" data-market-heatmap-mode="official">官方產業</button>
+            <button type="button" data-market-heatmap-mode="electronics">電子細分</button>
+            <button type="button" data-market-heatmap-mode="themes">群組概念</button>
+            <button type="button" data-market-heatmap-mode="groups">集團股</button>
+          `;
+        }
         return panel;
       };
       const marketActive = () => document.querySelector("#market-view.active:not([hidden])");
