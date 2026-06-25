@@ -319,7 +319,7 @@ module.exports = async function handler(request, response) {
   }
 
   const cached = await readEndpointFromDesktopSnapshot(request, {
-    timeoutMs: 650,
+    timeoutMs: 2500,
     via: "api/open-buy-latest",
   });
   if (cached) {

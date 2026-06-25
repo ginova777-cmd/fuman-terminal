@@ -67,7 +67,7 @@ module.exports = async function handler(request, response) {
     || request.query?.force === "1";
 
   if (!wantsRefresh) {
-    const snapshot = await readDesktopRouteSnapshot({ timeoutMs: 3000 });
+    const snapshot = await readDesktopRouteSnapshot({ timeoutMs: 30000 });
     if (snapshot?.payload) {
       if (request.method === "HEAD") {
         response.status(200).end("");

@@ -74,6 +74,6 @@
     "verify:terminal-modules": "node scripts/verify-terminal-modules-contract.js"
   },
   "engines": {
-    "node": "20.x"
+    "node": "24.x"
   }
 }

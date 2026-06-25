@@ -243,7 +243,7 @@ module.exports = async function handler(request, response) {
     || request.query?.refresh === "1"
     || request.query?.force === "1";
   if (!wantsLive) {
-    const snapshot = await readDesktopRouteSnapshot({ timeoutMs: 3000 });
+    const snapshot = await readDesktopRouteSnapshot({ timeoutMs: 30000 });
     if (snapshot?.payload?.endpoints) {
       const payload = {
         ...snapshot.payload,

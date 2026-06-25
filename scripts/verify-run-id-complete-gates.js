@@ -51,8 +51,12 @@ function todayTaipei() {
 }
 
 const expectedDate = process.env.RUN_GATE_DATE || todayTaipei();
-const strictStrategies = new Set(String(process.env.RUN_GATE_STRICT || "strategy1,strategy2,strategy3,strategy4,strategy5,institution,warrant_flow").split(",").map((item) => item.trim()).filter(Boolean));
+const allGateStrategies = "strategy1,strategy2,strategy3,strategy4,strategy5,institution,warrant_flow";
+const strictStrategies = new Set(String(process.env.RUN_GATE_STRICT || "strategy2").split(",").map((item) => item.trim()).filter(Boolean));
 const optionalStrategies = new Set(String(process.env.RUN_GATE_OPTIONAL || "").split(",").map((item) => item.trim()).filter(Boolean));
+// Only live routes should require same-day data by default. Complete-scan routes
+// are allowed to show the latest completed scan until their scheduled scan runs.
+const dateStrictStrategies = new Set(String(process.env.RUN_GATE_DATE_STRICT || "strategy2").split(",").map((item) => item.trim()).filter(Boolean));
 
 const gates = [
   { key: "strategy1", view: "v_strategy1_open_buy_latest_complete_run" },
@@ -75,8 +79,8 @@ async function checkGate(gate) {
   const row = Array.isArray(result.rows) ? result.rows[0] : null;
   if (!row?.run_id) return { ...gate, ok: false, issue: `${target} missing latest complete run` };
   const rowDate = normalizeDate(row.scan_date || row.finished_at);
-  if (expectedDate && rowDate && rowDate !== expectedDate) {
-    return { ...gate, ok: false, row, issue: `${target} stale scan_date=${rowDate} expected=${expectedDate}` };
+  if (dateStrictStrategies.has(gate.key) && expectedDate && rowDate && rowDate !== expectedDate) {
+    return { ...gate, ok: false, row, issue: `${target} date-strict scan_date=${rowDate} expected=${expectedDate}` };
   }
   if (Number(row.result_count || 0) <= 0 && gate.key !== "strategy2") {
     return { ...gate, ok: false, row, issue: `${target} complete run has zero result_count` };
@@ -92,7 +96,7 @@ async function checkGate(gate) {
     const level = strictStrategies.has(result.key) ? "strict" : optionalStrategies.has(result.key) ? "optional" : "info";
     const row = result.row || {};
     const summary = result.ok
-      ? `${result.key}: ok run=${row.run_id} count=${row.result_count || 0} date=${normalizeDate(row.scan_date || row.finished_at)}`
+      ? `${result.key}: ok run=${row.run_id} count=${row.result_count || 0} date=${normalizeDate(row.scan_date || row.finished_at)} datePolicy=${dateStrictStrategies.has(result.key) ? "same-day" : "latest-complete"}`
       : `${result.key}: ${level} ${result.issue}`;
     console.log(`[run-gate] ${summary}`);
     if (!result.ok && level === "strict") issues.push(result.issue);

@@ -13,6 +13,7 @@ const SUPABASE_KEY = terminalSupabaseKey({ root: ROOT, runtimeDir: RUNTIME_DIR }
 
 const LATEST_RUN_VIEW = process.env.STRATEGY2_SUPABASE_LATEST_RUN_VIEW || "v_strategy2_latest_complete_run";
 const RUNS_TABLE = process.env.STRATEGY2_SUPABASE_RUNS_TABLE || "strategy2_scan_runs";
+const RESULTS_TABLE = process.env.STRATEGY2_SUPABASE_RESULTS_TABLE || "strategy2_scan_results";
 const AUTHORITATIVE_GATE = "complete-run-authoritative";
 const MARKET_SUMMARY_FILE = "market-summary.json";
 const STOCKS_SLIM_FILE = "stocks-slim.json";
@@ -117,8 +118,9 @@ function payloadRunDate(payload, run) {
 }
 
 function allowedForMarketSession(run, marketSession) {
-  if (!marketSession?.closed || !marketSession.marketDataDate) return true;
   const runDate = payloadRunDate(run?.payload || {}, run);
+  if (runDate && runDate === marketSession?.today) return true;
+  if (!marketSession?.closed || !marketSession.marketDataDate) return true;
   return Boolean(runDate && runDate <= marketSession.marketDataDate);
 }
 
@@ -319,8 +321,89 @@ function hasStrategy2PayloadRows(payload) {
     || Array.isArray(payload?.rows) && payload.rows.length > 0;
 }
 
+function strategy2ResultPayload(row = {}) {
+  const payload = row.payload && typeof row.payload === "object" ? row.payload : {};
+  const code = String(payload.code || payload.symbol || row.code || "").match(/\d{4}/)?.[0] || "";
+  const name = payload.name || row.name || code;
+  return {
+    ...payload,
+    code,
+    name,
+    date: payload.date || row.scan_date || "",
+    timestamp: payload.timestamp || row.scan_time || row.updated_at || "",
+    entryAt: payload.entryAt || row.scan_time || "",
+    stateId: payload.stateId || row.state_id || "",
+    stateLabel: payload.stateLabel || payload.state || row.state_id || "",
+    score: payload.score ?? row.score ?? "",
+    maxScore: payload.maxScore ?? payload.score ?? row.score ?? "",
+    price: payload.price ?? row.price ?? "",
+    entryPrice: payload.entryPrice ?? row.price ?? "",
+    observedPrice: payload.observedPrice ?? row.price ?? "",
+    latestAPrice: payload.latestAPrice ?? row.price ?? "",
+    latestSeenPrice: payload.latestSeenPrice ?? row.price ?? "",
+    changePercent: payload.changePercent ?? row.change_percent ?? "",
+    volume: payload.volume ?? row.volume ?? "",
+    tradeValue: payload.tradeValue ?? row.trade_value ?? "",
+    signalId: payload.signalId || row.signal_id || code,
+    firstAAt: payload.firstAAt || row.first_a_at || "",
+    latestAAt: payload.latestAAt || row.latest_a_at || "",
+    latestSeenAt: payload.latestSeenAt || row.latest_seen_at || "",
+    quoteTime: payload.quoteTime || row.latest_seen_at || row.scan_time || "",
+    ma35Source: payload.ma35Source || row.ma35_source || "",
+    sourceCoverage: payload.sourceCoverage ?? row.source_coverage ?? "",
+    quoteAgeSeconds: payload.quoteAgeSeconds ?? row.quote_age_seconds ?? "",
+    latestCandleTime: payload.latestCandleTime || row.latest_candle_time || "",
+    todayCandleCount: payload.todayCandleCount ?? row.today_candle_count ?? "",
+  };
+}
+
+async function fetchResultRowsForRun(base, runId, limit = 500) {
+  if (!runId) return [];
+  return fetchRows(
+    base,
+    RESULTS_TABLE,
+    [
+      "select=run_id,row_kind,code,name,scan_date,scan_time,state_id,score,price,change_percent,volume,trade_value,signal_id,first_a_at,latest_a_at,latest_seen_at,ma35_source,source_coverage,quote_age_seconds,latest_candle_time,today_candle_count,complete,quality_status,schema_version,data_contract_source,generated_at,updated_at,payload",
+      "strategy=eq.strategy2",
+      `run_id=eq.${encodeURIComponent(runId)}`,
+      "complete=eq.true",
+      "order=row_kind.asc,score.desc.nullslast,scan_time.desc",
+      `limit=${Math.max(1, Math.min(1000, cleanNumber(limit) || 500))}`,
+    ].join("&")
+  );
+}
+
+async function hydrateRunPayloadRows(base, run, options = null) {
+  if (!run?.run_id || hasStrategy2PayloadRows(run.payload)) return run;
+  const limit = Math.max(200, cleanNumber(options?.limit) || 500);
+  const rows = await fetchResultRowsForRun(base, run.run_id, limit);
+  if (!rows.length) return run;
+  const events = rows.filter((row) => String(row.row_kind || "event") === "event").map(strategy2ResultPayload);
+  const records = rows.filter((row) => String(row.row_kind || "") !== "event").map(strategy2ResultPayload);
+  const payload = {
+    ...(run.payload || {}),
+    events,
+    records,
+    rows: events.length ? events : records,
+    date: run.payload?.date || run.scan_date || "",
+    updatedAt: run.payload?.updatedAt || run.updated_at || run.finished_at || rows[0]?.updated_at || "",
+    entryCount: cleanNumber(run.payload?.entryCount || run.payload?.aCount || events.length),
+    aCount: cleanNumber(run.payload?.aCount || run.payload?.entryCount || events.length),
+    matchCount: cleanNumber(run.payload?.matchCount || events.length || records.length),
+    totalCount: cleanNumber(run.payload?.totalCount || run.scanned_count || records.length || rows.length),
+    scanned: cleanNumber(run.payload?.scanned || run.scanned_count || records.length || rows.length),
+    total: cleanNumber(run.payload?.total || run.expected_total || records.length || rows.length),
+    qualityStatus: run.payload?.qualityStatus || run.quality_status || rows[0]?.quality_status || "complete",
+    schemaVersion: run.payload?.schemaVersion || rows[0]?.schema_version || "strategy2-run-id-complete-v1",
+    dataContractSource: run.payload?.dataContractSource || rows[0]?.data_contract_source || "supabase:strategy2_scan_results",
+  };
+  return { ...run, payload };
+}
+
 function buildStrategy2RunPayload(run, { skippedEmptyRunIds = [], sourceTable = LATEST_RUN_VIEW, marketSession = null, options = null, emptyToday = false } = {}) {
   const payload = run.payload || {};
+  const runDate = payloadRunDate(payload, run);
+  const isTodayRun = Boolean(runDate && runDate === marketSession?.today);
   const fullPayload = {
     ...payload,
     ok: payload.ok !== false,
@@ -331,7 +414,7 @@ function buildStrategy2RunPayload(run, { skippedEmptyRunIds = [], sourceTable = 
     qualityStatus: payload.qualityStatus || run.quality_status || "complete",
     cacheSource: "supabase-api",
     gate: AUTHORITATIVE_GATE,
-    reason: emptyToday ? "today-complete-run-empty" : marketSession?.closed ? "non-trading-day-cache" : "complete-run-authoritative",
+    reason: emptyToday ? "today-complete-run-empty" : isTodayRun ? "complete-run-authoritative" : marketSession?.closed ? "non-trading-day-cache" : "complete-run-authoritative",
     noTodayDetections: Boolean(emptyToday),
     marketSession,
     latestCompleteRunCorrected: skippedEmptyRunIds.length > 0,
@@ -364,11 +447,11 @@ async function fetchCompleteRunPayload(base, marketSession = null, options = nul
     ].filter(Boolean).join("&")
   );
   const skippedEmptyRunIds = [];
-  const latestRun = latestRows[0];
+  const latestRun = await hydrateRunPayloadRows(base, latestRows[0], options);
   if (latestRun?.run_id && latestRun?.payload && hasStrategy2PayloadRows(latestRun.payload) && allowedForMarketSession(latestRun, marketSession)) {
-    return buildStrategy2RunPayload(latestRun, { marketSession, options });
+    return buildStrategy2RunPayload(latestRun, { sourceTable: `${LATEST_RUN_VIEW}+${RESULTS_TABLE}`, marketSession, options });
   }
-  const emptyTodayRun = options?.today && latestRun?.run_id && payloadRunDate(latestRun.payload || {}, latestRun) === marketSession?.today
+  const emptyTodayRun = latestRun?.run_id && payloadRunDate(latestRun.payload || {}, latestRun) === marketSession?.today
     ? latestRun
     : null;
   if (latestRun?.run_id) skippedEmptyRunIds.push(latestRun.run_id);
@@ -388,8 +471,12 @@ async function fetchCompleteRunPayload(base, marketSession = null, options = nul
       "limit=10",
     ].filter(Boolean).join("&")
   );
-  const historyRun = historyRows.find(row => row?.run_id && row?.payload && hasStrategy2PayloadRows(row.payload) && allowedForMarketSession(row, marketSession));
-  if (historyRun) return buildStrategy2RunPayload(historyRun, { skippedEmptyRunIds, sourceTable: RUNS_TABLE, marketSession, options });
+  for (const row of historyRows) {
+    const historyRun = await hydrateRunPayloadRows(base, row, options);
+    if (historyRun?.run_id && historyRun?.payload && hasStrategy2PayloadRows(historyRun.payload) && allowedForMarketSession(historyRun, marketSession)) {
+      return buildStrategy2RunPayload(historyRun, { skippedEmptyRunIds, sourceTable: `${RUNS_TABLE}+${RESULTS_TABLE}`, marketSession, options });
+    }
+  }
   return emptyTodayRun ? buildStrategy2RunPayload(emptyTodayRun, { marketSession, options, emptyToday: true }) : null;
 }
 

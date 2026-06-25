@@ -1,4 +1,8 @@
 const crypto = require("crypto");
+const {
+  endpointPayloadFromSnapshot,
+  readDesktopRouteSnapshot,
+} = require("../lib/desktop-route-snapshot-cache");
 
 const FRAGMENT_TABS = ["strategy1", "strategy2", "strategy3", "strategy4", "strategy5", "chip", "warrant"];
 const TAB_ENDPOINTS = {
@@ -17,7 +21,7 @@ function originFrom(request) {
   return `${proto}://${host}`;
 }
 
-async function fetchJsonWithTimeout(url, timeoutMs = 8000) {
+async function fetchJsonWithTimeout(url, timeoutMs = 12000) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
@@ -33,20 +37,78 @@ async function fetchJsonWithTimeout(url, timeoutMs = 8000) {
   }
 }
 
+function appendQuery(endpoint, params) {
+  const search = new URLSearchParams();
+  for (const [key, value] of Object.entries(params || {})) {
+    if (value !== undefined && value !== null && value !== "") search.set(key, String(value));
+  }
+  const query = search.toString();
+  if (!query) return endpoint;
+  return `${endpoint}${endpoint.includes("?") ? "&" : "?"}${query}`;
+}
+
+function callbackName(request) {
+  const url = new URL(request.url, originFrom(request));
+  const callback = String(url.searchParams.get("callback") || "").trim();
+  return /^[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*$/.test(callback) ? callback : "";
+}
+
+function sendPayload(request, response, statusCode, payload) {
+  const callback = callbackName(request);
+  if (callback) {
+    response.setHeader("Content-Type", "application/javascript; charset=utf-8");
+    response.status(statusCode).send(request.method === "HEAD" ? "" : `${callback}(${JSON.stringify(payload)});`);
+    return;
+  }
+  response.setHeader("Content-Type", "application/json; charset=utf-8");
+  response.status(statusCode).send(request.method === "HEAD" ? "" : JSON.stringify(payload));
+}
+
 function signature(tab, payload) {
   return crypto.createHash("sha1").update(JSON.stringify({
     tab,
-    runId: payload?.runId || payload?.transport?.runId || "",
+    runId: extractRunId(payload),
     updatedAt: payload?.updatedAt || payload?.finishedAt || payload?.generatedAt || "",
     count: payload?.count ?? payload?.total ?? payload?.result_count ?? "",
     quality: payload?.qualityStatus || payload?.sourceHealth?.status || "",
   })).digest("hex").slice(0, 12);
 }
 
+function extractRunId(payload) {
+  return String(
+    payload?.runId
+    || payload?.transport?.runId
+    || payload?.transport?.payloadRunId
+    || payload?.payload?.runId
+    || payload?.payload?.transport?.runId
+    || payload?.meta?.runId
+    || ""
+  );
+}
+
 async function buildBoot(request) {
   const origin = originFrom(request);
+  const snapshot = await readDesktopRouteSnapshot({ timeoutMs: 30000 }).catch(() => null);
   const results = await Promise.all(FRAGMENT_TABS.map(async (tab) => {
-    const payload = await fetchJsonWithTimeout(`${origin}${TAB_ENDPOINTS[tab]}?mobileBoot=1&ts=${Date.now()}`);
+    const endpoint = appendQuery(TAB_ENDPOINTS[tab], {
+      mobileBoot: 1,
+      canvas: 1,
+      compact: 1,
+      shell: 1,
+      limit: 60,
+      ts: Date.now(),
+    });
+    let payload = endpointPayloadFromSnapshot(snapshot?.payload, endpoint);
+    try {
+      if (!payload) payload = await fetchJsonWithTimeout(`${origin}${endpoint}`);
+    } catch (error) {
+      payload = {
+        ok: false,
+        source: "mobile-boot-tab-timeout",
+        error: "mobile_boot_tab_unavailable",
+        message: error?.message || String(error),
+      };
+    }
     return [tab, payload];
   }));
   const fragments = {};
@@ -57,7 +119,7 @@ async function buildBoot(request) {
       url: `/api/mobile-fragment?tab=${encodeURIComponent(tab)}`,
       hash,
       api: TAB_ENDPOINTS[tab],
-      runId: payload?.runId || payload?.transport?.runId || "",
+      runId: extractRunId(payload),
       complete: payload?.complete === true,
       count: Number(payload?.count ?? payload?.total ?? payload?.result_count ?? 0) || 0,
     };
@@ -118,10 +180,9 @@ module.exports = function handler(request, response) {
   }
 
   buildBoot(request).then((payload) => {
-    response.setHeader("Content-Type", "application/json; charset=utf-8");
-    response.status(200).send(request.method === "HEAD" ? "" : JSON.stringify(payload));
+    sendPayload(request, response, 200, payload);
   }).catch((error) => {
-    response.status(503).json({
+    sendPayload(request, response, 503, {
       ok: false,
       source: "mobile-boot-api",
       error: "mobile_boot_unavailable",

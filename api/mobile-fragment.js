@@ -10,7 +10,7 @@ const TAB_CONFIG = {
   strategy2: {
     title: "策略2 當沖",
     subtitle: "2 分 K 即時偵測",
-    endpoint: "/api/strategy2-latest",
+    endpoint: "/api/latest-strategy?key=strategy2",
     points: ["只看進場區", "等待量價確認", "盤中訊號掃描端完成"],
   },
   strategy3: {
@@ -57,6 +57,32 @@ function originFrom(request) {
   const host = request.headers["x-forwarded-host"] || request.headers.host || "fuman-terminal.vercel.app";
   const proto = request.headers["x-forwarded-proto"] || "https";
   return `${proto}://${host}`;
+}
+
+function appendQuery(endpoint, params) {
+  const search = new URLSearchParams();
+  for (const [key, value] of Object.entries(params || {})) {
+    if (value !== undefined && value !== null && value !== "") search.set(key, String(value));
+  }
+  const query = search.toString();
+  if (!query) return endpoint;
+  return `${endpoint}${endpoint.includes("?") ? "&" : "?"}${query}`;
+}
+
+function callbackName(request) {
+  const url = new URL(request.url, originFrom(request));
+  const callback = String(url.searchParams.get("callback") || "").trim();
+  return /^[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*$/.test(callback) ? callback : "";
+}
+
+function sendHtml(request, response, statusCode, html, extra = {}) {
+  const callback = callbackName(request);
+  if (callback) {
+    response.setHeader("Content-Type", "application/javascript; charset=utf-8");
+    response.status(statusCode).send(request.method === "HEAD" ? "" : `${callback}(${JSON.stringify({ ok: statusCode < 400, html, ...extra })});`);
+    return;
+  }
+  response.status(statusCode).send(request.method === "HEAD" ? "" : html);
 }
 
 async function fetchJsonWithTimeout(url, timeoutMs = 9000) {
@@ -227,7 +253,13 @@ function renderFragment(tab, config, payload) {
   const reportedCount = Number(payload?.count ?? payload?.total ?? payload?.result_count ?? 0) || 0;
   const count = Math.max(reportedCount, rows.length);
   const updatedAt = payload?.updatedAt || payload?.finishedAt || payload?.generatedAt || payload?.scanTime || payload?.date || "";
-  const runId = payload?.runId || payload?.transport?.runId || "";
+  const runId = payload?.runId
+    || payload?.transport?.runId
+    || payload?.transport?.payloadRunId
+    || payload?.payload?.runId
+    || payload?.payload?.transport?.runId
+    || payload?.meta?.runId
+    || "";
   const quality = payload?.qualityStatus || payload?.sourceHealth?.status || "";
   const statusLine = [config.subtitle, runId ? `run ${runId}` : "", quality ? `quality ${quality}` : ""].filter(Boolean).join("｜");
   const points = config.points.map((point, index) => `<p><b>${index + 1}</b>${esc(point)}</p>`).join("");
@@ -257,15 +289,15 @@ module.exports = async function handler(request, response) {
   const tab = String(url.searchParams.get("tab") || "").trim();
   const config = TAB_CONFIG[tab];
   if (!config) {
-    response.status(404).send('<div class="empty-state">未知分頁。</div>');
+    sendHtml(request, response, 404, '<div class="empty-state">未知分頁。</div>', { tab });
     return;
   }
   try {
-    const payload = await fetchJsonWithTimeout(`${originFrom(request)}${config.endpoint}?mobile=1&ts=${Date.now()}`);
+    const payload = await fetchJsonWithTimeout(`${originFrom(request)}${appendQuery(config.endpoint, { mobile: 1, ts: Date.now() })}`);
     const html = renderFragment(tab, config, payload);
     response.setHeader("ETag", `"${crypto.createHash("sha1").update(html).digest("hex").slice(0, 16)}"`);
-    response.status(200).send(request.method === "HEAD" ? "" : html);
+    sendHtml(request, response, 200, html, { tab });
   } catch (error) {
-    response.status(503).send(`<div class="empty-state">手機 API fragment 暫時無法取得：${esc(error?.message || error)}</div>`);
+    sendHtml(request, response, 503, `<div class="empty-state">手機 API fragment 暫時無法取得：${esc(error?.message || error)}</div>`, { tab });
   }
 };

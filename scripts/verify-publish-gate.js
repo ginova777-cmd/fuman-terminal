@@ -3,12 +3,33 @@ const path = require("path");
 const { spawnSync } = require("child_process");
 
 const ROOT = path.resolve(__dirname, "..");
+const EXPECTED_VERCEL_PROJECT_ID = "prj_x0R2mMFsL0Xto4whcbPTKQTKJRUl";
+const EXPECTED_VERCEL_ORG_ID = "team_HfAXzMLgDcpw6UFbnexhuxHG";
+const EXPECTED_VERCEL_PROJECT_NAME = "fuman-terminal";
+const EXPECTED_NODE_VERSION = "24.x";
 
 function read(file) {
   return fs.readFileSync(path.join(ROOT, file), "utf8");
 }
 
 const issues = [];
+
+function readJsonFile(file) {
+  try {
+    return JSON.parse(read(file));
+  } catch (error) {
+    issues.push(`${file} must be valid JSON: ${error.message}`);
+    return null;
+  }
+}
+
+function assertNoPatternInExistingFiles(files, pattern, message) {
+  for (const file of files) {
+    const absolute = path.join(ROOT, file);
+    if (!fs.existsSync(absolute)) continue;
+    if (pattern.test(read(file))) issues.push(`${file} ${message}`);
+  }
+}
 
 const desktopApiOnlyGuard = spawnSync(process.execPath, [path.join(ROOT, "scripts", "verify-desktop-api-only.js")], {
   cwd: ROOT,
@@ -43,6 +64,36 @@ function queryScheduledTask(taskName) {
 }
 
 const packageJson = JSON.parse(read("package.json"));
+if (packageJson.engines?.node !== EXPECTED_NODE_VERSION) {
+  issues.push(`package.json engines.node must be ${EXPECTED_NODE_VERSION}; current=${packageJson.engines?.node || "(missing)"}`);
+}
+const vercelProject = readJsonFile(".vercel/project.json");
+if (vercelProject) {
+  if (vercelProject.projectId !== EXPECTED_VERCEL_PROJECT_ID) {
+    issues.push(`.vercel/project.json projectId must be ${EXPECTED_VERCEL_PROJECT_ID}; current=${vercelProject.projectId || "(missing)"}`);
+  }
+  if (vercelProject.orgId !== EXPECTED_VERCEL_ORG_ID) {
+    issues.push(`.vercel/project.json orgId must be ${EXPECTED_VERCEL_ORG_ID}; current=${vercelProject.orgId || "(missing)"}`);
+  }
+  if (vercelProject.projectName !== EXPECTED_VERCEL_PROJECT_NAME) {
+    issues.push(`.vercel/project.json projectName must be ${EXPECTED_VERCEL_PROJECT_NAME}; current=${vercelProject.projectName || "(missing)"}`);
+  }
+  if (vercelProject.settings?.nodeVersion !== EXPECTED_NODE_VERSION) {
+    issues.push(`.vercel/project.json settings.nodeVersion must be ${EXPECTED_NODE_VERSION}; current=${vercelProject.settings?.nodeVersion || "(missing)"}`);
+  }
+}
+if (!/require-version-bump-approval\.js/.test(String(packageJson.scripts?.deploy || ""))) {
+  issues.push("package.json scripts.deploy must require version/deploy approval");
+}
+if (!/require-version-bump-approval\.js/.test(String(packageJson.scripts?.["release:main"] || ""))) {
+  issues.push("package.json scripts.release:main must require version/deploy approval");
+}
+for (const [scriptName, scriptBody] of Object.entries(packageJson.scripts || {})) {
+  if (["bump:version", "verify:bump"].includes(scriptName)) continue;
+  if (/\bbump:version\b|bump-version\.js/.test(String(scriptBody || ""))) {
+    issues.push(`package.json scripts.${scriptName} must not auto bump version`);
+  }
+}
 if (!packageJson.scripts?.["cleanup:api-only-retired"] || !/cleanup-api-only-retired-artifacts\.js/.test(packageJson.scripts["cleanup:api-only-retired"])) {
   issues.push("package.json missing scripts.cleanup:api-only-retired");
 }
@@ -136,6 +187,44 @@ const strategy2Scanner = read("scripts/scan-intraday-signals.js");
 const runIdCompleteGate = read("scripts/verify-run-id-complete-gates.js");
 const terminalLiveCheck = read("terminal-live-check.js");
 const terminalApp = read("terminal-app.js");
+if (!/dataManifest:\s*""/.test(runtimeConfig)) {
+  issues.push("terminal-runtime-config.js dataManifest must be an empty string; static JSON manifest polling must stay disabled");
+}
+if (/dataManifest:\s*["']\/data\//.test(runtimeConfig)) {
+  issues.push("terminal-runtime-config.js must not point dataManifest at static JSON data");
+}
+assertNoPatternInExistingFiles([
+  "package.json",
+  "scripts/prepare-deploy.js",
+  "scripts/verify-production-guard.js",
+  "run-publish-gate.ps1",
+  "run-main-release-pipeline.ps1",
+  "run-daily-release.ps1",
+  "run-full-scan.ps1",
+  "run-cache-sync.ps1",
+  "terminal-runtime-config.js",
+  "api/desktop-route-snapshot.js",
+  "api/terminal-fast-bundle.js",
+], /fuman-terminal-sync/i, "must not depend on C:\\fuman-terminal-sync in production runtime or deploy flow");
+assertNoPatternInExistingFiles([
+  "terminal-runtime-config.js",
+  "api/desktop-route-snapshot.js",
+  "api/terminal-fast-bundle.js",
+  "api/mobile-boot.js",
+  "api/mobile-fragment.js",
+  "api/open-buy-latest.js",
+  "api/latest-strategy.js",
+  "api/strategy2-latest.js",
+  "api/strategy3-latest.js",
+  "api/strategy4-latest.js",
+  "api/strategy5-latest.js",
+  "api/institution-latest.js",
+  "api/warrant-flow-latest.js",
+  "api/cb-detect-latest.js",
+  "api/realtime-radar-latest.js",
+  "api/market-overview-latest.js",
+  "lib/desktop-route-snapshot-cache.js",
+], /google\s*sheet|googlesheet|sheets\.googleapis|docs\.google\.com\/spreadsheets/i, "must not use Google Sheet as a production data source");
 if (!/if \(\$Scope -ne "all"\)/.test(cacheSync)) {
   issues.push("run-cache-sync.ps1 must block every non-all scope");
 }
@@ -662,6 +751,7 @@ if (fetchResult.status !== 0) {
       .filter((line) => {
         const file = line.slice(3).trim();
         if (allowedDirty.has(file)) return false;
+        if (/^data\/scan-receipts\/[^/]+\.json$/.test(file)) return false;
         if (/^data\/mobile-analysis\/\d{4}\.json$/.test(file)) return false;
         return true;
       });
