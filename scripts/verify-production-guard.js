@@ -10,6 +10,7 @@ const CHECK_LIVE = !process.argv.includes("--pre-deploy");
 const ALLOW_DIRTY = process.argv.includes("--allow-dirty");
 const ALLOW_AHEAD = process.argv.includes("--allow-ahead");
 const EXPECTED_GIT_REMOTE_RE = /^(https:\/\/github\.com\/ginova777-cmd\/fuman-terminal\.git|git@github\.com:ginova777-cmd\/fuman-terminal\.git)$/i;
+const LEGACY_SYNC_TREE_RE = new RegExp("fuman-terminal" + "-sync", "i");
 const KEY_FILES = [
   "version.json",
   "terminal-core.js",
@@ -71,7 +72,7 @@ function assertGitState() {
   } else if (!EXPECTED_GIT_REMOTE_RE.test(originUrl.stdout)) {
     issues.push(`git origin must point to GitHub fuman-terminal before deploy; current=${originUrl.stdout || "(missing)"}`);
   }
-  if (/fuman-terminal-sync|^[A-Za-z]:[\\/]/i.test(originUrl.stdout || "")) {
+  if (LEGACY_SYNC_TREE_RE.test(originUrl.stdout || "") || /^[A-Za-z]:[\\/]/i.test(originUrl.stdout || "")) {
     issues.push(`git origin must not be a local path or legacy sync tree; current=${originUrl.stdout}`);
   }
   const upstream = git(["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"]);

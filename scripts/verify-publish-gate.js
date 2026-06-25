@@ -8,6 +8,7 @@ const EXPECTED_VERCEL_ORG_ID = "team_HfAXzMLgDcpw6UFbnexhuxHG";
 const EXPECTED_VERCEL_PROJECT_NAME = "fuman-terminal";
 const EXPECTED_NODE_VERSION = "24.x";
 const EXPECTED_GIT_REMOTE_RE = /^(https:\/\/github\.com\/ginova777-cmd\/fuman-terminal\.git|git@github\.com:ginova777-cmd\/fuman-terminal\.git)$/i;
+const LEGACY_SYNC_TREE_RE = new RegExp("fuman-terminal" + "-sync", "i");
 
 function read(file) {
   return fs.readFileSync(path.join(ROOT, file), "utf8");
@@ -46,8 +47,8 @@ function assertGitReleaseRemote() {
   if (!EXPECTED_GIT_REMOTE_RE.test(remote)) {
     issues.push(`git origin must point to GitHub fuman-terminal, not a local sync tree; current=${remote || "(missing)"}`);
   }
-  if (/fuman-terminal-sync|^[A-Za-z]:[\\/]/i.test(remote)) {
-    issues.push(`git origin must not be a local path or C:\\fuman-terminal-sync; current=${remote}`);
+  if (LEGACY_SYNC_TREE_RE.test(remote) || /^[A-Za-z]:[\\/]/i.test(remote)) {
+    issues.push(`git origin must not be a local path or legacy sync tree; current=${remote}`);
   }
   const upstream = git(["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"]);
   if (upstream.status !== 0) {
@@ -234,7 +235,7 @@ assertNoPatternInExistingFiles([
   "terminal-runtime-config.js",
   "api/desktop-route-snapshot.js",
   "api/terminal-fast-bundle.js",
-], /fuman-terminal-sync/i, "must not depend on C:\\fuman-terminal-sync in production runtime or deploy flow");
+], LEGACY_SYNC_TREE_RE, "must not depend on the legacy sync tree in production runtime or deploy flow");
 assertNoPatternInExistingFiles([
   "terminal-runtime-config.js",
   "api/desktop-route-snapshot.js",
