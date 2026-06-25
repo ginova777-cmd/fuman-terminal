@@ -2329,6 +2329,7 @@
     document.addEventListener("wheel", (event) => {
       const canvas = event.target.closest?.(".desktop-route-canvas");
       if (!canvas) return;
+      if (FIXED_CANVAS_PERSIST_ROUTES.includes(canvasState.route)) return;
       if (canvasPageSizeForRoute()) return;
       const direction = event.deltaY > 0 ? 1 : -1;
       const step = Math.max(1, Math.min(8, Math.round(Math.abs(event.deltaY) / 42)));
@@ -2345,6 +2346,7 @@
     document.addEventListener("keydown", (event) => {
       const canvas = event.target.closest?.(".desktop-route-canvas");
       if (!canvas) return;
+      if (FIXED_CANVAS_PERSIST_ROUTES.includes(canvasState.route)) return;
       const capacity = visibleCanvasCapacity(canvas);
       const pageSize = canvasPageSizeForRoute();
       const oldOffset = canvasState.offset;
