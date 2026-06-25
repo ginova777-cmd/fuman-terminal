@@ -16,7 +16,6 @@ const RESERVED_PRODUCTION_ROUTES = [
 ];
 const KEY_FILES = [
   "version.json",
-  "88.html",
   "terminal-core.js",
   "terminal.js",
   "terminal-desktop-fast-shell.js",
