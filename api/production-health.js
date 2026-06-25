@@ -8,6 +8,12 @@ const SNAPSHOT_MAX_AGE_MS = Number(
   || process.env.DESKTOP_ROUTE_SNAPSHOT_MAX_AGE_MS
   || 6 * 60 * 60 * 1000
 );
+const SNAPSHOT_READ_TIMEOUT_MS = Number(
+  process.env.FUMAN_PRODUCTION_HEALTH_SNAPSHOT_READ_TIMEOUT_MS
+  || process.env.FUMAN_DESKTOP_ROUTE_SNAPSHOT_READ_TIMEOUT_MS
+  || process.env.DESKTOP_ROUTE_SNAPSHOT_READ_TIMEOUT_MS
+  || 30000
+);
 
 function createCaptureResponse(resolve, label) {
   let settled = false;
@@ -103,7 +109,7 @@ module.exports = async function handler(request, response) {
 
   const issues = [];
   const snapshot = await readDesktopRouteSnapshot({
-    timeoutMs: 3000,
+    timeoutMs: SNAPSHOT_READ_TIMEOUT_MS,
     maxAgeMs: SNAPSHOT_MAX_AGE_MS,
   });
   const payload = snapshot?.payload || {};
