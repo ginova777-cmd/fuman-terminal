@@ -7,6 +7,7 @@ const path = require("path");
 
 const ROOT = path.resolve(__dirname, "..");
 const DEFAULT_BASE_URL = "https://fuman-terminal.vercel.app";
+const BLANK_PAGE_URL = "data:text/html,FUMAN_E2E";
 const BASE_URL = optionValue("--base-url") || process.env.FUMAN_UI_E2E_BASE_URL || DEFAULT_BASE_URL;
 const OUT_DIR = path.resolve(optionValue("--out") || process.env.FUMAN_UI_E2E_OUT || path.join(ROOT, "outputs", "terminal-ui-e2e"));
 const SCREENSHOT_DIR = path.join(OUT_DIR, "screenshots");
@@ -28,7 +29,7 @@ const ROUTE_TIMEOUT_MS = Number(optionValue("--route-timeout") || process.env.FU
 const DESKTOP_ROUTES = [
   { key: "market", label: "market overview", selector: "aside.sidebar a[data-view=\"market\"]", expectedRouteKey: "market|市場總覽", expectedPanelId: "market-view" },
   { key: "realtime-radar", label: "realtime radar", selector: "aside.sidebar a.realtime-radar-nav[data-view=\"realtime-radar\"]", expectedRouteKey: "realtime-radar|即時雷達", expectedPanelId: "realtime-radar-view" },
-  { key: "strategy1", label: "strategy1", selector: "aside.sidebar a[data-view=\"strategy\"] .s1", expectedRouteKey: "strategy|策略1", expectedPanelId: "strategy-view", allowFallbackStats: true },
+  { key: "strategy1", label: "strategy1", selector: "aside.sidebar a[data-view=\"strategy\"] .s1", expectedRouteKey: "strategy|策略1", expectedPanelId: "strategy-view", allowWaitingEmpty: true },
   { key: "strategy2", label: "strategy2 live", selector: "aside.sidebar a[data-view=\"strategy\"] .s2", expectedRouteKey: "strategy|策略2", expectedPanelId: "strategy-view" },
   { key: "strategy3", label: "strategy3", selector: "aside.sidebar a[data-view=\"strategy\"] .s3", expectedRouteKey: "strategy|策略3", expectedPanelId: "strategy-view" },
   { key: "strategy4", label: "strategy4", selector: "aside.sidebar a[data-view=\"strategy\"] .s4", expectedRouteKey: "strategy|策略4", expectedPanelId: "strategy-view" },
@@ -149,7 +150,7 @@ async function launchBrowser() {
     "--disable-extensions",
     "--disable-sync",
     "--window-size=1440,1000",
-    "about:blank",
+    BLANK_PAGE_URL,
   ];
   if (!HEADFUL) {
     args.unshift(
@@ -193,15 +194,14 @@ async function createTab(browser) {
   for (let attempt = 0; attempt < 5; attempt += 1) {
     try {
       debug(`create tab attempt=${attempt + 1} port=${port}`);
-      let list = await fetchJson(`http://127.0.0.1:${port}/json/list`);
-      let target = list.find((item) => item.type === "page" && item.webSocketDebuggerUrl);
+      let target = null;
       try {
-        if (!target) {
-          const newUrl = `http://127.0.0.1:${port}/json/new?${encodeURIComponent("about:blank")}`;
-          target = await fetchJson(newUrl, { method: "PUT" });
-        }
+        const newUrl = `http://127.0.0.1:${port}/json/new?${encodeURIComponent(BLANK_PAGE_URL)}`;
+        target = await fetchJson(newUrl, { method: "PUT" });
+        debug(`new target=${target.type || ""}:${target.title || target.url || ""}`);
       } catch (error) {
-        list = await fetchJson(`http://127.0.0.1:${port}/json/list`);
+        const list = await fetchJson(`http://127.0.0.1:${port}/json/list`);
+        debug(`targets=${list.map((item) => `${item.type}:${item.title || item.url || ""}`).join(" | ")}`);
         target = list.find((item) => item.type === "page");
       }
       if (!target?.webSocketDebuggerUrl) {
@@ -213,11 +213,11 @@ async function createTab(browser) {
       try {
         debug(`connect websocket attempt=${attempt + 1}`);
         await cdp.connect();
-        debug("enable Page/Runtime/DOM/Network");
-        await cdp.send("Page.enable", {}, 45000);
+        debug("enable Runtime/DOM/Network; Page.enable is optional");
         await cdp.send("Runtime.enable", {}, 30000);
         await cdp.send("DOM.enable", {}, 30000);
         await cdp.send("Network.enable", {}, 30000);
+        await cdp.send("Page.enable", {}, 5000).catch((error) => debug(`Page.enable skipped: ${error.message}`));
         await cdp.send("Log.enable", {}, 10000).catch(() => null);
         return cdp;
       } catch (error) {
@@ -262,12 +262,20 @@ class Cdp {
       this.ws.addEventListener("open", () => finish(resolve), { once: true });
       this.ws.addEventListener("error", (error) => finish(reject, error), { once: true });
       this.ws.addEventListener("close", () => finish(reject, new Error("CDP websocket closed before open")), { once: true });
-      this.ws.addEventListener("message", (event) => this.handleMessage(event));
+      this.ws.addEventListener("message", (event) => {
+        this.handleMessage(event).catch((error) => {
+          this.events.push({ method: "CDP.parseError", params: { message: error.message } });
+        });
+      });
     });
   }
 
-  handleMessage(event) {
-    const message = JSON.parse(String(event.data));
+  async handleMessage(event) {
+    let raw = event.data;
+    if (raw && typeof raw.text === "function") raw = await raw.text();
+    else if (raw instanceof ArrayBuffer) raw = Buffer.from(raw).toString("utf8");
+    else if (ArrayBuffer.isView(raw)) raw = Buffer.from(raw.buffer, raw.byteOffset, raw.byteLength).toString("utf8");
+    const message = JSON.parse(String(raw));
     if (message.id && this.pending.has(message.id)) {
       const pending = this.pending.get(message.id);
       this.pending.delete(message.id);
@@ -362,12 +370,14 @@ async function setViewport(cdp, mode) {
 }
 
 async function navigate(cdp, url) {
-  cdp.events = cdp.events.filter((event) => !["Page.loadEventFired", "Runtime.executionContextCreated"].includes(event.method));
-  const loaded = cdp.waitForEvent("Page.loadEventFired", 45000).catch(() => null);
+  cdp.events = cdp.events.filter((event) => !["Runtime.executionContextCreated"].includes(event.method));
   const contextReady = cdp.waitForEvent("Runtime.executionContextCreated", 45000).catch(() => null);
   await cdp.send("Page.navigate", { url }, 45000);
-  await loaded;
   await contextReady;
+  await waitFor(cdp, () => ({
+    ok: document.readyState === "interactive" || document.readyState === "complete",
+    state: document.readyState,
+  }), null, 45000, 500).catch(() => null);
   await cdp.send("Page.stopLoading").catch(() => null);
   await sleep(1000);
   await cdp.send("Page.bringToFront").catch(() => null);
@@ -551,6 +561,8 @@ function collectDesktopStats(route) {
     text(activePanel.querySelector(".refresh-line")),
     text(activePanel.querySelector(".desktop-canvas-status")),
   ].filter(Boolean).join(" | ");
+  const emptyStateText = text(activePanel.querySelector("[data-canvas-empty-note]:not([hidden])"));
+  const waitingEmptyOk = Boolean(route.allowWaitingEmpty && emptyStateText && /等待|受控|decision|futopt|ready|snapshot/i.test(emptyStateText));
   const dateSignals = [...`${freshnessText} ${panelText}`.matchAll(/(?:20\d{2}[\/.-]\d{1,2}[\/.-]\d{1,2}|20\d{6}|\d{1,2}[\/.]\d{1,2}\s+\d{2}:\d{2}|runId|run-|fresh|complete|更新|掃描|資料日期|今日)/gi)].slice(0, 12).map((match) => match[0]);
   const rowsVisible = Math.max(domRows.length, canvasRows);
   const softEmptyPattern = /等待資料載入|尚未產生 CB|權證快照尚未建立|更新策略資料中/;
@@ -559,6 +571,7 @@ function collectDesktopStats(route) {
   if (!routeIdentityOk) {
     warnings.push(`route identity mismatch: panel=${activePanel.id || ""}/${route.expectedPanelId || ""}, route=${activeRouteKey}/${route.expectedRouteKey || ""}`);
   }
+  if (waitingEmptyOk) warnings.push(`controlled waiting state: ${emptyStateText.slice(0, 90)}`);
   if (!dateSignals.length) warnings.push("freshness/date/run signal not visible enough");
   if (!rowsVisible && filterCounts.length) warnings.push("route has populated subfilters but default view has no rows");
   if (rowsVisible > 0 && hardBlockers.length !== blockerMatches.length) warnings.push("ignored hidden/soft empty-state text because rows are visible");
@@ -582,10 +595,12 @@ function collectDesktopStats(route) {
     sampleRows: domRows.slice(0, 3),
     filterCounts,
     freshnessText,
+    emptyStateText,
+    waitingEmptyOk,
     dateSignals,
     blockerMatches: [...new Set(hardBlockers)],
     warnings,
-    ok: routeIdentityOk && rowsVisible > 0 && hardBlockers.length === 0,
+    ok: routeIdentityOk && (rowsVisible > 0 || waitingEmptyOk) && hardBlockers.length === 0,
   };
 }
 
@@ -678,7 +693,7 @@ async function fallbackDesktopStats(cdp, route, error) {
       "route identity unavailable in fallback stats",
       ...(rowsVisible > 0 && hardBlockers.length !== blockerMatches.length ? ["ignored hidden/soft empty-state text because rows are visible"] : []),
     ],
-    ok: Boolean(route.allowFallbackStats) && rowsVisible > 0 && hardBlockers.length === 0,
+    ok: false,
   };
 }
 
@@ -718,7 +733,7 @@ async function collectDesktopStatsWhenReady(cdp, route, timeoutMs = 22000) {
   while (Date.now() - start < timeoutMs) {
     last = await evaluate(cdp, collectDesktopStats, route)
       .catch((error) => fallbackDesktopStats(cdp, route, error));
-    if (last?.ok && last?.rowsVisible > 0 && !(last.blockerMatches || []).length) return last;
+    if (last?.ok && !(last.blockerMatches || []).length) return last;
     await sleep(900);
   }
   return last || { kind: "desktop", routeKey: route.key, label: route.label, ok: false, rowsVisible: 0, blockerMatches: ["desktop stats missing"], warnings: [] };

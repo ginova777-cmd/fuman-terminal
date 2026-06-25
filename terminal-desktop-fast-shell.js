@@ -1,11 +1,11 @@
 (function () {
   if (
     window.__fumanDesktopFastShell === "20260623-09"
-    && window.__fumanDesktopFastShellApiOnlyPoll === "20260625-06"
+    && window.__fumanDesktopFastShellApiOnlyPoll === "20260625-07"
     && window.__fumanOriginalDesktopMarket === "20260624-01"
   ) return;
   window.__fumanDesktopFastShell = "20260623-09";
-  window.__fumanDesktopFastShellApiOnlyPoll = "20260625-06";
+  window.__fumanDesktopFastShellApiOnlyPoll = "20260625-07";
 
   const NAV_SELECTOR = "[data-view]:not([data-member-tab])";
   const SNAPSHOT_DB = "fuman-desktop-route-snapshots";
@@ -94,6 +94,7 @@
   const INTERACTION_HOLD_MS = 920;
   const routeSnapshots = new Map();
   const canvasStore = new Map();
+  const canvasEmptyStates = new Map();
   const canvasInflight = new Map();
   const canvasRouteVersions = new Map();
   const canvasMetricsCache = new Map();
@@ -1305,9 +1306,34 @@
       || reason.includes("futopt_not_ready");
   }
 
+  function routeEmptyStateFromPayload(payload, route = "") {
+    if (!isRoutePayloadNotDrawable(payload, route)) return null;
+    const reason = String(payload.reason || payload.error || payload.detail || payload.qualityStatus || "waiting_snapshot");
+    const detail = String(payload.detail || payload.lastError || payload.error || reason);
+    let title = "等待完整掃描";
+    let message = "策略1 等待下一次完整掃描與期權資料 ready，資料 ready 後會自動顯示。";
+    if (/futopt/i.test(detail)) {
+      title = "等待期權資料";
+      message = "期權資料尚未 ready，策略1 決策 gate 暫停出名單。";
+    } else if (/decision/i.test(reason) || payload.decisionReady === false || payload.meta?.decision_ready === false) {
+      title = "等待決策 gate";
+      message = "策略1 decision_ready 尚未完成，先維持受控等待狀態。";
+    }
+    return {
+      route,
+      title,
+      message,
+      reason,
+      detail,
+      qualityStatus: String(payload.qualityStatus || payload.cacheSource || ""),
+      at: Date.now(),
+    };
+  }
+
   function setCanvasRows(route, rows, source = "memory", at = Date.now()) {
     const cleanRows = (Array.isArray(rows) ? rows : []).filter((row) => row && (row.code || row.title || row.line));
     if (!route || !cleanRows.length) return false;
+    canvasEmptyStates.delete(route);
     canvasStore.set(route, { rows: cleanRows, source, at });
     canvasRouteVersions.set(route, Number(canvasRouteVersions.get(route) || 0) + 1);
     canvasPreRenderedRoutes.delete(route);
@@ -1492,6 +1518,14 @@
         const rows = normalizeCanvasRowsFromPayload(payload, route);
         if (rows.length) {
           rememberCanvasRows(route, rows, "api", Date.now());
+        } else {
+          const emptyState = routeEmptyStateFromPayload(payload, route);
+          if (emptyState) {
+            canvasEmptyStates.set(route, emptyState);
+            if (canvasState.route === route) {
+              canvasState.source = emptyState.qualityStatus || emptyState.reason || "waiting";
+            }
+          }
         }
         return rows;
       })
@@ -1594,6 +1628,10 @@
     }
     drawRouteCanvas(canvas, strategyMeta(canvasState.route || activeSnapshotRoute), canvasState.filtered, canvasState.source);
     setCanvasStatus();
+  }
+
+  function currentCanvasEmptyState() {
+    return canvasEmptyStates.get(canvasState.route || activeSnapshotRoute || "") || null;
   }
 
   function workerCanvasSupported() {
@@ -2643,16 +2681,37 @@
     ctx.fillText("Change", width - 92, 112);
 
     if (!rowsToDraw.length) {
-      for (let i = 0; i < 5; i += 1) {
-        const y = headerHeight + 18 + i * rowHeight;
-        const alpha = 0.16 - i * 0.014;
-        ctx.fillStyle = colors.skeleton.replace("0.16", String(alpha));
-        roundRect(ctx, 42, y, width - 84 - i * 28, 18, 9);
+      const emptyState = currentCanvasEmptyState();
+      if (emptyState) {
+        const cardY = headerHeight + 24;
+        ctx.fillStyle = canvasThemeMode() === "light" ? "rgba(255,247,237,0.95)" : "rgba(15,23,42,0.72)";
+        roundRect(ctx, 42, cardY, width - 84, 126, 16);
         ctx.fill();
+        ctx.strokeStyle = colors.stroke;
+        ctx.lineWidth = 1;
+        roundRect(ctx, 42.5, cardY + 0.5, width - 85, 125, 16);
+        ctx.stroke();
+        ctx.fillStyle = colors.accent;
+        ctx.font = "900 18px system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+        ctx.fillText(emptyState.title, 68, cardY + 42);
+        ctx.fillStyle = colors.text;
+        ctx.font = "700 14px system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+        ctx.fillText(compactText(emptyState.message, 88), 68, cardY + 72);
+        ctx.fillStyle = colors.muted;
+        ctx.font = "12px system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+        ctx.fillText(compactText(`gate: ${emptyState.reason || emptyState.detail || "waiting"}`, 96), 68, cardY + 98);
+      } else {
+        for (let i = 0; i < 5; i += 1) {
+          const y = headerHeight + 18 + i * rowHeight;
+          const alpha = 0.16 - i * 0.014;
+          ctx.fillStyle = colors.skeleton.replace("0.16", String(alpha));
+          roundRect(ctx, 42, y, width - 84 - i * 28, 18, 9);
+          ctx.fill();
+        }
       }
       ctx.fillStyle = colors.muted;
       ctx.font = "700 14px system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
-      ctx.fillText(isLiveStrategyRoute(canvasState.route) ? "今日尚無戰鬥訊號，持續即時監控" : source.includes("canvas") ? "讀取快照中" : "已切換，背景同步資料", 44, height - 28);
+      ctx.fillText(emptyState ? "受控等待，未使用舊 fallback" : isLiveStrategyRoute(canvasState.route) ? "今日尚無戰鬥訊號，持續即時監控" : source.includes("canvas") ? "讀取快照中" : "已切換，背景同步資料", 44, height - 28);
       return;
     }
 
@@ -3683,6 +3742,7 @@
         <div class="desktop-strategy4-signal-filters" data-strategy4-signal-filters hidden></div>
         <div class="desktop-strategy4-signal-filters" data-chip-canvas-filters hidden></div>
         <canvas class="desktop-route-canvas" tabindex="0" aria-label="${escapeHtml(meta.title)} Canvas 快速列表"></canvas>
+        <div class="desktop-canvas-empty-note" data-canvas-empty-note hidden></div>
         <div class="desktop-canvas-pagination" data-canvas-pagination hidden></div>
         <div class="desktop-canvas-detail" hidden></div>
       </section>
@@ -3802,6 +3862,7 @@
     const summary = shell.querySelector("[data-canvas-meta-summary]");
     const count = shell.querySelector(".desktop-canvas-count");
     const status = shell.querySelector(".desktop-canvas-status");
+    const emptyNote = shell.querySelector("[data-canvas-empty-note]");
     const entryCountNode = shell.querySelector("[data-strategy2-entry-count]");
     const entryNote = shell.querySelector("[data-strategy2-entry-note]");
     const historyCountNode = shell.querySelector("[data-strategy2-history-count]");
@@ -3871,10 +3932,15 @@
     if (icon) icon.textContent = meta.icon;
     if (title) title.textContent = meta.title;
     if (summary) summary.textContent = meta.summary;
-    if (dataState) dataState.textContent = isLiveStrategyRoute(key) ? "即時偵測" : canvasState.rows.length ? "快照命中" : "背景更新";
+    const emptyState = currentCanvasEmptyState();
+    if (dataState) dataState.textContent = isLiveStrategyRoute(key) ? "即時偵測" : canvasState.rows.length ? "快照命中" : emptyState ? "受控等待" : "背景更新";
     if (modeState) modeState.textContent = canvasWorkerReady ? "OffscreenCanvas" : "Canvas";
     if (count) count.textContent = `${canvasState.filtered.length}/${canvasState.rows.length}`;
-    if (status) status.textContent = canvasWorkerReady ? canvasWorkerMode : canvasState.source || "shell";
+    if (status) status.textContent = emptyState ? emptyState.reason || "waiting" : canvasWorkerReady ? canvasWorkerMode : canvasState.source || "shell";
+    if (emptyNote) {
+      emptyNote.hidden = !emptyState;
+      emptyNote.textContent = emptyState ? `${emptyState.title}：${emptyState.message} ${emptyState.detail || ""}` : "";
+    }
     if (input && document.activeElement !== input) input.value = canvasState.query || "";
     if (canvas) canvas.setAttribute("aria-label", `${meta.title} Canvas 快速列表`);
     updateStrategySignalControls(shell);
@@ -4625,6 +4691,18 @@
       .desktop-route-canvas:focus {
         outline: 2px solid rgba(255,112,55,0.72);
         outline-offset: 3px;
+      }
+      .desktop-canvas-empty-note {
+        margin-top: 12px;
+        border: 1px solid rgba(255,112,55,0.32);
+        border-radius: 12px;
+        padding: 12px 14px;
+        color: #ffd0b5;
+        background: rgba(255,112,55,0.10);
+        font: 800 13px system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      }
+      .desktop-canvas-empty-note[hidden] {
+        display: none !important;
       }
       .strategy2-battle-shell {
         display: grid;
