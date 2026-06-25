@@ -165,6 +165,135 @@ FUMAN_SUPABASE_SERVICE_ROLE_KEY
 - 點擊期間暫停背景 polling，避免搶主執行緒。
 - 不要讓舊 `terminal-app.js` 的 showView / render / warm load 搶回主控制權。
 
+## 手機終端 /mobile 固定規則
+
+手機終端正式公開路徑固定是：
+
+```text
+https://fuman-terminal.vercel.app/mobile
+```
+
+手機終端是獨立 shell，不是桌面終端的縮小版。手機頁不需要、也不得顯示進入電腦終端的「終端」按鈕。
+
+固定入口與路由：
+
+- `/mobile` 必須由 `vercel.json` rewrite 到 `/api/mobile-page`。
+- `/mobile.html` 也必須 rewrite 到 `/api/mobile-page`。
+- 行動裝置進 `/` 時，正式 Vercel rewrite 會導到 `/api/mobile-page`；`index.html` 也保留 fetch `/api/mobile-page` 的 fallback。
+- `api/mobile-page.js` 只負責 no-store 回傳 `mobile.html`，不要在這裡混資料邏輯。
+- `mobile.html` 是手機 shell；不要把它改成桌面 terminal shell、login gate、或 marketing landing page。
+
+手機頁禁止事項：
+
+- `mobile.html` 不得出現 `href="/?desktop=1"`。
+- `mobile.html` 不得出現 `>終端</a>` 這種桌面終端入口。
+- 不要把桌面側欄、桌面 Canvas shell、桌面 debug / latency 面板搬進手機頁。
+- 不要用 `serviceWorker.register` 或 service worker stale cache 當手機正式資料來源。
+- 不要用 `/data/mobile-boot.json` 當 primary boot endpoint。
+- 不要靠 static JSON manifest、Google Sheet、`C:\fuman-terminal-sync`、version bump 或 Vercel redeploy side effect 修手機資料。
+
+手機資料流：
+
+```text
+mobile.html
+-> /api/mobile-boot
+-> /api/mobile-fragment?tab=...
+-> Supabase API / latest complete run / live run
+```
+
+手機 shell 必須使用：
+
+- primary boot endpoint：`/api/mobile-boot`
+- fragment endpoint：`/api/mobile-fragment?tab=ai|strategy1|strategy2|strategy3|strategy4|strategy5|chip|cb|warrant|watch`
+- JSON / fragment fetch 必須 `cache:"no-store"` 並帶 cache-busting / version hash。
+- `/api/mobile-boot` 必須設 `Cache-Control: no-store`、`CDN-Cache-Control: no-store`、`Vercel-CDN-Cache-Control: no-store`。
+- fragment URL 必須保留 `?v=hash`，以 boot hash / fragment hash 控制更新。
+- tab 切換要優先使用已載入 boot 和 fragment cache；hash 沒變不要重抓或重畫。
+
+手機 tabs 固定包含：
+
+```text
+AI
+策略1
+策略2
+策略3
+策略4
+策略5
+法人
+CB
+權證
+自選
+```
+
+資料日期規則跟桌面一致：
+
+- 策略2當沖、即時雷達、市場總覽是當天資料。
+- 策略1 / 3 / 4 / 5、買賣超、CB、權證走向是每日完整掃描後更新；完整掃尚未自然跑完時，顯示上一個 latest complete run 是正常的。
+- 策略1若期貨/選擇權條件尚未 ready，可顯示受控等待 run，例如 `strategy1-waiting-...-futopt-not-ready`；這不是 fallback。
+- 自選 tab 空清單是正常狀態，不得因 rows=0 判 fail。
+
+手機 UI 固定驗收範圍：
+
+- 電腦瀏覽器直接開 `/mobile`
+- 手機直向
+- 手機橫向
+- 平板
+- 夜幕模式
+- 陽光模式
+
+每個模式都必須實際點過所有 tabs，確認：
+
+- 頁面不是白底純文字。
+- inline CSS 有合法 `:root{...}`，不得出現壞掉的 `rootcolor-scheme...`。
+- tabs 是 flex，可水平滑動或在大螢幕換行。
+- hero / card 有背景、border、padding。
+- 沒有水平溢出。
+- 每個資料 tab 有 rows/cards 或明確受控等待狀態。
+- runId / date / freshness 顯示合理。
+- 沒有 `timeout`、`HTTP 503`、`fallback`、`static json`、`Google Sheet`、`fuman-terminal-sync`、`讀取失敗`、`載入失敗`。
+
+手機版曾發生過的實際問題：
+
+- `mobile.html` 的 inline CSS 被錯誤壓縮成 `rootcolor-schemedark...`，正式頁變成只剩瀏覽器預設白底文字。修正方式是恢復合法 CSS，並讓 `verify-mobile-layout.js` 檢查 inline mobile shell CSS。
+- `/api/mobile-fragment?tab=strategy1` / `warrant` 曾被誤判 timeout；要分開驗 API 回 200、fragment HTML 有 `data-mobile-fragment-key`、瀏覽器 `#content` 是否成功塞入，不要只看一個錯誤字串。
+- 手機頁曾顯示「終端」桌面入口；使用者已要求剔除。`verify-mobile-entry-redirect.js` 會擋 `href="/?desktop=1"` 和 `>終端</a>`。
+
+手機驗證指令：
+
+```bash
+npm run verify:mobile-entry
+npm run verify:mobile-layout
+npm run verify:mobile-cache-contract
+npm run verify:mobile-api-only
+npm run verify:mobile-layout:live
+npm run verify:mobile-cache-contract:live
+npm run verify:mobile-api-only:live
+npm run verify:mobile-responsive-ui
+npm run verify:publish-gate
+```
+
+`verify:mobile-responsive-ui` 會用 headless Chrome 驗：
+
+- `mobile-desktop-night`
+- `mobile-desktop-sun`
+- `mobile-phone-portrait-night`
+- `mobile-phone-portrait-sun`
+- `mobile-phone-landscape-night`
+- `mobile-phone-landscape-sun`
+- `mobile-tablet-night`
+- `mobile-tablet-sun`
+
+如果在 Codex sandbox 裡跑 live Node fetch 出現 `EACCES` 或 `fetch failed`，通常是本機權限限制，不代表正式站壞；依規則用提升權限重跑 live verifier。
+
+手機終端修改 / 上線流程：
+
+1. 用乾淨 worktree 或 deploy-clean clone 修改，不要混入 `data/scan-receipts/*` 或 `data/mobile-analysis/*`。
+2. 先跑 local mobile gates。
+3. 跑 `npm run verify:publish-gate`。
+4. 只有使用者明確要求正式生效時，才 push main 並 `vercel --prod`。
+5. 部署後至少跑 `verify:mobile-layout:live`、`verify:mobile-api-only:live`，必要時跑 `verify:mobile-responsive-ui`。
+6. 同步 `C:\fuman-terminal` 時只能 `pull --ff-only`，不要處理或 revert 既有資料髒檔，除非使用者明確要求。
+
 ### 2026-06-24 策略 fast shell API-only 修正
 
 正式站目前策略頁 fast shell 基準：
