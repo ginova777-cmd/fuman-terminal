@@ -42,6 +42,8 @@
         const panel = document.querySelector("#market-view");
         if (!panel) return null;
         panel.querySelectorAll(":scope > .desktop-route-shell.desktop-canvas-app").forEach((node) => node.remove());
+        panel.querySelector(":scope > .ticker-strip")?.remove();
+        panel.querySelector(":scope > .strength-panel")?.remove();
         panel.classList.add("fuman-market-overview-shell");
         if (!panel.classList.contains("market-ai-mode")) panel.classList.add("market-overview-mode");
         if (!panel.querySelector(":scope > .page-header")) {
@@ -87,31 +89,7 @@
           ].join("");
           tabs.insertAdjacentElement("afterend", metric);
         }
-        if (!panel.querySelector(":scope > .ticker-strip")) {
-          const ticker = document.createElement("section");
-          ticker.className = "ticker-strip";
-          ticker.setAttribute("aria-label", "Market ticker");
-          ticker.innerHTML = "<span>等待熱力圖資料...</span>";
-          panel.querySelector(":scope > .metric-grid")?.insertAdjacentElement("afterend", ticker);
-        }
-        if (!panel.querySelector(":scope > .strength-panel")) {
-          const strength = document.createElement("section");
-          strength.className = "strength-panel";
-          strength.innerHTML = `
-            <div class="strength-head">
-              <div><h2>強勢</h2><p>等待官方資料</p></div>
-              <strong>--<span>上漲比例</span></strong>
-            </div>
-            <div class="stats-row">
-              <div><span>上漲</span><strong class="down">--</strong></div>
-              <div><span>下跌</span><strong class="up">--</strong></div>
-              <div><span>平盤</span><strong>--</strong></div>
-              <div><span>成交值</span><strong>--</strong></div>
-            </div>
-            <div class="balance-bar"><span class="red-zone"></span><span class="mid-zone"></span><span class="green-zone"></span></div>
-          `;
-          panel.querySelector(":scope > .ticker-strip")?.insertAdjacentElement("afterend", strength);
-        }
+        const metricGrid = panel.querySelector(":scope > .metric-grid");
         if (!panel.querySelector(":scope > .terminal-band")) {
           const band = document.createElement("section");
           band.className = "terminal-band";
@@ -120,7 +98,7 @@
             <div class="terminal-log"><span>FMN://market.scan</span><strong id="terminal-message">等待官方資料回應...</strong></div>
             <label class="search-box"><span>搜尋</span><input id="stock-search" type="search" placeholder="輸入股票代號或名稱" autocomplete="off"></label>
           `;
-          panel.querySelector(":scope > .strength-panel")?.insertAdjacentElement("afterend", band);
+          (metricGrid || tabs || header || panel).insertAdjacentElement(metricGrid || tabs || header ? "afterend" : "beforeend", band);
         }
         if (!panel.querySelector(":scope > .sector-section")) {
           const section = document.createElement("section");
@@ -139,7 +117,10 @@
             </div>
             <div class="heatmap" id="heatmap"></div>
           `;
-          (panel.querySelector(":scope > .terminal-band") || panel.querySelector(":scope > .strength-panel") || tabs).insertAdjacentElement("afterend", section);
+          (panel.querySelector(":scope > .terminal-band") || metricGrid || tabs || header || panel).insertAdjacentElement(
+            panel.querySelector(":scope > .terminal-band") || metricGrid || tabs || header ? "afterend" : "beforeend",
+            section
+          );
         }
         const heatmapTabs = panel.querySelector(".sector-section .tabs");
         if (heatmapTabs && !heatmapTabs.matches("[data-market-heatmap-tabs]")) {
@@ -296,6 +277,8 @@
       const paintMarket = (marketPayload = {}, heatPayload = {}) => {
         const panel = ensureMarketScaffold();
         if (!panel) return;
+        panel.querySelector(":scope > .ticker-strip")?.remove();
+        panel.querySelector(":scope > .strength-panel")?.remove();
         const updatedAt = marketPayload.updatedAt || heatPayload.updatedAt || heatPayload.servedAt || "";
         const compactTime = safeText(updatedAt).match(/(\d{2}):(\d{2})/)?.slice(1, 3).join(":") || "最新";
         const refresh = panel.querySelector(".refresh-line");
@@ -321,37 +304,6 @@
           themes: aggregateHeatmapSectors(rawSectors, "themes"),
           groups: aggregateHeatmapSectors(rawSectors, "groups"),
         };
-        const sectors = rawSectors;
-        const stocks = rawSectors.flatMap((sector) => list(sector.stocks));
-        const up = rawSectors.reduce((sum, sector) => sum + num(sector.up), 0);
-        const down = rawSectors.reduce((sum, sector) => sum + num(sector.down), 0);
-        const sample = num(heatPayload.stockCount || heatPayload.sample || heatPayload.count) || stocks.length || up + down;
-        const flat = Math.max(0, sample - up - down);
-        const totalValue = sectors.reduce((sum, sector) => sum + num(sector.totalValue || sector.value || (num(sector.amountYi) * 100000000)), 0);
-        const ratio = sample ? (up / sample) * 100 : 0;
-        const strength = panel.querySelector(".strength-panel");
-        if (strength) {
-          const title = strength.querySelector(".strength-head h2");
-          const sub = strength.querySelector(".strength-head p");
-          const strong = strength.querySelector(".strength-head strong");
-          const stats = strength.querySelectorAll(".stats-row strong");
-          if (title) title.textContent = up >= down ? "強勢" : "弱勢";
-          if (sub) sub.textContent = `${sample.toLocaleString("zh-TW")} 檔 · 平均 ${num(heatPayload.avgPct).toFixed(2)}%`;
-          if (strong) strong.innerHTML = `${ratio.toFixed(2)}%<span>上漲比例</span>`;
-          if (stats[0]) stats[0].textContent = up.toLocaleString("zh-TW");
-          if (stats[1]) stats[1].textContent = down.toLocaleString("zh-TW");
-          if (stats[2]) stats[2].textContent = flat.toLocaleString("zh-TW");
-          if (stats[3]) stats[3].textContent = yi(totalValue);
-        }
-        const ticker = panel.querySelector(".ticker-strip");
-        if (ticker) {
-          ticker.innerHTML = sectors.slice().sort((a, b) => num(b.pct ?? b.avgPct) - num(a.pct ?? a.avgPct)).slice(0, 28).map((sector) => {
-            const pct = num(sector.pct ?? sector.avgPct);
-            const leader = sector.leader || list(sector.stocks)[0] || {};
-            const leaderText = typeof leader === "string" ? leader : (leader.name || leader.code || "");
-            return `<span class="${pct >= 0 ? "ticker-up" : "ticker-down"}">${esc(sector.name || sector.industry || "--")} <b>${pct >= 0 ? "+" : ""}${pct.toFixed(2)}%</b> <small>${esc(leaderText)}</small></span>`;
-          }).join("");
-        }
         renderHeatmapCards(panel, heatPayload);
         const message = panel.querySelector("#terminal-message");
         if (message) message.textContent = "市場總覽已同步 Supabase/API，點熱力圖產業可看相關股票。";
