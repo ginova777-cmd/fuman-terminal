@@ -37,6 +37,8 @@ const STATIC_ASSETS = [
 
 const DATA_PATTERNS = [
   /\/api\/terminal-fast-bundle/i,
+  /\/data\/mobile-boot\.json/i,
+  /\/data\/mobile-analysis\/[^/]+\.json/i,
 ];
 
 const NETWORK_FIRST_DATA_PATTERNS = [];

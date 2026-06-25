@@ -126,7 +126,7 @@ function checkLocal() {
   requireHeader(vercel, "/data/mobile-boot.json", "Cache-Control", /no-cache.*max-age=0|max-age=0.*no-cache/i, "static mobile boot browser cache must be no-cache max-age=0");
   requireHeader(vercel, "/data/mobile-boot.json", "Vercel-CDN-Cache-Control", /max-age=3.*stale-while-revalidate=6|stale-while-revalidate=6.*max-age=3/i, "static mobile boot edge cache must be very short");
   requireHeader(vercel, "/data/mobile-ai-ultra.html", "Vercel-CDN-Cache-Control", /max-age=5/i, "mobile AI ultra edge cache must stay short");
-  requireHeader(vercel, "/data/mobile-(strategy1|strategy2|strategy3|strategy4|strategy5|chip|warrant)-ultra.html", "Vercel-CDN-Cache-Control", /max-age=5/i, "mobile strategy fragment edge cache must stay short");
+  requireHeader(vercel, "/data/mobile-(strategy1|strategy2|strategy3|strategy4|strategy5|chip|cb|warrant)-ultra.html", "Vercel-CDN-Cache-Control", /max-age=5/i, "mobile strategy fragment edge cache must stay short");
   requireHeader(vercel, "/data/mobile-analysis/(.*).json", "Vercel-CDN-Cache-Control", /max-age=5/i, "mobile analysis edge cache must stay short");
 
   const script = String(packageJson.scripts?.["verify:mobile-cache-contract"] || "");

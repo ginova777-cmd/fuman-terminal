@@ -1,0 +1,669 @@
+const childProcess = require("child_process");
+const fs = require("fs/promises");
+const net = require("net");
+const os = require("os");
+const path = require("path");
+
+const ROOT = path.resolve(__dirname, "..");
+const DEFAULT_BASE_URL = "https://fuman-terminal.vercel.app";
+const BASE_URL = optionValue("--base-url") || process.env.FUMAN_UI_E2E_BASE_URL || DEFAULT_BASE_URL;
+const OUT_DIR = path.resolve(optionValue("--out") || process.env.FUMAN_UI_E2E_OUT || path.join(ROOT, "outputs", "terminal-ui-e2e"));
+const SCREENSHOT_DIR = path.join(OUT_DIR, "screenshots");
+const KEEP_BROWSER = process.argv.includes("--keep-browser");
+const HEADFUL = process.argv.includes("--headful");
+const NO_SCREENSHOTS = process.argv.includes("--no-screenshots");
+const RUN_ONLY = new Set((optionValue("--only") || process.env.FUMAN_UI_E2E_ONLY || "desktop-night,desktop-sun,mobile-night,mobile-sun")
+  .split(",")
+  .map((item) => item.trim())
+  .filter(Boolean));
+const EVAL_TIMEOUT_MS = Number(optionValue("--eval-timeout") || process.env.FUMAN_UI_E2E_EVAL_TIMEOUT_MS || 30000);
+
+const DESKTOP_ROUTES = [
+  { key: "market", label: "market overview", selector: "aside.sidebar a[data-view=\"market\"]" },
+  { key: "realtime-radar", label: "realtime radar", selector: "aside.sidebar a.realtime-radar-nav[data-view=\"realtime-radar\"]" },
+  { key: "strategy1", label: "strategy1", selector: "aside.sidebar a[data-view=\"strategy\"] .s1" },
+  { key: "strategy2", label: "strategy2 live", selector: "aside.sidebar a[data-view=\"strategy\"] .s2" },
+  { key: "strategy3", label: "strategy3", selector: "aside.sidebar a[data-view=\"strategy\"] .s3" },
+  { key: "strategy4", label: "strategy4", selector: "aside.sidebar a[data-view=\"strategy\"] .s4" },
+  { key: "strategy5", label: "strategy5", selector: "aside.sidebar a[data-view=\"strategy\"] .s5" },
+  { key: "institution", label: "institution", selector: "aside.sidebar a[data-view=\"chip-trade\"]" },
+  { key: "cb", label: "cb detect", selector: "aside.sidebar a[data-view=\"cb-detect\"]" },
+  { key: "warrant", label: "warrant flow", selector: "aside.sidebar a[data-view=\"warrant-flow\"]" },
+];
+
+const MOBILE_ROUTES = [
+  { key: "ai", label: "market ai", fragment: "ai" },
+  { key: "strategy1", label: "strategy1", fragment: "strategy1" },
+  { key: "strategy2", label: "strategy2 live", fragment: "strategy2" },
+  { key: "strategy3", label: "strategy3", fragment: "strategy3" },
+  { key: "strategy4", label: "strategy4", fragment: "strategy4" },
+  { key: "strategy5", label: "strategy5", fragment: "strategy5" },
+  { key: "institution", label: "institution", fragment: "chip" },
+  { key: "cb", label: "cb detect", fragment: "cb" },
+  { key: "warrant", label: "warrant flow", fragment: "warrant" },
+  { key: "watch", label: "watchlist", fragment: "watch", allowEmpty: true },
+];
+
+function optionValue(name) {
+  const prefix = `${name}=`;
+  return (process.argv.find((arg) => arg.startsWith(prefix)) || "").slice(prefix.length);
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function withCacheBust(url) {
+  const target = new URL(url, BASE_URL);
+  target.searchParams.set("ui-e2e", Date.now().toString());
+  return target.toString();
+}
+
+function findBrowser() {
+  const candidates = [
+    process.env.CHROME_PATH,
+    "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
+    "C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe",
+    "C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe",
+    "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe",
+  ].filter(Boolean);
+  const fsSync = require("fs");
+  const found = candidates.find((candidate) => fsSync.existsSync(candidate));
+  if (!found) throw new Error("Chrome or Edge executable not found. Set CHROME_PATH to run UI E2E.");
+  return found;
+}
+
+function freePort() {
+  return new Promise((resolve, reject) => {
+    const server = net.createServer();
+    server.listen(0, "127.0.0.1", () => {
+      const port = server.address().port;
+      server.close(() => resolve(port));
+    });
+    server.on("error", reject);
+  });
+}
+
+async function fetchJson(url, options = {}) {
+  const response = await fetch(url, options);
+  if (!response.ok) throw new Error(`${url} HTTP ${response.status}`);
+  return response.json();
+}
+
+async function launchBrowser() {
+  const port = await freePort();
+  const userDataDir = await fs.mkdtemp(path.join(os.tmpdir(), "fuman-ui-e2e-"));
+  const browserPath = findBrowser();
+  const args = [
+    `--remote-debugging-port=${port}`,
+    `--user-data-dir=${userDataDir}`,
+    "--no-first-run",
+    "--no-default-browser-check",
+    "--disable-background-networking",
+    "--disable-extensions",
+    "--disable-sync",
+    "--window-size=1440,1000",
+    "about:blank",
+  ];
+  if (!HEADFUL) args.unshift("--headless=new", "--disable-gpu");
+  const child = childProcess.spawn(browserPath, args, { stdio: ["ignore", "ignore", "pipe"] });
+  let stderr = "";
+  child.stderr.on("data", (chunk) => {
+    stderr += String(chunk).slice(0, 1000);
+  });
+  const versionUrl = `http://127.0.0.1:${port}/json/version`;
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    try {
+      await fetchJson(versionUrl);
+      return { child, port, userDataDir, stderr: () => stderr };
+    } catch (error) {
+      if (child.exitCode !== null) throw new Error(`browser exited early: ${stderr}`);
+      await sleep(150);
+    }
+  }
+  throw new Error(`browser did not expose CDP: ${stderr}`);
+}
+
+async function createTab(port) {
+  const newUrl = `http://127.0.0.1:${port}/json/new?${encodeURIComponent("about:blank")}`;
+  let target = null;
+  try {
+    target = await fetchJson(newUrl, { method: "PUT" });
+  } catch (error) {
+    const list = await fetchJson(`http://127.0.0.1:${port}/json/list`);
+    target = list.find((item) => item.type === "page");
+  }
+  if (!target?.webSocketDebuggerUrl) throw new Error("CDP page target missing websocket URL");
+  const cdp = new Cdp(target.webSocketDebuggerUrl);
+  await cdp.connect();
+  await cdp.send("Page.enable");
+  await cdp.send("Runtime.enable");
+  await cdp.send("DOM.enable");
+  await cdp.send("Network.enable");
+  await cdp.send("Log.enable").catch(() => null);
+  return cdp;
+}
+
+class Cdp {
+  constructor(wsUrl) {
+    this.wsUrl = wsUrl;
+    this.id = 0;
+    this.pending = new Map();
+    this.eventWaiters = [];
+    this.events = [];
+  }
+
+  connect() {
+    return new Promise((resolve, reject) => {
+      this.ws = new WebSocket(this.wsUrl);
+      this.ws.addEventListener("open", resolve, { once: true });
+      this.ws.addEventListener("error", reject, { once: true });
+      this.ws.addEventListener("message", (event) => this.handleMessage(event));
+    });
+  }
+
+  handleMessage(event) {
+    const message = JSON.parse(String(event.data));
+    if (message.id && this.pending.has(message.id)) {
+      const pending = this.pending.get(message.id);
+      this.pending.delete(message.id);
+      clearTimeout(pending.timer);
+      if (message.error) pending.reject(new Error(`${pending.method}: ${message.error.message}`));
+      else pending.resolve(message.result || {});
+      return;
+    }
+    if (message.method) {
+      this.events.push(message);
+      for (const waiter of [...this.eventWaiters]) {
+        if (waiter.method === message.method) {
+          this.eventWaiters.splice(this.eventWaiters.indexOf(waiter), 1);
+          clearTimeout(waiter.timer);
+          waiter.resolve(message.params || {});
+        }
+      }
+    }
+  }
+
+  send(method, params = {}, timeoutMs = 30000) {
+    const id = ++this.id;
+    this.ws.send(JSON.stringify({ id, method, params }));
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        this.pending.delete(id);
+        reject(new Error(`${method} timed out after ${timeoutMs}ms`));
+      }, timeoutMs);
+      this.pending.set(id, { method, resolve, reject, timer });
+    });
+  }
+
+  waitForEvent(method, timeoutMs = 30000) {
+    const existingIndex = this.events.findIndex((event) => event.method === method);
+    if (existingIndex >= 0) {
+      const [event] = this.events.splice(existingIndex, 1);
+      return Promise.resolve(event.params || {});
+    }
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        this.eventWaiters = this.eventWaiters.filter((item) => item.resolve !== resolve);
+        reject(new Error(`event ${method} timed out`));
+      }, timeoutMs);
+      this.eventWaiters.push({ method, resolve, reject, timer });
+    });
+  }
+
+  close() {
+    try { this.ws?.close(); } catch {}
+  }
+}
+
+async function evaluate(cdp, fn, arg = null, timeoutMs = EVAL_TIMEOUT_MS) {
+  const expression = `(${fn})(${JSON.stringify(arg)})`;
+  const result = await cdp.send("Runtime.evaluate", {
+    expression,
+    awaitPromise: true,
+    returnByValue: true,
+  }, timeoutMs);
+  if (result.exceptionDetails) {
+    throw new Error(result.exceptionDetails.text || "Runtime.evaluate failed");
+  }
+  return result.result?.value;
+}
+
+async function waitFor(cdp, fn, arg, timeoutMs = 20000, intervalMs = 250) {
+  const start = Date.now();
+  let last = null;
+  while (Date.now() - start < timeoutMs) {
+    last = await evaluate(cdp, fn, arg, Math.min(EVAL_TIMEOUT_MS, Math.max(12000, timeoutMs))).catch((error) => ({ error: error.message }));
+    if (last && !last.error && last.ok) return last;
+    await sleep(intervalMs);
+  }
+  throw new Error(`waitFor timed out: ${JSON.stringify(last)}`);
+}
+
+async function setViewport(cdp, mode) {
+  await cdp.send("Emulation.setDeviceMetricsOverride", {
+    width: mode.width,
+    height: mode.height,
+    deviceScaleFactor: mode.deviceScaleFactor || 1,
+    mobile: Boolean(mode.mobile),
+    screenWidth: mode.width,
+    screenHeight: mode.height,
+  });
+  await cdp.send("Emulation.setTouchEmulationEnabled", { enabled: Boolean(mode.mobile) }).catch(() => null);
+  if (mode.mobile) {
+    await cdp.send("Network.setUserAgentOverride", {
+      userAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1",
+    });
+  }
+}
+
+async function navigate(cdp, url) {
+  cdp.events = cdp.events.filter((event) => !["Page.loadEventFired", "Runtime.executionContextCreated"].includes(event.method));
+  const loaded = cdp.waitForEvent("Page.loadEventFired", 45000).catch(() => null);
+  const contextReady = cdp.waitForEvent("Runtime.executionContextCreated", 45000).catch(() => null);
+  await cdp.send("Page.navigate", { url }, 45000);
+  await loaded;
+  await contextReady;
+  await cdp.send("Page.stopLoading").catch(() => null);
+  await sleep(1000);
+  await cdp.send("Page.bringToFront").catch(() => null);
+}
+
+async function querySelectorNodeId(cdp, selector, timeoutMs = 12000) {
+  const startedAt = Date.now();
+  let lastError = "";
+  while (Date.now() - startedAt < timeoutMs) {
+    try {
+      const { root } = await cdp.send("DOM.getDocument", { depth: 1, pierce: true }, 8000);
+      const { nodeId } = await cdp.send("DOM.querySelector", { nodeId: root.nodeId, selector }, 8000);
+      if (nodeId) return nodeId;
+      lastError = "missing";
+    } catch (error) {
+      lastError = error.message;
+    }
+    await sleep(250);
+  }
+  throw new Error(`selector not found: ${selector} (${lastError})`);
+}
+
+async function waitForSelector(cdp, selector, timeoutMs = 30000) {
+  return querySelectorNodeId(cdp, selector, timeoutMs);
+}
+
+async function clickSelectorByDom(cdp, selector) {
+  const nodeId = await waitForSelector(cdp, selector, 20000);
+  const { model } = await cdp.send("DOM.getBoxModel", { nodeId }, 10000);
+  const quad = model?.border || model?.content;
+  if (!quad || quad.length < 8) throw new Error(`selector has no box model: ${selector}`);
+  const xs = [quad[0], quad[2], quad[4], quad[6]];
+  const ys = [quad[1], quad[3], quad[5], quad[7]];
+  const x = xs.reduce((sum, value) => sum + value, 0) / xs.length;
+  const y = ys.reduce((sum, value) => sum + value, 0) / ys.length;
+  await cdp.send("Input.dispatchMouseEvent", { type: "mouseMoved", x, y });
+  await cdp.send("Input.dispatchMouseEvent", { type: "mousePressed", x, y, button: "left", clickCount: 1 });
+  await cdp.send("Input.dispatchMouseEvent", { type: "mouseReleased", x, y, button: "left", clickCount: 1 });
+}
+
+async function clickSelector(cdp, selector) {
+  try {
+    await clickSelectorByDom(cdp, selector);
+    return;
+  } catch {}
+  const rect = await waitFor(cdp, (sel) => {
+    const el = document.querySelector(sel);
+    if (!el) return { ok: false, reason: "missing" };
+    const target = el.closest("a,button,[role=button]") || el;
+    const r = target.getBoundingClientRect();
+    const style = getComputedStyle(target);
+    const visible = r.width > 2 && r.height > 2 && style.display !== "none" && style.visibility !== "hidden";
+    return { ok: visible, x: r.left + r.width / 2, y: r.top + r.height / 2, width: r.width, height: r.height };
+  }, selector, 15000).catch(() => null);
+  if (!rect) {
+    await clickSelectorByDom(cdp, selector);
+    return;
+  }
+  await cdp.send("Input.dispatchMouseEvent", { type: "mouseMoved", x: rect.x, y: rect.y });
+  await cdp.send("Input.dispatchMouseEvent", { type: "mousePressed", x: rect.x, y: rect.y, button: "left", clickCount: 1 });
+  await cdp.send("Input.dispatchMouseEvent", { type: "mouseReleased", x: rect.x, y: rect.y, button: "left", clickCount: 1 });
+}
+
+async function screenshot(cdp, filename) {
+  if (NO_SCREENSHOTS) return "";
+  const result = await cdp.send("Page.captureScreenshot", { format: "png", fromSurface: true }, 30000);
+  const file = path.join(SCREENSHOT_DIR, filename);
+  await fs.writeFile(file, Buffer.from(result.data, "base64"));
+  return file;
+}
+
+function collectDesktopStats(route) {
+  const visible = (el) => {
+    if (!el) return false;
+    const r = el.getBoundingClientRect();
+    const style = getComputedStyle(el);
+    return r.width > 1 && r.height > 1 && style.display !== "none" && style.visibility !== "hidden";
+  };
+  const text = (el) => String(el?.textContent || "").replace(/\s+/g, " ").trim();
+  const activePanel = [...document.querySelectorAll(".view-panel")].find((el) => el.classList.contains("active") && !el.hidden) || document.body;
+  const panelText = text(activePanel).slice(0, 16000);
+  const rowSelectors = [
+    ".metric-card",
+    ".sector-card",
+    ".market-ai-stock-row",
+    ".radar-signal-card",
+    ".radar-leader-card",
+    "#strategy-table .strategy-row:not(.strategy-head)",
+    "#strategy-table tbody tr",
+    "#strategy-table [data-stock-code]",
+    ".strategy5-stock-card",
+    ".intraday-table tbody tr",
+    ".swing-table tbody tr",
+    "#chip-trade-body tr",
+    "#cb-detect-list > *:not(.cb-detect-empty)",
+    ".warrant-flow-panel tbody tr",
+    ".warrant-flow-card",
+    ".warrant-flow-list > *",
+  ];
+  const emptyPattern = /等待資料載入|尚未產生|目前沒有符合|更新策略資料中|載入全台股|等待最新 complete run|權證快照尚未建立/;
+  const domRows = [];
+  for (const selector of rowSelectors) {
+    for (const el of activePanel.querySelectorAll(selector)) {
+      const rowText = text(el);
+      if (!visible(el) || !rowText || emptyPattern.test(rowText)) continue;
+      domRows.push({ selector, text: rowText.slice(0, 180) });
+    }
+  }
+  const canvas = activePanel.querySelector("canvas.desktop-route-canvas, canvas");
+  let canvasPixelDiversity = 0;
+  let canvasSize = null;
+  if (canvas?.getContext && canvas.width && canvas.height) {
+    canvasSize = { width: canvas.width, height: canvas.height };
+    const ctx = canvas.getContext("2d");
+    const colors = new Set();
+    const stepX = Math.max(1, Math.floor(canvas.width / 28));
+    const stepY = Math.max(1, Math.floor(canvas.height / 18));
+    for (let y = 0; y < canvas.height; y += stepY) {
+      for (let x = 0; x < canvas.width; x += stepX) {
+        const d = ctx.getImageData(x, y, 1, 1).data;
+        if (d[3] > 0) colors.add(`${d[0] >> 4},${d[1] >> 4},${d[2] >> 4},${d[3] >> 4}`);
+      }
+    }
+    canvasPixelDiversity = colors.size;
+  }
+  const canvasCountText = text(activePanel.querySelector(".desktop-canvas-count"));
+  const countMatch = canvasCountText.match(/(\d+)\s*\/\s*(\d+)/) || canvasCountText.match(/(\d+)\s*筆/);
+  const canvasRows = countMatch ? Number(countMatch[1]) || 0 : 0;
+  const filterCounts = [...activePanel.querySelectorAll("[data-chip-canvas-filter] b,[data-strategy4-signal-filter] b,[data-warrant-flow-tab] b")]
+    .map((el) => Number(text(el).replace(/\D/g, "")) || 0)
+    .filter((value) => value > 0);
+  const blockerMatches = [...panelText.matchAll(/(?:HTTP\s*503|timeout|fallback|static\s*json|Google Sheet|fuman-terminal-sync|資料載入失敗|讀取失敗|載入失敗|買賣超模組載入失敗|權證資料檔讀取失敗|手機 API fragment 暫時無法取得|等待資料載入|尚未產生 CB|權證快照尚未建立|更新策略資料中)/gi)].map((match) => match[0]);
+  const freshnessText = [
+    text(activePanel.querySelector(".data-freshness-bar")),
+    text(activePanel.querySelector(".refresh-line")),
+    text(activePanel.querySelector(".desktop-canvas-status")),
+  ].filter(Boolean).join(" | ");
+  const dateSignals = [...`${freshnessText} ${panelText}`.matchAll(/(?:20\d{2}[\/.-]\d{1,2}[\/.-]\d{1,2}|20\d{6}|\d{1,2}[\/.]\d{1,2}\s+\d{2}:\d{2}|runId|run-|fresh|complete|更新|掃描|資料日期|今日)/gi)].slice(0, 12).map((match) => match[0]);
+  const rowsVisible = Math.max(domRows.length, canvasRows);
+  const softEmptyPattern = /等待資料載入|尚未產生 CB|權證快照尚未建立|更新策略資料中/;
+  const hardBlockers = rowsVisible > 0 ? blockerMatches.filter((match) => !softEmptyPattern.test(match)) : blockerMatches;
+  const warnings = [];
+  if (!dateSignals.length) warnings.push("freshness/date/run signal not visible enough");
+  if (!rowsVisible && filterCounts.length) warnings.push("route has populated subfilters but default view has no rows");
+  if (rowsVisible > 0 && hardBlockers.length !== blockerMatches.length) warnings.push("ignored hidden/soft empty-state text because rows are visible");
+  return {
+    kind: "desktop",
+    routeKey: route.key,
+    label: route.label,
+    activePanelId: activePanel.id || "",
+    routeHeader: text(activePanel.querySelector(".desktop-route-shell-head h2")) || text(activePanel.querySelector("h1,h2,h3")),
+    rowsVisible,
+    domRows: domRows.length,
+    canvasRows,
+    canvasCountText,
+    canvasPixelDiversity,
+    canvasSize,
+    sampleRows: domRows.slice(0, 3),
+    filterCounts,
+    freshnessText,
+    dateSignals,
+    blockerMatches: [...new Set(hardBlockers)],
+    warnings,
+    ok: rowsVisible > 0 && hardBlockers.length === 0,
+  };
+}
+
+function collectMobileStats(route) {
+  const text = (el) => String(el?.textContent || "").replace(/\s+/g, " ").trim();
+  const content = document.querySelector("#content");
+  const status = document.querySelector("#status");
+  const root = content?.querySelector("[data-mobile-terminal-fragment]") || content?.firstElementChild || content;
+  const rows = [...content.querySelectorAll(".mobile-terminal-row,.market-ai-stock-row,.watch-row,article")]
+    .map((el) => text(el))
+    .filter((value) => value && !/等待資料|讀取中|載入中/.test(value));
+  const panelText = text(content).slice(0, 16000);
+  const blockerMatches = [...panelText.matchAll(/(?:HTTP\s*503|timeout|fallback|static\s*json|Google Sheet|fuman-terminal-sync|暫時無法取得|讀取失敗|載入失敗|等待資料|讀取中|載入中|未知分頁|沒有資料)/gi)].map((match) => match[0]);
+  const rootKey = root?.dataset?.mobileFragmentKey || "";
+  const runId = root?.dataset?.runId || "";
+  const statusText = text(status);
+  const dateSignals = [...`${statusText} ${panelText}`.matchAll(/(?:20\d{2}[\/.-]\d{1,2}[\/.-]\d{1,2}|20\d{6}|\d{2}:\d{2}|runId|run-|fresh|stale|expired|更新|掃描|資料)/gi)].slice(0, 12).map((match) => match[0]);
+  const keyOk = route.fragment === "watch" || rootKey === route.fragment;
+  const warnings = [];
+  if (!dateSignals.length && !route.allowEmpty) warnings.push("freshness/date/run signal not visible enough");
+  return {
+    kind: "mobile",
+    routeKey: route.key,
+    label: route.label,
+    fragment: route.fragment,
+    activeButtons: [...document.querySelectorAll("#tabs button.active")].map((el) => text(el)),
+    rootKey,
+    runId,
+    rowsVisible: rows.length,
+    sampleRows: rows.slice(0, 3),
+    statusText,
+    dateSignals,
+    blockerMatches: [...new Set(blockerMatches)],
+    warnings,
+    ok: keyOk && (route.allowEmpty || rows.length > 0) && (route.allowEmpty || route.fragment === "ai" || Boolean(runId)) && blockerMatches.length === 0,
+  };
+}
+
+function htmlToText(html) {
+  return String(html || "")
+    .replace(/<script[\s\S]*?<\/script>/gi, " ")
+    .replace(/<style[\s\S]*?<\/style>/gi, " ")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+async function outerHtml(cdp, selector = "body") {
+  const nodeId = await querySelectorNodeId(cdp, selector, 10000);
+  const { outerHTML } = await cdp.send("DOM.getOuterHTML", { nodeId }, 15000);
+  return outerHTML || "";
+}
+
+async function fallbackDesktopStats(cdp, route, error) {
+  const html = await outerHtml(cdp, "body").catch(() => "");
+  const panelText = htmlToText(html).slice(0, 16000);
+  const rowMatches = html.match(/class="[^"]*(?:metric-card|sector-card|market-ai-stock-row|radar-signal-card|radar-leader-card|strategy-row|strategy5-stock-card|intraday-table|swing-table|warrant-flow-card|mobile-terminal-row)[^"]*"/gi) || [];
+  const countMatch = panelText.match(/(\d+)\s*\/\s*(\d+)/) || panelText.match(/(\d+)\s*筆/);
+  const rowsVisible = Math.max(rowMatches.length, countMatch ? Number(countMatch[1]) || 0 : 0);
+  const blockerMatches = [...panelText.matchAll(/(?:HTTP\s*503|timeout|fallback|static\s*json|Google Sheet|fuman-terminal-sync|資料載入失敗|讀取失敗|載入失敗|等待資料載入|尚未產生 CB|權證快照尚未建立|更新策略資料中)/gi)].map((match) => match[0]);
+  const dateSignals = [...panelText.matchAll(/(?:20\d{2}[\/.-]\d{1,2}[\/.-]\d{1,2}|20\d{6}|\d{1,2}[\/.]\d{1,2}\s+\d{2}:\d{2}|runId|run-|fresh|complete|更新|掃描|資料日期|今日)/gi)].slice(0, 12).map((match) => match[0]);
+  const softEmptyPattern = /等待資料載入|尚未產生 CB|權證快照尚未建立|更新策略資料中/;
+  const hardBlockers = rowsVisible > 0 ? blockerMatches.filter((match) => !softEmptyPattern.test(match)) : blockerMatches;
+  return {
+    kind: "desktop",
+    routeKey: route.key,
+    label: route.label,
+    rowsVisible,
+    domRows: rowMatches.length,
+    canvasRows: countMatch ? Number(countMatch[1]) || 0 : 0,
+    canvasCountText: countMatch ? countMatch[0] : "",
+    canvasPixelDiversity: 0,
+    sampleRows: [],
+    filterCounts: [],
+    freshnessText: dateSignals.slice(0, 5).join(" / "),
+    dateSignals,
+    blockerMatches: [...new Set(hardBlockers)],
+    warnings: [
+      `Runtime stats fallback: ${error.message}`,
+      ...(rowsVisible > 0 && hardBlockers.length !== blockerMatches.length ? ["ignored hidden/soft empty-state text because rows are visible"] : []),
+    ],
+    ok: rowsVisible > 0 && hardBlockers.length === 0,
+  };
+}
+
+async function fallbackMobileStats(cdp, route, error) {
+  const html = await outerHtml(cdp, "#content").catch(() => "");
+  const panelText = htmlToText(html).slice(0, 16000);
+  const rowMatches = html.match(/class="[^"]*(?:mobile-terminal-row|market-ai-stock-row|watch-row)[^"]*"/gi) || [];
+  const keyMatch = html.match(/data-mobile-fragment-key="([^"]+)"/);
+  const runMatch = html.match(/data-run-id="([^"]*)"/);
+  const blockerMatches = [...panelText.matchAll(/(?:HTTP\s*503|timeout|fallback|static\s*json|Google Sheet|fuman-terminal-sync|暫時無法取得|讀取失敗|載入失敗|等待資料|讀取中|載入中|未知分頁|沒有資料)/gi)].map((match) => match[0]);
+  const dateSignals = [...panelText.matchAll(/(?:20\d{2}[\/.-]\d{1,2}[\/.-]\d{1,2}|20\d{6}|\d{2}:\d{2}|runId|run-|fresh|stale|expired|更新|掃描|資料)/gi)].slice(0, 12).map((match) => match[0]);
+  const rootKey = keyMatch?.[1] || "";
+  const runId = runMatch?.[1] || "";
+  return {
+    kind: "mobile",
+    routeKey: route.key,
+    label: route.label,
+    fragment: route.fragment,
+    activeButtons: [],
+    rootKey,
+    runId,
+    rowsVisible: rowMatches.length,
+    sampleRows: [],
+    statusText: dateSignals.slice(0, 5).join(" / "),
+    dateSignals,
+    blockerMatches: [...new Set(blockerMatches)],
+    warnings: [`Runtime stats fallback: ${error.message}`],
+    ok: (route.allowEmpty || rowMatches.length > 0) && (route.allowEmpty || route.fragment === "ai" || Boolean(runId)) && blockerMatches.length === 0,
+  };
+}
+
+async function runDesktopMode(browser, theme) {
+  const cdp = await createTab(browser.port);
+  await setViewport(cdp, { width: 1440, height: 1000, mobile: false });
+  await navigate(cdp, withCacheBust(`${BASE_URL.replace(/\/+$/, "")}/?desktop=1&theme=${theme === "sun" ? "sun" : "dark"}`));
+  await waitForSelector(cdp, "aside.sidebar [data-view]", 45000);
+  await sleep(1200);
+  const results = [];
+  for (const route of DESKTOP_ROUTES) {
+    let stats = null;
+    try {
+      await clickSelector(cdp, route.selector);
+      await sleep(["institution", "cb", "warrant"].includes(route.key) ? 5200 : 3200);
+      stats = await evaluate(cdp, collectDesktopStats, route).catch((error) => fallbackDesktopStats(cdp, route, error));
+    } catch (error) {
+      stats = { kind: "desktop", routeKey: route.key, label: route.label, ok: false, rowsVisible: 0, blockerMatches: [error.message], warnings: [] };
+    }
+    stats.theme = theme;
+    stats.screenshot = await screenshot(cdp, `desktop-${theme}-${route.key}.png`).catch((error) => `screenshot failed: ${error.message}`);
+    results.push(stats);
+  }
+  cdp.close();
+  return results;
+}
+
+async function runMobileMode(browser, theme) {
+  const cdp = await createTab(browser.port);
+  await setViewport(cdp, { width: 390, height: 844, mobile: true });
+  await navigate(cdp, withCacheBust(`${BASE_URL.replace(/\/+$/, "")}/api/mobile-page`));
+  await waitForSelector(cdp, "#tabs button[data-fragment]", 45000);
+  await evaluate(cdp, (nextTheme) => {
+    localStorage.setItem("fuman_mobile_sun", nextTheme === "sun" ? "1" : "0");
+    document.documentElement.dataset.sun = nextTheme === "sun" ? "1" : "0";
+    return true;
+  }, theme);
+  await sleep(1200);
+  const results = [];
+  for (const route of MOBILE_ROUTES) {
+    let stats = null;
+    try {
+      await clickSelector(cdp, `#tabs button[data-fragment="${route.fragment}"]`);
+      if (route.fragment !== "watch") {
+        await waitFor(cdp, (fragment) => {
+          const root = document.querySelector("#content [data-mobile-terminal-fragment]");
+          return { ok: root?.dataset?.mobileFragmentKey === fragment };
+        }, route.fragment, 18000, 300).catch(() => waitForSelector(cdp, `#content [data-mobile-fragment-key="${route.fragment}"]`, 18000));
+      } else {
+        await sleep(600);
+      }
+      stats = await evaluate(cdp, collectMobileStats, route).catch((error) => fallbackMobileStats(cdp, route, error));
+    } catch (error) {
+      stats = { kind: "mobile", routeKey: route.key, label: route.label, fragment: route.fragment, ok: false, rowsVisible: 0, blockerMatches: [error.message], warnings: [] };
+    }
+    stats.theme = theme;
+    stats.screenshot = await screenshot(cdp, `mobile-${theme}-${route.key}.png`).catch((error) => `screenshot failed: ${error.message}`);
+    results.push(stats);
+  }
+  cdp.close();
+  return results;
+}
+
+function markdownReport(report) {
+  const lines = [];
+  lines.push("# Terminal UI E2E Report");
+  lines.push("");
+  lines.push(`- Base URL: ${report.baseUrl}`);
+  lines.push(`- Generated: ${report.generatedAt}`);
+  lines.push(`- Overall: ${report.ok ? "PASS" : "FAIL"}`);
+  lines.push("");
+  lines.push("| Surface | Theme | Route | Rows | Freshness / status | Result | Notes |");
+  lines.push("|---|---:|---|---:|---|---|---|");
+  for (const item of report.results) {
+    const notes = [...(item.blockerMatches || []), ...(item.warnings || [])].join("; ");
+    lines.push(`| ${item.kind} | ${item.theme} | ${item.routeKey} | ${item.rowsVisible || 0} | ${(item.freshnessText || item.statusText || "").replace(/\|/g, "/").slice(0, 90)} | ${item.ok ? "PASS" : "FAIL"} | ${notes.replace(/\|/g, "/").slice(0, 120)} |`);
+  }
+  lines.push("");
+  lines.push("## Screenshots");
+  for (const item of report.results) {
+    if (item.screenshot && !String(item.screenshot).startsWith("screenshot failed")) {
+      lines.push(`- ${item.kind} ${item.theme} ${item.routeKey}: ${item.screenshot}`);
+    }
+  }
+  return `${lines.join("\n")}\n`;
+}
+
+async function main() {
+  await fs.mkdir(SCREENSHOT_DIR, { recursive: true });
+  const browser = await launchBrowser();
+  const results = [];
+  try {
+    if (RUN_ONLY.has("desktop-night")) results.push(...await runDesktopMode(browser, "night"));
+    if (RUN_ONLY.has("desktop-sun")) results.push(...await runDesktopMode(browser, "sun"));
+    if (RUN_ONLY.has("mobile-night")) results.push(...await runMobileMode(browser, "night"));
+    if (RUN_ONLY.has("mobile-sun")) results.push(...await runMobileMode(browser, "sun"));
+  } finally {
+    if (!KEEP_BROWSER) {
+      try { browser.child.kill(); } catch {}
+      await fs.rm(browser.userDataDir, { recursive: true, force: true }).catch(() => null);
+    }
+  }
+  const report = {
+    ok: results.every((item) => item.ok),
+    baseUrl: BASE_URL.replace(/\/+$/, ""),
+    generatedAt: new Date().toISOString(),
+    results,
+  };
+  await fs.writeFile(path.join(OUT_DIR, "terminal-ui-e2e-report.json"), JSON.stringify(report, null, 2));
+  await fs.writeFile(path.join(OUT_DIR, "terminal-ui-e2e-report.md"), markdownReport(report));
+  const failed = results.filter((item) => !item.ok);
+  for (const item of results) {
+    console.log(`[terminal-ui-e2e] ${item.ok ? "ok" : "fail"} ${item.kind}/${item.theme}/${item.routeKey} rows=${item.rowsVisible || 0}`);
+  }
+  if (failed.length) {
+    console.error(`[terminal-ui-e2e] failed ${failed.length}/${results.length}`);
+    process.exit(1);
+  }
+  console.log(`[terminal-ui-e2e] ok ${results.length}/${results.length}`);
+}
+
+main().catch((error) => {
+  console.error(`[terminal-ui-e2e] failed: ${error?.stack || error}`);
+  process.exit(1);
+});

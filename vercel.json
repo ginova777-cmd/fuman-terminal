@@ -231,7 +231,7 @@
       ]
     },
     {
-      "source": "/data/mobile-(strategy1|strategy2|strategy3|strategy4|strategy5|chip|warrant)-ultra.html",
+      "source": "/data/mobile-(strategy1|strategy2|strategy3|strategy4|strategy5|chip|cb|warrant)-ultra.html",
       "headers": [
         {
           "key": "Cache-Control",

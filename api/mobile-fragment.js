@@ -41,6 +41,12 @@ const TAB_CONFIG = {
     endpoint: "/api/institution-latest",
     points: ["連買優先", "合計買超", "籌碼集中"],
   },
+  cb: {
+    title: "CB 可轉債",
+    subtitle: "轉換價 / 技術 / 進場模型",
+    endpoint: "/api/cb-detect-latest",
+    points: ["CB 代號優先", "轉換價距離", "進場模型狀態"],
+  },
   warrant: {
     title: "權證資金",
     subtitle: "認購熱度與標的型態",
@@ -229,6 +235,31 @@ function rowHtml(row, index, tab = "") {
       <div class="mobile-terminal-actions">
         <button type="button" data-mobile-ai-contract="analyze" data-ai-stock-code="${esc(code)}" data-ai-stock-name="${esc(name)}">看分析</button>
         <button type="button" data-mobile-ai-contract="watch" data-ai-watch-code="${esc(code)}" data-ai-watch-name="${esc(name)}">加入自選</button>
+      </div>
+    </article>`;
+  }
+  if (tab === "cb") {
+    const cbCode = firstValue(row, ["cbCode", "cb_code", "convertibleBondCode", "bondCode", "code"], "--");
+    const cbName = firstValue(row, ["cbName", "cb_name", "convertibleBondName", "bondName", "name"], "");
+    const stockCode = firstValue(row, ["code", "stock_id", "stockId", "underlyingCode"], "");
+    const stockName = firstValue(row, ["stockName", "underlyingName", "company"], "");
+    const action = firstValue(row, ["tradableLabel", "entryLabel", "stage", "sourceLayer", "status"], "CB 偵測");
+    const score = firstValue(row, ["score", "finalScore", "rankScore", "baseScore"], "--");
+    const premium = firstValue(row, ["premium", "conversionDistancePct", "conversionPremiumRate"], null);
+    const reason = firstValue(row, ["tradableReason", "entryPlan.tradableReason", "sourceLayer", "summary", "reason"], "");
+    const tags = arrayAt(row, ["tags"]).slice(0, 3).join(" / ");
+    const line = `${action}｜${score}｜溢價 ${premium === null ? "--" : `${numberText(premium)}%`}`;
+    return `
+    <article class="mobile-terminal-row">
+      <b>#${index + 1}</b>
+      <div>
+        <h4>${esc(cbCode)} ${esc(cbName)}</h4>
+        <p>${esc(line)}</p>
+        <small>${esc([stockCode ? `現股 ${stockCode} ${stockName}` : "", reason, tags].filter(Boolean).join("｜").slice(0, 180))}</small>
+      </div>
+      <div class="mobile-terminal-actions">
+        <button type="button" data-mobile-ai-contract="analyze" data-ai-stock-code="${esc(stockCode || cbCode)}" data-ai-stock-name="${esc(stockName || cbName)}">看分析</button>
+        <button type="button" data-mobile-ai-contract="watch" data-ai-watch-code="${esc(stockCode || cbCode)}" data-ai-watch-name="${esc(stockName || cbName)}">加入自選</button>
       </div>
     </article>`;
   }

@@ -4,7 +4,7 @@ const {
   readDesktopRouteSnapshot,
 } = require("../lib/desktop-route-snapshot-cache");
 
-const FRAGMENT_TABS = ["strategy1", "strategy2", "strategy3", "strategy4", "strategy5", "chip", "warrant"];
+const FRAGMENT_TABS = ["strategy1", "strategy2", "strategy3", "strategy4", "strategy5", "chip", "cb", "warrant"];
 const TAB_ENDPOINTS = {
   strategy1: "/api/open-buy-latest",
   strategy2: "/api/latest-strategy?key=strategy2",
@@ -12,6 +12,7 @@ const TAB_ENDPOINTS = {
   strategy4: "/api/strategy4-latest",
   strategy5: "/api/strategy5-latest",
   chip: "/api/institution-latest",
+  cb: "/api/cb-detect-latest",
   warrant: "/api/warrant-flow-latest",
 };
 
