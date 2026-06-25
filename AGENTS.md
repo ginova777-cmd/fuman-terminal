@@ -1,6 +1,6 @@
 # Fuman Terminal AGENTS.md
 
-Last updated: 2026-06-24 Asia/Taipei
+Last updated: 2026-06-25 Asia/Taipei
 
 給後續接手的 Codex：這份是目前有效狀態。舊版同步站、舊 GitHub workflow、舊 auto-release、舊 governance 文件、舊排程 wrapper 都已退休。不要為了通過舊檢查而把它們復活。
 
@@ -35,9 +35,16 @@ fuman-terminal
 
 部署安全規則：
 
-- 不要從 dirty 的 `C:\fuman-terminal` repo 部署；若正式根目錄有本機 dirty 內容，必須改用乾淨 worktree。
-- 乾淨 worktree 部署前必須確認 `.vercel/project.json` 指向正式 `fuman-terminal` 專案。
-- 若乾淨 worktree 沒有 `.vercel/project.json`，不可盲部署；先確認 projectId / projectName，避免部署到舊 sync 或錯誤 Vercel 專案。
+- `origin/main` 是唯一 production source；策略 hotfix 必須先在獨立 branch / worktree commit，再 merge 或 fast-forward 到 `origin/main`。
+- `C:\fuman-terminal` 只當 production mirror；不要在這裡開發、rebase、累積未提交 diff 或直接混入策略修正。
+- 要使用 `C:\fuman-terminal` 前，`git -C C:\fuman-terminal status -sb` 必須乾淨且不能 behind；只允許用 `pull --ff-only` 或同步腳本對齊。
+- 每個策略修正獨立處理：Strategy2 coverage、Strategy5 label、CB snapshot、買賣超 verifier / renderer、左側解鎖，不要混成一包。
+- 部署前必須跑 `npm run guard:source`；它會擋 dirty tree、untracked files、非 `main` / 指定 release branch、behind/upstream 未推、錯誤 `.vercel/project.json`、未提交版本檔。
+- 乾淨 worktree 部署前必須確認 `.vercel/project.json` 指向正式 `fuman-terminal` 專案；缺檔不可盲部署。
+- 沒有使用者明確要求正式發版時，不要跑 `npm run bump:version`、`npm run release:main`、`npm run deploy`、`vercel --prod`。
+- `npm run bump:version`、`npm run release:main`、`npm run deploy` 必須明確設定 `ALLOW_VERSION_BUMP=1` 才能進行，避免 production alias 無預警跳版。
+- `version.json`、`index.html`、`fuman-sw.js`、service worker cache 不是資料修復手段；不要用 version bump 掩蓋資料、snapshot、renderer 或 fallback 問題。
+- `data/scan-receipts/*`、暫存 market-ai/mobile data、未追蹤檔不可隨策略 hotfix 混進 commit，除非該任務明確要求。
 
 ## 已退休且不可復活
 
