@@ -28,6 +28,30 @@ function rejectText(text, needle, message) {
   if (text.includes(needle)) issues.push(message);
 }
 
+function extractStyle(html) {
+  return html.match(/<style>([\s\S]*?)<\/style>/)?.[1] || "";
+}
+
+function checkMobileShellCss(mobile) {
+  const css = extractStyle(mobile);
+  if (!css) {
+    issues.push("mobile shell must keep inline CSS");
+    return;
+  }
+  if (!css.includes(":root{") || css.includes("rootcolor-scheme")) {
+    issues.push("mobile shell CSS must be valid; broken minified CSS was detected");
+  }
+  for (const marker of [
+    ".shell{max-width:720px;margin:0 auto}",
+    "@media (min-width:721px)",
+    "@media (min-width:1024px)",
+    "@media (orientation:landscape)",
+    "html[data-orientation=landscape] body{padding:8px 12px}",
+  ]) {
+    if (!css.includes(marker)) issues.push(`mobile shell CSS missing responsive marker ${marker}`);
+  }
+}
+
 function headerFor(vercel, source) {
   return (vercel.headers || []).find((item) => item.source === source);
 }
@@ -85,6 +109,8 @@ function checkLocal() {
   const apiBoot = readLocal("api/mobile-boot.js");
   const vercel = readJson("vercel.json");
   const packageJson = readJson("package.json");
+
+  checkMobileShellCss(mobile);
 
   requireText(mobile, 'bootUrl="/api/mobile-boot"', "mobile shell must use /api/mobile-boot as primary boot endpoint");
   requireText(mobile, 'fetch(fresh(url),{cache:"no-store"})', "mobile JSON fetches must use no-store plus cache-busting query");

@@ -52,6 +52,53 @@ const MOBILE_ROUTES = [
   { key: "watch", label: "watchlist", fragment: "watch", allowEmpty: true },
 ];
 
+const MOBILE_VIEWPORTS = {
+  "phone-portrait": {
+    key: "phone-portrait",
+    label: "phone portrait",
+    width: 390,
+    height: 844,
+    mobile: true,
+    userAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1",
+  },
+  "phone-landscape": {
+    key: "phone-landscape",
+    label: "phone landscape",
+    width: 844,
+    height: 390,
+    mobile: true,
+    userAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1",
+  },
+  tablet: {
+    key: "tablet",
+    label: "tablet",
+    width: 820,
+    height: 1180,
+    mobile: true,
+    userAgent: "Mozilla/5.0 (iPad; CPU OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1",
+  },
+  "desktop-mobile": {
+    key: "desktop-mobile",
+    label: "desktop opening mobile URL",
+    width: 1024,
+    height: 768,
+    mobile: false,
+  },
+};
+
+const MOBILE_RUNS = [
+  { flag: "mobile-night", theme: "night", viewport: MOBILE_VIEWPORTS["phone-portrait"] },
+  { flag: "mobile-sun", theme: "sun", viewport: MOBILE_VIEWPORTS["phone-portrait"] },
+  { flag: "mobile-phone-portrait-night", theme: "night", viewport: MOBILE_VIEWPORTS["phone-portrait"] },
+  { flag: "mobile-phone-portrait-sun", theme: "sun", viewport: MOBILE_VIEWPORTS["phone-portrait"] },
+  { flag: "mobile-phone-landscape-night", theme: "night", viewport: MOBILE_VIEWPORTS["phone-landscape"] },
+  { flag: "mobile-phone-landscape-sun", theme: "sun", viewport: MOBILE_VIEWPORTS["phone-landscape"] },
+  { flag: "mobile-tablet-night", theme: "night", viewport: MOBILE_VIEWPORTS.tablet },
+  { flag: "mobile-tablet-sun", theme: "sun", viewport: MOBILE_VIEWPORTS.tablet },
+  { flag: "mobile-desktop-night", theme: "night", viewport: MOBILE_VIEWPORTS["desktop-mobile"] },
+  { flag: "mobile-desktop-sun", theme: "sun", viewport: MOBILE_VIEWPORTS["desktop-mobile"] },
+];
+
 function optionValue(name) {
   const prefix = `${name}=`;
   return (process.argv.find((arg) => arg.startsWith(prefix)) || "").slice(prefix.length);
@@ -364,8 +411,12 @@ async function setViewport(cdp, mode) {
   await cdp.send("Emulation.setTouchEmulationEnabled", { enabled: Boolean(mode.mobile) }).catch(() => null);
   if (mode.mobile) {
     await cdp.send("Network.setUserAgentOverride", {
-      userAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1",
+      userAgent: mode.userAgent || "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1",
     });
+  } else {
+    await cdp.send("Network.setUserAgentOverride", {
+      userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126 Safari/537.36",
+    }).catch(() => null);
   }
 }
 
@@ -618,6 +669,45 @@ function collectMobileStats(route) {
   const runId = root?.dataset?.runId || "";
   const statusText = text(status);
   const dateSignals = [...`${statusText} ${panelText}`.matchAll(/(?:20\d{2}[\/.-]\d{1,2}[\/.-]\d{1,2}|20\d{6}|\d{2}:\d{2}|runId|run-|fresh|stale|expired|更新|掃描|資料)/gi)].slice(0, 12).map((match) => match[0]);
+  const shell = document.querySelector(".shell");
+  const tabs = document.querySelector("#tabs");
+  const hero = document.querySelector("#hero");
+  const card = content?.querySelector(".mobile-terminal-head,.mobile-terminal-row,.market-ai-stock-row,.market-ai-block,.watch-row");
+  const bodyStyle = getComputedStyle(document.body);
+  const shellStyle = shell ? getComputedStyle(shell) : null;
+  const tabsStyle = tabs ? getComputedStyle(tabs) : null;
+  const heroStyle = hero ? getComputedStyle(hero) : null;
+  const cardStyle = card ? getComputedStyle(card) : null;
+  const shellRect = shell?.getBoundingClientRect?.() || { width: 0, height: 0, left: 0, right: 0 };
+  const heroRect = hero?.getBoundingClientRect?.() || { width: 0, height: 0 };
+  const scrollWidth = Math.max(document.documentElement.scrollWidth || 0, document.body.scrollWidth || 0);
+  const horizontalOverflow = Math.max(0, Math.ceil(scrollWidth - window.innerWidth));
+  const layout = {
+    viewport: { width: window.innerWidth, height: window.innerHeight },
+    orientation: document.documentElement.dataset.orientation || "",
+    bodyBackground: bodyStyle.backgroundColor || "",
+    bodyFont: bodyStyle.fontFamily || "",
+    shellWidth: Math.round(shellRect.width || 0),
+    shellMaxWidth: shellStyle?.maxWidth || "",
+    tabsDisplay: tabsStyle?.display || "",
+    tabsFlexWrap: tabsStyle?.flexWrap || "",
+    heroBorder: heroStyle?.borderTopStyle || "",
+    heroWidth: Math.round(heroRect.width || 0),
+    cardBorder: cardStyle?.borderTopStyle || "",
+    horizontalOverflow,
+  };
+  const layoutBlockers = [];
+  if (!shell || !tabs || !hero) layoutBlockers.push("mobile shell missing core layout nodes");
+  if (/Times New Roman|serif/i.test(layout.bodyFont)) layoutBlockers.push(`mobile CSS not applied: font=${layout.bodyFont}`);
+  if (!layout.bodyBackground || layout.bodyBackground === "rgba(0, 0, 0, 0)" || layout.bodyBackground === "rgb(255, 255, 255)") {
+    layoutBlockers.push(`mobile CSS not applied: background=${layout.bodyBackground || "<missing>"}`);
+  }
+  if (layout.tabsDisplay !== "flex") layoutBlockers.push(`mobile tabs must be flex actual=${layout.tabsDisplay || "<missing>"}`);
+  if (layout.heroBorder === "none" || !layout.heroBorder) layoutBlockers.push("mobile hero card border is missing");
+  if (card && (layout.cardBorder === "none" || !layout.cardBorder)) layoutBlockers.push("mobile data card border is missing");
+  if (layout.shellWidth <= 0) layoutBlockers.push("mobile shell width is zero");
+  if (layout.shellWidth > Math.min(window.innerWidth, 860)) layoutBlockers.push(`mobile shell is too wide actual=${layout.shellWidth} viewport=${window.innerWidth}`);
+  if (horizontalOverflow > 8) layoutBlockers.push(`mobile page has horizontal overflow ${horizontalOverflow}px`);
   const keyOk = route.fragment === "watch" || rootKey === route.fragment;
   const warnings = [];
   if (!dateSignals.length && !route.allowEmpty) warnings.push("freshness/date/run signal not visible enough");
@@ -633,12 +723,15 @@ function collectMobileStats(route) {
     sampleRows: rows.slice(0, 3),
     statusText,
     dateSignals,
-    blockerMatches: [...new Set(blockerMatches)],
+    layout,
+    layoutBlockers,
+    blockerMatches: [...new Set([...blockerMatches, ...layoutBlockers])],
     warnings,
     ok: keyOk
       && (route.allowEmpty || rows.length > 0)
       && (route.allowEmpty || route.allowMissingRunId || route.fragment === "ai" || Boolean(runId))
-      && blockerMatches.length === 0,
+      && blockerMatches.length === 0
+      && layoutBlockers.length === 0,
   };
 }
 
@@ -772,12 +865,12 @@ async function runDesktopMode(browser, theme) {
   return results;
 }
 
-async function runMobileMode(browser, theme) {
-  debug(`mobile mode start theme=${theme}`);
+async function runMobileMode(browser, theme, viewport = MOBILE_VIEWPORTS["phone-portrait"]) {
+  debug(`mobile mode start theme=${theme} viewport=${viewport.key}`);
   const cdp = await createTab(browser);
-  await setViewport(cdp, { width: 390, height: 844, mobile: true });
-  await navigate(cdp, withCacheBust(`${BASE_URL.replace(/\/+$/, "")}/api/mobile-page`));
-  debug(`mobile navigated theme=${theme}`);
+  await setViewport(cdp, viewport);
+  await navigate(cdp, withCacheBust(`${BASE_URL.replace(/\/+$/, "")}/mobile`));
+  debug(`mobile navigated theme=${theme} viewport=${viewport.key}`);
   await waitForSelector(cdp, "#tabs button[data-fragment]", 45000);
   await evaluate(cdp, (nextTheme) => {
     localStorage.setItem("fuman_mobile_sun", nextTheme === "sun" ? "1" : "0");
@@ -805,12 +898,14 @@ async function runMobileMode(browser, theme) {
       stats = { kind: "mobile", routeKey: route.key, label: route.label, fragment: route.fragment, ok: false, rowsVisible: 0, blockerMatches: [error.message], warnings: [] };
     }
     stats.theme = theme;
+    stats.viewportKey = viewport.key;
+    stats.viewportLabel = viewport.label;
     stats.screenshot = await withTimeout(
-      screenshot(cdp, `mobile-${theme}-${route.key}.png`),
+      screenshot(cdp, `mobile-${viewport.key}-${theme}-${route.key}.png`),
       Math.min(ROUTE_TIMEOUT_MS, 30000),
-      `mobile/${theme}/${route.key}/screenshot`,
+      `mobile/${viewport.key}/${theme}/${route.key}/screenshot`,
     ).catch((error) => `screenshot failed: ${error.message}`);
-    console.log(`[terminal-ui-e2e] ${stats.ok ? "ok" : "fail"} mobile/${theme}/${route.key} rows=${stats.rowsVisible || 0}`);
+    console.log(`[terminal-ui-e2e] ${stats.ok ? "ok" : "fail"} mobile/${viewport.key}/${theme}/${route.key} rows=${stats.rowsVisible || 0}`);
     results.push(stats);
   }
   cdp.close();
@@ -825,11 +920,11 @@ function markdownReport(report) {
   lines.push(`- Generated: ${report.generatedAt}`);
   lines.push(`- Overall: ${report.ok ? "PASS" : "FAIL"}`);
   lines.push("");
-  lines.push("| Surface | Theme | Route | Rows | Freshness / status | Result | Notes |");
-  lines.push("|---|---:|---|---:|---|---|---|");
+  lines.push("| Surface | Viewport | Theme | Route | Rows | Freshness / status | Result | Notes |");
+  lines.push("|---|---|---:|---|---:|---|---|---|");
   for (const item of report.results) {
     const notes = [...(item.blockerMatches || []), ...(item.warnings || [])].join("; ");
-    lines.push(`| ${item.kind} | ${item.theme} | ${item.routeKey} | ${item.rowsVisible || 0} | ${(item.freshnessText || item.statusText || "").replace(/\|/g, "/").slice(0, 90)} | ${item.ok ? "PASS" : "FAIL"} | ${notes.replace(/\|/g, "/").slice(0, 120)} |`);
+    lines.push(`| ${item.kind} | ${item.viewportKey || "-"} | ${item.theme} | ${item.routeKey} | ${item.rowsVisible || 0} | ${(item.freshnessText || item.statusText || "").replace(/\|/g, "/").slice(0, 90)} | ${item.ok ? "PASS" : "FAIL"} | ${notes.replace(/\|/g, "/").slice(0, 120)} |`);
   }
   lines.push("");
   lines.push("## Screenshots");
@@ -848,8 +943,14 @@ async function main() {
   try {
     if (RUN_ONLY.has("desktop-night")) results.push(...await runDesktopMode(browser, "night"));
     if (RUN_ONLY.has("desktop-sun")) results.push(...await runDesktopMode(browser, "sun"));
-    if (RUN_ONLY.has("mobile-night")) results.push(...await runMobileMode(browser, "night"));
-    if (RUN_ONLY.has("mobile-sun")) results.push(...await runMobileMode(browser, "sun"));
+    const mobileExecuted = new Set();
+    for (const spec of MOBILE_RUNS) {
+      if (!RUN_ONLY.has(spec.flag)) continue;
+      const key = `${spec.viewport.key}:${spec.theme}`;
+      if (mobileExecuted.has(key)) continue;
+      mobileExecuted.add(key);
+      results.push(...await runMobileMode(browser, spec.theme, spec.viewport));
+    }
   } finally {
     if (!KEEP_BROWSER) {
       try { browser.child.kill(); } catch {}

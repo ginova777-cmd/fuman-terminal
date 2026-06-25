@@ -147,6 +147,9 @@ for (const scriptName of ["verify:mobile-layout", "verify:mobile-layout:live"]) 
     issues.push(`package.json missing scripts.${scriptName}`);
   }
 }
+if (!String(packageJson.scripts?.["verify:mobile-responsive-ui"] || "").includes("mobile-phone-landscape-night")) {
+  issues.push("package.json missing scripts.verify:mobile-responsive-ui for desktop/phone/tablet mobile shell checks");
+}
 if (!String(packageJson.scripts?.postdeploy || "").includes("verify-mobile-layout.js --live")) {
   issues.push("postdeploy must run live mobile layout verification");
 }
@@ -473,9 +476,23 @@ const mobileLayoutVerifier = read("scripts/verify-mobile-layout.js");
 for (const marker of [
   "repeat(2, minmax(0, 1fr))",
   "forbidden mobile #market-view #heatmap one-column override found",
+  "assertMobileShellCss",
+  "rootcolor-scheme",
+  "@media (orientation:landscape)",
   "--live",
 ]) {
   if (!mobileLayoutVerifier.includes(marker)) issues.push(`verify-mobile-layout.js missing ${marker}`);
+}
+
+const terminalUiE2eVerifier = read("scripts/verify-terminal-ui-e2e.js");
+for (const marker of [
+  "MOBILE_VIEWPORTS",
+  "desktop opening mobile URL",
+  "phone landscape",
+  "tablet",
+  "mobile CSS not applied",
+]) {
+  if (!terminalUiE2eVerifier.includes(marker)) issues.push(`verify-terminal-ui-e2e.js missing responsive mobile marker ${marker}`);
 }
 
 const liveVersionVerifier = read("scripts/verify-live-version.js");

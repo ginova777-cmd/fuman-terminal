@@ -52,9 +52,35 @@ function assertMobileHeatmapTwoColumns(css, issues) {
   }
 }
 
+function extractInlineStyle(html) {
+  return html.match(/<style>([\s\S]*?)<\/style>/)?.[1] || "";
+}
+
+function assertMobileShellCss(html, issues, label = "mobile.html") {
+  const css = extractInlineStyle(html);
+  if (!css) {
+    issues.push(`${label} missing inline mobile shell CSS`);
+    return;
+  }
+  if (!css.includes(":root{") || css.includes("rootcolor-scheme")) {
+    issues.push(`${label} inline CSS is invalid or over-minified`);
+  }
+  const required = [
+    ".shell{max-width:720px;margin:0 auto}",
+    "@media (min-width:721px)",
+    "@media (min-width:1024px)",
+    "@media (orientation:landscape)",
+    "html[data-orientation=landscape] body{padding:8px 12px}",
+  ];
+  for (const marker of required) {
+    if (!css.includes(marker)) issues.push(`${label} missing responsive marker ${marker}`);
+  }
+}
+
 async function verifyLocal() {
   const issues = [];
   const html = read("index.html");
+  const mobile = read("mobile.html");
   const css = read("styles.css");
   const versionJson = JSON.parse(read("version.json"));
   const stylesVersion = extractStylesVersion(html);
@@ -63,6 +89,7 @@ async function verifyLocal() {
     issues.push(`styles.css version mismatch index=${stylesVersion} version.json=${versionJson.version}`);
   }
   assertMobileHeatmapTwoColumns(css, issues);
+  assertMobileShellCss(mobile, issues);
   return issues;
 }
 
@@ -78,6 +105,12 @@ async function verifyLive() {
     issues.push("live home missing styles.css version");
     return issues;
   }
+  const mobile = await fetchText("/mobile");
+  if (mobile.status < 200 || mobile.status >= 400) {
+    issues.push(`live /mobile HTTP ${mobile.status}`);
+    return issues;
+  }
+  assertMobileShellCss(mobile.body, issues, "live /mobile");
   const css = await fetchText(`/styles.css?v=${encodeURIComponent(version)}`);
   if (css.status < 200 || css.status >= 400) {
     issues.push(`live styles HTTP ${css.status}`);
