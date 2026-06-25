@@ -843,3 +843,23 @@ npm run verify:live-version
 必要 module marker：`chipSnapshot`、`chipFlow`、`warrantFlow` 都必須保留，且都指向 `terminal-chip-snapshot-module.js`。缺 marker 時跑 `npm run verify:terminal-modules` 會 fail；請補 marker，不要 bump 版本號。
 
 `npm run verify:bump` 現在是穩定版本 guard：允許前端小修不 bump，但會阻擋未授權的版本字串變更。真正要公開改版時才可用 `ALLOW_VERSION_BUMP=1` 明確授權。
+## 策略 Codex 分支與部署規則
+
+正式站只認 GitHub `main`。所有策略 Codex 開工前必須先 `git fetch origin`，確認自己的基底不是 behind。
+
+建議分支命名：
+
+```text
+策略1：strategy1-sync
+策略2：strategy2-live
+策略3：strategy3-sync
+策略4：strategy4-sync
+策略5：strategy5-sync
+籌碼買賣超：chip-sync
+籌碼CB：chip-cb-sync
+籌碼權證走向：chip-warrant-sync
+```
+
+策略 Codex 只能在自己的分支或乾淨 worktree 更新 scanner / API / Supabase complete run / snapshot payload。不要在策略分支直接 `vercel --prod`，不要改終端版本號，不要改 terminal shell 主線。
+
+改完先合回 `main`，再由統一部署流程上 production。`npm run guard:source` 會擋 dirty、untracked、非 main / 未授權 release branch、behind、ahead 未推、錯誤 `.vercel/project.json`。這條 guard 是防止 A Codex 的新 bundle 被 B Codex 的舊 bundle 蓋回去。
