@@ -1,11 +1,11 @@
 (function () {
   if (
     window.__fumanDesktopFastShell === "20260623-09"
-    && window.__fumanDesktopFastShellApiOnlyPoll === "20260624-01"
+    && window.__fumanDesktopFastShellApiOnlyPoll === "20260625-02"
     && window.__fumanOriginalDesktopMarket === "20260624-01"
   ) return;
   window.__fumanDesktopFastShell = "20260623-09";
-  window.__fumanDesktopFastShellApiOnlyPoll = "20260624-01";
+  window.__fumanDesktopFastShellApiOnlyPoll = "20260625-02";
 
   const NAV_SELECTOR = "[data-view]:not([data-member-tab])";
   const SNAPSHOT_DB = "fuman-desktop-route-snapshots";
@@ -16,10 +16,11 @@
   const SNAPSHOT_ROUTES = ["strategy|策略1", "strategy|策略2", "strategy|策略3", "strategy|策略4", "strategy|策略5"];
   const API_ONLY_STRATEGY_ROUTES = ["strategy|策略1", "strategy|策略3", "strategy|策略4", "strategy|策略5"];
   const LIVE_API_STRATEGY_ROUTES = ["strategy|策略2"];
+  const REALTIME_RADAR_ROUTE = "realtime-radar|即時雷達";
   const CB_DETECT_ROUTE = "cb-detect|CB可轉債";
-  const FIXED_ROUTE_KEYS = ["market|市場總覽", "chip-trade|買賣超", CB_DETECT_ROUTE, "warrant-flow|權證走向", "watchlist|自選股"];
+  const FIXED_ROUTE_KEYS = ["market|市場總覽", REALTIME_RADAR_ROUTE, "chip-trade|買賣超", CB_DETECT_ROUTE, "warrant-flow|權證走向", "watchlist|自選股"];
   const FIXED_CANVAS_PERSIST_ROUTES = ["chip-trade|買賣超", CB_DETECT_ROUTE, "warrant-flow|權證走向"];
-  const API_ONLY_FIXED_ROUTE_KEYS = [CB_DETECT_ROUTE];
+  const API_ONLY_FIXED_ROUTE_KEYS = [REALTIME_RADAR_ROUTE, CB_DETECT_ROUTE];
   const CANVAS_REFRESH_TTL_MS = 18000;
   const API_ONLY_POLL_MS = 30000;
   const PERF_LOG_KEY = "fuman-desktop-fast-perf-log-v1";
@@ -38,12 +39,14 @@
     "strategy|策略4": "/api/strategy4-latest",
     "strategy|策略5": "/api/strategy5-latest",
     "market|市場總覽": "/api/market",
+    "realtime-radar|即時雷達": "/api/realtime-radar-latest",
     "chip-trade|買賣超": "/api/institution-latest",
     "cb-detect|CB可轉債": "/api/cb-detect-latest",
     "warrant-flow|權證走向": "/api/warrant-flow-latest",
   };
   const CANVAS_ROUTE_OPTIONS = {
     "market|市場總覽": { limit: 24, ttl: 14000 },
+    "realtime-radar|即時雷達": { limit: 80, ttl: 6500, live: true, today: true },
     "strategy|策略1": { limit: 60, ttl: 18000 },
     "strategy|策略2": { limit: 240, ttl: 6500, live: true, today: true },
     "strategy|策略3": { limit: 60, ttl: 22000 },
@@ -200,6 +203,7 @@
     if (isStrategyLink(link)) return strategyRouteKey(link);
     const view = link?.dataset?.view || "";
     if (view === "market") return "market|市場總覽";
+    if (view === "realtime-radar") return REALTIME_RADAR_ROUTE;
     if (view === "chip-trade") return "chip-trade|買賣超";
     if (view === "cb-detect") return "cb-detect|CB可轉債";
     if (view === "warrant-flow") return "warrant-flow|權證走向";
@@ -280,6 +284,7 @@
     if (route.viewName === "chip-trade") return "chip-trade|買賣超";
     if (route.viewName === "cb-detect") return "cb-detect|CB可轉債";
     if (route.viewName === "warrant-flow") return "warrant-flow|權證走向";
+    if (route.viewName === "realtime-radar") return REALTIME_RADAR_ROUTE;
     if (route.viewName === "watchlist") return "watchlist|自選股";
     if (route.viewName === "market") return "market|市場總覽";
     return "";
@@ -649,6 +654,14 @@
         title: "市場總覽",
         badge: "FMN://market.fast-shell",
         summary: "加權、櫃買、台指與強勢排行固定殼先顯示，市場資料背景同步。",
+      };
+    }
+    if (view === "realtime-radar") {
+      return {
+        icon: "◎",
+        title: "即時雷達",
+        badge: "FMN://radar.live-api",
+        summary: "今日即時雷達走 live API，不讀舊 static JSON 或桌機快照。",
       };
     }
     if (view === "chip-trade") {
@@ -2385,7 +2398,7 @@
     const poll = (reason = "timer") => {
       if (document.hidden || isInteractionHoldActive()) return;
       const route = canvasState.route || activeSnapshotRoute;
-      if (!isApiOnlyPollingRoute(route)) return;
+      if (!isApiOnlySnapshotRoute(route)) return;
       const active = window.__fumanDesktopActiveRoute;
       if (active?.key && active.key !== route) return;
       const before = currentRowsSignature(route);
@@ -2416,7 +2429,9 @@
           setCanvasStatus();
           return;
         }
-        renderStrategyRouteShell(route, `api-only-poll-${reason}`, rows);
+        const fixedLink = FIXED_ROUTE_KEYS.includes(route) ? linkForRouteKey(route) : null;
+        if (fixedLink) renderFixedPageShell(fixedLink, `api-only-poll-${reason}`, rows);
+        else renderStrategyRouteShell(route, `api-only-poll-${reason}`, rows);
       }).catch(() => undefined);
     };
     window.setInterval(() => poll("interval"), API_ONLY_POLL_MS);
@@ -3996,6 +4011,7 @@
   function restoreFixedPageSnapshot(link) {
     const key = fixedRouteKey(link);
     if (!key) return false;
+    if (isApiOnlySnapshotRoute(key)) return false;
     if (isMarketRoute(key)) {
       removeFixedPageShell(key);
       return false;
@@ -4070,7 +4086,7 @@
     }
     const panel = panelForRoute(key);
     let rows = isChipTradeRoute(key) ? [] : rowsForRoute(key);
-    if (!rows.length && !isChipTradeRoute(key)) {
+    if (!rows.length && !isChipTradeRoute(key) && !isApiOnlySnapshotRoute(key)) {
       const domRows = extractLiteRows(panel);
       if (domRows.length) {
         setCanvasRows(key, domRows, "dom-hot", Date.now());
@@ -4080,7 +4096,7 @@
     }
     renderFixedPageShell(link, source, rows);
     markLatency("shell", key);
-    if (!isChipTradeRoute(key)) restoreFixedPageSnapshot(link);
+    if (!isChipTradeRoute(key) && !isApiOnlySnapshotRoute(key)) restoreFixedPageSnapshot(link);
     window.setTimeout(() => {
       if (!isRouteCurrent(key, seq) || activeSnapshotRoute !== key || canvasState.route !== key) return;
       fetchCanvasRows(key, false).then((apiRows) => {
