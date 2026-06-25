@@ -8,6 +8,22 @@ const DEFAULT_ROOTS = [
   process.env.FUMAN_SYNC_ROOT || "C:\\fuman-terminal",
 ].filter(Boolean);
 const DEFAULT_RUNTIME_ROOT = process.env.FUMAN_RUNTIME_DIR || "C:\\fuman-runtime";
+const RESERVED_PRODUCTION_ROUTES = [
+  "/88",
+];
+const RESERVED_ROUTE_ARTIFACTS = new Set(RESERVED_PRODUCTION_ROUTES.flatMap((route) => {
+  const slug = String(route || "").replace(/^\/+/, "").replace(/\/+$/, "");
+  if (!slug) return [];
+  return [
+    slug,
+    `${slug}.html`,
+    path.join(slug, "index.html"),
+    path.join("api", `${slug}.js`),
+    path.join(".vercel", "output", "static", slug),
+    path.join(".vercel", "output", "static", `${slug}.html`),
+    path.join(".vercel", "output", "static", slug, "index.html"),
+  ].map((item) => item.replace(/\\/g, "/").toLowerCase());
+}));
 
 const EXACT_RETIRED = [
   "scan-intraday-signals.js",
@@ -219,8 +235,17 @@ function isInside(root, target) {
   return relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative));
 }
 
+function isReservedRouteArtifact(rel) {
+  const key = String(rel || "").replace(/\\/g, "/").replace(/^\/+/, "").toLowerCase();
+  return RESERVED_ROUTE_ARTIFACTS.has(key);
+}
+
 function rmFile(root, rel, result, dryRun) {
   const target = path.resolve(root, rel);
+  if (isReservedRouteArtifact(rel)) {
+    result.skipped.push({ path: target, reason: "reserved-production-route" });
+    return;
+  }
   if (!isInside(root, target)) {
     result.skipped.push({ path: target, reason: "outside-root" });
     return;
@@ -237,6 +262,10 @@ function rmFile(root, rel, result, dryRun) {
 
 function rmDirectory(root, rel, result, dryRun) {
   const target = path.resolve(root, rel);
+  if (isReservedRouteArtifact(rel)) {
+    result.skipped.push({ path: target, reason: "reserved-production-route" });
+    return;
+  }
   if (!isInside(root, target)) {
     result.skipped.push({ path: target, reason: "outside-root" });
     return;

@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>輔滿成績單</title>
+  <style>
+    :root{color-scheme:dark;--bg:#0b0f14;--panel:#141a22;--line:#27313f;--text:#f3f7fb;--muted:#94a3b8;--good:#5ee0a0;--bad:#ff7a90;--brand:#ff9b45;--soft:#1d2633}*{box-sizing:border-box}body{margin:0;font-family:"Microsoft JhengHei",system-ui,sans-serif;background:var(--bg);color:var(--text)}main{width:min(1180px,100%);margin:0 auto;padding:22px 16px 42px}.top{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;margin-bottom:18px}.badge{color:var(--brand);font-weight:800;letter-spacing:.08em;font-size:12px}h1{margin:6px 0 8px;font-size:clamp(28px,5vw,48px)}p{margin:0;color:var(--muted)}button,input,select{font:inherit}.tools{display:flex;gap:8px;flex-wrap:wrap;align-items:center}.tools input,.tools select{background:var(--panel);border:1px solid var(--line);color:var(--text);border-radius:8px;padding:10px 12px}.tools button{border:0;border-radius:8px;background:var(--brand);color:#17100a;font-weight:800;padding:10px 14px;cursor:pointer}.grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin:16px 0}.card{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:14px}.card span{display:block;color:var(--muted);font-size:13px}.card strong{display:block;font-size:26px;margin-top:8px}.tabs{display:flex;gap:8px;overflow:auto;margin:14px 0}.tab{background:var(--soft);border:1px solid var(--line);color:var(--text);border-radius:8px;padding:9px 12px;white-space:nowrap;cursor:pointer}.tab.active{border-color:var(--brand);color:var(--brand)}.panel{background:var(--panel);border:1px solid var(--line);border-radius:8px;overflow:hidden}.table-wrap{overflow:auto;max-height:68vh}table{width:100%;border-collapse:collapse;min-width:880px}th,td{padding:10px 12px;border-bottom:1px solid var(--line);text-align:left;white-space:nowrap}th{position:sticky;top:0;background:#111720;color:#cbd5e1;z-index:1}td.reason{white-space:normal;min-width:260px;color:#cbd5e1}.good{color:var(--good);font-weight:800}.bad{color:var(--bad);font-weight:800}.empty{padding:28px;text-align:center;color:var(--muted)}.summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;margin:0 0 14px}.footer{margin-top:12px;color:var(--muted);font-size:12px}@media(max-width:760px){main{padding:16px 10px 32px}.top{display:block}.grid{grid-template-columns:repeat(2,minmax(0,1fr))}.tools{margin-top:14px}.tools input{width:100%}.card strong{font-size:22px}table{min-width:760px}th,td{padding:9px 10px}}
+  </style>
+</head>
+<body>
+<main>
+  <section class="top">
+    <div><div class="badge">FUMAN SCORECARD</div><h1>輔滿成績單</h1><p id="subtitle">正在讀取公開成績單資料...</p></div>
+    <div class="tools"><input id="search" type="search" placeholder="搜尋代號 / 名稱"><select id="result"><option value="all">全部</option><option value="win">獲利</option><option value="loss">虧損</option><option value="flat">平盤</option></select><button id="reload" type="button">重新整理</button></div>
+  </section>
+  <section class="grid" id="metrics"></section>
+  <section class="summary" id="strategySummary"></section>
+  <nav class="tabs" id="tabs"></nav>
+  <section class="panel"><div class="table-wrap"><table><thead><tr><th>日期</th><th>策略</th><th>代號</th><th>名稱</th><th>進場時間</th><th>進場價</th><th>最高價</th><th>損益</th><th>原因</th></tr></thead><tbody id="rows"><tr><td colspan="9" class="empty">載入中...</td></tr></tbody></table></div></section>
+  <div class="footer" id="footer"></div>
+</main>
+<script>
+let payload=null,activeStrategy="全部";
+const fmt=new Intl.NumberFormat("zh-TW");
+const money=n=>fmt.format(Math.round(Number(n)||0));
+const byId=id=>document.getElementById(id);
+function esc(v){return String(v??"").replace(/[&<>"']/g,s=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[s]))}
+function metric(label,value,cls=""){return `<article class="card"><span>${label}</span><strong class="${cls}">${value}</strong></article>`}
+function render(){if(!payload?.ok)return;const rows=payload.records||[],summary=payload.summary||{};byId("subtitle").textContent=`資料日期 ${summary.latestDate||"--"}｜最近 ${payload.days||30} 天｜${new Date(payload.updatedAt).toLocaleString("zh-TW",{hour12:false})}`;byId("metrics").innerHTML=[metric("逐筆筆數",money(summary.rows)),metric("勝率",`${(summary.winRate||0).toFixed(1)}%`,"good"),metric("獲利 / 虧損",`${money(summary.wins)} / ${money(summary.losses)}`),metric("總損益",money(summary.totalPnl),(summary.totalPnl||0)>=0?"good":"bad")].join("");const strategies=["全部",...new Set(rows.map(r=>r.strategy||"未分類"))];byId("tabs").innerHTML=strategies.map(s=>`<button class="tab ${s===activeStrategy?"active":""}" data-strategy="${esc(s)}">${esc(s)}</button>`).join("");byId("strategySummary").innerHTML=(summary.byStrategy||[]).slice(0,8).map(s=>metric(`${esc(s.strategy)}｜${money(s.rows)}筆`,`${money(s.pnl)}｜${(s.winRate||0).toFixed(1)}%`,(s.pnl||0)>=0?"good":"bad")).join("");const q=byId("search").value.trim().toLowerCase(),result=byId("result").value;const filtered=rows.filter(r=>(activeStrategy==="全部"||r.strategy===activeStrategy)&&(!q||String(r.ticker).toLowerCase().includes(q)||String(r.name).toLowerCase().includes(q))&&(result==="all"||(result==="win"&&Number(r.pnl)>0)||(result==="loss"&&Number(r.pnl)<0)||(result==="flat"&&Number(r.pnl)===0)));byId("rows").innerHTML=filtered.length?filtered.map(r=>`<tr><td>${esc(r.record_date)}</td><td>${esc(r.strategy)}</td><td>${esc(r.ticker)}</td><td>${esc(r.name)}</td><td>${esc(r.entry_time||"--")}</td><td>${Number(r.entry_price||0).toFixed(2)}</td><td>${Number(r.high_price||0).toFixed(2)}</td><td class="${Number(r.pnl)>=0?"good":"bad"}">${money(r.pnl)}</td><td class="reason">${esc(r.reason)}</td></tr>`).join(""):`<tr><td colspan="9" class="empty">沒有符合條件的資料</td></tr>`;byId("footer").textContent=`來源：${payload.cacheSource||payload.source||"scorecard"}｜顯示 ${filtered.length} / ${rows.length} 筆`;}
+async function load(){byId("rows").innerHTML=`<tr><td colspan="9" class="empty">載入中...</td></tr>`;try{const res=await fetch(`/api/scorecard?t=${Date.now()}`,{cache:"no-store"});payload=await res.json();if(!payload.ok)throw new Error(payload.reason||payload.error||"scorecard unavailable");render();}catch(err){byId("subtitle").textContent="成績單資料暫時無法讀取";byId("rows").innerHTML=`<tr><td colspan="9" class="empty">${esc(err.message||err)}</td></tr>`;}}
+byId("tabs").addEventListener("click",e=>{const b=e.target.closest("[data-strategy]");if(!b)return;activeStrategy=b.dataset.strategy;render();});byId("search").addEventListener("input",render);byId("result").addEventListener("change",render);byId("reload").addEventListener("click",load);load();
+</script>
+</body>
+</html>

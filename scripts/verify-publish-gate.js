@@ -111,6 +111,13 @@ if (vercelProject) {
     issues.push(`.vercel/project.json settings.nodeVersion must be ${EXPECTED_NODE_VERSION}; current=${vercelProject.settings?.nodeVersion || "(missing)"}`);
   }
 }
+const vercelJson = readJsonFile("vercel.json");
+if (vercelJson) {
+  const rewrites = Array.isArray(vercelJson.rewrites) ? vercelJson.rewrites : [];
+  if (!rewrites.some((route) => route?.source === "/88" && route?.destination === "/88.html")) {
+    issues.push("vercel.json must keep /88 rewritten to /88.html for the public scorecard");
+  }
+}
 if (!/require-version-bump-approval\.js/.test(String(packageJson.scripts?.deploy || ""))) {
   issues.push("package.json scripts.deploy must require version/deploy approval");
 }
@@ -125,6 +132,15 @@ for (const [scriptName, scriptBody] of Object.entries(packageJson.scripts || {})
 }
 if (!packageJson.scripts?.["cleanup:api-only-retired"] || !/cleanup-api-only-retired-artifacts\.js/.test(packageJson.scripts["cleanup:api-only-retired"])) {
   issues.push("package.json missing scripts.cleanup:api-only-retired");
+}
+if (!packageJson.scripts?.["scorecard:sync"] || !/run-scorecard-snapshot\.ps1/.test(packageJson.scripts["scorecard:sync"])) {
+  issues.push("package.json missing scripts.scorecard:sync daily scorecard snapshot runner");
+}
+if (!packageJson.scripts?.["scorecard:publish"] || !/publish-scorecard-snapshot\.js/.test(packageJson.scripts["scorecard:publish"])) {
+  issues.push("package.json missing scripts.scorecard:publish");
+}
+if (!packageJson.scripts?.["verify:scorecard"] || !/verify-scorecard-snapshot\.js/.test(packageJson.scripts["verify:scorecard"])) {
+  issues.push("package.json missing scripts.verify:scorecard");
 }
 for (const scriptName of ["verify:mobile-layout", "verify:mobile-layout:live"]) {
   if (!packageJson.scripts?.[scriptName]) {
@@ -217,6 +233,7 @@ const strategy2Scanner = read("scripts/scan-intraday-signals.js");
 const runIdCompleteGate = read("scripts/verify-run-id-complete-gates.js");
 const terminalLiveCheck = read("terminal-live-check.js");
 const terminalApp = read("terminal-app.js");
+const scorecardApi = read("api/scorecard.js");
 if (!/dataManifest:\s*""/.test(runtimeConfig)) {
   issues.push("terminal-runtime-config.js dataManifest must be an empty string; static JSON manifest polling must stay disabled");
 }
@@ -240,6 +257,7 @@ assertNoPatternInExistingFiles([
   "terminal-runtime-config.js",
   "api/desktop-route-snapshot.js",
   "api/terminal-fast-bundle.js",
+  "api/scorecard.js",
   "api/mobile-boot.js",
   "api/mobile-fragment.js",
   "api/open-buy-latest.js",
@@ -255,6 +273,9 @@ assertNoPatternInExistingFiles([
   "api/market-overview-latest.js",
   "lib/desktop-route-snapshot-cache.js",
 ], /google\s*sheet|googlesheet|sheets\.googleapis|docs\.google\.com\/spreadsheets/i, "must not use Google Sheet as a production data source");
+if (!/scorecard_latest/.test(scorecardApi) || !/readSnapshot/.test(scorecardApi) || !/scorecard-latest\.json/.test(scorecardApi)) {
+  issues.push("api/scorecard.js must read Supabase snapshot scorecard_latest and keep data/scorecard-latest.json only as fallback/bootstrap");
+}
 if (!/verify:publish-gate/.test(prepareDeploy)) {
   issues.push("scripts/prepare-deploy.js must run verify:publish-gate before production deploy");
 }
@@ -523,17 +544,25 @@ if (!/ETIMEDOUT|ECONNRESET|fetch failed|AbortError/.test(healthSummary)) {
 
 const sourceSyncScript = read("scripts/sync-main-deploy-source.js");
 for (const file of [
+  "88.html",
   "terminal-live-check.js",
   "terminal-watchlist-module.js",
+  "api/scorecard.js",
   "lib/supabase-public-slot.js",
   "scripts/intraday-radar-rules.js",
   "scripts/scan-intraday-signals.js",
   "scripts/fugle-websocket-collector.js",
   "scripts/scan-realtime-radar-cache.js",
   "scripts/scan-strategy3-cache.js",
-  "scripts/verify-desktop-api-only.js",
+  "scripts/verify-desktop-api-only.js",
+  "scripts/verify-production-guard.js",
+  "scripts/verify-scorecard-snapshot.js",
+  "scripts/export-scorecard-snapshot.py",
+  "scripts/publish-scorecard-snapshot.js",
+  "run-scorecard-snapshot.ps1",
   "data/terminal-home-bundle.json",
   "data/terminal-home-mobile-slim.json",
+  "data/scorecard-latest.json",
   "scripts/scan-open-buy-cache.js",
   "scripts/scan-star-preopen.js",
   "ops/public-slot/Strategy1RunIdCompleteGate.sql",
@@ -551,6 +580,14 @@ for (const file of [
 }
 
 const apiOnlyCleanup = read("scripts/cleanup-api-only-retired-artifacts.js");
+for (const [fileName, text] of [
+  ["scripts/cleanup-api-only-retired-artifacts.js", apiOnlyCleanup],
+  ["scripts/sync-main-deploy-source.js", sourceSyncScript],
+]) {
+  if (!/RESERVED_PRODUCTION_ROUTES/.test(text) || !/["']\/88["']/.test(text) || !/isReservedRouteArtifact/.test(text)) {
+    issues.push(`${fileName} must protect reserved production route /88 for the future scorecard path`);
+  }
+}
 for (const marker of [
   "api-only-retired-artifact-cleanup",
   "scan-intraday-signals.js",
@@ -756,16 +793,25 @@ if (fetchResult.status !== 0) {
       "run-open-buy-sync-retry.ps1",
       "scripts/intraday-radar-rules.js",
   "scripts/scan-intraday-signals.js",
-  "scripts/fugle-websocket-collector.js",
+      "scripts/fugle-websocket-collector.js",
       "scripts/sync-main-deploy-source.js",
+      "scripts/verify-production-guard.js",
+      "scripts/verify-scorecard-snapshot.js",
+      "scripts/export-scorecard-snapshot.py",
+      "scripts/publish-scorecard-snapshot.js",
       "scripts/verify-source-sync.js",
       "scripts/cleanup-api-only-retired-artifacts.js",
       "install-api-only-cleanup-task.ps1",
+      "run-scorecard-snapshot.ps1",
       "run-main-release-pipeline.ps1",
       "run-daily-release.ps1",
       "run-full-scan.ps1",
       "run-publish-gate.ps1",
-      "package.json",
+      "package.json",
+      "vercel.json",
+      "88.html",
+      "api/scorecard.js",
+      "data/scorecard-latest.json",
       "data/mobile-home-summary.json",
       "data/strategy-match-index.json",
       "data/strategy2-intraday-live-top.json",

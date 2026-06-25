@@ -13,6 +13,10 @@
   ],
   "rewrites": [
     {
+      "source": "/88",
+      "destination": "/88.html"
+    },
+    {
       "source": "/",
       "has": [
         {
@@ -48,6 +52,32 @@
     }
   ],
   "headers": [
+    {
+      "source": "/88",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "no-store"
+        },
+        {
+          "key": "X-Content-Type-Options",
+          "value": "nosniff"
+        }
+      ]
+    },
+    {
+      "source": "/88.html",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "no-store"
+        },
+        {
+          "key": "X-Content-Type-Options",
+          "value": "nosniff"
+        }
+      ]
+    },
     {
       "source": "/mobile",
       "headers": [

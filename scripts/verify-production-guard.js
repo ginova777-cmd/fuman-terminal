@@ -11,8 +11,12 @@ const ALLOW_DIRTY = process.argv.includes("--allow-dirty");
 const ALLOW_AHEAD = process.argv.includes("--allow-ahead");
 const EXPECTED_GIT_REMOTE_RE = /^(https:\/\/github\.com\/ginova777-cmd\/fuman-terminal\.git|git@github\.com:ginova777-cmd\/fuman-terminal\.git)$/i;
 const LEGACY_SYNC_TREE_RE = new RegExp("fuman-terminal" + "-sync", "i");
+const RESERVED_PRODUCTION_ROUTES = [
+  "/88",
+];
 const KEY_FILES = [
   "version.json",
+  "88.html",
   "terminal-core.js",
   "terminal.js",
   "terminal-desktop-fast-shell.js",
@@ -98,6 +102,12 @@ function assertGitState() {
   return { localHead: localHead.stdout || "", originHead };
 }
 
+function assertReservedProductionRoutes() {
+  if (!RESERVED_PRODUCTION_ROUTES.includes("/88")) {
+    issues.push("reserved production routes must include /88 for the future scorecard path");
+  }
+}
+
 async function assertLiveState(version) {
   const versionJson = await fetchText("/version.json");
   if (versionJson.status < 200 || versionJson.status >= 300) {
@@ -126,6 +136,30 @@ async function assertLiveState(version) {
     }
   }
 
+  const scorecardPage = await fetchText("/88", 25000);
+  if (scorecardPage.status < 200 || scorecardPage.status >= 300) {
+    issues.push(`reserved scorecard route /88 HTTP ${scorecardPage.status}`);
+  } else if (!/FUMAN SCORECARD|\/api\/scorecard/.test(scorecardPage.body)) {
+    issues.push("reserved scorecard route /88 must render the public scorecard shell and call /api/scorecard");
+  }
+
+  const scorecardApi = await fetchText("/api/scorecard", 35000);
+  if (scorecardApi.status < 200 || scorecardApi.status >= 300) {
+    issues.push(`scorecard API HTTP ${scorecardApi.status}`);
+  } else {
+    try {
+      const payload = JSON.parse(scorecardApi.body);
+      const rows = Array.isArray(payload.records) ? payload.records.length : Number(payload.summary?.rows || 0);
+      if (payload.ok === false) issues.push("scorecard API ok=false");
+      if (rows <= 0) issues.push(`scorecard API row count invalid: ${rows}`);
+      if (!/supabase-snapshot|json-snapshot/.test(String(payload.cacheSource || ""))) {
+        issues.push(`scorecard API cacheSource must be supabase-snapshot or json-snapshot; current=${payload.cacheSource || "(missing)"}`);
+      }
+    } catch (error) {
+      issues.push(`scorecard API invalid JSON: ${error.message}`);
+    }
+  }
+
   const bundle = await fetchText("/api/terminal-fast-bundle?canvas=1&compact=1&shell=1", 35000);
   if (bundle.status < 200 || bundle.status >= 300) {
     issues.push(`terminal-fast-bundle HTTP ${bundle.status}`);
@@ -149,6 +183,7 @@ async function assertLiveState(version) {
 
 async function main() {
   const version = detectVersion();
+  assertReservedProductionRoutes();
   const gitState = assertGitState();
   if (CHECK_LIVE) await assertLiveState(version);
   if (issues.length) {

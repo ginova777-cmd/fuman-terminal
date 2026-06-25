@@ -884,6 +884,24 @@ npm run verify:live-version
 
 改完先合回 `main`，再由統一部署流程上 production。`npm run guard:source` 會擋 dirty、untracked、非 main / 未授權 release branch、behind、ahead 未推、錯誤 `.vercel/project.json`。這條 guard 是防止 A Codex 的新 bundle 被 B Codex 的舊 bundle 蓋回去。
 
+## 成績單 /88 固定規則
+
+成績單正式公開路徑固定是 `https://fuman-terminal.vercel.app/88`，不得刪除、改路徑或改回只靠本機 Streamlit。`vercel.json` 必須保留 `/88 -> /88.html` rewrite，`88.html` 必須呼叫 `/api/scorecard`。
+
+成績單正式資料源是 Supabase snapshot key `scorecard_latest`。`api/scorecard.js` 必須先讀 Supabase snapshot，`data/scorecard-latest.json` 只允許作為 fallback / bootstrap，不得把 Google Sheet 當正式資料源。
+
+每日固定計算流程是 `run-scorecard-snapshot.ps1` / `npm run scorecard:sync`：從本機 DuckDB 匯出 `data/scorecard-latest.json`，發布到 Supabase snapshot，再跑 `npm run verify:scorecard`。這條流程更新資料，不需要每天 deploy Vercel。
+
+改成績單時必跑：
+
+```text
+npm run verify:scorecard
+npm run verify:publish-gate
+npm run guard:production
+```
+
+若 `/88` 或 `/api/scorecard` 在正式站 404，代表路由/API 沒部署進 production；先修 source sync / GitHub main / Vercel 部署，不要改回 Google Sheet，也不要把 `http://127.0.0.1:8501/` 當公開網址。
+
 ## 已退役 / 暫停流程
 
 目前不要重啟下列流程，除非使用者明確要求：

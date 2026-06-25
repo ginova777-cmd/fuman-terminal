@@ -3,10 +3,27 @@ const path = require("path");
 
 const SOURCE_ROOT = path.resolve(__dirname, "..");
 const DEPLOY_ROOT = process.env.FUMAN_DEPLOY_SOURCE_DIR || "C:\\fuman-terminal";
+const RESERVED_PRODUCTION_ROUTES = [
+  "/88",
+];
+const RESERVED_ROUTE_ARTIFACTS = new Set(RESERVED_PRODUCTION_ROUTES.flatMap((route) => {
+  const slug = String(route || "").replace(/^\/+/, "").replace(/\/+$/, "");
+  if (!slug) return [];
+  return [
+    slug,
+    `${slug}.html`,
+    path.join(slug, "index.html"),
+    path.join("api", `${slug}.js`),
+    path.join(".vercel", "output", "static", slug),
+    path.join(".vercel", "output", "static", `${slug}.html`),
+    path.join(".vercel", "output", "static", slug, "index.html"),
+  ].map((item) => item.replace(/\\/g, "/").toLowerCase());
+}));
 
 const FILES = [
   "index.html",
   "index.github.html",
+  "88.html",
   "mobile.html",
   "refresh.html",
   "version.json",
@@ -29,6 +46,7 @@ const FILES = [
   "lib/strategy-cache-status.js",
   "fuman-sw.js",
   "api/version.js",
+  "api/scorecard.js",
   "api/mobile-boot.js",
   "api/open-buy-latest.js",
   "api/strategy5-latest.js",
@@ -76,7 +94,9 @@ const FILES = [
   "scripts/sync-afterhours-supabase-status.js",
   "scripts/sync-main-deploy-source.js",
   "scripts/verify-desktop-api-only.js",
+  "scripts/verify-production-guard.js",
   "scripts/verify-publish-gate.js",
+  "scripts/verify-scorecard-snapshot.js",
   "scripts/verify-warrant-freshness.js",
   "scripts/verify-live-version.js",
   "scripts/verify-service-worker-smoke.js",
@@ -88,6 +108,8 @@ const FILES = [
   "scripts/verify-run-id-complete-gates.js",
   "scripts/verify-version-bump-needed.js",
   "scripts/verify-version-consistency.js",
+  "scripts/export-scorecard-snapshot.py",
+  "scripts/publish-scorecard-snapshot.js",
   "ops/public-slot/Strategy1RunIdCompleteGate.sql",
   "ops/public-slot/StrategyCacheStatusAndLatestPayload.sql",
   "ops/public-slot/FinMindUnifiedQuoteViews.sql",
@@ -98,6 +120,7 @@ const FILES = [
   "ops/public-slot/Watchdog-PublicSlotSharedSource.ps1",
   "ops/public-slot/MobileUpdateEventsMaintenance.sql",
   "run-live-freshness-gate.ps1",
+  "run-scorecard-snapshot.ps1",
   "run-api-only-retired-cleanup.ps1",
   "run-cache-sync.ps1",
   "install-api-only-cleanup-task.ps1",
@@ -130,6 +153,7 @@ const FILES = [
   "data/mobile-home-summary.json",
   "data/performance-report.json",
   "data/signal-quality-report.json",
+  "data/scorecard-latest.json",
   "data/stocks-index.json",
   "data/stocks-quotes-mobile-top.json",
   "data/stocks-quotes-slim.json",
@@ -230,9 +254,15 @@ function isInside(root, target) {
   return relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative));
 }
 
+function isReservedRouteArtifact(rel) {
+  const key = String(rel || "").replace(/\\/g, "/").replace(/^\/+/, "").toLowerCase();
+  return RESERVED_ROUTE_ARTIFACTS.has(key);
+}
+
 function deleteRetiredArtifacts() {
   if (isSamePath(SOURCE_ROOT, DEPLOY_ROOT)) return;
   for (const file of RETIRED_ARTIFACTS) {
+    if (isReservedRouteArtifact(file)) continue;
     const target = path.join(DEPLOY_ROOT, file);
     if (!isInside(DEPLOY_ROOT, target) || !fs.existsSync(target)) continue;
     const stat = fs.statSync(target);
